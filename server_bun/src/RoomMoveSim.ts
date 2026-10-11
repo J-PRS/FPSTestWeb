@@ -68,7 +68,7 @@ export class RoomMoveSim {
     this.wantsAuthority = authoritative;
     this.surface = field ? FieldSurface.fromField(field) : null;
     this.botSurface = field ? FieldSurface.fromFieldChord(field) : null;
-    this.authoritative = authoritative && !!field;
+    this.authoritative = authoritative && Boolean(field);
     this.judge = new MoveJudge({
       authoritative: () => this.authoritative,
       divergenceM: () => this.divergenceM,
@@ -132,8 +132,8 @@ export class RoomMoveSim {
    *  tops for every sim already tracking (the surface object is shared). */
   attachStructures(list: readonly StructureSpec[] | undefined): void {
     this.solid = (list?.length || this.dyn?.length) ? new SolidWorld(structureColliders(list ?? []), this.dyn) : null;
-    if (this.surface) this.surface.solid = this.solid;
-    if (this.botSurface) this.botSurface.solid = this.solid;
+    if (this.surface) {this.surface.solid = this.solid;}
+    if (this.botSurface) {this.botSurface.solid = this.solid;}
     this.structEpoch++;
   }
 
@@ -142,11 +142,11 @@ export class RoomMoveSim {
    *  attachStructures call, so mint the world lazily too. */
   setDynamic(cols: readonly StructureCollider[]): void {
     this.dyn = cols;
-    if (this.solid) this.solid.dyn = cols;
-    else if (cols.length) {
+    if (this.solid) {this.solid.dyn = cols;}
+    else if (cols.length > 0) {
       this.solid = new SolidWorld([], cols);
-      if (this.surface) this.surface.solid = this.solid;
-      if (this.botSurface) this.botSurface.solid = this.solid;
+      if (this.surface) {this.surface.solid = this.solid;}
+      if (this.botSurface) {this.botSurface.solid = this.solid;}
     }
   }
   /** Bumped on every attachStructures — structure-reading caches key on
@@ -233,21 +233,21 @@ export class RoomMoveSim {
    *  flips with the jersey, not at the next respawn. */
   setTeam(playerId: string, team: string | undefined): void {
     const sh = this.shadows.get(playerId);
-    if (sh) sh.sim.state.team = team;
+    if (sh) {sh.sim.state.team = team;}
   }
 
   /** Arm the post-re-seat report grace — see the resyncAt comment on the
    *  shadow: pre-gameState frames still in flight are muted ~1 RTT. */
   markReseated(playerId: string): void {
     const sh = this.shadows.get(playerId);
-    if (sh) sh.resyncAt = wallNow();
+    if (sh) {sh.resyncAt = wallNow();}
   }
 
   /** Perk swap after track() baked the modifiers — role rebalance pins
    *  (capper featherjets) would otherwise stay cosmetic on the shadow. */
   setPerk(playerId: string, perk?: string): void {
     const sh = this.shadows.get(playerId);
-    if (!sh) return;
+    if (!sh) {return;}
     const mods = perkMods(perk);
     sh.energyMax = mods.energyMax;
     sh.energy = Math.min(sh.energy, ENERGY.max * sh.energyMax);
@@ -259,7 +259,7 @@ export class RoomMoveSim {
   /** Armor-class ground speed multiplier (server bots / future loadouts). */
   setSpeedScale(playerId: string, scale: number): void {
     const sh = this.shadows.get(playerId);
-    if (sh) sh.sim.speedScale = scale;
+    if (sh) {sh.sim.speedScale = scale;}
   }
 
   /** Armor-class body — mass divides jet thrust/impulses, eyeHeight sets
@@ -279,16 +279,16 @@ export class RoomMoveSim {
    *  client's per-edge replay. */
   queueInput(playerId: string, input: Partial<MoveInput>, status = 0, seq?: number): boolean {
     const sh = this.shadows.get(playerId);
-    if (!sh) return true;
+    if (!sh) {return true;}
     // Gate against the queued tail too — lastInputSeq only moves at
     // drain, so without it a reordered old packet could append a stale
     // edge behind fresher queued ones.
-    const tail = sh.pending.length ? sh.pending[sh.pending.length - 1]!.seq : undefined;
-    if (seq !== undefined && seq <= Math.max(sh.lastInputSeq, tail ?? 0)) return false;
+    const tail = sh.pending.length > 0 ? sh.pending[sh.pending.length - 1]!.seq : undefined;
+    if (seq !== undefined && seq <= Math.max(sh.lastInputSeq, tail ?? 0)) {return false;}
     sh.pending.push({ input, status, seq });
     // Bounded — a flood can't queue unbounded replay work; the oldest
     // edge drops (its seq anchor with it) so the newest intent survives.
-    if (sh.pending.length > 8) sh.pending.shift();
+    if (sh.pending.length > 8) {sh.pending.shift();}
     return true;
   }
 
@@ -297,11 +297,14 @@ export class RoomMoveSim {
    *  drain and activation antes (rising-edge costs). */
   setInput(playerId: string, input: Partial<MoveInput>, status = 0, seq?: number): boolean {
     const sh = this.shadows.get(playerId);
-    if (!sh) return true; // no field → no sim → nothing to order
-    if (seq !== undefined && seq <= sh.lastInputSeq) return false;
-    if (seq !== undefined) {
+    if (!sh) {return true;} // no field → no sim → nothing to order
+    if (seq !== undefined && seq <= sh.lastInputSeq) {return false;}
+    if (seq === undefined) {
+      if (input.jetHeld !== undefined) {sh.jetWanted = input.jetHeld;}
+      sh.sim.setInput({ ...input, jetHeld: sh.jetWanted && sh.energy > 0 });
+    } else {
       sh.lastInputSeq = seq;
-      if (input.jetHeld !== undefined) sh.jetWanted = input.jetHeld;
+      if (input.jetHeld !== undefined) {sh.jetWanted = input.jetHeld;}
       sh.sim.setInput({ ...input, jetHeld: sh.jetWanted && sh.energy > 0 });
       // The anchor carries the input that runs FORWARD from this seq —
       // anchoredCompare replays anchor(k).inp over [k, k+1), so a
@@ -313,18 +316,15 @@ export class RoomMoveSim {
         inp: { ...sh.sim.input },
         e: sh.energy,
       });
-      if (sh.seqStates.size > 32) evictEldest(sh.seqStates);
-    } else {
-      if (input.jetHeld !== undefined) sh.jetWanted = input.jetHeld;
-      sh.sim.setInput({ ...input, jetHeld: sh.jetWanted && sh.energy > 0 });
+      if (sh.seqStates.size > 32) {evictEldest(sh.seqStates);}
     }
 
     // Rising-edge antes — the client pays the activation cost when the
     // bit comes up; the sim must mirror it or cloaked jetters desync.
     const rising = status & ~sh.lastStatus;
-    if (rising & STATUS.CLOAK) sh.energy = Math.max(0, sh.energy - ENERGY.cloakCost);
-    if (rising & STATUS.SHIELD) sh.energy = Math.max(0, sh.energy - ENERGY.shieldCost);
-    if (rising & STATUS.MEND) sh.energy = Math.max(0, sh.energy - ENERGY.mendCost);
+    if (rising & STATUS.CLOAK) {sh.energy = Math.max(0, sh.energy - ENERGY.cloakCost);}
+    if (rising & STATUS.SHIELD) {sh.energy = Math.max(0, sh.energy - ENERGY.shieldCost);}
+    if (rising & STATUS.MEND) {sh.energy = Math.max(0, sh.energy - ENERGY.mendCost);}
     sh.lastStatus = status;
 
     const hSpeed = Math.hypot(sh.sim.state.vel.x, sh.sim.state.vel.z);
@@ -339,7 +339,7 @@ export class RoomMoveSim {
   /** Energy refunds the world grants — gem pickup half-tank refill. */
   grantEnergy(playerId: string, amount: number): void {
     const sh = this.shadows.get(playerId);
-    if (sh && Number.isFinite(amount)) sh.energy = Math.min(ENERGY.max * sh.energyMax, sh.energy + amount);
+    if (sh && Number.isFinite(amount)) {sh.energy = Math.min(ENERGY.max * sh.energyMax, sh.energy + amount);}
   }
 
   /** Energy burns outside the input stream — shield damage soak. */
@@ -347,7 +347,7 @@ export class RoomMoveSim {
     const sh = this.shadows.get(playerId);
     // NaN amount: Math.max(0, NaN) = NaN — one poison write kills
     // jets/skills for the session and never self-heals.
-    if (!sh || !Number.isFinite(amount)) return false;
+    if (!sh || !Number.isFinite(amount)) {return false;}
     sh.energy = Math.max(0, sh.energy - amount);
     return true;
   }
@@ -363,7 +363,7 @@ export class RoomMoveSim {
     const sh = this.shadows.get(playerId);
     // sim-vel names a poisoned shadow but doesn't fix it — a NaN dv
     // writes straight into the sim's velocity, so the funnel drops it.
-    if (!sh || !Number.isFinite(dv.x + dv.y + dv.z)) return;
+    if (!sh || !Number.isFinite(dv.x + dv.y + dv.z)) {return;}
     const v = sh.sim.state.vel;
     v.x += dv.x; v.y += dv.y; v.z += dv.z;
     sh.lastImpulseAt = wallNow();
@@ -376,8 +376,8 @@ export class RoomMoveSim {
    *  encodes as 0 on the wire. */
   inputSeqOf(playerId: string): number {
     const sh = this.shadows.get(playerId);
-    if (!sh) return -1;
-    const tail = sh.pending.length ? sh.pending[sh.pending.length - 1]!.seq ?? 0 : 0;
+    if (!sh) {return -1;}
+    const tail = sh.pending.length > 0 ? sh.pending[sh.pending.length - 1]!.seq ?? 0 : 0;
     return Math.max(sh.lastInputSeq, tail);
   }
 
@@ -393,14 +393,14 @@ export class RoomMoveSim {
    *  the caller turns it into a client correction (witness → judge). */
   reconcile(playerId: string, pos: Vec3Like, yaw: number, vel?: Vec3Like, reportInputSeq?: number, rttMs?: number): (MoveState & { inputSeq: number }) | null {
     const sh = this.shadows.get(playerId);
-    if (!sh) return null;
+    if (!sh) {return null;}
     // The report's own RTT estimate feeds the broadcast lead — the
     // uplink half is how stale the shadow's input stream is. It's
     // client-reported, so it's a lower bound on trust: server-measured
     // ping/pong echoes cap it from above in syncTransit.
     if (rttMs !== undefined && rttMs > 0) {
       const tr = Math.min(rttMs / 2, TRANSIT_EMA_CAP_MS);
-      if (sh.serverTransitEma === 0) sh.transitVar = sh.transitVar * 0.9 + Math.abs(tr - sh.transitEma) * 0.1;
+      if (sh.serverTransitEma === 0) {sh.transitVar = sh.transitVar * 0.9 + Math.abs(tr - sh.transitEma) * 0.1;}
       sh.clientTransitEma = sh.clientTransitEma === 0 ? tr : sh.clientTransitEma * 0.9 + tr * 0.1;
       this.syncTransit(sh);
     }
@@ -410,8 +410,8 @@ export class RoomMoveSim {
     // consecutive uncovered reports means events were lost, not queued
     // (≥2 measured worse: the early hint's resend re-anchored the client
     // mid-flight and corrections tripled on the adverse soak).
-    if (reportInputSeq !== undefined && reportInputSeq > Math.max(sh.lastInputSeq, sh.pending.length ? sh.pending[sh.pending.length - 1]!.seq ?? 0 : 0)) {
-      if (sh.gapStreak === 0) sh.gapAt = wallNow(); // streak start — the judge's in-flight grace window
+    if (reportInputSeq !== undefined && reportInputSeq > Math.max(sh.lastInputSeq, sh.pending.length > 0 ? sh.pending[sh.pending.length - 1]!.seq ?? 0 : 0)) {
+      if (sh.gapStreak === 0) {sh.gapAt = wallNow();} // streak start — the judge's in-flight grace window
       sh.gapStreak++;
       const now = wallNow();
       if (sh.gapStreak >= 3 && now - sh.lastHintAt > 1000) {
@@ -428,7 +428,7 @@ export class RoomMoveSim {
    *  (server bots): facing is host truth, not a claim. */
   faceYaw(playerId: string, yaw: number): void {
     const sh = this.shadows.get(playerId);
-    if (sh) sh.sim.state.yaw = yaw;
+    if (sh) {sh.sim.state.yaw = yaw;}
   }
 
   /** Declared discontinuity (teleport/respawn) — resync without counting. */
@@ -436,7 +436,7 @@ export class RoomMoveSim {
     const sh = this.shadows.get(playerId);
     // Claim lanes gate upstream, but a NaN spawn/reseat from any caller
     // still seeds a poisoned shadow — sim-pos can only count it after.
-    if (!sh || !Number.isFinite(pos.x + pos.y + pos.z + yaw)) return;
+    if (!sh || !Number.isFinite(pos.x + pos.y + pos.z + yaw)) {return;}
     const s = sh.sim.state;
     sh.sim.setState({
       pos: { x: pos.x, y: pos.y, z: pos.z },
@@ -479,7 +479,7 @@ export class RoomMoveSim {
         const b = bodies[i]!;
         const k = ((Math.floor(b.x / CELL) + BIAS) << 16) | (Math.floor(b.z / CELL) + BIAS);
         const cell = grid.get(k);
-        if (cell) cell.push(i); else grid.set(k, [i]);
+        if (cell) {cell.push(i);} else {grid.set(k, [i]);}
       }
       // Cells return indices — sorted back to roster order so contact
       // resolution runs in the exact sequence the flat scan produced
@@ -489,12 +489,12 @@ export class RoomMoveSim {
       bodiesNear = (x, z) => {
         idx.length = 0; scratch.length = 0;
         const cx = Math.floor(x / CELL), cz = Math.floor(z / CELL);
-        for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+        for (let dx = -1; dx <= 1; dx++) {for (let dz = -1; dz <= 1; dz++) {
           const cell = grid.get(((cx + dx + BIAS) << 16) | (cz + dz + BIAS));
-          if (cell) for (const i of cell) idx.push(i);
-        }
+          if (cell) {for (const i of cell) {idx.push(i);}}
+        }}
         idx.sort((a, b) => a - b);
-        for (const i of idx) scratch.push(bodies[i]!);
+        for (const i of idx) {scratch.push(bodies[i]!);}
         return scratch;
       };
     }
@@ -502,8 +502,8 @@ export class RoomMoveSim {
       // Phase 0 (per shadow): drain the queued edges through setInput in
       // seq order — seq-journal anchors, jet gating, and rising-edge
       // antes all land before the econ pass reads the final jetWanted.
-      const edges = sh.pending.length ? sh.pending.splice(0, sh.pending.length) : null;
-      if (edges) for (const e of edges) this.setInput(pid, e.input, e.status, e.seq);
+      const edges = sh.pending.length > 0 ? sh.pending.splice(0, sh.pending.length) : null;
+      if (edges) {for (const e of edges) {this.setInput(pid, e.input, e.status, e.seq);}}
       if (bodies) {
         // Shared list for every shadow — collideBodies skips selfId, so
         // rebuilding N-1 copies per tick was pure churn.
@@ -516,22 +516,22 @@ export class RoomMoveSim {
       // Jet economy: thrust only while the modeled tank has fuel, drain
       // while burning, recharge only when off jet AND no toggle skill is
       // running (client-side rule — all three pause recharge).
-      if (sh.jetLockT > 0) sh.jetLockT -= dt;
+      if (sh.jetLockT > 0) {sh.jetLockT -= dt;}
       const jetting = sh.jetWanted && sh.energy > 0 && sh.jetLockT <= 0;
-      if (jetting) sh.energy -= ENERGY.jetDrain * sh.jetDrain * dt;
-      if (sh.skillDrainPerSec > 0) sh.energy -= sh.skillDrainPerSec * dt;
+      if (jetting) {sh.energy -= ENERGY.jetDrain * sh.jetDrain * dt;}
+      if (sh.skillDrainPerSec > 0) {sh.energy -= sh.skillDrainPerSec * dt;}
       if (!jetting && !sh.skillSuppressRegen) {
         sh.energy = Math.min(ENERGY.max * sh.energyMax, sh.energy + ENERGY.jetCharge * sh.jetRegen * sh.energyRegen * dt);
       }
       // NaN is sticky (Math.max(0, NaN) = NaN) — a poisoned pool would
       // ride forever; drain to empty once, then let regen rebuild it.
-      if (!Number.isFinite(sh.energy)) sh.energy = 0;
+      if (!Number.isFinite(sh.energy)) {sh.energy = 0;}
       sh.energy = Math.max(0, sh.energy);
       // Pool law: energy lives in [0, cap]. grant/regen both clamp —
       // an over-cap read here means a write path added without one.
       inv('energy-bounds', sh.energy <= ENERGY.max * sh.energyMax + 0.01,
-        { id: pid, e: +sh.energy.toFixed(1), cap: +(ENERGY.max * sh.energyMax).toFixed(1) });
-      if (sh.energy <= 0) sh.jetLockT = ENERGY.jetLockout;
+        { id: pid, e: Number(sh.energy.toFixed(1)), cap: Number((ENERGY.max * sh.energyMax).toFixed(1)) });
+      if (sh.energy <= 0) {sh.jetLockT = ENERGY.jetLockout;}
       sh.sim.setInput({ jetHeld: jetting });
       // Resting shadows skip the integrator: quiet input + ~zero
       // velocity + grounded means two sub-steps of terrain/solid/body
@@ -592,7 +592,7 @@ export class RoomMoveSim {
    *  means it can never RAISE the effective estimate. */
   feedTransit(playerId: string, rttMs: number): void {
     const sh = this.shadows.get(playerId);
-    if (!sh || !(rttMs > 0)) return;
+    if (!sh || !(rttMs > 0)) {return;}
     const tr = Math.min(rttMs / 2, TRANSIT_EMA_CAP_MS);
     sh.transitVar = sh.transitVar * 0.9 + Math.abs(tr - sh.transitEma) * 0.1;
     sh.serverTransitEma = sh.serverTransitEma === 0 ? tr : sh.serverTransitEma * 0.9 + tr * 0.1;
@@ -607,7 +607,7 @@ export class RoomMoveSim {
    *  only shrinks the forger's own rendered lead). */
   feedUplink(playerId: string, uplinkMs: number): void {
     const sh = this.shadows.get(playerId);
-    if (!sh || !(uplinkMs >= 0)) return;
+    if (!sh || !(uplinkMs >= 0)) {return;}
     const tr = Math.min(uplinkMs, TRANSIT_EMA_CAP_MS);
     sh.serverTransitEma = sh.serverTransitEma === 0 ? tr : sh.serverTransitEma * 0.9 + tr * 0.1;
     this.syncTransit(sh);

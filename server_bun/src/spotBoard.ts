@@ -22,10 +22,10 @@ export class SpotBoard {
   update(p: { team?: string }, seen: BotEnemy[], now: number): void {
     for (const [id, s] of this.spots) {
       const q = this.players.getPlayer(s.e.id.replace(/^p:/, ''));
-      if (q?.status && (q.status & STATUS.CLOAK)) this.spots.delete(id);
+      if (q?.status && (q.status & STATUS.CLOAK)) {this.spots.delete(id);}
     }
     for (const e of seen) {
-      if (e.id.startsWith('b:') || e.id.startsWith('c:')) continue;
+      if (e.id.startsWith('b:') || e.id.startsWith('c:')) {continue;}
       this.spots.set(e.id, { e, team: p.team, at: now });
     }
   }
@@ -35,7 +35,7 @@ export class SpotBoard {
     const out: BotEnemy[] = [];
     for (const [id, s] of this.spots) {
       if (now - s.at > SpotBoard.SPOT_MS) { this.spots.delete(id); continue; }
-      if (s.team === me && s.e.alive) out.push(s.e);
+      if (s.team === me && s.e.alive) {out.push(s.e);}
     }
     return out;
   }

@@ -6,7 +6,7 @@ import {
   GNAT_ORBIT_R, GNAT_NIP_DIST, GNAT_NIP_CD, GNAT_FLOCK_CD,
   GNAT_STUN, MELEE_FAVOR,
 } from '../core/config.js';
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
@@ -46,12 +46,12 @@ let _wingMat: THREE.MeshLambertMaterial | null = null;
 
 /** Swarm part table — registered once in swarms.initSwarms. */
 export function gnatParts(): SwarmPart[] {
-  if (!_bodyMat) _bodyMat = new THREE.MeshLambertMaterial({
-    color: 0xffffff, flatShading: true,
-  });
-  if (!_wingMat) _wingMat = new THREE.MeshLambertMaterial({
-    color: 0x9a8a6a, transparent: true, opacity: 0.5, side: THREE.DoubleSide,
-  });
+  if (!_bodyMat) {_bodyMat = new THREE.MeshLambertMaterial({
+    color: 0xFF_FF_FF, flatShading: true,
+  });}
+  if (!_wingMat) {_wingMat = new THREE.MeshLambertMaterial({
+    color: 0x9A_8A_6A, transparent: true, opacity: 0.5, side: THREE.DoubleSide,
+  });}
   return [
     { geometry: bodyGeo(), material: _bodyMat },
     { geometry: _wingGeo, material: _wingMat, per: WINGS_PER },
@@ -83,10 +83,10 @@ export class Gnat implements Targetable, SwarmSlotOwner {
   health: number;
   maxHealth: number;
   radius: number;
-  color = new THREE.Color(0x6a5a3a); // dun-brown chitin
+  color = new THREE.Color(0x6A_5A_3A); // dun-brown chitin
   readonly debrisKind = 'goo' as const;
   readonly dieCue = 'splat' as const;
-  readonly ichor = 0x54c0b0; // teal-cyan gnat juice
+  readonly ichor = 0x54_C0_B0; // teal-cyan gnat juice
   scale: number;
   scoreless = true;  // fodder kills don't pump the kill counter — too trivial
   lootless = true;
@@ -121,20 +121,20 @@ export class Gnat implements Targetable, SwarmSlotOwner {
   bindNet(b: NetBindArgs): void {
     this.netDriven = true;
     this.netId = b.id;
-    this.id = 0x50000000 + b.id;
+    this.id = 0x50_00_00_00 + b.id;
     bindNetSim(this, makeSimFlyer, b);
   }
 
   applyNetEdge(m: { position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; kind: string; targetId: string | null; tp?: { x: number; y: number; z: number } | null }): void {
     applyNetEdgeSim(this, m);
-    if (m.kind === 'pounce') this.state = 'dart';
+    if (m.kind === 'pounce') {this.state = 'dart';}
   }
 
   private updateNet(dt: number, terrain: Terrain): void {
     updateNetSim(this, dt, terrain, stepFlyer);
     this.animT += dt;
-    if (this.flash > 0) this.flash -= dt;
-    if (this.vel.lengthSq() > 1) this.yaw = Math.atan2(this.vel.x, this.vel.z);
+    if (this.flash > 0) {this.flash -= dt;}
+    if (this.vel.lengthSq() > 1) {this.yaw = Math.atan2(this.vel.x, this.vel.z);}
     this.writeInstances();
   }
 
@@ -151,26 +151,26 @@ export class Gnat implements Targetable, SwarmSlotOwner {
     this.scale = uber ? 0.8 : 0.3;
     this.scoreless = !uber; // a queen kill counts
     if (uber) {
-      this.color.set(0x8a6a1a); // wasp queen amber
+      this.color.set(0x8A_6A_1A); // wasp queen amber
       this.orbitR *= 1.6;
       this.dartT = 0;
     }
     this.pos = pos.clone();
     this.vel = new THREE.Vector3();
     this.hasSlots = allocSlots('gnat', this);
-    if (!this.hasSlots) this.dead = true;
+    if (!this.hasSlots) {this.dead = true;}
   }
 
   /** Cloud members share one object — set by joinCloud after construction. */
   joinCloud(cloud: { center: THREE.Vector3; nipGate: number }): void { this.cloud = cloud; }
 
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
-    if (this.dead) return;
+    if (this.dead) {return;}
     if (this.netDriven && this.sim) { this.updateNet(dt, terrain); return; }
-    if (this.stunTimer > 0) this.stunTimer -= dt;
-    if (this.flash > 0) this.flash -= dt;
-    if (this.nipCd > 0) this.nipCd -= dt;
-    if (this.cloud.nipGate > 0) this.cloud.nipGate -= dt;
+    if (this.stunTimer > 0) {this.stunTimer -= dt;}
+    if (this.flash > 0) {this.flash -= dt;}
+    if (this.nipCd > 0) {this.nipCd -= dt;}
+    if (this.cloud.nipGate > 0) {this.cloud.nipGate -= dt;}
     this.animT += dt;
 
     if (this.state === 'dart') {
@@ -181,7 +181,7 @@ export class Gnat implements Targetable, SwarmSlotOwner {
 
     this.pos.addScaledVector(this.vel, dt);
     const gy = terrain.getHeight(this.pos.x, this.pos.z);
-    if (this.pos.y < gy + 0.8) this.pos.y = gy + 0.8;
+    if (this.pos.y < gy + 0.8) {this.pos.y = gy + 0.8;}
 
     if (this.vel.lengthSq() > 1) {
       this.yaw = Math.atan2(this.vel.x, this.vel.z);
@@ -200,7 +200,7 @@ export class Gnat implements Targetable, SwarmSlotOwner {
     if (this.pos.distanceToSquared(playerPos) < nipD * nipD) {
       this.onNip?.(this);
       this.endDart();
-    } else if (this.dartT <= 0 || d < 1.0) {
+    } else if (this.dartT <= 0 || d < 1) {
       this.endDart();
     }
   }
@@ -223,7 +223,7 @@ export class Gnat implements Targetable, SwarmSlotOwner {
     this.vel.lerp(_scratch, Math.min(1, dt * 4));
     // Clamp to gnat speed — the spring can spike when the center teleports
     const s = this.vel.length();
-    if (s > GNAT_SPEED * 2) this.vel.multiplyScalar(GNAT_SPEED * 2 / s);
+    if (s > GNAT_SPEED * 2) {this.vel.multiplyScalar(GNAT_SPEED * 2 / s);}
 
     // The nip urge — own cooldown AND a cloud-wide gate so the swarm
     // doesn't dump eight darts in the same second
@@ -247,9 +247,9 @@ export class Gnat implements Targetable, SwarmSlotOwner {
   }
 
   writeInstances(): void {
-    if (!this.hasSlots) return;
+    if (!this.hasSlots) {return;}
     const swarm = getSwarm('gnat');
-    if (!swarm) return;
+    if (!swarm) {return;}
     const slot = this.swarmSlot;
     const r = this.radius;
 
@@ -278,7 +278,7 @@ export class Gnat implements Targetable, SwarmSlotOwner {
   }
 
   takeDamage(damage: number, opts?: { serverPaid?: boolean }): boolean {
-    if (this.netDriven) return claimDamageMelee(this, damage, Gnat.hitClaim, opts?.serverPaid);
+    if (this.netDriven) {return claimDamageMelee(this, damage, Gnat.hitClaim, opts?.serverPaid);}
     this.health -= damage;
     this.flash = 0.15;
     if (this.health <= 0) { this.dead = true; return true; }
@@ -287,14 +287,14 @@ export class Gnat implements Targetable, SwarmSlotOwner {
 
   applyKnockback(from: THREE.Vector3, force: number): void {
     if (!Number.isFinite(from.x + from.y + from.z + force)) {return;}    _scratch.copy(this.pos).sub(from).normalize();
-    this.vel.addScaledVector(_scratch, force * 2.0); // flies away like a fly
+    this.vel.addScaledVector(_scratch, force * 2); // flies away like a fly
     this.stunTimer = GNAT_STUN;
-    if (this.state === 'dart') this.endDart();
+    if (this.state === 'dart') {this.endDart();}
   }
 
   applyPull(to: THREE.Vector3, force: number): void {
     if (!Number.isFinite(to.x + to.y + to.z + force)) {return;}    _scratch.copy(to).sub(this.pos).normalize();
-    this.vel.addScaledVector(_scratch, force * 2.0);
+    this.vel.addScaledVector(_scratch, force * 2);
     this.stunTimer = GNAT_STUN;
   }
 

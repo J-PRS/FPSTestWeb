@@ -123,7 +123,7 @@ describe('netHarness — real wire messages through real handlers', () => {
     feed(h.nm, { type: 'gameState', players: [], protocolVersion: PROTOCOL_VERSION, room: 'r1', mode: 'dm' } as ServerMessage);
     expect(h.world.mode).toBe('dm');
 
-    const bad = () => feed(h.nm, { type: 'gameState', players: [], protocolVersion: 999999, room: 'evil', mode: 'ctf' } as ServerMessage);
+    const bad = () => feed(h.nm, { type: 'gameState', players: [], protocolVersion: 999_999, room: 'evil', mode: 'ctf' } as ServerMessage);
     bad();
     expect(sessionStorage.getItem('fps-proto-reload')).toBe('1');
     expect(h.world.mode).toBe('dm'); // swap never ran — stale bundle can't rewrite state
@@ -146,7 +146,7 @@ describe('netHarness — real wire messages through real handlers', () => {
       removeItem: () => { throw new Error('SecurityError'); },
     });
     feed(h.nm, { type: 'gameState', players: [], protocolVersion: PROTOCOL_VERSION, room: 'r1', mode: 'dm' } as ServerMessage);
-    expect(() => feed(h.nm, { type: 'gameState', players: [], protocolVersion: 999999, room: 'x' } as ServerMessage)).not.toThrow();
+    expect(() => feed(h.nm, { type: 'gameState', players: [], protocolVersion: 999_999, room: 'x' } as ServerMessage)).not.toThrow();
     expect(h.world.mode).toBe('dm'); // still bailed before the swap
     vi.unstubAllGlobals();
   });

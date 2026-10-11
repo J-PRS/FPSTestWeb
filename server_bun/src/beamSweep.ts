@@ -40,15 +40,15 @@ export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: V
   let bestT = 1;
   if (world.field) {
     const th = segFieldHit(muzzle, end, world.field);
-    if (th) bestT = segPointT(muzzle, end, th);
+    if (th) {bestT = segPointT(muzzle, end, th);}
   }
-  if (world.solids.length) {
+  if (world.solids.length > 0) {
     const sh = segSolidHit(muzzle, end, world.solids, undefined, world.players.getPlayer(shooterId)?.team);
-    if (sh) bestT = Math.min(bestT, segPointT(muzzle, end, sh));
+    if (sh) {bestT = Math.min(bestT, segPointT(muzzle, end, sh));}
   }
   if (world.dynSolids?.length) {
     const dh = segSolidHit(muzzle, end, world.dynSolids, undefined, world.players.getPlayer(shooterId)?.team);
-    if (dh) bestT = Math.min(bestT, segPointT(muzzle, end, dh));
+    if (dh) {bestT = Math.min(bestT, segPointT(muzzle, end, dh));}
   }
   // Ghost-truth lag-comp: the shooter's beam was aimed at the rendered
   // ghost — sim(t − shooterTransit − renderDelay + vel·lead) — and the
@@ -63,13 +63,13 @@ export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: V
   const shooterTransit = shooter?.isBot ? 0 : shooterTransitMs(world.transitOf, shooterId, shooterPing);
   let playerId: string | undefined;
   for (const [pid, t] of world.players.getAllPlayers()) {
-    if (pid === shooterId || t.isDead) continue;
+    if (pid === shooterId || t.isDead) {continue;}
     const cap = classCapsule(t.armorClass);
     const targetTransit = world.transitOf?.(pid) ?? 0;
     const back = Math.max(0, shooterTransit + renderLagOfTarget(shooter, pid) - targetTransit);
     const tp = rewindPos(t, back);
     const c = { x: tp.x, y: tp.y + cap.centerOff, z: tp.z };
-    if (segPointDist(muzzle, end, c) > cap.radius + 0.2 + cap.half) continue;
+    if (segPointDist(muzzle, end, c) > cap.radius + 0.2 + cap.half) {continue;}
     const tt = segPointT(muzzle, end, c);
     if (tt <= bestT) { bestT = tt; playerId = pid; }
   }
@@ -85,7 +85,7 @@ export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: V
   if (cc && cc.t <= bestT) {
     return { crawlerId: cc.id, contact: at(cc.t), ...beamChain(world, at(cc.t), dir, undefined, cc.id) };
   }
-  if (playerId !== undefined) return { playerId, contact: at(bestT) };
+  if (playerId !== undefined) {return { playerId, contact: at(bestT) };}
   return bestT < 1 ? { contact: at(bestT) } : null;
 }
 
@@ -98,22 +98,22 @@ function beamChain(world: BeamSweepWorld, contact: Vec3, dir: Vec3, excludeBall:
   const consider = (kind: 'ball' | 'crawl', id: number, x: number, y: number, z: number): void => {
     const dx = x - contact.x, dy = y - contact.y, dz = z - contact.z;
     const d2 = dx * dx + dy * dy + dz * dz;
-    if (d2 >= LG_CHAIN_RANGE * LG_CHAIN_RANGE) return;
+    if (d2 >= LG_CHAIN_RANGE * LG_CHAIN_RANGE) {return;}
     const d = Math.sqrt(d2) || 1;
-    if ((dx * dir.x + dy * dir.y + dz * dir.z) < d * 0.35) return;
+    if ((dx * dir.x + dy * dir.y + dz * dir.z) < d * 0.35) {return;}
     cands.push({ id, kind, x, y, z, d2 });
   };
   for (const b of world.ballSim?.balls.values() ?? []) {
-    if (b.dead || b.id === excludeBall) continue;
+    if (b.dead || b.id === excludeBall) {continue;}
     consider('ball', b.id, b.x, b.y, b.z);
   }
   for (const c of world.creatureSim?.crawlers.values() ?? []) {
-    if (c.dead || c.id === excludeCrawler) continue;
+    if (c.dead || c.id === excludeCrawler) {continue;}
     consider('crawl', c.id, c.x, c.y, c.z);
   }
   let best: (typeof cands)[number] | null = null;
-  for (const c of cands) { if (!best || c.d2 < best.d2) best = c; }
-  if (!best) return {};
+  for (const c of cands) { if (!best || c.d2 < best.d2) {best = c;} }
+  if (!best) {return {};}
   return best.kind === 'ball'
     ? { chainBallId: best.id, chainContact: { x: best.x, y: best.y, z: best.z } }
     : { chainCrawlerId: best.id, chainContact: { x: best.x, y: best.y, z: best.z } };

@@ -172,7 +172,7 @@ function lgPop(deps: CombatDeps, hooks: LightningHooks, pos: THREE.Vector3, acc:
     sendAOE: deps.lazyNetworkManager()?.authorityShells()
       ? undefined
       : (p, targetId) => deps.lazyNetworkManager()?.sendAOEShot({ position: p, weaponType: WeaponType.Lightning, excludeTargetId: targetId }),
-    explosionTint: 0x8FDCFF, vfxRadius: radius * 0.8, weaponType: WeaponType.Lightning,
+    explosionTint: 0x8F_DC_FF, vfxRadius: radius * 0.8, weaponType: WeaponType.Lightning,
   });
 }
 
@@ -271,7 +271,7 @@ function zapTarget(deps: CombatDeps, hooks: LightningHooks, lg: LgState,
   if (!sh) {
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
       map: shroudTexture(), transparent: true, blending: THREE.AdditiveBlending,
-      depthWrite: false, color: 0x9FD8FF,
+      depthWrite: false, color: 0x9F_D8_FF,
     }));
     deps.lazyScene().add(sprite);
     sh = { sprite, seenAt: 0 };

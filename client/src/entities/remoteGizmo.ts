@@ -14,7 +14,7 @@ const _zero = new THREE.Vector3(0, 0, 0);
 const _m = new THREE.Matrix4();
 const _p = new THREE.Vector3();
 const _c = new THREE.Color();
-const _ringMat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF, side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
+const _ringMat = new THREE.MeshBasicMaterial({ color: 0xFF_FF_FF, side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
 
 interface GizmoPool {
   mesh: THREE.InstancedMesh;
@@ -49,7 +49,7 @@ export class RemoteGizmo {
     this.pool = acquireBatch(pools, scene, makePool,
       p => p.free.length > 0 || p.mesh.count < MAX_GIZMOS);
     this.slot = this.pool.free.length > 0 ? this.pool.free.pop()! : this.pool.mesh.count++;
-    this.setColor(0x00FF00);
+    this.setColor(0x00_FF_00);
     this.follow(startPos);
     this.attach();
   }

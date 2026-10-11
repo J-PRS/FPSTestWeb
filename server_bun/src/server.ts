@@ -22,7 +22,7 @@ const rtcServer = new RtcServer(gameServer);
 const wtServer = new WtServer(gameServer);
 
 function wsUpgrade(srv: { upgrade(req: Request, opts: { data: WebSocketData }): boolean }, req: Request, data: WebSocketData): Response | undefined {
-  if (srv.upgrade(req, { data })) return undefined;
+  if (srv.upgrade(req, { data })) {return undefined;}
   return new Response('Upgrade failed', { status: 400 });
 }
 
@@ -33,7 +33,7 @@ const stateUrl = process.env.FPS_STATE_URL;
 if (stateUrl) {
   try {
     const res = await fetch(stateUrl, { signal: AbortSignal.timeout(1500) });
-    if (res.ok) gameServer.restoreFrom(await res.json());
+    if (res.ok) {gameServer.restoreFrom(await res.json());}
   } catch { /* watcher not serving — clean boot */ }
 }
 
@@ -73,7 +73,7 @@ const server = Bun.serve<WebSocketData>({
     },
 
     drain(ws) {
-      if (ws.data.rtc || ws.data.rtcs) return;
+      if (ws.data.rtc || ws.data.rtcs) {return;}
       gameServer.onDrain(ws);
     },
   },
@@ -120,16 +120,16 @@ const server = Bun.serve<WebSocketData>({
     }
 
     const route = ROUTES[url.pathname];
-    if (route) return route(url, req);
+    if (route) {return route(url, req);}
 
     // Prefix routes — path carries params (admin query args, demo filename).
-    if (url.pathname.startsWith('/admin/')) return adminRoute(httpCtx, req, url);
-    if (url.pathname.startsWith('/demos/')) return demoRoute(httpCtx, req, url);
+    if (url.pathname.startsWith('/admin/')) {return adminRoute(httpCtx, req, url);}
+    if (url.pathname.startsWith('/demos/')) {return demoRoute(httpCtx, req, url);}
     // Clip-feed deep links — OG card for crawlers, refresh into the client.
     if (url.pathname === '/clips' || url.pathname.startsWith('/clips/')) {
       return clipRoute(httpCtx, url);
     }
-    if (url.pathname.startsWith('/maps/')) return mapBinRoute(url);
+    if (url.pathname.startsWith('/maps/')) {return mapBinRoute(url);}
     if (url.pathname === '/client-log' && req.method === 'POST') {
       return clientLogRoute(req, corsResponse, srv.requestIP(req)?.address ?? '');
     }
@@ -164,8 +164,8 @@ if (CONFIG.wtPort > 0) {
       keyPem: rf(keyPath, 'utf8'),
     });
     }
-  } catch (e) {
-    logger.warn('WebTransport disabled — cert/key unreadable', { error: (e as Error).message });
+  } catch (error) {
+    logger.warn('WebTransport disabled — cert/key unreadable', { error: (error as Error).message });
   }
 }
 
@@ -193,7 +193,7 @@ if (fleetReport) {
         list: gameServer.listRooms(),
       }),
     }).catch(() => { /* matchmaker restarting — the next beat retries */ });
-  }, 2_000);
+  }, 2000);
 }
 
 // Last-resort catches: a stray timer callback (killFeed taunts, grace

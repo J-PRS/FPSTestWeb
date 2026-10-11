@@ -20,17 +20,17 @@ const ROCKET_DMG = 30;    // center-of-blast damage
 
 const _geoRktBody = new THREE.CylinderGeometry(0.045, 0.065, 0.32, 6);
 const _geoRktNose = new THREE.ConeGeometry(0.045, 0.14, 6);
-const _rktBodyMat = new THREE.MeshLambertMaterial({ color: 0x5A616B });
-const _rktNoseMat = new THREE.MeshBasicMaterial({ color: 0xFFCC66 });
+const _rktBodyMat = new THREE.MeshLambertMaterial({ color: 0x5A_61_6B });
+const _rktNoseMat = new THREE.MeshBasicMaterial({ color: 0xFF_CC_66 });
 const _rktGlowMat = new THREE.SpriteMaterial({
-  map: getGlowTexture(), color: 0xFF9944, transparent: true,
+  map: getGlowTexture(), color: 0xFF_99_44, transparent: true,
   blending: THREE.AdditiveBlending, depthWrite: false,
 });
 const _FWD = new THREE.Vector3(0, 0, 1);
 // Ribbon colors — hot orange band, white-hot core pair. Same 3-lane recipe
 // as live projectiles so a sentry rocket reads as the same class of threat.
-const RKTT_COLOR = 0xFF9944;
-const RKTT_CORE = new THREE.Color(RKTT_COLOR).lerp(new THREE.Color(0xFFFFFF), 0.6).getHex();
+const RKTT_COLOR = 0xFF_99_44;
+const RKTT_CORE = new THREE.Color(RKTT_COLOR).lerp(new THREE.Color(0xFF_FF_FF), 0.6).getHex();
 const RKTT_W = 0.32;
 const RKTT_LIFE = 0.4;
 
@@ -169,7 +169,7 @@ export class DeployRockets {
   private detonate(r: Rocket): void {
     r.ttl = 0;
     this.deps.world.explosions.push(new Explosion(
-      this.deps.scene, r.pos, false, 0, this.deps.lazyTerrain(), 0.5, 0xFFAA44));
+      this.deps.scene, r.pos, false, 0, this.deps.lazyTerrain(), 0.5, 0xFF_AA_44));
     sfx.explosionAt(r.pos, false);
     for (const c of this.deps.targets) {
       if (c.dead || c.scoreless) {continue;}
@@ -179,7 +179,7 @@ export class DeployRockets {
         if (dmg > 0) {this.deps.lazyCombat()?.hitTargetLocal(c, dmg, r.owner);}
       }
     }
-    for (const b of (r.team !== undefined ? this.deps.botFoes?.(r.team) : this.deps.enemyBots?.()) ?? []) {
+    for (const b of (r.team === undefined ? this.deps.enemyBots?.() : this.deps.botFoes?.(r.team)) ?? []) {
       if (!b.alive) {continue;}
       const d = b.pos.distanceTo(r.pos);
       if (d >= ROCKET_AOE) {continue;}

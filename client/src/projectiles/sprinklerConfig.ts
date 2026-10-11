@@ -48,10 +48,10 @@ export const SPRINKLER_CONFIG: ProjectileConfig = {
   trailScaleMin: 0.5,
   trailScaleMax: 1.2,
   trailRampIn: 0.02,
-  meshColor: 0xAAFF66,
+  meshColor: 0xAA_FF_66,
   meshType: 'rocket',
   glowShell: true,
-  glowColor: 0x88FF44,
+  glowColor: 0x88_FF_44,
   glowOpacity: 0.5,
   glowScale: 0.7,
   meshRampIn: true,
@@ -65,6 +65,6 @@ export const SPRINKLER_CONFIG: ProjectileConfig = {
   ribbonTrail: true,
   ribbonWidth: 0.15,
   ribbonLife: 0.1,
-  ribbonColor: 0x88FF44,
+  ribbonColor: 0x88_FF_44,
   vfx: 'splash', // watery burst, not a fireball — it's a hose
 };

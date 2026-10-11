@@ -23,7 +23,7 @@ export class FleetDirectory {
 
   /** A beat older than this marks the worker down — its rooms re-open
    *  for placement on the survivors (clients rejoin through /join). */
-  static readonly BEAT_STALE_MS = 8_000;
+  static readonly BEAT_STALE_MS = 8000;
   /** A pending claim lives only until the beat confirms — a join that
    *  never completes must not pin the room forever. 30s covers slow
    *  admission under join storms (the failure mode of a shorter TTL is

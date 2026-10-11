@@ -2,9 +2,9 @@ import * as THREE from 'three';
 
 import {
   CLOUD_WIND_SPEED, CLOUD_DENSITY,
-  CLOUD_MIN_HEIGHT, CLOUD_MAX_HEIGHT,
+  CLOUD_MIN_HEIGHT, CLOUD_MAX_HEIGHT,FOG_COLOR
 } from '../core/config.js';
-import { FOG_COLOR } from '../core/config.js';
+
 import { UNGRADE_GLSL } from '../core/gradeGlsl.js';
 import { puffVertex, puffFragment, makePuffTexture, buildPuffGeometry } from './cloudPuffs.js';
 import { NOISE_WORLD_SCALE, noiseHash, _smooth } from './cloudNoise.js';
@@ -264,7 +264,7 @@ export class VolumetricClouds {
       fragmentShader,
       uniforms: {
         noiseTex: { value: this.noiseTex },
-        cloudColor: { value: params.cloudColor ?? new THREE.Color(0xFFFFFF) },
+        cloudColor: { value: params.cloudColor ?? new THREE.Color(0xFF_FF_FF) },
         fogColor: { value: new THREE.Color(FOG_COLOR) },
         sunDirection: { value: this.sunDirection },
         windScroll: { value: this.scroll },

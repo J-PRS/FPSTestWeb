@@ -11,9 +11,9 @@
 import * as THREE from 'three';
 
 import { TERRAIN_HEIGHT_SCALE } from '../core/config.js';
-import { getHeightScale } from '../world/heightmap.js';
+import { getHeightScale,maxHeightInRect } from '../world/heightmap.js';
 import { classCapsule } from '../../../shared/botClasses.js';
-import { maxHeightInRect } from '../world/heightmap.js';
+
 import { ChildLogger } from '../core/Logger.js';
 import type { Targetable } from '../entities/balls.js';
 import type { Terrain } from '../world/terrain.js';
@@ -57,12 +57,12 @@ export function sweepTerrain(p: SweepHost, terrain: Terrain): boolean {
   // Whole field tops out at TERRAIN_HEIGHT_SCALE × the map's height gain —
   // a segment whose lowest endpoint clears it can never intersect. Skips
   // the ~96-getHeight loop for every high-altitude shell (most mid-flight).
-  if (Math.min(p.pos.y, p.prevPos.y) > TERRAIN_HEIGHT_SCALE * getHeightScale() + offset) return false;
+  if (Math.min(p.pos.y, p.prevPos.y) > TERRAIN_HEIGHT_SCALE * getHeightScale() + offset) {return false;}
   // Coarse reject: the tallest heightmap cell under the segment's XZ rect
   // can't be under-reported, so clearing it skips the ~96-sample loop for
   // every shell cruising over low ground (the common case).
   const minY = Math.min(p.pos.y, p.prevPos.y);
-  if (minY > maxHeightInRect(p.prevPos.x, p.prevPos.z, p.pos.x, p.pos.z) + offset) return false;
+  if (minY > maxHeightInRect(p.prevPos.x, p.prevPos.z, p.pos.x, p.pos.z) + offset) {return false;}
   const step = Math.max(0.08, Math.min(0.5, offset));
   const steps = Math.max(1, Math.min(96, Math.ceil(dist / step)));
   const below = (t: number) => {
@@ -78,7 +78,7 @@ export function sweepTerrain(p: SweepHost, terrain: Terrain): boolean {
       let lo = Math.max(0, (i - 1) / steps), hi = t;
       for (let k = 0; k < 5; k++) {
         const mid = (lo + hi) / 2;
-        if (below(mid)) hi = mid; else lo = mid;
+        if (below(mid)) {hi = mid;} else {lo = mid;}
       }
       p.hitPoint.set(
         p.prevPos.x + dx * hi,
@@ -132,7 +132,7 @@ export function sweepBall(p: SweepHost, ball: Targetable): boolean {
   // Capsule targets extend past pos (capsuleTop up, capsuleEnd along the
   // heading) — the reject must cover the farthest reach point or it lies.
   const capsuleExt = Math.max(ball.capsuleTop ?? 0, ball.capsuleEnd ? ball.capsuleEnd.length() : 0);
-  if (segmentSphereReject(p, ball.pos.x, ball.pos.y, ball.pos.z, tr + p.hitRadius + capsuleExt + 0.5)) return false;
+  if (segmentSphereReject(p, ball.pos.x, ball.pos.y, ball.pos.z, tr + p.hitRadius + capsuleExt + 0.5)) {return false;}
   const dx = p.pos.x - p.prevPos.x;
   const dy = p.pos.y - p.prevPos.y;
   const dz = p.pos.z - p.prevPos.z;
@@ -151,7 +151,7 @@ export function sweepBall(p: SweepHost, ball: Targetable): boolean {
     const e = targetDelta(ball, sx, sy, sz);
     const d2 = e.x * e.x + e.y * e.y + e.z * e.z;
     const d = Math.sqrt(d2);
-    if (d < minDist) minDist = d;
+    if (d < minDist) {minDist = d;}
 
     // Passed center when distance increases from the previous step
     const passedCenter = i > 0 && d2 > prevD2;
@@ -194,7 +194,7 @@ export function sweepPlayer(p: SweepHost, playerPos: THREE.Vector3, playerId: st
   const capRadius = cap.radius;
   // Same sphere reject; capsule half-height inflates the reach so a
   // head/foot catch can't slip past the midpoint estimate.
-  if (segmentSphereReject(p, playerPos.x, centerY, playerPos.z, capRadius + capHalf + p.hitRadius + 0.5)) return false;
+  if (segmentSphereReject(p, playerPos.x, centerY, playerPos.z, capRadius + capHalf + p.hitRadius + 0.5)) {return false;}
 
   const dx = p.pos.x - p.prevPos.x;
   const dy = p.pos.y - p.prevPos.y;
@@ -249,7 +249,7 @@ export function sweepPlayer(p: SweepHost, playerPos: THREE.Vector3, playerId: st
     }
 
     // Only consider wake hit if we've passed the closest point on the path
-    const passedCenter = t <= 1.0;
+    const passedCenter = t <= 1;
     const prevMin = p.wakePlayerDistances.get(playerId) ?? Infinity;
     if (totalDist < prevMin) {
       p.wakePlayerDistances.set(playerId, totalDist);
@@ -272,7 +272,7 @@ export function sweepPlayer(p: SweepHost, playerPos: THREE.Vector3, playerId: st
 export function sweepObstacle(p: SweepHost, o: SweepObstacle): boolean {
   // Obstacle also moved — reject on its current midpoint vs the shell's
   // segment; its frame displacement is tiny next to the +0.5 slack.
-  if (segmentSphereReject(p, o.pos.x, o.pos.y, o.pos.z, p.config.bodyRadius + o.radius + 0.5)) return false;
+  if (segmentSphereReject(p, o.pos.x, o.pos.y, o.pos.z, p.config.bodyRadius + o.radius + 0.5)) {return false;}
   const dx = p.pos.x - p.prevPos.x;
   const dy = p.pos.y - p.prevPos.y;
   const dz = p.pos.z - p.prevPos.z;
@@ -288,7 +288,7 @@ export function sweepObstacle(p: SweepHost, o: SweepObstacle): boolean {
   const cx = ax + rx * t, cy = ay + ry * t, cz = az + rz * t;
   const d2 = cx * cx + cy * cy + cz * cz;
   const thresh = p.config.bodyRadius + o.radius;
-  if (d2 > thresh * thresh) return false;
+  if (d2 > thresh * thresh) {return false;}
   p.minHitDist = Math.sqrt(d2);
   p.directHit = true;
   p.hitAt(

@@ -94,14 +94,14 @@ export class P2PHost {
     // reports judge it, resync/energy ride the same hooks.
     moveInput: (pid, i, status, seq) => this.moveShadows.queueInput(pid, {
       forward: i.forward, right: i.right,
-      jumpPressed: !!i.jump, jumpHeld: !!i.jump, skiHeld: !!i.ski,
-      jetHeld: !!i.jet,
+      jumpPressed: Boolean(i.jump), jumpHeld: Boolean(i.jump), skiHeld: Boolean(i.ski),
+      jetHeld: Boolean(i.jet),
     }, status, seq),
     moveReport: (pid, pos, yaw, vel, inputSeq, rttMs) => this.moveShadows.reconcile(pid, pos, yaw, vel, inputSeq, rttMs),
     inputSeqOf: (pid) => this.moveShadows.inputSeqOf(pid),
     transitOf: (pid) => this.moveShadows.transitOf(pid),
     transitNote: (pid, rtt, stamp) => {
-      if (this.lastPingStamp.get(pid) !== stamp) return;
+      if (this.lastPingStamp.get(pid) !== stamp) {return;}
       this.moveShadows.feedTransit(pid, rtt);
     },
     drainEnergy: (pid, n) => this.moveShadows.drainEnergy(pid, n),
@@ -150,8 +150,8 @@ export class P2PHost {
     this.roomInfo.interiors = map.interiors;
     // Authored spawn anchors — the host assigns spawn positions, so a
     // spec map should land guests where the map says, not at origin.
-    if (map.spawns) this.playerManager.spawnPoints = map.spawns;
-    if (map.teamSpawns) this.playerManager.teamSpawns = map.teamSpawns;
+    if (map.spawns) {this.playerManager.spawnPoints = map.spawns;}
+    if (map.teamSpawns) {this.playerManager.teamSpawns = map.teamSpawns;}
     this.roomInfo.bases = map.bases;
     // setMap arrives after construction — both collider sets must track
     // the host's real map or beam sweeps + shell contacts adjudicate
@@ -290,8 +290,8 @@ export class P2PHost {
     // only cost the offending peer's link, never the host's own game.
     try {
       this.messageHandler.handleMessage(playerId, result.data);
-    } catch (e) {
-      logger.error('Handler failed', { playerId, type: (result.data as { type?: string })?.type ?? '?', err: e instanceof Error ? e.stack ?? e.message : String(e) });
+    } catch (error) {
+      logger.error('Handler failed', { playerId, type: (result.data as { type?: string })?.type ?? '?', err: error instanceof Error ? error.stack ?? error.message : String(error) });
       this.byPlayer.get(playerId)?.close();
     }
   }
@@ -330,7 +330,7 @@ export class P2PHost {
     if (++this.pingCycle % 10 === 0 && this.byPlayer.size > 0) {
       const ids = [...this.byPlayer.keys()];
       const pid = ids.find((id) => !this.lastPingStamp.has(id))
-        ?? ids[(this.pingCycle / 10 | 0) % ids.length]!;
+        ?? ids[(Math.trunc(this.pingCycle / 10)) % ids.length]!;
       const stamp = Date.now();
       this.lastPingStamp.set(pid, stamp);
       this.sendJSON(pid, { type: 'ping', timestamp: stamp });

@@ -27,13 +27,13 @@ export interface SpeciesRow {
 }
 
 export const SPECIES: Record<string, SpeciesRow> = {
-  crawler: { family: 'hop',      speed: 1.0,  health: 70,  bite: 25 },
+  crawler: { family: 'hop',      speed: 1,  health: 70,  bite: 25 },
   scarab:  { family: 'hop',      speed: 1.35, health: 40,  bite: 15, aggro: 55 * 55, pounceD: 20 * 20 },
-  rakk:    { family: 'fly',      speed: 1.0,  health: 50,  bite: 18 },
+  rakk:    { family: 'fly',      speed: 1,  health: 50,  bite: 18 },
   gnat:    { family: 'fly',      speed: 1.5,  health: 20,  bite: 8,  orbitR: 10, orbitAlt: 8 },
-  roller:  { family: 'roll',     speed: 1.0,  health: 120, bite: 30 },
-  snake:   { family: 'slither',  speed: 1.0,  health: 45,  bite: 14 },
-  baneling:{ family: 'baneling', speed: 1.0,  health: 15,  bite: 18, blast: 5.0 },
+  roller:  { family: 'roll',     speed: 1,  health: 120, bite: 30 },
+  snake:   { family: 'slither',  speed: 1,  health: 45,  bite: 14 },
+  baneling:{ family: 'baneling', speed: 1,  health: 15,  bite: 18, blast: 5 },
   totem:   { family: 'totem',               health: 200, bite: 15 },
 };
 

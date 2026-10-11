@@ -166,8 +166,8 @@ class LabView {
   private ensureRenderer(): void {
     if (this.renderer) {return;}
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
-    const grid = new THREE.GridHelper(120, 24, 0x22384F, 0x14202E);
-    const light = new THREE.AmbientLight(0xFFFFFF, 1.2);
+    const grid = new THREE.GridHelper(120, 24, 0x22_38_4F, 0x14_20_2E);
+    const light = new THREE.AmbientLight(0xFF_FF_FF, 1.2);
     this.statics.add(grid).add(light);
     this.labRoot.add(grid, light);
   }

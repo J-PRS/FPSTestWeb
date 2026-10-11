@@ -56,7 +56,7 @@ export class RoomPickups {
     // spot and grounding would sink the tag under the deck.
     if (this.room.field) {
       const ground = Math.max(hmHeight(this.room.field, p.pos.x, p.pos.z), hmChord(this.room.field, p.pos.x, p.pos.z)) + 0.5;
-      if (p.pos.y - ground < 2.5) p.pos.y = ground;
+      if (p.pos.y - ground < 2.5) {p.pos.y = ground;}
     }
     this.pickups.set(id, p);
     logger.debug('Pickup spawned', { room: this.room.name, kind, id });
@@ -95,12 +95,12 @@ export class RoomPickups {
    *  camper. Server moves the truth spot AND rebroadcasts a spawn edge:
    *  clients had their own cosmetic knock, this snaps them to agreement. */
   knock(at: Vec3, radius: number, force: number, pull = false): void {
-    if (!Number.isFinite(at.x + at.y + at.z + radius + force)) return;
+    if (!Number.isFinite(at.x + at.y + at.z + radius + force)) {return;}
     const s = pull ? -1 : 1;
     for (const p of this.pickups.values()) {
       const dx = p.pos.x - at.x, dy = p.pos.y - at.y, dz = p.pos.z - at.z;
       const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      if (d >= radius) continue;
+      if (d >= radius) {continue;}
       const mag = aoeImpulse(force, d, radius) * 0.4 * s; // nugs are light but grounded — fraction of player shove
       p.vel.x += (dx / (d || 1)) * mag;
       p.vel.z += (dz / (d || 1)) * mag;
@@ -110,11 +110,11 @@ export class RoomPickups {
 
   /** Gems decay by timeout, never by geography — see hmSettleWalkable. */
   private settleReachable(p: { pos: Vec3 }): void {
-    if (this.room.field) hmSettleWalkable(this.room.field, p.pos);
+    if (this.room.field) {hmSettleWalkable(this.room.field, p.pos);}
   }
 
   private remove(id: number, by: string | null): void {
-    if (!this.pickups.delete(id)) return;
+    if (!this.pickups.delete(id)) {return;}
     this.room.broadcast(verbPayload(WORLD_MODEL.pickup!, 'gone', 'id', id, { by }) as ServerMessage);
   }
 
@@ -122,7 +122,7 @@ export class RoomPickups {
     if (this.pickups.size === 0) {
       // Stale sweep anchors would span idle time — a fresh nugget must
       // start each segment from the current frame, not an hour-old spot.
-      if (this.prevPos.size) this.prevPos.clear();
+      if (this.prevPos.size > 0) {this.prevPos.clear();}
       return;
     }
     const players = this.room.players.getAllPlayers(); // live map — re-iterated, no roster copy per tick
@@ -145,9 +145,9 @@ export class RoomPickups {
           // surface is the nugget-burial class, not a cosmetic offset.
           const dg = this.room.field
             ? Math.max(hmHeight(this.room.field, p.pos.x, p.pos.z), hmChord(this.room.field, p.pos.x, p.pos.z))
-            : NaN;
+            : Number.NaN;
           inv('pickup-below-ground', !Number.isFinite(dg) || p.pos.y >= dg - 0.5,
-            { id: p.id, y: +p.pos.y.toFixed(1) });
+            { id: p.id, y: Number(p.pos.y.toFixed(1)) });
           // Resting spot is the new truth — one edge resyncs every client.
           this.room.broadcast(spawnPayload(WORLD_MODEL.pickup!, p.id, 'id', { pos: { ...p.pos }, kind: p.kind }) as ServerMessage);
         }
@@ -159,10 +159,10 @@ export class RoomPickups {
       }
       if (p.armT > 0) { p.armT -= dt; continue; } // still flying — no grabs
       for (const pl of players.values()) {
-        if (pl.isDead) continue;
+        if (pl.isDead) {continue;}
         // Score pickups (gems/tags) only exist in team modes; powerups
         // are grab-able by anyone alive in any mode.
-        if ((p.kind === 'gem' || p.kind === 'tag') && !pl.team) continue;
+        if ((p.kind === 'gem' || p.kind === 'tag') && !pl.team) {continue;}
         // Swept grab: closest point on this tick's path segment — a
         // point check lets a full-speed ski skip the ring entirely.
         const a = this.prevPos.get(pl.id) ?? pl.position;
@@ -177,10 +177,10 @@ export class RoomPickups {
         const cx = a.x + abx * t, cy = a.y + aby * t, cz = a.z + abz * t;
         // Planar grab — a jump shouldn't put a nugget out of reach,
         // but a jetpack flyover isn't a pickup.
-        if (Math.abs(cy - p.pos.y) > 6) continue;
+        if (Math.abs(cy - p.pos.y) > 6) {continue;}
         const dx = cx - p.pos.x, dz = cz - p.pos.z;
         const reach = PICKUP_R * perkMods(pl.perk).pickupRadius;
-        if (dx * dx + dz * dz > reach * reach) continue;
+        if (dx * dx + dz * dz > reach * reach) {continue;}
         this.remove(p.id, pl.id);
         weaponStats.recordPickup(this.room.mode, p.kind, 'banked');
         // Score touches are the money line — log them so a soak can prove
@@ -199,10 +199,10 @@ export class RoomPickups {
     for (const pl of players.values()) {
       const prev = this.prevPos.get(pl.id);
       if (prev) { prev.x = pl.position.x; prev.y = pl.position.y; prev.z = pl.position.z; }
-      else this.prevPos.set(pl.id, { ...pl.position });
+      else {this.prevPos.set(pl.id, { ...pl.position });}
     }
     for (const id of this.prevPos.keys()) {
-      if (!this.room.players.getPlayer(id)) this.prevPos.delete(id);
+      if (!this.room.players.getPlayer(id)) {this.prevPos.delete(id);}
     }
   }
 }

@@ -2,8 +2,8 @@
 // Single entry point for the game to interact with the demo system.
 
 import { DemoRecorder, type DemoContext, type RemoteSample, type TargetSnapshot } from './DemoRecorder.js';
-import { DemoPlayer, type InterpolatedRemote } from './DemoPlayer.js';
-import type { PlaybackState } from './DemoPlayer.js';
+import { DemoPlayer, type InterpolatedRemote,type PlaybackState } from './DemoPlayer.js';
+
 import { DemoUI } from './DemoUI.js';
 import type { IPlayerDataProvider, IInputProvider, Vec3 } from './interfaces.js';
 import type { ProjectileEvent, TargetEvent, DemoFile } from './types.js';
@@ -34,8 +34,8 @@ function recChip(on: boolean): void {
     recEl.style.cssText = 'color:#f44;font-weight:700;animation:krec 1.2s infinite';
     const st = document.createElement('style');
     st.textContent = '@keyframes krec{0%,100%{opacity:1}50%{opacity:.35}}';
-    recEl.appendChild(st);
-    (document.getElementById('hud-tr') ?? document.body).appendChild(recEl);
+    recEl.append(st);
+    (document.getElementById('hud-tr') ?? document.body).append(recEl);
   } else if (!on && recEl) {
     recEl.remove();
     recEl = null;
@@ -318,7 +318,7 @@ export class DemoManager implements demoIO.DemoIOHost {
       // A clip parked via finishLoad starts here, bypassing playDemoData —
       // without this the world never enters playbackMode and the live wire
       // fights the replay.
-      if (this.mode === 'idle') this.onPlaybackStart?.();
+      if (this.mode === 'idle') {this.onPlaybackStart?.();}
       this.player.play();
       this.mode = 'playing';
       this.ui.setPlaying(true);
@@ -327,7 +327,7 @@ export class DemoManager implements demoIO.DemoIOHost {
 
   // Seek by a relative offset (seconds)
   seekBy(delta: number): void {
-    if (this.mode !== 'playing' && this.mode !== 'paused') return;
+    if (this.mode !== 'playing' && this.mode !== 'paused') {return;}
     this.player.seek(this.player.currentTimeValue + delta);
     // Arrow-key seek while paused must still snap the replicas
     this.onRemotePlayback?.(this.player.getRemoteStates(), 0);
@@ -335,7 +335,7 @@ export class DemoManager implements demoIO.DemoIOHost {
 
   // Restart demo from the beginning
   restart(): void {
-    if (this.mode !== 'playing' && this.mode !== 'paused') return;
+    if (this.mode !== 'playing' && this.mode !== 'paused') {return;}
     this.player.seek(0);
     this.onRemotePlayback?.(this.player.getRemoteStates(), 0);
   }
@@ -349,7 +349,7 @@ export class DemoManager implements demoIO.DemoIOHost {
   // If a new cool shot happens during an existing pending clip's wait period,
   // the clips are merged into one longer clip (chain combo).
   // minLifetime is 0.2s during testing phase so clips are easy to trigger. Raise to ~2.0s for production.
-  autoClipOnHit(projectileLifetime: number, minLifetime: number = 0.2, bufferBefore: number = 5.0, bufferAfter: number = 5.0, hitTime?: number, meta?: { weapon?: string; distance?: number }): void {
+  autoClipOnHit(projectileLifetime: number, minLifetime: number = 0.2, bufferBefore: number = 5, bufferAfter: number = 5, hitTime?: number, meta?: { weapon?: string; distance?: number }): void {
     this.coolShotMgr.onHit(projectileLifetime, minLifetime, bufferBefore, bufferAfter, hitTime, meta);
   }
 
@@ -397,7 +397,7 @@ export class DemoManager implements demoIO.DemoIOHost {
     if (this.videoExportArmedAt) {
       const fresh = Date.now() - this.videoExportArmedAt < 30_000;
       this.videoExportArmedAt = 0;
-      if (fresh) this.startVideoCapture();
+      if (fresh) {this.startVideoCapture();}
     }
     this.onPlaybackStart?.();
   }
@@ -542,8 +542,8 @@ export class DemoManager implements demoIO.DemoIOHost {
 
   // Toggle UI with keyboard shortcut
   toggleUI(): void {
-    if (this.uiVisible) this.hideUI();
-    else this.showUI();
+    if (this.uiVisible) {this.hideUI();}
+    else {this.showUI();}
   }
 
   // Cleanup

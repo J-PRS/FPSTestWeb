@@ -4,7 +4,7 @@
  * Kept apart so gameLoop owns orchestration while this owns "how the
  * frame budget responds when the machine can't keep up".
  */
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import { urlParams } from '../core/params.js';
 import { settings } from '../core/settings.js';
 import Logger from '../core/Logger.js';
@@ -23,12 +23,12 @@ const fxJobMs = new Map<string, number>();
 const fxJobMax = new Map<string, number>();
 export function fxJobSample(name: string, ms: number): void {
   fxJobMs.set(name, (fxJobMs.get(name) ?? 0) * 0.9 + ms * 0.1);
-  if (ms > (fxJobMax.get(name) ?? 0)) fxJobMax.set(name, ms);
+  if (ms > (fxJobMax.get(name) ?? 0)) {fxJobMax.set(name, ms);}
 }
 export function fxJobStats(): Record<string, number> {
   const out: Record<string, number> = {};
-  for (const [k, v] of fxJobMs) out[k] = +v.toFixed(2);
-  for (const [k, v] of fxJobMax) out[`max:${k}`] = +v.toFixed(2);
+  for (const [k, v] of fxJobMs) {out[k] = Number(v.toFixed(2));}
+  for (const [k, v] of fxJobMax) {out[`max:${k}`] = Number(v.toFixed(2));}
   return out;
 }
 /** Clear the per-job maxes — called per dump so a spike doesn't fossilize. */
@@ -39,7 +39,7 @@ export function fxJobResetMax(): void { fxJobMax.clear(); }
 // throttled to once per 10s. Uses rawElapsed, not clamped dt, and skips
 // hidden tabs (rAF throttling ≠ real perf).
 export function fpsWatchdog(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof createFrameBudget>, perf: ReturnType<typeof createPerfHud>, rawElapsed: number, now: number): void {
-  if (document.hidden || rawElapsed <= 0) return;
+  if (document.hidden || rawElapsed <= 0) {return;}
   // A >0.5s frame isn't a slow frame — it's an rAF stall (occluded/
   // headless tab, OS jank). Counting them reported "avgFps 1" dumps on
   // machines rendering fine; stalls fall into the healthy branch and
@@ -71,13 +71,13 @@ export function fpsWatchdog(deps: GameLoopDeps, st: LoopState, budget: ReturnTyp
 function dumpPerf(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof createFrameBudget>, perf: ReturnType<typeof createPerfHud>): void {
   const player = deps.lazyPlayer();
   const nm = deps.lazyNetworkManager();
-  const info = deps.rendererSetup.renderer.info;
-  const entities = deps.entities;
+  const {info} = deps.rendererSetup.renderer;
+  const {entities} = deps;
   Logger.warn('LOW FPS sustained — perf dump', {
     avgFps: Math.round(st.lowFpsFrames / st.lowFpsAccum),
     frames: st.lowFpsFrames,
-    pos: { x: +player.pos.x.toFixed(1), y: +player.pos.y.toFixed(1), z: +player.pos.z.toFixed(1) },
-    speed: +player.vel.length().toFixed(1),
+    pos: { x: Number(player.pos.x.toFixed(1)), y: Number(player.pos.y.toFixed(1)), z: Number(player.pos.z.toFixed(1)) },
+    speed: Number(player.vel.length().toFixed(1)),
     dead: player.isDead,
     demo: deps.lazyDemoManager()?.isPlaying ?? false,
     targets: entities.targets.length,
@@ -104,7 +104,7 @@ function dumpPerf(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof c
     ping: nm?.getPing?.(),
     packetLoss: nm?.getPacketLoss?.(),
     heapMB: (performance as { memory?: { usedJSHeapSize: number } }).memory
-      ? Math.round((performance as { memory?: { usedJSHeapSize: number } }).memory!.usedJSHeapSize / 1048576)
+      ? Math.round((performance as { memory?: { usedJSHeapSize: number } }).memory!.usedJSHeapSize / 1_048_576)
       : undefined,
   });
   // worstItemMs is an all-time max — reset per dump so it reflects the
@@ -140,7 +140,7 @@ function tierOf(p: number, m: number): number {
   return p <= 1 ? 0 : p === 2 ? 2 : p === 3 ? 3 : m >= 2 ? 5 : 4;
 }
 function tierToPM(next: number, baseP: number, baseM: number): { p: number; m: number } {
-  if (next <= 1) return { p: baseP, m: baseM };
+  if (next <= 1) {return { p: baseP, m: baseM };}
   return { p: Math.min(4, next), m: next >= 5 ? 2 : baseM };
 }
 // Non-retro baselines get a gradual degrade: fractional render scale
@@ -163,12 +163,12 @@ function gpuLevelTarget(st: LoopState, dir: number, base: { p: number; m: number
 function autoScale(deps: GameLoopDeps, st: LoopState, dir: number): void {
   // The SETTINGS toggle is the master switch — an opted-out user keeps
   // their manual pixel/shadow picks no matter how low the fps sits.
-  if (!settings.get('fps-autoq')) return;
-  if (st.cpuBound) return autoScaleCpu(deps, st, dir);
+  if (!settings.get('fps-autoq')) {return;}
+  if (st.cpuBound) {return autoScaleCpu(deps, st, dir);}
   const { rendererSetup } = deps;
   const base = baselinePixel();
   const target = gpuLevelTarget(st, dir, base);
-  if (!target) return;
+  if (!target) {return;}
   const { next, baselineLevel } = target;
   // Shadows shed with the pixel tier under pressure and restore on
   // recovery, but only while the USER's fps-shadows pick stays on —
@@ -177,7 +177,7 @@ function autoScale(deps: GameLoopDeps, st: LoopState, dir: number): void {
   // ladder at level 1, so it never came back).
   const wantShadows = settings.get('fps-shadows') &&
     (next === 0 || (baselineLevel > 0 && next === baselineLevel));
-  if (rendererSetup.renderer.shadowMap.enabled !== wantShadows) setShadows(deps, wantShadows);
+  if (rendererSetup.renderer.shadowMap.enabled !== wantShadows) {setShadows(deps, wantShadows);}
   applyResTier(deps, st, next, base, baselineLevel);
   // Full-sky raster FX shed before the deepest pixel drop: the cloud dome
   // shades every skyward fragment on a GPU that already can't keep up.
@@ -192,10 +192,10 @@ function autoScale(deps: GameLoopDeps, st: LoopState, dir: number): void {
 
 function applyResTier(deps: GameLoopDeps, st: LoopState, next: number, base: { p: number; m: number }, baselineLevel: number): void {
   const { rendererSetup } = deps;
-  if (next < 2 && !st.autoPixel) return;
+  if (next < 2 && !st.autoPixel) {return;}
   // Gradual path: resScale rungs replace the px jumps entirely; retro
   // baselines keep the integer tiers (non-integer factors shimmer).
-  if (base.p <= 1) rendererSetup.setResScale(RES_LADDER[next]!);
+  if (base.p <= 1) {rendererSetup.setResScale(RES_LADDER[next]!);}
   else {
     const t = tierToPM(next, base.p, base.m);
     rendererSetup.setPixel(t.p, t.m, false);
@@ -205,7 +205,7 @@ function applyResTier(deps: GameLoopDeps, st: LoopState, next: number, base: { p
 
 let _gpuId: string | null = null;
 function gpuId(renderer: THREE.WebGLRenderer): string {
-  if (_gpuId) return _gpuId;
+  if (_gpuId) {return _gpuId;}
   const gl = renderer.getContext() as WebGLRenderingContext;
   const ext = gl.getExtension('WEBGL_debug_renderer_info');
   _gpuId = ext
@@ -218,8 +218,8 @@ function gpuId(renderer: THREE.WebGLRenderer): string {
 // thing a starving GPU needs. Shed at the deepest tier and restore by
 // the user's own toggles on recovery (pass flags only, settings kept).
 function shedPostPasses(rendererSetup: GameLoopDeps['rendererSetup'], shed: boolean): void {
-  if (rendererSetup.bloomPass) rendererSetup.bloomPass.enabled = !shed && rendererSetup.isBloomEnabled();
-  if (rendererSetup.contrastPass) rendererSetup.contrastPass.enabled = !shed && rendererSetup.isPostProcessingEnabled();
+  if (rendererSetup.bloomPass) {rendererSetup.bloomPass.enabled = !shed && rendererSetup.isBloomEnabled();}
+  if (rendererSetup.contrastPass) {rendererSetup.contrastPass.enabled = !shed && rendererSetup.isPostProcessingEnabled();}
 }
 
 // CPU-bound ladder — JS phases dominate the frame, so a smaller buffer
@@ -230,18 +230,18 @@ function autoScaleCpu(deps: GameLoopDeps, st: LoopState, dir: number): void {
   const pixelPinned = urlParams.get('px') !== null || (base.p > 1 && base.m === 3);
   const cap = pixelPinned ? 1 : 2;
   const next = Math.min(cap, Math.max(0, st.cpuLevel - dir));
-  if (next === st.cpuLevel) return;
+  if (next === st.cpuLevel) {return;}
   const ambientOn = next === 0;
   setVfxQualityScale(next === 0 ? 1 : next === 1 ? 0.6 : 0.4);
-  for (const layer of deps.ambientLayers) layer.setActive(ambientOn);
+  for (const layer of deps.ambientLayers) {layer.setActive(ambientOn);}
   deps.groundMist().setActive(ambientOn);
   deps.ambientBirds.setActive(ambientOn);
   // Stepping back up restores the baseline pick, not necessarily OFF.
   if (next === 2 || (st.autoPixel && next < 2)) {
     // CPU-bound: drop to a 2x raw buffer (or the baseline's scale, mode
     // demoted to raw — CPU dither/xBR passes cost JS/GPU either way).
-    if (next === 2) rendererSetup.setPixel(base.p > 1 ? base.p : 2, 0, false);
-    else rendererSetup.setPixel(base.p, base.m, false);
+    if (next === 2) {rendererSetup.setPixel(base.p > 1 ? base.p : 2, 0, false);}
+    else {rendererSetup.setPixel(base.p, base.m, false);}
     st.autoPixel = next === 2;
   }
   st.cpuLevel = next;
@@ -254,14 +254,14 @@ export function resetAutoQuality(deps: GameLoopDeps, st: LoopState): void {
   // Restore the stored baseline — the user's own pixel pick, not forced 0.
   if (st.autoPixel) {
     const base = baselinePixel();
-    if (base.p <= 1) deps.rendererSetup.setResScale(1);
-    else deps.rendererSetup.setPixel(base.p, base.m, false);
+    if (base.p <= 1) {deps.rendererSetup.setResScale(1);}
+    else {deps.rendererSetup.setPixel(base.p, base.m, false);}
     st.autoPixel = false;
   }
   if (deps.rendererSetup.renderer.shadowMap.enabled !== settings.get('fps-shadows')) {
     setShadows(deps, settings.get('fps-shadows'));
   }
-  for (const layer of deps.ambientLayers) layer.setActive(true);
+  for (const layer of deps.ambientLayers) {layer.setActive(true);}
   deps.groundMist().setActive(true);
   deps.ambientBirds.setActive(true);
   deps.sceneSetup.volumetricClouds?.setEnabled(true);
@@ -278,7 +278,7 @@ function setShadows(deps: GameLoopDeps, on: boolean): void {
   // Lit materials cache shadow uniforms — flag for recompile once.
   sceneSetup.scene.traverse(o => {
     const m = (o as THREE.Mesh).material;
-    if (m) (Array.isArray(m) ? m : [m]).forEach(x => { x.needsUpdate = true; });
+    if (m) {(Array.isArray(m) ? m : [m]).forEach(x => { x.needsUpdate = true; });}
   });
   // Deliberately NOT settings.set: fps-shadows is the user's stored pick,
   // the ladder only owns the runtime flag (see wantShadows above).

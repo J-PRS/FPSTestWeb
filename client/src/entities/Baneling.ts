@@ -7,7 +7,7 @@ import {
   BANELING_ACCEL, BANELING_TOPSPEED,
   BANELING_FUSE_DIST, BANELING_LIFE, BANELING_BLAST_RADIUS,
 } from '../core/config.js';
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
@@ -35,11 +35,11 @@ let _mat: THREE.MeshLambertMaterial | null = null;
 let _glowMat: THREE.MeshBasicMaterial | null = null;
 
 export function banelingParts(): SwarmPart[] {
-  if (!_mat) _mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-  if (!_glowMat) _glowMat = new THREE.MeshBasicMaterial({
-    map: getGlowTexture(), color: 0x66ff44, transparent: true, blending: THREE.AdditiveBlending,
+  if (!_mat) {_mat = new THREE.MeshLambertMaterial({ color: 0xFF_FF_FF });}
+  if (!_glowMat) {_glowMat = new THREE.MeshBasicMaterial({
+    map: getGlowTexture(), color: 0x66_FF_44, transparent: true, blending: THREE.AdditiveBlending,
     depthWrite: false, side: THREE.DoubleSide,
-  });
+  });}
   return [
     { geometry: _geo, material: _mat, castShadow: true },
     { geometry: _glowGeo, material: _glowMat },
@@ -67,9 +67,9 @@ export class Baneling implements Targetable, SwarmSlotOwner {
   health: number;
   maxHealth: number;
   radius: number;
-  color = new THREE.Color(0x4a8a2a); // swollen green sac
+  color = new THREE.Color(0x4A_8A_2A); // swollen green sac
   readonly debrisKind = 'goo' as const; // pops into splat blobs, not shards
-  readonly ichor = 0xe0a03c; // acid-orange sac contents
+  readonly ichor = 0xE0_A0_3C; // acid-orange sac contents
   scale = 0.9; // small gibs — it's a sac of goo, not a body
 
   swarmSlot = -1;
@@ -133,29 +133,29 @@ export class Baneling implements Targetable, SwarmSlotOwner {
     this.health = this.maxHealth = uber ? BANELING_HEALTH * 4 : BANELING_HEALTH;
     this.radius = uber ? BANELING_RADIUS * 1.7 : BANELING_RADIUS;
     this.blastRadius = uber ? BANELING_BLAST_RADIUS * 1.7 : BANELING_BLAST_RADIUS;
-    if (uber) this.color.set(0x8a6a1a); // overripe amber — visibly worse
+    if (uber) {this.color.set(0x8A_6A_1A);} // overripe amber — visibly worse
     this.pos = pos.clone();
     const gy = terrain.getHeight(pos.x, pos.z);
-    if (this.pos.y < gy + this.radius) this.pos.y = gy + this.radius;
+    if (this.pos.y < gy + this.radius) {this.pos.y = gy + this.radius;}
     this.airborne = this.pos.y > gy + this.radius + 0.5; // dropped from the overlord's belly
     this.vel = new THREE.Vector3();
     this.hasSlots = allocSlots('baneling', this);
-    if (!this.hasSlots) this.dead = true;
+    if (!this.hasSlots) {this.dead = true;}
   }
 
   private detonate(): void {
-    if (this.dead) return;
+    if (this.dead) {return;}
     this.dead = true;
     this.onDetonate?.(this);
   }
 
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
-    if (this.dead) return;
+    if (this.dead) {return;}
     if (this.netDriven && this.sim) {
       this.updateNet(dt, terrain, playerPos);
       return;
     }
-    if (this.flash > 0) this.flash -= dt;
+    if (this.flash > 0) {this.flash -= dt;}
     this.age += dt;
 
     const gy = terrain.getHeight(this.pos.x, this.pos.z);
@@ -208,7 +208,7 @@ export class Baneling implements Targetable, SwarmSlotOwner {
       this.rollQuat.premultiply(_dq);
     }
 
-    if (!this.hasSlots) return;
+    if (!this.hasSlots) {return;}
     this.writeInstances(terrain);
   }
 
@@ -216,7 +216,7 @@ export class Baneling implements Targetable, SwarmSlotOwner {
    *  (which drives pos/vel from the shared sim) shares one render path. */
   writeInstances(_terrain: Terrain): void {
     const swarm = getSwarm('baneling');
-    if (!swarm) return;
+    if (!swarm) {return;}
     const slot = this.swarmSlot;
     const r = this.radius;
     const swell = Math.max(0, this.glowPulse - 0.4) * 0.15; // urgency folded into the pulse
@@ -243,7 +243,7 @@ export class Baneling implements Targetable, SwarmSlotOwner {
   takeDamage(damage = 1, opts?: { serverPaid?: boolean }): boolean {
     // netDriven is a claim, never a pop — the authority's detonate edge
     // + crawlDie decide, so a client can't fake-explode a sac.
-    if (this.netDriven) return claimDamageMelee(this, damage, Baneling.hitClaim, opts?.serverPaid);
+    if (this.netDriven) {return claimDamageMelee(this, damage, Baneling.hitClaim, opts?.serverPaid);}
     // Shooting it pops it — that IS the counterplay
     this.detonate();
     return true;
@@ -252,13 +252,13 @@ export class Baneling implements Targetable, SwarmSlotOwner {
   applyKnockback(from: THREE.Vector3, force: number): void {
     if (!Number.isFinite(from.x + from.y + from.z + force)) {return;}    _dir.copy(this.pos).sub(from).normalize();
     this.vel.addScaledVector(_dir, force * 1.2); // light sac — blasts punt it
-    if (this.vel.y > 2) this.airborne = true;
+    if (this.vel.y > 2) {this.airborne = true;}
   }
 
   applyPull(to: THREE.Vector3, force: number): void {
     if (!Number.isFinite(to.x + to.y + to.z + force)) {return;}    _dir.copy(to).sub(this.pos).normalize();
     this.vel.addScaledVector(_dir, force * 1.2);
-    if (this.vel.y > 2) this.airborne = true;
+    if (this.vel.y > 2) {this.airborne = true;}
   }
 
   dispose(): void {

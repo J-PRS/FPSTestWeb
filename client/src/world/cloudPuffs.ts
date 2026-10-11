@@ -128,7 +128,7 @@ export function buildPuffGeometry(base: Float32Array, noiseSize: number, yMin: n
       // Same field the shader samples at windScroll=0 — uv = xz / scale.
       const f = sampleBase(base, noiseSize, gx / NOISE_WORLD_SCALE, gz / NOISE_WORLD_SCALE);
       if (f < 0.48) {continue;}
-      const h1 = noiseHash(gx | 0, gz | 0), h2 = noiseHash(gx | 0, (gz | 0) + 77);
+      const h1 = noiseHash(Math.trunc(gx), Math.trunc(gz)), h2 = noiseHash(Math.trunc(gx), (Math.trunc(gz)) + 77);
       const x = gx + (h1 - 0.5) * PUFF_CELL * 0.8;
       const z = gz + (h2 - 0.5) * PUFF_CELL * 0.8;
       const y = yMin + (0.25 + h1 * 0.5) * (yMax - yMin);

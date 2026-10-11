@@ -260,14 +260,14 @@ export class NetworkManager {
             this.lastDownReason = null;
             // Queued reliable commands ride the live lane after the join
             // (bounded 16 — a dead lane never earns an unbounded backlog).
-            for (const q of this.pendingCmds) this.send(q);
+            for (const q of this.pendingCmds) {this.send(q);}
             this.pendingCmds = [];
             resolve();
           },
           onDisconnect: (code, reason) => {
             // 1008 = server rejected our session — drop stored identity so
             // auto-reconnect joins fresh instead of looping on bad creds
-            if (code === 1008) this.resetIdentity(reason);
+            if (code === 1008) {this.resetIdentity(reason);}
             // A reasoned close ('server restarting', 'kicked') reads
             // differently than a dead pipe — the banner names it.
             this.lastDownReason = code !== undefined && code >= 1000 && reason ? reason : null;
@@ -330,17 +330,17 @@ export class NetworkManager {
   }
 
   private checkStall(): void {
-    if (!this.isConnected() || !this.lastUrl) return;
+    if (!this.isConnected() || !this.lastUrl) {return;}
     // Hidden tabs throttle this interval AND starve the network pump —
     // the "silent" window is throttling, not a dead socket. A real death
     // still trips wt.closed/the pumps, and the visibility resync covers
     // whatever's left on regain.
-    if (document.hidden) return;
+    if (document.hidden) {return;}
     // Worker transports stamp liveness at the receive edge — a main-loop
     // stall delays DRAIN, not arrival, and must not read as socket silence.
     const lastRx = Math.max(this.lastRxAt, this.ws?.probe?.lastRxAt ?? 0);
     const silent = Date.now() - lastRx;
-    if (lastRx === 0 || silent < NetworkManager.STALL_MS) return;
+    if (lastRx === 0 || silent < NetworkManager.STALL_MS) {return;}
     logger.warn(`no server traffic in ${Math.round(silent)}ms — socket silent, reprobing`, { tier: this.ws?.tier });
     const url = this.lastUrl;
     // TieredTransport is one-shot after disconnect() (closed flag), so
@@ -384,7 +384,7 @@ export class NetworkManager {
     if (!this.ws?.connected()) {
       if (this.onlineExpected && NetworkManager.QUEUEABLE.has(msg.type)) {
         this.pendingCmds.push(msg);
-        if (this.pendingCmds.length > NetworkManager.MAX_PENDING_CMDS) this.pendingCmds.shift();
+        if (this.pendingCmds.length > NetworkManager.MAX_PENDING_CMDS) {this.pendingCmds.shift();}
         return;
       }
       this.noteDrop(msg.type);
@@ -396,7 +396,7 @@ export class NetworkManager {
     checkIntent(msg.type, msg as unknown as Record<string, unknown>);
     const s = JSON.stringify(msg);
     this.txBytes += s.length;
-    if (this.ws.send(s) === false) this.noteDrop(msg.type);
+    if (this.ws.send(s) === false) {this.noteDrop(msg.type);}
   }
 
   /** wireIn hook: a tickSeq gap on the datagram lane — ask the server for
@@ -405,7 +405,7 @@ export class NetworkManager {
   private lastNackAt = 0;
   public onTickGap(_skipped: number): void {
     const now = Date.now();
-    if (now - this.lastNackAt < 250) return;
+    if (now - this.lastNackAt < 250) {return;}
     this.lastNackAt = now;
     this.send({ type: 'tickNack' });
   }
@@ -487,7 +487,7 @@ export class NetworkManager {
   /** Tick-arrival cadence — host loopback delivers ticks in per-frame
    *  bursts, which would read as fake packet loss in the gap tracker. */
   tickArrived(): void {
-    if (this.ws?.tier !== 'host') this.telemetry.onTickArrival(Date.now());
+    if (this.ws?.tier !== 'host') {this.telemetry.onTickArrival(Date.now());}
   }
 
   pongReceived(timestamp: number): void {
@@ -566,10 +566,10 @@ export class NetworkManager {
    *  and per-room state would alias across a merge). */
   remoteReset(players: GameStatePlayer[] | undefined): void {
     this.players.clear();
-    if (players) for (const p of players) {
-      if (p.id === this.localPlayerId) continue;
+    if (players) {for (const p of players) {
+      if (p.id === this.localPlayerId) {continue;}
       this.players.set(p.id, p);
-    }
+    }}
   }
 
   remoteHas(playerId: string): boolean { return this.players.has(playerId); }
@@ -584,7 +584,7 @@ export class NetworkManager {
   // must use patchRemotePlayer: minting on an edge leaves phantom roster
   // entries when the edge outlives its member (§2.165/§2.168).
   upsertRemotePlayer(playerId: string, patch: Partial<RemotePlayerState>): void {
-    if (!playerId || playerId === this.localPlayerId) return;
+    if (!playerId || playerId === this.localPlayerId) {return;}
     const existing = this.players.get(playerId);
     // Mutate in place: a fresh object per player per tick was the
     // biggest steady-state allocation on the 20Hz wire path. Merge
@@ -601,7 +601,7 @@ export class NetworkManager {
       // Vec fields are handled below — storing the patch ref would alias
       // the decode pool (a pooled slot tracks whichever player decoded
       // LAST), so they fill the entry's own sub-objects instead.
-      if (k === 'position' || k === 'rotation' || k === 'velocity') continue;
+      if (k === 'position' || k === 'rotation' || k === 'velocity') {continue;}
       const key = k as keyof RemotePlayerState;
       (next as unknown as Record<string, unknown>)[k] = patch[key] ?? next[key] ?? ROSTER_DEFAULTS[key];
     }
@@ -610,7 +610,7 @@ export class NetworkManager {
     if (patch.position && Number.isFinite(patch.position.x + patch.position.y + patch.position.z)) { next.position.x = patch.position.x; next.position.y = patch.position.y; next.position.z = patch.position.z; }
     if (patch.rotation && Number.isFinite(patch.rotation.yaw + patch.rotation.pitch)) { next.rotation.yaw = patch.rotation.yaw; next.rotation.pitch = patch.rotation.pitch; }
     if (patch.velocity && Number.isFinite(patch.velocity.x + patch.velocity.y + patch.velocity.z)) { next.velocity.x = patch.velocity.x; next.velocity.y = patch.velocity.y; next.velocity.z = patch.velocity.z; }
-    if (!existing) this.players.set(playerId, next);
+    if (!existing) {this.players.set(playerId, next);}
   }
 
   // Patch-in-place-or-drop for one-off edges — returns false when the
@@ -639,12 +639,12 @@ export class NetworkManager {
    * rejecting the move and rubber-banding us.
    */
   sendTeleport(position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, velocity: { x: number; y: number; z: number }): void {
-    if (!this.isConnected()) return;
+    if (!this.isConnected()) {return;}
     this.send({ type: 'teleport', position, rotation, velocity });
   }
 
   sendPosition(position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, velocity: { x: number; y: number; z: number }): void {
-    if (!this.isConnected()) return;
+    if (!this.isConnected()) {return;}
 
     const now = Date.now();
 
@@ -671,7 +671,7 @@ export class NetworkManager {
     this.stateHistory.set(seq, { position: { ...position }, velocity: { ...velocity }, rotation: { ...rotation } });
     if (this.stateHistory.size > this.STATE_HISTORY_MAX) {
       const oldest = this.stateHistory.keys().next().value;
-      if (oldest !== undefined) this.stateHistory.delete(oldest);
+      if (oldest !== undefined) {this.stateHistory.delete(oldest);}
     }
 
     // Binary frame: 30B instead of ~140B JSON. Server decodes on the wire
@@ -721,7 +721,7 @@ export class NetworkManager {
     // Ungated sends during the connect window counted as drops — the
     // journal keeps the entry regardless, so skipping the fast path
     // loses nothing (inputSync re-requests on the server's word).
-    if (!this.isConnected()) return;
+    if (!this.isConnected()) {return;}
     this.inputs.sendMove(input, rotation, (m) => this.send(m));
   }
 
@@ -745,7 +745,7 @@ export class NetworkManager {
   healRemoteHealth(playerId: string, health: number): void {
     // upsert would CREATE a stub for an unknown id — a heal must never
     // materialize a phantom roster row.
-    if (!this.players.has(playerId)) return;
+    if (!this.players.has(playerId)) {return;}
     this.upsertRemotePlayer(playerId, { health });
   }
 
@@ -757,7 +757,7 @@ export class NetworkManager {
    *  flip direction so the caller knows which visual to run. */
   healRemoteLife(playerId: string, isDead: boolean, health: number, position?: { x: number; y: number; z: number }): 'revived' | 'killed' | null {
     const cur = this.players.get(playerId);
-    if (!cur || cur.isDead === isDead) return null;
+    if (!cur || cur.isDead === isDead) {return null;}
     // Server position is truth either way: a revive anchors at the
     // respawn point, a kill pins the corpse where the server saw it die.
     this.upsertRemotePlayer(playerId, {
@@ -798,7 +798,7 @@ export class NetworkManager {
   /** Slam landing intent — the server derives blast power from its own
    *  velocity shadow; only the landing spot crosses the wire. */
   sendSlam(position: { x: number; y: number; z: number }): void {
-    if (!this.connected) return;
+    if (!this.connected) {return;}
     this.send({ type: 'slam', position, claimSeq: this.ledger.stamp('slam') });
   }
 
@@ -815,7 +815,7 @@ export class NetworkManager {
    *  For SERVER_SIMMED_WEAPONS it's the fire intent — pos/shotId help the
    *  spawn hint + echo binding; the server derives truth itself. */
   sendShotFired(a: { weaponType?: number; dir?: { x: number; y: number; z: number }; pos?: { x: number; y: number; z: number }; shotId?: string }): void {
-    if (!this.connected) return;
+    if (!this.connected) {return;}
     this.send({ type: 'shotFired', ...a, fireAt: this.serverNowMs() });
   }
 
@@ -827,7 +827,7 @@ export class NetworkManager {
   /** Deployable plant claim — sent when the pod lands and seats, so the
    *  position is the settled one the server will enforce caps/TTL on. */
   sendDeploy(kind: DeployKind, position: { x: number; y: number; z: number }): void {
-    if (!this.connected) return;
+    if (!this.connected) {return;}
     this.send({ type: 'deploy', kind, position, claimSeq: this.ledger.stamp('deploy') });
   }
 
@@ -841,20 +841,20 @@ export class NetworkManager {
   /** Instant-skill ante mirror — skills.ts already spent the energy
    *  locally; the server applies the same drain to its shadow tank. */
   sendSkillUse(): void {
-    if (!this.connected) return;
+    if (!this.connected) {return;}
     this.send({ type: 'skillUse', claimSeq: this.ledger.stamp('skillUse') });
   }
 
   /** Loadout class pick mid-match — the server banks it for the next
    *  respawn (same rule the client applies locally). */
   sendClassUpdate(armorClass: string): void {
-    if (!this.connected) return;
+    if (!this.connected) {return;}
     this.send({ type: 'classUpdate', armorClass });
   }
 
   /** Perk pick mid-match — same respawn-bank rule as the class pick. */
   sendPerkUpdate(perk: string): void {
-    if (!this.connected) return;
+    if (!this.connected) {return;}
     this.send({ type: 'perkUpdate', perk });
   }
 
@@ -948,7 +948,7 @@ export class NetworkManager {
    *  from. Returns false when there's no live socket (caller falls back
    *  to a reload join). */
   switchRoom(room: string, map?: string, bots?: number, mode?: string, unlisted?: boolean, noCreatures?: boolean, noBalls?: boolean): boolean {
-    if (!this.isConnected()) return false;
+    if (!this.isConnected()) {return false;}
     this.send({ type: 'switchRoom', room, map, bots, mode, unlisted: unlisted || undefined, noCreatures: noCreatures || undefined, noBalls: noBalls || undefined });
     return true;
   }
@@ -1023,7 +1023,7 @@ export class NetworkManager {
     // Map iterates in insertion order and seqs increase monotonically —
     // stop at the first unacked entry instead of scanning the whole map.
     for (const seq of this.stateHistory.keys()) {
-      if (seq > ackSeq) break;
+      if (seq > ackSeq) {break;}
       this.stateHistory.delete(seq);
     }
   }

@@ -94,7 +94,7 @@ export class ServerBotSenses {
    *  owned by the other team, near the bot and near what it's after.
    *  The stand's kill-zone is knowledge the room advertises anyway. */
   hostileGear(p: { id: string; team?: string; position: Vec3 }, goal: BotVec | null, sabotage = false): Vec3 | null {
-    if (!goal && !sabotage) return null;
+    if (!goal && !sabotage) {return null;}
     let best: Vec3 | null = null;
     // Lob from the edge of turret sight (42m) — a bot that must first
     // survive to 30m never gets the shot off.
@@ -105,10 +105,10 @@ export class ServerBotSenses {
     // redundant owner lookup per call (per think). Read-only iteration
     // is deletion-safe on this Map (clearOwner relies on it).
     for (const d of this.room.deployables.items.values()) {
-      if (d.kind === 'station') continue; // pads aren't a threat
+      if (d.kind === 'station') {continue;} // pads aren't a threat
       const owner = this.room.players.getPlayer(d.owner);
-      if (p.team && owner?.team === p.team) continue;
-      if (!p.team && d.owner === p.id) continue;
+      if (p.team && owner?.team === p.team) {continue;}
+      if (!p.team && d.owner === p.id) {continue;}
       const bd = Math.hypot(d.pos.x - p.position.x, d.pos.z - p.position.z);
       // The generator is a vault target — the lob must fly its doorway
       // from outside the face, so it earns a wider envelope than a
@@ -136,10 +136,10 @@ export class ServerBotSenses {
     let bestD = 45;
     for (const d of this.room.deployables.items.values()) {
       const cap = DEPLOY_HP[d.kind];
-      if (d.hp >= cap) continue;
+      if (d.hp >= cap) {continue;}
       if (d.owner !== p.id) {
         const owner = this.room.players.getPlayer(d.owner);
-        if (!p.team || owner?.team !== p.team) continue;
+        if (!p.team || owner?.team !== p.team) {continue;}
       }
       const bd = Math.hypot(d.pos.x - p.position.x, d.pos.z - p.position.z);
       if (bd < bestD) { bestD = bd; best = { key: String(d.id), pos: d.pos, frac: d.hp / cap }; }
@@ -155,7 +155,7 @@ export class ServerBotSenses {
    *  re-charged while it's gone. */
   markFoeNear(id: string, ctx: BrainCtx, pos: Vec3, yaw: number, now: number): void {
     for (const e of ctx.enemies) {
-      if (e.id.startsWith('b:') || e.id.startsWith('c:')) continue;
+      if (e.id.startsWith('b:') || e.id.startsWith('c:')) {continue;}
       const dx = e.pos.x - pos.x, dz = e.pos.z - pos.z;
       const d = Math.hypot(dx, e.pos.y - pos.y, dz);
       // Brawl range, not spotting range — a foe it can't reach yet is a
@@ -172,7 +172,7 @@ export class ServerBotSenses {
         // "ignoring" it is a false positive that maxes out honest bots.
         const fx = Math.sin(yaw), fz = Math.cos(yaw);
         const gd = Math.hypot(dx, dz) || 1;
-        if ((dx * fx + dz * fz) / gd < FOE_CONE_MIN_DOT) continue;
+        if ((dx * fx + dz * fz) / gd < FOE_CONE_MIN_DOT) {continue;}
         this.foeNear.set(id, now + 500);
         return;
       }
@@ -260,9 +260,9 @@ export class ServerBotSenses {
           const qx = Math.round(x / 4) * 4, qz = Math.round(z / 4) * 4;
           y = Math.max(this.field ? hmHeight(this.field, qx, qz) : p.position.y,
             this.room.moveSim.structureTop(qx, qz));
-          if (k >= 0) { if (this.groundMemo.size > 32768) this.groundMemo.clear(); this.groundMemo.set(k, y); }
+          if (k >= 0) { if (this.groundMemo.size > 32_768) {this.groundMemo.clear();} this.groundMemo.set(k, y); }
         }
-        if (sharedEnv.thinkProf) sharedEnv.thinkProf.set('sense:groundY', (sharedEnv.thinkProf.get('sense:groundY') ?? 0) + sharedEnv.wallPerf!() - t0);
+        if (sharedEnv.thinkProf) {sharedEnv.thinkProf.set('sense:groundY', (sharedEnv.thinkProf.get('sense:groundY') ?? 0) + sharedEnv.wallPerf!() - t0);}
         return y;
       },
       route: this.routing.routeOf(p),
@@ -329,7 +329,7 @@ export class ServerBotSenses {
    *  picker's drift candidate can't fire there regardless. */
   private confidenceOf(p: { team?: string; kills?: number; deaths?: number }): number | undefined {
     const spec = this.room.modeSpec;
-    if (!spec?.teams || (p.team !== 'alpha' && p.team !== 'bravo')) return undefined;
+    if (!spec?.teams || (p.team !== 'alpha' && p.team !== 'bravo')) {return undefined;}
     const other = p.team === 'alpha' ? 'bravo' : 'alpha';
     const margin = (this.room.scores[p.team] - this.room.scores[other]) / Math.max(1, spec.winAt);
     const kd = Math.tanh(((p.kills ?? 0) - (p.deaths ?? 0)) / 4);
@@ -341,7 +341,7 @@ export class ServerBotSenses {
    *  grab — a healthy bot accepts that trade, a wounded one doesn't. */
   private pickupFor(p: { id: string; team?: string; position: Vec3; health: number; maxHealth: number }, foes: BotEnemy[]): BotVec | null {
     const snaps = this.parties.tick().pickups;
-    if (!snaps.length) return null;
+    if (snaps.length === 0) {return null;}
     // Greedy like the capper's roam shell, not a wall: close gems always
     // pull, far ones only sometimes — acceptance odds fall with distance
     // so a nuggets map spreads the fleet over the field instead of every
@@ -353,15 +353,15 @@ export class ServerBotSenses {
     let best: BotVec | null = null, bestD = Infinity;
     for (const g of snaps) {
       const d = dist3(p.position, g.pos);
-      if (d >= bestD || !worthIt(d)) continue;
+      if (d >= bestD || !worthIt(d)) {continue;}
       const hurt = p.maxHealth > 0 && p.health / p.maxHealth < 0.4;
       if (hurt) {
         let camped = false;
         for (const f of foes) {
-          if (!f.alive) continue;
+          if (!f.alive) {continue;}
           if (Math.hypot(f.pos.x - g.pos.x, f.pos.z - g.pos.z) < 35) { camped = true; break; }
         }
-        if (camped && d > 12) continue; // close enough to sneeze on it anyway
+        if (camped && d > 12) {continue;} // close enough to sneeze on it anyway
       }
       bestD = d; best = g.pos;
     }

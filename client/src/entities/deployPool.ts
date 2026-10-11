@@ -32,7 +32,7 @@ export function takeSlot(pool: PartPool): number {
 }
 
 export function releaseSlot(pool: PartPool, slot: number): void {
-  if (slot < 0) return;
+  if (slot < 0) {return;}
   pool.mesh.setMatrixAt(slot, ZERO_M4);
   pool.mesh.instanceMatrix.needsUpdate = true;
   pool.free.push(slot);

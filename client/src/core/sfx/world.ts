@@ -16,7 +16,7 @@ const _right = new THREE.Vector3();
 
 // Pack pitch tracks chassis: light frames whine a touch brighter, heavy
 // burns low. Rates double as osc-freq multipliers for the synth fallback.
-const JET_RATE: Record<string, number> = { light: 1.05, medium: 1.0, heavy: 0.95 };
+const JET_RATE: Record<string, number> = { light: 1.05, medium: 1, heavy: 0.95 };
 let jetCls = 'medium';
 
 function jetLoop(cls: string): LoopHandle | null {
@@ -57,7 +57,7 @@ function ensureLoops(): NonNullable<typeof loops> {
 // Build before stop so a failed rebuild keeps the synth playing.
 function swapToRealSamples(): void {
   const l = loops;
-  if (!l) return;
+  if (!l) {return;}
   const jetBuf = !realBound.jet && audio.sample('jet_loop') && audio.sampleLoop('jet_loop', JET_RATE[jetCls] ?? 1);
   if (jetBuf) { realBound.jet = true; l.jet?.stop(); l.jet = jetBuf; }
   const windBuf = !realBound.wind && audio.sample('snow_amb') && audio.sampleLoop('snow_amb');
@@ -75,7 +75,7 @@ function swapToRealSamples(): void {
  * the AudioContext unlocks.
  */
 export function updateAudio(dt: number, player: LoopPlayer, camera: THREE.PerspectiveCamera): void {
-  if (!audio.ready) return;
+  if (!audio.ready) {return;}
 
   // Listener: camera position + its right axis drives cheap stereo pan
   _right.set(1, 0, 0).applyQuaternion(camera.quaternion);
@@ -87,7 +87,7 @@ export function updateAudio(dt: number, player: LoopPlayer, camera: THREE.Perspe
   if (cls !== jetCls) {
     jetCls = cls;
     loops?.jet?.stop();
-    if (loops) loops.jet = jetLoop(cls);
+    if (loops) {loops.jet = jetLoop(cls);}
   }
   const l = ensureLoops();
   swapToRealSamples();
@@ -110,11 +110,11 @@ export function updateAudio(dt: number, player: LoopPlayer, camera: THREE.Perspe
 /** Warp beacon toss — quick electric chirp, rising. */
 export function warpThrow(): void {
   const c = ctx();
-  if (!c) return;
-  const bus = audio.sfxBus; if (!bus) return;
+  if (!c) {return;}
+  const bus = audio.sfxBus; if (!bus) {return;}
   const g = c.createGain(); g.connect(bus);
-  if (!play(g, 0.45, undefined, 1)) return;
-  if (layer(g, [['shot_energy', 0.7, 1.5], ['hg_tick', 0.4, 2.2, undefined, 0.06]])) return;
+  if (!play(g, 0.45, undefined, 1)) {return;}
+  if (layer(g, [['shot_energy', 0.7, 1.5], ['hg_tick', 0.4, 2.2, undefined, 0.06]])) {return;}
   osc('sawtooth', 700, 2600, 0.14, 0.35, g);
 }
 
@@ -122,18 +122,18 @@ export function warpThrow(): void {
  *  Positional at the ARRIVAL point so distant warps read quiet. */
 export function warpJump(pos: THREE.Vector3, emitVel?: THREE.Vector3): void {
   const c = ctx();
-  if (!c) return;
+  if (!c) {return;}
   const inNode = audio.worldInput(pos, emitVel);
-  if (!inNode) return;
+  if (!inNode) {return;}
   const g = c.createGain(); g.connect(inNode);
   try {
     if (!play(g, 0.8, inNode)) { audio.freeInput(inNode); return; }
     if (layer(g, [
       ['sparks', 0.9, 1.15, undefined, 0.2],
       ['shot_energy', 0.65, 0.8],
-      ['dash2', 0.55, 1.0, undefined, 0.12],
+      ['dash2', 0.55, 1, undefined, 0.12],
       ['explosion_small', 0.4, 1.6, 3000, 0.15],
-    ])) return;
+    ])) {return;}
     noise(0.2, 0.55, g, 'highpass', 2800, 5000);
     osc('sawtooth', 280, 2400, 0.22, 0.45, g);
     osc('sine', 140, 40, 0.3, 0.35, g); // sub-thump under the crack
@@ -153,7 +153,7 @@ const REMOTE_LOOP_CAP = 6;
 
 export function remoteMoveAudioGone(id: string): void {
   const l = remoteLoops.get(id);
-  if (!l) return;
+  if (!l) {return;}
   l.jet?.stop(); l.ski?.stop();
   remoteLoops.delete(id);
 }
@@ -163,7 +163,7 @@ function acquireRemoteLoops(id: string, cls: string): RemoteLoops | null {
     for (const [k, v] of remoteLoops) {
       if (!v.busy) { remoteMoveAudioGone(k); break; }
     }
-    if (remoteLoops.size >= REMOTE_LOOP_CAP) return null;
+    if (remoteLoops.size >= REMOTE_LOOP_CAP) {return null;}
   }
   const r = JET_RATE[cls] ?? 1;
   const jetReal = audio.sample('jet_loop') !== null;
@@ -185,11 +185,11 @@ function acquireRemoteLoops(id: string, cls: string): RemoteLoops | null {
 }
 
 export function remoteMoveAudio(id: string, pos: THREE.Vector3, speed: number, jetting: boolean, skiing: boolean, vel?: THREE.Vector3, cls = 'medium'): void {
-  if (!audio.ready) return;
+  if (!audio.ready) {return;}
   let l = remoteLoops.get(id) ?? ((jetting || skiing) ? acquireRemoteLoops(id, cls) : null);
   // Respawned into a new tier — the pack pitch follows the chassis.
   if (l && l.cls !== cls) { remoteMoveAudioGone(id); l = (jetting || skiing) ? acquireRemoteLoops(id, cls) : null; }
-  if (!l) return;
+  if (!l) {return;}
   // Late-arriving samples: swap the synth stand-ins like the local loops.
   if (l.jetSynth && audio.sample('jet_loop')) {
     const jet = audio.worldLoop('sample', 'jet_loop', JET_RATE[l.cls] ?? 1);
@@ -208,9 +208,9 @@ type CueKind = 'pounce' | 'skitter' | 'splat' | 'dart' | 'zap' | 'launch' | 'die
 
 export function enemyCue(pos: THREE.Vector3, kind: CueKind, emitVel?: THREE.Vector3): void {
   const c = ctx();
-  if (!c) return;
+  if (!c) {return;}
   const inNode = audio.worldInput(pos, emitVel);
-  if (!inNode) return;
+  if (!inNode) {return;}
   const g = c.createGain(); g.connect(inNode);
   try {
     if (!play(g, 0.4, inNode)) { audio.freeInput(inNode); return; }
@@ -228,7 +228,7 @@ function cueSkitter(g: GainNode): void {
     sample('punch', g, 0.25, 1.4, 900, 0.05);
     return;
   }
-  for (let i = 0; i < 3; i++) noise(0.02, 0.3, g, 'highpass', 4000 - i * 800, 5000);
+  for (let i = 0; i < 3; i++) {noise(0.02, 0.3, g, 'highpass', 4000 - i * 800, 5000);}
   noise(0.1, 0.25, g, 'bandpass', 3500, 5000, 3);
 }
 
@@ -244,27 +244,27 @@ function cueSplat(g: GainNode): void {
 }
 
 function cuePounce(g: GainNode): void {
-  if (sample('monster1', g, 0.7)) return;
+  if (sample('monster1', g, 0.7)) {return;}
   osc('sawtooth', 400, 900, 0.15, 0.45, g);
 }
 
 function cueDart(g: GainNode): void {
-  if (sample('monster2', g, 0.6, 1.4)) return;
+  if (sample('monster2', g, 0.6, 1.4)) {return;}
   noise(0.25, 0.55, g, 'bandpass', 1500, 3000, 2);
 }
 
 function cueZap(g: GainNode): void {
-  if (sample('sparks', g, 0.8)) return;
+  if (sample('sparks', g, 0.8)) {return;}
   osc('sawtooth', 1800, 400, 0.12, 0.45, g);
 }
 
 function cueLaunch(g: GainNode): void {
-  if (sample('missile', g, 0.8)) return;
+  if (sample('missile', g, 0.8)) {return;}
   noise(0.3, 0.6, g, 'bandpass', 300, 1200);
 }
 
 function cueDie(g: GainNode): void {
-  if (sample(`alien_die${1 + Math.floor(Math.random() * 3)}`, g, 0.8)) return;
+  if (sample(`alien_die${1 + Math.floor(Math.random() * 3)}`, g, 0.8)) {return;}
   noise(0.3, 0.5, g, 'lowpass', 1500, 200);
   osc('square', 300, 60, 0.2, 0.35, g);
 }
@@ -275,11 +275,11 @@ function cueRustle(g: GainNode): void {
   if (sample('hg_tick', g, 0.5, 1.1)) {
     sample('hg_tick', g, 0.4, 0.9, undefined, undefined, 0.03);
     sample('hg_tick', g, 0.35, 1.4, undefined, undefined, 0.07);
-    sample('punch', g, 0.2, 2.0, 1400, 0.04);
+    sample('punch', g, 0.2, 2, 1400, 0.04);
     noise(0.1, 0.22, g, 'highpass', 2600, 3500);
     return;
   }
-  for (let i = 0; i < 3; i++) noise(0.02, 0.28, g, 'highpass', 3200 - i * 600, 4500);
+  for (let i = 0; i < 3; i++) {noise(0.02, 0.28, g, 'highpass', 3200 - i * 600, 4500);}
   noise(0.12, 0.2, g, 'bandpass', 2400, 4000, 2);
 }
 
@@ -296,7 +296,7 @@ function cueSquawk(g: GainNode): void {
 }
 
 function cueHit(g: GainNode): void {
-  if (sample('sparks', g, 0.5, 1.3)) return;
+  if (sample('sparks', g, 0.5, 1.3)) {return;}
   noise(0.08, 0.35, g, 'highpass', 2000, 3000);
 }
 

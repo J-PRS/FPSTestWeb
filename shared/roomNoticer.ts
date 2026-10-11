@@ -23,9 +23,9 @@ export class RoomNoticer {
    *  fresh for 2s after it happened. */
   for(id: string, team: string | undefined, now: number): { kind: ChatterKind; actor: string; goal?: { x: number; y: number; z: number } } | undefined {
     const n = this.pending;
-    if (!n) return undefined;
+    if (!n) {return undefined;}
     if (now - n.stamp > 2000) { this.pending = null; return undefined; }
-    if (n.actorId === id || (this.seen.get(id) ?? 0) >= n.stamp) return undefined;
+    if (n.actorId === id || (this.seen.get(id) ?? 0) >= n.stamp) {return undefined;}
     this.seen.set(id, n.stamp);
     const mine = n.actorTeam !== undefined && n.actorTeam === team;
     // 'same' pins belong to the caller's squad (an enemy's radio isn't
@@ -33,10 +33,13 @@ export class RoomNoticer {
     // pins the carrier for the defenders, not for the grabber's escort.
     const goal = n.goal && (n.goalSide === 'other' ? !mine : mine) ? n.goal : undefined;
     switch (n.kind) {
-      case 'flagcap': case 'flagreturn': return { kind: mine ? 'cheer' : 'groan', actor: n.actorId, goal };
-      case 'flaggrab': return { kind: mine ? 'cheer' : 'alert', actor: n.actorId, goal };
-      case 'flagdrop': return { kind: mine ? 'groan' : 'cheer', actor: n.actorId, goal };
-      default: return { kind: n.kind, actor: n.actorId, goal };
+      case 'flagcap': case 'flagreturn': { return { kind: mine ? 'cheer' : 'groan', actor: n.actorId, goal };}
+      case 'flaggrab': { return { kind: mine ? 'cheer' : 'alert', actor: n.actorId, goal };
+      }
+      case 'flagdrop': { return { kind: mine ? 'groan' : 'cheer', actor: n.actorId, goal };
+      }
+      default: { return { kind: n.kind, actor: n.actorId, goal };
+      }
     }
   }
 
@@ -51,6 +54,6 @@ export class RoomNoticer {
   rekey(oldId: string, newId: string): void {
     const stamp = this.seen.get(oldId);
     if (stamp !== undefined) { this.seen.delete(oldId); this.seen.set(newId, stamp); }
-    if (this.pending?.actorId === oldId) this.pending.actorId = newId;
+    if (this.pending?.actorId === oldId) {this.pending.actorId = newId;}
   }
 }

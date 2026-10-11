@@ -34,7 +34,7 @@ describe('tickNet — grid discipline', () => {
   it('consumes only whole 0.05 cells; simT stays on the grid', () => {
     const { st, bag, host } = rig();
     tickNet(st, bag, host, 0.12);
-    expect(bag.simT).toBeCloseTo(0.10, 9); // two cells
+    expect(bag.simT).toBeCloseTo(0.1, 9); // two cells
     expect(bag.netAcc).toBeCloseTo(0.02, 9); // remainder banked
     // host.pos carries the unconsumed fraction ballistically
     expect(host.pos.x).toBeCloseTo(bag.sim!.x + bag.sim!.vx * 0.02, 9);
@@ -50,7 +50,7 @@ describe('tickNet — grid discipline', () => {
 
   it('never runs ahead of the stamped sim clock', () => {
     const { st, bag, host } = rig(() => 0.07); // only one cell of headroom
-    tickNet(st, bag, host, 0.20);
+    tickNet(st, bag, host, 0.2);
     // gated: simT + 0.05 <= simNow → one step at most... but netAcc
     // reaches 0.15, under the 0.5 stall-breaker, so it must hold.
     expect(bag.simT).toBeCloseTo(0.05, 9);
@@ -68,15 +68,15 @@ describe('tickNet — grid discipline', () => {
   it('cell consumption is paced: a burst backlog pays down over frames instead of one leap', () => {
     const { st, bag, host } = rig(() => 10); // simNow wide open
     tickNet(st, bag, host, 0.25); // 5 cells available
-    expect(bag.simT).toBeCloseTo(0.10, 9); // only 2 cells this call
+    expect(bag.simT).toBeCloseTo(0.1, 9); // only 2 cells this call
     expect(bag.netAcc).toBeCloseTo(0.15, 9); // backlog stays banked
     tickNet(st, bag, host, 0); // next frame pays down 2 more
-    expect(bag.simT).toBeCloseTo(0.20, 9);
+    expect(bag.simT).toBeCloseTo(0.2, 9);
   });
 
   it('banks at most 0.5s of lead — long hitches cannot fast-forward', () => {
     const { st, bag, host } = rig();
-    tickNet(st, bag, host, 2.0);
+    tickNet(st, bag, host, 2);
     expect(bag.simT).toBeLessThanOrEqual(0.5 + 1e-9);
   });
 

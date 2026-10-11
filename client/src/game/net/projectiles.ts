@@ -34,7 +34,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     const hit = origin.clone().addScaledVector(dirV.normalize(), MELEE_RANGE * 0.7);
     deps.world.explosions.push(new Explosion(
       deps.lazyScene(), hit, true, 0, deps.lazyTerrain(),
-      (getWeaponStats(WeaponType.Melee).aoeRadius * 0.7) / EXPLOSION_VFX_RADIUS, 0xAADDFF, 'punch',
+      (getWeaponStats(WeaponType.Melee).aoeRadius * 0.7) / EXPLOSION_VFX_RADIUS, 0xAA_DD_FF, 'punch',
     ));
     // Enemy swings get the slash arc too — the streak is what makes a
     // punch readable at range (there's no arm animation to read).
@@ -49,7 +49,7 @@ export function wireProjectiles(ctx: NetCtx): void {
       meleeFlash(origin, dir);
     } else if (weaponType !== undefined && getWeaponStats(weaponType).speed <= 0) {
       const beamCfg = getProjectileConfig(weaponType);
-      deps.lazyEffects().spawnBeam(origin, origin.clone().addScaledVector(dir, 80), beamCfg?.glowColor ?? 0x8FDCFF);
+      deps.lazyEffects().spawnBeam(origin, origin.clone().addScaledVector(dir, 80), beamCfg?.glowColor ?? 0x8F_DC_FF);
     } else {
       return false;
     }
@@ -64,7 +64,7 @@ export function wireProjectiles(ctx: NetCtx): void {
   const linkOwnProjectile = (projectileId: string, shotId?: string, pellet?: number): void => {
     const registry = deps.world.projectileRegistry;
     const localProjectile = shotId
-      ? (pellet !== undefined ? registry.byFanSlot.get(`${shotId}#${pellet}`) : registry.byShotId.get(shotId))
+      ? (pellet === undefined ? registry.byShotId.get(shotId) : registry.byFanSlot.get(`${shotId}#${pellet}`))
       : undefined;
     if (!localProjectile) {
       // A missing entry after the nonce mint is either an echo that
@@ -177,7 +177,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     // shooter sees along the claimed aim — cosmetic only.
     if (dir && Number.isFinite(dir.x + dir.y + dir.z)) {
       const d = new THREE.Vector3(dir.x, dir.y, dir.z).normalize();
-      if (Number.isFinite(d.x + d.y + d.z)) cosmeticShot(id, weaponType, origin, d);
+      if (Number.isFinite(d.x + d.y + d.z)) {cosmeticShot(id, weaponType, origin, d);}
     }
   };
 
@@ -237,6 +237,6 @@ export function wireProjectiles(ctx: NetCtx): void {
     const reg = deps.world.projectileRegistry;
     const rider = remoteProjectiles.get(riderId) ?? reg.byId.get(riderId);
     const host = remoteProjectiles.get(hostId) ?? reg.byId.get(hostId);
-    if (rider && host) rider.host = host;
+    if (rider && host) {rider.host = host;}
   };
 }

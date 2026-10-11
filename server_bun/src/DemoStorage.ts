@@ -35,7 +35,7 @@ export class DemoStorage {
    *  index entry per request. Cache the listing briefly; uploads and
    *  evictions flow through saveIndex which invalidates it. */
   private listCache: { at: number; rows: DemoMeta[] } | null = null;
-  private static LIST_TTL_MS = 5_000;
+  private static LIST_TTL_MS = 5000;
 
   constructor(demosDir: string) {
     this.demosDir = demosDir;
@@ -54,16 +54,16 @@ export class DemoStorage {
         // Live membership check, not a snapshot: the ctor doesn't await
         // this reconcile, so a saveDemo in flight writes its file before
         // index.push — a snapshotted 'known' double-indexes it.
-        if (this.index.some(m => m.filename === filename)) continue;
+        if (this.index.some(m => m.filename === filename)) {continue;}
         try {
           const data = await readFile(join(this.demosDir, filename));
           const ab = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
           const header = this.parseDemoHeader(ab);
-          if (header.projectileLifetime < CONFIG.minDemoLifetime) continue;
+          if (header.projectileLifetime < CONFIG.minDemoLifetime) {continue;}
           // The readFile yield is a race window: a saveDemo landing inside
           // it already pushed this filename — re-check or the index rows
           // outnumber the files on disk.
-          if (this.index.some(m => m.filename === filename)) continue;
+          if (this.index.some(m => m.filename === filename)) {continue;}
           this.index.push({
             filename,
             projectileLifetime: header.projectileLifetime,
@@ -72,8 +72,8 @@ export class DemoStorage {
             fileSize: data.byteLength,
           });
           added++;
-        } catch (e: unknown) {
-          logger.warn(`Failed to parse orphaned demo ${filename}`, { error: errMsg(e) });
+        } catch (error: unknown) {
+          logger.warn(`Failed to parse orphaned demo ${filename}`, { error: errMsg(error) });
         }
       }
       if (added > 0) {
@@ -81,8 +81,8 @@ export class DemoStorage {
         await this.saveIndex();
         logger.info(`Reconciled ${added} orphaned demo(s) into index`);
       }
-    } catch (e: unknown) {
-      logger.warn('Failed to reconcile demo directory', { error: errMsg(e) });
+    } catch (error: unknown) {
+      logger.warn('Failed to reconcile demo directory', { error: errMsg(error) });
     }
   }
 
@@ -91,9 +91,9 @@ export class DemoStorage {
       if (!existsSync(this.demosDir)) {
         await mkdir(this.demosDir, { recursive: true });
       }
-    } catch (e: unknown) {
+    } catch (error: unknown) {
       // Storage keeps running — every later write reports its own failure.
-      logger.warn('Failed to create demos directory', { dir: this.demosDir, error: errMsg(e) });
+      logger.warn('Failed to create demos directory', { dir: this.demosDir, error: errMsg(error) });
     }
   }
 
@@ -105,8 +105,8 @@ export class DemoStorage {
         this.index = JSON.parse(data);
         logger.info(`Demo index loaded: ${this.index.length} demos`);
       }
-    } catch (e: unknown) {
-      logger.warn('Failed to load demo index', { error: errMsg(e) });
+    } catch (error: unknown) {
+      logger.warn('Failed to load demo index', { error: errMsg(error) });
       this.index = [];
     }
   }
@@ -116,8 +116,8 @@ export class DemoStorage {
     try {
       const indexPath = join(this.demosDir, INDEX_FILE);
       await writeFile(indexPath, JSON.stringify(this.index, null, 2));
-    } catch (e: unknown) {
-      logger.warn('Failed to save demo index', { error: errMsg(e) });
+    } catch (error: unknown) {
+      logger.warn('Failed to save demo index', { error: errMsg(error) });
     }
   }
 
@@ -129,12 +129,12 @@ export class DemoStorage {
     const view = new DataView(buf);
     let offset = 0;
     const need = (n: number) => {
-      if (offset + n > view.byteLength) throw new Error('Malformed demo header');
+      if (offset + n > view.byteLength) {throw new Error('Malformed demo header');}
     };
 
     need(1);
     const magic = view.getUint8(offset++);
-    if (magic !== 0x44) throw new Error('Malformed demo header');
+    if (magic !== 0x44) {throw new Error('Malformed demo header');}
 
     need(4);
     const formatVersion = view.getInt32(offset, true); offset += 4;
@@ -174,7 +174,7 @@ export class DemoStorage {
       // v1 fallback: parse from description string
       const match = description.match(/([\d.]+)s air/);
       if (match && match[1]) {
-        projectileLifetime = parseFloat(match[1]);
+        projectileLifetime = Number.parseFloat(match[1]);
       }
     }
 
@@ -253,7 +253,7 @@ export class DemoStorage {
 
   async listDemos(): Promise<DemoMeta[]> {
     const c = this.listCache;
-    if (c && wallNow() - c.at < DemoStorage.LIST_TTL_MS) return c.rows;
+    if (c && wallNow() - c.at < DemoStorage.LIST_TTL_MS) {return c.rows;}
     // Filter out stale entries whose files were deleted
     const valid = this.index.filter(m => existsSync(join(this.demosDir, m.filename)));
     if (valid.length !== this.index.length) {

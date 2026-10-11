@@ -24,7 +24,7 @@ describe('botSay lifecycle', () => {
 
   it('delivers the line after its beat', () => {
     botSay('bot:PICO-05', 'ez {v}');
-    vi.advanceTimersByTime(4_000);
+    vi.advanceTimersByTime(4000);
     expect(adds).toEqual(['ez {v}']);
   });
 
@@ -47,7 +47,7 @@ describe('botSay lifecycle', () => {
   it('hidden tab drops the line instead of queuing a stale taunt', () => {
     Object.defineProperty(document, 'hidden', { value: true, configurable: true });
     botSay('bot:PICO-05', 'wp');
-    vi.advanceTimersByTime(4_000);
+    vi.advanceTimersByTime(4000);
     expect(adds).toEqual([]);
   });
 });

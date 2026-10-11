@@ -23,7 +23,7 @@ function floatToWav(data: Float32Array, sampleRate: number): ArrayBuffer {
   w(36, 'data'); v.setUint32(40, data.length * 2, true);
   for (let i = 0; i < data.length; i++) {
     const s = Math.max(-1, Math.min(1, data[i]!));
-    v.setInt16(44 + i * 2, s < 0 ? s * 0x80_00 : s * 0x7f_ff, true);
+    v.setInt16(44 + i * 2, s < 0 ? s * 0x80_00 : s * 0x7F_FF, true);
   }
   return buf;
 }

@@ -63,7 +63,7 @@ export function applyDebugHooks(deps: DebugHooksDeps): ((dt: number) => void) | 
   const dummyPitch = (Number.parseFloat(qp.get('dummypitch')!) || 0) * Math.PI / 180;
   const marker = new THREE.Mesh(
     new THREE.SphereGeometry(0.5),
-    new THREE.MeshBasicMaterial({ color: 0xFF0000 })
+    new THREE.MeshBasicMaterial({ color: 0xFF_00_00 })
   );
   deps.scene.add(marker);
   const scratch = new THREE.Vector3();

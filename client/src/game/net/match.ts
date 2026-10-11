@@ -14,12 +14,12 @@ export function wireMatchEvents(ctx: NetCtx): void {
   let sbAutoShown = false;
   const pinScoreboard = (): void => {
     const hud = deps.lazyHud();
-    if (hud.scoreboardVisible) return;
+    if (hud.scoreboardVisible) {return;}
     hud.setScoreboardVisible(true);
     sbAutoShown = true;
   };
   const releaseScoreboard = (): void => {
-    if (!sbAutoShown) return;
+    if (!sbAutoShown) {return;}
     sbAutoShown = false;
     deps.lazyHud().setScoreboardVisible(false);
   };
@@ -31,7 +31,7 @@ export function wireMatchEvents(ctx: NetCtx): void {
   let lastLead = '';
   let lastMilestone = -1;
   networkManager.onTeamScore = (scores, winAt) => {
-    if (!Number.isFinite(scores.alpha + scores.bravo + winAt)) return;
+    if (!Number.isFinite(scores.alpha + scores.bravo + winAt)) {return;}
     deps.world.teamScores = scores;
     deps.lazyHud().setTeamScore?.(scores.alpha, scores.bravo);
     const top = Math.max(scores.alpha, scores.bravo);
@@ -44,11 +44,11 @@ export function wireMatchEvents(ctx: NetCtx): void {
     }
   };
   networkManager.onFfaScore = (scores, winAt) => {
-    if (Object.values(scores).some(v => !Number.isFinite(v)) || !Number.isFinite(winAt)) return;
+    if (Object.values(scores).some(v => !Number.isFinite(v)) || !Number.isFinite(winAt)) {return;}
     deps.world.ffaScores = new Map(Object.entries(scores));
     const me = nm().getLocalPlayerId();
     const mine = scores[me] ?? 0;
-    let lead = 0; for (const v of Object.values(scores)) if (v > lead) lead = v;
+    let lead = 0; for (const v of Object.values(scores)) {if (v > lead) {lead = v;}}
     // Only announce when the lead changes hands or YOU score — a per-kill
     // feed line for every bot frag would drown the chat. Team modes reuse
     // the same channel for the personal PTS column — silent there, the

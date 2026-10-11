@@ -20,7 +20,7 @@ export { simMs, type SimMs } from '../../shared/clockBrand.ts';
 import { type SimMs } from '../../shared/clockBrand.ts';
 
 export const simNow = (): SimMs =>
-  (frozenBaseMs !== null ? frozenBaseMs + warpOffsetMs : Date.now() + warpOffsetMs) as SimMs;
+  (frozenBaseMs === null ? Date.now() + warpOffsetMs : frozenBaseMs + warpOffsetMs) as SimMs;
 export const simNowAdvance = (ms: number): void => { warpOffsetMs += ms; };
 /** Reset starts a frozen clock: sim time then moves ONLY via
  *  simNowAdvance — wall-time gaps between step() calls can't leak into

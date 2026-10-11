@@ -56,10 +56,10 @@ export class MoveClaims {
 
   handlePosition(playerId: string, msg: Extract<ClientMessage, { type: 'position' }>): void {
     const player = this.h.playerManager.getPlayer(playerId);
-    if (!player || player.isDead) return;
+    if (!player || player.isDead) {return;}
 
     const now = wallNow();
-    if (!this.plausible(playerId, player, msg, now)) return;
+    if (!this.plausible(playerId, player, msg, now)) {return;}
 
     // Held input rides the volatile frame — the superseding-stream
     // input path. Two gates: the position seq must be the newest seen
@@ -103,10 +103,10 @@ export class MoveClaims {
       }
       player.rotation.yaw = msg.rotation.yaw; player.rotation.pitch = msg.rotation.pitch;
       player.lastSeen = now;
-      if (msg.seq !== undefined && msg.seq > player.lastSeq) player.lastSeq = msg.seq;
+      if (msg.seq !== undefined && msg.seq > player.lastSeq) {player.lastSeq = msg.seq;}
       player.hasReceivedPosition = true;
       this.h.announceIfInWorld(player);
-      if (msg.ping !== undefined) player.ping = Math.max(1, msg.ping);
+      if (msg.ping !== undefined) {player.ping = Math.max(1, msg.ping);}
       pushRewindSample(player, now); // player.position is sim truth
       return;
     }
@@ -120,7 +120,7 @@ export class MoveClaims {
     this.h.playerManager.updatePosition(playerId, msg.position, msg.rotation, msg.velocity, msg.seq);
     player.hasReceivedPosition = true;
     this.h.announceIfInWorld(player);
-    if (msg.ping !== undefined) player.ping = Math.max(1, msg.ping);
+    if (msg.ping !== undefined) {player.ping = Math.max(1, msg.ping);}
     pushRewindSample(player, now);
     // Don't broadcast immediately — batched in tickUpdate
   }
@@ -140,7 +140,7 @@ export class MoveClaims {
     // true. One non-finite claim would poison both.
     if (!Number.isFinite(msg.position.x + msg.position.y + msg.position.z
         + (msg.velocity?.x ?? 0) + (msg.velocity?.y ?? 0) + (msg.velocity?.z ?? 0)
-        + msg.rotation.yaw + msg.rotation.pitch)) return false;
+        + msg.rotation.yaw + msg.rotation.pitch)) {return false;}
     const dt = Math.max((now - player.lastPosCheckTime) / 1000, 0.05); // floor: bursts of queued packets report ~1ms gaps
     player.lastPosCheckTime = wallMs(now);
     if (!player.hasReceivedPosition || !player.lastPosCheckPos) {
@@ -209,7 +209,7 @@ export class MoveClaims {
     // Client persisting past corrections (disputed knockback, lost
     // correction packet): force-accept after 10 rejects to resync
     // instead of warping the player forever.
-    if (player.consecutiveRejects <= 10) return false;
+    if (player.consecutiveRejects <= 10) {return false;}
     this.h.hb('posforce');
     logger.warn(`Position force-accepted: ${playerId} after ${player.consecutiveRejects} rejects (resync)`);
     player.consecutiveRejects = 0;
@@ -221,12 +221,12 @@ export class MoveClaims {
   // deltas from here instead of measuring a 50m jump as a speedhack.
   handleTeleport(playerId: string, msg: Extract<ClientMessage, { type: 'teleport' }>): void {
     const player = this.h.playerManager.getPlayer(playerId);
-    if (!player || player.isDead) return;
+    if (!player || player.isDead) {return;}
     // lastValid* below are written directly, bypassing updatePosition's
     // finite gate — a non-finite warp claim must die here, not after.
     if (!Number.isFinite(msg.position.x + msg.position.y + msg.position.z
         + msg.velocity.x + msg.velocity.y + msg.velocity.z
-        + msg.rotation.yaw + msg.rotation.pitch)) return;
+        + msg.rotation.yaw + msg.rotation.pitch)) {return;}
     const now = wallNow();
     // Honor EVERY declared warp: the client already moved, so refusing
     // the reseat just recreates the warp as impossibly-fast pos reports
@@ -247,7 +247,7 @@ export class MoveClaims {
     // moved; refusing recreates the warp as impossibly-fast reports).
     const tg = this.h.playerManager.groundAt?.(msg.position.x, msg.position.z);
     inv('teleport-above-ground', tg === undefined || !Number.isFinite(tg) || msg.position.y >= tg - 0.5,
-      { id: playerId, y: +msg.position.y.toFixed(1), ground: tg !== undefined && Number.isFinite(tg) ? +tg.toFixed(1) : 'n/a' });
+      { id: playerId, y: Number(msg.position.y.toFixed(1)), ground: tg !== undefined && Number.isFinite(tg) ? Number(tg.toFixed(1)) : 'n/a' });
     player.lastPosCheckPos = { ...msg.position };
     player.lastPosCheckTime = wallNow();
     player.consecutiveRejects = 0;
@@ -282,7 +282,7 @@ export class MoveClaims {
    *  clients already interpolate to it. */
   handleResyncSeat(playerId: string): void {
     const player = this.h.playerManager.getPlayer(playerId);
-    if (!player || !player.hasReceivedPosition) return;
+    if (!player || !player.hasReceivedPosition) {return;}
     const now = wallNow();
     player.lastPosCheckPos = { ...player.position };
     player.lastPosCheckTime = now;

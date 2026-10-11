@@ -52,16 +52,16 @@ export class KillFeed {
     this.lastKiller.delete(playerId);
     this.deathStreak.delete(playerId);
     for (const [victim, killer] of this.lastKiller) {
-      if (killer === playerId) this.lastKiller.delete(victim);
+      if (killer === playerId) {this.lastKiller.delete(victim);}
     }
   }
 
   announce(shooterId: string, targetId: string, weapon?: number, label?: string, air?: number): void {
     const victim = this.playerManager.getPlayer(targetId);
     const ended = victim?.streak ?? 0;
-    if (victim) victim.streak = 0;
+    if (victim) {victim.streak = 0;}
     noteFrag(shooterId, targetId); // pair ledger must precede victimLine's bullied check
-    if (targetId.startsWith('BOT-')) this.victimLine(targetId, shooterId, weapon, air);
+    if (targetId.startsWith('BOT-')) {this.victimLine(targetId, shooterId, weapon, air);}
     if (shooterId === 'environment') { this.witness(targetId); return; }
     // Self-splash reads as a death, not a frag — no streak credit, no
     // taunt, just the suicide notice.
@@ -72,13 +72,13 @@ export class KillFeed {
     }
 
     const shooter = this.playerManager.getPlayer(shooterId);
-    if (!shooter) return;
+    if (!shooter) {return;}
     shooter.streak++;
     const revenge = this.lastKiller.get(shooterId) === targetId;
     this.lastKiller.set(targetId, shooterId);
     // Bounded grudges — a long-running room shouldn't bank one entry
     // per player who ever died.
-    if (this.lastKiller.size > 256) evictEldest(this.lastKiller);
+    if (this.lastKiller.size > 256) {evictEldest(this.lastKiller);}
 
     this.notices(shooterId, targetId, shooter.streak, ended);
 
@@ -88,10 +88,10 @@ export class KillFeed {
     // kill line — it reads as noticing, not noise.
     if (shooterId.startsWith('BOT-')) {
       this.deathStreak.delete(shooterId);
-      if (revenge) this.say(shooterId, 'revenge', targetId);
-      else if (weapon === WeaponType.Melee) this.say(shooterId, 'fist', targetId);
-      else if (ended >= 3) this.say(shooterId, 'streakend', targetId);
-      else if (this.skillKill(weapon, air)) this.say(shooterId, 'air', targetId);
+      if (revenge) {this.say(shooterId, 'revenge', targetId);}
+      else if (weapon === WeaponType.Melee) {this.say(shooterId, 'fist', targetId);}
+      else if (ended >= 3) {this.say(shooterId, 'streakend', targetId);}
+      else if (this.skillKill(weapon, air)) {this.say(shooterId, 'air', targetId);}
       else {
         const t = killTaunt(shooterId, targetId);
         this.botSay(shooterId, t?.text ?? null, true, t?.vgs);
@@ -105,14 +105,14 @@ export class KillFeed {
   private victimLine(targetId: string, shooterId: string, weapon?: number, air?: number): void {
     const streak = (this.deathStreak.get(targetId) ?? 0) + 1;
     this.deathStreak.set(targetId, streak);
-    if (this.deathStreak.size > 256) evictEldest(this.deathStreak);
-    if (bulliedBy(targetId, shooterId)) this.say(targetId, 'bully', shooterId);
-    else if (streak >= 3) this.say(targetId, 'tilt', shooterId);
+    if (this.deathStreak.size > 256) {evictEldest(this.deathStreak);}
+    if (bulliedBy(targetId, shooterId)) {this.say(targetId, 'bully', shooterId);}
+    else if (streak >= 3) {this.say(targetId, 'tilt', shooterId);}
     else if (this.hardShot(targetId, shooterId, weapon, air)) {
       // The props beat's second half: a victim who gave credit sometimes
       // hears the shooter close it with 'thanks' — the full Tribes
       // banter exchange (air hype → nice shot → thanks).
-      if (this.say(targetId, 'props', shooterId)) this.thanksBeat(shooterId, targetId);
+      if (this.say(targetId, 'props', shooterId)) {this.thanksBeat(shooterId, targetId);}
     }
     else {
       const t = shooterId === 'environment'
@@ -148,7 +148,7 @@ export class KillFeed {
    *  events — kind resolves through the shared pools + cooldown, so a
    *  loud situation still obeys the per-bot throttle. */
   say(id: string, kind: ChatterKind, other?: string, fill?: { d?: string; h?: string }): boolean {
-    if (!id.startsWith('BOT-')) return false;
+    if (!id.startsWith('BOT-')) {return false;}
     // Replies don't invite replies — a bark→answer beat is the whole
     // trick; letting 'reply' chain would ping-pong the room forever.
     const c = chatter(kind, id, other, fill);
@@ -162,11 +162,11 @@ export class KillFeed {
    *  and the 20s cooldown means this only fires when the killer DIDN'T
    *  gloat on the frag — quiet killers get the humble answer instead. */
   private thanksBeat(shooterId: string, targetId: string): void {
-    if (!shooterId.startsWith('BOT-') || tauntRand() > 0.5) return;
+    if (!shooterId.startsWith('BOT-') || tauntRand() > 0.5) {return;}
     const t = setTimeout(() => {
       this.pending.delete(t);
       try { this.say(shooterId, 'thanks', targetId); }
-      catch (e) { logger.error('thanks beat failed', { playerId: shooterId, err: e instanceof Error ? e.message : String(e) }); }
+      catch (error) { logger.error('thanks beat failed', { playerId: shooterId, err: error instanceof Error ? error.message : String(error) }); }
     }, 2500 + tauntRand() * 2000);
     this.pending.add(t);
   }
@@ -184,11 +184,11 @@ export class KillFeed {
    *  qualifying kill, never a routine death response. A true air-lob
    *  (skillKill) earns a better roll — everyone respects the rainbow. */
   private hardShot(targetId: string, shooterId: string, weapon?: number, air?: number): boolean {
-    if (tauntRand() > (this.skillKill(weapon, air) ? 0.7 : 0.45)) return false;
+    if (tauntRand() > (this.skillKill(weapon, air) ? 0.7 : 0.45)) {return false;}
     const victim = this.playerManager.getPlayer(targetId);
     const shooter = this.playerManager.getPlayer(shooterId);
-    if (!victim?.position || !shooter?.position) return false;
-    if (Math.abs(victim.velocity.y) > 10) return true; // died midair
+    if (!victim?.position || !shooter?.position) {return false;}
+    if (Math.abs(victim.velocity.y) > 10) {return true;} // died midair
     const dx = shooter.position.x - victim.position.x;
     const dy = shooter.position.y - victim.position.y;
     const dz = shooter.position.z - victim.position.z;
@@ -200,16 +200,16 @@ export class KillFeed {
    *  crater you actually watched happen. */
   private witness(targetId: string): void {
     const victim = this.playerManager.getPlayer(targetId);
-    if (!victim?.position) return;
+    if (!victim?.position) {return;}
     const NEAR = 50;
     const near: string[] = [];
     for (const [id, p] of this.playerManager.getAllPlayers()) {
-      if (!id.startsWith('BOT-') || id === targetId || p.isDead || !p.position) continue;
+      if (!id.startsWith('BOT-') || id === targetId || p.isDead || !p.position) {continue;}
       const dx = p.position.x - victim.position.x, dz = p.position.z - victim.position.z;
-      if (dx * dx + dz * dz < NEAR * NEAR) near.push(id);
+      if (dx * dx + dz * dz < NEAR * NEAR) {near.push(id);}
     }
-    if (!near.length) return;
-    this.say(near[(tauntRand() * near.length) | 0]!, 'witness', targetId);
+    if (near.length === 0) {return;}
+    this.say(near[Math.trunc((tauntRand() * near.length))]!, 'witness', targetId);
   }
 
   /** Match-end chatter — one rolled outcome line per bot, spread across
@@ -231,25 +231,25 @@ export class KillFeed {
    *  event, not inside the kill frame, and dropped if the speaker left
    *  the room meanwhile. Timers are tracked so room teardown can drain. */
   private botSay(id: string, line: string | null, inviteReply = true, vgs?: string, vgsTeam?: boolean, extraDelay = 0): void {
-    if (!line) return;
+    if (!line) {return;}
     let delay = this.tauntDelayMs();
     // Typing pace — a two-letter "ez" lands fast, a gripe takes a beat.
     // Only when the host delays at all (tests pin 0 = instant speech).
-    if (delay > 0) delay += Math.min(line.length * 35, 1400) + extraDelay;
+    if (delay > 0) {delay += Math.min(line.length * 35, 1400) + extraDelay;}
     const speak = () => {
-      if (!this.playerManager.getPlayer(id)) return;
+      if (!this.playerManager.getPlayer(id)) {return;}
       // Tactical VGS is team-scoped (canon); plain lines and VG*/VV*
       // chords go to everyone — a 'gg' answer must reach the human who
       // said it, whichever side they're on.
       const team = vgsTeam ? this.playerManager.getPlayer(id)?.team : undefined;
       if (team && this.sendToPlayer) {
         for (const [pid, q] of this.playerManager.getAllPlayers()) {
-          if (q.team === team) this.sendToPlayer(pid, { type: 'chat', playerId: id, text: line, vgs, team: true });
+          if (q.team === team) {this.sendToPlayer(pid, { type: 'chat', playerId: id, text: line, vgs, team: true });}
         }
       } else {
         this.broadcast({ type: 'chat', playerId: id, text: line, vgs });
       }
-      if (inviteReply) this.onBotSpoke?.(id, vgs);
+      if (inviteReply) {this.onBotSpoke?.(id, vgs);}
       // The VGS-combo intent: a rare second chord timed to cut the first
       // sample mid-word — two real chat lines, the listener's audio
       // channel produces the splice. VGS tails are all global scope.
@@ -258,21 +258,21 @@ export class KillFeed {
         const cut = setTimeout(() => {
           this.pending.delete(cut);
           try {
-            if (!this.playerManager.getPlayer(id)) return;
+            if (!this.playerManager.getPlayer(id)) {return;}
             this.broadcast({ type: 'chat', playerId: id, text: tail.text, vgs: tail.chord });
-          } catch (e) { logger.error('VGS combo tail failed', { playerId: id, err: e instanceof Error ? e.message : String(e) }); }
+          } catch (error) { logger.error('VGS combo tail failed', { playerId: id, err: error instanceof Error ? error.message : String(error) }); }
         }, comboCutDelayMs(line)); // land just before the last word
         this.pending.add(cut);
       }
     };
     if (delay <= 0) { speak(); return; }
-    const t = setTimeout(() => { this.pending.delete(t); try { speak(); } catch (e) { logger.error('Bot taunt failed', { playerId: id, err: e instanceof Error ? e.message : String(e) }); } }, delay);
+    const t = setTimeout(() => { this.pending.delete(t); try { speak(); } catch (error) { logger.error('Bot taunt failed', { playerId: id, err: error instanceof Error ? error.message : String(error) }); } }, delay);
     this.pending.add(t);
   }
 
   /** Room teardown — drain queued taunts so a dead room can't speak. */
   dispose(): void {
-    for (const t of this.pending) clearTimeout(t);
+    for (const t of this.pending) {clearTimeout(t);}
     this.pending.clear();
   }
 }

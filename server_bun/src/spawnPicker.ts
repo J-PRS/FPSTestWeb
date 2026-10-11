@@ -60,12 +60,12 @@ export class SpawnPicker {
     const raw = teamPool?.length ? teamPool
       : (this.host.spawnPoints() ?? CONFIG.spawnPoints);
     const points: SpawnPoint[] = [];
-    for (const p of raw) points.push({ ...p });
+    for (const p of raw) {points.push({ ...p });}
     const groundAt = this.host.groundAt();
     if (groundAt) {
       for (const p of points) {
         const g = groundAt(p.x, p.z);
-        if (p.y < g) p.y = g;
+        if (p.y < g) {p.y = g;}
       }
     }
     return { points, teamPool };
@@ -88,7 +88,7 @@ export class SpawnPicker {
     if (!obj && bias === 0) {
       const anyFoe = [...this.host.players().entries()].some(
         ([id, p]) => id !== playerId && !p.isDead && (!team || p.team !== team));
-      if (!anyFoe) return { ...points[Math.floor(this.host.rng() * points.length)]! };
+      if (!anyFoe) {return { ...points[Math.floor(this.host.rng() * points.length)]! };}
     }
     // Home pull target for points that can't ride the objective pull.
     const ownBase = bias > 0 && (team === 'alpha' || team === 'bravo')
@@ -102,7 +102,7 @@ export class SpawnPicker {
       // (bastion's flat pool) the w-term otherwise materializes the
       // respawner inside the enemy's defended base. Unsafe points fall
       // back to the home pull, which already penalizes the transit.
-      const objOk = !!obj && minFoeDist > SpawnPicker.CAMPED_R;
+      const objOk = Boolean(obj) && minFoeDist > SpawnPicker.CAMPED_R;
       const pullPos = objOk ? obj!.pos : obj ? ownBase : (bias > 0 ? ownBase : undefined);
       const pullW = objOk ? obj!.w : bias;
       const score = (pullPos
@@ -127,7 +127,7 @@ export class SpawnPicker {
       out.x += Math.cos(a) * d;
       out.z += Math.sin(a) * d;
       const g = groundAt?.(out.x, out.z);
-      if (g !== undefined && Number.isFinite(g) && out.y < g) out.y = g;
+      if (g !== undefined && Number.isFinite(g) && out.y < g) {out.y = g;}
     }
     // Postcondition: a spawn born under its surface is the buried-bot
     // seed — name it at the pick, not after the corpse renders sunk. A
@@ -145,10 +145,10 @@ export class SpawnPicker {
   private foeClearance(spawn: Vec3, playerId: string, team?: TeamId): number {
     let min = Infinity;
     for (const [id, p] of this.host.players()) {
-      if (id === playerId || p.isDead) continue;
-      if (team && p.team === team) continue;
+      if (id === playerId || p.isDead) {continue;}
+      if (team && p.team === team) {continue;}
       const dist = Math.hypot(spawn.x - p.position.x, spawn.z - p.position.z);
-      if (dist < min) min = dist;
+      if (dist < min) {min = dist;}
     }
     return min === Infinity ? 0 : min;
   }

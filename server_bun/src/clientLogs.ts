@@ -19,7 +19,7 @@ const logStamp = (t: Date) =>
 
 const rotateLog = (p: string): void => {
   try {
-    if (!existsSync(p) || statSync(p).size === 0) return;
+    if (!existsSync(p) || statSync(p).size === 0) {return;}
     const dst = join(LOGS_DIR, 'OLD', `${basename(p, extname(p))}_${logStamp(statSync(p).mtime)}${extname(p)}`);
     renameSync(p, dst);
   } catch { /* rotation must never block boot */ }
@@ -29,7 +29,7 @@ export function rotateLogs(): void {
   try {
     mkdirSync(join(LOGS_DIR, 'OLD'), { recursive: true });
     for (const f of readdirSync(LOGS_DIR)) {
-      if (/\.(log|jsonl)$/.test(f)) rotateLog(join(LOGS_DIR, f));
+      if (/\.(log|jsonl)$/.test(f)) {rotateLog(join(LOGS_DIR, f));}
     }
     rotateLog(join(import.meta.dir, '..', 'logs', 'server.log'));
   } catch { /* same */ }
@@ -44,7 +44,7 @@ const postIps = new Map<string, { count: number; start: number }>();
 const POST_IP_LIMIT = 20;
 const POST_IP_WINDOW_MS = 60_000;
 function postThrottleAllow(ip: string): boolean {
-  if (ip === '' || ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') return true;
+  if (ip === '' || ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') {return true;}
   return windowAllow(postIps, ip, wallNow(), POST_IP_WINDOW_MS, POST_IP_LIMIT, 1024);
 }
 
@@ -52,7 +52,7 @@ function postThrottleAllow(ip: string): boolean {
 // `dir` is injectable so tests can redirect appends off the live logs/.
 export async function clientLogRoute(req: Request, cors: (body: BodyInit | null, init?: ResponseInit) => Response, ip = '', dir = LOGS_DIR): Promise<Response> {
   try {
-    if (!postThrottleAllow(ip)) return cors('Too many posts', { status: 429 });
+    if (!postThrottleAllow(ip)) {return cors('Too many posts', { status: 429 });}
     // Declared size first — a lied/missing header still hits the real
     // cap below, but an honest giant never buffers into memory.
     const contentLength = Number(req.headers.get('content-length') ?? 0);
@@ -72,23 +72,23 @@ export async function clientLogRoute(req: Request, cors: (body: BodyInit | null,
     const warnLines: string[] = [];
     const errLines: string[] = [];
     for (const line of body.split('\n')) {
-      if (!line) continue;
-      if (line.includes('[ERROR]')) errLines.push(line);
-      else if (line.includes('[WARN]')) warnLines.push(line);
+      if (!line) {continue;}
+      if (line.includes('[ERROR]')) {errLines.push(line);}
+      else if (line.includes('[WARN]')) {warnLines.push(line);}
     }
-    if (warnLines.length) {
+    if (warnLines.length > 0) {
       const warnPath = join(dir, 'client_warning.log');
       rotateLogIfBig(warnPath);
-      appendFileSync(warnPath, warnLines.join('\n') + '\n');
+      appendFileSync(warnPath, `${warnLines.join('\n')  }\n`);
     }
-    if (errLines.length) {
+    if (errLines.length > 0) {
       const errPath = join(dir, 'client_error.log');
       rotateLogIfBig(errPath);
-      appendFileSync(errPath, errLines.join('\n') + '\n');
+      appendFileSync(errPath, `${errLines.join('\n')  }\n`);
     }
     return cors('ok');
-  } catch (e) {
-    logger.warn('Client log append failed', { error: (e as Error).message });
+  } catch (error) {
+    logger.warn('Client log append failed', { error: (error as Error).message });
     return cors('append failed', { status: 500 });
   }
 }

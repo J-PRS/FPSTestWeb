@@ -47,10 +47,10 @@ export const ARMORNADE_CONFIG: ProjectileConfig = {
   trailScaleMin: 0.5,
   trailScaleMax: 1.4,
   trailRampIn: 0.05,
-  meshColor: 0x2A3D34, // dark shell — the glow reads as the charge inside
+  meshColor: 0x2A_3D_34, // dark shell — the glow reads as the charge inside
   meshType: 'ball',
   glowShell: true,
-  glowColor: 0x33FF88,
+  glowColor: 0x33_FF_88,
   glowOpacity: 0.45,
   glowScale: 0.7,
   meshRampIn: true,

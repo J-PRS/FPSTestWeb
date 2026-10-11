@@ -417,7 +417,7 @@ export const CAMERA_NEAR = 0.05; // Near clipping plane — small value to preve
 export const CAMERA_FAR = 6000; // Far clipping plane
 
 // Fog constants
-export const FOG_COLOR = 0xBBD0E8; // Fog and clear color (matches sky haze horizon)
+export const FOG_COLOR = 0xBB_D0_E8; // Fog and clear color (matches sky haze horizon)
 export const FOG_START = 120; // Linear fog start distance
 export const FOG_END = 600; // Linear fog end distance
 
@@ -444,13 +444,13 @@ export const CLOUD_SPREAD_RADIUS = 4000; // Cloud spread radius
 // Lighting constants
 export const AMBIENT_COLOR = 0x88_66_44; // Ambient light color
 export const AMBIENT_INTENSITY = 0.35; // Ambient light intensity — lower fill deepens shading
-export const SUN_COLOR = 0xFFE8AA; // Sun light color
+export const SUN_COLOR = 0xFF_E8_AA; // Sun light color
 export const SUN_INTENSITY = 3.2; // Sun light intensity
 export const SHADOW_MAP_SIZE = 2048; // Shadow map resolution
 export const SHADOW_CAMERA_NEAR = 1; // Shadow camera near plane
 export const SHADOW_CAMERA_FAR = 2000; // Shadow camera far plane
 export const SHADOW_CAMERA_SIZE = 130; // Shadow camera half-extent — follows the camera; ~0.13m/texel at 2048². Measured on the 3070Ti bench: 250m box → 681 shadow-pass draw calls; ~130m cuts the caster count ~4× while distant shadows are unreadable anyway.
-export const HEMI_SKY_COLOR = 0x5599CC; // Hemisphere sky color
+export const HEMI_SKY_COLOR = 0x55_99_CC; // Hemisphere sky color
 export const HEMI_GROUND_COLOR = 0x66_44_22; // Hemisphere ground color
 export const HEMI_INTENSITY = 0.5; // Hemisphere light intensity
 

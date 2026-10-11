@@ -14,7 +14,7 @@ export function nextTargetId(): number {
   // 0x4000/0x8000/0xc000/0xe000 top bits for the deployable/creature/
   // flag/pickup namespaces, and demovalidate rejects ball ids that reach
   // them. Reuse is safe: live targets number in the tens.
-  counter = (counter + 1) % 0x4000;
+  counter = (counter + 1) % 0x40_00;
   if (counter === 0) {counter = 1;}
   return id;
 }

@@ -2,12 +2,11 @@
 // Zero overhead when disabled: all public methods early-out on `!recording`.
 
 import { CircularBuffer } from './CircularBuffer.js';
-import type {
-  DemoFrame, ProjectileEvent, TargetEvent, RemoteFrame, DemoHeightmap} from './types.js';
-import { RemoteFrameFlags,
+import {
+  type DemoFrame, type ProjectileEvent, type TargetEvent, type RemoteFrame, type DemoHeightmap,RemoteFrameFlags,
   createFrame,
-  type DemoFile, type DemoRosterEntry,
-} from './types.js';
+  type DemoFile,type DemoRosterEntry} from './types.js';
+
 import type { IPlayerDataProvider, IInputProvider, Vec3 } from './interfaces.js';
 import * as ev from './demoEvents.js';
 import { buildDemoFile, extractClip } from './demoExtract.js';

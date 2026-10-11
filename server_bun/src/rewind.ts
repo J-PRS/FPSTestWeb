@@ -30,10 +30,10 @@ export function renderLagOf(p: { clientStats?: { renderLagMs?: number; at?: numb
   // A report older than ~3 uplink windows describes a link state that
   // may no longer exist — fall back to the base constant rather than
   // let a stale (or dead-session) number steer validation forever.
-  if (!st || st.renderLagMs == null || (st.at !== undefined && wallNow() - st.at > 30_000)) return RENDER_LAG_MS;
+  if (!st || st.renderLagMs == null || (st.at !== undefined && wallNow() - st.at > 30_000)) {return RENDER_LAG_MS;}
   // Client-claimed: Math.max(NaN,0)=NaN — a poisoned claim returns NaN,
   // the rewind target goes NaN, and every hit validation whiffs silently.
-  if (!Number.isFinite(st.renderLagMs)) return RENDER_LAG_MS;
+  if (!Number.isFinite(st.renderLagMs)) {return RENDER_LAG_MS;}
   return Math.min(Math.max(st.renderLagMs, 0), 800);
 }
 
@@ -49,7 +49,7 @@ export function renderLagOfTarget(
   const st = p?.clientStats;
   if (st?.renderLag && !(st.at !== undefined && wallNow() - st.at > 30_000)) {
     const v = st.renderLag[targetId];
-    if (v !== undefined && Number.isFinite(v)) return Math.min(Math.max(v, 0), 800);
+    if (v !== undefined && Number.isFinite(v)) {return Math.min(Math.max(v, 0), 800);}
   }
   return renderLagOf(p);
 }
@@ -60,7 +60,7 @@ export function pushRewindSample(
 ): void {
   // A non-finite position would rewind hit validation to a NaN ghost —
   // every check against this window whiffs. Skip the sample instead.
-  if (!Number.isFinite(p.position.x + p.position.y + p.position.z)) return;
+  if (!Number.isFinite(p.position.x + p.position.y + p.position.z)) {return;}
   p.history.push({ t: now, x: p.position.x, y: p.position.y, z: p.position.z });
-  while (p.history.length > 0 && p.history[0]!.t < now - REWIND_MS) p.history.shift();
+  while (p.history.length > 0 && p.history[0]!.t < now - REWIND_MS) {p.history.shift();}
 }

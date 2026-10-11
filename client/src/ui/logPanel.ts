@@ -25,44 +25,44 @@ const LEVEL_CLASS: Partial<Record<LogLevel, string>> = {
 // `[LEVEL]` marker each writer stamps (logger and the console wrapper).
 function levelOf(line: string): LogLevel {
   const m = line.match(/\[(ERROR|WARN|INFO|DEBUG|LOG)\]/);
-  if (!m) return LogLevel.INFO;
+  if (!m) {return LogLevel.INFO;}
   return m[1] === 'ERROR' ? LogLevel.ERROR : m[1] === 'WARN' ? LogLevel.WARN
     : m[1] === 'DEBUG' || m[1] === 'LOG' ? LogLevel.DEBUG : LogLevel.INFO;
 }
 
 function appendLine(line: string, level: LogLevel): void {
-  if (!body || !panel!.classList.contains('show')) return;
+  if (!body || !panel!.classList.contains('show')) {return;}
   const div = document.createElement('div');
   div.className = `lp-line ${LEVEL_CLASS[level] ?? 'inf'}`;
   div.textContent = line;
-  body.appendChild(div);
-  while (body.childElementCount > MAX_LINES) body.firstElementChild!.remove();
-  if (stick) body.scrollTop = body.scrollHeight;
+  body.append(div);
+  while (body.childElementCount > MAX_LINES) {body.firstElementChild!.remove();}
+  if (stick) {body.scrollTop = body.scrollHeight;}
 }
 
 function reseed(): void {
-  if (!body) return;
+  if (!body) {return;}
   body.textContent = '';
   stick = true;
   for (const line of Logger.getLogs().slice(-MAX_LINES)) {
     const div = document.createElement('div');
     div.className = `lp-line ${LEVEL_CLASS[levelOf(line)] ?? 'inf'}`;
     div.textContent = line;
-    body.appendChild(div);
+    body.append(div);
   }
   body.scrollTop = body.scrollHeight;
 }
 
 function syncVisible(): void {
-  if (!panel) return;
+  if (!panel) {return;}
   const show = overlay;
   const was = panel.classList.contains('show');
   panel.classList.toggle('show', show);
-  if (show && !was) reseed();
+  if (show && !was) {reseed();}
 }
 
 function ensurePanel(): void {
-  if (panel) return;
+  if (panel) {return;}
   panel = document.createElement('div');
   panel.id = 'log-panel';
 
@@ -79,7 +79,7 @@ function ensurePanel(): void {
   });
 
   panel.append(head, body);
-  document.body.appendChild(panel);
+  document.body.append(panel);
 }
 
 /** Backquote debug overlay — same visibility contract as stats/perfHud. */

@@ -56,14 +56,14 @@ function iceServers(): unknown[] {
   if (_ice === null) {
     try { _ice = CONFIG.iceServersJson ? JSON.parse(CONFIG.iceServersJson) : []; }
     catch { logger.warn('FPS_ICE_SERVERS is not valid JSON — RTC tier will run without STUN/TURN'); _ice = []; }
-    if (!Array.isArray(_ice)) _ice = [];
+    if (!Array.isArray(_ice)) {_ice = [];}
   }
   return _ice;
 }
 
 function wtInfo(ctx: HttpCtx): { enabled: true; port: number; sha256: string } | null {
   const sha256 = ctx.wtCertHash();
-  if (!sha256) return null;
+  if (!sha256) {return null;}
   return { enabled: true, port: CONFIG.wtPort, sha256 };
 }
 
@@ -75,7 +75,7 @@ const joinIps = new Map<string, { count: number; start: number }>();
 const JOIN_IP_LIMIT = 5;
 const JOIN_IP_WINDOW_MS = 60_000;
 function joinThrottleAllow(ip: string): boolean {
-  if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') return true;
+  if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') {return true;}
   return windowAllow(joinIps, ip, wallNow(), JOIN_IP_WINDOW_MS, JOIN_IP_LIMIT, 1024);
 }
 
@@ -113,7 +113,7 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Reques
     // match fitting the request (or a fresh room built from that spec).
     '/join': (url, req) => {
       const ip = req ? ctx.requestIP?.(req)?.address : undefined;
-      if (ip && !joinThrottleAllow(ip)) return corsResponse('Too many joins', { status: 429 });
+      if (ip && !joinThrottleAllow(ip)) {return corsResponse('Too many joins', { status: 429 });}
       const mode = url.searchParams.get('mode') ?? '';
       const map = url.searchParams.get('map') ?? '';
       const botsRaw = url.searchParams.get('bots');
@@ -132,7 +132,7 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Reques
       const noCreatures = url.searchParams.get('nocreatures') === '1';
       const noBalls = url.searchParams.get('noballs') === '1';
       const room = ctx.gameServer.quickRoom(mode, map, bots, noCreatures, noBalls);
-      if (!room) return corsResponse('Server full', { status: 503 });
+      if (!room) {return corsResponse('Server full', { status: 503 });}
       return json({ room: room.name, mode: room.mode });
     },
     // WebTransport discovery: browser clients pin self-signed certs via
@@ -159,14 +159,14 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Reques
 //   GET  /admin/rooms           detailed live dump
 export function adminRoute(ctx: HttpCtx, req: Request, url: URL): Response {
   const want = CONFIG.adminToken;
-  if (!want) return corsResponse('admin disabled (FPS_ADMIN_TOKEN unset)', { status: 403 });
+  if (!want) {return corsResponse('admin disabled (FPS_ADMIN_TOKEN unset)', { status: 403 });}
   const got = req.headers.get('authorization')?.replace(/^bearer\s+/i, '');
-  if (got !== want) return corsResponse('unauthorized', { status: 401 });
+  if (got !== want) {return corsResponse('unauthorized', { status: 401 });}
 
   if (url.pathname === '/admin/rooms' && req.method === 'GET') {
     return json(ctx.gameServer.listRooms());
   }
-  if (req.method !== 'POST') return corsResponse('POST only', { status: 405 });
+  if (req.method !== 'POST') {return corsResponse('POST only', { status: 405 });}
 
   const ADMIN_ACTIONS: Record<string, () => Response> = {
     '/admin/reload': () => {
@@ -220,8 +220,8 @@ export async function demoRoute(ctx: HttpCtx, req: Request, url: URL): Promise<R
         return json({ success: false, rejected: true, reason: 'Below minimum lifetime' });
       }
       return json({ success: true, ...meta });
-    } catch (e) {
-      const msg = (e as Error).message;
+    } catch (error) {
+      const msg = (error as Error).message;
       logger.warn('Demo upload failed', { error: msg });
       // Malformed input is the uploader's fault (400); a storage fault is
       // ours (500) — and its internals don't belong in the response.
@@ -300,7 +300,7 @@ export async function mapBinRoute(url: URL): Promise<Response> {
     return corsResponse('Not found', { status: 404 });
   }
   const f = Bun.file(`${import.meta.dir}/../../maps/${file}`);
-  if (!(await f.exists())) return corsResponse('Not found', { status: 404 });
+  if (!(await f.exists())) {return corsResponse('Not found', { status: 404 });}
   const ct = file.endsWith('.png') ? 'image/png'
     : file.endsWith('.webp') ? 'image/webp'
     : file.endsWith('.glb') ? 'model/gltf-binary'

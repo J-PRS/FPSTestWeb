@@ -20,9 +20,9 @@ const SPRING = 14;          // anchor pull strength — lag is emergent, not fak
 const DAMP = 5.5;           // velocity damping — settles without orbit-jitter
 const CLEARANCE = 1.1;      // min height above terrain
 
-const _metal = new THREE.MeshLambertMaterial({ color: 0x4A5560 });
-const _dark = new THREE.MeshLambertMaterial({ color: 0x23282E });
-const _glow = new THREE.MeshBasicMaterial({ color: 0x88DDFF });
+const _metal = new THREE.MeshLambertMaterial({ color: 0x4A_55_60 });
+const _dark = new THREE.MeshLambertMaterial({ color: 0x23_28_2E });
+const _glow = new THREE.MeshBasicMaterial({ color: 0x88_DD_FF });
 const _geoHull = new THREE.SphereGeometry(0.3, 10, 6);
 const _geoRotor = new THREE.CylinderGeometry(0.34, 0.34, 0.03, 8);
 const _geoPod = new THREE.CylinderGeometry(0.07, 0.09, 0.5, 6);
@@ -85,7 +85,7 @@ export class DeployDrone {
     this.slot = takeSlot(poolFor(scene).hull);
 
     this.flash = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: getGlowTexture(), color: 0x88DDFF, transparent: true,
+      map: getGlowTexture(), color: 0x88_DD_FF, transparent: true,
       blending: THREE.AdditiveBlending, depthWrite: false,
     }));
     this.flash.scale.setScalar(0.5);
@@ -98,7 +98,7 @@ export class DeployDrone {
   }
 
   private syncMatrices(): void {
-    if (this.slot < 0 || !_pool) return;
+    if (this.slot < 0 || !_pool) {return;}
     const pool = _pool;
     const i = this.slot;
     const g = _m.compose(this.group.position, this.group.quaternion, this.group.scale).clone();

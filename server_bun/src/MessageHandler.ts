@@ -1,8 +1,8 @@
-import type { ClientMessage, ServerMessage, SnapshotPlayer, Vec3, PlayerState, ClaimVerdict, GameStatePlayer } from './types.ts';
-import { PlayerManager } from './PlayerManager.ts';
-import { RateLimiter } from './RateLimiter.ts';
+import type { ClientMessage, ServerMessage, SnapshotPlayer, Vec3, PlayerState, ClaimVerdict, GameStatePlayer,HitVerdict } from './types.ts';
+import type { PlayerManager } from './PlayerManager.ts';
+import type { RateLimiter } from './RateLimiter.ts';
 import { CombatHandler, type CombatDeps, type BeamContact } from './CombatHandler.ts';
-import type { HitVerdict } from './types.ts';
+
 import type { KillFeed } from './killFeed.ts';
 import type { InfluenceMap } from './influenceMap.ts';
 import { logger } from './logger.ts';
@@ -254,7 +254,7 @@ export class MessageHandler {
 
   hb(key: string, n = 1): void {
     const h = this.roomInfo.health;
-    if (h) h.set(key, (h.get(key) ?? 0) + n);
+    if (h) {h.set(key, (h.get(key) ?? 0) + n);}
   }
 
   /** Uniform claim verdict — one ack per claim that carried claimSeq;
@@ -262,14 +262,14 @@ export class MessageHandler {
    *  clients). Rejects bump the heartbeat so a massed drop pattern
    *  shows up on /metrics before any single client reports it. */
   claimAck(id: string, kind: string, seq: number | undefined, verdict: ClaimVerdict): void {
-    if (seq === undefined) return;
+    if (seq === undefined) {return;}
     const ok = verdict === true;
-    if (!ok) this.hb(`claimrej.${kind}`);
+    if (!ok) {this.hb(`claimrej.${kind}`);}
     this.sendToPlayer(id, { type: 'claimAck', kind, seq, ok, ...(ok ? {} : { reason: verdict }) });
   }
   hbMax(key: string, v: number): void {
     const h = this.roomInfo.health;
-    if (h && v > (h.get(key) ?? 0)) h.set(key, Math.round(v * 10) / 10);
+    if (h && v > (h.get(key) ?? 0)) {h.set(key, Math.round(v * 10) / 10);}
   }
 
   constructor(
@@ -283,7 +283,7 @@ export class MessageHandler {
     this.rateLimiter = rateLimiter;
     this.broadcast = broadcast;
     this.sendToPlayer = sendToPlayer;
-    if (roomInfo) this.roomInfo = roomInfo;
+    if (roomInfo) {this.roomInfo = roomInfo;}
     this.acceptClaims = roomInfo?.claimsAccepted ?? true;
     this.combat = new CombatHandler(playerManager, broadcast, sendToPlayer, combatDeps(roomInfo));
     this.moves = new MoveClaims(this);
@@ -353,7 +353,7 @@ export class MessageHandler {
       velocity,
       weaponType,
     });
-    if (hit && targetId) this.combat.botAttack(shooterId, targetId, weaponType);
+    if (hit && targetId) {this.combat.botAttack(shooterId, targetId, weaponType);}
   }
 
   /** Server-simulated projectile blast (bot rockets etc.) — combat's
@@ -372,7 +372,7 @@ export class MessageHandler {
    *  them or a leaver's entries sit in the map for the room's life. */
   private dropWarnKeys(playerId: string): void {
     for (const key of this.rateLimitWarnings.keys()) {
-      if (key.startsWith(`${playerId}:`)) this.rateLimitWarnings.delete(key);
+      if (key.startsWith(`${playerId}:`)) {this.rateLimitWarnings.delete(key);}
     }
   }
 
@@ -430,7 +430,7 @@ export class MessageHandler {
 
   handleHandshake(playerId: string, sessionToken?: string, isReconnect = false): void {
     const player = this.playerManager.getPlayer(playerId);
-    if (!player) return;
+    if (!player) {return;}
     this.roomInfo.moveTrack?.(playerId, player.position, player.rotation.yaw);
 
     if (isReconnect) {
@@ -471,7 +471,7 @@ export class MessageHandler {
   private rosterCache: { at: WallMs; data: GameStatePlayer[] } | undefined;
   private inWorldRoster(): GameStatePlayer[] {
     const now = wallNow();
-    if (this.rosterCache && now - this.rosterCache.at < 100) return this.rosterCache.data;
+    if (this.rosterCache && now - this.rosterCache.at < 100) {return this.rosterCache.data;}
     const data = [...this.playerManager.getAllPlayers().values()]
       .filter((p) => p.isBot || p.hasReceivedPosition)
       .map((p) => this.playerManager.toGameStatePlayer(p));
@@ -485,7 +485,7 @@ export class MessageHandler {
    *  alt-tab catch-up rebuilds the same truth a reload would. */
   sendWorldState(playerId: string, sessionToken?: string): void {
     const player = this.playerManager.getPlayer(playerId);
-    if (!player) return;
+    if (!player) {return;}
 
     // Humans that never reported a position aren't in-world yet — listing
     // them spawns a frozen ghost mesh at the spawn default for the joiner.
@@ -541,7 +541,7 @@ export class MessageHandler {
   /** Broadcast the playerJoined announce once — gates on the flag so a
    *  player reports for a while, then a second path can't re-announce. */
   announceIfInWorld(player: PlayerState): void {
-    if (player.joinAnnounced) return;
+    if (player.joinAnnounced) {return;}
     player.joinAnnounced = true;
     this.announceJoin(player);
   }
@@ -571,7 +571,7 @@ export class MessageHandler {
   /** World-state replay frames every registered sim opts into — adding
    *  a world sim to room.sims is now the whole wiring for its replay. */
   private sendSimWorldState(playerId: string): void {
-    for (const m of this.roomInfo.simsWorldState?.() ?? []) this.sendToPlayer(playerId, m);
+    for (const m of this.roomInfo.simsWorldState?.() ?? []) {this.sendToPlayer(playerId, m);}
   }
 
   /** `at` = socket-arrival time — the command drain runs it against the
@@ -579,7 +579,7 @@ export class MessageHandler {
    *  not by when the stalled tick caught up. */
   handleMessage(playerId: string, msg: ClientMessage, at?: WallMs): void {
     const player = this.playerManager.getPlayer(playerId);
-    if (!player) return;
+    if (!player) {return;}
 
     const verdict = this.rateLimiter.check(playerId, msg.type, at);
     if (verdict !== 'ok') {
@@ -646,7 +646,7 @@ export class MessageHandler {
   // to everyone but the sender for remote-side jump-dust/jet FX.
   relayPresenceEvent(playerId: string, msg: Extract<ClientMessage, { type: 'jump' | 'jetpack' }>): void {
     const player = this.playerManager.getPlayer(playerId);
-    if (!player || player.isDead) return;
+    if (!player || player.isDead) {return;}
     this.broadcast({ type: msg.type, playerId, position: msg.position }, playerId);
   }
 

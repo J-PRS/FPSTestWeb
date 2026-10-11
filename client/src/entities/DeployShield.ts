@@ -13,9 +13,9 @@ import { makePartPool, takeSlot, releaseSlot, ZERO_M4, type PartPool } from './d
 // Same entity contract as DeployStation/DeployTurret (unfold, vitals,
 // dep: candidate id) so the pod/owner/blast plumbing treats it alike.
 
-const _metal = new THREE.MeshLambertMaterial({ color: 0x39434e });
-const _dark = new THREE.MeshLambertMaterial({ color: 0x1b2229 });
-const _tipMat = new THREE.MeshBasicMaterial({ color: 0x66ccff });
+const _metal = new THREE.MeshLambertMaterial({ color: 0x39_43_4E });
+const _dark = new THREE.MeshLambertMaterial({ color: 0x1B_22_29 });
+const _tipMat = new THREE.MeshBasicMaterial({ color: 0x66_CC_FF });
 const _geoBase = new THREE.CylinderGeometry(0.55, 0.8, 0.28, 8);
 const _geoMast = new THREE.CylinderGeometry(0.09, 0.14, 1.3, 6);
 const _geoTip = new THREE.OctahedronGeometry(0.22, 0);
@@ -87,7 +87,7 @@ export class DeployShield {
     this.tip.position.y = 1.55;
     this.group.add(this.tip);
     this.tipGlow = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: getGlowTexture(), color: 0x66ccff, transparent: true,
+      map: getGlowTexture(), color: 0x66_CC_FF, transparent: true,
       blending: THREE.AdditiveBlending, depthWrite: false,
     }));
     this.tipGlow.scale.setScalar(1.1);
@@ -101,7 +101,7 @@ export class DeployShield {
   }
 
   private syncMatrices(): void {
-    if (this.slot < 0 || !_pool) return;
+    if (this.slot < 0 || !_pool) {return;}
     const pool = _pool;
     const i = this.slot;
     const g = _m.compose(this.group.position, this.group.quaternion, this.group.scale).clone();
@@ -129,7 +129,7 @@ export class DeployShield {
     this.anchor = new THREE.Group();
     this.anchor.position.copy(this.pos);
     this.scene.add(this.anchor);
-    this.dome = makeShieldedMesh(this.anchor, new THREE.SphereGeometry(DeployShield.RADIUS * 0.99, 36, 24), 0x66ccee);
+    this.dome = makeShieldedMesh(this.anchor, new THREE.SphereGeometry(DeployShield.RADIUS * 0.99, 36, 24), 0x66_CC_EE);
     this.dome.mesh.visible = true;
 
     // Ground contact glow — dome-contact slot: passes the sphere's
@@ -143,9 +143,9 @@ export class DeployShield {
   flash(): void { this.dome?.flash(); }
 
   update(dt: number): void {
-    if (this.dead) return;
+    if (this.dead) {return;}
     this.animT += dt;
-    if (this.placed && !this.dome) this.buildDome();
+    if (this.placed && !this.dome) {this.buildDome();}
     this.dome?.update(dt);
     if (this.edge) {
       this.edge.intensity = 0.5 + Math.sin(this.animT * 2.6) * 0.12;
@@ -192,7 +192,7 @@ export class DeployShield {
     this.tipGlow.material.dispose();
     // Dome + anchor + ring slot are per-instance, baked to THIS landing spot.
     this.dome?.dispose();
-    if (this.anchor) this.scene.remove(this.anchor);
+    if (this.anchor) {this.scene.remove(this.anchor);}
     if (this.edge) {
       this.terrain.removeFieldRing(this.edge);
       this.edge = null;

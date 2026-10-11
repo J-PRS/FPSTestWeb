@@ -244,7 +244,7 @@ async function init(): Promise<void> {
   // microtask the load resolves, so it can never flash rendered.
   void player.loadModel()
     .then(() => profiler.markTime('playerModelLoaded'))
-    .catch((e) => logger.warn('PlayerModel load gave up', { error: String(e) }));
+    .catch((error) => logger.warn('PlayerModel load gave up', { error: String(error) }));
 
   vmSetup = createViewModelScene(camera.aspect);
   viewModel = vmSetup.viewModel;
@@ -502,9 +502,9 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
       for (const c of cols) {
         const lx = (d.pos.x - c.cx) * c.cos + (d.pos.z - c.cz) * c.sin;
         const lz = -(d.pos.x - c.cx) * c.sin + (d.pos.z - c.cz) * c.cos;
-        if (Math.abs(lx) > c.hx || Math.abs(lz) > c.hz) continue;
+        if (Math.abs(lx) > c.hx || Math.abs(lz) > c.hz) {continue;}
         const t = c.cy + c.hy;
-        if (t > d.pos.y && t < floor && t <= d.pos.y + 12) floor = t;
+        if (t > d.pos.y && t < floor && t <= d.pos.y + 12) {floor = t;}
       }
       const y = floor === Infinity ? Math.max(d.pos.y, terrain.getHeight(d.pos.x, d.pos.z)) : floor;
       entities.deployables.remoteSpawn(depId++, {
@@ -589,8 +589,8 @@ function setupOfflineMode(mode: string, mapSpec?: MapSpec): void {
   // (the player occupies one alpha slot already).
   const want = urlParams.bots ?? mapSpec?.bots ?? mapSpec?.botFill;
   const counts = mode === 'flagrun' ? { alpha: want ?? 0, bravo: 0 }
-    : want !== undefined ? { alpha: Math.floor(want / 2), bravo: Math.ceil(want / 2) }
-    : spec.ffa ? { alpha: 5, bravo: 4 } : { alpha: 4, bravo: 5 };
+    : want === undefined ? spec.ffa ? { alpha: 5, bravo: 4 } : { alpha: 4, bravo: 5 }
+    : { alpha: Math.floor(want / 2), bravo: Math.ceil(want / 2) };
   teamBots = new TeamBots(
     {
       lazyPlayer: () => player,

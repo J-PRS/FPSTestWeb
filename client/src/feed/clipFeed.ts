@@ -39,19 +39,19 @@ const FLICK_V_PX_MS = 0.5;
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, parent: HTMLElement, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text !== undefined) e.textContent = text;
-  parent.appendChild(e);
+  if (cls) {e.className = cls;}
+  if (text !== undefined) {e.textContent = text;}
+  parent.append(e);
   return e;
 }
 
 function timeAgo(ts: number): string {
   const secs = Math.floor((Date.now() - ts) / 1000);
-  if (secs < 60) return `${secs}s ago`;
+  if (secs < 60) {return `${secs}s ago`;}
   const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 60) {return `${mins}m ago`;}
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
+  if (hrs < 24) {return `${hrs}h ago`;}
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
@@ -122,7 +122,7 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
   // frame painted on it once the commit mounts the clip.
   const poster = document.createElement('canvas');
   poster.id = 'clipfeed-poster';
-  document.body.appendChild(poster);
+  document.body.append(poster);
   const pctx = poster.getContext('2d')!;
 
   // Placeholder card for the incoming pane — a real frame would require
@@ -139,8 +139,8 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
     pctx.font = `${Math.round(h * 0.045)}px monospace`;
     pctx.fillText(e.description || 'Best shot', w / 2, h / 2 - h * 0.03, w * 0.9);
     const bits: string[] = [];
-    if (e.weapon) bits.push(e.weapon);
-    if (e.distance) bits.push(`${Math.round(e.distance)}m`);
+    if (e.weapon) {bits.push(e.weapon);}
+    if (e.distance) {bits.push(`${Math.round(e.distance)}m`);}
     bits.push(`${e.projectileLifetime.toFixed(2)}s air`);
     pctx.fillStyle = 'rgba(120,200,255,0.8)';
     pctx.font = `${Math.round(h * 0.032)}px monospace`;
@@ -209,10 +209,10 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
     counter.textContent = `${index + 1} / ${entries.length}`;
     metaDesc.textContent = e.description || 'Best shot';
     const bits: string[] = [];
-    if (e.weapon) bits.push(e.weapon);
-    if (e.distance) bits.push(`${Math.round(e.distance)}m`);
+    if (e.weapon) {bits.push(e.weapon);}
+    if (e.distance) {bits.push(`${Math.round(e.distance)}m`);}
     bits.push(`${e.projectileLifetime.toFixed(2)}s air`);
-    if (e.timestamp) bits.push(timeAgo(e.timestamp));
+    if (e.timestamp) {bits.push(timeAgo(e.timestamp));}
     metaStats.textContent = bits.join(' · ');
     hint.style.opacity = index === 0 ? '1' : '0';
   }
@@ -341,11 +341,16 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
 
   window.addEventListener('keydown', (ev) => {
     switch (ev.code) {
-      case 'ArrowDown': void go(1); break;
-      case 'ArrowUp': void go(-1); break;
-      case 'Space': ev.preventDefault(); dm.togglePlayPause(); break;
-      case 'KeyC': toggleClear(); break;
-      case 'Escape': window.location.href = exitTo; break;
+      case 'ArrowDown': { void go(1); break;
+      }
+      case 'ArrowUp': { void go(-1); break;
+      }
+      case 'Space': { ev.preventDefault(); dm.togglePlayPause(); break;
+      }
+      case 'KeyC': { toggleClear(); break;
+      }
+      case 'Escape': { window.location.href = exitTo; break;
+      }
     }
   });
 
@@ -400,7 +405,7 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
     const commit = Math.abs(dy) > window.innerHeight * SWIPE_COMMIT_RATIO || Math.abs(v) > FLICK_V_PX_MS;
     if (commit && dir === d0.dir) {
       advancing = dir;
-      const ni = d0.ni;
+      const {ni} = d0;
       const ready = d0.ready ?? resolveClip(entries[ni]!);
       void (async () => {
         await commitAdvance(dir, ni, ready);
@@ -439,8 +444,8 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
   logger.info(`Clip feed: ${entries.length} clip(s)`);
   if (feedMode.startAt) {
     const at = entries.findIndex(e => e.filename === feedMode.startAt || e.id === feedMode.startAt);
-    if (at >= 0) {index = at;}
-    else {logger.warn(`Deep-link clip not on the server: ${feedMode.startAt}`);}
+    if (at === -1) {logger.warn(`Deep-link clip not on the server: ${feedMode.startAt}`);}
+    else {index = at;}
   }
   play(index);
 }

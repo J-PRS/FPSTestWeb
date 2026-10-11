@@ -66,7 +66,7 @@ export class BotMoves {
     this.mountWait = false;
     const dx = dest.x - pos.x, dz = dest.z - pos.z;
     const gd = Math.hypot(dx, dz);
-    if (gd < 0.5) return { ski: false, jet: false, jump: false };
+    if (gd < 0.5) {return { ski: false, jet: false, jump: false };}
     const spd0 = ctx.vel ? Math.hypot(ctx.vel.x, ctx.vel.z) : 0;
     // The parking brake: a posted anchor that arrives at stand speed
     // overshoots the pole by 10-20m and orbits it forever — soaks read
@@ -95,7 +95,7 @@ export class BotMoves {
       if (olen > 1) {
         const probeD = Math.min(6, olen);
         const riseGoal = ctx.groundY(pos.x + (odx / olen) * probeD, pos.z + (odz / olen) * probeD) - g0;
-        if (riseGoal > rise) rise = riseGoal;
+        if (riseGoal > rise) {rise = riseGoal;}
       }
     }
     const speed = ctx.vel ? Math.hypot(ctx.vel.x, ctx.vel.z) : 0;
@@ -116,7 +116,7 @@ export class BotMoves {
     // 15-25m out reset odBest on every exit before (katabatic 9002:
     // 110s of 5-25m orbits), so the latch arms inside grabWatchGd.
     if (ctx.runner && !ctx.posted && ctx.objective && od < T.moves.grabWatchGd) {
-      if (od < this.odBest) this.odBest = od;
+      if (od < this.odBest) {this.odBest = od;}
       // Each grabOrbitS window must close grabOrbitMinGain toward the
       // pole — an orbit that dips a little nearer each lap keeps making
       // "progress" forever otherwise (katabatic: 110s of improving-miss
@@ -128,12 +128,12 @@ export class BotMoves {
         if (this.odT >= T.moves.grabOrbitS) {
           // A window that didn't set a NEW best by minGain is a lap —
           // equal-best dips don't count: they re-attest the same line.
-          if (this.odWindowBest - this.odBest < T.moves.grabOrbitMinGain) this.brakeNow = true;
+          if (this.odWindowBest - this.odBest < T.moves.grabOrbitMinGain) {this.brakeNow = true;}
           this.odWindowBest = this.odBest; this.odT = 0;
         }
       }
       if (this.brakeNow) {
-        if (spd0 > 1.5) return { ski: false, jet: false, jump: false, park: true };
+        if (spd0 > 1.5) {return { ski: false, jet: false, jump: false, park: true };}
         // Parked to a stop: switch to crawl — keep the walk key and
         // hops (dais stands need a jet hop to mount) but stay off the
         // skis, or the same downhill that made the orbit re-fires it.
@@ -193,10 +193,10 @@ export class BotMoves {
     // soak 9g/2c->8g/1c with hold collapsing — a perched member banks a
     // full tank and arrives strong; a burning one arrives dry and dies.
     if (!ctx.posted && !ctx.runner && ctx.energy !== undefined && !airborne && rise > T.moves.breathRise) {
-      if (this.breath) this.breath = ctx.energy < T.moves.breathHold;
-      else this.breath = ctx.energy < T.moves.breathArm;
+      if (this.breath) {this.breath = ctx.energy < T.moves.breathHold;}
+      else {this.breath = ctx.energy < T.moves.breathArm;}
       if (this.breath) { this.jetHold = 0; this.jetOut = false; return { ski: false, jet: false, jump: false, park: true }; }
-    } else this.breath = false;
+    } else {this.breath = false;}
     // Jet respects the tank — below the reserve the bot saves energy for
     // skills rather than hovering dry at the wall. A runner's airborne
     // tap burns deeper: speed on a flat transit IS his skill reserve —
@@ -274,7 +274,7 @@ export class BotMoves {
     const agl = pos.y - g0;
     const canDive = rise < -T.moves.boostRise || agl > T.moves.diveAglMin;
     const diveRun = gd < runway && tgtY < pos.y + T.moves.diveArriveMargin && canDive && this.jetWhy !== 'prey' && this.jetWhy !== 'block' && !flatRun;
-    if (diveRun) this.jetHold = 0;
+    if (diveRun) {this.jetHold = 0;}
     // Tail-of-hop tap — the timing the standalone sweep measured: jetting
     // only the DESCENDING arc of each hop holds ~43m/s at ~1/10 the energy
     // per meter of a held burn (66m/s): every thrust tick lands as forward
@@ -289,7 +289,7 @@ export class BotMoves {
     const tail = (ctx.runner === true || ctx.wave === true) && skilledHop && airborne && vy < 0 &&
       odTap > T.moves.boostGdMin && (ctx.objective?.y ?? dest.y) - pos.y < T.moves.runInRise &&
       speed < T.moves.tailTapSpeed && rise <= T.moves.boostRise && agl <= T.moves.ceilingAgl && enTap;
-    if (tail) this.jetWhy = 'tail';
+    if (tail) {this.jetWhy = 'tail';}
     // The hold latch and the escape ladder both bleed past the wantJet
     // veto: a burn armed outside the glide window keeps thrusting through
     // the touch ring (~20-30m of carry at approach speed), and the orbit
@@ -297,7 +297,7 @@ export class BotMoves {
     // feeds the altitude that keeps it armed (flagprobe: capper sustained
     // dy 8-20, orbits forever). Same window, same cut for both.
     const inGlide = ctx.runner && dyAbove > 6 && od < Math.max(T.moves.grabOrbitGd * 1.5, dyAbove * T.lines.diveGlideK);
-    if (inGlide) this.jetHold = 0;
+    if (inGlide) {this.jetHold = 0;}
     const jet = !diveRun && (((this.jetHold > 0 || (this.host.escapeJetT() > 0 && !inGlide)) && tanked) || (tail && !inGlide));
     this.jetOut = jet;
     return {
@@ -351,13 +351,13 @@ export class BotMoves {
    *  an altitude deficit is in play. */
   private arcClearsCrest(ctx: BrainCtx, pos: BotVec): boolean {
     const v = ctx.vel;
-    if (!v) return false;
+    if (!v) {return false;}
     const vx = v.x, vy = v.y ?? 0, vz = v.z;
     const hSpeed = Math.hypot(vx, vz);
-    if (hSpeed < 4) return false; // no arc worth predicting — the climb sense owns this
+    if (hSpeed < 4) {return false;} // no arc worth predicting — the climb sense owns this
     const nx = vx / hSpeed, nz = vz / hSpeed;
     const dtS = 0.12, G = GRAVITY; // same fall the sim sells — a dead-reckoned arc must pay world gravity
-    let x = pos.x, y = pos.y, z = pos.z, vy_ = vy;
+    let {x} = pos, {y} = pos, {z} = pos, vy_ = vy;
     for (let s = 0; s < 24; s++) {
       x += vx * dtS; z += vz * dtS;
       y += vy_ * dtS; vy_ += G * dtS;
@@ -394,12 +394,12 @@ export class BotMoves {
       const selfD = obj ? Math.hypot(obj.x - pos.x, obj.z - pos.z) : Infinity;
       if (obj && selfD < T.moves.blockSelfD && ctx.enemies) {
         for (const e of ctx.enemies) {
-          if (!e.alive || !e.vel) continue;
+          if (!e.alive || !e.vel) {continue;}
           const ox = e.pos.x - obj.x, oz = e.pos.z - obj.z;
           const od = Math.hypot(ox, oz);
-          if (od > T.moves.blockOd) continue;
+          if (od > T.moves.blockOd) {continue;}
           const closing = -(e.vel.x * ox + e.vel.z * oz) / (od || 1);
-          if (closing < T.moves.blockClosing || od / closing > T.moves.blockEta) continue;
+          if (closing < T.moves.blockClosing || od / closing > T.moves.blockEta) {continue;}
           this.jetWhy = 'block';
           return true;
         }
@@ -452,7 +452,7 @@ export class BotMoves {
     // Hard ceiling: past ~30m AGL a held burn is ballooning, not skiing —
     // featherjets turned a shallow hop chain into a 250m balloon ride.
     // High prey still earns altitude; everything else glides back down.
-    if (!targetHigh && pos.y - ctx.groundY(pos.x, pos.z) > T.moves.ceilingAgl) return false;
+    if (!targetHigh && pos.y - ctx.groundY(pos.x, pos.z) > T.moves.ceilingAgl) {return false;}
     // Discretionary spending asks for a healthier tank — boosting to
     // speed is nice-to-have, climbing out of a hole is not.
     const comfy = ctx.energy === undefined || ctx.energy > T.moves.comfyEnergy;
@@ -514,7 +514,7 @@ export class BotMoves {
     // regen, ~2s to a full hop) is always the better move; mid-burn
     // latches ride the regen inflow past this floor.
     const why = rise > T.moves.climbRise ? 'climb' : targetHigh ? 'prey' : destHigh ? 'destHigh' : hop ? 'hop' : runIn ? 'runIn' : tap ? 'tap' : boost ? 'boost' : '-';
-    if (why === '-') return false;
+    if (why === '-') {return false;}
     if (ctx.energy !== undefined && ctx.energy < T.moves.mountE) { this.jetWhy = '-'; return false; }
     this.jetWhy = why;
     return true;

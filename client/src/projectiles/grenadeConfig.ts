@@ -45,10 +45,10 @@ export const GRENADE_CONFIG: ProjectileConfig = {
   trailScaleMin: 0.5,
   trailScaleMax: 1.4,
   trailRampIn: 0.05,
-  meshColor: 0x3A3D42, // dark shell — the glow reads as heat leaking out
+  meshColor: 0x3A_3D_42, // dark shell — the glow reads as heat leaking out
   meshType: 'ball',
   glowShell: true,
-  glowColor: 0xFF5500,
+  glowColor: 0xFF_55_00,
   glowOpacity: 0.4,
   glowScale: 0.7,
   meshRampIn: true,

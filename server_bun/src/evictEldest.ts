@@ -5,5 +5,5 @@
 // dedupes, grudge maps all take the burst exactly when they're hottest).
 export function evictEldest<K, V>(c: Map<K, V> | Set<K>): void {
   const eldest = c.keys().next().value;
-  if (eldest !== undefined) c.delete(eldest as K);
+  if (eldest !== undefined) {c.delete(eldest as K);}
 }

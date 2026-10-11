@@ -25,7 +25,7 @@ const BOOM_SAMPLES: Partial<Record<number, [string, number, number?, number?, nu
   // Spinfusor pop: the default explosion_small it always was, with the
   // launcher's double low-end stack (thud_big + slam_thud) under it —
   // same voice, more chest.
-  [WeaponType.Disc]: [['explosion_small', 0.9, 1.0], ['thud_big', 1.0, 0.55, 350, 0.5], ['slam_thud', 1.0, 0.55, 400, 0.5]],
+  [WeaponType.Disc]: [['explosion_small', 0.9, 1], ['thud_big', 1, 0.55, 350, 0.5], ['slam_thud', 1, 0.55, 400, 0.5]],
   [WeaponType.Mortar]: [['explosion1', 1, 0.6], ['thud_big', 0.9, 0.6, 300]],
   [WeaponType.BoltLauncher]: [['explosion1', 0.95], ['thud_big', 0.5, 0.7]],
   [WeaponType.GrenadeLauncher]: [['explosion_small', 0.9, 0.9], ['thud_big', 0.4, 0.8, 500]],
@@ -54,7 +54,7 @@ const BOOM_SAMPLES: Partial<Record<number, [string, number, number?, number?, nu
   [WeaponType.Cannon]: [['explosion1', 0.9, 0.75], ['thud_big', 0.7, 0.7, 400], ['hg_clang', 0.25, 1.4, undefined, 0.2]],
   // Bombard crumble: NO powder — the ball shatters, not detonates. A deep
   // mass thunk + the stone-crack of shards breaking + spark scatter.
-  [WeaponType.Bombard]: [['thud_big', 1.0, 0.6, 350], ['hg_clang', 0.6, 0.9, undefined, 0.35], ['sparks', 0.5, 1.1, undefined, 0.3]],
+  [WeaponType.Bombard]: [['thud_big', 1, 0.6, 350], ['hg_clang', 0.6, 0.9, undefined, 0.35], ['sparks', 0.5, 1.1, undefined, 0.3]],
   // Warhead pop: the biggest layered boom — full blast + deep tail
   [WeaponType.RocketLauncher]: [['explosion1', 1, 0.8], ['explosion2', 0.7, 0.6], ['thud_big', 0.8, 0.65, 400]],
   // MRV airburst pop — the carrier's delivery bang: mid-size blast +

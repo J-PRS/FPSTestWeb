@@ -31,7 +31,7 @@ const mkDeps = () => {
 };
 
 describe('remote onRemove purges per-player receipts', () => {
-  it('a leaver drops out of killCounts, lastWeaponByPlayer, HUD and health bars', () => {
+  it('a leaver drops out of lastWeaponByPlayer, HUD and health bars — scores persist', () => {
     const { deps, world, hud, healthbars } = mkDeps();
     createRemotes(deps);
     const onRemove = world.remotePlayers.hooks.onRemove as (id: string) => void;
@@ -41,8 +41,10 @@ describe('remote onRemove purges per-player receipts', () => {
     lastWeaponByPlayer.set('leaver', { wt: 1, n: 2 });
     onRemove('leaver');
 
-    expect(world.killCounts.has('leaver')).toBe(false);
-    expect(world.deathCounts.has('leaver')).toBe(false);
+    // kill/death counts deliberately survive: onRemove also fires on the
+    // corpse→respawn entity swap, and zeroing there wiped K/D per respawn.
+    expect(world.killCounts.has('leaver')).toBe(true);
+    expect(world.deathCounts.has('leaver')).toBe(true);
     expect(lastWeaponByPlayer.has('leaver')).toBe(false);
     expect(hud.removePlayerIndicator).toHaveBeenCalledWith('leaver');
     expect(healthbars.forgetPlayer).toHaveBeenCalledWith('leaver');

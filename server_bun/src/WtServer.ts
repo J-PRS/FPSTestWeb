@@ -70,12 +70,12 @@ export class WtSocketAdapter {
     this.remoteAddress = session.peer?.ip ?? 'webtransport';
     // The client's first action after connect is creating THE reliable
     // bidi stream — grab it and start pumping both lanes.
-    void this.acceptReliable().catch((e) => this.die(`reliable pump: ${e instanceof Error ? e.message : e}`));
-    void this.pumpDatagrams().catch((e) => { logger.warn('wt dg lane ended', { e: String(e) }); }); // session death ends the iterator
+    void this.acceptReliable().catch((error) => this.die(`reliable pump: ${error instanceof Error ? error.message : error}`));
+    void this.pumpDatagrams().catch((error) => { logger.warn('wt dg lane ended', { e: String(error) }); }); // session death ends the iterator
     // Every lane here rejects with E_SESSION_CLOSED when the peer drops —
     // an unhandled rejection in the native addon's stream callbacks kills
     // the whole bun process, so each one is caught at its boundary.
-    session.closed.then(() => this.die('session.closed')).catch((e) => this.die(`session.closed err: ${e instanceof Error ? e.message : e}`));
+    session.closed.then(() => this.die('session.closed')).catch((error) => this.die(`session.closed err: ${error instanceof Error ? error.message : error}`));
   }
 
   private asSocket(): ServerWebSocket<WebSocketData> {
@@ -83,7 +83,7 @@ export class WtSocketAdapter {
   }
 
   private die(reason = 'unspecified'): void {
-    if (!this.open) return;
+    if (!this.open) {return;}
     this.open = false;
     logger.warn('wt session died', { reason });
     this.game.onClose(this.asSocket());
@@ -96,9 +96,9 @@ export class WtSocketAdapter {
     let idx = 0;
     for (;;) {
       const { value: stream, done: streamDone } = await reader.read();
-      if (streamDone || !stream) return;
-      if (idx++ === 0) void this.pumpText(stream).catch((e) => this.die(`reliable pump: ${e instanceof Error ? e.message : e}`));
-      else void this.pumpBin(stream).catch(() => {});
+      if (streamDone || !stream) {return;}
+      if (idx++ === 0) {void this.pumpText(stream).catch((error) => this.die(`reliable pump: ${error instanceof Error ? error.message : error}`));}
+      else {void this.pumpBin(stream).catch(() => {});}
     }
   }
 
@@ -110,13 +110,13 @@ export class WtSocketAdapter {
     let carry = new Uint8Array(0);
     for (;;) {
       const { done, value } = await rr.read();
-      if (done) break;
+      if (done) {break;}
       const merged = new Uint8Array(carry.length + value.length);
       merged.set(carry); merged.set(value);
       carry = merged;
       while (carry.length >= 2) {
         const n = carry[0]! | (carry[1]! << 8);
-        if (carry.length < 2 + n) break;
+        if (carry.length < 2 + n) {break;}
         this.game.onMessage(this.asSocket(), carry.subarray(2, 2 + n));
         carry = carry.subarray(2 + n);
       }
@@ -133,15 +133,15 @@ export class WtSocketAdapter {
     const rr = stream.readable.getReader();
     for (;;) {
       const { done: readDone, value } = await rr.read();
-      if (readDone) break;
+      if (readDone) {break;}
       carry += this.decoder.decode(value, { stream: true });
       // A peer that never sends '\n' grows this buffer forever — cap it.
-      if (carry.length > 65536) { this.close(1009, 'oversize frame'); return; }
+      if (carry.length > 65_536) { this.close(1009, 'oversize frame'); return; }
       let nl: number;
       while ((nl = carry.indexOf('\n')) >= 0) {
         const line = carry.slice(0, nl);
         carry = carry.slice(nl + 1);
-        if (line) this.deliverLine(line);
+        if (line) {this.deliverLine(line);}
       }
     }
     // Reliable stream ended while the session lives — the lane is dead,
@@ -183,7 +183,7 @@ export class WtSocketAdapter {
   }
 
   send(msg: string | Uint8Array): number {
-    if (!this.open) return 0;
+    if (!this.open) {return 0;}
     // Volatile seq'd tick frames → datagram lane when they fit the MTU.
     // An oversized tick stays reliable: datagrams over the path MTU are
     // dropped ENTIRELY, so "best effort" there is actually "never".
@@ -207,21 +207,21 @@ export class WtSocketAdapter {
     if (typeof msg !== 'string' && this.binWriter &&
         msg.length >= 2 && msg[0] === 0x54 &&
         (msg[1] === WIRE_TICK || msg[1] === WIRE_TICK_V3 || msg[1] === WIRE_TICK_V4) &&
-        msg.byteLength <= 0xffff) {
+        msg.byteLength <= 0xFF_FF) {
       const v = new DataView(this.binScratch);
       v.setUint16(0, msg.byteLength);
       void this.binWriter.write(new Uint8Array(this.binScratch)).catch(() => {});
       void this.binWriter.write(msg).catch(() => {});
       return msg.byteLength;
     }
-    if (!this.writer) return 0;
+    if (!this.writer) {return 0;}
     // The reliable stream is newline-delimited TEXT — raw binary has no
     // '\n' and corrupts the framing (it glued onto the next JSON line and
     // ate ballSpawn messages — creatures that existed but never spawned).
     // Binary rides as base64 in a JSON envelope; the client unwraps it.
     const line = typeof msg === 'string' ? msg
       : `{"type":"bin","d":"${Buffer.from(msg).toString('base64')}"}`;
-    const bytes = this.encoder.encode(line + '\n');
+    const bytes = this.encoder.encode(`${line  }\n`);
     void this.writer.write(bytes).catch(() => {});
     return bytes.byteLength;
   }
@@ -256,8 +256,8 @@ export class WtServer {
     try {
       const m = await import('@webtransport-bun/webtransport');
       mod = m as unknown as WtModule;
-    } catch (e) {
-      logger.warn('WebTransport addon unavailable — WT tier disabled', { error: (e as Error).message });
+    } catch (error) {
+      logger.warn('WebTransport addon unavailable — WT tier disabled', { error: (error as Error).message });
       return false;
     }
     try {
@@ -272,7 +272,7 @@ export class WtServer {
       // known-benign code at the boundary. Anything else still crashes.
       if (!WtServer.sessionCloseGuardInstalled) {
         WtServer.sessionCloseGuardInstalled = true;
-        process.on('unhandledRejection', (err) => { if (!swallow(err)) throw err; });
+        process.on('unhandledRejection', (err) => { if (!swallow(err)) {throw err;} });
         // The addon also throws E_SESSION_CLOSED synchronously inside
         // stream-start callbacks — that lands as uncaughtException, not a
         // rejection, so the rejection-only guard used to miss it.
@@ -286,8 +286,8 @@ export class WtServer {
       }
       logger.info('WebTransport listening', { port: opts.port });
       return true;
-    } catch (e) {
-      logger.warn('WebTransport server failed to start', { error: (e as Error).message });
+    } catch (error) {
+      logger.warn('WebTransport server failed to start', { error: (error as Error).message });
       return false;
     }
   }

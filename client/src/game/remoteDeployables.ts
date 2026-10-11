@@ -20,8 +20,8 @@ import type { DeployKind } from '../../../shared/deployables.js';
 import { segSolidHit } from '../../../shared/solidWorld.js';
 import { Projectile } from '../projectiles/Projectile.js';
 import { fxPuff } from '../effects/vfx.js';
-import type { DeployDeps } from './deployables.js';
-import type { Item } from './deployables.js';
+import type { DeployDeps,Item } from './deployables.js';
+
 import type { DeployRockets } from './deployRockets.js';
 
 type Foe = { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean; playerId?: string };
@@ -127,7 +127,7 @@ export class RemoteDeployables {
       const group = new THREE.Group();
       const m = new THREE.Mesh(
         new THREE.SphereGeometry(kind === 'mine' ? 0.3 : 0.5, 8, 6),
-        new THREE.MeshLambertMaterial({ color: kind === 'mine' ? 0x8A5A2A : 0x4a_55_60 }));
+        new THREE.MeshLambertMaterial({ color: kind === 'mine' ? 0x8A_5A_2A : 0x4A_55_60 }));
       group.add(m);
       group.position.copy(at);
       group.position.y = terrain.getHeight(at.x, at.z);
@@ -174,11 +174,11 @@ export class RemoteDeployables {
    *  and breathes a thin smoke wisp until it's welded or respawns. The
    *  deck plinth stays lit either way — the socket reads even dead. */
   private baseAssetItem(kind: 'generator' | 'sensor' | 'baseturret', at: THREE.Vector3, hp?: number, armor?: number, team?: string): Item {
-    const teamColor = team === 'alpha' ? 0x55AAFF : team === 'bravo' ? 0xff_88_55 : 0x99AABB;
+    const teamColor = team === 'alpha' ? 0x55_AA_FF : team === 'bravo' ? 0xFF_88_55 : 0x99_AA_BB;
     const group = new THREE.Group();
     const glowMat = new THREE.MeshBasicMaterial({ color: teamColor });
-    const darkMat = new THREE.MeshLambertMaterial({ color: 0x39424E });
-    const hullMat = new THREE.MeshLambertMaterial({ color: 0x55606E });
+    const darkMat = new THREE.MeshLambertMaterial({ color: 0x39_42_4E });
+    const hullMat = new THREE.MeshLambertMaterial({ color: 0x55_60_6E });
     // Mounting plinth — a low deck plate with team-lit trim that stays
     // intact when the asset dies, so the site reads as a socket even
     // while its hulk is dark. Sits below the slumped wreck.
@@ -240,7 +240,7 @@ export class RemoteDeployables {
       const optic = new THREE.Mesh(new THREE.SphereGeometry(0.34, 8, 6), glowMat);
       optic.position.set(0, 0.6, 1.3);
       head.add(optic);
-      const ammo = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.0, 1.5), darkMat);
+      const ammo = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1, 1.5), darkMat);
       ammo.position.set(0, 0.1, -1.6);
       head.add(ammo);
       group.add(head);
@@ -268,7 +268,7 @@ export class RemoteDeployables {
     const wrecked = hp !== undefined && hp <= 0;
     let downed = wrecked;
     let smokeT = 0;
-    if (wrecked) { glowMat.color.setHex(0x181C22); group.rotation.z = 0.07; group.scale.y = 0.82; }
+    if (wrecked) { glowMat.color.setHex(0x18_1C_22); group.rotation.z = 0.07; group.scale.y = 0.82; }
     const item: Item = {
       kind, candId: `rdep:${at.x.toFixed(0)},${at.z.toFixed(0)}`, pos: group.position, dead: false,
       hurt: (dmg) => this.hurtItem(item, dmg),
@@ -304,7 +304,7 @@ export class RemoteDeployables {
       head: isSentry ? head : undefined,
       setDown: (down) => {
         downed = down;
-        glowMat.color.setHex(down ? 0x18_1c_22 : teamColor);
+        glowMat.color.setHex(down ? 0x18_1C_22 : teamColor);
         if (down) { group.rotation.z = 0.07; group.scale.y = 0.82; }
         else { group.rotation.z = 0; group.scale.y = 1; }
       },
@@ -354,7 +354,7 @@ export class RemoteDeployables {
       // structure hulls — a pad-edge ray would falsely clip its plinth.
       if (segSolidHit(
         { x: it.pos.x, y: it.pos.y + 2.4, z: it.pos.z },
-        { x: f.pos.x, y: f.pos.y + 1.0, z: f.pos.z },
+        { x: f.pos.x, y: f.pos.y + 1, z: f.pos.z },
         Projectile.solidColliders, Projectile.solidIndex ?? undefined, it.team)) {continue;}
       bestD2 = d2; target = f;
     }
@@ -365,7 +365,7 @@ export class RemoteDeployables {
     const flight = dist / BT.projSpeed!;
     _aim.set(
       target.pos.x + target.vel.x * flight,
-      target.pos.y + 1.0 + target.vel.y * flight * 0.5,
+      target.pos.y + 1 + target.vel.y * flight * 0.5,
       target.pos.z + target.vel.z * flight,
     );
     // Slew the head onto the firing solution — group yaw is 0 for map
@@ -402,7 +402,7 @@ export class RemoteDeployables {
     it.setDown?.(true);
     it.v.health = 0;
     this.deps.world.explosions.push(new Explosion(
-      this.deps.scene, it.pos, false, 0, this.deps.lazyTerrain(), 1.6, 0xFFAA55));
+      this.deps.scene, it.pos, false, 0, this.deps.lazyTerrain(), 1.6, 0xFF_AA_55));
     sfx.explosionAt(it.pos, true);
     screenShake.blast(it.pos, 3, this.deps.lazyPlayer().pos);
   }
@@ -425,7 +425,7 @@ export class RemoteDeployables {
     if (!w) {
       w = {
         beam: new LightningBeam(this.deps.scene, {
-          glow: 0x1FBB66, core: 0xDCFFE8, chain: 0x7DFFB8, hit: 0xAAFFCC, sparkTop: 0x66_ff_aa,
+          glow: 0x1F_BB_66, core: 0xDC_FF_E8, chain: 0x7D_FF_B8, hit: 0xAA_FF_CC, sparkTop: 0x66_FF_AA,
         }),
         last: 0,
       };
@@ -458,7 +458,7 @@ export class RemoteDeployables {
     for (const t of targets) {
       const ring = new THREE.Mesh(
         new THREE.RingGeometry(0.8, 1, 24),
-        new THREE.MeshBasicMaterial({ color: 0xFF5544, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }));
+        new THREE.MeshBasicMaterial({ color: 0xFF_55_44, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }));
       ring.rotation.x = -Math.PI / 2;
       ring.position.set(t.x, t.y + 0.15, t.z);
       this.deps.scene.add(ring);

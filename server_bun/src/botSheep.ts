@@ -40,24 +40,24 @@ export class BotSheepMeter {
     // The bot's own fire intent refreshes the recency window the same
     // way a human's claim does — an engaged bot in legal volley cadence
     // isn't refusing to shoot.
-    if (m.out.fire?.targetId) this.core.noteFire(id);
+    if (m.out.fire?.targetId) {this.core.noteFire(id);}
     const v = this.core.tick(id, {
       pos: p.position,
       vel: p.velocity,
       height: m.height ?? 0,
       dt: m.dt,
-      foe: !!m.foe,
+      foe: Boolean(m.foe),
       hasDest: m.hasDest,
       dest: m.out.dest,
-      jetting: !!m.out.move?.jet,
-      repair: !!m.out.repair,
+      jetting: Boolean(m.out.move?.jet),
+      repair: Boolean(m.out.repair),
     });
     // Humans get metered for the scoreboard but never warned: a parked
     // human is a playstyle observation, not a broken-agent signal, and
     // the warn channel is for the latter.
-    if (!isBotId(id)) return;
-    if (v.newlyMaxed) this.warnMaxed(id, v.why);
-    else if (v.crossedHigh) logger.debug('Sheep meter high', { room: this.room.name, bot: id, meter: v.meter });
+    if (!isBotId(id)) {return;}
+    if (v.newlyMaxed) {this.warnMaxed(id, v.why);}
+    else if (v.crossedHigh) {logger.debug('Sheep meter high', { room: this.room.name, bot: id, meter: v.meter });}
   }
 
   /** Ledger sums are charge points, not seconds — each channel's share
@@ -67,9 +67,9 @@ export class BotSheepMeter {
    *  life), so FPS_SHEEP_LOG diverts them to a file and drops the
    *  console copy to info. */
   private warnMaxed(id: string, why: { idle: number; ignore: number; bleed: number; cover: number }): void {
-    if (this.core.now - (this.maxWarnedAt.get(id) ?? -600_000) < 600_000) return;
+    if (this.core.now - (this.maxWarnedAt.get(id) ?? -600_000) < 600_000) {return;}
     this.maxWarnedAt.set(id, this.core.now);
-    const whyPts = { idle: +why.idle.toFixed(1), ignore: +why.ignore.toFixed(1), bleed: +why.bleed.toFixed(1), cover: +why.cover.toFixed(1) };
+    const whyPts = { idle: Number(why.idle.toFixed(1)), ignore: Number(why.ignore.toFixed(1)), bleed: Number(why.bleed.toFixed(1)), cover: Number(why.cover.toFixed(1)) };
     const sheepLog = process.env.FPS_SHEEP_LOG;
     if (sheepLog) {
       const line = `${(this.core.now / 1000).toFixed(1)}s ${this.room.name} ${id} idle=${whyPts.idle} ignore=${whyPts.ignore} bleed=${whyPts.bleed} cover=${whyPts.cover}`;
@@ -77,7 +77,7 @@ export class BotSheepMeter {
       // why-line is unchanged, so repeats carry no information.
       if (line !== this.lastMaxLine.get(id)) {
         this.lastMaxLine.set(id, line);
-        try { appendFileSync(sheepLog, line + '\n'); }
+        try { appendFileSync(sheepLog, `${line  }\n`); }
         catch { /* a bad log path must never break a match */ }
       }
       logger.info('Sheep meter maxed', { room: this.room.name, bot: id, whyPts });

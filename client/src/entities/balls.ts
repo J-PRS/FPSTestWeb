@@ -31,7 +31,7 @@ function ballGeo(): THREE.IcosahedronGeometry {
 let _ballMat: THREE.MeshLambertMaterial | null = null;
 function ballMat(): THREE.MeshLambertMaterial {
   // White diffuse — instanceColor carries hue + emissive-style glow
-  if (!_ballMat) {_ballMat = new THREE.MeshLambertMaterial({ color: 0xFFFFFF });}
+  if (!_ballMat) {_ballMat = new THREE.MeshLambertMaterial({ color: 0xFF_FF_FF });}
   return _ballMat;
 }
 
@@ -373,7 +373,7 @@ export class Ball {
       // already staged), flash locally, and let ballDie decide death.
       // Shell contact/splash callers pass serverPaid — the sim's
       // creatureSweep/splashDamage pays those, a claim would double-pay.
-      if (!opts?.serverPaid) Ball.hitClaim?.(this.netId, damage, this._netImp.x, this._netImp.y, this._netImp.z);
+      if (!opts?.serverPaid) {Ball.hitClaim?.(this.netId, damage, this._netImp.x, this._netImp.y, this._netImp.z);}
       this._netImp.set(0, 0, 0);
       this.flashTimer = 0.15;
       // Predicted health — the claim carries exactly this damage, so the

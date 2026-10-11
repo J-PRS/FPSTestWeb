@@ -294,7 +294,7 @@ function restoreLocalPlayer(ctx: NetCtx, localPlayerState: LocalPlayerState): vo
   // empty — same-input-seq or a dead body restores take the plain snap.
   const journal = !localPlayerState.isDead && localPlayerState.inputSeq !== undefined
     ? nm().inputsAfter(localPlayerState.inputSeq, nm().getPing()) : [];
-  if (journal.length) {
+  if (journal.length > 0) {
     player.movement.setState({
       pos: new THREE.Vector3(p.x, p.y, p.z),
       vel: new THREE.Vector3(anchorVel.x, anchorVel.y, anchorVel.z),
@@ -307,8 +307,8 @@ function restoreLocalPlayer(ctx: NetCtx, localPlayerState: LocalPlayerState): vo
       const nextT = i + 1 < journal.length ? journal[i + 1]!.t : now;
       player.movement.setInput({
         forward: e.input.forward, right: e.input.right,
-        jumpPressed: !!e.input.jump, jumpHeld: !!e.input.jump,
-        skiHeld: !!e.input.ski, jetHeld: !!e.input.jet,
+        jumpPressed: Boolean(e.input.jump), jumpHeld: Boolean(e.input.jump),
+        skiHeld: Boolean(e.input.ski), jetHeld: Boolean(e.input.jet),
       });
       player.movement.update(Math.min(0.25, Math.max(0, (nextT - e.t) / 1000)));
     }
@@ -328,7 +328,7 @@ function restoreLocalPlayer(ctx: NetCtx, localPlayerState: LocalPlayerState): vo
   noteLocalSnap();
   deps.setLastSentPos({ x: p.x, y: p.y, z: p.z });
 
-  if (Number.isFinite(localPlayerState.health)) player.health = localPlayerState.health;
+  if (Number.isFinite(localPlayerState.health)) {player.health = localPlayerState.health;}
   player.armor = Number.isFinite(localPlayerState.armor) ? localPlayerState.armor! : 0;
   player.isDead = localPlayerState.isDead;
   player.syncMovement(); // reseat controller — restored pos/vel otherwise revert

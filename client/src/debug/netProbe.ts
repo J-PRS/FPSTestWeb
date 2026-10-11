@@ -19,7 +19,7 @@ import { ChildLogger } from '../core/Logger.js';
 const logger = new ChildLogger('NetProbe');
 
 const RING_MAX = 256;
-const GHOST_TTL_S = 3.0;
+const GHOST_TTL_S = 3;
 
 interface NetEvt {
   t: number;
@@ -54,7 +54,7 @@ export function attachScene(s: THREE.Scene): void { scene = s; }
 
 function push(kind: NetEvt['kind'], line: string): void {
   events.push({ t: performance.now(), kind, line });
-  if (events.length > RING_MAX) events.splice(0, events.length - RING_MAX);
+  if (events.length > RING_MAX) {events.splice(0, events.length - RING_MAX);}
 }
 
 // ---- recorders (called by the wire handlers) ----
@@ -91,8 +91,8 @@ export function spawnDrift(dv: number): void {
   // The journal is for anomalies — a 0.00 drift row is pure noise and
   // used to flood every Alt+Q's recent-events tail. The summary line
   // (spawnDrift max/N) still counts every sample.
-  if (dv >= 0.05) push('spawn', `spawn claim drift=${dv.toFixed(2)}m/s`);
-  if (dv > 0.5) logger.error(`spawn claim drifts ${dv.toFixed(2)}m/s from real flight — server arc replay will diverge`);
+  if (dv >= 0.05) {push('spawn', `spawn claim drift=${dv.toFixed(2)}m/s`);}
+  if (dv > 0.5) {logger.error(`spawn claim drifts ${dv.toFixed(2)}m/s from real flight — server arc replay will diverge`);}
 }
 
 // ---- Ghosts ----
@@ -102,12 +102,12 @@ export function spawnDrift(dv: number): void {
 
 const ghosts: { objs: THREE.Object3D[]; until: number }[] = [];
 const ghostGeo = new THREE.SphereGeometry(0.6, 10, 8);
-const ghostMatServer = new THREE.MeshBasicMaterial({ color: 0xff4455, wireframe: true, depthTest: false });
-const ghostMatClient = new THREE.MeshBasicMaterial({ color: 0x44ff88, wireframe: true, depthTest: false });
-const ghostLineMat = new THREE.LineBasicMaterial({ color: 0xffcc44, depthTest: false });
+const ghostMatServer = new THREE.MeshBasicMaterial({ color: 0xFF_44_55, wireframe: true, depthTest: false });
+const ghostMatClient = new THREE.MeshBasicMaterial({ color: 0x44_FF_88, wireframe: true, depthTest: false });
+const ghostLineMat = new THREE.LineBasicMaterial({ color: 0xFF_CC_44, depthTest: false });
 
 export function corrGhost(server: { x: number; y: number; z: number }, predicted: { x: number; y: number; z: number }): void {
-  if (!scene || !panelEl || !ghostOn) return;
+  if (!scene || !panelEl || !ghostOn) {return;}
   const srv = new THREE.Mesh(ghostGeo, ghostMatServer);
   srv.position.set(server.x, server.y, server.z);
   const cli = new THREE.Mesh(ghostGeo, ghostMatClient);
@@ -125,7 +125,7 @@ function pruneGhosts(): void {
   const now = performance.now();
   for (let i = ghosts.length - 1; i >= 0; i--) {
     if (ghosts[i]!.until <= now) {
-      for (const o of ghosts[i]!.objs) scene?.remove(o);
+      for (const o of ghosts[i]!.objs) {scene?.remove(o);}
       ghosts.splice(i, 1);
     }
   }
@@ -154,9 +154,9 @@ function panelHtml(): string {
     .map(e => `<div style="opacity:0.7">${((performance.now() - e.t) / 1000).toFixed(1)}s ${e.line}</div>`).join('');
   return `<b>NET</b> ping ${ping}ms · loss ${loss}% · jitter ${jitter}ms<br>` +
     `corr ${corrPerMin()}/min · max ${corrErrMax.toFixed(1)}m · avg ${avg.toFixed(2)}m<br>` +
-    `spawnDrift ${spawnDriftMax.toFixed(2)}m/s over ${spawnDriftN}<br>` +
-    (top ? `<b>claims</b><br>${top}<br>` : '') +
-    (recent ? `<b>recent</b>${recent}` : '<i>no events yet</i>');
+    `spawnDrift ${spawnDriftMax.toFixed(2)}m/s over ${spawnDriftN}<br>${ 
+    top ? `<b>claims</b><br>${top}<br>` : '' 
+    }${recent ? `<b>recent</b>${recent}` : '<i>no events yet</i>'}`;
 }
 
 function togglePanel(): void {
@@ -164,7 +164,7 @@ function togglePanel(): void {
     panelEl.remove();
     panelEl = null;
     clearInterval(refreshTimer);
-    for (const g of ghosts.splice(0)) for (const o of g.objs) scene?.remove(o);
+    for (const g of ghosts.splice(0)) {for (const o of g.objs) {scene?.remove(o);}}
     return;
   }
   panelEl = document.createElement('div');
@@ -190,7 +190,7 @@ function togglePanel(): void {
 let armed = false;
 /** Install the Alt+N toggle + register the Alt+Q dump section. Idempotent. */
 export function initNetProbe(): void {
-  if (armed || typeof window === 'undefined') return;
+  if (armed || typeof window === 'undefined') {return;}
   armed = true;
   document.addEventListener('keydown', (e) => {
     if (e.altKey && e.code === 'KeyN') { e.preventDefault(); togglePanel(); }
@@ -201,7 +201,7 @@ export function initNetProbe(): void {
 export function diagLines(): string[] {
   const avg = corrCount ? corrErrSum / corrCount : 0;
   const out = [`netprobe: corr=${corrCount} (${corrPerMin()}/min) max=${corrErrMax.toFixed(1)}m avg=${avg.toFixed(2)}m spawnDrift=${spawnDriftMax.toFixed(2)}m/s/${spawnDriftN}`];
-  if (rejects.size) {
+  if (rejects.size > 0) {
     out.push(`  claims: ${[...rejects.entries()].map(([r, n]) => `${r} ×${n}`).join(' | ')}`);
   }
   for (const e of events.slice(-12)) {

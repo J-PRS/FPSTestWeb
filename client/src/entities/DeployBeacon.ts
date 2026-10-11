@@ -10,13 +10,13 @@ import { makePartPool, takeSlot, releaseSlot, type PartPool } from './deployPool
 // and the HUD solves the mortar arc onto it (deployables.ts). Same entity
 // contract as the other deployables so pods/owner/blast treat it alike.
 
-const _dark = new THREE.MeshLambertMaterial({ color: 0x1B2229 });
-const _metal = new THREE.MeshLambertMaterial({ color: 0x39434E });
+const _dark = new THREE.MeshLambertMaterial({ color: 0x1B_22_29 });
+const _metal = new THREE.MeshLambertMaterial({ color: 0x39_43_4E });
 const _geoBase = new THREE.CylinderGeometry(0.3, 0.45, 0.16, 8);
 const _geoMast = new THREE.CylinderGeometry(0.05, 0.08, 0.7, 6);
 const _geoHolo = new THREE.OctahedronGeometry(0.16, 0);
 const _holoMat = new THREE.MeshBasicMaterial({
-  color: 0x7DF9FF, transparent: true, opacity: 0.85,
+  color: 0x7D_F9_FF, transparent: true, opacity: 0.85,
   blending: THREE.AdditiveBlending, depthWrite: false,
 });
 // Sky pillar — unit-height additive shaft anchored at the emitter base
@@ -26,7 +26,7 @@ const _geoPillar = new THREE.CylinderGeometry(0.18, 0.6, 1, 6, 1, true);
 _geoPillar.translate(0, 0.5, 0);
 const _UP = new THREE.Vector3(0, 1, 0);
 const _pillarMat = new THREE.MeshBasicMaterial({
-  color: 0x44DDEE, transparent: true, opacity: 0.12,
+  color: 0x44_DD_EE, transparent: true, opacity: 0.12,
   blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
 });
 
@@ -85,7 +85,7 @@ export class DeployBeacon {
     this.slot = takeSlot(poolFor(scene).base);
 
     this.holoGlow = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: getGlowTexture(), color: 0x7DF9FF, transparent: true,
+      map: getGlowTexture(), color: 0x7D_F9_FF, transparent: true,
       blending: THREE.AdditiveBlending, depthWrite: false,
     }));
     this.holoGlow.scale.setScalar(0.8);
@@ -103,7 +103,7 @@ export class DeployBeacon {
   }
 
   private syncMatrices(): void {
-    if (this.slot < 0 || !_pool) return;
+    if (this.slot < 0 || !_pool) {return;}
     const pool = _pool;
     const i = this.slot;
     const g = _m.compose(this.group.position, this.group.quaternion, this.group.scale).clone();

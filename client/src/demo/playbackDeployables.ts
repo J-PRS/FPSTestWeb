@@ -14,16 +14,16 @@ import { fastForward } from './playbackFF.js';
 // kindIdx (DEMO_DEPLOY_KINDS order) -> proxy look. Persisted in files —
 // append-only. t = half-extent of the proxy box.
 const KIND_SPECS: Record<number, { color: number; w: number; h: number }> = {
-  0: { color: 0x555f77, w: 0.5, h: 1.2 },  // turret
-  1: { color: 0x664422, w: 0.35, h: 0.25 }, // mine
-  2: { color: 0x4477aa, w: 0.8, h: 0.4 },  // station
-  3: { color: 0xaaaa44, w: 0.4, h: 0.4 },  // drone
-  4: { color: 0x66ccff, w: 1.2, h: 1.6 },  // shield
-  5: { color: 0xffcc33, w: 0.3, h: 0.3 },  // nugget
-  6: { color: 0x33ffcc, w: 0.3, h: 1.4 },  // beacon
-  7: { color: 0xcc7733, w: 1.0, h: 1.4 },  // generator
-  8: { color: 0x8899bb, w: 0.6, h: 1.8 },  // sensor
-  9: { color: 0x667799, w: 0.7, h: 1.5 },  // sentry
+  0: { color: 0x55_5F_77, w: 0.5, h: 1.2 },  // turret
+  1: { color: 0x66_44_22, w: 0.35, h: 0.25 }, // mine
+  2: { color: 0x44_77_AA, w: 0.8, h: 0.4 },  // station
+  3: { color: 0xAA_AA_44, w: 0.4, h: 0.4 },  // drone
+  4: { color: 0x66_CC_FF, w: 1.2, h: 1.6 },  // shield
+  5: { color: 0xFF_CC_33, w: 0.3, h: 0.3 },  // nugget
+  6: { color: 0x33_FF_CC, w: 0.3, h: 1.4 },  // beacon
+  7: { color: 0xCC_77_33, w: 1, h: 1.4 },  // generator
+  8: { color: 0x88_99_BB, w: 0.6, h: 1.8 },  // sensor
+  9: { color: 0x66_77_99, w: 0.7, h: 1.5 },  // sentry
 };
 
 const geoByKind = new Map<number, THREE.BoxGeometry>();

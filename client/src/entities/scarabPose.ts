@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { getSwarm } from './swarms.js';
-import { getShadows } from './swarms.js';
+import { getSwarm,getShadows } from './swarms.js';
+
 import type { Scarab } from './Scarab.js';
 import type { Terrain } from '../world/terrain.js';
 
@@ -23,9 +23,9 @@ const _e = new THREE.Euler();
 const _s = new THREE.Vector3();
 
 export function writeInstances(sc: Scarab, terrain: Terrain): void {
-    if (!sc.hasSlots) return;
+    if (!sc.hasSlots) {return;}
     const swarm = getSwarm('scarab');
-    if (!swarm) return;
+    if (!swarm) {return;}
     const slot = sc.swarmSlot;
     const r = sc.radius;
 

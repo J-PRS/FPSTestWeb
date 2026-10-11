@@ -41,7 +41,7 @@ export function fireAtBall(h: BeamHost, p: BotBody, ball: number, aim: Vec3, pic
   const lenb = Math.sqrt(dxb * dxb + dyb * dyb + dzb * dzb) || 1;
   const lo = h.loadouts.get(p.id) ?? pickDefault;
   const wt = h.pickWeapon(lo, Math.hypot(dxb, dzb), lenb);
-  if (!h.rateOk(p.id, wt)) return;
+  if (!h.rateOk(p.id, wt)) {return;}
   if (wt === WeaponType.Melee) {
     // The punch lands if the creature is inside the swing's reach —
     // geometry decides, not a dice roll.
@@ -51,7 +51,7 @@ export function fireAtBall(h: BeamHost, p: BotBody, ball: number, aim: Vec3, pic
       const d = Math.hypot(b.x - muzzle.x, b.y - muzzle.y, b.z - muzzle.z);
       if (d <= stats.aoeRadius + b.radius) {
         const dmg = isSuper(p.id) ? 300 : stats.aoeDamage;
-        const killed = h.room.ballSim.handleHit(p.id, ball, dmg).killed;
+        const {killed} = h.room.ballSim.handleHit(p.id, ball, dmg);
         weaponStats.record(h.room.mode, `w${wt}:prey`, dmg, killed, true);
       }
     }
@@ -71,15 +71,15 @@ export function fireSpeedless(h: BeamHost, id: string, muzzle: Vec3, dir: Vec3, 
   const c = isSuper(id) ? null : beamContact(h, id, muzzle, dir);
   const playerId = isSuper(id) ? h.lastHunt(id) : (c?.playerId ?? null);
   h.room.messages.botFire(id, playerId, muzzle,
-    { x: dir.x * BOLT_SPEED, y: dir.y * BOLT_SPEED, z: dir.z * BOLT_SPEED }, wt, !!playerId);
+    { x: dir.x * BOLT_SPEED, y: dir.y * BOLT_SPEED, z: dir.z * BOLT_SPEED }, wt, Boolean(playerId));
   if (c?.ballId !== undefined && stats) {
     const dmg = stats.directDamage || stats.aoeDamage;
-    const killed = h.room.ballSim.handleHit(id, c.ballId, dmg).killed;
+    const {killed} = h.room.ballSim.handleHit(id, c.ballId, dmg);
     weaponStats.record(h.room.mode, `w${wt}:prey`, dmg, killed, true);
   }
   if (c?.crawlerId !== undefined && stats) {
     const dmg = stats.directDamage || stats.aoeDamage;
-    const killed = h.room.creatureSim.handleHit(id, c.crawlerId, dmg).killed;
+    const {killed} = h.room.creatureSim.handleHit(id, c.crawlerId, dmg);
     weaponStats.record(h.room.mode, `w${wt}:prey`, dmg, killed, true);
   }
 }
@@ -91,12 +91,12 @@ function beamContact(h: BeamHost, shooterId: string, muzzle: Vec3, dir: Vec3, ra
   let bestT = 1;
   if (h.room.field) {
     const th = segFieldHit(muzzle, end, h.room.field);
-    if (th) bestT = segPointT(muzzle, end, th);
+    if (th) {bestT = segPointT(muzzle, end, th);}
   }
   const solids = h.room.projectiles.solidColliders;
-  if (solids.length) {
+  if (solids.length > 0) {
     const sh = segSolidHit(muzzle, end, solids, undefined, h.room.players.getPlayer(shooterId)?.team);
-    if (sh) bestT = Math.min(bestT, segPointT(muzzle, end, sh));
+    if (sh) {bestT = Math.min(bestT, segPointT(muzzle, end, sh));}
   }
   return beamEntityAt(h, shooterId, muzzle, end, bestT);
 }
@@ -107,17 +107,17 @@ function beamEntityAt(h: BeamHost, shooterId: string, muzzle: Vec3, end: Vec3, w
   let bestT = worldT;
   let playerId: string | undefined;
   for (const [pid, t] of h.room.players.getAllPlayers()) {
-    if (pid === shooterId || t.isDead) continue;
+    if (pid === shooterId || t.isDead) {continue;}
     const cap = classCapsule(t.armorClass);
     const c = { x: t.position.x, y: t.position.y + cap.centerOff, z: t.position.z };
-    if (segPointDist(muzzle, end, c) > cap.radius + 0.2 + cap.half) continue;
+    if (segPointDist(muzzle, end, c) > cap.radius + 0.2 + cap.half) {continue;}
     const tt = segPointT(muzzle, end, c);
     if (tt <= bestT) { bestT = tt; playerId = pid; }
   }
   const bc = h.room.ballSim?.sweepHit(muzzle, end, 0.2);
-  if (bc && bc.t <= bestT) return { ballId: bc.id };
+  if (bc && bc.t <= bestT) {return { ballId: bc.id };}
   const cc = h.room.creatureSim?.sweepHit(muzzle, end, 0.2);
-  if (cc && cc.t <= bestT) return { crawlerId: cc.id };
-  if (playerId !== undefined) return { playerId };
+  if (cc && cc.t <= bestT) {return { crawlerId: cc.id };}
+  if (playerId !== undefined) {return { playerId };}
   return worldT < 1 ? {} : null;
 }

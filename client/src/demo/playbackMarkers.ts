@@ -14,15 +14,15 @@ import { fastForward } from './playbackFF.js';
 import * as sfxUtil from '../core/sfx/util.js';
 import * as sfxPlayer from '../core/sfx/player.js';
 
-const PICKUP_COLORS = [0xffcc33, 0xdd4444, 0x44dd66, 0xff8833, 0x44ccff, 0xcc44ff]; // gem/tag/heal/armor/regen/dd
-const FLAG_COLORS = [0x55aaff, 0xff8855]; // alpha/beta — matches TEAM_COLORS
+const PICKUP_COLORS = [0xFF_CC_33, 0xDD_44_44, 0x44_DD_66, 0xFF_88_33, 0x44_CC_FF, 0xCC_44_FF]; // gem/tag/heal/armor/regen/dd
+const FLAG_COLORS = [0x55_AA_FF, 0xFF_88_55]; // alpha/beta — matches TEAM_COLORS
 
 function buildFlagProxy(colorIdx: number): THREE.Group {
   const g = new THREE.Group();
-  const color = FLAG_COLORS[colorIdx] ?? 0xffcc33;
+  const color = FLAG_COLORS[colorIdx] ?? 0xFF_CC_33;
   const pole = new THREE.Mesh(
     new THREE.CylinderGeometry(0.06, 0.08, 4, 6),
-    new THREE.MeshBasicMaterial({ color: 0x888888 }));
+    new THREE.MeshBasicMaterial({ color: 0x88_88_88 }));
   pole.position.y = 2;
   const banner = new THREE.Mesh(
     new THREE.ConeGeometry(0.5, 1.2, 4),
@@ -38,7 +38,7 @@ class PlaybackPickup {
   readonly mesh: THREE.Mesh;
   dead = false;
   constructor(scene: THREE.Scene, kindIdx: number, pos: THREE.Vector3) {
-    this.mesh = new THREE.Mesh(pickupGeo, new THREE.MeshBasicMaterial({ color: PICKUP_COLORS[kindIdx] ?? 0xffcc33 }));
+    this.mesh = new THREE.Mesh(pickupGeo, new THREE.MeshBasicMaterial({ color: PICKUP_COLORS[kindIdx] ?? 0xFF_CC_33 }));
     this.mesh.position.copy(pos).add(new THREE.Vector3(0, 0.5, 0));
     scene.add(this.mesh);
   }
@@ -49,14 +49,14 @@ class PlaybackPickup {
 }
 
 function flagTeamIdx(targetId: number): number {
-  return targetId & 0xf; // low nibble of FLAG_DEMO_ID_BASE|teamIdx
+  return targetId & 0xF; // low nibble of FLAG_DEMO_ID_BASE|teamIdx
 }
 
 export function applyPlaybackMarkerEvent(world: PlaybackWorld, ev: TargetEvent, audible = false): void {
   if (ev.targetType === TARGETTYPE_KILL) {
     // Victim pos + a small red burst — the body gibs ride remoteFrames.
     const pos = new THREE.Vector3(ev.posX, ev.posY, ev.posZ);
-    world.explosions.push(new Explosion(world.scene, pos, false, 0, world.terrain, 0.8, 0xdd3333));
+    world.explosions.push(new Explosion(world.scene, pos, false, 0, world.terrain, 0.8, 0xDD_33_33));
     // Live kills cue a death bark at the body — playback's version.
     if (audible) {sfxUtil.at(pos, 'robot_die', 0.9);}
     return;
@@ -160,7 +160,7 @@ export function updatePlaybackFlags(world: PlaybackWorld): void {
     }
   }
 }
-const _carryOffset = new THREE.Vector3(0, 1.0, 0);
+const _carryOffset = new THREE.Vector3(0, 1, 0);
 
 export function clearPlaybackMarkers(world: PlaybackWorld): void {
   for (const flag of world.playbackFlags.values()) {world.scene.remove(flag);}

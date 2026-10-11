@@ -26,7 +26,7 @@ let _bodyGeo: THREE.IcosahedronGeometry | null = null;
 function bodyGeo(): THREE.BufferGeometry {
   if (!_bodyGeo) {
     _bodyGeo = new THREE.IcosahedronGeometry(1, 1);
-    _bodyGeo.scale(0.62, 0.55, 1.0);
+    _bodyGeo.scale(0.62, 0.55, 1);
   }
   return _bodyGeo;
 }
@@ -62,14 +62,14 @@ let _wingMat: THREE.MeshLambertMaterial | null = null;
 let _eyeMat: THREE.MeshBasicMaterial | null = null;
 
 export function seekerParts(): SwarmPart[] {
-  if (!_bodyMat) _bodyMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  if (!_bodyMat) {_bodyMat = new THREE.MeshLambertMaterial({ color: 0xFF_FF_FF });}
   // Opaque chitin wing — the transparent membrane was blending against
   // the viewmodel/scene in the composer buffer.
-  if (!_wingMat) _wingMat = new THREE.MeshLambertMaterial({ color: 0x8a7a5f, side: THREE.DoubleSide });
-  if (!_eyeMat) _eyeMat = new THREE.MeshBasicMaterial({
-    map: getGlowTexture(), color: 0xffcc44, transparent: true, blending: THREE.AdditiveBlending,
+  if (!_wingMat) {_wingMat = new THREE.MeshLambertMaterial({ color: 0x8A_7A_5F, side: THREE.DoubleSide });}
+  if (!_eyeMat) {_eyeMat = new THREE.MeshBasicMaterial({
+    map: getGlowTexture(), color: 0xFF_CC_44, transparent: true, blending: THREE.AdditiveBlending,
     depthWrite: false, side: THREE.DoubleSide,
-  });
+  });}
   return [
     { geometry: bodyGeo(), material: _bodyMat, castShadow: true },
     { geometry: _wingGeo, material: _wingMat, per: WINGS_PER },
@@ -97,9 +97,9 @@ export interface SeekerVisHost {
 }
 
 export function writeSeekerInstances(s: SeekerVisHost): void {
-  if (!s.hasSlots) return;
+  if (!s.hasSlots) {return;}
   const swarm = getSwarm('seeker');
-  if (!swarm) return;
+  if (!swarm) {return;}
   const slot = s.swarmSlot;
   const r = s.radius;
 

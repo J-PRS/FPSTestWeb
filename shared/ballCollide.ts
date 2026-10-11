@@ -11,7 +11,7 @@ import type { SimBall } from './ballSim.js';
 
 /** Restitution for structure + body bounces. Lives here (not ballSim) so
  *  the collide helpers don't value-import the sim — one-directional dep. */
-export const BALL_BOUNCE = 1.0;             // elastic reflection
+export const BALL_BOUNCE = 1;             // elastic reflection
 
 /** Yaw-only oriented box for sphere-vs-structure contact. Precomputed from
  *  StructureSpec — pos is the piece's BASE center, so the box center sits
@@ -31,7 +31,7 @@ export interface StructureCollider {
 }
 
 export function structureColliders(list: readonly StructureSpec[] | undefined): StructureCollider[] {
-  if (!list?.length) return [];
+  if (!list?.length) {return [];}
   const out: StructureCollider[] = [];
   for (const s of list) {
     const cos = Math.cos(s.rotY ?? 0), sin = Math.sin(s.rotY ?? 0);
@@ -87,14 +87,14 @@ export function structureColliders(list: readonly StructureSpec[] | undefined): 
  *  touching, not intersecting. */
 export function findStructureOverlaps(list: readonly StructureSpec[] | undefined, eps = 0.3): { a: number; b: number; x: number; y: number; z: number }[] {
   const out: { a: number; b: number; x: number; y: number; z: number }[] = [];
-  if (!list?.length) return out;
+  if (!list?.length) {return out;}
   const perSpec = list.map((s) => structureColliders([s]));
   const gatePair = (i: number, j: number) =>
     (list[i]!.kind === 'shield' && list[j]!.kind === 'kit' && list[j]!.piece === 'gatehouse') ||
     (list[j]!.kind === 'shield' && list[i]!.kind === 'kit' && list[i]!.piece === 'gatehouse');
   for (let i = 0; i < list.length; i++) {
     for (let j = i + 1; j < list.length; j++) {
-      if (gatePair(i, j)) continue;
+      if (gatePair(i, j)) {continue;}
       // Butted joints are authored everywhere (wall T-junctions, hull
       // chains telescoping a few meters). The flag is *containment*:
       // the overlap swallowing a real fraction of the smaller box.
@@ -102,9 +102,9 @@ export function findStructureOverlaps(list: readonly StructureSpec[] | undefined
       // AABB approx inflates yawed pieces into phantom containment.
       let worst = 0;
       let best: { x: number; y: number; z: number } | null = null;
-      for (const ca of perSpec[i]!) for (const cb of perSpec[j]!) {
+      for (const ca of perSpec[i]!) {for (const cb of perSpec[j]!) {
         const oy = Math.min(ca.cy + ca.hy, cb.cy + cb.hy) - Math.max(ca.cy - ca.hy, cb.cy - cb.hy);
-        if (oy <= eps) continue;
+        if (oy <= eps) {continue;}
         const dx = cb.cx - ca.cx, dz = cb.cz - ca.cz;
         // Face axes of each box in world XZ: local x ↦ (cos,−sin), z ↦ (sin,cos).
         const proj = (c: StructureCollider, ax: number, az: number) =>
@@ -119,15 +119,15 @@ export function findStructureOverlaps(list: readonly StructureSpec[] | undefined
         for (const [ax, az, ra, rb] of axes) {
           const dep = ra + rb - Math.abs(dx * ax + dz * az);
           if (dep <= eps) { d0 = d1 = 0; break; }
-          if (dep < d0) { d1 = d0; d0 = dep; } else if (dep < d1) d1 = dep;
+          if (dep < d0) { d1 = d0; d0 = dep; } else if (dep < d1) {d1 = dep;}
         }
-        if (d0 <= eps) continue;
+        if (d0 <= eps) {continue;}
         // The two shallowest SAT depths bound the intersection footprint.
         const va = 8 * ca.hx * ca.hy * ca.hz, vb = 8 * cb.hx * cb.hy * cb.hz;
         const frac = (d0 * d1 * oy) / Math.min(va, vb);
         if (frac > worst) { worst = frac; best = { x: d0, y: oy, z: d1 }; }
-      }
-      if (best && worst > 0.35) out.push({ a: i, b: j, ...best });
+      }}
+      if (best && worst > 0.35) {out.push({ a: i, b: j, ...best });}
     }
   }
   return out;
@@ -145,7 +145,7 @@ export function collideStructures(b: SimBall, colliders: readonly StructureColli
     const dx = b.x - c.cx, dy = b.y - c.cy, dz = b.z - c.cz;
     // cheap broadphase — skip pieces nowhere near this ball
     const rr = Math.max(c.hx, c.hz) + b.radius + 0.5;
-    if (dx * dx + dz * dz > rr * rr) continue;
+    if (dx * dx + dz * dz > rr * rr) {continue;}
     if (c.dome) {
       // Sphere vs hemisphere: contact normal runs from the dome's base
       // center to the ball — the buried half never matters, the plinth
@@ -154,7 +154,7 @@ export function collideStructures(b: SimBall, colliders: readonly StructureColli
       const sx = b.x - c.cx, sy = b.y - cy0, sz = b.z - c.cz;
       const d2 = sx * sx + sy * sy + sz * sz;
       const reach = c.dome + b.radius;
-      if (d2 >= reach * reach) continue;
+      if (d2 >= reach * reach) {continue;}
       const d = Math.sqrt(d2) || 1;
       const push = reach - d;
       b.x += (sx / d) * push; b.y += (sy / d) * push; b.z += (sz / d) * push;
@@ -172,8 +172,8 @@ export function collideStructures(b: SimBall, colliders: readonly StructureColli
     const qy = Math.max(-c.hy, Math.min(c.hy, dy));
     const qz = Math.max(-c.hz, Math.min(c.hz, lz));
     let nx = lx - qx, ny = dy - qy, nz = lz - qz;
-    let d2 = nx * nx + ny * ny + nz * nz;
-    if (d2 >= b.radius * b.radius) continue;
+    const d2 = nx * nx + ny * ny + nz * nz;
+    if (d2 >= b.radius * b.radius) {continue;}
     let d: number;
     if (d2 > 1e-9) {
       d = Math.sqrt(d2);
@@ -182,9 +182,9 @@ export function collideStructures(b: SimBall, colliders: readonly StructureColli
       // center inside the box — exit along the axis of least depth
       const px = c.hx - Math.abs(lx), py = c.hy - Math.abs(dy), pz = c.hz - Math.abs(lz);
       nx = 0; ny = 0; nz = 0;
-      if (px <= py && px <= pz) nx = Math.sign(lx) || 1;
-      else if (py <= pz) ny = Math.sign(dy) || 1;
-      else nz = Math.sign(lz) || 1;
+      if (px <= py && px <= pz) {nx = Math.sign(lx) || 1;}
+      else if (py <= pz) {ny = Math.sign(dy) || 1;}
+      else {nz = Math.sign(lz) || 1;}
       d = -Math.min(px, py, pz); // negative = overlap depth
     }
     // normal back to world yaw frame

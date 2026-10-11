@@ -374,7 +374,7 @@ export class TieredTransport implements GameTransport {
       for (const d of this.pending) {t.send(d);}
       this.pending.length = 0;
     }).catch((error) => {
-      if (gen !== this.gen) return;
+      if (gen !== this.gen) {return;}
       this.config.onError?.(error instanceof Error ? error : new Error(String(error)));
     });
   }

@@ -60,8 +60,8 @@ const ENDPOST_3: KitHull[] = [box(0, 2.3, 0, 3, 4.6, 3)];
 // Tall gate face (~21m): stubs at ±7.15, mouth towers at ±3.9, full-
 // height slot. Hoisted so bastion can fold the same hull set twice.
 const GATEHOUSE: KitHull[] = [
-  box(-7.15, 10.0, 0, 9.7, 20.4, 1.8),
-  box(7.15, 10.0, 0, 9.7, 20.4, 1.8),
+  box(-7.15, 10, 0, 9.7, 20.4, 1.8),
+  box(7.15, 10, 0, 9.7, 20.4, 1.8),
   box(-3.9, 10.8, 0, 3.4, 21.6, 3.4),
   box(3.9, 10.8, 0, 3.4, 21.6, 3.4),
 ];
@@ -81,10 +81,10 @@ const GENHOUSE: KitHull[] = [
     [[box(0, -7.3, 0, 2, 29.4, 2)], -3, -7],
     [[box(0, -7.3, 0, 2, 29.4, 2)], 3, -7],
   ]),
-  box(0, -10.5, 0, 14.8, 23.0, 12.8), // deck → foundation fill
-  box(0, 7.5, 0, 16, 1.0, 14),        // roof
-  box(0, 13.0, 0, 2.2, 6.4, 2.2),     // comms mast on the vent crown
-  box(0, 9.0, 0, 4.4, 1.6, 3.2),      // vent stack
+  box(0, -10.5, 0, 14.8, 23, 12.8), // deck → foundation fill
+  box(0, 7.5, 0, 16, 1, 14),        // roof
+  box(0, 13, 0, 2.2, 6.4, 2.2),     // comms mast on the vent crown
+  box(0, 9, 0, 4.4, 1.6, 3.2),      // vent stack
 ];
 
 // Bunker hulls (mkBunker 12×10, door +Z) — hoisted for the bastion fold.
@@ -208,12 +208,12 @@ export function seatKits(
   list: readonly { kind: string; pos: Vec3like; size?: Vec3like; piece?: string; rotY?: number; scale?: number }[] | undefined,
   getHeight: (x: number, z: number) => number | undefined,
 ): void {
-  if (!list) return;
+  if (!list) {return;}
   for (const s of list) {
     // 'shield' panes seat their BASE on the field too — a pane authored
     // a metre off the ground either floats (enemies ski under a "gate")
     // or buries (an opaque seam eats the bottom of the arch).
-    if (s.kind !== 'kit' && s.kind !== 'shield') continue;
+    if (s.kind !== 'kit' && s.kind !== 'shield') {continue;}
     // Footprint reach in world XZ: farthest hull corner (kits — rotY of
     // the spec itself moves with the piece, so sample its yaw) or the
     // pane's own half-extents.
@@ -225,7 +225,7 @@ export function seatKits(
           (Math.abs(h.pos.x) + h.size.x / 2) * k,
           (Math.abs(h.pos.z) + h.size.z / 2) * k);
       }
-      if (reach === 0) continue; // unknown piece — nothing to seat
+      if (reach === 0) {continue;} // unknown piece — nothing to seat
     } else {
       reach = Math.max(s.size?.x ?? 0, s.size?.z ?? 0) / 2;
     }
@@ -241,10 +241,10 @@ export function seatKits(
     for (const [ox, oz] of [[0, 0], [reach, 0], [-reach, 0], [0, reach], [0, -reach]] as const) {
       const h = getHeight(s.pos.x + ox * cos + oz * sin,
                           s.pos.z - ox * sin + oz * cos);
-      if (h === undefined) continue;
-      if (h < min) min = h;
-      if (h > max) max = h;
+      if (h === undefined) {continue;}
+      if (h < min) {min = h;}
+      if (h > max) {max = h;}
     }
-    if (min !== Infinity) s.pos.y = floored ? max : min;
+    if (min !== Infinity) {s.pos.y = floored ? max : min;}
   }
 }

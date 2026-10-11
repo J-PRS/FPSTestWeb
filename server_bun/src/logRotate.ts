@@ -22,7 +22,7 @@ const logStamp = (t: Date) =>
  *  Never throws — a bad rotate must never block an append. */
 export function rotateLogIfBig(p: string): void {
   try {
-    if (!existsSync(p) || statSync(p).size === 0 || statSync(p).size <= MID_RUN_ROLL_BYTES) return;
+    if (!existsSync(p) || statSync(p).size === 0 || statSync(p).size <= MID_RUN_ROLL_BYTES) {return;}
     const dir = dirname(p);
     mkdirSync(join(dir, 'OLD'), { recursive: true });
     const oldDir = join(dir, 'OLD');
@@ -32,7 +32,7 @@ export function rotateLogIfBig(p: string): void {
     // per collision. Bump a suffix until the name is free.
     const stem = join(oldDir, `${basename(p, extname(p))}_${logStamp(statSync(p).mtime)}`);
     let dst = stem + extname(p), n = 1;
-    while (existsSync(dst)) dst = `${stem}_${n++}${extname(p)}`;
+    while (existsSync(dst)) {dst = `${stem}_${n++}${extname(p)}`;}
     renameSync(p, dst);
     pruneOld(oldDir);
   } catch { /* rotation must never block an append */ }
@@ -46,6 +46,6 @@ function pruneOld(oldDir: string): void {
       .map((f) => join(oldDir, f))
       .filter((p) => statSync(p).isFile())
       .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
-    for (const p of files.slice(OLD_KEEP)) unlinkSync(p);
+    for (const p of files.slice(OLD_KEEP)) {unlinkSync(p);}
   } catch { /* pruning is best-effort like rotation itself */ }
 }

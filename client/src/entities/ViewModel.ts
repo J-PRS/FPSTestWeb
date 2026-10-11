@@ -130,7 +130,7 @@ export class ViewModel {
     // Muzzle light — the half of a retro flash nobody draws: for ~60ms
     // the shot actually LIGHTS the gun and hands. Parented to the quad so
     // it inherits the per-weapon muzzle park and sway/kick for free.
-    this.flashLight = new THREE.PointLight(0xFFFFFF, 0, 2.2, 2);
+    this.flashLight = new THREE.PointLight(0xFF_FF_FF, 0, 2.2, 2);
     this.flashLight.visible = false;
     this.flashMesh.add(this.flashLight);
 
@@ -336,10 +336,10 @@ export class ViewModel {
   // Energy shield, first-person read: the same hex+fresnel field that wraps
   // the third-person bubble crawls over the gun's surface.
   shieldShells: THREE.Object3D[] = []; // public — switch envelope re-wraps
-  shellColor = 0x66CCFF;
-  setShield(on: boolean, color = 0x66CCFF): void { vm.setShield(this, on, color); }
+  shellColor = 0x66_CC_FF;
+  setShield(on: boolean, color = 0x66_CC_FF): void { vm.setShield(this, on, color); }
   // Medkit reuses the gun shell — same field, green read.
-  setMend(on: boolean): void { vm.setShield(this, on, 0x3FDD6F); }
+  setMend(on: boolean): void { vm.setShield(this, on, 0x3F_DD_6F); }
   /** Tick the field animation on the gun shells (called from update). */
   updateShieldShells(dt: number): void { vm.updateShieldShells(this, dt); }
 

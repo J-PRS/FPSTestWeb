@@ -86,7 +86,7 @@ export class RoomScore {
       }
       return;
     }
-    if (!spec?.ffa || spec.ptsCreatureKill <= 0 || !this.h.players.getPlayer(by)) return;
+    if (!spec?.ffa || spec.ptsCreatureKill <= 0 || !this.h.players.getPlayer(by)) {return;}
     this.awardFfa(by, spec.ptsCreatureKill);
   }
 
@@ -120,7 +120,7 @@ export class RoomScore {
     this.h.deployables.clearOwner(targetId);
     // A death is audible — nearby idle bots drift toward the kill spot.
     const corpse = this.h.players.getPlayer(targetId);
-    if (corpse) this.h.pushNoise(corpse.position);
+    if (corpse) {this.h.pushNoise(corpse.position);}
     const spec = this.h.modeSpec;
     // Corpse loot — offline drops 3 nuggets on every team-mode death
     // ("kills feed the economy"); the wire must match or hosted rooms
@@ -146,10 +146,10 @@ export class RoomScore {
       }
     }
     const shooter = this.h.players.getPlayer(shooterId);
-    if (!spec || !shooter) return;
+    if (!spec || !shooter) {return;}
     // Self-splash is a death, not a frag — kills/deaths still record,
     // but a suicide must never pay a point toward winning.
-    if (shooterId === targetId) return;
+    if (shooterId === targetId) {return;}
     // CTF personal board: a frag pays 1, doubled when the victim was in
     // a flag zone (defending your stand or clearing the enemy's). Runs
     // BEFORE the ptsPlayerKill gate — ctf sets that to 0 because frags
@@ -159,9 +159,9 @@ export class RoomScore {
       const inZone = victim ? this.h.flags?.nearStand(victim.position, CTF_FLAG_ZONE_R) : false;
       this.awardPersonal(shooterId, inZone ? CTF_PTS.flagZoneKill : CTF_PTS.kill);
     }
-    if (spec.ptsPlayerKill <= 0) return;
-    if (spec.ffa) this.awardFfa(shooterId, spec.ptsPlayerKill);
-    else if (shooter.team) this.score(shooter.team, spec.ptsPlayerKill);
+    if (spec.ptsPlayerKill <= 0) {return;}
+    if (spec.ffa) {this.awardFfa(shooterId, spec.ptsPlayerKill);}
+    else if (shooter.team) {this.score(shooter.team, spec.ptsPlayerKill);}
   }
 
   /** CTF damage economy — every 100 post-mitigation enemy damage pays 1
@@ -172,23 +172,23 @@ export class RoomScore {
   private dmgPool = new Map<string, number>();
   onDamage(shooterId: string, targetId: string, damage: number): void {
     const spec = this.h.modeSpec;
-    if (!spec?.teams || !spec.flags || shooterId === targetId) return;
+    if (!spec?.teams || !spec.flags || shooterId === targetId) {return;}
     const shooter = this.h.players.getPlayer(shooterId);
     const victim = this.h.players.getPlayer(targetId);
-    if (!shooter?.team || !victim?.team || shooter.team === victim.team) return;
+    if (!shooter?.team || !victim?.team || shooter.team === victim.team) {return;}
     const acc = (this.dmgPool.get(shooterId) ?? 0) + damage;
     const pts = Math.floor(acc / CTF_DMG_PER_PTS);
     this.dmgPool.set(shooterId, acc - pts * CTF_DMG_PER_PTS);
-    if (pts > 0) this.awardPersonal(shooterId, pts * CTF_PTS.dmg);
+    if (pts > 0) {this.awardPersonal(shooterId, pts * CTF_PTS.dmg);}
   }
 
   /** Team point from a server-observed objective (flag cap, gem touch). */
   score(team: TeamId, n = 1): void {
-    if (!this.h.modeSpec?.teams) return;
+    if (!this.h.modeSpec?.teams) {return;}
     bank(this.h.scores, team, n);
     this.h.broadcast({ type: 'teamScore', scores: { ...this.h.scores }, winAt: this.h.modeSpec.winAt });
     const w = winner(this.h.scores, this.h.modeSpec.winAt);
-    if (w) this.h.endMatch(w);
+    if (w) {this.h.endMatch(w);}
   }
 
   /** Rabbit's bottom-feeder rule: exactly ONE last-place hunter may brawl
@@ -216,14 +216,14 @@ export class RoomScore {
     const pts = (this.ffaScores.get(id) ?? 0) + n;
     this.ffaScores.set(id, pts);
     this.h.broadcast({ type: 'ffaScore', scores: Object.fromEntries(this.ffaScores), winAt: spec.winAt });
-    if (pts >= spec.winAt) this.h.endMatch(id);
+    if (pts >= spec.winAt) {this.h.endMatch(id);}
   }
 
   /** Team-mode personal score — same ffaScores map + ffaScore echo, but
    *  it can NEVER end a match: the PTS column is honor, not the win. */
   awardPersonal(id: string, n: number): void {
     const spec = this.h.modeSpec;
-    if (!spec) return;
+    if (!spec) {return;}
     this.ffaScores.set(id, (this.ffaScores.get(id) ?? 0) + n);
     this.h.broadcast({ type: 'ffaScore', scores: Object.fromEntries(this.ffaScores), winAt: spec.winAt });
   }

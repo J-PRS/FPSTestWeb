@@ -21,7 +21,7 @@ export const SLITHER_SIM = {
   STRIKE_CD: 2.2,
   WINDUP_S: 0.45,
   LUNGE_T: 1.2,      // safety cap — landing ends the leap long before this
-  LUNGE_SPEED: 14.0,
+  LUNGE_SPEED: 14,
   GRAVITY,           // the leap arc pays world gravity — one source in movement.ts
   OVERSHOOT: 3.5,    // aim point past the target — the leap goes THROUGH
   BITE_D2: 2.4 * 2.4,
@@ -96,11 +96,14 @@ export function stepSlither(
   // to integration — the event kinds are the wire.
   let ev: CrawlerEvent | null = null;
   switch (c.state) {
-    case 'windup': ev = stepCoil(c, dt, geom); break;
-    case 'lunge': return stepLeap(c, dt, field, target, authoritative, cols);
-    default: ev = stepWeave(c, dt, target, geom); break;
+    case 'windup': { ev = stepCoil(c, dt, geom); break;
+    }
+    case 'lunge': { return stepLeap(c, dt, field, target, authoritative, cols);
+    }
+    default: { ev = stepWeave(c, dt, target, geom); break;
+    }
   }
-  if (ev !== null) return ev;
+  if (ev !== null) {return ev;}
 
   const spx = c.x, spz = c.z;
   c.x += c.vx * dt;
@@ -160,7 +163,7 @@ function stepLeap(
     const bdx = target.x - c.x, bdz = target.z - c.z, bdy = target.y - c.y;
     if (bdx * bdx + bdz * bdz + bdy * bdy < c.sp.BITE_D2) {
       c.struck = true;
-      if (authoritative) c.pendingBite = true;
+      if (authoritative) {c.pendingBite = true;}
       return 'bite';
     }
   }

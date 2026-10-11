@@ -43,7 +43,7 @@ export class RabbitBridge {
     private announce: (text: string) => void,
   ) {
     // The networked flag's look, no stand — neutral gold since rabbit is FFA.
-    this.group.add(mkFlagMesh('alpha', 0xFFCC44));
+    this.group.add(mkFlagMesh('alpha', 0xFF_CC_44));
     this.group.visible = false;
     this.d.lazyScene().add(this.group);
   }

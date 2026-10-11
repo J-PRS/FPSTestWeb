@@ -12,10 +12,10 @@
  * replay must land on the same vertex or bounces diverge.
  */
 
-export const HM_WORLD_SCALE = 1500.0; // meters per heightmap wrap — MUST match client config TERRAIN_WORLD_SCALE
-export const HM_HEIGHT_SCALE = 125.0; // MUST match TERRAIN_HEIGHT_SCALE
-export const HM_DIVISOR = 255.0;      // MUST match TERRAIN_HEIGHTMAP_DIVISOR
-const CPU_STEP = 5.0;                 // normal finite-diff step (finest clipmap spacing)
+export const HM_WORLD_SCALE = 1500; // meters per heightmap wrap — MUST match client config TERRAIN_WORLD_SCALE
+export const HM_HEIGHT_SCALE = 125; // MUST match TERRAIN_HEIGHT_SCALE
+export const HM_DIVISOR = 255;      // MUST match TERRAIN_HEIGHTMAP_DIVISOR
+const CPU_STEP = 5;                 // normal finite-diff step (finest clipmap spacing)
 
 export interface Heightfield {
   size: number;
@@ -39,8 +39,8 @@ export interface Heightfield {
 function hmField(f: Heightfield, wx: number, wz: number): number {
   const N = f.size;
   const ws = f.worldScale ?? HM_WORLD_SCALE;
-  const u = (((wx / ws) % 1.0) + 1.0) % 1.0 * N - 0.5;
-  const v = (((wz / ws) % 1.0) + 1.0) % 1.0 * N - 0.5;
+  const u = (((wx / ws) % 1) + 1) % 1 * N - 0.5;
+  const v = (((wz / ws) % 1) + 1) % 1 * N - 0.5;
   const x0 = ((Math.floor(u) % N) + N) % N;
   const z0 = ((Math.floor(v) % N) + N) % N;
   const x1 = (x0 + 1) % N;
@@ -91,6 +91,7 @@ export function hmFingerprint(f: Heightfield): string {
   let acc = 0;
   for (let i = 0; i < 64; i++) {
     const cell = Math.floor((i / 64) * N * N);
+    // oxlint-disable-next-line prefer-math-trunc -- int32 wrap is the point
     acc = (acc * 31 + d[cell * s]!) | 0;
   }
   return `${N}:${(acc >>> 0).toString(16)}:${f.heightScale ?? 1}:${f.worldScale ?? HM_WORLD_SCALE}`;
@@ -135,13 +136,13 @@ export function hmSettleWalkable(f: Heightfield, pos: { x: number; y: number; z:
     const gzm = hmHeight(f, pos.x, pos.z - 4), gzp = hmHeight(f, pos.x, pos.z + 4);
     const sx = (gxp - gxm) / 8, sz = (gzp - gzm) / 8;
     const slope = Math.hypot(sx, sz);
-    if (slope < 0.8) break; // walkable grade
+    if (slope < 0.8) {break;} // walkable grade
     const d = slope || 1;
     pos.x -= (sx / d) * 6; pos.z -= (sz / d) * 6;
     // Rest height is the drawn chord — the flat triangles dip under the
     // bilinear field on convex ground, so a field rest reads midair.
     pos.y = Math.max(hmHeight(f, pos.x, pos.z), hmChord(f, pos.x, pos.z)) + lift;
-    if (Math.abs(h0 - pos.y) < 0.5 && i > 4) break; // settled on a shelf
+    if (Math.abs(h0 - pos.y) < 0.5 && i > 4) {break;} // settled on a shelf
   }
 }
 
@@ -152,7 +153,7 @@ export function hmNormal(f: Heightfield, wx: number, wz: number, out: { x: numbe
   const hD = hmHeight(f, wx, wz - e);
   const hU = hmHeight(f, wx, wz + e);
   const nx = hL - hR;
-  const ny = 2.0 * e;
+  const ny = 2 * e;
   const nz = hD - hU;
   const il = 1 / Math.sqrt(nx * nx + ny * ny + nz * nz);
   out.x = nx * il;

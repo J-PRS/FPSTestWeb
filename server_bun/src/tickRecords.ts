@@ -35,7 +35,7 @@ function mintWireId(room: Room): number {
   for (const [id, at] of room.wireIdRetired) {
     if (now - at >= WIRE_ID_QUIET_MS) { room.wireIdRetired.delete(id); return id; }
   }
-  if (room.nextWireId <= 0xffff) return room.nextWireId++;
+  if (room.nextWireId <= 0xFF_FF) {return room.nextWireId++;}
   // Space exhausted with nothing quiet enough — take the eldest retired
   // id anyway; strictly better than a silent modulo-wrap.
   const eldest = room.wireIdRetired.keys().next().value;
@@ -47,7 +47,7 @@ function mintWireId(room: Room): number {
   // 65536 simultaneously-bound ids — the room has bigger problems than
   // this collision, but fail loud rather than aliasing silently.
   logger.error('wireId space exhausted — live collision', { room: room.name });
-  return (room.nextWireId++ % 0xffff) + 1;
+  return (room.nextWireId++ % 0xFF_FF) + 1;
 }
 
 /** Counters the loop's metrics rollup reads — shared object so a second
@@ -102,7 +102,7 @@ export class TickFanout {
     let roster: Record<number, string> | null = null;
     let rosterDirty = false;
     for (const [playerId, p] of players) {
-      if (this.skipRecord(room, playerId, p, now)) continue;
+      if (this.skipRecord(room, playerId, p, now)) {continue;}
       this.tickServerHeals(room, playerId, p, now, simT);
       this.tickChargeEcho(room, playerId, p, now, simT);
       // forceSendUntil is WallMs (hit-window bookkeeping, types.ts:105) —
@@ -222,7 +222,7 @@ export class TickFanout {
       this.metrics.recordsBuilt++;
     }
     records.length = recN;
-    if (rosterDirty) room.connections.broadcast({ type: 'wireIds', add: roster! });
+    if (rosterDirty) {room.connections.broadcast({ type: 'wireIds', add: roster! });}
     return records;
   }
 
@@ -237,13 +237,13 @@ export class TickFanout {
    *  clock — a shared timestamp meant only the first stale player in map
    *  order ever heartbeat. */
   private skipRecord(room: Room, playerId: string, p: PlayerState, now: number): boolean {
-    if (room.sessions?.state(playerId) === 'grace') return true;
+    if (room.sessions?.state(playerId) === 'grace') {return true;}
     const silenceMs = now - p.lastSeen;
     // Idle reap FIRST: a menu-sitter's dead socket must still be collected
     // — checking hasReceivedPosition before this left unreported ghosts
     // sitting in the roster forever.
-    if (this.reapIdle(room, playerId, p, silenceMs)) return true;
-    if (!p.isBot && !p.hasReceivedPosition) return true;
+    if (this.reapIdle(room, playerId, p, silenceMs)) {return true;}
+    if (!p.isBot && !p.hasReceivedPosition) {return true;}
     const lastSent = room.lastSentPositions.get(playerId);
     return silenceMs > 5000 && lastSent !== undefined && now - lastSent.t < 2000;
   }
@@ -252,7 +252,7 @@ export class TickFanout {
    *  (onClose runs the grace path) or remove directly when it's already
    *  dead. Returns true when the player was reaped. */
   private reapIdle(room: Room, playerId: string, p: PlayerState, silenceMs: number): boolean {
-    if (p.isBot || silenceMs <= TickFanout.IDLE_KICK_MS) return false;
+    if (p.isBot || silenceMs <= TickFanout.IDLE_KICK_MS) {return false;}
     const ws = room.socketOf(playerId);
     if (ws && ws.readyState === 1) {
       ws.close(1000, 'idle'); // triggers onClose → grace cleanup
@@ -271,7 +271,7 @@ export class TickFanout {
    *  drifting until the next discrete event. */
   private tickServerHeals(room: Room, playerId: string, p: PlayerState, now: number, simT: number): void {
     const heal = healPerTick(p, simT); // regenUntil is sim domain
-    if (heal <= 0) return;
+    if (heal <= 0) {return;}
     healPool(p, heal);
     // Capping out always echoes — the channel ends here, so the final
     // converged hp would otherwise wait on the next discrete event.
@@ -288,8 +288,8 @@ export class TickFanout {
   private tickChargeEcho(room: Room, playerId: string, p: PlayerState, now: number, simT: number): void {
     const acc = lgChargeAt(p.charge, p.chargeT, simT / 1000); // chargeT is sim domain
     const live = acc > 0.5;
-    if (!live && p.chargeEchoed <= 0) return;
-    if (live && now - p.chargeEchoAt < 500) return;
+    if (!live && p.chargeEchoed <= 0) {return;}
+    if (live && now - p.chargeEchoAt < 500) {return;}
     p.chargeEchoAt = wallMs(now);
     p.chargeEchoed = live ? acc : 0;
     room.connections.sendToPlayer(playerId, { type: 'yourCharge', charge: p.chargeEchoed });
@@ -304,12 +304,12 @@ export class TickFanout {
     for (const [recipientId, rp] of players) {
       // Grace-period entries have no socket — record filtering for them
       // is wasted work
-      if (room.sessions?.state(recipientId) === 'grace') continue;
+      if (room.sessions?.state(recipientId) === 'grace') {continue;}
       const rx = rp.position.x, ry = rp.position.y, rz = rp.position.z;
       const others = this.scratchOthers;
       others.length = 0;
       for (const r of records) {
-        if (r.playerId === recipientId) continue;
+        if (r.playerId === recipientId) {continue;}
         const dx = r.pos.x - rx;
         const dy = r.pos.y - ry;
         const dz = r.pos.z - rz;
@@ -321,11 +321,11 @@ export class TickFanout {
         // Egress is quadratic in roster — the far-field past 600m is a
         // speck on screen, so it earns a record only every 8th tick while
         // the 400-600m band keeps the 150ms worst-case cadence.
-        const tier = dSq < 22500 ? 1 : dSq < 160000 ? 2 : dSq < 360000 ? 3 : 8; // 150m / 400m / 600m
+        const tier = dSq < 22_500 ? 1 : dSq < 160_000 ? 2 : dSq < 360_000 ? 3 : 8; // 150m / 400m / 600m
         // force = hit/knockback window: real positions must reach every
         // observer at full rate while they extrapolate the knockback
-        if (r.force || seq % tier === 0) others.push(r.data);
-        else this.metrics.recordsTierSkipped++;
+        if (r.force || seq % tier === 0) {others.push(r.data);}
+        else {this.metrics.recordsTierSkipped++;}
       }
       // Always send — even an empty frame. The client's loss telemetry
       // keys on tick-frame ARRIVAL cadence (a silent link reads as 100%
@@ -346,7 +346,7 @@ export class TickFanout {
       // Dropped frames surface as tickSeq gaps client-side — count them
       // here so a consumer that can't drain reads as rising loss, not
       // as an unexplained stutter nobody can attribute.
-      if (room.connections.sendBinaryToPlayer(recipientId, frame) === 'backlogged') this.metrics.tickFramesDropped++;
+      if (room.connections.sendBinaryToPlayer(recipientId, frame) === 'backlogged') {this.metrics.tickFramesDropped++;}
     }
     // Spectators have no viewpoint for interest tiers — they get the
     // full record set every tick.
@@ -355,7 +355,7 @@ export class TickFanout {
       // per tick was the only allocation left in fanout.
       const all = this.scratchOthers;
       all.length = 0;
-      for (const r of records) all.push(r.data);
+      for (const r of records) {all.push(r.data);}
       for (const id of room.spectators) {
         // Same ackSeq contract as player frames — a spectator who spawns
         // mid-session must not carry a synthetic seq into history pruning.

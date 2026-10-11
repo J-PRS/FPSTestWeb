@@ -77,22 +77,22 @@ const FLOOR_Y = -220;
  *  a floor for skipping terrain sweeps: no heightfield texel exceeds the
  *  precomputed max, so a miss before this time is impossible. */
 function timeToCeiling(y0: number, vy: number, g: number, ceiling: number): number {
-  if (y0 <= ceiling) return 0;                       // already inside — check now
+  if (y0 <= ceiling) {return 0;}                       // already inside — check now
   const target = ceiling - y0;                        // negative drop needed
   if (g === 0) {
-    if (vy >= 0) return Infinity;                    // flat/rising forever
+    if (vy >= 0) {return Infinity;}                    // flat/rising forever
     return (target / vy);                            // vy<0: linear descent
   }
   // ½g·t² + vy·t + (y0−ceiling) = 0 → smaller root is first descent to it.
   const a = 0.5 * g, c = y0 - ceiling;
   const disc = vy * vy - 4 * a * c;
-  if (disc < 0) return Infinity;                     // apex never reaches it
+  if (disc < 0) {return Infinity;}                     // apex never reaches it
   const sq = Math.sqrt(disc);
   const t1 = (-vy - sq) / (2 * a);
   const t0 = (-vy + sq) / (2 * a);
   // First descent = smallest positive root; taking min() picks the
   // negative root whenever vy≈0 and the sweep gets scheduled at Infinity.
-  if (t0 > 0) return Math.min(t0, t1 > 0 ? t1 : t0);
+  if (t0 > 0) {return Math.min(t0, t1 > 0 ? t1 : t0);}
   return t1 > 0 ? t1 : Infinity;
 }
 
@@ -158,19 +158,19 @@ export class RoomProjectiles {
     let maxByte = 0;
     if (field) {
       const d = field.data, s = field.stride;
-      for (let i = 0; i < d.length; i += s) if (d[i]! > maxByte) maxByte = d[i]!;
+      for (let i = 0; i < d.length; i += s) {if (d[i]! > maxByte) {maxByte = d[i]!;}}
     }
     this.fieldMax = (maxByte / HM_DIVISOR) * HM_HEIGHT_SCALE;
     // Schedules were solved against the old ceiling — resweep until each
     // arc re-earns its skip against the new field.
-    for (const proj of this.projs.values()) proj.terrainAt = 0;
+    for (const proj of this.projs.values()) {proj.terrainAt = 0;}
   }
 
   /** Structures ride the same lifecycle as the field — spec load and
    *  admin reload both refresh them. */
   attachStructures(list: readonly StructureSpec[] | undefined): void {
     this.solids = structureColliders(list);
-    this.solidIndex = this.solids.length ? new ColliderIndex(this.solids) : null;
+    this.solidIndex = this.solids.length > 0 ? new ColliderIndex(this.solids) : null;
   }
 
   /** Fire a real projectile. `dir` is normalized; muzzle velocity = dir*speed
@@ -182,7 +182,7 @@ export class RoomProjectiles {
     const stats = getWeaponStats(weaponType);
     const burst = stats?.burst ?? 1;
     const spread = stats?.pelletSpread ?? 0;
-    if (burst <= 1 || spread <= 0) return this.spawnOne(ownerId, weaponType, origin, dir, ownerVel, shotId);
+    if (burst <= 1 || spread <= 0) {return this.spawnOne(ownerId, weaponType, origin, dir, ownerVel, shotId);}
     // Fan basis: right = dir × up0, up = right × dir — deterministic
     // Vogel-spiral coverage (no rng: every pellet's offset is fixed by
     // index, so sim replicas fan identically).
@@ -199,16 +199,16 @@ export class RoomProjectiles {
       const dx = dir.x + rx * ox + ux * oy, dy = dir.y + ry * ox + uy * oy, dz = dir.z + rz * ox + uz * oy;
       const l = Math.hypot(dx, dy, dz) || 1;
       const id = this.spawnOne(ownerId, weaponType, origin, { x: dx / l, y: dy / l, z: dz / l }, ownerVel, shotId, i);
-      if (first === null) first = id;
+      if (first === null) {first = id;}
     }
     return first;
   }
 
   private spawnOne(ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string, pellet?: number): string | null {
     const stats = getWeaponStats(weaponType);
-    if (!stats || stats.speed <= 0) return null; // hitscan-class — no body
+    if (!stats || stats.speed <= 0) {return null;} // hitscan-class — no body
     const owner = this.room.players.getPlayer(ownerId);
-    if (!owner) return null;
+    if (!owner) {return null;}
     const id = `sp-${this.nextId++}`;
     const vel: Vec3 = {
       x: dir.x * stats.speed + ownerVel.x * 0.5,
@@ -235,8 +235,8 @@ export class RoomProjectiles {
   tick(dt: number): void {
     // Map iterators tolerate mid-loop delete (detonate) — no snapshot.
     for (const proj of this.projs.values()) {
-      const stats = proj.stats;
-      const p = proj.p;
+      const {stats} = proj;
+      const {p} = proj;
       const prevAge = p.age;
       // Combo rider: centered on the host shell — no integration, no
       // contact; the host's detonation cascades into this pop. A missing
@@ -244,14 +244,14 @@ export class RoomProjectiles {
       if (proj.rides) {
         const h = this.projs.get(proj.rides);
         if (h) { p.pos.x = h.p.pos.x; p.pos.y = h.p.pos.y; p.pos.z = h.p.pos.z; }
-        else proj.rides = undefined;
+        else {proj.rides = undefined;}
         p.age += dt;
         continue;
       }
       // A glued bomb rides its victim — position follows the player it
       // stuck to (feet + the contact offset), so the fuse pops wherever
       // they carried it. Dead victim keeps the last riding point.
-      if (proj.stuck) p.age += dt; // a glued bomb's fuse still burns
+      if (proj.stuck) {p.age += dt;} // a glued bomb's fuse still burns
       if (proj.stuck?.playerId) {
         const t = this.room.players.getPlayer(proj.stuck.playerId);
         if (t && !t.isDead) {
@@ -262,7 +262,7 @@ export class RoomProjectiles {
       }
       const from = proj.stuck ? { ...p.pos } : projStep(p, dt, stats.gravity ? GRAVITY : 0);
       if (p.age >= proj.ttl || p.pos.y < FLOOR_Y) { this.detonate(proj, { ...p.pos }); continue; }
-      if (proj.stuck) continue; // frozen — only the fuse ends it now
+      if (proj.stuck) {continue;} // frozen — only the fuse ends it now
 
       // Ray-burst discharge (remote railgun): crossing rayDelay turns the
       // shell's velocity line into a hitscan beam — the earliest contact
@@ -275,8 +275,8 @@ export class RoomProjectiles {
       // Combo catch: a same-owner ridable bomb inside this shell's swept
       // step glues on dead-center. Runs BEFORE contact so a shell that
       // dies inside the catch still carries its riders into the blast.
-      if (!stats.rides && canHostRide(proj.weaponType, stats)) this.catchRiders(proj, from);
-      if (this.stepContact(proj, stats, from, dt)) continue;
+      if (!stats.rides && canHostRide(proj.weaponType, stats)) {this.catchRiders(proj, from);}
+      if (this.stepContact(proj, stats, from, dt)) {continue;}
       // No contact — still flying; survives to the next tick.
     }
   }
@@ -314,7 +314,7 @@ export class RoomProjectiles {
     const len2 = hx * hx + hy * hy + hz * hz;
     const r2 = RIDE_CATCH_R * RIDE_CATCH_R;
     for (const r of this.projs.values()) {
-      if (r === host || !r.stats.rides || r.stuck || r.rides || r.ownerId !== host.ownerId) continue;
+      if (r === host || !r.stats.rides || r.stuck || r.rides || r.ownerId !== host.ownerId) {continue;}
       const ax = r.p.pos.x - from.x, ay = r.p.pos.y - from.y, az = r.p.pos.z - from.z;
       const t = len2 > 0 ? Math.max(0, Math.min(1, (ax * hx + ay * hy + az * hz) / len2)) : 0;
       const dx = ax - hx * t, dy = ay - hy * t, dz = az - hz * t;
@@ -342,7 +342,7 @@ export class RoomProjectiles {
     // 2s disc lead pays the same multiplier a player's claim would. Wake
     // contacts still pay flat directDamage; only body hits earn it.
     const rampAge = bodyDirect ? proj.p.age : undefined;
-    if (directHitId) this.room.messages.botAttack(proj.ownerId, directHitId, proj.weaponType, rampAge, proj.id);
+    if (directHitId) {this.room.messages.botAttack(proj.ownerId, directHitId, proj.weaponType, rampAge, proj.id);}
     // A shell that lands on a creature deals its direct line, then the
     // blast splashes the rest of the swarm — same outcome a player-caused
     // hit + aoeShot pair produces, minus the claims.
@@ -403,7 +403,7 @@ export class RoomProjectiles {
     if (proj.weaponType === WeaponType.Sticky) {
       const r2 = proj.stats.aoeRadius * proj.stats.aoeRadius;
       for (const sib of this.projs.values()) {
-        if (sib.weaponType !== WeaponType.Sticky) continue;
+        if (sib.weaponType !== WeaponType.Sticky) {continue;}
         const dx = sib.p.pos.x - at.x, dy = sib.p.pos.y - at.y, dz = sib.p.pos.z - at.z;
         if (dx * dx + dy * dy + dz * dz <= r2) {
           sib.p.age = Math.max(sib.p.age, sib.ttl);
@@ -431,7 +431,7 @@ export class RoomProjectiles {
         const p = list[i]!.p.pos;
         const k = ((Math.floor(p.x / CELL) + BIAS) << 16) | (Math.floor(p.z / CELL) + BIAS);
         const cell = cells.get(k);
-        if (cell) cell.push(i); else cells.set(k, [i]);
+        if (cell) {cell.push(i);} else {cells.set(k, [i]);}
       }
       this.shellGrid = { seq, cells, list };
     }
@@ -441,14 +441,14 @@ export class RoomProjectiles {
     idx.length = 0;
     const x0 = Math.floor((pos.x - radius) / CELL), x1 = Math.floor((pos.x + radius) / CELL);
     const z0 = Math.floor((pos.z - radius) / CELL), z1 = Math.floor((pos.z + radius) / CELL);
-    for (let cx = x0; cx <= x1; cx++) for (let cz = z0; cz <= z1; cz++) {
+    for (let cx = x0; cx <= x1; cx++) {for (let cz = z0; cz <= z1; cz++) {
       const cell = cells.get(((cx + BIAS) << 16) | (cz + BIAS));
-      if (cell) for (const i of cell) idx.push(i);
-    }
+      if (cell) {for (const i of cell) {idx.push(i);}}
+    }}
     idx.sort((a, b) => a - b);
     const out = this.shellOut;
     out.length = 0;
-    for (const i of idx) out.push(list[i]!);
+    for (const i of idx) {out.push(list[i]!);}
     return out;
   }
 
@@ -461,9 +461,9 @@ export class RoomProjectiles {
     for (const proj of this.shellsNear(pos, radius)) {
       const dx = pos.x - proj.p.pos.x, dy = pos.y - proj.p.pos.y, dz = pos.z - proj.p.pos.z;
       const d = Math.hypot(dx, dy, dz);
-      if (d > radius) continue;
+      if (d > radius) {continue;}
       const closing = proj.p.vel.x * dx + proj.p.vel.y * dy + proj.p.vel.z * dz;
-      if (closing <= 0) continue; // moving away — ignore
+      if (closing <= 0) {continue;} // moving away — ignore
       out.push(proj.p.pos);
     }
     return out;

@@ -41,10 +41,10 @@ let _eyeMat: THREE.MeshBasicMaterial | null = null;
 /** Swarm part table — registered once in swarms.initSwarms. */
 export function snakeParts(): SwarmPart[] {
   if (!_bodyMat) {_bodyMat = new THREE.MeshLambertMaterial({
-    color: 0xffffff, // smooth — scales read in color bands, not facets
+    color: 0xFF_FF_FF, // smooth — scales read in color bands, not facets
   });}
   if (!_eyeMat) {_eyeMat = new THREE.MeshBasicMaterial({
-    map: getGlowTexture(), color: 0x222206, transparent: true, blending: THREE.AdditiveBlending,
+    map: getGlowTexture(), color: 0x22_22_06, transparent: true, blending: THREE.AdditiveBlending,
     depthWrite: false, side: THREE.DoubleSide,
   });}
   return [
@@ -70,10 +70,10 @@ export class Snake implements Targetable, SwarmSlotOwner {
   health: number;
   maxHealth: number;
   radius: number;
-  color = new THREE.Color(0x6D7A3A); // dusty olive — desert viper
+  color = new THREE.Color(0x6D_7A_3A); // dusty olive — desert viper
   readonly debrisKind = 'goo' as const;
   readonly dieCue = 'splat' as const;
-  readonly ichor = 0xD8A04A; // amber — desert viper blood
+  readonly ichor = 0xD8_A0_4A; // amber — desert viper blood
   scale: number;
 
   swarmSlot = -1;
@@ -140,7 +140,7 @@ export class Snake implements Targetable, SwarmSlotOwner {
     this.health = this.maxHealth = uber ? SNAKE_HEALTH * 4 : SNAKE_HEALTH;
     this.radius = uber ? SNAKE_RADIUS * 2.4 : SNAKE_RADIUS;
     this.scale = uber ? 3 : 1;
-    if (uber) {this.color.set(0x8a6a2a);} // bronze king serpent
+    if (uber) {this.color.set(0x8A_6A_2A);} // bronze king serpent
     this.pos = pos.clone();
     this.pos.y = terrain.getHeight(pos.x, pos.z) + this.radius;
     this.vel = new THREE.Vector3();

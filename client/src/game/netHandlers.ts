@@ -75,9 +75,9 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
     // non-unique, so an ambiguous hit just mutes the first match (the
     // id itself always works).
     idFor: (name) => {
-      if (networkManager.getPlayers().has(name)) return name;
+      if (networkManager.getPlayers().has(name)) {return name;}
       for (const [id, p] of networkManager.getPlayers()) {
-        if (p.name === name) return id;
+        if (p.name === name) {return id;}
       }
       return undefined;
     },

@@ -29,11 +29,11 @@ export const DISC_CONFIG: ProjectileConfig = {
   vfx: 'energy',
   damageColor: '#00ffff',
   trailColors: [
-    new THREE.Color(0.0, 0.5, 1.0),
-    new THREE.Color(0.0, 0.3, 0.8),
-    new THREE.Color(0.0, 0.2, 0.6),
-    new THREE.Color(0.0, 0.1, 0.4),
-    new THREE.Color(0.0, 0.05, 0.2),
+    new THREE.Color(0, 0.5, 1),
+    new THREE.Color(0, 0.3, 0.8),
+    new THREE.Color(0, 0.2, 0.6),
+    new THREE.Color(0, 0.1, 0.4),
+    new THREE.Color(0, 0.05, 0.2),
   ],
   trailParticlesPerUnit: 2,
   trailLifeMin: 0.8,
@@ -47,10 +47,10 @@ export const DISC_CONFIG: ProjectileConfig = {
   trailScaleMin: 0.5,
   trailScaleMax: 1.5,
   trailRampIn: 0,
-  meshColor: 0x00ffff,
+  meshColor: 0x00_FF_FF,
   meshType: 'disc',
   glowShell: true,
-  glowColor: 0x00ffff,
+  glowColor: 0x00_FF_FF,
   // Additive + alphaMap: the map's filament streaks eat most of the
   // fill, so opacity runs hotter than the sphere needed to read.
   glowOpacity: 0.9,
@@ -58,7 +58,7 @@ export const DISC_CONFIG: ProjectileConfig = {
   // energy skirt flaring back along the flight line. The collar radius
   // IS the live wake hitbox (projectileVisuals couples them); this only
   // sizes the skirt's trailing length, never the reach.
-  glowScale: 1.0,
+  glowScale: 1,
   glowShape: 'wakeCone',
   meshRampIn: true,
   meshRampInDuration: 0.15,
@@ -69,7 +69,7 @@ export const DISC_CONFIG: ProjectileConfig = {
   ribbonTrail: true,
   ribbonWidth: 0.6,
   ribbonLife: 0.35,
-  ribbonColor: 0x0066ff,
+  ribbonColor: 0x00_66_FF,
 };
 
 // Belt disc (C) — the implosion variant. Same flight/damage, opposite force:

@@ -42,15 +42,15 @@ const _s = new THREE.Vector3();
 
 function poolsFor(scene: THREE.Scene, geo: THREE.BufferGeometry, accentGeo: THREE.BufferGeometry | null, bodyMat: () => THREE.Material): { body: PartPool; accent: PartPool | null } {
   let p = _pools.get(geo);
-  if (p) return p;
+  if (p) {return p;}
   p = {
     body: makePartPool(scene, geo, bodyMat(), POOL_CAP),
-    accent: accentGeo ? makePartPool(scene, accentGeo, new THREE.MeshBasicMaterial({ color: 0xffffff }), POOL_CAP) : null,
+    accent: accentGeo ? makePartPool(scene, accentGeo, new THREE.MeshBasicMaterial({ color: 0xFF_FF_FF }), POOL_CAP) : null,
   };
   p.body.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(POOL_CAP * 3).fill(1), 3);
-  if (p.accent) p.accent.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(POOL_CAP * 3).fill(1), 3);
+  if (p.accent) {p.accent.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(POOL_CAP * 3).fill(1), 3);}
   p.body.mesh.layers.enable(BLOOM_LAYER);
-  if (p.accent) p.accent.mesh.layers.enable(BLOOM_LAYER);
+  if (p.accent) {p.accent.mesh.layers.enable(BLOOM_LAYER);}
   _pools.set(geo, p);
   return p;
 }
@@ -91,11 +91,11 @@ export class Nugget {
   /** tint: pickup kind sells itself by color — gold gems, green heals,
    *  red tags — no marquee iconography needed. `parts` swaps the plain
    *  gem for a diegetic shape: dark body + accent part in the tint. */
-  constructor(scene: THREE.Scene, pos: THREE.Vector3, inheritVel: THREE.Vector3, tint = 0xFFD54A, parts: { body: THREE.BufferGeometry; accent: THREE.BufferGeometry; bodyColor?: number } | null = null) {
+  constructor(scene: THREE.Scene, pos: THREE.Vector3, inheritVel: THREE.Vector3, tint = 0xFF_D5_4A, parts: { body: THREE.BufferGeometry; accent: THREE.BufferGeometry; bodyColor?: number } | null = null) {
     this.scene = scene;
     this.baseColor = new THREE.Color(tint);
     // Emit slightly desaturated so bloom reads hot without clipping to white
-    this.emitColor = this.baseColor.clone().lerp(new THREE.Color(0xFFFFFF), 0.33);
+    this.emitColor = this.baseColor.clone().lerp(new THREE.Color(0xFF_FF_FF), 0.33);
     this.pos = pos.clone();
     this.vel = inheritVel.clone().multiplyScalar(INHERIT_VEL);
     // Small random spread so multi-nugget drops scatter naturally
@@ -106,7 +106,7 @@ export class Nugget {
     if (parts) {
       this.pools = poolsFor(scene, parts.body, parts.accent, () => metalMat(parts.bodyColor));
     } else {
-      this.pools = poolsFor(scene, NUGGET_GEO, null, () => new THREE.MeshBasicMaterial({ color: 0xffffff }));
+      this.pools = poolsFor(scene, NUGGET_GEO, null, () => new THREE.MeshBasicMaterial({ color: 0xFF_FF_FF }));
     }
     this.slot = takeSlot(this.pools.body);
     this.writeInstance();
@@ -180,7 +180,7 @@ export class Nugget {
   }
 
   private writeInstance(): void {
-    if (this.slot < 0) return;
+    if (this.slot < 0) {return;}
     _q.setFromEuler(_e.set(this.spinX, this.spinY, 0));
     const m = _m.compose(this.pos, _q, _s.setScalar(this.visScale));
     this.pools.body.mesh.setMatrixAt(this.slot, m);
@@ -364,7 +364,7 @@ export class Nugget {
     this.scene.remove(this.glow);
     if (this.slot >= 0) {
       releaseSlot(this.pools.body, this.slot);
-      if (this.pools.accent) releaseSlot(this.pools.accent, this.slot);
+      if (this.pools.accent) {releaseSlot(this.pools.accent, this.slot);}
       this.slot = -1;
     }
     this.glowMat.dispose();

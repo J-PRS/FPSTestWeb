@@ -46,10 +46,10 @@ export const RAILGUN_CONFIG: ProjectileConfig = {
   trailScaleMin: 0.5,
   trailScaleMax: 1.4,
   trailRampIn: 0,
-  meshColor: 0xBBEEFF,
+  meshColor: 0xBB_EE_FF,
   meshType: 'rocket',
   glowShell: true,
-  glowColor: 0x66CCFF,
+  glowColor: 0x66_CC_FF,
   glowOpacity: 0.6,
   glowScale: 1.2,
   meshRampIn: true,        // classic spawn pop: 10% → full over 0.1s
@@ -63,5 +63,5 @@ export const RAILGUN_CONFIG: ProjectileConfig = {
   ribbonTrail: true,
   ribbonWidth: 0.55,
   ribbonLife: 0.4,
-  ribbonColor: 0x55BBFF,
+  ribbonColor: 0x55_BB_FF,
 };

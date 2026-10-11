@@ -128,7 +128,7 @@ function buildNugget(kind: PickupKind): () => THREE.Group {
   return () => {
     const g = new THREE.Group();
     const base = new THREE.Color(PICKUP_ACCENT[kind]);
-    const emit = base.clone().lerp(new THREE.Color(0xFFFFFF), 0.33).multiplyScalar(EMIT_GAIN);
+    const emit = base.clone().lerp(new THREE.Color(0xFF_FF_FF), 0.33).multiplyScalar(EMIT_GAIN);
     // Diegetic kinds get the real pickupParts body+accent — the same
     // shapes/materials Nugget builds in-game. Null parts keep the plain
     // gem (gem kind itself).
@@ -186,14 +186,14 @@ export const STRUCTURES: [label: string, build: () => THREE.Group][] = [
     for (const s of spec.structures ?? []) {
       if (s.kind === 'kit') {
         const mk = KIT_BUILDERS[s.piece ?? ''];
-        if (!mk) continue;
-        const piece = mk(s.team ? TEAM_COLORS[s.team] : 0x59F2FF);
+        if (!mk) {continue;}
+        const piece = mk(s.team ? TEAM_COLORS[s.team] : 0x59_F2_FF);
         piece.position.set(s.pos.x, s.pos.y, s.pos.z);
         piece.rotation.y = s.rotY ?? 0;
-        if (s.scale && s.scale !== 1) piece.scale.setScalar(s.scale);
+        if (s.scale && s.scale !== 1) {piece.scale.setScalar(s.scale);}
         g.add(piece);
-      } else if (s.kind === 'shield' && s.size) {
-        const color = s.team ? TEAM_COLORS[s.team] : 0x59F2FF;
+      } else if (s.kind === 'shield' && s.size.y > 0) {
+        const color = s.team ? TEAM_COLORS[s.team] : 0x59_F2_FF;
         const pane = new THREE.Mesh(
           new THREE.BoxGeometry(s.size.x, s.size.y, Math.max(0.25, s.size.z)),
           new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false }));
@@ -281,7 +281,7 @@ export const ITEMS: [label: string, build: () => THREE.Group][] = [
 // old classlineup page did by hand, but through the real pipeline.
 const CLASS_LINEUP: [cls: ArmorClass, x: number, labelY: number][] = [
   ['light',  -1.9, 2.1],
-  ['medium',  0.0, 2.5],
+  ['medium',  0, 2.5],
   ['heavy',   2.4, 3.2],
 ];
 function mkTextSprite(text: string, y: number): THREE.Sprite {

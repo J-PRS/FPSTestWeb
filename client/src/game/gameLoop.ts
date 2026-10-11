@@ -712,7 +712,7 @@ export function createGameLoop(deps: GameLoopDeps) {
   // never picked. No reload — ladders gate on the setting live.
   const autoqBtn = document.querySelector('#autoq-toggle') as HTMLButtonElement | null;
   if (autoqBtn) {
-    const label = () => { autoqBtn.classList.toggle('on', !!settings.get('fps-autoq')); };
+    const label = () => { autoqBtn.classList.toggle('on', Boolean(settings.get('fps-autoq'))); };
     label();
     autoqBtn.addEventListener('click', () => {
       const on = !settings.get('fps-autoq');
@@ -756,7 +756,7 @@ export function createGameLoop(deps: GameLoopDeps) {
     // its own renders separately; here we meter real frames.
     st.bootFrames++;
     if (rawElapsed < 0.026) { st.bootStable++; } else { st.bootStable = 0; }
-    if (st.bootStableResolvers.length && (st.bootStable >= 45 || st.bootFrames >= 240)) {
+    if (st.bootStableResolvers.length > 0 && (st.bootStable >= 45 || st.bootFrames >= 240)) {
       const resolvers = st.bootStableResolvers;
       st.bootStableResolvers = [];
       for (const r of resolvers) { r(); }
@@ -799,7 +799,7 @@ export function createGameLoop(deps: GameLoopDeps) {
         const renderLag: Record<string, number> = {};
         deps.world.remotePlayers.forEach((rp, id) => {
           renderLag[id] = rp.renderDelayMs;
-          if (rp.renderDelayMs > renderLagMs) renderLagMs = rp.renderDelayMs;
+          if (rp.renderDelayMs > renderLagMs) {renderLagMs = rp.renderDelayMs;}
         });
         return { fps: s.frame > 0 ? Math.round(1000 / s.frame) : 0, jsMs: s.frame, renderLagMs, renderLag };
       };

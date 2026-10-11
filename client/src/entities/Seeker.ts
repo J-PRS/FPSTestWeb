@@ -7,7 +7,7 @@ import {
   SEEKER_DART_RANGE, SEEKER_DART_SPEED, SEEKER_DART_TELEGRAPH, SEEKER_DART_MAX,
   SEEKER_STING_DIST, SEEKER_RECOVER, SEEKER_STUN, MELEE_FAVOR,
 } from '../core/config.js';
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots } from './swarms.js';
 import type { SwarmSlotOwner } from './swarm.js';
@@ -37,9 +37,9 @@ export class Seeker implements Targetable, SwarmSlotOwner {
   health: number;
   maxHealth: number;
   radius: number;
-  color = new THREE.Color(0xcfc39a); // bone-pale chitin
+  color = new THREE.Color(0xCF_C3_9A); // bone-pale chitin
   readonly debrisKind = 'goo' as const;
-  readonly ichor = 0x86c8e8; // pale blue, matches the bone chitin
+  readonly ichor = 0x86_C8_E8; // pale blue, matches the bone chitin
   scale = 0.3;
 
   swarmSlot = -1;
@@ -77,12 +77,12 @@ export class Seeker implements Targetable, SwarmSlotOwner {
     this.uber = uber;
     this.health = this.maxHealth = uber ? SEEKER_HEALTH * 3 : SEEKER_HEALTH;
     this.radius = uber ? SEEKER_RADIUS * 1.8 : SEEKER_RADIUS;
-    if (uber) this.color.set(0x9a2a2a); // blood lancer
+    if (uber) {this.color.set(0x9A_2A_2A);} // blood lancer
     this.pos = pos.clone();
     this.pos.y = terrain.getHeight(pos.x, pos.z) + SEEKER_HOVER;
     this.vel = new THREE.Vector3();
     this.hasSlots = allocSlots('seeker', this);
-    if (!this.hasSlots) this.dead = true;
+    if (!this.hasSlots) {this.dead = true;}
   }
 
   // State handlers live in a static table — each is a small (self, ctx)
@@ -100,7 +100,7 @@ export class Seeker implements Targetable, SwarmSlotOwner {
       const pull = Math.max(-1, Math.min(1, (d - hold) / hold));
       s.vel.addScaledVector(_dir, pull * SEEKER_ACCEL * 0.4 * c.dt);
       s.capSpeed(SEEKER_SPEED * 0.4);
-      if (c.distSq < SEEKER_AGGRO_DIST * SEEKER_AGGRO_DIST) s.state = 'chase';
+      if (c.distSq < SEEKER_AGGRO_DIST * SEEKER_AGGRO_DIST) {s.state = 'chase';}
       s.glow = 0;
     },
     chase(s, c) {
@@ -142,7 +142,7 @@ export class Seeker implements Targetable, SwarmSlotOwner {
     },
     dart(s, c) {
       s.dartTimer -= c.dt;
-      if (s.dartTimer <= 0) s.beginRecover();
+      if (s.dartTimer <= 0) {s.beginRecover();}
     },
     recover(s, c) {
       s.recoverTimer -= c.dt;
@@ -151,14 +151,14 @@ export class Seeker implements Targetable, SwarmSlotOwner {
       s.vel.addScaledVector(_dir.normalize(), SEEKER_ACCEL * 0.5 * c.dt);
       s.capSpeed(SEEKER_SPEED * 0.6);
       s.glow = 0;
-      if (s.recoverTimer <= 0) s.state = 'chase';
+      if (s.recoverTimer <= 0) {s.state = 'chase';}
     },
   };
 
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3, playerVel?: THREE.Vector3): void {
-    if (this.dead) return;
-    if (this.stunTimer > 0) this.stunTimer -= dt;
-    if (this.flash > 0) this.flash -= dt;
+    if (this.dead) {return;}
+    if (this.stunTimer > 0) {this.stunTimer -= dt;}
+    if (this.flash > 0) {this.flash -= dt;}
 
     this.animT += dt;
     const distSq = this.pos.distanceToSquared(playerPos);
@@ -184,7 +184,7 @@ export class Seeker implements Targetable, SwarmSlotOwner {
     const gy = terrain.getHeight(this.pos.x, this.pos.z);
     const bob = Math.sin(this.animT * 3 + this.bobPhase) * 0.6;
     const minY = gy + (this.state === 'dart' ? 0.8 : 1.2);
-    if (this.pos.y < minY) { this.pos.y = minY; if (this.vel.y < 0) this.vel.y = 0; }
+    if (this.pos.y < minY) { this.pos.y = minY; if (this.vel.y < 0) {this.vel.y = 0;} }
     if (this.state === 'patrol') {
       const targetY = gy + SEEKER_HOVER + bob;
       this.pos.y += (targetY - this.pos.y) * Math.min(1, 2 * dt);
@@ -215,7 +215,7 @@ export class Seeker implements Targetable, SwarmSlotOwner {
 
   private capSpeed(max: number): void {
     const s = this.vel.length();
-    if (s > max) this.vel.multiplyScalar(max / s);
+    if (s > max) {this.vel.multiplyScalar(max / s);}
   }
 
   takeDamage(damage: number): boolean {

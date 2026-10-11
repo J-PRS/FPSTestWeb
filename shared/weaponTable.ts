@@ -134,7 +134,7 @@ export interface WeaponStats {
 /** Catch radius for the belt-sticky combo — shared so the server and
  *  the client replica attach on the same tick. Tight on purpose: this
  *  is an aimed skill shot, not a vacuum. */
-export const RIDE_CATCH_R = 1.0;
+export const RIDE_CATCH_R = 1;
 
 /** Explosion VFX dome = aoeRadius × this — damage always reaches a bit past
  *  the visual edge (covers the shock ring), and the two can never drift. */
@@ -142,57 +142,57 @@ export const WEAPONS: Record<number, WeaponStats> = {
   [WeaponType.BoltLauncher]: {
     directDamage: 50,
     aoeDamage: 15,
-    aoeRadius: 8.0, // ~1.3× the VFX dome — damage reaches the ring's edge
-    knockbackForce: 28.0,
+    aoeRadius: 8, // ~1.3× the VFX dome — damage reaches the ring's edge
+    knockbackForce: 28,
     forceMode: 'push',
-    speed: 120.0,
+    speed: 120,
     gravity: true,
     bodyRadius: 0.18,
-    hitMin: 0.0,
-    hitMax: 8.0,
-    hitGrow: 2.0,
-    maxLifetime: 4.0, // ~480m of reach — a lobbed bolt missing every contact streaked forever on remote replicas
+    hitMin: 0,
+    hitMax: 8,
+    hitGrow: 2,
+    maxLifetime: 12, // ~1.4km — effectively "flies until it lands"; the fuse only exists so a bugged remote replica can't streak forever
   },
   [WeaponType.Disc]: {
     directDamage: 50,
     aoeDamage: 15,
-    aoeRadius: 10.0,
-    knockbackForce: 45.0, // THE disc-jump weapon — strongest launcher shove (rocket=40, MRV=45)
+    aoeRadius: 10,
+    knockbackForce: 45, // THE disc-jump weapon — strongest launcher shove (rocket=40, MRV=45)
     forceMode: 'push', // launcher disc knocks back like everything else
-    speed: 80.0,
+    speed: 80,
     gravity: false,
     bodyRadius: 0.5,
     hitMin: 0.3,
-    hitMax: 8.0,
-    hitGrow: 2.0,
-    maxLifetime: 5.0, // ~400m flat — flat-flying shells have no gravity to end them on open ground
+    hitMax: 8,
+    hitGrow: 2,
+    maxLifetime: 12, // ~960m — long prayers stay live; fuse only bounds desynced replicas
   },
   [WeaponType.DiscPull]: {
     // Belt disc (C): the implosion — pulls targets toward the blast.
     directDamage: 50,
     aoeDamage: 15,
-    aoeRadius: 10.0, // slightly exceeds the 8m Implosion VFX — pull reaches everything it visibly sucks
-    knockbackForce: 25.0,
+    aoeRadius: 10, // slightly exceeds the 8m Implosion VFX — pull reaches everything it visibly sucks
+    knockbackForce: 25,
     forceMode: 'pull',
-    speed: 80.0,
+    speed: 80,
     gravity: false,
     bodyRadius: 0.5,
-    hitMin: 0.0,
+    hitMin: 0,
     hitMax: 0.25, // belt rule: the throw is a physical shell, not a wake — the pull AOE is the payoff after contact
-    hitGrow: 2.0,
+    hitGrow: 2,
   },
   [WeaponType.Grenade]: {
     directDamage: 50,
     aoeDamage: 20,
-    aoeRadius: 13.0,
-    knockbackForce: 35.0,
+    aoeRadius: 13,
+    knockbackForce: 35,
     forceMode: 'push',
-    speed: 40.0,
+    speed: 40,
     gravity: true,
     bodyRadius: 0.25,
-    hitMin: 0.0,
+    hitMin: 0,
     hitMax: 0.25, // belt rule — and it phases through bodies anyway
-    hitGrow: 2.0,
+    hitGrow: 2,
     maxLifetime: 1.5, // THE fuse — the only trigger. Nothing else pops it.
     // armTime == fuse ⇒ the shell NEVER arms: bodies phase through and
     // dirt can't detonate it, for its whole flight. Same machinery the
@@ -209,11 +209,11 @@ export const WEAPONS: Record<number, WeaponStats> = {
     aoeRadius: 0,
     knockbackForce: 0,
     forceMode: 'push',
-    speed: 250.0,
+    speed: 250,
     gravity: false,
     bodyRadius: 0.15,
-    hitMin: 0.0,
-    hitMax: 2.0, // forgiving wake — the dps is honest, so let the spray land like it feels
+    hitMin: 0,
+    hitMax: 2, // forgiving wake — the dps is honest, so let the spray land like it feels
     hitGrow: 0.25, // full 1m proxy by ~125m — mid-range is where the spray lives
     maxLifetime: 1.5, // ~375m of reach — every other fast slug carries a fuse; without one remote replicas streak to the 10s backstop
   },
@@ -221,19 +221,19 @@ export const WEAPONS: Record<number, WeaponStats> = {
     directDamage: 120,
 
     aoeDamage: 80,
-    aoeRadius: 18.0,
+    aoeRadius: 18,
     // Steep inner ring, thin outskirts: 100/80/40 across the 18m — a mortar
     // pays out on placement, not on carpeting (that's the MRV's job).
     aoeScales: [0.833, 0.667, 0.333],
-    knockbackForce: 45.0,
+    knockbackForce: 45,
     forceMode: 'push',
-    speed: 55.0,
+    speed: 55,
     gravity: true,
     bodyRadius: 0.3,
-    hitMin: 0.0,
+    hitMin: 0,
     hitMax: 0.5, // area-denial tier: 0.5m wake cap — the 18m splash is the reach, not the proxy
-    hitGrow: 2.0,
-    maxLifetime: 6.0,
+    hitGrow: 2,
+    maxLifetime: 12, // long lobs stay live — fuse only bounds desynced replicas
     armTime: 1.5, // T2 arming fuse — no point-blank body pops; bounces off
                 // dirt until it cooks (client mortarConfig's canBounce rule)
     terrainBounce: true,
@@ -243,17 +243,17 @@ export const WEAPONS: Record<number, WeaponStats> = {
   [WeaponType.GrenadeLauncher]: {
     directDamage: 50,
     aoeDamage: 20,
-    aoeRadius: 13.0,
-    knockbackForce: 35.0,
+    aoeRadius: 13,
+    knockbackForce: 35,
     forceMode: 'push',
-    speed: 55.0,
+    speed: 55,
     gravity: true,
     bodyRadius: 0.15,
-    hitMin: 0.0,
-    hitMax: 2.0, // tight proxy — bouncing shells shouldn't drag a huge wake
-    hitGrow: 2.0,
-    maxLifetime: 6.0, // fuse cap — a bouncing shell skitters a long way before the airburst
-    armTime: 1.0, // bounce window only — dirt skips until cooked
+    hitMin: 0,
+    hitMax: 2, // tight proxy — bouncing shells shouldn't drag a huge wake
+    hitGrow: 2,
+    maxLifetime: 6, // fuse cap — a bouncing shell skitters a long way before the airburst
+    armTime: 1, // bounce window only — dirt skips until cooked
     bodyArmTime: 0, // T2 GL: a body contact pops at ANY age — the arming
                     // fuse exists so shells skip, not so they pass through
     terrainBounce: true, // T2 GL core: skips off dirt, pops on bodies
@@ -263,18 +263,18 @@ export const WEAPONS: Record<number, WeaponStats> = {
   [WeaponType.Flak]: {
     directDamage: 9,
     burst: 9, // one pull registers all shards at once // per shard — 9 shards ≈ 81 max
-    pelletSpread: 0.10,
+    pelletSpread: 0.1,
     aoeDamage: 0,
     aoeRadius: 0,
     knockbackForce: 0,
     forceMode: 'push',
-    speed: 90.0,
+    speed: 90,
     gravity: true,
     bodyRadius: 0.12,
-    hitMin: 0.0,
-    hitMax: 2.0,
+    hitMin: 0,
+    hitMax: 2,
     hitGrow: 0.5,
-    maxLifetime: 2.0,
+    maxLifetime: 2,
     ttlJitter: 0.1, // shards scatter their airbursts — a synchronized pop reads as a single blob
     terrainBounce: true,
     bounceRestitution: 0.6, // = client FLAK_BOUNCE_RESTITUTION
@@ -286,15 +286,15 @@ export const WEAPONS: Record<number, WeaponStats> = {
 
     aoeDamage: 12,
     aoeRadius: 5.5,
-    knockbackForce: 20.0,
+    knockbackForce: 20,
     forceMode: 'push',
-    speed: 90.0,
+    speed: 90,
     gravity: false,
     bodyRadius: 0.2,
-    hitMin: 0.0,
-    hitMax: 2.0, // tight proxy — the fat bolt is already generous
-    hitGrow: 2.0,
-    maxLifetime: 5.0, // ~450m flat — same fuse class as Disc; remote replicas otherwise streak forever
+    hitMin: 0,
+    hitMax: 2, // tight proxy — the fat bolt is already generous
+    hitGrow: 2,
+    maxLifetime: 5, // ~450m flat — same fuse class as Disc; remote replicas otherwise streak forever
   },
   [WeaponType.PlasmaGun]: {
 
@@ -304,12 +304,12 @@ export const WEAPONS: Record<number, WeaponStats> = {
     directDamage: 14,
     aoeDamage: 4,
     aoeRadius: 2.5, // tiny pop — bolts sting, they don't splash
-    knockbackForce: 8.0,
+    knockbackForce: 8,
     forceMode: 'push',
-    speed: 160.0,   // slower than chain slugs (250), fast enough to lead lightly
+    speed: 160,   // slower than chain slugs (250), fast enough to lead lightly
     gravity: false,
     bodyRadius: 0.32, // visibly chunky bolt — generous vs players
-    hitMin: 0.0,
+    hitMin: 0,
     hitMax: 1.2,
     hitGrow: 0.3,
     maxLifetime: 1.5, // ~240m of reach
@@ -320,13 +320,13 @@ export const WEAPONS: Record<number, WeaponStats> = {
     // wins). Small AOE so near-misses still pop.
     directDamage: 60,
     aoeDamage: 20,
-    aoeRadius: 6.0,
-    knockbackForce: 35.0,
+    aoeRadius: 6,
+    knockbackForce: 35,
     forceMode: 'push',
-    speed: 450.0,
+    speed: 450,
     gravity: false,
     bodyRadius: 0.18,
-    hitMin: 0.0,
+    hitMin: 0,
     hitMax: 0.5, // tight — a rail is precision, not a wake
     hitGrow: 0.15, // fast ramp, no grace — full proxy by ~68m of travel
     maxLifetime: 1.2, // ~540m of reach
@@ -337,7 +337,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     directDamage: 0,
     aoeDamage: 55,
     aoeRadius: 3.2,
-    knockbackForce: 40.0,
+    knockbackForce: 40,
     forceMode: 'push',
     speed: 0,
     gravity: false,
@@ -374,10 +374,10 @@ export const WEAPONS: Record<number, WeaponStats> = {
     aoeRadius: 0,
     knockbackForce: 0,
     forceMode: 'push',
-    speed: 300.0,
+    speed: 300,
     gravity: false,
     bodyRadius: 0.1,
-    hitMin: 0.0,
+    hitMin: 0,
     hitMax: 0.4,
     hitGrow: 0.1,
     maxLifetime: 0.4,
@@ -389,16 +389,16 @@ export const WEAPONS: Record<number, WeaponStats> = {
     // The GL's rowdier bigger brother — trades shell count for presence.
     directDamage: 70,
     aoeDamage: 25,
-    aoeRadius: 10.0,
-    knockbackForce: 40.0,
+    aoeRadius: 10,
+    knockbackForce: 40,
     forceMode: 'push',
-    speed: 80.0,    // faster than GL's 55 — it skips far between bounces
+    speed: 80,    // faster than GL's 55 — it skips far between bounces
     gravity: true,
     bodyRadius: 0.8, // HUGE — the comedy is the ball, not the damage
-    hitMin: 0.0,
-    hitMax: 2.0,    // proxy scaled to match the bigger ball
+    hitMin: 0,
+    hitMax: 2,    // proxy scaled to match the bigger ball
     hitGrow: 1.5,
-    maxLifetime: 6.0, // skitters around until fuse or contact ends it
+    maxLifetime: 6, // skitters around until fuse or contact ends it
     terrainBounce: true,
     bounceRestitution: 0.75, // = client CANNON_BOUNCE_RESTITUTION
     bounceFriction: 0.85,
@@ -409,16 +409,16 @@ export const WEAPONS: Record<number, WeaponStats> = {
     // blast. The Tribes/Quake rocket niche the Bolt Launcher never filled.
     directDamage: 90,
     aoeDamage: 35,
-    aoeRadius: 14.0, // big — but under mortar's 18
-    knockbackForce: 30.0, // rocket-jump tier — the tool IS the movement; sits at BLAST_IMPULSE_MAX so point-blank stays the intended apex
+    aoeRadius: 14, // big — but under mortar's 18
+    knockbackForce: 30, // rocket-jump tier — the tool IS the movement; sits at BLAST_IMPULSE_MAX so point-blank stays the intended apex
     forceMode: 'push',
-    speed: 48.0,
+    speed: 48,
     gravity: false,
     bodyRadius: 0.35,
-    hitMin: 0.0,
+    hitMin: 0,
     hitMax: 0.5, // area-denial tier: 0.5m wake cap — the 14m splash is the reach, not the proxy
     hitGrow: 0.4,
-    maxLifetime: 6.0, // ~290m of flat reach
+    maxLifetime: 6, // ~290m of flat reach
   },
   [WeaponType.Pistol]: {
 
@@ -427,12 +427,12 @@ export const WEAPONS: Record<number, WeaponStats> = {
     directDamage: 14,
     aoeDamage: 0,
     aoeRadius: 0,
-    knockbackForce: 4.0,
+    knockbackForce: 4,
     forceMode: 'push',
-    speed: 220.0,
+    speed: 220,
     gravity: false,
     bodyRadius: 0.12,
-    hitMin: 0.0,
+    hitMin: 0,
     hitMax: 0.5,
     hitGrow: 0.1,
     maxLifetime: 0.6,
@@ -443,12 +443,12 @@ export const WEAPONS: Record<number, WeaponStats> = {
     directDamage: 34,
     aoeDamage: 0,
     aoeRadius: 0,
-    knockbackForce: 8.0,
+    knockbackForce: 8,
     forceMode: 'push',
-    speed: 260.0,
+    speed: 260,
     gravity: false,
     bodyRadius: 0.14,
-    hitMin: 0.0,
+    hitMin: 0,
     hitMax: 0.5,
     hitGrow: 0.1,
     maxLifetime: 0.5,
@@ -461,16 +461,16 @@ export const WEAPONS: Record<number, WeaponStats> = {
     // overlapping blast, not three weak pops.
     directDamage: 45,
     aoeDamage: 35,
-    aoeRadius: 11.0,
-    knockbackForce: 40.0,
+    aoeRadius: 11,
+    knockbackForce: 40,
     forceMode: 'push',
-    speed: 55.0,
+    speed: 55,
     gravity: true,
     bodyRadius: 0.3,
-    hitMin: 0.0,
+    hitMin: 0,
     hitMax: 0.25, // proxy barely wider than the shell — sticks on real contact, not a 2m wake
     hitGrow: 0.5,
-    maxLifetime: 3.0, // THE fuse — 0.8s rate ⇒ ~3 bombs live per shooter
+    maxLifetime: 3, // THE fuse — 0.8s rate ⇒ ~3 bombs live per shooter
     stick: true,
   },
   [WeaponType.BeltSticky]: {
@@ -481,13 +481,13 @@ export const WEAPONS: Record<number, WeaponStats> = {
     // belt throws free (server couldn't charge the nugget).
     directDamage: 45,
     aoeDamage: 35,
-    aoeRadius: 11.0,
-    knockbackForce: 40.0,
+    aoeRadius: 11,
+    knockbackForce: 40,
     forceMode: 'push',
-    speed: 26.0,      // half the launcher's muzzle — hangs catchable
+    speed: 26,      // half the launcher's muzzle — hangs catchable
     gravity: true,
     bodyRadius: 0.3,
-    hitMin: 0.0,
+    hitMin: 0,
     hitMax: 0.25,
     hitGrow: 0.5,
     maxLifetime: 3.5, // a beat longer than the launcher — the lob needs hang time to BE caught
@@ -500,31 +500,31 @@ export const WEAPONS: Record<number, WeaponStats> = {
     // ClusterBomblet stats, so the parent's radius stays honest).
     directDamage: 30,
     aoeDamage: 15,
-    aoeRadius: 8.0,
-    knockbackForce: 12.0, // the pop is only the delivery — the payload shoves
+    aoeRadius: 8,
+    knockbackForce: 12, // the pop is only the delivery — the payload shoves
     forceMode: 'push',
-    speed: 42.0,
+    speed: 42,
     gravity: true,
     bodyRadius: 0.3,
-    hitMin: 0.0,
+    hitMin: 0,
     hitMax: 0.25, // near-contact only — an 8m proxy popped the carrier on anything nearby
-    hitGrow: 2.0,
+    hitGrow: 2,
     maxLifetime: 1.6, // fuse pop releases the bomblets
-    cluster: { count: 5, radius: 9.0 }, // bomblet scatter footprint around the pop
+    cluster: { count: 5, radius: 9 }, // bomblet scatter footprint around the pop
   },
   [WeaponType.ClusterBomblet]: {
     // Child charge — small pop, small radius; count is the weapon.
     directDamage: 15,
     aoeDamage: 12,
-    aoeRadius: 6.0,
-    knockbackForce: 7.0, // popcorn pop, not a launcher — 5 stacked ≈ a rocket's worth
+    aoeRadius: 6,
+    knockbackForce: 7, // popcorn pop, not a launcher — 5 stacked ≈ a rocket's worth
     forceMode: 'push',
     speed: 0, // spawned mid-air by the carrier, never muzzle-fired
     gravity: true,
     bodyRadius: 0.15,
-    hitMin: 0.0,
+    hitMin: 0,
     hitMax: 0.25, // bomblets must LAND — a fat proxy pops the rain mid-air
-    hitGrow: 1.0,
+    hitGrow: 1,
     maxLifetime: 1.1,
   },
   [WeaponType.Javelin]: {
@@ -533,15 +533,15 @@ export const WEAPONS: Record<number, WeaponStats> = {
     directDamage: 60,
     aoeDamage: 0,
     aoeRadius: 0,
-    knockbackForce: 26.0, // the stagger IS the hit feedback — a 60dmg spear shoves
+    knockbackForce: 26, // the stagger IS the hit feedback — a 60dmg spear shoves
     forceMode: 'push',
-    speed: 120.0,  // bolt-launcher velocity — a thrown spear shouldn't lob
+    speed: 120,  // bolt-launcher velocity — a thrown spear shouldn't lob
     gravity: true,
     bodyRadius: 0.15,
-    hitMin: 0.0,
+    hitMin: 0,
     hitMax: 0.25, // belt rule — a thrown spear skewers on the shaft, not a wake
     hitGrow: 0.2,
-    maxLifetime: 2.4, // ~285m of reach — same as before, just faster
+    maxLifetime: 12, // ~1.4km — spear prayers stay live; fuse only bounds desynced replicas
   },
   [WeaponType.ImpactGrenade]: {
     // Contact-fused blast nade: flies flat and far, pops on ANY touch,
@@ -549,16 +549,16 @@ export const WEAPONS: Record<number, WeaponStats> = {
     // shove is the bonus, not the payload (the CONC carries the strip).
     directDamage: 60,
     aoeDamage: 20,
-    aoeRadius: 5.0,
-    knockbackForce: 45.0, // biggest shove in the belt
+    aoeRadius: 5,
+    knockbackForce: 45, // biggest shove in the belt
     forceMode: 'push',
-    speed: 55.0,
+    speed: 55,
     gravity: true,
     bodyRadius: 0.25,
-    hitMin: 0.0,
+    hitMin: 0,
     hitMax: 0.25, // belt rule: the contact pop needs real contact, not a 6m wake
     hitGrow: 1.5,
-    maxLifetime: 4.0, // contact usually pops it first
+    maxLifetime: 4, // contact usually pops it first
   },
   [WeaponType.Concussion]: {
     // T2 concussion grenade: the blast is a STRIP, not a kill — small
@@ -567,15 +567,15 @@ export const WEAPONS: Record<number, WeaponStats> = {
     // bomb: never arms, so bodies phase through and dirt only bounces it.
     directDamage: 15,
     aoeDamage: 8,
-    aoeRadius: 9.0,
-    knockbackForce: 55.0,
+    aoeRadius: 9,
+    knockbackForce: 55,
     forceMode: 'push',
-    speed: 40.0,
+    speed: 40,
     gravity: true,
     bodyRadius: 0.25,
-    hitMin: 0.0,
+    hitMin: 0,
     hitMax: 0.25, // belt rule — and it phases through bodies anyway
-    hitGrow: 2.0,
+    hitGrow: 2,
     maxLifetime: 1.5,
     armTime: 1.5, // never arms — same never-pops-on-contact contract as Grenade
     terrainBounce: true,
@@ -588,18 +588,18 @@ export const WEAPONS: Record<number, WeaponStats> = {
     // slug itself can also contact-pop before discharge like an impact nade.
     directDamage: 70,
     aoeDamage: 25,
-    aoeRadius: 7.0,
-    knockbackForce: 35.0,
+    aoeRadius: 7,
+    knockbackForce: 35,
     forceMode: 'push',
-    speed: 40.0,    // slower lob — a readable cap-to-discharge window
+    speed: 40,    // slower lob — a readable cap-to-discharge window
     gravity: false, // flat flight: the ray tracks the throw line
     bodyRadius: 0.3,
-    hitMin: 0.0,
+    hitMin: 0,
     hitMax: 0.25, // belt rule — the reach is the beam, not a wake
     hitGrow: 0.3,
-    maxLifetime: 4.0, // intercept before discharge → plain impact pop
+    maxLifetime: 4, // intercept before discharge → plain impact pop
     rayDelay: 0.4,
-    rayRange: 160.0,
+    rayRange: 160,
   },
   [WeaponType.Sprinkler]: {
 
@@ -609,24 +609,24 @@ export const WEAPONS: Record<number, WeaponStats> = {
     // stream rewards saturation over precision.
     directDamage: 12,
     aoeDamage: 5,
-    aoeRadius: 3.0,
-    knockbackForce: 9.0,
+    aoeRadius: 3,
+    knockbackForce: 9,
     forceMode: 'push',
-    speed: 120.0,    // slower than plasma's 160 — an arc needs airtime to read
+    speed: 120,    // slower than plasma's 160 — an arc needs airtime to read
     gravity: true,
     bodyRadius: 0.3,
-    hitMin: 0.0,
+    hitMin: 0,
     hitMax: 1.2,
     hitGrow: 0.3,
-    maxLifetime: 3.0, // arcs need hang time — ~1.9s to reach a 60m lob
+    maxLifetime: 3, // arcs need hang time — ~1.9s to reach a 60m lob
   },
   [WeaponType.Slam]: {
     // Not a projectile — the Q-skill lands as a ground AOE. Ballistic
     // fields are inert; only aoe/knock stats are live.
     directDamage: 0,
     aoeDamage: 35,
-    aoeRadius: 9.0,
-    knockbackForce: 40.0,
+    aoeRadius: 9,
+    knockbackForce: 40,
     forceMode: 'push',
     speed: 0,
     gravity: false,
@@ -659,16 +659,16 @@ export const WEAPONS: Record<number, WeaponStats> = {
     // plating your own push — see ARMORNADE_* below.
     directDamage: 0,
     aoeDamage: 40,
-    aoeRadius: 10.0,
-    knockbackForce: 25.0, // a nudge, not a launcher — the plating is the payload
+    aoeRadius: 10,
+    knockbackForce: 25, // a nudge, not a launcher — the plating is the payload
     forceMode: 'push',
-    speed: 40.0,
+    speed: 40,
     gravity: true,
     bodyRadius: 0.25,
-    hitMin: 0.0,
+    hitMin: 0,
     hitMax: 0.25, // belt rule — plating lands on contact, not a fat wake
-    hitGrow: 2.0,
-    maxLifetime: 2.0,
+    hitGrow: 2,
+    maxLifetime: 2,
   },
   [WeaponType.HealBeam]: {
     // Hitscan heal — the payload is HP on a friend, not damage. directDamage
@@ -691,16 +691,16 @@ export const WEAPONS: Record<number, WeaponStats> = {
     // misthrow — allies get the strong heal, foes get a shove + graze.
     directDamage: 0,
     aoeDamage: 12,
-    aoeRadius: 6.0,
-    knockbackForce: 22.0,
+    aoeRadius: 6,
+    knockbackForce: 22,
     forceMode: 'push',
-    speed: 40.0,
+    speed: 40,
     gravity: true,
     bodyRadius: 0.25,
-    hitMin: 0.0,
+    hitMin: 0,
     hitMax: 0.25, // belt rule — the heal pops on real contact or the fuse
-    hitGrow: 2.0,
-    maxLifetime: 2.0,
+    hitGrow: 2,
+    maxLifetime: 2,
   },
   [WeaponType.ProxyGrenade]: {
     // Proximity-fused zone pop: a 1s fuse whose trigger bubble inflates
@@ -709,16 +709,16 @@ export const WEAPONS: Record<number, WeaponStats> = {
     // wanders into the bubble (or the fuse lands anyway).
     directDamage: 35,
     aoeDamage: 30,
-    aoeRadius: 6.0,
-    knockbackForce: 22.0,
+    aoeRadius: 6,
+    knockbackForce: 22,
     forceMode: 'push',
-    speed: 45.0,   // thrown lob — enough to clear a doorway, not a dart
+    speed: 45,   // thrown lob — enough to clear a doorway, not a dart
     gravity: true,
     bodyRadius: 0.22,
-    hitMin: 0.0,
-    hitMax: 4.0,   // the proxy bubble ceiling — 4m radius at fuse end
-    hitGrow: 1.0,  // grows for the whole 1s life — full width AT the pop
-    maxLifetime: 1.0,
+    hitMin: 0,
+    hitMax: 4,   // the proxy bubble ceiling — 4m radius at fuse end
+    hitGrow: 1,  // grows for the whole 1s life — full width AT the pop
+    maxLifetime: 1,
   },
   [WeaponType.SatchelCharge]: {
     // Satchel charge: hand-planted bomb, not a grenade. Near-zero throw
@@ -727,16 +727,16 @@ export const WEAPONS: Record<number, WeaponStats> = {
     // The payoff is the biggest belt blast in the kit.
     directDamage: 150,
     aoeDamage: 130,
-    aoeRadius: 17.0,
-    knockbackForce: 75.0,
+    aoeRadius: 17,
+    knockbackForce: 75,
     forceMode: 'push',
-    speed: 14.0,    // an underhand lob — ~10m useful range, no tossing over walls
+    speed: 14,    // an underhand lob — ~10m useful range, no tossing over walls
     gravity: true,
     bodyRadius: 0.28,
-    hitMin: 0.0,
-    hitMax: 0.0,   // NO proxy wake — a planted charge only sticks on true contact
+    hitMin: 0,
+    hitMax: 0,   // NO proxy wake — a planted charge only sticks on true contact
     hitGrow: 0.1,  // >0 so hitRadiusAt never divides by zero; hitMax 0 makes it moot
-    maxLifetime: 4.0, // THE fuse — long enough to walk away, short enough the victim hears it
+    maxLifetime: 4, // THE fuse — long enough to walk away, short enough the victim hears it
     stick: true,   // hand-planted: rests where it lands until the fuse
   },
   [WeaponType.MRVLauncher]: {
@@ -747,13 +747,13 @@ export const WEAPONS: Record<number, WeaponStats> = {
     // carrier's own pop is small; the bomblet rain is the weapon.
     directDamage: 30,
     aoeDamage: 15,
-    aoeRadius: 8.0,
-    knockbackForce: 15.0, // the pop is delivery — the rain does the shoving
+    aoeRadius: 8,
+    knockbackForce: 15, // the pop is delivery — the rain does the shoving
     forceMode: 'push',
-    speed: 55.0,          // mortar muzzle — same lob line, different payload
+    speed: 55,          // mortar muzzle — same lob line, different payload
     gravity: true,
     bodyRadius: 0.3,
-    hitMin: 0.0,
+    hitMin: 0,
     hitMax: 0.5,          // bombardment weapon — no fat wake proxy, the rain is the reach
     hitGrow: 0.5,
     maxLifetime: 1.5,     // fuse pop releases the bomblets mid-air — ~80m of carry before the split
@@ -762,7 +762,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     terrainBounce: true,  // skips along until the fuse — the airburst needs the carry
     bounceRestitution: 0.35, // = client MRV_BOUNCE_RESTITUTION
     bounceFriction: 0.7,
-    cluster: { count: 6, radius: 5.0 }, // bomblet scatter footprint at the burst point
+    cluster: { count: 6, radius: 5 }, // bomblet scatter footprint at the burst point
   },
   [WeaponType.MRVBomblet]: {
     // Airburst child — contact pop on whatever it rains onto. Count is
@@ -771,16 +771,16 @@ export const WEAPONS: Record<number, WeaponStats> = {
     // at 6m the rain read as fireworks, not zoning.
     directDamage: 18,
     aoeDamage: 20,
-    aoeRadius: 16.0,
-    knockbackForce: 8.0,
+    aoeRadius: 16,
+    knockbackForce: 8,
     forceMode: 'push',
     speed: 0, // scattered by the carrier, never muzzle-fired
     gravity: true,
     bodyRadius: 0.15,
-    hitMin: 0.0,
+    hitMin: 0,
     hitMax: 0.5,          // bomblets must LAND — a big proxy would pop them mid-air on anything nearby
-    hitGrow: 1.0,
-    maxLifetime: 10.0,    // safety TTL only — contact pops them; an air fuse wastes the rain
+    hitGrow: 1,
+    maxLifetime: 10,    // safety TTL only — contact pops them; an air fuse wastes the rain
   },
   [WeaponType.Bombard]: {
     // The cannon's bigger, meaner brother: an even fatter iron ball that
@@ -802,23 +802,23 @@ export const WEAPONS: Record<number, WeaponStats> = {
                          // not an artillery dome
     knockbackForce: 12,  // shard thump — staggers, doesn't launch
     forceMode: 'push',
-    speed: 100.0,        // faster than the cannon's 80 — a flat siege slug, not a lob
+    speed: 100,        // faster than the cannon's 80 — a flat siege slug, not a lob
     gravity: true,
     bodyRadius: 1.05,    // HUGE — visibly wider than the 0.8 cannonball
-    hitMin: 0.0,
+    hitMin: 0,
     hitMax: 1.5,         // modest proxy — a siege slug earns contact, not a 2m wake
     hitGrow: 0.5,
-    maxLifetime: 6.0,    // ~570m of carry before the fuse crumbles it mid-air
+    maxLifetime: 6,    // ~570m of carry before the fuse crumbles it mid-air
   },
 };
 
 /** FNV-1a — stable string→u32 seed shared by server spawn and client
  *  replicas, so a jittered fuse pops at the same age on both ends. */
 export function idSeed(id: string): number {
-  let h = 2166136261;
+  let h = 2_166_136_261;
   for (let i = 0; i < id.length; i++) {
     h ^= id.charCodeAt(i);
-    h = Math.imul(h, 16777619);
+    h = Math.imul(h, 16_777_619);
   }
   return h >>> 0 || 1;
 }
@@ -826,10 +826,10 @@ export function idSeed(id: string): number {
 /** Effective fuse for one projectile: `maxLifetime × (1 ± ttlJitter)`,
  *  the sign/spread seeded by `seed` (a projectile id hash, or any u32). */
 export function jitteredTtl(stats: Pick<WeaponStats, 'maxLifetime' | 'ttlJitter'>, seed: number): number | undefined {
-  if (!stats.maxLifetime) return undefined;
+  if (!stats.maxLifetime) {return undefined;}
   const j = stats.ttlJitter ?? 0;
-  if (!j) return stats.maxLifetime;
-  return stats.maxLifetime * (1 - j + 2 * j * ((seed >>> 0 || 1) / 4294967296));
+  if (!j) {return stats.maxLifetime;}
+  return stats.maxLifetime * (1 - j + 2 * j * ((seed >>> 0 || 1) / 4_294_967_296));
 }
 
 // Repair-tool economy — one number set on both ends so the server heal

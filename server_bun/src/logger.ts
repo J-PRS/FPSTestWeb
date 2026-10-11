@@ -22,14 +22,14 @@ class Logger {
     // if it isn't there.
     try {
       const g = globalThis as { Bun?: unknown; require?: (m: string) => { appendFileSync(p: string, s: string): void; mkdirSync(p: string, o?: { recursive: boolean }): void } };
-      if (!g.Bun) return;
+      if (!g.Bun) {return;}
       // globalThis.require (not bare `require`) keeps this file valid in
       // the browser tsconfig that typechecks server modules for P2P embeds.
       const fs = g.require?.('node:fs');
-      if (!fs) return;
+      if (!fs) {return;}
       fs.mkdirSync('logs', { recursive: true });
       this.logFile = 'logs/server.log';
-      this.append = (line) => fs.appendFileSync(this.logFile!, line + '\n');
+      this.append = (line) => fs.appendFileSync(this.logFile!, `${line  }\n`);
     } catch { /* console-only */ }
   }
 
@@ -68,11 +68,11 @@ class Logger {
   }
 
   debug(msg: string, data?: unknown): void {
-    if (this.shouldLog('debug')) console.debug(this.format('debug', msg, data));
+    if (this.shouldLog('debug')) {console.debug(this.format('debug', msg, data));}
   }
 
   info(msg: string, data?: unknown): void {
-    if (this.shouldLog('info')) console.log(this.format('info', msg, data));
+    if (this.shouldLog('info')) {console.log(this.format('info', msg, data));}
   }
 
   // A hot fault path (claim rejections, unconfirmed hits, send failures)
@@ -86,7 +86,7 @@ class Logger {
     const now = Date.now();
     if (msg === burst.msg && now - burst.at < 5000) {
       burst.n++;
-      if (burst.n % 8 !== 0) return null;
+      if (burst.n % 8 !== 0) {return null;}
       return `${msg} (×${burst.n} suppressed repeats)`;
     }
     burst.msg = msg;
@@ -96,18 +96,18 @@ class Logger {
   }
 
   warn(msg: string, data?: unknown): void {
-    if (!this.shouldLog('warn')) return;
+    if (!this.shouldLog('warn')) {return;}
     const collapsed = this.collapse(this.warnBurst, msg);
-    if (collapsed === null) return;
+    if (collapsed === null) {return;}
     const line = this.format('warn', collapsed, data);
     console.warn(line);
     this.toFile(line);
   }
 
   error(msg: string, data?: unknown): void {
-    if (!this.shouldLog('error')) return;
+    if (!this.shouldLog('error')) {return;}
     const collapsed = this.collapse(this.errorBurst, msg);
-    if (collapsed === null) return;
+    if (collapsed === null) {return;}
     const line = this.format('error', collapsed, data);
     console.error(line);
     this.toFile(line);

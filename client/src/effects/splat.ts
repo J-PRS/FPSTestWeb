@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import type { Terrain} from '../world/terrain.js';
-import { type Splat } from '../world/terrain.js';
+import { type Terrain,type Splat} from '../world/terrain.js';
+
 
 const LIFETIME = 45;
 const HOLD = 8;            // stains stay wet-bright for 8s, then dry out

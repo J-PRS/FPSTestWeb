@@ -3,7 +3,7 @@
 // swapping geo alone keeps the pose. The skeleton/mixer is untouched.
 // Only exists for 'mannequin'.
 
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const _creased = new WeakMap<THREE.BufferGeometry, THREE.BufferGeometry>();

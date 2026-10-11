@@ -105,7 +105,7 @@ function buildTumbleweedGeometry(): THREE.BufferGeometry {
   // Keep ~20 evenly-spread twigs as the debris pool (same squash so shard
   // silhouettes match the live weed — merge copies data, so scale separately)
   _twigPool = twigs.filter((_, i) => i % 4 === 0);
-  for (const t of _twigPool) {t.scale(1.0, 0.88, 1.0);}
+  for (const t of _twigPool) {t.scale(1, 0.88, 1);}
   geo.computeBoundingSphere();
   return geo;
 }
@@ -117,7 +117,7 @@ let _mat: THREE.MeshLambertMaterial | null = null;
 /** Swarm part table — one twig-ball per weed. */
 export function weedParts(): SwarmPart[] {
   if (!_mat) {
-    _mat = new THREE.MeshLambertMaterial({ color: 0xFFFFFF });
+    _mat = new THREE.MeshLambertMaterial({ color: 0xFF_FF_FF });
   }
   return [{ geometry: _geo, material: _mat, castShadow: false }];
 }

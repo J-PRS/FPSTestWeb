@@ -25,9 +25,9 @@ const _aim = new THREE.Vector3();
 
 // Shared across all sentries — a handful of turrets doesn't justify
 // per-instance materials/geometries; geometries die with the module.
-const _metal = new THREE.MeshLambertMaterial({ color: 0x4a5560 });
-const _dark = new THREE.MeshLambertMaterial({ color: 0x23282e });
-const _glow = new THREE.MeshBasicMaterial({ color: 0x66ddff });
+const _metal = new THREE.MeshLambertMaterial({ color: 0x4A_55_60 });
+const _dark = new THREE.MeshLambertMaterial({ color: 0x23_28_2E });
+const _glow = new THREE.MeshBasicMaterial({ color: 0x66_DD_FF });
 const _geoBase = new THREE.CylinderGeometry(0.55, 0.8, 0.5, 8);
 const _geoMast = new THREE.CylinderGeometry(0.16, 0.22, 0.9, 6);
 const _geoDome = new THREE.SphereGeometry(0.42, 10, 8);
@@ -126,7 +126,7 @@ export class DeployTurret {
     this.group.add(this.head);
 
     this.flash = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: getGlowTexture(), color: 0xaaddff, transparent: true,
+      map: getGlowTexture(), color: 0xAA_DD_FF, transparent: true,
       blending: THREE.AdditiveBlending, depthWrite: false,
     }));
     this.flash.scale.setScalar(0.6);
@@ -143,7 +143,7 @@ export class DeployTurret {
    *  (the real meshes are pool-owned; `group`/`head` only carry the flash
    *  sprite and muzzle math now). */
   private syncMatrices(): void {
-    if (this.slot < 0 || !_pool) return;
+    if (this.slot < 0 || !_pool) {return;}
     const pool = _pool;
     const i = this.slot;
     // G = terrain-aligned base transform (pos + tilt + unfold scale)
@@ -157,7 +157,7 @@ export class DeployTurret {
     for (let t = 0; t < 2; t++) {
       const k = this.tubeKick[t]!;
       pool.tube.setMatrixAt(i * 2 + t, _m3.compose(
-        _p.set(t === 0 ? -0.14 : 0.14, 0.08, 0.55 - k * 0.10),
+        _p.set(t === 0 ? -0.14 : 0.14, 0.08, 0.55 - k * 0.1),
         _rx90,
         _s.set(1, 1 - k * 0.22, 1),
       ).premultiply(headM));
@@ -176,7 +176,7 @@ export class DeployTurret {
    */
   update(dt: number, enemies: { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[]):
       { muzzle: THREE.Vector3; target: { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean } } | null {
-    if (this.dead) return null;
+    if (this.dead) {return null;}
     if (this.unfoldT < 1) { this.tickUnfold(dt); return null; } // still assembling
     this.flashT -= dt;
     this.flash.material.opacity = Math.max(0, this.flashT / 0.09);
@@ -186,7 +186,7 @@ export class DeployTurret {
     // shove; y-scale (barrel axis, mesh rotated to +Z) hides the tail.
     for (let i = 0; i < 2; i++) {
       const k = this.tubeKick[i]!;
-      if (k <= 0.001) continue;
+      if (k <= 0.001) {continue;}
       this.tubeKick[i] = k * Math.exp(-dt * 10);
     }
     const shot = this.stepFire(dt, enemies);
@@ -200,7 +200,7 @@ export class DeployTurret {
     let best: (typeof enemies)[0] | null = null;
     let bestD2 = RANGE * RANGE;
     for (const e of enemies) {
-      if (!e.alive) continue;
+      if (!e.alive) {continue;}
       const d2 = this.pos.distanceToSquared(e.pos);
       if (d2 < bestD2) { bestD2 = d2; best = e; }
     }
@@ -212,7 +212,7 @@ export class DeployTurret {
     this.fireCd -= dt;
     // No firing off-bore: a fast jinker earns real dodge time while the
     // head traverses. The cooldown keeps ticking so it's ready on target.
-    if (!best || !aimed || this.fireCd > 0) return null;
+    if (!best || !aimed || this.fireCd > 0) {return null;}
 
     // LOS gate — a rocket is a straight-ish missile, not a mortar: when
     // the muzzle→target line runs into a hill, firing just detonates on
@@ -241,8 +241,8 @@ export class DeployTurret {
     _aim.copy(pos).sub(this.pos);
     const yaw = Math.atan2(_aim.x, _aim.z);
     let dy = yaw - this.head.rotation.y;
-    while (dy > Math.PI) dy -= Math.PI * 2;
-    while (dy < -Math.PI) dy += Math.PI * 2;
+    while (dy > Math.PI) {dy -= Math.PI * 2;}
+    while (dy < -Math.PI) {dy += Math.PI * 2;}
     const step = TURN_RATE * dt;
     this.head.rotation.y += Math.abs(dy) <= step ? dy : Math.sign(dy) * step;
     const pitch = THREE.MathUtils.clamp(-Math.atan2(_aim.y, Math.hypot(_aim.x, _aim.z)), -0.9, 0.5);
@@ -263,7 +263,7 @@ export class DeployTurret {
       const x = _v.x + (target.x - _v.x) * t;
       const y = _v.y + (target.y - _v.y) * t;
       const z = _v.z + (target.z - _v.z) * t;
-      if (this.terrain.getHeight(x, z) > y - 0.15) return true;
+      if (this.terrain.getHeight(x, z) > y - 0.15) {return true;}
     }
     return false;
   }

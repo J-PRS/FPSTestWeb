@@ -50,7 +50,7 @@ export class BotRouting {
     let a = this.routePrefs.get(id);
     if (a === undefined) {
       let h = 0;
-      for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+      for (let i = 0; i < id.length; i++) {h = (h * 31 + id.charCodeAt(i)) >>> 0;}
       a = ((h % 1000) / 1000 - 0.5) * 1.8;
       this.routePrefs.set(id, a);
     }
@@ -69,7 +69,7 @@ export class BotRouting {
   // moment a committed runner could plausibly arrive, which is when the
   // escorts need to leave.
   static readonly PUSH_ETA_S = 75;
-  static readonly PUSH_HOLD_MS = 14000;
+  static readonly PUSH_HOLD_MS = 14_000;
   /** Once a ring entry is reached the press is committed, not re-probed:
    *  at the lip the straight-line wall check reads the crest the entry
    *  was picked to avoid, bounces the bot back out, and the same entry
@@ -101,10 +101,10 @@ export class BotRouting {
    *  built on first route query so botless rooms never pay the grid. */
   flow: TerrainFlow | null = null;
   routeOf(p: { team?: string }) {
-    if (!this.field) return undefined;
+    if (!this.field) {return undefined;}
     this.flow ??= new TerrainFlow((x, z) => hmHeight(this.field!, x, z),
       BOT_TUNING.graph.extent, BOT_TUNING.graph.cell, this.room.ballSim.colliders);
-    const flow = this.flow;
+    const {flow} = this;
     // Danger feed is per-team and live: the walk deflects around cells
     // where THIS side keeps dying, so two rooms' routes diverge without
     // a second flood.
@@ -121,7 +121,7 @@ export class BotRouting {
   waitSpotFor(id: string, home: BotVec, duty: number): BotVec {
     const now = simNow();
     const cur = this.waitSpot.get(id);
-    if (cur && now - cur.at < BotRouting.WAIT_TTL_MS) return cur.pos;
+    if (cur && now - cur.at < BotRouting.WAIT_TTL_MS) {return cur.pos;}
     const u = botRand();
     const slack = 1 + (1 - duty);               // slack carriers roam wider
     const r = u < 0.5 ? (15 + botRand() * 35)
@@ -157,7 +157,7 @@ export class BotRouting {
     f.pos = pos;
     f.n = stand !== undefined && f.stand !== undefined && dist3(f.stand, stand) < 1
       ? (f.n ?? 0) + 1 : 1;
-    if (stand !== undefined) f.stand = { ...stand };
+    if (stand !== undefined) {f.stand = { ...stand };}
     f.at = simNow();
     this.routeFailed.set(id, f);
   }
@@ -176,7 +176,7 @@ export class BotRouting {
   taskGoalFor(id: string): CommandTask | undefined {
     for (const cmd of this.commands.values()) {
       const t = cmd.taskFor(id);
-      if (t) return t;
+      if (t) {return t;}
     }
     return undefined;
   }
@@ -184,7 +184,7 @@ export class BotRouting {
   /** Test hook — live command task list for a team (soak wave probe). */
   debugTasks(team: string): { id: string; kind: string; goal: BotVec }[] {
     const cmd = this.commands.get(team as TeamId);
-    if (!cmd) return [];
+    if (!cmd) {return [];}
     // taskFor is per-id; the map lives inside the commander — expose via
     // its own debug view.
     return cmd.debugTasks();
@@ -211,7 +211,7 @@ export class BotRouting {
    *  on a stand press long after the run collapsed. */
   pushFor(me: TeamId): BotVec | null {
     const c = this.pushAt.get(me);
-    if (!c) return null;
+    if (!c) {return null;}
     if (simNow() - c.at > BotRouting.PUSH_HOLD_MS) { this.pushAt.delete(me); return null; }
     return c.pos;
   }
@@ -223,14 +223,14 @@ export class BotRouting {
    *  enemy flag reachable → go grab it. Defenders invert it: their flag
    *  recovery/intercept outranks pressing the enemy stand. */
   flagGoal(p: { id: string; team?: string; position: Vec3 }, duty = 1, parties?: ReturnType<ServerParties['of']>): { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; marshal?: boolean; posted?: number } | null {
-    const flags = this.room.flags;
-    if (!flags) return null;
+    const {flags} = this.room;
+    if (!flags) {return null;}
     // Rabbit: no teams, one neutral flag. Hunters converge on the flag
     // itself (stand or loose drop) or the carrier's live beacon — the
     // rabbit keeps moving on a defensive circuit instead of sitting.
     if (this.room.mode === 'rabbit') {
       const flag = flags.flags.get('alpha');
-      if (!flag || flag.state === 'unspawned') return null;
+      if (!flag || flag.state === 'unspawned') {return null;}
       if (flag.state === 'carried' && flag.carrier === p.id) {
         return { pos: this.waitSpotFor(p.id, flag.home, duty), infiltrating: false, running: true, runner: true };
       }
@@ -241,15 +241,15 @@ export class BotRouting {
       // flag sat loose untouched for minutes.
       return { pos, infiltrating: false, running: true, runner: true };
     }
-    if (!p.team) return null;
+    if (!p.team) {return null;}
     const me = p.team as TeamId;
     const enemy = flags.flags.get(me === 'alpha' ? 'bravo' : 'alpha');
     const own = flags.flags.get(me);
-    if (!enemy || !own) return null;
+    if (!enemy || !own) {return null;}
     if (enemy.carrier === p.id) {
       // Own flag dropped in the field: touching it home re-opens the
       // cap window — a carrier that can reach it goes for the touch.
-      if (own.state === 'dropped') return { pos: own.pos, infiltrating: false, running: true, runner: true };
+      if (own.state === 'dropped') {return { pos: own.pos, infiltrating: false, running: true, runner: true };}
       // The cap line is blocked while our own flag is in the field —
       // standing on the stand just paints a target. Hover a defensive
       // circuit around home instead: re-roll a wait waypoint every
@@ -281,7 +281,7 @@ export class BotRouting {
     // ground level — they're sitting in the open.
     const enemyStand = enemy.state === 'home'
       ? { x: enemy.pos.x, y: enemy.pos.y + FLAG_STAND_LIFT, z: enemy.pos.z }
-      : enemy.state !== 'carried' ? enemy.pos : null;
+      : enemy.state === 'carried' ? null : enemy.pos;
     // The touch aim must stay at the flag's real height — the lifted
     // goal is only the mount target; fly-throughs aimed at the lift
     // ride ~3m high and graze past outside the 6m grab window.
@@ -306,7 +306,7 @@ export class BotRouting {
     const members: CommandMember[] = [];
     for (const [id, role] of this.roles) {
       const mp = this.room.players.getPlayer(id);
-      if (!mp || mp.team !== me) continue;
+      if (!mp || mp.team !== me) {continue;}
       members.push({ id, role, pos: mp.position, carrier: enemy.carrier === id,
         hpFrac: mp.maxHealth > 0 ? Math.max(0, mp.health / mp.maxHealth) : 1 });
     }
@@ -324,10 +324,10 @@ export class BotRouting {
     cmd.update(simNow(), sit, members, siege);
     const task = cmd.taskFor(p.id);
     if (!task) {
-      if (cmd.staffed(p.id, 'chase')) sit.thief = null;
-      if (cmd.staffed(p.id, 'return')) sit.dropped = null;
-      if (cmd.staffed(p.id, 'escort')) sit.escort = null;
-      if (cmd.staffed(p.id, 'push')) sit.push = null;
+      if (cmd.staffed(p.id, 'chase')) {sit.thief = null;}
+      if (cmd.staffed(p.id, 'return')) {sit.dropped = null;}
+      if (cmd.staffed(p.id, 'escort')) {sit.escort = null;}
+      if (cmd.staffed(p.id, 'push')) {sit.push = null;}
     }
     // The task names WHICH job, not WHERE: re-resolve its slot live so
     // a named chaser tracks the carrier's beacon between the commander's
@@ -394,7 +394,7 @@ export class BotRouting {
       // route through the DMZ loses to a wide arc around it.
       const foes: { x: number; z: number }[] = [];
       for (const q of (parties ?? this.parties.of(p)).roster) {
-        if (q.team && q.team !== me) foes.push({ x: q.pos.x, z: q.pos.z });
+        if (q.team && q.team !== me) {foes.push({ x: q.pos.x, z: q.pos.z });}
       }
       // Ring routing exists to get AROUND a wall: once the lane to the
       // stand is clear at body height (breached the compound, open
@@ -403,14 +403,14 @@ export class BotRouting {
       // capper inside the courtyard chased an entry 52m off and died
       // at the lip 27m from the flag). Probe 6m short of the socket so
       // the stand's own plinth collider can't veto the lane.
-      const laneBlocked = dStand > 0 && !!segSolidHit(
+      const laneBlocked = dStand > 0 && Boolean(segSolidHit(
         { x: p.position.x, y: p.position.y + 1, z: p.position.z },
         {
           x: enemyStand.x - (enemyStand.x - p.position.x) / dStand * 6,
           y: enemyStand.y + 1,
           z: enemyStand.z - (enemyStand.z - p.position.z) / dStand * 6,
         },
-        this.room.ballSim.colliders, this.room.ballSim.colliderIndex ?? undefined, me);
+        this.room.ballSim.colliders, this.room.ballSim.colliderIndex ?? undefined, me));
       const laneClear = dStand < 60 && !laneBlocked;
       // Stay live until the last hop: snapping the goal to the raw
       // stand at 90m beelines the bot into the rim wall it probed its
@@ -582,7 +582,7 @@ export class BotRouting {
             const lz = p.position.z + (ez - p.position.z) * t;
             const lh = hmHeight(this.field!, lx, lz);
             ridge = Math.max(ridge, lh - (p.position.y + (ey - p.position.y) * t));
-            if (lh > prevH) climb += lh - prevH;
+            if (lh > prevH) {climb += lh - prevH;}
             prevH = lh;
           }
           score -= ridge * 2.5;
@@ -617,7 +617,7 @@ export class BotRouting {
               const lx = ex + (enemyStand.x - ex) * t;
               const lz = ez + (enemyStand.z - ez) * t;
               const lh = hmHeight(this.field!, lx, lz);
-              if (lh < prevH) drop += prevH - lh; else rise += lh - prevH;
+              if (lh < prevH) {drop += prevH - lh;} else {rise += lh - prevH;}
               prevH = lh;
             }
             score += (drop - rise) * 1.5;
@@ -636,7 +636,7 @@ export class BotRouting {
           // the same unreachable point every re-score (raindance orbit).
           const fr = this.routeFailed.get(p.id);
           if (fr && simNow() - fr.at < 90_000
-            && Math.hypot(fr.pos.x - ex, fr.pos.z - ez) < 80) score -= 400;
+            && Math.hypot(fr.pos.x - ex, fr.pos.z - ez) < 80) {score -= 400;}
           // Structure cost — the terrain probes are blind to walls, so a
           // ring point inside a walled compound scored like open ground
           // and the bot chased it through a curtain it can't walk
@@ -645,13 +645,13 @@ export class BotRouting {
           // line; entries that only cross the breach face once still
           // compete, entries walled on both legs lose.
           const cols = this.room.ballSim.colliders;
-          if (cols.length) {
+          if (cols.length > 0) {
             const idx = this.room.ballSim.colliderIndex ?? undefined;
             const body = { x: p.position.x, y: p.position.y + 1, z: p.position.z };
             const ent = { x: ex, y: ey + 1, z: ez };
             const std = { x: enemyStand.x, y: enemyStand.y + 1, z: enemyStand.z };
-            if (segSolidHit(body, ent, cols, idx, me)) score -= 150;
-            if (segSolidHit(ent, std, cols, idx, me)) score -= 180;
+            if (segSolidHit(body, ent, cols, idx, me)) {score -= 150;}
+            if (segSolidHit(ent, std, cols, idx, me)) {score -= 180;}
           }
           return score;
         };
@@ -698,7 +698,7 @@ export class BotRouting {
           // only breaks further out — a plateau stand needs the far
           // rings to find the saddle where its massif opens.
           const ring = a < 8 ? 85 : a < 16 ? 170 : 300;
-          if (inside && ring > dStand + 20) continue;
+          if (inside && ring > dStand + 20) {continue;}
           const ang = ((a % 8) / 8) * Math.PI * 2 + (a < 8 ? 0 : (a < 16 ? Math.PI / 8 : Math.PI / 4));
           const ex = enemyStand.x + Math.cos(ang) * ring;
           const ez = enemyStand.z + Math.sin(ang) * ring;
@@ -771,7 +771,7 @@ export class BotRouting {
    *  carrier's position is already on the wire, no wallhack needed. */
   private escortSpot(carrier: string | null | undefined, me: TeamId): (Vec3 & { vx?: number; vz?: number }) | null {
     const escortP = carrier ? this.room.players.getPlayer(carrier) : null;
-    if (!escortP || escortP.team !== me) return null;
+    if (!escortP || escortP.team !== me) {return null;}
     return { ...escortP.position, vx: escortP.velocity.x, vz: escortP.velocity.z };
   }
 
@@ -792,12 +792,12 @@ export class BotRouting {
    *  pickHunt consumes this to actually ENGAGE the thief, not just run at
    *  the flag's old stand position. */
   thiefOf(team: string): BotEnemy | null {
-    const flags = this.room.flags;
-    if (!flags || (team !== 'alpha' && team !== 'bravo')) return null;
+    const {flags} = this.room;
+    if (!flags || (team !== 'alpha' && team !== 'bravo')) {return null;}
     const own = flags.flags.get(team);
-    if (!own || own.state !== 'carried' || !own.carrier) return null;
+    if (!own || own.state !== 'carried' || !own.carrier) {return null;}
     const t = this.room.players.getPlayer(own.carrier);
-    if (!t || t.isDead) return null;
+    if (!t || t.isDead) {return null;}
     return { id: t.id, pos: t.position, vel: t.velocity, alive: true,
       aimY: classCapsule(t.armorClass).centerOff };
   }

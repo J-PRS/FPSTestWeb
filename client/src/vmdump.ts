@@ -23,12 +23,12 @@ document.body.append(renderer.domElement);
 document.body.style.margin = '0';
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x25282E);
+scene.background = new THREE.Color(0x25_28_2E);
 const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.01, 100);
 scene.add(camera);
 scene.add(new THREE.AmbientLight(0x88_66_44, 0.35));            // AMBIENT_*
-scene.add(new THREE.HemisphereLight(0x5599CC, 0x66_44_22, 0.5)); // HEMI_*
-const sun = new THREE.DirectionalLight(0xFFE8AA, 3.2);         // SUN_*
+scene.add(new THREE.HemisphereLight(0x55_99_CC, 0x66_44_22, 0.5)); // HEMI_*
+const sun = new THREE.DirectionalLight(0xFF_E8_AA, 3.2);         // SUN_*
 sun.position.set(2, 4, 1);
 scene.add(sun);
 

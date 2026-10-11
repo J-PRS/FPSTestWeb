@@ -3,7 +3,7 @@ import {
   encodePosition, decodePosition,
   encodeTickPlayer, encodeTickPlayerV3, encodeTickPlayerV4, encodeTickFrame, decodeTickFrame,
   isWireFrame, WIRE_POSITION, WIRE_TICK_V3, WIRE_TICK_V4, WireIdRoster,
-  tickEncodeScratch, v4Last,
+  tickEncodeScratch, v4Last,encodeBallSegment,decodeBallSegment
 } from '../../../shared/wire';
 
 describe('position frame round-trip', () => {
@@ -129,7 +129,6 @@ describe('tick frame round-trip', () => {
   });
 });
 
-import { encodeBallSegment, decodeBallSegment } from '../../../shared/wire';
 
 describe('ballSegment binary codec', () => {
   const full = {

@@ -16,7 +16,7 @@ const _dir = new THREE.Vector3();
 export function beginBlinkF(t: Totem, playerPos: THREE.Vector3): void {
     // Gate: staggered (damage-locked) or still on post-blink cooldown —
     // the caller treats a no-op as "stay put".
-    if (t.staggerT > 0 || t.blinkCd > 0) return;
+    if (t.staggerT > 0 || t.blinkCd > 0) {return;}
     // Peak-seek: sample a ring of terrain around the PLAYER'S general
     // bearing, pick the highest point that keeps firing range.
     let bestH = -Infinity;
@@ -28,7 +28,7 @@ export function beginBlinkF(t: Totem, playerPos: THREE.Vector3): void {
       const z = t.pos.z + Math.sin(a) * r;
       const h = t.terrain.getHeight(x, z);
       const pd = Math.hypot(playerPos.x - x, playerPos.z - z);
-      if (pd > TOTEM_RANGE * 0.9) continue;
+      if (pd > TOTEM_RANGE * 0.9) {continue;}
       if (h > bestH) { bestH = h; t.blinkTarget.set(x, h, z); found = true; }
     }
     if (!found || bestH < t.terrain.getHeight(t.pos.x, t.pos.z) + TOTEM_PEAK_MIN_GAIN) {
@@ -51,7 +51,7 @@ export function lineClear(t: Totem, target: THREE.Vector3): boolean {
       const x = t.pos.x + (target.x - t.pos.x) * u;
       const z = t.pos.z + (target.z - t.pos.z) * u;
       const y = sy + (target.y - sy) * u;
-      if (y < t.terrain.getHeight(x, z) + 0.4) return false;
+      if (y < t.terrain.getHeight(x, z) + 0.4) {return false;}
     }
     return true;
   }
@@ -97,7 +97,7 @@ export function fireBeam(t: Totem, playerPos: THREE.Vector3): void {
     // full envelope (energy leaving the whole line), snaps thin as it
     // decays. beamFade drives the white-hot color in writeInstances.
     t.beamWidth = t.uber ? UBER_TOTEM_BEAM_WIDTH * 0.5 : 0.3;
-    t.beamOpacity = 1.0;
+    t.beamOpacity = 1;
     t.beamFade = 0.35;
     t.beamOn = true;
   }
@@ -106,13 +106,13 @@ export function fireBeam(t: Totem, playerPos: THREE.Vector3): void {
 // Anchored — a blast during charge drops the aim. Staggered it can't
 // even flee: the charge fizzles but the totem holds its ground.
 export function blastPush(t: Totem, from: THREE.Vector3, force: number): void {
-  if (t.state !== 'charge' || !Number.isFinite(from.x + from.y + from.z + force) || force <= 8) return;
+  if (t.state !== 'charge' || !Number.isFinite(from.x + from.y + from.z + force) || force <= 8) {return;}
   if (t.staggerT > 0 || t.blinkCd > 0) { t.state = 'aim'; t.refire = Math.max(t.refire, 0.4); t.beamOn = false; }
-  else beginBlinkF(t, from);
+  else {beginBlinkF(t, from);}
 }
 
 export function blastPull(t: Totem, to: THREE.Vector3, force: number): void {
-  if (t.state !== 'charge' || !Number.isFinite(to.x + to.y + to.z + force) || force <= 8) return;
+  if (t.state !== 'charge' || !Number.isFinite(to.x + to.y + to.z + force) || force <= 8) {return;}
   if (t.staggerT > 0 || t.blinkCd > 0) { t.state = 'aim'; t.refire = Math.max(t.refire, 0.4); t.beamOn = false; }
-  else beginBlinkF(t, to);
+  else {beginBlinkF(t, to);}
 }

@@ -1,7 +1,7 @@
-import type { ClientMessage, ServerMessage, Vec3, ClaimVerdict } from './types.ts';
+import type { ClientMessage, ServerMessage, Vec3, ClaimVerdict,PlayerState,HitVerdict } from './types.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import { POWERUP } from '../../shared/pickups.ts';
-import type { PlayerState } from './types.ts';
+
 import { logger } from './logger.ts';
 import { classCanFire } from '../../shared/botClasses.ts';
 import { serverSimmed, BELT_THROW_WEAPONS, beltThrowCost, WeaponType, getWeaponStats, REPAIR_RANGE, WEAPON_FIRE_INTERVAL_S } from '../../shared/weapons.ts';
@@ -25,7 +25,7 @@ import { wallNow , wallMs} from './wallClock.ts';
 import { tauntRand } from '../../shared/botRand.ts';
 import { lgTickDamage, lgChargeAt, LG_RANGE, LG_CHAIN_DMG_SCALE, LG_POP_CHARGE_MULT } from '../../shared/combat.ts';
 import { perkMods } from '../../shared/perks.ts';
-import type { HitVerdict } from './types.ts';
+
 
 /** What a beam intent's honest ray struck — the room resolves earliest
  *  contact; CombatHandler pays it. `contact` is the surface point (pop
@@ -162,7 +162,7 @@ export class CombatHandler {
   get solids(): readonly StructureCollider[] { return this._solids; }
   set solids(list: readonly StructureCollider[]) {
     this._solids = list;
-    this.solidIndex = list.length ? new ColliderIndex(list) : null;
+    this.solidIndex = list.length > 0 ? new ColliderIndex(list) : null;
   }
 
   killFeed: KillFeed;
@@ -190,7 +190,7 @@ export class CombatHandler {
   }
 
   hb(key: string, n = 1): void {
-    if (this.deps.health) this.deps.health.set(key, (this.deps.health.get(key) ?? 0) + n);
+    if (this.deps.health) {this.deps.health.set(key, (this.deps.health.get(key) ?? 0) + n);}
   }
 
   /** Claim refused: server-side warn plus a shotRejected to the shooter so
@@ -243,7 +243,7 @@ export class CombatHandler {
   notifyDrop(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number, shotId?: string): void {
     const key = `${playerId}:${kind}:${targetId ?? ''}`;
     const now = wallNow();
-    if (now - (this.lastDropNotify.get(key) ?? 0) < 1000) return;
+    if (now - (this.lastDropNotify.get(key) ?? 0) < 1000) {return;}
     this.lastDropNotify.set(key, now);
     const health = this.playerManager.getPlayer(playerId)?.health;
     this.sendToPlayer(playerId, { type: 'claimDropped', reason: `${kind}: ${reason}`, targetId, weaponType, health, shotId });
@@ -257,23 +257,23 @@ export class CombatHandler {
     // bottom-feeder is exempt: last place can hit/be hit by anyone.
     // Self-splash stays legal (rocket jumps).
     if (this.deps.rabbitCarrier) {
-      if (shooterId === targetId) return false;
+      if (shooterId === targetId) {return false;}
       const c = this.deps.rabbitCarrier();
-      if (c && (shooterId === c || targetId === c)) return false;
-      if (!c && !this.deps.rabbitFlagLive?.()) return false;
+      if (c && (shooterId === c || targetId === c)) {return false;}
+      if (!c && !this.deps.rabbitFlagLive?.()) {return false;}
       const bottom = this.deps.rabbitBottom?.();
       return !(bottom?.has(shooterId) || bottom?.has(targetId));
     }
     // friendlyFire server option opens the gate entirely; self-splash
     // stays allowed regardless (rocket jumps).
-    if (!this.deps.teams || shooterId === targetId || this.deps.friendlyFire) return false;
+    if (!this.deps.teams || shooterId === targetId || this.deps.friendlyFire) {return false;}
     const t = this.playerManager.getPlayer(targetId);
     // Map-authored assets shoot under the virtual `base:<team>` owner —
     // no player row exists, so the team's own bodies must be exempted here
     // or a base turret's splash would chew its defenders.
-    if (shooterId.startsWith('base:')) return t?.team === shooterId.slice(5);
+    if (shooterId.startsWith('base:')) {return t?.team === shooterId.slice(5);}
     const s = this.playerManager.getPlayer(shooterId);
-    return !!(s?.team && t?.team && s.team === t.team);
+    return Boolean(s?.team && t?.team && s.team === t.team);
   }
 
   /** Drop live projectiles when a player is fully removed (grace timeout /
@@ -299,21 +299,21 @@ export class CombatHandler {
     this.lastFireNotify.delete(playerId);
     this.simmedFireTimes.delete(playerId);
     for (const key of this.fireWindows.keys()) {
-      if (key.startsWith(`${playerId}:`)) this.fireWindows.delete(key);
+      if (key.startsWith(`${playerId}:`)) {this.fireWindows.delete(key);}
     }
     this.lastHeal.delete(playerId);
     for (const key of this.lastEnvCredit.keys()) {
-      if (key.endsWith(`>${playerId}`) || key.startsWith(`${playerId}>`)) this.lastEnvCredit.delete(key);
+      if (key.endsWith(`>${playerId}`) || key.startsWith(`${playerId}>`)) {this.lastEnvCredit.delete(key);}
     }
     this.chargeBank.delete(playerId);
     for (const key of this.healTicks.keys()) {
-      if (key.startsWith(`${playerId}|`) || key.endsWith(`|${playerId}`)) this.healTicks.delete(key);
+      if (key.startsWith(`${playerId}|`) || key.endsWith(`|${playerId}`)) {this.healTicks.delete(key);}
     }
     for (const key of this.lastDropNotify.keys()) {
-      if (key.startsWith(`${playerId}:`)) this.lastDropNotify.delete(key);
+      if (key.startsWith(`${playerId}:`)) {this.lastDropNotify.delete(key);}
     }
     for (const key of this.lastRejectWarn.keys()) {
-      if (key.startsWith(`${playerId}:`)) this.lastRejectWarn.delete(key);
+      if (key.startsWith(`${playerId}:`)) {this.lastRejectWarn.delete(key);}
     }
   }
 
@@ -333,7 +333,7 @@ export class CombatHandler {
       return;
     }
     const now = wallNow();
-    if (typeof msg.fireAt === 'number' && Number.isFinite(msg.fireAt)) this.deps.uplinkNote?.(playerId, msg.fireAt);
+    if (typeof msg.fireAt === 'number' && Number.isFinite(msg.fireAt)) {this.deps.uplinkNote?.(playerId, msg.fireAt);}
     const dir = msg.dir && finiteVec(msg.dir) ? msg.dir : undefined;
     const fireProjectile = dir && serverSimmed(msg.weaponType) ? this.deps.fireProjectile : undefined;
     // Class lock applies to every fire intent — beams and melee skip the
@@ -394,14 +394,9 @@ export class CombatHandler {
       const id = this.deps.repairTarget(playerId,
         { x: mpos.x, y: mpos.y + 1.6, z: mpos.z },
         { x: dir.x / l, y: dir.y / l, z: dir.z / l }, REPAIR_RANGE);
-      if (id !== null) this.deps.repair?.(playerId, id);
+      if (id !== null) {this.deps.repair?.(playerId, id);}
     }
-    if (!fireProjectile) {
-      // Cosmetic relay only — throttled: a dropped relay costs a muzzle
-      // flash, but a dropped intent would orphan a predicted shell.
-      if (now - (this.lastFireNotify.get(playerId) ?? 0) < 50) return;
-      this.lastFireNotify.set(playerId, now);
-    } else {
+    if (fireProjectile) {
       // Intents spawn real sims + broadcasts, so they need a real flood
       // gate — the fastest legit simmed weapon is ~13/s; 20/s is spam.
       const recent = (this.simmedFireTimes.get(playerId) ?? []).filter(t => now - t < 1000);
@@ -413,7 +408,7 @@ export class CombatHandler {
       // ~13 simmed shells/sec. Rolling-second arrival bound per
       // `${playerId}:${weaponType}`; 0.85× interval slack absorbs input
       // bunching under loss, so legit burst catch-up passes.
-      const interval = msg.weaponType !== undefined ? WEAPON_FIRE_INTERVAL_S[msg.weaponType as WeaponType] : undefined;
+      const interval = msg.weaponType === undefined ? undefined : WEAPON_FIRE_INTERVAL_S[msg.weaponType as WeaponType];
       if (interval !== undefined) {
         const key = `${playerId}:${msg.weaponType}`;
         const win = this.fireWindows.get(key) ?? { start: now, count: 0, lastTs: undefined, arr: [] as number[], violations: 0 };
@@ -426,6 +421,11 @@ export class CombatHandler {
           return;
         }
       }
+    } else {
+      // Cosmetic relay only — throttled: a dropped relay costs a muzzle
+      // flash, but a dropped intent would orphan a predicted shell.
+      if (now - (this.lastFireNotify.get(playerId) ?? 0) < 50) {return;}
+      this.lastFireNotify.set(playerId, now);
     }
     this.deps.emit?.({ type: 'fire', playerId });
     const at = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
@@ -452,7 +452,7 @@ export class CombatHandler {
         player.velocity, msg.shotId);
       if (id) {
         this.hb('shot.serverSim');
-        if (msg.weaponType !== undefined) weaponStats.recordShot(this.deps.mode ?? '', `w${msg.weaponType}`);
+        if (msg.weaponType !== undefined) {weaponStats.recordShot(this.deps.mode ?? '', `w${msg.weaponType}`);}
         return;
       }
       // spawn() declined (hitscan stats, missing owner) — a silent
@@ -490,7 +490,7 @@ export class CombatHandler {
       this.notifyDrop(playerId, 'AOE', 'shooter dead', undefined, msg.weaponType, msg.shotId);
       return;
     }
-    if (typeof msg.fireAt === 'number' && Number.isFinite(msg.fireAt)) this.deps.uplinkNote?.(playerId, msg.fireAt);
+    if (typeof msg.fireAt === 'number' && Number.isFinite(msg.fireAt)) {this.deps.uplinkNote?.(playerId, msg.fireAt);}
     this.deps.emit?.({ type: 'fire', playerId });
     this.aoe.handleAOEShot(playerId, msg);
   }
@@ -554,7 +554,7 @@ export class CombatHandler {
     const target = this.playerManager.getPlayer(targetId);
     if (!target || target.isDead) { this.hb('drop.deadTarget'); return; }
     if (ownerId !== 'environment' && this.friendly(ownerId, targetId)) { this.hb('drop.friendly'); return; }
-    if (opts.hb) this.hb(opts.hb);
+    if (opts.hb) {this.hb(opts.hb);}
     const owner = ownerId === 'environment' ? null : this.playerManager.getPlayer(ownerId);
     const dmg = damage * (owner ? this.ddMult(owner) : 1);
     const result = this.playerManager.applyDamage(targetId, dmg);
@@ -570,7 +570,7 @@ export class CombatHandler {
   private creatureCharge = new Map<string, { charge: number; t: number }>();
 
   private beamPay(playerId: string, player: PlayerState, c: BeamContact | null): void {
-    if (!c) return;
+    if (!c) {return;}
     if (c.playerId) {
       const n = this.chargeBank.step(playerId, c.playerId);
       const victim = this.playerManager.getPlayer(c.playerId);
@@ -581,10 +581,10 @@ export class CombatHandler {
       this.serverHit(playerId, c.playerId, dmg, 'Lightning', { hb: 'beam.lg', weapon: WeaponType.Lightning });
       return;
     }
-    if (c.ballId !== undefined) this.creatureTick(playerId, 'ball', c.ballId, c.contact, 1);
-    if (c.crawlerId !== undefined) this.creatureTick(playerId, 'crawl', c.crawlerId, c.contact, 1);
-    if (c.chainBallId !== undefined && c.chainContact) this.creatureTick(playerId, 'ball', c.chainBallId, c.chainContact, LG_CHAIN_DMG_SCALE);
-    if (c.chainCrawlerId !== undefined && c.chainContact) this.creatureTick(playerId, 'crawl', c.chainCrawlerId, c.chainContact, LG_CHAIN_DMG_SCALE);
+    if (c.ballId !== undefined) {this.creatureTick(playerId, 'ball', c.ballId, c.contact, 1);}
+    if (c.crawlerId !== undefined) {this.creatureTick(playerId, 'crawl', c.crawlerId, c.contact, 1);}
+    if (c.chainBallId !== undefined && c.chainContact) {this.creatureTick(playerId, 'ball', c.chainBallId, c.chainContact, LG_CHAIN_DMG_SCALE);}
+    if (c.chainCrawlerId !== undefined && c.chainContact) {this.creatureTick(playerId, 'crawl', c.chainCrawlerId, c.chainContact, LG_CHAIN_DMG_SCALE);}
   }
 
   private creatureTick(playerId: string, kind: 'ball' | 'crawl', id: number, at: Vec3, scale: number): void {
@@ -597,7 +597,7 @@ export class CombatHandler {
     this.creatureCharge.set(key, { charge: acc, t: nowS });
     if (this.creatureCharge.size > 64) {
       for (const [k, e] of this.creatureCharge) {
-        if (nowS - e.t > 30) this.creatureCharge.delete(k);
+        if (nowS - e.t > 30) {this.creatureCharge.delete(k);}
       }
     }
     const verdict = kind === 'ball'
@@ -605,7 +605,7 @@ export class CombatHandler {
       : this.deps.crawlerHit?.(playerId, id, lgTickDamage(n) * scale);
     if (verdict?.killed) {
       this.creatureCharge.delete(key);
-      if (acc > 0) this.blast.pop(playerId, at, acc);
+      if (acc > 0) {this.blast.pop(playerId, at, acc);}
       this.hb('beam.kill');
     }
   }
@@ -624,8 +624,8 @@ export class CombatHandler {
       return;
     }
     // Arm BEFORE the kill so the timer the death schedules inherits it.
-    if (hold) this.respawner.hold(id);
-    this.serverHit(id, id, 99999, 'Respawn', { hb: 'respawn.req' });
+    if (hold) {this.respawner.hold(id);}
+    this.serverHit(id, id, 99_999, 'Respawn', { hb: 'respawn.req' });
   }
 
   /** Server-authored creature bite (CreatureSim). */

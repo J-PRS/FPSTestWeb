@@ -26,7 +26,7 @@ vi.spyOn(RemotePlayer.prototype, 'dispose').mockImplementation(() => {});
 
 function lcg(seed: number) {
   let s = seed >>> 0;
-  return () => (s = (s * 1664525 + 1013904223) >>> 0) / 0x100000000;
+  return () => (s = (s * 1_664_525 + 1_013_904_223) >>> 0) / 0x1_00_00_00_00;
 }
 
 const GS = (ids: string[]) => ({
@@ -86,10 +86,10 @@ describe('rosterFuzz — client roster conformance', () => {
           const rows = sub.map(tickRow);
           // An isDead row mints the roster row but never the body —
           // onPlayerUpdate waits for a respawn edge (players.ts).
-          for (let i = 0; i < sub.length; i++) { if (!rows[i]!.isDead) tickSeen.add(sub[i]!); }
-          const ghost = rnd() < 0.15 ? 'ghost-' + Math.floor(rnd() * 4) : null;
+          for (let i = 0; i < sub.length; i++) { if (!rows[i]!.isDead) {tickSeen.add(sub[i]!);} }
+          const ghost = rnd() < 0.15 ? `ghost-${  Math.floor(rnd() * 4)}` : null;
           let ghostRow: ReturnType<typeof tickRow> | null = null;
-          if (ghost) { members.add(ghost); ghostRow = tickRow(ghost); if (!ghostRow.isDead) tickSeen.add(ghost); } // a record for an unseen id mints membership (upsert owns create)
+          if (ghost) { members.add(ghost); ghostRow = tickRow(ghost); if (!ghostRow.isDead) {tickSeen.add(ghost);} } // a record for an unseen id mints membership (upsert owns create)
           feed(h.nm, { type: 'tickUpdate', updates: [...rows, ...(ghostRow ? [ghostRow] : [])] } as ServerMessage);
           opsSeen.add('tick'); if (ghostRow) {opsSeen.add('ghost');}
         } else if (roll < 0.9) { // respawn
@@ -108,7 +108,7 @@ describe('rosterFuzz — client roster conformance', () => {
           const carried = tickSeen.has(keep);
           members.clear(); tickSeen.clear(); dead.clear();
           members.add(keep);
-          if (carried) tickSeen.add(keep);
+          if (carried) {tickSeen.add(keep);}
           opsSeen.add('gs');
           feed(h.nm, GS([keep]));
         }

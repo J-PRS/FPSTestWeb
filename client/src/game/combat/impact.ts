@@ -26,7 +26,7 @@ import { processProjectileExplosion, type CombatCtx } from '../combat.js';
 
 const CHAIN_WINDOW = CHAINGUN_RATE * 1.5;
 const CHAIN_RAMP_CAP = 8;
-const CHAIN_STAGGER_FORCE = 6.0; // juggles the target, doesn't melt it
+const CHAIN_STAGGER_FORCE = 6; // juggles the target, doesn't melt it
 
 const _debrisDir = new THREE.Vector3();
 const _ichorCol = new THREE.Color();
@@ -76,8 +76,8 @@ function hitVerdict(c: CombatCtx, p: Projectile, hitPos: { x: number; y: number;
 // Droplets paint their own stain where they land (the Wendigo model) —
 // a spray arcing over a ridge stains THAT ground, not the shooter's feet.
 function ichorSpray(c: CombatCtx, ball: import('../../entities/balls.js').Targetable, dir: THREE.Vector3, scale: number): void {
-  if (ball.ichor === undefined) return;
-  const deps = c.deps;
+  if (ball.ichor === undefined) {return;}
+  const {deps} = c;
   const hex = ball.ichor;
   deps.world.debrisList.push(new BallDebris(
     deps.lazyScene(), deps.lazyTerrain(), ball.pos,
@@ -88,8 +88,8 @@ function ichorSpray(c: CombatCtx, ball: import('../../entities/balls.js').Target
 }
 
 function splatAt(c: CombatCtx, x: number, z: number, r: number, hex: number, intensity?: number, dx = 0, dz = 0): void {
-  const deps = c.deps;
-  if (deps.world.splats.length >= SPLAT_MAX) deps.world.splats.shift()!.dispose();
+  const {deps} = c;
+  if (deps.world.splats.length >= SPLAT_MAX) {deps.world.splats.shift()!.dispose();}
   _splatPos.set(x, 0, z);
   // Smear the stain along the droplet's landing velocity — a streaked
   // splash, not a round dot. Slow drops stay roundish pools.
@@ -110,7 +110,7 @@ function ichorSplat(c: CombatCtx, ball: import('../../entities/balls.js').Target
 // Instanced body-part gib burst when the species has one, else the generic
 // shard debris — same visual contract either way.
 function corpseBurst(c: CombatCtx, ball: import('../../entities/balls.js').Targetable, dir: THREE.Vector3): void {
-  if (burstGibs(ball, ball.pos, dir, ball.vel)) return;
+  if (burstGibs(ball, ball.pos, dir, ball.vel)) {return;}
   c.deps.world.debrisList.push(new BallDebris(
     c.deps.lazyScene(), c.deps.lazyTerrain(), ball.pos,
     ball.color, ball.scale,
@@ -121,7 +121,7 @@ function corpseBurst(c: CombatCtx, ball: import('../../entities/balls.js').Targe
 // The body pops AND the ground keeps the stain — death reads as a wound,
 // not a despawn.
 function ichorDeath(c: CombatCtx, ball: import('../../entities/balls.js').Targetable, dir: THREE.Vector3): void {
-  if (ball.ichor === undefined) return;
+  if (ball.ichor === undefined) {return;}
   ichorSpray(c, ball, dir, 0.55);
   ichorSplat(c, ball, ball.radius * 2.4);
 }
@@ -133,7 +133,7 @@ const _coneUp = new THREE.Vector3(0, 1, 0);
 
 // Projectile exploded: spawn effect, apply AOE, score hits, notify server/demo
 export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
-  const deps = c.deps;
+  const {deps} = c;
   // Remote shells are server-authoritative: render the effect locally,
   // but never report AOE/destroy/hits — that's the shooter's client's job.
   // (GL shells explode on their 2.5s fuse on every observing client.)
@@ -141,7 +141,7 @@ export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
     spawnVisualOnly(c, p);
     // Bomblets are visual-only anyway — remote viewers still need the
     // rain, or an airburst reads as a midair pop with no payload.
-    if (p.config.cluster) spawnClusterBomblets(c, p);
+    if (p.config.cluster) {spawnClusterBomblets(c, p);}
     // The replica is visual-only for DAMAGE (server declares it), but the
     // blast still physically shoves the local player — predict the shove
     // here so its knockback echo dedupes on the stamp instead of landing
@@ -156,10 +156,10 @@ export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
 
   spawnImpactEffect(c, p);
   recordProjectileHit(c, p);
-  if (p.config.cluster) spawnClusterBomblets(c, p);
+  if (p.config.cluster) {spawnClusterBomblets(c, p);}
 
-  if (p.hitBall) handleBallHit(c, p, p.hitBall);
-  if (p.hitPlayerId) handlePlayerHit(c, p, p.hitPlayerId);
+  if (p.hitBall) {handleBallHit(c, p, p.hitBall);}
+  if (p.hitPlayerId) {handlePlayerHit(c, p, p.hitPlayerId);}
 
   // Destroy LAST — this tombstones the server-tracked id. WS is ordered,
   // so sending it ahead of the aoeShot/shot claims above used to make
@@ -178,7 +178,7 @@ const _crumbCol = new THREE.Color();
  *  floor; an embedding spear (javelin) earns a compact kinetic burst and
  *  its own thunk voice so a 60dmg dart doesn't feel like a pistol hit. */
 function kineticHitFx(c: CombatCtx, p: Projectile, pos: THREE.Vector3): void {
-  const deps = c.deps;
+  const {deps} = c;
   deps.lazyEffects().spawnImpact(pos, p.vel);
   if (p.config.crumbles) {
     // The ball IS the ordnance: it bursts into rock shards at the contact
@@ -199,7 +199,7 @@ function kineticHitFx(c: CombatCtx, p: Projectile, pos: THREE.Vector3): void {
     sfx.explosionAt(pos, false, p.config.weaponType, p.vel);
     return;
   }
-  if (p.config.embeds === undefined) return;
+  if (p.config.embeds === undefined) {return;}
   deps.world.explosions.push(new Explosion(
     deps.lazyScene(), pos, p.directHit, p.age, deps.lazyTerrain(),
     3.4 / EXPLOSION_VFX_RADIUS, p.config.damageColor, 'punch',
@@ -209,13 +209,13 @@ function kineticHitFx(c: CombatCtx, p: Projectile, pos: THREE.Vector3): void {
 
 // Visual effect only — no AOE, no damage, no server traffic
 export function spawnVisualOnly(c: CombatCtx, p: Projectile): void {
-  const deps = c.deps;
+  const {deps} = c;
   // Prefer the swept hitPoint — on a bounce-fail the integrated pos is
   // already inside the terrain and the blast would render underground
   const pos = p.hitPointValid ? p.hitPoint : p.pos;
   if (p.config.noExplosion) {
     kineticHitFx(c, p, pos);
-    if (!p.hitBall && !p.hitPlayerId && !p.config.crumbles) deps.lazyEffects().spawnBulletMark(pos);
+    if (!p.hitBall && !p.hitPlayerId && !p.config.crumbles) {deps.lazyEffects().spawnBulletMark(pos);}
     return;
   }
   deps.world.explosions.push(new Explosion(deps.lazyScene(), pos, p.directHit, p.age, deps.lazyTerrain(), p.explosionRadius / EXPLOSION_VFX_RADIUS, p.config.damageColor, p.config.vfx));
@@ -223,7 +223,7 @@ export function spawnVisualOnly(c: CombatCtx, p: Projectile): void {
 }
 
 export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
-  const deps = c.deps;
+  const {deps} = c;
   if (p.config.noExplosion) {
     // Bullet impact at the exact sweep intersection point (terrain hits
     // use the bisected hitPoint; ball/player hits use pos).
@@ -232,13 +232,13 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
     // Bullet hole on terrain hits only — enemy/player hits already get
     // damage numbers, bars, and spark feedback; a crumbled shell leaves
     // shards, not a decal.
-    if (!p.hitBall && !p.hitPlayerId && !p.config.crumbles) deps.lazyEffects().spawnBulletMark(hitPos);
+    if (!p.hitBall && !p.hitPlayerId && !p.config.crumbles) {deps.lazyEffects().spawnBulletMark(hitPos);}
     return;
   }
   // One AOE message for all weapons — the shared weapon table carries
   // weaponType, server resolves stats from it (no per-weapon message types)
   const networkManager = deps.lazyNetworkManager();
-  const weaponType = p.config.weaponType;
+  const {weaponType} = p.config;
   // Canonical launchers bloom on a direct hit — the blast reach AND its
   // VFX dome grow together so the visual never lies about the damage area
   const bloom = p.directHit ? directHitAoeBonus(weaponType) : 1;
@@ -256,7 +256,7 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
   // claim alone isn't enough: the blast's predicted damage on remote
   // players (numbers, bars, knockback) would be ghost feedback for a
   // blast the authority never applies.
-  const claimLegal = !claimable ? undefined : aoeVerdict(c, p, blastPos, airtime).ok;
+  const claimLegal = claimable ? aoeVerdict(c, p, blastPos, airtime).ok : undefined;
   if (claimable && claimLegal === false) {
     deps.logger.info(`[Shot] aoe claim suppressed pre-flight: ${p.config.displayName} air=${airtime.toFixed(2)}s`);
   }
@@ -300,7 +300,7 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
 // comes from the server's WeaponStats.cluster scatter on the carrier's
 // validated blast; client-side pops never claim (untracked projectile).
 export function spawnClusterBomblets(c: CombatCtx, p: Projectile): void {
-  const deps = c.deps;
+  const {deps} = c;
   const { count, spread, fuse, sphere } = p.config.cluster!;
   const at = p.hitPointValid ? p.hitPoint : p.pos;
   // The scatter cone rides the carrier: axis = the carrier's heading
@@ -309,8 +309,8 @@ export function spawnClusterBomblets(c: CombatCtx, p: Projectile): void {
   // popping a static fountain that ignores where it was going.
   // sphere mode (MRV) instead: full carrier velocity + a uniform random
   // direction, so the cloud keeps the arc's momentum and rains out.
-  if (p.vel.lengthSq() > 1) _coneAxis.copy(p.vel).normalize();
-  else _coneAxis.set(0, 1, 0);
+  if (p.vel.lengthSq() > 1) {_coneAxis.copy(p.vel).normalize();}
+  else {_coneAxis.set(0, 1, 0);}
   _coneQuat.setFromUnitVectors(_coneUp, _coneAxis);
   for (let i = 0; i < count; i++) {
     const yaw = Math.random() * Math.PI * 2;
@@ -346,10 +346,10 @@ export function spawnClusterBomblets(c: CombatCtx, p: Projectile): void {
 
 // Demo recording + cool-shot logging for any hit (terrain, ball, or player)
 export function recordProjectileHit(c: CombatCtx, p: Projectile): void {
-  const deps = c.deps;
+  const {deps} = c;
   const demoManager = deps.lazyDemoManager();
   if (demoManager?.isRecording && p.demoProjectileId) {
-    const targetId = p.hitBall ? p.hitBall.id : (p.hitPlayerId ? 0xFFFF : 0);
+    const targetId = p.hitBall ? p.hitBall.id : (p.hitPlayerId ? 0xFF_FF : 0);
     // Lane tag for the id: ball variant for ball hits so playback looks the
     // victim up in the right map; HIT_TARGET_NONE otherwise (terrain, and
     // today's anonymous 0xFFFF player hit).
@@ -371,14 +371,14 @@ export function recordProjectileHit(c: CombatCtx, p: Projectile): void {
 // hit marker, not a stat sheet. `airborne` = target's feet >0.6m over
 // terrain at the moment of the hit (same threshold the anim code uses).
 export function logHitScore(c: CombatCtx, p: Projectile, target: 'ball' | 'player', airborne: boolean, targetId?: string): void {
-  const deps = c.deps;
+  const {deps} = c;
   const acc = computeAccuracy(p.hitAccuracy, p.directHit);
   const dist = p.hitDistance;
   const air = p.hitAge;
   const score = Math.round(acc * dist * air);
   deps.lazyPlayer().score += score;
   deps.logger.info(`[Hit] ${target}${targetId ? ` ${targetId}` : ''} direct=${p.directHit} air=${airborne} accRaw=${p.hitAccuracy.toFixed(2)} acc=${acc.toFixed(1)} dist=${dist.toFixed(1)} air=${air.toFixed(2)}s score=${score}`);
-  if (airborne) deps.fragMessages.showScore(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`, air);
+  if (airborne) {deps.fragMessages.showScore(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`, air);}
   deps.lazyHud().showHitMarker();
   sfx.hitMarker(p.directHit);
 }
@@ -387,14 +387,14 @@ export function logHitScore(c: CombatCtx, p: Projectile, target: 'ball' | 'playe
 // nuggets, kill credit, elite split. Without this a blast kill would
 // silently delete the entity with no payout.
 export function onTargetDestroyed(c: CombatCtx, ball: import('../../entities/balls.js').Targetable, impulse?: THREE.Vector3, weaponType?: number, shooterId?: string): void {
-  const deps = c.deps;
+  const {deps} = c;
   // Railgun reward: any kill (direct or its splash) instantly reloads —
   // the "not useless" payoff that turns a slow precision weapon into a
   // chain-kill tool against clusters. Only when the kill is MINE —
   // a bot's railgun shouldn't refund my trigger.
   const mine = !shooterId || shooterId === 'local';
-  if (mine && weaponType === WeaponType.Railgun) deps.lazyPlayer().refundWeaponCooldown();
-  if (impulse) _debrisDir.copy(impulse).normalize(); else _debrisDir.set(0, 0.5, 0);
+  if (mine && weaponType === WeaponType.Railgun) {deps.lazyPlayer().refundWeaponCooldown();}
+  if (impulse) {_debrisDir.copy(impulse).normalize();} else {_debrisDir.set(0, 0.5, 0);}
   ichorDeath(c, ball, _debrisDir);
   corpseBurst(c, ball, _debrisDir);
   screenShake.blast(ball.pos, 1.6, deps.lazyPlayer().pos);
@@ -402,7 +402,7 @@ export function onTargetDestroyed(c: CombatCtx, ball: import('../../entities/bal
   // kills++ is personal credit — bot-authored kills still reach the
   // referee via onCreatureKilled(shooterId), just not my counter.
   if (!ball.scoreless) {
-    if (mine) deps.lazyPlayer().kills++;
+    if (mine) {deps.lazyPlayer().kills++;}
     deps.onCreatureKilled?.(shooterId);
   }
   // Connected, the server's RoomPickups drop is the backed loot — a
@@ -431,7 +431,7 @@ export function onTargetDestroyed(c: CombatCtx, ball: import('../../entities/bal
 /** A non-beam direct hit invests its damage into the victim's banked pop
  *  charge — the rest of the charge stays smoldering, not wasted. */
 export function detonateCharge(p: Projectile, ball: import('../../entities/balls.js').Targetable, dmg: number): void {
-  if (p.config.weaponType !== WeaponType.Lightning) lgDischarge(ball.id, dmg, ball.pos);
+  if (p.config.weaponType !== WeaponType.Lightning) {lgDischarge(ball.id, dmg, ball.pos);}
 }
 
 /** Wind the chaingun's bank on a hit: at the cap the shot dumps a
@@ -450,15 +450,15 @@ export function chaingunBank(c: CombatCtx, p: Projectile, ball: import('../../en
   }
   // Cheap sweep: drop entries past the chain window when the map grows
   if (c.chainRamp.size > 32) {
-    for (const [id, s] of c.chainRamp) if (now - s.t > CHAIN_WINDOW) c.chainRamp.delete(id);
+    for (const [id, s] of c.chainRamp) {if (now - s.t > CHAIN_WINDOW) {c.chainRamp.delete(id);}}
   }
 }
 
 export function handleBallHit(c: CombatCtx, p: Projectile, ball: import('../../entities/balls.js').Targetable): void {
-  const deps = c.deps;
+  const {deps} = c;
   // Airtime ramp is body-contact only — wake hits pay flat directDamage.
   const dmg = scaledDirectDamage(p.config.weaponType, p.directHit ? p.hitAge : undefined) * deps.lazyPlayer().mods.directDamage;
-  if (p.config.weaponType === WeaponType.Chaingun) chaingunBank(c, p, ball);
+  if (p.config.weaponType === WeaponType.Chaingun) {chaingunBank(c, p, ball);}
   deps.reportTargetDamage?.(ball, dmg);
   // Shell contact is server-paid — the authority's creatureSweep pays
   // this hit already; a claim would double it (feedback still local).
@@ -467,13 +467,13 @@ export function handleBallHit(c: CombatCtx, p: Projectile, ball: import('../../e
   // Numbers + crosshair marker are MY-hit feedback — bot shells carry
   // shooterId and shouldn't fire them (damage itself still applies).
   const mine = !p.shooterId;
-  if (mine) deps.lazyDamageNumbers().spawn(ball.pos, Math.round(dmg), p.config.damageColor, deps.lazyCamera());
+  if (mine) {deps.lazyDamageNumbers().spawn(ball.pos, Math.round(dmg), p.config.damageColor, deps.lazyCamera());}
   if (!destroyed && !ball.hideHealthBar) {
     deps.lazyHealthBarSystem().spawnBall(ball, dmg, ball.health);
   }
   const airborne = ball.pos.y - ball.radius - deps.lazyTerrain().getHeight(ball.pos.x, ball.pos.z) > 0.6;
-  if (mine) logHitScore(c, p, 'ball', airborne, `ball#${ball.id}`);
-  if (destroyed) onTargetDestroyed(c, ball, p.vel, p.config.weaponType, p.shooterId ?? undefined);
+  if (mine) {logHitScore(c, p, 'ball', airborne, `ball#${ball.id}`);}
+  if (destroyed) {onTargetDestroyed(c, ball, p.vel, p.config.weaponType, p.shooterId ?? undefined);}
   else if (ball.ichor !== undefined) {
     // Non-lethal hit: a thin spray along the shot direction — the stains
     // come free wherever the droplets land (ichorSpray paints them).
@@ -488,7 +488,7 @@ export function handleBallHit(c: CombatCtx, p: Projectile, ball: import('../../e
 }
 
 export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): void {
-  const deps = c.deps;
+  const {deps} = c;
   const targetPlayer = deps.world.remotePlayers.get(playerId);
   const hitPos = targetPlayer ? targetPlayer.position : deps.lazyPlayer().pos;
   const directDamage = scaledDirectDamage(p.config.weaponType, p.directHit ? p.hitAge : undefined) * deps.lazyPlayer().mods.directDamage;
@@ -511,9 +511,9 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
       return;
     }
   }
-  if (mine) deps.lazyDamageNumbers().spawn(hitPos, directDamage, p.config.damageColor, deps.lazyCamera());
-  if (deps.botHit?.(playerId, directDamage, p.pos, p.shooterId ?? undefined, p.config.weaponType, p.hitAge)) return; // bot authority: real damage, no claim
-  if (!mine) return;
+  if (mine) {deps.lazyDamageNumbers().spawn(hitPos, directDamage, p.config.damageColor, deps.lazyCamera());}
+  if (deps.botHit?.(playerId, directDamage, p.pos, p.shooterId ?? undefined, p.config.weaponType, p.hitAge)) {return;} // bot authority: real damage, no claim
+  if (!mine) {return;}
   deps.lazyHealthBarSystem().predictDamage(playerId, directDamage);
   // Authority rooms give this hit no claim — stamp it so a server whiff
   // (no playerHit echo within ~RTT) counts as a ghost hit in the dump.
@@ -526,7 +526,7 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
     : false;
   logHitScore(c, p, 'player', airborne, playerId);
 
-  if (playerId === 'local') return;
+  if (playerId === 'local') {return;}
   // A predicted server-simmed shell still unbound past the bind grace is
   // a ghost — the authority knows nothing about it and will never pay the
   // damage. Under the grace it's a benign race: close-range hits land
@@ -545,7 +545,7 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
  *  attackerId set ⇒ not mine: apply damage but skip the floating number
  *  (personal feedback is for damage I dealt). */
 export function hitTargetLocal(c: CombatCtx, t: import('../../entities/balls.js').Targetable, dmg: number, attackerId?: string): boolean {
-  const deps = c.deps;
+  const {deps} = c;
   deps.reportTargetDamage?.(t, dmg);
   if (!attackerId || attackerId === 'local') {
     deps.lazyDamageNumbers().spawn(t.pos, Math.round(dmg), '#ffe08a', deps.lazyCamera());
@@ -553,6 +553,6 @@ export function hitTargetLocal(c: CombatCtx, t: import('../../entities/balls.js'
   // Server-owned damage (bot swings, deployable attacks): the authority
   // settles the same hit — claiming would double-dip.
   if (t.takeDamage(dmg, { serverPaid: true })) { onTargetDestroyed(c, t, t.vel, undefined, attackerId); return true; }
-  if (!t.hideHealthBar) deps.lazyHealthBarSystem().spawnBall(t, dmg, t.health);
+  if (!t.hideHealthBar) {deps.lazyHealthBarSystem().spawnBall(t, dmg, t.health);}
   return false;
 }

@@ -85,7 +85,7 @@ export class DeployAdopter {
     m.onDetonate = (mine) => {
       this.deps.world.explosions.push(new Explosion(
         this.deps.scene, mine.pos, false, 0, this.deps.lazyTerrain(),
-        mine.blastRadius / EXPLOSION_VFX_RADIUS, 0xFFAA44));
+        mine.blastRadius / EXPLOSION_VFX_RADIUS, 0xFF_AA_44));
       sfx.explosionAt(mine.pos, true);
       screenShake.blast(mine.pos, 2.5, player.pos);
       // Friendly mine — creatures + enemy bots take the blast, not you.

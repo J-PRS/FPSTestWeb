@@ -27,18 +27,18 @@ export function tickDrone(r: RoomDeployables, d: Deployed, dt: number): void {
     d.pos.y = owner.position.y + DRONE_HOVER_UP;
     d.pos.z = owner.position.z;
     d.fireCd -= dt;
-    if (d.fireCd > 0) return;
+    if (d.fireCd > 0) {return;}
     const dTeam = r.teamOf(d);
     let target: string | null = null;
     let bestD2 = DRONE_RANGE * DRONE_RANGE;
     for (const [pid, p] of r.room.players.getAllPlayers()) {
-      if (p.isDead || pid === d.owner) continue;
-      if (dTeam && p.team === dTeam) continue;
-      if (p.protectedUntil > simNow()) continue;
+      if (p.isDead || pid === d.owner) {continue;}
+      if (dTeam && p.team === dTeam) {continue;}
+      if (p.protectedUntil > simNow()) {continue;}
       const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
       const d2 = dx * dx + dy * dy + dz * dz;
-      if (d2 >= bestD2) continue;
-      if (!losClear(r, d.pos, p.position, dTeam)) continue;
+      if (d2 >= bestD2) {continue;}
+      if (!losClear(r, d.pos, p.position, dTeam)) {continue;}
       bestD2 = d2; target = pid;
     }
     if (!target) { d.fireCd = 0.15; return; }
@@ -53,14 +53,14 @@ export function tickDrone(r: RoomDeployables, d: Deployed, dt: number): void {
    *  off the mineBoom broadcast. */
 export function tickMine(r: RoomDeployables, d: Deployed, _dt: number): void {
     d.fireCd -= _dt; // doubles as the arm timer
-    if (d.fireCd > 0) return;
+    if (d.fireCd > 0) {return;}
     const dTeam = r.teamOf(d);
     for (const [pid, p] of r.room.players.getAllPlayers()) {
-      if (p.isDead || pid === d.owner) continue;
-      if (dTeam && p.team === dTeam) continue;
+      if (p.isDead || pid === d.owner) {continue;}
+      if (dTeam && p.team === dTeam) {continue;}
       // Spawn grace exempts like the sentry scan — a fresh spawn standing
       // on a fuse shouldn't eat it before control hands over.
-      if (p.protectedUntil > simNow()) continue;
+      if (p.protectedUntil > simNow()) {continue;}
       const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
       if (dx * dx + dy * dy + dz * dz < MINE_TRIGGER_DIST * MINE_TRIGGER_DIST) {
         r.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'mineBoom', 'id', d.id, { owner: d.owner, pos: { ...d.pos } }) as ServerMessage);
@@ -76,15 +76,15 @@ export function tickMine(r: RoomDeployables, d: Deployed, _dt: number): void {
    *  top-off) — health is the server-owned half of the pad's job. */
 export function tickStation(r: RoomDeployables, d: Deployed, dt: number): void {
     d.fireCd -= dt;
-    if (d.fireCd > 0) return;
+    if (d.fireCd > 0) {return;}
     d.fireCd = STATION_HEAL_CD;
     const dTeam = r.teamOf(d);
     for (const [pid, p] of r.room.players.getAllPlayers()) {
-      if (p.isDead) continue;
-      if (dTeam && p.team !== dTeam) continue;
+      if (p.isDead) {continue;}
+      if (dTeam && p.team !== dTeam) {continue;}
       const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
-      if (dx * dx + dy * dy + dz * dz > STATION_RANGE * STATION_RANGE) continue;
-      if (p.health >= p.maxHealth) continue;
+      if (dx * dx + dy * dy + dz * dz > STATION_RANGE * STATION_RANGE) {continue;}
+      if (p.health >= p.maxHealth) {continue;}
       healPool(p, p.maxHealth * STATION_HP_RATE * STATION_HEAL_CD);
       p.forceSendUntil = wallMs(wallNow() + FORCE_SEND_MS);
       void pid;
@@ -95,10 +95,10 @@ export function tickStation(r: RoomDeployables, d: Deployed, dt: number): void {
    *  players outside through the wall. Target at chest height. */
 export function losClear(r: RoomDeployables, from: Vec3, to: Vec3, team?: string): boolean {
     const cols = r.room.ballSim.colliders;
-    if (!cols.length) return true;
+    if (cols.length === 0) {return true;}
     return !segSolidHit(
       { x: from.x, y: from.y + 0.5, z: from.z },
-      { x: to.x, y: to.y + 1.0, z: to.z },
+      { x: to.x, y: to.y + 1, z: to.z },
       cols, r.room.ballSim.colliderIndex ?? undefined, team,
     );
   }
@@ -109,18 +109,18 @@ export function losClear(r: RoomDeployables, from: Vec3, to: Vec3, team?: string
    *  visual layer shows the matching rocket via the turretShot broadcast. */
 export function tickTurret(r: RoomDeployables, d: Deployed, dt: number): void {
     d.fireCd -= dt;
-    if (d.fireCd > 0) return;
+    if (d.fireCd > 0) {return;}
     const dTeam = r.teamOf(d);
     let target: string | null = null;
     let bestD2 = TURRET_RANGE * TURRET_RANGE;
     for (const [pid, p] of r.room.players.getAllPlayers()) {
-      if (p.isDead || pid === d.owner) continue;
-      if (dTeam && p.team === dTeam) continue;
-      if (p.protectedUntil > simNow()) continue;
+      if (p.isDead || pid === d.owner) {continue;}
+      if (dTeam && p.team === dTeam) {continue;}
+      if (p.protectedUntil > simNow()) {continue;}
       const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
       const d2 = dx * dx + dy * dy + dz * dz;
-      if (d2 >= bestD2) continue;
-      if (!losClear(r, d.pos, p.position, dTeam)) continue;
+      if (d2 >= bestD2) {continue;}
+      if (!losClear(r, d.pos, p.position, dTeam)) {continue;}
       bestD2 = d2; target = pid;
     }
     if (!target) { d.fireCd = Math.min(d.fireCd + 0.15, 0.15); return; } // idle scan: cheap re-check
@@ -143,20 +143,20 @@ const SENTRY_KNOCKBACK = DEPLOY_ITEMS.baseturret.knockback!;
  *  same straight-line flight. */
 export function tickSentry(r: RoomDeployables, d: Deployed, dt: number): void {
     d.fireCd -= dt;
-    if (d.fireCd > 0) return;
+    if (d.fireCd > 0) {return;}
     const dTeam = r.teamOf(d);
     let target: string | null = null;
     let tp: { x: number; y: number; z: number } | null = null;
     let tv = { x: 0, y: 0, z: 0 };
     let bestD2 = SENTRY_RANGE * SENTRY_RANGE;
     for (const [pid, p] of r.room.players.getAllPlayers()) {
-      if (p.isDead || pid === d.owner) continue;
-      if (dTeam && p.team === dTeam) continue;
-      if (p.protectedUntil > simNow()) continue;
+      if (p.isDead || pid === d.owner) {continue;}
+      if (dTeam && p.team === dTeam) {continue;}
+      if (p.protectedUntil > simNow()) {continue;}
       const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
       const d2 = dx * dx + dy * dy + dz * dz;
-      if (d2 >= bestD2) continue;
-      if (!losClear(r, d.pos, p.position, dTeam)) continue;
+      if (d2 >= bestD2) {continue;}
+      if (!losClear(r, d.pos, p.position, dTeam)) {continue;}
       bestD2 = d2; target = pid; tp = p.position;
       tv = { x: p.velocity?.x ?? 0, y: p.velocity?.y ?? 0, z: p.velocity?.z ?? 0 };
     }
@@ -168,7 +168,7 @@ export function tickSentry(r: RoomDeployables, d: Deployed, dt: number): void {
     // on, a skier crossing at 40 m/s watches it land behind them.
     const aim = {
       x: tp.x + tv.x * flight,
-      y: tp.y + 1.0 + tv.y * flight * 0.5, // partial vertical lead — bolts drop nothing anyway
+      y: tp.y + 1 + tv.y * flight * 0.5, // partial vertical lead — bolts drop nothing anyway
       z: tp.z + tv.z * flight,
     };
     r.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'sentryShot', 'id', d.id, { owner: d.owner, x: aim.x, y: aim.y, z: aim.z }) as ServerMessage);
@@ -184,17 +184,17 @@ const SENSOR_SCAN_S = DEPLOY_ITEMS.sensor.fireInterval!;
  *  the point of a raid prep phase. */
 export function tickSensor(r: RoomDeployables, d: Deployed, dt: number): void {
     d.fireCd -= dt;
-    if (d.fireCd > 0) return;
+    if (d.fireCd > 0) {return;}
     d.fireCd = SENSOR_SCAN_S;
     const dTeam = r.teamOf(d);
     const targets: { id: string; x: number; y: number; z: number }[] = [];
     for (const [pid, p] of r.room.players.getAllPlayers()) {
-      if (p.isDead) continue;
-      if (dTeam && p.team === dTeam) continue;
+      if (p.isDead) {continue;}
+      if (dTeam && p.team === dTeam) {continue;}
       const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
-      if (dx * dx + dy * dy + dz * dz > SENSOR_RANGE * SENSOR_RANGE) continue;
+      if (dx * dx + dy * dy + dz * dz > SENSOR_RANGE * SENSOR_RANGE) {continue;}
       targets.push({ id: pid, x: p.position.x, y: p.position.y, z: p.position.z });
     }
-    if (!targets.length) return;
+    if (targets.length === 0) {return;}
     r.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'sensorPing', 'id', d.id, { team: dTeam, targets }) as ServerMessage);
 }

@@ -8,7 +8,7 @@ const MAX_REWIND_MS = 250;
 export function clampPing(ping: number): number {
   // NaN ping: Math.max(NaN,0)=NaN — rewindPos then walks history with a
   // NaN target and validates against a garbage sample. No ping = 0.
-  if (!Number.isFinite(ping)) return 0;
+  if (!Number.isFinite(ping)) {return 0;}
   return Math.min(Math.max(ping, 0), MAX_REWIND_MS);
 }
 
@@ -27,11 +27,11 @@ export function rewindPos(target: PlayerState, backMs: number): { x: number; y: 
   const h = target.history;
   // NaN backMs: every t-comparison below is false — the walk returns a
   // garbage sample instead of the present. Present is the safe answer.
-  if (h.length === 0 || !Number.isFinite(backMs)) return target.position;
+  if (h.length === 0 || !Number.isFinite(backMs)) {return target.position;}
   const tAt = wallNow() - backMs;
-  if (tAt <= h[0]!.t) return h[0]!;
+  if (tAt <= h[0]!.t) {return h[0]!;}
   const last = h[h.length - 1]!;
-  if (tAt >= last.t) return target.position;
+  if (tAt >= last.t) {return target.position;}
   for (let i = h.length - 1; i > 0; i--) {
     if (h[i - 1]!.t <= tAt) {
       const a = h[i - 1]!, b = h[i]!;
@@ -52,12 +52,12 @@ export function rewindNearest(target: PlayerState, backMs: number, extraMs: numb
   let best = rewindPos(target, backMs);
   let bestD = dist3(best, pt);
   for (const s of target.history) {
-    if (s.t < floor) continue;
+    if (s.t < floor) {continue;}
     const d = dist3(s, pt);
     if (d < bestD) { bestD = d; best = s; }
   }
   const d = dist3(target.position, pt);
-  if (d < bestD) best = target.position;
+  if (d < bestD) {best = target.position;}
   return best;
 }
 

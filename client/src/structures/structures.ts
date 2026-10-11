@@ -29,19 +29,19 @@ export function mkFlagStand(teamGlow: number): THREE.Group {
   const plinth = mkLoft([
     { z: 0.8, ring: profOct(2.1, 2.1, 0.35) },
     { z: 0, ring: profOct(2.4, 2.4, 0.4) },
-    { z: -0.4, ring: profOct(2.0, 2.0, 0.3) },
+    { z: -0.4, ring: profOct(2, 2, 0.3) },
   ], deckMat);
   plinth.rotation.x = -Math.PI / 2;
   g.add(plinth);
   // Team-lit ring around the socket mouth — the "flag lives here" read.
-  const ring = mkAnnulus(profOct(1.0, 1.0, 0.15), profOct(0.55, 0.55, 0.1), 0.12, 0.4, glow);
+  const ring = mkAnnulus(profOct(1, 1, 0.15), profOct(0.55, 0.55, 0.1), 0.12, 0.4, glow);
   ring.rotation.x = -Math.PI / 2;
   ring.position.y = 0.8;
   g.add(ring);
   // Socket well — the dark throat the pommel seats into.
   const well = new THREE.Mesh(
     new THREE.CylinderGeometry(0.5, 0.4, 0.3, 8),
-    new THREE.MeshBasicMaterial({ color: 0x101418 }));
+    new THREE.MeshBasicMaterial({ color: 0x10_14_18 }));
   well.position.y = 0.82;
   g.add(well);
   // No hulls — the socket is a prop, not a platform. Knee-high plinths
@@ -252,7 +252,7 @@ export function mkGenHouse(w = 16, d = 14, h = 7, teamGlow = 0x59_F2_FF, door = 
   // Interior deck — a real slab, top at y=1: the generator plinth rides
   // on it and raiders never touch terrain inside the vault.
   const floor = mkLoft(topDown(
-    { z: 1.0, ring: profOct(w - 1.2, d - 1.2, 0.3) },
+    { z: 1, ring: profOct(w - 1.2, d - 1.2, 0.3) },
     { z: 0,   ring: profOct(w - 0.6, d - 0.6, 0.35) },
   ), deckMat);
   floor.rotation.x = -Math.PI / 2;
@@ -262,7 +262,7 @@ export function mkGenHouse(w = 16, d = 14, h = 7, teamGlow = 0x59_F2_FF, door = 
   const roof = mkLoft(topDown(
     { z: 1.2, ring: profOct(w - 0.6, d - 0.6, 0.5) },
     { z: 0.5, ring: profOct(w + 0.5, d + 0.5, 0.6) },
-    { z: 0,   ring: profOct(w + 1.0, d + 1.0, 0.65) },
+    { z: 0,   ring: profOct(w + 1, d + 1, 0.65) },
   ), hullMat);
   roof.rotation.x = -Math.PI / 2;
   roof.position.y = h;
@@ -271,7 +271,7 @@ export function mkGenHouse(w = 16, d = 14, h = 7, teamGlow = 0x59_F2_FF, door = 
   // read from the field: lit = grid live.
   const vent = mkLoft(topDown(
     { z: 1.6, ring: profOct(4.4, 3.2, 0.4) },
-    { z: 0,   ring: profOct(5.0, 3.8, 0.5) },
+    { z: 0,   ring: profOct(5, 3.8, 0.5) },
   ), trimMat);
   vent.rotation.x = -Math.PI / 2;
   vent.position.y = h + 1.2;
@@ -290,8 +290,8 @@ export function mkGenHouse(w = 16, d = 14, h = 7, teamGlow = 0x59_F2_FF, door = 
   strip.position.set(0, h - 0.6, -d / 2 + 0.55);
   g.add(strip);
   (g.userData.hulls as HullBox[]).push(
-    { pos: { x: 0, y: -10.5, z: 0 }, size: { x: w - 1.2, y: 23.0, z: d - 1.2 } }, // deck + foundation fill (−22…1)
-    { pos: { x: 0, y: h + 0.5, z: 0 }, size: { x: w, y: 1.0, z: d } },          // roof
+    { pos: { x: 0, y: -10.5, z: 0 }, size: { x: w - 1.2, y: 23, z: d - 1.2 } }, // deck + foundation fill (−22…1)
+    { pos: { x: 0, y: h + 0.5, z: 0 }, size: { x: w, y: 1, z: d } },          // roof
     { pos: { x: 0, y: h + 2.8 + 3.2, z: 0 }, size: { x: 2.2, y: 6.4, z: 2.2 } }, // roof mast on the vent
     { pos: { x: 0, y: h + 1.2 + 0.8, z: 0 }, size: { x: 4.4, y: 1.6, z: 3.2 } },   // vent stack
   );
@@ -504,7 +504,7 @@ export function mkArch(span = 9, h = 7, w = 2.6): THREE.Group {
     [endPost(h, w),  span / 2, 0],
   ]);
   const beam = mkLoft(topDown(
-    { z: 1.1, ring: profOct(span + w, 1.0, 0.25) },
+    { z: 1.1, ring: profOct(span + w, 1, 0.25) },
     { z: 0,   ring: profOct(span + w, 1.4, 0.3) },
   ), hullMat);
   beam.rotation.x = -Math.PI / 2;

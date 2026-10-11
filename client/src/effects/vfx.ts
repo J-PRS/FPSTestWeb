@@ -14,11 +14,11 @@ import {
   GravityForce, ColorOverLife, Gradient, SizeOverLife,
   RandomColorBetweenGradient, RotationOverLife,
   // quarks.core math types are NOT three's — keep them separate.
-  Vector3 as QV3, Vector4 as QV4,
+  Vector3 as QV3, Vector4 as QV4,CircleEmitter
 } from 'three.quarks';
 import type { FunctionValueGenerator, GeneratorMemory, FunctionJSON } from 'three.quarks';
 import { registerDiag } from '../core/fxDiag.js';
-import { CircleEmitter } from 'three.quarks';
+
 import {
   vfxPressure, vfxReady, vfxBatcher,
   live, pools, takeSystem, activateSystem, attachSystem, returnSystem, resyncEmission,
@@ -60,14 +60,14 @@ function normalMat(): THREE.MeshBasicMaterial {
  *  meshes — one batched burst, ~0 allocation, one draw call shared with
  *  every other burst in flight. */
 export function impactBurst(pos: THREE.Vector3, vel: THREE.Vector3): void {
-  if (!vfxReady()) return;
+  if (!vfxReady()) {return;}
   const ps = takeSystem('impact', () => new ParticleSystem({
     duration: 0.35,
     looping: false,
     startLife: new IntervalValue(0.12, 0.27),
     startSpeed: new IntervalValue(4, 12),
     startSize: new IntervalValue(0.08, 0.2),
-    startColor: new ConstantColor(new QV4(1.0, 0.9, 0.45, 0.9)),
+    startColor: new ConstantColor(new QV4(1, 0.9, 0.45, 0.9)),
     emissionOverTime: new ConstantValue(0),
     emissionBursts: [{ time: 0, count: new ConstantValue(8), cycle: 0, interval: 0.01, probability: 1 }],
     shape: new ConeEmitter({ radius: 0.02, angle: 0.7 }),
@@ -86,7 +86,7 @@ export function impactBurst(pos: THREE.Vector3, vel: THREE.Vector3): void {
   if (vel.lengthSq() > 0) {
     _back.copy(vel).normalize().negate();
     _aimQ.setFromUnitVectors(_forward, _back);
-  } else _aimQ.identity();
+  } else {_aimQ.identity();}
   activateSystem(ps, pos, _aimQ);
   live.add(ps);
 
@@ -101,7 +101,7 @@ export function impactBurst(pos: THREE.Vector3, vel: THREE.Vector3): void {
       startLife: new IntervalValue(0.1, 0.2),
       startSpeed: new IntervalValue(18, 45),
       startSize: new IntervalValue(0.05, 0.09),
-      startColor: new ConstantColor(new QV4(1.0, 0.85, 0.4, 0.9)),
+      startColor: new ConstantColor(new QV4(1, 0.85, 0.4, 0.9)),
       emissionOverTime: new ConstantValue(0),
       emissionBursts: [{ time: 0, count: new ConstantValue(5), cycle: 0, interval: 0.01, probability: 1 }],
       shape: new ConeEmitter({ radius: 0.02, angle: 0.5 }),
@@ -166,7 +166,7 @@ const liveQuarks = new Set<QuarksTrail>();
 
 export function trailDump(): Record<string, unknown>[] {
   const out: Record<string, unknown>[] = [];
-  for (const t of liveQuarks) out.push(t.diag());
+  for (const t of liveQuarks) {out.push(t.diag());}
   return out;
 }
 
@@ -185,11 +185,11 @@ export class QuarksTrail {
   private _sx = Number.NaN; private _sy = 0; private _sz = 0;
 
   constructor(private host: QuarksTrailHost) {
-    const config = host.config;
+    const {config} = host;
     if (!vfxReady()) { trailStats.noBatcher++; return; }
     if (config.trailParticlesPerUnit <= 0) { trailStats.noRate++; return; }
     this.key = trailKey(config);
-    if ((pools.get(this.key)?.length ?? 0) > 0) trailStats.reused++; else trailStats.built++;
+    if ((pools.get(this.key)?.length ?? 0) > 0) {trailStats.reused++;} else {trailStats.built++;}
     this.ps = takeSystem(this.key, () => {
       // Gradient + alpha fade built from the config's arbitrary-length
       // trailColors — same lerp the per-particle loop used to do by hand.
@@ -241,24 +241,24 @@ export class QuarksTrail {
     liveQuarks.add(this);
     // A system reaped out from under a previous owner comes back dead —
     // the batcher no longer knows it, so attach+restart renders nothing.
-    if (!vfxBatcher()!.systemToBatchIndex.has(this.ps)) trailStats.poolZombies++;
+    if (!vfxBatcher()!.systemToBatchIndex.has(this.ps)) {trailStats.poolZombies++;}
   }
 
   diag(): Record<string, unknown> {
-    const ps = this.ps;
+    const {ps} = this;
     const { pos, vel, config } = this.host;
     return {
       n: config.name,
-      age: +this.host.age().toFixed(2),
+      age: Number(this.host.age().toFixed(2)),
       pos: `${pos.x.toFixed(1)},${pos.y.toFixed(1)},${pos.z.toFixed(1)}`,
-      spd: +vel.length().toFixed(1),
+      spd: Number(vel.length().toFixed(1)),
       ppu: config.trailParticlesPerUnit,
-      hasPs: !!ps,
+      hasPs: Boolean(ps),
       segs: this.segCount,
       particles: ps?.particleNum ?? -1,
-      attached: ps ? !!vfxBatcher()?.systemToBatchIndex.has(ps) : false,
+      attached: ps ? Boolean(vfxBatcher()?.systemToBatchIndex.has(ps)) : false,
       paused: ps?.paused ?? false,
-      waiting: +((ps?.emissionState as { waitEmiting?: number } | undefined)?.waitEmiting ?? 0).toFixed(2),
+      waiting: Number(((ps?.emissionState as { waitEmiting?: number } | undefined)?.waitEmiting ?? 0).toFixed(2)),
       // Silent-emission discriminators: emitEnded pauses emit() forever,
       // looping gates the time-wrap, travelDistance/prevWorldPos say whether
       // emit-over-distance ever deposits, emVis/emRoot catch an emitter
@@ -266,15 +266,15 @@ export class QuarksTrail {
       // from the scene root (update() self-disposes on !Scene).
       ended: (ps as unknown as { emitEnded?: boolean } | undefined)?.emitEnded ?? null,
       loop: ps?.looping ?? null,
-      emT: ps ? +ps.time.toFixed(2) : null,
-      travel: +((ps?.emissionState as { travelDistance?: number } | undefined)?.travelDistance ?? -1).toFixed(2),
+      emT: ps ? Number(ps.time.toFixed(2)) : null,
+      travel: Number(((ps?.emissionState as { travelDistance?: number } | undefined)?.travelDistance ?? -1).toFixed(2)),
       emVis: ps?.emitter.visible ?? null,
       emRoot: ps ? (() => {
         let o: THREE.Object3D = ps.emitter;
-        while (o.parent) o = o.parent;
+        while (o.parent) {o = o.parent;}
         return o.type;
       })() : null,
-      emScale: ps ? +ps.emitter.scale.x.toFixed(3) : null,
+      emScale: ps ? Number(ps.emitter.scale.x.toFixed(3)) : null,
       // Double-checkout detector: a trail ps that also sits in a pool means
       // two owners share one system — emit bookkeeping is then torn between
       // them (the classic "sometimes no trail" split-brain).
@@ -298,7 +298,7 @@ export class QuarksTrail {
    *  — resync the emitter or the next emit() reads the jump as traveled
    *  distance and dumps a straight line of particles across the gap. */
   teleport(): void {
-    if (!this.ps) return;
+    if (!this.ps) {return;}
     this.ps.emitter.position.copy(this.host.pos);
     this._sx = Number.NaN; // re-arm measured travel at the new anchor
     resyncEmission(this.ps, this.ps.emitter);
@@ -306,7 +306,7 @@ export class QuarksTrail {
 
   // Move + aim the emitter; quarks emits floor(dist*ppu) particles itself.
   emitSegment(dt = 0): void {
-    if (!this.ps) return;
+    if (!this.ps) {return;}
     // Starve-reaped while parked (owner stalled >4s without disposing):
     // re-attach so this emit actually lands — an orphan's detach is
     // self-healing here, not a permanent "no trail" state.
@@ -395,8 +395,8 @@ export class QuarksTrail {
   update(_dt: number): void { /* batcher.update drives everything */ }
 
   dispose(): void {
-    if (!this.ps) return;
-    const ps = this.ps;
+    if (!this.ps) {return;}
+    const {ps} = this;
     this.ps = null;
     activeTrailPs.delete(ps);
     liveQuarks.delete(this);
@@ -468,12 +468,12 @@ const puffOf = new WeakMap<ParticleSystem, PuffEmitter>();
  *  overwrote spawn opacity), size ran (0.3+t·1.4)·sizeScale shrinking
  *  over life, gravity applied unless noGravity. */
 export function fxPuff(pos: THREE.Vector3, spec: PuffSpec): void {
-  if (!vfxReady() || document.hidden) return; // off-screen bursts only pile up
+  if (!vfxReady() || document.hidden) {return;} // off-screen bursts only pile up
   const pressure = vfxPressure();
   // Ambient emitters fire every frame — under pressure each call still
   // costs a ParticleSystem even at count 1, so skip emissions outright.
   // Squaring keeps low-pressure drops rare: 0.35 → ~12% emit rate.
-  if (Math.random() > pressure * pressure) return;
+  if (Math.random() > pressure * pressure) {return;}
   const ss = spec.sizeScale ?? 1;
   const count = Math.max(1, Math.round(spec.count * pressure));
   // The key covers only what the build bakes into generators/behaviors
@@ -564,13 +564,13 @@ class BlastEmitter {
   constructor(private elvBase: number, private elvSpan: number,
               private planar: boolean, private vy: number,
               private dir?: THREE.Vector3, private spread?: number) {
-    if (dir) this.liveDir.copy(dir);
+    if (dir) {this.liveDir.copy(dir);}
   }
   update(): void { }
   // Pooled systems keep their constructed emitter — the launch dir is the
   // only per-shot value a forward-cone burst needs swapped on reuse.
   private liveDir = new THREE.Vector3();
-  setDir(d?: THREE.Vector3): void { if (d) this.liveDir.copy(d); }
+  setDir(d?: THREE.Vector3): void { if (d) {this.liveDir.copy(d);} }
   initialize(p: BlastParticle): void {
     const ang = Math.random() * Math.PI * 2;
     p.position.set((Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5);
@@ -626,7 +626,7 @@ function burstKey(kind: string, spec: BlastSpec | ImplodeSpec, additive: boolean
     q(s.lifeMin), q(s.lifeMax), q(s.sizeMin), q(s.sizeMax), q(s.gravity),
     qc(s.c1), qc(s.c2), q(s.opacity), q(s.elvBase), q(s.elvSpan), s.planar,
     s.stretched, q(s.stretchLen), q(s.spin), q(s.stagger, 0.1),
-    !!s.dir, q(s.spread), q(s.rMin), q(s.rMax), q(s.swirl)].join(',');
+    Boolean(s.dir), q(s.spread), q(s.rMin), q(s.rMax), q(s.swirl)].join(',');
 }
 
 /** Inward shell emitter for implosions: spawn on a sphere shell at
@@ -682,7 +682,7 @@ export function implodeBurst(pos: THREE.Vector3, spec: ImplodeSpec, additive: bo
 }
 
 function spawnImplodeBurst(pos: THREE.Vector3, spec: ImplodeSpec, additive: boolean): void {
-  if (!vfxReady()) return;
+  if (!vfxReady()) {return;}
   const w = spec.stagger ?? 0;
   const ps = takeSystem(burstKey('implode', spec, additive), () => new ParticleSystem({
     duration: spec.lifeMax + w + 0.05,
@@ -752,7 +752,7 @@ function blastColorGen(spec: BlastSpec) {
 /** Staggered emission: 60% at t=0 (the hit still snaps), 25%/15% trailing
  *  across the window so a layer breathes instead of popping in one frame. */
 function blastBursts(count: number, w: number) {
-  if (w <= 0) return [{ time: 0, count: new ConstantValue(count), cycle: 0, interval: 0.01, probability: 1 }];
+  if (w <= 0) {return [{ time: 0, count: new ConstantValue(count), cycle: 0, interval: 0.01, probability: 1 }];}
   return [[0, Math.ceil(count * 0.6)], [w * 0.45, Math.ceil(count * 0.25)], [w, Math.floor(count * 0.15)]]
     .filter(b => b[1] > 0)
     .map(([time, c]) => ({ time, count: new ConstantValue(c), cycle: 0, interval: 0.01, probability: 1 }));
@@ -770,14 +770,14 @@ export function blastBurst(pos: THREE.Vector3, spec: BlastSpec,
 
 function spawnBlastBurst(pos: THREE.Vector3, spec: BlastSpec,
     additive: boolean): void {
-  if (!vfxReady()) return;
+  if (!vfxReady()) {return;}
   const colorGen = blastColorGen(spec);
-  const lifeMax = spec.lifeMax;
+  const {lifeMax} = spec;
   const w = spec.stagger ?? 0;
   // Particle-pressure LOD: counts thin as global live particles climb,
   // so a mass-explosion pileup doesn't turn into 30k CPU-simmed quads.
   const bursts = blastBursts(Math.max(1, Math.round(spec.count * vfxPressure())), w);
-  const em = new BlastEmitter(spec.elvBase ?? 0.5, spec.elvSpan ?? Math.PI, !!spec.planar, spec.vy, spec.dir, spec.spread);
+  const em = new BlastEmitter(spec.elvBase ?? 0.5, spec.elvSpan ?? Math.PI, Boolean(spec.planar), spec.vy, spec.dir, spec.spread);
   const ps = takeSystem(burstKey('blast', spec, additive), () => {
     const sys = new ParticleSystem({
     duration: lifeMax + w + 0.05,

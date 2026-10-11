@@ -30,7 +30,7 @@ const SWIPE_LEN = 1.9;
 const SWIPE_TILT = 0.65;
 
 /** World-space X-slash across `dir` from `origin` — remote players. */
-export function swingSwipe(scene: THREE.Scene, origin: THREE.Vector3, dir: THREE.Vector3, color = 0x9FD8FF): void {
+export function swingSwipe(scene: THREE.Scene, origin: THREE.Vector3, dir: THREE.Vector3, color = 0x9F_D8_FF): void {
   for (const tilt of [SWIPE_TILT, -SWIPE_TILT]) {
     const r = RibbonTrail.acquire(scene, { color, width: 0.45, life: SWIPE_LIFE, billboard: true, tag: 'swipe' });
     _side.crossVectors(dir, _UP);
@@ -79,7 +79,7 @@ function traceStroke(r: RibbonTrail, camPos: THREE.Vector3, camDir: THREE.Vector
 interface CamSwipe { r: RibbonTrail; cam: THREE.Camera; tilt: number; t: number }
 const camSwipes: CamSwipe[] = [];
 
-export function swingSwipeView(scene: THREE.Scene, cam: THREE.Camera, color = 0x9FD8FF): void {
+export function swingSwipeView(scene: THREE.Scene, cam: THREE.Camera, color = 0x9F_D8_FF): void {
   cam.getWorldPosition(_camP);
   cam.getWorldDirection(_aim);
   for (const tilt of [SWIPE_TILT, -SWIPE_TILT]) {

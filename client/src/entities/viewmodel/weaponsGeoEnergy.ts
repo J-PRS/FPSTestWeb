@@ -12,7 +12,7 @@ import { bodyMat, darkMat, boreMat, brassMat, mkTube, mkBore, mkLoft, mkAnnulus,
 export function mkPlasmaCannon(): THREE.Group {
 const plasma = new THREE.Group();
 // Main body — shorter and much fatter than the old slim tube
-plasma.add(mkTube(0.115, 0.13, 0.3, 0.0, bodyMat));
+plasma.add(mkTube(0.115, 0.13, 0.3, 0, bodyMat));
 // Flared emitter head — a wide shallow dish the bolt charges inside.
 // Two nested cones: outer bell + inner throat.
 const plasmaBell = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.115, 0.1, 10), darkMat);
@@ -28,7 +28,7 @@ plasma.add(mkBore(0.085, -0.331));
 // old ring so the muzzle reads HOT at viewmodel distance
 const plasmaGlow = new THREE.Mesh(
   new THREE.CylinderGeometry(0.078, 0.078, 0.02, 14),
-  new THREE.MeshBasicMaterial({ color: 0x33ffaa })
+  new THREE.MeshBasicMaterial({ color: 0x33_FF_AA })
 );
 plasmaGlow.rotation.x = Math.PI / 2;
 plasmaGlow.position.z = -0.332;
@@ -48,9 +48,9 @@ for (let i = 0; i < 4; i++) {
   const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
   const slat = new THREE.Mesh(
     new THREE.BoxGeometry(0.015, 0.015, 0.16),
-    new THREE.MeshBasicMaterial({ color: 0x22cc88 })
+    new THREE.MeshBasicMaterial({ color: 0x22_CC_88 })
   );
-  slat.position.set(Math.cos(a) * 0.125, Math.sin(a) * 0.125, 0.0);
+  slat.position.set(Math.cos(a) * 0.125, Math.sin(a) * 0.125, 0);
   plasma.add(slat);
 }
 // Capacitor bottle under the receiver — a fat cell slung low, same
@@ -60,7 +60,7 @@ plasmaCell.position.y = -0.13;
 plasma.add(plasmaCell);
 const plasmaCellGlow = new THREE.Mesh(
   new THREE.CylinderGeometry(0.045, 0.045, 0.015, 10),
-  new THREE.MeshBasicMaterial({ color: 0x33ffaa })
+  new THREE.MeshBasicMaterial({ color: 0x33_FF_AA })
 );
 plasmaCellGlow.rotation.x = Math.PI / 2;
 plasmaCellGlow.position.set(0, -0.13, -0.07);
@@ -85,7 +85,7 @@ return plasma;
 // glows *inside* a dark cage, so the glow reads as depth, not a sticker.
 export function mkPlasmaGun(): THREE.Group {
 const pg = new THREE.Group();
-const glowMat = new THREE.MeshBasicMaterial({ color: 0x44bbff });
+const glowMat = new THREE.MeshBasicMaterial({ color: 0x44_BB_FF });
 // Receiver — chamfered-rectangle loft, slight rear taper. The chamfers
 // catch the rim light where the old tube read flat.
 // Grooves are NOTCHED INTO the receiver profile — real machined channels
@@ -163,7 +163,7 @@ return pg;
 // perforated spray face weeping green.
 export function mkSprinkler(): THREE.Group {
 const sp = new THREE.Group();
-const gooMat = new THREE.MeshBasicMaterial({ color: 0xaaff66 });
+const gooMat = new THREE.MeshBasicMaterial({ color: 0xAA_FF_66 });
 // Reservoir tank — one fat cylinder muzzle-to-breech, domed rear cap.
 // No necking: the douser reads as a pressurized can the whole way.
 sp.add(mkTube(0.12, 0.13, 0.4, -0.04, bodyMat, 6));
@@ -174,10 +174,10 @@ sp.add(dome);
 // Fill gauge — a dark bezel channel with the goo strip recessed inside,
 // so it reads as a glassed-in sight gauge, not a glowing sticker.
 const bezel = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.024, 0.24), brassMat);
-bezel.position.set(0, 0.124, 0.0);
+bezel.position.set(0, 0.124, 0);
 sp.add(bezel);
 const gauge = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.014, 0.2), gooMat);
-gauge.position.set(0, 0.13, 0.0);
+gauge.position.set(0, 0.13, 0);
 sp.add(gauge);
 // Side pods — two goo cells bulging left/right; in first person the
 // silhouette edges are where detail lives.
@@ -297,7 +297,7 @@ for (let i = 0; i < 3; i++) {
   // channel runs the full blade including through the taper. Descending
   // edge order (each notch grows the ring).
   let hex = rotRing(profCircle(0.066, 6), a);
-  for (let e = 5; e >= 0; e--) hex = notchRing(hex, e, [[0.35, 0.65]], 0.006, 0.3);
+  for (let e = 5; e >= 0; e--) {hex = notchRing(hex, e, [[0.35, 0.65]], 0.006, 0.3);}
   rail.add(mkLoft([
     { z: -0.165, ring: scaleRing(hex, 0.042 / 0.066), dx: px, dy: py },
     { z: -0.345, ring: hex, dx: px, dy: py },
@@ -334,14 +334,14 @@ return rail;
 // before it ever arcs.
 export function mkLightningGun(): THREE.Group {
 const lg = new THREE.Group();
-const lgHotMat = new THREE.MeshBasicMaterial({ color: 0xcfefff });
+const lgHotMat = new THREE.MeshBasicMaterial({ color: 0xCF_EF_FF });
 
 // Insulated body — slimmer than before so the crown reads wider.
 lg.add(mkTube(0.1, 0.12, 0.4, 0.06, bodyMat));
 // Tesla coil stack wrapped on the rear half — brass winding between
 // ceramic ribs is the "this gun stores charge" tell.
 for (let i = 0; i < 4; i++) {
-  lg.add(mkTube(0.125, 0.125, 0.014, 0.0 + i * 0.07, brassMat));
+  lg.add(mkTube(0.125, 0.125, 0.014, 0 + i * 0.07, brassMat));
   lg.add(mkTube(0.122, 0.122, 0.03, 0.028 + i * 0.07, darkMat));
 }
 // Crown collar where the electrodes seat — barely wider than the
@@ -384,7 +384,7 @@ core.position.z = EMITTER_Z;
 lg.add(core);
 const corona = new THREE.Mesh(
   new THREE.SphereGeometry(0.045, 12, 10),
-  new THREE.MeshBasicMaterial({ color: 0x66c8ff, transparent: true, opacity: 0.28, depthWrite: false, blending: THREE.AdditiveBlending, fog: false })
+  new THREE.MeshBasicMaterial({ color: 0x66_C8_FF, transparent: true, opacity: 0.28, depthWrite: false, blending: THREE.AdditiveBlending, fog: false })
 );
 corona.position.z = EMITTER_Z;
 lg.add(corona);

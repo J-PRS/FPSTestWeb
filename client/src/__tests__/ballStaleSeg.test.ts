@@ -10,25 +10,25 @@ import * as THREE from 'three';
 describe('isStaleSeg — wire-order boundary', () => {
   it('drops strictly-older stamps', () => {
     const bag = newNetBag();
-    bag.legT0 = 10.0;
+    bag.legT0 = 10;
     expect(isStaleSeg(bag, 9.9)).toBe(true);
   });
 
   it('applies equal stamps — same-tick second segments are fresher truth', () => {
     const bag = newNetBag();
-    bag.legT0 = 10.0;
-    expect(isStaleSeg(bag, 10.0)).toBe(false);
+    bag.legT0 = 10;
+    expect(isStaleSeg(bag, 10)).toBe(false);
   });
 
   it('applies newer stamps', () => {
     const bag = newNetBag();
-    bag.legT0 = 10.0;
+    bag.legT0 = 10;
     expect(isStaleSeg(bag, 10.1)).toBe(false);
   });
 
   it('never drops unstamped segments', () => {
     const bag = newNetBag();
-    bag.legT0 = 10.0;
+    bag.legT0 = 10;
     expect(isStaleSeg(bag, undefined)).toBe(false);
   });
 
@@ -56,18 +56,18 @@ describe('applySeg — same-tick re-anchor', () => {
     const bag = newNetBag();
     bag.sim = makeSimBall(1, 0, 0, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
     const h = host();
-    applySeg(bag, h, seg(10, 5.0));
-    applySeg(bag, h, seg(30, 5.0)); // same stamp, newer wire truth
+    applySeg(bag, h, seg(10, 5));
+    applySeg(bag, h, seg(30, 5)); // same stamp, newer wire truth
     expect(bag.sim!.x).toBe(30); // second segment won
-    expect(bag.legT0).toBe(5.0);
+    expect(bag.legT0).toBe(5);
   });
 
   it('the sim cursor rewinds to the fresh stamp so the whole gap replays', () => {
     const bag = newNetBag();
     bag.sim = makeSimBall(1, 0, 0, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
-    bag.simT = 12.0; // stepped ahead
+    bag.simT = 12; // stepped ahead
     const h = host();
-    applySeg(bag, h, seg(10, 10.0));
-    expect(bag.simT).toBe(10.0); // cursor re-anchored to the stamp
+    applySeg(bag, h, seg(10, 10));
+    expect(bag.simT).toBe(10); // cursor re-anchored to the stamp
   });
 });

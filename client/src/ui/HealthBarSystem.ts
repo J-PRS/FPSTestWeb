@@ -4,7 +4,7 @@ import { MAX_HEALTH } from '../core/config.js';
 import { CLASS_STATS } from '../../../shared/botClasses.js';
 import { REPAIR_ARMOR_MULT } from '../../../shared/weapons.js';
 
-import { Ball, Targetable } from '../entities/balls.js';
+import type { Ball, Targetable } from '../entities/balls.js';
 
 // Scratch vectors — update() iterates bars sequentially, safe to share
 const _cameraPos = new THREE.Vector3();
@@ -32,7 +32,7 @@ const BAR_WIDTH = 40;
 const BAR_HEIGHT = 5;
 const FLASH_DURATION = 0.12;
 const DELAY_DURATION = 0.3;
-const BAR_LIFETIME = 5.0; // hit-popup linger — a wounded readout, not a flash
+const BAR_LIFETIME = 5; // hit-popup linger — a wounded readout, not a flash
 const REPAIR_LINGER = 0.4; // weld bar outlives the beam by a beat — no flicker between ticks
 
 /** Structural repair target — deployables.ts Item satisfies this; kept
@@ -99,11 +99,11 @@ export class HealthBarSystem {
         display: none;
       }
     `;
-    document.head.appendChild(style);
+    document.head.append(style);
 
     this.container = document.createElement('div');
     this.container.id = 'healthbar-container';
-    document.body.appendChild(this.container);
+    document.body.append(this.container);
   }
 
   spawn(playerId: string, damage: number, health: number): void {
@@ -134,7 +134,7 @@ export class HealthBarSystem {
       el.classList.toggle('ally', ally);
       const armorEl = document.createElement('div');
       armorEl.className = 'armor';
-      el.appendChild(armorEl);
+      el.append(armorEl);
       r = {
         bar: {
           damage: 0, flashTimer: 0, delayTimer: 0, life: 0,
@@ -185,7 +185,7 @@ export class HealthBarSystem {
     // tickUpdate + playerHit) — keeps predictions anchored even while bars
     // are dormant, and self-heals on respawn (health back to max).
     for (const [playerId, state] of players) {
-      if (state.health !== undefined) this.knownHealth.set(playerId, state.health);
+      if (state.health !== undefined) {this.knownHealth.set(playerId, state.health);}
     }
 
     const cameraPos = _cameraPos;
@@ -263,8 +263,8 @@ export class HealthBarSystem {
    *  rule (teamless modes never turn friendly). Class writes only on flip
    *  so classList churn doesn't run every frame per bar. */
   private tagAlly(bar: HealthBar, theirTeam: string | undefined, localTeam: string | undefined): void {
-    const ally = !!localTeam && theirTeam === localTeam;
-    if (ally !== bar.el.classList.contains('ally')) bar.el.classList.toggle('ally', ally);
+    const ally = Boolean(localTeam) && theirTeam === localTeam;
+    if (ally !== bar.el.classList.contains('ally')) {bar.el.classList.toggle('ally', ally);}
   }
 
   removeBar(playerId: string): void {
@@ -302,7 +302,7 @@ export class HealthBarSystem {
       bar.el.remove();
     }
     this.ballBars.clear();
-    for (const [, r] of this.repairBars) r.bar.el.remove();
+    for (const [, r] of this.repairBars) {r.bar.el.remove();}
     this.repairBars.clear();
     this.knownHealth.clear();
     this.knownMax.clear();
@@ -312,7 +312,7 @@ export class HealthBarSystem {
     const el = document.createElement('div');
     el.className = 'enemy-hpbar';
     el.innerHTML = '<div class="bg"></div><div class="health"></div><div class="white"></div>';
-    this.container.appendChild(el);
+    this.container.append(el);
     return el;
   }
 

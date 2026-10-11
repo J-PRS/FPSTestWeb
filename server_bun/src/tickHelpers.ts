@@ -15,13 +15,13 @@ const MEND_HP_PER_TICK = MEND_HP_PER_SEC / CONFIG.tickRate;
  *  regenerator perk, regen powerup — all cap at the perk max (the caller
  *  applies the clamp). */
 export function healPerTick(p: Pick<PlayerState, 'isDead' | 'health' | 'maxHealth' | 'status' | 'regenUntil' | 'perk' | 'lastDamageAt'>, now: number): number {
-  if (p.isDead || p.health >= p.maxHealth) return 0;
+  if (p.isDead || p.health >= p.maxHealth) {return 0;}
   const mods = perkMods(p.perk);
   // Regenerator pays per unhurt second PAST the wind-up — a hit zeroes
   // the ramp, and anything inside REGEN_DELAY_S buys no healing at all.
   let heal = (mods.regen + mods.regenRamp * Math.max(0, (now - p.lastDamageAt) / 1000 - REGEN_DELAY_S)) / CONFIG.tickRate;
-  if (p.status & STATUS.MEND) heal += MEND_HP_PER_TICK;
-  if (now < p.regenUntil) heal += POWERUP.regenHpPerSec / CONFIG.tickRate;
+  if (p.status & STATUS.MEND) {heal += MEND_HP_PER_TICK;}
+  if (now < p.regenUntil) {heal += POWERUP.regenHpPerSec / CONFIG.tickRate;}
   return heal;
 }
 

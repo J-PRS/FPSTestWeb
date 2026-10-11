@@ -28,27 +28,27 @@ describe('predictAt — probe bounds and isolation', () => {
   it('returns false when no replay sim exists', () => {
     const { st, bag } = rig();
     bag.sim = null;
-    expect(predictAt(st, bag, 1.0, out)).toBe(false);
+    expect(predictAt(st, bag, 1, out)).toBe(false);
   });
 
   it('steps on the 0.05 grid then lands the remainder ballistically', () => {
     const { st, bag } = rig();
     expect(predictAt(st, bag, 0.22, out)).toBe(true);
     // 4 cells (0.20) stepped under gravity; rem 0.02 ballistic.
-    const steppedX = 10 * 0.20; // vx=10 horizontal flight
+    const steppedX = 10 * 0.2; // vx=10 horizontal flight
     expect(out.x).toBeCloseTo(steppedX + 10 * 0.02, 6);
   });
 
   it('clamps the horizon to the stamped sim clock', () => {
-    const { st, bag } = rig(() => 0.10);
-    predictAt(st, bag, 5.0, out);
+    const { st, bag } = rig(() => 0.1);
+    predictAt(st, bag, 5, out);
     // end = min(5, 0.10, 8) = 0.10 → 2 cells
-    expect(out.x).toBeCloseTo(10 * 0.10, 6);
+    expect(out.x).toBeCloseTo(10 * 0.1, 6);
   });
 
   it('caps the chase at simT + 8s — stale legs cannot runaway', () => {
     const { st, bag } = rig();
-    bag.simT = 2.0;
+    bag.simT = 2;
     predictAt(st, bag, 1000, out);
     // end = 2.0 + 8 = 10.0 → the ball travelled only 8s of vx=10 plus
     // gravity fall — but y=1000 ran out of altitude long before;

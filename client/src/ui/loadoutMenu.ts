@@ -35,7 +35,7 @@ const measureCtx = document.createElement('canvas').getContext('2d')!;
 function dropWidth(options: { label: string }[]): number {
   measureCtx.font = `600 ${0.78 * 16}px ${getComputedStyle(document.body).fontFamily}`;
   let w = 0;
-  for (const o of options) w = Math.max(w, measureCtx.measureText(o.label.toUpperCase()).width);
+  for (const o of options) {w = Math.max(w, measureCtx.measureText(o.label.toUpperCase()).width);}
   return Math.ceil(w) + 11 * 2 + 8 + 12; // padding + gap + caret
 }
 
@@ -62,14 +62,14 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
     const el = document.createElement('div');
     el.className = 'lo-chip lo-drop';
     const face = document.createElement('span');
-    el.appendChild(face);
+    el.append(face);
     const caret = document.createElement('span');
     caret.className = 'lo-caret';
     caret.textContent = '▴';
-    el.appendChild(caret);
+    el.append(caret);
     const list = document.createElement('div');
     list.className = cols2 ? 'lo-list cols2' : 'lo-list';
-    el.appendChild(list);
+    el.append(list);
     let options = initialOptions;
     let currentV = '';
     const rebuild = () => {
@@ -78,13 +78,13 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
       for (const o of options) {
         const it = document.createElement('div');
         it.className = 'lo-opt';
-        if (o.disabled) it.classList.add('locked');
+        if (o.disabled) {it.classList.add('locked');}
         // 'none' isn't a perk — banner it across both columns.
-        if (cols2 && o.v === 'none') it.classList.add('full');
+        if (cols2 && o.v === 'none') {it.classList.add('full');}
         const name = document.createElement('span');
         name.className = 'lo-name';
         name.textContent = o.label;
-        it.appendChild(name);
+        it.append(name);
         if (o.desc) {
           // Perks are the only invisible pick — everything else
           // self-explains in a second of firing it.
@@ -92,18 +92,18 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
           const d = document.createElement('span');
           d.className = 'lo-desc';
           d.textContent = o.desc;
-          it.appendChild(d);
+          it.append(d);
         }
         it.dataset.v = o.v;
         it.addEventListener('click', (e) => {
           e.stopPropagation();
-          if (o.disabled) return; // tier-locked — visible but unshoulderable
+          if (o.disabled) {return;} // tier-locked — visible but unshoulderable
           onPick(o.v);
           el.classList.remove('open');
           openDrop = null;
           refreshLoadout();
         });
-        list.appendChild(it);
+        list.append(it);
       }
     };
     rebuild();
@@ -151,7 +151,7 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
   const ui = loadoutBar ? buildRows(loadoutBar, deps, mkDrop) : null;
 
   function refreshLoadout(): void {
-    if (!ui) return;
+    if (!ui) {return;}
     const player = deps.lazyPlayer();
     // Options gate on armorClass — the tier whose kit is being edited
     // (a banked heavy pick CAN hold a mortar; it shoulders at respawn).
@@ -165,10 +165,10 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
     ui.classDrop?.setValue(player.armorClass);
     ui.sidearmDrop?.setValue(player.sidearm);
     ui.packDrop?.setValue(player.packItem);
-    if (ui.beltLabel) ui.beltLabel.textContent = `BELT (${codeLabel(codeFor('belt'))})`;
-    if (ui.skillLabel) ui.skillLabel.textContent = `SKILL (${codeLabel(codeFor('skill'))})`;
-    if (ui.sidearmLabel) ui.sidearmLabel.textContent = `SIDEARM (${codeLabel(codeFor('sidearm'))})`;
-    if (ui.packLabel) ui.packLabel.textContent = `PACK (${codeLabel(codeFor('deploy'))})`;
+    if (ui.beltLabel) {ui.beltLabel.textContent = `BELT (${codeLabel(codeFor('belt'))})`;}
+    if (ui.skillLabel) {ui.skillLabel.textContent = `SKILL (${codeLabel(codeFor('skill'))})`;}
+    if (ui.sidearmLabel) {ui.sidearmLabel.textContent = `SIDEARM (${codeLabel(codeFor('sidearm'))})`;}
+    if (ui.packLabel) {ui.packLabel.textContent = `PACK (${codeLabel(codeFor('deploy'))})`;}
   }
 
   // Menu close must not strand an open dropup — resume, then next ESC
@@ -197,8 +197,8 @@ function mkCellDom(parent: HTMLElement): { cell: HTMLElement; cap: HTMLSpanEleme
   cell.className = 'lo-cell';
   const cap = document.createElement('span');
   cap.className = 'lo-cap';
-  cell.appendChild(cap);
-  parent.appendChild(cell);
+  cell.append(cap);
+  parent.append(cell);
   return { cell, cap };
 }
 
@@ -221,7 +221,7 @@ function weaponOptsFor(cls: ArmorClass): DropOpt[] {
       return {
         v: String(wid),
         label: (tag ? `${tag} ` : '') + def.config.displayName,
-        sidearm: !!def.sidearm,
+        sidearm: Boolean(def.sidearm),
         disabled: Player.lockedForClass(cls, wid),
       };
     })
@@ -252,12 +252,12 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
     if (showHead) {
       h.className = 'lo-head';
       h.textContent = title;
-      g.appendChild(h);
+      g.append(h);
     }
     const cells = document.createElement('div');
     cells.className = 'lo-cells';
-    g.appendChild(cells);
-    bar.appendChild(g);
+    g.append(cells);
+    bar.append(g);
     return cells;
   };
 
@@ -266,7 +266,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   const armorCells = mkGroup('ARMOR', false);
   const tiles = document.createElement('div');
   tiles.className = 'lo-tiles';
-  armorCells.appendChild(tiles);
+  armorCells.append(tiles);
   const classTileEls: { v: string; el: HTMLElement }[] = [];
   const pickClass = (v: string) => {
     const player = deps.lazyPlayer();
@@ -282,7 +282,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   };
   const refreshTiles = () => {
     const cur = deps.lazyPlayer()?.armorClass ?? 'medium';
-    for (const t of classTileEls) t.el.classList.toggle('sel', t.v === cur);
+    for (const t of classTileEls) {t.el.classList.toggle('sel', t.v === cur);}
   };
   for (const cls of ['light', 'medium', 'heavy'] as const) {
     const t = document.createElement('div');
@@ -290,9 +290,9 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
     const name = document.createElement('span');
     name.className = 'lo-tile-name';
     name.textContent = cls.toUpperCase();
-    t.appendChild(name);
+    t.append(name);
     t.addEventListener('click', (e) => { e.stopPropagation(); pickClass(cls); });
-    tiles.appendChild(t);
+    tiles.append(t);
     classTileEls.push({ v: cls, el: t });
   }
   // Drop-compatible shim: refreshLoadout drives faces via setValue.
@@ -310,7 +310,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
     const { cell, cap } = mkCellDom(weaponCells);
     cap.textContent = `SLOT ${i + 1}`;
     const drop = mkDrop(weaponOpts, (v) => deps.lazyPlayer().setLoadoutSlot(i, Number(v)), allWeaponOpts);
-    cell.appendChild(drop.el);
+    cell.append(drop.el);
     ui.slotDrops.push(drop);
   }
 
@@ -329,7 +329,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
      { v: 'repair', label: 'Repair Tool' }],
     (v) => deps.lazyPlayer().setSidearm(v as 'pistol' | 'revolver' | 'shotgun' | 'repair'),
   );
-  sidearm.cell.appendChild(ui.sidearmDrop.el);
+  sidearm.cell.append(ui.sidearmDrop.el);
 
   const belt = mkCellDom(kitRowA);
   ui.beltLabel = belt.cap;
@@ -338,7 +338,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
     BELT_ITEMS.map((b) => ({ v: b, label: BELT_LABELS[b] })),
     (v) => deps.lazyPlayer().setBeltItem(v as BeltItem),
   );
-  belt.cell.appendChild(ui.beltDrop.el);
+  belt.cell.append(ui.beltDrop.el);
 
   const pack = mkCellDom(kitRowB);
   ui.packLabel = pack.cap;
@@ -346,7 +346,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
     DEPLOY_KINDS.map((kind) => ({ v: kind, label: DEPLOY_ITEMS[kind].label })),
     (v) => deps.lazyPlayer().setPackItem(v as DeployKind),
   );
-  pack.cell.appendChild(ui.packDrop.el);
+  pack.cell.append(ui.packDrop.el);
 
   const skill = mkCellDom(kitRowB);
   ui.skillLabel = skill.cap;
@@ -354,7 +354,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
     SKILL_ORDER.map((s) => ({ v: s, label: s[0].toUpperCase() + s.slice(1) })),
     (v) => deps.lazyPlayer().setSkill(v as SkillId),
   );
-  skill.cell.appendChild(ui.skillDrop.el);
+  skill.cell.append(ui.skillDrop.el);
 
   const perk = mkCellDom(kitRowB);
   perk.cap.textContent = 'PERK';
@@ -366,7 +366,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
     },
     undefined, true, // 2 cols — 10 perks stack taller than the menu otherwise
   );
-  perk.cell.appendChild(ui.perkDrop.el);
+  perk.cell.append(ui.perkDrop.el);
 
   return ui;
 }

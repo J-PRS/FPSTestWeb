@@ -46,8 +46,8 @@ export function minClassForWeapon(w: number): ArmorClass {
  *  same default the rest of the class plumbing assumes. */
 export function classCanFire(cls: string | undefined, w: number): boolean {
   const have = cls === 'light' || cls === 'heavy' ? cls : 'medium';
-  if (LIGHT_ONLY_WEAPONS.has(w)) return have === 'light';
-  if (MEDIUM_ONLY_WEAPONS.has(w)) return have === 'medium';
+  if (LIGHT_ONLY_WEAPONS.has(w)) {return have === 'light';}
+  if (MEDIUM_ONLY_WEAPONS.has(w)) {return have === 'medium';}
   return TIER_RANK[have] >= TIER_RANK[minClassForWeapon(w)];
 }
 
@@ -60,7 +60,7 @@ export const CLASS_MODEL_SCALE: Record<ArmorClass, number> = {
   // that LOOKED 1.15× but hit-tested 2.5m was a lie. Medium shares the
   // mannequin rig with light and gets a small silhouette bump so the
   // tier still reads at distance (capsule stays 2.0m, model ~2.07m).
-  light: 1.0, medium: 2.07 / 1.8, heavy: 2.5 / 1.8,
+  light: 1, medium: 2.07 / 1.8, heavy: 2.5 / 1.8,
 };
 
 export const CLASS_STATS: Record<ArmorClass, ClassStats> = {
@@ -70,7 +70,7 @@ export const CLASS_STATS: Record<ArmorClass, ClassStats> = {
   // the heaviest frame that still climbs. Lighter mass also means bigger
   // blast shoves, so the tier spread doubles as the shove gradient.
   light:  { maxHealth: -25, speedScale: 1.2, mass: 1.1,  eyeHeight: 1.8, radius: 0.5 },
-  medium: { maxHealth: 25,  speedScale: 1.0,  mass: 1.15, eyeHeight: 2.0, radius: 0.65 },
+  medium: { maxHealth: 25,  speedScale: 1,  mass: 1.15, eyeHeight: 2, radius: 0.65 },
   heavy:  { maxHealth: 100, speedScale: 0.8, mass: 1.2,  eyeHeight: 2.5, radius: 0.8 },
 };
 

@@ -2,10 +2,10 @@
 // impact handling (effects, AOE force, hit scoring, server/demo notifications).
 // All shared game state arrives via CombatDeps (getters for late-init objects).
 
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import type { ViewModel } from '../entities/ViewModel.js';
 import type { Ball } from '../entities/balls.js';
-import { Nugget } from '../entities/Nugget.js';
+import type { Nugget } from '../entities/Nugget.js';
 import type { DamageNumberManager } from '../effects/damageNumbers.js';
 import type { SweepObstacle } from '../projectiles/Projectile.js';
 import type { FragMessages } from '../ui/FragMessages.js';
@@ -149,7 +149,7 @@ export function createCombat(deps: CombatDeps) {
       // any route that shouldered a gated weapon past the menu (gunlab,
       // stale persisted slot, sidearm) must refuse here too, or every
       // spawn + blast claim spam-rejects for the rest of the life.
-      if (!classCanFire(deps.lazyPlayer().appliedClass, def.weaponType)) return;
+      if (!classCanFire(deps.lazyPlayer().appliedClass, def.weaponType)) {return;}
       // Hitscan kinds leave no projectile for observers — tell the server
       // so it can relay a cosmetic playerShot (muzzle audio/visual).
       if (def.kind === 'fan' || def.kind === 'beam') {
@@ -158,10 +158,10 @@ export function createCombat(deps: CombatDeps) {
         });
       }
       if (def.kind === 'beam') {
-        if (def.weaponType === WeaponType.Repair) rep.repair(e);
-        else lightning(e);
+        if (def.weaponType === WeaponType.Repair) {rep.repair(e);}
+        else {lightning(e);}
       }
-      else fire.fireWeapon(def, e);
+      else {fire.fireWeapon(def, e);}
     },
     onBelt,
     onMelee: fire.onMelee,

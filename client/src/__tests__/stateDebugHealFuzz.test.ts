@@ -16,10 +16,11 @@ import type { SnapshotPlayer } from '../../../shared/protocol.js';
 
 function mulberry(seed: number) {
   return () => {
-    seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
+    // oxlint-disable-next-line prefer-math-trunc -- int32 wrap is the point
+    seed |= 0; seed = (seed + 0x6D_2B_79_F5) | 0;
     let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
   };
 }
 
@@ -57,7 +58,7 @@ describe('stateDebug heal-loop conformance fuzz', () => {
   beforeEach(() => { vi.useFakeTimers(); });
   afterEach(() => { vi.useRealTimers(); });
 
-  for (const seed of [7, 42, 1337, 20240, 999983]) {
+  for (const seed of [7, 42, 1337, 20_240, 999_983]) {
     it(`seed ${seed}: roster converges to server truth under churn`, () => {
       const rnd = mulberry(seed);
       const { nm, ctx, remotePlayers, localPlayer } = mk();
@@ -84,7 +85,7 @@ describe('stateDebug heal-loop conformance fuzz', () => {
       for (let op = 0; op < 150; op++) {
         const roll = rnd();
         const ids = [...server.keys()];
-        if (roll < 0.3 || !ids.length) {
+        if (roll < 0.3 || ids.length === 0) {
           // Server joins a new player.
           const id = `srv-${Math.floor(rnd() * 1e6)}`;
           server.set(id, { id, x: rnd() * 100, y: rnd() * 50, z: rnd() * 100, health: Math.floor(rnd() * 101), isDead: rnd() < 0.1 });
@@ -102,10 +103,10 @@ describe('stateDebug heal-loop conformance fuzz', () => {
           // stale health, ghost member.
           const act = rnd();
           const clientIds = [...nm.getPlayers().keys()].filter(id => id !== nm.getLocalPlayerId());
-          if (act < 0.35 && ids.length) {
+          if (act < 0.35 && ids.length > 0) {
             const miss = ids[Math.floor(rnd() * ids.length)]!;
             nm.getPlayers().delete(miss); // join edge never arrived
-          } else if (act < 0.7 && clientIds.length) {
+          } else if (act < 0.7 && clientIds.length > 0) {
             const cid = clientIds[Math.floor(rnd() * clientIds.length)]!;
             const cp = nm.getPlayers().get(cid)!;
             cp.health = Math.max(0, cp.health - Math.floor(rnd() * 40) - 5);

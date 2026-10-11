@@ -50,7 +50,7 @@ function field(text: string): HTMLDivElement {
   row.className = 'lb-field';
   const span = document.createElement('span');
   span.textContent = text;
-  row.appendChild(span);
+  row.append(span);
   return row;
 }
 
@@ -93,7 +93,7 @@ function buildP2PButtons(p2pIn: HTMLInputElement): HTMLDivElement {
     pub = !pub;
     pubBtn.classList.toggle('on', pub);
   });
-  pubRow.appendChild(pubBtn);
+  pubRow.append(pubBtn);
   const specs: [string, () => void][] = [
     ['HOST', () => p2pGo(`host:${code()}`, pub ? 1 : 0)],
     ['JOIN', () => p2pGo(`join:${code()}`, 0)],
@@ -103,9 +103,9 @@ function buildP2PButtons(p2pIn: HTMLInputElement): HTMLDivElement {
   for (const [text, fn] of specs) {
     const b = btn(text);
     b.addEventListener('click', fn);
-    wrap.appendChild(b);
+    wrap.append(b);
   }
-  wrap.appendChild(pubRow);
+  wrap.append(pubRow);
   return wrap;
 }
 
@@ -118,13 +118,13 @@ function playOffline(mode: string, map: string, bots: number | undefined): void 
   settings.set('fps-p2p', '');
   settings.set('fps-lobby', 0);
   const q = new URLSearchParams(location.search);
-  for (const k of ['room', 'p2p', 'lobby', 'map', 'bots', 'mode', 'unlisted', 'solo', 'nocreatures', 'noballs']) q.delete(k);
-  if (mode) q.set('mode', mode);
-  if (map) q.set('map', map);
-  if (bots !== undefined) q.set('bots', String(bots));
+  for (const k of ['room', 'p2p', 'lobby', 'map', 'bots', 'mode', 'unlisted', 'solo', 'nocreatures', 'noballs']) {q.delete(k);}
+  if (mode) {q.set('mode', mode);}
+  if (map) {q.set('map', map);}
+  if (bots !== undefined) {q.set('bots', String(bots));}
   // Same sim gates as HOST — the local spawner reads the URL params too.
-  if (settings.get('fps-nocreatures') === 1) q.set('nocreatures', '1');
-  if (settings.get('fps-noballs') === 1) q.set('noballs', '1');
+  if (settings.get('fps-nocreatures') === 1) {q.set('nocreatures', '1');}
+  if (settings.get('fps-noballs') === 1) {q.set('noballs', '1');}
   // Marker param — a free-roam pick writes no mode/map/bots at all, but
   // it is still a live session; without this the boot is indistinguishable
   // from a fresh front-door load and the lobby would re-pop mid-game.
@@ -155,9 +155,9 @@ function mapPicker(h: LobbyPanelHost): { select: HTMLSelectElement; thumb: HTMLI
     const gen = ++probe;
     if (!url) { thumb.style.display = 'none'; return; }
     const ok = await fetch(url).then((r) => r.ok).catch(() => false);
-    if (gen !== probe) return; // selection moved on while probing
+    if (gen !== probe) {return;} // selection moved on while probing
     thumb.style.display = ok ? 'block' : 'none';
-    if (ok) thumb.src = url;
+    if (ok) {thumb.src = url;}
   };
   thumb.addEventListener('error', () => { thumb.style.display = 'none'; });
   select.addEventListener('change', update);
@@ -238,7 +238,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     // a floating HUD button during gameplay was HUD clutter. The panel
     // mounts inside #overlay so menu-close takes it down too.
     const openBtn = document.getElementById('lobby-open');
-    if (openBtn) openBtn.addEventListener('click', () => h.toggle());
+    if (openBtn) {openBtn.addEventListener('click', () => h.toggle());}
 
     // ESC-menu disconnect — the classic "leave server" is a one-shot
     // reload to a clean URL: solo boot IS the disconnected state, so no
@@ -257,7 +257,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
         settings.set('fps-p2p', '');
         settings.set('fps-lobby', 0);
         const q = new URLSearchParams(location.search);
-        for (const k of ['room', 'p2p', 'lobby']) q.delete(k);
+        for (const k of ['room', 'p2p', 'lobby']) {q.delete(k);}
         location.href = q.toString() ? `${location.pathname}?${q}` : location.pathname;
       });
     }
@@ -273,15 +273,15 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     const tabs = new Map<string, HTMLDivElement>();
     const tabBtns: HTMLButtonElement[] = [];
     const showTab = (name: string) => {
-      for (const [n, el] of tabs) el.style.display = n === name ? 'block' : 'none';
-      for (const b of tabBtns) b.classList.toggle('active', b.dataset.tab === name);
+      for (const [n, el] of tabs) {el.style.display = n === name ? 'block' : 'none';}
+      for (const b of tabBtns) {b.classList.toggle('active', b.dataset.tab === name);}
     };
     for (const name of ['JOIN', 'HOST', 'OFFLINE', 'P2P']) {
       const b = btn(name);
       b.dataset.tab = name;
       b.addEventListener('click', () => showTab(name));
       tabBtns.push(b);
-      tabBar.appendChild(b);
+      tabBar.append(b);
       const page = document.createElement('div');
       page.style.display = 'none';
       tabs.set(name, page);
@@ -330,9 +330,9 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     nameInput.style.cssText = 'flex:1;min-width:0;';
     nameInput.addEventListener('keydown', (e) => {
       e.stopPropagation();
-      if (e.key === 'Enter') hostBtn.click();
+      if (e.key === 'Enter') {hostBtn.click();}
     });
-    nameRow.appendChild(nameInput);
+    nameRow.append(nameInput);
     const modeRow = field('MODE');
     const modeSelect = document.createElement('select');
     modeSelect.className = 'lb-input';
@@ -340,7 +340,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     // select keeps serving fillMapSelect/handler reads.
     modeSelect.style.display = 'none';
     modeSelect.addEventListener('change', () => h.fillMapSelect());
-    modeRow.appendChild(modeSelect);
+    modeRow.append(modeSelect);
     // Toggle row is a page-level block under the MODE field — inside the
     // flex field it shares the row and wraps at half width.
     const modeBtns = modeToggleRow(modeSelect);
@@ -357,10 +357,10 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
         b.classList.toggle('active', h.mapFamOn(kind));
         b.addEventListener('click', () => {
           h.toggleMapFam(kind);
-          for (const f of famBtns) f.b.classList.toggle('active', h.mapFamOn(f.kind));
+          for (const f of famBtns) {f.b.classList.toggle('active', h.mapFamOn(f.kind));}
         });
         famBtns.push({ b, kind });
-        row.appendChild(b);
+        row.append(b);
       }
       return row;
     };
@@ -375,7 +375,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
       settings.set('fps-unlisted', on ? 1 : 0);
       privBtn.classList.toggle('active', on);
     });
-    famRow.appendChild(privBtn);
+    famRow.append(privBtn);
     // Sim gates — the host can mint a room without creatures (melee
     // species) and/or the ball sim. ON is the default; OFF rides the
     // join as noCreatures/noBalls like `unlisted`. Same toggles serve
@@ -393,7 +393,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
           settings.set(key, off ? 1 : 0);
           b.classList.toggle('active', !off);
         });
-        row.appendChild(b);
+        row.append(b);
       }
     };
     gateToggles(famRow);
@@ -408,7 +408,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     botsInput.className = 'lb-input';
     botsInput.style.cssText = 'width:110px;text-align:right;';
     botsInput.addEventListener('keydown', (e) => e.stopPropagation());
-    botsRow.appendChild(botsInput);
+    botsRow.append(botsInput);
     const hostBtn = btn('PLAY');
     hostBtn.style.cssText = 'width:100%;margin-top:6px;border-color:rgba(58,167,255,0.4);';
     hostBtn.addEventListener('click', async () => {
@@ -441,7 +441,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
         try { h.join((await h.deps.quickJoin(mode)).room); }
         catch { b.disabled = false; }
       });
-      quick.appendChild(b);
+      quick.append(b);
     }
 
     const newWrap = document.createElement('div');
@@ -455,7 +455,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     // from the selected spec + bot count instead of always landing bare.
     const named = () => {
       const v = input.value.trim();
-      if (!v) return;
+      if (!v) {return;}
       const map = mapSelect.value || undefined;
       const mode = modeSelect.value || mapSelect.selectedOptions[0]?.dataset.mode || undefined;
       const bots = botsInput.value === '' ? undefined : Math.max(0, Math.min(24, Number(botsInput.value) || 0));
@@ -463,7 +463,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     };
     input.addEventListener('keydown', (e) => {
       e.stopPropagation();
-      if (e.key === 'Enter') named();
+      if (e.key === 'Enter') {named();}
     });
     const create = btn('JOIN');
     create.addEventListener('click', named);
@@ -495,7 +495,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     p2pIn.className = 'lb-input';
     p2pIn.style.cssText = 'flex:1;min-width:0;';
     p2pIn.addEventListener('keydown', (e) => e.stopPropagation());
-    p2pRow.appendChild(p2pIn);
+    p2pRow.append(p2pIn);
     const p2pBtns = buildP2PButtons(p2pIn);
 
     // Open P2P lobbies — the relay lists public hosts still waiting for
@@ -505,17 +505,17 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     lobRows.className = 'lb-rows';
     const refreshLobsFn = async () => {
       lobRows.textContent = '';
-      if (!h.deps.listP2pLobbies) return;
+      if (!h.deps.listP2pLobbies) {return;}
       try {
         const lobs = await h.deps.listP2pLobbies();
         if (lobs.length === 0) { lobRows.textContent = '— none open —'; lobRows.style.color = 'rgba(58,167,255,0.5)'; return; }
         lobRows.style.color = '';
         for (const l of lobs) {
-          const row = btn(`${l.room}  ·  ${Math.max(0, Math.round((Date.now() - l.since) / 60000))}m`);
+          const row = btn(`${l.room}  ·  ${Math.max(0, Math.round((Date.now() - l.since) / 60_000))}m`);
           row.classList.add('lb-room');
           row.style.textAlign = 'left';
           row.addEventListener('click', () => p2pGo(`join:${l.room}`, 0));
-          lobRows.appendChild(row);
+          lobRows.append(row);
         }
       } catch { /* relay unreachable — same failure class as /rooms */ }
     };
@@ -547,7 +547,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     const soloModeSel = document.createElement('select');
     soloModeSel.className = 'lb-input';
     soloModeSel.style.display = 'none';
-    soloModeRow.appendChild(soloModeSel);
+    soloModeRow.append(soloModeSel);
     const soloModeBtns = modeToggleRow(soloModeSel);
     const soloFamRow = famToggles();
     gateToggles(soloFamRow);
@@ -562,7 +562,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     soloBotsIn.className = 'lb-input';
     soloBotsIn.style.cssText = 'width:110px;text-align:right;';
     soloBotsIn.addEventListener('keydown', (e) => e.stopPropagation());
-    soloBotsRow.appendChild(soloBotsIn);
+    soloBotsRow.append(soloBotsIn);
     const soloBtn = btn('PLAY');
     soloBtn.style.cssText = 'width:100%;margin-top:6px;border-color:rgba(58,167,255,0.4);';
     soloBtn.addEventListener('click', () => {
@@ -584,14 +584,14 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     panel.append(tabBar, joinPage, tabs.get('HOST')!, tabs.get('OFFLINE')!, tabs.get('P2P')!);
     showTab('JOIN');
-    (document.getElementById('overlay') ?? document.body).appendChild(panel);
+    (document.getElementById('overlay') ?? document.body).append(panel);
     // Menu closed while the panel was open (resume / re-lock) — display:none
     // hides it anyway, but the poll timer would keep burning for nothing.
     let menuWasOpen = false;
     let doorShown = false;
     new MutationObserver(() => {
       const menuOpen = document.body.classList.contains('menu-open');
-      if (!menuOpen && panel.style.display !== 'none') h.toggle();
+      if (!menuOpen && panel.style.display !== 'none') {h.toggle();}
       // No session at all → the browser IS the front door: the FIRST
       // menu open lands on the room list. Any live session (room, p2p,
       // or a solo boot — ?mode/?map/?bots/?solo) counts as "in a game":
@@ -602,7 +602,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
         || urlParams.bots !== undefined || urlParams.has('solo');
       if (menuOpen && !menuWasOpen) {
         syncLeaveBtn();
-        if (!doorShown && !inGame && panel.style.display === 'none') h.toggle();
+        if (!doorShown && !inGame && panel.style.display === 'none') {h.toggle();}
         doorShown = true;
       }
       menuWasOpen = menuOpen;

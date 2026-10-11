@@ -6,7 +6,7 @@ import {
   GRUB_AGGRO_DIST, GRUB_BITE_DIST, GRUB_BITE_CD, GRUB_STUN,
   EMERGE_DUR, MELEE_FAVOR,
 } from '../core/config.js';
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
@@ -37,7 +37,7 @@ let _segGeo: THREE.IcosahedronGeometry | null = null;
 function segGeo(): THREE.BufferGeometry {
   if (!_segGeo) {
     _segGeo = new THREE.IcosahedronGeometry(0.6, 1);
-    _segGeo.scale(1.0, 0.88, 1.18); // plump, a little longer than wide
+    _segGeo.scale(1, 0.88, 1.18); // plump, a little longer than wide
   }
   return _segGeo;
 }
@@ -60,14 +60,14 @@ let _legMat: THREE.MeshLambertMaterial | null = null;
 
 /** Swarm part table — registered once in swarms.initSwarms. */
 export function grubParts(): SwarmPart[] {
-  if (!_bodyMat) _bodyMat = new THREE.MeshLambertMaterial({
-    color: 0xffffff, // smooth — a grub is soft tissue, facets read as rock
-  });
-  if (!_eyeMat) _eyeMat = new THREE.MeshBasicMaterial({
-    map: getGlowTexture(), color: 0x332211, transparent: true, blending: THREE.AdditiveBlending,
+  if (!_bodyMat) {_bodyMat = new THREE.MeshLambertMaterial({
+    color: 0xFF_FF_FF, // smooth — a grub is soft tissue, facets read as rock
+  });}
+  if (!_eyeMat) {_eyeMat = new THREE.MeshBasicMaterial({
+    map: getGlowTexture(), color: 0x33_22_11, transparent: true, blending: THREE.AdditiveBlending,
     depthWrite: false, side: THREE.DoubleSide,
-  });
-  if (!_legMat) _legMat = new THREE.MeshLambertMaterial({ color: 0x8a6f4d, flatShading: true });
+  });}
+  if (!_legMat) {_legMat = new THREE.MeshLambertMaterial({ color: 0x8A_6F_4D, flatShading: true });}
   return [
     { geometry: segGeo(), material: _bodyMat, castShadow: true, per: SEGS_PER },
     { geometry: _eyeGeo, material: _eyeMat, per: EYES_PER },
@@ -91,10 +91,10 @@ export class Grub implements Targetable, SwarmSlotOwner {
   health: number;
   maxHealth: number;
   radius: number;
-  color = new THREE.Color(0xded4b4); // waxy cream — real white grubs are brighter than khaki
+  color = new THREE.Color(0xDE_D4_B4); // waxy cream — real white grubs are brighter than khaki
   readonly debrisKind = 'goo' as const; // pops into pulp — deeply satisfying
   readonly dieCue = 'splat' as const;
-  readonly ichor = 0x7fb4e8; // pale blue grub juice
+  readonly ichor = 0x7F_B4_E8; // pale blue grub juice
   scale: number;
 
   swarmSlot = -1;
@@ -129,21 +129,21 @@ export class Grub implements Targetable, SwarmSlotOwner {
     this.uber = uber;
     this.health = this.maxHealth = uber ? GRUB_HEALTH * 4 : GRUB_HEALTH;
     this.radius = uber ? GRUB_RADIUS * 2.2 : GRUB_RADIUS;
-    this.scale = uber ? 3.0 : 0.75; // scale 3 → 3 nuggets — the fat piñata pays out
-    if (uber) this.color.set(0xd8a860); // bloated amber — reads pregnant
+    this.scale = uber ? 3 : 0.75; // scale 3 → 3 nuggets — the fat piñata pays out
+    if (uber) {this.color.set(0xD8_A8_60);} // bloated amber — reads pregnant
     this.pos = pos.clone();
     const sg = terrain.getHeight(pos.x, pos.z);
     if (Number.isFinite(sg)) {this.pos.y = sg + this.radius;}
     this.vel = new THREE.Vector3();
     this.hasSlots = allocSlots('grub', this);
-    if (!this.hasSlots) this.dead = true;
+    if (!this.hasSlots) {this.dead = true;}
   }
 
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
-    if (this.dead) return;
-    if (this.stunTimer > 0) this.stunTimer -= dt;
-    if (this.flash > 0) this.flash -= dt;
-    if (this.biteCd > 0) this.biteCd -= dt;
+    if (this.dead) {return;}
+    if (this.stunTimer > 0) {this.stunTimer -= dt;}
+    if (this.flash > 0) {this.flash -= dt;}
+    if (this.biteCd > 0) {this.biteCd -= dt;}
     this.animT += dt;
 
     const dx = playerPos.x - this.pos.x;
@@ -188,8 +188,8 @@ export class Grub implements Targetable, SwarmSlotOwner {
     if (this.vel.lengthSq() > 0.1) {
       const want = Math.atan2(this.vel.x, this.vel.z);
       let dyaw = want - this.yaw;
-      while (dyaw > Math.PI) dyaw -= Math.PI * 2;
-      while (dyaw < -Math.PI) dyaw += Math.PI * 2;
+      while (dyaw > Math.PI) {dyaw -= Math.PI * 2;}
+      while (dyaw < -Math.PI) {dyaw += Math.PI * 2;}
       this.yaw += dyaw * Math.min(1, 3 * dt); // sluggish turn — it oozes around
     }
     this.pushTrail();
@@ -209,11 +209,11 @@ export class Grub implements Targetable, SwarmSlotOwner {
     const step = Grub.STEP * r;
     if (tr.length >= 2) {
       const dx = hx - tr[0]!, dz = hz - tr[1]!;
-      if (dx * dx + dz * dz < step * step) return;
+      if (dx * dx + dz * dz < step * step) {return;}
     }
     tr.unshift(hx, hz);
     const maxPts = Math.ceil(Grub.BODY_LEN * 1.6 / Grub.STEP) * 2;
-    if (tr.length > maxPts) tr.length = maxPts;
+    if (tr.length > maxPts) {tr.length = maxPts;}
   }
 
   // Walk the trail to a point `dist` (radius units) behind the head.
@@ -252,9 +252,9 @@ export class Grub implements Targetable, SwarmSlotOwner {
   private groundY = 0; // terrain height at center — segment heights are deltas from this
 
   private writeInstances(terrain: Terrain): void {
-    if (!this.hasSlots) return;
+    if (!this.hasSlots) {return;}
     const swarm = getSwarm('grub');
-    if (!swarm) return;
+    if (!swarm) {return;}
     const slot = this.swarmSlot;
     const r = this.radius;
 
@@ -312,8 +312,8 @@ export class Grub implements Targetable, SwarmSlotOwner {
       // Three-tone grub: ORANGE-brown chitin head capsule, pale juicy
       // thorax/abdomen, and a dusky rear lobe — the translucent tail
       // showing gut contents that real white grubs wear.
-      const headCap = t > 0.99 ? 0.62 : 1.0;
-      const gutDark = t < 0.01 ? 0.68 : 1.0;
+      const headCap = t > 0.99 ? 0.62 : 1;
+      const gutDark = t < 0.01 ? 0.68 : 1;
       const shad = (0.92 + t * 0.08) * headCap * gutDark;
       swarm.setColor(PART_SEG, slot * SEGS_PER + i,
         this.color.r * fr * shad,

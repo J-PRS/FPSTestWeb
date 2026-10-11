@@ -9,7 +9,9 @@
 export const NOISE_WORLD_SCALE = 3200;
 
 export const noiseHash = (x: number, y: number): number => {
+  // oxlint-disable-next-line prefer-math-trunc -- int32 wrap is the point
   let h = (x * 374_761_393 + y * 668_265_263) | 0;
+  // oxlint-disable-next-line prefer-math-trunc -- int32 wrap is the point
   h = (h ^ (h >> 13)) * 1_274_126_177 | 0;
   return ((h ^ (h >> 16)) >>> 0) / 4_294_967_295;
 };

@@ -164,7 +164,7 @@ export class BotSenses {
       // Wounded readout — the brain's burst-orbit pick prices the hp
       // left on the target; wire remotes carry no tank and stay
       // undefined (server marks them the same way).
-      e.hpFrac = rp.botHp !== undefined ? rp.botHp / (rp.botMaxHp ?? 1) : undefined;
+      e.hpFrac = rp.botHp === undefined ? undefined : rp.botHp / (rp.botMaxHp ?? 1);
       _enemies.push(e);
     }
     // Every live scored creature enters — the server parties feed the

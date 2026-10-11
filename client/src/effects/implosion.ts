@@ -106,14 +106,14 @@ export class Implosion {
       this.scene.add(mesh);
       sw = { mesh, mat, life: 0, elapsed: 0, maxRadius: 0, dead: false };
     }
-    sw.mat.color.setHex(0x00FFFF).multiplyScalar(EMIT_GAIN);
+    sw.mat.color.setHex(0x00_FF_FF).multiplyScalar(EMIT_GAIN);
     sw.mat.opacity = 0.8;
     sw.mesh.position.copy(pos);
     sw.life = 0.4; sw.elapsed = 0; sw.maxRadius = 8 * timeScale; sw.dead = false;
     this.shockwaves.push(sw);
 
     // Layer 5b: Terrain-draped expanding ground ring — see TerrainRing
-    this.rings.push(new TerrainRing(this.scene, pos, 0x66_ee_ff, 0.5, 10 * timeScale, terrain));
+    this.rings.push(new TerrainRing(this.scene, pos, 0x66_EE_FF, 0.5, 10 * timeScale, terrain));
 
     // Layer 6: Collapsing core - bright white sphere that shrinks
     let core = corePool.pop();
@@ -129,7 +129,7 @@ export class Implosion {
       this.scene.add(mesh);
       core = { mesh, mat, dead: false };
     }
-    core.mat.color.setHex(0xff_ff_ff).multiplyScalar(EMIT_GAIN);
+    core.mat.color.setHex(0xFF_FF_FF).multiplyScalar(EMIT_GAIN);
     core.mat.opacity = 1;
     core.mesh.position.copy(pos);
     core.mesh.scale.setScalar(1);
@@ -170,7 +170,7 @@ export class Implosion {
         arc.basePts[j * 3 + 1] = radius * Math.sin(elv);
         arc.basePts[j * 3 + 2] = radius * Math.cos(elv) * Math.cos(angle);
       }
-      arc.mat.color.setHex(0x88FFFF).multiplyScalar(EMIT_GAIN);
+      arc.mat.color.setHex(0x88_FF_FF).multiplyScalar(EMIT_GAIN);
       arc.mat.opacity = 0.8;
       arc.life = 0.3; arc.elapsed = 0; arc.dead = false;
       this.arcs.push(arc);

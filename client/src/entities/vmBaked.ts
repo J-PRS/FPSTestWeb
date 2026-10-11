@@ -99,7 +99,7 @@ export class VmBaked {
         }
         await this.swapBaked(wt, g, loader, texLoader);
       } catch (error) {
-        if (forced) {g.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.visible = true; });}
+        if (forced) {g.traverse((o) => { if ((o as THREE.Mesh).isMesh) {o.visible = true;} });}
         bakeVertexAO(g, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });
         // A missing bake is the normal case — 404s surface as
         // Event/ProgressEvent (ImageLoader) or "Not Found"/404 Errors —
@@ -131,8 +131,8 @@ export class VmBaked {
     }
     const bakedMat = new THREE.MeshLambertMaterial();
     if (tex) {bakedMat.map = tex;}
-    if (!tex) {bakedMat.color.set(0x3a_36_32);} // gunmetal fallback until an ao bake exists
-    if (urlParams.has('bakedbg')) { bakedMat.map = null; bakedMat.color.set(0xFF00FF); }
+    if (!tex) {bakedMat.color.set(0x3A_36_32);} // gunmetal fallback until an ao bake exists
+    if (urlParams.has('bakedbg')) { bakedMat.map = null; bakedMat.color.set(0xFF_00_FF); }
     // Chaingun special case: the barrel triad is ANIMATED (spinVel), not
     // static geometry — a merged bake folds it into the body and the gun
     // stops spinning forever. null = merged bake, procedural barrels keep

@@ -21,9 +21,9 @@ const _rot = new THREE.Matrix4();
 const _identQ = new THREE.Quaternion();
 
 export function writeInstances(s: Strifer): void {
-    if (!s.hasSlots) return;
+    if (!s.hasSlots) {return;}
     const swarm = getSwarm('strifer');
-    if (!swarm) return;
+    if (!swarm) {return;}
     const slot = s.swarmSlot;
     const r = s.radius;
 

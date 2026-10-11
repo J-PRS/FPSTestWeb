@@ -71,8 +71,8 @@ export class BlastVariants {
       // dissipates, it doesn't smolder.
       this.h.spawnFlash(pos, mult * 0.9);
       this.energy(pos, mult, directHit);
-      this.h.allocShock(pos, 0xFFFFFF, 0.35, 5 * mult * 0.8, 0.35);
-      this.h.allocShock(pos, this.h.hasTint ? this.h.tint : 0xFFCC66, 0.45, 6.5 * mult * 0.8, 0.5);
+      this.h.allocShock(pos, 0xFF_FF_FF, 0.35, 5 * mult * 0.8, 0.35);
+      this.h.allocShock(pos, this.h.hasTint ? this.h.tint : 0xFF_CC_66, 0.45, 6.5 * mult * 0.8, 0.5);
       this.electricSparks(pos, mult);
       if (directHit) {this.directHitLayers(pos, timeScale);}
       this.h.spawnGroundRing(pos, mult * 1.2, terrain); // wider, brighter — the ring IS the read
@@ -354,8 +354,8 @@ export class BlastVariants {
       c1: [0.9, 1, 0.55], c2: [0.3, 0.8, 0.1],
       opacity: 0.95,
     });
-    this.h.allocShock(pos, 0xAAFF44, 0.22, 3.2 * mult, 0.65); // shell pops
-    this.h.allocShock(pos, 0xea_ff_aa, 0.14, 1.8 * mult, 0.8);  // hot inner rim
+    this.h.allocShock(pos, 0xAA_FF_44, 0.22, 3.2 * mult, 0.65); // shell pops
+    this.h.allocShock(pos, 0xEA_FF_AA, 0.14, 1.8 * mult, 0.8);  // hot inner rim
     this.h.spawnBurst(pos, { // whitewater — pale foam globs, NORMAL blend
       count: 12, countMult: mult,   // opaque-ish: foam scatters light back
       elvBase: 0.15, elvSpan: Math.PI * 0.45,
@@ -474,8 +474,8 @@ export class BlastVariants {
 
     // Layers 8+9: Shockwave spheres — white expanding sphere, then blue
     for (const [color, life, maxRadius, opacity] of [
-      [0xFFFFFF, 0.5, 10 * timeScale, 0.6],
-      [0x00CCFF, 0.4, 12 * timeScale, 0.7],
+      [0xFF_FF_FF, 0.5, 10 * timeScale, 0.6],
+      [0x00_CC_FF, 0.4, 12 * timeScale, 0.7],
     ] as const) {
       this.h.allocShock(pos, color, life, maxRadius, opacity);
     }

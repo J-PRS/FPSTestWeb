@@ -36,7 +36,7 @@ export class FlagPlacer {
    *  stand would hand them free territory), else the arena center, else
    *  the first spawn — always de-shelved + snapped to walkable ground. */
   rabbitFlagHome(): Vec3 {
-    const spec = this.host.spec;
+    const {spec} = this.host;
     const src = (spec.bases?.alpha && spec.bases?.bravo)
       ? {
         x: (spec.bases.alpha.x + spec.bases.bravo.x) / 2,
@@ -65,7 +65,7 @@ export class FlagPlacer {
         // footprint homes onto its standing surface (KIT_STAND_TOP).
         // Other kits' placeholder {1,1,1} size must never count.
         const lift = KIT_STAND_TOP[s.piece ?? ''];
-        if (lift === undefined) continue;
+        if (lift === undefined) {continue;}
         const k = s.scale ?? 1;
         let reach = 0;
         for (const h of KIT_HULLS[s.piece!] ?? []) {
@@ -90,7 +90,7 @@ export class FlagPlacer {
    *  downhill toward the gentlest ring neighbor until some side is a
    *  jet-able climb (~18m over 60m) instead of a wall. */
   deShelf(v: { x: number; z: number }): { x: number; z: number } {
-    let x = v.x, z = v.z;
+    let {x} = v, {z} = v;
     for (let i = 0; i < 10; i++) {
       const top = this.standTop(x, z);
       // Reachable when SOME side offers a jet-able approach (~18m over
@@ -103,7 +103,7 @@ export class FlagPlacer {
         const t = this.standTop(px, pz);
         if (t > bestTop) { bestTop = t; bx = px; bz = pz; }
       }
-      if (top - bestTop <= 18) break;
+      if (top - bestTop <= 18) {break;}
       const dx = bx - x, dz = bz - z, dd = Math.hypot(dx, dz) || 1;
       x += (dx / dd) * 15; z += (dz / dd) * 15;
     }
@@ -129,9 +129,9 @@ export class FlagPlacer {
       const dx = x - c.cx, dz = z - c.cz;
       const lx = dx * c.cos + dz * c.sin;
       const lz = -dx * c.sin + dz * c.cos;
-      if (Math.abs(lx) > c.hx || Math.abs(lz) > c.hz) continue;
+      if (Math.abs(lx) > c.hx || Math.abs(lz) > c.hz) {continue;}
       const t = c.cy + c.hy;
-      if (t > authoredY && t < floor && t <= authoredY + 12) floor = t;
+      if (t > authoredY && t < floor && t <= authoredY + 12) {floor = t;}
     }
     return floor === Infinity ? authoredY : floor;
   }
@@ -152,7 +152,7 @@ export class FlagPlacer {
           if (t > bt + 0.5) { bt = t; bx = px; bz = pz; }
         }
       }
-      if (bx === x && bz === z) break;
+      if (bx === x && bz === z) {break;}
       x = bx; z = bz; top = bt;
     }
     return { x, z };
@@ -178,7 +178,7 @@ export class FlagPlacer {
    *  the peaks collide or flee. */
   autoFlagBases(): { alpha: Vec3; bravo: Vec3 } {
     const pair = this.diagonalHilltops();
-    if (pair) return this.seatAuto(pair);
+    if (pair) {return this.seatAuto(pair);}
     return this.seatAuto(this.pcaAxisSeats());
   }
 
@@ -192,13 +192,13 @@ export class FlagPlacer {
    *  counts when the peaks end 150–500m apart — closer is one hill
    *  claiming both seeds, farther means the climbs ran off the map. */
   private diagonalHilltops(): { alpha: Vec3like; bravo: Vec3like } | null {
-    const spec = this.host.spec;
+    const {spec} = this.host;
     const pts: Vec3like[] = [
       ...(spec.spawns ?? []),
       ...(spec.structures ?? []).map(s => ({ x: s.pos.x, y: 0, z: s.pos.z })),
     ];
     let cx = spec.arena?.x ?? 0, cz = spec.arena?.z ?? 0;
-    if (!spec.arena && pts.length) {
+    if (!spec.arena && pts.length > 0) {
       for (const p of pts) { cx += p.x; cz += p.z; }
       cx /= pts.length; cz /= pts.length;
     }
@@ -206,7 +206,7 @@ export class FlagPlacer {
       const a = this.hilltop(cx - ux * 150, cz - uz * 150);
       const b = this.hilltop(cx + ux * 150, cz + uz * 150);
       const d = Math.hypot(b.x - a.x, b.z - a.z);
-      if (d >= 150 && d <= 500) return { alpha: { x: a.x, y: 0, z: a.z }, bravo: { x: b.x, y: 0, z: b.z } };
+      if (d >= 150 && d <= 500) {return { alpha: { x: a.x, y: 0, z: a.z }, bravo: { x: b.x, y: 0, z: b.z } };}
     }
     return null;
   }
@@ -216,7 +216,7 @@ export class FlagPlacer {
    *  symmetric clouds take the 45° diagonal, bare specs the arena split
    *  or ±50m. */
   private pcaAxisSeats(): { alpha: Vec3like; bravo: Vec3like } {
-    const spec = this.host.spec;
+    const {spec} = this.host;
     const pts: Vec3like[] = [
       ...(spec.spawns ?? []),
       ...(spec.structures ?? []).map(s => ({ x: s.pos.x, y: 0, z: s.pos.z })),
@@ -245,8 +245,8 @@ export class FlagPlacer {
       let tMin = Infinity, tMax = -Infinity;
       for (const p of pts) {
         const t = (p.x - cx) * ux + (p.z - cz) * uz;
-        if (t < tMin) tMin = t;
-        if (t > tMax) tMax = t;
+        if (t < tMin) {tMin = t;}
+        if (t > tMax) {tMax = t;}
       }
       const span = tMax - tMin;
       const seat = (t: number): Vec3like => ({ x: cx + ux * t, y: 0, z: cz + uz * t });
@@ -281,15 +281,15 @@ export class FlagPlacer {
    *  Called again on every terrain attach and applySpec (bases can move
    *  with the map). */
   refreshHomes(broadcastUpdate = true): void {
-    const host = this.host;
-    if (!host.flags) return;
+    const {host} = this;
+    if (!host.flags) {return;}
     if (host.mode === 'rabbit') {
       host.flags.retargetHomes({ alpha: this.rabbitFlagHome() });
       this.relayout(broadcastUpdate);
       return;
     }
-    const bases = host.spec.bases;
-    if (!host.flags.flags.has('bravo')) return;
+    const {bases} = host.spec;
+    if (!host.flags.flags.has('bravo')) {return;}
     // Auto-placed homes (bare spec) re-derive the same way — terrain
     // lands after the ctor, so the first snap was against null ground.
     const snapped = bases?.alpha && bases?.bravo

@@ -21,7 +21,7 @@ const TICK_DT = SIM_TICK_DT;
 const RETARGET_INTERVAL = CRAWLER_SIM.RETARGET_S;
 // Silence desyncs a wanderer just like a long-flying ball — force a
 // resync edge (same committed snapshot) every few seconds.
-const RESYNC_INTERVAL = 4.0;
+const RESYNC_INTERVAL = 4;
 const _snap: SimVec = { x: 0, y: 0, z: 0 };
 // Cloak confusion: seconds a creature keeps hunting its prey's last
 // sighting, and the radius the ghost target wanders.
@@ -88,7 +88,7 @@ export class CreatureBrain {
 
   stepAll(crawlers: Iterable<SimBeing>, alive: { id: string; pos: SimVec }[]): void {
     for (const c of crawlers) {
-      if (c.dead) continue;
+      if (c.dead) {continue;}
       // A due retarget consumes the whole tick step for this creature —
       // it re-aims first, moves next tick.
       if (this.retargetDue(c, alive)) { this.host.edge(c, 'retarget'); continue; }
@@ -175,8 +175,8 @@ export class CreatureBrain {
     if (ev === 'windup' || ev === 'pounce') { this.host.edge(c, ev); return; }
     if (ev === 'bite') { this.bite(c); return; }
     const rs = (this.resyncAcc.get(c.id) ?? 0) + TICK_DT;
-    if (rs >= RESYNC_INTERVAL) this.host.edge(c, 'retarget');
-    else this.resyncAcc.set(c.id, rs);
+    if (rs >= RESYNC_INTERVAL) {this.host.edge(c, 'retarget');}
+    else {this.resyncAcc.set(c.id, rs);}
   }
 
   /** A pending bite lands only if the committed target is still
@@ -184,11 +184,11 @@ export class CreatureBrain {
    *  pouncing a stale sighting damages a cloaked player across the map. */
   private bite(c: SimBeing): void {
     this.host.edge(c, 'bite');
-    if (!c.pendingBite || !c.targetId) return;
+    if (!c.pendingBite || !c.targetId) {return;}
     const live = this.host.playerState(c.targetId);
     const near = live && !live.isDead
       && (live.position.x - c.x) ** 2 + (live.position.y - c.y) ** 2 + (live.position.z - c.z) ** 2 < 8 * 8;
-    if (near) this.host.onBite?.(c, c.targetId);
+    if (near) {this.host.onBite?.(c, c.targetId);}
     c.pendingBite = false;
   }
 }

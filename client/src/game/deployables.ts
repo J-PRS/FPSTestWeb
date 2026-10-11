@@ -60,7 +60,7 @@ const NUGGET_LOB = 0.55;   // fraction of pod speed — a nugget lobs, not launc
 // (entities/Nugget.ts): faceted gold icosa + additive halo. What leaves
 // your hand must read as the thing you'll pick back up.
 const NUG_POD_GEO = new THREE.IcosahedronGeometry(0.3, 0);
-const NUG_POD_MAT = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xFFEE88).multiplyScalar(EMIT_GAIN) });
+const NUG_POD_MAT = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xFF_EE_88).multiplyScalar(EMIT_GAIN) });
 const _UP = new THREE.Vector3(0, 1, 0);
 const _FAR = new THREE.Vector3(0, -1e5, 0); // dormant-proxy for flying mines
 const _repTo = new THREE.Vector3(); // repair-beam ray scratch
@@ -237,7 +237,7 @@ export class Deployables {
       pod.nugget.layers.enable(BLOOM_LAYER);
       // Same additive halo the pickup wears — the pickup read at distance.
       const halo = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: getGlowTexture(32), color: 0xff_d5_4a, transparent: true,
+        map: getGlowTexture(32), color: 0xFF_D5_4A, transparent: true,
         blending: THREE.AdditiveBlending, depthWrite: false,
       }));
       halo.scale.setScalar(2.2);
@@ -653,13 +653,13 @@ export class Deployables {
     item.dead = true;
     if (item.kind === 'station' || item.kind === 'drone' || item.kind === 'shield') {
       // Fizzle-pop — smaller than the turret's, still tells you it died.
-      const tint = item.kind === 'drone' ? 0x88_dd_ff : item.kind === 'shield' ? 0x66_cc_ff : 0x55FFCC;
+      const tint = item.kind === 'drone' ? 0x88_DD_FF : item.kind === 'shield' ? 0x66_CC_FF : 0x55_FF_CC;
       this.deps.world.explosions.push(new Explosion(
         this.deps.scene, item.pos, false, 0, this.deps.lazyTerrain(), 0.9, tint));
       sfx.explosionAt(item.pos, false);
     } else if (item.kind === 'turret') {
       this.deps.world.explosions.push(new Explosion(
-        this.deps.scene, item.pos, false, 0, this.deps.lazyTerrain(), 1.4, 0xFF7744));
+        this.deps.scene, item.pos, false, 0, this.deps.lazyTerrain(), 1.4, 0xFF_77_44));
       sfx.explosionAt(item.pos, true);
       screenShake.blast(item.pos, 2, this.deps.lazyPlayer().pos);
     }

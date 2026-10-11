@@ -31,14 +31,14 @@ export function respawnBotF(b: TeamBots, bot: GameBot): void {
     bot.sheepShown = 100;
     b.sheep.clear(bot.playerId);
     bot.show();
-    bot.setGizmoColor(bot.team === 'ffa' ? 0xcc66ff : TEAM_COLORS[bot.team as TeamId]);
+    bot.setGizmoColor(bot.team === 'ffa' ? 0xCC_66_FF : TEAM_COLORS[bot.team as TeamId]);
   }
 
 /** Shared local-hit funnel: trigger-time claims and real bot-shell
  *  impacts land here — damage, knockback, death feed + credit. */
 export function hurtLocal(b: TeamBots, dmg: number, fromPos: THREE.Vector3, attackerId: string, opts: { src: string; melee?: boolean; weapon?: number; air?: number }): void {
     const p = b.deps.lazyPlayer();
-    if (p.isDead) return;
+    if (p.isDead) {return;}
     p.lastDamageSource = opts.src;
     // An explosive hit detonates this same frame — the blast pays the
     // T1 shove, which is the ONLY displacement the server grants a
@@ -46,7 +46,7 @@ export function hurtLocal(b: TeamBots, dmg: number, fromPos: THREE.Vector3, atta
     // offline AND online (predicted blast + this knock + the deduped
     // wire echo read as a blink). Blastless hits (bolts, melee) keep it.
     const blastPays = opts.weapon !== undefined && getWeaponStats(opts.weapon).aoeRadius > 0;
-    const knock = () => { if (!blastPays) p.applyKnockback(fromPos, (opts.melee ? 6 : 4) * p.mods.knockbackTaken); };
+    const knock = () => { if (!blastPays) {p.applyKnockback(fromPos, (opts.melee ? 6 : 4) * p.mods.knockbackTaken);} };
     // Connected room: health is server truth. A local write gets stomped
     // by the next yourHealth echo — report through the self-damage channel
     // (same as creature melee) and let the wire echo apply it. Feedback
@@ -63,7 +63,7 @@ export function hurtLocal(b: TeamBots, dmg: number, fromPos: THREE.Vector3, atta
     knock();
     b.deps.lazyHud().showDamage(fromPos, dmg);
     sfx.playerHurt();
-    if (p.health > 0) return;
+    if (p.health > 0) {return;}
     b.deps.world.killCounts.set(attackerId, (b.deps.world.killCounts.get(attackerId) ?? 0) + 1);
     b.creditKill(attackerId, false, p.pos);
     b.localDied();
@@ -83,10 +83,10 @@ export function hitF(b: TeamBots, playerId: string, dmg: number, fromPos: THREE.
     // Local authority has to enforce the same friendly gate the server's
     // CombatHandler does — without it P2P-host/offline kills teammates.
     const aTeam = b.teamOf.get(attackerId), vTeam = b.teamOf.get(playerId);
-    if (attackerId !== playerId && aTeam && aTeam === vTeam) return true; // claim swallowed, like a server reject
+    if (attackerId !== playerId && aTeam && aTeam === vTeam) {return true;} // claim swallowed, like a server reject
     // Rabbit: while a carrier exists, only pairs involving the rabbit
     // (or a bottom feeder) resolve — same gate the server applies.
-    if (b.rabbit?.blocks(attackerId, playerId, b.bottomFeeders())) return true;
+    if (b.rabbit?.blocks(attackerId, playerId, b.bottomFeeders())) {return true;}
     if (playerId === 'local') {
       hurtLocal(b, dmg, fromPos, attackerId, { src: attackerId.replace('bot:', ''), weapon, air });
       if (concStrip(b, playerId, dmg, weapon, b.deps.lazyPlayer().pos)) {
@@ -96,14 +96,14 @@ export function hitF(b: TeamBots, playerId: string, dmg: number, fromPos: THREE.
       return true;
     }
     const rp = b.deps.world.remotePlayers.get(playerId);
-    if (!(rp instanceof GameBot)) return false;
+    if (!(rp instanceof GameBot)) {return false;}
     b.creditDamage(attackerId, playerId, dmg); // bot victim — attacker banks chip
     const died = rp.takeDamageLocal(dmg, fromPos, attackerId);
     b.deps.lazyHealthBarSystem().spawn(playerId, dmg, died ? 0 : rp.botHp);
     if (!died && concStrip(b, playerId, dmg, weapon, rp.position)) {
       rp.energy = Math.max(0, rp.energy - CONC_JET_DRAIN);
     }
-    if (died) botKilledF(b, attackerId, rp, weapon, air);
+    if (died) {botKilledF(b, attackerId, rp, weapon, air);}
     return true;
 }
 
@@ -113,7 +113,7 @@ export function hitF(b: TeamBots, playerId: string, dmg: number, fromPos: THREE.
  *  the tank drain — player and bot energy fields differ in shape).
  *  The dead already drop theirs via botKilledF/localDied. */
 function concStrip(b: TeamBots, playerId: string, dmg: number, weapon: number | undefined, at: THREE.Vector3): boolean {
-    if (weapon !== WeaponType.Concussion || dmg < 1) return false;
+    if (weapon !== WeaponType.Concussion || dmg < 1) {return false;}
     b.ctf?.dropCarried(playerId, at);
     return true;
 }
@@ -126,27 +126,27 @@ const sayTimers = new Set<ReturnType<typeof setTimeout>>();
 /** Match teardown — a queued taunt from a disposed roster is a dead id
  *  speaking; drop it rather than let it read as live room traffic. */
 export function botSayDrain(): void {
-    for (const t of sayTimers) clearTimeout(t);
+    for (const t of sayTimers) {clearTimeout(t);}
     sayTimers.clear();
 }
 
 /** A bot's line lands a beat after the frag like a typed reply — the
  *  same delay envelope the server killfeed uses over the wire. */
 export function botSay(id: string, line: string | null, vgs?: string, team?: boolean): void {
-    if (!line) return;
+    if (!line) {return;}
     const name = id.replace('bot:', '');
     const delay = 1200 + Math.random() * 1800;
     // Chatter is transient like debris/audio — while hidden the timers
     // still fire but nothing queues, so alt-tab returns to a live feed,
     // not a burst of stale taunts (same rule the fx classes follow).
-    const t = setTimeout(() => { sayTimers.delete(t); if (!document.hidden) chatSink.add?.(name, line, team, vgs); }, delay);
+    const t = setTimeout(() => { sayTimers.delete(t); if (!document.hidden) {chatSink.add?.(name, line, team, vgs);} }, delay);
     sayTimers.add(t);
     // VGS-combo intent — a rare second chord timed to hard-cut the first
     // sample mid-word ("I am the— SHAZBOT!"). Tails are global-scope
     // chords, so they land wherever the starter did.
     const tail = vgs ? comboTailFor(vgs) : undefined;
     if (tail) {
-      const cut = setTimeout(() => { sayTimers.delete(cut); if (!document.hidden) chatSink.add?.(name, tail.text, false, tail.chord); }, delay + comboCutDelayMs(line));
+      const cut = setTimeout(() => { sayTimers.delete(cut); if (!document.hidden) {chatSink.add?.(name, tail.text, false, tail.chord);} }, delay + comboCutDelayMs(line));
       sayTimers.add(cut);
     }
   }
@@ -159,7 +159,7 @@ export function botKilledF(b: TeamBots, killerId: string, bot: GameBot, weapon?:
     // the instanced path (mesh-path gibs are ~20 materials + matrix
     // writes each, the pdebris spike under throttle).
     const cam = b.deps.lazyCamera().position;
-    const gdx = bot.position.x - cam.x, gdy = bot.position.y + 1.0 - cam.y, gdz = bot.position.z - cam.z;
+    const gdx = bot.position.x - cam.x, gdy = bot.position.y + 1 - cam.y, gdz = bot.position.z - cam.z;
     let parts: { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] | undefined;
     if (gdx * gdx + gdy * gdy + gdz * gdz < 120 * 120) {
       try { parts = bot.model.deathParts() ?? undefined; }
@@ -167,12 +167,12 @@ export function botKilledF(b: TeamBots, killerId: string, bot: GameBot, weapon?:
     }
     b.deps.world.playerDebrisList.push(new PlayerDebris(
       b.deps.lazyScene(), b.deps.lazyTerrain(),
-      { x: bot.position.x, y: bot.position.y + 1.0, z: bot.position.z },
-      new THREE.Color(t === 'alpha' || t === 'bravo' ? TEAM_COLORS[t] : 0xcc66ff),
+      { x: bot.position.x, y: bot.position.y + 1, z: bot.position.z },
+      new THREE.Color(t === 'alpha' || t === 'bravo' ? TEAM_COLORS[t] : 0xCC_66_FF),
       { inheritVel: bot.vel, parts },
     ));
     // Kills drop nuggets — bots feed the economy like everything else.
-    if (!b.spec.ffa) b.hooks.dropNuggets(bot.position, 3, bot.vel);
+    if (!b.spec.ffa) {b.hooks.dropNuggets(bot.position, 3, bot.vel);}
     b.deps.world.killCounts.set(killerId, (b.deps.world.killCounts.get(killerId) ?? 0) + 1);
     b.deps.world.deathCounts.set(bot.playerId, (b.deps.world.deathCounts.get(bot.playerId) ?? 0) + 1);
     b.creditKill(killerId, false, bot.position);

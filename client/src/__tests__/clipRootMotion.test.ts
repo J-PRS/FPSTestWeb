@@ -22,7 +22,7 @@ interface Glb { json: any; bin: Buffer; }
 
 function parseGlb(file: string): Glb {
   const buf = fs.readFileSync(file);
-  if (buf.readUInt32LE(0) !== 0x46_54_6c_67) {throw new Error(`${file}: not a GLB`);}
+  if (buf.readUInt32LE(0) !== 0x46_54_6C_67) {throw new Error(`${file}: not a GLB`);}
   const jsonLen = buf.readUInt32LE(12);
   const json = JSON.parse(buf.subarray(20, 20 + jsonLen).toString('utf8'));
   const off = 20 + jsonLen;

@@ -1140,8 +1140,8 @@ export function radioAimFor(chord: string): RadioAim | undefined {
  *  'im at low'). */
 function fillLine(line: string, other?: string, f?: { d?: string; h?: string }): string {
   let out = line;
-  if (other) out = out.replace(/\{t\}/g, other).replace(/\{v\}/g, other);
-  else out = out.replace(/ ?\{[tv]\}/g, ''); // unfilled name tokens never print raw
+  if (other) {out = out.replace(/\{t\}/g, other).replace(/\{v\}/g, other);}
+  else {out = out.replace(/ ?\{[tv]\}/g, '');} // unfilled name tokens never print raw
   out = out.replace(/ ?\{d\}/g, f?.d ? ` ${f.d}` : '');
   out = out.replace(/\{h\}/g, f?.h ?? 'low');
   return out;
@@ -1268,9 +1268,9 @@ const REPEAT_KILL_MS = 90_000;
  *  as a human doing it. */
 const pairKills = new Map<string, number>();
 export function noteFrag(killerId: string, victimId: string): void {
-  if (killerId === victimId || killerId === 'environment') return;
+  if (killerId === victimId || killerId === 'environment') {return;}
   pairKills.set(`${killerId}|${victimId}`, (pairKills.get(`${killerId}|${victimId}`) ?? 0) + 1);
-  if (pairKills.size > 512) pairKills.delete(pairKills.keys().next().value!);
+  if (pairKills.size > 512) {pairKills.delete(pairKills.keys().next().value!);}
 }
 /** victim has died to killer 3+ times and has zero frags back. */
 export function bulliedBy(victimId: string, killerId: string): boolean {

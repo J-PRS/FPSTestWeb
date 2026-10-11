@@ -7,8 +7,8 @@
 
 /** Shortest signed distance a→b in radians, in (-π, π]. */
 export function wrapAngleDelta(delta: number): number {
-  while (delta > Math.PI) delta -= 2 * Math.PI;
-  while (delta < -Math.PI) delta += 2 * Math.PI;
+  while (delta > Math.PI) {delta -= 2 * Math.PI;}
+  while (delta < -Math.PI) {delta += 2 * Math.PI;}
   return delta;
 }
 

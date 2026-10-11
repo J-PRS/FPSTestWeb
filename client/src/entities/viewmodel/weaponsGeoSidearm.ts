@@ -61,7 +61,7 @@ trigger.rotation.x = 0.25;
 pistol.add(trigger);
 // Grip — autopistol rake: straighter than a revolver, ~15° back.
 // Extruded profile again: flat front strap, convex backstrap, squared butt.
-const gripMat = new THREE.MeshLambertMaterial({ color: 0x33362F, emissive: 0x0b_0c_0a });
+const gripMat = new THREE.MeshLambertMaterial({ color: 0x33_36_2F, emissive: 0x0B_0C_0A });
 const gs = new THREE.Shape();
 gs.moveTo(0, 0);
 gs.lineTo(-0.005, -0.11);                        // front strap — near vertical
@@ -182,7 +182,7 @@ revolver.add(spur);
 // the palm, rounding into the butt) — stacked rotated boxes will never
 // read as a grip; the silhouette curve is the whole trick. Drawn in
 // the YZ plane (x = backward along +Z, y = down is -Y), extruded thick.
-const gripMat = new THREE.MeshLambertMaterial({ color: 0x5A3D28, emissive: 0x140C06 });
+const gripMat = new THREE.MeshLambertMaterial({ color: 0x5A_3D_28, emissive: 0x14_0C_06 });
 const gripShape = new THREE.Shape();
 // Shape x = backward (+Z after the Y-rotation below), y = down (-Y).
 gripShape.moveTo(0, 0);                                       // top front at frame junction
@@ -213,8 +213,8 @@ return revolver;
 // underneath. The beam color (0x7dffb8) is the only glow it needs.
 export function mkRepair(): THREE.Group {
 const rep = new THREE.Group();
-const weldGlow = new THREE.MeshBasicMaterial({ color: 0x7d_ff_b8 }); // matches the repair beam
-const cableMat = new THREE.MeshLambertMaterial({ color: 0xCC6A1A, emissive: 0x2A1204 });
+const weldGlow = new THREE.MeshBasicMaterial({ color: 0x7D_FF_B8 }); // matches the repair beam
+const cableMat = new THREE.MeshLambertMaterial({ color: 0xCC_6A_1A, emissive: 0x2A_12_04 });
 // T:A repair tool language: an industrial handpiece, not a gun — two
 // octagonal housings (same faceting as the emitter plate) bridged by
 // exposed orange cabling, green guts visible in the gap. Cylinders
@@ -244,7 +244,7 @@ rep.add(tip);
 // Green guts in the gap between housings — the internals show where
 // the body splits, like the ref's green bay between the plates.
 const bay = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.06),
-  new THREE.MeshLambertMaterial({ color: 0x1A3A28, emissive: 0x0A2A14 }));
+  new THREE.MeshLambertMaterial({ color: 0x1A_3A_28, emissive: 0x0A_2A_14 }));
 bay.position.set(0, 0.03, 0);
 rep.add(bay);
 // Exposed orange cabling bridging front↔rear — THE detail that kills

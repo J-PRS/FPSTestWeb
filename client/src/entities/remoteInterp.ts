@@ -238,13 +238,13 @@ export class RemoteInterp {
   predict(fromPos: THREE.Vector3, impulseMag: number, pull = false): void {
     // NaN seed → NaN simulatedVelocity + a cleared interp buffer: the
     // remote ghosts into nowhere until the next wire row re-roots it.
-    if (!Number.isFinite(fromPos.x + fromPos.y + fromPos.z + impulseMag)) return;
+    if (!Number.isFinite(fromPos.x + fromPos.y + fromPos.z + impulseMag)) {return;}
     // Inside an active window the seed already owns the flight — a second
     // predicted blast re-seeding would STACK impulses (serverVelocity +
     // impulse, again) and refresh the timer, so sustained mortar spam
     // launched remotes tens of meters past any real record. The arriving
     // wire truth carries the extra blasts; this prediction is cosmetic.
-    if (this.predictionTimer > 0) return;
+    if (this.predictionTimer > 0) {return;}
     const p = this.h.position;
     const dx = p.x - fromPos.x;
     const dy = p.y - fromPos.y;

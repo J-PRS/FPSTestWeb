@@ -23,8 +23,8 @@ export const CHAINGUN_CONFIG: ProjectileConfig = {
   aoeRadius: 0,
   damageColor: '#ffee88',
   trailColors: [
-    new THREE.Color(1.0, 0.95, 0.6),
-    new THREE.Color(1.0, 0.8, 0.3),
+    new THREE.Color(1, 0.95, 0.6),
+    new THREE.Color(1, 0.8, 0.3),
     new THREE.Color(0.9, 0.5, 0.1),
   ],
   // No particle trail — the bright bolt mesh IS the tracer. At 250 m/s this
@@ -40,15 +40,15 @@ export const CHAINGUN_CONFIG: ProjectileConfig = {
   trailBaseSize: 0.04,
   trailSizeRange: 0.03,
   trailScaleMin: 0.3,
-  trailScaleMax: 1.0,
+  trailScaleMax: 1,
   trailRampIn: 0,
-  meshColor: 0xffee88,
+  meshColor: 0xFF_EE_88,
   meshType: 'rocket',
   // Wake cone available but off for now — flip glowShell to render the
   // same hitbox-coupled collar disc/bolt wear.
   glowShell: false,
   glowShape: 'wakeCone',
-  glowColor: 0xffee88,
+  glowColor: 0xFF_EE_88,
   glowOpacity: 0.6,
   glowScale: 0.8,
   meshRampIn: true,
@@ -69,5 +69,5 @@ export const CHAINGUN_CONFIG: ProjectileConfig = {
   // Streak grows in behind the slug — same 10%→full ramp as the bolt
   // mesh, applied to both width and trail length.
   ribbonRampIn: 0.2,
-  ribbonColor: 0xffd850,
+  ribbonColor: 0xFF_D8_50,
 };

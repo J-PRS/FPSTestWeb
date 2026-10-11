@@ -161,14 +161,14 @@ export class FlagRunBridge {
       this.flags.push({ mesh, stand, home, pos: home.clone(), state: 'home', team, carrier: null, dropT: 0, flyVel: new THREE.Vector3(), airborneBy: null });
     });
     w.onFeed(`FLAG RUN — grab an enemy flag, bank it at any ${TEAM_LABEL[w.playerTeam]} stand.`);
-    if (urlParams.has('tas')) this.loadTasGhost();
+    if (urlParams.has('tas')) {this.loadTasGhost();}
   }
 
   /** Scene teardown — same leak class as CtfFlags: orphaned stand+flag
    *  meshes keep rendering after the offline match retires. */
   dispose(): void {
     const scene = this.deps.lazyScene();
-    for (const f of this.flags) scene.remove(f.mesh, f.stand);
+    for (const f of this.flags) {scene.remove(f.mesh, f.stand);}
     this.flags.length = 0;
     if (this.tasGhost) { scene.remove(this.tasGhost); this.tasGhost = undefined; }
   }
@@ -223,7 +223,7 @@ export class FlagRunBridge {
       if (i + 1 < this.tasPts.length) {
         s.yaw = leg2.samples[i + 1]!.yaw;
         sim.setInput({ forward: 1, right: 0, jumpPressed: false, jumpHeld: false, skiHeld: true, jetHeld: leg2.samples[i + 1]!.j === 1 });
-        for (let k = 0; k < 9; k++) sim.update(1 / 60);
+        for (let k = 0; k < 9; k++) {sim.update(1 / 60);}
       }
     }
     // The search scored "goal" at ring crossing (≤40m above the stand) —
@@ -240,8 +240,8 @@ export class FlagRunBridge {
     this.tasPts = simPts;
     const line = new THREE.Line(
       new THREE.BufferGeometry().setFromPoints(this.tasPts),
-      new THREE.LineBasicMaterial({ color: 0xffd84d, transparent: true, opacity: 0.7 }));
-    this.tasMat = new THREE.MeshBasicMaterial({ color: 0xff4060 });
+      new THREE.LineBasicMaterial({ color: 0xFF_D8_4D, transparent: true, opacity: 0.7 }));
+    this.tasMat = new THREE.MeshBasicMaterial({ color: 0xFF_40_60 });
     const dot = new THREE.Mesh(new THREE.SphereGeometry(1.6, 10, 8), this.tasMat);
     // Carried-flag prop — the leg is a grab→cap flight, so the marker
     // needs the enemy standard on its back or it reads as a stray spark.
@@ -270,11 +270,11 @@ export class FlagRunBridge {
   }
 
   private tickTasGhost(dt: number): void {
-    if (!this.tasPts.length || !this.tasGhost) return;
+    if (this.tasPts.length === 0 || !this.tasGhost) {return;}
     this.tasT += dt;
     // 1s hold at each end: grab beat on the source stand, cap beat on the
     // goal stand — the flight is sandwiched so the loop reads as a cap.
-    const HOLD = 1.0;
+    const HOLD = 1;
     const flight = this.tasPts.length * this.tasStep;
     const t = this.tasT % (flight + HOLD * 2);
     const ft = Math.max(0, Math.min(t - HOLD, flight)) / this.tasStep;
@@ -283,10 +283,10 @@ export class FlagRunBridge {
     dot.position.lerpVectors(this.tasPts[i]!, this.tasPts[i + 1]!, ft - i);
     const atEnd = t >= flight + HOLD;
     (dot.material as THREE.MeshBasicMaterial).color.setHex(
-      t < HOLD || atEnd ? 0xffd84d : this.tasJet[i] ? 0x40ff90 : 0xff4060);
+      t < HOLD || atEnd ? 0xFF_D8_4D : this.tasJet[i] ? 0x40_FF_90 : 0xFF_40_60);
     // The real source flag leaves its stand while the ghost carries it —
     // otherwise the "grab" shows a copy flying and the original seated.
-    if (this.tasSrc) this.tasSrc.mesh.visible = t < HOLD || atEnd;
+    if (this.tasSrc) {this.tasSrc.mesh.visible = t < HOLD || atEnd;}
     // Live speed label over the marker (sample-spacing / step duration).
     const spd = this.tasPts[i + 1]!.distanceTo(this.tasPts[i]!) / this.tasStep;
     const spdTxt = atEnd ? 'CAP' : t < HOLD ? 'GRAB' : `${spd.toFixed(0)} m/s`;
@@ -323,10 +323,10 @@ export class FlagRunBridge {
   /** Spawn/respawn anchor — beside the nearest live enemy flag. */
   spawnPoint(): THREE.Vector3 | null {
     const p = this.playerPos;
-    if (!p) return this.flags.find(f => f.team !== this.w.playerTeam)?.home ?? null;
+    if (!p) {return this.flags.find(f => f.team !== this.w.playerTeam)?.home ?? null;}
     let best: THREE.Vector3 | null = null, bd = Infinity;
     for (const f of this.flags) {
-      if (f.team === this.w.playerTeam || f.state === 'carried') continue;
+      if (f.team === this.w.playerTeam || f.state === 'carried') {continue;}
       const d = f.home.distanceToSquared(p);
       if (d < bd) { bd = d; best = f.home; }
     }
@@ -342,10 +342,10 @@ export class FlagRunBridge {
   rekey(oldId: string, newId: string): void {
     const p = this.lastTouchPos.get(oldId);
     this.lastTouchPos.delete(oldId);
-    if (p !== undefined) this.lastTouchPos.set(newId, p);
+    if (p !== undefined) {this.lastTouchPos.set(newId, p);}
     const v = this.lastTouchV.get(oldId);
     this.lastTouchV.delete(oldId);
-    if (v !== undefined) this.lastTouchV.set(newId, v);
+    if (v !== undefined) {this.lastTouchV.set(newId, v);}
   }
 
   update(dt: number): void {
@@ -362,15 +362,15 @@ export class FlagRunBridge {
       this.eSum += player.energy ?? 0;
       this.eN++;
       const v = Math.hypot(player.vel?.x ?? 0, player.vel?.z ?? 0);
-      if (v > this.maxV) this.maxV = v;
+      if (v > this.maxV) {this.maxV = v;}
       this.lastTouchV.set('local', v);
       this.lastTouchPos.set('local', (this.lastTouchPos.get('local') ?? new THREE.Vector3()).copy(player.pos));
       touchers.push(['local', player.pos, prev]);
     }
     for (const b of this.w.bots) {
-      if (b.isDead) continue;
+      if (b.isDead) {continue;}
       let prev = this.lastTouchPos.get(b.playerId);
-      if (!prev) this.lastTouchPos.set(b.playerId, (prev = b.position.clone()));
+      if (!prev) {this.lastTouchPos.set(b.playerId, (prev = b.position.clone()));}
       this.lastTouchV.set(b.playerId, dt > 0 ? b.position.distanceTo(prev) / dt : 0);
       touchers.push([b.playerId, b.position, prev]);
       prev.copy(b.position);
@@ -391,7 +391,7 @@ export class FlagRunBridge {
           // Cap: any friendly stand within FLAG_HOME_R banks it.
           const cTeam = this.w.teamOf.get(f.carrier!) as TeamId | undefined;
           for (const home of this.friendlyHomes(cTeam ?? this.w.playerTeam)) {
-            if (f.pos.distanceTo(home) >= FLAG_HOME_R + STAND_TOP) continue;
+            if (f.pos.distanceTo(home) >= FLAG_HOME_R + STAND_TOP) {continue;}
             this.cap(f);
             break;
           }
@@ -409,14 +409,14 @@ export class FlagRunBridge {
       if (f.state === 'dropped') {
         this.tickBallistic(f, dt);
         f.dropT -= dt;
-        if (f.dropT <= 0) this.sendHome(f, 'returned');
+        if (f.dropT <= 0) {this.sendHome(f, 'returned');}
       }
       // home/dropped both accept touches — swept capsule like CtfFlags.
       for (const [id, tp, pp] of touchers) {
-        if (id === f.airborneBy) continue; // thrower can't re-grab mid-flight
+        if (id === f.airborneBy) {continue;} // thrower can't re-grab mid-flight
         const tTeam = this.w.teamOf.get(id);
         if (f.state === 'dropped' && tTeam === f.team) { this.sendHome(f, 'returned'); break; }
-        if (tTeam === f.team) continue;
+        if (tTeam === f.team) {continue;}
         const segLen2 = pp.distanceToSquared(tp);
         const t = segLen2 > 0 ? Math.min(1, Math.max(0,
           ((f.pos.x - pp.x) * (tp.x - pp.x) + (f.pos.y - pp.y) * (tp.y - pp.y) + (f.pos.z - pp.z) * (tp.z - pp.z)) / segLen2)) : 0;
@@ -426,7 +426,7 @@ export class FlagRunBridge {
         // Server touch rule: |dy|<=6 vertical + planar radius — the deck
         // puts the flag ~3m over your feet, a 3D sphere would miss.
         const pickupR = FLAG_PICKUP_R * (id === 'local' ? (player.mods.pickupRadius ?? 1) : 1);
-        if (Math.abs(dy) > 6 || dx * dx + dz * dz > pickupR * pickupR) continue;
+        if (Math.abs(dy) > 6 || dx * dx + dz * dz > pickupR * pickupR) {continue;}
         f.state = 'carried'; f.carrier = id;
         f.airborneBy = null; f.flyVel.set(0, 0, 0);
         this.setBotCarry(id, true);
@@ -438,7 +438,7 @@ export class FlagRunBridge {
         break;
       }
       f.mesh.position.copy(f.pos);
-      if (f.state === 'home') f.mesh.position.y += STAND_TOP;
+      if (f.state === 'home') {f.mesh.position.y += STAND_TOP;}
     }
     // Markers: one pin per stand, lifted to deck height.
     const cam = this.deps.lazyCamera();
@@ -476,7 +476,7 @@ export class FlagRunBridge {
 
   private setBotCarry(id: string | null, v: boolean): void {
     const b = id ? this.w.bots.find(x => x.playerId === id) : undefined;
-    if (b) b.carryingFlag = v;
+    if (b) {b.carryingFlag = v;}
   }
 
   /** Bot objective for flagrun — grab the nearest enemy flag, bank it at
@@ -487,7 +487,7 @@ export class FlagRunBridge {
     if (bot.carryingFlag) {
       let home: THREE.Vector3 | null = null, hd = Infinity;
       for (const f of this.flags) {
-        if (f.team !== myTeam) continue;
+        if (f.team !== myTeam) {continue;}
         const d = f.home.distanceToSquared(bot.position);
         if (d < hd) { hd = d; home = f.home; }
       }
@@ -495,7 +495,7 @@ export class FlagRunBridge {
     }
     let best: THREE.Vector3 | null = null, bd = Infinity;
     for (const f of this.flags) {
-      if (f.team === myTeam || f.state === 'carried') continue;
+      if (f.team === myTeam || f.state === 'carried') {continue;}
       const d = f.pos.distanceToSquared(bot.position);
       if (d < bd) { bd = d; best = f.pos; }
     }
@@ -512,12 +512,12 @@ export class FlagRunBridge {
     this.w.onCapture(cTeam);
     const cv = (f.carrier ? this.lastTouchV.get(f.carrier) ?? 0 : 0).toFixed(0);
     this.w.onFeed(`CAP ${this.caps % LAP_CAPS || LAP_CAPS}/${LAP_CAPS} — ${this.capT.toFixed(1)}s AT ${cv} m/s`);
-    if (this.capT < this.bestCap) this.bestCap = this.capT;
+    if (this.capT < this.bestCap) {this.bestCap = this.capT;}
     sfx.flagCue('captured', true);
     this.burst(f.home, cTeam, 2.4);
     if (this.caps % LAP_CAPS === 0) {
       this.lap++;
-      if (this.lapT < this.bestLap) this.bestLap = this.lapT;
+      if (this.lapT < this.bestLap) {this.bestLap = this.lapT;}
       this.w.onFeed(`LAP ${this.lap} — ${this.lapT.toFixed(1)}s  (best ${this.bestLap.toFixed(1)}s)`);
       this.lapT = 0;
     }
@@ -547,7 +547,7 @@ export class FlagRunBridge {
 
   dropCarried(carrierId: string, at: THREE.Vector3): void {
     for (const f of this.flags) {
-      if (f.carrier !== carrierId) continue;
+      if (f.carrier !== carrierId) {continue;}
       this.setBotCarry(carrierId, false);
       f.carrier = null; f.state = 'dropped';
       f.pos.copy(at);
@@ -564,9 +564,9 @@ export class FlagRunBridge {
    *  arc reads identical to the wire replay. */
   throwLocal(): void {
     const player = this.deps.lazyPlayer();
-    if (player.isDead) return;
+    if (player.isDead) {return;}
     for (const f of this.flags) {
-      if (f.carrier !== 'local') continue;
+      if (f.carrier !== 'local') {continue;}
       const cp = Math.cos(player.pitch), sp = Math.sin(player.pitch);
       this.setBotCarry('local', false);
       f.carrier = null; f.state = 'dropped';
@@ -584,7 +584,7 @@ export class FlagRunBridge {
   /** Loose-flag tumble — mirrors RoomFlags.tickBallistic (world
    *  gravity, 0.3 bounce, 4/s skid bleed, 0.6 settle). */
   private tickBallistic(f: CircuitFlag, dt: number): void {
-    if (f.flyVel.x === 0 && f.flyVel.y === 0 && f.flyVel.z === 0) return;
+    if (f.flyVel.x === 0 && f.flyVel.y === 0 && f.flyVel.z === 0) {return;}
     f.flyVel.y += GRAVITY * dt;
     f.pos.addScaledVector(f.flyVel, dt);
     const gy = this.deps.lazyTerrain().getHeight(f.pos.x, f.pos.z) + 0.2;

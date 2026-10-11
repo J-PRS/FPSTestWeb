@@ -50,9 +50,9 @@ export function computeStateHash(players: Iterable<[string, HashablePlayer]>): s
   // state, the exact false-positive this check exists to avoid.
   let h = 0;
   for (const [id, p] of players) {
-    let ph = 0x811c9dc5;
+    let ph = 0x81_1C_9D_C5;
     for (let i = 0; i < id.length; i++) {
-      ph ^= id.charCodeAt(i); ph = Math.imul(ph, 0x01000193) >>> 0;
+      ph ^= id.charCodeAt(i); ph = Math.imul(ph, 0x01_00_01_93) >>> 0;
     }
     for (const v of [
       Math.round(p.x), Math.round(p.y), Math.round(p.z),
@@ -62,7 +62,7 @@ export function computeStateHash(players: Iterable<[string, HashablePlayer]>): s
       Math.floor(Math.round(p.health) / ECHO_QUANTUM),
       p.isDead ? 1 : 0,
     ]) {
-      ph ^= v & 0xffff; ph = Math.imul(ph, 0x01000193) >>> 0;
+      ph ^= v & 0xFF_FF; ph = Math.imul(ph, 0x01_00_01_93) >>> 0;
     }
     h = (h + ph) >>> 0;
   }
@@ -83,16 +83,16 @@ import type { WorldKindDecl } from './worldModel.ts';
 function mixValue(ph: number, v: unknown): number {
   // null/undefined and '' mix identically (separator only) — an unset
   // edge field and an empty one must not read as different state.
-  if (v == null) { ph ^= 0xff; return Math.imul(ph, 0x01000193) >>> 0; }
-  if (typeof v === 'number') { ph ^= v & 0xffff; return Math.imul(ph, 0x01000193) >>> 0; }
-  if (typeof v === 'boolean') { ph ^= v ? 1 : 0; return Math.imul(ph, 0x01000193) >>> 0; }
+  if (v == null) { ph ^= 0xFF; return Math.imul(ph, 0x01_00_01_93) >>> 0; }
+  if (typeof v === 'number') { ph ^= v & 0xFF_FF; return Math.imul(ph, 0x01_00_01_93) >>> 0; }
+  if (typeof v === 'boolean') { ph ^= v ? 1 : 0; return Math.imul(ph, 0x01_00_01_93) >>> 0; }
   const s = String(v);
   for (let i = 0; i < s.length; i++) {
-    ph ^= s.charCodeAt(i); ph = Math.imul(ph, 0x01000193) >>> 0;
+    ph ^= s.charCodeAt(i); ph = Math.imul(ph, 0x01_00_01_93) >>> 0;
   }
   // Field separator — concatenated strings alone can't tell
   // ('chase','r') from ('cha','ser').
-  ph ^= 0xff; return Math.imul(ph, 0x01000193) >>> 0;
+  ph ^= 0xFF; return Math.imul(ph, 0x01_00_01_93) >>> 0;
 }
 
 /** Identity + declared lifecycle fields, per kind. Hash inputs ride
@@ -104,9 +104,9 @@ function mixValue(ph: number, v: unknown): number {
 export function replicaHash(kind: WorldKindDecl, replicas: Iterable<[number | string, Record<string, unknown>]>): string {
   let h = 0;
   for (const [id, r] of replicas) {
-    let ph = 0x811c9dc5;
+    let ph = 0x81_1C_9D_C5;
     ph = mixValue(ph, id);
-    for (const f of kind.fields) ph = mixValue(ph, r[f.name]);
+    for (const f of kind.fields) {ph = mixValue(ph, r[f.name]);}
     h = (h + ph) >>> 0;
   }
   return h.toString(16);

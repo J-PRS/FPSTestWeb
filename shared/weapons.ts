@@ -44,7 +44,7 @@ const AIRTIME_SCALED = new Set<number>([
 ]);
 export function scaledDirectDamage(weaponType: number, airtime?: number): number {
   const w = WEAPONS[weaponType];
-  if (!w) return 0;
+  if (!w) {return 0;}
   if (!AIRTIME_SCALED.has(weaponType) || airtime === undefined || airtime <= 0) {
     return w.directDamage;
   }
@@ -144,9 +144,9 @@ export function getWeaponStats(weaponType: number | undefined): WeaponStats {
  *  brain at 0.45s cadence would otherwise out-shoot a player's 2.0s). */
 export const WEAPON_FIRE_INTERVAL_S: Partial<Record<WeaponType, number>> = {
   [WeaponType.BoltLauncher]: 0.8,
-  [WeaponType.Disc]: 1.0,
+  [WeaponType.Disc]: 1,
   [WeaponType.Chaingun]: 0.09,
-  [WeaponType.Mortar]: 2.0,
+  [WeaponType.Mortar]: 2,
   [WeaponType.GrenadeLauncher]: 0.7,
   [WeaponType.Flak]: 1.1,
   [WeaponType.PlasmaCannon]: 0.28,
@@ -176,7 +176,7 @@ export function canHostRide(weaponType: number, stats: { directDamage: number })
   // MRV exemption: the carrier's small pop is delivery, not the payload —
   // it airbursts mid-flight anyway, so a hitchhiker adds spectacle, not
   // a damage exploit the gate exists to prevent.
-  if (weaponType === WeaponType.MRVLauncher) return true;
+  if (weaponType === WeaponType.MRVLauncher) {return true;}
   return (WEAPON_FIRE_INTERVAL_S[weaponType as WeaponType] ?? 0) >= RIDE_HOST_MIN_INTERVAL_S
     && stats.directDamage >= RIDE_HOST_MIN_DIRECT;
 }

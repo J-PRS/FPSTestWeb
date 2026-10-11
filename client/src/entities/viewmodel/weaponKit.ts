@@ -5,11 +5,11 @@ import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 // Shared material palette + tube/bore helpers for the procedural weapon
 // builders. Hoisted so every family file (weaponsGeo, weaponsGeoEnergy,
 // weaponsGeoSidearm) builds against the same palette.
-export const bodyMat = new THREE.MeshLambertMaterial({ color: 0x55_5a_60, emissive: 0x1C1E20 });
-export const darkMat = new THREE.MeshLambertMaterial({ color: 0x2A2D30, emissive: 0x0E0F10 });
+export const bodyMat = new THREE.MeshLambertMaterial({ color: 0x55_5A_60, emissive: 0x1C_1E_20 });
+export const darkMat = new THREE.MeshLambertMaterial({ color: 0x2A_2D_30, emissive: 0x0E_0F_10 });
 export const boreMat = new THREE.MeshBasicMaterial({ color: 0x00_00_00 });
-export const shellMat = new THREE.MeshLambertMaterial({ color: 0xa8_24_1a, emissive: 0x2a_06_04 });
-export const brassMat = new THREE.MeshLambertMaterial({ color: 0xB08A3A, emissive: 0x241A08 });
+export const shellMat = new THREE.MeshLambertMaterial({ color: 0xA8_24_1A, emissive: 0x2A_06_04 });
+export const brassMat = new THREE.MeshLambertMaterial({ color: 0xB0_8A_3A, emissive: 0x24_1A_08 });
 
 // hseg: vertex AO bakes per-vertex — a 1-segment cylinder only has two
 // vert rings, so one occluded rim shades the WHOLE length black. Long

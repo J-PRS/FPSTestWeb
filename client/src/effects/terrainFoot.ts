@@ -25,7 +25,7 @@ export class TerrainFoot {
     private rimRadius: number,
     private depth = 0.15,
     segs = 28,
-    color = 0x4A4235, // dirt
+    color = 0x4A_42_35, // dirt
   ) {
     this.segs = segs;
     this.geo = new THREE.BufferGeometry();

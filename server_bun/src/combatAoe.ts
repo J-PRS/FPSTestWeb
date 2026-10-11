@@ -1,7 +1,7 @@
 import { simMs } from './simClock.ts';
-import type { ClientMessage, Vec3 } from './types.ts';
+import type { ClientMessage, Vec3,PlayerState } from './types.ts';
 import type { PlayerManager } from './PlayerManager.ts';
-import type { PlayerState } from './types.ts';
+
 import type { WeaponStats } from '../../shared/weapons.ts';
 import { getWeaponStats, WeaponType } from '../../shared/weapons.ts';
 import { lgTickDamage, LG_TICK_BASE } from '../../shared/combat.ts';
@@ -100,9 +100,9 @@ export class AoeClaims {
       this.h.reject(playerId, 'AOE', `slam ${dist.toFixed(0)}m from player`, undefined, msg.weaponType);
       return;
     }
-    const power = msg.power !== undefined
-      ? Math.min(Math.max(msg.power, 0.2), 1.8)
-      : 1;
+    const power = msg.power === undefined
+      ? 1
+      : Math.min(Math.max(msg.power, 0.2), 1.8);
     this.h.blast.processAOE(playerId, msg.position, msg.excludeTargetId, {
       ...stats,
       aoeDamage: stats.aoeDamage * power,
@@ -126,7 +126,7 @@ export class AoeClaims {
       this.h.reject(playerId, 'AOE', `beam tip ${dist.toFixed(0)}m from eye`, undefined, msg.weaponType);
       return;
     }
-    if (this.h.solids.length && segSolidHit(eye, msg.position, this.h.solids, this.h.solidIndex ?? undefined, player.team)) {
+    if (this.h.solids.length > 0 && segSolidHit(eye, msg.position, this.h.solids, this.h.solidIndex ?? undefined, player.team)) {
       this.h.hb('aoe.beam.occluded');
       this.h.reject(playerId, 'AOE', 'beam tip behind structure', undefined, msg.weaponType);
       return;
@@ -142,7 +142,7 @@ export class AoeClaims {
       // predicted tic still needs clearing or its ledger warns phantom.
       this.h.notifyDrop(playerId, 'AOE', 'target dead', victim.id, msg.weaponType, msg.shotId);
     }
-    if (victim && !victim.isDead && !this.h.friendly(playerId, victim.id)) this.h.chargeBank.bank(victim, this.h.chargeBank.withheldFor(n));
+    if (victim && !victim.isDead && !this.h.friendly(playerId, victim.id)) {this.h.chargeBank.bank(victim, this.h.chargeBank.withheldFor(n));}
     // The victim sits in excludeTargetId — projectile semantics would skip
     // them in the blast, but the beam has no paired `shot` claim. Apply the
     // tick directly (lag-comp'd, occluded, pin shove) — same ramp botAttack
@@ -151,7 +151,7 @@ export class AoeClaims {
       const dmg = lgTickDamage(n) * perkMods(player.perk).directDamage * this.h.ddMult(player);
       this.h.hb('aoe.beam.hit');
       this.h.blast.splashOne({
-        shooterId: playerId, ping: player.ping, bot: !!player.isBot, pos: msg.position,
+        shooterId: playerId, ping: player.ping, bot: Boolean(player.isBot), pos: msg.position,
         lagMs: player.isBot ? 0 : renderLagOf(player),
         lagMap: player.isBot ? undefined : player.clientStats?.renderLag,
         radius: stats.aoeRadius, baseDamage: dmg,

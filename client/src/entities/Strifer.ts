@@ -9,7 +9,7 @@ import {
   STRIFER_HOVER_T, STRIFER_STUN, MELEE_FAVOR,
 } from '../core/config.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getShadows } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
@@ -93,12 +93,12 @@ let _eyeMat: THREE.MeshBasicMaterial | null = null;
 export function striferParts(): SwarmPart[] {
   // Same grunge/wear convention as the turretter — carved metal that
   // catches the sun, not bare plastic.
-  if (!_bodyMat) { _bodyMat = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x0a0d12 }); _bodyMat.userData.__wearInt = 2.2; }
-  if (!_wingMat) { _wingMat = new THREE.MeshLambertMaterial({ color: 0xb8c2cf, side: THREE.DoubleSide, emissive: 0x0a0d12 }); _wingMat.userData.__wearInt = 2.2; }
-  if (!_eyeMat) _eyeMat = new THREE.MeshBasicMaterial({
-    map: getGlowTexture(), color: 0xff8844, transparent: true, blending: THREE.AdditiveBlending,
+  if (!_bodyMat) { _bodyMat = new THREE.MeshLambertMaterial({ color: 0xFF_FF_FF, emissive: 0x0A_0D_12 }); _bodyMat.userData.__wearInt = 2.2; }
+  if (!_wingMat) { _wingMat = new THREE.MeshLambertMaterial({ color: 0xB8_C2_CF, side: THREE.DoubleSide, emissive: 0x0A_0D_12 }); _wingMat.userData.__wearInt = 2.2; }
+  if (!_eyeMat) {_eyeMat = new THREE.MeshBasicMaterial({
+    map: getGlowTexture(), color: 0xFF_88_44, transparent: true, blending: THREE.AdditiveBlending,
     depthWrite: false, side: THREE.DoubleSide,
-  });
+  });}
   return [
     { geometry: bodyGeo(), material: _bodyMat, castShadow: true },
     { geometry: wingGeo(), material: _wingMat, per: WINGS_PER },
@@ -128,7 +128,7 @@ export class Strifer implements Targetable, SwarmSlotOwner {
   health: number;
   maxHealth: number;
   radius: number;
-  color = new THREE.Color(0x4a5a6e); // gunmetal blue-gray
+  color = new THREE.Color(0x4A_5A_6E); // gunmetal blue-gray
   readonly debrisKind = 'rock' as const;
   scale = 0.9;
 
@@ -166,18 +166,18 @@ export class Strifer implements Targetable, SwarmSlotOwner {
     this.uber = uber;
     this.health = this.maxHealth = uber ? STRIFER_HEALTH * 3 : STRIFER_HEALTH;
     this.radius = uber ? STRIFER_RADIUS * 1.8 : STRIFER_RADIUS;
-    if (uber) this.color.set(0x3a2a4a);
+    if (uber) {this.color.set(0x3A_2A_4A);}
     this.pos = pos.clone();
     this.pos.y = terrain.getHeight(pos.x, pos.z) + STRIFER_ORBIT_ALT;
     this.vel = new THREE.Vector3();
     this.hasSlots = allocSlots('strifer', this);
-    if (!this.hasSlots) this.dead = true;
+    if (!this.hasSlots) {this.dead = true;}
   }
 
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3, playerVel?: THREE.Vector3): void {
-    if (this.dead) return;
-    if (this.stunTimer > 0) this.stunTimer -= dt;
-    if (this.flash > 0) this.flash -= dt;
+    if (this.dead) {return;}
+    if (this.stunTimer > 0) {this.stunTimer -= dt;}
+    if (this.flash > 0) {this.flash -= dt;}
     this.animT += dt;
     this.stateTimer -= dt;
 
@@ -194,13 +194,13 @@ export class Strifer implements Targetable, SwarmSlotOwner {
 
     this.pos.addScaledVector(this.vel, dt);
     const gy = terrain.getHeight(this.pos.x, this.pos.z);
-    if (this.pos.y < gy + 1.2) this.pos.y = gy + 1.2;
+    if (this.pos.y < gy + 1.2) {this.pos.y = gy + 1.2;}
 
     if (this.vel.lengthSq() > 1) {
       const targetYaw = Math.atan2(this.vel.x, this.vel.z);
       let dy = targetYaw - this.yaw;
-      while (dy > Math.PI) dy -= Math.PI * 2;
-      while (dy < -Math.PI) dy += Math.PI * 2;
+      while (dy > Math.PI) {dy -= Math.PI * 2;}
+      while (dy < -Math.PI) {dy += Math.PI * 2;}
       this.yaw += dy * Math.min(1, 4 * dt);
       this.roll = -dy * 0.4;
       this.pitch = THREE.MathUtils.clamp(-this.vel.y * 0.05, -0.6, 0.5);
@@ -208,8 +208,8 @@ export class Strifer implements Targetable, SwarmSlotOwner {
       // face the target while gunning — the fuselage must track the player
       const targetYaw = Math.atan2(playerPos.x - this.pos.x, playerPos.z - this.pos.z);
       let dy = targetYaw - this.yaw;
-      while (dy > Math.PI) dy -= Math.PI * 2;
-      while (dy < -Math.PI) dy += Math.PI * 2;
+      while (dy > Math.PI) {dy -= Math.PI * 2;}
+      while (dy < -Math.PI) {dy += Math.PI * 2;}
       this.yaw += dy * Math.min(1, 6 * dt);
       this.roll *= 0.9;
     }
@@ -229,7 +229,7 @@ export class Strifer implements Targetable, SwarmSlotOwner {
         c.playerPos.z + Math.sin(s.orbitPhase) * STRIFER_ORBIT_R,
       );
       s.steerToward(_dir, STRIFER_SPEED, c.dt);
-      if (Math.random() < c.dt * 0.12) s.orbitDir *= -1;
+      if (Math.random() < c.dt * 0.12) {s.orbitDir *= -1;}
 
       if (s.stateTimer <= 0) {
         s.state = 'hover';
@@ -257,8 +257,8 @@ export class Strifer implements Targetable, SwarmSlotOwner {
 
   private fireBolt(playerPos: THREE.Vector3, playerVel?: THREE.Vector3): void {
     _dir.copy(playerPos);
-    _dir.y += 1.0; // chest height
-    if (playerVel) _dir.addScaledVector(playerVel, 0.15); // light lead
+    _dir.y += 1; // chest height
+    if (playerVel) {_dir.addScaledVector(playerVel, 0.15);} // light lead
     _dir.sub(this.pos).normalize();
     this.bolts.push({ pos: this.pos.clone(), vel: _dir.clone().multiplyScalar(STRIFER_BOLT_SPEED), age: 0 });
     this.onFire?.(this);
@@ -271,9 +271,9 @@ export class Strifer implements Targetable, SwarmSlotOwner {
       b.pos.addScaledVector(b.vel, dt);
       const boltD = STRIFER_BOLT_DIST * MELEE_FAVOR;
       const hitPlayer = b.pos.distanceToSquared(playerPos) < boltD * boltD;
-      if (hitPlayer) this.onBoltHit?.(this, b.pos);
+      if (hitPlayer) {this.onBoltHit?.(this, b.pos);}
       if (hitPlayer || b.age > STRIFER_BOLT_LIFE || b.pos.y < terrain.getHeight(b.pos.x, b.pos.z)) {
-        if (!hitPlayer) this.onBoltLand?.(b.pos);
+        if (!hitPlayer) {this.onBoltLand?.(b.pos);}
         this.bolts.splice(i, 1);
       }
     }
@@ -291,7 +291,7 @@ export class Strifer implements Targetable, SwarmSlotOwner {
 
   private capSpeed(max: number): void {
     const s = this.vel.length();
-    if (s > max) this.vel.multiplyScalar(max / s);
+    if (s > max) {this.vel.multiplyScalar(max / s);}
   }
 
   takeDamage(damage: number): boolean {

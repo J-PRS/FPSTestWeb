@@ -106,7 +106,7 @@ function makeConfig(url: string, hasResolver: boolean): ConnectionConfig {
       : undefined,
     onConnect: () => {
       connected = true;
-      for (const q of sendQueue.splice(0)) inner?.send(q);
+      for (const q of sendQueue.splice(0)) {inner?.send(q);}
       post({ kind: 'up', tier: inner?.tier });
     },
     onDisconnect: (code, reason) => { connected = false; post({ kind: 'down', code, reason }); },
@@ -146,9 +146,10 @@ function makeConfig(url: string, hasResolver: boolean): ConnectionConfig {
 w.onmessage = (e: MessageEvent<Down>) => {
   const m = e.data;
   switch (m.kind) {
-    case 'init':
+    case 'init': {
       opts = { net: m.net };
       break;
+    }
     case 'connect': {
       // A lingering lane from a previous connect gets torn down here —
       // orphan sockets are the parallel-join flood source. Queued sends
@@ -170,7 +171,7 @@ w.onmessage = (e: MessageEvent<Down>) => {
       // returns false already parked the send in its own pending list,
       // and queueing here too would double-deliver on connect.
       if (ok === undefined) { sendQueue.push(payload); }
-      while (sendQueue.length > SEND_QUEUE_MAX) sendQueue.shift();
+      while (sendQueue.length > SEND_QUEUE_MAX) {sendQueue.shift();}
       // A lane that reports dead without a disconnect event was the
       // contract-violation scream on main — keep it visible here.
       if (ok === false && connected) {
@@ -178,7 +179,7 @@ w.onmessage = (e: MessageEvent<Down>) => {
       }
       break;
     }
-    case 'disconnect':
+    case 'disconnect': {
       connected = false;
       inner?.disconnect();
       inner = null;
@@ -187,13 +188,15 @@ w.onmessage = (e: MessageEvent<Down>) => {
       for (const res of resolveWaiters.values()) {res(null);}
       resolveWaiters.clear();
       break;
-    case 'resolved':
+    }
+    case 'resolved': {
       resolveWaiters.get(m.seq)?.(m.url);
       resolveWaiters.delete(m.seq);
       break;
+    }
   }
 };
 
 // DedicatedWorkerGlobalScope.onmessage assignment is the actual entry —
 // keep the export so bundlers treat this as a module.
-export {};
+

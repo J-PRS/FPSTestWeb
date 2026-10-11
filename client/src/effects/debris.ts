@@ -93,11 +93,11 @@ export class Debris {
       return;
     }
 
-    if (opts.shellRadius) this.allocGhost(scene, opts.shellRadius, color, px, py, pz);
+    if (opts.shellRadius) {this.allocGhost(scene, opts.shellRadius, color, px, py, pz);}
 
     this.onDropletLand = opts.onDropletLand;
     this.paintBudget = opts.paintBudget ?? 0;
-    this.smoke = !!opts.smoke;
+    this.smoke = Boolean(opts.smoke);
 
     this.spawnShards(px, py, pz, color, opts);
   }
@@ -110,7 +110,7 @@ export class Debris {
    *  The damped horizontal velocity still points along travel, so the
    *  stain can smear the way the droplet was going. */
   paintShard(s: Shard): void {
-    if (!this.onDropletLand || this.paintBudget <= 0) return;
+    if (!this.onDropletLand || this.paintBudget <= 0) {return;}
     this.paintBudget--;
     this.onDropletLand(s.x, s.z, s.radius, s.vx, s.vz);
   }
@@ -128,7 +128,7 @@ export class Debris {
     this.ghost = pooled ? pooled.mesh : new THREE.Mesh();
     markProbe(this.ghost, { kind: 'fxMesh', label: 'debrisGhost' });
     this.ghost.geometry = new THREE.IcosahedronGeometry(shellRadius, 0);
-    if (this.ghost.material !== this.ghostMat) this.ghost.material = this.ghostMat;
+    if (this.ghost.material !== this.ghostMat) {this.ghost.material = this.ghostMat;}
     this.ghost.scale.setScalar(1);
     this.ghost.position.set(px, py, pz);
     scene.add(this.ghost);
@@ -173,7 +173,7 @@ export class Debris {
     const pool = Debris.instPool.get(prim);
     if (pool) {
       for (let i = pool.length - 1; i >= 0; i--) {
-        if (pool[i]!.instanceMatrix.count >= cap) return pool.splice(i, 1)[0]!;
+        if (pool[i]!.instanceMatrix.count >= cap) {return pool.splice(i, 1)[0]!;}
       }
     }
     return new THREE.InstancedMesh(Debris.primGeos[prim]!, Debris.primMat, cap);
@@ -192,7 +192,7 @@ export class Debris {
       b = this.insts[prim] = { mesh, free: [] };
       this.scene.add(mesh);
     }
-    const slot = b.free.length ? b.free.pop()! : b.mesh.count++;
+    const slot = b.free.length > 0 ? b.free.pop()! : b.mesh.count++;
     return { inst: prim, slot };
   }
 
@@ -204,7 +204,7 @@ export class Debris {
       const a = this.instAlloc(prim);
       const m = this.insts[a.inst]!.mesh;
       m.setColorAt(a.slot, _tmpColor.setRGB(cr, cg, cb));
-      if (m.instanceColor) m.instanceColor.needsUpdate = true;
+      if (m.instanceColor) {m.instanceColor.needsUpdate = true;}
       return { mesh: null, mat: null, inst: a.inst, slot: a.slot,
         radius: opts.kind === 'brush' ? 0.08 : opts.kind === 'goo' ? 0.06 : Math.max(sw, sh, sd) };
     }
@@ -223,21 +223,21 @@ export class Debris {
       px: number, py: number, pz: number, color: THREE.Color): void {
     let sw = 0.25 + Math.random() * 0.55;
     let sh = 0.18 + Math.random() * 0.45;
-    let sd = 0.20 + Math.random() * 0.50;
+    let sd = 0.2 + Math.random() * 0.5;
     // Unit-primitive scale: brush twigs are thin rods, goo is droplets —
     // same dims the old per-shard geometries baked in.
     const prim = this.instanced ? pickShardPrim(opts) : -1;
-    if (prim === 3) [sw, sh, sd] = [0.011, 0.2 + Math.random() * 0.35, 0.011];
+    if (prim === 3) {[sw, sh, sd] = [0.011, 0.2 + Math.random() * 0.35, 0.011];}
     // Goo globs stay lumpy — unequal axes tumble as tissue chunks,
     // a sphere reads as a marble.
-    else if (prim === 4) [sw, sh, sd] = [0.04 + Math.random() * 0.09, 0.03 + Math.random() * 0.05, 0.04 + Math.random() * 0.09];
+    else if (prim === 4) {[sw, sh, sd] = [0.04 + Math.random() * 0.09, 0.03 + Math.random() * 0.05, 0.04 + Math.random() * 0.09];}
 
     const v   = 0.75 + Math.random() * 0.25;
     const cr  = color.r * v;
     const cg  = color.g * v;
     const cb  = color.b * v;
-    const sharedGeo = !!opts.shardGeos?.length;
-    const tumble = 4.0 + Math.random() * 8.0;
+    const sharedGeo = Boolean(opts.shardGeos?.length);
+    const tumble = 4 + Math.random() * 8;
 
     const { o, vel } = shardLaunch(part, opts, px, py, pz);
     const a = this.allocShard(prim, part, opts,
@@ -279,8 +279,8 @@ export class Debris {
       if (t >= 1) {
         this.scene.remove(this.ghost);
         this.ghost.geometry.dispose();
-        if (Debris.ghostPool.length < Debris.GHOST_POOL_KEEP) Debris.ghostPool.push({ mesh: this.ghost, mat: this.ghostMat });
-        else this.ghostMat.dispose();
+        if (Debris.ghostPool.length < Debris.GHOST_POOL_KEEP) {Debris.ghostPool.push({ mesh: this.ghost, mat: this.ghostMat });}
+        else {this.ghostMat.dispose();}
         this.ghost = null; this.ghostMat = null;
       }
     }
@@ -290,23 +290,23 @@ export class Debris {
     for (let k = 0; k < n; k++) {
       const s = this.shards[this.shardCursor % n]!;
       this.shardCursor = (this.shardCursor + 1) % n;
-      if (s.dead) continue;
+      if (s.dead) {continue;}
       s.elapsed += dt;
       if (s.elapsed >= s.life) {
         this.removeShard(s);
         continue;
       }
-      if (this.stepShard(s, dt)) alive++;
-      if (performance.now() - t0 > deadlineMs) break;
+      if (this.stepShard(s, dt)) {alive++;}
+      if (performance.now() - t0 > deadlineMs) {break;}
     }
-    if (alive === 0 && performance.now() - t0 <= deadlineMs) this.dead = true;
+    if (alive === 0 && performance.now() - t0 <= deadlineMs) {this.dead = true;}
   }
 
   /** Instanced shards have no Mesh — pos/tumble/scale fold into the
    *  slot's matrix; color folds into instanceColor. Called every step. */
   writeShard(s: Shard): void {
     const b = this.insts[s.inst];
-    if (!b) return;
+    if (!b) {return;}
     _tmpE.set(s.ex, s.ey, s.ez);
     _tmpQ.setFromEuler(_tmpE);
     _tmpP.set(s.x, s.y, s.z);
@@ -320,7 +320,7 @@ export class Debris {
 
   writeShardColor(s: Shard, r: number, g: number, b: number): void {
     const bk = this.insts[s.inst];
-    if (!bk) return;
+    if (!bk) {return;}
     bk.mesh.setColorAt(s.slot, _tmpColor.setRGB(r, g, b));
     if (bk.mesh.instanceColor) {
       bk.mesh.instanceColor.addUpdateRange(s.slot * 3, 3);
@@ -347,7 +347,7 @@ export class Debris {
     markProbe(mesh, { kind: 'fxMesh', label: 'debrisShard' });
     const mat = pooled ? pooled.mat : new THREE.MeshLambertMaterial();
     mesh.geometry = geo;
-    if (mesh.material !== mat) mesh.material = mat;
+    if (mesh.material !== mat) {mesh.material = mat;}
     mat.color.setRGB(cr, cg, cb);
     mesh.scale.setScalar(1);
     mesh.rotation.set(0, 0, 0);
@@ -359,9 +359,9 @@ export class Debris {
     s.trail = undefined;
     if (s.mesh && s.mat) {
       this.scene.remove(s.mesh);
-      if (!s.sharedGeo) s.mesh.geometry.dispose();
-      if (Debris.shardPool.length < Debris.SHARD_POOL_KEEP) Debris.shardPool.push({ mesh: s.mesh, mat: s.mat });
-      else s.mat.dispose();
+      if (!s.sharedGeo) {s.mesh.geometry.dispose();}
+      if (Debris.shardPool.length < Debris.SHARD_POOL_KEEP) {Debris.shardPool.push({ mesh: s.mesh, mat: s.mat });}
+      else {s.mat.dispose();}
     } else {
       const b = this.insts[s.inst];
       if (b) {
@@ -378,20 +378,20 @@ export class Debris {
     if (this.ghost && this.ghostMat) {
       this.scene.remove(this.ghost);
       this.ghost.geometry.dispose();
-      if (Debris.ghostPool.length < Debris.GHOST_POOL_KEEP) Debris.ghostPool.push({ mesh: this.ghost, mat: this.ghostMat });
-      else this.ghostMat.dispose();
+      if (Debris.ghostPool.length < Debris.GHOST_POOL_KEEP) {Debris.ghostPool.push({ mesh: this.ghost, mat: this.ghostMat });}
+      else {this.ghostMat.dispose();}
       this.ghost = null; this.ghostMat = null;
     }
     for (const s of this.shards) {
-      if (!s.dead) this.removeShard(s);
+      if (!s.dead) {this.removeShard(s);}
     }
     for (const b of this.insts) {
-      if (!b) continue;
+      if (!b) {continue;}
       this.scene.remove(b.mesh);
       let pool = Debris.instPool.get(this.insts.indexOf(b));
-      if (!pool) Debris.instPool.set(this.insts.indexOf(b), pool = []);
-      if (pool.length < Debris.INST_POOL_KEEP) pool.push(b.mesh);
-      else b.mesh.dispose();
+      if (!pool) {Debris.instPool.set(this.insts.indexOf(b), pool = []);}
+      if (pool.length < Debris.INST_POOL_KEEP) {pool.push(b.mesh);}
+      else {b.mesh.dispose();}
     }
     this.insts = [];
   }
@@ -403,7 +403,7 @@ export class BallDebris extends Debris {
   constructor(
     scene: THREE.Scene, terrain: Terrain,
     pos: Vec3Like,
-    color: THREE.Color, scale: number = 1.0,
+    color: THREE.Color, scale: number = 1,
     opts?: { bodyRadius?: number; impulseDir?: THREE.Vector3; inheritVel?: THREE.Vector3; kind?: 'rock' | 'brush' | 'goo'; shardGeos?: THREE.BufferGeometry[]; onDropletLand?: (x: number, z: number, dropletR: number, dx: number, dz: number) => void; paintBudget?: number }
   ) {
     const spread = 0.6 * scale;
@@ -427,7 +427,7 @@ export class PlayerDebris extends Debris {
   constructor(
     scene: THREE.Scene, terrain: Terrain,
     pos: Vec3Like,
-    color: THREE.Color = new THREE.Color(0x4444ff), // Default player blue
+    color: THREE.Color = new THREE.Color(0x44_44_FF), // Default player blue
     opts?: { impulseDir?: THREE.Vector3; inheritVel?: THREE.Vector3; parts?: { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] }
   ) {
     // shellRadius lifts this from "box of chunks" to "the body bursts":
@@ -436,7 +436,7 @@ export class PlayerDebris extends Debris {
     // the dead skier's momentum — the same trio that sells ball deaths.
     super(scene, terrain, pos, color, {
       count: PLAYER_CHUNK_COUNT,
-      spreadX: 0.8, spreadY: 1.0, spreadZ: 0.8, // larger/taller spread for players
+      spreadX: 0.8, spreadY: 1, spreadZ: 0.8, // larger/taller spread for players
       shellRadius: PLAYER_RADIUS,
       impulseDir: opts?.impulseDir,
       inheritVel: opts?.inheritVel,

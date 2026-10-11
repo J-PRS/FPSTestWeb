@@ -6,9 +6,9 @@
  * stays about sockets while this owns seat transfers.
  */
 import type { ServerWebSocket } from 'bun';
-import type { WebSocketData } from './types.ts';
+import type { WebSocketData,PlayerState } from './types.ts';
 import type { Room } from './Room.ts';
-import type { PlayerState } from './types.ts';
+
 import type { TransportKind } from '../../shared/protocol.ts';
 import { evictEldest } from './evictEldest.ts';
 import { logger } from './logger.ts';
@@ -40,10 +40,10 @@ export class RoomSwitcher {
   constructor(private host: SwitchHost) {}
 
   switchRoom(ws: ServerWebSocket<WebSocketData>, playerId: string, raw: unknown): void {
-    if (this.throttled(playerId)) return;
+    if (this.throttled(playerId)) {return;}
 
     const target = this.switchTarget(playerId, raw as { room?: string; map?: string; mode?: string; bots?: number; unlisted?: boolean; noCreatures?: boolean; noBalls?: boolean });
-    if (!target) return;
+    if (!target) {return;}
     const { from, to, prev } = target;
 
     // Leave teardown: the disconnect path minus the grace window.
@@ -59,8 +59,8 @@ export class RoomSwitcher {
     const wantNoBalls = req.noBalls === true, wantNoCreatures = req.noCreatures === true;
     if (to.noBalls !== wantNoBalls || to.noCreatures !== wantNoCreatures) {
       const diffs = [
-        to.noBalls !== wantNoBalls ? `balls ${to.noBalls ? 'OFF' : 'ON'}` : '',
-        to.noCreatures !== wantNoCreatures ? `critters ${to.noCreatures ? 'OFF' : 'ON'}` : '',
+        to.noBalls === wantNoBalls ? '' : `balls ${to.noBalls ? 'OFF' : 'ON'}`,
+        to.noCreatures === wantNoCreatures ? '' : `critters ${to.noCreatures ? 'OFF' : 'ON'}`,
       ].filter(Boolean).join(', ');
       to.sendToPlayer(playerId, { type: 'serverWarn', text: `room '${to.name}' already existed — your settings overridden (${diffs})` });
     }
@@ -82,8 +82,8 @@ export class RoomSwitcher {
   private switchTarget(playerId: string, msg: { room?: string; map?: string; mode?: string; bots?: number; unlisted?: boolean; noCreatures?: boolean; noBalls?: boolean }): { from: Room; to: Room; prev?: PlayerState } | null {
     const name = word(msg.room) ?? 'default';
     const from = this.host.roomOfPlayer(playerId);
-    if (!from) return null;
-    if (from.name === name) return null; // already seated — no-op, not an error
+    if (!from) {return null;}
+    if (from.name === name) {return null;} // already seated — no-op, not an error
 
     // Dead players can't hop — reseating runs addPlayer, which spawns
     // alive, so a hop would dodge the whole respawn delay. Check BEFORE
@@ -119,7 +119,7 @@ export class RoomSwitcher {
     room.sessionTokens.set(playerId, sessionToken);
     const joined = room.players.addPlayer(playerId, room.nextTeam(), perk, armorClass);
     joined.name = name;
-    if (transport) joined.transport = transport;
+    if (transport) {joined.transport = transport;}
     // Room hops don't stop the client's stream: reports emitted in the
     // OLD room keep arriving for ~1 RTT and would poison the fresh
     // anchor (first straggler seats lastPosCheckPos, the post-hop spawn
@@ -143,7 +143,7 @@ export class RoomSwitcher {
 
   private throttled(playerId: string): boolean {
     const now = wallNow();
-    if (now - (this.cooldowns.get(playerId) ?? 0) < RoomSwitcher.SWITCH_COOLDOWN_MS) return true;
+    if (now - (this.cooldowns.get(playerId) ?? 0) < RoomSwitcher.SWITCH_COOLDOWN_MS) {return true;}
     // Mark on attempt — denied paths (room full, dead, no-op) stay
     // throttled too or switchRoom name-spam churns roomFor unbounded.
     this.cooldowns.set(playerId, now);
@@ -151,7 +151,7 @@ export class RoomSwitcher {
     // cooldown must survive the hop), so cap growth like duelStart —
     // evict the eldest, not clear(): a wholesale wipe under id churn
     // resets the cooldown for every live hopper at once.
-    if (this.cooldowns.size > 1024) evictEldest(this.cooldowns);
+    if (this.cooldowns.size > 1024) {evictEldest(this.cooldowns);}
     return false;
   }
 

@@ -18,9 +18,9 @@ export function windowAllow<K>(
     map.set(key, w);
     if (map.size > cap) {
       for (const [k, e] of map) {
-        if (now - e.start >= windowMs) map.delete(k);
+        if (now - e.start >= windowMs) {map.delete(k);}
       }
-      while (map.size > cap) evictEldest(map);
+      while (map.size > cap) {evictEldest(map);}
     }
   }
   return ++w.count <= limit;

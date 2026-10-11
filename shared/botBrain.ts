@@ -517,7 +517,7 @@ export class BotBrain {
     this.flinchT = FLINCH_S;
     this.hitSay = true;
     this.flinchFrom = { x: from.x, y: from.y, z: from.z };
-    if (attackerId) noteFoeHit(this.h, attackerId, this.now);
+    if (attackerId) {noteFoeHit(this.h, attackerId, this.now);}
     this.h.lastHitAt = this.now;
     this.h.skill.form = Math.max(0.85, this.h.skill.form - 0.03); // tilt
     this.goalS.revengeT = 2.5;
@@ -533,7 +533,7 @@ export class BotBrain {
     // higher-priority line fires would leak a stale 'underfire' next tick.
     const underfire = this.sayThreats(ctx);
     const bored = this.sayBored(ctx);
-    if (hurtEdge) return { kind: hero ? 'hero' : 'fear', h: this.hpTag(ctx) };
+    if (hurtEdge) {return { kind: hero ? 'hero' : 'fear', h: this.hpTag(ctx) };}
     return this.sayHelp(ctx) ?? this.sayHunt(ctx, wasHunt) ?? underfire ?? bored;
   }
 
@@ -542,23 +542,23 @@ export class BotBrain {
    *  this bot's position, so the shout is a call for help, not flavor. */
   private helpUntil = 0;
   private sayHelp(ctx: BrainCtx): BrainOut['say'] {
-    if (!ctx.running || ctx.now < this.helpUntil) return undefined;
+    if (!ctx.running || ctx.now < this.helpUntil) {return undefined;}
     const close = ctx.enemies.some((e) => e.alive && distSqXZ(e.pos, ctx.pos) < 90 * 90);
-    if (!close) return undefined;
+    if (!close) {return undefined;}
     this.helpUntil = ctx.now + 30_000;
     return { kind: 'callfor' };
   }
 
   /** {h} fill for wound lines — "im at 23hp" reads human, "im hurt" is a bot line. */
   private hpTag(ctx: BrainCtx): string | undefined {
-    return ctx.healthFrac != null ? `${Math.round(ctx.healthFrac * 100)}hp` : undefined;
+    return ctx.healthFrac == null ? undefined : `${Math.round(ctx.healthFrac * 100)}hp`;
   }
 
   /** {d} fill for spotting lines — compass bearing from self to the
    *  last-seen ground, so "contact sw" names where, not just who. */
   private dirTag(ctx: BrainCtx, at?: BotVec | null): string | undefined {
     const t = at ?? this.h.lastSeen;
-    if (!t) return undefined;
+    if (!t) {return undefined;}
     return dir8(t.x - ctx.pos.x, t.z - ctx.pos.z);
   }
 
@@ -570,7 +570,7 @@ export class BotBrain {
         : huntNow.startsWith('b:') ? undefined
         : { kind: 'contact', target: huntNow, d: this.dirTag(ctx) };
     }
-    if (wasHunt && !huntNow) return { kind: 'lost', target: wasHunt, d: this.dirTag(ctx) };
+    if (wasHunt && !huntNow) {return { kind: 'lost', target: wasHunt, d: this.dirTag(ctx) };}
     return undefined;
   }
 
@@ -588,7 +588,7 @@ export class BotBrain {
   private sayBored(ctx: BrainCtx): BrainOut['say'] {
     const quiet = !this.h.hunt && ctx.now - this.h.lastSeenAt > 40_000;
     if (!quiet) { this.boredLatch = false; return undefined; }
-    if (this.boredLatch) return undefined;
+    if (this.boredLatch) {return undefined;}
     this.boredLatch = true;
     return { kind: 'bored' };
   }
@@ -600,18 +600,18 @@ export class BotBrain {
    *  the whole point of sneaking up. */
   private pickBelt(dt: number, pos: BotVec, now: number, ctx: BrainCtx): boolean {
     this.beltT -= dt;
-    if (!this.h.hunt || this.beltT > 0 || now - this.h.lastSeenAt > STALE_MS) return false;
+    if (!this.h.hunt || this.beltT > 0 || now - this.h.lastSeenAt > STALE_MS) {return false;}
     const d = dist3(pos, this.h.lastSeen);
     if (ctx.infiltrating) {
       // Guideline, not doctrine — only commit to the knife-range combo
       // when the setup is favorable: healthy enough to eat the trade,
       // tank carrying the fight, and not walking into a crowd.
       const crowded = (ctx.enemies?.length ?? 0) > 2;
-      if (d > 22 || crowded || (ctx.healthFrac ?? 1) < 0.45 || (ctx.energy ?? 99) < 25) return false;
+      if (d > 22 || crowded || (ctx.healthFrac ?? 1) < 0.45 || (ctx.energy ?? 99) < 25) {return false;}
       this.beltT = 9;
       return true;
     }
-    if (d <= 10 || d >= 35) return false;
+    if (d <= 10 || d >= 35) {return false;}
     this.beltT = 9;
     return true;
   }
@@ -626,7 +626,7 @@ export class BotBrain {
     // A nemesis rattles the hero roll — the man who's already killed
     // this bot twice doesn't inspire a last stand, he ends it.
     const shaken = this.h.lastHitBy && dreadOf(this.h, this.h.lastHitBy.id) >= 2;
-    if (hurtEdge && botRand() < T.brain.heroChance * (shaken ? 0.4 : 1)) this.heroT = T.brain.heroS;
+    if (hurtEdge && botRand() < T.brain.heroChance * (shaken ? 0.4 : 1)) {this.heroT = T.brain.heroS;}
     this.hurtLatch = hurt;
     this.heroT = Math.max(0, this.heroT - dt);
     const hero = this.heroT > 0;
@@ -634,8 +634,8 @@ export class BotBrain {
   }
 
   think(dt: number, ctx: BrainCtx): BrainOut {
-    const pos = ctx.pos;
-    const now = ctx.now;
+    const {pos} = ctx;
+    const {now} = ctx;
     this.now = now;
     driftForm(this.h.skill, dt);
 
@@ -647,14 +647,14 @@ export class BotBrain {
     // absent, the wrapper costs one undefined check per stage.
     const prof = sharedEnv.thinkProf;
     const pf = prof ? sharedEnv.wallPerf! : () => 0;
-    const P = (stage: string, t0: number) => { if (prof) prof.set(stage, (prof.get(stage) ?? 0) + pf() - t0); };
+    const P = (stage: string, t0: number) => { if (prof) {prof.set(stage, (prof.get(stage) ?? 0) + pf() - t0);} };
     let tp = pf();
 
     // Radio commands carry an implied position — a same-team "Defend our
     // flag!" or "Cover me!" sticks for a stretch instead of dying with the
     // notice tick, so a dutiful bot actually rotates toward the call.
-    if (ctx.notice?.goal) this.radioGoal = { ...ctx.notice.goal, until: now + 25_000 };
-    if (this.radioGoal && (now > this.radioGoal.until || distSqXZ(this.radioGoal, pos) < 25 * 25)) this.radioGoal = null;
+    if (ctx.notice?.goal) {this.radioGoal = { ...ctx.notice.goal, until: now + 25_000 };}
+    if (this.radioGoal && (now > this.radioGoal.until || distSqXZ(this.radioGoal, pos) < 25 * 25)) {this.radioGoal = null;}
     ctx.radio = this.radioGoal;
 
     // --- pick a hunt target / refresh the goal (slow cadence) ---
@@ -709,7 +709,7 @@ export class BotBrain {
     P('steer', tp);
     // Env-gated decision-chain trace: which stage rewrites the step.
     // FPS_TRACE=<playerId> — soaks print stage deltas for one bot.
-    const traceId = sharedEnv.traceId;
+    const {traceId} = sharedEnv;
     if (ctx.id && traceId && ctx.id.includes(traceId)
       && ctx.objective && Math.hypot(pos.x - ctx.objective.x, pos.z - ctx.objective.z) > 30) {
       const f = (v: BotVec) => `${v.x.toFixed(0)},${v.z.toFixed(0)}`;
@@ -763,7 +763,7 @@ export class BotBrain {
           // clears bastion's 21m gate where the 1.1s escape sips can't).
           // The dest still drives INTO the wall, so the burn climbs it.
           // Only a second consecutive stall earns the blacklist below.
-          this.escapeS.escapeJetT = Math.max(this.escapeS.escapeJetT, 3.0);
+          this.escapeS.escapeJetT = Math.max(this.escapeS.escapeJetT, 3);
           this.huntWin.fails = 1;
         } else if (stalled && (preyUnreachable(ctx, pos, hp) || ++this.huntWin.fails >= 3)) {
           // The pocket is unreachable, not just this prey — a defended
@@ -773,7 +773,7 @@ export class BotBrain {
           // (Probe-false three-strikes: the geometry says a route exists
           // but the escape kit can't find it — same grind, same fix.)
           for (const e of ctx.enemies) {
-            if (e.alive && distSqXZ(e.pos, hp) < 35 * 35) this.h.unreachUntil.set(e.id, now + 30_000);
+            if (e.alive && distSqXZ(e.pos, hp) < 35 * 35) {this.h.unreachUntil.set(e.id, now + 30_000);}
           }
           this.h.unreachUntil.set(this.h.hunt.id, now + 30_000);
           this.huntWin.fails = 0;
@@ -810,7 +810,7 @@ export class BotBrain {
     // breach machinery — inside an enemy base there is ALWAYS a hunt
     // target, so `!this.h.hunt` would silence wallResponse exactly where
     // it's needed (siege probe: besieger parked at the door face 100s+).
-    const committed = !!(ctx.wave || ctx.runner || ctx.running);
+    const committed = Boolean(ctx.wave || ctx.runner || ctx.running);
     if (streak >= 4 && (!this.h.hunt || committed)) {
       this.wallResponse(ctx, pos, now);
       this.escapeS.stuckStreak = 0;
@@ -894,18 +894,18 @@ export class BotBrain {
     // --- repair: a builder in weld range works on the damaged gear ---
     const repair = pickRepair(this, ctx, pos, fearing);
 
-    if (!say && belt) say = { kind: 'belt' };
-    if (!say && deploy) say = { kind: 'deploy' };
+    if (!say && belt) {say = { kind: 'belt' };}
+    if (!say && deploy) {say = { kind: 'deploy' };}
     // Room-event notice — last priority: a wound or a fresh contact is
     // worth more words than scoreboard commentary.
-    if (!say && ctx.notice) say = { kind: ctx.notice.kind, target: ctx.notice.actor };
+    if (!say && ctx.notice) {say = { kind: ctx.notice.kind, target: ctx.notice.actor };}
 
     P('fire+', tp);
     this.lastDest = dest;
     tp = pf();
     const move = this.moves.hints(dt, ctx, pos, dest);
     P('moves', tp);
-    this.lastPark = !!move?.park;
+    this.lastPark = Boolean(move?.park);
     this.lastPosted = ctx.posted ?? 0;
     return { dest, move, fire, status: statusIntent(this, ctx, fearing), belt, deploy, repair, say };
   }
@@ -929,10 +929,10 @@ export class BotBrain {
     }
     const wallTop = wallTopOnPath(ctx, pos, this.goalS.goal);
     if (wallTop !== null && wallTop - pos.y < 26 && this.goalClimbs < 2) {
-      this.escapeS.escapeJetT = Math.max(this.escapeS.escapeJetT, 3.0);
+      this.escapeS.escapeJetT = Math.max(this.escapeS.escapeJetT, 3);
       this.goalClimbs++;
     } else {
-      let breach = wallTop !== null ? breachAlongWall(ctx, pos, this.goalS.goal) : null;
+      let breach = wallTop === null ? null : breachAlongWall(ctx, pos, this.goalS.goal);
       if (!breach && ctx.route && this.goalS.goal) {
         // The face probe only scans ±60m — a fortress wall's real
         // opening can sit farther along. The structure-aware flood
@@ -944,7 +944,7 @@ export class BotBrain {
         if (hop && !segSolidHit(
           { x: pos.x, y: pos.y + 1, z: pos.z },
           { x: hop.x, y: pos.y + 1, z: hop.z },
-          ctx.solids ?? [], ctx.solidIndex ?? undefined, ctx.team)) breach = hop;
+          ctx.solids ?? [], ctx.solidIndex ?? undefined, ctx.team)) {breach = hop;}
       }
       if (breach) {
         this.breachGoal = breach;

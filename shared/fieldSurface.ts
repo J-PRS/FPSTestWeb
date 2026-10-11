@@ -14,7 +14,7 @@
  *  the maxTop bound, teleporting walkers onto every roof; keep the
  *  forwarding non-negotiable by not letting it be re-written. */
 import { hmHeight, hmChord, hmNormal, type Heightfield } from './heightfield.ts';
-import { SolidWorld } from './solidWorld.ts';
+import type { SolidWorld } from './solidWorld.ts';
 import type { MoveState, Vec3Like } from './movement.ts';
 
 /** Bare ground under the solids — two reads, nothing else. The server

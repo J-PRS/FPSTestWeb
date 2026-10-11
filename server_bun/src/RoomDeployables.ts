@@ -95,12 +95,12 @@ function segSphereEnter(from: Vec3, to: Vec3, c: Vec3, r: number): number | null
   const dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
   const mx = from.x - c.x, my = from.y - c.y, mz = from.z - c.z;
   const a = dx * dx + dy * dy + dz * dz;
-  if (a < 1e-9) return null;
+  if (a < 1e-9) {return null;}
   const cc = mx * mx + my * my + mz * mz - r * r;
-  if (cc <= 0) return 0; // started inside
+  if (cc <= 0) {return 0;} // started inside
   const b = 2 * (mx * dx + my * dy + mz * dz);
   const disc = b * b - 4 * a * cc;
-  if (disc < 0) return null;
+  if (disc < 0) {return null;}
   const t = (-b - Math.sqrt(disc)) / (2 * a);
   return t >= 0 && t <= 1 ? t : null;
 }
@@ -119,7 +119,7 @@ export class RoomDeployables {
   private refreshSolids(): void {
     this.solidCols.length = 0;
     for (const d of this.items.values()) {
-      if (!deploySolid(d.kind)) continue;
+      if (!deploySolid(d.kind)) {continue;}
       const def = DEPLOY_ITEMS[d.kind];
       this.solidCols.push({
         cx: d.pos.x, cy: d.pos.y + def.bodyH / 2, cz: d.pos.z,
@@ -133,12 +133,12 @@ export class RoomDeployables {
    *  meters, not across the map. */
   handleDeploy(playerId: string, kind: string, pos: Vec3): ClaimVerdict {
     const player = this.room.players.getPlayer(playerId);
-    if (!player || player.isDead) return 'gone';
-    if (!KINDS.has(kind as DeployKind)) return 'badkind';
+    if (!player || player.isDead) {return 'gone';}
+    if (!KINDS.has(kind as DeployKind)) {return 'badkind';}
     const k = kind as DeployKind;
     // cap-0 kinds are map-authored only — a client can't plant a generator.
-    if (DEPLOY_ITEMS[k].cap === 0) return 'badkind';
-    if (!Number.isFinite(pos.x + pos.y + pos.z)) return 'badpos';
+    if (DEPLOY_ITEMS[k].cap === 0) {return 'badkind';}
+    if (!Number.isFinite(pos.x + pos.y + pos.z)) {return 'badpos';}
     // Pack gear costs belt charges — the same nugget pool the throws drink
     // from, so a builder pays real economy for every stand it fortifies.
     if (player.beltCharges < DEPLOY_ITEMS[k].cost) {
@@ -146,7 +146,7 @@ export class RoomDeployables {
       return 'drybelt';
     }
     const dx = pos.x - player.position.x, dy = pos.y - player.position.y, dz = pos.z - player.position.z;
-    if (dx * dx + dy * dy + dz * dz > MAX_PLANT_DIST * MAX_PLANT_DIST) return 'toofar';
+    if (dx * dx + dy * dy + dz * dz > MAX_PLANT_DIST * MAX_PLANT_DIST) {return 'toofar';}
     pos = { ...pos, y: this.groundY(pos) };
     player.beltCharges -= DEPLOY_ITEMS[k].cost;
     // Nugget: no planted item — the claim mints a grabbable gem where the
@@ -172,7 +172,7 @@ export class RoomDeployables {
     // the planter switches sides). Gear fights for its planting team.
     this.items.set(id, { id, owner: playerId, kind: k, pos: { ...pos }, ttl: DEPLOY_ITEMS[k].ttlS, fireCd: armDelay, hp: HP[k], armor: 0, respawnT: 0, team: player.team });
     this.refreshSolids();
-    logger.info('Deploy placed', { owner: playerId, kind: k, x: +pos.x.toFixed(1), y: +pos.y.toFixed(1), z: +pos.z.toFixed(1) });
+    logger.info('Deploy placed', { owner: playerId, kind: k, x: Number(pos.x.toFixed(1)), y: Number(pos.y.toFixed(1)), z: Number(pos.z.toFixed(1)) });
     weaponStats.recordDeploy(this.room.mode, k);
     this.room.broadcast(spawnPayload(WORLD_MODEL.deploy!, id, 'id', { owner: playerId, kind: k, pos: { ...pos }, team: player.team }) as ServerMessage);
     return true;
@@ -193,8 +193,8 @@ export class RoomDeployables {
       this.room.ballSim.colliders,
     );
     const support = hit ? hit.y : floor;
-    if (pos.y > support + PLANT_FLOAT) return support;
-    if (pos.y < support - PLANT_FLOAT) return support; // buried claim — lift to the surface
+    if (pos.y > support + PLANT_FLOAT) {return support;}
+    if (pos.y < support - PLANT_FLOAT) {return support;} // buried claim — lift to the surface
     return pos.y;
   }
 
@@ -205,12 +205,12 @@ export class RoomDeployables {
   seedBase(entries: readonly { kind: string; pos: Vec3; team?: TeamId }[]): void {
     for (const e of entries) {
       const k = e.kind as DeployKind;
-      if (!KINDS.has(k)) continue;
+      if (!KINDS.has(k)) {continue;}
       const id = this.nextId++;
       const owner = e.team ? `base:${e.team}` : 'base';
       this.items.set(id, { id, owner, kind: k, pos: { ...e.pos }, ttl: Infinity, fireCd: 0, hp: HP[k], armor: 0, base: true, team: e.team, respawnT: 0 });
       this.room.broadcast(spawnPayload(WORLD_MODEL.deploy!, id, 'id', { owner, kind: k, pos: { ...e.pos }, team: e.team }) as ServerMessage);
-      logger.info('Base asset seeded', { id, kind: k, team: e.team, x: +e.pos.x.toFixed(1), z: +e.pos.z.toFixed(1) });
+      logger.info('Base asset seeded', { id, kind: k, team: e.team, x: Number(e.pos.x.toFixed(1)), z: Number(e.pos.z.toFixed(1)) });
     }
     this.refreshSolids();
   }
@@ -220,13 +220,13 @@ export class RoomDeployables {
   clearOwner(ownerId: string): void {
     // Map iteration survives deletes — no snapshot needed.
     for (const d of this.items.values()) {
-      if (d.owner === ownerId) this.remove(d.id);
+      if (d.owner === ownerId) {this.remove(d.id);}
     }
     // The owner's cooldown keys are their trace too: items outlive them
     // (base gear is immortal), so a departed welder's entries would sit
     // in lastRepair for the room's life.
     for (const k of this.lastRepair.keys()) {
-      if (k.startsWith(`${ownerId}:`)) this.lastRepair.delete(k);
+      if (k.startsWith(`${ownerId}:`)) {this.lastRepair.delete(k);}
     }
   }
 
@@ -240,9 +240,9 @@ export class RoomDeployables {
    *  assets go dormant — turrets stop scanning, pads stop healing. Field
    *  plants and generator-less teams are always powered. */
   powered(d: Deployed): boolean {
-    if (!d.base || !d.team || d.kind === 'generator') return true;
+    if (!d.base || !d.team || d.kind === 'generator') {return true;}
     for (const g of this.items.values()) {
-      if (g.base && g.kind === 'generator' && g.team === d.team) return g.hp > 0;
+      if (g.base && g.kind === 'generator' && g.team === d.team) {return g.hp > 0;}
     }
     return true;
   }
@@ -252,7 +252,7 @@ export class RoomDeployables {
    *  powered. */
   teamPowered(team: TeamId): boolean {
     for (const g of this.items.values()) {
-      if (g.base && g.kind === 'generator' && g.team === team) return g.hp > 0;
+      if (g.base && g.kind === 'generator' && g.team === team) {return g.hp > 0;}
     }
     return true;
   }
@@ -262,8 +262,8 @@ export class RoomDeployables {
     // and come back repaired — the compound outlives the scoreboard.
     for (const id of this.items.keys()) {
       const d = this.items.get(id)!;
-      if (!d.base) this.remove(id);
-      else if (d.hp <= 0) this.revive(d);
+      if (!d.base) {this.remove(id);}
+      else if (d.hp <= 0) {this.revive(d);}
     }
   }
 
@@ -275,12 +275,12 @@ export class RoomDeployables {
    *  targeting table so wildlife raze stands on dedicated rooms too. */
   creatureTargets(): { id: string; pos: Vec3 }[] {
     const out: { id: string; pos: Vec3 }[] = [];
-    for (const d of this.items.values()) out.push({ id: `dep:${d.id}`, pos: d.pos });
+    for (const d of this.items.values()) {out.push({ id: `dep:${d.id}`, pos: d.pos });}
     return out;
   }
 
   posOf(depId: string): Vec3 | null {
-    const d = this.items.get(+depId.slice(4));
+    const d = this.items.get(Number(depId.slice(4)));
     return d ? d.pos : null;
   }
 
@@ -292,12 +292,12 @@ export class RoomDeployables {
     let bestT = Infinity;
     const shooterTeam = this.room.players.getPlayer(shooterId)?.team;
     for (const d of this.items.values()) {
-      if (d.kind !== 'shield' || d.owner === shooterId) continue;
-      if (!this.powered(d)) continue; // generator down — dome is off
+      if (d.kind !== 'shield' || d.owner === shooterId) {continue;}
+      if (!this.powered(d)) {continue;} // generator down — dome is off
       const domeTeam = this.room.players.getPlayer(d.owner)?.team;
-      if (domeTeam !== undefined && shooterTeam !== undefined && domeTeam === shooterTeam) continue;
+      if (domeTeam !== undefined && shooterTeam !== undefined && domeTeam === shooterTeam) {continue;}
       const t = segSphereEnter(from, to, d.pos, SHIELD_RADIUS);
-      if (t !== null && t < bestT) bestT = t;
+      if (t !== null && t < bestT) {bestT = t;}
     }
     return bestT === Infinity ? null : bestT;
   }
@@ -305,21 +305,21 @@ export class RoomDeployables {
   /** A creature's bite lands on a deployable — same durability pool the
    *  blast sweep drains, so gnawing and shelling clear gear alike. */
   gnaw(depId: string, dmg: number): void {
-    const d = this.items.get(+depId.slice(4));
-    if (!d) return;
+    const d = this.items.get(Number(depId.slice(4)));
+    if (!d) {return;}
     this.hurt(d, dmg, 'creature');
   }
 
   /** Armor soaks before hp; any change rides out as deployHp so clients
    *  can paint the overcharge. */
   private hurt(d: Deployed, dmg: number, by: string): void {
-    if (!Number.isFinite(dmg)) return; // NaN would silent-poison the replica
+    if (!Number.isFinite(dmg)) {return;} // NaN would silent-poison the replica
     if (d.armor > 0) {
       const soaked = Math.min(d.armor, dmg);
       d.armor -= soaked;
       dmg -= soaked;
     }
-    if (d.hp <= 0) return; // downed base hulk — hits are noise, not damage
+    if (d.hp <= 0) {return;} // downed base hulk — hits are noise, not damage
     d.hp -= dmg;
     this.sendHp(d);
     if (d.hp <= 0) {
@@ -327,7 +327,7 @@ export class RoomDeployables {
         d.respawnT = RESPAWN_S;
         this.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'deployDown', 'id', d.id, { kind: d.kind, team: d.team, respawnS: RESPAWN_S }) as ServerMessage);
         logger.info('Base asset down', { id: d.id, kind: d.kind, team: d.team, by });
-        if (d.kind === 'generator') this.room.refreshPowerStructures(); // grid drops — gate fields go dark
+        if (d.kind === 'generator') {this.room.refreshPowerStructures();} // grid drops — gate fields go dark
       } else {
         logger.info('Deploy destroyed', { id: d.id, kind: d.kind, owner: d.owner, by });
         this.remove(d.id);
@@ -344,7 +344,7 @@ export class RoomDeployables {
     this.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'deployUp', 'id', d.id, {}) as ServerMessage);
     this.sendHp(d);
     logger.info('Base asset restored', { id: d.id, kind: d.kind, team: d.team });
-    if (d.kind === 'generator') this.room.refreshPowerStructures();
+    if (d.kind === 'generator') {this.room.refreshPowerStructures();}
   }
 
   private sendHp(d: Deployed, src?: string): void {
@@ -360,7 +360,7 @@ export class RoomDeployables {
   /** Friendly only: own gear always; teammates' gear when teams exist.
    *  Base assets belong to the team, not a body — same-side weld only. */
   private weldable(p: PlayerState, d: Deployed, playerId: string): boolean {
-    if (d.base) return !d.team || p.team === d.team;
+    if (d.base) {return !d.team || p.team === d.team;}
     if (p.team && d.owner !== playerId) {
       return this.room.players.getPlayer(d.owner)?.team === p.team;
     }
@@ -374,16 +374,16 @@ export class RoomDeployables {
    *  names the target too. */
   repairTarget(playerId: string, muzzle: Vec3, dir: Vec3, range: number): number | null {
     const p = this.room.players.getPlayer(playerId);
-    if (!p || p.isDead) return null;
+    if (!p || p.isDead) {return null;}
     let best: number | null = null;
     let bestT = range;
     for (const d of this.items.values()) {
       const cx = d.pos.x - muzzle.x, cy = d.pos.y + 0.7 - muzzle.y, cz = d.pos.z - muzzle.z;
       const proj = cx * dir.x + cy * dir.y + cz * dir.z;
-      if (proj < 0 || proj > bestT) continue;
+      if (proj < 0 || proj > bestT) {continue;}
       const perp2 = (cx * cx + cy * cy + cz * cz) - proj * proj;
-      if (perp2 >= 1.1 * 1.1) continue;
-      if (!this.weldable(p, d, playerId)) continue;
+      if (perp2 >= 1.1 * 1.1) {continue;}
+      if (!this.weldable(p, d, playerId)) {continue;}
       const entry = proj - Math.sqrt(1.1 * 1.1 - perp2);
       if (entry < bestT) { bestT = Math.max(entry, 0); best = d.id; }
     }
@@ -397,34 +397,34 @@ export class RoomDeployables {
   repair(playerId: string, targetId: number): ClaimVerdict {
     const d = this.items.get(targetId);
     const p = this.room.players.getPlayer(playerId);
-    if (!d || !p || p.isDead) return 'gone';
-    if (!this.weldable(p, d, playerId)) return 'enemy';
+    if (!d || !p || p.isDead) {return 'gone';}
+    if (!this.weldable(p, d, playerId)) {return 'enemy';}
     const dx = d.pos.x - p.position.x, dy = d.pos.y - p.position.y, dz = d.pos.z - p.position.z;
-    if (dx * dx + dy * dy + dz * dz > REPAIR_RANGE * REPAIR_RANGE * 2.25) return 'range'; // 1.5× slack
-    if (!losClear(this, p.position, d.pos, p.team)) return 'los';
+    if (dx * dx + dy * dy + dz * dz > REPAIR_RANGE * REPAIR_RANGE * 2.25) {return 'range';} // 1.5× slack
+    if (!losClear(this, p.position, d.pos, p.team)) {return 'los';}
     const key = `${playerId}:${targetId}`;
     const now = simNow() / 1000;
-    if (now - (this.lastRepair.get(key) ?? -1) < REPAIR_MIN_TICK_S) return 'cooldown';
+    if (now - (this.lastRepair.get(key) ?? -1) < REPAIR_MIN_TICK_S) {return 'cooldown';}
     this.lastRepair.set(key, now);
     const hpCap = HP[d.kind];
     // A hulk welds back from zero — blast overkill digs hp far negative,
     // and making a tech excavate it would gate revival on the kill shot's
     // size instead of the weld time.
-    if (d.base && d.hp < 0) d.hp = 0;
+    if (d.base && d.hp < 0) {d.hp = 0;}
     const healed = Math.min(REPAIR_HEAL_PER_TICK, hpCap - d.hp);
     d.hp += healed;
     d.armor = Math.min(REPAIR_ARMOR_MULT * hpCap, d.armor + (REPAIR_HEAL_PER_TICK - healed));
-    if (d.base && d.hp > 0 && d.respawnT > 0) this.revive(d); // welded back early
-    else this.sendHp(d, playerId);
+    if (d.base && d.hp > 0 && d.respawnT > 0) {this.revive(d);} // welded back early
+    else {this.sendHp(d, playerId);}
     return true;
   }
 
   remove(id: number): void {
-    if (!this.items.delete(id)) return;
+    if (!this.items.delete(id)) {return;}
     // Dead ids must drop their rate-limit keys — otherwise every planted
     // and destroyed item leaves a permanent entry in lastRepair.
     for (const k of this.lastRepair.keys()) {
-      if (k.endsWith(`:${id}`)) this.lastRepair.delete(k);
+      if (k.endsWith(`:${id}`)) {this.lastRepair.delete(k);}
     }
     this.room.broadcast(verbPayload(WORLD_MODEL.deploy!, 'gone', 'id', id, {}) as ServerMessage);
     this.refreshSolids();
@@ -434,7 +434,7 @@ export class RoomDeployables {
    *  splash (same falloff curve as players). Own gear is not exempt:
    *  a careless mortar wrecks your own turret too. */
   applyBlast(center: Vec3, damage: number, radius: number, shooterId: string, scales?: readonly number[], weapon?: number, splash?: number): void {
-    if (this.items.size === 0) return;
+    if (this.items.size === 0) {return;}
     // Sticky launcher is the breaching tool — 2x to structures/base
     // assets gives the otherwise-purposeless gun a siege job.
     const mult = weapon === WeaponType.Sticky ? 2 : 1;
@@ -442,7 +442,7 @@ export class RoomDeployables {
     for (const d of this.items.values()) {
       const dx = d.pos.x - center.x, dy = d.pos.y - center.y, dz = d.pos.z - center.z;
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      if (dist > radius) continue;
+      if (dist > radius) {continue;}
       // Contact hit — the blast center landed inside the item's body
       // radius (a sticky glued ON the turret): pays the direct line, no
       // falloff. Outside it, splash does its normal aoe scale.
@@ -451,40 +451,40 @@ export class RoomDeployables {
       // at least half its base splash, so clearing a stand costs a few
       // well-placed lobs instead of a dozen grazed edges.
       const dmg = (direct ? damage : Math.max(aoeDamage(aoe, dist, radius, scales), Math.round(aoe * 0.5))) * mult;
-      if (!Number.isFinite(dmg) || dmg <= 0) continue;
-      logger.debug('Deploy hit', { kind: d.kind, dist: +dist.toFixed(1), dmg, hp: d.hp, by: shooterId });
+      if (!Number.isFinite(dmg) || dmg <= 0) {continue;}
+      logger.debug('Deploy hit', { kind: d.kind, dist: Number(dist.toFixed(1)), dmg, hp: d.hp, by: shooterId });
       this.hurt(d, dmg, shooterId);
     }
   }
 
   tick(dt: number): void {
-    if (this.items.size === 0) return;
+    if (this.items.size === 0) {return;}
     for (const d of this.items.values()) {
       if (d.base) {
         if (d.respawnT > 0) {
           d.respawnT -= dt;
-          if (d.respawnT <= 0) this.revive(d);
+          if (d.respawnT <= 0) {this.revive(d);}
           continue;
         }
-        if (d.hp <= 0) continue;
+        if (d.hp <= 0) {continue;}
       } else {
         d.ttl -= dt;
         if (d.ttl <= 0) { this.remove(d.id); continue; }
       }
-      if (!this.powered(d)) continue; // generator down — base goes dark
-      if (d.kind === 'turret') tickTurret(this, d, dt);
-      else if (d.kind === 'mine') tickMine(this, d, dt);
-      else if (d.kind === 'station') tickStation(this, d, dt);
-      else if (d.kind === 'drone') tickDrone(this, d, dt);
-      else if (d.kind === 'sensor') tickSensor(this, d, dt);
-      else if (d.kind === 'baseturret') tickSentry(this, d, dt);
+      if (!this.powered(d)) {continue;} // generator down — base goes dark
+      if (d.kind === 'turret') {tickTurret(this, d, dt);}
+      else if (d.kind === 'mine') {tickMine(this, d, dt);}
+      else if (d.kind === 'station') {tickStation(this, d, dt);}
+      else if (d.kind === 'drone') {tickDrone(this, d, dt);}
+      else if (d.kind === 'sensor') {tickSensor(this, d, dt);}
+      else if (d.kind === 'baseturret') {tickSentry(this, d, dt);}
     }
     // Sentry bolts in flight — the blast lands where the bolt does, so a
     // sidestepping capper genuinely outruns it (non-homing by design).
     for (let i = this.bolts.length - 1; i >= 0; i--) {
       const b = this.bolts[i]!;
       b.ttl -= dt;
-      if (b.ttl > 0) continue;
+      if (b.ttl > 0) {continue;}
       this.bolts.splice(i, 1);
       this.room.messages.mineBlast(b.owner, b.at, b.dmg, b.rad, b.kb);
     }

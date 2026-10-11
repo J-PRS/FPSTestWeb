@@ -7,14 +7,14 @@ import {
   TURRET_RANGE, TURRET_RELAUNCH, TURRET_MIN_DWELL,
   TURRET_REFIRE, TURRET_DEPRESS,
 } from '../core/config.js';
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
 import { TerrainFoot } from '../effects/terrainFoot.js';
 import { allocSlots, freeSlots, getSwarm, getShadows, type SwarmPart } from './swarms.js';
 import { type Bolt, spawnBolt, detonateBolt as detBolt, updateBolts as stepBolts, disposeBolts } from './turretBolts.js';
 import { BallTrailDots } from '../effects/ballTrails.js';
-import { RibbonTrail } from '../effects/RibbonTrail.js';
+import type { RibbonTrail } from '../effects/RibbonTrail.js';
 import { updateAir as balAir, seat as balSeat, launch as balLaunch, solveBolt as balSolve, pathClear as balPath } from './turretBallistics.js';
 export type { Bolt } from './turretBolts.js';
 
@@ -50,7 +50,7 @@ let _domeGeo: THREE.SphereGeometry | null = null;
 function domeGeo(): THREE.SphereGeometry {
   // Full sphere, not a hemisphere cap — the ball IS the gimbal housing,
   // so the barrel stays visibly socketed at any depression angle.
-  if (!_domeGeo) _domeGeo = new THREE.SphereGeometry(0.7, 10, 8);
+  if (!_domeGeo) {_domeGeo = new THREE.SphereGeometry(0.7, 10, 8);}
   return _domeGeo;
 }
 let _barrelGeo: THREE.CylinderGeometry | null = null;
@@ -64,34 +64,34 @@ function barrelGeo(): THREE.CylinderGeometry {
 }
 let _eyeGeo: THREE.PlaneGeometry | null = null;
 function eyeGeo(): THREE.PlaneGeometry {
-  if (!_eyeGeo) _eyeGeo = new THREE.PlaneGeometry(0.5, 0.5);
+  if (!_eyeGeo) {_eyeGeo = new THREE.PlaneGeometry(0.5, 0.5);}
   return _eyeGeo;
 }
 
 // Shared materials — per-turret variations ride on instanceColor instead.
 let _baseMat: THREE.MeshLambertMaterial | null = null;
 function baseMat(): THREE.MeshLambertMaterial {
-  if (!_baseMat) { _baseMat = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x0a0d12 }); _baseMat.userData.__wearInt = 2.2; }
+  if (!_baseMat) { _baseMat = new THREE.MeshLambertMaterial({ color: 0xFF_FF_FF, emissive: 0x0A_0D_12 }); _baseMat.userData.__wearInt = 2.2; }
   return _baseMat;
 }
 let _domeMatS: THREE.MeshLambertMaterial | null = null;
 function domeMatS(): THREE.MeshLambertMaterial {
-  if (!_domeMatS) { _domeMatS = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x101820 }); _domeMatS.userData.__wearInt = 2.2; }
+  if (!_domeMatS) { _domeMatS = new THREE.MeshLambertMaterial({ color: 0xFF_FF_FF, emissive: 0x10_18_20 }); _domeMatS.userData.__wearInt = 2.2; }
   return _domeMatS;
 }
 let _eyeMat: THREE.MeshBasicMaterial | null = null;
 function eyeMat(): THREE.MeshBasicMaterial {
-  if (!_eyeMat) _eyeMat = new THREE.MeshBasicMaterial({
+  if (!_eyeMat) {_eyeMat = new THREE.MeshBasicMaterial({
     map: getGlowTexture(), transparent: true,
     blending: THREE.AdditiveBlending, depthWrite: false,
-  });
+  });}
   return _eyeMat;
 }
 const PART_BASE = 0, PART_DOME = 1, PART_BARREL = 2, PART_EYE = 3;
-const DOME_R = 0x4a / 255, DOME_G = 0x5f / 255, DOME_B = 0x73 / 255;
+const DOME_R = 0x4A / 255, DOME_G = 0x5F / 255, DOME_B = 0x73 / 255;
 // Match the sentry's steel (0x4a5560) — the grunge shader modulates a few
 // percent of albedo, so the bake reads flat below ~30% luminance.
-const HULL_R = 0x4a / 255, HULL_G = 0x55 / 255, HULL_B = 0x60 / 255;
+const HULL_R = 0x4A / 255, HULL_G = 0x55 / 255, HULL_B = 0x60 / 255;
 
 export function turretterParts(): SwarmPart[] {
   return [
@@ -125,7 +125,7 @@ export class Turretter implements Targetable {
   // Dome tops out ~1.8m above pos — capsule covers the turret head, not
   // just the squashed sphere at the base (top-of-dome shots were whiffing).
   capsuleTop = 1.8;
-  color = new THREE.Color(0x3a4a5a); // gunmetal
+  color = new THREE.Color(0x3A_4A_5A); // gunmetal
   scale = 1.2;
 
   // Swarm-slot handles — the turret renders through instanced parts, not a
@@ -174,7 +174,7 @@ export class Turretter implements Targetable {
     this.uber = uber;
     this.health = this.maxHealth = uber ? TURRET_HEALTH * 2 : TURRET_HEALTH;
     this.radius = uber ? TURRET_RADIUS * 1.4 : TURRET_RADIUS;
-    if (uber) this.color.set(0x5a3a2a); // rusted siege bronze
+    if (uber) {this.color.set(0x5A_3A_2A);} // rusted siege bronze
 
     this.trailFx = new BallTrailDots(scene, { sizeMul: 0.5 });
     this.pos = pos.clone();
@@ -191,8 +191,8 @@ export class Turretter implements Targetable {
   }
 
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3, playerVel?: THREE.Vector3): void {
-    if (this.dead) return;
-    if (this.flashTimer > 0) this.flashTimer -= dt;
+    if (this.dead) {return;}
+    if (this.flashTimer > 0) {this.flashTimer -= dt;}
 
     stepBolts(this, this, dt, terrain, playerPos);
 
@@ -211,7 +211,7 @@ export class Turretter implements Targetable {
   // pivot (yaw+pitch inside that frame), writing each part's matrix.
   private writeInstances(): void {
     const swarm = getSwarm('turretter');
-    if (!swarm || this.swarmSlot < 0) return;
+    if (!swarm || this.swarmSlot < 0) {return;}
     const slot = this.swarmSlot;
 
     _p.set(this.pos.x, this.pos.y + this.meshYOffset, this.pos.z);
@@ -253,7 +253,7 @@ export class Turretter implements Targetable {
       flash ? 4 : hot ? DOME_G * 2 : DOME_G,
       flash ? 4 : hot ? DOME_B : DOME_B);
     swarm.setColor(PART_EYE, slot,
-      hot ? 2.0 : 1.0, hot ? 1.0 : 0.53, hot ? 0.4 : 0.19);
+      hot ? 2 : 1, hot ? 1 : 0.53, hot ? 0.4 : 0.19);
   }
 
   private updatePlanted(dt: number, playerPos: THREE.Vector3, playerVel?: THREE.Vector3): void {
@@ -267,7 +267,7 @@ export class Turretter implements Targetable {
       balLaunch(this, playerPos, playerVel);
       return;
     }
-    if (dist > TURRET_RANGE) return; // out of range — sit tight
+    if (dist > TURRET_RANGE) {return;} // out of range — sit tight
 
     // Track the player — the head lives inside the slope-tilted base, so
     // transform the world-space aim into the base's local frame first;
@@ -294,7 +294,7 @@ export class Turretter implements Targetable {
         if (this.dwell >= TURRET_MIN_DWELL) {
           _v.copy(this.pos).sub(playerPos);
           _v.y = 0;
-          if (_v.lengthSq() < 1e-4) _v.set(1, 0, 0); // dead overhead — pick a side
+          if (_v.lengthSq() < 1e-4) {_v.set(1, 0, 0);} // dead overhead — pick a side
           _v.normalize().multiplyScalar(TURRET_RELAUNCH * 0.5).add(playerPos);
           _v.y = this.pos.y; // launch() lands on terrain; this seeds the arc height
           balLaunch(this, _v);
@@ -342,7 +342,7 @@ export class Turretter implements Targetable {
   /** Planted = armored (half damage), airborne = vulnerable (triple — the
    *  airshot window is the skill check, make it pay). */
   takeDamage(damage: number): boolean {
-    this.health -= damage * (this.planted ? 0.5 : 3.0);
+    this.health -= damage * (this.planted ? 0.5 : 3);
     this.flashTimer = 0.12;
     if (this.health <= 0) { this.dead = true; return true; }
     return false;
@@ -350,14 +350,14 @@ export class Turretter implements Targetable {
 
   applyKnockback(from: THREE.Vector3, force: number): void {
     _dir.copy(this.pos).sub(from).normalize();
-    this.vel.addScaledVector(_dir, force * (this.planted ? 0.15 : 1.0)); // planted = anchored
-    if (this.planted && this.vel.y > 4) this.planted = false; // big blast pops it loose
+    this.vel.addScaledVector(_dir, force * (this.planted ? 0.15 : 1)); // planted = anchored
+    if (this.planted && this.vel.y > 4) {this.planted = false;} // big blast pops it loose
   }
 
   applyPull(to: THREE.Vector3, force: number): void {
     _dir.copy(to).sub(this.pos).normalize();
-    this.vel.addScaledVector(_dir, force * (this.planted ? 0.15 : 1.0));
-    if (this.planted && this.vel.y > 4) this.planted = false;
+    this.vel.addScaledVector(_dir, force * (this.planted ? 0.15 : 1));
+    if (this.planted && this.vel.y > 4) {this.planted = false;}
   }
 
   dispose(): void {

@@ -65,7 +65,7 @@ export class BotGoals {
     const rallyAt = 0.15 * (0.4 + this.nerve(ctx) * 1.6);
     if ((ctx.healthFrac ?? 1) < rallyAt && ctx.allies && ctx.allies.length > 0 && !ctx.posted) {
       const rally = this.rallyGoal(ctx, pos, rallyAt);
-      if (rally) s.goal = rally;
+      if (rally) {s.goal = rally;}
       return;
     }
     // A dry infiltrator can't hold the veil — the nugget loop IS its
@@ -82,7 +82,7 @@ export class BotGoals {
     const heard = this.heardGoal(ctx, pos);
     const cands: Array<{ goal: BotVec; score: number }> = [];
     const offer = (goal: BotVec | null | undefined, weight: number, ignoreScent = false) => {
-      if (!goal) return;
+      if (!goal) {return;}
       const d = Math.sqrt(distSq(pos, goal));
       const reach = 1 / (1 + d / 140);
       // Experience memory on top of the shared scent: a spot where THIS
@@ -107,7 +107,7 @@ export class BotGoals {
     // every heard fight outbid the 1.0-weight objective, so the called
     // push walked in alone.
     const committed = ctx.runner || ctx.posted || ctx.wave;
-    offer(ctx.objective, committed ? 3.5 : 1.0, !!committed);
+    offer(ctx.objective, committed ? 3.5 : 1, Boolean(committed));
     if (!(ctx.posted && ctx.objective && ctx.pickup && distSq(ctx.pickup, ctx.objective) > ctx.posted * ctx.posted)) {
       offer(ctx.pickup, 0.8);
     }
@@ -124,15 +124,15 @@ export class BotGoals {
     // rattled social one finds a buddy — pairs form and dissolve as the
     // drifted-to ally's own goals move it on, never a formed unit.
     const buddy = this.buddyAnchor(ctx, pos);
-    if (buddy) offer(buddy, this.nerve(ctx) * 0.55);
+    if (buddy) {offer(buddy, this.nerve(ctx) * 0.55);}
     // A same-team VGS callout left a pin: commited roles hold their post —
     // everyone else weighs the call like a heard fight, duty-scaled so a
     // loner bot can still shrug off "cover me".
-    if (ctx.radio && !committed) offer(ctx.radio, 0.35 + this.duty() * 0.45);
-    if (wander && !ctx.posted) offer(wander, 0.35);
+    if (ctx.radio && !committed) {offer(ctx.radio, 0.35 + this.duty() * 0.45);}
+    if (wander && !ctx.posted) {offer(wander, 0.35);}
     if (cands.length > 0) {
       let best = cands[0]!;
-      for (const c of cands) if (c.score > best.score) best = c;
+      for (const c of cands) {if (c.score > best.score) {best = c;}}
       // Hysteresis: the incumbent needs beating by a margin — flipping
       // goals on a 1% re-score reads as bot dithering, not judgment.
       const incumbent = cands.find((c) => distSq(c.goal, s.goal) < 25 * 25);
@@ -150,7 +150,7 @@ export class BotGoals {
     if (s.wanderT <= 0 || distSq(pos, s.wanderWp) < 9) {
       s.wanderT = (3 + botRand() * 4) / this.wanderlust();
       const best = this.rollWander(ctx, pos);
-      if (best) s.wanderWp = best;
+      if (best) {s.wanderWp = best;}
     }
     return s.wanderWp;
   }
@@ -170,7 +170,7 @@ export class BotGoals {
       const a = Math.atan2(hv.z, hv.x) + (botRand() - 0.5) * 2.4;
       const r = (25 + botRand() * 55) * this.wanderlust();
       const wp = { x: pos.x + Math.cos(a) * r, z: pos.z + Math.sin(a) * r };
-      if (this.nearDeath(wp)) continue;
+      if (this.nearDeath(wp)) {continue;}
       const drop = g0 - ctx.groundY(wp.x, wp.z);
       if (drop > bestDrop) {
         bestDrop = drop;
@@ -184,12 +184,12 @@ export class BotGoals {
    *  inside real transit reach. Null when the bot already HAS company
    *  (the pull can't stack pairs into a blob) or nobody's reachable. */
   private buddyAnchor(ctx: BrainCtx, pos: BotVec): BotVec | null {
-    if (ctx.objective || !ctx.allies || ctx.allies.length === 0 || ctx.posted) return null;
+    if (ctx.objective || !ctx.allies || ctx.allies.length === 0 || ctx.posted) {return null;}
     let ally: BotVec | null = null;
     let ad = Infinity;
     for (const o of ctx.allies) {
       const d = distSq(pos, o);
-      if (d < 60 * 60) return null; // already has company — a pull here would herd
+      if (d < 60 * 60) {return null;} // already has company — a pull here would herd
       if (d < ad && d < 260 * 260) { ad = d; ally = o; }
     }
     return ally ? { ...ally } : null;
@@ -198,7 +198,7 @@ export class BotGoals {
   /** Hurt with nobody shooting back at: fold toward the nearest ALLY —
    *  folding onto an enemy while at 15% hp was worse than running solo. */
   private rallyGoal(ctx: BrainCtx, pos: BotVec, rallyAt = 0.15): BotVec | null {
-    if ((ctx.healthFrac ?? 1) >= rallyAt || !ctx.allies || ctx.allies.length === 0) return null;
+    if ((ctx.healthFrac ?? 1) >= rallyAt || !ctx.allies || ctx.allies.length === 0) {return null;}
     let ally: BotVec | null = null;
     let ad = Infinity;
     for (const o of ctx.allies) {
@@ -211,7 +211,7 @@ export class BotGoals {
   /** Heard a fight: investigate the nearest noise. Curiosity is a
    *  personality roll so a squad doesn't stampede as one. */
   private heardGoal(ctx: BrainCtx, pos: BotVec): BotVec | null {
-    if (!ctx.sounds || ctx.sounds.length === 0) return null;
+    if (!ctx.sounds || ctx.sounds.length === 0) {return null;}
     let loudest: BotVec | null = null;
     let ld = Infinity;
     for (const s of ctx.sounds) {

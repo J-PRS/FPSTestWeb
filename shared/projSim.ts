@@ -49,7 +49,7 @@ export function segPointDist(a: Vec3, b: Vec3, c: Vec3): number {
 export function segPointT(a: Vec3, b: Vec3, c: Vec3): number {
   const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z;
   const lenSq = abx * abx + aby * aby + abz * abz;
-  if (lenSq <= 0) return 0;
+  if (lenSq <= 0) {return 0;}
   const acx = c.x - a.x, acy = c.y - a.y, acz = c.z - a.z;
   return Math.max(0, Math.min(1, (acx * abx + acy * aby + acz * abz) / lenSq));
 }
@@ -65,7 +65,7 @@ export function segFieldHit(a: Vec3, b: Vec3, field: Heightfield): Vec3 | null {
   for (let i = 1; i <= steps; i++) {
     const t = i / steps;
     const x = a.x + dx * t, y = a.y + dy * t, z = a.z + dz * t;
-    if (y <= hmHeight(field, x, z)) return { x, y, z };
+    if (y <= hmHeight(field, x, z)) {return { x, y, z };}
   }
   return null;
 }

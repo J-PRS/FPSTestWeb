@@ -55,14 +55,14 @@ export class BotSteer {
   steer(dt: number, ctx: BrainCtx, pos: BotVec, dest: BotVec): BotVec {
     let gx = dest.x - pos.x, gz = dest.z - pos.z;
     const gd = Math.hypot(gx, gz);
-    if (gd < 0.5) return dest;
+    if (gd < 0.5) {return dest;}
     // Arrived: drift a lazy figure around the point instead of freezing
     // — statues are how bots out themselves on a held position. The
     // radius breathes so it's a wander, not a metronome circle. Not on
     // the objective's doorstep: a flag touch is worth a still beat.
     if (gd < 4 && (!ctx.objective || Math.hypot(ctx.objective.x - pos.x, ctx.objective.z - pos.z) > 15)) {
       this.swayT += dt * 0.5;
-      const r = 1.5 + Math.sin(this.swayT * 0.31) * 1.0;
+      const r = 1.5 + Number(Math.sin(this.swayT * 0.31));
       const ax = dest.x + Math.cos(this.swayT) * r - pos.x;
       const az = dest.z + Math.sin(this.swayT) * r - pos.z;
       const al = Math.hypot(ax, az) || 1;
@@ -109,14 +109,14 @@ export class BotSteer {
       const step0 = Math.min(gd, T.steer.step);
       return { x: pos.x + gx * step0, y: pos.y, z: pos.z + gz * step0 };
     }
-    const now = ctx.now;
+    const {now} = ctx;
 
     // Lay the trail, then drop crumbs that are stale or out of range.
     this.memT -= dt;
     if (this.memT <= 0) {
       this.memT = 0.4;
       this.memory.push({ x: pos.x, z: pos.z, t: now });
-      if (this.memory.length > 24) this.memory.shift();
+      if (this.memory.length > 24) {this.memory.shift();}
     }
     this.memory = this.memory.filter(
       (m) => now - m.t < T.steer.memMs && distSqXZ(m, pos) < T.steer.memRange * T.steer.memRange,
@@ -129,7 +129,7 @@ export class BotSteer {
     if (ctx.others) {
       for (const o of ctx.others) {
         const od2 = distSqXZ(o, pos);
-        if (od2 <= sep2 && od2 > 0.0001) (near ??= []).push(o);
+        if (od2 <= sep2 && od2 > 0.0001) {(near ??= []).push(o);}
       }
     }
 
@@ -232,8 +232,8 @@ export class BotSteer {
     // keeps the slot open; a real slope keeps rising past it.
     const boundedStep = riseA > 0 && riseA <= T.steer.mountRise && riseB - riseA < T.steer.mountCrest;
     const slope = Math.max(boundedStep ? 0 : riseA / T.steer.probeA, riseB / T.steer.probeB);
-    if (slope > T.steer.slopeThresh) danger = Math.min(1, danger + (slope - T.steer.slopeThresh) * T.steer.slopeW);
-    if (riseA < T.steer.sheerDrop) danger = Math.min(1, danger + T.steer.sheerDanger); // sheer drop
+    if (slope > T.steer.slopeThresh) {danger = Math.min(1, danger + (slope - T.steer.slopeThresh) * T.steer.slopeW);}
+    if (riseA < T.steer.sheerDrop) {danger = Math.min(1, danger + T.steer.sheerDanger);} // sheer drop
 
     // Solid faces price like terrain — the steerer used to see only the
     // heightfield, so a shield pane or curtain was clear air until the
@@ -245,7 +245,7 @@ export class BotSteer {
         { x: pos.x, y: pos.y + 1, z: pos.z },
         { x: pos.x + dx * pa, y: pos.y + 1, z: pos.z + dz * pa },
         ctx.solids, ctx.solidIndex ?? undefined, ctx.team);
-      if (hit) danger = Math.min(1, danger + 1.2 - hit.t);
+      if (hit) {danger = Math.min(1, danger + 1.2 - hit.t);}
     }
 
     // Commitment leash: a posted anchor's field is bounded by its post —
@@ -257,7 +257,7 @@ export class BotSteer {
       const px = pos.x - ctx.objective.x, pz = pos.z - ctx.objective.z;
       const fromPost = Math.hypot(px, pz);
       const out = (px * dx + pz * dz) / Math.max(fromPost, 0.01);
-      if (fromPost + Math.max(0, out) * s > ctx.posted) danger = 1;
+      if (fromPost + Math.max(0, out) * s > ctx.posted) {danger = 1;}
     }
 
     // Standoff repeller: a defended point the wave isn't ready for.
@@ -279,15 +279,15 @@ export class BotSteer {
       for (const o of near) {
         const ox = o.x - pos.x, oz = o.z - pos.z;
         const od = Math.hypot(ox, oz);
-        if (od < 0.01) continue;
+        if (od < 0.01) {continue;}
         const toward = dx * (ox / od) + dz * (oz / od);
-        if (toward > 0.5) danger = Math.min(1, danger + toward * (1 - od / T.steer.sepRange));
+        if (toward > 0.5) {danger = Math.min(1, danger + toward * (1 - od / T.steer.sepRange));}
       }
     }
     for (const m of nearGoal || ctx.posted ? [] : this.memory) {
       const mx = m.x - pos.x, mz = m.z - pos.z;
       const md = Math.hypot(mx, mz);
-      if (md > T.steer.memRange || md < 0.5) continue;
+      if (md > T.steer.memRange || md < 0.5) {continue;}
       const toward = dx * (mx / md) + dz * (mz / md);
       if (toward > 0.5) {
         danger = Math.min(1, danger + toward * 0.2 * (1 - md / T.steer.memRange) * (1 - (now - m.t) / T.steer.memMs));

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Player } from '../../entities/Player.js';
+import type { Player } from '../../entities/Player.js';
 
 /**
  * HudStats — the per-frame stat painter: vitals (health/energy/armor),
@@ -64,7 +64,7 @@ export class HudStats {
   constructor(private h: StatsHost) {}
 
   tick(dt: number, player: Player, ping: number = 0, packetLoss: number = 0, jitter: number = 0): void {
-    const h = this.h;
+    const {h} = this;
     this.tickVitals(dt, player);
     this.tickBuffs(player);
     this.lastPlayerPos.copy(player.pos);
@@ -90,12 +90,12 @@ export class HudStats {
     this.setText(h.jitter, 'jitter', String(Math.round(jitter)));
 
     // Slots are loadout-driven: labels + highlight re-render only on change.
-    const loadoutKey = player.loadout.join(',') + '|' + player.weaponIndex;
+    const loadoutKey = `${player.loadout.join(',')  }|${  player.weaponIndex}`;
     if (loadoutKey !== this.lastWeapon) {
       this.lastWeapon = loadoutKey;
       player.loadout.forEach((wid, i) => {
         const s = h.weaponSlots[i];
-        if (!s) return;
+        if (!s) {return;}
         s.textContent = `${i + 1} ${HudStats.WEAPON_SHORT[wid] ?? '?'}`;
         s.classList.toggle('active', i === player.weaponIndex);
       });
@@ -103,7 +103,7 @@ export class HudStats {
 
     if (this.hitTimer > 0) {
       this.hitTimer -= dt;
-      if (this.hitTimer <= 0) h.hitMarker.classList.remove('visible');
+      if (this.hitTimer <= 0) {h.hitMarker.classList.remove('visible');}
     }
   }
 
@@ -115,7 +115,7 @@ export class HudStats {
   // Health text + bar with ghost-drain: damage leaves a trailing sliver
   // that bleeds down at ~40%/s so a hit reads as loss, not a snap.
   private tickVitals(dt: number, player: Player): void {
-    const h = this.h;
+    const {h} = this;
     // health is float (regen ticks at 12/s leave fractions) — the chip
     // shows whole hp or it prints 78.00000000000001.
     this.setText(h.health, 'health', String(Math.round(player.health)));
@@ -151,12 +151,12 @@ export class HudStats {
   private tickBuffs(player: Player): void {
     const now = Date.now();
     const buffsKey = `${player.buffUntil.regen > now ? Math.ceil((player.buffUntil.regen - now) / 1000) : 0}|${player.buffUntil.dd > now ? Math.ceil((player.buffUntil.dd - now) / 1000) : 0}`;
-    if (buffsKey === this.lastBuffsKey) return;
+    if (buffsKey === this.lastBuffsKey) {return;}
     this.lastBuffsKey = buffsKey;
     const chips: string[] = [];
     const [rs, ds] = buffsKey.split('|').map(Number);
-    if (rs > 0) chips.push(`<span class="buff regen">REGEN ${rs}s</span>`);
-    if (ds > 0) chips.push(`<span class="buff dd">2×DMG ${ds}s</span>`);
+    if (rs > 0) {chips.push(`<span class="buff regen">REGEN ${rs}s</span>`);}
+    if (ds > 0) {chips.push(`<span class="buff dd">2×DMG ${ds}s</span>`);}
     this.h.buffsRow.innerHTML = chips.join('');
   }
 
@@ -203,7 +203,7 @@ export class HudStats {
   // even for identical strings. Public — the host's own nugget chip paints
   // through the same cache.
   setText(el: HTMLElement, key: string, value: string): void {
-    if (this.lastText[key] === value) return;
+    if (this.lastText[key] === value) {return;}
     this.lastText[key] = value;
     el.textContent = value;
   }
@@ -211,19 +211,19 @@ export class HudStats {
   /** Local player took damage — vignette pulse scaled to the hit, plus a
    *  directional arc pointing at the source when we know where it is. */
   damage(fromPos: THREE.Vector3 | null, damage: number): void {
-    const h = this.h;
+    const {h} = this;
     // Vignette: 10dmg ≈ subtle, 40+ ≈ strong. Stacking hits push opacity up
     // but cap below readability loss.
     this.dmgT = Math.min(1, this.dmgT + 0.18 + damage * 0.012);
     h.dmgVignette.style.opacity = String(Math.min(0.85, this.dmgT));
 
-    if (fromPos) this.pointAt(fromPos);
+    if (fromPos) {this.pointAt(fromPos);}
   }
 
   /** Shielded hit — same directional language as damage() but cyan and
    *  punchier: the bubble ate it, the energy bar is the real damage readout. */
   shieldDamage(fromPos: THREE.Vector3 | null, damage: number): void {
-    const h = this.h;
+    const {h} = this;
     this.dmgT = Math.min(1, this.dmgT + 0.12 + damage * 0.008);
     h.dmgVignette.style.opacity = String(Math.min(0.6, this.dmgT));
     h.dmgVignette.style.boxShadow =
@@ -233,7 +233,7 @@ export class HudStats {
     this.shieldVignetteReset = window.setTimeout(() => {
       h.dmgVignette.style.boxShadow = '';
     }, 300);
-    if (fromPos) this.pointAt(fromPos);
+    if (fromPos) {this.pointAt(fromPos);}
   }
 
   /** Bearing: world angle of (source - player) relative to facing.
@@ -243,8 +243,8 @@ export class HudStats {
     const dz = fromPos.z - this.lastPlayerPos.z;
     let rel = Math.atan2(dx, dz) - this.lastPlayerYaw;
     // Normalize to [-π, π], then flip: screen-right is -x when yaw=0
-    while (rel > Math.PI) rel -= Math.PI * 2;
-    while (rel < -Math.PI) rel += Math.PI * 2;
+    while (rel > Math.PI) {rel -= Math.PI * 2;}
+    while (rel < -Math.PI) {rel += Math.PI * 2;}
     this.h.dmgDirArc.style.transform = `rotate(${-rel}rad)`;
     this.dmgDirT = 1;
     this.h.dmgDir.style.opacity = '1';

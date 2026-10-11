@@ -8,7 +8,7 @@ import { wallNow } from './wallClock.ts';
 
 export function totalPlayers(g: GameServer): number {
   let n = 0;
-  for (const room of g.rooms.values()) n += room.playerCount();
+  for (const room of g.rooms.values()) {n += room.playerCount();}
   return n;
 }
   /** Server-browser card: what a master list / LAN browser displays per
@@ -40,8 +40,8 @@ export function getHealthStatus(g: GameServer) {
       players: totalPlayers(g),
       maxPlayers: CONFIG.maxPlayers,
       tickRate: CONFIG.tickRate,
-      ...(quarantined.length ? { quarantined } : {}),
-      ...(lagBad ? { tickLagMsAvg: +(g.ops.tickLagMsSum / g.ops.tickLagSamples).toFixed(1) } : {}),
+      ...(quarantined.length > 0 ? { quarantined } : {}),
+      ...(lagBad ? { tickLagMsAvg: Number((g.ops.tickLagMsSum / g.ops.tickLagSamples).toFixed(1)) } : {}),
     };
   }
 
@@ -58,7 +58,7 @@ export function getMetrics(g: GameServer) {
       let n = 0, fpsSum = 0, fpsMin = Infinity, lossMax = 0, pingMax = 0;
       for (const p of r.players.getAllPlayers().values()) {
         const s = p.clientStats;
-        if (!s || now - s.at > 30_000) continue;
+        if (!s || now - s.at > 30_000) {continue;}
         n++; fpsSum += s.fps; fpsMin = Math.min(fpsMin, s.fps);
         lossMax = Math.max(lossMax, s.loss); pingMax = Math.max(pingMax, s.ping);
       }
@@ -71,9 +71,9 @@ export function getMetrics(g: GameServer) {
       // Bot CPU per stage as ms/sec over the last 10s window — a room
       // melting on think/drive shows it here instead of needing a soak.
       botMs: r.bots ? {
-        flagGoal: +r.bots.stageMs[0]!.toFixed(1), build: +r.bots.stageMs[1]!.toFixed(1),
-        think: +r.bots.stageMs[2]!.toFixed(1), fire: +r.bots.stageMs[3]!.toFixed(1),
-        drive: +r.bots.stageMs[4]!.toFixed(1),
+        flagGoal: Number(r.bots.stageMs[0]!.toFixed(1)), build: Number(r.bots.stageMs[1]!.toFixed(1)),
+        think: Number(r.bots.stageMs[2]!.toFixed(1)), fire: Number(r.bots.stageMs[3]!.toFixed(1)),
+        drive: Number(r.bots.stageMs[4]!.toFixed(1)),
       } : undefined,
       pickups: r.pickups?.snapshot().length ?? 0,
       gracePending: r.sessions?.graceInRoom(r.name) ?? 0,
@@ -88,9 +88,9 @@ export function getMetrics(g: GameServer) {
       uptimeS,
       players: totalPlayers(g),
       memMB: {
-        rss: +(mem.rss / 1048576).toFixed(1),
-        heapUsed: +(mem.heapUsed / 1048576).toFixed(1),
-        heapTotal: +(mem.heapTotal / 1048576).toFixed(1),
+        rss: Number((mem.rss / 1_048_576).toFixed(1)),
+        heapUsed: Number((mem.heapUsed / 1_048_576).toFixed(1)),
+        heapTotal: Number((mem.heapTotal / 1_048_576).toFixed(1)),
       },
       // Last 10s tick-fanout window — null until a player has been connected
       // long enough to close one.
@@ -108,7 +108,7 @@ export function getMetrics(g: GameServer) {
       sessions: g.registry.metrics(),
       tiers: { ws: o.tierWs, wt: o.tierWt, rtc: o.tierRtc, other: o.tierOther },
       tickLagMs: {
-        avg: o.tickLagSamples ? +(o.tickLagMsSum / o.tickLagSamples).toFixed(2) : 0,
+        avg: o.tickLagSamples ? Number((o.tickLagMsSum / o.tickLagSamples).toFixed(2)) : 0,
         max: o.tickLagMsMax,
       },
     };

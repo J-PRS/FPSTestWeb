@@ -37,7 +37,7 @@ function bodyGeo(): THREE.BufferGeometry {
     abdomen.scale(0.95, 0.72, 1.05);
     abdomen.translate(0, 0.2, -0.5);
     const thorax = new THREE.IcosahedronGeometry(0.55, 0);
-    thorax.scale(1.0, 0.8, 0.9);
+    thorax.scale(1, 0.8, 0.9);
     thorax.translate(0, 0.08, 0.45);
     const headPlate = new THREE.IcosahedronGeometry(0.32, 0);
     headPlate.scale(1.15, 0.65, 0.8);
@@ -82,14 +82,14 @@ let _eyeMat: THREE.MeshBasicMaterial | null = null;
 
 /** Swarm part table — registered once in swarms.initSwarms. */
 export function crawlerParts(): SwarmPart[] {
-  if (!_bodyMat) _bodyMat = new THREE.MeshLambertMaterial({
-    color: 0xffffff, emissive: 0x000000,
+  if (!_bodyMat) {_bodyMat = new THREE.MeshLambertMaterial({
+    color: 0xFF_FF_FF, emissive: 0x00_00_00,
     flatShading: true, // hard facets — the facets ARE the art direction
-  });
-  if (!_eyeMat) _eyeMat = new THREE.MeshBasicMaterial({
-    map: getGlowTexture(), color: 0xff3311, transparent: true, blending: THREE.AdditiveBlending,
+  });}
+  if (!_eyeMat) {_eyeMat = new THREE.MeshBasicMaterial({
+    map: getGlowTexture(), color: 0xFF_33_11, transparent: true, blending: THREE.AdditiveBlending,
     depthWrite: false, side: THREE.DoubleSide,
-  });
+  });}
   return [
     { geometry: bodyGeo(), material: _bodyMat, castShadow: true },
     { geometry: headGeo(), material: _bodyMat },
@@ -120,9 +120,9 @@ export interface CrawlerVisHost {
 }
 
 export function writeCrawlerInstances(c: CrawlerVisHost, terrain: Terrain): void {
-  if (!c.hasSlots) return;
+  if (!c.hasSlots) {return;}
   const swarm = getSwarm('crawler');
-  if (!swarm) return;
+  if (!swarm) {return;}
   const slot = c.swarmSlot;
   const r = c.radius;
 
@@ -173,7 +173,7 @@ function writeLegs(c: CrawlerVisHost, swarm: NonNullable<ReturnType<typeof getSw
     _e.set(0, side < 0 ? Math.PI - fan + wiggle : fan + wiggle, 0);
     _q.setFromEuler(_e);
     _local.compose(
-      _p.set(side * 0.5, 0.0 + Math.abs(Math.sin(c.animT * 16 + i * 1.31)) * amp * 0.15, (k - 1.5) * 0.55),
+      _p.set(side * 0.5, 0 + Math.abs(Math.sin(c.animT * 16 + i * 1.31)) * amp * 0.15, (k - 1.5) * 0.55),
       _q, _s.set(1, 1, 1));
     _world.multiplyMatrices(_root, _local);
     swarm.setMatrix(PART_LEG, slot * LEGS_PER + i, _world);

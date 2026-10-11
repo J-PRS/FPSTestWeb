@@ -41,13 +41,13 @@ export class BotWatchdog {
     for (const m of [this.logic, this.render] as const) {
       const v = m.get(oldId);
       m.delete(oldId);
-      if (v !== undefined) m.set(newId, v);
+      if (v !== undefined) {m.set(newId, v);}
     }
     const a = this.anchor.get(oldId);
     this.anchor.delete(oldId);
-    if (a !== undefined) this.anchor.set(newId, a);
+    if (a !== undefined) {this.anchor.set(newId, a);}
     for (const s of [this.stalled, this.stuck] as const) {
-      if (s.delete(oldId)) s.add(newId);
+      if (s.delete(oldId)) {s.add(newId);}
     }
   }
 

@@ -52,13 +52,13 @@ export type BotSkillSpec = BotTier | BotSkillMix;
 
 /** Resolve a tier name or per-axis mix into one mods row. */
 export function skillMods(spec: BotSkillSpec | undefined): BotTierMods {
-  if (!spec || spec === 'medium') return BOT_TIERS.medium;
-  if (typeof spec === 'string') return BOT_TIERS[spec];
+  if (!spec || spec === 'medium') {return BOT_TIERS.medium;}
+  if (typeof spec === 'string') {return BOT_TIERS[spec];}
   const m = BOT_TIERS.medium;
   const out = { ...m } as BotTierMods;
   for (const k of ['aim', 'move', 'react', 'jitter', 'temper'] as const) {
     const t = spec[k];
-    if (t) out[k] = BOT_TIERS[t][k];
+    if (t) {out[k] = BOT_TIERS[t][k];}
   }
   return out;
 }
@@ -91,16 +91,16 @@ export interface BotSkill {
 function prng(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
+    a = (a + 0x6D_2B_79_F5) >>> 0;
     let t = a;
     t = Math.imul(t ^ (t >>> 15), t | 1);
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
   };
 }
 
 export function rollSkill(spawn: BotVec, spec: BotSkillSpec = 'medium'): BotSkill {
-  const seed = Math.imul(spawn.x | 0, 73856093) ^ Math.imul(spawn.z | 0, 19349663) ^ Math.imul(spawn.y | 0, 83492791);
+  const seed = Math.imul(Math.trunc(spawn.x), 73_856_093) ^ Math.imul(Math.trunc(spawn.z), 19_349_663) ^ Math.imul(Math.trunc(spawn.y), 83_492_791);
   const rng = prng(seed || 1);
   const mods = skillMods(spec);
   const clamp = (v: number) => Math.min(1.5, Math.max(0.45, v));
@@ -132,15 +132,17 @@ export function weaponAxis(w: number): AimAxis | null {
     case WeaponType.RemoteRailgun:
     case WeaponType.Pistol:
     case WeaponType.Revolver:
-    case WeaponType.Javelin:
+    case WeaponType.Javelin: {
       return 'snap';
+    }
     case WeaponType.Chaingun:
     case WeaponType.Lightning:
     case WeaponType.Shotgun:
     case WeaponType.PlasmaGun:
     case WeaponType.PlasmaCannon:
-    case WeaponType.Sprinkler:
+    case WeaponType.Sprinkler: {
       return 'track';
+    }
     case WeaponType.Disc:
     case WeaponType.DiscPull:
     case WeaponType.RocketLauncher:
@@ -149,16 +151,19 @@ export function weaponAxis(w: number): AimAxis | null {
     case WeaponType.Bombard:
     case WeaponType.GrenadeLauncher:
     case WeaponType.ImpactGrenade:
-    case WeaponType.MRVLauncher:
+    case WeaponType.MRVLauncher: {
       return 'arcLead';
+    }
     case WeaponType.BoltLauncher:
     case WeaponType.Mortar:
     case WeaponType.Grenade:
     case WeaponType.Sticky:
-    case WeaponType.ClusterBomb:
+    case WeaponType.ClusterBomb: {
       return 'arcJudge';
-    default:
+    }
+    default: {
       return null;
+    }
   }
 }
 
@@ -167,7 +172,7 @@ export function weaponAxis(w: number): AimAxis | null {
  *  stand under mortar fire is pure `still`), then applies form. */
 export function aimSkillFor(s: BotSkill, weapon: number, targetSpeed: number): number {
   const ax = weaponAxis(weapon);
-  if (!ax) return 1;
+  if (!ax) {return 1;}
   const p = s.axes[ax];
   const w = Math.min(1, targetSpeed / 20);
   return (p.still * (1 - w) + p.moving * w) * s.form;

@@ -50,10 +50,10 @@ export const CONC_CONFIG: ProjectileConfig = {
   trailScaleMin: 0.5,
   trailScaleMax: 1.4,
   trailRampIn: 0.05,
-  meshColor: 0x39434E, // cold gunmetal shell — frost glow, not ember heat
+  meshColor: 0x39_43_4E, // cold gunmetal shell — frost glow, not ember heat
   meshType: 'ball',
   glowShell: true,
-  glowColor: 0x88DDFF,
+  glowColor: 0x88_DD_FF,
   glowOpacity: 0.45,
   glowScale: 0.7,
   meshRampIn: true,

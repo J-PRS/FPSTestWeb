@@ -21,7 +21,7 @@ export function rollVariant(mix: readonly number[] = DEFAULT_MIX, rng: () => num
   let r = rng() * total;
   for (let i = 0; i < 4; i++) {
     r -= mix[i]!;
-    if (r <= 0) return i as BallVariant;
+    if (r <= 0) {return i as BallVariant;}
   }
   return 0;
 }
@@ -31,7 +31,7 @@ export function alivePlayers(players: PlayerManager): { id: string; pos: SimVec 
   for (const [id, p] of players.getAllPlayers()) {
     // Firing decloaks: a shot stamps the reveal window, so a cloaked
     // player who just shot is fodder again like everyone else.
-    if (!p.isDead && (!(p.status & STATUS.CLOAK) || shootRevealed(p.lastFireSim, simNow()))) out.push({ id, pos: p.position });
+    if (!p.isDead && (!(p.status & STATUS.CLOAK) || shootRevealed(p.lastFireSim, simNow()))) {out.push({ id, pos: p.position });}
   }
   return out;
 }
@@ -63,7 +63,7 @@ export interface SpawnHost {
   targetSnap(b: SimBall): SimVec | null;
 }
 
-export const RETARGET_INTERVAL = 2.0;  // seconds between nearest-player re-evals
+export const RETARGET_INTERVAL = 2;  // seconds between nearest-player re-evals
 export const RESYNC_INTERVAL = 1.2;
 /** Worst-case replay drift tolerated before a resync heartbeat — the
  *  per-ball interval is min(RESYNC_INTERVAL, budget/speed). */
@@ -97,7 +97,7 @@ export function spawnBall(h: SpawnHost, variant: BallVariant, near?: SimVec, pos
     // Wrap below the demo format's lane base: demo targetIds are u16 and
     // 0x4000+ belongs to the deployable/creature/flag/pickup namespaces —
     // an uncapped counter leaks ball ids into those lanes in a long sim.
-    (h.nextId = h.nextId % 0x3fff + 1), variant, Math.floor(h.rng() * 8),
+    (h.nextId = h.nextId % 0x3F_FF + 1), variant, Math.floor(h.rng() * 8),
     { x, y, z },
     { x: Math.cos(ang) * spd, y: -2, z: Math.sin(ang) * spd },
   );
@@ -117,7 +117,7 @@ export function spawnBall(h: SpawnHost, variant: BallVariant, near?: SimVec, pos
     targetId: b.targetId, tp: h.targetSnap(b),
     t: h.simTime,
   };
-  for (const f of WORLD_MODEL.ball!.spawnFields!) spawnMsg[f.name] = fieldVals[f.name];
+  for (const f of WORLD_MODEL.ball!.spawnFields!) {spawnMsg[f.name] = fieldVals[f.name];}
   h.broadcast(spawnMsg as ServerMessage);
   return b;
 }

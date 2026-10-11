@@ -14,7 +14,7 @@ import * as THREE from 'three';
 
 /** Standard gunmetal — the pickup-body defaults (Nugget.ts diegetic
  *  bodies, dd cage, armor laminate). */
-export function metalMat(color = 0x3A4048, opts: { roughness?: number; metalness?: number } = {}): THREE.MeshStandardMaterial {
+export function metalMat(color = 0x3A_40_48, opts: { roughness?: number; metalness?: number } = {}): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({
     color,
     roughness: opts.roughness ?? 0.45,
@@ -24,6 +24,6 @@ export function metalMat(color = 0x3A4048, opts: { roughness?: number; metalness
 
 /** Tumbled/worn variant — rougher + less metal, for parts that should
  *  read used rather than machined (struts, housings, cage rods). */
-export function wornMetalMat(color = 0x3A4048): THREE.MeshStandardMaterial {
+export function wornMetalMat(color = 0x3A_40_48): THREE.MeshStandardMaterial {
   return metalMat(color, { roughness: 0.6, metalness: 0.55 });
 }

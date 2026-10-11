@@ -69,7 +69,7 @@ describe('weapon registry', () => {
     // (belt item) is allowed to keep the overall record.
     const PRIMARIES = new Set(SLOT_DEFS.map((d) => d.weaponType));
     for (const [wt, s] of Object.entries(WEAPONS)) {
-      if (!PRIMARIES.has(Number(wt))) continue;
+      if (!PRIMARIES.has(Number(wt))) {continue;}
       expect(s.directDamage, `w${wt} out-damages the bombard`).toBeLessThanOrEqual(w.directDamage);
     }
     // Crumble shrapnel: the radial sweep's per-victim payout is a

@@ -24,8 +24,8 @@ const STREAK_NAMES: [number, string][] = [
  *  you, frag headline + streak when it's yours, ragdoll for the victim. */
 export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, weapon?: number, air?: number): void {
   const { deps, nm } = ctx;
-  const logger = deps.logger;
-  if (deps.world.playbackMode) return;
+  const {logger} = deps;
+  if (deps.world.playbackMode) {return;}
   noteKill(shooterId, targetId, weapon); // Alt+Q battle log
   deps.world.killCounts.set(shooterId, (deps.world.killCounts.get(shooterId) ?? 0) + 1);
   deps.world.deathCounts.set(targetId, (deps.world.deathCounts.get(targetId) ?? 0) + 1);
@@ -132,7 +132,7 @@ function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlaye
   deps.world.playerDebrisList.push(new PlayerDebris(
     deps.lazyScene(), deps.lazyTerrain(),
     { x: remotePlayer.position.x, y: centerY, z: remotePlayer.position.z },
-    new THREE.Color(team ? TEAM_COLORS[team] : 0x8899aa),
+    new THREE.Color(team ? TEAM_COLORS[team] : 0x88_99_AA),
     { impulseDir, inheritVel: remotePlayer.vel, parts },
   ));
 

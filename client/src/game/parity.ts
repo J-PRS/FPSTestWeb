@@ -45,19 +45,19 @@ export function expectDamageEcho(victim: string, dmg: number, wt?: number, shotI
 
 export function confirmDamageEcho(victim: string): void {
   const i = dmgEchoes.findIndex(e => e.victim === victim);
-  if (i >= 0) {dmgEchoes.splice(i, 1);}
+  if (i !== -1) {dmgEchoes.splice(i, 1);}
 }
 
 export function noteShellFate(shotId: string, at: { x: number; y: number; z: number }): void {
   // Wire blast point — NaN turns every divergence diff against it into
   // NaN meters, which renders as a bogus "far" ghost in the dump.
-  if (!Number.isFinite(at.x + at.y + at.z)) return;
+  if (!Number.isFinite(at.x + at.y + at.z)) {return;}
   shellFates.set(shotId, { at, t: performance.now() });
   if (shellFates.size > 64) {
     // Sweep stale entries lazily — fates older than the confirm window
     // can't be needed by any live echo.
     const now = performance.now();
-    for (const [k, f] of shellFates) {if (now - f.t > 15000) {shellFates.delete(k);}}
+    for (const [k, f] of shellFates) {if (now - f.t > 15_000) {shellFates.delete(k);}}
   }
 }
 
@@ -66,10 +66,10 @@ export function sweepDamageEchoes(now: number): void {
     const e = dmgEchoes[i]!;
     if (now - e.t > 900) {
       const fate = e.shotId ? shellFates.get(e.shotId) : undefined;
-      const detail: Record<string, unknown> = { victim: e.victim, dmg: e.dmg, ...(e.wt !== undefined ? { wt: e.wt } : {}) };
+      const detail: Record<string, unknown> = { victim: e.victim, dmg: e.dmg, ...(e.wt === undefined ? {} : { wt: e.wt }) };
       if (fate && e.at) {
         detail.srvAt = `${fate.at.x.toFixed(0)},${fate.at.y.toFixed(0)},${fate.at.z.toFixed(0)}`;
-        detail.offM = +Math.hypot(fate.at.x - e.at.x, fate.at.y - e.at.y, fate.at.z - e.at.z).toFixed(1);
+        detail.offM = Number(Math.hypot(fate.at.x - e.at.x, fate.at.y - e.at.y, fate.at.z - e.at.z).toFixed(1));
       } else if (fate) {
         detail.srvAt = `${fate.at.x.toFixed(0)},${fate.at.y.toFixed(0)},${fate.at.z.toFixed(0)}`;
       } else {

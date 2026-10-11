@@ -77,7 +77,7 @@ export class PlayerGun {
 
   private static shared(): void {
     if (!PlayerGun.mat) {
-      PlayerGun.mat = new THREE.MeshStandardMaterial({ color: 0x2a_2e_33, roughness: 0.55, metalness: 0.6, emissive: 0x33_44_55, emissiveIntensity: 0.8 });
+      PlayerGun.mat = new THREE.MeshStandardMaterial({ color: 0x2A_2E_33, roughness: 0.55, metalness: 0.6, emissive: 0x33_44_55, emissiveIntensity: 0.8 });
     }
     if (!PlayerGun.geo) {
       const body = new THREE.BoxGeometry(0.16, 0.26, 0.9);
@@ -129,7 +129,7 @@ export class PlayerGun {
     }
     const handBone = a.handBone!;
     const ws = handBone.getWorldScale(new THREE.Vector3());
-    const mount = a.mount;
+    const {mount} = a;
     logger.debug(`GUN ATTACH`, { hand: handBone.name, worldScale: ws.x });
     if (mount?.palms && a.handBoneL && model) {
       // Palm-line mount: model-root prop driven per frame — position at

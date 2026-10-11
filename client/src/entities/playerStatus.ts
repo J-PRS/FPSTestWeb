@@ -1,8 +1,9 @@
-import * as THREE from 'three';
+import type * as THREE from 'three';
 
 import { STATUS } from '../../../shared/status.js';
 import { SHIELD_DMG_PER_ENERGY } from './player/skills.js';
-import { makeContouredShield, makeShieldBubble, ShieldBubble } from '../effects/shieldBubble.js';
+import type { ShieldBubble } from '../effects/shieldBubble.js';
+import { makeContouredShield, makeShieldBubble } from '../effects/shieldBubble.js';
 
 // Toggle-status family — cloak/shield/mend flags + the wire status byte
 // + the third-person shield bubble + spectator ghost-flight. Split from
@@ -47,8 +48,8 @@ export class PlayerStatus {
   }
 
   setCloaked(on: boolean): void {
-    const h = this.h;
-    if (this.cloaked === on) return;
+    const {h} = this;
+    if (this.cloaked === on) {return;}
     this.cloaked = on;
     // Own body never vanishes for its owner — cloak ghosts it like the
     // FP viewmodel does; invisibility is only what ENEMIES get on the
@@ -60,8 +61,8 @@ export class PlayerStatus {
   }
 
   setShielded(on: boolean): void {
-    const h = this.h;
-    if (this.shielded === on) return;
+    const {h} = this;
+    if (this.shielded === on) {return;}
     this.shielded = on;
     if (on && !this.shieldBubble) {
       const root = h.model?.object3D;
@@ -74,20 +75,20 @@ export class PlayerStatus {
   }
 
   syncBubbleVisibility(): void {
-    if (this.shieldBubble) this.shieldBubble.mesh.visible = this.shielded && this.h.thirdPerson;
-    if (this.mendBubble) this.mendBubble.mesh.visible = this.mending && this.h.thirdPerson && !this.cloaked;
+    if (this.shieldBubble) {this.shieldBubble.mesh.visible = this.shielded && this.h.thirdPerson;}
+    if (this.mendBubble) {this.mendBubble.mesh.visible = this.mending && this.h.thirdPerson && !this.cloaked;}
   }
 
   setMending(on: boolean): void {
-    if (this.mending === on) return;
+    if (this.mending === on) {return;}
     this.mending = on;
     if (on && !this.mendBubble) {
       // Contoured shell — healing should read ON the body like the FP
       // gun shell does, not as a bubble standing around it. Sphere is
       // the pre-model-load fallback only.
       const root = this.h.model?.object3D;
-      this.mendBubble = (root ? makeContouredShield(root, 0x3fdd6f) : null)
-        ?? makeShieldBubble(this.h.scene, 1.6, 0x3fdd6f);
+      this.mendBubble = (root ? makeContouredShield(root, 0x3F_DD_6F) : null)
+        ?? makeShieldBubble(this.h.scene, 1.6, 0x3F_DD_6F);
     }
     this.syncBubbleVisibility();
     this.h.onMend?.(on);
@@ -97,11 +98,11 @@ export class PlayerStatus {
   tickBubble(dt: number): void {
     if (this.shieldBubble) {
       this.shieldBubble.update(dt);
-      if (this.shielded) this.shieldBubble.mesh.position.set(this.h.pos.x, this.h.pos.y - 0.6, this.h.pos.z);
+      if (this.shielded) {this.shieldBubble.mesh.position.set(this.h.pos.x, this.h.pos.y - 0.6, this.h.pos.z);}
     }
     if (this.mendBubble) {
       this.mendBubble.update(dt);
-      if (this.mending) this.mendBubble.mesh.position.set(this.h.pos.x, this.h.pos.y - 0.5, this.h.pos.z);
+      if (this.mending) {this.mendBubble.mesh.position.set(this.h.pos.x, this.h.pos.y - 0.5, this.h.pos.z);}
     }
   }
 
@@ -109,8 +110,8 @@ export class PlayerStatus {
    *  instead of health. Returns the health damage that still gets through —
    *  zero while the tank holds. */
   absorbShieldDamage(dmg: number): number {
-    const h = this.h;
-    if (!this.shielded) return dmg;
+    const {h} = this;
+    if (!this.shielded) {return dmg;}
     h.energy = Math.max(0, h.energy - dmg / SHIELD_DMG_PER_ENERGY);
     this.shieldBubble?.flash();
     if (h.energy <= 0) {
@@ -121,8 +122,8 @@ export class PlayerStatus {
   }
 
   toggleSpectator(): void {
-    const h = this.h;
-    if (h.isDead) return; // dead already gives you this cam
+    const {h} = this;
+    if (h.isDead) {return;} // dead already gives you this cam
     this.spectating = !this.spectating;
     // Land mid-toggle-off in the air and the body floats — drop the ghost's
     // drift so gravity owns the fall again. Also drop any fire/jet clicks

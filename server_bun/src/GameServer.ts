@@ -1,7 +1,7 @@
 import { simMs } from './simClock.ts';
 import type { ServerWebSocket, Server } from 'bun';
 import { CONFIG } from './config.ts';
-import { Room } from './Room.ts';
+import type { Room } from './Room.ts';
 import { totalPlayers as opsTotalPlayers, getServerInfo as opsGetServerInfo, getHealthStatus as opsGetHealthStatus, getMetrics as opsGetMetrics } from './serverOps.ts';
 import { BallSim } from './BallSim.ts';
 import { validateMessage } from './wire.ts';
@@ -81,16 +81,16 @@ export class GameServer {
             if (!room.ballSim.hasField) { room.field = this.field; room.ballSim.attachField(this.field); }
             // The creature sim rides the same field — it sits dead
             // without it (step() early-returns on !field).
-            if (!room.creatureSim.hasField) room.creatureSim.attachField(this.field);
+            if (!room.creatureSim.hasField) {room.creatureSim.attachField(this.field);}
             // moveSim + projectiles got null at construction the same
             // way — without this their seats sit in pendingTrack forever:
             // no reconcile, no transit channel, no corrections for anyone
             // who joined before the heightmap read resolved.
-            if (!room.moveSim.hasField) room.moveSim.attachField(this.field, (pid) => room.players.getPlayer(pid)?.position);
+            if (!room.moveSim.hasField) {room.moveSim.attachField(this.field, (pid) => room.players.getPlayer(pid)?.position);}
             room.projectiles.attachField(this.field);
           }
         })
-        .catch(err => logger.warn('BallSim disabled — heightmap load failed', { err: String(err) }));
+        .catch(error => logger.warn('BallSim disabled — heightmap load failed', { err: String(error) }));
     } else {
       logger.warn('BallSim disabled — not running under Bun');
     }
@@ -180,7 +180,7 @@ export class GameServer {
     // handshake would otherwise sit forever (QUIC/RTC peers don't die on
     // their own quickly). 15s is generous — real clients join in ms.
     setTimeout(() => {
-      if (!ws.data.playerId && ws.readyState === 1) ws.close(1000, 'join timeout');
+      if (!ws.data.playerId && ws.readyState === 1) {ws.close(1000, 'join timeout');}
     }, CONFIG.joinTimeoutMs).unref?.();
   }
 
@@ -192,7 +192,7 @@ export class GameServer {
       if (isWireFrame(u8)) {
         const existingId = ws.data.playerId;
         const room = existingId ? this.roomOfPlayer(existingId) : undefined;
-        if (!existingId || !room) return; // binary before join — ignore
+        if (!existingId || !room) {return;} // binary before join — ignore
         // Per-socket decode slot: ~30Hz × n frames' worth of object churn
         // becomes zero-alloc. Every consumer copies field-wise inside the
         // handler — nothing may retain `pos` past this call.
@@ -208,8 +208,8 @@ export class GameServer {
           // this socket, not the process.
           try {
             this.handleGameMessage(room, existingId, pos);
-          } catch (e) {
-            logger.error('Message handler failed', { playerId: existingId, type: 'position(binary)', err: e instanceof Error ? e.stack ?? e.message : String(e) });
+          } catch (error) {
+            logger.error('Message handler failed', { playerId: existingId, type: 'position(binary)', err: error instanceof Error ? error.stack ?? error.message : String(error) });
             try { ws.close(1011, 'server error'); } catch { /* socket already dying */ }
           }
         }
@@ -228,7 +228,7 @@ export class GameServer {
     }
 
     const existingPlayerId = ws.data.playerId;
-    if (existingPlayerId && this.specRooms.has(existingPlayerId)) return; // spectators are read-only
+    if (existingPlayerId && this.specRooms.has(existingPlayerId)) {return;} // spectators are read-only
     const room = existingPlayerId ? this.roomOfPlayer(existingPlayerId) : undefined;
 
     // A bad message must only cost its own sender — anything downstream
@@ -249,9 +249,9 @@ export class GameServer {
     }
 
     this.handleGameMessage(room, existingPlayerId, raw);
-    } catch (e) {
+    } catch (error) {
       const t = (raw as { type?: string })?.type ?? '?';
-      logger.error('Message handler failed', { playerId: existingPlayerId, type: t, err: e instanceof Error ? e.stack ?? e.message : String(e) });
+      logger.error('Message handler failed', { playerId: existingPlayerId, type: t, err: error instanceof Error ? error.stack ?? error.message : String(error) });
       try { ws.close(1011, 'server error'); } catch { /* socket already dying */ }
     }
   }
@@ -259,13 +259,13 @@ export class GameServer {
   private reconnectGraceMs = CONFIG.reconnectGraceMs; // Grace period for F5 reconnect
 
   onClose(ws: ServerWebSocket<WebSocketData>): void {
-    const playerId = ws.data.playerId;
-    if (!playerId) return;
+    const {playerId} = ws.data;
+    if (!playerId) {return;}
     // Throttle entries keyed by playerId must die with the socket —
     // otherwise they linger until the 4096 wholesale clear, which also
     // resets the gate for live spammers.
     this.invalidWarnAt.delete(playerId);
-    if (this.departSpectator(playerId, 'spectator left')) return;
+    if (this.departSpectator(playerId, 'spectator left')) {return;}
     const room = this.roomOfPlayer(playerId);
     if (!room) {
       // Closed mid-handshake (connecting, never seated) — no room entry
@@ -281,8 +281,8 @@ export class GameServer {
     // the connection every reconnect cycle. The seat generation makes it
     // a no-op by construction; the map check stays as belt-and-suspenders
     // for sockets seated before the registry existed (adapters).
-    if (room.connections.getConnection(playerId) !== ws) return;
-    if (ws.data.gen !== undefined && ws.data.gen !== this.registry.gen(playerId)) return;
+    if (room.connections.getConnection(playerId) !== ws) {return;}
+    if (ws.data.gen !== undefined && ws.data.gen !== this.registry.gen(playerId)) {return;}
 
     // The grace countdown arms inside the session itself — reclaim and
     // terminate clear it, so the timer can't outlive the seat.
@@ -326,11 +326,11 @@ export class GameServer {
    *  layout — spawns, structures, arena, ball mix, bot fill — reloads. */
   reloadRoom(name: string): 'ok' | 'no-room' | 'no-spec' {
     const room = this.rooms.get(name);
-    if (!room) return 'no-room';
+    if (!room) {return 'no-room';}
     // The room's name isn't always its map's (ad-hoc room names, map= pick
     // in /join, post-rotation state) — reload whatever spec it's playing.
     const spec = this.maps.reloadSpec(this.maps.mapNameOf(name) ?? name);
-    if (!spec) return 'no-spec';
+    if (!spec) {return 'no-spec';}
     room.mapSrc = this.maps.mapNameOf(name) ?? name;
     room.applySpec(spec);
     logger.info('Room spec reloaded', { room: name });
@@ -340,7 +340,7 @@ export class GameServer {
   /** Boot a player out of their room — the wire sees a normal playerLeft. */
   kickPlayer(playerId: string): boolean {
     const room = this.roomOfPlayer(playerId);
-    if (!room) return false;
+    if (!room) {return false;}
     room.socketOf(playerId)?.close(1000, 'kicked');
     this.removePlayerCompletely(room, playerId, 'adminKick');
     logger.info('Player kicked', { playerId });
@@ -350,7 +350,7 @@ export class GameServer {
   /** End the room's current match with the standing leader (or draw). */
   forceEndMatch(roomName: string): 'ok' | 'no-room' | 'no-mode' {
     const room = this.rooms.get(roomName);
-    if (!room) return 'no-room';
+    if (!room) {return 'no-room';}
     return room.forceEndMatch() ? 'ok' : 'no-mode';
   }
 
@@ -375,9 +375,9 @@ export class GameServer {
     for (const room of this.rooms.values()) {
       const players: RestoreSeat[] = [];
       for (const [id, p] of room.players.getAllPlayers()) {
-        if (p.isBot) continue;
+        if (p.isBot) {continue;}
         const token = room.sessionTokens.get(id);
-        if (!token) continue; // pre-seat or bot — nothing to reclaim with
+        if (!token) {continue;} // pre-seat or bot — nothing to reclaim with
         players.push({
           id, name: p.name, team: p.team, perk: p.perk, armorClass: p.armorClass,
           pos: { ...p.position }, vel: { ...p.velocity },
@@ -385,7 +385,7 @@ export class GameServer {
           health: p.health, isDead: p.isDead, token,
         });
       }
-      if (players.length) {
+      if (players.length > 0) {
         rooms.push({ name: room.name, mode: room.mode, map: room.mapSrc, bots: room.spec.bots, unlisted: room.unlisted, players });
       }
     }
@@ -398,26 +398,26 @@ export class GameServer {
    *  resumeSeq replay, respawn re-arm) untouched. */
   restoreFrom(raw: unknown): void {
     const s = raw as RestoreState | null;
-    if (!s || s.v !== 1 || !Array.isArray(s.rooms)) return;
+    if (!s || s.v !== 1 || !Array.isArray(s.rooms)) {return;}
     let seated = 0;
     for (const rs of s.rooms) {
-      if (!rs || typeof rs.name !== 'string' || !Array.isArray(rs.players)) continue;
+      if (!rs || typeof rs.name !== 'string' || !Array.isArray(rs.players)) {continue;}
       const room = this.factory.roomFor(rs.name, rs.mode ?? '', rs.map ?? '', rs.bots, rs.unlisted === true, rs.noCreatures === true, rs.noBalls === true);
-      if (!room) continue;
+      if (!room) {continue;}
       for (const ps of rs.players) {
-        if (!ps || typeof ps.id !== 'string' || typeof ps.token !== 'string') continue;
+        if (!ps || typeof ps.id !== 'string' || typeof ps.token !== 'string') {continue;}
         // A corrupt blob must not seed NaN bodies into a live room.
-        if (!ps.pos || !Number.isFinite(ps.pos.x) || !Number.isFinite(ps.pos.y) || !Number.isFinite(ps.pos.z)) continue;
-        if (ps.vel && !(Number.isFinite(ps.vel.x) && Number.isFinite(ps.vel.y) && Number.isFinite(ps.vel.z))) continue;
-        if (ps.health !== undefined && !Number.isFinite(ps.health)) continue;
-        if (room.players.getPlayer(ps.id)) continue;
+        if (!ps.pos || !Number.isFinite(ps.pos.x) || !Number.isFinite(ps.pos.y) || !Number.isFinite(ps.pos.z)) {continue;}
+        if (ps.vel && !(Number.isFinite(ps.vel.x) && Number.isFinite(ps.vel.y) && Number.isFinite(ps.vel.z))) {continue;}
+        if (ps.health !== undefined && !Number.isFinite(ps.health)) {continue;}
+        if (room.players.getPlayer(ps.id)) {continue;}
         const p = room.players.addPlayer(ps.id, ps.team, ps.perk ?? 'none', ps.armorClass ?? 'medium');
         p.position = { ...ps.pos };
         p.velocity = { ...ps.vel };
         p.rotation.yaw = ps.yaw ?? 0;
         p.rotation.pitch = ps.pitch ?? 0;
         p.lastValidPosition = { ...ps.pos };
-        if (typeof ps.health === 'number') p.health = ps.health;
+        if (typeof ps.health === 'number') {p.health = ps.health;}
         p.isDead = ps.isDead === true;
         p.pendingRespawn = p.isDead;
         p.name = ps.name;
@@ -432,7 +432,7 @@ export class GameServer {
       }
       logger.info('Restored seats across restart', { room: room.name, players: rs.players.length });
     }
-    if (seated) logger.info('Restart restore complete', { seats: seated });
+    if (seated) {logger.info('Restart restore complete', { seats: seated });}
   }
 
   stop(): void {
@@ -440,8 +440,8 @@ export class GameServer {
     // Deliver real close frames first — server.stop(true) severs sockets
     // mid-flight, so without this every player sees a mystery drop on
     // both the banner and their logs rather than 'server restarting'.
-    for (const room of this.rooms.values()) room.connections.closeAll(1001, 'server restarting');
-    for (const room of this.specRooms.values()) room.connections.closeAll(1001, 'server restarting');
+    for (const room of this.rooms.values()) {room.connections.closeAll(1001, 'server restarting');}
+    for (const room of this.specRooms.values()) {room.connections.closeAll(1001, 'server restarting');}
     if (this.bunServer) {
       this.bunServer.stop(true);
       logger.info('Server stopped');
@@ -466,7 +466,7 @@ export class GameServer {
     const now = wallNow();
     if (now - (this.invalidWarnAt.get(key) ?? 0) >= GameServer.INVALID_WARN_GAP_MS) {
       this.invalidWarnAt.set(key, now);
-      if (this.invalidWarnAt.size > 4096) evictEldest(this.invalidWarnAt);
+      if (this.invalidWarnAt.size > 4096) {evictEldest(this.invalidWarnAt);}
       logger.warn(msg, { playerId, ...data });
     }
   }
@@ -505,8 +505,8 @@ export class GameServer {
    *  socket first when its departure is server-initiated (id claim). */
   departSpectator(playerId: string, reason: string, closeCode?: number): boolean {
     const specRoom = this.specRooms.get(playerId);
-    if (!specRoom) return false;
-    if (closeCode !== undefined) specRoom.connections.getConnection(playerId)?.close(closeCode, reason);
+    if (!specRoom) {return false;}
+    if (closeCode !== undefined) {specRoom.connections.getConnection(playerId)?.close(closeCode, reason);}
     specRoom.spectators.delete(playerId);
     specRoom.connections.unregister(playerId);
     this.specRooms.delete(playerId);

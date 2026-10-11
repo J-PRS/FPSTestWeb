@@ -46,7 +46,7 @@ export class RoomFactory {
       p = bunFile
         ? bunFile(join(import.meta.dir, '..', '..', 'maps', file)).arrayBuffer()
             .then(ab => BallSim.parseHeightmap(new Uint8Array(ab), heightScale, worldScale))
-            .catch(err => { logger.warn('map terrain load failed', { file, err: String(err) }); return null; })
+            .catch(error => { logger.warn('map terrain load failed', { file, err: String(error) }); return null; })
         : Promise.resolve(null);
       this.fields.set(key, p);
     }
@@ -66,7 +66,7 @@ export class RoomFactory {
     const def = () => Promise.resolve(this.host.field()).then(f => f && hmScaled(f, scale, wscale));
     const target = spec.terrain ? this.loadField(spec.terrain, scale, wscale) : def();
     target.then(f => {
-      if (!f || this.host.rooms.get(roomName) !== room) return;
+      if (!f || this.host.rooms.get(roomName) !== room) {return;}
       room.field = f;
       room.ballSim.attachField(f);
       room.moveSim.attachField(f, (pid) => room.players.getPlayer(pid)?.position);
@@ -108,7 +108,7 @@ export class RoomFactory {
     if (!room) {
       if (this.host.rooms.size >= CONFIG.maxRooms) {
         for (const [n, r] of this.host.rooms) {
-          if (r.players.getHumanCount() > 0 || r.spectators.size > 0) continue;
+          if (r.players.getHumanCount() > 0 || r.spectators.size > 0) {continue;}
           r.dispose();
           this.host.rooms.delete(n);
           this.host.forgetRoom(n);
@@ -128,8 +128,8 @@ export class RoomFactory {
       // gates apply post-ctor and on later applySpec reloads.
       room.noCreatures = noCreatures;
       room.noBalls = noBalls;
-      if (noCreatures) room.creatureSim.pops = {};
-      if (noBalls) room.ballSim.population = { base: 0, perPlayer: 0, max: 0 };
+      if (noCreatures) {room.creatureSim.pops = {};}
+      if (noBalls) {room.ballSim.population = { base: 0, perPlayer: 0, max: 0 };}
       room.sessions = this.host.sessions;
       room.mapSrc = src; // spec source filename — scoreboard map title fallback
       // `room` is a mutable let — bind a const for the closures or TS
@@ -140,14 +140,14 @@ export class RoomFactory {
       // only fires on repeated teleport-scale gaps honest drift can't
       // reach (see RoomMoveSim.SEVERE_*).
       room.moveSim.onCheat = (pid, dist, detail) => {
-        logger.warn('Movement cheat detected', { playerId: pid, room: r.name, dist: +dist.toFixed(1), ...detail });
+        logger.warn('Movement cheat detected', { playerId: pid, room: r.name, dist: Number(dist.toFixed(1)), ...detail });
         // Warn instead of kick — flap/reconnect catch-up reports read as
         // teleport-scale divergence, and a kick loop punishes honest lag.
         r.sendToPlayer(pid, { type: 'serverWarn', text: 'SUSPICIOUS BEHAVIOR DETECTED' });
       };
       room.onRotate = () => this.host.maps.nextRotationSpec(r);
       room.onTerrain = (s) => this.attachTerrain(r, s);
-      if (spec?.terrain || spec?.heightScale || spec?.tileSize) this.attachTerrain(room, spec);
+      if (spec?.terrain || spec?.heightScale || spec?.tileSize) {this.attachTerrain(room, spec);}
       this.host.rooms.set(name, room);
       logger.info('Room created', { room: name, mode: room.mode });
     } else if (room.noBalls !== noBalls || room.noCreatures !== noCreatures) {
@@ -190,20 +190,20 @@ export class RoomFactory {
     for (const room of this.host.rooms.values()) {
       // Map and mode are independent filters — a peaks-ctf room must not
       // absorb a peaks-dm quick-join just because the map matches.
-      if (map && this.host.maps.mapNameOf(room.name) !== map) continue;
-      if (mode && room.mode !== mode) continue;
+      if (map && this.host.maps.mapNameOf(room.name) !== map) {continue;}
+      if (mode && room.mode !== mode) {continue;}
       // The sim gates are part of the match a joiner asked for — picking a
       // balled room for a no-balls joiner silently ignores the toggle
       // (first joiner defines, so a wrong-gated room can never be fixed).
-      if (room.noBalls !== noBalls || room.noCreatures !== noCreatures) continue;
-      if (room.playerCount() >= CONFIG.maxPlayers) continue;
-      if (room.unlisted) continue;
-      if (!best || room.playerCount() < best.playerCount()) best = room;
+      if (room.noBalls !== noBalls || room.noCreatures !== noCreatures) {continue;}
+      if (room.playerCount() >= CONFIG.maxPlayers) {continue;}
+      if (room.unlisted) {continue;}
+      if (!best || room.playerCount() < best.playerCount()) {best = room;}
     }
-    if (best) return best;
+    if (best) {return best;}
     const base = map || mode || 'arena';
     let n = 1;
-    while (this.host.rooms.has(`${base}-${n}`)) n++;
+    while (this.host.rooms.has(`${base}-${n}`)) {n++;}
     return this.roomFor(`${base}-${n}`, mode, map, bots, false, noCreatures, noBalls);
   }
 }

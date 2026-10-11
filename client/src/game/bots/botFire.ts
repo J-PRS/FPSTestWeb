@@ -58,7 +58,7 @@ export class BotFire {
   rekey(oldId: string, newId: string): void {
     const v = this.lastShotAt.get(oldId);
     this.lastShotAt.delete(oldId);
-    if (v !== undefined) this.lastShotAt.set(newId, v);
+    if (v !== undefined) {this.lastShotAt.set(newId, v);}
   }
 
   constructor(public host: FireHost) {}

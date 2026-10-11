@@ -216,14 +216,14 @@ export class MoveJudge {
     // seed the fresh shadow at the old position and flag the real spawn
     // landing ~60m away as a cheat. The hop grace mutes them; the first
     // post-gameState report seeds at the true spawn instead.
-    if (wallNow() - sh.resyncAt < CONFIG.reportGraceMs) return 'grace';
-    if (!sh.seeded) return 'seed';
+    if (wallNow() - sh.resyncAt < CONFIG.reportGraceMs) {return 'grace';}
+    if (!sh.seeded) {return 'seed';}
     // Stale-epoch reports: the client sent this before it saw the respawn/
     // teleport that reseated the shadow. Judging it against the new anchor
     // flags a phantom blow-through (a guaranteed ~100m spike per respawn).
-    if (reportInputSeq !== undefined && reportInputSeq <= sh.resyncSeq) return 'stale-epoch';
+    if (reportInputSeq !== undefined && reportInputSeq <= sh.resyncSeq) {return 'stale-epoch';}
     if (reportInputSeq !== undefined && reportInputSeq > sh.lastInputSeq) {
-      const parked = reportInputSeq <= (sh.pending.length ? sh.pending[sh.pending.length - 1]!.seq ?? 0 : 0);
+      const parked = reportInputSeq <= (sh.pending.length > 0 ? sh.pending[sh.pending.length - 1]!.seq ?? 0 : 0);
       // Journal coverage gate: a report stamped seq N was produced by the
       // input whose seq is N. When that inputMove has arrived but is still
       // parked in the pending slot (drains at the next tick's phase 0), the
@@ -233,7 +233,7 @@ export class MoveJudge {
       // RECEIVED is different: its input is lost (inputSync recovers it)
       // or forged to dodge the journal — judging it raw is the only
       // authority-preserving answer.
-      if (parked && sh.deferStreak < 2) return 'parked-defer';
+      if (parked && sh.deferStreak < 2) {return 'parked-defer';}
       // Uncovered-but-young gap: the producing inputMove is plausibly
       // still in flight — join-burst clients push inputs on a change/
       // heartbeat lane slower than the report cadence (seen: netbots at
@@ -244,7 +244,7 @@ export class MoveJudge {
       // edge is judged lost. A sustained gap past the window resumes
       // banking — a forger can't hold the frontier past it, and the
       // window itself bounds strike starvation.
-      if (!parked && sh.gapStreak > 0 && wallNow() - sh.gapAt < INPUT_GAP_DEFER_MS) return 'gap-young';
+      if (!parked && sh.gapStreak > 0 && wallNow() - sh.gapAt < INPUT_GAP_DEFER_MS) {return 'gap-young';}
     }
     return 'judge';
   }
@@ -267,27 +267,27 @@ export class MoveJudge {
     if (sh.lastReportAt > 0) {
       const dt = reportNow - sh.lastReportAt;
       if (dt > 0 && dt < 5000) {
-        if (sh.reportEma > 0) sh.reportVar = sh.reportVar * 0.9 + Math.abs(dt - sh.reportEma) * 0.1;
+        if (sh.reportEma > 0) {sh.reportVar = sh.reportVar * 0.9 + Math.abs(dt - sh.reportEma) * 0.1;}
         sh.reportEma = sh.reportEma === 0 ? dt : sh.reportEma * 0.8 + dt * 0.2;
       }
     }
     sh.lastReportAt = reportNow;
     s.yaw = yaw; // facing is client truth — sim only needs it for input dir
     const phase = this.gatePhase(sh, reportInputSeq);
-    if (phase === 'grace') return null;
+    if (phase === 'grace') {return null;}
     if (phase === 'seed') {
       sh.seeded = true;
       s.pos = { x: pos.x, y: pos.y, z: pos.z };
       // The guess-run during the mute built momentum the client never
       // had — adopt the reported velocity too or the leftover vel
       // carries the shadow ~10m ahead for one divergence blip.
-      if (vel) s.vel = { x: vel.x, y: vel.y, z: vel.z };
+      if (vel) {s.vel = { x: vel.x, y: vel.y, z: vel.z };}
       s.onGround = true;
       sh.seqStates.clear(); // pre-seed journal anchors the discarded guess
       sh.lastRepPos = { x: pos.x, y: pos.y, z: pos.z };
       return null;
     }
-    if (phase === 'stale-epoch') return null;
+    if (phase === 'stale-epoch') {return null;}
     if (vel) { s.vel.x = vel.x; s.vel.y = vel.y; s.vel.z = vel.z; }
     // Report-to-report step — tracked on every judged report so a
     // step-function teleport reads as teleport even while the shadow
@@ -310,7 +310,7 @@ export class MoveJudge {
       // from every reference.
       const cmp = this.anchoredCompare(sh, s, reportInputSeq, pos);
       const d = Math.hypot(pos.x - cmp.pos.x, pos.y - cmp.pos.y, pos.z - cmp.pos.z);
-      if (d < dist) dist = d;
+      if (d < dist) {dist = d;}
     }
     const speed = Math.hypot(s.vel.x, s.vel.z);
     // A client throttled below ~4fps sims slower than wall time (MAX_DT
@@ -332,7 +332,7 @@ export class MoveJudge {
     // mean still diverges honestly.
     const transitTol = speed3d * Math.min(Math.max(rttMs ?? 0, 0), RTT_TOL_CAP_MS) / 2000;
     const tol = this.host.divergenceM() * (1 + speed / SPEED_TOL_REF) + lagTol + transitTol;
-    if (dist <= tol) return null;
+    if (dist <= tol) {return null;}
 
     // Young-gap reports get corrected like any over-tolerance drift but
     // bank nothing — the producing input may still be in flight, and a
@@ -344,7 +344,7 @@ export class MoveJudge {
       ? speed3d * Math.min((reportNow - sh.gapAt) / 1000, GAP_SEVERE_CREDIT_S)
       : 0;
     const severeM = SEVERE_M + gapCredit;
-    if (!gapYoung) this.noteDivergence(sh, playerId, pos, reportInputSeq, dist, tol, severeM);
+    if (!gapYoung) {this.noteDivergence(sh, playerId, pos, reportInputSeq, dist, tol, severeM);}
     // Judge mode: the client report is truth (no corrections flow), so a
     // shadow left standing on a stale position measures the SAME offset
     // on every report — one systematic blip (crest timing, transit skew,
@@ -373,9 +373,9 @@ export class MoveJudge {
     // still bank at tol — anti-cheat doesn't get the slack — and the
     // budget is bounded so drift can't grow past it.
     const snapTol = Math.max(tol, Math.max(1.5, speed3d * 0.1));
-    if (dist <= snapTol) return null;
+    if (dist <= snapTol) {return null;}
     const now = wallNow();
-    if (now - sh.lastCorrection < this.host.correctMs()) return null;
+    if (now - sh.lastCorrection < this.host.correctMs()) {return null;}
     sh.lastCorrection = now;
     // The sim keeps its own position — resyncing onto the rejected report
     // would make the correction we just sent diverge from the next report
@@ -440,7 +440,7 @@ export class MoveJudge {
     // sims drifting on cresty terrain is the expected steady state,
     // not a warn — the plausibility gate is the real judge there.
     const transient = !this.host.authoritative() || dist < tol * 1.5 || wallNow() - sh.lastImpulseAt < 2000;
-    if (sh.divergences !== 1 && sh.divergences % 20 !== 0) return;
+    if (sh.divergences !== 1 && sh.divergences % 20 !== 0) {return;}
     const s = sh.sim.state;
     logger[transient ? 'info' : 'warn']('Move sim divergence', {
       playerId, dist: dist.toFixed(1), tol: tol.toFixed(1), count: sh.divergences,
@@ -453,15 +453,15 @@ export class MoveJudge {
 
   private noteHealth(dist: number): void {
     const h = this.host.health();
-    if (!h) return;
+    if (!h) {return;}
     h.set('diverge', (h.get('diverge') ?? 0) + 1);
-    if (dist > (h.get('gapMax') ?? 0)) h.set('gapMax', Math.round(dist * 10) / 10);
+    if (dist > (h.get('gapMax') ?? 0)) {h.set('gapMax', Math.round(dist * 10) / 10);}
   }
 
   /** Rolling severe-blow counter — N overshoots inside the window flags
    *  the shadow as a teleporter, not a drifter. */
   private noteSevere(sh: Shadow, playerId: string, dist: number, severeM: number, detail?: Record<string, unknown>): void {
-    if (dist <= severeM || sh.cheated) return;
+    if (dist <= severeM || sh.cheated) {return;}
     const now = wallNow();
     sh.severeT = sh.severeT.filter((t) => now - t < SEVERE_MS);
     sh.severeT.push(now);
@@ -484,12 +484,12 @@ export class MoveJudge {
     let anchorSeq: number | undefined;
     const after: { snap: SimSnapshot; tick: number; inp: MoveInput; e: number }[] = [];
     for (const [k, e] of sh.seqStates) {
-      if (k <= reportSeq && (anchorSeq === undefined || k > anchorSeq)) anchorSeq = k;
-      else if (k > reportSeq) after.push(e);
+      if (k <= reportSeq && (anchorSeq === undefined || k > anchorSeq)) {anchorSeq = k;}
+      else if (k > reportSeq) {after.push(e);}
     }
     after.sort((x, y) => x.tick - y.tick);
-    const anchor = anchorSeq !== undefined ? sh.seqStates.get(anchorSeq) : undefined;
-    if (!anchor) return s;
+    const anchor = anchorSeq === undefined ? undefined : sh.seqStates.get(anchorSeq);
+    if (!anchor) {return s;}
     const probe = (sh.probe ??= new MoveSim(this.host.surface()!, anchor.snap.st));
     // The probe replays the SAME body — a heavy's weaker jets would
     // replay as a phantom climb if mass/eye fell back to defaults.
@@ -510,7 +510,7 @@ export class MoveJudge {
     let best: MoveState | null = null;
     let bestD = Infinity;
     this.replayWindow(sh, probe, anchor, segs, (tick) => {
-      if (tick < targetTick - 1) return;
+      if (tick < targetTick - 1) {return;}
       const st = probe.state;
       const d = Math.hypot(reportPos.x - st.pos.x, reportPos.y - st.pos.y, reportPos.z - st.pos.z);
       if (d < bestD) { bestD = d; best = { ...st, pos: { ...st.pos }, vel: { ...st.vel } }; }
@@ -528,34 +528,34 @@ export class MoveJudge {
     segs: { tick: number; inp: MoveInput }[],
     onStep?: (tick: number) => void,
   ): void {
-    let tick = anchor.tick;
-    let inp = anchor.inp;
+    let {tick} = anchor;
+    let {inp} = anchor;
     let budget = 128;
     // The probe must mirror the tank: the live sim gates jetHeld off when
     // energy drains — replaying raw input keeps the probe jetting where
     // the real sim ran dry (~18m false divergence at spawn jet windows).
-    let e = anchor.e;
+    let {e} = anchor;
     let lockT = 0;
     for (const seg of segs) {
       const steps = Math.min(seg.tick - tick, budget);
       if (steps > 0) {
         Object.assign(probe.input, inp);
         for (let i = 0; i < steps; i++) {
-          if (lockT > 0) lockT -= MoveSim.STEP;
+          if (lockT > 0) {lockT -= MoveSim.STEP;}
           const jetting = inp.jetHeld === true && e > 0 && lockT <= 0;
           probe.input.jetHeld = jetting;
-          if (jetting) e -= ENERGY.jetDrain * sh.jetDrain * MoveSim.STEP;
-          else if (!sh.skillSuppressRegen) e = Math.min(ENERGY.max * sh.energyMax, e + ENERGY.jetCharge * sh.jetRegen * sh.energyRegen * MoveSim.STEP);
-          if (sh.skillDrainPerSec > 0) e -= sh.skillDrainPerSec * MoveSim.STEP;
+          if (jetting) {e -= ENERGY.jetDrain * sh.jetDrain * MoveSim.STEP;}
+          else if (!sh.skillSuppressRegen) {e = Math.min(ENERGY.max * sh.energyMax, e + ENERGY.jetCharge * sh.jetRegen * sh.energyRegen * MoveSim.STEP);}
+          if (sh.skillDrainPerSec > 0) {e -= sh.skillDrainPerSec * MoveSim.STEP;}
           e = Math.max(0, e);
-          if (e <= 0) lockT = ENERGY.jetLockout;
+          if (e <= 0) {lockT = ENERGY.jetLockout;}
           probe.update(MoveSim.STEP);
           onStep?.(tick + i + 1);
         }
         tick += steps;
         budget -= steps;
       }
-      if (tick >= sh.simTicks || budget <= 0) break;
+      if (tick >= sh.simTicks || budget <= 0) {break;}
       inp = seg.inp;
     }
   }

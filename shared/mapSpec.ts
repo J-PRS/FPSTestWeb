@@ -181,13 +181,13 @@ let parseWarnings: string[] | null = null;
 const specWarn = (m: string): void => { parseWarnings?.push(m); };
 
 const clampInt = (v: unknown, lo: number, hi: number, fallback: number, label: string): number => {
-  if (v === undefined) return fallback;
+  if (v === undefined) {return fallback;}
   if (typeof v !== 'number' || !Number.isFinite(v)) {
     specWarn(`${label}: non-numeric value dropped (${JSON.stringify(v)})`);
     return fallback;
   }
   const c = Math.max(lo, Math.min(hi, Math.floor(v)));
-  if (c !== v) specWarn(`${label}: ${v} clamped to ${c} (${lo}..${hi})`);
+  if (c !== v) {specWarn(`${label}: ${v} clamped to ${c} (${lo}..${hi})`);}
   return c;
 };
 
@@ -215,7 +215,7 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     perPlayer: clampInt(src.balls?.perPlayer, 0, 50, d.perPlayer, 'balls.perPlayer'),
     max: clampInt(src.balls?.max, 0, 200, d.max, 'balls.max'),
   };
-  if (balls.max < balls.base) balls.max = balls.base;
+  if (balls.max < balls.base) {balls.max = balls.base;}
 
   const spec: MapSpec = {
     name: parseName((src as { name?: unknown }).name),
@@ -246,7 +246,7 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     ambient: parseAmbient((src as { ambient?: unknown }).ambient),
     creatures: parseAmbient((src as { creatures?: unknown }).creatures),
   };
-  if (parseWarnings.length) spec.warnings = parseWarnings;
+  if (parseWarnings.length > 0) {spec.warnings = parseWarnings;}
   parseWarnings = null;
   return spec;
 }
@@ -258,22 +258,22 @@ function parseBotSkill(raw: unknown): MapSpec['botSkill'] {
   const TIER = new Set(['easy', 'medium', 'hard', 'impossible']);
   const AXES = ['aim', 'move', 'react', 'jitter', 'temper'] as const;
   const one = (v: unknown): import('./botSkill.ts').BotSkillSpec | undefined => {
-    if (typeof v === 'string') return TIER.has(v) ? v as import('./botSkill.ts').BotTier : undefined;
+    if (typeof v === 'string') {return TIER.has(v) ? v as import('./botSkill.ts').BotTier : undefined;}
     if (v && typeof v === 'object' && !Array.isArray(v)) {
       const mix: import('./botSkill.ts').BotSkillMix = {};
       for (const k of AXES) {
         const t = (v as Record<string, unknown>)[k];
-        if (typeof t === 'string' && TIER.has(t)) mix[k] = t as import('./botSkill.ts').BotTier;
+        if (typeof t === 'string' && TIER.has(t)) {mix[k] = t as import('./botSkill.ts').BotTier;}
       }
-      return Object.keys(mix).length ? mix : undefined;
+      return Object.keys(mix).length > 0 ? mix : undefined;
     }
     return undefined;
   };
-  if (typeof raw === 'string') return one(raw);
+  if (typeof raw === 'string') {return one(raw);}
   if (raw && typeof raw === 'object') {
     const o = raw as { alpha?: unknown; bravo?: unknown };
     const alpha = one(o.alpha), bravo = one(o.bravo);
-    if (alpha || bravo) return { alpha, bravo };
+    if (alpha || bravo) {return { alpha, bravo };}
   }
   return undefined;
 }
@@ -289,9 +289,9 @@ function parseMode(raw: unknown): string | undefined {
 }
 
 function parseModes(raw: unknown): string[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
+  if (!Array.isArray(raw)) {return undefined;}
   const out = raw.filter((m): m is string => parseMode(m) !== undefined).slice(0, 8);
-  return out.length ? out : undefined;
+  return out.length > 0 ? out : undefined;
 }
 
 /** Modes a spec can legally host: the declared list; else its own mode
@@ -300,8 +300,8 @@ function parseModes(raw: unknown): string[] | undefined {
  *  stands on geometry without authored bases (farthest spawn pair).
  *  A mode-less spec remains "anything" (empty = unconstrained). */
 export function specModes(spec: MapSpec | undefined): string[] {
-  if (spec?.modes) return spec.modes;
-  if (!spec?.mode) return [];
+  if (spec?.modes) {return spec.modes;}
+  if (!spec?.mode) {return [];}
   const legal = ['ctf', 'tdm', 'nuggets', 'dm', 'rabbit', 'duel', 'flagrun'];
   return [...new Set([spec.mode, ...legal])];
 }
@@ -313,23 +313,23 @@ function parseTerrain(raw: unknown): string | undefined {
 /** Vertical gain — 0.1× (flats) to 8× (spikes). u8 quantization steps grow
  *  with it: past ~4× the 0.49m texel step is readable under skis. */
 function parseHeightScale(raw: unknown): number | undefined {
-  if (typeof raw !== 'number' || !Number.isFinite(raw)) return undefined;
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) {return undefined;}
   const v = Math.max(0.1, Math.min(8, raw));
   return v === 1 ? undefined : v;
 }
 
 function parseTileSize(raw: unknown): number | undefined {
-  if (typeof raw !== 'number' || !Number.isFinite(raw)) return undefined;
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) {return undefined;}
   const v = Math.max(256, Math.min(4096, raw));
   return v === 1500 ? undefined : v;
 }
 
 function parseFog(raw: unknown): MapSpec['fog'] {
-  if (!raw || typeof raw !== 'object') return undefined;
+  if (!raw || typeof raw !== 'object') {return undefined;}
   const f = raw as { color?: unknown; distance?: unknown; visible?: unknown; horizon?: unknown };
   if (!Array.isArray(f.color) || f.color.length < 3 ||
       !f.color.slice(0, 3).every((v) => typeof v === 'number' && Number.isFinite(v)))
-    return undefined;
+    {return undefined;}
   const num = (v: unknown, lo: number, hi: number) =>
     typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : undefined;
   const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
@@ -349,21 +349,21 @@ function parseFog(raw: unknown): MapSpec['fog'] {
  *  extension `tail` requires. No dots in segments => no traversal. */
 function parsePathField(raw: unknown, tail: RegExp, maxDepth = 2, label = 'path'): string | undefined {
   const reject = (): undefined => {
-    if (raw !== undefined) specWarn(`${label}: ${JSON.stringify(raw)} rejected`);
+    if (raw !== undefined) {specWarn(`${label}: ${JSON.stringify(raw)} rejected`);}
     return undefined;
   };
-  if (typeof raw !== 'string' || raw.length > 128) return reject();
+  if (typeof raw !== 'string' || raw.length > 128) {return reject();}
   const parts = raw.split('/');
-  if (parts.length > maxDepth + 1) return reject();
+  if (parts.length > maxDepth + 1) {return reject();}
   for (const p of parts.slice(0, -1)) {
-    if (!/^[\w-]{1,64}$/.test(p)) return reject();   // dirs: word chars only, no dots
+    if (!/^[\w-]{1,64}$/.test(p)) {return reject();}   // dirs: word chars only, no dots
   }
-  if (!/^[\w-]{1,64}(\.[\w-]{1,8})?$/.test(parts[parts.length - 1]!)) return reject();
+  if (!/^[\w-]{1,64}(\.[\w-]{1,8})?$/.test(parts[parts.length - 1]!)) {return reject();}
   return tail.test(raw) ? raw : reject();
 }
 
 function parseSpawns(raw: unknown): SpawnPoint[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
+  if (!Array.isArray(raw)) {return undefined;}
   const out: SpawnPoint[] = [];
   let dropped = 0;
   for (const s of raw) {
@@ -374,14 +374,14 @@ function parseSpawns(raw: unknown): SpawnPoint[] | undefined {
       r: typeof o.r === 'number' && Number.isFinite(o.r) ? Math.max(0, Math.min(400, o.r)) : undefined,
       w: typeof o.w === 'number' && Number.isFinite(o.w) && o.w > 0 ? Math.min(1000, o.w) : undefined,
     });
-    if (out.length >= 32) break;
+    if (out.length >= 32) {break;}
   }
-  if (dropped) specWarn(`spawns: ${dropped} invalid points dropped`);
-  return out.length ? out : undefined;
+  if (dropped) {specWarn(`spawns: ${dropped} invalid points dropped`);}
+  return out.length > 0 ? out : undefined;
 }
 
 function parseTeamSpawns(raw: unknown): MapSpec['teamSpawns'] {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {return undefined;}
   const t = raw as { alpha?: unknown; bravo?: unknown };
   const alpha = parseSpawns(t.alpha);
   const bravo = parseSpawns(t.bravo);
@@ -389,12 +389,12 @@ function parseTeamSpawns(raw: unknown): MapSpec['teamSpawns'] {
 }
 
 function parseBases(raw: unknown): MapSpec['bases'] {
-  if (!raw || typeof raw !== 'object') return undefined;
+  if (!raw || typeof raw !== 'object') {return undefined;}
   const b = raw as { alpha?: unknown; bravo?: unknown };
   // A present-but-broken base is an authored intent that failed — a CTF
   // spec with a typo'd bravo base silently plays with one flag.
-  if (b.alpha !== undefined && !isVec(b.alpha)) specWarn('bases.alpha: invalid position dropped');
-  if (b.bravo !== undefined && !isVec(b.bravo)) specWarn('bases.bravo: invalid position dropped');
+  if (b.alpha !== undefined && !isVec(b.alpha)) {specWarn('bases.alpha: invalid position dropped');}
+  if (b.bravo !== undefined && !isVec(b.bravo)) {specWarn('bases.bravo: invalid position dropped');}
   const out: MapSpec['bases'] = {
     alpha: isVec(b.alpha) ? b.alpha : undefined,
     bravo: isVec(b.bravo) ? b.bravo : undefined,
@@ -403,19 +403,19 @@ function parseBases(raw: unknown): MapSpec['bases'] {
 }
 
 function parseAmbient(raw: unknown): Record<string, number> | undefined {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {return undefined;}
   const out: Record<string, number> = {};
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-    if (!/^[\w-]{1,24}$/.test(k)) continue;
-    if (typeof v === 'number' && Number.isFinite(v)) out[k] = Math.max(0, Math.min(200, Math.floor(v)));
+    if (!/^[\w-]{1,24}$/.test(k)) {continue;}
+    if (typeof v === 'number' && Number.isFinite(v)) {out[k] = Math.max(0, Math.min(200, Math.floor(v)));}
   }
-  return Object.keys(out).length ? out : undefined;
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 function parseArena(raw: unknown): MapSpec['arena'] {
-  if (!raw || typeof raw !== 'object') return undefined;
+  if (!raw || typeof raw !== 'object') {return undefined;}
   const a = raw as { x?: unknown; z?: unknown; radius?: unknown };
-  if (!Number.isFinite(a.x) || !Number.isFinite(a.z) || !Number.isFinite(a.radius)) return undefined;
+  if (!Number.isFinite(a.x) || !Number.isFinite(a.z) || !Number.isFinite(a.radius)) {return undefined;}
   const radius = Math.max(10, Math.min(750, a.radius as number));
   return { x: a.x as number, z: a.z as number, radius };
 }
@@ -429,14 +429,14 @@ const STRUCT_KINDS = new Set(['box', 'wall', 'pillar', 'ramp', 'root', 'stand', 
  *  home onto it) or an authored 'stand' box. */
 export const FLAG_STAND_LIFT = 0.85;
 const isVec = (s: unknown): s is Vec3like =>
-  !!s && typeof s === 'object' &&
+  Boolean(s) && typeof s === 'object' &&
   Number.isFinite((s as Vec3like).x) &&
   Number.isFinite((s as Vec3like).y) &&
   Number.isFinite((s as Vec3like).z);
 
 /** Validated structure list — bad entries dropped, sane clamps, cap 256. */
 function parseStructures(raw: unknown): StructureSpec[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
+  if (!Array.isArray(raw)) {return undefined;}
   const out: StructureSpec[] = [];
   let dropped = 0;
   for (const s of raw) {
@@ -476,16 +476,16 @@ function parseStructures(raw: unknown): StructureSpec[] | undefined {
     });
     // Cap is a sanity bound, not a budget: T2 interior hull batches run
     // in the hundreds (each .dif decomposes into dozens of convex boxes).
-    if (out.length >= 2048) break;
+    if (out.length >= 2048) {break;}
   }
-  if (dropped) specWarn(`structures: ${dropped} invalid entries dropped`);
-  return out.length ? out : undefined;
+  if (dropped) {specWarn(`structures: ${dropped} invalid entries dropped`);}
+  return out.length > 0 ? out : undefined;
 }
 
 /** Validated authored-deployable list — kinds restricted to things that
  *  make sense unattended (no nuggets/drones chasing a phantom owner). */
 function parseDeploys(raw: unknown): DeploySpec[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
+  if (!Array.isArray(raw)) {return undefined;}
   const AUTHORED = new Set(['turret', 'mine', 'station', 'shield', 'beacon', 'generator', 'sensor', 'baseturret']);
   const out: DeploySpec[] = [];
   let dropped = 0;
@@ -504,16 +504,16 @@ function parseDeploys(raw: unknown): DeploySpec[] | undefined {
       pos,
       team: o.team === 'alpha' || o.team === 'bravo' ? o.team : undefined,
     });
-    if (out.length >= 64) break;
+    if (out.length >= 64) {break;}
   }
-  if (dropped) specWarn(`deploys: ${dropped} invalid entries dropped`);
-  return out.length ? out : undefined;
+  if (dropped) {specWarn(`deploys: ${dropped} invalid entries dropped`);}
+  return out.length > 0 ? out : undefined;
 }
 
 /** Validated interior placements — bare .dif basenames only (client maps
  *  them to t2/dif/*.glb), sane-clamped transforms, cap 256. */
 function parseInteriors(raw: unknown): InteriorSpec[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
+  if (!Array.isArray(raw)) {return undefined;}
   const out: InteriorSpec[] = [];
   let dropped = 0;
   for (const s of raw) {
@@ -526,16 +526,16 @@ function parseInteriors(raw: unknown): InteriorSpec[] | undefined {
       && o.rot.every(v => typeof v === 'number' && Number.isFinite(v))
       ? o.rot as number[] : undefined;
     out.push({ file, pos: o.pos, rot, scale: isVec(o.scale) ? o.scale : undefined });
-    if (out.length >= 256) break;
+    if (out.length >= 256) {break;}
   }
-  if (dropped) specWarn(`interiors: ${dropped} invalid placements dropped`);
-  return out.length ? out : undefined;
+  if (dropped) {specWarn(`interiors: ${dropped} invalid placements dropped`);}
+  return out.length > 0 ? out : undefined;
 }
 
 /** Four non-negative weights, normalized. Anything malformed → undefined
  *  (sim falls back to its built-in mix). */
 function parseBallMix(raw: unknown): number[] | undefined {
-  if (!Array.isArray(raw) || raw.length !== 4) return undefined;
+  if (!Array.isArray(raw) || raw.length !== 4) {return undefined;}
   const w = raw.map((v) => (typeof v === 'number' && isFinite(v) && v > 0 ? v : 0));
   return w.some((v) => v > 0) ? w : undefined;
 }

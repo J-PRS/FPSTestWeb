@@ -13,13 +13,13 @@ import { SPECIES, speciesFamily, type SpeciesRow } from './species.js';
 import { inv } from './invariants.js';
 
 export const BANELING_SIM = {
-  ACCEL: 22.0,
-  TOPSPEED: 20.0,
+  ACCEL: 22,
+  TOPSPEED: 20,
   AGGRO_D2: 140 * 140,   // born homing — a wide chase envelope
   // Player capsule + sac radius stop it ~3m out via clipMotion — the fuse
   // must cover contact distance, else it orbits the body and never pops.
   FUSE_D2: 4.2 * 4.2,    // 3D proximity pop (includes body radii)
-  LIFE_S: 25.0,          // self-detonates eventually
+  LIFE_S: 25,          // self-detonates eventually
   STUN_S: 0.3,           // a hit staggers the fuse run
 } as const;
 
@@ -110,7 +110,7 @@ export function stepBaneling(
   c.z += c.vz * dt;
   clipMotion(c, bpx, c.y, bpz, cols);
   c.y = Math.max(hmHeight(field, c.x, c.z), hmChord(field, c.x, c.z)) + 0.7; // small sac, low ride
-  if (hSpeed > 0.5) c.yaw = Math.atan2(c.vx, c.vz);
+  if (hSpeed > 0.5) {c.yaw = Math.atan2(c.vx, c.vz);}
 
   if (target) {
     const d3 = (target.x - c.x) ** 2 + (target.y - c.y) ** 2 + (target.z - c.z) ** 2;

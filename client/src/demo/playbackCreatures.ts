@@ -16,14 +16,14 @@ import * as sfxWorld from '../core/sfx/world.js';
 // speciesIdx (from DEMO_SPECIES order) -> proxy look. Keys are the file's
 // persisted ids, so this table must stay append-only.
 const PROXY_SPECS: Record<number, { color: number; r: number; gravity: boolean }> = {
-  0: { color: 0x8a8a8a, r: 0.5,  gravity: true },  // crawler
-  1: { color: 0xcc9944, r: 0.4,  gravity: true },  // scarab
-  2: { color: 0xdd4444, r: 0.45, gravity: false }, // rakk
-  3: { color: 0x88ee66, r: 0.25, gravity: false }, // gnat
-  4: { color: 0x996633, r: 0.6,  gravity: true },  // roller
-  5: { color: 0x66aa66, r: 0.35, gravity: true },  // snake
-  6: { color: 0x77ff44, r: 0.35, gravity: true },  // baneling
-  7: { color: 0xbb66ff, r: 0.7,  gravity: false }, // totem
+  0: { color: 0x8A_8A_8A, r: 0.5,  gravity: true },  // crawler
+  1: { color: 0xCC_99_44, r: 0.4,  gravity: true },  // scarab
+  2: { color: 0xDD_44_44, r: 0.45, gravity: false }, // rakk
+  3: { color: 0x88_EE_66, r: 0.25, gravity: false }, // gnat
+  4: { color: 0x99_66_33, r: 0.6,  gravity: true },  // roller
+  5: { color: 0x66_AA_66, r: 0.35, gravity: true },  // snake
+  6: { color: 0x77_FF_44, r: 0.35, gravity: true },  // baneling
+  7: { color: 0xBB_66_FF, r: 0.7,  gravity: false }, // totem
 };
 
 // Geometries/materials are shared module-level per species — same policy as

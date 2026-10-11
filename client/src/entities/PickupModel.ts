@@ -9,12 +9,12 @@ import type { PickupKind } from '../../../shared/pickups.js';
 import { blastBurst } from '../effects/vfx.js';
 
 export const PICKUP_ACCENT: Record<PickupKind, number> = {
-  gem:   0xFFD54A, // warm gold
-  tag:   0xff_33_55, // dog-tag red
-  heal:  0x44_ff_66, // medkit green
-  armor: 0xff_aa_22, // plating orange
-  regen: 0x66FFEE, // regen teal
-  dd:    0xFF4422, // overcharge red-orange
+  gem:   0xFF_D5_4A, // warm gold
+  tag:   0xFF_33_55, // dog-tag red
+  heal:  0x44_FF_66, // medkit green
+  armor: 0xFF_AA_22, // plating orange
+  regen: 0x66_FF_EE, // regen teal
+  dd:    0xFF_44_22, // overcharge red-orange
 };
 
 // Per-kind diegetic shapes — real objects that tumble and settle like the
@@ -43,7 +43,7 @@ function buildParts(kind: PickupKind): PickupParts | null {
       ], false)!;
       const band = new THREE.TorusGeometry(0.17, 0.035, 6, 14);
       band.rotateX(Math.PI / 2);
-      return { body, accent: band, bodyColor: 0xCFCFC4 };
+      return { body, accent: band, bodyColor: 0xCF_CF_C4 };
     }
     case 'armor': {
       // Layered plating — a hex core with stepped face plates and

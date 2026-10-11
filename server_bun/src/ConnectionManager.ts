@@ -92,7 +92,7 @@ export class ConnectionManager {
     const buffered = (ws as unknown as { getBufferedAmount?(): number }).getBufferedAmount?.() ?? 0;
     // Sockets without a data slot (test mocks) can't carry the mark —
     // buffered is also 0 there, so there's nothing to track anyway.
-    if (!ws.data) return 'ok';
+    if (!ws.data) {return 'ok';}
     if (buffered < DROWN_BYTES) {
       ws.data.slowSince = undefined;
       return 'ok';
@@ -102,7 +102,7 @@ export class ConnectionManager {
       ws.data.slowSince = wallNow();
       return 'ok'; // first sighting — could be the reclaim burst
     }
-    if (wallNow() - since < SLOW_FOR_MS) return 'drowned';
+    if (wallNow() - since < SLOW_FOR_MS) {return 'drowned';}
     logger.warn('closing drowned socket', { playerId, buffered, slowMs: wallNow() - since });
     this.onDrowned?.(playerId);
     try { ws.close(1011, 'slow client'); } catch { /* already closing */ }
@@ -131,21 +131,21 @@ export class ConnectionManager {
   replayTo(playerId: string, ws: ServerWebSocket<WebSocketData>, fromSeq: number): number {
     const now = wallNow();
     let n = 0, skippedStale = 0;
-    const oldest = this.journal.length ? this.journal[0]!.seq : this.outSeq + 1;
+    const oldest = this.journal.length > 0 ? this.journal[0]!.seq : this.outSeq + 1;
     const missed = oldest - fromSeq - 1;
     if (missed > 0) {
       this.reclaimGap += missed;
       this.onReclaimGap?.(playerId, missed);
     }
     for (const e of this.journal) {
-      if (e.seq <= fromSeq) continue;
+      if (e.seq <= fromSeq) {continue;}
       if (e.volatile && now - e.at > VOLATILE_TTL_MS) { skippedStale++; continue; }
-      if (e.only !== undefined && e.only !== playerId) continue;
-      if (e.exclude === playerId) continue;
+      if (e.only !== undefined && e.only !== playerId) {continue;}
+      if (e.exclude === playerId) {continue;}
       ws.send(e.data);
       n++;
     }
-    if (n > 0 || skippedStale > 0) logger.info('reclaim replay', { playerId, fromSeq, replayed: n, skippedStale });
+    if (n > 0 || skippedStale > 0) {logger.info('reclaim replay', { playerId, fromSeq, replayed: n, skippedStale });}
     return n;
   }
 
@@ -181,7 +181,7 @@ export class ConnectionManager {
    *  'backlogged' as loss; a closing socket isn't a dropped frame. */
   sendBinaryToPlayer(playerId: string, data: Uint8Array): 'sent' | 'backlogged' | 'gone' {
     const ws = this.connections.get(playerId);
-    if (!ws || ws.readyState !== 1) return 'gone';
+    if (!ws || ws.readyState !== 1) {return 'gone';}
     const buffered = (ws as unknown as { getBufferedAmount?(): number }).getBufferedAmount?.() ?? 0;
     if (buffered > MAX_TICK_BACKLOG) {
       // Backlogged sockets ALSO feed the drown clock — the cap sheds
@@ -204,14 +204,14 @@ export class ConnectionManager {
    *  reclaim's ballRoster reseeds ball truth, so the skip is honest. */
   broadcastBinaryReliable(data: Uint8Array): void {
     this.connections.forEach((ws, pid) => {
-      if (ws.readyState === 1 && this.drownCheck(pid, ws) === 'ok') ws.send(data);
+      if (ws.readyState === 1 && this.drownCheck(pid, ws) === 'ok') {ws.send(data);}
     });
   }
 
   broadcast(msg: ServerMessage, excludePlayerId?: string): void {
     const data = this.frame(msg, undefined, excludePlayerId);
     this.connections.forEach((ws, pid) => {
-      if (excludePlayerId !== undefined && pid === excludePlayerId) return;
+      if (excludePlayerId !== undefined && pid === excludePlayerId) {return;}
       if (ws.readyState === 1 && this.drownCheck(pid, ws) === 'ok') {
         ws.send(data);
       }

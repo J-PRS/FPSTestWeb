@@ -16,8 +16,8 @@ export function botWeaponHooks(pick: (d: number) => WeaponType, lo: BotLoadout) 
     // radius; other shells' ceiling is gravity, not a ray.
     weaponRange: (d: number): number | undefined => {
       const ws = getWeaponStats(pick(d));
-      if (ws.speed === 0) return 55;
-      if (ws.fuseOnly && ws.maxLifetime) return ws.speed * ws.maxLifetime + 20;
+      if (ws.speed === 0) {return 55;}
+      if (ws.fuseOnly && ws.maxLifetime) {return ws.speed * ws.maxLifetime + 20;}
       return undefined;
     },
     weaponFuse: (d: number): number | undefined => {
@@ -35,11 +35,11 @@ export function botWeaponHooks(pick: (d: number) => WeaponType, lo: BotLoadout) 
       if ((st.burst ?? 0) > 1 && st.pelletSpread) {
         const need = Math.max(15, (hpFrac ?? 1) * 150 * 0.9);
         const maxDmg = (st.burst ?? 1) * st.directDamage;
-        if (need >= maxDmg) return 8;
+        if (need >= maxDmg) {return 8;}
         return Math.min(45, Math.max(6, (0.5 / st.pelletSpread) * Math.sqrt(maxDmg / need)));
       }
-      if (w === lo.near || w === lo.side) return 10;
-      if (w === lo.far) return 30;
+      if (w === lo.near || w === lo.side) {return 10;}
+      if (w === lo.far) {return 30;}
       return undefined;
     },
     // Trigger rhythm — the legal cadence the client trigger enforces,

@@ -147,7 +147,7 @@ export class Chat {
     }
     if (cmd === '/muted') {
       const s = mutedIds();
-      this.add(null, s.size ? `muted: ${[...s].map((id) => this.nameOf(id)).join(', ')}` : 'nobody muted');
+      this.add(null, s.size > 0 ? `muted: ${[...s].map((id) => this.nameOf(id)).join(', ')}` : 'nobody muted');
       return true;
     }
     return false;

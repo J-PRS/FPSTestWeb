@@ -1,22 +1,22 @@
 import * as THREE from 'three';
 import { GRAVITY } from '../core/config.js';
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
-import { BallTrailDots } from '../effects/ballTrails.js';
+import type { BallTrailDots } from '../effects/ballTrails.js';
 import { RibbonTrail } from '../effects/RibbonTrail.js';
 
 let _boltGeo: THREE.SphereGeometry | null = null;
 function boltGeo(): THREE.SphereGeometry {
-  if (!_boltGeo) _boltGeo = new THREE.SphereGeometry(0.16, 8, 6);
+  if (!_boltGeo) {_boltGeo = new THREE.SphereGeometry(0.16, 8, 6);}
   return _boltGeo;
 }
 let _boltMat: THREE.MeshBasicMaterial | null = null;
 function boltMat(): THREE.MeshBasicMaterial {
-  if (!_boltMat) _boltMat = new THREE.MeshBasicMaterial({ color: 0xffcc66 });
+  if (!_boltMat) {_boltMat = new THREE.MeshBasicMaterial({ color: 0xFF_CC_66 });}
   return _boltMat;
 }
 // Ember tint shared by every host's BallTrailDots burst.
-const EMBER = new THREE.Color(0xff8830);
+const EMBER = new THREE.Color(0xFF_88_30);
 
 export interface Bolt {
   mesh: THREE.Mesh;
@@ -54,11 +54,11 @@ const _v = new THREE.Vector3();
 export function spawnBolt<T>(h: BoltHost<T>, vel: THREE.Vector3, muzzle?: THREE.Vector3): void {
   const mesh = new THREE.Mesh(boltGeo(), boltMat());
   const pos = muzzle ? muzzle.clone() : h.pos.clone();
-  if (!muzzle) pos.y += 1.0; // muzzle-less hosts keep the old center-top spawn
+  if (!muzzle) {pos.y += 1;} // muzzle-less hosts keep the old center-top spawn
   mesh.position.copy(pos);
   // Hot halo — the bolt reads at range even when the sphere is subpixel
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: getGlowTexture(), color: 0xffaa44, transparent: true,
+    map: getGlowTexture(), color: 0xFF_AA_44, transparent: true,
     blending: THREE.AdditiveBlending, depthWrite: false,
   }));
   glow.scale.setScalar(1.6);
@@ -69,26 +69,26 @@ export function spawnBolt<T>(h: BoltHost<T>, vel: THREE.Vector3, muzzle?: THREE.
     prevPos: pos.clone(),
     radius: 1.5, // generous — clipping a 60m/s shell mid-air is a skill shot
     vel: vel.clone(),
-    life: 10.0, // lobbed shells are slow arks — long fuse so a shot fired
+    life: 10, // lobbed shells are slow arks — long fuse so a shot fired
     // at range actually lands instead of fizzing mid-air
     trailAcc: 0,
     // Toned down on purpose: thin + short-lived — a whiff of ember, not
     // the fat ribbon player shells carry.
     ribbon: RibbonTrail.acquire(h.scene, {
-      color: 0xff8830, width: 0.12, life: 0.4, billboard: true, tag: 'tbolt',
+      color: 0xFF_88_30, width: 0.12, life: 0.4, billboard: true, tag: 'tbolt',
     }),
   });
 }
 
 /** Cooked mid-air by a player shell — same cleanup as a landed bolt, no callbacks. */
 export function detonateBolt<T>(h: BoltHost<T>, i: number): void {
-  if (!h.bolts[i]) return;
+  if (!h.bolts[i]) {return;}
   removeBolt(h, i);
 }
 
 function removeBolt<T>(h: BoltHost<T>, i: number): void {
   const b = h.bolts[i];
-  if (!b) return;
+  if (!b) {return;}
   h.scene.remove(b.mesh, b.glow);
   (b.glow.material as THREE.SpriteMaterial).dispose();
   b.ribbon.stop(); // streak stops emitting; deadRibbons fades+disposes it
@@ -127,7 +127,7 @@ export function updateBolts<T>(h: BoltHost<T>, t: T, dt: number, terrain: Terrai
       h.onBoltHit?.(t, b.pos);
     } else if (hitGround || b.life <= 0) {
       removeBolt(h, i);
-      if (hitGround) h.onBoltLand?.(b.pos);
+      if (hitGround) {h.onBoltLand?.(b.pos);}
     }
   }
 
@@ -148,7 +148,7 @@ export function disposeBolts<T>(h: BoltHost<T>): void {
     b.ribbon.dispose(); // host is gone — no fade-out, just free the slots
   }
   h.bolts.length = 0;
-  for (const r of h.deadRibbons) r.dispose();
+  for (const r of h.deadRibbons) {r.dispose();}
   h.deadRibbons.length = 0;
   h.trailFx.dispose();
 }

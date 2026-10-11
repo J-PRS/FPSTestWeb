@@ -188,7 +188,7 @@ export function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: numbe
     map.set(k, v);
     if (map.size > RB_MAP_MAX) {
       const it = map.keys();
-      for (let i = map.size - RB_MAP_MAX; i > 0; i--) map.delete(it.next().value!);
+      for (let i = map.size - RB_MAP_MAX; i > 0; i--) {map.delete(it.next().value!);}
     }
   }
   const RB_WARN_MS = 2000;

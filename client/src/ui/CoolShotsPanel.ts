@@ -44,7 +44,7 @@ export class CoolShotsPanel {
     // is actually up: a closed overlay re-render is a 1Hz DOM rebuild
     // nobody sees. Same skip for a backgrounded tab.
     setInterval(() => {
-      if (document.hidden || this.overlay.style.display === 'none') return;
+      if (document.hidden || this.overlay.style.display === 'none') {return;}
       if (this.lastCoolShots.length > 0) {
         this.renderCoolShots(this.lastCoolShots);
       }
@@ -53,22 +53,22 @@ export class CoolShotsPanel {
 
   private timeAgo(ts: number): string {
     const secs = Math.floor((Date.now() - ts) / 1000);
-    if (secs < 60) return `${secs}s ago`;
+    if (secs < 60) {return `${secs}s ago`;}
     const mins = Math.floor(secs / 60);
-    if (mins < 60) return `${mins}m ago`;
+    if (mins < 60) {return `${mins}m ago`;}
     const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
+    if (hrs < 24) {return `${hrs}h ago`;}
     const days = Math.floor(hrs / 24);
     return `${days}d ago`;
   }
 
   private renderShotItem(container: HTMLElement, shot: CoolShotEntry, rank: number): void {
     const item = document.createElement('div');
-    const isRecent = Date.now() - shot.timestamp < 60000;
+    const isRecent = Date.now() - shot.timestamp < 60_000;
     item.className = isRecent ? 'cool-shot-item recent' : 'cool-shot-item';
     // Tile: weapon + shot→hit distance + air time — the brag stats.
     // meta is optional (server/vault-restored entries may lack it).
-    const dist = shot.distance != null ? `${shot.distance.toFixed(0)}m` : '';
+    const dist = shot.distance == null ? '' : `${shot.distance.toFixed(0)}m`;
     // The column ellipsizes past ~18 chars; a long weapon name would eat the
     // distance, so multi-word names initial only when the pair overflows.
     let weapon = shot.weapon ?? '';
@@ -82,7 +82,7 @@ export class CoolShotsPanel {
       const s = document.createElement('span');
       s.className = cls;
       s.textContent = text;
-      item.appendChild(s);
+      item.append(s);
     };
     span('rank', String(rank));
     span('lifetime', `${shot.projectileLifetime.toFixed(2)}s`);
@@ -101,7 +101,7 @@ export class CoolShotsPanel {
       e.preventDefault();
       this.openMenu(e.clientX, e.clientY, shot);
     });
-    container.appendChild(item);
+    container.append(item);
   }
 
   private menu: HTMLElement | null = null;
@@ -127,7 +127,7 @@ export class CoolShotsPanel {
         this.closeMenu();
         fn();
       });
-      menu.appendChild(b);
+      menu.append(b);
     };
     act('Play', () => {
       this.demoManager.playCoolShotById(shot.id);
@@ -147,7 +147,7 @@ export class CoolShotsPanel {
       this.overlay.style.display = 'none';
       this.requestLock();
     });
-    this.overlay.appendChild(menu);
+    this.overlay.append(menu);
     // Clamp into the viewport — anchored top-left of the cursor, flips up/
     // left when it would overflow an edge.
     const mw = menu.offsetWidth, mh = menu.offsetHeight;
@@ -155,7 +155,7 @@ export class CoolShotsPanel {
     menu.style.top = `${Math.max(0, Math.min(y, innerHeight - mh - 4))}px`;
     this.menu = menu;
     const dismiss = (e: Event) => {
-      if (menu.contains(e.target as Node)) return;
+      if (menu.contains(e.target as Node)) {return;}
       this.closeMenu();
       document.removeEventListener('pointerdown', dismiss, true);
       document.removeEventListener('keydown', key, true);

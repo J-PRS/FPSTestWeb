@@ -76,17 +76,17 @@ export class BotLines {
     // the flood is the only layer that priced the walls. One probe per
     // plan buys two things: short legs still consult the route, and the
     // close-in homing squash can't flatten a real detour into a hull.
-    const solidAhead = !!ctx.solids?.length && gd > 1 && !!segSolidHit(
+    const solidAhead = Boolean(ctx.solids?.length) && gd > 1 && Boolean(segSolidHit(
       { x: pos.x, y: pos.y + 1, z: pos.z },
       { x: dest.x, y: pos.y + 1, z: dest.z },
-      ctx.solids, ctx.solidIndex ?? undefined, ctx.team);
+      ctx.solids ?? [], ctx.solidIndex ?? undefined, ctx.team));
     this.lineT -= dt;
     // A leg that moved real altitude is worth remembering: the ramp
     // down is the ramp up in reverse, and only terrain the bot itself
     // crossed gets filed — no map knowledge it never earned.
     if (Math.abs(pos.y - this.lastY) > 12 && gd < this.lastGd + 60) {
       this.passes.push({ x: pos.x, y: pos.y, z: pos.z });
-      if (this.passes.length > 8) this.passes.shift();
+      if (this.passes.length > 8) {this.passes.shift();}
     }
     this.lastY = pos.y;
     // Runner close-out reaches further than minGd: inside the stand's
@@ -119,9 +119,9 @@ export class BotLines {
     // costs the whole fan — without a latch the same dead roll re-ran
     // every think (~83% of the think stage on soak). Hold the empty
     // result for the commit window like a real waypoint.
-    if (!this.wp && this.lineT > 0 && !drifted) return dest;
+    if (!this.wp && this.lineT > 0 && !drifted) {return dest;}
     if (this.wp && this.lineT > 0 && wpD > T.lines.arrive) {
-      if (!drifted) return this.wp;
+      if (!drifted) {return this.wp;}
       // Goal drifted: keep the committed line while it still runs inside
       // the fan cone of the new goal. Live-lead destinations (escort
       // intercept, carrier follow) slide every think — re-rolling the
@@ -148,8 +148,8 @@ export class BotLines {
     // the third gives up on terrain scoring entirely and beelines —
     // humans grind the climb when carving stops paying. A pass the bot
     // has actually made before outranks another face probe.
-    if (gd > this.lastGd - 8) this.stale++;
-    else { this.stale = 0; if (this.orbitGd === Infinity) this.traverseDir = null; }
+    if (gd > this.lastGd - 8) {this.stale++;}
+    else { this.stale = 0; if (this.orbitGd === Infinity) {this.traverseDir = null;} }
     this.lastGd = gd;
     // Release the orbit latch only on net progress from where it armed —
     // or when the goal itself moved: a latch armed for the enemy stand
@@ -164,7 +164,7 @@ export class BotLines {
     let tp = prof ? sharedEnv.wallPerf!() : 0;
     if (faceAhead || this.stale >= T.lines.staleLimit || this.orbitGd !== Infinity) {
       if (this.orbitGd === Infinity) { this.orbitGd = gd; this.orbitFails = 0; this.orbitGoal = { ...dest }; }
-      else this.orbitFails++;
+      else {this.orbitFails++;}
       let bestPass: BotVec | null = null, bestPassD = 250;
       for (const pass of this.passes) {
         const pd = Math.hypot(pass.x - pos.x, pass.z - pos.z);
@@ -186,7 +186,7 @@ export class BotLines {
         if (wp) {
           const w = dirXZ(wp.x - pos.x, wp.z - pos.z);
           const offLine = w.x * ((dest.x - pos.x) / gd) + w.z * ((dest.z - pos.z) / gd) < 0.75;
-          if (!offLine) wp = null;
+          if (!offLine) {wp = null;}
         }
       }
       if (this.orbitFails >= 2) {
@@ -227,12 +227,12 @@ export class BotLines {
             const crest = (c: { x: number; z: number }) => {
               const ddx = dest.x - c.x, ddz = dest.z - c.z;
               const dd = Math.hypot(ddx, ddz);
-              if (dd < 1) return 0;
+              if (dd < 1) {return 0;}
               const steps = Math.min(12, Math.ceil(dd / 30));
               let m = 0;
               for (let s = 1; s <= steps; s++) {
                 const h = ctx.groundY(c.x + ddx * s / steps, c.z + ddz * s / steps) - g0;
-                if (h > m) m = h;
+                if (h > m) {m = h;}
               }
               return m;
             };
@@ -257,7 +257,7 @@ export class BotLines {
       this.wpGoal = { ...dest };
       this.lineT = T.lines.commitS;
       this.stale = 0;
-      if (prof) prof.set('lines:orbit', (prof.get('lines:orbit') ?? 0) + sharedEnv.wallPerf!() - tp);
+      if (prof) {prof.set('lines:orbit', (prof.get('lines:orbit') ?? 0) + sharedEnv.wallPerf!() - tp);}
       return this.wp;
     }
 
@@ -287,11 +287,11 @@ export class BotLines {
       if (prof) { const t1 = sharedEnv.wallPerf!(); prof.set('lines:route', (prof.get('lines:route') ?? 0) + t1 - tp); tp = t1; }
     }
     this.wp = routed ?? this.roll(ctx, pos, dest, gd);
-    if (prof) prof.set('lines:roll', (prof.get('lines:roll') ?? 0) + sharedEnv.wallPerf!() - tp);
+    if (prof) {prof.set('lines:roll', (prof.get('lines:roll') ?? 0) + sharedEnv.wallPerf!() - tp);}
     // A fresh roll that lands inside `arrive` is no waypoint at all —
     // latching it would re-roll every think (the residual fan storm);
     // commit the empty result like a null roll: walk at the goal.
-    if (this.wp && Math.hypot(this.wp.x - pos.x, this.wp.z - pos.z) <= T.lines.arrive) this.wp = null;
+    if (this.wp && Math.hypot(this.wp.x - pos.x, this.wp.z - pos.z) <= T.lines.arrive) {this.wp = null;}
     this.wpGoal = { ...dest };
     this.lineT = T.lines.commitS;
     return this.wp ?? dest;
@@ -307,7 +307,7 @@ export class BotLines {
       const g = ctx.groundY(pos.x + dx * d, pos.z + dz * d);
       const prev = ctx.groundY(pos.x + dx * (d - 3), pos.z + dz * (d - 3));
       const seg = (g - prev) / 3;
-      if (seg > worst) worst = seg;
+      if (seg > worst) {worst = seg;}
     }
     return worst;
   }
@@ -353,12 +353,12 @@ export class BotLines {
         const d = T.lines.near + ((reach - T.lines.near) * p) / T.lines.pts;
         const g = ctx.groundY(pos.x + dx * d, pos.z + dz * d);
         const seg = (g - prevG) / (d - prevD);
-        if (prevD < T.lines.near && seg > earlyClimb) earlyClimb = seg;
+        if (prevD < T.lines.near && seg > earlyClimb) {earlyClimb = seg;}
         drops.push(g);
         prevG = g; prevD = d;
       }
       const sheer = Math.min(...drops.map((g, i) => g - (i ? drops[i - 1]! : g0)));
-      if (sheer < T.lines.sheerVeto) continue; // cliff face — don't route bots off sheers
+      if (sheer < T.lines.sheerVeto) {continue;} // cliff face — don't route bots off sheers
 
       // Best landing on this ray: the deepest pocket that still gains
       // on the goal. Downhill pockets buy speed; the goal term keeps
@@ -380,7 +380,7 @@ export class BotLines {
         // setup, not a loop). Without the floor a deep side valley
         // always outscores the route and the bot orbits midfield
         // forever (soak: align=0.00, prog=0).
-        if (gained < d * T.lines.gainedFloor && (eScore <= T.lines.eScoreEscape || this.stale >= 2)) continue;
+        if (gained < d * T.lines.gainedFloor && (eScore <= T.lines.eScoreEscape || this.stale >= 2)) {continue;}
         // Apex setup (last leg, runners only): a landing above the goal
         // banks altitude the dive converts back into arrival speed —
         // the flank-crest-and-drop that makes a flag run survivable.

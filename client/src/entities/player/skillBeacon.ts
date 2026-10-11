@@ -36,11 +36,11 @@ export class WarpBeacon {
       // as a warp anchor, not a pebble, at 60m against the sand
       this.mesh = new THREE.Mesh(
         new THREE.OctahedronGeometry(0.32),
-        new THREE.MeshBasicMaterial({ color: 0xAAFFF4 })
+        new THREE.MeshBasicMaterial({ color: 0xAA_FF_F4 })
       );
       this.glow = new THREE.Sprite(new THREE.SpriteMaterial({
         map: getGlowTexture(),
-        color: 0x33FFDD,
+        color: 0x33_FF_DD,
         transparent: true,
         blending: THREE.AdditiveBlending,
         depthWrite: false,

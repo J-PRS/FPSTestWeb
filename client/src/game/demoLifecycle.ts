@@ -1,6 +1,6 @@
 import { reconstructSeek, applyPlaybackEvents, releasePlaybackBeam, type PlaybackWorld } from '../demo/playbackReconstruction.js';
 import type { ProjectileEvent, TargetEvent } from '../demo/types.js';
-import { RemoteFrameFlags, TARGETTYPE_CREATURE_BASE, demoSpeciesIndex, creatureDemoId, targetDemoId } from '../demo/types.js';
+import { RemoteFrameFlags, TARGETTYPE_CREATURE_BASE, demoSpeciesIndex, creatureDemoId, targetDemoId,ProjectileEventType } from '../demo/types.js';
 import type { RemoteSample } from '../demo/DemoRecorder.js';
 import type { DemoManager } from '../demo/index.js';
 import type { Ball } from '../entities/balls.js';
@@ -16,7 +16,7 @@ import { ChildLogger } from '../core/Logger.js';
 import type { WorldState } from './worldState.js';
 import { RemotePlayer } from '../entities/RemotePlayer.js';
 import { SLOT_DEFS } from '../weapons.js';
-import { ProjectileEventType } from '../demo/types.js';
+
 import { updatePlaybackCreatures, clearPlaybackCreatures, type PlaybackCreature } from '../demo/playbackCreatures.js';
 import { clearPlaybackDeployables, type PlaybackDeployable } from '../demo/playbackDeployables.js';
 import { clearPlaybackMarkers, updatePlaybackFlags } from '../demo/playbackMarkers.js';

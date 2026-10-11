@@ -13,7 +13,7 @@ export const BOT_NEAR_M = 15, BOT_FAR_M = 40;
 export const BOT_MELEE_M = 4.5;   // fist reach — brains press inside CLOSE_PRESS_M
 // and two capsule bodies hover ~1-2m apart, so the honest closest gap in a
 // chase sits ~4m; 3.0 never opened in soak ledgers (0 w10 rows).
-export const BOT_SIDEARM_M = 8.0; // knife range: the hold-out draw is faster than tracking a long gun
+export const BOT_SIDEARM_M = 8; // knife range: the hold-out draw is faster than tracking a long gun
 
 /** Kit → armor tier. Ordnance decides first — a bot lugging a mortar or
  *  rocket rack IS a heavy regardless of perk; then plated anchors heavy
@@ -24,12 +24,12 @@ export function botClassForLoadout(lo: BotLoadout): ArmorClass {
   const kit = [lo.near, lo.mid, lo.far, lo.belt, lo.side];
   // Light-frame guns (Railgun/Lightning) pick the body outright — a kit
   // built around them can't ride a heavier chassis.
-  if (kit.some((w) => LIGHT_ONLY_WEAPONS.has(w))) return 'light';
+  if (kit.some((w) => LIGHT_ONLY_WEAPONS.has(w))) {return 'light';}
   // Any ordnance slot can carry the tier-lock — authored kits keep it in
   // far/belt, but the bombard lives in mid and a hidden heavy pick would
   // shoulder it on a medium body that can't legally fire it.
-  if (kit.some((w) => HEAVY_ONLY_WEAPONS.has(w))) return 'heavy';
-  if (lo.perk === 'plated') return 'heavy';
+  if (kit.some((w) => HEAVY_ONLY_WEAPONS.has(w))) {return 'heavy';}
+  if (lo.perk === 'plated') {return 'heavy';}
   // featherjets wants light, but a kit carrying medium-locked ordnance
   // (Flak/PlasmaGun) can't shoulder it on a light frame — the class gate
   // outranks the perk's silhouette.
@@ -113,16 +113,16 @@ export function kitConsistent(lo: BotLoadout): boolean {
  *  squads stop being 14 identical silhouettes. A draw that would leave
  *  the kit inconsistent keeps the base weapon instead. */
 export function rollLoadout(lo: BotLoadout, alts: Partial<Record<LoadoutSlot, WeaponType[]>> | undefined, rng: () => number): BotLoadout {
-  if (!alts) return lo;
+  if (!alts) {return lo;}
   const out = { ...lo };
   for (const slot of SLOTS) {
     const cands = alts[slot];
-    if (!cands?.length) continue;
+    if (!cands?.length) {continue;}
     const pool = [lo[slot], ...cands];
     const w = pool[Math.floor(rng() * pool.length)] ?? lo[slot];
-    if (w === lo[slot]) continue;
+    if (w === lo[slot]) {continue;}
     out[slot] = w;
-    if (!kitConsistent(out)) out[slot] = lo[slot];
+    if (!kitConsistent(out)) {out[slot] = lo[slot];}
   }
   return out;
 }
@@ -137,7 +137,7 @@ export function rollWildcard(rng: () => number): BotLoadout {
   const cls: ArmorClass = rng() < 0.25 ? 'light' : rng() < 0.67 ? 'medium' : 'heavy';
   const pick = (pool: WeaponType[], fb: WeaponType) => {
     const legal = pool.filter((w) => classCanFire(cls, w));
-    return (legal.length ? legal : [fb])[Math.floor(rng() * (legal.length || 1))] ?? fb;
+    return (legal.length > 0 ? legal : [fb])[Math.floor(rng() * (legal.length || 1))] ?? fb;
   };
   const kit = {
     near: pick(WILDCARD_SLOTS.near, WeaponType.Chaingun), mid: pick(WILDCARD_SLOTS.mid, WeaponType.Disc),
@@ -152,12 +152,12 @@ export function rollWildcard(rng: () => number): BotLoadout {
  *  weapon its skill matrix scores highest — competence drifts the kit
  *  toward what this bot actually hits with. */
 export function adaptLoadout(lo: BotLoadout, alts: Partial<Record<LoadoutSlot, WeaponType[]>> | undefined, skill: (w: number) => number, rng?: () => number): BotLoadout {
-  if (!alts) return lo;
+  if (!alts) {return lo;}
   const out = { ...lo };
   const r = rng ?? (() => 0.5);
   for (const slot of SLOTS) {
     const cands = alts[slot];
-    if (!cands?.length) continue;
+    if (!cands?.length) {continue;}
     let best = lo[slot];
     let bs = skill(best);
     for (const w of cands) {
@@ -179,21 +179,25 @@ export function adaptLoadout(lo: BotLoadout, alts: Partial<Record<LoadoutSlot, W
  *  utility of a splash weapon still wins at clearly right ranges —
  *  specialists use their best gun MOST of the time, not always. */
 export function pickBotWeapon(lo: BotLoadout, distXZ: number, dist: number, skill?: (w: number) => number, courage = 0.5, nonAoeOnly = false): number {
-  if (distXZ < BOT_MELEE_M) return WeaponType.Melee;
+  if (distXZ < BOT_MELEE_M) {return WeaponType.Melee;}
   // Heal slots never feed a combat draw — the med kit fires its beam at
   // ALLIES through the support path; picking it at an enemy is a dry pull.
   const beltOut = (w: WeaponType, fb: WeaponType) => w === WeaponType.HealBeam ? fb : w;
-  if (!skill) return beltOut(dist < BOT_SIDEARM_M ? lo.side : dist < BOT_NEAR_M ? lo.near : dist > BOT_FAR_M ? lo.far : lo.mid, lo.mid);
+  if (!skill) {return beltOut(dist < BOT_SIDEARM_M ? lo.side : dist < BOT_NEAR_M ? lo.near : dist > BOT_FAR_M ? lo.far : lo.mid, lo.mid);}
   // Triangular band fit: a slot scores 1 dead-center of its range,
   // decaying to 0 one band away — then multiplied by how good the bot
   // is with that gun. Utility (right range) and skill (right weapon)
   // trade off instead of the band being a hard wall.
   const fit = (slot: 'side' | 'near' | 'mid' | 'far'): number => {
     switch (slot) {
-      case 'side': return Math.max(0, 1 - dist / (BOT_NEAR_M * 1.2));
-      case 'near': return Math.max(0, 1 - Math.abs(dist - BOT_NEAR_M * 0.7) / 14);
-      case 'mid': return Math.max(0, 1 - Math.abs(dist - (BOT_NEAR_M + BOT_FAR_M) / 2) / 25);
-      case 'far': return dist < BOT_NEAR_M ? Math.max(0, dist / BOT_NEAR_M - 0.4) : Math.min(1, dist / BOT_FAR_M);
+      case 'side': { return Math.max(0, 1 - dist / (BOT_NEAR_M * 1.2));
+      }
+      case 'near': { return Math.max(0, 1 - Math.abs(dist - BOT_NEAR_M * 0.7) / 14);
+      }
+      case 'mid': { return Math.max(0, 1 - Math.abs(dist - (BOT_NEAR_M + BOT_FAR_M) / 2) / 25);
+      }
+      case 'far': { return dist < BOT_NEAR_M ? Math.max(0, dist / BOT_NEAR_M - 0.4) : Math.min(1, dist / BOT_FAR_M);
+      }
     }
   };
   let best: { w: number; s: number } = { w: lo.mid, s: 0 };
@@ -207,16 +211,16 @@ export function pickBotWeapon(lo: BotLoadout, distXZ: number, dist: number, skil
   }
   for (const slot of ['side', 'near', 'mid', 'far'] as const) {
     const w = lo[slot];
-    if (w === WeaponType.HealBeam) continue; // healing is aimed at allies, not drawn for a fight
+    if (w === WeaponType.HealBeam) {continue;} // healing is aimed at allies, not drawn for a fight
     // Self-splash pricing: an enemy already inside this weapon's blast
     // means the shell costs the shooter too — the cautious draw the
     // sidearm, the bold keep the launcher (a mutual splash is still a
     // play). Dist-scaled so the rule fades in as the foe closes.
     const aoe = getWeaponStats(w).aoeRadius;
-    if (aoe > 0 && nonAoeOnly) continue;
+    if (aoe > 0 && nonAoeOnly) {continue;}
     let s = fit(slot) * Math.max(0.1, skill(w));
-    if (aoe > 0 && dist < aoe * 0.8) s *= 0.08 + courage * 0.5;
-    if (s > best.s) best = { w, s };
+    if (aoe > 0 && dist < aoe * 0.8) {s *= 0.08 + courage * 0.5;}
+    if (s > best.s) {best = { w, s };}
   }
   return nonAoeOnly && getWeaponStats(best.w).aoeRadius > 0 ? safeW : best.w;
 }
@@ -238,7 +242,7 @@ export function pickBotWeaponSafe(lo: BotLoadout, distXZ: number, dist: number, 
   const woundedGate = wstats.aoeRadius > 0 && (
     (dist < wstats.aoeRadius && hp <= (1 - courage) * (SELF_SPLASH_MAX * 2 + 15)) ||
     (dist < 60 && hp <= SELF_SPLASH_MAX * (1.5 - courage)));
-  if (!woundedGate) return wt;
+  if (!woundedGate) {return wt;}
   const alt = pickBotWeapon(lo, distXZ, dist, skill, courage, true);
-  return alt !== wt ? alt : wt;
+  return alt === wt ? wt : alt;
 }

@@ -16,7 +16,8 @@
 import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
-import { BotBrain, BRAWL_RANGE, FOE_CONE_MIN_DOT, type BotVec, type BrainCtx, type BrainOut } from '../../shared/botBrain.ts';
+import { type BotBrain,BRAWL_RANGE,FOE_CONE_MIN_DOT,type BotVec,type BrainCtx,type BrainOut} from '../../shared/botBrain.ts';
+
 import { losClear } from '../../shared/botLos.ts';
 import { aimSkillFor, type BotSkill } from '../../shared/botSkill.ts';
 import { endTaunt, startTaunt, type ChatterKind, type EndOutcome, type TauntLine } from '../../shared/botTaunts.ts';
@@ -142,8 +143,8 @@ export class ServerBots {
    *  kills/min bottleneck detector). */
   huntUptime(): number {
     let n = 0;
-    for (const b of this.brains.values()) if (b.h.hunt) n++;
-    return this.brains.size ? n / this.brains.size : 0;
+    for (const b of this.brains.values()) {if (b.h.hunt) {n++;}}
+    return this.brains.size > 0 ? n / this.brains.size : 0;
   }
 
   /** Prune a bot that was fully removed (room teardown / test hooks).
@@ -187,7 +188,7 @@ export class ServerBots {
   flinch(targetId: string, shooterId: string): void {
     const brain = this.brains.get(targetId);
     const shooter = this.room.players.getPlayer(shooterId);
-    if (brain && shooter) brain.takeHit(shooter.position, shooterId);
+    if (brain && shooter) {brain.takeHit(shooter.position, shooterId);}
   }
 
   /** A room event the squad may react to — enters the senses as a notice
@@ -205,9 +206,9 @@ export class ServerBots {
     const entries: { id: string; line: TauntLine }[] = [];
     for (const id of this.brains.keys()) {
       const p = this.room.players.getPlayer(id);
-      if (!p) continue;
+      if (!p) {continue;}
       let outcome: EndOutcome;
-      if (winner === 'draw') outcome = 'draw';
+      if (winner === 'draw') {outcome = 'draw';}
       else if (spec?.teams) {
         const margin = Math.abs(this.room.scores.alpha - this.room.scores.bravo);
         outcome = margin <= 1 ? (p.team === winner ? 'winclose' : 'close') : (p.team === winner ? 'win' : 'loss');
@@ -218,7 +219,7 @@ export class ServerBots {
         outcome = pts.length > 1 && top - runnerUp <= 1 ? (id === winner ? 'winclose' : 'close') : (id === winner ? 'win' : 'loss');
       }
       const line = endTaunt(id, outcome);
-      if (line) entries.push({ id, line });
+      if (line) {entries.push({ id, line });}
     }
     this.room.messages.killFeed.matchEnd(entries);
   }
@@ -230,7 +231,7 @@ export class ServerBots {
     const entries: { id: string; line: TauntLine }[] = [];
     for (const id of this.brains.keys()) {
       const line = startTaunt(id);
-      if (line) entries.push({ id, line });
+      if (line) {entries.push({ id, line });}
     }
     this.room.messages.killFeed.matchStart(entries);
   }
@@ -241,7 +242,7 @@ export class ServerBots {
     const t = text.toLowerCase();
     for (const id of this.brains.keys()) {
       const name = id.slice(4, id.lastIndexOf('-')).toLowerCase();
-      if (name.length > 2 && t.includes(name)) return true;
+      if (name.length > 2 && t.includes(name)) {return true;}
     }
     return false;
   }
@@ -266,13 +267,13 @@ export class ServerBots {
   private skillOffAt = new Map<string, Map<number, number>>();
   private static readonly SKILL_REARM_MS = 1500;
   private applyStatus(id: string, p: { status: number }, out: BrainOut, now: number): void {
-    if (out.status === undefined) return;
+    if (out.status === undefined) {return;}
     let claim = out.status & CLIENT_STATUS_MASK;
     let offs = this.skillOffAt.get(id);
     if (!offs) { offs = new Map(); this.skillOffAt.set(id, offs); }
     const cur = p.status & CLIENT_STATUS_MASK;
     for (const bit of [STATUS.MEND, STATUS.SHIELD, STATUS.CLOAK]) {
-      if ((cur & bit) && !(claim & bit)) offs.set(bit, now);
+      if ((cur & bit) && !(claim & bit)) {offs.set(bit, now);}
       else if (!(cur & bit) && (claim & bit) && now - (offs.get(bit) ?? -Infinity) < ServerBots.SKILL_REARM_MS) {
         claim &= ~bit; // still cooling down — suppress the flicker
       }
@@ -297,8 +298,8 @@ export class ServerBots {
    *  lowers the reserve — the refill is already planned. */
   private spendOk(id: string, cost: number, highValue: boolean, nuggetNear: boolean): boolean {
     const c = this.room.players.getPlayer(id)?.beltCharges ?? 0;
-    if (c < cost) return false;
-    if (highValue) return true;
+    if (c < cost) {return false;}
+    if (highValue) {return true;}
     const reserve = c >= BELT_MAX ? 0 : nuggetNear ? 1 : 2;
     return c - cost >= reserve;
   }
@@ -308,7 +309,7 @@ export class ServerBots {
    *  deploy claims re-validated through the human message path. */
   private firePhase(id: string, p: { id: string; position: Vec3; velocity: Vec3; armorClass: string; team?: string }, out: BrainOut, s: { goal: { pos: BotVec; runner?: boolean; wave?: boolean } | null; now: number; sh: MoveState | null; nuggetNear: boolean; ctx: BrainCtx }): void {
     const { goal, now, sh, nuggetNear, ctx } = s;
-    if (out.fire) this.arsenal.fireAt(p, out.fire.targetId, out.fire.aim);
+    if (out.fire) {this.arsenal.fireAt(p, out.fire.targetId, out.fire.aim);}
     // Stand suppression: a committed runner with clear LOS takes a few
     // potshots at the stand while closing — humans pre-soften the ring
     // (disc/GL/bolt, not a mortar barrage) so the pass doesn't fly
@@ -327,7 +328,7 @@ export class ServerBots {
       }
     }
     // The generic hunt lob is the definition of a low-value toss.
-    if (out.belt && this.spendOk(id, BELT_THROW_COST, false, nuggetNear)) this.arsenal.throwBelt(p);
+    if (out.belt && this.spendOk(id, BELT_THROW_COST, false, nuggetNear)) {this.arsenal.throwBelt(p);}
     this.arsenal.tryPropel(id, p, out, goal, sh, now);
     // Sentry-clearing lob: hostile gear watching the objective gets a
     // grenade on its own slow cadence — the same legal path humans use
@@ -350,7 +351,7 @@ export class ServerBots {
       // At 8s a turret effectively outlived the lobber's attention.
       // A saboteur pushes harder — wrecking gear IS its objective.
       this.gearLobT.set(id, now + (saboteur || besieger ? 1800 : 3000));
-      logger.debug('Gear lob', { id, x: +gear.x.toFixed(1), z: +gear.z.toFixed(1) });
+      logger.debug('Gear lob', { id, x: Number(gear.x.toFixed(1)), z: Number(gear.z.toFixed(1)) });
     }
     // Stand siege: the bombardier's perch IS a shelling job — while it
     // holds the enemy stand in lob range it mortars/nades on cadence,
@@ -368,14 +369,14 @@ export class ServerBots {
         && this.spendOk(id, BELT_THROW_COST, sieging, nuggetNear)) {
       this.arsenal.lobAt(p, shell);
       this.gearLobT.set(id, now + (push ? 2500 : 4000));
-      logger.debug('Push lob', { id, x: +shell.x.toFixed(1), z: +shell.z.toFixed(1) });
+      logger.debug('Push lob', { id, x: Number(shell.x.toFixed(1)), z: Number(shell.z.toFixed(1)) });
     }
     // Deploy claims run the same handleDeploy a human's message does —
     // kind, plant distance, and per-player cap are all re-validated.
-    if (out.deploy) this.room.deployables.handleDeploy(id, out.deploy.kind, out.deploy.pos);
+    if (out.deploy) {this.room.deployables.handleDeploy(id, out.deploy.kind, out.deploy.pos);}
     // Weld ticks ride the human repair path too — range, LOS, team and
     // the per-shooter rate cap all re-check server-side.
-    if (out.repair) this.room.deployables.repair(id, +out.repair);
+    if (out.repair) {this.room.deployables.repair(id, Number(out.repair));}
   }
 
   private driveMove(id: string, p: { position: Vec3; velocity: Vec3; rotation: { yaw: number; pitch: number }; status: number; skiing: number; jetting: number; armorClass: string }, out: BrainOut, sh: MoveState, dt: number, now: number): void {
@@ -407,7 +408,7 @@ export class ServerBots {
    *  parked bot's stall probe names which layer actually owns it. */
   debugBrain(id: string): string {
     const b = this.brains.get(id);
-    if (!b) return '?';
+    if (!b) {return '?';}
     const hunt = b.h.hunt ? `${b.h.hunt.pos.x.toFixed(0)},${b.h.hunt.pos.z.toFixed(0)}` : '-';
     return `hunt=${hunt} hold=${b.holding} jet=${b.jetDebug.why}/${b.jetDebug.out ? 'on' : 'off'}`;
   }
@@ -445,29 +446,29 @@ export class ServerBots {
    *  anyone pressing in. Technicians do it eagerly; other support kits
    *  toss one now and then — a guideline, not a reflex. */
   private supportNade(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; armorClass: string }, brain: BotBrain, now: number, nuggetNear: boolean): void {
-    if (!p.team) return;
+    if (!p.team) {return;}
     const belt = this.loadouts.get(id)?.belt;
-    if (belt !== WeaponType.ArmorGrenade) return;
+    if (belt !== WeaponType.ArmorGrenade) {return;}
     const tech = this.roster.roleInfo.get(id) === 'technician';
-    if ((this.supportT.get(id) ?? 0) > now) return;
+    if ((this.supportT.get(id) ?? 0) > now) {return;}
     // Plating is a nice-to-have, never worth the reserve — a real carrier
     // target still lobs freely, speculative coats wait for income.
-    if (!this.spendOk(id, BELT_THROW_COST, tech, nuggetNear)) return;
+    if (!this.spendOk(id, BELT_THROW_COST, tech, nuggetNear)) {return;}
     // Scoring: carrier > hurt > nearby — the blast radius coats the
     // cluster around the throw point too, so one nade plates a group.
     let best: { pos: Vec3; vel: Vec3; score: number } | null = null;
     for (const [aid, a] of this.room.players.getAllPlayers()) {
-      if (aid === id || a.team !== p.team || a.isDead) continue;
+      if (aid === id || a.team !== p.team || a.isDead) {continue;}
       const d = Math.hypot(a.position.x - p.position.x, a.position.z - p.position.z);
-      if (d > 45) continue;
+      if (d > 45) {continue;}
       const carrying = this.room.flagCarriedBy(aid);
       const hurt = a.health < a.maxHealth * 0.8;
       const score = (carrying ? 60 : 0) + (hurt ? 30 : 0) + (45 - d);
-      if (score >= 25 && (!best || score > best.score)) best = { pos: a.position, vel: a.velocity, score };
+      if (score >= 25 && (!best || score > best.score)) {best = { pos: a.position, vel: a.velocity, score };}
     }
     // No target worth plating → keep the fuse. Duty-scaled chance keeps
     // it a lean: a slack tech forgets to plate, a keen one rarely does.
-    if (!best || (!tech && botRand() > 0.45 * brain.dutyLevel)) return;
+    if (!best || (!tech && botRand() > 0.45 * brain.dutyLevel)) {return;}
     this.supportT.set(id, now + 5000 + botRand() * 3000);
     // Lead the lob a touch — the ally is usually running through.
     const aim = { x: best.pos.x + best.vel.x * 0.4, y: best.pos.y, z: best.pos.z + best.vel.z * 0.4 };
@@ -484,30 +485,30 @@ export class ServerBots {
    *  hybrids only when duty says so and the tank has a reserve. The
    *  beam's ammo IS jet energy, so pocket-healing spends mobility. */
   private healAlly(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; armorClass: string }, brain: BotBrain, now: number): void {
-    if (!p.team) return;
+    if (!p.team) {return;}
     const lo = this.loadouts.get(id);
-    if (!lo) return;
+    if (!lo) {return;}
     const hasBeam = lo.near === WeaponType.HealBeam || lo.side === WeaponType.HealBeam || lo.mid === WeaponType.HealBeam || lo.far === WeaponType.HealBeam;
     const hasNade = lo.belt === WeaponType.HealGrenade;
-    if (!hasBeam && !hasNade) return;
+    if (!hasBeam && !hasNade) {return;}
     const medic = this.roster.roleInfo.get(id) === 'medic';
-    if (!medic && botRand() > 0.45 * brain.dutyLevel) return;
+    if (!medic && botRand() > 0.45 * brain.dutyLevel) {return;}
     const energy = this.room.moveSim.energyOf(id);
     // Keep a mobility reserve — a medic that drains dry on allies can't
     // jet out of the counter-push. Dedicated medics push the tank lower.
     const floor = medic ? HEALBEAM_ENERGY * 2 : HEALBEAM_ENERGY * 5;
-    if (energy !== null && energy < floor) return;
+    if (energy !== null && energy < floor) {return;}
     let best: { id: string; a: { position: Vec3; velocity: Vec3; health: number; maxHealth: number }; score: number } | null = null;
     let hurtCount = 0;
     for (const [aid, a] of this.room.players.getAllPlayers()) {
-      if (aid === id || a.team !== p.team || a.isDead || a.health >= a.maxHealth * 0.85) continue;
+      if (aid === id || a.team !== p.team || a.isDead || a.health >= a.maxHealth * 0.85) {continue;}
       const d = Math.hypot(a.position.x - p.position.x, a.position.y - p.position.y, a.position.z - p.position.z);
-      if (d > HEALBEAM_RANGE * 1.4) continue;
+      if (d > HEALBEAM_RANGE * 1.4) {continue;}
       hurtCount++;
       const carrying = this.room.flagCarriedBy(aid);
       const missing = a.maxHealth - a.health;
       const score = missing + (carrying ? 40 : 0) - d;
-      if (!best || score > best.score) best = { id: aid, a, score };
+      if (!best || score > best.score) {best = { id: aid, a, score };}
     }
     if (best && hasBeam && (this.healBeamT.get(id) ?? 0) <= now) {
       this.healBeamT.set(id, now + 110); // ~0.1s tick — matches WEAPON_FIRE_INTERVAL_S[HealBeam]
@@ -542,14 +543,14 @@ export class ServerBots {
     this.arsenal.step(dt); // sim-clock — the weapon-rate gate is sim-paced
     this.sheep.step(dt); // sim-clock — the coverage window is sim-paced too
     this.meterHumans(dt);
-    if (this.brains.size === 0) return;
+    if (this.brains.size === 0) {return;}
     this.thinkPhaseNow = (this.thinkPhaseNow + 1) % ServerBots.THINK_DIV;
     const now = simNow();
     // 10s window roll (same pattern as the TickLoop phase rollup): the
     // cumulative prof counters diff into a per-second rate /metrics can
     // show — bot CPU on a live server was only measurable in soaks.
     if (now - this.stageWinAt >= 10_000) {
-      for (let i = 0; i < 6; i++) this.stageMs[i] = (this.stageProf[i]! - this.stageBase[i]!) / 10;
+      for (let i = 0; i < 6; i++) {this.stageMs[i] = (this.stageProf[i]! - this.stageBase[i]!) / 10;}
       this.stageBase = [...this.stageProf];
       this.stageWinAt = now;
     }
@@ -557,11 +558,11 @@ export class ServerBots {
     const tailS0 = this.stageProf[0]! + this.stageProf[1]! + this.stageProf[2]! + this.stageProf[3]! + this.stageProf[4]!;
     for (const [id, brain] of this.brains) {
       const p = this.room.players.getPlayer(id);
-      if (!p) continue;
+      if (!p) {continue;}
       if (p.isDead) {
         // First sighting of this corpse — the brain keeps the spot as a
         // death memory so its wander goals sour on kill zones.
-        if (!this.deadSet.has(id)) brain.markDeath(p.position, now);
+        if (!this.deadSet.has(id)) {brain.markDeath(p.position, now);}
         this.deadSet.add(id);
         continue;
       }
@@ -588,7 +589,7 @@ export class ServerBots {
 
       // Test-silenced: heartbeat and shadow upkeep still run — only the
       // think/fire/move pipeline is skipped.
-      if (this.quiet.has(id)) continue;
+      if (this.quiet.has(id)) {continue;}
 
       // Think pipeline runs on the bot's slow cadence; between thinks the
       // previous decision is re-emitted so the move sim still gets inputs
@@ -613,14 +614,14 @@ export class ServerBots {
         // Income in reach — a nugget the bot could realistically touch
         // lowers the spend reserve (refill is basically planned).
         const pk = ctx.pickup;
-        const nuggetNear = !!pk && Math.hypot(pk.x - p.position.x, pk.z - p.position.z) < 60;
+        const nuggetNear = Boolean(pk) && Math.hypot(pk.x - p.position.x, pk.z - p.position.z) < 60;
         out = brain.think(dt * ServerBots.THINK_DIV, ctx);
         prof[2]! += performance.now() - tm; tm = performance.now();
         // Situation chatter edge — killFeed.say resolves the kind through
         // the taunt pools + throttle, so a fresh contact/bored edge reads
         // as a remark rather than spam.
         this.sense.reportSpots(p, brain.h.seenEnemies, now);
-        if (out.say) this.room.messages.killFeed.say(id, out.say.kind, out.say.target, out.say);
+        if (out.say) {this.room.messages.killFeed.say(id, out.say.kind, out.say.target, out.say);}
         this.sense.markFoeNear(id, ctx, p.position, p.rotation.yaw, now);
         this.applyStatus(id, p, out, now);
         const sh0 = this.room.moveSim.simState(id);
@@ -632,13 +633,13 @@ export class ServerBots {
       }
       const tm2 = performance.now();
       const sh = this.room.moveSim.simState(id);
-      if (sh) this.driveMove(id, p, out, sh, dt, now);
-      else if (this.legacyMove(id, p, out.dest, dt)) continue;
+      if (sh) {this.driveMove(id, p, out, sh, dt, now);}
+      else if (this.legacyMove(id, p, out.dest, dt)) {continue;}
       this.stageProf[4]! += performance.now() - tm2;
 
       // The stuck leash is 2.5-5s — sampling every 4 ticks keeps the
       // alarm honest without paying a map probe per bot per tick.
-      if ((this.room.tickSeq & 3) === ((this.thinkPhase.get(id) ?? 0) & 3)) this.checkStuck(id, p, brain, now);
+      if ((this.room.tickSeq & 3) === ((this.thinkPhase.get(id) ?? 0) & 3)) {this.checkStuck(id, p, brain, now);}
 
       p.lastValidPosition = { ...p.position };
       p.lastValidVelocity = { ...p.velocity };
@@ -666,11 +667,11 @@ export class ServerBots {
     const now = simNow();
     const players = this.room.players.getAllPlayers();
     for (const [id, p] of players) {
-      if (p.isBot || p.isDead) continue;
+      if (p.isBot || p.isDead) {continue;}
       // A closed socket freezes the last position but the player is
       // gone — charging sheep to a corpse-of-a-session just spams
       // maxed warns through the grace window.
-      if (wallNow() - p.lastSeen > 2000) continue; // lastSeen is wall domain
+      if (wallNow() - p.lastSeen > 2000) {continue;} // lastSeen is wall domain
       const sh = this.room.moveSim.simState(id);
       const ground = Math.max(
         this.room.moveSim.structureTop(p.position.x, p.position.z),
@@ -695,13 +696,13 @@ export class ServerBots {
   private humanFoeNear(id: string, p: { position: Vec3; rotation: { yaw: number }; team?: string }, players: Map<string, { position: Vec3; team?: string; isDead?: boolean }>): boolean {
     const fx = Math.sin(p.rotation.yaw), fz = Math.cos(p.rotation.yaw);
     for (const [qid, q] of players) {
-      if (qid === id || q.isDead) continue;
-      if (q.team && p.team && q.team === p.team) continue;
+      if (qid === id || q.isDead) {continue;}
+      if (q.team && p.team && q.team === p.team) {continue;}
       const dx = q.position.x - p.position.x, dz = q.position.z - p.position.z;
       const d = Math.hypot(dx, q.position.y - p.position.y, dz);
-      if (d >= BRAWL_RANGE) continue;
+      if (d >= BRAWL_RANGE) {continue;}
       const gd = Math.hypot(dx, dz) || 1;
-      if ((dx * fx + dz * fz) / gd < FOE_CONE_MIN_DOT) continue;
+      if ((dx * fx + dz * fz) / gd < FOE_CONE_MIN_DOT) {continue;}
       return true;
     }
     return false;

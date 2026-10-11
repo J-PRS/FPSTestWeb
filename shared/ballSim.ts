@@ -22,48 +22,55 @@ export { structureColliders, BALL_BOUNCE, type StructureCollider } from './ballC
 
 export const BALL_GRAVITY = GRAVITY;
 export const BALL_BASE_RADIUS = 1.2;
-export const BALL_MAX_DIST = 200.0;
-export const BALL_TELE_MIN = 40.0;
-export const BALL_TELE_MAX = 80.0;
+// Recall happens at the fog wall (~400m) — 200m yanked them back while
+// still plainly visible, so the pop-out read as a glitch instead of a
+// far-off disappearance.
+export const BALL_MAX_DIST = 300;
+// Re-arrival band sits near the edge of readability, not point-blank —
+// 40-80m put the spring-in right in the player's face; 130-185 stays
+// inside the 200m leash (with overshoot margin) but reads as "that ball
+// was always out there", not a pop-in.
+export const BALL_TELE_MIN = 130;
+export const BALL_TELE_MAX = 185;
 // Surface drop, not airlift: ball radius + margin, so even the big
 // variants land just above contact instead of spawning clipped into
 // the collider (a buried spawn can reflect a garbage velocity).
 export const BALL_TELE_MARGIN = 0.3;
-export const BALL_ENRAGE_FORCE = 12.0;
-export const BALL_ENRAGE_TIMEOUT = 20.0;
-export const BALL_ENRAGE_DASH_DIST = 100.0;
-export const BALL_ENRAGE_DASH_SPEED = 45.0;
+export const BALL_ENRAGE_FORCE = 12;
+export const BALL_ENRAGE_TIMEOUT = 20;
+export const BALL_ENRAGE_DASH_DIST = 100;
+export const BALL_ENRAGE_DASH_SPEED = 45;
 // Overspeed guard: knockback impulses + slope chains can stack a ball past
 // readable speeds — above this, the next bounce deadens to 50% elasticity
 // instead of conserving energy (same thud as the post-dash damp).
-export const BALL_OVERSPEED = 100.0;
+export const BALL_OVERSPEED = 100;
 // Absolute speed ceiling — impulses and launches stack additively, so
 // without a clamp sustained fire turns an enrage launch into an orbital
 // insertion (observed: a ball parked at ~9km altitude for minutes).
-export const BALL_MAX_SPEED = 140.0;
+export const BALL_MAX_SPEED = 140;
 // Settle threshold: an impact slower than this doesn't reflect, it just
 // rests on the terrain — no segment. Without it a settled ball keeps
 // micro-bouncing every tick (elastic reflection never dies at low speed),
 // spamming ~20 bounce events/s per ball and visibly jittering on clients.
-export const BALL_REST_SPEED = 6.0;
+export const BALL_REST_SPEED = 6;
 // Stall breaker: a ball loitering under MIN_SPEED for STALL_TIME gets a
 // free spring launch at its committed target — it already owns this skill
 // (the enrage launch), this just fires it on boredom instead of distance.
-export const BALL_MIN_SPEED = 5.0;
-export const BALL_STALL_TIME = 2.0;
+export const BALL_MIN_SPEED = 5;
+export const BALL_STALL_TIME = 2;
 // Dead-contact threshold — PhysX's bounceThresholdVelocity (~0.2*gravity).
 // A contact whose NORMAL approach speed |v·n| is below this is a
 // zero-restitution slide: the inward normal velocity is cancelled and the
 // tangential rides on, instead of reflecting a feeble kick. Elastic
 // reflection at grazing incidence is the micro-skip storm — PhysX never
 // had it because it never reflected sub-threshold contacts.
-export const BALL_SLIDE_VN_MIN = 6.0;
+export const BALL_SLIDE_VN_MIN = 6;
 export let BALL_SLIDE_ENABLED = true;
 export function setBallSlide(on: boolean): void { BALL_SLIDE_ENABLED = on; }
 
 export type BallVariant = 0 | 1 | 2 | 3;
 
-export const BALL_VARIANT_SCALE = [1.0, 2.0, 3.0, 2.4] as const;
+export const BALL_VARIANT_SCALE = [1, 2, 3, 2.4] as const;
 export const BALL_VARIANT_HEALTH = [30, 70, 130, 350] as const;
 
 export interface SimVec { x: number; y: number; z: number }
@@ -154,7 +161,7 @@ export function stepBall(
   b.z += b.vz * dt;
 
   const enrage = enragePull(b, dt, field, target, authoritative, world?.rand);
-  if (enrage !== undefined) return enrage;
+  if (enrage !== undefined) {return enrage;}
 
   // Stall breaker — RNG-free, so predictors run it too and land the same
   // spring the server commits to. Fires BEFORE the bounce check so a ball
@@ -169,7 +176,7 @@ export function stepBall(
 
   // Structures before terrain — a ball inside a wall would otherwise
   // terrain-resolve first and stay embedded.
-  if (world?.colliders && collideStructures(b, world.colliders, world.colliderIndex)) return 'bounce';
+  if (world?.colliders && collideStructures(b, world.colliders, world.colliderIndex)) {return 'bounce';}
 
   return groundContact(b, dt, field, target);
 }
@@ -178,7 +185,7 @@ export function stepBall(
  *  flavored — it arcs and bounces rather than homing). Returns the segment
  *  kind when the step ends here, undefined when the sim should continue. */
 function enragePull(b: SimBall, dt: number, field: Heightfield, target: SimVec | null, authoritative: boolean, rand?: () => number): SegmentKind | null | undefined {
-  if (!b.enraged || !target) return undefined;
+  if (!b.enraged || !target) {return undefined;}
   b.enrageTimer += dt;
   const dx = target.x - b.x;
   const dy = target.y + b.radius - b.y;
@@ -190,10 +197,10 @@ function enragePull(b: SimBall, dt: number, field: Heightfield, target: SimVec |
     b.vy += dy * f;
     b.vz += dz * f;
   }
-  if (b.enrageTimer <= BALL_ENRAGE_TIMEOUT) return undefined;
+  if (b.enrageTimer <= BALL_ENRAGE_TIMEOUT) {return undefined;}
   b.enraged = false;
   b.enrageTimer = 0; // budget spent — the next enrage gets a fresh 20s
-  if (authoritative) return teleportNearTarget(b, field, target, rand ?? botRand);
+  if (authoritative) {return teleportNearTarget(b, field, target, rand ?? botRand);}
   return null; // predictor: let it fly, the event will snap it
 }
 
@@ -206,11 +213,11 @@ function enragePull(b: SimBall, dt: number, field: Heightfield, target: SimVec |
 function groundContact(b: SimBall, _dt: number, field: Heightfield, target: SimVec | null): SegmentKind | null {
   const gy = b.ggy = hmHeight(field, b.x, b.z);
   b.gx = b.x; b.gz = b.z; b.gt = 0;
-  if (b.y - b.radius > gy) return null;
+  if (b.y - b.radius > gy) {return null;}
   b.y = gy + b.radius;
   hmNormal(field, b.x, b.z, _n);
   const dot = b.vx * _n.x + b.vy * _n.y + b.vz * _n.z;
-  if (dot >= 0) return null;
+  if (dot >= 0) {return null;}
 
   if (b.enraged && target && (target.x - b.x) ** 2 + (target.z - b.z) ** 2 <= BALL_ENRAGE_DASH_DIST * BALL_ENRAGE_DASH_DIST) {
     dashAt(b, target);
@@ -239,7 +246,7 @@ function groundContact(b: SimBall, _dt: number, field: Heightfield, target: SimV
   } else {
     const elasticity = (b.dampNextBounce || impactSpeed > BALL_OVERSPEED) ? 0.5 : BALL_BOUNCE;
     b.dampNextBounce = false;
-    const k = -(1.0 + elasticity) * dot;
+    const k = -(1 + elasticity) * dot;
     b.vx += _n.x * k;
     b.vy += _n.y * k;
     b.vz += _n.z * k;

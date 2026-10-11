@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import * as THREE from 'three';
 import { makeRubberbandWatch } from '../game/netBalls.js';
-import { Ball } from '../entities/balls.js';
+import type { Ball } from '../entities/balls.js';
 
 // netDiag fields the watch reads — a fake Ball carries just the diagnostics
 // surface; check() never touches mesh/sim beyond netS.sim (null = replay
@@ -55,7 +55,7 @@ describe('rubberband watch — unreplayed-stamp gate', () => {
     const { watch, logger } = rig();
     // simT 9.0 < t 10.0 - 0.05: the cursor sits on a just-re-anchored leg —
     // err measures event spacing, not divergence. The a3a77034 fix.
-    watch.check(fakeBall({ simT: 9.0 }), { ...SEG, t: 10.0 });
+    watch.check(fakeBall({ simT: 9 }), { ...SEG, t: 10 });
     expect(logger.warn).not.toHaveBeenCalled();
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('unreplayed stamp'));
   });
@@ -64,20 +64,20 @@ describe('rubberband watch — unreplayed-stamp gate', () => {
     const { watch, logger } = rig();
     // simT 10.4 > t 10.0 - 0.05: sim ran through the stamp and still sits
     // far off truth — a real desync worth the full warn + forensics.
-    watch.check(fakeBall({ simT: 10.4 }), { ...SEG, t: 10.0 });
+    watch.check(fakeBall({ simT: 10.4 }), { ...SEG, t: 10 });
     expect(logger.warn).toHaveBeenCalledTimes(1);
     expect(logger.warn.mock.calls[0]![0]).toContain('rubberband');
   });
 
   it('suppresses warn on a parked leg regardless of replay state', () => {
     const { watch, logger } = rig();
-    watch.check(fakeBall({ simT: 10.4, parked: true }), { ...SEG, t: 10.0 });
+    watch.check(fakeBall({ simT: 10.4, parked: true }), { ...SEG, t: 10 });
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
   it('suppresses warn on a stale leg (legAge > 3)', () => {
     const { watch, logger } = rig();
-    watch.check(fakeBall({ simT: 10.4, legAge: 5 }), { ...SEG, t: 10.0 });
+    watch.check(fakeBall({ simT: 10.4, legAge: 5 }), { ...SEG, t: 10 });
     expect(logger.warn).not.toHaveBeenCalled();
   });
 });

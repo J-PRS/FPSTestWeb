@@ -25,20 +25,20 @@ document.body.style.margin = '0';
 
 const scene = new THREE.Scene();
 // Studio look: white cyclorama + neutral lighting so silhouette/shading read clean.
-scene.background = new THREE.Color(0xF2F3F5);
+scene.background = new THREE.Color(0xF2_F3_F5);
 scene.fog = null;
-scene.add(new THREE.HemisphereLight(0xFFFFFF, 0x8899AA, 1.1));
-const key = new THREE.DirectionalLight(0xff_ff_ff, 2.2);
+scene.add(new THREE.HemisphereLight(0xFF_FF_FF, 0x88_99_AA, 1.1));
+const key = new THREE.DirectionalLight(0xFF_FF_FF, 2.2);
 key.position.set(3, 5, 4);
 scene.add(key);
-const rim = new THREE.DirectionalLight(0xDDE8FF, 1);
+const rim = new THREE.DirectionalLight(0xDD_E8_FF, 1);
 rim.position.set(-3, 3, -4);
 scene.add(rim);
 
 // Light floor so feet/legs have a ground reference without scene clutter.
 const floor = new THREE.Mesh(
   new THREE.CircleGeometry(6, 48),
-  new THREE.MeshStandardMaterial({ color: 0xe2_e5_e9, roughness: 1 }));
+  new THREE.MeshStandardMaterial({ color: 0xE2_E5_E9, roughness: 1 }));
 floor.rotation.x = -Math.PI / 2;
 scene.add(floor);
 

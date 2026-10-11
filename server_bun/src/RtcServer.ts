@@ -15,13 +15,13 @@ import { wallNow } from './wallClock.ts';
 function serverIce(): { hostname: string; port: number; relayer?: boolean }[] {
   try {
     const raw = CONFIG.iceServersJson ? JSON.parse(CONFIG.iceServersJson) : [];
-    if (!Array.isArray(raw)) return [];
+    if (!Array.isArray(raw)) {return [];}
     const out: { hostname: string; port: number; relayer?: boolean }[] = [];
     for (const e of raw) {
       const urls = typeof e === 'string' ? [e] : (Array.isArray(e?.urls) ? e.urls : (e?.urls ? [e.urls] : []));
       for (const u of urls) {
         const m = typeof u === 'string' && u.match(/^(stun|turn)s?:\/\/([^:/]+):?(\d+)?/);
-        if (m) out.push({ hostname: m[2]!, port: m[3] ? +m[3] : 3478, relayer: m[1]!.startsWith('turn') });
+        if (m) {out.push({ hostname: m[2]!, port: m[3] ? Number(m[3]) : 3478, relayer: m[1]!.startsWith('turn') });}
       }
     }
     return out;
@@ -56,14 +56,14 @@ type NdModule = { PeerConnection: new (name: string, cfg: { iceServers: { hostna
 let ndc: NdModule | null = null;
 let ndcFailed = false;
 async function loadNd(): Promise<NdModule | null> {
-  if (ndc || ndcFailed) return ndc;
+  if (ndc || ndcFailed) {return ndc;}
   try {
     const mod = await import('node-datachannel');
     ndc = (mod.default ?? mod) as unknown as NdModule;
     logger.info('node-datachannel loaded — WebRTC tier live');
-  } catch (e) {
+  } catch (error) {
     ndcFailed = true;
-    logger.warn('node-datachannel unavailable — /rtcs disabled', { error: (e as Error).message });
+    logger.warn('node-datachannel unavailable — /rtcs disabled', { error: (error as Error).message });
   }
   return ndc;
 }
@@ -92,8 +92,8 @@ class RtcSocketAdapter {
 
   attach(dc: DataChannelLabeled): void {
     const label = dc.getLabel?.() ?? dc.label;
-    if (label === 'ctrl') this.ctrl = dc;
-    else this.game = dc; // 'game' or unlabeled → the fast lane
+    if (label === 'ctrl') {this.ctrl = dc;}
+    else {this.game = dc;} // 'game' or unlabeled → the fast lane
   }
   get readyState(): number { return this.game?.isOpen() || this.ctrl?.isOpen() ? 1 : 3; }
   // Backpressure must report the WORST lane: ctrl-only reads showed ~0
@@ -111,12 +111,12 @@ class RtcSocketAdapter {
     const lane = fast ? this.game : this.ctrl;
     const alt = fast ? this.ctrl : this.game;
     const dc = lane?.isOpen() ? lane : alt?.isOpen() ? alt : null;
-    if (!dc) return 0;
+    if (!dc) {return 0;}
     // isOpen() can lag the real channel state on close races; a failed
     // send must not take down the whole broadcast path.
     try {
-      if (typeof msg === 'string') dc.sendMessage(msg);
-      else dc.sendMessageBinary(msg);
+      if (typeof msg === 'string') {dc.sendMessage(msg);}
+      else {dc.sendMessageBinary(msg);}
     } catch { return 0; }
     return typeof msg === 'string' ? msg.length : msg.byteLength;
   }
@@ -151,15 +151,15 @@ export class RtcServer {
   onOpen(ws: ServerWebSocket<WebSocketData>): void {
     this.signalSockets.add(ws);
     void loadNd().then((ok) => {
-      if (!ok) ws.close(1013, 'rtc unavailable');
+      if (!ok) {ws.close(1013, 'rtc unavailable');}
     });
   }
 
   onMessage(ws: ServerWebSocket<WebSocketData>, message: string | ArrayBuffer): void {
-    if (typeof message !== 'string') return;
+    if (typeof message !== 'string') {return;}
     let m: { type?: string; sdp?: string };
     try { m = JSON.parse(message); } catch { return; }
-    if (m.type !== 'offer' || typeof m.sdp !== 'string') return;
+    if (m.type !== 'offer' || typeof m.sdp !== 'string') {return;}
     // Each offer spawns a native PeerConnection — cap in-flight ones.
     if (this.peers.size >= 64) { ws.close(1013, 'rtc busy'); return; }
     void this.answerOffer(ws, m.sdp);
@@ -215,9 +215,9 @@ export class RtcServer {
       });
     });
     pc.onGatheringStateChange((state) => {
-      if (state !== 'complete' || ws.readyState !== 1) return;
+      if (state !== 'complete' || ws.readyState !== 1) {return;}
       const local = pc.localDescription();
-      if (!local) return;
+      if (!local) {return;}
       // libdatachannel emits a=setup:actpass even in answers, which peers
       // (and libdatachannel itself) reject as illegal. 'active' makes us
       // the DTLS initiator — verified working against a loopback peer.
@@ -229,10 +229,10 @@ export class RtcServer {
       // NB: must be the no-arg form — explicit 'answer' segfaults
       // libdatachannel on this platform (verified).
       pc.setLocalDescription();
-    } catch (e) {
+    } catch (error) {
       // Malformed SDP (no ICE ufrag, truncated, etc.) — answer with a close
       // so the client's probe times out and falls back to the WS tier.
-      logger.warn('RTC offer rejected', { error: (e as Error).message });
+      logger.warn('RTC offer rejected', { error: (error as Error).message });
       clearTimeout(staleTimer);
       this.peers.delete(ws);
       try { pc.close(); } catch { /* gone */ }

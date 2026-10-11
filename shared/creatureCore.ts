@@ -32,12 +32,12 @@ export const CRAWLER_SIM = {
   AGGRO_D2: 70 * 70,
   POUNCE_D2: 25 * 25,
   WINDUP_S: 0.35,
-  HOP_SPEED: 10.0,
-  HOP_UP: 5.0,
-  POUNCE_SPEED: 30.0,
+  HOP_SPEED: 10,
+  HOP_UP: 5,
+  POUNCE_SPEED: 30,
   HOP_REST_MIN: 0.25,
   HOP_REST_VAR: 0.3,
-  RETARGET_S: 2.0,      // authority re-commits its target snapshot this often
+  RETARGET_S: 2,      // authority re-commits its target snapshot this often
   POUNCE_HIT_D2: 4 * 4, // landing this close to the committed target = a bite
   STUN_S: 0.5,          // blast knockback suppresses hopping this long
 } as const;
@@ -86,11 +86,11 @@ export interface SimCrawler {
 /** Cheap deterministic RNG (Numerical Recipes LCG) — the point isn't
  *  quality, it's that every runtime produces the identical sequence. */
 export function crng(s: number): number {
-  return (s * 1664525 + 1013904223) >>> 0;
+  return (s * 1_664_525 + 1_013_904_223) >>> 0;
 }
 export function crand(c: { rng: number }): number {
   c.rng = crng(c.rng);
-  return c.rng / 4294967296;
+  return c.rng / 4_294_967_296;
 }
 
 /** Sweep the just-taken move leg against solid structures. On hit the
@@ -102,9 +102,9 @@ export function clipMotion(
   px: number, py: number, pz: number,
   cols: readonly StructureCollider[] | undefined,
 ): boolean {
-  if (!cols?.length) return false;
+  if (!cols?.length) {return false;}
   const hit = segSolidHit({ x: px, y: py, z: pz }, { x: c.x, y: c.y, z: c.z }, cols);
-  if (!hit) return false;
+  if (!hit) {return false;}
   // Park a whisker OUTSIDE the face — on-boundary parking leaves the next
   // leg starting inside the slab, where every step re-clips at t≈0 and
   // the creature floats pinned against the wall mid-air.
@@ -174,14 +174,14 @@ export function stepCrawler(
   const gy = Math.max(hmHeight(field, c.x, c.z), hmChord(field, c.x, c.z));
   const airborne = c.y > gy + 0.05;
 
-  if (airborne || !Number.isFinite(gy)) return null; // mid-hop, or a floor the field can't answer
+  if (airborne || !Number.isFinite(gy)) {return null;} // mid-hop, or a floor the field can't answer
 
   // Touchdown: park exactly on the surface.
   c.y = gy; c.vx = 0; c.vy = 0; c.vz = 0;
 
   // Windup is a timed edge, not a position event — but the pounce LAUNCH is
   // the discontinuity, so it's the event the wire carries.
-  if (c.state === 'windup') return windupPounce(c, dt, target);
+  if (c.state === 'windup') {return windupPounce(c, dt, target);}
 
   // A pounce that already landed beside the target = the bite. Both sides
   // take the same early return — only the pendingBite flag is authority
@@ -189,7 +189,7 @@ export function stepCrawler(
   if (target && c.tgtValid) {
     const dx = target.x - c.x, dz = target.z - c.z;
     if (dx * dx + dz * dz < c.sp.POUNCE_HIT_D2) {
-      if (authoritative) c.pendingBite = true;
+      if (authoritative) {c.pendingBite = true;}
       return 'bite';
     }
   }
@@ -227,10 +227,10 @@ function windupPounce(c: SimCrawler, dt: number, target: SimVec | null): Crawler
 
 /** Hop clock → chase launch at the snapshot, or a wander hop. */
 function hopLaunch(c: SimCrawler, dt: number, target: SimVec | null, distSq: number): CrawlerEvent | null {
-  if (c.stunTimer > 0) return null; // staggered — no hops until it clears
+  if (c.stunTimer > 0) {return null;} // staggered — no hops until it clears
 
   c.hopTimer -= dt;
-  if (c.hopTimer > 0) return null;
+  if (c.hopTimer > 0) {return null;}
   c.hopTimer = c.sp.HOP_REST_MIN + crand(c) * c.sp.HOP_REST_VAR;
 
   if (target && distSq < c.sp.AGGRO_D2) {
@@ -242,7 +242,7 @@ function hopLaunch(c: SimCrawler, dt: number, target: SimVec | null, distSq: num
     c.yaw = Math.atan2(c.vx, c.vz);
   } else {
     c.state = 'wander';
-    if (crand(c) < 0.4) c.wanderYaw += (crand(c) - 0.5) * 2;
+    if (crand(c) < 0.4) {c.wanderYaw += (crand(c) - 0.5) * 2;}
     c.vx = Math.sin(c.wanderYaw) * c.sp.HOP_SPEED * 0.35;
     c.vz = Math.cos(c.wanderYaw) * c.sp.HOP_SPEED * 0.35;
     c.vy = c.sp.HOP_UP * 0.8;

@@ -18,7 +18,7 @@ import { logger } from './logger.ts';
 const NODE = typeof window === 'undefined';
 let statsPaths: { dir: string; file: string } | null = null;
 async function statsFile(): Promise<{ dir: string; file: string } | null> {
-  if (!NODE) return null;
+  if (!NODE) {return null;}
   if (!statsPaths) {
     const { dirname, join } = await import('node:path');
     const { fileURLToPath } = await import('node:url');
@@ -78,7 +78,7 @@ const SPEED_BIN = 5;
 // out near ~150 (jet cap + dive conversion), so anything past that is a
 // physics anomaly that belongs in one 'fast' bucket, not a fresh mint.
 const speedBin = (v: { x: number; y: number; z: number } | null): string => {
-  if (!v) return 'unk';
+  if (!v) {return 'unk';}
   const s = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
   return s >= 150 ? '150+' : String(Math.floor(s / SPEED_BIN) * SPEED_BIN);
 };
@@ -102,8 +102,8 @@ export class WeaponStats {
   // names would otherwise grow these maps (and the jsonl) forever.
   private static readonly MAX_MODES = 64;
   private modeOk(mode: string): boolean {
-    if (this.table[mode]) return true;
-    if (Object.keys(this.table).length >= WeaponStats.MAX_MODES) return false;
+    if (this.table[mode]) {return true;}
+    if (Object.keys(this.table).length >= WeaponStats.MAX_MODES) {return false;}
     this.table[mode] = {}; // admit — one slot covers every per-mode map
     return true;
   }
@@ -120,14 +120,14 @@ export class WeaponStats {
   /** Feed one credited hit. `source` is `w<weaponType>` or a label for
    *  non-weapon damage ('Turret hit', 'Mine hit', 'environment'). */
   record(mode: string, source: string, damage: number, killed: boolean, botShooter: boolean): void {
-    if (damage <= 0 || !this.modeOk(mode)) return;
+    if (damage <= 0 || !this.modeOk(mode)) {return;}
     const r = this.row(mode, source);
     r.hits++;
     r.damage += damage;
-    if (killed) r.kills++;
+    if (killed) {r.kills++;}
     if (botShooter) {
       r.botDamage += damage;
-      if (killed) r.botKills++;
+      if (killed) {r.botKills++;}
     }
     this.dirty = true;
   }
@@ -136,7 +136,7 @@ export class WeaponStats {
    *  kills can be priced against its own trigger-uptime, not just
    *  hits that actually landed. */
   recordShot(mode: string, source: string, dist?: number): void {
-    if (!this.modeOk(mode)) return;
+    if (!this.modeOk(mode)) {return;}
     const r = this.row(mode, source);
     r.shots++;
     if (dist !== undefined && Number.isFinite(dist)) {
@@ -149,7 +149,7 @@ export class WeaponStats {
 
   /** A kill location, binned to a CELL-meter grid cell. */
   recordDeath(mode: string, pos: { x: number; z: number }): void {
-    if (!this.modeOk(mode)) return;
+    if (!this.modeOk(mode)) {return;}
     const m = (this.deaths[mode] ??= {});
     // Cell coords derive from client position claims — unbounded
     // magnitude mints unbounded cells, so overflow folds into 'far'.
@@ -161,7 +161,7 @@ export class WeaponStats {
 
   /** Engagement time for a finished duel (ms, first-hit → kill). */
   recordTtk(mode: string, source: string, ms: number): void {
-    if (!this.modeOk(mode)) return;
+    if (!this.modeOk(mode)) {return;}
     const m = (this.ttk[mode] ??= {});
     const key = source in m || Object.keys(m).length < WeaponStats.MAX_SOURCES ? source : 'other';
     const r = (m[key] ??= { n: 0, totalMs: 0 });
@@ -171,7 +171,7 @@ export class WeaponStats {
 
   /** Flag lifecycle: 'cap' adds holdMs (pickup→cap), 'return' dropMs. */
   recordFlag(mode: string, kind: 'cap' | 'return', ms: number): void {
-    if (!this.modeOk(mode)) return;
+    if (!this.modeOk(mode)) {return;}
     const r = (this.flags[mode] ??= { caps: 0, holdMs: 0, returns: 0, dropMs: 0 });
     if (kind === 'cap') { r.caps++; r.holdMs += ms; }
     else { r.returns++; r.dropMs += ms; }
@@ -180,20 +180,20 @@ export class WeaponStats {
 
   /** Kill-moment speeds (m/s) for shooter and victim, 5 m/s buckets. */
   recordKillSpeed(mode: string, shooterVel: { x: number; y: number; z: number } | null, victimVel: { x: number; y: number; z: number } | null): void {
-    if (!this.modeOk(mode)) return;
+    if (!this.modeOk(mode)) {return;}
     const r = (this.speeds[mode] ??= { shooter: {}, victim: {}, airShooter: 0, airVictim: 0 });
     const sb = speedBin(shooterVel), vb = speedBin(victimVel);
     r.shooter[sb] = (r.shooter[sb] ?? 0) + 1;
     r.victim[vb] = (r.victim[vb] ?? 0) + 1;
-    if (shooterVel && Math.abs(shooterVel.y) > 4) r.airShooter++;
-    if (victimVel && Math.abs(victimVel.y) > 4) r.airVictim++;
+    if (shooterVel && Math.abs(shooterVel.y) > 4) {r.airShooter++;}
+    if (victimVel && Math.abs(victimVel.y) > 4) {r.airVictim++;}
     this.dirty = true;
   }
 
   /** Pickup economy: 'spawned' at drop, 'banked' on collect, 'decayed'
    *  on TTL, 'refused' when the pool cap swallowed the spawn. */
   recordPickup(mode: string, kind: string, event: 'spawned' | 'banked' | 'decayed' | 'refused'): void {
-    if (!this.modeOk(mode)) return;
+    if (!this.modeOk(mode)) {return;}
     const m = (this.pickups[mode] ??= {});
     const r = (m[kind] ??= { spawned: 0, banked: 0, decayed: 0, refused: 0 });
     r[event]++;
@@ -202,7 +202,7 @@ export class WeaponStats {
 
   /** A deployable was placed (turret/mine/station/drone). */
   recordDeploy(mode: string, kind: string): void {
-    if (!this.modeOk(mode)) return;
+    if (!this.modeOk(mode)) {return;}
     const m = (this.deploys[mode] ??= {});
     m[kind] = (m[kind] ?? 0) + 1;
     this.dirty = true;
@@ -225,22 +225,22 @@ export class WeaponStats {
 
   /** Append the accumulated rollup to the JSONL ledger. */
   private flush(): void {
-    if (!this.dirty) return;
+    if (!this.dirty) {return;}
     this.dirty = false;
     void statsFile().then(async (paths) => {
-      if (!paths) return;
+      if (!paths) {return;}
       try {
         const { appendFileSync, mkdirSync } = await import('node:fs');
         const { rotateLogIfBig } = await import('./logRotate.ts');
         mkdirSync(paths.dir, { recursive: true });
         rotateLogIfBig(paths.file);
-        appendFileSync(paths.file, JSON.stringify({
+        appendFileSync(paths.file, `${JSON.stringify({
           ts: new Date().toISOString(), byMode: this.table,
           deaths: this.deaths, ttk: this.ttk, flags: this.flags,
           speeds: this.speeds, pickups: this.pickups, deploys: this.deploys,
-        }) + '\n');
-      } catch (e) {
-        logger.warn('WeaponStats flush failed', e);
+        })  }\n`);
+      } catch (error) {
+        logger.warn('WeaponStats flush failed', error);
       }
     });
   }

@@ -14,9 +14,9 @@ import { makePartPool, takeSlot, releaseSlot, ZERO_M4, type PartPool } from './d
 // Real meshes, not swarm instances: capped at one per player anyway.
 
 // Shared module resources — one pad per player doesn't justify instancing.
-const _metal = new THREE.MeshLambertMaterial({ color: 0x3a4550 });
-const _dark = new THREE.MeshLambertMaterial({ color: 0x1e242b });
-const _crystalMat = new THREE.MeshBasicMaterial({ color: 0x55ffcc });
+const _metal = new THREE.MeshLambertMaterial({ color: 0x3A_45_50 });
+const _dark = new THREE.MeshLambertMaterial({ color: 0x1E_24_2B });
+const _crystalMat = new THREE.MeshBasicMaterial({ color: 0x55_FF_CC });
 const _geoBase = new THREE.CylinderGeometry(0.7, 0.95, 0.3, 8);
 const _geoMast = new THREE.CylinderGeometry(0.1, 0.16, 1.1, 6);
 const _geoCrystal = new THREE.OctahedronGeometry(0.32, 0);
@@ -90,7 +90,7 @@ export class DeployStation {
     this.group.add(this.crystal);
 
     this.glow = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: getGlowTexture(), color: 0x55ffcc, transparent: true,
+      map: getGlowTexture(), color: 0x55_FF_CC, transparent: true,
       blending: THREE.AdditiveBlending, depthWrite: false,
     }));
     this.glow.scale.setScalar(1.4);
@@ -108,7 +108,7 @@ export class DeployStation {
   }
 
   private syncMatrices(): void {
-    if (this.slot < 0 || !_pool) return;
+    if (this.slot < 0 || !_pool) {return;}
     const pool = _pool;
     const i = this.slot;
     const g = _m.compose(this.group.position, this.group.quaternion, this.group.scale).clone();
@@ -144,7 +144,7 @@ export class DeployStation {
   /** Returns true while a player stands in the envelope — caller applies
    *  the actual refill (energy + health) so authority stays one place. */
   update(dt: number, playerPos: THREE.Vector3): boolean {
-    if (this.dead) return false;
+    if (this.dead) {return false;}
     this.animT += dt;
     const inRange = this.pos.distanceToSquared(playerPos) < DeployStation.RANGE * DeployStation.RANGE;
     this.charge += ((inRange ? 1 : 0) - this.charge) * Math.min(1, dt * 4);
@@ -154,7 +154,7 @@ export class DeployStation {
     this.crystal.position.y = 1.55 + Math.sin(this.animT * 1.8) * 0.08;
     this.glow.material.opacity = 0.5 + this.charge * 0.5;
     this.glow.scale.setScalar(1.1 + this.charge * 0.7 + Math.sin(this.animT * 3) * 0.08);
-    if (!this.ring) this.buildEnvelope();
+    if (!this.ring) {this.buildEnvelope();}
     this.tickEnvelope(dt);
     this.syncMatrices();
     return inRange;
@@ -164,7 +164,7 @@ export class DeployStation {
    *  zero mesh. Plus the dome bubble and rising heal motes. */
   private buildEnvelope(): void {
     const R = DeployStation.RANGE;
-    this.ring = this.terrain.addFieldRing(this.pos.x, this.pos.z, R, [0.33, 1.0, 0.8]);
+    this.ring = this.terrain.addFieldRing(this.pos.x, this.pos.z, R, [0.33, 1, 0.8]);
 
     // FULL sphere centered on the pad — a hemisphere dome planted at
     // pod height carves a bright rim through any slope it sits on. A
@@ -173,7 +173,7 @@ export class DeployStation {
     this.dome = new THREE.Mesh(
       new THREE.SphereGeometry(R * 0.98, 28, 20),
       new THREE.MeshBasicMaterial({
-        color: 0x44eebb, transparent: true, opacity: 0.05,
+        color: 0x44_EE_BB, transparent: true, opacity: 0.05,
         blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
       }));
     this.dome.position.copy(this.pos);
@@ -195,7 +195,7 @@ export class DeployStation {
     const mg = new THREE.BufferGeometry();
     mg.setAttribute('position', new THREE.BufferAttribute(pts, 3));
     this.motes = new THREE.Points(mg, new THREE.PointsMaterial({
-      map: getGlowTexture(), color: 0x77ffcc, size: 0.22, transparent: true,
+      map: getGlowTexture(), color: 0x77_FF_CC, size: 0.22, transparent: true,
       opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false,
       sizeAttenuation: true,
     }));
@@ -214,7 +214,7 @@ export class DeployStation {
       const m = this.moteData[i]!;
       m.y += m.sp * lift * dt;
       const ground = this.terrain.getHeight(m.x, m.z);
-      if (m.y > ground + 3.2) m.y = ground + 0.1; // respawn at the dirt
+      if (m.y > ground + 3.2) {m.y = ground + 0.1;} // respawn at the dirt
       attr.setXYZ(i, m.x, m.y, m.z);
     }
     attr.needsUpdate = true;
@@ -260,7 +260,7 @@ export class DeployStation {
     if (this.ring) { this.terrain.removeFieldRing(this.ring); this.ring = null; }
     // Envelope pieces are per-instance (baked to THIS landing spot).
     for (const o of [this.dome, this.motes]) {
-      if (!o) continue;
+      if (!o) {continue;}
       this.scene.remove(o);
       o.geometry.dispose();
       (o.material as THREE.Material).dispose();

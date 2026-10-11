@@ -21,7 +21,7 @@ export function staleCount(): number {
 /** Alt+Q row: total plus up to 8 names so a paste answers "reload for
  *  WHAT" without guessing. */
 export function staleLine(): string {
-  if (!count) return 'staleCode: 0 files changed';
+  if (!count) {return 'staleCode: 0 files changed';}
   const names = [...files].slice(0, 8);
-  return `staleCode: ${count} file${count === 1 ? '' : 's'} changed${names.length ? ` — ${names.join(', ')}${files.size > 8 ? `, +${files.size - 8} more` : ''}` : ''} (Ctrl+R)`;
+  return `staleCode: ${count} file${count === 1 ? '' : 's'} changed${names.length > 0 ? ` — ${names.join(', ')}${files.size > 8 ? `, +${files.size - 8} more` : ''}` : ''} (Ctrl+R)`;
 }

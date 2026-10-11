@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { settings } from './settings.js';
 import { urlParams } from './params.js';
+import type {
+  Pass} from 'postprocessing';
 import {
   Effect,
   EffectComposer,
   RenderPass,
   EffectPass,
-  Pass,
   BloomEffect,
   BrightnessContrastEffect,
   BlendFunction,
@@ -70,7 +71,7 @@ function detectWeakGpu(): boolean {
   try {
     const c = document.createElement('canvas');
     const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext | null;
-    if (!gl) return true; // no GL at all — deepest tier either way
+    if (!gl) {return true;} // no GL at all — deepest tier either way
     const ext = gl.getExtension('WEBGL_debug_renderer_info');
     const r = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : '');
     gl.getExtension('WEBGL_lose_context')?.loseContext();
@@ -78,8 +79,8 @@ function detectWeakGpu(): boolean {
   } catch { return false; }
 }
 function seedPotatoDefaults(): void {
-  if (settings.has('fps-pixelated') || settings.has('fps-pscale') || settings.has('fps-shadows')) return;
-  if (!detectWeakGpu()) return;
+  if (settings.has('fps-pixelated') || settings.has('fps-pscale') || settings.has('fps-shadows')) {return;}
+  if (!detectWeakGpu()) {return;}
   settings.set('fps-pscale', 4);
   settings.set('fps-shadows', false);
 }
@@ -99,15 +100,15 @@ function resolveModes(): RenderModes {
   let bloomEnabled = settings.get('fps-bloom');
   // URL overrides for headless screenshots/testing
   const px = urlParams.get('pixelated');
-  if (px !== null && px in PX_MODES) [pscale, pmode] = LEGACY_PM[PX_MODES[px]!] ?? [1, 0];
+  if (px !== null && px in PX_MODES) {[pscale, pmode] = LEGACY_PM[PX_MODES[px]!] ?? [1, 0];}
   const ps = urlParams.get('pscale');
-  if (ps !== null) pscale = Math.min(4, Math.max(1, parseInt(ps, 10) || 1));
+  if (ps !== null) {pscale = Math.min(4, Math.max(1, Number.parseInt(ps, 10) || 1));}
   const pm = urlParams.get('pmode');
-  if (pm !== null) pmode = Math.min(3, Math.max(0, parseInt(pm, 10) || 0));
+  if (pm !== null) {pmode = Math.min(3, Math.max(0, Number.parseInt(pm, 10) || 0));}
   const pp = urlParams.get('postpro');
-  if (pp !== null) postproEnabled = pp === 'on';
+  if (pp !== null) {postproEnabled = pp === 'on';}
   const bm = urlParams.get('bloom');
-  if (bm !== null) bloomEnabled = bm === 'on';
+  if (bm !== null) {bloomEnabled = bm === 'on';}
   // Atkinson bypasses the composer entirely (GL render → CPU quantize),
   // so postpro/bloom can never engage under it — suppress dead toggles.
   if (pmode === 3) {
@@ -144,7 +145,7 @@ function makeFloydEngine(renderer: THREE.WebGLRenderer) {
 
   function quantize(): void {
     const w = canvasEl.width, h = canvasEl.height;
-    if (!w || !h || !buf || !img) return;
+    if (!w || !h || !buf || !img) {return;}
     const gl = renderer.getContext();
     gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf);
     const src = buf, dst = img.data, step = 255 / (FS_LEVELS - 1);
@@ -212,7 +213,7 @@ export function overscanSize(): { w: number; h: number } {
 function applyPixelSize(renderer: THREE.WebGLRenderer,
     fsCanvas: HTMLCanvasElement, pscale: number, pmode: number): boolean {
   fsCanvas.style.display = pmode === 3 ? 'block' : 'none';
-  if (pscale <= 1 || (pmode !== 0 && pmode !== 3)) return false;
+  if (pscale <= 1 || (pmode !== 0 && pmode !== 3)) {return false;}
   const { w, h } = overscanSize();
   renderer.setPixelRatio(1);
   renderer.setSize(Math.floor(w / pscale),
@@ -248,7 +249,7 @@ class VmRenderPass extends RenderPass {
   override render(renderer: THREE.WebGLRenderer, inputBuffer: THREE.WebGLRenderTarget | null,
       outputBuffer: THREE.WebGLRenderTarget | null, deltaTime?: number, stencilTest?: boolean): void {
     super.render(renderer, inputBuffer, outputBuffer, deltaTime, stencilTest);
-    if (!this.vmDraw) return;
+    if (!this.vmDraw) {return;}
     renderer.setRenderTarget(this.renderToScreen ? null : inputBuffer);
     const prev = renderer.autoClear;
     renderer.autoClear = false;
@@ -326,7 +327,7 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   const dirtEffect = new Effect('LensDirt', LENS_DIRT_GLSL, {
     uniforms: new Map<string, THREE.Uniform>([
       ['dirtMap', new THREE.Uniform(dirtTex)],
-      ['dirtIntensity', new THREE.Uniform(3.0)], // 03 is a dark map — needs the boost to read
+      ['dirtIntensity', new THREE.Uniform(3)], // 03 is a dark map — needs the boost to read
       ['dirtThreshold', new THREE.Uniform(1.15)], // under the 1.3 bloom gate so halo shoulders count
     ]),
   });
@@ -381,12 +382,12 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   // black. The last ENABLED pass must carry the flag; re-sync on every
   // toggle, not just construction.
   function syncRenderToScreen(): void {
-    const passes = composer.passes;
+    const {passes} = composer;
     let found = false;
     for (let i = passes.length - 1; i >= 0; i--) {
       const p = passes[i]!;
       p.renderToScreen = !found && p.enabled;
-      if (p.renderToScreen) found = true;
+      if (p.renderToScreen) {found = true;}
     }
   }
   // fps-aa: 0 off / 1 FXAA / 2 SMAA / 3 MSAA2x / 4 MSAA4x — MSAA rebuilds
@@ -452,7 +453,7 @@ function wireSegRow(id: string, current: () => number,
   const row = document.getElementById(id);
   const btns = row ? [...row.querySelectorAll('button')] : [];
   const mark = (v: number) => {
-    for (const b of btns) b.classList.toggle('active', Number(b.dataset['v']) === v);
+    for (const b of btns) {b.classList.toggle('active', Number(b.dataset['v']) === v);}
   };
   btns.forEach((b, i) => b.addEventListener('click', () => pick(Number(b.dataset['v'] ?? i))));
   mark(current());
@@ -508,10 +509,10 @@ function makeRender(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
 export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Scene): RendererSetup {
   seedPotatoDefaults();
   const modes = resolveModes();
-  let pscale = modes.pscale;
-  let pmode = modes.pmode;
-  let postproEnabled = modes.postproEnabled;
-  let bloomEnabled = modes.bloomEnabled;
+  let {pscale} = modes;
+  let {pmode} = modes;
+  let {postproEnabled} = modes;
+  let {bloomEnabled} = modes;
   let aaMode = settings.get('fps-aa');
 
   // high-performance asks the browser to pick the dGPU on dual-GPU
@@ -526,9 +527,9 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   let renderer: THREE.WebGLRenderer;
   try {
     renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-  } catch (err) {
+  } catch (error) {
     setTimeout(() => location.reload(), 1000);
-    throw err;
+    throw error;
   }
   renderer.domElement.addEventListener('webglcontextlost', (e) => {
     e.preventDefault();
@@ -539,12 +540,12 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   const fsCanvas = fs.canvasEl;
   fsCanvas.style.cssText =
     'position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;display:none;pointer-events:none;z-index:0';
-  document.body.appendChild(fsCanvas);
+  document.body.append(fsCanvas);
   let fsOverlay: (() => void) | null = null; // viewmodel pass, injected by gameLoop
   // auto-quality degrade — hard-pixel modes force 1 (integer grid).
   // ?res=0.5 pins a starting scale for headless degrade/filter testing.
   const resParam = urlParams.get('res');
-  let resScale = resParam !== null ? Math.min(1, Math.max(0.25, parseFloat(resParam) || 1)) : 1;
+  let resScale = resParam === null ? 1 : Math.min(1, Math.max(0.25, Number.parseFloat(resParam) || 1));
   // Effective pixel mode: at PIXEL SCALE 1× there's no low-res buffer for
   // SMOOTH/DITHERED/ATKINSON to process, so they collapse to RAW. pmode
   // keeps the stored pick — bumping the scale restores it.
@@ -582,7 +583,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   renderer.domElement.style.left = '50%';
   renderer.domElement.style.top = '50%';
   renderer.domElement.style.transform = 'translate(-50%, -50%)';
-  document.body.appendChild(renderer.domElement);
+  document.body.append(renderer.domElement);
 
   const cc = makeComposer(renderer, scene, camera, modes);
   const { composer, scenePass, bloomMergePass, dirtPass, contrastPass, upscalePass, upscaleEffect, xbrPass, xbrEffect, syncRenderToScreen, applyAA, dumpPasses } = cc;
@@ -618,7 +619,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
 
   const render = makeRender(renderer, scene, camera, composer, fs,
     { pmode: pmodeEff, fsOverlay: () => fsOverlay, scenePass,
-      shadowTick: () => { if ((shadowTick++ & 1) === 0) renderer.shadowMap.needsUpdate = true; } });
+      shadowTick: () => { if ((shadowTick++ & 1) === 0) {renderer.shadowMap.needsUpdate = true;} } });
 
   // Seg-row markers — assigned by wireSegRow below; setPixel fires them
   // so auto-quality steps re-light the row too.
@@ -636,8 +637,8 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     // ATKINSON bypasses the composer entirely — bloom/post have no
     // pipeline to live in there, so opting into it drops them.
     if (pmodeEff() === 3) {
-      if (postproEnabled) setPostProcessingEnabled(false);
-      if (bloomEnabled) setBloomEnabled(false);
+      if (postproEnabled) {setPostProcessingEnabled(false);}
+      if (bloomEnabled) {setBloomEnabled(false);}
     }
     updateRendererSize();
     applyBufferSizes();
@@ -686,7 +687,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     // Floyd mode has no composer — enabling post there drops floyd rather
     // than silently refusing (the toggle used to clamp back to OFF with
     // no feedback and read as dead). Other pixel modes share the chain.
-    if (enabled && pmodeEff() === 3) setPixel(pscale, 0, false); // compat drop, not a user pick
+    if (enabled && pmodeEff() === 3) {setPixel(pscale, 0, false);} // compat drop, not a user pick
     postproEnabled = enabled;
     settings.set('fps-postpro', postproEnabled);
     contrastPass.enabled = postproEnabled;
@@ -696,7 +697,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
 
   function setBloomEnabled(enabled: boolean): void {
     // Same story as post — only atkinson is exclusive.
-    if (enabled && pmodeEff() === 3) setPixel(pscale, 0, false);
+    if (enabled && pmodeEff() === 3) {setPixel(pscale, 0, false);}
     bloomEnabled = enabled;
     settings.set('fps-bloom', bloomEnabled);
     bloomMergePass.enabled = bloomEnabled;

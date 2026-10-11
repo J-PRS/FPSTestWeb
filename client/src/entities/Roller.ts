@@ -37,7 +37,7 @@ export class Roller implements Targetable, SwarmSlotOwner {
   health: number;
   maxHealth: number;
   radius: number;
-  color = new THREE.Color(0x6B5A44); // dusty rock
+  color = new THREE.Color(0x6B_5A_44); // dusty rock
   scale = 1.6; // big debris on death
 
   swarmSlot = -1;
@@ -103,7 +103,7 @@ export class Roller implements Targetable, SwarmSlotOwner {
     this.uber = uber;
     this.health = this.maxHealth = uber ? ROLLER_HEALTH * 3 : ROLLER_HEALTH;
     this.radius = uber ? ROLLER_RADIUS * 2 : ROLLER_RADIUS;
-    if (uber) {this.color.set(0x4a3a52);} // dark basalt — reads heavy
+    if (uber) {this.color.set(0x4A_3A_52);} // dark basalt — reads heavy
     this.pos = pos.clone();
     this.pos.y = terrain.getHeight(pos.x, pos.z) + this.radius;
     this.vel = new THREE.Vector3();
@@ -187,7 +187,7 @@ export class Roller implements Targetable, SwarmSlotOwner {
       this.vel.z += _dir.z * Math.min(g * 0.02, 4) * dt;
     }
 
-    if (this.hitCooldown <= 0 && this.pos.distanceTo(playerPos) < this.radius + 1 * MELEE_FAVOR) {
+    if (this.hitCooldown <= 0 && this.pos.distanceTo(playerPos) < this.radius + Number(MELEE_FAVOR)) {
       this.hitCooldown = 0.6;
       this.onHit?.(this);
     }

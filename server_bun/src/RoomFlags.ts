@@ -11,7 +11,7 @@
  */
 import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
-import { FLAG_PICKUP_R, FLAG_HOME_R, FLAG_RESET_S, type TeamId } from '../../shared/teams.ts';
+import { FLAG_PICKUP_R, FLAG_HOME_R, FLAG_RESET_S, type TeamId,CTF_PTS } from '../../shared/teams.ts';
 import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
 import { perkMods } from '../../shared/perks.ts';
@@ -20,7 +20,7 @@ import { aoeImpulse } from '../../shared/combat.ts';
 import { hmHeight, hmChord, hmSettleWalkable } from '../../shared/heightfield.ts';
 import { inv } from '../../shared/invariants.ts';
 import { GRAVITY } from '../../shared/movement.ts';
-import { CTF_PTS } from '../../shared/teams.ts';
+
 import { WORLD_MODEL, rosterRow } from '../../shared/worldModel.ts';
 
 // 'unspawned' is server-internal — rabbit's flag doesn't exist until
@@ -54,7 +54,7 @@ export interface RoomFlag {
 // Blast impulses knock it again; the rest spot is pickup truth.
 const FLAG_REST_LIFT = 0.5;   // sphere rest height above terrain
 const FLAG_BOUNCE = 0.3;      // vertical restitution
-const FLAG_FRICTION = 4.0;    // skid bleed per second
+const FLAG_FRICTION = 4;    // skid bleed per second
 const FLAG_GRAV = -GRAVITY;   // loose objects fall at world gravity — one constant, no soft-tumble fork
 const FLAG_KNOCK = 0.55;      // fraction of the player-scale blast impulse
 const FLAG_SETTLE = 0.6;      // |vel| below this on the ground = rest
@@ -109,10 +109,10 @@ export class RoomFlags {
   retargetHomes(homes: Partial<Record<TeamId, Vec3>>): void {
     for (const [team, f] of this.flags) {
       const home = homes[team];
-      if (!home) continue;
-      if (f.home.x === home.x && f.home.y === home.y && f.home.z === home.z) continue;
+      if (!home) {continue;}
+      if (f.home.x === home.x && f.home.y === home.y && f.home.z === home.z) {continue;}
       f.home = { ...home };
-      if (f.state === 'home') f.pos = { ...home };
+      if (f.state === 'home') {f.pos = { ...home };}
       this.dirty = true;
     }
   }
@@ -154,7 +154,7 @@ export class RoomFlags {
    *  damage funnel so ANY death source (shots, bots, environment) drops it. */
   dropIfCarrier(playerId: string): void {
     for (const f of this.flags.values()) {
-      if (f.carrier !== playerId) continue;
+      if (f.carrier !== playerId) {continue;}
       // The dead carrier gets the fumble line — the killer's taunt
       // already fires on the frag itself.
       this.room.messages.killFeed.say(playerId, 'flagdrop');
@@ -162,7 +162,7 @@ export class RoomFlags {
       this.room.bots?.notice('flagdrop', playerId,
         dp?.team, dp ? { ...dp.position } : undefined, 'other');
       const p = dp;
-      if (p) f.pos = { ...p.position };
+      if (p) {f.pos = { ...p.position };}
       f.carrier = null;
       f.state = 'dropped';
       f.dropT = FLAG_RESET_S;
@@ -176,9 +176,9 @@ export class RoomFlags {
    *  drops it at the corpse. Called on EVERY death like dropIfCarrier;
    *  only the first 'unspawned' flag takes the corpse's position. */
   spawnAtCorpse(playerId: string): void {
-    if (!this.rabbit) return;
+    if (!this.rabbit) {return;}
     for (const f of this.flags.values()) {
-      if (f.state !== 'unspawned') continue;
+      if (f.state !== 'unspawned') {continue;}
       const corpse = this.room.players.getPlayer(playerId);
       f.pos = corpse ? { ...corpse.position } : { ...f.home };
       f.state = 'dropped';
@@ -197,14 +197,14 @@ export class RoomFlags {
    *  could punt the objective out of the arena from anywhere. */
   throwFor(playerId: string): void {
     const p = this.room.players.getPlayer(playerId);
-    if (!p || p.isDead) return;
+    if (!p || p.isDead) {return;}
     // sim-pos/sim-vel name a poisoned shadow but don't fix it — a NaN
     // carrier vector here would write a NaN flag every client drops.
     if (!Number.isFinite(p.position.x + p.position.y + p.position.z
         + p.velocity.x + p.velocity.y + p.velocity.z
-        + p.rotation.yaw + p.rotation.pitch)) return;
+        + p.rotation.yaw + p.rotation.pitch)) {return;}
     for (const f of this.flags.values()) {
-      if (f.state !== 'carried' || f.carrier !== playerId) continue;
+      if (f.state !== 'carried' || f.carrier !== playerId) {continue;}
       const cp = Math.cos(p.rotation.pitch), sp = Math.sin(p.rotation.pitch);
       f.pos = { ...p.position };
       f.carrier = null;
@@ -244,13 +244,13 @@ export class RoomFlags {
   knock(at: Vec3, radius: number, force: number, pull = false): void {
     // d>=radius is false on NaN — the compare fails INTO the write, so a
     // NaN blast center would += NaN into every dropped flag's velocity.
-    if (!Number.isFinite(at.x + at.y + at.z + radius + force)) return;
+    if (!Number.isFinite(at.x + at.y + at.z + radius + force)) {return;}
     const s = pull ? -1 : 1;
     for (const f of this.flags.values()) {
-      if (f.state !== 'dropped') continue;
+      if (f.state !== 'dropped') {continue;}
       const dx = f.pos.x - at.x, dy = f.pos.y - at.y, dz = f.pos.z - at.z;
       const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      if (d >= radius) continue;
+      if (d >= radius) {continue;}
       const mag = aoeImpulse(force, d, radius) * FLAG_KNOCK * s;
       f.vel.x += (dx / (d || 1)) * mag;
       f.vel.z += (dz / (d || 1)) * mag;
@@ -264,7 +264,7 @@ export class RoomFlags {
   nearStand(pos: Vec3, r: number): boolean {
     for (const f of this.flags.values()) {
       const dx = pos.x - f.home.x, dy = pos.y - f.home.y, dz = pos.z - f.home.z;
-      if (dx * dx + dy * dy + dz * dz <= r * r) return true;
+      if (dx * dx + dy * dy + dz * dz <= r * r) {return true;}
     }
     return false;
   }
@@ -275,13 +275,13 @@ export class RoomFlags {
     let captureBy: TeamId | null = null;
 
     for (const f of this.flags.values()) {
-      if (f.state === 'unspawned') continue; // rabbit: not in play yet
+      if (f.state === 'unspawned') {continue;} // rabbit: not in play yet
       if (f.state === 'carried') {
         captureBy = this.tickCarried(f, dt) ?? captureBy;
         continue;
       }
-      if (f.state === 'dropped') this.tickDropped(f, dt);
-      if (f.state !== 'dropped' && f.state !== 'home') continue;
+      if (f.state === 'dropped') {this.tickDropped(f, dt);}
+      if (f.state !== 'dropped' && f.state !== 'home') {continue;}
       this.tickTouch(f);
     }
 
@@ -295,10 +295,10 @@ export class RoomFlags {
     for (const p of this.room.players.getAllPlayers().values()) {
       const prev = this.prevPos.get(p.id);
       if (prev) { prev.x = p.position.x; prev.y = p.position.y; prev.z = p.position.z; }
-      else this.prevPos.set(p.id, { ...p.position });
+      else {this.prevPos.set(p.id, { ...p.position });}
     }
     for (const id of this.prevPos.keys()) {
-      if (!this.room.players.getPlayer(id)) this.prevPos.delete(id);
+      if (!this.room.players.getPlayer(id)) {this.prevPos.delete(id);}
     }
     return captureBy;
   }
@@ -315,14 +315,14 @@ export class RoomFlags {
    *  pre-game is open season, spawned-but-loose still enforces pairings. */
   spawned(): boolean {
     for (const f of this.flags.values()) {
-      if (f.state !== 'unspawned') return true;
+      if (f.state !== 'unspawned') {return true;}
     }
     return false;
   }
 
   carrierId(): string | null {
     for (const f of this.flags.values()) {
-      if (f.state === 'carried') return f.carrier;
+      if (f.state === 'carried') {return f.carrier;}
     }
     return null;
   }
@@ -332,7 +332,7 @@ export class RoomFlags {
     if (!carrier || carrier.isDead) {
       // Refresh pos from the corpse when it's still around — otherwise
       // the flag teleports to wherever it was last tracked.
-      if (carrier) f.pos = { ...carrier.position };
+      if (carrier) {f.pos = { ...carrier.position };}
       f.state = 'dropped';
       f.carrier = null;
       f.dropT = FLAG_RESET_S;
@@ -381,10 +381,10 @@ export class RoomFlags {
   /** Dropped flag countdown — time-out sends it home. */
   private tickDropped(f: RoomFlag, dt: number): void {
     this.tickBallistic(f, dt);
-    if (this.rabbit && f.vel.x === 0 && f.vel.y === 0 && f.vel.z === 0) this.magnet(f, dt);
+    if (this.rabbit && f.vel.x === 0 && f.vel.y === 0 && f.vel.z === 0) {this.magnet(f, dt);}
     f.dropT -= dt;
-    if (f.dropT > 0) return;
-    if (f.droppedAt) weaponStats.recordFlag(this.room.mode, 'return', simNow() - f.droppedAt);
+    if (f.dropT > 0) {return;}
+    if (f.droppedAt) {weaponStats.recordFlag(this.room.mode, 'return', simNow() - f.droppedAt);}
     f.state = 'home';
     f.pos = { ...f.home };
     f.vel = { x: 0, y: 0, z: 0 };
@@ -398,18 +398,18 @@ export class RoomFlags {
     let best: { x: number; y: number; z: number } | null = null;
     let bestD2 = RABBIT_MAGNET_R * RABBIT_MAGNET_R;
     for (const p of this.room.players.getAllPlayers().values()) {
-      if (p.isDead) continue;
+      if (p.isDead) {continue;}
       const dx = p.position.x - f.pos.x, dy = p.position.y - f.pos.y, dz = p.position.z - f.pos.z;
       const d2 = dx * dx + dy * dy + dz * dz;
       if (d2 < bestD2) { bestD2 = d2; best = p.position; }
     }
-    if (!best) return;
+    if (!best) {return;}
     const d = Math.sqrt(bestD2) || 1;
     const stepLen = Math.min(RABBIT_MAGNET_SPEED * dt, d);
     f.pos.x += (best.x - f.pos.x) / d * stepLen;
     f.pos.z += (best.z - f.pos.z) / d * stepLen;
-    const field = this.room.field;
-    if (field) f.pos.y = Math.max(hmHeight(field, f.pos.x, f.pos.z), hmChord(field, f.pos.x, f.pos.z)) + FLAG_REST_LIFT;
+    const {field} = this.room;
+    if (field) {f.pos.y = Math.max(hmHeight(field, f.pos.x, f.pos.z), hmChord(field, f.pos.x, f.pos.z)) + FLAG_REST_LIFT;}
     this.dirty = true;
   }
 
@@ -418,8 +418,8 @@ export class RoomFlags {
    *  tick (truth matters — the ring a player grabs is THIS position);
    *  at rest the spot is snapped to walkable ground like a nugget. */
   private tickBallistic(f: RoomFlag, dt: number): void {
-    if (f.vel.x === 0 && f.vel.y === 0 && f.vel.z === 0) return;
-    const field = this.room.field;
+    if (f.vel.x === 0 && f.vel.y === 0 && f.vel.z === 0) {return;}
+    const {field} = this.room;
     f.vel.y -= FLAG_GRAV * dt;
     f.pos.x += f.vel.x * dt;
     f.pos.y += f.vel.y * dt;
@@ -448,7 +448,7 @@ export class RoomFlags {
         // Settled spot is a seed like spawn/teleport — resting under the
         // drawn surface names it instead of a floating/buried flag.
         const dg = Math.max(hmHeight(field, f.pos.x, f.pos.z), hmChord(field, f.pos.x, f.pos.z));
-        inv('flag-above-ground', !Number.isFinite(dg) || f.pos.y >= dg - 0.5, { team: f.team, y: +f.pos.y.toFixed(1), ground: +dg.toFixed(1) });
+        inv('flag-above-ground', !Number.isFinite(dg) || f.pos.y >= dg - 0.5, { team: f.team, y: Number(f.pos.y.toFixed(1)), ground: Number(dg.toFixed(1)) });
       }
     }
     this.dirty = true; // flight is stream-worthy — see the doc comment
@@ -458,7 +458,7 @@ export class RoomFlags {
    *  flag; own team touching a dropped flag sends it home. */
   private tickTouch(f: RoomFlag): void {
     const t = this.nearestTouching(f);
-    if (!t) return;
+    if (!t) {return;}
     // Rabbit: the flag is neutral — anyone touching it becomes the
     // carrier, home or dropped. No return-by-touch exists; the only
     // way home is the drop timer.
@@ -480,7 +480,7 @@ export class RoomFlags {
       logger.info('Flag returned', { room: this.room.name, flag: f.team, by: t.id });
       this.room.messages.killFeed.say(t.id, 'flagreturn');
       this.room.bots?.notice('flagreturn', t.id, t.team);
-      if (f.droppedAt) weaponStats.recordFlag(this.room.mode, 'return', simNow() - f.droppedAt);
+      if (f.droppedAt) {weaponStats.recordFlag(this.room.mode, 'return', simNow() - f.droppedAt);}
       this.retLog.push({ by: t.id, team: f.team, at: simNow() });
       this.room.scoring.awardPersonal(t.id, CTF_PTS.flagReturn);
       f.state = 'home';
@@ -508,11 +508,11 @@ export class RoomFlags {
     for (const p of this.room.players.getAllPlayers().values()) {
       // Rabbit is FFA — hunters carry no team, so the !p.team guard
       // would make the flag untouchable; it's a CTF-only filter.
-      if (p.isDead || (!this.rabbit && !p.team)) continue;
+      if (p.isDead || (!this.rabbit && !p.team)) {continue;}
       // A thrown flag can't be re-grabbed by its thrower until it
       // settles — without this a stationary carrier instantly re-catches
       // their own toss (it never leaves the ring inside one tick).
-      if (p.id === f.airborneBy) continue;
+      if (p.id === f.airborneBy) {continue;}
       // Swept capsule: closest point on the player's path segment to the
       // flag, so a full-speed graze can't tunnel through the ring the
       // way a snapshot check does. Planar reach + vertical cap keep a
@@ -527,10 +527,10 @@ export class RoomFlags {
           ((f.pos.x - a.x) * abx + (f.pos.y - a.y) * aby + (f.pos.z - a.z) * abz) / len2));
       }
       const cx = a.x + abx * t, cy = a.y + aby * t, cz = a.z + abz * t;
-      if (Math.abs(cy - f.pos.y) > 6) continue;
+      if (Math.abs(cy - f.pos.y) > 6) {continue;}
       const d = Math.hypot(cx - f.pos.x, cz - f.pos.z);
       const ring = (this.rabbit ? RABBIT_PICKUP_R : FLAG_PICKUP_R) * perkMods(p.perk).pickupRadius;
-      if (d <= ring && (!best || d < best.d)) best = { id: p.id, team: p.team, d };
+      if (d <= ring && (!best || d < best.d)) {best = { id: p.id, team: p.team, d };}
     }
     return best;
   }

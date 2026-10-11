@@ -23,17 +23,17 @@ import { SPECIES, speciesFamily, type SpeciesRow } from './species.js';
 import { dir3 } from './botVec.js';
 
 export const TOTEM_SIM = {
-  RANGE: 105.0,          // engage envelope — inside readable fog distance
-  MIN_RANGE: 22.0,       // player closer than this → blink away
+  RANGE: 105,          // engage envelope — inside readable fog distance
+  MIN_RANGE: 22,       // player closer than this → blink away
   REFIRE: 2.6,           // seconds between shots
   CHARGE: 0.65,          // aim-beam telegraph — dodgeable, not free
   RELOCATE_SHOTS: 3,     // shots fired before seeking a new perch
-  PEAK_RADIUS: 45.0,     // blink ring-search radius for high ground
-  PEAK_MIN_GAIN: 3.0,    // min height gain to count as a better perch
+  PEAK_RADIUS: 45,     // blink ring-search radius for high ground
+  PEAK_MIN_GAIN: 3,    // min height gain to count as a better perch
   BLINK_OUT_S: 0.25,     // shrink-out telegraph
   BLINK_IN_S: 1.1,       // arrival shimmer before the body exists
-  BLINK_CD_MIN: 2.0,     // random 2–5s between blinks — no chain escapes
-  BLINK_CD_VAR: 3.0,
+  BLINK_CD_MIN: 2,     // random 2–5s between blinks — no chain escapes
+  BLINK_CD_VAR: 3,
   EYE_HEIGHT: 3.9,       // beam origin per unit body radius (× c.radius)
   HIT_R2: 1.7,           // beam catch radius² vs a player on the line
   STAGGER_S: 2.1,        // damage pins the obelisk — it can't blink
@@ -42,7 +42,7 @@ export const TOTEM_SIM = {
 // Uber mirrors the client's crowned elder: slower, fatter, predictive.
 const TOTEM_UBER = {
   REFIRE: 4.5,
-  CHARGE: 1.0,
+  CHARGE: 1,
   HIT_R2: 1.5 * 1.5,
 } as const;
 
@@ -101,7 +101,7 @@ export function makeSimTotem(
     targetId: null, tx: 0, ty: 0, tz: 0, tgtValid: false, pendingBite: false,
     shotsFired: 0, blinkCd: 0,
     hitR2: uber ? TOTEM_UBER.HIT_R2 : TOTEM_SIM.HIT_R2,
-    radius: uber ? 1.8 : 1.0, // UBER_TOTEM_RADIUS / TOTEM_RADIUS — config twins
+    radius: uber ? 1.8 : 1, // UBER_TOTEM_RADIUS / TOTEM_RADIUS — config twins
     lockDirX: 0, lockDirY: 0, lockDirZ: 0, lockDist: 0,
     blinkX: x, blinkY: y, blinkZ: z,
   };
@@ -125,7 +125,7 @@ function totemLineClear(
     const x = c.x + (tx - c.x) * t;
     const z = c.z + (tz - c.z) * t;
     const y = sy + (ty - sy) * t;
-    if (y < hmHeight(field, x, z) + 0.4) return false;
+    if (y < hmHeight(field, x, z) + 0.4) {return false;}
   }
   return true;
 }
@@ -155,7 +155,7 @@ export function totemSolveBeam(
       { x: ex + dx * c.lockDist, y: ey + dy * c.lockDist, z: ez + dz * c.lockDist },
       cols,
     );
-    if (hit) c.lockDist = Math.min(c.lockDist, hit.t * c.lockDist);
+    if (hit) {c.lockDist = Math.min(c.lockDist, hit.t * c.lockDist);}
   }
 }
 
@@ -166,7 +166,7 @@ export function totemBeamHit(c: SimTotem, px: number, py: number, pz: number): b
   const ex = c.x, ey = c.y + c.sp.EYE_HEIGHT * c.radius, ez = c.z;
   const rx = px - ex, ry = py - ey, rz = pz - ez;
   const proj = rx * c.lockDirX + ry * c.lockDirY + rz * c.lockDirZ;
-  if (proj <= 0 || proj >= c.lockDist) return false;
+  if (proj <= 0 || proj >= c.lockDist) {return false;}
   const dx = rx - c.lockDirX * proj;
   const dy = ry - c.lockDirY * proj;
   const dz = rz - c.lockDirZ * proj;
@@ -186,7 +186,7 @@ function totemPickBlink(c: SimTotem, field: Heightfield, tx: number, tz: number)
     const z = c.z + Math.sin(a) * r;
     const h = hmHeight(field, x, z);
     const pd = Math.hypot(tx - x, tz - z);
-    if (pd > c.sp.RANGE * 0.9) continue;
+    if (pd > c.sp.RANGE * 0.9) {continue;}
     if (h > bestH) { bestH = h; c.blinkX = x; c.blinkY = h; c.blinkZ = z; found = true; }
   }
   const here = hmHeight(field, c.x, c.z);
@@ -218,8 +218,10 @@ export function stepTotem(
   // Per-state steppers return the edge to emit, or null to stay in state —
   // the event kinds are the wire.
   switch (c.state) {
-    case 'aim': return stepTotemAim(c, dt, field, target, dist, cols);
-    case 'charge': return stepTotemCharge(c, dt, authoritative);
+    case 'aim': { return stepTotemAim(c, dt, field, target, dist, cols);
+    }
+    case 'charge': { return stepTotemCharge(c, dt, authoritative);
+    }
     case 'blinkOut': {
       c.hopTimer -= dt;
       if (c.hopTimer <= 0) {
@@ -279,7 +281,7 @@ function stepTotemCharge(c: SimTotem, dt: number, authoritative: boolean): Crawl
     c.state = 'aim';
     c.windupTimer = c.sp.REFIRE;
     c.shotsFired++;
-    if (authoritative) c.pendingBite = true; // beam resolves in stepAll
+    if (authoritative) {c.pendingBite = true;} // beam resolves in stepAll
     return 'fire';
   }
   return null;
@@ -290,14 +292,14 @@ function stepTotemCharge(c: SimTotem, dt: number, authoritative: boolean): Crawl
 export function totemFireTargets(c: SimTotem, players: { id: string; pos: SimVec }[]): string[] {
   const hits: string[] = [];
   for (const p of players) {
-    if (totemBeamHit(c, p.pos.x, p.pos.y + 1.0, p.pos.z)) hits.push(p.id); // +1 ≈ chest
+    if (totemBeamHit(c, p.pos.x, p.pos.y + 1, p.pos.z)) {hits.push(p.id);} // +1 ≈ chest
   }
   return hits;
 }
 
 export function applyTotemDamage(c: SimTotem, damage: number): boolean {
   // Intangible mid-blink — matches the client's untargetable phases.
-  if (c.state === 'blinkOut' || c.state === 'blinkIn') return false;
+  if (c.state === 'blinkOut' || c.state === 'blinkIn') {return false;}
   c.health -= damage;
   c.stunTimer = Math.max(c.stunTimer, TOTEM_SIM.STAGGER_S); // pinned
   if (c.health <= 0) { c.dead = true; return true; }

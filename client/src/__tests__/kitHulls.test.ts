@@ -10,8 +10,8 @@ import type { HullBox } from '../structures/structKit.ts';
 // geometry), so the check is builder-hull vs table-hull, not a guess.
 describe('kit hull parity', () => {
   test('every KIT_HULLS piece has a builder and vice versa', () => {
-    for (const piece of KIT_PIECES) expect(KIT_BUILDERS[piece], `no builder for '${piece}'`).toBeTruthy();
-    for (const key of Object.keys(KIT_BUILDERS)) expect(KIT_HULLS[key], `no hulls for builder '${key}'`).toBeTruthy();
+    for (const piece of KIT_PIECES) {expect(KIT_BUILDERS[piece], `no builder for '${piece}'`).toBeTruthy();}
+    for (const key of Object.keys(KIT_BUILDERS)) {expect(KIT_HULLS[key], `no hulls for builder '${key}'`).toBeTruthy();}
   });
 
   test('builder sidecar hulls match the server table', () => {

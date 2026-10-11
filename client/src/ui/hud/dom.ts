@@ -98,7 +98,7 @@ export function createHudDom(): HudDom {
         <div id="sb-countdown"></div>
       </div>
     `;
-    document.body.appendChild(el);
+    document.body.append(el);
 
     const health = el.querySelector('#hp')! as HTMLSpanElement;
     const energy = el.querySelector('#nrg')! as HTMLSpanElement;

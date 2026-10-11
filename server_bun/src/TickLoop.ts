@@ -113,7 +113,7 @@ export class TickLoop {
         const lag = now0 - this.ops.lastTickAt - tickMs;
         this.ops.tickLagMsSum += lag;
         this.ops.tickLagSamples++;
-        if (lag > this.ops.tickLagMsMax) this.ops.tickLagMsMax = lag;
+        if (lag > this.ops.tickLagMsMax) {this.ops.tickLagMsMax = lag;}
       }
       this.ops.lastTickAt = now0;
 
@@ -121,7 +121,7 @@ export class TickLoop {
         // A room that faulted but couldn't be drained (dispose threw
         // inside drainQuarantined) stays in the map — skip it rather
         // than retrying a doomed path every tick.
-        if (this.tickQuarantined.has(room.name)) continue;
+        if (this.tickQuarantined.has(room.name)) {continue;}
         // Empty named rooms are teardown: the sim timer + entry would leak
         // per room name otherwise. 'default' is immortal.
         if (room.empty && room.name !== 'default') {
@@ -137,11 +137,11 @@ export class TickLoop {
             this.tickErrStreak.delete(room.name);
             this.tickQuarantined.delete(room.name);
             logger.info('Room disposed', { room: room.name });
-          } catch (e) {
+          } catch (error) {
             const n = (this.tickErrStreak.get(room.name) ?? 0) + 1;
             this.tickErrStreak.set(room.name, n);
             this.metrics.tickErrors++;
-            logger.error('Room dispose failed', { room: room.name, streak: n, err: e instanceof Error ? e.stack ?? e.message : String(e) });
+            logger.error('Room dispose failed', { room: room.name, streak: n, err: error instanceof Error ? error.stack ?? error.message : String(error) });
             if (n >= 10) {
               this.tickQuarantined.add(room.name);
               this.drainQuarantined(room);
@@ -162,7 +162,7 @@ export class TickLoop {
    *  this; scenario tests can too (tickRoomNow only exercises the raw
    *  body, not the streak → quarantine → drain path). */
   tickRoomGuarded(room: Room, now0 = wallNow()): void {
-    if (this.tickQuarantined.has(room.name)) return;
+    if (this.tickQuarantined.has(room.name)) {return;}
     try {
     // errPhase is module state — a pre-tick throw (match clock,
     // hibernation check) would otherwise log whichever phase a PREVIOUS
@@ -180,13 +180,13 @@ export class TickLoop {
     // (and silently grows the crawler population it later dumps on
     // a rejoining player).
     room.creatureSim.dormant = !audience;
-    if (!audience) return;
+    if (!audience) {return;}
     const players = room.players.getAllPlayers();
-    if (players.size === 0) return;
+    if (players.size === 0) {return;}
     this.errPhase = 'room';
       this.tickRoom(room, players, now0);
       this.tickErrStreak.delete(room.name);
-    } catch (e) {
+    } catch (error) {
       // A drain failure leaves the poisoned message queued — it would
       // re-throw every tick until quarantine. Drop the backlog: the
       // unprocessed commands were already lost when the drain aborted.
@@ -194,7 +194,7 @@ export class TickLoop {
       const n = (this.tickErrStreak.get(room.name) ?? 0) + 1;
       this.tickErrStreak.set(room.name, n);
       this.metrics.tickErrors++;
-      logger.error('Room tick failed', { room: room.name, phase: this.errPhase, streak: n, err: e instanceof Error ? e.stack ?? e.message : String(e) });
+      logger.error('Room tick failed', { room: room.name, phase: this.errPhase, streak: n, err: error instanceof Error ? error.stack ?? error.message : String(error) });
       if (n >= 10) {
         this.tickQuarantined.add(room.name);
         logger.error('Room quarantined after repeated tick failures', { room: room.name, phase: this.errPhase });
@@ -211,7 +211,7 @@ export class TickLoop {
     try {
       for (const p of room.players.getAllPlayers().values()) {
         try { room.socketOf(p.id)?.close(1011, 'room faulted'); } catch { /* socket already dying */ }
-        if (!p.isBot) this.onRemove(room, p.id, 'quarantine');
+        if (!p.isBot) {this.onRemove(room, p.id, 'quarantine');}
       }
       for (const pid of room.spectators) {
         try { room.socketOf(pid)?.close(1011, 'room faulted'); } catch { /* socket already dying */ }
@@ -225,10 +225,10 @@ export class TickLoop {
       this.faultedRooms.add(room.name);
       // Bounded — a fault loop recreating doomed rooms under fresh names
       // would otherwise grow the set one name per ~10 ticks forever.
-      if (this.faultedRooms.size > 512) evictEldest(this.faultedRooms);
+      if (this.faultedRooms.size > 512) {evictEldest(this.faultedRooms);}
       logger.info('Quarantined room drained + disposed', { room: room.name });
-    } catch (e) {
-      logger.error('Quarantine drain failed', { room: room.name, err: e instanceof Error ? e.message : String(e) });
+    } catch (error) {
+      logger.error('Quarantine drain failed', { room: room.name, err: error instanceof Error ? error.message : String(error) });
     }
   }
 
@@ -281,9 +281,9 @@ export class TickLoop {
     this.errPhase = 'auth';
     if (room.moveAuthority) {
       for (const [playerId, p] of players) {
-        if (p.isBot) continue;
+        if (p.isBot) {continue;}
         const s = room.moveSim.simState(playerId);
-        if (!s) continue;
+        if (!s) {continue;}
         // Half transit, not full: a linear lead overshoots on turns by
         // the same amount it recovers on straights — half centers the
         // systematic lag without doubling the turn error.
@@ -321,17 +321,17 @@ export class TickLoop {
    *  did the optimization buy" with real numbers instead of estimates. */
   private rollupMetrics(now0: number, playerCount: number): void {
     const m = this.metrics;
-    if (m.windowStart === 0) m.windowStart = now0;
-    if (now0 - m.windowStart > 10000) {
+    if (m.windowStart === 0) {m.windowStart = now0;}
+    if (now0 - m.windowStart > 10_000) {
       const secs = (now0 - m.windowStart) / 1000;
       const phaseMs: Record<string, number> = {};
-      for (const [k, v] of this.phases) phaseMs[k] = +v.toFixed(2);
+      for (const [k, v] of this.phases) {phaseMs[k] = Number(v.toFixed(2));}
       this.lastBw = {
-        kbpsDownTotal: +(m.bytesSent * 8 / 1000 / secs).toFixed(1),
-        recordsPerSec: +(m.recordsSent / secs).toFixed(0),
-        suppressedPerSec: +(m.recordsSuppressed / secs).toFixed(0),
-        tierSkippedPerSec: +(m.recordsTierSkipped / secs).toFixed(0),
-        tickFramesDroppedPerSec: +(m.tickFramesDropped / secs).toFixed(0),
+        kbpsDownTotal: Number((m.bytesSent * 8 / 1000 / secs).toFixed(1)),
+        recordsPerSec: Number((m.recordsSent / secs).toFixed(0)),
+        suppressedPerSec: Number((m.recordsSuppressed / secs).toFixed(0)),
+        tierSkippedPerSec: Number((m.recordsTierSkipped / secs).toFixed(0)),
+        tickFramesDroppedPerSec: Number((m.tickFramesDropped / secs).toFixed(0)),
         tickErrors: m.tickErrors,
         phaseMs,
       };
@@ -345,11 +345,11 @@ export class TickLoop {
   private startHashBroadcast(): void {
     this.hashTimer = setInterval(() => {
       for (const room of this.rooms.values()) {
-        if (this.tickQuarantined.has(room.name)) continue;
+        if (this.tickQuarantined.has(room.name)) {continue;}
         try { this.broadcastStateHash(room); }
-        catch (e) {
+        catch (error) {
           this.metrics.tickErrors++;
-          logger.error('State hash broadcast failed', { room: room.name, err: e instanceof Error ? e.message : String(e) });
+          logger.error('State hash broadcast failed', { room: room.name, err: error instanceof Error ? error.message : String(error) });
         }
       }
     }, CONFIG.hashBroadcastIntervalMs);
@@ -357,7 +357,7 @@ export class TickLoop {
 
   private broadcastStateHash(room: Room): void {
     const playerCount = room.playerCount();
-    if (playerCount === 0) return;
+    if (playerCount === 0) {return;}
 
     // tag the hash with the last EMITTED tick — consuming a fresh
     // tickSeq here would ship a seq no frame ever carries, and every
@@ -370,7 +370,7 @@ export class TickLoop {
     // drift apart. Omitted where the roster is empty — a room without
     // that kind doesn't emit a meaningless constant.
     const emitLane = <T extends { id: number }>(kind: WorldKindDecl, roster: T[]) =>
-      roster.length
+      roster.length > 0
         ? { hash: replicaHash(kind, roster.map((e) => [e.id, e] as [number, Record<string, unknown>])),
             fields: kindFields(kind, roster) }
         : undefined;

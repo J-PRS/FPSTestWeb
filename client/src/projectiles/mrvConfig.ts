@@ -56,10 +56,10 @@ export const MRV_BOMBLET_CONFIG: ProjectileConfig = {
   trailScaleMin: 0.5,
   trailScaleMax: 1.2,
   trailRampIn: 0,
-  meshColor: 0x8A2A18,
+  meshColor: 0x8A_2A_18,
   meshType: 'ball',
   glowShell: true,
-  glowColor: 0xFF5522,
+  glowColor: 0xFF_55_22,
   glowOpacity: 0.45,
   glowScale: 0.7,
   meshRampIn: true,
@@ -73,7 +73,7 @@ export const MRV_BOMBLET_CONFIG: ProjectileConfig = {
   ribbonTrail: true,
   ribbonWidth: 0.18,
   ribbonLife: 0.3,
-  ribbonColor: 0xFF7733,
+  ribbonColor: 0xFF_77_33,
 };
 
 export const MRV_CONFIG: ProjectileConfig = {
@@ -112,10 +112,10 @@ export const MRV_CONFIG: ProjectileConfig = {
   trailScaleMin: 0.6,
   trailScaleMax: 1.8,
   trailRampIn: 0.05,
-  meshColor: 0xB84A18,
+  meshColor: 0xB8_4A_18,
   meshType: 'rocket',
   glowShell: true,
-  glowColor: 0xFF6633,
+  glowColor: 0xFF_66_33,
   glowOpacity: 0.3,
   glowScale: 1.1,
   meshRampIn: true,
@@ -143,5 +143,5 @@ export const MRV_CONFIG: ProjectileConfig = {
   ribbonTrail: true,
   ribbonWidth: 0.5,
   ribbonLife: 0.35,
-  ribbonColor: 0xCC5522,
+  ribbonColor: 0xCC_55_22,
 };

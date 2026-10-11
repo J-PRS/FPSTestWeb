@@ -76,6 +76,6 @@ export function getProjectileConfigByName(name: string): ProjectileConfig | unde
 /** Unified accuracy formula: 1-10 scale, direct hits = max */
 export function computeAccuracy(accRaw: number, directHit: boolean): number {
   let acc = 1 + (ACCURACY_MAX - 1) * Math.max(0, 1 - accRaw / ACCURACY_NORMALIZATION);
-  if (directHit) acc = ACCURACY_MAX;
+  if (directHit) {acc = ACCURACY_MAX;}
   return acc;
 }

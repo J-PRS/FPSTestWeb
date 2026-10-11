@@ -14,7 +14,7 @@ export interface DeployBody {
 }
 
 export function tickUnfold(d: DeployBody, dt: number): void {
-  if (d.unfoldT >= 1) return;
+  if (d.unfoldT >= 1) {return;}
   d.unfoldT = Math.min(1, d.unfoldT + dt / 0.45);
   const k = d.unfoldT - 1;
   d.group.scale.setScalar(Math.max(0.08, 1 + 2.7 * k * k * k + 1.7 * k * k)); // easeOutBack
@@ -33,9 +33,9 @@ export function healDeploy(d: DeployBody, n: number): void {
 }
 
 export function damageDeploy(d: DeployBody, dmg: number): void {
-  if (d.dead) return;
+  if (d.dead) {return;}
   const soak = Math.min(d.armor, dmg);
   d.armor -= soak;
   d.health -= dmg - soak;
-  if (d.health <= 0) d.dead = true;
+  if (d.health <= 0) {d.dead = true;}
 }

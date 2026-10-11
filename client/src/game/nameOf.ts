@@ -10,6 +10,6 @@ import { isBotId, botDisplayName } from '../../../shared/botNames.js';
 /** `players` is NetworkManager's remote roster — entries carry the
  *  join-declared `name` when the player chose one. */
 export function displayName(id: string, players?: Map<string, { name?: string }>): string {
-  if (isBotId(id)) return botDisplayName(id);
+  if (isBotId(id)) {return botDisplayName(id);}
   return players?.get(id)?.name ?? id;
 }

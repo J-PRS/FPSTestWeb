@@ -15,15 +15,15 @@ import { dir3 } from './botVec.js';
 import { inv } from './invariants.js';
 
 export const FLYER_SIM = {
-  ORBIT_R: 16.0,        // circle radius around the prey anchor
-  ORBIT_ALT: 12.0,      // cruising height above the anchor's terrain
-  ORBIT_SPEED: 13.0,    // tangential cruise speed
-  DIVE_SPEED: 30.0,
+  ORBIT_R: 16,        // circle radius around the prey anchor
+  ORBIT_ALT: 12,      // cruising height above the anchor's terrain
+  ORBIT_SPEED: 13,    // tangential cruise speed
+  DIVE_SPEED: 30,
   DIVE_CD_MIN: 2.5,     // RNG window between dives (seeded, shared)
-  DIVE_CD_VAR: 2.0,
+  DIVE_CD_VAR: 2,
   WINDUP_S: 0.55,       // fold telegraph before the launch
   DIVE_T_MAX: 1.8,      // abort the dive past this — climb away
-  CLIMB_RATE: 9.0,
+  CLIMB_RATE: 9,
   HIT_D2: 2.4 * 2.4,    // claw contact radius vs the committed point
   AGGRO_D2: 85 * 85,
   STEER_K: 3.5,         // exponential steering gain — 1/s
@@ -117,12 +117,16 @@ export function stepFlyer(
   // to integration — the event kinds are the wire.
   let ev: CrawlerEvent | null = null;
   switch (c.state) {
-    case 'orbit': ev = stepOrbit(c, dt, field, anchor, target); break;
-    case 'windup': ev = stepWindup(c, dt); break;
-    case 'dive': ev = stepDive(c, dt, target, authoritative); break;
-    case 'climb': ev = stepClimb(c, dt, field); break;
+    case 'orbit': { ev = stepOrbit(c, dt, field, anchor, target); break;
+    }
+    case 'windup': { ev = stepWindup(c, dt); break;
+    }
+    case 'dive': { ev = stepDive(c, dt, target, authoritative); break;
+    }
+    case 'climb': { ev = stepClimb(c, dt, field); break;
+    }
   }
-  if (ev !== null) return ev;
+  if (ev !== null) {return ev;}
 
   const px = c.x, py = c.y, pz = c.z;
   c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt;
@@ -130,8 +134,8 @@ export function stepFlyer(
   // Chord floor so the clearance holds against the drawn mesh, not the
   // field under it — a gully's bridged chord is the real clip surface.
   const gy = Math.max(hmHeight(field, c.x, c.z), hmChord(field, c.x, c.z));
-  if (c.y < gy + 0.8) c.y = gy + 0.8;
-  if (c.vx * c.vx + c.vz * c.vz > 1) c.yaw = Math.atan2(c.vx, c.vz);
+  if (c.y < gy + 0.8) {c.y = gy + 0.8;}
+  if (c.vx * c.vx + c.vz * c.vz > 1) {c.yaw = Math.atan2(c.vx, c.vz);}
   return null;
 }
 
@@ -172,11 +176,11 @@ function stepWindup(c: SimFlyer, dt: number): CrawlerEvent | null {
 
 function stepDive(c: SimFlyer, dt: number, target: SimVec | null, authoritative: boolean): CrawlerEvent | null {
   c.diveTimer -= dt;
-  if (target) flyToward(c, target.x, target.y, target.z, c.sp.DIVE_SPEED, dt);
+  if (target) {flyToward(c, target.x, target.y, target.z, c.sp.DIVE_SPEED, dt);}
   const hit = target &&
     (target.x - c.x) ** 2 + (target.y - c.y) ** 2 + (target.z - c.z) ** 2 < c.sp.HIT_D2;
   if (hit) {
-    if (authoritative) c.pendingBite = true;
+    if (authoritative) {c.pendingBite = true;}
     c.state = 'climb';
     return 'bite';
   }
@@ -190,7 +194,7 @@ function stepClimb(c: SimFlyer, dt: number, field: Heightfield): CrawlerEvent | 
   const gy = hmHeight(field, c.x, c.z);
   // NaN floor would latch climb forever (y >= NaN never holds, flyToward
   // would chase a NaN target) — hold altitude until the field answers.
-  if (!Number.isFinite(gy)) return null;
+  if (!Number.isFinite(gy)) {return null;}
   flyToward(c, c.x, gy + c.sp.ORBIT_ALT + 4, c.z, c.sp.CLIMB_RATE, dt);
   if (c.y >= gy + c.sp.ORBIT_ALT) {
     c.state = 'orbit';

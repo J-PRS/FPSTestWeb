@@ -60,6 +60,7 @@ export function createFrameBudget(): FrameBudget {
       // First-run phase — a cheap name hash spaces sweeps so three
       // 40ms jobs don't all fire on frame N together.
       let h = 0;
+      // oxlint-disable-next-line prefer-math-trunc -- int32 wrap is the point
       for (let i = 0; i < name.length; i++) {h = (h * 31 + name.charCodeAt(i)) | 0;}
       last = performance.now() - intervalMs + (Math.abs(h) % Math.max(1, intervalMs));
       sweeps.set(name, last);

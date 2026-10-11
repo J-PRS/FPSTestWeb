@@ -146,7 +146,7 @@ export class Lobby {
       }
       // FREE ROAM dead last — sandbox entries sit at the tail of the ramp.
       const fr = this.soloSels.mode.querySelector('option[value=""]');
-      if (fr) this.soloSels.mode.append(fr);
+      if (fr) {this.soloSels.mode.append(fr);}
     }
     this.fillMapSelect();
   }
@@ -159,14 +159,14 @@ export class Lobby {
     sel.textContent = '';
     const any = document.createElement('option');
     any.value = ''; any.textContent = firstLabel;
-    if (leading) sel.append(any);
+    if (leading) {sel.append(any);}
     for (const mode of modes) {
       const o = document.createElement('option');
       o.value = mode;
       o.textContent = mode.toUpperCase();
       sel.append(o);
     }
-    if (!leading) sel.append(any);
+    if (!leading) {sel.append(any);}
     sel.value = keep;
   }
 
@@ -184,7 +184,7 @@ export class Lobby {
         modeSel.dispatchEvent(new Event('change'));
       }
     });
-    if (this.maps.length || this.mapsFailed) {this.refreshMaps();}
+    if (this.maps.length > 0 || this.mapsFailed) {this.refreshMaps();}
   }
 
   /** Refill MAP for the chosen MODE — a map only shows the modes it
@@ -210,7 +210,7 @@ export class Lobby {
     // terrain. Restrict those to our own spec maps: an 800m circuit
     // square wants a real core heightmap, not a T2 port's bounds.
     const catalogModes = new Set(this.maps.flatMap((m) => m.modes.length > 0 ? m.modes : (m.mode ? [m.mode] : [])));
-    const procedural = !!mode && !catalogModes.has(mode);
+    const procedural = Boolean(mode) && !catalogModes.has(mode);
     const rows = this.maps.filter((m) =>
       this.mapFam[m.t2 ? 't2' : 'custom'] &&
       (!procedural || !m.t2) &&
@@ -310,13 +310,13 @@ export class Lobby {
     // Dedupe: "ctf-1 · CTF · CTF" is three fields agreeing, not info —
     // keep each token only when it adds something.
     const hereExtras: string[] = [];
-    if (cur?.mode) hereExtras.push(cur.mode.toUpperCase());
+    if (cur?.mode) {hereExtras.push(cur.mode.toUpperCase());}
     if (cur?.map && cur.map.toUpperCase() !== cur.mode?.toUpperCase()
       && !this.currentRoom().toUpperCase().includes(cur.map.toUpperCase())) {
       hereExtras.push(cur.map.toUpperCase());
     }
     this.here.textContent = online
-      ? `IN: ${this.currentRoom().toUpperCase()}${hereExtras.length ? ` · ${hereExtras.join(' · ')}` : ''}`
+      ? `IN: ${this.currentRoom().toUpperCase()}${hereExtras.length > 0 ? ` · ${hereExtras.join(' · ')}` : ''}`
       : 'IN: OFFLINE';
     // Default lobby IS home — leaving it is a no-op; offline there's no
     // room to leave, but the button doubles as "go to the lobby".

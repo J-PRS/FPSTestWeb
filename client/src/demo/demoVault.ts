@@ -68,9 +68,9 @@ export class DemoVault {
       await tx.objectStore(META_STORE).put(meta);
       await this.evict(tx);
       await tx.done;
-    } catch (e) {
+    } catch (error) {
       // Vault failing must never eat a clip — memory copy is primary.
-      logger.warn('Vault put failed', e);
+      logger.warn('Vault put failed', error);
     }
   }
 
@@ -78,8 +78,8 @@ export class DemoVault {
     try {
       const rec = await (await this.db()).get(STORE, id) as VaultEntry | undefined;
       return rec?.data;
-    } catch (e) {
-      logger.warn('Vault get failed', e);
+    } catch (error) {
+      logger.warn('Vault get failed', error);
       return undefined;
     }
   }
@@ -97,8 +97,8 @@ export class DemoVault {
       const all = await db.getAll(META_STORE) as VaultMeta[];
       all.sort((a, b) => b.timestamp - a.timestamp);
       return all;
-    } catch (e) {
-      logger.warn('Vault list failed', e);
+    } catch (error) {
+      logger.warn('Vault list failed', error);
       return [];
     }
   }
@@ -113,8 +113,8 @@ export class DemoVault {
         await tx.objectStore(META_STORE).put(m);
       }
       await tx.done;
-    } catch (e) {
-      logger.warn('Vault meta backfill failed', e);
+    } catch (error) {
+      logger.warn('Vault meta backfill failed', error);
     }
   }
 

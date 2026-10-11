@@ -52,11 +52,11 @@ export function validatePlayerId(id: unknown): ValidationResult<string> {
 // clients' dead reckoning, so a finite-but-absurd magnitude is poisoned.
 export function validateBody(obj: Record<string, unknown>): ValidationResult<{ position: Vec3; rotation: Rotation; velocity: Vec3 }> {
   const pos = validateVec3(obj.position);
-  if (!pos.success) return { success: false, error: `position: ${pos.error}` };
+  if (!pos.success) {return { success: false, error: `position: ${pos.error}` };}
   const rot = validateRotation(obj.rotation);
-  if (!rot.success) return { success: false, error: `rotation: ${rot.error}` };
+  if (!rot.success) {return { success: false, error: `rotation: ${rot.error}` };}
   const vel = validateVec3(obj.velocity);
-  if (!vel.success) return { success: false, error: `velocity: ${vel.error}` };
+  if (!vel.success) {return { success: false, error: `velocity: ${vel.error}` };}
   const v = vel.data;
   if (v.x * v.x + v.y * v.y + v.z * v.z > 1000 * 1000) {
     return { success: false, error: 'velocity magnitude out of range' };
@@ -81,7 +81,7 @@ export function optShotId(v: unknown): string | undefined {
  *  frame's id would otherwise sit in capped-but-fat maps. Rejects outright —
  *  an oversized id is never a live projectile. */
 export function optProjId(v: unknown): { ok: boolean; v?: string } {
-  if (typeof v !== 'string' || v.length === 0 || v.length > 64) return { ok: false };
+  if (typeof v !== 'string' || v.length === 0 || v.length > 64) {return { ok: false };}
   return { ok: true, v };
 }
 export function optProjIdOpt(v: unknown): { ok: boolean; v?: string } {
@@ -92,11 +92,11 @@ export function optProjIdOpt(v: unknown): { ok: boolean; v?: string } {
 
 /** Claim verdict cursor — the seq the client wants a claimAck for. */
 export function optClaimSeq(v: unknown): number | undefined {
-  return typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 0xffffffff ? v : undefined;
+  return typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 0xFF_FF_FF_FF ? v : undefined;
 }
 
 export function optVec(value: unknown): OptVec {
-  if (value === undefined) return { ok: true };
+  if (value === undefined) {return { ok: true };}
   const r = validateVec3(value);
   return r.success ? { ok: true, data: r.data } : { ok: false, error: r.error };
 }

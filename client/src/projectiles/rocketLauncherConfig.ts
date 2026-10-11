@@ -49,10 +49,10 @@ export const RKT_CONFIG: ProjectileConfig = {
   trailScaleMin: 0.8,
   trailScaleMax: 3,
   trailRampIn: 0.1,
-  meshColor: 0x3D4A35, // military olive — ordnance, not energy
+  meshColor: 0x3D_4A_35, // military olive — ordnance, not energy
   meshType: 'rocket',
   glowShell: true,
-  glowColor: 0xFF5500, // burning motor at the tail
+  glowColor: 0xFF_55_00, // burning motor at the tail
   glowOpacity: 0.35,
   glowScale: 0.9,
   // Billboard streak like the MRV carrier — the missile's flight line
@@ -60,7 +60,7 @@ export const RKT_CONFIG: ProjectileConfig = {
   ribbonTrail: true,
   ribbonWidth: 0.55,
   ribbonLife: 0.5,
-  ribbonColor: 0xFF6622,
+  ribbonColor: 0xFF_66_22,
   terrainOffset: WEAPONS[15].hitMin,
   needsServerTracking: true,
   maxLifetime: WEAPONS[15].maxLifetime,

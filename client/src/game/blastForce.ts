@@ -185,7 +185,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     const dup = rkb.findIndex(s => now - s.t < 700 &&
       Math.hypot(s.x - pos.x, s.y - pos.y, s.z - pos.z) < 8 &&
       (s.f === undefined || Math.abs(s.f - force) < 0.5));
-    if (dup >= 0) {rkb.splice(dup, 1); return true;}
+    if (dup !== -1) {rkb.splice(dup, 1); return true;}
     const impulse = Math.min(
       aoeImpulseT1At(force, pos, player.pos, radius, player.appliedClass) * KNOCKBACK_SCALE * player.mods.knockbackTaken,
       BLAST_IMPULSE_MAX);

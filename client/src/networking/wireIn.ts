@@ -18,10 +18,10 @@ import type { ServerMessage, TickUpdatePlayer } from '../../../shared/protocol.j
 import { PROTOCOL_VERSION } from '../../../shared/protocol.js';
 import { WeaponType } from '../../../shared/weapons.js';
 import { WORLD_MODEL, verbForType, checkPacket, rowPatch } from '../../../shared/worldModel.js';
-import type { RemotePlayerState } from './NetworkManager.js';
+import type { RemotePlayerState,NetworkManager } from './NetworkManager.js';
 import { claim as netProbeClaim } from '../debug/netProbe.js';
 import { rejectCensus, dedupCensus, dropCensus } from './claimLedger.js';
-import type { NetworkManager } from './NetworkManager.js';
+
 import { urlParams } from '../core/params.js';
 
 const logger = new ChildLogger('Wire');
@@ -79,8 +79,8 @@ export class WireIn {
   /** Wire-feed seam — one message through the live dispatch path, so
    *  recorded streams (.rec replays) and sockets are indistinguishable. */
   dispatch(data: ServerMessage | Uint8Array): void {
-    if (typeof data === 'object' && !(data instanceof Uint8Array)) this.message(data);
-    else this.binary(data as Uint8Array);
+    if (typeof data === 'object' && !(data instanceof Uint8Array)) {this.message(data);}
+    else {this.binary(data as Uint8Array);}
   }
 
   /** Inbound that lands before the app binds its handler deps (the
@@ -98,54 +98,54 @@ export class WireIn {
     this.ready = true;
     const q = this.early;
     this.early = [];
-    if (this.earlyDrops > 0) logger.warn(`wireIn dropped ${this.earlyDrops} early messages over the 512 cap`);
-    for (const m of q) this.dispatch(m);
+    if (this.earlyDrops > 0) {logger.warn(`wireIn dropped ${this.earlyDrops} early messages over the 512 cap`);}
+    for (const m of q) {this.dispatch(m);}
   }
 
   private gate(data: ServerMessage | Uint8Array): boolean {
-    if (this.ready) return false;
-    if (this.early.length < 512) this.early.push(data);
-    else this.earlyDrops++;
+    if (this.ready) {return false;}
+    if (this.early.length < 512) {this.early.push(data);}
+    else {this.earlyDrops++;}
     return true;
   }
 
   message(data: ServerMessage): void {
-    if (this.gate(data)) return;
+    if (this.gate(data)) {return;}
     this.h.noteRx(JSON.stringify(data).length); // rx approximation — JSON events are sparse
     // Offset cursor: every reliable frame carries a room-scoped `ev`.
     // Replays only ever carry seq > our watermark, so tracking the max
     // doubles as the dup guard if a transport ever re-delivers.
-    const ev = (data as ServerMessage & { ev?: number }).ev;
-    if (ev !== undefined && ev > this.lastEv) this.lastEv = ev;
+    const {ev} = (data as ServerMessage & { ev?: number });
+    if (ev !== undefined && ev > this.lastEv) {this.lastEv = ev;}
     // Capture the server-issued session token for future reconnects.
     // gameState also re-seeds the ev watermark: `ev` is room-scoped, so a
     // room hop or fresh join must adopt THIS room's seq, not max() against
     // a stale watermark from the old room.
     if (data?.type === 'gameState') {
-      if (ev !== undefined) this.lastEv = ev;
-      if (typeof data.sessionToken === 'string') this.h.acceptSessionToken(data.sessionToken);
+      if (ev !== undefined) {this.lastEv = ev;}
+      if (typeof data.sessionToken === 'string') {this.h.acceptSessionToken(data.sessionToken);}
     }
     if (WireIn.HEALTH_EVENT_TYPES.has(data.type)) {
-      if (this.recentHealthEvents.length >= 24) this.recentHealthEvents.shift();
+      if (this.recentHealthEvents.length >= 24) {this.recentHealthEvents.shift();}
       const d = data as Record<string, unknown>;
       this.recentHealthEvents.push({ type: data.type, t: Date.now(), detail: `${d.shooterId ?? d.playerId ?? ''}→${d.targetId ?? ''} ${d.damage ?? ''}` });
     }
     // Declared entity verbs get the inbound field check — a packet that
     // drops a declared field warns here instead of desyncing silently.
     const decl = verbForType(data.type);
-    if (decl) checkPacket(decl.kind, decl.verb, data as unknown as Record<string, unknown>);
+    if (decl) {checkPacket(decl.kind, decl.verb, data as unknown as Record<string, unknown>);}
     // Avoid JSON.stringify on every message — tickUpdate arrives at 20Hz
     const handler = this.handlers[data.type] as ((d: ServerMessage) => void) | undefined;
     if (handler) {
       // A malformed-but-parseable message mustn't reach the connection's
       // onError path — one bad packet shouldn't cost a reconnect.
       try { handler(data); }
-      catch (e) {
+      catch (error) {
         // Swallow containment isn't free: the handler may have half-applied
         // state. The count surfaces in the Alt+Q dump so "feels off" reports
         // can be checked for silent partial-apply storms.
         this.handlerThrows++;
-        logger.warn(`Handler threw for ${data.type}: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`);
+        logger.warn(`Handler threw for ${data.type}: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
       }
     } else {
       logger.warn(`Unknown message type: ${data.type}`);
@@ -153,7 +153,7 @@ export class WireIn {
   }
 
   binary(data: Uint8Array): void {
-    if (this.gate(data)) return;
+    if (this.gate(data)) {return;}
     this.h.noteRx(data.length);
     if (!isWireFrame(data)) {
       logger.debug(`Received non-wire binary message: ${data.length} bytes`);
@@ -168,30 +168,30 @@ export class WireIn {
         // own which ones cross into the JSON shape handlers see.
         const src = seg as unknown as Record<string, unknown>;
         const msg: Record<string, unknown> = { type: 'ballSegment', id: seg.id };
-        for (const f of WORLD_MODEL.ball!.updateFields!) msg[f.name] = src[f.name];
+        for (const f of WORLD_MODEL.ball!.updateFields!) {msg[f.name] = src[f.name];}
         try { this.h.onBallSegment?.(msg as unknown as Extract<ServerMessage, { type: 'ballSegment' }>); }
-        catch (e) { this.handlerThrows++; logger.warn(`Handler threw for ballSegment: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`); }
+        catch (error) { this.handlerThrows++; logger.warn(`Handler threw for ballSegment: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`); }
       }
       return;
     }
     // Stale-drop BEFORE decode: v4 decode mutates the byId baseline — an
     // out-of-order datagram frame would smuggle its stale fields into the
     // retained slots even when dropped here. tickSeq sits at bytes 6-9.
-    if (data.byteLength >= 15 && new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(6, true) <= this.lastTickSeq) return;
+    if (data.byteLength >= 15 && new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(6, true) <= this.lastTickSeq) {return;}
     // ?dropticks=N — drop every Nth tick frame before decode to exercise
     // the tickNack recovery loop (localhost can't produce real loss).
     if (WireIn.dropEvery > 0 && ++WireIn.dropCounter >= WireIn.dropEvery) { WireIn.dropCounter = 0; return; }
     const tick = decodeTickFrame(data, this.tickPool);
-    if (!tick) return;
+    if (!tick) {return;}
     // A real loss (the <= drop above already ate reorders): masked fields
     // in the gap are stale until each wireId's staggered full lands —
     // ask for a full-record window instead of waiting out the ~750ms.
-    if (tick.tickSeq - this.lastTickSeq > 1) this.h.onTickGap?.(tick.tickSeq - this.lastTickSeq - 1);
+    if (tick.tickSeq - this.lastTickSeq > 1) {this.h.onTickGap?.(tick.tickSeq - this.lastTickSeq - 1);}
     this.lastTickSeq = tick.tickSeq;
     // Same containment as the JSON path — a throwing tick handler at 20Hz
     // would otherwise hit onError and reconnect the socket every frame.
     try { this.handleTickUpdate(tick); }
-    catch (e) { this.handlerThrows++; logger.warn(`Handler threw for tickUpdate: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`); }
+    catch (error) { this.handlerThrows++; logger.warn(`Handler threw for tickUpdate: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`); }
   }
 
   private readonly handlers: { [K in ServerMessage['type']]: (data: Extract<ServerMessage, { type: K }>) => void } = {
@@ -200,7 +200,7 @@ export class WireIn {
     playerJoined: (data) => this.handlePlayerJoined(data),
     playerLeft: (data) => this.handlePlayerLeft(data),
     wireIds: (data) => {
-      for (const [id, pid] of Object.entries(data.add)) this.wireIds.set(Number(id), pid);
+      for (const [id, pid] of Object.entries(data.add)) {this.wireIds.set(Number(id), pid);}
       for (const id of data.remove ?? []) {
         this.wireIds.delete(id);
         // A reissued id must seat a fresh baseline — never inherit the
@@ -271,8 +271,8 @@ export class WireIn {
       rejectCensus.total++;
       rejectCensus.byReason.set(data.reason, (rejectCensus.byReason.get(data.reason) ?? 0) + 1);
       rejectCensus.last = `${data.reason}${data.targetId ? ` →${data.targetId}` : ''}`;
-      if (data.targetId || data.shotId) this.h.confirmClaimHit(data.targetId ?? '', data.shotId);
-      const wName = data.weaponType !== undefined ? String(WeaponType[data.weaponType] ?? data.weaponType) : undefined;
+      if (data.targetId || data.shotId) {this.h.confirmClaimHit(data.targetId ?? '', data.shotId);}
+      const wName = data.weaponType === undefined ? undefined : String(WeaponType[data.weaponType] ?? data.weaponType);
       netProbeClaim('reject', data.reason, wName, data.targetId, this.h.getPing());
       logger.error(`shot rejected — predicted damage never applied`, {
         reason: data.reason,
@@ -288,11 +288,11 @@ export class WireIn {
       dropCensus.total++;
       dropCensus.byReason.set(data.reason, (dropCensus.byReason.get(data.reason) ?? 0) + 1);
       dropCensus.last = `${data.reason}${data.targetId ? ` →${data.targetId}` : ''}`;
-      if (data.targetId || data.shotId) this.h.confirmClaimHit(data.targetId ?? '', data.shotId);
-      netProbeClaim('drop', data.reason, data.weaponType !== undefined ? String(WeaponType[data.weaponType] ?? data.weaponType) : undefined, data.targetId, this.h.getPing());
+      if (data.targetId || data.shotId) {this.h.confirmClaimHit(data.targetId ?? '', data.shotId);}
+      netProbeClaim('drop', data.reason, data.weaponType === undefined ? undefined : String(WeaponType[data.weaponType] ?? data.weaponType), data.targetId, this.h.getPing());
       logger.warn(`claim dropped — predicted damage never applied`, {
         reason: data.reason, targetId: data.targetId,
-        weapon: data.weaponType !== undefined ? WeaponType[data.weaponType] ?? data.weaponType : undefined,
+        weapon: data.weaponType === undefined ? undefined : WeaponType[data.weaponType] ?? data.weaponType,
         pingMs: this.h.getPing(),
       });
       this.h.onShotRejected?.(data.reason, data.targetId, data.weaponType, data.health);
@@ -340,7 +340,7 @@ export class WireIn {
     // v4 masked deltas inherit per-wireId state — a new room epoch must
     // not let a reassigned id keep the old player's last-decoded fields.
     this.tickPool.byId?.clear();
-    if (data.wireIds) for (const [id, pid] of Object.entries(data.wireIds)) this.wireIds.set(Number(id), pid);
+    if (data.wireIds) {for (const [id, pid] of Object.entries(data.wireIds)) {this.wireIds.set(Number(id), pid);}}
     this.h.remoteReset(data.players);
     logger.debug(`raw gameState map: ${data.map ? JSON.stringify(data.map).slice(0, 300) : 'none'}`);
     this.h.onGameState?.(data.players || [], data.localPlayerState, { room: data.room, mode: data.mode, mapName: data.mapName, team: data.team, scores: data.scores, ffaScores: data.ffaScores, pickups: data.pickups, flags: data.flags, matchEndsAt: data.matchEndsAt, respawnMs: data.respawnMs, deployables: data.deployables, map: data.map });
@@ -357,13 +357,13 @@ export class WireIn {
     if (data.inputAck !== undefined && data.inputAck > 0) {
       this.h.ackInputs(data.inputAck);
     }
-    if (!data.updates || !Array.isArray(data.updates)) return;
+    if (!data.updates || !Array.isArray(data.updates)) {return;}
     const now = Date.now();
     // Snapshots must carry the SERVER timeline (tickSeq×50), not arrival
     // wall time — arrival stamps fold transport jitter into the rendered
     // path itself, which is the rubberband mechanism. The JSON path has
     // no tickSeq and keeps the arrival fallback (host/loopback: jitter≈0).
-    const serverMs = data.tickSeq !== undefined ? data.tickSeq * SERVER_TICK_MS : now;
+    const serverMs = data.tickSeq === undefined ? now : data.tickSeq * SERVER_TICK_MS;
     // Pooled decode hands back its whole slots array + a live count —
     // entries past it are stale from earlier, larger frames.
     const n = data.count ?? data.updates.length;
@@ -371,7 +371,7 @@ export class WireIn {
       const u = data.updates[i]!;
       // v3 record ahead of its roster — can't build a body without an
       // identity, so it drops; the next record for that id resolves.
-      if (!u.playerId) continue;
+      if (!u.playerId) {continue;}
       this.applyTickPlayerUpdate(u, serverMs);
     }
   }
@@ -379,7 +379,7 @@ export class WireIn {
   private applyTickPlayerUpdate(u: TickUpdatePlayer, serverMs: number): void {
     // Defense-in-depth: server already excludes self from tickUpdate,
     // but skip local player here too in case of any server-side regression
-    if (u.playerId === this.h.getLocalPlayerId()) return;
+    if (u.playerId === this.h.getLocalPlayerId()) {return;}
     this.h.upsertRemotePlayer(u.playerId, {
       // Declared wire fields copy straight from the model — a field the
       // handler forgot lands as a key the record still owns.
@@ -398,15 +398,15 @@ export class WireIn {
     const patch = rowPatch(WORLD_MODEL.player.spawnFields!, data as unknown as Record<string, unknown>) as Partial<RemotePlayerState>;
     // Rejoins get identity fields but not vitals — a grace rejoiner
     // keeps the wounded/dead truth tickUpdate already delivered.
-    if (!isNew) { delete patch.health; delete patch.isDead; }
-    else patch.velocity = { x: 0, y: 0, z: 0 };
-    if (patch.health !== undefined && !Number.isFinite(patch.health)) delete patch.health;
+    if (isNew) {patch.velocity = { x: 0, y: 0, z: 0 };}
+    else { delete patch.health; delete patch.isDead; }
+    if (patch.health !== undefined && !Number.isFinite(patch.health)) {delete patch.health;}
     this.h.upsertRemotePlayer(data.playerId, patch);
-    if (isNew) this.h.onPlayerJoined?.(data.playerId, data.position, data.rotation);
+    if (isNew) {this.h.onPlayerJoined?.(data.playerId, data.position, data.rotation);}
   }
 
   private handlePlayerLeft(data: Extract<ServerMessage, { type: 'playerLeft' }>): void {
-    if (data.playerId) this.h.remoteDelete(data.playerId);
+    if (data.playerId) {this.h.remoteDelete(data.playerId);}
     this.h.onPlayerLeft?.(data.playerId);
   }
 
@@ -424,7 +424,7 @@ export class WireIn {
   }
 
   private handlePlayerHit(data: Extract<ServerMessage, { type: 'playerHit' }>): void {
-    if (data.shooterId === this.h.getLocalPlayerId()) this.h.confirmClaimHit(data.targetId);
+    if (data.shooterId === this.h.getLocalPlayerId()) {this.h.confirmClaimHit(data.targetId);}
     if (data.seq !== undefined) {
       if (data.seq <= this.lastHitSeq) {
         dedupCensus.hitSeqDrops++;
@@ -451,7 +451,7 @@ export class WireIn {
   private handlePlayerKill(data: Extract<ServerMessage, { type: 'playerKill' }>): void {
     // A kill IS the confirm — the fatal blow arrives as playerKill, not
     // playerHit, so the pending ledger would warn phantom otherwise.
-    if (data.shooterId === this.h.getLocalPlayerId()) this.h.confirmClaimHit(data.targetId);
+    if (data.shooterId === this.h.getLocalPlayerId()) {this.h.confirmClaimHit(data.targetId);}
     // Update REMOTE player state (local player death handled by callback).
     // Same phantom-row guard as hits — a kill for a departed target must
     // not mint a stub corpse.

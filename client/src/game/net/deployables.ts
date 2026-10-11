@@ -49,7 +49,7 @@ export function wireDeployables(ctx: NetCtx): void {
     deps.lazyDemoManager?.()?.recordDeployBoom(id, pos);
   };
   networkManager.onDeployHp = (id, hp, armor, src) => {
-    if (!Number.isFinite(hp + (armor ?? 0))) return;
+    if (!Number.isFinite(hp + (armor ?? 0))) {return;}
     mgr().applyDeployHp(id, hp, armor);
     deps.lazyDemoManager?.()?.recordDeployHp(id, hp);
     // A heal tick names its welder — draw the beam. The local player's

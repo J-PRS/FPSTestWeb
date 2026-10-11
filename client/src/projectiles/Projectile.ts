@@ -389,14 +389,14 @@ export class Projectile {
     // (stale ttl, armed gate, stuck early-return) — name it in the dump.
     if (ttl && !this.overdueFlagged && this.age > ttl * 2) {
       this.overdueFlagged = true;
-      glitch('proj-overdue', { cfg: this.config.name, age: +this.age.toFixed(2), ttl, fa, remote: this.isRemote, stuck: this.stuck, wt: this.config.weaponType });
+      glitch('proj-overdue', { cfg: this.config.name, age: Number(this.age.toFixed(2)), ttl, fa, remote: this.isRemote, stuck: this.stuck, wt: this.config.weaponType });
     }
     // Fuseless shells (missing maxLifetime — the BOLT_CONFIG fallback on an
     // unknown weaponType is exactly this) fly to the 10s backstop; flag
     // them early so an immortal replica names itself instead of streaking.
     if (!ttl && !this.overdueFlagged && this.age > 4) {
       this.overdueFlagged = true;
-      glitch('proj-fuseless', { cfg: this.config.name, age: +this.age.toFixed(2), remote: this.isRemote, wt: this.config.weaponType });
+      glitch('proj-fuseless', { cfg: this.config.name, age: Number(this.age.toFixed(2)), remote: this.isRemote, wt: this.config.weaponType });
     }
 
     this.tickRayDischarge();
@@ -470,7 +470,7 @@ export class Projectile {
     if (this.armedFxDone || !this.armed || this.config.armTime === undefined) {return;}
     this.armedFxDone = true;
     const armed = RibbonTrail.acquire(this.scene, {
-      color: 0xFFBB33, width: 0.22, life: 0.5, billboard: true, tag: `arm:${this.config.name}`,
+      color: 0xFF_BB_33, width: 0.22, life: 0.5, billboard: true, tag: `arm:${this.config.name}`,
     });
     // Late-join ribbons miss the driver's ctor follow-bind — without this
     // the armed streak's tip trails the shell by a frame of travel.

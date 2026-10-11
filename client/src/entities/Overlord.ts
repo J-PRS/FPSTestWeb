@@ -6,7 +6,7 @@ import {
   OVERLORD_SPEED, OVERLORD_ALTITUDE, OVERLORD_LOITER_DIST, OVERLORD_ACCEL,
   OVERLORD_DROP_INTERVAL, OVERLORD_DROP_RANGE, OVERLORD_STUN,
 } from '../core/config.js';
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
@@ -34,7 +34,7 @@ function hullGeo(): THREE.BufferGeometry {
     _hullGeo = new THREE.IcosahedronGeometry(1, 1);
     // Zerg proportions: wide fleshy sac, taller than a blimp, blunt nose —
     // reads as a floating creature, not an airship.
-    _hullGeo.scale(1.35, 1.0, 1.2);
+    _hullGeo.scale(1.35, 1, 1.2);
   }
   return _hullGeo;
 }
@@ -48,11 +48,11 @@ const _eyeGeo = new THREE.PlaneGeometry(1, 1);
 
 // Tentacle roots around the belly — [x, y, z, phase]
 const TENT_OFFSETS = [
-  [0.55, -0.75, 0.35, 0.0],
+  [0.55, -0.75, 0.35, 0],
   [-0.55, -0.75, 0.35, 1.4],
   [0.75, -0.65, -0.35, 2.6],
   [-0.75, -0.65, -0.35, 3.9],
-  [0.0, -0.85, -0.55, 5.1],
+  [0, -0.85, -0.55, 5.1],
 ] as const;
 
 let _hullMat: THREE.MeshLambertMaterial | null = null;
@@ -60,12 +60,12 @@ let _tentMat: THREE.MeshLambertMaterial | null = null;
 let _eyeMat: THREE.MeshBasicMaterial | null = null;
 
 export function overlordParts(): SwarmPart[] {
-  if (!_hullMat) _hullMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-  if (!_tentMat) _tentMat = new THREE.MeshLambertMaterial({ color: 0x3d2a35 });
-  if (!_eyeMat) _eyeMat = new THREE.MeshBasicMaterial({
-    map: getGlowTexture(), color: 0xffaa33, transparent: true, blending: THREE.AdditiveBlending,
+  if (!_hullMat) {_hullMat = new THREE.MeshLambertMaterial({ color: 0xFF_FF_FF });}
+  if (!_tentMat) {_tentMat = new THREE.MeshLambertMaterial({ color: 0x3D_2A_35 });}
+  if (!_eyeMat) {_eyeMat = new THREE.MeshBasicMaterial({
+    map: getGlowTexture(), color: 0xFF_AA_33, transparent: true, blending: THREE.AdditiveBlending,
     depthWrite: false, side: THREE.DoubleSide,
-  });
+  });}
   return [
     { geometry: hullGeo(), material: _hullMat, castShadow: true },
     { geometry: _tentGeo, material: _tentMat, per: TENTS_PER },
@@ -93,9 +93,9 @@ export class Overlord implements Targetable, SwarmSlotOwner {
   // Hull is a 7m-long fuselage — capsule along heading, not a sphere, so
   // nose/tail shots count. Updated per-frame from yaw.
   readonly capsuleEnd = new THREE.Vector3(0, 0, 1.3);
-  color = new THREE.Color(0x6e4460); // bruised zerg purple flesh
+  color = new THREE.Color(0x6E_44_60); // bruised zerg purple flesh
   readonly debrisKind = 'goo' as const; // gasbag pops into splat
-  readonly ichor = 0xe08a3c; // hot orange under the purple hide
+  readonly ichor = 0xE0_8A_3C; // hot orange under the purple hide
   scale = 2.2;
 
   swarmSlot = -1;
@@ -127,7 +127,7 @@ export class Overlord implements Targetable, SwarmSlotOwner {
     this.dropInterval = uber ? OVERLORD_DROP_INTERVAL * 0.55 : OVERLORD_DROP_INTERVAL;
     this.dropTimer = this.dropInterval * 0.5;
     if (uber) {
-      this.color.set(0x7a2a4a); // swollen crimson sac
+      this.color.set(0x7A_2A_4A); // swollen crimson sac
       this.scale = 3.2; // bigger debris — and it pays out 3 nuggets
     }
     this.pos = pos.clone();
@@ -137,14 +137,14 @@ export class Overlord implements Targetable, SwarmSlotOwner {
     this.pos.y = terrain.getHeight(pos.x, pos.z) + 2;
     this.vel = new THREE.Vector3();
     this.hasSlots = allocSlots('overlord', this);
-    if (!this.hasSlots) this.dead = true;
+    if (!this.hasSlots) {this.dead = true;}
   }
 
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
-    if (this.dead) return;
-    if (this.stunTimer > 0) this.stunTimer -= dt;
-    if (this.flash > 0) this.flash -= dt;
-    if (this.dropGlow > 0) this.dropGlow -= dt;
+    if (this.dead) {return;}
+    if (this.stunTimer > 0) {this.stunTimer -= dt;}
+    if (this.flash > 0) {this.flash -= dt;}
+    if (this.dropGlow > 0) {this.dropGlow -= dt;}
     this.animT += dt;
 
     // Steering: hold a wide loiter ring around the player — close enough that
@@ -154,7 +154,7 @@ export class Overlord implements Targetable, SwarmSlotOwner {
     const d = _dir.length() || 0.001;
     _dir.multiplyScalar(1 / d);
     this.steerLoiter(dt, terrain, d);
-    if (Math.random() < dt * 0.1) this.strafeDir *= -1;
+    if (Math.random() < dt * 0.1) {this.strafeDir *= -1;}
 
     this.tickDrops(dt, playerPos);
     this.faceTarget(dt, playerPos, d);
@@ -176,7 +176,7 @@ export class Overlord implements Targetable, SwarmSlotOwner {
     if (spd > OVERLORD_SPEED) { this.vel.x *= OVERLORD_SPEED / spd; this.vel.z *= OVERLORD_SPEED / spd; }
     this.pos.addScaledVector(this.vel, dt);
     const gy = terrain.getHeight(this.pos.x, this.pos.z);
-    if (this.pos.y < gy + 2) this.pos.y = gy + 2;
+    if (this.pos.y < gy + 2) {this.pos.y = gy + 2;}
   }
 
   private tickDrops(dt: number, playerPos: THREE.Vector3): void {
@@ -193,11 +193,11 @@ export class Overlord implements Targetable, SwarmSlotOwner {
   // you while sliding sideways is creepier anyway. Bank still follows
   // the turn so it doesn't look rail-mounted.
   private faceTarget(dt: number, playerPos: THREE.Vector3, d: number): void {
-    if (d <= 0.5) return;
+    if (d <= 0.5) {return;}
     const targetYaw = Math.atan2(playerPos.x - this.pos.x, playerPos.z - this.pos.z);
     let dy = targetYaw - this.yaw;
-    while (dy > Math.PI) dy -= Math.PI * 2;
-    while (dy < -Math.PI) dy += Math.PI * 2;
+    while (dy > Math.PI) {dy -= Math.PI * 2;}
+    while (dy < -Math.PI) {dy += Math.PI * 2;}
     this.yaw += dy * Math.min(1, 2 * dt);
     this.roll = -dy * 0.3;
     // Hitbox capsule follows the actual visual heading
@@ -205,9 +205,9 @@ export class Overlord implements Targetable, SwarmSlotOwner {
   }
 
   private writeInstances(): void {
-    if (!this.hasSlots) return;
+    if (!this.hasSlots) {return;}
     const swarm = getSwarm('overlord');
-    if (!swarm) return;
+    if (!swarm) {return;}
     const slot = this.swarmSlot;
     const r = this.radius;
 

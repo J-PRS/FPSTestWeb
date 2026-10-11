@@ -43,7 +43,7 @@ describe('resetMatch purges per-match state', () => {
     resetMatch(m);
     expect(m.over).toBeNull();
     expect(m.scores.alpha + m.scores.bravo).toBe(0);
-    for (const v of m.ffaScores.values()) expect(v).toBe(0);
+    for (const v of m.ffaScores.values()) {expect(v).toBe(0);}
     expect(m.dmgPool.size).toBe(0);
     expect((m.ctf as { reset: unknown }).reset).toHaveBeenCalled();
     expect((m.rabbit as { reset: unknown }).reset).toHaveBeenCalled();

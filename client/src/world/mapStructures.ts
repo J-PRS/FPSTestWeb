@@ -47,10 +47,10 @@ export const KIT_BUILDERS: Record<string, (glow: number) => THREE.Group> = {
 // draw calls regardless of piece count. Collision is the next layer —
 // for now these are cover you can stand behind, not walls that stop you.
 const TINTS = {
-  neutral: 0x4A5058,
-  alpha: 0x3A5A80,
-  bravo: 0x80483A,
-  root: 0x4D3A24,
+  neutral: 0x4A_50_58,
+  alpha: 0x3A_5A_80,
+  bravo: 0x80_48_3A,
+  root: 0x4D_3A_24,
 } as const;
 
 let built: THREE.Group | null = null;
@@ -85,7 +85,7 @@ export function buildArenaDome(a: { x: number; z: number; radius: number }, grou
     dome = null;
   }
   const mat = new THREE.MeshBasicMaterial({
-    color: 0x66CCFF, transparent: true, opacity: 0,
+    color: 0x66_CC_FF, transparent: true, opacity: 0,
     // DoubleSide: BackSide is invisible from outside — and outside is
     // exactly where an offender stands when the boundary matters.
     side: THREE.DoubleSide, depthWrite: false,
@@ -118,7 +118,7 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
   // and this build's spec-box mats so every wall/kit foot fades into
   // the heightfield instead of hard-intersecting it.
   if (terrain) {
-    for (const m of [hullMat, trimMat, deckMat, darkMat]) applyTerrainBlend(m, terrain.heightU);
+    for (const m of [hullMat, trimMat, deckMat, darkMat]) {applyTerrainBlend(m, terrain.heightU);}
   }
   if (built) {
     scene.remove(built);
@@ -170,7 +170,7 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
     if (s.kind !== 'kit') {continue;}
     const mk = KIT_BUILDERS[s.piece ?? ''];
     if (!mk) {continue;}
-    const piece = mk(s.team ? TEAM_COLORS[s.team] : 0x59F2FF); // unteamed = neutral cyan
+    const piece = mk(s.team ? TEAM_COLORS[s.team] : 0x59_F2_FF); // unteamed = neutral cyan
     piece.userData.kitPiece = true;
     piece.position.set(s.pos.x, s.pos.y, s.pos.z);
     piece.rotation.y = s.rotY ?? 0;
@@ -183,7 +183,7 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
   // collider carries passTeam so the server resolves who gets through.
   for (const s of list) {
     if (s.kind !== 'shield') {continue;}
-    const color = s.team ? TEAM_COLORS[s.team] : 0x59F2FF;
+    const color = s.team ? TEAM_COLORS[s.team] : 0x59_F2_FF;
     const pane = new THREE.Mesh(
       new THREE.BoxGeometry(s.size.x, s.size.y, Math.max(0.25, s.size.z)),
       new THREE.MeshBasicMaterial({
@@ -298,7 +298,7 @@ function buildColliderGizmos(list: StructureSpec[], scene: THREE.Scene): void {
   if (!merged) {return;}
   colliderGizmos = new THREE.LineSegments(
     merged,
-    new THREE.LineBasicMaterial({ color: 0x33FF88, transparent: true, opacity: 0.55, depthTest: false }),
+    new THREE.LineBasicMaterial({ color: 0x33_FF_88, transparent: true, opacity: 0.55, depthTest: false }),
   );
   colliderGizmos.renderOrder = 999;
   colliderGizmos.matrixAutoUpdate = false;

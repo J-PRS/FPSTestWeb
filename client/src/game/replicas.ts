@@ -35,10 +35,10 @@ export function reconcileReplicas<T, R, K>(map: Map<K, T>, rows: R[], hooks: Rep
     // A dead-but-registered entry wedges every later spawn — evict so
     // the ensure below actually creates it (the ctor-fail wedge).
     const held = map.get(id);
-    if (held !== undefined && hooks.isDead?.(held)) map.delete(id);
-    if (!map.has(id)) hooks.ensure(r);
+    if (held !== undefined && hooks.isDead?.(held)) {map.delete(id);}
+    if (!map.has(id)) {hooks.ensure(r);}
     const e = map.get(id);
-    if (e === undefined) continue; // ensure refused — next roster retries
+    if (e === undefined) {continue;} // ensure refused — next roster retries
     hooks.apply?.(e, r);
   }
   for (const [id, e] of map) {

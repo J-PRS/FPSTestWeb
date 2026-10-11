@@ -59,7 +59,7 @@ export class SpeedLines {
    * travel path so the teleport reads as a whoosh, not a cut. Also flares
    * intensity so they render even if velocity just changed.
    */
-  surge(from: THREE.Vector3, to: THREE.Vector3, color = 0x55CCFF, count = 14): void {
+  surge(from: THREE.Vector3, to: THREE.Vector3, color = 0x55_CC_FF, count = 14): void {
     _velDir.subVectors(to, from);
     const len = _velDir.length();
     if (len < 0.5) { this.burst(); return; }
@@ -104,7 +104,7 @@ export class SpeedLines {
     let s = this.pool.pop();
     if (!s) {
       const mat = new THREE.MeshBasicMaterial({
-        color: 0x9DB8D4,
+        color: 0x9D_B8_D4,
         transparent: true,
         opacity: 0,
         blending: THREE.AdditiveBlending,

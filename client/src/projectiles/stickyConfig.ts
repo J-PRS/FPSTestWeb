@@ -57,14 +57,14 @@ export const STICKY_CONFIG: ProjectileConfig = {
   ribbonLanes: 1, // single thin streak — the fizz particles carry the volume
   ribbonWidth: 0.22,
   ribbonLife: 0.3,
-  ribbonColor: 0xFF7733,
+  ribbonColor: 0xFF_77_33,
   // Dark gunmetal shell + hot amber armed-light that pulses and quickens
   // on the fuse — reads "live ordnance", not gum. The pink trail is gone
   // with it; lobbed bombs shed embers instead.
-  meshColor: 0x4A3A26,
+  meshColor: 0x4A_3A_26,
   meshType: 'ball',
   glowShell: true,
-  glowColor: 0xFF5522,
+  glowColor: 0xFF_55_22,
   glowOpacity: 0.7,
   // Sits permanently just above the shell (pulse crests higher) — a live
   // amber halo so the bomb reads "armed" instead of inert cannonball.

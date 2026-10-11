@@ -22,7 +22,7 @@ const TRADE_MS = 300;
 const PROBE_CAP = 256;
 function probePush<T>(arr: T[], v: T): void {
   arr.push(v);
-  if (arr.length > PROBE_CAP) arr.splice(0, arr.length - PROBE_CAP);
+  if (arr.length > PROBE_CAP) {arr.splice(0, arr.length - PROBE_CAP);}
 }
 import { logger } from './logger.ts';
 import { WORLD_MODEL, eventPayload } from '../../shared/worldModel.ts';
@@ -48,9 +48,9 @@ export class HitLedger {
   applyHit(c: LedgerHost, shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number }, opts: { label: string; extra?: Record<string, unknown>; weapon?: number; shotId?: string; air?: number }): void {
     c.hb('hit');
     c.hb('dmg', Math.round(damage));
-    if (result.killed) c.hb('kill');
+    if (result.killed) {c.hb('kill');}
     c.deps.emit?.({ type: 'hit', targetId, shooterId, damage });
-    const src = opts.weapon !== undefined ? `w${opts.weapon}` : opts.label;
+    const src = opts.weapon === undefined ? opts.label : `w${opts.weapon}`;
     this.noteHit(c, shooterId, targetId, src, damage, result.killed, { dist: opts.extra?.dist as number | undefined, pos: opts.extra?.pos as { x: number; y: number; z: number } | undefined });
     if (!result.killed) {
       // Surviving victim pops min(banked, damage) of their LG charge —
@@ -62,7 +62,7 @@ export class HitLedger {
         const v = c.playerManager.getPlayer(targetId);
         if (v) {
           const acc = c.chargeBank.of(v);
-          if (acc > 0) c.chargeBank.discharge(shooterId, v, Math.min(acc, damage));
+          if (acc > 0) {c.chargeBank.discharge(shooterId, v, Math.min(acc, damage));}
         }
       }
       logger.debug(opts.label, { shooter: shooterId, target: targetId, damage, targetHealth: result.newHealth, ...opts.extra });
@@ -70,7 +70,7 @@ export class HitLedger {
       return;
     }
     const corpse = c.playerManager.getPlayer(targetId);
-    if (corpse) c.chargeBank.corpse(shooterId, corpse); // banked LG charge goes off on the body
+    if (corpse) {c.chargeBank.corpse(shooterId, corpse);} // banked LG charge goes off on the body
     this.creditKill(c, shooterId, targetId, damage, opts);
   }
 
@@ -83,9 +83,9 @@ export class HitLedger {
     const duelKey = `${shooterId}|${targetId}`;
     if (!killed) {
       this.duelStart.set(duelKey, this.duelStart.get(duelKey) ?? simNow());
-      if (this.duelStart.size > 512) this.pruneStaleDuels();
+      if (this.duelStart.size > 512) {this.pruneStaleDuels();}
       const v = c.playerManager.getPlayer(targetId);
-      if (v) c.deps.influence?.splat(v.position, c.deps.influence.dangerLayer(v.team ?? 'alpha'), 0.3);
+      if (v) {c.deps.influence?.splat(v.position, c.deps.influence.dangerLayer(v.team ?? 'alpha'), 0.3);}
       return;
     }
     const victim = c.playerManager.getPlayer(targetId);
@@ -96,20 +96,20 @@ export class HitLedger {
       c.deps.influence?.splat(victim.position, c.deps.influence.dangerLayer(victim.team ?? 'alpha'), 2);
       c.deps.influence?.splat(victim.position, 'opportunity', 0.8);
     }
-    if (shooterId === targetId && impactDist !== undefined) probePush(selfKillImpactDist, impactDist);
+    if (shooterId === targetId && impactDist !== undefined) {probePush(selfKillImpactDist, impactDist);}
     if (shooterId === targetId && impactPos) {
       probePush(selfKillImpactPos, { x: impactPos.x, y: impactPos.y, z: impactPos.z });
       const near = c.deps.preyNear?.(impactPos, shooterId);
-      if (near) probePush(selfKillPrey, near);
+      if (near) {probePush(selfKillPrey, near);}
     }
     if (shooterId === targetId) {
       const me2 = c.playerManager.getPlayer(shooterId);
       if (me2) {
         let foeD = Infinity;
         for (const o of c.playerManager.getAllPlayers().values()) {
-          if (o.team === me2.team || o.isDead) continue;
+          if (o.team === me2.team || o.isDead) {continue;}
           const d = Math.hypot(o.position.x - me2.position.x, o.position.z - me2.position.z);
-          if (d < foeD) foeD = d;
+          if (d < foeD) {foeD = d;}
         }
         probePush(selfKillFoeDist, foeD);
       }
@@ -117,15 +117,15 @@ export class HitLedger {
     // Trade accounting runs both directions of the batch: a self-frag
     // after a same-window enemy kill, or the enemy kill landing first.
     const now0 = simNow();
-    if (recentKills.some((k) => k.shooterId === shooterId && now0 - k.t <= TRADE_MS)) selfKillTrades.trades++;
+    if (recentKills.some((k) => k.shooterId === shooterId && now0 - k.t <= TRADE_MS)) {selfKillTrades.trades++;}
     recentKills.push({ t: now0, shooterId });
-    if (recentKills.length > 256) recentKills.splice(0, recentKills.length - 256);
+    if (recentKills.length > 256) {recentKills.splice(0, recentKills.length - 256);}
     weaponStats.recordKillSpeed(modeTag,
       c.playerManager.getPlayer(shooterId)?.velocity ?? null,
       victim?.velocity ?? null);
     // Duel engagement: first-hit→kill time per shooter+victim pair.
     const started = this.duelStart.get(duelKey);
-    if (started !== undefined) weaponStats.recordTtk(modeTag, src, simNow() - started);
+    if (started !== undefined) {weaponStats.recordTtk(modeTag, src, simNow() - started);}
     this.duelStart.delete(duelKey);
   }
 
@@ -136,7 +136,7 @@ export class HitLedger {
   private pruneStaleDuels(): void {
     const cutoff = simNow() - 60_000;
     for (const [k, t] of this.duelStart) {
-      if (t > cutoff) break;
+      if (t > cutoff) {break;}
       this.duelStart.delete(k);
     }
   }
@@ -147,7 +147,7 @@ export class HitLedger {
     // Self-frags are deaths, not kills — the kill feed already says so;
     // kills++/killTotal must agree or suicides pad the scoreboard and
     // can even fake "first blood".
-    if (shooterId !== 'environment' && shooterId !== targetId) c.playerManager.addKill(shooterId);
+    if (shooterId !== 'environment' && shooterId !== targetId) {c.playerManager.addKill(shooterId);}
     logger.info(`${opts.label} → kill`, { shooter: shooterId, target: targetId, damage, ...opts.extra });
     const shooterStreak = shooterId === 'environment' ? undefined
       : (c.playerManager.getPlayer(shooterId)?.streak ?? 0) + 1;

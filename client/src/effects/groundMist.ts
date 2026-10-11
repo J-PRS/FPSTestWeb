@@ -43,7 +43,7 @@ export class GroundMist {
       const spot = candidates[i % candidates.length]!;
       const mat = new THREE.MeshBasicMaterial({
         map: tex,
-        color: 0xBCC8D8,
+        color: 0xBC_C8_D8,
         transparent: true,
         opacity: 0.055 + Math.random() * 0.03,
         depthWrite: false,

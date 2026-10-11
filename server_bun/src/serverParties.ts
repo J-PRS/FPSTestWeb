@@ -51,12 +51,12 @@ export class ServerParties {
    *  the tick. Keyed on simNow, not tickSeq — bots think at their own
    *  cadence and scenario steps advance simNow without bumping tickSeq. */
   tick(): this {
-    if (this.seq === simNow()) return this;
+    if (this.seq === simNow()) {return this;}
     this.seq = simNow();
     this.players.length = 0; this.bodies.length = 0; this.roster.length = 0; this.pickups.length = 0;
     this.othersAll.length = 0; this.alliesByTeam.clear(); this.grid.clear();
     for (const q of this.room.players.getAllPlayers().values()) {
-      this.players.push({ id: q.id, pos: q.position, vel: q.velocity, team: q.team, dead: q.isDead, cloaked: !!(q.status & STATUS.CLOAK) && !shootRevealed(q.lastFireSim, this.seq), aimY: classCapsule(q.armorClass).centerOff,
+      this.players.push({ id: q.id, pos: q.position, vel: q.velocity, team: q.team, dead: q.isDead, cloaked: Boolean(q.status & STATUS.CLOAK) && !shootRevealed(q.lastFireSim, this.seq), aimY: classCapsule(q.armorClass).centerOff,
         en: { id: q.id, pos: q.position, vel: q.velocity, alive: true, aimY: classCapsule(q.armorClass).centerOff,
               hpFrac: q.maxHealth > 0 ? q.health / q.maxHealth : undefined } });
       if (!q.isDead) {
@@ -64,23 +64,23 @@ export class ServerParties {
         this.othersAll.push(q.position);
         if (q.team) {
           const list = this.alliesByTeam.get(q.team);
-          if (list) list.push(q.position);
-          else this.alliesByTeam.set(q.team, [q.position]);
+          if (list) {list.push(q.position);}
+          else {this.alliesByTeam.set(q.team, [q.position]);}
         }
       }
       const k = cellKey(Math.floor(q.position.x / CELL_M), Math.floor(q.position.z / CELL_M));
       const cell = this.grid.get(k);
-      if (cell) cell.push(this.players.length - 1);
-      else this.grid.set(k, [this.players.length - 1]);
+      if (cell) {cell.push(this.players.length - 1);}
+      else {this.grid.set(k, [this.players.length - 1]);}
     }
     for (const b of this.room.ballSim.roster())
-      this.bodies.push({ id: `b:${b.id}`, pos: b.position, vel: b.velocity, alive: true, aimY: 0 });
+      {this.bodies.push({ id: `b:${b.id}`, pos: b.position, vel: b.velocity, alive: true, aimY: 0 });}
     for (const cr of this.room.creatureSim.roster())
-      this.bodies.push({ id: `c:${cr.id}`, pos: cr.position, vel: cr.velocity, alive: true, aimY: 0 });
+      {this.bodies.push({ id: `c:${cr.id}`, pos: cr.position, vel: cr.velocity, alive: true, aimY: 0 });}
     // Pickups ride the same cache — gems only move on rare blast edges,
     // so per-step freshness matches every other channel here.
     const snaps = this.room.pickups?.snapshot();
-    if (snaps) for (const g of snaps) this.pickups.push(g);
+    if (snaps) {for (const g of snaps) {this.pickups.push(g);}}
     return this;
   }
 
@@ -90,27 +90,27 @@ export class ServerParties {
   of(p: { id: string; team?: string; position: Vec3 }): Parties {
     const c = this.tick();
     const enemies: BotEnemy[] = [];
-    const teams = !!this.room.modeSpec?.teams;
+    const teams = Boolean(this.room.modeSpec?.teams);
     const cx0 = Math.floor((p.position.x - DOMAIN_M) / CELL_M), cx1 = Math.floor((p.position.x + DOMAIN_M) / CELL_M);
     const cz0 = Math.floor((p.position.z - DOMAIN_M) / CELL_M), cz1 = Math.floor((p.position.z + DOMAIN_M) / CELL_M);
     for (let cx = cx0; cx <= cx1; cx++) {
       for (let cz = cz0; cz <= cz1; cz++) {
         const cell = c.grid.get(cellKey(cx, cz));
-        if (!cell) continue;
+        if (!cell) {continue;}
         for (const i of cell) {
           const q = c.players[i]!;
-          if (q.id === p.id || q.dead || q.cloaked) continue;
+          if (q.id === p.id || q.dead || q.cloaked) {continue;}
           const dx = q.pos.x - p.position.x, dz = q.pos.z - p.position.z;
-          if (dx * dx + dz * dz > DOMAIN_R2) continue;
+          if (dx * dx + dz * dz > DOMAIN_R2) {continue;}
           // Teamless modes are open season on every live body — bot or
           // human makes no difference to the gun.
-          if (teams ? q.team !== p.team : true) enemies.push(q.en);
+          if (teams ? q.team !== p.team : true) {enemies.push(q.en);}
         }
       }
     }
     // Non-player bodies (balls/crawlers) ride ungridded — their counts
     // are small and their acquisition range is a separate gate.
-    for (const b of c.bodies) enemies.push(b);
+    for (const b of c.bodies) {enemies.push(b);}
     return { enemies, allies: p.team ? (c.alliesByTeam.get(p.team) ?? []) : [], others: c.othersAll, roster: c.roster };
   }
 
@@ -124,14 +124,14 @@ export class ServerParties {
     const x0 = Math.floor((x - r) / CELL_M), x1 = Math.floor((x + r) / CELL_M);
     const z0 = Math.floor((z - r) / CELL_M), z1 = Math.floor((z + r) / CELL_M);
     const idx: number[] = [];
-    for (let cx = x0; cx <= x1; cx++) for (let cz = z0; cz <= z1; cz++) {
+    for (let cx = x0; cx <= x1; cx++) {for (let cz = z0; cz <= z1; cz++) {
       const cell = c.grid.get(cellKey(cx, cz));
-      if (cell) for (const i of cell) idx.push(i);
-    }
+      if (cell) {for (const i of cell) {idx.push(i);}}
+    }}
     idx.sort((a, b) => a - b);
     for (const i of idx) {
       const q = c.players[i]!;
-      if (q.dead || q.team === me) continue;
+      if (q.dead || q.team === me) {continue;}
       out.push({ id: q.id, pos: q.pos, team: q.team });
     }
     return out;

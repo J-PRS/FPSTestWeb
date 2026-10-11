@@ -65,7 +65,7 @@ export class ExplosionLayers implements VariantHost {
   // Layer 0: Instant flash — one giant white-hot sprite, gone in ~90ms.
   // The frame-zero flash is what reads as "something violent happened".
   spawnFlash(pos: THREE.Vector3, mult: number): void {
-    _c.setHex(0xFFF6D8);
+    _c.setHex(0xFF_F6_D8);
     if (this.hasTint) {_c.lerp(this.tint, 0.3);}
     // One batched particle, not a pooled sprite — a flash is a burst of 1.
     blastBurst(pos, {
@@ -196,8 +196,8 @@ export class ExplosionLayers implements VariantHost {
   // is why ground-detonating weapons (mortar/GL/plasma) looked weak. Radius
   // scales with the weapon's real blast size (mult).
   private spawnShockDome(pos: THREE.Vector3, mult: number): void {
-    this.allocShock(pos, 0xFFFFFF, 0.35, 5 * mult, 0.35);
-    this.allocShock(pos, this.hasTint ? this.tint : 0xff_cc_66, 0.45, 6.5 * mult, 0.5);
+    this.allocShock(pos, 0xFF_FF_FF, 0.35, 5 * mult, 0.35);
+    this.allocShock(pos, this.hasTint ? this.tint : 0xFF_CC_66, 0.45, 6.5 * mult, 0.5);
   }
 
   allocShock(pos: THREE.Vector3, color: number | THREE.Color, life: number, maxRadius: number, opacity: number): void {
@@ -255,7 +255,7 @@ export class ExplosionLayers implements VariantHost {
   }
 
   spawnGroundRing(pos: THREE.Vector3, mult: number, terrain?: Terrain): void {
-    this.rings.push(new TerrainRing(this.scene, pos, this.hasTint ? this.tint.getHex() : 0xFFAA33, 0.45, 9 * mult, terrain));
+    this.rings.push(new TerrainRing(this.scene, pos, this.hasTint ? this.tint.getHex() : 0xFF_AA_33, 0.45, 9 * mult, terrain));
   }
 
   /** blastBurst with the weapon-energy tint applied to glow colors. */

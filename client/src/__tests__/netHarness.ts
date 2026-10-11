@@ -53,7 +53,7 @@ export function makeDeps() {
     // handler is always a bug (partial state applied), so fail loudly.
     logger: {
       debug() {}, info() {}, error() {},
-      warn(m: string) { if (m.startsWith('Handler threw')) throw new Error(m); },
+      warn(m: string) { if (m.startsWith('Handler threw')) {throw new Error(m);} },
     } as never,
     world,
     setLastSentPos() {},

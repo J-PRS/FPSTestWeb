@@ -51,10 +51,10 @@ export const SATCHEL_CONFIG: ProjectileConfig = {
   trailScaleMin: 0.5,
   trailScaleMax: 1.2,
   trailRampIn: 0.04,
-  meshColor: 0x3A2E28, // dark casement — the red glow reads as the armed light
+  meshColor: 0x3A_2E_28, // dark casement — the red glow reads as the armed light
   meshType: 'ball',
   glowShell: true,
-  glowColor: 0xFF3322,
+  glowColor: 0xFF_33_22,
   glowOpacity: 0.7,
   glowScale: 0.9,
   meshRampIn: true,

@@ -49,7 +49,7 @@ const joinIps = new Map<string, { count: number; start: number }>();
 const JOIN_IP_LIMIT = 30; // every client load calls this once — looser than the workers' minting 5/min
 const JOIN_IP_WINDOW_MS = 60_000;
 function joinThrottleAllow(ip: string | undefined | null): boolean {
-  if (!ip || ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') return true;
+  if (!ip || ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') {return true;}
   return windowAllow(joinIps, ip, wallNow(), JOIN_IP_WINDOW_MS, JOIN_IP_LIMIT, 1024);
 }
 
@@ -79,7 +79,7 @@ function spawnWorker(id: string, port: number): void {
     const lived = wallNow() - spawnedAt;
     const streak = (crashStreak.get(id) ?? 0);
     crashStreak.set(id, lived > FleetDirectory.BEAT_STALE_MS ? 0 : streak + 1);
-    const delay = Math.min(60_000, 1_000 << Math.min(streak, 6));
+    const delay = Math.min(60_000, 1000 << Math.min(streak, 6));
     logger.warn(`[fleet] worker ${id} exited (${code}) — respawning in ${delay}ms`);
     // The next beat gap flips it down in the directory; respawn quickly
     // so rooms it held re-open for placement rather than dangling.

@@ -94,7 +94,7 @@ renderer.toneMappingExposure = 0.4; // TONE_MAPPING_EXPOSURE
 document.body.append(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x25282E);
+scene.background = new THREE.Color(0x25_28_2E);
 // FOV + lights mirror world/viewmodelScene.ts — the game renders the
 // viewmodel in its own pass at FOV 55, so this rig must match or the
 // FPS view judges the gun wider and warmer-lit than in-game.
@@ -102,8 +102,8 @@ const camera = new THREE.PerspectiveCamera(state.fov ?? 55, innerWidth / innerHe
 initPreviews(camera); // creature/deployable builders aim at this eye
 lap('renderer+scene');
 scene.add(camera);
-scene.add(new THREE.AmbientLight(0x8899AA, 0.9));
-const sun = new THREE.DirectionalLight(0xff_ff_ff, 1.2);
+scene.add(new THREE.AmbientLight(0x88_99_AA, 0.9));
+const sun = new THREE.DirectionalLight(0xFF_FF_FF, 1.2);
 sun.position.set(0.5, 1, 0.4);
 scene.add(sun);
 // Probes read state.pick AND dump baked attributes off scene — same
@@ -327,7 +327,7 @@ function zPaint(on: boolean): void {
   geo.setAttribute('position', new THREE.Float32BufferAttribute(flagVerts, 3));
   // depthTest off + late renderOrder: the overlay sits ON the fighting
   // plane — let it win outright or it becomes the thing it highlights.
-  const mat = new THREE.MeshBasicMaterial({ color: 0xff_00_ff, side: THREE.DoubleSide, depthTest: false });
+  const mat = new THREE.MeshBasicMaterial({ color: 0xFF_00_FF, side: THREE.DoubleSide, depthTest: false });
   zOverlay = new THREE.Mesh(geo, mat);
   zOverlay.renderOrder = 999;
   scene.add(zOverlay);
@@ -371,15 +371,15 @@ const wireLines: THREE.LineSegments[] = [];
 // toneMapped:false — ACES otherwise crushes the flat line colors into
 // murk on the dark model; these are debug markup, they should punch.
 const wireMat = new THREE.LineBasicMaterial({
-  color: 0xff_dd_00, depthWrite: false, toneMapped: false,
+  color: 0xFF_DD_00, depthWrite: false, toneMapped: false,
   polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3,
 });
 const wireFlatMat = new THREE.LineBasicMaterial({
-  color: 0x33AAFF, depthWrite: false, transparent: true, opacity: 0.45, toneMapped: false,
+  color: 0x33_AA_FF, depthWrite: false, transparent: true, opacity: 0.45, toneMapped: false,
   polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
 });
 const wireSharpMat = new THREE.LineBasicMaterial({
-  color: 0xFF3355, depthWrite: false, toneMapped: false,
+  color: 0xFF_33_55, depthWrite: false, toneMapped: false,
   // Biggest depth pull — the flagged list sits at the same spots as the
   // other two layers' lines, so without a clear offset margin the
   // brighter layers cover the debug red.
@@ -536,7 +536,7 @@ async function manifoldParts(g: THREE.Group): Promise<{ Manifold: any; parts: TH
     // whose whole attribute set matches, and per-vertex AO/wear differs,
     // so nothing welded and every part read as non-manifold.
     const stripped = m.geometry.clone().applyMatrix4(inv.clone().multiply(m.matrixWorld));
-    for (const name of Object.keys(stripped.attributes)) {if (name !== 'position') stripped.deleteAttribute(name);}
+    for (const name of Object.keys(stripped.attributes)) {if (name !== 'position') {stripped.deleteAttribute(name);}}
     const geo = mergeVertices(stripped);
     if (!geo.index) {geo.setIndex([...Array(geo.attributes.position!.count).keys()]);}
     inV += geo.attributes.position!.count;
@@ -677,7 +677,7 @@ function metalFor(src: THREE.Material): THREE.MeshStandardMaterial {
   let m = metalCache.get(src);
   if (!m) {
     const l = src as THREE.MeshLambertMaterial;
-    m = metalMat(l.color?.getHex() ?? 0x3A4048);
+    m = metalMat(l.color?.getHex() ?? 0x3A_40_48);
     if (l.emissive) {m.emissive.copy(l.emissive);} // Lambert fakes ambient via emissive — carry it
     enhanceWeaponMaterial(m);
     metalCache.set(src, m);
@@ -975,7 +975,7 @@ function shotSheet(): void {
     camera.position.copy(tgt).addScaledVector(v.d, dist);
     camera.lookAt(tgt);
     camera.up.copy(keepUp);
-    shot(i % 2, (i / 2) | 0, label);
+    shot(i % 2, Math.trunc((i / 2)), label);
   }
   // Restore whatever the user was doing.
   camera.aspect = keepAspect;
@@ -1140,7 +1140,7 @@ addEventListener('keydown', (e) => {
       return;
     }
     const wts = [...vm.weapons.keys()].toSorted((a, b) => a - b);
-    if (wts.length) {
+    if (wts.length > 0) {
       const i = wts.indexOf(state.wt);
       select(wts[(i + step + wts.length) % wts.length]);
     }
@@ -1162,10 +1162,10 @@ addEventListener('mousemove', (e) => {
 // bigger counts as an orbit/pan gesture. ---
 const raycaster = new THREE.Raycaster();
 const pickNDC = new THREE.Vector2();
-const pickFlashMat = new THREE.MeshBasicMaterial({ color: 0xff_ee_66 });
+const pickFlashMat = new THREE.MeshBasicMaterial({ color: 0xFF_EE_66 });
 // Surface dot: marks the exact raycast hit while the flash marks the mesh.
 const pickDot = new THREE.Mesh(new THREE.SphereGeometry(0.008, 12, 8),
-  new THREE.MeshBasicMaterial({ color: 0xff_ff_ff, depthTest: false }));
+  new THREE.MeshBasicMaterial({ color: 0xFF_FF_FF, depthTest: false }));
 pickDot.visible = false;
 pickDot.renderOrder = 999;
 scene.add(pickDot);
@@ -1184,7 +1184,7 @@ function pickPiece(cx: number, cy: number): void {
   // Raycaster doesn't honor visible=false — skip hits inside a hidden
   // subtree (the non-active weapons parked invisible in vm.group).
   const hit = raycaster.intersectObject(root, true)
-    .find(h => { for (let o: THREE.Object3D | null = h.object; o && o !== root.parent; o = o.parent) {if (!o.visible) return false;} return true; });
+    .find(h => { for (let o: THREE.Object3D | null = h.object; o && o !== root.parent; o = o.parent) {if (!o.visible) {return false;}} return true; });
   if (!hit) {return;}
   // Path label: ancestor chain up to the weapon group, e.g.
   // "Chaingun › barrels[2] CylinderGeometry @(0.09, 0, -0.55)".
@@ -1269,7 +1269,7 @@ lap(`restore pick=${state.pick ?? '-'} inspect=${Boolean(state.inspect)} z=${Boo
 // First painted frame ≈ interactive — module eval + init + first render.
 requestAnimationFrame(() => {
   const tti = performance.now().toFixed(0);
-  console.log(`[gunlab] interactive: nav+${tti}ms${reloadGap !== null ? ` f5-total ${Date.now() - Number(localStorage.getItem('gunlab.unloadAt'))}ms` : ''}`);
+  console.log(`[gunlab] interactive: nav+${tti}ms${reloadGap === null ? '' : ` f5-total ${Date.now() - Number(localStorage.getItem('gunlab.unloadAt'))}ms`}`);
 });
 let last = performance.now();
 renderer.setAnimationLoop(() => {

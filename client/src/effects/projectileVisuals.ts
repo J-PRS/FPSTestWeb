@@ -14,7 +14,7 @@ const MESH_GEO_CACHE = new Map<string, THREE.BufferGeometry>();
 // so rapid fire doesn't create/dispose a material every shot
 const BODY_MAT_CACHE = new Map<number, THREE.MeshBasicMaterial>();
 const GLOW_MAT_CACHE = new Map<string, THREE.MeshBasicMaterial>();
-const GLOW_GEO = new THREE.SphereGeometry(1.0, 12, 12);
+const GLOW_GEO = new THREE.SphereGeometry(1, 12, 12);
 // Vapor-cone silhouette: unit cone TRAILING the shell — apex rooted at
 // the body, skirt flaring backward along -Z. (A forward spearhead read
 // wrong; the wake belongs behind the shell. Own-shell camera overlap is
@@ -33,7 +33,7 @@ const CONE_LEN = 1.4;
 // reads as braided light, not a solid sail. Shared by all cone pools.
 let _coneAlphaTex: THREE.Texture | null = null;
 function getConeAlphaTex(): THREE.Texture {
-  if (_coneAlphaTex) return _coneAlphaTex;
+  if (_coneAlphaTex) {return _coneAlphaTex;}
   const S = 128;
   const cv = document.createElement('canvas');
   cv.width = cv.height = S;
@@ -74,7 +74,7 @@ function getBodyMat(color: number): THREE.MeshBasicMaterial {
   return m;
 }
 
-const _white = new THREE.Color(0xffffff);
+const _white = new THREE.Color(0xFF_FF_FF);
 
 function getGlowMat(color: number, opacity: number, flash: boolean, cone = false): THREE.MeshBasicMaterial {
   const key = `${color}|${opacity}|${flash ? 'f' : ''}|${cone ? 'c' : ''}`;
@@ -84,7 +84,7 @@ function getGlowMat(color: number, opacity: number, flash: boolean, cone = false
     // instanceColor can only darken a material, so each shell tints down
     // to the resting hue and the pulse writes near-white at the crest.
     const c = new THREE.Color(color);
-    if (flash) c.lerp(_white, 0.7);
+    if (flash) {c.lerp(_white, 0.7);}
     m = new THREE.MeshBasicMaterial({
       color: c.multiplyScalar(EMIT_GAIN), transparent: true, opacity,
       depthWrite: false, side: THREE.DoubleSide,
@@ -157,7 +157,7 @@ const _zeroScale = new THREE.Vector3(0, 0, 0);
 interface SlotTag { __inst?: { pool: InstPool; slot: number } }
 
 function instPoolFor(scene: THREE.Scene, kind: string, geo: THREE.BufferGeometry, mat: THREE.Material, colored = false): InstPool {
-  const key = scene.uuid + '|' + kind; // pools die with their scene — no cross-scene reuse
+  const key = `${scene.uuid  }|${  kind}`; // pools die with their scene — no cross-scene reuse
   return acquireBatch(instPools, key, (k) => {
     const mesh = new THREE.InstancedMesh(geo, mat, INST_CAP);
     if (colored) {
@@ -179,14 +179,14 @@ function instPoolFor(scene: THREE.Scene, kind: string, geo: THREE.BufferGeometry
 }
 
 function instAlloc(pool: InstPool): number {
-  if (pool.free.length) return pool.free.pop()!;
+  if (pool.free.length > 0) {return pool.free.pop()!;}
   // instPoolFor only hands out pools with room, so count is always < cap
   return pool.mesh.count++;
 }
 
 export function syncProjectileInstance(m: THREE.Mesh | null): void {
   const t = (m as SlotTag | null)?.__inst;
-  if (!t || t.slot < 0) return;
+  if (!t || t.slot < 0) {return;}
   _instMat.compose(m!.position, m!.quaternion, m!.scale);
   t.pool.mesh.setMatrixAt(t.slot, _instMat);
   t.pool.mesh.instanceMatrix.needsUpdate = true;
@@ -198,14 +198,14 @@ const _instColor = new THREE.Color();
  *  so values ≤1 only ever darken toward the resting hue. */
 export function syncProjectileInstanceColor(m: THREE.Mesh | null, color: THREE.Color): void {
   const t = (m as SlotTag | null)?.__inst;
-  if (!t || t.slot < 0 || !t.pool.mesh.instanceColor) return;
+  if (!t || t.slot < 0 || !t.pool.mesh.instanceColor) {return;}
   t.pool.mesh.setColorAt(t.slot, color);
   t.pool.mesh.instanceColor.needsUpdate = true;
 }
 
 export function releaseProjectileInstance(m: THREE.Mesh | null): void {
   const t = (m as SlotTag | null)?.__inst;
-  if (!t || t.slot < 0) return;
+  if (!t || t.slot < 0) {return;}
   _instMat.compose(m!.position, m!.quaternion, _zeroScale);
   t.pool.mesh.setMatrixAt(t.slot, _instMat);
   t.pool.mesh.instanceMatrix.needsUpdate = true;
@@ -236,19 +236,19 @@ const RAMP_IN_START = 0.2;
 const RAMP_IN_DUR = 0.2;
 
 export function rampInStartScale(config: ProjectileConfig): number {
-  if (config.meshRampIn === false) return 1.0;
+  if (config.meshRampIn === false) {return 1;}
   return config.meshStartScale ?? RAMP_IN_START;
 }
 
 export function rampInScale(config: ProjectileConfig, age: number): number {
-  if (config.meshRampIn === false) return 1.0;
+  if (config.meshRampIn === false) {return 1;}
   const start = rampInStartScale(config);
   const maxLife = config.maxLifetime ?? 0;
   const dur = Math.min(
     config.meshRampInDuration ?? RAMP_IN_DUR,
     maxLife > 0 ? maxLife * 0.4 : RAMP_IN_DUR,
   );
-  return start + (1.0 - start) * Math.min(age / dur, 1.0);
+  return start + (1 - start) * Math.min(age / dur, 1);
 }
 
 export function buildProjectileMeshes(
@@ -267,7 +267,7 @@ export function buildProjectileMeshes(
 
   let glowMesh: THREE.Mesh | null = null;
   if (config.glowShell) {
-    const flash = !!config.glowPulse;
+    const flash = Boolean(config.glowPulse);
     const cone = config.glowShape === 'wakeCone';
     const glowMat = getGlowMat(config.glowColor, config.glowOpacity, flash, cone); // shared
     const glowGeo = cone ? CONE_GEO : GLOW_GEO;
@@ -291,12 +291,12 @@ export function buildProjectileMeshes(
   // Default ON — a config must opt OUT (`ribbonTrail: false`); opt-in
   // left nine shell types flying trail-less (grenades, GL, cannon…).
   if (config.ribbonTrail !== false) {
-    const color = config.ribbonColor ?? config.trailColors[0]?.getHex() ?? 0xffffff;
+    const color = config.ribbonColor ?? config.trailColors[0]?.getHex() ?? 0xFF_FF_FF;
     const width = config.ribbonWidth ?? 0.5;
     const life = config.ribbonLife ?? 0.3;
     // 3 lanes: wide outer band + thin bright core pair offset above/below —
     // reads as a glowing energy streak with depth instead of a flat line
-    const coreColor = new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.6).getHex();
+    const coreColor = new THREE.Color(color).lerp(new THREE.Color(0xFF_FF_FF), 0.6).getHex();
     // billboard=true: the strip re-sides to face the camera each frame —
     // the fixed-horizontal variant was edge-on to every level shot and
     // rendered as a zero-pixel line (ball ribbons already do this).
@@ -310,7 +310,7 @@ export function buildProjectileMeshes(
         RibbonTrail.acquire(scene, { color: coreColor, width: width * 0.35, life: life * 0.8, vOffset: -width * 0.07, billboard: true, tag }),
       ];
     }
-    if (config.ribbonRampIn) for (const r of ribbons) r.rampIn(config.ribbonRampIn);
+    if (config.ribbonRampIn) {for (const r of ribbons) {r.rampIn(config.ribbonRampIn);}}
   }
   return { mesh, glowMesh, ribbons };
 }
@@ -330,14 +330,14 @@ export function updateProjectileMesh(
   if (glowMesh) {
     glowMesh.position.copy(pos);
     // Glow scales with hitRadius (wake hitbox) so they always match
-    const glowMultiplier = config.glowScale ?? 1.0;
+    const glowMultiplier = config.glowScale ?? 1;
     // Glow always ramps in at spawn even when the body opts out — a
     // full-size glow envelope near the muzzle swallows the camera for
     // the first frames (fullscreen color flash).
     const start = config.meshStartScale ?? RAMP_IN_START;
     const maxLife = config.maxLifetime ?? 0;
-    const glowRamp = start + (1.0 - start) * Math.min(
-      age / Math.min(config.meshRampInDuration ?? RAMP_IN_DUR, maxLife > 0 ? maxLife * 0.4 : RAMP_IN_DUR), 1.0);
+    const glowRamp = start + (1 - start) * Math.min(
+      age / Math.min(config.meshRampInDuration ?? RAMP_IN_DUR, maxLife > 0 ? maxLife * 0.4 : RAMP_IN_DUR), 1);
     let gs = hitRadius * glowMultiplier * glowRamp;
     const restTint = (glowMesh as SlotTag & { __restTint?: THREE.Color }).__restTint;
     if (config.glowPulse) {
@@ -393,7 +393,7 @@ export function updateProjectileMesh(
       // Spheres don't orient — they tumble. Spin around a fixed random
       // axis, rate proportional to speed so a lobbed ball visibly rotates
       _tumbleAxis.set(tumble.x, tumble.y, tumble.z).normalize();
-      mesh.rotateOnAxis(_tumbleAxis, vel.length() * dt * 3.0);
+      mesh.rotateOnAxis(_tumbleAxis, vel.length() * dt * 3);
     } else {
       mesh.quaternion.setFromUnitVectors(_FORWARD, _velDir);
     }

@@ -224,7 +224,7 @@ export class EffectsManager {
     }, true);
 
     // Flash sphere — sharedGeo scaled up via sizeScale in the update loop
-    _c.setHex(0xFFCC44);
+    _c.setHex(0xFF_CC_44);
     _v.set(0, 0, 0);
     this.alloc(this.sharedGeo, pos, _v, 0.12, _c, { opacity: 0.9, sizeScale: (radius * 0.8) / 0.15 });
   }
@@ -235,7 +235,7 @@ export class EffectsManager {
     const back = vel.lengthSq() > 0 ? _v.copy(vel).normalize().negate() : _v.set(0, 1, 0);
     impactBurst(pos, vel);
     // Tiny flash at the exact hit point — quad faces along the shot direction
-    _c.setHex(0xff_ee_99);
+    _c.setHex(0xFF_EE_99);
     _v2.copy(pos).addScaledVector(back, 0.05);
     const flash = this.alloc(this.sharedDiscGeo, _v2, _v3.set(0, 0, 0), 0.06, _c, { opacity: 0.8, additive: true, depthWrite: false, side: THREE.DoubleSide });
     if (flash) {
@@ -259,7 +259,7 @@ export class EffectsManager {
     // Lift along the normal enough to clear surface bumps between the
     // disc's center and rim — 3cm buried edges on anything but flat ground
     _v2.set(pos.x, h, pos.z).addScaledVector(_v, 0.12);
-    _c.setHex(0x14_10_0c);
+    _c.setHex(0x14_10_0C);
     const mark = this.alloc(this.sharedDiscGeo, _v2, _v3.set(0, 0, 0), 1, _c,
       { opacity: 0.7, depthWrite: false, noGravity: true, sizeScale: 0.2, side: THREE.DoubleSide });
     if (mark) {
@@ -284,7 +284,7 @@ export class EffectsManager {
 
   // Hitscan beam flash (remote railgun discharge): a transient additive
   // rod from→to that fades fast. Pooled like particles — mesh+mat reused.
-  spawnBeam(from: THREE.Vector3, to: THREE.Vector3, colorHex = 0x99EEFF): void {
+  spawnBeam(from: THREE.Vector3, to: THREE.Vector3, colorHex = 0x99_EE_FF): void {
     _v.subVectors(to, from);
     const len = _v.length();
     if (len < 0.01) {return;}

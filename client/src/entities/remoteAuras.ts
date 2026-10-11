@@ -1,7 +1,8 @@
-import * as THREE from 'three';
+import type * as THREE from 'three';
 
 import { classCapsule } from '../../../shared/botClasses.js';
-import { makeContouredShield, makeShieldBubble, ShieldBubble } from '../effects/shieldBubble.js';
+import type { ShieldBubble } from '../effects/shieldBubble.js';
+import { makeContouredShield, makeShieldBubble } from '../effects/shieldBubble.js';
 
 // Status-aura family — the energy-shield bubble plus the one-bit status
 // auras (mend/regen/dd/charge), identical lazy-glow plumbing per STATUS
@@ -44,7 +45,7 @@ export class RemoteAuras {
   private buildShield(): void {
     const root = this.h.model?.object3D;
     const contoured = root ? makeContouredShield(root) : null;
-    this.shieldContoured = !!contoured;
+    this.shieldContoured = Boolean(contoured);
     this.shieldBubble = contoured ?? makeShieldBubble(this.h.scene);
   }
 
@@ -58,11 +59,11 @@ export class RemoteAuras {
       this.shieldBubble!.mesh.visible = !this.h.staleHidden && !this.h.cloakHidden;
     }
     const root = this.h.model?.object3D;
-    if (!root) return;
+    if (!root) {return;}
     for (const a of this.statusAuras.values()) {
-      if (!a.wantContoured || a.contoured) continue;
+      if (!a.wantContoured || a.contoured) {continue;}
       const c = makeContouredShield(root, a.color);
-      if (!c) continue;
+      if (!c) {continue;}
       const vis = a.bubble.mesh.visible;
       a.bubble.dispose();
       a.bubble = c;
@@ -72,26 +73,26 @@ export class RemoteAuras {
   }
 
   setShielded(on: boolean): void {
-    if (on === this.shielded) return;
+    if (on === this.shielded) {return;}
     this.shielded = on;
-    if (on && !this.shieldBubble) this.buildShield();
-    if (this.shieldBubble) this.shieldBubble.mesh.visible = on;
+    if (on && !this.shieldBubble) {this.buildShield();}
+    if (this.shieldBubble) {this.shieldBubble.mesh.visible = on;}
   }
 
   /** Soaked hit — flare the lattice. */
   flashShield(): void {
-    if (this.shielded) this.shieldBubble?.flash();
+    if (this.shielded) {this.shieldBubble?.flash();}
   }
 
   private setAura(key: string, on: boolean, radius: number, color: number, wantContoured = false): void {
     let a = this.statusAuras.get(key);
-    if ((a?.on ?? false) === on) return;
+    if ((a?.on ?? false) === on) {return;}
     if (!a) {
       const root = this.h.model?.object3D;
       const c = wantContoured && root ? makeContouredShield(root, color) : null;
       a = {
         bubble: c ?? makeShieldBubble(this.h.scene, radius, color),
-        on: false, wantContoured, contoured: !!c, radius, color,
+        on: false, wantContoured, contoured: Boolean(c), radius, color,
       };
       this.statusAuras.set(key, a);
     }
@@ -101,43 +102,43 @@ export class RemoteAuras {
 
   // Medkit channel — green energy hugging the body, same read as the
   // local third-person mend shell (sphere only before the model loads).
-  setMending(on: boolean): void { this.setAura('mend', on, 1.6, 0x3fdd6f, true); }
+  setMending(on: boolean): void { this.setAura('mend', on, 1.6, 0x3F_DD_6F, true); }
   get isMending(): boolean { return this.statusAuras.get('mend')?.on ?? false; }
 
   // Powerup tells — a buffed enemy should be readable at range: regen
   // shimmers teal, double-damage burns red. Server-owned bits.
-  setRegenAura(on: boolean): void { this.setAura('regen', on, 1.8, 0x66ffee); }
-  setDdAura(on: boolean): void { this.setAura('dd', on, 1.8, 0xff4422); }
+  setRegenAura(on: boolean): void { this.setAura('regen', on, 1.8, 0x66_FF_EE); }
+  setDdAura(on: boolean): void { this.setAura('dd', on, 1.8, 0xFF_44_22); }
 
   // LG charge telegraph — the walking-bomb warning, same electric tint
   // as the beam so the read is instant. Bit-level flag only: remotes see
   // "loaded", not the exact bank size.
-  setCharged(on: boolean): void { this.setAura('charge', on, 1.9, 0x9fd8ff); }
+  setCharged(on: boolean): void { this.setAura('charge', on, 1.9, 0x9F_D8_FF); }
 
   tick(dt: number): void {
     const y = this.h.position.y - classCapsule(this.h.armorClass).eye;
     if (this.shieldBubble) {
       this.shieldBubble.update(dt);
-      if (this.shielded) this.shieldBubble.mesh.position.set(this.h.position.x, y + 1.1, this.h.position.z);
+      if (this.shielded) {this.shieldBubble.mesh.position.set(this.h.position.x, y + 1.1, this.h.position.z);}
     }
     for (const a of this.statusAuras.values()) {
       a.bubble.update(dt);
-      if (a.on) a.bubble.mesh.position.set(this.h.position.x, y + 1.0, this.h.position.z);
+      if (a.on) {a.bubble.mesh.position.set(this.h.position.x, y + 1, this.h.position.z);}
     }
   }
 
   hide(): void {
-    if (this.shieldBubble) this.shieldBubble.mesh.visible = false;
-    for (const a of this.statusAuras.values()) a.bubble.mesh.visible = false;
+    if (this.shieldBubble) {this.shieldBubble.mesh.visible = false;}
+    for (const a of this.statusAuras.values()) {a.bubble.mesh.visible = false;}
   }
 
   show(): void {
-    if (this.shieldBubble && this.shielded) this.shieldBubble.mesh.visible = true;
-    for (const a of this.statusAuras.values()) if (a.on) a.bubble.mesh.visible = true;
+    if (this.shieldBubble && this.shielded) {this.shieldBubble.mesh.visible = true;}
+    for (const a of this.statusAuras.values()) {if (a.on) {a.bubble.mesh.visible = true;}}
   }
 
   dispose(): void {
     this.shieldBubble?.dispose();
-    for (const a of this.statusAuras.values()) a.bubble.dispose();
+    for (const a of this.statusAuras.values()) {a.bubble.dispose();}
   }
 }

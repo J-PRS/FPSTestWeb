@@ -32,7 +32,7 @@ function bodyGeo(): THREE.BufferGeometry {
     torso.scale(0.42, 0.34, 1.15); // skinny barrel — rakks are lean
     const head = new THREE.IcosahedronGeometry(0.42, 1);
     head.scale(0.66, 0.3, 0.9);  // flat, wide head plate
-    head.translate(0, 0.14, 1.0);
+    head.translate(0, 0.14, 1);
     const snout = new THREE.ConeGeometry(0.2, 0.9, 4);
     snout.rotateX(Math.PI / 2);
     snout.scale(1.6, 0.55, 1);   // flattened wedge, not a round beak
@@ -67,7 +67,7 @@ const _wingInGeo = new THREE.BoxGeometry(1.1, 0.06, 0.9);
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i);
     const t = Math.min(1, Math.max(0, x + 0.55)); // 0 at root → 1 at wrist
-    if (z < 0) pos.setZ(i, z * (1 - t * 0.45)); // trailing edge shortens
+    if (z < 0) {pos.setZ(i, z * (1 - t * 0.45));} // trailing edge shortens
     pos.setY(i, pos.getY(i) * (1 - t * 0.4));   // arm thins toward wrist
   }
   _wingInGeo.computeVertexNormals();
@@ -134,17 +134,17 @@ let _crestMat: THREE.MeshLambertMaterial | null = null;
 let _eyeMat: THREE.MeshBasicMaterial | null = null;
 
 export function rakkParts(): SwarmPart[] {
-  if (!_bodyMat) _bodyMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  if (!_bodyMat) {_bodyMat = new THREE.MeshLambertMaterial({ color: 0xFF_FF_FF });}
   // Membrane runs LIGHTER than the hide — a dark wing on dark sky reads as
   // a void. Warm leather catches rim light and separates from the body.
-  if (!_wingMat) _wingMat = new THREE.MeshLambertMaterial({ color: 0x8a5a58, side: THREE.DoubleSide });
+  if (!_wingMat) {_wingMat = new THREE.MeshLambertMaterial({ color: 0x8A_5A_58, side: THREE.DoubleSide });}
   // Bone crest — fixed pale bone tone, deliberately not tinted by species
   // color so it stays a bright accent against the hide.
-  if (!_crestMat) _crestMat = new THREE.MeshLambertMaterial({ color: 0xd8c9a0, side: THREE.DoubleSide });
-  if (!_eyeMat) _eyeMat = new THREE.MeshBasicMaterial({
-    map: getGlowTexture(), color: 0xffe066, transparent: true, blending: THREE.AdditiveBlending,
+  if (!_crestMat) {_crestMat = new THREE.MeshLambertMaterial({ color: 0xD8_C9_A0, side: THREE.DoubleSide });}
+  if (!_eyeMat) {_eyeMat = new THREE.MeshBasicMaterial({
+    map: getGlowTexture(), color: 0xFF_E0_66, transparent: true, blending: THREE.AdditiveBlending,
     depthWrite: false, side: THREE.DoubleSide,
-  });
+  });}
   return [
     { geometry: bodyGeo(), material: _bodyMat, castShadow: true },
     { geometry: _crestGeo, material: _crestMat },
@@ -173,17 +173,17 @@ export interface RakkVisHost {
 // Flap amplitude+rate by state — dive folds the wings, climb rows hard.
 function wingbeat(r: RakkVisHost): number {
   const dive = r.state === 'dive';
-  const flapAmp = dive ? 0.12 : r.state === 'climb' ? 1.0 : 0.55;
+  const flapAmp = dive ? 0.12 : r.state === 'climb' ? 1 : 0.55;
   const flapRate = dive ? 3 : r.state === 'climb' ? 13 : 6;
   return Math.sin(r.animT * flapRate) * flapAmp;
 }
 
 export function writeRakkInstances(r: RakkVisHost): void {
-  if (!r.hasSlots) return;
+  if (!r.hasSlots) {return;}
   const swarm = getSwarm('rakk');
-  if (!swarm) return;
+  if (!swarm) {return;}
   const slot = r.swarmSlot;
-  const radius = r.radius;
+  const {radius} = r;
 
   _e.set(r.pitch, r.yaw, r.roll, 'YXZ');
   _q.setFromEuler(_e);

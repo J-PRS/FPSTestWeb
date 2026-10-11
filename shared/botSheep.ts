@@ -86,11 +86,11 @@ export class SheepCore {
   /** Identity change (team defect/rekey) — carry every per-id cell so the
    *  body keeps its earned meter instead of reading as a fresh leash. */
   rekey(oldId: string, newId: string): void {
-    if (oldId === newId) return;
-    const mv = <T>(m: Map<string, T>) => { const v = m.get(oldId); m.delete(oldId); if (v !== undefined) m.set(newId, v); };
+    if (oldId === newId) {return;}
+    const mv = <T>(m: Map<string, T>) => { const v = m.get(oldId); m.delete(oldId); if (v !== undefined) {m.set(newId, v);} };
     mv(this.meter); mv(this.cov); mv(this.lastFire); mv(this.eSm); mv(this.eLast);
     mv(this.eParts); mv(this.provenUntil); mv(this.why);
-    if (this.maxed.delete(oldId)) this.maxed.add(newId);
+    if (this.maxed.delete(oldId)) {this.maxed.add(newId);}
   }
 
   /** Respawn is a fresh leash — unproven = 100. */
@@ -118,8 +118,8 @@ export class SheepCore {
     // Tribesing = holding/converting real E. Bare airborne doesn't
     // qualify — a low-speed hop is pedestrian motion that left the
     // ground; jetting and repair beams are the work itself.
-    const tribesing = bonusSpeed > 20 || !!s.jetting || !!s.repair || !!s.busy;
-    if (tribesing) this.provenUntil.set(id, this.simMs + 20_000);
+    const tribesing = bonusSpeed > 20 || Boolean(s.jetting) || Boolean(s.repair) || Boolean(s.busy);
+    if (tribesing) {this.provenUntil.set(id, this.simMs + 20_000);}
     const proven = this.simMs < (this.provenUntil.get(id) ?? 0);
     const prev = this.meter.get(id) ?? 100;
     const why = this.ledger(id);
@@ -137,7 +137,7 @@ export class SheepCore {
     const base = s.dt * (tribesing
       ? -Math.min(12 + bonusSpeed * 0.6 + (s.jetting ? 15 : 0), 30)
       : excused ? 2 : s.hasDest ? 9 : 18);
-    if (base > 0) why.idle += base;
+    if (base > 0) {why.idle += base;}
     meter += base;
 
     // Fastest cowardice tell: a visible live enemy and a sustained
@@ -171,8 +171,8 @@ export class SheepCore {
     // Warn only on the RISE into the cap — bodies start at 100 (llama
     // until proven), so a fresh spawn at the cap isn't a maxed event.
     const newlyMaxed = clamped >= 100 && prev < 100 && !this.maxed.has(id);
-    if (clamped >= 100 && prev < 100) this.maxed.add(id);
-    else if (clamped < 100) this.maxed.delete(id);
+    if (clamped >= 100 && prev < 100) {this.maxed.add(id);}
+    else if (clamped < 100) {this.maxed.delete(id);}
     return { meter: clamped, newlyMaxed, crossedHigh, why };
   }
 
@@ -203,8 +203,8 @@ export class SheepCore {
   private energyBleed(id: string, mech: number, foe: boolean): number {
     const ePrev = this.eLast.get(id);
     this.eLast.set(id, mech);
-    if (ePrev === undefined || mech >= ePrev || foe) return 0;
-    if (mech >= 12.5) return 0; // still carrying >5m/s — transit, not a deadstop
+    if (ePrev === undefined || mech >= ePrev || foe) {return 0;}
+    if (mech >= 12.5) {return 0;} // still carrying >5m/s — transit, not a deadstop
     return Math.min(8, (ePrev - mech) * 0.08);
   }
 
@@ -219,7 +219,7 @@ export class SheepCore {
     // slope (half of every T2 port) as covering no ground.
     w.dist += Math.hypot(pos.x - w.lx, pos.y - w.ly, pos.z - w.lz);
     w.lx = pos.x; w.ly = pos.y; w.lz = pos.z;
-    if (atMs - w.start < 5000) return 0;
+    if (atMs - w.start < 5000) {return 0;}
     const owed = hasDest && w.dist < 30 ? 20 : 0;
     w.start = atMs; w.dist = 0;
     return owed;

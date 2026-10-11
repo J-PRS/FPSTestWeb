@@ -14,7 +14,7 @@ const logger = new ChildLogger('PlayerModel');
 export class PlayerCollider {
   private gizmo: THREE.Mesh | null = null;
   private mat: THREE.MeshBasicMaterial | null = null;
-  private hex = 0x00FF00;
+  private hex = 0x00_FF_00;
   private shown = true;
   /** `force` bypasses the ?debug gate — lab/inspect surfaces drive the
    *  gizmo directly, without flipping the global debug flag. Sticky so
@@ -30,7 +30,7 @@ export class PlayerCollider {
   // (rig fit × class bump): the gizmo is a model child, so setScale()
   // would otherwise inflate the wire past the real sim capsule.
   attach(model: THREE.Group, vs: number, feetOffsetY: number): void {
-    const cap = this.cap;
+    const {cap} = this;
     const geo = new THREE.CapsuleGeometry(
       (cap ? cap.radius : PLAYER_RADIUS) / vs,
       (cap ? 2 * cap.half : CAPSULE_CYLINDER_HEIGHT) / vs,

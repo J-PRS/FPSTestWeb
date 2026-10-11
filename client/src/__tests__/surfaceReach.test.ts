@@ -52,7 +52,7 @@ describe('client surface reach', () => {
       size: { x: 8, y: 0.4, z: 8 },
     }]);
     mc.setInput({ forward: 1 });
-    for (let i = 0; i < 240; i += 1) mc.update(1 / 60);
+    for (let i = 0; i < 240; i += 1) {mc.update(1 / 60);}
     expect(mc.getState().pos.z).toBeGreaterThan(10); // climbed on and crossed
   });
 });

@@ -25,7 +25,7 @@ function rollerGeo(): THREE.BufferGeometry {
     const v = new THREE.Vector3();
     for (let i = 0; i < pos.count; i++) {
       v.set(pos.getX(i), pos.getY(i), pos.getZ(i));
-      const n = Math.sin(v.x * 12.9898 + v.y * 78.233 + v.z * 37.719) * 43758.5453;
+      const n = Math.sin(v.x * 12.9898 + v.y * 78.233 + v.z * 37.719) * 43_758.5453;
       // Tight bulge: at ±20% the bottom face alternately floats 0.2r or
       // digs 0.2r as the boulder rolls. ±10% reads lumpy, stays honest.
       const j = 0.9 + (n - Math.floor(n)) * 0.2; // 0.9..1.1 radial bulge
@@ -42,7 +42,7 @@ let _mat: THREE.MeshLambertMaterial | null = null;
 
 /** Swarm part table — one rigid boulder per roller. */
 export function rollerParts(): SwarmPart[] {
-  if (!_mat) _mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  if (!_mat) {_mat = new THREE.MeshLambertMaterial({ color: 0xFF_FF_FF });}
   return [{ geometry: rollerGeo(), material: _mat, castShadow: true }];
 }
 
@@ -59,7 +59,7 @@ export interface RollerVisHost {
 }
 
 export function writeRollerInstances(r: RollerVisHost, _terrain?: Terrain): void {
-  if (!r.hasSlots) return;
+  if (!r.hasSlots) {return;}
   const swarm = getSwarm('roller');
   if (swarm) {
     _s.setScalar(r.radius);

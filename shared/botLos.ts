@@ -47,13 +47,13 @@ function losKey(ctx: BrainCtx, from: BotVec, to: BotVec): number {
 export function losClear(ctx: BrainCtx, from: BotVec, to: BotVec): boolean {
   const key = losKey(ctx, from, to);
   const hit = losMemo.get(key);
-  if (hit && hit.until > ctx.now) return hit.clear;
+  if (hit && hit.until > ctx.now) {return hit.clear;}
   const clear = losMarch(ctx, from, to);
   // Bound the map — combat bots reuse a narrow band of cells, and stale
   // entries self-expire anyway; sweep only when it balloons.
   if (losMemo.size > 4096) {
-    for (const [k, v] of losMemo) if (v.until <= ctx.now) losMemo.delete(k);
-    if (losMemo.size > 4096) losMemo.clear();
+    for (const [k, v] of losMemo) {if (v.until <= ctx.now) {losMemo.delete(k);}}
+    if (losMemo.size > 4096) {losMemo.clear();}
   }
   losMemo.set(key, { clear, until: ctx.now + LOS_TTL_MS });
   return clear;
@@ -68,7 +68,7 @@ export function losClear(ctx: BrainCtx, from: BotVec, to: BotVec): boolean {
 function losMarch(ctx: BrainCtx, from: BotVec, to: BotVec): boolean {
   const dx = to.x - from.x, dz = to.z - from.z;
   const dist = Math.hypot(dx, dz);
-  if (dist < 4) return true; // point-blank: probes are coarser than the gap
+  if (dist < 4) {return true;} // point-blank: probes are coarser than the gap
   // The memo key may fuzz endpoints ±5m, but the march itself marches
   // the true segment at 6m — a ~10m-wide ridge must still be stepped
   // on, not hopped (a 10m stride literally skipped the tests' wall).
@@ -78,10 +78,10 @@ function losMarch(ctx: BrainCtx, from: BotVec, to: BotVec): boolean {
   for (let i = 1; i < steps; i++) {
     const t = i / steps;
     const x = from.x + dx * t, z = from.z + dz * t;
-    if (ctx.groundY(x, z) > y0 + (y1 - y0) * t + 0.5) return false;
+    if (ctx.groundY(x, z) > y0 + (y1 - y0) * t + 0.5) {return false;}
   }
   if (ctx.solids?.length &&
       segSolidHit({ x: from.x, y: y0, z: from.z }, { x: to.x, y: y1, z: to.z },
-                  ctx.solids, ctx.solidIndex ?? undefined, ctx.team)) return false;
+                  ctx.solids, ctx.solidIndex ?? undefined, ctx.team)) {return false;}
   return true;
 }

@@ -23,19 +23,19 @@ renderer.toneMappingExposure = 0.4;
 document.body.append(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x25_28_2e);
+scene.background = new THREE.Color(0x25_28_2E);
 const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.01, 100);
 camera.position.set(0.45, 0.3, 0.55);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 0.02, 0);
 
 scene.add(new THREE.AmbientLight(0x88_66_44, 0.35));
-scene.add(new THREE.HemisphereLight(0x55_99_cc, 0x66_44_22, 0.5));
-const sun = new THREE.DirectionalLight(0xff_e8_aa, 3.2);
+scene.add(new THREE.HemisphereLight(0x55_99_CC, 0x66_44_22, 0.5));
+const sun = new THREE.DirectionalLight(0xFF_E8_AA, 3.2);
 sun.position.set(2, 4, 1);
 scene.add(sun);
 // Fill from camera side so edges read — game viewmodels are lit mostly by sun+hemi.
-const fill = new THREE.DirectionalLight(0x8899BB, 0.8);
+const fill = new THREE.DirectionalLight(0x88_99_BB, 0.8);
 fill.position.set(-1.5, 1, 2);
 scene.add(fill);
 

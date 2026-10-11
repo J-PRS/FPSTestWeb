@@ -42,7 +42,7 @@ export const CANNON_CONFIG: ProjectileConfig = {
   trailScaleMin: 0,
   trailScaleMax: 0,
   trailRampIn: 0,
-  meshColor: 0x23252B, // dark iron cannonball
+  meshColor: 0x23_25_2B, // dark iron cannonball
   meshType: 'ball',
   glowShell: false, // iron, not energy — the ember trail carries the read
   glowColor: 0x00_00_00, // unused — glowShell is off

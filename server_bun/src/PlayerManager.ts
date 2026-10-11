@@ -131,8 +131,8 @@ export class PlayerManager {
     // Bots stamp p.isBot after this returns — the counter must key on
     // the join call's own answer, not the field's late arrival.
     const was = this.players.get(playerId);
-    if (was && !was.isBot) this.humans--;
-    if (!isBot) this.humans++;
+    if (was && !was.isBot) {this.humans--;}
+    if (!isBot) {this.humans++;}
     this.players.set(playerId, player);
     return player;
   }
@@ -140,7 +140,7 @@ export class PlayerManager {
   removePlayer(playerId: string): PlayerState | undefined {
     const player = this.players.get(playerId);
     if (player) {
-      if (!player.isBot) this.humans--;
+      if (!player.isBot) {this.humans--;}
       this.players.delete(playerId);
     }
     return player;
@@ -150,7 +150,7 @@ export class PlayerManager {
    *  the damage path without sleeping 2s. */
   breakShield(playerId: string): void {
     const p = this.players.get(playerId);
-    if (p) p.protectedUntil = simMs(0);
+    if (p) {p.protectedUntil = simMs(0);}
   }
 
   getPlayer(playerId: string): PlayerState | undefined {
@@ -160,15 +160,15 @@ export class PlayerManager {
   /** Mid-match team swap — callers broadcast teamUpdate. */
   setTeam(playerId: string, team: TeamId): void {
     const p = this.players.get(playerId);
-    if (p) p.team = team;
+    if (p) {p.team = team;}
   }
 
   /** Live player counts per team. */
   teamCounts(): { alpha: number; bravo: number } {
     let alpha = 0, bravo = 0;
     for (const p of this.players.values()) {
-      if (p.team === 'alpha') alpha++;
-      else if (p.team === 'bravo') bravo++;
+      if (p.team === 'alpha') {alpha++;}
+      else if (p.team === 'bravo') {bravo++;}
     }
     return { alpha, bravo };
   }
@@ -216,7 +216,7 @@ export class PlayerManager {
     const player = this.players.get(playerId);
     // Wire boundary: a non-finite claim would poison lastValid* and the
     // broadcast for every observer — refuse it before it lands.
-    if (!Number.isFinite(position.x + position.y + position.z + velocity.x + velocity.y + velocity.z + rotation.yaw + rotation.pitch)) return;
+    if (!Number.isFinite(position.x + position.y + position.z + velocity.x + velocity.y + velocity.z + rotation.yaw + rotation.pitch)) {return;}
     // A stale/reordered report must not regress position — all lanes are
     // ordered now, but a replayed or duplicated packet would otherwise
     // teleport the player backward through plausible() checks.
@@ -244,7 +244,7 @@ export class PlayerManager {
 
   getLastValidState(playerId: string): { position: Vec3; velocity: Vec3; rotation: Rotation; seq: number } | null {
     const player = this.players.get(playerId);
-    if (!player) return null;
+    if (!player) {return null;}
     return {
       position: { ...player.lastValidPosition },
       velocity: { ...player.lastValidVelocity },
@@ -292,7 +292,7 @@ export class PlayerManager {
     // (scenario fixtures, superbot, claimed records) may legitimately
     // sit over max already — only a path that PUSHES over is named.
     inv('health-in-pool', target.health <= target.maxHealth + 0.01 || preHp > target.maxHealth + 0.01,
-      { id: targetId, hp: +target.health.toFixed(1), max: target.maxHealth, dmg: +incoming.toFixed(1) });
+      { id: targetId, hp: Number(target.health.toFixed(1)), max: target.maxHealth, dmg: Number(incoming.toFixed(1)) });
     if (target.health <= 0) {
       target.health = 0;
       target.isDead = true;
@@ -315,7 +315,7 @@ export class PlayerManager {
 
   respawnPlayer(playerId: string): { position: Vec3; rotation: Rotation; armorClass: string } | null {
     const player = this.players.get(playerId);
-    if (!player) return null;
+    if (!player) {return null;}
 
     // Banked classUpdate — the tier swap takes effect at the new life so
     // the sim scale and HP pool change at a declared discontinuity, never
@@ -396,7 +396,7 @@ export class PlayerManager {
    *  (resetStats zeroes the table, so it can't lag a match boundary). */
   killTotal(): number {
     let n = 0;
-    for (const p of this.players.values()) n += p.kills;
+    for (const p of this.players.values()) {n += p.kills;}
     return n;
   }
 

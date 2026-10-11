@@ -192,7 +192,7 @@ export function gapScan(root: THREE.Object3D): { orphans: number; who: string[];
   const find = (i: number): number => parent[i] === i ? i : (parent[i] = find(parent[i]!));
   for (let i = 0; i < parts.length; i++)
     {for (let j = i + 1; j < parts.length; j++)
-      {if (touch(parts[i]!.box, parts[j]!.box)) parent[find(i)] = find(j);}}
+      {if (touch(parts[i]!.box, parts[j]!.box)) {parent[find(i)] = find(j);}}}
   const roots = new Set(parts.map((_, i) => find(i)));
   // Orphan = a cluster of one (not merely a small cluster).
   const size = new Map<number, number>();

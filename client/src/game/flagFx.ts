@@ -14,7 +14,7 @@ const _c = new THREE.Color();
  *  the dropped spot is known, a fast stretched streak flying the return
  *  path — so "it went home" reads at any distance, not just on-site. */
 export function flagReturnFx(standPos: THREE.Vector3, team: TeamId | null, from?: THREE.Vector3 | null): void {
-  const hex = team ? TEAM_COLORS[team] : 0xFFD066; // rabbit's flag is neutral gold
+  const hex = team ? TEAM_COLORS[team] : 0xFF_D0_66; // rabbit's flag is neutral gold
   _c.setHex(hex);
   const c2: [number, number, number] = [_c.r, _c.g, _c.b];
   implodeBurst(_p.copy(standPos).setY(standPos.y + 1.4), {

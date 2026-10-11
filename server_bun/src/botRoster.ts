@@ -90,7 +90,7 @@ export class BotRoster {
       this.roles.set(id, 'offense');
       this.applyClass(p, cls);
       p.isBot = true;
-      if (isSuper(id)) p.health = 400; // superbot tanks a beating
+      if (isSuper(id)) {p.health = 400;} // superbot tanks a beating
       p.lastSeen = wallNow();
       this.room.assignTeam(p);
       this.room.broadcast(spawnPayload(WORLD_MODEL.player!, id, 'playerId', {
@@ -108,13 +108,13 @@ export class BotRoster {
       // The spawn pick is thoughtful, not flat: the fresh brain's skill
       // matrix rerolls every open slot toward what this bot hits with.
       this.adaptOnRespawn(id, (w) => aimSkillFor(this.brains.get(id)!.skill, w, 0), 'spawn');
-      if (wildcard) logger.info('Bot wildcard kit', { id, room: this.room.name, kit: { near: this.loadouts.get(id)!.near, mid: this.loadouts.get(id)!.mid, far: this.loadouts.get(id)!.far, belt: this.loadouts.get(id)!.belt, side: this.loadouts.get(id)!.side, perk: loadout.perk } });
+      if (wildcard) {logger.info('Bot wildcard kit', { id, room: this.room.name, kit: { near: this.loadouts.get(id)!.near, mid: this.loadouts.get(id)!.mid, far: this.loadouts.get(id)!.far, belt: this.loadouts.get(id)!.belt, side: this.loadouts.get(id)!.side, perk: loadout.perk } });}
       this.thinkPhase.set(id, this.nextIdx % this.thinkDiv);
       // Legal body: the bot gets a move shadow exactly like a human join —
       // brains emit inputs, the sim owns motion, energy model included.
       this.room.moveSim.track(id, p.position, p.rotation.yaw, p.perk, p.team, true, cls);
     }
-    if (n > 0) logger.info('Bots spawned', { room: this.room.name, count: n });
+    if (n > 0) {logger.info('Bots spawned', { room: this.room.name, count: n });}
   }
 
   /** Team's difficulty spec from spec.botSkill — a bare tier covers
@@ -124,8 +124,8 @@ export class BotRoster {
     const s = this.room.spec.botSkill;
     // A team wrapper always carries alpha or bravo; a bare spec is a
     // string or an axis mix, which never does.
-    if (typeof s === 'string' || (s && !('alpha' in s) && !('bravo' in s))) return s as import('../../shared/botSkill.ts').BotSkillSpec;
-    if (s) return (team === 'alpha' ? s.alpha : s.bravo) ?? 'medium';
+    if (typeof s === 'string' || (s && !('alpha' in s) && !('bravo' in s))) {return s as import('../../shared/botSkill.ts').BotSkillSpec;}
+    if (s) {return (team === 'alpha' ? s.alpha : s.bravo) ?? 'medium';}
     return 'medium';
   }
 
@@ -135,7 +135,7 @@ export class BotRoster {
   public refitClass(id: string): void {
     const lo = this.loadouts.get(id);
     const p = this.room.players.getPlayer(id);
-    if (!lo || !p) return;
+    if (!lo || !p) {return;}
     p.armorClass = botClassForLoadout(lo);
     this.applyClass(p, p.armorClass as ArmorClass);
   }
@@ -155,7 +155,7 @@ export class BotRoster {
     // class read as an anchor instead of just a slower medium.
     if (cls === 'heavy') {
       const lo = this.loadouts.get(p.id);
-      if (lo && lo.far !== WeaponType.Mortar) this.loadouts.set(p.id, { ...lo, far: WeaponType.Mortar });
+      if (lo && lo.far !== WeaponType.Mortar) {this.loadouts.set(p.id, { ...lo, far: WeaponType.Mortar });}
     }
     const delta = CLASS_STATS[cls].maxHealth - CLASS_STATS[prev].maxHealth;
     p.maxHealth += delta;
@@ -172,8 +172,8 @@ export class BotRoster {
     // the body. The shadow may not exist yet (spawn applies the class
     // before track) — when it does, its eye IS the class eye.
     const simEye = this.room.moveSim.eyeOf(p.id);
-    if (simEye !== undefined) invEq('sim-eye-class-eye', simEye, CLASS_STATS[cls].eyeHeight,
-      0.001, { id: p.id, cls });
+    if (simEye !== undefined) {invEq('sim-eye-class-eye', simEye, CLASS_STATS[cls].eyeHeight,
+      0.001, { id: p.id, cls });}
   }
 
   /** Rebalance squad roles ~every 5s. Needs are computed per team: a flag
@@ -181,15 +181,15 @@ export class BotRoster {
    *  and an infiltrator; the rest split offense/defense. Reassignment
    *  skips carriers mid-run — the flagGoal carrier check owns them. */
   private rebalanceRoles(now: number): void {
-    if (!this.room.flags || now < this.roleT) return;
+    if (!this.room.flags || now < this.roleT) {return;}
     this.roleT = now + 5000;
     const byTeam = new Map<string, string[]>();
     for (const id of this.brains.keys()) {
       const p = this.room.players.getPlayer(id);
-      if (!p?.team) continue;
+      if (!p?.team) {continue;}
       (byTeam.get(p.team) ?? byTeam.set(p.team, []).get(p.team)!).push(id);
     }
-    for (const ids of byTeam.values()) this.rebalanceTeam(ids);
+    for (const ids of byTeam.values()) {this.rebalanceTeam(ids);}
   }
 
   /** One team's role fill: walk ROLE_PRIORITY (capper@3 … infiltrator@7)
@@ -199,9 +199,9 @@ export class BotRoster {
     // Never reassign a carrier — the flagGoal carrier check owns them.
     const free = ids.filter((id) => {
       const p = this.room.players.getPlayer(id);
-      if (!p || p.isDead) return true; // corpses re-role freely on respawn
+      if (!p || p.isDead) {return true;} // corpses re-role freely on respawn
       for (const f of this.room.flags!.flags.values()) {
-        if (f.carrier === id) return false;
+        if (f.carrier === id) {return false;}
       }
       return true;
     });
@@ -210,9 +210,9 @@ export class BotRoster {
     // same body flip-flops capper→hof→technician on every pass.
     const donors = free.filter((id) => !ROLE_PRIORITY.some((w) => this.roles.get(id) === w.role));
     for (const { role: want, want: need, minSquad } of ROLE_PRIORITY) {
-      if (ids.length < minSquad) break;
+      if (ids.length < minSquad) {break;}
       let have = 0;
-      for (const id of ids) if (this.roles.get(id) === want) have++;
+      for (const id of ids) {if (this.roles.get(id) === want) {have++;}}
       while (have < need) {
         // Kit-weighted pick: the best-fit donor takes the slot
         // (CLASS_FITNESS argmax, id tiebreak) — a pull, not a gate, so
@@ -223,7 +223,7 @@ export class BotRoster {
           const f = CLASS_FITNESS[this.room.players.getPlayer(id)?.armorClass ?? '']?.[want] ?? 1;
           if (f > bestFit || (f === bestFit && donor !== null && id < donor)) { bestFit = f; donor = id; }
         }
-        if (!donor) break;
+        if (!donor) {break;}
         donors.splice(donors.indexOf(donor), 1);
         this.roles.set(donor, want);
         const strict = STRICT_CLASS[want];
@@ -253,12 +253,12 @@ export class BotRoster {
         // pin its builder trait instead of trusting the spawn roll.
         // HoF gets the same nudge: mines+shields ARE the job. (The
         // deploy itself stays stochastic — a guideline, not a script.)
-        if (want === 'technician' || want === 'hof') this.brains.get(donor)?.setBuilder(true);
+        if (want === 'technician' || want === 'hof') {this.brains.get(donor)?.setBuilder(true);}
         // A HoF that blasts off the flag on every nearby shell is a
         // HoF that isn't ON the flag — juggernaut is the perk a human
         // anchor would pick, and it's what makes "planted" physically
         // true instead of a goal the sim keeps vetoing.
-        if (want === 'hof' && donorP) donorP.perk = 'juggernaut';
+        if (want === 'hof' && donorP) {donorP.perk = 'juggernaut';}
         // A capper who PREFERS pull rides the implosion disc — the
         // forward launch needs no heel-shot turnaround. Push-style
         // cappers keep their drawn belt and blast off their heels;
@@ -295,7 +295,7 @@ export class BotRoster {
         // heal nade is a hybrid, the medic carries the whole archetype.
         if (want === 'medic') {
           const lo = this.loadouts.get(donor);
-          if (lo) this.loadouts.set(donor, { ...lo, near: WeaponType.HealBeam, belt: WeaponType.HealGrenade });
+          if (lo) {this.loadouts.set(donor, { ...lo, near: WeaponType.HealBeam, belt: WeaponType.HealGrenade });}
         }
         // The chaser (LD) lives or dies on catching 30-45 m/s carriers —
         // a mortar or rocket rack can't lead that, and a shotgun can't
@@ -311,14 +311,14 @@ export class BotRoster {
             // lightning gun's hold-on-target model; chaingun when the
             // kit doesn't field beam mechanics anyway.
             const near = closeNear.has(lo.near) ? WeaponType.Lightning : lo.near;
-            if (far !== lo.far || near !== lo.near) this.loadouts.set(donor, { ...lo, far, near });
+            if (far !== lo.far || near !== lo.near) {this.loadouts.set(donor, { ...lo, far, near });}
           }
         }
         // Role kit edits (LD's beam, capper's disc) can change the body's
         // legal tier — an LD donor grafted Lightning must run light or
         // the class gate makes its own guns contraband. Strict roles
         // already re-fit above; everyone else re-derives from the kit.
-        if (!strict) this.refitClass(donor);
+        if (!strict) {this.refitClass(donor);}
         logger.info('Bot role', { id: donor, role: want, room: this.room.name });
         have++;
       }
@@ -331,7 +331,7 @@ export class BotRoster {
   maintain(now: number): void {
     this.rebalanceRoles(now);
     const fill = this.room.spec.botFill;
-    if (!fill || now < this.maintainAt) return;
+    if (!fill || now < this.maintainAt) {return;}
     this.maintainAt = now + 1000;
     const humans = this.room.playerCount() - this.brains.size;
     // The 16 clamp was a hidden ceiling: a map asking botFill=40 quietly
@@ -343,17 +343,17 @@ export class BotRoster {
       return;
     }
     let excess = this.brains.size - want;
-    if (excess <= 0) return;
+    if (excess <= 0) {return;}
     // Map iterators tolerate mid-loop delete — no snapshot needed.
     for (const id of this.brains.keys()) {
-      if (excess <= 0) break;
+      if (excess <= 0) {break;}
       const p = this.room.players.getPlayer(id);
-      if (p && !p.isDead) continue; // keep live bots, kill the corpse queue first
+      if (p && !p.isDead) {continue;} // keep live bots, kill the corpse queue first
       this.retire(id);
       excess--;
     }
     for (const id of this.brains.keys()) {
-      if (excess <= 0) break;
+      if (excess <= 0) {break;}
       this.retire(id);
       excess--;
     }
@@ -366,10 +366,10 @@ export class BotRoster {
   adaptOnRespawn(id: string, skill: (w: number) => number, at: 'spawn' | 'respawn' = 'respawn'): void {
     const lo = this.loadouts.get(id);
     const alts = this.alts.get(id);
-    if (!lo || !alts) return;
+    if (!lo || !alts) {return;}
     const next = adaptLoadout(lo, alts, skill, botRand);
     const moved = (['near', 'mid', 'far', 'belt', 'side'] as const).filter((s) => next[s] !== lo[s]);
-    if (!moved.length) return;
+    if (moved.length === 0) {return;}
     this.loadouts.set(id, next);
     logger.info('Bot adapted kit', { id, room: this.room.name, at, swapped: moved.map((s) => `${s}:${lo[s]}->${next[s]}`) });
     this.refitClass(id);

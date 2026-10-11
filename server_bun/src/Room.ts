@@ -32,7 +32,7 @@ import { RoomPickups } from './RoomPickups.ts';
 import { RoomArena } from './RoomArena.ts';
 import { RoomDeployables } from './RoomDeployables.ts';
 import { RoomProjectiles } from './RoomProjectiles.ts';
-import type { PlayerState, Vec3, ClientMessage } from './types.ts';
+import type { PlayerState, Vec3, ClientMessage,WebSocketData } from './types.ts';
 import { CLASS_STATS, classCapsule, type ArmorClass } from '../../shared/botClasses.ts';
 import { inv, setInvariantSink } from '../../shared/invariants.ts';
 import { logger } from './logger.ts';
@@ -50,7 +50,7 @@ import { perkMods } from '../../shared/perks.ts';
 import { healPool } from './healPool.ts';
 import { FORCE_SEND_MS } from './combatBlast.ts';
 import type { ServerWebSocket } from 'bun';
-import type { WebSocketData } from './types.ts';
+
 import { simNow } from './simClock.ts';
 import { wallNow, wallMs, type WallMs } from './wallClock.ts';
 
@@ -131,9 +131,9 @@ export class Room {
   private healthTimer = 0;
   private healthTick(dt: number): void {
     this.healthTimer += dt;
-    if (this.healthTimer < 15) return;
+    if (this.healthTimer < 15) {return;}
     this.healthTimer = 0;
-    if (!this.health.size) return;
+    if (this.health.size === 0) {return;}
     logger.debug('Room health', { room: this.name, humans: this.players.getHumanCount(), ...Object.fromEntries(this.health) });
     // Fold the window into since-boot totals. gapMax is a gauge (the
     // worst single sample), not a counter — merge by max, not sum.
@@ -154,12 +154,12 @@ export class Room {
   private unburyAcc = 0;
   private unburyLogN = 0;
   private unburyTick(dt: number): void {
-    if (!this.field) return;
+    if (!this.field) {return;}
     this.unburyAcc += dt;
-    if (this.unburyAcc < 0.5) return;
+    if (this.unburyAcc < 0.5) {return;}
     this.unburyAcc = 0;
     for (const p of this.players.getAllPlayers().values()) {
-      if (p.isDead || (!p.isBot && !p.hasReceivedPosition)) continue;
+      if (p.isDead || (!p.isBot && !p.hasReceivedPosition)) {continue;}
       // Measure with the shadow's own eye when one exists — the class
       // capsule and the sim body disagree whenever a refit left the sim
       // at the default eye, and the record's view was the stale one.
@@ -180,9 +180,9 @@ export class Room {
       // phantom-bury every banded contact (a grounded heavy legally rides
       // its eye ~0.5 under the floor in the snap window). Buried means
       // the EYE itself is below the surface.
-      if (p.isBot) inv('bot-below-ground', !Number.isFinite(terrain) || p.position.y >= terrain - 0.5,
-        { id: p.id, y: +p.position.y.toFixed(1), eye, terrain: Number.isFinite(terrain) ? +terrain.toFixed(1) : 'n/a', dbg: this.moveSim.unburyDebug(p.id) });
-      if (!Number.isFinite(terrain) || p.position.y >= terrain - 0.5) continue;
+      if (p.isBot) {inv('bot-below-ground', !Number.isFinite(terrain) || p.position.y >= terrain - 0.5,
+        { id: p.id, y: Number(p.position.y.toFixed(1)), eye, terrain: Number.isFinite(terrain) ? Number(terrain.toFixed(1)) : 'n/a', dbg: this.moveSim.unburyDebug(p.id) });}
+      if (!Number.isFinite(terrain) || p.position.y >= terrain - 0.5) {continue;}
       // First rescues carry the autopsy at debug level — the 'unbury'
       // health counter and the bot-scoped inv above are the loud signal;
       // a warn per rescue reads as jank in soak asserts while routine
@@ -234,8 +234,8 @@ export class Room {
    *  "is id carrying", and per-tick callers (checkStuck, propel gate)
    *  paid it every bot every tick. */
   flagCarriedBy(playerId: string): boolean {
-    if (!this.flags) return false;
-    for (const f of this.flags.flags.values()) if (f.carrier === playerId) return true;
+    if (!this.flags) {return false;}
+    for (const f of this.flags.flags.values()) {if (f.carrier === playerId) {return true;}}
     return false;
   }
   /** Server-owned ground loot — gems/tags score in team modes, powerups
@@ -263,17 +263,17 @@ export class Room {
    *  arrival-time mutations interleaving with bot/projectile ticks. */
   readonly commands: { playerId: string; msg: ClientMessage; at: WallMs }[] = [];
   drainCommands(): void {
-    if (!this.commands.length) return;
+    if (this.commands.length === 0) {return;}
     for (const c of this.commands) {
       // Contain per command: a throwing handler must not kill the rest
       // of the drain (and the tick that hosts it) — the client's binary
       // dispatch got the same treatment; one malformed input = one
       // counted drop, never a stalled queue.
       try { this.messages.handleMessage(c.playerId, c.msg, c.at); }
-      catch (err) {
+      catch (error) {
         this.messages.hb('handlerThrow');
         this.messages.hb(`handlerThrow.${c.msg.type}`);
-        logger.warn('Handler threw — contained, counted', { room: this.name, playerId: c.playerId, type: c.msg.type, err });
+        logger.warn('Handler threw — contained, counted', { room: this.name, playerId: c.playerId, type: c.msg.type, error });
       }
     }
     this.commands.length = 0;
@@ -327,7 +327,7 @@ export class Room {
     setInvariantSink((n, ctx) => { this.healthBump(`inv:${n}`); logger.warn(`INVARIANT ${n}`, ctx ?? {}); });
     this.name = name;
     this.field = field;
-    this.moveAuthority = moveAuthority && !!field;
+    this.moveAuthority = moveAuthority && Boolean(field);
     this.spec = spec ?? resolveMapSpec(null);
     this.influence = new InfluenceMap(this.spec.tileSize);
     this.mode = mode || this.spec.mode || '';
@@ -345,7 +345,7 @@ export class Room {
     this.moveSim.bodySource = () => {
       const out: ({ id: string } & BodyCapsule)[] = [];
       for (const p of this.players.getAllPlayers().values()) {
-        if (p.isDead) continue;
+        if (p.isDead) {continue;}
         const st = CLASS_STATS[p.armorClass as ArmorClass];
         out.push({ id: p.id, x: p.position.x, y: p.position.y, z: p.position.z, h: st.eyeHeight, mass: st.mass, r: st.radius, vx: p.velocity.x, vz: p.velocity.z });
       }
@@ -381,16 +381,16 @@ export class Room {
       (msg) => this.connections.broadcast(msg),
       (data) => this.connections.broadcastBinaryReliable(data),
     );
-    if (this.noBalls) this.ballSim.population = { base: 0, perPlayer: 0, max: 0 };
-    else if (this.spec.balls) this.ballSim.population = this.spec.balls;
+    if (this.noBalls) {this.ballSim.population = { base: 0, perPlayer: 0, max: 0 };}
+    else if (this.spec.balls) {this.ballSim.population = this.spec.balls;}
     this.ballSim.onKilled = (by, pos, variant) => this.scoring.nonPlayerKill(by, pos, variant);
     this.ballSim.colliders = structureColliders(this.structs.eff());
-    if (this.spec.ballMix) this.ballSim.ballMix = this.spec.ballMix;
-    if (this.spec.spawns) this.players.spawnPoints = this.spec.spawns;
+    if (this.spec.ballMix) {this.ballSim.ballMix = this.spec.ballMix;}
+    if (this.spec.spawns) {this.players.spawnPoints = this.spec.spawns;}
     this.players.teamSpawns = this.spec.teamSpawns ?? null;
     this.players.spawnRng = () => this.rng();
     this.messages.setBallSim(this.ballSim);
-    if (field) this.ballSim.attachField(field);
+    if (field) {this.ballSim.attachField(field);}
     this.creatureSim = this.initCreatures(field);
     this.bots = new ServerBots(this, field);
     // Event subscriptions — producers emit through RoomInfo.emit; each
@@ -399,12 +399,14 @@ export class Room {
     // think phases, so an answer lands a beat later like real chat.
     this.events.on((e) => {
       switch (e.type) {
-        case 'kill': this.scoring.onKill(e.targetId, e.shooterId); break;
-        case 'hit': this.bots.flinch(e.targetId, e.shooterId); this.scoring.onDamage(e.shooterId, e.targetId, e.damage); break;
+        case 'kill': { this.scoring.onKill(e.targetId, e.shooterId); break;
+        }
+        case 'hit': { this.bots.flinch(e.targetId, e.shooterId); this.scoring.onDamage(e.shooterId, e.targetId, e.damage); break;
+        }
         case 'fire': {
           this.bots.noteHumanFire(e.playerId);
           const shooter = this.players.getPlayer(e.playerId);
-          if (shooter) shooter.lastFireSim = simNow(); // decloak-on-fire: senses unmask CLOAK for the reveal window
+          if (shooter) {shooter.lastFireSim = simNow();} // decloak-on-fire: senses unmask CLOAK for the reveal window
           break;
         }
         case 'botSpoke': {
@@ -420,7 +422,7 @@ export class Room {
             ?? (e.vgs ? vgsCommandFor(e.vgs) : null)
             ?? (this.bots.nameIn(e.text) ? 'mention' : null);
           const team = this.players.getPlayer(e.id)?.team;
-          if (kind) this.bots.notice(kind, e.id, team, e.vgs ? this.radioGoal(e.vgs, e.id, team) : undefined);
+          if (kind) {this.bots.notice(kind, e.id, team, e.vgs ? this.radioGoal(e.vgs, e.id, team) : undefined);}
           this.noteChatPace(e.id);
           break;
         }
@@ -429,25 +431,32 @@ export class Room {
         // flags ('flag'): a client-claimed origin is untrusted, so it
         // must not punt loose pickups — 'pickup' emits only come from
         // server-owned blast paths (shells, mines).
-        case 'blast': this.deployables.applyBlast(e.pos, e.damage, e.radius, e.shooterId, e.scales, e.weapon, e.splash); break;
-        case 'knock':
+        case 'blast': { this.deployables.applyBlast(e.pos, e.damage, e.radius, e.shooterId, e.scales, e.weapon, e.splash); break;
+        }
+        case 'knock': {
           if (e.kind === 'prey') { this.ballSim.knock(e.pos, e.radius, e.force, e.pull); this.creatureSim.knock(e.pos, e.radius, e.force, e.pull); }
-          else (e.kind === 'pickup' ? this.pickups : this.flags)?.knock(e.pos, e.radius, e.force, e.pull);
+          else {(e.kind === 'pickup' ? this.pickups : this.flags)?.knock(e.pos, e.radius, e.force, e.pull);}
           break;
-        case 'preySplash':
+        }
+        case 'preySplash': {
           this.ballSim.splashDamage(e.ownerId, e.pos, e.radius, e.maxDamage);
           this.creatureSim.splashDamage(e.ownerId, e.pos, e.radius, e.maxDamage);
           break;
-        case 'meleeSweep':
+        }
+        case 'meleeSweep': {
           this.ballSim.meleeSweep(e.playerId, e.pos, e.dir);
           this.creatureSim.meleeSweep(e.playerId, e.pos, e.dir);
           break;
-        case 'armor':
+        }
+        case 'armor': {
           this.ballSim.armorBlast(e.pos, e.radius, e.amount);
           this.creatureSim.armorBlast(e.pos, e.radius, e.amount);
           break;
-        case 'impulse': this.moveSim.applyImpulse(e.playerId, e.dv); break;
-        case 'flagDrop': this.flags?.dropIfCarrier(e.playerId); break;
+        }
+        case 'impulse': { this.moveSim.applyImpulse(e.playerId, e.dv); break;
+        }
+        case 'flagDrop': { this.flags?.dropIfCarrier(e.playerId); break;
+        }
       }
     });
     // Posted roles spawn at home — a defender materializing on a
@@ -469,7 +478,7 @@ export class Room {
     };
     // Bots populate before humans join so team balancing puts humans on
     // the emptier side.
-    if (this.spec.bots) this.bots.populate(this.spec.bots);
+    if (this.spec.bots) {this.bots.populate(this.spec.bots);}
     this.wireModeFeatures();
     this.deployables = new RoomDeployables(this);
     // Deployables are solid — the move shadows push bodies out of gear.
@@ -500,9 +509,9 @@ export class Room {
     hits.push(now);
     if (hits.length < 4) { this.chatPace.set(id, hits); return; }
     this.chatPace.delete(id); // burst spent — re-arm on the next run
-    if (tauntRand() >= 0.12) return;
+    if (tauntRand() >= 0.12) {return;}
     const bots = [...this.players.getAllPlayers().values()].filter((p) => p.id.startsWith('BOT-') && !p.isDead);
-    if (bots.length) this.messages.killFeed.say(bots[(tauntRand() * bots.length) | 0]!.id, 'quiet', id);
+    if (bots.length > 0) {this.messages.killFeed.say(bots[Math.trunc((tauntRand() * bots.length))]!.id, 'quiet', id);}
   }
 
   /** A team VGS chord → the spot it orders bots toward. 'own'/'enemy'
@@ -511,14 +520,14 @@ export class Room {
    *  'actor' is the caller's position. No stand/no flag → no pin. */
   private radioGoal(chord: string, actorId: string, actorTeam?: string): { x: number; y: number; z: number } | undefined {
     const aim = radioAimFor(chord);
-    if (!aim) return undefined;
-    if (aim === 'actor') return this.players.getPlayer(actorId)?.position;
-    if (!this.flags || !actorTeam) return undefined;
+    if (!aim) {return undefined;}
+    if (aim === 'actor') {return this.players.getPlayer(actorId)?.position;}
+    if (!this.flags || !actorTeam) {return undefined;}
     const ours = this.flags.flags.get(actorTeam as TeamId);
     const enemyTeam = actorTeam === 'alpha' ? 'bravo' : 'alpha';
     const theirs = this.flags.flags.get(enemyTeam);
-    if (aim === 'own') return ours?.home;
-    if (aim === 'enemy') return theirs?.home;
+    if (aim === 'own') {return ours?.home;}
+    if (aim === 'enemy') {return theirs?.home;}
     // 'carrier' — the thief holding OUR flag; beacon info, pos is public
     return ours && ours.state === 'carried' ? ours.pos : undefined;
   }
@@ -551,14 +560,14 @@ export class Room {
     };
     creatureSim.onKilled = (by, pos) => this.scoring.nonPlayerKill(by, pos, 0);
     this.messages.setCreatureSim(creatureSim);
-    if (field) creatureSim.attachField(field);
+    if (field) {creatureSim.attachField(field);}
     return creatureSim;
   }
 
   // Team bases → spawn anchors, kill-confirmed pickups, CTF flags — the
   // per-mode feature set the spec + modeSpec select together.
   private wireModeFeatures(): void {
-    const bases = this.spec.bases;
+    const {bases} = this.spec;
     if (this.modeSpec?.teams && bases?.alpha && bases?.bravo) {
       // Spawn anchoring uses the SNAPPED stand positions — a defender
       // bias toward a floating/under-terrain authored base sends players
@@ -569,7 +578,7 @@ export class Room {
     this.pickups = new RoomPickups(this);
     this.pickups.onCollect = (pid, kind) => {
       const p = this.players.getPlayer(pid);
-      if (!p) return;
+      if (!p) {return;}
       if (kind === 'gem' || kind === 'tag') {
         // Gems also heal — server-declared now: the collect IS the intent,
         // so the heal applies here instead of waiting on a claim that a
@@ -586,7 +595,7 @@ export class Room {
         // mode — in CTF a gem is heal+credit, not a cap. Tags are tdm's
         // kill-confirmation point; they only ever spawn there.
         p.beltCharges = Math.min(BELT_MAX, p.beltCharges + 1);
-        const team = p.team;
+        const {team} = p;
         if ((kind === 'tag' || this.modeSpec?.gems) && (team === 'alpha' || team === 'bravo')) {
           this.score(team);
           // Banker credit — without it nuggets/tdm leave the personal
@@ -635,8 +644,8 @@ export class Room {
     this.sims.push({ name: 'balls', tick: (dt) => this.ballSim.step(dt), worldState: () => [{ type: 'ballRoster', balls: this.ballSim.roster() }] });
     this.sims.push({ name: 'crawl', tick: (dt) => this.creatureSim.step(dt), worldState: () => [{ type: 'crawlRoster', crawlers: this.creatureSim.roster() }] });
     this.sims.push({ name: 'bots', tick: (dt) => this.bots.tick(dt) });
-    if (this.flags) this.sims.push({ name: 'flags', tick: (dt) => this.tickFlags(dt), worldState: () => [{ type: 'flagUpdate', flags: this.flags!.snapshot() }] });
-    if (this.pickups) this.sims.push({ name: 'pickups', tick: (dt) => this.pickups!.tick(dt), worldState: () => this.pickups!.snapshot().map((p) => ({ type: 'pickupSpawn', id: p.id, pos: p.pos, kind: p.kind }) as ServerMessage) });
+    if (this.flags) {this.sims.push({ name: 'flags', tick: (dt) => this.tickFlags(dt), worldState: () => [{ type: 'flagUpdate', flags: this.flags!.snapshot() }] });}
+    if (this.pickups) {this.sims.push({ name: 'pickups', tick: (dt) => this.pickups!.tick(dt), worldState: () => this.pickups!.snapshot().map((p) => ({ type: 'pickupSpawn', id: p.id, pos: p.pos, kind: p.kind }) as ServerMessage) });}
     this.sims.push({ name: 'unbury', tick: (dt) => this.unburyTick(dt) });
     if (this.spec.arena) {
       const arena = new RoomArena(this, this.spec.arena);
@@ -667,14 +676,14 @@ export class Room {
    *  exploit through the trusted channel). */
   private lastPingStamp = new Map<string, number>();
   private pingTick(): void {
-    if (++this.pingCycle % 10 !== 0) return;
+    if (++this.pingCycle % 10 !== 0) {return;}
     const humans = [...this.players.getAllPlayers().values()].filter((p) => !p.isBot);
-    if (!humans.length) return;
+    if (humans.length === 0) {return;}
     // Unmeasured humans jump the queue — the client channel stands alone
     // until the first pong lands, and join grace shouldn't outlast a
     // full round-robin sweep in a big room.
     const target = humans.find((p) => !this.lastPingStamp.has(p.id))
-      ?? humans[(this.pingCycle / 10 | 0) % humans.length]!;
+      ?? humans[(Math.trunc(this.pingCycle / 10)) % humans.length]!;
     const stamp = wallNow();
     this.lastPingStamp.set(target.id, stamp);
     this.sendToPlayer(target.id, { type: 'ping', timestamp: stamp });
@@ -685,7 +694,7 @@ export class Room {
    *  one capture = one score point). */
   tickFlags(dt: number): void {
     const scoredBy = this.flags?.tick(dt);
-    if (scoredBy) this.score(scoredBy);
+    if (scoredBy) {this.score(scoredBy);}
   }
 
   /** Beam-intent resolution: the honest ray a Lightning tick strikes —
@@ -740,7 +749,7 @@ export class Room {
       // inverse so receivers resolve a frame's u16 to an identity.
       wireIds: () => {
         const out: Record<number, string> = {};
-        for (const [pid, id] of this.wireIds) out[id] = pid;
+        for (const [pid, id] of this.wireIds) {out[id] = pid;}
         return out;
       },
       simsWorldState: () => this.sims.flatMap((s) => s.worldState?.() ?? []),
@@ -770,10 +779,10 @@ export class Room {
       // nack-storm can't hold the room on fulls permanently.
       nackFulls: () => {
         const now = wallNow();
-        if (now - this.lastNackAt < 500) return;
+        if (now - this.lastNackAt < 500) {return;}
         // A window still paying out covers every client — re-stamping
         // would let a nack every 500ms hold the room on fulls forever.
-        if (this.tickSeq - this.introSeq < 20) return;
+        if (this.tickSeq - this.introSeq < 20) {return;}
         this.lastNackAt = now;
         this.introSeq = this.tickSeq;
       },
@@ -789,14 +798,14 @@ export class Room {
       matchEndsAt: () => this.matchClock.timeLeftMs() > 0 ? simNow() + this.matchClock.timeLeftMs() : 0,
       moveInput: (pid, i, status, seq) => this.moveSim.queueInput(pid, {
         forward: i.forward, right: i.right,
-        jumpPressed: !!i.jump, jumpHeld: !!i.jump, skiHeld: !!i.ski,
-        jetHeld: !!i.jet,
+        jumpPressed: Boolean(i.jump), jumpHeld: Boolean(i.jump), skiHeld: Boolean(i.ski),
+        jetHeld: Boolean(i.jet),
       }, status, seq),
       moveReport: (pid, pos, yaw, vel, inputSeq, rttMs) => this.moveSim.reconcile(pid, pos, yaw, vel, inputSeq, rttMs),
       inputSeqOf: (pid) => this.moveSim.inputSeqOf(pid),
       transitOf: (pid) => this.moveSim.transitOf(pid),
       transitNote: (pid, rtt, stamp) => {
-        if (this.lastPingStamp.get(pid) !== stamp) return;
+        if (this.lastPingStamp.get(pid) !== stamp) {return;}
         this.moveSim.feedTransit(pid, rtt);
         // Echo the server-measured RTT back — the client's own ping/pong
         // number includes its event-loop stall, so the pair reads as
@@ -808,7 +817,7 @@ export class Room {
         // bounded so a wildly off clock (or forged stamp) degrades to the
         // ping/pong channel instead of poisoning the EMA.
         const uplink = wallNow() - fireAt;
-        if (uplink >= 0 && uplink <= 2_000) this.moveSim.feedUplink(pid, uplink);
+        if (uplink >= 0 && uplink <= 2000) {this.moveSim.feedUplink(pid, uplink);}
       },
       // The rabbit dep's presence IS the mode check — CombatHandler gates
       // all PvP damage on the carrier being one side of the pair.
@@ -856,7 +865,7 @@ export class Room {
         let crawler = Infinity;
         for (const c of this.creatureSim.crawlers.values()) {
           const d = Math.hypot(c.x - pos.x, c.y - pos.y, c.z - pos.z);
-          if (d < crawler) crawler = d;
+          if (d < crawler) {crawler = d;}
         }
         // Nearest enemy body to the pop — a foe eating the shell at 5m
         // reads as a 'lip' in the autopsy otherwise, masking body
@@ -864,9 +873,9 @@ export class Room {
         const team = shooterId ? this.players.getPlayer(shooterId)?.team : undefined;
         let foe = Infinity;
         for (const q of this.players.getAllPlayers().values()) {
-          if (q.id === shooterId || q.isDead || (team && q.team === team)) continue;
+          if (q.id === shooterId || q.isDead || (team && q.team === team)) {continue;}
           const d = Math.hypot(q.position.x - pos.x, q.position.y - pos.y, q.position.z - pos.z);
-          if (d < foe) foe = d;
+          if (d < foe) {foe = d;}
         }
         return { ball: this.ballSim.nearestBallDist(pos.x, pos.y, pos.z), crawler, foe };
       },
@@ -893,7 +902,7 @@ export class Room {
       },
       reshuffleBots: () => {
         const bots = [...this.players.getAllPlayers().values()].filter((p) => p.isBot);
-        if (bots.length < 2 || !this.modeSpec?.teams) return;
+        if (bots.length < 2 || !this.modeSpec?.teams) {return;}
         // Fisher-Yates on botRand so harness replays stay deterministic,
         // then alternate alpha/bravo — sizes stay even, loyalties don't.
         for (let i = bots.length - 1; i > 0; i--) {
@@ -964,7 +973,7 @@ export class Room {
       // Hitscan relays carry `pos` (server-stamped), spawns carry `position`.
       const m = msg as { position?: Vec3; pos?: Vec3 };
       const pos = m.position ?? m.pos;
-      if (pos) this.pushNoise(pos);
+      if (pos) {this.pushNoise(pos);}
     }
     this.connections.broadcast(msg, exclude);
   }
@@ -973,9 +982,9 @@ export class Room {
    *  reports them here so bots hear explosions as well as muzzle fire. */
   pushNoise(pos: Vec3): void {
     const now = simNow();
-    while (this.noises.length && now - this.noises[0]!.at > Room.NOISE_TTL) this.noises.shift();
+    while (this.noises.length > 0 && now - this.noises[0]!.at > Room.NOISE_TTL) {this.noises.shift();}
     this.noises.push({ pos: { ...pos }, at: now });
-    if (this.noises.length > Room.NOISE_MAX) this.noises.shift();
+    if (this.noises.length > Room.NOISE_MAX) {this.noises.shift();}
     this.influence.splat(pos, 'opportunity', 0.4);
   }
 
@@ -984,9 +993,9 @@ export class Room {
     const now = simNow();
     const out: Vec3[] = [];
     for (const n of this.noises) {
-      if (now - n.at > Room.NOISE_TTL) continue;
+      if (now - n.at > Room.NOISE_TTL) {continue;}
       const dx = n.pos.x - pos.x, dy = n.pos.y - pos.y, dz = n.pos.z - pos.z;
-      if (dx * dx + dy * dy + dz * dz <= radius * radius) out.push(n.pos);
+      if (dx * dx + dy * dy + dz * dz <= radius * radius) {out.push(n.pos);}
     }
     return out;
   }
@@ -1010,11 +1019,11 @@ export class Room {
    *  undefined. Split from assignTeam so GameServer can pass the pick to
    *  addPlayer — the join spawn itself is then already team-aware. */
   nextTeam(): TeamId | undefined {
-    if (!this.modeSpec?.teams) return undefined;
+    if (!this.modeSpec?.teams) {return undefined;}
     let alpha = 0, bravo = 0;
     for (const p of this.players.getAllPlayers().values()) {
-      if (p.team === 'alpha') alpha++;
-      else if (p.team === 'bravo') bravo++;
+      if (p.team === 'alpha') {alpha++;}
+      else if (p.team === 'bravo') {bravo++;}
     }
     return pickTeam({ alpha, bravo });
   }
@@ -1032,18 +1041,18 @@ export class Room {
    *  mapUpdate broadcast to rebuild their geometry. */
   applySpec(spec: MapSpec): void {
     const terrainChanged = spec.terrain !== this.spec.terrain || spec.heightScale !== this.spec.heightScale || spec.tileSize !== this.spec.tileSize;
-    if (spec.tileSize !== this.spec.tileSize) this.influence.resize(spec.tileSize ?? HM_WORLD_SCALE);
+    if (spec.tileSize !== this.spec.tileSize) {this.influence.resize(spec.tileSize ?? HM_WORLD_SCALE);}
     this.spec = spec;
-    if (spec.spawns) this.players.spawnPoints = spec.spawns;
+    if (spec.spawns) {this.players.spawnPoints = spec.spawns;}
     this.players.teamSpawns = spec.teamSpawns ?? null;
     this.structs.attach(); // merged authored + stand hulls; refreshFlagHomes re-runs it post-snap
     // Bases can move with a new spec — re-snap homes (no update push: the
     // mapUpdate below carries the post-snap list). If the terrain is
     // also rotating the attach below corrects them once it lands.
     this.refreshFlagHomes(false);
-    if (this.noBalls) this.ballSim.population = { base: 0, perPlayer: 0, max: 0 };
-    else if (spec.balls) this.ballSim.population = spec.balls;
-    if (spec.ballMix) this.ballSim.ballMix = spec.ballMix;
+    if (this.noBalls) {this.ballSim.population = { base: 0, perPlayer: 0, max: 0 };}
+    else if (spec.balls) {this.ballSim.population = spec.balls;}
+    if (spec.ballMix) {this.ballSim.ballMix = spec.ballMix;}
     this.creatureSim.pops = this.noCreatures ? {} : (spec.creatures ?? {});
     this.creatureSim.colliders = this.ballSim.colliders;
     // The echo carries the merged list too — joiners get stand hulls in
@@ -1069,20 +1078,20 @@ export class Room {
     // Rotate the sims' heightfield WITH the broadcast — clients rebuild on
     // mapUpdate; a sim still running the old field disagrees about where
     // the ground is for the entire match.
-    if (terrainChanged) this.onTerrain?.(spec);
+    if (terrainChanged) {this.onTerrain?.(spec);}
     this.retuneBots(spec.bots ?? 0);
   }
 
   /** Top up / retire bots toward a spec's bot count (admin reload). */
   private retuneBots(want: number): void {
     if (this.bots.count < want) { this.bots.populate(want - this.bots.count); return; }
-    if (this.bots.count <= want) return;
+    if (this.bots.count <= want) {return;}
     let excess = this.bots.count - want;
     // Snapshot first — removePlayerCompletely mutates the map we're walking.
     // oxlint-disable-next-line no-useless-spread
     for (const p of [...this.players.getAllPlayers().values()]) {
-      if (excess <= 0) break;
-      if (!p.isBot) continue;
+      if (excess <= 0) {break;}
+      if (!p.isBot) {continue;}
       this.removePlayerCompletely(p.id, 'adminReload', () => {});
       excess--;
     }
@@ -1101,7 +1110,7 @@ export class Room {
     // leave the brain keyed on a gone player forever. Idempotent: retire
     // already untracked before reaching this.
     const wasBot = this.players.getPlayer(playerId)?.isBot;
-    if (wasBot) this.bots.untrack(playerId);
+    if (wasBot) {this.bots.untrack(playerId);}
     // A carrier leaving drops the flag — same rule as dying with it.
     this.flagCarrierDied(playerId);
     this.deployables.clearOwner(playerId);
@@ -1145,16 +1154,16 @@ export class Room {
    *  hostile; a bot doesn't care which jersey it's wearing. No-op in
    *  non-team modes and when the delta is ≤1 (already balanced). */
   private rebalanceTeams(): void {
-    if (!this.modeSpec?.teams) return;
+    if (!this.modeSpec?.teams) {return;}
     const counts = this.players.teamCounts();
-    let [big, small] =
+    const [big, small] =
       counts.alpha >= counts.bravo
         ? (['alpha', 'bravo'] as const)
         : (['bravo', 'alpha'] as const);
-    if (counts[big] - counts[small] < 2) return;
+    if (counts[big] - counts[small] < 2) {return;}
     for (const p of this.players.getAllPlayers().values()) {
-      if (counts[big] - counts[small] < 2) break;
-      if (p.team !== big || !p.isBot) continue;
+      if (counts[big] - counts[small] < 2) {break;}
+      if (p.team !== big || !p.isBot) {continue;}
       // A flipped carrier would hold the flag in 'carried' forever —
       // tickCarried requires carrier.team !== flag.team, and the bot's
       // new own-team can't grab or return it. Drop it at their feet.

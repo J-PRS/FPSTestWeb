@@ -21,7 +21,7 @@ export interface FlagVis { flag: THREE.Group; stand: THREE.Group }
  *  dropped, and returned; home state reseats the pole in the socket so
  *  the pair reads as one complete flag. */
 function buildFlagVis(team: TeamId): FlagVis {
-  const teamColor = team === 'alpha' ? 0x55aaff : 0xff8855;
+  const teamColor = team === 'alpha' ? 0x55_AA_FF : 0xFF_88_55;
   const stand = mkFlagStand(teamColor);
   const base = new THREE.Mesh(
     new THREE.IcosahedronGeometry(0.4, 0),
@@ -53,7 +53,7 @@ function rabbitCallout(
   } else if (f.state === 'dropped') {
     frag.show('FLAG LOOSE — GRAB IT');
     sfx.flagCue('dropped', false);
-    burst(1.0);
+    burst(1);
     log('the rabbit flag is loose');
   } else if (f.state === 'home') {
     frag.show('FLAG RETURNED');
@@ -85,7 +85,7 @@ function ctfCallout(
   } else if (f.state === 'dropped') {
     c.frag.show(c.mine ? 'OUR FLAG DROPPED' : 'ENEMY FLAG DROPPED');
     sfx.flagCue('dropped', c.mine);
-    c.burst(1.0);
+    c.burst(1);
     c.log(`${f.team} flag dropped`);
   } else if (f.state === 'home') {
     c.homeCallout();
@@ -105,7 +105,7 @@ export function wireFlags(ctx: NetCtx): void {
   const wasDropped = new Set<string>();
   const ensureFlagMesh = (team: TeamId): FlagVis => {
     let vis = flagMeshes.get(team);
-    if (vis) return vis;
+    if (vis) {return vis;}
     // No onBeforeRender hook here — three.js never invokes it on a bare
     // Group (only renderable objects reach the render list). The per-frame
     // carrier pin + flight lerp lives in remotes.ts tickFlagMarkers.
@@ -134,10 +134,10 @@ export function wireFlags(ctx: NetCtx): void {
     const rabbit = deps.world.mode === 'rabbit';
     // Rabbit's flag enters play already 'dropped' — first blood spawns
     // it — so its very first update IS the announce-worthy transition.
-    if (prev === f.state || (prev === undefined && !(rabbit && f.state !== 'home'))) return;
+    if (prev === f.state || (prev === undefined && !(rabbit && f.state !== 'home'))) {return;}
     // Match-reset →home transitions are endCleanup, not a play — the
     // server's flags.reset() fakes cap/return transitions otherwise.
-    if (hush && f.state === 'home') return;
+    if (hush && f.state === 'home') {return;}
     const mine = f.team === deps.world.localTeam;
     const iAmCarrier = f.carrier === networkManager.getLocalPlayerId();
     const frag = deps.fragMessages;
@@ -169,7 +169,7 @@ export function wireFlags(ctx: NetCtx): void {
     if (scored) {
       const capAt = carrierPos(f.team) ?? f.pos;
       burstAt(capAt, 2.4, f.team);
-      burst(f, 1.0); // return puff back at the stand
+      burst(f, 1); // return puff back at the stand
     } else {
       burst(f, 1.4);
       // wirePos still holds the dropped spot — callout runs before
@@ -183,7 +183,7 @@ export function wireFlags(ctx: NetCtx): void {
   /** Carrier's live rendered pos — the cap spot on a scored transition. */
   const carrierPos = (team: TeamId): THREE.Vector3 | null => {
     const id = deps.world.flagMarkers.get(team)?.carrier;
-    if (!id) return null;
+    if (!id) {return null;}
     return id === networkManager.getLocalPlayerId()
       ? deps.lazyPlayer().pos
       : deps.world.remotePlayers.get(id)?.pos ?? null;
@@ -234,15 +234,15 @@ export function wireFlags(ctx: NetCtx): void {
     marker.wirePos.set(f.pos.x, f.pos.y, f.pos.z);
     // The wire's home is ground level; the pole seats ON the platform
     // deck — tickFlagMarkers lerps to wirePos, so lift the target.
-    if (f.state === 'home') marker.wirePos.y += FLAG_STAND_TOP;
+    if (f.state === 'home') {marker.wirePos.y += FLAG_STAND_TOP;}
     // 'dropped' streams 20Hz while the flag flies — don't snap the mesh
     // mid-flight, tickFlagMarkers eases toward wirePos. The drop frame
     // itself and every other state snap as before.
     if (!(f.state === 'dropped' && wasDropped.has(f.team))) {
       vis.flag.position.copy(marker.wirePos);
     }
-    if (f.state === 'dropped') wasDropped.add(f.team);
-    else wasDropped.delete(f.team);
+    if (f.state === 'dropped') {wasDropped.add(f.team);}
+    else {wasDropped.delete(f.team);}
     deps.lazyDemoManager?.()?.recordFlagUpdate(f.team, f.state, f.pos, f.carrier);
     marker.carrier = f.state === 'carried' ? f.carrier : null;
     deps.world.flagStates[f.team] = f.state;

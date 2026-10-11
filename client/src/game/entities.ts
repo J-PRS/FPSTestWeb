@@ -74,7 +74,7 @@ function createBallField(f: BallFieldDeps) {
 // Wire bounce/peak keyframe callbacks so demo clips replay this ball accurately
 function recordBallKeyframes(ball: Ball): void {
   const dm = deps.lazyDemoManager();
-  if (!dm?.isRecording) return;
+  if (!dm?.isRecording) {return;}
   ball.onBounce = (pos, vel) => {
     dm.recordTargetBounce(ball.id, { x: pos.x, y: pos.y, z: pos.z }, { x: vel.x, y: vel.y, z: vel.z }, ball.variant);
   };
@@ -86,10 +86,10 @@ function recordBallKeyframes(ball: Ball): void {
 // ---- Balls ----
 function spawnBall(): void {
   const dm = deps.lazyDemoManager();
-  if (dm?.isPlaying) return; // skip normal spawning during demo playback
-  if (f.serverBalls()) return; // connected: the server owns ball spawning
-  if (urlParams.noBalls) return; // lobby sim-gate, applied to the local field too
-  if (f.atCap(balls, BALL_MAX)) return;
+  if (dm?.isPlaying) {return;} // skip normal spawning during demo playback
+  if (f.serverBalls()) {return;} // connected: the server owns ball spawning
+  if (urlParams.noBalls) {return;} // lobby sim-gate, applied to the local field too
+  if (f.atCap(balls, BALL_MAX)) {return;}
   // Classic mode is plain bouncy balls — no elites, no variants
   spawnBallOfVariant(f.classicMode ? 0 : f.pickVariant());
 }
@@ -100,7 +100,7 @@ function spawnBallOfVariant(variant: 0 | 1 | 2 | 3): Ball {
   const ball = new Ball(scene, deps.lazyTerrain(), variant, undefined, deps.lazyPlayer().pos);
   balls.push(ball);
   targets.push(ball);
-  if (ball.variant === 3) ball.onDeath = (t) => spawnSplitChildren(t);
+  if (ball.variant === 3) {ball.onDeath = (t) => spawnSplitChildren(t);}
   if (dm?.isRecording) {
     dm.recordTargetSpawned(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.variant);
     recordBallKeyframes(ball);
@@ -111,9 +111,9 @@ function spawnBallOfVariant(variant: 0 | 1 | 2 | 3): Ball {
 // Director-friendly spawn — an elite on demand (skips the cap: events
 // are authored moments, the population cap is for ambient trickle)
 function spawnEliteBall(): void {
-  if (deps.lazyDemoManager()?.isPlaying) return;
-  if (f.serverBalls()) return;
-  if (urlParams.noBalls) return;
+  if (deps.lazyDemoManager()?.isPlaying) {return;}
+  if (f.serverBalls()) {return;}
+  if (urlParams.noBalls) {return;}
   spawnBallOfVariant(3);
 }
 
@@ -121,9 +121,9 @@ function spawnEliteBall(): void {
 // velocities. Kill-it-close = you're suddenly fighting two balls point-blank;
 // kill-it-far = free loot. The decision IS the mechanic.
 function spawnSplitChildren(t: Targetable): void {
-  if (deps.lazyDemoManager()?.isPlaying) return;
-  if (f.serverBalls()) return;
-  if (urlParams.noBalls) return;
+  if (deps.lazyDemoManager()?.isPlaying) {return;}
+  if (f.serverBalls()) {return;}
+  if (urlParams.noBalls) {return;}
   const dm = deps.lazyDemoManager();
   for (let k = 0; k < 2; k++) {
     const child = new Ball(scene, deps.lazyTerrain(), 0);
@@ -158,7 +158,7 @@ function updateBalls(dt: number): void {
   Ball.updateDyingRibbons(dt); // retired teleport tails fade out where they were
   for (let i = balls.length - 1; i >= 0; i--) {
     const b = balls[i]!;
-    if (netMode && !b.netDriven && !b.dead) b.netKill(); // cull pre-connect locals
+    if (netMode && !b.netDriven && !b.dead) {b.netKill();} // cull pre-connect locals
     // Classic: docile balls leash straight to the player — aggroFor would
     // degrade to a wander waypoint near the BALL once its fodder leash drops
     // the target, and the >200m drift check would never fire again.
@@ -167,7 +167,7 @@ function updateBalls(dt: number): void {
       : f.aggroFor(b, b.pos, dt, PROFILES.fodder));
     f.kickDust(b, dt); // bounce frames puff — airborne frames don't
     // Only remove ball when trails have fully faded out
-    if (b.disposed) f.removeTarget(balls, i, b);
+    if (b.disposed) {f.removeTarget(balls, i, b);}
   }
 
   recordBallSnapshots(dt);
@@ -177,9 +177,9 @@ function updateBalls(dt: number): void {
 // This ensures clip snapshots for pre-existing balls are never stale
 function recordBallSnapshots(dt: number): void {
   const dm = deps.lazyDemoManager();
-  if (!dm?.isRecording) return;
+  if (!dm?.isRecording) {return;}
   ballSnapshotTimer += dt;
-  if (ballSnapshotTimer < 0.5) return;
+  if (ballSnapshotTimer < 0.5) {return;}
   ballSnapshotTimer = 0;
   for (const b of balls) {
     if (!b.dead) {
@@ -281,7 +281,7 @@ export function createEntities(deps: EntitiesDeps) {
       if (collectors) {
         let bestD = Infinity;
         for (const c of collectors) {
-          if (!c.alive) continue;
+          if (!c.alive) {continue;}
           const d = c.pos.distanceToSquared(n.pos);
           if (d < bestD) { bestD = d; magnetPos = c.pos; magnetId = c.id; magnetScale = c.pickupScale ?? 1; }
         }
@@ -314,7 +314,7 @@ export function createEntities(deps: EntitiesDeps) {
   /** Loose gems from non-target deaths (bots fragged offline — combat's
    *  onTargetDestroyed already covers Targetable deaths). */
   function spawnNuggetsAt(pos: THREE.Vector3, count: number, inheritVel: THREE.Vector3): void {
-    for (let i = 0; i < count; i++) nuggets.push(new Nugget(scene, pos, inheritVel));
+    for (let i = 0; i < count; i++) {nuggets.push(new Nugget(scene, pos, inheritVel));}
   }
 
   return {

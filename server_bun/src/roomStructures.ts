@@ -70,7 +70,7 @@ export class RoomStructures {
    *  (mkFlagStand), so nothing is injected here; a map that wants a real
    *  platform authors a 'stand' box or a katastand/flagtower kit piece. */
   eff(): StructureSpec[] {
-    const host = this.host;
+    const {host} = this;
     // Team shield panes vanish while their grid is dark — no collider,
     // no render, no blocker on either side.
     // deployables construct after the first moveSim/ballSim attach —
@@ -87,27 +87,27 @@ export class RoomStructures {
   /** Re-attach the merged structure list everywhere it feeds — called
    *  at boot and whenever flag homes re-snap (terrain attach, map swap). */
   attach(): void {
-    const host = this.host;
+    const {host} = this;
     // Kit pieces ground-seat on the live heightfield — authored y in the
     // map file can't know the terrain, and a floating/buried compound is
     // worse than an advisory height. Spec objects are shared with the
     // wire echo, so the mutation reaches clients as the real position.
-    if (host.field) seatKits(host.spec.structures, (x, z) => hmHeight(host.field!, x, z));
+    if (host.field) {seatKits(host.spec.structures, (x, z) => hmHeight(host.field!, x, z));}
     const list = this.eff();
     host.moveSim.attachStructures(list);
     host.projectiles?.attachStructures(list);
-    if (host.ballSim) host.ballSim.colliders = structureColliders(list);
+    if (host.ballSim) {host.ballSim.colliders = structureColliders(list);}
   }
 
   /** Re-push the merged structure list when the stand hulls moved — a
    *  skinny mapUpdate (no terrain/name keys) so clients rebuild colliders
    *  without a full map reload. */
   pushUpdate(): void {
-    const host = this.host;
+    const {host} = this;
     const stands = this.standsJson();
-    if (stands === this.emittedStands) return;
+    if (stands === this.emittedStands) {return;}
     this.emittedStands = stands;
-    const spec = host.spec;
+    const {spec} = host;
     // Refresh the join-time echo too — setMap freezes whatever snap was
     // live when applySpec ran (often the previous map's field), and
     // gameState re-serves that stale list to every reconnect until the

@@ -176,7 +176,7 @@ export function sampleHeight(wx: number, wz: number): number {
   // The L0 clipmap chord (two flat triangles per 5m cell, world-anchored
   // lattice) — mirrors shared/heightfield.ts hmChord so prediction lands
   // on the same surface the server sims AND the GPU draws.
-  const s = 5.0;
+  const s = 5;
   const x0 = Math.floor(wx / s) * s, z0 = Math.floor(wz / s) * s;
   const h00 = sampleHeightmap(x0, z0), h10 = sampleHeightmap(x0 + s, z0);
   const h01 = sampleHeightmap(x0, z0 + s), h11 = sampleHeightmap(x0 + s, z0 + s);
@@ -191,7 +191,7 @@ export function sampleHeight(wx: number, wz: number): number {
 // invisible for decoration; sim code must keep calling sampleHeight above.
 const _hvc = new Map<number, number>();
 export function sampleHeightVisual(wx: number, wz: number): number {
-  const k = (wx | 0) * 131_072 + (wz | 0);
+  const k = (Math.trunc(wx)) * 131_072 + (Math.trunc(wz));
   let v = _hvc.get(k);
   if (v === undefined) {
     if (_hvc.size > 2048) {_hvc.clear();}

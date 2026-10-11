@@ -129,7 +129,7 @@ export class BotArsenal implements BeamHost {
         // scales with target unpredictability: a straight-line runner
         // gets tracked clean even by modest aim, a jinking one doesn't.
         if (live) {
-          if (!tr.lag) tr.lag = { ...live };
+          if (!tr.lag) {tr.lag = { ...live };}
           tr.lag.x += (live.x - tr.lag.x) * 0.85;
           tr.lag.y += (live.y - tr.lag.y) * 0.85;
           tr.lag.z += (live.z - tr.lag.z) * 0.85;
@@ -170,7 +170,7 @@ export class BotArsenal implements BeamHost {
           tr.aim.z += live.z - tr.lastPos.z;
         }
       }
-      if (live) tr.lastPos = live;
+      if (live) {tr.lastPos = live;}
       this.discharge(p, tr);
     }
   }
@@ -178,8 +178,8 @@ export class BotArsenal implements BeamHost {
   /** Where the held target is now — the aim rides its delta, so a
    *  sweeping beam tracks the runner instead of painting where he was. */
   private targetPos(targetId: string): Vec3 | null {
-    if (targetId.startsWith('b:')) return this.room.ballSim?.ballAt(Number(targetId.slice(2))) ?? null;
-    if (targetId.startsWith('c:')) return this.room.creatureSim?.crawlerAt(Number(targetId.slice(2))) ?? null;
+    if (targetId.startsWith('b:')) {return this.room.ballSim?.ballAt(Number(targetId.slice(2))) ?? null;}
+    if (targetId.startsWith('c:')) {return this.room.creatureSim?.crawlerAt(Number(targetId.slice(2))) ?? null;}
     const t = this.room.players.getPlayer(targetId);
     return t && !t.isDead ? t.position : null;
   }
@@ -203,13 +203,13 @@ export class BotArsenal implements BeamHost {
 
   rateOk(id: string, wt: number): boolean {
     const interval = (WEAPON_FIRE_INTERVAL_S[wt as WeaponType] ?? 0.1) * 1000;
-    if (this.clock - (this.lastShot.get(id) ?? -interval) < interval) return false;
+    if (this.clock - (this.lastShot.get(id) ?? -interval) < interval) {return false;}
     this.lastShot.set(id, this.clock);
     // Decloak-on-fire: every legal shot stamps the reveal clock. Bots
     // emit no 'fire' event, so the human path's Room-handler stamp
     // can't cover them — rateOk is the one gate every shot clears.
     const p = this.room.players.getPlayer(id);
-    if (p) p.lastFireSim = simNow();
+    if (p) {p.lastFireSim = simNow();}
     return true;
   }
 
@@ -235,14 +235,14 @@ export class BotArsenal implements BeamHost {
       const cdist = Math.hypot(cdx, cdy, cdz) || 1;
       const lo0 = this.loadouts.get(p.id) ?? BOT_LOADOUTS[0]!;
       const wt0 = this.pickWeapon(lo0, Math.hypot(cdx, cdz), cdist, p.id);
-      if (tr.track === undefined) this.markTrack(tr, wt0, aim);
-      if (!this.rateOk(p.id, wt0)) return;
+      if (tr.track === undefined) {this.markTrack(tr, wt0, aim);}
+      if (!this.rateOk(p.id, wt0)) {return;}
       weaponStats.recordShot(this.room.mode, `w${wt0}`, cdist);
       if (wt0 === WeaponType.Melee) {
         const stats = getWeaponStats(WeaponType.Melee);
         const bug = this.room.creatureSim.crawlerAt(Number(targetId.slice(2)));
         if (bug && stats && Math.hypot(bug.x - muzzle0.x, bug.y - muzzle0.y, bug.z - muzzle0.z) <= stats.aoeRadius + 1.4) {
-          const killed = this.room.creatureSim.handleHit(p.id, bug.id, isSuper(p.id) ? 300 : stats.aoeDamage).killed;
+          const {killed} = this.room.creatureSim.handleHit(p.id, bug.id, isSuper(p.id) ? 300 : stats.aoeDamage);
           weaponStats.record(this.room.mode, `w${wt0}:prey`, stats.aoeDamage, killed, true);
         }
         this.room.messages.botAttack(p.id, targetId, WeaponType.Melee);
@@ -258,7 +258,7 @@ export class BotArsenal implements BeamHost {
       return;
     }
     const target = this.room.players.getPlayer(targetId);
-    if (!target || target.isDead) return;
+    if (!target || target.isDead) {return;}
     const muzzle = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
     const dx0 = aim.x - muzzle.x, dy0 = aim.y - muzzle.y, dz0 = aim.z - muzzle.z;
     const dist = Math.sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0) || 1;
@@ -274,9 +274,9 @@ export class BotArsenal implements BeamHost {
     // instead of another heroic lob — the sidearm is a chip on a thin
     // target. ~40% of discharges take it; the rest stay on the primary,
     // because going all easy-hit is the dishonorable version.
-    if (target.maxHealth > 0 && target.health / target.maxHealth < 0.25 && botRand() < 0.4) wt = lo.side;
-    if (tr.track === undefined) this.markTrack(tr, wt, aim);
-    if (!this.rateOk(p.id, wt)) return;
+    if (target.maxHealth > 0 && target.health / target.maxHealth < 0.25 && botRand() < 0.4) {wt = lo.side;}
+    if (tr.track === undefined) {this.markTrack(tr, wt, aim);}
+    if (!this.rateOk(p.id, wt)) {return;}
     weaponStats.recordShot(this.room.mode, `w${wt}`, dist);
     if (wt === WeaponType.Melee) {
       // The punch IS the player's swing — combat funnels it identically,
@@ -295,7 +295,7 @@ export class BotArsenal implements BeamHost {
     const az = aim.z - muzzle.z;
     const alen = Math.sqrt(ax * ax + ay * ay + az * az) || 1;
     const dir = { x: ax / alen, y: ay / alen, z: az / alen };
-    if (this.selfBlastBlocked(muzzle, dir, wt, p.velocity, p.id, this.room.players.getPlayer(p.id)?.team ?? undefined)) return;
+    if (this.selfBlastBlocked(muzzle, dir, wt, p.velocity, p.id, this.room.players.getPlayer(p.id)?.team ?? undefined)) {return;}
     if (!this.room.projectiles.spawn(p.id, wt, muzzle, dir, p.velocity)) {
       fireSpeedless(this, p.id, muzzle, dir, wt);
     }
@@ -307,7 +307,7 @@ export class BotArsenal implements BeamHost {
    *  pulled 5m off target drifts wider than one that pulled 1m. */
   private markTrack(tr: { targetId: string; track: boolean | undefined; sig: number; err: Vec3; aim: Vec3 }, wt: number, aim: Vec3): void {
     tr.track = getWeaponStats(wt).speed === 0;
-    if (!tr.track) return;
+    if (!tr.track) {return;}
     const live = this.targetPos(tr.targetId);
     const miss = live ? Math.hypot(aim.x - live.x, aim.y - live.y - 1.2, aim.z - live.z) : 1;
     tr.sig = Math.max(0.3, Math.min(1.5, miss * 0.5));
@@ -326,13 +326,13 @@ export class BotArsenal implements BeamHost {
     const dist = Math.hypot(dx, dy, dz) || 1;
     const lo = this.loadouts.get(p.id) ?? BOT_LOADOUTS[0]!;
     const wt = this.pickWeapon(lo, Math.hypot(dx, dz), dist, p.id);
-    if (!this.rateOk(p.id, wt)) return;
+    if (!this.rateOk(p.id, wt)) {return;}
     weaponStats.recordShot(this.room.mode, `w${wt}`, dist);
     const j = () => (botRand() - 0.5) * 0.07;
     const dir = { x: dx / dist + j(), y: dy / dist + j(), z: dz / dist + j() };
     const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
     dir.x /= l; dir.y /= l; dir.z /= l;
-    if (this.selfBlastBlocked(muzzle, dir, wt, p.velocity, p.id, this.room.players.getPlayer(p.id)?.team ?? undefined)) return;
+    if (this.selfBlastBlocked(muzzle, dir, wt, p.velocity, p.id, this.room.players.getPlayer(p.id)?.team ?? undefined)) {return;}
     if (!this.room.projectiles.spawn(p.id, wt, muzzle, dir, p.velocity)) {
       fireSpeedless(this, p.id, muzzle, dir, wt);
     }
@@ -347,14 +347,14 @@ export class BotArsenal implements BeamHost {
   private selfBlastBlocked(muzzle: Vec3, dir: Vec3, wt: WeaponType, ownerVel: Vec3, shooterId?: string, shooterTeam?: string): boolean {
     const stats = getWeaponStats(wt);
     const aoer = stats?.aoeRadius ?? 0;
-    if (!this.room.field || !stats || aoer <= 0) return false;
+    if (!this.room.field || !stats || aoer <= 0) {return false;}
     // March the REAL ballistic path, not the aim ray: the shell inherits
     // half the shooter's velocity, so a bot skiing downhill bends every
     // shot below the checked line and clips lips the ray clears (soak
     // autopsy: all self-frag blasts <2m over ground @~6m from muzzle).
-    let vx = dir.x * stats.speed + ownerVel.x * 0.5;
+    const vx = dir.x * stats.speed + ownerVel.x * 0.5;
     let vy = dir.y * stats.speed + ownerVel.y * 0.5;
-    let vz = dir.z * stats.speed + ownerVel.z * 0.5;
+    const vz = dir.z * stats.speed + ownerVel.z * 0.5;
     const g = stats.gravity ? GRAVITY : 0;
     let px = muzzle.x, py = muzzle.y, pz = muzzle.z;
     let travelled = 0;
@@ -381,7 +381,7 @@ export class BotArsenal implements BeamHost {
       const line = py + stats.bodyRadius;
       const ground = Math.max(hmHeight(this.room.field, px, pz), hmChord(this.room.field, px, pz), this.room.moveSim.structureTop(px, pz));
       if (ground > line) {
-        if (travelled < aoer) return true;
+        if (travelled < aoer) {return true;}
         hitX = px; hitY = py; hitZ = pz;
         break;
       }
@@ -393,14 +393,14 @@ export class BotArsenal implements BeamHost {
             // so the shot only exists if the splash likely kills the
             // body it's about to hit — a sacrifice, not a whiff.
             bodyHit = f.health <= stats.aoeDamage * 0.8 ? f : null;
-            if (!bodyHit) return true;
+            if (!bodyHit) {return true;}
           }
           hitX = px; hitY = py; hitZ = pz;
           stepN = 400;
           break;
         }
       }
-      if (hitX !== null) break;
+      if (hitX !== null) {break;}
     }
     // Self-collision ahead: the blast radius is measured shooter→pop at
     // detonation, and a bot skiing INTO his own shot covers real distance
@@ -418,7 +418,7 @@ export class BotArsenal implements BeamHost {
       // his speed again over the short flight), not a full safety band.
       const speedGain = Math.min(6, Math.hypot(ownerVel.x, ownerVel.z) * flightT * 0.5);
       const reach = aoer + speedGain;
-      if (sx * sx + sy * sy + sz * sz < reach * reach && !bodyHit) return true;
+      if (sx * sx + sy * sy + sz * sz < reach * reach && !bodyHit) {return true;}
     }
     // Entity intercepts inside the blast envelope: a wandering ball,
     // a species pop, or a teammate body on the muzzle line pops the
@@ -430,16 +430,16 @@ export class BotArsenal implements BeamHost {
     // models them (projContact.shieldBlock), the clearance march can't
     // miss what flight will hit: a bot firing across a dome edge pops
     // his own shell inside his own blast envelope.
-    if (this.room.deployables.shieldBlock(muzzle, to, shooterId ?? '') !== null) return true;
-    if (this.room.ballSim?.sweepHit(muzzle, to, 1)) return true;
-    if (this.room.creatureSim?.sweepHit(muzzle, to, 1)) return true;
+    if (this.room.deployables.shieldBlock(muzzle, to, shooterId ?? '') !== null) {return true;}
+    if (this.room.ballSim?.sweepHit(muzzle, to, 1)) {return true;}
+    if (this.room.creatureSim?.sweepHit(muzzle, to, 1)) {return true;}
     for (const q of this.room.players.getAllPlayers().values()) {
-      if (q.id === shooterId || q.isDead) continue;
-      if (shooterTeam && q.team !== shooterTeam) continue;
+      if (q.id === shooterId || q.isDead) {continue;}
+      if (shooterTeam && q.team !== shooterTeam) {continue;}
       const ex = q.position.x - muzzle.x, ey = q.position.y - muzzle.y, ez = q.position.z - muzzle.z;
       const t = Math.max(0, Math.min(1, (ex * dir.x + ey * dir.y + ez * dir.z) / aoer));
       const rx = ex - dir.x * aoer * t, ry = ey - dir.y * aoer * t, rz = ez - dir.z * aoer * t;
-      if (rx * rx + ry * ry + rz * rz < 4) return true;
+      if (rx * rx + ry * ry + rz * rz < 4) {return true;}
     }
     return false;
   }
@@ -449,7 +449,7 @@ export class BotArsenal implements BeamHost {
     const skill = s ? (t: number) => aimSkillFor(s, t, 0) : undefined;
     // The wounded-explosive gate lives in shared pickBotWeaponSafe so
     // offline bots get the same self-preservation.
-    if (!botId) return pickBotWeapon(lo, distXZ, dist, skill, s?.courage);
+    if (!botId) {return pickBotWeapon(lo, distXZ, dist, skill, s?.courage);}
     const hp = this.room.players.getAllPlayers().get(botId)?.health ?? 100;
     return pickBotWeaponSafe(lo, distXZ, dist, hp, skill, s?.courage);
   }
@@ -459,15 +459,15 @@ export class BotArsenal implements BeamHost {
    *  Aims at lastSeen, never the live body — a cloaked or occluded
    *  target is only as findable as memory says. */
   throwBelt(p: BotBody): void {
-    if (!this.lastHunt(p.id)) return;
+    if (!this.lastHunt(p.id)) {return;}
     // Same wounded-explosive gate as the primary pick: a bot under one
     // self-blast's price doesn't throw ordnance that can pop short.
     const s = this.skillOfCb(p.id);
     const nerve = s?.courage ?? 0.5;
     const hp = this.room.players.getAllPlayers().get(p.id)?.health ?? 100;
-    if (hp <= SELF_SPLASH_MAX * (1.5 - nerve)) return;
+    if (hp <= SELF_SPLASH_MAX * (1.5 - nerve)) {return;}
     const seen = this.huntSeenCb(p.id);
-    if (seen) this.lobAt(p, seen);
+    if (seen) {this.lobAt(p, seen);}
   }
 
   /** Lob the belt weapon at an explicit point — used for hunt targets
@@ -480,11 +480,11 @@ export class BotArsenal implements BeamHost {
   lobAt(p: BotBody, aim: Vec3, riskSelf = false): boolean {
     const wt = this.loadouts.get(p.id)?.belt ?? WeaponType.Grenade;
     const stats = getWeaponStats(wt);
-    if (!stats || stats.speed <= 0) return false;
+    if (!stats || stats.speed <= 0) {return false;}
     // The belt pool pays for every toss — a dry bot's lob intents quietly
     // fizzle until a nugget restocks it (brains see ctx.pickup for that).
     const body = this.room.players.getPlayer(p.id);
-    if (body && body.beltCharges < BELT_THROW_COST) return false;
+    if (body && body.beltCharges < BELT_THROW_COST) {return false;}
     const dx = aim.x - p.position.x, dz = aim.z - p.position.z;
     const d = Math.hypot(dx, dz) || 1;
     // Ballistic lob: range = v²·sin(2θ)/|g| — solve θ for the target's
@@ -509,8 +509,8 @@ export class BotArsenal implements BeamHost {
     const vl = Math.hypot(vx, vy, vz) || 1;
     const muzzle = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
     const dirN = { x: vx / vl, y: vy / vl, z: vz / vl };
-    if (!riskSelf && this.selfBlastBlocked(muzzle, dirN, wt, p.velocity, p.id, body?.team ?? undefined)) return false;
-    if (body) body.beltCharges -= BELT_THROW_COST;
+    if (!riskSelf && this.selfBlastBlocked(muzzle, dirN, wt, p.velocity, p.id, body?.team ?? undefined)) {return false;}
+    if (body) {body.beltCharges -= BELT_THROW_COST;}
     this.room.projectiles.spawn(p.id, wt, muzzle, dirN, p.velocity);
     return true;
   }
@@ -537,8 +537,8 @@ export class BotArsenal implements BeamHost {
    *  distant pursuits may boost mid-volley since out-shooting never
    *  closes ground on a fleeing carrier. */
   tryPropel(id: string, p: BotBody, out: BrainOut, goal: { pos: BotVec; runner?: boolean; wave?: boolean } | null, sh: MoveState | null, now: number): void {
-    const surge = goal ? !!(goal.runner || goal.wave) : false;
-    if (!goal || !sh) return;
+    const surge = goal ? Boolean(goal.runner || goal.wave) : false;
+    if (!goal || !sh) {return;}
     // Grab edge: the instant a bot becomes carrier his getaway blast
     // re-arms — the approach blasts' cooldown is up to 3.5s dead, and
     // the soak's return-leg autopsy reads carriers dying at ~3% of the
@@ -548,8 +548,8 @@ export class BotArsenal implements BeamHost {
     // unset) and the feet blast then fires as if he weren't loaded.
     const carrying = this.room.flags
       ? this.room.flagCarriedBy(id)
-      : !!(goal as { running?: boolean }).running;
-    if (carrying && !this.wasCarrying.get(id)) this.propelT.delete(id);
+      : Boolean((goal as { running?: boolean }).running);
+    if (carrying && !this.wasCarrying.get(id)) {this.propelT.delete(id);}
     this.wasCarrying.set(id, carrying);
     // Self-splash costs real health now. A wounded bot holds fire —
     // except a desperate chaser: a loose enemy carrier far away means
@@ -587,7 +587,7 @@ export class BotArsenal implements BeamHost {
       // Even a lost chase doesn't buy a funeral: the feet blast costs
       // up to SELF_SPLASH_MAX (halved by lightfoot) — under that plus a
       // hair, the "launch" is just a suicide with extra steps.
-      if (!urgent || hp <= SELF_SPLASH_MAX * perkMods(me?.perk).selfDamage + 5) return;
+      if (!urgent || hp <= SELF_SPLASH_MAX * perkMods(me?.perk).selfDamage + 5) {return;}
     }
     const dx = goal.pos.x - p.position.x, dz = goal.pos.z - p.position.z;
     const dist = Math.hypot(dx, dz);
@@ -608,17 +608,17 @@ export class BotArsenal implements BeamHost {
     const blastNow = (strike && dist < 80 || waveChain) &&
       Math.hypot(sh.vel.x, sh.vel.z) < chainCap &&
       (this.propelT.get(id) ?? 0) < now + 1400; // still ~1s apart — each shove must land before the next
-    if (!blastNow && (this.propelT.get(id) ?? 0) > now) return;
+    if (!blastNow && (this.propelT.get(id) ?? 0) > now) {return;}
     // Hard floor only: a 50% grab-hp budget can't survive the route —
     // propels ARE the speed and starving them flatlines transit (capRun
     // regression: kata never grabbed at all). A quarter-hp floor keeps
     // the grab from arriving one hit from a corpse while the blow-by
     // stays armed inside the ring.
     const maxHp = this.room.players.getAllPlayers().get(id)?.maxHealth ?? 200;
-    if (goal.runner && dist > 60 && hp < maxHp * 0.25) return;
+    if (goal.runner && dist > 60 && hp < maxHp * 0.25) {return;}
     // Runners keep the burn going until the pole — the last blast IS
     // the blow-by through the intercept line (overshoot = the grab).
-    if (dist < (surge ? 10 : 35)) return;
+    if (dist < (surge ? 10 : 35)) {return;}
     const lo = this.loadouts.get(id) ?? BOT_LOADOUTS[0]!;
     // A pull-belt carrier never feet/crest-blasts: lobbing the implosion
     // ahead drags him forward with ZERO self-splash — the feet blast at
@@ -647,7 +647,7 @@ export class BotArsenal implements BeamHost {
       // held ~32m/s on hop-gait alone). Inside the cap zone or low hp,
       // holding is still correct: a fragile carrier's last blast is the
       // ring entry, not another burn.
-      if (carrying && (dist < 120 || hp < maxHp * 0.45)) return;
+      if (carrying && (dist < 120 || hp < maxHp * 0.45)) {return;}
     }
     // A blast doesn't need contact, it needs dirt close enough to pop
     // inside the shove envelope — a hop-gait transit (wave members:
@@ -658,10 +658,10 @@ export class BotArsenal implements BeamHost {
       // Crest blast: jetting up a face, the hill drops away under the
       // bot — a straight-down shot at its own feet banks the blast as
       // pure height, the T2 "lose contact, shoot the floor" trick.
-      if (!this.room.field || dist < 60) return;
-      if (floor < p.position.y - 18) return;         // too high already — blast can't reach the dirt
-      if (Math.hypot(sh.vel.x, sh.vel.z) < 8) return; // needs real run speed to mean anything
-      if (sh.vel.y < -2) return;                      // falling — the moment passed
+      if (!this.room.field || dist < 60) {return;}
+      if (floor < p.position.y - 18) {return;}         // too high already — blast can't reach the dirt
+      if (Math.hypot(sh.vel.x, sh.vel.z) < 8) {return;} // needs real run speed to mean anything
+      if (sh.vel.y < -2) {return;}                      // falling — the moment passed
       const wt = this.propelWeapon(lo);
       this.room.projectiles.spawn(id, wt,
         { x: p.position.x, y: p.position.y + 0.2, z: p.position.z },
@@ -677,7 +677,7 @@ export class BotArsenal implements BeamHost {
     // the runner: dueling interceptors at 60m is how pushes die at ~40m
     // out (ring autopsy: mdD@41m). His clear is the escort's job; his
     // blast is the only pass through.
-    if (out.fire && !surge && dist < 60) return;
+    if (out.fire && !surge && dist < 60) {return;}
     // A heel blast at speed is only "wasted" if the bot isn't running a
     // route — a capper's job is SUSTAINED 25-35m/s, and speed decays on
     // every flat stretch, so runners re-blast before the run dies.
@@ -688,7 +688,7 @@ export class BotArsenal implements BeamHost {
     // ceiling — ring entries at ~27m/s die in ~3s where a 45m/s
     // blow-through clears the ring before the defense re-acquires.
     const movingCap = surge ? (strike ? 50 : 55) : 12;
-    if (Math.hypot(sh.vel.x, sh.vel.z) > movingCap) return;
+    if (Math.hypot(sh.vel.x, sh.vel.z) > movingCap) {return;}
     // No energy gate here by design: a heel blast costs ammo + hp, NOT
     // jet fuel — gating it on a charged tank stranded every trapped
     // climber whose tank was dry from the climb (the massif-pocket soak
@@ -702,7 +702,7 @@ export class BotArsenal implements BeamHost {
       const nx0 = dx / dist, nz0 = dz / dist;
       const ahead = hmHeight(this.room.field, p.position.x + nx0 * 40, p.position.z + nz0 * 40);
       const drop40 = p.position.y - ahead;
-      if (drop40 > 6 && drop40 < 14) return;
+      if (drop40 > 6 && drop40 < 14) {return;}
     }
     const nx = dx / dist, nz = dz / dist;
     // Pull-preference isn't exclusive: the main-gun heel blast stays in
@@ -735,7 +735,7 @@ export class BotArsenal implements BeamHost {
       if (this.room.field) {
         const aheadH = hmHeight(this.room.field, p.position.x + nx * 20, p.position.z + nz * 20);
         const slope = p.position.y - aheadH; // >0 means the route falls away
-        if (slope > 4) { back = 3.0; drop *= 0.55; } // speed-disc geometry
+        if (slope > 4) { back = 3; drop *= 0.55; } // speed-disc geometry
       }
       const hx = p.position.x - nx * back - muzzle.x;
       const hy = p.position.y - drop - muzzle.y;

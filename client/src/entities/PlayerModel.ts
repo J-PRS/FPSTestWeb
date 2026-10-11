@@ -471,13 +471,14 @@ export class PlayerModel {
   private stretchAt = Math.random() * 0.5;
   private auditStretch(dt: number): void {
     this.stretchAt -= dt;
-    if (this.stretchAt > 0) return;
+    if (this.stretchAt > 0) {return;}
     this.stretchAt = 0.5;
-    if (!this.model || !this.model.visible || this.skinnedMeshes.length === 0) return;
+    if (!this.model || !this.model.visible || this.skinnedMeshes.length === 0) {return;}
     this.model.updateMatrixWorld(true);
-    let maxSq = 0, bi = -1, bj = -1, mesh0 = this.skinnedMeshes[0];
+    let maxSq = 0, bi = -1, bj = -1;
+    const mesh0 = this.skinnedMeshes[0];
     for (const sm of this.skinnedMeshes) {
-      const bones = sm.skeleton.bones;
+      const {bones} = sm.skeleton;
       for (let i = 0; i < bones.length; i++) {
         const a = bones[i].matrixWorld.elements;
         for (let j = i + 1; j < bones.length; j++) {

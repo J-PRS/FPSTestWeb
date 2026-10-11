@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { getProjectileConfig } from '../projectiles/index.js';
 import { makeFlashTexture } from './playerClips.js';
 
-const _white = new THREE.Color(0xFFFFFF);
+const _white = new THREE.Color(0xFF_FF_FF);
 const _leanEul = new THREE.Euler();
 const _leanNo = new THREE.Quaternion();
 const _leanYes = new THREE.Quaternion();
@@ -64,7 +64,7 @@ export class ModelFx {
   static buildMuzzleFlash(): THREE.Sprite {
     const flashMat = new THREE.SpriteMaterial({
       map: makeFlashTexture(),
-      color: 0xAAD4FF,
+      color: 0xAA_D4_FF,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       transparent: true,
@@ -116,7 +116,7 @@ export class ModelFx {
     // LG shot flashing amber.
     if (this.h.muzzleFlash) {
       const glow = weaponType === undefined ? undefined : getProjectileConfig(weaponType)?.glowColor;
-      (this.h.muzzleFlash.material as THREE.SpriteMaterial).color.set(glow ?? 0xAAD4FF);
+      (this.h.muzzleFlash.material as THREE.SpriteMaterial).color.set(glow ?? 0xAA_D4_FF);
     }
   }
 

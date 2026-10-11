@@ -19,7 +19,7 @@ import type { Vec3 } from './types.ts';
 
 export const IMAP_CELL = 32; // meters per cell — reads like "this area"
 const DEFAULT_WORLD = HM_WORLD_SCALE; // the map is a square wrap of this size
-const DECAY = Math.pow(0.5, 0.1 / 30); // ~30s half-life per 0.1s tick
+const DECAY = 0.5 ** (0.1 / 30); // ~30s half-life per 0.1s tick
 const SPLAT_RADIUS = 2; // cells each way — a splat covers ~160m across
 export type IMapLayer = 'dangerA' | 'dangerB' | 'opportunity' | 'traffic';
 
@@ -39,7 +39,7 @@ export class InfluenceMap {
   /** Map rotation onto a different tile span — fresh layers, stale
    *  scent doesn't translate anyway. */
   resize(world: number): void {
-    if (world === this.world) return;
+    if (world === this.world) {return;}
     this.world = world;
     this.grid = Math.ceil(world / IMAP_CELL);
     this.layers = this.freshLayers();
@@ -69,7 +69,7 @@ export class InfluenceMap {
     for (let dz = -SPLAT_RADIUS; dz <= SPLAT_RADIUS; dz++) {
       for (let dx = -SPLAT_RADIUS; dx <= SPLAT_RADIUS; dx++) {
         const nx = cx + dx, nz = cz + dz;
-        if (nx < 0 || nx >= this.grid || nz < 0 || nz >= this.grid) continue;
+        if (nx < 0 || nx >= this.grid || nz < 0 || nz >= this.grid) {continue;}
         const ring = Math.max(Math.abs(dx), Math.abs(dz));
         g[nz * this.grid + nx]! += strength * (ring === 0 ? 1 : 0.5 / ring);
       }
@@ -98,7 +98,7 @@ export class InfluenceMap {
     for (let dz = -cells; dz <= cells; dz += cells) { // only the ring edge
       for (let dx = -cells; dx <= cells; dx++) {
         const nx = cx + dx, nz = cz + dz;
-        if (nx < 0 || nx >= this.grid || nz < 0 || nz >= this.grid) continue;
+        if (nx < 0 || nx >= this.grid || nz < 0 || nz >= this.grid) {continue;}
         const v = g[nz * this.grid + nx]!;
         if (v < best) { best = v; bx = dx; bz = dz; }
       }
@@ -107,7 +107,7 @@ export class InfluenceMap {
       for (let dx = -cells; dx <= cells; dx++) {
         for (const dz of [-cells, cells]) {
           const nx = cx + dx, nz = cz + dz;
-          if (nx < 0 || nx >= this.grid || nz < 0 || nz >= this.grid) continue;
+          if (nx < 0 || nx >= this.grid || nz < 0 || nz >= this.grid) {continue;}
           const v = g[nz * this.grid + nx]!;
           if (v < best) { best = v; bx = dx; bz = dz; }
         }
@@ -148,19 +148,19 @@ export class InfluenceMap {
     for (let dz = -cells; dz <= cells; dz++) {
       for (let dx = -cells; dx <= cells; dx++) {
         const nx = cx + dx, nz = cz + dz;
-        if (nx < 0 || nx >= this.grid || nz < 0 || nz >= this.grid) continue;
+        if (nx < 0 || nx >= this.grid || nz < 0 || nz >= this.grid) {continue;}
         const v = g[nz * this.grid + nx]!;
         if (v > best) { best = v; bx = nx; bz = nz; }
       }
     }
-    if (best <= 0) return null;
+    if (best <= 0) {return null;}
     return { x: bx * IMAP_CELL - this.world / 2 + IMAP_CELL / 2, z: bz * IMAP_CELL - this.world / 2 + IMAP_CELL / 2, v: best };
   }
 
   /** One decay pass per room tick — sim clock, so warps stay honest. */
   tick(_dt: number): void {
     for (const g of Object.values(this.layers)) {
-      for (let i = 0; i < g.length; i++) g[i]! *= DECAY;
+      for (let i = 0; i < g.length; i++) {g[i]! *= DECAY;}
     }
   }
 }

@@ -532,7 +532,7 @@ export class RibbonTrail {
    *  forever (fades only fall), so the scan floor advances past them and
    *  dead slots stop costing iterations. */
   private applyFadeBucket(i: number, o: number, fade: number): boolean {
-    const fq = (fade * 255) | 0;
+    const fq = Math.trunc((fade * 255));
     if (fq === 0 && i === this.liveFrom) {this.liveFrom = i + 1;}
     if (this._lf[i] === fq) {return false;}
     this._lf[i] = fq;

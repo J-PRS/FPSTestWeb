@@ -22,7 +22,7 @@ const killName = (id: string) => id.replace(/^bot:/, '');
 export function noteKill(shooterId: string, targetId: string, weapon?: number): void {
   const w = weapon !== undefined && WeaponType[weapon] ? ` with ${WeaponType[weapon]}` : '';
   battleLog.push(`${killName(shooterId)} killed ${killName(targetId)}${w}`);
-  if (battleLog.length > BATTLE_LOG_MAX) battleLog.splice(0, battleLog.length - BATTLE_LOG_MAX);
+  if (battleLog.length > BATTLE_LOG_MAX) {battleLog.splice(0, battleLog.length - BATTLE_LOG_MAX);}
 }
 
 export const fmt = (v: { x: number; y: number; z: number }) =>
@@ -32,7 +32,7 @@ export const fmt = (v: { x: number; y: number; z: number }) =>
  *  degrades to nothing instead of lying. */
 function heapLine(): string {
   const m = (performance as { memory?: { usedJSHeapSize: number; jsHeapSizeLimit: number } }).memory;
-  return m ? ` heap ${(m.usedJSHeapSize / 1048576).toFixed(0)}/${(m.jsHeapSizeLimit / 1048576).toFixed(0)}MB` : '';
+  return m ? ` heap ${(m.usedJSHeapSize / 1_048_576).toFixed(0)}/${(m.jsHeapSizeLimit / 1_048_576).toFixed(0)}MB` : '';
 }
 
 export function diagLines(ctx: StateDebugContext, verbose = false): string[] {
@@ -49,9 +49,9 @@ export function diagLines(ctx: StateDebugContext, verbose = false): string[] {
   // Collider-vs-drawn-surface divergence around the player — the F1
   // overlay's numbers. Chord undercut reads as a positive mean bias.
   const td = terrainDivLine();
-  if (td) lines.push(td);
+  if (td) {lines.push(td);}
   pushWorld(lines, ctx.world);
-  if (verbose) pushRender(lines);
+  if (verbose) {pushRender(lines);}
   pushPerf(lines);
   pushAimProbe(lines, ctx);
   // Netcode census — corrections/claim verdicts answer "why did it
@@ -67,17 +67,17 @@ export function diagLines(ctx: StateDebugContext, verbose = false): string[] {
     // terrΔ = wire feet vs the drawn terrain surface — negative past
     // ~-0.5m means the wire is holding the body under the visible ground
     // (server-side dip; the render lift in remoteAnim covers the rest).
-    const terrD = rp?.terrain ? (ps.position.y - rp.eyeOff) - rp.terrain.getRenderedHeight(ps.position.x, ps.position.z) : NaN;
+    const terrD = rp?.terrain ? (ps.position.y - rp.eyeOff) - rp.terrain.getRenderedHeight(ps.position.x, ps.position.z) : Number.NaN;
     lines.push(`  wire ${id.slice(0, 20)} team=${ps.team ?? '-'} dead=${ps.isDead} hp=${ps.health} ping=${ps.ping ?? '?'} pos=${fmt(ps.position)}${rp ? ` renderΔ=${renderD.toFixed(1)}m at=${fmt(rp.position)} terrΔ=${Number.isFinite(terrD) ? `${terrD.toFixed(1)}m` : '?'} sim=${rp.isSimulating}` : ' NOT-RENDERED'}`);
   }
   // Rendered but absent from the wire roster — local bots, dummies,
   // stale ghosts the roster never told us about.
   for (const [id, rp] of ctx.remotePlayers) {
-    if (wire.has(id)) continue;
-    const team = (rp as { team?: string }).team;
+    if (wire.has(id)) {continue;}
+    const {team} = (rp as { team?: string });
     lines.push(`  local ${id.slice(0, 20)} team=${team ?? '-'} dead=${rp.isDead} pos=${fmt(rp.position)}`);
   }
-  if (verbose) pushBots(lines, ctx);
+  if (verbose) {pushBots(lines, ctx);}
   lines.push(
     `projectiles: ${ctx.projectiles.length} live`,
     `uptime: ${(performance.now() / 1000).toFixed(0)}s`,
@@ -92,16 +92,16 @@ export function diagLines(ctx: StateDebugContext, verbose = false): string[] {
   } else {
     lines.push('verbose: Ctrl+Alt+Q for the full census (trails/pools/projectiles/bots)');
   }
-  if (battleLog.length) {
+  if (battleLog.length > 0) {
     lines.push('battleLog:');
-    for (const k of battleLog.slice(-15)) lines.push(`  ${k}`);
+    for (const k of battleLog.slice(-15)) {lines.push(`  ${k}`);}
   }
   // Sim lab: the scenario's own rows (hp/fires/lanes) — registered by
   // labView only while the lab is actually open.
   const ld = (window as { __labDump?: () => [string, [string, string][]] | undefined }).__labDump?.();
   if (ld) {
     lines.push(`lab: ${ld[0]}`);
-    for (const [k, v] of ld[1]) lines.push(`  ${k}: ${v}`);
+    for (const [k, v] of ld[1]) {lines.push(`  ${k}: ${v}`);}
   }
   return lines;
 }
@@ -115,10 +115,10 @@ function pushProjectiles(lines: string[], ctx: StateDebugContext): void {
   for (const pr of ctx.projectiles) {
     const d = pr.dbg();
     const rib = d.ribbons.map(r => `${r.slot}:${r.count}${r.stopped ? '!' : ''}${r.lit ? 'L' : ''}${r.starved ? `~${r.starved}` : ''}`).join(',');
-    if (d.ribbons.some(r => r.count < 2 && r.starved > 10)) ribbonWarns++;
+    if (d.ribbons.some(r => r.count < 2 && r.starved > 10)) {ribbonWarns++;}
     lines.push(`  proj ${pr.config.name} age=${pr.age.toFixed(2)}${pr.exploded ? ' EX' : ''} q=${JSON.stringify(d.trail)} rib=[${rib}]`);
   }
-  if (ribbonWarns) lines.push(`ribbonWarns: ${ribbonWarns} projectiles emit pushes but have NO ribbon samples`);
+  if (ribbonWarns) {lines.push(`ribbonWarns: ${ribbonWarns} projectiles emit pushes but have NO ribbon samples`);}
 }
 
 // Render pipeline census — pixel modes/AA live in settings + closure
@@ -127,7 +127,7 @@ function pushProjectiles(lines: string[], ctx: StateDebugContext): void {
 // case (mid-chain pass output landing below display res).
 function pushRender(lines: string[]): void {
   const rd = window.__renderDump?.();
-  if (!rd) return;
+  if (!rd) {return;}
   const pm = ['RAW', 'SMOOTH', 'BAYER', 'ATKINSON'];
   lines.push(`render: pmode=${pm[rd['pmodeEff'] as number] ?? rd['pmodeEff']} (pick ${pm[rd['pmode'] as number]}) pscale=${rd['pscale']} res=${(rd['resScale'] as number).toFixed(2)}`);
   lines.push(`  aa=${rd['aaEff']} (pick ${rd['aa']}) msaa=${rd['msaa']} bloom=${rd['bloom']} postpro=${rd['postpro']} composer=${rd['composerOn']}`);
@@ -157,13 +157,13 @@ function pushPerf(lines: string[]): void {
   lines.push(`perf: frame=${rest['frame']}ms gpu=${gpu?.toFixed(1) ?? '?'}ms draws=${draws} tris=${trisK}k`);
   lines.push(`  ${phasePairs.join(' ')}`);
   const maxPairs = Object.entries(rest).filter(([k]) => k.startsWith('max:'));
-  if (maxPairs.length) {
+  if (maxPairs.length > 0) {
     lines.push(`  spikes: ${maxPairs.map(([k, v]) => `${k.slice(4)}=${v}`).join(' ')}`);
   }
   // Worst frame in the last ~5s with its own phase split — catches the
   // transient dips the EMA row smooths away.
   const wPairs = Object.entries(rest).filter(([k]) => k.startsWith('w:'));
-  if (wPairs.length) {
+  if (wPairs.length > 0) {
     lines.push(`  worst: ${wPairs.map(([k, v]) => `${k.slice(2)}=${v}`).join(' ')}`);
   }
 }
@@ -172,13 +172,13 @@ function pushPerf(lines: string[]): void {
 // is THAT thing", so the answer shouldn't sit under the censuses.
 function pushAimProbe(lines: string[], ctx: StateDebugContext): void {
   const aimScene = ctx.getScene?.(), aimCam = ctx.getCamera?.();
-  if (!aimScene || !aimCam) return;
+  if (!aimScene || !aimCam) {return;}
   try {
     const hits = aimProbe(aimScene, aimCam);
-    lines.push(`aim: ${hits.length ? '' : '(no tagged object under crosshair)'}`);
-    for (const h of hits) lines.push(`  ${h}`);
-  } catch (e) {
-    lines.push(`aim: probe failed ${(e as Error).message}`);
+    lines.push(`aim: ${hits.length > 0 ? '' : '(no tagged object under crosshair)'}`);
+    for (const h of hits) {lines.push(`  ${h}`);}
+  } catch (error) {
+    lines.push(`aim: probe failed ${(error as Error).message}`);
   }
 }
 
@@ -207,8 +207,8 @@ interface TrailDump {
 // omitted count.
 function pushCapped(lines: string[], label: string, arr: Record<string, unknown>[] | undefined, cap = 24, def?: Record<string, unknown>): void {
   const rows = arr ?? [];
-  for (const r of rows.slice(0, cap)) lines.push(`  ${label} ${JSON.stringify(slim(r, def))}`);
-  if (rows.length > cap) lines.push(`  … ${rows.length - cap} more ${label}s`);
+  for (const r of rows.slice(0, cap)) {lines.push(`  ${label} ${JSON.stringify(slim(r, def))}`);}
+  if (rows.length > cap) {lines.push(`  … ${rows.length - cap} more ${label}s`);}
 }
 
 // Default-value suppression — rows repeat ~10 fields that are always the
@@ -216,10 +216,10 @@ function pushCapped(lines: string[], label: string, arr: Record<string, unknown>
 // boilerplate and the anomaly hides in it. Fields drop ONLY when they
 // equal the default; anything odd survives verbatim.
 function slim(r: Record<string, unknown>, def?: Record<string, unknown>): Record<string, unknown> {
-  if (!def) return r;
+  if (!def) {return r;}
   const o: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(r)) {
-    if (k in def && v === def[k]) continue;
+    if (k in def && v === def[k]) {continue;}
     o[k] = v;
   }
   return o;
@@ -236,15 +236,15 @@ const BALL_DOTS_DEF = { timer: 0, lastLive: 0 };
 // trail, not just the projectile count.
 function pushTrailCensus(lines: string[], ctx: StateDebugContext): void {
   const td = window.__trailDump?.() as TrailDump | undefined;
-  if (!td) return;
-  if (td.stats) lines.push(`trailStats: ${Object.entries(td.stats).map(([k, v]) => `${k}=${v}`).join(' ')}`);
-  if (td.pools) lines.push(`pools: ${JSON.stringify(td.pools)}`);
+  if (!td) {return;}
+  if (td.stats) {lines.push(`trailStats: ${Object.entries(td.stats).map(([k, v]) => `${k}=${v}`).join(' ')}`);}
+  if (td.pools) {lines.push(`pools: ${JSON.stringify(td.pools)}`);}
   pushCapped(lines, 'trail', td.trails, 24, TRAIL_ROW_DEF);
   lines.push(`ribbons: ${td.ribbons?.length ?? 0} live ${JSON.stringify(td.ribbonBatch ?? null)}`);
   // Position-tagged rows — a frozen streak on screen maps to a slot by its
   // head/mid coords; sorted by fullness so the longest streaks lead.
   const rs = (td.ribbons ?? []).slice().sort((a, b) => ((b.count as number) ?? 0) - ((a.count as number) ?? 0)).slice(0, 16);
-  for (const r of rs) lines.push(`  rib ${JSON.stringify(slim(r, RIB_ROW_DEF))}`);
+  for (const r of rs) {lines.push(`  rib ${JSON.stringify(slim(r, RIB_ROW_DEF))}`);}
   const orphans = td.ribbonOrphans;
   if (orphans && orphans.count > 0) {
     lines.push(`ribbonOrphans: ${orphans.count} (leaked slots: ${orphans.slots.length})`);
@@ -261,15 +261,15 @@ function pushTrailCensus(lines: string[], ctx: StateDebugContext): void {
 // and the oldest-shell line that surfaces the next immortal early.
 function pushTrailExtras(lines: string[], td: TrailDump, ctx: StateDebugContext): void {
   if (td.litAudit) {
-    const unowned = td.litAudit.unowned;
-    lines.push(`litAudit: lit=${td.litAudit.lit} unowned=${unowned.length}${unowned.length ? ' slots=[' + unowned.slice(0, 12).join(',') + (unowned.length > 12 ? ',…' : '') + ']' : ''} reaped=${td.reapedLit ?? 0}`);
+    const {unowned} = td.litAudit;
+    lines.push(`litAudit: lit=${td.litAudit.lit} unowned=${unowned.length}${unowned.length > 0 ? ` slots=[${  unowned.slice(0, 12).join(',')  }${unowned.length > 12 ? ',…' : ''  }]` : ''} reaped=${td.reapedLit ?? 0}`);
   }
-  if (td.inst) lines.push(`instPools: ${JSON.stringify(td.inst)}`);
-  if (td.swarm) lines.push(`swarm: ${JSON.stringify(td.swarm)}`);
-  if (td.fx) lines.push(`fx: ${JSON.stringify(td.fx)}`);
+  if (td.inst) {lines.push(`instPools: ${JSON.stringify(td.inst)}`);}
+  if (td.swarm) {lines.push(`swarm: ${JSON.stringify(td.swarm)}`);}
+  if (td.fx) {lines.push(`fx: ${JSON.stringify(td.fx)}`);}
   // NaN-geometry sniffer rows — owner path + attr signature, so the next
   // "radius is NaN" console burst already names its source.
-  if (td.geoNaN?.length) lines.push(`geoNaN: ${td.geoNaN.map(h => `${h.uuid}@${h.at}s ${h.owner}${h.tag ? `<${h.tag}>` : ''}`).join(' | ')}`);
+  if (td.geoNaN?.length) {lines.push(`geoNaN: ${td.geoNaN.map(h => `${h.uuid}@${h.at}s ${h.owner}${h.tag ? `<${h.tag}>` : ''}`).join(' | ')}`);}
   pushBallCensus(lines, td);
   pushShellAudit(lines, ctx);
   pushUnclaimed(lines, td);
@@ -285,10 +285,10 @@ const TRAIL_CLAIMED = new Set([
 ]);
 function pushUnclaimed(lines: string[], td: TrailDump): void {
   for (const [k, v] of Object.entries(td)) {
-    if (TRAIL_CLAIMED.has(k) || v == null) continue;
+    if (TRAIL_CLAIMED.has(k) || v == null) {continue;}
     const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
-    if (!s || s === '{}' || s === '[]') continue;
-    lines.push(`${k}: ${s.length > 600 ? s.slice(0, 600) + '…' : s}`);
+    if (!s || s === '{}' || s === '[]') {continue;}
+    lines.push(`${k}: ${s.length > 600 ? `${s.slice(0, 600)  }…` : s}`);
   }
 }
 
@@ -297,45 +297,45 @@ function pushUnclaimed(lines: string[], td: TrailDump): void {
 // box (a garbage trail census usually traces back to one of these).
 function pushShellAudit(lines: string[], ctx: StateDebugContext): void {
   const aged = ctx.projectiles.slice().sort((a, b) => b.age - a.age).slice(0, 5);
-  if (aged.length) {
+  if (aged.length > 0) {
     lines.push(`oldest: ${aged.map(pr => `${pr.config.name}@${pr.age.toFixed(1)}s(${pr.pos.x.toFixed(0)},${pr.pos.y.toFixed(0)},${pr.pos.z.toFixed(0)})`).join(' ')}`);
   }
   let offWorld = 0;
   for (const pr of ctx.projectiles) {
-    if (pr.pos.y < -500 || Math.abs(pr.pos.x) > 4000 || Math.abs(pr.pos.z) > 4000) offWorld++;
+    if (pr.pos.y < -500 || Math.abs(pr.pos.x) > 4000 || Math.abs(pr.pos.z) > 4000) {offWorld++;}
   }
-  if (offWorld) lines.push(`offWorld: ${offWorld} projectiles outside sane bounds`);
+  if (offWorld) {lines.push(`offWorld: ${offWorld} projectiles outside sane bounds`);}
 }
 
 // Ball trail census — emit gates (speed >0.7, cam <200m) vs outputs
 // (live dots, ribbon samples). "spd=0 dots=0" everywhere = the shared
 // starvation case; "dots>0 but no sparkle" = a render/batch break.
 function pushBallCensus(lines: string[], td: TrailDump): void {
-  if (td.ballDots) lines.push(`ballDots: ${JSON.stringify(td.ballDots)}`);
+  if (td.ballDots) {lines.push(`ballDots: ${JSON.stringify(td.ballDots)}`);}
   if (td.balls) {
     lines.push(`balls: ${td.balls.rows?.length ?? 0} live viewPos=${td.balls.viewPos ?? '?'}`);
     for (const r of td.balls.rows ?? []) {
       const s = slim(r, BALL_ROW_DEF);
       // Nested rib/dots records get their own defaults — same idea as
       // the flat slim, one level down.
-      if (Array.isArray(s.rib)) s.rib = (s.rib as Record<string, unknown>[]).map(x => slim(x, BALL_RIB_DEF));
-      if (s.dots && typeof s.dots === 'object') s.dots = slim(s.dots as Record<string, unknown>, BALL_DOTS_DEF);
+      if (Array.isArray(s.rib)) {s.rib = (s.rib as Record<string, unknown>[]).map(x => slim(x, BALL_RIB_DEF));}
+      if (s.dots && typeof s.dots === 'object') {s.dots = slim(s.dots as Record<string, unknown>, BALL_DOTS_DEF);}
       lines.push(`  ball ${JSON.stringify(s)}`);
     }
   }
 }
 
 function pushWorld(lines: string[], w: StateDebugContext['world']): void {
-  if (!w) return;
+  if (!w) {return;}
   const clock = w.matchEndsAt ? ` endsIn=${Math.max(0, Math.ceil((w.matchEndsAt - Date.now()) / 1000))}s` : '';
   lines.push(`mode: ${w.mode ?? '(none)'} localTeam: ${w.localTeam ?? '-'}${w.playbackMode ? ' PLAYBACK' : ''}${clock}`);
-  if (w.teamScores) lines.push(`teamScores: alpha=${w.teamScores.alpha} bravo=${w.teamScores.bravo}`);
-  if (w.ffaScores?.size) lines.push(`ffaScores: ${[...w.ffaScores.entries()].map(([id, s]) => `${id.replace('bot:', '')}=${s}`).join(' ')}`);
+  if (w.teamScores) {lines.push(`teamScores: alpha=${w.teamScores.alpha} bravo=${w.teamScores.bravo}`);}
+  if (w.ffaScores?.size) {lines.push(`ffaScores: ${[...w.ffaScores.entries()].map(([id, s]) => `${id.replace('bot:', '')}=${s}`).join(' ')}`);}
 }
 
 function pushBots(lines: string[], ctx: StateDebugContext): void {
   const tb = ctx.teamBots?.();
-  if (!tb) return;
+  if (!tb) {return;}
   const alive = tb.bots.filter(b => !b.isDead).length;
   lines.push(`teamBots: ${alive}/${tb.bots.length} alive over=${tb.over ?? '-'} score=${tb.scores.alpha}:${tb.scores.bravo} localTeam=${tb.teamOf.get('local') ?? '-'}`);
   for (const b of tb.bots) {

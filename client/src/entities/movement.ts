@@ -62,8 +62,8 @@ export class MovementController {
    *  reads as divergence. */
   setDynamicCols(cols: readonly StructureCollider[]): void {
     this.dyn = cols;
-    if (this.surface.solid) this.surface.solid.dyn = cols;
-    else if (cols.length) this.surface.solid = new SolidWorld([], cols);
+    if (this.surface.solid) {this.surface.solid.dyn = cols;}
+    else if (cols.length > 0) {this.surface.solid = new SolidWorld([], cols);}
   }
 
   setInput(input: Partial<MovementInput>): void { this.sim.setInput(input); }

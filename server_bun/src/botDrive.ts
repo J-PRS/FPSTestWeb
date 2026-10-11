@@ -54,8 +54,8 @@ export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocit
     // arc at ~5 rad/s reads as a player swinging their view around.
     const want = Math.atan2(dx, dz);
     let dyaw = want - p.rotation.yaw;
-    if (dyaw > Math.PI) dyaw -= Math.PI * 2;
-    if (dyaw < -Math.PI) dyaw += Math.PI * 2;
+    if (dyaw > Math.PI) {dyaw -= Math.PI * 2;}
+    if (dyaw < -Math.PI) {dyaw += Math.PI * 2;}
     const yaw = p.rotation.yaw + Math.max(-5 * dt, Math.min(5 * dt, dyaw));
     h.room.moveSim.faceYaw(id, yaw);
     p.rotation.yaw = yaw;
@@ -71,12 +71,12 @@ export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocit
   // 'trying' needs reach, not intent: out.dest re-rolls each think and
   // can hover a meter off the position (steerer micro-orbit), which
   // would count a bot that has effectively arrived as grinding forever.
-  h.checkSheep(id, p, { trying: dist >= 2 && !out.move?.park, ski: !!out.move?.ski, airborne: !sh.onGround, jetting: !!out.move?.jet, dt }, now);
+  h.checkSheep(id, p, { trying: dist >= 2 && !out.move?.park, ski: Boolean(out.move?.ski), airborne: !sh.onGround, jetting: Boolean(out.move?.jet), dt }, now);
   // The shadow's write is the bot's whole wire truth — a NaN/Infinity
   // here broadcasts poison to every observer with no warn. Named once.
   inv('bot-pos-finite',
     Number.isFinite(sh.pos.x + sh.pos.y + sh.pos.z + sh.vel.x + sh.vel.y + sh.vel.z),
-    { id, pos: { x: +sh.pos.x.toFixed(1), y: +sh.pos.y.toFixed(1), z: +sh.pos.z.toFixed(1) } });
+    { id, pos: { x: Number(sh.pos.x.toFixed(1)), y: Number(sh.pos.y.toFixed(1)), z: Number(sh.pos.z.toFixed(1)) } });
   p.position.x = sh.pos.x; p.position.y = sh.pos.y; p.position.z = sh.pos.z;
   p.velocity.x = sh.vel.x; p.velocity.y = sh.vel.y; p.velocity.z = sh.vel.z;
   // Ski bit rides the tick flag byte (bit 2) — drives remote dust.
@@ -92,9 +92,9 @@ export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocit
 function commitMoveInput(h: DriveHost, id: string, p: { status: number }, out: BrainOut, intent: { moving: boolean }, now: number): void {
   h.room.moveSim.setInput(id, intent.moving && !out.move?.park ? {
     forward: 1, right: 0,
-    jumpPressed: !!out.move?.jump, jumpHeld: !!out.move?.jump,
-    skiHeld: !!out.move?.ski,
-    jetHeld: !!out.move?.jet || h.arsenal.jetPinUntil(id) > now,
+    jumpPressed: Boolean(out.move?.jump), jumpHeld: Boolean(out.move?.jump),
+    skiHeld: Boolean(out.move?.ski),
+    jetHeld: Boolean(out.move?.jet) || h.arsenal.jetPinUntil(id) > now,
   } : {
     // Idle = every key released. Omitting jetHeld left a stale 1 pinned
     // in the shadow (setInput treats undefined as "unchanged"), so one
@@ -129,7 +129,7 @@ export function legacyMove(h: DriveHost, id: string, p: { position: Vec3; veloci
   const groundY = Number.isFinite(rawGroundY) ? rawGroundY : p.position.y;
   // p.position is EYE-height (the wire convention — clients render
   // feet at pos.y - eyeHeight); groundY+0.1 parked the model underground.
-  const eye = classCapsule(p.armorClass).eye;
+  const {eye} = classCapsule(p.armorClass);
   const targetY = Math.max(groundY + eye, p.position.y - 9 * dt);
   const hopping = p.position.y > groundY + eye + 1.1;
   p.velocity.y = hopping ? p.velocity.y - 30 * dt : 0;

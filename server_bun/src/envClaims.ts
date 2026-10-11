@@ -31,8 +31,8 @@ export interface EnvHost {
 // channel is indistinguishable from a quiet one in postmortem logs.
 const envSeen = new Set<string>();
 const markEnvSeen = (id: string): boolean => {
-  if (envSeen.has(id)) return false;
-  if (envSeen.size > 512) evictEldest(envSeen);
+  if (envSeen.has(id)) {return false;}
+  if (envSeen.size > 512) {evictEldest(envSeen);}
   envSeen.add(id);
   return true;
 };
@@ -41,11 +41,11 @@ const markEnvSeen = (id: string): boolean => {
   // clamped so it can never be aimed at another player or one-shot anyone.
 export function handleEnvironmentDamage(h: EnvHost, playerId: string, msg: Extract<ClientMessage, { type: 'environmentDamage' }>): ClaimVerdict {
     const player = h.playerManager.getPlayer(playerId);
-    if (!player || player.isDead) return 'gone';
+    if (!player || player.isDead) {return 'gone';}
     // Wire decode already finite-checks amount, but this handler is the
     // trust boundary: Math.max(1, round(NaN)) stays NaN and writes NaN
     // health into the next tick broadcast if any caller skips decode.
-    if (!Number.isFinite(msg.amount)) return 'gone';
+    if (!Number.isFinite(msg.amount)) {return 'gone';}
     h.hb('envdmg');
     if (markEnvSeen(playerId)) {
       logger.warn('First envDamage claim received', { playerId, amount: msg.amount, attacker: msg.attacker });
@@ -114,13 +114,13 @@ export function handleEnvironmentDamage(h: EnvHost, playerId: string, msg: Extra
   // it isn't delta-suppressed.
 export function handleHeal(h: EnvHost, playerId: string, msg: Extract<ClientMessage, { type: 'heal' }>): ClaimVerdict {
     const player = h.playerManager.getPlayer(playerId);
-    if (!player || player.isDead) return 'gone';
-    if (!Number.isFinite(msg.amount)) return 'gone'; // see envDamage guard — NaN heals poison health state
+    if (!player || player.isDead) {return 'gone';}
+    if (!Number.isFinite(msg.amount)) {return 'gone';} // see envDamage guard — NaN heals poison health state
     const now = wallNow();
-    if ((h.lastHeal.get(playerId) ?? 0) > now) return 'cooldown';
+    if ((h.lastHeal.get(playerId) ?? 0) > now) {return 'cooldown';}
     const heal = Math.min(25, Math.max(1, Math.round(msg.amount * perkMods(player.perk).healBoost)));
     if (h.deps.teams) {
-      if (player.healCredit <= 0) return 'nocredit';
+      if (player.healCredit <= 0) {return 'nocredit';}
       const applied = Math.min(heal, player.healCredit);
       player.healCredit -= applied;
       healPool(player, applied);

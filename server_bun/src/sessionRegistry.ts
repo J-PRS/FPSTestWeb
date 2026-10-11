@@ -72,8 +72,8 @@ export class SessionRegistry {
     }
     const wallAge = wallNow() - s.at;
     const from = s.state;
-    if (from === 'grace') this.bumpGrace(s.room, -1);
-    if (to === 'grace') this.bumpGrace(s.room, +1);
+    if (from === 'grace') {this.bumpGrace(s.room, -1);}
+    if (to === 'grace') {this.bumpGrace(s.room, +1);}
     s.state = to;
     s.at = wallNow();
     const edge = `${from}->${to}`;
@@ -81,8 +81,8 @@ export class SessionRegistry {
     logger.info('session transition', { playerId, t: edge, reason, gen: s.gen, room: s.room, wallAgeMs: wallAge });
     // Leaving grace for any reason retires the countdown — reclaim clears
     // it in-place, terminate deletes the session below.
-    if (from === 'grace' || to === 'reaped') this.clearGrace(s);
-    if (to === 'reaped') this.sessions.delete(playerId);
+    if (from === 'grace' || to === 'reaped') {this.clearGrace(s);}
+    if (to === 'reaped') {this.sessions.delete(playerId);}
     return true;
   }
 
@@ -128,14 +128,14 @@ export class SessionRegistry {
    *  no live session to reclaim (caller rejects). */
   reclaim(playerId: string, reason: string): number | undefined {
     const s = this.sessions.get(playerId);
-    if (!s) return undefined;
-    if (s.state === 'grace') this.transition(playerId, s, 'active', reason);
-    else if (s.state !== 'active') {
+    if (!s) {return undefined;}
+    if (s.state === 'grace') {this.transition(playerId, s, 'active', reason);}
+    else if (s.state === 'active') {
+      logger.info('session reseat', { playerId, gen: s.gen, room: s.room, reason });
+    } else {
       this.anomalies.reclaimNonLive++;
       logger.error('reclaim on non-live session', { playerId, from: s.state, reason });
       return undefined;
-    } else {
-      logger.info('session reseat', { playerId, gen: s.gen, room: s.room, reason });
     }
     s.gen = ++this.genCounter;
     s.at = wallNow();
@@ -148,7 +148,7 @@ export class SessionRegistry {
    *  timer wins; a reclaim or terminate clears it. */
   disconnect(playerId: string, reason: string, graceMs?: number, onExpire?: () => void): boolean {
     const s = this.sessions.get(playerId);
-    if (!s) return false;
+    if (!s) {return false;}
     const ok = this.transition(playerId, s, 'grace', reason);
     if (ok && graceMs !== undefined && onExpire) {
       this.clearGrace(s);
@@ -157,7 +157,7 @@ export class SessionRegistry {
       // the failure logs with the victim instead of going unhandled.
       s.graceTimer = setTimeout(() => {
         try { onExpire(); }
-        catch (e) { logger.error('Grace expiry failed', { playerId, err: e instanceof Error ? e.message : String(e) }); }
+        catch (error) { logger.error('Grace expiry failed', { playerId, err: error instanceof Error ? error.message : String(error) }); }
       }, graceMs);
     }
     return ok;
@@ -172,7 +172,7 @@ export class SessionRegistry {
     this.bumpGrace(room, +1);
     s.graceTimer = setTimeout(() => {
       try { onExpire(); }
-      catch (e) { logger.error('Grace expiry failed', { playerId, err: e instanceof Error ? e.message : String(e) }); }
+      catch (error) { logger.error('Grace expiry failed', { playerId, err: error instanceof Error ? error.message : String(error) }); }
     }, graceMs);
   }
 
@@ -180,7 +180,7 @@ export class SessionRegistry {
    *  lifecycle teardown funnels through removePlayerCompletely → here. */
   terminate(playerId: string, reason: string): boolean {
     const s = this.sessions.get(playerId);
-    if (!s) return false; // never a session (pre-seat reject, bot, double remove)
+    if (!s) {return false;} // never a session (pre-seat reject, bot, double remove)
     return this.transition(playerId, s, 'reaped', reason);
   }
 
@@ -198,7 +198,7 @@ export class SessionRegistry {
   /** Census for /metrics — sessions by state. */
   census(): Record<SessionState, number> {
     const c: Record<SessionState, number> = { connecting: 0, active: 0, spectating: 0, grace: 0, reaped: 0 };
-    for (const s of this.sessions.values()) c[s.state]++;
+    for (const s of this.sessions.values()) {c[s.state]++;}
     return c;
   }
 

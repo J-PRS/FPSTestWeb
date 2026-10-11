@@ -99,7 +99,7 @@ export class AmbientBirds {
   /** Live bird world positions — feeds the minimap debug layer. */
   positions(out: THREE.Vector3[]): void {
     out.length = 0;
-    for (const b of this.birds) out.push(b.group.position);
+    for (const b of this.birds) {out.push(b.group.position);}
   }
 
   private flock!: THREE.InstancedMesh;
@@ -111,7 +111,7 @@ export class AmbientBirds {
    *  to actually see. */
   constructor(scene: THREE.Scene, private distScale = 1) {
     this.scene = scene;
-    for (const k of this.kettles) k.roamDist *= distScale; // field init runs before ctor params land
+    for (const k of this.kettles) {k.roamDist *= distScale;} // field init runs before ctor params land
     const bodyGeo = new THREE.ConeGeometry(0.12, 0.9, 5);
     bodyGeo.rotateX(-Math.PI / 2); // nose along -Z so lookAt aims it
     tagWing(bodyGeo, 0);
@@ -129,7 +129,7 @@ export class AmbientBirds {
     // (27 draws for ambient decor). wingSide tags each vertex so the shader
     // flaps wings about the hinge Z while the body stays rigid.
     const geo = mergeGeometries([bodyGeo, wingLGeo, wingRGeo], false)!;
-    const mat = new THREE.MeshBasicMaterial({ color: 0x1a1410, side: THREE.DoubleSide });
+    const mat = new THREE.MeshBasicMaterial({ color: 0x1A_14_10, side: THREE.DoubleSide });
     this.flapAttr = new THREE.InstancedBufferAttribute(new Float32Array(BIRD_COUNT), 1);
     this.flapAttr.setUsage(THREE.DynamicDrawUsage);
     geo.setAttribute('aFlap', this.flapAttr);
@@ -228,7 +228,7 @@ export class AmbientBirds {
   }
 
   /** The whole flock snaps aggro — one bird bleeds, they all dive. */
-  aggro(): void { if (this.active) this.aggroT = AGGRO_TIME; }
+  aggro(): void { if (this.active) {this.aggroT = AGGRO_TIME;} }
 
   /** Dynamic-quality switch — hides the flock and skips the flock sim.
    *  Live birds keep their slots in targets but stay parked. The hide
@@ -238,7 +238,7 @@ export class AmbientBirds {
   setActive(on: boolean): void {
     this.active = on;
     if (!on && !this.hidden) {
-      for (const b of this.birds) this.flock.setMatrixAt(b.slot, _zero);
+      for (const b of this.birds) {this.flock.setMatrixAt(b.slot, _zero);}
       this.flock.instanceMatrix.needsUpdate = true;
       this.hidden = true;
     } else if (on) {
@@ -251,7 +251,7 @@ export class AmbientBirds {
   update(dt: number, playerPos: THREE.Vector3, terrain: Terrain, playerDead = false): void {
     if (!this.active) {
       if (!this.hidden) {
-        for (const b of this.birds) this.flock.setMatrixAt(b.slot, _zero);
+        for (const b of this.birds) {this.flock.setMatrixAt(b.slot, _zero);}
         this.flock.instanceMatrix.needsUpdate = true;
         this.hidden = true;
       }
@@ -262,13 +262,13 @@ export class AmbientBirds {
     this.flight.tickAggro(dt, playerPos, playerDead);
 
     for (const b of this.birds) {
-      if (b.dead) continue;
+      if (b.dead) {continue;}
       b.flapPhase += dt * (7 + b.flapAmp * 6);
       b.bobPhase += dt;
 
       // Flap bursts: amp decays to glide, occasionally re-ignites
-      if (b.flapAmp > 0) b.flapAmp = Math.max(0, b.flapAmp - dt * 0.5);
-      if (Math.random() < dt * 0.25) b.flapAmp = 1; // burst ~every 4s avg
+      if (b.flapAmp > 0) {b.flapAmp = Math.max(0, b.flapAmp - dt * 0.5);}
+      if (Math.random() < dt * 0.25) {b.flapAmp = 1;} // burst ~every 4s avg
       // Player buzzing a bird scatters it — flap hard
       const pd = b.group.position.distanceToSquared(playerPos);
       if (pd < 225) { b.flapAmp = 1; b.orbitR = Math.min(b.orbitR + dt * 6, 40); }
@@ -277,8 +277,8 @@ export class AmbientBirds {
       if (this.departT > 0) { this.flight.departBird(b, dt); continue; }
       this.flight.churnMembership(b, dt);
       this.flight.flapWings(b);
-      if (b.kettle === -1) this.flight.soarLoner(b, dt, playerPos, terrain);
-      else this.flight.orbitKettle(b, dt);
+      if (b.kettle === -1) {this.flight.soarLoner(b, dt, playerPos, terrain);}
+      else {this.flight.orbitKettle(b, dt);}
     }
     this.syncFlock();
   }
@@ -307,7 +307,7 @@ export class AmbientBirds {
   /** Seed both kettles on their roam rings; loners somewhere on the
    *  horizon ring, free-flying. */
   private seedFlock(playerPos: THREE.Vector3, terrain: Terrain): void {
-    if (this.seeded) return;
+    if (this.seeded) {return;}
     this.seeded = true;
     for (const k of this.kettles) {
       k.center.set(

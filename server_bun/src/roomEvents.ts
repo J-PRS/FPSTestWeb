@@ -47,7 +47,7 @@ export class EventBus {
   }
   readonly emit: RoomEventSink = (e) => {
     for (const cb of this.subs) {
-      try { cb(e); } catch (err) { console.error('[EventBus] subscriber threw', err); }
+      try { cb(e); } catch (error) { console.error('[EventBus] subscriber threw', error); }
     }
   };
 }

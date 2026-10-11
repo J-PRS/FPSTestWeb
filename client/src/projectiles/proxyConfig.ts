@@ -49,10 +49,10 @@ export const PROXY_CONFIG: ProjectileConfig = {
   trailScaleMin: 0.6,
   trailScaleMax: 1.3,
   trailRampIn: 0.02,
-  meshColor: 0x554A33, // drab shell — the hot amber glow does the talking
+  meshColor: 0x55_4A_33, // drab shell — the hot amber glow does the talking
   meshType: 'ball',
   glowShell: true,
-  glowColor: 0xFFBB33,
+  glowColor: 0xFF_BB_33,
   glowOpacity: 0.65, // hotter than a fuse nade — it's a sensor armed to pop
   glowScale: 0.8,
   meshRampIn: true,

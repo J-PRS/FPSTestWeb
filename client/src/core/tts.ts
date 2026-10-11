@@ -34,6 +34,7 @@ function samFor(who?: string): SamJs {
   let idx = 0;
   if (who) {
     let h = 0;
+    // oxlint-disable-next-line prefer-math-trunc -- int32 wrap is the point
     for (let i = 0; i < who.length; i++) {h = (h * 31 + who.charCodeAt(i)) | 0;}
     idx = Math.abs(h) % VOICES.length;
   }
@@ -146,6 +147,7 @@ export function speakVgs(text: string, who?: string): void {
  *  Pitch jitters per speaker so voices differ by who typed. */
 export function speakChat(text: string, who?: string): void {
   let h = 0;
+  // oxlint-disable-next-line prefer-math-trunc -- int32 wrap is the point
   if (who) {for (let i = 0; i < who.length; i++) {h = (h * 31 + who.charCodeAt(i)) | 0;}}
   speakSystem(text, 0.7 + (Math.abs(h) % 8) * 0.08); // 0.70–1.26
 }

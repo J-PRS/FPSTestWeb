@@ -142,7 +142,7 @@ export class PlayerIndicators {
    *  pedestrian-vs-skier read lives for triage). */
   private updateSheepBadge(playerId: string, indicator: HTMLElement, sheep: number | undefined, hp: number | undefined): void {
     const sheepMode = debugOverlays && sheep !== undefined && sheep > 0;
-    const v = sheepMode ? Math.round(sheep!) : hp !== undefined ? Math.round(hp) : -1;
+    const v = sheepMode ? Math.round(sheep!) : hp === undefined ? -1 : Math.round(hp);
     // The mode is packed into the cache key — toggling debug must rewrite
     // the badge even when sheep and hp happen to round to the same number.
     const key = v < 0 ? -1 : v * 2 + (sheepMode ? 1 : 0);

@@ -11,14 +11,13 @@ import type { StructureSpec } from '../../../../shared/mapSpec.js';
 import { TEAM_COLORS, type TeamId } from '../../../../shared/teams.js';
 import { BotBrain, BOT_EYE, type BrainOut } from '../../../../shared/botBrain.js';
 import { CLASS_STATS, type ArmorClass } from '../../../../shared/botClasses.js';
-import { BOT_LOADOUTS, pickBotWeapon, adaptLoadout, botClassForLoadout, type LoadoutSlot } from '../../../../shared/botLoadouts.js';
+import { BOT_LOADOUTS, pickBotWeapon, adaptLoadout, botClassForLoadout, type LoadoutSlot,type BotLoadout } from '../../../../shared/botLoadouts.js';
 import { aimSkillFor } from '../../../../shared/botSkill.js';
 import { botRand } from '../../../../shared/botRand.js';
 import { botWeaponHooks } from '../../../../shared/botWeaponHooks.js';
 import { type WeaponType } from '../../../../shared/weapons.js';
 import { STATUS } from '../../../../shared/status.js';
 import type { ChatterKind } from '../../../../shared/botTaunts.js';
-import type { BotLoadout } from '../../../../shared/botLoadouts.js';
 import { perkMods, effectiveResist, type PerkMods } from '../../../../shared/perks.js';
 import { inv } from '../../../../shared/invariants.js';
 
@@ -116,12 +115,12 @@ export class GameBot extends RemotePlayer {
   /** Respawn kit drift: keep whichever candidate the skill matrix
    *  favors — same adaptation BotRoster.adaptOnRespawn runs online. */
   adaptLoadout(): void {
-    if (!this.loadout || !this.loadoutAlts) return;
+    if (!this.loadout || !this.loadoutAlts) {return;}
     const next = adaptLoadout(this.loadout, this.loadoutAlts, (w) => aimSkillFor(this.brain.skill, w, 0), botRand);
-    if (next === this.loadout) return;
+    if (next === this.loadout) {return;}
     this.setLoadout(next);
     const cls = botClassForLoadout(next);
-    if (cls !== this.armorClass) this.setBotClass(cls);
+    if (cls !== this.armorClass) {this.setBotClass(cls);}
   }
   /** Shared MoveSim — the same physics the server shadow runs, so a bot
    *  skis/jets/lands exactly like a legal player (no invented velocities). */
@@ -158,7 +157,7 @@ export class GameBot extends RemotePlayer {
     // them through update()→snapshot interp made tick() stomp pos with a
     // ~200ms-delayed sample every frame (the frozen/crawling bot bug).
     this.localDriven = true;
-    this.setGizmoColor(team === 'ffa' ? 0xCC66FF : TEAM_COLORS[team]);
+    this.setGizmoColor(team === 'ffa' ? 0xCC_66_FF : TEAM_COLORS[team]);
   }
 
   /** Local-authority damage — the same role the server's hit validation
@@ -251,7 +250,7 @@ export class GameBot extends RemotePlayer {
         // ~2m cells, not 4cm: getHeight is a smooth bilinear heightmap
         // read, so meter snapping is invisible to the senses — and wider
         // cells give the shared memo a much higher hit rate.
-        const k = ((x * 0.5) | 0) * 131_072 + ((z * 0.5) | 0);
+        const k = (Math.trunc((x * 0.5))) * 131_072 + (Math.trunc((z * 0.5)));
         let v = gyc.get(k);
         if (v === undefined) {
           // Cap the memo — roaming bots would otherwise grow it a cell at

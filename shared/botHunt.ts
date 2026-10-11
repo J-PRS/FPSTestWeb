@@ -160,12 +160,12 @@ export function scanVisible(ctx: BrainCtx, pos: BotVec, range: number, beastRang
   let player: BotEnemy | null = null, beast: BotEnemy | null = null;
   let playerD = range, beastD = beastRange;
   for (const e of ctx.enemies) {
-    if (!e.alive) continue;
+    if (!e.alive) {continue;}
     const d = dist3(pos, e.pos);
     // Cheapest gate first: an out-of-range enemy never earns the LOS
     // march — it was paying a ~dist/6-probe walk for a guaranteed discard.
-    if (d >= (e.id.startsWith('b:') ? beastRange : range)) continue;
-    if (!losClear(ctx, pos, e.pos)) continue;
+    if (d >= (e.id.startsWith('b:') ? beastRange : range)) {continue;}
+    if (!losClear(ctx, pos, e.pos)) {continue;}
     seenAll?.push(e);
     if (e.id.startsWith('b:')) {
       if (d < beastD) { beastD = d; beast = e; }
@@ -192,14 +192,14 @@ export function noteFoeHit(st: HuntState, id: string, now: number): void {
   f.hits++;
   st.foeScore.set(id, f);
   st.lastHitBy = { id, at: now };
-  if (st.foeScore.size > 8) st.foeScore.delete(st.foeScore.keys().next().value!);
+  if (st.foeScore.size > 8) {st.foeScore.delete(st.foeScore.keys().next().value!);}
 }
 
 /** markDeath side: who gets the kill on this bot's scorecard. */
 export function noteFoeDeath(st: HuntState, now: number): void {
-  if (!st.lastHitBy || now - st.lastHitBy.at > 4000) return;
+  if (!st.lastHitBy || now - st.lastHitBy.at > 4000) {return;}
   const f = st.foeScore.get(st.lastHitBy.id);
-  if (f) f.deaths++;
+  if (f) {f.deaths++;}
 }
 
 /** Lost-LOS extrapolation: momentum lead plus one anticipation step —
@@ -212,7 +212,7 @@ function ghostPos(st: HuntState, ctx: BrainCtx, now: number): BotVec {
     y: st.lastSeen.y,
     z: st.lastSeen.z + st.leadVel.z * leadS,
   };
-  if (ctx.pickup && distSqXZ(g, ctx.pickup) < 30 * 30) return { ...ctx.pickup };
+  if (ctx.pickup && distSqXZ(g, ctx.pickup) < 30 * 30) {return { ...ctx.pickup };}
   return g;
 }
 
@@ -235,11 +235,11 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
   // and hero (the desperate last stand doesn't pick its opponent).
   const BRAWL_M = 25;
   let ectx = ctx;
-  if (st.unreachUntil.size || st.foeScore.size) {
+  if (st.unreachUntil.size > 0 || st.foeScore.size > 0) {
     const enemies = ctx.enemies.filter((e) => (st.unreachUntil.get(e.id) ?? 0) <= now
       && (hero || dreadOf(st, e.id) < 2 || dist3(pos, e.pos) < BRAWL_M));
     if (st.unreachUntil.size > 6) {
-      for (const [id, until] of st.unreachUntil) if (until <= now) st.unreachUntil.delete(id);
+      for (const [id, until] of st.unreachUntil) {if (until <= now) {st.unreachUntil.delete(id);}}
     }
     ectx = { ...ctx, enemies };
   }
@@ -286,7 +286,7 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
   // eye line for a tick doesn't reset the nerves.
   if (next && !st.acquiredAt.has(next.id)) {
     st.acquiredAt.set(next.id, st.huntTick);
-    if (st.acquiredAt.size > 6) st.acquiredAt.delete(st.acquiredAt.keys().next().value!);
+    if (st.acquiredAt.size > 6) {st.acquiredAt.delete(st.acquiredAt.keys().next().value!);}
   }
   // Eye-line + the flag beacon refresh the fire memory; a squad callout
   // only commits the hunt — otherwise a lingering spot refreshes
@@ -300,7 +300,7 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
     st.lastAimY = seen.aimY ?? CENTER_AIM_Y;
     // Opponent-model update — the tracker's running estimate drifts
     // toward the newest read, never snaps to it.
-    const blend = st.leadId !== seen.id ? 0.55 : 0.2;
+    const blend = st.leadId === seen.id ? 0.2 : 0.55;
     st.leadId = seen.id;
     st.leadVel.x += (seen.vel.x - st.leadVel.x) * blend;
     st.leadVel.y += (seen.vel.y - st.leadVel.y) * blend;
@@ -332,19 +332,19 @@ function planFight(st: HuntState, ctx: BrainCtx, pos: BotVec, best: BotEnemy | n
       st.fightPos = prevFight;
     } else {
       st.fightPos = pickFightPos(st, ctx, pos, best, prevFight);
-      if (st.fightPos) st.fightHold = 6;
+      if (st.fightPos) {st.fightHold = 6;}
     }
   }
   st.fightHold = Math.max(0, st.fightHold - 1);
-  if (!best || ctx.runner || ctx.wave) pickGoal(ctx, pos);
+  if (!best || ctx.runner || ctx.wave) {pickGoal(ctx, pos);}
 }
 
 /** The beacon-marked flag carrier, when it's in committing range —
  *  beacon range (80m) or any clear eye line. */
 function thiefBeacon(ctx: BrainCtx, pos: BotVec): BotEnemy | null {
   const t = ctx.thief;
-  if (!t || !t.alive) return null;
-  if (dist3(pos, t.pos) >= 80 && !losClear(ctx, pos, t.pos)) return null;
+  if (!t || !t.alive) {return null;}
+  if (dist3(pos, t.pos) >= 80 && !losClear(ctx, pos, t.pos)) {return null;}
   return t;
 }
 
@@ -353,7 +353,7 @@ function thiefBeacon(ctx: BrainCtx, pos: BotVec): BotEnemy | null {
 function nearestSpot(ctx: BrainCtx, pos: BotVec): BotEnemy | null {
   let best: BotEnemy | null = null, bd = PURSUE_M;
   for (const e of ctx.spots ?? []) {
-    if (!e.alive) continue;
+    if (!e.alive) {continue;}
     const d = dist3(pos, e.pos);
     if (d < bd) { bd = d; best = e; }
   }
@@ -368,12 +368,12 @@ function nearestSpot(ctx: BrainCtx, pos: BotVec): BotEnemy | null {
  *  Called only after the escape streaks prove the pin, so the cheap
  *  answer just has to be right in the already-stuck case. */
 export function preyUnreachable(ctx: BrainCtx, pos: BotVec, prey: BotVec): boolean {
-  if (prey.y - pos.y > 8) return true;
-  if (!ctx.solids?.length) return false;
-  return !!segSolidHit(
+  if (prey.y - pos.y > 8) {return true;}
+  if (!ctx.solids?.length) {return false;}
+  return Boolean(segSolidHit(
     { x: pos.x, y: pos.y + 1, z: pos.z },
     { x: prey.x, y: prey.y + 1, z: prey.z },
-    ctx.solids, ctx.solidIndex ?? undefined, ctx.team);
+    ctx.solids, ctx.solidIndex ?? undefined, ctx.team));
 }
 
 /** Volley pick: burst cadence + sloppy ballistic lead at lastSeen. */
@@ -385,9 +385,9 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   // with aim decaying by how long the eye line has been broken.
   const staleMs = now - st.lastSeenAt;
   const memS = Math.max(0, (staleMs - STALE_MS) / 1000);
-  if (!st.hunt || staleMs > PURSUE_MS) return undefined;
+  if (!st.hunt || staleMs > PURSUE_MS) {return undefined;}
   const acq = st.acquiredAt.get(st.hunt.id);
-  if (acq !== undefined && st.huntTick - acq < st.reactTicks) return undefined;
+  if (acq !== undefined && st.huntTick - acq < st.reactTicks) {return undefined;}
   const d = dist3(pos, memS > 0 ? st.hunt.pos : st.lastSeen);
   // Reach gate: a beam at 100m is a guaranteed whiff the ledger counts
   // — humans close instead of hosing air (FFA: LG acc 6.6% was mostly
@@ -395,11 +395,11 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   const reach = ctx.weaponRange?.(d);
   if (memS <= 0 && reach !== undefined && d > reach) { st.fireT = 0.5; return undefined; }
   st.fireT -= dt;
-  if (st.fireT > 0) return undefined;
+  if (st.fireT > 0) {return undefined;}
   // The trigger finger follows the gun: a chaingun streams long bursts,
   // a mortar picks its moments — same cadence rules the client enforces.
   const interval = ctx.fireInterval?.(d) ?? 0.45;
-  if (st.burstLeft <= 0) st.burstLeft = Math.max(2, Math.min(12, Math.round(3.0 / interval)));
+  if (st.burstLeft <= 0) {st.burstLeft = Math.max(2, Math.min(12, Math.round(3 / interval)));}
   st.burstLeft--;
   st.fireT = (st.burstLeft > 0
     ? Math.max(interval, 0.25) + botRand() * 0.15
@@ -431,13 +431,13 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   // A held beam is a tracking task, not a snap: the error is a slow
   // drift off the target, not a fresh scatter per pull — half the
   // snap-aim budget (19% FFA acc at full scatter vs ~35% pro norms).
-  if (ws === 0) err *= 0.5;
+  if (ws === 0) {err *= 0.5;}
   err *= hero ? 0.3 : fearing ? 1.8 : 1;
   err *= st.jitter;
   // The skill matrix: hosts that know which weapon will actually fire
   // report it via aimSkill — a snap phenom threads rails, a mortar
   // artist plants the stand, a potato sprays and prays.
-  if (ctx.aimSkill) err /= ctx.aimSkill(d, Math.hypot(st.lastSeenVel.x, st.lastSeenVel.y, st.lastSeenVel.z));
+  if (ctx.aimSkill) {err /= ctx.aimSkill(d, Math.hypot(st.lastSeenVel.x, st.lastSeenVel.y, st.lastSeenVel.z));}
   // The shooter's own motion: projectile velocity inheritance makes
   // shots ACROSS your line of travel the hardest (the impact point
   // drags sideways with you), while firing along your velocity is
@@ -452,7 +452,7 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   }
   // Getting shot throws the aim off — decaying spike, not a toggle.
   const hitAgo = now - st.lastHitAt;
-  if (hitAgo < 800) err *= 1 + (1 - hitAgo / 800) * 0.9;
+  if (hitAgo < 800) {err *= 1 + (1 - hitAgo / 800) * 0.9;}
   // Humans under- and over-lead differently — per-bot skew on the
   // intercept so tracers don't all converge on the same math.
   const leadFlight = flight * st.leadSkew;
@@ -565,7 +565,7 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
           >= muzzle.y + (nearAim.y - muzzle.y) * t + 0.3) { blocked = true; break; }
     }
     if (!blocked && ctx.solids?.length &&
-        segSolidHit(muzzle, nearAim, ctx.solids, ctx.solidIndex ?? undefined, ctx.team)) blocked = true;
+        segSolidHit(muzzle, nearAim, ctx.solids, ctx.solidIndex ?? undefined, ctx.team)) {blocked = true;}
     if (blocked) {
       st.fireT = 0.3;
       return undefined;
@@ -609,11 +609,11 @@ export function pickFightPos(st: HuntState, ctx: BrainCtx, pos: BotVec, t: BotEn
     const a = (i / 12) * Math.PI * 2;
     const cx = pos.x + Math.cos(a) * 10, cz = pos.z + Math.sin(a) * 10;
     const cy = ctx.groundY(cx, cz);
-    if (cy - g0 > 4) continue; // can't stand there
+    if (cy - g0 > 4) {continue;} // can't stand there
     const s = scorePos(ctx, pos, { x: cx, y: cy + BOT_EYE, z: cz }, t, mid, cy);
     if (s > bs) { bs = s; bx = cx; bz = cz; }
   }
-  if (Math.hypot(bx - pos.x, bz - pos.z) < 3) return null;
+  if (Math.hypot(bx - pos.x, bz - pos.z) < 3) {return null;}
   return { x: bx, y: pos.y, z: bz };
 }
 
@@ -626,12 +626,12 @@ function scorePos(ctx: BrainCtx, self: BotVec, cand: BotVec, t: BotEnemy, mid: n
   let s = losClear(ctx, cand, t.pos) ? 2 : -1.5;
   s -= Math.abs(dt - mid) * 0.08;
   for (const e of ctx.enemies) {
-    if (!e.alive || e === t) continue;
+    if (!e.alive || e === t) {continue;}
     // A shooter past engagement range can't hold this spot down — skip
     // the march; the whole roster times a ring of candidates made this
     // the hunt stage's hot loop.
-    if (dist3(cand, e.pos) >= BOT_FIRE_RANGE) continue;
-    if (losClear(ctx, cand, e.pos)) s -= 0.6; // a second gun covers this spot
+    if (dist3(cand, e.pos) >= BOT_FIRE_RANGE) {continue;}
+    if (losClear(ctx, cand, e.pos)) {s -= 0.6;} // a second gun covers this spot
   }
   const selfG = ctx.groundY(self.x, self.z);
   s -= Math.abs(candGround - selfG) * 0.05;
@@ -640,7 +640,7 @@ function scorePos(ctx: BrainCtx, self: BotVec, cand: BotVec, t: BotEnemy, mid: n
   // avoid it when the duel could happen on the flat (soak: duel picks
   // parked bots at the base of a dais lip they could never walk up).
   const tG = ctx.groundY(t.pos.x, t.pos.z);
-  if (candGround - selfG > 2 && Math.abs(candGround - tG) > 1.5) s -= 1.2;
+  if (candGround - selfG > 2 && Math.abs(candGround - tG) > 1.5) {s -= 1.2;}
   return s;
 }
 

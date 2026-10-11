@@ -284,7 +284,7 @@ const _probeTgt: SimVec = { x: 0, y: 0, z: 0 };
 export function predictAt(st: NetStatics, bag: NetBag, t: number, out: THREE.Vector3): boolean {
   const live = bag.sim;
   if (!live) {return false;}
-  const s = Object.assign({}, live);
+  const s = { ...live};
   const tgt = s.tgtValid ? (_probeTgt.x = s.tx, _probeTgt.y = s.ty, _probeTgt.z = s.tz, _probeTgt) : null;
   const field = st.field();
   const simNow = st.simNow() ?? Infinity;

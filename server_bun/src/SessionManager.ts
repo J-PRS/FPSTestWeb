@@ -60,7 +60,7 @@ export class SessionManager {
   private joinThrottleAllow(ip: string): boolean {
     // Loopback is the dev box and the pvptest harness — fleets spawn 24+
     // joins/minute legitimately. Flood control is for real traffic only.
-    if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') return true;
+    if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') {return true;}
     return windowAllow(
       this.joinWindows, ip, wallNow(),
       SessionManager.JOIN_WINDOW_MS, SessionManager.JOIN_LIMIT, SessionManager.MAX_JOIN_WINDOWS,
@@ -89,7 +89,7 @@ export class SessionManager {
     // pending queue that flushes on session open — pings enqueued during
     // the probe land before join. Killing the session re-arms the
     // reconnect loop (the ~1s flap storm); swallowing them costs nothing.
-    if (handshake.type === 'ping' || handshake.type === 'pong' || handshake.type === 'clientStats' || handshake.type === 'tickNack') return;
+    if (handshake.type === 'ping' || handshake.type === 'pong' || handshake.type === 'clientStats' || handshake.type === 'tickNack') {return;}
     if (handshake.type !== 'join') {
       logger.warn('pre-join frame rejected', { got: handshake.type });
       ws.close(1008, 'Expected join handshake');
@@ -195,8 +195,8 @@ export class SessionManager {
       const diffs = [
         modeDiff,
         botDiff,
-        room.noBalls !== noBalls ? `balls ${room.noBalls ? 'OFF' : 'ON'}` : '',
-        room.noCreatures !== noCreatures ? `critters ${room.noCreatures ? 'OFF' : 'ON'}` : '',
+        room.noBalls === noBalls ? '' : `balls ${room.noBalls ? 'OFF' : 'ON'}`,
+        room.noCreatures === noCreatures ? '' : `critters ${room.noCreatures ? 'OFF' : 'ON'}`,
       ].filter(Boolean).join(', ');
       room.sendToPlayer(playerId, { type: 'serverWarn', text: `room '${room.name}' already existed — your settings overridden (${diffs})` });
     }
@@ -235,7 +235,7 @@ export class SessionManager {
     room.connections.register(playerId, ws);
     // Offset-cursor replay: reliable events the dead socket missed stream
     // back BEFORE the handshake reply, so gameState remains the final word.
-    if (resumeSeq !== undefined) room.connections.replayTo(playerId, ws, resumeSeq);
+    if (resumeSeq !== undefined) {room.connections.replayTo(playerId, ws, resumeSeq);}
     // Evict whatever still held the seat — zombie or not. Register FIRST:
     // closing the old socket fires GameServer.onClose, which must see the
     // seat already owned by ws or it re-marks the player disconnected and
@@ -309,7 +309,7 @@ export class SessionManager {
    *  verbatim into DOM text nodes, so this only needs to kill control
    *  bytes and cap length (markup dies at textContent rendering). */
   private static nameSpec(v: unknown): string | undefined {
-    if (typeof v !== 'string') return undefined;
+    if (typeof v !== 'string') {return undefined;}
     // Control bytes die, and so do unicode format chars — a bidi
     // override renders reversed text in scoreboard/chat (name
     // spoofing), zero-width chars make names invisible/impersonable.
@@ -350,7 +350,7 @@ export class SessionManager {
   private claimIdentity(playerId: string, token: string | undefined, idToken: string): boolean {
     const claimed = this.claimedIdentities.get(playerId);
     if (claimed) {
-      if (claimed === token) return true;
+      if (claimed === token) {return true;}
       logger.warn('Join rejected: claimed playerId, bad token', { playerId });
       return false;
     }
@@ -358,7 +358,7 @@ export class SessionManager {
       const it = this.claimedIdentities.keys();
       for (let i = 0; i < SessionManager.MAX_IDENTITIES / 2; i++) {
         const k = it.next().value;
-        if (k === undefined) break;
+        if (k === undefined) {break;}
         this.claimedIdentities.delete(k);
       }
     }
@@ -382,10 +382,14 @@ export class SessionManager {
     room.messages.handleHandshake(playerId, sessionToken);
     this.d.ops.joins++;
     switch (handshake.transport) {
-      case 'ws': this.d.ops.tierWs++; break;
-      case 'wt': this.d.ops.tierWt++; break;
-      case 'rtc': this.d.ops.tierRtc++; break;
-      default: this.d.ops.tierOther++;
+      case 'ws': { this.d.ops.tierWs++; break;
+      }
+      case 'wt': { this.d.ops.tierWt++; break;
+      }
+      case 'rtc': { this.d.ops.tierRtc++; break;
+      }
+      default: { this.d.ops.tierOther++;
+      }
     }
 
     logger.info('Player connected', { playerId, room: room.name, total: room.playerCount() });

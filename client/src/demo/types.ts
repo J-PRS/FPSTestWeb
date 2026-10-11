@@ -6,6 +6,7 @@ export const DEMO_FORMAT_VERSION = 6;
 // Remote-frame flag bitmasks
 export const RemoteFrameFlags = {
   None: 0,
+  // oxlint-disable-next-line prefer-math-trunc -- int32 wrap is the point
   Dead: 1 << 0,
   Ski: 1 << 1,
 } as const;
@@ -13,6 +14,7 @@ export const RemoteFrameFlags = {
 // Input flag bitmasks
 export const InputFlags = {
   None: 0,
+  // oxlint-disable-next-line prefer-math-trunc -- int32 wrap is the point
   Forward: 1 << 0,
   Backward: 1 << 1,
   Left: 1 << 2,
@@ -26,6 +28,7 @@ export const InputFlags = {
 // Jetpack flag bitmasks
 export const JetpackFlags = {
   None: 0,
+  // oxlint-disable-next-line prefer-math-trunc -- int32 wrap is the point
   Active: 1 << 0,
 } as const;
 
@@ -49,12 +52,12 @@ export enum TargetEventType {
 // on this, so creature targetIds only need uniqueness among themselves —
 // CREATURE_ID_FLAG sets the top bit anyway so raw ids never alias ball ids.
 export const TARGETTYPE_CREATURE_BASE = 64;
-export const CREATURE_ID_FLAG = 0x8000;
+export const CREATURE_ID_FLAG = 0x80_00;
 // Ordered to match shared/species.ts — keep stable, ids land in the file.
 export const DEMO_SPECIES = ['crawler', 'scarab', 'rakk', 'gnat', 'roller', 'snake', 'baneling', 'totem'] as const;
 export function demoSpeciesIndex(species: string): number {
   const i = DEMO_SPECIES.indexOf(species as (typeof DEMO_SPECIES)[number]);
-  return i < 0 ? 0 : i;
+  return i === -1 ? 0 : i;
 }
 export function creatureDemoId(netId: number): number {
   // 14-bit mask, not 15: creatures must stay 0x8000–0xbfff. 0x7fff let a
@@ -62,7 +65,7 @@ export function creatureDemoId(netId: number): number {
   // (0xe000+) lanes — cross-lane corruption every 16k spawns. NetIds past
   // 0x3fff now self-collide within the creature lane only, which the
   // composite (targetType, targetId) keys keep bounded.
-  return CREATURE_ID_FLAG | (netId & 0x3fff);
+  return CREATURE_ID_FLAG | (netId & 0x3F_FF);
 }
 export function isCreatureTargetType(targetType: number): boolean {
   return targetType >= TARGETTYPE_CREATURE_BASE && targetType < TARGETTYPE_DEPLOY_BASE;
@@ -72,14 +75,14 @@ export function isCreatureTargetType(targetType: number): boolean {
 // DEMO_DEPLOY_KINDS, top-bit-below demo id so it can't alias ball or
 // creature ids. Ordered to match shared/deployItems.ts — keep stable.
 export const TARGETTYPE_DEPLOY_BASE = 128;
-export const DEPLOY_ID_FLAG = 0x4000;
+export const DEPLOY_ID_FLAG = 0x40_00;
 export const DEMO_DEPLOY_KINDS = ['turret', 'mine', 'station', 'drone', 'shield', 'nugget', 'beacon', 'generator', 'sensor', 'baseturret'] as const;
 export function demoDeployKindIndex(kind: string): number {
   const i = DEMO_DEPLOY_KINDS.indexOf(kind as (typeof DEMO_DEPLOY_KINDS)[number]);
-  return i < 0 ? 0 : i;
+  return i === -1 ? 0 : i;
 }
 export function deployDemoId(netId: number): number {
-  return DEPLOY_ID_FLAG | (netId & 0x3fff);
+  return DEPLOY_ID_FLAG | (netId & 0x3F_FF);
 }
 export function isDeployTargetType(targetType: number): boolean {
   return targetType >= TARGETTYPE_DEPLOY_BASE && targetType < TARGETTYPE_KILL;
@@ -94,19 +97,19 @@ export function isDeployTargetType(targetType: number): boolean {
 export const TARGETTYPE_KILL = 224;
 export const TARGETTYPE_FLAG = 225;
 export const TARGETTYPE_PICKUP_BASE = 226;
-export const FLAG_DEMO_ID_BASE = 0xc000; // |teamIdx — one flag per team
-export const PICKUP_ID_FLAG = 0xe000;
+export const FLAG_DEMO_ID_BASE = 0xC0_00; // |teamIdx — one flag per team
+export const PICKUP_ID_FLAG = 0xE0_00;
 // Ordered to match shared/pickups.ts — keep stable, ids land in the file.
 export const DEMO_PICKUP_KINDS = ['gem', 'tag', 'heal', 'armor', 'regen', 'dd'] as const;
 export function demoPickupKindIndex(kind: string): number {
   const i = DEMO_PICKUP_KINDS.indexOf(kind as (typeof DEMO_PICKUP_KINDS)[number]);
-  return i < 0 ? 0 : i;
+  return i === -1 ? 0 : i;
 }
 export function flagDemoId(teamIdx: number): number {
-  return FLAG_DEMO_ID_BASE | (teamIdx & 0xf);
+  return FLAG_DEMO_ID_BASE | (teamIdx & 0xF);
 }
 export function pickupDemoId(netId: number): number {
-  return PICKUP_ID_FLAG | (netId & 0x1fff);
+  return PICKUP_ID_FLAG | (netId & 0x1F_FF);
 }
 export function isMiscTargetType(targetType: number): boolean {
   return targetType >= TARGETTYPE_KILL;

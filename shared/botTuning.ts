@@ -75,7 +75,7 @@ export const BOT_TUNING = {
     destHighNear: 60,    // m — objective only counts in the climb deficit inside this ring
     grabOrbitGd: 14,     // m — runner orbit-brake ring around the objective (covers the ~2.2m touch + overshoot lap)
     grabWatchGd: 30,     // m — the wider orbit-detection ring: a lazy lap swinging 15-25m out never arms the 14m brake
-    grabOrbitS: 1.0,     // s — closure-rate window inside the ring
+    grabOrbitS: 1,     // s — closure-rate window inside the ring
     grabOrbitMinGain: 3, // m/window — closure slower than this = orbit lap, brake it
     crawlHopGd: 5,       // m — inside this of the objective a crawler walks (hops overshoot the 9m deck)
   },
@@ -86,7 +86,7 @@ export const BOT_TUNING = {
     pts: 4,              // probes per ray
     reach: 65,           // m — farthest landing probe (multi-map evolution: mid-horizon beats both tight 25m and lazy 80m)
     near: 15,            // m — nearest landing probe
-    commitS: 2.0,        // s — hold a line before re-planning (evolved: re-plan a bit sooner so corners stay fresh)
+    commitS: 2,        // s — hold a line before re-planning (evolved: re-plan a bit sooner so corners stay fresh)
     arrive: 6,           // m — waypoint reached radius
     minGd: 34,           // m — closer than this, steerer owns it
     runnerDirectGd: 48,  // m — runner close-out: pockets near the stand only feed the
@@ -101,7 +101,7 @@ export const BOT_TUNING = {
     farReachGd: 300,     // m — legs longer than this get far eyes
     farReachK: 0.45,     // far-eye reach as a share of remaining leg
     runnerConeK: 2.6,    // runner fan widening (evolved: wider route fan — corners are won by line, not by straightness)
-    runnerDropW: 2.0,    // downhill pull for runners
+    runnerDropW: 2,    // downhill pull for runners
     dropW: 1.4,          // downhill pull for everyone else
     runnerStraightW: 3.2,// straightness tax for runners (evolved: momentum through the turn beats the straight line)
     straightW: 8,        // straightness tax for everyone else

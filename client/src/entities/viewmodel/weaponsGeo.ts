@@ -55,7 +55,7 @@ export function buildWeaponMeshes(parent: THREE.Group, muzzleZ: Record<number, n
     mz.position.z = (muzzleZ[wt] ?? -0.35) / g.scale.z;
     // Chaingun fires from the TOP barrel — the cluster indexes a barrel
     // to TDC each shot, so the flash rides the top of the cluster.
-    if (wt === WeaponType.Chaingun) mz.position.y = 0.088;
+    if (wt === WeaponType.Chaingun) {mz.position.y = 0.088;}
     g.add(mz);
     muzzleNodes.set(wt, mz);
   }
@@ -83,7 +83,7 @@ export function buildHandAndFlash(parent: THREE.Group): HandFlash {
 // Random roll each shot keeps it from looking identical.
 const flashMat = new THREE.MeshBasicMaterial({
   map: getMuzzleFlashTexture(), // starburst alpha — kills the square edge
-  color: 0xffc866,
+  color: 0xFF_C8_66,
   transparent: true,
   opacity: 0,
   blending: THREE.AdditiveBlending,
@@ -103,8 +103,8 @@ parent.add(flashMesh2);
 // Off-hand fist for melee — chunky glove: palm block + knuckle row.
 // Parked off-screen bottom-left until punch() jabs it across the frame.
 const fistGroup = new THREE.Group();
-const gloveMat = new THREE.MeshLambertMaterial({ color: 0x3a3d42, emissive: 0x111214 });
-const knuckleMat = new THREE.MeshLambertMaterial({ color: 0x8a4a3a, emissive: 0x20100c });
+const gloveMat = new THREE.MeshLambertMaterial({ color: 0x3A_3D_42, emissive: 0x11_12_14 });
+const knuckleMat = new THREE.MeshLambertMaterial({ color: 0x8A_4A_3A, emissive: 0x20_10_0C });
 const palm = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.09, 0.14), gloveMat);
 fistGroup.add(palm);
 for (let i = 0; i < 4; i++) {

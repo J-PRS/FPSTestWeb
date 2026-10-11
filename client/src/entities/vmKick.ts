@@ -19,24 +19,24 @@ const FLASH_LIFE = 0.07; // 1-2 frames feel; >0.15 reads as flamethrower
 // random sideways/roll spread. amp = muzzle rise, back = backward shove
 // scale (1 = baseline — viewmodel.ts multiplies kickZ).
 const RECOIL: Record<number, { recover: number; jitter: number; amp: number; back: number }> = {
-    [WeaponType.BoltLauncher]:    { recover: 0.90, jitter: 0.03,  amp: 0.45, back: 0.5 },  // same throw as the disc launcher
-    [WeaponType.Disc]:            { recover: 0.90, jitter: 0.03,  amp: 0.45, back: 0.5 },  // ~60% of the railgun's throw
-    [WeaponType.DiscPull]:        { recover: 0.90, jitter: 0.03,  amp: 0.45, back: 0.5 },
-    [WeaponType.Chaingun]:        { recover: 0.18, jitter: 0.02,  amp: 0.5,  back: 1.0 },  // tiny buzz
-    [WeaponType.Mortar]:          { recover: 0.47, jitter: 0.00,  amp: 1.0,  back: 1.0 },  // slow heavy heave
-    [WeaponType.GrenadeLauncher]: { recover: 0.30, jitter: 0.03,  amp: 0.9,  back: 1.0 },  // pump pop
-    [WeaponType.Flak]:            { recover: 0.33, jitter: 0.09,  amp: 1.1,  back: 1.0 },  // hard shove + sideways shudder
-    [WeaponType.PlasmaCannon]:    { recover: 0.22, jitter: 0.00,  amp: 0.7,  back: 1.0 },  // light tap
-    [WeaponType.PlasmaGun]:       { recover: 0.24, jitter: 0.01,  amp: 0.5,  back: 1.0 },  // repeater
-    [WeaponType.Sprinkler]:       { recover: 0.22, jitter: 0.02,  amp: 0.45, back: 1.0 },  // hose — light wobble
-    [WeaponType.Railgun]:         { recover: 1.50, jitter: 0.015, amp: 0.75, back: 0.85 }, // modest flip, heavy haul home
-    [WeaponType.Lightning]:       { recover: 0.21, jitter: 0.05,  amp: 0.4,  back: 1.0 },  // per-tick hum
-    [WeaponType.Cannon]:          { recover: 0.41, jitter: 0.02,  amp: 1.1,  back: 1.0 },  // heavy naval-gun thump
+    [WeaponType.BoltLauncher]:    { recover: 0.9, jitter: 0.03,  amp: 0.45, back: 0.5 },  // same throw as the disc launcher
+    [WeaponType.Disc]:            { recover: 0.9, jitter: 0.03,  amp: 0.45, back: 0.5 },  // ~60% of the railgun's throw
+    [WeaponType.DiscPull]:        { recover: 0.9, jitter: 0.03,  amp: 0.45, back: 0.5 },
+    [WeaponType.Chaingun]:        { recover: 0.18, jitter: 0.02,  amp: 0.5,  back: 1 },  // tiny buzz
+    [WeaponType.Mortar]:          { recover: 0.47, jitter: 0,  amp: 1,  back: 1 },  // slow heavy heave
+    [WeaponType.GrenadeLauncher]: { recover: 0.3, jitter: 0.03,  amp: 0.9,  back: 1 },  // pump pop
+    [WeaponType.Flak]:            { recover: 0.33, jitter: 0.09,  amp: 1.1,  back: 1 },  // hard shove + sideways shudder
+    [WeaponType.PlasmaCannon]:    { recover: 0.22, jitter: 0,  amp: 0.7,  back: 1 },  // light tap
+    [WeaponType.PlasmaGun]:       { recover: 0.24, jitter: 0.01,  amp: 0.5,  back: 1 },  // repeater
+    [WeaponType.Sprinkler]:       { recover: 0.22, jitter: 0.02,  amp: 0.45, back: 1 },  // hose — light wobble
+    [WeaponType.Railgun]:         { recover: 1.5, jitter: 0.015, amp: 0.75, back: 0.85 }, // modest flip, heavy haul home
+    [WeaponType.Lightning]:       { recover: 0.21, jitter: 0.05,  amp: 0.4,  back: 1 },  // per-tick hum
+    [WeaponType.Cannon]:          { recover: 0.41, jitter: 0.02,  amp: 1.1,  back: 1 },  // heavy naval-gun thump
     [WeaponType.RocketLauncher]:  { recover: 2.8,  jitter: 0.02,  amp: 0.9,  back: 1.15 }, // tube launch — back-blast shove
-    [WeaponType.Pistol]:          { recover: 0.15, jitter: 0.01,  amp: 1.1,  back: 1.0 },  // snappy crack — quick settle
-    [WeaponType.Revolver]:        { recover: 0.41, jitter: 0.05,  amp: 1.3,  back: 1.0 },  // hand-cannon bark
-    [WeaponType.Sticky]:          { recover: 0.25, jitter: 0.02,  amp: 0.9,  back: 1.0 },  // thoomp — tube launch
-    [WeaponType.Repair]:          { recover: 0.21, jitter: 0.05,  amp: 0.4,  back: 1.0 },  // per-tick hum
+    [WeaponType.Pistol]:          { recover: 0.15, jitter: 0.01,  amp: 1.1,  back: 1 },  // snappy crack — quick settle
+    [WeaponType.Revolver]:        { recover: 0.41, jitter: 0.05,  amp: 1.3,  back: 1 },  // hand-cannon bark
+    [WeaponType.Sticky]:          { recover: 0.25, jitter: 0.02,  amp: 0.9,  back: 1 },  // thoomp — tube launch
+    [WeaponType.Repair]:          { recover: 0.21, jitter: 0.05,  amp: 0.4,  back: 1 },  // per-tick hum
     [WeaponType.MRVLauncher]:     { recover: 1.5,  jitter: 0.03,  amp: 0.8,  back: 1.35 }, // drum-fed cannon — pull-back
     [WeaponType.Bombard]:         { recover: 0.9,  jitter: 0.02,  amp: 1.35, back: 1.2 },  // siege gun — biggest muzzle rise in the roster
 };
@@ -47,26 +47,26 @@ const FLASH: Record<number, { color: number; scale: number; life: number; light:
     // release + limb snap animation IS the fire read. Zeroed scale/light
     // rides the existing decay math (flashT still ticks, quad scales to
     // nothing, light intensity 0).
-    [WeaponType.BoltLauncher]:    { color: 0xffc866, scale: 0,    life: 0.5, light: 0 },
-    [WeaponType.Disc]:            { color: 0x99ddff, scale: 0.7,  life: 0.7, light: 1.0 },
-    [WeaponType.DiscPull]:        { color: 0x99ddff, scale: 0.7,  life: 0.7, light: 1.0 },
-    [WeaponType.Chaingun]:        { color: 0xffaa44, scale: 0.9,  life: 0.8, light: 0.15 }, // faint lamp — sprite carries the flash
-    [WeaponType.Mortar]:          { color: 0xffdd99, scale: 1.6,  life: 1.5, light: 1.0 },  // big flash
-    [WeaponType.GrenadeLauncher]: { color: 0xffc866, scale: 0.8,  life: 0.9, light: 1.0 },
-    [WeaponType.Flak]:            { color: 0xffbb55, scale: 1.3,  life: 1.0, light: 1.0 },
-    [WeaponType.PlasmaCannon]:    { color: 0x44ffbb, scale: 0.5,  life: 0.6, light: 1.0 },  // green glow
-    [WeaponType.PlasmaGun]:       { color: 0x66ccff, scale: 0.75, life: 0.6, light: 1.0 },  // ~42ms so it can't bridge the shot gap
-    [WeaponType.Sprinkler]:       { color: 0xaaff66, scale: 0.55, life: 1.5, light: 1.0 },  // ~105ms → lit nozzle
-    [WeaponType.Railgun]:         { color: 0x77ccff, scale: 1.8,  life: 1.2, light: 1.6 },  // discharge bigger than the prong cluster
-    [WeaponType.Lightning]:       { color: 0x8fdcff, scale: 0.4,  life: 0.4, light: 1.0 },  // tiny flash — the beam is the show
-    [WeaponType.Cannon]:          { color: 0xff9944, scale: 2,  life: 1.8, light: 1.8 },  // bombard fireball — biggest flash in the roster
-    [WeaponType.RocketLauncher]:  { color: 0xff8844, scale: 1.8,  life: 1.6, light: 1.0 },
-    [WeaponType.Pistol]:          { color: 0xffe0a0, scale: 0.35, life: 0.4, light: 1.0 },
-    [WeaponType.Revolver]:        { color: 0xffb060, scale: 1.1,  life: 0.8, light: 1.0 },
-    [WeaponType.Sticky]:          { color: 0xff66dd, scale: 0.8,  life: 0.7, light: 1.0 },  // magenta spit
-    [WeaponType.Repair]:          { color: 0x7dffb8, scale: 0.4,  life: 0.4, light: 1.0 },  // green weld spark
-    [WeaponType.MRVLauncher]:     { color: 0xff7744, scale: 1.4,  life: 1.4, light: 1.0 },
-    [WeaponType.Bombard]:         { color: 0xff8833, scale: 2.4,  life: 1.9, light: 2.0 }, // a powder fireball that fills the bell
+    [WeaponType.BoltLauncher]:    { color: 0xFF_C8_66, scale: 0,    life: 0.5, light: 0 },
+    [WeaponType.Disc]:            { color: 0x99_DD_FF, scale: 0.7,  life: 0.7, light: 1 },
+    [WeaponType.DiscPull]:        { color: 0x99_DD_FF, scale: 0.7,  life: 0.7, light: 1 },
+    [WeaponType.Chaingun]:        { color: 0xFF_AA_44, scale: 0.9,  life: 0.8, light: 0.15 }, // faint lamp — sprite carries the flash
+    [WeaponType.Mortar]:          { color: 0xFF_DD_99, scale: 1.6,  life: 1.5, light: 1 },  // big flash
+    [WeaponType.GrenadeLauncher]: { color: 0xFF_C8_66, scale: 0.8,  life: 0.9, light: 1 },
+    [WeaponType.Flak]:            { color: 0xFF_BB_55, scale: 1.3,  life: 1, light: 1 },
+    [WeaponType.PlasmaCannon]:    { color: 0x44_FF_BB, scale: 0.5,  life: 0.6, light: 1 },  // green glow
+    [WeaponType.PlasmaGun]:       { color: 0x66_CC_FF, scale: 0.75, life: 0.6, light: 1 },  // ~42ms so it can't bridge the shot gap
+    [WeaponType.Sprinkler]:       { color: 0xAA_FF_66, scale: 0.55, life: 1.5, light: 1 },  // ~105ms → lit nozzle
+    [WeaponType.Railgun]:         { color: 0x77_CC_FF, scale: 1.8,  life: 1.2, light: 1.6 },  // discharge bigger than the prong cluster
+    [WeaponType.Lightning]:       { color: 0x8F_DC_FF, scale: 0.4,  life: 0.4, light: 1 },  // tiny flash — the beam is the show
+    [WeaponType.Cannon]:          { color: 0xFF_99_44, scale: 2,  life: 1.8, light: 1.8 },  // bombard fireball — biggest flash in the roster
+    [WeaponType.RocketLauncher]:  { color: 0xFF_88_44, scale: 1.8,  life: 1.6, light: 1 },
+    [WeaponType.Pistol]:          { color: 0xFF_E0_A0, scale: 0.35, life: 0.4, light: 1 },
+    [WeaponType.Revolver]:        { color: 0xFF_B0_60, scale: 1.1,  life: 0.8, light: 1 },
+    [WeaponType.Sticky]:          { color: 0xFF_66_DD, scale: 0.8,  life: 0.7, light: 1 },  // magenta spit
+    [WeaponType.Repair]:          { color: 0x7D_FF_B8, scale: 0.4,  life: 0.4, light: 1 },  // green weld spark
+    [WeaponType.MRVLauncher]:     { color: 0xFF_77_44, scale: 1.4,  life: 1.4, light: 1 },
+    [WeaponType.Bombard]:         { color: 0xFF_88_33, scale: 2.4,  life: 1.9, light: 2 }, // a powder fireball that fills the bell
 };
 const RECOIL_FALLBACK = RECOIL[WeaponType.BoltLauncher];
 const FLASH_FALLBACK = FLASH[WeaponType.BoltLauncher];

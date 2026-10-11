@@ -132,7 +132,7 @@ for (const side of [-1, 1]) {
 // the vertex rides bowString's z (drawn-back at rest, snapped to the
 // cam line when fired).
 const CAM_R = 0.065;
-const strutMat = new THREE.MeshBasicMaterial({ color: 0x18_1a_1c });
+const strutMat = new THREE.MeshBasicMaterial({ color: 0x18_1A_1C });
 const stringG = new THREE.Group();
 stringG.name = 'bowString';
 const knot = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.03), darkMat);
@@ -177,7 +177,7 @@ shaft.rotation.x = Math.PI / 2;
 shaft.position.set(0, 0.035, 0.04);
 boltG.add(shaft);
 const tip = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.06, 6),
-  new THREE.MeshBasicMaterial({ color: 0xff_c8_66 }));
+  new THREE.MeshBasicMaterial({ color: 0xFF_C8_66 }));
 tip.rotation.x = -Math.PI / 2;
 tip.position.set(0, 0.035, -0.11);
 boltG.add(tip);
@@ -300,12 +300,12 @@ disc.add(collar);
 // out of the breech into the slit (the "it really fires discs" sell).
 const ammo = new THREE.Group();
 ammo.name = 'discAmmo';
-const loadedMat = new THREE.MeshLambertMaterial({ color: 0x3A3F45, emissive: 0x14161A });
+const loadedMat = new THREE.MeshLambertMaterial({ color: 0x3A_3F_45, emissive: 0x14_16_1A });
 const loaded = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.115, 0.028, 24), loadedMat);
 loaded.position.set(0, 0, -0.15);
 ammo.add(loaded);
 const rim = new THREE.Mesh(new THREE.TorusGeometry(0.112, 0.011, 6, 32),
-  new THREE.MeshBasicMaterial({ color: 0x77_e8_ff }));
+  new THREE.MeshBasicMaterial({ color: 0x77_E8_FF }));
 rim.rotation.x = Math.PI / 2;
 rim.position.set(0, 0, -0.15);
 ammo.add(rim);
@@ -442,7 +442,7 @@ gl.add(drumHub);
 // Six chamber bores ringed around the drum face — the revolver read.
 // Solid drum looked like a wheel; dark mouths with brass rims sell
 // "six 40mm chambers" at viewmodel distance.
-const chamberRimMat = new THREE.MeshLambertMaterial({ color: 0x8A7A4A, emissive: 0x1A1408 });
+const chamberRimMat = new THREE.MeshLambertMaterial({ color: 0x8A_7A_4A, emissive: 0x1A_14_08 });
 for (let i = 0; i < 6; i++) {
   const a = (i / 6) * Math.PI * 2;
   const cy = -0.09 + Math.sin(a) * 0.105;
@@ -497,8 +497,8 @@ sticky.add(stickyDrum);
 // Chambered bombs peeking through the drum's front face — five dark
 // shells ringed around the hub, each with a fuse nub. Visible ordnance =
 // the "sticky bombs loaded" read at viewmodel distance.
-const bombMat = new THREE.MeshLambertMaterial({ color: 0x1E2226, emissive: 0x0a_0c_0e });
-const fuseMat = new THREE.MeshBasicMaterial({ color: 0xff_aa_22 }); // amber fuse glow — hazard, not candy
+const bombMat = new THREE.MeshLambertMaterial({ color: 0x1E_22_26, emissive: 0x0A_0C_0E });
+const fuseMat = new THREE.MeshBasicMaterial({ color: 0xFF_AA_22 }); // amber fuse glow — hazard, not candy
 for (let i = 0; i < 5; i++) {
   const a = (i / 5) * Math.PI * 2;
   const bomb = new THREE.Mesh(new THREE.SphereGeometry(0.038, 8, 6), bombMat);
@@ -520,7 +520,7 @@ stickyRecv.position.set(0, -0.01, 0.14);
 sticky.add(stickyRecv);
 // Warning stripe across the receiver flank — ordnance hardware marking,
 // not decoration. Same trick as the shotgun's red shells.
-const warnMat = new THREE.MeshLambertMaterial({ color: 0xCC8818, emissive: 0x30_1f_04 });
+const warnMat = new THREE.MeshLambertMaterial({ color: 0xCC_88_18, emissive: 0x30_1F_04 });
 const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.152, 0.03, 0.14), warnMat);
 stripe.position.set(0, 0.03, 0.14);
 sticky.add(stripe);
@@ -800,7 +800,7 @@ for (const z of [-0.02, 0.18]) {
   mrv.add(flange);
 }
 // Chamber windows + glowing shell noses — the volley is visibly LOADED
-const shellTipMat = new THREE.MeshLambertMaterial({ color: 0xFF5518, emissive: 0x99_22_00 });
+const shellTipMat = new THREE.MeshLambertMaterial({ color: 0xFF_55_18, emissive: 0x99_22_00 });
 for (let i = 0; i < 6; i++) {
   const a = (i / 6) * Math.PI * 2;
   const cx = Math.cos(a) * 0.1, cy = -0.05 + Math.sin(a) * 0.1;

@@ -43,7 +43,7 @@ export const BOMBARD_CONFIG: ProjectileConfig = {
   trailScaleMin: 0,
   trailScaleMax: 0,
   trailRampIn: 0,
-  meshColor: 0x1d1f24, // near-black iron — reads heavier than the cannon's dark ball
+  meshColor: 0x1D_1F_24, // near-black iron — reads heavier than the cannon's dark ball
   meshType: 'ball',
   glowShell: false,
   glowColor: 0x00_00_00,

@@ -36,7 +36,7 @@ export class TerrainFlow {
     this.h = new Float32Array(this.n * this.n);
     for (let j = 0; j < this.n; j++) {
       const z = this.w(j);
-      for (let i = 0; i < this.n; i++) this.h[j * this.n + i] = height(this.w(i), z);
+      for (let i = 0; i < this.n; i++) {this.h[j * this.n + i] = height(this.w(i), z);}
     }
   }
 
@@ -64,7 +64,7 @@ export class TerrainFlow {
     const ti = team === 'alpha' ? 0 : team === 'bravo' ? 1 : 2;
     const key = goal * 3 + ti;
     const hit = this.fields.get(key);
-    if (hit) return hit;
+    if (hit) {return hit;}
     const n2 = this.n * this.n;
     const parent = new Int32Array(n2).fill(-1);
     const dist = new Float64Array(n2).fill(Infinity);
@@ -78,7 +78,7 @@ export class TerrainFlow {
       let i = heap.length - 1;
       while (i > 0) {
         const p = (i - 1) >> 1;
-        if (!less(heap[i]!, heap[p]!)) break;
+        if (!less(heap[i]!, heap[p]!)) {break;}
         [heap[i], heap[p]] = [heap[p]!, heap[i]!];
         i = p;
       }
@@ -86,36 +86,36 @@ export class TerrainFlow {
     const pop = (): number => {
       const top = heap[0]!;
       const last = heap.pop()!;
-      if (heap.length) {
+      if (heap.length > 0) {
         heap[0] = last;
         let i = 0;
         for (;;) {
           const l = i * 2 + 1, r = l + 1;
           let m = i;
-          if (l < heap.length && less(heap[l]!, heap[m]!)) m = l;
-          if (r < heap.length && less(heap[r]!, heap[m]!)) m = r;
-          if (m === i) break;
+          if (l < heap.length && less(heap[l]!, heap[m]!)) {m = l;}
+          if (r < heap.length && less(heap[r]!, heap[m]!)) {m = r;}
+          if (m === i) {break;}
           [heap[i], heap[m]] = [heap[m]!, heap[i]!];
           i = m;
         }
       }
       return top;
     };
-    while (heap.length) {
+    while (heap.length > 0) {
       const u = pop();
-      const ux = u % this.n, uz = (u / this.n) | 0;
+      const ux = u % this.n, uz = Math.trunc((u / this.n));
       for (let dz = -1; dz <= 1; dz++) {
         for (let dx = -1; dx <= 1; dx++) {
-          if (!dx && !dz) continue;
+          if (!dx && !dz) {continue;}
           const vx = ux + dx, vz = uz + dz;
-          if (vx < 0 || vz < 0 || vx >= this.n || vz >= this.n) continue;
+          if (vx < 0 || vz < 0 || vx >= this.n || vz >= this.n) {continue;}
           const v = vz * this.n + vx;
           // Traveller moves v → u (flood runs goal-outward, so the
           // climb paid is toward the goal, i.e. h[u] - h[v]).
           const d = Math.hypot(dx, dz) * this.cell;
           const rise = this.h[u]! - this.h[v]!;
           let k = 1;
-          if (rise > 0) k += rise * T.graph.climbTax;
+          if (rise > 0) {k += rise * T.graph.climbTax;}
           else {
             // Sustained-descent credit only: a dive earns speed only
             // when the route keeps falling toward the goal — a lone
@@ -134,17 +134,17 @@ export class TerrainFlow {
               let cur = u, falling = 0;
               for (let s = 0; s < 3; s++) {
                 const p = parent[cur]!;
-                if (p === -1 || this.h[p]! >= this.h[cur]!) break;
+                if (p === -1 || this.h[p]! >= this.h[cur]!) {break;}
                 falling++;
                 cur = p;
               }
               keepsFalling = falling >= 2;
             }
-            if (keepsFalling) k += rise * T.graph.diveCredit;
-            else k -= rise * T.graph.dipTax;
+            if (keepsFalling) {k += rise * T.graph.diveCredit;}
+            else {k -= rise * T.graph.dipTax;}
           }
           const slope = rise / d;
-          if (slope > T.graph.wallSlope) k += (slope - T.graph.wallSlope) * T.graph.wallTax;
+          if (slope > T.graph.wallSlope) {k += (slope - T.graph.wallSlope) * T.graph.wallTax;}
           if (this.solidIndex) {
             // Does the traveller's leg actually cross a structure? The
             // probe runs at chest height over the higher endpoint — a
@@ -154,7 +154,7 @@ export class TerrainFlow {
             if (segSolidHit(
               { x: this.w(vx), y, z: this.w(vz) },
               { x: this.w(ux), y, z: this.w(uz) },
-              this.solids!, this.solidIndex, team)) k += T.graph.solidTax;
+              this.solids!, this.solidIndex, team)) {k += T.graph.solidTax;}
           }
           const nd = dist[u]! + d * k;
           if (nd < dist[v]!) {
@@ -189,9 +189,9 @@ export class TerrainFlow {
     const qb = this.cell * 12;
     const goal = this.cellOf(Math.round(tx / qb) * qb, Math.round(tz / qb) * qb);
     const field = this.fieldFor(goal, team);
-    const parent = field.parent;
+    const {parent} = field;
     const c0 = this.cellOf(fx, fz);
-    if (parent[c0] === -1 && c0 !== goal) return null;
+    if (parent[c0] === -1 && c0 !== goal) {return null;}
     let c = c0;
     let walked = 0, prev = c;
     // Cells the chain actually walked, so a goal inside the horizon can
@@ -207,30 +207,30 @@ export class TerrainFlow {
       // forever); the flood's parent stays the safe fallback.
       let p = parent[c]!;
       if (danger) {
-        const cx = c % this.n, cz = (c / this.n) | 0;
+        const cx = c % this.n, cz = Math.trunc((c / this.n));
         let best = Infinity;
         for (let dz = -1; dz <= 1; dz++) {
           for (let dx = -1; dx <= 1; dx++) {
-            if (!dx && !dz) continue;
+            if (!dx && !dz) {continue;}
             const nx = cx + dx, nz = cz + dz;
-            if (nx < 0 || nz < 0 || nx >= this.n || nz >= this.n) continue;
+            if (nx < 0 || nz < 0 || nx >= this.n || nz >= this.n) {continue;}
             const v = nz * this.n + nx;
-            if (field.dist[v]! >= field.dist[c]!) continue;
+            if (field.dist[v]! >= field.dist[c]!) {continue;}
             const score = field.dist[v]! + danger(this.w(nx), this.w(nz)) * this.cell * T.graph.dangerTax;
             if (score < best) { best = score; p = v; }
           }
         }
       }
-      if (p === -1) return null;
-      const dx = (p % this.n) - (c % this.n), dz = ((p / this.n) | 0) - ((c / this.n) | 0);
+      if (p === -1) {return null;}
+      const dx = (p % this.n) - (c % this.n), dz = (Math.trunc((p / this.n))) - (Math.trunc((c / this.n)));
       walked += Math.hypot(dx, dz) * this.cell;
       prev = c;
       c = p;
       chain.push(c);
-      if (walked >= ahead) break;
+      if (walked >= ahead) {break;}
     }
     let target: number;
-    if (walked >= ahead) target = c;
+    if (walked >= ahead) {target = c;}
     else if (c === goal && chain.length > 1 && this.solidIndex
       // Goal inside the horizon AND a wall on the beeline: emit the
       // chain's midpoint — on a bent path it's the doorway/funnel the
@@ -243,9 +243,9 @@ export class TerrainFlow {
       // hop); longer chains emit their middle — the doorway the flood
       // threaded, not a beeline at the wall face.
       target = chain[chain.length > 2 ? chain.length >> 1 : chain.length - 2]!;
-    } else target = c === goal ? goal : prev;
+    } else {target = c === goal ? goal : prev;}
     const tx2 = target === goal ? tx : this.w(target % this.n);
-    const tz2 = target === goal ? tz : this.w((target / this.n) | 0);
+    const tz2 = target === goal ? tz : this.w(Math.trunc((target / this.n)));
     return { x: tx2, y: this.h[target]!, z: tz2 };
   }
 
@@ -254,26 +254,26 @@ export class TerrainFlow {
    *  through instead of a myopic ring candidate. Null when unrouted. */
   routeNearGoal(fx: number, fz: number, tx: number, tz: number, backM: number, team?: string): BotVec | null {
     const goal = this.cellOf(tx, tz);
-    const parent = this.fieldFor(goal, team).parent;
+    const {parent} = this.fieldFor(goal, team);
     const start = this.cellOf(fx, fz);
-    if (parent[start] === -1 && start !== goal) return null;
+    if (parent[start] === -1 && start !== goal) {return null;}
     // Measure the whole chain once, then re-walk to total-backM.
     let total = 0;
     for (let c = start; c !== goal;) {
       const p = parent[c]!;
-      if (p === -1) return null;
-      const dx = (p % this.n) - (c % this.n), dz = ((p / this.n) | 0) - ((c / this.n) | 0);
+      if (p === -1) {return null;}
+      const dx = (p % this.n) - (c % this.n), dz = (Math.trunc((p / this.n))) - (Math.trunc((c / this.n)));
       total += Math.hypot(dx, dz) * this.cell;
       c = p;
     }
     let walked = 0, c = start;
     while (c !== goal && total - walked > backM) {
       const p = parent[c]!;
-      if (p === -1) return null;
-      const dx = (p % this.n) - (c % this.n), dz = ((p / this.n) | 0) - ((c / this.n) | 0);
+      if (p === -1) {return null;}
+      const dx = (p % this.n) - (c % this.n), dz = (Math.trunc((p / this.n))) - (Math.trunc((c / this.n)));
       walked += Math.hypot(dx, dz) * this.cell;
       c = p;
     }
-    return { x: this.w(c % this.n), y: this.h[c]!, z: this.w((c / this.n) | 0) };
+    return { x: this.w(c % this.n), y: this.h[c]!, z: this.w(Math.trunc((c / this.n))) };
   }
 }

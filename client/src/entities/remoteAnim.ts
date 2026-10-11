@@ -93,7 +93,7 @@ export class RemoteAnim {
         // field too = the server's sim really sank (unbury-class bug);
         // wire fine on field but under the chord = the drawn mesh bridges
         // the gully at this LOD and the lift cap is the only cover.
-        if (depth > 0.4) {glitch('remote-buried', { id: h.playerId, depth: +depth.toFixed(1), lift: +lift.toFixed(1), fieldD: +(h.terrain.getHeight(h.position.x, h.position.z) - h.feetY).toFixed(1) });}
+        if (depth > 0.4) {glitch('remote-buried', { id: h.playerId, depth: Number(depth.toFixed(1)), lift: Number(lift.toFixed(1)), fieldD: Number((h.terrain.getHeight(h.position.x, h.position.z) - h.feetY).toFixed(1)) });}
       }
     }
     h.model.setPosition(h.position.x, h.feetY + lift, h.position.z);

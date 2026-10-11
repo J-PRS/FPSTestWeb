@@ -50,7 +50,7 @@ export class ChargeBank {
   /** Death-burst: a killed victim pops for everything still banked. */
   corpse(shooterId: string, target: PlayerState): void {
     const acc = this.of(target);
-    if (acc <= 0) return;
+    if (acc <= 0) {return;}
     target.charge = 0; // zero before the blast — a chain kill can't double-pop the same bank
     this.pop(shooterId, target, acc);
   }

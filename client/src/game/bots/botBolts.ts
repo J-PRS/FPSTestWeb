@@ -6,7 +6,7 @@ import { WeaponType } from '../../../../shared/weapons.js';
 
 type BoltHost = BotFire;
 const _shotMuzzle = new THREE.Vector3();
-const BOLT_MAT = new THREE.LineBasicMaterial({ color: 0xFFE08A, transparent: true, opacity: 0.9 });
+const BOLT_MAT = new THREE.LineBasicMaterial({ color: 0xFF_E0_8A, transparent: true, opacity: 0.9 });
 
 // Bot tracer + claim-resolution family: resolveShot decides hit or miss,
 // then these resolve the claim against the right target kind (local

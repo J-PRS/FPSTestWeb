@@ -169,7 +169,7 @@ describe('playback audit — every lane animates', () => {
 
   it('flag spawn exists; carried flag re-pins to the replayed carrier', () => {
     const rig = makePlaybackRig();
-    const flagId = FLAG_DEMO_ID_BASE | 0;
+    const flagId = Math.trunc(FLAG_DEMO_ID_BASE);
     applyPlaybackEvents(rig.world, { projectiles: [], targets: [mkTarget({
       targetId: flagId, targetType: TARGETTYPE_FLAG, health: 1,
       peakPosX: 3 + 1, hasPeakPosition: true, // carrier roster idx 3
@@ -229,7 +229,7 @@ describe.skipIf(!existsSync(CLIP))('remote replica interpolation', () => {
     const demo: DemoFile = deserializeDemo(readFileSync(CLIP).buffer);
     const player = new DemoPlayer();
     player.load(demo);
-    player.currentTime = 1.0;
+    player.currentTime = 1;
     const s0 = player.getRemoteStates();
     player.currentTime = 1.5;
     const s1 = player.getRemoteStates();
@@ -376,7 +376,7 @@ describe('playback audit — corpse lifecycle', () => {
  *  would see. */
 function scrubDemo(demo: DemoFile) {
   const rig = makePlaybackRig();
-  const world = rig.world;
+  const {world} = rig;
   const trace = {
     ballBirths: new Map<number, THREE.Vector3>(),
     creatureBirths: new Map<number, THREE.Vector3>(),
@@ -432,7 +432,7 @@ describe.skipIf(!existsSync(CLIP))('recorded clip audit', () => {
 
   it('every spawned ball animates or rests on ground — none hover midair', () => {
     const rig = makePlaybackRig();
-    const world = rig.world;
+    const {world} = rig;
     const birthPos = new Map<number, THREE.Vector3>();
     const spawnT = new Map<number, number>();
     let pi = 0, ti = 0;

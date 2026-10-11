@@ -8,7 +8,7 @@ import type { HUD } from '../hud.js';
 
 const paintFlagChip = (el: HTMLElement, st?: string) => {
   el.style.display = st ? '' : 'none';
-  if (!st) return;
+  if (!st) {return;}
   el.textContent = st === 'home' ? '⚑' : st === 'carried' ? '⚑ TAKEN' : '⚑ LOOSE';
   el.classList.toggle('taken', st !== 'home');
 };
@@ -17,13 +17,13 @@ export function feedKill(h: HUD, shooter: string, target: string, localIsShooter
     const { shooter: sTeam, target: tTeam, weapon, air, sName, tName } = meta ?? {};
     const row = document.createElement('div');
     row.className = 'kf-row';
-    if (localIsShooter) row.classList.add('me');
+    if (localIsShooter) {row.classList.add('me');}
     // Self-inflicted kill (own splash): "X cratered" — "X ▸ X" reads as a
     // normal frag in the feed.
     const suicide = shooter === target;
     const s = document.createElement('span');
     // Team tint like the TAB board — alpha/bravo first letter keys the class.
-    s.className = 'kf-s' + (sTeam ? ` tm-${sTeam[0]}` : '');
+    s.className = `kf-s${  sTeam ? ` tm-${sTeam[0]}` : ''}`;
     s.textContent = shooter === 'environment' ? '☠' : (sName ?? botDisplayName(shooter));
     const w = document.createElement('span');
     w.className = 'kf-w';
@@ -35,11 +35,11 @@ export function feedKill(h: HUD, shooter: string, target: string, localIsShooter
     const airTag = air !== undefined && air >= 0.1 ? ` [${air.toFixed(1)}s]` : '';
     w.textContent = wName || airTag ? ` ${wName}${airTag} ` : '';
     const t = document.createElement('span');
-    t.className = 'kf-t' + (localIsTarget ? ' dead' : tTeam ? ` tm-${tTeam[0]}` : '');
+    t.className = `kf-t${  localIsTarget ? ' dead' : tTeam ? ` tm-${tTeam[0]}` : ''}`;
     t.textContent = suicide ? 'self' : (tName ?? botDisplayName(target));
     row.append(s, w, t);
     h.killFeed.append(row);
-    while (h.killFeed.childElementCount > 6) h.killFeed.firstElementChild!.remove();
+    while (h.killFeed.childElementCount > 6) {h.killFeed.firstElementChild!.remove();}
     // Hard expiry — a fading ghost row reads as a smear while the stack
     // snaps up through it; classic feeds just cut the row in one frame.
     setTimeout(() => row.remove(), 5200);
@@ -50,15 +50,15 @@ export function feedKill(h: HUD, shooter: string, target: string, localIsShooter
 export function setMatchStatus(h: HUD, msLeft: number | null, flags: { alpha?: string; bravo?: string }): void {
     const hasAny = msLeft !== null || flags.alpha || flags.bravo;
     h.matchStatus.style.display = hasAny ? 'flex' : 'none';
-    if (!hasAny) return;
+    if (!hasAny) {return;}
     let txt = '';
-    if (msLeft !== null) {
+    if (msLeft === null) {
+      h.matchClock.style.display = 'none';
+    } else {
       const s = Math.max(0, Math.floor(msLeft / 1000));
       txt = msLeft <= 0 ? 'OT' : `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
       h.matchClock.classList.toggle('late', msLeft < 60_000);
       h.matchClock.style.display = '';
-    } else {
-      h.matchClock.style.display = 'none';
     }
     if (txt !== h.lastClockTxt) { h.lastClockTxt = txt; h.matchClock.textContent = txt; }
     const key = `${flags.alpha ?? ''}|${flags.bravo ?? ''}`;
@@ -75,8 +75,8 @@ export function setDeathOverlay(h: HUD, on: boolean): void {
       d.id = 'death-overlay';
       const c = document.createElement('div');
       c.className = 'death-clock';
-      d.appendChild(c);
-      document.body.appendChild(d);
+      d.append(c);
+      document.body.append(d);
       h.deathOverlay = d;
       h.deathClock = c;
       h.diedAt = performance.now();
@@ -92,7 +92,7 @@ export function setDeathOverlay(h: HUD, on: boolean): void {
  *  A held corpse (L's die+spectate) doesn't count down: the server parks
  *  it until a dead-state press, so the line says so instead of lying. */
 export function updateDeathCountdown(h: HUD, respawnMs: number, held = false): void {
-    if (!h.deathClock) return;
+    if (!h.deathClock) {return;}
     const left = Math.max(0, respawnMs - (performance.now() - h.diedAt));
     const txt = held ? 'DEAD — CLICK TO RESPAWN'
       : left > 0 ? `RESPAWN IN ${(left / 1000).toFixed(1)}` : 'RESPAWNING';
@@ -109,7 +109,7 @@ export function setSpectatorHint(h: HUD, on: boolean): void {
       const d = document.createElement('div');
       d.id = 'spectate-hint';
       d.textContent = 'SPECTATING';
-      document.body.appendChild(d);
+      document.body.append(d);
       h.spectateHint = d;
     } else if (!on && h.spectateHint) {
       h.spectateHint.remove();

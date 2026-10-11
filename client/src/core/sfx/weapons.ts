@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import { audio } from '../audio.js';
 import { WeaponType } from '../../../../shared/weapons.js';
 import { ctx, play, osc, sample, layer, noise } from './util.js';
@@ -9,18 +9,18 @@ import { ctx, play, osc, sample, layer, noise } from './util.js';
 export function shoot(weaponType: number): void {
   const bus = audio.sfxBus;
   const c = ctx();
-  if (!bus || !c) return;
+  if (!bus || !c) {return;}
   const g = c.createGain(); g.connect(bus);
-  if (!play(g, 0.3, undefined, 1)) return;
+  if (!play(g, 0.3, undefined, 1)) {return;}
   shootInto(g, weaponType);
 }
 
 /** Remote player's shot — same signature, distance-attenuated + panned. */
 export function shotAt(pos: THREE.Vector3, weaponType: number, emitVel?: THREE.Vector3): void {
   const c = ctx();
-  if (!c) return;
+  if (!c) {return;}
   const inNode = audio.worldInput(pos, emitVel);
-  if (!inNode) return;
+  if (!inNode) {return;}
   const g = c.createGain(); g.connect(inNode);
   try {
     if (!play(g, 0.3, inNode)) { audio.freeInput(inNode); return; }
@@ -65,7 +65,7 @@ const SHOT_LAYERS: Partial<Record<number, [name: string, gain: number, rate?: nu
   // Rocket launcher: launch is THUMP + whoosh — the motor kicking off,
   // not a powder crack. Delayed hiss = the burn travelling away.
   [WeaponType.RocketLauncher]: [
-    ['thud_big', 0.7, 1.0, 900, 0.14],
+    ['thud_big', 0.7, 1, 900, 0.14],
     ['punch', 0.5, 0.8, undefined, 0.08],
     ['hg_tick', 0.4, 0.5, 2000, 0.3, 0.06], // motor hiss, slightly delayed
   ],
@@ -74,7 +74,7 @@ const SHOT_LAYERS: Partial<Record<number, [name: string, gain: number, rate?: nu
   // be confused blind, and a delayed low explosion_small rolls behind
   // it as the echo off the hills. Bore ring tail stays — the identity.
   [WeaponType.Cannon]: [
-    ['shot_cannon', 1.0, 0.32, 300, 0.5],
+    ['shot_cannon', 1, 0.32, 300, 0.5],
     ['thud_big', 0.9, 0.45, 320, 0.4],
     ['explosion_small', 0.35, 0.55, 1400, 0.3, 0.1], // rolling far echo
     ['punch', 0.4, 0.8, 1200, 0.12],
@@ -83,7 +83,7 @@ const SHOT_LAYERS: Partial<Record<number, [name: string, gain: number, rate?: nu
   // Bombard: the same naval gun a full octave down — a slower, deeper
   // chest hit with a long clang tail. Slower cadence lets the ring ride.
   [WeaponType.Bombard]: [
-    ['shot_cannon', 1.0, 0.26, 280, 0.6],
+    ['shot_cannon', 1, 0.26, 280, 0.6],
     ['thud_big', 0.95, 0.55, 350, 0.4],
     ['punch', 0.5, 0.7, 1200, 0.2],
     ['hg_clang', 0.4, 0.6, undefined, 0.4, 0.08],
@@ -93,7 +93,7 @@ const SHOT_LAYERS: Partial<Record<number, [name: string, gain: number, rate?: nu
   [WeaponType.Pistol]: [
     ['shot_chaingun', 0.8, 1.3, undefined, 0.06],
     ['hg_tick', 0.4, 1.8, 3000, 0.05],
-    ['punch', 0.3, 1.0, 1200, 0.05],
+    ['punch', 0.3, 1, 1200, 0.05],
   ],
   [WeaponType.Revolver]: [
     ['shot_cannon', 0.85, 1.1, 900, 0.16],
@@ -132,7 +132,7 @@ const SHOT_LAYERS: Partial<Record<number, [name: string, gain: number, rate?: nu
   // Proxy grenade: a sensor ball leaving the hand — short whoosh + the
   // arming beep that tells you the bubble is live.
   [WeaponType.ProxyGrenade]: [
-    ['dash2', 0.45, 1.0],
+    ['dash2', 0.45, 1],
     ['hg_tick', 0.45, 1.7, 2200, 0.08],
   ],
   // Chaingun @ ~11/s: voice is the authentic T2 fire crack (bright
@@ -142,7 +142,7 @@ const SHOT_LAYERS: Partial<Record<number, [name: string, gain: number, rate?: nu
   // old stacked sub-thumps that read as a fart. Cut stays tight so
   // every trigger is one crack.
   [WeaponType.Chaingun]: [
-    ['shot_chaingun', 0.9, 1.0, undefined, 0.075],
+    ['shot_chaingun', 0.9, 1, undefined, 0.075],
     ['punch', 0.7, 0.55, 550, 0.09],
     // Faint bolt tick for mechanical detail — quiet enough to read as
     // texture under sustained fire, not a second transient.
@@ -153,7 +153,7 @@ const SHOT_LAYERS: Partial<Record<number, [name: string, gain: number, rate?: nu
 const SHOT_SAMPLES: Partial<Record<number, [string, number, number?]>> = {
   [WeaponType.BoltLauncher]:          ['shot_rocket', 0.9],
   [WeaponType.Chaingun]:        ['shot_chaingun', 0.8],
-  [WeaponType.Mortar]:          ['shot_cannon', 1.0],
+  [WeaponType.Mortar]:          ['shot_cannon', 1],
   // MRV volley — same tube bark as the GL but heavier: one trigger
   // serves the whole burst, so it needs cannon weight, not pump snap.
   [WeaponType.MRVLauncher]:     ['shot_cannon', 0.9, 0.75],
@@ -167,8 +167,8 @@ const SHOT_SAMPLES: Partial<Record<number, [string, number, number?]>> = {
   [WeaponType.PlasmaGun]:       ['shot_plasma', 0.4, 1.6],
   // Sprinkler — plasma sample pitched higher and quieter still; at ~9/s
   // anything fatter drones into a hum.
-  [WeaponType.Sprinkler]:       ['shot_plasma', 0.32, 2.0],
-  [WeaponType.Railgun]:         ['shot_energy', 1.0],
+  [WeaponType.Sprinkler]:       ['shot_plasma', 0.32, 2],
+  [WeaponType.Railgun]:         ['shot_energy', 1],
 };
 
 function shootInto(g: GainNode, weaponType: number): void {
@@ -178,11 +178,11 @@ function shootInto(g: GainNode, weaponType: number): void {
   // ring tails — verified punchy in the spectrogram (sharp attack, decayed
   // by ~0.4s, no sustained band). A thrown disc IS a disc launch.
   if ((weaponType === WeaponType.Disc || weaponType === WeaponType.DiscPull) &&
-      layer(g, [['shot_cannon', 1.0, 0.5, 600, 0.6], ['thud_big', 0.9, 0.7], ['slam_thud', 0.85, 0.7, 500, 0.25], ['punch', 0.5, 1.1, 2000, 0.2], ['hg_clang', 0.35, 1.8, undefined, 0.12]])) return;
+      layer(g, [['shot_cannon', 1, 0.5, 600, 0.6], ['thud_big', 0.9, 0.7], ['slam_thud', 0.85, 0.7, 500, 0.25], ['punch', 0.5, 1.1, 2000, 0.2], ['hg_clang', 0.35, 1.8, undefined, 0.12]])) {return;}
   // Melee swing: whoosh (pitched-up dash) + fist crack + low thud body.
   // The connect 'impact' plays separately in combat on an actual hit.
   if (weaponType === WeaponType.Melee &&
-      layer(g, [['dash2', 0.7, 1.35], ['punch', 0.9, 1.15], ['slam_thud', 0.5, 0.9]])) return;
+      layer(g, [['dash2', 0.7, 1.35], ['punch', 0.9, 1.15], ['slam_thud', 0.5, 0.9]])) {return;}
   const layered = SHOT_LAYERS[weaponType];
   // Chaingun gets the widest jitter — at 11 shots/s it's the recipe where
   // the identical-waveform buzz is most audible; ±15% pitch + gain spread
@@ -192,9 +192,9 @@ function shootInto(g: GainNode, weaponType: number): void {
   const layerJitter = weaponType === WeaponType.Chaingun ? 0.3
     : weaponType === WeaponType.BoltLauncher ? 0.29
     : 0.1;
-  if (layered && layer(g, layered, layerJitter)) return;
+  if (layered && layer(g, layered, layerJitter)) {return;}
   const s = SHOT_SAMPLES[weaponType];
-  if (s && sample(s[0], g, s[1], s[2])) return;
+  if (s && sample(s[0], g, s[1], s[2])) {return;}
   (SYNTH_SHOTS[weaponType] ?? synthDefault)(g);
 }
 

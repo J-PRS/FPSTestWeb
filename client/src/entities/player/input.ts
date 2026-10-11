@@ -322,7 +322,7 @@ export class PlayerInput {
 
     const debugBtn = document.querySelector('#debug-toggle') as HTMLButtonElement | null;
     if (debugBtn) {
-      const label = () => { debugBtn.classList.toggle('on', !!settings.get('fps-debug')); };
+      const label = () => { debugBtn.classList.toggle('on', Boolean(settings.get('fps-debug'))); };
       label();
       debugBtn.addEventListener('click', () => {
         settings.set('fps-debug', settings.get('fps-debug') ? 0 : 1);
@@ -335,7 +335,7 @@ export class PlayerInput {
     // Read live per message — no reload needed.
     const ttsBtn = document.querySelector('#tts-chat-toggle') as HTMLButtonElement | null;
     if (ttsBtn) {
-      const label = () => { ttsBtn.classList.toggle('on', !!settings.get('fps-tts-chat')); };
+      const label = () => { ttsBtn.classList.toggle('on', Boolean(settings.get('fps-tts-chat'))); };
       label();
       ttsBtn.addEventListener('click', () => {
         settings.set('fps-tts-chat', !settings.get('fps-tts-chat'));

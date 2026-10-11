@@ -282,7 +282,7 @@ function meleeSwingFx(deps: CombatDeps, e: FireArgs, fxPos: THREE.Vector3, groun
   deps.lazyViewModel()?.punch(landed); // landed = apex hold — the hit-pose dwell
   deps.world.explosions.push(new Explosion(
     deps.lazyScene(), fxPos, true, 0, deps.lazyTerrain(),
-    (stats.aoeRadius * 0.7) / EXPLOSION_VFX_RADIUS, 0xAADDFF, 'punch',
+    (stats.aoeRadius * 0.7) / EXPLOSION_VFX_RADIUS, 0xAA_DD_FF, 'punch',
   ));
   screenShake.blast(fxPos, stats.aoeRadius, player.pos);
   if (groundHit) {
@@ -298,7 +298,7 @@ function meleeSwingFx(deps: CombatDeps, e: FireArgs, fxPos: THREE.Vector3, groun
     sfx.at(groundHit, 'slam_thud', 0.9);
     screenShake.add(0.28);
   }
-  deps.lazySpeedLines?.().surge(player.pos, fxPos, 0xAADDFF, 8);
+  deps.lazySpeedLines?.().surge(player.pos, fxPos, 0xAA_DD_FF, 8);
   // The slash arc — the actual "swing" read. Hit or whiff, every punch
   // sweeps an X of billboarded streaks across the view (~0.16s); without
   // it a mid-air swing was just a faint puff. Pinned to the camera so it

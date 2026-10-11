@@ -97,7 +97,7 @@ export class PlayerAnim {
     // dropped whole rather than interpolated into the corruption.
     clip.tracks = clip.tracks.filter(t => {
       const cap = t.name.endsWith('.quaternion') ? 2 : t.name.endsWith('.scale') ? 1e3 : 1e4;
-      for (const v of t.values) {if (!Number.isFinite(v) || Math.abs(v) > cap) return false;}
+      for (const v of t.values) {if (!Number.isFinite(v) || Math.abs(v) > cap) {return false;}}
       return true;
     });
     // A clip the filter gutted whole still registers — a zero-track
@@ -130,7 +130,7 @@ export class PlayerAnim {
     }
     const action = this.mixer!.clipAction(clip);
     this.animations.set(clip.name, action);
-    if (mann) {this.animations.set('UAL_' + clip.name, action);}
+    if (mann) {this.animations.set(`UAL_${  clip.name}`, action);}
   }
 
   /** Authored clips can bake a facing turn into the hip track — the
@@ -141,7 +141,7 @@ export class PlayerAnim {
    *  and unwind outliers (>~30°) back onto it in the node's parent
    *  frame. */
   alignHipYaw(): void {
-    const model = this.host.model;
+    const {model} = this.host;
     if (!model) {return;}
     const fwd = new THREE.Vector3();
     const q = new THREE.Quaternion();
@@ -186,7 +186,7 @@ export class PlayerAnim {
           buckets.set(k, b);
         }
         let best = { sum: 0, n: 0 };
-        for (const b of buckets.values()) {if (b.n > best.n) best = b;}
+        for (const b of buckets.values()) {if (b.n > best.n) {best = b;}}
         return best.n ? best.sum / best.n : null;
       };
       const natives = collect(n => !n.startsWith('UAL_'));
@@ -396,7 +396,7 @@ export class PlayerAnim {
    * rest pose, so the results are identical).
    */
   retargetUAL(): void {
-    const model = this.host.model;
+    const {model} = this.host;
     if (!model) {return;}
     const adopt = (baked: Map<string, THREE.AnimationClip>) => {
       if (this.host.disposed || !this.mixer || !this.host.model) {return;}
@@ -427,7 +427,7 @@ export class PlayerAnim {
     };
     const runtimeBake = () =>
       bakeUALClips(model, this.host.variant).then(adopt)
-        .catch((error) => { logger.warn('UAL bake failed for ' + this.host.variant, error); });
+        .catch((error) => { logger.warn(`UAL bake failed for ${  this.host.variant}`, error); });
     // The offline bake (public/assets/anims/<variant>.glb) ships the
     // whole retarget so load never flashes bind pose or burns a
     // resample; missing file → dev rigs still runtime-bake.

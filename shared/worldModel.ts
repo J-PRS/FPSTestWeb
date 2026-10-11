@@ -458,7 +458,7 @@ function emitFields(
   for (const f of fields ?? []) {
     // The id field is declared for documentation but already written —
     // skip it or a vals-less emit would overwrite the id with null.
-    if (f.name === idField) continue;
+    if (f.name === idField) {continue;}
     if (!(f.name in vals)) {
       if (f.absent === undefined) {
         warnOnce(`${kind.kind}.${label}:${f.name}`, `[worldModel] ${kind.kind}.${label} emit missing declared field '${f.name}'`);
@@ -493,7 +493,7 @@ export function rowPatch(fields: KindFieldDecl[], row: Record<string, unknown>):
   const patch: Record<string, unknown> = {};
   for (const f of fields) {
     const v = row[f.name];
-    if (v === undefined || v === null || v === '') continue;
+    if (v === undefined || v === null || v === '') {continue;}
     patch[f.name] = v;
   }
   return patch;
@@ -569,25 +569,25 @@ export function checkPacket(
     // A roster feed may carry several kinds (gameState ships them all) —
     // sweep every declared container present, not just the caller's.
     for (const k of Object.values(WORLD_MODEL)) {
-      if (!k.rosterFields || k === kind) continue;
+      if (!k.rosterFields || k === kind) {continue;}
       const extra = msg[ROSTER_ROWS[k.kind]!];
       if (Array.isArray(extra)) {
-        for (const r of extra) checkFields(k.rosterFields, r as Record<string, unknown>, `${k.kind} `);
+        for (const r of extra) {checkFields(k.rosterFields, r as Record<string, unknown>, `${k.kind} `);}
       }
     }
     const rows = ROSTER_ROWS[kind.kind] ? msg[ROSTER_ROWS[kind.kind]!] : undefined;
-    if (Array.isArray(rows)) { for (const r of rows) check(r as Record<string, unknown>); }
+    if (Array.isArray(rows)) { for (const r of rows) {check(r as Record<string, unknown>);} }
     // The envelope's own fields — the roster containers get row-checked
     // above; this verifies the message-level payload (players[],
     // protocolVersion, map, scores, ...) carries its declared shape.
-    if (kind.envelope) checkFields(kind.envelope, msg, 'env:');
+    if (kind.envelope) {checkFields(kind.envelope, msg, 'env:');}
     return;
   }
   // Update envelopes (tickUpdate's ack/count keys) wrap the row list —
   // checked before the row branch since updates[] returns early.
-  if (verb === 'update' && kind.updateEnvelope) checkFields(kind.updateEnvelope, msg, 'env:');
+  if (verb === 'update' && kind.updateEnvelope) {checkFields(kind.updateEnvelope, msg, 'env:');}
   const rows = msg.updates ?? msg.balls ?? msg.crawlers ?? msg.flags ?? msg.players;
-  if (Array.isArray(rows)) { for (const r of rows) check(r as Record<string, unknown>); return; }
+  if (Array.isArray(rows)) { for (const r of rows) {check(r as Record<string, unknown>);} return; }
   check(msg);
 }
 
@@ -640,11 +640,16 @@ const WARN_ONCE_MS = 5000;
  *  field that arrives as the wrong kind of value. */
 function wireOk(wire: KindFieldDecl['wire'], v: unknown): boolean {
   switch (wire) {
-    case 'num': return typeof v === 'number' && Number.isFinite(v);
-    case 'str': return typeof v === 'string';
-    case 'bool': return typeof v === 'boolean';
-    case 'arr': return Array.isArray(v);
-    case 'obj': return typeof v === 'object' && v !== null;
+    case 'num': { return typeof v === 'number' && Number.isFinite(v);
+    }
+    case 'str': { return typeof v === 'string';
+    }
+    case 'bool': { return typeof v === 'boolean';
+    }
+    case 'arr': { return Array.isArray(v);
+    }
+    case 'obj': { return typeof v === 'object' && v !== null;
+    }
     case 'vec3': {
       const o = v as { x?: unknown; y?: unknown; z?: unknown } | null;
       return typeof o === 'object' && o !== null &&
@@ -662,7 +667,7 @@ const warnOnceSeen = new Map<string, number>();
 function warnOnce(key: string, text: string): void {
   const now = sharedNow();
   const last = warnOnceSeen.get(key);
-  if (last !== undefined && now - last < WARN_ONCE_MS) return;
+  if (last !== undefined && now - last < WARN_ONCE_MS) {return;}
   warnOnceSeen.set(key, now);
   console.warn(text);
 }
@@ -672,7 +677,7 @@ function warnOnce(key: string, text: string): void {
  *  stay unchecked (e.g. a union member added before its intent lands). */
 export function checkIntent(type: string, msg: Record<string, unknown>): void {
   const fields = CLIENT_INTENTS[type];
-  if (!fields) return;
+  if (!fields) {return;}
   for (const f of fields) {
     if (f.name in msg && f.wire && msg[f.name] != null && !wireOk(f.wire, msg[f.name])) {
       warnOnce(`${type}:${f.name}!t`, `[worldModel] inbound intent ${type} field '${f.name}' wrong type (want ${f.wire})`);
@@ -688,7 +693,7 @@ export function checkIntent(type: string, msg: Record<string, unknown>): void {
 const VERB_INDEX = new Map<string, { kind: WorldKindDecl; verb: string }>();
 for (const k of Object.values(WORLD_MODEL)) {
   for (const v of ['spawn', 'update', 'gone', 'roster'] as const) {
-    if (k.verbs[v]) VERB_INDEX.set(k.verbs[v]!, { kind: k, verb: v });
+    if (k.verbs[v]) {VERB_INDEX.set(k.verbs[v]!, { kind: k, verb: v });}
   }
   // Event notifies index under their own wire type, not a verb slot.
   for (const t of Object.keys(k.events ?? {})) {
@@ -717,7 +722,7 @@ export function declaredFieldNames(
   const out: string[] = [];
   for (const s of slots) {
     for (const f of kind[s] ?? []) {
-      if (!out.includes(f.name)) out.push(f.name);
+      if (!out.includes(f.name)) {out.push(f.name);}
     }
   }
   return out;
@@ -748,7 +753,7 @@ export function kindFieldDiffs(
 ): { diffs: string[]; keys: Set<string> } {
   const diffs: string[] = [];
   const keys = new Set<string>();
-  if (!serverFields) return { diffs, keys };
+  if (!serverFields) {return { diffs, keys };}
   const seen = new Set<number>();
   for (const row of serverFields) {
     const id = row[0] as number;

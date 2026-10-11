@@ -20,7 +20,7 @@ export interface Vec3Like {
 }
 
 export function aoeFalloff(dist: number, radius: number): number {
-  if (radius <= 0 || dist >= radius) return 0;
+  if (radius <= 0 || dist >= radius) {return 0;}
   return 1 - dist / radius;
 }
 
@@ -30,10 +30,10 @@ export function aoeFalloff(dist: number, radius: number): number {
  *  linear aoeFalloff so push feel is unchanged. */
 export const AOE_BAND_SCALES = [0.75, 0.5, 0.25] as const;
 /** Global splash dial — every band scales by this. 1.0 for now. */
-export const AOE_DAMAGE_MULT = 1.0;
+export const AOE_DAMAGE_MULT = 1;
 
 export function aoeBandScale(dist: number, radius: number, scales: readonly number[] = AOE_BAND_SCALES): number {
-  if (radius <= 0 || dist >= radius) return 0;
+  if (radius <= 0 || dist >= radius) {return 0;}
   return scales[Math.min(scales.length - 1, Math.floor((dist / radius) * scales.length))]! * AOE_DAMAGE_MULT;
 }
 
@@ -49,7 +49,7 @@ export function aoeDamage(amount: number, dist: number, radius: number, scales?:
  *  aoeImpulse, so the falloff math stays pure/testable. 3.0 sent rocket
  *  jumps into orbit (and Slam stacked power on top → ~300 m/s launches);
  *  pulled back to 1.0 — keep the constant as the single tuning point. */
-export const KNOCKBACK_SCALE = 1.0;
+export const KNOCKBACK_SCALE = 1;
 
 /** Ceiling on a single blast's impulse magnitude — blasts scale their
  *  shove down rather than being truncated, so no point-blank pop can
@@ -75,9 +75,9 @@ export function aoeImpulse(force: number, dist: number, radius: number): number 
  *  dimension (2·capsule radius: light 1.0 = T1's own). Reach extends to
  *  surface distance = radius — i.e. ~minbox past the center-distance rim. */
 export function aoeImpulseT1(force: number, dist: number, radius: number, minbox: number): number {
-  if (radius <= 0) return 0;
+  if (radius <= 0) {return 0;}
   const d = Math.max(dist - minbox, 1);
-  if (d > radius) return 0;
+  if (d > radius) {return 0;}
   // The raw curve overshoots ~2× at the hitbox rim (its quirk is a
   // position-dependent *shape*, not a global boost) — normalize by the
   // peak power so `force` still means "max impulse", then return raw
@@ -202,9 +202,9 @@ export function pointToCapsuleDistance(point: Vec3Like, eyePos: Vec3Like, cls?: 
 // interpolation lag, tick quantization, and velocity inheritance. They are
 // anti-cheat tolerances, not correctness bounds: tight enough to reject a
 // forged kill across the map, loose enough to never reject an honest hit.
-const TARGET_SLACK = 3.0;
+const TARGET_SLACK = 3;
 const AIRTIME_SLACK_S = 0.5;
-const REACH_MARGIN_M = 15.0;
+const REACH_MARGIN_M = 15;
 const INHERITANCE_MARGIN = 0.6; // max |shooterVel| fraction a projectile can inherit
 
 // Shared legality core: claimed airtime and the point where the flight ended
@@ -310,7 +310,7 @@ function arcBlockedAt(
       // lands its final segment on that face — that is the impact the
       // claim describes, not a wall flown through. Only a face hit
       // BEFORE the last step means the arc can't honestly reach the end.
-      if (i < steps && segSolidHit({ x: px, y: py, z: pz }, { x: nx, y: ny, z: nz }, solids, undefined, passTeam)) return t;
+      if (i < steps && segSolidHit({ x: px, y: py, z: pz }, { x: nx, y: ny, z: nz }, solids, undefined, passTeam)) {return t;}
     }
     px = nx; py = ny; pz = nz;
   }
@@ -334,7 +334,7 @@ export function validateHitClaim(args: {
 }): HitClaimVerdict {
   const { projectile, hitPos, targetPos, shooterVel, now, airtime } = args;
   const flight = checkFlightLegality({ projectile, endPos: hitPos, airtime, shooterVel, now, solids: args.solids, shooterTeam: args.shooterTeam });
-  if (!flight.ok) return flight;
+  if (!flight.ok) {return flight;}
 
   // Target proximity: hitPos must be within the legal hit radius at that
   // airtime (core body + grown wake) of the target's capsule.

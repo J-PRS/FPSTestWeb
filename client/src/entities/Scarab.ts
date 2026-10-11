@@ -7,7 +7,7 @@ import {
   SCARAB_AGGRO_DIST, SCARAB_BITE_DIST, SCARAB_BITE_CD, SCARAB_STUN,
   EMERGE_DUR, MELEE_FAVOR,
 } from '../core/config.js';
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots } from './swarms.js';
@@ -28,10 +28,10 @@ let _bodyGeo: THREE.BufferGeometry | null = null;
 function bodyGeo(): THREE.BufferGeometry {
   if (!_bodyGeo) {
     const shell = new THREE.IcosahedronGeometry(1, 0);
-    shell.scale(0.8, 0.55, 1.0); // hard dome — the beetle silhouette
+    shell.scale(0.8, 0.55, 1); // hard dome — the beetle silhouette
     shell.translate(0, 0.25, -0.1);
     const head = new THREE.IcosahedronGeometry(0.35, 0);
-    head.scale(1.0, 0.6, 0.8);
+    head.scale(1, 0.6, 0.8);
     head.translate(0, 0.12, 0.85);
     _bodyGeo = mergeGeometries([shell, head])!;
   }
@@ -56,13 +56,13 @@ let _eyeGeo: THREE.PlaneGeometry | undefined;
 
 /** Swarm part table — registered once in swarms.initSwarms. */
 export function scarabParts(): SwarmPart[] {
-  if (!_bodyMat) _bodyMat = new THREE.MeshLambertMaterial({
-    color: 0xffffff, flatShading: true,
-  });
-  if (!_eyeMat) _eyeMat = new THREE.MeshBasicMaterial({
-    map: getGlowTexture(), color: 0xffcc44, transparent: true, blending: THREE.AdditiveBlending,
+  if (!_bodyMat) {_bodyMat = new THREE.MeshLambertMaterial({
+    color: 0xFF_FF_FF, flatShading: true,
+  });}
+  if (!_eyeMat) {_eyeMat = new THREE.MeshBasicMaterial({
+    map: getGlowTexture(), color: 0xFF_CC_44, transparent: true, blending: THREE.AdditiveBlending,
     depthWrite: false, side: THREE.DoubleSide,
-  });
+  });}
   return [
     { geometry: bodyGeo(), material: _bodyMat, castShadow: true },
     { geometry: legGeo(), material: _bodyMat, per: LEGS_PER },
@@ -86,10 +86,10 @@ export class Scarab implements Targetable, SwarmSlotOwner {
   health: number;
   maxHealth: number;
   radius: number;
-  color = new THREE.Color(0x4a3524); // dark chitin
+  color = new THREE.Color(0x4A_35_24); // dark chitin
   readonly debrisKind = 'goo' as const;
   readonly dieCue = 'splat' as const;
-  readonly ichor = 0x3fc9b0; // teal hemolymph under the dark shell
+  readonly ichor = 0x3F_C9_B0; // teal hemolymph under the dark shell
   scale: number;
   // Uber = "dreadbeetle": telegraphed charge dash — a straight-line ram
   // that reads as a bull rush, not the zigzag skitter.
@@ -120,7 +120,7 @@ export class Scarab implements Targetable, SwarmSlotOwner {
   bindNet(b: NetBindArgs): void {
     this.netDriven = true;
     this.netId = b.id;
-    this.id = 0x50000000 + b.id;
+    this.id = 0x50_00_00_00 + b.id;
     bindNetSim(this, makeSimCrawler, b);
   }
 
@@ -148,19 +148,19 @@ export class Scarab implements Targetable, SwarmSlotOwner {
     this.scale = uber ? 1.1 : 0.45;
     this.biteDamage = uber ? 12 : 0; // entities reads these — normal uses the shared consts
     this.biteForce = uber ? 14 : 0;
-    if (uber) this.color.set(0x6a4a20); // bronze shell — reads "the big one"
+    if (uber) {this.color.set(0x6A_4A_20);} // bronze shell — reads "the big one"
     this.pos = pos.clone();
     this.pos.y = terrain.getHeight(pos.x, pos.z) + this.radius;
     this.vel = new THREE.Vector3();
     this.hasSlots = allocSlots('scarab', this);
-    if (!this.hasSlots) this.dead = true;
+    if (!this.hasSlots) {this.dead = true;}
   }
 
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
-    if (this.dead) return;
+    if (this.dead) {return;}
     if (this.netDriven && this.sim) {
       updateNetSim(this, dt, terrain, stepCrawler, { grounded: true });
-      if (this.flash > 0) this.flash -= dt;
+      if (this.flash > 0) {this.flash -= dt;}
       this.animT += dt;
       return;
     }
@@ -186,7 +186,7 @@ export class Scarab implements Targetable, SwarmSlotOwner {
     const onGround = this.pos.y - this.radius <= gy;
     if (onGround) {
       this.pos.y = gy + this.radius;
-      if (this.airborne) this.onLanded?.(this.pos);
+      if (this.airborne) {this.onLanded?.(this.pos);}
       this.airborne = false;
       this.vel.y = 0;
       this.steer(dt, dx, dz, distSq);
@@ -199,7 +199,7 @@ export class Scarab implements Targetable, SwarmSlotOwner {
       this.airborne = true;
     }
 
-    if (this.vel.lengthSq() > 1) this.yaw = Math.atan2(this.vel.x, this.vel.z);
+    if (this.vel.lengthSq() > 1) {this.yaw = Math.atan2(this.vel.x, this.vel.z);}
     this.writeInstances(terrain);
   }
 
@@ -213,10 +213,10 @@ export class Scarab implements Targetable, SwarmSlotOwner {
   // Ground locomotion: uber dash (a straight, fast, un-zigzagged RAM —
   // the dash IS the tell), normal beeline+zigzag, or idle scuttle.
   private steer(dt: number, dx: number, dz: number, distSq: number): void {
-    if (this.stunTimer > 0) return;
+    if (this.stunTimer > 0) {return;}
     if (this.uber) {
       this.dashCd -= dt;
-      if (this.dashT > 0) this.dashT -= dt;
+      if (this.dashT > 0) {this.dashT -= dt;}
       else if (this.dashCd <= 0 && distSq < 45 * 45) {
         this.dashT = 0.45;
         this.dashCd = 3.5 + Math.random() * 1.5;

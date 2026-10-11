@@ -11,7 +11,7 @@ import { clipMotion, type CrawlerEvent, type SimCrawler } from './creatureCore.j
 import { SPECIES, speciesFamily, type SpeciesRow } from './species.js';
 
 export const ROLLER_SIM = {
-  ACCEL: 9.0,
+  ACCEL: 9,
   TOPSPEED: 8.5,
   AGGRO_D2: 90 * 90,   // beyond this it idles (drifts at 20% speed)
   HIT_R: 2.4,          // contact-bite reach around its center
@@ -92,7 +92,7 @@ export function stepRoller(
     c.vx += (dx / d) * g * dt;
     c.vz += (dz / d) * g * dt;
   }
-  if (hSpeed > 0.5) c.yaw = Math.atan2(c.vx, c.vz);
+  if (hSpeed > 0.5) {c.yaw = Math.atan2(c.vx, c.vz);}
 
   return rollContact(c, target, authoritative);
 }
@@ -119,7 +119,7 @@ function rollContact(c: SimRoller, target: SimVec | null, authoritative: boolean
     const d3 = (target.x - c.x) ** 2 + (target.y - c.y) ** 2 + (target.z - c.z) ** 2;
     if (d3 < c.sp.HIT_R * c.sp.HIT_R) {
       c.hitCd = c.sp.BITE_CD;
-      if (authoritative) c.pendingBite = true;
+      if (authoritative) {c.pendingBite = true;}
       return 'bite';
     }
   }

@@ -51,11 +51,11 @@ export class MatchClock {
    *  wall clock (mixing domains shifts the horn by the warp offset). */
   tick(now: number): void {
     const spec = this.host.modeSpec;
-    if (!spec) return;
+    if (!spec) {return;}
     // Intermission owns the tick: nothing else may re-arm or re-end
     // until the standings window has played out.
     if (this.intermissionAt) {
-      if (now >= this.intermissionAt) this.startNext();
+      if (now >= this.intermissionAt) {this.startNext();}
       return;
     }
     if (this.endsAt === 0) {
@@ -74,7 +74,7 @@ export class MatchClock {
       const w = this.leader();
       if (w !== null) { this.end(w); return; }
     }
-    if (now < this.endsAt) return;
+    if (now < this.endsAt) {return;}
     const w = this.leader();
     if (w === null) {
       if (this.overtime) { this.end('draw'); return; } // OT window spent
@@ -96,7 +96,7 @@ export class MatchClock {
     let top: string | null = null, topPts = -1, tied = false;
     for (const [id, pts] of this.host.ffaScores) {
       if (pts > topPts) { top = id; topPts = pts; tied = false; }
-      else if (pts === topPts) tied = true;
+      else if (pts === topPts) {tied = true;}
     }
     return top && !tied ? top : null;
   }
@@ -105,7 +105,7 @@ export class MatchClock {
    *  the normal reset funnel. No-op in rooms without a mode. */
   forceEnd(): boolean {
     const spec = this.host.modeSpec;
-    if (!spec) return false;
+    if (!spec) {return false;}
     let w = 'draw';
     if (spec.teams) {
       const s = this.host.scores;
@@ -126,11 +126,11 @@ export class MatchClock {
   end(w: string): void {
     // A second end during the standings window (admin force, late score
     // cap) must not re-fire the broadcast or restart the countdown.
-    if (this.intermissionAt) return;
+    if (this.intermissionAt) {return;}
     // Standings window is for the gg beat only — kills/contacts past the
     // horn shouldn't keep barking over the scoreboard.
     setMatchMuted(true);
-    const host = this.host;
+    const {host} = this;
     const spec = host.modeSpec!;
     const scores = spec.teams ? { ...host.scores } : Object.fromEntries(host.ffaScores);
     host.broadcast({ type: spec.teams ? 'matchEnd' : 'ffaMatchEnd', winner: w, scores } as ServerMessage);
@@ -144,7 +144,7 @@ export class MatchClock {
    *  the NEW map (applySpec re-points spawnPoints) rather than eating
    *  one old-map spawn before mapUpdate lands. */
   private startNext(): void {
-    const host = this.host;
+    const {host} = this;
     const spec = host.modeSpec!;
     this.intermissionAt = 0;
     setMatchMuted(false);
@@ -158,7 +158,7 @@ export class MatchClock {
     // their picked team; only bot assignments churn.
     host.reshuffleBots?.();
     const next = host.rotate();
-    if (next) host.applySpec(next);
+    if (next) {host.applySpec(next);}
     // Re-arm only with an audience: an empty room's clock should stay
     // unarmed (endsAt=0) so the next joiner gets a fresh match instead
     // of inheriting whatever an unwatched countdown burned down to.

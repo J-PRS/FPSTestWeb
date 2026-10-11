@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 import { ExplosionSparks } from './explosionSparks.js';
 import { ExplosionLayers } from './explosionLayers.js';
 
@@ -26,7 +26,7 @@ export class Explosion {
   // sizeScale normalizes blast size to weapon radius (rocket = 1.0):
   // a mortar's 14m blast shouldn't render like a 6m rocket.
   constructor(scene: THREE.Scene, pos: THREE.Vector3, directHit: boolean = false, age: number = 0, ...opts: [terrain?: Terrain, sizeScale?: number, tint?: string | number, vfx?: 'splash' | 'punch' | 'energy' | 'kinetic' | 'concussion' | 'arc' | 'bolt' | 'flak']) {
-    const [terrain, sizeScale = 1.0, tint, vfx] = opts;
+    const [terrain, sizeScale = 1, tint, vfx] = opts;
     // pos/scene must always bind — bot senses read .pos for blast
     // hearing even on a dead-at-birth shell.
     this.scene = scene;
@@ -41,7 +41,7 @@ export class Explosion {
     }
 
     // Scale factor based on projectile flight time: 50% at 0s, 100% at 1s (linear, clamped)
-    const timeScale = (directHit ? Math.min(0.5 + age * 0.5, 1.0) : 1.0) * sizeScale;
+    const timeScale = (directHit ? Math.min(0.5 + age * 0.5, 1) : 1) * sizeScale;
     // Multipliers for direct hit enhancement (base 1.8, scaled by time)
     const mult = (directHit ? 1.8 * timeScale : sizeScale);
 
@@ -54,7 +54,7 @@ export class Explosion {
   update(dt: number): void {
     this.elapsed += dt;
     const alive = (this.layers?.update(dt) ?? 0) + (this.sparks?.update(dt) ?? 0);
-    if (alive === 0) this.dead = true;
+    if (alive === 0) {this.dead = true;}
   }
 
   /** Distance-gated tick — far blasts skip the spark buffer writes
@@ -70,7 +70,7 @@ export class Explosion {
     // so one update ages them out and collapses the slices — bounded
     // cost either way.
     this.sparks?.update(dt);
-    if (this.elapsed > 6) this.dead = true;
+    if (this.elapsed > 6) {this.dead = true;}
   }
 
   dispose(): void {

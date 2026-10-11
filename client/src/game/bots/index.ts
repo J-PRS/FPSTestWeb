@@ -144,9 +144,9 @@ export class TeamBots {
       hurtLocal: (d, fp, src, m, att) => hurtLocal(this, d, fp, att, { src, melee: m }),
     });
     this.wd = new BotWatchdog(deps.logger, () => this.over !== null);
-    const ffa = this.spec.ffa;
+    const {ffa} = this.spec;
     this.teamOf.set('local', ffa ? 'local' : playerTeam);
-    if (ffa) this.ffaScores.set('local', 0);
+    if (ffa) {this.ffaScores.set('local', 0);}
     const player = deps.lazyPlayer();
     const terrain = deps.lazyTerrain();
     const scene = deps.lazyScene();
@@ -176,7 +176,7 @@ export class TeamBots {
         }
         // Debug hitbox tint matches the name-gizmo verdict — squadmates
         // green, everything else red (FFA pseudo-teams never match 'local').
-        bot.setColliderColor(bot.team === this.teamOf.get('local') ? 0x00ff00 : 0xff3333);
+        bot.setColliderColor(bot.team === this.teamOf.get('local') ? 0x00_FF_00 : 0xFF_33_33);
         this.bots.push(bot);
         this.teamOf.set(bot.playerId, bot.team);
         deps.world.remotePlayers.adopt(bot.playerId, bot);
@@ -239,7 +239,7 @@ export class TeamBots {
     // from. A bot's own position reads as dist 0 and is skipped inside.
     const others = this.othersScratch;
     others.length = 0;
-    for (const b of this.bots) if (!b.isDead) others.push(b.position);
+    for (const b of this.bots) {if (!b.isDead) {others.push(b.position);}}
     others.push(player.pos);
     const bodies = this.bodyScratch;
     // Pooled per index — length is only trimmed at the end, so entries
@@ -247,7 +247,7 @@ export class TeamBots {
     // literal plus classCapsule's fresh object per call).
     let bn = 0;
     for (const b of this.bots) {
-      if (b.isDead) continue;
+      if (b.isDead) {continue;}
       const cap = classCapsule(b.armorClass);
       const e = bodies[bn] ?? (bodies[bn] = {} as BodyCapsule);
       e.id = b.playerId; e.x = b.position.x; e.y = b.position.y; e.z = b.position.z;
@@ -306,7 +306,7 @@ export class TeamBots {
     // size (9 bots → windows fired ~9x too often, cover-dominated max-outs).
     this.sheep.advance(dt);
     let i = 0;
-    for (const bot of this.bots) this.tickBot(bot, dt, others, bodies, terrain, i++);
+    for (const bot of this.bots) {this.tickBot(bot, dt, others, bodies, terrain, i++);}
   }
 
   // Think rate: brains decide at ~10Hz (staggered per bot so thinks
@@ -327,7 +327,7 @@ export class TeamBots {
     bot.localTeam = this.teamOf.get('local');
     if (bot.isDead) {
       bot.respawnAt -= dt;
-      if (bot.respawnAt <= 0) this.respawnBot(bot);
+      if (bot.respawnAt <= 0) {this.respawnBot(bot);}
       return;
     }
     // Movement integrates every frame — the 10Hz think gate below is for
@@ -342,7 +342,7 @@ export class TeamBots {
     const acc = (this.thinkAccum.get(bot.playerId)
       ?? (rosterIdx * TeamBots.THINK_PERIOD) / Math.max(1, this.bots.length)) + dt;
     this.thinkAccum.set(bot.playerId, acc);
-    if (acc < TeamBots.THINK_PERIOD) return;
+    if (acc < TeamBots.THINK_PERIOD) {return;}
     this.thinkAccum.set(bot.playerId, 0);
     let foes = this.senses.enemyList(bot);
     // Rabbit: while a carrier exists, a plain hunter's only legal
@@ -360,31 +360,31 @@ export class TeamBots {
     const shot = bot.think(acc, this.ctxFor(bot, foes, others, terrain));
     // Standing down between rounds is correct play — metering it would
     // charge every bot a guaranteed ~150 idle points per match end.
-    if (this.over) return;
+    if (this.over) {return;}
     this.afterThink(bot, shot, acc, foes, terrain);
   }
 
   private afterThink(bot: GameBot, shot: ReturnType<GameBot['think']>, acc: number,
     foes: Parameters<GameBot['think']>[1]['enemies'], terrain: Terrain): void {
     this.speakEdge(bot);
-    if (shot) this.fire.resolveShot(bot, shot.targetId, shot.aim);
+    if (shot) {this.fire.resolveShot(bot, shot.targetId, shot.aim);}
     // Belt + propel are real-spawn actions — offline only, same gate
     // as resolveShot (a connected room's wire remotes can't attribute).
     const online = this.deps.lazyNetworkManager?.()?.isConnected() ?? false;
     if (!online) {
-      if (bot.wantBelt) this.fire.throwBelt(bot);
-      if (bot.wantDeploy) this.tryDeploy(bot);
+      if (bot.wantBelt) {this.fire.throwBelt(bot);}
+      if (bot.wantDeploy) {this.tryDeploy(bot);}
       if (bot.wantRepair) {
         // Welding — the heal rate mirrors a human trigger hold (~50hp/s
         // at think cadence). A welded item counts as productive work for
         // the meter: parked but not sheeping.
         const welded = this.hooks.botWeld?.(bot.wantRepair) ?? false;
-        if (welded) this.sheep.markShot(bot.playerId);
-        else bot.wantRepair = null; // died mid-walk — drop the intent
+        if (welded) {this.sheep.markShot(bot.playerId);}
+        else {bot.wantRepair = null;} // died mid-walk — drop the intent
       }
-      this.fire.tryPropel(bot, !!shot);
+      this.fire.tryPropel(bot, Boolean(shot));
     }
-    if (shot) this.sheep.markShot(bot.playerId);
+    if (shot) {this.sheep.markShot(bot.playerId);}
     this.sheepTick(bot, acc, foes, terrain);
   }
 
@@ -399,7 +399,7 @@ export class TeamBots {
   /** Situation chatter edge — same pools + throttle as the wire path,
    *  resolved locally since offline bots never touch the chat wire. */
   private speakEdge(bot: GameBot): void {
-    if (!bot.wantSay) return;
+    if (!bot.wantSay) {return;}
     const tgt = bot.wantSay.target;
     const c = chatter(bot.wantSay.kind, bot.playerId,
       tgt === 'local' ? 'YOU' : tgt?.replace('bot:', ''),
@@ -417,15 +417,15 @@ export class TeamBots {
   /** Offline-only action intents — belt throw, emplacement, weld, disc
    *  jump. A connected room's wire remotes can't attribute these. */
   private offlineActs(bot: GameBot, hasShot: boolean): void {
-    if (bot.wantBelt) this.fire.throwBelt(bot);
-    if (bot.wantDeploy) this.tryDeploy(bot);
+    if (bot.wantBelt) {this.fire.throwBelt(bot);}
+    if (bot.wantDeploy) {this.tryDeploy(bot);}
     if (bot.wantRepair) {
       // Welding — the heal rate mirrors a human trigger hold (~50hp/s
       // at think cadence). A welded item counts as productive work for
       // the meter: parked but not sheeping.
       const welded = this.hooks.botWeld?.(bot.wantRepair) ?? false;
-      if (welded) this.sheep.markShot(bot.playerId);
-      else bot.wantRepair = null; // died mid-walk — drop the intent
+      if (welded) {this.sheep.markShot(bot.playerId);}
+      else {bot.wantRepair = null;} // died mid-walk — drop the intent
     }
     this.fire.tryPropel(bot, hasShot);
   }
@@ -508,7 +508,7 @@ export class TeamBots {
       ?? (vgs ? vgsCommandFor(vgs) : null)
       ?? (this.bots.some((b) => text.toLowerCase().includes(b.playerId.slice(4).toLowerCase())) ? 'mention' : null);
     const goal = vgs && team ? this.radioGoal(vgs) : undefined;
-    if (kind) this.notice(kind, 'local', this.teamOf.get('local'), goal);
+    if (kind) {this.notice(kind, 'local', this.teamOf.get('local'), goal);}
   }
 
   /** Same chord→spot resolution Room.radioGoal runs on the wire —
@@ -516,14 +516,14 @@ export class TeamBots {
    *  player's. */
   private radioGoal(chord: string, actorId = 'local'): { x: number; y: number; z: number } | undefined {
     const aim = radioAimFor(chord);
-    if (!aim) return undefined;
+    if (!aim) {return undefined;}
     if (aim === 'actor') {
       const a = actorId === 'local' ? this.deps.lazyPlayer().pos : this.bots.find((b) => b.playerId === actorId)?.position;
       return a ? { x: a.x, y: a.y, z: a.z } : undefined;
     }
     const team = this.teamOf.get(actorId);
-    if (!team) return undefined;
-    if (aim === 'carrier') return this.ctf?.flagPos(team, true);
+    if (!team) {return undefined;}
+    if (aim === 'carrier') {return this.ctf?.flagPos(team, true);}
     return this.ctf?.flagPos(aim === 'own' ? team : team === 'alpha' ? 'bravo' : 'alpha', false);
   }
 
@@ -531,7 +531,7 @@ export class TeamBots {
    *  input must read the same scoreboard offline that it reads on the
    *  wire, or solo bots herd differently than hosted ones. */
   private confidenceOf(bot: GameBot): number | undefined {
-    if (!this.spec.teams || (bot.team !== 'alpha' && bot.team !== 'bravo')) return undefined;
+    if (!this.spec.teams || (bot.team !== 'alpha' && bot.team !== 'bravo')) {return undefined;}
     const other = bot.team === 'alpha' ? 'bravo' : 'alpha';
     const margin = (this.scores[bot.team] - this.scores[other]) / Math.max(1, this.spec.winAt);
     const kd = Math.tanh(((this.deps.world.killCounts.get(bot.playerId) ?? 0)
@@ -543,13 +543,13 @@ export class TeamBots {
    *  modes have a real squad to fold onto; FFA passes nothing (there's
    *  nobody safe to run to — bot.team is its own playerId there). */
   private alliesOf(bot: GameBot): THREE.Vector3[] | undefined {
-    if (bot.team !== 'alpha' && bot.team !== 'bravo') return undefined;
+    if (bot.team !== 'alpha' && bot.team !== 'bravo') {return undefined;}
     // Reused scratch: think() consumes it synchronously before the next bot.
     const allies = _alliesScratch;
     allies.length = 0;
     const player = this.deps.lazyPlayer();
-    if (this.playerTeam === bot.team && !player.isDead) allies.push(player.pos);
-    for (const b of this.bots) if (b !== bot && !b.isDead && b.team === bot.team) allies.push(b.position);
+    if (this.playerTeam === bot.team && !player.isDead) {allies.push(player.pos);}
+    for (const b of this.bots) {if (b !== bot && !b.isDead && b.team === bot.team) {allies.push(b.position);}}
     return allies;
   }
 
@@ -586,7 +586,7 @@ export class TeamBots {
    *  team's spawn anchors without touching hp/meters/loadout. */
   reseatAll(): void {
     for (const bot of this.bots) {
-      if (bot.isDead) continue;
+      if (bot.isDead) {continue;}
       // respawn() clears the interp state a teleport needs; it doesn't
       // touch hp or meters so it doubles as a quiet re-seat.
       bot.respawn(this.spawnSpot(bot.team));
@@ -609,7 +609,7 @@ export class TeamBots {
    *  meter follows or the defector leaks a stale cell and restarts
    *  think-stagger/sheep/seen windows from zero. */
   rekeyBot(oldId: string, newId: string): void {
-    const mv = <T>(m: Map<string, T>) => { const v = m.get(oldId); m.delete(oldId); if (v !== undefined) m.set(newId, v); };
+    const mv = <T>(m: Map<string, T>) => { const v = m.get(oldId); m.delete(oldId); if (v !== undefined) {m.set(newId, v);} };
     mv(this.thinkAccum); mv(this.ctxCache); mv(this.ffaScores); mv(this.dmgPool);
     this.senses.rekey(oldId, newId);
     this.sheep.rekey(oldId, newId);
@@ -645,9 +645,9 @@ export class TeamBots {
    *  pipeline owns the pod+item (mirrors the server's handleDeploy). */
   private tryDeploy(bot: GameBot): void {
     const want = bot.wantDeploy;
-    if (!want) return;
+    if (!want) {return;}
     bot.wantDeploy = null;
-    if (want.kind !== 'turret' && want.kind !== 'mine' && want.kind !== 'station' && want.kind !== 'drone') return;
+    if (want.kind !== 'turret' && want.kind !== 'mine' && want.kind !== 'station' && want.kind !== 'drone') {return;}
     this.hooks.botDeploy?.(want.kind, want.pos, {
       id: bot.playerId,
       team: bot.team,
@@ -686,11 +686,11 @@ export class TeamBots {
   /** The local player died (any mode) — release a carried flag; in
    *  rabbit every corpse is a flag event (first one spawns it). */
   localDied(): void {
-    const pos = this.deps.lazyPlayer().pos;
+    const {pos} = this.deps.lazyPlayer();
     const p = this.deps.lazyPlayer();
     // Same corpse-loot rule bot deaths and the server both run: team
     // modes drop 3 nuggets so a death feeds the economy, not just pain.
-    if (!this.spec.ffa) this.hooks.dropNuggets(pos, 3, p.vel);
+    if (!this.spec.ffa) {this.hooks.dropNuggets(pos, 3, p.vel);}
     this.ctf?.dropCarried('local', pos);
     this.rabbit?.onDeath('local', pos);
     this.flagrun?.dropCarried('local', pos);
@@ -698,7 +698,7 @@ export class TeamBots {
 
   /** Live position by roster id — 'local' or a bot. */
   private posOf(id: string): THREE.Vector3 | null {
-    if (id === 'local') return this.deps.lazyPlayer().pos;
+    if (id === 'local') {return this.deps.lazyPlayer().pos;}
     return this.bots.find(b => b.playerId === id)?.position ?? null;
   }
 
@@ -707,19 +707,19 @@ export class TeamBots {
     this.ffaScores.set(id, (this.ffaScores.get(id) ?? 0) + 1);
     const me = this.ffaScores.get('local') ?? 0;
     let lead = 0;
-    for (const [, v] of this.ffaScores) if (v > lead) lead = v;
+    for (const [, v] of this.ffaScores) {if (v > lead) {lead = v;}}
     this.deps.lazyHud().setTeamScore?.(me, lead);
   }
 
   /** Tied-for-last FFA ids — the server's bottomFeeders rule: exempt
    *  only while someone is actually below them (full-field tie = none). */
   bottomFeeders(): ReadonlySet<string> {
-    if (this.ffaScores.size === 0) return _emptySet;
+    if (this.ffaScores.size === 0) {return _emptySet;}
     let min = Infinity;
-    for (const [, v] of this.ffaScores) if (v < min) min = v;
+    for (const [, v] of this.ffaScores) {if (v < min) {min = v;}}
     _bottomScratch.clear();
-    for (const [id, v] of this.ffaScores) if (v === min) _bottomScratch.add(id);
-    if (_bottomScratch.size === this.ffaScores.size) _bottomScratch.clear();
+    for (const [id, v] of this.ffaScores) {if (v === min) {_bottomScratch.add(id);}}
+    if (_bottomScratch.size === this.ffaScores.size) {_bottomScratch.clear();}
     return _bottomScratch;
   }
 
@@ -738,7 +738,7 @@ export class TeamBots {
     _collectors.length = 0;
     const p = this.deps.lazyPlayer();
     _collectors.push({ id: 'local', pos: p.pos, alive: !p.isDead, pickupScale: p.mods.pickupRadius });
-    for (const b of this.bots) _collectors.push({ id: b.playerId, pos: b.position, alive: !b.isDead, pickupScale: b.perkMods.pickupRadius });
+    for (const b of this.bots) {_collectors.push({ id: b.playerId, pos: b.position, alive: !b.isDead, pickupScale: b.perkMods.pickupRadius });}
     return _collectors;
   }
 
@@ -748,7 +748,7 @@ export class TeamBots {
 
   dispose(): void {
     botSayDrain(); // queued taunts belong to this match's roster, not the next one's feed
-    for (const b of this.bots) this.deps.world.remotePlayers.remove(b.playerId);
+    for (const b of this.bots) {this.deps.world.remotePlayers.remove(b.playerId);}
     this.bots.length = 0;
     this.fire.dispose();
     this.rabbit?.dispose();

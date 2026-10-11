@@ -39,9 +39,9 @@ export function alivePlayers(h: SpawnHost): { id: string; pos: SimVec }[] {
   for (const [id, p] of h.players.getAllPlayers()) {
     // Firing decloaks — a cloaked shooter is fodder for the reveal
     // window, same rule the ball sim and bot senses apply.
-    if (!p.isDead && (!(p.status & STATUS.CLOAK) || shootRevealed(p.lastFireSim, simNow()))) out.push({ id, pos: p.position });
+    if (!p.isDead && (!(p.status & STATUS.CLOAK) || shootRevealed(p.lastFireSim, simNow()))) {out.push({ id, pos: p.position });}
   }
-  if (h.extraTargets) out.push(...h.extraTargets());
+  if (h.extraTargets) {out.push(...h.extraTargets());}
   return out;
 }
 
@@ -62,7 +62,7 @@ export function spawnCrawler(h: SpawnHost, near: SimVec, species: string): SimBe
   const dist = 40 + h.rng() * 50;
   const x = near.x + Math.cos(ang) * dist;
   const z = near.z + Math.sin(ang) * dist;
-  const seed = (h.rng() * 0xffffffff) >>> 0 || 1;
+  const seed = (h.rng() * 0xFF_FF_FF_FF) >>> 0 || 1;
   const g0 = Math.max(hmHeight(field, x, z), hmChord(field, x, z));
   const gy = Number.isFinite(g0) ? g0 : 0;
   const id = h.nextId++;

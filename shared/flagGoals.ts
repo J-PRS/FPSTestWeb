@@ -116,26 +116,26 @@ export function assignRole(
 ): BotRole {
   const ids = [...teammateIds].sort();
   const me = ids.indexOf(myId);
-  if (me < 0) return 'offense';
+  if (me === -1) {return 'offense';}
   const mine = new Map<string, BotRole>();
   for (const { role, want, minSquad } of ROLE_PRIORITY) {
-    if (!playable.includes(role)) continue;
-    if (ids.length < minSquad) continue;
+    if (!playable.includes(role)) {continue;}
+    if (ids.length < minSquad) {continue;}
     for (let i = 0; i < want; i++) {
       let best: string | null = null;
       let bestFit = -Infinity;
       for (const id of ids) {
-        if (mine.has(id)) continue;
+        if (mine.has(id)) {continue;}
         const f = fit(kitOf?.(id), role);
         if (f > bestFit) { bestFit = f; best = id; }
       }
-      if (!best) break;
+      if (!best) {break;}
       mine.set(best, role);
     }
   }
   let tail = 0;
   for (const id of ids) {
-    if (mine.has(id)) continue;
+    if (mine.has(id)) {continue;}
     mine.set(id, tail % 3 === 2 ? 'defense' : 'offense');
     tail++;
   }
@@ -150,7 +150,8 @@ export function assignRole(
  *  generic defenders mirror each other instead of stacking. */
 export function roleSide(id: string): number {
   let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  // oxlint-disable-next-line prefer-math-trunc -- int32 wrap is the point
+  for (let i = 0; i < id.length; i++) {h = (h * 31 + id.charCodeAt(i)) | 0;}
   return (h & 1) === 0 ? 1 : -1;
 }
 
@@ -163,15 +164,21 @@ export function roleObjective(role: string, s: FlagSituation, commit = 1, side =
   // mass push. HoF holds (the parked carrier is still a stand to guard)
   // and the capper stays escort (our carrier needs a screen, not a crowd
   // of identical chasers — the escort keeps moving while the mob hunts).
-  if (s.thief && s.escort && role !== 'hof' && role !== 'capper') return s.thief;
+  if (s.thief && s.escort && role !== 'hof' && role !== 'capper') {return s.thief;}
   switch (role) {
-    case 'hof': return hofGoal(s, commit);
-    case 'ldefense': case 'technician': case 'defense': return defenseGoal(s, role, side);
-    case 'capper': return capperGoal(s);
-    case 'bombardier': return bombardierGoal(s);
-    case 'infiltrator': return infiltratorGoal(s);
-    case 'medic': return medicGoal(s);
-    default: return offenseGoal(s);
+    case 'hof': { return hofGoal(s, commit);
+    }
+    case 'ldefense': case 'technician': case 'defense': { return defenseGoal(s, role, side);}
+    case 'capper': { return capperGoal(s);
+    }
+    case 'bombardier': { return bombardierGoal(s);
+    }
+    case 'infiltrator': { return infiltratorGoal(s);
+    }
+    case 'medic': { return medicGoal(s);
+    }
+    default: { return offenseGoal(s);
+    }
   }
 }
 
@@ -182,7 +189,7 @@ export function roleObjective(role: string, s: FlagSituation, commit = 1, side =
  *  before it hits the flag. */
 function hofGoal(s: FlagSituation, commit: number) {
   const T = BOT_TUNING.hof;
-  if (s.dropped && Math.hypot(s.dropped.x - s.home.x, s.dropped.z - s.home.z) < T.dropR) return s.dropped;
+  if (s.dropped && Math.hypot(s.dropped.x - s.home.x, s.dropped.z - s.home.z) < T.dropR) {return s.dropped;}
   if (s.threat) {
     const dx = s.threat.x - s.home.x, dz = s.threat.z - s.home.z;
     const d = Math.hypot(dx, dz);
@@ -204,9 +211,9 @@ function hofGoal(s: FlagSituation, commit: number) {
  *  early escort beats a late body-block: the carrier's most fragile
  *  leg is the approach, where chasers converge. */
 function defenseGoal(s: FlagSituation, role: string, side: number) {
-  if (s.thief) return s.thief;
-  if (s.dropped) return s.dropped;
-  if (s.escort && Math.hypot(s.escort.x - s.home.x, s.escort.z - s.home.z) < 260) return s.escort;
+  if (s.thief) {return s.thief;}
+  if (s.dropped) {return s.dropped;}
+  if (s.escort && Math.hypot(s.escort.x - s.home.x, s.escort.z - s.home.z) < 260) {return s.escort;}
   // Idle: don't stack bodies on the pole — the era's real defense is
   // coverage, not a clump. LD screens the incoming lane toward the
   // enemy stand, generic defense takes a flank (side mirrors per bot),
@@ -215,8 +222,8 @@ function defenseGoal(s: FlagSituation, role: string, side: number) {
     const dx = s.enemyStand.x - s.home.x, dz = s.enemyStand.z - s.home.z;
     const d = Math.hypot(dx, dz) || 1;
     const ux = dx / d, uz = dz / d;
-    if (role === 'ldefense') return { x: s.home.x + ux * 38, y: s.home.y, z: s.home.z + uz * 38 };
-    if (role === 'defense') return { x: s.home.x - uz * side * 24 + ux * 10, y: s.home.y, z: s.home.z + ux * side * 24 + uz * 10 };
+    if (role === 'ldefense') {return { x: s.home.x + ux * 38, y: s.home.y, z: s.home.z + uz * 38 };}
+    if (role === 'defense') {return { x: s.home.x - uz * side * 24 + ux * 10, y: s.home.y, z: s.home.z + ux * side * 24 + uz * 10 };}
   }
   return s.home;
 }
@@ -224,9 +231,9 @@ function defenseGoal(s: FlagSituation, role: string, side: number) {
 /** Capper: the flag route is the job — escort a carrier teammate,
  *  otherwise press the stand. Only a dropped own flag pulls it off-route. */
 function capperGoal(s: FlagSituation) {
-  if (s.escort) return s.escort;
-  if (s.dropped) return s.dropped;
-  if (s.enemyStand) return s.enemyStand;
+  if (s.escort) {return s.escort;}
+  if (s.dropped) {return s.dropped;}
+  if (s.enemyStand) {return s.enemyStand;}
   return s.home;
 }
 
@@ -250,20 +257,20 @@ function bombardierGoal(s: FlagSituation) {
     }
     return s.enemyStand;
   }
-  if (s.escort) return s.escort;
-  if (s.dropped) return s.dropped;
+  if (s.escort) {return s.escort;}
+  if (s.dropped) {return s.dropped;}
   return s.home;
 }
 
 /** Infiltrator: slips in to wreck gear / grab — the stand press holds
  *  even when nobody's home so the cloak keeps covering the breach. */
 function infiltratorGoal(s: FlagSituation) {
-  if (s.escort) return s.escort;
+  if (s.escort) {return s.escort;}
   // The push call outranks a routine stand press — the breach is timed
   // to the capper's arrival, not whenever the saboteur wandered up.
-  if (s.push) return s.push;
-  if (s.enemyStand) return s.enemyStand;
-  if (s.thief) return s.thief;
+  if (s.push) {return s.push;}
+  if (s.enemyStand) {return s.enemyStand;}
+  if (s.thief) {return s.thief;}
   return s.home;
 }
 
@@ -272,8 +279,8 @@ function infiltratorGoal(s: FlagSituation) {
  *  beam the breachers, far enough to live), a dropped flag pulls like
  *  everyone else's, home otherwise. */
 function medicGoal(s: FlagSituation) {
-  if (s.escort) return s.escort;
-  if (s.dropped) return s.dropped;
+  if (s.escort) {return s.escort;}
+  if (s.dropped) {return s.dropped;}
   if (s.enemyStand) {
     const dx = s.home.x - s.enemyStand.x, dz = s.home.z - s.enemyStand.z;
     const d = Math.hypot(dx, dz);
@@ -304,15 +311,15 @@ function offenseGoal(s: FlagSituation) {
     const meToFlag = Math.hypot(s.me.x - s.enemyStand.x, s.me.z - s.enemyStand.z);
     const capRisk = 1 - Math.min(1, thiefToStand / 300);
     const reach = 1 - Math.min(1, meToFlag / Math.max(60, thiefToStand * 1.5));
-    if (botRand() < capRisk * capRisk * reach * reach) return s.enemyStand;
+    if (botRand() < capRisk * capRisk * reach * reach) {return s.enemyStand;}
   }
-  if (s.thief) return s.thief;
+  if (s.thief) {return s.thief;}
   // A called push drops routine jobs (escort/dropped read below it):
   // the capper is ~10s out, so offense floods the stand NOW to eat
   // the HoF/defense that would otherwise kill it at the flag.
-  if (s.push) return s.push;
-  if (s.escort) return s.escort;
-  if (s.dropped) return s.dropped;
-  if (s.enemyStand) return s.enemyStand;
+  if (s.push) {return s.push;}
+  if (s.escort) {return s.escort;}
+  if (s.dropped) {return s.dropped;}
+  if (s.enemyStand) {return s.enemyStand;}
   return s.home; // flag's moving — defend home
 }

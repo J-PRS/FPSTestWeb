@@ -8,7 +8,7 @@ import {
   UBER_TOTEM_RADIUS, UBER_TOTEM_HEALTH, UBER_TOTEM_REFIRE,
   UBER_TOTEM_BEAM_WIDTH,
 } from '../core/config.js';
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 import { bindNetTotem, applyNetEdgeTotem, updateNetTotem, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
 import { TOTEM_STATES, type TotemState, type TotemCtx } from './totemFsm.js';
 import { type SimTotem, makeSimTotem, stepTotem } from '../../../shared/creatureSim.js';
@@ -93,7 +93,7 @@ export class Totem implements Targetable, SwarmSlotOwner {
   static hitClaim: ((netId: number, damage: number) => void) | null = null;
 
   bindNet(b: NetBindArgs): void {
-    const pos = b.pos;
+    const {pos} = b;
     this.netDriven = true;
     this.netId = b.id;
     bindNetTotem(this, b, makeSimTotem);
@@ -122,7 +122,7 @@ export class Totem implements Targetable, SwarmSlotOwner {
   /** 'fire' edge — the discharge flash; damage is the authority's job. */
   onSimFire(): void {
     this.beamWidth = this.uber ? UBER_TOTEM_BEAM_WIDTH * 0.5 : 0.3;
-    this.beamOpacity = 1.0;
+    this.beamOpacity = 1;
     this.beamFade = 0.35;
     this.beamOn = true;
     this.eyeScale = 1.1;
@@ -148,14 +148,14 @@ export class Totem implements Targetable, SwarmSlotOwner {
     this.capsuleTop = 5.2 * this.radius; // visual top: cap tip at 5.2r
     this.refire = uber ? UBER_TOTEM_REFIRE : TOTEM_REFIRE;
     // Uber reads as a crowned elder — gold-bronze massif, not obsidian
-    this.color = new THREE.Color(uber ? 0x5a4020 : 0x2a2438);
+    this.color = new THREE.Color(uber ? 0x5A_40_20 : 0x2A_24_38);
     this.scale = uber ? 2.4 : 1.4;
 
     this.pos = pos.clone();
     this.pos.y = terrain.getHeight(pos.x, pos.z);
 
     this.hasSlots = allocSlots('totem', this);
-    if (!this.hasSlots) this.dead = true;
+    if (!this.hasSlots) {this.dead = true;}
 
     // Foundation foot — obelisk rim extruded into the dirt. Per-instance:
     // it conform-samples the heightmap, which an InstancedMesh can't express.
@@ -168,11 +168,11 @@ export class Totem implements Targetable, SwarmSlotOwner {
   private static readonly _ctx: TotemCtx = { dt: 0, dist: 0, playerPos: null as never };
 
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3, playerVel?: THREE.Vector3): void {
-    if (this.dead) return;
+    if (this.dead) {return;}
     if (this.netDriven) { this.updateNet(dt, terrain); return; }
-    if (this.flash > 0) this.flash -= dt;
-    if (this.staggerT > 0) this.staggerT -= dt;
-    if (this.blinkCd > 0) this.blinkCd -= dt;
+    if (this.flash > 0) {this.flash -= dt;}
+    if (this.staggerT > 0) {this.staggerT -= dt;}
+    if (this.blinkCd > 0) {this.blinkCd -= dt;}
 
     this.stateTimer -= dt;
     const dist = this.pos.distanceTo(playerPos);
@@ -184,19 +184,19 @@ export class Totem implements Targetable, SwarmSlotOwner {
     if (this.beamFade > 0) {
       this.beamFade -= dt;
       this.beamOpacity = Math.max(0, this.beamFade / 0.3) * 0.95;
-      if (this.beamFade <= 0) this.beamOn = false;
+      if (this.beamFade <= 0) {this.beamOn = false;}
     }
 
     this.writeInstances();
-    if (this.foot) getShadows()?.set(this, this.pos, this.radius * 0.9, 0.35);
+    if (this.foot) {getShadows()?.set(this, this.pos, this.radius * 0.9, 0.35);}
   }
 
   /** netDriven leg — the shared sim owns the state machine; this maps its
    *  state onto the same visual fields the offline path animates. */
   private updateNet(dt: number, terrain: Terrain): void {
     const s = this.sim;
-    if (!s) return;
-    if (this.flash > 0) this.flash -= dt;
+    if (!s) {return;}
+    if (this.flash > 0) {this.flash -= dt;}
     const prevState = s.state;
     updateNetTotem(this, dt, terrain, stepTotem);
 
@@ -240,11 +240,11 @@ export class Totem implements Targetable, SwarmSlotOwner {
       if (this.beamFade > 0) {
         this.beamFade -= dt;
         this.beamOpacity = Math.max(0, this.beamFade / 0.3) * 0.95;
-        if (this.beamFade <= 0) this.beamOn = false;
+        if (this.beamFade <= 0) {this.beamOn = false;}
       }
     }
     this.staggerT = s.stunTimer; // the pin telegraph rides the same field
-    if (this.foot) getShadows()?.set(this, this.pos, this.radius * 0.9, 0.35);
+    if (this.foot) {getShadows()?.set(this, this.pos, this.radius * 0.9, 0.35);}
   }
 
   writeInstances(_terrain?: import('../world/terrain.js').Terrain): void {
@@ -264,7 +264,7 @@ export class Totem implements Targetable, SwarmSlotOwner {
       this.flash = 0.12;
       return claimDamageMelee(this, damage, Totem.hitClaim, opts?.serverPaid);
     }
-    if (this.intangible) return false;
+    if (this.intangible) {return false;}
     this.health -= damage;
     this.flash = 0.12;
     this.staggerT = Math.max(this.staggerT, 2.1); // pinned — can't blink

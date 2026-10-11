@@ -25,10 +25,10 @@ import type { CombatCtx, ExplosionArgs } from '../combat.js';
 // Turret-bolt interception: clip a lobbed shell with an explosive and it
 // cooks off mid-air — huge blast (the shell's own payload going off), so
 // shooting the bolt down NEXT to its turret is a real counterattack.
-const BOLT_MEGA_RADIUS = 13.0;     // bolt's land-splash is ~5m — cookoff is way bigger
+const BOLT_MEGA_RADIUS = 13;     // bolt's land-splash is ~5m — cookoff is way bigger
 const BOLT_MEGA_DAMAGE = 60;
 const BOLT_MEGA_FORCE = 55;
-const BOLT_CHAIN_RADIUS = 8.0;     // cookoff blast pops neighboring shells too
+const BOLT_CHAIN_RADIUS = 8;     // cookoff blast pops neighboring shells too
 const BOLT_CHAIN_PASSES = 3;       // bounded worklist — a chain can't run away
 
 // ?debug / menu DEBUG — show the real gameplay blast radius as a wireframe
@@ -48,12 +48,12 @@ const _remotePlayerClasses = new Map<string, string>();
 // Blast presentation layer: explosion/implosion entity, positional audio,
 // screenshake, and the terrain scorch decal. All visuals, no gameplay.
 function blastFx(c: CombatCtx, a: ExplosionArgs): void {
-  const deps = c.deps;
+  const {deps} = c;
   const { pos, radius, forceMode } = a;
   const directHit = a.directHit ?? false;
   const vfx = a.vfxRadius ?? radius;
   // Impact VFX variant — config-driven (sprinkler splashes, doesn't burn)
-  const vfxKind = a.vfx ?? (a.weaponType !== undefined ? getProjectileConfig(a.weaponType)?.vfx : undefined);
+  const vfxKind = a.vfx ?? (a.weaponType === undefined ? undefined : getProjectileConfig(a.weaponType)?.vfx);
   if (forceMode === 'push') {
     deps.world.explosions.push(new Explosion(deps.lazyScene(), pos, directHit, a.age ?? 0, deps.lazyTerrain(), vfx / EXPLOSION_VFX_RADIUS, a.explosionTint, vfxKind));
     sfx.explosionAt(pos, directHit, a.weaponType);
@@ -72,11 +72,11 @@ function blastFx(c: CombatCtx, a: ExplosionArgs): void {
     }
     deps.world.scorches.push(new ScorchDecal(deps.lazyScene(), deps.lazyTerrain(), pos, vfx * 0.6));
   }
-  if (AOE_DEBUG()) deps.world.aoeGizmos.push(new AoeGizmo(deps.lazyScene(), pos, radius));
+  if (AOE_DEBUG()) {deps.world.aoeGizmos.push(new AoeGizmo(deps.lazyScene(), pos, radius));}
 }
 
 export function processProjectileExplosion(c: CombatCtx, a: ExplosionArgs): void {
-  const deps = c.deps;
+  const {deps} = c;
   const { pos, radius, force, forceMode, aoeDamage } = a;
   blastFx(c, a);
 
@@ -108,7 +108,7 @@ export function processProjectileExplosion(c: CombatCtx, a: ExplosionArgs): void
 // Runs through the same blast path as projectiles so prediction,
 // particles, scorch, and the server aoeShot all behave identically.
 export function slam(c: CombatCtx, pos: THREE.Vector3, impactSpeed: number): void {
-  const deps = c.deps;
+  const {deps} = c;
   const stats = getWeaponStats(WeaponType.Slam);
   // Blast scales with landing speed: the skill spikes you at 55 m/s, so a
   // tap-slam lands ~55 and a full dive can exceed 100. ~0.2 at a lazy hop
@@ -121,7 +121,7 @@ export function slam(c: CombatCtx, pos: THREE.Vector3, impactSpeed: number): voi
     ? undefined
     : (p: { x: number; y: number; z: number }, _targetId: string | null) =>
       networkManager.sendAOEShot({ position: p, weaponType: WeaponType.Slam, excludeTargetId: _targetId, power });
-  if (networkManager.isConnected()) networkManager.sendSlam({ x: pos.x, y: pos.y, z: pos.z });
+  if (networkManager.isConnected()) {networkManager.sendSlam({ x: pos.x, y: pos.y, z: pos.z });}
   processProjectileExplosion(c, {
     pos,
     radius: stats.aoeRadius * power * deps.lazyPlayer().mods.aoeRadius,
@@ -131,7 +131,7 @@ export function slam(c: CombatCtx, pos: THREE.Vector3, impactSpeed: number): voi
     forceMultiplier: 1,
     // no directHit — slam has no proxy-hit bonus layer
     sendAOE,
-    explosionTint: 0xffcc66,               // hot slam flash
+    explosionTint: 0xFF_CC_66,               // hot slam flash
     vfxRadius: stats.aoeRadius * power * AOE_VFX_SCALE, // VFX = 80% of damage reach
   });
 }
@@ -142,15 +142,15 @@ export function slam(c: CombatCtx, pos: THREE.Vector3, impactSpeed: number): voi
 function pruneShots(c: CombatCtx): void {
   const registry = c.deps.world.projectileRegistry;
   for (const [sid, p] of registry.byShotId) {
-    if (p.dead) registry.byShotId.delete(sid);
+    if (p.dead) {registry.byShotId.delete(sid);}
   }
   // byId normally evicts on the destroy echo — a lost projectileDestroyed
   // would keep a dead shell's server-id entry forever otherwise.
   for (const [id, p] of registry.byId) {
-    if (p.dead) registry.byId.delete(id);
+    if (p.dead) {registry.byId.delete(id);}
   }
   for (const [slot, p] of registry.byFanSlot) {
-    if (p.dead) registry.byFanSlot.delete(slot);
+    if (p.dead) {registry.byFanSlot.delete(slot);}
   }
 }
 
@@ -158,8 +158,8 @@ function pruneShots(c: CombatCtx): void {
 // cook it at the exact swept contact, then ripple the mega blast through
 // neighboring shells with a bounded worklist (no infinite chain).
 function collectBoltIntercept(c: CombatCtx, p: Projectile): void {
-  const deps = c.deps;
-  if (!p.hitBolt || !deps.consumeBolt) return;
+  const {deps} = c;
+  if (!p.hitBolt || !deps.consumeBolt) {return;}
   const bolt = p.hitBolt;
   // Consume once — an exploded projectile lives on until its trail fades,
   // and an uncleared hitBolt would re-fire the mega blast every frame.
@@ -167,10 +167,10 @@ function collectBoltIntercept(c: CombatCtx, p: Projectile): void {
   const at = p.hitPointValid ? p.hitPoint : p.pos;
   deps.consumeBolt(bolt);
   boltCookoff(c, at, p.shooterId ?? undefined);
-  if (!deps.cookBoltsNear) return;
+  if (!deps.cookBoltsNear) {return;}
   let frontier = deps.cookBoltsNear(at, BOLT_CHAIN_RADIUS);
-  for (let pass = 0; pass < BOLT_CHAIN_PASSES && frontier.length; pass++) {
-    for (const bp of frontier) boltCookoff(c, bp, p.shooterId ?? undefined);
+  for (let pass = 0; pass < BOLT_CHAIN_PASSES && frontier.length > 0; pass++) {
+    for (const bp of frontier) {boltCookoff(c, bp, p.shooterId ?? undefined);}
     frontier = deps.cookBoltsNear(frontier[0], BOLT_CHAIN_RADIUS);
   }
 }
@@ -178,13 +178,13 @@ function collectBoltIntercept(c: CombatCtx, p: Projectile): void {
 // Sticky chain: one pop cooks every sibling bomb inside its blast —
 // BFS so the detonation ripples outward through spaced bombs.
 function chainStickies(c: CombatCtx, src: Projectile): void {
-  const deps = c.deps;
+  const {deps} = c;
   let frontier: Projectile[] = [src];
-  for (let pass = 0; pass < 4 && frontier.length; pass++) {
+  for (let pass = 0; pass < 4 && frontier.length > 0; pass++) {
     const next: Projectile[] = [];
     for (const s of frontier) {
       for (const q of deps.world.projectiles) {
-        if (!q.config.sticks || q.exploded || q === s) continue;
+        if (!q.config.sticks || q.exploded || q === s) {continue;}
         if (q.pos.distanceToSquared(s.pos) <= src.config.aoeRadius * src.config.aoeRadius) {
           q.explode();
           next.push(q);
@@ -196,7 +196,7 @@ function chainStickies(c: CombatCtx, src: Projectile): void {
 }
 
 export function updateProjectiles(c: CombatCtx, dt: number): void {
-  const deps = c.deps;
+  const {deps} = c;
   c.lg.tickBeam(dt); // beam fades ~80ms after the last tick
   pruneShots(c);
 
@@ -207,7 +207,7 @@ export function updateProjectiles(c: CombatCtx, dt: number): void {
   deps.world.remotePlayers.forEach((rp, playerId) => {
     if (!rp.isDead) {
       remotePlayerPositions.set(playerId, rp.position);
-      if (rp.armorClass) remotePlayerClasses.set(playerId, rp.armorClass);
+      if (rp.armorClass) {remotePlayerClasses.set(playerId, rp.armorClass);}
     }
   });
 
@@ -215,7 +215,7 @@ export function updateProjectiles(c: CombatCtx, dt: number): void {
   // inside each projectile's own collision pass (no tunneling).
   const obstacles = deps.turretBolts?.() ?? [];
   const shields = deps.shieldObstacles?.();
-  if (shields?.length) obstacles.push(...shields);
+  if (shields?.length) {obstacles.push(...shields);}
 
   // Billboard ribbons re-side against this each frame — without it the
   // strip stays locked to its spawn-plane and level shots read edge-on.
@@ -238,10 +238,10 @@ export function updateProjectiles(c: CombatCtx, dt: number): void {
     if (p.exploded && !p.explosionProcessed) {
       p.explosionProcessed = true;
       handleProjectileImpact(c, p);
-      if (p.config.sticks) chainStickies(c, p);
+      if (p.config.sticks) {chainStickies(c, p);}
     }
 
-    if (p.dead) retireProjectile(deps, p, i);
+    if (p.dead) {retireProjectile(deps, p, i);}
   }
   catchRiders(deps.world.projectiles);
 }
@@ -264,10 +264,10 @@ function distSqToSegment(p: THREE.Vector3, a: THREE.Vector3, b: THREE.Vector3): 
 function catchRiders(list: Projectile[]): void {
   const r2 = RIDE_CATCH_R * RIDE_CATCH_R;
   for (const q of list) {
-    if (!q.config.rides || q.host || q.exploded || q.stuck || q.dead) continue;
+    if (!q.config.rides || q.host || q.exploded || q.stuck || q.dead) {continue;}
     for (const h of list) {
       if (h === q || h.exploded || h.dead || h.stuck || h.config.rides || h.shooterId !== q.shooterId
-        || !canHostRide(h.config.weaponType, getWeaponStats(h.config.weaponType)!)) continue;
+        || !canHostRide(h.config.weaponType, getWeaponStats(h.config.weaponType)!)) {continue;}
       if (distSqToSegment(q.pos, h.prevPos, h.pos) <= r2) { q.host = h; break; }
     }
   }
@@ -293,7 +293,7 @@ function boltCookoff(c: CombatCtx, pos: THREE.Vector3, shooterId?: string): void
     pos, radius: BOLT_MEGA_RADIUS, force: BOLT_MEGA_FORCE, forceMode: 'push',
     aoeDamage: BOLT_MEGA_DAMAGE,
     forceMultiplier: 1,
-    directHit: true, explosionTint: 0xffaa44, vfxRadius: BOLT_MEGA_RADIUS,
+    directHit: true, explosionTint: 0xFF_AA_44, vfxRadius: BOLT_MEGA_RADIUS,
     shooterId, // a bot's interception reads as the bot's blast, not mine
   });
 }

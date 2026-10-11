@@ -51,14 +51,14 @@ export const SMOKE_INTERVAL = 0.14;
  *  random branch below, but as a bucket id so shards can share one
  *  InstancedMesh per family (14-20 shards per kill were 14-20 draws). */
 export function pickShardPrim(opts: DebrisOptions): number {
-  if (opts.kind === 'brush') return 3;
-  if (opts.kind === 'goo') return 4;
+  if (opts.kind === 'brush') {return 3;}
+  if (opts.kind === 'goo') {return 4;}
   const t = Math.random();
   return t < 0.4 ? 0 : t < 0.7 ? 1 : 2;
 }
 
 export function pickShardGeo(part: DebrisPart | undefined, opts: DebrisOptions, sw: number, sh: number, sd: number): THREE.BufferGeometry {
-  if (part) return part.geo;
+  if (part) {return part.geo;}
   if (opts.shardGeos?.length) {
     return opts.shardGeos[Math.floor(Math.random() * opts.shardGeos.length)]!;
   }
@@ -93,8 +93,8 @@ function partLaunch(part: DebrisPart, opts: DebrisOptions, px: number, py: numbe
   const dz = l > 0.01 ? o.z / l : Math.random() * 2 - 1;
   const spd = (BASE_SPEED * 0.6) + Math.random() * EXTRA_SPEED * 0.6;
   const vel = new THREE.Vector3(dx * spd, dy * spd + 1.5, dz * spd);
-  if (opts.impulseDir) vel.addScaledVector(opts.impulseDir, 6);
-  if (opts.inheritVel) vel.addScaledVector(opts.inheritVel, 0.7);
+  if (opts.impulseDir) {vel.addScaledVector(opts.impulseDir, 6);}
+  if (opts.inheritVel) {vel.addScaledVector(opts.inheritVel, 0.7);}
   return { o, vel };
 }
 
@@ -119,8 +119,8 @@ function shellLaunch(opts: DebrisOptions):
   }
   const vel = new THREE.Vector3(ndx * spd, ndy * spd + 1.5, ndz * spd);
   // ~40% of the shot's push carried through the shards
-  if (opts.impulseDir) vel.addScaledVector(opts.impulseDir, 6);
-  if (opts.inheritVel) vel.addScaledVector(opts.inheritVel, 0.7);
+  if (opts.impulseDir) {vel.addScaledVector(opts.impulseDir, 6);}
+  if (opts.inheritVel) {vel.addScaledVector(opts.inheritVel, 0.7);}
   return { o, vel };
 }
 
@@ -128,8 +128,8 @@ function shellLaunch(opts: DebrisOptions):
 // modes: posed body part, shell-sampled burst, or plain spread cone.
 export function shardLaunch(part: DebrisPart | undefined, opts: DebrisOptions, px: number, py: number, pz: number):
   { o: THREE.Vector3; vel: THREE.Vector3 } {
-  if (part) return partLaunch(part, opts, px, py, pz);
-  if (opts.shellRadius) return shellLaunch(opts);
+  if (part) {return partLaunch(part, opts, px, py, pz);}
+  if (opts.shellRadius) {return shellLaunch(opts);}
   const o = new THREE.Vector3(
     (Math.random() - 0.5) * opts.spreadX,
     (Math.random() - 0.5) * opts.spreadY,
@@ -141,7 +141,7 @@ export function shardLaunch(part: DebrisPart | undefined, opts: DebrisOptions, p
     o,
     vel: new THREE.Vector3(
       Math.cos(elv) * Math.cos(ang) * spd,
-      Math.sin(elv) * spd + 2.0,
+      Math.sin(elv) * spd + 2,
       Math.cos(elv) * Math.sin(ang) * spd),
   };
 }

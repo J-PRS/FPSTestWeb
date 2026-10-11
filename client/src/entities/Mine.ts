@@ -7,7 +7,7 @@ import {
   EMERGE_DUR,
 } from '../core/config.js';
 import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
@@ -31,11 +31,11 @@ const _domeGeo = (() => {
     // and bake the bottom half with inward normals.
     const cap = new THREE.SphereGeometry(0.5, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.5);
     cap.scale(1, 0.62, 1);
-    if (s < 0) cap.rotateX(Math.PI);
+    if (s < 0) {cap.rotateX(Math.PI);}
     cap.translate(0, 0.14 * s, 0);
     parts.push(cap);
     const fuse = new THREE.CylinderGeometry(0.12, 0.16, 0.18, 6);
-    if (s < 0) fuse.rotateX(Math.PI);
+    if (s < 0) {fuse.rotateX(Math.PI);}
     fuse.translate(0, 0.5 * s, 0);
     parts.push(fuse);
     for (let i = 0; i < 3; i++) {
@@ -44,18 +44,18 @@ const _domeGeo = (() => {
       leg.rotateZ(0.62); // splay outward…
       leg.rotateY(-a);
       leg.translate(Math.cos(a) * 0.62, 0.05, Math.sin(a) * 0.62);
-      if (s < 0) leg.rotateX(Math.PI); // …then flip the whole prong
+      if (s < 0) {leg.rotateX(Math.PI);} // …then flip the whole prong
       parts.push(leg);
     }
   }
   const g = mergeGeometries(parts, false)!;
-  for (const p of parts) p.dispose();
+  for (const p of parts) {p.dispose();}
   return g;
 })();
 let _domeMat: THREE.MeshLambertMaterial | null = null;
 
 export function mineParts(): SwarmPart[] {
-  if (!_domeMat) _domeMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  if (!_domeMat) {_domeMat = new THREE.MeshLambertMaterial({ color: 0xFF_FF_FF });}
   return [{ geometry: _domeGeo, material: _domeMat }];
 }
 
@@ -80,7 +80,7 @@ export class Mine implements Targetable, SwarmSlotOwner {
   // soak ticks down before the shell itself gets touched.
   armor = 0;
   radius: number;
-  color = new THREE.Color(0x3a2a1a); // dark shell, glow does the talking
+  color = new THREE.Color(0x3A_2A_1A); // dark shell, glow does the talking
   scale = 0.2;
 
   swarmSlot = -1;
@@ -122,16 +122,16 @@ export class Mine implements Targetable, SwarmSlotOwner {
     // Seat at -0.30 local: prong tips (~-0.26) graze the dirt, the lower
     // cap buries to its shoulder, and the bottom fuse is fully swallowed.
     const bg = terrain.getHeight(pos.x, pos.z);
-    if (Number.isFinite(bg)) {this.pos.y = bg + this.radius * 0.30;}
+    if (Number.isFinite(bg)) {this.pos.y = bg + this.radius * 0.3;}
     this.tilt.setFromUnitVectors(new THREE.Vector3(0, 1, 0), terrain.getNormal(pos.x, pos.z));
     this.hasSlots = allocSlots('mine', this);
-    if (!this.hasSlots) this.dead = true;
+    if (!this.hasSlots) {this.dead = true;}
   }
 
   get armed(): boolean { return this.age >= MINE_ARM_TIME; }
 
   update(dt: number, playerPos: THREE.Vector3): void {
-    if (this.dead) return;
+    if (this.dead) {return;}
     this.age += dt;
 
     if (this.emergeT > 0) {
@@ -156,9 +156,9 @@ export class Mine implements Targetable, SwarmSlotOwner {
     const bright = this.armed ? 0.4 + p * (0.4 + urgency * 0.5) : 0.25 + p * 0.15;
     this.glowPulse = bright;
 
-    if (!this.hasSlots) return;
+    if (!this.hasSlots) {return;}
     const swarm = getSwarm('mine');
-    if (!swarm) return;
+    if (!swarm) {return;}
     const slot = this.swarmSlot;
     const r = this.radius;
 
@@ -173,12 +173,12 @@ export class Mine implements Targetable, SwarmSlotOwner {
   /** Re-seat on terrain after a ballistic landing (thrown pack mines) —
    *  re-aligns the dome to the slope under its new resting spot. */
   seatOn(terrain: Terrain): void {
-    this.pos.y = terrain.getHeight(this.pos.x, this.pos.z) + this.radius * 0.30;
+    this.pos.y = terrain.getHeight(this.pos.x, this.pos.z) + this.radius * 0.3;
     this.tilt.setFromUnitVectors(new THREE.Vector3(0, 1, 0), terrain.getNormal(this.pos.x, this.pos.z));
   }
 
   private detonate(): void {
-    if (this.dead) return;
+    if (this.dead) {return;}
     this.dead = true;
     this.onDetonate?.(this);
   }

@@ -9,7 +9,7 @@ import {
   CRAWLER_STUN,
   EMERGE_DUR, MELEE_FAVOR,
 } from '../core/config.js';
-import { Terrain } from '../world/terrain.js';
+import type { Terrain } from '../world/terrain.js';
 import { type SimCrawler, makeSimCrawler, stepCrawler } from '../../../shared/creatureSim.js';
 import { bindNetSim, applyNetEdgeSim, updateNetSim, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
 import type { Targetable } from './balls.js';
@@ -38,10 +38,10 @@ export class Crawler implements Targetable, SwarmSlotOwner {
   health: number;
   maxHealth: number;
   radius: number;
-  color = new THREE.Color(0x8a2f22);
+  color = new THREE.Color(0x8A_2F_22);
   readonly debrisKind = 'goo' as const; // chitin splat, not rock chunks
   readonly dieCue = 'splat' as const;
-  readonly ichor = 0x3fc9b0; // teal pops hard against the red shell
+  readonly ichor = 0x3F_C9_B0; // teal pops hard against the red shell
   scale: number;
 
   swarmSlot = -1;
@@ -81,14 +81,14 @@ export class Crawler implements Targetable, SwarmSlotOwner {
   bindNet(b: NetBindArgs): void {
     this.netDriven = true;
     this.netId = b.id;
-    this.id = 0x50000000 + b.id; // net namespace — can't collide with local targetIds
+    this.id = 0x50_00_00_00 + b.id; // net namespace — can't collide with local targetIds
     bindNetSim(this, makeSimCrawler, b);
   }
 
   /** A wire edge — apply the committed state the authority stepped into. */
   applyNetEdge(m: { position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; kind: string; targetId: string | null; tp?: { x: number; y: number; z: number } | null }): void {
     applyNetEdgeSim(this, m);
-    if (this.sim) this.state = this.sim.state;
+    if (this.sim) {this.state = this.sim.state;}
   }
 
   onPounceHit?: (crawler: Crawler) => void;
@@ -107,24 +107,24 @@ export class Crawler implements Targetable, SwarmSlotOwner {
     this.health = this.maxHealth = uber ? CRAWLER_HEALTH * 4 : CRAWLER_HEALTH;
     this.radius = uber ? CRAWLER_RADIUS * 2.2 : CRAWLER_RADIUS;
     this.scale = uber ? 1.3 : 0.5;
-    if (uber) this.color.set(0x5a1a3a); // brood-purple — the queen reads different
+    if (uber) {this.color.set(0x5A_1A_3A);} // brood-purple — the queen reads different
     this.pos = pos.clone();
     const sg = terrain.getHeight(pos.x, pos.z);
     if (Number.isFinite(sg)) {this.pos.y = sg + this.radius;}
     this.vel = new THREE.Vector3();
     this.hasSlots = allocSlots('crawler', this);
-    if (!this.hasSlots) this.dead = true; // swarm full — refuse to exist
+    if (!this.hasSlots) {this.dead = true;} // swarm full — refuse to exist
   }
 
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
-    if (this.dead) return;
+    if (this.dead) {return;}
     if (this.netDriven && this.sim) {
       this.updateNet(dt, terrain);
       return;
     }
-    if (this.stunTimer > 0) this.stunTimer -= dt;
-    if (this.flash > 0) this.flash -= dt;
-    if (this.glow > 0 && this.state !== 'windup') this.glow -= dt * 2.5;
+    if (this.stunTimer > 0) {this.stunTimer -= dt;}
+    if (this.flash > 0) {this.flash -= dt;}
+    if (this.glow > 0 && this.state !== 'windup') {this.glow -= dt * 2.5;}
 
     const dx = playerPos.x - this.pos.x;
     const dz = playerPos.z - this.pos.z;
@@ -167,12 +167,12 @@ export class Crawler implements Targetable, SwarmSlotOwner {
     const gy = terrain.getHeight(this.pos.x, this.pos.z);
     if (Number.isFinite(gy) && this.pos.y - this.radius <= gy) {
       this.pos.y = gy + this.radius;
-      if (this.airborne) this.onLanded?.(this.pos);
+      if (this.airborne) {this.onLanded?.(this.pos);}
       this.airborne = false;
       this.vel.set(0, 0, 0);
       if (this.pounceAirborne) {
         this.pounceAirborne = false;
-        if (this.pos.distanceToSquared(playerPos) < 6.25 * MELEE_FAVOR * MELEE_FAVOR) this.onPounceHit?.(this);
+        if (this.pos.distanceToSquared(playerPos) < 6.25 * MELEE_FAVOR * MELEE_FAVOR) {this.onPounceHit?.(this);}
       }
       this.groundThink(dt, terrain, playerPos, distSq);
     } else {
@@ -197,7 +197,7 @@ export class Crawler implements Targetable, SwarmSlotOwner {
   }
 
   private groundThink(dt: number, terrain: Terrain, playerPos: THREE.Vector3, distSq: number): void {
-    if (this.stunTimer > 0) return;
+    if (this.stunTimer > 0) {return;}
 
     if (this.state === 'windup') {
       this.windupTimer -= dt;
@@ -218,7 +218,7 @@ export class Crawler implements Targetable, SwarmSlotOwner {
     }
 
     this.hopTimer -= dt;
-    if (this.hopTimer > 0) return;
+    if (this.hopTimer > 0) {return;}
     this.hopTimer = 0.25 + Math.random() * 0.3;
 
     if (distSq < CRAWLER_AGGRO_DIST * CRAWLER_AGGRO_DIST) {
@@ -231,7 +231,7 @@ export class Crawler implements Targetable, SwarmSlotOwner {
       );
     } else {
       this.state = 'wander';
-      if (Math.random() < 0.4) this.wanderYaw += (Math.random() - 0.5) * 2;
+      if (Math.random() < 0.4) {this.wanderYaw += (Math.random() - 0.5) * 2;}
       this.vel.set(
         Math.sin(this.wanderYaw) * CRAWLER_HOP_SPEED * 0.35,
         CRAWLER_HOP_UP * 0.8,
@@ -266,9 +266,9 @@ export class Crawler implements Targetable, SwarmSlotOwner {
       this.glow = Math.max(0, t) * 0.6;
     } else {
       this.squash = 1;
-      if (this.glow > 0) this.glow -= dt * 2.5;
+      if (this.glow > 0) {this.glow -= dt * 2.5;}
     }
-    if (this.flash > 0) this.flash -= dt;
+    if (this.flash > 0) {this.flash -= dt;}
     this.animT += dt;
     this.writeInstances(terrain);
   }

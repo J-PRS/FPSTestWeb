@@ -44,12 +44,12 @@ const TOTAL_W = WEIGHTS.reduce((a, [, w]) => a + w, 0);
 /** Roll a creature-kill drop; null = no powerup this kill. Rolls are
  *  REQUIRED — a default Math.random here is a silent desync source. */
 export function rollCreatureDrop(r0: number, r1: number): PowerupKind | null {
-  if (r0 >= POWERUP.dropChance) return null;
+  if (r0 >= POWERUP.dropChance) {return null;}
   let acc = 0;
   const roll = r1 * TOTAL_W;
   for (const [kind, w] of WEIGHTS) {
     acc += w;
-    if (roll < acc) return kind;
+    if (roll < acc) {return kind;}
   }
   return 'heal';
 }

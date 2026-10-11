@@ -235,7 +235,7 @@ function skyCandPush(list: SkyCand[], s: number, assign: number[], orient: numbe
  *  the hard constraint that stops a seamless-but-sideways cube. */
 /** Signed third-vs-third gradient down one axis of one face. */
 function skyAxisGrad(d: Uint8ClampedArray, horizontal: boolean): number {
-  const S = SKY_SOLVE_PX, T = (S / 3) | 0;
+  const S = SKY_SOLVE_PX, T = Math.trunc((S / 3));
   let g = 0;
   for (let u = 0; u < S; u++) {
     let band = 0;
@@ -788,7 +788,7 @@ export async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefin
       // 2048m cells: T2 GLBs shatter into ~250 materials, and the old 512m
       // grid multiplied that by 4 → ~1000 draw calls. Bigger cells keep
       // frustum culling useful at range while quartering the mesh count.
-      const cell = `${e[12]! / 2048 | 0},${e[14]! / 2048 | 0}`;
+      const cell = `${Math.trunc(e[12]! / 2048)},${Math.trunc(e[14]! / 2048)}`;
       // Material dedup: the DIF exporter emits the same Blender material
       // under a new `.NNN` name per GLB (BE_EWAL01B, .001…005) — ~360
       // distinct uuids for ~60 real materials. Canonicalize on the

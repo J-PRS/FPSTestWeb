@@ -71,15 +71,15 @@ export class CtfBridge {
       onPersonalPoints: (id, pts) => w.onPersonalPoints?.(id, pts),
       onFlagEvent: (kind, team, at, actor) => {
         const chatKind = { taken: 'flaggrab', dropped: 'flagdrop', returned: 'flagreturn', captured: 'flagcap' } as const;
-        if (actor) w.onFlagNotice?.(chatKind[kind], actor.id, actor.team, at);
+        if (actor) {w.onFlagNotice?.(chatKind[kind], actor.id, actor.team, at);}
         sfx.flagCue(kind, team === w.playerTeam);
         // 'at' is the stand on a return — same converge ceremony as the
         // online path; no streak, the offline room doesn't keep a
         // dropped-pos marker to fly it from.
-        if (kind === 'returned') flagReturnFx(at, team, null);
+        if (kind === 'returned') {flagReturnFx(at, team, null);}
         deps.world.explosions.push(new Explosion(
           deps.lazyScene(), _flagBurst.copy(at).setY(at.y + 1.2), false, 0,
-          deps.lazyTerrain(), kind === 'captured' ? 2.4 : kind === 'dropped' ? 1.0 : 1.4,
+          deps.lazyTerrain(), kind === 'captured' ? 2.4 : kind === 'dropped' ? 1 : 1.4,
           TEAM_COLORS[team]));
       },
     }, deps.lazyPlayer().pos, w.bases, w.structures);
@@ -93,8 +93,8 @@ export class CtfBridge {
    *  broadcast location — public info). */
   flagPos(team: string, carried: boolean): { x: number; y: number; z: number } | undefined {
     const m = this.ctf.markers().find((m) => m.team === team);
-    if (!m) return undefined;
-    if (carried) return m.state === 'carried' ? { x: m.pos.x, y: m.pos.y, z: m.pos.z } : undefined;
+    if (!m) {return undefined;}
+    if (carried) {return m.state === 'carried' ? { x: m.pos.x, y: m.pos.y, z: m.pos.z } : undefined;}
     return { x: m.home.x, y: m.home.y, z: m.home.z };
   }
 
@@ -150,7 +150,7 @@ export class CtfBridge {
    *  CtfFlags only knows positions, not look direction. */
   throwLocal(): void {
     const p = this.deps.lazyPlayer();
-    if (p.isDead) return;
+    if (p.isDead) {return;}
     this.ctf.throwLocal('local', p.pos, p.vel ?? _flagBurst.set(0, 0, 0), p.yaw, p.pitch);
   }
 
@@ -168,7 +168,7 @@ export class CtfBridge {
   rekey(oldId: string, newId: string): void {
     const v = this.lastTouchPos.get(oldId);
     this.lastTouchPos.delete(oldId);
-    if (v !== undefined) this.lastTouchPos.set(newId, v);
+    if (v !== undefined) {this.lastTouchPos.set(newId, v);}
     this.ctf.rekey(oldId, newId);
   }
 
@@ -182,9 +182,9 @@ export class CtfBridge {
       _touchers.push(['local', player.pos, prev]);
     }
     for (const b of bots) {
-      if (b.isDead) continue;
+      if (b.isDead) {continue;}
       let prev = this.lastTouchPos.get(b.playerId);
-      if (!prev) this.lastTouchPos.set(b.playerId, (prev = b.position.clone()));
+      if (!prev) {this.lastTouchPos.set(b.playerId, (prev = b.position.clone()));}
       _touchers.push([b.playerId, b.position, prev]);
       prev.copy(b.position);
     }

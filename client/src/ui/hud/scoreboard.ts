@@ -69,22 +69,22 @@ function sbRowEl(r: SbRow, num = ''): HTMLTableRowElement {
   const cells = [String(r.frags), String(r.deaths), r.score === null ? '—' : String(r.score), r.net ?? '—', r.ping === null ? '—' : typeof r.ping === 'string' ? r.ping : String(Math.round(r.ping)), r.sheep == null ? '—' : `${Math.round(r.sheep)}%`, r.alive == null ? '—' : `${r.alive}s`, r.asw ?? '—'];
   const numTd = document.createElement('td');
   numTd.textContent = num;
-  tr.appendChild(numTd);
+  tr.append(numTd);
   const nameTd = document.createElement('td');
   // Bots carry a literal [BOT] badge in the name — a diamond/dot glyph
   // in front would be a second legend saying the same thing.
-  nameTd.appendChild(document.createTextNode(` ${r.name}`));
-  tr.appendChild(nameTd);
+  nameTd.append(document.createTextNode(` ${r.name}`));
+  tr.append(nameTd);
   const clsTd = document.createElement('td');
   // Three-letter class codes (T2 board convention) — a full word's width
   // for a three-value column is wasted; HVY over HEV is the era spelling.
   clsTd.textContent = r.cls ? (CLASS_SHORT[r.cls] ?? r.cls.slice(0, 3).toUpperCase()) : '—';
   clsTd.className = `sb-cls-${r.cls ?? 'none'}`;
-  tr.appendChild(clsTd);
+  tr.append(clsTd);
   for (const cell of cells) {
     const td = document.createElement('td');
     td.textContent = cell;
-    tr.appendChild(td);
+    tr.append(td);
   }
   return tr;
 }
@@ -116,7 +116,7 @@ export class Scoreboard {
     this.countdownAt = secLeft === null ? 0 : performance.now() + secLeft * 1000;
     if (!this.countdownAt) {
       this.lastCountdownTxt = '';
-      if (this.countdownEl) this.countdownEl.style.display = 'none';
+      if (this.countdownEl) {this.countdownEl.style.display = 'none';}
     }
   }
 
@@ -124,7 +124,7 @@ export class Scoreboard {
    *  callers recompute every scoreboard tick, but the DOM only pays when
    *  the match actually changes. */
   setTitle(t: string): void {
-    if (t === this.lastTitle || !this.title) return;
+    if (t === this.lastTitle || !this.title) {return;}
     this.lastTitle = t;
     this.title.textContent = t;
     this.title.style.display = t ? '' : 'none';
@@ -136,7 +136,7 @@ export class Scoreboard {
     // Player markers are later siblings in #hud — no z-index anywhere, so
     // they paint over the panel's translucent dim. Hide them while open.
     this.root.parentElement?.classList.toggle('sb-open', v);
-    if (v) this.refresh = 0; // force render on open
+    if (v) {this.refresh = 0;} // force render on open
   }
 
   get isVisible(): boolean { return this.visible; }
@@ -148,7 +148,7 @@ export class Scoreboard {
   /** 4Hz re-render while open — cheap enough that diffing row state
    *  isn't worth the bookkeeping. */
   tick(dt: number): void {
-    if (!this.visible) return;
+    if (!this.visible) {return;}
     if (this.countdownAt && this.countdownEl) {
       const left = Math.max(0, Math.ceil((this.countdownAt - performance.now()) / 1000));
       const txt = left > 0 ? `NEXT MATCH IN ${left}` : 'NEXT MATCH…';
@@ -159,7 +159,7 @@ export class Scoreboard {
       }
     }
     this.refresh -= dt;
-    if (this.refresh > 0) return;
+    if (this.refresh > 0) {return;}
     this.refresh = 0.25;
     // Any row carrying a team → split into sections; otherwise flat FFA.
     const hasTeams = this.rows.some(r => r.team);
@@ -172,7 +172,7 @@ export class Scoreboard {
       // # restarts per team — the split makes size imbalance readable at
       // a glance (a 9-row team vs a 3-row team is obvious).
       const trs = this.rows.filter(r => r.team === team).map((r, i) => sbRowEl(r, String(i + 1)));
-      if (!trs.length) continue;
+      if (trs.length === 0) {continue;}
       // Team label is redundant — name cells are already alpha/bravo
       // tinted. The row survives as a tinted hairline divider so the
       // section split still reads at a glance.
@@ -180,12 +180,12 @@ export class Scoreboard {
       th.className = `sb-team ${team}`;
       const td = document.createElement('td');
       td.colSpan = 99; // span whatever column count the table has
-      th.appendChild(td);
+      th.append(td);
       kids.push(th, ...trs);
     }
     // Teamless stragglers (spectators, unteamed) under their own header.
     const rest = this.rows.filter(r => !r.team);
-    if (rest.length) kids.push(...rest.map((r, i) => sbRowEl(r, String(i + 1))));
+    if (rest.length > 0) {kids.push(...rest.map((r, i) => sbRowEl(r, String(i + 1))));}
     this.tbody.replaceChildren(...kids);
   }
 }

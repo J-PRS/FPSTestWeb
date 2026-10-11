@@ -33,13 +33,13 @@ export class MatchJournal {
   }): void {
     const entry = { t: wallNow(), ...rec };
     this.ring.push(entry);
-    if (this.ring.length > 100) this.ring.shift();
+    if (this.ring.length > 100) {this.ring.shift();}
     try {
       mkdirSync(join(this.journalPath, '..'), { recursive: true });
       rotateLogIfBig(this.journalPath);
-      appendFileSync(this.journalPath, JSON.stringify(entry) + '\n');
-    } catch (e) {
-      logger.warn('Match journal write failed', { err: String(e) });
+      appendFileSync(this.journalPath, `${JSON.stringify(entry)  }\n`);
+    } catch (error) {
+      logger.warn('Match journal write failed', { err: String(error) });
     }
   }
 
@@ -60,12 +60,12 @@ export class MatchJournal {
     const file = Bun.file(this.journalPath);
     let size = -1;
     try { size = file.size; } catch { /* no journal yet */ }
-    if (size >= 0 && this.statsCache?.size === size) return this.statsCache.rows;
+    if (size >= 0 && this.statsCache?.size === size) {return this.statsCache.rows;}
     const agg = new Map<string, Row>();
     try {
       const text = await file.text();
       for (const line of text.split('\n')) {
-        if (!line.trim()) continue;
+        if (!line.trim()) {continue;}
         let rec: { winner?: string; players?: { id: string; team?: string; kills?: number; deaths?: number }[] };
         try { rec = JSON.parse(line); } catch { continue; }
         for (const p of rec.players ?? []) {
@@ -74,13 +74,13 @@ export class MatchJournal {
           row.kills += p.kills ?? 0;
           row.deaths += p.deaths ?? 0;
           // FFA records name the player; team records name the side.
-          if (rec.winner === p.id || (p.team && rec.winner === p.team)) row.wins++;
+          if (rec.winner === p.id || (p.team && rec.winner === p.team)) {row.wins++;}
           agg.set(p.id, row);
         }
       }
     } catch { /* no journal yet — empty leaderboard */ }
     const rows = [...agg.values()].toSorted((a, b) => b.wins - a.wins || b.kills - a.kills);
-    if (size >= 0) this.statsCache = { size, rows };
+    if (size >= 0) {this.statsCache = { size, rows };}
     return rows;
   }
 }

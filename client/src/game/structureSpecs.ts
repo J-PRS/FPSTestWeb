@@ -37,7 +37,7 @@ export function applyStructureSpecs(list: readonly StructureSpec[] | undefined, 
   if (movement) {move = movement;}
   const eff = specList.filter((s) => s.kind !== 'shield' || !s.team || !gridDown.has(s.team));
   const cols = structureColliders(eff);
-  live = cols.length ? new SolidWorld(cols) : null;
+  live = cols.length > 0 ? new SolidWorld(cols) : null;
   setStructureTopAt(live ? structureTopAt : undefined);
   Ball.colliders = cols;
   Ball.colliderIndex = cols.length > 0 ? new ColliderIndex(cols) : null;

@@ -49,7 +49,7 @@ plasmagun.add(mkTube(0.12, 0.13, 0.05, -0.22, darkMat)); // emitter collar
 plasmagun.add(mkBore(0.09, -0.246));
 const plasmagunGlow = new THREE.Mesh(
   new THREE.CylinderGeometry(0.08, 0.08, 0.02, 16),
-  new THREE.MeshBasicMaterial({ color: 0x44BBFF })
+  new THREE.MeshBasicMaterial({ color: 0x44_BB_FF })
 );
 plasmagunGlow.rotation.x = Math.PI / 2;
 plasmagunGlow.position.z = -0.247;
@@ -164,8 +164,8 @@ return chain;
 // articulated two-segment scalloped wing.
 export function mkRakk_v1(): THREE.Group {
   const g = new THREE.Group();
-  const hide = new THREE.MeshLambertMaterial({ color: 0x54413F });
-  const memb = new THREE.MeshLambertMaterial({ color: 0x4A2F3A, side: THREE.DoubleSide });
+  const hide = new THREE.MeshLambertMaterial({ color: 0x54_41_3F });
+  const memb = new THREE.MeshLambertMaterial({ color: 0x4A_2F_3A, side: THREE.DoubleSide });
   const body = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), hide);
   body.scale.set(0.75, 0.6, 1);
   g.add(body);
@@ -245,7 +245,7 @@ for (const side of [-1, 1]) {
 }
 // Shell hopper on the left flank — a rack of finned bombs, tips
 // visible above the tube. Live ordnance = the mortar read.
-const finMat = new THREE.MeshLambertMaterial({ color: 0x5a_4a_28, emissive: 0x18_12_05 });
+const finMat = new THREE.MeshLambertMaterial({ color: 0x5A_4A_28, emissive: 0x18_12_05 });
 for (let i = 0; i < 3; i++) {
   const shell = mkTube(0.035, 0.035, 0.16, -0.05 + i * 0.09, bodyMat);
   shell.position.set(-0.15, -0.02, shell.position.z);

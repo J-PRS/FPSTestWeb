@@ -9,27 +9,27 @@
  */
 
 export const MOVEMENT_CONFIG = {
-  maxVelocityGround: 7.0,
-  groundAccelerate: 800.0,
-  groundFriction: 50.0,
-  stopThreshold: 1.0,
-  maxPassiveAirvel: 10.0,
+  maxVelocityGround: 7,
+  groundAccelerate: 800,
+  groundFriction: 50,
+  stopThreshold: 1,
+  maxPassiveAirvel: 10,
   airControl: 0.2,
-  terminalVelocity: 100.0,
-  jumpSpeed: 7.0,
+  terminalVelocity: 100,
+  jumpSpeed: 7,
   autoHop: true,
   // Horizontal overspeed bleed while grounded: blast/slide velocity above
   // the ground cap decays toward it instead of being hard-clamped — the
   // clamp used to truncate knockback impulses (including the loft that
   // makes rocket jumps) before the body ever left the floor.
-  overspeedBleed: 4.0,
+  overspeedBleed: 4,
   // Generous grounding — Tribes walkers stay glued: any terrain is
   // walkable at any angle, and a lip/crest under this height never
   // reads airborne (the air-control steal + walk→jump anim flicker a
   // strict gate produced). A real launch — explosion loft, jet burn,
   // jump takeoff — clears the snap via the vel gate.
   groundSnapDistance: 0.6,
-  groundLaunchVel: 3.0,
+  groundLaunchVel: 3,
   // T1 parity: contact lingers 256ms (MAXJUMPTICKS=8 @ 32ms) after the
   // surface is lost — gentle crest hops stay grounded, real launches don't.
   groundGraceT: 0.256,
@@ -45,13 +45,13 @@ export const MOVEMENT_CONFIG = {
   // is modelled by the server shadow (RoomMoveSim) so a client can't
   // claim more jet than the tank allows — numbers mirror the client's
   // skills.ts economy.
-  jetForceUp: 35.0,
-  jetForceDir: 10.0,
+  jetForceUp: 35,
+  jetForceDir: 10,
   // Horizontal-speed ceiling for jet thrust's velocity-aligned share:
   // past it only the perpendicular (steering) share applies — jets
   // steer and lift but can't pump forward speed forever. Ports the
   // maxForwardAccelSpeed rule from the Unity RB_Controller jetpack.
-  jetMaxFwdAccel: 50.0,
+  jetMaxFwdAccel: 50,
   // Player-vs-player contact: capsule half-width and the elastic share
   // of the bump — a juggernaut eating a capper keeps most of its line,
   // the light one takes the shove (Tribes bodyblock, not a brick wall).
@@ -141,7 +141,7 @@ export interface MoveSurface {
  *  speed instead of pure geometry. Hosts rebuild this list each tick. */
 export interface BodyCapsule { x: number; y: number; z: number; h: number; mass: number; vx: number; vz: number; r: number; id?: string }
 
-export const GRAVITY = -28.0;
+export const GRAVITY = -28;
 
 // Scalar scratch — no Vec3 allocation in the hot path.
 const _in = { x: 0, y: 0, z: 0 };
@@ -199,12 +199,12 @@ export class MoveSim {
     // Claimed input is the trust boundary — the server replays these on a
     // shadow sim, so a doctored magnitude (forward=999) or a NaN bitfield
     // is a speedhack/poison lane, not just a bad local frame.
-    if (input.forward !== undefined) this.input.forward = Number.isFinite(input.forward) ? Math.max(-1, Math.min(1, input.forward)) : 0;
-    if (input.right !== undefined) this.input.right = Number.isFinite(input.right) ? Math.max(-1, Math.min(1, input.right)) : 0;
-    if (input.jumpPressed !== undefined) this.input.jumpPressed = !!input.jumpPressed;
-    if (input.jumpHeld !== undefined) this.input.jumpHeld = !!input.jumpHeld;
-    if (input.skiHeld !== undefined) this.input.skiHeld = !!input.skiHeld;
-    if (input.jetHeld !== undefined) this.input.jetHeld = !!input.jetHeld;
+    if (input.forward !== undefined) {this.input.forward = Number.isFinite(input.forward) ? Math.max(-1, Math.min(1, input.forward)) : 0;}
+    if (input.right !== undefined) {this.input.right = Number.isFinite(input.right) ? Math.max(-1, Math.min(1, input.right)) : 0;}
+    if (input.jumpPressed !== undefined) {this.input.jumpPressed = Boolean(input.jumpPressed);}
+    if (input.jumpHeld !== undefined) {this.input.jumpHeld = Boolean(input.jumpHeld);}
+    if (input.skiHeld !== undefined) {this.input.skiHeld = Boolean(input.skiHeld);}
+    if (input.jetHeld !== undefined) {this.input.jetHeld = Boolean(input.jetHeld);}
   }
 
   setState(s: MoveState): void {
@@ -212,7 +212,7 @@ export class MoveSim {
     // ANY caller (wire restore, replay snapshot, spawn seed) poisons
     // every integration step after it. Callers gate too, but the law
     // holds only if it's enforced where the write happens.
-    if (!Number.isFinite(s.pos.x + s.pos.y + s.pos.z + s.vel.x + s.vel.y + s.vel.z + s.yaw + s.pitch)) return;
+    if (!Number.isFinite(s.pos.x + s.pos.y + s.pos.z + s.vel.x + s.vel.y + s.vel.z + s.yaw + s.pitch)) {return;}
     this.state.pos.x = s.pos.x; this.state.pos.y = s.pos.y; this.state.pos.z = s.pos.z;
     this.state.vel.x = s.vel.x; this.state.vel.y = s.vel.y; this.state.vel.z = s.vel.z;
     this.state.yaw = s.yaw; this.state.pitch = s.pitch; this.state.onGround = s.onGround;
@@ -247,7 +247,7 @@ export class MoveSim {
   update(dt: number): void {
     // NaN dt would poison acc permanently — `NaN >= STEP` never drains
     // and the sim freezes until a snapshot/setState reseed.
-    if (!Number.isFinite(dt)) return;
+    if (!Number.isFinite(dt)) {return;}
     this.acc += Math.min(dt, MoveSim.MAX_DT);
     while (this.acc >= MoveSim.STEP) {
       this.acc -= MoveSim.STEP;
@@ -376,7 +376,7 @@ export class MoveSim {
     // tangential speed through the contact, so clamping vel.y while
     // grounded silently capped downhill speed at terminal/sin(slope).
     s.vel.y += GRAVITY * dt;
-    if (!s.onGround && s.vel.y < -MOVEMENT_CONFIG.terminalVelocity) s.vel.y = -MOVEMENT_CONFIG.terminalVelocity;
+    if (!s.onGround && s.vel.y < -MOVEMENT_CONFIG.terminalVelocity) {s.vel.y = -MOVEMENT_CONFIG.terminalVelocity;}
 
     s.pos.x += s.vel.x * dt;
     s.pos.y += s.vel.y * dt;
@@ -388,15 +388,15 @@ export class MoveSim {
 
   private collideBodies(): void {
     const s = this.state;
-    if (this.bodies.length === 0 && !this.bodiesNear) return;
+    if (this.bodies.length === 0 && !this.bodiesNear) {return;}
     const feet = s.pos.y - this.eyeHeight;
     for (const b of this.bodiesNear ? this.bodiesNear(s.pos.x, s.pos.z) : this.bodies) {
-      if (b.id === this.selfId) continue;
+      if (b.id === this.selfId) {continue;}
       const rr = this.bodyRadius + b.r;
-      if (feet >= b.y || s.pos.y <= b.y - b.h) continue;
+      if (feet >= b.y || s.pos.y <= b.y - b.h) {continue;}
       const dx = s.pos.x - b.x, dz = s.pos.z - b.z;
       const d2 = dx * dx + dz * dz;
-      if (d2 >= rr * rr) continue;
+      if (d2 >= rr * rr) {continue;}
       const d = Math.sqrt(d2) || 0.001;
       const nx = dx / d, nz = dz / d;
       // Half-separation per side — the neighbor's own sim moves its half

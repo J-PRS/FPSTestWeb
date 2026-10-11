@@ -10,7 +10,7 @@ const STUCK_MS_FLAG = 2500;
 
 // Sheep audit: mobile bots should spend most travel ticks skiing/
 // airborne, jet a slice of the time, and actually cover ground.
-const SHEEP_WIN_MS = 10000;
+const SHEEP_WIN_MS = 10_000;
 const SHEEP_MIN_TICKS = 60;
 const SHEEP_SKIAIR = 0.65;
 const SHEEP_JETPCT = 0.05;
@@ -53,7 +53,7 @@ export class MobilityWatchdog {
    *  boundary rather than spamming every tick. Stand-and-shoot is a legal
    *  pick — the timer is parked while the brain holds a combat spot. */
   checkStuck(id: string, pos: Vec3, brain: BotBrain, carryingFlag: boolean, now: number): void {
-    let w = this.stuck.get(id);
+    const w = this.stuck.get(id);
     if (!w) {
       this.stuck.set(id, { x: pos.x, z: pos.z, since: now, warned: false });
       return;
@@ -80,10 +80,10 @@ export class MobilityWatchdog {
         room: this.roomName, bot: id,
         ms: now - w.since, carrying: carryingFlag,
         hunting: brain.currentHuntId !== null,
-        pos: { x: +pos.x.toFixed(1), y: +pos.y.toFixed(1), z: +pos.z.toFixed(1) },
+        pos: { x: Number(pos.x.toFixed(1)), y: Number(pos.y.toFixed(1)), z: Number(pos.z.toFixed(1)) },
         // The destination it can't reach is what separates "parked by
         // choice" from "grinding into a pocket" — log both ends.
-        dest: { x: +brain.lastDest.x.toFixed(1), y: +brain.lastDest.y.toFixed(1), z: +brain.lastDest.z.toFixed(1) },
+        dest: { x: Number(brain.lastDest.x.toFixed(1)), y: Number(brain.lastDest.y.toFixed(1)), z: Number(brain.lastDest.z.toFixed(1)) },
         diag: brain.stuckDiag,
       });
     }
@@ -95,7 +95,7 @@ export class MobilityWatchdog {
    *  jet-use, pace, or coverage floors. Healthy mobility is logged too,
    *  so a regression is visible not just failures. */
   checkSheep(id: string, pos: Vec3, m: MobilitySample, now: number): void {
-    let s = this.sheep.get(id);
+    const s = this.sheep.get(id);
     if (!s) {
       this.sheep.set(id, { winStart: now, ticks: 0, skiAir: 0, air: 0, jet: 0, dist: 0, lx: pos.x, lz: pos.z });
       return;
@@ -104,14 +104,14 @@ export class MobilityWatchdog {
     s.lx = pos.x; s.lz = pos.z;
     if (m.trying) {
       s.ticks++; s.dist += Math.hypot(dx, dz);
-      if (m.ski || m.airborne) s.skiAir++;
+      if (m.ski || m.airborne) {s.skiAir++;}
       // airPct is the honest "dynamic Tribes bot" number — skiHeld on the
       // ground counts as ski, but only real altitude counts as air.
-      if (m.airborne) s.air++;
-      if (m.jetting) s.jet++;
+      if (m.airborne) {s.air++;}
+      if (m.jetting) {s.jet++;}
     }
     const winMs = now - s.winStart;
-    if (winMs < SHEEP_WIN_MS) return;
+    if (winMs < SHEEP_WIN_MS) {return;}
     if (s.ticks >= SHEEP_MIN_TICKS) {
       const frac = s.skiAir / s.ticks;
       const avgSpeed = s.dist / (s.ticks * m.dt); // per-tick distance → m/s
@@ -120,8 +120,8 @@ export class MobilityWatchdog {
         skiAirPct: Math.round(frac * 100),
         airPct: Math.round((s.air / s.ticks) * 100),
         jetPct: Math.round((s.jet / s.ticks) * 100),
-        avgSpeed: +avgSpeed.toFixed(1),
-        covered: +s.dist.toFixed(1),
+        avgSpeed: Number(avgSpeed.toFixed(1)),
+        covered: Number(s.dist.toFixed(1)),
       };
       logger.debug('Bot mobility', stats);
       // Coverage is the ground truth: a bot topping 100m/s over 700m
@@ -137,7 +137,7 @@ export class MobilityWatchdog {
       // worth a line. Healthy samples reset the streak.
       if (sheeping) {
         s.wasSheep = true;
-        if ((s.sheepStreak = (s.sheepStreak ?? 0) + 1) >= 2) logger.info('Bot sheeping', stats);
+        if ((s.sheepStreak = (s.sheepStreak ?? 0) + 1) >= 2) {logger.info('Bot sheeping', stats);}
       } else {
         s.sheepStreak = 0;
       }

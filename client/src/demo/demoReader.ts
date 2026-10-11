@@ -2,15 +2,14 @@
 // Uses DataView for efficient binary read/write.
 // Format: magic(1) + version(4) + header fields + frames + events
 
-import type {
-  DemoFrame, ProjectileEvent, TargetEvent, RemoteFrame,
-  ProjectileEventType, TargetEventType} from './types.js';
 import {
-  DEMO_MAGIC, DEMO_FORMAT_VERSION,
-  type DemoFile, type DemoRosterEntry,
-} from './types.js';
+  type DemoFrame, type ProjectileEvent, type TargetEvent, type RemoteFrame,
+  type ProjectileEventType, type TargetEventType,
+  DEMO_MAGIC,DEMO_FORMAT_VERSION,
+  type DemoFile,type DemoRosterEntry,type DemoHeightmap} from './types.js';
+
 import { crc32, FRAME_SIZE, PROJECTILE_EVENT_SIZE, TARGET_EVENT_SIZE, REMOTE_FRAME_SIZE, SECTION_HMAP } from './demoWriter.js';
-import type { DemoHeightmap } from './types.js';
+
 
 // CRC32 lookup table
 

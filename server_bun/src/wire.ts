@@ -62,12 +62,12 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
   // naming a different playerId can't re-seat a live socket, so it dies
   // here instead of warn-spamming every drained retry.
   join: {
-    limit: { maxCount: 4, windowMs: 10000 },
+    limit: { maxCount: 4, windowMs: 10_000 },
     validate: (obj) => typeof obj.playerId === 'string'
       ? { success: true, data: { ...obj, type: 'join', playerId: obj.playerId } as Extract<ClientMessage, { type: 'join' }> }
       : { success: false, error: 'join missing playerId' },
     handle: (h, id, m) => {
-      if (m.playerId === id) h.sendWorldState(id);
+      if (m.playerId === id) {h.sendWorldState(id);}
     },
   },
 
@@ -86,7 +86,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     limit: { maxCount: 30, windowMs: 1000 },
     validate: (obj) => {
       const body = validateBody(obj);
-      if (!body.success) return body;
+      if (!body.success) {return body;}
       const seq = isFiniteNumber(obj.seq) ? obj.seq : undefined;
       const inputSeq = isFiniteNumber(obj.inputSeq) ? obj.inputSeq : undefined;
       const ping = isFiniteNumber(obj.ping) ? obj.ping : undefined;
@@ -114,7 +114,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     // drop-and-desync.
     validate: (obj) => {
       const body = validateBody(obj);
-      if (!body.success) return body;
+      if (!body.success) {return body;}
       return { success: true, data: { type: 'teleport', ...body.data } };
     },
     handle: (h, id, m) => h.moves.handleTeleport(id, m),
@@ -128,15 +128,15 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     limit: { maxCount: 30, windowMs: 1000 },
     validate: (obj) => {
       const pos = validateVec3(obj.position);
-      if (!pos.success) return { success: false, error: `position: ${pos.error}` };
-      const excludeTargetId = obj.excludeTargetId;
+      if (!pos.success) {return { success: false, error: `position: ${pos.error}` };}
+      const {excludeTargetId} = obj;
       if (excludeTargetId !== null && excludeTargetId !== undefined && typeof excludeTargetId !== 'string') {
         return { success: false, error: 'excludeTargetId must be string or null' };
       }
       const wt = optWeaponType(obj.weaponType);
-      if (!wt.ok) return { success: false, error: 'weaponType: unknown weapon' };
+      if (!wt.ok) {return { success: false, error: 'weaponType: unknown weapon' };}
       const pid = optProjIdOpt(obj.projectileId);
-      if (!pid.ok) return { success: false, error: 'projectileId: oversized' };
+      if (!pid.ok) {return { success: false, error: 'projectileId: oversized' };}
       return {
         success: true,
         data: {
@@ -167,11 +167,11 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     limit: { maxCount: 40, windowMs: 1000 },
     validate: (obj) => {
       const dir = optVec(obj.dir);
-      if (!dir.ok) return { success: false, error: `dir: ${dir.error}` };
+      if (!dir.ok) {return { success: false, error: `dir: ${dir.error}` };}
       const wt = optWeaponType(obj.weaponType);
-      if (!wt.ok) return { success: false, error: 'weaponType: unknown weapon' };
+      if (!wt.ok) {return { success: false, error: 'weaponType: unknown weapon' };}
       const pos = optVec(obj.pos);
-      if (!pos.ok) return { success: false, error: `pos: ${pos.error}` };
+      if (!pos.ok) {return { success: false, error: `pos: ${pos.error}` };}
       return {
         success: true,
         data: {
@@ -193,7 +193,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     limit: { maxCount: 6, windowMs: 1000 },
     validate: (obj) => {
       const pos = validateVec3(obj.position);
-      if (!pos.success) return { success: false, error: `position: ${pos.error}` };
+      if (!pos.success) {return { success: false, error: `position: ${pos.error}` };}
       return { success: true, data: { type: 'slam', position: pos.data, claimSeq: optClaimSeq(obj.claimSeq) } };
     },
     handle: (h, id, m) => h.claimAck(id, 'slam', m.claimSeq, h.combat.handleSlam(id, m)),
@@ -203,7 +203,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     limit: { maxCount: 10, windowMs: 1000 },
     validate: (obj) => {
       const pos = validateVec3(obj.position);
-      if (!pos.success) return { success: false, error: `position: ${pos.error}` };
+      if (!pos.success) {return { success: false, error: `position: ${pos.error}` };}
       return { success: true, data: { type: 'jump', position: pos.data } };
     },
     handle: (h, id, m) => h.relayPresenceEvent(id, m),
@@ -213,7 +213,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     limit: { maxCount: 60, windowMs: 1000 },
     validate: (obj) => {
       const pos = validateVec3(obj.position);
-      if (!pos.success) return { success: false, error: `position: ${pos.error}` };
+      if (!pos.success) {return { success: false, error: `position: ${pos.error}` };}
       return { success: true, data: { type: 'jetpack', position: pos.data } };
     },
     handle: (h, id, m) => h.relayPresenceEvent(id, m),
@@ -224,13 +224,13 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     validate: (obj) => {
       const parseEdge = (raw: unknown): { seq?: number; input: { forward: number; right: number; jump: number; ski: number; jet: number; status: number }; rotation: { yaw: number; pitch: number } } | string => {
         const input = (raw as Record<string, unknown>)?.input;
-        if (typeof input !== 'object' || input === null) return 'input must be an object';
+        if (typeof input !== 'object' || input === null) {return 'input must be an object';}
         const i = input as Record<string, unknown>;
         if (!isFiniteNumber(i.forward) || !isFiniteNumber(i.right) || !isFiniteNumber(i.jump) || !isFiniteNumber(i.ski)) {
           return 'input fields must be finite numbers';
         }
         const rot = validateRotation((raw as Record<string, unknown>).rotation);
-        if (!rot.success) return `rotation: ${rot.error}`;
+        if (!rot.success) {return `rotation: ${rot.error}`;}
         return {
           seq: isFiniteNumber((raw as Record<string, unknown>).seq) ? (raw as Record<string, unknown>).seq as number : undefined,
           input: { forward: i.forward, right: i.right, jump: i.jump, ski: i.ski, jet: isFiniteNumber(i.jet) ? i.jet : 0, status: isFiniteNumber(i.status) ? i.status : 0 },
@@ -238,26 +238,26 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
         };
       };
       const edge = parseEdge(obj);
-      if (typeof edge === 'string') return { success: false, error: edge };
+      if (typeof edge === 'string') {return { success: false, error: edge };}
       // prev is optional redundancy: same shape, validated the same —
       // a malformed copy must not sink the good current edge though, so
       // it fails soft (dropped, not rejected).
       let prev: typeof edge | undefined;
       if (obj.prev != null) {
         const pe = parseEdge(obj.prev);
-        if (typeof pe !== 'string') prev = pe;
+        if (typeof pe !== 'string') {prev = pe;}
       }
       return { success: true, data: { type: 'inputMove', ...edge, prev } };
     },
     handle: (h, id, m) => {
       const p = h.playerManager.getPlayer(id);
-      if (!p || p.isDead) return;
+      if (!p || p.isDead) {return;}
       const apply = (e: { seq?: number; input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number } }): boolean => {
         const i = e.input;
         const newStatus = (i.status ?? 0) & CLIENT_STATUS_MASK;
         // Stale edges must not touch skiing/status either — the sim's
         // seq gate decides before we commit.
-        if (h.roomInfo.moveInput?.(id, i, newStatus, e.seq) === false) return false;
+        if (h.roomInfo.moveInput?.(id, i, newStatus, e.seq) === false) {return false;}
         p.skiing = i.ski ? 1 : 0;
         p.jetting = i.jet ? 1 : 0;
         p.status = newStatus;
@@ -266,7 +266,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       // Redundant copy first: a lost packet's edge lands here instantly
       // instead of waiting the watchdog round-trip. seq gates inside
       // moveInput keep the double-apply a no-op on the happy path.
-      if (m.prev) apply(m.prev);
+      if (m.prev) {apply(m.prev);}
       apply(m);
     },
   },
@@ -368,12 +368,12 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
   deploy: {
     limit: { maxCount: 4, windowMs: 1000 }, // plants are deliberate, not per-frame
     validate: (obj) => {
-      const kind = obj.kind;
+      const {kind} = obj;
       if (typeof kind !== 'string' || !DEPLOY_KINDS.includes(kind as DeployKind)) {
         return { success: false, error: `kind must be ${DEPLOY_KINDS.join('|')}` };
       }
       const dpos = validateVec3(obj.position);
-      if (!dpos.success) return { success: false, error: `position: ${dpos.error}` };
+      if (!dpos.success) {return { success: false, error: `position: ${dpos.error}` };}
       return { success: true, data: { type: 'deploy', kind: kind as DeployKind, position: dpos.data, claimSeq: optClaimSeq(obj.claimSeq) } };
     },
     handle: (h, id, m) => h.claimAck(id, 'deploy', m.claimSeq, h.roomInfo.onDeploy?.(id, m.kind, m.position) ?? 'gone'),
@@ -466,7 +466,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       const p = h.playerManager.getPlayer(id);
       // The validator allows exactly light|medium|heavy; this `in` guard
       // keeps the table honest if CLASS_STATS' keys ever drift from that.
-      if (p && m.armorClass in CLASS_STATS) p.pendingClass = m.armorClass as ArmorClass;
+      if (p && m.armorClass in CLASS_STATS) {p.pendingClass = m.armorClass as ArmorClass;}
     },
   },
 
@@ -480,7 +480,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     },
     handle: (h, id, m) => {
       const p = h.playerManager.getPlayer(id);
-      if (p && isPerkId(m.perk)) p.pendingPerk = m.perk;
+      if (p && isPerkId(m.perk)) {p.pendingPerk = m.perk;}
     },
   },
 
@@ -519,14 +519,14 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       // oversized payload would amplify one client's bandwidth into
       // every socket in the room.
       const text = typeof m.text === 'string' ? m.text.slice(0, 280) : '';
-      if (!text) return;
+      if (!text) {return;}
       // Team channel: only the sender's own team hears it — and only
       // when the sender actually carries a team, else a ffa client
       // claiming 'team' would quietly self-filter to nobody.
       const vgs = typeof m.vgs === 'string' ? m.vgs : undefined;
       if (m.team && sender?.team) {
         for (const [pid, p] of h.playerManager.getAllPlayers()) {
-          if (p.team === sender.team) h.sendToPlayer(pid, { type: 'chat', playerId: id, text, team: true, vgs });
+          if (p.team === sender.team) {h.sendToPlayer(pid, { type: 'chat', playerId: id, text, team: true, vgs });}
         }
         return;
       }
@@ -544,7 +544,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     validate: (obj) => {
       const fields: Record<string, unknown> = {};
       for (const k of ['fps', 'jsMs', 'ping', 'loss', 'jitter']) {
-        if (!isFiniteNumber(obj[k])) return { success: false, error: `clientStats.${k} must be a finite number` };
+        if (!isFiniteNumber(obj[k])) {return { success: false, error: `clientStats.${k} must be a finite number` };}
         fields[k] = obj[k];
       }
       const renderLagMs = isFiniteNumber(obj.renderLagMs) ? (obj.renderLagMs as number) : undefined;
@@ -552,14 +552,14 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       if (obj.renderLag !== null && typeof obj.renderLag === 'object' && !Array.isArray(obj.renderLag)) {
         renderLag = {};
         for (const [k, v] of Object.entries(obj.renderLag as Record<string, unknown>)) {
-          if (isFiniteNumber(v)) renderLag[k] = v;
+          if (isFiniteNumber(v)) {renderLag[k] = v;}
         }
       }
       return { success: true, data: { type: 'clientStats', fps: fields.fps as number, jsMs: fields.jsMs as number, ping: fields.ping as number, loss: fields.loss as number, jitter: fields.jitter as number, renderLagMs, renderLag } };
     },
     handle: (h, id, m) => {
       const p = h.playerManager.getPlayer(id);
-      if (!p) return;
+      if (!p) {return;}
       p.lastSeen = wallNow();
       p.clientStats = { fps: m.fps, jsMs: m.jsMs, ping: m.ping, loss: m.loss, jitter: m.jitter, renderLagMs: m.renderLagMs, renderLag: m.renderLag, at: wallNow() };
     },
@@ -574,7 +574,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     },
     handle: (h, id, m) => {
       const p = h.playerManager.getPlayer(id);
-      if (!p) return;
+      if (!p) {return;}
       p.lastSeen = wallNow(); // ping is a liveness signal too —
       // without it a non-moving client could still go "stale"
       h.sendToPlayer(id, { type: 'pong', timestamp: m.timestamp });
@@ -593,7 +593,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     },
     handle: (h, id, m) => {
       const p = h.playerManager.getPlayer(id);
-      if (!p) return;
+      if (!p) {return;}
       p.lastSeen = wallNow();
       h.roomInfo.transitNote?.(id, wallNow() - m.timestamp, m.timestamp);
     },
@@ -605,7 +605,7 @@ export function validateMessage(raw: unknown): ValidationResult<ClientMessage> {
     return { success: false, error: 'Message must be an object' };
   }
   const obj = raw as Record<string, unknown>;
-  const type = obj.type;
+  const {type} = obj;
   if (typeof type !== 'string') {
     return { success: false, error: 'Message missing "type" field' };
   }

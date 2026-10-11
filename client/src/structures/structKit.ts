@@ -13,11 +13,11 @@ import {
 } from '../entities/viewmodel/weaponKit';
 
 // — palette — concrete gunmetal + dark trim + one glow line per structure —
-export const hullMat  = new THREE.MeshStandardMaterial({ color: 0x8A8F96, roughness: 0.75, metalness: 0.35 });
-export const trimMat  = new THREE.MeshStandardMaterial({ color: 0x3A3D44, roughness: 0.6,  metalness: 0.6  });
-export const deckMat  = new THREE.MeshStandardMaterial({ color: 0x6D7078, roughness: 0.85, metalness: 0.25 });
-export const glowCyan = new THREE.MeshBasicMaterial({ color: 0x59F2FF });
-export const glowAmber = new THREE.MeshBasicMaterial({ color: 0xFFB040 });
+export const hullMat  = new THREE.MeshStandardMaterial({ color: 0x8A_8F_96, roughness: 0.75, metalness: 0.35 });
+export const trimMat  = new THREE.MeshStandardMaterial({ color: 0x3A_3D_44, roughness: 0.6,  metalness: 0.6  });
+export const deckMat  = new THREE.MeshStandardMaterial({ color: 0x6D_70_78, roughness: 0.85, metalness: 0.25 });
+export const glowCyan = new THREE.MeshBasicMaterial({ color: 0x59_F2_FF });
+export const glowAmber = new THREE.MeshBasicMaterial({ color: 0xFF_B0_40 });
 export const darkMat  = new THREE.MeshStandardMaterial({ color: 0x14_15_18, roughness: 0.9,  metalness: 0.2  });
 
 /** Add mesh w/ shadows on — every kit piece goes through this. */
@@ -163,7 +163,7 @@ export function glowStrip(len: number, h: number, depth = 0.12, glow = glowCyan)
 /** Wall terminator — squat battered post that closes a curtain's open
  *  loft end. Without one a wall run just stops mid-air, hollow end on
  *  show. ~0.4m taller than the wall it caps. */
-export function endPost(h = 4.2, w = 3.0): THREE.Group {
+export function endPost(h = 4.2, w = 3): THREE.Group {
   const g = new THREE.Group();
   const post = mkLoft(topDown(
     { z: h + 0.4, ring: profOct(w * 0.82, w * 0.82, w * 0.16) },
@@ -213,7 +213,7 @@ export function compound(
       });
     }
   }
-  if (hulls.length) {g.userData.hulls = hulls;}
+  if (hulls.length > 0) {g.userData.hulls = hulls;}
   return g;
 }
 

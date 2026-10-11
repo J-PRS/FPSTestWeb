@@ -8,7 +8,7 @@ import { setSharedEnv, setSharedNow } from '../../shared/env.ts';
 import { wallNow } from './wallClock.ts';
 function envNum(name: string, fallback: number): number {
   const v = ENV?.[name];
-  if (v === undefined || v === '') return fallback;
+  if (v === undefined || v === '') {return fallback;}
   const n = Number(v);
   if (!Number.isFinite(n)) {
     console.warn(`[config] ${name}=${v} is not a number — using ${fallback}`);
@@ -37,7 +37,7 @@ export const CONFIG = {
   maxRooms: envNum('FPS_MAX_ROOMS', 256),
   /** A socket that connects but never completes the join handshake would
    *  otherwise sit forever (QUIC/RTC peers don't die quickly). */
-  joinTimeoutMs: envNum('FPS_JOIN_TIMEOUT_MS', 15000),
+  joinTimeoutMs: envNum('FPS_JOIN_TIMEOUT_MS', 15_000),
 
   playerMaxHealth: 100,
   respawnDelayMs: 3000,
@@ -69,7 +69,7 @@ export const CONFIG = {
   // timeouts) + join roundtrip can pass 15s on a flap. A drop that lands
   // after expiry joins fresh and the player respawns, so this needs real
   // headroom, not just "F5 is fast" margin.
-  reconnectGraceMs: envNum('FPS_RECONNECT_GRACE_MS', 60000),
+  reconnectGraceMs: envNum('FPS_RECONNECT_GRACE_MS', 60_000),
   idleKickMs: envNum('FPS_IDLE_KICK_MS', 60_000),
 
   // Movement authority flip: when set, the room's shadow sim OWNS player

@@ -148,20 +148,24 @@ export class WorkerTransport implements GameTransport {
   private drain(): void {
     // coalesceTickFrames may return its input unchanged — swap the queue
     // out by reference first or clearing pending would drain `evs` too.
-    const pending = this.pending;
+    const {pending} = this;
     this.pending = [];
     const evs = coalesceTickFrames(pending);
     this.coalesced += pending.length - evs.length;
     for (const ev of evs) {
       try {
         switch (ev.kind) {
-          case 'up': this.open = true; this.innerTier = ev.tier; this.config.onConnect?.(); break;
-          case 'down': this.open = false; this.config.onDisconnect?.(ev.code, ev.reason); break;
-          case 'err': this.config.onError?.(new Error(ev.msg)); break;
-          case 'ev': if ('j' in ev) {this.config.onMessage?.(ev.j);} else {this.config.onBinaryMessage?.(ev.b);} break;
+          case 'up': { this.open = true; this.innerTier = ev.tier; this.config.onConnect?.(); break;
+          }
+          case 'down': { this.open = false; this.config.onDisconnect?.(ev.code, ev.reason); break;
+          }
+          case 'err': { this.config.onError?.(new Error(ev.msg)); break;
+          }
+          case 'ev': { if ('j' in ev) {this.config.onMessage?.(ev.j);} else {this.config.onBinaryMessage?.(ev.b);} break;
+          }
         }
-      } catch (e) {
-        logger.error(`drain dispatch threw on ${ev.kind}`, e instanceof Error ? e.message : String(e));
+      } catch (error) {
+        logger.error(`drain dispatch threw on ${ev.kind}`, error instanceof Error ? error.message : String(error));
       }
     }
   }

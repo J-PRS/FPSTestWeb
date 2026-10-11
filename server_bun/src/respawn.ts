@@ -58,7 +58,7 @@ export class RespawnManager {
   respawnNow(playerId: string): void {
     this.held.delete(playerId);
     const pending = this.timers.get(playerId);
-    if (pending) return; // countdown still owed — the timer fires
+    if (pending) {return;} // countdown still owed — the timer fires
     this.dueAt.delete(playerId);
     this.fire(playerId, wallNow());
   }
@@ -68,9 +68,9 @@ export class RespawnManager {
    *  is the caller's domain (sim-time drivers arm sim-time grace). */
   private fire(playerId: string, graceClock: number): void {
     const result = this.playerManager.respawnPlayer(playerId);
-    if (!result) return;
+    if (!result) {return;}
     const player = this.playerManager.getPlayer(playerId);
-    if (!player) return;
+    if (!player) {return;}
     logger.info('Player respawned', { playerId, position: result.position });
     this.moveResync?.(playerId, result.position, result.rotation.yaw, true);
     // The respawn broadcast and the honest post-snap report are both
@@ -103,28 +103,28 @@ export class RespawnManager {
    *  but replaces an existing timer (socket flap mid-death). */
   ensureScheduled(playerId: string): void {
     const player = this.playerManager.getPlayer(playerId);
-    if (player?.isDead) this.schedule(playerId);
+    if (player?.isDead) {this.schedule(playerId);}
   }
 
   schedule(playerId: string): void {
     // One respawn timer per player — a second kill while dead replaces
     // it instead of stacking.
     const existing = this.timers.get(playerId);
-    if (existing) clearTimeout(existing);
+    if (existing) {clearTimeout(existing);}
     this.dueAt.set(playerId, simNow() + CONFIG.respawnDelayMs);
     const timer = setTimeout(() => {
       this.timers.delete(playerId);
       this.dueAt.delete(playerId);
       // Held corpse (die-and-spectate) — the deadline lapses silently;
       // a dead-state respawn claim is what revives them.
-      if (this.held.has(playerId)) return;
+      if (this.held.has(playerId)) {return;}
       try {
       this.fire(playerId, wallNow());
-      } catch (e) {
+      } catch (error) {
         // A throw here stranded the player dead forever — the process
         // handler would survive it but nobody would ever re-fire the
         // respawn. Log with the victim so a stuck-dead report names him.
-        logger.error('Respawn timer failed', { playerId, err: e instanceof Error ? e.message : String(e) });
+        logger.error('Respawn timer failed', { playerId, err: error instanceof Error ? error.message : String(error) });
       }
     }, CONFIG.respawnDelayMs);
     this.timers.set(playerId, timer);
@@ -135,16 +135,16 @@ export class RespawnManager {
    *  wall timer does the firing — so wire behavior is unchanged. */
   tick(now: number): void {
     for (const [id, at] of this.dueAt) {
-      if (now < at) continue;
+      if (now < at) {continue;}
       // The wall timer is still armed — deleting the bookkeeping alone
       // leaves it to fire() a second time on its own schedule. Sim-paced
       // drivers reach deadlines ahead of wall clock, so every respawn
       // would broadcast twice.
       const t = this.timers.get(id);
-      if (t) clearTimeout(t);
+      if (t) {clearTimeout(t);}
       this.timers.delete(id);
       this.dueAt.delete(id);
-      if (this.held.has(id)) continue; // held corpse — same gate as the wall timer
+      if (this.held.has(id)) {continue;} // held corpse — same gate as the wall timer
       this.fire(id, now);
     }
   }
@@ -152,7 +152,7 @@ export class RespawnManager {
   /** Room teardown — pending respawns die with the room or they fire
    *  broadcasts into an empty world. */
   dispose(): void {
-    for (const t of this.timers.values()) clearTimeout(t);
+    for (const t of this.timers.values()) {clearTimeout(t);}
     this.timers.clear();
     this.dueAt.clear();
     this.held.clear();

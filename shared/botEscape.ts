@@ -140,7 +140,7 @@ export function stuckBreak(s: EscapeState, dt: number, ctx: BrainCtx, pos: BotVe
         s.detourT = 1.2;
       }
       // Pinned through a detour = every sideways probe is a face.
-      if (s.stuckStreak >= 2) s.escapeJetT = Math.max(s.escapeJetT, 1.1);
+      if (s.stuckStreak >= 2) {s.escapeJetT = Math.max(s.escapeJetT, 1.1);}
     } else {
       s.pinStreak = 0;
     }
@@ -162,15 +162,15 @@ export function stuckBreak(s: EscapeState, dt: number, ctx: BrainCtx, pos: BotVe
       // treadmill instead of cresting it (soak: capper cycling y45→81
       // →45 on a ~50m face all match). Consecutive failures escalate
       // the burn so the bot commits real fuel to a real climb.
-      s.escapeJetT = Math.max(s.escapeJetT, Math.min(1.1 + s.orbitStreak * 0.7, 3.0));
+      s.escapeJetT = Math.max(s.escapeJetT, Math.min(1.1 + s.orbitStreak * 0.7, 3));
       if (s.detourT <= 0) {
         s.detour = pickDetour(s, ctx, pos, 20);
-        s.detourT = 2.0;
+        s.detourT = 2;
       }
     }
     s.progressGoalD = gd;
   }
-  if (s.progressT < 1.5) return s.detourT > 0 && s.detour ? s.detour : dest;
+  if (s.progressT < 1.5) {return s.detourT > 0 && s.detour ? s.detour : dest;}
   // On the step = arrived or a deliberate hold — stillness on post is
   // a hold, not a trap; counting it fires detour+jet escapes that fling
   // defenders off post in a loop.
@@ -189,7 +189,7 @@ export function stuckBreak(s: EscapeState, dt: number, ctx: BrainCtx, pos: BotVe
     }
     // Pinned through a detour = a wall pocket every sideways probe
     // is a face — thrust up and over is the legal way out.
-    if (s.stuckStreak >= 2) s.escapeJetT = Math.max(s.escapeJetT, 1.1);
+    if (s.stuckStreak >= 2) {s.escapeJetT = Math.max(s.escapeJetT, 1.1);}
   } else {
     s.stuckStreak = 0;
   }
@@ -209,13 +209,13 @@ export function dodge(ctx: BrainCtx, pos: BotVec, dest: BotVec, hero: boolean): 
     const d = dist3(pos, t);
     if (d < nearestD) { nearestD = d; nearest = t; }
   }
-  if (!nearest) return dest;
+  if (!nearest) {return dest;}
   // A runner on final approach doesn't juke — ANY dest tilt bleeds
   // arrival speed and arrival speed is what survives the shelling
   // (soak A/B: a 30% dodge lean took seed 4246 from 6 grabs/3 caps to
   // 0-0; the old stall was worse but the lean still kills the run).
   // Inside ~80m the run wins the feet. Same commit the carrier gets.
-  if ((ctx.runner || ctx.running || ctx.wave) && ctx.objective && dist3(pos, ctx.objective) < 80) return dest;
+  if ((ctx.runner || ctx.running || ctx.wave) && ctx.objective && dist3(pos, ctx.objective) < 80) {return dest;}
   // A posted anchor's dodge is a hop, not a juke — the flag is also
   // the cover, and a 9m sidestep under steady bombardment parks him in
   // the 3-15m ring instead of back on the pole between shells.
@@ -247,12 +247,12 @@ export function dodge(ctx: BrainCtx, pos: BotVec, dest: BotVec, hero: boolean): 
  *  a full-tank climb can crest the face or the waypoint should be
  *  forfeited. Linear scan — runs only on a matured stall (~once/4s). */
 export function wallTopOnPath(ctx: BrainCtx, pos: BotVec, goal: BotVec | undefined): number | null {
-  if (!ctx.solids?.length || !goal) return null;
+  if (!ctx.solids?.length || !goal) {return null;}
   const hit = segSolidHit(
     { x: pos.x, y: pos.y + 1, z: pos.z },
     { x: goal.x, y: goal.y, z: goal.z },
     ctx.solids, ctx.solidIndex ?? undefined, ctx.team);
-  if (!hit) return null;
+  if (!hit) {return null;}
   return topCovering(ctx, hit.x, hit.z);
 }
 
@@ -265,7 +265,7 @@ function topCovering(ctx: BrainCtx, x: number, z: number): number | null {
     const lz = -dx * c.sin + dz * c.cos;
     if (Math.abs(lx) <= c.hx + 0.5 && Math.abs(lz) <= c.hz + 0.5) {
       const t = c.cy + c.hy;
-      if (t > top) top = t;
+      if (t > top) {top = t;}
     }
   }
   return top === -Infinity ? null : top;
@@ -278,7 +278,7 @@ function topCovering(ctx: BrainCtx, x: number, z: number): number | null {
  *  The colliders answer "which hole in the wall is mine" themselves —
  *  no authored gate metadata needed. */
 export function ownGate(ctx: BrainCtx, pos: BotVec, goal: BotVec | undefined): BotVec | null {
-  if (!ctx.solids?.length || !goal || !ctx.team) return null;
+  if (!ctx.solids?.length || !goal || !ctx.team) {return null;}
   const gx = goal.x - pos.x, gz = goal.z - pos.z;
   const g = Math.hypot(gx, gz) || 1;
   const ix = gx / g, iz = gz / g;
@@ -286,10 +286,10 @@ export function ownGate(ctx: BrainCtx, pos: BotVec, goal: BotVec | undefined): B
   let bestD = Infinity;
   let bestBlocked = Infinity;
   for (const c of ctx.solids) {
-    if (c.passTeam !== ctx.team) continue;
+    if (c.passTeam !== ctx.team) {continue;}
     const dx = c.cx - pos.x, dz = c.cz - pos.z;
     const d = Math.hypot(dx, dz);
-    if (d > 140) continue;                             // no door in reach — climb/breach instead
+    if (d > 140) {continue;}                             // no door in reach — climb/breach instead
     // The pane is only an exit if the bot can WALK to it: a compound
     // interior structure (genhouse, tower) between the bot and the pane
     // makes the nearest gate a waypoint nobody reaches — prefer a gate
@@ -320,10 +320,10 @@ export function ownGate(ctx: BrainCtx, pos: BotVec, goal: BotVec | undefined): B
  *  the feet should visit next, or null when the face runs >60m both
  *  ways (fortress seam — forfeit is honest there). */
 export function breachAlongWall(ctx: BrainCtx, pos: BotVec, goal: BotVec | undefined): BotVec | null {
-  if (!ctx.solids?.length || !goal) return null;
+  if (!ctx.solids?.length || !goal) {return null;}
   const from = { x: pos.x, y: pos.y + 1, z: pos.z };
   const hit = segSolidHit(from, goal, ctx.solids, ctx.solidIndex ?? undefined, ctx.team);
-  if (!hit) return null;
+  if (!hit) {return null;}
   const gx = goal.x - pos.x, gz = goal.z - pos.z;
   const g = Math.hypot(gx, gz) || 1;
   const ix = gx / g, iz = gz / g;         // inward — toward the goal
@@ -334,7 +334,7 @@ export function breachAlongWall(ctx: BrainCtx, pos: BotVec, goal: BotVec | undef
       const qx = px + ix * 8, qz = pz + iz * 8;
       const h2 = segSolidHit({ x: px, y: pos.y + 1, z: pz }, { x: qx, y: pos.y + 1, z: qz },
         ctx.solids, ctx.solidIndex ?? undefined, ctx.team);
-      if (!h2) return { x: qx, y: ctx.groundY(qx, qz) + 1, z: qz }; // open gap — walk through
+      if (!h2) {return { x: qx, y: ctx.groundY(qx, qz) + 1, z: qz };} // open gap — walk through
       const top = topCovering(ctx, h2.x, h2.z);
       if (top !== null && top - pos.y < 24) {
         // Deck-grade lip (raised floor behind a door mouth — genhouse):
@@ -342,7 +342,7 @@ export function breachAlongWall(ctx: BrainCtx, pos: BotVec, goal: BotVec | undef
         // the face — a face waypoint lands inside the doorpost hull and
         // the stall loop re-arms forever (bastion besiegers parked at
         // the vault door for minutes).
-        if (top - pos.y < 12) return { x: qx, y: top + 0.5, z: qz };
+        if (top - pos.y < 12) {return { x: qx, y: top + 0.5, z: qz };}
         // Low section — stand at the face and let the climb arm it.
         return { x: px + ix * 2, y: ctx.groundY(px, pz) + 1, z: pz + iz * 2 };
       }

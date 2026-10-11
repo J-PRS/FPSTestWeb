@@ -1,5 +1,5 @@
 import type { Vec3 } from './types.ts';
-import { getWeaponStats } from '../../shared/weapons.ts';
+import type { getWeaponStats } from '../../shared/weapons.ts';
 import { classCapsule } from '../../shared/botClasses.ts';
 import { hitRadiusAt } from '../../shared/combat.ts';
 import { segFieldHit, segPointDist, segPointT, bounceOffField } from '../../shared/projSim.ts';
@@ -18,7 +18,7 @@ type ContactHost = RoomProjectiles;
  *  shooter-side window as a backMs velocity extrapolation. */
 function ghostBack(r: ContactHost, owner: { ping: number; isBot?: boolean; clientStats?: { renderLagMs?: number; renderLag?: Record<string, number>; at?: number } } | null | undefined, ownerId: string, targetId: string): number {
   // Bots read live positions — no render pipeline, no ghost to chase.
-  if (owner?.isBot) return 0;
+  if (owner?.isBot) {return 0;}
   const targetTransit = r.room.moveSim?.transitOf?.(targetId) ?? 0;
   return Math.max(0, shooterTransitMs(r.room.moveSim?.transitOf?.bind(r.room.moveSim), ownerId, owner?.ping ?? 0) + renderLagOfTarget(owner, targetId) - targetTransit);
 }
@@ -36,7 +36,7 @@ function capsuleReach(t: { armorClass: string }, reach: number): number {
 }
 
 export function stepContact(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getWeaponStats>, from: Vec3, dt: number): boolean {
-    const p = proj.p;
+    const {p} = proj;
     // Server shells pop on first contact; the client's own bounce arc
     // diverges cosmetically, never in damage outcome.
     if (r.field && p.age >= proj.terrainAt) {
@@ -66,7 +66,7 @@ export function stepContact(r: ContactHost, proj: LiveProj, stats: ReturnType<ty
     // Deployable hulls contest the same lane: earliest contact wins, so
     // a generator body-blocks a shot meant for the vault wall behind it.
     {
-      const sh = r.solids.length ? segSolidHit(from, p.pos, r.solids, r.solidIndex ?? undefined, proj.ownerTeam) : null;
+      const sh = r.solids.length > 0 ? segSolidHit(from, p.pos, r.solids, r.solidIndex ?? undefined, proj.ownerTeam) : null;
       const dyn = r.room.deployables?.solidCols;
       const dh = dyn?.length ? segSolidHit(from, p.pos, dyn, undefined, proj.ownerTeam) : null;
       const hit = dh && (!sh || dh.t < sh.t) ? dh : sh;
@@ -89,13 +89,13 @@ export function stepContact(r: ContactHost, proj: LiveProj, stats: ReturnType<ty
     // Fuse-only carriers (MRV) phase through bodies — contact pops would
     // make a timed airburst into a strictly-better mortar. Terrain, walls,
     // and domes above already stopped it; skip the body sweeps entirely.
-    if (stats.fuseOnly) return false;
+    if (stats.fuseOnly) {return false;}
     // Arming fuse (T2 mortar): bodies phase through until the shell is
     // armed — terrain, walls, and domes above already stopped it. GL
     // overrides with bodyArmTime=0: its shells bounce off dirt yet pop
     // on a body at any age. Client gates the same sweeps on bodiesLive.
     const bodyArm = stats.bodyArmTime ?? stats.armTime;
-    if (bodyArm !== undefined && p.age < bodyArm) return false;
+    if (bodyArm !== undefined && p.age < bodyArm) {return false;}
     // Player sweep — same legal radius the hit-claim validator allows:
     // the target's class radius (in capsuleReach) + the larger of
     // body/wake radius at this airtime.
@@ -108,17 +108,17 @@ export function stepContact(r: ContactHost, proj: LiveProj, stats: ReturnType<ty
  *  plus teleport slack) skips anyone who cannot displace into reach this
  *  tick before the per-candidate segment solve runs. */
 function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getWeaponStats>, from: Vec3, reach: number, dt: number, owner: { ping: number; isBot?: boolean; clientStats?: { renderLagMs?: number; renderLag?: Record<string, number>; at?: number } } | null | undefined): boolean {
-    const p = proj.p;
+    const {p} = proj;
     const midX = (from.x + p.pos.x) / 2, midY = (from.y + p.pos.y) / 2, midZ = (from.z + p.pos.z) / 2;
     const halfLen = Math.hypot(p.pos.x - from.x, p.pos.y - from.y, p.pos.z - from.z) / 2;
     for (const [pid, target] of r.room.players.getAllPlayers()) {
-      if (pid === proj.ownerId || target.isDead) continue;
+      if (pid === proj.ownerId || target.isDead) {continue;}
       const back = ghostBack(r, owner, proj.ownerId, pid);
       const speed = Math.hypot(target.velocity.x, target.velocity.y, target.velocity.z);
       const margin = capsuleReach(target, reach) + halfLen + (speed + 25) * dt + speed * back / 1000;
       const center = capsuleCenter(target);
       const dx = center.x - midX, dy = center.y - midY, dz = center.z - midZ;
-      if (dx * dx + dy * dy + dz * dz > margin * margin) continue;
+      if (dx * dx + dy * dy + dz * dz > margin * margin) {continue;}
       const tp = rewindPos(target, back);
       const pc = { x: tp.x, y: tp.y + classCapsule(target.armorClass).centerOff, z: tp.z };
       const pd = segPointDist(from, p.pos, pc);
@@ -136,7 +136,7 @@ function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getW
 /** Creature sweep — server shells connect with the swarm the same way a
  *  client's creatureHit claim does: earliest ball contact along the leg. */
 function creatureSweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getWeaponStats>, from: Vec3, reach: number, owner: { ping: number; isBot?: boolean; clientStats?: { renderLagMs?: number; renderLag?: Record<string, number>; at?: number } } | null | undefined): boolean {
-    const p = proj.p;
+    const {p} = proj;
     // Creature sims run server-side — no uplink in their history and
     // no broadcast lead, so their ghost sits exactly shooterTransit +
     // renderDelay back.
@@ -147,14 +147,14 @@ function creatureSweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof 
     // for a ball behind it (and vice versa).
     const cc = r.room.creatureSim?.sweepHit(from, p.pos, reach, backMs);
     const best = bc && (!cc || bc.t <= cc.t) ? bc : cc;
-    if (!best) return false;
+    if (!best) {return false;}
     const at: Vec3 = {
       x: from.x + (p.pos.x - from.x) * best.t,
       y: from.y + (p.pos.y - from.y) * best.t,
       z: from.z + (p.pos.z - from.z) * best.t,
     };
     const bodyDirect = best === bc
-      ? (() => { const ball = r.room.ballSim?.ballAt(bc!.id); return !!ball && bc!.d <= ball.radius + stats.bodyRadius; })()
+      ? (() => { const ball = r.room.ballSim?.ballAt(bc!.id); return ball !== undefined && ball !== null && bc!.d <= ball.radius + stats.bodyRadius; })()
       : best.d <= stats.bodyRadius + 1;
     if (stats.stick) { r.attach(proj, at); return true; }
     r.detonate(proj, at, null, best === bc ? best.id : undefined, bodyDirect, best === cc ? best.id : undefined);
@@ -165,7 +165,7 @@ function creatureSweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof 
    *  contacts decides the blast point: nearest wins between terrain and
    *  players, so a beam that clips a ridge never splashes past it. */
 export function dischargeRay(r: ContactHost, proj: LiveProj, range: number): void {
-    const p = proj.p;
+    const {p} = proj;
     const speed = Math.hypot(p.vel.x, p.vel.y, p.vel.z) || 1;
     const end: Vec3 = {
       x: p.pos.x + (p.vel.x / speed) * range,
@@ -177,31 +177,31 @@ export function dischargeRay(r: ContactHost, proj: LiveProj, range: number): voi
     let bestT = 1, hitId: string | null = null;
     if (r.field) {
       const th = segFieldHit(p.pos, end, r.field);
-      if (th) bestT = segPointT(p.pos, end, th);
+      if (th) {bestT = segPointT(p.pos, end, th);}
     }
-    if (r.solids.length) {
+    if (r.solids.length > 0) {
       const sh = segSolidHit(p.pos, end, r.solids, r.solidIndex ?? undefined, proj.ownerTeam);
-      if (sh) bestT = Math.min(bestT, segPointT(p.pos, end, sh));
+      if (sh) {bestT = Math.min(bestT, segPointT(p.pos, end, sh));}
     }
     const dcols = r.room.deployables?.solidCols;
     if (dcols?.length) {
       const dh = segSolidHit(p.pos, end, dcols, undefined, proj.ownerTeam);
-      if (dh) bestT = Math.min(bestT, segPointT(p.pos, end, dh));
+      if (dh) {bestT = Math.min(bestT, segPointT(p.pos, end, dh));}
     }
     // A dome eats the discharged beam too — same rule as flight contact.
     const sht = r.room.deployables?.shieldBlock(p.pos, end, proj.ownerId) ?? null;
-    if (sht !== null) bestT = Math.min(bestT, sht);
+    if (sht !== null) {bestT = Math.min(bestT, sht);}
     const owner = r.room.players.getPlayer(proj.ownerId);
     const midX = (p.pos.x + end.x) / 2, midY = (p.pos.y + end.y) / 2, midZ = (p.pos.z + end.z) / 2;
     // +0.6: the reject is off the capsule MIDPOINT — a heavy's cylinder
     // half-height (0.55) would let head/foot hits fall outside the bound.
     const margin = reach + range / 2 + 0.6;
     for (const [pid, target] of r.room.players.getAllPlayers()) {
-      if (pid === proj.ownerId || target.isDead) continue;
+      if (pid === proj.ownerId || target.isDead) {continue;}
       const tp = rewindPos(target, ghostBack(r, owner, proj.ownerId, pid));
       const center = { x: tp.x, y: tp.y + classCapsule(target.armorClass).centerOff, z: tp.z };
       const dx = center.x - midX, dy = center.y - midY, dz = center.z - midZ;
-      if (dx * dx + dy * dy + dz * dz > margin * margin) continue;
+      if (dx * dx + dy * dy + dz * dz > margin * margin) {continue;}
       const t = segPointT(p.pos, end, center);
       if (t <= bestT && segPointDist(p.pos, end, center) <= capsuleReach(target, reach)) { bestT = t; hitId = pid; }
     }

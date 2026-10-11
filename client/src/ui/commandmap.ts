@@ -65,8 +65,11 @@ export class CommandMap {
     this.ensureBake();
     const c = this.ctx;
     if (this.bake) {c.drawImage(this.bake, 0, 0);} else { c.fillStyle = '#0a0e12'; c.fillRect(0, 0, RES, RES); }
-    const mx = (wx: number) => (wx / W + 0.5) * RES;
-    const my = (wz: number) => (wz / W + 0.5) * RES;
+    // The heightfield wraps — a player at wx > W/2 is standing on valid
+    // repeating terrain. Fold coords into the tile or blips (incl. the
+    // self arrow) draw off-canvas and vanish.
+    const wrap = (w: number): number => (((w / W + 0.5) % 1) + 1) % 1 * RES;
+    const mx = wrap, my = wrap;
 
     // Flag diamonds ride wirePos (carried flags track the runner); a
     // hollow ring marks the stand's home so a pulled flag still shows
@@ -74,7 +77,7 @@ export class CommandMap {
     if (flags) {
       c.lineWidth = 1.5;
       for (const [team, f] of flags) {
-        const col = `#${  (TEAM_COLORS[team] ?? 0xFFFFFF).toString(16).padStart(6, '0')}`;
+        const col = `#${  (TEAM_COLORS[team] ?? 0xFF_FF_FF).toString(16).padStart(6, '0')}`;
         c.strokeStyle = col;
         if (f.homeKnown) {
           c.beginPath();

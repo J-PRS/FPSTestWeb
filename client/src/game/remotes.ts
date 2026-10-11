@@ -20,7 +20,7 @@ import * as sfxWorld from '../core/sfx/world.js';
 import { lastWeaponByPlayer } from './net/projectiles.js';
 
 // Hostiles always read red — team colors are for your own side only.
-const ENEMY_RED = 0xFF3333;
+const ENEMY_RED = 0xFF_33_33;
 
 // Shared scratch for the per-tick offscreen test.
 const _frustum = new THREE.Frustum();
@@ -91,7 +91,7 @@ function applyStatusVisuals(deps: RemotesDeps, playerId: string, remotePlayer: R
   // Corpses hold no channels — the corpse window's row still streams the
   // pre-death bits until respawn clears them server-side, and a cloaked
   // corpse would render nothing at all.
-  if (remotePlayer.isDead) status = 0;
+  if (remotePlayer.isDead) {status = 0;}
   const cloaked = Boolean(status & STATUS.CLOAK);
   const friendly = cloaked && Boolean(theirTeam) && theirTeam === deps.world.localTeam;
   remotePlayer.setCloakHidden(cloaked && !friendly);
@@ -222,7 +222,7 @@ function applyTeamTint(deps: RemotesDeps, lastTintOf: Map<string, string>,
   // tick (setHex is free) so teamless/FFA bodies read enemy-red, not the
   // constructor's default green.
   const friendly = Boolean(theirTeam) && theirTeam === deps.world.localTeam;
-  remotePlayer.setColliderColor(friendly ? 0x00_ff_00 : ENEMY_RED);
+  remotePlayer.setColliderColor(friendly ? 0x00_FF_00 : ENEMY_RED);
   if (!theirTeam || theirTeam === lastTintOf.get(playerId)) {return;}
   lastTintOf.set(playerId, theirTeam);
   remotePlayer.setGizmoColor(theirTeam === deps.world.localTeam ? TEAM_COLORS[theirTeam] : ENEMY_RED);
@@ -304,9 +304,9 @@ function aswAccrue(id: string, dead: boolean, grounded: boolean, skiing: boolean
 }
 function aswStr(id: string): string | null {
   const e = asw.get(id);
-  if (!e) return null;
+  if (!e) {return null;}
   const t = e.a + e.s + e.w;
-  if (t <= 0) return null;
+  if (t <= 0) {return null;}
   const pct = (v: number) => Math.round((v / t) * 100);
   return `${pct(e.a)}/${pct(e.s)}/${pct(e.w)}`;
 }
@@ -364,7 +364,7 @@ function updateScoreboard(deps: RemotesDeps): void {
   const selfDeaths = (deps.world.deathCounts.get('local') ?? 0)
     + (localScoreId === 'local' ? 0 : deps.world.deathCounts.get(localScoreId) ?? 0);
   const now = Date.now();
-  const rows = [{ name: settings.get('fps-name') || localId, frags: selfFrags, deaths: selfDeaths, score: ffa.get(localScoreId) ?? null, ping: nm.serverPingMs != null ? `${nm.getPing()}/${Math.round(nm.serverPingMs)}` : nm.getPing(), net: nm.getTransportTier() ?? null, self: true, dead: deps.lazyPlayer().isDead, team: deps.world.localTeam, sheep: deps.lazyPlayerSheep?.().shown ?? null, alive: aliveSecs(localId, deps.lazyPlayer().isDead, now), cls: deps.lazyPlayer().appliedClass, asw: aswStr(localId) }];
+  const rows = [{ name: settings.get('fps-name') || localId, frags: selfFrags, deaths: selfDeaths, score: ffa.get(localScoreId) ?? null, ping: nm.serverPingMs == null ? nm.getPing() : `${nm.getPing()}/${Math.round(nm.serverPingMs)}`, net: nm.getTransportTier() ?? null, self: true, dead: deps.lazyPlayer().isDead, team: deps.world.localTeam, sheep: deps.lazyPlayerSheep?.().shown ?? null, alive: aliveSecs(localId, deps.lazyPlayer().isDead, now), cls: deps.lazyPlayer().appliedClass, asw: aswStr(localId) }];
   // net is string|null — 'bot' rows carry a label, not a transport tier.
   const queriedIds = new Set<string>([localId]);
   const remoteRows: { name: string; frags: number; deaths: number; score: number | null; ping: number | null; net: string | null; self: boolean; dead: boolean; team?: TeamId; sheep?: number | null; bot?: boolean; alive?: number | null; cls?: string; asw?: string | null }[] = [...nm.getPlayers().keys()]

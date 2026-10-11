@@ -15,8 +15,8 @@ const batch = (r: RibbonTrail) =>
 
 describe('RibbonTrail pooling + slots', () => {
   it('acquired trails claim distinct packed slots', () => {
-    const a = RibbonTrail.acquire(scene, { color: 0xff_00_00 });
-    const b = RibbonTrail.acquire(scene, { color: 0x00_ff_00 });
+    const a = RibbonTrail.acquire(scene, { color: 0xFF_00_00 });
+    const b = RibbonTrail.acquire(scene, { color: 0x00_FF_00 });
     expect(slot(a)).not.toBe(slot(b));
     expect(batch(a).used.has(slot(a))).toBe(true);
     expect(batch(a)).toBe(batch(b)); // one batch mesh per scene
@@ -25,25 +25,25 @@ describe('RibbonTrail pooling + slots', () => {
   });
 
   it('released slots return to the free list and get re-handed out', () => {
-    const a = RibbonTrail.acquire(scene, { color: 0xFF0000 });
+    const a = RibbonTrail.acquire(scene, { color: 0xFF_00_00 });
     const s = slot(a);
     a.dispose();
     expect(batch(a).used.has(s)).toBe(false);
-    const b = RibbonTrail.acquire(scene, { color: 0x00FF00 });
+    const b = RibbonTrail.acquire(scene, { color: 0x00_FF_00 });
     expect(slot(b)).toBe(s); // lowest-first keeps the draw range dense
     b.dispose();
   });
 
   it('pooled instances are reused after dispose', () => {
-    const a = RibbonTrail.acquire(scene, { color: 0xff_00_00 });
+    const a = RibbonTrail.acquire(scene, { color: 0xFF_00_00 });
     a.dispose();
-    const b = RibbonTrail.acquire(scene, { color: 0x00_ff_00 });
+    const b = RibbonTrail.acquire(scene, { color: 0x00_FF_00 });
     expect(b).toBe(a); // free-list reuse — samples are fixed-size, reuse is free
     b.dispose();
   });
 
   it('done flips true only after the last sample outlives its life', () => {
-    const r = RibbonTrail.acquire(scene, { color: 0xff_00_00, width: 0.5, life: 0.1 }); // life 0.1s
+    const r = RibbonTrail.acquire(scene, { color: 0xFF_00_00, width: 0.5, life: 0.1 }); // life 0.1s
     r.push(pos(0), vel());
     r.push(pos(1), vel());
     r.stop();
@@ -54,7 +54,7 @@ describe('RibbonTrail pooling + slots', () => {
   });
 
   it('clear() drops samples and zeroes slot colors (teleport streak)', () => {
-    const r = RibbonTrail.acquire(scene, { color: 0xff_00_00 });
+    const r = RibbonTrail.acquire(scene, { color: 0xFF_00_00 });
     r.push(pos(0), vel());
     r.push(pos(1), vel());
     r.update(0.1);
@@ -70,7 +70,7 @@ describe('RibbonTrail pooling + slots', () => {
     // Push past MAX_SAMPLES so every push evicts — each vert's sample
     // assignment shifts. Buffer vert 0 must track the live oldest, not
     // the position it was first written with (the stale-vert streak).
-    const r = RibbonTrail.acquire(scene, { color: 0xff_00_00, life: 10 });
+    const r = RibbonTrail.acquire(scene, { color: 0xFF_00_00, life: 10 });
     // Per-frame cadence like production: one push, one update — pushed=1
     // at rewrite time, so vert 0 only stays fresh if eviction forces a
     // full rewrite (the stale-vert bug hid behind freshFrom=count-1).
@@ -86,7 +86,7 @@ describe('RibbonTrail pooling + slots', () => {
   });
 
   it('a position discontinuity cuts the strip instead of drawing a chord', () => {
-    const r = RibbonTrail.acquire(scene, { color: 0xff_00_00 });
+    const r = RibbonTrail.acquire(scene, { color: 0xFF_00_00 });
     r.push(pos(0), vel());
     r.push(pos(1), vel());
     // ~200m jump in one push — far past the per-push travel guard.
@@ -97,7 +97,7 @@ describe('RibbonTrail pooling + slots', () => {
   });
 
   it('push after dispose counts a zombie and writes nothing', () => {
-    const r = RibbonTrail.acquire(scene, { color: 0xFF0000 });
+    const r = RibbonTrail.acquire(scene, { color: 0xFF_00_00 });
     r.dispose();
     const before = RibbonTrail.zombiePushes;
     r.push(pos(5), vel());
@@ -105,11 +105,11 @@ describe('RibbonTrail pooling + slots', () => {
   });
 
   it('double dispose is safe — the pool never hands one ribbon to two owners', () => {
-    const r = RibbonTrail.acquire(scene, { color: 0xff_00_00 });
+    const r = RibbonTrail.acquire(scene, { color: 0xFF_00_00 });
     r.dispose();
     r.dispose(); // inPool guard — a second push would double-list it
-    const a = RibbonTrail.acquire(scene, { color: 0x00_ff_00 });
-    const b = RibbonTrail.acquire(scene, { color: 0x00_00_ff });
+    const a = RibbonTrail.acquire(scene, { color: 0x00_FF_00 });
+    const b = RibbonTrail.acquire(scene, { color: 0x00_00_FF });
     expect(a).not.toBe(b);
     expect(slot(a)).not.toBe(slot(b));
     a.dispose();
@@ -120,13 +120,13 @@ describe('RibbonTrail pooling + slots', () => {
   // owner must refuse writes — the batch's gen word proves staleness
   // where slot index alone can't.
   it('a stale gen handle refuses to paint the new owner\u2019s slot', () => {
-    const a = RibbonTrail.acquire(scene, { color: 0xff_00_00 });
+    const a = RibbonTrail.acquire(scene, { color: 0xFF_00_00 });
     const s = slot(a);
     const b = (a as unknown as { batch: { release(n: number): void; claim(): number } }).batch;
     // Free a's slot out from under it, then re-issue it to a fresh trail —
     // 'a' still thinks it owns s.
     b.release(s);
-    const c = RibbonTrail.acquire(scene, { color: 0x00_ff_00 });
+    const c = RibbonTrail.acquire(scene, { color: 0x00_FF_00 });
     expect(slot(c)).toBe(s);
     const before = RibbonTrail.zombiePushes;
     a.push(pos(9), vel()); // stale gen — refused, handle dropped
@@ -140,11 +140,11 @@ describe('RibbonTrail pooling + slots', () => {
   });
 
   it('a stale releaseSlot can\u2019t steal the slot back from its new owner', () => {
-    const a = RibbonTrail.acquire(scene, { color: 0xff_00_00 });
+    const a = RibbonTrail.acquire(scene, { color: 0xFF_00_00 });
     const s = slot(a);
     const ba = (a as unknown as { batch: { release(n: number): void } }).batch;
     ba.release(s);
-    const c = RibbonTrail.acquire(scene, { color: 0x00_ff_00 });
+    const c = RibbonTrail.acquire(scene, { color: 0x00_FF_00 });
     expect(slot(c)).toBe(s);
     (a as unknown as { releaseSlot(): void }).releaseSlot(); // stale — must not re-free s
     expect(batch(c).used.has(s)).toBe(true);
@@ -153,7 +153,7 @@ describe('RibbonTrail pooling + slots', () => {
   });
 
   it('done ribbons the owner stopped ticking get swept as stale', () => {
-    const r = RibbonTrail.acquire(scene, { color: 0xff_00_00, life: 0.05 });
+    const r = RibbonTrail.acquire(scene, { color: 0xFF_00_00, life: 0.05 });
     r.push(pos(0), vel());
     r.push(pos(1), vel());
     r.stop();
@@ -167,7 +167,7 @@ describe('RibbonTrail pooling + slots', () => {
   });
 
   it('sweepStale drains a stopped orphan mid-fade instead of waiting on done forever', () => {
-    const r = RibbonTrail.acquire(scene, { color: 0xff_00_00, life: 0.05 });
+    const r = RibbonTrail.acquire(scene, { color: 0xFF_00_00, life: 0.05 });
     r.push(pos(0), vel());
     r.push(pos(1), vel());
     r.stop();

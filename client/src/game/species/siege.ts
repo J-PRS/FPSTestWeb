@@ -34,7 +34,7 @@ function reapSpecies<T extends HasDead & Targetable>(list: T[], targets: Species
     if (e.dead) {
       e.dispose();
       const ti = targets.indexOf(e);
-      if (ti >= 0) targets.splice(ti, 1);
+      if (ti !== -1) {targets.splice(ti, 1);}
       list.splice(i, 1);
     }
   }
@@ -52,7 +52,7 @@ function plantMineImpl(deps: SpeciesCtx['deps'], kit: SiegeKit,
     oldest.dead = true;
     oldest.dispose();
     const ti = targets.indexOf(oldest);
-    if (ti >= 0) targets.splice(ti, 1);
+    if (ti !== -1) {targets.splice(ti, 1);}
   }
   const m = new Mine(scene, deps.lazyTerrain(), pos, uber);
   burrow(m); // planted mines bury themselves — thematic even from an Overlord drop
@@ -60,7 +60,7 @@ function plantMineImpl(deps: SpeciesCtx['deps'], kit: SiegeKit,
   m.onDetonate = (mine) => {
     // Mine pop — compact dirty-orange blast, not a rocket. Doombloom's
     // blastRadius field carries its doubled envelope.
-    deps.world.explosions.push(new Explosion(scene, mine.pos, false, 0, deps.lazyTerrain(), mine.blastRadius / EXPLOSION_VFX_RADIUS, 0xff7733));
+    deps.world.explosions.push(new Explosion(scene, mine.pos, false, 0, deps.lazyTerrain(), mine.blastRadius / EXPLOSION_VFX_RADIUS, 0xFF_77_33));
     sfx.explosionAt(mine.pos, true);
     screenShake.blast(mine.pos, mine.uber ? 4 : 2.5, player.pos);
     blastAtPlayer(mine.pos, mine.blastRadius, MINE_DAMAGE_MAX, MINE_KNOCKBACK,
@@ -85,15 +85,15 @@ function spawnBanelingImpl(deps: SpeciesCtx['deps'], kit: SiegeKit,
     banelings: Baneling[], targets: SpeciesCtx['targets'], pos: THREE.Vector3, uber = false): void {
   const { scene } = deps;
   const { atCap, blastAtPlayer } = kit;
-  if (atCap(banelings, capFor('baneling', BANELING_MAX))) return;
+  if (atCap(banelings, capFor('baneling', BANELING_MAX))) {return;}
   const b = new Baneling(scene, deps.lazyTerrain(), pos, uber);
   if (b.dead) { b.dispose(); return; }
   const player = deps.lazyPlayer();
   b.onDetonate = (bane) => {
     // blastRadius is per-instance — a goliath pops 1.7× wider
-    deps.world.explosions.push(new Explosion(scene, bane.pos, false, 0, deps.lazyTerrain(), bane.blastRadius / EXPLOSION_VFX_RADIUS, 0x77ff44));
+    deps.world.explosions.push(new Explosion(scene, bane.pos, false, 0, deps.lazyTerrain(), bane.blastRadius / EXPLOSION_VFX_RADIUS, 0x77_FF_44));
     sfx.explosionAt(bane.pos, true);
-    screenShake.blast(bane.pos, bane.uber ? 3.5 : 2.0, player.pos);
+    screenShake.blast(bane.pos, bane.uber ? 3.5 : 2, player.pos);
     if (blastAtPlayer(bane.pos, bane.blastRadius, BANELING_DAMAGE_MAX, BANELING_KNOCKBACK,
       bane.uber ? 'melted by a goliath' : 'melted by a baneling', bane.uber ? 1.4 : 1) > 0) {
       sfx.playerHurt();
@@ -110,12 +110,12 @@ function spawnTotemImpl(deps: SpeciesCtx['deps'], kit: SiegeKit,
     totems: Totem[], targets: SpeciesCtx['targets'], uber = false): void {
   const { scene } = deps;
   const { ringPos, boltPop, hurtPlayer } = kit;
-  if (deps.lazyDemoManager()?.isPlaying) return;
+  if (deps.lazyDemoManager()?.isPlaying) {return;}
   const cap = uber ? UBER_TOTEM_MAX : capFor('totem', TOTEM_MAX);
-  if (totems.filter(t => !t.dead && (!uber || t.uber)).length >= cap) return;
+  if (totems.filter(t => !t.dead && (!uber || t.uber)).length >= cap) {return;}
   const bolt = uber
-    ? { scale: 0.6, color: 0xffaa33, popDur: 3.0, force: 14, dmg: UBER_TOTEM_BOLT_DAMAGE, text: 'sniped by the grand totem' }
-    : { scale: 0.35, color: 0xff5566, popDur: 2.0, force: 8, dmg: TOTEM_BOLT_DAMAGE, text: 'struck down by a totem' };
+    ? { scale: 0.6, color: 0xFF_AA_33, popDur: 3, force: 14, dmg: UBER_TOTEM_BOLT_DAMAGE, text: 'sniped by the grand totem' }
+    : { scale: 0.35, color: 0xFF_55_66, popDur: 2, force: 8, dmg: TOTEM_BOLT_DAMAGE, text: 'struck down by a totem' };
   const t = new Totem(scene, deps.lazyTerrain(), ringPos(TOTEM_SPAWN_MIN, TOTEM_SPAWN_MAX), uber);
   t.onBoltLand = (pos) => boltPop(pos, bolt.scale, bolt.color, bolt.popDur);
   t.onBoltHit = (_x, pos) => {
@@ -149,19 +149,19 @@ export function createSiegeSpecies({ deps, kit, targets }: SpeciesCtx) {
 
   // ---- Turretters (plant-and-shell enemies that lob themselves at you) ----
   function spawnTurretter(uber?: boolean): void {
-    if (atCap(turrets, capFor('turret', TURRET_MAX))) return;
+    if (atCap(turrets, capFor('turret', TURRET_MAX))) {return;}
     const u = uber ?? rollUber();
     const t = new Turretter(scene, deps.lazyTerrain(), ringPos(TURRET_SPAWN_MIN, TURRET_SPAWN_MAX), u);
-    t.onLanded = (pos) => boltPop(pos, 0.4, 0xff8844, 2.4);
+    t.onLanded = (pos) => boltPop(pos, 0.4, 0xFF_88_44, 2.4);
     t.onLaunch = (pos) => { deps.lazyEffects().spawnJumpDust(pos); sfx.enemyCue(pos, 'launch'); };
-    t.onBoltLand = (pos) => boltPop(pos, 0.3, 0xffaa44, 1.8);
+    t.onBoltLand = (pos) => boltPop(pos, 0.3, 0xFF_AA_44, 1.8);
     t.onBoltHit = (x, pos) => {
       // Damage judges from the IMPACT point — the shell lands tens of
       // meters from the turret, so reach in the shooter's frame whiffs
       // every legit hit (was: explosion VFX in your face, zero damage).
       if (hurtPlayer(pos, 6, TURRET_BOLT_DAMAGE * (x.uber ? 1.5 : 1),
         x.uber ? 'shelled by a siege engine' : 'shelled by a turretter', 3, x)) {
-        boltPop(pos.clone(), 0.3, 0xffaa44, 1.8);
+        boltPop(pos.clone(), 0.3, 0xFF_AA_44, 1.8);
       }
     };
     turrets.push(t);
@@ -183,8 +183,8 @@ export function createSiegeSpecies({ deps, kit, targets }: SpeciesCtx) {
   function turretBolts(): Bolt[] {
     _boltList.length = 0;
     for (const t of turrets) {
-      if (t.dead) continue;
-      for (const b of t.bolts) _boltList.push(b);
+      if (t.dead) {continue;}
+      for (const b of t.bolts) {_boltList.push(b);}
     }
     return _boltList;
   }
@@ -192,7 +192,7 @@ export function createSiegeSpecies({ deps, kit, targets }: SpeciesCtx) {
   function consumeBolt(bolt: Bolt): void {
     for (const t of turrets) {
       const i = t.bolts.indexOf(bolt);
-      if (i >= 0) { t.detonateBolt(i); return; }
+      if (i !== -1) { t.detonateBolt(i); return; }
     }
   }
 
@@ -201,7 +201,7 @@ export function createSiegeSpecies({ deps, kit, targets }: SpeciesCtx) {
     _boltKills.length = 0;
     const r2 = radius * radius;
     for (const t of turrets) {
-      if (t.dead) continue;
+      if (t.dead) {continue;}
       for (let i = t.bolts.length - 1; i >= 0; i--) {
         if (t.bolts[i].pos.distanceToSquared(pos) < r2) {
           _boltKills.push(t.bolts[i].pos.clone());
@@ -214,8 +214,8 @@ export function createSiegeSpecies({ deps, kit, targets }: SpeciesCtx) {
 
   function spawnOverlord(uber?: boolean): void {
     // Also called by director events — the species loop isn't the only caller
-    if (deps.lazyDemoManager()?.isPlaying) return;
-    if (atCap(overlords, capFor('overlord', OVERLORD_MAX))) return;
+    if (deps.lazyDemoManager()?.isPlaying) {return;}
+    if (atCap(overlords, capFor('overlord', OVERLORD_MAX))) {return;}
     const u = uber ?? rollUber();
     const m = new Overlord(scene, deps.lazyTerrain(), ringPos(OVERLORD_SPAWN_MIN, OVERLORD_SPAWN_MAX), u);
     deps.lazyEffects().spawnJumpDust(m.pos); // eruption dust — it lifts off out of the dirt

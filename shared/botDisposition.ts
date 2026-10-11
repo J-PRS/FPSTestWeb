@@ -33,8 +33,8 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
     // committed route IS what pinned the bot on the tower face. Feet
     // walk to the gap/low section; fire and aim stay live elsewhere.
     if (b.breachUntil > ctx.now) {
-      if (Math.hypot(pos.x - b.breachGoal.x, pos.z - b.breachGoal.z) < 6) b.breachUntil = 0;
-      else return { ...b.breachGoal };
+      if (Math.hypot(pos.x - b.breachGoal.x, pos.z - b.breachGoal.z) < 6) {b.breachUntil = 0;}
+      else {return { ...b.breachGoal };}
     }
     // Carrying the objective: the run is the job — engaging whoever the
     // hunt found converts the carrier into a duelist mid-route (orbit
@@ -102,7 +102,7 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
             };
           }
         }
-      } else if (gd >= 160) b.stageT = 0;
+      } else if (gd >= 160) {b.stageT = 0;}
     }
     if ((ctx.running || ctx.runner || ctx.wave) && ctx.objective) {
       // Jink on the run: a committed runner crossing open ground on a
@@ -112,7 +112,7 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
       // terrain-aware) rather than a fake perpendicular waypoint.
       // The last leg stays pure — jinking inside the grab ring is a
       // missed flag.
-      if (dist3(pos, ctx.objective) > 60) b.weave = 0.35;
+      if (dist3(pos, ctx.objective) > 60) {b.weave = 0.35;}
       // Drop lead: an airborne runner steering at the flag overshoots
       // the 2.2m touch ring every pass — the arc keeps flying while the
       // aim point says "here". Aim short by the arc's own overshoot so
@@ -138,7 +138,7 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
     // objective a wounded bot still crashes the point — dying with the
     // flag in hand beats surviving the approach. Only the feet commit;
     // fire stays live elsewhere.
-    if (ctx.objective && dist3(pos, ctx.objective) < 40) return { ...ctx.objective };
+    if (ctx.objective && dist3(pos, ctx.objective) < 40) {return { ...ctx.objective };}
     if (!b.h.hunt) {
       // A builder with hands free welds the stand's wounded gear before
       // wandering on — same "nobody close enough to interrupt" gate the
@@ -191,7 +191,7 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
     // most-shelled ground on the map, and an unclamped fear retreat is
     // exactly how the HoF kept wandering: shell → flee 30m → walk back
     // → shell. He sidesteps inside his leash, not across the field.
-    if (fearing) return retreatDest(ctx, pos, t);
+    if (fearing) {return retreatDest(ctx, pos, t);}
     // Hurt-runner health-pack divert tried and reverted: eHp rose
     // 33->37 but grabs collapsed 14->6 — the mid-run detour cost more
     // momentum/timing than the HP bought. eHp is a combat-power
@@ -208,7 +208,7 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
       const ptx = t.pos.x - pos.x, ptz = t.pos.z - pos.z;
       const ptd = Math.hypot(ptx, ptz) || 1;
       const onRoute = d <= b.h.orbitFar && (ptx * pg.x + ptz * pg.z) / ptd > 0.4;
-      if (!onRoute || pd < 12) return { ...ctx.pickup };
+      if (!onRoute || pd < 12) {return { ...ctx.pickup };}
     }
     // The committed-route and crash-the-point rules live above the hunt
     // section (runner/wave always objective; anyone <40m crashes the
@@ -229,7 +229,7 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
     // preferred range band, cycling angle so the bot keeps moving
     // between volleys like a real duelist.
     b.holding = b.h.fightPos === null;
-    if (b.h.fightPos) return b.h.fightPos;
+    if (b.h.fightPos) {return b.h.fightPos;}
     // The beat: settle and shoot, then swing wide. Direction flips and
     // radius jinks already break up the carousel; the cadence is what
     // makes it read like a duelist choosing a moment instead of a fan
@@ -260,8 +260,8 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
 export function pickDeploy(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fearing: boolean): BrainOut['deploy'] {
     b.deployT -= dt;
     const handsFree = !b.h.hunt || dist3(pos, b.h.hunt.pos) > 25;
-    if (!b.builder || b.deployT > 0 || !handsFree || fearing || !ctx.objective) return undefined;
-    if (dist3(pos, ctx.objective) >= 15) return undefined;
+    if (!b.builder || b.deployT > 0 || !handsFree || fearing || !ctx.objective) {return undefined;}
+    if (dist3(pos, ctx.objective) >= 15) {return undefined;}
     b.deployT = 28 + botRand() * 20;
     // A hurting builder drops a station first (it heals the squad);
     // otherwise the stand gets guns, a minefield, or a patrol drone
@@ -281,9 +281,9 @@ export function pickDeploy(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, 
    *  heal path re-validates range/LOS/team like any claim. The hunt and
    *  fear gates mirror pickDeploy: nobody welds through a firefight. */
 export function pickRepair(b: BotBrain, ctx: BrainCtx, pos: BotVec, fearing: boolean): string | undefined {
-    if (!b.builder || fearing || !ctx.repair) return undefined;
-    if (b.h.hunt && dist3(pos, b.h.hunt.pos) <= 25) return undefined;
-    if (dist3(pos, ctx.repair.pos) > REPAIR_RANGE * 0.9) return undefined;
+    if (!b.builder || fearing || !ctx.repair) {return undefined;}
+    if (b.h.hunt && dist3(pos, b.h.hunt.pos) <= 25) {return undefined;}
+    if (dist3(pos, ctx.repair.pos) > REPAIR_RANGE * 0.9) {return undefined;}
     return ctx.repair.key;
   }
 
@@ -294,24 +294,24 @@ export function pickRepair(b: BotBrain, ctx: BrainCtx, pos: BotVec, fearing: boo
    *  Otherwise shield up in a real fight while the tank can carry the
    *  drain. Returns undefined when the host has no energy model. */
 export function statusIntent(b: BotBrain, ctx: BrainCtx, fearing: boolean): number | undefined {
-    if (ctx.energy === undefined) return undefined;
+    if (ctx.energy === undefined) {return undefined;}
     // A pinned wall-mount needs the tank for jets — a held drain skill
     // keeps the tank sputter-locked at zero and the lip never mounts
     // (soak: shielded hunters pinned at the stand dais 5s+ cycles).
-    if (b.mountWait) return 0;
+    if (b.mountWait) {return 0;}
     const fighting = b.h.hunt !== null;
     const hurt = (ctx.healthFrac ?? 1) < 0.6;
     let status = 0;
-    if (hurt && (!fighting || fearing) && ctx.energy >= ENERGY.mendCost + 10) status |= STATUS.MEND;
+    if (hurt && (!fighting || fearing) && ctx.energy >= ENERGY.mendCost + 10) {status |= STATUS.MEND;}
     // REVERTED: SHIELD for committed runners inside 200m of the objective —
     // same-seed soak identical (5g/2c, eHp 44->42). The ring kill window is
     // crossfire volume, not a tank problem; shields already fire once the
     // hunt flags 'fighting' inside the ring anyway.
-    else if (fighting && ctx.energy >= ENERGY.shieldCost + 15) status |= STATUS.SHIELD;
+    else if (fighting && ctx.energy >= ENERGY.shieldCost + 15) {status |= STATUS.SHIELD;}
     // Infiltration cloak: pressing an enemy stand unseen beats shielding
     // through it. A WOUNDED infiltrator slips the veil back on while
     // retreating — the pest survives by breaking contact, not trading.
-    if (ctx.infiltrating && (!fighting || fearing) && ctx.energy >= ENERGY.cloakCost + 15) status |= STATUS.CLOAK;
+    if (ctx.infiltrating && (!fighting || fearing) && ctx.energy >= ENERGY.cloakCost + 15) {status |= STATUS.CLOAK;}
     return status;
   }
 

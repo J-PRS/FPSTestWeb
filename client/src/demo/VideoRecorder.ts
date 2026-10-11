@@ -322,7 +322,7 @@ export class VideoRecorder {
 
   async stop(): Promise<Blob | null> {
     if (this.enc) {
-      const enc = this.enc, mux = this.mux!, aenc = this.aenc;
+      const {enc} = this, mux = this.mux!, {aenc} = this;
       this.enc = null;
       this.mux = null;
       this.ring = [];

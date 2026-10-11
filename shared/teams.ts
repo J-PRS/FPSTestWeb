@@ -12,8 +12,8 @@ export const WIN_NUGGETS = 100;
 
 /** Team colors — name tags, indicators, scoreboard. */
 export const TEAM_COLORS: Record<TeamId, number> = {
-  alpha: 0x55aaff, // blue
-  bravo: 0xff8855, // orange
+  alpha: 0x55_AA_FF, // blue
+  bravo: 0xFF_88_55, // orange
 };
 
 export const TEAM_LABEL: Record<TeamId, string> = { alpha: 'ALPHA', bravo: 'BRAVO' };
@@ -38,8 +38,8 @@ export function bank(s: TeamScores, team: TeamId, n = 1): number {
 
 /** First team at/over the win threshold, or null. */
 export function winner(s: TeamScores, winAt = WIN_NUGGETS): TeamId | null {
-  if (s.alpha >= winAt) return 'alpha';
-  if (s.bravo >= winAt) return 'bravo';
+  if (s.alpha >= winAt) {return 'alpha';}
+  if (s.bravo >= winAt) {return 'bravo';}
   return null;
 }
 

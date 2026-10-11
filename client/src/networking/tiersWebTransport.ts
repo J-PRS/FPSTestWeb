@@ -38,7 +38,7 @@ export class WebTransportGameTransport implements GameTransport {
   constructor(private config: ConnectionConfig, private wt: WebTransport) {}
 
   connect(): void {
-    const wt = this.wt;
+    const {wt} = this;
     wt.ready.then(async () => {
       this.open = true;
       // Reliable JSON lane: one bidi stream, newline-delimited frames.
@@ -52,19 +52,19 @@ export class WebTransportGameTransport implements GameTransport {
       this.dr = wt.datagrams.readable.getReader();
       void this.pumpReliable(this.rr);
       void this.pumpDatagrams(this.dr);
-      for (const d of this.preOpen) void this.writer.write(this.encoder.encode(d + '\n')).catch(() => {});
+      for (const d of this.preOpen) {void this.writer.write(this.encoder.encode(`${d  }\n`)).catch(() => {});}
       this.preOpen.length = 0;
       this.config.onConnect?.();
-    }).catch((e) => {
-      logger.warn(`wt connect failed mid-setup: ${e instanceof Error ? `${e.name} ${e.message}` : String(e)}`);
-      this.config.onError?.(e instanceof Error ? e : new Error(String(e)));
+    }).catch((error) => {
+      logger.warn(`wt connect failed mid-setup: ${error instanceof Error ? `${error.name} ${error.message}` : String(error)}`);
+      this.config.onError?.(error instanceof Error ? error : new Error(String(error)));
       this.config.onDisconnect?.(1006, 'webtransport failed');
     });
     // wt.closed REJECTS on abnormal close — an unhandled rejection for
     // every failed probe (the log-spam bug). Rejection = closed.
     wt.closed.then(
       () => this.declareDead('webtransport closed'),
-      (e) => this.declareDead(`webtransport closed: ${e instanceof Error ? `${e.name} ${e.message}` : String(e)}`),
+      (error) => this.declareDead(`webtransport closed: ${error instanceof Error ? `${error.name} ${error.message}` : String(error)}`),
     );
   }
 
@@ -75,7 +75,7 @@ export class WebTransportGameTransport implements GameTransport {
    *  TieredTransport never learned the lane died, never reprobed, and
    *  the session just black-holed sends forever. */
   private declareDead(reason: string): void {
-    if (!this.open) return; // first detector wins; deliberate disconnect() leaves open=false
+    if (!this.open) {return;} // first detector wins; deliberate disconnect() leaves open=false
     logger.warn(`wt declareDead: ${reason}`);
     this.open = false;
     this.config.onDisconnect?.(1006, reason);
@@ -100,10 +100,10 @@ export class WebTransportGameTransport implements GameTransport {
       while ((nl = carry.indexOf('\n')) >= 0) {
         const line = carry.slice(0, nl);
         carry = carry.slice(nl + 1);
-        if (line) this.dispatchLine(line);
+        if (line) {this.dispatchLine(line);}
       }
       }
-    } catch (e) { this.declareDead(`wt reliable stream reset: ${e instanceof Error ? `${e.name} ${e.message}` : String(e)}`); }
+    } catch (error) { this.declareDead(`wt reliable stream reset: ${error instanceof Error ? `${error.name} ${error.message}` : String(error)}`); }
   }
 
   // One complete JSON frame from the reliable stream. The server wraps
@@ -133,13 +133,13 @@ export class WebTransportGameTransport implements GameTransport {
       let carry = new Uint8Array(0);
       for (;;) {
         const { done, value } = await rr.read();
-        if (done) break;
+        if (done) {break;}
         const merged = new Uint8Array(carry.length + value.length);
         merged.set(carry); merged.set(value);
         carry = merged;
         while (carry.length >= 2) {
           const n = carry[0]! | (carry[1]! << 8);
-          if (carry.length < 2 + n) break;
+          if (carry.length < 2 + n) {break;}
           this.config.onBinaryMessage?.(carry.subarray(2, 2 + n));
           carry = carry.subarray(2 + n);
         }
@@ -168,7 +168,7 @@ export class WebTransportGameTransport implements GameTransport {
   }
 
   send(data: string | Uint8Array): boolean {
-    if (!this.open) return false;
+    if (!this.open) {return false;}
     // Seq'd binary frames (position reports) that fit a datagram take the
     // unreliable lane — each is superseding state, so a drop costs the
     // next frame's worth of staleness, never a stall. Oversized frames
@@ -189,8 +189,8 @@ export class WebTransportGameTransport implements GameTransport {
     if (!this.writer) { this.preOpen.push(payload); return true; }
     // A write can outlive the session — teardown rejects it; that's a
     // normal close, not an error.
-    void this.writer.write(this.encoder.encode(payload + '\n')).catch((e) => {
-      logger.warn(`wt reliable write failed: ${e instanceof Error ? `${e.name} ${e.message}` : String(e)}`);
+    void this.writer.write(this.encoder.encode(`${payload  }\n`)).catch((error) => {
+      logger.warn(`wt reliable write failed: ${error instanceof Error ? `${error.name} ${error.message}` : String(error)}`);
     });
     return true;
   }
@@ -207,16 +207,16 @@ export class WebTransportGameTransport implements GameTransport {
 }
 
 export async function tryWebTransport(config: ConnectionConfig): Promise<GameTransport | null> {
-  if (typeof WebTransport === 'undefined') return null;
+  if (typeof WebTransport === 'undefined') {return null;}
   // WT runs on its own QUIC port — ask /wthash (plain HTTP on the WS port)
   // for the port + the cert's DER SHA-256 so self-signed dev certs pin
   // without a CA install. Absent/disabled → no tier.
   try {
-    const httpBase = config.url.replace(/^wss?:/, 'http' + (config.url.startsWith('wss') ? 's' : '') + ':').replace(/\/ws$/, '');
+    const httpBase = config.url.replace(/^wss?:/, `http${  config.url.startsWith('wss') ? 's' : ''  }:`).replace(/\/ws$/, '');
     // Bounded — a flapping tunnel left this fetch hanging forever, which
     // stalled the whole re-probe and the session never recovered.
     const info = await (await fetch(`${httpBase}/wthash`, { signal: AbortSignal.timeout(4000) })).json();
-    if (!info?.enabled || !info.port || !info.sha256) return null;
+    if (!info?.enabled || !info.port || !info.sha256) {return null;}
     // Chrome resolves `localhost` to ::1 but the QUIC listener is IPv4 —
     // normalized here (the pvptest adapter does the same) or loopback WT
     // dies with ERR_CONNECTION_RESET before the handshake starts.

@@ -25,7 +25,7 @@ export class MapCatalog {
    *  name-spammer grows it forever otherwise. Entries only feed the
    *  scoreboard's map title, so evicting the oldest is harmless. */
   noteSource(room: string, src: string): void {
-    if (!src) return;
+    if (!src) {return;}
     if (this.roomMapName.size >= 256 && !this.roomMapName.has(room)) {
       evictEldest(this.roomMapName);
     }
@@ -47,11 +47,11 @@ export class MapCatalog {
   private static MISS_TTL_MS = 30_000;
 
   loadMapSpec(name: string): MapSpec | undefined {
-    if (!name) return undefined;
+    if (!name) {return undefined;}
     const missAt = this.specMisses.get(name);
-    if (missAt !== undefined && wallNow() - missAt < MapCatalog.MISS_TTL_MS) return undefined;
+    if (missAt !== undefined && wallNow() - missAt < MapCatalog.MISS_TTL_MS) {return undefined;}
     const hit = this.specs.get(name);
-    if (hit && wallNow() - hit.at < MapCatalog.MISS_TTL_MS) return hit.spec;
+    if (hit && wallNow() - hit.at < MapCatalog.MISS_TTL_MS) {return hit.spec;}
     try {
       const spec = this.readSpec(name);
       this.specMisses.delete(name);
@@ -59,7 +59,7 @@ export class MapCatalog {
       return spec;
     } catch {
       this.specMisses.set(name, wallNow());
-      if (this.specMisses.size > 512) evictEldest(this.specMisses);
+      if (this.specMisses.size > 512) {evictEldest(this.specMisses);}
       return undefined;
     }
   }
@@ -67,7 +67,7 @@ export class MapCatalog {
   /** Force a fresh disk read — the admin reload path exists to pick up
    *  an edited maps/*.json, which a cache hit would silently veto. */
   reloadSpec(name: string): MapSpec | undefined {
-    if (!name) return undefined;
+    if (!name) {return undefined;}
     try {
       const spec = this.readSpec(name);
       this.specMisses.delete(name);
@@ -82,8 +82,8 @@ export class MapCatalog {
     const path = `${MAPS_DIR}/${name}.json`;
     const parsed = parseMapSpecJson(readFileSync(path, 'utf8'));
     const isT2 = (parsed as { _t2?: unknown })._t2 !== undefined;
-    if (isT2 && CONFIG.publicBeta) throw new Error('t2 spec excluded by FPS_PUBLIC_BETA');
-    if (isT2) this.t2Flags.add(name);
+    if (isT2 && CONFIG.publicBeta) {throw new Error('t2 spec excluded by FPS_PUBLIC_BETA');}
+    if (isT2) {this.t2Flags.add(name);}
     const spec = resolveMapSpec(parsed);
     // Fail loud on coerced/dropped fields — a typo in the JSON shouldn't
     // silently play as a different map than the author wrote.
@@ -118,7 +118,7 @@ export class MapCatalog {
     if (spec && mode && spec.mode !== mode && specModes(spec).includes(mode)) {
       spec = { ...spec, mode };
     }
-    if (bots !== undefined) spec = { ...spec, bots, botFill: bots } as MapSpec;
+    if (bots !== undefined) {spec = { ...spec, bots, botFill: bots } as MapSpec;}
     return { spec, src };
   }
 
@@ -132,7 +132,7 @@ export class MapCatalog {
     if (this.rotationList === undefined) {
       const env = (process.env.FPS_MAP_ROTATION ?? '').split(',')
         .map(s => s.trim()).filter(Boolean);
-      if (env.length) this.rotationList = env;
+      if (env.length > 0) {this.rotationList = env;}
       else {
         try {
           const raw = readFileSync(`${MAPS_DIR}/rotation.json`, 'utf8');
@@ -149,15 +149,15 @@ export class MapCatalog {
    *  foreign-mode specs are skipped rather than half-applied. */
   nextRotationSpec(room: { name: string; mode: string; mapSrc?: string }): MapSpec | null {
     const list = this.rotation();
-    if (!list.length) return null;
+    if (list.length === 0) {return null;}
     for (let i = 0; i < list.length; i++) {
       const name = list[this.rotationIdx++ % list.length];
-      if (name === undefined) continue;
+      if (name === undefined) {continue;}
       const spec = this.loadMapSpec(name);
       // A spec declares its legal modes; a mode-less one is a bare arena
       // that inherits whatever the room already runs.
       const legal = specModes(spec);
-      if (!spec || (room.mode && legal.length && !legal.includes(room.mode))) continue;
+      if (!spec || (room.mode && legal.length > 0 && !legal.includes(room.mode))) {continue;}
       this.rotationIdx %= list.length;
       this.roomMapName.set(room.name, name);
       room.mapSrc = name; // keep the scoreboard's map title honest too
@@ -175,7 +175,7 @@ export class MapCatalog {
   private listCache: { at: number; rows: { name: string; mode: string; modes: string[]; bots: number; t2: boolean }[] } | undefined;
   list(): { name: string; mode: string; modes: string[]; bots: number; t2: boolean }[] {
     const c = this.listCache;
-    if (c && wallNow() - c.at < MapCatalog.MISS_TTL_MS) return c.rows;
+    if (c && wallNow() - c.at < MapCatalog.MISS_TTL_MS) {return c.rows;}
     const rows = this.buildList();
     this.listCache = { at: wallNow(), rows };
     return rows;

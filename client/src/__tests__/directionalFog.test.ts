@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import { fogTint } from '../world/directionalFog.js';
 
-const BASE = new THREE.Color(0xbb_d0_e8);
+const BASE = new THREE.Color(0xBB_D0_E8);
 const SUN = new THREE.Vector3(1, 0.4, 0).normalize();
 const out = new THREE.Color();
 

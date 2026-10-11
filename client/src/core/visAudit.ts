@@ -54,7 +54,7 @@ export function auditScene(scene: THREE.Scene): VisAuditResult {
       const dx = X(a) - X(b), dy = Y(a) - Y(b), dz = Z(a) - Z(b);
       const e = dx * dx + dy * dy + dz * dz;
       if (!isFinite(e)) { nan++; return; }
-      if (e > maxEdge) { maxEdge = e; at = [X(a) | 0, Y(a) | 0, Z(a) | 0]; }
+      if (e > maxEdge) { maxEdge = e; at = [Math.trunc(X(a)), Math.trunc(Y(a)), Math.trunc(Z(a))]; }
     };
 
     const anyO = o as unknown as { isLine?: boolean; isLineSegments?: boolean; isInstancedMesh?: boolean; count?: number; instanceMatrix?: { array: ArrayLike<number> } };
@@ -83,7 +83,7 @@ export function auditScene(scene: THREE.Scene): VisAuditResult {
       // The 60m edge limit that catches trail teleports catches an
       // exploded skeleton identically.
       const skel = (o as unknown as { skeleton?: { bones: { updateWorldMatrix(a: boolean, b: boolean): void; matrixWorld: { elements: ArrayLike<number> } }[] } }).skeleton;
-      if (!skel || skel.bones.length < 2) return;
+      if (!skel || skel.bones.length < 2) {return;}
       out.scanned++;
       // matrixWorld.elements[12..14] — no Vector3 needed (THREE is a
       // type-only import in this file).
@@ -96,7 +96,7 @@ export function auditScene(scene: THREE.Scene): VisAuditResult {
           const dx = ea[12] - eb[12], dy = ea[13] - eb[13], dz = ea[14] - eb[14];
           const e = dx * dx + dy * dy + dz * dz;
           if (!isFinite(e)) { nan++; continue; }
-          if (e > maxEdge) { maxEdge = e; at = [ea[12] | 0, ea[13] | 0, ea[14] | 0]; }
+          if (e > maxEdge) { maxEdge = e; at = [Math.trunc(ea[12]), Math.trunc(ea[13]), Math.trunc(ea[14])]; }
         }
       }
     } else if (anyO.isInstancedMesh && anyO.instanceMatrix && anyO.count != null) {
@@ -109,7 +109,7 @@ export function auditScene(scene: THREE.Scene): VisAuditResult {
         if (!isFinite(sx)) { nan++; continue; }
         if (sx * sx > LIM2) {
           maxEdge = Math.max(maxEdge, sx * sx);
-          at = [im[b + 12] | 0, im[b + 13] | 0, im[b + 14] | 0];
+          at = [Math.trunc(im[b + 12]), Math.trunc(im[b + 13]), Math.trunc(im[b + 14])];
         }
       }
     } else {
