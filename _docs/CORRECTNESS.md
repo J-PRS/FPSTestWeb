@@ -568,6 +568,14 @@ violation instead of a symptom hunt.
   `max(beaconY+0.4, groundY+0.4)` — never inside terrain; and
   `markTeleport` declares the jump so the server's plausibility
   judge doesn't read it as a speedhack.
+- **Demo recorder buffer (verified sealed):** `DemoRecorder`
+  frames ride a `CircularBuffer` sized `bufferSeconds ×
+  tickRate` — a recorder left running can never grow memory,
+  oldest frames evict in place; playback re-seats indexes by
+  `slice(lastIndex, count)` so a stalled seek can't re-emit
+  events; stopping a clip hands the live map back before
+  recording resumes (a clip's embedded grid can't leak into the
+  next recording's HMAP trailer).
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
