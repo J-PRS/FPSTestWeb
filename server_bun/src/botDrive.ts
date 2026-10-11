@@ -47,7 +47,7 @@ export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocit
     h.field ? hmChord(h.field, p.position.x, p.position.z) : p.position.y,
     h.room.moveSim.structureTop(p.position.x, p.position.z),
   );
-  const sheepHeight = Math.max(0, p.position.y - classCapsule(p.armorClass).eye - sheepGround);
+  const sheepHeight = Number.isFinite(sheepGround) ? Math.max(0, p.position.y - classCapsule(p.armorClass).eye - sheepGround) : 0;
   h.sheep.check(id, p, { out, airborne: !sh.onGround, hasDest: dist >= 0.5, foe: (h.foeNear.get(id) ?? 0) > now, dt, height: sheepHeight }, now);
   if (dist >= 0.5) {
     // Wrist-speed turn — a snapped 180° reads as a fly-flick while an
@@ -121,11 +121,12 @@ export function legacyMove(h: DriveHost, id: string, p: { position: Vec3; veloci
   p.velocity.z = nz * speed;
   // Chord is the rendered surface — a bot clamped to the smooth field
   // alone sinks under the level-0 mesh in gullies on every client's screen.
-  const groundY = Math.max(
+  const rawGroundY = Math.max(
     h.field ? hmHeight(h.field, p.position.x, p.position.z) : p.position.y,
     h.field ? hmChord(h.field, p.position.x, p.position.z) : p.position.y,
     h.room.moveSim.structureTop(p.position.x, p.position.z),
   );
+  const groundY = Number.isFinite(rawGroundY) ? rawGroundY : p.position.y;
   // p.position is EYE-height (the wire convention — clients render
   // feet at pos.y - eyeHeight); groundY+0.1 parked the model underground.
   const eye = classCapsule(p.armorClass).eye;
