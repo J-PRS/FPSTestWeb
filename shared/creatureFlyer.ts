@@ -145,7 +145,7 @@ function stepOrbit(
     const gy = hmHeight(field, anchor.x, anchor.z);
     flyToward(c,
       anchor.x + Math.cos(c.orbitPhase) * c.sp.ORBIT_R,
-      Math.max(anchor.y, gy) + c.sp.ORBIT_ALT,
+      Math.max(anchor.y, Number.isFinite(gy) ? gy : anchor.y) + c.sp.ORBIT_ALT,
       anchor.z + Math.sin(c.orbitPhase) * c.sp.ORBIT_R,
       c.sp.ORBIT_SPEED, dt);
   }
@@ -188,6 +188,9 @@ function stepDive(c: SimFlyer, dt: number, target: SimVec | null, authoritative:
 
 function stepClimb(c: SimFlyer, dt: number, field: Heightfield): CrawlerEvent | null {
   const gy = hmHeight(field, c.x, c.z);
+  // NaN floor would latch climb forever (y >= NaN never holds, flyToward
+  // would chase a NaN target) — hold altitude until the field answers.
+  if (!Number.isFinite(gy)) return null;
   flyToward(c, c.x, gy + c.sp.ORBIT_ALT + 4, c.z, c.sp.CLIMB_RATE, dt);
   if (c.y >= gy + c.sp.ORBIT_ALT) {
     c.state = 'orbit';

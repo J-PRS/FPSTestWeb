@@ -174,7 +174,7 @@ export function stepCrawler(
   const gy = Math.max(hmHeight(field, c.x, c.z), hmChord(field, c.x, c.z));
   const airborne = c.y > gy + 0.05;
 
-  if (airborne) return null; // mid-hop — nothing to decide until touchdown
+  if (airborne || !Number.isFinite(gy)) return null; // mid-hop, or a floor the field can't answer
 
   // Touchdown: park exactly on the surface.
   c.y = gy; c.vx = 0; c.vy = 0; c.vz = 0;

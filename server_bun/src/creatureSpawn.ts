@@ -63,7 +63,8 @@ export function spawnCrawler(h: SpawnHost, near: SimVec, species: string): SimBe
   const x = near.x + Math.cos(ang) * dist;
   const z = near.z + Math.sin(ang) * dist;
   const seed = (h.rng() * 0xffffffff) >>> 0 || 1;
-  const gy = Math.max(hmHeight(field, x, z), hmChord(field, x, z));
+  const g0 = Math.max(hmHeight(field, x, z), hmChord(field, x, z));
+  const gy = Number.isFinite(g0) ? g0 : 0;
   const id = h.nextId++;
   const uber = h.rng() < 0.05;
   const fam = SPECIES_FAMILY[speciesFamily(species)];

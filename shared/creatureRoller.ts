@@ -84,7 +84,7 @@ export function stepRoller(
   c.z += c.vz * dt;
   if (clipMotion(c, px, c.y, pz, cols)) { c.hitCd = Math.max(c.hitCd, 0.3); }
   const gy = hmHeight(field, c.x, c.z);
-  c.y = gy + 1.6; // rides the surface — radius baked into the constant
+  if (Number.isFinite(gy)) {c.y = gy + 1.6;} // rides the surface — radius baked into the constant
   const drop = prevY - c.y;
   if (drop > 0 && hSpeed > 0.1 && target && distSq > 0.01) {
     const d = Math.sqrt(distSq);

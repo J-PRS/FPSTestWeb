@@ -166,8 +166,8 @@ function stepLeap(
   }
 
   const gy = Math.max(hmHeight(field, c.x, c.z), hmChord(field, c.x, c.z)) + 0.5;
-  if (c.y <= gy || c.hopTimer <= 0) {
-    c.y = Math.min(c.y, gy); c.vx = 0; c.vy = 0; c.vz = 0;
+  if ((Number.isFinite(gy) && c.y <= gy) || c.hopTimer <= 0) {
+    if (Number.isFinite(gy)) {c.y = Math.min(c.y, gy);} c.vx = 0; c.vy = 0; c.vz = 0;
     c.state = 'slither';
     c.strikeCd = c.sp.STRIKE_CD;
     return null;
