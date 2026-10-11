@@ -211,6 +211,7 @@ export function wireFlags(ctx: NetCtx): void {
   };
 
   const applyFlagUpdate = (f: { team: TeamId; pos: { x: number; y: number; z: number }; home?: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }, hush = false): void => {
+    if (!Number.isFinite(f.pos.x + f.pos.y + f.pos.z) || (f.home !== undefined && !Number.isFinite(f.home.x + f.home.y + f.home.z))) {deps.logger.warn(`flag ${f.team} update dropped: non-finite position`); return;}
     callout(f, hush);
     const vis = ensureFlagMesh(f.team);
     let marker = deps.world.flagMarkers.get(f.team);
