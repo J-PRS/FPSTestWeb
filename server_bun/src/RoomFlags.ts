@@ -157,9 +157,10 @@ export class RoomFlags {
       // The dead carrier gets the fumble line — the killer's taunt
       // already fires on the frag itself.
       this.room.messages.killFeed.say(playerId, 'flagdrop');
+      const dp = this.room.players.getPlayer(playerId);
       this.room.bots?.notice('flagdrop', playerId,
-        this.room.players.getPlayer(playerId)?.team);
-      const p = this.room.players.getPlayer(playerId);
+        dp?.team, dp ? { ...dp.position } : undefined, 'other');
+      const p = dp;
       if (p) f.pos = { ...p.position };
       f.carrier = null;
       f.state = 'dropped';
@@ -211,7 +212,7 @@ export class RoomFlags {
       f.vel.z = p.velocity.z + cp * Math.cos(p.rotation.yaw) * FLAG_THROW_SPEED;
       f.airborneBy = playerId;
       this.room.messages.killFeed.say(playerId, 'flagdrop');
-      this.room.bots?.notice('flagdrop', playerId, p.team);
+      this.room.bots?.notice('flagdrop', playerId, p.team, { ...f.pos }, 'other');
       this.room.influence.splat(f.pos, 'opportunity', 1.2);
       this.dirty = true;
     }
@@ -445,7 +446,7 @@ export class RoomFlags {
     if (this.rabbit) {
       logger.info('Rabbit flag grabbed', { room: this.room.name, by: t.id });
       this.room.messages.killFeed.say(t.id, 'flaggrab');
-      this.room.bots?.notice('flaggrab', t.id, undefined);
+      this.room.bots?.notice('flaggrab', t.id, undefined, { ...f.pos }, 'other');
       f.state = 'carried';
       f.carrier = t.id;
       f.carriedAt = simNow();
@@ -471,7 +472,7 @@ export class RoomFlags {
     } else if (t.team && t.team !== f.team) {
       logger.info('Flag grabbed', { room: this.room.name, flag: f.team, by: t.id });
       this.room.messages.killFeed.say(t.id, 'flaggrab');
-      this.room.bots?.notice('flaggrab', t.id, t.team);
+      this.room.bots?.notice('flaggrab', t.id, t.team, { ...f.pos }, 'other');
       f.state = 'carried';
       f.carrier = t.id;
       f.airborneBy = null;

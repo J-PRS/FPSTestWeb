@@ -152,7 +152,7 @@ export class HitLedger {
     const shooterStreak = shooterId === 'environment' ? undefined
       : (c.playerManager.getPlayer(shooterId)?.streak ?? 0) + 1;
     c.broadcast(eventPayload(WORLD_MODEL.player!, 'playerKill', 'targetId', targetId, { shooterId, weapon: opts.weapon, streak: shooterStreak, air: opts.air }) as ServerMessage);
-    c.killFeed.announce(shooterId, targetId, opts.weapon, opts.label);
+    c.killFeed.announce(shooterId, targetId, opts.weapon, opts.label, opts.air);
     c.deps.emit?.({ type: 'kill', targetId, shooterId });
     c.respawner.schedule(targetId);
   }

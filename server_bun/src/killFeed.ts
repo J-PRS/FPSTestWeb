@@ -6,10 +6,10 @@
  */
 import type { ServerMessage } from './types.ts';
 import type { PlayerManager } from './PlayerManager.ts';
-import { killTaunt, deathTaunt, envDeathTaunt, spreeTaunt, chatter, comboTailFor, comboCutDelayMs, type ChatterKind, type TauntLine } from '../../shared/botTaunts.ts';
+import { killTaunt, deathTaunt, envDeathTaunt, spreeTaunt, chatter, comboTailFor, comboCutDelayMs, noteFrag, bulliedBy, type ChatterKind, type TauntLine } from '../../shared/botTaunts.ts';
 import { tauntRand } from '../../shared/botRand.ts';
 import { logger } from './logger.ts';
-import { WeaponType } from '../../shared/weapons.ts';
+import { WeaponType, getWeaponStats } from '../../shared/weapons.ts';
 import { evictEldest } from './evictEldest.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
@@ -39,7 +39,7 @@ export class KillFeed {
     /** A bot's line actually landed on the wire — hosts use it to offer
      *  the room a 'reply' notice, so a bark can become a two-bot beat
      *  without any dialogue scripting. */
-    private onBotSpoke?: (id: string) => void,
+    private onBotSpoke?: (id: string, vgs?: string) => void,
     /** Team-scoped delivery for tactical VGS chords — canon: only
      *  squadmates hear "Defend our flag!". */
     private sendToPlayer?: SendToPlayerFn,
@@ -56,11 +56,12 @@ export class KillFeed {
     }
   }
 
-  announce(shooterId: string, targetId: string, weapon?: number, label?: string): void {
+  announce(shooterId: string, targetId: string, weapon?: number, label?: string, air?: number): void {
     const victim = this.playerManager.getPlayer(targetId);
     const ended = victim?.streak ?? 0;
     if (victim) victim.streak = 0;
-    if (targetId.startsWith('BOT-')) this.victimLine(targetId, shooterId);
+    noteFrag(shooterId, targetId); // pair ledger must precede victimLine's bullied check
+    if (targetId.startsWith('BOT-')) this.victimLine(targetId, shooterId, weapon, air);
     if (shooterId === 'environment') { this.witness(targetId); return; }
     // Self-splash reads as a death, not a frag — no streak credit, no
     // taunt, just the suicide notice.
@@ -90,6 +91,7 @@ export class KillFeed {
       if (revenge) this.say(shooterId, 'revenge', targetId);
       else if (weapon === WeaponType.Melee) this.say(shooterId, 'fist', targetId);
       else if (ended >= 3) this.say(shooterId, 'streakend', targetId);
+      else if (this.skillKill(weapon, air)) this.say(shooterId, 'air', targetId);
       else {
         const t = killTaunt(shooterId, targetId);
         this.botSay(shooterId, t?.text ?? null, true, t?.vgs);
@@ -100,12 +102,18 @@ export class KillFeed {
   /** The dead bot's half of announce: dying is +1 on the tilt counter
    *  (fragging resets it in announce) — three unanswered deaths earns
    *  the 'tilt' pool instead of the usual death/env line. */
-  private victimLine(targetId: string, shooterId: string): void {
+  private victimLine(targetId: string, shooterId: string, weapon?: number, air?: number): void {
     const streak = (this.deathStreak.get(targetId) ?? 0) + 1;
     this.deathStreak.set(targetId, streak);
     if (this.deathStreak.size > 256) evictEldest(this.deathStreak);
-    if (streak >= 3) this.say(targetId, 'tilt', shooterId);
-    else if (this.hardShot(targetId, shooterId)) this.say(targetId, 'props', shooterId);
+    if (bulliedBy(targetId, shooterId)) this.say(targetId, 'bully', shooterId);
+    else if (streak >= 3) this.say(targetId, 'tilt', shooterId);
+    else if (this.hardShot(targetId, shooterId, weapon, air)) {
+      // The props beat's second half: a victim who gave credit sometimes
+      // hears the shooter close it with 'thanks' — the full Tribes
+      // banter exchange (air hype → nice shot → thanks).
+      if (this.say(targetId, 'props', shooterId)) this.thanksBeat(shooterId, targetId);
+    }
     else {
       const t = shooterId === 'environment'
         ? envDeathTaunt(targetId)
@@ -139,19 +147,44 @@ export class KillFeed {
   /** Situation chatter from brains (contact/fear/bored/...) and flag
    *  events — kind resolves through the shared pools + cooldown, so a
    *  loud situation still obeys the per-bot throttle. */
-  say(id: string, kind: ChatterKind, other?: string): void {
-    if (!id.startsWith('BOT-')) return;
+  say(id: string, kind: ChatterKind, other?: string, fill?: { d?: string; h?: string }): boolean {
+    if (!id.startsWith('BOT-')) return false;
     // Replies don't invite replies — a bark→answer beat is the whole
     // trick; letting 'reply' chain would ping-pong the room forever.
-    const c = chatter(kind, id, other);
+    const c = chatter(kind, id, other, fill);
     this.botSay(id, c?.text ?? null, kind !== 'reply', c?.vgs, c?.team);
+    return c != null;
+  }
+
+  /** A compliment was actually spoken — give the shooter a shot at the
+   *  closing 'thanks'. The delay matters on two levels: the reply must
+   *  land after the props line (which itself carries a typing beat),
+   *  and the 20s cooldown means this only fires when the killer DIDN'T
+   *  gloat on the frag — quiet killers get the humble answer instead. */
+  private thanksBeat(shooterId: string, targetId: string): void {
+    if (!shooterId.startsWith('BOT-') || tauntRand() > 0.5) return;
+    const t = setTimeout(() => {
+      this.pending.delete(t);
+      try { this.say(shooterId, 'thanks', targetId); }
+      catch (e) { logger.error('thanks beat failed', { playerId: shooterId, err: e instanceof Error ? e.message : String(e) }); }
+    }, 2500 + tauntRand() * 2000);
+    this.pending.add(t);
+  }
+
+  /** A lob that rode half a second of airtime and still connected, on an
+   *  explosive shell — the Tribes skill kill (auto-weapon frags don't
+   *  qualify: spray kills aren't brag kills). Feeds the shooter's hype
+   *  line AND tilts the victim's props roll. */
+  private skillKill(weapon: number | undefined, air: number | undefined): boolean {
+    return (air ?? 0) >= 0.5 && weapon != null && (getWeaponStats(weapon)?.aoeRadius ?? 0) > 0;
   }
 
   /** Did the victim die to a hard shot? Long range or midair both count
    *  — the 'nice shot' compliment is earned, so it's a roll (~45%) on a
-   *  qualifying kill, never a routine death response. */
-  private hardShot(targetId: string, shooterId: string): boolean {
-    if (tauntRand() > 0.45) return false;
+   *  qualifying kill, never a routine death response. A true air-lob
+   *  (skillKill) earns a better roll — everyone respects the rainbow. */
+  private hardShot(targetId: string, shooterId: string, weapon?: number, air?: number): boolean {
+    if (tauntRand() > (this.skillKill(weapon, air) ? 0.7 : 0.45)) return false;
     const victim = this.playerManager.getPlayer(targetId);
     const shooter = this.playerManager.getPlayer(shooterId);
     if (!victim?.position || !shooter?.position) return false;
@@ -216,7 +249,7 @@ export class KillFeed {
       } else {
         this.broadcast({ type: 'chat', playerId: id, text: line, vgs });
       }
-      if (inviteReply) this.onBotSpoke?.(id);
+      if (inviteReply) this.onBotSpoke?.(id, vgs);
       // The VGS-combo intent: a rare second chord timed to cut the first
       // sample mid-word — two real chat lines, the listener's audio
       // channel produces the splice. VGS tails are all global scope.

@@ -515,12 +515,15 @@ export class BotArsenal implements BeamHost {
     return true;
   }
 
-  /** First push-class AOE weapon in the kit — the blast needs forceMode
-   *  'push' (a pull weapon would drag the bot toward its own feet). */
+  /** First push-class AOE weapon in the kit that can actually LAUNCH —
+   *  forceMode 'push' (a pull weapon would drag the bot toward its own
+   *  feet) and real shove behind it. AoeRadius alone let Bombard (9m of
+   *  self-damage, 12 m/s of shard thump) qualify as a jump gun — the
+   *  feet blast cost a third of the bot's health and moved it a step. */
   private propelWeapon(lo: BotLoadout): number {
     const pick = [lo.mid, lo.far].find((wt) => {
       const s = getWeaponStats(wt);
-      return s && s.aoeRadius > 0 && s.speed > 0 && s.forceMode !== 'pull';
+      return s && s.aoeRadius > 0 && s.speed > 0 && s.forceMode !== 'pull' && s.knockbackForce >= 20;
     });
     return pick ?? WeaponType.Disc;
   }

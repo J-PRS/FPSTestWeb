@@ -182,7 +182,7 @@ export class CombatHandler {
     // Late binding on the static — tests reassign tauntDelayMs after
     // construction and must still steer the delay.
     this.killFeed = new KillFeed(playerManager, broadcast, () => CombatHandler.tauntDelayMs(),
-      (id) => this.deps.emit?.({ type: 'botSpoke', id }), sendToPlayer);
+      (id, vgs) => this.deps.emit?.({ type: 'botSpoke', id, vgs }), sendToPlayer);
     this.respawner = new RespawnManager(playerManager, broadcast, (pid, pos, yaw, full) => this.deps.moveResync?.(pid, pos, yaw, full));
     this.blast = new BlastRunner(this);
     this.chargeBank = new ChargeBank((ownerId, target, amount) => this.blast.pop(ownerId, target.position, amount));

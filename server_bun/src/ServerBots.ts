@@ -192,8 +192,9 @@ export class ServerBots {
 
   /** A room event the squad may react to — enters the senses as a notice
    *  channel; each bot's brain decides on its own whether to remark. */
-  notice(kind: ChatterKind, actorId: string, actorTeam?: string): void {
-    this.sense.notice(kind, actorId, actorTeam);
+  notice(kind: ChatterKind, actorId: string, actorTeam?: string, goal?: { x: number; y: number; z: number },
+    goalSide?: 'same' | 'other'): void {
+    this.sense.notice(kind, actorId, actorTeam, goal, goalSide);
   }
 
   /** The horn beat — every bot rolls an outcome-appropriate line (winners
@@ -619,7 +620,7 @@ export class ServerBots {
         // the taunt pools + throttle, so a fresh contact/bored edge reads
         // as a remark rather than spam.
         this.sense.reportSpots(p, brain.h.seenEnemies, now);
-        if (out.say) this.room.messages.killFeed.say(id, out.say.kind, out.say.target);
+        if (out.say) this.room.messages.killFeed.say(id, out.say.kind, out.say.target, out.say);
         this.sense.markFoeNear(id, ctx, p.position, p.rotation.yaw, now);
         this.applyStatus(id, p, out, now);
         const sh0 = this.room.moveSim.simState(id);

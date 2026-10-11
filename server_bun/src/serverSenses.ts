@@ -78,8 +78,9 @@ export class ServerBotSenses {
 
   /** Room code reports an event worth a reaction (flag cap/grab/return/
    *  drop). Actor's own line is separate — the actor never gets a notice. */
-  notice(kind: ChatterKind, actorId: string, actorTeam?: string): void {
-    this.notices.notice(kind, actorId, actorTeam, simNow());
+  notice(kind: ChatterKind, actorId: string, actorTeam?: string, goal?: { x: number; y: number; z: number },
+    goalSide?: 'same' | 'other'): void {
+    this.notices.notice(kind, actorId, actorTeam, simNow(), goal, goalSide);
   }
 
   /** One pass producing every per-think roster view — the shared tick

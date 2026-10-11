@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   killTaunt, deathTaunt, envDeathTaunt, spreeTaunt, endTaunt, startTaunt,
   chatter, chatKindFor, vgsCommandFor, setMatchMuted, setTauntClock,
-  resetTauntCooldowns,
+  resetTauntCooldowns, noteFrag, bulliedBy, dir8, radioAimFor,
 } from '../../shared/botTaunts.ts';
 import { RoomNoticer } from '../../shared/roomNoticer.ts';
 import { tauntRng } from '../../shared/botRand.ts';
@@ -118,6 +118,53 @@ describe('botTaunts', () => {
     expect(vgsCommandFor('VVY')).toBeNull();
     expect(vgsCommandFor('VNE')).toBe('ack');
     expect(vgsCommandFor('VCA')).toBeNull();
+  });
+
+  it('the bully read: 3+ unanswered deaths to the same foe, zero kills back', () => {
+    noteFrag('p:1', 'b1'); noteFrag('p:1', 'b1');
+    expect(bulliedBy('b1', 'p:1')).toBe(false); // threshold not met
+    noteFrag('p:1', 'b1');
+    expect(bulliedBy('b1', 'p:1')).toBe(true);
+    // Even one frag back breaks the one-sided read — it becomes a rivalry.
+    noteFrag('b1', 'p:1');
+    expect(bulliedBy('b1', 'p:1')).toBe(false);
+    // Identity-blind: a bot farming another bot earns the same flag.
+    noteFrag('b2', 'b3'); noteFrag('b2', 'b3'); noteFrag('b2', 'b3');
+    expect(bulliedBy('b3', 'b2')).toBe(true);
+    // Environment and self-frags are not bullies.
+    noteFrag('environment', 'b4'); noteFrag('b4', 'b4');
+    expect(bulliedBy('b4', 'environment')).toBe(false);
+    rng(0.5); // text path, cooldown open
+    const c = chatter('bully', 'b1', 's1mple');
+    expect(c!.text).toContain('s1mple');
+  });
+
+  it('air-kill hype speaks a canon chord and names the victim', () => {
+    rng(0); // speak + chord path → first of the air VGS list (VGW 'Woohoo')
+    const t = chatter('air', 'b1', 'skyrider');
+    expect(t!.vgs).toBe('VGW');
+    rng(0.5); // text path
+    const t2 = chatter('air', 'b2', 'skyrider');
+    expect(t2!.text.length).toBeGreaterThan(0);
+    // thanks' canon chord is VGRT ('Thanks') — the props reply beat
+    rng(0);
+    expect(chatter('thanks', 'b3', 'x')!.vgs).toBe('VGRT');
+  });
+
+  it('radio chords point at a spot; compass names it', () => {
+    expect(radioAimFor('VDF')).toBe('own');      // Defend our flag!
+    expect(radioAimFor('VAF')).toBe('enemy');    // Get the enemy flag!
+    expect(radioAimFor('VDM')).toBe('actor');    // Cover me!
+    expect(radioAimFor('VAC')).toBe('carrier');  // Chase the enemy flag carrier!
+    expect(radioAimFor('VGS')).toBeUndefined();  // shazbot orders nobody
+    expect(dir8(0, -10)).toBe('n');
+    expect(dir8(10, 0)).toBe('e');
+    expect(dir8(0, 10)).toBe('s');
+    expect(dir8(-10, 0)).toBe('w');
+    // The {d}/{h} fills degrade gracefully when the caller lacks them.
+    rng(0.5);
+    const c = chatter('fear', 'b9');
+    expect(c!.text).not.toContain('{h}');
   });
 
   it('chatter answers a human line through the same cooldown gate', () => {

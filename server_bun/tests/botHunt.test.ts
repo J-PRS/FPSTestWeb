@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 
-import { newHuntState, pickHunt, pickFire, scanVisible, retreatDest } from '../../shared/botHunt.ts';
+import { newHuntState, pickHunt, pickFire, scanVisible, retreatDest, noteFoeHit, noteFoeDeath, dreadOf } from '../../shared/botHunt.ts';
 import { botRng, botRngRelease } from '../../shared/botRand.ts';
 import type { BotEnemy, BrainCtx } from '../../shared/botBrain.ts';
 
@@ -73,6 +73,79 @@ describe('pickHunt', () => {
     let ran = false;
     pickHunt(st, flat(), P, 0, mood, () => { ran = true; });
     expect(ran).toBe(true);
+  });
+});
+
+describe('nemesis', () => {
+  const scar = (st: ReturnType<typeof newHuntState>, id: string, deaths = 2) => {
+    for (let i = 0; i < deaths * 2; i++) { noteFoeHit(st, id, i * 100); noteFoeDeath(st, i * 100 + 50); }
+  };
+
+  it('hits and deaths stack a foe score', () => {
+    const st = newHuntState(P);
+    noteFoeHit(st, 'p:1', 0);
+    noteFoeDeath(st, 100);
+    expect(dreadOf(st, 'p:1')).toBeCloseTo(1.5 + 0.25, 3);
+    noteFoeHit(st, 'p:2', 0);
+    expect(dreadOf(st, 'p:2')).toBeCloseTo(0.25, 3);
+    // A stale lastHitBy attributes nothing.
+    const st2 = newHuntState(P);
+    noteFoeHit(st2, 'p:1', 0);
+    noteFoeDeath(st2, 10_000);
+    expect(dreadOf(st2, 'p:1')).toBeCloseTo(0.25, 3);
+  });
+
+  it('a nemesis is invisible to acquisition — the brawl-range foe is not', () => {
+    const st = newHuntState(P);
+    scar(st, 'p:nem');
+    pickHunt(st, flat({ enemies: [foe(40, 0, 'p:nem'), foe(50, 0, 'p:2')] }), P, 0, mood, () => {});
+    expect(st.hunt?.id).toBe('p:2');
+    // Inside brawl range nobody gets ignored — dread can't stand down
+    // a fight that's already on top of the bot.
+    const st2 = newHuntState(P);
+    scar(st2, 'p:nem');
+    pickHunt(st2, flat({ enemies: [foe(10, 0, 'p:nem')] }), P, 0, mood, () => {});
+    expect(st2.hunt?.id).toBe('p:nem');
+  });
+
+  it('hero mode does not pick its opponent', () => {
+    const st = newHuntState(P);
+    scar(st, 'p:nem');
+    pickHunt(st, flat({ enemies: [foe(40, 0, 'p:nem')] }), P, 0, { hero: true, fearing: false }, () => {});
+    expect(st.hunt?.id).toBe('p:nem');
+  });
+
+  it('a plain grudge (hits, no deaths) stays engaged', () => {
+    const st = newHuntState(P);
+    noteFoeHit(st, 'p:1', 0); // 0.25 < 2 — annoyance, not fear
+    pickHunt(st, flat({ enemies: [foe(40, 0, 'p:1')] }), P, 0, mood, () => {});
+    expect(st.hunt?.id).toBe('p:1');
+  });
+});
+
+describe('anticipation', () => {
+  it('a lost runner heading at a pack is chased to the pack', () => {
+    const st = newHuntState(P);
+    // First sighting establishes the model: runner at (30,0) going +x.
+    const runner = foe(30, 0, 'p:run');
+    runner.vel = { x: 20, y: 0, z: 0 };
+    pickHunt(st, flat({ enemies: [runner] }), P, 0, mood, () => {});
+    expect(st.hunt?.id).toBe('p:run');
+    // LOS breaks — no enemy in the next ctx. The pickup sits at the end
+    // of the heading line, so the ghost should land on it.
+    st.lastSeenAt = 900;
+    const pack = { x: 54, y: 0, z: 0 }; // 30 + 20*1.2 = 54 — on the money
+    pickHunt(st, flat({ pickup: pack, now: 2000 }), P, 2000, mood, () => {});
+    expect(st.hunt?.pos.x).toBeCloseTo(54, 3);
+    // Without the attractor the same ghost rides pure momentum.
+    const st2 = newHuntState(P);
+    const r2 = foe(30, 0, 'p:run');
+    r2.vel = { x: 20, y: 0, z: 0 };
+    pickHunt(st2, flat({ enemies: [r2] }), P, 0, mood, () => {});
+    st2.lastSeenAt = 900;
+    pickHunt(st2, flat({ now: 2000 }), P, 2000, mood, () => {});
+    expect(st2.hunt?.pos.x).toBeGreaterThan(30); // momentum carried it
+    expect(st2.hunt?.pos.x).toBeLessThanOrEqual(54.001);
   });
 });
 
