@@ -95,6 +95,7 @@ export class RoomPickups {
    *  camper. Server moves the truth spot AND rebroadcasts a spawn edge:
    *  clients had their own cosmetic knock, this snaps them to agreement. */
   knock(at: Vec3, radius: number, force: number, pull = false): void {
+    if (!Number.isFinite(at.x + at.y + at.z + radius + force)) return;
     const s = pull ? -1 : 1;
     for (const p of this.pickups.values()) {
       const dx = p.pos.x - at.x, dy = p.pos.y - at.y, dz = p.pos.z - at.z;

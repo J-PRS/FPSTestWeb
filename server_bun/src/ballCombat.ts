@@ -110,6 +110,7 @@ export class BallCombat {
    *  it). Without it the client throws the ball and the next segment
    *  yanks it back. */
   knock(pos: SimVec, radius: number, force: number, pull = false): void {
+    if (!Number.isFinite(pos.x + pos.y + pos.z + radius + force)) return;
     const s = pull ? -1 : 1;
     for (const b of this.host.balls().values()) {
       if (b.dead) continue;

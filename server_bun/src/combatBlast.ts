@@ -85,6 +85,10 @@ export class BlastRunner {
     // Trusted server blasts still run from dead owners — a corpse's
     // in-flight ordnance and its charge-pop both outlive the kill.
     if (!player || (player.isDead && !trusted)) return;
+    // A NaN blast center fails every `d > radius` skip below — the whole
+    // fan-out (splash, plating, heals, flag/pickup punts) would resolve
+    // against NaN distances instead of resolving nothing.
+    if (!Number.isFinite(position.x + position.y + position.z)) return;
 
     // Projectile-bound blasts already passed validateAoeClaim (airtime,
     // flight reach, occlusion) — the flat shooter-distance gate is for

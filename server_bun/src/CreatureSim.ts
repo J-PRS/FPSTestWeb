@@ -273,6 +273,7 @@ export class CreatureSim {
    *  on net-driven creatures, pull flips it. Without it a blast visibly
    *  throws them and the next segment yanks them back. */
   knock(pos: SimVec, radius: number, force: number, pull = false): void {
+    if (!Number.isFinite(pos.x + pos.y + pos.z + radius + force)) return;
     const s = pull ? -1 : 1;
     for (const c of this.crawlers.values()) {
       if (c.dead) continue;
