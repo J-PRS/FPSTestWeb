@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 import type { Terrain } from '../world/terrain.js';
 import { TEAM_COLORS, TEAM_LABEL, FLAG_HOME_R, FLAG_RESET_S, CTF_PTS, bank, type TeamId, type TeamScores } from '../../../shared/teams.js';
-import type { GameBot } from './botBrain.js';
+import type { GameBot } from './bots/botBrain.js';
 import { roleObjective, ROLE_PRIORITY, STRICT_CLASS, type BotRole } from '../../../shared/flagGoals.js';
 import * as sfx from '../core/sfx.js';
 import { mkFlagStand, FLAG_STAND_TOP } from '../structures/structures.js';

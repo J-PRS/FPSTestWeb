@@ -1,4 +1,4 @@
-import { SheepMeter, type SheepBody } from './botSheep.js';
+import { SheepMeter, type SheepBody } from './bots/botSheep.js';
 import Logger from '../core/Logger.js';
 import type { Player } from '../entities/Player.js';
 import type { Terrain } from '../world/terrain.js';

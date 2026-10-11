@@ -18,7 +18,7 @@ import { TEAM_COLORS, TEAM_LABEL, FLAG_PICKUP_R, FLAG_HOME_R, FLAG_RESET_S,
   bank, type TeamId, type TeamScores } from '../../../shared/teams.js';
 import type { StructureSpec } from '../../../shared/mapSpec.js';
 import type { Terrain } from '../world/terrain.js';
-import type { GameBot } from './botBrain.js';
+import type { GameBot } from './bots/botBrain.js';
 import { flagReturnFx } from './flagFx.js';
 import * as sfx from '../core/sfx.js';
 import { GRAVITY } from '../core/config.js';

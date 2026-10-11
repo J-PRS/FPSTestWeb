@@ -9,7 +9,7 @@ import { structureColliders } from '../../../shared/ballCollide.js';
 import { ColliderIndex, SolidWorld } from '../../../shared/solidWorld.js';
 import { Ball } from '../entities/balls.js';
 import { Projectile } from '../projectiles/Projectile.js';
-import { setBotStructureSpecs } from './botBrain.js';
+import { setBotStructureSpecs } from './bots/botBrain.js';
 import { setShieldPanesOn } from '../world/mapStructures.js';
 import { setStructureTopAt } from '../entities/bodyGround.js';
 

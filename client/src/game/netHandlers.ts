@@ -54,6 +54,9 @@ export interface NetDeps {
    *  match (gameState with a room name) retires it — otherwise ghosts the
    *  server never heard of stand next to wire bots as unkillable decoys. */
   retireOfflineBots?(): void;
+  /** The local player's chat/VGS — offline rooms never see the wire, so
+   *  the bots need this to hear "gg" or a team command at all. */
+  hearLocalChat?(text: string, team: boolean, vgs?: string): void;
 }
 
 export function wireNetworkHandlers(deps: NetDeps): NetCtx {
@@ -64,7 +67,7 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
   // Chat is self-contained (own DOM + key routing) — net wiring is just
   // where network↔game glue already lives.
   const chat = new Chat({
-    send: (text, team) => networkManager.sendChat(text, team),
+    send: (text, team) => { networkManager.sendChat(text, team); deps.hearLocalChat?.(text, team); },
     isConnected: () => networkManager.isConnected(),
     localName: () => networkManager.getLocalPlayerId(),
     nameFor: (id) => displayName(id, networkManager.getPlayers()),
@@ -89,7 +92,7 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
   // V rides the same chat wire — tactical lines team-scoped, emotes global.
   // Self-contained like Chat — its key routing lives on window.
   new Vgs({
-    send: (text, team, chord) => networkManager.sendChat(text, team, chord),
+    send: (text, team, chord) => { networkManager.sendChat(text, team, chord); deps.hearLocalChat?.(text, team, chord); },
     echo: (text, team, chord) => chat.echoSelf(text, team, chord),
     speak: (text) => speakVgs(text, networkManager.getLocalPlayerId()),
   });

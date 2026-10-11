@@ -49,7 +49,7 @@ import { REPAIR_HEAL_PER_TICK } from '../../shared/weapons.js';
 import { applyDebugHooks } from './game/debugHooks.js';
 import { createWorldState } from './game/worldState.js';
 import { createCombat } from './game/combat.js';
-import { TeamBots } from './game/bots.js';
+import { TeamBots } from './game/bots/index.js';
 import { MODES } from '../../shared/teams.js';
 import { firstTerrain, probeBootMap, bootPrimeTerrain, bootApplySavedMap, armSessionVeil, type MapSnapshot } from './game/net/world.js';
 import { resolveMapSpec, parseMapSpecJson, type MapSpec } from '../../shared/mapSpec.js';
@@ -295,6 +295,7 @@ async function init(): Promise<void> {
     setLastSentPos: remotes.setLastSentPos,
     entities: () => entities,
     retireOfflineBots: () => { teamBots?.dispose(); teamBots = null; },
+    hearLocalChat: (t, tm, v) => teamBots?.hearLocal(t, tm, v),
   });
 
   await connectPhase(netCtx, bootSaved?.map ?? null, classicMode, mode);
