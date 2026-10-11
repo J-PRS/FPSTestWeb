@@ -68,12 +68,12 @@ class InstBucket {
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.count = 0;
     this.mesh.frustumCulled = false; // instances span the map; culling is per-slot pointless
-    for (let i = POOL_MAX - 1; i >= 0; i--) {this.free.push(i);}
+    for (let i = POOL_MAX - 1; i >= 0; i -= 1) {this.free.push(i);}
   }
 
   take(): number {
     const s = this.free.pop()!; // acquireBatch only hands out buckets with room
-    this.used++;
+this.used += 1;
     return s;
   }
 
@@ -90,7 +90,7 @@ class InstBucket {
     this.mesh.setMatrixAt(s, _m);
     this.alphaAttr.array[s] = 0;
     this.free.push(s);
-    this.used--;
+this.used -= 1;
   }
 
   write(p: Particle): void {
@@ -321,7 +321,7 @@ export class EffectsManager {
   }
 
   update(dt: number): void {
-    for (let i = this.beams.length - 1; i >= 0; i--) {
+    for (let i = this.beams.length - 1; i >= 0; i -= 1) {
       const b = this.beams[i];
       b.life -= dt;
       if (b.life <= 0) {
@@ -337,7 +337,7 @@ export class EffectsManager {
     }
     const gravity = GRAVITY;
     const highOf = new Map<InstBucket, number>();
-    for (let i = this.particles.length - 1; i >= 0; i--) {
+    for (let i = this.particles.length - 1; i >= 0; i -= 1) {
       const p = this.particles[i];
       p.life -= dt;
       if (p.life <= 0) {

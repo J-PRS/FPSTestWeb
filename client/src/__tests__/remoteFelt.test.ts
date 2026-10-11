@@ -63,7 +63,7 @@ function runLink(opts: { transit: number; jitter: number; loss: number; secs: nu
   const prev = new THREE.Vector3().copy(h.position);
 
   const totalFrames = Math.floor(opts.secs * 1000 / FRAME_MS);
-  for (let f = 0; f < totalFrames; f++) {
+  for (let f = 0; f < totalFrames; f += 1) {
     const now = f * FRAME_MS;
     vi.setSystemTime(now);
 
@@ -158,7 +158,7 @@ describe('felt-state canary (rendered remote vs truth)', () => {
     interp.onUpdate(t0, { yaw: 0, pitch: 0 }, 40, { x: t0.vx, y: t0.vy, z: t0.vz }, 0);
     h.position.set(t0.x, t0.y, t0.z);
     // Two normal updates so the buffer has a pair.
-    for (let f = 1; f <= 6; f++) {
+    for (let f = 1; f <= 6; f += 1) {
       vi.setSystemTime(f * FRAME);
       if (f % 3 === 0) {
         const s = truth(f * FRAME);
@@ -176,7 +176,7 @@ describe('felt-state canary (rendered remote vs truth)', () => {
     interp.step(FRAME / 1000, false);
     expect(h.position.distanceTo(new THREE.Vector3(tp.x, tp.y, tp.z))).toBeLessThan(0.5);
     // And it must not drift on the next frames either.
-    for (let f = 0; f < 5; f++) {
+    for (let f = 0; f < 5; f += 1) {
       vi.setSystemTime(216 + f * FRAME);
       h.previousPosition.copy(h.position);
       interp.step(FRAME / 1000, false);
@@ -213,7 +213,7 @@ describe('felt-state canary (rendered remote vs truth)', () => {
     h.position.set(0, 20, 0);
     // Wire goes silent past the DR threshold — the ghost must keep the
     // jet burn going (gravity alone would visibly drop it mid-air).
-    for (let f = 1; f <= 60; f++) {
+    for (let f = 1; f <= 60; f += 1) {
       vi.setSystemTime(f * FRAME);
       h.previousPosition.copy(h.position);
       interp.step(FRAME / 1000, false);
@@ -237,10 +237,10 @@ describe('felt-state canary (rendered remote vs truth)', () => {
     h.position.set(0, 20, 0);
     // Repeated predicted blasts ~150ms apart — each used to re-arm the
     // window, so wire truth arriving mid-spam could never exit the sim.
-    for (let b = 0; b < 6; b++) {
+    for (let b = 0; b < 6; b += 1) {
       vi.setSystemTime(b * 150);
       interp.predict(new THREE.Vector3(h.position.x + 1, h.position.y, h.position.z), 20);
-      for (let f = 0; f < 9; f++) {
+      for (let f = 0; f < 9; f += 1) {
         vi.advanceTimersByTime(FRAME);
         interp.step(FRAME / 1000, false);
       }
@@ -253,7 +253,7 @@ describe('felt-state canary (rendered remote vs truth)', () => {
     // converging IS simulating — the steer shares the sim's velocity).
     // The ballistic ghost must steer back toward truth: distance shrinks.
     const driftBefore = h.position.distanceTo(new THREE.Vector3(5, 20, 0));
-    for (let f = 0; f < 15; f++) {
+    for (let f = 0; f < 15; f += 1) {
       vi.advanceTimersByTime(FRAME);
       h.previousPosition.copy(h.position);
       interp.step(FRAME / 1000, false);

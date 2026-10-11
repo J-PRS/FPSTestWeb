@@ -174,7 +174,7 @@ export class MoveClaims {
       player.consecutiveRejects = 0;
       return true;
     }
-    player.consecutiveRejects++;
+player.consecutiveRejects += 1;
     this.h.hb('posrej');
     this.h.hbMax('posrejSpeed', speed);
     // Send correction on the first reject of a streak only — no flood.

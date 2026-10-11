@@ -15,7 +15,7 @@ const counts = new Map<string, number>();
 let total = 0;
 
 export function parityMiss(kind: string, detail: Record<string, unknown>): void {
-  total++;
+total += 1;
   counts.set(kind, (counts.get(kind) ?? 0) + 1);
   rows.push({ kind, detail: JSON.stringify(detail), ageMs: Math.round(performance.now()) });
   if (rows.length > MAX_ROWS) {rows.splice(0, rows.length - MAX_ROWS);}
@@ -62,7 +62,7 @@ export function noteShellFate(shotId: string, at: { x: number; y: number; z: num
 }
 
 export function sweepDamageEchoes(now: number): void {
-  for (let i = dmgEchoes.length - 1; i >= 0; i--) {
+  for (let i = dmgEchoes.length - 1; i >= 0; i -= 1) {
     const e = dmgEchoes[i]!;
     if (now - e.t > 900) {
       const fate = e.shotId ? shellFates.get(e.shotId) : undefined;

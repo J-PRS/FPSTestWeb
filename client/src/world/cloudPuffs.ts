@@ -15,11 +15,11 @@ const _vn = (x: number, y: number): number => {
 
 export function makePuffTexture(size = 256): THREE.DataTexture {
   const data = new Uint8Array(size * size * 4);
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
       const nx = x / size - 0.5, ny = y / size - 0.5;
       let a = 0;
-      for (let bIdx = 0; bIdx < 12; bIdx++) {
+      for (let bIdx = 0; bIdx < 12; bIdx += 1) {
         const bx = (noiseHash(bIdx, 7) - 0.5) * 0.52;
         const by = (noiseHash(bIdx, 91) - 0.5) * 0.42;
         const br = 0.09 + noiseHash(bIdx, 33) * 0.17;
@@ -149,8 +149,8 @@ export function buildPuffGeometry(base: Float32Array, noiseSize: number, yMin: n
   const uv = new Float32Array(n * 4 * 2);
   const idx = new Uint16Array(n * 6);
   const corners = [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]];
-  for (let i = 0; i < n; i++) {
-    for (let v = 0; v < 4; v++) {
+  for (let i = 0; i < n; i += 1) {
+    for (let v = 0; v < 4; v += 1) {
       const vi = i * 4 + v;
       pos[vi * 3] = corners[v]![0]!;
       pos[vi * 3 + 1] = corners[v]![1]!;

@@ -152,7 +152,7 @@ export class TeamBots {
     const scene = deps.lazyScene();
     let ni = 0;
     const mk = (team: TeamId, n: number) => {
-      for (let i = 0; i < n; i++) {
+      for (let i = 0; i < n; i += 1) {
         const spawn = this.spawnSpot(team);
         const name = ffa ? BOT_NAMES[ni++ % BOT_NAMES.length] : `${BOT_NAMES[ni++ % BOT_NAMES.length]}-${team === 'alpha' ? 'A' : 'B'}`;
         // Same roster the dedicated server fields — loadout picks the
@@ -252,13 +252,13 @@ export class TeamBots {
       const e = bodies[bn] ?? (bodies[bn] = {} as BodyCapsule);
       e.id = b.playerId; e.x = b.position.x; e.y = b.position.y; e.z = b.position.z;
       e.h = cap.eye; e.mass = classMass(b.armorClass); e.r = cap.radius; e.vx = b.vel.x; e.vz = b.vel.z;
-      bn++;
+bn += 1;
     }
     const pst = CLASS_STATS[player.appliedClass];
     const le = bodies[bn] ?? (bodies[bn] = {} as BodyCapsule);
     le.id = 'local'; le.x = player.pos.x; le.y = player.pos.y; le.z = player.pos.z;
     le.h = pst.eyeHeight; le.mass = pst.mass; le.r = pst.radius; le.vx = player.vel.x; le.vz = player.vel.z;
-    bn++;
+bn += 1;
     bodies.length = bn;
     this.tickBots(dt, others, bodies);
     this.ctf?.update(dt);

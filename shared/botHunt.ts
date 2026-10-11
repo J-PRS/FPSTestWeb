@@ -189,7 +189,7 @@ export function dreadOf(st: HuntState, id: string): number {
  *  Cap at 8 entries: the lobby's repeat offenders, not a census. */
 export function noteFoeHit(st: HuntState, id: string, now: number): void {
   const f = st.foeScore.get(id) ?? { hits: 0, deaths: 0 };
-  f.hits++;
+f.hits += 1;
   st.foeScore.set(id, f);
   st.lastHitBy = { id, at: now };
   if (st.foeScore.size > 8) {st.foeScore.delete(st.foeScore.keys().next().value!);}
@@ -199,7 +199,7 @@ export function noteFoeHit(st: HuntState, id: string, now: number): void {
 export function noteFoeDeath(st: HuntState, now: number): void {
   if (!st.lastHitBy || now - st.lastHitBy.at > 4000) {return;}
   const f = st.foeScore.get(st.lastHitBy.id);
-  if (f) {f.deaths++;}
+  if (f) {f.deaths += 1;}
 }
 
 /** Lost-LOS extrapolation: momentum lead plus one anticipation step —
@@ -280,7 +280,7 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
       }
     : null;
   st.hunt = next ?? ghost;
-  st.huntTick++;
+st.huntTick += 1;
   // New contact starts the reaction clock — a human doesn't shoot the
   // instant a target enters the eye line. Stamped per id so losing the
   // eye line for a tick doesn't reset the nerves.
@@ -400,7 +400,7 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   // a mortar picks its moments — same cadence rules the client enforces.
   const interval = ctx.fireInterval?.(d) ?? 0.45;
   if (st.burstLeft <= 0) {st.burstLeft = Math.max(2, Math.min(12, Math.round(3 / interval)));}
-  st.burstLeft--;
+st.burstLeft -= 1;
   st.fireT = (st.burstLeft > 0
     ? Math.max(interval, 0.25) + botRand() * 0.15
     : 0.8 + botRand() * 0.5) / st.temper
@@ -554,7 +554,7 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
     // segment at ~1m steps, solids included — a wall eats it too.
     let blocked = false;
     const steps = Math.max(2, Math.ceil(reach));
-    for (let i = 1; i <= steps; i++) {
+    for (let i = 1; i <= steps; i += 1) {
       const t = i / steps;
       // A lip is terrain ABOVE the ray: descending toward a foe's feet
       // skims the deck near the aim point and that is the shell doing
@@ -605,7 +605,7 @@ export function pickFightPos(st: HuntState, ctx: BrainCtx, pos: BotVec, t: BotEn
       if (s > bs) { bs = s; bx = prev.x; bz = prev.z; }
     }
   }
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 12; i += 1) {
     const a = (i / 12) * Math.PI * 2;
     const cx = pos.x + Math.cos(a) * 10, cz = pos.z + Math.sin(a) * 10;
     const cy = ctx.groundY(cx, cz);

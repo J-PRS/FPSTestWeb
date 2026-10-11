@@ -166,7 +166,7 @@ export class RibbonTrail {
       // head pos + a centroid over live samples — enough to point at the
       // on-screen streak a slot is actually drawing.
       let cx = 0, cy = 0, cz = 0;
-      for (let i = 0; i < r.count; i++) { cx += r.px[i]; cy += r.py[i]; cz += r.pz[i]; }
+      for (let i = 0; i < r.count; i += 1) { cx += r.px[i]; cy += r.py[i]; cz += r.pz[i]; }
       const n = Math.max(1, r.count);
       out.push({
         slot: r.slot, tag: r.tag, count: r.count, pushed: r.pushed, stopped: r.stopped,
@@ -239,7 +239,7 @@ export class RibbonTrail {
         continue;
       }
       r.dispose();
-      RibbonTrail.reapedStale++;
+RibbonTrail.reapedStale += 1;
     }
   }
 
@@ -345,19 +345,19 @@ export class RibbonTrail {
     // dispose (resync mass-drop, stale-owner sweep) used to keep filling
     // the ring with slot=-1: the census row looked alive, the trail
     // rendered nothing, and nobody could tell which owner lost it.
-    if (!this.slotAlive()) { RibbonTrail.zombiePushes++; return; }
+    if (!this.slotAlive()) {RibbonTrail.zombiePushes += 1; return; }
     if (this.stopped) {return;}
     // Reject NaN/Inf inputs at the door — one bad sample poisons px/py/pz
     // forever: every later sideFor/glueBoundary reuses it and the whole
     // slot's verts go NaN (the "radius is NaN" console spam).
     // NaN propagates through the sum — one check covers all six lanes.
     if (!Number.isFinite(pos.x + pos.y + pos.z + vel.x + vel.y + vel.z)) {
-      RibbonTrail.nanPushes++;
+RibbonTrail.nanPushes += 1;
       return;
     }
     _dir.copy(vel);
     const spd = _dir.length();
-    if (spd * spd < 1e-6) { this.starvedPushes++; return; }
+    if (spd * spd < 1e-6) {this.starvedPushes += 1; return; }
     _dir.normalize();
     this.lastSpd = spd;
     // Side vector: perpendicular to velocity, biased to the world-horizontal plane
@@ -402,8 +402,8 @@ export class RibbonTrail {
     this.dx[this.head] = _dir.x; this.dy[this.head] = _dir.y; this.dz[this.head] = _dir.z;
     this.st[this.head] = this.time;
     this.ws[this.head] = wScale;
-    if (this.count < MAX_SAMPLES) {this.count++;}
-    this.pushed++;
+    if (this.count < MAX_SAMPLES) {this.count += 1;}
+this.pushed += 1;
   }
 
   /** Ramp the emitter in over `dur` seconds starting at `from` scale —
@@ -458,7 +458,7 @@ export class RibbonTrail {
       const jumpM = JUMP_BUDGET(this.lastSpd);
       if (jx * jx + jy * jy + jz * jz > jumpM * jumpM) {
         this.clear();
-        RibbonTrail.followJumps++;
+RibbonTrail.followJumps += 1;
         glitch('follow-jump', { tag: this.tag, slot: this.slot, gapM: Math.round(Math.hypot(jx, jy, jz)) });
         return;
       }
@@ -500,7 +500,7 @@ export class RibbonTrail {
   private rewriteSamples(base: number, pos: Float32Array, freshFrom: number, rebillboard?: THREE.Vector3): boolean {
     let dirty = false;
     const effLife = this.life * Math.max(this.emitScale, 0.02);
-    for (let i = this.liveFrom; i < this.count; i++) {
+    for (let i = this.liveFrom; i < this.count; i += 1) {
       // oldest -> newest
       const s = (this.head - this.count + 1 + i + MAX_SAMPLES) % MAX_SAMPLES;
       const fade = Math.max(0, 1 - (this.time - this.st[s]) / effLife);
@@ -582,7 +582,7 @@ export class RibbonTrail {
     const len = Math.hypot(sx, sy, sz);
     // isFinite, not just >eps: NaN len passes `<=` comparisons (NaN < x
     // is false), so a NaN cross product used to normalize into NaN verts.
-    if (!Number.isFinite(len) || len <= 1e-6) { RibbonTrail.nanSides++; this.sf[s] = 0; return null; }
+    if (!Number.isFinite(len) || len <= 1e-6) {RibbonTrail.nanSides += 1; this.sf[s] = 0; return null; }
     // len = |d||v|·sinθ — the same cross-product magnitude the side axis
     // normalizes away. Below ~19° the strip is nearly end-on: fade width
     // with the angle instead of showing the whole face.
@@ -638,7 +638,7 @@ export class DyingRibbons {
   }
 
   update(dt: number, camPos?: THREE.Vector3): void {
-    for (let i = this.list.length - 1; i >= 0; i--) {
+    for (let i = this.list.length - 1; i >= 0; i -= 1) {
       const t = this.list[i]!;
       t.update(dt, camPos);
       if (t.done) { t.dispose(); this.list.splice(i, 1); }

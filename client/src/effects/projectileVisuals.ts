@@ -39,8 +39,8 @@ function getConeAlphaTex(): THREE.Texture {
   cv.width = cv.height = S;
   const ctx = cv.getContext('2d')!;
   const img = ctx.createImageData(S, S);
-  for (let y = 0; y < S; y++) {
-    for (let x = 0; x < S; x++) {
+  for (let y = 0; y < S; y += 1) {
+    for (let x = 0; x < S; x += 1) {
       const u = x / S, v = y / S; // v: 0 apex → 1 base (cone UVs)
       // Bright collar near the apex, soft falloff to the skirt edge.
       // map-mode (not alphaMap): the texture IS the additive color, so

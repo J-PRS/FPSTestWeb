@@ -149,7 +149,7 @@ function makeFloydEngine(renderer: THREE.WebGLRenderer) {
     const gl = renderer.getContext();
     gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf);
     const src = buf, dst = img.data, step = 255 / (FS_LEVELS - 1);
-    for (let y = 0; y < h; y++) {
+    for (let y = 0; y < h; y += 1) {
       const cur = errA; errA = errB; errB = cur; errB.fill(0);
       ditherRow(y, src, dst, w, h, step);
     }
@@ -167,10 +167,10 @@ function makeFloydEngine(renderer: THREE.WebGLRenderer) {
     // smears error one way and leaves diagonal worm artifacts
     const fwd = (y & 1) === 0;
     const ahead = fwd ? 3 : -3, behind = -ahead;
-    for (let xi = 0; xi < w; xi++) {
+    for (let xi = 0; xi < w; xi += 1) {
       const x = fwd ? xi : w - 1 - xi;
       const si = srcRow + x * 4, di = dstRow + x * 4, ei = x * 3;
-      for (let c = 0; c < 3; c++) {
+      for (let c = 0; c < 3; c += 1) {
         const v = src[si + c] + errA[ei + c];
         const q = v < 0 ? 0 : v > 255 ? 255 : Math.round(v / step) * step;
         const e = v - q;
@@ -384,7 +384,7 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   function syncRenderToScreen(): void {
     const {passes} = composer;
     let found = false;
-    for (let i = passes.length - 1; i >= 0; i--) {
+    for (let i = passes.length - 1; i >= 0; i -= 1) {
       const p = passes[i]!;
       p.renderToScreen = !found && p.enabled;
       if (p.renderToScreen) {found = true;}

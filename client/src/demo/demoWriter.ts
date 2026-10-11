@@ -11,9 +11,9 @@ import { demoTableHash } from './demoTables.js';
 // reader lives in demoReader.ts; record sizes are shared from here.
 export const crcTable = (() => {
   const table = new Uint32Array(256);
-  for (let i = 0; i < 256; i++) {
+  for (let i = 0; i < 256; i += 1) {
     let crc = i;
-    for (let j = 0; j < 8; j++) {
+    for (let j = 0; j < 8; j += 1) {
       crc = (crc & 1) ? (0xED_B8_83_20 ^ (crc >>> 1)) : (crc >>> 1);
     }
     table[i] = crc;
@@ -23,7 +23,7 @@ export const crcTable = (() => {
 
 export function crc32(data: Uint8Array): number {
   let crc = 0xFF_FF_FF_FF;
-  for (let i = 0; i < data.length; i++) {
+  for (let i = 0; i < data.length; i += 1) {
     crc = crcTable[(crc ^ data[i]!) & 0xFF]! ^ (crc >>> 8);
   }
   return (crc ^ 0xFF_FF_FF_FF) >>> 0;
@@ -34,7 +34,7 @@ function writeString(view: DataView, offset: number, str: string): number {
   const bytes = new TextEncoder().encode(str);
   view.setUint16(offset, bytes.length, true);
   offset += 2;
-  for (let i = 0; i < bytes.length; i++) {
+  for (let i = 0; i < bytes.length; i += 1) {
     view.setUint8(offset++, bytes[i]!);
   }
   return offset;

@@ -67,7 +67,7 @@ export class NetTelemetry {
     const rtts = this.pingHistory.map((p) => p.rtt);
     if (rtts.length < 2) {return 0;}
     let sumDiff = 0;
-    for (let i = 1; i < rtts.length; i++) {
+    for (let i = 1; i < rtts.length; i += 1) {
       sumDiff += Math.abs(rtts[i]! - rtts[i - 1]!);
     }
     return Math.round(sumDiff / (rtts.length - 1));

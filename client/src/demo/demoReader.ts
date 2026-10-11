@@ -153,7 +153,7 @@ function readFrames(r: Reader, hasWeaponType: boolean): DemoFrame[] {
   const recSize = hasWeaponType ? FRAME_SIZE : FRAME_SIZE - 1;
   const count = readRecordCount(r, 'frame', recSize, 720_000);
   const frames: DemoFrame[] = Array.from({ length: count });
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < count; i += 1) {
     frames[i] = {
       frameNumber: r.u16(),
       timestamp: r.f32(),
@@ -176,7 +176,7 @@ function readProjectileEvents(r: Reader, hasTargetType: boolean): ProjectileEven
   const recSize = hasTargetType ? PROJECTILE_EVENT_SIZE : PROJECTILE_EVENT_SIZE - 1;
   const count = readRecordCount(r, 'projectile event', recSize, 100_000);
   const events: ProjectileEvent[] = Array.from({ length: count });
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < count; i += 1) {
     const eventTypeVal = r.u8();
     if (eventTypeVal > 3) {
       throw new Error(`Invalid projectile event type ${eventTypeVal} at event ${i} (max 3)`);
@@ -201,7 +201,7 @@ function readProjectileEvents(r: Reader, hasTargetType: boolean): ProjectileEven
 function readTargetEvents(r: Reader): TargetEvent[] {
   const count = readRecordCount(r, 'target event', TARGET_EVENT_SIZE, 100_000);
   const events: TargetEvent[] = Array.from({ length: count });
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < count; i += 1) {
     const eventTypeVal = r.u8();
     if (eventTypeVal > 4) {
       throw new Error(`Invalid target event type ${eventTypeVal} at event ${i} (max 4)`);
@@ -228,7 +228,7 @@ function readRoster(r: Reader): DemoRosterEntry[] {
   // not just live remotes, so a long recording's join churn can exceed 256.
   if (count > 65_535) {throw new Error(`Invalid roster count: ${count} (max 65535)`);}
   const roster: DemoRosterEntry[] = Array.from({ length: count });
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < count; i += 1) {
     roster[i] = { name: r.str() };
   }
   return roster;
@@ -237,7 +237,7 @@ function readRoster(r: Reader): DemoRosterEntry[] {
 function readRemoteFrames(r: Reader, rosterSize: number): RemoteFrame[] {
   const count = readRecordCount(r, 'remote frame', REMOTE_FRAME_SIZE, 4_000_000);
   const frames: RemoteFrame[] = Array.from({ length: count });
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < count; i += 1) {
     const timestamp = r.f32();
     const rosterIdx = r.u16();
     if (rosterIdx >= rosterSize) {
@@ -275,7 +275,7 @@ function readTrailerSections(r: Reader): DemoHeightmap | undefined {
   if (r.remaining === 0) {return undefined;}
   const count = r.u8();
   let hmap: DemoHeightmap | undefined;
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < count; i += 1) {
     r.ensure(1 + 4, 'trailer section header');
     const tag = r.u8();
     const len = r.u32();

@@ -52,10 +52,10 @@ export function auditHudOverlap(): OverlapHit[] {
     .filter((el) => isChrome(el, vw, vh));
 
   const hits: OverlapHit[] = [];
-  for (let i = 0; i < els.length; i++) {
+  for (let i = 0; i < els.length; i += 1) {
     const a = els[i]!;
     const ra = a.getBoundingClientRect();
-    for (let j = i + 1; j < els.length; j++) {
+    for (let j = i + 1; j < els.length; j += 1) {
       const b = els[j]!;
       // Ancestor/descendant pairs are containment, not overlap.
       if (a.contains(b) || b.contains(a)) {continue;}

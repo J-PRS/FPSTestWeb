@@ -15,13 +15,13 @@ if (!isDevHost()) {
 function floatToWav(data: Float32Array, sampleRate: number): ArrayBuffer {
   const buf = new ArrayBuffer(44 + data.length * 2);
   const v = new DataView(buf);
-  const w = (o: number, s: string) => { for (let i = 0; i < s.length; i++) {v.setUint8(o + i, s.charCodeAt(i));} };
+  const w = (o: number, s: string) => { for (let i = 0; i < s.length; i += 1) {v.setUint8(o + i, s.charCodeAt(i));} };
   w(0, 'RIFF'); v.setUint32(4, 36 + data.length * 2, true); w(8, 'WAVEfmt ');
   v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
   v.setUint32(24, sampleRate, true); v.setUint32(28, sampleRate * 2, true);
   v.setUint16(32, 2, true); v.setUint16(34, 16, true);
   w(36, 'data'); v.setUint32(40, data.length * 2, true);
-  for (let i = 0; i < data.length; i++) {
+  for (let i = 0; i < data.length; i += 1) {
     const s = Math.max(-1, Math.min(1, data[i]!));
     v.setInt16(44 + i * 2, s < 0 ? s * 0x80_00 : s * 0x7F_FF, true);
   }
@@ -39,7 +39,7 @@ async function render(name: string, secs: number, fn: () => void): Promise<strin
   const wav = floatToWav(pcm, sr);
   let bin = '';
   const bytes = new Uint8Array(wav);
-  for (let i = 0; i < bytes.length; i++) {bin += String.fromCharCode(bytes[i]!);}
+  for (let i = 0; i < bytes.length; i += 1) {bin += String.fromCharCode(bytes[i]!);}
   console.log(`rendered ${name} (${pcm.length} samples)`);
   return btoa(bin);
 }

@@ -50,7 +50,7 @@ export class BotRouting {
     let a = this.routePrefs.get(id);
     if (a === undefined) {
       let h = 0;
-      for (let i = 0; i < id.length; i++) {h = (h * 31 + id.charCodeAt(i)) >>> 0;}
+      for (let i = 0; i < id.length; i += 1) {h = (h * 31 + id.charCodeAt(i)) >>> 0;}
       a = ((h % 1000) / 1000 - 0.5) * 1.8;
       this.routePrefs.set(id, a);
     }
@@ -471,7 +471,7 @@ export class BotRouting {
         // ring hops entry-to-entry ~60m out forever, never taking the
         // last hop that was clean all along.
         let wall = 0;
-        for (let s = 1; s < 8; s++) {
+        for (let s = 1; s < 8; s += 1) {
           const t = s / 8;
           wall = Math.max(wall, hmHeight(this.field, p.position.x + (enemyStand.x - p.position.x) * t,
             p.position.z + (enemyStand.z - p.position.z) * t)
@@ -576,7 +576,7 @@ export class BotRouting {
           let ridge = 0;
           let prevH = p.position.y;
           let climb = 0;
-          for (let s = 1; s < 8; s++) {
+          for (let s = 1; s < 8; s += 1) {
             const t = s / 8;
             const lx = p.position.x + (ex - p.position.x) * t;
             const lz = p.position.z + (ez - p.position.z) * t;
@@ -594,7 +594,7 @@ export class BotRouting {
           // climb over dips beats the sheer face.
           score -= climb * 2;
           let lip = 0;
-          for (let s = 1; s < 8; s++) {
+          for (let s = 1; s < 8; s += 1) {
             const t = s / 8;
             const lx = ex + (enemyStand.x - ex) * t;
             const lz = ez + (enemyStand.z - ez) * t;
@@ -612,7 +612,7 @@ export class BotRouting {
           if (capper) {
             let drop = 0, rise = 0;
             prevH = ey;
-            for (let s = 1; s < 8; s++) {
+            for (let s = 1; s < 8; s += 1) {
               const t = s / 8;
               const lx = ex + (enemyStand.x - ex) * t;
               const lz = ez + (enemyStand.z - ez) * t;
@@ -623,7 +623,7 @@ export class BotRouting {
             score += (drop - rise) * 1.5;
           }
           for (const e of foes) {
-            for (let s = 1; s < 8; s++) {
+            for (let s = 1; s < 8; s += 1) {
               const t = s / 8;
               const lx = p.position.x + (ex - p.position.x) * t - e.x;
               const lz = p.position.z + (ez - p.position.z) * t - e.z;
@@ -693,7 +693,7 @@ export class BotRouting {
             + Math.cos(Math.atan2(flowEntry.z - enemyStand.z, flowEntry.x - enemyStand.x) - pref) * prefW;
           if (score > bestScore) { bestScore = score; best = flowEntry; }
         }
-        for (let a = 0; a < 24; a++) {
+        for (let a = 0; a < 24; a += 1) {
           // Three radii: close entries are cheap, a closed rim wall
           // only breaks further out — a plateau stand needs the far
           // rings to find the saddle where its massif opens.

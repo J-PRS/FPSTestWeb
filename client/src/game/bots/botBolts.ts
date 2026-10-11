@@ -65,7 +65,7 @@ function spawnBolt(b: BoltHost, from: THREE.Vector3, to: THREE.Vector3): void {
   }
 
 export function tickBolts(h: BoltHost, dt: number): void {
-    for (let i = h.bolts.length - 1; i >= 0; i--) {
+    for (let i = h.bolts.length - 1; i >= 0; i -= 1) {
       const tr = h.bolts[i];
       tr.t -= dt;
       if (tr.t <= 0) {

@@ -203,7 +203,7 @@ export class RoomFactory {
     if (best) {return best;}
     const base = map || mode || 'arena';
     let n = 1;
-    while (this.host.rooms.has(`${base}-${n}`)) {n++;}
+    while (this.host.rooms.has(`${base}-${n}`)) {n += 1;}
     return this.roomFor(`${base}-${n}`, mode, map, bots, false, noCreatures, noBalls);
   }
 }

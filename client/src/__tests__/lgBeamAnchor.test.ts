@@ -40,7 +40,7 @@ describe('LG beam anchor under strafing', () => {
     const dt = 1 / 60;
     // Player moves along camera-right while keeping aim forward — the
     // exact scenario that was detaching the bolt.
-    for (let f = 0; f < 120; f++) {
+    for (let f = 0; f < 120; f += 1) {
       driveCamera(cam, pos, 0, 0);
       cam.getWorldDirection(_fwd);
       const right = new THREE.Vector3().crossVectors(_fwd, new THREE.Vector3(0, 1, 0)).normalize();
@@ -58,7 +58,7 @@ describe('LG beam anchor under strafing', () => {
     const cam = new THREE.PerspectiveCamera(90, 16 / 9, 0.1, 1000);
     const pos = new THREE.Vector3(100, 30, -40);
     const dt = 1 / 60;
-    for (let f = 0; f < 180; f++) {
+    for (let f = 0; f < 180; f += 1) {
       const yaw = f * 0.01; // turning while strafing
       driveCamera(cam, pos, yaw, -0.2);
       cam.getWorldDirection(_fwd);

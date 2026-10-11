@@ -29,7 +29,7 @@ describe('CircularBuffer', () => {
 
   it('extracts ranges and clears', () => {
     const b = new CircularBuffer<number>(5);
-    for (let i = 0; i < 4; i++) {b.add(i);}
+    for (let i = 0; i < 4; i += 1) {b.add(i);}
     expect(b.extractNewest(2)).toEqual([2, 3]);
     expect(b.extractAll()).toEqual([0, 1, 2, 3]);
     expect(b.IsEmpty).toBe(true);

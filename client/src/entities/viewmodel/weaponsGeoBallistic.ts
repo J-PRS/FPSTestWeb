@@ -183,7 +183,7 @@ tip.position.set(0, 0.035, -0.11);
 boltG.add(tip);
 // Fletching fins at the tail — thin plates spread radially around the
 // shaft axis so the silhouette reads arrowed from the side too.
-for (let i = 0; i < 3; i++) {
+for (let i = 0; i < 3; i += 1) {
   const a = (i / 3) * Math.PI * 2;
   const fin = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.03, 0.05), bodyMat);
   fin.position.set(Math.cos(a) * 0.028, 0.035 + Math.sin(a) * 0.028, 0.16);
@@ -199,7 +199,7 @@ drumG.name = 'bowDrum';
 const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.11, 8), darkMat);
 drum.rotation.z = Math.PI / 2;
 drumG.add(drum);
-for (let i = 0; i < 8; i++) {
+for (let i = 0; i < 8; i += 1) {
   const a = (i / 8) * Math.PI * 2;
   const mouth = new THREE.Mesh(new THREE.CircleGeometry(0.018, 6), boreMat);
   mouth.position.set(0.056, Math.sin(a) * 0.058, Math.cos(a) * 0.058);
@@ -242,13 +242,13 @@ const DISC_SLIT_HALF = 0.019; // hug the 0.028-thick disc — a wide gap reads h
 // extrusion, so its walls are real faceted geometry.
 function hexHalf(side: 1 | -1): THREE.Shape {
   const hex: THREE.Vector2[] = [];
-  for (let k = 0; k < 6; k++) {
+  for (let k = 0; k < 6; k += 1) {
     const a = (k * Math.PI) / 3 + Math.PI / 6; // flat flanks, ridge top/bottom — the slit cuts the flat sides
     hex.push(new THREE.Vector2(Math.cos(a) * DISC_HEX_R, Math.sin(a) * DISC_HEX_R));
   }
   const inside = (p: THREE.Vector2) => side * p.y >= DISC_SLIT_HALF;
   const out: THREE.Vector2[] = [];
-  for (let i = 0; i < hex.length; i++) {
+  for (let i = 0; i < hex.length; i += 1) {
     const cur = hex[i]!;
     const nxt = hex[(i + 1) % hex.length]!;
     if (inside(cur)) {out.push(cur);}
@@ -274,7 +274,7 @@ disc.add(extrudeAt(hexHalf(1), zFront, slitLen, bodyMat));
 disc.add(extrudeAt(hexHalf(-1), zFront, slitLen, bodyMat));
 // Solid hex breech behind the slit — same profile, no cut
 const fullHex = new THREE.Shape();
-for (let k = 0; k <= 6; k++) {
+for (let k = 0; k <= 6; k += 1) {
   const a = (k * Math.PI) / 3 + Math.PI / 6;
   const x = Math.cos(a) * DISC_HEX_R, y = Math.sin(a) * DISC_HEX_R;
   if (k === 0) {fullHex.moveTo(x, y);} else {fullHex.lineTo(x, y);}
@@ -341,7 +341,7 @@ const chainBarrels = new THREE.Group();
 chainBarrels.name = 'barrels';
 const CHAIN_BARRELS = 3;
 const CLUSTER_R = 0.088;
-for (let i = 0; i < CHAIN_BARRELS; i++) {
+for (let i = 0; i < CHAIN_BARRELS; i += 1) {
   const a = (i / CHAIN_BARRELS) * Math.PI * 2;
   const dx = Math.cos(a) * CLUSTER_R, dy = Math.sin(a) * CLUSTER_R;
   // FAT barrels — the cluster fills the FPS view; chunky 8-seg with a
@@ -372,7 +372,7 @@ const chainCollar = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.175, 0.09,
 chainCollar.rotation.x = Math.PI / 2;
 chainCollar.position.z = -0.11;
 chainBarrels.add(chainCollar);
-for (let i = 0; i < CHAIN_BARRELS * 2; i++) {
+for (let i = 0; i < CHAIN_BARRELS * 2; i += 1) {
   const a = (i / (CHAIN_BARRELS * 2)) * Math.PI * 2;
   const stud = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.03), bodyMat);
   stud.position.set(Math.cos(a) * 0.15, Math.sin(a) * 0.15, -0.14);
@@ -443,7 +443,7 @@ gl.add(drumHub);
 // Solid drum looked like a wheel; dark mouths with brass rims sell
 // "six 40mm chambers" at viewmodel distance.
 const chamberRimMat = new THREE.MeshLambertMaterial({ color: 0x8A_7A_4A, emissive: 0x1A_14_08 });
-for (let i = 0; i < 6; i++) {
+for (let i = 0; i < 6; i += 1) {
   const a = (i / 6) * Math.PI * 2;
   const cy = -0.09 + Math.sin(a) * 0.105;
   const cz = -0.08 + Math.cos(a) * 0.105;
@@ -499,7 +499,7 @@ sticky.add(stickyDrum);
 // the "sticky bombs loaded" read at viewmodel distance.
 const bombMat = new THREE.MeshLambertMaterial({ color: 0x1E_22_26, emissive: 0x0A_0C_0E });
 const fuseMat = new THREE.MeshBasicMaterial({ color: 0xFF_AA_22 }); // amber fuse glow — hazard, not candy
-for (let i = 0; i < 5; i++) {
+for (let i = 0; i < 5; i += 1) {
   const a = (i / 5) * Math.PI * 2;
   const bomb = new THREE.Mesh(new THREE.SphereGeometry(0.038, 8, 6), bombMat);
   bomb.position.set(0.081, -0.11 + Math.sin(a) * 0.075, -0.06 + Math.cos(a) * 0.075);
@@ -543,7 +543,7 @@ export function mkFlak(): THREE.Group {
 const flak = new THREE.Group();
 flak.add(mkTube(0.17, 0.15, 0.3, -0.08, bodyMat));
 // Ribbed barrel — two pinch ribs along the tube, not just the ring
-for (let i = 0; i < 2; i++) {
+for (let i = 0; i < 2; i += 1) {
   flak.add(mkTube(0.175, 0.175, 0.025, -0.14 + i * 0.09, darkMat));
 }
 flak.add(mkTube(0.19, 0.19, 0.06, -0.24, darkMat)); // muzzle ring
@@ -559,7 +559,7 @@ flakBox.position.set(0, 0, 0.16);
 flak.add(flakBox);
 // Top vents — the UT flak "grill". Hex rods across the drum top match
 // the new hexagonal receiver better than raw slabs.
-for (let i = 0; i < 3; i++) {
+for (let i = 0; i < 3; i += 1) {
   const vent = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.16, 6), bodyMat);
   vent.rotation.z = Math.PI / 2;
   vent.position.set(0, 0.1, 0.11 + i * 0.08);
@@ -603,7 +603,7 @@ sg.add(receiver);
 // Side-saddle shells — three red hulls on the receiver flank. THE
 // shotgun read: nothing else in the arsenal carries colored shells.
 // (shellMat/brassMat hoisted to module scope — the RPG warhead shares them.)
-for (let i = 0; i < 3; i++) {
+for (let i = 0; i < 3; i += 1) {
   const hull = mkTube(0.022, 0.022, 0.07, 0, shellMat);
   hull.position.set(-0.085, 0.03, 0.09 + i * 0.08); // a row along the flank
   sg.add(hull);
@@ -620,13 +620,13 @@ sg.add(port);
 const pump = mkTube(0.085, 0.085, 0.19, -0.13, darkMat);
 pump.position.y = -0.15;
 sg.add(pump);
-for (let i = 0; i < 4; i++) {
+for (let i = 0; i < 4; i += 1) {
   const rib = mkTube(0.092, 0.092, 0.02, -0.2 + i * 0.05, bodyMat);
   rib.position.y = -0.15;
   sg.add(rib);
 }
 // Heat-shield vents along the barrel top — rows of holes read at scale
-for (let i = 0; i < 4; i++) {
+for (let i = 0; i < 4; i += 1) {
   const vent = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.03, 0.045), darkMat);
   vent.position.set(0, 0.12, -0.24 + i * 0.1);
   sg.add(vent);
@@ -770,7 +770,7 @@ mrv.add(mkBore(0.095, -0.386));
 for (const z of [-0.34, -0.22, -0.1]) {
   mrv.add(mkTube(0.148, 0.148, 0.045, z, darkMat));
 }
-for (let i = 0; i < 8; i++) {
+for (let i = 0; i < 8; i += 1) {
   const a = (i / 8) * Math.PI * 2;
   const rib = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.035, 0.3), darkMat);
   rib.position.set(Math.cos(a) * 0.135, Math.sin(a) * 0.135, -0.22);
@@ -781,7 +781,7 @@ for (let i = 0; i < 8; i++) {
 const brake = mkTube(0.155, 0.14, 0.09, -0.4, darkMat);
 mrv.add(brake);
 for (const side of [-1, 1]) {
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 3; i += 1) {
     const port = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.035, 0.02), boreMat);
     port.position.set(side * 0.13, 0.01 - i * 0.045, -0.4);
     port.rotation.z = side * 0.3;
@@ -801,7 +801,7 @@ for (const z of [-0.02, 0.18]) {
 }
 // Chamber windows + glowing shell noses — the volley is visibly LOADED
 const shellTipMat = new THREE.MeshLambertMaterial({ color: 0xFF_55_18, emissive: 0x99_22_00 });
-for (let i = 0; i < 6; i++) {
+for (let i = 0; i < 6; i += 1) {
   const a = (i / 6) * Math.PI * 2;
   const cx = Math.cos(a) * 0.1, cy = -0.05 + Math.sin(a) * 0.1;
   const hole = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.205, 8), boreMat);

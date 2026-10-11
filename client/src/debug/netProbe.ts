@@ -63,7 +63,7 @@ function push(kind: NetEvt['kind'], line: string): void {
  *  and the authoritative state BEFORE the snap — the rubberband size. */
 export function corr(err: number, seq: number, journalLen: number, vel: number, snap: boolean): void {
   const ping = stats?.getPing() ?? -1;
-  corrCount++;
+corrCount += 1;
   corrErrSum += err;
   corrErrMax = Math.max(corrErrMax, err);
   corrWindow.push(performance.now());
@@ -86,7 +86,7 @@ export function claim(kind: 'reject' | 'drop', reason: string, weapon: string | 
  *  any nonzero here means the server replays a different arc than the
  *  one on screen (the 'flight blocked' class of phantom rejects). */
 export function spawnDrift(dv: number): void {
-  spawnDriftN++;
+spawnDriftN += 1;
   spawnDriftMax = Math.max(spawnDriftMax, dv);
   // The journal is for anomalies — a 0.00 drift row is pure noise and
   // used to flood every Alt+Q's recent-events tail. The summary line
@@ -123,7 +123,7 @@ export function corrGhost(server: { x: number; y: number; z: number }, predicted
 
 function pruneGhosts(): void {
   const now = performance.now();
-  for (let i = ghosts.length - 1; i >= 0; i--) {
+  for (let i = ghosts.length - 1; i >= 0; i -= 1) {
     if (ghosts[i]!.until <= now) {
       for (const o of ghosts[i]!.objs) {scene?.remove(o);}
       ghosts.splice(i, 1);

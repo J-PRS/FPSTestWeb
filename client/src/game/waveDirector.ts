@@ -59,7 +59,7 @@ interface WaveBeat { at: number; name: string; run: (d: DirectorDeps) => void }
 function ringOf(d: DirectorDeps, n: number, dist: number, fn: (pos: THREE.Vector3) => void): void {
   const p = d.lazyPlayer().pos;
   const off = Math.random() * Math.PI * 2;
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < n; i += 1) {
     const a = off + (i / n) * Math.PI * 2;
     fn(new THREE.Vector3(p.x + Math.cos(a) * dist, 0, p.z + Math.sin(a) * dist));
   }
@@ -71,7 +71,7 @@ const WAVES: WaveBeat[] = [
   { at: 160, name: 'Rakk flock',         run: (d) => { d.entities.spawnRakk(); d.entities.spawnRakk(); d.entities.spawnRakk(); } },
   { at: 220, name: 'Mine rain',          run: (d) => {
       const p = d.lazyPlayer().pos;
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < 6; i += 1) {
         const a = Math.random() * Math.PI * 2, r = 8 + Math.random() * 22;
         // One doombloom hidden in the rain — clear the field carelessly
         // and the whole garden goes up at once.
@@ -148,7 +148,7 @@ const RANDOM_INTERVAL_RAMP = 0.006; // s shaved off per elapsed second
 function aliveCount(e: ReturnType<typeof createEntities>): number {
   let n = 0;
   for (const l of [e.balls, e.crawlers, e.turrets, e.rollers, e.seekers, e.overlords, e.totems, e.rakks] as { dead: boolean }[][]) {
-    for (const t of l) {if (!t.dead) {n++;}}
+    for (const t of l) {if (!t.dead) {n += 1;}}
   }
   return n;
 }
@@ -196,13 +196,13 @@ export function createWaveDirector(deps: DirectorDeps) {
     if (waveIdx < WAVES.length && elapsed >= WAVES[waveIdx].at) {
       deps.logger.info(`[Director] wave ${waveIdx + 1}: ${WAVES[waveIdx].name} @ ${elapsed.toFixed(0)}s`);
       WAVES[waveIdx].run(deps);
-      waveIdx++;
+waveIdx += 1;
     } else if (waveIdx >= WAVES.length && elapsed >= WAVES[WAVES.length - 1].at + WAVE_LOOP * (loopCount + 1)) {
       // Loop: re-fire a random late-game beat
       const late = WAVES[Math.max(0, WAVES.length - 3) + Math.floor(Math.random() * 3)];
       deps.logger.info(`[Director] loop ${loopCount + 1}: ${late.name} @ ${elapsed.toFixed(0)}s`);
       late.run(deps);
-      loopCount++;
+loopCount += 1;
     }
 
     // Credit spend — weighted random affordable pick from the unlocked pool

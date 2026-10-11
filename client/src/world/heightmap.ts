@@ -32,9 +32,9 @@ function cellMax(cx: number, cz: number, texel: number): number {
   let m = 0;
   const xEnd = Math.min(hmSize, (cx + 1) * texel);
   const zEnd = Math.min(hmSize, (cz + 1) * texel);
-  for (let z = cz * texel; z < zEnd; z++) {
+  for (let z = cz * texel; z < zEnd; z += 1) {
     const row = (z * hmSize + cx * texel) * 4;
-    for (let x = cx * texel; x < xEnd; x++) {
+    for (let x = cx * texel; x < xEnd; x += 1) {
       const v = hmData![row + (x - cx * texel) * 4];
       if (v > m) {m = v;}
     }
@@ -46,8 +46,8 @@ function buildMaxGrid(): void {
   maxGrid.fill(0);
   if (!hmData || !hmSize) {return;}
   const texel = Math.max(1, Math.floor(hmSize / MAXGRID));
-  for (let cz = 0; cz < MAXGRID; cz++) {
-    for (let cx = 0; cx < MAXGRID; cx++) {
+  for (let cz = 0; cz < MAXGRID; cz += 1) {
+    for (let cx = 0; cx < MAXGRID; cx += 1) {
       maxGrid[cz * MAXGRID + cx] = cellMax(cx, cz, texel);
     }
   }
@@ -73,10 +73,10 @@ export function maxHeightInRect(wx0: number, wz0: number, wx1: number, wz1: numb
   };
   const nx = span(xa, xb), nz = span(za, zb);
   let m = 0;
-  for (let iz = 0; iz < nz; iz++) {
+  for (let iz = 0; iz < nz; iz += 1) {
     const z = (za + iz) % MAXGRID;
     const row = z * MAXGRID;
-    for (let ix = 0; ix < nx; ix++) {
+    for (let ix = 0; ix < nx; ix += 1) {
       const v = maxGrid[row + (xa + ix) % MAXGRID];
       if (v > m) {m = v;}
     }
@@ -127,7 +127,7 @@ export async function loadHeightfieldBin(url: string): Promise<void> {
   }
   const src = buf.subarray(8);
   const rgba = new Uint8ClampedArray(w * h * 4);
-  for (let i = 0; i < w * h; i++) {
+  for (let i = 0; i < w * h; i += 1) {
     rgba[i * 4] = src[i]!;
     rgba[i * 4 + 1] = src[i]!;
     rgba[i * 4 + 2] = src[i]!;
@@ -232,7 +232,7 @@ export function injectHeightmapBytes(
 ): () => void {
   const prev = snapshotHeightmap();
   const rgba = new Uint8ClampedArray(size * size * 4);
-  for (let i = 0; i < size * size; i++) {
+  for (let i = 0; i < size * size; i += 1) {
     rgba[i * 4] = data[i]!;
     rgba[i * 4 + 1] = data[i]!;
     rgba[i * 4 + 2] = data[i]!;

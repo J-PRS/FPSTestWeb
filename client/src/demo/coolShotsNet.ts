@@ -76,7 +76,7 @@ export async function uploadClipToServer(m: CoolShotManager, clipData: DemoFile)
       logger.debug(`Clip uploaded to server: ${result.filename}`);
       return result.filename as string;
     } catch (error) {
-      m.uploadFailureCount++;
+m.uploadFailureCount += 1;
       if (m.uploadFailureCount <= MAX_UPLOAD_WARNINGS) {
         logger.warn(`Failed to upload clip (${m.uploadFailureCount}):`, error);
         if (m.uploadFailureCount === MAX_UPLOAD_WARNINGS) {

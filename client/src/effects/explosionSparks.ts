@@ -63,7 +63,7 @@ class SparkBatch {
   }
 
   alloc(n: number): number {
-    for (let i = 0; i < this.free.length; i++) {
+    for (let i = 0; i < this.free.length; i += 1) {
       if (this.free[i]!.count >= n) {
         const s = this.free.splice(i, 1)[0]!;
         if (s.count > n) {this.free.push({ start: s.start + n, count: s.count - n });}
@@ -162,7 +162,7 @@ export class ExplosionSparks {
     const a = sparkAlloc(this.scene, n);
     this.batch = a.batch;
     this.base = a.base;
-    for (let i = 0; i < n; i++) {this.sparks[i]!.slice = (this.base + i) * SPARK_FLOATS;}
+    for (let i = 0; i < n; i += 1) {this.sparks[i]!.slice = (this.base + i) * SPARK_FLOATS;}
   }
 
   update(dt: number): number {
@@ -181,7 +181,7 @@ export class ExplosionSparks {
         wrote = true;
         continue;
       }
-      alive++;
+alive += 1;
 
       // Apply gravity
       spark.vel.y -= 40 * dt;
@@ -195,7 +195,7 @@ export class ExplosionSparks {
       const h = spark.trailHead;
       tb[h * 3] = spark.pos.x; tb[h * 3 + 1] = spark.pos.y; tb[h * 3 + 2] = spark.pos.z;
       spark.trailHead = (h + 1) % SPARK_TRAIL;
-      if (spark.trailCount < SPARK_TRAIL) {spark.trailCount++;}
+      if (spark.trailCount < SPARK_TRAIL) {spark.trailCount += 1;}
 
       this.writeSlice(spark, posArr, colArr);
     }
@@ -216,7 +216,7 @@ export class ExplosionSparks {
     const tb = spark.trailBuf;
     let w = spark.slice;
     const n = spark.trailCount;
-    for (let i = 0; i < SPARK_TRAIL - 1; i++) {
+    for (let i = 0; i < SPARK_TRAIL - 1; i += 1) {
       if (i < n - 1) {
         const s0 = (spark.trailHead - n + i + SPARK_TRAIL) % SPARK_TRAIL;
         const s1 = (s0 + 1) % SPARK_TRAIL;

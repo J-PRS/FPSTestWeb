@@ -40,7 +40,7 @@ describe('FragMessages', () => {
 
 describe('feedShot', () => {
   it('caps the stack at MAX_ENTRIES oldest-out', () => {
-    for (let i = 0; i < 8; i++) {feedShot(i, 1.5);}
+    for (let i = 0; i < 8; i += 1) {feedShot(i, 1.5);}
     // The feed container is the module-cached div stamped with
     // column-reverse styling — find it in the stub's creation registry.
     const all = (document as unknown as { _all: { style: { cssText?: string }; children: unknown[] }[] })._all;

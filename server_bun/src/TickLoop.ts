@@ -112,7 +112,7 @@ export class TickLoop {
       if (this.ops.lastTickAt > 0) {
         const lag = now0 - this.ops.lastTickAt - tickMs;
         this.ops.tickLagMsSum += lag;
-        this.ops.tickLagSamples++;
+this.ops.tickLagSamples += 1;
         if (lag > this.ops.tickLagMsMax) {this.ops.tickLagMsMax = lag;}
       }
       this.ops.lastTickAt = now0;
@@ -140,7 +140,7 @@ export class TickLoop {
           } catch (error) {
             const n = (this.tickErrStreak.get(room.name) ?? 0) + 1;
             this.tickErrStreak.set(room.name, n);
-            this.metrics.tickErrors++;
+this.metrics.tickErrors += 1;
             logger.error('Room dispose failed', { room: room.name, streak: n, err: error instanceof Error ? error.stack ?? error.message : String(error) });
             if (n >= 10) {
               this.tickQuarantined.add(room.name);
@@ -193,7 +193,7 @@ export class TickLoop {
       room.commands.length = 0;
       const n = (this.tickErrStreak.get(room.name) ?? 0) + 1;
       this.tickErrStreak.set(room.name, n);
-      this.metrics.tickErrors++;
+this.metrics.tickErrors += 1;
       logger.error('Room tick failed', { room: room.name, phase: this.errPhase, streak: n, err: error instanceof Error ? error.stack ?? error.message : String(error) });
       if (n >= 10) {
         this.tickQuarantined.add(room.name);
@@ -298,8 +298,8 @@ export class TickLoop {
     const records = this.fanout.buildRecords(room, players, now0);
     this.mark('records');
 
-    room.tickSeq++;
-    this.metrics.ticks++;
+room.tickSeq += 1;
+this.metrics.ticks += 1;
 
     // Unconditional — even an all-suppressed tick must ship an empty
     // frame. The client's loss metric reads arrival CADENCE (a silent
@@ -348,7 +348,7 @@ export class TickLoop {
         if (this.tickQuarantined.has(room.name)) {continue;}
         try { this.broadcastStateHash(room); }
         catch (error) {
-          this.metrics.tickErrors++;
+this.metrics.tickErrors += 1;
           logger.error('State hash broadcast failed', { room: room.name, err: error instanceof Error ? error.message : String(error) });
         }
       }
@@ -416,7 +416,7 @@ export class TickLoop {
     const statusLine = `Status [${room.name} · ${playerCount} players] ${summary}`;
 
     if (statusLine === this.lastStatusLine) {
-      this.statusRepeatCount++;
+this.statusRepeatCount += 1;
     } else {
       if (this.statusRepeatCount > 0) {
         logger.debug(`${this.lastStatusLine} [x${this.statusRepeatCount + 1}]`);

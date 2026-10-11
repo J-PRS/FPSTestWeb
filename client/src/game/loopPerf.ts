@@ -44,7 +44,7 @@ export function fpsWatchdog(deps: GameLoopDeps, st: LoopState, budget: ReturnTyp
   // headless tab, OS jank). Counting them reported "avgFps 1" dumps on
   // machines rendering fine; stalls fall into the healthy branch and
   // reset the counter instead.
-  if (1 / rawElapsed < 40 && rawElapsed < 0.5) { st.lowFpsFrames++; st.lowFpsAccum += rawElapsed; st.headroomAccum = 0; }
+  if (1 / rawElapsed < 40 && rawElapsed < 0.5) {st.lowFpsFrames += 1; st.lowFpsAccum += rawElapsed; st.headroomAccum = 0; }
   else {
     st.lowFpsFrames = 0; st.lowFpsAccum = 0;
     // Comfortable headroom: >55fps accumulates toward a quality step-UP.

@@ -97,7 +97,7 @@ class GibMeshPool {
     this.bodyR = growA(this.bodyR); this.puffT = growA(this.puffT);
     const la = new Float32Array(cap).fill(-1); la.set(this.landedAt); this.landedAt = la;
     const oldCap = cap / 2;
-    for (let i = cap - 1; i >= oldCap; i--) {this.freeIdx.push(i);}
+    for (let i = cap - 1; i >= oldCap; i -= 1) {this.freeIdx.push(i);}
     const mat = new THREE.InstancedBufferAttribute(new Float32Array(cap * 16), 16);
     mat.array.set(this.mesh.instanceMatrix.array.subarray(0, cap * 16));
     mat.setUsage(THREE.DynamicDrawUsage);
@@ -121,10 +121,10 @@ class GibMeshPool {
     // Repack: live slots (life > 0) move down in index order.
     const remap = new Int32Array(cap).fill(-1);
     let next = 0;
-    for (let i = 0; i < cap; i++) {if (this.life[i]! > 0) {remap[i] = next++;}}
+    for (let i = 0; i < cap; i += 1) {if (this.life[i]! > 0) {remap[i] = next++;}}
     const moveA = (a: Float32Array): Float32Array<ArrayBuffer> => {
       const n = new Float32Array(target);
-      for (let i = 0; i < cap; i++) {if (remap[i]! >= 0) {n[remap[i]!] = a[i]!;}}
+      for (let i = 0; i < cap; i += 1) {if (remap[i]! >= 0) {n[remap[i]!] = a[i]!;}}
       return n;
     };
     const npx = moveA(this.px); const npy = moveA(this.py); const npz = moveA(this.pz);
@@ -136,7 +136,7 @@ class GibMeshPool {
     const nage = moveA(this.age); const nlife = moveA(this.life);
     const nbodyR = moveA(this.bodyR); const npuffT = moveA(this.puffT);
     const nla = new Float32Array(target).fill(-1);
-    for (let i = 0; i < cap; i++) {if (remap[i]! >= 0) {nla[remap[i]!] = this.landedAt[i]!;}}
+    for (let i = 0; i < cap; i += 1) {if (remap[i]! >= 0) {nla[remap[i]!] = this.landedAt[i]!;}}
     this.px = npx; this.py = npy; this.pz = npz;
     this.vx = nvx; this.vy = nvy; this.vz = nvz;
     this.rx = nrx; this.ry = nry; this.rz = nrz;
@@ -149,7 +149,7 @@ class GibMeshPool {
     const mat = new THREE.InstancedBufferAttribute(new Float32Array(target * 16), 16);
     const col = new THREE.InstancedBufferAttribute(new Float32Array(target * 3).fill(1), 3);
     const srcM = this.mesh.instanceMatrix, srcC = this.mesh.instanceColor!;
-    for (let i = 0; i < cap; i++) {
+    for (let i = 0; i < cap; i += 1) {
       const j = remap[i]!;
       if (j < 0) {continue;}
       mat.array.set(srcM.array.subarray(i * 16, i * 16 + 16), j * 16);
@@ -161,7 +161,7 @@ class GibMeshPool {
     mat.needsUpdate = true; col.needsUpdate = true;
     // Dead slots vanish — everything past live is a fresh free index.
     this.freeIdx = [];
-    for (let i = target - 1; i >= this.live; i--) {this.freeIdx.push(i);}
+    for (let i = target - 1; i >= this.live; i -= 1) {this.freeIdx.push(i);}
     this.mesh.count = Math.max(this.mesh.count, this.live);
     this.capGov.shrunk(now);
   }
@@ -188,7 +188,7 @@ class GibMeshPool {
     this.bodyR[i] = radius;
     this.mesh.instanceColor!.setXYZ(i, col.r, col.g, col.b);
     this.mesh.count = Math.max(this.mesh.count, i + 1);
-    this.live++;
+this.live += 1;
     return i;
   }
 
@@ -203,7 +203,7 @@ class GibMeshPool {
     // Walk live slots via the count bound; dead slots get compacted lazily
     // by skip (they're in freeIdx already).
     let wrote = false;
-    for (let i = 0; i < this.mesh.count; i++) {
+    for (let i = 0; i < this.mesh.count; i += 1) {
       if (this.life[i]! <= 0) {continue;} // dead slot
       this.age[i]! += dt;
       const landed = this.landedAt[i]! >= 0;
@@ -214,7 +214,7 @@ class GibMeshPool {
         this.mesh.setMatrixAt(i, _m);
         this.life[i] = 0;
         this.freeIdx.push(i);
-        this.live--;
+this.live -= 1;
         wrote = true;
         continue;
       }
@@ -287,7 +287,7 @@ export class GibPool {
 
   constructor(scene: THREE.Scene, swarm: SpeciesSwarm) {
     this.swarm = swarm;
-    for (let i = 0; i < swarm.partCount; i++) {
+    for (let i = 0; i < swarm.partCount; i += 1) {
       const src = swarm.meshes[i]!;
       const mat = Array.isArray(src.material) ? src.material[0]! : src.material;
       this.pools.push(new GibMeshPool(scene, src.geometry, mat, swarm.perFor(i)));
@@ -331,10 +331,10 @@ export class GibPool {
   ): boolean {
     if (this.totalPartsPerBody < 3) {return false;}
     let spawned = 0;
-    for (let pi = 0; pi < this.pools.length; pi++) {
+    for (let pi = 0; pi < this.pools.length; pi += 1) {
       const pool = this.pools[pi]!;
       const src = this.swarm.meshes[pi]!;
-      for (let k = 0; k < pool.per; k++) {
+      for (let k = 0; k < pool.per; k += 1) {
         const idx = ownerSlot * pool.per + k;
         src.getMatrixAt(idx, _m);
         const c = src.instanceColor!;
@@ -365,7 +365,7 @@ export class GibPool {
           vx += inheritVel.x * 0.7; vy += inheritVel.y * 0.7; vz += inheritVel.z * 0.7;
         }
         pool.setVel(gi, vx, vy, vz);
-        spawned++;
+spawned += 1;
       }
     }
     return spawned > 0;

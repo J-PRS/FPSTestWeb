@@ -120,7 +120,7 @@ export function tickNet(st: NetStatics, bag: NetBag, host: NetHost, dt: number):
   const tgt = s.tgtValid ? (_tgt.x = s.tx, _tgt.y = s.ty, _tgt.z = s.tz, _tgt) : null;
   const field = st.field();
   while (field && cellsLeft > 0 && bag.netAcc >= 0.05 && bag.simT + 0.05 <= simNow) {
-    cellsLeft--;
+cellsLeft -= 1;
     bag.netAcc -= 0.05;
     bag.simT += 0.05;
     stepBall(s, 0.05, field, tgt, false, { colliders: st.colliders(), colliderIndex: st.colliderIndex() ?? undefined });

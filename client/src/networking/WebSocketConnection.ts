@@ -119,7 +119,7 @@ export class WebSocketConnection {
         while (this.messageQueue.length > 0) {
           const e = this.messageQueue.shift()!;
           if (e.type !== undefined && !WebSocketConnection.KEEP_ALWAYS.has(e.type)
-              && now - e.at > WebSocketConnection.STALE_MS) { stale++; continue; }
+              && now - e.at > WebSocketConnection.STALE_MS) {stale += 1; continue; }
           this.send(e.data);
         }
         if (stale > 0) {logger.info(`reconnect flush dropped ${stale} stale queued message(s)`);}
@@ -138,7 +138,7 @@ export class WebSocketConnection {
         // Attempt reconnection
         // ?? not || — an explicit 0 means "never reconnect", not "five tries"
         if (this.reconnectAttempts < (this.config.maxReconnectAttempts ?? 5)) {
-          this.reconnectAttempts++;
+this.reconnectAttempts += 1;
           const uptime = this.openedAt ? Date.now() - this.openedAt : 0;
           const delay = uptime < WebSocketConnection.MIN_UPTIME_MS
             ? (this.config.reconnectInterval ?? 1000) * 4
@@ -205,7 +205,7 @@ export class WebSocketConnection {
     if (data.charCodeAt(0) < 32 || data.charCodeAt(0) > 126) {
       logger.warn('Binary data received as string, converting to Uint8Array');
       const uint8Array = new Uint8Array(data.length);
-      for (let i = 0; i < data.length; i++) {
+      for (let i = 0; i < data.length; i += 1) {
         uint8Array[i] = data.charCodeAt(i);
       }
       if (this.config.onBinaryMessage) {

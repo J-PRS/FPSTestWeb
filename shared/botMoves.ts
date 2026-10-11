@@ -358,7 +358,7 @@ export class BotMoves {
     const nx = vx / hSpeed, nz = vz / hSpeed;
     const dtS = 0.12, G = GRAVITY; // same fall the sim sells — a dead-reckoned arc must pay world gravity
     let {x} = pos, {y} = pos, {z} = pos, vy_ = vy;
-    for (let s = 0; s < 24; s++) {
+    for (let s = 0; s < 24; s += 1) {
       x += vx * dtS; z += vz * dtS;
       y += vy_ * dtS; vy_ += G * dtS;
       const g = ctx.groundY(x, z);

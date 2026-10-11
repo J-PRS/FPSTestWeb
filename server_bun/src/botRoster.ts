@@ -62,7 +62,7 @@ export class BotRoster {
    *  minus a socket. Call once at room creation, before human joins, so
    *  team balancing lands humans on the emptier side. */
   populate(n: number): void {
-    for (let i = 0; i < n; i++) {
+    for (let i = 0; i < n; i += 1) {
       // Callsign from the shared pool, not the room name — 'BOT-escalade-11'
       // read as a map tag, not a pilot. The index suffix stays IN THE ID:
       // per-id seeds (routePref, jitteredTtl) hash the string, and display
@@ -212,7 +212,7 @@ export class BotRoster {
     for (const { role: want, want: need, minSquad } of ROLE_PRIORITY) {
       if (ids.length < minSquad) {break;}
       let have = 0;
-      for (const id of ids) {if (this.roles.get(id) === want) {have++;}}
+      for (const id of ids) {if (this.roles.get(id) === want) {have += 1;}}
       while (have < need) {
         // Kit-weighted pick: the best-fit donor takes the slot
         // (CLASS_FITNESS argmax, id tiebreak) — a pull, not a gate, so
@@ -320,7 +320,7 @@ export class BotRoster {
         // already re-fit above; everyone else re-derives from the kit.
         if (!strict) {this.refitClass(donor);}
         logger.info('Bot role', { id: donor, role: want, room: this.room.name });
-        have++;
+have += 1;
       }
     }
   }
@@ -350,12 +350,12 @@ export class BotRoster {
       const p = this.room.players.getPlayer(id);
       if (p && !p.isDead) {continue;} // keep live bots, kill the corpse queue first
       this.retire(id);
-      excess--;
+excess -= 1;
     }
     for (const id of this.brains.keys()) {
       if (excess <= 0) {break;}
       this.retire(id);
-      excess--;
+excess -= 1;
     }
   }
 

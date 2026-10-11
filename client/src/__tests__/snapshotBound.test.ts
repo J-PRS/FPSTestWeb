@@ -13,7 +13,7 @@ describe('SnapshotBuffer bound', () => {
   it('stays windowed under a long sustained stream', () => {
     const b = new SnapshotBuffer();
     let t = 0;
-    for (let i = 0; i < 2000; i++) {
+    for (let i = 0; i < 2000; i += 1) {
       t += 50; // nominal 20Hz cadence
       b.push(t, POS, ROT, VEL, t);
     }
@@ -25,7 +25,7 @@ describe('SnapshotBuffer bound', () => {
 
   it('keeps at least 2 snapshots for interpolation', () => {
     const b = new SnapshotBuffer();
-    for (let i = 0; i < 100; i++) { b.push(i * 50, POS, ROT, VEL, i * 50); }
+    for (let i = 0; i < 100; i += 1) { b.push(i * 50, POS, ROT, VEL, i * 50); }
     expect(b.size).toBeGreaterThanOrEqual(2);
   });
 });

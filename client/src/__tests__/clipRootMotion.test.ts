@@ -55,7 +55,7 @@ function rootMotionNodes(g: Glb): Set<string> {
   (g.json.nodes || []).forEach((n: any, i: number) => {
     for (const c of n.children || []) {parents.set(c, i);}
   });
-  const depth = (i: number) => { let d = 0; for (let p = parents.get(i); p !== undefined; p = parents.get(p)) {d++;} return d; };
+  const depth = (i: number) => { let d = 0; for (let p = parents.get(i); p !== undefined; p = parents.get(p)) {d += 1;} return d; };
   const set = new Set<string>();
   for (const skin of g.json.skins || []) {
     let root: number | null = null, rd = Infinity;

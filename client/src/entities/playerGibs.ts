@@ -25,14 +25,14 @@ export function buildGibParts(model: THREE.Group): GibPart[] | null {
     const triCount = Math.floor((index ? index.count : pos.count) / 3);
     const domBone = (v: number): number => {
       let bi = 0, bw = -1;
-      for (let k = 0; k < 4; k++) {
+      for (let k = 0; k < 4; k += 1) {
         const w = sWt.getComponent(v, k);
         if (w > bw) { bw = w; bi = sIdx.getComponent(v, k); }
       }
       return bi;
     };
     const buckets = new Map<number, number[]>();
-    for (let t = 0; t < triCount; t++) {
+    for (let t = 0; t < triCount; t += 1) {
       const a = index ? index.getX(t * 3) : t * 3;
       const b = index ? index.getX(t * 3 + 1) : t * 3 + 1;
       const c = index ? index.getX(t * 3 + 2) : t * 3 + 2;
@@ -57,7 +57,7 @@ export function bakeDeathParts(model: THREE.Group, parts: GibPart[]): { geo: THR
   for (const p of parts) {
     const pos = p.mesh.geometry.getAttribute('position');
     const verts = new Float32Array(p.indices.length * 3);
-    for (let i = 0; i < p.indices.length; i++) {
+    for (let i = 0; i < p.indices.length; i += 1) {
       const vi = p.indices[i];
       // Full skinned transform: bindMatrix → Σw·(boneWorld×boneInverse)
       // → bindMatrixInverse, then out to world via the mesh matrix.

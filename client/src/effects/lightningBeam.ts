@@ -145,7 +145,7 @@ export class LightningBeam {
       // Degenerate (point-blank) beam: any basis works, just don't NaN
       if (len < 0.05) { _side.set(1, 0, 0); _up.set(0, 1, 0); }
       else {perpBasis(_dir, _side, _up);}
-      for (let i = 0; i <= SEGS; i++) {
+      for (let i = 0; i <= SEGS; i += 1) {
         const t = i / SEGS;
         const amp = Math.sin(t * Math.PI) * JAG * Math.min(1, len / 30);
         this.beamPts[i]!.copy(this.from).addScaledVector(_dir, t)
@@ -157,7 +157,7 @@ export class LightningBeam {
       // Damage arc: same shaft, nearly double the jag — it reads as the
       // bolt tearing INTO the contact, not just reaching it
       if (k > 0) {
-        for (let i = 0; i <= SEGS; i++) {
+        for (let i = 0; i <= SEGS; i += 1) {
           const t = i / SEGS;
           const amp = Math.sin(t * Math.PI) * JAG * 1.9 * Math.min(1, len / 30);
           this.arcPts[i]!.copy(this.from).addScaledVector(_dir, t)
@@ -170,7 +170,7 @@ export class LightningBeam {
       if (this.chainLive) {
         _dir.copy(this.chainTo).sub(this.chainFrom);
         perpBasis(_dir, _side, _up);
-        for (let i = 0; i <= SEGS; i++) {
+        for (let i = 0; i <= SEGS; i += 1) {
           const t = i / SEGS;
           const amp = Math.sin(t * Math.PI) * JAG * 0.6;
           this.chainPts[i]!.copy(this.chainFrom).addScaledVector(_dir, t)
@@ -199,7 +199,7 @@ export class LightningBeam {
     this.hitGlow.scale.setScalar(pulse * f);
 
     // Spark fountain: integrate + respawn dead sparks at the contact
-    for (let i = 0; i < SPARKS; i++) {
+    for (let i = 0; i < SPARKS; i += 1) {
       this.sparkAge[i]! -= dt;
       // Respawn only while the trigger is held (fade===1 means a fire()
       // landed this frame; <1 is the post-release decay) — otherwise the
@@ -236,7 +236,7 @@ export class LightningBeam {
   }
   private writeRibbonPts(mesh: THREE.Mesh, pts: THREE.Vector3[], halfW: number): void {
     const verts = mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
-    for (let i = 0; i <= SEGS; i++) {
+    for (let i = 0; i <= SEGS; i += 1) {
       const p = pts[i]!;
       const dCam = Math.sqrt(
         (p.x - this.camPos.x) ** 2 + (p.y - this.camPos.y) ** 2 + (p.z - this.camPos.z) ** 2,

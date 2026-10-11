@@ -246,7 +246,7 @@ function bakeArmHold(baked: Map<string, THREE.AnimationClip>, target: THREE.Skin
   const roleOf = new Map<string, number>();
   for (const b of target.skeleton.bones) {
     const nb = normBone(b.name);
-    for (let r = 0; r < chains.length; r++) {
+    for (let r = 0; r < chains.length; r += 1) {
       if (chains[r]!.has(nb)) { roleOf.set(b.name, r); break; }
     }
   }
@@ -393,7 +393,7 @@ function bakeSource(
         continue;
       }
       const v = hipTr.values, t = hipTr.times;
-      for (let i = 0; i < t.length; i++) {
+      for (let i = 0; i < t.length; i += 1) {
         const s = interp.evaluate(t[i]!);
         v[i * 3] = tgtHipBind.x + (s[0]! - srcHipBind.x) * deltaScale;
         v[i * 3 + 1] = tgtHipBind.y + (s[1]! - srcHipBind.y) * deltaScale;

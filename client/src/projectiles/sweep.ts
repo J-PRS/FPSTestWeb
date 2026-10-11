@@ -71,12 +71,12 @@ export function sweepTerrain(p: SweepHost, terrain: Terrain): boolean {
     const sz = p.prevPos.z + dz * t;
     return sy <= terrain.getHeight(sx, sz) + offset;
   };
-  for (let i = 0; i <= steps; i++) {
+  for (let i = 0; i <= steps; i += 1) {
     const t = i / steps;
     if (below(t)) {
       // Bisect between last above-ground sample and this one
       let lo = Math.max(0, (i - 1) / steps), hi = t;
-      for (let k = 0; k < 5; k++) {
+      for (let k = 0; k < 5; k += 1) {
         const mid = (lo + hi) / 2;
         if (below(mid)) {hi = mid;} else {lo = mid;}
       }
@@ -143,7 +143,7 @@ export function sweepBall(p: SweepHost, ball: Targetable): boolean {
   let minDist = Infinity;
   let prevD2 = Infinity;
 
-  for (let i = 0; i <= steps; i++) {
+  for (let i = 0; i <= steps; i += 1) {
     const t = i / steps;
     const sx = p.prevPos.x + dx * t;
     const sy = p.prevPos.y + dy * t;

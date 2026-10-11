@@ -18,11 +18,11 @@ interface Hit {
 
 function scanArray(arr: ArrayLike<number>, hit: Hit, maxBad = 4): number {
   let bad = 0;
-  for (let i = 0; i < arr.length; i++) {
+  for (let i = 0; i < arr.length; i += 1) {
     const v = arr[i]!;
     if (!Number.isFinite(v)) {
       if (bad === 0) { hit.index = i; hit.value = v; }
-      bad++;
+bad += 1;
       if (bad >= maxBad) {break;}
     }
   }
@@ -34,7 +34,7 @@ function scanArray(arr: ArrayLike<number>, hit: Hit, maxBad = 4): number {
 // NaN — scan |v|>1e5 too (gameplay coords stay within a few km).
 function scanHuge(arr: ArrayLike<number>, hit: Hit, maxBad = 4): number {
   let bad = 0;
-  for (let i = 0; i < arr.length; i++) {
+  for (let i = 0; i < arr.length; i += 1) {
     const v = arr[i]!;
     if (Number.isFinite(v) && Math.abs(v) > 1e5) {
       if (bad === 0) { hit.index = i; hit.value = v; }

@@ -760,7 +760,7 @@ export function kindFieldDiffs(
     seen.add(id);
     const l = local.get(id);
     if (!l) { diffs.push(`#${id}:missing`); keys.add(`${id}:missing`); continue; }
-    for (let i = 0; i < kind.fields.length; i++) {
+    for (let i = 0; i < kind.fields.length; i += 1) {
       const f = kind.fields[i]!;
       const remote = row[i + 1];
       const lv = l[f.name] ?? f.absent ?? null;

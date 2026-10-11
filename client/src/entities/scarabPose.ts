@@ -53,7 +53,7 @@ export function writeInstances(sc: Scarab, terrain: Terrain): void {
     // Six legs, 3 per side — frantic alternating scuttle, way faster than
     // the crawler's: scarabs are all legs and panic.
     const amp = sc.airborne ? 0.06 : (sc.vel.lengthSq() > 4 ? 0.6 : 0.2);
-    for (let i = 0; i < LEGS_PER; i++) {
+    for (let i = 0; i < LEGS_PER; i += 1) {
       const side = i < 3 ? -1 : 1;
       const k = i % 3; // 0 front → 2 rear
       const wiggle = Math.sin(sc.animT * 24 + i * 2.1) * amp;
@@ -68,7 +68,7 @@ export function writeInstances(sc: Scarab, terrain: Terrain): void {
     }
 
     // Two amber eyes on the head lobe
-    for (let i = 0; i < EYES_PER; i++) {
+    for (let i = 0; i < EYES_PER; i += 1) {
       const side = i === 0 ? -1 : 1;
       _local.compose(
         _p.set(side * 0.14, 0.25, 0.9), _q.identity(), _s.setScalar(0.3),

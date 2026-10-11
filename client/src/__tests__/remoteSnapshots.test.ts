@@ -47,7 +47,7 @@ describe('SnapshotBuffer', () => {
     // Interest-tier suppression: snapshots at ~500ms spacing (tier 10).
     // The pre-fix 300ms delay cap left renderTime permanently past the
     // newest snap — far remotes froze on MAX_EXTRAPOLATE and stepped.
-    for (let i = 6; i >= 0; i--) {
+    for (let i = 6; i >= 0; i -= 1) {
       buf.push(now - i * 500, {x:(6-i)*10,y:0,z:0}, {yaw:0,pitch:0}, {x:20,y:0,z:0});
     }
     const { pos } = sample(buf);
@@ -136,7 +136,7 @@ describe('SnapshotBuffer', () => {
     // behind truth; the cap must trade cushion for freshness (≤50ms here).
     // interpDelay slews down 10ms/push — the stream needs enough pushes
     // for the cap to converge, same as real play.
-    for (let i = 9; i >= 0; i--) {
+    for (let i = 9; i >= 0; i -= 1) {
       const t = now - i * 250;
       fast.push(t, {x:(9-i)*20,y:0,z:0}, {yaw:0,pitch:0}, {x:80,y:0,z:0}, t);
       walk.push(t, {x:(9-i)*1,y:0,z:0}, {yaw:0,pitch:0}, {x:3,y:0,z:0}, t);

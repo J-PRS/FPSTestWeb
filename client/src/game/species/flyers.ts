@@ -56,7 +56,7 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
     const n = u
       ? 1 + Math.floor(Math.random() * 3) + 2      // queen + 2-4 escorts
       : GNAT_CLOUD_MIN + Math.floor(Math.random() * (GNAT_CLOUD_MAX - GNAT_CLOUD_MIN + 1));
-    for (let k = 0; k < n; k++) {
+    for (let k = 0; k < n; k += 1) {
       if (atCap(gnats, capFor('gnat', GNAT_MAX))) {break;}
       const queen = u && k === 0; // firstborn is the queen
       const g = new Gnat(scene, deps.lazyTerrain(), cloud.center.clone().add(new THREE.Vector3(
@@ -77,7 +77,7 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
     // Cloud centers stalk the player loosely — the swarm hovers over you
     // and drifts along as you move, never quite settling. Each cloud gets
     // its own brain: in shared PvE a cloud picks a victim and stalks THEM.
-    for (let i = gnatClouds.length - 1; i >= 0; i--) {
+    for (let i = gnatClouds.length - 1; i >= 0; i -= 1) {
       const c = gnatClouds[i]!;
       // Retire clouds with no living members
       if (!gnats.some(g => !g.dead && g.cloud === c)) {

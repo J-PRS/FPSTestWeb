@@ -111,7 +111,7 @@ export class Debris {
    *  stain can smear the way the droplet was going. */
   paintShard(s: Shard): void {
     if (!this.onDropletLand || this.paintBudget <= 0) {return;}
-    this.paintBudget--;
+this.paintBudget -= 1;
     this.onDropletLand(s.x, s.z, s.radius, s.vx, s.vz);
   }
 
@@ -138,7 +138,7 @@ export class Debris {
     const count = opts.parts?.length ?? opts.count;
     this.instanced = !opts.parts?.length && !opts.shardGeos?.length;
     this.instCap = count;
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < count; i += 1) {
       this.spawnShard(opts.parts?.[i], opts, px, py, pz, color);
     }
   }
@@ -172,7 +172,7 @@ export class Debris {
   private static instBucketFor(prim: number, cap: number): THREE.InstancedMesh {
     const pool = Debris.instPool.get(prim);
     if (pool) {
-      for (let i = pool.length - 1; i >= 0; i--) {
+      for (let i = pool.length - 1; i >= 0; i -= 1) {
         if (pool[i]!.instanceMatrix.count >= cap) {return pool.splice(i, 1)[0]!;}
       }
     }
@@ -287,7 +287,7 @@ export class Debris {
     let alive = 0;
     const n = this.shards.length;
     const t0 = performance.now();
-    for (let k = 0; k < n; k++) {
+    for (let k = 0; k < n; k += 1) {
       const s = this.shards[this.shardCursor % n]!;
       this.shardCursor = (this.shardCursor + 1) % n;
       if (s.dead) {continue;}
@@ -296,7 +296,7 @@ export class Debris {
         this.removeShard(s);
         continue;
       }
-      if (this.stepShard(s, dt)) {alive++;}
+      if (this.stepShard(s, dt)) {alive += 1;}
       if (performance.now() - t0 > deadlineMs) {break;}
     }
     if (alive === 0 && performance.now() - t0 <= deadlineMs) {this.dead = true;}

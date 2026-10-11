@@ -479,9 +479,9 @@ export class PlayerModel {
     const mesh0 = this.skinnedMeshes[0];
     for (const sm of this.skinnedMeshes) {
       const {bones} = sm.skeleton;
-      for (let i = 0; i < bones.length; i++) {
+      for (let i = 0; i < bones.length; i += 1) {
         const a = bones[i].matrixWorld.elements;
-        for (let j = i + 1; j < bones.length; j++) {
+        for (let j = i + 1; j < bones.length; j += 1) {
           const b = bones[j].matrixWorld.elements;
           const dx = a[12] - b[12], dy = a[13] - b[13], dz = a[14] - b[14];
           const d = dx * dx + dy * dy + dz * dz;

@@ -129,9 +129,9 @@ export class TrailBatch {
     this.geo.setAttribute('position', this.posAttr);
     this.geo.setAttribute('color', this.colAttr);
     const idx = new Uint32Array(MAX_TRAILS * IDX);
-    for (let r = 0; r < MAX_TRAILS; r++) {
+    for (let r = 0; r < MAX_TRAILS; r += 1) {
       const base = r * VERTS, io = r * IDX;
-      for (let i = 0; i < RIBBON_SAMPLES - 1; i++) {
+      for (let i = 0; i < RIBBON_SAMPLES - 1; i += 1) {
         const o = io + i * 6, v = base + i * 2;
         idx[o] = v; idx[o + 1] = v + 1; idx[o + 2] = v + 2;
         idx[o + 3] = v + 1; idx[o + 4] = v + 3; idx[o + 5] = v + 2;
@@ -155,7 +155,7 @@ export class TrailBatch {
     // Aim-probe tag — the crosshair raycast resolves a slot via faceIndex
     // back to whichever RibbonTrail owns it (or proves it ownerless).
     markProbe(this.mesh, { kind: 'trailBatch', batch: this });
-    for (let s = MAX_TRAILS - 1; s >= 0; s--) {this.free.push(s);}
+    for (let s = MAX_TRAILS - 1; s >= 0; s -= 1) {this.free.push(s);}
     scene.add(this.mesh);
   }
 
@@ -204,7 +204,7 @@ export function retireBatchIfOverflow(b: TrailBatch): void {
  *  used, so they're provably black. */
 export function slotLit(b: TrailBatch, s: number): boolean {
   const base = s * VERTS * 3;
-  for (let i = 0; i < VERTS * 3; i++) {if (b.col[base + i] !== 0) {return true;}}
+  for (let i = 0; i < VERTS * 3; i += 1) {if (b.col[base + i] !== 0) {return true;}}
   return false;
 }
 
@@ -220,9 +220,9 @@ export function litAudit(): { lit: number; unowned: number[] } {
   const unowned: number[] = [];
   let lit = 0;
   for (const b of allBatches()) {
-    for (let s = 0; s < b.hw; s++) {
+    for (let s = 0; s < b.hw; s += 1) {
       if (!slotLit(b, s)) {continue;}
-      lit++;
+lit += 1;
       if (!b.used.has(s)) {unowned.push(s);}
     }
   }
@@ -269,7 +269,7 @@ export function sweepSmear(): void {
         b.mark(base, base + VERTS * 3);
         dirty = true;
       }
-      smearCuts++;
+smearCuts += 1;
       glitch('trail-smear', { slot: s, tag: b.owners.get(s)?.tag ?? '?', gapM: Math.round(Math.sqrt(gapSq)) });
     }
     if (dirty) {b.flush();}
@@ -282,13 +282,13 @@ export function sweepSmear(): void {
 export function sweepLit(): void {
   for (const b of allBatches()) {
     let dirty = false;
-    for (let s = 0; s < b.hw; s++) {
+    for (let s = 0; s < b.hw; s += 1) {
       if (b.used.has(s) || !slotLit(b, s)) {continue;}
       const base = s * VERTS * 3;
       b.col.fill(0, base, base + VERTS * 3);
       b.mark(base, base + VERTS * 3);
       dirty = true;
-      reapedLit++;
+reapedLit += 1;
     }
     if (dirty) {b.flush();}
   }

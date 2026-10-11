@@ -201,7 +201,7 @@ describe('ballSegment binary codec', () => {
     const bin = encodeBallSegment({ id: 1, kind: 'segment', position: { x: 1, y: 2, z: 3 }, velocity: { x: 4, y: 5, z: 6 }, enraged: true, damp: true, tp: { x: 7, y: 8, z: 9 }, targetId: 'p', et: 1, slowT: 2, t: 3 });
     // The decoder's floor is 44B; anything shorter must fail, and so must
     // a frame whose optional tail is cut mid-field.
-    for (let len = 0; len < 44; len++) {
+    for (let len = 0; len < 44; len += 1) {
       expect(decodeBallSegment(bin.slice(0, len))).toBeNull();
     }
   });
@@ -419,7 +419,7 @@ describe('v4 delta-masked records', () => {
     // changes at t2 and frames t2..t4 all die (each carried hp), so the
     // decode pool stays stale until the forced full lands.
     p.health = 12;
-    for (let t = 2; t <= 4; t++) { p.position.x = t; encodeTickPlayerV4(7, p, enc, last, false); }
+    for (let t = 2; t <= 4; t += 1) { p.position.x = t; encodeTickPlayerV4(7, p, enc, last, false); }
     p.position.x = 5;
     const stale = decodeTickFrame(encodeTickFrame(0, 5, 0, [encodeTickPlayerV4(7, p, enc, last, false)], WIRE_TICK_V4), r.pool)!;
     expect(stale.updates[0]!.health).toBe(100);

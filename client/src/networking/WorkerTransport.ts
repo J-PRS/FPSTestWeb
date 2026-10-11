@@ -38,7 +38,7 @@ type Ev =
 export function coalesceTickFrames(evs: Ev[]): Ev[] {
   let lastTick = -1;
   let maxSeq = -1;
-  for (let i = 0; i < evs.length; i++) {
+  for (let i = 0; i < evs.length; i += 1) {
     const e = evs[i]!;
     if (e.kind === 'ev' && 'b' in e && e.b.length >= 10 && e.b[0] === MAGIC && TICK_KINDS.has(e.b[1]!)) {
       const seq = new DataView(e.b.buffer, e.b.byteOffset).getUint32(6, true);

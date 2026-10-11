@@ -158,7 +158,7 @@ export namespace Logger {
     // The fold key skips the timestamp so rapid repeats actually match.
     const foldKey = `${levelStr}|${prefix}|${message}${ctxStr}`;
     if (foldKey === lastFoldKey) {
-      lastFoldCount++;
+lastFoldCount += 1;
       logBuffer[logBuffer.length - 1] = `${logLine} (×${lastFoldCount + 1})`;
     } else {
       lastFoldKey = foldKey;

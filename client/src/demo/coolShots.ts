@@ -161,7 +161,7 @@ export class CoolShotManager {
   tick(): void {
     if (this.pendingClips.length === 0) {return;}
     const now = this.deps.recorder().duration;
-    for (let i = this.pendingClips.length - 1; i >= 0; i--) {
+    for (let i = this.pendingClips.length - 1; i >= 0; i -= 1) {
       const pending = this.pendingClips[i];
       if (now < pending.extractAt) {continue;}
       this.pendingClips.splice(i, 1);

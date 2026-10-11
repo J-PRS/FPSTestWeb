@@ -165,7 +165,7 @@ export function writeCrawlerInstances(c: CrawlerVisHost, terrain: Terrain): void
 // back, and mirrors the left side. Wiggle = scuttle.
 function writeLegs(c: CrawlerVisHost, swarm: NonNullable<ReturnType<typeof getSwarm>>, slot: number): void {
   const amp = c.airborne ? 0.08 : (c.state === 'wander' ? 0.25 : 0.55);
-  for (let i = 0; i < LEGS_PER; i++) {
+  for (let i = 0; i < LEGS_PER; i += 1) {
     const side = i % 2 === 0 ? -1 : 1;
     const k = Math.floor(i / 2); // pair 0..3, front→back
     const fan = (k - 1.5) * 0.4;
@@ -184,7 +184,7 @@ function writeLegs(c: CrawlerVisHost, swarm: NonNullable<ReturnType<typeof getSw
 
 // Fangs: two forward-curved tusks framing the head
 function writeFangs(swarm: NonNullable<ReturnType<typeof getSwarm>>, slot: number): void {
-  for (let i = 0; i < FANGS_PER; i++) {
+  for (let i = 0; i < FANGS_PER; i += 1) {
     const side = i === 0 ? -1 : 1;
     _e.set(2.4, 0, side * -0.25);
     _q.setFromEuler(_e);
@@ -199,7 +199,7 @@ function writeFangs(swarm: NonNullable<ReturnType<typeof getSwarm>>, slot: numbe
 // Eyes: two additive quads on the head plate — widen during windup
 function writeEyes(c: CrawlerVisHost, swarm: NonNullable<ReturnType<typeof getSwarm>>, slot: number): void {
   const eyeS = (c.state === 'wander' ? 0.55 : c.state === 'windup' ? 0.9 : 0.75) * 0.55;
-  for (let i = 0; i < EYES_PER; i++) {
+  for (let i = 0; i < EYES_PER; i += 1) {
     const side = i === 0 ? -1 : 1;
     _local.compose(
       _p.set(side * 0.16, 0.28, 1.15), _q.identity(), _s.setScalar(eyeS),

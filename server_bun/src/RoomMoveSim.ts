@@ -134,7 +134,7 @@ export class RoomMoveSim {
     this.solid = (list?.length || this.dyn?.length) ? new SolidWorld(structureColliders(list ?? []), this.dyn) : null;
     if (this.surface) {this.surface.solid = this.solid;}
     if (this.botSurface) {this.botSurface.solid = this.solid;}
-    this.structEpoch++;
+this.structEpoch += 1;
   }
 
   /** Deployable hulls — one array, mutated in place by RoomDeployables.
@@ -412,7 +412,7 @@ export class RoomMoveSim {
     // mid-flight and corrections tripled on the adverse soak).
     if (reportInputSeq !== undefined && reportInputSeq > Math.max(sh.lastInputSeq, sh.pending.length > 0 ? sh.pending[sh.pending.length - 1]!.seq ?? 0 : 0)) {
       if (sh.gapStreak === 0) {sh.gapAt = wallNow();} // streak start — the judge's in-flight grace window
-      sh.gapStreak++;
+sh.gapStreak += 1;
       const now = wallNow();
       if (sh.gapStreak >= 3 && now - sh.lastHintAt > 1000) {
         sh.lastHintAt = now;
@@ -475,7 +475,7 @@ export class RoomMoveSim {
     if (bodies && bodies.length > 0) {
       const CELL = 4, BIAS = 512;
       const grid = new Map<number, number[]>();
-      for (let i = 0; i < bodies.length; i++) {
+      for (let i = 0; i < bodies.length; i += 1) {
         const b = bodies[i]!;
         const k = ((Math.floor(b.x / CELL) + BIAS) << 16) | (Math.floor(b.z / CELL) + BIAS);
         const cell = grid.get(k);
@@ -489,7 +489,7 @@ export class RoomMoveSim {
       bodiesNear = (x, z) => {
         idx.length = 0; scratch.length = 0;
         const cx = Math.floor(x / CELL), cz = Math.floor(z / CELL);
-        for (let dx = -1; dx <= 1; dx++) {for (let dz = -1; dz <= 1; dz++) {
+        for (let dx = -1; dx <= 1; dx += 1) {for (let dz = -1; dz <= 1; dz += 1) {
           const cell = grid.get(((cx + dx + BIAS) << 16) | (cz + dz + BIAS));
           if (cell) {for (const i of cell) {idx.push(i);}}
         }}

@@ -189,7 +189,7 @@ function dumpWeapon(wt: number, root: THREE.Object3D, name: string): string {
   root.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) {return;}
-    meshes++;
+meshes += 1;
     const pos = m.geometry.getAttribute('position');
     verts += pos.count;
     tris += m.geometry.index ? m.geometry.index.count / 3 : pos.count / 3;
@@ -243,8 +243,8 @@ function updateStats(): void {
   root.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) {return;}
-    if ((m as THREE.InstancedMesh).isInstancedMesh) {insts++;}
-    else {meshes++;}
+    if ((m as THREE.InstancedMesh).isInstancedMesh) {insts += 1;}
+    else {meshes += 1;}
     const pos = m.geometry.getAttribute('position');
     if (!pos) {return;}
     const n = m.geometry.index ? m.geometry.index.count / 3 : pos.count / 3;
@@ -342,7 +342,7 @@ const statusEl = document.querySelector('#status')!;
 // --- viewmodel lifecycle (rebuilt on bake-asset change / HMR) ---
 let vm = new ViewModel(camera);
 vm.switchWeapon(state.wt);
-for (let i = 0; i < 60; i++) {vm.update(1 / 60, 0, 0, zeroVel, camera);} // settle past switch dip
+for (let i = 0; i < 60; i += 1) {vm.update(1 / 60, 0, 0, zeroVel, camera);} // settle past switch dip
 lap('viewmodel init');
 
 // Inspect mode parks the ACTIVE weapon group in the scene on a manual
@@ -487,7 +487,7 @@ function rebuild(): void {
   archiveGroup = null; archiveLabel = ''; // died with the old vm group
   vm = new ViewModel(camera);
   vm.switchWeapon(state.wt);
-  for (let i = 0; i < 60; i++) {vm.update(1 / 60, 0, 0, zeroVel, camera);}
+  for (let i = 0; i < 60; i += 1) {vm.update(1 / 60, 0, 0, zeroVel, camera);}
   // A creature/pickup/archive pick died with the old group — respawn it.
   if (state.pick) {
     const hit = [...ARCHIVE_BUILDERS, ...CREATURES, ...PICKUPS, ...CLASSES, ...STRUCTURES].find(([l]) => l === state.pick);
@@ -549,7 +549,7 @@ async function manifoldParts(g: THREE.Group): Promise<{ Manifold: any; parts: TH
       })));
       kept.push(m);
     } catch (error) {
-      rejected++;
+rejected += 1;
       console.warn(`[union] part ${parts.indexOf(m)} (${m.geometry.type}) not manifold:`, error);
     }
     geo.dispose();
@@ -564,7 +564,7 @@ async function manifoldParts(g: THREE.Group): Promise<{ Manifold: any; parts: TH
 function maniToGeo(om: any): THREE.BufferGeometry {
   const np = om.numProp;
   const verts = new Float32Array(om.numVert * 3);
-  for (let v = 0; v < om.numVert; v++) { verts[v * 3] = om.vertProperties[v * np]!; verts[v * 3 + 1] = om.vertProperties[v * np + 1]!; verts[v * 3 + 2] = om.vertProperties[v * np + 2]!; }
+  for (let v = 0; v < om.numVert; v += 1) { verts[v * 3] = om.vertProperties[v * np]!; verts[v * 3 + 1] = om.vertProperties[v * np + 1]!; verts[v * 3 + 2] = om.vertProperties[v * np + 2]!; }
   const ni = new THREE.BufferGeometry();
   ni.setAttribute('position', new THREE.BufferAttribute(verts, 3));
   ni.setIndex(new THREE.BufferAttribute(new Uint32Array(om.triVerts), 1));
@@ -639,7 +639,7 @@ async function shellToggle(): Promise<void> {
   if (manis.length < 2) {return;} // a lone part has nothing to carve against
   g.updateWorldMatrix(true, true);
   let carved = 0, outT = 0;
-  for (let i = 0; i < manis.length; i++) {
+  for (let i = 0; i < manis.length; i += 1) {
     const m = parts[i]!;
     const rest = Manifold.union(manis.filter((_, j) => j !== i));
     const cut = manis[i].subtract(rest);
@@ -654,7 +654,7 @@ async function shellToggle(): Promise<void> {
     if (!shelled.has(m)) {shelled.set(m, m.geometry);}
     m.geometry = geo;
     outT += om.triVerts.length / 3;
-    carved++;
+carved += 1;
   }
   for (const mm of manis) {mm.delete?.();}
   if (carved === 0) {return;}
@@ -699,7 +699,7 @@ function metalToggle(): void {
     if (!m.isMesh || (m.material as THREE.Material).type !== 'MeshLambertMaterial') {return;}
     if (!metaled.has(m)) {metaled.set(m, m.material as THREE.Material);}
     m.material = metalFor(m.material as THREE.Material);
-    n++;
+n += 1;
   });
   if (n === 0) {return;}
   metalOn = true;
@@ -944,7 +944,7 @@ function shotSheet(): void {
   camera.rotation.set(0, 0, 0);
   // A single update only lerps partway to REST_POS — settle the pose
   // like rebuild() does or the gun floats wherever inspect left it.
-  for (let i = 0; i < 60; i++) {vm.update(1 / 60, 0, 0, zeroVel, camera);}
+  for (let i = 0; i < 60; i += 1) {vm.update(1 / 60, 0, 0, zeroVel, camera);}
   renderer.render(scene, camera);
   {
     const buf = renderer.domElement;
@@ -1013,8 +1013,8 @@ async function copyBuilderSrc(): Promise<void> {
     const at = src.indexOf(head);
     if (at === -1) {continue;}
     let depth = 0, end = at;
-    for (let i = src.indexOf('{', at); i < src.length; i++) {
-      if (src[i] === '{') {depth++;}
+    for (let i = src.indexOf('{', at); i < src.length; i += 1) {
+      if (src[i] === '{') {depth += 1;}
       else if (src[i] === '}' && --depth === 0) { end = i + 1; break; }
     }
     // Grab the comment block above it too — the "why" matters.
@@ -1073,7 +1073,7 @@ function select(wt: number): void {
   }
   state.pick = undefined;
   vm.switchWeapon(wt);
-  for (let i = 0; i < 60; i++) {vm.update(1 / 60, 0, 0, zeroVel, camera);} // skip the holster dip
+  for (let i = 0; i < 60; i += 1) {vm.update(1 / 60, 0, 0, zeroVel, camera);} // skip the holster dip
   // Re-anchor whatever just became active — inspect mode follows the
   // pick; setInspect refits along the tracked inspectDir, so the view
   // angle survives the swap.

@@ -155,7 +155,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     const m = this.wallMarks;
     if (m.length === 0) {return null;}
     if (t <= m[0].t) {return m[0].wall - (m[0].t - t) * 1000;}
-    for (let i = 1; i < m.length; i++) {
+    for (let i = 1; i < m.length; i += 1) {
       if (t <= m[i].t) {
         const a = m[i - 1], b = m[i];
         return a.wall + ((t - a.t) / (b.t - a.t)) * (b.wall - a.wall);

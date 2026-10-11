@@ -125,7 +125,7 @@ function spawnSplitChildren(t: Targetable): void {
   if (f.serverBalls()) {return;}
   if (urlParams.noBalls) {return;}
   const dm = deps.lazyDemoManager();
-  for (let k = 0; k < 2; k++) {
+  for (let k = 0; k < 2; k += 1) {
     const child = new Ball(scene, deps.lazyTerrain(), 0);
     const a = Math.random() * Math.PI * 2;
     child.pos.copy(t.pos);
@@ -156,7 +156,7 @@ function updateBalls(dt: number): void {
 
   Ball.viewPos.copy(camera.position); // feeds billboarded ball ribbon trails
   Ball.updateDyingRibbons(dt); // retired teleport tails fade out where they were
-  for (let i = balls.length - 1; i >= 0; i--) {
+  for (let i = balls.length - 1; i >= 0; i -= 1) {
     const b = balls[i]!;
     if (netMode && !b.netDriven && !b.dead) {b.netKill();} // cull pre-connect locals
     // Classic: docile balls leash straight to the player — aggroFor would
@@ -273,7 +273,7 @@ export function createEntities(deps: EntitiesDeps) {
     // In team mode nuggets sweep toward the nearest living collector —
     // bots mine gems too, that's the whole game mode.
     const collectors = deps.nuggetCollectors?.();
-    for (let i = nuggets.length - 1; i >= 0; i--) {
+    for (let i = nuggets.length - 1; i >= 0; i -= 1) {
       const n = nuggets[i]!;
       let magnetPos = player.pos;
       let magnetId = 'local';
@@ -290,7 +290,7 @@ export function createEntities(deps: EntitiesDeps) {
       if (n.collected && !n.collectNotified) {
         n.collectNotified = true;
         if (magnetId === 'local') {
-          nuggetsCollected++;
+nuggetsCollected += 1;
           player.grantJetBoost();
           player.heal(0.2); // 20% max hp per nugget
           // Belt income — the wired collect (net/pickups.ts) pays a charge
@@ -314,7 +314,7 @@ export function createEntities(deps: EntitiesDeps) {
   /** Loose gems from non-target deaths (bots fragged offline — combat's
    *  onTargetDestroyed already covers Targetable deaths). */
   function spawnNuggetsAt(pos: THREE.Vector3, count: number, inheritVel: THREE.Vector3): void {
-    for (let i = 0; i < count; i++) {nuggets.push(new Nugget(scene, pos, inheritVel));}
+    for (let i = 0; i < count; i += 1) {nuggets.push(new Nugget(scene, pos, inheritVel));}
   }
 
   return {

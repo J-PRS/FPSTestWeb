@@ -75,7 +75,7 @@ function losMarch(ctx: BrainCtx, from: BotVec, to: BotVec): boolean {
   const steps = Math.ceil(dist / 6);
   const y0 = Math.max(from.y + 0.4, ctx.groundY(from.x, from.z) + BOT_EYE);
   const y1 = Math.max(to.y + 0.4, ctx.groundY(to.x, to.z) + BOT_EYE);
-  for (let i = 1; i < steps; i++) {
+  for (let i = 1; i < steps; i += 1) {
     const t = i / steps;
     const x = from.x + dx * t, z = from.z + dz * t;
     if (ctx.groundY(x, z) > y0 + (y1 - y0) * t + 0.5) {return false;}

@@ -129,7 +129,7 @@ export function pathClear(t: BalHost, vel: THREE.Vector3): boolean {
   const muzzle = t.pos.y + 1;
   const g = Math.abs(GRAVITY);
   const tEnd = Math.min(1.5, 2 * vel.y / g + 0.3); // up-and-down time + margin
-  for (let i = 1; i <= 12; i++) {
+  for (let i = 1; i <= 12; i += 1) {
     const tt = (i / 12) * tEnd;
     const x = t.pos.x + vel.x * tt;
     const z = t.pos.z + vel.z * tt;

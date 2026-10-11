@@ -66,7 +66,7 @@ function makeInstanced(geo: THREE.BufferGeometry, mat: THREE.Material, count: nu
   m.count = count;
   m.frustumCulled = false; // turrets span the map
   m.castShadow = false;
-  for (let i = 0; i < count; i++) {m.setMatrixAt(i, _zero);}
+  for (let i = 0; i < count; i += 1) {m.setMatrixAt(i, _zero);}
   scene.add(m);
   return m;
 }
@@ -82,7 +82,7 @@ function poolFor(scene: THREE.Scene): Pool {
       eye: makeInstanced(_geoEye, _glow, POOL_CAP, scene),
       free: [],
     };
-    for (let i = POOL_CAP - 1; i >= 0; i--) {_pool.free.push(i);}
+    for (let i = POOL_CAP - 1; i >= 0; i -= 1) {_pool.free.push(i);}
   }
   return _pool;
 }
@@ -154,7 +154,7 @@ export class DeployTurret {
     pool.mast.setMatrixAt(i, _m3.makeTranslation(0, 0.9, 0).premultiply(g));
     pool.dome.setMatrixAt(i, headM);
     pool.pod.setMatrixAt(i, _m3.makeTranslation(0, 0.08, 0.3).premultiply(headM));
-    for (let t = 0; t < 2; t++) {
+    for (let t = 0; t < 2; t += 1) {
       const k = this.tubeKick[t]!;
       pool.tube.setMatrixAt(i * 2 + t, _m3.compose(
         _p.set(t === 0 ? -0.14 : 0.14, 0.08, 0.55 - k * 0.1),
@@ -184,7 +184,7 @@ export class DeployTurret {
     // must stay inside the pod housing (a knock-back that pokes through
     // the rear face reads as a bug, not a cannon). z-slide gives the
     // shove; y-scale (barrel axis, mesh rotated to +Z) hides the tail.
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < 2; i += 1) {
       const k = this.tubeKick[i]!;
       if (k <= 0.001) {continue;}
       this.tubeKick[i] = k * Math.exp(-dt * 10);
@@ -258,7 +258,7 @@ export class DeployTurret {
   private blockedTo(target: THREE.Vector3): boolean {
     this.head.updateWorldMatrix(true, false);
     _v.copy(MUZZLE).applyMatrix4(this.head.matrixWorld);
-    for (let i = 1; i < 8; i++) {
+    for (let i = 1; i < 8; i += 1) {
       const t = i / 8;
       const x = _v.x + (target.x - _v.x) * t;
       const y = _v.y + (target.y - _v.y) * t;

@@ -12,7 +12,7 @@ function checkEventRate(b: DemoRecorder): boolean {
       b.lastEventResetTime = b.elapsedTime;
     }
     if (b.eventCountThisSecond >= MAX_EVENTS_PER_SEC) {return false;}
-    b.eventCountThisSecond++;
+b.eventCountThisSecond += 1;
     return true;
   }
 

@@ -192,7 +192,7 @@ export class RoomProjectiles {
     const ux = ry * dir.z - rz * dir.y, uy = rz * dir.x - rx * dir.z, uz = rx * dir.y - ry * dir.x;
     const golden = Math.PI * (3 - Math.sqrt(5));
     let first: string | null = null;
-    for (let i = 0; i < burst; i++) {
+    for (let i = 0; i < burst; i += 1) {
       const r = Math.sqrt((i + 0.5) / burst) * spread;
       const a = i * golden;
       const ox = Math.cos(a) * r, oy = Math.sin(a) * r;
@@ -365,7 +365,7 @@ export class RoomProjectiles {
       const bomblet = proj.weaponType === WeaponType.MRVLauncher
         ? WeaponType.MRVBomblet : WeaponType.ClusterBomblet;
       const bStats = getWeaponStats(bomblet);
-      for (let i = 0; i < proj.stats.cluster.count; i++) {
+      for (let i = 0; i < proj.stats.cluster.count; i += 1) {
         const ang = this.room.rng() * Math.PI * 2;
         const r = this.room.rng() * proj.stats.cluster.radius;
         const bx = at.x + Math.cos(ang) * r;
@@ -427,7 +427,7 @@ export class RoomProjectiles {
       const CELL = 16, BIAS = 2048;
       const cells = new Map<number, number[]>();
       const list = [...this.projs.values()];
-      for (let i = 0; i < list.length; i++) {
+      for (let i = 0; i < list.length; i += 1) {
         const p = list[i]!.p.pos;
         const k = ((Math.floor(p.x / CELL) + BIAS) << 16) | (Math.floor(p.z / CELL) + BIAS);
         const cell = cells.get(k);
@@ -441,7 +441,7 @@ export class RoomProjectiles {
     idx.length = 0;
     const x0 = Math.floor((pos.x - radius) / CELL), x1 = Math.floor((pos.x + radius) / CELL);
     const z0 = Math.floor((pos.z - radius) / CELL), z1 = Math.floor((pos.z + radius) / CELL);
-    for (let cx = x0; cx <= x1; cx++) {for (let cz = z0; cz <= z1; cz++) {
+    for (let cx = x0; cx <= x1; cx += 1) {for (let cz = z0; cz <= z1; cz += 1) {
       const cell = cells.get(((cx + BIAS) << 16) | (cz + BIAS));
       if (cell) {for (const i of cell) {idx.push(i);}}
     }}

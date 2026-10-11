@@ -73,7 +73,7 @@ export class KillFeed {
 
     const shooter = this.playerManager.getPlayer(shooterId);
     if (!shooter) {return;}
-    shooter.streak++;
+shooter.streak += 1;
     const revenge = this.lastKiller.get(shooterId) === targetId;
     this.lastKiller.set(targetId, shooterId);
     // Bounded grudges — a long-running room shouldn't bank one entry

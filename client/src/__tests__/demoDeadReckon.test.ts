@@ -43,7 +43,7 @@ describe('DemoRecorder dead-reckon', () => {
   it('deadReckon=false records verbatim', () => {
     const { r } = rec();
     r.deadReckon = false;
-    for (let k = 0; k < 5; k++) {tick(r);}
+    for (let k = 0; k < 5; k += 1) {tick(r);}
     expect(r.frameCount).toBe(5);
   });
 });

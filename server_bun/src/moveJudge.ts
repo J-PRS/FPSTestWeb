@@ -412,7 +412,7 @@ export class MoveJudge {
    *  on repeats or blow-throughs; count=1 marginal clips are the known
    *  noise floor and stay INFO for later review. */
   private noteDivergence(sh: Shadow, playerId: string, pos: Vec3Like, reportInputSeq: number | undefined, dist: number, tol: number, severeM: number): void {
-    sh.divergences++;
+sh.divergences += 1;
     this.noteHealth(dist);
     // The severe counter gets the same grace the log line does: inside
     // the impulse window the journal can't reproduce the shove (see
@@ -540,7 +540,7 @@ export class MoveJudge {
       const steps = Math.min(seg.tick - tick, budget);
       if (steps > 0) {
         Object.assign(probe.input, inp);
-        for (let i = 0; i < steps; i++) {
+        for (let i = 0; i < steps; i += 1) {
           if (lockT > 0) {lockT -= MoveSim.STEP;}
           const jetting = inp.jetHeld === true && e > 0 && lockT <= 0;
           probe.input.jetHeld = jetting;

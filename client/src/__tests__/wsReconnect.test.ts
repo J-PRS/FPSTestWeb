@@ -70,8 +70,8 @@ describe('WebSocketConnection reconnect contract', () => {
   it('offline queue caps at 100 and KEEP_NEWEST dedupes volatile types', () => {
     const c = conn();
     c.connect();                            // socket still CONNECTING → queued
-    for (let i = 0; i < 60; i++) {c.send(JSON.stringify({ type: 'position', i }));}
-    for (let i = 0; i < 60; i++) {c.send(JSON.stringify({ type: 'claim', i }));}
+    for (let i = 0; i < 60; i += 1) {c.send(JSON.stringify({ type: 'position', i }));}
+    for (let i = 0; i < 60; i += 1) {c.send(JSON.stringify({ type: 'claim', i }));}
     const q = (c as unknown as { messageQueue: unknown[] }).messageQueue;
     expect(q.length).toBeLessThanOrEqual(100);
     const positions = (q as { type?: string }[]).filter(m => m.type === 'position');

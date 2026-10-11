@@ -38,7 +38,7 @@ export function writeInstances(s: Strifer): void {
     swarm.setColor(PART_BODY, slot, cr, cg, cb);
 
     const hovering = s.state === 'hover';
-    for (let i = 0; i < WINGS_PER; i++) {
+    for (let i = 0; i < WINGS_PER; i += 1) {
       const side = i === 0 ? -1 : 1;
       // Vanes cant down while hovering — the platform braces to fire.
       // The -X scale mirrors the right vane's geometry for the left;

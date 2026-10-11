@@ -82,7 +82,7 @@ describe('stateDebug heal-loop conformance fuzz', () => {
         if (batch) {nm.onSnapshot?.(batch, Date.now());}
       };
 
-      for (let op = 0; op < 150; op++) {
+      for (let op = 0; op < 150; op += 1) {
         const roll = rnd();
         const ids = [...server.keys()];
         if (roll < 0.3 || ids.length === 0) {
@@ -129,7 +129,7 @@ describe('stateDebug heal-loop conformance fuzz', () => {
       }
 
       // Clean window: mismatch → reply → heal, until stable.
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < 6; i += 1) {
         vi.advanceTimersByTime(6000);
         fireCheck(); deliver();
         replyQueue.length = 0;

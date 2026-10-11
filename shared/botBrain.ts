@@ -930,7 +930,7 @@ export class BotBrain {
     const wallTop = wallTopOnPath(ctx, pos, this.goalS.goal);
     if (wallTop !== null && wallTop - pos.y < 26 && this.goalClimbs < 2) {
       this.escapeS.escapeJetT = Math.max(this.escapeS.escapeJetT, 3);
-      this.goalClimbs++;
+this.goalClimbs += 1;
     } else {
       let breach = wallTop === null ? null : breachAlongWall(ctx, pos, this.goalS.goal);
       if (!breach && ctx.route && this.goalS.goal) {

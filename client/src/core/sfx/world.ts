@@ -228,7 +228,7 @@ function cueSkitter(g: GainNode): void {
     sample('punch', g, 0.25, 1.4, 900, 0.05);
     return;
   }
-  for (let i = 0; i < 3; i++) {noise(0.02, 0.3, g, 'highpass', 4000 - i * 800, 5000);}
+  for (let i = 0; i < 3; i += 1) {noise(0.02, 0.3, g, 'highpass', 4000 - i * 800, 5000);}
   noise(0.1, 0.25, g, 'bandpass', 3500, 5000, 3);
 }
 
@@ -279,7 +279,7 @@ function cueRustle(g: GainNode): void {
     noise(0.1, 0.22, g, 'highpass', 2600, 3500);
     return;
   }
-  for (let i = 0; i < 3; i++) {noise(0.02, 0.28, g, 'highpass', 3200 - i * 600, 4500);}
+  for (let i = 0; i < 3; i += 1) {noise(0.02, 0.28, g, 'highpass', 3200 - i * 600, 4500);}
   noise(0.12, 0.2, g, 'bandpass', 2400, 4000, 2);
 }
 

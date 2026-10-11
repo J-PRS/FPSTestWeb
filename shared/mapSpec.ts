@@ -367,7 +367,7 @@ function parseSpawns(raw: unknown): SpawnPoint[] | undefined {
   const out: SpawnPoint[] = [];
   let dropped = 0;
   for (const s of raw) {
-    if (!isVec(s)) { dropped++; continue; }
+    if (!isVec(s)) {dropped += 1; continue; }
     const o = s as { r?: unknown; w?: unknown };
     out.push({
       x: s.x, y: s.y, z: s.z,
@@ -448,11 +448,11 @@ function parseStructures(raw: unknown): StructureSpec[] | undefined {
         // kit pieces carry their own dims — every other kind needs size
         (!ok && !isVec((s as Record<string, unknown>).size)) ||
         (ok && (typeof (s as Record<string, unknown>).piece !== 'string' ||
-                !((s as Record<string, unknown>).piece as string in KIT_HULLS)))) { dropped++; continue; }
+                !((s as Record<string, unknown>).piece as string in KIT_HULLS)))) {dropped += 1; continue; }
     // Scale only exists for kit pieces; a bogus value drops the entry —
     // a silently-coerced wall scale would desync render from collision.
     const sc = (s as Record<string, unknown>).scale;
-    if (sc !== undefined && (!Number.isFinite(Number(sc)) || Number(sc) < 0.25 || Number(sc) > 4)) { dropped++; continue; }
+    if (sc !== undefined && (!Number.isFinite(Number(sc)) || Number(sc) < 0.25 || Number(sc) > 4)) {dropped += 1; continue; }
     const o = s as Record<string, unknown>;
     const sv = (o.size as Vec3like | undefined) ?? { x: 1, y: 1, z: 1 };
     const pv = o.pos as Vec3like;
@@ -490,10 +490,10 @@ function parseDeploys(raw: unknown): DeploySpec[] | undefined {
   const out: DeploySpec[] = [];
   let dropped = 0;
   for (const s of raw) {
-    if (!s || typeof s !== 'object') { dropped++; continue; }
+    if (!s || typeof s !== 'object') {dropped += 1; continue; }
     const o = s as Record<string, unknown>;
-    if (typeof o.kind !== 'string' || !AUTHORED.has(o.kind)) { dropped++; continue; }
-    if (!isVec(o.pos)) { dropped++; continue; }
+    if (typeof o.kind !== 'string' || !AUTHORED.has(o.kind)) {dropped += 1; continue; }
+    if (!isVec(o.pos)) {dropped += 1; continue; }
     const pos = {
       x: Math.max(-2000, Math.min(2000, o.pos.x)),
       y: Math.max(-100, Math.min(300, o.pos.y)),
@@ -517,11 +517,11 @@ function parseInteriors(raw: unknown): InteriorSpec[] | undefined {
   const out: InteriorSpec[] = [];
   let dropped = 0;
   for (const s of raw) {
-    if (!s || typeof s !== 'object') { dropped++; continue; }
+    if (!s || typeof s !== 'object') {dropped += 1; continue; }
     const o = s as Record<string, unknown>;
     const file = typeof o.file === 'string' && /^[\w-]{1,64}\.dif$/i.test(o.file)
       ? o.file.toLowerCase() : undefined;
-    if (!file || !isVec(o.pos)) { dropped++; continue; }
+    if (!file || !isVec(o.pos)) {dropped += 1; continue; }
     const rot = Array.isArray(o.rot) && o.rot.length === 4
       && o.rot.every(v => typeof v === 'number' && Number.isFinite(v))
       ? o.rot as number[] : undefined;

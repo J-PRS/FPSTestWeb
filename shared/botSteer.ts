@@ -153,7 +153,7 @@ export class BotSteer {
 
     let bestX = gx, bestZ = gz, bestScore = -1;
     let safeX = gx, safeZ = gz, safeDanger = 2;
-    for (let i = 0; i < T.steer.slots; i++) {
+    for (let i = 0; i < T.steer.slots; i += 1) {
       const a = (i / T.steer.slots) * Math.PI * 2;
       const dx = Math.cos(a), dz = Math.sin(a);
 

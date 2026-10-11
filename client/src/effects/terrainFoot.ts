@@ -34,7 +34,7 @@ export class TerrainFoot {
     this.geo.setAttribute('position', this.posAttr);
     const idx: number[] = [];
     const ringVerts = segs + 1;
-    for (let i = 0; i < segs; i++) {
+    for (let i = 0; i < segs; i += 1) {
       const a = i, b = i + ringVerts;
       idx.push(a, b, a + 1, a + 1, b, b + 1);
     }
@@ -55,7 +55,7 @@ export class TerrainFoot {
     this.mesh.position.set(cx, 0, cz);
     const arr = this.posAttr.array as Float32Array;
     const ringVerts = this.segs + 1;
-    for (let i = 0; i <= this.segs; i++) {
+    for (let i = 0; i <= this.segs; i += 1) {
       const a = (i / this.segs) * Math.PI * 2;
       _v.set(Math.cos(a) * this.rimRadius, 0.02, Math.sin(a) * this.rimRadius);
       if (quat) {_v.applyQuaternion(quat);}

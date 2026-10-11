@@ -150,7 +150,7 @@ export class MapCatalog {
   nextRotationSpec(room: { name: string; mode: string; mapSrc?: string }): MapSpec | null {
     const list = this.rotation();
     if (list.length === 0) {return null;}
-    for (let i = 0; i < list.length; i++) {
+    for (let i = 0; i < list.length; i += 1) {
       const name = list[this.rotationIdx++ % list.length];
       if (name === undefined) {continue;}
       const spec = this.loadMapSpec(name);

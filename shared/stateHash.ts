@@ -51,7 +51,7 @@ export function computeStateHash(players: Iterable<[string, HashablePlayer]>): s
   let h = 0;
   for (const [id, p] of players) {
     let ph = 0x81_1C_9D_C5;
-    for (let i = 0; i < id.length; i++) {
+    for (let i = 0; i < id.length; i += 1) {
       ph ^= id.charCodeAt(i); ph = Math.imul(ph, 0x01_00_01_93) >>> 0;
     }
     for (const v of [
@@ -87,7 +87,7 @@ function mixValue(ph: number, v: unknown): number {
   if (typeof v === 'number') { ph ^= v & 0xFF_FF; return Math.imul(ph, 0x01_00_01_93) >>> 0; }
   if (typeof v === 'boolean') { ph ^= v ? 1 : 0; return Math.imul(ph, 0x01_00_01_93) >>> 0; }
   const s = String(v);
-  for (let i = 0; i < s.length; i++) {
+  for (let i = 0; i < s.length; i += 1) {
     ph ^= s.charCodeAt(i); ph = Math.imul(ph, 0x01_00_01_93) >>> 0;
   }
   // Field separator — concatenated strings alone can't tell

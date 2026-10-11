@@ -73,7 +73,7 @@ export function createMeleeSpecies({ deps, kit, targets }: SpeciesCtx) {
     // An uber roll drops ONE dreadbeetle instead — a pack of those is a raid boss.
     const base = pos ?? ringPos(SCARAB_SPAWN_MIN, SCARAB_SPAWN_MAX);
     const n = u ? 1 : pos ? 1 : SCARAB_PACK_MIN + Math.floor(Math.random() * (SCARAB_PACK_MAX - SCARAB_PACK_MIN + 1));
-    for (let k = 0; k < n; k++) {
+    for (let k = 0; k < n; k += 1) {
       if (atCap(scarabs, capFor('scarab', SCARAB_MAX))) {break;}
       const s = new Scarab(scene, deps.lazyTerrain(), base.clone().add(new THREE.Vector3(
         (Math.random() - 0.5) * 6, 0, (Math.random() - 0.5) * 6)), u);
@@ -101,7 +101,7 @@ export function createMeleeSpecies({ deps, kit, targets }: SpeciesCtx) {
     if (u) {g.onDeath = (mother) => {
       // Bloatgrub births on pop: three live grubs spill out of the corpse —
       // cap-checked so a bloatgrub chain can't flood the field.
-      for (let k = 0; k < 3 && !atCap(grubs, capFor('grub', GRUB_MAX)); k++) {
+      for (let k = 0; k < 3 && !atCap(grubs, capFor('grub', GRUB_MAX)); k += 1) {
         const child = new Grub(scene, deps.lazyTerrain(), mother.pos.clone().add(new THREE.Vector3(
           (Math.random() - 0.5) * 2, 0, (Math.random() - 0.5) * 2)));
         child.onBite = g.onBite; // same wiring — children are normal grubs

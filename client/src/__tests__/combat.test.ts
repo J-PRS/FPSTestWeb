@@ -100,7 +100,7 @@ describe('validateHitClaim', () => {
 describe('target ID allocator', () => {
   it('never repeats and stays in u16 space', () => {
     const seen = new Set<number>();
-    for (let i = 0; i < 1000; i++) {
+    for (let i = 0; i < 1000; i += 1) {
       const id = nextTargetId();
       expect(id).toBeGreaterThanOrEqual(1);
       expect(id).toBeLessThanOrEqual(65_535);

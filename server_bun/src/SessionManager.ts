@@ -298,7 +298,7 @@ export class SessionManager {
     room.connections.register(playerId, ws);
     room.introSeq = room.tickSeq; // spectators decode from zero too
     room.messages.handleSpectatorHandshake(playerId);
-    this.d.ops.joins++;
+this.d.ops.joins += 1;
     logger.info('Spectator joined', { playerId, room: room.name });
   }
 
@@ -356,7 +356,7 @@ export class SessionManager {
     }
     if (this.claimedIdentities.size >= SessionManager.MAX_IDENTITIES) {
       const it = this.claimedIdentities.keys();
-      for (let i = 0; i < SessionManager.MAX_IDENTITIES / 2; i++) {
+      for (let i = 0; i < SessionManager.MAX_IDENTITIES / 2; i += 1) {
         const k = it.next().value;
         if (k === undefined) {break;}
         this.claimedIdentities.delete(k);
@@ -380,15 +380,15 @@ export class SessionManager {
     room.connections.register(playerId, ws);
     room.introSeq = room.tickSeq; // see Room.introSeq — fulls for ~1s
     room.messages.handleHandshake(playerId, sessionToken);
-    this.d.ops.joins++;
+this.d.ops.joins += 1;
     switch (handshake.transport) {
-      case 'ws': { this.d.ops.tierWs++; break;
+      case 'ws': {this.d.ops.tierWs += 1; break;
       }
-      case 'wt': { this.d.ops.tierWt++; break;
+      case 'wt': {this.d.ops.tierWt += 1; break;
       }
-      case 'rtc': { this.d.ops.tierRtc++; break;
+      case 'rtc': {this.d.ops.tierRtc += 1; break;
       }
-      default: { this.d.ops.tierOther++;
+      default: {this.d.ops.tierOther += 1;
       }
     }
 

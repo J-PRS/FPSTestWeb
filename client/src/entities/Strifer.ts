@@ -45,7 +45,7 @@ function bodyGeo(): THREE.BufferGeometry {
     // spire's top was one flat facet; a carved ridge gives the side
     // profile a crown-line and reads "shrine ornament" at range.
     const ridge: THREE.BufferGeometry[] = [];
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 3; i += 1) {
       const plate = new THREE.ConeGeometry(0.1, 0.5, 4);
       plate.scale(1.4, 1, 0.3); // thin blade cross-section
       plate.rotateX(-0.35 - i * 0.18); // tips lean progressively aft
@@ -245,7 +245,7 @@ export class Strifer implements Targetable, SwarmSlotOwner {
       s.volleyGap -= c.dt;
       if (s.volleyLeft > 0 && s.volleyGap <= 0) {
         s.volleyGap = 0.5;
-        s.volleyLeft--;
+s.volleyLeft -= 1;
         s.fireBolt(c.playerPos, c.playerVel);
       }
       if (s.stateTimer <= 0 && s.volleyLeft <= 0) {
@@ -265,7 +265,7 @@ export class Strifer implements Targetable, SwarmSlotOwner {
   }
 
   private updateBolts(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
-    for (let i = this.bolts.length - 1; i >= 0; i--) {
+    for (let i = this.bolts.length - 1; i >= 0; i -= 1) {
       const b = this.bolts[i]!;
       b.age += dt;
       b.pos.addScaledVector(b.vel, dt);

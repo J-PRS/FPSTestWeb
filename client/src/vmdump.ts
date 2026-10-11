@@ -58,7 +58,7 @@ if (q.get('export')) {
       const col = ((m.material as THREE.MeshLambertMaterial).color ?? new THREE.Color(1, 1, 1)).clone();
       const n = geo.attributes.position.count;
       const arr = new Float32Array(n * 3);
-      for (let i = 0; i < n; i++) { arr[i * 3] = col.r; arr[i * 3 + 1] = col.g; arr[i * 3 + 2] = col.b; }
+      for (let i = 0; i < n; i += 1) { arr[i * 3] = col.r; arr[i * 3 + 1] = col.g; arr[i * 3 + 2] = col.b; }
       geo.setAttribute('color', new THREE.BufferAttribute(arr, 3));
     });
     for (const m of glow) {m.visible = false;}
@@ -67,7 +67,7 @@ if (q.get('export')) {
     for (const m of glow) {m.visible = true;}
     const bytes = new Uint8Array(glb);
     let bin = '';
-    for (let i = 0; i < bytes.length; i++) {bin += String.fromCharCode(bytes[i]);}
+    for (let i = 0; i < bytes.length; i += 1) {bin += String.fromCharCode(bytes[i]);}
     out[wt] = btoa(bin);
     g.visible = false;
   }
@@ -88,7 +88,7 @@ if (!ao) {
 vm.switchWeapon(w);
 // Skip past the switch dip so the weapon sits at rest for the shot.
 const zeroVel = new THREE.Vector3();
-for (let i = 0; i < 60; i++) {vm.update(1 / 60, 0, 0, zeroVel, camera);}
+for (let i = 0; i < 60; i += 1) {vm.update(1 / 60, 0, 0, zeroVel, camera);}
 
 if (q.get('close')) {
   // Detach the active weapon from the viewmodel rig and frame it directly —

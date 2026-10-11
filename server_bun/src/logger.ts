@@ -85,7 +85,7 @@ class Logger {
   private collapse(burst: { msg: string; n: number; at: number }, msg: string): string | null {
     const now = Date.now();
     if (msg === burst.msg && now - burst.at < 5000) {
-      burst.n++;
+burst.n += 1;
       if (burst.n % 8 !== 0) {return null;}
       return `${msg} (×${burst.n} suppressed repeats)`;
     }

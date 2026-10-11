@@ -84,7 +84,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
     // spam-rejecting every pull for the rest of the life. Unshoulder it
     // to the class fallback once and the next pull fires something legal.
     if (reason === 'class-locked weapon' && weaponType !== undefined) {
-      for (let i = 0; i < player.loadout.length; i++) {
+      for (let i = 0; i < player.loadout.length; i += 1) {
         if (weaponDef(player.loadout[i]).weaponType === weaponType) {
           player.armory.setLoadoutSlot(i, PlayerLoadout.fallbackWid(player.appliedClass, player.loadout));
           break;
@@ -244,7 +244,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
     // Entry i's input governed [t_i, t_{i+1}); clamp segment dt so a stale
     // journal can't produce a giant catch-up step.
     const now = performance.now();
-    for (let i = 0; i < journal.length; i++) {
+    for (let i = 0; i < journal.length; i += 1) {
       const e = journal[i];
       const nextT = i + 1 < journal.length ? journal[i + 1].t : now;
       player.movement.setInput({

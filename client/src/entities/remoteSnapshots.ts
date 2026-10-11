@@ -149,7 +149,7 @@ export class SnapshotBuffer {
     // Datagram lanes deliver out of order — insert at timeline position,
     // never a plain append: the sampler assumes monotonic t.
     let idx = this.snapshots.length;
-    while (idx > 0 && this.snapshots[idx - 1]!.t > t) {idx--;}
+    while (idx > 0 && this.snapshots[idx - 1]!.t > t) {idx -= 1;}
     this.snapshots.splice(idx, 0, snap);
 
     // Keep a few intervals of history — the delay window plus one pair.
@@ -224,7 +224,7 @@ export class SnapshotBuffer {
 
     // Find the pair straddling renderTime
     let i = snaps.length - 2;
-    while (i >= 0 && snaps[i]!.t > renderTime) {i--;}
+    while (i >= 0 && snaps[i]!.t > renderTime) {i -= 1;}
     if (i < 0) {
       const s = snaps[0]!;
       outPos.set(s.x, s.y, s.z);

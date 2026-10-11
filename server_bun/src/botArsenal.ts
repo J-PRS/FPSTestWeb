@@ -62,7 +62,7 @@ export class BotArsenal implements BeamHost {
   private lastPropelAt = new Map<string, number>();
   private propelMark(id: string, kind: 'heel' | 'pull' | 'crest', now: number): void {
     const s = this.propels.get(id) ?? { heel: 0, pull: 0, crest: 0 };
-    s[kind]++; this.propels.set(id, s);
+s[kind] += 1; this.propels.set(id, s);
     this.lastPropelAt.set(id, now);
   }
 
@@ -372,7 +372,7 @@ export class BotArsenal implements BeamHost {
     // apex between two samples is invisible to the check but real to
     // the sim (residual lip selfK @4-5m). Fine-march the blast envelope
     // where a pop is lethal, coarse-march the rest of the flight.
-    for (let stepN = 0; stepN < 400 && travelled < 80; stepN++) {
+    for (let stepN = 0; stepN < 400 && travelled < 80; stepN += 1) {
       const dt = travelled < aoer + 3 ? 0.005 : 0.02;
       vy += g * dt;
       px += vx * dt; py += vy * dt; pz += vz * dt;

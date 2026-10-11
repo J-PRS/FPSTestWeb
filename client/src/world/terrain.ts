@@ -79,8 +79,8 @@ function createFlatGridGeometry(divisions: number, borderCells = 1): THREE.Buffe
   const positions = new Float32Array(n * n * 3);
   const indices = new Uint16Array(total * total * 6);
 
-  for (let iz = 0; iz < n; iz++) {
-    for (let ix = 0; ix < n; ix++) {
+  for (let iz = 0; iz < n; iz += 1) {
+    for (let ix = 0; ix < n; ix += 1) {
       const vi = iz * n + ix;
       // Interior [-0.5, 0.5] plus border overhang on each side
       positions[vi * 3 + 0] = (ix - borderCells) / divisions - 0.5;
@@ -89,8 +89,8 @@ function createFlatGridGeometry(divisions: number, borderCells = 1): THREE.Buffe
     }
   }
 
-  for (let iz = 0; iz < total; iz++) {
-    for (let ix = 0; ix < total; ix++) {
+  for (let iz = 0; iz < total; iz += 1) {
+    for (let ix = 0; ix < total; ix += 1) {
       const i = iz * n + ix;
       const ti = (iz * total + ix) * 6;
       indices[ti]     = i;
@@ -184,7 +184,7 @@ export class Terrain {
     const vertSpacing = (i: number) =>
       CLIPMAP_LEVELS[i].spacing * CLIPMAP_LEVELS[i].divisions / geoDivs(i);
 
-    for (let i = 0; i < CLIPMAP_LEVELS.length; i++) {
+    for (let i = 0; i < CLIPMAP_LEVELS.length; i += 1) {
       const cfg = CLIPMAP_LEVELS[i];
       const levelScale = cfg.spacing * cfg.divisions;
 
@@ -299,7 +299,7 @@ export class Terrain {
     for (let dz = -r; dz <= r; dz += step) {
       for (let dx = -r; dx <= r; dx += step) {
         const d = sampleHeight(px + dx, pz + dz) - this.getRenderedHeight(px + dx, pz + dz);
-        n++; sum += d; sumAbs += Math.abs(d);
+n += 1; sum += d; sumAbs += Math.abs(d);
         if (Math.abs(d) > maxAbs) { maxAbs = Math.abs(d); worstX = dx; worstZ = dz; }
       }
     }
@@ -397,7 +397,7 @@ export class Terrain {
   }
 
   update(px: number, pz: number): void {
-    for (let i = 0; i < this.levels.length; i++) {
+    for (let i = 0; i < this.levels.length; i += 1) {
       const level = this.levels[i];
       // Snap grid origin to the vertex lattice (not cfg.spacing — outer
       // rings are coarser than that) or verts swim through the heightmap
@@ -426,7 +426,7 @@ export class Terrain {
     // Upload scorch decal slots (shared Float32Array across all level materials)
     this.scorchArr.fill(0);
     this.scorchEmberArr.fill(0);
-    for (let i = 0; i < this.scorchList.length; i++) {
+    for (let i = 0; i < this.scorchList.length; i += 1) {
       const s = this.scorchList[i];
       const o = i * 4;
       this.scorchArr[o] = s.x;
@@ -439,7 +439,7 @@ export class Terrain {
     // Upload field-ring decal slots
     this.fieldRingArr.fill(0);
     this.fieldTintArr.fill(0);
-    for (let i = 0; i < this.fieldRingList.length; i++) {
+    for (let i = 0; i < this.fieldRingList.length; i += 1) {
       const s = this.fieldRingList[i];
       const o = i * 4;
       this.fieldRingArr[o] = s.x;
@@ -456,7 +456,7 @@ export class Terrain {
     this.splatArr.fill(0);
     this.splatTintArr.fill(0);
     this.splatDirArr.fill(0);
-    for (let i = 0; i < this.splatList.length; i++) {
+    for (let i = 0; i < this.splatList.length; i += 1) {
       const s = this.splatList[i];
       const o = i * 4;
       this.splatArr[o] = s.x;
@@ -590,8 +590,8 @@ export class Terrain {
     const half = 80; // meters of patch around the player
     const n = Math.ceil((half * 2) / step);
     const verts = new Float32Array((n + 1) * (n + 1) * 3);
-    for (let iz = 0; iz <= n; iz++) {
-      for (let ix = 0; ix <= n; ix++) {
+    for (let iz = 0; iz <= n; iz += 1) {
+      for (let ix = 0; ix <= n; ix += 1) {
         const wx = cx - half + ix * step;
         const wz = cz - half + iz * step;
         const o = (iz * (n + 1) + ix) * 3;
@@ -604,8 +604,8 @@ export class Terrain {
     const pos = new Float32Array(segs * 6);
     let o = 0;
     const at = (ix: number, iz: number): number => (iz * (n + 1) + ix) * 3;
-    for (let iz = 0; iz < n; iz++) {
-      for (let ix = 0; ix < n; ix++) {
+    for (let iz = 0; iz < n; iz += 1) {
+      for (let ix = 0; ix < n; ix += 1) {
         for (const [a, b] of [[at(ix, iz), at(ix + 1, iz)], [at(ix, iz), at(ix, iz + 1)]]) {
           pos.set(verts.subarray(a!, a! + 3), o); pos.set(verts.subarray(b!, b! + 3), o + 3);
           o += 6;

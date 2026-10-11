@@ -299,7 +299,7 @@ function arcBlockedAt(
   const dt = airtime / steps;
   const v = { ...projectile.velocity };
   let px = projectile.origin.x, py = projectile.origin.y, pz = projectile.origin.z;
-  for (let i = 1; i <= steps; i++) {
+  for (let i = 1; i <= steps; i += 1) {
     v.y += g * dt;
     const nx = px + v.x * dt;
     const ny = py + v.y * dt;

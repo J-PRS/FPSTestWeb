@@ -188,7 +188,7 @@ export function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: numbe
     map.set(k, v);
     if (map.size > RB_MAP_MAX) {
       const it = map.keys();
-      for (let i = map.size - RB_MAP_MAX; i > 0; i--) {map.delete(it.next().value!);}
+      for (let i = map.size - RB_MAP_MAX; i > 0; i -= 1) {map.delete(it.next().value!);}
     }
   }
   const RB_WARN_MS = 2000;
@@ -198,7 +198,7 @@ export function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: numbe
   const RB_FLEET_MS = 10_000;
 
   function rbFleetNote(id: number, err: number): void {
-    rbFleetCount++;
+rbFleetCount += 1;
     if (err > rbFleetWorst.err) {rbFleetWorst = { id, err };}
     if (rbFleetFlushAt === 0) {rbFleetFlushAt = performance.now() + RB_FLEET_MS;}
   }
@@ -244,7 +244,7 @@ export function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: numbe
     s.radius = b.radius; s.gt = 0; s.dead = false;
     _rbTgt.x = s.tx; _rbTgt.y = s.ty; _rbTgt.z = s.tz;
     const steps = Math.min(48, Math.floor(span / SIM_TICK_DT));
-    for (let i = 0; i < steps; i++) {
+    for (let i = 0; i < steps; i += 1) {
       stepBall(s, SIM_TICK_DT, field, s.tgtValid ? _rbTgt : null, false, { colliders: Ball.colliders, colliderIndex: Ball.colliderIndex ?? undefined });
     }
     // Sub-cell remainder is ballistic — a partial step would leave the

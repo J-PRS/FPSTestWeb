@@ -18,7 +18,7 @@ const mkWd = (matchOver = () => false) => {
 // The watchdog samples every 4s (WD_DT) and judges net travel over 10s
 // windows (WD_STUCK_T/WD_STUCK_D). step() is fed dt slices like the loop.
 const stepN = (wd: BotWatchdog, bots: any[], seconds: number) => {
-  for (let i = 0; i < seconds; i++) {wd.step(1, bots);}
+  for (let i = 0; i < seconds; i += 1) {wd.step(1, bots);}
 };
 
 describe('BotWatchdog', () => {
@@ -51,7 +51,7 @@ describe('BotWatchdog', () => {
     const p = new THREE.Vector3();
     const b = mkBot('b1', p);
     // Pace back and forth 3m — plenty of per-sample motion, no net travel.
-    for (let s = 0; s < 17; s++) {
+    for (let s = 0; s < 17; s += 1) {
       p.x = s % 2 ? 3 : 0;
       wd.step(1, [b]);
     }

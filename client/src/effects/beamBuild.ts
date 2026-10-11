@@ -10,7 +10,7 @@ function mkRibbon(color: number, opacity: number): THREE.Mesh {
   const geo = new THREE.BufferGeometry();
   const verts = new Float32Array((SEGS + 1) * 4 * 3); // 4 verts/segment: 2 strips
   const idx: number[] = [];
-  for (let i = 0; i < SEGS; i++) {
+  for (let i = 0; i < SEGS; i += 1) {
     const a = i * 4;
     idx.push(a, a + 1, a + 4, a + 1, a + 5, a + 4);
     idx.push(a + 2, a + 3, a + 6, a + 3, a + 7, a + 6);
@@ -80,7 +80,7 @@ export function buildBeam(b: LightningBeam, scene: THREE.Scene, tint?: { glow: n
     // Per-spark color jitter — white core to deep blue edge, no two alike
     const sCol = new Float32Array(SPARKS * 3);
     const sparkTop = new THREE.Color(tint?.sparkTop ?? 0xFF_FF_FF);
-    for (let i = 0; i < SPARKS; i++) {
+    for (let i = 0; i < SPARKS; i += 1) {
       const t = Math.random();
       if (tint) {
         sCol[i * 3] = sparkTop.r * (0.55 + t * 0.45);

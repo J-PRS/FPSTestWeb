@@ -273,7 +273,7 @@ export class Grub implements Targetable, SwarmSlotOwner {
     const PROFILE = [0.55, 0.97, 1.06, 0.95, 0.72, 0.5];
     const segX: number[] = []; const segY: number[] = [];
     const segZ: number[] = []; const segR: number[] = [];
-    for (let i = 0; i < SEGS_PER; i++) {
+    for (let i = 0; i < SEGS_PER; i += 1) {
       const t = i / (SEGS_PER - 1); // 0 tail → 1 head
       const phase = this.animT * 5 * crawl - i * 1.05;
       // Peristalsis: squeeze radially while telescoping forward
@@ -329,7 +329,7 @@ export class Grub implements Targetable, SwarmSlotOwner {
       const fl = Math.hypot(fx, fz) || 1;
       const ux = fx / fl, uz = fz / fl;
       const lx = -uz, lz = ux; // head's left normal
-      for (let i = 0; i < EYES_PER; i++) {
+      for (let i = 0; i < EYES_PER; i += 1) {
         const side = i === 0 ? -1 : 1;
         _local.compose(
           _p.set(hx + ux * 0.45 * r + lx * side * 0.22 * r,
@@ -353,7 +353,7 @@ export class Grub implements Targetable, SwarmSlotOwner {
       const bx = segX[HOST_B]!, bz = segZ[HOST_B]!;
       const bt = Math.hypot(bx - ax, bz - az) || 1;
       const lnx = -(bz - az) / bt, lnz = (bx - ax) / bt; // spine left normal
-      for (let i = 0; i < LEGS_PER; i++) {
+      for (let i = 0; i < LEGS_PER; i += 1) {
         const pair = Math.floor(i / 2);
         const side = i % 2 === 0 ? -1 : 1;
         const u = LEG_U[pair]!;

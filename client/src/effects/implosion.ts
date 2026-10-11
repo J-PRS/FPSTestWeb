@@ -138,7 +138,7 @@ export class Implosion {
 
     // Layer 7: Electric arcs - lightning lines spiraling inward
     const arcCount = Math.floor(8 * timeScale);
-    for (let i = 0; i < arcCount; i++) {
+    for (let i = 0; i < arcCount; i += 1) {
       const startRadius = 3 + Math.random() * 2;
 
       let arc = arcPool.pop();
@@ -161,7 +161,7 @@ export class Implosion {
                 basePts: new Float32Array(ARC_POINTS * 3), posAttr, mat };
       }
       // Store spawn-time point offsets relative to explosion center
-      for (let j = 0; j < ARC_POINTS; j++) {
+      for (let j = 0; j < ARC_POINTS; j += 1) {
         const t = j / ARC_SEGS;
         const radius = startRadius * (1 - t);
         const angle = (Math.PI * 2 * i / arcCount) + t * Math.PI * 2 + Math.random() * 0.5;
@@ -183,7 +183,7 @@ export class Implosion {
       this.updateCore() +
       this.updateShockwaves(dt) +
       this.updateArcs(dt);
-    for (const r of this.rings) {if (r.update(dt)) {alive++;}}
+    for (const r of this.rings) {if (r.update(dt)) {alive += 1;}}
     if (alive === 0) {this.dead = true;}
   }
 
@@ -215,7 +215,7 @@ export class Implosion {
         releaseShock(sw);
         continue;
       }
-      alive++;
+alive += 1;
       const t = sw.elapsed / sw.life;
       sw.mesh.scale.setScalar(sw.maxRadius * t / 0.3);
       sw.mat.opacity = (1 - t) * 0.8;
@@ -234,13 +234,13 @@ export class Implosion {
         releaseArc(arc);
         continue;
       }
-      alive++;
+alive += 1;
       const t = arc.elapsed / arc.life;
       const ft = 1 - t;
 
       // Shrink arc points toward center — rewrite the preallocated attribute
       const arr = arc.posAttr.array as Float32Array;
-      for (let i = 0; i < ARC_POINTS; i++) {
+      for (let i = 0; i < ARC_POINTS; i += 1) {
         arr[i * 3]     = this.ox + arc.basePts[i * 3] * ft;
         arr[i * 3 + 1] = this.oy + arc.basePts[i * 3 + 1] * ft;
         arr[i * 3 + 2] = this.oz + arc.basePts[i * 3 + 2] * ft;

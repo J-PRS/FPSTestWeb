@@ -20,7 +20,7 @@ interface ZTri { n: THREE.Vector3; d: number; p: [THREE.Vector3, THREE.Vector3, 
 // 2D SAT: project both triangles on each of the 6 edge-normal axes.
 function zOverlap2d(a: THREE.Vector2[], b: THREE.Vector2[]): boolean {
   for (const t of [a, b]) {
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 3; i += 1) {
       const p = t[i]!, q = t[(i + 1) % 3]!;
       const nx = -(q.y - p.y), ny = q.x - p.x;
       let aMin = Infinity, aMax = -Infinity, bMin = Infinity, bMax = -Infinity;
@@ -42,12 +42,12 @@ export function zScan(root: THREE.Object3D): { pairs: number; at: number[][]; fl
   root.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) {return;}
-    meshId++;
+meshId += 1;
     names[meshId] = m.name || m.geometry.type;
     const pos = m.geometry.getAttribute('position');
     const idx = m.geometry.index;
     const triCount = idx ? idx.count / 3 : pos.count / 3;
-    for (let t = 0; t < triCount; t++) {
+    for (let t = 0; t < triCount; t += 1) {
       const [ia, ib, ic] = idx ? [idx.getX(t * 3), idx.getX(t * 3 + 1), idx.getX(t * 3 + 2)] : [t * 3, t * 3 + 1, t * 3 + 2];
       A.fromBufferAttribute(pos, ia).applyMatrix4(m.matrixWorld);
       B.fromBufferAttribute(pos, ib).applyMatrix4(m.matrixWorld);
@@ -60,8 +60,8 @@ export function zScan(root: THREE.Object3D): { pairs: number; at: number[][]; fl
   });
   let pairs = 0;
   const at: number[][] = [], flagVerts: number[] = [], who: string[] = [];
-  for (let i = 0; i < tris.length; i++) {
-    for (let j = i + 1; j < tris.length; j++) {
+  for (let i = 0; i < tris.length; i += 1) {
+    for (let j = i + 1; j < tris.length; j += 1) {
       const x = tris[i]!, y = tris[j]!;
       // Cross-mesh only — same-mesh coplanarity is authored tessellation
       // (extrude caps, fan splits), not a fight between two surfaces.
@@ -80,13 +80,13 @@ export function zScan(root: THREE.Object3D): { pairs: number; at: number[][]; fl
       // the fighting patch; painting whole tris flags innocent surface.
       let poly = xa;
       const cx = (ya[0]!.x + ya[1]!.x + ya[2]!.x) / 3, cy = (ya[0]!.y + ya[1]!.y + ya[2]!.y) / 3;
-      for (let e = 0; e < 3 && poly.length > 0; e++) {
+      for (let e = 0; e < 3 && poly.length > 0; e += 1) {
         const p = ya[e]!, q = ya[(e + 1) % 3]!;
         const nx = -(q.y - p.y), ny = q.x - p.x; // edge normal
         const sign = Math.sign(nx * (cx - p.x) + ny * (cy - p.y)) || 1; // inside = centroid side
         const inside = (v: THREE.Vector2) => sign * (nx * (v.x - p.x) + ny * (v.y - p.y)) >= -1e-9;
         const out: THREE.Vector2[] = [];
-        for (let k = 0; k < poly.length; k++) {
+        for (let k = 0; k < poly.length; k += 1) {
           const s = poly[k]!, t = poly[(k + 1) % poly.length]!;
           if (inside(s)) {out.push(s);}
           const sin = inside(s), tin = inside(t);
@@ -100,7 +100,7 @@ export function zScan(root: THREE.Object3D): { pairs: number; at: number[][]; fl
         poly = out;
       }
       if (poly.length < 3) {continue;}
-      pairs++;
+pairs += 1;
       // Lift each clipped 2D point back to x's 3D plane via barycentrics
       // of the projected triangle — axis-drop projection is affine.
       const [p0, p1, p2] = xa, [q0, q1, q2] = x.p;
@@ -114,7 +114,7 @@ export function zScan(root: THREE.Object3D): { pairs: number; at: number[][]; fl
           q0.z * w0 + q1.z * w1 + q2.z * w2];
       };
       // Fan-triangulate the (convex) clip polygon into the flat vert list.
-      for (let k = 1; k + 1 < poly.length; k++) {
+      for (let k = 1; k + 1 < poly.length; k += 1) {
         flagVerts.push(...lift(poly[0]!), ...lift(poly[k]!), ...lift(poly[k + 1]!));
       }
       if (at.length < 6) {
@@ -138,12 +138,12 @@ export function holeScan(root: THREE.Object3D): { holes: number; at: number[][];
   root.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) {return;}
-    meshId++;
+meshId += 1;
     names[meshId] = m.name || m.geometry.type;
     const pos = m.geometry.getAttribute('position');
     const idx = m.geometry.index;
     const triCount = idx ? idx.count / 3 : pos.count / 3;
-    for (let t = 0; t < triCount; t++) {
+    for (let t = 0; t < triCount; t += 1) {
       const [ia, ib, ic] = idx ? [idx.getX(t * 3), idx.getX(t * 3 + 1), idx.getX(t * 3 + 2)] : [t * 3, t * 3 + 1, t * 3 + 2];
       A.fromBufferAttribute(pos, ia).applyMatrix4(m.matrixWorld);
       B.fromBufferAttribute(pos, ib).applyMatrix4(m.matrixWorld);
@@ -162,7 +162,7 @@ export function holeScan(root: THREE.Object3D): { holes: number; at: number[][];
   const at: number[][] = [], who: string[] = [];
   for (const l of edges.values()) {
     if (l.length !== 1) {continue;}
-    holes++;
+holes += 1;
     if (at.length < 8) {
       const e = l[0]!;
       at.push(e.a.clone().add(e.b).multiplyScalar(0.5).toArray().map(v => Number(v.toFixed(3))));
@@ -190,15 +190,15 @@ export function gapScan(root: THREE.Object3D): { orphans: number; who: string[];
   // Union-find over box-overlap: cluster count + orphan detection in one pass.
   const parent = parts.map((_, i) => i);
   const find = (i: number): number => parent[i] === i ? i : (parent[i] = find(parent[i]!));
-  for (let i = 0; i < parts.length; i++)
-    {for (let j = i + 1; j < parts.length; j++)
+  for (let i = 0; i < parts.length; i += 1)
+    {for (let j = i + 1; j < parts.length; j += 1)
       {if (touch(parts[i]!.box, parts[j]!.box)) {parent[find(i)] = find(j);}}}
   const roots = new Set(parts.map((_, i) => find(i)));
   // Orphan = a cluster of one (not merely a small cluster).
   const size = new Map<number, number>();
-  for (let i = 0; i < parts.length; i++) {size.set(find(i), (size.get(find(i)) ?? 0) + 1);}
+  for (let i = 0; i < parts.length; i += 1) {size.set(find(i), (size.get(find(i)) ?? 0) + 1);}
   const orphans: { m: THREE.Mesh; box: THREE.Box3 }[] = [];
-  for (let i = 0; i < parts.length; i++) {if (size.get(find(i)) === 1) {orphans.push(parts[i]!);}}
+  for (let i = 0; i < parts.length; i += 1) {if (size.get(find(i)) === 1) {orphans.push(parts[i]!);}}
   const who: string[] = [], at: number[][] = [];
   for (const o of orphans.slice(0, 8)) {
     who.push(o.m.name || o.m.geometry.type);
@@ -219,7 +219,7 @@ export function volScan(root: THREE.Object3D): { inverted: number; who: string[]
     const idx = m.geometry.index;
     const triCount = idx ? idx.count / 3 : pos.count / 3;
     let vol = 0;
-    for (let t = 0; t < triCount; t++) {
+    for (let t = 0; t < triCount; t += 1) {
       const [ia, ib, ic] = idx ? [idx.getX(t * 3), idx.getX(t * 3 + 1), idx.getX(t * 3 + 2)] : [t * 3, t * 3 + 1, t * 3 + 2];
       A.fromBufferAttribute(pos, ia).applyMatrix4(m.matrixWorld);
       B.fromBufferAttribute(pos, ib).applyMatrix4(m.matrixWorld);

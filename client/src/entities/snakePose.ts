@@ -117,7 +117,7 @@ export function writeInstances(s: Snake, terrain: Terrain): void {
     // belly staying glued to the floor mid-flight.
     const air = Math.max(0, s.pos.y - s.radius - terrain.getHeight(s.pos.x, s.pos.z));
 
-    for (let i = 0; i < SEGS_PER; i++) {
+    for (let i = 0; i < SEGS_PER; i += 1) {
       const t = i / (SEGS_PER - 1); // 0 head → 1 tail
       sampleTrail(s, i * spacing, _pt);
       // Tangent = centered difference: the point TOWARD the head minus
@@ -166,7 +166,7 @@ export function writeInstances(s: Snake, terrain: Terrain): void {
     const headGround = terrain.getHeight(_pt.x, _pt.z);
     const headY = headGround + 0.29 * r + coiling * 1.6 * r + air;
     const ex = -hz / hl, ez = hx / hl; // head left normal
-    for (let i = 0; i < EYES_PER; i++) {
+    for (let i = 0; i < EYES_PER; i += 1) {
       const side = i === 0 ? -1 : 1;
       _local.compose(
         _p.set(_pt.x + ex * side * 0.14 * r + (hx / hl) * (0.1 - coiling * 0.9) * r,
@@ -183,7 +183,7 @@ export function writeInstances(s: Snake, terrain: Terrain): void {
 /** Aim each lobe along the real 3D chain direction between its placed
  *  neighbours — covers coil rise, leap arcs and per-seg terrain steps. */
 function orientSegments(s: Snake, swarm: NonNullable<ReturnType<typeof getSwarm>>, slot: number, r: number, fr: number): void {
-  for (let i = 0; i < SEGS_PER; i++) {
+  for (let i = 0; i < SEGS_PER; i += 1) {
     const iA = Math.max(0, i - 1), iB = Math.min(SEGS_PER - 1, i + 1);
     const dx = _segX[iA] - _segX[iB];
     const dy = _segY[iA] - _segY[iB];

@@ -70,7 +70,7 @@ export function skirt(ring: Ring2, height: number, flare = 1.4, mat = hullMat, b
 export function towerShaft(w: number, h: number, tiers = 2, mat = hullMat): THREE.Group {
   const g = new THREE.Group();
   let y = 0;
-  for (let i = 0; i < tiers; i++) {
+  for (let i = 0; i < tiers; i += 1) {
     const tw = w * (1 - i * 0.12);
     const th = h / tiers;
     const secs: LoftSection[] = topDown(
@@ -126,7 +126,7 @@ export function pad(r: number, thick = 0.5, glow = glowCyan): THREE.Group {
 export function dome(r: number, mat = hullMat): THREE.Mesh {
   const prof: [number, number][] = [];
   const N = 10;
-  for (let i = 0; i <= N; i++) {
+  for (let i = 0; i <= N; i += 1) {
     const a = (i / N) * Math.PI / 2;
     prof.push([Math.cos(a) * r, Math.sin(a) * r]);
   }

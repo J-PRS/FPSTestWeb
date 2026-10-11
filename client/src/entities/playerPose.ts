@@ -192,7 +192,7 @@ export class PoseControl {
     // (UpperArmr / Base_HumanRUpperarm / forearmr all land here).
     {
       const chains = holdChains();
-      for (let role = 0; role < chains.length; role++) {
+      for (let role = 0; role < chains.length; role += 1) {
         const norms = chains[role]!;
         if (norms.has(nb)) {
           this.holdBones.push({ bone: child, role, off: new THREE.Quaternion(...(this.holdQuats[role] ?? [0, 0, 0, 1])), last: new THREE.Quaternion(), bind: child.quaternion.clone() });

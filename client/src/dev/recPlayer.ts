@@ -16,7 +16,7 @@ interface RecLine { ms: number; json?: ServerMessage; bin?: Uint8Array }
 
 const hexToBytes = (hex: string): Uint8Array => {
   const u8 = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < u8.length; i++) {u8[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);}
+  for (let i = 0; i < u8.length; i += 1) {u8[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);}
   return u8;
 };
 

@@ -96,7 +96,7 @@ if (pvariant) {
     pm.forceAnimationState(wantState as never);
     window.__pm = pm;
     // Step the mixer a fixed phase so loops settle mid-cycle.
-    for (let i = 0; i < 30; i++) {pm.update(1 / 60 * wantT * 4);}
+    for (let i = 0; i < 30; i += 1) {pm.update(1 / 60 * wantT * 4);}
     model.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(model);
     const c = box.getCenter(new THREE.Vector3());

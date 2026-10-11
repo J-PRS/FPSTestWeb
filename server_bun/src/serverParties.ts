@@ -93,8 +93,8 @@ export class ServerParties {
     const teams = Boolean(this.room.modeSpec?.teams);
     const cx0 = Math.floor((p.position.x - DOMAIN_M) / CELL_M), cx1 = Math.floor((p.position.x + DOMAIN_M) / CELL_M);
     const cz0 = Math.floor((p.position.z - DOMAIN_M) / CELL_M), cz1 = Math.floor((p.position.z + DOMAIN_M) / CELL_M);
-    for (let cx = cx0; cx <= cx1; cx++) {
-      for (let cz = cz0; cz <= cz1; cz++) {
+    for (let cx = cx0; cx <= cx1; cx += 1) {
+      for (let cz = cz0; cz <= cz1; cz += 1) {
         const cell = c.grid.get(cellKey(cx, cz));
         if (!cell) {continue;}
         for (const i of cell) {
@@ -124,7 +124,7 @@ export class ServerParties {
     const x0 = Math.floor((x - r) / CELL_M), x1 = Math.floor((x + r) / CELL_M);
     const z0 = Math.floor((z - r) / CELL_M), z1 = Math.floor((z + r) / CELL_M);
     const idx: number[] = [];
-    for (let cx = x0; cx <= x1; cx++) {for (let cz = z0; cz <= z1; cz++) {
+    for (let cx = x0; cx <= x1; cx += 1) {for (let cz = z0; cz <= z1; cz += 1) {
       const cell = c.grid.get(cellKey(cx, cz));
       if (cell) {for (const i of cell) {idx.push(i);}}
     }}

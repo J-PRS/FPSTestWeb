@@ -122,12 +122,12 @@ export class WeaponStats {
   record(mode: string, source: string, damage: number, killed: boolean, botShooter: boolean): void {
     if (damage <= 0 || !this.modeOk(mode)) {return;}
     const r = this.row(mode, source);
-    r.hits++;
+r.hits += 1;
     r.damage += damage;
-    if (killed) {r.kills++;}
+    if (killed) {r.kills += 1;}
     if (botShooter) {
       r.botDamage += damage;
-      if (killed) {r.botKills++;}
+      if (killed) {r.botKills += 1;}
     }
     this.dirty = true;
   }
@@ -138,7 +138,7 @@ export class WeaponStats {
   recordShot(mode: string, source: string, dist?: number): void {
     if (!this.modeOk(mode)) {return;}
     const r = this.row(mode, source);
-    r.shots++;
+r.shots += 1;
     if (dist !== undefined && Number.isFinite(dist)) {
       const band = dist < 10 ? '<10' : dist < 25 ? '10-25' : dist < 60 ? '25-60' : dist < 120 ? '60-120' : '120+';
       const d = (r.dist ??= {});
@@ -165,7 +165,7 @@ export class WeaponStats {
     const m = (this.ttk[mode] ??= {});
     const key = source in m || Object.keys(m).length < WeaponStats.MAX_SOURCES ? source : 'other';
     const r = (m[key] ??= { n: 0, totalMs: 0 });
-    r.n++; r.totalMs += ms;
+r.n += 1; r.totalMs += ms;
     this.dirty = true;
   }
 
@@ -173,8 +173,8 @@ export class WeaponStats {
   recordFlag(mode: string, kind: 'cap' | 'return', ms: number): void {
     if (!this.modeOk(mode)) {return;}
     const r = (this.flags[mode] ??= { caps: 0, holdMs: 0, returns: 0, dropMs: 0 });
-    if (kind === 'cap') { r.caps++; r.holdMs += ms; }
-    else { r.returns++; r.dropMs += ms; }
+    if (kind === 'cap') {r.caps += 1; r.holdMs += ms; }
+    else {r.returns += 1; r.dropMs += ms; }
     this.dirty = true;
   }
 
@@ -185,8 +185,8 @@ export class WeaponStats {
     const sb = speedBin(shooterVel), vb = speedBin(victimVel);
     r.shooter[sb] = (r.shooter[sb] ?? 0) + 1;
     r.victim[vb] = (r.victim[vb] ?? 0) + 1;
-    if (shooterVel && Math.abs(shooterVel.y) > 4) {r.airShooter++;}
-    if (victimVel && Math.abs(victimVel.y) > 4) {r.airVictim++;}
+    if (shooterVel && Math.abs(shooterVel.y) > 4) {r.airShooter += 1;}
+    if (victimVel && Math.abs(victimVel.y) > 4) {r.airVictim += 1;}
     this.dirty = true;
   }
 
@@ -196,7 +196,7 @@ export class WeaponStats {
     if (!this.modeOk(mode)) {return;}
     const m = (this.pickups[mode] ??= {});
     const r = (m[kind] ??= { spawned: 0, banked: 0, decayed: 0, refused: 0 });
-    r[event]++;
+r[event] += 1;
     this.dirty = true;
   }
 

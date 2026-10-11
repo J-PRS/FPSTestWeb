@@ -75,7 +75,7 @@ const aimAt = (dx: number, dy = 0, dz = 0) => new THREE.Vector3(dx, dy, dz);
 
 describe('bot real-weapon fire', () => {
   it('every loadout fires a real Projectile at mid range', () => {
-    for (let i = 0; i < BOT_LOADOUTS.length; i++) {
+    for (let i = 0; i < BOT_LOADOUTS.length; i += 1) {
       const c = ctx();
       c.fire.resolveShot(fakeBot(i), 'e1', aimAt(30, 1.6, 0));
       const spawned = c.projectiles;
@@ -104,7 +104,7 @@ describe('bot real-weapon fire', () => {
     // Locate a (loadout, band-range) pair whose pick carries pellets,
     // then fire inside that band and count the fan.
     let fired = false;
-    for (let i = 0; i < BOT_LOADOUTS.length && !fired; i++) {
+    for (let i = 0; i < BOT_LOADOUTS.length && !fired; i += 1) {
       const lo = BOT_LOADOUTS[i]!;
       for (const [wt, range] of [[lo.near, 12], [lo.mid, 25], [lo.far, 80]] as const) {
         const pellets = SLOT_DEFS.find(w => w.weaponType === wt)?.pellets;

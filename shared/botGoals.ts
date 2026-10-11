@@ -162,7 +162,7 @@ export class BotGoals {
     const g0 = ctx.groundY(pos.x, pos.z);
     let best: BotVec | null = null;
     let bestDrop = -Infinity;
-    for (let tries = 0; tries < 3; tries++) {
+    for (let tries = 0; tries < 3; tries += 1) {
       // Committed lines: a skier picks a direction and holds it — the
       // roll is a forward cone off the current heading with real run
       // length, not a fresh random bearing that reverses mid-carve.

@@ -90,7 +90,7 @@ const flagEdge = (ctx: EdgeCtx, list: EdgeRef[]) => {
   // opposite corner interpolates the flag to zero exactly at the edge
   // it marks (vAedge.c ≈ bary.c → 0), so the line could never draw.
   // Constant flags across the tri give a real distance-to-edge field.
-  for (const e of list) {for (let v = 0; v < 3; v++) {ctx.aedge[(e.t * 3 + v) * 3 + e.c] = 1;}}
+  for (const e of list) {for (let v = 0; v < 3; v += 1) {ctx.aedge[(e.t * 3 + v) * 3 + e.c] = 1;}}
 };
 
 /** Face normals + welded-vertex edge map. */
@@ -104,7 +104,7 @@ function collectEdges(pos: THREE.BufferAttribute, triCount: number): { faceN: Fl
   const pk = (i: number) => `${pos.getX(i).toFixed(4)},${pos.getY(i).toFixed(4)},${pos.getZ(i).toFixed(4)}`;
   const edges: EdgeMap = new Map();
   const _e = new THREE.Vector3();
-  for (let t = 0; t < triCount; t++) {
+  for (let t = 0; t < triCount; t += 1) {
     const v0 = t * 3, v1 = t * 3 + 1, v2 = t * 3 + 2;
     _fa.fromBufferAttribute(pos, v0);
     _fb.fromBufferAttribute(pos, v1);
@@ -144,8 +144,8 @@ function flagSharpPairs(ctx: EdgeCtx): void {
     // ref — sharp edges were flagged onto coplanar seams and real
     // edges skipped when their first two refs were flat. Flag only the
     // tris of a genuinely sharp pair; !(>t) keeps NaN normals failing.
-    for (let i = 0; i < list.length; i++) {
-      for (let j = i + 1; j < list.length; j++) {
+    for (let i = 0; i < list.length; i += 1) {
+      for (let j = i + 1; j < list.length; j += 1) {
         const x = list[i]!, y = list[j]!;
         if (!(1 - faceDot(faceN, x.t, y.t) > SHARP_DIHEDRAL)) {continue;}
         // Flag EVERY ref on this edge, not just the sharp pair: duplicated
@@ -272,13 +272,13 @@ function emitEdgeDebug(geo: THREE.BufferGeometry, ctx: EdgeCtx, triCount: number
   if ((geo.userData.__dbgEdge as boolean | undefined) !== true) {
     geo.userData.__dbgEdge = true;
     let shared = 0, bnd = 0, sharpN = 0, flaggedN = 0;
-    for (const l of edges.values()) { if (l.length > 1) {shared++;} else {bnd++;} }
+    for (const l of edges.values()) { if (l.length > 1) {shared += 1;} else {bnd += 1;} }
     for (const l of edges.values()) {
-      if (l.length === 1) { sharpN++; flaggedN += l.length; continue; }
+      if (l.length === 1) {sharpN += 1; flaggedN += l.length; continue; }
       const [x, y] = [l[0]!, l[1]!];
-      if (1 - faceDot(faceN, x.t, y.t) > SHARP_DIHEDRAL) { sharpN++; flaggedN += l.length; }
+      if (1 - faceDot(faceN, x.t, y.t) > SHARP_DIHEDRAL) {sharpN += 1; flaggedN += l.length; }
     }
-    let set = 0; for (let i = 0; i < count * 3; i++) {if (aedge[i]! > 0) {set++;}}
+    let set = 0; for (let i = 0; i < count * 3; i += 1) {if (aedge[i]! > 0) {set += 1;}}
     if ((window as any).__edgebakeLog) {console.log(`[edgebake] tris=${triCount} edges=${edges.size} shared=${shared} bnd=${bnd} sharp=${sharpN} flagverts=${set}/${count}`);}
   }
 }
@@ -292,7 +292,7 @@ function bakeBaryAttrs(geo: THREE.BufferGeometry, pos: THREE.BufferAttribute, tr
   const abary = new Float32Array(triCount * 9);
   const aalt = new Float32Array(triCount * 9);
   const _va = new THREE.Vector3(), _vb = new THREE.Vector3(), _vc = new THREE.Vector3(), _ab = new THREE.Vector3(), _ac = new THREE.Vector3();
-  for (let t = 0; t < triCount; t++) {
+  for (let t = 0; t < triCount; t += 1) {
     abary[(t * 3) * 3] = 1;
     abary[(t * 3 + 1) * 3 + 1] = 1;
     abary[(t * 3 + 2) * 3 + 2] = 1;
@@ -300,14 +300,14 @@ function bakeBaryAttrs(geo: THREE.BufferGeometry, pos: THREE.BufferAttribute, tr
     _va.fromBufferAttribute(pos, v[0]!);
     _vb.fromBufferAttribute(pos, v[1]!);
     _vc.fromBufferAttribute(pos, v[2]!);
-    for (let c = 0; c < 3; c++) {
+    for (let c = 0; c < 3; c += 1) {
       const a = (c + 1) % 3, b = (c + 2) % 3;
       const pa = [_va, _vb, _vc][a]!, pb = [_va, _vb, _vc][b]!, pc = [_va, _vb, _vc][c]!;
       _ab.subVectors(pb, pa);
       _ac.subVectors(pc, pa);
       const len = _ab.length();
       const alt = len < 1e-9 ? 0 : _ac.cross(_ab).length() / len;
-      for (let k = 0; k < 3; k++) {aalt[(t * 3 + k) * 3 + c] = alt;}
+      for (let k = 0; k < 3; k += 1) {aalt[(t * 3 + k) * 3 + c] = alt;}
     }
   }
   return { abary, aalt };
@@ -419,7 +419,7 @@ function bakeWearTexture(geo: THREE.BufferGeometry): void {
   const triScale = new Float32Array(triCount);
   const triOrg = new Float32Array(triCount * 2);
   const triE1: [number, number, number][] = [], triE2: [number, number, number][] = [];
-  for (let t = 0; t < triCount; t++) {
+  for (let t = 0; t < triCount; t += 1) {
     _wA.fromBufferAttribute(pos, t * 3);
     _wB.fromBufferAttribute(pos, t * 3 + 1);
     _wC.fromBufferAttribute(pos, t * 3 + 2);
@@ -440,7 +440,7 @@ function bakeWearTexture(geo: THREE.BufferGeometry): void {
     triOrg[t * 2 + 1] = cy0 + WEAR_MARGIN;
     triE1[t] = [_wE1.x, _wE1.y, _wE1.z];
     triE2[t] = [_wE2.x, _wE2.y, _wE2.z];
-    for (let v = 0; v < 3; v++) {
+    for (let v = 0; v < 3; v += 1) {
       const i = t * 3 + v;
       _wB.fromBufferAttribute(pos, i).sub(_wA);
       const lx = _wB.x * triE1[t][0] + _wB.y * triE1[t][1] + _wB.z * triE1[t][2];
@@ -476,7 +476,7 @@ function bakeWearTexture(geo: THREE.BufferGeometry): void {
     const wlen = _wA.fromBufferAttribute(pos, r.a).distanceTo(_wB.fromBufferAttribute(pos, r.b));
     const pieces = Math.max(2, Math.ceil(wlen / 0.004));
     const lwCore = Math.max(1, WEAR_LINE * 2 * triScale[r.t]);
-    for (let k = 0; k < pieces; k++) {
+    for (let k = 0; k < pieces; k += 1) {
       const t0 = k / pieces, t1 = (k + 1) / pieces;
       // Object-space midpoint for the noise — same coords the surface
       // wear samples, so chips land where the face wear does.
@@ -529,7 +529,7 @@ function bakeWear(geo: THREE.BufferGeometry, grime = false, wearBoost = 0): void
   const triCount = idx ? idx.count / 3 : count / 3;
   const acc = new Float32Array(count);
   const cnt = new Uint16Array(count);
-  for (let t = 0; t < triCount; t++) {
+  for (let t = 0; t < triCount; t += 1) {
     const ia = idx ? idx.getX(t * 3) : t * 3;
     const ib = idx ? idx.getX(t * 3 + 1) : t * 3 + 1;
     const ic = idx ? idx.getX(t * 3 + 2) : t * 3 + 2;
@@ -541,7 +541,7 @@ function bakeWear(geo: THREE.BufferGeometry, grime = false, wearBoost = 0): void
     for (const vi of [ia, ib, ic]) {
       _n.fromBufferAttribute(nor, vi);
       acc[vi] += Math.max(0, 1 - _n.dot(_fa));
-      cnt[vi]++;
+cnt[vi] += 1;
     }
   }
   // Hard-edge pass: flat-shaded geometry (every BoxGeometry part — most of
@@ -552,7 +552,7 @@ function bakeWear(geo: THREE.BufferGeometry, grime = false, wearBoost = 0): void
   const hard = hardEdgeDivergence(pos, nor, count);
 
   const wear = new Float32Array(count);
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < count; i += 1) {
     const soft = cnt[i] ? (acc[i]! / cnt[i]!) * WEAR_GAIN : 0;
     wear[i] = Math.min(1, Math.max(soft, hard[i]!));
   }
@@ -576,7 +576,7 @@ function bakeGrime(geo: THREE.BufferGeometry, pos: THREE.BufferAttribute, count:
   const faceN = new Float32Array(triCount * 3);
   const faceC = new Float32Array(triCount * 3);
   const _gn = new THREE.Vector3(), _ca = new THREE.Vector3(), _cb = new THREE.Vector3();
-  for (let t = 0; t < triCount; t++) {
+  for (let t = 0; t < triCount; t += 1) {
     const v = [idx ? idx.getX(t * 3) : t * 3, idx ? idx.getX(t * 3 + 1) : t * 3 + 1, idx ? idx.getX(t * 3 + 2) : t * 3 + 2];
     _fa.fromBufferAttribute(pos, v[0]!);
     _fb.fromBufferAttribute(pos, v[1]!);
@@ -618,7 +618,7 @@ function bakeGrime(geo: THREE.BufferGeometry, pos: THREE.BufferAttribute, count:
  *  vertex sharing its position — 0 on flat faces, ~1 at 90° corners. */
 function hardEdgeDivergence(pos: THREE.BufferAttribute, nor: THREE.BufferAttribute, count: number): Float32Array {
   const byPos = new Map<string, number[]>();
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < count; i += 1) {
     const key = `${pos.getX(i).toFixed(4)},${pos.getY(i).toFixed(4)},${pos.getZ(i).toFixed(4)}`;
     let list = byPos.get(key);
     if (!list) {byPos.set(key, list = []);}
@@ -648,7 +648,7 @@ function hardEdgeDivergence(pos: THREE.BufferAttribute, nor: THREE.BufferAttribu
 const HEMI_DIRS: [number, number, number][] = (() => {
   const dirs: [number, number, number][] = [];
   const golden = Math.PI * (3 - Math.sqrt(5));
-  for (let i = 0; i < RAYS; i++) {
+  for (let i = 0; i < RAYS; i += 1) {
     const t = (i + 0.5) / RAYS;
     const z = CONE_MIN_Z + (1 - CONE_MIN_Z) * Math.sqrt(1 - t * t);
     const a = i * golden;
@@ -667,7 +667,7 @@ function bakeMesh(mesh: THREE.Mesh, occluder: THREE.Mesh, rayDist: number, grime
   const colors = new Float32Array(count * 3).fill(1);
   const mm = mesh.matrixWorld;
 
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < count; i += 1) {
     _p.fromBufferAttribute(pos, i).applyMatrix4(mm);
     _n.fromBufferAttribute(nor, i).transformDirection(mm).normalize();
     // tangent frame for hemisphere jitter
@@ -677,7 +677,7 @@ function bakeMesh(mesh: THREE.Mesh, occluder: THREE.Mesh, rayDist: number, grime
     _bitan.crossVectors(_n, _tan);
 
     let occluded = 0;
-    for (let r = 0; r < RAYS; r++) {
+    for (let r = 0; r < RAYS; r += 1) {
       const [tx, ty, tz] = HEMI_DIRS[r]!;
       _dir.copy(_n).multiplyScalar(tz)
         .addScaledVector(_tan, tx)
@@ -686,7 +686,7 @@ function bakeMesh(mesh: THREE.Mesh, occluder: THREE.Mesh, rayDist: number, grime
       _origin.copy(_p).addScaledVector(_n, EPS);
       _ray.set(_origin, _dir);
       _ray.far = rayDist;
-      if (_ray.intersectObject(occluder, false).length > 0) {occluded++;}
+      if (_ray.intersectObject(occluder, false).length > 0) {occluded += 1;}
     }
     const ao = 1 - (occluded / RAYS) * (1 - MIN_LIGHT);
     colors[i * 3] = ao;
@@ -700,7 +700,7 @@ function bakeMesh(mesh: THREE.Mesh, occluder: THREE.Mesh, rayDist: number, grime
   // point + same shading normal must get the same light; split-normal
   // verts on hard edges keep their own values.
   const weld = new Map<string, number[]>();
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < count; i += 1) {
     const k = `${pos.getX(i).toFixed(4)},${pos.getY(i).toFixed(4)},${pos.getZ(i).toFixed(4)}|${nor.getX(i).toFixed(2)},${nor.getY(i).toFixed(2)},${nor.getZ(i).toFixed(2)}`;
     let l = weld.get(k);
     if (!l) {weld.set(k, l = []);}
@@ -936,7 +936,7 @@ function mergeGeometries(meshes: THREE.Mesh[]): THREE.BufferGeometry {
     const out = new Float32Array(tris * 3);
     const v = new THREE.Vector3();
     let w = 0;
-    for (let t = 0; t < tris; t++) {
+    for (let t = 0; t < tris; t += 1) {
       const i = idx ? idx.getX(t) : t;
       v.fromBufferAttribute(p, i).applyMatrix4(m.matrixWorld);
       out[w++] = v.x; out[w++] = v.y; out[w++] = v.z;

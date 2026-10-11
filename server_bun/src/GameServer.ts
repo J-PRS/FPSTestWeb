@@ -428,7 +428,7 @@ export class GameServer {
         this.registry.seedGrace(ps.id, room.name, this.reconnectGraceMs,
           () => this.removePlayerCompletely(room, ps.id, 'grace period'));
         room.messages.onPlayerDisconnected(ps.id);
-        seated++;
+seated += 1;
       }
       logger.info('Restored seats across restart', { room: room.name, players: rs.players.length });
     }
@@ -474,12 +474,12 @@ export class GameServer {
   private handleGameMessage(room: Room, playerId: string, raw: unknown): void {
     const result = validateMessage(raw);
     if (!result.success) {
-      this.ops.msgsRejected++;
+this.ops.msgsRejected += 1;
       this.invalidWarn(playerId, 'Invalid message rejected', { room: room.name, error: result.error });
       return;
     }
 
-    this.ops.msgsIn++;
+this.ops.msgsIn += 1;
     // Backstop bound: legit traffic is ~20 reports + a few actions per
     // player per tick (~500 for a full room) — a flooding client would
     // otherwise grow this array unboundedly between drains and stall the
@@ -487,7 +487,7 @@ export class GameServer {
     // the observability surface — a per-drop log would spam, since a
     // flooded queue parks at the cap until the next drain).
     if (room.commands.length >= 2000) {
-      this.ops.msgsRejected++;
+this.ops.msgsRejected += 1;
       return;
     }
     // Command buffer: effects land at phase 0 of the next room tick, in
@@ -519,7 +519,7 @@ export class GameServer {
     this.registry.terminate(playerId, reason);
     room.removePlayerCompletely(playerId, reason, (m, o) => logger.info(m, o));
     this.playerRoom.delete(playerId);
-    this.ops.leaves++;
+this.ops.leaves += 1;
   }
 
 }

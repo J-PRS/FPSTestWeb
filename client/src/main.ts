@@ -519,7 +519,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   // Initial balls — offline only. In a room the wire owns the ball
   // population; boot-time locals were duplicate spam on the default map.
   if (!networkManager.isConnected()) {
-    for (let i = 0; i < 4; i++) {entities.spawnBall();} // OG startingSpawnCount
+    for (let i = 0; i < 4; i += 1) {entities.spawnBall();} // OG startingSpawnCount
   }
 
   // Auto-start demo recording so cool shots are captured seamlessly —

@@ -73,7 +73,7 @@ export const rotRing = (r: Ring2, rad: number): Ring2 => {
 /** Circular ring profile. */
 export const profCircle = (r: number, seg = 16): Ring2 => {
   const pts: Ring2 = [];
-  for (let i = 0; i < seg; i++) {
+  for (let i = 0; i < seg; i += 1) {
     const a = (i / seg) * Math.PI * 2;
     pts.push([Math.cos(a) * r, Math.sin(a) * r]);
   }
@@ -86,7 +86,7 @@ export const profCircle = (r: number, seg = 16): Ring2 => {
 export const profSuper = (w: number, h: number, n = 6, seg = 32): Ring2 => {
   const pts: Ring2 = [];
   const e = 2 / n;
-  for (let i = 0; i < seg; i++) {
+  for (let i = 0; i < seg; i += 1) {
     const a = (i / seg) * Math.PI * 2;
     const c = Math.cos(a), s = Math.sin(a);
     pts.push([Math.sign(c) * Math.abs(c) ** e * w / 2, Math.sign(s) * Math.abs(s) ** e * h / 2]);
@@ -115,7 +115,7 @@ export const profOct = (w: number, h: number, r: number): Ring2 => {
  *  Cheap enough to run on every build; warns, never throws. */
 export const validateRing = (r: Ring2, tag = 'ring'): void => {
   let area = 0;
-  for (let i = 0; i < r.length; i++) {
+  for (let i = 0; i < r.length; i += 1) {
     const [x0, y0] = r[i]!, [x1, y1] = r[(i + 1) % r.length]!;
     area += x0 * y1 - x1 * y0;
     if (Math.hypot(x1 - x0, y1 - y0) < 1e-6) {Logger.warn(`[weaponKit] ${tag}: duplicate/degenerate point at ${i}`);}
@@ -156,9 +156,9 @@ export const mkLoft = (sections: LoftSection[], mat: THREE.Material, cap = true,
     pos.push(...a, ...b, ...c);
     uv.push((u0 + u1) / 2, v0, u1, v1, u0, v1);
   };
-  for (let i = 0; i < sections.length - 1; i++) {
+  for (let i = 0; i < sections.length - 1; i += 1) {
     const s0 = sections[i]!, s1 = sections[i + 1]!;
-    for (let j = 0; j < seg; j++) {
+    for (let j = 0; j < seg; j += 1) {
       if (s0.point && s1.ring) {tri(pt(s0), ring(s1, j), ring(s1, j + 1), [j / seg, (j + 1) / seg, s0.z, s1.z]);}
       else if (s0.ring && s1.point) {tri(pt(s1), ring(s0, j + 1), ring(s0, j), [j / seg, (j + 1) / seg, s0.z, s1.z]);}
       else if (s0.ring && s1.ring) {
@@ -173,7 +173,7 @@ export const mkLoft = (sections: LoftSection[], mat: THREE.Material, cap = true,
       let cx = 0, cy = 0;
       for (const p of s.ring) { cx += p[0]; cy += p[1]; }
       cx = cx / seg + (s.dx ?? 0); cy = cy / seg + (s.dy ?? 0);
-      for (let j = 0; j < seg; j++) {
+      for (let j = 0; j < seg; j += 1) {
         const a = ring(s, j), b = ring(s, j + 1);
         if (flip) {pos.push(cx, cy, s.z, ...a, ...b);} else {pos.push(cx, cy, s.z, ...b, ...a);}
         uv.push(0.5, s.z, (j + 1) / seg, s.z, j / seg, s.z);
@@ -213,13 +213,13 @@ export const morphRing = (a: Ring2, b: Ring2, t: number): Ring2 => {
  *  {z:-0.1, ring:profCircle(...)}]) → mkLoft(...). */
 export const morphLoft = (keys: LoftSection[], subdiv = 4): LoftSection[] => {
   const out: LoftSection[] = [];
-  for (let i = 0; i < keys.length; i++) {
+  for (let i = 0; i < keys.length; i += 1) {
     const k = keys[i]!, next = keys[i + 1];
     out.push(k);
     if (!next || !k.ring || !next.ring) {continue;}
     const n = Math.max(k.ring.length, next.ring.length);
     const a = resampleRing(k.ring, n), b = resampleRing(next.ring, n);
-    for (let s = 1; s <= subdiv; s++) {
+    for (let s = 1; s <= subdiv; s += 1) {
       const t = s / (subdiv + 1);
       out.push({ z: k.z + (next.z - k.z) * t, ring: morphRing(a, b, t), dx: (k.dx ?? 0) + ((next.dx ?? 0) - (k.dx ?? 0)) * t, dy: (k.dy ?? 0) + ((next.dy ?? 0) - (k.dy ?? 0)) * t });
     }
@@ -235,9 +235,9 @@ export const morphLoft = (keys: LoftSection[], subdiv = 4): LoftSection[] => {
 export const mkRevolve = (profile: [number, number][], mat: THREE.Material, seg = 12, smooth = false): THREE.Mesh => {
   const pos: number[] = [], uv: number[] = [];
   const n = profile.length;
-  for (let i = 0; i < n - 1; i++) {
+  for (let i = 0; i < n - 1; i += 1) {
     const [r0, z0] = profile[i]!, [r1, z1] = profile[i + 1]!;
-    for (let j = 0; j < seg; j++) {
+    for (let j = 0; j < seg; j += 1) {
       const a0 = (j / seg) * Math.PI * 2, a1 = ((j + 1) / seg) * Math.PI * 2;
       const c0 = Math.cos(a0), s0 = Math.sin(a0), c1 = Math.cos(a1), s1 = Math.sin(a1);
       if (r0 === 0) { // point cap at this end — fan, no quad
@@ -269,7 +269,7 @@ export const mkRevolve = (profile: [number, number][], mat: THREE.Material, seg 
 export const profGear = (teeth: number, rRoot: number, rTip: number, duty = 0.3): Ring2 => {
   const pts: Ring2 = [];
   const step = (Math.PI * 2) / teeth;
-  for (let i = 0; i < teeth; i++) {
+  for (let i = 0; i < teeth; i += 1) {
     const a = i * step;
     // 4 points per tooth: root→tip→tip→root keeps flats planar.
     const A = a, B = a + step * duty, C = a + step * (1 - duty), D = a + step;
@@ -304,7 +304,7 @@ export const notchRing = (r: Ring2, edge: number, spans: [number, number][], dep
     const s = slope * (t1 - t0);
     out.push(lerp(t0), dip(lerp(t0 + s)), dip(lerp(t1 - s)), lerp(t1));
   }
-  for (let i = edge + 1; i < m; i++) {out.push(r[i]!);}
+  for (let i = edge + 1; i < m; i += 1) {out.push(r[i]!);}
   return out;
 };
 
@@ -314,16 +314,16 @@ export const notchRing = (r: Ring2, edge: number, spans: [number, number][], dep
 export const resampleRing = (r: Ring2, n: number): Ring2 => {
   const m = r.length;
   const lens: number[] = [0];
-  for (let i = 0; i < m; i++) {
+  for (let i = 0; i < m; i += 1) {
     const [x0, y0] = r[i]!, [x1, y1] = r[(i + 1) % m]!;
     lens.push(lens[i]! + Math.hypot(x1 - x0, y1 - y0));
   }
   const total = lens[m]!;
   const out: Ring2 = [];
   let e = 0;
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < n; i += 1) {
     const t = (i / n) * total;
-    while (e < m - 1 && lens[e + 1]! < t) {e++;}
+    while (e < m - 1 && lens[e + 1]! < t) {e += 1;}
     const f = (t - lens[e]!) / Math.max(lens[e + 1]! - lens[e]!, 1e-9);
     const [x0, y0] = r[e]!, [x1, y1] = r[(e + 1) % m]!;
     out.push([x0 + (x1 - x0) * f, y0 + (y1 - y0) * f]);
@@ -351,7 +351,7 @@ export const mkAnnulus = (outer: Ring2, inner: Ring2, zBack: number, zFront: num
   };
   const O = (j: number, z: number): number[] => [...outer[j % seg]!, z];
   const I = (j: number, z: number): number[] => [...inner[j % seg]!, z];
-  for (let j = 0; j < seg; j++) {
+  for (let j = 0; j < seg; j += 1) {
     const u0 = j / seg, u1 = (j + 1) / seg;
     quadW(O(j, zBack), O(j, zFront), O(j + 1, zFront), O(j + 1, zBack), [u0, u1, zBack, zFront]); // outer wall (outward)
     quadW(I(j, zBack), I(j + 1, zBack), I(j + 1, zFront), I(j, zFront), [u0, u1, zBack, zFront]); // inner wall (faces the hole)
@@ -375,12 +375,12 @@ export const mkAnnulus = (outer: Ring2, inner: Ring2, zBack: number, zFront: num
 const sweepFrames = (pts: [number, number, number, number?][]): { N: THREE.Vector3[]; B: THREE.Vector3[] } => {
   const n = pts.length;
   const T: THREE.Vector3[] = [], N: THREE.Vector3[] = [], B: THREE.Vector3[] = [];
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < n; i += 1) {
     const a = pts[Math.max(0, i - 1)]!, b = pts[Math.min(n - 1, i + 1)]!;
     T.push(new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]).normalize());
   }
   let nv = Math.abs(T[0]!.x) < 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < n; i += 1) {
     nv.sub(T[i]!.clone().multiplyScalar(nv.dot(T[i]!))).normalize();
     N.push(nv.clone());
     B.push(new THREE.Vector3().crossVectors(T[i]!, nv));
@@ -398,8 +398,8 @@ export const tubePath = (pts: [number, number, number, number?][], radius: numbe
     const p = pts[i]!, r = p[3] ?? radius;
     return [p[0] + (N[i]!.x * c + B[i]!.x * s) * r, p[1] + (N[i]!.y * c + B[i]!.y * s) * r, p[2] + (N[i]!.z * c + B[i]!.z * s) * r];
   };
-  for (let i = 0; i < n - 1; i++) {
-    for (let j = 0; j < seg; j++) {
+  for (let i = 0; i < n - 1; i += 1) {
+    for (let j = 0; j < seg; j += 1) {
       // Winding is mirrored vs mkLoft: sections advance ALONG the ring's
       // CCW axis (+t), where lofts travel against it.
       const a = ring(i, j), b = ring(i, j + 1), c = ring(i + 1, j + 1), d = ring(i + 1, j);
@@ -410,7 +410,7 @@ export const tubePath = (pts: [number, number, number, number?][], radius: numbe
   if (cap) {
     for (const [i, flip] of [[0, true], [n - 1, false]] as const) {
       const p = pts[i]!;
-      for (let j = 0; j < seg; j++) {
+      for (let j = 0; j < seg; j += 1) {
         const a = ring(i, j), b = ring(i, j + 1);
         const [x, y] = flip ? [b, a] : [a, b];
         pos.push(p[0], p[1], p[2], ...x, ...y);

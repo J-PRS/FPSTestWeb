@@ -83,7 +83,7 @@ function laneCheck(lane: ReplicaLane, logger: ChildLogger, a: {
     lane.prevKeys.clear();
     return false;
   }
-  lane.streak++;
+lane.streak += 1;
   const detail = `server=${a.serverHash} client=${a.localHash} ${a.detail}`;
   let persistent = lane.streak >= 2;
   let persistDesc = `across ${lane.streak} checks`;
@@ -391,7 +391,7 @@ export function wireStateDebug(ctx: StateDebugContext): void {
     // every lane would compare server truth against the recorded past and
     // report phantom desyncs.
     if (ctx.world?.playbackMode) {return;}
-    hashCheckCount++;
+hashCheckCount += 1;
     // A persistent lane desync earns a world-state replay, not just a
     // warn — snapshotRequest now re-streams flag/pickup/deploy/ball/
     // crawler rosters server-side, so stuck lanes can converge back.
@@ -570,7 +570,7 @@ export function wireStateDebug(ctx: StateDebugContext): void {
       return;
     }
 
-    hashMismatchCount++;
+hashMismatchCount += 1;
     logger.debug(`[StateHash] MISMATCH tick=${tick} server=${serverHash} client=${localHashStr}`);
     const now = Date.now();
 

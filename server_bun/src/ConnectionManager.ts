@@ -139,11 +139,11 @@ export class ConnectionManager {
     }
     for (const e of this.journal) {
       if (e.seq <= fromSeq) {continue;}
-      if (e.volatile && now - e.at > VOLATILE_TTL_MS) { skippedStale++; continue; }
+      if (e.volatile && now - e.at > VOLATILE_TTL_MS) {skippedStale += 1; continue; }
       if (e.only !== undefined && e.only !== playerId) {continue;}
       if (e.exclude === playerId) {continue;}
       ws.send(e.data);
-      n++;
+n += 1;
     }
     if (n > 0 || skippedStale > 0) {logger.info('reclaim replay', { playerId, fromSeq, replayed: n, skippedStale });}
     return n;

@@ -35,7 +35,7 @@ plasmaGlow.position.z = -0.332;
 plasma.add(plasmaGlow);
 // Cooling fins — four flat blades radiating off the emitter head, the
 // silhouette detail that separates "energy projector" from "tube"
-for (let i = 0; i < 4; i++) {
+for (let i = 0; i < 4; i += 1) {
   const a = (i / 4) * Math.PI * 2;
   const fin = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.11, 0.14), darkMat);
   fin.position.set(Math.cos(a) * 0.115, Math.sin(a) * 0.115, -0.15);
@@ -44,7 +44,7 @@ for (let i = 0; i < 4; i++) {
 }
 // Core slats — green glow strips along the body so the energy read
 // isn't only at the muzzle
-for (let i = 0; i < 4; i++) {
+for (let i = 0; i < 4; i += 1) {
   const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
   const slat = new THREE.Mesh(
     new THREE.BoxGeometry(0.015, 0.015, 0.16),
@@ -104,7 +104,7 @@ pg.add(mkLoft([
 // face, carrying the collar. The hot core sits INSIDE the cage.
 // Six prongs — one per hex-collar vertex. They start well inside the
 // receiver (z=-0.06 < front cap -0.14) so every one seats into the body.
-for (let i = 0; i < 6; i++) {
+for (let i = 0; i < 6; i += 1) {
   const a = (i / 6) * Math.PI * 2;
   const dx = Math.cos(a) * 0.085, dy = Math.sin(a) * 0.085;
   const railP = profOct(0.026, 0.026, 0.006);
@@ -220,7 +220,7 @@ const holeGlow = new THREE.Mesh(
 holeGlow.rotation.x = Math.PI / 2;
 holeGlow.position.z = -0.244;
 sp.add(holeGlow);
-for (let i = 0; i < 8; i++) {
+for (let i = 0; i < 8; i += 1) {
   const a = (i / 8) * Math.PI * 2;
   const hole = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.02, 6), boreMat);
   hole.rotation.x = Math.PI / 2;
@@ -281,7 +281,7 @@ rail.add(mkTube(0.075, 0.075, 0.05, -0.055, brassMat));
 // spread, the railgun's unmistakable read. Faceted cylinders give
 // machined facets; flat slab blades read as planks.
 const PRONG_R = 0.065; // chord ≈ 0.113 — head-on the brass caps read as three separate hexes
-for (let i = 0; i < 3; i++) {
+for (let i = 0; i < 3; i += 1) {
   const a = (i / 3) * Math.PI * 2 + Math.PI / 2;
   const px = Math.cos(a) * PRONG_R, py = Math.sin(a) * PRONG_R; // cluster centered on the bore — no lift, bases kiss the nose face
   // Sized so the three hexes nearly kiss at the tips — chord between
@@ -297,7 +297,7 @@ for (let i = 0; i < 3; i++) {
   // channel runs the full blade including through the taper. Descending
   // edge order (each notch grows the ring).
   let hex = rotRing(profCircle(0.066, 6), a);
-  for (let e = 5; e >= 0; e--) {hex = notchRing(hex, e, [[0.35, 0.65]], 0.006, 0.3);}
+  for (let e = 5; e >= 0; e -= 1) {hex = notchRing(hex, e, [[0.35, 0.65]], 0.006, 0.3);}
   rail.add(mkLoft([
     { z: -0.165, ring: scaleRing(hex, 0.042 / 0.066), dx: px, dy: py },
     { z: -0.345, ring: hex, dx: px, dy: py },
@@ -340,7 +340,7 @@ const lgHotMat = new THREE.MeshBasicMaterial({ color: 0xCF_EF_FF });
 lg.add(mkTube(0.1, 0.12, 0.4, 0.06, bodyMat));
 // Tesla coil stack wrapped on the rear half — brass winding between
 // ceramic ribs is the "this gun stores charge" tell.
-for (let i = 0; i < 4; i++) {
+for (let i = 0; i < 4; i += 1) {
   lg.add(mkTube(0.125, 0.125, 0.014, 0 + i * 0.07, brassMat));
   lg.add(mkTube(0.122, 0.122, 0.03, 0.028 + i * 0.07, darkMat));
 }
@@ -357,7 +357,7 @@ const LEN = 0.26, TILT = 0.12;
 const RB = 0.105, RT = RB - Math.sin(TILT) * LEN;      // radial: base → tip
 const ZB = -0.175, ZT = ZB - Math.cos(TILT) * LEN;     // axial: base → tip
 const ZMID = (ZB + ZT) / 2, RMID = (RB + RT) / 2;
-for (let i = 0; i < 3; i++) {
+for (let i = 0; i < 3; i += 1) {
   const a = (i / 3) * Math.PI * 2 + Math.PI / 2;
   const fork = new THREE.Group();
   fork.rotation.z = a - Math.PI / 2; // local +y = radial outward

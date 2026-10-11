@@ -32,7 +32,7 @@ function makeShaftTexture(): THREE.CanvasTexture {
   // Radial streaks — alpha varies per spoke so it reads as rays, not a glow
   ctx.globalCompositeOperation = 'lighter';
   const spokes = 24;
-  for (let i = 0; i < spokes; i++) {
+  for (let i = 0; i < spokes; i += 1) {
     const a = (i / spokes) * Math.PI * 2 + Math.random() * 0.15;
     const len = TEX_SIZE * (0.3 + Math.random() * 0.2);
     const w = 0.012 + Math.random() * 0.02; // radians of width

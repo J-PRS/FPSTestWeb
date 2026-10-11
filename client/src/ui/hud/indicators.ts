@@ -40,7 +40,7 @@ export class PlayerIndicators {
   private refreshCamera(camera: THREE.Camera): void {
     const e = camera.matrixWorld.elements;
     if (!this.camDirty) {
-      for (let i = 0; i < 16; i++) {if (this.lastCamMat[i] !== e[i]) { this.camDirty = true; break; }}
+      for (let i = 0; i < 16; i += 1) {if (this.lastCamMat[i] !== e[i]) { this.camDirty = true; break; }}
     }
     if (!this.camDirty) {return;}
     this.lastCamMat.set(e);

@@ -75,7 +75,7 @@ interface DemoLifecycleCtx extends DemoLifecycleDeps {
 
 function updatePlaybackProjectiles(d: DemoLifecycleCtx, dt: number): void {
   // Fade playback rail beams — pooled alongside the projectiles that spawn them.
-  for (let i = d.playbackWorld.beams.length - 1; i >= 0; i--) {
+  for (let i = d.playbackWorld.beams.length - 1; i >= 0; i -= 1) {
     const b = d.playbackWorld.beams[i];
     b.life -= dt;
     if (b.life <= 0) {
@@ -86,7 +86,7 @@ function updatePlaybackProjectiles(d: DemoLifecycleCtx, dt: number): void {
       b.mat.opacity = 0.85 * (b.life / b.maxLife);
     }
   }
-  for (let i = d.playbackProjectiles.length - 1; i >= 0; i--) {
+  for (let i = d.playbackProjectiles.length - 1; i >= 0; i -= 1) {
     const r = d.playbackProjectiles[i];
     r.update(dt, d.lazyTerrain());
     if (r.dead) {
@@ -114,7 +114,7 @@ function updateBallsPlayback(d: DemoLifecycleCtx, dt: number): void {
     b.update(dt, terrain, player.pos);
     // Detect frozen balls (near-zero velocity, not dead, not on ground resting)
     if (!b.dead && b.vel.lengthSq() < 0.01) {
-      frozenCount++;
+frozenCount += 1;
     }
     if (b.disposed) {
       const bi = d.balls.indexOf(b);
@@ -125,7 +125,7 @@ function updateBallsPlayback(d: DemoLifecycleCtx, dt: number): void {
     }
   }
   if (frozenCount > 0) {
-    d.frozenWarn.n++;
+d.frozenWarn.n += 1;
     if (d.frozenWarn.n <= 5 || d.frozenWarn.n % 60 === 0) {
       logger.debug(`${frozenCount} ball(s) frozen midair (vel~0). Total playback balls: ${d.playbackBallById.size}`);
     }
@@ -295,7 +295,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
     for (const rp of d.world.remotePlayers.values()) {rp.setStaleHidden(true);}
     // Dispose all non-playback balls (live game balls)
     const playbackBallSet = new Set(d.playbackBallById.values());
-    for (let i = d.balls.length - 1; i >= 0; i--) {
+    for (let i = d.balls.length - 1; i >= 0; i -= 1) {
       const b = d.balls[i];
       if (!playbackBallSet.has(b)) {
         b.dispose();
@@ -384,7 +384,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
       s.velX = rp.vel.x; s.velY = rp.vel.y; s.velZ = rp.vel.z;
       s.yaw = rp.rotation.yaw; s.pitch = rp.rotation.pitch;
       s.dead = rp.isDead; s.ski = false;
-      i++;
+i += 1;
     }
     out.length = i;
     return out;

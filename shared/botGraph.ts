@@ -34,9 +34,9 @@ export class TerrainFlow {
     this.n = Math.max(8, Math.round(extent / cell));
     this.cell = cell;
     this.h = new Float32Array(this.n * this.n);
-    for (let j = 0; j < this.n; j++) {
+    for (let j = 0; j < this.n; j += 1) {
       const z = this.w(j);
-      for (let i = 0; i < this.n; i++) {this.h[j * this.n + i] = height(this.w(i), z);}
+      for (let i = 0; i < this.n; i += 1) {this.h[j * this.n + i] = height(this.w(i), z);}
     }
   }
 
@@ -104,8 +104,8 @@ export class TerrainFlow {
     while (heap.length > 0) {
       const u = pop();
       const ux = u % this.n, uz = Math.trunc((u / this.n));
-      for (let dz = -1; dz <= 1; dz++) {
-        for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz += 1) {
+        for (let dx = -1; dx <= 1; dx += 1) {
           if (!dx && !dz) {continue;}
           const vx = ux + dx, vz = uz + dz;
           if (vx < 0 || vz < 0 || vx >= this.n || vz >= this.n) {continue;}
@@ -132,10 +132,10 @@ export class TerrainFlow {
             let keepsFalling = u === goal;
             if (!keepsFalling) {
               let cur = u, falling = 0;
-              for (let s = 0; s < 3; s++) {
+              for (let s = 0; s < 3; s += 1) {
                 const p = parent[cur]!;
                 if (p === -1 || this.h[p]! >= this.h[cur]!) {break;}
-                falling++;
+falling += 1;
                 cur = p;
               }
               keepsFalling = falling >= 2;
@@ -209,8 +209,8 @@ export class TerrainFlow {
       if (danger) {
         const cx = c % this.n, cz = Math.trunc((c / this.n));
         let best = Infinity;
-        for (let dz = -1; dz <= 1; dz++) {
-          for (let dx = -1; dx <= 1; dx++) {
+        for (let dz = -1; dz <= 1; dz += 1) {
+          for (let dx = -1; dx <= 1; dx += 1) {
             if (!dx && !dz) {continue;}
             const nx = cx + dx, nz = cz + dz;
             if (nx < 0 || nz < 0 || nx >= this.n || nz >= this.n) {continue;}

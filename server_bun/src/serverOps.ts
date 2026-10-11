@@ -59,7 +59,7 @@ export function getMetrics(g: GameServer) {
       for (const p of r.players.getAllPlayers().values()) {
         const s = p.clientStats;
         if (!s || now - s.at > 30_000) {continue;}
-        n++; fpsSum += s.fps; fpsMin = Math.min(fpsMin, s.fps);
+n += 1; fpsSum += s.fps; fpsMin = Math.min(fpsMin, s.fps);
         lossMax = Math.max(lossMax, s.loss); pingMax = Math.max(pingMax, s.ping);
       }
       return {

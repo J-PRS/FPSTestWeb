@@ -89,7 +89,7 @@ export function hmFingerprint(f: Heightfield): string {
   const s = f.stride;
   const d = f.data;
   let acc = 0;
-  for (let i = 0; i < 64; i++) {
+  for (let i = 0; i < 64; i += 1) {
     const cell = Math.floor((i / 64) * N * N);
     // oxlint-disable-next-line prefer-math-trunc -- int32 wrap is the point
     acc = (acc * 31 + d[cell * s]!) | 0;
@@ -130,7 +130,7 @@ export function hmSurface(f: Heightfield): { getHeight(x: number, z: number): nu
  *  a cliff lip or a steep face is unreachable for every walker, so the
  *  rest spot slides downhill until the gradient is walkable. Mutates pos. */
 export function hmSettleWalkable(f: Heightfield, pos: { x: number; y: number; z: number }, lift = 0.5): void {
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 12; i += 1) {
     const h0 = hmHeight(f, pos.x, pos.z);
     const gxm = hmHeight(f, pos.x - 4, pos.z), gxp = hmHeight(f, pos.x + 4, pos.z);
     const gzm = hmHeight(f, pos.x, pos.z - 4), gzp = hmHeight(f, pos.x, pos.z + 4);

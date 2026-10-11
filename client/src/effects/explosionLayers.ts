@@ -233,7 +233,7 @@ export class ExplosionLayers implements VariantHost {
   // dim: at full strength they outshouted the fireball itself.
   private spawnDebrisSparks(pos: THREE.Vector3, mult: number): void {
     const count = Math.floor(8 * Math.min(mult, 2.5)); // cap count so mortar doesn't melt the pool
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < count; i += 1) {
       const ang = Math.random() * Math.PI * 2;
       const elv = (Math.random() - 0.3) * Math.PI * 0.7; // biased upward — ground blast
       const spd = 18 + Math.random() * 35;
@@ -274,7 +274,7 @@ export class ExplosionLayers implements VariantHost {
 
   update(dt: number): number {
     let alive = this.updateShockwaves(dt);
-    for (const r of this.rings) {if (r.update(dt)) {alive++;}}
+    for (const r of this.rings) {if (r.update(dt)) {alive += 1;}}
     return alive;
   }
 
@@ -289,7 +289,7 @@ export class ExplosionLayers implements VariantHost {
         releaseShock(sw);
         continue;
       }
-      alive++;
+alive += 1;
       const t = sw.elapsed / sw.life;
       sw.mesh.scale.setScalar(sw.maxRadius * t / 0.3); // Scale from initial 0.3 radius
       sw.mat.opacity = (1 - t) * 0.8;

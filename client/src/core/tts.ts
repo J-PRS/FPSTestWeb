@@ -35,7 +35,7 @@ function samFor(who?: string): SamJs {
   if (who) {
     let h = 0;
     // oxlint-disable-next-line prefer-math-trunc -- int32 wrap is the point
-    for (let i = 0; i < who.length; i++) {h = (h * 31 + who.charCodeAt(i)) | 0;}
+    for (let i = 0; i < who.length; i += 1) {h = (h * 31 + who.charCodeAt(i)) | 0;}
     idx = Math.abs(h) % VOICES.length;
   }
   let s = samCache.get(idx);
@@ -148,7 +148,7 @@ export function speakVgs(text: string, who?: string): void {
 export function speakChat(text: string, who?: string): void {
   let h = 0;
   // oxlint-disable-next-line prefer-math-trunc -- int32 wrap is the point
-  if (who) {for (let i = 0; i < who.length; i++) {h = (h * 31 + who.charCodeAt(i)) | 0;}}
+  if (who) {for (let i = 0; i < who.length; i += 1) {h = (h * 31 + who.charCodeAt(i)) | 0;}}
   speakSystem(text, 0.7 + (Math.abs(h) % 8) * 0.08); // 0.70–1.26
 }
 
@@ -169,7 +169,7 @@ function playRadioVoice(ctx: BaseAudioContext, bus: AudioNode, buf: AudioBuffer,
   const clip = ctx.createWaveShaper();
   if (!_clipCurve) {
     _clipCurve = new Float32Array(new ArrayBuffer(256 * 4));
-    for (let i = 0; i < 256; i++) { const x = i / 128 - 1; _clipCurve[i] = Math.tanh(x * 2.2); }
+    for (let i = 0; i < 256; i += 1) { const x = i / 128 - 1; _clipCurve[i] = Math.tanh(x * 2.2); }
   }
   clip.curve = _clipCurve;
 
@@ -222,7 +222,7 @@ function squelchBuf(ctx: BaseAudioContext): AudioBuffer {
   const n = Math.floor(ctx.sampleRate * 0.035);
   const b = ctx.createBuffer(1, n, ctx.sampleRate);
   const d = b.getChannelData(0);
-  for (let i = 0; i < n; i++) {d[i] = (Math.random() * 2 - 1) * (1 - i / n);}
+  for (let i = 0; i < n; i += 1) {d[i] = (Math.random() * 2 - 1) * (1 - i / n);}
   _squelch = b;
   return b;
 }

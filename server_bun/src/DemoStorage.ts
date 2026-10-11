@@ -71,7 +71,7 @@ export class DemoStorage {
             description: header.description,
             fileSize: data.byteLength,
           });
-          added++;
+added += 1;
         } catch (error: unknown) {
           logger.warn(`Failed to parse orphaned demo ${filename}`, { error: errMsg(error) });
         }
@@ -207,7 +207,7 @@ export class DemoStorage {
     const base = `clip_${ts}_${header.projectileLifetime.toFixed(1)}s`;
     const taken = new Set(this.index.map(m => m.filename));
     let filename = `${base}.demo`;
-    for (let n = 2; existsSync(join(this.demosDir, filename)) || taken.has(filename); n++) {
+    for (let n = 2; existsSync(join(this.demosDir, filename)) || taken.has(filename); n += 1) {
       filename = `${base}_${n}.demo`;
     }
 

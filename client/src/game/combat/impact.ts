@@ -312,7 +312,7 @@ export function spawnClusterBomblets(c: CombatCtx, p: Projectile): void {
   if (p.vel.lengthSq() > 1) {_coneAxis.copy(p.vel).normalize();}
   else {_coneAxis.set(0, 1, 0);}
   _coneQuat.setFromUnitVectors(_coneUp, _coneAxis);
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < count; i += 1) {
     const yaw = Math.random() * Math.PI * 2;
     if (sphere) {
       // Uniform sphere: cos(tilt) uniform in [-1,1], not tilt uniform.
@@ -411,7 +411,7 @@ export function onTargetDestroyed(c: CombatCtx, ball: import('../../entities/bal
   // authoritySims — not isConnected: a P2P host has no RoomPickups, so
   // the loot economy falls back to local nuggets there too.
   if (!ball.lootless && !deps.lazyNetworkManager().authoritySims()) {
-    for (let n = 0; n < Math.round(ball.scale); n++) {
+    for (let n = 0; n < Math.round(ball.scale); n += 1) {
       deps.nuggets.push(new Nugget(deps.lazyScene(), ball.pos, ball.vel));
     }
   }

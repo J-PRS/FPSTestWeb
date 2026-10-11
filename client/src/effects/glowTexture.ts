@@ -75,7 +75,7 @@ export function getMuzzleFlashTexture(size = 128): THREE.Texture {
     // Spikes — tapered blades at uneven angles/lengths (roll on the mesh
     // re-randomizes the silhouette each shot anyway)
     const spikes = 6;
-    for (let i = 0; i < spikes; i++) {
+    for (let i = 0; i < spikes; i += 1) {
       const ang = (i / spikes) * Math.PI * 2 + 0.4 * Math.sin(i * 3.7);
       const len = half * (0.55 + 0.4 * ((i * 37 % 10) / 10));
       const w = half * 0.12;

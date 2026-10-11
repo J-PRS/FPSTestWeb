@@ -64,7 +64,7 @@ export class CreatureSim {
 
   private aliveCount(species: string): number {
     let n = 0;
-    for (const c of this.crawlers.values()) {if (!c.dead && c.species === species) {n++;}}
+    for (const c of this.crawlers.values()) {if (!c.dead && c.species === species) {n += 1;}}
     return n;
   }
 

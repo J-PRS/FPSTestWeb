@@ -46,7 +46,7 @@ function makeTimer(r: THREE.WebGLRenderer): { begin(): void; end(): void; read()
         }
         if (gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) {
           total += gl.getQueryParameter(q, gl.QUERY_RESULT) as number;
-          n++;
+n += 1;
         }
         gl.deleteQuery(q);
       }
@@ -60,8 +60,8 @@ async function sampleStage(run: () => void, frames: number, r: THREE.WebGLRender
   let cpu = 0, calls = 0, tris = 0;
   // Two warmup frames first: lazy shader compiles and buffer uploads would
   // otherwise poison the first measured frame of every stage.
-  for (let i = 0; i < 2; i++) {run();}
-  for (let i = 0; i < frames; i++) {
+  for (let i = 0; i < 2; i += 1) {run();}
+  for (let i = 0; i < frames; i += 1) {
     r.info.reset();
     const t0 = performance.now();
     timer.begin();

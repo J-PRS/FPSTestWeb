@@ -231,7 +231,7 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
   function play(i: number, preloaded?: DemoFile | null): void {
     if (entries.length === 0) {paintMeta(); return;}
     index = wrapIdx(i);
-    clipGen++;
+clipGen += 1;
     const e = entries[index]!;
     paintMeta();
     updateAddress();
@@ -437,7 +437,7 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
   entries = [...dm.getCoolShots()];
   // Shuffle the queue — the index is lifetime-sorted, which makes every
   // feed session replay the same top-N run. One pass, one shuffle.
-  for (let i = entries.length - 1; i > 0; i--) {
+  for (let i = entries.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1));
     [entries[i], entries[j]] = [entries[j]!, entries[i]!];
   }

@@ -20,12 +20,12 @@ export function dropVolatileWorldFx(w: { projectiles: { isRemote: boolean; dispo
   // Splice in place — the dump/debug ctx captured world.projectiles by
   // reference at wire-up; rebinding the array leaves every such holder
   // reading a frozen list forever (the "0 live" artifact after resync).
-  for (let i = w.projectiles.length - 1; i >= 0; i--) {
+  for (let i = w.projectiles.length - 1; i >= 0; i -= 1) {
     const p = w.projectiles[i]!;
     if (!p.isRemote) {continue;}
     p.dispose();
     w.projectiles.splice(i, 1);
-    dropped++;
+dropped += 1;
   }
   for (const e of w.explosions) { e.dispose(); }
   w.explosions.length = 0;

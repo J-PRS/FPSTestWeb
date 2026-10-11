@@ -41,14 +41,14 @@ export function createFrameBudget(): FrameBudget {
       const i0 = performance.now();
       fn(items[done]!);
       const itemMs = performance.now() - i0;
-      done++;
+done += 1;
       if (itemMs > s.worst) {s.worst = itemMs;}
       if (performance.now() - t0 >= msCap && done < items.length) {break;}
     }
     // One O(n) splice for the completed prefix — shift()-per-item would
     // be O(n²) on a big backlog.
     items.splice(0, done);
-    s.done += done; s.calls++; s.backlog = items.length;
+    s.done += done;s.calls += 1; s.backlog = items.length;
     return items.length;
   }
 
@@ -61,7 +61,7 @@ export function createFrameBudget(): FrameBudget {
       // 40ms jobs don't all fire on frame N together.
       let h = 0;
       // oxlint-disable-next-line prefer-math-trunc -- int32 wrap is the point
-      for (let i = 0; i < name.length; i++) {h = (h * 31 + name.charCodeAt(i)) | 0;}
+      for (let i = 0; i < name.length; i += 1) {h = (h * 31 + name.charCodeAt(i)) | 0;}
       last = performance.now() - intervalMs + (Math.abs(h) % Math.max(1, intervalMs));
       sweeps.set(name, last);
     }

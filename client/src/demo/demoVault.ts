@@ -131,7 +131,7 @@ export class DemoVault {
       if (excess <= 0) { break; }
       await cursor.delete();
       await meta.delete(cursor.primaryKey as string);
-      excess--;
+excess -= 1;
     }
   }
 }

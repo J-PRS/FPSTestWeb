@@ -58,14 +58,14 @@ export class BotWatchdog {
     let alive = 0, stuckNow = 0, stuckEval = 0;
     for (const bot of bots) {
       if (bot.isDead) {continue;}
-      alive++;
+alive += 1;
       const prev = this.logic.get(bot.playerId);
       const logicD = prev ? prev.distanceTo(bot.position) : 99;
       if (prev) {prev.copy(bot.position);} else {this.logic.set(bot.playerId, bot.position.clone());}
 
       const evald = this.checkDisplacement(bot);
-      if (evald === 'stuck') { stuckEval++; stuckNow++; }
-      else if (evald === 'ok') {stuckEval++;}
+      if (evald === 'stuck') {stuckEval += 1;stuckNow += 1; }
+      else if (evald === 'ok') {stuckEval += 1;}
 
       this.checkRender(bot, logicD);
     }

@@ -340,7 +340,7 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
   const tail = 26;
   const slots = pool ? pool.slots : [];
   let o = 15;
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < count; i += 1) {
     if (o >= u8.length) {return null;}
     let playerId: string;
     let wireId = 0;

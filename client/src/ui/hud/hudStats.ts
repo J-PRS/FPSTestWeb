@@ -182,7 +182,7 @@ export class HudStats {
 
   private updateFps(dt: number): void {
     this.fpsAccum += dt;
-    this.fpsFrames++;
+this.fpsFrames += 1;
     if (this.fpsAccum >= 0.5) {
       this.fpsValue = Math.round(this.fpsFrames / this.fpsAccum);
       this.fpsAccum = 0;

@@ -18,8 +18,8 @@ describe('poissonDisc', () => {
     const n = 16;
     const pts = poissonDisc(n);
     const minDist = Math.sqrt(Math.PI / (n * 1.9));
-    for (let i = 0; i < n; i++) {
-      for (let j = i + 1; j < n; j++) {
+    for (let i = 0; i < n; i += 1) {
+      for (let j = i + 1; j < n; j += 1) {
         const d = Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y);
         expect(d).toBeGreaterThan(minDist * 0.5); // relaxed bound — fallback spiral may starve
       }

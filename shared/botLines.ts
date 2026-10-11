@@ -148,7 +148,7 @@ export class BotLines {
     // the third gives up on terrain scoring entirely and beelines —
     // humans grind the climb when carving stops paying. A pass the bot
     // has actually made before outranks another face probe.
-    if (gd > this.lastGd - 8) {this.stale++;}
+    if (gd > this.lastGd - 8) {this.stale += 1;}
     else { this.stale = 0; if (this.orbitGd === Infinity) {this.traverseDir = null;} }
     this.lastGd = gd;
     // Release the orbit latch only on net progress from where it armed —
@@ -164,7 +164,7 @@ export class BotLines {
     let tp = prof ? sharedEnv.wallPerf!() : 0;
     if (faceAhead || this.stale >= T.lines.staleLimit || this.orbitGd !== Infinity) {
       if (this.orbitGd === Infinity) { this.orbitGd = gd; this.orbitFails = 0; this.orbitGoal = { ...dest }; }
-      else {this.orbitFails++;}
+      else {this.orbitFails += 1;}
       let bestPass: BotVec | null = null, bestPassD = 250;
       for (const pass of this.passes) {
         const pd = Math.hypot(pass.x - pos.x, pass.z - pos.z);
@@ -202,7 +202,7 @@ export class BotLines {
         // Beeline only when the terrain around is already flat.
         const g0 = ctx.groundY(pos.x, pos.z);
         let ux = 0, uz = 0, up = 0;
-        for (let i = 0; i < 8; i++) {
+        for (let i = 0; i < 8; i += 1) {
           const ang = (i / 8) * Math.PI * 2;
           const rise = ctx.groundY(pos.x + Math.cos(ang) * 12, pos.z + Math.sin(ang) * 12) - g0;
           if (rise > up) { up = rise; ux = Math.cos(ang); uz = Math.sin(ang); }
@@ -230,7 +230,7 @@ export class BotLines {
               if (dd < 1) {return 0;}
               const steps = Math.min(12, Math.ceil(dd / 30));
               let m = 0;
-              for (let s = 1; s <= steps; s++) {
+              for (let s = 1; s <= steps; s += 1) {
                 const h = ctx.groundY(c.x + ddx * s / steps, c.z + ddz * s / steps) - g0;
                 if (h > m) {m = h;}
               }
@@ -339,7 +339,7 @@ export class BotLines {
     const eNow = 0.5 * vNow * vNow + 28 * pos.y;
 
     let best: BotVec | null = null, bestScore = 0;
-    for (let r = 0; r < T.lines.rays; r++) {
+    for (let r = 0; r < T.lines.rays; r += 1) {
       const a = (r / (T.lines.rays - 1) - 0.5) * 2 * cone;
       const dx = gx * Math.cos(a) - gz * Math.sin(a);
       const dz = gx * Math.sin(a) + gz * Math.cos(a);
@@ -349,7 +349,7 @@ export class BotLines {
       let earlyClimb = 0;
       let prevG = g0, prevD = 0;
       const drops: number[] = [];
-      for (let p = 1; p <= T.lines.pts; p++) {
+      for (let p = 1; p <= T.lines.pts; p += 1) {
         const d = T.lines.near + ((reach - T.lines.near) * p) / T.lines.pts;
         const g = ctx.groundY(pos.x + dx * d, pos.z + dz * d);
         const seg = (g - prevG) / (d - prevD);
@@ -363,7 +363,7 @@ export class BotLines {
       // Best landing on this ray: the deepest pocket that still gains
       // on the goal. Downhill pockets buy speed; the goal term keeps
       // the run pointed at the objective.
-      for (let p = 0; p < T.lines.pts; p++) {
+      for (let p = 0; p < T.lines.pts; p += 1) {
         const d = T.lines.near + ((reach - T.lines.near) * (p + 1)) / T.lines.pts;
         const wx = pos.x + dx * d, wz = pos.z + dz * d;
         const gained = gd - Math.hypot(dest.x - wx, dest.z - wz);

@@ -28,7 +28,7 @@ export class CircularBuffer<T> {
     this.buffer[this.head] = item;
     this.head = (this.head + 1) % this.capacity;
     if (this.count < this.capacity) {
-      this.count++;
+this.count += 1;
     } else {
       this.tail = (this.tail + 1) % this.capacity;
     }
@@ -70,7 +70,7 @@ export class CircularBuffer<T> {
       throw new Error(`Invalid length ${length} for range starting at ${startIndex}`);
     }
     const result = Array.from<T>({ length });
-    for (let i = 0; i < length; i++) {
+    for (let i = 0; i < length; i += 1) {
       result[i] = this.get(startIndex + i);
     }
     return result;

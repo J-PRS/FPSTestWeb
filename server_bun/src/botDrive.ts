@@ -114,7 +114,7 @@ export function legacyMove(h: DriveHost, id: string, p: { position: Vec3; veloci
   const dx = dest.x - p.position.x;
   const dz = dest.z - p.position.z;
   const dist = Math.sqrt(dx * dx + dz * dz);
-  if (dist < 0.5) { p.velocity.x = 0; p.velocity.z = 0; p.lastSeq++; return true; }
+  if (dist < 0.5) { p.velocity.x = 0; p.velocity.z = 0;p.lastSeq += 1; return true; }
   const nx = dx / dist, nz = dz / dist;
   const speed = isSuper(id) ? SPEED * 3 : SPEED;
   p.velocity.x = nx * speed;

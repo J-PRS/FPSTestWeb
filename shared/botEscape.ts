@@ -133,8 +133,8 @@ export function stuckBreak(s: EscapeState, dt: number, ctx: BrainCtx, pos: BotVe
     s.pinX = pos.x;
     s.pinZ = pos.z;
     if (net < 2 && !arrived) {
-      s.stuckStreak++;
-      s.pinStreak++;
+s.stuckStreak += 1;
+s.pinStreak += 1;
       if (s.detourT <= 0) {
         s.detour = pickDetour(s, ctx, pos, 14);
         s.detourT = 1.2;
@@ -156,7 +156,7 @@ export function stuckBreak(s: EscapeState, dt: number, ctx: BrainCtx, pos: BotVe
     // burst this streak arms is exactly how a posted hof kept getting
     // flung 60-100m off post (hof-away probe: dest ~82m during home).
     if (s.progressGoalD > 20 && s.progressGoalD - gd < 4 && !arrived) {
-      s.orbitStreak++;
+s.orbitStreak += 1;
       // A 1.1s burst buys ~10m of climb — a wall that eats it and stays
       // up is met every 4s with the same sip, which top-dresses the
       // treadmill instead of cresting it (soak: capper cycling y45→81
@@ -182,7 +182,7 @@ export function stuckBreak(s: EscapeState, dt: number, ctx: BrainCtx, pos: BotVe
     return dest;
   }
   if (distSq(pos, s.progressPos) < 2.25) {
-    s.stuckStreak++;
+s.stuckStreak += 1;
     if (s.detourT <= 0) {
       s.detour = pickDetour(s, ctx, pos, 14);
       s.detourT = 1.2;

@@ -199,7 +199,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     // Settle older stamps: a predicted self-shove the server never echoed
     // back (~700ms past the 400ms consume window) was rejected server-side —
     // loud parity miss, not a silent expiry.
-    for (let i = stamps.length - 1; i >= 0; i--) {
+    for (let i = stamps.length - 1; i >= 0; i -= 1) {
       if (now - stamps[i]!.t > 700) {
         parityMiss('kb-echo', { x: Math.round(stamps[i]!.x), y: Math.round(stamps[i]!.y), z: Math.round(stamps[i]!.z), by: stamps[i]!.by, f: stamps[i]!.f, ageMs: Math.round(now - stamps[i]!.t) });
         stamps.splice(i, 1);

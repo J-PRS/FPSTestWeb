@@ -30,7 +30,7 @@ export class GroundMist {
     // Find the lowest local spots — mist physically pools in basins, which
     // is exactly what makes this read as weather instead of random sprites.
     const candidates: { x: number; z: number; h: number }[] = [];
-    for (let i = 0; i < SAMPLES; i++) {
+    for (let i = 0; i < SAMPLES; i += 1) {
       const x = (Math.random() * 2 - 1) * SAMPLE_RANGE;
       const z = (Math.random() * 2 - 1) * SAMPLE_RANGE;
       candidates.push({ x, z, h: terrain.getHeightVisual(x, z) });
@@ -39,7 +39,7 @@ export class GroundMist {
 
     const geo = new THREE.PlaneGeometry(16, 6);
     const tex = getGlowTexture(128);
-    for (let i = 0; i < CARD_COUNT; i++) {
+    for (let i = 0; i < CARD_COUNT; i += 1) {
       const spot = candidates[i % candidates.length]!;
       const mat = new THREE.MeshBasicMaterial({
         map: tex,

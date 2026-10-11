@@ -35,7 +35,7 @@ function pathOf(obj: THREE.Object3D): string {
 function reportNaN(geo: THREE.BufferGeometry): void {
   const pos = geo.getAttribute('position');
   const hit = hits.get(geo.uuid);
-  if (hit) { hit.n++; return; }
+  if (hit) {hit.n += 1; return; }
   // Owner walk — NaN computes are rare (the error itself is once per
   // geometry per bounds miss), so a full traverse is fine here.
   let owner = '(detached)';

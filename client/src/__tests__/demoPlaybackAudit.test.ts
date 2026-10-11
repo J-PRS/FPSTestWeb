@@ -143,7 +143,7 @@ describe('playback audit — every lane animates', () => {
     const c = rig.world.playbackCreatureById.get(901)!;
     expect(c).toBeTruthy();
     const y0 = c.pos.y;
-    for (let i = 0; i < 60; i++) {rig.life.updateBallsPlayback(1 / 60);}
+    for (let i = 0; i < 60; i += 1) {rig.life.updateBallsPlayback(1 / 60);}
     expect(c.pos.y).toBeLessThan(y0 - 0.5); // crawler falls, mesh follows
     expect(c.mesh.position.y).toBe(c.pos.y);
   });
@@ -239,7 +239,7 @@ describe.skipIf(!existsSync(CLIP))('remote replica interpolation', () => {
       const b = s1.find(r => r.rosterIdx === a.rosterIdx);
       if (!b) {continue;}
       const d2 = (a.posX - b.posX) ** 2 + (a.posY - b.posY) ** 2 + (a.posZ - b.posZ) ** 2;
-      if (d2 > 0.01) {moved++;}
+      if (d2 > 0.01) {moved += 1;}
       expect(Number.isFinite(b.posX + b.posY + b.posZ + b.yaw + b.pitch)).toBe(true);
     }
     // In a firefight clip most replicas move; a dead interp freezes all.
@@ -257,7 +257,7 @@ describe('playback audit — entities must animate', () => {
     expect(ball).toBeTruthy();
     expect(ball.id).not.toBe(42_000); // proves the map key ≠ instance id
     const y0 = ball.pos.y;
-    for (let i = 0; i < 60; i++) {rig.life.updateBallsPlayback(1 / 60);}
+    for (let i = 0; i < 60; i += 1) {rig.life.updateBallsPlayback(1 / 60);}
     expect(ball.pos.y).toBeLessThan(y0 - 1); // fell under gravity
   });
 
@@ -267,7 +267,7 @@ describe('playback audit — entities must animate', () => {
     live.pos.set(0, 50, 0); live.vel.set(0, 0, 0);
     rig.balls.push(live);
     const y0 = live.pos.y;
-    for (let i = 0; i < 30; i++) {rig.life.updateBallsPlayback(1 / 60);}
+    for (let i = 0; i < 30; i += 1) {rig.life.updateBallsPlayback(1 / 60);}
     expect(live.pos.y).toBe(y0); // live game balls frozen during playback
   });
 
@@ -284,7 +284,7 @@ describe('playback audit — entities must animate', () => {
     const r = rig.world.playbackProjectileById.get(7)!;
     expect(r).toBeTruthy();
     const origin = r.pos.clone();
-    for (let i = 0; i < 18; i++) {rig.life.updatePlaybackProjectiles(1 / 60);}
+    for (let i = 0; i < 18; i += 1) {rig.life.updatePlaybackProjectiles(1 / 60);}
     expect(r.pos.distanceTo(origin)).toBeGreaterThan(5);
   });
 
@@ -314,7 +314,7 @@ describe('playback audit — corpse lifecycle', () => {
     let n = 0;
     while (n < max && rig.world.playbackBallById.size > 0) {
       rig.life.updateBallsPlayback(1 / 60);
-      n++;
+n += 1;
     }
     return n;
   };
@@ -391,9 +391,9 @@ function scrubDemo(demo: DemoFile) {
   const expBase = world.explosions.length;
   for (let t = 0; t < demo.header.duration; t += dt) {
     const proj: ProjectileEvent[] = [];
-    while (pi < demo.projectileEvents.length && demo.projectileEvents[pi]!.timestamp <= t) {proj.push(demo.projectileEvents[pi]!); pi++;}
+    while (pi < demo.projectileEvents.length && demo.projectileEvents[pi]!.timestamp <= t) {proj.push(demo.projectileEvents[pi]!);pi += 1;}
     const tgt: TargetEvent[] = [];
-    while (ti < demo.targetEvents.length && demo.targetEvents[ti]!.timestamp <= t) {tgt.push(demo.targetEvents[ti]!); ti++;}
+    while (ti < demo.targetEvents.length && demo.targetEvents[ti]!.timestamp <= t) {tgt.push(demo.targetEvents[ti]!);ti += 1;}
     for (const e of tgt) {
       if (e.eventType === TargetEventType.Spawned && e.targetType < 32) {
         trace.ballBirths.set(e.targetId, new THREE.Vector3(e.posX, e.posY, e.posZ));
@@ -406,7 +406,7 @@ function scrubDemo(demo: DemoFile) {
           && e.targetType >= TARGETTYPE_DEPLOY_BASE && e.targetType < TARGETTYPE_KILL) {
         trace.deploySpawns.add(e.targetId);
       }
-      if (e.targetType === TARGETTYPE_FLAG) {trace.flagEvents++;}
+      if (e.targetType === TARGETTYPE_FLAG) {trace.flagEvents += 1;}
       if (e.eventType === TargetEventType.Spawned && e.targetType >= TARGETTYPE_PICKUP_BASE) {
         trace.pickupSpawns.add(e.targetId);
       }
@@ -439,9 +439,9 @@ describe.skipIf(!existsSync(CLIP))('recorded clip audit', () => {
     const dt = 1 / 30;
     for (let t = 0; t < demo.header.duration; t += dt) {
       const proj: ProjectileEvent[] = [];
-      while (pi < demo.projectileEvents.length && demo.projectileEvents[pi]!.timestamp <= t) {proj.push(demo.projectileEvents[pi]!); pi++;}
+      while (pi < demo.projectileEvents.length && demo.projectileEvents[pi]!.timestamp <= t) {proj.push(demo.projectileEvents[pi]!);pi += 1;}
       const tgt: TargetEvent[] = [];
-      while (ti < demo.targetEvents.length && demo.targetEvents[ti]!.timestamp <= t) {tgt.push(demo.targetEvents[ti]!); ti++;}
+      while (ti < demo.targetEvents.length && demo.targetEvents[ti]!.timestamp <= t) {tgt.push(demo.targetEvents[ti]!);ti += 1;}
       // snapshot birth state before apply
       for (const e of tgt) {
         if (e.eventType === TargetEventType.Spawned && e.targetType < 32) {
@@ -478,9 +478,9 @@ describe.skipIf(!existsSync(CLIP))('recorded clip audit', () => {
     const dt = 1 / 30;
     for (let t = 0; t < demo.header.duration; t += dt) {
       const proj: ProjectileEvent[] = [];
-      while (pi < demo.projectileEvents.length && demo.projectileEvents[pi]!.timestamp <= t) {proj.push(demo.projectileEvents[pi]!); pi++;}
+      while (pi < demo.projectileEvents.length && demo.projectileEvents[pi]!.timestamp <= t) {proj.push(demo.projectileEvents[pi]!);pi += 1;}
       const tgt: TargetEvent[] = [];
-      while (ti < demo.targetEvents.length && demo.targetEvents[ti]!.timestamp <= t) {tgt.push(demo.targetEvents[ti]!); ti++;}
+      while (ti < demo.targetEvents.length && demo.targetEvents[ti]!.timestamp <= t) {tgt.push(demo.targetEvents[ti]!);ti += 1;}
       for (const e of proj) {
         if (e.eventType === ProjectileEventType.Fired) {
           origins.set(e.projectileId, new THREE.Vector3(e.posX, e.posY, e.posZ));

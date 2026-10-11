@@ -70,7 +70,7 @@ describe('rosterFuzz — client roster conformance', () => {
         }
       };
 
-      for (let op = 0; op < 120; op++) {
+      for (let op = 0; op < 120; op += 1) {
         const roll = rnd();
         const tag = `op${op}(r${roll.toFixed(2)})`;
         if (roll < 0.25) { // joined (fresh or rejoin)
@@ -86,7 +86,7 @@ describe('rosterFuzz — client roster conformance', () => {
           const rows = sub.map(tickRow);
           // An isDead row mints the roster row but never the body —
           // onPlayerUpdate waits for a respawn edge (players.ts).
-          for (let i = 0; i < sub.length; i++) { if (!rows[i]!.isDead) {tickSeen.add(sub[i]!);} }
+          for (let i = 0; i < sub.length; i += 1) { if (!rows[i]!.isDead) {tickSeen.add(sub[i]!);} }
           const ghost = rnd() < 0.15 ? `ghost-${  Math.floor(rnd() * 4)}` : null;
           let ghostRow: ReturnType<typeof tickRow> | null = null;
           if (ghost) { members.add(ghost); ghostRow = tickRow(ghost); if (!ghostRow.isDead) {tickSeen.add(ghost);} } // a record for an unseen id mints membership (upsert owns create)

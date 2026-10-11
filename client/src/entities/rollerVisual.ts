@@ -23,7 +23,7 @@ function rollerGeo(): THREE.BufferGeometry {
     const g = new THREE.IcosahedronGeometry(1, 2);
     const pos = g.getAttribute('position') as THREE.BufferAttribute;
     const v = new THREE.Vector3();
-    for (let i = 0; i < pos.count; i++) {
+    for (let i = 0; i < pos.count; i += 1) {
       v.set(pos.getX(i), pos.getY(i), pos.getZ(i));
       const n = Math.sin(v.x * 12.9898 + v.y * 78.233 + v.z * 37.719) * 43_758.5453;
       // Tight bulge: at ±20% the bottom face alternately floats 0.2r or

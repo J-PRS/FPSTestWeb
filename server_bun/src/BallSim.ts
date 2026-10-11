@@ -268,7 +268,7 @@ export class BallSim {
     if (by) {this.onKilled?.(by, pos, b.variant);}
     // Elite splitter: two child balls at the corpse
     if (b.variant === 3) {
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < 2; i += 1) {
         const c = this.spawnBall(0, undefined, { x: b.x, y: b.y + 2, z: b.z });
         const a = this.rng() * Math.PI * 2;
         c.vx = Math.cos(a) * 15; c.vy = 14 + this.rng() * 6; c.vz = Math.sin(a) * 15;

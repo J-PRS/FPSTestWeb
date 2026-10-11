@@ -352,7 +352,7 @@ export class TieredTransport implements GameTransport {
         // would double-schedule connections.
         if (this.inner instanceof WebSocketConnection) {return;}
         if (this.attempts < (this.config.maxReconnectAttempts ?? Infinity)) {
-          this.attempts++;
+this.attempts += 1;
           this.reconnectTimer = setTimeout(() => {
             if (!this.closed && this.gen === gen) {this.connect(this.url);}
           }, TieredTransport.BACKOFF_MS);

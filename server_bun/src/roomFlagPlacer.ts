@@ -91,13 +91,13 @@ export class FlagPlacer {
    *  jet-able climb (~18m over 60m) instead of a wall. */
   deShelf(v: { x: number; z: number }): { x: number; z: number } {
     let {x} = v, {z} = v;
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 10; i += 1) {
       const top = this.standTop(x, z);
       // Reachable when SOME side offers a jet-able approach (~18m over
       // 60m); a big flat mesa reads correctly this way — local flatness
       // doesn't fake accessibility, the far ring does.
       let bestTop = -Infinity, bx = x, bz = z;
-      for (let a = 0; a < 8; a++) {
+      for (let a = 0; a < 8; a += 1) {
         const px = x + Math.cos((a / 8) * Math.PI * 2) * 60;
         const pz = z + Math.sin((a / 8) * Math.PI * 2) * 60;
         const t = this.standTop(px, pz);
@@ -142,10 +142,10 @@ export class FlagPlacer {
    *  deShelf still rescues the rare pure-cliff summit it lands on. */
   private hilltop(x0: number, z0: number): { x: number; z: number } {
     let x = x0, z = z0, top = this.standTop(x, z);
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 8; i += 1) {
       let bt = top, bx = x, bz = z;
       for (let r = 25; r <= 100; r += 25) {
-        for (let a = 0; a < 8; a++) {
+        for (let a = 0; a < 8; a += 1) {
           const px = x + Math.cos((a / 8) * Math.PI * 2) * r;
           const pz = z + Math.sin((a / 8) * Math.PI * 2) * r;
           const t = this.standTop(px, pz);

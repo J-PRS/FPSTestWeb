@@ -816,7 +816,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
  *  replicas, so a jittered fuse pops at the same age on both ends. */
 export function idSeed(id: string): number {
   let h = 2_166_136_261;
-  for (let i = 0; i < id.length; i++) {
+  for (let i = 0; i < id.length; i += 1) {
     h ^= id.charCodeAt(i);
     h = Math.imul(h, 16_777_619);
   }

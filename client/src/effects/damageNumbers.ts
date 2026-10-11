@@ -52,7 +52,7 @@ function buildAtlas(): THREE.CanvasTexture {
   ctx.strokeStyle = '#000';
   ctx.lineWidth = 7;
   ctx.lineJoin = 'round';
-  for (let i = 0; i < GLYPHS.length; i++) {
+  for (let i = 0; i < GLYPHS.length; i += 1) {
     const cx = i * CELL_W + CELL_W / 2;
     ctx.strokeText(GLYPHS[i]!, cx, ATLAS_H / 2);
     ctx.fillText(GLYPHS[i]!, cx, ATLAS_H / 2);
@@ -93,7 +93,7 @@ export class DamageNumberManager {
     this.geo.setAttribute('uv', this.uvAttr);
     this.geo.setAttribute('aColor', this.colAttr);
     const idx = new Uint16Array(MAX_QUADS * 6);
-    for (let i = 0; i < MAX_QUADS; i++) {
+    for (let i = 0; i < MAX_QUADS; i += 1) {
       const v = i * 4, k = i * 6;
       idx[k] = v; idx[k + 1] = v + 1; idx[k + 2] = v + 2;
       idx[k + 3] = v; idx[k + 4] = v + 2; idx[k + 5] = v + 3;
@@ -149,7 +149,7 @@ export class DamageNumberManager {
     // a value no shot deals.
     const text = Math.round(damage).toString().slice(0, MAX_GLYPHS);
     n.glyphCount = text.length;
-    for (let i = 0; i < text.length; i++) {
+    for (let i = 0; i < text.length; i += 1) {
       const uvr = glyphUv.get(text[i]!) ?? glyphUv.get('0')!;
       n.glyphUv.set(uvr, i * 4);
     }
@@ -170,7 +170,7 @@ export class DamageNumberManager {
     camera.matrixWorld.extractBasis(_right, _up, _fwd);
     let quad = 0;
 
-    for (let i = this.numbers.length - 1; i >= 0; i--) {
+    for (let i = this.numbers.length - 1; i >= 0; i -= 1) {
       const n = this.numbers[i]!;
       n.age += dt;
       if (n.age >= DURATION || n.dead) {
@@ -216,7 +216,7 @@ export class DamageNumberManager {
     for (let gIdx = 0; gIdx < n.glyphCount && quad < MAX_QUADS; gIdx++, quad++) {
       const ox = x0 + gIdx * step;
       const v = quad * 4;
-      for (let k = 0; k < 4; k++) {
+      for (let k = 0; k < 4; k += 1) {
         const sx = k === 0 || k === 3 ? -1 : 1;
         const sy = k < 2 ? -1 : 1;
         const p = v * 3 + k * 3;

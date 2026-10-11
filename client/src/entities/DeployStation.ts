@@ -116,7 +116,7 @@ export class DeployStation {
     pool.base.mesh.instanceMatrix.needsUpdate = true;
     pool.mast.mesh.setMatrixAt(i, _m2.makeTranslation(0, 0.75, 0).premultiply(g));
     pool.mast.mesh.instanceMatrix.needsUpdate = true;
-    for (let s = 0; s < 3; s++) {
+    for (let s = 0; s < 3; s += 1) {
       const a = (s / 3) * Math.PI * 2;
       _q.setFromEuler(new THREE.Euler(Math.sin(a) * 0.5, 0, Math.cos(a) * -0.5));
       pool.strut.mesh.setMatrixAt(i * 3 + s, _m2.compose(
@@ -183,7 +183,7 @@ export class DeployStation {
     // Heal motes — a fixed Points cloud drifting up inside the dome.
     const pts = new Float32Array(MOTE_COUNT * 3);
     this.moteData.length = 0;
-    for (let i = 0; i < MOTE_COUNT; i++) {
+    for (let i = 0; i < MOTE_COUNT; i += 1) {
       const a = Math.random() * Math.PI * 2;
       const r = Math.sqrt(Math.random()) * R * 0.9;
       const x = this.pos.x + Math.cos(a) * r;
@@ -210,7 +210,7 @@ export class DeployStation {
     (this.dome!.material as THREE.MeshBasicMaterial).opacity = 0.035 + this.charge * 0.06 + pulse * 0.015;
     const attr = this.motes!.geometry.getAttribute('position') as THREE.BufferAttribute;
     const lift = 1 + this.charge * 1.6; // motes race while someone's charging
-    for (let i = 0; i < MOTE_COUNT; i++) {
+    for (let i = 0; i < MOTE_COUNT; i += 1) {
       const m = this.moteData[i]!;
       m.y += m.sp * lift * dt;
       const ground = this.terrain.getHeight(m.x, m.z);
@@ -246,7 +246,7 @@ export class DeployStation {
       releaseSlot(_pool.base, this.slot);
       releaseSlot(_pool.mast, this.slot);
       releaseSlot(_pool.crystal, this.slot);
-      for (let s = 0; s < 3; s++) {
+      for (let s = 0; s < 3; s += 1) {
         _pool.strut.mesh.setMatrixAt(this.slot * 3 + s, ZERO_M4);
       }
       _pool.strut.mesh.instanceMatrix.needsUpdate = true;

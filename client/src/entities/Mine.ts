@@ -38,7 +38,7 @@ const _domeGeo = (() => {
     if (s < 0) {fuse.rotateX(Math.PI);}
     fuse.translate(0, 0.5 * s, 0);
     parts.push(fuse);
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 3; i += 1) {
       const a = ((i + (s > 0 ? 0 : 0.5)) / 3) * Math.PI * 2; // staggered lower prongs
       const leg = new THREE.BoxGeometry(0.1, 0.7, 0.1);
       leg.rotateZ(0.62); // splay outward…

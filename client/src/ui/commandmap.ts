@@ -126,16 +126,16 @@ export class CommandMap {
     const img = this.ctx.createImageData(RES, RES);
     let hMin = Infinity, hMax = -Infinity;
     const hAt = (px: number, py: number) => sampleHeight((px / RES - 0.5) * W, (py / RES - 0.5) * W);
-    for (let py = 0; py < RES; py++) {
-      for (let px = 0; px < RES; px++) {
+    for (let py = 0; py < RES; py += 1) {
+      for (let px = 0; px < RES; px += 1) {
         const h = hAt(px, py);
         if (h < hMin) {hMin = h;}
         if (h > hMax) {hMax = h;}
       }
     }
     const range = Math.max(1, hMax - hMin);
-    for (let py = 0; py < RES; py++) {
-      for (let px = 0; px < RES; px++) {
+    for (let py = 0; py < RES; py += 1) {
+      for (let px = 0; px < RES; px += 1) {
         const h = hAt(px, py);
         // Central differences → surface normal → sun lambert.
         const gx = (hAt(px + 1, py) - hAt(px - 1, py)) / (2 * step);

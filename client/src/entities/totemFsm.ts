@@ -113,7 +113,7 @@ export const TOTEM_STATES: Record<TotemState, (t: TotemFsmHost, c: TotemCtx) => 
       t.chargeGlow = 0;
       t.state = 'aim';
       t.refire = TOTEM_REFIRE;
-      t.shotsFired++;
+t.shotsFired += 1;
     }
   },
   blinkOut(t, _c) {

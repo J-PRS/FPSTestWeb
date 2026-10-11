@@ -38,7 +38,7 @@ return cn;
 export function mkPlasmaGun_v1(): THREE.Group {
 const plasmagun = new THREE.Group();
 plasmagun.add(mkTube(0.11, 0.12, 0.34, -0.05, bodyMat));
-for (let i = 0; i < 3; i++) {
+for (let i = 0; i < 3; i += 1) {
   const prong = mkTube(0.025, 0.025, 0.22, -0.2, darkMat);
   const a = (i / 3) * Math.PI * 2;
   prong.position.x = Math.cos(a) * 0.09;
@@ -72,7 +72,7 @@ const chainBarrels = new THREE.Group();
 chainBarrels.name = 'barrels';
 const CHAIN_BARRELS = 6;
 const CLUSTER_R = 0.09;
-for (let i = 0; i < CHAIN_BARRELS; i++) {
+for (let i = 0; i < CHAIN_BARRELS; i += 1) {
   const a = (i / CHAIN_BARRELS) * Math.PI * 2;
   const barrel = mkTube(0.04, 0.04, 0.62, -0.62, bodyMat, 4);
   barrel.position.x = Math.cos(a) * CLUSTER_R;
@@ -95,7 +95,7 @@ housing.closePath();
 chain.add(arcExtrudeAt(housing, 0.02, 0.13, bodyMat));
 chain.add(mkTube(0.125, 0.12, 0.33, -0.145, bodyMat));
 for (const side of [-1, 1]) {
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 3; i += 1) {
     const slot = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.04, 0.12), boreMat);
     slot.position.set(side * 0.092, 0.015 - i * 0.055, 0.08);
     chain.add(slot);
@@ -105,7 +105,7 @@ const chainCollar = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.115, 0.05
 chainCollar.rotation.x = Math.PI / 2;
 chainCollar.position.z = -0.29;
 chainBarrels.add(chainCollar);
-for (let i = 0; i < CHAIN_BARRELS; i++) {
+for (let i = 0; i < CHAIN_BARRELS; i += 1) {
   const a = (i / 6) * Math.PI * 2;
   const stud = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.024, 0.024), bodyMat);
   stud.position.set(Math.cos(a) * 0.098, Math.sin(a) * 0.098, -0.315);
@@ -117,7 +117,7 @@ chain.add(race);
 const clamp = new THREE.Mesh(new THREE.TorusGeometry(CLUSTER_R + 0.045, 0.016, 6, 14), bodyMat);
 clamp.position.z = -0.88;
 chainBarrels.add(clamp);
-for (let i = 0; i < 3; i++) {
+for (let i = 0; i < 3; i += 1) {
   const a = (i / 3) * Math.PI * 2 + Math.PI / 6;
   const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.58, 5), darkMat);
   rod.rotation.x = Math.PI / 2;
@@ -137,7 +137,7 @@ const drumCap = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.15, 8), 
 drumCap.rotation.z = Math.PI / 2;
 drumCap.position.copy(drum.position);
 chain.add(drumCap);
-for (let i = 0; i < 4; i++) {
+for (let i = 0; i < 4; i += 1) {
   const link = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.024, 0.05), brassMat);
   link.position.set(-0.06, -0.09 + i * 0.035, 0.2 - i * 0.02);
   link.rotation.x = 0.4;
@@ -246,7 +246,7 @@ for (const side of [-1, 1]) {
 // Shell hopper on the left flank — a rack of finned bombs, tips
 // visible above the tube. Live ordnance = the mortar read.
 const finMat = new THREE.MeshLambertMaterial({ color: 0x5A_4A_28, emissive: 0x18_12_05 });
-for (let i = 0; i < 3; i++) {
+for (let i = 0; i < 3; i += 1) {
   const shell = mkTube(0.035, 0.035, 0.16, -0.05 + i * 0.09, bodyMat);
   shell.position.set(-0.15, -0.02, shell.position.z);
   mortar.add(shell);

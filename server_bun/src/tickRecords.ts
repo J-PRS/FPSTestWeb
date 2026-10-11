@@ -120,7 +120,7 @@ export class TickFanout {
         | (simT < p.ddUntil ? STATUS.DD : 0)
         | (lgChargeAt(p.charge, p.chargeT, simT / 1000) > 0 ? STATUS.CHARGED : 0);
       if (lastSent && !forceSend && recordSuppressed(p, lastSent, now, sheep, wireStatus)) {
-        this.metrics.recordsSuppressed++;
+this.metrics.recordsSuppressed += 1;
         continue; // Skip — within extrapolation tolerance
       }
       // Mutate the snapshot in place — a fresh object per record per tick
@@ -218,8 +218,8 @@ export class TickFanout {
           // could still hold the retired owner's basis, and a masked
           // record would hand receivers the departed owner's hp/flags.
         }, rec.enc, last, fullRecord);
-      recN++;
-      this.metrics.recordsBuilt++;
+recN += 1;
+this.metrics.recordsBuilt += 1;
     }
     records.length = recN;
     if (rosterDirty) {room.connections.broadcast({ type: 'wireIds', add: roster! });}
@@ -260,7 +260,7 @@ export class TickFanout {
       this.onRemove(room, playerId, 'idle');
     }
     logger.info('Idle player removed', { playerId, silenceMs });
-    this.metrics.recordsIdleReaped++;
+this.metrics.recordsIdleReaped += 1;
     return true;
   }
 
@@ -325,7 +325,7 @@ export class TickFanout {
         // force = hit/knockback window: real positions must reach every
         // observer at full rate while they extrapolate the knockback
         if (r.force || seq % tier === 0) {others.push(r.data);}
-        else {this.metrics.recordsTierSkipped++;}
+        else {this.metrics.recordsTierSkipped += 1;}
       }
       // Always send — even an empty frame. The client's loss telemetry
       // keys on tick-frame ARRIVAL cadence (a silent link reads as 100%
@@ -346,7 +346,7 @@ export class TickFanout {
       // Dropped frames surface as tickSeq gaps client-side — count them
       // here so a consumer that can't drain reads as rising loss, not
       // as an unexplained stutter nobody can attribute.
-      if (room.connections.sendBinaryToPlayer(recipientId, frame) === 'backlogged') {this.metrics.tickFramesDropped++;}
+      if (room.connections.sendBinaryToPlayer(recipientId, frame) === 'backlogged') {this.metrics.tickFramesDropped += 1;}
     }
     // Spectators have no viewpoint for interest tiers — they get the
     // full record set every tick.

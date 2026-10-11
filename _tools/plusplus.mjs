@@ -13,7 +13,7 @@ for (const l of lines) {
   if (m) (byFile[m[1]] ??= []).push({ row: +m[2] - 1 });
 }
 
-const STMT = /(^|[;{}]\s*)([A-Za-z_$][\w$.\[\]]*)\s*(\+\+|--);\s*$/;
+const STMT = /(^|[;{}])\s*([A-Za-z_$][\w$.\[\]]*)\s*(\+\+|--);/g;
 const FOR_UPD = /(for\s*\([^;]*;[^;]*;\s*)([A-Za-z_$][\w$.\[\]]*)\s*(\+\+|--)\s*(\))/;
 
 let nDo = 0, nManual = 0;
@@ -24,14 +24,17 @@ for (const [f, sites] of Object.entries(byFile)) {
   for (const row of rows) {
     let s = src[row];
     let hit = false;
-    const stmtMatch = s.match(STMT);
-    if (stmtMatch) {
-      const [, pre, operand, op] = stmtMatch;
-      // Guard: `x = i++;` — left context must not end in an operator/keyword
-      // that consumes the value. pre is `;`/`{`/`}` or line start here.
+    let m1;
+    const stmtHits = [];
+    while ((m1 = STMT.exec(s))) {
+      const [, pre, operand, op] = m1;
+      stmtHits.push(m1.index);
       console.log(`${f}:${row + 1}: ${operand}${op}; -> ${operand} ${op === '++' ? '+=' : '-='} 1  [stmt]`);
-      s = s.replace(STMT, `$1${operand} ${op === '++' ? '+=' : '-='} 1;`);
       hit = true; nDo++;
+    }
+    if (stmtHits.length) {
+      s = s.replace(STMT, (whole, pre, operand, op) =>
+        `${pre}${operand} ${op === '++' ? '+=' : '-='} 1;`);
     }
     let m2;
     const forRe = /(for\s*\([^;]*;[^;]*;\s*)([A-Za-z_$][\w$.\[\]]*)\s*(\+\+|--)\s*(\))/g;

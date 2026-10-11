@@ -68,7 +68,7 @@ export class SpeedLines {
     if (_side.lengthSq() < 1e-6) {_side.set(1, 0, 0);} else {_side.normalize();}
     _up.crossVectors(_side, _velDir);
 
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < count; i += 1) {
       const s = this.alloc();
       const t = Math.random();
       const ang = Math.random() * Math.PI * 2;
@@ -169,7 +169,7 @@ export class SpeedLines {
     const effective = Math.min(this.intensity + this.burstLvl * 0.85, 1);
 
     // Tick live streaks — fade over life, drift slightly against velocity
-    for (let i = this.streaks.length - 1; i >= 0; i--) {
+    for (let i = this.streaks.length - 1; i >= 0; i -= 1) {
       const s = this.streaks[i];
       s.life -= dt;
       if (s.life <= 0 || effective <= 0.01) {

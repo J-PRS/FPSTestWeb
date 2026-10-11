@@ -183,17 +183,17 @@ function skyOrientEdges(d: Uint8ClampedArray): SkyEdge[][] {
     const i = (y * S + x) * 4;
     return d[i]! + d[i + 1]! + d[i + 2]!;
   };
-  for (let k = 0; k < 8; k++) {
+  for (let k = 0; k < 8; k += 1) {
     const flip = k >= 4, rot = k % 4;
     // Oriented sample coords for each output edge. For a square face:
     // rotate CCW k quarter-turns after an optional horizontal mirror.
     const at = (x: number, y: number): number => {
       let sx = flip ? S - 1 - x : x, sy = y;
-      for (let r = 0; r < rot; r++) { const t = sx; sx = sy; sy = S - 1 - t; }
+      for (let r = 0; r < rot; r += 1) { const t = sx; sx = sy; sy = S - 1 - t; }
       return sum(sx, sy);
     };
     const edges: SkyEdge[] = [new Uint16Array(S), new Uint16Array(S), new Uint16Array(S), new Uint16Array(S)];
-    for (let i = 0; i < S; i++) {
+    for (let i = 0; i < S; i += 1) {
       edges[0]![i] = at(i, 0);          // T
       edges[1]![i] = at(S - 1, i);      // R
       edges[2]![i] = at(i, S - 1);      // B
@@ -211,8 +211,8 @@ function skySeamErr(E: SkyEdge[][][], assign: number[], orient: number[]): numbe
   for (const [f, fe, g, ge, flip] of SKY_PAIRS) {
     const a = E[assign[f]!]![orient[f]!]![fe]!;
     const b = E[assign[g]!]![orient[g]!]![ge]!;
-    if (flip) {for (let i = 0; i < SKY_SOLVE_PX; i++) {tot += Math.abs(a[i]! - b[SKY_SOLVE_PX - 1 - i]!);}}
-    else {for (let i = 0; i < SKY_SOLVE_PX; i++) {tot += Math.abs(a[i]! - b[i]!);}}
+    if (flip) {for (let i = 0; i < SKY_SOLVE_PX; i += 1) {tot += Math.abs(a[i]! - b[SKY_SOLVE_PX - 1 - i]!);}}
+    else {for (let i = 0; i < SKY_SOLVE_PX; i += 1) {tot += Math.abs(a[i]! - b[i]!);}}
   }
   return tot;
 }
@@ -237,9 +237,9 @@ function skyCandPush(list: SkyCand[], s: number, assign: number[], orient: numbe
 function skyAxisGrad(d: Uint8ClampedArray, horizontal: boolean): number {
   const S = SKY_SOLVE_PX, T = Math.trunc((S / 3));
   let g = 0;
-  for (let u = 0; u < S; u++) {
+  for (let u = 0; u < S; u += 1) {
     let band = 0;
-    for (let v = 0; v < S; v++) {
+    for (let v = 0; v < S; v += 1) {
       const i = (horizontal ? v * S + u : u * S + v) * 4;
       band += d[i]! + d[i + 1]! + d[i + 2]!;
     }
@@ -277,9 +277,9 @@ function skySolveRots(E: SkyEdge[][][]): SkyCand[] {
   const assign = [0, 1, 2, 3, 4, 5];
   const cands: SkyCand[] = [];
   const o = [0, 0, 0, 0, 0, 0];
-  for (let n = 0; n < 4096; n++) {
+  for (let n = 0; n < 4096; n += 1) {
     let m = n;
-    for (let i = 0; i < 6; i++) { o[i] = m & 3; m >>= 2; }
+    for (let i = 0; i < 6; i += 1) { o[i] = m & 3; m >>= 2; }
     skyCandPush(cands, skySeamErr(E, assign, o), assign, o);
   }
   return cands;
@@ -295,10 +295,10 @@ function skySolvePerm(E: SkyEdge[][][]): SkyCand[] {
   const next = (): boolean => {
     // Iterative lexicographic next_permutation.
     let i = 4;
-    while (i >= 0 && perm[i]! > perm[i + 1]!) {i--;}
+    while (i >= 0 && perm[i]! > perm[i + 1]!) {i -= 1;}
     if (i < 0) {return false;}
     let j = 5;
-    while (perm[j]! < perm[i]!) {j--;}
+    while (perm[j]! < perm[i]!) {j -= 1;}
     [perm[i], perm[j]] = [perm[j]!, perm[i]!];
     for (let a = i + 1, b = 5; a < b; a++, b--) {[perm[a], perm[b]] = [perm[b]!, perm[a]!];}
     return true;
@@ -307,10 +307,10 @@ function skySolvePerm(E: SkyEdge[][][]): SkyCand[] {
   // orientation that minimises total seam error, three rounds.
   const polish = (): number => {
     o.fill(0);
-    for (let round = 0; round < 3; round++) {
-      for (let slot = 0; slot < 6; slot++) {
+    for (let round = 0; round < 3; round += 1) {
+      for (let slot = 0; slot < 6; slot += 1) {
         let bs = Infinity, bk = 0;
-        for (let k = 0; k < 8; k++) {
+        for (let k = 0; k < 8; k += 1) {
           o[slot] = k;
           const s = skySeamErr(E, perm, o);
           if (s < bs) { bs = s; bk = k; }
@@ -355,7 +355,7 @@ function skyAssemble(faces: (HTMLImageElement | HTMLCanvasElement)[]): typeof fa
   if (!pick || pick.s >= ident) {return faces;} // names were fine
   const { assign, orient } = pick;
   const out: HTMLCanvasElement[] = [];
-  for (let slot = 0; slot < 6; slot++) {
+  for (let slot = 0; slot < 6; slot += 1) {
     const src = faces[assign[slot]!]!;
     const k = orient[slot]!;
     const c = document.createElement('canvas');
@@ -519,10 +519,10 @@ async function loadMats(dirUrl: string): Promise<{
   // over the whole map — the tiled detail covered the entire terrain.
   const pack = (offset: number) => {
     const rgba = new Uint8Array(grid * grid * 4);
-    for (let c = 0; c < 4; c++) {
+    for (let c = 0; c < 4; c += 1) {
       const layer = offset + c;
       if (layer >= count) {break;}
-      for (let i = 0; i < grid * grid; i++) {rgba[i * 4 + c] = raw[i * count + layer];}
+      for (let i = 0; i < grid * grid; i += 1) {rgba[i * 4 + c] = raw[i * count + layer];}
     }
     const t = new THREE.DataTexture(rgba, grid, grid, THREE.RGBAFormat, THREE.UnsignedByteType);
     t.magFilter = THREE.LinearFilter;
@@ -716,7 +716,7 @@ async function fetchGlb(httpUrl: string, file: string): Promise<THREE.Group | nu
 /** Instance a converted T2 interior. Clone shares geometry/materials —
  *  these are static hulls, no skeletons. */
 export async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefined): Promise<void> {
-  interiorsEpoch++;
+interiorsEpoch += 1;
   const { deps } = ctx;
   const scene = deps.lazyScene();
   if (interiorGroup) {

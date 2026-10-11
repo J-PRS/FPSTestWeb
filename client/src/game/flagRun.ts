@@ -216,20 +216,20 @@ export class FlagRunBridge {
       yaw: leg2.samples[0]!.yaw, pitch: 0, onGround: true,
     } as MoveSim['state']);
     let maxDrift = 0;
-    for (let i = 0; i < this.tasPts.length; i++) {
+    for (let i = 0; i < this.tasPts.length; i += 1) {
       const s = sim.state;
       simPts.push(new THREE.Vector3(s.pos.x, s.pos.y, s.pos.z));
       maxDrift = Math.max(maxDrift, Math.hypot(s.pos.x - this.tasPts[i]!.x, s.pos.z - this.tasPts[i]!.z, s.pos.y - this.tasPts[i]!.y));
       if (i + 1 < this.tasPts.length) {
         s.yaw = leg2.samples[i + 1]!.yaw;
         sim.setInput({ forward: 1, right: 0, jumpPressed: false, jumpHeld: false, skiHeld: true, jetHeld: leg2.samples[i + 1]!.j === 1 });
-        for (let k = 0; k < 9; k++) {sim.update(1 / 60);}
+        for (let k = 0; k < 9; k += 1) {sim.update(1 / 60);}
       }
     }
     // The search scored "goal" at ring crossing (≤40m above the stand) —
     // keep coasting the sim until touchdown so the path visibly lands.
     sim.setInput({ forward: 1, right: 0, jumpPressed: false, jumpHeld: false, skiHeld: true, jetHeld: false });
-    for (let k = 0; k < 240 && !sim.state.onGround; k++) {
+    for (let k = 0; k < 240 && !sim.state.onGround; k += 1) {
       sim.update(1 / 60);
       if (k % 9 === 8) { const s = sim.state; simPts.push(new THREE.Vector3(s.pos.x, s.pos.y, s.pos.z)); }
     }
@@ -360,7 +360,7 @@ export class FlagRunBridge {
       this.pathM += player.pos.distanceTo(prev);
       this.liveS += dt;
       this.eSum += player.energy ?? 0;
-      this.eN++;
+this.eN += 1;
       const v = Math.hypot(player.vel?.x ?? 0, player.vel?.z ?? 0);
       if (v > this.maxV) {this.maxV = v;}
       this.lastTouchV.set('local', v);
@@ -505,7 +505,7 @@ export class FlagRunBridge {
   }
 
   private cap(f: CircuitFlag): void {
-    this.caps++;
+this.caps += 1;
     const cTeam = (f.carrier ? this.w.teamOf.get(f.carrier) : null) as TeamId | null ?? this.w.playerTeam;
     this.setBotCarry(f.carrier, false);
     bank(this.w.scores, cTeam);
@@ -516,7 +516,7 @@ export class FlagRunBridge {
     sfx.flagCue('captured', true);
     this.burst(f.home, cTeam, 2.4);
     if (this.caps % LAP_CAPS === 0) {
-      this.lap++;
+this.lap += 1;
       if (this.lapT < this.bestLap) {this.bestLap = this.lapT;}
       this.w.onFeed(`LAP ${this.lap} — ${this.lapT.toFixed(1)}s  (best ${this.bestLap.toFixed(1)}s)`);
       this.lapT = 0;

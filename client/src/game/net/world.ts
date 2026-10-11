@@ -302,7 +302,7 @@ function restoreLocalPlayer(ctx: NetCtx, localPlayerState: LocalPlayerState): vo
       onGround: true,
     });
     const now = performance.now();
-    for (let i = 0; i < journal.length; i++) {
+    for (let i = 0; i < journal.length; i += 1) {
       const e = journal[i];
       const nextT = i + 1 < journal.length ? journal[i + 1]!.t : now;
       player.movement.setInput({

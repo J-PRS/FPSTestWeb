@@ -401,12 +401,12 @@ export class VideoRecorder {
       this.enc.encode(frame, opts);
       if (now - this.lastKeyAt >= 2000) {this.lastKeyAt = now;}
       frame.close();
-      this.frames++;
+this.frames += 1;
       const pumpMs = performance.now() - p0;
       const q = this.enc.encodeQueueSize;
       if (q > this.statQMax) {this.statQMax = q;}
       if (pumpMs > this.statPumpMax) {this.statPumpMax = pumpMs;}
-      this.statPumpSum += pumpMs; this.statPumpN++;
+      this.statPumpSum += pumpMs;this.statPumpN += 1;
       if (now - this.statLastAt >= 5000) {
         this.statLastAt = now;
         logger.info(`rec stats qMax=${this.statQMax} pump=${pumpMs.toFixed(2)}ms pumpAvg=${(this.statPumpSum / Math.max(1, this.statPumpN)).toFixed(2)}ms`);
@@ -422,7 +422,7 @@ export class VideoRecorder {
   cutWindow(startMs: number, endMs: number): Blob | null {
     if (!this.enc || this.ring.length === 0) {return null;}
     let keyIdx = -1, endIdx = -1;
-    for (let i = 0; i < this.ring.length; i++) {
+    for (let i = 0; i < this.ring.length; i += 1) {
       const r = this.ring[i]!;
       if (r.c.type === 'key' && r.ts <= startMs) {keyIdx = i;}
       if (r.ts <= endMs) {endIdx = i;} else {break;}
@@ -435,7 +435,7 @@ export class VideoRecorder {
       fastStart: 'in-memory',
     });
     const base = this.ring[keyIdx]!.ts;
-    for (let i = keyIdx; i <= endIdx; i++) {
+    for (let i = keyIdx; i <= endIdx; i += 1) {
       const r = this.ring[i]!;
       // Retimestamp relative to the leading keyframe so the clip starts at 0.
       // The muxer only learns decoderConfig from a meta that carries it —

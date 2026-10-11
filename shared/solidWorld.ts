@@ -17,14 +17,14 @@ export class ColliderIndex {
   constructor(private readonly cols: readonly StructureCollider[], cell = 16) {
     this.cell = cell;
     this.stamp = new Int32Array(cols.length);
-    for (let i = 0; i < cols.length; i++) {
+    for (let i = 0; i < cols.length; i += 1) {
       const c = cols[i]!;
       // Rotated XZ extents: yaw spreads hx/hz across both axes.
       const ex = Math.abs(c.hx * c.cos) + Math.abs(c.hz * c.sin);
       const ez = Math.abs(c.hx * c.sin) + Math.abs(c.hz * c.cos);
       const x0 = Math.floor((c.cx - ex - 1) / cell), x1 = Math.floor((c.cx + ex + 1) / cell);
       const z0 = Math.floor((c.cz - ez - 1) / cell), z1 = Math.floor((c.cz + ez + 1) / cell);
-      for (let x = x0; x <= x1; x++) {for (let z = z0; z <= z1; z++) {
+      for (let x = x0; x <= x1; x += 1) {for (let z = z0; z <= z1; z += 1) {
         const key = x * 4096 + z;
         let list = this.cells.get(key);
         if (!list) {this.cells.set(key, list = []);}
@@ -39,7 +39,7 @@ export class ColliderIndex {
     const id = ++this.queryId;
     const x0 = Math.floor((Math.min(ax, bx) - pad) / this.cell), x1 = Math.floor((Math.max(ax, bx) + pad) / this.cell);
     const z0 = Math.floor((Math.min(az, bz) - pad) / this.cell), z1 = Math.floor((Math.max(az, bz) + pad) / this.cell);
-    for (let x = x0; x <= x1; x++) {for (let z = z0; z <= z1; z++) {
+    for (let x = x0; x <= x1; x += 1) {for (let z = z0; z <= z1; z += 1) {
       const list = this.cells.get(x * 4096 + z);
       if (!list) {continue;}
       for (const i of list) {
@@ -297,7 +297,7 @@ export function blastOccluded(
 ): boolean {
   const to = { x: targetPos.x, y: targetPos.y + 1, z: targetPos.z };
   let sx = blastPos.x, sy = blastPos.y, sz = blastPos.z;
-  for (let hop = 0; hop < 3; hop++) {
+  for (let hop = 0; hop < 3; hop += 1) {
     const dx = to.x - sx, dy = to.y - sy, dz = to.z - sz;
     const d = Math.hypot(dx, dy, dz);
     if (d < 0.5) {return false;}

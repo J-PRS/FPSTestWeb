@@ -232,7 +232,7 @@ export class CombatHandler {
     const now = wallNow();
     const w = this.lastRejectWarn.get(key);
     if (w && now - w.at < 2000) {
-      w.n++;
+w.n += 1;
     } else {
       const suppressed = w?.n ?? 0;
       this.lastRejectWarn.set(key, { at: now, n: 0 });
@@ -416,7 +416,7 @@ export class CombatHandler {
         win.arr = win.arr.filter(t => now - t < 1000);
         win.arr.push(now);
         if (win.arr.length >= Math.ceil(1000 / (interval * 850)) + 2) {
-          win.violations++;
+win.violations += 1;
           this.reject(playerId, 'Shot', `fire rate (cadence: ${win.arr.length}/s)`, undefined, msg.weaponType, msg.shotId);
           return;
         }

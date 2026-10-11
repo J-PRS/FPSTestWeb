@@ -526,7 +526,7 @@ export class RemoteDeployables {
       }
       if (i.kind === 'baseturret' && !i.downed && this.offline()) {this.tickOfflineSentry(i, dt);}
     }
-    for (let i = this.pings.length - 1; i >= 0; i--) {
+    for (let i = this.pings.length - 1; i >= 0; i -= 1) {
       const p = this.pings[i]!;
       p.t -= dt;
       const k = 1 - p.t / PING_TTL;

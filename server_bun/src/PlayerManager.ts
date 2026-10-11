@@ -131,8 +131,8 @@ export class PlayerManager {
     // Bots stamp p.isBot after this returns — the counter must key on
     // the join call's own answer, not the field's late arrival.
     const was = this.players.get(playerId);
-    if (was && !was.isBot) {this.humans--;}
-    if (!isBot) {this.humans++;}
+    if (was && !was.isBot) {this.humans -= 1;}
+    if (!isBot) {this.humans += 1;}
     this.players.set(playerId, player);
     return player;
   }
@@ -140,7 +140,7 @@ export class PlayerManager {
   removePlayer(playerId: string): PlayerState | undefined {
     const player = this.players.get(playerId);
     if (player) {
-      if (!player.isBot) {this.humans--;}
+      if (!player.isBot) {this.humans -= 1;}
       this.players.delete(playerId);
     }
     return player;
@@ -167,8 +167,8 @@ export class PlayerManager {
   teamCounts(): { alpha: number; bravo: number } {
     let alpha = 0, bravo = 0;
     for (const p of this.players.values()) {
-      if (p.team === 'alpha') {alpha++;}
-      else if (p.team === 'bravo') {bravo++;}
+      if (p.team === 'alpha') {alpha += 1;}
+      else if (p.team === 'bravo') {bravo += 1;}
     }
     return { alpha, bravo };
   }
@@ -298,7 +298,7 @@ export class PlayerManager {
       target.isDead = true;
       target.status = 0; // death strips every channel — a cloaked/mending corpse is a lie
       target.skiing = 0; target.jetting = 0; // held keys die too — the wire bit can't outlive the body
-      target.deaths++;
+target.deaths += 1;
       // Killstreak counts the current life — deaths++ without this let
       // a dead player's wire streak keep climbing across lives.
       target.streak = 0;
@@ -403,7 +403,7 @@ export class PlayerManager {
   addKill(playerId: string): void {
     const player = this.players.get(playerId);
     if (player) {
-      player.kills++;
+player.kills += 1;
     }
   }
 }

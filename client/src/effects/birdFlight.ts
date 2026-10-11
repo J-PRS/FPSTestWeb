@@ -149,7 +149,7 @@ export class BirdFlight {
       // A loner finding itself near a thermal circles down into it
       if (Math.random() < dt * 0.03) {
         let best = -1, bestD = Infinity;
-        for (let ki = 0; ki < this.h.kettles.length; ki++) {
+        for (let ki = 0; ki < this.h.kettles.length; ki += 1) {
           const k = this.h.kettles[ki]!;
           const dx = k.center.x - b.group.position.x;
           const dz = k.center.z - b.group.position.z;

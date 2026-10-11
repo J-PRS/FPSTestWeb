@@ -265,7 +265,7 @@ export class Gnat implements Targetable, SwarmSlotOwner {
 
     // Wings buzz at insect frequency — nearly a blur, correct for a gnat
     const buzz = Math.sin(this.animT * 55) * 0.7;
-    for (let i = 0; i < WINGS_PER; i++) {
+    for (let i = 0; i < WINGS_PER; i += 1) {
       const side = i === 0 ? -1 : 1;
       _e.set(0, 0, side * (0.4 + buzz));
       _q.setFromEuler(_e);

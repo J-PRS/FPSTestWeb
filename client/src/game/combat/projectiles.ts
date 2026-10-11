@@ -169,7 +169,7 @@ function collectBoltIntercept(c: CombatCtx, p: Projectile): void {
   boltCookoff(c, at, p.shooterId ?? undefined);
   if (!deps.cookBoltsNear) {return;}
   let frontier = deps.cookBoltsNear(at, BOLT_CHAIN_RADIUS);
-  for (let pass = 0; pass < BOLT_CHAIN_PASSES && frontier.length > 0; pass++) {
+  for (let pass = 0; pass < BOLT_CHAIN_PASSES && frontier.length > 0; pass += 1) {
     for (const bp of frontier) {boltCookoff(c, bp, p.shooterId ?? undefined);}
     frontier = deps.cookBoltsNear(frontier[0], BOLT_CHAIN_RADIUS);
   }
@@ -180,7 +180,7 @@ function collectBoltIntercept(c: CombatCtx, p: Projectile): void {
 function chainStickies(c: CombatCtx, src: Projectile): void {
   const {deps} = c;
   let frontier: Projectile[] = [src];
-  for (let pass = 0; pass < 4 && frontier.length > 0; pass++) {
+  for (let pass = 0; pass < 4 && frontier.length > 0; pass += 1) {
     const next: Projectile[] = [];
     for (const s of frontier) {
       for (const q of deps.world.projectiles) {
@@ -229,7 +229,7 @@ export function updateProjectiles(c: CombatCtx, dt: number): void {
   // more (orphan path that skipped dispose) still holds its slot + liveSet
   // entry forever — reclaim it so the pool and census reflect reality.
   RibbonTrail.sweepStale();
-  for (let i = deps.world.projectiles.length - 1; i >= 0; i--) {
+  for (let i = deps.world.projectiles.length - 1; i >= 0; i -= 1) {
     const p = deps.world.projectiles[i];
     p.update(dt, deps.lazyTerrain(), deps.targets, remotePlayerPositions, obstacles, remotePlayerClasses);
 

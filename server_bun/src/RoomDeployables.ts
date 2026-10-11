@@ -481,7 +481,7 @@ export class RoomDeployables {
     }
     // Sentry bolts in flight — the blast lands where the bolt does, so a
     // sidestepping capper genuinely outruns it (non-homing by design).
-    for (let i = this.bolts.length - 1; i >= 0; i--) {
+    for (let i = this.bolts.length - 1; i >= 0; i -= 1) {
       const b = this.bolts[i]!;
       b.ttl -= dt;
       if (b.ttl > 0) {continue;}

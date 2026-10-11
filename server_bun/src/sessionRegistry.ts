@@ -66,7 +66,7 @@ export class SessionRegistry {
     if (!EDGES[s.state].includes(to)) {
       // Loud, not fatal — the caller's flow continues but the rejected edge
       // names the site where lifecycle logic disagrees with the machine.
-      this.anomalies.illegal++;
+this.anomalies.illegal += 1;
       logger.error('illegal session transition', { playerId, from: s.state, to, reason, gen: s.gen, room: s.room });
       return false;
     }
@@ -93,7 +93,7 @@ export class SessionRegistry {
   begin(playerId: string, room: string): void {
     const prior = this.sessions.get(playerId);
     if (prior) {
-      this.anomalies.rebegin++;
+this.anomalies.rebegin += 1;
       logger.warn('session re-begin over live state', { playerId, from: prior.state, gen: prior.gen, room: prior.room });
       // Overwriting drops the prior record — its grace seat must come off
       // the room's count or the replacement's room inherits a phantom ghost.
@@ -113,7 +113,7 @@ export class SessionRegistry {
   seat(playerId: string, spectator: boolean, reason: string): number {
     const s = this.sessions.get(playerId);
     if (!s) {
-      this.anomalies.seatWithoutBegin++;
+this.anomalies.seatWithoutBegin += 1;
       logger.error('seat without begin', { playerId });
       this.sessions.set(playerId, { state: 'connecting', gen: ++this.genCounter, at: wallNow(), room: '' });
       return this.sessions.get(playerId)!.gen;
@@ -133,7 +133,7 @@ export class SessionRegistry {
     else if (s.state === 'active') {
       logger.info('session reseat', { playerId, gen: s.gen, room: s.room, reason });
     } else {
-      this.anomalies.reclaimNonLive++;
+this.anomalies.reclaimNonLive += 1;
       logger.error('reclaim on non-live session', { playerId, from: s.state, reason });
       return undefined;
     }
@@ -198,7 +198,7 @@ export class SessionRegistry {
   /** Census for /metrics — sessions by state. */
   census(): Record<SessionState, number> {
     const c: Record<SessionState, number> = { connecting: 0, active: 0, spectating: 0, grace: 0, reaped: 0 };
-    for (const s of this.sessions.values()) {c[s.state]++;}
+    for (const s of this.sessions.values()) {c[s.state] += 1;}
     return c;
   }
 

@@ -182,7 +182,7 @@ export class PlayerAnim {
           const y = yawOf(hit.tr);
           const k = Math.round(y / (Math.PI / 18));
           const b = buckets.get(k) ?? { sum: 0, n: 0 };
-          b.sum += y; b.n++;
+          b.sum += y;b.n += 1;
           buckets.set(k, b);
         }
         let best = { sum: 0, n: 0 };
@@ -234,7 +234,7 @@ export class PlayerAnim {
 
   private depthOf(node: THREE.Object3D): number {
     let d = 0;
-    for (let p = node.parent; p && p !== this.host.model; p = p.parent) {d++;}
+    for (let p = node.parent; p && p !== this.host.model; p = p.parent) {d += 1;}
     return d;
   }
 
@@ -378,7 +378,7 @@ export class PlayerAnim {
     // in that order. The last candidate is always a table-native name
     // played unconditionally (missing clip = hold pose, not snap).
     const cands = clipCandidates(this.host.variant, state, this.locoDir);
-    for (let i = 0; i < cands.length; i++) {
+    for (let i = 0; i < cands.length; i += 1) {
       const c = cands[i];
       const last = i === cands.length - 1;
       if (!last && !this.animations.has(c.name)) {continue;}

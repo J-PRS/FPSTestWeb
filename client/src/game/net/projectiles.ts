@@ -19,7 +19,7 @@ export const lastWeaponByPlayer = new Map<string, { wt: number; n: number }>();
 function noteWeapon(id: string, weaponType: number | undefined): void {
   if (weaponType === undefined) {return;}
   const rec = lastWeaponByPlayer.get(id) ?? { wt: 0, n: 0 };
-  rec.wt = weaponType; rec.n++;
+  rec.wt = weaponType;rec.n += 1;
   lastWeaponByPlayer.set(id, rec);
 }
 

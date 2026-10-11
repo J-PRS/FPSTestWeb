@@ -97,7 +97,7 @@ function removeBolt<T>(h: BoltHost<T>, i: number): void {
 }
 
 export function updateBolts<T>(h: BoltHost<T>, t: T, dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
-  for (let i = h.bolts.length - 1; i >= 0; i--) {
+  for (let i = h.bolts.length - 1; i >= 0; i -= 1) {
     const b = h.bolts[i];
     b.life -= dt;
     b.vel.y += GRAVITY * dt;
@@ -134,7 +134,7 @@ export function updateBolts<T>(h: BoltHost<T>, t: T, dt: number, terrain: Terrai
   h.trailFx.fade(dt);
 
   // Dying streaks fade out over their life window, then free the slot.
-  for (let i = h.deadRibbons.length - 1; i >= 0; i--) {
+  for (let i = h.deadRibbons.length - 1; i >= 0; i -= 1) {
     const r = h.deadRibbons[i]!;
     r.update(dt);
     if (r.done) { r.dispose(); h.deadRibbons.splice(i, 1); }

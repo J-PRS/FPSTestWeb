@@ -64,7 +64,7 @@ export function lgTrace(deps: CombatDeps, cam: THREE.Camera, traceT: { t: number
     _lgP.copy(_lgO).addScaledVector(_lgD, d);
     if (_lgP.y < deps.lazyTerrain().getHeight(_lgP.x, _lgP.z)) {
       let lo = d - 1.5, hi = d;
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < 6; i += 1) {
         const mid = (lo + hi) * 0.5;
         _lgP.copy(_lgO).addScaledVector(_lgD, mid);
         if (_lgP.y < deps.lazyTerrain().getHeight(_lgP.x, _lgP.z)) {hi = mid;} else {lo = mid;}

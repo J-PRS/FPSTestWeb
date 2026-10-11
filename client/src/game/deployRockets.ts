@@ -110,7 +110,7 @@ export class DeployRockets {
   }
 
   update(dt: number): void {
-    for (let i = this.rockets.length - 1; i >= 0; i--) {
+    for (let i = this.rockets.length - 1; i >= 0; i -= 1) {
       const r = this.rockets[i]!;
       this.step(r, dt);
       if (r.ttl <= 0) {

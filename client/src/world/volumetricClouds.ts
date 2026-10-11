@@ -165,7 +165,7 @@ const _vnoise = (x: number, y: number, period: number): number => {
 };
 const _fbm = (u: number, v: number, basePeriod: number, octaves: number): number => {
   let sum = 0, amp = 0.5, per = basePeriod, norm = 0;
-  for (let o = 0; o < octaves; o++) {
+  for (let o = 0; o < octaves; o += 1) {
     sum += _vnoise(u * per, v * per, per) * amp;
     norm += amp;
     amp *= 0.5;
@@ -182,8 +182,8 @@ function makeNoiseTexture(size = 256): { tex: THREE.DataTexture; base: Float32Ar
   const rawR = new Float32Array(size * size);
   const rawG = new Float32Array(size * size);
   let rMin = 9, rMax = -9, gMin = 9, gMax = -9;
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
       const u = x / size, v = y / size;
       const i = y * size + x;
       const r = _fbm(u, v, 6, 4), g = _fbm(u, v, 18, 4);
@@ -205,7 +205,7 @@ function makeNoiseTexture(size = 256): { tex: THREE.DataTexture; base: Float32Ar
   // shader's deck blobs instead of free-floating in clear sky.
   const base = new Float32Array(size * size);
   const rSpan = rMax - rMin;
-  for (let i = 0; i < size * size; i++) {base[i] = (rawR[i]! - rMin) / rSpan;}
+  for (let i = 0; i < size * size; i += 1) {base[i] = (rawR[i]! - rMin) / rSpan;}
   return { tex, base };
 }
 
@@ -217,7 +217,7 @@ function packNoiseTex(size: number, ch: {
   const { rawR, rawG } = ch;
   const data = new Uint8Array(size * size * 4);
   const rSpan = ch.rMax - ch.rMin, gSpan = ch.gMax - ch.gMin;
-  for (let i = 0; i < size * size; i++) {
+  for (let i = 0; i < size * size; i += 1) {
     const j = i * 4;
     data[j] = Math.round((rawR[i]! - ch.rMin) / rSpan * 255);
     data[j + 1] = Math.round((rawG[i]! - ch.gMin) / gSpan * 255);

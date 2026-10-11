@@ -87,7 +87,7 @@ export class SpeciesSwarm {
    *  dense, so the count bound needs no remapping either direction. */
   private resize(cap: number): void {
     this.owners.length = cap;
-    for (let i = 0; i < this.meshes.length; i++) {
+    for (let i = 0; i < this.meshes.length; i += 1) {
       const m = this.meshes[i]!;
       const per = this.pers[i]!;
       const mat = new THREE.InstancedBufferAttribute(new Float32Array(cap * per * 16), 16);
@@ -121,7 +121,7 @@ export class SpeciesSwarm {
     const slot = this.live++;
     this.owners[slot] = owner;
     owner.swarmSlot = slot;
-    for (let i = 0; i < this.meshes.length; i++) {this.meshes[i]!.count = this.live * this.pers[i]!;}
+    for (let i = 0; i < this.meshes.length; i += 1) {this.meshes[i]!.count = this.live * this.pers[i]!;}
     return slot;
   }
 
@@ -133,11 +133,11 @@ export class SpeciesSwarm {
       const moved = this.owners[last]!;
       this.owners[slot] = moved;
       moved.swarmSlot = slot;
-      for (let i = 0; i < this.meshes.length; i++) {
+      for (let i = 0; i < this.meshes.length; i += 1) {
         const m = this.meshes[i]!;
         const per = this.pers[i]!;
         const c = m.instanceColor!;
-        for (let k = 0; k < per; k++) {
+        for (let k = 0; k < per; k += 1) {
           m.getMatrixAt(last * per + k, _m);
           m.setMatrixAt(slot * per + k, _m);
           c.setXYZ(slot * per + k, c.getX(last * per + k), c.getY(last * per + k), c.getZ(last * per + k));
@@ -145,8 +145,8 @@ export class SpeciesSwarm {
       }
     }
     this.owners[last] = undefined;
-    this.live--;
-    for (let i = 0; i < this.meshes.length; i++) {this.meshes[i]!.count = this.live * this.pers[i]!;}
+this.live -= 1;
+    for (let i = 0; i < this.meshes.length; i += 1) {this.meshes[i]!.count = this.live * this.pers[i]!;}
     this.dirty = true;
     this.flagDirty();
   }
@@ -181,7 +181,7 @@ export class SpeciesSwarm {
   flagDirty(): void {
     if (!this.dirty) {return;}
     this.dirty = false;
-    for (let i = 0; i < this.meshes.length; i++) {
+    for (let i = 0; i < this.meshes.length; i += 1) {
       const m = this.meshes[i]!;
       m.instanceMatrix.addUpdateRange(0, this.live * this.pers[i]! * 16);
       m.instanceMatrix.needsUpdate = true;
@@ -372,7 +372,7 @@ export class InstancedBlobShadows {
       this.opacity.needsUpdate = true;
     }
     this.owners[last] = undefined;
-    this.live--;
+this.live -= 1;
     this.mesh.count = this.live;
     owner.shadowSlot = -1;
   }

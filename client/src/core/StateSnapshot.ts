@@ -54,7 +54,7 @@ export namespace StateSnapshot {
     
     // Simple hash function (djb2)
     let hash = 5381;
-    for (let i = 0; i < combined.length; i++) {
+    for (let i = 0; i < combined.length; i += 1) {
       hash = ((hash << 5) + hash) + combined.charCodeAt(i);
     }
     return (hash >>> 0).toString(16);

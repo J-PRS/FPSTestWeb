@@ -19,11 +19,11 @@ export function makePartPool(scene: THREE.Scene, geo: THREE.BufferGeometry, mat:
   mesh.count = cap;
   mesh.frustumCulled = false; // units span the map
   mesh.castShadow = false;
-  for (let i = 0; i < cap; i++) { mesh.setMatrixAt(i, ZERO_M4); }
+  for (let i = 0; i < cap; i += 1) { mesh.setMatrixAt(i, ZERO_M4); }
   mesh.instanceMatrix.needsUpdate = true;
   scene.add(mesh);
   const free: number[] = [];
-  for (let i = cap - 1; i >= 0; i--) { free.push(i); }
+  for (let i = cap - 1; i >= 0; i -= 1) { free.push(i); }
   return { mesh, free };
 }
 

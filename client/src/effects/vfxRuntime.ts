@@ -152,13 +152,13 @@ export function takeSystem(kind: string, build: () => ParticleSystem): ParticleS
   const ps = pools.get(kind)?.pop()?.ps;
   const st = window.__vfxStats;
   if (ps) {
-    if (st) {st.hits++;} pooled.delete(ps);
+    if (st) {st.hits += 1;} pooled.delete(ps);
     // Pooled systems can come back parked distance-paused (the flag lives
     // on the system, not in restart()) — a paused reuse emits nothing.
     ps.paused = false;
     return ps;
   }
-  if (st) {st.misses++;}
+  if (st) {st.misses += 1;}
   const n = build();
   kindOf.set(n, kind);
   return n;
@@ -220,7 +220,7 @@ function reapStarved(ps: IParticleSystem): void {
   if (activeTrailPs.has(ps as ParticleSystem)) {
     const s = ps.particleNum === 0 ? (starveFrames.get(ps) ?? 0) + 1 : 0;
     if (s === STARVE_LIMIT) {
-      trailStats.reapedActive++;
+trailStats.reapedActive += 1;
       // Reap for real — a looping trail system whose owner left the
       // world without dispose() stays attached FOREVER otherwise: a
       // parked emitter holding a stale matrixWorld is exactly the
@@ -338,7 +338,7 @@ function retirePooled(ps: ParticleSystem): void {
 function shrinkPools(now: number): void {
   let total = 0;
   for (const [kind, pool] of pools) {
-    for (let i = pool.length - 1; i >= POOL_FLOOR; i--) {
+    for (let i = pool.length - 1; i >= POOL_FLOOR; i -= 1) {
       if (now - pool[i]!.idleAt <= POOL_IDLE_MS) {continue;}
       const {ps} = pool[i]!;
       pool[i] = pool[pool.length - 1]!;
@@ -357,7 +357,7 @@ function shrinkPools(now: number): void {
     for (const pool of pools.values())
       {for (const e of pool) {all.push({ ps: e.ps, idleAt: e.idleAt, pool });}}
     all.sort((a, b) => a.idleAt - b.idleAt);
-    for (let i = 0; i < all.length - POOL_MAX_TOTAL; i++) {
+    for (let i = 0; i < all.length - POOL_MAX_TOTAL; i += 1) {
       const e = all[i]!;
       const idx = e.pool.findIndex(x => x.ps === e.ps);
       if (idx !== -1) {e.pool.splice(idx, 1);}
@@ -477,7 +477,7 @@ export function updateVfx(dt: number, camPos?: THREE.Vector3): void {
       const jx = e[12]! - prev.x, jy = e[13]! - prev.y, jz = e[14]! - prev.z;
       if (jx * jx + jy * jy + jz * jz > EMIT_JUMP_M * EMIT_JUMP_M) {
         resyncEmission(ps as ParticleSystem, (ps as ParticleSystem).emitter as unknown as THREE.Object3D);
-        trailStats.teleportJumps++;
+trailStats.teleportJumps += 1;
       }
     }
     batcher.update(dt * 2);
@@ -497,7 +497,7 @@ export function poolDump(): Record<string, unknown> {
   for (const [k, v] of pools) {
     const kind = k.split(/[:,]/, 1)[0] ?? k;
     const roll = byKind[kind] ?? (byKind[kind] = { pools: 0, depth: 0 });
-    roll.pools++;
+roll.pools += 1;
     roll.depth += v.length;
     top.push({ k, n: v.length });
   }
@@ -506,7 +506,7 @@ export function poolDump(): Record<string, unknown> {
   let paused = 0, pooledN = 0;
   if (batcher) {
     for (const ps of batcher.systemToBatchIndex.keys()) {
-      if ((ps as ParticleSystem).paused) {paused++;}
+      if ((ps as ParticleSystem).paused) {paused += 1;}
     }
   }
   for (const v of pools.values()) {pooledN += v.length;}

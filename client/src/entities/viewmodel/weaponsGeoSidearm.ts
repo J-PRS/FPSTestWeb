@@ -29,7 +29,7 @@ spine.position.set(0, 0.088, -0.06);
 pistol.add(spine);
 // Front + rear slide serrations.
 for (const base of [-0.16, 0.05]) {
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 4; i += 1) {
     const serr = new THREE.Mesh(new THREE.BoxGeometry(0.078, 0.04, 0.01), darkMat);
     serr.position.set(0, 0.055, base + i * 0.016);
     pistol.add(serr);
@@ -43,7 +43,7 @@ pistol.add(pFrame);
 const railP = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.02, 0.09), darkMat);
 railP.position.set(0, -0.033, -0.12);
 pistol.add(railP);
-for (let i = 0; i < 2; i++) {
+for (let i = 0; i < 2; i += 1) {
   const slot = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.022, 0.008), darkMat);
   slot.position.set(0, -0.033, -0.14 + i * 0.035);
   pistol.add(slot);
@@ -141,7 +141,7 @@ cyl.position.set(0, 0.008, 0.045);
 revolver.add(cyl);
 // Flutes — fore-aft grooves ringing the drum in the XY plane (drum
 // axis is Z, so the grooves radiate around it, each rotated to face out).
-for (let i = 0; i < 8; i++) {
+for (let i = 0; i < 8; i += 1) {
   const a = (i / 8) * Math.PI * 2;
   const flute = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.012, 0.08), darkMat);
   flute.position.set(Math.cos(a) * 0.058, 0.008 + Math.sin(a) * 0.058, 0.045);
@@ -256,7 +256,7 @@ for (const side of [-1, 1]) {
     cable.position.set(side * 0.045, 0.03 + yOff, 0);
     rep.add(cable);
     // cable ribs — tiny rings, the corrugated-hose look
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 4; i += 1) {
       const rib = new THREE.Mesh(new THREE.TorusGeometry(0.013, 0.004, 4, 8), darkMat);
       rib.position.set(side * 0.045, 0.03 + yOff, -0.06 + i * 0.04);
       rep.add(rib);
@@ -265,7 +265,7 @@ for (const side of [-1, 1]) {
 }
 // Top vent grid — the ref's perforated panel: short dark slats along
 // the front housing's top face.
-for (let i = 0; i < 3; i++) {
+for (let i = 0; i < 3; i += 1) {
   const vent = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.015, 0.09), darkMat);
   vent.position.set(-0.035 + i * 0.035, 0.104, -0.09);
   rep.add(vent);

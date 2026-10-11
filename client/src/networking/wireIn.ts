@@ -105,7 +105,7 @@ export class WireIn {
   private gate(data: ServerMessage | Uint8Array): boolean {
     if (this.ready) {return false;}
     if (this.early.length < 512) {this.early.push(data);}
-    else {this.earlyDrops++;}
+    else {this.earlyDrops += 1;}
     return true;
   }
 
@@ -144,7 +144,7 @@ export class WireIn {
         // Swallow containment isn't free: the handler may have half-applied
         // state. The count surfaces in the Alt+Q dump so "feels off" reports
         // can be checked for silent partial-apply storms.
-        this.handlerThrows++;
+this.handlerThrows += 1;
         logger.warn(`Handler threw for ${data.type}: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
       }
     } else {
@@ -170,7 +170,7 @@ export class WireIn {
         const msg: Record<string, unknown> = { type: 'ballSegment', id: seg.id };
         for (const f of WORLD_MODEL.ball!.updateFields!) {msg[f.name] = src[f.name];}
         try { this.h.onBallSegment?.(msg as unknown as Extract<ServerMessage, { type: 'ballSegment' }>); }
-        catch (error) { this.handlerThrows++; logger.warn(`Handler threw for ballSegment: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`); }
+        catch (error) {this.handlerThrows += 1; logger.warn(`Handler threw for ballSegment: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`); }
       }
       return;
     }
@@ -191,7 +191,7 @@ export class WireIn {
     // Same containment as the JSON path — a throwing tick handler at 20Hz
     // would otherwise hit onError and reconnect the socket every frame.
     try { this.handleTickUpdate(tick); }
-    catch (error) { this.handlerThrows++; logger.warn(`Handler threw for tickUpdate: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`); }
+    catch (error) {this.handlerThrows += 1; logger.warn(`Handler threw for tickUpdate: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`); }
   }
 
   private readonly handlers: { [K in ServerMessage['type']]: (data: Extract<ServerMessage, { type: K }>) => void } = {
@@ -268,7 +268,7 @@ export class WireIn {
     // Server refused a hit claim — worth surfacing: a healthy client
     // should basically never see this, so it's a desync tell.
     shotRejected: (data) => {
-      rejectCensus.total++;
+rejectCensus.total += 1;
       rejectCensus.byReason.set(data.reason, (rejectCensus.byReason.get(data.reason) ?? 0) + 1);
       rejectCensus.last = `${data.reason}${data.targetId ? ` →${data.targetId}` : ''}`;
       if (data.targetId || data.shotId) {this.h.confirmClaimHit(data.targetId ?? '', data.shotId);}
@@ -285,7 +285,7 @@ export class WireIn {
     // Honest-lag discard (dead shooter/target) — not a reject, but the
     // predicted hit still needs clearing or the ledger warns phantom.
     claimDropped: (data) => {
-      dropCensus.total++;
+dropCensus.total += 1;
       dropCensus.byReason.set(data.reason, (dropCensus.byReason.get(data.reason) ?? 0) + 1);
       dropCensus.last = `${data.reason}${data.targetId ? ` →${data.targetId}` : ''}`;
       if (data.targetId || data.shotId) {this.h.confirmClaimHit(data.targetId ?? '', data.shotId);}
@@ -367,7 +367,7 @@ export class WireIn {
     // Pooled decode hands back its whole slots array + a live count —
     // entries past it are stale from earlier, larger frames.
     const n = data.count ?? data.updates.length;
-    for (let i = 0; i < n; i++) {
+    for (let i = 0; i < n; i += 1) {
       const u = data.updates[i]!;
       // v3 record ahead of its roster — can't build a body without an
       // identity, so it drops; the next record for that id resolves.
@@ -427,7 +427,7 @@ export class WireIn {
     if (data.shooterId === this.h.getLocalPlayerId()) {this.h.confirmClaimHit(data.targetId);}
     if (data.seq !== undefined) {
       if (data.seq <= this.lastHitSeq) {
-        dedupCensus.hitSeqDrops++;
+dedupCensus.hitSeqDrops += 1;
         logger.warn(`playerHit dropped as stale seq ${data.seq} <= ${this.lastHitSeq}`);
         return;
       }

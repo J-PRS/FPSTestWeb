@@ -92,7 +92,7 @@ export class AmbientParticles {
     this.life = new Float32Array(n);
     this.cfg = cfg;
 
-    for (let i = 0; i < n; i++) {
+    for (let i = 0; i < n; i += 1) {
       this.phases[i] = Math.random() * Math.PI * 2;
       this.speeds[i] = 0.5 + Math.random() * 1.5;
       this.vels[i * 3] = cfg.vel.x + (Math.random() - 0.5) * cfg.velSpread;
@@ -167,7 +167,7 @@ export class AmbientParticles {
     // First tick: seed the whole field around wherever the camera started.
     if (!this.seeded) {
       this.seeded = true;
-      for (let i = 0; i < n; i++) {this.respawn(i, camPos, terrain);}
+      for (let i = 0; i < n; i += 1) {this.respawn(i, camPos, terrain);}
       this.posAttr.needsUpdate = true;
       return;
     }
@@ -175,7 +175,7 @@ export class AmbientParticles {
     let colorDirty = false;
     const colors = this.colorAttr.array as Float32Array;
 
-    for (let i = 0; i < n; i++) {
+    for (let i = 0; i < n; i += 1) {
       const ix = i * 3;
       this.life[i]! -= dt;
 

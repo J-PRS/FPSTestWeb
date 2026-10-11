@@ -121,7 +121,7 @@ export function assignRole(
   for (const { role, want, minSquad } of ROLE_PRIORITY) {
     if (!playable.includes(role)) {continue;}
     if (ids.length < minSquad) {continue;}
-    for (let i = 0; i < want; i++) {
+    for (let i = 0; i < want; i += 1) {
       let best: string | null = null;
       let bestFit = -Infinity;
       for (const id of ids) {
@@ -137,7 +137,7 @@ export function assignRole(
   for (const id of ids) {
     if (mine.has(id)) {continue;}
     mine.set(id, tail % 3 === 2 ? 'defense' : 'offense');
-    tail++;
+tail += 1;
   }
   return mine.get(myId) ?? 'offense';
 }
@@ -151,7 +151,7 @@ export function assignRole(
 export function roleSide(id: string): number {
   let h = 0;
   // oxlint-disable-next-line prefer-math-trunc -- int32 wrap is the point
-  for (let i = 0; i < id.length; i++) {h = (h * 31 + id.charCodeAt(i)) | 0;}
+  for (let i = 0; i < id.length; i += 1) {h = (h * 31 + id.charCodeAt(i)) | 0;}
   return (h & 1) === 0 ? 1 : -1;
 }
 

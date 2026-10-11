@@ -64,7 +64,7 @@ describe('projectile event spool', () => {
     const b = host();
     b.elapsedTime = 0;
     let ok = 0;
-    for (let i = 0; i < 1100; i++) {if (recordFired(b, V, V, 1)) {ok++;}}
+    for (let i = 0; i < 1100; i += 1) {if (recordFired(b, V, V, 1)) {ok += 1;}}
     expect(ok).toBe(1000);
     b.elapsedTime = 1.5; // next window
     expect(recordFired(b, V, V, 1)).not.toBe(0);

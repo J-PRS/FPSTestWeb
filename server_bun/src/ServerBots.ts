@@ -143,7 +143,7 @@ export class ServerBots {
    *  kills/min bottleneck detector). */
   huntUptime(): number {
     let n = 0;
-    for (const b of this.brains.values()) {if (b.h.hunt) {n++;}}
+    for (const b of this.brains.values()) {if (b.h.hunt) {n += 1;}}
     return this.brains.size > 0 ? n / this.brains.size : 0;
   }
 
@@ -504,7 +504,7 @@ export class ServerBots {
       if (aid === id || a.team !== p.team || a.isDead || a.health >= a.maxHealth * 0.85) {continue;}
       const d = Math.hypot(a.position.x - p.position.x, a.position.y - p.position.y, a.position.z - p.position.z);
       if (d > HEALBEAM_RANGE * 1.4) {continue;}
-      hurtCount++;
+hurtCount += 1;
       const carrying = this.room.flagCarriedBy(aid);
       const missing = a.maxHealth - a.health;
       const score = missing + (carrying ? 40 : 0) - d;
@@ -550,7 +550,7 @@ export class ServerBots {
     // cumulative prof counters diff into a per-second rate /metrics can
     // show — bot CPU on a live server was only measurable in soaks.
     if (now - this.stageWinAt >= 10_000) {
-      for (let i = 0; i < 6; i++) {this.stageMs[i] = (this.stageProf[i]! - this.stageBase[i]!) / 10;}
+      for (let i = 0; i < 6; i += 1) {this.stageMs[i] = (this.stageProf[i]! - this.stageBase[i]!) / 10;}
       this.stageBase = [...this.stageProf];
       this.stageWinAt = now;
     }
@@ -643,7 +643,7 @@ export class ServerBots {
 
       p.lastValidPosition = { ...p.position };
       p.lastValidVelocity = { ...p.velocity };
-      p.lastSeq++; // tick stream keys staleness off seq
+p.lastSeq += 1; // tick stream keys staleness off seq
 
       // Bots never send positions, so nothing else feeds their rewind
       // buffer — without samples, hit validation rewinds to the stale

@@ -95,9 +95,9 @@ describe('resyncEmission', () => {
 // updateVfx ticks registered drivers; a host discontinuity cuts every
 // layer without any caller declaring a teleport.
 const fakeLayer = () => ({ emits: 0, teleports: 0,
-  emitSegment() { this.emits++; }, teleport() { this.teleports++; } });
+  emitSegment() {this.emits += 1; }, teleport() {this.teleports += 1; } });
 const fakeRibbon = () => ({ pushes: 0, clears: 0,
-  push() { this.pushes++; }, clear() { this.clears++; } });
+  push() {this.pushes += 1; }, clear() {this.clears += 1; } });
 
 describe('TrailDriver', () => {
 

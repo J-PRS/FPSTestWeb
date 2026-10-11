@@ -70,11 +70,11 @@ export class MatchJournal {
         try { rec = JSON.parse(line); } catch { continue; }
         for (const p of rec.players ?? []) {
           const row = agg.get(p.id) ?? { playerId: p.id, matches: 0, wins: 0, kills: 0, deaths: 0 };
-          row.matches++;
+row.matches += 1;
           row.kills += p.kills ?? 0;
           row.deaths += p.deaths ?? 0;
           // FFA records name the player; team records name the side.
-          if (rec.winner === p.id || (p.team && rec.winner === p.team)) {row.wins++;}
+          if (rec.winner === p.id || (p.team && rec.winner === p.team)) {row.wins += 1;}
           agg.set(p.id, row);
         }
       }

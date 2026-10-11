@@ -186,10 +186,10 @@ export class QuarksTrail {
 
   constructor(private host: QuarksTrailHost) {
     const {config} = host;
-    if (!vfxReady()) { trailStats.noBatcher++; return; }
-    if (config.trailParticlesPerUnit <= 0) { trailStats.noRate++; return; }
+    if (!vfxReady()) {trailStats.noBatcher += 1; return; }
+    if (config.trailParticlesPerUnit <= 0) {trailStats.noRate += 1; return; }
     this.key = trailKey(config);
-    if ((pools.get(this.key)?.length ?? 0) > 0) {trailStats.reused++;} else {trailStats.built++;}
+    if ((pools.get(this.key)?.length ?? 0) > 0) {trailStats.reused += 1;} else {trailStats.built += 1;}
     this.ps = takeSystem(this.key, () => {
       // Gradient + alpha fade built from the config's arbitrary-length
       // trailColors — same lerp the per-particle loop used to do by hand.
@@ -241,7 +241,7 @@ export class QuarksTrail {
     liveQuarks.add(this);
     // A system reaped out from under a previous owner comes back dead —
     // the batcher no longer knows it, so attach+restart renders nothing.
-    if (!vfxBatcher()!.systemToBatchIndex.has(this.ps)) {trailStats.poolZombies++;}
+    if (!vfxBatcher()!.systemToBatchIndex.has(this.ps)) {trailStats.poolZombies += 1;}
   }
 
   diag(): Record<string, unknown> {
@@ -316,7 +316,7 @@ export class QuarksTrail {
       resyncEmission(this.ps, this.ps.emitter);
       activeTrailPs.add(this.ps);
     }
-    this.segCount++;
+this.segCount += 1;
     const { pos, vel, config } = this.host;
     // Emit-time jump cut — the deposit is the segment the emitter
     // traveled, so ANY discontinuity (teleport, resync sweep, correction
@@ -371,7 +371,7 @@ export class QuarksTrail {
     em.updateMatrixWorld(true);
     const lx = em.position.x - ax, ly = em.position.y - ay, lz = em.position.z - az;
     if (jumped || lx * lx + ly * ly + lz * lz > jump * jump) {
-      trailStats.emitCuts++;
+trailStats.emitCuts += 1;
       em.position.copy(pos);
       em.updateMatrixWorld(true);
       resyncEmission(this.ps, em);

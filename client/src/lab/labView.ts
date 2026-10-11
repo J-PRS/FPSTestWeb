@@ -148,7 +148,7 @@ class LabView {
     // Drop any strays a scenario leaked rather than letting them pile
     // up in the lab root across switches — reverse-order removal so the
     // children array mutation can't skip an index.
-    for (let i = this.labRoot.children.length - 1; i >= 0; i--) {
+    for (let i = this.labRoot.children.length - 1; i >= 0; i -= 1) {
       const o = this.labRoot.children[i]!;
       if (!this.statics.has(o)) {this.labRoot.remove(o);}
     }

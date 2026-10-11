@@ -21,7 +21,7 @@ export function beginBlinkF(t: Totem, playerPos: THREE.Vector3): void {
     // bearing, pick the highest point that keeps firing range.
     let bestH = -Infinity;
     let found = false;
-    for (let i = 0; i < 16; i++) {
+    for (let i = 0; i < 16; i += 1) {
       const a = (i / 16) * Math.PI * 2 + Math.random() * 0.4;
       const r = 15 + Math.random() * TOTEM_PEAK_RADIUS;
       const x = t.pos.x + Math.cos(a) * r;
@@ -46,7 +46,7 @@ export function beginBlinkF(t: Totem, playerPos: THREE.Vector3): void {
   // so terrain grazing matters more than arc clearance.
 export function lineClear(t: Totem, target: THREE.Vector3): boolean {
     const sy = t.pos.y + 3.9 * t.radius;
-    for (let i = 1; i <= 10; i++) {
+    for (let i = 1; i <= 10; i += 1) {
       const u = i / 10;
       const x = t.pos.x + (target.x - t.pos.x) * u;
       const z = t.pos.z + (target.z - t.pos.z) * u;

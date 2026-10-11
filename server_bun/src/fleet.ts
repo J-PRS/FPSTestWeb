@@ -87,7 +87,7 @@ function spawnWorker(id: string, port: number): void {
   });
 }
 
-for (let i = 0; i < WORKERS; i++) {
+for (let i = 0; i < WORKERS; i += 1) {
   const id = `w${i}`;
   dir.register(id, BASE + 1 + i);
   spawnWorker(id, BASE + 1 + i);
@@ -162,7 +162,7 @@ Bun.serve({
           const names = dir.roomNames();
           for (const rows of lobbyRows.values()) {for (const r of rows) {names.add(r.name);}}
           let n = 1;
-          while (names.has(`${base}-${n}`)) {n++;}
+          while (names.has(`${base}-${n}`)) {n += 1;}
           room = `${base}-${n}`;
         }
         const w = dir.resolve(room, now);

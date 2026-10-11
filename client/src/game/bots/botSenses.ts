@@ -46,14 +46,14 @@ const _vecPool: { x: number; y: number; z: number }[] = [];
 let _vecUsed = 0;
 function nextVec(): { x: number; y: number; z: number } {
   const v = _vecPool[_vecUsed] ?? (_vecPool[_vecUsed] = { x: 0, y: 0, z: 0 });
-  _vecUsed++;
+_vecUsed += 1;
   return v;
 }
 const _botPool: (BotEntry & { id?: string })[] = [];
 let _botUsed = 0;
 function nextBot(): BotEntry & { id?: string } {
   const b = _botPool[_botUsed] ?? (_botPool[_botUsed] = { playerId: '', pos: null as never, vel: null as never, alive: false });
-  _botUsed++;
+_botUsed += 1;
   return b;
 }
 

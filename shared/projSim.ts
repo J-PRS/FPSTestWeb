@@ -62,7 +62,7 @@ export function segFieldHit(a: Vec3, b: Vec3, field: Heightfield): Vec3 | null {
   const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
   const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
   const steps = Math.max(1, Math.ceil(len / TERRAIN_SAMPLE_STEP));
-  for (let i = 1; i <= steps; i++) {
+  for (let i = 1; i <= steps; i += 1) {
     const t = i / steps;
     const x = a.x + dx * t, y = a.y + dy * t, z = a.z + dz * t;
     if (y <= hmHeight(field, x, z)) {return { x, y, z };}

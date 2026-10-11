@@ -95,7 +95,7 @@ function updateDeadList<T extends { update(dt: number): void; dead: boolean; dis
   }
 }
 
-const _aliveCount = (l: { dead: boolean }[]) => { let n = 0; for (const e of l) {if (!e.dead) {n++;}} return n; };
+const _aliveCount = (l: { dead: boolean }[]) => { let n = 0; for (const e of l) {if (!e.dead) {n += 1;}} return n; };
 
 // Live-explosion ceiling — a busy room stacks blasts until particles
 // and draw calls crush the frame (seen: 155 live, 30k particles). Past
@@ -214,7 +214,7 @@ function censusEntities(deps: GameLoopDeps, entities: ReturnType<typeof createEn
   let balls = 0, elites = 0;
   for (const b of entities.balls) {
     if (b.dead || b.disposed) {continue;}
-    if (b.variant === 3) {elites++;} else {balls++;}
+    if (b.variant === 3) {elites += 1;} else {balls += 1;}
   }
   return {
     balls, elites,
@@ -287,7 +287,7 @@ function simTick(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, f: 
     b.x = rp.pos.x; b.y = rp.pos.y; b.z = rp.pos.z;
     b.h = caps.eye; b.mass = classMass(rp.armorClass); b.r = caps.radius;
     b.vx = rp.vel.x; b.vz = rp.vel.z;
-    bodyN++;
+bodyN += 1;
   }
   _contactBodies.length = bodyN;
   player.movement.bodies = _contactBodies;
@@ -386,19 +386,19 @@ function fxTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cre
       // the same resumable slice path far debris already use.
       const t0 = performance.now();
       let i = list.length - 1;
-      for (; i >= 0; i--) {
+      for (; i >= 0; i -= 1) {
         const d = list[i]!;
         const dx = d.ox - cam.x, dy = d.oy - cam.y, dz = d.oz - cam.z;
         if (dx * dx + dy * dy + dz * dz < VFX_NEAR_SQ) {
           // Resumable shard budget — one debris can't overdraw the cap.
           d.update(fxDt, 1.5 - (performance.now() - t0));
-          if (performance.now() - t0 > 1.5) { i--; break; }
+          if (performance.now() - t0 > 1.5) {i -= 1; break; }
         } else {d.update(fxDt, 0.15);} // far: resumable ~1-shard slice —
         // tickAge froze shards mid-air at spawn positions for their
         // whole 6-8s life (same parked-ring bug as Explosion.tickAge)
         if (d.dead) { d.dispose(); list.splice(i, 1); }
       }
-      for (; i >= 0; i--) {
+      for (; i >= 0; i -= 1) {
         const d = list[i]!;
         d.update(fxDt, 0.05); // over-budget tail — one shard a frame still beats frozen chunks
         if (d.dead) { d.dispose(); list.splice(i, 1); }
@@ -412,11 +412,11 @@ function fxTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cre
     }],
     ['explosions', () => {
       const ex = deps.world.explosions;
-      for (let i = 0; i <= ex.length - MAX_LIVE_EXPLOSIONS; i++) {ex[i]!.dead = true;}
+      for (let i = 0; i <= ex.length - MAX_LIVE_EXPLOSIONS; i += 1) {ex[i]!.dead = true;}
       // Same 260m rule as the vfx sim-pause — a blast past it is sub-pixel,
       // so it ages out without paying the layer/spark buffer writes.
       const cam = deps.camera.position;
-      for (let i = ex.length - 1; i >= 0; i--) {
+      for (let i = ex.length - 1; i >= 0; i -= 1) {
         const e = ex[i]!;
         if (!e.dead) {
           if (e.pos.distanceToSquared(cam) < VFX_NEAR_SQ) {e.update(fxDt);}
@@ -506,7 +506,7 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
     if (!b) { b = { x: 0, z: 0, friendly: false, bot: false }; _mapBlips.push(b); }
     b.x = rp.position.x; b.z = rp.position.z;
     b.friendly = Boolean(team) && team === deps.world.localTeam; b.bot = isBotId(id);
-    blipN++;
+blipN += 1;
   });
   _mapBlips.length = blipN;
   hud.updateMinimap(entities.targets, entities.nuggets, player.pos, player.yaw, _birdPosBuf, _mapBlips);
@@ -754,8 +754,8 @@ export function createGameLoop(deps: GameLoopDeps) {
     // landed AND ~45 stable frames ran (180-frame cap = safety valve).
     // Boot warmup counter runs even while veiled — the veil block counts
     // its own renders separately; here we meter real frames.
-    st.bootFrames++;
-    if (rawElapsed < 0.026) { st.bootStable++; } else { st.bootStable = 0; }
+st.bootFrames += 1;
+    if (rawElapsed < 0.026) {st.bootStable += 1; } else { st.bootStable = 0; }
     if (st.bootStableResolvers.length > 0 && (st.bootStable >= 45 || st.bootFrames >= 240)) {
       const resolvers = st.bootStableResolvers;
       st.bootStableResolvers = [];
@@ -763,8 +763,8 @@ export function createGameLoop(deps: GameLoopDeps) {
     }
     if (isSessionVeiled()) {
       deps.rendererSetup.renderer.render(deps.sceneSetup.scene, deps.camera);
-      st.veilFrames++;
-      if (rawElapsed < 0.026) { st.veilStable++; } else { st.veilStable = 0; }
+st.veilFrames += 1;
+      if (rawElapsed < 0.026) {st.veilStable += 1; } else { st.veilStable = 0; }
       if (isSessionVeilReady() && (st.veilStable >= 45 || st.veilFrames >= 180)) {
         st.veilStable = 0;
         st.veilFrames = 0;

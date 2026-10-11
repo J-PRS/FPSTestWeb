@@ -39,7 +39,7 @@ function growStem(twigs: THREE.BufferGeometry[], origin: THREE.Vector3, dir: THR
   const p = origin.clone();
   const d = dir.clone();
 
-  for (let i = 0; i < steps; i++) {
+  for (let i = 0; i < steps; i += 1) {
     // Random turn
     d.add(_rnd.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(1.4));
     const r = Math.max(p.length(), 0.15);
@@ -83,7 +83,7 @@ function buildTumbleweedGeometry(): THREE.BufferGeometry {
   const origin = new THREE.Vector3();
   const dir = new THREE.Vector3();
 
-  for (let b = 0; b < BRANCHES; b++) {
+  for (let b = 0; b < BRANCHES; b += 1) {
     // Seed at a random point in the shell (not the core — tumbleweeds are
     // hollow-ish in the middle, dense at the skin)
     const a = Math.random() * Math.PI * 2;

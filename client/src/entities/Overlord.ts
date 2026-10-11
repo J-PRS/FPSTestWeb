@@ -230,7 +230,7 @@ export class Overlord implements Targetable, SwarmSlotOwner {
     // "dragged through the air," not static decoration.
     const spd = Math.hypot(this.vel.x, this.vel.z);
     const swayAmp = 0.18 + Math.min(0.3, spd * 0.06);
-    for (let i = 0; i < TENTS_PER; i++) {
+    for (let i = 0; i < TENTS_PER; i += 1) {
       const [px, py, pz, ph] = TENT_OFFSETS[i]!;
       _e.set(
         Math.sin(this.animT * 1.6 + ph) * swayAmp,
@@ -245,7 +245,7 @@ export class Overlord implements Targetable, SwarmSlotOwner {
     }
 
     // Eyes on the face — low on the front of the sac, staring down at you
-    for (let i = 0; i < EYES_PER; i++) {
+    for (let i = 0; i < EYES_PER; i += 1) {
       const side = i === 0 ? -1 : 1;
       _local.compose(_p.set(side * 0.3, -0.35, 1.15), _q.identity(), _s.setScalar(0.4));
       _world.multiplyMatrices(_root, _local);

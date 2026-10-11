@@ -73,7 +73,7 @@ export function extractClip(r: DemoRecorder, startTime: number, endTime: number,
   if (startIdx < 0) {return null;}
 
   const frames: DemoFrame[] = [];
-  for (let i = startIdx; i < r.frameBuffer.Count; i++) {
+  for (let i = startIdx; i < r.frameBuffer.Count; i += 1) {
     const f = r.frameBuffer.getUnsafe(i);
     if (f.timestamp > clipEnd) {break;}
     frames.push(f);

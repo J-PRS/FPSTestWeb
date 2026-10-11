@@ -35,7 +35,7 @@ export class ExplosionTracker {
     // and drop the whole expired prefix in one splice; shift() per entry
     // is O(n) per add under a burst.
     let live = 0;
-    while (live < this.recentExplosions.length && this.recentExplosions[live].timestamp < cutoff) {live++;}
+    while (live < this.recentExplosions.length && this.recentExplosions[live].timestamp < cutoff) {live += 1;}
     if (live > 0) {this.recentExplosions.splice(0, live);}
   }
 }

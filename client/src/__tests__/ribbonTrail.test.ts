@@ -48,7 +48,7 @@ describe('RibbonTrail pooling + slots', () => {
     r.push(pos(1), vel());
     r.stop();
     expect(r.done).toBe(false);
-    for (let i = 0; i < 20 && !r.done; i++) {r.update(0.05);}
+    for (let i = 0; i < 20 && !r.done; i += 1) {r.update(0.05);}
     expect(r.done).toBe(true);
     r.dispose();
   });
@@ -74,7 +74,7 @@ describe('RibbonTrail pooling + slots', () => {
     // Per-frame cadence like production: one push, one update — pushed=1
     // at rewrite time, so vert 0 only stays fresh if eviction forces a
     // full rewrite (the stale-vert bug hid behind freshFrom=count-1).
-    for (let i = 0; i < 60; i++) {r.push(pos(i), vel()); r.update(0.016);}
+    for (let i = 0; i < 60; i += 1) {r.push(pos(i), vel()); r.update(0.016);}
     const b = (r as unknown as { batch: { pos: Float32Array } }).batch;
     const s = slot(r);
     const o = s * 48 * 2 * 3; // slot * VERTS * 3
@@ -157,7 +157,7 @@ describe('RibbonTrail pooling + slots', () => {
     r.push(pos(0), vel());
     r.push(pos(1), vel());
     r.stop();
-    for (let i = 0; i < 20 && !r.done; i++) {r.update(0.05);}
+    for (let i = 0; i < 20 && !r.done; i += 1) {r.update(0.05);}
     expect(r.done).toBe(true);
     // Owner walked away without dispose() — sweepStale is the reaper.
     (r as unknown as { lastUpdateAt: number }).lastUpdateAt = 0;
@@ -177,7 +177,7 @@ describe('RibbonTrail pooling + slots', () => {
     expect(r.done).toBe(false);
     const before = RibbonTrail.reapedStale;
     // The sweep ages it on wall-clock; done → dispose on a later pass.
-    for (let i = 0; i < 10 && RibbonTrail.reapedStale === before; i++) {
+    for (let i = 0; i < 10 && RibbonTrail.reapedStale === before; i += 1) {
       RibbonTrail.sweepStale(1);
     }
     expect(r.done).toBe(true);

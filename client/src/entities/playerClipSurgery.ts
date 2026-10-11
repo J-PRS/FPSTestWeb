@@ -61,7 +61,7 @@ export function computeRootMotionNodes(model: THREE.Object3D): Set<string> {
     if (!sk.isSkinnedMesh || !sk.skeleton) {return;}
     let root: THREE.Object3D | null = null, rootDepth = Infinity;
     for (const b of sk.skeleton.bones) {
-      let d = 0; for (let p = b.parent; p && p !== model; p = p.parent) {d++;}
+      let d = 0; for (let p = b.parent; p && p !== model; p = p.parent) {d += 1;}
       if (d < rootDepth) { root = b; rootDepth = d; }
     }
     for (let n = root; n && n !== model; n = n.parent) {

@@ -31,7 +31,7 @@ export const claimCensus = {
 };
 
 export function noteMutedClaim(): void {
-  mutedCensus.count++;
+mutedCensus.count += 1;
   const now = performance.now();
   // First muted claim warns immediately; a held beam then folds to one
   // warn/second instead of a line per tic.
@@ -121,8 +121,8 @@ export class ClaimLedger {
 
   ack(data: Extract<ServerMessage, { type: 'claimAck' }>): void {
     this.pendingClaims.delete(data.seq);
-    if (data.ok) { claimCensus.accepted++; return; }
-    claimCensus.rejected++;
+    if (data.ok) {claimCensus.accepted += 1; return; }
+claimCensus.rejected += 1;
     const key = `${data.kind}:${data.reason ?? '?'}`;
     claimCensus.byReason.set(key, (claimCensus.byReason.get(key) ?? 0) + 1);
     claimCensus.last = key;
@@ -140,8 +140,8 @@ export class ClaimLedger {
     for (const [seq, c] of this.pendingClaims) {
       if (now - c.t < ClaimLedger.HIT_CONFIRM_MS) {continue;}
       this.pendingClaims.delete(seq);
-      claimCensus.unconfirmed++;
-      unacked++;
+claimCensus.unconfirmed += 1;
+unacked += 1;
       oldest = Math.max(oldest, Math.round(now - c.t));
       byKind[c.kind] = (byKind[c.kind] ?? 0) + 1;
       const key = `${c.kind}:unconfirmed`;
@@ -154,7 +154,7 @@ export class ClaimLedger {
     for (const [id, h] of this.pendingHits) {
       if (now - h.t < ClaimLedger.HIT_CONFIRM_MS) {continue;}
       this.pendingHits.delete(id);
-      rejectCensus.total++;
+rejectCensus.total += 1;
       rejectCensus.byReason.set('unconfirmed', (rejectCensus.byReason.get('unconfirmed') ?? 0) + 1);
       rejectCensus.last = `unconfirmed →${h.targetId}`;
       logger.warn(`predicted hit never confirmed — claim lost or silently dropped`, {

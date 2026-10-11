@@ -115,7 +115,7 @@ function pushProjectiles(lines: string[], ctx: StateDebugContext): void {
   for (const pr of ctx.projectiles) {
     const d = pr.dbg();
     const rib = d.ribbons.map(r => `${r.slot}:${r.count}${r.stopped ? '!' : ''}${r.lit ? 'L' : ''}${r.starved ? `~${r.starved}` : ''}`).join(',');
-    if (d.ribbons.some(r => r.count < 2 && r.starved > 10)) {ribbonWarns++;}
+    if (d.ribbons.some(r => r.count < 2 && r.starved > 10)) {ribbonWarns += 1;}
     lines.push(`  proj ${pr.config.name} age=${pr.age.toFixed(2)}${pr.exploded ? ' EX' : ''} q=${JSON.stringify(d.trail)} rib=[${rib}]`);
   }
   if (ribbonWarns) {lines.push(`ribbonWarns: ${ribbonWarns} projectiles emit pushes but have NO ribbon samples`);}
@@ -302,7 +302,7 @@ function pushShellAudit(lines: string[], ctx: StateDebugContext): void {
   }
   let offWorld = 0;
   for (const pr of ctx.projectiles) {
-    if (pr.pos.y < -500 || Math.abs(pr.pos.x) > 4000 || Math.abs(pr.pos.z) > 4000) {offWorld++;}
+    if (pr.pos.y < -500 || Math.abs(pr.pos.x) > 4000 || Math.abs(pr.pos.z) > 4000) {offWorld += 1;}
   }
   if (offWorld) {lines.push(`offWorld: ${offWorld} projectiles outside sane bounds`);}
 }

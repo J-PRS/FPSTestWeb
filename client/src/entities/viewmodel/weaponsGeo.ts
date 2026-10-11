@@ -107,7 +107,7 @@ const gloveMat = new THREE.MeshLambertMaterial({ color: 0x3A_3D_42, emissive: 0x
 const knuckleMat = new THREE.MeshLambertMaterial({ color: 0x8A_4A_3A, emissive: 0x20_10_0C });
 const palm = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.09, 0.14), gloveMat);
 fistGroup.add(palm);
-for (let i = 0; i < 4; i++) {
+for (let i = 0; i < 4; i += 1) {
   const k = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.03, 0.03), knuckleMat);
   k.position.set(-0.036 + i * 0.024, 0.03, -0.07);
   fistGroup.add(k);

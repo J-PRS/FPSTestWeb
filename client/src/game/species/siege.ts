@@ -28,7 +28,7 @@ type SiegeKit = Pick<SpeciesCtx['kit'],
 
 interface HasDead { dead: boolean; dispose(): void }
 function reapSpecies<T extends HasDead & Targetable>(list: T[], targets: SpeciesCtx['targets'], _dt: number, tick: (e: T) => void): void {
-  for (let i = list.length - 1; i >= 0; i--) {
+  for (let i = list.length - 1; i >= 0; i -= 1) {
     const e = list[i]!;
     tick(e);
     if (e.dead) {
@@ -202,7 +202,7 @@ export function createSiegeSpecies({ deps, kit, targets }: SpeciesCtx) {
     const r2 = radius * radius;
     for (const t of turrets) {
       if (t.dead) {continue;}
-      for (let i = t.bolts.length - 1; i >= 0; i--) {
+      for (let i = t.bolts.length - 1; i >= 0; i -= 1) {
         if (t.bolts[i].pos.distanceToSquared(pos) < r2) {
           _boltKills.push(t.bolts[i].pos.clone());
           t.detonateBolt(i);

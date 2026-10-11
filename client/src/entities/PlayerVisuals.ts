@@ -112,7 +112,7 @@ export class PlayerVisuals {
     // z → world up, so each vertex samples its own ground height.
     const attr = this.shadowPosAttr
       ?? (this.shadowPosAttr = this.shadowBlob.geometry.getAttribute('position') as THREE.BufferAttribute);
-    for (let i = 0; i < attr.count; i++) {
+    for (let i = 0; i < attr.count; i += 1) {
       const wx = pos.x + attr.getX(i), wz = pos.z - attr.getY(i);
       // Clear the rendered chord too, not just the heightfield: the 5m
       // mesh bridges mid-cell gullies, and depthTest clips a blob that

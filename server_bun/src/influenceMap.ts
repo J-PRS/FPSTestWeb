@@ -66,8 +66,8 @@ export class InfluenceMap {
     const g = this.layers[layer];
     const cx = Math.floor((pos.x + this.world / 2) / IMAP_CELL);
     const cz = Math.floor((pos.z + this.world / 2) / IMAP_CELL);
-    for (let dz = -SPLAT_RADIUS; dz <= SPLAT_RADIUS; dz++) {
-      for (let dx = -SPLAT_RADIUS; dx <= SPLAT_RADIUS; dx++) {
+    for (let dz = -SPLAT_RADIUS; dz <= SPLAT_RADIUS; dz += 1) {
+      for (let dx = -SPLAT_RADIUS; dx <= SPLAT_RADIUS; dx += 1) {
         const nx = cx + dx, nz = cz + dz;
         if (nx < 0 || nx >= this.grid || nz < 0 || nz >= this.grid) {continue;}
         const ring = Math.max(Math.abs(dx), Math.abs(dz));
@@ -96,7 +96,7 @@ export class InfluenceMap {
     let best = g[this.idx(pos.x, pos.z)]!;
     let bx = 0, bz = 0;
     for (let dz = -cells; dz <= cells; dz += cells) { // only the ring edge
-      for (let dx = -cells; dx <= cells; dx++) {
+      for (let dx = -cells; dx <= cells; dx += 1) {
         const nx = cx + dx, nz = cz + dz;
         if (nx < 0 || nx >= this.grid || nz < 0 || nz >= this.grid) {continue;}
         const v = g[nz * this.grid + nx]!;
@@ -104,7 +104,7 @@ export class InfluenceMap {
       }
     }
     if (bx === 0 && bz === 0) {
-      for (let dx = -cells; dx <= cells; dx++) {
+      for (let dx = -cells; dx <= cells; dx += 1) {
         for (const dz of [-cells, cells]) {
           const nx = cx + dx, nz = cz + dz;
           if (nx < 0 || nx >= this.grid || nz < 0 || nz >= this.grid) {continue;}
@@ -126,7 +126,7 @@ export class InfluenceMap {
    *  an arbitrary detour. */
   quietApproach(pos: Vec3, home: Vec3, layer: IMapLayer, ringR: number): { x: number; y: number; z: number } {
     let best = home, bestScore = Infinity;
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 8; i += 1) {
       const a = (i / 8) * Math.PI * 2;
       const cand = { x: home.x + Math.cos(a) * ringR, y: home.y, z: home.z + Math.sin(a) * ringR };
       const mid = { x: (cand.x + pos.x) / 2, y: 0, z: (cand.z + pos.z) / 2 };
@@ -145,8 +145,8 @@ export class InfluenceMap {
     const cx = Math.floor((pos.x + this.world / 2) / IMAP_CELL);
     const cz = Math.floor((pos.z + this.world / 2) / IMAP_CELL);
     let best = 0, bx = 0, bz = 0;
-    for (let dz = -cells; dz <= cells; dz++) {
-      for (let dx = -cells; dx <= cells; dx++) {
+    for (let dz = -cells; dz <= cells; dz += 1) {
+      for (let dx = -cells; dx <= cells; dx += 1) {
         const nx = cx + dx, nz = cz + dz;
         if (nx < 0 || nx >= this.grid || nz < 0 || nz >= this.grid) {continue;}
         const v = g[nz * this.grid + nx]!;
@@ -160,7 +160,7 @@ export class InfluenceMap {
   /** One decay pass per room tick — sim clock, so warps stay honest. */
   tick(_dt: number): void {
     for (const g of Object.values(this.layers)) {
-      for (let i = 0; i < g.length; i++) {g[i]! *= DECAY;}
+      for (let i = 0; i < g.length; i += 1) {g[i]! *= DECAY;}
     }
   }
 }

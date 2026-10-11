@@ -17,11 +17,11 @@ function fixture() {
   const make = (_key: string): FakeBatch => ({ id: next++, used: 0, cap: 2, disposed: false });
   const alloc = (key = 'scene'): FakeBatch => {
     const b = acquireBatch(map, key, make, hasRoom);
-    b.used++;
+b.used += 1;
     return b;
   };
   const free = (key: string, b: FakeBatch) => {
-    b.used--;
+b.used -= 1;
     retireBatch(map, key, b, isDrained, dispose);
   };
   return { map, alloc, free };

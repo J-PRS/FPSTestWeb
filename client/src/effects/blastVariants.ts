@@ -197,7 +197,7 @@ export class BlastVariants {
       planar: true,
     });
     // A few hot chips — sparks sell the metal-on-metal read
-    for (let i = 0; i < Math.floor(5 * mult); i++) {
+    for (let i = 0; i < Math.floor(5 * mult); i += 1) {
       const ang = Math.random() * Math.PI * 2;
       const elv = (Math.random() - 0.2) * Math.PI * 0.6;
       const spd = 25 + Math.random() * 40;
@@ -301,7 +301,7 @@ export class BlastVariants {
       planar: true,
     });
     // A few spark chips sell the shell-casing shred
-    for (let i = 0; i < Math.floor(4 * mult); i++) {
+    for (let i = 0; i < Math.floor(4 * mult); i += 1) {
       const ang = Math.random() * Math.PI * 2;
       const elv = (Math.random() - 0.5) * Math.PI;
       const spd = 30 + Math.random() * 40;
@@ -316,7 +316,7 @@ export class BlastVariants {
   /** Electric spark helper — violet-white trails for energy/arc pops. */
   private electricSparks(pos: THREE.Vector3, mult: number): void {
     const count = Math.floor(6 * Math.min(mult, 2.5));
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < count; i += 1) {
       const ang = Math.random() * Math.PI * 2;
       const elv = (Math.random() - 0.3) * Math.PI * 0.7;
       const spd = 20 + Math.random() * 38;
@@ -481,7 +481,7 @@ export class BlastVariants {
     }
 
     // Layer 10: Sparks with trails — mix of orange and blue.
-    for (let i = 0; i < Math.floor(18 * timeScale); i++) {
+    for (let i = 0; i < Math.floor(18 * timeScale); i += 1) {
       const ang = Math.random() * Math.PI * 2;
       const elv = (Math.random() - 0.5) * Math.PI * 0.8;
       const spd = 15 + Math.random() * 30;

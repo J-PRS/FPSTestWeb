@@ -139,7 +139,7 @@ export function writeSeekerInstances(s: SeekerVisHost): void {
   swarm.setMatrix(PART_STINGER, slot, _world);
 
   // Mandibles angle forward-in like grasping fangs, not drooping cones
-  for (let i = 0; i < JAWS_PER; i++) {
+  for (let i = 0; i < JAWS_PER; i += 1) {
     const side = i === 0 ? -1 : 1;
     _e.set(2.4, side * -0.35, 0);
     _q.setFromEuler(_e);
@@ -157,7 +157,7 @@ export function writeSeekerInstances(s: SeekerVisHost): void {
   const amp = s.state === 'dart' ? 0.9 : 0.6;
   // Three pairs marching down the thorax, shrinking and phase-offset so
   // the wings read as a blurred fan, not two discrete paddles.
-  for (let i = 0; i < WINGS_PER; i++) {
+  for (let i = 0; i < WINGS_PER; i += 1) {
     const side = (i & 1) === 0 ? -1 : 1;
     const pair = i >> 1; // 0 fore, 1 mid, 2 rear
     const wingA = Math.sin(s.animT * flapRate - pair * 0.9) * amp;

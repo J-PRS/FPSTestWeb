@@ -53,14 +53,14 @@ export function auditScene(scene: THREE.Scene): VisAuditResult {
     const check = (a: number, b: number) => {
       const dx = X(a) - X(b), dy = Y(a) - Y(b), dz = Z(a) - Z(b);
       const e = dx * dx + dy * dy + dz * dz;
-      if (!isFinite(e)) { nan++; return; }
+      if (!isFinite(e)) {nan += 1; return; }
       if (e > maxEdge) { maxEdge = e; at = [Math.trunc(X(a)), Math.trunc(Y(a)), Math.trunc(Z(a))]; }
     };
 
     const anyO = o as unknown as { isLine?: boolean; isLineSegments?: boolean; isInstancedMesh?: boolean; count?: number; instanceMatrix?: { array: ArrayLike<number> } };
     if (anyO.isLine || anyO.isLineSegments) {
       // Real segment pairs — the only honest measure for lines.
-      out.scanned++;
+out.scanned += 1;
       const idx = geo.index ? geo.index.array : null;
       const nseg = idx ? idx.length / 2 : arr.length / 6;
       const step = Math.max(1, Math.floor(nseg / 2000));
@@ -69,13 +69,13 @@ export function auditScene(scene: THREE.Scene): VisAuditResult {
       }
     } else if (o.userData?.probe?.kind === 'trailBatch') {
       // Ribbon slots: only consecutive-sample edges within a quad matter.
-      out.scanned++;
+out.scanned += 1;
       const nslot = Math.floor(arr.length / 3 / SLOT_VERTS);
       const dr = geo.drawRange ? geo.drawRange.count : Infinity;
       const usedSlots = Math.min(nslot, Math.floor(dr / ((SLOT_VERTS / 2 - 1) * 6)) + 1);
-      for (let s = 0; s < usedSlots; s++) {
+      for (let s = 0; s < usedSlots; s += 1) {
         const base = s * SLOT_VERTS;
-        for (let i = 0; i < SLOT_VERTS / 2 - 1; i++) {check(base + i * 2, base + i * 2 + 2);}
+        for (let i = 0; i < SLOT_VERTS / 2 - 1; i += 1) {check(base + i * 2, base + i * 2 + 2);}
       }
     } else if ((anyO as { isSkinnedMesh?: boolean }).isSkinnedMesh) {
       // Geometry is authored at bind pose — a stretched rig hides in the
@@ -84,7 +84,7 @@ export function auditScene(scene: THREE.Scene): VisAuditResult {
       // exploded skeleton identically.
       const skel = (o as unknown as { skeleton?: { bones: { updateWorldMatrix(a: boolean, b: boolean): void; matrixWorld: { elements: ArrayLike<number> } }[] } }).skeleton;
       if (!skel || skel.bones.length < 2) {return;}
-      out.scanned++;
+out.scanned += 1;
       // matrixWorld.elements[12..14] — no Vector3 needed (THREE is a
       // type-only import in this file).
       const step = Math.max(1, Math.floor(skel.bones.length / 64));
@@ -95,18 +95,18 @@ export function auditScene(scene: THREE.Scene): VisAuditResult {
           const eb = px(j);
           const dx = ea[12] - eb[12], dy = ea[13] - eb[13], dz = ea[14] - eb[14];
           const e = dx * dx + dy * dy + dz * dz;
-          if (!isFinite(e)) { nan++; continue; }
+          if (!isFinite(e)) {nan += 1; continue; }
           if (e > maxEdge) { maxEdge = e; at = [Math.trunc(ea[12]), Math.trunc(ea[13]), Math.trunc(ea[14])]; }
         }
       }
     } else if (anyO.isInstancedMesh && anyO.instanceMatrix && anyO.count != null) {
       // Giant or off-field instances — matrix rows give scale+position.
-      out.scanned++;
+out.scanned += 1;
       const im = anyO.instanceMatrix.array;
-      for (let i = 0; i < (anyO.count ?? 0); i++) {
+      for (let i = 0; i < (anyO.count ?? 0); i += 1) {
         const b = i * 16;
         const sx = Math.hypot(im[b], im[b + 1], im[b + 2]);
-        if (!isFinite(sx)) { nan++; continue; }
+        if (!isFinite(sx)) {nan += 1; continue; }
         if (sx * sx > LIM2) {
           maxEdge = Math.max(maxEdge, sx * sx);
           at = [Math.trunc(im[b + 12]), Math.trunc(im[b + 13]), Math.trunc(im[b + 14])];

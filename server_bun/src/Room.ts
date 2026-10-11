@@ -905,7 +905,7 @@ export class Room {
         if (bots.length < 2 || !this.modeSpec?.teams) {return;}
         // Fisher-Yates on botRand so harness replays stay deterministic,
         // then alternate alpha/bravo — sizes stay even, loyalties don't.
-        for (let i = bots.length - 1; i > 0; i--) {
+        for (let i = bots.length - 1; i > 0; i -= 1) {
           const j = Math.floor(botRand() * (i + 1));
           [bots[i], bots[j]] = [bots[j]!, bots[i]!];
         }
@@ -1022,8 +1022,8 @@ export class Room {
     if (!this.modeSpec?.teams) {return undefined;}
     let alpha = 0, bravo = 0;
     for (const p of this.players.getAllPlayers().values()) {
-      if (p.team === 'alpha') {alpha++;}
-      else if (p.team === 'bravo') {bravo++;}
+      if (p.team === 'alpha') {alpha += 1;}
+      else if (p.team === 'bravo') {bravo += 1;}
     }
     return pickTeam({ alpha, bravo });
   }
@@ -1093,7 +1093,7 @@ export class Room {
       if (excess <= 0) {break;}
       if (!p.isBot) {continue;}
       this.removePlayerCompletely(p.id, 'adminReload', () => {});
-      excess--;
+excess -= 1;
     }
   }
 
@@ -1171,8 +1171,8 @@ export class Room {
       this.players.setTeam(p.id, small);
       this.moveSim.setTeam(p.id, small);
       this.broadcast(eventPayload(WORLD_MODEL.player!, 'teamUpdate', 'playerId', p.id, { team: small }) as ServerMessage);
-      counts[big]--;
-      counts[small]++;
+counts[big] -= 1;
+counts[small] += 1;
     }
   }
 }

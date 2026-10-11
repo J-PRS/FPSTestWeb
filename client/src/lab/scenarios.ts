@@ -63,7 +63,7 @@ function labOf(entities: SimEntity[], world: LabWorld, extra?: Partial<LabInstan
       world.time += dt;
       extra?.tick?.(dt);
       for (const e of entities) {e.tick(dt, world);}
-      for (let i = world.effects.length - 1; i >= 0; i--) {
+      for (let i = world.effects.length - 1; i >= 0; i -= 1) {
         const fx = world.effects[i]!;
         fx.update(dt);
         if (fx.dead) { fx.dispose(); world.effects.splice(i, 1); }
@@ -167,7 +167,7 @@ function mortarVolley(scene: THREE.Scene): LabInstance {
       radius: 0.5,
       color: side === 1 ? 0xFF_E0_8A : 0x9A_DC_FF,
       onDone(hit) {
-        landed++;
+landed += 1;
         if (hit) {
           const m = new THREE.Mesh(new THREE.SphereGeometry(1.4, 10, 10), impactMat);
           m.position.set(hit.x, hit.y + 0.5, hit.z);
@@ -177,7 +177,7 @@ function mortarVolley(scene: THREE.Scene): LabInstance {
       },
     }, world);
     shells.push(shell);
-    fired++;
+fired += 1;
   };
 
   return {
@@ -186,7 +186,7 @@ function mortarVolley(scene: THREE.Scene): LabInstance {
       cd -= dt;
       if (cd <= 0) { launch(); cd = 1.1; }
       for (const s of shells) {s.tick(dt, world);}
-      for (let i = impacts.length - 1; i >= 0; i--) {
+      for (let i = impacts.length - 1; i >= 0; i -= 1) {
         const im = impacts[i]!;
         im.t += dt;
         im.m.scale.setScalar(1 + im.t * 6);
@@ -251,7 +251,7 @@ function duel(scene: THREE.Scene): LabInstance {
     m.visible = true;
     scene.add(m);
     bolts.push({ p: { pos: { x: f.pos.x, y: f.pos.y, z: f.pos.z }, vel: { x: dir.x * DUEL_SPEED, y: dir.y * DUEL_SPEED, z: dir.z * DUEL_SPEED }, age: 0 }, m, from: f });
-    shots++;
+shots += 1;
   };
 
   const _aim = new THREE.Vector3();
@@ -273,18 +273,18 @@ function duel(scene: THREE.Scene): LabInstance {
       if (a.cd <= 0 && b.hp > 0) { fire(a, b); a.cd = 0.6 + rand() * 0.3; }
       if (b.cd <= 0 && a.hp > 0) { fire(b, a); b.cd = 0.7 + rand() * 0.3; }
 
-      for (let i = bolts.length - 1; i >= 0; i--) {
+      for (let i = bolts.length - 1; i >= 0; i -= 1) {
         const bolt = bolts[i]!;
         const from = projStep(bolt.p, dt, 0);
         const foe = bolt.from === a ? b : a;
         if (segPointDist(from, bolt.p.pos, { x: foe.pos.x, y: foe.pos.y, z: foe.pos.z }) < 1.4) {
           foe.hp -= 20;
           foe.flash = 1;
-          hits++;
+hits += 1;
           tracerPool.push(bolt.m); bolt.m.visible = false;
           bolts.splice(i, 1);
           if (foe.hp <= 0) {
-            deaths++;
+deaths += 1;
             foe.hp = DUEL_HP;
             // Respawn across the arena — the fight continues forever.
             foe.pos.set((rand() - 0.5) * 40, 1.6, (rand() - 0.5) * 40);
@@ -423,11 +423,11 @@ function speciesPack(scene: THREE.Scene): LabInstance {
   const events = new Map<string, number>();
   const onEvent = (ev: string) => events.set(ev, (events.get(ev) ?? 0) + 1);
   const pack: SimEntity[] = [];
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 4; i += 1) {
     const a = (i / 4) * Math.PI * 2;
     pack.push(spawnCrawler({ id: i, species: 'crawler', pos: { x: Math.cos(a) * 25, y: 0, z: Math.sin(a) * 25 }, onEvent }, world));
   }
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < 2; i += 1) {
     pack.push(spawnRoller({ id: 10 + i, pos: { x: -30 + i * 8, y: 0, z: -20 }, onEvent }, world));
     pack.push(spawnSlither({ id: 20 + i, pos: { x: 30 - i * 8, y: 0, z: 20 }, onEvent }, world));
   }
@@ -558,8 +558,8 @@ function makeHill(): Heightfield {
   const N = 64;
   const data = new Uint8Array(N * N);
   const R = 10;
-  for (let z = 0; z < N; z++) {
-    for (let x = 0; x < N; x++) {
+  for (let z = 0; z < N; z += 1) {
+    for (let x = 0; x < N; x += 1) {
       const dx = x - 32, dz = z - 32;
       const r = Math.hypot(dx, dz);
       if (r < R) {data[z * N + x] = Math.round(255 * Math.cos((r / R) * Math.PI * 0.5));}
@@ -598,8 +598,8 @@ function skiRun(scene: THREE.Scene): LabInstance {
   );
   {
     let w = 0;
-    for (let i = 0; i < SEG; i++) {
-      for (let j = 0; j < SEG; j++) {
+    for (let i = 0; i < SEG; i += 1) {
+      for (let j = 0; j < SEG; j += 1) {
         const x0 = HILL_X - EXT + (i / SEG) * 2 * EXT;
         const x1 = HILL_X - EXT + ((i + 1) / SEG) * 2 * EXT;
         const z0 = HILL_Z - EXT + (j / SEG) * 2 * EXT;
@@ -641,7 +641,7 @@ function skiRun(scene: THREE.Scene): LabInstance {
         pos: { x: HILL_X, y: startY + 2, z: HILL_Z },
         vel: { x: 0, y: 0, z: 0 }, yaw: s.yaw, pitch: 0, onGround: false,
       });
-      runs++;
+runs += 1;
     }
   };
 
@@ -692,20 +692,20 @@ function botDuel(scene: THREE.Scene, loA: BotLoadout, loB: BotLoadout): LabInsta
       onDone: (impact, directHit) => {
         if (!directHit || !impact) {return;}
         foe.hp -= st.directDamage;
-        hits++;
+hits += 1;
         foe.brain.takeHit(f.sim.state.pos);
         if (foe.hp <= 0) {
           foe.dead = 1.5;
           foe.hp = BOT_HP;
           foe.energy = BOT_ENERGY_MAX;
           foe.mesh.visible = false;
-          deaths++;
+deaths += 1;
         }
       },
     }, world) as ReturnType<typeof spawnShell> & { from: BotAgent; wt: number };
     sh.from = f; sh.wt = wt;
     shells.push(sh);
-    fires++;
+fires += 1;
   };
 
   const thinkOne = (a: BotAgent, foe: BotAgent): void => {
@@ -742,12 +742,12 @@ function botDuel(scene: THREE.Scene, loA: BotLoadout, loB: BotLoadout): LabInsta
       if (A.dead <= 0) {thinkOne(A, B);}
       if (B.dead <= 0) {thinkOne(B, A);}
       for (const a of [A, B]) {if (a.dead <= 0) {locomoteAgent(a, dt);}}
-      for (let i = shells.length - 1; i >= 0; i--) {
+      for (let i = shells.length - 1; i >= 0; i -= 1) {
         const s = shells[i]!;
         s.tick(dt, world);
         if (s.done) { s.dispose(); shells.splice(i, 1); }
       }
-      for (let i = world.effects.length - 1; i >= 0; i--) {
+      for (let i = world.effects.length - 1; i >= 0; i -= 1) {
         const fx = world.effects[i]!;
         fx.update(dt);
         if (fx.dead) { fx.dispose(); world.effects.splice(i, 1); }
@@ -858,10 +858,10 @@ function weaponGym(scene: THREE.Scene): LabInstance {
       // Blast scaled to the weapon's real aoe radius — a mortar's boom
       // reads wide next to a disc's pop without any hardcoded sizes.
       blastScale: l.st.aoeRadius > 0 ? l.st.aoeRadius / 6 : 0.6,
-      onDone: () => { l.done++; },
+      onDone: () => {l.done += 1; },
     }, world);
     shells.push(s);
-    l.fired++;
+l.fired += 1;
     l.cd = 1.4;
   };
 
@@ -872,12 +872,12 @@ function weaponGym(scene: THREE.Scene): LabInstance {
         l.cd -= dt;
         if (l.cd <= 0) {fireLane(l);}
       }
-      for (let i = shells.length - 1; i >= 0; i--) {
+      for (let i = shells.length - 1; i >= 0; i -= 1) {
         const s = shells[i]!;
         s.tick(dt, world);
         if (s.done) { s.dispose(); shells.splice(i, 1); }
       }
-      for (let i = world.effects.length - 1; i >= 0; i--) {
+      for (let i = world.effects.length - 1; i >= 0; i -= 1) {
         const fx = world.effects[i]!;
         fx.update(dt);
         if (fx.dead) { fx.dispose(); world.effects.splice(i, 1); }

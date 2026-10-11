@@ -28,7 +28,7 @@ describe('weapon registry', () => {
   });
 
   it('weaponDef(wid) round-trips and falls back to rocket for bad wids', () => {
-    for (let wid = 0; wid < SLOT_COUNT; wid++) {
+    for (let wid = 0; wid < SLOT_COUNT; wid += 1) {
       expect(weaponDef(wid)).toBe(SLOT_DEFS[wid]);
     }
     expect(weaponDef(999)).toBe(SLOT_DEFS[0]);

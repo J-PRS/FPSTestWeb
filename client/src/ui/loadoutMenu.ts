@@ -306,7 +306,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   // be unborn at wire-up — default the flag pass to medium.
   const weaponOpts = weaponOptsFor(deps.lazyPlayer()?.armorClass ?? 'medium');
   const allWeaponOpts = weaponOpts; // label source for filtered-out picks
-  for (let i = 0; i < Player.LOADOUT_SLOTS; i++) {
+  for (let i = 0; i < Player.LOADOUT_SLOTS; i += 1) {
     const { cell, cap } = mkCellDom(weaponCells);
     cap.textContent = `SLOT ${i + 1}`;
     const drop = mkDrop(weaponOpts, (v) => deps.lazyPlayer().setLoadoutSlot(i, Number(v)), allWeaponOpts);

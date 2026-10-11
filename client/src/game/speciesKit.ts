@@ -180,7 +180,7 @@ class SpeciesKitImpl {
         const now = performance.now();
         const fold = this.whiffFold.get(deathText);
         if (fold && now - fold.at < this.WHIFF_FOLD_MS) {
-          fold.count++;
+fold.count += 1;
         } else {
           const suppressed = fold ? fold.count : 0;
           this.whiffFold.set(deathText, { at: now, count: 0 });
@@ -278,7 +278,7 @@ class SpeciesKitImpl {
       if (!this.RANDOM_SPAWNS && !this.deps.lazyDemoManager()?.isPlaying && !(urlParams.noCreatures && !s.decor)) {s.spawn();}
     }
     const playerPos = this.deps.lazyPlayer().pos;
-    for (let i = s.list.length - 1; i >= 0; i--) {
+    for (let i = s.list.length - 1; i >= 0; i -= 1) {
       const e = s.list[i]!;
       const tickDt = this.lodTick(e, e.pos.distanceToSquared(playerPos), dt);
       if (tickDt > 0) {s.tick(e, tickDt);}

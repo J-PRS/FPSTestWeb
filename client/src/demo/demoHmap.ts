@@ -27,7 +27,7 @@ export function hmapFingerprint(field: Heightfield): number {
   const d = field.data;
   const s = field.stride;
   const packed = new Uint8Array(field.size * field.size);
-  for (let i = 0; i < packed.length; i++) {packed[i] = d[i * s]!;}
+  for (let i = 0; i < packed.length; i += 1) {packed[i] = d[i * s]!;}
   return crc32(packed);
 }
 
@@ -36,8 +36,8 @@ export function hmapFingerprint(field: Heightfield): number {
 export function hmapDownsample(field: Heightfield, gridN: number = HMAP_GRID): DemoHeightmap {
   const data = new Uint8Array(gridN * gridN);
   const ws = field.worldScale ?? 1500;
-  for (let z = 0; z < gridN; z++) {
-    for (let x = 0; x < gridN; x++) {
+  for (let z = 0; z < gridN; z += 1) {
+    for (let x = 0; x < gridN; x += 1) {
       // Sample at the CENTER of each output cell's world footprint —
       // hmHeight() already applies the texel-center convention, so the
       // coarse grid round-trips through the same sampler cleanly.
@@ -73,7 +73,7 @@ export function hmapMatches(hm: DemoHeightmap, field: Heightfield): boolean {
   const other = hmapDownsample({ ...field, worldScale: hm.worldScale }, hm.gridN);
   let worst = 0;
   const gain = 125 * hm.heightScale;
-  for (let i = 0; i < hm.data.length; i++) {
+  for (let i = 0; i < hm.data.length; i += 1) {
     const dy = Math.abs(hm.data[i]! - other.data[i]!) / 255 * gain;
     if (dy > worst) {worst = dy;}
     if (worst > 1.5) {return false;}

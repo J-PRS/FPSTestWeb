@@ -19,7 +19,7 @@ export const DEFAULT_MIX: readonly number[] = [0.84, 0.07, 0.04, 0.05];
 export function rollVariant(mix: readonly number[] = DEFAULT_MIX, rng: () => number = Math.random): BallVariant {
   const total = mix[0]! + mix[1]! + mix[2]! + mix[3]!;
   let r = rng() * total;
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 4; i += 1) {
     r -= mix[i]!;
     if (r <= 0) {return i as BallVariant;}
   }

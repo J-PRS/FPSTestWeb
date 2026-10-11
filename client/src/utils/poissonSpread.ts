@@ -25,15 +25,15 @@ export function poissonDisc(n: number): { x: number; y: number }[] {
   let attempts = 0;
   const maxAttempts = n * 400;
   while (pts.length < n && attempts < maxAttempts) {
-    attempts++;
+attempts += 1;
     const x = Math.random() * 2 - 1;
     const y = Math.random() * 2 - 1;
     if (x * x + y * y > 1) {continue;}
     const c = cellOf(x, y);
     const cx = c % gridSize, cy = Math.floor(c / gridSize);
     let ok = true;
-    for (let gy = Math.max(0, cy - 2); ok && gy <= Math.min(gridSize - 1, cy + 2); gy++) {
-      for (let gx = Math.max(0, cx - 2); gx <= Math.min(gridSize - 1, cx + 2); gx++) {
+    for (let gy = Math.max(0, cy - 2); ok && gy <= Math.min(gridSize - 1, cy + 2); gy += 1) {
+      for (let gx = Math.max(0, cx - 2); gx <= Math.min(gridSize - 1, cx + 2); gx += 1) {
         const pi = grid[gy * gridSize + gx]!;
         if (pi < 0) {continue;}
         const dx = pts[pi]!.x - x, dy = pts[pi]!.y - y;
@@ -47,7 +47,7 @@ export function poissonDisc(n: number): { x: number; y: number }[] {
 
   // Fallback: top up with a Vogel spiral if rejection sampling starved
   const golden = Math.PI * (3 - Math.sqrt(5));
-  for (let i = pts.length; i < n; i++) {
+  for (let i = pts.length; i < n; i += 1) {
     const r = Math.sqrt((i + 0.5) / n);
     const a = i * golden;
     pts.push({ x: r * Math.cos(a), y: r * Math.sin(a) });

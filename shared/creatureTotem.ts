@@ -120,7 +120,7 @@ function totemLineClear(
       segSolidHit({ x: c.x, y: sy, z: c.z }, { x: tx, y: ty, z: tz }, cols)) {
     return false;
   }
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 1; i <= 10; i += 1) {
     const t = i / 10;
     const x = c.x + (tx - c.x) * t;
     const z = c.z + (tz - c.z) * t;
@@ -179,7 +179,7 @@ export function totemBeamHit(c: SimTotem, px: number, py: number, pz: number): b
 function totemPickBlink(c: SimTotem, field: Heightfield, tx: number, tz: number): void {
   let bestH = -Infinity;
   let found = false;
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < 16; i += 1) {
     const a = (i / 16) * Math.PI * 2 + crand(c) * 0.4;
     const r = 15 + crand(c) * c.sp.PEAK_RADIUS;
     const x = c.x + Math.cos(a) * r;
@@ -280,7 +280,7 @@ function stepTotemCharge(c: SimTotem, dt: number, authoritative: boolean): Crawl
   if (c.hopTimer <= 0) {
     c.state = 'aim';
     c.windupTimer = c.sp.REFIRE;
-    c.shotsFired++;
+c.shotsFired += 1;
     if (authoritative) {c.pendingBite = true;} // beam resolves in stepAll
     return 'fire';
   }

@@ -123,7 +123,7 @@ export class PlayerInput {
   }
 
   private slotForCode(code: string): number {
-    for (let i = 0; i < LOADOUT_SLOTS; i++) {
+    for (let i = 0; i < LOADOUT_SLOTS; i += 1) {
       if (matchCode(`slot${i}` as BindAction, code)) {return i;}
     }
     return -1;

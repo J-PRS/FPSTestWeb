@@ -46,9 +46,9 @@ function makePool(scene: THREE.Scene): RingPool {
   geo.setAttribute('position', pos);
   geo.setAttribute('color', col);
   const idx = new Uint32Array(MAX_RINGS * SEGS * 6);
-  for (let s = 0; s < MAX_RINGS; s++) {
+  for (let s = 0; s < MAX_RINGS; s += 1) {
     const vo = s * VERTS, io = s * SEGS * 6;
-    for (let i = 0; i < SEGS; i++) {
+    for (let i = 0; i < SEGS; i += 1) {
       const o = io + i * 6, v = vo + i * 2;
       idx[o] = v; idx[o + 1] = v + 1; idx[o + 2] = v + 2;
       idx[o + 3] = v + 1; idx[o + 4] = v + 3; idx[o + 5] = v + 2;
@@ -76,19 +76,19 @@ function makePool(scene: THREE.Scene): RingPool {
     pos, col, free: [], live: 0,
     scene, geo, meshes: [mesh], mats: [mat],
   };
-  for (let i = MAX_RINGS - 1; i >= 0; i--) {pool.free.push(i);}
+  for (let i = MAX_RINGS - 1; i >= 0; i -= 1) {pool.free.push(i);}
   return pool;
 }
 
 function acquireRingSlot(scene: THREE.Scene): { pool: RingPool; slot: number } {
   const p = acquireBatch(pools, scene, makePool, b => b.live < MAX_RINGS);
-  p.live++;
+p.live += 1;
   return { pool: p, slot: p.free.pop()! };
 }
 
 function releaseRingSlot(pool: RingPool, slot: number): void {
   pool.free.push(slot);
-  pool.live--;
+pool.live -= 1;
   retireBatch(pools, pool.scene, pool, p => p.live === 0, p => {
     for (const m of p.meshes) {p.scene.remove(m);}
     p.geo.dispose();
@@ -140,7 +140,7 @@ export class TerrainRing {
     const inner = radius * 0.85;
     const { x: cx, y: cy, z: cz } = this.center;
     const base = this.slot * VERTS;
-    for (let i = 0; i <= SEGS; i++) {
+    for (let i = 0; i <= SEGS; i += 1) {
       const ang = (i / SEGS) * Math.PI * 2;
       const c = Math.cos(ang), s = Math.sin(ang);
       for (const rr of [inner, radius] as const) {

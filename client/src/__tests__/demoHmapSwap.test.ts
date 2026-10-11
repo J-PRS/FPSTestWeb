@@ -16,7 +16,7 @@ import type { DemoHeightmap } from '../demo/types.js';
 // swapped-in field provably answers with ITS shape, not a leftover's.
 const rampField = (size: number, gain: number): Heightfield => {
   const data = new Uint8Array(size * size);
-  for (let i = 0; i < data.length; i++) {data[i] = (i * gain) % 256;}
+  for (let i = 0; i < data.length; i += 1) {data[i] = (i * gain) % 256;}
   return { size, data, stride: 1, heightScale: 1, worldScale: 1500 };
 };
 

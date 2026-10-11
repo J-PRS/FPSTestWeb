@@ -109,7 +109,7 @@ export class DeployShield {
     pool.base.mesh.instanceMatrix.needsUpdate = true;
     pool.mast.mesh.setMatrixAt(i, _m2.makeTranslation(0, 0.8, 0).premultiply(g));
     pool.mast.mesh.instanceMatrix.needsUpdate = true;
-    for (let s = 0; s < 3; s++) {
+    for (let s = 0; s < 3; s += 1) {
       const a = (s / 3) * Math.PI * 2;
       _q.setFromEuler(new THREE.Euler(Math.sin(a) * 0.5, 0, Math.cos(a) * -0.5));
       pool.strut.mesh.setMatrixAt(i * 3 + s, _m2.compose(
@@ -182,7 +182,7 @@ export class DeployShield {
       releaseSlot(_pool.base, this.slot);
       releaseSlot(_pool.mast, this.slot);
       releaseSlot(_pool.tip, this.slot);
-      for (let s = 0; s < 3; s++) {
+      for (let s = 0; s < 3; s += 1) {
         _pool.strut.mesh.setMatrixAt(this.slot * 3 + s, ZERO_M4);
       }
       _pool.strut.mesh.instanceMatrix.needsUpdate = true;

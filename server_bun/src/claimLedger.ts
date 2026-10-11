@@ -32,7 +32,7 @@ export function rewindPos(target: PlayerState, backMs: number): { x: number; y: 
   if (tAt <= h[0]!.t) {return h[0]!;}
   const last = h[h.length - 1]!;
   if (tAt >= last.t) {return target.position;}
-  for (let i = h.length - 1; i > 0; i--) {
+  for (let i = h.length - 1; i > 0; i -= 1) {
     if (h[i - 1]!.t <= tAt) {
       const a = h[i - 1]!, b = h[i]!;
       const f = (tAt - a.t) / Math.max(b.t - a.t, 1);

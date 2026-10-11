@@ -782,7 +782,7 @@ export class Deployables {
   update(dt: number): void {
     for (const i of this.items) {if (!i.dead) {i.update(dt);}}
 
-    for (let i = this.pods.length - 1; i >= 0; i--) {
+    for (let i = this.pods.length - 1; i >= 0; i -= 1) {
       const pod = this.pods[i]!;
       this.updatePod(pod, dt);
       if (pod.ttl <= 0) {
@@ -803,7 +803,7 @@ export class Deployables {
     // Solid-hull sync: a census signature catches every add/remove/death;
     // items never move once planted (drones are excluded by deploySolid).
     let live = 0;
-    for (const i of this.items) {if (!i.dead) {live++;}}
+    for (const i of this.items) {if (!i.dead) {live += 1;}}
     const sig = this.items.length * 97 + live * 13 + this.remotes.size * 7;
     if (sig !== this.solidSig) { this.solidSig = sig; this.refreshSolidCols(); }
     const mv = this.deps.lazyPlayer()?.movement as unknown as { setDynamicCols(c: readonly StructureCollider[]): void } | undefined;
@@ -879,7 +879,7 @@ export class Deployables {
   // A server-acked local item also sits in byId — drop it or
   // applyDeployHp/remoteWeld keep resolving a corpse until deployGone.
   private reapDeadItems(): void {
-    for (let i = this.items.length - 1; i >= 0; i--) {
+    for (let i = this.items.length - 1; i >= 0; i -= 1) {
       const item = this.items[i]!;
       if (!item.dead) {continue;}
       if (item.serverId !== undefined) {this.remotes.dropById(item.serverId);}

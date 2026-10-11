@@ -38,7 +38,7 @@ export function swingSwipe(scene: THREE.Scene, origin: THREE.Vector3, dir: THREE
     _up.crossVectors(_side, dir).normalize();
     const ct = Math.cos(tilt), st = Math.sin(tilt);
     _dirW.copy(_side).multiplyScalar(ct).addScaledVector(_up, st);
-    for (let i = 0; i < SWIPE_SAMPLES; i++) {
+    for (let i = 0; i < SWIPE_SAMPLES; i += 1) {
       const u = i / (SWIPE_SAMPLES - 1);
       const s = (u - 0.5) * SWIPE_LEN;
       _pos.copy(origin).addScaledVector(dir, SWIPE_REACH).addScaledVector(_dirW, s);
@@ -65,7 +65,7 @@ function traceStroke(r: RibbonTrail, camPos: THREE.Vector3, camDir: THREE.Vector
   // Stroke direction = side axis rotated ±tilt toward up — the mirrored
   // pair crosses at camPos + camDir·REACH, i.e. dead on the crosshair.
   _dirW.copy(_side).multiplyScalar(ct).addScaledVector(_up, st);
-  for (let i = 0; i < SWIPE_SAMPLES; i++) {
+  for (let i = 0; i < SWIPE_SAMPLES; i += 1) {
     const u = i / (SWIPE_SAMPLES - 1);          // 0..1 along the stroke
     const s = (u - 0.5) * SWIPE_LEN * lenScale;
     _pos.copy(camPos).addScaledVector(camDir, SWIPE_REACH).addScaledVector(_dirW, s);
@@ -104,7 +104,7 @@ export function disposeSwings(): void {
  *  life expires, then join the fading list like every other ribbon. */
 export function updateSwings(dt: number, camera?: THREE.Camera): void {
   const camPos = camera?.position;
-  for (let i = camSwipes.length - 1; i >= 0; i--) {
+  for (let i = camSwipes.length - 1; i >= 0; i -= 1) {
     const s = camSwipes[i]!;
     s.t -= dt;
     // Dead swipes DISPOSE, not stop-and-fade — a stopped ribbon freezes
@@ -118,7 +118,7 @@ export function updateSwings(dt: number, camera?: THREE.Camera): void {
     traceStroke(s.r, _camP, _aim, s.tilt, Math.sin(Math.PI * (1 - s.t / SWIPE_LIFE)));
     s.r.update(dt, camPos);
   }
-  for (let i = list.length - 1; i >= 0; i--) {
+  for (let i = list.length - 1; i >= 0; i -= 1) {
     const r = list[i]!;
     r.update(dt, camPos);
     if (r.done) { r.dispose(); list.splice(i, 1); }

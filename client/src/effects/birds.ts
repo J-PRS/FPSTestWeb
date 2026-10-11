@@ -153,7 +153,7 @@ export class AmbientBirds {
     scene.add(this.flock);
     markProbe(this.flock, { kind: 'fxMesh', label: 'birds' });
 
-    for (let i = 0; i < BIRD_COUNT; i++) {
+    for (let i = 0; i < BIRD_COUNT; i += 1) {
       const group = new THREE.Group();
       // Oversized silhouette — at 150–500m real buzzard scale is invisible
       group.scale.setScalar(3.2);
@@ -333,7 +333,7 @@ export class AmbientBirds {
    *  small figure-8 wander — birds drift past the horizon over time and
    *  the two groups approach from different bearings. */
   private roamKettles(dt: number, playerPos: THREE.Vector3, terrain: Terrain): void {
-    for (let ki = 0; ki < this.kettles.length; ki++) {
+    for (let ki = 0; ki < this.kettles.length; ki += 1) {
       const k = this.kettles[ki]!;
       k.roamAngle += dt * k.roamW;
       k.wanderPhase += dt * 0.07;

@@ -224,7 +224,7 @@ function spawnFan(deps: CombatDeps, config: ProjectileConfig, e: FireArgs, count
       p.fanSlot = `${pullId}#${i}`;
       registry.byFanSlot.set(p.fanSlot, p);
     }
-    i++;
+i += 1;
   }
   if (simmed) {
     deps.lazyNetworkManager().sendShotFired({

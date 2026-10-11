@@ -103,12 +103,12 @@ export class MobilityWatchdog {
     const dx = pos.x - s.lx, dz = pos.z - s.lz;
     s.lx = pos.x; s.lz = pos.z;
     if (m.trying) {
-      s.ticks++; s.dist += Math.hypot(dx, dz);
-      if (m.ski || m.airborne) {s.skiAir++;}
+s.ticks += 1; s.dist += Math.hypot(dx, dz);
+      if (m.ski || m.airborne) {s.skiAir += 1;}
       // airPct is the honest "dynamic Tribes bot" number — skiHeld on the
       // ground counts as ski, but only real altitude counts as air.
-      if (m.airborne) {s.air++;}
-      if (m.jetting) {s.jet++;}
+      if (m.airborne) {s.air += 1;}
+      if (m.jetting) {s.jet += 1;}
     }
     const winMs = now - s.winStart;
     if (winMs < SHEEP_WIN_MS) {return;}

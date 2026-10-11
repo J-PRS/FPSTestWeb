@@ -77,7 +77,7 @@ export class RoomScore {
       const killer = this.h.players.getPlayer(by);
       const k = killer ? 0.45 : 0;
       const dx = k * (killer!.position.x - pos.x), dz = k * (killer!.position.z - pos.z);
-      for (let i = 0; i < drops; i++) {
+      for (let i = 0; i < drops; i += 1) {
         const gx2 = pos.x + dx + (this.h.rng() - 0.5) * 2;
         const gz2 = pos.z + dz + (this.h.rng() - 0.5) * 2;
         const gy2 = (this.h.field ? hmHeight(this.h.field, gx2, gz2) : pos.y) + 0.5;
@@ -136,7 +136,7 @@ export class RoomScore {
         this.h.pickups?.spawn(corpse.position, 'tag');
         this.h.influence.splat(corpse.position, 'opportunity', 0.5);
       } else {
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 3; i += 1) {
           this.h.pickups?.spawn({
             x: corpse.position.x + (this.h.rng() - 0.5) * 3,
             y: corpse.position.y,

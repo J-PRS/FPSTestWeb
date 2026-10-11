@@ -161,7 +161,7 @@ export class PlayerLoadout {
    *  heavy (respawn bank) AND at construction, since the persisted
    *  loadout parses raw and can carry a stale locked pick. */
   unshoulderLocked(): void {
-    for (let i = 0; i < this.h.loadout.length; i++) {
+    for (let i = 0; i < this.h.loadout.length; i += 1) {
       if (this.lockedFor(this.h.appliedClass, this.h.loadout[i])) {
         this.setLoadoutSlot(i, PlayerLoadout.fallbackWid(this.h.appliedClass, this.h.loadout));
       }
@@ -173,7 +173,7 @@ export class PlayerLoadout {
    *  legal, not-always-carried wid so two slots never hold the same gun. */
   static fallbackWid(cls: ArmorClass, loadout: readonly number[]): number {
     if (!loadout.includes(2)) {return 2;}
-    for (let w = 0; w < SLOT_COUNT; w++) {
+    for (let w = 0; w < SLOT_COUNT; w += 1) {
       if (!loadout.includes(w) && !PlayerLoadout.lockedForClass(cls, w)) {return w;}
     }
     return 2;

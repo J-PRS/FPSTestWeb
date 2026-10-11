@@ -64,7 +64,7 @@ const _crestGeo = new THREE.ConeGeometry(0.16, 0.7, 4);
 const _wingInGeo = new THREE.BoxGeometry(1.1, 0.06, 0.9);
 {
   const pos = _wingInGeo.attributes.position!;
-  for (let i = 0; i < pos.count; i++) {
+  for (let i = 0; i < pos.count; i += 1) {
     const x = pos.getX(i), z = pos.getZ(i);
     const t = Math.min(1, Math.max(0, x + 0.55)); // 0 at root → 1 at wrist
     if (z < 0) {pos.setZ(i, z * (1 - t * 0.45));} // trailing edge shortens
@@ -201,7 +201,7 @@ export function writeRakkInstances(r: RakkVisHost): void {
   // Two-joint wing: the arm rolls with the beat, the hand fan folds
   // further — dive sweeps both back into a dart silhouette.
   const fold = r.state === 'dive' ? 1 : 0;
-  for (let i = 0; i < WINGS_PER; i++) {
+  for (let i = 0; i < WINGS_PER; i += 1) {
     const side = i === 0 ? -1 : 1;
     // Arm: rooted INSIDE the torso (wide root overlaps the hide — no gap),
     // slight forward rake + roll with the flap, sweeps back on the dive
@@ -239,7 +239,7 @@ export function writeRakkInstances(r: RakkVisHost): void {
   swarm.setColor(PART_TAIL, slot, cr * 0.85, cg * 0.85, cb * 0.85);
 
   // Eyes — small glow quads on either side of the flat head
-  for (let i = 0; i < EYES_PER; i++) {
+  for (let i = 0; i < EYES_PER; i += 1) {
     const side = i === 0 ? -1 : 1;
     _e.set(0, side * 0.55, 0);
     _q.setFromEuler(_e);
