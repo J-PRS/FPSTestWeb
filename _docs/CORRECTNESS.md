@@ -41,6 +41,18 @@ violation instead of a symptom hunt.
    name the bug class, not the line. A hot-path invariant never crashes
    the match — it makes the dump say exactly what broke.
 
+5a. **NaN passes every `>` gate — check `isFinite` before comparing.**
+   `NaN > x` is always false, so a non-finite value sails through
+   `dist > MAX`, `reach > cap`, `health <= 0` untouched. Every untrusted
+   number needs its own finite gate at ingest AND at the write site —
+   a validator upstream doesn't protect a path that writes around it
+   (the teleport claim fed `lastValid*` directly, past the gated
+   `updatePosition`; `healPool`'s `min(cap, NaN)` = NaN; NaN damage
+   made a player unkillable because `health <= 0` was never true).
+   Closed sites: move-claim anchor+sim, slam landing, deploy plant,
+   hit-claim legality, knockback wire+shove, damage chokepoint,
+   reconnect seat, healPool, shot/contact ingest.
+
 6. **Render can lie, but every lie is watched.** Prediction, interp
    smoothing, corpse physics may diverge from wire truth — each divergence
    budget gets a census counter (render-blend, seg-div, nugrest, dmg-echo,
