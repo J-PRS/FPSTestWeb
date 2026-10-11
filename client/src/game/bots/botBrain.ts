@@ -20,6 +20,7 @@ import { STATUS } from '../../../../shared/status.js';
 import type { ChatterKind } from '../../../../shared/botTaunts.js';
 import type { BotLoadout } from '../../../../shared/botLoadouts.js';
 import { perkMods, effectiveResist, type PerkMods } from '../../../../shared/perks.js';
+import { inv } from '../../../../shared/invariants.js';
 
 /**
  * GameBot — an in-world fake player. A GameBot is a RemotePlayer registered
@@ -164,6 +165,8 @@ export class GameBot extends RemotePlayer {
    *  plays online. Returns true when the hit killed. */
   takeDamageLocal(dmg: number, fromPos: THREE.Vector3, attackerId?: string): boolean {
     if (this.isDead) {return false;}
+    // NaN dmg fails `botHp <= 0` forever — an unkillable bot.
+    if (!Number.isFinite(dmg)) { inv('bot-damage-finite', false, { dmg }); return false; }
     // Plated et al — the server's applyDamage applies the same resist.
     dmg *= 1 - effectiveResist(this.mods, this.botHp, this.botMaxHp);
     // Held shield burns tank instead of flesh — same exchange rate the
