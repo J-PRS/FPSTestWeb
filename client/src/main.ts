@@ -201,6 +201,14 @@ async function init(): Promise<void> {
 
   player = new Player(terrain, camera, scene);
   profiler.markTime('playerCtor');
+  // The GLB is a ~0.4-0.6s fetch+parse the first-person camera never
+  // draws — kicking it at construction overlaps it with the rest of
+  // init and the connect handshake instead of serializing it before
+  // connectPhase. setVisible(false) still applies in the same
+  // microtask the load resolves, so it can never flash rendered.
+  void player.loadModel()
+    .then(() => profiler.markTime('playerModelLoaded'))
+    .catch((e) => logger.warn('PlayerModel load gave up', { error: String(e) }));
 
   vmSetup = createViewModelScene(camera.aspect);
   viewModel = vmSetup.viewModel;
@@ -274,9 +282,8 @@ async function init(): Promise<void> {
   });
   playerSheep = new PlayerSheep(() => networkManager.getLocalPlayerId());
 
-  // Load player model
-  await player.loadModel();
-  profiler.markTime('playerModelLoaded');
+  // The model load was kicked at playerCtor — it resolves in the
+  // background through the connect handshake.
 
 
 
@@ -301,16 +308,19 @@ async function init(): Promise<void> {
     hearLocalChat: (t, tm, v) => teamBots?.hearLocal(t, tm, v),
   });
 
-  await connectPhase(netCtx, bootSaved?.map ?? null, classicMode, mode);
-
-
-  // Frame loop — everything mutable is passed via deps getters
+  // Frame loop — everything mutable is passed via deps getters. The
+  // loop starts BEFORE the handshake completes: first frames + shader
+  // compile overlap the connect/worldstate flight instead of stacking
+  // after it (the terrain-swap machinery already runs mid-game).
   gameLoop = makeGameLoop();
   profiler.markTime('initComplete');
+  gameLoop.start();
+
+  const connP = connectPhase(netCtx, bootSaved?.map ?? null, classicMode, mode);
 
   profiler.printSummary();
 
-  gameLoop.start();
+  await connP;
 }
 
 /** SOLO map pick: fetch maps/<name>.json off the static route and resolve
@@ -391,6 +401,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
     seatKits(soloSpec.spec.structures, (x, z) => terrain.getHeight(x, z));
   }
   if (!classicMode) {bootApplySavedMap(netCtx, soloMode ? (soloSpec?.map ?? null) : savedMap);}
+  profiler.markTime('savedMapApplied');
   const serverUrl = (await serverEndpoints).wsUrl;
   logger.info(`[diag] serverUrl=${serverUrl} classic=${classicMode || soloMode}`);
   // F5 with a stored session token = the server may hand back our old
@@ -399,6 +410,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   // curtain over a connect that can never land is the wrong order.
   if (!classicMode && !soloMode && settings.get('fps-session-token')) {
     if (await pingServer((await serverEndpoints).httpUrl)) {armSessionVeil();}
+    profiler.markTime('veilProbed');
   }
   const ep = await serverEndpoints;
   await connectServer({
