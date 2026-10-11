@@ -152,7 +152,7 @@ function mapPicker(h: LobbyPanelHost): { select: HTMLSelectElement; thumb: HTMLI
   let probe = 0;
   const update = async () => {
     const url = select.value && h.deps.mapThumbUrl ? h.deps.mapThumbUrl(select.value) : '';
-    const gen = ++probe;
+    const gen = (probe += 1);
     if (!url) { thumb.style.display = 'none'; return; }
     const ok = await fetch(url).then((r) => r.ok).catch(() => false);
     if (gen !== probe) {return;} // selection moved on while probing

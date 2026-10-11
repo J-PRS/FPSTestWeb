@@ -121,8 +121,8 @@ export function encodePosition(pos: WireVec3, rot: WireRot, vel: WireVec3, seq: 
   const buf = new ArrayBuffer(37);
   const d = new DataView(buf);
   let o = 0;
-  d.setUint8(o++, MAGIC);
-  d.setUint8(o++, WIRE_POSITION);
+  d.setUint8(((o += 1) - 1), MAGIC);
+  d.setUint8(((o += 1) - 1), WIRE_POSITION);
   d.setUint32(o, seq >>> 0, true); o += 4;
   d.setFloat32(o, pos.x, true); o += 4;
   d.setFloat32(o, pos.y, true); o += 4;
@@ -135,9 +135,9 @@ export function encodePosition(pos: WireVec3, rot: WireRot, vel: WireVec3, seq: 
   // Held input as a superseding stream: +3B, seq'd by inputSeq — the
   // seq gate drops stale applies, a dropped frame costs nothing.
   if (input !== undefined) {
-    d.setInt8(o++, Math.round(input.forward));
-    d.setInt8(o++, Math.round(input.right));
-    d.setUint8(o++, (input.jump ? 1 : 0) | (input.ski ? 2 : 0) | (input.jet ? 4 : 0));
+    d.setInt8(((o += 1) - 1), Math.round(input.forward));
+    d.setInt8(((o += 1) - 1), Math.round(input.right));
+    d.setUint8(((o += 1) - 1), (input.jump ? 1 : 0) | (input.ski ? 2 : 0) | (input.jet ? 4 : 0));
   }
   return new Uint8Array(buf, 0, o);
 }
@@ -212,7 +212,7 @@ export function encodeTickPlayer(p: WireTickPlayer): Uint8Array {
   const u8 = new Uint8Array(buf);
   const d = new DataView(buf);
   let o = 0;
-  u8[o++] = id.length;
+  u8[((o += 1) - 1)] = id.length;
   u8.set(id, o); o += id.length;
   o = packPos(d, o, p.position.x, p.position.y, p.position.z);
   o = packVel(d, o, p.velocity);
@@ -220,11 +220,11 @@ export function encodeTickPlayer(p: WireTickPlayer): Uint8Array {
   // u8 clamped real hp at 255 — heavies/bots run 300+, which shipped as
   // 255 on the wire and desynced every StateHash check against truth.
   d.setUint16(o, Math.max(0, Math.min(65_535, Math.round(p.health))), true); o += 2;
-  u8[o++] = p.ping === undefined ? 0 : Math.max(0, Math.min(255, Math.round(p.ping)));
-  u8[o++] = (p.isDead ? 1 : 0) | (p.ski ? 2 : 0) | ((p.status ?? 0) & STATUS_MASK);
+  u8[((o += 1) - 1)] = p.ping === undefined ? 0 : Math.max(0, Math.min(255, Math.round(p.ping)));
+  u8[((o += 1) - 1)] = (p.isDead ? 1 : 0) | (p.ski ? 2 : 0) | ((p.status ?? 0) & STATUS_MASK);
   // Always present — records are concatenated without lengths, so an
   // optional trailing byte would alias as the next record's idLen.
-  u8[o++] = Math.max(0, Math.min(100, Math.round(p.sheep ?? 0))) | (p.jet ? 0x80 : 0);
+  u8[((o += 1) - 1)] = Math.max(0, Math.min(100, Math.round(p.sheep ?? 0))) | (p.jet ? 0x80 : 0);
   return new Uint8Array(buf, 0, o);
 }
 
@@ -249,9 +249,9 @@ export function encodeTickPlayerV3(wireId: number, p: WireTickPlayer, into?: Tic
   o = packVel(d, o, p.velocity);
   o = packRot(d, o, p.rotation);
   d.setUint16(o, Math.max(0, Math.min(65_535, Math.round(p.health))), true); o += 2;
-  u8[o++] = p.ping === undefined ? 0 : Math.max(0, Math.min(255, Math.round(p.ping)));
-  u8[o++] = (p.isDead ? 1 : 0) | (p.ski ? 2 : 0) | ((p.status ?? 0) & STATUS_MASK);
-  u8[o++] = Math.max(0, Math.min(100, Math.round(p.sheep ?? 0))) | (p.jet ? 0x80 : 0);
+  u8[((o += 1) - 1)] = p.ping === undefined ? 0 : Math.max(0, Math.min(255, Math.round(p.ping)));
+  u8[((o += 1) - 1)] = (p.isDead ? 1 : 0) | (p.ski ? 2 : 0) | ((p.status ?? 0) & STATUS_MASK);
+  u8[((o += 1) - 1)] = Math.max(0, Math.min(100, Math.round(p.sheep ?? 0))) | (p.jet ? 0x80 : 0);
   return new Uint8Array(buf, 0, o);
 }
 
@@ -355,7 +355,7 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
       wireId = d.getUint16(o, true); o += 2;
       playerId = pool?.resolveId?.(wireId) ?? '';
     } else {
-      const idLen = u8[o++]!;
+      const idLen = u8[((o += 1) - 1)]!;
       if (o + idLen + tail > u8.length) {return null;}
       playerId = DEC.decode(u8.subarray(o, o + idLen)); o += idLen;
     }
@@ -378,7 +378,7 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
     u.playerId = playerId;
     u.wireId = wireId;
     if (v4) {
-      const mask = u8[o++]!;
+      const mask = u8[((o += 1) - 1)]!;
       if (o + 12 > u8.length) {return null;}
       u.position.x = d.getInt32(o, true) * POS_Q; o += 4;
       u.position.y = d.getInt32(o, true) * POS_Q; o += 4;
@@ -394,13 +394,13 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
       if (mask & V4_MASK_HP_PING) {
         if (o + 3 > u8.length) {return null;}
         u.health = d.getUint16(o, true); o += 2;
-        const pingRaw = u8[o++]!;
+        const pingRaw = u8[((o += 1) - 1)]!;
         u.ping = pingRaw > 0 ? pingRaw : undefined;
       }
       if (mask & V4_MASK_FLAGS_SHEEP) {
         if (o + 2 > u8.length) {return null;}
-        const flags = u8[o++]!;
-        const sheep = u8[o++]!;
+        const flags = u8[((o += 1) - 1)]!;
+        const sheep = u8[((o += 1) - 1)]!;
         u.isDead = (flags & 1) !== 0;
         u.ski = (flags & 2) === 0 ? 0 : 1;
         u.status = flags & STATUS_MASK;
@@ -432,9 +432,9 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
     o = unpackVel(d, o, u.velocity);
     o = unpackRot(d, o, u.rotation);
     u.health = d.getUint16(o, true); o += 2;
-    const pingRaw = u8[o++]!;
-    const flags = u8[o++]!;
-    const sheep = o < u8.length ? u8[o++]! : 0;
+    const pingRaw = u8[((o += 1) - 1)]!;
+    const flags = u8[((o += 1) - 1)]!;
+    const sheep = o < u8.length ? u8[((o += 1) - 1)]! : 0;
     u.isDead = (flags & 1) !== 0;
     u.ping = pingRaw > 0 ? pingRaw : undefined;
     u.ski = (flags & 2) === 0 ? 0 : 1;
@@ -547,12 +547,12 @@ export function encodeTickPlayerV4(wireId: number, p: WireTickPlayer, into: Tick
   if (fresh || basis.flags !== flags || basis.sheepJet !== sheepJet) {mask |= V4_MASK_FLAGS_SHEEP;}
   let o = 0;
   d.setUint16(o, wireId, true); o += 2;
-  u8[o++] = mask;
+  u8[((o += 1) - 1)] = mask;
   o = packPos(d, o, p.position.x, p.position.y, p.position.z);
   if (mask & V4_MASK_VEL) { d.setInt16(o, velX, true); o += 2; d.setInt16(o, velY, true); o += 2; d.setInt16(o, velZ, true); o += 2; }
   if (mask & V4_MASK_ROT) { d.setUint16(o, yaw, true); o += 2; d.setInt16(o, pitch, true); o += 2; }
-  if (mask & V4_MASK_HP_PING) { d.setUint16(o, hp, true); o += 2; u8[o++] = pingB; }
-  if (mask & V4_MASK_FLAGS_SHEEP) { u8[o++] = flags; u8[o++] = sheepJet; }
+  if (mask & V4_MASK_HP_PING) { d.setUint16(o, hp, true); o += 2; u8[((o += 1) - 1)] = pingB; }
+  if (mask & V4_MASK_FLAGS_SHEEP) { u8[((o += 1) - 1)] = flags; u8[((o += 1) - 1)] = sheepJet; }
   // A fresh basis reseeds every slot so subsequent deltas mask against
   // THIS state — the K-send redundancy window starts clean, not against
   // whatever the retired owner's history still held.
@@ -595,10 +595,10 @@ export function encodeBallSegment(s: WireBallSegment): Uint8Array {
   const u8 = new Uint8Array(buf);
   const d = new DataView(buf);
   let o = 0;
-  d.setUint8(o++, MAGIC);
-  d.setUint8(o++, WIRE_BALLSEG);
+  d.setUint8(((o += 1) - 1), MAGIC);
+  d.setUint8(((o += 1) - 1), WIRE_BALLSEG);
   d.setUint32(o, s.id >>> 0, true); o += 4;
-  d.setUint8(o++, segKindIdx.get(s.kind) ?? 0);
+  d.setUint8(((o += 1) - 1), segKindIdx.get(s.kind) ?? 0);
   d.setFloat32(o, s.t, true); o += 4;
   d.setFloat32(o, s.position.x, true); o += 4;
   d.setFloat32(o, s.position.y, true); o += 4;
@@ -606,7 +606,7 @@ export function encodeBallSegment(s: WireBallSegment): Uint8Array {
   d.setFloat32(o, s.velocity.x, true); o += 4;
   d.setFloat32(o, s.velocity.y, true); o += 4;
   d.setFloat32(o, s.velocity.z, true); o += 4;
-  d.setUint8(o++,
+  d.setUint8(((o += 1) - 1),
     (s.enraged ? 1 : 0) | (s.damp ? 2 : 0) | (s.tp ? 4 : 0) | (idBytes ? 8 : 0));
   // Float32, not tenths: the client replays the pull with these timers and
   // ±0.05s of quantization error compounds into meters of divergence at
@@ -619,7 +619,7 @@ export function encodeBallSegment(s: WireBallSegment): Uint8Array {
     d.setFloat32(o, s.tp.z, true); o += 4;
   }
   if (idBytes) {
-    d.setUint8(o++, idBytes.length);
+    d.setUint8(((o += 1) - 1), idBytes.length);
     u8.set(idBytes, o); o += idBytes.length;
   }
   return new Uint8Array(buf, 0, o);
@@ -630,11 +630,11 @@ export function decodeBallSegment(u8: Uint8Array): WireBallSegment | null {
   const d = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
   let o = 2;
   const id = d.getUint32(o, true); o += 4;
-  const kind = SEG_KINDS[d.getUint8(o++)] ?? 'bounce';
+  const kind = SEG_KINDS[d.getUint8(((o += 1) - 1))] ?? 'bounce';
   const t = d.getFloat32(o, true); o += 4;
   const position = { x: d.getFloat32(o, true), y: d.getFloat32(o + 4, true), z: d.getFloat32(o + 8, true) }; o += 12;
   const velocity = { x: d.getFloat32(o, true), y: d.getFloat32(o + 4, true), z: d.getFloat32(o + 8, true) }; o += 12;
-  const flags = d.getUint8(o++);
+  const flags = d.getUint8(((o += 1) - 1));
   const et = d.getFloat32(o, true); o += 4;
   const slowT = d.getFloat32(o, true); o += 4;
   let tp: WireVec3 | null = null;
@@ -643,7 +643,7 @@ export function decodeBallSegment(u8: Uint8Array): WireBallSegment | null {
   }
   let targetId: string | null = null;
   if (flags & 8) {
-    const idLen = d.getUint8(o++);
+    const idLen = d.getUint8(((o += 1) - 1));
     if (o + idLen > u8.length) {return null;}
     targetId = DEC.decode(u8.subarray(o, o + idLen));
   }

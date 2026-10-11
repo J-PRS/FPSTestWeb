@@ -295,7 +295,7 @@ export class MoveJudge {
     // shadow distance; only the report stream itself separates them).
     const repJump = sh.lastRepPos ? Math.hypot(pos.x - sh.lastRepPos.x, pos.y - sh.lastRepPos.y, pos.z - sh.lastRepPos.z) : 0;
     sh.lastRepPos = { x: pos.x, y: pos.y, z: pos.z };
-    if (phase === 'parked-defer') { ++sh.deferStreak; return null; }
+    if (phase === 'parked-defer') { (sh.deferStreak += 1); return null; }
     if (reportInputSeq === undefined || reportInputSeq <= sh.lastInputSeq) {
       sh.deferStreak = 0;
     }
@@ -513,7 +513,7 @@ sh.divergences += 1;
       if (tick < targetTick - 1) {return;}
       const st = probe.state;
       const d = Math.hypot(reportPos.x - st.pos.x, reportPos.y - st.pos.y, reportPos.z - st.pos.z);
-      if (d < bestD) { bestD = d; best = { ...st, pos: Object.assign({}, st.pos),vel: Object.assign({}, st.vel)}; }
+      if (d < bestD) { bestD = d; best = { ...st, pos: { ...st.pos},vel: { ...st.vel}}; }
     });
     return best ?? probe.state;
   }

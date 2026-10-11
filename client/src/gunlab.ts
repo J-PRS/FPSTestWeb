@@ -1015,7 +1015,7 @@ async function copyBuilderSrc(): Promise<void> {
     let depth = 0, end = at;
     for (let i = src.indexOf('{', at); i < src.length; i += 1) {
       if (src[i] === '{') {depth += 1;}
-      else if (src[i] === '}' && --depth === 0) { end = i + 1; break; }
+      else if (src[i] === '}' && (depth -= 1) === 0) { end = i + 1; break; }
     }
     // Grab the comment block above it too — the "why" matters.
     let start = at;

@@ -163,7 +163,7 @@ export class RoomDeployables {
       owned.sort((a, b) => a.ttl - b.ttl);
       this.remove(owned[0]!.id);
     }
-    const id = this.nextId++;
+    const id = ((this.nextId += 1) - 1);
     const armDelay = k === 'turret' ? TURRET_UNFOLD_S + this.room.rng() * 0.4
       : k === 'mine' ? MINE_ARM_S
       : k === 'station' ? STATION_HEAL_CD : 0;
@@ -206,7 +206,7 @@ export class RoomDeployables {
     for (const e of entries) {
       const k = e.kind as DeployKind;
       if (!KINDS.has(k)) {continue;}
-      const id = this.nextId++;
+      const id = ((this.nextId += 1) - 1);
       const owner = e.team ? `base:${e.team}` : 'base';
       this.items.set(id, { id, owner, kind: k, pos: { ...e.pos}, ttl: Infinity, fireCd: 0, hp: HP[k], armor: 0, base: true, team: e.team, respawnT: 0 });
       this.room.broadcast(spawnPayload(WORLD_MODEL.deploy!, id, 'id', { owner, kind: k, pos: { ...e.pos}, team: e.team }) as ServerMessage);

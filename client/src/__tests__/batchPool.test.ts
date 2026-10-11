@@ -14,7 +14,7 @@ const dispose = (b: FakeBatch) => { b.disposed = true; };
 function fixture() {
   const map: BatchMap<string, FakeBatch> = new Map();
   let next = 0;
-  const make = (_key: string): FakeBatch => ({ id: next++, used: 0, cap: 2, disposed: false });
+  const make = (_key: string): FakeBatch => ({ id: ((next += 1) - 1), used: 0, cap: 2, disposed: false });
   const alloc = (key = 'scene'): FakeBatch => {
     const b = acquireBatch(map, key, make, hasRoom);
 b.used += 1;

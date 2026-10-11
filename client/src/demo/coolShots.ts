@@ -250,7 +250,7 @@ export class CoolShotManager {
   playAt(index: number): void {
     if (index < 0 || index >= this.coolShots.length) {return;}
     const entry = this.coolShots[index];
-    const seq = ++this.playSeq;
+    const seq = (this.playSeq += 1);
     if (entry.clipData) {
       this.deps.playDemoData(entry.clipData);
       logger.debug(`Playing cool shot: ${entry.description}`);

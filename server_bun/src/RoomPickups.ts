@@ -46,7 +46,7 @@ export class RoomPickups {
       weaponStats.recordPickup(this.room.mode, kind, 'refused');
       return;
     }
-    const id = this.nextId++;
+    const id = ((this.nextId += 1) - 1);
     const p = { id, pos: { ...pos}, ttl: PICKUP_TTL_S, kind, vel: { x: 0, y: 0, z: 0 }, armT: armS };
     this.settleReachable(p);
     // Drops spawn at the victim's eye height — hmSettleWalkable only

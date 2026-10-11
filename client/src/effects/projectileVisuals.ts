@@ -184,7 +184,7 @@ function instPoolFor(scene: THREE.Scene, kind: string, geo: THREE.BufferGeometry
 function instAlloc(pool: InstPool): number {
   if (pool.free.length > 0) {return pool.free.pop()!;}
   // instPoolFor only hands out pools with room, so count is always < cap
-  return pool.mesh.count++;
+  return ((pool.mesh.count += 1) - 1);
 }
 
 export function syncProjectileInstance(m: THREE.Mesh | null): void {

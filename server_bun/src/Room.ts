@@ -188,7 +188,7 @@ export class Room {
       // health counter and the bot-scoped inv above are the loud signal;
       // a warn per rescue reads as jank in soak asserts while routine
       // claim wobble is legitimately rescued.
-      if (this.unburyLogN++ < 30) {
+      if (((this.unburyLogN += 1) - 1) < 30) {
         logger.debug(`unbury ${p.id}: pos.y=${p.position.y.toFixed(1)} feet=${(p.position.y - eye).toFixed(1)} terrain=${terrain.toFixed(1)} bot=${p.isBot} ${this.moveSim.unburyDebug(p.id)}`);
       }
       p.position.y = terrain + eye;
@@ -488,7 +488,7 @@ export class Room {
       // Ride structure floors: a generator seeded inside a genhouse must
       // stand on its deck (seated high over terrain), not drown in it.
       // max() keeps authored elevations — tower sentries never descend.
-      this.deployables.seedBase(this.spec.deploys.map(e => ((({ ...e, pos: Object.assign({}, e.pos, {y: Math.max(e.pos.y, this.flagPlacer.deployFloor(e.pos.x, e.pos.z, e.pos.y))})})))));
+      this.deployables.seedBase(this.spec.deploys.map(e => ((({ ...e, pos: { ...e.pos, y: Math.max(e.pos.y, this.flagPlacer.deployFloor(e.pos.x, e.pos.z, e.pos.y))}})))));
     }
     this.projectiles = new RoomProjectiles(this, field);
     this.projectiles.attachStructures(this.structs.eff());
@@ -675,7 +675,7 @@ export class Room {
    *  exploit through the trusted channel). */
   private lastPingStamp = new Map<string, number>();
   private pingTick(): void {
-    if (++this.pingCycle % 10 !== 0) {return;}
+    if ((this.pingCycle += 1) % 10 !== 0) {return;}
     const humans = [...this.players.getAllPlayers().values()].filter((p) => !p.isBot);
     if (humans.length === 0) {return;}
     // Unmeasured humans jump the queue — the client channel stands alone

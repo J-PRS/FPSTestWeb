@@ -300,7 +300,7 @@ function skySolvePerm(E: SkyEdge[][][]): SkyCand[] {
     let j = 5;
     while (perm[j]! < perm[i]!) {j -= 1;}
     [perm[i], perm[j]] = [perm[j]!, perm[i]!];
-    for (let a = i + 1, b = 5; a < b; a++, b--) {[perm[a], perm[b]] = [perm[b]!, perm[a]!];}
+    for (let a = i + 1, b = 5; a < b; ((a += 1) - 1), ((b -= 1) + 1)) {[perm[a], perm[b]] = [perm[b]!, perm[a]!];}
     return true;
   };
   // One coordinate-descent polish per permutation: each slot takes the

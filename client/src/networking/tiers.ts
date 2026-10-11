@@ -317,7 +317,7 @@ export class TieredTransport implements GameTransport {
 
   connect(url?: string): void {
     this.url = url;
-    const gen = ++this.gen;
+    const gen = (this.gen += 1);
     this.closed = false;
     // Sends queued during a superseded attempt belong to that generation —
     // flushing them into the new probe could replay a stale join.

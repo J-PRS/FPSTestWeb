@@ -18,7 +18,7 @@ import { wallNow, wallMs } from './wallClock.ts';
 let internalIdCounter = 0;
 
 function nextInternalId(): string {
-  return `${wallNow()}_${++internalIdCounter}`;
+  return `${wallNow()}_${(internalIdCounter += 1)}`;
 }
 
 export class PlayerManager {

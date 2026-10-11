@@ -52,7 +52,7 @@ const rollUber = (): boolean => Math.random() < UBER_CHANCE;
 function atCap<T extends { dead: boolean }>(list: T[], max: number): boolean {
   let n = 0;
   for (const e of list) {
-    if (!e.dead && ++n >= max) {return true;}
+    if (!e.dead && (n += 1) >= max) {return true;}
   }
   return false;
 }

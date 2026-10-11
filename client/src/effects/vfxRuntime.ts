@@ -457,7 +457,7 @@ export class TrailDriver {
 export function updateVfx(dt: number, camPos?: THREE.Vector3): void {
   for (const d of drivers) {d.tick(dt);}
   if (buildQueue.length > 0) {buildQueue.shift()!();}
-  if (++prunePhase >= 4) {
+  if ((prunePhase += 1) >= 4) {
     prunePhase = 0;
     runBookkeeping(camOverride ?? camPos);
   }

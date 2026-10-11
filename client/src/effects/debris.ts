@@ -194,7 +194,7 @@ this.paintBudget -= 1;
       b = this.insts[prim];
       this.scene.add(mesh);
     }
-    const slot = b.free.length > 0 ? b.free.pop()! : b.mesh.count++;
+    const slot = b.free.length > 0 ? b.free.pop()! : ((b.mesh.count += 1) - 1);
     return { inst: prim, slot };
   }
 

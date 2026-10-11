@@ -190,7 +190,7 @@ export class RtcServer {
       // The offer cap bounds peers, not channels — a single accepted
       // peer could mint unlimited adapterOf entries by spamming
       // datachannels. Legit flow opens exactly two (game + ctrl).
-      if (++dcCount > 4) {
+      if ((dcCount += 1) > 4) {
         try { dc.close(); } catch { /* gone */ }
         return;
       }

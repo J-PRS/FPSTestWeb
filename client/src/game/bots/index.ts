@@ -156,7 +156,7 @@ export class TeamBots {
     const mk = (team: TeamId, n: number) => {
       for (let i = 0; i < n; i += 1) {
         const spawn = this.spawnSpot(team);
-        const name = ffa ? BOT_NAMES[ni++ % BOT_NAMES.length] : `${BOT_NAMES[ni++ % BOT_NAMES.length]}-${team === 'alpha' ? 'A' : 'B'}`;
+        const name = ffa ? BOT_NAMES[((ni += 1) - 1) % BOT_NAMES.length] : `${BOT_NAMES[((ni += 1) - 1) % BOT_NAMES.length]}-${team === 'alpha' ? 'A' : 'B'}`;
         // Same roster the dedicated server fields — loadout picks the
         // weapon by engagement range instead of one generic bolt, and
         // the kit picks the body (botClassForLoadout) so the class gate
@@ -308,7 +308,7 @@ bn += 1;
     // size (9 bots → windows fired ~9x too often, cover-dominated max-outs).
     this.sheep.advance(dt);
     let i = 0;
-    for (const bot of this.bots) {this.tickBot(bot, dt, others, bodies, terrain, i++);}
+    for (const bot of this.bots) {this.tickBot(bot, dt, others, bodies, terrain, ((i += 1) - 1));}
   }
 
   // Think rate: brains decide at ~10Hz (staggered per bot so thinks

@@ -62,7 +62,7 @@ export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, w
   if (shooterId === localId) {
     // Announce only on the crossing kill — `>=` repeated the title on
     // every frag past the threshold, so a 4-kill life yelled SPREE twice.
-    const streakName = STREAK_NAMES.find(([n]) => ++deps.world.killStreak === n)?.[1];
+    const streakName = STREAK_NAMES.find(([n]) => (deps.world.killStreak += 1) === n)?.[1];
     const name = displayName(targetId, roster);
     deps.fragMessages.showKill(streakName ? `FRAGGED ${name}!\n${streakName}` : `FRAGGED ${name}!`);
     sfx.killConfirm();

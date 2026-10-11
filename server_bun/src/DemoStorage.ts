@@ -133,7 +133,7 @@ added += 1;
     };
 
     need(1);
-    const magic = view.getUint8(offset++);
+    const magic = view.getUint8(((offset += 1) - 1));
     if (magic !== 0x44) {throw new Error('Malformed demo header');}
 
     need(4);

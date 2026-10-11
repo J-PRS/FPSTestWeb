@@ -179,7 +179,7 @@ this.handlerThrows += 1;
     if (data.byteLength >= 15 && new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(6, true) <= this.lastTickSeq) {return;}
     // ?dropticks=N — drop every Nth tick frame before decode to exercise
     // the tickNack recovery loop (localhost can't produce real loss).
-    if (WireIn.dropEvery > 0 && ++WireIn.dropCounter >= WireIn.dropEvery) { WireIn.dropCounter = 0; return; }
+    if (WireIn.dropEvery > 0 && (WireIn.dropCounter += 1) >= WireIn.dropEvery) { WireIn.dropCounter = 0; return; }
     const tick = decodeTickFrame(data, this.tickPool);
     if (!tick) {return;}
     // A real loss (the <= drop above already ate reorders): masked fields

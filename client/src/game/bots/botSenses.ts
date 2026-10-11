@@ -75,7 +75,7 @@ export class BotSenses {
     let n = 0;
     for (const b of this.host.bots) {
       if (b.isDead || b.team === myTeam) {continue;}
-      const e = this.nextFoe(n++);
+      const e = this.nextFoe(((n += 1) - 1));
       e.playerId = b.playerId; e.pos = b.pos; e.vel = b.vel; e.alive = true;
     }
     this._foeOut.length = n;
@@ -89,13 +89,13 @@ export class BotSenses {
     let n = 0;
     const player = this.host.player();
     if (this.host.teamOf.get('local') !== team) {
-      const e = this.nextFoe(n++);
+      const e = this.nextFoe(((n += 1) - 1));
       e.playerId = 'local'; e.pos = player.pos; e.vel = player.vel;
       e.alive = !player.isDead && (!player.isCloaked || shootRevealed(player.lastFireAt, performance.now()));
     }
     for (const b of this.host.bots) {
       if (b.team === team) {continue;}
-      const e = this.nextFoe(n++);
+      const e = this.nextFoe(((n += 1) - 1));
       e.playerId = b.playerId; e.pos = b.pos; e.vel = b.vel;
       e.alive = !b.isDead && (!b.isCloakHidden || b.ghostT > 0);
     }

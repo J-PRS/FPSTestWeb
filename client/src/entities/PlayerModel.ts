@@ -174,7 +174,7 @@ export class PlayerModel {
           // kill the model for the whole session — an invisible player is
           // worse than a late one. Retry with backoff before giving up.
           if (this._disposed) { resolve(); return; }
-          if (++attempts <= 4) {
+          if ((attempts += 1) <= 4) {
             logger.warn(`Model load failed, retry ${attempts}/4`, error);
             setTimeout(attempt, 600 * attempts);
             return;

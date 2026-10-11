@@ -764,7 +764,7 @@ export class BotBrain {
           // Only a second consecutive stall earns the blacklist below.
           this.escapeS.escapeJetT = Math.max(this.escapeS.escapeJetT, 3);
           this.huntWin.fails = 1;
-        } else if (stalled && (preyUnreachable(ctx, pos, hp) || ++this.huntWin.fails >= 3)) {
+        } else if (stalled && (preyUnreachable(ctx, pos, hp) || (this.huntWin.fails += 1) >= 3)) {
           // The pocket is unreachable, not just this prey — a defended
           // gate holds several enemies, and blacklisting one at a time
           // re-arms the stall on each next-nearest. Everything huddled

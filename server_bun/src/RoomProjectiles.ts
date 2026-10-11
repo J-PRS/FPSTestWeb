@@ -209,7 +209,7 @@ export class RoomProjectiles {
     if (!stats || stats.speed <= 0) {return null;} // hitscan-class — no body
     const owner = this.room.players.getPlayer(ownerId);
     if (!owner) {return null;}
-    const id = `sp-${this.nextId++}`;
+    const id = `sp-${((this.nextId += 1) - 1)}`;
     const vel: Vec3 = {
       x: dir.x * stats.speed + ownerVel.x * 0.5,
       y: dir.y * stats.speed + ownerVel.y * 0.5,

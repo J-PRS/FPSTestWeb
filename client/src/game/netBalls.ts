@@ -155,7 +155,7 @@ function netBallDie(deps: EntitiesDeps, netBallById: Map<number, Ball>,
   if (m.by && m.by === deps.lazyNetworkManager()?.getLocalPlayerId()) {
     // Our kill — in team rooms the server drops a gem at the corpse
     // (pickupSpawn); collecting it is the score AND the reward.
-    deps.lazyPlayer().kills++;
+    deps.lazyPlayer().kills += 1;
   }
 }
 

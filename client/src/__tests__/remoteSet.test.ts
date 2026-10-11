@@ -89,7 +89,7 @@ describe('RemoteSet', () => {
     set.ensure('a', { ping: 1 }); set.ensure('b', { ping: 1 });
     expect([...set.keys()].toSorted()).toEqual(['a', 'b']);
     let n = 0;
-    set.forEach(() => n++);
+    set.forEach(() => ((n += 1) - 1));
     expect(n).toBe(2);
     set.clear();
     expect(set.size).toBe(0);

@@ -90,8 +90,8 @@ export class ClaimLedger {
    *  rejected pattern still surfaces. Returns undefined when unsampled
    *  → legacy fire-and-forget, no ack expected. */
   stamp(kind: string, sparse = false): number | undefined {
-    if (sparse && (this.creatureClaimN++ & 3) !== 0) {return undefined;}
-    const seq = ++this.claimSeq;
+    if (sparse && (((this.creatureClaimN += 1) - 1) & 3) !== 0) {return undefined;}
+    const seq = (this.claimSeq += 1);
     this.pendingClaims.set(seq, { kind, t: performance.now() });
     if (this.pendingClaims.size > 256) {
       // Acks aren't arriving at all — every waiting entry died with its

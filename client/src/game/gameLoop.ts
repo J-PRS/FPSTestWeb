@@ -672,7 +672,7 @@ function maybeWarmShaders(deps: GameLoopDeps, st: LoopState): void {
     if (count !== (st.lastRemoteCount ?? 0)) {st.lastRemoteCount = count; st.rewarmT = 90;}
     return;
   }
-  if (++st.warmN <= 60) {return;}
+  if ((st.warmN += 1) <= 60) {return;}
   // getObjectByName walks the whole scene — poll every 30 ticks instead of
   // per frame while interiors land (a live profile caught the scan at ~2%
   // of a match profile through getObjectByProperty).
@@ -869,7 +869,7 @@ st.veilFrames += 1;
     if (shadow.enabled) {
       const period = st.gpuLevel >= 4 ? 3 : 2;
       shadow.autoUpdate = false;
-      if (++st.shadowAcc >= period) { st.shadowAcc = 0; shadow.needsUpdate = true; }
+      if ((st.shadowAcc += 1) >= period) { st.shadowAcc = 0; shadow.needsUpdate = true; }
     } else {
       shadow.autoUpdate = true;
       st.shadowAcc = 0;

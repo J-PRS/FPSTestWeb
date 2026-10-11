@@ -48,7 +48,7 @@ export class RemoteGizmo {
   constructor(scene: THREE.Scene, startPos: { x: number; y: number; z: number }) {
     this.pool = acquireBatch(pools, scene, makePool,
       p => p.free.length > 0 || p.mesh.count < MAX_GIZMOS);
-    this.slot = this.pool.free.length > 0 ? this.pool.free.pop()! : this.pool.mesh.count++;
+    this.slot = this.pool.free.length > 0 ? this.pool.free.pop()! : ((this.pool.mesh.count += 1) - 1);
     this.setColor(0x00_FF_00);
     this.follow(startPos);
     this.attach();

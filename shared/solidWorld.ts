@@ -36,7 +36,7 @@ export class ColliderIndex {
   /** Colliders whose XZ footprint a `pad`-expanded segment could touch —
    *  deduplicated, appended to `out` (scratch-passed, no alloc). */
   querySegment(ax: number, az: number, bx: number, bz: number, pad: number, out: StructureCollider[]): void {
-    const id = ++this.queryId;
+    const id = (this.queryId += 1);
     const x0 = Math.floor((Math.min(ax, bx) - pad) / this.cell), x1 = Math.floor((Math.max(ax, bx) + pad) / this.cell);
     const z0 = Math.floor((Math.min(az, bz) - pad) / this.cell), z1 = Math.floor((Math.max(az, bz) + pad) / this.cell);
     for (let x = x0; x <= x1; x += 1) {for (let z = z0; z <= z1; z += 1) {

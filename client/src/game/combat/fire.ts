@@ -80,7 +80,7 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   // needsServerTracking keeps governing the damage-claim path; the nonce
   // costs a map entry, pruned on death.
   p.shooterTeam = deps.world.localTeam ?? null;
-  p.shotId = `s${++deps.world.projectileRegistry.seq}`;
+  p.shotId = `s${(deps.world.projectileRegistry.seq += 1)}`;
   deps.world.projectileRegistry.byShotId.set(p.shotId, p);
 
   // Record projectile fired event for demo
@@ -209,7 +209,7 @@ function spawnFan(deps: CombatDeps, config: ProjectileConfig, e: FireArgs, count
   // itself and echoes pellet indices, so each predicted pellet registers
   // under its own `${pullId}#${idx}` slot for the echo bind.
   const simmed = serverSimmed(config.weaponType);
-  const pullId = simmed ? `s${++deps.world.projectileRegistry.seq}` : '';
+  const pullId = simmed ? `s${(deps.world.projectileRegistry.seq += 1)}` : '';
   const registry = deps.world.projectileRegistry;
   let i = 0;
   for (const pt of pts) {

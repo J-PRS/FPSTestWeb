@@ -138,7 +138,7 @@ export class ProjCollide {
   // detonation instead of letting the shell sink or jitter in place.
   bounceOffTerrain(terrain: Terrain): boolean {
     const {h} = this;
-    if (h.config.maxBounces !== undefined && ++h.bouncesTaken > h.config.maxBounces) {
+    if (h.config.maxBounces !== undefined && (h.bouncesTaken += 1) > h.config.maxBounces) {
       return false; // out of bounces — treat as impact
     }
     const e = 0.5;

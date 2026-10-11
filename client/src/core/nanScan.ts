@@ -38,7 +38,7 @@ function scanHuge(arr: ArrayLike<number>, hit: Hit, maxBad = 4): number {
     const v = arr[i]!;
     if (Number.isFinite(v) && Math.abs(v) > 1e5) {
       if (bad === 0) { hit.index = i; hit.value = v; }
-      if (++bad >= maxBad) {break;}
+      if ((bad += 1) >= maxBad) {break;}
     }
   }
   hit.count = bad;
@@ -59,7 +59,7 @@ function label(o: THREE.Object3D): string {
   bits.push(`@(${Math.round(wp.x)},${Math.round(wp.y)},${Math.round(wp.z)})`);
   let p = o.parent;
   let hops = 0;
-  while (p && hops++ < 3) { if (p.name) {bits.push(`<"${p.name}"`);} p = p.parent; }
+  while (p && ((hops += 1) - 1) < 3) { if (p.name) {bits.push(`<"${p.name}"`);} p = p.parent; }
   return bits.join(' ');
 }
 
@@ -193,7 +193,7 @@ export function nanScanTick(scene: THREE.Scene, camera?: THREE.Camera): void {
     }
   }
   for (const h of nanScanTransforms(scene)) {report(h);}
-  if (++tick % EVERY === 0) {
+  if ((tick += 1) % EVERY === 0) {
     for (const h of nanScanScene(scene)) {report(h);}
   }
 }

@@ -403,7 +403,7 @@ export function onTargetDestroyed(c: CombatCtx, ball: Targetable, impulse?: THRE
   // kills++ is personal credit — bot-authored kills still reach the
   // referee via onCreatureKilled(shooterId), just not my counter.
   if (!ball.scoreless) {
-    if (mine) {deps.lazyPlayer().kills++;}
+    if (mine) {deps.lazyPlayer().kills += 1;}
     deps.onCreatureKilled?.(shooterId);
   }
   // Connected, the server's RoomPickups drop is the backed loot — a

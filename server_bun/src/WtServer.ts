@@ -97,7 +97,7 @@ export class WtSocketAdapter {
     for (;;) {
       const { value: stream, done: streamDone } = await reader.read();
       if (streamDone || !stream) {return;}
-      if (idx++ === 0) {this.pumpText(stream).catch((error) => this.die(`reliable pump: ${error instanceof Error ? error.message : error}`));}
+      if (((idx += 1) - 1) === 0) {this.pumpText(stream).catch((error) => this.die(`reliable pump: ${error instanceof Error ? error.message : error}`));}
       else {this.pumpBin(stream).catch(() => { return; });}
     }
   }

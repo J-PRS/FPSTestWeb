@@ -328,7 +328,7 @@ export class P2PHost {
     // Same RTT probe the dedicated Room runs — the move shadow's transit
     // EMA needs a channel guests can't fabricate (their reported ping
     // rides every position frame).
-    if (++this.pingCycle % 10 === 0 && this.byPlayer.size > 0) {
+    if ((this.pingCycle += 1) % 10 === 0 && this.byPlayer.size > 0) {
       const ids = [...this.byPlayer.keys()];
       const pid = ids.find((id) => !this.lastPingStamp.has(id))
         ?? ids[(Math.trunc(this.pingCycle / 10)) % ids.length]!;
@@ -394,7 +394,7 @@ export class P2PHost {
       if (records.length === 0) {continue;}
       // inputAck=0: the P2P host tracks no per-player input seqs — clients
       // ignore 0 (never prune on it).
-      try { link.send(encodeTickFrame(this.playerManager.getLastSeq(recipientId), this.tickSeq++, 0, records)); } catch { /* dead pipe */ }
+      try { link.send(encodeTickFrame(this.playerManager.getLastSeq(recipientId), ((this.tickSeq += 1) - 1), 0, records)); } catch { /* dead pipe */ }
     }
   }
 

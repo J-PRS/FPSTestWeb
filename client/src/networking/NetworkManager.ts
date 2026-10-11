@@ -668,7 +668,7 @@ this.sendDrops += 1;
     this.lastSentState.yaw = rotation.yaw; this.lastSentState.pitch = rotation.pitch;
 
     // Assign sequence number and store in state history for reconciliation
-    const seq = ++this.sequenceCounter;
+    const seq = (this.sequenceCounter += 1);
     this.stateHistory.set(seq, { position: { ...position}, velocity: { ...velocity}, rotation: { ...rotation} });
     if (this.stateHistory.size > this.STATE_HISTORY_MAX) {
       const oldest = this.stateHistory.keys().next().value;
@@ -903,7 +903,7 @@ this.sendDrops += 1;
     // Sampled claim log (1-in-16): chaingun-rate creature fire would flood
     // the buffer; a periodic line still proves claims are flowing and
     // carries the damage values being asserted.
-    if ((this.creatureHitLogN++ & 15) === 0) {
+    if ((((this.creatureHitLogN += 1) - 1) & 15) === 0) {
       logger.info(`creatureHit claim x${this.creatureHitLogN}`, { id, damage });
     }
     this.send({ type: 'creatureHit', id, damage, kx, ky, kz, claimSeq: this.ledger.stamp('creatureHit', true) });

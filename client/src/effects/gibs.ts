@@ -121,7 +121,7 @@ class GibMeshPool {
     // Repack: live slots (life > 0) move down in index order.
     const remap = new Int32Array(cap).fill(-1);
     let next = 0;
-    for (let i = 0; i < cap; i += 1) {if (this.life[i]! > 0) {remap[i] = next++;}}
+    for (let i = 0; i < cap; i += 1) {if (this.life[i]! > 0) {remap[i] = ((next += 1) - 1);}}
     const moveA = (a: Float32Array): Float32Array<ArrayBuffer> => {
       const n = new Float32Array(target);
       for (let i = 0; i < cap; i += 1) {if (remap[i]! >= 0) {n[remap[i]!] = a[i]!;}}

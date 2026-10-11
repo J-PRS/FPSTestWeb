@@ -348,7 +348,7 @@ export class MessageHandler {
   botFire(shooterId: string, targetId: string | null, position: Vec3, velocity: Vec3, weaponType: number, hit: boolean): void {
     this.broadcast({
       type: 'projectileCreated',
-      projectileId: `bot-${shooterId}-${wallNow()}-${this.botBoltSeq++}`,
+      projectileId: `bot-${shooterId}-${wallNow()}-${((this.botBoltSeq += 1) - 1)}`,
       ownerId: shooterId,
       position,
       velocity,

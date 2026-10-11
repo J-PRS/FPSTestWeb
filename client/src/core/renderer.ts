@@ -619,7 +619,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
 
   const render = makeRender(renderer, scene, camera, composer, fs,
     { pmode: pmodeEff, fsOverlay: () => fsOverlay, scenePass,
-      shadowTick: () => { if ((shadowTick++ & 1) === 0) {renderer.shadowMap.needsUpdate = true;} } });
+      shadowTick: () => { if ((((shadowTick += 1) - 1) & 1) === 0) {renderer.shadowMap.needsUpdate = true;} } });
 
   // Seg-row markers — assigned by wireSegRow below; setPixel fires them
   // so auto-quality steps re-light the row too.

@@ -32,7 +32,7 @@ export function rotateLogIfBig(p: string): void {
     // per collision. Bump a suffix until the name is free.
     const stem = join(oldDir, `${basename(p, extname(p))}_${logStamp(statSync(p).mtime)}`);
     let dst = stem + extname(p), n = 1;
-    while (existsSync(dst)) {dst = `${stem}_${n++}${extname(p)}`;}
+    while (existsSync(dst)) {dst = `${stem}_${((n += 1) - 1)}${extname(p)}`;}
     renameSync(p, dst);
     pruneOld(oldDir);
   } catch { /* rotation must never block an append */ }

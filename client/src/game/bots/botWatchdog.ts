@@ -74,7 +74,7 @@ alive += 1;
     // aren't producing travel at all (not just one wedged path).
     if (stuckEval === 0) {return;} // nobody closed a window — keep the streak
     if (stuckNow === stuckEval && stuckEval >= Math.max(1, alive >> 1) && !this.matchOver()) {
-      if (++this.idleWindows >= 2) {
+      if ((this.idleWindows += 1) >= 2) {
         this.log.warn(`all ${alive} bots pinned — <${WD_STUCK_D}m net travel per ${WD_STUCK_T}s window (brains not ticking?)`);
         this.idleWindows = 0; // re-arm the counter, not the warning state
       }

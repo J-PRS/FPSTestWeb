@@ -508,7 +508,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
         if (t > d.pos.y && t < floor && t <= d.pos.y + 12) {floor = t;}
       }
       const y = floor === Infinity ? Math.max(d.pos.y, terrain.getHeight(d.pos.x, d.pos.z)) : floor;
-      entities.deployables.remoteSpawn(depId++, {
+      entities.deployables.remoteSpawn(((depId += 1) - 1), {
         owner: d.team ? `base:${d.team}` : 'base',
         kind: d.kind as DeployKind,
         pos: { ...d.pos, y},

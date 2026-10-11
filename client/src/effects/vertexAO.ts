@@ -262,8 +262,8 @@ function emitEdgeDebug(geo: THREE.BufferGeometry, ctx: EdgeCtx, triCount: number
     for (const key of flagged) {
       const list = edges.get(key)!;
       const e = list[0]!;
-      segs[w++] = pos.getX(e.a); segs[w++] = pos.getY(e.a); segs[w++] = pos.getZ(e.a);
-      segs[w++] = pos.getX(e.b); segs[w++] = pos.getY(e.b); segs[w++] = pos.getZ(e.b);
+      segs[((w += 1) - 1)] = pos.getX(e.a); segs[((w += 1) - 1)] = pos.getY(e.a); segs[((w += 1) - 1)] = pos.getZ(e.a);
+      segs[((w += 1) - 1)] = pos.getX(e.b); segs[((w += 1) - 1)] = pos.getY(e.b); segs[((w += 1) - 1)] = pos.getZ(e.b);
       for (const r of list) {refs.push({ t: r.t, a: r.a, b: r.b });}
     }
     geo.userData.__sharpEdges = segs;
@@ -939,7 +939,7 @@ function mergeGeometries(meshes: THREE.Mesh[]): THREE.BufferGeometry {
     for (let t = 0; t < tris; t += 1) {
       const i = idx ? idx.getX(t) : t;
       v.fromBufferAttribute(p, i).applyMatrix4(m.matrixWorld);
-      out[w++] = v.x; out[w++] = v.y; out[w++] = v.z;
+      out[((w += 1) - 1)] = v.x; out[((w += 1) - 1)] = v.y; out[((w += 1) - 1)] = v.z;
     }
     parts.push(out);
   }

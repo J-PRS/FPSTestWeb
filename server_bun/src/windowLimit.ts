@@ -23,5 +23,5 @@ export function windowAllow<K>(
       while (map.size > cap) {evictEldest(map);}
     }
   }
-  return ++w.count <= limit;
+  return (w.count += 1) <= limit;
 }

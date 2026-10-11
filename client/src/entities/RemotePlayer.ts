@@ -139,7 +139,7 @@ export class RemotePlayer {
   }
 
   constructor(scene: THREE.Scene, playerId: string, startPos: { x: number; y: number; z: number }, terrain?: Terrain, _armorClass?: string) {
-    this.instanceId = ++_remotePlayerInstanceCounter;
+    this.instanceId = (_remotePlayerInstanceCounter += 1);
     this.scene = scene;
     this.playerId = playerId;
     this.position = new THREE.Vector3(startPos.x, startPos.y, startPos.z);

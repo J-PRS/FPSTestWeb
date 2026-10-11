@@ -429,7 +429,7 @@ export class Deployables {
       if (c.dead || c.scoreless) {continue;}
       const e = this._foePool[n] ?? (this._foePool[n] = { pos: null as never, vel: null as never, alive: false });
       e.pos = c.pos; e.vel = c.vel; e.alive = true; e.playerId = undefined;
-      this._enemies[n++] = e;
+      this._enemies[((n += 1) - 1)] = e;
     }
     this._enemies.length = n;
     if (owner) {

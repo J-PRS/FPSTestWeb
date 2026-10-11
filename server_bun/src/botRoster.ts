@@ -68,7 +68,7 @@ export class BotRoster {
       // per-id seeds (routePref, jitteredTtl) hash the string, and display
       // strips it via botDisplayName — pilots on screen, unique seeds on
       // the wire.
-      const idx = this.nextIdx++;
+      const idx = ((this.nextIdx += 1) - 1);
       const id = `BOT-${BOT_NAMES[(idx - 1) % BOT_NAMES.length]}-${String(idx).padStart(2, '0')}`;
       const kitIdx = (this.nextIdx - 2 + BOT_LOADOUTS.length) % BOT_LOADOUTS.length;
       const wildcard = botRand() < 0.125;

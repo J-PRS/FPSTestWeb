@@ -105,7 +105,7 @@ this.anomalies.rebegin += 1;
       // reaping a just-seated player out of their new room.
       this.clearGrace(prior);
     }
-    this.sessions.set(playerId, { state: 'connecting', gen: ++this.genCounter, at: wallNow(), room });
+    this.sessions.set(playerId, { state: 'connecting', gen: (this.genCounter += 1), at: wallNow(), room });
   }
 
   /** connecting → active|spectating. Returns the seat generation — stamp it
@@ -115,7 +115,7 @@ this.anomalies.rebegin += 1;
     if (!s) {
 this.anomalies.seatWithoutBegin += 1;
       logger.error('seat without begin', { playerId });
-      this.sessions.set(playerId, { state: 'connecting', gen: ++this.genCounter, at: wallNow(), room: '' });
+      this.sessions.set(playerId, { state: 'connecting', gen: (this.genCounter += 1), at: wallNow(), room: '' });
       return this.sessions.get(playerId)!.gen;
     }
     this.transition(playerId, s, spectator ? 'spectating' : 'active', reason);
@@ -137,7 +137,7 @@ this.anomalies.reclaimNonLive += 1;
       logger.error('reclaim on non-live session', { playerId, from: s.state, reason });
       return undefined;
     }
-    s.gen = ++this.genCounter;
+    s.gen = (this.genCounter += 1);
     s.at = wallNow();
     return s.gen;
   }
@@ -167,7 +167,7 @@ this.anomalies.reclaimNonLive += 1;
    *  directly at 'grace' — same expiry a live disconnect would arm, so a
    *  reclaimer gets the reclaim path and a no-show still reaps. */
   seedGrace(playerId: string, room: string, graceMs: number, onExpire: () => void): void {
-    const s: Session = { state: 'grace', gen: ++this.genCounter, at: wallNow(), room };
+    const s: Session = { state: 'grace', gen: (this.genCounter += 1), at: wallNow(), room };
     this.sessions.set(playerId, s);
     this.bumpGrace(room, +1);
     s.graceTimer = setTimeout(() => {

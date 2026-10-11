@@ -151,7 +151,7 @@ export class MapCatalog {
     const list = this.rotation();
     if (list.length === 0) {return null;}
     for (let i = 0; i < list.length; i += 1) {
-      const name = list[this.rotationIdx++ % list.length];
+      const name = list[((this.rotationIdx += 1) - 1) % list.length];
       if (name === undefined) {continue;}
       const spec = this.loadMapSpec(name);
       // A spec declares its legal modes; a mode-less one is a bare arena

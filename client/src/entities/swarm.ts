@@ -118,7 +118,7 @@ export class SpeciesSwarm {
   /** Returns a slot index; grows the swarm instead of ever returning -1. */
   alloc(owner: SwarmSlotOwner): number {
     if (this.live >= this.owners.length) {this.grow();}
-    const slot = this.live++;
+    const slot = ((this.live += 1) - 1);
     this.owners[slot] = owner;
     owner.swarmSlot = slot;
     for (let i = 0; i < this.meshes.length; i += 1) {this.meshes[i]!.count = this.live * this.pers[i]!;}
@@ -349,7 +349,7 @@ export class InstancedBlobShadows {
 
   alloc(owner: SwarmSlotOwner): number {
     if (this.live >= this.owners.length) {this.grow();}
-    const slot = this.live++;
+    const slot = ((this.live += 1) - 1);
     this.owners[slot] = owner;
     this.mesh.count = this.live;
     return slot;

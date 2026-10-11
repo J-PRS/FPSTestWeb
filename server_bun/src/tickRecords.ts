@@ -35,7 +35,7 @@ function mintWireId(room: Room): number {
   for (const [id, at] of room.wireIdRetired) {
     if (now - at >= WIRE_ID_QUIET_MS) { room.wireIdRetired.delete(id); return id; }
   }
-  if (room.nextWireId <= 0xFF_FF) {return room.nextWireId++;}
+  if (room.nextWireId <= 0xFF_FF) {return ((room.nextWireId += 1) - 1);}
   // Space exhausted with nothing quiet enough — take the eldest retired
   // id anyway; strictly better than a silent modulo-wrap.
   const eldest = room.wireIdRetired.keys().next().value;
@@ -47,7 +47,7 @@ function mintWireId(room: Room): number {
   // 65536 simultaneously-bound ids — the room has bigger problems than
   // this collision, but fail loud rather than aliasing silently.
   logger.error('wireId space exhausted — live collision', { room: room.name });
-  return (room.nextWireId++ % 0xFF_FF) + 1;
+  return (((room.nextWireId += 1) - 1) % 0xFF_FF) + 1;
 }
 
 /** Counters the loop's metrics rollup reads — shared object so a second

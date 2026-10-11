@@ -35,7 +35,7 @@ function writeString(view: DataView, offset: number, str: string): number {
   view.setUint16(offset, bytes.length, true);
   offset += 2;
   for (let i = 0; i < bytes.length; i += 1) {
-    view.setUint8(offset++, bytes[i]!);
+    view.setUint8(((offset += 1) - 1), bytes[i]!);
   }
   return offset;
 }
@@ -57,7 +57,7 @@ export const SECTION_HMAP = 1;
 
 function writeHmapSection(view: DataView, offset: number, hm: DemoFile['heightmap']): number {
   if (!hm) {return offset;}
-  view.setUint8(offset++, SECTION_HMAP);
+  view.setUint8(((offset += 1) - 1), SECTION_HMAP);
   const lenPos = offset; offset += 4;
   const start = offset;
   view.setUint16(offset, hm.gridN, true); offset += 2;
@@ -65,7 +65,7 @@ function writeHmapSection(view: DataView, offset: number, hm: DemoFile['heightma
   view.setFloat32(offset, hm.worldScale, true); offset += 4;
   view.setUint32(offset, hm.srcHash, true); offset += 4;
   view.setUint32(offset, hm.data.length, true); offset += 4;
-  for (const b of hm.data) {view.setUint8(offset++, b);}
+  for (const b of hm.data) {view.setUint8(((offset += 1) - 1), b);}
   view.setUint32(lenPos, offset - start, true);
   return offset;
 }
@@ -83,12 +83,12 @@ function writeFrames(view: DataView, offset: number, frames: DemoFile['frames'])
     view.setFloat32(offset, f.velZ, true); offset += 4;
     view.setFloat32(offset, f.yaw, true); offset += 4;
     view.setFloat32(offset, f.pitch, true); offset += 4;
-    view.setUint8(offset++, f.inputFlags);
+    view.setUint8(((offset += 1) - 1), f.inputFlags);
     view.setInt16(offset, f.mouseDeltaX, true); offset += 2;
     view.setInt16(offset, f.mouseDeltaY, true); offset += 2;
-    view.setUint8(offset++, f.jetpackFlags);
+    view.setUint8(((offset += 1) - 1), f.jetpackFlags);
     view.setFloat32(offset, f.jetpackFuel, true); offset += 4;
-    view.setUint8(offset++, f.weaponType);
+    view.setUint8(((offset += 1) - 1), f.weaponType);
   }
   return offset;
 }
@@ -96,7 +96,7 @@ function writeFrames(view: DataView, offset: number, frames: DemoFile['frames'])
 function writeProjEvents(view: DataView, offset: number, events: DemoFile['projectileEvents']): number {
   view.setUint32(offset, events.length, true); offset += 4;
   for (const e of events) {
-    view.setUint8(offset++, e.eventType);
+    view.setUint8(((offset += 1) - 1), e.eventType);
     view.setFloat32(offset, e.timestamp, true); offset += 4;
     view.setFloat32(offset, e.posX, true); offset += 4;
     view.setFloat32(offset, e.posY, true); offset += 4;
@@ -105,13 +105,13 @@ function writeProjEvents(view: DataView, offset: number, events: DemoFile['proje
     view.setFloat32(offset, e.velY, true); offset += 4;
     view.setFloat32(offset, e.velZ, true); offset += 4;
     view.setUint16(offset, e.projectileId, true); offset += 2;
-    view.setUint8(offset++, e.weaponType);
+    view.setUint8(((offset += 1) - 1), e.weaponType);
     view.setFloat32(offset, e.surfaceNormalX, true); offset += 4;
     view.setFloat32(offset, e.surfaceNormalY, true); offset += 4;
     view.setFloat32(offset, e.surfaceNormalZ, true); offset += 4;
     view.setUint16(offset, e.targetId, true); offset += 2;
-    view.setUint8(offset++, e.targetType);
-    view.setUint8(offset++, e.hasPeakPosition ? 1 : 0);
+    view.setUint8(((offset += 1) - 1), e.targetType);
+    view.setUint8(((offset += 1) - 1), e.hasPeakPosition ? 1 : 0);
     view.setFloat32(offset, e.peakPosX, true); offset += 4;
     view.setFloat32(offset, e.peakPosY, true); offset += 4;
     view.setFloat32(offset, e.peakPosZ, true); offset += 4;
@@ -122,7 +122,7 @@ function writeProjEvents(view: DataView, offset: number, events: DemoFile['proje
 function writeTargetEvents(view: DataView, offset: number, events: DemoFile['targetEvents']): number {
   view.setUint32(offset, events.length, true); offset += 4;
   for (const e of events) {
-    view.setUint8(offset++, e.eventType);
+    view.setUint8(((offset += 1) - 1), e.eventType);
     view.setFloat32(offset, e.timestamp, true); offset += 4;
     view.setFloat32(offset, e.posX, true); offset += 4;
     view.setFloat32(offset, e.posY, true); offset += 4;
@@ -131,9 +131,9 @@ function writeTargetEvents(view: DataView, offset: number, events: DemoFile['tar
     view.setFloat32(offset, e.velY, true); offset += 4;
     view.setFloat32(offset, e.velZ, true); offset += 4;
     view.setUint16(offset, e.targetId, true); offset += 2;
-    view.setUint8(offset++, e.targetType);
+    view.setUint8(((offset += 1) - 1), e.targetType);
     view.setFloat32(offset, e.health, true); offset += 4;
-    view.setUint8(offset++, e.hasPeakPosition ? 1 : 0);
+    view.setUint8(((offset += 1) - 1), e.hasPeakPosition ? 1 : 0);
     view.setFloat32(offset, e.peakPosX, true); offset += 4;
     view.setFloat32(offset, e.peakPosY, true); offset += 4;
     view.setFloat32(offset, e.peakPosZ, true); offset += 4;
@@ -154,7 +154,7 @@ function writeRemoteFrames(view: DataView, offset: number, frames: DemoFile['rem
     view.setFloat32(offset, f.velZ, true); offset += 4;
     view.setFloat32(offset, f.yaw, true); offset += 4;
     view.setFloat32(offset, f.pitch, true); offset += 4;
-    view.setUint8(offset++, f.flags);
+    view.setUint8(((offset += 1) - 1), f.flags);
   }
   return offset;
 }
@@ -187,7 +187,7 @@ export function serializeDemo(data: DemoFile): ArrayBuffer {
     let offset = 0;
 
     // Header
-    view.setUint8(offset++, data.header.magic);
+    view.setUint8(((offset += 1) - 1), data.header.magic);
     view.setInt32(offset, data.header.formatVersion, true); offset += 4;
     offset = writeString(view, offset, data.header.gameVersion);
     view.setFloat64(offset, data.header.timestamp, true); offset += 8;
@@ -230,7 +230,7 @@ export function serializeDemo(data: DemoFile): ArrayBuffer {
     offset = writeRemoteFrames(view, offset, data.remoteFrames);
 
     // v5 trailer sections — u8 count, then tag+len+payload per section.
-    view.setUint8(offset++, data.heightmap ? 1 : 0);
+    view.setUint8(((offset += 1) - 1), data.heightmap ? 1 : 0);
     offset = writeHmapSection(view, offset, data.heightmap);
 
     // Compute and write checksum over everything after the checksum field
