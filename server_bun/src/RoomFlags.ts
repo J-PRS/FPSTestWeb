@@ -242,6 +242,9 @@ export class RoomFlags {
    *  nuggets: server moves truth, flagUpdate streams the flight, the rest
    *  spot is what a touch resolves against. */
   knock(at: Vec3, radius: number, force: number, pull = false): void {
+    // d>=radius is false on NaN — the compare fails INTO the write, so a
+    // NaN blast center would += NaN into every dropped flag's velocity.
+    if (!Number.isFinite(at.x + at.y + at.z + radius + force)) return;
     const s = pull ? -1 : 1;
     for (const f of this.flags.values()) {
       if (f.state !== 'dropped') continue;
