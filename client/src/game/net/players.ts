@@ -32,6 +32,8 @@ function wirePlayerCombat(ctx: NetCtx): void {
 
   networkManager.onPlayerHit = (shooterId: string, targetId: string, damage: number, health: number, armor?: number) => {
     if (deps.world.playbackMode) return;
+    inv('wire-hit-finite', Number.isFinite(damage) && Number.isFinite(health), { damage, health, shooterId, targetId });
+    if (!Number.isFinite(damage) || !Number.isFinite(health)) return;
     // Check if local player was hit
     if (targetId === nm().getLocalPlayerId()) {
       const player = deps.lazyPlayer();
@@ -40,7 +42,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
         // than the sim did — worth surfacing, it moves kill credit too.
         logger.warn(`playerHit on dead local player: ${damage} from ${shooterId}`);
       }
-      if (armor !== undefined) player.armor = armor;
+      if (armor !== undefined && Number.isFinite(armor)) player.armor = armor;
       // Shielded hits route to the energy tank (server kept health
       // unchanged) — the soak reads as a cyan flash + hum, not a grunt.
       if (player.isShielded) {
@@ -88,7 +90,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
         }
       }
     }
-    if (health !== undefined && !player.isDead) player.health = health;
+    if (health !== undefined && Number.isFinite(health) && !player.isDead) player.health = health;
   };
 
   // Server-healed hp (regen perk, mend channel, regen powerup) — arrives
