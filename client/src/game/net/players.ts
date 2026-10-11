@@ -14,6 +14,7 @@ import { onPlayerKill } from './playerKill.js';
 import { noteLocalSnap } from '../gameLoop.js';
 import { initNetProbe, bindStats, attachScene, corr as probeCorr, corrGhost } from '../../debug/netProbe.js';
 import { parityMiss } from '../parity.js';
+import { lastWeaponByPlayer } from './projectiles.js';
 import type { NetCtx } from './ctx.js';
 
 export function wirePlayers(ctx: NetCtx): void {
@@ -383,5 +384,8 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
     if (deps.world.remotePlayers.remove(playerId)) {
       logger.info(`Remote player removed (playerLeft): ${playerId}`);
     }
+    // Alt+w fire ledger is keyed per id — a churned roster grows dead
+    // ids forever otherwise.
+    lastWeaponByPlayer.delete(playerId);
   };
 }
