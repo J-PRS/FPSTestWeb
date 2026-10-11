@@ -129,7 +129,9 @@ export function hmSettleWalkable(f: Heightfield, pos: { x: number; y: number; z:
     if (slope < 0.8) break; // walkable grade
     const d = slope || 1;
     pos.x -= (sx / d) * 6; pos.z -= (sz / d) * 6;
-    pos.y = hmHeight(f, pos.x, pos.z) + lift;
+    // Rest height is the drawn chord — the flat triangles dip under the
+    // bilinear field on convex ground, so a field rest reads midair.
+    pos.y = Math.max(hmHeight(f, pos.x, pos.z), hmChord(f, pos.x, pos.z)) + lift;
     if (Math.abs(h0 - pos.y) < 0.5 && i > 4) break; // settled on a shelf
   }
 }

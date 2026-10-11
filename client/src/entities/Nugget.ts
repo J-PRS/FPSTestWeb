@@ -206,7 +206,10 @@ export class Nugget {
 
   private ballisticStep(dt: number, terrain: Terrain): void {
     this.vel.y += GRAVITY * dt;
-    const gy = terrain.getHeight(this.pos.x, this.pos.z);
+    // Rest on the drawn surface, not the smooth field — the flat
+    // triangles dip under bilinear on convex ground and a field rest
+    // reads as a nugget hanging midair.
+    const gy = terrain.getRenderedHeight(this.pos.x, this.pos.z);
     if (this.pos.y + this.vel.y * dt > gy + NUGGET_RADIUS) {return;}
     this.pos.y = gy + NUGGET_RADIUS;
     if (Math.abs(this.vel.y) > 2) {
@@ -267,7 +270,9 @@ export class Nugget {
     const bleed = Math.max(0, 1 - NUG_TUMBLE.friction * step);
     this.pos.addScaledVector(this.vel, step);
     this.vel.y += GRAVITY * step;
-    const gy = terrain.getHeight(this.pos.x, this.pos.z) + NUG_TUMBLE.groundLift;
+    // Same chord the server's tumble now uses — mirrored math must
+    // floor against the same surface or the rest snaps never stop.
+    const gy = terrain.getRenderedHeight(this.pos.x, this.pos.z) + NUG_TUMBLE.groundLift;
     if (this.pos.y < gy) {this.pos.y = gy; this.vel.y = 0;}
     this.vel.x *= bleed; this.vel.y *= bleed; this.vel.z *= bleed;
     if (Math.abs(this.vel.x) < NUG_TUMBLE.settle && Math.abs(this.vel.y) < NUG_TUMBLE.settle && Math.abs(this.vel.z) < NUG_TUMBLE.settle) {

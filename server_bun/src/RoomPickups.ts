@@ -13,7 +13,7 @@ import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { aoeImpulse } from '../../shared/combat.ts';
-import { hmHeight, hmSettleWalkable } from '../../shared/heightfield.ts';
+import { hmHeight, hmChord, hmSettleWalkable } from '../../shared/heightfield.ts';
 import { NUG_TUMBLE, type PickupKind } from '../../shared/pickups.ts';
 import { GRAVITY } from '../../shared/movement.ts';
 
@@ -54,7 +54,7 @@ export class RoomPickups {
     // terrain; on a structure (>2.5m up) corpse height is the reachable
     // spot and grounding would sink the tag under the deck.
     if (this.room.field) {
-      const ground = hmHeight(this.room.field, p.pos.x, p.pos.z) + 0.5;
+      const ground = Math.max(hmHeight(this.room.field, p.pos.x, p.pos.z), hmChord(this.room.field, p.pos.x, p.pos.z)) + 0.5;
       if (p.pos.y - ground < 2.5) p.pos.y = ground;
     }
     this.pickups.set(id, p);
@@ -130,7 +130,10 @@ export class RoomPickups {
         const bleed = Math.max(0, 1 - NUG_FRICTION * dt);
         p.pos.x += p.vel.x * dt; p.pos.z += p.vel.z * dt;
         p.pos.y += p.vel.y * dt; p.vel.y += GRAVITY * dt; // world gravity — no soft loose-object fork
-        const gy = this.room.field ? hmHeight(this.room.field, p.pos.x, p.pos.z) + NUG_TUMBLE.groundLift : p.pos.y;
+        // Ground truth is the drawn chord, not the smooth field — on
+        // convex ground the flat triangles dip below the bilinear patch,
+        // so a field-rested gem hangs visibly midair (JP's report).
+        const gy = this.room.field ? Math.max(hmHeight(this.room.field, p.pos.x, p.pos.z), hmChord(this.room.field, p.pos.x, p.pos.z)) + NUG_TUMBLE.groundLift : p.pos.y;
         if (p.pos.y < gy) { p.pos.y = gy; p.vel.y = 0; }
         p.vel.x *= bleed; p.vel.z *= bleed; p.vel.y *= bleed;
         if (Math.abs(p.vel.x) < NUG_TUMBLE.settle && Math.abs(p.vel.z) < NUG_TUMBLE.settle && Math.abs(p.vel.y) < NUG_TUMBLE.settle) {
