@@ -575,6 +575,11 @@ export class RoomMoveSim {
       const steps = Math.floor(sh.acc / MoveSim.STEP);
       sh.acc -= steps * MoveSim.STEP;
       sh.simTicks += steps;
+      // A NaN shadow is invisible on the wire AND keeps consuming
+      // claims — the poison always enters through an ungated lane, so
+      // name the field that broke, don't silence it.
+      inv('sim-pos', Number.isFinite(s.pos.x + s.pos.y + s.pos.z), { id: pid });
+      inv('sim-vel', Number.isFinite(s.vel.x + s.vel.y + s.vel.z), { id: pid });
     }
   }
 
