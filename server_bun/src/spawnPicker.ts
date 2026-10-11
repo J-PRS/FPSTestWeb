@@ -127,14 +127,14 @@ export class SpawnPicker {
       out.x += Math.cos(a) * d;
       out.z += Math.sin(a) * d;
       const g = groundAt?.(out.x, out.z);
-      if (Number.isFinite(g) && out.y < g) out.y = g;
+      if (g !== undefined && Number.isFinite(g) && out.y < g) out.y = g;
     }
     // Postcondition: a spawn born under its surface is the buried-bot
     // seed — name it at the pick, not after the corpse renders sunk. A
     // field that can't produce a finite floor (degenerate test hosts)
     // isn't evidence of burial.
     const g2 = groundAt?.(out.x, out.z);
-    inv('spawn-above-ground', !Number.isFinite(g2) || out.y >= g2 - 0.5,
+    inv('spawn-above-ground', g2 === undefined || !Number.isFinite(g2) || out.y >= g2 - 0.5,
       { x: out.x, y: out.y, z: out.z, ground: g2 });
     return out;
   }
