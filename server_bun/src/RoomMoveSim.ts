@@ -338,13 +338,15 @@ export class RoomMoveSim {
   /** Energy refunds the world grants — gem pickup half-tank refill. */
   grantEnergy(playerId: string, amount: number): void {
     const sh = this.shadows.get(playerId);
-    if (sh) sh.energy = Math.min(ENERGY.max * sh.energyMax, sh.energy + amount);
+    if (sh && Number.isFinite(amount)) sh.energy = Math.min(ENERGY.max * sh.energyMax, sh.energy + amount);
   }
 
   /** Energy burns outside the input stream — shield damage soak. */
   drainEnergy(playerId: string, amount: number): boolean {
     const sh = this.shadows.get(playerId);
-    if (!sh) return false;
+    // NaN amount: Math.max(0, NaN) = NaN — one poison write kills
+    // jets/skills for the session and never self-heals.
+    if (!sh || !Number.isFinite(amount)) return false;
     sh.energy = Math.max(0, sh.energy - amount);
     return true;
   }
@@ -516,6 +518,9 @@ export class RoomMoveSim {
       if (!jetting && !sh.skillSuppressRegen) {
         sh.energy = Math.min(ENERGY.max * sh.energyMax, sh.energy + ENERGY.jetCharge * sh.jetRegen * sh.energyRegen * dt);
       }
+      // NaN is sticky (Math.max(0, NaN) = NaN) — a poisoned pool would
+      // ride forever; drain to empty once, then let regen rebuild it.
+      if (!Number.isFinite(sh.energy)) sh.energy = 0;
       sh.energy = Math.max(0, sh.energy);
       if (sh.energy <= 0) sh.jetLockT = ENERGY.jetLockout;
       sh.sim.setInput({ jetHeld: jetting });
