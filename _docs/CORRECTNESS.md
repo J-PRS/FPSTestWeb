@@ -193,6 +193,12 @@ violation instead of a symptom hunt.
 - **Join/roster coherence:** `hasReceivedPosition` gates in-world
   membership (unreported joiners spawn no ghost mesh); `joinAnnounced`
   once-per-record; wireIds ship inline in the join snapshot.
+- **Lifecycle/leak hygiene (verified):** `RemoteSet.remove`/`prune`
+  dispose + fire onRemove; stamp ledgers all bounded (`recentKb` 8,
+  `selfBlastStamps` 8, `dmgEchoes` 32+900ms, `shellFates` 64+15s,
+  interp buffer time-windowed); `lastWeaponByPlayer` cleans on
+  playerLeft; server `onPlayerDisconnected` purges every per-player
+  map (fire/lastHeal/envCredit/healTicks/chargeBank/warn/drop keys).
 - **Mutation during iteration (verified):** every entity list sweeps
   backwards for in-place removal (`updateDeadList`, balls, species
   loop); spawns land before the sweep, never inside it; `speciesAggro.
