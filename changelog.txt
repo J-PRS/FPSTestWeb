@@ -1,3 +1,33 @@
+2026-10-11 - trails: quarks emit cut now judges the deposit span (pos+lead vs previousWorldPos), not pos alone — a dt-scaled fallback lead on hitch frames could park the emitter km ahead and paint the whole sky gap
+2026-10-11 - ribbons: view-angle width fade on billboard trails — a
+streak flying along the camera axis used to show its whole re-sided
+face (giant wedge on shots coming at/away from you); width now scales
+with sin(dir-to-view), full past ~19 deg, collapsing to a point end-on.
+
+2026-10-11 - bolt launcher: ribbonRampIn 0.1 — the streak emitter now
+spawns at 0 width/life and reaches full over 100ms (same ramp the
+chaingun uses), no more fat ribbon at the muzzle on the first frames.
+
+2026-10-11 - terrain: LOD seams welded from the FINE side — each level's
+outer-edge verts now morph onto the parent ring's drawn two-triangle
+field chord (parentChord), replacing the old coarse->fine chord morph
+that could never equal the fine boundary polyline and left hairline
+holes at every clipmap edge. Depth order corrected: graded polygonOffset
+makes finer levels win the border-cell overlap band (was: all rings
+pulled -1 in front of L0). gridSpacing uniform now carries real vert
+spacing. New terrainSeam test pins the weld for all origin parities.
+
+balls: spring-in pop on spawn/teleport — instance scale eases 0->1 over
+~0.22s with a small back-out overshoot so births read as eruptions, and a
+12-particle trails.burst dust puff sells the landing. spawnPopT lives on
+Ball (visual only, never recorded); ballRage resets it on leash teleport
+with a 14 m/s speed floor so dawdlers still spring up; demo playback pops
+on >=25m hard snaps (recorded teleports).
+Also fixed ambient spawns: they were born 80-140m in the SKY falling with
+mostly-horizontal vel — now they spawn on the surface and get tossed
+roughly upward (vy 12-26, horizontal scatter 2-10) like the OG game.
+classic soak 1h/30 still CLEAN after the speed floor.
+
 2026-10-11 - fix: per-weapon cadence gate on simmed shotFired intents (mortar could claim ~13/s)
 2026-10-11 - fix: finite gate inside applyDeployHp (roster lane bypassed the event-lane check)
 2026-10-11 - fix: finite gate on offline-bot damage (NaN dmg made unkillable bots)
@@ -37,6 +67,7 @@
 2026-10-10 - correctness: last NaN write paths closed — reconnect seat rejects non-finite vel/health blobs, healPool refuses non-finite amount/pool/cap (min(cap,NaN)=NaN writes unrescueable health)
 2026-10-10 - correctness: NaN damage/impulse containment — inv(damage-finite) + early return in PlayerManager.applyDamage (NaN hp meant unkillable + NaN broadcast), shove() refuses non-finite impulse/offset before writing target.velocity
 2026-10-10 - correctness: finite gates on the hit-claim legality core (shared/combat.ts — NaN endPos sailed through reach + target-proximity since NaN > x is always false) and wire-knockback-finite on the client (a NaN force/pos would poison the local sim velocity)
+2026-10-11 - world-space ShaderMaterial glows no longer pierce the fog wall: shield bubbles (flat/skinned/contoured) and ball trail dots fade out by fogFactor — additive fields attenuate to nothing rather than repainting fog color. Shared FX_FOG near/far uniforms live in directionalFog.ts, synced once per frame in gameLoop.syncFog alongside terrain.updateFog; UI layers (damage numbers, DOM health bars) stay unfogged by design
 2026-10-11 - blob shadows no longer pierce the fog wall: the shared instanced shadow pass is a ShaderMaterial, which ignores scene.fog — bodies dissolved into fog at distance but their dark discs stayed crisp (free enemy radar past the fog line). Shadow shader now fades alpha by the same linear fog factor, fed from scene.fog each frame in checkShrink
 2026-10-11 - fog-ghost decals: fade-by-vertex-color additive batches (TerrainRing, trail ribbons, explosion sparks) set fog:false — the fade only scales RGB to black while alpha stays 1, so the fog mix repainted dead quads/lines as fog-colored silhouettes at distance until a new shot reused the slot. Opacity-faded materials were unaffected (alpha dies with the fade)
 2026-10-11 - Regenerator wind-up: the ramp now only accrues after 5s unhurt (shared REGEN_DELAY_S in perks.ts) — before, regen started ticking the moment a hit landed+1 tick, so chip-fights still bought healing between exchanges. Sustained combat now denies the perk entirely; full strength (4hp/s) arrives at 15s disengage instead of 10. Server tick + offline mirror use the same formula; flat `regen` mod is untouched (no perk sets it)

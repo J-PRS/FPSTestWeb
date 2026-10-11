@@ -359,11 +359,19 @@ export class QuarksTrail {
         em.position.addScaledVector(vel, dt * 2);
       }
     }
-    // emit() deposits previousWorldPos→matrixWorld — matrixWorld only
-    // refreshes at render, so without this the segment always ends at
-    // LAST frame's rendered pos: a full frame of head gap on fast shells.
+    // emit() deposits previousWorldPos→matrixWorld — judge THAT span, not
+    // pos alone: a dt-scaled fallback lead can park the emitter far ahead
+    // on a hitch frame while pos never jumped (hidden-tab resume dumps
+    // vel*dt*2 ≈ kilometers of lead), and emit() then paints the whole
+    // gap as one sky streak. On overshoot re-seat at pos, no lead.
     em.updateMatrixWorld(true);
-    if (jumped) { trailStats.emitCuts++; resyncEmission(this.ps, em); }
+    const lx = em.position.x - ax, ly = em.position.y - ay, lz = em.position.z - az;
+    if (jumped || lx * lx + ly * ly + lz * lz > jump * jump) {
+      trailStats.emitCuts++;
+      em.position.copy(pos);
+      em.updateMatrixWorld(true);
+      resyncEmission(this.ps, em);
+    }
     if (vel.lengthSq() > 1e-4) {
       this.ps.emitter.quaternion.setFromUnitVectors(
         _forward, _tDir.copy(vel).normalize());
