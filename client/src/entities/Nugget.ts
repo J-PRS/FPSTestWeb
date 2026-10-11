@@ -284,7 +284,7 @@ export class Nugget {
   /** Server truth for a knocked-around gem's rest spot — a correction,
    *  not a teleport: only snap when the local tumble diverged for real. */
   serverRest(p: { x: number; y: number; z: number }): void {
-    if (this.collected || this.dead) {return;}
+    if (this.collected || this.dead || !Number.isFinite(p.x + p.y + p.z)) {return;}
     const dx = this.pos.x - p.x, dy = this.pos.y - p.y, dz = this.pos.z - p.z;
     const dSq = dx * dx + dy * dy + dz * dz;
     if (dSq < 0.5 * 0.5) {return;}
