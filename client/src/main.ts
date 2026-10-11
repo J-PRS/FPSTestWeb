@@ -200,11 +200,14 @@ async function init(): Promise<void> {
   profiler.markTime('effectsCreated');
 
   player = new Player(terrain, camera, scene);
+  profiler.markTime('playerCtor');
 
   vmSetup = createViewModelScene(camera.aspect);
   viewModel = vmSetup.viewModel;
+  profiler.markTime('viewmodel');
 
   entities = makeEntities();
+  profiler.markTime('entities');
 
   // Hybrid wave director — scripted beats + a credit pool spent on an
   // unlocking roster. Lives beside entities, drives its spawn fns.

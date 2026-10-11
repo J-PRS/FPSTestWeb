@@ -9,6 +9,9 @@ export class LoadProfiler {
 
   markTime(name: string): void {
     this.loadTimes[name] = performance.now();
+    // performance.mark too — the boot waterfall is readable from any
+    // tooling (devtools timeline, MCP) without scraping console.log.
+    try { performance.mark(`load:${name}`); } catch { /* mark name clash on re-init */ }
     const elapsed = (this.loadTimes[name] - this.loadStart).toFixed(2);
     console.log(`[PROFILE] ${name}: ${elapsed}ms`);
   }

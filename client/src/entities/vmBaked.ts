@@ -64,7 +64,14 @@ export class VmBaked {
     const loader = mkGltfLoader();
     const texLoader = new THREE.TextureLoader();
     const done = new Set<THREE.Group>();
+    // bakeVertexAO is ~100ms of raycasts per weapon — an async fn's body
+    // still runs synchronously until a real await, so the old loop froze
+    // boot for ~2.3s before this function's first fetch ever fired.
+    // Yield per weapon: the bake streams in over the first seconds of
+    // menu/play instead of blocking TTI.
+    const yieldFrame = () => new Promise<void>((r) => setTimeout(r, 0));
     for (const [wt, g] of this.h.weapons) {
+      await yieldFrame();
       if (!bakeAll && !ALWAYS_BAKE.has(wt)) {
         bakeVertexAO(g, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });
         continue;
