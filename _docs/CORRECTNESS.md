@@ -493,6 +493,13 @@ violation instead of a symptom hunt.
   IP-throttled at 5/min, room + global player caps, spectator
   squatters evicted by real joins, reclaim stamps
   `protectedUntil` for the warmup window.
+- **Flag lane server-side (verified sealed):** NO flag claim
+  exists — grab/cap/return resolve in the tick's swept-position
+  pass alone, so a client can only render the wrong visuals,
+  never move the objective. `throwFlag` is payload-less (arc
+  derives from shadow pos/vel/rot + finite gate); `loose`
+  finite-gates the corpse vel; `knock` finite-gates the blast
+  args at entry (the NaN skip-compare class, fixed earlier).
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
