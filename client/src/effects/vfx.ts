@@ -468,6 +468,8 @@ const puffOf = new WeakMap<ParticleSystem, PuffEmitter>();
  *  particle lifecycle: alpha always faded t·0.6 (the old update loop
  *  overwrote spawn opacity), size ran (0.3+t·1.4)·sizeScale shrinking
  *  over life, gravity applied unless noGravity. */
+const _qc = (c?: number[]): string => c === undefined ? '' : c.map((v): number => Math.round(v * 20) / 20).join('-');
+const _q = (v?: number, step = 0.05): number | "" => v === undefined ? '' : Math.round(v / step) * step;
 export function fxPuff(pos: THREE.Vector3, spec: PuffSpec): void {
   if (!vfxReady() || document.hidden) {return;} // off-screen bursts only pile up
   const pressure = vfxPressure();
@@ -610,8 +612,8 @@ const _eVel = new THREE.Vector3();
 const shapeOf = new WeakMap<ParticleSystem, BlastEmitter>();
 
 // Spec-quantizers hoisted out of burstKey — they're recreated per call otherwise.
-const _q = (v?: number, step = 0.05): number | "" => v === undefined ? '' : Math.round(v / step) * step;
-const _qc = (c?: number[]): string => c === undefined ? '' : c.map((v): number => Math.round(v * 20) / 20).join('-');
+
+
 
 function burstKey(kind: string, spec: BlastSpec | ImplodeSpec, additive: boolean): string {
   const s = spec as BlastSpec & ImplodeSpec;

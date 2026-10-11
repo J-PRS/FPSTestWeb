@@ -217,6 +217,11 @@ function parseBallMix(raw: unknown): number[] | undefined {
 
 /** Validated interior placements — bare .dif basenames only (client maps
  *  them to t2/dif/*.glb), sane-clamped transforms, cap 256. */
+const isVec = (s: unknown): s is Vec3like =>
+  Boolean(s) && typeof s === 'object' &&
+  Number.isFinite((s as Vec3like).x) &&
+  Number.isFinite((s as Vec3like).y) &&
+  Number.isFinite((s as Vec3like).z);
 function parseInteriors(raw: unknown): InteriorSpec[] | undefined {
   if (!Array.isArray(raw)) {return undefined;}
   const out: InteriorSpec[] = [];
@@ -572,8 +577,4 @@ const STRUCT_KINDS = new Set(['box', 'wall', 'pillar', 'ramp', 'root', 'stand', 
  *  authors a stand kit piece (katastand/flagtower — standTop snaps the
  *  home onto it) or an authored 'stand' box. */
 export const FLAG_STAND_LIFT = 0.85;
-const isVec = (s: unknown): s is Vec3like =>
-  Boolean(s) && typeof s === 'object' &&
-  Number.isFinite((s as Vec3like).x) &&
-  Number.isFinite((s as Vec3like).y) &&
-  Number.isFinite((s as Vec3like).z);
+

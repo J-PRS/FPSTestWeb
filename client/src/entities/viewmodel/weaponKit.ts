@@ -123,6 +123,25 @@ export const validateRing = (r: Ring2, tag = 'ring'): void => {
   if (area < 0) {Logger.warn(`[weaponKit] ${tag}: ring wound clockwise — normals will face INWARD`);}
   if (r.length < 3) {Logger.warn(`[weaponKit] ${tag}: ring has ${r.length} points`);}
 };
+export const resampleRing = (r: Ring2, n: number): Ring2 => {
+  const m = r.length;
+  const lens: number[] = [0];
+  for (let i = 0; i < m; i += 1) {
+    const [x0, y0] = r[i]!, [x1, y1] = r[(i + 1) % m]!;
+    lens.push(lens[i]! + Math.hypot(x1 - x0, y1 - y0));
+  }
+  const total = lens[m]!;
+  const out: Ring2 = [];
+  let e = 0;
+  for (let i = 0; i < n; i += 1) {
+    const t = (i / n) * total;
+    while (e < m - 1 && lens[e + 1]! < t) {e += 1;}
+    const f = (t - lens[e]!) / Math.max(lens[e + 1]! - lens[e]!, 1e-9);
+    const [x0, y0] = r[e]!, [x1, y1] = r[(e + 1) % m]!;
+    out.push([x0 + (x1 - x0) * f, y0 + (y1 - y0) * f]);
+  }
+  return out;
+};
 const validateLoft = (sections: LoftSection[]): void => {
   let n = -1;
   for (const s of sections) {
@@ -311,25 +330,7 @@ export const notchRing = (r: Ring2, edge: number, spans: [number, number][], dep
 /** Re-sample a ring to n points by arc length — keeps the polygon's
  *  SHAPE (extra points land on the flats), just changes the count so
  *  mkAnnulus's inner/outer rings can mismatch in segment count. */
-export const resampleRing = (r: Ring2, n: number): Ring2 => {
-  const m = r.length;
-  const lens: number[] = [0];
-  for (let i = 0; i < m; i += 1) {
-    const [x0, y0] = r[i]!, [x1, y1] = r[(i + 1) % m]!;
-    lens.push(lens[i]! + Math.hypot(x1 - x0, y1 - y0));
-  }
-  const total = lens[m]!;
-  const out: Ring2 = [];
-  let e = 0;
-  for (let i = 0; i < n; i += 1) {
-    const t = (i / n) * total;
-    while (e < m - 1 && lens[e + 1]! < t) {e += 1;}
-    const f = (t - lens[e]!) / Math.max(lens[e + 1]! - lens[e]!, 1e-9);
-    const [x0, y0] = r[e]!, [x1, y1] = r[(e + 1) % m]!;
-    out.push([x0 + (x1 - x0) * f, y0 + (y1 - y0) * f]);
-  }
-  return out;
-};
+
 
 /** Annulus — a ring extrusion with a TRUE through-hole (mkLoft can't
  *  express one: its caps always close). Skins the outer wall, inner wall,
