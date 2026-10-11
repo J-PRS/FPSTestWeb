@@ -197,6 +197,27 @@ export class RoomMoveSim {
 
   untrack(playerId: string): void { this.shadows.delete(playerId); this.pendingTrack.delete(playerId); }
 
+  /** The shadow's own eye height — the measure of "buried" must match
+   *  the sim's floor convention (pos.y IS the eye point). Reading the
+   *  record's armorClass instead phantom-buries every bot whose sim
+   *  body wasn't re-set after a class refit: lifted to the class eye,
+   *  sinks back to its sim eye, rescued again — the rescue/re-sink loop. */
+  eyeOf(playerId: string): number | undefined {
+    return this.shadows.get(playerId)?.sim.eyeHeight;
+  }
+
+  /** Unbury autopsy: what the shadow knows about a body the record says
+   *  is under the field — its flag, its sim pos, and what each surface
+   *  claims the ground is there. */
+  unburyDebug(playerId: string): string {
+    const sh = this.shadows.get(playerId);
+    const pos = sh?.sim.state.pos;
+    const x = pos?.x ?? 0, z = pos?.z ?? 0;
+    const f = this.surface?.getHeight(x, z).toFixed(1) ?? '?';
+    const c = this.botSurface?.getHeight(x, z).toFixed(1) ?? '?';
+    return `shadow=${sh ? `bot=${sh.bot} y=${pos!.y.toFixed(1)} onG=${sh.sim.state.onGround}` : 'none'} fieldG=${f} chordG=${c}`;
+  }
+
   /** Mid-match team swap (rebalance) — the shadow's gate-shield access
    *  flips with the jersey, not at the next respawn. */
   setTeam(playerId: string, team: string | undefined): void {

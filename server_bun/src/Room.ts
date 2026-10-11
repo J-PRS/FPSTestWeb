@@ -151,6 +151,7 @@ export class Room {
    *  so client and server agree. Counted in room health — if the number
    *  stays nonzero there's a real leak to hunt. */
   private unburyAcc = 0;
+  private unburyLogN = 0;
   private unburyTick(dt: number): void {
     if (!this.field) return;
     this.unburyAcc += dt;
@@ -158,9 +159,18 @@ export class Room {
     this.unburyAcc = 0;
     for (const p of this.players.getAllPlayers().values()) {
       if (p.isDead || (!p.isBot && !p.hasReceivedPosition)) continue;
-      const eye = classCapsule(p.armorClass as ArmorClass).eye;
+      // Measure with the shadow's own eye when one exists — the class
+      // capsule and the sim body disagree whenever a refit left the sim
+      // at the default eye, and the record's view was the stale one.
+      const eye = this.moveSim.eyeOf(p.id) ?? classCapsule(p.armorClass as ArmorClass).eye;
       const terrain = Math.max(hmHeight(this.field, p.position.x, p.position.z), hmChord(this.field, p.position.x, p.position.z));
       if (p.position.y - eye >= terrain - 0.5) continue;
+      // First rescues carry the autopsy: who sank, how deep vs field vs
+      // chord, and what the move shadow thought the ground was — a
+      // recurring unbury means a sim/writer is still leaking under.
+      if (this.unburyLogN++ < 30) {
+        logger.warn(`unbury ${p.id}: pos.y=${p.position.y.toFixed(1)} feet=${(p.position.y - eye).toFixed(1)} terrain=${terrain.toFixed(1)} bot=${p.isBot} ${this.moveSim.unburyDebug(p.id)}`);
+      }
       p.position.y = terrain + eye;
       p.velocity.y = Math.max(0, p.velocity.y);
       this.moveSim.resync(p.id, p.position, p.rotation.yaw);

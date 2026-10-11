@@ -65,12 +65,12 @@ function makeRemoteHooks(deps: RemotesDeps) {
       deps.lazyHud().removePlayerIndicator(id);
       deps.lazyHealthBarSystem().forgetPlayer(id);
       sfxWorld.remoteMoveAudioGone(id);
-      // aliveSince/killCounts/lastWeaponByPlayer key on live ids — a
-      // leaver drops here or the module maps grow one entry per
-      // departed player forever.
+      // aliveSince/lastWeaponByPlayer key on live ids — a leaver drops
+      // here or the module maps grow one entry per departed player
+      // forever. kill/death counts are NOT cleared: onRemove also fires
+      // on the corpse→respawn entity swap, and zeroing the score there
+      // reset every bot's K/D in the tab board on each respawn.
       aliveSince.delete(id);
-      deps.world.killCounts.delete(id);
-      deps.world.deathCounts.delete(id);
       lastWeaponByPlayer.delete(id);
     },
   };
