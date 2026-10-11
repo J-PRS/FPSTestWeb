@@ -283,6 +283,12 @@ violation instead of a symptom hunt.
   regex'd; beam intents (lightning/repair/melee) flood-gated 30/s,
   muzzle rewind-derived not claimed, dir finite-gated once at :337
   then normalized, ranges are server constants.
+- **VFX ledgers (verified sealed):** live explosions capped at
+  `MAX_LIVE_EXPLOSIONS` 48 (oldest retires early); scorch/splat decals
+  self-expire on `age/LIFETIME` and insta-die when the tab hides;
+  BallDebris shards carry per-shard life budgets + deadlineMs
+  resumable updates; all swept by `updateDeadList` backward-splice.
+  Push volume is bounded upstream by rate-limited wire events.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
