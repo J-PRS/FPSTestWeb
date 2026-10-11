@@ -408,6 +408,15 @@ violation instead of a symptom hunt.
   don't hard-snap. Server gates against the pending tail AND the
   drained watermark (reordered stale edges can't append behind
   fresh ones), pending bounded 8, seqStates bounded 32.
+- **Divergence→correction loop (verified sealed):** `reconcile`
+  returns sim truth past tolerance → authority mode sends it back
+  as a `correction`, reseats `lastPosCheckPos` at the corrected
+  spot (else the client's snap reads as a speedhack reject) and
+  mutes judges (in-flight pre-correction reports can't blip the
+  streak). Judge mode deliberately never corrects — the snap IS
+  the warp; divergence is an anti-cheat signal only. Plausibility
+  anchors update even on reject (no reject-spiral), and NaN
+  reports fail the `isFinite` gate before either mode touches them.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
