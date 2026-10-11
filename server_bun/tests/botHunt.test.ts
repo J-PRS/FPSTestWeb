@@ -68,6 +68,17 @@ describe('pickHunt', () => {
     expect(st2.hunt).toBeNull(); // past the eye line
   });
 
+  it('a squad spot commits the hunt but not the fire memory', () => {
+    const st = newHuntState(P);
+    const c = flat({ spots: [foe(20, 0, 'p:spotted')] });
+    pickHunt(st, c, P, 60_000, mood, () => {});
+    expect(st.hunt?.id).toBe('p:spotted');
+    // Blind callout: no eye line ever confirmed it, so there's nothing
+    // fresh to aim at — the posted defender does NOT hose a frozen point.
+    expect(st.lastSeenAt).toBe(0);
+    expect(pickFire(st, 0.1, c, P, 60_000, mood)).toBeUndefined();
+  });
+
   it('nothing visible → the goal ladder runs instead', () => {
     const st = newHuntState(P);
     let ran = false;

@@ -26,8 +26,16 @@ describe('roleObjective', () => {
     for (const role of ['ldefense', 'technician', 'defense']) {
       expect(roleObjective(role, sit({ thief: THIEF, dropped: DROPPED }))).toBe(THIEF);
       expect(roleObjective(role, sit({ dropped: DROPPED }))).toBe(DROPPED);
-      expect(roleObjective(role, sit())).toBe(HOME);
     }
+  });
+  test('idle defense roles spread to stations, not a pole-stack', () => {
+    expect(roleObjective('technician', sit())).toBe(HOME);
+    const ld = roleObjective('ldefense', sit());
+    const def = roleObjective('defense', sit(), 1, 1);
+    const defMirror = roleObjective('defense', sit(), 1, -1);
+    for (const p of [ld, def, defMirror]) expect(p).not.toEqual(HOME);
+    expect(Math.hypot(ld.x, ld.z)).toBeGreaterThan(Math.hypot(def.x, def.z)); // LD screens the lane out
+    expect(def.x).not.toBe(defMirror.x); // opposite flanks
   });
   test('capper escorts a carrier first, else presses the stand', () => {
     expect(roleObjective('capper', sit({ escort: ESCORT, enemyStand: ENEMY }))).toBe(ESCORT);

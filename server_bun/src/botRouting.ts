@@ -10,7 +10,7 @@ import { botRand } from '../../shared/botRand.ts';
 import { TerrainFlow } from '../../shared/botGraph.ts';
 import type { Vec3 } from './types.ts';
 import type { BotEnemy } from '../../shared/botBrain.ts';
-import { roleObjective, type BotRole, type FlagSituation } from '../../shared/flagGoals.ts';
+import { roleObjective, roleSide, type BotRole, type FlagSituation } from '../../shared/flagGoals.ts';
 import { classCapsule } from '../../shared/botClasses.ts';
 import { segSolidHit } from '../../shared/solidWorld.ts';
 import { FLAG_STAND_LIFT } from '../../shared/mapSpec.ts';
@@ -337,7 +337,7 @@ export class BotRouting {
       // its stored stand goal keeps the flood running.
       ?? (task.kind === 'push' ? task.goal : null));
     // One role table for both runtimes — shared/flagGoals.ts.
-    let pick = taskGoal ?? roleObjective(this.roles.get(p.id) ?? 'offense', sit, duty);
+    let pick = taskGoal ?? roleObjective(this.roles.get(p.id) ?? 'offense', sit, duty, roleSide(p.id));
     // A moving-target pick aims at where it will BE: chasing the raw
     // position means following the wake of a 30m/s+ run forever — the
     // slots' velocity rides along for exactly this lead (escort's slot

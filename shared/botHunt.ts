@@ -288,7 +288,11 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
     st.acquiredAt.set(next.id, st.huntTick);
     if (st.acquiredAt.size > 6) st.acquiredAt.delete(st.acquiredAt.keys().next().value!);
   }
-  const seen = best ?? thief ?? spotted;
+  // Eye-line + the flag beacon refresh the fire memory; a squad callout
+  // only commits the hunt — otherwise a lingering spot refreshes
+  // lastSeenAt forever and the bot hoses a frozen point through cover
+  // (soak: posted defenders firing one hillside spot "for no reason").
+  const seen = best ?? thief;
   if (seen) {
     st.lastSeen = { ...seen.pos };
     st.lastSeenVel = { ...seen.vel };

@@ -11,7 +11,7 @@ import { segPointDist } from '../../../shared/projSim.js';
 import { hmHeight } from '../../../shared/heightfield.js';
 import { GRAVITY } from '../../../shared/movement.js';
 import type { BotVec } from '../../../shared/botBrain.js';
-import { assignRole, roleObjective, WIRE_ROLES, type BotRole, type FlagSituation } from '../../../shared/flagGoals.js';
+import { assignRole, roleObjective, roleSide, WIRE_ROLES, type BotRole, type FlagSituation } from '../../../shared/flagGoals.js';
 import { FLAG_HOME_R, FLAG_PICKUP_R, FLAG_RESET_S, TEAM_COLORS, type TeamId } from '../../../shared/teams.js';
 import { FLAG_STAND_LIFT } from '../../../shared/mapSpec.js';
 import { BOT_TUNING } from '../../../shared/botTuning.js';
@@ -140,7 +140,7 @@ function objectiveFor(a: FlagBot, flags: Record<TeamId, LabFlag>, foes: FlagBot[
     return { objective: own.home, runner: true, posted: 0 };
   }
   const sit = flagSituation(a, flags, foes);
-  let pick = roleObjective(a.role, sit, a.brain.dutyLevel);
+  let pick = roleObjective(a.role, sit, a.brain.dutyLevel, roleSide(a.name));
   let lead = null;
   if (pick === sit.escort) { lead = sit.escort; }
   else if (pick === sit.thief) { lead = sit.thief; }

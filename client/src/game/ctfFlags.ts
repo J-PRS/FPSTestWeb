@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import type { Terrain } from '../world/terrain.js';
 import { TEAM_COLORS, TEAM_LABEL, FLAG_HOME_R, FLAG_RESET_S, CTF_PTS, bank, type TeamId, type TeamScores } from '../../../shared/teams.js';
 import type { GameBot } from './bots/botBrain.js';
-import { roleObjective, ROLE_PRIORITY, STRICT_CLASS, type BotRole } from '../../../shared/flagGoals.js';
+import { roleObjective, roleSide, ROLE_PRIORITY, STRICT_CLASS, type BotRole } from '../../../shared/flagGoals.js';
 import * as sfx from '../core/sfx.js';
 import { mkFlagStand, FLAG_STAND_TOP } from '../structures/structures.js';
 import { wornMetalMat } from '../entities/procMetal.js';
@@ -308,7 +308,7 @@ export class CtfFlags {
       escort: escortPos,
       threat: this.standThreat(own.home, bot.team as string),
       me: { x: bot.position.x, z: bot.position.z },
-    }, bot.dutyLevel);
+    }, bot.dutyLevel, roleSide(bot.playerId));
     // Cloak intent is the infiltrator's alone — the drain is
     // speed-scaled, so a sprinting capper would arrive tank-dry.
     const infiltrating = enemyStand !== null && pick === enemyStand && role === 'infiltrator';

@@ -146,7 +146,15 @@ export function assignRole(
  *  situation slot picked — callers compare against their own slots (e.g.
  *  `result === s.enemyStand` ⇒ the bot is pressing the stand, which the
  *  server reads as its infiltrate/cloak intent). */
-export function roleObjective(role: string, s: FlagSituation, commit = 1): { x: number; y: number; z: number } {
+/** Which flank a home-side role takes — derived from the bot id so two
+ *  generic defenders mirror each other instead of stacking. */
+export function roleSide(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  return (h & 1) === 0 ? 1 : -1;
+}
+
+export function roleObjective(role: string, s: FlagSituation, commit = 1, side = 1): { x: number; y: number; z: number } {
   // Mutual-carry lock: both flags are out, so nobody can cap and the match
   // is decided by which carrier dies first. If every role kept its routine
   // job, chasers would trickle in one at a time against a stand-camped
@@ -158,7 +166,7 @@ export function roleObjective(role: string, s: FlagSituation, commit = 1): { x: 
   if (s.thief && s.escort && role !== 'hof' && role !== 'capper') return s.thief;
   switch (role) {
     case 'hof': return hofGoal(s, commit);
-    case 'ldefense': case 'technician': case 'defense': return defenseGoal(s);
+    case 'ldefense': case 'technician': case 'defense': return defenseGoal(s, role, side);
     case 'capper': return capperGoal(s);
     case 'bombardier': return bombardierGoal(s);
     case 'infiltrator': return infiltratorGoal(s);
@@ -195,10 +203,21 @@ function hofGoal(s: FlagSituation, commit: number) {
  *  carrier closing on home pulls midfield defense OUT to meet him —
  *  early escort beats a late body-block: the carrier's most fragile
  *  leg is the approach, where chasers converge. */
-function defenseGoal(s: FlagSituation) {
+function defenseGoal(s: FlagSituation, role: string, side: number) {
   if (s.thief) return s.thief;
   if (s.dropped) return s.dropped;
   if (s.escort && Math.hypot(s.escort.x - s.home.x, s.escort.z - s.home.z) < 260) return s.escort;
+  // Idle: don't stack bodies on the pole — the era's real defense is
+  // coverage, not a clump. LD screens the incoming lane toward the
+  // enemy stand, generic defense takes a flank (side mirrors per bot),
+  // technician stays on the pole for the weld/deploy work.
+  if (s.enemyStand) {
+    const dx = s.enemyStand.x - s.home.x, dz = s.enemyStand.z - s.home.z;
+    const d = Math.hypot(dx, dz) || 1;
+    const ux = dx / d, uz = dz / d;
+    if (role === 'ldefense') return { x: s.home.x + ux * 38, y: s.home.y, z: s.home.z + uz * 38 };
+    if (role === 'defense') return { x: s.home.x - uz * side * 24 + ux * 10, y: s.home.y, z: s.home.z + ux * side * 24 + uz * 10 };
+  }
   return s.home;
 }
 
