@@ -206,13 +206,17 @@ export function wireProjectiles(ctx: NetCtx): void {
     // trails fade. The shotId covers destroys for shells whose server-id
     // echo never landed.
     const registry = deps.world.projectileRegistry;
+    // The authority's blast point for MY shell — damage-echo ghosts diff
+    // it against where the hit painted to tell trajectory divergence
+    // (srvAt far) from a shell that never ran (srvAt none). Key on the
+    // echoed nonce, NOT a registry hit: the predicted shell self-destructs
+    // on its painted contact, so pruneShots evicts it before 'gone'
+    // lands — keying on localProjectile reported srvAt:none on every
+    // real miss by construction.
+    if (position && shotId) {noteShellFate(shotId, position);}
     const localProjectile = registry.byId.get(projectileId)
       ?? (shotId ? registry.byShotId.get(shotId) : undefined);
     if (localProjectile) {
-      // The authority's blast point for MY shell — damage-echo ghosts
-      // diff it against where the hit painted to tell trajectory
-      // divergence (srvAt far) from a shell that never ran (srvAt none).
-      if (position) {noteShellFate(shotId ?? localProjectile.shotId ?? projectileId, position);}
       snapToContact(localProjectile, position);
       localProjectile.explode();
       registry.byId.delete(projectileId);
