@@ -45,6 +45,33 @@ let wtCertHash: string | null = null;
 const httpCtx = { gameServer, demoStorage, rtcRelay, wtCertHash: (): string | null => wtCertHash, requestIP: (req: Request): Bun.SocketAddress | null => server.requestIP(req) };
 const ROUTES = makeRoutes(httpCtx);
 
+// Let the close frames flush before exiting: an immediate process.exit
+// kills the sockets mid-handshake and players see a drop, not 1001.
+// The loop drains on its own once the server socket is down; the
+// fallback timer force-exits if a straggler socket lingers.
+async function shutdown(): Promise<void> {
+  try {
+    // Snapshot seats BEFORE stop() closes sockets — the restore is only
+    // useful if it still names live players. Awaited and abort-bounded:
+    // the handoff must land before exit, or there's nothing to hand off.
+    if (stateUrl) {
+      try {
+        await fetch(stateUrl, {
+          method: 'PUT',
+          body: JSON.stringify(gameServer.exportRestore()),
+          signal: AbortSignal.timeout(400),
+        });
+      } catch { /* watcher gone — nothing to hand off */ }
+    }
+    gameServer.stop();
+  } finally {
+    // Exit is the contract — a handoff/stop failure must still die.
+    setTimeout((): never => process.exit(0), 500).unref();
+  }
+}
+
+
+
 const server = Bun.serve<WebSocketData>({
   port: CONFIG.port,
   hostname: '0.0.0.0',
@@ -210,31 +237,6 @@ process.on('unhandledRejection', (reason): void => {
 process.on('uncaughtException', (e): void => {
   logger.error('Uncaught exception (process survived)', { err: e.stack ?? e.message });
 });
-
-// Let the close frames flush before exiting: an immediate process.exit
-// kills the sockets mid-handshake and players see a drop, not 1001.
-// The loop drains on its own once the server socket is down; the
-// fallback timer force-exits if a straggler socket lingers.
-async function shutdown(): Promise<void> {
-  try {
-    // Snapshot seats BEFORE stop() closes sockets — the restore is only
-    // useful if it still names live players. Awaited and abort-bounded:
-    // the handoff must land before exit, or there's nothing to hand off.
-    if (stateUrl) {
-      try {
-        await fetch(stateUrl, {
-          method: 'PUT',
-          body: JSON.stringify(gameServer.exportRestore()),
-          signal: AbortSignal.timeout(400),
-        });
-      } catch { /* watcher gone — nothing to hand off */ }
-    }
-    gameServer.stop();
-  } finally {
-    // Exit is the contract — a handoff/stop failure must still die.
-    setTimeout((): never => process.exit(0), 500).unref();
-  }
-}
 
 process.on('SIGINT', (): void => {
   logger.info('SIGINT received, shutting down...');

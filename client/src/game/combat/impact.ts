@@ -71,6 +71,22 @@ function hitVerdict(c: CombatCtx, p: Projectile, hitPos: { x: number; y: number;
   });
 }
 
+function splatAt(c: CombatCtx, x: number, z: number, r: number, hex: number, intensity?: number, dx = 0, dz = 0): void {
+  const {deps} = c;
+  if (deps.world.splats.length >= SPLAT_MAX) {deps.world.splats.shift()!.dispose();}
+  _splatPos.set(x, 0, z);
+  // Smear the stain along the droplet's landing velocity — a streaked
+  // splash, not a round dot. Slow drops stay roundish pools.
+  const sp = Math.hypot(dx, dz);
+  const ux = sp > 0.01 ? dx / sp : 0, uz = sp > 0.01 ? dz / sp : 0;
+  const stretch = Math.min(sp * 0.18, 1.6);
+  deps.world.splats.push(new SplatDecal(
+    deps.lazyScene(), deps.lazyTerrain(), _splatPos, r, hex, intensity, ux, uz, stretch,
+  ));
+}
+
+
+
 // Creature hits bleed tinted ichor: a directional droplet spray (rides the
 // pooled debris system) + a projected ground stain. Absent on mechanicals
 // (Turretter) and props (Tumbleweed) — they leave ichor undefined.
@@ -85,20 +101,6 @@ function ichorSpray(c: CombatCtx, ball: Targetable, dir: THREE.Vector3, scale: n
     _ichorCol.setHex(hex), scale,
     { impulseDir: dir, kind: 'goo', paintBudget: 4,
       onDropletLand: (x, z, r, dx, dz): void => splatAt(c, x, z, r * (4 + Math.random() * 2.5), hex, 0.5, dx, dz) },
-  ));
-}
-
-function splatAt(c: CombatCtx, x: number, z: number, r: number, hex: number, intensity?: number, dx = 0, dz = 0): void {
-  const {deps} = c;
-  if (deps.world.splats.length >= SPLAT_MAX) {deps.world.splats.shift()!.dispose();}
-  _splatPos.set(x, 0, z);
-  // Smear the stain along the droplet's landing velocity — a streaked
-  // splash, not a round dot. Slow drops stay roundish pools.
-  const sp = Math.hypot(dx, dz);
-  const ux = sp > 0.01 ? dx / sp : 0, uz = sp > 0.01 ? dz / sp : 0;
-  const stretch = Math.min(sp * 0.18, 1.6);
-  deps.world.splats.push(new SplatDecal(
-    deps.lazyScene(), deps.lazyTerrain(), _splatPos, r, hex, intensity, ux, uz, stretch,
   ));
 }
 
@@ -132,96 +134,170 @@ const _coneAxis = new THREE.Vector3();
 const _coneQuat = new THREE.Quaternion();
 const _coneUp = new THREE.Vector3(0, 1, 0);
 
-// Projectile exploded: spawn effect, apply AOE, score hits, notify server/demo
-export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
+export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): void {
   const {deps} = c;
-  // Remote shells are server-authoritative: render the effect locally,
-  // but never report AOE/destroy/hits — that's the shooter's client's job.
-  // (GL shells explode on their 2.5s fuse on every observing client.)
-  if (p.isRemote) {
-    spawnVisualOnly(c, p);
-    // Bomblets are visual-only anyway — remote viewers still need the
-    // rain, or an airburst reads as a midair pop with no payload.
-    if (p.config.cluster) {spawnClusterBomblets(c, p);}
-    // The replica is visual-only for DAMAGE (server declares it), but the
-    // blast still physically shoves the local player — predict the shove
-    // here so its knockback echo dedupes on the stamp instead of landing
-    // raw and late. Without this every enemy blast felt like a grab.
-    if (!p.config.noExplosion && p.config.aoeRadius > 0) {
-      const blastPos = p.hitPointValid ? p.hitPoint : p.pos;
-      const bloom = p.directHit ? directHitAoeBonus(p.config.weaponType) : 1;
-      c.predictLocalShove(blastPos, p.config.aoeRadius * bloom, p.force, p.forceMode, p.shooterId ?? undefined);
+  const targetPlayer = deps.world.remotePlayers.get(playerId);
+  const hitPos = targetPlayer ? targetPlayer.position : deps.lazyPlayer().pos;
+  const directDamage = scaledDirectDamage(p.config.weaponType, p.directHit ? p.hitAge : undefined) * deps.lazyPlayer().mods.directDamage;
+  // Personal feedback (numbers/marker/score) is for shells I fired — a
+  // bot-authored hit isn't my frag. Player shells leave shooterId unset.
+  const mine = !p.shooterId;
+  // 'local' is a client sentinel — the server can't resolve it, so the
+  // claim would only earn a reject. Self-damage reports through the
+  // blast's env-damage channel instead (blastForce handles it once).
+  const willClaim = playerId !== 'local'
+    && deps.lazyNetworkManager()
+    && !(p.shooterId && isBotId(p.shooterId));
+  // Same gate as the blast: a hit the shared validator calls illegal is
+  // dead on arrival — predicting its damage (numbers, bars, score) is
+  // the ghost-hit feedback the reject warn complains about.
+  if (mine && willClaim) {
+    const verdict = hitVerdict(c, p, p.pos, hitPos, p.hitAge, targetPlayer?.armorClass);
+    if (!verdict.ok) {
+      deps.logger.info(`[Shot] hit claim suppressed pre-flight: ${verdict.reason}`);
+      return;
     }
-    return;
   }
-
-  spawnImpactEffect(c, p);
-  recordProjectileHit(c, p);
-  if (p.config.cluster) {spawnClusterBomblets(c, p);}
-
-  if (p.hitBall) {handleBallHit(c, p, p.hitBall);}
-  if (p.hitPlayerId) {handlePlayerHit(c, p, p.hitPlayerId);}
-
-  // Destroy LAST — this tombstones the server-tracked id. WS is ordered,
-  // so sending it ahead of the aoeShot/shot claims above used to make
-  // every blast arrive at a projectile the server no longer knew
-  // ("blast with no known projectile" — splash silently never applied).
-  // Server-simmed shells never claim: the authority's own sim owns the
-  // lifecycle and its projectileDestroyed echo does the tombstoning.
-  if ((p.serverProjectileId || p.shotId) && !(serverSimmed(p.config.weaponType) && deps.lazyNetworkManager().authorityShells())) {
-    deps.lazyNetworkManager().sendProjectileDestroy(p.serverProjectileId ?? '', p.shotId ?? undefined);
+  if (mine) {deps.lazyDamageNumbers().spawn(hitPos, directDamage, p.config.damageColor, deps.lazyCamera());}
+  if (deps.botHit?.(playerId, directDamage, p.pos, p.shooterId ?? undefined, p.config.weaponType, p.hitAge)) {return;} // bot authority: real damage, no claim
+  if (!mine) {return;}
+  deps.lazyHealthBarSystem().predictDamage(playerId, directDamage);
+  // Authority rooms give this hit no claim — stamp it so a server whiff
+  // (no playerHit echo within ~RTT) counts as a ghost hit in the dump.
+  // P2P/claim rooms already ledger the outcome through claimSeq instead.
+  if (deps.lazyNetworkManager()?.authoritySims()) {
+    expectDamageEcho(playerId, directDamage, p.config.weaponType, p.shotId, { x: p.pos.x, y: p.pos.y, z: p.pos.z });
   }
+  const airborne = targetPlayer
+    ? targetPlayer.feetY - deps.lazyTerrain().getHeight(hitPos.x, hitPos.z) > 0.6
+    : false;
+  logHitScore(c, p, 'player', airborne, playerId);
+
+  if (playerId === 'local') {return;}
+  // A predicted server-simmed shell still unbound past the bind grace is
+  // a ghost — the authority knows nothing about it and will never pay the
+  // damage. Under the grace it's a benign race: close-range hits land
+  // before the projectileCreated echo round-trips, while the server-side
+  // shell exists and adjudicates its own contact regardless.
+  if (serverSimmed(p.config.weaponType) && deps.lazyNetworkManager()?.authorityShells() && !p.serverProjectileId && p.age > 0.6) {
+    deps.logger.warn(`[Shot] ghost shell hit ${playerId}: ${p.config.displayName} never bound to a server shell (shotId=${p.shotId}, age=${p.age.toFixed(2)}s) — hit is prediction-only, no damage`);
+  }
+  // Server-simmed shells never claim their hit — predicted feedback
+  // (damage numbers, bars, hitmarker) already ran above; the authority
+  // declares the outcome via playerHit/projectileDestroyed.
 }
 
-const _crumbCol = new THREE.Color();
 
-/** Kinetic-hit feedback for noExplosion shells — the bullet puff is the
- *  floor; an embedding spear (javelin) earns a compact kinetic burst and
- *  its own thunk voice so a 60dmg dart doesn't feel like a pistol hit. */
-function kineticHitFx(c: CombatCtx, p: Projectile, pos: THREE.Vector3): void {
+
+export function handleBallHit(c: CombatCtx, p: Projectile, ball: Targetable): void {
   const {deps} = c;
-  deps.lazyEffects().spawnImpact(pos, p.vel);
-  if (p.config.crumbles) {
-    // The ball IS the ordnance: it bursts into rock shards at the contact
-    // point, riding the same pooled debris a creature death would — no
-    // explosion, no dome, just the mass coming apart.
+  // Airtime ramp is body-contact only — wake hits pay flat directDamage.
+  const dmg = scaledDirectDamage(p.config.weaponType, p.directHit ? p.hitAge : undefined) * deps.lazyPlayer().mods.directDamage;
+  if (p.config.weaponType === WeaponType.Chaingun) {chaingunBank(c, p, ball);}
+  deps.reportTargetDamage?.(ball, dmg);
+  // Shell contact is server-paid — the authority's creatureSweep pays
+  // this hit already; a claim would double it (feedback still local).
+  const destroyed = ball.takeDamage(dmg, { serverPaid: true });
+  detonateCharge(p, ball, dmg);
+  // Numbers + crosshair marker are MY-hit feedback — bot shells carry
+  // shooterId and shouldn't fire them (damage itself still applies).
+  const mine = !p.shooterId;
+  if (mine) {deps.lazyDamageNumbers().spawn(ball.pos, Math.round(dmg), p.config.damageColor, deps.lazyCamera());}
+  if (!destroyed && !ball.hideHealthBar) {
+    deps.lazyHealthBarSystem().spawnBall(ball, dmg, ball.health);
+  }
+  const airborne = ball.pos.y - ball.radius - deps.lazyTerrain().getHeight(ball.pos.x, ball.pos.z) > 0.6;
+  if (mine) {logHitScore(c, p, 'ball', airborne, `ball#${ball.id}`);}
+  if (destroyed) {onTargetDestroyed(c, ball, p.vel, p.config.weaponType, p.shooterId ?? undefined);}
+  else if (ball.ichor !== undefined) {
+    // Non-lethal hit: a thin spray along the shot direction — the stains
+    // come free wherever the droplets land (ichorSpray paints them).
     _debrisDir.copy(p.vel).normalize();
-    deps.world.debrisList.push(new BallDebris(
-      deps.lazyScene(), deps.lazyTerrain(), pos,
-      _crumbCol.setHex(p.config.meshColor), p.config.bodyRadius,
-      { bodyRadius: p.config.bodyRadius, impulseDir: _debrisDir, inheritVel: p.vel, kind: 'rock' },
-    ));
-    // Crumble shells still carry a real server-side shrapnel sweep —
-    // under ?debug show its reach like every blast, else the damage
-    // envelope is invisible (noExplosion skips the normal gizmo path).
-    if (urlParams.debug && p.config.aoeRadius > 0) {
-      deps.world.aoeGizmos.push(new AoeGizmo(deps.lazyScene(), pos, p.config.aoeRadius));
-    }
-    sfx.explosionAt(pos, false, p.config.weaponType, p.vel);
-    return;
+    ichorSpray(c, ball, _debrisDir, 0.28);
   }
-  if (p.config.embeds === undefined) {return;}
-  deps.world.explosions.push(new Explosion(
-    deps.lazyScene(), pos, p.directHit, p.age, deps.lazyTerrain(),
-    3.4 / EXPLOSION_VFX_RADIUS, p.config.damageColor, 'punch',
-  ));
-  sfx.explosionAt(pos, false, p.config.weaponType, p.vel);
+
+  const demoManager = deps.lazyDemoManager();
+  if (demoManager?.isRecording && !destroyed) {
+    demoManager.recordTargetHit(targetDemoId(ball), { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.variant, ball.health);
+  }
 }
 
-// Visual effect only — no AOE, no damage, no server traffic
-export function spawnVisualOnly(c: CombatCtx, p: Projectile): void {
+
+
+// Demo recording + cool-shot logging for any hit (terrain, ball, or player)
+export function recordProjectileHit(c: CombatCtx, p: Projectile): void {
   const {deps} = c;
-  // Prefer the swept hitPoint — on a bounce-fail the integrated pos is
-  // already inside the terrain and the blast would render underground
-  const pos = p.hitPointValid ? p.hitPoint : p.pos;
-  if (p.config.noExplosion) {
-    kineticHitFx(c, p, pos);
-    if (!p.hitBall && !p.hitPlayerId && !p.config.crumbles) {deps.lazyEffects().spawnBulletMark(pos);}
-    return;
+  const demoManager = deps.lazyDemoManager();
+  if (demoManager?.isRecording && p.demoProjectileId) {
+    const targetId = p.hitBall ? p.hitBall.id : (p.hitPlayerId ? 0xFF_FF : 0);
+    // Lane tag for the id: ball variant for ball hits so playback looks the
+    // victim up in the right map; HIT_TARGET_NONE otherwise (terrain, and
+    // today's anonymous 0xFFFF player hit).
+    const targetType = p.hitBall ? p.hitBall.variant : HIT_TARGET_NONE;
+    demoManager.recordProjectileHit(p.demoProjectileId, { x: p.pos.x, y: p.pos.y, z: p.pos.z }, targetId, p.config.weaponType, targetType);
   }
-  deps.world.explosions.push(new Explosion(deps.lazyScene(), pos, p.directHit, p.age, deps.lazyTerrain(), p.explosionRadius / EXPLOSION_VFX_RADIUS, p.config.damageColor, p.config.vfx));
-  sfx.explosionAt(pos, p.directHit);
+  // CoolShot/auto-clip is MY highlight reel — a bot's air shot isn't mine
+  // to bank. Player shells leave shooterId unset; bots carry 'bot:*'.
+  if ((p.hitBall || p.hitPlayerId) && !p.shooterId) {
+    const hitWho = p.hitBall ? `ball#${p.hitBall.id}` : (p.hitPlayerId ?? '?');
+    deps.logger.info(`[CoolShot] ${p.config.displayName} hit ${hitWho} airtime=${p.hitAge.toFixed(3)}s dist=${p.hitDistance.toFixed(1)} direct=${p.directHit}`);
+    if (demoManager?.isRecording && p.hitAge > 0.2) {
+      demoManager.autoClipOnHit(p.hitAge, 0.2, undefined, undefined, undefined, { weapon: p.config.displayName, distance: p.hitDistance });
+    }
+  }
 }
+
+
+
+// Cluster pop: scatter bomblets in an upward cone — VISUAL only. Damage
+// comes from the server's WeaponStats.cluster scatter on the carrier's
+// validated blast; client-side pops never claim (untracked projectile).
+export function spawnClusterBomblets(c: CombatCtx, p: Projectile): void {
+  const {deps} = c;
+  const { count, spread, fuse, sphere } = p.config.cluster!;
+  const at = p.hitPointValid ? p.hitPoint : p.pos;
+  // The scatter cone rides the carrier: axis = the carrier's heading
+  // (up when it's parked), plus 80% momentum inheritance below — a
+  // forward-flying shell rains its bomblets ALONG its arc instead of
+  // popping a static fountain that ignores where it was going.
+  // sphere mode (MRV) instead: full carrier velocity + a uniform random
+  // direction, so the cloud keeps the arc's momentum and rains out.
+  if (p.vel.lengthSq() > 1) {_coneAxis.copy(p.vel).normalize();}
+  else {_coneAxis.set(0, 1, 0);}
+  _coneQuat.setFromUnitVectors(_coneUp, _coneAxis);
+  for (let i = 0; i < count; i += 1) {
+    const yaw = Math.random() * Math.PI * 2;
+    if (sphere) {
+      // Uniform sphere: cos(tilt) uniform in [-1,1], not tilt uniform.
+      const u = Math.random() * 2 - 1, s = Math.sqrt(1 - u * u);
+      _bombDir.set(s * Math.cos(yaw), u, s * Math.sin(yaw));
+    } else {
+      const tilt = Math.random() * spread; // 0..spread off the cone axis
+      _bombDir.set(Math.sin(yaw) * Math.sin(tilt), Math.cos(tilt), Math.cos(yaw) * Math.sin(tilt))
+        .applyQuaternion(_coneQuat);
+    }
+    // Per-instance config clone only carries the jittered fuse — and only
+    // when the carrier SETS one: fuseless clusters (MRV) drop contact bombs
+    // that pop on whatever they land on, not mid-air timers.
+    const base = p.config.bomblet ?? BOMBLET_CONFIG;
+    const cfg = fuse ? ((((((Object.assign({}, base, {maxLifetime: fuse * (0.6 + Math.random() * 0.8)}))))))) : base;
+    // Bomblet speed lives in the "playerVel" ctor arg: config.speed is 0 and
+    // the ctor adds half the inherit term — so pass final velocity × 2.
+    // Sphere: carrier velocity in FULL + uniform random kick; cone: 0.8×
+    // carrier + cone scatter (unchanged).
+    if (sphere) {
+      _bombVel.copy(p.vel).addScaledVector(_bombDir, 6 + Math.random() * 12)
+        .multiplyScalar(2);
+    } else {
+      _bombVel.copy(_bombDir).multiplyScalar((9 + Math.random() * 6) * 2)
+        .addScaledVector(p.vel, 1.6);
+    }
+    const b = new Projectile(deps.lazyScene(), at, _bombDir, _bombVel, cfg);
+    deps.world.projectiles.push(b);
+  }
+}
+
+
 
 export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
   const {deps} = c;
@@ -297,75 +373,99 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
   });
 }
 
-// Cluster pop: scatter bomblets in an upward cone — VISUAL only. Damage
-// comes from the server's WeaponStats.cluster scatter on the carrier's
-// validated blast; client-side pops never claim (untracked projectile).
-export function spawnClusterBomblets(c: CombatCtx, p: Projectile): void {
+
+
+// Visual effect only — no AOE, no damage, no server traffic
+export function spawnVisualOnly(c: CombatCtx, p: Projectile): void {
   const {deps} = c;
-  const { count, spread, fuse, sphere } = p.config.cluster!;
-  const at = p.hitPointValid ? p.hitPoint : p.pos;
-  // The scatter cone rides the carrier: axis = the carrier's heading
-  // (up when it's parked), plus 80% momentum inheritance below — a
-  // forward-flying shell rains its bomblets ALONG its arc instead of
-  // popping a static fountain that ignores where it was going.
-  // sphere mode (MRV) instead: full carrier velocity + a uniform random
-  // direction, so the cloud keeps the arc's momentum and rains out.
-  if (p.vel.lengthSq() > 1) {_coneAxis.copy(p.vel).normalize();}
-  else {_coneAxis.set(0, 1, 0);}
-  _coneQuat.setFromUnitVectors(_coneUp, _coneAxis);
-  for (let i = 0; i < count; i += 1) {
-    const yaw = Math.random() * Math.PI * 2;
-    if (sphere) {
-      // Uniform sphere: cos(tilt) uniform in [-1,1], not tilt uniform.
-      const u = Math.random() * 2 - 1, s = Math.sqrt(1 - u * u);
-      _bombDir.set(s * Math.cos(yaw), u, s * Math.sin(yaw));
-    } else {
-      const tilt = Math.random() * spread; // 0..spread off the cone axis
-      _bombDir.set(Math.sin(yaw) * Math.sin(tilt), Math.cos(tilt), Math.cos(yaw) * Math.sin(tilt))
-        .applyQuaternion(_coneQuat);
+  // Prefer the swept hitPoint — on a bounce-fail the integrated pos is
+  // already inside the terrain and the blast would render underground
+  const pos = p.hitPointValid ? p.hitPoint : p.pos;
+  if (p.config.noExplosion) {
+    kineticHitFx(c, p, pos);
+    if (!p.hitBall && !p.hitPlayerId && !p.config.crumbles) {deps.lazyEffects().spawnBulletMark(pos);}
+    return;
+  }
+  deps.world.explosions.push(new Explosion(deps.lazyScene(), pos, p.directHit, p.age, deps.lazyTerrain(), p.explosionRadius / EXPLOSION_VFX_RADIUS, p.config.damageColor, p.config.vfx));
+  sfx.explosionAt(pos, p.directHit);
+}
+
+
+
+// Projectile exploded: spawn effect, apply AOE, score hits, notify server/demo
+export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
+  const {deps} = c;
+  // Remote shells are server-authoritative: render the effect locally,
+  // but never report AOE/destroy/hits — that's the shooter's client's job.
+  // (GL shells explode on their 2.5s fuse on every observing client.)
+  if (p.isRemote) {
+    spawnVisualOnly(c, p);
+    // Bomblets are visual-only anyway — remote viewers still need the
+    // rain, or an airburst reads as a midair pop with no payload.
+    if (p.config.cluster) {spawnClusterBomblets(c, p);}
+    // The replica is visual-only for DAMAGE (server declares it), but the
+    // blast still physically shoves the local player — predict the shove
+    // here so its knockback echo dedupes on the stamp instead of landing
+    // raw and late. Without this every enemy blast felt like a grab.
+    if (!p.config.noExplosion && p.config.aoeRadius > 0) {
+      const blastPos = p.hitPointValid ? p.hitPoint : p.pos;
+      const bloom = p.directHit ? directHitAoeBonus(p.config.weaponType) : 1;
+      c.predictLocalShove(blastPos, p.config.aoeRadius * bloom, p.force, p.forceMode, p.shooterId ?? undefined);
     }
-    // Per-instance config clone only carries the jittered fuse — and only
-    // when the carrier SETS one: fuseless clusters (MRV) drop contact bombs
-    // that pop on whatever they land on, not mid-air timers.
-    const base = p.config.bomblet ?? BOMBLET_CONFIG;
-    const cfg = fuse ? ((((((Object.assign({}, base, {maxLifetime: fuse * (0.6 + Math.random() * 0.8)}))))))) : base;
-    // Bomblet speed lives in the "playerVel" ctor arg: config.speed is 0 and
-    // the ctor adds half the inherit term — so pass final velocity × 2.
-    // Sphere: carrier velocity in FULL + uniform random kick; cone: 0.8×
-    // carrier + cone scatter (unchanged).
-    if (sphere) {
-      _bombVel.copy(p.vel).addScaledVector(_bombDir, 6 + Math.random() * 12)
-        .multiplyScalar(2);
-    } else {
-      _bombVel.copy(_bombDir).multiplyScalar((9 + Math.random() * 6) * 2)
-        .addScaledVector(p.vel, 1.6);
-    }
-    const b = new Projectile(deps.lazyScene(), at, _bombDir, _bombVel, cfg);
-    deps.world.projectiles.push(b);
+    return;
+  }
+
+  spawnImpactEffect(c, p);
+  recordProjectileHit(c, p);
+  if (p.config.cluster) {spawnClusterBomblets(c, p);}
+
+  if (p.hitBall) {handleBallHit(c, p, p.hitBall);}
+  if (p.hitPlayerId) {handlePlayerHit(c, p, p.hitPlayerId);}
+
+  // Destroy LAST — this tombstones the server-tracked id. WS is ordered,
+  // so sending it ahead of the aoeShot/shot claims above used to make
+  // every blast arrive at a projectile the server no longer knew
+  // ("blast with no known projectile" — splash silently never applied).
+  // Server-simmed shells never claim: the authority's own sim owns the
+  // lifecycle and its projectileDestroyed echo does the tombstoning.
+  if ((p.serverProjectileId || p.shotId) && !(serverSimmed(p.config.weaponType) && deps.lazyNetworkManager().authorityShells())) {
+    deps.lazyNetworkManager().sendProjectileDestroy(p.serverProjectileId ?? '', p.shotId ?? undefined);
   }
 }
 
-// Demo recording + cool-shot logging for any hit (terrain, ball, or player)
-export function recordProjectileHit(c: CombatCtx, p: Projectile): void {
+const _crumbCol = new THREE.Color();
+
+/** Kinetic-hit feedback for noExplosion shells — the bullet puff is the
+ *  floor; an embedding spear (javelin) earns a compact kinetic burst and
+ *  its own thunk voice so a 60dmg dart doesn't feel like a pistol hit. */
+function kineticHitFx(c: CombatCtx, p: Projectile, pos: THREE.Vector3): void {
   const {deps} = c;
-  const demoManager = deps.lazyDemoManager();
-  if (demoManager?.isRecording && p.demoProjectileId) {
-    const targetId = p.hitBall ? p.hitBall.id : (p.hitPlayerId ? 0xFF_FF : 0);
-    // Lane tag for the id: ball variant for ball hits so playback looks the
-    // victim up in the right map; HIT_TARGET_NONE otherwise (terrain, and
-    // today's anonymous 0xFFFF player hit).
-    const targetType = p.hitBall ? p.hitBall.variant : HIT_TARGET_NONE;
-    demoManager.recordProjectileHit(p.demoProjectileId, { x: p.pos.x, y: p.pos.y, z: p.pos.z }, targetId, p.config.weaponType, targetType);
-  }
-  // CoolShot/auto-clip is MY highlight reel — a bot's air shot isn't mine
-  // to bank. Player shells leave shooterId unset; bots carry 'bot:*'.
-  if ((p.hitBall || p.hitPlayerId) && !p.shooterId) {
-    const hitWho = p.hitBall ? `ball#${p.hitBall.id}` : (p.hitPlayerId ?? '?');
-    deps.logger.info(`[CoolShot] ${p.config.displayName} hit ${hitWho} airtime=${p.hitAge.toFixed(3)}s dist=${p.hitDistance.toFixed(1)} direct=${p.directHit}`);
-    if (demoManager?.isRecording && p.hitAge > 0.2) {
-      demoManager.autoClipOnHit(p.hitAge, 0.2, undefined, undefined, undefined, { weapon: p.config.displayName, distance: p.hitDistance });
+  deps.lazyEffects().spawnImpact(pos, p.vel);
+  if (p.config.crumbles) {
+    // The ball IS the ordnance: it bursts into rock shards at the contact
+    // point, riding the same pooled debris a creature death would — no
+    // explosion, no dome, just the mass coming apart.
+    _debrisDir.copy(p.vel).normalize();
+    deps.world.debrisList.push(new BallDebris(
+      deps.lazyScene(), deps.lazyTerrain(), pos,
+      _crumbCol.setHex(p.config.meshColor), p.config.bodyRadius,
+      { bodyRadius: p.config.bodyRadius, impulseDir: _debrisDir, inheritVel: p.vel, kind: 'rock' },
+    ));
+    // Crumble shells still carry a real server-side shrapnel sweep —
+    // under ?debug show its reach like every blast, else the damage
+    // envelope is invisible (noExplosion skips the normal gizmo path).
+    if (urlParams.debug && p.config.aoeRadius > 0) {
+      deps.world.aoeGizmos.push(new AoeGizmo(deps.lazyScene(), pos, p.config.aoeRadius));
     }
+    sfx.explosionAt(pos, false, p.config.weaponType, p.vel);
+    return;
   }
+  if (p.config.embeds === undefined) {return;}
+  deps.world.explosions.push(new Explosion(
+    deps.lazyScene(), pos, p.directHit, p.age, deps.lazyTerrain(),
+    3.4 / EXPLOSION_VFX_RADIUS, p.config.damageColor, 'punch',
+  ));
+  sfx.explosionAt(pos, false, p.config.weaponType, p.vel);
 }
 
 // Score breakdown is an AIRSHOT reward — grounded hits get the plain
@@ -453,92 +553,6 @@ export function chaingunBank(c: CombatCtx, p: Projectile, ball: Targetable): voi
   if (c.chainRamp.size > 32) {
     for (const [id, s] of c.chainRamp) {if (now - s.t > CHAIN_WINDOW) {c.chainRamp.delete(id);}}
   }
-}
-
-export function handleBallHit(c: CombatCtx, p: Projectile, ball: Targetable): void {
-  const {deps} = c;
-  // Airtime ramp is body-contact only — wake hits pay flat directDamage.
-  const dmg = scaledDirectDamage(p.config.weaponType, p.directHit ? p.hitAge : undefined) * deps.lazyPlayer().mods.directDamage;
-  if (p.config.weaponType === WeaponType.Chaingun) {chaingunBank(c, p, ball);}
-  deps.reportTargetDamage?.(ball, dmg);
-  // Shell contact is server-paid — the authority's creatureSweep pays
-  // this hit already; a claim would double it (feedback still local).
-  const destroyed = ball.takeDamage(dmg, { serverPaid: true });
-  detonateCharge(p, ball, dmg);
-  // Numbers + crosshair marker are MY-hit feedback — bot shells carry
-  // shooterId and shouldn't fire them (damage itself still applies).
-  const mine = !p.shooterId;
-  if (mine) {deps.lazyDamageNumbers().spawn(ball.pos, Math.round(dmg), p.config.damageColor, deps.lazyCamera());}
-  if (!destroyed && !ball.hideHealthBar) {
-    deps.lazyHealthBarSystem().spawnBall(ball, dmg, ball.health);
-  }
-  const airborne = ball.pos.y - ball.radius - deps.lazyTerrain().getHeight(ball.pos.x, ball.pos.z) > 0.6;
-  if (mine) {logHitScore(c, p, 'ball', airborne, `ball#${ball.id}`);}
-  if (destroyed) {onTargetDestroyed(c, ball, p.vel, p.config.weaponType, p.shooterId ?? undefined);}
-  else if (ball.ichor !== undefined) {
-    // Non-lethal hit: a thin spray along the shot direction — the stains
-    // come free wherever the droplets land (ichorSpray paints them).
-    _debrisDir.copy(p.vel).normalize();
-    ichorSpray(c, ball, _debrisDir, 0.28);
-  }
-
-  const demoManager = deps.lazyDemoManager();
-  if (demoManager?.isRecording && !destroyed) {
-    demoManager.recordTargetHit(targetDemoId(ball), { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.variant, ball.health);
-  }
-}
-
-export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): void {
-  const {deps} = c;
-  const targetPlayer = deps.world.remotePlayers.get(playerId);
-  const hitPos = targetPlayer ? targetPlayer.position : deps.lazyPlayer().pos;
-  const directDamage = scaledDirectDamage(p.config.weaponType, p.directHit ? p.hitAge : undefined) * deps.lazyPlayer().mods.directDamage;
-  // Personal feedback (numbers/marker/score) is for shells I fired — a
-  // bot-authored hit isn't my frag. Player shells leave shooterId unset.
-  const mine = !p.shooterId;
-  // 'local' is a client sentinel — the server can't resolve it, so the
-  // claim would only earn a reject. Self-damage reports through the
-  // blast's env-damage channel instead (blastForce handles it once).
-  const willClaim = playerId !== 'local'
-    && deps.lazyNetworkManager()
-    && !(p.shooterId && isBotId(p.shooterId));
-  // Same gate as the blast: a hit the shared validator calls illegal is
-  // dead on arrival — predicting its damage (numbers, bars, score) is
-  // the ghost-hit feedback the reject warn complains about.
-  if (mine && willClaim) {
-    const verdict = hitVerdict(c, p, p.pos, hitPos, p.hitAge, targetPlayer?.armorClass);
-    if (!verdict.ok) {
-      deps.logger.info(`[Shot] hit claim suppressed pre-flight: ${verdict.reason}`);
-      return;
-    }
-  }
-  if (mine) {deps.lazyDamageNumbers().spawn(hitPos, directDamage, p.config.damageColor, deps.lazyCamera());}
-  if (deps.botHit?.(playerId, directDamage, p.pos, p.shooterId ?? undefined, p.config.weaponType, p.hitAge)) {return;} // bot authority: real damage, no claim
-  if (!mine) {return;}
-  deps.lazyHealthBarSystem().predictDamage(playerId, directDamage);
-  // Authority rooms give this hit no claim — stamp it so a server whiff
-  // (no playerHit echo within ~RTT) counts as a ghost hit in the dump.
-  // P2P/claim rooms already ledger the outcome through claimSeq instead.
-  if (deps.lazyNetworkManager()?.authoritySims()) {
-    expectDamageEcho(playerId, directDamage, p.config.weaponType, p.shotId, { x: p.pos.x, y: p.pos.y, z: p.pos.z });
-  }
-  const airborne = targetPlayer
-    ? targetPlayer.feetY - deps.lazyTerrain().getHeight(hitPos.x, hitPos.z) > 0.6
-    : false;
-  logHitScore(c, p, 'player', airborne, playerId);
-
-  if (playerId === 'local') {return;}
-  // A predicted server-simmed shell still unbound past the bind grace is
-  // a ghost — the authority knows nothing about it and will never pay the
-  // damage. Under the grace it's a benign race: close-range hits land
-  // before the projectileCreated echo round-trips, while the server-side
-  // shell exists and adjudicates its own contact regardless.
-  if (serverSimmed(p.config.weaponType) && deps.lazyNetworkManager()?.authorityShells() && !p.serverProjectileId && p.age > 0.6) {
-    deps.logger.warn(`[Shot] ghost shell hit ${playerId}: ${p.config.displayName} never bound to a server shell (shotId=${p.shotId}, age=${p.age.toFixed(2)}s) — hit is prediction-only, no damage`);
-  }
-  // Server-simmed shells never claim their hit — predicted feedback
-  // (damage numbers, bars, hitmarker) already ran above; the authority
-  // declares the outcome via playerHit/projectileDestroyed.
 }
 
 /** Nugget Wars bots damaging creatures: the identical funnel a

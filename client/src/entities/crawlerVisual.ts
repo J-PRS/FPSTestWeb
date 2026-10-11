@@ -119,6 +119,61 @@ export interface CrawlerVisHost {
   color: THREE.Color;
 }
 
+// Eyes: two additive quads on the head plate — widen during windup
+function writeEyes(c: CrawlerVisHost, swarm: NonNullable<ReturnType<typeof getSwarm>>, slot: number): void {
+  const eyeS = (c.state === 'wander' ? 0.55 : c.state === 'windup' ? 0.9 : 0.75) * 0.55;
+  for (let i = 0; i < EYES_PER; i += 1) {
+    const side = i === 0 ? -1 : 1;
+    _local.compose(
+      _p.set(side * 0.16, 0.28, 1.15), _q.identity(), _s.setScalar(eyeS),
+    );
+    _world.multiplyMatrices(_root, _local);
+    swarm.setMatrix(PART_EYE, slot * EYES_PER + i, _world);
+  }
+}
+
+
+
+// Fangs: two forward-curved tusks framing the head
+function writeFangs(swarm: NonNullable<ReturnType<typeof getSwarm>>, slot: number): void {
+  for (let i = 0; i < FANGS_PER; i += 1) {
+    const side = i === 0 ? -1 : 1;
+    _e.set(2.4, 0, side * -0.25);
+    _q.setFromEuler(_e);
+    _local.compose(_p.set(side * 0.16, -0.02, 1.25), _q, _s.set(1, 1.3, 1));
+    _world.multiplyMatrices(_root, _local);
+    swarm.setMatrix(PART_FANG, slot * FANGS_PER + i, _world);
+    // Pale chitin — mandibles should catch the eye, not blend in
+    swarm.setColor(PART_FANG, slot * FANGS_PER + i, 0.9, 0.8, 0.6);
+  }
+}
+
+
+
+// Eight legs, 4 pairs fanned thorax→abdomen. The leg geo is already
+// bent (hip→knee→foot); instance yaw fans fore legs forward, rear legs
+// back, and mirrors the left side. Wiggle = scuttle.
+function writeLegs(c: CrawlerVisHost, swarm: NonNullable<ReturnType<typeof getSwarm>>, slot: number): void {
+  const amp = c.airborne ? 0.08 : (c.state === 'wander' ? 0.25 : 0.55);
+  for (let i = 0; i < LEGS_PER; i += 1) {
+    const side = i % 2 === 0 ? -1 : 1;
+    const k = Math.floor(i / 2); // pair 0..3, front→back
+    const fan = (k - 1.5) * 0.4;
+    const wiggle = Math.sin(c.animT * 16 + i * 1.31) * amp;
+    _e.set(0, side < 0 ? Math.PI - fan + wiggle : fan + wiggle, 0);
+    _q.setFromEuler(_e);
+    _local.compose(
+      _p.set(side * 0.5, 0 + Math.abs(Math.sin(c.animT * 16 + i * 1.31)) * amp * 0.15, (k - 1.5) * 0.55),
+      _q, _s.set(1, 1, 1));
+    _world.multiplyMatrices(_root, _local);
+    swarm.setMatrix(PART_LEG, slot * LEGS_PER + i, _world);
+    // Legs darker than carapace — silhouette reads jointed, not blobbed
+    swarm.setColor(PART_LEG, slot * LEGS_PER + i, c.color.r * 0.45, c.color.g * 0.45, c.color.b * 0.45);
+  }
+}
+
+
+
 export function writeCrawlerInstances(c: CrawlerVisHost, terrain: Terrain): void {
   if (!c.hasSlots) {return;}
   const swarm = getSwarm('crawler');
@@ -158,53 +213,4 @@ export function writeCrawlerInstances(c: CrawlerVisHost, terrain: Terrain): void
   writeEyes(c, swarm, slot);
 
   getShadows()?.set(c as never, c.pos, r * 1.1, 0.35);
-}
-
-// Eight legs, 4 pairs fanned thorax→abdomen. The leg geo is already
-// bent (hip→knee→foot); instance yaw fans fore legs forward, rear legs
-// back, and mirrors the left side. Wiggle = scuttle.
-function writeLegs(c: CrawlerVisHost, swarm: NonNullable<ReturnType<typeof getSwarm>>, slot: number): void {
-  const amp = c.airborne ? 0.08 : (c.state === 'wander' ? 0.25 : 0.55);
-  for (let i = 0; i < LEGS_PER; i += 1) {
-    const side = i % 2 === 0 ? -1 : 1;
-    const k = Math.floor(i / 2); // pair 0..3, front→back
-    const fan = (k - 1.5) * 0.4;
-    const wiggle = Math.sin(c.animT * 16 + i * 1.31) * amp;
-    _e.set(0, side < 0 ? Math.PI - fan + wiggle : fan + wiggle, 0);
-    _q.setFromEuler(_e);
-    _local.compose(
-      _p.set(side * 0.5, 0 + Math.abs(Math.sin(c.animT * 16 + i * 1.31)) * amp * 0.15, (k - 1.5) * 0.55),
-      _q, _s.set(1, 1, 1));
-    _world.multiplyMatrices(_root, _local);
-    swarm.setMatrix(PART_LEG, slot * LEGS_PER + i, _world);
-    // Legs darker than carapace — silhouette reads jointed, not blobbed
-    swarm.setColor(PART_LEG, slot * LEGS_PER + i, c.color.r * 0.45, c.color.g * 0.45, c.color.b * 0.45);
-  }
-}
-
-// Fangs: two forward-curved tusks framing the head
-function writeFangs(swarm: NonNullable<ReturnType<typeof getSwarm>>, slot: number): void {
-  for (let i = 0; i < FANGS_PER; i += 1) {
-    const side = i === 0 ? -1 : 1;
-    _e.set(2.4, 0, side * -0.25);
-    _q.setFromEuler(_e);
-    _local.compose(_p.set(side * 0.16, -0.02, 1.25), _q, _s.set(1, 1.3, 1));
-    _world.multiplyMatrices(_root, _local);
-    swarm.setMatrix(PART_FANG, slot * FANGS_PER + i, _world);
-    // Pale chitin — mandibles should catch the eye, not blend in
-    swarm.setColor(PART_FANG, slot * FANGS_PER + i, 0.9, 0.8, 0.6);
-  }
-}
-
-// Eyes: two additive quads on the head plate — widen during windup
-function writeEyes(c: CrawlerVisHost, swarm: NonNullable<ReturnType<typeof getSwarm>>, slot: number): void {
-  const eyeS = (c.state === 'wander' ? 0.55 : c.state === 'windup' ? 0.9 : 0.75) * 0.55;
-  for (let i = 0; i < EYES_PER; i += 1) {
-    const side = i === 0 ? -1 : 1;
-    _local.compose(
-      _p.set(side * 0.16, 0.28, 1.15), _q.identity(), _s.setScalar(eyeS),
-    );
-    _world.multiplyMatrices(_root, _local);
-    swarm.setMatrix(PART_EYE, slot * EYES_PER + i, _world);
-  }
 }

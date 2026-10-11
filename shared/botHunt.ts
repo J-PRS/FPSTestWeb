@@ -216,6 +216,63 @@ function ghostPos(st: HuntState, ctx: BrainCtx, now: number): BotVec {
   return g;
 }
 
+/** Nearest squad-spotted enemy inside committing reach — callouts
+ *  don't summon cross-map hunts, just the leaker two hills over. */
+function nearestSpot(ctx: BrainCtx, pos: BotVec): BotEnemy | null {
+  let best: BotEnemy | null = null, bd = PURSUE_M;
+  for (const e of ctx.spots ?? []) {
+    if (!e.alive) {continue;}
+    const d = dist3(pos, e.pos);
+    if (d < bd) { bd = d; best = e; }
+  }
+  return best;
+}
+
+
+
+/** The beacon-marked flag carrier, when it's in committing range —
+ *  beacon range (80m) or any clear eye line. */
+function thiefBeacon(ctx: BrainCtx, pos: BotVec): BotEnemy | null {
+  const t = ctx.thief;
+  if (!t || !t.alive) {return null;}
+  if (dist3(pos, t.pos) >= 80 && !losClear(ctx, pos, t.pos)) {return null;}
+  return t;
+}
+
+
+
+/** Fight-position replan or goal fallback. A fearing bot skips
+ *  position-keeping: the dest pick breaks contact instead of
+ *  holding an orbit. */
+function planFight(st: HuntState, ctx: BrainCtx, pos: BotVec, best: BotEnemy | null, fearing: boolean, pickGoal: (ctx: BrainCtx, pos: BotVec) => void): void {
+  const prevFight = st.fightPos;
+  st.fightPos = null;
+  // A runner's route owns his feet: a capper that orbits every midfield
+  // contact dies at ~130m out without ever arriving (soak: hunt pulls
+  // ate every approach leg). He still FIRES off st.hunt — only the
+  // position commitment shrinks to point-blank threats he can't
+  // out-ski, and the objective goal keeps refreshing so the run
+  // resumes the tick the fight ends.
+  // Wave members get the same committed feet — a tasked push/escort
+  // dueling every midfield contact is the soak's "wave never arrives"
+  // defect (d530m, near0%): suppression travels WITH the flood, not
+  // instead of it.
+  const orbit = (ctx.runner || ctx.wave) ? Math.min(st.orbitFar, 45) : st.orbitFar;
+  if (best && !fearing && dist3(pos, best.pos) <= orbit) {
+    if (prevFight && st.fightHold > 0 &&
+        ctx.groundY(prevFight.x, prevFight.z) - ctx.groundY(pos.x, pos.z) <= 4) {
+      st.fightPos = prevFight;
+    } else {
+      st.fightPos = pickFightPos(st, ctx, pos, best, prevFight);
+      if (st.fightPos) {st.fightHold = 6;}
+    }
+  }
+  st.fightHold = Math.max(0, st.fightHold - 1);
+  if (!best || ctx.runner || ctx.wave) {pickGoal(ctx, pos);}
+}
+
+
+
 export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number, mood: { hero: boolean; fearing: boolean }, pickGoal: (ctx: BrainCtx, pos: BotVec) => void): void {
   const { hero, fearing } = mood;
   // Armament reach widens acquisition for siege weapons — a mortar heavy
@@ -301,56 +358,50 @@ st.huntTick += 1;
   planFight(st, ctx, pos, best, fearing, pickGoal);
 }
 
-/** Fight-position replan or goal fallback. A fearing bot skips
- *  position-keeping: the dest pick breaks contact instead of
- *  holding an orbit. */
-function planFight(st: HuntState, ctx: BrainCtx, pos: BotVec, best: BotEnemy | null, fearing: boolean, pickGoal: (ctx: BrainCtx, pos: BotVec) => void): void {
-  const prevFight = st.fightPos;
-  st.fightPos = null;
-  // A runner's route owns his feet: a capper that orbits every midfield
-  // contact dies at ~130m out without ever arriving (soak: hunt pulls
-  // ate every approach leg). He still FIRES off st.hunt — only the
-  // position commitment shrinks to point-blank threats he can't
-  // out-ski, and the objective goal keeps refreshing so the run
-  // resumes the tick the fight ends.
-  // Wave members get the same committed feet — a tasked push/escort
-  // dueling every midfield contact is the soak's "wave never arrives"
-  // defect (d530m, near0%): suppression travels WITH the flood, not
-  // instead of it.
-  const orbit = (ctx.runner || ctx.wave) ? Math.min(st.orbitFar, 45) : st.orbitFar;
-  if (best && !fearing && dist3(pos, best.pos) <= orbit) {
-    if (prevFight && st.fightHold > 0 &&
-        ctx.groundY(prevFight.x, prevFight.z) - ctx.groundY(pos.x, pos.z) <= 4) {
-      st.fightPos = prevFight;
-    } else {
-      st.fightPos = pickFightPos(st, ctx, pos, best, prevFight);
-      if (st.fightPos) {st.fightHold = 6;}
+/** Killzone-style position pick: score a ring of candidate spots by
+ *  LOS to the target, preferred range band, exposure to the rest of
+ *  the enemy roster, and climbable ground. Standing still is candidate
+ *  0 with an inertia bonus, so a good spot is kept instead of orbiting
+ *  for orbit's sake. Returns null to hold position. */
+export function pickFightPos(st: HuntState, ctx: BrainCtx, pos: BotVec, t: BotEnemy, prev?: BotVec | null): BotVec | null {
+  // Fight where the drawn gun is lethal — a Flak brawler's ring closes
+  // to ~10m, a rail holds its orbit. Weapon-blind hosts keep the
+  // generic midpoint (Flak's ~60% FFA acc was an orbit at 17m where
+  // the cone barely covers a capsule).
+  const mid = ctx.preferredRange?.(dist3(pos, t.pos), t.hpFrac) ?? (st.orbitFar + st.orbitClose) * 0.5;
+  const g0 = ctx.groundY(pos.x, pos.z);
+  let bx = pos.x, bz = pos.z;
+  let bs = scorePos(ctx, pos, pos, t, mid, g0) + 0.4;
+  // The spot already committed gets a real margin: replanning every
+  // think makes near-tied ring candidates flip-flop, and a dest that
+  // zigzags ±10m reads to the watchdog as a pin the bot never escapes
+  // (soak: defender churning fight spots around a stand, walking off
+  // and back without ever settling). Beat the incumbent or keep it.
+  if (prev) {
+    const py = ctx.groundY(prev.x, prev.z);
+    if (py - g0 <= 4) {
+      // Commitment rule: the held spot must be clearly beaten to be
+      // abandoned — a marginal challenger isn't worth a move (feet
+      // churn, treadmill pins, shots interrupted). The margin is sized
+      // to real score swings: LOS flips score ±3.5, range-band drift
+      // ~0.8 over 10m — under 1.5 nothing meaningful changed.
+      const s = scorePos(ctx, pos, { x: prev.x, y: py + BOT_EYE, z: prev.z }, t, mid, py) + 1.5;
+      if (s > bs) { bs = s; bx = prev.x; bz = prev.z; }
     }
   }
-  st.fightHold = Math.max(0, st.fightHold - 1);
-  if (!best || ctx.runner || ctx.wave) {pickGoal(ctx, pos);}
-}
-
-/** The beacon-marked flag carrier, when it's in committing range —
- *  beacon range (80m) or any clear eye line. */
-function thiefBeacon(ctx: BrainCtx, pos: BotVec): BotEnemy | null {
-  const t = ctx.thief;
-  if (!t || !t.alive) {return null;}
-  if (dist3(pos, t.pos) >= 80 && !losClear(ctx, pos, t.pos)) {return null;}
-  return t;
-}
-
-/** Nearest squad-spotted enemy inside committing reach — callouts
- *  don't summon cross-map hunts, just the leaker two hills over. */
-function nearestSpot(ctx: BrainCtx, pos: BotVec): BotEnemy | null {
-  let best: BotEnemy | null = null, bd = PURSUE_M;
-  for (const e of ctx.spots ?? []) {
-    if (!e.alive) {continue;}
-    const d = dist3(pos, e.pos);
-    if (d < bd) { bd = d; best = e; }
+  for (let i = 0; i < 12; i += 1) {
+    const a = (i / 12) * Math.PI * 2;
+    const cx = pos.x + Math.cos(a) * 10, cz = pos.z + Math.sin(a) * 10;
+    const cy = ctx.groundY(cx, cz);
+    if (cy - g0 > 4) {continue;} // can't stand there
+    const s = scorePos(ctx, pos, { x: cx, y: cy + BOT_EYE, z: cz }, t, mid, cy);
+    if (s > bs) { bs = s; bx = cx; bz = cz; }
   }
-  return best;
+  if (Math.hypot(bx - pos.x, bz - pos.z) < 3) {return null;}
+  return { x: bx, y: pos.y, z: bz };
 }
+
+
 
 /** Is this prey geometrically un-chaseable right now? Two shapes:
  *  - a perch above the jet-climb envelope (roof campers on bastion's
@@ -566,49 +617,6 @@ st.burstLeft -= 1;
   return { targetId: st.hunt.id, aim };
 }
 
-/** Killzone-style position pick: score a ring of candidate spots by
- *  LOS to the target, preferred range band, exposure to the rest of
- *  the enemy roster, and climbable ground. Standing still is candidate
- *  0 with an inertia bonus, so a good spot is kept instead of orbiting
- *  for orbit's sake. Returns null to hold position. */
-export function pickFightPos(st: HuntState, ctx: BrainCtx, pos: BotVec, t: BotEnemy, prev?: BotVec | null): BotVec | null {
-  // Fight where the drawn gun is lethal — a Flak brawler's ring closes
-  // to ~10m, a rail holds its orbit. Weapon-blind hosts keep the
-  // generic midpoint (Flak's ~60% FFA acc was an orbit at 17m where
-  // the cone barely covers a capsule).
-  const mid = ctx.preferredRange?.(dist3(pos, t.pos), t.hpFrac) ?? (st.orbitFar + st.orbitClose) * 0.5;
-  const g0 = ctx.groundY(pos.x, pos.z);
-  let bx = pos.x, bz = pos.z;
-  let bs = scorePos(ctx, pos, pos, t, mid, g0) + 0.4;
-  // The spot already committed gets a real margin: replanning every
-  // think makes near-tied ring candidates flip-flop, and a dest that
-  // zigzags ±10m reads to the watchdog as a pin the bot never escapes
-  // (soak: defender churning fight spots around a stand, walking off
-  // and back without ever settling). Beat the incumbent or keep it.
-  if (prev) {
-    const py = ctx.groundY(prev.x, prev.z);
-    if (py - g0 <= 4) {
-      // Commitment rule: the held spot must be clearly beaten to be
-      // abandoned — a marginal challenger isn't worth a move (feet
-      // churn, treadmill pins, shots interrupted). The margin is sized
-      // to real score swings: LOS flips score ±3.5, range-band drift
-      // ~0.8 over 10m — under 1.5 nothing meaningful changed.
-      const s = scorePos(ctx, pos, { x: prev.x, y: py + BOT_EYE, z: prev.z }, t, mid, py) + 1.5;
-      if (s > bs) { bs = s; bx = prev.x; bz = prev.z; }
-    }
-  }
-  for (let i = 0; i < 12; i += 1) {
-    const a = (i / 12) * Math.PI * 2;
-    const cx = pos.x + Math.cos(a) * 10, cz = pos.z + Math.sin(a) * 10;
-    const cy = ctx.groundY(cx, cz);
-    if (cy - g0 > 4) {continue;} // can't stand there
-    const s = scorePos(ctx, pos, { x: cx, y: cy + BOT_EYE, z: cz }, t, mid, cy);
-    if (s > bs) { bs = s; bx = cx; bz = cz; }
-  }
-  if (Math.hypot(bx - pos.x, bz - pos.z) < 3) {return null;}
-  return { x: bx, y: pos.y, z: bz };
-}
-
 /** Score one candidate position for the combat picker: LOS to the hunt
  *  target (a spot that can't see it is cover — mildly bad on offense),
  *  closeness to the preferred range band, exposure to every OTHER enemy
@@ -635,6 +643,8 @@ function scorePos(ctx: BrainCtx, self: BotVec, cand: BotVec, t: BotEnemy, mid: n
   if (candGround - selfG > 2 && Math.abs(candGround - tG) > 1.5) {s -= 1.2;}
   return s;
 }
+
+
 
 /** Retreat: straight away from the shooter, folding toward the nearest
  *  body when one is near — suppression keeps them honest. */

@@ -41,11 +41,13 @@ function opsAllowed(req: Request | undefined, url: URL): boolean {
   const bearer = req?.headers.get('authorization')?.replace(/^bearer\s+/i, '');
   return bearer === CONFIG.adminToken || url.searchParams.get('key') === CONFIG.adminToken;
 }
-const opsClosed = (): Response => corsResponse('unauthorized', { status: 401 });
 
 export function corsResponse(body: BodyInit | null, init?: ResponseInit): Response {
   return new Response(body, Object.assign({}, init, {headers: Object.assign({}, CORS_HEADERS, init?.headers)}));
 }
+
+
+const opsClosed = (): Response => corsResponse('unauthorized', { status: 401 });
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const json = (data: unknown, init?: ResponseInit): Response =>

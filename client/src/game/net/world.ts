@@ -33,6 +33,16 @@ let sessionVeil: HTMLDivElement | null = null;
 let sessionVeilTimer: ReturnType<typeof setTimeout> | null = null;
 let sessionVeilLabelTimer: ReturnType<typeof setTimeout> | null = null;
 
+export function dropSessionVeil(): void {
+  if (sessionVeilTimer) { clearTimeout(sessionVeilTimer); sessionVeilTimer = null; }
+  if (sessionVeilLabelTimer) { clearTimeout(sessionVeilLabelTimer); sessionVeilLabelTimer = null; }
+  sessionVeil?.remove();
+  sessionVeil = null;
+  sessionVeilReady = false;
+}
+
+
+
 export function armSessionVeil(): void {
   if (sessionVeil) {return;}
   const el = document.createElement('div');
@@ -50,14 +60,6 @@ export function armSessionVeil(): void {
   sessionVeilTimer = setTimeout(dropSessionVeil, 8000);
 }
 
-export function dropSessionVeil(): void {
-  if (sessionVeilTimer) { clearTimeout(sessionVeilTimer); sessionVeilTimer = null; }
-  if (sessionVeilLabelTimer) { clearTimeout(sessionVeilLabelTimer); sessionVeilLabelTimer = null; }
-  sessionVeil?.remove();
-  sessionVeil = null;
-  sessionVeilReady = false;
-}
-
 // gameState landed — the loop may drop the veil once frames stabilize
 // (warmup window: shaders/textures must not compile on the player's
 // first interactive frame).
@@ -67,6 +69,119 @@ export function isSessionVeilReady(): boolean { return sessionVeilReady; }
 /** While veiled there IS no session — the game loop freezes rather than
  *  simulating a boot world the incoming gameState discards anyway. */
 export function isSessionVeiled(): boolean { return sessionVeil !== null; }
+
+/** Local-player half of gameState — position/rotation/health restore on
+ *  reconnect. Velocity only survives if gentle: the stored value is
+ *  whatever the last packet before disconnect reported, and replaying a
+ *  stale knockback vector on reload produced phantom launches. */
+function restoreLocalPlayer(ctx: NetCtx, localPlayerState: LocalPlayerState): void {
+  const { deps, nm } = ctx;
+  deps.logger.debug(`Restoring local player state from gameState: ${JSON.stringify(localPlayerState)}`);
+  const player = deps.lazyPlayer();
+  // A non-finite stored vector would poison the sim on every reconnect —
+  // drop the restore rather than write NaN into the movement controller.
+  const p = localPlayerState.position;
+  if (!finiteVec(p)) {
+    deps.logger.warn(`Local-player restore dropped: non-finite position ${JSON.stringify(p)}`);
+    return;
+  }
+  player.protectedUntil = performance.now() + (localPlayerState.protectedMs ?? 0);
+
+  const v = localPlayerState.velocity;
+  const anchorVel = v && Math.hypot(v.x, v.y, v.z) < 10 ? v : { x: 0, y: 0, z: 0 };
+
+  // The anchor is the shadow's last-accepted position — on a lossy link
+  // that's seconds stale. Rewind to it and replay the journaled inputs
+  // the server never consumed (same machinery a correction runs), so a
+  // WT flap converges to where you actually are instead of yanking the
+  // body back to where the wire last saw it. A fresh join's journal is
+  // empty — same-input-seq or a dead body restores take the plain snap.
+  const journal = !localPlayerState.isDead && localPlayerState.inputSeq !== undefined
+    ? nm().inputsAfter(localPlayerState.inputSeq, nm().getPing()) : [];
+  if (journal.length > 0) {
+    player.movement.setState({
+      pos: new THREE.Vector3(p.x, p.y, p.z),
+      vel: new THREE.Vector3(anchorVel.x, anchorVel.y, anchorVel.z),
+      yaw: player.yaw, pitch: player.pitch,
+      onGround: true,
+    });
+    const now = performance.now();
+    for (let i = 0; i < journal.length; i += 1) {
+      const e = journal[i];
+      const nextT = i + 1 < journal.length ? journal[i + 1]!.t : now;
+      player.movement.setInput({
+        forward: e.input.forward, right: e.input.right,
+        jumpPressed: Boolean(e.input.jump), jumpHeld: Boolean(e.input.jump),
+        skiHeld: Boolean(e.input.ski), jetHeld: Boolean(e.input.jet),
+      });
+      player.movement.update(Math.min(0.25, Math.max(0, (nextT - e.t) / 1000)));
+    }
+    const st = player.movement.getState();
+    player.pos.set(st.pos.x, st.pos.y, st.pos.z);
+    player.vel.set(st.vel.x, st.vel.y, st.vel.z);
+    player.onGround = st.onGround;
+    deps.logger.info(`Reconnect restore replayed: ${journal.length} inputs from seq ${localPlayerState.inputSeq}`);
+  } else {
+    player.pos.set(p.x, p.y, p.z);
+    if (Number.isFinite(localPlayerState.rotation.yaw + localPlayerState.rotation.pitch)) {
+      player.yaw = localPlayerState.rotation.yaw;
+      player.pitch = localPlayerState.rotation.pitch;
+    }
+    player.vel.set(anchorVel.x, anchorVel.y, anchorVel.z);
+  }
+  noteLocalSnap();
+  deps.setLastSentPos({ x: p.x, y: p.y, z: p.z });
+
+  if (Number.isFinite(localPlayerState.health)) {player.health = localPlayerState.health;}
+  player.armor = Number.isFinite(localPlayerState.armor) ? localPlayerState.armor! : 0;
+  player.isDead = localPlayerState.isDead;
+  player.syncMovement(); // reseat controller — restored pos/vel otherwise revert
+  // A join reseat is a declared discontinuity like any respawn — without
+  // it the first pos report can be judged a 50m+ jump, and the camera
+  // spinout watchdog flags the spawn snap as a 100°+/frame flick.
+  player.markTeleport();
+
+  deps.lazyHud().setDeathOverlay(player.isDead);
+  if (player.isDead) {
+    deps.lazyHud().hide();
+  } else {
+    deps.lazyHud().show();
+  }
+
+  deps.logger.debug(`Player state restored from gameState - pos(${localPlayerState.position.x.toFixed(1)},${localPlayerState.position.y.toFixed(1)},${localPlayerState.position.z.toFixed(1)}) vel(${localPlayerState.velocity?.x.toFixed(1) || 0},${localPlayerState.velocity?.y.toFixed(1) || 0},${localPlayerState.velocity?.z.toFixed(1) || 0}) health:${localPlayerState.health} dead:${localPlayerState.isDead}`);
+}
+
+
+
+/** Room snapshot half of gameState — mode, team, scores, clock, map
+ *  geometry, mid-flight pickups/flags. Pure world setup, no local player. */
+function applyRoomInfo(ctx: NetCtx, playerCount: number, roomInfo?: Parameters<NonNullable<NetworkManager['onGameState']>>[2]): void {
+  const { deps, networkManager } = ctx;
+  if (!roomInfo) {return;}
+  deps.world.mode = roomInfo.mode;
+  if (roomInfo.mapName) {deps.world.mapName = roomInfo.mapName;}
+  if (roomInfo.room !== undefined) {deps.retireOfflineBots?.();}
+  applyMatchMeta(ctx, roomInfo);
+  if (roomInfo.respawnMs) {deps.world.respawnMs = roomInfo.respawnMs;}
+  announceRoom(ctx, playerCount, roomInfo);
+  // Pickups still lying on the field when we (re)joined — the roster is
+  // authoritative both ways: spawn what's there, drop ghosts whose
+  // pickupGone we missed while disconnected.
+  ctx.reconcilePickups(new Set((roomInfo.pickups ?? []).map((p): number => p.id)));
+  for (const p of roomInfo.pickups ?? []) {ctx.addPickup(p.id, p.pos, p.kind ?? 'gem');}
+  reconcileDeployables(ctx, roomInfo.deployables);
+  applyMapSnapshot(ctx, roomInfo.map);
+  // Remember this room's map — F5 boots straight into it while the
+  // socket round-trips instead of flashing the default field.
+  resolveServerEndpoints().then(({ httpUrl }): void => saveLastRoomMap(httpUrl, roomInfo.map))
+    .catch((error): void => ctx.deps.logger.warn(`saveLastRoomMap failed: ${error instanceof Error ? error.message : String(error)}`));
+  // Flags mid-flight when we joined — same path as a flagUpdate broadcast.
+  // An empty/absent list on a room hop must also clear the old room's
+  // banners and HUD chips, so fire it either way.
+  networkManager.onFlagUpdate?.(roomInfo.flags ?? []);
+}
+
+
 
 export function wireWorld(ctx: NetCtx): void {
   const { deps, networkManager, chat } = ctx;
@@ -169,79 +284,6 @@ export function wireWorld(ctx: NetCtx): void {
   };
 }
 
-/** Room snapshot half of gameState — mode, team, scores, clock, map
- *  geometry, mid-flight pickups/flags. Pure world setup, no local player. */
-function applyRoomInfo(ctx: NetCtx, playerCount: number, roomInfo?: Parameters<NonNullable<NetworkManager['onGameState']>>[2]): void {
-  const { deps, networkManager } = ctx;
-  if (!roomInfo) {return;}
-  deps.world.mode = roomInfo.mode;
-  if (roomInfo.mapName) {deps.world.mapName = roomInfo.mapName;}
-  if (roomInfo.room !== undefined) {deps.retireOfflineBots?.();}
-  applyMatchMeta(ctx, roomInfo);
-  if (roomInfo.respawnMs) {deps.world.respawnMs = roomInfo.respawnMs;}
-  announceRoom(ctx, playerCount, roomInfo);
-  // Pickups still lying on the field when we (re)joined — the roster is
-  // authoritative both ways: spawn what's there, drop ghosts whose
-  // pickupGone we missed while disconnected.
-  ctx.reconcilePickups(new Set((roomInfo.pickups ?? []).map((p): number => p.id)));
-  for (const p of roomInfo.pickups ?? []) {ctx.addPickup(p.id, p.pos, p.kind ?? 'gem');}
-  reconcileDeployables(ctx, roomInfo.deployables);
-  applyMapSnapshot(ctx, roomInfo.map);
-  // Remember this room's map — F5 boots straight into it while the
-  // socket round-trips instead of flashing the default field.
-  resolveServerEndpoints().then(({ httpUrl }): void => saveLastRoomMap(httpUrl, roomInfo.map))
-    .catch((error): void => ctx.deps.logger.warn(`saveLastRoomMap failed: ${error instanceof Error ? error.message : String(error)}`));
-  // Flags mid-flight when we joined — same path as a flagUpdate broadcast.
-  // An empty/absent list on a room hop must also clear the old room's
-  // banners and HUD chips, so fire it either way.
-  networkManager.onFlagUpdate?.(roomInfo.flags ?? []);
-}
-
-type RoomInfo = Parameters<NonNullable<NetworkManager['onGameState']>>[2];
-
-/** Match meta (team/scores/clock/board) — a room-scoped gameState is
- *  authoritative, so a hop that drops them clears rather than leaves the
- *  old match's residue. The `room` gate keeps offline modes (TeamBots
- *  localTeam) untouched: only the server sends a room name. */
-function applyMatchMeta(ctx: NetCtx, roomInfo: RoomInfo): void {
-  const { deps } = ctx;
-  const scores = roomInfo?.scores && Number.isFinite(roomInfo.scores.alpha + roomInfo.scores.bravo)
-    ? roomInfo.scores : undefined;
-  const ffaScores = roomInfo?.ffaScores && !Object.values(roomInfo.ffaScores).some((v): boolean => !Number.isFinite(v))
-    ? roomInfo.ffaScores : undefined;
-  const matchEndsAt = Number.isFinite(roomInfo?.matchEndsAt) ? roomInfo!.matchEndsAt : undefined;
-  if (roomInfo?.room !== undefined) {
-    deps.world.localTeam = roomInfo.team;
-    deps.world.teamScores = scores ?? null;
-    deps.world.ffaScores = new Map(Object.entries(ffaScores ?? {}));
-    deps.world.matchEndsAt = matchEndsAt ?? null;
-    return;
-  }
-  if (roomInfo?.team !== undefined) {deps.world.localTeam = roomInfo.team;}
-  if (scores) {deps.world.teamScores = scores;}
-  if (matchEndsAt !== undefined) {deps.world.matchEndsAt = matchEndsAt;}
-  if (ffaScores) {deps.world.ffaScores = new Map(Object.entries(ffaScores));}
-}
-
-/** Chat lines summarizing what we just joined — clock, room, team, board. */
-function announceRoom(ctx: NetCtx, playerCount: number, roomInfo?: RoomInfo): void {
-  const { chat } = ctx;
-  if (roomInfo?.matchEndsAt) {
-    const leftMin = Math.max(0, Math.ceil((roomInfo.matchEndsAt - Date.now()) / 60_000));
-    chat.add(null, `match clock — ~${leftMin}m left${leftMin === 0 ? ' (overtime)' : ''}`);
-  }
-  if (roomInfo?.room && roomInfo.room !== 'default') {
-    chat.add(null, `joined room '${roomInfo.room}'${roomInfo.mode ? ` (${roomInfo.mode})` : ''} — ${playerCount} other player(s)`);
-  }
-  if (roomInfo?.team) {
-    chat.add(null, `you are on ${roomInfo.team.toUpperCase()}${roomInfo.scores ? ` — ALPHA ${roomInfo.scores.alpha} : BRAVO ${roomInfo.scores.bravo}` : ''}`);
-  }
-  if (roomInfo?.ffaScores && Object.keys(roomInfo.ffaScores).length > 0) {
-    const top = Object.entries(roomInfo.ffaScores).toSorted((a, b): number => b[1] - a[1]).slice(0, 3);
-    chat.add(null, `dm board — ${top.map(([id, s]): string => `${id} ${s}`).join(' / ')}`);
-  }
-}
-
 /** Structures, dome, and per-map species caps — shared by gameState's
  *  join path; mapUpdate handles the same rebuild itself since it always
  *  knows a spec exists. Clears rather than skips on absence: a room hop
@@ -267,86 +309,56 @@ function applyMapSnapshot(ctx: NetCtx, map?: MapSnapshot): void {
     .catch((error): void => ctx.deps.logger.warn(`applyInteriors failed: ${error instanceof Error ? error.message : String(error)}`));
 }
 
-/** Local-player half of gameState — position/rotation/health restore on
- *  reconnect. Velocity only survives if gentle: the stored value is
- *  whatever the last packet before disconnect reported, and replaying a
- *  stale knockback vector on reload produced phantom launches. */
-function restoreLocalPlayer(ctx: NetCtx, localPlayerState: LocalPlayerState): void {
-  const { deps, nm } = ctx;
-  deps.logger.debug(`Restoring local player state from gameState: ${JSON.stringify(localPlayerState)}`);
-  const player = deps.lazyPlayer();
-  // A non-finite stored vector would poison the sim on every reconnect —
-  // drop the restore rather than write NaN into the movement controller.
-  const p = localPlayerState.position;
-  if (!finiteVec(p)) {
-    deps.logger.warn(`Local-player restore dropped: non-finite position ${JSON.stringify(p)}`);
+
+
+/** Chat lines summarizing what we just joined — clock, room, team, board. */
+function announceRoom(ctx: NetCtx, playerCount: number, roomInfo?: RoomInfo): void {
+  const { chat } = ctx;
+  if (roomInfo?.matchEndsAt) {
+    const leftMin = Math.max(0, Math.ceil((roomInfo.matchEndsAt - Date.now()) / 60_000));
+    chat.add(null, `match clock — ~${leftMin}m left${leftMin === 0 ? ' (overtime)' : ''}`);
+  }
+  if (roomInfo?.room && roomInfo.room !== 'default') {
+    chat.add(null, `joined room '${roomInfo.room}'${roomInfo.mode ? ` (${roomInfo.mode})` : ''} — ${playerCount} other player(s)`);
+  }
+  if (roomInfo?.team) {
+    chat.add(null, `you are on ${roomInfo.team.toUpperCase()}${roomInfo.scores ? ` — ALPHA ${roomInfo.scores.alpha} : BRAVO ${roomInfo.scores.bravo}` : ''}`);
+  }
+  if (roomInfo?.ffaScores && Object.keys(roomInfo.ffaScores).length > 0) {
+    const top = Object.entries(roomInfo.ffaScores).toSorted((a, b): number => b[1] - a[1]).slice(0, 3);
+    chat.add(null, `dm board — ${top.map(([id, s]): string => `${id} ${s}`).join(' / ')}`);
+  }
+}
+
+
+
+/** Match meta (team/scores/clock/board) — a room-scoped gameState is
+ *  authoritative, so a hop that drops them clears rather than leaves the
+ *  old match's residue. The `room` gate keeps offline modes (TeamBots
+ *  localTeam) untouched: only the server sends a room name. */
+function applyMatchMeta(ctx: NetCtx, roomInfo: RoomInfo): void {
+  const { deps } = ctx;
+  const scores = roomInfo?.scores && Number.isFinite(roomInfo.scores.alpha + roomInfo.scores.bravo)
+    ? roomInfo.scores : undefined;
+  const ffaScores = roomInfo?.ffaScores && !Object.values(roomInfo.ffaScores).some((v): boolean => !Number.isFinite(v))
+    ? roomInfo.ffaScores : undefined;
+  const matchEndsAt = Number.isFinite(roomInfo?.matchEndsAt) ? roomInfo!.matchEndsAt : undefined;
+  if (roomInfo?.room !== undefined) {
+    deps.world.localTeam = roomInfo.team;
+    deps.world.teamScores = scores ?? null;
+    deps.world.ffaScores = new Map(Object.entries(ffaScores ?? {}));
+    deps.world.matchEndsAt = matchEndsAt ?? null;
     return;
   }
-  player.protectedUntil = performance.now() + (localPlayerState.protectedMs ?? 0);
-
-  const v = localPlayerState.velocity;
-  const anchorVel = v && Math.hypot(v.x, v.y, v.z) < 10 ? v : { x: 0, y: 0, z: 0 };
-
-  // The anchor is the shadow's last-accepted position — on a lossy link
-  // that's seconds stale. Rewind to it and replay the journaled inputs
-  // the server never consumed (same machinery a correction runs), so a
-  // WT flap converges to where you actually are instead of yanking the
-  // body back to where the wire last saw it. A fresh join's journal is
-  // empty — same-input-seq or a dead body restores take the plain snap.
-  const journal = !localPlayerState.isDead && localPlayerState.inputSeq !== undefined
-    ? nm().inputsAfter(localPlayerState.inputSeq, nm().getPing()) : [];
-  if (journal.length > 0) {
-    player.movement.setState({
-      pos: new THREE.Vector3(p.x, p.y, p.z),
-      vel: new THREE.Vector3(anchorVel.x, anchorVel.y, anchorVel.z),
-      yaw: player.yaw, pitch: player.pitch,
-      onGround: true,
-    });
-    const now = performance.now();
-    for (let i = 0; i < journal.length; i += 1) {
-      const e = journal[i];
-      const nextT = i + 1 < journal.length ? journal[i + 1]!.t : now;
-      player.movement.setInput({
-        forward: e.input.forward, right: e.input.right,
-        jumpPressed: Boolean(e.input.jump), jumpHeld: Boolean(e.input.jump),
-        skiHeld: Boolean(e.input.ski), jetHeld: Boolean(e.input.jet),
-      });
-      player.movement.update(Math.min(0.25, Math.max(0, (nextT - e.t) / 1000)));
-    }
-    const st = player.movement.getState();
-    player.pos.set(st.pos.x, st.pos.y, st.pos.z);
-    player.vel.set(st.vel.x, st.vel.y, st.vel.z);
-    player.onGround = st.onGround;
-    deps.logger.info(`Reconnect restore replayed: ${journal.length} inputs from seq ${localPlayerState.inputSeq}`);
-  } else {
-    player.pos.set(p.x, p.y, p.z);
-    if (Number.isFinite(localPlayerState.rotation.yaw + localPlayerState.rotation.pitch)) {
-      player.yaw = localPlayerState.rotation.yaw;
-      player.pitch = localPlayerState.rotation.pitch;
-    }
-    player.vel.set(anchorVel.x, anchorVel.y, anchorVel.z);
-  }
-  noteLocalSnap();
-  deps.setLastSentPos({ x: p.x, y: p.y, z: p.z });
-
-  if (Number.isFinite(localPlayerState.health)) {player.health = localPlayerState.health;}
-  player.armor = Number.isFinite(localPlayerState.armor) ? localPlayerState.armor! : 0;
-  player.isDead = localPlayerState.isDead;
-  player.syncMovement(); // reseat controller — restored pos/vel otherwise revert
-  // A join reseat is a declared discontinuity like any respawn — without
-  // it the first pos report can be judged a 50m+ jump, and the camera
-  // spinout watchdog flags the spawn snap as a 100°+/frame flick.
-  player.markTeleport();
-
-  deps.lazyHud().setDeathOverlay(player.isDead);
-  if (player.isDead) {
-    deps.lazyHud().hide();
-  } else {
-    deps.lazyHud().show();
-  }
-
-  deps.logger.debug(`Player state restored from gameState - pos(${localPlayerState.position.x.toFixed(1)},${localPlayerState.position.y.toFixed(1)},${localPlayerState.position.z.toFixed(1)}) vel(${localPlayerState.velocity?.x.toFixed(1) || 0},${localPlayerState.velocity?.y.toFixed(1) || 0},${localPlayerState.velocity?.z.toFixed(1) || 0}) health:${localPlayerState.health} dead:${localPlayerState.isDead}`);
+  if (roomInfo?.team !== undefined) {deps.world.localTeam = roomInfo.team;}
+  if (scores) {deps.world.teamScores = scores;}
+  if (matchEndsAt !== undefined) {deps.world.matchEndsAt = matchEndsAt;}
+  if (ffaScores) {deps.world.ffaScores = new Map(Object.entries(ffaScores));}
 }
+
+
+
+type RoomInfo = Parameters<NonNullable<NetworkManager['onGameState']>>[2];
 
 /** Apply the probed saved map once the net ctx exists — structures,
  *  arena, interiors, albedo, sky. gameState that follows re-applies the

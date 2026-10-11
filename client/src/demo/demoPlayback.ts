@@ -6,6 +6,31 @@ const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 
 export { lerpAngle };
 
+  // Emit the interpolated frame state and events up to `time` without advancing
+  // currentTime. Used by loop wraparound to flush the final partial step.
+export function emitFrameAndEvents(p: DemoPlayer, time: number): void {
+    if (!p.demoData) {return;}
+    p.frameIndex = findFrameIndex(p, time);
+    const state = getInterpolatedState(p,);
+    const projCount = findEventIndex(p.demoData.projectileEvents, time);
+    const tgtCount = findEventIndex(p.demoData.targetEvents, time);
+    const newProjEvents = p.demoData.projectileEvents.slice(p.lastProjectileEventIndex, projCount);
+    const newTargetEvents = p.demoData.targetEvents.slice(p.lastTargetEventIndex, tgtCount);
+    const remoteCount = findEventIndex(p.demoData.remoteFrames, time);
+    const newRemoteFrames = p.demoData.remoteFrames.slice(p.lastRemoteFrameIndex, remoteCount);
+    if (p.callbacks.onFrameUpdate) {
+      p.callbacks.onFrameUpdate(state, { projectiles: newProjEvents, targets: newTargetEvents, remotes: newRemoteFrames });
+    }
+    if (p.callbacks.onTimeUpdate) {
+      p.callbacks.onTimeUpdate(time, p.duration);
+    }
+    p.lastProjectileEventIndex = projCount;
+    p.lastTargetEventIndex = tgtCount;
+    p.lastRemoteFrameIndex = remoteCount;
+  }
+
+
+
 // Playback internals — loop-wrap handling, seek reconstruction, event
 // window collection and frame interpolation. DemoPlayer is the host;
 // these take it flat (same pattern as the other *Host splits).
@@ -31,6 +56,24 @@ export function handleEndOfPlayback(p: DemoPlayer): void {
     }
   }
 
+export function findFrameIndex(p: DemoPlayer, time: number): number {
+    if (!p.demoData || p.demoData.frames.length === 0) {return 0;}
+    const {frames} = p.demoData;
+    // Binary search for the frame at or before `time`
+    let lo = 0, hi = frames.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (frames[mid]!.timestamp <= time) {
+        lo = mid;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    return lo;
+  }
+
+
+
 export function handleRewindWrap(p: DemoPlayer): void {
     if (p.loop) {
       // Emit events for the partial step [0, prevTime] then wrap to end
@@ -54,6 +97,22 @@ export function handleRewindWrap(p: DemoPlayer): void {
     }
   }
 
+export function findEventIndex(events: { timestamp: number }[], time: number): number {
+    // Find the first event index with timestamp > time
+    let lo = 0, hi = events.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (events[mid]!.timestamp <= time) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    return lo;
+  }
+
+
+
   // Clear all in-flight objects and return every event up to `time`, so the
   // game can rebuild the full state at that timestamp (seek/reverse playback).
 export function reconstructToTime(p: DemoPlayer, time: number): { newProjEvents: ProjectileEvent[]; newTargetEvents: TargetEvent[]; projCount: number; tgtCount: number } {
@@ -70,68 +129,6 @@ export function reconstructToTime(p: DemoPlayer, time: number): { newProjEvents:
       projCount,
       tgtCount,
     };
-  }
-
-  // Emit the interpolated frame state and events up to `time` without advancing
-  // currentTime. Used by loop wraparound to flush the final partial step.
-export function emitFrameAndEvents(p: DemoPlayer, time: number): void {
-    if (!p.demoData) {return;}
-    p.frameIndex = findFrameIndex(p, time);
-    const state = getInterpolatedState(p,);
-    const projCount = findEventIndex(p.demoData.projectileEvents, time);
-    const tgtCount = findEventIndex(p.demoData.targetEvents, time);
-    const newProjEvents = p.demoData.projectileEvents.slice(p.lastProjectileEventIndex, projCount);
-    const newTargetEvents = p.demoData.targetEvents.slice(p.lastTargetEventIndex, tgtCount);
-    const remoteCount = findEventIndex(p.demoData.remoteFrames, time);
-    const newRemoteFrames = p.demoData.remoteFrames.slice(p.lastRemoteFrameIndex, remoteCount);
-    if (p.callbacks.onFrameUpdate) {
-      p.callbacks.onFrameUpdate(state, { projectiles: newProjEvents, targets: newTargetEvents, remotes: newRemoteFrames });
-    }
-    if (p.callbacks.onTimeUpdate) {
-      p.callbacks.onTimeUpdate(time, p.duration);
-    }
-    p.lastProjectileEventIndex = projCount;
-    p.lastTargetEventIndex = tgtCount;
-    p.lastRemoteFrameIndex = remoteCount;
-  }
-
-export function findFrameIndex(p: DemoPlayer, time: number): number {
-    if (!p.demoData || p.demoData.frames.length === 0) {return 0;}
-    const {frames} = p.demoData;
-    // Binary search for the frame at or before `time`
-    let lo = 0, hi = frames.length - 1;
-    while (lo < hi) {
-      const mid = (lo + hi + 1) >> 1;
-      if (frames[mid]!.timestamp <= time) {
-        lo = mid;
-      } else {
-        hi = mid - 1;
-      }
-    }
-    return lo;
-  }
-
-export function findEventIndex(events: { timestamp: number }[], time: number): number {
-    // Find the first event index with timestamp > time
-    let lo = 0, hi = events.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if (events[mid]!.timestamp <= time) {
-        lo = mid + 1;
-      } else {
-        hi = mid;
-      }
-    }
-    return lo;
-  }
-
-export function collectNewEvents<T extends { timestamp: number }>(p: DemoPlayer, events: T[], lastIndex: number): T[] {
-    if (!p.demoData) {return [];}
-    if (p.playbackSpeed > 0) {
-      const newIndex = findEventIndex(events, p.currentTime);
-      return events.slice(lastIndex, newIndex);
-    }
-    return [];
   }
 
 export function getInterpolatedState(p: DemoPlayer): PlaybackState {
@@ -174,5 +171,16 @@ export function getInterpolatedState(p: DemoPlayer): PlaybackState {
       // Held weapon is discrete like the flags — snap at midpoint, not lerp.
       weaponType: t < 0.5 ? f0.weaponType : f1.weaponType,
     };
+  }
+
+
+
+export function collectNewEvents<T extends { timestamp: number }>(p: DemoPlayer, events: T[], lastIndex: number): T[] {
+    if (!p.demoData) {return [];}
+    if (p.playbackSpeed > 0) {
+      const newIndex = findEventIndex(events, p.currentTime);
+      return events.slice(lastIndex, newIndex);
+    }
+    return [];
   }
 

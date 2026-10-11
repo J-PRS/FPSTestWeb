@@ -45,6 +45,42 @@ export function pickChain(deps: CombatDeps, from: THREE.Vector3, exclude: (typeo
   return best;
 }
 
+function tracePlayerHit(deps: CombatDeps, hitT: number, traceT: { t: number }): string | null {
+  traceT.t = hitT;
+  let hitId: string | null = null;
+  for (const [pid, rp] of deps.world.remotePlayers) {
+    if (rp.isDead) {continue;}
+    // Ray vs the class capsule (shared/botClasses — the same shape the
+    // server validates). rp.position is eye height; the capsule axis runs
+    // feet+R .. feet+HEIGHT−R below it.
+    const entry = rayCapsuleEntry(rp.position, traceT.t, rp.armorClass);
+    if (entry !== null) { traceT.t = entry; hitId = pid; }
+  }
+  return hitId;
+}
+
+
+
+
+function traceTargetHit(deps: CombatDeps, hitT: number, traceT: { t: number }): (typeof deps.targets)[number] | null {
+  traceT.t = hitT;
+  let hit: (typeof deps.targets)[number] | null = null;
+  for (const t of deps.targets) {
+    if (t.dead) {continue;}
+    _lgTo.copy(t.pos).sub(_lgO);
+    // Capsule bodies (totem): aim the test at the shaft's midpoint —
+    // the feet-sphere misses a beam through the upper half entirely.
+    if (t.capsuleTop) {_lgTo.y += t.capsuleTop * 0.5;}
+    const proj = _lgTo.dot(_lgD);
+    if (proj < 0 || proj > traceT.t) {continue;}
+    const entry = sphereEntry(traceT.t, (t.hitRadius ?? t.radius) + 0.45, proj);
+    if (entry !== null) { traceT.t = entry; hit = t; }
+  }
+  return hit;
+}
+
+
+
 // Shared ray: eye + current camera forward → terrain march + nearest
 // sphere hit. Both the damage tick AND the per-frame visual refresh run
 // this — a stale tip between ticks is what detached the bolt on strafes.
@@ -100,37 +136,17 @@ export function lgTrace(deps: CombatDeps, cam: THREE.Camera, traceT: { t: number
   return { hitT, hitTarget, hitPlayerId };
 }
 
-
-function traceTargetHit(deps: CombatDeps, hitT: number, traceT: { t: number }): (typeof deps.targets)[number] | null {
-  traceT.t = hitT;
-  let hit: (typeof deps.targets)[number] | null = null;
-  for (const t of deps.targets) {
-    if (t.dead) {continue;}
-    _lgTo.copy(t.pos).sub(_lgO);
-    // Capsule bodies (totem): aim the test at the shaft's midpoint —
-    // the feet-sphere misses a beam through the upper half entirely.
-    if (t.capsuleTop) {_lgTo.y += t.capsuleTop * 0.5;}
-    const proj = _lgTo.dot(_lgD);
-    if (proj < 0 || proj > traceT.t) {continue;}
-    const entry = sphereEntry(traceT.t, (t.hitRadius ?? t.radius) + 0.45, proj);
-    if (entry !== null) { traceT.t = entry; hit = t; }
-  }
-  return hit;
+// Ray-vs-sphere entry distance along _lgD for the to-target vector in
+// _lgTo; null when the ray misses or the sphere sits behind the tip.
+// Beam is thin but not needle-thin — callers pad the radius.
+function sphereEntry(hitT: number, r: number, proj: number): number | null {
+  const perp2 = _lgTo.lengthSq() - proj * proj;
+  if (perp2 >= r * r) {return null;}
+  const entry = proj - Math.sqrt(r * r - perp2); // surface, not center
+  return entry < hitT ? Math.max(entry, 0) : null;
 }
 
-function tracePlayerHit(deps: CombatDeps, hitT: number, traceT: { t: number }): string | null {
-  traceT.t = hitT;
-  let hitId: string | null = null;
-  for (const [pid, rp] of deps.world.remotePlayers) {
-    if (rp.isDead) {continue;}
-    // Ray vs the class capsule (shared/botClasses — the same shape the
-    // server validates). rp.position is eye height; the capsule axis runs
-    // feet+R .. feet+HEIGHT−R below it.
-    const entry = rayCapsuleEntry(rp.position, traceT.t, rp.armorClass);
-    if (entry !== null) { traceT.t = entry; hitId = pid; }
-  }
-  return hitId;
-}
+
 
 /** Entry distance along _lgD for the player capsule at eyePos, or null.
  *  Closest-approach between the ray and the capsule's vertical axis
@@ -164,13 +180,5 @@ function rayCapsuleEntry(eyePos: THREE.Vector3, hitT: number, cls?: string): num
   return entry < hitT ? Math.max(entry, 0) : null;
 }
 
-// Ray-vs-sphere entry distance along _lgD for the to-target vector in
-// _lgTo; null when the ray misses or the sphere sits behind the tip.
-// Beam is thin but not needle-thin — callers pad the radius.
-function sphereEntry(hitT: number, r: number, proj: number): number | null {
-  const perp2 = _lgTo.lengthSq() - proj * proj;
-  if (perp2 >= r * r) {return null;}
-  const entry = proj - Math.sqrt(r * r - perp2); // surface, not center
-  return entry < hitT ? Math.max(entry, 0) : null;
-}
+
 

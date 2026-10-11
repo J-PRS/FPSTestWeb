@@ -50,191 +50,6 @@ interface BarUi {
 
 type MkDrop = (options: DropOpt[], onPick: (v: string) => void, faceOpts?: DropOpt[], cols2?: boolean) => Drop;
 
-export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; closeDrops(): void } {
-  const loadoutBar = document.getElementById('loadout-bar');
-
-  function mkDrop(
-    initialOptions: DropOpt[],
-    onPick: (v: string) => void,
-    faceOpts?: DropOpt[],
-    cols2 = false,
-  ): Drop {
-    const el = document.createElement('div');
-    el.className = 'lo-chip lo-drop';
-    const face = document.createElement('span');
-    el.append(face);
-    const caret = document.createElement('span');
-    caret.className = 'lo-caret';
-    caret.textContent = '▴';
-    el.append(caret);
-    const list = document.createElement('div');
-    list.className = cols2 ? 'lo-list cols2' : 'lo-list';
-    el.append(list);
-    let options = initialOptions;
-    let currentV = '';
-    const rebuild = (): void => {
-      el.style.minWidth = `${dropWidth(options)}px`;
-      list.innerHTML = '';
-      for (const o of options) {
-        const it = document.createElement('div');
-        it.className = 'lo-opt';
-        if (o.disabled) {it.classList.add('locked');}
-        // 'none' isn't a perk — banner it across both columns.
-        if (cols2 && o.v === 'none') {it.classList.add('full');}
-        const name = document.createElement('span');
-        name.className = 'lo-name';
-        name.textContent = o.label;
-        it.append(name);
-        if (o.desc) {
-          // Perks are the only invisible pick — everything else
-          // self-explains in a second of firing it.
-          it.classList.add('has-desc');
-          const d = document.createElement('span');
-          d.className = 'lo-desc';
-          d.textContent = o.desc;
-          it.append(d);
-        }
-        it.dataset.v = o.v;
-        it.addEventListener('click', (e): void => {
-          e.stopPropagation();
-          if (o.disabled) {return;} // tier-locked — visible but unshoulderable
-          onPick(o.v);
-          el.classList.remove('open');
-          openDrop = null;
-          refreshLoadout();
-        });
-        list.append(it);
-      }
-    };
-    rebuild();
-    el.addEventListener('click', (e): void => {
-      e.stopPropagation();
-      const was = el.classList.contains('open');
-      openDrop?.classList.remove('open');
-      el.classList.toggle('open', !was);
-      openDrop = was ? null : el;
-    });
-    return {
-      el,
-      setValue(v): void {
-        currentV = v;
-        // faceOpts resolves labels the filtered list can't — an equipped
-        // heavy weapon on lighter armor must name itself, not print "6".
-        face.textContent = options.find((o): boolean => o.v === v)?.label
-          ?? faceOpts?.find((o): boolean => o.v === v)?.label ?? v;
-        list.querySelectorAll<HTMLElement>('.lo-opt').forEach((o): boolean =>
-          o.classList.toggle('sel', o.dataset.v === v));
-      },
-      setOptions(next): void {
-        options = next;
-        rebuild();
-        // The equipped value may have survived the filter — re-face it.
-        this.setValue(currentV);
-      },
-      // 'used' = equipped in a sibling slot — a faint tint reads "already
-      // in the kit" without competing with this slot's bright .sel.
-      markUsed(used): void {
-        list.querySelectorAll<HTMLElement>('.lo-opt').forEach((o): void => {
-          const v = o.dataset.v ?? '';
-          o.classList.toggle('used', v !== currentV && used.has(v));
-        });
-      },
-    };
-  }
-
-  // Clicking the bar's dead space closes any open dropup
-  loadoutBar?.addEventListener('click', (): void => {
-    openDrop?.classList.remove('open');
-    openDrop = null;
-  });
-
-  const ui = loadoutBar ? buildRows(loadoutBar, deps, mkDrop) : null;
-
-  function refreshLoadout(): void {
-    if (!ui) {return;}
-    const player = deps.lazyPlayer();
-    // Options gate on armorClass — the tier whose kit is being edited
-    // (a banked heavy pick CAN hold a mortar; it shoulders at respawn).
-    // Faces come from menuKit: the pending kit while a swap is banked.
-    const opts = weaponOptsFor(player.armorClass);
-    ui.slotDrops.forEach((d, i): void => { d.setOptions?.(opts); d.setValue(String(player.menuKit[i])); });
-    markSlotUse(player, ui.slotDrops);
-    ui.beltDrop?.setValue(player.beltItem);
-    ui.skillDrop?.setValue(player.skill);
-    ui.perkDrop?.setValue(player.perk);
-    ui.classDrop?.setValue(player.armorClass);
-    ui.sidearmDrop?.setValue(player.sidearm);
-    ui.packDrop?.setValue(player.packItem);
-    if (ui.beltLabel) {ui.beltLabel.textContent = `BELT (${codeLabel(codeFor('belt'))})`;}
-    if (ui.skillLabel) {ui.skillLabel.textContent = `SKILL (${codeLabel(codeFor('skill'))})`;}
-    if (ui.sidearmLabel) {ui.sidearmLabel.textContent = `SIDEARM (${codeLabel(codeFor('sidearm'))})`;}
-    if (ui.packLabel) {ui.packLabel.textContent = `PACK (${codeLabel(codeFor('deploy'))})`;}
-  }
-
-  // Menu close must not strand an open dropup — resume, then next ESC
-  // shows a list floating over a face that isn't asking for it.
-  function closeDrops(): void {
-    openDrop?.classList.remove('open');
-    openDrop = null;
-  }
-
-  return { refreshLoadout, closeDrops };
-}
-
-/** Faint-mark weapons already sitting in a sibling slot — one open
- *  list then shows the whole kit at a glance. */
-function markSlotUse(player: Player, slotDrops: Drop[]): void {
-  const kit = player.menuKit.map(String);
-  slotDrops.forEach((d, i): void => {
-    const used = new Set(kit);
-    used.delete(kit[i]); // this slot's pick keeps the bright .sel, not 'used'
-    d.markUsed?.(used);
-  });
-}
-
-function mkCellDom(parent: HTMLElement): { cell: HTMLElement; cap: HTMLSpanElement } {
-  const cell = document.createElement('div');
-  cell.className = 'lo-cell';
-  const cap = document.createElement('span');
-  cap.className = 'lo-cap';
-  cell.append(cap);
-  parent.append(cell);
-  return { cell, cap };
-}
-
-// Sidearms are chosen in their own row — a primary slot offering them
-// would let a loadout double-carry the hold-out tier. Tier-locked
-// ordnance stays listed but tagged [H]/[M]/[L] and grayed out —
-// lockedForClass flags it in the list AND gates it in setLoadoutSlot.
-const TIER_TAG = new Map<string, string>([
-  ...Player.HEAVY_ONLY.map((w): readonly [string, "[H]"] => [String(w), '[H]'] as const),
-  ...Player.MEDIUM_ONLY.map((w): readonly [string, "[M]"] => [String(w), '[M]'] as const),
-  ...Player.LIGHT_ONLY.map((w): readonly [string, "[L]"] => [String(w), '[L]'] as const),
-]);
-
-// Locked gear stays listed but grays out against the tier in effect —
-// knowing a mortar exists matters even when you can't shoulder it.
-function weaponOptsFor(cls: ArmorClass): DropOpt[] {
-  return SLOT_DEFS
-    .map((def, wid): { v: string; label: string; sidearm: boolean; disabled: boolean; } => {
-      const tag = TIER_TAG.get(String(wid));
-      return {
-        v: String(wid),
-        label: (tag ? `${tag} ` : '') + def.config.displayName,
-        sidearm: Boolean(def.sidearm),
-        disabled: Player.lockedForClass(cls, wid),
-      };
-    })
-    .filter((o): boolean => !o.sidearm)
-    // SLOT_DEFS order is wire identity (wid = index) — the MENU sorts by
-    // name instead; v stays the wid so picks never reshuffle. Tier-locked
-    // entries group at the bottom so restricted gear reads as one block.
-    .toSorted((a, b) => {
-      const ar = a.label.startsWith('[') ? 1 : 0, br = b.label.startsWith('[') ? 1 : 0;
-      return ar - br || a.label.localeCompare(b.label);
-    });
-}
-
 // Panel construction — three labeled groups (ARMOR / WEAPONS / KIT) inside
 // one bottom sheet. Class is a tile picker because its tradeoff (speed vs
 // HP) reads at a glance; everything else stays a dropup chip.
@@ -370,3 +185,194 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
 
   return ui;
 }
+
+
+
+// Locked gear stays listed but grays out against the tier in effect —
+// knowing a mortar exists matters even when you can't shoulder it.
+function weaponOptsFor(cls: ArmorClass): DropOpt[] {
+  return SLOT_DEFS
+    .map((def, wid): { v: string; label: string; sidearm: boolean; disabled: boolean; } => {
+      const tag = TIER_TAG.get(String(wid));
+      return {
+        v: String(wid),
+        label: (tag ? `${tag} ` : '') + def.config.displayName,
+        sidearm: Boolean(def.sidearm),
+        disabled: Player.lockedForClass(cls, wid),
+      };
+    })
+    .filter((o): boolean => !o.sidearm)
+    // SLOT_DEFS order is wire identity (wid = index) — the MENU sorts by
+    // name instead; v stays the wid so picks never reshuffle. Tier-locked
+    // entries group at the bottom so restricted gear reads as one block.
+    .toSorted((a, b) => {
+      const ar = a.label.startsWith('[') ? 1 : 0, br = b.label.startsWith('[') ? 1 : 0;
+      return ar - br || a.label.localeCompare(b.label);
+    });
+}
+
+
+
+/** Faint-mark weapons already sitting in a sibling slot — one open
+ *  list then shows the whole kit at a glance. */
+function markSlotUse(player: Player, slotDrops: Drop[]): void {
+  const kit = player.menuKit.map(String);
+  slotDrops.forEach((d, i): void => {
+    const used = new Set(kit);
+    used.delete(kit[i]); // this slot's pick keeps the bright .sel, not 'used'
+    d.markUsed?.(used);
+  });
+}
+
+
+
+export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; closeDrops(): void } {
+  const loadoutBar = document.getElementById('loadout-bar');
+
+  function mkDrop(
+    initialOptions: DropOpt[],
+    onPick: (v: string) => void,
+    faceOpts?: DropOpt[],
+    cols2 = false,
+  ): Drop {
+    const el = document.createElement('div');
+    el.className = 'lo-chip lo-drop';
+    const face = document.createElement('span');
+    el.append(face);
+    const caret = document.createElement('span');
+    caret.className = 'lo-caret';
+    caret.textContent = '▴';
+    el.append(caret);
+    const list = document.createElement('div');
+    list.className = cols2 ? 'lo-list cols2' : 'lo-list';
+    el.append(list);
+    let options = initialOptions;
+    let currentV = '';
+    const rebuild = (): void => {
+      el.style.minWidth = `${dropWidth(options)}px`;
+      list.innerHTML = '';
+      for (const o of options) {
+        const it = document.createElement('div');
+        it.className = 'lo-opt';
+        if (o.disabled) {it.classList.add('locked');}
+        // 'none' isn't a perk — banner it across both columns.
+        if (cols2 && o.v === 'none') {it.classList.add('full');}
+        const name = document.createElement('span');
+        name.className = 'lo-name';
+        name.textContent = o.label;
+        it.append(name);
+        if (o.desc) {
+          // Perks are the only invisible pick — everything else
+          // self-explains in a second of firing it.
+          it.classList.add('has-desc');
+          const d = document.createElement('span');
+          d.className = 'lo-desc';
+          d.textContent = o.desc;
+          it.append(d);
+        }
+        it.dataset.v = o.v;
+        it.addEventListener('click', (e): void => {
+          e.stopPropagation();
+          if (o.disabled) {return;} // tier-locked — visible but unshoulderable
+          onPick(o.v);
+          el.classList.remove('open');
+          openDrop = null;
+          refreshLoadout();
+        });
+        list.append(it);
+      }
+    };
+    rebuild();
+    el.addEventListener('click', (e): void => {
+      e.stopPropagation();
+      const was = el.classList.contains('open');
+      openDrop?.classList.remove('open');
+      el.classList.toggle('open', !was);
+      openDrop = was ? null : el;
+    });
+    return {
+      el,
+      setValue(v): void {
+        currentV = v;
+        // faceOpts resolves labels the filtered list can't — an equipped
+        // heavy weapon on lighter armor must name itself, not print "6".
+        face.textContent = options.find((o): boolean => o.v === v)?.label
+          ?? faceOpts?.find((o): boolean => o.v === v)?.label ?? v;
+        list.querySelectorAll<HTMLElement>('.lo-opt').forEach((o): boolean =>
+          o.classList.toggle('sel', o.dataset.v === v));
+      },
+      setOptions(next): void {
+        options = next;
+        rebuild();
+        // The equipped value may have survived the filter — re-face it.
+        this.setValue(currentV);
+      },
+      // 'used' = equipped in a sibling slot — a faint tint reads "already
+      // in the kit" without competing with this slot's bright .sel.
+      markUsed(used): void {
+        list.querySelectorAll<HTMLElement>('.lo-opt').forEach((o): void => {
+          const v = o.dataset.v ?? '';
+          o.classList.toggle('used', v !== currentV && used.has(v));
+        });
+      },
+    };
+  }
+
+  // Clicking the bar's dead space closes any open dropup
+  loadoutBar?.addEventListener('click', (): void => {
+    openDrop?.classList.remove('open');
+    openDrop = null;
+  });
+
+  const ui = loadoutBar ? buildRows(loadoutBar, deps, mkDrop) : null;
+
+  function refreshLoadout(): void {
+    if (!ui) {return;}
+    const player = deps.lazyPlayer();
+    // Options gate on armorClass — the tier whose kit is being edited
+    // (a banked heavy pick CAN hold a mortar; it shoulders at respawn).
+    // Faces come from menuKit: the pending kit while a swap is banked.
+    const opts = weaponOptsFor(player.armorClass);
+    ui.slotDrops.forEach((d, i): void => { d.setOptions?.(opts); d.setValue(String(player.menuKit[i])); });
+    markSlotUse(player, ui.slotDrops);
+    ui.beltDrop?.setValue(player.beltItem);
+    ui.skillDrop?.setValue(player.skill);
+    ui.perkDrop?.setValue(player.perk);
+    ui.classDrop?.setValue(player.armorClass);
+    ui.sidearmDrop?.setValue(player.sidearm);
+    ui.packDrop?.setValue(player.packItem);
+    if (ui.beltLabel) {ui.beltLabel.textContent = `BELT (${codeLabel(codeFor('belt'))})`;}
+    if (ui.skillLabel) {ui.skillLabel.textContent = `SKILL (${codeLabel(codeFor('skill'))})`;}
+    if (ui.sidearmLabel) {ui.sidearmLabel.textContent = `SIDEARM (${codeLabel(codeFor('sidearm'))})`;}
+    if (ui.packLabel) {ui.packLabel.textContent = `PACK (${codeLabel(codeFor('deploy'))})`;}
+  }
+
+  // Menu close must not strand an open dropup — resume, then next ESC
+  // shows a list floating over a face that isn't asking for it.
+  function closeDrops(): void {
+    openDrop?.classList.remove('open');
+    openDrop = null;
+  }
+
+  return { refreshLoadout, closeDrops };
+}
+
+function mkCellDom(parent: HTMLElement): { cell: HTMLElement; cap: HTMLSpanElement } {
+  const cell = document.createElement('div');
+  cell.className = 'lo-cell';
+  const cap = document.createElement('span');
+  cap.className = 'lo-cap';
+  cell.append(cap);
+  parent.append(cell);
+  return { cell, cap };
+}
+
+// Sidearms are chosen in their own row — a primary slot offering them
+// would let a loadout double-carry the hold-out tier. Tier-locked
+// ordnance stays listed but tagged [H]/[M]/[L] and grayed out —
+// lockedForClass flags it in the list AND gates it in setLoadoutSlot.
+const TIER_TAG = new Map<string, string>([
+  ...Player.HEAVY_ONLY.map((w): readonly [string, "[H]"] => [String(w), '[H]'] as const),
+  ...Player.MEDIUM_ONLY.map((w): readonly [string, "[M]"] => [String(w), '[M]'] as const),
+  ...Player.LIGHT_ONLY.map((w): readonly [string, "[L]"] => [String(w), '[L]'] as const),
+]);

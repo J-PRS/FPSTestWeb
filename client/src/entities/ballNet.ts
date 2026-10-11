@@ -207,6 +207,25 @@ export function isStaleSeg(bag: NetBag, t: number | undefined): boolean {
   return t !== undefined && t < bag.legT0 && (bag.legT0 - t) <= TIMELINE_RESET_S;
 }
 
+// Carry the visible error into renderOffset: (old rendered pos) - (new
+// truth). Prediction-vs-truth divergence is dominated by server-clock
+// skew, not real desync — so every non-discontinuity correction blends
+// (a 10m slide over 0.2s on a moving arc reads as nothing). Only
+// teleport/spawn hard-snap: there continuity is impossible anyway.
+function blendSegCorrection(host: NetHost, s: SimBall, seg: NetSeg): void {
+  _rpos.copy(host.pos).add(host.renderOffset);
+  _rpos.x -= s.x; _rpos.y -= s.y; _rpos.z -= s.z;
+  if (seg.hard || _rpos.lengthSq() > 3600) {host.renderOffset.set(0, 0, 0);}
+  else {host.renderOffset.copy(_rpos);}
+  host.pos.set(s.x, s.y, s.z);
+  host.vel.set(s.vx, s.vy, s.vz);
+  host.enraged = s.enraged;
+  host.enrageTimer = 0;
+  if (!seg.enraged) {host.emissive.setRGB(0, 0, 0);}
+}
+
+
+
 /** Authoritative resync — a segment event lands mid-flight: snap the sim
  *  (and the render) to server truth, then advance it by `lead` seconds
  *  (≈half RTT) because the event is already stale when it arrives —
@@ -297,23 +316,6 @@ export function predictAt(st: NetStatics, bag: NetBag, t: number, out: THREE.Vec
   const rem = Math.max(0, Math.min(0.05, end - cur));
   out.set(s.x + s.vx * rem, s.y + s.vy * rem + 0.5 * BALL_GRAVITY * rem * rem, s.z + s.vz * rem);
   return true;
-}
-
-// Carry the visible error into renderOffset: (old rendered pos) - (new
-// truth). Prediction-vs-truth divergence is dominated by server-clock
-// skew, not real desync — so every non-discontinuity correction blends
-// (a 10m slide over 0.2s on a moving arc reads as nothing). Only
-// teleport/spawn hard-snap: there continuity is impossible anyway.
-function blendSegCorrection(host: NetHost, s: SimBall, seg: NetSeg): void {
-  _rpos.copy(host.pos).add(host.renderOffset);
-  _rpos.x -= s.x; _rpos.y -= s.y; _rpos.z -= s.z;
-  if (seg.hard || _rpos.lengthSq() > 3600) {host.renderOffset.set(0, 0, 0);}
-  else {host.renderOffset.copy(_rpos);}
-  host.pos.set(s.x, s.y, s.z);
-  host.vel.set(s.vx, s.vy, s.vz);
-  host.enraged = s.enraged;
-  host.enrageTimer = 0;
-  if (!seg.enraged) {host.emissive.setRGB(0, 0, 0);}
 }
 
 // Segment event applied to a netDriven ball — server truth for the sim

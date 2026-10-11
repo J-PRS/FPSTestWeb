@@ -196,6 +196,50 @@ function totemPickBlink(c: SimTotem, field: Heightfield, tx: number, tz: number)
   }
 }
 
+function stepTotemCharge(c: SimTotem, dt: number, authoritative: boolean): CrawlerEvent | null {
+  c.hopTimer -= dt;
+  if (c.hopTimer <= 0) {
+    c.state = 'aim';
+    c.windupTimer = c.sp.REFIRE;
+c.shotsFired += 1;
+    if (authoritative) {c.pendingBite = true;} // beam resolves in stepAll
+    return 'fire';
+  }
+  return null;
+}
+
+
+
+/** Idle-aim step: relocation checks (too close / shot budget / lost the
+ *  line) then the committed-snapshot beam lock. */
+function stepTotemAim(
+  c: SimTotem, dt: number, field: Heightfield,
+  target: SimVec | null, dist: number, cols?: readonly StructureCollider[],
+): CrawlerEvent | null {
+  c.windupTimer -= dt; // refire clock
+  // Relocation checks — stagger (damage pin) and cooldown gate them.
+  if (target && c.stunTimer <= 0 && c.blinkCd <= 0 &&
+      (dist < c.sp.MIN_RANGE ||
+       c.shotsFired >= c.sp.RELOCATE_SHOTS ||
+       (c.windupTimer <= 0 && !totemLineClear(c, field, target.x, target.y, target.z, cols)))) {
+    totemPickBlink(c, field, target.x, target.z);
+    c.state = 'blinkOut';
+    c.hopTimer = c.sp.BLINK_OUT_S;
+    return 'blink';
+  }
+  if (target && c.windupTimer <= 0 && dist < c.sp.RANGE) {
+    // Lock the line at the COMMITTED snapshot — the beam can't track,
+    // and both sides replay the identical lock.
+    c.state = 'charge';
+    c.hopTimer = c.sp.CHARGE;
+    totemSolveBeam(c, field, target.x, target.y, target.z, cols);
+    return 'charge';
+  }
+  return null;
+}
+
+
+
 export function stepTotem(
   c: SimTotem,
   dt: number,
@@ -241,46 +285,6 @@ export function stepTotem(
     }
       default: { break; }
 }
-  return null;
-}
-
-/** Idle-aim step: relocation checks (too close / shot budget / lost the
- *  line) then the committed-snapshot beam lock. */
-function stepTotemAim(
-  c: SimTotem, dt: number, field: Heightfield,
-  target: SimVec | null, dist: number, cols?: readonly StructureCollider[],
-): CrawlerEvent | null {
-  c.windupTimer -= dt; // refire clock
-  // Relocation checks — stagger (damage pin) and cooldown gate them.
-  if (target && c.stunTimer <= 0 && c.blinkCd <= 0 &&
-      (dist < c.sp.MIN_RANGE ||
-       c.shotsFired >= c.sp.RELOCATE_SHOTS ||
-       (c.windupTimer <= 0 && !totemLineClear(c, field, target.x, target.y, target.z, cols)))) {
-    totemPickBlink(c, field, target.x, target.z);
-    c.state = 'blinkOut';
-    c.hopTimer = c.sp.BLINK_OUT_S;
-    return 'blink';
-  }
-  if (target && c.windupTimer <= 0 && dist < c.sp.RANGE) {
-    // Lock the line at the COMMITTED snapshot — the beam can't track,
-    // and both sides replay the identical lock.
-    c.state = 'charge';
-    c.hopTimer = c.sp.CHARGE;
-    totemSolveBeam(c, field, target.x, target.y, target.z, cols);
-    return 'charge';
-  }
-  return null;
-}
-
-function stepTotemCharge(c: SimTotem, dt: number, authoritative: boolean): CrawlerEvent | null {
-  c.hopTimer -= dt;
-  if (c.hopTimer <= 0) {
-    c.state = 'aim';
-    c.windupTimer = c.sp.REFIRE;
-c.shotsFired += 1;
-    if (authoritative) {c.pendingBite = true;} // beam resolves in stepAll
-    return 'fire';
-  }
   return null;
 }
 

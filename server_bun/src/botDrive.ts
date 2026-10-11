@@ -33,6 +33,30 @@ export interface DriveHost {
   checkSheep(id: string, p: { position: Vec3 }, m: MobilitySample, now: number): void;
 }
 
+/** The bot's intent becomes input keys — only what a player's fingers
+ *  could press. The arsenal's post-throw jet pin rides the same held
+ *  bit as the brain's own jet key. */
+function commitMoveInput(h: DriveHost, id: string, p: { status: number }, out: BrainOut, intent: { moving: boolean }, now: number): void {
+  h.room.moveSim.setInput(id, intent.moving && !out.move?.park ? {
+    forward: 1, right: 0,
+    jumpPressed: Boolean(out.move?.jump), jumpHeld: Boolean(out.move?.jump),
+    skiHeld: Boolean(out.move?.ski),
+    jetHeld: Boolean(out.move?.jet) || h.arsenal.jetPinUntil(id) > now,
+  } : {
+    // Idle = every key released. Omitting jetHeld left a stale 1 pinned
+    // in the shadow (setInput treats undefined as "unchanged"), so one
+    // transient commit kept jetWanted true forever — the tank burned
+    // every regen tick and sat at ~0 for the rest of the match.
+    forward: 0, right: 0,
+    jumpPressed: false, jumpHeld: false, skiHeld: false, jetHeld: false,
+    // No seq: bots never reconcile, so the per-call journal entry (a
+    // state+input+energy snapshot plus a Map evict) would be pure churn
+    // every tick for every bot — the journal exists for wire replay.
+  }, p.status);
+}
+
+
+
 /** Legal path: convert the brain's destination into human inputs
  *  (heading → yaw, walk = forward key) and let the sim integrate.
  *  Commit happens on the NEXT tick — sims[] order puts moveSim.tick
@@ -84,28 +108,6 @@ export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocit
   // Jet bit mirrors the held-input the shadow actually burns — the
   // arsenal's post-throw pin counts as jetting too.
   p.jetting = (out.move?.jet || h.arsenal.jetPinUntil(id) > now) ? 1 : 0;
-}
-
-/** The bot's intent becomes input keys — only what a player's fingers
- *  could press. The arsenal's post-throw jet pin rides the same held
- *  bit as the brain's own jet key. */
-function commitMoveInput(h: DriveHost, id: string, p: { status: number }, out: BrainOut, intent: { moving: boolean }, now: number): void {
-  h.room.moveSim.setInput(id, intent.moving && !out.move?.park ? {
-    forward: 1, right: 0,
-    jumpPressed: Boolean(out.move?.jump), jumpHeld: Boolean(out.move?.jump),
-    skiHeld: Boolean(out.move?.ski),
-    jetHeld: Boolean(out.move?.jet) || h.arsenal.jetPinUntil(id) > now,
-  } : {
-    // Idle = every key released. Omitting jetHeld left a stale 1 pinned
-    // in the shadow (setInput treats undefined as "unchanged"), so one
-    // transient commit kept jetWanted true forever — the tank burned
-    // every regen tick and sat at ~0 for the rest of the match.
-    forward: 0, right: 0,
-    jumpPressed: false, jumpHeld: false, skiHeld: false, jetHeld: false,
-    // No seq: bots never reconcile, so the per-call journal entry (a
-    // state+input+energy snapshot plus a Map evict) would be pure churn
-    // every tick for every bot — the journal exists for wire replay.
-  }, p.status);
 }
 
 /** No heightfield → no shadow → legacy direct-write fallback.

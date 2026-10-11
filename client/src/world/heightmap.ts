@@ -224,6 +224,14 @@ export function snapshotHeightmap(): HeightmapSnapshot {
   return { data: hmData, size: hmSize, scale: hmScale, worldScale: hmWorldScale };
 }
 
+export function restoreHeightmap(snap: HeightmapSnapshot): void {
+  hmData = snap.data; hmSize = snap.size; hmScale = snap.scale; hmWorldScale = snap.worldScale;
+  buildMaxGrid();
+  _hvc.clear();
+}
+
+
+
 /** Replace the field with a stride-1 u8 grid (e.g. a demo's embedded
  *  HMAP). Returns a restore() that hands back the previous field —
  *  callers must also Terrain.reloadHeightmap() on both transitions. */
@@ -242,12 +250,6 @@ export function injectHeightmapBytes(
   buildMaxGrid();
   _hvc.clear();
   return (): void => restoreHeightmap(prev);
-}
-
-export function restoreHeightmap(snap: HeightmapSnapshot): void {
-  hmData = snap.data; hmSize = snap.size; hmScale = snap.scale; hmWorldScale = snap.worldScale;
-  buildMaxGrid();
-  _hvc.clear();
 }
 
 const _normalTmp = new THREE.Vector3();

@@ -66,6 +66,12 @@ u.timelineWrap.append(u.timeline);
 u.timelineWrap.append(u.markerOverlay);
   }
 
+export function btnStyle(bgColor: string): string {
+    return `background: ${bgColor}; color: #fff; border: 1px solid #555; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-family: monospace; font-size: 13px; min-width: 32px;`;
+  }
+
+
+
 export function initControls(u: DemoUI): void {
 // Speed selector
 u.speedSelect = document.createElement('select');
@@ -114,9 +120,5 @@ u.loadInput.addEventListener('change', (): void => {
     u.callbacks?.onLoad(u.loadInput.files[0]);
   }
 });
-  }
-
-export function btnStyle(bgColor: string): string {
-    return `background: ${bgColor}; color: #fff; border: 1px solid #555; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-family: monospace; font-size: 13px; min-width: 32px;`;
   }
 

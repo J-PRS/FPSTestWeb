@@ -170,6 +170,14 @@ function applyTo(group: THREE.Group): void {
 // ---- bake toggle -----------------------------------------------------------
 let aoOn = q.get('ao') !== 'off';
 const bakedGroups = new WeakSet<THREE.Group>();
+function show(wt: number): void {
+  currentW = wt;
+  for (const [w, g] of vm.weapons) {g.visible = w === wt;}
+  const g = vm.weapons.get(wt);
+  if (g) {applyTo(g);}
+}
+
+
 function rebake(): void {
   for (const [, g] of vm.weapons) {
     if (bakedGroups.has(g)) {continue;} // vertex attrs can't be re-baked cleanly
@@ -186,12 +194,6 @@ function rebake(): void {
 // ---- weapon picker -----------------------------------------------------------
 const wnames = Object.entries(WeaponType).filter(([, v]): boolean => typeof v === 'number') as [string, number][];
 let currentW = Number.parseInt(q.get('w') ?? '0');
-function show(wt: number): void {
-  currentW = wt;
-  for (const [w, g] of vm.weapons) {g.visible = w === wt;}
-  const g = vm.weapons.get(wt);
-  if (g) {applyTo(g);}
-}
 
 // ---- UI ---------------------------------------------------------------------
 const panel = document.querySelector('#panel')!;

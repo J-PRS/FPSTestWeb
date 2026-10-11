@@ -42,6 +42,99 @@ function muteable(config: ConnectionConfig): { config: ConnectionConfig; arm(): 
   };
 }
 
+async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null> {
+  if (typeof RTCPeerConnection === 'undefined') {return null;}
+  let pc: RTCPeerConnection | undefined = undefined;
+  let signalRef: WebSocket | undefined = undefined;
+  try {
+    // ICE servers come from the server itself (/rtcconfig) — STUN/TURN is a
+    // deployment property, not a client constant; LAN/dev needs neither.
+    const httpBase = config.url.replace(/^wss?:/, `http${  config.url.startsWith('wss') ? 's' : ''  }:`).replace(/\/ws$/, '');
+    const iceServers = await fetch(`${httpBase}/rtcconfig`, { signal: AbortSignal.timeout(4000) })
+      .then((r): Promise<any> => r.json())
+      .then((j) => (Array.isArray(j?.iceServers) ? j.iceServers : []))
+      .catch((): never[] => []);
+    pc = new RTCPeerConnection({ iceServers });
+    const conn = pc;
+    // Lane split: 'game' is unordered with bounded retransmits — it carries
+    // only seq-stamped volatile frames (position up, tickUpdate down) that
+    // the receiver stale-drops anyway, so a lost/superseded packet must not
+    // stall the SCTP association. maxRetransmits:2 covers jitter spikes
+    // without ever head-of-line blocking behind a superseded seq.
+    const dc = conn.createDataChannel('game', { ordered: false, maxRetransmits: 2 });
+    const ctrl = conn.createDataChannel('ctrl'); // reliable+ordered — join, claims, events, ball segments
+    // Signal over the dedicated /rtcs socket — one offer in, one answer out.
+    // The offer is sent only after ICE gathering completes so candidates
+    // are embedded in the SDP (non-trickle — the server doesn't accept
+    // trickle candidates; on LAN/host scenarios that's sufficient).
+    const signal = new WebSocket(config.url.replace(/\/ws$/, '/rtcs'));
+    signalRef = signal;
+    const offer = await conn.createOffer();
+    await conn.setLocalDescription(offer);
+    if (conn.iceGatheringState !== 'complete') {
+      await new Promise<void>((res): void => {
+        const t = setTimeout(res, 2500);
+        conn.addEventListener('icegatheringstatechange', (): void => {
+          if (conn.iceGatheringState === 'complete') { clearTimeout(t); res(); }
+        });
+      });
+    }
+    const sdp = conn.localDescription?.sdp ?? offer.sdp;
+    const answer = await new Promise<RTCSessionDescriptionInit>((res, rej): void => {
+      // Server gathers its own ICE (STUN) before answering — that window
+      // is seconds, so a LAN-era 3s timeout would always fall back to ws
+      // for internet peers. 10s covers a slow srflx gather.
+      const timer = setTimeout((): void => rej(new Error('rtc signal timeout')), 10_000);
+      signal.addEventListener('message', (ev): void => {
+        try {
+          const m = JSON.parse(ev.data);
+          if (m.type === 'answer') { clearTimeout(timer); res(m); }
+        } catch { /* not ours */ }
+      });
+      signal.addEventListener('error', (): void => rej(new Error('rtc signal error')));
+      // The signal ws can already be OPEN here — it connected while we
+      // were awaiting createOffer+ICE gather, so 'open' never refires and
+      // the probe would sit out its 3s timeout. Send immediately when so.
+      if (signal.readyState === WebSocket.OPEN) {
+        signal.send(JSON.stringify({ type: 'offer', sdp }));
+      } else {
+        signal.addEventListener('open', (): void => signal.send(JSON.stringify({ type: 'offer', sdp })));
+      }
+    });
+    await conn.setRemoteDescription(answer);
+    signal.close();
+    // ICE diagnostics/watchdog live on the transport — it can declare the
+    // session dead directly instead of hoping channel 'close' events fire.
+    return new ServerRtcTransport(dc, config, conn, ctrl);
+  } catch {
+    // Failed probe — the ICE/DTLS machinery keeps running without this.
+    try { pc?.close(); } catch { /* gone */ }
+    // The signal ws leaks otherwise: closing while CONNECTING trips
+    // Chrome's "closed before established" pageerror, so let it finish
+    // opening and shut it then.
+    const s = signalRef;
+    if (s && s.readyState !== WebSocket.CLOSED && s.readyState !== WebSocket.CLOSING) {
+      if (s.readyState === WebSocket.OPEN) {s.close();}
+      else {s.addEventListener('open', (): void => s.close(), { once: true });}
+    }
+    return null;
+  }
+}
+
+
+
+/** ?net=ws|wt|rtc pins a single tier for testing. The raced probes were
+ *  the session layer's bug source once — muteable/gen/flap-breaker/miss-
+ *  cache now hold that fault line, so the ladder is the default again. */
+async function pinnedTier(want: string | null | undefined, config: ConnectionConfig): Promise<GameTransport> {
+  if (want === 'wt') {return (await tryWebTransport(config)) ?? new WebSocketConnection(config);}
+  if (want === 'rtc') {return (await tryWebRTC(config)) ?? new WebSocketConnection(config);}
+  logger.info('tier: WebSocket');
+  return new WebSocketConnection(config);
+}
+
+
+
 export async function connectGameTransport(config: ConnectionConfig, opts?: TierOpts): Promise<GameTransport> {
   const want = opts?.net ?? 'auto';
   if (want !== 'auto') {return pinnedTier(want, config);}
@@ -64,16 +157,6 @@ export async function connectGameTransport(config: ConnectionConfig, opts?: Tier
   if (probeRtc && !rtc) {missUntil.rtc = Date.now() + MISS_CACHE_MS;}
   if (wt) { wtC.arm(); rtc?.disconnect(); logger.info('tier: WebTransport'); return wt; }
   if (rtc) { rtcC.arm(); logger.info('tier: WebRTC'); return rtc; }
-  logger.info('tier: WebSocket');
-  return new WebSocketConnection(config);
-}
-
-/** ?net=ws|wt|rtc pins a single tier for testing. The raced probes were
- *  the session layer's bug source once — muteable/gen/flap-breaker/miss-
- *  cache now hold that fault line, so the ladder is the default again. */
-async function pinnedTier(want: string | null | undefined, config: ConnectionConfig): Promise<GameTransport> {
-  if (want === 'wt') {return (await tryWebTransport(config)) ?? new WebSocketConnection(config);}
-  if (want === 'rtc') {return (await tryWebRTC(config)) ?? new WebSocketConnection(config);}
   logger.info('tier: WebSocket');
   return new WebSocketConnection(config);
 }
@@ -207,85 +290,6 @@ class ServerRtcTransport implements GameTransport {
     this.dead = true; // muted/losing-probe teardown must not declare dead
     try { this.dc.close(); } catch { /* gone */ }
     try { this.pc?.close(); } catch { /* gone */ }
-  }
-}
-
-async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null> {
-  if (typeof RTCPeerConnection === 'undefined') {return null;}
-  let pc: RTCPeerConnection | undefined = undefined;
-  let signalRef: WebSocket | undefined = undefined;
-  try {
-    // ICE servers come from the server itself (/rtcconfig) — STUN/TURN is a
-    // deployment property, not a client constant; LAN/dev needs neither.
-    const httpBase = config.url.replace(/^wss?:/, `http${  config.url.startsWith('wss') ? 's' : ''  }:`).replace(/\/ws$/, '');
-    const iceServers = await fetch(`${httpBase}/rtcconfig`, { signal: AbortSignal.timeout(4000) })
-      .then((r): Promise<any> => r.json())
-      .then((j) => (Array.isArray(j?.iceServers) ? j.iceServers : []))
-      .catch((): never[] => []);
-    pc = new RTCPeerConnection({ iceServers });
-    const conn = pc;
-    // Lane split: 'game' is unordered with bounded retransmits — it carries
-    // only seq-stamped volatile frames (position up, tickUpdate down) that
-    // the receiver stale-drops anyway, so a lost/superseded packet must not
-    // stall the SCTP association. maxRetransmits:2 covers jitter spikes
-    // without ever head-of-line blocking behind a superseded seq.
-    const dc = conn.createDataChannel('game', { ordered: false, maxRetransmits: 2 });
-    const ctrl = conn.createDataChannel('ctrl'); // reliable+ordered — join, claims, events, ball segments
-    // Signal over the dedicated /rtcs socket — one offer in, one answer out.
-    // The offer is sent only after ICE gathering completes so candidates
-    // are embedded in the SDP (non-trickle — the server doesn't accept
-    // trickle candidates; on LAN/host scenarios that's sufficient).
-    const signal = new WebSocket(config.url.replace(/\/ws$/, '/rtcs'));
-    signalRef = signal;
-    const offer = await conn.createOffer();
-    await conn.setLocalDescription(offer);
-    if (conn.iceGatheringState !== 'complete') {
-      await new Promise<void>((res): void => {
-        const t = setTimeout(res, 2500);
-        conn.addEventListener('icegatheringstatechange', (): void => {
-          if (conn.iceGatheringState === 'complete') { clearTimeout(t); res(); }
-        });
-      });
-    }
-    const sdp = conn.localDescription?.sdp ?? offer.sdp;
-    const answer = await new Promise<RTCSessionDescriptionInit>((res, rej): void => {
-      // Server gathers its own ICE (STUN) before answering — that window
-      // is seconds, so a LAN-era 3s timeout would always fall back to ws
-      // for internet peers. 10s covers a slow srflx gather.
-      const timer = setTimeout((): void => rej(new Error('rtc signal timeout')), 10_000);
-      signal.addEventListener('message', (ev): void => {
-        try {
-          const m = JSON.parse(ev.data);
-          if (m.type === 'answer') { clearTimeout(timer); res(m); }
-        } catch { /* not ours */ }
-      });
-      signal.addEventListener('error', (): void => rej(new Error('rtc signal error')));
-      // The signal ws can already be OPEN here — it connected while we
-      // were awaiting createOffer+ICE gather, so 'open' never refires and
-      // the probe would sit out its 3s timeout. Send immediately when so.
-      if (signal.readyState === WebSocket.OPEN) {
-        signal.send(JSON.stringify({ type: 'offer', sdp }));
-      } else {
-        signal.addEventListener('open', (): void => signal.send(JSON.stringify({ type: 'offer', sdp })));
-      }
-    });
-    await conn.setRemoteDescription(answer);
-    signal.close();
-    // ICE diagnostics/watchdog live on the transport — it can declare the
-    // session dead directly instead of hoping channel 'close' events fire.
-    return new ServerRtcTransport(dc, config, conn, ctrl);
-  } catch {
-    // Failed probe — the ICE/DTLS machinery keeps running without this.
-    try { pc?.close(); } catch { /* gone */ }
-    // The signal ws leaks otherwise: closing while CONNECTING trips
-    // Chrome's "closed before established" pageerror, so let it finish
-    // opening and shut it then.
-    const s = signalRef;
-    if (s && s.readyState !== WebSocket.CLOSED && s.readyState !== WebSocket.CLOSING) {
-      if (s.readyState === WebSocket.OPEN) {s.close();}
-      else {s.addEventListener('open', (): void => s.close(), { once: true });}
-    }
-    return null;
   }
 }
 

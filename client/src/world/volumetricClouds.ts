@@ -174,6 +174,26 @@ const _fbm = (u: number, v: number, basePeriod: number, octaves: number): number
   return sum / norm;
 };
 
+// Histogram-stretch both baked channels into RGBA8 (B unused, A opaque).
+function packNoiseTex(size: number, ch: {
+    rawR: Float32Array; rawG: Float32Array;
+    rMin: number; rMax: number; gMin: number; gMax: number;
+  }): Uint8Array {
+  const { rawR, rawG } = ch;
+  const data = new Uint8Array(size * size * 4);
+  const rSpan = ch.rMax - ch.rMin, gSpan = ch.gMax - ch.gMin;
+  for (let i = 0; i < size * size; i += 1) {
+    const j = i * 4;
+    data[j] = Math.round((rawR[i]! - ch.rMin) / rSpan * 255);
+    data[j + 1] = Math.round((rawG[i]! - ch.gMin) / gSpan * 255);
+    data[j + 2] = 0;
+    data[j + 3] = 255;
+  }
+  return data;
+}
+
+
+
 function makeNoiseTexture(size = 256): { tex: THREE.DataTexture; base: Float32Array } {
   // Two passes: bake raw fbm, then histogram-stretch to the full 0-255.
   // Value-noise fbm bunches hard around its mean (~0.23 here, max ~0.44)
@@ -207,24 +227,6 @@ function makeNoiseTexture(size = 256): { tex: THREE.DataTexture; base: Float32Ar
   const rSpan = rMax - rMin;
   for (let i = 0; i < size * size; i += 1) {base[i] = (rawR[i]! - rMin) / rSpan;}
   return { tex, base };
-}
-
-// Histogram-stretch both baked channels into RGBA8 (B unused, A opaque).
-function packNoiseTex(size: number, ch: {
-    rawR: Float32Array; rawG: Float32Array;
-    rMin: number; rMax: number; gMin: number; gMax: number;
-  }): Uint8Array {
-  const { rawR, rawG } = ch;
-  const data = new Uint8Array(size * size * 4);
-  const rSpan = ch.rMax - ch.rMin, gSpan = ch.gMax - ch.gMin;
-  for (let i = 0; i < size * size; i += 1) {
-    const j = i * 4;
-    data[j] = Math.round((rawR[i]! - ch.rMin) / rSpan * 255);
-    data[j + 1] = Math.round((rawG[i]! - ch.gMin) / gSpan * 255);
-    data[j + 2] = 0;
-    data[j + 3] = 255;
-  }
-  return data;
 }
 
 

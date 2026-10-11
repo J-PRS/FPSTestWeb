@@ -60,19 +60,6 @@ export interface NetEdgeMsg {
   tp?: SimVec | null;
 }
 
-/** Seed the shared sim from a wire spawn — the seeded LCG makes every
- *  client's replay identical to the authority's. */
-export function bindNetSim<S extends NetSimState>(
-  e: NetDrivenLike<S>, make: MakeSim<S>, b: NetBindArgs,
-): void {
-  e.sim = make(b.id, b.pos, b.uber, b.seed, b.species);
-  seedReplicaState(e.sim, b.state);
-  e.sim.vx = b.vel.x; e.sim.vy = b.vel.y; e.sim.vz = b.vel.z;
-  e.pos.set(b.pos.x, b.pos.y, b.pos.z);
-  e.vel.set(b.vel.x, b.vel.y, b.vel.z);
-  e.health = e.sim.health;
-}
-
 /** Seed a replica label the way the authority entered it. A bare
  *  `sim.state = x` strands timer-gated states: lunge exits on
  *  hopTimer<=0, windup on windupTimer<=0 — so a healed label reverts the
@@ -121,6 +108,21 @@ export function seedReplicaState(
     }
       default: { break; }
 }
+}
+
+
+
+/** Seed the shared sim from a wire spawn — the seeded LCG makes every
+ *  client's replay identical to the authority's. */
+export function bindNetSim<S extends NetSimState>(
+  e: NetDrivenLike<S>, make: MakeSim<S>, b: NetBindArgs,
+): void {
+  e.sim = make(b.id, b.pos, b.uber, b.seed, b.species);
+  seedReplicaState(e.sim, b.state);
+  e.sim.vx = b.vel.x; e.sim.vy = b.vel.y; e.sim.vz = b.vel.z;
+  e.pos.set(b.pos.x, b.pos.y, b.pos.z);
+  e.vel.set(b.vel.x, b.vel.y, b.vel.z);
+  e.health = e.sim.health;
 }
 
 export function applyNetEdgeSim<S extends NetSimState>(e: NetDrivenLike<S>, m: NetEdgeMsg): void {

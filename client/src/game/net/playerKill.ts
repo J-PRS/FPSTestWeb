@@ -20,6 +20,67 @@ const STREAK_NAMES: [number, string][] = [
   [10, 'RAMPAGE'], [5, 'KILLING SPREE'],
 ];
 
+/** Victim fx: ragdoll with the blast's impulse, capsule-shard gibs in the
+ *  team color, then hide the model and strip HUD markers. */
+function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlayer: RemotePlayer): void {
+  const { deps, nm } = ctx;
+  // Find matching explosion from this shooter
+  let explosionPos: THREE.Vector3 | undefined = undefined;
+  let explosionForce: number | undefined = undefined;
+  for (const exp of deps.explosionTracker.getRecentExplosions()) {
+    if (exp.shooterId === shooterId) {
+      explosionPos = exp.position;
+      explosionForce = exp.force;
+      break;
+    }
+  }
+
+  // Play death animation (ragdoll physics with explosion impulse)
+  remotePlayer.playDeath(explosionPos, explosionForce);
+
+  // Shatter like the creatures do: shards burst off the capsule shell,
+  // carry the blast direction through the body, and inherit whatever
+  // speed the corpse had. Team color when known, robot grey otherwise.
+  const centerY = remotePlayer.position.y - 0.6; // eye ~1.6 → chest
+  let impulseDir: THREE.Vector3 | undefined = undefined;
+  if (explosionPos) {
+    impulseDir = new THREE.Vector3(
+      remotePlayer.position.x - explosionPos.x,
+      centerY - explosionPos.y,
+      remotePlayer.position.z - explosionPos.z,
+    );
+    const l = impulseDir.length() || 1;
+    impulseDir.multiplyScalar(Math.min(1.5, (explosionForce ?? 10) / 15) / l);
+  }
+  const team = nm().getPlayers().get(targetId)?.team
+    ?? (remotePlayer as { team?: TeamId }).team;
+  // Gibs are best-effort — a degenerate model must never take the kill
+  // handler down with it (generic chunks still spawn on null). Past
+  // ~120m real body parts are indistinguishable from primitive shards,
+  // so far kills take the instanced path — mesh-path gibs are ~20
+  // unique materials and matrix writes each (~7ms spikes under throttle).
+  const cam = deps.lazyPlayer().pos;
+  const gdx = remotePlayer.position.x - cam.x, gdy = centerY - cam.y, gdz = remotePlayer.position.z - cam.z;
+  const nearEnough = gdx * gdx + gdy * gdy + gdz * gdz < 120 * 120;
+  let parts: { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] | undefined = undefined;
+  if (nearEnough) {
+    try { parts = remotePlayer.model.deathParts() ?? undefined; }
+    catch { /* fall through to generic shards */ }
+  }
+  deps.world.playerDebrisList.push(new PlayerDebris(
+    deps.lazyScene(), deps.lazyTerrain(),
+    { x: remotePlayer.position.x, y: centerY, z: remotePlayer.position.z },
+    new THREE.Color(team ? TEAM_COLORS[team] : 0x88_99_AA),
+    { impulseDir, inheritVel: remotePlayer.vel, parts },
+  ));
+
+  remotePlayer.hide();
+  deps.lazyHud().removePlayerIndicator(targetId);
+  deps.lazyHealthBarSystem().removeBar(targetId);
+}
+
+
+
 /** A kill landed somewhere: feed row for everyone, death overlay when it's
  *  you, frag headline + streak when it's yours, ragdoll for the victim. */
 export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, weapon?: number, air?: number): void {
@@ -80,63 +141,4 @@ export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, w
     gibVictim(ctx, shooterId, targetId, remotePlayer);
     logger.info(`Player ${targetId} killed by ${shooterId}`);
   }
-}
-
-/** Victim fx: ragdoll with the blast's impulse, capsule-shard gibs in the
- *  team color, then hide the model and strip HUD markers. */
-function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlayer: RemotePlayer): void {
-  const { deps, nm } = ctx;
-  // Find matching explosion from this shooter
-  let explosionPos: THREE.Vector3 | undefined = undefined;
-  let explosionForce: number | undefined = undefined;
-  for (const exp of deps.explosionTracker.getRecentExplosions()) {
-    if (exp.shooterId === shooterId) {
-      explosionPos = exp.position;
-      explosionForce = exp.force;
-      break;
-    }
-  }
-
-  // Play death animation (ragdoll physics with explosion impulse)
-  remotePlayer.playDeath(explosionPos, explosionForce);
-
-  // Shatter like the creatures do: shards burst off the capsule shell,
-  // carry the blast direction through the body, and inherit whatever
-  // speed the corpse had. Team color when known, robot grey otherwise.
-  const centerY = remotePlayer.position.y - 0.6; // eye ~1.6 → chest
-  let impulseDir: THREE.Vector3 | undefined = undefined;
-  if (explosionPos) {
-    impulseDir = new THREE.Vector3(
-      remotePlayer.position.x - explosionPos.x,
-      centerY - explosionPos.y,
-      remotePlayer.position.z - explosionPos.z,
-    );
-    const l = impulseDir.length() || 1;
-    impulseDir.multiplyScalar(Math.min(1.5, (explosionForce ?? 10) / 15) / l);
-  }
-  const team = nm().getPlayers().get(targetId)?.team
-    ?? (remotePlayer as { team?: TeamId }).team;
-  // Gibs are best-effort — a degenerate model must never take the kill
-  // handler down with it (generic chunks still spawn on null). Past
-  // ~120m real body parts are indistinguishable from primitive shards,
-  // so far kills take the instanced path — mesh-path gibs are ~20
-  // unique materials and matrix writes each (~7ms spikes under throttle).
-  const cam = deps.lazyPlayer().pos;
-  const gdx = remotePlayer.position.x - cam.x, gdy = centerY - cam.y, gdz = remotePlayer.position.z - cam.z;
-  const nearEnough = gdx * gdx + gdy * gdy + gdz * gdz < 120 * 120;
-  let parts: { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] | undefined = undefined;
-  if (nearEnough) {
-    try { parts = remotePlayer.model.deathParts() ?? undefined; }
-    catch { /* fall through to generic shards */ }
-  }
-  deps.world.playerDebrisList.push(new PlayerDebris(
-    deps.lazyScene(), deps.lazyTerrain(),
-    { x: remotePlayer.position.x, y: centerY, z: remotePlayer.position.z },
-    new THREE.Color(team ? TEAM_COLORS[team] : 0x88_99_AA),
-    { impulseDir, inheritVel: remotePlayer.vel, parts },
-  ));
-
-  remotePlayer.hide();
-  deps.lazyHud().removePlayerIndicator(targetId);
-  deps.lazyHealthBarSystem().removeBar(targetId);
 }

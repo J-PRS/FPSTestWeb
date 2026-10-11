@@ -151,143 +151,6 @@ function loadSources(env?: UalBakeEnv): Promise<UalSource[]> {
   return ualSource;
 }
 
-/** Retargeted UAL clip table for this model's variant — baked once per
- *  variant, name-keyed 'UAL_*'. Resolves to the shared cache on repeat
- *  calls; rejects only if the source GLBs can't load/bake. */
-export async function bakeUALClips(model: THREE.Object3D, variant: string, env?: UalBakeEnv): Promise<Map<string, THREE.AnimationClip>> {
-  const sources = await loadSources(env);
-  const cached = bakedByVariant.get(variant);
-  if (cached) {return cached;}
-
-  // Target: this model's skinned mesh + its full skeleton. Multi-skin
-  // GLBs carry a duplicate skeleton per mesh (class_heavy's head/body/
-  // backpack/arm/leg) — GLTFLoader dedupes their joint names with `_N`
-  // suffixes. Retarget onto the UNSUFFIXED skeleton: baked track names
-  // fan out to the sibling sets below, so every skin animates instead
-  // of one mesh following clips while the rest hold bind pose.
-  let target = undefined as THREE.SkinnedMesh | undefined;
-  let firstSkin = undefined as THREE.SkinnedMesh | undefined;
-  model.traverse((o): void => {
-    if (!(o as THREE.SkinnedMesh).isSkinnedMesh) {return;}
-    const sm = o as THREE.SkinnedMesh;
-    firstSkin ??= sm;
-    if (!target && !/_\d+$/.test(sm.skeleton.bones[0]?.name ?? '')) {target = sm;}
-  });
-  target ??= firstSkin;
-  if (!target) {throw new Error('no skinned mesh to retarget onto');}
-  model.updateMatrixWorld(true);
-
-  // Snapshot the rest pose once — every bakeSource reads the hip's local
-  // transform as its bind reference and retargetClip leaves the skeleton
-  // at its last evaluated frame, so a second source would bake off the
-  // first's residue and drag the mesh ~100 units out of the body.
-  const rest = target.skeleton.bones.map(b => ({
-    b, p: b.position.clone(), q: b.quaternion.clone(), s: b.scale.clone(),
-  }));
-  const restoreRest = (): void => {
-    for (const r of rest) { r.b.position.copy(r.p); r.b.quaternion.copy(r.q); r.b.scale.copy(r.s); }
-    model.updateMatrixWorld(true);
-  };
-
-  const t0 = performance.now();
-  const baked = new Map<string, THREE.AnimationClip>();
-  // Which sources feed this rig lives on its manifest row — a new
-  // variant never edits this list, only its RIG_MANIFEST entry.
-  const want = new Set(RIG_MANIFEST[variant]?.sources ?? []);
-  for (const s of sources) {
-    if (!want.has(s.spec.id)) {continue;}
-    restoreRest();
-    for (const [name, clip] of bakeSource(s, target, model, variant)) {baked.set(name, clip);}
-  }
-  // Leave the skeleton at its authored rest, not the last baked frame.
-  restoreRest();
-
-  // Clip surgery rides inside the bake so offline-baked GLBs (_tools/
-  // animbake) ship byte-identical results — runtime retarget output and
-  // shipped clips must not diverge. Every variant's clips get the hip
-  // XZ strip (entity owns world position); mannequin's layered clips
-  // additionally yield their arm tracks to the aim layer.
-  const roots = computeRootMotionNodes(model);
-  for (const [name, clip] of baked) {
-    stripHipXZ(clip, roots);
-    if (variant === 'mannequin' && isLayeredClip(name)) {
-      clip.tracks = clip.tracks.filter((t): boolean => {
-        const bn = normBone(t.name.slice(0, t.name.indexOf('.')));
-        if (AIM_BONE_MASK.has(bn)) {return false;}
-        if (t.name.endsWith('.quaternion') && AIM_TORSO_BONES.has(bn)) {return false;}
-        return true;
-      });
-      dampenSway(clip, SWAY_BONES);
-    }
-  }
-  if (bakeArmHold(baked, target, variant)) {
-    // Marks the pack so PlayerModel skips the runtime holdBones compose —
-    // pre-bake anims files simply lack the marker and keep the old path.
-    baked.set('__holdbake1', new THREE.AnimationClip('__holdbake1', 0.01, []));
-  }
-  logger.debug(`UAL retarget baked ${baked.size} clips for ${variant} in ${(performance.now() - t0).toFixed(0)}ms`);
-  bakedByVariant.set(variant, baked);
-  return baked;
-}
-
-/** Bake the hip-fire grip into arm-chain tracks — the same bind×off
- *  compose PoseControl used to run every frame post-mixer. Only rigs
- *  without a native anims table take it (same predicate as
- *  wantHoldPose); mannequin/robot limb names just don't resolve into
- *  the chains, so the predicate's second half is data-driven.
- *  Oneshot/death clips keep authored arm tracks — the runtime
- *  suppression rule (oneshotOwnsArms) hands them the arms either way.
- *  Skeleton is at authored rest when this runs (post-restoreRest), so
- *  bone.quaternion IS the bind local. Returns whether it baked. */
-function bakeArmHold(baked: Map<string, THREE.AnimationClip>, target: THREE.SkinnedMesh, variant: string): boolean {
-  if (CLASS_BODY_SPEC[variant]?.anims) {return false;}
-  const chains = holdChains();
-  const quats = HOLD_QUATS[variant] ?? HOLD_QUATS['cybersoldier']!;
-  const roleOf = new Map<string, number>();
-  for (const b of target.skeleton.bones) {
-    const nb = normBone(b.name);
-    for (let r = 0; r < chains.length; r += 1) {
-      if (chains[r]!.has(nb)) { roleOf.set(b.name, r); break; }
-    }
-  }
-  if (roleOf.size === 0) {return false;}
-  const _hold = new THREE.Quaternion();
-  const _off = new THREE.Quaternion();
-  for (const [name, clip] of baked) {
-    // Aim poses feed the masked aim layer — flattening them would pin the
-    // pitch blend to a single constant frame.
-    if (ONESHOT_CLIPS.has(name) || name === 'UAL_Death01' || name.includes('Aim_')) {continue;}
-    for (const tr of clip.tracks) {
-      if (!tr.name.endsWith('.quaternion')) {continue;}
-      const role = roleOf.get(tr.name.slice(0, tr.name.indexOf('.')));
-      if (role === undefined) {continue;}
-      const bone = target.skeleton.getBoneByName(tr.name.slice(0, tr.name.indexOf('.')));
-      if (!bone) {continue;}
-      _hold.copy(bone.quaternion).multiply(_off.set(...quats[role]!));
-      tr.times = new Float32Array([0, clip.duration]);
-      tr.values = new Float32Array([_hold.x, _hold.y, _hold.z, _hold.w, _hold.x, _hold.y, _hold.z, _hold.w]);
-    }
-  }
-  return true;
-}
-
-// Offline-baked clip packs the client prefers when present — ships the
-// whole retarget ahead of time so the async bake can't flash a T-pose
-// (and saves ~100-300ms of main-thread resample on load). Missing file
-// resolves null → runtime bake fallback keeps dev rigs working.
-const bakedFileByVariant = new Map<string, Promise<Map<string, THREE.AnimationClip> | null>>();
-
-export function loadBakedUALClips(variant: string): Promise<Map<string, THREE.AnimationClip> | null> {
-  let p = bakedFileByVariant.get(variant);
-  if (!p) {
-    p = mkGltfLoader().loadAsync(`/assets/anims/${variant}.glb`)
-      .then((gltf): Map<string, THREE.AnimationClip> | null => gltf.animations.length > 0 ? new Map(gltf.animations.map((c): [string, THREE.AnimationClip] => [c.name, c])) : null)
-      .catch((): null => null);
-    bakedFileByVariant.set(variant, p);
-  }
-  return p;
-}
-
 /** Bake one source pack's clips onto the target skeleton — names map, the
  *  torso rest-pose correction, hip scale, then retargetClip per clip. */
 function bakeSource(
@@ -453,4 +316,145 @@ function bakeSource(
     baked.set(rt.name, rt);
   }
   return baked;
+}
+
+
+
+/** Bake the hip-fire grip into arm-chain tracks — the same bind×off
+ *  compose PoseControl used to run every frame post-mixer. Only rigs
+ *  without a native anims table take it (same predicate as
+ *  wantHoldPose); mannequin/robot limb names just don't resolve into
+ *  the chains, so the predicate's second half is data-driven.
+ *  Oneshot/death clips keep authored arm tracks — the runtime
+ *  suppression rule (oneshotOwnsArms) hands them the arms either way.
+ *  Skeleton is at authored rest when this runs (post-restoreRest), so
+ *  bone.quaternion IS the bind local. Returns whether it baked. */
+function bakeArmHold(baked: Map<string, THREE.AnimationClip>, target: THREE.SkinnedMesh, variant: string): boolean {
+  if (CLASS_BODY_SPEC[variant]?.anims) {return false;}
+  const chains = holdChains();
+  const quats = HOLD_QUATS[variant] ?? HOLD_QUATS['cybersoldier']!;
+  const roleOf = new Map<string, number>();
+  for (const b of target.skeleton.bones) {
+    const nb = normBone(b.name);
+    for (let r = 0; r < chains.length; r += 1) {
+      if (chains[r]!.has(nb)) { roleOf.set(b.name, r); break; }
+    }
+  }
+  if (roleOf.size === 0) {return false;}
+  const _hold = new THREE.Quaternion();
+  const _off = new THREE.Quaternion();
+  for (const [name, clip] of baked) {
+    // Aim poses feed the masked aim layer — flattening them would pin the
+    // pitch blend to a single constant frame.
+    if (ONESHOT_CLIPS.has(name) || name === 'UAL_Death01' || name.includes('Aim_')) {continue;}
+    for (const tr of clip.tracks) {
+      if (!tr.name.endsWith('.quaternion')) {continue;}
+      const role = roleOf.get(tr.name.slice(0, tr.name.indexOf('.')));
+      if (role === undefined) {continue;}
+      const bone = target.skeleton.getBoneByName(tr.name.slice(0, tr.name.indexOf('.')));
+      if (!bone) {continue;}
+      _hold.copy(bone.quaternion).multiply(_off.set(...quats[role]!));
+      tr.times = new Float32Array([0, clip.duration]);
+      tr.values = new Float32Array([_hold.x, _hold.y, _hold.z, _hold.w, _hold.x, _hold.y, _hold.z, _hold.w]);
+    }
+  }
+  return true;
+}
+
+
+
+/** Retargeted UAL clip table for this model's variant — baked once per
+ *  variant, name-keyed 'UAL_*'. Resolves to the shared cache on repeat
+ *  calls; rejects only if the source GLBs can't load/bake. */
+export async function bakeUALClips(model: THREE.Object3D, variant: string, env?: UalBakeEnv): Promise<Map<string, THREE.AnimationClip>> {
+  const sources = await loadSources(env);
+  const cached = bakedByVariant.get(variant);
+  if (cached) {return cached;}
+
+  // Target: this model's skinned mesh + its full skeleton. Multi-skin
+  // GLBs carry a duplicate skeleton per mesh (class_heavy's head/body/
+  // backpack/arm/leg) — GLTFLoader dedupes their joint names with `_N`
+  // suffixes. Retarget onto the UNSUFFIXED skeleton: baked track names
+  // fan out to the sibling sets below, so every skin animates instead
+  // of one mesh following clips while the rest hold bind pose.
+  let target = undefined as THREE.SkinnedMesh | undefined;
+  let firstSkin = undefined as THREE.SkinnedMesh | undefined;
+  model.traverse((o): void => {
+    if (!(o as THREE.SkinnedMesh).isSkinnedMesh) {return;}
+    const sm = o as THREE.SkinnedMesh;
+    firstSkin ??= sm;
+    if (!target && !/_\d+$/.test(sm.skeleton.bones[0]?.name ?? '')) {target = sm;}
+  });
+  target ??= firstSkin;
+  if (!target) {throw new Error('no skinned mesh to retarget onto');}
+  model.updateMatrixWorld(true);
+
+  // Snapshot the rest pose once — every bakeSource reads the hip's local
+  // transform as its bind reference and retargetClip leaves the skeleton
+  // at its last evaluated frame, so a second source would bake off the
+  // first's residue and drag the mesh ~100 units out of the body.
+  const rest = target.skeleton.bones.map(b => ({
+    b, p: b.position.clone(), q: b.quaternion.clone(), s: b.scale.clone(),
+  }));
+  const restoreRest = (): void => {
+    for (const r of rest) { r.b.position.copy(r.p); r.b.quaternion.copy(r.q); r.b.scale.copy(r.s); }
+    model.updateMatrixWorld(true);
+  };
+
+  const t0 = performance.now();
+  const baked = new Map<string, THREE.AnimationClip>();
+  // Which sources feed this rig lives on its manifest row — a new
+  // variant never edits this list, only its RIG_MANIFEST entry.
+  const want = new Set(RIG_MANIFEST[variant]?.sources ?? []);
+  for (const s of sources) {
+    if (!want.has(s.spec.id)) {continue;}
+    restoreRest();
+    for (const [name, clip] of bakeSource(s, target, model, variant)) {baked.set(name, clip);}
+  }
+  // Leave the skeleton at its authored rest, not the last baked frame.
+  restoreRest();
+
+  // Clip surgery rides inside the bake so offline-baked GLBs (_tools/
+  // animbake) ship byte-identical results — runtime retarget output and
+  // shipped clips must not diverge. Every variant's clips get the hip
+  // XZ strip (entity owns world position); mannequin's layered clips
+  // additionally yield their arm tracks to the aim layer.
+  const roots = computeRootMotionNodes(model);
+  for (const [name, clip] of baked) {
+    stripHipXZ(clip, roots);
+    if (variant === 'mannequin' && isLayeredClip(name)) {
+      clip.tracks = clip.tracks.filter((t): boolean => {
+        const bn = normBone(t.name.slice(0, t.name.indexOf('.')));
+        if (AIM_BONE_MASK.has(bn)) {return false;}
+        if (t.name.endsWith('.quaternion') && AIM_TORSO_BONES.has(bn)) {return false;}
+        return true;
+      });
+      dampenSway(clip, SWAY_BONES);
+    }
+  }
+  if (bakeArmHold(baked, target, variant)) {
+    // Marks the pack so PlayerModel skips the runtime holdBones compose —
+    // pre-bake anims files simply lack the marker and keep the old path.
+    baked.set('__holdbake1', new THREE.AnimationClip('__holdbake1', 0.01, []));
+  }
+  logger.debug(`UAL retarget baked ${baked.size} clips for ${variant} in ${(performance.now() - t0).toFixed(0)}ms`);
+  bakedByVariant.set(variant, baked);
+  return baked;
+}
+
+// Offline-baked clip packs the client prefers when present — ships the
+// whole retarget ahead of time so the async bake can't flash a T-pose
+// (and saves ~100-300ms of main-thread resample on load). Missing file
+// resolves null → runtime bake fallback keeps dev rigs working.
+const bakedFileByVariant = new Map<string, Promise<Map<string, THREE.AnimationClip> | null>>();
+
+export function loadBakedUALClips(variant: string): Promise<Map<string, THREE.AnimationClip> | null> {
+  let p = bakedFileByVariant.get(variant);
+  if (!p) {
+    p = mkGltfLoader().loadAsync(`/assets/anims/${variant}.glb`)
+      .then((gltf): Map<string, THREE.AnimationClip> | null => gltf.animations.length > 0 ? new Map(gltf.animations.map((c): [string, THREE.AnimationClip] => [c.name, c])) : null)
+      .catch((): null => null);
+    bakedFileByVariant.set(variant, p);
+  }
+  return p;
 }

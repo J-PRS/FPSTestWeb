@@ -35,6 +35,67 @@ function capsuleReach(t: { armorClass: string }, reach: number): number {
   return reach + cap.half + cap.radius;
 }
 
+/** Creature sweep — server shells connect with the swarm the same way a
+ *  client's creatureHit claim does: earliest ball contact along the leg. */
+function creatureSweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getWeaponStats>, from: Vec3, reach: number, owner: { ping: number; isBot?: boolean; clientStats?: { renderLagMs?: number; renderLag?: Record<string, number>; at?: number } } | null | undefined): boolean {
+    const {p} = proj;
+    // Creature sims run server-side — no uplink in their history and
+    // no broadcast lead, so their ghost sits exactly shooterTransit +
+    // renderDelay back.
+    const backMs = owner?.isBot ? 0 : shooterTransitMs(r.room.moveSim?.transitOf?.bind(r.room.moveSim), proj.ownerId, owner?.ping ?? 0) + renderLagOf(owner);
+    const bc = r.room.ballSim?.sweepHit(from, p.pos, reach, backMs);
+    // Species pops contest the same lane — earliest of ball/crawler
+    // contact eats the shell, so a crawler body-blocks a shot meant
+    // for a ball behind it (and vice versa).
+    const cc = r.room.creatureSim?.sweepHit(from, p.pos, reach, backMs);
+    const best = bc && (!cc || bc.t <= cc.t) ? bc : cc;
+    if (!best) {return false;}
+    const at: Vec3 = {
+      x: from.x + (p.pos.x - from.x) * best.t,
+      y: from.y + (p.pos.y - from.y) * best.t,
+      z: from.z + (p.pos.z - from.z) * best.t,
+    };
+    const bodyDirect = best === bc
+      ? ((): boolean => { const ball = r.room.ballSim?.ballAt(bc!.id); return ball !== undefined && ball !== null && bc!.d <= ball.radius + stats.bodyRadius; })()
+      : best.d <= stats.bodyRadius + 1;
+    if (stats.stick) { r.attach(proj, at); return true; }
+    r.detonate(proj, at, null, best === bc ? best.id : undefined, bodyDirect, best === cc ? best.id : undefined);
+    return true;
+  }
+
+
+
+/** Player sweep — a cheap midpoint-sphere reject (server |vel|·dt bound
+ *  plus teleport slack) skips anyone who cannot displace into reach this
+ *  tick before the per-candidate segment solve runs. */
+function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getWeaponStats>, from: Vec3, reach: number, dt: number, owner: { ping: number; isBot?: boolean; clientStats?: { renderLagMs?: number; renderLag?: Record<string, number>; at?: number } } | null | undefined): boolean {
+    const {p} = proj;
+    const midX = (from.x + p.pos.x) / 2, midY = (from.y + p.pos.y) / 2, midZ = (from.z + p.pos.z) / 2;
+    const halfLen = Math.hypot(p.pos.x - from.x, p.pos.y - from.y, p.pos.z - from.z) / 2;
+    for (const [pid, target] of r.room.players.getAllPlayers()) {
+      if (pid === proj.ownerId || target.isDead) {continue;}
+      const back = ghostBack(r, owner, proj.ownerId, pid);
+      const speed = Math.hypot(target.velocity.x, target.velocity.y, target.velocity.z);
+      const margin = capsuleReach(target, reach) + halfLen + (speed + 25) * dt + speed * back / 1000;
+      const center = capsuleCenter(target);
+      const dx = center.x - midX, dy = center.y - midY, dz = center.z - midZ;
+      if (dx * dx + dy * dy + dz * dz > margin * margin) {continue;}
+      const tp = rewindPos(target, back);
+      const pc = { x: tp.x, y: tp.y + classCapsule(target.armorClass).centerOff, z: tp.z };
+      const pd = segPointDist(from, p.pos, pc);
+      if (pd <= capsuleReach(target, reach)) {
+        // Wake contact counts as a hit but earns no airtime ramp — the
+        // skillshot bonus is body-contact only, like the claim path.
+        if (stats.stick) { r.attach(proj, Object.assign({}, p.pos), pid); return true; }
+        r.detonate(proj, Object.assign({}, p.pos), pid, undefined, pd <= classCapsule(target.armorClass).radius + stats.bodyRadius);
+        return true;
+      }
+    }
+    return false;
+  }
+
+
+
 export function stepContact(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getWeaponStats>, from: Vec3, dt: number): boolean {
     const {p} = proj;
     // Server shells pop on first contact; the client's own bounce arc
@@ -102,63 +163,6 @@ export function stepContact(r: ContactHost, proj: LiveProj, stats: ReturnType<ty
     const reach = Math.max(stats.bodyRadius, hitRadiusAt(proj.weaponType, p.age));
     const owner = r.room.players.getPlayer(proj.ownerId);
     return bodySweep(r, proj, stats, from, reach, dt, owner) || creatureSweep(r, proj, stats, from, reach, owner);
-  }
-
-/** Player sweep — a cheap midpoint-sphere reject (server |vel|·dt bound
- *  plus teleport slack) skips anyone who cannot displace into reach this
- *  tick before the per-candidate segment solve runs. */
-function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getWeaponStats>, from: Vec3, reach: number, dt: number, owner: { ping: number; isBot?: boolean; clientStats?: { renderLagMs?: number; renderLag?: Record<string, number>; at?: number } } | null | undefined): boolean {
-    const {p} = proj;
-    const midX = (from.x + p.pos.x) / 2, midY = (from.y + p.pos.y) / 2, midZ = (from.z + p.pos.z) / 2;
-    const halfLen = Math.hypot(p.pos.x - from.x, p.pos.y - from.y, p.pos.z - from.z) / 2;
-    for (const [pid, target] of r.room.players.getAllPlayers()) {
-      if (pid === proj.ownerId || target.isDead) {continue;}
-      const back = ghostBack(r, owner, proj.ownerId, pid);
-      const speed = Math.hypot(target.velocity.x, target.velocity.y, target.velocity.z);
-      const margin = capsuleReach(target, reach) + halfLen + (speed + 25) * dt + speed * back / 1000;
-      const center = capsuleCenter(target);
-      const dx = center.x - midX, dy = center.y - midY, dz = center.z - midZ;
-      if (dx * dx + dy * dy + dz * dz > margin * margin) {continue;}
-      const tp = rewindPos(target, back);
-      const pc = { x: tp.x, y: tp.y + classCapsule(target.armorClass).centerOff, z: tp.z };
-      const pd = segPointDist(from, p.pos, pc);
-      if (pd <= capsuleReach(target, reach)) {
-        // Wake contact counts as a hit but earns no airtime ramp — the
-        // skillshot bonus is body-contact only, like the claim path.
-        if (stats.stick) { r.attach(proj, Object.assign({}, p.pos), pid); return true; }
-        r.detonate(proj, Object.assign({}, p.pos), pid, undefined, pd <= classCapsule(target.armorClass).radius + stats.bodyRadius);
-        return true;
-      }
-    }
-    return false;
-  }
-
-/** Creature sweep — server shells connect with the swarm the same way a
- *  client's creatureHit claim does: earliest ball contact along the leg. */
-function creatureSweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getWeaponStats>, from: Vec3, reach: number, owner: { ping: number; isBot?: boolean; clientStats?: { renderLagMs?: number; renderLag?: Record<string, number>; at?: number } } | null | undefined): boolean {
-    const {p} = proj;
-    // Creature sims run server-side — no uplink in their history and
-    // no broadcast lead, so their ghost sits exactly shooterTransit +
-    // renderDelay back.
-    const backMs = owner?.isBot ? 0 : shooterTransitMs(r.room.moveSim?.transitOf?.bind(r.room.moveSim), proj.ownerId, owner?.ping ?? 0) + renderLagOf(owner);
-    const bc = r.room.ballSim?.sweepHit(from, p.pos, reach, backMs);
-    // Species pops contest the same lane — earliest of ball/crawler
-    // contact eats the shell, so a crawler body-blocks a shot meant
-    // for a ball behind it (and vice versa).
-    const cc = r.room.creatureSim?.sweepHit(from, p.pos, reach, backMs);
-    const best = bc && (!cc || bc.t <= cc.t) ? bc : cc;
-    if (!best) {return false;}
-    const at: Vec3 = {
-      x: from.x + (p.pos.x - from.x) * best.t,
-      y: from.y + (p.pos.y - from.y) * best.t,
-      z: from.z + (p.pos.z - from.z) * best.t,
-    };
-    const bodyDirect = best === bc
-      ? ((): boolean => { const ball = r.room.ballSim?.ballAt(bc!.id); return ball !== undefined && ball !== null && bc!.d <= ball.radius + stats.bodyRadius; })()
-      : best.d <= stats.bodyRadius + 1;
-    if (stats.stick) { r.attach(proj, at); return true; }
-    r.detonate(proj, at, null, best === bc ? best.id : undefined, bodyDirect, best === cc ? best.id : undefined);
-    return true;
   }
 
   /** Fire the shell's hitscan beam along its velocity line. Order of

@@ -9,6 +9,22 @@ const DEMO_ZERO_FRAME = {
   posX: 0, posY: 0, posZ: 0, yaw: 0, pitch: 0, velX: 0, velY: 0, velZ: 0,
 } as unknown as DemoFrame;
 
+function startFrame(first: DemoFrame | null) {
+  const f = first ?? DEMO_ZERO_FRAME;
+  return {
+    startPosX: f.posX,
+    startPosY: f.posY,
+    startPosZ: f.posZ,
+    startYaw: f.yaw,
+    startPitch: f.pitch,
+    startVelX: f.velX,
+    startVelY: f.velY,
+    startVelZ: f.velZ,
+  };
+}
+
+
+
 export function buildDemoFile(r: DemoRecorder, description = ''): DemoFile {
   const frames = r.frameBuffer.extractAll();
   // Same window semantics as extractClip: a target whose Spawned aged
@@ -33,20 +49,6 @@ export function buildDemoFile(r: DemoRecorder, description = ''): DemoFile {
     targetEvents,
     roster: r.roster.map(e => Object.assign({}, e)),
     remoteFrames: [...r.remoteFrames]}, (r.heightmap ? { heightmap: r.heightmap } : {}));
-}
-
-function startFrame(first: DemoFrame | null) {
-  const f = first ?? DEMO_ZERO_FRAME;
-  return {
-    startPosX: f.posX,
-    startPosY: f.posY,
-    startPosZ: f.posZ,
-    startYaw: f.yaw,
-    startPitch: f.pitch,
-    startVelX: f.velX,
-    startVelY: f.velY,
-    startVelZ: f.velZ,
-  };
 }
 
 export function extractClip(r: DemoRecorder, startTime: number, endTime: number, description: string, projectileLifetime = 0): DemoFile | null {

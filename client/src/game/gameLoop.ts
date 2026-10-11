@@ -268,6 +268,31 @@ const _contactBodies: BodyCapsule[] = [];
  *  projectiles. Returns demoPaused for the later stages. */
 interface TickFrame { dt: number; player: Player; networkManager: NetworkManager; demoManager: DemoManager | null }
 const fmtBps = (b: number): string => b >= 1_048_576 ? `${(b / 1_048_576).toFixed(1)}MB/s` : b >= 1024 ? `${(b / 1024).toFixed(1)}KB/s` : `${Math.round(b)}B/s`;
+
+function tickEntities(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, dt: number, demoPlaying: boolean): void {
+  const {entities} = deps;
+  entities.updateBalls(dt);
+  perf.mark('balls');
+  // ?mode=classic — balls are the whole roster, every other species'
+  // tick is skipped (they self-spawn ambiently, so ticking = populating)
+  if (!CLASSIC_MODE) {
+    entities.updateSpeciesAll(dt);
+    entities.updateDeployables(dt);
+  }
+  perf.mark('species');
+  // Ambient population is an offline feature — connected rooms own
+  // their balls/creatures on the wire; the director spawning locals
+  // alongside them was the busy double-population on join.
+  if (!demoPlaying && !deps.lazyNetworkManager().isConnected()) {deps.waveDirector().update(dt);}
+  if (!demoPlaying) {entities.updateNuggets(dt);}
+  deps.teamBots?.()?.update(dt);
+  perf.mark('bots');
+  if (!demoPlaying) {deps.combat()?.updateProjectiles(dt);}
+  deps.demoLifecycle().updatePlaybackProjectiles(dt);
+  perf.mark('proj');
+}
+
+
 function simTick(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, f: TickFrame, terrain: Terrain): boolean {
   const { dt, player, demoManager, networkManager } = f;
   // Offline pause: a hidden tab rAFs ~1/s, so the local match would crawl
@@ -324,29 +349,6 @@ bodyN += 1;
 
   tickEntities(deps, perf, dt, demoManager?.isPlaying ?? false);
   return false;
-}
-
-function tickEntities(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, dt: number, demoPlaying: boolean): void {
-  const {entities} = deps;
-  entities.updateBalls(dt);
-  perf.mark('balls');
-  // ?mode=classic — balls are the whole roster, every other species'
-  // tick is skipped (they self-spawn ambiently, so ticking = populating)
-  if (!CLASSIC_MODE) {
-    entities.updateSpeciesAll(dt);
-    entities.updateDeployables(dt);
-  }
-  perf.mark('species');
-  // Ambient population is an offline feature — connected rooms own
-  // their balls/creatures on the wire; the director spawning locals
-  // alongside them was the busy double-population on join.
-  if (!demoPlaying && !deps.lazyNetworkManager().isConnected()) {deps.waveDirector().update(dt);}
-  if (!demoPlaying) {entities.updateNuggets(dt);}
-  deps.teamBots?.()?.update(dt);
-  perf.mark('bots');
-  if (!demoPlaying) {deps.combat()?.updateProjectiles(dt);}
-  deps.demoLifecycle().updatePlaybackProjectiles(dt);
-  perf.mark('proj');
 }
 
 /** Stage 2 — transient VFX on wall-clock fxDt so they decay while the

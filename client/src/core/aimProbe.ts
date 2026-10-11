@@ -17,6 +17,32 @@ _ray.params.Line = { threshold: 1.5 };
 const _ndc = new THREE.Vector2(0, 0);
 const MAX_HITS = 5;
 
+function describeHit(h: THREE.Intersection): string {
+  const d = h.object.userData.dbg as DbgTag;
+  if (d.kind === 'trailBatch') {
+    const slot = Math.floor((h.faceIndex ?? 0) / RIBBON_TRIS_PER_SLOT);
+    return `ribbon ${JSON.stringify(RibbonTrail.identify(d.batch as TrailBatch, slot))}`;
+  }
+  if (d.kind === 'species') {
+    const owner = (d.swarm as SpeciesSwarm).ownerAt(d.part!, h.instanceId ?? -1);
+    return `species:${d.species} owner=${describeOwner(owner)}`;
+  }
+  return describePooled(d, h);
+}
+
+
+
+/** Type + parent chain + name — enough to find which subsystem owns an
+ *  untagged render object without guessing. */
+function describeRaw(o: THREE.Object3D): string {
+  const chain: string[] = [];
+  for (let p: THREE.Object3D | null = o; p && chain.length < 3; p = p.parent)
+    {chain.push(`${p.type}${p.name ? `(${p.name})` : ''}`);}
+  return chain.join(' < ');
+}
+
+
+
 /** Best-first list of tagged objects under the crosshair, e.g.
  *  `42m ribbon {"slot":20,"owner":true,...}`. Empty when nothing tags. */
 export function aimProbe(scene: THREE.Scene, camera: THREE.Camera): string[] {
@@ -35,27 +61,20 @@ export function aimProbe(scene: THREE.Scene, camera: THREE.Camera): string[] {
     .map((h): string => `${h.distance.toFixed(0)}m untagged ${describeRaw(h.object)}`);
 }
 
-/** Type + parent chain + name — enough to find which subsystem owns an
- *  untagged render object without guessing. */
-function describeRaw(o: THREE.Object3D): string {
-  const chain: string[] = [];
-  for (let p: THREE.Object3D | null = o; p && chain.length < 3; p = p.parent)
-    {chain.push(`${p.type}${p.name ? `(${p.name})` : ''}`);}
-  return chain.join(' < ');
+// SwarmSlotOwner carries no name — best-effort identity from whatever
+// the concrete owner exposes (Ball has pos/netId, RemotePlayer has id).
+function describeOwner(owner: SwarmSlotOwner | undefined): string {
+  if (!owner) {return 'none';}
+  const o = owner as SwarmSlotOwner & {
+    pos?: { x: number; y: number; z: number };
+    netId?: number; playerId?: string; dead?: boolean;
+  };
+  const pos = o.pos ? ` @${o.pos.x.toFixed(0)},${o.pos.y.toFixed(0)},${o.pos.z.toFixed(0)}` : '';
+  const id = o.playerId ?? (o.netId === undefined ? '' : `net${o.netId}`);
+  return `${o.constructor.name}${id ? `(${id})` : ''}${o.dead ? ' DEAD' : ''}${pos}`;
 }
 
-function describeHit(h: THREE.Intersection): string {
-  const d = h.object.userData.dbg as DbgTag;
-  if (d.kind === 'trailBatch') {
-    const slot = Math.floor((h.faceIndex ?? 0) / RIBBON_TRIS_PER_SLOT);
-    return `ribbon ${JSON.stringify(RibbonTrail.identify(d.batch as TrailBatch, slot))}`;
-  }
-  if (d.kind === 'species') {
-    const owner = (d.swarm as SpeciesSwarm).ownerAt(d.part!, h.instanceId ?? -1);
-    return `species:${d.species} owner=${describeOwner(owner)}`;
-  }
-  return describePooled(d, h);
-}
+
 
 // Instance-backed pools — one describe for anything with a slot index +
 // a free list, since the leak signature is the same for all of them:
@@ -89,15 +108,4 @@ function describePooled(d: DbgTag, h: THREE.Intersection): string {
   }
 }
 
-// SwarmSlotOwner carries no name — best-effort identity from whatever
-// the concrete owner exposes (Ball has pos/netId, RemotePlayer has id).
-function describeOwner(owner: SwarmSlotOwner | undefined): string {
-  if (!owner) {return 'none';}
-  const o = owner as SwarmSlotOwner & {
-    pos?: { x: number; y: number; z: number };
-    netId?: number; playerId?: string; dead?: boolean;
-  };
-  const pos = o.pos ? ` @${o.pos.x.toFixed(0)},${o.pos.y.toFixed(0)},${o.pos.z.toFixed(0)}` : '';
-  const id = o.playerId ?? (o.netId === undefined ? '' : `net${o.netId}`);
-  return `${o.constructor.name}${id ? `(${id})` : ''}${o.dead ? ' DEAD' : ''}${pos}`;
-}
+

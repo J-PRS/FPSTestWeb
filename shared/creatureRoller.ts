@@ -58,6 +58,39 @@ export function makeSimRoller(
   };
 }
 
+/** Rolling contact — the body IS the weapon, no separate swing. */
+function rollContact(c: SimRoller, target: SimVec | null, authoritative: boolean): CrawlerEvent | null {
+  if (target && c.hitCd <= 0) {
+    const d3 = (target.x - c.x) ** 2 + (target.y - c.y) ** 2 + (target.z - c.z) ** 2;
+    if (d3 < c.sp.HIT_R * c.sp.HIT_R) {
+      c.hitCd = c.sp.BITE_CD;
+      if (authoritative) {c.pendingBite = true;}
+      return 'bite';
+    }
+  }
+  return null;
+}
+
+
+
+/** Push toward the committed snapshot, capped — stunned rollers coast. */
+function rollSteer(c: SimRoller, dt: number, target: SimVec | null, dx: number, dz: number, distSq: number): void {
+  if (c.stunTimer <= 0 && target && distSq > 0.01) {
+    const aggro = distSq < c.sp.AGGRO_D2;
+    const d = Math.sqrt(distSq);
+    const k = c.sp.ACCEL * (aggro ? 1 : 0.2) * dt;
+    c.vx += (dx / d) * k;
+    c.vz += (dz / d) * k;
+  }
+  const hSpeed = Math.hypot(c.vx, c.vz);
+  if (hSpeed > c.sp.TOPSPEED) {
+    const s = c.sp.TOPSPEED / hSpeed;
+    c.vx *= s; c.vz *= s;
+  }
+}
+
+
+
 export function stepRoller(
   c: SimRoller,
   dt: number,
@@ -92,35 +125,6 @@ export function stepRoller(
   if (hSpeed > 0.5) {c.yaw = Math.atan2(c.vx, c.vz);}
 
   return rollContact(c, target, authoritative);
-}
-
-/** Push toward the committed snapshot, capped — stunned rollers coast. */
-function rollSteer(c: SimRoller, dt: number, target: SimVec | null, dx: number, dz: number, distSq: number): void {
-  if (c.stunTimer <= 0 && target && distSq > 0.01) {
-    const aggro = distSq < c.sp.AGGRO_D2;
-    const d = Math.sqrt(distSq);
-    const k = c.sp.ACCEL * (aggro ? 1 : 0.2) * dt;
-    c.vx += (dx / d) * k;
-    c.vz += (dz / d) * k;
-  }
-  const hSpeed = Math.hypot(c.vx, c.vz);
-  if (hSpeed > c.sp.TOPSPEED) {
-    const s = c.sp.TOPSPEED / hSpeed;
-    c.vx *= s; c.vz *= s;
-  }
-}
-
-/** Rolling contact — the body IS the weapon, no separate swing. */
-function rollContact(c: SimRoller, target: SimVec | null, authoritative: boolean): CrawlerEvent | null {
-  if (target && c.hitCd <= 0) {
-    const d3 = (target.x - c.x) ** 2 + (target.y - c.y) ** 2 + (target.z - c.z) ** 2;
-    if (d3 < c.sp.HIT_R * c.sp.HIT_R) {
-      c.hitCd = c.sp.BITE_CD;
-      if (authoritative) {c.pendingBite = true;}
-      return 'bite';
-    }
-  }
-  return null;
 }
 
 export function applyRollerDamage(c: SimRoller, damage: number): boolean {

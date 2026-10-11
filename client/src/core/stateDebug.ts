@@ -110,6 +110,37 @@ declare global {
   }
 }
 
+function hashableEntry(
+  rp: RemotePlayer | undefined,
+  playerData: { position?: { x: number; y: number; z: number }; health?: number; isDead?: boolean } | undefined,
+): { x: number; y: number; z: number; health: number; isDead: boolean } | null {
+  const p = playerData?.position ?? rp?.position;
+  if (!p) {return null;}
+  return {
+    x: p.x, y: p.y, z: p.z,
+    health: playerData?.health ?? 100,
+    isDead: playerData?.isDead ?? rp?.isDead ?? false,
+  };
+}
+
+
+
+/** Echo-channel grace events observed per player while building the map:
+ *  dead flips and "health still fabricated" both re-arm the join window. */
+function noteEchoRace(id: string, isDead: boolean, health: number | undefined, now: number): void {
+  if (deadState.get(id) !== isDead) {
+    deadState.set(id, isDead);
+    firstSeenAt.set(id, now);
+  }
+  if (health === undefined && !healthSeen.has(id)) {
+    firstSeenAt.set(id, now);
+  } else if (health !== undefined) {
+    healthSeen.add(id);
+  }
+}
+
+
+
 // Build the player map the way the server hashes it: local player uses
 // lastSentPos (the server only knows what we've sent), remotes use raw
 // NetworkManager data so unrendered players still count.
@@ -166,37 +197,42 @@ function noteSeenIds(ids: Iterable<string>): void {
   }
 }
 
-/** Echo-channel grace events observed per player while building the map:
- *  dead flips and "health still fabricated" both re-arm the join window. */
-function noteEchoRace(id: string, isDead: boolean, health: number | undefined, now: number): void {
-  if (deadState.get(id) !== isDead) {
-    deadState.set(id, isDead);
-    firstSeenAt.set(id, now);
-  }
-  if (health === undefined && !healthSeen.has(id)) {
-    firstSeenAt.set(id, now);
-  } else if (health !== undefined) {
-    healthSeen.add(id);
-  }
-}
-
 function youngId(id: string): boolean {
   const t = firstSeenAt.get(id);
   return t !== undefined && Date.now() - t < JOIN_GRACE_MS;
 }
 
-function hashableEntry(
-  rp: RemotePlayer | undefined,
-  playerData: { position?: { x: number; y: number; z: number }; health?: number; isDead?: boolean } | undefined,
-): { x: number; y: number; z: number; health: number; isDead: boolean } | null {
-  const p = playerData?.position ?? rp?.position;
-  if (!p) {return null;}
-  return {
-    x: p.x, y: p.y, z: p.z,
-    health: playerData?.health ?? 100,
-    isDead: playerData?.isDead ?? rp?.isDead ?? false,
-  };
+function diffPlayerFields(
+  id: string,
+  cp: { x: number; y: number; z: number; health: number; isDead: boolean },
+  sp: { position: { x: number; y: number; z: number }; health: number; isDead: boolean },
+  healthDriftIds: string[],
+  deadDriftIds: string[],
+): string[] {
+  const diffs: string[] = [];
+  const dx = Math.abs(cp.x - sp.position.x);
+  const dy = Math.abs(cp.y - sp.position.y);
+  const dz = Math.abs(cp.z - sp.position.z);
+  if (Math.max(dx, dy, dz) > POSITION_TOLERANCE) {
+    // Print BOTH positions, not just the delta — a frozen delta means one
+    // end parked (spawn/teleport desync), and you can't tell which end is
+    // stranded without the coordinates.
+    diffs.push(`[sim] Player ${id} position delta=(${dx.toFixed(1)},${dy.toFixed(1)},${dz.toFixed(1)}) client=${fmt(cp)} server=${fmt(sp.position)}`);
+  }
+  // echo channel: a live heal window is stale-low by up to an echo
+  // interval (~2hp) when the snapshot lands — real desyncs are >=9hp.
+  if (Math.abs(cp.health - sp.health) > HEALTH_TOLERANCE) {
+    diffs.push(`[echo] Player ${id} health: client=${cp.health} server=${sp.health}`);
+    healthDriftIds.push(id);
+  }
+  if (cp.isDead !== sp.isDead) {
+    diffs.push(`[edge] Player ${id} isDead: client=${cp.isDead} server=${sp.isDead}`);
+    deadDriftIds.push(id);
+  }
+  return diffs;
 }
+
+
 
 // Diff client-side player state against a server snapshot; returns significant diffs.
 function diffServerSnapshot(
@@ -233,36 +269,6 @@ function diffServerSnapshot(
     diffs.push(...diffPlayerFields(id, cp, sp, healthDriftIds, deadDriftIds));
   }
   return { diffs, healthDriftIds, deadDriftIds, memberDriftIds };
-}
-
-function diffPlayerFields(
-  id: string,
-  cp: { x: number; y: number; z: number; health: number; isDead: boolean },
-  sp: { position: { x: number; y: number; z: number }; health: number; isDead: boolean },
-  healthDriftIds: string[],
-  deadDriftIds: string[],
-): string[] {
-  const diffs: string[] = [];
-  const dx = Math.abs(cp.x - sp.position.x);
-  const dy = Math.abs(cp.y - sp.position.y);
-  const dz = Math.abs(cp.z - sp.position.z);
-  if (Math.max(dx, dy, dz) > POSITION_TOLERANCE) {
-    // Print BOTH positions, not just the delta — a frozen delta means one
-    // end parked (spawn/teleport desync), and you can't tell which end is
-    // stranded without the coordinates.
-    diffs.push(`[sim] Player ${id} position delta=(${dx.toFixed(1)},${dy.toFixed(1)},${dz.toFixed(1)}) client=${fmt(cp)} server=${fmt(sp.position)}`);
-  }
-  // echo channel: a live heal window is stale-low by up to an echo
-  // interval (~2hp) when the snapshot lands — real desyncs are >=9hp.
-  if (Math.abs(cp.health - sp.health) > HEALTH_TOLERANCE) {
-    diffs.push(`[echo] Player ${id} health: client=${cp.health} server=${sp.health}`);
-    healthDriftIds.push(id);
-  }
-  if (cp.isDead !== sp.isDead) {
-    diffs.push(`[edge] Player ${id} isDead: client=${cp.isDead} server=${sp.isDead}`);
-    deadDriftIds.push(id);
-  }
-  return diffs;
 }
 
 /** Health is an echo field under combat — a remote taking hits mutates
@@ -357,6 +363,80 @@ function reportStateComparison(
 
   return result;
 }
+
+function exposeDebugWindowFunctions(ctx: StateDebugContext): void {
+  if (typeof window === 'undefined') {return;}
+  const { networkManager, logger } = ctx;
+
+  window.takeClientSnapshot = (): GameStateSnapshot => {
+    const playerMap = new Map<string, Omit<EntityState, 'id'>>();
+    const player = ctx.getPlayer();
+    playerMap.set('local', {
+      position: { x: player.pos.x, y: player.pos.y, z: player.pos.z },
+      velocity: { x: player.vel.x, y: player.vel.y, z: player.vel.z },
+      health: player.health,
+      isDead: player.isDead,
+      rotation: { yaw: player.yaw, pitch: player.pitch }
+    });
+
+    for (const [id, rp] of ctx.remotePlayers) {
+      // Health lives in NetworkManager's player map, not on the render
+      // replica — hashing a hardcoded 100 made every compareState report
+      // show remote health as fiction.
+      const data = ctx.networkManager.getPlayers().get(id);
+      playerMap.set(id, {
+        position: { x: rp.position.x, y: rp.position.y, z: rp.position.z },
+        velocity: { x: 0, y: 0, z: 0 },
+        health: data?.health ?? 100,
+        isDead: rp.isDead || false,
+        rotation: { yaw: rp.rotation.yaw, pitch: rp.rotation.pitch }
+      });
+    }
+
+    const snapshot = StateSnapshot.create(playerMap, ctx.projectiles.map(p => ({
+      id: p.serverProjectileId ?? `demo-${p.demoProjectileId}`,
+      ownerId: p.isRemote ? 'remote' : ctx.networkManager.getLocalPlayerId(),
+      position: { x: p.pos.x, y: p.pos.y, z: p.pos.z },
+      velocity: { x: p.vel.x, y: p.vel.y, z: p.vel.z },
+    })), 'client');
+    StateSnapshot.save(snapshot);
+    logger.info('Client snapshot taken');
+    return snapshot;
+  };
+
+  window.requestServerSnapshot = (): void => {
+    if (networkManager.isConnected()) {
+      networkManager.sendSnapshotRequest();
+      logger.info('Requested server snapshot');
+    } else {
+      logger.warn('Not connected - cannot request server snapshot');
+    }
+  };
+
+  window.exportClientSnapshots = (): void => {
+    StateSnapshot.exportSnapshots();
+  };
+
+  window.compareState = (): void => {
+    if (!networkManager.isConnected()) {
+      logger.warn('Not connected');
+      return;
+    }
+
+    const clientSnapshot = window.takeClientSnapshot!();
+    logger.info('Client snapshot hash:', clientSnapshot.hash);
+
+    pendingServerSnapshot = (serverPlayers: SnapshotPlayer[], _timestamp: number): { hashMatch: boolean; playerDifferences: string[]; projectileDifferences: string[]; } =>
+      reportStateComparison(logger, clientSnapshot, serverPlayers);
+
+    networkManager.sendSnapshotRequest();
+    logger.info('CompareState: requested server snapshot, waiting for response...');
+  };
+
+  logger.info('Client snapshot functions available: takeClientSnapshot(), requestServerSnapshot(), compareState(), exportClientSnapshots()');
+}
+
+
 
 // Wire the onSnapshot/onStateHash handlers and expose window debug functions.
 // Call once after networkManager exists (post-init).
@@ -680,76 +760,4 @@ hashMismatchCount += 1;
   Logger.setDiagnostics((verbose: boolean): string[] => diagLines(ctx, verbose));
 
   exposeDebugWindowFunctions(ctx);
-}
-
-function exposeDebugWindowFunctions(ctx: StateDebugContext): void {
-  if (typeof window === 'undefined') {return;}
-  const { networkManager, logger } = ctx;
-
-  window.takeClientSnapshot = (): GameStateSnapshot => {
-    const playerMap = new Map<string, Omit<EntityState, 'id'>>();
-    const player = ctx.getPlayer();
-    playerMap.set('local', {
-      position: { x: player.pos.x, y: player.pos.y, z: player.pos.z },
-      velocity: { x: player.vel.x, y: player.vel.y, z: player.vel.z },
-      health: player.health,
-      isDead: player.isDead,
-      rotation: { yaw: player.yaw, pitch: player.pitch }
-    });
-
-    for (const [id, rp] of ctx.remotePlayers) {
-      // Health lives in NetworkManager's player map, not on the render
-      // replica — hashing a hardcoded 100 made every compareState report
-      // show remote health as fiction.
-      const data = ctx.networkManager.getPlayers().get(id);
-      playerMap.set(id, {
-        position: { x: rp.position.x, y: rp.position.y, z: rp.position.z },
-        velocity: { x: 0, y: 0, z: 0 },
-        health: data?.health ?? 100,
-        isDead: rp.isDead || false,
-        rotation: { yaw: rp.rotation.yaw, pitch: rp.rotation.pitch }
-      });
-    }
-
-    const snapshot = StateSnapshot.create(playerMap, ctx.projectiles.map(p => ({
-      id: p.serverProjectileId ?? `demo-${p.demoProjectileId}`,
-      ownerId: p.isRemote ? 'remote' : ctx.networkManager.getLocalPlayerId(),
-      position: { x: p.pos.x, y: p.pos.y, z: p.pos.z },
-      velocity: { x: p.vel.x, y: p.vel.y, z: p.vel.z },
-    })), 'client');
-    StateSnapshot.save(snapshot);
-    logger.info('Client snapshot taken');
-    return snapshot;
-  };
-
-  window.requestServerSnapshot = (): void => {
-    if (networkManager.isConnected()) {
-      networkManager.sendSnapshotRequest();
-      logger.info('Requested server snapshot');
-    } else {
-      logger.warn('Not connected - cannot request server snapshot');
-    }
-  };
-
-  window.exportClientSnapshots = (): void => {
-    StateSnapshot.exportSnapshots();
-  };
-
-  window.compareState = (): void => {
-    if (!networkManager.isConnected()) {
-      logger.warn('Not connected');
-      return;
-    }
-
-    const clientSnapshot = window.takeClientSnapshot!();
-    logger.info('Client snapshot hash:', clientSnapshot.hash);
-
-    pendingServerSnapshot = (serverPlayers: SnapshotPlayer[], _timestamp: number): { hashMatch: boolean; playerDifferences: string[]; projectileDifferences: string[]; } =>
-      reportStateComparison(logger, clientSnapshot, serverPlayers);
-
-    networkManager.sendSnapshotRequest();
-    logger.info('CompareState: requested server snapshot, waiting for response...');
-  };
-
-  logger.info('Client snapshot functions available: takeClientSnapshot(), requestServerSnapshot(), compareState(), exportClientSnapshots()');
 }

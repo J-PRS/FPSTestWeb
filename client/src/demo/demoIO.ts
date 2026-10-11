@@ -49,6 +49,24 @@ export function saveDemo(h: DemoIOHost): void {
   downloadDemoFile(data, `demo_${timestampStr()}.demo`);
 }
 
+// Shared post-load: parked at 0, not playing — differs from playDemoData
+// which starts playback immediately.
+export function finishLoad(h: DemoIOHost, data: DemoFile): void {
+  if (h.recorder.isRecording) {
+    h.coolShotMgr.flushPending();
+    h.recorder.stop();
+    h.ui.setRecording(false);
+    h.ui.setStatus('');
+  }
+  h.player.load(data);
+  h.setMode('idle');
+  h.ui.setPlaying(false);
+  h.ui.setTime(0, data.header.duration);
+  updateHitMarkers(h, data);
+}
+
+
+
 // Load demo from file
 export async function loadDemo(h: DemoIOHost, file: File): Promise<void> {
   try {
@@ -70,22 +88,6 @@ export function loadDemoFromBuffer(h: DemoIOHost, buffer: ArrayBuffer): void {
     logger.error('Failed to load demo:', error);
     h.ui.setStatus(`Load error: ${(error as Error).message}`);
   }
-}
-
-// Shared post-load: parked at 0, not playing — differs from playDemoData
-// which starts playback immediately.
-export function finishLoad(h: DemoIOHost, data: DemoFile): void {
-  if (h.recorder.isRecording) {
-    h.coolShotMgr.flushPending();
-    h.recorder.stop();
-    h.ui.setRecording(false);
-    h.ui.setStatus('');
-  }
-  h.player.load(data);
-  h.setMode('idle');
-  h.ui.setPlaying(false);
-  h.ui.setTime(0, data.header.duration);
-  updateHitMarkers(h, data);
 }
 
 export function updateHitMarkers(h: DemoIOHost, data: DemoFile): void {
@@ -117,3 +119,5 @@ export function updateHitMarkers(h: DemoIOHost, data: DemoFile): void {
 
   h.ui.setMarkers(hitTimes, shotTimes, data.header.duration);
 }
+
+

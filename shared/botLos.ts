@@ -44,21 +44,6 @@ function losKey(ctx: BrainCtx, from: BotVec, to: BotVec): number {
   return (((ax * 4096 + az) * 4096 + bx) * 4096 + bz) * 4 + t;
 }
 
-export function losClear(ctx: BrainCtx, from: BotVec, to: BotVec): boolean {
-  const key = losKey(ctx, from, to);
-  const hit = losMemo.get(key);
-  if (hit && hit.until > ctx.now) {return hit.clear;}
-  const clear = losMarch(ctx, from, to);
-  // Bound the map — combat bots reuse a narrow band of cells, and stale
-  // entries self-expire anyway; sweep only when it balloons.
-  if (losMemo.size > 4096) {
-    for (const [k, v] of losMemo) {if (v.until <= ctx.now) {losMemo.delete(k);}}
-    if (losMemo.size > 4096) {losMemo.clear();}
-  }
-  losMemo.set(key, { clear, until: ctx.now + LOS_TTL_MS });
-  return clear;
-}
-
 /** Heightfield LOS — march the eye→target line, fail where ground rises
  *  above it. pos.y is eye-height on the client and near-feet on the
  *  server, so the eye point is whichever is higher of pos.y and
@@ -84,4 +69,21 @@ function losMarch(ctx: BrainCtx, from: BotVec, to: BotVec): boolean {
       segSolidHit({ x: from.x, y: y0, z: from.z }, { x: to.x, y: y1, z: to.z },
                   ctx.solids, ctx.solidIndex ?? undefined, ctx.team)) {return false;}
   return true;
+}
+
+
+
+export function losClear(ctx: BrainCtx, from: BotVec, to: BotVec): boolean {
+  const key = losKey(ctx, from, to);
+  const hit = losMemo.get(key);
+  if (hit && hit.until > ctx.now) {return hit.clear;}
+  const clear = losMarch(ctx, from, to);
+  // Bound the map — combat bots reuse a narrow band of cells, and stale
+  // entries self-expire anyway; sweep only when it balloons.
+  if (losMemo.size > 4096) {
+    for (const [k, v] of losMemo) {if (v.until <= ctx.now) {losMemo.delete(k);}}
+    if (losMemo.size > 4096) {losMemo.clear();}
+  }
+  losMemo.set(key, { clear, until: ctx.now + LOS_TTL_MS });
+  return clear;
 }

@@ -80,12 +80,6 @@ export function spawnBolt<T>(h: BoltHost<T>, vel: THREE.Vector3, muzzle?: THREE.
   });
 }
 
-/** Cooked mid-air by a player shell — same cleanup as a landed bolt, no callbacks. */
-export function detonateBolt<T>(h: BoltHost<T>, i: number): void {
-  if (!h.bolts[i]) {return;}
-  removeBolt(h, i);
-}
-
 function removeBolt<T>(h: BoltHost<T>, i: number): void {
   const b = h.bolts[i];
   if (!b) {return;}
@@ -94,6 +88,14 @@ function removeBolt<T>(h: BoltHost<T>, i: number): void {
   b.ribbon.stop(); // streak stops emitting; deadRibbons fades+disposes it
   h.deadRibbons.push(b.ribbon);
   h.bolts.splice(i, 1);
+}
+
+
+
+/** Cooked mid-air by a player shell — same cleanup as a landed bolt, no callbacks. */
+export function detonateBolt<T>(h: BoltHost<T>, i: number): void {
+  if (!h.bolts[i]) {return;}
+  removeBolt(h, i);
 }
 
 export function updateBolts<T>(h: BoltHost<T>, t: T, dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {

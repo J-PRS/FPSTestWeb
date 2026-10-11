@@ -15,6 +15,30 @@ b.eventCountThisSecond += 1;
     return true;
   }
 
+  // Marker lanes — game-state edges packed into targetEvents:
+  // kill (224): victim roster idx in targetId, weapon in health,
+  //   shooter roster idx + 1 in peakPosX.
+  // flag (225): state code in health (0 home / 1 carried / 2 dropped),
+  //   carrier roster idx + 1 in peakPosX.
+  // pickup (226+kind): spawn/gone, gone carries no pos — spawn seeds it.
+
+function rosterIdx(b: DemoRecorder, id: string | null): number {
+    if (!id) {return -1;}
+    let i = b.rosterIdxById.get(id);
+    if (i === undefined) {
+      // Adopt-if-unknown, same policy as remote sampling: kills reference
+      // victims the 20Hz sampler never captured — including the LOCAL
+      // player, who never enters remoteFrames at all. A -1→0 clamp would
+      // silently misname roster[0] as the victim.
+      i = b.roster.length;
+      b.rosterIdxById.set(id, i);
+      b.roster.push({ name: id });
+    }
+    return i;
+  }
+
+
+
   // IProjectileEventRecorder
 export function recordFired(b: DemoRecorder, position: Vec3, velocity: Vec3, weaponType: number, shooterId?: string): number {
     if (!b.recording || !checkEventRate(b)) {return 0;}
@@ -104,17 +128,63 @@ const ZERO_VEC: Vec3 = { x: 0, y: 0, z: 0 };
 // playback falls back to the bolt config for unknown ids anyway.
 const DEPLOY_SHOT_WEAPON = 254;
 
+  // ITargetEventRecorder
+export function recordTargetSpawned(b: DemoRecorder, targetId: number, position: Vec3, velocity: Vec3, targetType: number): void {
+    if (!b.recording || !checkEventRate(b)) {return;}
+    const e = b.targetEventPool.pop() ?? ({} as TargetEvent);
+    e.eventType = TargetEventType.Spawned;
+    e.timestamp = b.elapsedTime;
+    e.posX = position.x; e.posY = position.y; e.posZ = position.z;
+    e.velX = velocity.x; e.velY = velocity.y; e.velZ = velocity.z;
+    e.targetId = targetId; e.targetType = targetType; e.health = 0;
+    e.hasPeakPosition = false;
+    e.peakPosX = 0; e.peakPosY = 0; e.peakPosZ = 0;
+    b.targetEvents.push(e);
+  }
+
+
+
 export function recordCreatureSpawned(b: DemoRecorder, netId: number, species: string, position: Vec3): void {
     const tt = TARGETTYPE_CREATURE_BASE + demoSpeciesIndex(species);
     b.creatureTtByNetId.set(netId, tt);
     recordTargetSpawned(b, creatureDemoId(netId), position, ZERO_VEC, tt);
   }
 
+export function recordTargetBounce(b: DemoRecorder, targetId: number, position: Vec3, velocity: Vec3, targetType: number): void {
+    if (!b.recording || !checkEventRate(b)) {return;}
+    const e = b.targetEventPool.pop() ?? ({} as TargetEvent);
+    e.eventType = TargetEventType.Bounce;
+    e.timestamp = b.elapsedTime;
+    e.posX = position.x; e.posY = position.y; e.posZ = position.z;
+    e.velX = velocity.x; e.velY = velocity.y; e.velZ = velocity.z;
+    e.targetId = targetId; e.targetType = targetType; e.health = 0;
+    e.hasPeakPosition = false;
+    e.peakPosX = 0; e.peakPosY = 0; e.peakPosZ = 0;
+    b.targetEvents.push(e);
+  }
+
+
+
 export function recordCreatureEdge(b: DemoRecorder, netId: number, position: Vec3, velocity: Vec3): void {
     const tt = b.creatureTtByNetId.get(netId);
     if (tt === undefined) {return;} // edge predates the recording window
     recordTargetBounce(b, creatureDemoId(netId), position, velocity, tt);
   }
+
+export function recordTargetPeak(b: DemoRecorder, targetId: number, position: Vec3, velocity: Vec3, targetType: number): void {
+    if (!b.recording || !checkEventRate(b)) {return;}
+    const e = b.targetEventPool.pop() ?? ({} as TargetEvent);
+    e.eventType = TargetEventType.StateChanged;
+    e.timestamp = b.elapsedTime;
+    e.posX = position.x; e.posY = position.y; e.posZ = position.z;
+    e.velX = velocity.x; e.velY = velocity.y; e.velZ = velocity.z;
+    e.targetId = targetId; e.targetType = targetType; e.health = 0;
+    e.hasPeakPosition = true;
+    e.peakPosX = position.x; e.peakPosY = position.y; e.peakPosZ = position.z;
+    b.targetEvents.push(e);
+  }
+
+
 
 export function recordCreatureRoster(b: DemoRecorder, netId: number, species: string, position: Vec3, velocity: Vec3): void {
     if (!b.creatureTtByNetId.has(netId)) {
@@ -125,6 +195,21 @@ export function recordCreatureRoster(b: DemoRecorder, netId: number, species: st
     }
     recordTargetPeak(b, creatureDemoId(netId), position, velocity, b.creatureTtByNetId.get(netId) as number);
   }
+
+export function recordTargetDestroyed(b: DemoRecorder, targetId: number, position: Vec3, targetType: number, health = 0): void {
+    if (!b.recording || !checkEventRate(b)) {return;}
+    const e = b.targetEventPool.pop() ?? ({} as TargetEvent);
+    e.eventType = TargetEventType.Destroyed;
+    e.timestamp = b.elapsedTime;
+    e.posX = position.x; e.posY = position.y; e.posZ = position.z;
+    e.velX = 0; e.velY = 0; e.velZ = 0;
+    e.targetId = targetId; e.targetType = targetType; e.health = health;
+    e.hasPeakPosition = false;
+    e.peakPosX = 0; e.peakPosY = 0; e.peakPosZ = 0;
+    b.targetEvents.push(e);
+  }
+
+
 
 export function recordCreatureDie(b: DemoRecorder, netId: number, position: Vec3): void {
     const tt = b.creatureTtByNetId.get(netId);
@@ -149,6 +234,21 @@ export function recordDeployGone(b: DemoRecorder, netId: number): void {
     b.deployInfoByNetId.delete(netId);
     recordTargetDestroyed(b, deployDemoId(netId), info, info.tt);
   }
+
+export function recordTargetHit(b: DemoRecorder, targetId: number, position: Vec3, velocity: Vec3, targetType: number, health: number): void {
+    if (!b.recording || !checkEventRate(b)) {return;}
+    const e = b.targetEventPool.pop() ?? ({} as TargetEvent);
+    e.eventType = TargetEventType.Hit;
+    e.timestamp = b.elapsedTime;
+    e.posX = position.x; e.posY = position.y; e.posZ = position.z;
+    e.velX = velocity.x; e.velY = velocity.y; e.velZ = velocity.z;
+    e.targetId = targetId; e.targetType = targetType; e.health = health;
+    e.hasPeakPosition = false;
+    e.peakPosX = 0; e.peakPosY = 0; e.peakPosZ = 0;
+    b.targetEvents.push(e);
+  }
+
+
 
 export function recordDeployHp(b: DemoRecorder, netId: number, hp: number): void {
     const info = b.deployInfoByNetId.get(netId);
@@ -175,28 +275,6 @@ export function recordDeployBoom(b: DemoRecorder, netId: number, position: Vec3)
     b.deployInfoByNetId.delete(netId);
     recordTargetHit(b, deployDemoId(netId), position, ZERO_VEC, info.tt, 0);
     recordTargetDestroyed(b, deployDemoId(netId), position, info.tt);
-  }
-
-  // Marker lanes — game-state edges packed into targetEvents:
-  // kill (224): victim roster idx in targetId, weapon in health,
-  //   shooter roster idx + 1 in peakPosX.
-  // flag (225): state code in health (0 home / 1 carried / 2 dropped),
-  //   carrier roster idx + 1 in peakPosX.
-  // pickup (226+kind): spawn/gone, gone carries no pos — spawn seeds it.
-
-function rosterIdx(b: DemoRecorder, id: string | null): number {
-    if (!id) {return -1;}
-    let i = b.rosterIdxById.get(id);
-    if (i === undefined) {
-      // Adopt-if-unknown, same policy as remote sampling: kills reference
-      // victims the 20Hz sampler never captured — including the LOCAL
-      // player, who never enters remoteFrames at all. A -1→0 clamp would
-      // silently misname roster[0] as the victim.
-      i = b.roster.length;
-      b.rosterIdxById.set(id, i);
-      b.roster.push({ name: id });
-    }
-    return i;
   }
 
 export function recordKill(b: DemoRecorder, shooterId: string | null, targetId: string, weapon: number, position: Vec3): void {
@@ -279,71 +357,5 @@ export function recordTargetSnapshots(b: DemoRecorder, samples: Iterable<{ targe
       e.peakPosX = 0; e.peakPosY = 0; e.peakPosZ = 0;
       b.targetEvents.push(e);
     }
-  }
-
-  // ITargetEventRecorder
-export function recordTargetSpawned(b: DemoRecorder, targetId: number, position: Vec3, velocity: Vec3, targetType: number): void {
-    if (!b.recording || !checkEventRate(b)) {return;}
-    const e = b.targetEventPool.pop() ?? ({} as TargetEvent);
-    e.eventType = TargetEventType.Spawned;
-    e.timestamp = b.elapsedTime;
-    e.posX = position.x; e.posY = position.y; e.posZ = position.z;
-    e.velX = velocity.x; e.velY = velocity.y; e.velZ = velocity.z;
-    e.targetId = targetId; e.targetType = targetType; e.health = 0;
-    e.hasPeakPosition = false;
-    e.peakPosX = 0; e.peakPosY = 0; e.peakPosZ = 0;
-    b.targetEvents.push(e);
-  }
-
-export function recordTargetBounce(b: DemoRecorder, targetId: number, position: Vec3, velocity: Vec3, targetType: number): void {
-    if (!b.recording || !checkEventRate(b)) {return;}
-    const e = b.targetEventPool.pop() ?? ({} as TargetEvent);
-    e.eventType = TargetEventType.Bounce;
-    e.timestamp = b.elapsedTime;
-    e.posX = position.x; e.posY = position.y; e.posZ = position.z;
-    e.velX = velocity.x; e.velY = velocity.y; e.velZ = velocity.z;
-    e.targetId = targetId; e.targetType = targetType; e.health = 0;
-    e.hasPeakPosition = false;
-    e.peakPosX = 0; e.peakPosY = 0; e.peakPosZ = 0;
-    b.targetEvents.push(e);
-  }
-
-export function recordTargetPeak(b: DemoRecorder, targetId: number, position: Vec3, velocity: Vec3, targetType: number): void {
-    if (!b.recording || !checkEventRate(b)) {return;}
-    const e = b.targetEventPool.pop() ?? ({} as TargetEvent);
-    e.eventType = TargetEventType.StateChanged;
-    e.timestamp = b.elapsedTime;
-    e.posX = position.x; e.posY = position.y; e.posZ = position.z;
-    e.velX = velocity.x; e.velY = velocity.y; e.velZ = velocity.z;
-    e.targetId = targetId; e.targetType = targetType; e.health = 0;
-    e.hasPeakPosition = true;
-    e.peakPosX = position.x; e.peakPosY = position.y; e.peakPosZ = position.z;
-    b.targetEvents.push(e);
-  }
-
-export function recordTargetHit(b: DemoRecorder, targetId: number, position: Vec3, velocity: Vec3, targetType: number, health: number): void {
-    if (!b.recording || !checkEventRate(b)) {return;}
-    const e = b.targetEventPool.pop() ?? ({} as TargetEvent);
-    e.eventType = TargetEventType.Hit;
-    e.timestamp = b.elapsedTime;
-    e.posX = position.x; e.posY = position.y; e.posZ = position.z;
-    e.velX = velocity.x; e.velY = velocity.y; e.velZ = velocity.z;
-    e.targetId = targetId; e.targetType = targetType; e.health = health;
-    e.hasPeakPosition = false;
-    e.peakPosX = 0; e.peakPosY = 0; e.peakPosZ = 0;
-    b.targetEvents.push(e);
-  }
-
-export function recordTargetDestroyed(b: DemoRecorder, targetId: number, position: Vec3, targetType: number, health = 0): void {
-    if (!b.recording || !checkEventRate(b)) {return;}
-    const e = b.targetEventPool.pop() ?? ({} as TargetEvent);
-    e.eventType = TargetEventType.Destroyed;
-    e.timestamp = b.elapsedTime;
-    e.posX = position.x; e.posY = position.y; e.posZ = position.z;
-    e.velX = 0; e.velY = 0; e.velZ = 0;
-    e.targetId = targetId; e.targetType = targetType; e.health = health;
-    e.hasPeakPosition = false;
-    e.peakPosX = 0; e.peakPosY = 0; e.peakPosZ = 0;
-    b.targetEvents.push(e);
   }
 

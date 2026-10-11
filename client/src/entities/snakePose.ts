@@ -95,6 +95,39 @@ function segWidth(t: number): number {
        :            0.145 - (t - 0.8) * 0.55) * 1.3;
 }
 
+/** Aim each lobe along the real 3D chain direction between its placed
+ *  neighbours — covers coil rise, leap arcs and per-seg terrain steps. */
+function orientSegments(s: Snake, swarm: NonNullable<ReturnType<typeof getSwarm>>, slot: number, r: number, fr: number): void {
+  for (let i = 0; i < SEGS_PER; i += 1) {
+    const iA = Math.max(0, i - 1), iB = Math.min(SEGS_PER - 1, i + 1);
+    const dx = _segX[iA] - _segX[iB];
+    const dy = _segY[iA] - _segY[iB];
+    const dz = _segZ[iA] - _segZ[iB];
+    const segYaw = Math.atan2(dx, dz);
+    // YXZ like the turret mount: yaw to the horizontal component, then
+    // pitch the lobe's +Z onto the true rise to the next segment.
+    const pitch = Math.atan2(dy, Math.hypot(dx, dz));
+    _e.set(-pitch, segYaw, 0, 'YXZ');
+    _q.setFromEuler(_e);
+    const w = _segW[i];
+    _local.compose(
+      _p.set(_segX[i], _segY[i], _segZ[i]),
+      _q,
+      // Stretched along the spine tangent: arc-length spacing becomes a
+      // chord across curves — near-spherical lobes show gaps in bends;
+      // scale 1.8 on Z overlaps them like plates.
+      _s.set(w * r, w * r, w * r * 1.8),
+    );
+    // _local is already in world space — trail samples are world coords.
+    swarm.setMatrix(PART_SEG, slot * SEGS_PER + i, _local);
+    const band = _segB[i];
+    swarm.setColor(PART_SEG, slot * SEGS_PER + i,
+      s.color.r * fr * band, s.color.g * fr * band, s.color.b * fr * band);
+  }
+}
+
+
+
 export function writeInstances(s: Snake, terrain: Terrain): void {
     if (!s.hasSlots) {return;}
     const swarm = getSwarm('snake');
@@ -179,34 +212,3 @@ export function writeInstances(s: Snake, terrain: Terrain): void {
 
     getShadows()?.set(s, s.pos, r * 2.2, 0.35);
   }
-
-/** Aim each lobe along the real 3D chain direction between its placed
- *  neighbours — covers coil rise, leap arcs and per-seg terrain steps. */
-function orientSegments(s: Snake, swarm: NonNullable<ReturnType<typeof getSwarm>>, slot: number, r: number, fr: number): void {
-  for (let i = 0; i < SEGS_PER; i += 1) {
-    const iA = Math.max(0, i - 1), iB = Math.min(SEGS_PER - 1, i + 1);
-    const dx = _segX[iA] - _segX[iB];
-    const dy = _segY[iA] - _segY[iB];
-    const dz = _segZ[iA] - _segZ[iB];
-    const segYaw = Math.atan2(dx, dz);
-    // YXZ like the turret mount: yaw to the horizontal component, then
-    // pitch the lobe's +Z onto the true rise to the next segment.
-    const pitch = Math.atan2(dy, Math.hypot(dx, dz));
-    _e.set(-pitch, segYaw, 0, 'YXZ');
-    _q.setFromEuler(_e);
-    const w = _segW[i];
-    _local.compose(
-      _p.set(_segX[i], _segY[i], _segZ[i]),
-      _q,
-      // Stretched along the spine tangent: arc-length spacing becomes a
-      // chord across curves — near-spherical lobes show gaps in bends;
-      // scale 1.8 on Z overlaps them like plates.
-      _s.set(w * r, w * r, w * r * 1.8),
-    );
-    // _local is already in world space — trail samples are world coords.
-    swarm.setMatrix(PART_SEG, slot * SEGS_PER + i, _local);
-    const band = _segB[i];
-    swarm.setColor(PART_SEG, slot * SEGS_PER + i,
-      s.color.r * fr * band, s.color.g * fr * band, s.color.b * fr * band);
-  }
-}

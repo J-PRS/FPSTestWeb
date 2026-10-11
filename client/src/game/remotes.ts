@@ -110,6 +110,15 @@ function applyStatusVisuals(deps: RemotesDeps, playerId: string, remotePlayer: R
   return false;
 }
 
+// One jetting verdict for audio + trail: wireJet when a driver knows the
+// real button, else the powered-climb heuristic.
+function isJetting(rp: RemotePlayer, dead: boolean): boolean {
+  if (dead) {return false;}
+  return rp.wireJet ?? rp.vel.y > 4.5;
+}
+
+
+
 // Ski dust off a networked ski flag near the ground, plus the HUD
 // name marker from the extrapolated position.
 function tickRemoteCosmetics(deps: RemotesDeps, playerId: string, remotePlayer: RemotePlayer, playerState: WirePlayerState): void {
@@ -144,13 +153,6 @@ function tickRemoteCosmetics(deps: RemotesDeps, playerId: string, remotePlayer: 
   }
 }
 
-// One jetting verdict for audio + trail: wireJet when a driver knows the
-// real button, else the powered-climb heuristic.
-function isJetting(rp: RemotePlayer, dead: boolean): boolean {
-  if (dead) {return false;}
-  return rp.wireJet ?? rp.vel.y > 4.5;
-}
-
 /** Offscreen flag for the anim gate — one frustum extraction per frame,
  *  a ~2m sphere test per remote. Mixer ticks for culled bodies were pure
  *  waste (the skin never rasterizes). */
@@ -162,6 +164,30 @@ function tickOnScreen(deps: RemotesDeps, cam: THREE.PerspectiveCamera): void {
     setFrustumVis(rp, !rp.onScreen);
   }
 }
+function aswAccrue(id: string, dead: boolean, grounded: boolean, skiing: boolean, dt: number): void {
+  if (dead) { asw.delete(id); return; }
+  let e = asw.get(id);
+  if (!e) { e = { a: 0, s: 0, w: 0 }; asw.set(id, e); }
+  if (!grounded) { e.a += dt; } else if (skiing) { e.s += dt; } else { e.w += dt; }
+}
+
+
+
+// Friend-or-foe marker: teammates wear their team's color, enemies are
+// always red. Tint applies only when the wire team changes.
+function applyTeamTint(deps: RemotesDeps, lastTintOf: Map<string, string>,
+    playerId: string, remotePlayer: RemotePlayer, theirTeam: string | undefined): void {
+  // Debug hitbox wireframe — friendly green, everyone else red. Runs every
+  // tick (setHex is free) so teamless/FFA bodies read enemy-red, not the
+  // constructor's default green.
+  const friendly = Boolean(theirTeam) && theirTeam === deps.world.localTeam;
+  remotePlayer.setColliderColor(friendly ? 0x00_FF_00 : ENEMY_RED);
+  if (!theirTeam || theirTeam === lastTintOf.get(playerId)) {return;}
+  lastTintOf.set(playerId, theirTeam);
+  remotePlayer.setGizmoColor(theirTeam === deps.world.localTeam ? TEAM_COLORS[theirTeam] : ENEMY_RED);
+}
+
+
 
 // Per-remote-player frame work: create if new, hide if stale, tick, then cosmetics
 function tickRemotePlayer(deps: RemotesDeps, lastTintOf: Map<string, string>,
@@ -212,20 +238,6 @@ function tickRemotePlayer(deps: RemotesDeps, lastTintOf: Map<string, string>,
   if (!applyStatusVisuals(deps, playerId, remotePlayer, playerState.status ?? 0, playerState.team) && remotePlayer.ghostT <= 0) {return;}
   applyTeamTint(deps, lastTintOf, playerId, remotePlayer, playerState.team);
   tickRemoteCosmetics(deps, playerId, remotePlayer, playerState);
-}
-
-// Friend-or-foe marker: teammates wear their team's color, enemies are
-// always red. Tint applies only when the wire team changes.
-function applyTeamTint(deps: RemotesDeps, lastTintOf: Map<string, string>,
-    playerId: string, remotePlayer: RemotePlayer, theirTeam: string | undefined): void {
-  // Debug hitbox wireframe — friendly green, everyone else red. Runs every
-  // tick (setHex is free) so teamless/FFA bodies read enemy-red, not the
-  // constructor's default green.
-  const friendly = Boolean(theirTeam) && theirTeam === deps.world.localTeam;
-  remotePlayer.setColliderColor(friendly ? 0x00_FF_00 : ENEMY_RED);
-  if (!theirTeam || theirTeam === lastTintOf.get(playerId)) {return;}
-  lastTintOf.set(playerId, theirTeam);
-  remotePlayer.setGizmoColor(theirTeam === deps.world.localTeam ? TEAM_COLORS[theirTeam] : ENEMY_RED);
 }
 
 /** CTF flag diamonds — projected every frame like player indicators.
@@ -296,12 +308,6 @@ const aliveSince = new Map<string, number>();
  *  like aliveSince. Ski reads as grounded-and-skiing; airborne ski time
  *  counts as air (you can't ski without a surface). */
 const asw = new Map<string, { a: number; s: number; w: number }>();
-function aswAccrue(id: string, dead: boolean, grounded: boolean, skiing: boolean, dt: number): void {
-  if (dead) { asw.delete(id); return; }
-  let e = asw.get(id);
-  if (!e) { e = { a: 0, s: 0, w: 0 }; asw.set(id, e); }
-  if (!grounded) { e.a += dt; } else if (skiing) { e.s += dt; } else { e.w += dt; }
-}
 function aswStr(id: string): string | null {
   const e = asw.get(id);
   if (!e) {return null;}

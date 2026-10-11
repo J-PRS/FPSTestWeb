@@ -514,52 +514,34 @@ export function attachEdgeWear(mesh: THREE.Mesh): void {
   bakeWearTexture(mesh.geometry);
 }
 
-/** Per-vertex convexity bake — Substance's curvature input, at vertex res.
- *  Vertex normals on a hard edge diverge from the flat face normals of
- *  their incident triangles; flat-shaded plates stay at ~0. Concave
- *  edges score too, but the shader gates wear by AO exposure, so crevices
- *  stay dark and only sun-facing edges whiten — the reverse-weighting
- *  trick (wear = convexity AND unoccluded). */
-function bakeWear(geo: THREE.BufferGeometry, grime = false, wearBoost = 0): void {
-  const pos = geo.attributes.position as THREE.BufferAttribute;
-  const nor = geo.attributes.normal as THREE.BufferAttribute;
-  if (!pos || !nor) {return;}
-  const {count} = pos;
-  const idx = geo.index;
-  const triCount = idx ? idx.count / 3 : count / 3;
-  const acc = new Float32Array(count);
-  const cnt = new Uint16Array(count);
-  for (let t = 0; t < triCount; t += 1) {
-    const ia = idx ? idx.getX(t * 3) : t * 3;
-    const ib = idx ? idx.getX(t * 3 + 1) : t * 3 + 1;
-    const ic = idx ? idx.getX(t * 3 + 2) : t * 3 + 2;
-    _fa.fromBufferAttribute(pos, ia);
-    _fb.fromBufferAttribute(pos, ib);
-    _fc.fromBufferAttribute(pos, ic);
-    _fb.sub(_fa); _fc.sub(_fa);
-    _fa.crossVectors(_fb, _fc).normalize(); // flat face normal
-    for (const vi of [ia, ib, ic]) {
-      _n.fromBufferAttribute(nor, vi);
-      acc[vi] += Math.max(0, 1 - _n.dot(_fa));
-cnt[vi] += 1;
+/** Max (1 - dot) between each vertex's normal and the normals of every
+ *  vertex sharing its position — 0 on flat faces, ~1 at 90° corners. */
+function hardEdgeDivergence(pos: THREE.BufferAttribute, nor: THREE.BufferAttribute, count: number): Float32Array {
+  const byPos = new Map<string, number[]>();
+  for (let i = 0; i < count; i += 1) {
+    const key = `${pos.getX(i).toFixed(4)},${pos.getY(i).toFixed(4)},${pos.getZ(i).toFixed(4)}`;
+    let list = byPos.get(key);
+    if (!list) {byPos.set(key, list = []);}
+    list.push(i);
+  }
+  const hard = new Float32Array(count);
+  const _ni = new THREE.Vector3(), _nj = new THREE.Vector3();
+  for (const list of byPos.values()) {
+    if (list.length < 2) {continue;}
+    for (const i of list) {
+      _ni.fromBufferAttribute(nor, i);
+      for (const j of list) {
+        if (i === j) {continue;}
+        _nj.fromBufferAttribute(nor, j);
+        const d = 1 - _ni.dot(_nj);
+        if (d > hard[i]!) {hard[i] = d;}
+      }
     }
   }
-  // Hard-edge pass: flat-shaded geometry (every BoxGeometry part — most of
-  // the viewmodel family) duplicates verts per face, so the vertex-vs-face
-  // divergence above reads ~0 and blocks get NO edge wear. Comparing
-  // normals across coincident POSITIONS catches the real edge signal: a
-  // 90° cube corner has three verts at one spot with orthogonal normals.
-  const hard = hardEdgeDivergence(pos, nor, count);
-
-  const wear = new Float32Array(count);
-  for (let i = 0; i < count; i += 1) {
-    const soft = cnt[i] ? (acc[i]! / cnt[i]!) * WEAR_GAIN : 0;
-    wear[i] = Math.min(1, Math.max(soft, hard[i]!));
-  }
-  geo.setAttribute('wear', new THREE.BufferAttribute(wear, 1));
-  if (wearBoost) {geo.setAttribute('awear', new THREE.BufferAttribute(new Float32Array(count).fill(wearBoost), 1));}
-  if (grime) {bakeGrime(geo, pos, count, triCount, idx);}
+  return hard;
 }
+
+
 
 /** Signed-curvature split — the half of Blender-style edge wear the
  *  vertex-vs-face divergence can't express: it scores magnitude only,
@@ -614,31 +596,53 @@ function bakeGrime(geo: THREE.BufferGeometry, pos: THREE.BufferAttribute, count:
   geo.setAttribute('grime', new THREE.BufferAttribute(grime, 1));
 }
 
-/** Max (1 - dot) between each vertex's normal and the normals of every
- *  vertex sharing its position — 0 on flat faces, ~1 at 90° corners. */
-function hardEdgeDivergence(pos: THREE.BufferAttribute, nor: THREE.BufferAttribute, count: number): Float32Array {
-  const byPos = new Map<string, number[]>();
-  for (let i = 0; i < count; i += 1) {
-    const key = `${pos.getX(i).toFixed(4)},${pos.getY(i).toFixed(4)},${pos.getZ(i).toFixed(4)}`;
-    let list = byPos.get(key);
-    if (!list) {byPos.set(key, list = []);}
-    list.push(i);
-  }
-  const hard = new Float32Array(count);
-  const _ni = new THREE.Vector3(), _nj = new THREE.Vector3();
-  for (const list of byPos.values()) {
-    if (list.length < 2) {continue;}
-    for (const i of list) {
-      _ni.fromBufferAttribute(nor, i);
-      for (const j of list) {
-        if (i === j) {continue;}
-        _nj.fromBufferAttribute(nor, j);
-        const d = 1 - _ni.dot(_nj);
-        if (d > hard[i]!) {hard[i] = d;}
-      }
+
+
+/** Per-vertex convexity bake — Substance's curvature input, at vertex res.
+ *  Vertex normals on a hard edge diverge from the flat face normals of
+ *  their incident triangles; flat-shaded plates stay at ~0. Concave
+ *  edges score too, but the shader gates wear by AO exposure, so crevices
+ *  stay dark and only sun-facing edges whiten — the reverse-weighting
+ *  trick (wear = convexity AND unoccluded). */
+function bakeWear(geo: THREE.BufferGeometry, grime = false, wearBoost = 0): void {
+  const pos = geo.attributes.position as THREE.BufferAttribute;
+  const nor = geo.attributes.normal as THREE.BufferAttribute;
+  if (!pos || !nor) {return;}
+  const {count} = pos;
+  const idx = geo.index;
+  const triCount = idx ? idx.count / 3 : count / 3;
+  const acc = new Float32Array(count);
+  const cnt = new Uint16Array(count);
+  for (let t = 0; t < triCount; t += 1) {
+    const ia = idx ? idx.getX(t * 3) : t * 3;
+    const ib = idx ? idx.getX(t * 3 + 1) : t * 3 + 1;
+    const ic = idx ? idx.getX(t * 3 + 2) : t * 3 + 2;
+    _fa.fromBufferAttribute(pos, ia);
+    _fb.fromBufferAttribute(pos, ib);
+    _fc.fromBufferAttribute(pos, ic);
+    _fb.sub(_fa); _fc.sub(_fa);
+    _fa.crossVectors(_fb, _fc).normalize(); // flat face normal
+    for (const vi of [ia, ib, ic]) {
+      _n.fromBufferAttribute(nor, vi);
+      acc[vi] += Math.max(0, 1 - _n.dot(_fa));
+cnt[vi] += 1;
     }
   }
-  return hard;
+  // Hard-edge pass: flat-shaded geometry (every BoxGeometry part — most of
+  // the viewmodel family) duplicates verts per face, so the vertex-vs-face
+  // divergence above reads ~0 and blocks get NO edge wear. Comparing
+  // normals across coincident POSITIONS catches the real edge signal: a
+  // 90° cube corner has three verts at one spot with orthogonal normals.
+  const hard = hardEdgeDivergence(pos, nor, count);
+
+  const wear = new Float32Array(count);
+  for (let i = 0; i < count; i += 1) {
+    const soft = cnt[i] ? (acc[i]! / cnt[i]!) * WEAR_GAIN : 0;
+    wear[i] = Math.min(1, Math.max(soft, hard[i]!));
+  }
+  geo.setAttribute('wear', new THREE.BufferAttribute(wear, 1));
+  if (wearBoost) {geo.setAttribute('awear', new THREE.BufferAttribute(new Float32Array(count).fill(wearBoost), 1));}
+  if (grime) {bakeGrime(geo, pos, count, triCount, idx);}
 }
 
 // Deterministic hemisphere dirs (cosine-weighted Fibonacci) — random
@@ -717,73 +721,6 @@ function bakeMesh(mesh: THREE.Mesh, occluder: THREE.Mesh, rayDist: number, grime
   bakeWear(geo, grime, wearBoost);
   bakeEdgeLines(geo);
   attachEdgeWear(mesh);
-}
-
-/** Curvature-only bake for meshes that already carry baked AO textures
- *  (the vmBaked swap path) — same wear attribute + shader, no raycast AO. */
-export function bakeWearOnly(group: THREE.Group, opts: { grime?: boolean; wearBoost?: number } = {}): void {
-  group.traverse((o): void => {
-    const m = o as THREE.Mesh;
-    if (!m.isMesh) {return;}
-    ensureNonIndexed(m);
-    // Always rebake — GLBs can carry a STALE wear attribute round-tripped
-    // through the dump pipeline (baked before the hard-edge pass existed).
-    bakeWear(m.geometry, opts.grime, opts.wearBoost);
-    bakeEdgeLines(m.geometry);
-    attachEdgeWear(m);
-    const mats = Array.isArray(m.material) ? m.material : [m.material];
-    for (const mat of mats) {if (mat && mat.type !== 'MeshBasicMaterial') {
-      mat.userData.__wearTex = m.geometry.userData.__wearTex ?? null;
-      mat.userData.__grimeTex = m.geometry.userData.__grimeTex ?? null;
-      enhanceWeaponMaterial(mat);
-    }}
-  });
-}
-
-/** Bake vertex AO into every mesh of a group. Call after the group's local
- *  transforms are final (add to a parent first or updateWorldMatrix). */
-export function bakeVertexAO(group: THREE.Group, opts: { grime?: boolean; wearBoost?: number } = {}): void {
-  group.updateWorldMatrix(true, true);
-
-  // One merged occluder mesh so rays hit every part of the weapon.
-  // InstancedMesh is skipped — its buffer serves N instances at N
-  // positions; baking scene-space AO into it double-darkens the swarm
-  // species that already got their own bake via SwarmSpec.bake.
-  const meshes: THREE.Mesh[] = [];
-  group.traverse((o): void => { if ((o as THREE.Mesh).isMesh && !(o as THREE.InstancedMesh).isInstancedMesh) {meshes.push(o as THREE.Mesh);} });
-  if (meshes.length === 0) {return;}
-
-  const occluderGeo = mergeGeometries(meshes);
-  occluderGeo.boundsTree = new MeshBVH(occluderGeo);
-  // DoubleSide is required: hemisphere rays point outward and mostly hit the
-  // back faces of surrounding geometry — FrontSide culling would miss them all.
-  const occluder = new THREE.Mesh(occluderGeo, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
-  occluder.updateMatrixWorld(true);
-  // Range must stay below model scale or every ray hits something and the
-  // bake flattens to the floor value everywhere.
-  const rayDist = occluderGeo.boundingSphere!.radius * RAY_DIST_SCALE;
-
-  // Sibling meshes can share one BufferGeometry (disc rails, mag discs) —
-  // baking instance A then instance B overwrites A's vertex colors, so both
-  // siblings wear the LAST-baked occlusion. Detach on repeat bake.
-  const baked = new Set<THREE.BufferGeometry>();
-  for (const m of meshes) {
-    // Emissive/glow parts (MeshBasicMaterial: glow rings, muzzle glows) must
-    // stay lit — AO would dim them. Only lit materials get vertex colors.
-    if ((m.material as THREE.Material).type === 'MeshBasicMaterial') {continue;}
-    if (baked.has(m.geometry)) {m.geometry = m.geometry.clone();}
-    baked.add(m.geometry);
-    bakeMesh(m, occluder, rayDist, opts.grime, opts.wearBoost);
-    const mat = m.material as THREE.Material & { vertexColors?: boolean };
-    if (mat) {
-      mat.vertexColors = true;
-      mat.userData.__wearTex = m.geometry.userData.__wearTex ?? null;
-      mat.userData.__grimeTex = m.geometry.userData.__grimeTex ?? null;
-      mat.needsUpdate = true;
-      enhanceWeaponMaterial(mat);
-    }
-  }
-  occluderGeo.dispose();
 }
 
 /**
@@ -924,6 +861,29 @@ float wfbm(vec3 p) { return 0.5 * wnoise(p) + 0.25 * wnoise(p * 2.17) + 0.125 * 
   };
 }
 
+
+
+/** Curvature-only bake for meshes that already carry baked AO textures
+ *  (the vmBaked swap path) — same wear attribute + shader, no raycast AO. */
+export function bakeWearOnly(group: THREE.Group, opts: { grime?: boolean; wearBoost?: number } = {}): void {
+  group.traverse((o): void => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) {return;}
+    ensureNonIndexed(m);
+    // Always rebake — GLBs can carry a STALE wear attribute round-tripped
+    // through the dump pipeline (baked before the hard-edge pass existed).
+    bakeWear(m.geometry, opts.grime, opts.wearBoost);
+    bakeEdgeLines(m.geometry);
+    attachEdgeWear(m);
+    const mats = Array.isArray(m.material) ? m.material : [m.material];
+    for (const mat of mats) {if (mat && mat.type !== 'MeshBasicMaterial') {
+      mat.userData.__wearTex = m.geometry.userData.__wearTex ?? null;
+      mat.userData.__grimeTex = m.geometry.userData.__grimeTex ?? null;
+      enhanceWeaponMaterial(mat);
+    }}
+  });
+}
+
 // Minimal merge: concatenate world-space triangles of all meshes (indexed
 // or not) into one non-indexed position buffer — raycasts only need that.
 function mergeGeometries(meshes: THREE.Mesh[]): THREE.BufferGeometry {
@@ -953,4 +913,52 @@ function mergeGeometries(meshes: THREE.Mesh[]): THREE.BufferGeometry {
   geo.computeVertexNormals();
   geo.computeBoundingSphere();
   return geo;
+}
+
+
+
+/** Bake vertex AO into every mesh of a group. Call after the group's local
+ *  transforms are final (add to a parent first or updateWorldMatrix). */
+export function bakeVertexAO(group: THREE.Group, opts: { grime?: boolean; wearBoost?: number } = {}): void {
+  group.updateWorldMatrix(true, true);
+
+  // One merged occluder mesh so rays hit every part of the weapon.
+  // InstancedMesh is skipped — its buffer serves N instances at N
+  // positions; baking scene-space AO into it double-darkens the swarm
+  // species that already got their own bake via SwarmSpec.bake.
+  const meshes: THREE.Mesh[] = [];
+  group.traverse((o): void => { if ((o as THREE.Mesh).isMesh && !(o as THREE.InstancedMesh).isInstancedMesh) {meshes.push(o as THREE.Mesh);} });
+  if (meshes.length === 0) {return;}
+
+  const occluderGeo = mergeGeometries(meshes);
+  occluderGeo.boundsTree = new MeshBVH(occluderGeo);
+  // DoubleSide is required: hemisphere rays point outward and mostly hit the
+  // back faces of surrounding geometry — FrontSide culling would miss them all.
+  const occluder = new THREE.Mesh(occluderGeo, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+  occluder.updateMatrixWorld(true);
+  // Range must stay below model scale or every ray hits something and the
+  // bake flattens to the floor value everywhere.
+  const rayDist = occluderGeo.boundingSphere!.radius * RAY_DIST_SCALE;
+
+  // Sibling meshes can share one BufferGeometry (disc rails, mag discs) —
+  // baking instance A then instance B overwrites A's vertex colors, so both
+  // siblings wear the LAST-baked occlusion. Detach on repeat bake.
+  const baked = new Set<THREE.BufferGeometry>();
+  for (const m of meshes) {
+    // Emissive/glow parts (MeshBasicMaterial: glow rings, muzzle glows) must
+    // stay lit — AO would dim them. Only lit materials get vertex colors.
+    if ((m.material as THREE.Material).type === 'MeshBasicMaterial') {continue;}
+    if (baked.has(m.geometry)) {m.geometry = m.geometry.clone();}
+    baked.add(m.geometry);
+    bakeMesh(m, occluder, rayDist, opts.grime, opts.wearBoost);
+    const mat = m.material as THREE.Material & { vertexColors?: boolean };
+    if (mat) {
+      mat.vertexColors = true;
+      mat.userData.__wearTex = m.geometry.userData.__wearTex ?? null;
+      mat.userData.__grimeTex = m.geometry.userData.__grimeTex ?? null;
+      mat.needsUpdate = true;
+      enhanceWeaponMaterial(mat);
+    }
+  }
+  occluderGeo.dispose();
 }

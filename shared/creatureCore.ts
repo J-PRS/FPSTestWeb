@@ -147,6 +147,54 @@ export function commitTarget(
   else { c.tgtValid = false; }
 }
 
+/** Hop clock → chase launch at the snapshot, or a wander hop. */
+function hopLaunch(c: SimCrawler, dt: number, target: SimVec | null, distSq: number): CrawlerEvent | null {
+  if (c.stunTimer > 0) {return null;} // staggered — no hops until it clears
+
+  c.hopTimer -= dt;
+  if (c.hopTimer > 0) {return null;}
+  c.hopTimer = c.sp.HOP_REST_MIN + crand(c) * c.sp.HOP_REST_VAR;
+
+  if (target && distSq < c.sp.AGGRO_D2) {
+    c.state = 'chase';
+    const d = (distSq) ** 0.5 || 0.001;
+    c.vx = ((target.x - c.x) / d) * c.sp.HOP_SPEED;
+    c.vz = ((target.z - c.z) / d) * c.sp.HOP_SPEED;
+    c.vy = c.sp.HOP_UP;
+    c.yaw = Math.atan2(c.vx, c.vz);
+  } else {
+    c.state = 'wander';
+    if (crand(c) < 0.4) {c.wanderYaw += (crand(c) - 0.5) * 2;}
+    c.vx = Math.sin(c.wanderYaw) * c.sp.HOP_SPEED * 0.35;
+    c.vz = Math.cos(c.wanderYaw) * c.sp.HOP_SPEED * 0.35;
+    c.vy = c.sp.HOP_UP * 0.8;
+    c.yaw = c.wanderYaw;
+  }
+  return 'land'; // hop launch — clients use it for dust/anim edge
+}
+
+
+
+/** Grounded windup countdown → ballistic pounce at the committed point. */
+function windupPounce(c: SimCrawler, dt: number, target: SimVec | null): CrawlerEvent | null {
+  c.windupTimer -= dt;
+  if (c.windupTimer <= 0) {
+    c.state = 'chase';
+    if (target) {
+      const dx = target.x - c.x, dz = target.z - c.z;
+      const pd = (dx * dx + dz * dz) ** 0.5 || 0.001;
+      const t = Math.max(0.15, pd / c.sp.POUNCE_SPEED);
+      c.vx = (dx / pd) * c.sp.POUNCE_SPEED;
+      c.vz = (dz / pd) * c.sp.POUNCE_SPEED;
+      c.vy = (target.y - c.y + 0.5 * Math.abs(c.sp.GRAVITY) * t * t) / t;
+      return 'pounce';
+    }
+  }
+  return null;
+}
+
+
+
 /** One step. `target` = committed snapshot (null = no prey). Returns the
  *  event the authority should broadcast this step, else null. */
 export function stepCrawler(
@@ -200,50 +248,6 @@ export function stepCrawler(
   }
 
   return hopLaunch(c, dt, target, distSq);
-}
-
-/** Grounded windup countdown → ballistic pounce at the committed point. */
-function windupPounce(c: SimCrawler, dt: number, target: SimVec | null): CrawlerEvent | null {
-  c.windupTimer -= dt;
-  if (c.windupTimer <= 0) {
-    c.state = 'chase';
-    if (target) {
-      const dx = target.x - c.x, dz = target.z - c.z;
-      const pd = (dx * dx + dz * dz) ** 0.5 || 0.001;
-      const t = Math.max(0.15, pd / c.sp.POUNCE_SPEED);
-      c.vx = (dx / pd) * c.sp.POUNCE_SPEED;
-      c.vz = (dz / pd) * c.sp.POUNCE_SPEED;
-      c.vy = (target.y - c.y + 0.5 * Math.abs(c.sp.GRAVITY) * t * t) / t;
-      return 'pounce';
-    }
-  }
-  return null;
-}
-
-/** Hop clock → chase launch at the snapshot, or a wander hop. */
-function hopLaunch(c: SimCrawler, dt: number, target: SimVec | null, distSq: number): CrawlerEvent | null {
-  if (c.stunTimer > 0) {return null;} // staggered — no hops until it clears
-
-  c.hopTimer -= dt;
-  if (c.hopTimer > 0) {return null;}
-  c.hopTimer = c.sp.HOP_REST_MIN + crand(c) * c.sp.HOP_REST_VAR;
-
-  if (target && distSq < c.sp.AGGRO_D2) {
-    c.state = 'chase';
-    const d = (distSq) ** 0.5 || 0.001;
-    c.vx = ((target.x - c.x) / d) * c.sp.HOP_SPEED;
-    c.vz = ((target.z - c.z) / d) * c.sp.HOP_SPEED;
-    c.vy = c.sp.HOP_UP;
-    c.yaw = Math.atan2(c.vx, c.vz);
-  } else {
-    c.state = 'wander';
-    if (crand(c) < 0.4) {c.wanderYaw += (crand(c) - 0.5) * 2;}
-    c.vx = Math.sin(c.wanderYaw) * c.sp.HOP_SPEED * 0.35;
-    c.vz = Math.cos(c.wanderYaw) * c.sp.HOP_SPEED * 0.35;
-    c.vy = c.sp.HOP_UP * 0.8;
-    c.yaw = c.wanderYaw;
-  }
-  return 'land'; // hop launch — clients use it for dust/anim edge
 }
 
 /** Server-side hit application — knockback staggers the hop clock. */

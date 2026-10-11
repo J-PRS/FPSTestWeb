@@ -14,6 +14,20 @@ import { DEPLOY_ITEMS } from '../../shared/deployItems.ts';
 import { simNow } from './simClock.ts';
 import { wallNow , wallMs} from './wallClock.ts';
 
+  /** Structure LOS for the gun scan — a sentry indoors shouldn't plink
+   *  players outside through the wall. Target at chest height. */
+export function losClear(r: RoomDeployables, from: Vec3, to: Vec3, team?: string): boolean {
+    const cols = r.room.ballSim.colliders;
+    if (cols.length === 0) {return true;}
+    return !segSolidHit(
+      { x: from.x, y: from.y + 0.5, z: from.z },
+      { x: to.x, y: to.y + 1, z: to.z },
+      cols, r.room.ballSim.colliderIndex ?? undefined, team,
+    );
+  }
+
+
+
 // Per-kind deployable ticks — drone escort scan, proximity-mine fuse,
 // resupply-pad pulse, structure LOS, sentry fire. RoomDeployables owns
 // the item table + lifecycle; the behavior half lives here.
@@ -88,18 +102,6 @@ export function tickStation(r: RoomDeployables, d: Deployed, dt: number): void {
       healPool(p, p.maxHealth * STATION_HP_RATE * STATION_HEAL_CD);
       p.forceSendUntil = wallMs(wallNow() + FORCE_SEND_MS);
     }
-  }
-
-  /** Structure LOS for the gun scan — a sentry indoors shouldn't plink
-   *  players outside through the wall. Target at chest height. */
-export function losClear(r: RoomDeployables, from: Vec3, to: Vec3, team?: string): boolean {
-    const cols = r.room.ballSim.colliders;
-    if (cols.length === 0) {return true;}
-    return !segSolidHit(
-      { x: from.x, y: from.y + 0.5, z: from.z },
-      { x: to.x, y: to.y + 1, z: to.z },
-      cols, r.room.ballSim.colliderIndex ?? undefined, team,
-    );
   }
 
   /** Server-side sentry fire: nearest hostile player in the envelope gets

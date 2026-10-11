@@ -66,13 +66,6 @@ const saved = ((): LabState | undefined => {
 const state: LabState = saved ?? { wt: 0, inspect: false, yaw: 0.75, pitch: 0 };
 (window as any).__gunlab = state;
 let saveTimer: ReturnType<typeof setTimeout> | undefined = undefined;
-function saveState(): void {
-  state.cam = camera.position.toArray();
-  state.tgt = orbit.target.toArray();
-  // Debounced — orbit 'change' can fire per frame while damping settles.
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(flushSave, 500);
-}
 function flushSave(): void {
   // state IS window.__gunlab — probes bolt `scene` and other live objects
   // onto it, and swarm meshes carry deliberately-circular dbg tags, so
@@ -83,6 +76,15 @@ function flushSave(): void {
     cat: state.cat, pick: state.pick,
   };
   localStorage.setItem('gunlab', JSON.stringify(persist));
+}
+
+
+function saveState(): void {
+  state.cam = camera.position.toArray();
+  state.tgt = orbit.target.toArray();
+  // Debounced — orbit 'change' can fire per frame while damping settles.
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(flushSave, 500);
 }
 addEventListener('pagehide', flushSave); // a pending debounce dies with the page
 
@@ -269,6 +271,62 @@ function updateStats(): void {
     `${verts.toLocaleString()} v · ${Math.round(tris).toLocaleString()} t · ${(bytes / 1024).toFixed(1)} KB\n` +
     `${s.x.toFixed(2)} × ${s.y.toFixed(2)} × ${s.z.toFixed(2)} m`;
 }
+
+// --- rail UI ---
+function paintRail(): void {
+  rail.innerHTML = '';
+  // Category picker — weapons today, creatures/pickups/etc as they get
+  // previewable builds. The select repaints the rail below it.
+  const cats: [id: string, label: string][] = [['weapons', 'weapons'], ['classes', 'classes'], ['creatures', 'creatures'], ['items', 'items'], ['pickups', 'pickups'], ['structures', 'structures']];
+  const catSel = document.createElement('select');
+  catSel.className = 'catsel';
+  for (const [id, label] of cats) {
+    const o = document.createElement('option');
+    o.value = id;
+    o.textContent = label;
+    if ((state.cat ?? 'weapons') === id) {o.selected = true;}
+    catSel.append(o);
+  }
+  catSel.addEventListener('change', (): void => { state.cat = catSel.value; saveState(); paintRail(); });
+  rail.append(catSel);
+  const catTable = state.cat === 'classes' ? CLASSES : state.cat === 'creatures' ? CREATURES : state.cat === 'items' ? ITEMS : state.cat === 'pickups' ? PICKUPS : state.cat === 'structures' ? STRUCTURES : null;
+  if (catTable) {
+    for (const [label, build] of catTable) {
+      const b = document.createElement('button');
+      b.textContent = label;
+      if (archiveLabel === label && archiveGroup) {b.classList.add('active');}
+      b.addEventListener('click', (): void => selectArchive(label, build));
+      rail.append(b);
+    }
+    paintTools();
+    return;
+  }
+  const wts = [...vm.weapons.keys()].toSorted((a, b): number => a - b);
+  for (const wt of wts) {
+    const b = document.createElement('button');
+    b.textContent = `${wt} ${WeaponType[wt] ?? '?'}`;
+    if (wt === state.wt) {b.classList.add('active');}
+    b.addEventListener('click', (): void => select(wt));
+    rail.append(b);
+  }
+  // Archive shelf — retired builders, for A/B against the live versions.
+  if (ARCHIVE_BUILDERS.length > 0) {
+    const sep = document.createElement('div');
+    sep.className = 'tools';
+    sep.innerHTML = '<span style="opacity:.5;padding:2px 4px">archive</span>';
+    rail.append(sep);
+    for (const [label, mkArc] of ARCHIVE_BUILDERS) {
+      const b = document.createElement('button');
+      b.textContent = `† ${label}`;
+      if (archiveLabel === label && archiveGroup) {b.classList.add('active');}
+      b.addEventListener('click', (): void => selectArchive(label, mkArc));
+      rail.append(b);
+    }
+  }
+  paintTools();
+}
+
+
 function toggleStats(): void {
   statOn = !statOn;
   if (statOn && !statEl) {
@@ -283,6 +341,13 @@ function toggleStats(): void {
   if (statOn) {updateStats();}
   paintRail();
 }
+
+function flashStatus(msg: string): void {
+  statusEl.innerHTML = `<span class="hot">${msg}</span>`;
+  setTimeout((): void => { statusEl.innerHTML = ''; }, 1500);
+}
+
+
 async function infoDump(all = false): Promise<void> {
   const lines: string[] = [`gunlab info — ${new Date().toISOString()}`];
   if (all) {
@@ -478,6 +543,34 @@ function disposeVm(v: ViewModel): void {
   });
   camera.remove(v.group);
 }
+function selectArchive(label: string, mk: () => THREE.Group): void {
+  unshell();
+  unmetal();
+  // parent-remove, not vm.group.remove: inspect mode re-parents the
+  // preview into `scene` as the orbit anchor, so a group-only remove
+  // silently leaves the old pick on stage (and setInspect re-homes it).
+  if (archiveGroup) {
+    (archiveGroup.userData.disposeCreature as (() => void) | undefined)?.();
+    archiveGroup.parent?.remove(archiveGroup);
+    if (inspectAnchor === archiveGroup) {inspectAnchor = null;}
+  }
+  for (const g of vm.weapons.values()) {g.visible = false;}
+  archiveGroup = mk();
+  bakeVertexAO(archiveGroup); // same AO+grunge+wear pipeline the live weapons get
+  archiveGroup.visible = true;
+  archiveGroup.name = `archive:${label}`;
+  archiveLabel = label;
+  state.pick = label; // survives F5 — same slot the weapon pick uses
+  saveState();
+  vm.group.add(archiveGroup);
+  if (state.inspect) { setInspect(false); setInspect(true); }
+  applyWire();
+  paintRail();
+  paintAnimRail();
+  flashStatus(`archive: ${label}`);
+}
+
+
 
 function rebuild(): void {
   const wasInspect = state.inspect;
@@ -745,59 +838,31 @@ function paintAnimRail(): void {
   animRail.append(drow);
 }
 
-// --- rail UI ---
-function paintRail(): void {
-  rail.innerHTML = '';
-  // Category picker — weapons today, creatures/pickups/etc as they get
-  // previewable builds. The select repaints the rail below it.
-  const cats: [id: string, label: string][] = [['weapons', 'weapons'], ['classes', 'classes'], ['creatures', 'creatures'], ['items', 'items'], ['pickups', 'pickups'], ['structures', 'structures']];
-  const catSel = document.createElement('select');
-  catSel.className = 'catsel';
-  for (const [id, label] of cats) {
-    const o = document.createElement('option');
-    o.value = id;
-    o.textContent = label;
-    if ((state.cat ?? 'weapons') === id) {o.selected = true;}
-    catSel.append(o);
+function select(wt: number): void {
+  state.wt = wt;
+  unshell(); // carved geos don't follow a weapon swap
+  unmetal();
+  if (archiveGroup) {
+    (archiveGroup.userData.disposeCreature as (() => void) | undefined)?.();
+    archiveGroup.parent?.remove(archiveGroup);
+    if (inspectAnchor === archiveGroup) {inspectAnchor = null;}
+    archiveGroup = null; archiveLabel = '';
+    paintAnimRail(); // weapons expose no anim driver — rail hides
   }
-  catSel.addEventListener('change', (): void => { state.cat = catSel.value; saveState(); paintRail(); });
-  rail.append(catSel);
-  const catTable = state.cat === 'classes' ? CLASSES : state.cat === 'creatures' ? CREATURES : state.cat === 'items' ? ITEMS : state.cat === 'pickups' ? PICKUPS : state.cat === 'structures' ? STRUCTURES : null;
-  if (catTable) {
-    for (const [label, build] of catTable) {
-      const b = document.createElement('button');
-      b.textContent = label;
-      if (archiveLabel === label && archiveGroup) {b.classList.add('active');}
-      b.addEventListener('click', (): void => selectArchive(label, build));
-      rail.append(b);
-    }
-    paintTools();
-    return;
-  }
-  const wts = [...vm.weapons.keys()].toSorted((a, b): number => a - b);
-  for (const wt of wts) {
-    const b = document.createElement('button');
-    b.textContent = `${wt} ${WeaponType[wt] ?? '?'}`;
-    if (wt === state.wt) {b.classList.add('active');}
-    b.addEventListener('click', (): void => select(wt));
-    rail.append(b);
-  }
-  // Archive shelf — retired builders, for A/B against the live versions.
-  if (ARCHIVE_BUILDERS.length > 0) {
-    const sep = document.createElement('div');
-    sep.className = 'tools';
-    sep.innerHTML = '<span style="opacity:.5;padding:2px 4px">archive</span>';
-    rail.append(sep);
-    for (const [label, mkArc] of ARCHIVE_BUILDERS) {
-      const b = document.createElement('button');
-      b.textContent = `† ${label}`;
-      if (archiveLabel === label && archiveGroup) {b.classList.add('active');}
-      b.addEventListener('click', (): void => selectArchive(label, mkArc));
-      rail.append(b);
-    }
-  }
-  paintTools();
+  state.pick = undefined;
+  vm.switchWeapon(wt);
+  for (let i = 0; i < 60; i += 1) {vm.update(1 / 60, 0, 0, zeroVel, camera);} // skip the holster dip
+  // Re-anchor whatever just became active — inspect mode follows the
+  // pick; setInspect refits along the tracked inspectDir, so the view
+  // angle survives the swap.
+  if (state.inspect) { setInspect(false); setInspect(true); }
+  if (zOverlay) {zPaint(true);} // flag the new pick — old overlay's tris are gone
+  applyWire();
+  paintRail();
+  saveState();
 }
+
+
 
 function paintTools(): void {
   const tools = document.createElement('div');
@@ -898,19 +963,34 @@ function paintTools(): void {
   rail.append(tools);
 }
 
-// 4-up reference sheet: side / top / front-¾ / first-person in one PNG.
-// Each shot renders full-frame then gets blitted into a composite cell —
-// the drawing buffer is only guaranteed valid within the same task, so
-// every render+drawImage pair runs synchronously.
-// cell layout — `up` pins the camera roll: without it lookAt rolls
-// arbitrarily and "top" ends up tilted on two axes instead of one.
-const shotDir: Record<string, { d: THREE.Vector3; up?: THREE.Vector3 }> = {
-  side:  { d: new THREE.Vector3(1, 0.05, 0) },
-  // up=-X puts the muzzle (-Z) to screen-right — same heading as the
-  // side cell, just seen from above.
-  top:   { d: new THREE.Vector3(0, 1, 0), up: new THREE.Vector3(-1, 0, 0) },
-  front: { d: new THREE.Vector3(-0.55, 0.25, -0.78) }, // gunner-facing ¾
-};
+
+async function copyBuilderSrc(): Promise<void> {
+  const entry = MODEL_BUILDERS.find(([wt]): boolean => wt === state.wt);
+  if (!entry) { flashStatus('no builder'); return; }
+  const name = entry[1].name || 'mk?';
+  const head = `export function ${name}`;
+  for (const load of Object.values(GEO_SOURCES)) {
+    const src = await load() as string;
+    const at = src.indexOf(head);
+    if (at === -1) {continue;}
+    let depth = 0, end = at;
+    for (let i = src.indexOf('{', at); i < src.length; i += 1) {
+      if (src[i] === '{') {depth += 1;}
+      else if (src[i] === '}' && (depth -= 1) === 0) { end = i + 1; break; }
+    }
+    // Grab the comment block above it too — the "why" matters.
+    let start = at;
+    const before = src.slice(0, at);
+    const m = before.match(/(?:\n\s*\/\/[^\n]*)+\s*$|\n\/\*[\s\S]*?\*\/\s*$/);
+    if (m) {start = m.index ?? at;}
+    await navigator.clipboard?.writeText(src.slice(start, end).trimStart());
+    flashStatus(`copied ${name}()`);
+    return;
+  }
+  flashStatus(`${name} not found in sources`);
+}
+
+
 function shotSheet(): void {
   (window as unknown as { __sheetPNG?: string }).__sheetPNG = undefined;
   const wasInspect = state.inspect;
@@ -992,96 +1072,32 @@ function shotSheet(): void {
   flashStatus(`w${state.wt} sheet → clipboard + shots/`);
 }
 
+
+
+// 4-up reference sheet: side / top / front-¾ / first-person in one PNG.
+// Each shot renders full-frame then gets blitted into a composite cell —
+// the drawing buffer is only guaranteed valid within the same task, so
+// every render+drawImage pair runs synchronously.
+// cell layout — `up` pins the camera roll: without it lookAt rolls
+// arbitrarily and "top" ends up tilted on two axes instead of one.
+const shotDir: Record<string, { d: THREE.Vector3; up?: THREE.Vector3 }> = {
+  side:  { d: new THREE.Vector3(1, 0.05, 0) },
+  // up=-X puts the muzzle (-Z) to screen-right — same heading as the
+  // side cell, just seen from above.
+  top:   { d: new THREE.Vector3(0, 1, 0), up: new THREE.Vector3(-1, 0, 0) },
+  front: { d: new THREE.Vector3(-0.55, 0.25, -0.78) }, // gunner-facing ¾
+};
+
 // Copy the active weapon's builder source — import.meta.glob pulls
 // every .ts under viewmodel/ as raw text, so new builder files are
 // picked up with zero wiring. fn.name survives bundling here because
 // vite dev serves the modules unminified.
 const GEO_SOURCES = import.meta.glob('./entities/viewmodel/*.ts', { query: '?raw', import: 'default' });
-async function copyBuilderSrc(): Promise<void> {
-  const entry = MODEL_BUILDERS.find(([wt]): boolean => wt === state.wt);
-  if (!entry) { flashStatus('no builder'); return; }
-  const name = entry[1].name || 'mk?';
-  const head = `export function ${name}`;
-  for (const load of Object.values(GEO_SOURCES)) {
-    const src = await load() as string;
-    const at = src.indexOf(head);
-    if (at === -1) {continue;}
-    let depth = 0, end = at;
-    for (let i = src.indexOf('{', at); i < src.length; i += 1) {
-      if (src[i] === '{') {depth += 1;}
-      else if (src[i] === '}' && (depth -= 1) === 0) { end = i + 1; break; }
-    }
-    // Grab the comment block above it too — the "why" matters.
-    let start = at;
-    const before = src.slice(0, at);
-    const m = before.match(/(?:\n\s*\/\/[^\n]*)+\s*$|\n\/\*[\s\S]*?\*\/\s*$/);
-    if (m) {start = m.index ?? at;}
-    await navigator.clipboard?.writeText(src.slice(start, end).trimStart());
-    flashStatus(`copied ${name}()`);
-    return;
-  }
-  flashStatus(`${name} not found in sources`);
-}
 
 // Retired-model preview — archive builders spawn straight into
 // vm.group so inspect/zcheck/gapcheck treat them like any weapon.
 let archiveGroup: THREE.Group | null = null;
 let archiveLabel = '';
-function selectArchive(label: string, mk: () => THREE.Group): void {
-  unshell();
-  unmetal();
-  // parent-remove, not vm.group.remove: inspect mode re-parents the
-  // preview into `scene` as the orbit anchor, so a group-only remove
-  // silently leaves the old pick on stage (and setInspect re-homes it).
-  if (archiveGroup) {
-    (archiveGroup.userData.disposeCreature as (() => void) | undefined)?.();
-    archiveGroup.parent?.remove(archiveGroup);
-    if (inspectAnchor === archiveGroup) {inspectAnchor = null;}
-  }
-  for (const g of vm.weapons.values()) {g.visible = false;}
-  archiveGroup = mk();
-  bakeVertexAO(archiveGroup); // same AO+grunge+wear pipeline the live weapons get
-  archiveGroup.visible = true;
-  archiveGroup.name = `archive:${label}`;
-  archiveLabel = label;
-  state.pick = label; // survives F5 — same slot the weapon pick uses
-  saveState();
-  vm.group.add(archiveGroup);
-  if (state.inspect) { setInspect(false); setInspect(true); }
-  applyWire();
-  paintRail();
-  paintAnimRail();
-  flashStatus(`archive: ${label}`);
-}
-
-function select(wt: number): void {
-  state.wt = wt;
-  unshell(); // carved geos don't follow a weapon swap
-  unmetal();
-  if (archiveGroup) {
-    (archiveGroup.userData.disposeCreature as (() => void) | undefined)?.();
-    archiveGroup.parent?.remove(archiveGroup);
-    if (inspectAnchor === archiveGroup) {inspectAnchor = null;}
-    archiveGroup = null; archiveLabel = '';
-    paintAnimRail(); // weapons expose no anim driver — rail hides
-  }
-  state.pick = undefined;
-  vm.switchWeapon(wt);
-  for (let i = 0; i < 60; i += 1) {vm.update(1 / 60, 0, 0, zeroVel, camera);} // skip the holster dip
-  // Re-anchor whatever just became active — inspect mode follows the
-  // pick; setInspect refits along the tracked inspectDir, so the view
-  // angle survives the swap.
-  if (state.inspect) { setInspect(false); setInspect(true); }
-  if (zOverlay) {zPaint(true);} // flag the new pick — old overlay's tris are gone
-  applyWire();
-  paintRail();
-  saveState();
-}
-
-function flashStatus(msg: string): void {
-  statusEl.innerHTML = `<span class="hot">${msg}</span>`;
-  setTimeout((): void => { statusEl.innerHTML = ''; }, 1500);
-}
 
 // --- baked-asset watch: HEAD signatures on this weapon's bake files ---
 const watched = new Map<string, string>();
@@ -1166,11 +1182,6 @@ scene.add(pickDot);
 let pickDotTimer: ReturnType<typeof setTimeout> | undefined = undefined;
 let downX = 0, downY = 0;
 addEventListener('mousedown', (e): void => { downX = e.clientX; downY = e.clientY; });
-addEventListener('mouseup', (e): void => {
-  if (Math.hypot(e.clientX - downX, e.clientY - downY) > 4) {return;}
-  if ((e.target as HTMLElement).tagName === 'BUTTON') {return;}
-  pickPiece(e.clientX, e.clientY);
-});
 function pickPiece(cx: number, cy: number): void {
   const root: THREE.Object3D = state.inspect && inspectAnchor ? inspectAnchor : vm.group;
   pickNDC.set((cx / innerWidth) * 2 - 1, -(cy / innerHeight) * 2 + 1);
@@ -1225,6 +1236,13 @@ function pickPiece(cx: number, cy: number): void {
   clearTimeout(pickDotTimer);
   pickDotTimer = setTimeout((): void => { pickDot.visible = false; }, 700);
 }
+
+
+addEventListener('mouseup', (e): void => {
+  if (Math.hypot(e.clientX - downX, e.clientY - downY) > 4) {return;}
+  if ((e.target as HTMLElement).tagName === 'BUTTON') {return;}
+  pickPiece(e.clientX, e.clientY);
+});
 addEventListener('resize', (): void => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();

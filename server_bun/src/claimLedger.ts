@@ -42,6 +42,12 @@ export function rewindPos(target: PlayerState, backMs: number): { x: number; y: 
   return last;
 }
 
+function dist3(a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }): number {
+  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+}
+
+
+
 // The shooter's view is stale by ping + jitter + interp buffer, so an
 // honest claim can land where the target WAS anywhere across the lag
 // window, not only at the rewound instant. Nearest point on the
@@ -59,8 +65,4 @@ export function rewindNearest(target: PlayerState, backMs: number, extraMs: numb
   const d = dist3(target.position, pt);
   if (d < bestD) {best = target.position;}
   return best;
-}
-
-function dist3(a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }): number {
-  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 }

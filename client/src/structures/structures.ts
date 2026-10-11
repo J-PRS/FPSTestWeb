@@ -215,6 +215,21 @@ export function mkBunker(w = 12, d = 10, h = 4.2, teamGlow = 0x59_F2_FF, door = 
   return g;
 }
 
+/** Sensor/comms mast — thin tower + dish horn; the "eyes" silhouette.
+ *  Sits on its own skirt so it reads planted, not speared. */
+export function mkCommsMast(h = 10, teamGlow = 0x59_F2_FF): THREE.Group {
+  const g = new THREE.Group();
+  g.add(skirt(profOct(3.4, 3.4, 0.5), 1.4, 1.3, hullMat, 2));
+  const m = mast(h, 0.3, trimMat, new THREE.MeshBasicMaterial({ color: teamGlow }));
+  m.position.y = 1.4;
+  g.add(m);
+  // Skirt + shaft as one slim box — bare mast, no dish dressing.
+  g.userData.hulls = [{ pos: { x: 0, y: (1.4 + h) / 2, z: 0 }, size: { x: 2.2, y: 1.4 + h, z: 2.2 } } satisfies HullBox];
+  return g;
+}
+
+
+
 /** Generator house — the base's power vault: tower-mass walls (taller
  *  and wider than mkBunker), a rear service door on the −Z face, and a
  *  raised interior deck so the generator stands on structure, not dirt.
@@ -390,19 +405,6 @@ export function mkLandingPad(r = 4.5, teamGlow = 0x59_F2_FF): THREE.Group {
   return g;
 }
 
-/** Sensor/comms mast — thin tower + dish horn; the "eyes" silhouette.
- *  Sits on its own skirt so it reads planted, not speared. */
-export function mkCommsMast(h = 10, teamGlow = 0x59_F2_FF): THREE.Group {
-  const g = new THREE.Group();
-  g.add(skirt(profOct(3.4, 3.4, 0.5), 1.4, 1.3, hullMat, 2));
-  const m = mast(h, 0.3, trimMat, new THREE.MeshBasicMaterial({ color: teamGlow }));
-  m.position.y = 1.4;
-  g.add(m);
-  // Skirt + shaft as one slim box — bare mast, no dish dressing.
-  g.userData.hulls = [{ pos: { x: 0, y: (1.4 + h) / 2, z: 0 }, size: { x: 2.2, y: 1.4 + h, z: 2.2 } } satisfies HullBox];
-  return g;
-}
-
 // ---------------------------------------------------------------------------
 // Midfield scatter — landmarks and ski-cover, not base parts. Each is one
 // strong silhouette on a buried skirt; all take a `hue` accent or none.
@@ -550,6 +552,37 @@ export function mkShard(w = 3.4, h = 8, lean = 0.25): THREE.Group {
   return g;
 }
 
+/** Gatehouse — a TALL curtain pierced by ONE full-height slot. In a jet
+ *  game a low wall is decor, so the face climbs to ~20m: clearing it
+ *  costs a full tank of climb and a slow exposed arc, while the shielded
+ *  slot (a 'shield' spec seated in the mouth) is the practical door —
+ *  allies walk and shoot through, enemies eat a wall. The slot runs the
+ *  whole height on purpose: when the generator drops the shield, the
+ *  breach is big enough to matter. Battered stubs, gate towers flanking
+ *  the mouth. ~24m span, ~21m tall, slot 4.4w×20h. */
+export function mkGatehouse(teamGlow = 0x59_F2_FF): THREE.Group {
+  const H = 20, GAP = 4.6, STUB = 9.7;
+  const stubC = GAP / 2 + STUB / 2;
+  const g = compound([
+    [mkWallRun(STUB, H, teamGlow, false), -stubC, 0],
+    [mkWallRun(STUB, H, teamGlow, false),  stubC, 0],
+    [endPost(H + 1.2, 3.4), -3.9, 0],
+    [endPost(H + 1.2, 3.4),  3.9, 0],
+  ]);
+  // Gate mouth accents: one vertical slot on each tower face, a hair
+  // proud of the surface like the wallrun parapet strip. Kept to the
+  // lower half — full-height strips read as floating neon on a 30m face.
+  const glowMat = new THREE.MeshBasicMaterial({ color: teamGlow });
+  for (const side of [-1, 1]) {
+    const slot = glowStrip(0.3, H * 0.45, 0.1, glowMat);
+    slot.position.set(side * 3.9, H * 0.28, 1.72); // front face of the tower
+    g.add(slot);
+  }
+  return g;
+}
+
+
+
 /** The bastion — a complete CTF base compound from the kit, ~46×44m.
  *  Composition rules (the parts that made hand-placed walls look wrong):
  *  every mass is axially aligned to the compound, heights step
@@ -604,33 +637,4 @@ export function mkBastion(teamGlow = 0x59_F2_FF): THREE.Group {
     [endPost(5, 4.5), -20, -21.75],
     [endPost(5, 4.5),  20, -21.75],
   ]);
-}
-
-/** Gatehouse — a TALL curtain pierced by ONE full-height slot. In a jet
- *  game a low wall is decor, so the face climbs to ~20m: clearing it
- *  costs a full tank of climb and a slow exposed arc, while the shielded
- *  slot (a 'shield' spec seated in the mouth) is the practical door —
- *  allies walk and shoot through, enemies eat a wall. The slot runs the
- *  whole height on purpose: when the generator drops the shield, the
- *  breach is big enough to matter. Battered stubs, gate towers flanking
- *  the mouth. ~24m span, ~21m tall, slot 4.4w×20h. */
-export function mkGatehouse(teamGlow = 0x59_F2_FF): THREE.Group {
-  const H = 20, GAP = 4.6, STUB = 9.7;
-  const stubC = GAP / 2 + STUB / 2;
-  const g = compound([
-    [mkWallRun(STUB, H, teamGlow, false), -stubC, 0],
-    [mkWallRun(STUB, H, teamGlow, false),  stubC, 0],
-    [endPost(H + 1.2, 3.4), -3.9, 0],
-    [endPost(H + 1.2, 3.4),  3.9, 0],
-  ]);
-  // Gate mouth accents: one vertical slot on each tower face, a hair
-  // proud of the surface like the wallrun parapet strip. Kept to the
-  // lower half — full-height strips read as floating neon on a 30m face.
-  const glowMat = new THREE.MeshBasicMaterial({ color: teamGlow });
-  for (const side of [-1, 1]) {
-    const slot = glowStrip(0.3, H * 0.45, 0.1, glowMat);
-    slot.position.set(side * 3.9, H * 0.28, 1.72); // front face of the tower
-    g.add(slot);
-  }
-  return g;
 }

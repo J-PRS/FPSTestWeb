@@ -48,6 +48,12 @@ export function checkWin(m: MatchHost): string | null {
   return null;
 }
 
+export function pushScore(m: MatchHost): void {
+  m.deps.lazyHud().setTeamScore?.(m.scores.alpha, m.scores.bravo);
+}
+
+
+
 /** Match over → wipe scores, flags home. Rounds are seamless: live
  *  bots keep their ground (hp/meters refilled), only the dead come
  *  back through the spawn ring — teleporting a healthy squad reads
@@ -126,10 +132,6 @@ export function collect(m: MatchHost, collectorId: string): void {
   // offline board's PTS column carries nuggets hauled, same as wire.
   awardPersonal(m, collectorId, 1);
   pushScore(m);
-}
-
-export function pushScore(m: MatchHost): void {
-  m.deps.lazyHud().setTeamScore?.(m.scores.alpha, m.scores.bravo);
 }
 
 /** The player's live team is world.localTeam — a connected room can

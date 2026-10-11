@@ -57,6 +57,19 @@ function hmField(f: Heightfield, wx: number, wz: number): number {
   return (h / HM_DIVISOR) * HM_HEIGHT_SCALE * (f.heightScale ?? 1);
 }
 
+export function hmChord(f: Heightfield, wx: number, wz: number): number {
+  const s = CPU_STEP;
+  const x0 = Math.floor(wx / s) * s, z0 = Math.floor(wz / s) * s;
+  const h00 = hmField(f, x0, z0), h10 = hmField(f, x0 + s, z0);
+  const h01 = hmField(f, x0, z0 + s), h11 = hmField(f, x0 + s, z0 + s);
+  const tx = (wx - x0) / s, tz = (wz - z0) / s;
+  return tx + tz <= 1
+    ? h00 + (h10 - h00) * tx + (h01 - h00) * tz
+    : h11 + (h10 - h11) * (1 - tz) + (h01 - h11) * (1 - tx);
+}
+
+
+
 /** Ground height = the RENDERED surface — the client's level-0 clipmap
  *  draws each 5m quad as two flat triangles split on the (x0+s,z0)↔
  *  (x0,z0+s) diagonal, and its lattice is world-anchored (the clipmap
@@ -68,17 +81,6 @@ function hmField(f: Heightfield, wx: number, wz: number): number {
  *  survives as hmField for chord corner taps. */
 export function hmHeight(f: Heightfield, wx: number, wz: number): number {
   return hmChord(f, wx, wz);
-}
-
-export function hmChord(f: Heightfield, wx: number, wz: number): number {
-  const s = CPU_STEP;
-  const x0 = Math.floor(wx / s) * s, z0 = Math.floor(wz / s) * s;
-  const h00 = hmField(f, x0, z0), h10 = hmField(f, x0 + s, z0);
-  const h01 = hmField(f, x0, z0 + s), h11 = hmField(f, x0 + s, z0 + s);
-  const tx = (wx - x0) / s, tz = (wz - z0) / s;
-  return tx + tz <= 1
-    ? h00 + (h10 - h00) * tx + (h01 - h00) * tz
-    : h11 + (h10 - h11) * (1 - tz) + (h01 - h11) * (1 - tx);
 }
 
 /** Cheap field identity for desync forensics — not a hash, just enough
@@ -117,6 +119,23 @@ export function hmScaled(f: Heightfield, heightScale: number, worldScale?: numbe
   return (heightScale === 1 && ws === fws) ? f : ((Object.assign({}, f, {heightScale,worldScale: ws})));
 }
 
+export function hmNormal(f: Heightfield, wx: number, wz: number, out: { x: number; y: number; z: number }): void {
+  const e = CPU_STEP * 0.5;
+  const hL = hmHeight(f, wx - e, wz);
+  const hR = hmHeight(f, wx + e, wz);
+  const hD = hmHeight(f, wx, wz - e);
+  const hU = hmHeight(f, wx, wz + e);
+  const nx = hL - hR;
+  const ny = 2 * e;
+  const nz = hD - hU;
+  const il = 1 / (nx * nx + ny * ny + nz * nz) ** 0.5;
+  out.x = nx * il;
+  out.y = ny * il;
+  out.z = nz * il;
+}
+
+
+
 /** Plain terrain-only move surface — the server wraps this shape with
  *  structure solids (FieldSurface); bots and tools use it bare. */
 export function hmSurface(f: Heightfield): { getHeight(x: number, z: number): number; getNormal(x: number, z: number, out: { x: number; y: number; z: number }): { x: number; y: number; z: number } } {
@@ -144,19 +163,4 @@ export function hmSettleWalkable(f: Heightfield, pos: { x: number; y: number; z:
     pos.y = Math.max(hmHeight(f, pos.x, pos.z), hmChord(f, pos.x, pos.z)) + lift;
     if (Math.abs(h0 - pos.y) < 0.5 && i > 4) {break;} // settled on a shelf
   }
-}
-
-export function hmNormal(f: Heightfield, wx: number, wz: number, out: { x: number; y: number; z: number }): void {
-  const e = CPU_STEP * 0.5;
-  const hL = hmHeight(f, wx - e, wz);
-  const hR = hmHeight(f, wx + e, wz);
-  const hD = hmHeight(f, wx, wz - e);
-  const hU = hmHeight(f, wx, wz + e);
-  const nx = hL - hR;
-  const ny = 2 * e;
-  const nz = hD - hU;
-  const il = 1 / (nx * nx + ny * ny + nz * nz) ** 0.5;
-  out.x = nx * il;
-  out.y = ny * il;
-  out.z = nz * il;
 }

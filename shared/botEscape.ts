@@ -239,6 +239,23 @@ export function dodge(ctx: BrainCtx, pos: BotVec, dest: BotVec, hero: boolean): 
   return { x: dx, y: pos.y, z: dz };
 }
 
+/** Tallest collider top covering (x,z), or null when open ground. */
+function topCovering(ctx: BrainCtx, x: number, z: number): number | null {
+  let top = -Infinity;
+  for (const c of ctx.solids!) {
+    const dx = x - c.cx, dz = z - c.cz;
+    const lx = dx * c.cos + dz * c.sin;
+    const lz = -dx * c.sin + dz * c.cos;
+    if (Math.abs(lx) <= c.hx + 0.5 && Math.abs(lz) <= c.hz + 0.5) {
+      const t = c.cy + c.hy;
+      if (t > top) {top = t;}
+    }
+  }
+  return top === -Infinity ? null : top;
+}
+
+
+
 // dist3/distSq imported from botVec.ts — shared by the brain family.
 
 /** First structure hit on the straight path pos→goal → the tallest
@@ -254,21 +271,6 @@ export function wallTopOnPath(ctx: BrainCtx, pos: BotVec, goal: BotVec | undefin
     ctx.solids, ctx.solidIndex ?? undefined, ctx.team);
   if (!hit) {return null;}
   return topCovering(ctx, hit.x, hit.z);
-}
-
-/** Tallest collider top covering (x,z), or null when open ground. */
-function topCovering(ctx: BrainCtx, x: number, z: number): number | null {
-  let top = -Infinity;
-  for (const c of ctx.solids!) {
-    const dx = x - c.cx, dz = z - c.cz;
-    const lx = dx * c.cos + dz * c.sin;
-    const lz = -dx * c.sin + dz * c.cos;
-    if (Math.abs(lx) <= c.hx + 0.5 && Math.abs(lz) <= c.hz + 0.5) {
-      const t = c.cy + c.hy;
-      if (t > top) {top = t;}
-    }
-  }
-  return top === -Infinity ? null : top;
 }
 
 /** Nearest own-team gate shield in reach → a waypoint a few meters

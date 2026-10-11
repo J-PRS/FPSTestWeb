@@ -155,144 +155,6 @@ export function roleSide(id: string): number {
   return (h & 1) === 0 ? 1 : -1;
 }
 
-export function roleObjective(role: string, s: FlagSituation, commit = 1, side = 1): { x: number; y: number; z: number } {
-  // Mutual-carry lock: both flags are out, so nobody can cap and the match
-  // is decided by which carrier dies first. If every role kept its routine
-  // job, chasers would trickle in one at a time against a stand-camped
-  // carrier plus its whole defense — the 8v8 zero-cap deadlock. Folding
-  // every non-anchor role onto the enemy carrier turns the trickle into a
-  // mass push. HoF holds (the parked carrier is still a stand to guard)
-  // and the capper stays escort (our carrier needs a screen, not a crowd
-  // of identical chasers — the escort keeps moving while the mob hunts).
-  if (s.thief && s.escort && role !== 'hof' && role !== 'capper') {return s.thief;}
-  switch (role) {
-    case 'hof': { return hofGoal(s, commit);
-    }
-    case 'ldefense': case 'technician': case 'defense': { return defenseGoal(s, role, side);}
-    case 'capper': { return capperGoal(s);
-    }
-    case 'bombardier': { return bombardierGoal(s);
-    }
-    case 'infiltrator': { return infiltratorGoal(s);
-    }
-    case 'medic': { return medicGoal(s);
-    }
-    default: { return offenseGoal(s);
-    }
-  }
-}
-
-/** HoF: planted on the stand, PERIOD — never chases a thief (that's what
- *  LD exists for). Only leaves the ring for a flag dropped in easy
- *  reach. With a threat inbound it interposes — plants a few meters
- *  toward the incoming line so a capping run hits a heavy's hitbox
- *  before it hits the flag. */
-function hofGoal(s: FlagSituation, commit: number): { x: number; y: number; z: number; } {
-  const T = BOT_TUNING.hof;
-  if (s.dropped && Math.hypot(s.dropped.x - s.home.x, s.dropped.z - s.home.z) < T.dropR) {return s.dropped;}
-  if (s.threat) {
-    const dx = s.threat.x - s.home.x, dz = s.threat.z - s.home.z;
-    const d = Math.hypot(dx, dz);
-    if (d > 1 && d < T.threatR) {
-      // The HoF body-block: slide onto the capper's run line so his
-      // speed meets a heavy's hitbox before it meets the flag. A slack
-      // HoF barely shifts off the pole, a locked-in one squares up
-      // several meters into the lane.
-      const lean = Math.min(T.leanMax, d * T.leanK) * commit;
-      return { x: s.home.x + (dx / d) * lean, y: s.home.y, z: s.home.z + (dz / d) * lean };
-    }
-  }
-  return s.home;
-}
-
-/** Light defense / technician / generic defense: home-side priorities —
- *  thief, dropped, then hold home in intercept range. A teammate
- *  carrier closing on home pulls midfield defense OUT to meet him —
- *  early escort beats a late body-block: the carrier's most fragile
- *  leg is the approach, where chasers converge. */
-function defenseGoal(s: FlagSituation, role: string, side: number): { x: number; y: number; z: number; } {
-  if (s.thief) {return s.thief;}
-  if (s.dropped) {return s.dropped;}
-  if (s.escort && Math.hypot(s.escort.x - s.home.x, s.escort.z - s.home.z) < 260) {return s.escort;}
-  // Idle: don't stack bodies on the pole — the era's real defense is
-  // coverage, not a clump. LD screens the incoming lane toward the
-  // enemy stand, generic defense takes a flank (side mirrors per bot),
-  // technician stays on the pole for the weld/deploy work.
-  if (s.enemyStand) {
-    const dx = s.enemyStand.x - s.home.x, dz = s.enemyStand.z - s.home.z;
-    const d = Math.hypot(dx, dz) || 1;
-    const ux = dx / d, uz = dz / d;
-    if (role === 'ldefense') {return { x: s.home.x + ux * 38, y: s.home.y, z: s.home.z + uz * 38 };}
-    if (role === 'defense') {return { x: s.home.x - uz * side * 24 + ux * 10, y: s.home.y, z: s.home.z + ux * side * 24 + uz * 10 };}
-  }
-  return s.home;
-}
-
-/** Capper: the flag route is the job — escort a carrier teammate,
- *  otherwise press the stand. Only a dropped own flag pulls it off-route. */
-function capperGoal(s: FlagSituation): { x: number; y: number; z: number; } {
-  if (s.escort) {return s.escort;}
-  if (s.dropped) {return s.dropped;}
-  if (s.enemyStand) {return s.enemyStand;}
-  return s.home;
-}
-
-/** Bombardier: the stand-clearer — holds a shelling perch ~90m off the
- *  enemy stand on the friendly side (mortar/MRV standoff), so the capper
- *  arrives at a softened stand instead of a fortified one. Not on the
- *  flag — parking ON the stand is the capper's death, not the
- *  bombardier's job. Falls back to escort/home when there's no stand
- *  to shell. */
-function bombardierGoal(s: FlagSituation): { x: number; y: number; z: number; } {
-  if (s.enemyStand) {
-    const dx = s.home.x - s.enemyStand.x, dz = s.home.z - s.enemyStand.z;
-    const d = Math.hypot(dx, dz);
-    if (d > 1) {
-      const standoff = Math.min(90, d * 0.35);
-      return {
-        x: s.enemyStand.x + (dx / d) * standoff,
-        y: s.enemyStand.y,
-        z: s.enemyStand.z + (dz / d) * standoff,
-      };
-    }
-    return s.enemyStand;
-  }
-  if (s.escort) {return s.escort;}
-  if (s.dropped) {return s.dropped;}
-  return s.home;
-}
-
-/** Infiltrator: slips in to wreck gear / grab — the stand press holds
- *  even when nobody's home so the cloak keeps covering the breach. */
-function infiltratorGoal(s: FlagSituation): { x: number; y: number; z: number; } {
-  if (s.escort) {return s.escort;}
-  // The push call outranks a routine stand press — the breach is timed
-  // to the capper's arrival, not whenever the saboteur wandered up.
-  if (s.push) {return s.push;}
-  if (s.enemyStand) {return s.enemyStand;}
-  if (s.thief) {return s.thief;}
-  return s.home;
-}
-
-/** Medic: shadow the push, not lead it — the carrier's pocket first,
- *  then hang ~40m behind whoever presses the stand (close enough to
- *  beam the breachers, far enough to live), a dropped flag pulls like
- *  everyone else's, home otherwise. */
-function medicGoal(s: FlagSituation): { x: number; y: number; z: number; } {
-  if (s.escort) {return s.escort;}
-  if (s.dropped) {return s.dropped;}
-  if (s.enemyStand) {
-    const dx = s.home.x - s.enemyStand.x, dz = s.home.z - s.enemyStand.z;
-    const d = Math.hypot(dx, dz);
-    if (d > 1) {
-      const back = Math.min(40, d * 0.2);
-      return { x: s.enemyStand.x + (dx / d) * back, y: s.enemyStand.y, z: s.enemyStand.z + (dz / d) * back };
-    }
-    return s.enemyStand;
-  }
-  return s.home;
-}
-
 /** Offense (light offense in Tribes terms): kill the thief first —
  *  while our flag is out the score is blocked anyway, so returning it
  *  beats shadowing a carrier who legally can't cap yet. Then escort,
@@ -322,4 +184,156 @@ function offenseGoal(s: FlagSituation): { x: number; y: number; z: number; } {
   if (s.dropped) {return s.dropped;}
   if (s.enemyStand) {return s.enemyStand;}
   return s.home; // flag's moving — defend home
+}
+
+
+
+/** Medic: shadow the push, not lead it — the carrier's pocket first,
+ *  then hang ~40m behind whoever presses the stand (close enough to
+ *  beam the breachers, far enough to live), a dropped flag pulls like
+ *  everyone else's, home otherwise. */
+function medicGoal(s: FlagSituation): { x: number; y: number; z: number; } {
+  if (s.escort) {return s.escort;}
+  if (s.dropped) {return s.dropped;}
+  if (s.enemyStand) {
+    const dx = s.home.x - s.enemyStand.x, dz = s.home.z - s.enemyStand.z;
+    const d = Math.hypot(dx, dz);
+    if (d > 1) {
+      const back = Math.min(40, d * 0.2);
+      return { x: s.enemyStand.x + (dx / d) * back, y: s.enemyStand.y, z: s.enemyStand.z + (dz / d) * back };
+    }
+    return s.enemyStand;
+  }
+  return s.home;
+}
+
+
+
+/** Infiltrator: slips in to wreck gear / grab — the stand press holds
+ *  even when nobody's home so the cloak keeps covering the breach. */
+function infiltratorGoal(s: FlagSituation): { x: number; y: number; z: number; } {
+  if (s.escort) {return s.escort;}
+  // The push call outranks a routine stand press — the breach is timed
+  // to the capper's arrival, not whenever the saboteur wandered up.
+  if (s.push) {return s.push;}
+  if (s.enemyStand) {return s.enemyStand;}
+  if (s.thief) {return s.thief;}
+  return s.home;
+}
+
+
+
+/** Bombardier: the stand-clearer — holds a shelling perch ~90m off the
+ *  enemy stand on the friendly side (mortar/MRV standoff), so the capper
+ *  arrives at a softened stand instead of a fortified one. Not on the
+ *  flag — parking ON the stand is the capper's death, not the
+ *  bombardier's job. Falls back to escort/home when there's no stand
+ *  to shell. */
+function bombardierGoal(s: FlagSituation): { x: number; y: number; z: number; } {
+  if (s.enemyStand) {
+    const dx = s.home.x - s.enemyStand.x, dz = s.home.z - s.enemyStand.z;
+    const d = Math.hypot(dx, dz);
+    if (d > 1) {
+      const standoff = Math.min(90, d * 0.35);
+      return {
+        x: s.enemyStand.x + (dx / d) * standoff,
+        y: s.enemyStand.y,
+        z: s.enemyStand.z + (dz / d) * standoff,
+      };
+    }
+    return s.enemyStand;
+  }
+  if (s.escort) {return s.escort;}
+  if (s.dropped) {return s.dropped;}
+  return s.home;
+}
+
+
+
+/** Capper: the flag route is the job — escort a carrier teammate,
+ *  otherwise press the stand. Only a dropped own flag pulls it off-route. */
+function capperGoal(s: FlagSituation): { x: number; y: number; z: number; } {
+  if (s.escort) {return s.escort;}
+  if (s.dropped) {return s.dropped;}
+  if (s.enemyStand) {return s.enemyStand;}
+  return s.home;
+}
+
+
+
+/** Light defense / technician / generic defense: home-side priorities —
+ *  thief, dropped, then hold home in intercept range. A teammate
+ *  carrier closing on home pulls midfield defense OUT to meet him —
+ *  early escort beats a late body-block: the carrier's most fragile
+ *  leg is the approach, where chasers converge. */
+function defenseGoal(s: FlagSituation, role: string, side: number): { x: number; y: number; z: number; } {
+  if (s.thief) {return s.thief;}
+  if (s.dropped) {return s.dropped;}
+  if (s.escort && Math.hypot(s.escort.x - s.home.x, s.escort.z - s.home.z) < 260) {return s.escort;}
+  // Idle: don't stack bodies on the pole — the era's real defense is
+  // coverage, not a clump. LD screens the incoming lane toward the
+  // enemy stand, generic defense takes a flank (side mirrors per bot),
+  // technician stays on the pole for the weld/deploy work.
+  if (s.enemyStand) {
+    const dx = s.enemyStand.x - s.home.x, dz = s.enemyStand.z - s.home.z;
+    const d = Math.hypot(dx, dz) || 1;
+    const ux = dx / d, uz = dz / d;
+    if (role === 'ldefense') {return { x: s.home.x + ux * 38, y: s.home.y, z: s.home.z + uz * 38 };}
+    if (role === 'defense') {return { x: s.home.x - uz * side * 24 + ux * 10, y: s.home.y, z: s.home.z + ux * side * 24 + uz * 10 };}
+  }
+  return s.home;
+}
+
+
+
+/** HoF: planted on the stand, PERIOD — never chases a thief (that's what
+ *  LD exists for). Only leaves the ring for a flag dropped in easy
+ *  reach. With a threat inbound it interposes — plants a few meters
+ *  toward the incoming line so a capping run hits a heavy's hitbox
+ *  before it hits the flag. */
+function hofGoal(s: FlagSituation, commit: number): { x: number; y: number; z: number; } {
+  const T = BOT_TUNING.hof;
+  if (s.dropped && Math.hypot(s.dropped.x - s.home.x, s.dropped.z - s.home.z) < T.dropR) {return s.dropped;}
+  if (s.threat) {
+    const dx = s.threat.x - s.home.x, dz = s.threat.z - s.home.z;
+    const d = Math.hypot(dx, dz);
+    if (d > 1 && d < T.threatR) {
+      // The HoF body-block: slide onto the capper's run line so his
+      // speed meets a heavy's hitbox before it meets the flag. A slack
+      // HoF barely shifts off the pole, a locked-in one squares up
+      // several meters into the lane.
+      const lean = Math.min(T.leanMax, d * T.leanK) * commit;
+      return { x: s.home.x + (dx / d) * lean, y: s.home.y, z: s.home.z + (dz / d) * lean };
+    }
+  }
+  return s.home;
+}
+
+
+
+export function roleObjective(role: string, s: FlagSituation, commit = 1, side = 1): { x: number; y: number; z: number } {
+  // Mutual-carry lock: both flags are out, so nobody can cap and the match
+  // is decided by which carrier dies first. If every role kept its routine
+  // job, chasers would trickle in one at a time against a stand-camped
+  // carrier plus its whole defense — the 8v8 zero-cap deadlock. Folding
+  // every non-anchor role onto the enemy carrier turns the trickle into a
+  // mass push. HoF holds (the parked carrier is still a stand to guard)
+  // and the capper stays escort (our carrier needs a screen, not a crowd
+  // of identical chasers — the escort keeps moving while the mob hunts).
+  if (s.thief && s.escort && role !== 'hof' && role !== 'capper') {return s.thief;}
+  switch (role) {
+    case 'hof': { return hofGoal(s, commit);
+    }
+    case 'ldefense': case 'technician': case 'defense': { return defenseGoal(s, role, side);}
+    case 'capper': { return capperGoal(s);
+    }
+    case 'bombardier': { return bombardierGoal(s);
+    }
+    case 'infiltrator': { return infiltratorGoal(s);
+    }
+    case 'medic': { return medicGoal(s);
+    }
+    default: { return offenseGoal(s);
+    }
+  }
 }

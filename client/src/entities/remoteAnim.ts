@@ -37,6 +37,18 @@ export interface AnimHost {
   tickAuras(dt: number): void;
 }
 
+/** Anim LOD table — Infinity = freeze everything (renderer already
+ *  culls the skin, so only CPU bone evaluation was burning). Floor is
+ *  15Hz — slower idle tiers read as steppy even at distance. */
+export function pickAnimCadence(onScreen: boolean, camDistSq: number, _moving: boolean): number {
+  if (onScreen === false) {return Infinity;}
+  if (camDistSq > 120 * 120) {return 1 / 15;}
+  if (camDistSq > 60 * 60) {return 1 / 30;}
+  return 0;
+}
+
+
+
 export class RemoteAnim {
   // Damage flinch / shot recoil timers — fire()/flinch() on the host set
   // them; the shoot oneshot outranks the flinch so a trigger pull snaps
@@ -267,14 +279,4 @@ export class RemoteAnim {
       Math.max(-0.45, Math.min(0.45, fwd * 0.022)),
       Math.max(-0.4, Math.min(0.4, -side * 0.02)));
   }
-}
-
-/** Anim LOD table — Infinity = freeze everything (renderer already
- *  culls the skin, so only CPU bone evaluation was burning). Floor is
- *  15Hz — slower idle tiers read as steppy even at distance. */
-export function pickAnimCadence(onScreen: boolean, camDistSq: number, _moving: boolean): number {
-  if (onScreen === false) {return Infinity;}
-  if (camDistSq > 120 * 120) {return 1 / 15;}
-  if (camDistSq > 60 * 60) {return 1 / 30;}
-  return 0;
 }

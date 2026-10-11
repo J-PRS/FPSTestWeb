@@ -113,6 +113,68 @@ export function buildArenaDome(a: { x: number; z: number; radius: number }, grou
   scene.add(dome);
 }
 
+// Non-terrain collider wireframes — same ?debug / menu DEBUG gate as the
+// player hitbox + AOE blast gizmos. Drawn straight from structureColliders
+// output, so the overlay IS the set the sim resolves against (dif hulls,
+// stands, cover) rather than a second guess at it.
+function buildColliderGizmos(list: StructureSpec[], scene: THREE.Scene): void {
+  if (colliderGizmos) {
+    scene.remove(colliderGizmos);
+    colliderGizmos.geometry.dispose();
+    (colliderGizmos.material as THREE.Material).dispose();
+    colliderGizmos = null;
+  }
+  const colliders = structureColliders(list);
+  if (colliders.length === 0) {return;}
+  if (urlParams.debug) {
+    // Stand float probe — the wire spec vs the OBB it becomes. A dais
+    // mesh anchors at home.y (ground); its skirt collider should start
+    // at the SAME y. If collider base - spec pos.y ≠ 0, the mismatch is
+    // in the collider math; if pos.y itself is high, the server snapped
+    // the home onto something under it.
+    const fmt = (n: number): string => n.toFixed(2);
+    let ci = 0;
+    for (const s of list) {
+      // Mirror structureColliders' expansion so ci lands on this spec's
+      // first produced box: kits → one per KIT_HULLS row, root → 2 feet.
+      const nOut = s.kind === 'kit' ? (KIT_HULLS[s.piece ?? '']?.length ?? 0)
+        : s.kind === 'root' ? 2 : 1;
+      if (s.kind === 'stand' && nOut > 0) {
+        const c = colliders[ci];
+        // oxlint-disable-next-line no-console
+        console.log(`[standCollider] spec pos=(${fmt(s.pos.x)},${fmt(s.pos.y)},${fmt(s.pos.z)}) size=(${fmt(s.size.x)},${fmt(s.size.y)},${fmt(s.size.z)}) scale=${s.scale ?? 1} → box center y=${fmt(c.cy)} span=[${fmt(c.cy - c.hy)}..${fmt(c.cy + c.hy)}] baseOffset=${fmt(c.cy - c.hy - s.pos.y)}`);
+      }
+      ci += nOut;
+    }
+  }
+  const unitEdges = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
+  const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3();
+  const edges: THREE.BufferGeometry[] = [];
+  for (const c of colliders) {
+    _p.set(c.cx, c.cy, c.cz);
+    _e.set(0, Math.atan2(c.sin, c.cos), 0);
+    _q.setFromEuler(_e);
+    _s.set(c.hx * 2, c.hy * 2, c.hz * 2);
+    _m.compose(_p, _q, _s);
+    edges.push(unitEdges.clone().applyMatrix4(_m));
+  }
+  const merged = mergeGeometries(edges, false);
+  for (const g of edges) {g.dispose();}
+  unitEdges.dispose();
+  if (!merged) {return;}
+  colliderGizmos = new THREE.LineSegments(
+    merged,
+    new THREE.LineBasicMaterial({ color: 0x33_FF_88, transparent: true, opacity: 0.55, depthTest: false }),
+  );
+  colliderGizmos.renderOrder = 999;
+  colliderGizmos.matrixAutoUpdate = false;
+  colliderGizmos.matrixWorldAutoUpdate = false;
+  colliderGizmos.visible = urlParams.debug;
+  scene.add(colliderGizmos);
+}
+
+
+
 export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terrain?: Pick<Terrain, 'heightU'>): void {
   // Sand-creep seam blend — patch the shared kit palette (idempotent)
   // and this build's spec-box mats so every wall/kit foot fades into
@@ -247,66 +309,6 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
   unit.dispose();
   cyl.dispose();
   buildColliderGizmos(list, scene);
-}
-
-// Non-terrain collider wireframes — same ?debug / menu DEBUG gate as the
-// player hitbox + AOE blast gizmos. Drawn straight from structureColliders
-// output, so the overlay IS the set the sim resolves against (dif hulls,
-// stands, cover) rather than a second guess at it.
-function buildColliderGizmos(list: StructureSpec[], scene: THREE.Scene): void {
-  if (colliderGizmos) {
-    scene.remove(colliderGizmos);
-    colliderGizmos.geometry.dispose();
-    (colliderGizmos.material as THREE.Material).dispose();
-    colliderGizmos = null;
-  }
-  const colliders = structureColliders(list);
-  if (colliders.length === 0) {return;}
-  if (urlParams.debug) {
-    // Stand float probe — the wire spec vs the OBB it becomes. A dais
-    // mesh anchors at home.y (ground); its skirt collider should start
-    // at the SAME y. If collider base - spec pos.y ≠ 0, the mismatch is
-    // in the collider math; if pos.y itself is high, the server snapped
-    // the home onto something under it.
-    const fmt = (n: number): string => n.toFixed(2);
-    let ci = 0;
-    for (const s of list) {
-      // Mirror structureColliders' expansion so ci lands on this spec's
-      // first produced box: kits → one per KIT_HULLS row, root → 2 feet.
-      const nOut = s.kind === 'kit' ? (KIT_HULLS[s.piece ?? '']?.length ?? 0)
-        : s.kind === 'root' ? 2 : 1;
-      if (s.kind === 'stand' && nOut > 0) {
-        const c = colliders[ci];
-        // oxlint-disable-next-line no-console
-        console.log(`[standCollider] spec pos=(${fmt(s.pos.x)},${fmt(s.pos.y)},${fmt(s.pos.z)}) size=(${fmt(s.size.x)},${fmt(s.size.y)},${fmt(s.size.z)}) scale=${s.scale ?? 1} → box center y=${fmt(c.cy)} span=[${fmt(c.cy - c.hy)}..${fmt(c.cy + c.hy)}] baseOffset=${fmt(c.cy - c.hy - s.pos.y)}`);
-      }
-      ci += nOut;
-    }
-  }
-  const unitEdges = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
-  const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3();
-  const edges: THREE.BufferGeometry[] = [];
-  for (const c of colliders) {
-    _p.set(c.cx, c.cy, c.cz);
-    _e.set(0, Math.atan2(c.sin, c.cos), 0);
-    _q.setFromEuler(_e);
-    _s.set(c.hx * 2, c.hy * 2, c.hz * 2);
-    _m.compose(_p, _q, _s);
-    edges.push(unitEdges.clone().applyMatrix4(_m));
-  }
-  const merged = mergeGeometries(edges, false);
-  for (const g of edges) {g.dispose();}
-  unitEdges.dispose();
-  if (!merged) {return;}
-  colliderGizmos = new THREE.LineSegments(
-    merged,
-    new THREE.LineBasicMaterial({ color: 0x33_FF_88, transparent: true, opacity: 0.55, depthTest: false }),
-  );
-  colliderGizmos.renderOrder = 999;
-  colliderGizmos.matrixAutoUpdate = false;
-  colliderGizmos.matrixWorldAutoUpdate = false;
-  colliderGizmos.visible = urlParams.debug;
-  scene.add(colliderGizmos);
 }
 
 /** The debug toggle is live — menu flips mid-session must reach the

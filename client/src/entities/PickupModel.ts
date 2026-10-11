@@ -26,14 +26,6 @@ export interface PickupParts { body: THREE.BufferGeometry; accent: THREE.BufferG
 
 const _parts = new Map<PickupKind, PickupParts | null>();
 
-export function pickupParts(kind: PickupKind): PickupParts | null {
-  const hit = _parts.get(kind);
-  if (hit !== undefined) {return hit;}
-  const built = buildParts(kind);
-  _parts.set(kind, built);
-  return built;
-}
-
 function buildParts(kind: PickupKind): PickupParts | null {
   switch (kind) {
     case 'heal': {
@@ -135,6 +127,16 @@ function buildParts(kind: PickupKind): PickupParts | null {
       return null;
     } // gem/tag-less kinds keep the plain nugget gem
   }
+}
+
+
+
+export function pickupParts(kind: PickupKind): PickupParts | null {
+  const hit = _parts.get(kind);
+  if (hit !== undefined) {return hit;}
+  const built = buildParts(kind);
+  _parts.set(kind, built);
+  return built;
 }
 
 /** Kind-tinted collect burst — rising sparks in the pickup's accent. */

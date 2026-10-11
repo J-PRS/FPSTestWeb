@@ -13,6 +13,78 @@ const TRAIL_INTERVAL  = 0.06; // seconds between trail dots (14-dot slot ≈ 0.8
 const _trailPos = new THREE.Vector3();
 const _trailTint = new THREE.Color();
 
+export function shrinkLanded(d: Debris, s: Shard): boolean {
+    if (!s.landed) {return true;}
+    const ft = 1 - (s.elapsed - s.landedAt) / SHRINK_DUR;
+    if (ft <= 0) {
+      d.removeShard(s);
+      return false;
+    }
+    if (s.mesh) { s.mesh.scale.setScalar(ft); }
+    else { s.shrink = ft; }
+    d.writeShard(s);
+    return true;
+  }
+
+
+
+export function greyShard(d: Debris, s: Shard): void {
+    const gt   = Math.min(s.elapsed / GREY_DUR, 1);
+    const grey = s.cr * 0.299 + s.cg * 0.587 + s.cb * 0.114;
+    const r = s.cr + (grey - s.cr) * gt;
+    const g = s.cg + (grey - s.cg) * gt;
+    const b = s.cb + (grey - s.cb) * gt;
+    if (s.mat) {s.mat.color.setRGB(r, g, b);}
+    else {d.writeShardColor(s, r, g, b);}
+  }
+
+
+
+// Smoke wake for player gibs — one pooled fxPuff wisp per shard on a
+// slow cadence, only while still moving fast enough to read as "flung".
+// Dark alpha puffs (not additive) shed against velocity so the trail
+// leans back along the flight path. fxPuff pressure-throttles itself,
+// so a multi-kill storm degrades density before it costs frames.
+export function emitSmoke(d: Debris, s: Shard, dt: number): void {
+    if (!d.smoke) {return;}
+    s.smokeTimer += dt;
+    if (s.smokeTimer < SMOKE_INTERVAL) {return;}
+    s.smokeTimer = 0;
+    if (s.vx * s.vx + s.vy * s.vy + s.vz * s.vz < 25) {return;} // <5m/s: wisps stop
+    _trailPos.set(s.x, s.y, s.z);
+    fxPuff(_trailPos, {
+      count: 1,
+      velMin: [-0.3, 0.3, -0.3], velMax: [0.3, 1, 0.3],
+      shed: [-s.vx * 0.1, -s.vy * 0.05, -s.vz * 0.1],
+      lifeMin: 0.4, lifeMax: 0.7,
+      sizeScale: Math.max(0.5, s.radius * 1.5),
+      colA: [0.16, 0.15, 0.14], colB: [0.3, 0.28, 0.26],
+      gravity: false,
+    });
+  }
+
+
+
+  // Trail dots ride the shared BallTrailDots batch â€” a kill storm used to be a
+  // draw call per puff per shard per interval (the 5000+ draw-call spikes).
+  // Trail dots ride the shared BallTrailDots Points batch — one slot per
+  // airborne shard, ~128 trails per draw call. The quarks puff this
+  // replaced built a whole ParticleSystem per emission: a few hundred
+  // airborne shards × 33Hz churned thousands of live systems (the 3338-
+  // live-systems frame tank).
+export function emitTrail(d: Debris, s: Shard, dt: number): void {
+    s.trail ??= new BallTrailDots(d.scene, { interval: TRAIL_INTERVAL, opacity: 0.6 });
+    s.trail.fade(dt);
+    s.trailTimer += dt;
+    while (s.trailTimer >= TRAIL_INTERVAL) {
+      s.trailTimer -= TRAIL_INTERVAL;
+      _trailPos.set(s.x, s.y, s.z);
+      s.trail.burst(1, _trailPos, s.radius * 0.8, _trailTint.setRGB(s.cr, s.cg, s.cb));
+    }
+  }
+
+
+
   // Returns false when the shard has fully shrunk away after landing
 export function stepShard(d: Debris, s: Shard, dt: number): boolean {
     // Physics â€” brush shards flutter: light gravity, air drag, soft bounce
@@ -64,69 +136,5 @@ export function stepShard(d: Debris, s: Shard, dt: number): boolean {
     }
     greyShard(d, s);
     return shrinkLanded(d, s);
-  }
-
-  // Trail dots ride the shared BallTrailDots batch â€” a kill storm used to be a
-  // draw call per puff per shard per interval (the 5000+ draw-call spikes).
-  // Trail dots ride the shared BallTrailDots Points batch — one slot per
-  // airborne shard, ~128 trails per draw call. The quarks puff this
-  // replaced built a whole ParticleSystem per emission: a few hundred
-  // airborne shards × 33Hz churned thousands of live systems (the 3338-
-  // live-systems frame tank).
-export function emitTrail(d: Debris, s: Shard, dt: number): void {
-    s.trail ??= new BallTrailDots(d.scene, { interval: TRAIL_INTERVAL, opacity: 0.6 });
-    s.trail.fade(dt);
-    s.trailTimer += dt;
-    while (s.trailTimer >= TRAIL_INTERVAL) {
-      s.trailTimer -= TRAIL_INTERVAL;
-      _trailPos.set(s.x, s.y, s.z);
-      s.trail.burst(1, _trailPos, s.radius * 0.8, _trailTint.setRGB(s.cr, s.cg, s.cb));
-    }
-  }
-
-// Smoke wake for player gibs — one pooled fxPuff wisp per shard on a
-// slow cadence, only while still moving fast enough to read as "flung".
-// Dark alpha puffs (not additive) shed against velocity so the trail
-// leans back along the flight path. fxPuff pressure-throttles itself,
-// so a multi-kill storm degrades density before it costs frames.
-export function emitSmoke(d: Debris, s: Shard, dt: number): void {
-    if (!d.smoke) {return;}
-    s.smokeTimer += dt;
-    if (s.smokeTimer < SMOKE_INTERVAL) {return;}
-    s.smokeTimer = 0;
-    if (s.vx * s.vx + s.vy * s.vy + s.vz * s.vz < 25) {return;} // <5m/s: wisps stop
-    _trailPos.set(s.x, s.y, s.z);
-    fxPuff(_trailPos, {
-      count: 1,
-      velMin: [-0.3, 0.3, -0.3], velMax: [0.3, 1, 0.3],
-      shed: [-s.vx * 0.1, -s.vy * 0.05, -s.vz * 0.1],
-      lifeMin: 0.4, lifeMax: 0.7,
-      sizeScale: Math.max(0.5, s.radius * 1.5),
-      colA: [0.16, 0.15, 0.14], colB: [0.3, 0.28, 0.26],
-      gravity: false,
-    });
-  }
-
-export function greyShard(d: Debris, s: Shard): void {
-    const gt   = Math.min(s.elapsed / GREY_DUR, 1);
-    const grey = s.cr * 0.299 + s.cg * 0.587 + s.cb * 0.114;
-    const r = s.cr + (grey - s.cr) * gt;
-    const g = s.cg + (grey - s.cg) * gt;
-    const b = s.cb + (grey - s.cb) * gt;
-    if (s.mat) {s.mat.color.setRGB(r, g, b);}
-    else {d.writeShardColor(s, r, g, b);}
-  }
-
-export function shrinkLanded(d: Debris, s: Shard): boolean {
-    if (!s.landed) {return true;}
-    const ft = 1 - (s.elapsed - s.landedAt) / SHRINK_DUR;
-    if (ft <= 0) {
-      d.removeShard(s);
-      return false;
-    }
-    if (s.mesh) { s.mesh.scale.setScalar(ft); }
-    else { s.shrink = ft; }
-    d.writeShard(s);
-    return true;
   }
 

@@ -35,6 +35,139 @@ function heapLine(): string {
   return m ? ` heap ${(m.usedJSHeapSize / 1_048_576).toFixed(0)}/${(m.jsHeapSizeLimit / 1_048_576).toFixed(0)}MB` : '';
 }
 
+function pushBots(lines: string[], ctx: StateDebugContext): void {
+  const tb = ctx.teamBots?.();
+  if (!tb) {return;}
+  const alive = tb.bots.filter((b): boolean => !b.isDead).length;
+  lines.push(`teamBots: ${alive}/${tb.bots.length} alive over=${tb.over ?? '-'} score=${tb.scores.alpha}:${tb.scores.bravo} localTeam=${tb.teamOf.get('local') ?? '-'}`);
+  for (const b of tb.bots) {
+    lines.push(`  bot ${b.playerId.replace('bot:', '')} team=${b.team} dead=${b.isDead} hp=${b.botHp ?? '?'} sheep=${(b as { sheep?: number }).sheep ?? 0} pos=${fmt(b.position)}`);
+  }
+}
+
+
+
+function pushWorld(lines: string[], w: StateDebugContext['world']): void {
+  if (!w) {return;}
+  const clock = w.matchEndsAt ? ` endsIn=${Math.max(0, Math.ceil((w.matchEndsAt - Date.now()) / 1000))}s` : '';
+  lines.push(`mode: ${w.mode ?? '(none)'} localTeam: ${w.localTeam ?? '-'}${w.playbackMode ? ' PLAYBACK' : ''}${clock}`);
+  if (w.teamScores) {lines.push(`teamScores: alpha=${w.teamScores.alpha} bravo=${w.teamScores.bravo}`);}
+  if (w.ffaScores?.size) {lines.push(`ffaScores: ${[...w.ffaScores.entries()].map(([id, s]): string => `${id.replace('bot:', '')}=${s}`).join(' ')}`);}
+}
+
+
+
+// Trail census — dead-trail bugs need attached/particles/slot per live
+// trail, not just the projectile count.
+function pushTrailCensus(lines: string[], ctx: StateDebugContext): void {
+  const td = window.__trailDump?.() as TrailDump | undefined;
+  if (!td) {return;}
+  if (td.stats) {lines.push(`trailStats: ${Object.entries(td.stats).map(([k, v]): string => `${k}=${v}`).join(' ')}`);}
+  if (td.pools) {lines.push(`pools: ${JSON.stringify(td.pools)}`);}
+  pushCapped(lines, 'trail', td.trails, 24, TRAIL_ROW_DEF);
+  lines.push(`ribbons: ${td.ribbons?.length ?? 0} live ${JSON.stringify(td.ribbonBatch ?? null)}`);
+  // Position-tagged rows — a frozen streak on screen maps to a slot by its
+  // head/mid coords; sorted by fullness so the longest streaks lead.
+  const rs = (td.ribbons ?? []).slice().sort((a, b): number => ((b.count as number) ?? 0) - ((a.count as number) ?? 0)).slice(0, 16);
+  for (const r of rs) {lines.push(`  rib ${JSON.stringify(slim(r, RIB_ROW_DEF))}`);}
+  const orphans = td.ribbonOrphans;
+  if (orphans && orphans.count > 0) {
+    lines.push(`ribbonOrphans: ${orphans.count} (leaked slots: ${orphans.slots.length})`);
+    pushCapped(lines, 'orphan', orphans.rows);
+  } else {
+    lines.push('ribbonOrphans: 0');
+  }
+  pushTrailExtras(lines, td, ctx);
+}
+
+
+
+// Crosshair probe near the top — the point of the dump is usually "what
+// is THAT thing", so the answer shouldn't sit under the censuses.
+function pushAimProbe(lines: string[], ctx: StateDebugContext): void {
+  const aimScene = ctx.getScene?.(), aimCam = ctx.getCamera?.();
+  if (!aimScene || !aimCam) {return;}
+  try {
+    const hits = aimProbe(aimScene, aimCam);
+    lines.push(`aim: ${hits.length > 0 ? '' : '(no tagged object under crosshair)'}`);
+    for (const h of hits) {lines.push(`  ${h}`);}
+  } catch (error) {
+    lines.push(`aim: probe failed ${(error as Error).message}`);
+  }
+}
+
+
+
+// Frame-cost section — window.__perf carries the per-phase EMA table
+// (gameLoop marks sim/balls/species/proj/fx/hud/render) plus draw calls
+// and the GPU timer. The watchdog log ships the same snapshot on
+// sustained <40fps; Alt+Q is the on-demand version. Unknown phases are
+// printed as-is so new marks never need wiring here.
+function pushPerf(lines: string[]): void {
+  const pd = window.__perf?.();
+  if (!pd) {return;}
+  const {gpu, draws, trisK} = pd as Record<string, number>;
+  const rest = ((((Object.assign({}, pd))))) as Record<string, number>;
+  delete rest.gpu; delete rest.draws; delete rest.trisK;
+  const phasePairs = Object.entries(rest)
+    .filter(([k, v]): boolean => !k.startsWith('max:') && !k.startsWith('w:') && k !== 'frame' && typeof v === 'number')
+    .map(([k, v]): string => `${k}=${v}`);
+  // budget stats arrive as {perFrame,worstItemMs,backlog} objects —
+  // flatten to k:field so they survive the number-only filter above.
+  for (const [k, v] of Object.entries(pd)) {
+    if (typeof v === 'object' && v) {
+      phasePairs.push(...Object.entries(v as Record<string, number>).map(([f, n]): string => `${k}.${f}=${n}`));
+    }
+  }
+  lines.push(`perf: frame=${rest['frame']}ms gpu=${gpu?.toFixed(1) ?? '?'}ms draws=${draws} tris=${trisK}k`);
+  lines.push(`  ${phasePairs.join(' ')}`);
+  const maxPairs = Object.entries(rest).filter(([k]): boolean => k.startsWith('max:'));
+  if (maxPairs.length > 0) {
+    lines.push(`  spikes: ${maxPairs.map(([k, v]): string => `${k.slice(4)}=${v}`).join(' ')}`);
+  }
+  // Worst frame in the last ~5s with its own phase split — catches the
+  // transient dips the EMA row smooths away.
+  const wPairs = Object.entries(rest).filter(([k]): boolean => k.startsWith('w:'));
+  if (wPairs.length > 0) {
+    lines.push(`  worst: ${wPairs.map(([k, v]): string => `${k.slice(2)}=${v}`).join(' ')}`);
+  }
+}
+
+
+
+// Render pipeline census — pixel modes/AA live in settings + closure
+// state, so the renderer self-registers __renderDump rather than the
+// dump reaching in. buffer vs canvas size exposes the low-res demote
+// case (mid-chain pass output landing below display res).
+function pushRender(lines: string[]): void {
+  const rd = window.__renderDump?.();
+  if (!rd) {return;}
+  const pm = ['RAW', 'SMOOTH', 'BAYER', 'ATKINSON'];
+  lines.push(`render: pmode=${pm[rd['pmodeEff'] as number] ?? rd['pmodeEff']} (pick ${pm[rd['pmode'] as number]}) pscale=${rd['pscale']} res=${(rd['resScale'] as number).toFixed(2)}`);
+  lines.push(`  aa=${rd['aaEff']} (pick ${rd['aa']}) msaa=${rd['msaa']} bloom=${rd['bloom']} postpro=${rd['postpro']} composer=${rd['composerOn']}`);
+  lines.push(`  buffer=${rd['buffer']} canvas=${rd['canvas']} tone=${rd['toneMapping']} exp=${rd['exposure']}`);
+  lines.push(`  passes: ${(rd['passes'] as string[]).join(' ')}`);
+}
+
+
+
+// Per-projectile row — pairs a dead trail with the shell that owns it.
+// Ribbon health flags per lane: '!' stopped, 'L' lit on screen,
+// '~N' pushes starved by the near-zero-velocity gate — a shell pushing
+// every frame that still has count<2 is the silent no-trail case.
+function pushProjectiles(lines: string[], ctx: StateDebugContext): void {
+  let ribbonWarns = 0;
+  for (const pr of ctx.projectiles) {
+    const d = pr.dbg();
+    const rib = d.ribbons.map((r): string => `${r.slot}:${r.count}${r.stopped ? '!' : ''}${r.lit ? 'L' : ''}${r.starved ? `~${r.starved}` : ''}`).join(',');
+    if (d.ribbons.some((r): boolean => r.count < 2 && r.starved > 10)) {ribbonWarns += 1;}
+    lines.push(`  proj ${pr.config.name} age=${pr.age.toFixed(2)}${pr.exploded ? ' EX' : ''} q=${JSON.stringify(d.trail)} rib=[${rib}]`);
+  }
+  if (ribbonWarns) {lines.push(`ribbonWarns: ${ribbonWarns} projectiles emit pushes but have NO ribbon samples`);}
+}
+
+
+
 export function diagLines(ctx: StateDebugContext, verbose = false): string[] {
   const nm = ctx.networkManager;
   const p = ctx.getPlayer();
@@ -106,84 +239,6 @@ export function diagLines(ctx: StateDebugContext, verbose = false): string[] {
   return lines;
 }
 
-// Per-projectile row — pairs a dead trail with the shell that owns it.
-// Ribbon health flags per lane: '!' stopped, 'L' lit on screen,
-// '~N' pushes starved by the near-zero-velocity gate — a shell pushing
-// every frame that still has count<2 is the silent no-trail case.
-function pushProjectiles(lines: string[], ctx: StateDebugContext): void {
-  let ribbonWarns = 0;
-  for (const pr of ctx.projectiles) {
-    const d = pr.dbg();
-    const rib = d.ribbons.map((r): string => `${r.slot}:${r.count}${r.stopped ? '!' : ''}${r.lit ? 'L' : ''}${r.starved ? `~${r.starved}` : ''}`).join(',');
-    if (d.ribbons.some((r): boolean => r.count < 2 && r.starved > 10)) {ribbonWarns += 1;}
-    lines.push(`  proj ${pr.config.name} age=${pr.age.toFixed(2)}${pr.exploded ? ' EX' : ''} q=${JSON.stringify(d.trail)} rib=[${rib}]`);
-  }
-  if (ribbonWarns) {lines.push(`ribbonWarns: ${ribbonWarns} projectiles emit pushes but have NO ribbon samples`);}
-}
-
-// Render pipeline census — pixel modes/AA live in settings + closure
-// state, so the renderer self-registers __renderDump rather than the
-// dump reaching in. buffer vs canvas size exposes the low-res demote
-// case (mid-chain pass output landing below display res).
-function pushRender(lines: string[]): void {
-  const rd = window.__renderDump?.();
-  if (!rd) {return;}
-  const pm = ['RAW', 'SMOOTH', 'BAYER', 'ATKINSON'];
-  lines.push(`render: pmode=${pm[rd['pmodeEff'] as number] ?? rd['pmodeEff']} (pick ${pm[rd['pmode'] as number]}) pscale=${rd['pscale']} res=${(rd['resScale'] as number).toFixed(2)}`);
-  lines.push(`  aa=${rd['aaEff']} (pick ${rd['aa']}) msaa=${rd['msaa']} bloom=${rd['bloom']} postpro=${rd['postpro']} composer=${rd['composerOn']}`);
-  lines.push(`  buffer=${rd['buffer']} canvas=${rd['canvas']} tone=${rd['toneMapping']} exp=${rd['exposure']}`);
-  lines.push(`  passes: ${(rd['passes'] as string[]).join(' ')}`);
-}
-
-// Frame-cost section — window.__perf carries the per-phase EMA table
-// (gameLoop marks sim/balls/species/proj/fx/hud/render) plus draw calls
-// and the GPU timer. The watchdog log ships the same snapshot on
-// sustained <40fps; Alt+Q is the on-demand version. Unknown phases are
-// printed as-is so new marks never need wiring here.
-function pushPerf(lines: string[]): void {
-  const pd = window.__perf?.();
-  if (!pd) {return;}
-  const {gpu, draws, trisK} = pd as Record<string, number>;
-  const rest = ((((Object.assign({}, pd))))) as Record<string, number>;
-  delete rest.gpu; delete rest.draws; delete rest.trisK;
-  const phasePairs = Object.entries(rest)
-    .filter(([k, v]): boolean => !k.startsWith('max:') && !k.startsWith('w:') && k !== 'frame' && typeof v === 'number')
-    .map(([k, v]): string => `${k}=${v}`);
-  // budget stats arrive as {perFrame,worstItemMs,backlog} objects —
-  // flatten to k:field so they survive the number-only filter above.
-  for (const [k, v] of Object.entries(pd)) {
-    if (typeof v === 'object' && v) {
-      phasePairs.push(...Object.entries(v as Record<string, number>).map(([f, n]): string => `${k}.${f}=${n}`));
-    }
-  }
-  lines.push(`perf: frame=${rest['frame']}ms gpu=${gpu?.toFixed(1) ?? '?'}ms draws=${draws} tris=${trisK}k`);
-  lines.push(`  ${phasePairs.join(' ')}`);
-  const maxPairs = Object.entries(rest).filter(([k]): boolean => k.startsWith('max:'));
-  if (maxPairs.length > 0) {
-    lines.push(`  spikes: ${maxPairs.map(([k, v]): string => `${k.slice(4)}=${v}`).join(' ')}`);
-  }
-  // Worst frame in the last ~5s with its own phase split — catches the
-  // transient dips the EMA row smooths away.
-  const wPairs = Object.entries(rest).filter(([k]): boolean => k.startsWith('w:'));
-  if (wPairs.length > 0) {
-    lines.push(`  worst: ${wPairs.map(([k, v]): string => `${k.slice(2)}=${v}`).join(' ')}`);
-  }
-}
-
-// Crosshair probe near the top — the point of the dump is usually "what
-// is THAT thing", so the answer shouldn't sit under the censuses.
-function pushAimProbe(lines: string[], ctx: StateDebugContext): void {
-  const aimScene = ctx.getScene?.(), aimCam = ctx.getCamera?.();
-  if (!aimScene || !aimCam) {return;}
-  try {
-    const hits = aimProbe(aimScene, aimCam);
-    lines.push(`aim: ${hits.length > 0 ? '' : '(no tagged object under crosshair)'}`);
-    for (const h of hits) {lines.push(`  ${h}`);}
-  } catch (error) {
-    lines.push(`aim: probe failed ${(error as Error).message}`);
-  }
-}
-
 // Sections self-register via registerDiag() in the owning modules —
 // every field optional so a module that never loaded degrades to a
 // missing line, not a thrown dump.
@@ -204,15 +259,6 @@ interface TrailDump {
   balls?: { viewPos?: string; rows?: Record<string, unknown>[] };
 }
 
-// Row dumps are per-live-entity — bound them or a busy fight turns the
-// paste into a novel. Totals stay exact; rows beyond the cap get an
-// omitted count.
-function pushCapped(lines: string[], label: string, arr: Record<string, unknown>[] | undefined, cap = 24, def?: Record<string, unknown>): void {
-  const rows = arr ?? [];
-  for (const r of rows.slice(0, cap)) {lines.push(`  ${label} ${JSON.stringify(slim(r, def))}`);}
-  if (rows.length > cap) {lines.push(`  … ${rows.length - cap} more ${label}s`);}
-}
-
 // Default-value suppression — rows repeat ~10 fields that are always the
 // same (attached:true, stopped:false, starved:0 …), so a paste is 90%
 // boilerplate and the anomaly hides in it. Fields drop ONLY when they
@@ -227,35 +273,23 @@ function slim(r: Record<string, unknown>, def?: Record<string, unknown>): Record
   return o;
 }
 
+
+
+// Row dumps are per-live-entity — bound them or a busy fight turns the
+// paste into a novel. Totals stay exact; rows beyond the cap get an
+// omitted count.
+function pushCapped(lines: string[], label: string, arr: Record<string, unknown>[] | undefined, cap = 24, def?: Record<string, unknown>): void {
+  const rows = arr ?? [];
+  for (const r of rows.slice(0, cap)) {lines.push(`  ${label} ${JSON.stringify(slim(r, def))}`);}
+  if (rows.length > cap) {lines.push(`  … ${rows.length - cap} more ${label}s`);}
+}
+
 // Per-section defaults — chosen so the *interesting* state always prints.
 const TRAIL_ROW_DEF = { attached: true, paused: false, waiting: 0, ended: false, loop: true, emVis: true, emRoot: 'Scene', emScale: 1, inPool: false, hasPs: true };
 const RIB_ROW_DEF = { pushed: 0, stopped: false, bb: true, lit: false, starved: 0 };
 const BALL_ROW_DEF = { net: true };
 const BALL_RIB_DEF = { stopped: false, lit: false, starved: 0 };
 const BALL_DOTS_DEF = { timer: 0, lastLive: 0 };
-
-// Trail census — dead-trail bugs need attached/particles/slot per live
-// trail, not just the projectile count.
-function pushTrailCensus(lines: string[], ctx: StateDebugContext): void {
-  const td = window.__trailDump?.() as TrailDump | undefined;
-  if (!td) {return;}
-  if (td.stats) {lines.push(`trailStats: ${Object.entries(td.stats).map(([k, v]): string => `${k}=${v}`).join(' ')}`);}
-  if (td.pools) {lines.push(`pools: ${JSON.stringify(td.pools)}`);}
-  pushCapped(lines, 'trail', td.trails, 24, TRAIL_ROW_DEF);
-  lines.push(`ribbons: ${td.ribbons?.length ?? 0} live ${JSON.stringify(td.ribbonBatch ?? null)}`);
-  // Position-tagged rows — a frozen streak on screen maps to a slot by its
-  // head/mid coords; sorted by fullness so the longest streaks lead.
-  const rs = (td.ribbons ?? []).slice().sort((a, b): number => ((b.count as number) ?? 0) - ((a.count as number) ?? 0)).slice(0, 16);
-  for (const r of rs) {lines.push(`  rib ${JSON.stringify(slim(r, RIB_ROW_DEF))}`);}
-  const orphans = td.ribbonOrphans;
-  if (orphans && orphans.count > 0) {
-    lines.push(`ribbonOrphans: ${orphans.count} (leaked slots: ${orphans.slots.length})`);
-    pushCapped(lines, 'orphan', orphans.rows);
-  } else {
-    lines.push('ribbonOrphans: 0');
-  }
-  pushTrailExtras(lines, td, ctx);
-}
 
 // The extras half of the trail census: GPU-buffer audits (lit-but-unowned
 // slots — frozen streaks no RibbonTrail object owns, reapedLit counts the
@@ -277,37 +311,7 @@ function pushTrailExtras(lines: string[], td: TrailDump, ctx: StateDebugContext)
   pushUnclaimed(lines, td);
 }
 
-// Generic pass-through — collectDiag merges EVERY registerDiag section,
-// so keys this census has no bespoke format for must still reach the
-// paste; before this sweep, glitches/visAudit/the net reject censuses
-// and vfx.drivers were collected and silently dropped.
-const TRAIL_CLAIMED = new Set([
-  'stats', 'pools', 'trails', 'ribbons', 'ribbonBatch', 'ribbonOrphans',
-  'litAudit', 'reapedLit', 'inst', 'swarm', 'fx', 'geoNaN', 'ballDots', 'balls',
-]);
-function pushUnclaimed(lines: string[], td: TrailDump): void {
-  for (const [k, v] of Object.entries(td)) {
-    if (TRAIL_CLAIMED.has(k) || v == null) {continue;}
-    const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
-    if (!s || s === '{}' || s === '[]') {continue;}
-    lines.push(`${k}: ${s.length > 600 ? `${s.slice(0, 600)  }…` : s}`);
-  }
-}
 
-// Projectile audit — the oldest-shell line surfaces the next immortal
-// early; the offWorld count catches shells that escaped the sane-bounds
-// box (a garbage trail census usually traces back to one of these).
-function pushShellAudit(lines: string[], ctx: StateDebugContext): void {
-  const aged = ctx.projectiles.slice().sort((a, b): number => b.age - a.age).slice(0, 5);
-  if (aged.length > 0) {
-    lines.push(`oldest: ${aged.map((pr): string => `${pr.config.name}@${pr.age.toFixed(1)}s(${pr.pos.x.toFixed(0)},${pr.pos.y.toFixed(0)},${pr.pos.z.toFixed(0)})`).join(' ')}`);
-  }
-  let offWorld = 0;
-  for (const pr of ctx.projectiles) {
-    if (pr.pos.y < -500 || Math.abs(pr.pos.x) > 4000 || Math.abs(pr.pos.z) > 4000) {offWorld += 1;}
-  }
-  if (offWorld) {lines.push(`offWorld: ${offWorld} projectiles outside sane bounds`);}
-}
 
 // Ball trail census — emit gates (speed >0.7, cam <200m) vs outputs
 // (live dots, ribbon samples). "spd=0 dots=0" everywhere = the shared
@@ -327,20 +331,40 @@ function pushBallCensus(lines: string[], td: TrailDump): void {
   }
 }
 
-function pushWorld(lines: string[], w: StateDebugContext['world']): void {
-  if (!w) {return;}
-  const clock = w.matchEndsAt ? ` endsIn=${Math.max(0, Math.ceil((w.matchEndsAt - Date.now()) / 1000))}s` : '';
-  lines.push(`mode: ${w.mode ?? '(none)'} localTeam: ${w.localTeam ?? '-'}${w.playbackMode ? ' PLAYBACK' : ''}${clock}`);
-  if (w.teamScores) {lines.push(`teamScores: alpha=${w.teamScores.alpha} bravo=${w.teamScores.bravo}`);}
-  if (w.ffaScores?.size) {lines.push(`ffaScores: ${[...w.ffaScores.entries()].map(([id, s]): string => `${id.replace('bot:', '')}=${s}`).join(' ')}`);}
+
+
+// Projectile audit — the oldest-shell line surfaces the next immortal
+// early; the offWorld count catches shells that escaped the sane-bounds
+// box (a garbage trail census usually traces back to one of these).
+function pushShellAudit(lines: string[], ctx: StateDebugContext): void {
+  const aged = ctx.projectiles.slice().sort((a, b): number => b.age - a.age).slice(0, 5);
+  if (aged.length > 0) {
+    lines.push(`oldest: ${aged.map((pr): string => `${pr.config.name}@${pr.age.toFixed(1)}s(${pr.pos.x.toFixed(0)},${pr.pos.y.toFixed(0)},${pr.pos.z.toFixed(0)})`).join(' ')}`);
+  }
+  let offWorld = 0;
+  for (const pr of ctx.projectiles) {
+    if (pr.pos.y < -500 || Math.abs(pr.pos.x) > 4000 || Math.abs(pr.pos.z) > 4000) {offWorld += 1;}
+  }
+  if (offWorld) {lines.push(`offWorld: ${offWorld} projectiles outside sane bounds`);}
 }
 
-function pushBots(lines: string[], ctx: StateDebugContext): void {
-  const tb = ctx.teamBots?.();
-  if (!tb) {return;}
-  const alive = tb.bots.filter((b): boolean => !b.isDead).length;
-  lines.push(`teamBots: ${alive}/${tb.bots.length} alive over=${tb.over ?? '-'} score=${tb.scores.alpha}:${tb.scores.bravo} localTeam=${tb.teamOf.get('local') ?? '-'}`);
-  for (const b of tb.bots) {
-    lines.push(`  bot ${b.playerId.replace('bot:', '')} team=${b.team} dead=${b.isDead} hp=${b.botHp ?? '?'} sheep=${(b as { sheep?: number }).sheep ?? 0} pos=${fmt(b.position)}`);
+
+function pushUnclaimed(lines: string[], td: TrailDump): void {
+  for (const [k, v] of Object.entries(td)) {
+    if (TRAIL_CLAIMED.has(k) || v == null) {continue;}
+    const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+    if (!s || s === '{}' || s === '[]') {continue;}
+    lines.push(`${k}: ${s.length > 600 ? `${s.slice(0, 600)  }…` : s}`);
   }
 }
+
+
+
+// Generic pass-through — collectDiag merges EVERY registerDiag section,
+// so keys this census has no bespoke format for must still reach the
+// paste; before this sweep, glitches/visAudit/the net reject censuses
+// and vfx.drivers were collected and silently dropped.
+const TRAIL_CLAIMED = new Set([
+  'stats', 'pools', 'trails', 'ribbons', 'ribbonBatch', 'ribbonOrphans',
+  'litAudit', 'reapedLit', 'inst', 'swarm', 'fx', 'geoNaN', 'ballDots', 'balls',
+]);

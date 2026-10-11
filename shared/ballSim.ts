@@ -147,62 +147,19 @@ export interface StepWorld {
   rand?: () => number;
 }
 
-export function stepBall(
-  b: SimBall,
-  dt: number,
-  field: Heightfield,
-  target: SimVec | null,
-  authoritative: boolean,
-  world?: StepWorld,
-): SegmentKind | null {
-  b.vy += BALL_GRAVITY * dt;
-  b.x += b.vx * dt;
-  b.y += b.vy * dt;
-  b.z += b.vz * dt;
-
-  const enrage = enragePull(b, dt, field, target, authoritative, world?.rand);
-  if (enrage !== undefined) {return enrage;}
-
-  // Stall breaker — RNG-free, so predictors run it too and land the same
-  // spring the server commits to. Fires BEFORE the bounce check so a ball
-  // resting on the ground (the common stall) launches immediately.
-  const sp = Math.hypot(b.vx, b.vy, b.vz);
-  b.slowTimer = sp < BALL_MIN_SPEED ? b.slowTimer + dt : 0;
-  if (b.slowTimer >= BALL_STALL_TIME && target) {
-    b.slowTimer = 0;
-    launchAt(b, target, Math.SQRT1_2);
-    return 'stall';
-  }
-
-  // Structures before terrain — a ball inside a wall would otherwise
-  // terrain-resolve first and stay embedded.
-  if (world?.colliders && collideStructures(b, world.colliders, world.colliderIndex)) {return 'bounce';}
-
-  return groundContact(b, dt, field, target);
+function launchAt(b: SimBall, target: SimVec, upFrac: number): void {
+  b.gt = 0; // new arc — the cached time-to-ground is stale
+  const pdx = target.x - b.x;
+  const pdz = target.z - b.z;
+  const pd = (pdx * pdx + pdz * pdz) ** 0.5 || 0.001;
+  const speed = Math.min(BALL_MAX_SPEED, Math.max(Math.hypot(b.vx, b.vy, b.vz), BALL_ENRAGE_DASH_SPEED * 0.5));
+  const h = (1 - upFrac * upFrac) ** 0.5;
+  b.vx = (pdx / pd) * speed * h;
+  b.vz = (pdz / pd) * speed * h;
+  b.vy = Math.max(speed * upFrac, (target.y - b.y) * 0.8);
 }
 
-/** Enrage pull: linear accel toward the committed target (still ballistic-
- *  flavored — it arcs and bounces rather than homing). Returns the segment
- *  kind when the step ends here, undefined when the sim should continue. */
-function enragePull(b: SimBall, dt: number, field: Heightfield, target: SimVec | null, authoritative: boolean, rand?: () => number): SegmentKind | null | undefined {
-  if (!b.enraged || !target) {return undefined;}
-  b.enrageTimer += dt;
-  const dx = target.x - b.x;
-  const dy = target.y + b.radius - b.y;
-  const dz = target.z - b.z;
-  const d = (dx * dx + dy * dy + dz * dz) ** 0.5;
-  if (d > 0.001) {
-    const f = BALL_ENRAGE_FORCE * dt / d;
-    b.vx += dx * f;
-    b.vy += dy * f;
-    b.vz += dz * f;
-  }
-  if (b.enrageTimer <= BALL_ENRAGE_TIMEOUT) {return undefined;}
-  b.enraged = false;
-  b.enrageTimer = 0; // budget spent — the next enrage gets a fresh 20s
-  if (authoritative) {return teleportNearTarget(b, field, target, rand ?? botRand);}
-  return null; // predictor: let it fly, the event will snap it
-}
+
 
 /** Ground contact → reflect. Mirrors handleGroundBounce: only a bounce
  *  while moving INTO the surface counts. The height is sampled at the
@@ -268,29 +225,65 @@ function groundContact(b: SimBall, _dt: number, field: Heightfield, target: SimV
   return seg;
 }
 
-function launchAt(b: SimBall, target: SimVec, upFrac: number): void {
-  b.gt = 0; // new arc — the cached time-to-ground is stale
-  const pdx = target.x - b.x;
-  const pdz = target.z - b.z;
-  const pd = (pdx * pdx + pdz * pdz) ** 0.5 || 0.001;
-  const speed = Math.min(BALL_MAX_SPEED, Math.max(Math.hypot(b.vx, b.vy, b.vz), BALL_ENRAGE_DASH_SPEED * 0.5));
-  const h = (1 - upFrac * upFrac) ** 0.5;
-  b.vx = (pdx / pd) * speed * h;
-  b.vz = (pdz / pd) * speed * h;
-  b.vy = Math.max(speed * upFrac, (target.y - b.y) * 0.8);
+
+
+/** Enrage pull: linear accel toward the committed target (still ballistic-
+ *  flavored — it arcs and bounces rather than homing). Returns the segment
+ *  kind when the step ends here, undefined when the sim should continue. */
+function enragePull(b: SimBall, dt: number, field: Heightfield, target: SimVec | null, authoritative: boolean, rand?: () => number): SegmentKind | null | undefined {
+  if (!b.enraged || !target) {return undefined;}
+  b.enrageTimer += dt;
+  const dx = target.x - b.x;
+  const dy = target.y + b.radius - b.y;
+  const dz = target.z - b.z;
+  const d = (dx * dx + dy * dy + dz * dz) ** 0.5;
+  if (d > 0.001) {
+    const f = BALL_ENRAGE_FORCE * dt / d;
+    b.vx += dx * f;
+    b.vy += dy * f;
+    b.vz += dz * f;
+  }
+  if (b.enrageTimer <= BALL_ENRAGE_TIMEOUT) {return undefined;}
+  b.enraged = false;
+  b.enrageTimer = 0; // budget spent — the next enrage gets a fresh 20s
+  if (authoritative) {return teleportNearTarget(b, field, target, rand ?? botRand);}
+  return null; // predictor: let it fly, the event will snap it
 }
 
-function dashAt(b: SimBall, target: SimVec): void {
-  b.gt = 0;
-  const pdx = target.x - b.x;
-  const pdz = target.z - b.z;
-  const pd = (pdx * pdx + pdz * pdz) ** 0.5 || 0.001;
-  const hSpeed = Math.max(Math.hypot(b.vx, b.vz), BALL_ENRAGE_DASH_SPEED * 0.5);
-  const t = Math.max(0.15, pd / hSpeed);
-  const vy = (target.y - b.y + 0.5 * Math.abs(BALL_GRAVITY) * t * t) / t;
-  b.vx = (pdx / pd) * hSpeed;
-  b.vz = (pdz / pd) * hSpeed;
-  b.vy = vy;
+
+
+export function stepBall(
+  b: SimBall,
+  dt: number,
+  field: Heightfield,
+  target: SimVec | null,
+  authoritative: boolean,
+  world?: StepWorld,
+): SegmentKind | null {
+  b.vy += BALL_GRAVITY * dt;
+  b.x += b.vx * dt;
+  b.y += b.vy * dt;
+  b.z += b.vz * dt;
+
+  const enrage = enragePull(b, dt, field, target, authoritative, world?.rand);
+  if (enrage !== undefined) {return enrage;}
+
+  // Stall breaker — RNG-free, so predictors run it too and land the same
+  // spring the server commits to. Fires BEFORE the bounce check so a ball
+  // resting on the ground (the common stall) launches immediately.
+  const sp = Math.hypot(b.vx, b.vy, b.vz);
+  b.slowTimer = sp < BALL_MIN_SPEED ? b.slowTimer + dt : 0;
+  if (b.slowTimer >= BALL_STALL_TIME && target) {
+    b.slowTimer = 0;
+    launchAt(b, target, Math.SQRT1_2);
+    return 'stall';
+  }
+
+  // Structures before terrain — a ball inside a wall would otherwise
+  // terrain-resolve first and stay embedded.
+  if (world?.colliders && collideStructures(b, world.colliders, world.colliderIndex)) {return 'bounce';}
+
+  return groundContact(b, dt, field, target);
 }
 
 function teleportNearTarget(b: SimBall, field: Heightfield, target: SimVec, rand: () => number): SegmentKind {
@@ -312,6 +305,23 @@ function teleportNearTarget(b: SimBall, field: Heightfield, target: SimVec, rand
   b.vz = Math.sin(a2) * hsp;
   return 'teleport';
 }
+
+
+
+function dashAt(b: SimBall, target: SimVec): void {
+  b.gt = 0;
+  const pdx = target.x - b.x;
+  const pdz = target.z - b.z;
+  const pd = (pdx * pdx + pdz * pdz) ** 0.5 || 0.001;
+  const hSpeed = Math.max(Math.hypot(b.vx, b.vz), BALL_ENRAGE_DASH_SPEED * 0.5);
+  const t = Math.max(0.15, pd / hSpeed);
+  const vy = (target.y - b.y + 0.5 * Math.abs(BALL_GRAVITY) * t * t) / t;
+  b.vx = (pdx / pd) * hSpeed;
+  b.vz = (pdz / pd) * hSpeed;
+  b.vy = vy;
+}
+
+
 
 /** Server-side hit claim result. `impulse` mirrors Ball.applyKnockback —
  * a hit shoves the ball (the whole point of the damage model) so the claim

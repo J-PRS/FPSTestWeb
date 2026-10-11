@@ -32,24 +32,6 @@ export interface BalHost {
   onLaunch?: (pos: THREE.Vector3) => void;
 }
 
-export function updateAir(t: BalHost, dt: number, terrain: Terrain): void {
-  t.vel.y += GRAVITY * dt;
-  t.pos.addScaledVector(t.vel, dt);
-  // Tumble slightly in flight — reads as "thrown", not "flying"
-  _q.setFromEuler(_e.set(dt * 2.2, 0, dt * 1.4));
-  t.rootQuat.premultiply(_q);
-
-  const gy = terrain.getHeight(t.pos.x, t.pos.z);
-  if (t.pos.y - t.radius * 0.5 <= gy) {
-    t.pos.y = gy + t.radius * 0.5;
-    t.planted = true;
-    t.dwell = 0;
-    t.vel.set(0, 0, 0);
-    seat(t, terrain);
-    t.onLanded?.(t.pos);
-  }
-}
-
 // Seat the base onto the terrain:
 //  1. Tilt to the ground normal (works on any slope)
 //  2. Sink the base bottom a shallow burrow under CENTER ground — no
@@ -74,6 +56,26 @@ export function seat(t: BalHost, terrain: Terrain): void {
   // driven under the terrain at each column — no gap can form.
   t.foot.conform(cx, cz, t.pos.y + t.meshYOffset, terrain, t.rootQuat);
   t.foot.mesh.visible = true;
+}
+
+
+
+export function updateAir(t: BalHost, dt: number, terrain: Terrain): void {
+  t.vel.y += GRAVITY * dt;
+  t.pos.addScaledVector(t.vel, dt);
+  // Tumble slightly in flight — reads as "thrown", not "flying"
+  _q.setFromEuler(_e.set(dt * 2.2, 0, dt * 1.4));
+  t.rootQuat.premultiply(_q);
+
+  const gy = terrain.getHeight(t.pos.x, t.pos.z);
+  if (t.pos.y - t.radius * 0.5 <= gy) {
+    t.pos.y = gy + t.radius * 0.5;
+    t.planted = true;
+    t.dwell = 0;
+    t.vel.set(0, 0, 0);
+    seat(t, terrain);
+    t.onLanded?.(t.pos);
+  }
 }
 
 // Perfect ballistic arc onto the player's predicted position — fixed

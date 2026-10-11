@@ -289,6 +289,40 @@ function tickSuspended(ps: IParticleSystem, em: THREE.Object3D, camPos: THREE.Ve
   (ps as ParticleSystem).paused = true;
 }
 
+function shrinkPools(now: number): void {
+  let total = 0;
+  for (const [kind, pool] of pools) {
+    for (let i = pool.length - 1; i >= POOL_FLOOR; i -= 1) {
+      if (now - pool[i]!.idleAt <= POOL_IDLE_MS) {continue;}
+      const {ps} = pool[i]!;
+      pool[i] = pool[pool.length - 1]!;
+      pool.pop();
+      retirePooled(ps);
+    }
+    if (pool.length === 0) {pools.delete(kind);}
+    else {total += pool.length;}
+  }
+  // Global ceiling: evict the oldest idle entries when the pool census
+  // exceeds POOL_MAX_TOTAL — a fragmented key space must not convert into
+  // unbounded parked systems again.
+  if (total > POOL_MAX_TOTAL) {
+    type Entry = { ps: ParticleSystem; idleAt: number; pool: { ps: ParticleSystem; idleAt: number }[] };
+    const all: Entry[] = [];
+    for (const pool of pools.values())
+      {for (const e of pool) {all.push({ ps: e.ps, idleAt: e.idleAt, pool });}}
+    all.sort((a, b): number => a.idleAt - b.idleAt);
+    for (let i = 0; i < all.length - POOL_MAX_TOTAL; i += 1) {
+      const e = all[i]!;
+      const idx = e.pool.findIndex((x): boolean => x.ps === e.ps);
+      if (idx !== -1) {e.pool.splice(idx, 1);}
+      retirePooled(e.ps);
+    }
+    for (const [kind, pool] of pools) {if (pool.length === 0) {pools.delete(kind);}}
+  }
+}
+
+
+
 function runBookkeeping(camPos?: THREE.Vector3): void {
   // Distance-pause BEFORE the batch sim: skip offscreen systems this frame.
   // Covers every attached system (live bursts AND projectile trails).
@@ -332,38 +366,6 @@ function runBookkeeping(camPos?: THREE.Vector3): void {
 function retirePooled(ps: ParticleSystem): void {
   pooled.delete(ps);
   ps.dispose();
-}
-
-function shrinkPools(now: number): void {
-  let total = 0;
-  for (const [kind, pool] of pools) {
-    for (let i = pool.length - 1; i >= POOL_FLOOR; i -= 1) {
-      if (now - pool[i]!.idleAt <= POOL_IDLE_MS) {continue;}
-      const {ps} = pool[i]!;
-      pool[i] = pool[pool.length - 1]!;
-      pool.pop();
-      retirePooled(ps);
-    }
-    if (pool.length === 0) {pools.delete(kind);}
-    else {total += pool.length;}
-  }
-  // Global ceiling: evict the oldest idle entries when the pool census
-  // exceeds POOL_MAX_TOTAL — a fragmented key space must not convert into
-  // unbounded parked systems again.
-  if (total > POOL_MAX_TOTAL) {
-    type Entry = { ps: ParticleSystem; idleAt: number; pool: { ps: ParticleSystem; idleAt: number }[] };
-    const all: Entry[] = [];
-    for (const pool of pools.values())
-      {for (const e of pool) {all.push({ ps: e.ps, idleAt: e.idleAt, pool });}}
-    all.sort((a, b): number => a.idleAt - b.idleAt);
-    for (let i = 0; i < all.length - POOL_MAX_TOTAL; i += 1) {
-      const e = all[i]!;
-      const idx = e.pool.findIndex((x): boolean => x.ps === e.ps);
-      if (idx !== -1) {e.pool.splice(idx, 1);}
-      retirePooled(e.ps);
-    }
-    for (const [kind, pool] of pools) {if (pool.length === 0) {pools.delete(kind);}}
-  }
 }
 
 // Sim-lab overlay: while the lab view is open it steers the distance-

@@ -108,57 +108,6 @@ function wordBoundary(text: string, who: string | undefined, fullDurS: number): 
   return boundary;
 }
 
-export function speakVgs(text: string, who?: string): void {
-  const bus = audio.uiBus;
-  const ctx = bus?.context;
-  if (!bus || !ctx) {return;}
-  const key = who ?? '';
-  const t = ctx.currentTime;
-  let startAt = t;
-  const live = liveVoice.get(key);
-  if (live) {
-    // Snap the kill to the live line's last-word boundary — the "perfect
-    // splice" is measured, not timed. Past the boundary already = a
-    // mistimed combo, which cuts instantly like era spam.
-    const delay = Math.min(Math.max(live.startT + live.boundaryS - t, 0), 1.2);
-    try { live.src.stop(t + delay); live.carrier.stop(t + delay); } catch { /* already ended */ }
-    liveVoice.delete(key);
-    startAt = t + delay;
-  }
-  // oxlint-disable-next-line init-declarations -- set by sam-js
-  let pcm!: unknown; // sam-js returns Float32Array | Boolean
-  try {
-    pcm = samFor(who).buf32(text);
-  } catch {
-    speakSystem(text); // reciter hiccup → degrade to system voice
-    return;
-  }
-  // buf32 returns false (not throws) on unparseable text — apostrophes,
-  // stray symbols — degrade to the system voice rather than silent.
-  if (!(pcm instanceof Float32Array) || pcm.length === 0) { speakSystem(text); return; }
-  const buf = ctx.createBuffer(1, pcm.length, SAM_RATE);
-  buf.copyToChannel(pcm as Float32Array<ArrayBuffer>, 0);
-  const src = playRadioVoice(ctx, bus, buf, startAt);
-  liveVoice.set(key, Object.assign({}, src, {startT: startAt,boundaryS: wordBoundary(text, who, buf.duration)}));
-  src.src.onended = (): void => { if (liveVoice.get(key)?.src === src.src) {liveVoice.delete(key);} };
-}
-
-/** Typed chat read-aloud — deliberately the plain system voice, NOT the
- *  robot, so typed messages and VGS calls sound like different channels.
- *  Pitch jitters per speaker so voices differ by who typed. */
-export function speakChat(text: string, who?: string): void {
-  let h = 0;
-  // oxlint-disable-next-line prefer-math-trunc -- int32 wrap is the point
-  if (who) {for (let i = 0; i < who.length; i += 1) {h = (h * 31 + who.charCodeAt(i)) | 0;}}
-  speakSystem(text, 0.7 + (Math.abs(h) % 8) * 0.08); // 0.70–1.26
-}
-
-/** True when the CHAT TTS option is on — the call sites read through
- *  this so the toggle applies live, no reload. */
-export function chatTtsEnabled(): boolean {
-  return settings.get('fps-tts-chat');
-}
-
 /** Radio-comms chain for the robot voice:
  *    squelch click → src → soft-clip → ring-mod mix → bandpass → slapback → bus
  *  SAM raw is a dry robot; the metallic ring + squelch is what makes it
@@ -214,8 +163,58 @@ function playRadioVoice(ctx: BaseAudioContext, bus: AudioNode, buf: AudioBuffer,
   return { src, carrier };
 }
 
-let _clipCurve: Float32Array<ArrayBuffer> | null = null;
-let _squelch: AudioBuffer | null = null;
+
+
+export function speakVgs(text: string, who?: string): void {
+  const bus = audio.uiBus;
+  const ctx = bus?.context;
+  if (!bus || !ctx) {return;}
+  const key = who ?? '';
+  const t = ctx.currentTime;
+  let startAt = t;
+  const live = liveVoice.get(key);
+  if (live) {
+    // Snap the kill to the live line's last-word boundary — the "perfect
+    // splice" is measured, not timed. Past the boundary already = a
+    // mistimed combo, which cuts instantly like era spam.
+    const delay = Math.min(Math.max(live.startT + live.boundaryS - t, 0), 1.2);
+    try { live.src.stop(t + delay); live.carrier.stop(t + delay); } catch { /* already ended */ }
+    liveVoice.delete(key);
+    startAt = t + delay;
+  }
+  // oxlint-disable-next-line init-declarations -- set by sam-js
+  let pcm!: unknown; // sam-js returns Float32Array | Boolean
+  try {
+    pcm = samFor(who).buf32(text);
+  } catch {
+    speakSystem(text); // reciter hiccup → degrade to system voice
+    return;
+  }
+  // buf32 returns false (not throws) on unparseable text — apostrophes,
+  // stray symbols — degrade to the system voice rather than silent.
+  if (!(pcm instanceof Float32Array) || pcm.length === 0) { speakSystem(text); return; }
+  const buf = ctx.createBuffer(1, pcm.length, SAM_RATE);
+  buf.copyToChannel(pcm as Float32Array<ArrayBuffer>, 0);
+  const src = playRadioVoice(ctx, bus, buf, startAt);
+  liveVoice.set(key, Object.assign({}, src, {startT: startAt,boundaryS: wordBoundary(text, who, buf.duration)}));
+  src.src.onended = (): void => { if (liveVoice.get(key)?.src === src.src) {liveVoice.delete(key);} };
+}
+
+/** Typed chat read-aloud — deliberately the plain system voice, NOT the
+ *  robot, so typed messages and VGS calls sound like different channels.
+ *  Pitch jitters per speaker so voices differ by who typed. */
+export function speakChat(text: string, who?: string): void {
+  let h = 0;
+  // oxlint-disable-next-line prefer-math-trunc -- int32 wrap is the point
+  if (who) {for (let i = 0; i < who.length; i += 1) {h = (h * 31 + who.charCodeAt(i)) | 0;}}
+  speakSystem(text, 0.7 + (Math.abs(h) % 8) * 0.08); // 0.70–1.26
+}
+
+/** True when the CHAT TTS option is on — the call sites read through
+ *  this so the toggle applies live, no reload. */
+export function chatTtsEnabled(): boolean {
+  return settings.get('fps-tts-chat');
+}
 
 /** Tiny white-noise pip, highpassed — press-to-talk squelch. */
 function squelchBuf(ctx: BaseAudioContext): AudioBuffer {
@@ -227,3 +226,8 @@ function squelchBuf(ctx: BaseAudioContext): AudioBuffer {
   _squelch = b;
   return b;
 }
+
+
+
+let _clipCurve: Float32Array<ArrayBuffer> | null = null;
+let _squelch: AudioBuffer | null = null;

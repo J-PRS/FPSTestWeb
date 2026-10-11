@@ -2,6 +2,26 @@ import { cloakDrainPerSec, ENERGY } from '../../../../shared/movement.js';
 import { STATUS, MEND_HP_PER_SEC } from '../../../../shared/status.js';
 import type { GameBot } from './botBrain.js';
 
+export function dropSkill(b: GameBot, bit: number): void {
+    b.status &= ~bit;
+    if (bit === STATUS.MEND) {b.setMending(false);}
+    else if (bit === STATUS.SHIELD) {b.setShielded(false);}
+    else if (bit === STATUS.CLOAK) { b.setCloakHidden(false); b.setCloakGhosted(false); }
+  }
+
+
+
+/** Cloak display: a teammate's held cloak is the ghost shimmer, an
+ *  enemy's is full invisibility — same split the wire path applies. */
+function setCloakVisual(b: GameBot): void {
+    const cloaked = Boolean(b.status & STATUS.CLOAK);
+    const friendly = cloaked && b.team === b.localTeam && b.localTeam !== undefined;
+    b.setCloakHidden(cloaked && !friendly);
+    b.setCloakGhosted(cloaked && friendly);
+  }
+
+
+
 // The bot's honest energy tank: rising-edge activation costs, held
 // drains, mend heal + regen trickle, jet fuel. One tank feeds jets AND
 // skills — mirrors the server's per-player rule.
@@ -36,22 +56,6 @@ export function applyStatus(b: GameBot, claim: number, dt: number): void {
     b.setMending(Boolean(b.status & STATUS.MEND));
     b.setShielded(Boolean(b.status & STATUS.SHIELD));
     setCloakVisual(b);
-  }
-
-/** Cloak display: a teammate's held cloak is the ghost shimmer, an
- *  enemy's is full invisibility — same split the wire path applies. */
-function setCloakVisual(b: GameBot): void {
-    const cloaked = Boolean(b.status & STATUS.CLOAK);
-    const friendly = cloaked && b.team === b.localTeam && b.localTeam !== undefined;
-    b.setCloakHidden(cloaked && !friendly);
-    b.setCloakGhosted(cloaked && friendly);
-  }
-
-export function dropSkill(b: GameBot, bit: number): void {
-    b.status &= ~bit;
-    if (bit === STATUS.MEND) {b.setMending(false);}
-    else if (bit === STATUS.SHIELD) {b.setShielded(false);}
-    else if (bit === STATUS.CLOAK) { b.setCloakHidden(false); b.setCloakGhosted(false); }
   }
 
   /** One tank feeds jets AND skills — featherjets' fuel regen and

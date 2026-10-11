@@ -17,6 +17,20 @@ const p2 = (n: number): string => String(n).padStart(2, '0');
 const logStamp = (t: Date): string =>
   `${t.getFullYear()}_${p2(t.getMonth() + 1)}_${p2(t.getDate())}-${p2(t.getHours())}_${p2(t.getMinutes())}_${p2(t.getSeconds())}`;
 
+/** Keep the newest OLD_KEEP archives per directory — mtime order, so a
+ *  clock-skewed name can't hide a stale file from eviction. */
+function pruneOld(oldDir: string): void {
+  try {
+    const files = readdirSync(oldDir)
+      .map((f): string => join(oldDir, f))
+      .filter((p): boolean => statSync(p).isFile())
+      .sort((a, b): number => statSync(b).mtimeMs - statSync(a).mtimeMs);
+    for (const p of files.slice(OLD_KEEP)) {unlinkSync(p);}
+  } catch { /* pruning is best-effort like rotation itself */ }
+}
+
+
+
 /** Rolls `p` to an OLD/ sibling with its mtime stamped in the name when
  *  it passes 32MB. Sync stat is fine: appenders are throttled/windowed.
  *  Never throws — a bad rotate must never block an append. */
@@ -36,16 +50,4 @@ export function rotateLogIfBig(p: string): void {
     renameSync(p, dst);
     pruneOld(oldDir);
   } catch { /* rotation must never block an append */ }
-}
-
-/** Keep the newest OLD_KEEP archives per directory — mtime order, so a
- *  clock-skewed name can't hide a stale file from eviction. */
-function pruneOld(oldDir: string): void {
-  try {
-    const files = readdirSync(oldDir)
-      .map((f): string => join(oldDir, f))
-      .filter((p): boolean => statSync(p).isFile())
-      .sort((a, b): number => statSync(b).mtimeMs - statSync(a).mtimeMs);
-    for (const p of files.slice(OLD_KEEP)) {unlinkSync(p);}
-  } catch { /* pruning is best-effort like rotation itself */ }
 }

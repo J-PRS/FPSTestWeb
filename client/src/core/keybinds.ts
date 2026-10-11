@@ -76,6 +76,12 @@ export function isDown(keys: Record<string, boolean>, action: BindAction): boole
   return Boolean(keys[b] || (b === 'ShiftLeft' && keys['ShiftRight']) || (b === 'ShiftRight' && keys['ShiftLeft']));
 }
 
+function persist(): void {
+  settings.set('fps-keys', BIND_DEFS.map((d): string => `${d.action}=${binds[d.action]}`).join(','));
+}
+
+
+
 /** Rebind an action. If the code was bound elsewhere the actions swap —
  *  players expect the stolen key to go back to the thing that lost it. */
 export function rebind(action: BindAction, code: string): void {
@@ -92,10 +98,6 @@ export function rebind(action: BindAction, code: string): void {
 export function resetAll(): void {
   Object.assign(binds, DEFAULTS);
   persist();
-}
-
-function persist(): void {
-  settings.set('fps-keys', BIND_DEFS.map((d): string => `${d.action}=${binds[d.action]}`).join(','));
 }
 
 // ---- Display --------------------------------------------------------------

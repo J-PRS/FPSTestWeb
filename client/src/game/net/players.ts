@@ -17,14 +17,116 @@ import { parityMiss } from '../parity.js';
 import { lastWeaponByPlayer } from './projectiles.js';
 import type { NetCtx } from './ctx.js';
 
-export function wirePlayers(ctx: NetCtx): void {
-  wirePlayerCombat(ctx);
-  wirePlayerLifecycle(ctx);
-  // NetProbe harness — stats source, ghost scene, Alt+N panel, Alt+Q section.
-  initNetProbe();
-  bindStats(ctx.networkManager);
-  attachScene(ctx.deps.lazyScene());
+/** Updates, respawns, join/leave, movement events — the presence wire. */
+function wirePlayerLifecycle(ctx: NetCtx): void {
+  const { deps, networkManager, nm, ensureRemotePlayer } = ctx;
+  const {logger} = deps;
+
+  networkManager.onPlayerJump = (_playerId: string, position: { x: number; y: number; z: number }): void => {
+    if (!finiteVec(position)) {return;} // non-finite wire pos would poison the particle pool
+    const pos = new THREE.Vector3(position.x, position.y, position.z);
+    deps.lazyEffects().spawnJumpDust(pos);
+  };
+
+  networkManager.onPlayerJetpack = (_playerId: string, position: { x: number; y: number; z: number }): void => {
+    if (!finiteVec(position)) {return;}
+    const pos = new THREE.Vector3(position.x, position.y, position.z);
+    deps.lazyEffects().spawnJetpack(pos);
+  };
+
+  networkManager.onPlayerUpdate = (playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, serverMs: number, velocity?: { x: number; y: number; z: number }): void => {
+    // Safety: never process local player as a remote player
+    if (playerId === nm().getLocalPlayerId()) {return;}
+    const remotePlayer = deps.world.remotePlayers.get(playerId);
+    if (remotePlayer) {
+      remotePlayer.update(position, rotation, REMOTE_PLAYER_FIXED_DT, nm().getPing(), velocity, serverMs);
+      if (Math.random() < DEBUG_LOG_SAMPLE_RATE) { // 5% of updates log for debugging
+        logger.debug(`onPlayerUpdate: ${playerId} at ${position.x.toFixed(1)},${position.y.toFixed(1)},${position.z.toFixed(1)}`);
+      }
+      return;
+    }
+
+    // Don't create RemotePlayer for dead players — wait for respawn event.
+    // Absent record = departed (playerLeft purges the roster row): a stale
+    // update racing the delete must not resurrect a phantom remote.
+    const playerData = nm().getPlayers().get(playerId);
+    if (!playerData || playerData.isDead) {return;}
+    logger.debug(`onPlayerUpdate called for unknown player: ${playerId}, creating...`);
+    ensureRemotePlayer(playerId, position, 'onPlayerUpdate');
+  };
+
+  networkManager.onPlayerRespawn = (playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, armorClass?: string): void => {
+    if (deps.world.playbackMode) {return;}
+    // Check if local player respawned
+    if (playerId === nm().getLocalPlayerId()) {
+      logger.info(`Local player respawned at ${JSON.stringify(position)}`);
+      const player = deps.lazyPlayer();
+      // The respawn carries the class the server actually banked — trust
+      // it over the local pick or a dropped classUpdate leaves the client
+      // shouldering ordnance the authority still calls class-locked.
+      if (armorClass) {player.armorClass = armorClass as ArmorClass;}
+      player.resetLifeState();
+      // A non-finite respawn pos would poison pos/lastSentPos/movement —
+      // the same wire-ingest class gated everywhere else on this lane.
+      if (!finiteVec(position)) {
+        logger.warn(`local respawn dropped: non-finite position`);
+        return;
+      }
+      player.pos.set(position.x, position.y, position.z);
+      noteLocalSnap();
+      deps.setLastSentPos({ x: position.x, y: position.y, z: position.z });
+      if (Number.isFinite(rotation.yaw + rotation.pitch)) {
+        player.yaw = rotation.yaw;
+        player.pitch = rotation.pitch;
+      }
+      player.syncMovement(); // reseat controller or its snapshot overwrites the respawn
+      player.markTeleport(); // spawn point can sit >50m from the corpse
+      deps.lazyHud().show();
+      deps.lazyHud().setDeathOverlay(false);
+      return;
+    }
+
+    // Reset existing remote player on respawn
+    if (!finiteVec(position)) {
+      logger.warn(`remote respawn ${playerId} dropped: non-finite position`);
+      return;
+    }
+    const remotePlayer = deps.world.remotePlayers.get(playerId);
+    if (remotePlayer) {
+      const playerData = nm().getPlayers().get(playerId);
+      const internalId = playerData?.internalId || 'unknown';
+      if (armorClass) {remotePlayer.setClass(armorClass);} // respawn may carry a banked tier swap
+      remotePlayer.respawn(position);
+      logger.info(`Player ${playerId} (internalId: ${internalId}) respawned at ${JSON.stringify(position)}`);
+    } else {
+      // Create new remote player if they don't exist (shouldn't happen but safety check)
+      ensureRemotePlayer(playerId, position, 'onPlayerRespawn');
+    }
+  };
+
+  networkManager.onPlayerJoined = (playerId: string, position: { x: number; y: number; z: number }, _rotation: { yaw: number; pitch: number }): void => {
+    if (deps.world.playbackMode) {return;}
+    // Safety: server excludes self from playerJoined broadcast, but guard anyway
+    if (playerId === nm().getLocalPlayerId()) {return;}
+    const playerData = nm().getPlayers().get(playerId);
+    const internalId = playerData?.internalId || 'unknown';
+    const terrainHeight = deps.lazyTerrain().getHeight(position.x, position.z);
+    const aboveTerrain = position.y >= terrainHeight;
+    logger.info(`Player joined: ${playerId} (internalId: ${internalId}) at ${JSON.stringify(position)} | Terrain height: ${terrainHeight.toFixed(1)} | ${aboveTerrain ? '✓ Above/at terrain' : '✗ BELOW TERRAIN'}`);
+    // RemotePlayer will be created in the main loop when networkManager.getPlayers() includes this player
+  };
+
+  networkManager.onPlayerLeft = (playerId: string): void => {
+    if (deps.world.remotePlayers.remove(playerId)) {
+      logger.info(`Remote player removed (playerLeft): ${playerId}`);
+    }
+    // Alt+w fire ledger is keyed per id — a churned roster grows dead
+    // ids forever otherwise.
+    lastWeaponByPlayer.delete(playerId);
+  };
 }
+
+
 
 /** Hit feedback, knockback, reconciliation, kills — the damage wire. */
 function wirePlayerCombat(ctx: NetCtx): void {
@@ -281,111 +383,13 @@ function wirePlayerCombat(ctx: NetCtx): void {
   networkManager.onPlayerKill = (shooterId, targetId, weapon, air): void => onPlayerKill(ctx, shooterId, targetId, weapon, air);
 }
 
-/** Updates, respawns, join/leave, movement events — the presence wire. */
-function wirePlayerLifecycle(ctx: NetCtx): void {
-  const { deps, networkManager, nm, ensureRemotePlayer } = ctx;
-  const {logger} = deps;
 
-  networkManager.onPlayerJump = (_playerId: string, position: { x: number; y: number; z: number }): void => {
-    if (!finiteVec(position)) {return;} // non-finite wire pos would poison the particle pool
-    const pos = new THREE.Vector3(position.x, position.y, position.z);
-    deps.lazyEffects().spawnJumpDust(pos);
-  };
 
-  networkManager.onPlayerJetpack = (_playerId: string, position: { x: number; y: number; z: number }): void => {
-    if (!finiteVec(position)) {return;}
-    const pos = new THREE.Vector3(position.x, position.y, position.z);
-    deps.lazyEffects().spawnJetpack(pos);
-  };
-
-  networkManager.onPlayerUpdate = (playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, serverMs: number, velocity?: { x: number; y: number; z: number }): void => {
-    // Safety: never process local player as a remote player
-    if (playerId === nm().getLocalPlayerId()) {return;}
-    const remotePlayer = deps.world.remotePlayers.get(playerId);
-    if (remotePlayer) {
-      remotePlayer.update(position, rotation, REMOTE_PLAYER_FIXED_DT, nm().getPing(), velocity, serverMs);
-      if (Math.random() < DEBUG_LOG_SAMPLE_RATE) { // 5% of updates log for debugging
-        logger.debug(`onPlayerUpdate: ${playerId} at ${position.x.toFixed(1)},${position.y.toFixed(1)},${position.z.toFixed(1)}`);
-      }
-      return;
-    }
-
-    // Don't create RemotePlayer for dead players — wait for respawn event.
-    // Absent record = departed (playerLeft purges the roster row): a stale
-    // update racing the delete must not resurrect a phantom remote.
-    const playerData = nm().getPlayers().get(playerId);
-    if (!playerData || playerData.isDead) {return;}
-    logger.debug(`onPlayerUpdate called for unknown player: ${playerId}, creating...`);
-    ensureRemotePlayer(playerId, position, 'onPlayerUpdate');
-  };
-
-  networkManager.onPlayerRespawn = (playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, armorClass?: string): void => {
-    if (deps.world.playbackMode) {return;}
-    // Check if local player respawned
-    if (playerId === nm().getLocalPlayerId()) {
-      logger.info(`Local player respawned at ${JSON.stringify(position)}`);
-      const player = deps.lazyPlayer();
-      // The respawn carries the class the server actually banked — trust
-      // it over the local pick or a dropped classUpdate leaves the client
-      // shouldering ordnance the authority still calls class-locked.
-      if (armorClass) {player.armorClass = armorClass as ArmorClass;}
-      player.resetLifeState();
-      // A non-finite respawn pos would poison pos/lastSentPos/movement —
-      // the same wire-ingest class gated everywhere else on this lane.
-      if (!finiteVec(position)) {
-        logger.warn(`local respawn dropped: non-finite position`);
-        return;
-      }
-      player.pos.set(position.x, position.y, position.z);
-      noteLocalSnap();
-      deps.setLastSentPos({ x: position.x, y: position.y, z: position.z });
-      if (Number.isFinite(rotation.yaw + rotation.pitch)) {
-        player.yaw = rotation.yaw;
-        player.pitch = rotation.pitch;
-      }
-      player.syncMovement(); // reseat controller or its snapshot overwrites the respawn
-      player.markTeleport(); // spawn point can sit >50m from the corpse
-      deps.lazyHud().show();
-      deps.lazyHud().setDeathOverlay(false);
-      return;
-    }
-
-    // Reset existing remote player on respawn
-    if (!finiteVec(position)) {
-      logger.warn(`remote respawn ${playerId} dropped: non-finite position`);
-      return;
-    }
-    const remotePlayer = deps.world.remotePlayers.get(playerId);
-    if (remotePlayer) {
-      const playerData = nm().getPlayers().get(playerId);
-      const internalId = playerData?.internalId || 'unknown';
-      if (armorClass) {remotePlayer.setClass(armorClass);} // respawn may carry a banked tier swap
-      remotePlayer.respawn(position);
-      logger.info(`Player ${playerId} (internalId: ${internalId}) respawned at ${JSON.stringify(position)}`);
-    } else {
-      // Create new remote player if they don't exist (shouldn't happen but safety check)
-      ensureRemotePlayer(playerId, position, 'onPlayerRespawn');
-    }
-  };
-
-  networkManager.onPlayerJoined = (playerId: string, position: { x: number; y: number; z: number }, _rotation: { yaw: number; pitch: number }): void => {
-    if (deps.world.playbackMode) {return;}
-    // Safety: server excludes self from playerJoined broadcast, but guard anyway
-    if (playerId === nm().getLocalPlayerId()) {return;}
-    const playerData = nm().getPlayers().get(playerId);
-    const internalId = playerData?.internalId || 'unknown';
-    const terrainHeight = deps.lazyTerrain().getHeight(position.x, position.z);
-    const aboveTerrain = position.y >= terrainHeight;
-    logger.info(`Player joined: ${playerId} (internalId: ${internalId}) at ${JSON.stringify(position)} | Terrain height: ${terrainHeight.toFixed(1)} | ${aboveTerrain ? '✓ Above/at terrain' : '✗ BELOW TERRAIN'}`);
-    // RemotePlayer will be created in the main loop when networkManager.getPlayers() includes this player
-  };
-
-  networkManager.onPlayerLeft = (playerId: string): void => {
-    if (deps.world.remotePlayers.remove(playerId)) {
-      logger.info(`Remote player removed (playerLeft): ${playerId}`);
-    }
-    // Alt+w fire ledger is keyed per id — a churned roster grows dead
-    // ids forever otherwise.
-    lastWeaponByPlayer.delete(playerId);
-  };
+export function wirePlayers(ctx: NetCtx): void {
+  wirePlayerCombat(ctx);
+  wirePlayerLifecycle(ctx);
+  // NetProbe harness — stats source, ghost scene, Alt+N panel, Alt+Q section.
+  initNetProbe();
+  bindStats(ctx.networkManager);
+  attachScene(ctx.deps.lazyScene());
 }

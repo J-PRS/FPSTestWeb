@@ -424,24 +424,6 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
   },
 };
 
-/** Build a lifecycle payload from the declared field list — the emitter
- *  supplies the values; the declared ORDER and field set own the wire
- *  shape, so a field can't drift into a message the client's handler
- *  never reads. Values absent from `vals` become the declared `absent`
- *  sentinel or null. */
-export function verbPayload(
-  kind: WorldKindDecl,
-  verb: 'spawn' | 'update' | 'gone',
-  idField: string,
-  id: number | string,
-  vals: Record<string, unknown>,
-): Record<string, unknown> {
-  const fields = verb === 'spawn' ? kind.spawnFields : verb === 'update' ? kind.updateFields : kind.goneFields;
-  const msg: Record<string, unknown> = { type: kind.verbs[verb], [idField]: id };
-  emitFields(kind, kind.verbs[verb]!, fields, idField, vals, msg);
-  return msg;
-}
-
 /** The emit-side field contract — one body for verbs, roster rows, and
  *  events. An emit that forgets a declared field used to sail out as
  *  null and the client diffs forever; null IS legit when the
@@ -469,6 +451,65 @@ function emitFields(
     msg[f.name] = vals[f.name] ?? f.absent ?? null;
   }
 }
+
+
+
+/** Build a lifecycle payload from the declared field list — the emitter
+ *  supplies the values; the declared ORDER and field set own the wire
+ *  shape, so a field can't drift into a message the client's handler
+ *  never reads. Values absent from `vals` become the declared `absent`
+ *  sentinel or null. */
+export function verbPayload(
+  kind: WorldKindDecl,
+  verb: 'spawn' | 'update' | 'gone',
+  idField: string,
+  id: number | string,
+  vals: Record<string, unknown>,
+): Record<string, unknown> {
+  const fields = verb === 'spawn' ? kind.spawnFields : verb === 'update' ? kind.updateFields : kind.goneFields;
+  const msg: Record<string, unknown> = { type: kind.verbs[verb], [idField]: id };
+  emitFields(kind, kind.verbs[verb]!, fields, idField, vals, msg);
+  return msg;
+}
+function warnOnce(key: string, text: string): void {
+  const now = sharedNow();
+  const last = warnOnceSeen.get(key);
+  if (last !== undefined && now - last < WARN_ONCE_MS) {return;}
+  warnOnceSeen.set(key, now);
+  // oxlint-disable-next-line no-console
+  console.warn(text);
+}
+
+
+/** Shape check for a declared wire type — presence alone can't catch a
+ *  field that arrives as the wrong kind of value. */
+function wireOk(wire: KindFieldDecl['wire'], v: unknown): boolean {
+  switch (wire) {
+    case 'num': { return typeof v === 'number' && Number.isFinite(v);
+    }
+    case 'str': { return typeof v === 'string';
+    }
+    case 'bool': { return typeof v === 'boolean';
+    }
+    case 'arr': { return Array.isArray(v);
+    }
+    case 'obj': { return typeof v === 'object' && v !== null;
+    }
+    case 'vec3': {
+      const o = v as { x?: unknown; y?: unknown; z?: unknown } | null;
+      return typeof o === 'object' && o !== null &&
+        typeof o.x === 'number' && typeof o.y === 'number' && typeof o.z === 'number';
+    }
+    case 'rot': {
+      const o = v as { yaw?: unknown; pitch?: unknown } | null;
+      return typeof o === 'object' && o !== null &&
+        typeof o.yaw === 'number' && typeof o.pitch === 'number';
+    }
+    default: { const _exhaustive: never = wire; return false; }
+}
+}
+
+
 
 /** One roster row — id plus each declared roster field in order. Same
  *  contract as verbPayload: the declared field set owns the wire shape. */
@@ -636,43 +677,8 @@ export const CLIENT_INTENTS: Record<string, IntentFieldDecl[]> = {
 // emit inside a per-entity loop would flood the log. Throttle per key so
 // the signal survives without the flood.
 const WARN_ONCE_MS = 5000;
-/** Shape check for a declared wire type — presence alone can't catch a
- *  field that arrives as the wrong kind of value. */
-function wireOk(wire: KindFieldDecl['wire'], v: unknown): boolean {
-  switch (wire) {
-    case 'num': { return typeof v === 'number' && Number.isFinite(v);
-    }
-    case 'str': { return typeof v === 'string';
-    }
-    case 'bool': { return typeof v === 'boolean';
-    }
-    case 'arr': { return Array.isArray(v);
-    }
-    case 'obj': { return typeof v === 'object' && v !== null;
-    }
-    case 'vec3': {
-      const o = v as { x?: unknown; y?: unknown; z?: unknown } | null;
-      return typeof o === 'object' && o !== null &&
-        typeof o.x === 'number' && typeof o.y === 'number' && typeof o.z === 'number';
-    }
-    case 'rot': {
-      const o = v as { yaw?: unknown; pitch?: unknown } | null;
-      return typeof o === 'object' && o !== null &&
-        typeof o.yaw === 'number' && typeof o.pitch === 'number';
-    }
-    default: { const _exhaustive: never = wire; return false; }
-}
-}
 
 const warnOnceSeen = new Map<string, number>();
-function warnOnce(key: string, text: string): void {
-  const now = sharedNow();
-  const last = warnOnceSeen.get(key);
-  if (last !== undefined && now - last < WARN_ONCE_MS) {return;}
-  warnOnceSeen.set(key, now);
-  // oxlint-disable-next-line no-console
-  console.warn(text);
-}
 
 /** Inbound twin of checkPacket: required intent fields missing from a
  *  client packet warn at dispatch. Message types with no declaration

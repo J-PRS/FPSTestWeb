@@ -51,6 +51,22 @@ export interface BallRageHost {
   onBounce?: (pos: THREE.Vector3, vel: THREE.Vector3) => void;
 }
 
+// Redirect velocity toward the player, preserving current speed (floored
+// at half dash speed so a dead-slow roll still produces a real launch).
+// upFrac is sin(launch angle): 0.34 ≈ flat lunge, √½ = 45° spring.
+function launchAt(b: BallRageHost, playerPos: THREE.Vector3, upFrac: number): void {
+  const pdx = playerPos.x - b.pos.x;
+  const pdz = playerPos.z - b.pos.z;
+  const pd = Math.hypot(pdx, pdz) || 0.001;
+  const speed = Math.max(b.vel.length(), BALL_ENRAGE_DASH_SPEED * 0.5);
+  const h = Math.sqrt(1 - upFrac * upFrac);
+  b.vel.set((pdx / pd) * speed * h, 0, (pdz / pd) * speed * h);
+  // Launch angle, plus extra loft if the player is above
+  b.vel.y = Math.max(speed * upFrac, (playerPos.y - b.pos.y) * 0.8);
+}
+
+
+
 // Stall breaker — loitering under MIN_SPEED for STALL_TIME earns a free
 // spring launch at the target (same skill as the enrage launch, fired
 // on boredom instead of distance). Mirrors shared/ballSim.ts — a ball
@@ -65,6 +81,51 @@ export function tickStallBreaker(b: BallRageHost, dt: number, playerPos: THREE.V
   b.trails.burst(8, b._rpos, b.radius, b.color);
   b.onBounce?.(b.pos.clone(), b.vel.clone());
 }
+
+// Ball drifted too far from the player — teleport it back into play range
+function teleportNearPlayer(b: BallRageHost, terrain: Terrain, playerPos: THREE.Vector3): void {
+  const ang = Math.random() * Math.PI * 2;
+  const dist = BALL_TELE_MIN + Math.random() * (BALL_TELE_MAX - BALL_TELE_MIN);
+  b.pos.x = playerPos.x + Math.cos(ang) * dist;
+  b.pos.z = playerPos.z + Math.sin(ang) * dist;
+  const tg = terrain.getHeight(b.pos.x, b.pos.z);
+  b.pos.y = (Number.isFinite(tg) ? tg : 0) + b.radius + BALL_TELE_MARGIN;
+
+  // Position jumped — retire the ribbons so they fade where they were;
+  // a clear() would vanish the whole tail in one frame.
+  b.retireRibbons();
+  // Spring-in + dust puff — the re-arrival should read as an eruption,
+  // not a hard pop into existence.
+  b.spawnPopT = SPAWN_POP_S;
+  b.trails.burst(12, b.pos, b.radius, b.color);
+
+  // Preserve speed, send it UP like the spawn toss — a stone-skimmer
+  // teleported in flat just keeps skimming; the leash's job is to put
+  // the ball back in the AIR (midair fodder), not re-lay it on the dirt.
+  const currentSpeed = Math.max(b.vel.length(), 14);
+  const upFrac = 0.75 + Math.random() * 0.2;
+  const a2 = Math.random() * Math.PI * 2;
+  const hsp = currentSpeed * Math.sqrt(1 - upFrac * upFrac);
+  b.vel.set(Math.cos(a2) * hsp, currentSpeed * upFrac, Math.sin(a2) * hsp);
+
+  // Reset the tracking baseline only — the ball keeps its absolute speed
+  b.lastBounceEnergy = 0;
+  // Record teleport as a bounce keyframe too (position + velocity reset)
+  b.onBounce?.(b.pos.clone(), b.vel.clone());
+}
+
+
+
+/** Director hook — enrage storms light up every ball at once. */
+export function setEnraged(b: BallRageHost, on: boolean): void {
+  if (b.enraged === on) {return;}
+  b.enraged = on;
+  b.enrageTimer = 0;
+  // Visual cue: emissive red burn while enraged
+  b.emissive.setRGB(on ? 0.55 : 0, 0, 0);
+}
+
+
 
 // Enrage pull + dash telegraph emissive + post-dash pop.
 export function tickEnrage(b: BallRageHost, dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
@@ -112,6 +173,43 @@ export function tickEnrage(b: BallRageHost, dt: number, terrain: Terrain, player
     if (b.dashFlash <= 0 && b.enraged) {b.emissive.setRGB(0.55, 0, 0);}
   }
 }
+
+// Bounced beyond engagement range: enrage + spring at the player when
+// enabled, else teleport back into play.
+function chaseIfFar(b: BallRageHost, terrain: Terrain, playerPos: THREE.Vector3): void {
+  const dx = b.pos.x - playerPos.x;
+  const dz = b.pos.z - playerPos.z;
+  if (dx * dx + dz * dz <= BALL_MAX_DIST * BALL_MAX_DIST) {return;}
+  if (!BALL_ENRAGE_ENABLED) { teleportNearPlayer(b, terrain, playerPos); return; }
+  setEnraged(b, true);
+  // Spring at the player on enrage — 45° launch, same redirect physics
+  // as the ground lunge. Rage stays ON (this isn't the discharging dash,
+  // it's the opening move) until a real lunge lands or timeout hits.
+  launchAt(b, playerPos, Math.SQRT1_2);
+  b.dashFlash = 0.15;
+  b.trails.burst(8, b._rpos, b.radius, b.enraged ? _enrageTint : b.color);
+  b.onBounce?.(b.pos.clone(), b.vel.clone());
+}
+
+
+
+// Touchdown within dash range while enraged → ballistic lunge that
+// discharges the rage. Returns true when the lunge consumed the bounce.
+function tryEnrageLunge(b: BallRageHost, playerPos: THREE.Vector3): boolean {
+  const pdx = playerPos.x - b.pos.x;
+  const pdz = playerPos.z - b.pos.z;
+  if (pdx * pdx + pdz * pdz > BALL_ENRAGE_DASH_DIST * BALL_ENRAGE_DASH_DIST) {return false;}
+  dashAt(b, playerPos);
+  b.dashFlash = 0.15;
+  setEnraged(b, false); // lunge discharges the rage
+  b.dampNextBounce = true; // the landing bounce is deadened — no slingshot flyout
+  b.trails.burst(8, b._rpos, b.radius, b.color); // dust-burst at takeoff
+  b.lastBounceEnergy = 0;
+  b.onBounce?.(b.pos.clone(), b.vel.clone());
+  return true;
+}
+
+
 
 export function handleGroundBounce(b: BallRageHost, terrain: Terrain, playerPos: THREE.Vector3): void {
   const gy = terrain.getHeight(b.pos.x, b.pos.z);
@@ -186,53 +284,6 @@ export function handleGroundBounce(b: BallRageHost, terrain: Terrain, playerPos:
   chaseIfFar(b, terrain, playerPos);
 }
 
-// Touchdown within dash range while enraged → ballistic lunge that
-// discharges the rage. Returns true when the lunge consumed the bounce.
-function tryEnrageLunge(b: BallRageHost, playerPos: THREE.Vector3): boolean {
-  const pdx = playerPos.x - b.pos.x;
-  const pdz = playerPos.z - b.pos.z;
-  if (pdx * pdx + pdz * pdz > BALL_ENRAGE_DASH_DIST * BALL_ENRAGE_DASH_DIST) {return false;}
-  dashAt(b, playerPos);
-  b.dashFlash = 0.15;
-  setEnraged(b, false); // lunge discharges the rage
-  b.dampNextBounce = true; // the landing bounce is deadened — no slingshot flyout
-  b.trails.burst(8, b._rpos, b.radius, b.color); // dust-burst at takeoff
-  b.lastBounceEnergy = 0;
-  b.onBounce?.(b.pos.clone(), b.vel.clone());
-  return true;
-}
-
-// Bounced beyond engagement range: enrage + spring at the player when
-// enabled, else teleport back into play.
-function chaseIfFar(b: BallRageHost, terrain: Terrain, playerPos: THREE.Vector3): void {
-  const dx = b.pos.x - playerPos.x;
-  const dz = b.pos.z - playerPos.z;
-  if (dx * dx + dz * dz <= BALL_MAX_DIST * BALL_MAX_DIST) {return;}
-  if (!BALL_ENRAGE_ENABLED) { teleportNearPlayer(b, terrain, playerPos); return; }
-  setEnraged(b, true);
-  // Spring at the player on enrage — 45° launch, same redirect physics
-  // as the ground lunge. Rage stays ON (this isn't the discharging dash,
-  // it's the opening move) until a real lunge lands or timeout hits.
-  launchAt(b, playerPos, Math.SQRT1_2);
-  b.dashFlash = 0.15;
-  b.trails.burst(8, b._rpos, b.radius, b.enraged ? _enrageTint : b.color);
-  b.onBounce?.(b.pos.clone(), b.vel.clone());
-}
-
-// Redirect velocity toward the player, preserving current speed (floored
-// at half dash speed so a dead-slow roll still produces a real launch).
-// upFrac is sin(launch angle): 0.34 ≈ flat lunge, √½ = 45° spring.
-function launchAt(b: BallRageHost, playerPos: THREE.Vector3, upFrac: number): void {
-  const pdx = playerPos.x - b.pos.x;
-  const pdz = playerPos.z - b.pos.z;
-  const pd = Math.hypot(pdx, pdz) || 0.001;
-  const speed = Math.max(b.vel.length(), BALL_ENRAGE_DASH_SPEED * 0.5);
-  const h = Math.sqrt(1 - upFrac * upFrac);
-  b.vel.set((pdx / pd) * speed * h, 0, (pdz / pd) * speed * h);
-  // Launch angle, plus extra loft if the player is above
-  b.vel.y = Math.max(speed * upFrac, (playerPos.y - b.pos.y) * 0.8);
-}
-
 // Ballistic lunge: horizontal speed becomes the approach speed, then vy is
 // solved so the arc lands on the player after t = dist/hspeed seconds.
 // Angles up as needed — over bumps, up at elevated players — instead of a
@@ -247,43 +298,4 @@ function dashAt(b: BallRageHost, playerPos: THREE.Vector3): void {
   b.vel.set((pdx / pd) * hSpeed, vy, (pdz / pd) * hSpeed);
 }
 
-/** Director hook — enrage storms light up every ball at once. */
-export function setEnraged(b: BallRageHost, on: boolean): void {
-  if (b.enraged === on) {return;}
-  b.enraged = on;
-  b.enrageTimer = 0;
-  // Visual cue: emissive red burn while enraged
-  b.emissive.setRGB(on ? 0.55 : 0, 0, 0);
-}
 
-// Ball drifted too far from the player — teleport it back into play range
-function teleportNearPlayer(b: BallRageHost, terrain: Terrain, playerPos: THREE.Vector3): void {
-  const ang = Math.random() * Math.PI * 2;
-  const dist = BALL_TELE_MIN + Math.random() * (BALL_TELE_MAX - BALL_TELE_MIN);
-  b.pos.x = playerPos.x + Math.cos(ang) * dist;
-  b.pos.z = playerPos.z + Math.sin(ang) * dist;
-  const tg = terrain.getHeight(b.pos.x, b.pos.z);
-  b.pos.y = (Number.isFinite(tg) ? tg : 0) + b.radius + BALL_TELE_MARGIN;
-
-  // Position jumped — retire the ribbons so they fade where they were;
-  // a clear() would vanish the whole tail in one frame.
-  b.retireRibbons();
-  // Spring-in + dust puff — the re-arrival should read as an eruption,
-  // not a hard pop into existence.
-  b.spawnPopT = SPAWN_POP_S;
-  b.trails.burst(12, b.pos, b.radius, b.color);
-
-  // Preserve speed, send it UP like the spawn toss — a stone-skimmer
-  // teleported in flat just keeps skimming; the leash's job is to put
-  // the ball back in the AIR (midair fodder), not re-lay it on the dirt.
-  const currentSpeed = Math.max(b.vel.length(), 14);
-  const upFrac = 0.75 + Math.random() * 0.2;
-  const a2 = Math.random() * Math.PI * 2;
-  const hsp = currentSpeed * Math.sqrt(1 - upFrac * upFrac);
-  b.vel.set(Math.cos(a2) * hsp, currentSpeed * upFrac, Math.sin(a2) * hsp);
-
-  // Reset the tracking baseline only — the ball keeps its absolute speed
-  b.lastBounceEnergy = 0;
-  // Record teleport as a bounce keyframe too (position + velocity reset)
-  b.onBounce?.(b.pos.clone(), b.vel.clone());
-}

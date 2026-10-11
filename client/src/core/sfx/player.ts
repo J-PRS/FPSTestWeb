@@ -98,6 +98,28 @@ export function pickup(): void {
   o2.start(c.currentTime + 0.07); o2.stop(c.currentTime + 0.25);
 }
 
+/** Light shimmer layered under a real 'powerup' sample so each kind keeps
+ *  a bit of its own color on top of the shared recording. */
+function powerupTail(kind: string, g: GainNode): void {
+  switch (kind) {
+    case 'heal': { osc('sine', 780, 1400, 0.18, 0.12, g); break;
+    }
+    case 'armor': { noise(0.1, 0.12, g, 'bandpass', 3000, 2000, 2); break;
+    }
+    case 'regen': { osc('sine', 500, 1500, 0.3, 0.1, g); break;
+    }
+    case 'dd': { osc('sawtooth', 180, 100, 0.25, 0.18, g); break;
+    }
+    case 'gem': { osc('sine', 1560, 2080, 0.12, 0.1, g); osc('sine', 320, 960, 0.2, 0.06, g); break;
+    }
+    case 'tag': { noise(0.05, 0.1, g, 'bandpass', 4200, 2600, 3); break;
+    }
+      default: { break; }
+}
+}
+
+
+
 /** Server powerup collect — one synth voice per kind so the reward reads
  *  by ear: heal chirps warm, armor clanks metal, regen bubbles up, dd
  *  growls. Falls back to the plain pickup chirp when a 'powerup' sample
@@ -154,26 +176,6 @@ export function powerup(kind: string): void {
       osc('sine', 880, 880, 0.07, 0.15, g);
     }
   }
-}
-
-/** Light shimmer layered under a real 'powerup' sample so each kind keeps
- *  a bit of its own color on top of the shared recording. */
-function powerupTail(kind: string, g: GainNode): void {
-  switch (kind) {
-    case 'heal': { osc('sine', 780, 1400, 0.18, 0.12, g); break;
-    }
-    case 'armor': { noise(0.1, 0.12, g, 'bandpass', 3000, 2000, 2); break;
-    }
-    case 'regen': { osc('sine', 500, 1500, 0.3, 0.1, g); break;
-    }
-    case 'dd': { osc('sawtooth', 180, 100, 0.25, 0.18, g); break;
-    }
-    case 'gem': { osc('sine', 1560, 2080, 0.12, 0.1, g); osc('sine', 320, 960, 0.2, 0.06, g); break;
-    }
-    case 'tag': { noise(0.05, 0.1, g, 'bandpass', 4200, 2600, 3); break;
-    }
-      default: { break; }
-}
 }
 
 export function equip(): void {

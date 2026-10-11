@@ -93,6 +93,79 @@ function flyToward(c: SimFlyer, gx: number, gy: number, gz: number, speed: numbe
   c.vz += (u.z * speed - c.vz) * k;
 }
 
+function stepClimb(c: SimFlyer, dt: number, field: Heightfield): CrawlerEvent | null {
+  const gy = hmHeight(field, c.x, c.z);
+  // NaN floor would latch climb forever (y >= NaN never holds, flyToward
+  // would chase a NaN target) — hold altitude until the field answers.
+  if (!Number.isFinite(gy)) {return null;}
+  flyToward(c, c.x, gy + c.sp.ORBIT_ALT + 4, c.z, c.sp.CLIMB_RATE, dt);
+  if (c.y >= gy + c.sp.ORBIT_ALT) {
+    c.state = 'orbit';
+    c.diveCooldown = c.sp.DIVE_CD_MIN + crand(c) * c.sp.DIVE_CD_VAR;
+    return 'land';
+  }
+  return null;
+}
+
+
+
+function stepDive(c: SimFlyer, dt: number, target: SimVec | null, authoritative: boolean): CrawlerEvent | null {
+  c.diveTimer -= dt;
+  if (target) {flyToward(c, target.x, target.y, target.z, c.sp.DIVE_SPEED, dt);}
+  const hit = target &&
+    (target.x - c.x) ** 2 + (target.y - c.y) ** 2 + (target.z - c.z) ** 2 < c.sp.HIT_D2;
+  if (hit) {
+    if (authoritative) {c.pendingBite = true;}
+    c.state = 'climb';
+    return 'bite';
+  }
+  if (c.diveTimer <= 0 || (target && (target.x - c.x) ** 2 + (target.z - c.z) ** 2 < 4)) {
+    c.state = 'climb';
+  }
+  return null;
+}
+
+
+
+function stepWindup(c: SimFlyer, dt: number): CrawlerEvent | null {
+  // Fold telegraph — brake hard; the dive launch is the wire event.
+  const k = Math.min(1, 6 * dt);
+  c.vx -= c.vx * k; c.vy -= c.vy * k; c.vz -= c.vz * k;
+  c.diveTimer -= dt;
+  if (c.diveTimer <= 0) {
+    c.state = 'dive';
+    c.diveTimer = c.sp.DIVE_T_MAX;
+    return 'pounce';
+  }
+  return null;
+}
+
+
+
+function stepOrbit(
+  c: SimFlyer, dt: number, field: Heightfield,
+  anchor: SimVec, target: SimVec | null,
+): CrawlerEvent | null {
+  c.diveCooldown -= dt;
+  if (c.stunTimer <= 0) {
+    c.orbitPhase += (c.sp.ORBIT_SPEED / c.sp.ORBIT_R) * c.orbitDir * dt;
+    const gy = hmHeight(field, anchor.x, anchor.z);
+    flyToward(c,
+      anchor.x + Math.cos(c.orbitPhase) * c.sp.ORBIT_R,
+      Math.max(anchor.y, Number.isFinite(gy) ? gy : anchor.y) + c.sp.ORBIT_ALT,
+      anchor.z + Math.sin(c.orbitPhase) * c.sp.ORBIT_R,
+      c.sp.ORBIT_SPEED, dt);
+  }
+  if (target && c.tgtValid && c.diveCooldown <= 0) {
+    c.state = 'windup';
+    c.diveTimer = c.sp.WINDUP_S;
+    return 'windup';
+  }
+  return null;
+}
+
+
+
 /** One step — authority and predictor run the same transitions. `target`
  *  is the committed snapshot; the orbit anchor falls back to spawn-home
  *  when no prey is committed. */
@@ -131,71 +204,6 @@ export function stepFlyer(
   const gy = Math.max(hmHeight(field, c.x, c.z), hmChord(field, c.x, c.z));
   if (c.y < gy + 0.8) {c.y = gy + 0.8;}
   if (c.vx * c.vx + c.vz * c.vz > 1) {c.yaw = Math.atan2(c.vx, c.vz);}
-  return null;
-}
-
-function stepOrbit(
-  c: SimFlyer, dt: number, field: Heightfield,
-  anchor: SimVec, target: SimVec | null,
-): CrawlerEvent | null {
-  c.diveCooldown -= dt;
-  if (c.stunTimer <= 0) {
-    c.orbitPhase += (c.sp.ORBIT_SPEED / c.sp.ORBIT_R) * c.orbitDir * dt;
-    const gy = hmHeight(field, anchor.x, anchor.z);
-    flyToward(c,
-      anchor.x + Math.cos(c.orbitPhase) * c.sp.ORBIT_R,
-      Math.max(anchor.y, Number.isFinite(gy) ? gy : anchor.y) + c.sp.ORBIT_ALT,
-      anchor.z + Math.sin(c.orbitPhase) * c.sp.ORBIT_R,
-      c.sp.ORBIT_SPEED, dt);
-  }
-  if (target && c.tgtValid && c.diveCooldown <= 0) {
-    c.state = 'windup';
-    c.diveTimer = c.sp.WINDUP_S;
-    return 'windup';
-  }
-  return null;
-}
-
-function stepWindup(c: SimFlyer, dt: number): CrawlerEvent | null {
-  // Fold telegraph — brake hard; the dive launch is the wire event.
-  const k = Math.min(1, 6 * dt);
-  c.vx -= c.vx * k; c.vy -= c.vy * k; c.vz -= c.vz * k;
-  c.diveTimer -= dt;
-  if (c.diveTimer <= 0) {
-    c.state = 'dive';
-    c.diveTimer = c.sp.DIVE_T_MAX;
-    return 'pounce';
-  }
-  return null;
-}
-
-function stepDive(c: SimFlyer, dt: number, target: SimVec | null, authoritative: boolean): CrawlerEvent | null {
-  c.diveTimer -= dt;
-  if (target) {flyToward(c, target.x, target.y, target.z, c.sp.DIVE_SPEED, dt);}
-  const hit = target &&
-    (target.x - c.x) ** 2 + (target.y - c.y) ** 2 + (target.z - c.z) ** 2 < c.sp.HIT_D2;
-  if (hit) {
-    if (authoritative) {c.pendingBite = true;}
-    c.state = 'climb';
-    return 'bite';
-  }
-  if (c.diveTimer <= 0 || (target && (target.x - c.x) ** 2 + (target.z - c.z) ** 2 < 4)) {
-    c.state = 'climb';
-  }
-  return null;
-}
-
-function stepClimb(c: SimFlyer, dt: number, field: Heightfield): CrawlerEvent | null {
-  const gy = hmHeight(field, c.x, c.z);
-  // NaN floor would latch climb forever (y >= NaN never holds, flyToward
-  // would chase a NaN target) — hold altitude until the field answers.
-  if (!Number.isFinite(gy)) {return null;}
-  flyToward(c, c.x, gy + c.sp.ORBIT_ALT + 4, c.z, c.sp.CLIMB_RATE, dt);
-  if (c.y >= gy + c.sp.ORBIT_ALT) {
-    c.state = 'orbit';
-    c.diveCooldown = c.sp.DIVE_CD_MIN + crand(c) * c.sp.DIVE_CD_VAR;
-    return 'land';
-  }
   return null;
 }
 

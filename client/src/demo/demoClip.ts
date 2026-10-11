@@ -66,29 +66,35 @@ export function collectProjectileEvents(projectileEvents: ProjectileEvent[], cli
   ];
 }
 
-// Target events in [clipStart, clipEnd], plus synthetic Spawned events at
-// clipStart for balls that were alive when the clip began (or whose Spawned
-// event was pruned before extractClip ran).
-export function collectTargetEvents(targetEvents: TargetEvent[], clipStart: number, clipEnd: number): TargetEvent[] {
-  const aliveBalls = findAliveTargets(targetEvents, clipStart);
-
-  // Create synthetic Spawned events at clipStart for alive targets
-  const snapshotEvents: TargetEvent[] = [];
-  for (const [, e] of aliveBalls) {
-    snapshotEvents.push(Object.assign({}, e, {eventType: TargetEventType.Spawned,timestamp: clipStart}));
+// For any targetId that appears inside the clip but has no Spawned event and
+// no alive snapshot, create a synthetic Spawned at clipStart from its first
+// event. This covers Spawned events that were pruned before extractClip ran.
+// Same (targetType, targetId) identity as findAliveTargets — a raw-id
+// check here would skip a needed synthetic spawn the moment an unrelated
+// lane reuses the id.
+function recoverMissingSpawns(actualTgtEvents: TargetEvent[], aliveBalls: Map<number, TargetEvent>, clipStart: number): TargetEvent[] {
+  const keyOf = (e: TargetEvent): number => e.targetType * 65_536 + e.targetId;
+  const firstEventByKey = new Map<number, TargetEvent>();
+  const hasSpawnedInClip = new Set<number>();
+  for (const e of actualTgtEvents) {
+    if (e.targetType === TARGETTYPE_KILL) {continue;}
+    const k = keyOf(e);
+    if (!firstEventByKey.has(k)) {
+      firstEventByKey.set(k, e);
+    }
+    if (e.eventType === TargetEventType.Spawned) {
+      hasSpawnedInClip.add(k);
+    }
   }
-
-  // Target events that fall inside the clip window
-  const actualTgtEvents = targetEvents.filter((
-    e): boolean => e.timestamp >= clipStart && e.timestamp <= clipEnd
-  );
-
-  return [
-    ...snapshotEvents,
-    ...recoverMissingSpawns(actualTgtEvents, aliveBalls, clipStart),
-    ...actualTgtEvents,
-  ];
+  const additionalSpawned: TargetEvent[] = [];
+  for (const [k, first] of firstEventByKey) {
+    if (aliveBalls.has(k) || hasSpawnedInClip.has(k)) {continue;}
+    additionalSpawned.push(Object.assign({}, first, {eventType: TargetEventType.Spawned,timestamp: clipStart}));
+  }
+  return additionalSpawned;
 }
+
+
 
 // Replay target events before clipStart to find which targets were alive
 // then. If the Spawned event was pruned, Bounce/StateChanged/Hit events
@@ -130,30 +136,28 @@ export function findAliveTargets(targetEvents: TargetEvent[], clipStart: number)
   return aliveBalls;
 }
 
-// For any targetId that appears inside the clip but has no Spawned event and
-// no alive snapshot, create a synthetic Spawned at clipStart from its first
-// event. This covers Spawned events that were pruned before extractClip ran.
-// Same (targetType, targetId) identity as findAliveTargets — a raw-id
-// check here would skip a needed synthetic spawn the moment an unrelated
-// lane reuses the id.
-function recoverMissingSpawns(actualTgtEvents: TargetEvent[], aliveBalls: Map<number, TargetEvent>, clipStart: number): TargetEvent[] {
-  const keyOf = (e: TargetEvent): number => e.targetType * 65_536 + e.targetId;
-  const firstEventByKey = new Map<number, TargetEvent>();
-  const hasSpawnedInClip = new Set<number>();
-  for (const e of actualTgtEvents) {
-    if (e.targetType === TARGETTYPE_KILL) {continue;}
-    const k = keyOf(e);
-    if (!firstEventByKey.has(k)) {
-      firstEventByKey.set(k, e);
-    }
-    if (e.eventType === TargetEventType.Spawned) {
-      hasSpawnedInClip.add(k);
-    }
+
+
+// Target events in [clipStart, clipEnd], plus synthetic Spawned events at
+// clipStart for balls that were alive when the clip began (or whose Spawned
+// event was pruned before extractClip ran).
+export function collectTargetEvents(targetEvents: TargetEvent[], clipStart: number, clipEnd: number): TargetEvent[] {
+  const aliveBalls = findAliveTargets(targetEvents, clipStart);
+
+  // Create synthetic Spawned events at clipStart for alive targets
+  const snapshotEvents: TargetEvent[] = [];
+  for (const [, e] of aliveBalls) {
+    snapshotEvents.push(Object.assign({}, e, {eventType: TargetEventType.Spawned,timestamp: clipStart}));
   }
-  const additionalSpawned: TargetEvent[] = [];
-  for (const [k, first] of firstEventByKey) {
-    if (aliveBalls.has(k) || hasSpawnedInClip.has(k)) {continue;}
-    additionalSpawned.push(Object.assign({}, first, {eventType: TargetEventType.Spawned,timestamp: clipStart}));
-  }
-  return additionalSpawned;
+
+  // Target events that fall inside the clip window
+  const actualTgtEvents = targetEvents.filter((
+    e): boolean => e.timestamp >= clipStart && e.timestamp <= clipEnd
+  );
+
+  return [
+    ...snapshotEvents,
+    ...recoverMissingSpawns(actualTgtEvents, aliveBalls, clipStart),
+    ...actualTgtEvents,
+  ];
 }

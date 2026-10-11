@@ -60,6 +60,78 @@ export const firstTerrain = new Promise<void>((r): void => { firstTerrainGate.re
 // the server sims (server_bun/heightmap.bin mirrored under assets), so
 // prediction and authority sample one file instead of PNG-vs-bin drift.
 const BOOT_HEIGHTMAP = '/assets/heightmaps/heightmap.bin';
+
+/** Baked albedo + optional full-fidelity material layer (mats.json next
+ *  to it on T2 ports). Missing mats just keeps the baked look. */
+async function applyTerrainTex(deps: NetCtx['deps'], httpUrl: string, texPath: string | undefined): Promise<void> {
+  const terrain = deps.lazyTerrain();
+  if (!texPath) {
+    terrain.setAlbedo(null);
+    terrain.setMaterialBlend(null, null, null, 0, null);
+    return;
+  }
+  const tex = await new THREE.TextureLoader().loadAsync(`${httpUrl}/maps/${texPath}`);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.wrapS = tex.wrapT;
+  terrain.setAlbedo(tex);
+  try {
+    const mats = urlParams.has('mats')
+      ? await loadMats(`${httpUrl}/maps/${texPath.slice(0, texPath.lastIndexOf('/'))}`)
+      : null;
+    if (mats) {terrain.setMaterialBlend(mats.tiles, mats.alphaA, mats.alphaB, mats.tileMeters, mats.means);}
+  } catch {
+    terrain.setMaterialBlend(null, null, null, 0, null);
+  }
+}
+
+
+
+/** A missing face must not kill the terrain swap — loader rejections
+ *  are ProgressEvents, which used to surface as "undefined" here. */
+async function applySky(deps: NetCtx['deps'], httpUrl: string, skyDir: string | undefined): Promise<void> {
+  const skyMesh = deps.lazyScene().getObjectByName('__sky');
+  if (!skyDir) {
+    deps.lazyScene().background = null;
+    if (cubeDome) {cubeDome.visible = false;}
+    if (skyMesh) {skyMesh.visible = true;}
+    return;
+  }
+  // Baked ports ship .webp faces; .png is the fallback for a sky
+  // dropped in by hand without the converter.
+  const base = (f: string): string => `${httpUrl}/maps/${skyDir}/${f}`;
+  try {
+    const loader = new THREE.ImageLoader();
+    const faces = await Promise.all(SKY_FACES.map(async (f, i): Promise<HTMLCanvasElement | HTMLImageElement> => {
+      const img = await loader.loadAsync(`${base(f)}.webp`)
+        .catch((): Promise<HTMLImageElement> => loader.loadAsync(`${base(f)}.png`));
+      if (!SKY_VFLIP.has(SKY_FACES[i]!)) {return img;}
+      const c = document.createElement('canvas');
+      c.width = img.width; c.height = img.height;
+      const ctx = c.getContext('2d')!;
+      ctx.translate(0, img.height);
+      ctx.scale(1, -1);
+      ctx.drawImage(img, 0, 0);
+      return c;
+    }));
+    let assembled: typeof faces | HTMLCanvasElement[] = faces;
+    try {
+      assembled = skyAssemble(faces);
+      if (assembled !== faces) {deps.logger.info(`Sky ${skyDir}: faces misassembled — seam solver rebuilt the cube`);}
+    } catch { /* canvas taint/security — keep the named assembly */ }
+    const cube = new THREE.CubeTexture(assembled);
+    cube.colorSpace = THREE.SRGBColorSpace;
+    cube.needsUpdate = true;
+    applyCubeDome(deps.lazyScene(), cube);
+    deps.lazyScene().background = null;
+    if (skyMesh) {skyMesh.visible = false;}
+  } catch (error) {
+    const src = (error as ProgressEvent)?.target as { src?: string } | undefined;
+    deps.logger.warn(`Sky load failed for ${skyDir}: ${src?.src ?? String(error)}`);
+  }
+}
+
+
 export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: string, skyDir?: string, heightScale?: number, tileSize?: number, terrainPreset?: number): Promise<void> {
   const mult = heightScale ?? 1;
   const wscale = tileSize ?? TERRAIN_WORLD_SCALE;
@@ -425,82 +497,6 @@ export function updateCubeSky(camera: THREE.Camera, fogColor: THREE.Color): void
   ((cubeDome.material as THREE.ShaderMaterial).uniforms.uFog.value as THREE.Color).copy(fogColor);
 }
 
-/** A missing face must not kill the terrain swap — loader rejections
- *  are ProgressEvents, which used to surface as "undefined" here. */
-async function applySky(deps: NetCtx['deps'], httpUrl: string, skyDir: string | undefined): Promise<void> {
-  const skyMesh = deps.lazyScene().getObjectByName('__sky');
-  if (!skyDir) {
-    deps.lazyScene().background = null;
-    if (cubeDome) {cubeDome.visible = false;}
-    if (skyMesh) {skyMesh.visible = true;}
-    return;
-  }
-  // Baked ports ship .webp faces; .png is the fallback for a sky
-  // dropped in by hand without the converter.
-  const base = (f: string): string => `${httpUrl}/maps/${skyDir}/${f}`;
-  try {
-    const loader = new THREE.ImageLoader();
-    const faces = await Promise.all(SKY_FACES.map(async (f, i): Promise<HTMLCanvasElement | HTMLImageElement> => {
-      const img = await loader.loadAsync(`${base(f)}.webp`)
-        .catch((): Promise<HTMLImageElement> => loader.loadAsync(`${base(f)}.png`));
-      if (!SKY_VFLIP.has(SKY_FACES[i]!)) {return img;}
-      const c = document.createElement('canvas');
-      c.width = img.width; c.height = img.height;
-      const ctx = c.getContext('2d')!;
-      ctx.translate(0, img.height);
-      ctx.scale(1, -1);
-      ctx.drawImage(img, 0, 0);
-      return c;
-    }));
-    let assembled: typeof faces | HTMLCanvasElement[] = faces;
-    try {
-      assembled = skyAssemble(faces);
-      if (assembled !== faces) {deps.logger.info(`Sky ${skyDir}: faces misassembled — seam solver rebuilt the cube`);}
-    } catch { /* canvas taint/security — keep the named assembly */ }
-    const cube = new THREE.CubeTexture(assembled);
-    cube.colorSpace = THREE.SRGBColorSpace;
-    cube.needsUpdate = true;
-    applyCubeDome(deps.lazyScene(), cube);
-    deps.lazyScene().background = null;
-    if (skyMesh) {skyMesh.visible = false;}
-  } catch (error) {
-    const src = (error as ProgressEvent)?.target as { src?: string } | undefined;
-    deps.logger.warn(`Sky load failed for ${skyDir}: ${src?.src ?? String(error)}`);
-  }
-}
-
-/** Baked albedo + optional full-fidelity material layer (mats.json next
- *  to it on T2 ports). Missing mats just keeps the baked look. */
-async function applyTerrainTex(deps: NetCtx['deps'], httpUrl: string, texPath: string | undefined): Promise<void> {
-  const terrain = deps.lazyTerrain();
-  if (!texPath) {
-    terrain.setAlbedo(null);
-    terrain.setMaterialBlend(null, null, null, 0, null);
-    return;
-  }
-  const tex = await new THREE.TextureLoader().loadAsync(`${httpUrl}/maps/${texPath}`);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.wrapS = tex.wrapT;
-  terrain.setAlbedo(tex);
-  try {
-    const mats = urlParams.has('mats')
-      ? await loadMats(`${httpUrl}/maps/${texPath.slice(0, texPath.lastIndexOf('/'))}`)
-      : null;
-    if (mats) {terrain.setMaterialBlend(mats.tiles, mats.alphaA, mats.alphaB, mats.tileMeters, mats.means);}
-  } catch {
-    terrain.setMaterialBlend(null, null, null, 0, null);
-  }
-}
-
-// The shader compares sampled (linear-decoded) luminance against each
-// tile's mean — compute that mean in linear space too or dark tiles
-// divide by an sRGB mean ~2.4× too high and the blend reads as black grime.
-function srgb2lin(c: number): number {
-  const v = c / 255;
-  return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-}
-
 /** T2 material-blend manifest beside albedo.png: alphas.bin is
  *  grid²×count u8 weights packed into two RGBA DataTextures (8 max);
  *  the 256px tiles are drawn into a 4×2 atlas so a plain sampler2D can
@@ -559,6 +555,16 @@ async function loadMats(dirUrl: string): Promise<{
   tilesTex.generateMipmaps = true;
   tilesTex.minFilter = THREE.LinearMipmapLinearFilter;
   return { tiles: tilesTex, alphaA: pack(0), alphaB: pack(4), tileMeters: man.tileMeters, means };
+}
+
+
+
+// The shader compares sampled (linear-decoded) luminance against each
+// tile's mean — compute that mean in linear space too or dark tiles
+// divide by an sRGB mean ~2.4× too high and the blend reads as black grime.
+function srgb2lin(c: number): number {
+  const v = c / 255;
+  return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
 }
 
 // ── T2 interiors ────────────────────────────────────────────────────────

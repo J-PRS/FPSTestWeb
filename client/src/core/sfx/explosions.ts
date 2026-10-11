@@ -3,6 +3,21 @@ import { audio } from '../audio.js';
 import { WeaponType } from '../../../../shared/weapons.js';
 import { ctx, play, osc, sample, layer, noise } from './util.js';
 
+/** LG damage connect — frying sizzle at the contact point. Caller throttles
+ *  (~6/s); positional so a beam on a distant target reads quieter. */function explosionSample(g: GainNode, big: boolean, weaponType?: number): boolean {
+  const w = weaponType === undefined ? undefined : BOOM_SAMPLES[weaponType];
+  if (w && layer(g, w)) {return true;}
+  if (!big) {return sample('explosion_small', g, 0.9);}
+  // Layer blast + deep thud at half rate — the stacking trick: two cheap
+  // samples at different pitches read as one massive detonation.
+  return layer(g, [
+    [Math.random() < 0.5 ? 'explosion1' : 'explosion2', 0.9],
+    ['thud_big', 0.5, 0.7],
+  ]);
+}
+
+
+
 // World (positional — routed through distance gain + pan)
 
 export function explosionAt(pos: THREE.Vector3, big: boolean, weaponType?: number, emitVel?: THREE.Vector3): void {
@@ -72,19 +87,6 @@ const BOOM_SAMPLES: Partial<Record<number, [string, number, number?, number?, nu
   // Proxy pop: the sensor tripping — a zap-forward snap + compact blast.
   [WeaponType.ProxyGrenade]: [['shot_energy', 0.6, 1.1], ['explosion_small', 0.55, 1.4], ['sparks', 0.4, 1.1, undefined, 0.3]],
 };
-
-/** LG damage connect — frying sizzle at the contact point. Caller throttles
- *  (~6/s); positional so a beam on a distant target reads quieter. */function explosionSample(g: GainNode, big: boolean, weaponType?: number): boolean {
-  const w = weaponType === undefined ? undefined : BOOM_SAMPLES[weaponType];
-  if (w && layer(g, w)) {return true;}
-  if (!big) {return sample('explosion_small', g, 0.9);}
-  // Layer blast + deep thud at half rate — the stacking trick: two cheap
-  // samples at different pitches read as one massive detonation.
-  return layer(g, [
-    [Math.random() < 0.5 ? 'explosion1' : 'explosion2', 0.9],
-    ['thud_big', 0.5, 0.7],
-  ]);
-}
 
 /** Pull-mode detonation (disc) — a suck-in zap layered over a deep pop. */
 export function implosionAt(pos: THREE.Vector3, direct: boolean, emitVel?: THREE.Vector3): void {

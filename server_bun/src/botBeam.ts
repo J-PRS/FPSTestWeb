@@ -29,6 +29,29 @@ export interface BeamHost {
   loadouts: Map<string, BotLoadout>;
 }
 
+/** Projectile-less weapons (beam-class): an honest ray decides contact —
+ *  earliest of terrain/wall/player/creature pays, a whiff is a real
+ *  miss. Damage lands via the same funnels the projectile paths use. */
+export function fireSpeedless(h: BeamHost, id: string, muzzle: Vec3, dir: Vec3, wt: number): void {
+  const stats = getWeaponStats(wt);
+  const c = isSuper(id) ? null : beamContact(h, id, muzzle, dir);
+  const playerId = isSuper(id) ? h.lastHunt(id) : (c?.playerId ?? null);
+  h.room.messages.botFire(id, playerId, muzzle,
+    { x: dir.x * BOLT_SPEED, y: dir.y * BOLT_SPEED, z: dir.z * BOLT_SPEED }, wt, Boolean(playerId));
+  if (c?.ballId !== undefined && stats) {
+    const dmg = stats.directDamage || stats.aoeDamage;
+    const {killed} = h.room.ballSim.handleHit(id, c.ballId, dmg);
+    weaponStats.record(h.room.mode, `w${wt}:prey`, dmg, killed, true);
+  }
+  if (c?.crawlerId !== undefined && stats) {
+    const dmg = stats.directDamage || stats.aoeDamage;
+    const {killed} = h.room.creatureSim.handleHit(id, c.crawlerId, dmg);
+    weaponStats.record(h.room.mode, `w${wt}:prey`, dmg, killed, true);
+  }
+}
+
+
+
 /** Creature targets fire REAL shells — the projectile sim sweeps them
  *  against live balls and pays through handleHit, so a bot kill drops
  *  its gem/FFA point identically to a player's. Melee and projectile-
@@ -63,27 +86,6 @@ export function fireAtBall(h: BeamHost, p: BotBody, ball: number, aim: Vec3, pic
   }
 }
 
-/** Projectile-less weapons (beam-class): an honest ray decides contact —
- *  earliest of terrain/wall/player/creature pays, a whiff is a real
- *  miss. Damage lands via the same funnels the projectile paths use. */
-export function fireSpeedless(h: BeamHost, id: string, muzzle: Vec3, dir: Vec3, wt: number): void {
-  const stats = getWeaponStats(wt);
-  const c = isSuper(id) ? null : beamContact(h, id, muzzle, dir);
-  const playerId = isSuper(id) ? h.lastHunt(id) : (c?.playerId ?? null);
-  h.room.messages.botFire(id, playerId, muzzle,
-    { x: dir.x * BOLT_SPEED, y: dir.y * BOLT_SPEED, z: dir.z * BOLT_SPEED }, wt, Boolean(playerId));
-  if (c?.ballId !== undefined && stats) {
-    const dmg = stats.directDamage || stats.aoeDamage;
-    const {killed} = h.room.ballSim.handleHit(id, c.ballId, dmg);
-    weaponStats.record(h.room.mode, `w${wt}:prey`, dmg, killed, true);
-  }
-  if (c?.crawlerId !== undefined && stats) {
-    const dmg = stats.directDamage || stats.aoeDamage;
-    const {killed} = h.room.creatureSim.handleHit(id, c.crawlerId, dmg);
-    weaponStats.record(h.room.mode, `w${wt}:prey`, dmg, killed, true);
-  }
-}
-
 /** First thing a 60m ray actually strikes: terrain face, wall, player
  *  chest, or creature — earliest contact wins, like dischargeRay. */
 function beamContact(h: BeamHost, shooterId: string, muzzle: Vec3, dir: Vec3, range = 60): { playerId?: string; ballId?: number; crawlerId?: number } | null {
@@ -100,6 +102,8 @@ function beamContact(h: BeamHost, shooterId: string, muzzle: Vec3, dir: Vec3, ra
   }
   return beamEntityAt(h, shooterId, muzzle, end, bestT);
 }
+
+
 
 /** Players and creatures the ray reaches before its first world
  *  contact — earliest wins; none = the beam ended in dirt. */
@@ -121,3 +125,5 @@ function beamEntityAt(h: BeamHost, shooterId: string, muzzle: Vec3, end: Vec3, w
   if (playerId !== undefined) {return { playerId };}
   return worldT < 1 ? {} : null;
 }
+
+

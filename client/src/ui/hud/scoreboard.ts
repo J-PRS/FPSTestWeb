@@ -5,6 +5,16 @@
  */
 
 import { MODES, type ModeId, type TeamId } from '../../../../shared/teams.js';
+function prettifyMapName(file: string): string {
+  return file
+    .replace(/_nef$/i, '') // T2-conversion marker, not part of the name
+    .split(/[\s_-]/)
+    .filter(Boolean)
+    .map((w): string => MAP_ACRONYMS.has(w.toLowerCase()) ? w.toUpperCase() : w[0]!.toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+
 
 /** Header text — "CAPTURE THE FLAG · Dangerous Crossing". The map arg
  *  arrives already resolved server-side (spec.name ?? spec filename);
@@ -18,14 +28,6 @@ export function scoreboardTitle(mode?: string, mapName?: string): string {
 }
 
 const MAP_ACRONYMS = new Set(['ctf', 'dm', 'tdm', 't2']);
-function prettifyMapName(file: string): string {
-  return file
-    .replace(/_nef$/i, '') // T2-conversion marker, not part of the name
-    .split(/[\s_-]/)
-    .filter(Boolean)
-    .map((w): string => MAP_ACRONYMS.has(w.toLowerCase()) ? w.toUpperCase() : w[0]!.toUpperCase() + w.slice(1))
-    .join(' ');
-}
 
 export type SbRow = {
   name: string; frags: number; deaths: number; score: number | null; ping: number | string | null;

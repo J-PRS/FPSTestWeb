@@ -95,17 +95,6 @@ export async function regrantClipsDir(): Promise<boolean> {
  *  Bounded like the ShadowPlay ring: oldest clips evict past the cap. */
 const VAULT_MAX = 24;
 
-async function vaultPut(filename: string, blob: Blob): Promise<void> {
-  const db = await idb();
-  await new Promise<void>((res, rej): void => {
-    const tx = db.transaction('v', 'readwrite');
-    tx.objectStore('v').put({ name: filename, blob, at: Date.now() }, filename);
-    tx.oncomplete = (): void => res();
-    tx.onerror = (): void => rej(tx.error);
-  });
-  await vaultEvict(db);
-}
-
 async function vaultEvict(db: IDBDatabase): Promise<void> {
   const keys = await new Promise<string[]>((res): void => {
     const q = db.transaction('v').objectStore('v').getAllKeys();
@@ -128,6 +117,19 @@ async function vaultEvict(db: IDBDatabase): Promise<void> {
       tx.onerror = (): void => res();
     });
   }
+}
+
+
+
+async function vaultPut(filename: string, blob: Blob): Promise<void> {
+  const db = await idb();
+  await new Promise<void>((res, rej): void => {
+    const tx = db.transaction('v', 'readwrite');
+    tx.objectStore('v').put({ name: filename, blob, at: Date.now() }, filename);
+    tx.oncomplete = (): void => res();
+    tx.onerror = (): void => rej(tx.error);
+  });
+  await vaultEvict(db);
 }
 
 export type VaultClip = { name: string; size: number; at: number };

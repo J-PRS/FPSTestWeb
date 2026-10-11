@@ -40,6 +40,17 @@ const BOT_RESPAWN_S = 4;
 // Terrain heights are static mid-match — one shared memo for every bot.
 const sharedGroundYCache = new Map<number, number>();
 
+/** Rotate `cur` toward `want` by at most `maxDelta` radians — view
+ *  turns have wrist speed, so a snapped 180° reads as a fly-flick. */
+function slewYaw(cur: number, want: number, maxDelta: number): number {
+  let d = want - cur;
+  if (d > Math.PI) {d -= Math.PI * 2;}
+  if (d < -Math.PI) {d += Math.PI * 2;}
+  return cur + Math.max(-maxDelta, Math.min(maxDelta, d));
+}
+
+
+
 export class GameBot extends RemotePlayer {
   /** 'alpha'/'bravo' in team modes; the bot's own playerId in FFA. */
   team: string;
@@ -374,15 +385,6 @@ export class GameBot extends RemotePlayer {
 let botStructureSpec: readonly StructureSpec[] | undefined = undefined;
 export function setBotStructureSpecs(list: readonly StructureSpec[] | undefined): void {
   botStructureSpec = list;
-}
-
-/** Rotate `cur` toward `want` by at most `maxDelta` radians — view
- *  turns have wrist speed, so a snapped 180° reads as a fly-flick. */
-function slewYaw(cur: number, want: number, maxDelta: number): number {
-  let d = want - cur;
-  if (d > Math.PI) {d -= Math.PI * 2;}
-  if (d < -Math.PI) {d += Math.PI * 2;}
-  return cur + Math.max(-maxDelta, Math.min(maxDelta, d));
 }
 
 const _aim = new THREE.Vector3();

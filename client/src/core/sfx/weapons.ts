@@ -3,6 +3,35 @@ import { audio } from '../audio.js';
 import { WeaponType } from '../../../../shared/weapons.js';
 import { ctx, play, osc, sample, layer, noise } from './util.js';
 
+function shootInto(g: GainNode, weaponType: number): void {
+  // Disc launcher + belt disc share the voice: lowpassed cannon body +
+  // a double low-end stack (thud_big + slam_thud — the launcher's chest
+  // thump) + short metallic twang + punch transient, all cut before their
+  // ring tails — verified punchy in the spectrogram (sharp attack, decayed
+  // by ~0.4s, no sustained band). A thrown disc IS a disc launch.
+  if ((weaponType === WeaponType.Disc || weaponType === WeaponType.DiscPull) &&
+      layer(g, [['shot_cannon', 1, 0.5, 600, 0.6], ['thud_big', 0.9, 0.7], ['slam_thud', 0.85, 0.7, 500, 0.25], ['punch', 0.5, 1.1, 2000, 0.2], ['hg_clang', 0.35, 1.8, undefined, 0.12]])) {return;}
+  // Melee swing: whoosh (pitched-up dash) + fist crack + low thud body.
+  // The connect 'impact' plays separately in combat on an actual hit.
+  if (weaponType === WeaponType.Melee &&
+      layer(g, [['dash2', 0.7, 1.35], ['punch', 0.9, 1.15], ['slam_thud', 0.5, 0.9]])) {return;}
+  const layered = SHOT_LAYERS[weaponType];
+  // Chaingun gets the widest jitter — at 11 shots/s it's the recipe where
+  // the identical-waveform buzz is most audible; ±15% pitch + gain spread
+  // keeps successive cracks from phasing into a drone. Bolt launcher's
+  // 0.29 isn't drift-jitter: it's the authored 1.5–2.0 pitch randomization
+  // around the 1.75 base rate.
+  const layerJitter = weaponType === WeaponType.Chaingun ? 0.3
+    : weaponType === WeaponType.BoltLauncher ? 0.29
+    : 0.1;
+  if (layered && layer(g, layered, layerJitter)) {return;}
+  const s = SHOT_SAMPLES[weaponType];
+  if (s && sample(s[0], g, s[1], s[2])) {return;}
+  (SYNTH_SHOTS[weaponType] ?? synthDefault)(g);
+}
+
+
+
 // Player-facing (non-positional)
 
 /** Weapon fire — each weapon gets a signature shape so shots are readable. */
@@ -170,33 +199,11 @@ const SHOT_SAMPLES: Partial<Record<number, [string, number, number?]>> = {
   [WeaponType.Sprinkler]:       ['shot_plasma', 0.32, 2],
   [WeaponType.Railgun]:         ['shot_energy', 1],
 };
-
-function shootInto(g: GainNode, weaponType: number): void {
-  // Disc launcher + belt disc share the voice: lowpassed cannon body +
-  // a double low-end stack (thud_big + slam_thud — the launcher's chest
-  // thump) + short metallic twang + punch transient, all cut before their
-  // ring tails — verified punchy in the spectrogram (sharp attack, decayed
-  // by ~0.4s, no sustained band). A thrown disc IS a disc launch.
-  if ((weaponType === WeaponType.Disc || weaponType === WeaponType.DiscPull) &&
-      layer(g, [['shot_cannon', 1, 0.5, 600, 0.6], ['thud_big', 0.9, 0.7], ['slam_thud', 0.85, 0.7, 500, 0.25], ['punch', 0.5, 1.1, 2000, 0.2], ['hg_clang', 0.35, 1.8, undefined, 0.12]])) {return;}
-  // Melee swing: whoosh (pitched-up dash) + fist crack + low thud body.
-  // The connect 'impact' plays separately in combat on an actual hit.
-  if (weaponType === WeaponType.Melee &&
-      layer(g, [['dash2', 0.7, 1.35], ['punch', 0.9, 1.15], ['slam_thud', 0.5, 0.9]])) {return;}
-  const layered = SHOT_LAYERS[weaponType];
-  // Chaingun gets the widest jitter — at 11 shots/s it's the recipe where
-  // the identical-waveform buzz is most audible; ±15% pitch + gain spread
-  // keeps successive cracks from phasing into a drone. Bolt launcher's
-  // 0.29 isn't drift-jitter: it's the authored 1.5–2.0 pitch randomization
-  // around the 1.75 base rate.
-  const layerJitter = weaponType === WeaponType.Chaingun ? 0.3
-    : weaponType === WeaponType.BoltLauncher ? 0.29
-    : 0.1;
-  if (layered && layer(g, layered, layerJitter)) {return;}
-  const s = SHOT_SAMPLES[weaponType];
-  if (s && sample(s[0], g, s[1], s[2])) {return;}
-  (SYNTH_SHOTS[weaponType] ?? synthDefault)(g);
+function synthDefault(g: GainNode): void {
+  osc('square', 700, 300, 0.1, 0.2, g);
 }
+
+
 
 // Synth fallbacks — only reached when no sample is loaded for the weapon.
 function synthChaingun(g: GainNode): void {
@@ -225,9 +232,6 @@ function synthLightning(g: GainNode): void {
   const j = 1 + (Math.random() - 0.5) * 0.6;
   noise(0.05, 0.4, g, 'highpass', 3200 * j, 5500 * j, 1.5);
   osc('sawtooth', 2600 * j, 900, 0.04, 0.12, g);
-}
-function synthDefault(g: GainNode): void {
-  osc('square', 700, 300, 0.1, 0.2, g);
 }
 
 const SYNTH_SHOTS: Record<number, (g: GainNode) => void> = {

@@ -154,6 +154,22 @@ function pruneShots(c: CombatCtx): void {
   }
 }
 
+// A cooked turret shell: its payload detonating where it was shot down.
+// No sendAOE — remote-player damage from a cookoff stays unclaimed (it's
+// environment-adjacent), but the blast still shoves/kills client-run
+// targets including the turret that lobbed it.
+function boltCookoff(c: CombatCtx, pos: THREE.Vector3, shooterId?: string): void {
+  processProjectileExplosion(c, {
+    pos, radius: BOLT_MEGA_RADIUS, force: BOLT_MEGA_FORCE, forceMode: 'push',
+    aoeDamage: BOLT_MEGA_DAMAGE,
+    forceMultiplier: 1,
+    directHit: true, explosionTint: 0xFF_AA_44, vfxRadius: BOLT_MEGA_RADIUS,
+    shooterId, // a bot's interception reads as the bot's blast, not mine
+  });
+}
+
+
+
 // Mid-air interception: the projectile's sweep tagged a turret shell —
 // cook it at the exact swept contact, then ripple the mega blast through
 // neighboring shells with a bounded worklist (no infinite chain).
@@ -194,6 +210,32 @@ function chainStickies(c: CombatCtx, src: Projectile): void {
     frontier = next;
   }
 }
+
+// Demo-replay bookkeeping rides on disposal so a recorded shot's destroy
+// event lands in the clip before its meshes leave the scene.
+function retireProjectile(deps: CombatCtx['deps'], p: Projectile, i: number): void {
+  const demoManager = deps.lazyDemoManager();
+  if (demoManager?.isRecording && p.demoProjectileId) {
+    demoManager.recordProjectileDestroyed(p.demoProjectileId, { x: p.pos.x, y: p.pos.y, z: p.pos.z });
+  }
+  p.dispose();
+  deps.world.projectiles.splice(i, 1);
+}
+
+
+function catchRiders(list: Projectile[]): void {
+  const r2 = RIDE_CATCH_R * RIDE_CATCH_R;
+  for (const q of list) {
+    if (!q.config.rides || q.host || q.exploded || q.stuck || q.dead) {continue;}
+    for (const h of list) {
+      if (h === q || h.exploded || h.dead || h.stuck || h.config.rides || h.shooterId !== q.shooterId
+        || !canHostRide(h.config.weaponType, getWeaponStats(h.config.weaponType)!)) {continue;}
+      if (distSqToSegment(q.pos, h.prevPos, h.pos) <= r2) { q.host = h; break; }
+    }
+  }
+}
+
+
 
 export function updateProjectiles(c: CombatCtx, dt: number): void {
   const {deps} = c;
@@ -260,40 +302,4 @@ function distSqToSegment(p: THREE.Vector3, a: THREE.Vector3, b: THREE.Vector3): 
   const d = _segAB.lengthSq();
   const t = d > 0 ? Math.max(0, Math.min(1, _segAP.dot(_segAB) / d)) : 0;
   return _segAP.addScaledVector(_segAB, -t).lengthSq();
-}
-function catchRiders(list: Projectile[]): void {
-  const r2 = RIDE_CATCH_R * RIDE_CATCH_R;
-  for (const q of list) {
-    if (!q.config.rides || q.host || q.exploded || q.stuck || q.dead) {continue;}
-    for (const h of list) {
-      if (h === q || h.exploded || h.dead || h.stuck || h.config.rides || h.shooterId !== q.shooterId
-        || !canHostRide(h.config.weaponType, getWeaponStats(h.config.weaponType)!)) {continue;}
-      if (distSqToSegment(q.pos, h.prevPos, h.pos) <= r2) { q.host = h; break; }
-    }
-  }
-}
-
-// Demo-replay bookkeeping rides on disposal so a recorded shot's destroy
-// event lands in the clip before its meshes leave the scene.
-function retireProjectile(deps: CombatCtx['deps'], p: Projectile, i: number): void {
-  const demoManager = deps.lazyDemoManager();
-  if (demoManager?.isRecording && p.demoProjectileId) {
-    demoManager.recordProjectileDestroyed(p.demoProjectileId, { x: p.pos.x, y: p.pos.y, z: p.pos.z });
-  }
-  p.dispose();
-  deps.world.projectiles.splice(i, 1);
-}
-
-// A cooked turret shell: its payload detonating where it was shot down.
-// No sendAOE — remote-player damage from a cookoff stays unclaimed (it's
-// environment-adjacent), but the blast still shoves/kills client-run
-// targets including the turret that lobbed it.
-function boltCookoff(c: CombatCtx, pos: THREE.Vector3, shooterId?: string): void {
-  processProjectileExplosion(c, {
-    pos, radius: BOLT_MEGA_RADIUS, force: BOLT_MEGA_FORCE, forceMode: 'push',
-    aoeDamage: BOLT_MEGA_DAMAGE,
-    forceMultiplier: 1,
-    directHit: true, explosionTint: 0xFF_AA_44, vfxRadius: BOLT_MEGA_RADIUS,
-    shooterId, // a bot's interception reads as the bot's blast, not mine
-  });
 }

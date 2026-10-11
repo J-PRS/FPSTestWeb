@@ -671,16 +671,6 @@ export interface ImplodeSpec {
   stagger?: number;
 }
 
-/** Inward variant of blastBurst — same batching, shell → center. */
-export function implodeBurst(pos: THREE.Vector3, spec: ImplodeSpec, additive: boolean): void {
-  if (queueIfCold(burstKey('implode', spec, additive))) {
-    const p = pos.clone();
-    buildQueue.push((): void => spawnImplodeBurst(p, spec, additive));
-    return;
-  }
-  spawnImplodeBurst(pos, spec, additive);
-}
-
 function spawnImplodeBurst(pos: THREE.Vector3, spec: ImplodeSpec, additive: boolean): void {
   if (!vfxReady()) {return;}
   const w = spec.stagger ?? 0;
@@ -710,6 +700,29 @@ function spawnImplodeBurst(pos: THREE.Vector3, spec: ImplodeSpec, additive: bool
   activateSystem(ps, pos);
   live.add(ps);
 }
+
+
+
+/** Inward variant of blastBurst — same batching, shell → center. */
+export function implodeBurst(pos: THREE.Vector3, spec: ImplodeSpec, additive: boolean): void {
+  if (queueIfCold(burstKey('implode', spec, additive))) {
+    const p = pos.clone();
+    buildQueue.push((): void => spawnImplodeBurst(p, spec, additive));
+    return;
+  }
+  spawnImplodeBurst(pos, spec, additive);
+}
+
+/** Staggered emission: 60% at t=0 (the hit still snaps), 25%/15% trailing
+ *  across the window so a layer breathes instead of popping in one frame. */
+function blastBursts(count: number, w: number) {
+  if (w <= 0) {return [{ time: 0, count: new ConstantValue(count), cycle: 0, interval: 0.01, probability: 1 }];}
+  return [[0, Math.ceil(count * 0.6)], [w * 0.45, Math.ceil(count * 0.25)], [w, Math.floor(count * 0.15)]]
+    .filter((b): boolean => b[1] > 0)
+    .map(([time, c]) => ({ time, count: new ConstantValue(c), cycle: 0, interval: 0.01, probability: 1 }));
+}
+
+
 
 export interface BlastSpec {
   count: number;
@@ -747,25 +760,6 @@ function blastColorGen(spec: BlastSpec): Gradient | RandomColorBetweenGradient {
         [[new QV3(spec.c1[0], spec.c1[1] + spec.gVar, spec.c1[2]), 0],
          [new QV3(...spec.c2), 1]], [[spec.opacity, 0], [0, 1]]))
     : g1;
-}
-
-/** Staggered emission: 60% at t=0 (the hit still snaps), 25%/15% trailing
- *  across the window so a layer breathes instead of popping in one frame. */
-function blastBursts(count: number, w: number) {
-  if (w <= 0) {return [{ time: 0, count: new ConstantValue(count), cycle: 0, interval: 0.01, probability: 1 }];}
-  return [[0, Math.ceil(count * 0.6)], [w * 0.45, Math.ceil(count * 0.25)], [w, Math.floor(count * 0.15)]]
-    .filter((b): boolean => b[1] > 0)
-    .map(([time, c]) => ({ time, count: new ConstantValue(c), cycle: 0, interval: 0.01, probability: 1 }));
-}
-
-export function blastBurst(pos: THREE.Vector3, spec: BlastSpec,
-    additive: boolean): void {
-  if (queueIfCold(burstKey('blast', spec, additive))) {
-    const p = pos.clone();
-    buildQueue.push((): void => spawnBlastBurst(p, spec, additive));
-    return;
-  }
-  spawnBlastBurst(pos, spec, additive);
 }
 
 function spawnBlastBurst(pos: THREE.Vector3, spec: BlastSpec,
@@ -808,6 +802,18 @@ function spawnBlastBurst(pos: THREE.Vector3, spec: BlastSpec,
   shapeOf.get(ps)?.setDir(spec.dir);
   activateSystem(ps, pos);
   live.add(ps);
+}
+
+
+
+export function blastBurst(pos: THREE.Vector3, spec: BlastSpec,
+    additive: boolean): void {
+  if (queueIfCold(burstKey('blast', spec, additive))) {
+    const p = pos.clone();
+    buildQueue.push((): void => spawnBlastBurst(p, spec, additive));
+    return;
+  }
+  spawnBlastBurst(pos, spec, additive);
 }
 
 // Alt+Q census section — registered here so the dump grows without

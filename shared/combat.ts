@@ -205,7 +205,46 @@ export function pointToCapsuleDistance(point: Vec3Like, eyePos: Vec3Like, cls?: 
 const TARGET_SLACK = 3;
 const AIRTIME_SLACK_S = 0.5;
 const REACH_MARGIN_M = 15;
-const INHERITANCE_MARGIN = 0.6; // max |shooterVel| fraction a projectile can inherit
+const INHERITANCE_MARGIN = 0.6;
+function arcBlockedAt(
+  projectile: TrackedProjectile, g: number, airtime: number,
+  solids: readonly StructureCollider[], passTeam?: string,
+): number | null {
+  const steps = Math.max(4, Math.min(240, Math.ceil(airtime / ARC_STEP_S)));
+  const dt = airtime / steps;
+  const v = Object.assign({}, projectile.velocity);
+  let px = projectile.origin.x, py = projectile.origin.y, pz = projectile.origin.z;
+  for (let i = 1; i <= steps; i += 1) {
+    v.y += g * dt;
+    const nx = px + v.x * dt;
+    const ny = py + v.y * dt;
+    const nz = pz + v.z * dt;
+    const t = i * dt;
+    if (t > 0.03) { // muzzle grace — a spawn point may hug a doorway lip
+      // Terminal-step grace: a shell that honestly detonates ON a face
+      // lands its final segment on that face — that is the impact the
+      // claim describes, not a wall flown through. Only a face hit
+      // BEFORE the last step means the arc can't honestly reach the end.
+      if (i < steps && segSolidHit({ x: px, y: py, z: pz }, { x: nx, y: ny, z: nz }, solids, undefined, passTeam)) {return t;}
+    }
+    px = nx; py = ny; pz = nz;
+  }
+  return null;
+}
+
+
+
+/** Max legal reach for a claimed airtime: ballistic v·t + ½·|g|·t², plus
+ *  ray-burst range once the discharge delay has passed (remote railgun
+ *  teleports its beam forward — that range is legal reach). */
+function flightReach(stats: ReturnType<typeof getWeaponStats>, speed: number, airtime: number): number {
+  const rayReach = (stats.rayRange !== undefined && stats.rayDelay !== undefined && airtime >= stats.rayDelay)
+    ? stats.rayRange : 0;
+  const gMag = stats.gravity ? Math.abs(GRAVITY) : 0;
+  return speed * airtime + 0.5 * gMag * airtime * airtime + rayReach + REACH_MARGIN_M;
+}
+
+ // max |shooterVel| fraction a projectile can inherit
 
 // Shared legality core: claimed airtime and the point where the flight ended
 // must be consistent with what the tracked projectile could physically reach.
@@ -274,16 +313,6 @@ function checkFlightLegality(args: {
   return { ok: true, airtime };
 }
 
-/** Max legal reach for a claimed airtime: ballistic v·t + ½·|g|·t², plus
- *  ray-burst range once the discharge delay has passed (remote railgun
- *  teleports its beam forward — that range is legal reach). */
-function flightReach(stats: ReturnType<typeof getWeaponStats>, speed: number, airtime: number): number {
-  const rayReach = (stats.rayRange !== undefined && stats.rayDelay !== undefined && airtime >= stats.rayDelay)
-    ? stats.rayRange : 0;
-  const gMag = stats.gravity ? Math.abs(GRAVITY) : 0;
-  return speed * airtime + 0.5 * gMag * airtime * airtime + rayReach + REACH_MARGIN_M;
-}
-
 /** March the ballistic arc with the SAME semi-implicit Euler the live
  *  sims step (projSim.ts: vel.y += g·dt then pos += vel·dt), not the
  *  analytic v·t+½g·t² — the analytic path diverges from the sim by
@@ -291,31 +320,6 @@ function flightReach(stats: ReturnType<typeof getWeaponStats>, speed: number, ai
  *  wall-grazing detonations as "flight blocked". 1/120s steps bound the
  *  divergence below any wall thickness. */
 const ARC_STEP_S = 1 / 120;
-function arcBlockedAt(
-  projectile: TrackedProjectile, g: number, airtime: number,
-  solids: readonly StructureCollider[], passTeam?: string,
-): number | null {
-  const steps = Math.max(4, Math.min(240, Math.ceil(airtime / ARC_STEP_S)));
-  const dt = airtime / steps;
-  const v = Object.assign({}, projectile.velocity);
-  let px = projectile.origin.x, py = projectile.origin.y, pz = projectile.origin.z;
-  for (let i = 1; i <= steps; i += 1) {
-    v.y += g * dt;
-    const nx = px + v.x * dt;
-    const ny = py + v.y * dt;
-    const nz = pz + v.z * dt;
-    const t = i * dt;
-    if (t > 0.03) { // muzzle grace — a spawn point may hug a doorway lip
-      // Terminal-step grace: a shell that honestly detonates ON a face
-      // lands its final segment on that face — that is the impact the
-      // claim describes, not a wall flown through. Only a face hit
-      // BEFORE the last step means the arc can't honestly reach the end.
-      if (i < steps && segSolidHit({ x: px, y: py, z: pz }, { x: nx, y: ny, z: nz }, solids, undefined, passTeam)) {return t;}
-    }
-    px = nx; py = ny; pz = nz;
-  }
-  return null;
-}
 
 export function validateHitClaim(args: {
   projectile: TrackedProjectile;

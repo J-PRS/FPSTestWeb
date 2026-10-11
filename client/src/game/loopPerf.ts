@@ -34,39 +34,37 @@ export function fxJobStats(): Record<string, number> {
 /** Clear the per-job maxes — called per dump so a spike doesn't fossilize. */
 export function fxJobResetMax(): void { fxJobMax.clear(); }
 
-// FPS watchdog — sustained <40fps for >10 consecutive frames fires a
-// one-shot stats dump (ships to logs/client.log via the WARN+ pipeline),
-// throttled to once per 10s. Uses rawElapsed, not clamped dt, and skips
-// hidden tabs (rAF throttling ≠ real perf).
-export function fpsWatchdog(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof createFrameBudget>, perf: ReturnType<typeof createPerfHud>, rawElapsed: number, now: number): void {
-  if (document.hidden || rawElapsed <= 0) {return;}
-  // A >0.5s frame isn't a slow frame — it's an rAF stall (occluded/
-  // headless tab, OS jank). Counting them reported "avgFps 1" dumps on
-  // machines rendering fine; stalls fall into the healthy branch and
-  // reset the counter instead.
-  if (1 / rawElapsed < 40 && rawElapsed < 0.5) {st.lowFpsFrames += 1; st.lowFpsAccum += rawElapsed; st.headroomAccum = 0; }
-  else {
-    st.lowFpsFrames = 0; st.lowFpsAccum = 0;
-    // Comfortable headroom: >55fps accumulates toward a quality step-UP.
-    // 20s of sustained headroom per step keeps the ladder from bouncing.
-    if (1 / rawElapsed > 55) {
-      st.headroomAccum += rawElapsed;
-      if (st.headroomAccum > 20) { st.headroomAccum = 0; autoScale(deps, st, +1); }
-    }
-  }
-  if (st.lowFpsFrames > 10 && now - st.lastFpsDump > 10_000) {
-    st.lastFpsDump = now;
-    // JS share of the slow frames decides which axis degrades: sim/HUD
-    // phases over a third of frame time is a CPU-throttled box, and
-    // dropping resolution would only shrink the raster it wasn't bound on.
-    const phases = perf.snapshot();
-    const jsMs = Object.values(phases).reduce((a, v): number => a + v, 0);
-    st.cpuBound = jsMs > (st.lowFpsAccum / st.lowFpsFrames) * 1000 * 0.35;
-    dumpPerf(deps, st, budget, perf);
-    st.lowFpsFrames = 0; st.lowFpsAccum = 0;
-    autoScale(deps, st, -1);
-  }
+function autoScale(deps: GameLoopDeps, st: LoopState, dir: number): void {
+  // The SETTINGS toggle is the master switch — an opted-out user keeps
+  // their manual pixel/shadow picks no matter how low the fps sits.
+  if (!settings.get('fps-autoq')) {return;}
+  if (st.cpuBound) {return autoScaleCpu(deps, st, dir);}
+  const { rendererSetup } = deps;
+  const base = baselinePixel();
+  const target = gpuLevelTarget(st, dir, base);
+  if (!target) {return;}
+  const { next, baselineLevel } = target;
+  // Shadows shed with the pixel tier under pressure and restore on
+  // recovery, but only while the USER's fps-shadows pick stays on —
+  // setShadows must not overwrite it or a degrade would persist
+  // shadow-off forever (and the old floor clause then trapped the
+  // ladder at level 1, so it never came back).
+  const wantShadows = settings.get('fps-shadows') &&
+    (next === 0 || (baselineLevel > 0 && next === baselineLevel));
+  if (rendererSetup.renderer.shadowMap.enabled !== wantShadows) {setShadows(deps, wantShadows);}
+  applyResTier(deps, st, next, base, baselineLevel);
+  // Full-sky raster FX shed before the deepest pixel drop: the cloud dome
+  // shades every skyward fragment on a GPU that already can't keep up.
+  deps.sceneSetup.volumetricClouds?.setEnabled(next < 3);
+  shedPostPasses(rendererSetup, next >= 4);
+  // Quarks sim is pure CPU — on weak GPUs (usually weak CPUs too, e.g.
+  // chromebooks) thin burst density before the pressure curve engages.
+  setVfxQualityScale(next >= 4 ? 0.45 : next >= 2 ? 0.7 : 1);
+  st.gpuLevel = next;
+  Logger[dir < 0 ? 'warn' : 'info'](`auto-quality: gpu level ${next} (${dir < 0 ? 'sustained low fps' : 'headroom'})`);
 }
+
+
 
 function dumpPerf(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof createFrameBudget>, perf: ReturnType<typeof createPerfHud>): void {
   const player = deps.lazyPlayer();
@@ -112,6 +110,53 @@ function dumpPerf(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof c
   budget.reset('fxdecay');
   fxJobResetMax();
 }
+
+
+
+// FPS watchdog — sustained <40fps for >10 consecutive frames fires a
+// one-shot stats dump (ships to logs/client.log via the WARN+ pipeline),
+// throttled to once per 10s. Uses rawElapsed, not clamped dt, and skips
+// hidden tabs (rAF throttling ≠ real perf).
+export function fpsWatchdog(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof createFrameBudget>, perf: ReturnType<typeof createPerfHud>, rawElapsed: number, now: number): void {
+  if (document.hidden || rawElapsed <= 0) {return;}
+  // A >0.5s frame isn't a slow frame — it's an rAF stall (occluded/
+  // headless tab, OS jank). Counting them reported "avgFps 1" dumps on
+  // machines rendering fine; stalls fall into the healthy branch and
+  // reset the counter instead.
+  if (1 / rawElapsed < 40 && rawElapsed < 0.5) {st.lowFpsFrames += 1; st.lowFpsAccum += rawElapsed; st.headroomAccum = 0; }
+  else {
+    st.lowFpsFrames = 0; st.lowFpsAccum = 0;
+    // Comfortable headroom: >55fps accumulates toward a quality step-UP.
+    // 20s of sustained headroom per step keeps the ladder from bouncing.
+    if (1 / rawElapsed > 55) {
+      st.headroomAccum += rawElapsed;
+      if (st.headroomAccum > 20) { st.headroomAccum = 0; autoScale(deps, st, +1); }
+    }
+  }
+  if (st.lowFpsFrames > 10 && now - st.lastFpsDump > 10_000) {
+    st.lastFpsDump = now;
+    // JS share of the slow frames decides which axis degrades: sim/HUD
+    // phases over a third of frame time is a CPU-throttled box, and
+    // dropping resolution would only shrink the raster it wasn't bound on.
+    const phases = perf.snapshot();
+    const jsMs = Object.values(phases).reduce((a, v): number => a + v, 0);
+    st.cpuBound = jsMs > (st.lowFpsAccum / st.lowFpsFrames) * 1000 * 0.35;
+    dumpPerf(deps, st, budget, perf);
+    st.lowFpsFrames = 0; st.lowFpsAccum = 0;
+    autoScale(deps, st, -1);
+  }
+}
+function gpuId(renderer: THREE.WebGLRenderer): string {
+  if (_gpuId) {return _gpuId;}
+  const gl = renderer.getContext() as WebGLRenderingContext;
+  const ext = gl.getExtension('WEBGL_debug_renderer_info');
+  _gpuId = ext
+    ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL))
+    : 'unknown';
+  return _gpuId;
+}
+
+
 
 // Dynamic quality scaling — the render cost follows the machine instead of
 // a manual ?shadows=off param. dir -1 steps down per sustained low-fps dump
@@ -160,67 +205,20 @@ function gpuLevelTarget(st: LoopState, dir: number, base: { p: number; m: number
   return next === st.gpuLevel ? null : { next, baselineLevel };
 }
 
-function autoScale(deps: GameLoopDeps, st: LoopState, dir: number): void {
-  // The SETTINGS toggle is the master switch — an opted-out user keeps
-  // their manual pixel/shadow picks no matter how low the fps sits.
-  if (!settings.get('fps-autoq')) {return;}
-  if (st.cpuBound) {return autoScaleCpu(deps, st, dir);}
-  const { rendererSetup } = deps;
-  const base = baselinePixel();
-  const target = gpuLevelTarget(st, dir, base);
-  if (!target) {return;}
-  const { next, baselineLevel } = target;
-  // Shadows shed with the pixel tier under pressure and restore on
-  // recovery, but only while the USER's fps-shadows pick stays on —
-  // setShadows must not overwrite it or a degrade would persist
-  // shadow-off forever (and the old floor clause then trapped the
-  // ladder at level 1, so it never came back).
-  const wantShadows = settings.get('fps-shadows') &&
-    (next === 0 || (baselineLevel > 0 && next === baselineLevel));
-  if (rendererSetup.renderer.shadowMap.enabled !== wantShadows) {setShadows(deps, wantShadows);}
-  applyResTier(deps, st, next, base, baselineLevel);
-  // Full-sky raster FX shed before the deepest pixel drop: the cloud dome
-  // shades every skyward fragment on a GPU that already can't keep up.
-  deps.sceneSetup.volumetricClouds?.setEnabled(next < 3);
-  shedPostPasses(rendererSetup, next >= 4);
-  // Quarks sim is pure CPU — on weak GPUs (usually weak CPUs too, e.g.
-  // chromebooks) thin burst density before the pressure curve engages.
-  setVfxQualityScale(next >= 4 ? 0.45 : next >= 2 ? 0.7 : 1);
-  st.gpuLevel = next;
-  Logger[dir < 0 ? 'warn' : 'info'](`auto-quality: gpu level ${next} (${dir < 0 ? 'sustained low fps' : 'headroom'})`);
+function setShadows(deps: GameLoopDeps, on: boolean): void {
+  const { rendererSetup, sceneSetup } = deps;
+  rendererSetup.renderer.shadowMap.enabled = on;
+  sceneSetup.sun.castShadow = on;
+  // Lit materials cache shadow uniforms — flag for recompile once.
+  sceneSetup.scene.traverse((o): void => {
+    const m = (o as THREE.Mesh).material;
+    if (m) {(Array.isArray(m) ? m : [m]).forEach((x): void => { x.needsUpdate = true; });}
+  });
+  // Deliberately NOT settings.set: fps-shadows is the user's stored pick,
+  // the ladder only owns the runtime flag (see wantShadows above).
 }
 
-function applyResTier(deps: GameLoopDeps, st: LoopState, next: number, base: { p: number; m: number }, baselineLevel: number): void {
-  const { rendererSetup } = deps;
-  if (next < 2 && !st.autoPixel) {return;}
-  // Gradual path: resScale rungs replace the px jumps entirely; retro
-  // baselines keep the integer tiers (non-integer factors shimmer).
-  if (base.p <= 1) {rendererSetup.setResScale(RES_LADDER[next]!);}
-  else {
-    const t = tierToPM(next, base.p, base.m);
-    rendererSetup.setPixel(t.p, t.m, false);
-  }
-  st.autoPixel = next > baselineLevel;
-}
 
-let _gpuId: string | null = null;
-function gpuId(renderer: THREE.WebGLRenderer): string {
-  if (_gpuId) {return _gpuId;}
-  const gl = renderer.getContext() as WebGLRenderingContext;
-  const ext = gl.getExtension('WEBGL_debug_renderer_info');
-  _gpuId = ext
-    ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL))
-    : 'unknown';
-  return _gpuId;
-}
-
-// Post passes are pure fill cost — bloom's mip-blur chain is the last
-// thing a starving GPU needs. Shed at the deepest tier and restore by
-// the user's own toggles on recovery (pass flags only, settings kept).
-function shedPostPasses(rendererSetup: GameLoopDeps['rendererSetup'], shed: boolean): void {
-  if (rendererSetup.bloomPass) {rendererSetup.bloomPass.enabled = !shed && rendererSetup.isBloomEnabled();}
-  if (rendererSetup.contrastPass) {rendererSetup.contrastPass.enabled = !shed && rendererSetup.isPostProcessingEnabled();}
-}
 
 // CPU-bound ladder — JS phases dominate the frame, so a smaller buffer
 // buys nothing; shed ambient JS work first, then drop res as a last resort.
@@ -248,6 +246,35 @@ function autoScaleCpu(deps: GameLoopDeps, st: LoopState, dir: number): void {
   Logger[dir < 0 ? 'warn' : 'info'](`auto-quality: cpu level ${next} (${dir < 0 ? 'sustained low fps' : 'headroom'})`);
 }
 
+
+
+// Post passes are pure fill cost — bloom's mip-blur chain is the last
+// thing a starving GPU needs. Shed at the deepest tier and restore by
+// the user's own toggles on recovery (pass flags only, settings kept).
+function shedPostPasses(rendererSetup: GameLoopDeps['rendererSetup'], shed: boolean): void {
+  if (rendererSetup.bloomPass) {rendererSetup.bloomPass.enabled = !shed && rendererSetup.isBloomEnabled();}
+  if (rendererSetup.contrastPass) {rendererSetup.contrastPass.enabled = !shed && rendererSetup.isPostProcessingEnabled();}
+}
+
+
+
+function applyResTier(deps: GameLoopDeps, st: LoopState, next: number, base: { p: number; m: number }, baselineLevel: number): void {
+  const { rendererSetup } = deps;
+  if (next < 2 && !st.autoPixel) {return;}
+  // Gradual path: resScale rungs replace the px jumps entirely; retro
+  // baselines keep the integer tiers (non-integer factors shimmer).
+  if (base.p <= 1) {rendererSetup.setResScale(RES_LADDER[next]!);}
+  else {
+    const t = tierToPM(next, base.p, base.m);
+    rendererSetup.setPixel(t.p, t.m, false);
+  }
+  st.autoPixel = next > baselineLevel;
+}
+
+
+
+let _gpuId: string | null = null;
+
 /** Undo every ladder step — called when AUTO QUALITY flips off so the
  *  player isn't stranded on a degraded preset it chose for them. */
 export function resetAutoQuality(deps: GameLoopDeps, st: LoopState): void {
@@ -269,17 +296,4 @@ export function resetAutoQuality(deps: GameLoopDeps, st: LoopState): void {
   setVfxQualityScale(1);
   st.gpuLevel = 0;
   st.cpuLevel = 0;
-}
-
-function setShadows(deps: GameLoopDeps, on: boolean): void {
-  const { rendererSetup, sceneSetup } = deps;
-  rendererSetup.renderer.shadowMap.enabled = on;
-  sceneSetup.sun.castShadow = on;
-  // Lit materials cache shadow uniforms — flag for recompile once.
-  sceneSetup.scene.traverse((o): void => {
-    const m = (o as THREE.Mesh).material;
-    if (m) {(Array.isArray(m) ? m : [m]).forEach((x): void => { x.needsUpdate = true; });}
-  });
-  // Deliberately NOT settings.set: fps-shadows is the user's stored pick,
-  // the ladder only owns the runtime flag (see wantShadows above).
 }

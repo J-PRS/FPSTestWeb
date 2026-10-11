@@ -85,6 +85,10 @@ interface BotHooks {
   /** Apply a weld tick — returns true while the item still exists. */
   botWeld?(key: string): boolean;
 }
+// Small accessor so update() reads deps once per frame.
+function deps0(m: TeamBots): BotsDeps { return m.deps; }
+
+
 
 export class TeamBots {
   readonly bots: GameBot[] = [];
@@ -762,5 +766,3 @@ const _collectors: { id: string; pos: THREE.Vector3; alive: boolean; pickupScale
 const _alliesScratch: THREE.Vector3[] = [];
 const _bottomScratch = new Set<string>();
 const _emptySet: ReadonlySet<string> = new Set();
-// Small accessor so update() reads deps once per frame.
-function deps0(m: TeamBots): BotsDeps { return m.deps; }

@@ -63,31 +63,6 @@ function label(o: THREE.Object3D): string {
   return bits.join(' ');
 }
 
-function scanMesh(o: THREE.Object3D, hits: Hit[]): void {
-  const base: Hit = { name: label(o), kind: o.type, attr: '', index: -1, value: 0, count: 0 };
-  const mesh = o as THREE.Mesh;
-  if (!mesh.geometry) {return;}
-  const geo = mesh.geometry;
-
-  const pos = geo.getAttribute('position') as THREE.BufferAttribute | undefined;
-  if (pos) {
-    const h = Object.assign({}, base, {attr: 'position'});
-    if (scanArray(pos.array, h)) {hits.push(h);}
-    const huge = Object.assign({}, base, {attr: 'positionHuge'});
-    if (scanHuge(pos.array, huge)) {hits.push(huge);}
-  }
-
-  scanInstAndBones(o, base, hits);
-
-  // InstancedBufferAttributes other than position (ribbon cols, opacity,
-  // quarks particle data all live in custom attributes)
-  for (const [name, attr] of Object.entries(geo.attributes)) {
-    if (name === 'position' || name === 'normal' || name === 'uv') {continue;}
-    const h = Object.assign({}, base, {attr: name});
-    if (scanArray((attr as THREE.BufferAttribute).array, h)) {hits.push(h);}
-  }
-}
-
 // Instanced matrices + skinned bones — shared by the full-buffer scan and
 // the per-frame transform scan (a one-frame NaN bone/matrix is the exact
 // transient that covers the screen then recomputes clean).
@@ -115,6 +90,33 @@ function scanInstAndBones(o: THREE.Object3D, base: Hit, hits: Hit[]): void {
     if (scanArray(bones, h)) {hits.push(h);}
     const hugeB = Object.assign({}, base, {attr: 'boneMatricesHuge'});
     if (scanHuge(bones, hugeB)) {hits.push(hugeB);}
+  }
+}
+
+
+
+function scanMesh(o: THREE.Object3D, hits: Hit[]): void {
+  const base: Hit = { name: label(o), kind: o.type, attr: '', index: -1, value: 0, count: 0 };
+  const mesh = o as THREE.Mesh;
+  if (!mesh.geometry) {return;}
+  const geo = mesh.geometry;
+
+  const pos = geo.getAttribute('position') as THREE.BufferAttribute | undefined;
+  if (pos) {
+    const h = Object.assign({}, base, {attr: 'position'});
+    if (scanArray(pos.array, h)) {hits.push(h);}
+    const huge = Object.assign({}, base, {attr: 'positionHuge'});
+    if (scanHuge(pos.array, huge)) {hits.push(huge);}
+  }
+
+  scanInstAndBones(o, base, hits);
+
+  // InstancedBufferAttributes other than position (ribbon cols, opacity,
+  // quarks particle data all live in custom attributes)
+  for (const [name, attr] of Object.entries(geo.attributes)) {
+    if (name === 'position' || name === 'normal' || name === 'uv') {continue;}
+    const h = Object.assign({}, base, {attr: name});
+    if (scanArray((attr as THREE.BufferAttribute).array, h)) {hits.push(h);}
   }
 }
 

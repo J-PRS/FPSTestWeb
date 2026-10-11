@@ -45,6 +45,24 @@ export interface FireHost {
   hurtLocal(dmg: number, fromPos: THREE.Vector3, src: string, melee: boolean, attackerId: string): void;
 }
 
+/** Pellet fan for flak/shotgun bots — one random cone dir per pellet;
+ *  count 1 collapses to a single straight shot. */
+function pelletDirs(dir: THREE.Vector3, count: number, spread: number): THREE.Vector3[] {
+  if (count <= 1 || spread <= 0) {return [dir.clone()];}
+  _pelletRight.crossVectors(dir, _pelletUp0);
+  if (_pelletRight.lengthSq() < 1e-8) {_pelletRight.set(1, 0, 0);} else {_pelletRight.normalize();}
+  _pelletUp.crossVectors(_pelletRight, dir);
+  const rot = Math.random() * Math.PI * 2;
+  const cs = Math.cos(rot), sn = Math.sin(rot);
+  return poissonDisc(count).map((pt): THREE.Vector3 => {
+    const ox = (pt.x * cs - pt.y * sn) * spread;
+    const oy = (pt.x * sn + pt.y * cs) * spread;
+    return dir.clone().addScaledVector(_pelletRight, ox).addScaledVector(_pelletUp, oy).normalize();
+  });
+}
+
+
+
 
 export class BotFire {
   // Bolt tracers share a pool — a fresh BufferGeometry per shot meant a
@@ -256,20 +274,4 @@ export class BotFire {
   tickBolts(dt: number): void { tickBolts(this, dt); }
 
   dispose(): void { disposeBolts(this); }
-}
-
-/** Pellet fan for flak/shotgun bots — one random cone dir per pellet;
- *  count 1 collapses to a single straight shot. */
-function pelletDirs(dir: THREE.Vector3, count: number, spread: number): THREE.Vector3[] {
-  if (count <= 1 || spread <= 0) {return [dir.clone()];}
-  _pelletRight.crossVectors(dir, _pelletUp0);
-  if (_pelletRight.lengthSq() < 1e-8) {_pelletRight.set(1, 0, 0);} else {_pelletRight.normalize();}
-  _pelletUp.crossVectors(_pelletRight, dir);
-  const rot = Math.random() * Math.PI * 2;
-  const cs = Math.cos(rot), sn = Math.sin(rot);
-  return poissonDisc(count).map((pt): THREE.Vector3 => {
-    const ox = (pt.x * cs - pt.y * sn) * spread;
-    const oy = (pt.x * sn + pt.y * cs) * spread;
-    return dir.clone().addScaledVector(_pelletRight, ox).addScaledVector(_pelletUp, oy).normalize();
-  });
 }

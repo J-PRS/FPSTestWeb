@@ -72,6 +72,98 @@ export function makeSimSlither(
   };
 }
 
+/** S-weave pursuit at the committed snapshot; bleeds off when no prey
+ *  is in aggro, telegraphs into the coil when the strike lands. */
+function stepWeave(
+  c: SimSlither, dt: number, target: SimVec | null, g: SlitherGeom,
+): CrawlerEvent | null {
+  if (c.stunTimer <= 0 && target && g.distSq < c.sp.AGGRO_D2) {
+    const wantYaw = Math.atan2(g.dx, g.dz);
+    const weave = Math.sin(c.animT * c.sp.WEAVE_HZ) * c.sp.WEAVE_AMP;
+    const wy = wantYaw + weave;
+    c.vx = Math.sin(wy) * c.sp.SPEED;
+    c.vz = Math.cos(wy) * c.sp.SPEED;
+    if (g.hitSq < c.sp.STRIKE_D2 && c.strikeCd <= 0) {
+      c.state = 'windup';
+      c.windupTimer = c.sp.WINDUP_S;
+      return 'windup';
+    }
+  } else {
+    c.vx *= Math.max(0, 1 - 4 * dt);
+    c.vz *= Math.max(0, 1 - 4 * dt);
+  }
+  return null;
+}
+
+
+
+/** Leap leg — airborne arc. One bite on the pass-through; the flight
+ *  keeps going (that's the point) and touchdown ends the strike. */
+function stepLeap(
+  c: SimSlither, dt: number, field: Heightfield,
+  target: SimVec | null, authoritative: boolean,
+  cols?: readonly StructureCollider[],
+): CrawlerEvent | null {
+  c.hopTimer -= dt;
+  const px = c.x, py = c.y, pz = c.z;
+  c.vy += c.sp.GRAVITY * dt;
+  c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt;
+  clipMotion(c, px, py, pz, cols);
+
+  // Pass-through contact — fires once per leap, mid-flight, and the
+  // snake keeps moving. A body already past still counts on the frame.
+  if (target && !c.struck) {
+    const bdx = target.x - c.x, bdz = target.z - c.z, bdy = target.y - c.y;
+    if (bdx * bdx + bdz * bdz + bdy * bdy < c.sp.BITE_D2) {
+      c.struck = true;
+      if (authoritative) {c.pendingBite = true;}
+      return 'bite';
+    }
+  }
+
+  const gy = Math.max(hmHeight(field, c.x, c.z), hmChord(field, c.x, c.z)) + 0.5;
+  if ((Number.isFinite(gy) && c.y <= gy) || c.hopTimer <= 0) {
+    if (Number.isFinite(gy)) {c.y = Math.min(c.y, gy);} c.vx = 0; c.vy = 0; c.vz = 0;
+    c.state = 'slither';
+    c.strikeCd = c.sp.STRIKE_CD;
+    return null;
+  }
+
+  if (c.vx * c.vx + c.vz * c.vz > 0.1) {
+    const want = Math.atan2(c.vx, c.vz);
+    c.yaw += wrapAngleDelta(want - c.yaw) * Math.min(1, 6 * dt);
+  }
+  return null;
+}
+
+
+
+/** Coil — stationary telegraph; contact during the coil doesn't bite,
+ *  the committed leap does. */
+function stepCoil(c: SimSlither, dt: number, g: SlitherGeom): CrawlerEvent | null {
+  c.vx = 0; c.vz = 0;
+  c.windupTimer -= dt;
+  if (c.windupTimer <= 0 && c.stunTimer <= 0) {
+    c.state = 'lunge';
+    c.struck = false;
+    // The leap is ballistic THROUGH the target, not a dash to it: the
+    // aim point rides an OVERSHOOT past the prey, and vy is solved like
+    // the crawler pounce so the arc arrives at the target's own height —
+    // it passes through legs-to-chest and keeps flying.
+    const d = Math.sqrt(g.distSq) || 0.001;
+    const ux = g.dx / d, uz = g.dz / d;
+    const t = Math.max(0.2, (d + c.sp.OVERSHOOT) / c.sp.LUNGE_SPEED);
+    c.hopTimer = t + 0.4; // safety clock just past the planned touchdown
+    c.vx = ux * c.sp.LUNGE_SPEED;
+    c.vz = uz * c.sp.LUNGE_SPEED;
+    c.vy = (g.ty - c.y + 0.5 * Math.abs(c.sp.GRAVITY) * t * t) / t;
+    return 'pounce';
+  }
+  return null;
+}
+
+
+
 export function stepSlither(
   c: SimSlither,
   dt: number,
@@ -117,92 +209,6 @@ export function stepSlither(
 }
 
 type SlitherGeom = { dx: number; dz: number; dy: number; ty: number; distSq: number; hitSq: number };
-
-/** Coil — stationary telegraph; contact during the coil doesn't bite,
- *  the committed leap does. */
-function stepCoil(c: SimSlither, dt: number, g: SlitherGeom): CrawlerEvent | null {
-  c.vx = 0; c.vz = 0;
-  c.windupTimer -= dt;
-  if (c.windupTimer <= 0 && c.stunTimer <= 0) {
-    c.state = 'lunge';
-    c.struck = false;
-    // The leap is ballistic THROUGH the target, not a dash to it: the
-    // aim point rides an OVERSHOOT past the prey, and vy is solved like
-    // the crawler pounce so the arc arrives at the target's own height —
-    // it passes through legs-to-chest and keeps flying.
-    const d = Math.sqrt(g.distSq) || 0.001;
-    const ux = g.dx / d, uz = g.dz / d;
-    const t = Math.max(0.2, (d + c.sp.OVERSHOOT) / c.sp.LUNGE_SPEED);
-    c.hopTimer = t + 0.4; // safety clock just past the planned touchdown
-    c.vx = ux * c.sp.LUNGE_SPEED;
-    c.vz = uz * c.sp.LUNGE_SPEED;
-    c.vy = (g.ty - c.y + 0.5 * Math.abs(c.sp.GRAVITY) * t * t) / t;
-    return 'pounce';
-  }
-  return null;
-}
-
-/** Leap leg — airborne arc. One bite on the pass-through; the flight
- *  keeps going (that's the point) and touchdown ends the strike. */
-function stepLeap(
-  c: SimSlither, dt: number, field: Heightfield,
-  target: SimVec | null, authoritative: boolean,
-  cols?: readonly StructureCollider[],
-): CrawlerEvent | null {
-  c.hopTimer -= dt;
-  const px = c.x, py = c.y, pz = c.z;
-  c.vy += c.sp.GRAVITY * dt;
-  c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt;
-  clipMotion(c, px, py, pz, cols);
-
-  // Pass-through contact — fires once per leap, mid-flight, and the
-  // snake keeps moving. A body already past still counts on the frame.
-  if (target && !c.struck) {
-    const bdx = target.x - c.x, bdz = target.z - c.z, bdy = target.y - c.y;
-    if (bdx * bdx + bdz * bdz + bdy * bdy < c.sp.BITE_D2) {
-      c.struck = true;
-      if (authoritative) {c.pendingBite = true;}
-      return 'bite';
-    }
-  }
-
-  const gy = Math.max(hmHeight(field, c.x, c.z), hmChord(field, c.x, c.z)) + 0.5;
-  if ((Number.isFinite(gy) && c.y <= gy) || c.hopTimer <= 0) {
-    if (Number.isFinite(gy)) {c.y = Math.min(c.y, gy);} c.vx = 0; c.vy = 0; c.vz = 0;
-    c.state = 'slither';
-    c.strikeCd = c.sp.STRIKE_CD;
-    return null;
-  }
-
-  if (c.vx * c.vx + c.vz * c.vz > 0.1) {
-    const want = Math.atan2(c.vx, c.vz);
-    c.yaw += wrapAngleDelta(want - c.yaw) * Math.min(1, 6 * dt);
-  }
-  return null;
-}
-
-/** S-weave pursuit at the committed snapshot; bleeds off when no prey
- *  is in aggro, telegraphs into the coil when the strike lands. */
-function stepWeave(
-  c: SimSlither, dt: number, target: SimVec | null, g: SlitherGeom,
-): CrawlerEvent | null {
-  if (c.stunTimer <= 0 && target && g.distSq < c.sp.AGGRO_D2) {
-    const wantYaw = Math.atan2(g.dx, g.dz);
-    const weave = Math.sin(c.animT * c.sp.WEAVE_HZ) * c.sp.WEAVE_AMP;
-    const wy = wantYaw + weave;
-    c.vx = Math.sin(wy) * c.sp.SPEED;
-    c.vz = Math.cos(wy) * c.sp.SPEED;
-    if (g.hitSq < c.sp.STRIKE_D2 && c.strikeCd <= 0) {
-      c.state = 'windup';
-      c.windupTimer = c.sp.WINDUP_S;
-      return 'windup';
-    }
-  } else {
-    c.vx *= Math.max(0, 1 - 4 * dt);
-    c.vz *= Math.max(0, 1 - 4 * dt);
-  }
-  return null;
-}
 
 export function applySlitherDamage(c: SimSlither, damage: number): boolean {
   if (!Number.isFinite(damage)) { inv('creature-damage-finite', false, { damage, kind: 'slither' }); return false; }
