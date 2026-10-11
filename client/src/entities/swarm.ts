@@ -219,7 +219,21 @@ const shadowVert = /* glsl */ `
     // the clipmap vertex shader applies (fract() UV + hScale gain). The
     // instance matrix keeps owning XZ + radius; y is ground + epsilon.
     vec4 wp = modelMatrix * instanceMatrix * vec4(position, 1.0);
-    wp.y = texture2D(heightMap, fract(wp.xz / hmWorldScale)).r * hScale + 0.06;
+    float fieldY = texture2D(heightMap, fract(wp.xz / hmWorldScale)).r * hScale;
+    // Also clear the level-0 chord — the 5m mesh bridges mid-cell
+    // gullies, and a blob displaced to the smooth field alone dips
+    // under the rendered surface there (hard diagonal clip). Same
+    // two-triangle barycentric as Terrain.getRenderedHeight.
+    vec2 cell0 = floor(wp.xz / 5.0) * 5.0;
+    vec2 f = (wp.xz - cell0) / 5.0;
+    float s00 = texture2D(heightMap, fract(cell0 / hmWorldScale)).r * hScale;
+    float s10 = texture2D(heightMap, fract((cell0 + vec2(5.0, 0.0)) / hmWorldScale)).r * hScale;
+    float s01 = texture2D(heightMap, fract((cell0 + vec2(0.0, 5.0)) / hmWorldScale)).r * hScale;
+    float s11 = texture2D(heightMap, fract((cell0 + vec2(5.0, 5.0)) / hmWorldScale)).r * hScale;
+    float chordY = f.x + f.y <= 1.0
+      ? s00 + (s10 - s00) * f.x + (s01 - s00) * f.y
+      : s11 + (s10 - s11) * (1.0 - f.y) + (s01 - s11) * (1.0 - f.x);
+    wp.y = max(fieldY, chordY) + 0.08;
     gl_Position = projectionMatrix * viewMatrix * wp;
   }
 `;
