@@ -269,6 +269,12 @@ function wirePlayerCombat(ctx: NetCtx): void {
   networkManager.onRemoteTeleport = (playerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }) => {
     const rp = deps.world.remotePlayers.get(playerId);
     if (!rp) return;
+    // teleportTo writes straight into position/previousPosition/interp — a
+    // non-finite wire value would poison the remote's whole motion state.
+    if (!finiteVec(position)) {
+      logger.warn(`remoteTeleport ${playerId} dropped: non-finite position`);
+      return;
+    }
     rp.teleportTo(new THREE.Vector3(position.x, position.y, position.z));
     void velocity; // next tick record carries it — no need to touch internals
   };
@@ -282,11 +288,13 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
   const logger = deps.logger;
 
   networkManager.onPlayerJump = (_playerId: string, position: { x: number; y: number; z: number }) => {
+    if (!finiteVec(position)) return; // non-finite wire pos would poison the particle pool
     const pos = new THREE.Vector3(position.x, position.y, position.z);
     deps.lazyEffects().spawnJumpDust(pos);
   };
 
   networkManager.onPlayerJetpack = (_playerId: string, position: { x: number; y: number; z: number }) => {
+    if (!finiteVec(position)) return;
     const pos = new THREE.Vector3(position.x, position.y, position.z);
     deps.lazyEffects().spawnJetpack(pos);
   };
