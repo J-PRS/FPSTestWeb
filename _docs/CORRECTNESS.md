@@ -51,13 +51,39 @@ violation instead of a symptom hunt.
    made a player unkillable because `health <= 0` was never true).
    Closed sites: move-claim anchor+sim, slam landing, deploy plant,
    hit-claim legality, knockback wire+shove, damage chokepoint,
-   reconnect seat, healPool, shot/contact ingest.
+   reconnect seat, healPool, shot/contact ingest, energy grant/drain,
+   deployable hurt, clientStats renderLag, clampPing/rewindPos,
+   pushRewindSample, remote roster (hit/join/diff-heal), deployHp.
+
+   Sticky variant: `Math.max(0, NaN) = NaN` — a poisoned pool never
+   self-heals. Pools also need a finite *recovery* at the tick clamp
+   (energy drains to 0 and regen rebuilds; local health snaps to max).
 
 6. **Render can lie, but every lie is watched.** Prediction, interp
    smoothing, corpse physics may diverge from wire truth — each divergence
    budget gets a census counter (render-blend, seg-div, nugrest, dmg-echo,
    remote-buried, anim-bind). New cosmetic divergence ⇒ new counter at
    birth, or the next "sometimes looks wrong" report has no instrument.
+
+## Audited — verified state (2026-10-10)
+
+- **Determinism (rule 3): clean.** `movement.ts`, `projSim.ts`,
+  `combat.ts`, `heightfield.ts`, `ballSim.ts` hold zero ambient reads
+  (`Math.random`/`Date.now`/`performance.now`). `MoveSim` integrates at
+  fixed 60Hz with a step accumulator — same-step determinism on both
+  sides. Ambient draws live only in bot brains (`botDisposition`,
+  `botGoals`, `botHunt`, `botBrain`), which clients never predict —
+  prod-legal by the rule's own letter.
+- **Wire-row coherence:** `wire-row-finite` + `wire-row-coherent`
+  (alive ⇒ hp>0) at the tick egress; `wire-vel-sane` magnitude cap at
+  client ingest. No upper bound on hp — seeded pools legitimately
+  exceed class max.
+- **Above-floor postconditions:** `spawn-above-ground`,
+  `teleport-above-ground` — both seed paths for "body under terrain"
+  name the violation at birth.
+- **Verdict-complete:** every WIRE table claim returns a verdict or
+  reject; the three silent shotFired declines (dead shooter, dry belt,
+  spawn refuse) now reject with shotId.
 
 ## When adding a system
 
