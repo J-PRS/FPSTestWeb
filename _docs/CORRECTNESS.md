@@ -320,6 +320,13 @@ violation instead of a symptom hunt.
   missed; `pickupGone` fades the replica and bounds the belt grant
   at `BELT_MAX`; `onBuff` finite-gates health/armor and a NaN
   `until` fails safe (buff never displays).
+- **Flag wire lane (verified sealed):** `applyFlagUpdate` drops
+  non-finite pos/home at the entry; `reconcileReplicas` reaps
+  teams absent from the roster (mesh, marker, HUD diamonds,
+  flagStates all cleaned); 'dropped' streams ease toward
+  `wirePos` rather than snap mid-flight; match-reset →home
+  transitions hush via `flagHomeHush` so `flags.reset()` can't
+  fake cap/return callouts.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
