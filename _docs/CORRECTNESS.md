@@ -275,6 +275,14 @@ violation instead of a symptom hunt.
   `rateLimitWarnings`. Buff/timer fields (`regenUntil`, `ddUntil`,
   `charge`, `armor`) are server-owned: pickups/blast grant under
   POWERUP caps, death zeroes, no claim path writes them.
+- **Claim lanes (verified sealed):** deploy-plant gated end-to-end
+  (dead check, kind whitelist, cap-0 denied, finite, belt cost,
+  MAX_PLANT_DIST reach, server-decided `groundY`, per-player cap
+  recycle, team stamped at plant); chat routes on the sender's
+  roster team never the claimed flag, text re-truncated, VGS
+  regex'd; beam intents (lightning/repair/melee) flood-gated 30/s,
+  muzzle rewind-derived not claimed, dir finite-gated once at :337
+  then normalized, ranges are server constants.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
