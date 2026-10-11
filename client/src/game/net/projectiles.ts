@@ -95,9 +95,13 @@ export function wireProjectiles(ctx: NetCtx): void {
       return;
     }
 
+    // NaN spawn vectors seed a NaN trajectory — and a NaN trail emitter
+    // paints the whole sky. normalize() on a zero vector is NaN too.
+    if (!Number.isFinite(position.x + position.y + position.z
+        + velocity.x + velocity.y + velocity.z)) {return;}
     const vel = new THREE.Vector3(velocity.x, velocity.y, velocity.z);
     const origin = new THREE.Vector3(position.x, position.y, position.z);
-    const dir = vel.clone().normalize();
+    const dir = vel.lengthSq() > 0 ? vel.clone().normalize() : new THREE.Vector3(0, 0, 1);
     if (cosmeticShot(ownerId, weaponType, origin, dir)) {return;}
     const cfg = (weaponType === undefined ? undefined : getProjectileConfig(weaponType)) ?? BOLT_CONFIG;
     const remoteProjectile = new Projectile(deps.lazyScene(), origin, dir, new THREE.Vector3(0, 0, 0), cfg);
