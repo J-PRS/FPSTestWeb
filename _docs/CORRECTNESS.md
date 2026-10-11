@@ -375,6 +375,14 @@ violation instead of a symptom hunt.
   slam position, ClaimVerdict on env damage. JSON's `NaN → null`
   means a stray claim nulls out server-side rather than writing
   NaN into sims.
+- **Wire dispatch coverage (verified sealed):** the handler map is
+  keyed on `ServerMessage['type']` — tsc won't compile with a
+  declared-but-unhandled type; genuinely unknown types warn.
+  Handler throws are contained per-message (a throwing tick at
+  20Hz can't reconnect-loop the socket) with `handlerThrows`
+  counting the half-applied-state hazard in the dump.
+  `send dropped — no live lane` is the send-side counterpart:
+  legit during the connect window, counted + lastType logged.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
