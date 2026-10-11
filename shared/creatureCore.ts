@@ -20,7 +20,7 @@
  * predictor runs motion/state purely for display.
  */
 
-import { type Heightfield, hmHeight } from './heightfield.js';
+import { type Heightfield, hmHeight, hmChord } from './heightfield.js';
 import type { SimVec, StructureCollider } from './ballSim.js';
 import { segSolidHit } from './solidWorld.js';
 import { SPECIES, speciesFamily, type SpeciesRow } from './species.js';
@@ -168,7 +168,9 @@ export function stepCrawler(
   c.vy += c.sp.GRAVITY * dt;
   c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt;
   clipMotion(c, px, py, pz, cols);
-  const gy = hmHeight(field, c.x, c.z);
+  // Drawn-chord floor — see nuggets/flags: the smooth field sits under
+  // the rendered mesh in gullies, parking a crawler there reads buried.
+  const gy = Math.max(hmHeight(field, c.x, c.z), hmChord(field, c.x, c.z));
   const airborne = c.y > gy + 0.05;
 
   if (airborne) return null; // mid-hop — nothing to decide until touchdown

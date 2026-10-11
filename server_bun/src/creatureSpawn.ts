@@ -6,7 +6,7 @@
  * appear" — including the committed target snapshot that keeps server
  * and client replays on the same aim point.
  */
-import { type Heightfield, hmHeight } from '../../shared/heightfield.ts';
+import { type Heightfield, hmHeight, hmChord } from '../../shared/heightfield.ts';
 import {
   SPECIES_FAMILY, speciesFamily,
   commitTarget,
@@ -63,7 +63,7 @@ export function spawnCrawler(h: SpawnHost, near: SimVec, species: string): SimBe
   const x = near.x + Math.cos(ang) * dist;
   const z = near.z + Math.sin(ang) * dist;
   const seed = (h.rng() * 0xffffffff) >>> 0 || 1;
-  const gy = hmHeight(field, x, z);
+  const gy = Math.max(hmHeight(field, x, z), hmChord(field, x, z));
   const id = h.nextId++;
   const uber = h.rng() < 0.05;
   const fam = SPECIES_FAMILY[speciesFamily(species)];

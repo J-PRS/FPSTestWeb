@@ -6,7 +6,7 @@
  * is the counterplay.
  */
 
-import { type Heightfield, hmHeight } from './heightfield.js';
+import { type Heightfield, hmHeight, hmChord } from './heightfield.js';
 import type { SimVec, StructureCollider } from './ballSim.js';
 import { clipMotion, type CrawlerEvent, type SimCrawler } from './creatureCore.js';
 import { SPECIES, speciesFamily, type SpeciesRow } from './species.js';
@@ -108,7 +108,7 @@ export function stepBaneling(
   c.x += c.vx * dt;
   c.z += c.vz * dt;
   clipMotion(c, bpx, c.y, bpz, cols);
-  c.y = hmHeight(field, c.x, c.z) + 0.7; // small sac, low ride
+  c.y = Math.max(hmHeight(field, c.x, c.z), hmChord(field, c.x, c.z)) + 0.7; // small sac, low ride
   if (hSpeed > 0.5) c.yaw = Math.atan2(c.vx, c.vz);
 
   if (target) {

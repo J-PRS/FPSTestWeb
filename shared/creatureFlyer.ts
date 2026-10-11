@@ -7,7 +7,7 @@
  * continuous motion, so they never need an event of their own.
  */
 
-import { type Heightfield, hmHeight } from './heightfield.js';
+import { type Heightfield, hmHeight, hmChord } from './heightfield.js';
 import type { SimVec, StructureCollider } from './ballSim.js';
 import { clipMotion, crand, type CrawlerEvent, type SimCrawler } from './creatureCore.js';
 import { SPECIES, speciesFamily, type SpeciesRow } from './species.js';
@@ -126,7 +126,9 @@ export function stepFlyer(
   const px = c.x, py = c.y, pz = c.z;
   c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt;
   clipMotion(c, px, py, pz, cols);
-  const gy = hmHeight(field, c.x, c.z);
+  // Chord floor so the clearance holds against the drawn mesh, not the
+  // field under it — a gully's bridged chord is the real clip surface.
+  const gy = Math.max(hmHeight(field, c.x, c.z), hmChord(field, c.x, c.z));
   if (c.y < gy + 0.8) c.y = gy + 0.8;
   if (c.vx * c.vx + c.vz * c.vz > 1) c.yaw = Math.atan2(c.vx, c.vz);
   return null;

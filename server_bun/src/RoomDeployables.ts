@@ -20,7 +20,7 @@ import { DEPLOY_KINDS, DEPLOY_MAX, DEPLOY_HP, type DeployKind } from '../../shar
 import { DEPLOY_ITEMS, deploySolid } from '../../shared/deployItems.ts';
 import type { StructureCollider } from '../../shared/ballCollide.ts';
 import { segSolidHit } from '../../shared/solidWorld.ts';
-import { hmHeight } from '../../shared/heightfield.ts';
+import { hmHeight, hmChord } from '../../shared/heightfield.ts';
 import { simNow } from './simClock.ts';
 import type { TeamId } from '../../shared/teams.ts';
 const KINDS = new Set<DeployKind>(DEPLOY_KINDS);
@@ -183,7 +183,10 @@ export class RoomDeployables {
    *  PLANT_FLOAT above it is pulled down — "server decides" applies to
    *  the landing spot too, and the replica echoes this y verbatim. */
   private groundY(pos: Vec3): number {
-    let floor = this.room.field ? hmHeight(this.room.field, pos.x, pos.z) : pos.y;
+    // Chord-augmented floor — the replica renders on the drawn mesh, so
+    // "terrain" here must mean the surface the client draws, not the
+    // smooth field under it (same law as nuggets/flags/bot shadows).
+    const floor = this.room.field ? Math.max(hmHeight(this.room.field, pos.x, pos.z), hmChord(this.room.field, pos.x, pos.z)) : pos.y;
     const hit = segSolidHit(
       { x: pos.x, y: pos.y + 0.5, z: pos.z },
       { x: pos.x, y: floor - 1, z: pos.z },

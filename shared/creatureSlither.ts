@@ -6,7 +6,7 @@
  * — zero new wire vocab.
  */
 
-import { type Heightfield, hmHeight } from './heightfield.js';
+import { type Heightfield, hmHeight, hmChord } from './heightfield.js';
 import { wrapAngleDelta } from './angles.ts';
 import type { SimVec, StructureCollider } from './ballSim.js';
 import { clipMotion, type CrawlerEvent, type SimCrawler } from './creatureCore.js';
@@ -105,7 +105,7 @@ export function stepSlither(
   c.x += c.vx * dt;
   c.z += c.vz * dt;
   clipMotion(c, spx, c.y, spz, cols);
-  c.y = hmHeight(field, c.x, c.z) + 0.5; // belly rides the terrain
+  c.y = Math.max(hmHeight(field, c.x, c.z), hmChord(field, c.x, c.z)) + 0.5; // belly rides the drawn surface
 
   if (c.vx * c.vx + c.vz * c.vz > 0.1) {
     const want = Math.atan2(c.vx, c.vz);
@@ -164,7 +164,7 @@ function stepLeap(
     }
   }
 
-  const gy = hmHeight(field, c.x, c.z) + 0.5;
+  const gy = Math.max(hmHeight(field, c.x, c.z), hmChord(field, c.x, c.z)) + 0.5;
   if (c.y <= gy || c.hopTimer <= 0) {
     c.y = Math.min(c.y, gy); c.vx = 0; c.vy = 0; c.vz = 0;
     c.state = 'slither';
