@@ -142,9 +142,11 @@ export class BotRoster {
    *  dropping it just clamps). The move shadow's ground scale makes the
    *  class legally different — a light capper really out-runs a heavy. */
   private applyClass(p: { id: string; maxHealth: number; health: number }, cls: ArmorClass): void {
-    const prev = this.classes.get(p.id);
-    if (prev === cls) return;
-    const base = p.maxHealth - (prev ? CLASS_STATS[prev].maxHealth : 0);
+    // Unseeded map means the class bonus is ALREADY baked into maxHealth
+    // by addPlayer (spawn calls this right after) — treating prev as
+    // "no class" re-adds the bonus: heavies read 300, mediums 150, and
+    // lights got a negative delta down to 50.
+    const prev = this.classes.get(p.id) ?? cls;
     this.classes.set(p.id, cls);
     // Heavies shoulder the mortar — tier-locked ordnance is what makes the
     // class read as an anchor instead of just a slower medium.
@@ -152,7 +154,7 @@ export class BotRoster {
       const lo = this.loadouts.get(p.id);
       if (lo && lo.far !== WeaponType.Mortar) this.loadouts.set(p.id, { ...lo, far: WeaponType.Mortar });
     }
-    const delta = base + CLASS_STATS[cls].maxHealth - p.maxHealth;
+    const delta = CLASS_STATS[cls].maxHealth - CLASS_STATS[prev].maxHealth;
     p.maxHealth += delta;
     healPool(p, Math.max(0, delta));
     this.room.moveSim.setSpeedScale(p.id, CLASS_STATS[cls].speedScale);

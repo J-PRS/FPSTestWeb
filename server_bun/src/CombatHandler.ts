@@ -318,7 +318,7 @@ export class CombatHandler {
    *  dir stays cosmetic — observers only use it to aim a beam flash. */
   handleShotFired(playerId: string, msg: Extract<ClientMessage, { type: 'shotFired' }>): void {
     const player = this.playerManager.getPlayer(playerId);
-    if (!player || player.isDead) return;
+    if (!player || player.isDead) { this.reject(playerId, 'Shot', 'shooter dead', undefined, msg.weaponType, msg.shotId); return; }
     const now = wallNow();
     if (typeof msg.fireAt === 'number' && Number.isFinite(msg.fireAt)) this.deps.uplinkNote?.(playerId, msg.fireAt);
     const dir = msg.dir && finiteVec(msg.dir) ? msg.dir : undefined;
@@ -407,7 +407,10 @@ export class CombatHandler {
       // skipping it would make free ordnance a forged intent away.
       if (msg.weaponType !== undefined && BELT_THROW_WEAPONS.has(msg.weaponType)) {
         const cost = beltThrowCost(msg.weaponType);
-        if (player.beltCharges < cost) { this.hb('drop.beltDry'); return; }
+        // Silent drops orphan the shooter's predicted shell — it binds
+        // nothing and reads as a ghost hit. Verdict back so the ledger
+        // closes instead of waiting out the bind grace.
+        if (player.beltCharges < cost) { this.hb('drop.beltDry'); this.reject(playerId, 'Shot', 'belt charges dry', undefined, msg.weaponType, msg.shotId); return; }
         player.beltCharges -= cost;
       }
       player.protectedUntil = simMs(0); // firing breaks your own spawn shield
@@ -421,6 +424,9 @@ export class CombatHandler {
         if (msg.weaponType !== undefined) weaponStats.recordShot(this.deps.mode ?? '', `w${msg.weaponType}`);
         return;
       }
+      // spawn() declined (hitscan stats, missing owner) — a silent
+      // no-spawn leaves a predicted shell waiting forever.
+      this.reject(playerId, 'Shot', 'spawn refused', undefined, msg.weaponType, msg.shotId);
     }
     this.broadcast({
       type: 'playerShot', id: playerId, weaponType: msg.weaponType,
