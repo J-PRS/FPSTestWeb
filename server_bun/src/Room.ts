@@ -372,7 +372,10 @@ export class Room {
     this.players.energyBurn = (pid, n) => this.moveSim.drainEnergy(pid, n);
     // Closure over this.field — a mid-match terrain swap must not leave
     // spawn anchors snapping to the old map.
-    this.players.groundAt = (x, z) => (this.field ? hmHeight(this.field, x, z) : 0);
+    // Anchors lift to the drawn surface, not just the field — an authored
+    // point under a chord bridge (gully apex) would otherwise respawn a
+    // body whose wire pos sits under the mesh it renders on.
+    this.players.groundAt = (x, z) => (this.field ? Math.max(hmHeight(this.field, x, z), hmChord(this.field, x, z)) : 0);
     this.ballSim = new BallSim(
       this.players,
       (msg) => this.connections.broadcast(msg),

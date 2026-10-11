@@ -1,3 +1,4 @@
+2026-10-10 - correctness: spawn anchors lift to the drawn surface — groundAt now max(hmHeight, hmChord), closing the respawn-under-a-gully-apex seed for wire-burial
 2026-10-10 - correctness: teleport claim finite-gated before the direct lastValid* writes (updatePosition gate was bypassed by those lines), client shot/contact ingest — NaN origin falls back to remote pos, NaN dir drops the cosmetic, NaN contact point never reaches hitPoint
 2026-10-10 - correctness: last NaN write paths closed — reconnect seat rejects non-finite vel/health blobs, healPool refuses non-finite amount/pool/cap (min(cap,NaN)=NaN writes unrescueable health)
 2026-10-10 - correctness: NaN damage/impulse containment — inv(damage-finite) + early return in PlayerManager.applyDamage (NaN hp meant unkillable + NaN broadcast), shove() refuses non-finite impulse/offset before writing target.velocity
