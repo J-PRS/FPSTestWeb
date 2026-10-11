@@ -178,6 +178,11 @@ export class QuarksTrail {
   private circle: CircleEmitter | null = null;
   private key = '';
   private segCount = 0;
+  // Last emitter anchor the sim deposited from — NaN until the first
+  // emitSegment. Used to measure REAL per-frame travel; vel assumes
+  // pos += vel*dt, which interp-driven/shadowed hosts don't honor, and a
+  // stale vel left the lead short — the head-gap on remote shells.
+  private _sx = Number.NaN; private _sy = 0; private _sz = 0;
 
   constructor(private host: QuarksTrailHost) {
     const config = host.config;
@@ -295,11 +300,12 @@ export class QuarksTrail {
   teleport(): void {
     if (!this.ps) return;
     this.ps.emitter.position.copy(this.host.pos);
+    this._sx = Number.NaN; // re-arm measured travel at the new anchor
     resyncEmission(this.ps, this.ps.emitter);
   }
 
   // Move + aim the emitter; quarks emits floor(dist*ppu) particles itself.
-  emitSegment(): void {
+  emitSegment(dt = 0): void {
     if (!this.ps) return;
     // Starve-reaped while parked (owner stalled >4s without disposing):
     // re-attach so this emit actually lands — an orphan's detach is
@@ -328,7 +334,31 @@ export class QuarksTrail {
     const ax = pwp?.x ?? em.position.x, ay = pwp?.y ?? em.position.y, az = pwp?.z ?? em.position.z;
     const jx = pos.x - ax, jy = pos.y - ay, jz = pos.z - az;
     const jumped = jx * jx + jy * jy + jz * jz > jump * jump;
+    // Real per-frame travel — pos-driven hosts (interp remotes, shadow
+    // shells, renderOffset decay) don't move by vel*dt, so a vel-based
+    // lead undershoots and the deposit head lags the mesh. Measure the
+    // anchor's actual displacement instead; identical to vel*dt when
+    // the host is vel-driven. Capped: a resume/jump frame's giant delta
+    // would push the lead past the jump cut the resync just cleared.
+    const mdx = pos.x - this._sx, mdy = pos.y - this._sy, mdz = pos.z - this._sz;
+    this._sx = pos.x; this._sy = pos.y; this._sz = pos.z;
     em.position.copy(pos);
+    // Sim-decimation lead: the batcher only sims every other frame, and
+    // quarks spawns distance particles AT the emitter's matrixWorld —
+    // so the freshest particle is always ~2 render frames behind the
+    // mesh (the head gap, ~7m at 200m/s). Lead the emitter by the sim
+    // interval so deposits land at the head's drawn position instead.
+    // Travel math is unaffected — previousWorldPos carries the same
+    // lead, so only the deposit's endpoint shifts forward.
+    if (dt > 0) {
+      const cap = spd * dt * 4 + 3;
+      const mLen = mdx * mdx + mdy * mdy + mdz * mdz;
+      if (Number.isFinite(mLen) && mLen <= cap * cap) {
+        em.position.x += mdx * 2; em.position.y += mdy * 2; em.position.z += mdz * 2;
+      } else {
+        em.position.addScaledVector(vel, dt * 2);
+      }
+    }
     // emit() deposits previousWorldPos→matrixWorld — matrixWorld only
     // refreshes at render, so without this the segment always ends at
     // LAST frame's rendered pos: a full frame of head gap on fast shells.
