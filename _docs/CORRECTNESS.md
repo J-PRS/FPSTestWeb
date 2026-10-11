@@ -538,6 +538,15 @@ violation instead of a symptom hunt.
   skips only the render call (sim/input stay full-rate); boot
   and veil stability meters live next to the frame meter so
   the same `rawElapsed` sample feeds all of them.
+- **Remote snapshot lane (verified sealed):** reordered packets
+  insert at timeline position — `latestT` never rewinds, so a
+  stale arrival can't snap the render backward; undeclared
+  teleports (>8m or >90m/s × span) wipe buffer + DR state (no
+  speed-ghost slide, no impossible DR launch); DR velocity is
+  estimated from server-tick deltas (jitter-free), its trigger
+  scales to the measured arrival cadence; and `clear()` on
+  epoch change keeps a stale `latestT` from swallowing every
+  fresh push.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
