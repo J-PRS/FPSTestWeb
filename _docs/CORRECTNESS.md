@@ -367,6 +367,14 @@ violation instead of a symptom hunt.
   catches WebGL context-creation failure and schedules a reload;
   `webglcontextlost` reloads immediately — a lost context is
   unrecoverable for three anyway (khronos: recreate ALL resources).
+- **Outbound claim lane (verified sealed):** every `send*`
+  (`shotFired`, `environmentDamage`, `deploy`, `slam`, `teleport`,
+  `jump`, `crawlerHit`/`creatureHit`) carries only fields whose
+  write sites are already finite-gated upstream, and the server
+  drops/adjudicates anyway — `finiteVec` on `dir`, `isFinite` on
+  slam position, ClaimVerdict on env damage. JSON's `NaN → null`
+  means a stray claim nulls out server-side rather than writing
+  NaN into sims.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
