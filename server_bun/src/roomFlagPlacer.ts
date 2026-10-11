@@ -220,7 +220,7 @@ export class FlagPlacer {
       ...(spec.spawns ?? []),
       ...(spec.structures ?? []).map(s => ({ x: s.pos.x, y: 0, z: s.pos.z })),
     ];
-    let a: Vec3like, b: Vec3like;
+    let a = undefined as unknown as Vec3like, b = undefined as unknown as Vec3like;
     if (pts.length >= 2) {
       let cx = 0, cz = 0;
       for (const p of pts) { cx += p.x; cz += p.z; }
@@ -230,7 +230,7 @@ export class FlagPlacer {
       const tr = (sxx + szz) / 2;
       const disc = Math.hypot((sxx - szz) / 2, sxz);
       const lam1 = tr + disc, lam2 = tr - disc;
-      let ux: number, uz: number;
+      let ux = 0, uz = 0;
       if (disc < 1e-6 || lam1 / lam2 < 1.25) {
         // Symmetric cloud — the axis is ambiguous, take the diagonal.
         ux = Math.SQRT1_2; uz = Math.SQRT1_2;

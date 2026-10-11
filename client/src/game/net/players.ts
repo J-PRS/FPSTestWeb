@@ -229,7 +229,6 @@ function wirePlayerCombat(ctx: NetCtx): void {
       // NEVER touch yaw/pitch — the server echoes our last *accepted*
       // rotation, which can be seconds stale. Aim is client-authoritative;
       // snapping it warps the camera 40-60° for no gameplay reason.
-      void rotation;
       player.syncMovement();
       return;
     }
@@ -277,7 +276,6 @@ function wirePlayerCombat(ctx: NetCtx): void {
       return;
     }
     rp.teleportTo(new THREE.Vector3(position.x, position.y, position.z));
-    void velocity; // next tick record carries it — no need to touch internals
   };
 
   networkManager.onPlayerKill = (shooterId, targetId, weapon, air) => onPlayerKill(ctx, shooterId, targetId, weapon, air);

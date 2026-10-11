@@ -117,7 +117,6 @@ export class Overlord implements Targetable, SwarmSlotOwner {
   get disposed(): boolean { return this.dead; }
 
   constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3, uber = false) {
-    void scene;
     this.id = nextTargetId();
     // Uber = "broodmother": a bigger, meaner sac that sows banelings twice
     // as fast — and drops them in pairs (wired in entities).

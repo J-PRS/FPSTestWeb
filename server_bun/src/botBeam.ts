@@ -105,7 +105,7 @@ function beamContact(h: BeamHost, shooterId: string, muzzle: Vec3, dir: Vec3, ra
  *  contact — earliest wins; none = the beam ended in dirt. */
 function beamEntityAt(h: BeamHost, shooterId: string, muzzle: Vec3, end: Vec3, worldT: number): { playerId?: string; ballId?: number; crawlerId?: number } | null {
   let bestT = worldT;
-  let playerId: string | undefined;
+  let playerId: string | undefined = undefined;
   for (const [pid, t] of h.room.players.getAllPlayers()) {
     if (pid === shooterId || t.isDead) {continue;}
     const cap = classCapsule(t.armorClass);

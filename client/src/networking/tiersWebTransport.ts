@@ -50,9 +50,9 @@ export class WebTransportGameTransport implements GameTransport {
       try { this.dgWriter = wt.datagrams.writable?.getWriter() ?? null; } catch { this.dgWriter = null; }
       this.rr = stream.readable.getReader();
       this.dr = wt.datagrams.readable.getReader();
-      void this.pumpReliable(this.rr);
-      void this.pumpDatagrams(this.dr);
-      for (const d of this.preOpen) {void this.writer.write(this.encoder.encode(`${d  }\n`)).catch(() => {});}
+      this.pumpReliable(this.rr);
+      this.pumpDatagrams(this.dr);
+      for (const d of this.preOpen) {this.writer.write(this.encoder.encode(`${d  }\n`)).catch(() => {});}
       this.preOpen.length = 0;
       this.config.onConnect?.();
     }).catch((error) => {
@@ -95,8 +95,8 @@ export class WebTransportGameTransport implements GameTransport {
       // tight: a full map gameState (or a 'bin'-wrapped segment burst)
       // legitimately exceeds it. 4MB keeps the guard without killing
       // real frames.
-      if (carry.length > 4 * 1024 * 1024) { this.declareDead('wt line overflow'); void this.wt.close(); return; }
-      let nl: number;
+      if (carry.length > 4 * 1024 * 1024) { this.declareDead('wt line overflow'); this.wt.close(); return; }
+      let nl: number = 0;
       while ((nl = carry.indexOf('\n')) >= 0) {
         const line = carry.slice(0, nl);
         carry = carry.slice(nl + 1);
@@ -110,10 +110,10 @@ export class WebTransportGameTransport implements GameTransport {
   // reliable-binary frames in a JSON envelope — the stream is text-framed
   // so raw bytes would corrupt it (how ball segments arrive on wt).
   private dispatchLine(line: string): void {
-    let m: ServerMessage | { type: 'bin'; d: string };
+    let m = undefined as unknown as ServerMessage | { type: 'bin'; d: string };
     try { m = JSON.parse(line); } catch { return; /* malformed */ }
     if (m.type === 'gameState' && (m as { caps?: { binLane?: number } }).caps?.binLane && !this.binStream) {
-      void this.openBinLane();
+      this.openBinLane();
     }
     if (m.type === 'bin' && typeof (m as { d?: string }).d === 'string') {
       this.config.onBinaryMessage?.(Uint8Array.from(atob((m as { d: string }).d), (c) => c.charCodeAt(0)));
@@ -176,7 +176,7 @@ export class WebTransportGameTransport implements GameTransport {
     // the reliable stream (enveloped).
     if (data instanceof Uint8Array && data.byteLength <= WT_MAX_DATAGRAM) {
       if (this.dgWriter) {
-        void this.dgWriter.write(data).catch(() => {});
+        this.dgWriter.write(data).catch(() => {});
         return true;
       }
     }
@@ -189,7 +189,7 @@ export class WebTransportGameTransport implements GameTransport {
     if (!this.writer) { this.preOpen.push(payload); return true; }
     // A write can outlive the session — teardown rejects it; that's a
     // normal close, not an error.
-    void this.writer.write(this.encoder.encode(`${payload  }\n`)).catch((error) => {
+    this.writer.write(this.encoder.encode(`${payload  }\n`)).catch((error) => {
       logger.warn(`wt reliable write failed: ${error instanceof Error ? `${error.name} ${error.message}` : String(error)}`);
     });
     return true;
@@ -202,7 +202,7 @@ export class WebTransportGameTransport implements GameTransport {
   disconnect(): void {
     this.open = false;
     this.stream = null; this.rr = null; this.dr = null; this.binStream = null;
-    void this.wt?.close();
+    this.wt?.close();
   }
 }
 
@@ -229,7 +229,7 @@ export async function tryWebTransport(config: ConnectionConfig): Promise<GameTra
     // Failed probes leave wt.closed rejected with no subscriber —
     // unhandledrejection noise. Swallow it here; the winning session's
     // close is handled by WebTransportGameTransport's own subscription.
-    void wt.closed.catch(() => {});
+    wt.closed.catch(() => {});
     try {
       // The probe IS the session — don't handshake twice.
       await Promise.race([wt.ready, new Promise((_, rej) => setTimeout(rej, 3000))]);

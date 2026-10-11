@@ -211,8 +211,8 @@ class ServerRtcTransport implements GameTransport {
 
 async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null> {
   if (typeof RTCPeerConnection === 'undefined') {return null;}
-  let pc: RTCPeerConnection | undefined;
-  let signalRef: WebSocket | undefined;
+  let pc: RTCPeerConnection | undefined = undefined;
+  let signalRef: WebSocket | undefined = undefined;
   try {
     // ICE servers come from the server itself (/rtcconfig) — STUN/TURN is a
     // deployment property, not a client constant; LAN/dev needs neither.

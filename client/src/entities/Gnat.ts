@@ -141,7 +141,6 @@ export class Gnat implements Targetable, SwarmSlotOwner {
   get disposed(): boolean { return this.dead; }
 
   constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3, uber = false) {
-    void scene;
     this.id = nextTargetId();
     // Uber = the cloud's queen: three times the body, actually tanky, and
     // her darts carry a real sting. She shares the cloud — the swarm orbits HER.

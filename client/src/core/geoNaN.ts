@@ -39,7 +39,7 @@ function reportNaN(geo: THREE.BufferGeometry): void {
   // Owner walk — NaN computes are rare (the error itself is once per
   // geometry per bounds miss), so a full traverse is fine here.
   let owner = '(detached)';
-  let tag: string | undefined;
+  let tag: string | undefined = undefined;
   try {
     scene?.traverse((o) => {
       const g = (o as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;

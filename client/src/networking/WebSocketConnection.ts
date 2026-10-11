@@ -155,7 +155,7 @@ this.reconnectAttempts += 1;
             // plain-WS reconnects past the timer tick for no benefit.
             const resolve = this.config.resolveUrl;
             if (!resolve) { this.connect(); return; }
-            void (async () => {
+            (async () => {
               try {
                 const next = await resolve();
                 if (next && next !== this.config.url) {
@@ -266,7 +266,7 @@ this.reconnectAttempts += 1;
       // Binary frames are volatile state (position) — only the newest one
       // is worth flushing after reconnect; drop queued predecessors instead
       // of replaying 100 stale positions into the live socket.
-      let type: string | undefined;
+      let type: string | undefined = undefined;
       if (typeof data === 'string') {
         try { type = (JSON.parse(data) as { type?: string }).type; } catch { /* unparseable: queue anyway */ }
       }

@@ -13,7 +13,7 @@ type TimerExt = {
   GPU_DISJOINT_EXT: number;
 };
 
-let ext: TimerExt | null | undefined;
+let ext: TimerExt | null | undefined = undefined;
 let gl: WebGL2RenderingContext | null = null;
 const pending: WebGLQuery[] = [];
 let active: WebGLQuery | null = null;

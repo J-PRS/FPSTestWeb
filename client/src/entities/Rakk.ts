@@ -102,7 +102,6 @@ export class Rakk implements Targetable, SwarmSlotOwner {
   get disposed(): boolean { return this.dead; }
 
   constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3, uber = false) {
-    void scene;
     this.id = nextTargetId();
     // Uber = "elder": a wingspan you can't miss — and its claw hit TALONS
     // you upward instead of just shredding (wired in entities).

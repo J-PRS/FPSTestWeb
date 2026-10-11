@@ -77,7 +77,7 @@ export async function pickClipsDir(): Promise<boolean> {
   try {
     const h = await picker({ id: 'kribes-clips', mode: 'readwrite' });
     dir = h;
-    void persistDir(h);
+    persistDir(h);
     return true;
   } catch { return false; } // user cancelled — keep anchor downloads
 }

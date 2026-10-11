@@ -32,7 +32,7 @@ const SKIP_ABOVE = 2.5;
  *  every collider rebuild (kept here so entities never import the game
  *  side: remoteAnim → structureSpecs → botBrain → RemotePlayer cycles). */
 type StructAt = (x: number, z: number, maxTop?: number) => number;
-let structAt: StructAt | undefined;
+let structAt: StructAt | undefined = undefined;
 export function setStructureTopAt(fn: StructAt | undefined): void { structAt = fn; }
 
 /** Ground clearance lift for a body standing at (x,z) with logical feet

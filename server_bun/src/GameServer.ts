@@ -219,7 +219,7 @@ export class GameServer {
       return;
     }
     const text = message;
-    let raw: unknown;
+    let raw: unknown = undefined;
     try {
       raw = JSON.parse(text);
     } catch {

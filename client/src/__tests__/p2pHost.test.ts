@@ -25,7 +25,7 @@ function join(host: P2PHost, link: FakeLink, id: string) {
 }
 
 describe('P2PHost', () => {
-  let host: P2PHost;
+  let host = undefined as unknown as P2PHost;
   beforeEach(() => { vi.useFakeTimers(); host = new P2PHost(); });
   afterEach(() => { host.stop(); vi.useRealTimers(); });
 

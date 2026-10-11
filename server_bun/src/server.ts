@@ -113,7 +113,7 @@ const server = Bun.serve<WebSocketData>({
     if (url.pathname === '/dev/shutdown') {
       const ip = server.requestIP(req)?.address;
       if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') {
-        setImmediate(() => void shutdown());
+        setImmediate(() => shutdown());
         return corsResponse('shutting down', { status: 200 });
       }
       return corsResponse('loopback only', { status: 403 });
@@ -158,7 +158,7 @@ if (CONFIG.wtPort > 0) {
     // DER hash is what serverCertificateHashes expects — PEM is just the
     // base64 wrapper, so decode via X509Certificate to get the raw bytes.
     wtCertHash = createHash('sha256').update(new X509Certificate(certPem).raw).digest('base64');
-    void wtServer.start({
+    wtServer.start({
       port: CONFIG.wtPort,
       certPem,
       keyPem: rf(keyPath, 'utf8'),
@@ -183,7 +183,7 @@ const fleetReport = process.env.FPS_FLEET_REPORT;
 if (fleetReport) {
   setInterval(() => {
     const rooms = [...gameServer.rooms.values()];
-    void fetch(fleetReport, {
+    fetch(fleetReport, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -234,10 +234,10 @@ async function shutdown(): Promise<void> {
 
 process.on('SIGINT', () => {
   logger.info('SIGINT received, shutting down...');
-  void shutdown();
+  shutdown();
 });
 
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received, shutting down...');
-  void shutdown();
+  shutdown();
 });

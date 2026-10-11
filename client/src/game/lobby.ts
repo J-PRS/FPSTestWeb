@@ -252,12 +252,12 @@ export class Lobby {
     const favs = this.favSet();
     if (favs.has(name)) {favs.delete(name);} else {favs.add(name);}
     settings.set('fps-fav-rooms', JSON.stringify([...favs]));
-    void this.refresh();
+    this.refresh();
   }
 
   /** Manual repoll — the ↻ button in the JOIN tab header. */
   refresh(): void {
-    void this.refreshRooms();
+    this.refreshRooms();
     this.els.refreshLobs();
   }
 
@@ -284,7 +284,7 @@ export class Lobby {
 
   private async refreshRooms(): Promise<void> {
     this.rows.textContent = '';
-    let rooms: RoomRow[];
+    let rooms: RoomRow[] = [];
     // RTT of the /rooms fetch itself = the server ping — green/amber/red.
     const t0 = performance.now();
     try {

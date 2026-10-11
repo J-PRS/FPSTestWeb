@@ -91,7 +91,7 @@ export class RemoteDeployables {
     }
     const terrain = this.deps.lazyTerrain();
     const at = new THREE.Vector3(pos.x, pos.y, pos.z);
-    let item: Item;
+    let item = undefined as unknown as Item;
     if (kind === 'shield') {
       // The dome IS the deployable — no proxy sphere for this kind; the
       // field must be visible or enemies can't read what ate their shell.

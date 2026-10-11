@@ -41,7 +41,7 @@ export const previewLive: { tick: ((dt: number) => void) | null } = { tick: null
 // Camera world position is what creature AI and deployable tracking
 // aim at — installed once by initPreviews since the tables below are
 // built lazily, possibly before a camera exists.
-let cam: THREE.Camera;
+let cam = undefined as unknown as THREE.Camera;
 export function initPreviews(camera: THREE.Camera): void { cam = camera; }
 
 const _camW = new THREE.Vector3();
@@ -138,7 +138,7 @@ function buildNugget(kind: PickupKind): () => THREE.Group {
     // shapes/materials Nugget builds in-game. Null parts keep the plain
     // gem (gem kind itself).
     const parts = pickupParts(kind);
-    let gem: THREE.Mesh;
+    let gem = undefined as unknown as THREE.Mesh;
     if (parts) {
       gem = new THREE.Mesh(parts.body, metalMat(parts.bodyColor));
       gem.add(new THREE.Mesh(parts.accent, new THREE.MeshBasicMaterial({ color: emit })));
@@ -307,7 +307,7 @@ export const CLASSES: [label: string, build: () => THREE.Group][] = [
       // The gizmo defaults to the generic capsule — without the class
       // sizes the collider wireframe would lie about light/heavy.
       pm.setColliderCapsule(classCapsule(cls));
-      void pm.load().then(() => {
+      pm.load().then(() => {
         if ((pm as unknown as { _disposed?: boolean })._disposed) {return;}
         pm.setScale(CLASS_MODEL_SCALE[cls]); // real tier silhouette, not raw rig height
         pm.setPosition(x, 0, 0);

@@ -471,7 +471,7 @@ sh.gapStreak += 1;
     // whole roster in collideBodies — O(shadows × bodies) at scale. 4m
     // cells dwarf any contact radius, so the 3x3 ring around a pos
     // always contains every capsule it could touch.
-    let bodiesNear: ((x: number, z: number) => BodyCapsule[]) | undefined;
+    let bodiesNear: ((x: number, z: number) => BodyCapsule[]) | undefined = undefined;
     if (bodies && bodies.length > 0) {
       const CELL = 4, BIAS = 512;
       const grid = new Map<number, number[]>();

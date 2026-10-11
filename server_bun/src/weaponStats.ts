@@ -227,7 +227,7 @@ r[event] += 1;
   private flush(): void {
     if (!this.dirty) {return;}
     this.dirty = false;
-    void statsFile().then(async (paths) => {
+    statsFile().then(async (paths) => {
       if (!paths) {return;}
       try {
         const { appendFileSync, mkdirSync } = await import('node:fs');

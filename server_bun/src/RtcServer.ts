@@ -150,19 +150,19 @@ export class RtcServer {
 
   onOpen(ws: ServerWebSocket<WebSocketData>): void {
     this.signalSockets.add(ws);
-    void loadNd().then((ok) => {
+    loadNd().then((ok) => {
       if (!ok) {ws.close(1013, 'rtc unavailable');}
     });
   }
 
   onMessage(ws: ServerWebSocket<WebSocketData>, message: string | ArrayBuffer): void {
     if (typeof message !== 'string') {return;}
-    let m: { type?: string; sdp?: string };
+    let m = undefined as unknown as { type?: string; sdp?: string };
     try { m = JSON.parse(message); } catch { return; }
     if (m.type !== 'offer' || typeof m.sdp !== 'string') {return;}
     // Each offer spawns a native PeerConnection — cap in-flight ones.
     if (this.peers.size >= 64) { ws.close(1013, 'rtc busy'); return; }
-    void this.answerOffer(ws, m.sdp);
+    this.answerOffer(ws, m.sdp);
   }
 
   private async answerOffer(ws: ServerWebSocket<WebSocketData>, sdp: string): Promise<void> {

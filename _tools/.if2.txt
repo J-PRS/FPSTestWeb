@@ -1,0 +1,8 @@
+client/src/effects/vfx.ts:29:1
+client/src/effects/vfx.ts:30:1
+client/src/effects/vfx.ts:31:1
+client/src/entities/Rakk.ts:16:1
+client/src/entities/Rakk.ts:17:1
+client/src/entities/Totem.ts:21:1
+client/src/entities/Roller.ts:16:1
+client/src/entities/Roller.ts:17:1

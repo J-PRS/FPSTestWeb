@@ -481,7 +481,7 @@ sh.divergences += 1;
     // its recorded input until the next entry's sim tick — a jet toggle
     // mid-window then replays correctly instead of being applied to the
     // whole span.
-    let anchorSeq: number | undefined;
+    let anchorSeq: number | undefined = undefined;
     const after: { snap: SimSnapshot; tick: number; inp: MoveInput; e: number }[] = [];
     for (const [k, e] of sh.seqStates) {
       if (k <= reportSeq && (anchorSeq === undefined || k > anchorSeq)) {anchorSeq = k;}

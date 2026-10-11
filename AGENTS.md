@@ -16,13 +16,19 @@ cd client && npx -y oxlint src                   # lint
 bun _tools/e2e/all.ts                            # headless E2E (locked-PC safe): smoke/duo/p2p/lobby/reconnect/perf
 bun _tools/e2e/perf.ts --compare _tools/e2e/baseline.json   # perf regression vs baseline
 bash _tools/check.sh                             # DEFINITION OF DONE — run before handing back
+bash _tools/review.sh                            # dump diff + verifier prompt for a fresh-context review agent
 # bun: export PATH="$HOME/.bun/bin:$PATH"   (Windows, Git Bash)
 ```
 
 **Definition of done:** `bash _tools/check.sh` exits 0. It lints+fixes
 the changed files, typechecks the client, runs related vitest tests, and
-runs `bun test` when `shared/` or `server_bun/` changed. The individual
-commands above are for debugging; check.sh is the gate. A git
+runs `bun test` when `shared/` or `server_bun/` changed, and captures a
+headless screenshot when scene code (`world|effects|structures|
+projectiles|shaders|entities`) changed — READ that PNG, green tests do
+not see the screen. The individual commands above are for debugging;
+check.sh is the gate. Before committing a big diff, run `review.sh` and
+hand its diff + prompt to a fresh-context verifier agent — the author
+never grades itself. A git
 `pre-commit` hook lint-fixes staged files — keep it fast, don't add the
 suite to it.
 
@@ -55,8 +61,13 @@ Ports: game client (Vite) **:5400**, game server (Bun) **:8000**.
   committed snapshot; both ends replay the same sim.
 - Cheap is a feature: events over streams, distance-tiered sends, staggered
   AI buckets, only provably-safe skips (no unfair misses).
+- `.agents/memory/` — read it, and append when you screw up or make a
+  non-obvious call. `corrections.md` = "got this wrong → rule";
+  `decisions.md` = "chose X over Y because Z". One line each, append-only.
 - Comments say WHY, not WHAT. No secrets. No push. Commit per settled
-  topic only. Windows+Git Bash: `cmd //c "taskkill /F /PID <pid>"`.
+  topic only. Pre-commit refuses commits under 50 changed lines — batch
+  small fixes; a genuine one-liner uses `--no-verify` deliberately.
+  Windows+Git Bash: `cmd //c "taskkill /F /PID <pid>"`.
 - Scenario tests: one file per scenario under `tests/scenarios/` using
   `harness.ts`. Sim-time ≠ wall-clock — `pin()` clears spawn protection,
   drive sims via `step(dt)`.

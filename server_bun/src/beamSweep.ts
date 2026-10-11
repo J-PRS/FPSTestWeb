@@ -61,7 +61,7 @@ export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: V
   const shooterPing = shooter?.isBot ? 0 : (shooter?.ping ?? 0);
   const shooterLag = shooter?.isBot ? 0 : renderLagOf(shooter);
   const shooterTransit = shooter?.isBot ? 0 : shooterTransitMs(world.transitOf, shooterId, shooterPing);
-  let playerId: string | undefined;
+  let playerId: string | undefined = undefined;
   for (const [pid, t] of world.players.getAllPlayers()) {
     if (pid === shooterId || t.isDead) {continue;}
     const cap = classCapsule(t.armorClass);

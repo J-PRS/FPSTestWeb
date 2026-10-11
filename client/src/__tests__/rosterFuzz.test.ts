@@ -38,7 +38,7 @@ const GS = (ids: string[]) => ({
 } as ServerMessage);
 
 describe('rosterFuzz — client roster conformance', () => {
-  let h: ReturnType<typeof makeDeps>;
+  let h = undefined as unknown as ReturnType<typeof makeDeps>;
   beforeEach(() => { h = makeDeps(); });
 
   for (const seed of [11, 22, 33, 44, 55]) {

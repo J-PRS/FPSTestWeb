@@ -349,7 +349,7 @@ export class NetworkManager {
     this.ws?.disconnect();
     this.ws = null;
     this.connected = false;
-    void this.connect(url, this.lastFactory).catch(() => { /* probe errors are already logged */ });
+    this.connect(url, this.lastFactory).catch(() => { /* probe errors are already logged */ });
   }
 
   /** Online session whose socket is down right now (reconnect loop

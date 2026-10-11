@@ -87,8 +87,8 @@ export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, w
 function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlayer: RemotePlayer): void {
   const { deps, nm } = ctx;
   // Find matching explosion from this shooter
-  let explosionPos: THREE.Vector3 | undefined;
-  let explosionForce: number | undefined;
+  let explosionPos: THREE.Vector3 | undefined = undefined;
+  let explosionForce: number | undefined = undefined;
   for (const exp of deps.explosionTracker.getRecentExplosions()) {
     if (exp.shooterId === shooterId) {
       explosionPos = exp.position;
@@ -104,7 +104,7 @@ function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlaye
   // carry the blast direction through the body, and inherit whatever
   // speed the corpse had. Team color when known, robot grey otherwise.
   const centerY = remotePlayer.position.y - 0.6; // eye ~1.6 → chest
-  let impulseDir: THREE.Vector3 | undefined;
+  let impulseDir: THREE.Vector3 | undefined = undefined;
   if (explosionPos) {
     impulseDir = new THREE.Vector3(
       remotePlayer.position.x - explosionPos.x,
@@ -124,7 +124,7 @@ function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlaye
   const cam = deps.lazyPlayer().pos;
   const gdx = remotePlayer.position.x - cam.x, gdy = centerY - cam.y, gdz = remotePlayer.position.z - cam.z;
   const nearEnough = gdx * gdx + gdy * gdy + gdz * gdz < 120 * 120;
-  let parts: { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] | undefined;
+  let parts: { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] | undefined = undefined;
   if (nearEnough) {
     try { parts = remotePlayer.model.deathParts() ?? undefined; }
     catch { /* fall through to generic shards */ }

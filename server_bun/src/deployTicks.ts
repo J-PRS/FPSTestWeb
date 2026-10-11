@@ -87,7 +87,6 @@ export function tickStation(r: RoomDeployables, d: Deployed, dt: number): void {
       if (p.health >= p.maxHealth) {continue;}
       healPool(p, p.maxHealth * STATION_HP_RATE * STATION_HEAL_CD);
       p.forceSendUntil = wallMs(wallNow() + FORCE_SEND_MS);
-      void pid;
     }
   }
 

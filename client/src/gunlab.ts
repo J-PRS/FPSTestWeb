@@ -65,7 +65,7 @@ const saved = (() => {
 })();
 const state: LabState = saved ?? { wt: 0, inspect: false, yaw: 0.75, pitch: 0 };
 (window as any).__gunlab = state;
-let saveTimer: ReturnType<typeof setTimeout> | undefined;
+let saveTimer: ReturnType<typeof setTimeout> | undefined = undefined;
 function saveState(): void {
   state.cam = camera.position.toArray();
   state.tgt = orbit.target.toArray();
@@ -586,7 +586,7 @@ async function unionToggle(): Promise<void> {
   const t0 = performance.now();
   const { Manifold, parts, manis, rejected, inV, inT } = await manifoldParts(g);
   if (manis.length === 0) {return;}
-  let solid: any;
+  let solid: any = undefined;
   try {
     solid = Manifold.union(manis);
     if (solid.isEmpty()) { console.warn('[union] empty result'); return; }
@@ -1169,7 +1169,7 @@ const pickDot = new THREE.Mesh(new THREE.SphereGeometry(0.008, 12, 8),
 pickDot.visible = false;
 pickDot.renderOrder = 999;
 scene.add(pickDot);
-let pickDotTimer: ReturnType<typeof setTimeout> | undefined;
+let pickDotTimer: ReturnType<typeof setTimeout> | undefined = undefined;
 let downX = 0, downY = 0;
 addEventListener('mousedown', (e) => { downX = e.clientX; downY = e.clientY; });
 addEventListener('mouseup', (e) => {

@@ -125,7 +125,7 @@ export function speakVgs(text: string, who?: string): void {
     liveVoice.delete(key);
     startAt = t + delay;
   }
-  let pcm: unknown; // sam-js returns Float32Array | Boolean
+  let pcm: unknown = undefined; // sam-js returns Float32Array | Boolean
   try {
     pcm = samFor(who).buf32(text);
   } catch {

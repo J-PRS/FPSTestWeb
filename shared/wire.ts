@@ -274,7 +274,7 @@ export function tickFrameScratch(cap = 2048): TickFrameScratch {
 export function encodeTickFrame(ackSeq: number, tickSeq: number, inputAck: number, records: Uint8Array[], type: number = WIRE_TICK, into?: TickFrameScratch): Uint8Array {
   let total = 15;
   for (const r of records) {total += r.length;}
-  let u8: Uint8Array, d: DataView;
+  let u8 = undefined as unknown as Uint8Array, d = undefined as unknown as DataView;
   if (into) {
     if (into.buf.byteLength < total) {
       // Grow to the next power-of-two above need — resize-once amortized.
@@ -342,7 +342,7 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
   let o = 15;
   for (let i = 0; i < count; i += 1) {
     if (o >= u8.length) {return null;}
-    let playerId: string;
+    let playerId: string = '';
     let wireId = 0;
     if (v3) {
       if (o + 29 > u8.length) {return null;}
@@ -361,7 +361,7 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
     }
     // v4 decodes into the per-wireId slot so masked groups inherit the
     // last-decoded values; flat slots stay for v1/v3 frames.
-    let u: WireTickPlayer | undefined;
+    let u: WireTickPlayer | undefined = undefined;
     let v4HadBase = false;
     if (v4) {
       u = pool?.byId?.get(wireId);
@@ -418,7 +418,7 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
       pool?.byId?.set(wireId, u);
       continue;
     }
-    let px: number, py: number, pz: number;
+    let px = 0, py = 0, pz = 0;
     if (v1) {
       px = d.getFloat32(o, true); o += 4;
       py = d.getFloat32(o, true); o += 4;

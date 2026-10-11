@@ -221,7 +221,7 @@ export class P2PHost {
       return;
     }
 
-    let raw: unknown;
+    let raw: unknown = undefined;
     try { raw = JSON.parse(data); } catch { return; }
 
     const playerId = this.links.get(link);

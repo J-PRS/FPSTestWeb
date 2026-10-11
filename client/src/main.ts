@@ -110,7 +110,7 @@ const ambientLayers = [
   new AmbientParticles(scene, 'embers'),
   new AmbientParticles(scene, 'ash'),
 ];
-let groundMist: GroundMist; // needs terrain — created in init()
+let groundMist = undefined as unknown as GroundMist; // needs terrain — created in init()
 const ambientBirds = new AmbientBirds(scene); // kettle of buzzards on a thermal
 
 // ---- Renderer ----
@@ -120,14 +120,14 @@ renderer.setClearColor(FOG_COLOR);
 
 // ---- Game state ----
 let demoManager: DemoManager | null = null;
-let terrain: Terrain;
-let player: Player;
-let viewModel: ViewModel;
-let vmSetup: ReturnType<typeof createViewModelScene>;
-let hud: HUD;
-let healthBarSystem: HealthBarSystem;
-let damageNumberManager: DamageNumberManager;
-let networkManager: NetworkManager;
+let terrain = undefined as unknown as Terrain;
+let player = undefined as unknown as Player;
+let viewModel = undefined as unknown as ViewModel;
+let vmSetup = undefined as unknown as ReturnType<typeof createViewModelScene>;
+let hud = undefined as unknown as HUD;
+let healthBarSystem = undefined as unknown as HealthBarSystem;
+let damageNumberManager = undefined as unknown as DamageNumberManager;
+let networkManager = undefined as unknown as NetworkManager;
 /** Room-join sockets open at boot start (before the handler deps bind)
  *  so the handshake overlaps init — connectPhase awaits this instead of
  *  connecting late. Null for classic/solo/p2p paths. */
@@ -136,7 +136,7 @@ let earlyConnP: Promise<void> | null = null;
 const world = createWorldState();
 const {remotePlayers} = world;
 let dummyUpdate: ((dt: number) => void) | null = null; // ?dummy debug hook
-let effects: EffectsManager;
+let effects = undefined as unknown as EffectsManager;
 
 // ---- Input tracking ----
 const inputTracking = setupInputTracking(logger);
@@ -148,22 +148,22 @@ const explosionTracker = new ExplosionTracker();
 const fragMessages = new FragMessages();
 
 // ---- Combat pipeline (fire handlers, projectile updates, impact/force) ----
-let combat: ReturnType<typeof createCombat>;
+let combat = undefined as unknown as ReturnType<typeof createCombat>;
 let teamBots: TeamBots | null = null; // ?mode=nuggets
 
 // ---- Remote player lifecycle (game/remotes.ts); created in init() ----
-let remotes: ReturnType<typeof createRemotes>;
-let playerSheep: PlayerSheep;
+let remotes = undefined as unknown as ReturnType<typeof createRemotes>;
+let playerSheep = undefined as unknown as PlayerSheep;
 
 // ---- Demo playback lifecycle (game/demoLifecycle.ts); created in init() ----
-let demoLifecycle: ReturnType<typeof createDemoLifecycle>;
+let demoLifecycle = undefined as unknown as ReturnType<typeof createDemoLifecycle>;
 
 // ---- Ambient entities: balls/crawlers/turretters/rollers/nuggets ----
-let entities: ReturnType<typeof createEntities>;
-let waveDirector: ReturnType<typeof createWaveDirector>;
+let entities = undefined as unknown as ReturnType<typeof createEntities>;
+let waveDirector = undefined as unknown as ReturnType<typeof createWaveDirector>;
 
 // ---- Frame loop + render pass (game/gameLoop.ts); created in init() ----
-let gameLoop: ReturnType<typeof createGameLoop>;
+let gameLoop = undefined as unknown as ReturnType<typeof createGameLoop>;
 
 // ---- Boot ----
 const serverEndpoints = resolveServerEndpoints();
@@ -188,7 +188,7 @@ async function init(): Promise<void> {
   // connectServer path — they need machinery that isn't built yet.
   const earlyWire = Boolean(urlParams.room) && !urlParams.p2p && urlParams.mode !== 'classic';
   if (onlineBoot && urlParams.mode !== 'classic' && settings.get('fps-session-token')) {
-    void serverEndpoints
+    serverEndpoints
       .then((ep) => pingServer(ep.httpUrl))
       .then((live) => { if (live) {armSessionVeil(); profiler.markTime('veilProbed');} })
       .catch(() => { /* dead-host probe — the offline world owns first frames */ });
@@ -243,7 +243,7 @@ async function init(): Promise<void> {
   // init and the connect handshake instead of serializing it before
   // connectPhase. setVisible(false) still applies in the same
   // microtask the load resolves, so it can never flash rendered.
-  void player.loadModel()
+  player.loadModel()
     .then(() => profiler.markTime('playerModelLoaded'))
     .catch((error) => logger.warn('PlayerModel load gave up', { error: String(error) }));
 
@@ -403,7 +403,7 @@ async function initDemo(): Promise<void> {
   // Silently re-arm the previously-picked clips folder (no prompt — the
   // handle reuses its stored permission until Chrome asks for a re-grant,
   // which happens inside the next F9 gesture via pickClipsDir).
-  void import('./demo/clipSink.js').then(m => m.restoreClipsDir());
+  import('./demo/clipSink.js').then(m => m.restoreClipsDir());
   const { playerData, inputData } = playerProviders(player);
   demoManager.setDataProviders(playerData, inputData);
 

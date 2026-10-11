@@ -242,11 +242,11 @@ clipGen += 1;
     // signal, so a clip that never starts gets skipped on a timer.
     const g = clipGen;
     setTimeout(() => {
-      if (g === clipGen && dm.mode !== 'playing' && dm.mode !== 'paused') {void go(1);}
+      if (g === clipGen && dm.mode !== 'playing' && dm.mode !== 'paused') {go(1);}
     }, DEAD_CLIP_MS);
     // Warm the next clip so the swipe lands with no network gap.
     const nxt = entries[wrapIdx(index + 1)];
-    if (nxt?.filename) {void dm.coolShotMgr.prefetchClip(nxt.filename);}
+    if (nxt?.filename) {dm.coolShotMgr.prefetchClip(nxt.filename);}
   }
 
   // Shared commit tail: slide the playing clip out, swap the canvas to
@@ -290,7 +290,7 @@ clipGen += 1;
       // so end-of-clip must still advance while a mid-clip pause holds.
       const parkedAtEnd = dm.player.duration > 0 && dm.player.currentTimeValue >= dm.player.duration;
       if (dm.mode === 'playing' || (dm.mode === 'paused' && !parkedAtEnd)) {return;}
-      void go(1);
+      go(1);
     }, NEXT_DELAY_MS);
   }
 
@@ -299,17 +299,17 @@ clipGen += 1;
   const prevEnd = dm.onPlaybackEnd;
   dm.onPlaybackEnd = () => { prevEnd?.(); scheduleNext(); };
 
-  btnUp.addEventListener('click', () => void go(-1));
-  btnDown.addEventListener('click', () => void go(1));
+  btnUp.addEventListener('click', () => go(-1));
+  btnDown.addEventListener('click', () => go(1));
   btnPause.addEventListener('click', () => dm.togglePlayPause());
   btnSave.addEventListener('click', () => {
     const e = current();
-    if (e) {void dm.downloadCoolShotById(e.id);}
+    if (e) {dm.downloadCoolShotById(e.id);}
   });
   btnShare.addEventListener('click', () => {
     const e = current();
     if (!e?.filename) {return;}
-    void navigator.clipboard?.writeText(`${window.location.origin}/clips/${e.filename}`)
+    navigator.clipboard?.writeText(`${window.location.origin}/clips/${e.filename}`)
       .then(() => { btnShare.textContent = '✓'; setTimeout(() => { btnShare.textContent = '⤴'; }, 1200); })
       .catch(() => {});
   });
@@ -336,14 +336,14 @@ clipGen += 1;
     wheelLock = now + WHEEL_COOLDOWN;
     const dir = wheelAcc > 0 ? 1 : -1;
     wheelAcc = 0;
-    void go(dir as 1 | -1);
+    go(dir as 1 | -1);
   }, { passive: true });
 
   window.addEventListener('keydown', (ev) => {
     switch (ev.code) {
-      case 'ArrowDown': { void go(1); break;
+      case 'ArrowDown': { go(1); break;
       }
-      case 'ArrowUp': { void go(-1); break;
+      case 'ArrowUp': { go(-1); break;
       }
       case 'Space': { ev.preventDefault(); dm.togglePlayPause(); break;
       }
@@ -407,14 +407,14 @@ clipGen += 1;
       advancing = dir;
       const {ni} = d0;
       const ready = d0.ready ?? resolveClip(entries[ni]!);
-      void (async () => {
+      (async () => {
         await commitAdvance(dir, ni, ready);
         advancing = 0;
       })();
     } else {
       // Spring back — the outgoing clip never paused, so the restore is
       // pure CSS: both panes ease home and the poster drops.
-      void (async () => {
+      (async () => {
         await slidePanes(d0.dir, false, SLIDE_MS);
         hidePoster();
       })();

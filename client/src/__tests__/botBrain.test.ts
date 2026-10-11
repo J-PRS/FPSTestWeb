@@ -54,7 +54,7 @@ describe('BotBrain senses', () => {
     const pos = { x: 0, y: 1.6, z: 0 };
     // Reaction delay: a human doesn't shoot the frame an enemy appears —
     // acquisition stamps a hunt tick and reactTicks (up to 2) must elapse.
-    let out: ReturnType<typeof b.think> | undefined;
+    let out: ReturnType<typeof b.think> | undefined = undefined;
     for (let i = 0; i < 5 && !out?.fire; i += 1) {out = b.think(0.4, ctx(pos, flat, { enemies: enemy(20, 0) }));}
     expect(out?.fire?.targetId).toBe('e1');
   });

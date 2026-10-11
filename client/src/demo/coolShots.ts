@@ -213,7 +213,7 @@ export class CoolShotManager {
     this.trimList();
     // Vault is the durable copy — memory clipData frees after upload,
     // vault keeps the clip downloadable/playbackable across sessions.
-    void this.vault.put({ id: entry.id, timestamp: entry.timestamp, description: entry.description, projectileLifetime: entry.projectileLifetime, weapon: entry.weapon, distance: entry.distance, mp4Name: entry.mp4Name, data: clipData });
+    this.vault.put({ id: entry.id, timestamp: entry.timestamp, description: entry.description, projectileLifetime: entry.projectileLifetime, weapon: entry.weapon, distance: entry.distance, mp4Name: entry.mp4Name, data: clipData });
     this.onChanged?.(this.coolShots);
 
     logger.debug(`Auto-saved clip: ${filename} (best lifetime ${pending.bestLifetime.toFixed(2)}s, chain x${pending.chainCount})`);
@@ -255,7 +255,7 @@ export class CoolShotManager {
       this.deps.playDemoData(entry.clipData);
       logger.debug(`Playing cool shot: ${entry.description}`);
     } else {
-      void this.vault.get(entry.id).then((data) => {
+      this.vault.get(entry.id).then((data) => {
         if (seq !== this.playSeq) {return;} // a newer play request superseded us
         if (data) {
           this.deps.playDemoData(data);

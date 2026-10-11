@@ -5,7 +5,7 @@ import { TREE , type VgsNode } from '../game/vgsTree.js';
 
 type Handler = (e: KeyboardEvent) => void;
 
-let keydown: Handler;
+let keydown = undefined as unknown as Handler;
 
 const press = (code: string, key = code.slice(3).toLowerCase()) =>
   keydown({

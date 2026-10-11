@@ -92,7 +92,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       const ping = isFiniteNumber(obj.ping) ? obj.ping : undefined;
       // Held input piggybacks on volatile frames — optional, validated
       // like inputMove's fields, dropped silently when malformed.
-      let input: { forward: number; right: number; jump: number; ski: number; jet: number } | undefined;
+      let input: { forward: number; right: number; jump: number; ski: number; jet: number } | undefined = undefined;
       const rawInput = obj.input;
       if (typeof rawInput === 'object' && rawInput !== null) {
         const i = rawInput as Record<string, unknown>;
@@ -242,7 +242,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       // prev is optional redundancy: same shape, validated the same —
       // a malformed copy must not sink the good current edge though, so
       // it fails soft (dropped, not rejected).
-      let prev: typeof edge | undefined;
+      let prev: typeof edge | undefined = undefined;
       if (obj.prev != null) {
         const pe = parseEdge(obj.prev);
         if (typeof pe !== 'string') {prev = pe;}
@@ -548,7 +548,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
         fields[k] = obj[k];
       }
       const renderLagMs = isFiniteNumber(obj.renderLagMs) ? (obj.renderLagMs as number) : undefined;
-      let renderLag: Record<string, number> | undefined;
+      let renderLag: Record<string, number> | undefined = undefined;
       if (obj.renderLag !== null && typeof obj.renderLag === 'object' && !Array.isArray(obj.renderLag)) {
         renderLag = {};
         for (const [k, v] of Object.entries(obj.renderLag as Record<string, unknown>)) {

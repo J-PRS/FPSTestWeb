@@ -1,0 +1,1052 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index b8e2b489..7ff4c82f 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -55,8 +55,13 @@ Ports: game client (Vite) **:5400**, game server (Bun) **:8000**.
+   committed snapshot; both ends replay the same sim.
+ - Cheap is a feature: events over streams, distance-tiered sends, staggered
+   AI buckets, only provably-safe skips (no unfair misses).
++- `.agents/memory/` — read it, and append when you screw up or make a
++  non-obvious call. `corrections.md` = "got this wrong → rule";
++  `decisions.md` = "chose X over Y because Z". One line each, append-only.
+ - Comments say WHY, not WHAT. No secrets. No push. Commit per settled
+-  topic only. Windows+Git Bash: `cmd //c "taskkill /F /PID <pid>"`.
++  topic only. Pre-commit refuses commits under 50 changed lines — batch
++  small fixes; a genuine one-liner uses `--no-verify` deliberately.
++  Windows+Git Bash: `cmd //c "taskkill /F /PID <pid>"`.
+ - Scenario tests: one file per scenario under `tests/scenarios/` using
+   `harness.ts`. Sim-time ≠ wall-clock — `pin()` clears spawn protection,
+   drive sims via `step(dt)`.
+diff --git a/_tools/check.sh b/_tools/check.sh
+index 17661407..d99cc5a9 100644
+--- a/_tools/check.sh
++++ b/_tools/check.sh
+@@ -4,6 +4,8 @@
+ # test the clusters you reached. Exit 0 = done.
+ set -euo pipefail
+ cd "$(dirname "$0")/.."
++# bun isn't on PATH in fresh agent shells (Windows Git Bash).
++command -v bun >/dev/null || export PATH="$HOME/.bun/bin:$PATH"
+ 
+ CHANGED=$(git diff --name-only HEAD -- '*.ts' '*.tsx' | sort -u)
+ if [ -z "$CHANGED" ]; then
+@@ -16,7 +18,9 @@ echo "check: $(echo "$CHANGED" | wc -l) changed files"
+ # (The fixer leaves edits UNSTAGED; staging is the caller's business.)
+ echo "$CHANGED" | xargs -n 50 npx -y oxlint --fix
+ 
+-(cd client && ./node_modules/.bin/tsc --noEmit)
++# tsgo (native tsc) is ~3x faster for the same tsconfig; tsc is the fallback.
++(cd client && npx -y -p @typescript/native-preview tsgo --noEmit) \
++  || (cd client && ./node_modules/.bin/tsc --noEmit)
+ 
+ CLIENT_FILES=$(echo "$CHANGED" | grep '^client/' | sed 's|^client/||' || true)
+ if [ -n "$CLIENT_FILES" ]; then
+@@ -30,4 +34,11 @@ if echo "$CHANGED" | grep -qE '^(shared|server_bun)/'; then
+   (cd server_bun && bun test)
+ fi
+ 
++# Visual checkpoint: scene-visible code can't be verified by typecheck —
++# boots the stack, frames a shot, and you MUST read the PNG it prints.
++if echo "$CHANGED" | grep -qE '^client/src/(world|effects|structures|projectiles|shaders|entities)/'; then
++  bun _tools/e2e/mapshot.ts && ls -t _tools/e2e/shots/*.png | head -1 | \
++    xargs -I{} echo "check: READ THE SHOT — {} — render code changed; green tests do not see the screen"
++fi
++
+ echo "check: DONE"
+diff --git a/client/src/__tests__/vgs.test.ts b/client/src/__tests__/vgs.test.ts
+index 4111c0c5..690862d0 100644
+--- a/client/src/__tests__/vgs.test.ts
++++ b/client/src/__tests__/vgs.test.ts
+@@ -1,7 +1,7 @@
+ import { describe, expect, it, vi, beforeEach } from 'vitest';
+ 
+ import { Vgs, vgsGate } from '../game/vgs.js';
+-import { TREE } from '../game/vgsTree.js';
++import { TREE , type VgsNode } from '../game/vgsTree.js';
+ 
+ type Handler = (e: KeyboardEvent) => void;
+ 
+@@ -84,7 +84,7 @@ describe('Vgs', () => {
+ 
+   it('every tree leaf resolves to a unique chord', () => {
+     const seen = new Map<string, string>();
+-    const walk = (node: Record<string, import('../game/vgsTree.js').VgsNode>, prefix: string) => {
++    const walk = (node: Record<string, VgsNode>, prefix: string) => {
+       for (const [k, n] of Object.entries(node)) {
+         const chord = prefix + k;
+         if ('line' in n) {
+diff --git a/client/src/__tests__/wire.test.ts b/client/src/__tests__/wire.test.ts
+index f8763678..19502939 100644
+--- a/client/src/__tests__/wire.test.ts
++++ b/client/src/__tests__/wire.test.ts
+@@ -1,4 +1,5 @@
+ import { describe, it, expect } from 'vitest';
++import type { WireTickPlayer } from '../../../shared/wire.js';
+ import {
+   encodePosition, decodePosition,
+   encodeTickPlayer, encodeTickPlayerV3, encodeTickPlayerV4, encodeTickFrame, decodeTickFrame,
+@@ -331,7 +332,7 @@ describe('v3 wireId frames', () => {
+ });
+ 
+ describe('v4 delta-masked records', () => {
+-  const base = (): import('../../../shared/wire.js').WireTickPlayer => ({
++  const base = (): WireTickPlayer => ({
+     playerId: '', position: { x: 1, y: 2, z: 3 }, rotation: { yaw: 0.5, pitch: 0.1 },
+     velocity: { x: 10, y: 0, z: 5 }, health: 100, isDead: false, ski: 1, jet: 0, status: 0, sheep: 40, ping: 50,
+   });
+diff --git a/client/src/__tests__/workerTransportDrain.test.ts b/client/src/__tests__/workerTransportDrain.test.ts
+index f37c1253..a7f554d3 100644
+--- a/client/src/__tests__/workerTransportDrain.test.ts
++++ b/client/src/__tests__/workerTransportDrain.test.ts
+@@ -18,7 +18,7 @@ class FakeWorker {
+   emit(data: unknown) { this.onmessage?.({ data } as MessageEvent); }
+ }
+ 
+-let WorkerTransport: typeof import('../networking/WorkerTransport.js').WorkerTransport;
++let WorkerTransport: typeof WorkerTransport;
+ 
+ function makeConfig(): ConnectionConfig {
+   return {
+diff --git a/client/src/effects/debris.ts b/client/src/effects/debris.ts
+index 95b6f46f..0a0150b2 100644
+--- a/client/src/effects/debris.ts
++++ b/client/src/effects/debris.ts
+@@ -5,6 +5,7 @@ import { pickShardGeo, pickShardPrim, shardLaunch, SMOKE_INTERVAL, type DebrisOp
+ import { markProbe } from '../core/fxDiag.js';
+ import type { Terrain } from '../world/terrain.js';
+ import { stepShard, greyShard, shrinkLanded } from './debrisStep.js';
++import type { BallTrailDots } from './ballTrails.js';
+ 
+ type Vec3Like = { x: number; y: number; z: number };
+ 
+@@ -47,7 +48,7 @@ export interface Shard {
+   /** Shared-batch dot trail — a slot per airborne shard; fxPuff-per-
+    *  interval used to cost ONE quarks ParticleSystem per emission
+    *  (300 shards × 33Hz ≈ 10k live systems — the frame tank). */
+-  trail?: import('./ballTrails.js').BallTrailDots;
++  trail?: BallTrailDots;
+   brush: boolean;
+   goo: boolean;
+   /** Geometry borrowed from the dying body — never dispose it. */
+diff --git a/client/src/entities/Totem.ts b/client/src/entities/Totem.ts
+index c37c5aa6..581ec284 100644
+--- a/client/src/entities/Totem.ts
++++ b/client/src/entities/Totem.ts
+@@ -249,7 +249,7 @@ export class Totem implements Targetable, SwarmSlotOwner {
+     if (this.foot) {getShadows()?.set(this, this.pos, this.radius * 0.9, 0.35);}
+   }
+ 
+-  writeInstances(_terrain?: import('../world/terrain.js').Terrain): void {
++  writeInstances(_terrain?: Terrain): void {
+     writeTotemInstances(this);
+   }
+ 
+diff --git a/client/src/game/bots/botCtf.ts b/client/src/game/bots/botCtf.ts
+index 16377b1e..c2efe7b9 100644
+--- a/client/src/game/bots/botCtf.ts
++++ b/client/src/game/bots/botCtf.ts
+@@ -14,12 +14,13 @@ import type { StructureSpec } from '../../../../shared/mapSpec.js';
+ import { flagReturnFx } from '../flagFx.js';
+ import { FLAG_STAND_TOP } from '../../structures/structures.js';
+ import * as sfx from '../../core/sfx.js';
++import type { Terrain } from '../../world/terrain.js';
+ 
+ const _flagBurst = new THREE.Vector3();
+ const _touchers: [string, THREE.Vector3, THREE.Vector3][] = [];
+ 
+ export interface CtfBridgeDeps {
+-  lazyTerrain(): import('../../world/terrain.js').Terrain;
++  lazyTerrain(): Terrain;
+   lazyScene(): THREE.Scene;
+   lazyCamera(): THREE.Camera;
+   lazyPlayer(): { pos: THREE.Vector3; isDead: boolean; mods: { pickupRadius: number };
+@@ -50,7 +51,7 @@ export interface CtfBridgeWiring {
+   bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } };
+   /** The spec's structure list — stand hulls merge OVER it (the solid
+    *  world is replaced wholesale, never appended). */
+-  structures?: import('../../../../shared/mapSpec.js').StructureSpec[];
++  structures?: StructureSpec[];
+ }
+ 
+ export class CtfBridge {
+diff --git a/client/src/game/bots/index.ts b/client/src/game/bots/index.ts
+index b09f4e84..fcb997aa 100644
+--- a/client/src/game/bots/index.ts
++++ b/client/src/game/bots/index.ts
+@@ -42,6 +42,8 @@ import { winText, checkWin, resetMatch, creditKill, creditDamage, collect, pushS
+ import { BOT_NAMES } from '../../../../shared/botNames.js';
+ import { CLASS_STATS, classCapsule, classMass } from '../../../../shared/botClasses.js';
+ import type { BodyCapsule } from '../../../../shared/movement.js';
++import type { DeployOwner } from '../deployables.js';
++import type { MapSpec } from '../../../../shared/mapSpec.js';
+ 
+ export interface BotsDeps extends GameContext {
+   lazyScene(): THREE.Scene;
+@@ -77,7 +79,7 @@ interface BotHooks {
+   damageCreature(id: number, dmg: number, attackerId: string): boolean;
+   /** A builder bot wants to plant — owner wrapper keeps the item's foes,
+    *  anchors, and heals pointed at the bot, not the local player. */
+-  botDeploy?(kind: string, pos: { x: number; y: number; z: number }, owner: import('../deployables.js').DeployOwner): void;
++  botDeploy?(kind: string, pos: { x: number; y: number; z: number }, owner: DeployOwner): void;
+   /** Damaged friendly deployable the bot could weld — mirrors the
+    *  server senses' repairJob scan (nearest within ~45m). */
+   botRepairJob?(team: string, pos: THREE.Vector3, botId: string): { key: string; pos: THREE.Vector3; frac: number } | null;
+@@ -119,7 +121,7 @@ export class TeamBots {
+     /** Solo map spec (maps/<X>.json resolved client-side) — feeds flag
+      *  homes and authored spawn anchors; absent = the old around-player
+      *  ±70m default bases. */
+-    private mapSpec?: import('../../../../shared/mapSpec.js').MapSpec,
++    private mapSpec?: MapSpec,
+   ) {
+     this.spec = MODES[mode]; // param props assign after field inits — do it here
+     this.deps.world.mode = mode; // wire rooms set this on gameState; offline must too (scoreboard title)
+diff --git a/client/src/game/combat.ts b/client/src/game/combat.ts
+index d758ad94..116281fe 100644
+--- a/client/src/game/combat.ts
++++ b/client/src/game/combat.ts
+@@ -4,7 +4,7 @@
+ 
+ import type * as THREE from 'three';
+ import type { ViewModel } from '../entities/ViewModel.js';
+-import type { Ball } from '../entities/balls.js';
++import type { Ball , Targetable } from '../entities/balls.js';
+ import type { Nugget } from '../entities/Nugget.js';
+ import type { DamageNumberManager } from '../effects/damageNumbers.js';
+ import type { SweepObstacle } from '../projectiles/Projectile.js';
+@@ -24,6 +24,8 @@ import { WeaponType } from '../../../shared/weapons.js';
+ import { classCanFire } from '../../../shared/botClasses.js';
+ 
+ import type { GameContext } from './context.js';
++import type { Deployables } from './deployables.js';
++import type { SpeedLines } from '../effects/speedLines.js';
+ 
+ export interface CombatDeps extends GameContext {
+   lazyScene(): THREE.Scene;
+@@ -32,9 +34,9 @@ export interface CombatDeps extends GameContext {
+   lazyHealthBarSystem(): HealthBarSystem;
+   lazyDamageNumbers(): DamageNumberManager;
+   /** Deployable registry — the repair beam's heal targets live here. */
+-  lazyDeployables?: () => import('./deployables.js').Deployables;
++  lazyDeployables?: () => Deployables;
+   /** Optional — melee swing whoosh rides the speed-lines surge path. */
+-  lazySpeedLines?: () => import('../effects/speedLines.js').SpeedLines;
++  lazySpeedLines?: () => SpeedLines;
+   fragMessages: FragMessages;
+   inputTracking: ReturnType<typeof setupInputTracking>;
+   explosionTracker: ExplosionTracker;
+@@ -57,7 +59,7 @@ export interface CombatDeps extends GameContext {
+    *  ('local' when unset; offline bot shells carry their bot id). */
+   onCreatureKilled?: (shooterId?: string) => void;
+   balls: Ball[];
+-  targets: import('../entities/balls.js').Targetable[]; // balls + crawlers — shootable/blastable
++  targets: Targetable[]; // balls + crawlers — shootable/blastable
+   nuggets: Nugget[];
+ }
+ 
+@@ -169,6 +171,6 @@ export function createCombat(deps: CombatDeps) {
+     slam: (pos: THREE.Vector3, impactSpeed: number) => slam(c, pos, impactSpeed),
+     updateProjectiles: (dt: number) => updateProjectiles(c, dt),
+     updateBeamVisual: () => { updateBeamVisual(); rep.updateBeamVisual(); },
+-    hitTargetLocal: (t: import('../entities/balls.js').Targetable, dmg: number, attackerId?: string) => hitTargetLocal(c, t, dmg, attackerId),
++    hitTargetLocal: (t: Targetable, dmg: number, attackerId?: string) => hitTargetLocal(c, t, dmg, attackerId),
+   };
+ }
+diff --git a/client/src/game/combat/impact.ts b/client/src/game/combat/impact.ts
+index a7a41d43..ae7046fc 100644
+--- a/client/src/game/combat/impact.ts
++++ b/client/src/game/combat/impact.ts
+@@ -23,6 +23,7 @@ import { lgDischarge } from './lightning.js';
+ import { AoeGizmo } from '../../effects/aoeGizmo.js';
+ import { urlParams } from '../../core/params.js';
+ import { processProjectileExplosion, type CombatCtx } from '../combat.js';
++import type { Targetable } from '../../entities/balls.js';
+ 
+ const CHAIN_WINDOW = CHAINGUN_RATE * 1.5;
+ const CHAIN_RAMP_CAP = 8;
+@@ -75,7 +76,7 @@ function hitVerdict(c: CombatCtx, p: Projectile, hitPos: { x: number; y: number;
+ // (Turretter) and props (Tumbleweed) — they leave ichor undefined.
+ // Droplets paint their own stain where they land (the Wendigo model) —
+ // a spray arcing over a ridge stains THAT ground, not the shooter's feet.
+-function ichorSpray(c: CombatCtx, ball: import('../../entities/balls.js').Targetable, dir: THREE.Vector3, scale: number): void {
++function ichorSpray(c: CombatCtx, ball: Targetable, dir: THREE.Vector3, scale: number): void {
+   if (ball.ichor === undefined) {return;}
+   const {deps} = c;
+   const hex = ball.ichor;
+@@ -103,13 +104,13 @@ function splatAt(c: CombatCtx, x: number, z: number, r: number, hex: number, int
+ 
+ const _splatPos = new THREE.Vector3();
+ 
+-function ichorSplat(c: CombatCtx, ball: import('../../entities/balls.js').Targetable, radius: number): void {
++function ichorSplat(c: CombatCtx, ball: Targetable, radius: number): void {
+   splatAt(c, ball.pos.x, ball.pos.z, radius, ball.ichor!);
+ }
+ 
+ // Instanced body-part gib burst when the species has one, else the generic
+ // shard debris — same visual contract either way.
+-function corpseBurst(c: CombatCtx, ball: import('../../entities/balls.js').Targetable, dir: THREE.Vector3): void {
++function corpseBurst(c: CombatCtx, ball: Targetable, dir: THREE.Vector3): void {
+   if (burstGibs(ball, ball.pos, dir, ball.vel)) {return;}
+   c.deps.world.debrisList.push(new BallDebris(
+     c.deps.lazyScene(), c.deps.lazyTerrain(), ball.pos,
+@@ -120,7 +121,7 @@ function corpseBurst(c: CombatCtx, ball: import('../../entities/balls.js').Targe
+ 
+ // The body pops AND the ground keeps the stain — death reads as a wound,
+ // not a despawn.
+-function ichorDeath(c: CombatCtx, ball: import('../../entities/balls.js').Targetable, dir: THREE.Vector3): void {
++function ichorDeath(c: CombatCtx, ball: Targetable, dir: THREE.Vector3): void {
+   if (ball.ichor === undefined) {return;}
+   ichorSpray(c, ball, dir, 0.55);
+   ichorSplat(c, ball, ball.radius * 2.4);
+@@ -386,7 +387,7 @@ export function logHitScore(c: CombatCtx, p: Projectile, target: 'ball' | 'playe
+ // Shared death pipeline for direct hits AND splash kills — debris,
+ // nuggets, kill credit, elite split. Without this a blast kill would
+ // silently delete the entity with no payout.
+-export function onTargetDestroyed(c: CombatCtx, ball: import('../../entities/balls.js').Targetable, impulse?: THREE.Vector3, weaponType?: number, shooterId?: string): void {
++export function onTargetDestroyed(c: CombatCtx, ball: Targetable, impulse?: THREE.Vector3, weaponType?: number, shooterId?: string): void {
+   const {deps} = c;
+   // Railgun reward: any kill (direct or its splash) instantly reloads —
+   // the "not useless" payoff that turns a slow precision weapon into a
+@@ -430,14 +431,14 @@ export function onTargetDestroyed(c: CombatCtx, ball: import('../../entities/bal
+ 
+ /** A non-beam direct hit invests its damage into the victim's banked pop
+  *  charge — the rest of the charge stays smoldering, not wasted. */
+-export function detonateCharge(p: Projectile, ball: import('../../entities/balls.js').Targetable, dmg: number): void {
++export function detonateCharge(p: Projectile, ball: Targetable, dmg: number): void {
+   if (p.config.weaponType !== WeaponType.Lightning) {lgDischarge(ball.id, dmg, ball.pos);}
+ }
+ 
+ /** Wind the chaingun's bank on a hit: at the cap the shot dumps a
+  *  stagger shove into the victim and the bank resets for another
+  *  wind-up — sustained tracking pays in displacement, not damage. */
+-export function chaingunBank(c: CombatCtx, p: Projectile, ball: import('../../entities/balls.js').Targetable): void {
++export function chaingunBank(c: CombatCtx, p: Projectile, ball: Targetable): void {
+   const now = performance.now() / 1000;
+   const st = c.chainRamp.get(ball.id);
+   const n = st && now - st.t <= CHAIN_WINDOW ? st.n + 1 : 0;
+@@ -454,7 +455,7 @@ export function chaingunBank(c: CombatCtx, p: Projectile, ball: import('../../en
+   }
+ }
+ 
+-export function handleBallHit(c: CombatCtx, p: Projectile, ball: import('../../entities/balls.js').Targetable): void {
++export function handleBallHit(c: CombatCtx, p: Projectile, ball: Targetable): void {
+   const {deps} = c;
+   // Airtime ramp is body-contact only — wake hits pay flat directDamage.
+   const dmg = scaledDirectDamage(p.config.weaponType, p.directHit ? p.hitAge : undefined) * deps.lazyPlayer().mods.directDamage;
+@@ -544,7 +545,7 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string):
+  *  projectile hit runs — aggro report, damage numbers, kill pipeline.
+  *  attackerId set ⇒ not mine: apply damage but skip the floating number
+  *  (personal feedback is for damage I dealt). */
+-export function hitTargetLocal(c: CombatCtx, t: import('../../entities/balls.js').Targetable, dmg: number, attackerId?: string): boolean {
++export function hitTargetLocal(c: CombatCtx, t: Targetable, dmg: number, attackerId?: string): boolean {
+   const {deps} = c;
+   deps.reportTargetDamage?.(t, dmg);
+   if (!attackerId || attackerId === 'local') {
+diff --git a/client/src/game/demoLifecycle.ts b/client/src/game/demoLifecycle.ts
+index 0252b927..f765f044 100644
+--- a/client/src/game/demoLifecycle.ts
++++ b/client/src/game/demoLifecycle.ts
+@@ -2,7 +2,7 @@ import { reconstructSeek, applyPlaybackEvents, releasePlaybackBeam, type Playbac
+ import {type ProjectileEvent, type TargetEvent, RemoteFrameFlags, TARGETTYPE_CREATURE_BASE, demoSpeciesIndex, creatureDemoId, targetDemoId, ProjectileEventType} from '../demo/types.js';
+ import type { RemoteSample } from '../demo/DemoRecorder.js';
+ import type { DemoManager } from '../demo/index.js';
+-import type { Ball } from '../entities/balls.js';
++import type { Ball , Targetable } from '../entities/balls.js';
+ import type { DamageNumberManager } from '../effects/damageNumbers.js';
+ import type { FragMessages } from '../ui/FragMessages.js';
+ import type { HUD } from '../ui/hud.js';
+@@ -24,6 +24,19 @@ import { feedMode } from '../feed/feedMode.js';
+ import { disposeSwings } from '../effects/swingTrails.js';
+ import { getHeightfield, injectHeightmapBytes, applyHeightfieldScale } from '../world/heightmap.js';
+ import * as sfxWorld from '../core/sfx/world.js';
++import type { ViewModel } from '../entities/ViewModel.js';
++import type { Crawler } from '../entities/Crawler.js';
++import type { Scarab } from '../entities/Scarab.js';
++import type { Gnat } from '../entities/Gnat.js';
++import type { Snake } from '../entities/Snake.js';
++import type { Baneling } from '../entities/Baneling.js';
++import type { Turretter } from '../entities/Turretter.js';
++import type { Roller } from '../entities/Roller.js';
++import type { Seeker } from '../entities/Seeker.js';
++import type { Overlord } from '../entities/Overlord.js';
++import type { Mine } from '../entities/Mine.js';
++import type { Totem } from '../entities/Totem.js';
++import type { Rakk } from '../entities/Rakk.js';
+ 
+ const logger = new ChildLogger('DemoPlayback');
+ 
+@@ -33,24 +46,24 @@ export interface DemoLifecycleDeps {
+   lazyCamera: () => THREE.PerspectiveCamera;
+   lazyPlayer: () => Player;
+   lazyDemoManager: () => DemoManager | null;
+-  lazyViewModel: () => import('../entities/ViewModel.js').ViewModel | null;
++  lazyViewModel: () => ViewModel | null;
+   damageNumberManager: () => DamageNumberManager;
+   fragMessages: () => FragMessages;
+   lazyHud: () => HUD;
+   balls: Ball[];
+-  targets: import('../entities/balls.js').Targetable[]; // balls+crawlers live here too — keep in sync on removal
+-  crawlers: import('../entities/Crawler.js').Crawler[];
+-  scarabs: import('../entities/Scarab.js').Scarab[];
+-  gnats: import('../entities/Gnat.js').Gnat[];
+-  snakes: import('../entities/Snake.js').Snake[];
+-  banelings: import('../entities/Baneling.js').Baneling[];
+-  turrets: import('../entities/Turretter.js').Turretter[];
+-  rollers: import('../entities/Roller.js').Roller[];
+-  seekers: import('../entities/Seeker.js').Seeker[];
+-  overlords: import('../entities/Overlord.js').Overlord[];
+-  mines: import('../entities/Mine.js').Mine[];
+-  totems: import('../entities/Totem.js').Totem[];
+-  rakks: import('../entities/Rakk.js').Rakk[];
++  targets: Targetable[]; // balls+crawlers live here too — keep in sync on removal
++  crawlers: Crawler[];
++  scarabs: Scarab[];
++  gnats: Gnat[];
++  snakes: Snake[];
++  banelings: Baneling[];
++  turrets: Turretter[];
++  rollers: Roller[];
++  seekers: Seeker[];
++  overlords: Overlord[];
++  mines: Mine[];
++  totems: Totem[];
++  rakks: Rakk[];
+   world: WorldState;
+   overlay: HTMLElement;
+   rendererCanvas: HTMLCanvasElement;
+@@ -309,7 +322,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
+     // All live species are game objects too — dispose so they don't hang
+     // frozen in the scene during playback
+     for (const m of d.mines) {m.onDetonate = undefined;} // teardown isn't a detonation
+-    type DisposableTarget = import('../entities/balls.js').Targetable & { dispose(): void };
++    type DisposableTarget = Targetable & { dispose(): void };
+     for (const list of [d.crawlers, d.turrets, d.rollers, d.seekers, d.overlords, d.mines, d.totems, d.rakks] as DisposableTarget[][]) {
+       for (const e of list) {
+         e.dispose();
+diff --git a/client/src/game/gameLoop.ts b/client/src/game/gameLoop.ts
+index 66ef16d9..6c377cb3 100644
+--- a/client/src/game/gameLoop.ts
++++ b/client/src/game/gameLoop.ts
+@@ -55,6 +55,7 @@ import type { BodyCapsule } from '../../../shared/movement.js';
+ import { isBotId } from '../../../shared/botNames.js';
+ import { nanScanTick, nanScanBindProbe } from '../core/nanScan.js';
+ import Logger from '../core/Logger.js';
++import type { PlayerSheep } from './playerSheep.js';
+ 
+ const _zeroVel = new THREE.Vector3(); // shared zero for demo playback
+ const _sunDir = new THREE.Vector3(); // scratch — directional fog sun lookup
+@@ -134,7 +135,7 @@ export interface GameLoopDeps {
+   getDummyTick: () => ((dt: number) => void) | null;
+   /** Local sheep meter — ticks each frame from hudTick so the crosshair
+    *  readout and scoreboard self-row share the smoothed value. */
+-  lazyPlayerSheep?: () => import('./playerSheep.js').PlayerSheep;
++  lazyPlayerSheep?: () => PlayerSheep;
+ }
+ 
+ // The frame loop + render pass. Everything mutable it touches comes in via
+diff --git a/client/src/game/lobby.ts b/client/src/game/lobby.ts
+index 7fb1aada..471fe8c4 100644
+--- a/client/src/game/lobby.ts
++++ b/client/src/game/lobby.ts
+@@ -8,7 +8,7 @@
+  * ?room=NAME reload, which stays the shareable link either way.
+  */
+ 
+-import { buildLobbyPanel } from './lobbyPanel.js';
++import { buildLobbyPanel , type LobbyPanelEls } from './lobbyPanel.js';
+ import { urlParams } from '../core/params.js';
+ import { settings } from '../core/settings.js';
+ import Logger from '../core/Logger.js';
+@@ -78,7 +78,7 @@ export class Lobby {
+   private modeSelect: HTMLSelectElement;
+   private botsInput: HTMLInputElement;
+   private leaveBtn: HTMLButtonElement;
+-  private els: import('./lobbyPanel.js').LobbyPanelEls;
++  private els: LobbyPanelEls;
+   private maps: MapRow[] = [];
+   private mapsFailed = false;
+   // MAP picker family filter — the [T2] badge marks Tribes 2 ports;
+diff --git a/client/src/game/net/ctx.ts b/client/src/game/net/ctx.ts
+index 6c994815..2f7b2f7c 100644
+--- a/client/src/game/net/ctx.ts
++++ b/client/src/game/net/ctx.ts
+@@ -5,6 +5,7 @@ import type { NetDeps } from '../netHandlers.js';
+ import type { Chat } from '../chat.js';
+ import type { NetworkManager } from '../../networking/NetworkManager.js';
+ import type { RemotePlayer } from '../../entities/RemotePlayer.js';
++import type { PickupKind } from '../../../../shared/pickups.js';
+ 
+ export interface NetCtx {
+   deps: NetDeps;
+@@ -14,7 +15,7 @@ export interface NetCtx {
+   /** Both first-seen-update and respawn-into-missing end up here. */
+   ensureRemotePlayer(playerId: string, position: { x: number; y: number; z: number }, via: string): RemotePlayer;
+   /** Server-owned pickup meshes — gem/dog-tag renderers. */
+-  addPickup(id: number, pos: { x: number; y: number; z: number }, kind?: import('../../../../shared/pickups.js').PickupKind): void;
++  addPickup(id: number, pos: { x: number; y: number; z: number }, kind?: PickupKind): void;
+   /** Reconcile against the server roster — drop meshes whose ids aren't in
+    *  the set (their pickupGone was missed during a disconnect). */
+   reconcilePickups(liveIds: ReadonlySet<number>): void;
+diff --git a/client/src/game/net/world.ts b/client/src/game/net/world.ts
+index f3d69702..5fbbce49 100644
+--- a/client/src/game/net/world.ts
++++ b/client/src/game/net/world.ts
+@@ -18,6 +18,7 @@ import { finiteVec } from '../../../../shared/wire.js';
+ import { saveLastRoomMap } from './lastRoom.js';
+ import { dropVolatileWorldFx } from './resync.js';
+ import { applyTerrain, applyInteriors, applyMapFog, type MapSnapshot } from './mapAssets.js';
++import type { PickupKind } from '../../../../shared/pickups.js';
+ // Boot/terrain machinery lives in mapAssets.js — re-exported so main.ts
+ // and lastRoom.ts keep a single import site.
+ export { firstTerrain, probeBootMap, bootPrimeTerrain } from './mapAssets.js';
+@@ -133,7 +134,7 @@ export function wireWorld(ctx: NetCtx): void {
+   };
+ 
+   // Initial connection and reconnection — full roster + local restore.
+-  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: import('../../../../shared/pickups.js').PickupKind }[]; flags?: { team: TeamId; pos: { x: number; y: number; z: number }; home?: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; team?: string }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; terrainTex?: string; terrainPreset?: number; sky?: string; interiors?: InteriorSpec[] } }) => {
++  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: PickupKind }[]; flags?: { team: TeamId; pos: { x: number; y: number; z: number }; home?: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; team?: string }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; terrainTex?: string; terrainPreset?: number; sky?: string; interiors?: InteriorSpec[] } }) => {
+     logger.info(`gameState room=${roomInfo?.room} mapKeys=${roomInfo?.map ? Object.keys(roomInfo.map).join(',') : 'none'}`);
+     // The snapshot replaces the world — any volatile layer still alive
+     // pre-reconnect is stale fast-forward, not truth. Purge before
+diff --git a/client/src/game/netHandlers.ts b/client/src/game/netHandlers.ts
+index c04461c0..698e4d8f 100644
+--- a/client/src/game/netHandlers.ts
++++ b/client/src/game/netHandlers.ts
+@@ -9,7 +9,7 @@ import type { Player } from '../entities/Player.js';
+ import { RemotePlayer } from '../entities/RemotePlayer.js';
+ import type { EffectsManager } from '../effects/effects.js';
+ import type { NetworkManager } from '../networking/NetworkManager.js';
+-import { Lobby } from './lobby.js';
++import { Lobby , type RoomRow, type MapRow } from './lobby.js';
+ import { resolveServerEndpoints } from '../networking/endpoints.js';
+ import type { WorldState } from './worldState.js';
+ import type { createEntities } from './entities.js';
+@@ -32,6 +32,7 @@ import { wireDeployables } from './net/deployables.js';
+ import { wireWorld } from './net/world.js';
+ import { wireResync } from './net/resync.js';
+ import { displayName } from './nameOf.js';
++import type { DemoManager } from '../demo/DemoManager.js';
+ 
+ export interface NetDeps {
+   lazyNetworkManager(): NetworkManager;
+@@ -43,7 +44,7 @@ export interface NetDeps {
+   lazyHealthBarSystem(): HealthBarSystem;
+   /** Optional until initDemo runs — net handlers record through it when
+    *  present so remote shots/creatures land in the rolling buffer. */
+-  lazyDemoManager?(): import('../demo/DemoManager.js').DemoManager | null;
++  lazyDemoManager?(): DemoManager | null;
+   fragMessages: FragMessages;
+   explosionTracker: ExplosionTracker;
+   logger: ChildLogger;
+@@ -130,12 +131,12 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
+       // worker-local fetch would hide the rest of the fleet.
+       const res = await fetch(`${lobbyUrl ?? httpUrl}/rooms`);
+       if (!res.ok) {throw new Error(`rooms ${res.status}`);}
+-      return res.json() as Promise<import('./lobby.js').RoomRow[]>;
++      return res.json() as Promise<RoomRow[]>;
+     },
+     listMaps: async () => {
+       const res = await fetch(`${httpUrl}/maps`);
+       if (!res.ok) {throw new Error(`maps ${res.status}`);}
+-      return res.json() as Promise<import('./lobby.js').MapRow[]>;
++      return res.json() as Promise<MapRow[]>;
+     },
+     quickJoin: async (mode, map, bots, noCreatures, noBalls) => {
+       const q = new URLSearchParams({ mode });
+diff --git a/client/src/game/remotes.ts b/client/src/game/remotes.ts
+index fd347674..e4626f42 100644
+--- a/client/src/game/remotes.ts
++++ b/client/src/game/remotes.ts
+@@ -7,7 +7,7 @@ import type { Player } from '../entities/Player.js';
+ import { RemotePlayer } from '../entities/RemotePlayer.js';
+ import { setFrustumVis } from '../entities/remoteVis.js';
+ import type { EffectsManager } from '../effects/effects.js';
+-import type { NetworkManager } from '../networking/NetworkManager.js';
++import type { NetworkManager , RemotePlayerState } from '../networking/NetworkManager.js';
+ import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
+ import type { HUD } from '../ui/hud.js';
+ import { rankRows, scoreboardTitle } from '../ui/hud/scoreboard.js';
+@@ -76,7 +76,7 @@ function makeRemoteHooks(deps: RemotesDeps) {
+   };
+ }
+ 
+-type WirePlayerState = import('../networking/NetworkManager.js').RemotePlayerState;
++type WirePlayerState = RemotePlayerState;
+ 
+ function isRemoteActive(deps: RemotesDeps, playerId: string, players: Map<string, WirePlayerState>): boolean {
+   return deps.world.remotePlayers.active(playerId, deps.world.remotePlayers.get(playerId), players.get(playerId));
+diff --git a/client/src/game/worldState.ts b/client/src/game/worldState.ts
+index ebd68071..f3a372ec 100644
+--- a/client/src/game/worldState.ts
++++ b/client/src/game/worldState.ts
+@@ -10,6 +10,8 @@ import { createProjectileRegistry, type ProjectileRegistry } from './projectileR
+ import { RemoteSet } from './net/RemoteSet.js';
+ import type { RemotePlayerState } from '../networking/NetworkManager.js';
+ import type { TeamId } from '../../../shared/teams.js';
++import type { SplatDecal } from '../effects/splat.js';
++import type { PickupKind } from '../../../shared/pickups.js';
+ 
+ /**
+  * The shared mutable world: every entity collection the game modules
+@@ -34,7 +36,7 @@ export interface WorldState {
+   playerDebrisList: PlayerDebris[];
+   explosions: Explosion[];
+   scorches: ScorchDecal[];
+-  splats: import('../effects/splat.js').SplatDecal[];
++  splats: SplatDecal[];
+   implosions: Implosion[];
+   aoeGizmos: AoeGizmo[]; // ?debug blast-radius wireframes
+   // Match meta from the wire — scoreboard needs mode/team/scores to group
+@@ -63,7 +65,7 @@ export interface WorldState {
+   flagMarkers: Map<TeamId, { mesh: THREE.Group; stand: THREE.Group; home: THREE.Vector3; homeKnown: boolean; carrier: string | null; wirePos: THREE.Vector3 }>;
+   /** Server-owned pickup replicas — net/pickups.ts owns the map; the
+    *  §4.7 pickup fidelity hash enumerates it. */
+-  netPickups: Map<number, { kind: import('../../../shared/pickups.js').PickupKind }>;
++  netPickups: Map<number, { kind: PickupKind }>;
+   // Demo playback is a different world than the live one — while set, the
+   // wire must not mutate the scene (corrections/projectiles/live balls)
+   // and we must not stream recorded camera motion to the server.
+diff --git a/client/src/main.ts b/client/src/main.ts
+index 976d63a1..bf66c8df 100644
+--- a/client/src/main.ts
++++ b/client/src/main.ts
+@@ -52,7 +52,7 @@ import { applyDebugHooks } from './game/debugHooks.js';
+ import { createWorldState } from './game/worldState.js';
+ import { createCombat } from './game/combat.js';
+ import { TeamBots } from './game/bots/index.js';
+-import { MODES } from '../../shared/teams.js';
++import { MODES , type ModeId } from '../../shared/teams.js';
+ import { firstTerrain, probeBootMap, bootPrimeTerrain, bootApplySavedMap, armSessionVeil, type MapSnapshot } from './game/net/world.js';
+ import { resolveMapSpec, parseMapSpecJson, type MapSpec } from '../../shared/mapSpec.js';
+ import { seatKits } from '../../shared/structKits.js';
+@@ -80,6 +80,7 @@ import { loadHeightfieldBin, applyHeightfieldScale } from './world/heightmap.js'
+ import { SWARM_SPECS } from './game/species/registry.js';
+ import { initSwarms } from './entities/swarms.js';
+ import type { Bolt } from './entities/Turretter.js';
++import type { DeployKind } from '../../shared/deployables.js';
+ 
+ const logger = new ChildLogger('Main');
+ 
+@@ -509,7 +510,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
+       const y = floor === Infinity ? Math.max(d.pos.y, terrain.getHeight(d.pos.x, d.pos.z)) : floor;
+       entities.deployables.remoteSpawn(depId++, {
+         owner: d.team ? `base:${d.team}` : 'base',
+-        kind: d.kind as import('../../shared/deployables.js').DeployKind,
++        kind: d.kind as DeployKind,
+         pos: { ...d.pos, y},
+         team: d.team,
+       });
+@@ -639,14 +640,14 @@ function setupOfflineMode(mode: string, mapSpec?: MapSpec): void {
+         return combat.hitTargetLocal(t, dmg, att); // same pipeline as a projectile hit
+       },
+       botDeploy: (kind, pos, owner) =>
+-        entities.deployables.plantFor(kind as import('./game/deployables.js').DeployKind, pos, owner),
++        entities.deployables.plantFor(kind as DeployKind, pos, owner),
+       botRepairJob: (team, pos, botId) => entities.deployables.repairJob(botId, team, pos),
+       // ~50hp/s at think cadence — the same heal a human trigger hold does.
+       botWeld: (key) => entities.deployables.weld(key, REPAIR_HEAL_PER_TICK) !== null,
+     },
+     'alpha',
+     counts,
+-    mode as import('../../shared/teams.js').ModeId,
++    mode as ModeId,
+     mapSpec,
+   );
+   // Flag Run starts you beside the nearest enemy flag — the ring is
+diff --git a/client/src/networking/NetworkManager.ts b/client/src/networking/NetworkManager.ts
+index 8f92351b..09d1474d 100644
+--- a/client/src/networking/NetworkManager.ts
++++ b/client/src/networking/NetworkManager.ts
+@@ -15,6 +15,8 @@ import { confirmDamageEcho, sweepDamageEchoes } from '../game/parity.js';
+ import { InputStream } from './inputStream.js';
+ import { WireIn } from './wireIn.js';
+ import { WORLD_MODEL, declaredFieldNames, checkIntent } from '../../../shared/worldModel.js';
++import type { StructureSpec } from '../../../shared/mapSpec.js';
++import type { InteriorSpec } from '../../../shared/mapSpec.js';
+ 
+ const logger = new ChildLogger('NetworkManager');
+ 
+@@ -94,7 +96,7 @@ export class NetworkManager {
+   public onKnockback: ((position: { x: number; y: number; z: number }, force: number, pull?: boolean) => void) | null = null;
+   public onChat: ((playerId: string, text: string, team: boolean, vgs: string | undefined, muted: boolean) => void) | null = null;
+   public onPlayerUpdate: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, timestamp: number, velocity?: { x: number; y: number; z: number }) => void) | null = null;
+-  public onGameState: ((players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: PickupKind }[]; flags?: { team: TeamId; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; team?: string }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: import('../../../shared/mapSpec.js').StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; terrainTex?: string; terrainPreset?: number; sky?: string } }) => void) | null = null;
++  public onGameState: ((players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: PickupKind }[]; flags?: { team: TeamId; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; team?: string }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; terrainTex?: string; terrainPreset?: number; sky?: string } }) => void) | null = null;
+   public onTeamScore: ((scores: { alpha: number; bravo: number }, winAt: number) => void) | null = null;
+   public onMatchEnd: ((winner: TeamId | 'draw', scores: { alpha: number; bravo: number }) => void) | null = null;
+   public onMatchStart: ((mode: string, scores: { alpha: number; bravo: number }) => void) | null = null;
+@@ -114,7 +116,7 @@ export class NetworkManager {
+   public onFfaScore: ((scores: Record<string, number>, winAt: number) => void) | null = null;
+   public onFfaMatchEnd: ((winner: string, scores: Record<string, number>) => void) | null = null;
+   /** Admin hot-reload — structures/arena changed mid-match; rebuild them. */
+-  public onMapUpdate: ((map: { mapName?: string; silent?: boolean; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: import('../../../shared/mapSpec.js').StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; terrainTex?: string; terrainPreset?: number; sky?: string; interiors?: import('../../../shared/mapSpec.js').InteriorSpec[] }) => void) | null = null;
++  public onMapUpdate: ((map: { mapName?: string; silent?: boolean; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; terrainTex?: string; terrainPreset?: number; sky?: string; interiors?: InteriorSpec[] }) => void) | null = null;
+   // Server-owned deployables — rendered as dumb visuals client-side;
+   // the sim (firing/damage) stays authoritative on the server.
+   public onDeploySpawn: ((id: number, owner: string, kind: DeployKind, pos: { x: number; y: number; z: number }, team?: TeamId) => void) | null = null;
+diff --git a/client/src/networking/connectServer.ts b/client/src/networking/connectServer.ts
+index 72302d91..8ad76f3e 100644
+--- a/client/src/networking/connectServer.ts
++++ b/client/src/networking/connectServer.ts
+@@ -2,6 +2,7 @@ import { urlParams } from '../core/params.js';
+ import type { NetworkManager } from './NetworkManager.js';
+ import type { ChildLogger } from '../core/Logger.js';
+ import type { LoadProfiler } from '../utils/profiling.js';
++import type { MapSnapshot } from '../game/net/mapAssets.js';
+ 
+ export interface ConnectCtx {
+   serverUrl: string;
+@@ -14,7 +15,7 @@ export interface ConnectCtx {
+   profiler: LoadProfiler;
+   /** The map this client built — a p2p host must hand it to guests through
+    *  gameState or both ends silently live in different worlds. */
+-  bootMap?: import('../game/net/mapAssets.js').MapSnapshot | null;
++  bootMap?: MapSnapshot | null;
+   /** Fleet only: re-resolve the ws target through the matchmaker before a
+    *  reconnect — the room's worker may have re-homed since the last URL. */
+   resolveUrl?: () => Promise<string | null>;
+diff --git a/client/src/networking/p2p/host.ts b/client/src/networking/p2p/host.ts
+index dcd80cab..cd49b9ec 100644
+--- a/client/src/networking/p2p/host.ts
++++ b/client/src/networking/p2p/host.ts
+@@ -21,7 +21,7 @@ import { MessageHandler, type RoomInfo } from '../../../../server_bun/src/Messag
+ import { RateLimiter } from '../../../../server_bun/src/RateLimiter.js';
+ import { validateMessage } from '../../../../server_bun/src/wire.js';
+ import { validatePlayerId } from '../../../../server_bun/src/validation.js';
+-import { isWireFrame, decodePosition, encodeTickPlayer, encodeTickFrame } from '../../../../shared/wire.js';
++import { isWireFrame, decodePosition, encodeTickPlayer, encodeTickFrame , type WirePosition } from '../../../../shared/wire.js';
+ import { wallMs } from '../../../../shared/clockBrand.js';
+ import type { ServerMessage } from '../../../../shared/protocol.js';
+ import { ChildLogger } from '../../core/Logger.js';
+@@ -34,6 +34,9 @@ import { healPool } from '../../../../server_bun/src/healPool.js';
+ import { lgChargeAt } from '../../../../shared/combat.js';
+ import { simNow } from '../../../../server_bun/src/simClock.js';
+ import { getHeightfield } from '../../world/heightmap.js';
++import type { StructureSpec } from '../../../../shared/mapSpec.js';
++import type { InteriorSpec } from '../../../../shared/mapSpec.js';
++import type { MapSpec } from '../../../../shared/mapSpec.js';
+ 
+ const logger = new ChildLogger('P2PHost');
+ 
+@@ -51,7 +54,7 @@ export class P2PHost {
+   private links = new Map<P2PLink, string>(); // link → playerId
+   /** Per-link decode slot — position frames are the host's hottest
+    *  inbound path; consumers copy field-wise within dispatch. */
+-  private decodeScratch = new Map<P2PLink, import('../../../../shared/wire.js').WirePosition>();
++  private decodeScratch = new Map<P2PLink, WirePosition>();
+   private byPlayer = new Map<string, P2PLink>();
+   private pingCycle = 0;
+   /** Stamp of the ping each guest last received — pongs that don't echo
+@@ -121,7 +124,7 @@ export class P2PHost {
+    *  not whatever map they last saved. Called once the boot map resolves;
+    *  gameState map fields read it at handshake. */
+   setMap(map: {
+-    structures?: import('../../../../shared/mapSpec.js').StructureSpec[];
++    structures?: StructureSpec[];
+     arena?: { x: number; z: number; radius: number } | null;
+     ambient?: Record<string, number>;
+     terrain?: string;
+@@ -131,9 +134,9 @@ export class P2PHost {
+     terrainTex?: string;
+     terrainPreset?: number;
+     sky?: string;
+-    interiors?: import('../../../../shared/mapSpec.js').InteriorSpec[];
+-    spawns?: import('../../../../shared/mapSpec.js').MapSpec['spawns'];
+-    teamSpawns?: import('../../../../shared/mapSpec.js').MapSpec['teamSpawns'];
++    interiors?: InteriorSpec[];
++    spawns?: MapSpec['spawns'];
++    teamSpawns?: MapSpec['teamSpawns'];
+     bases?: RoomInfo['bases'];
+   } | null): void {
+     if (!map) {return;}
+@@ -252,14 +255,14 @@ export class P2PHost {
+     logger.info('P2P peer left', { playerId });
+   }
+ 
+-  private freshPosSlot(link: P2PLink): import('../../../../shared/wire.js').WirePosition {
++  private freshPosSlot(link: P2PLink): WirePosition {
+     const slot = {
+       type: 'position',
+       position: { x: 0, y: 0, z: 0 },
+       rotation: { yaw: 0, pitch: 0 },
+       velocity: { x: 0, y: 0, z: 0 },
+       seq: 0, ping: 0,
+-    } as import('../../../../shared/wire.js').WirePosition;
++    } as WirePosition;
+     this.decodeScratch.set(link, slot);
+     return slot;
+   }
+diff --git a/client/src/ui/hud.ts b/client/src/ui/hud.ts
+index 7c6803ad..7ba38e94 100644
+--- a/client/src/ui/hud.ts
++++ b/client/src/ui/hud.ts
+@@ -1,5 +1,5 @@
+ import * as THREE from 'three';
+-import { Minimap } from './minimap.js';
++import { Minimap , type MinimapPlayer } from './minimap.js';
+ import { CommandMap } from './commandmap.js';
+ import { createHudDom } from './hud/dom.js';
+ import { PlayerIndicators } from './hud/indicators.js';
+@@ -364,14 +364,14 @@ export class HUD {
+     this.connBanner.style.display = 'block';
+   }
+ 
+-  updateMinimap(targets: Targetable[], nuggets: Nugget[], pos: THREE.Vector3, yaw: number, birds?: THREE.Vector3[], players?: Iterable<import('./minimap.js').MinimapPlayer>): void {
++  updateMinimap(targets: Targetable[], nuggets: Nugget[], pos: THREE.Vector3, yaw: number, birds?: THREE.Vector3[], players?: Iterable<MinimapPlayer>): void {
+     this.minimap.update(targets, nuggets, pos, yaw, birds, players);
+   }
+ 
+   toggleCommandMap(force?: boolean): void { this.cmdmap.toggle(force); }
+   get commandMapOpen(): boolean { return this.cmdmap.isOpen; }
+ 
+-  updateCommandMap(pos: THREE.Vector3, yaw: number, players: Iterable<import('./minimap.js').MinimapPlayer>,
++  updateCommandMap(pos: THREE.Vector3, yaw: number, players: Iterable<MinimapPlayer>,
+                    flags: Map<TeamId, { home: THREE.Vector3; homeKnown: boolean; carrier: string | null; wirePos: THREE.Vector3 }>): void {
+     this.cmdmap.update(pos, yaw, players, flags);
+   }
+diff --git a/server_bun/src/MessageHandler.ts b/server_bun/src/MessageHandler.ts
+index 61a307d2..16500188 100644
+--- a/server_bun/src/MessageHandler.ts
++++ b/server_bun/src/MessageHandler.ts
+@@ -21,6 +21,7 @@ import type { RoomEventSink } from './roomEvents.ts';
+ import { WORLD_MODEL, spawnPayload, checkIntent } from '../../shared/worldModel.ts';
+ import { wallNow, type WallMs } from './wallClock.ts';
+ import { simNow } from './simClock.ts';
++import type { StructureSpec } from '../../shared/mapSpec.ts';
+ 
+ type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
+ type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
+@@ -49,7 +50,7 @@ export interface RoomInfo {
+   bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } };
+   /** Static structures from the map spec — echoed on gameState so every
+    *  client builds the same base compounds/cover. */
+-  structures?: import('../../shared/mapSpec.ts').StructureSpec[];
++  structures?: StructureSpec[];
+   /** Arena dome from the map spec — center {x,z} + radius. */
+   arena?: { x: number; z: number; radius: number };
+   /** World-state replay frames the room's registered sims emit —
+diff --git a/server_bun/src/Room.ts b/server_bun/src/Room.ts
+index fdc1b989..9687884f 100644
+--- a/server_bun/src/Room.ts
++++ b/server_bun/src/Room.ts
+@@ -20,7 +20,7 @@ import { InfluenceMap } from './influenceMap.ts';
+ import { hmHeight, hmChord, HM_WORLD_SCALE, type Heightfield } from '../../shared/heightfield.ts';
+ import { beamSweepRay } from './beamSweep.ts';
+ import type { BeamContact } from './CombatHandler.ts';
+-import { NOISE_TTL_MS } from '../../shared/wire.ts';
++import { NOISE_TTL_MS , type V4Last } from '../../shared/wire.ts';
+ import { RoomMoveSim } from './RoomMoveSim.ts';
+ import { type MapSpec, resolveMapSpec } from '../../shared/mapSpec.ts';
+ import { MODES, pickTeam, makeScores, type ModeId, type ModeSpec, type TeamScores, type TeamId } from '../../shared/teams.ts';
+@@ -53,6 +53,7 @@ import type { ServerWebSocket } from 'bun';
+ 
+ import { simNow } from './simClock.ts';
+ import { wallNow, wallMs, type WallMs } from './wallClock.ts';
++import type { SessionRegistry } from './sessionRegistry.ts';
+ 
+ export class Room {
+   readonly name: string;
+@@ -83,7 +84,7 @@ export class Room {
+    *  assigned post-ctor by the factory. `graceInRoom` replaces the old
+    *  per-room disconnected map so the countdown can't outlive the
+    *  session it belongs to. */
+-  sessions?: import('./sessionRegistry.ts').SessionRegistry;
++  sessions?: SessionRegistry;
+   /** Watching sockets — no player record, get broadcasts + ticks. */
+   readonly spectators = new Set<string>();
+   /** Room-scoped u16 record ids for v3 tick frames — minted lazily on a
+@@ -100,7 +101,7 @@ export class Room {
+    *  wireId, not by pooled-record slot: slot↔player binding shuffles on
+    *  every join/leave/suppression, and a slot-carried basis would emit a
+    *  mask computed against a different player's values. */
+-  readonly v4Last = new Map<number, import('../../shared/wire.ts').V4Last>();
++  readonly v4Last = new Map<number, V4Last>();
+   nextWireId = 1;
+   readonly sessionTokens = new Map<string, string>();
+   readonly lastSentPositions = new Map<string, { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; jet: number; status: number; sheep: number; t: number }>();
+diff --git a/server_bun/src/RoomProjectiles.ts b/server_bun/src/RoomProjectiles.ts
+index d6b93b36..20f567fd 100644
+--- a/server_bun/src/RoomProjectiles.ts
++++ b/server_bun/src/RoomProjectiles.ts
+@@ -123,7 +123,7 @@ export interface ProjHost {
+     shieldBlock(from: Vec3, to: Vec3, shooterId: string): number | null;
+     /** Live gear hulls — a shell detonates on contact instead of
+      *  phasing through a generator and popping on the wall behind it. */
+-    solidCols?: readonly import('../../shared/ballCollide.ts').StructureCollider[];
++    solidCols?: readonly StructureCollider[];
+   };
+   moveSim?: { structureTop(x: number, z: number): number; transitOf?(playerId: string): number };
+ }
+diff --git a/server_bun/src/botRoster.ts b/server_bun/src/botRoster.ts
+index 9cc2b583..aa978515 100644
+--- a/server_bun/src/botRoster.ts
++++ b/server_bun/src/botRoster.ts
+@@ -10,7 +10,7 @@ import { logger } from './logger.ts';
+ import { WeaponType, getWeaponStats } from '../../shared/weapons.ts';
+ import { CLASS_STATS, classCanFire, type ArmorClass } from '../../shared/botClasses.ts';
+ import { BOT_LOADOUTS, BOT_ALT_SLOTS, WILDCARD_SLOTS, botClassForLoadout, rollWildcard, adaptLoadout, type BotLoadout, type LoadoutSlot } from '../../shared/botLoadouts.ts';
+-import { aimSkillFor } from '../../shared/botSkill.ts';
++import { aimSkillFor , type BotSkillSpec } from '../../shared/botSkill.ts';
+ import { botRand } from '../../shared/botRand.ts';
+ import { BOT_NAMES } from '../../shared/botNames.ts';
+ import { CLASS_FITNESS, ROLE_PRIORITY, STRICT_CLASS, type BotRole } from '../../shared/flagGoals.ts';
+@@ -120,11 +120,11 @@ export class BotRoster {
+   /** Team's difficulty spec from spec.botSkill — a bare tier covers
+    *  the lobby, {alpha,bravo} handicaps sides, and either can be an
+    *  axis mix ({aim:'impossible',move:'easy'}); unset is medium. */
+-  private tierFor(team: string | undefined): import('../../shared/botSkill.ts').BotSkillSpec {
++  private tierFor(team: string | undefined): BotSkillSpec {
+     const s = this.room.spec.botSkill;
+     // A team wrapper always carries alpha or bravo; a bare spec is a
+     // string or an axis mix, which never does.
+-    if (typeof s === 'string' || (s && !('alpha' in s) && !('bravo' in s))) {return s as import('../../shared/botSkill.ts').BotSkillSpec;}
++    if (typeof s === 'string' || (s && !('alpha' in s) && !('bravo' in s))) {return s as BotSkillSpec;}
+     if (s) {return (team === 'alpha' ? s.alpha : s.bravo) ?? 'medium';}
+     return 'medium';
+   }
+diff --git a/server_bun/src/roomFactory.ts b/server_bun/src/roomFactory.ts
+index 3bff5c08..4d69889b 100644
+--- a/server_bun/src/roomFactory.ts
++++ b/server_bun/src/roomFactory.ts
+@@ -12,12 +12,13 @@ import { logger } from './logger.ts';
+ import type { MapCatalog } from './mapCatalog.ts';
+ import type { MapSpec } from '../../shared/mapSpec.ts';
+ import { hmScaled, type Heightfield } from '../../shared/heightfield.ts';
++import type { SessionRegistry } from './sessionRegistry.ts';
+ 
+ export interface RoomFactoryHost {
+   /** Live room index — created rooms register here before returning. */
+   rooms: Map<string, Room>;
+   /** Session lifecycle owner — rooms read grace state through it. */
+-  sessions: import('./sessionRegistry.ts').SessionRegistry;
++  sessions: SessionRegistry;
+   maps: MapCatalog;
+   /** Shared default field (null until the boot heightmap lands). */
+   field(): Heightfield | null;
+diff --git a/server_bun/src/types.ts b/server_bun/src/types.ts
+index ee7701f9..a982b01f 100644
+--- a/server_bun/src/types.ts
++++ b/server_bun/src/types.ts
+@@ -6,6 +6,7 @@ import type { TeamId } from '../../shared/teams.ts';
+ import type { SimMs } from './simClock.ts';
+ import type { WallMs } from './wallClock.ts';
+ import type { ArmorClass } from '../../shared/botClasses.ts';
++import type { WirePosition } from '../../shared/wire.ts';
+ export type {
+   Vec3, Rotation,
+   ClientMessage, ServerMessage,
+@@ -31,7 +32,7 @@ export interface WebSocketData {
+   slowSince?: number;
+   /** Per-socket decode slot for binary position frames — decodePosition
+    *  mutates it in place, consumers copy field-wise within the handler. */
+-  posScratch?: import('../../shared/wire.ts').WirePosition;
++  posScratch?: WirePosition;
+ }
+ 
+ export interface PlayerState {
+diff --git a/server_bun/tests/serverbots.test.ts b/server_bun/tests/serverbots.test.ts
+index 37be0f8b..bd1ce1a7 100644
+--- a/server_bun/tests/serverbots.test.ts
++++ b/server_bun/tests/serverbots.test.ts
+@@ -25,7 +25,7 @@ describe('ServerBots', () => {
+     const room = new Room('t', null, '', resolveMapSpec({ mode: 'nuggets', bots: 6 }));
+     const teams = { alpha: 0, bravo: 0 };
+     for (const p of room.players.getAllPlayers().values()) {
+-      if (p.team) teams[p.team]++;
++      if (p.team) {teams[p.team]++;}
+     }
+     expect(teams.alpha).toBe(3);
+     expect(teams.bravo).toBe(3);
+@@ -46,7 +46,7 @@ describe('ServerBots', () => {
+     const room = new Room('t', null, '', resolveMapSpec({ bots: 1 }));
+     const p = room.players.getPlayer('BOT-VEKTOR-01')!;
+     const before = { ...p.position };
+-    for (let i = 0; i < 20; i++) room.bots.tick(0.05);
++    for (let i = 0; i < 20; i++) {room.bots.tick(0.05);}
+     const moved = Math.hypot(p.position.x - before.x, p.position.z - before.z);
+     expect(moved).toBeGreaterThan(1);
+     expect(p.lastSeq).toBeGreaterThan(0);
+@@ -106,11 +106,10 @@ describe('ServerBots', () => {
+ 
+   it('assigns each bot a loadout perk at spawn', () => {
+     const room = new Room('t', flat, '', resolveMapSpec({ bots: 4, mode: 'dm' }));
+-    const perks = ['featherjets', 'bombardier', 'plated', 'overcharge'];
++    const perks = ['featherjets', 'bombardier', 'plated', 'overcharge', 'vitality'];
+     for (let i = 1; i <= 4; i++) {
+       const p = room.players.getPlayer(`BOT-${BOT_NAMES[i - 1]}-0${i}`)!;
+       expect(perks).toContain(p.perk);
+-      // vitality-style perks would shift maxHealth — ours don't, so just
+       // assert the perk reached both the roster and the move shadow.
+       expect(room.moveSim.simState(p.id)).not.toBeNull();
+     }
+@@ -162,7 +161,7 @@ describe('ServerBots', () => {
+     // An offense teammate escorts; a plated defender holds the stand.
+     const escort = bots.find((b) => b.team === 'alpha' && b !== carrier)!;
+     const defender = bots.find((b) => b.team === 'bravo')!;
+-    if (escort) roles.set(escort.id, 'offense'); // deterministic role for the assert
++    if (escort) {roles.set(escort.id, 'offense');} // deterministic role for the assert
+ 
+     // Alpha bot grabs bravo's flag — park it on the enemy stand.
+     carrier.position = { x: 70, y: 0, z: 0 };
+@@ -186,7 +185,7 @@ describe('ServerBots', () => {
+     }
+     const anchor = bots.find((b) => roles.get(b.id) === 'defense');
+     if (anchor) {
+-      const home = room.flags!.flags.get(anchor.team as 'alpha' | 'bravo')!.home;
++      const {home} = room.flags!.flags.get(anchor.team as 'alpha' | 'bravo')!;
+       expect(flagGoal(anchor)).toMatchObject({ x: home.x, z: home.z });
+     }
+   });
+diff --git a/shared/mapSpec.ts b/shared/mapSpec.ts
+index e653cfa4..bf56d8eb 100644
+--- a/shared/mapSpec.ts
++++ b/shared/mapSpec.ts
+@@ -10,6 +10,10 @@
+ 
+ import type { TeamId } from './teams.ts';
+ import { KIT_HULLS } from './structKits.js';
++import type { BotSkillSpec } from './botSkill.ts';
++import type { DeployKind } from './deployables.ts';
++import type { BotTier } from './botSkill.ts';
++import type { BotSkillMix } from './botSkill.ts';
+ 
+ export interface BallPopulation {
+   /** solo population */
+@@ -57,7 +61,7 @@ export interface MapSpec {
+   /** Difficulty band for spawned bots — one tier for the whole lobby, or
+    *  {alpha,bravo} to handicap sides differently. Per-bot variance rolls
+    *  around the band, so a team's bots aren't clones. */
+-  botSkill?: import('./botSkill.ts').BotSkillSpec | { alpha?: import('./botSkill.ts').BotSkillSpec; bravo?: import('./botSkill.ts').BotSkillSpec };
++  botSkill?: BotSkillSpec | { alpha?: BotSkillSpec; bravo?: BotSkillSpec };
+   /** Spawn weights per ball variant [common, mid, large, elite] — default
+    *  [0.84, 0.07, 0.04, 0.05]. Lets a map go all-elite or fodder-only. */
+   ballMix?: number[];
+@@ -122,9 +126,9 @@ export interface MapSpec {
+ }
+ 
+ export interface DeploySpec {
+-  kind: import('./deployables.ts').DeployKind;
++  kind: DeployKind;
+   pos: Vec3like;
+-  team?: import('./teams.ts').TeamId;
++  team?: TeamId;
+ }
+ 
+ export interface StructureSpec {
+@@ -257,13 +261,13 @@ export function resolveMapSpec(raw: unknown): MapSpec {
+ function parseBotSkill(raw: unknown): MapSpec['botSkill'] {
+   const TIER = new Set(['easy', 'medium', 'hard', 'impossible']);
+   const AXES = ['aim', 'move', 'react', 'jitter', 'temper'] as const;
+-  const one = (v: unknown): import('./botSkill.ts').BotSkillSpec | undefined => {
+-    if (typeof v === 'string') {return TIER.has(v) ? v as import('./botSkill.ts').BotTier : undefined;}
++  const one = (v: unknown): BotSkillSpec | undefined => {
++    if (typeof v === 'string') {return TIER.has(v) ? v as BotTier : undefined;}
+     if (v && typeof v === 'object' && !Array.isArray(v)) {
+-      const mix: import('./botSkill.ts').BotSkillMix = {};
++      const mix: BotSkillMix = {};
+       for (const k of AXES) {
+         const t = (v as Record<string, unknown>)[k];
+-        if (typeof t === 'string' && TIER.has(t)) {mix[k] = t as import('./botSkill.ts').BotTier;}
++        if (typeof t === 'string' && TIER.has(t)) {mix[k] = t as BotTier;}
+       }
+       return Object.keys(mix).length > 0 ? mix : undefined;
+     }

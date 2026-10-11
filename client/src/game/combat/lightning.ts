@@ -86,7 +86,7 @@ function isDescendant(node: THREE.Object3D, root: THREE.Object3D): boolean {
   for (let p: THREE.Object3D | null = node; p; p = p.parent) {if (p === root) {return true;}}
   return false;
 }
-let lgBall: { mesh: THREE.Mesh; mat: THREE.MeshLambertMaterial } | null | undefined;
+let lgBall: { mesh: THREE.Mesh; mat: THREE.MeshLambertMaterial } | null | undefined = undefined;
 function lgBallNode(deps: CombatDeps): { mesh: THREE.Mesh; mat: THREE.MeshLambertMaterial } | null {
   const g = deps.lazyViewModel()?.weapons.get(WeaponType.Lightning);
   if (lgBall !== undefined) {

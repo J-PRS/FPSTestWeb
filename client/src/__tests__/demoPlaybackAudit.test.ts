@@ -421,7 +421,7 @@ function scrubDemo(demo: DemoFile) {
 // File-level differential audit: replay the real clip through real playback,
 // then every spawned entity must have moved (or died) — never froze midair.
 describe.skipIf(!existsSync(CLIP))('recorded clip audit', () => {
-  let demo: ReturnType<typeof deserializeDemo>;
+  let demo = undefined as unknown as ReturnType<typeof deserializeDemo>;
   beforeAll(() => { demo = deserializeDemo(readFileSync(CLIP).buffer); });
 
   it('every spawned ball animates or rests on ground — none hover midair', () => {
@@ -526,7 +526,7 @@ describe.skipIf(!existsSync(CLIP))('recorded clip audit', () => {
 // Crossfire clip carries the lanes henge lacks: 27 creature events, 109 flag,
 // 34 pickup — every lane asserted against real recorded data.
 describe.skipIf(!existsSync(CLIP2))('crossfire clip — remaining lanes on real data', () => {
-  let demo2: DemoFile;
+  let demo2 = undefined as unknown as DemoFile;
   beforeAll(() => { demo2 = deserializeDemo(readFileSync(CLIP2).buffer); });
 
   it('every spawned creature animates or dies — none freeze', () => {

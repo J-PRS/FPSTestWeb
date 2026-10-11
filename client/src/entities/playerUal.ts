@@ -165,8 +165,8 @@ export async function bakeUALClips(model: THREE.Object3D, variant: string, env?:
   // suffixes. Retarget onto the UNSUFFIXED skeleton: baked track names
   // fan out to the sibling sets below, so every skin animates instead
   // of one mesh following clips while the rest hold bind pose.
-  let target: THREE.SkinnedMesh | undefined;
-  let firstSkin: THREE.SkinnedMesh | undefined;
+  let target = undefined as THREE.SkinnedMesh | undefined;
+  let firstSkin = undefined as THREE.SkinnedMesh | undefined;
   model.traverse(o => {
     if (!(o as THREE.SkinnedMesh).isSkinnedMesh) {return;}
     const sm = o as THREE.SkinnedMesh;

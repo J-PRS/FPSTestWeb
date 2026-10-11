@@ -524,7 +524,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   // or after Chrome blocked the page for prior losses — same cure:
   // reload gets a fresh page (and a fresh loss budget). The 1s delay
   // lets a transient GPU churn settle instead of thrash-reloading.
-  let renderer: THREE.WebGLRenderer;
+  let renderer = undefined as unknown as THREE.WebGLRenderer;
   try {
     renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   } catch (error) {
@@ -623,8 +623,8 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
 
   // Seg-row markers — assigned by wireSegRow below; setPixel fires them
   // so auto-quality steps re-light the row too.
-  let markPscale: ((v: number) => void) | undefined;
-  let markPmode: ((v: number) => void) | undefined;
+  let markPscale: ((v: number) => void) | undefined = undefined;
+  let markPmode: ((v: number) => void) | undefined = undefined;
 
   // persist=false for auto-quality steps: the stored keys are the
   // user's chosen baseline; the ladder may degrade below it but never
@@ -766,7 +766,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     // checkMaterialsReady throws inside three when a material added
     // mid-compile never receives a currentProgram — benign, but the
     // rejection was surfacing as a pageerror in probes.
-    warmup: () => { void renderer.compileAsync(scene, camera).catch(() => { /* late-added material */ }); },
+    warmup: () => { renderer.compileAsync(scene, camera).catch(() => { /* late-added material */ }); },
     setPixel,
     setResScale,
     setPostProcessingEnabled,

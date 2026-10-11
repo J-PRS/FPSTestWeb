@@ -412,7 +412,7 @@ export class GameBot extends RemotePlayer {
 
 // Map structures every bot's movement surface resolves against — set from
 // the same map.structures the player's controller gets (net/world.ts).
-let botStructureSpec: readonly StructureSpec[] | undefined;
+let botStructureSpec: readonly StructureSpec[] | undefined = undefined;
 export function setBotStructureSpecs(list: readonly StructureSpec[] | undefined): void {
   botStructureSpec = list;
 }

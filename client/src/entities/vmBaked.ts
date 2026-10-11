@@ -236,7 +236,7 @@ export class VmBaked {
    *  then skipped entirely. */
   private async adoptChainSpin(scene: THREE.Object3D, wt: number, texLoader: THREE.TextureLoader):
     Promise<{ node: THREE.Object3D; barrelMat: THREE.MeshLambertMaterial | null } | null> {
-    let node: THREE.Object3D | undefined;
+    let node: THREE.Object3D | undefined = undefined;
     scene.traverse((o) => { if (!node && o.name.startsWith('barrels')) {node = o;} });
     if (!node) {return null;}
     this.h.chainBarrels = node as THREE.Group;

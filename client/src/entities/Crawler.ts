@@ -101,7 +101,6 @@ export class Crawler implements Targetable, SwarmSlotOwner {
   get disposed(): boolean { return this.dead; }
 
   constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3, uber = false) {
-    void scene; // swarm renders through the shared scene — kept in signature
     this.id = nextTargetId();
     this.uber = uber;
     this.maxHealth = uber ? CRAWLER_HEALTH * 4 : CRAWLER_HEALTH;

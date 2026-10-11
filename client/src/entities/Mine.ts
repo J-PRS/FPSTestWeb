@@ -109,7 +109,6 @@ export class Mine implements Targetable, SwarmSlotOwner {
   private readonly life: number;
 
   constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3, uber = false, life = MINE_LIFE) {
-    void scene;
     this.id = nextTargetId();
     // Uber = "doombloom": a bigger pod with a bigger payload — twice the
     // blast envelope, and it triggers from further out.

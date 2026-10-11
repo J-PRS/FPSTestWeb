@@ -135,11 +135,11 @@ export class CoolShotsPanel {
       this.requestLock();
     });
     act('Download .demo', () => {
-      void this.demoManager.downloadCoolShotById(shot.id);
+      this.demoManager.downloadCoolShotById(shot.id);
     });
     if (shot.mp4Name) {
       act('Download MP4', () => {
-        void exportClip(shot.mp4Name!);
+        exportClip(shot.mp4Name!);
       });
     }
     act('Export MP4', () => {

@@ -10,15 +10,15 @@ import { WebTransportGameTransport } from '../networking/tiersWebTransport.js';
 // mode can be driven deterministically.
 
 function makeStream() {
-  let ctrl!: ReadableStreamDefaultController<Uint8Array>;
+  let ctrl = undefined as unknown as ReadableStreamDefaultController<Uint8Array>;
   const readable = new ReadableStream<Uint8Array>({ start: (c) => { ctrl = c; } });
   const writable = new WritableStream<Uint8Array>({ write: () => Promise.resolve() });
   return { readable, writable, ctrl };
 }
 
 function fakeWt() {
-  let closeResolve!: () => void;
-  let closeReject!: (e: unknown) => void;
+  let closeResolve = undefined as unknown as () => void;
+  let closeReject = undefined as unknown as (e: unknown) => void;
   const closed = new Promise<void>((res, rej) => { closeResolve = res; closeReject = rej; });
   const stream = makeStream();
   const dgrams = makeStream();

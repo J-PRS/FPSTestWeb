@@ -66,7 +66,7 @@ export class MatchJournal {
       const text = await file.text();
       for (const line of text.split('\n')) {
         if (!line.trim()) {continue;}
-        let rec: { winner?: string; players?: { id: string; team?: string; kills?: number; deaths?: number }[] };
+        let rec = undefined as unknown as { winner?: string; players?: { id: string; team?: string; kills?: number; deaths?: number }[] };
         try { rec = JSON.parse(line); } catch { continue; }
         for (const p of rec.players ?? []) {
           const row = agg.get(p.id) ?? { playerId: p.id, matches: 0, wins: 0, kills: 0, deaths: 0 };

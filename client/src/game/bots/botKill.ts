@@ -160,7 +160,7 @@ export function botKilledF(b: TeamBots, killerId: string, bot: GameBot, weapon?:
     // writes each, the pdebris spike under throttle).
     const cam = b.deps.lazyCamera().position;
     const gdx = bot.position.x - cam.x, gdy = bot.position.y + 1 - cam.y, gdz = bot.position.z - cam.z;
-    let parts: { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] | undefined;
+    let parts: { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] | undefined = undefined;
     if (gdx * gdx + gdy * gdy + gdz * gdz < 120 * 120) {
       try { parts = bot.model.deathParts() ?? undefined; }
       catch { /* fall through to generic shards */ }

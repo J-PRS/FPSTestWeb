@@ -189,7 +189,7 @@ describe('applyExplosionForce — balls and nuggets', () => {
       takeDamage: vi.fn((d: number) => { health -= d; if (health <= 0) { (ball as { dead: boolean }).dead = true; return true; } return false; }),
     } as unknown as Targetable & { health: number };
   };
-  let ball: Targetable & { health: number };
+  let ball = undefined as unknown as Targetable & { health: number };
 
   it('ball in radius takes falloff damage; lethal hit reports destroyed', () => {
     const r = mkRig();

@@ -190,9 +190,9 @@ export class DemoPlayer {
     // For forward playback this is a simple forward slice.
     // For reverse playback, incremental re-emission is impossible (events are
     // timestamp-ordered and we're moving backward), so we seek-reconstruct.
-    let newProjEvents: ProjectileEvent[];
-    let newTargetEvents: TargetEvent[];
-    let newRemoteFrames: RemoteFrame[];
+    let newProjEvents: ProjectileEvent[] = [];
+    let newTargetEvents: TargetEvent[] = [];
+    let newRemoteFrames: RemoteFrame[] = [];
     if (this.playbackSpeed < 0) {
       // Reverse playback: reconstruct full state at the new time.
       ({ newProjEvents, newTargetEvents } = pb.reconstructToTime(this, this.currentTime));

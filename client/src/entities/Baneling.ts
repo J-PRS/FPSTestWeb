@@ -126,7 +126,6 @@ export class Baneling implements Targetable, SwarmSlotOwner {
   get disposed(): boolean { return this.dead; }
 
   constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3, uber = false) {
-    void scene;
     this.id = nextTargetId();
     // Uber = "goliath": a wobbling bomb-sack — bigger pop, harder to pop.
     this.uber = uber;

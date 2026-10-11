@@ -143,7 +143,6 @@ export function reconstructSeekMarker(world: PlaybackWorld, ev: TargetEvent, see
   }
   applyPlaybackMarkerEvent(world, ev);
   // fastForward isn't needed — pickups don't move
-  void seekTime;
 }
 
 /** Per-frame flag tick — re-pin a carried flag to its replayed carrier. */

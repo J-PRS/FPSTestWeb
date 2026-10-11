@@ -207,7 +207,7 @@ export class ServerBots {
     for (const id of this.brains.keys()) {
       const p = this.room.players.getPlayer(id);
       if (!p) {continue;}
-      let outcome: EndOutcome;
+      let outcome = undefined as unknown as EndOutcome;
       if (winner === 'draw') {outcome = 'draw';}
       else if (spec?.teams) {
         const margin = Math.abs(this.room.scores.alpha - this.room.scores.bravo);

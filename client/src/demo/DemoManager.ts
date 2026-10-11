@@ -108,7 +108,7 @@ export class DemoManager implements demoIO.DemoIOHost {
     });
     this.coolShotMgr.onChanged = (shots) => this.onCoolShotsChanged?.(shots);
     // IDB vault rehydrate — fire-and-forget; entries land via onChanged.
-    void this.coolShotMgr.loadVault();
+    this.coolShotMgr.loadVault();
 
     // Stamped into every clip — wrong-map playback is the classic demo bug
     this.recorder.setContext({
@@ -177,7 +177,7 @@ export class DemoManager implements demoIO.DemoIOHost {
       this.ui.setVideoRecording(false);
       recChip(false);
       const ctx = this.player.isLoaded ? 'demo' : 'live';
-      void this.video.stop().then(async blob => {
+      this.video.stop().then(async blob => {
         const ext = this.video.mimeType.includes('mp4') ? 'mp4' : 'webm';
         const name = `kribes_${ctx}_${demoIO.timestampStr()}.${ext}`;
         const ok = blob ? await clipSink.saveClip(name, blob) : false;
@@ -186,7 +186,7 @@ export class DemoManager implements demoIO.DemoIOHost {
           // onto the shot (Download MP4 badge) and download the file too.
           const shot = this.coolShotMgr.list.find(s => s.id === this.pendingExportShotId);
           if (shot) {shot.mp4Name = name;}
-          void clipSink.exportClip(name);
+          clipSink.exportClip(name);
         }
         this.pendingExportShotId = null;
         this.ui.setStatus(ok ? 'video saved' : 'video failed');
@@ -195,7 +195,7 @@ export class DemoManager implements demoIO.DemoIOHost {
     }
     // First F9 on a Chromium build: pick the clips folder once and every
     // save after that is silent. Cancelled pickers keep the anchor path.
-    if (!clipSink.hasClipsDir()) {void clipSink.pickClipsDir();}
+    if (!clipSink.hasClipsDir()) {clipSink.pickClipsDir();}
     this.startVideoCapture();
   }
 
@@ -207,7 +207,7 @@ export class DemoManager implements demoIO.DemoIOHost {
       if (!canvas) { this.ui.setStatus('no canvas'); return false; }
       this.video.setCanvas(canvas);
     }
-    void this.video.start(60).then((ok) => {
+    this.video.start(60).then((ok) => {
       if (!ok) { this.ui.setStatus('video unsupported'); return; }
       this.ui.setVideoRecording(true);
       recChip(true);
@@ -230,7 +230,7 @@ export class DemoManager implements demoIO.DemoIOHost {
     const blob = this.video.cutWindow(wallStart, wallEnd);
     if (!blob) {return null;}
     const name = `kribes_coolshot_${demoIO.timestampStr()}_${lifetime.toFixed(1)}s.mp4`;
-    void clipSink.saveClip(name, blob).then(ok => {
+    clipSink.saveClip(name, blob).then(ok => {
       if (ok) {this.ui.setStatus('cool shot mp4 saved');}
     });
     return name;

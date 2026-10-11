@@ -161,7 +161,7 @@ export class VmEnvelopes {
       this.h.fistGroup.position.copy(FIST_OFF);
       return 0;
     }
-    let env: number;
+    let env: number = 0;
     if (t < PUNCH_IN) {env = t / PUNCH_IN;}
     else if (t < PUNCH_IN + hold) {env = 1;}
     else {env = 1 - (t - PUNCH_IN - hold) / PUNCH_OUT;}

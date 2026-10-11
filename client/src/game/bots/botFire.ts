@@ -165,7 +165,7 @@ export class BotFire {
     if (!stats || stats.speed <= 0 || !cfg) {return;}
     const dx = aim.x - bot.position.x, dz = aim.z - bot.position.z;
     const d = Math.hypot(dx, dz) || 1;
-    let pitch: number;
+    let pitch: number = 0;
     if (stats.rayDelay) {
       pitch = 0.15;
     } else {

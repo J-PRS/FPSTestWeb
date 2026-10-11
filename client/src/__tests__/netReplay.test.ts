@@ -46,7 +46,7 @@ function loadRec(text: string) {
 }
 
 describe('netReplay — captured wire stream through real handlers', () => {
-  let h: ReturnType<typeof makeDeps>;
+  let h = undefined as unknown as ReturnType<typeof makeDeps>;
   beforeEach(() => { h = makeDeps(); });
 
   it('replays the duel capture without throwing', () => {

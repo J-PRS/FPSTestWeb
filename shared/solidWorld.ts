@@ -263,7 +263,7 @@ export class SolidWorld {
   /** Least-penetration horizontal push out of a face, plus the velocity
    *  kill into it — sliding along walls stays free. */
   private pushOut(s: MS, c: StructureCollider, lx: number, lz: number, px: number, pz: number): void {
-    let pushX: number, pushZ: number;
+    let pushX = 0, pushZ = 0;
     if (px < pz) {                                  // least-penetration axis
       const dir = lx >= 0 ? 1 : -1;
       pushX = dir * px * c.cos;

@@ -118,7 +118,7 @@ const sparkBatches: BatchMap<THREE.Scene, SparkBatch> = new Map();
 function sparkAlloc(scene: THREE.Scene, n: number): { batch: SparkBatch; base: number } {
   // hasRoom runs alloc() speculatively — -1 means the batch is full,
   // not a side effect: free-list splices are only kept when they fit.
-  let hit: SparkBatch | undefined;
+  let hit: SparkBatch | undefined = undefined;
   let base = -1;
   const batch = acquireBatch(sparkBatches, scene, s => new SparkBatch(s), b => {
     base = b.alloc(n);

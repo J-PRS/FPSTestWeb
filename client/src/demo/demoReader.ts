@@ -274,7 +274,7 @@ function validateHeaderCounts(header: DemoFile['header'], frames: DemoFrame[], p
 function readTrailerSections(r: Reader): DemoHeightmap | undefined {
   if (r.remaining === 0) {return undefined;}
   const count = r.u8();
-  let hmap: DemoHeightmap | undefined;
+  let hmap: DemoHeightmap | undefined = undefined;
   for (let i = 0; i < count; i += 1) {
     r.ensure(1 + 4, 'trailer section header');
     const tag = r.u8();

@@ -519,7 +519,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
         }
       } catch { /* relay unreachable — same failure class as /rooms */ }
     };
-    const refreshLobs = () => { void refreshLobsFn(); };
+    const refreshLobs = () => { refreshLobsFn(); };
     refreshLobs();
 
     // Advanced paths shelved for now — JOIN is browser + quick-join only.

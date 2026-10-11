@@ -72,7 +72,7 @@ export function feedShotPending(waitSec: number): PendingFeed {
     fill.style.transitionDuration = `${Math.max(0.2, sec)}s`;
     fill.style.transform = 'scaleX(0)';
     // Force a reflow so the restarted transition always animates from 0.
-    void fill.offsetWidth;
+    fill.getBoundingClientRect();
     fill.style.transform = 'scaleX(1)';
   };
   arm(waitSec);

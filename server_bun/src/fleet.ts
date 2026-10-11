@@ -71,7 +71,7 @@ function spawnWorker(id: string, port: number): void {
   logger.info(`[fleet] worker ${id} spawned on :${port} (pid ${proc.pid})`);
   // Surviving a beat interval counts as healthy — crash-looping children
   // back off exponentially (cap 60s) instead of respawn-storming.
-  void proc.exited.then((code) => {
+  proc.exited.then((code) => {
     const lived = wallNow() - spawnedAt;
     const streak = (crashStreak.get(id) ?? 0);
     crashStreak.set(id, lived > FleetDirectory.BEAT_STALE_MS ? 0 : streak + 1);
@@ -140,7 +140,7 @@ Bun.serve({
         if (!/^[a-z0-9_-]{0,16}$/.test(mode) || !/^[a-z0-9_-]{0,32}$/.test(map)) {
           return corsResponse('Bad mode/map', { status: 400 });
         }
-        let best: LobbyRow | undefined;
+        let best: LobbyRow | undefined = undefined;
         for (const [id, rows] of lobbyRows) {
           if (!dir.workers.get(id)?.up) {continue;}
           for (const r of rows) {

@@ -25,7 +25,7 @@ describe('ServerBots', () => {
     const room = new Room('t', null, '', resolveMapSpec({ mode: 'nuggets', bots: 6 }));
     const teams = { alpha: 0, bravo: 0 };
     for (const p of room.players.getAllPlayers().values()) {
-      if (p.team) teams[p.team]++;
+      if (p.team) {teams[p.team]++;}
     }
     expect(teams.alpha).toBe(3);
     expect(teams.bravo).toBe(3);
@@ -46,7 +46,7 @@ describe('ServerBots', () => {
     const room = new Room('t', null, '', resolveMapSpec({ bots: 1 }));
     const p = room.players.getPlayer('BOT-VEKTOR-01')!;
     const before = { ...p.position };
-    for (let i = 0; i < 20; i++) room.bots.tick(0.05);
+    for (let i = 0; i < 20; i++) {room.bots.tick(0.05);}
     const moved = Math.hypot(p.position.x - before.x, p.position.z - before.z);
     expect(moved).toBeGreaterThan(1);
     expect(p.lastSeq).toBeGreaterThan(0);
@@ -106,11 +106,10 @@ describe('ServerBots', () => {
 
   it('assigns each bot a loadout perk at spawn', () => {
     const room = new Room('t', flat, '', resolveMapSpec({ bots: 4, mode: 'dm' }));
-    const perks = ['featherjets', 'bombardier', 'plated', 'overcharge'];
+    const perks = ['featherjets', 'bombardier', 'plated', 'overcharge', 'vitality'];
     for (let i = 1; i <= 4; i++) {
       const p = room.players.getPlayer(`BOT-${BOT_NAMES[i - 1]}-0${i}`)!;
       expect(perks).toContain(p.perk);
-      // vitality-style perks would shift maxHealth — ours don't, so just
       // assert the perk reached both the roster and the move shadow.
       expect(room.moveSim.simState(p.id)).not.toBeNull();
     }
@@ -162,7 +161,7 @@ describe('ServerBots', () => {
     // An offense teammate escorts; a plated defender holds the stand.
     const escort = bots.find((b) => b.team === 'alpha' && b !== carrier)!;
     const defender = bots.find((b) => b.team === 'bravo')!;
-    if (escort) roles.set(escort.id, 'offense'); // deterministic role for the assert
+    if (escort) {roles.set(escort.id, 'offense');} // deterministic role for the assert
 
     // Alpha bot grabs bravo's flag — park it on the enemy stand.
     carrier.position = { x: 70, y: 0, z: 0 };
@@ -186,7 +185,7 @@ describe('ServerBots', () => {
     }
     const anchor = bots.find((b) => roles.get(b.id) === 'defense');
     if (anchor) {
-      const home = room.flags!.flags.get(anchor.team as 'alpha' | 'bravo')!.home;
+      const {home} = room.flags!.flags.get(anchor.team as 'alpha' | 'bravo')!;
       expect(flagGoal(anchor)).toMatchObject({ x: home.x, z: home.z });
     }
   });
