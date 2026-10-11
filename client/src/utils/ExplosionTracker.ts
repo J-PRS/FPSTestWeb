@@ -13,6 +13,8 @@ export class ExplosionTracker {
   private recentExplosions: ExplosionInfo[] = [];
 
   addExplosion(pos: THREE.Vector3, force: number, shooterId: string): void {
+    // A poisoned entry leaks NaN into gib impulse math at kill time.
+    if (!Number.isFinite(pos.x + pos.y + pos.z + force)) return;
     this.recentExplosions.push({
       position: pos.clone(),
       force,
