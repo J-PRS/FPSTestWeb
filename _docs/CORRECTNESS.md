@@ -439,6 +439,14 @@ violation instead of a symptom hunt.
   the grab is planar+6y (a jetpack flyover isn't a touch),
   reach scales with the pickup perk, and `prevPos` prunes
   departed ids so stale anchors can't span idle time.
+- **Heal/repair lanes (verified sealed):** heal is self-only +
+  `isFinite` + ≤25/call clamp + 1.5s cadence (a refused claim
+  doesn't reset it); team rooms require `healCredit` the server
+  granted at gem-touch (no free regen); `forceSend` keeps the
+  health write from being delta-suppressed. Repair claims are
+  rejected outright in simmed mode (`acceptClaims===false`) —
+  the server re-casts the weld target off the honest ray, so
+  the claim's targetId is never trusted.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
