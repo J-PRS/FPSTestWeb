@@ -635,6 +635,13 @@ violation instead of a symptom hunt.
   never register (a wedged-invisible replica can't stale-skip
   respawns), and `sk` re-credits missed retarget quanta so
   clients that lost edges don't drift the replay clock.
+- **Parity ledger bounds (verified sealed):** diagnostic rows
+  cap at 24; `dmgEchoes` bound 32 + 900ms settle sweep;
+  `shellFates` bound 64 + lazy 15s prune (fates older than the
+  confirm window can't match a live echo); `noteShellFate`
+  drops non-finite blast points at the entry — a NaN `srvAt`
+  would NaN every divergence diff and render as a bogus "far"
+  ghost in the dump.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
