@@ -33,7 +33,10 @@ export interface Heightfield {
   worldScale?: number;
 }
 
-export function hmHeight(f: Heightfield, wx: number, wz: number): number {
+/** The RAW bilinear field read — internal. Ground truth for physics is
+ *  the chord below; callers that need the continuous field are rare and
+ *  should say so explicitly. */
+function hmField(f: Heightfield, wx: number, wz: number): number {
   const N = f.size;
   const ws = f.worldScale ?? HM_WORLD_SCALE;
   const u = (((wx / ws) % 1.0) + 1.0) % 1.0 * N - 0.5;
@@ -54,18 +57,24 @@ export function hmHeight(f: Heightfield, wx: number, wz: number): number {
   return (h / HM_DIVISOR) * HM_HEIGHT_SCALE * (f.heightScale ?? 1);
 }
 
-/** The RENDERED surface height — the client's level-0 clipmap draws each
- *  5m quad as two flat triangles split on the (x0+s,z0)↔(x0,z0+s)
- *  diagonal (world/terrain.ts getRenderedHeight; CLIPMAP_LEVELS[0]
- *  spacing = CPU_STEP = 5). The smooth field sags below that chord in
- *  gullies, so bodies clamped to hmHeight alone render under the mesh.
- *  Ground clamps that must match what the player sees take
- *  max(hmHeight, hmChord). */
+/** Ground height = the RENDERED surface — the client's level-0 clipmap
+ *  draws each 5m quad as two flat triangles split on the (x0+s,z0)↔
+ *  (x0,z0+s) diagonal, and its lattice is world-anchored (the clipmap
+ *  origin snaps to spacing multiples), so this chord is a fixed,
+ *  deterministic surface that IS what every client renders inside the
+ *  fine LOD ring. Physics samples this — not the smooth field — so feet,
+ *  shots, and spawns land exactly on the drawn mesh. It also quantizes
+ *  away sub-texel terracing in 8-bit heightmaps. The old bilinear field
+ *  survives as hmField for chord corner taps. */
+export function hmHeight(f: Heightfield, wx: number, wz: number): number {
+  return hmChord(f, wx, wz);
+}
+
 export function hmChord(f: Heightfield, wx: number, wz: number): number {
   const s = CPU_STEP;
   const x0 = Math.floor(wx / s) * s, z0 = Math.floor(wz / s) * s;
-  const h00 = hmHeight(f, x0, z0), h10 = hmHeight(f, x0 + s, z0);
-  const h01 = hmHeight(f, x0, z0 + s), h11 = hmHeight(f, x0 + s, z0 + s);
+  const h00 = hmField(f, x0, z0), h10 = hmField(f, x0 + s, z0);
+  const h01 = hmField(f, x0, z0 + s), h11 = hmField(f, x0 + s, z0 + s);
   const tx = (wx - x0) / s, tz = (wz - z0) / s;
   return tx + tz <= 1
     ? h00 + (h10 - h00) * tx + (h01 - h00) * tz

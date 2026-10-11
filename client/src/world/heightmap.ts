@@ -134,6 +134,9 @@ function hmSample(x: number, z: number): number {
   return hmData![idx] / TERRAIN_HEIGHTMAP_DIVISOR; // R channel 0..1
 }
 
+// Raw bilinear read — the FIELD, not the collider. Ground truth is the
+// 5m L0 chord in sampleHeight (see shared/heightfield.ts hmHeight —
+// physics on both ends now collides with the drawn clipmap surface).
 function sampleHeightmap(wx: number, wz: number): number {
   // GPU texture2D + LinearFilter evaluates at texel CENTERS — texel i sits at
   // (i + 0.5)/N in UV space. Sample identically on CPU (u shifted by -0.5) or
@@ -160,8 +163,18 @@ function sampleHeightmap(wx: number, wz: number): number {
 // clamps: a wrong clamp reads as sim divergence → corrections. The
 // bilinear itself is ~20 ops; the callers' sweep budgets are the lever.
 export function sampleHeight(wx: number, wz: number): number {
-  if (hmData) {return sampleHeightmap(wx, wz);}
-  return 0;
+  if (!hmData) {return 0;}
+  // The L0 clipmap chord (two flat triangles per 5m cell, world-anchored
+  // lattice) — mirrors shared/heightfield.ts hmChord so prediction lands
+  // on the same surface the server sims AND the GPU draws.
+  const s = 5.0;
+  const x0 = Math.floor(wx / s) * s, z0 = Math.floor(wz / s) * s;
+  const h00 = sampleHeightmap(x0, z0), h10 = sampleHeightmap(x0 + s, z0);
+  const h01 = sampleHeightmap(x0, z0 + s), h11 = sampleHeightmap(x0 + s, z0 + s);
+  const tx = (wx - x0) / s, tz = (wz - z0) / s;
+  return tx + tz <= 1
+    ? h00 + (h10 - h00) * tx + (h01 - h00) * tz
+    : h11 + (h10 - h11) * (1 - tz) + (h01 - h11) * (1 - tx);
 }
 
 // Visual-only cached read: debris shards / ambient particles ask for the

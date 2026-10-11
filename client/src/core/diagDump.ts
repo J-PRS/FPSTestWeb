@@ -4,6 +4,7 @@
 // the rolling battle log sections read from.
 
 import { aimProbe } from './aimProbe.js';
+import { terrainDivLine } from '../world/terrain.js';
 import { staleLine } from './staleFiles.js';
 import { diagLines as netProbeLines } from '../debug/netProbe.js';
 import { parityLines } from '../game/parity.js';
@@ -45,6 +46,10 @@ export function diagLines(ctx: StateDebugContext, verbose = false): string[] {
     `local: dead=${p.isDead} hp=${p.health} pos=${fmt(p.pos)} vel=${fmt(p.vel)} yaw=${p.yaw.toFixed(2)} pitch=${p.pitch.toFixed(2)} onGround=${p.onGround}`,
     `lastSentPos: ${fmt(ctx.getLastSentPos())}`,
   ];
+  // Collider-vs-drawn-surface divergence around the player — the F1
+  // overlay's numbers. Chord undercut reads as a positive mean bias.
+  const td = terrainDivLine();
+  if (td) lines.push(td);
   pushWorld(lines, ctx.world);
   if (verbose) pushRender(lines);
   pushPerf(lines);
