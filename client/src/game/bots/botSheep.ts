@@ -56,7 +56,8 @@ export class SheepMeter {
     foe?: boolean; ignoring?: boolean; hasDest?: boolean; dest?: SheepVec;
     jetting?: boolean; repair?: boolean; busy?: boolean;
   } = {}): void {
-    const height = Math.max(0, bot.pos.y - terrain.getHeight(bot.pos.x, bot.pos.z));
+    const sh = terrain.getHeight(bot.pos.x, bot.pos.z);
+    const height = Number.isFinite(sh) ? Math.max(0, bot.pos.y - sh) : 0;
     const v = this.core.tick(bot.playerId, {
       pos: bot.pos,
       vel: bot.vel,

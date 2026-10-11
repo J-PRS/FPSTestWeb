@@ -75,7 +75,8 @@ export class RabbitBridge {
   private drop(pos: THREE.Vector3): void {
     this.state = 'dropped';
     this.carrier = null;
-    this.pos.set(pos.x, this.d.lazyTerrain().getHeight(pos.x, pos.z), pos.z);
+    const dropG = this.d.lazyTerrain().getHeight(pos.x, pos.z);
+    this.pos.set(pos.x, Number.isFinite(dropG) ? dropG : pos.y, pos.z);
     this.flyVel.set(0, 3, 0); // same tumble pop RoomFlags.loose gives
     this.group.position.copy(this.pos);
     this.group.visible = true;
@@ -128,7 +129,7 @@ export class RabbitBridge {
       this.flyVel.y += GRAVITY * dt;
       this.pos.addScaledVector(this.flyVel, dt);
       const gy = this.d.lazyTerrain().getHeight(this.pos.x, this.pos.z);
-      if (this.pos.y <= gy) {
+      if (Number.isFinite(gy) && this.pos.y <= gy) {
         this.pos.y = gy;
         this.flyVel.y = this.flyVel.y < -2 ? -this.flyVel.y * 0.3 : 0;
         const bleed = Math.max(0, 1 - 4 * dt);

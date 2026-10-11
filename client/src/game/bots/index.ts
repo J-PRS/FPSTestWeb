@@ -566,16 +566,20 @@ export class TeamBots {
   spawnSpot(team: string): THREE.Vector3 {
     const terrain = this.deps.lazyTerrain();
     const pool = this.mapSpec?.teamSpawns?.[team as TeamId] ?? this.mapSpec?.spawns;
+    const floorAt = (x: number, z: number): number => {
+      const g = terrain.getHeight(x, z);
+      return Number.isFinite(g) ? g : 0;
+    };
     if (pool?.length) {
       const p = pool[Math.floor(Math.random() * pool.length)]!;
       const jx = (Math.random() - 0.5) * 8, jz = (Math.random() - 0.5) * 8;
-      return new THREE.Vector3(p.x + jx, terrain.getHeight(p.x + jx, p.z + jz) + EYE, p.z + jz);
+      return new THREE.Vector3(p.x + jx, floorAt(p.x + jx, p.z + jz) + EYE, p.z + jz);
     }
     const player = this.deps.lazyPlayer();
     const a = Math.random() * Math.PI * 2;
     const r = 20 + Math.random() * 40;
     const sx = player.pos.x + Math.cos(a) * r, sz = player.pos.z + Math.sin(a) * r;
-    return new THREE.Vector3(sx, terrain.getHeight(sx, sz) + EYE, sz);
+    return new THREE.Vector3(sx, floorAt(sx, sz) + EYE, sz);
   }
 
   /** Terrain swapped under the roster — re-seat every live bot on its

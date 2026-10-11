@@ -259,6 +259,9 @@ export class GameBot extends RemotePlayer {
           // a Map reset is one alloc, per-entry LRU bookkeeping is worse.
           if (gyc.size > 2048) {gyc.clear();}
           v = ctx.terrain.getHeight(x, z);
+          // A NaN floor sample memoized here would poison every later
+          // trajectory that crosses the cell — flat-zero instead.
+          if (!Number.isFinite(v)) {v = 0;}
           gyc.set(k, v);
         }
         return v;
