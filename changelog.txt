@@ -1,3 +1,4 @@
+2026-10-10 - correctness: local energy floor + inv(local-energy-bounds) — skill drains can overshoot between frames; pool mirrors the server law [0,cap]
 2026-10-10 - correctness: inv(pool-positive) at respawn (a correct formula can still yield a dead pool) + inv(energy-bounds) at the tick clamp (over-cap = a write path skipped the clamp)
 2026-10-10 - correctness: inv(flag-above-ground) at flag settle — a rest landing under the drawn surface names the violation at birth like spawn/teleport seeds
 2026-10-11 - Bot energy regen matches the player rule: offline bots recharged only while onGround, so a jetting bot fell out of the sky and waited dead-stick for fuel — fuelTick now regens whenever off the jet (airborne too), suppressed only by held cloak/shield/mend channels like Player.tickEnergy

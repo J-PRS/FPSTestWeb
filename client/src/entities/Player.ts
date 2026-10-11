@@ -615,6 +615,11 @@ export class Player {
     // NaN is sticky through Math.max/min — a poisoned tank rides forever.
     // Drain to empty once and let regen rebuild, same rule as the server.
     if (!Number.isFinite(this.energy)) {this.energy = 0;}
+    // Pool law mirrors the server: floor at empty (a skill drain can
+    // overshoot between frames), over-cap means a write skipped its clamp.
+    this.energy = Math.max(0, this.energy);
+    inv('local-energy-bounds', this.energy <= this.energyCap + 0.01,
+      { e: +this.energy.toFixed(1), cap: +this.energyCap.toFixed(1) });
     if (this.energy <= 0) {this.jetLockT = ENERGY.jetLockout;}
 
     // Regenerator perk â€” MP regenerates in the server tick; offline we
