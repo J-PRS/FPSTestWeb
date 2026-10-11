@@ -1,3 +1,4 @@
+2026-10-10 - correctness: NaN containment on the lag-comp rewind path — client-claimed renderLag/renderLagMs finite-checked before clamping (Math.max(NaN,0)=NaN whiffed every hit validation), pushRewindSample refuses non-finite positions
 2026-10-10 - correctness: local pool NaN containment — inv(local-health-finite) snaps a poisoned pool to full + energy drains to empty; NaN is sticky through Math.max/min so both pools self-heal once instead of riding forever
 2026-10-10 - correctness: energy-pool NaN containment — grantEnergy/drainEnergy refuse non-finite amounts (Math.max(0, NaN) = NaN, one poison write kills jets/skills forever); tick clamp self-heals a NaN pool to empty instead of riding it
 2026-10-10 - correctness: inv(wire-row-coherent) at tick egress — a broadcast row claiming alive with hp<=0 is a lie even when finite; dead write pairs are atomic so it can never legitimately occur
