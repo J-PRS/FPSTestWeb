@@ -392,6 +392,13 @@ violation instead of a symptom hunt.
   free-run between sparse join-window segments — the documented
   catch-all regime, self-correcting per segment, not a steady
   divergence. Canary working as designed.
+- **Wire epoch hygiene (verified sealed):** `lastTickSeq`/
+  `lastHitSeq` reset on reconnect (`resetForReconnect`) AND inside
+  `handleGameState` — a room hop without reconnect can't freeze
+  remotes behind the old room's watermarks. `wireIds` +
+  `tickPool.byId` cleared per epoch so a reassigned wireId can't
+  inherit another player's decoded baseline. Protocol mismatch
+  reloads with a storage-bounded budget (never loops).
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
