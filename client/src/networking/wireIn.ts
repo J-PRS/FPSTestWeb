@@ -400,6 +400,7 @@ export class WireIn {
     // keeps the wounded/dead truth tickUpdate already delivered.
     if (!isNew) { delete patch.health; delete patch.isDead; }
     else patch.velocity = { x: 0, y: 0, z: 0 };
+    if (patch.health !== undefined && !Number.isFinite(patch.health)) delete patch.health;
     this.h.upsertRemotePlayer(data.playerId, patch);
     if (isNew) this.h.onPlayerJoined?.(data.playerId, data.position, data.rotation);
   }
@@ -439,7 +440,11 @@ export class WireIn {
     // waiting for the hash-diff heal. patchRemotePlayer never mints: a
     // hit for a departed/never-joined target drops instead of leaving a
     // phantom roster entry hashing client-only forever.
-    this.h.patchRemotePlayer(data.targetId, { health: data.health, isDead: false });
+    if (Number.isFinite(data.health)) {
+      this.h.patchRemotePlayer(data.targetId, { health: data.health, isDead: false });
+    } else {
+      this.h.patchRemotePlayer(data.targetId, { isDead: false });
+    }
     this.h.onPlayerHit?.(data.shooterId, data.targetId, data.damage, data.health, data.armor);
   }
 

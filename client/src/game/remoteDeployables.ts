@@ -80,6 +80,7 @@ export class RemoteDeployables {
   spawn(id: number, spec: { owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; hp?: number; armor?: number; team?: string }): void {
     const { owner, kind, pos, hp, armor, team } = spec;
     if (kind === 'nugget') {return;} // mints pickups, never a deploySpawn
+    if (!Number.isFinite(pos.x + pos.y + pos.z + (hp ?? 0) + (armor ?? 0))) {return;}
     // Server deploy ids are per-room counters — after a room hop a stale
     // replica can sit on a reused id with a different kind/owner. Same-id
     // same-kind is the normal spawn-echo dedupe; anything else is stale.
