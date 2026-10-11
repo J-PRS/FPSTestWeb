@@ -34,6 +34,7 @@ import { RoomDeployables } from './RoomDeployables.ts';
 import { RoomProjectiles } from './RoomProjectiles.ts';
 import type { PlayerState, Vec3, ClientMessage } from './types.ts';
 import { CLASS_STATS, classCapsule, type ArmorClass } from '../../shared/botClasses.ts';
+import { inv, setInvariantSink } from '../../shared/invariants.ts';
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
@@ -164,7 +165,10 @@ export class Room {
       // at the default eye, and the record's view was the stale one.
       const eye = this.moveSim.eyeOf(p.id) ?? classCapsule(p.armorClass as ArmorClass).eye;
       const terrain = Math.max(hmHeight(this.field, p.position.x, p.position.z), hmChord(this.field, p.position.x, p.position.z));
-      if (p.position.y - eye >= terrain - 0.5) continue;
+      // The ground law as an invariant — a body under the surface it
+      // renders on is a NAMED violation, never a silent rescue.
+      if (inv('bot-below-ground', p.position.y - eye >= terrain - 0.5,
+        { id: p.id, y: +p.position.y.toFixed(1), eye, terrain: +terrain.toFixed(1), dbg: this.moveSim.unburyDebug(p.id) })) continue;
       // First rescues carry the autopsy: who sank, how deep vs field vs
       // chord, and what the move shadow thought the ground was — a
       // recurring unbury means a sim/writer is still leaking under.
@@ -303,6 +307,9 @@ export class Room {
   mapSrc = '';
 
   constructor(name: string, field: Heightfield | null, mode = '', spec?: MapSpec, moveAuthority = false) {
+    // Invariant violations land on the room health counters — /metrics
+    // exposes them as inv:<name> totals next to the existing tallies.
+    setInvariantSink((n, ctx) => { this.healthBump(`inv:${n}`); logger.warn(`INVARIANT ${n}`, ctx ?? {}); });
     this.name = name;
     this.field = field;
     this.moveAuthority = moveAuthority && !!field;

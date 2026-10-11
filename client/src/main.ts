@@ -1,5 +1,7 @@
 import './core/polyfills.js'; // toSorted etc. — older engines
 import * as THREE from 'three';
+import { setInvariantSink } from '../../shared/invariants.js';
+import { glitch } from './core/fxDiag.js';
 
 import {
   CAMERA_FOV, CAMERA_NEAR, CAMERA_FAR,
@@ -171,6 +173,9 @@ let soloSpec: { spec: MapSpec; map: MapSnapshot } | null = null;
 
 async function init(): Promise<void> {
   profiler.markTime('initStart');
+  // Invariant violations land in the glitch census — a named truth
+  // breaking shows in the alt+q dump, never crashes the match.
+  setInvariantSink(glitch);
   watchDeployVersion();
   networkManager = new NetworkManager();
   networkManager.armWireQueue();
