@@ -131,6 +131,11 @@ violation instead of a symptom hunt.
   `ballCombat.knock`. `RoomDeployables.applyBlast` already guarded the
   dmg line; client leaves (`applyKnockback`/`applyPull`) gate at the
   impulse write.
+- **Spawn/shadow seeding:** `pick()` results finite-checked at join and
+  respawn (fallback: lastValid anchor / mid-map drop — a NaN spawn
+  broadcasts an invisible player). Shadow-state writes sealed:
+  `applyImpulse`, `resync`, reseat `setState` all drop non-finite at
+  the write — the sim-pos/sim-vel invs stay monitors, not fixes.
 - **Trust boundary:** `MoveSim.setInput` clamps forward/right to [-1,1]
   finite and coerces booleans — doctored magnitude can't speedhack.
 - **Clock domains:** `SimMs` vs `WallMs` audited — `forceSendUntil` read
