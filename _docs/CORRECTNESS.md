@@ -84,6 +84,30 @@ violation instead of a symptom hunt.
 - **Verdict-complete:** every WIRE table claim returns a verdict or
   reject; the three silent shotFired declines (dead shooter, dry belt,
   spawn refuse) now reject with shotId.
+- **Drawn-surface floor (2026-10-10):** every rest/contact read floors on
+  `max(hmHeight, hmChord)` — bot shadows, nuggets, dropped flags,
+  deployables `groundY`, all creature families + spawn. Left on
+  `hmHeight` deliberately: human movers (client predicts on it) and
+  bot-routing LOS/lip probes (navigation, not rendering).
+- **Corpses hold no channels:** server strips status/ski/jet at the kill
+  edge; `corpse-no-channels` inv on egress rows; `applyStatusVisuals`
+  zeroes dead rows' status words; `playDeath` clears auras + decloaks
+  (covers bots via botEnergy, which bypasses the wire path).
+- **Dead-claim gates:** every claim path refuses corpses —
+  inputMove/teleport, shotFired (verdict), melee/slam, env credit/burst,
+  deploy plant, flag throw. `respawn` is the deliberate exception.
+- **Respawn pipeline:** all kills converge on `creditKill` → `schedule`;
+  reconnect/restore re-arms via `ensure`/`ensureScheduled`; timer body
+  try/catch so a throw can't strand a corpse; held (die+spectate)
+  honored; `respawnNow` can't skip a live countdown; `tick()` drains
+  dueAt for non-networked drivers.
+- **Damage funnel:** `damage-finite` inv asserts finite + non-negative at
+  `applyHit` entry; armor soak bounded by `min(armor, …)` so it can't
+  over-drain; health clamps at 0 on kill.
+- **Encoding:** positions pack i32×0.04 with explicit clamp (±85Mm — the
+  ±1310m "parked" desync is the documented prior bug); vel/rot/health
+  all clamp; `handleTeleport` reseats `lastValid*` so a resync can't
+  resume from a corpse-side anchor.
 
 ## When adding a system
 
