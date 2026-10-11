@@ -193,6 +193,11 @@ violation instead of a symptom hunt.
 - **Join/roster coherence:** `hasReceivedPosition` gates in-world
   membership (unreported joiners spawn no ghost mesh); `joinAnnounced`
   once-per-record; wireIds ship inline in the join snapshot.
+- **Mutation during iteration (verified):** every entity list sweeps
+  backwards for in-place removal (`updateDeadList`, balls, species
+  loop); spawns land before the sweep, never inside it; `speciesAggro.
+  _candList` clears before refill; `lodAcc` is a WeakMap — entries die
+  with the entity, no leak on any removal path.
 - **Room-switch lane:** dead players denied before `roomFor` (can't
   dodge respawn or churn map specs); cooldown; `correctionGraceUntil`
   mutes in-flight stragglers; pending class/perk rides; session
