@@ -27,6 +27,7 @@ export function wirePickups(ctx: NetCtx): void {
   // same map; kind is all it needs (id is the key).
   deps.world.netPickups = pickupMeshes as Map<number, { kind: PickupKind }>;
   const addPickup = (id: number, pos: { x: number; y: number; z: number }, kind: PickupKind = 'gem') => {
+    if (!Number.isFinite(pos.x + pos.y + pos.z)) {deps.logger.warn(`pickup #${id} dropped: non-finite position`); return;}
     deps.lazyDemoManager?.()?.recordPickupSpawned(id, kind, pos);
     const live = pickupMeshes.get(id);
     if (live && live.kind !== kind) {
