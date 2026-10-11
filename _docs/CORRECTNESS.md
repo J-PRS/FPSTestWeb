@@ -123,6 +123,14 @@ violation instead of a symptom hunt.
   lanes: gameState remote reseat, sensorPing targets, teamScore/
   ffaScore scoreboard state, roster match-meta (scores/ffaScores/
   matchEndsAt), restored yaw/pitch on local reseat.
+- **Radius-skip NaN shape:** `if (d >= radius) continue` is FALSE on a
+  NaN distance — the guard fails into the write. Every blast/knock
+  funnel now finite-gates its center at entry: `processAOE` (one gate
+  covers splash/plate/heal/flag/pickup/prey fan-out), `RoomFlags.
+  throwFor`/`loose`/`knock`, `RoomPickups.knock`, `CreatureSim.knock`,
+  `ballCombat.knock`. `RoomDeployables.applyBlast` already guarded the
+  dmg line; client leaves (`applyKnockback`/`applyPull`) gate at the
+  impulse write.
 - **Trust boundary:** `MoveSim.setInput` clamps forward/right to [-1,1]
   finite and coerces booleans — doctored magnitude can't speedhack.
 - **Clock domains:** `SimMs` vs `WallMs` audited — `forceSendUntil` read
