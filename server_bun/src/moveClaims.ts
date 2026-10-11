@@ -133,6 +133,13 @@ export class MoveClaims {
    *  force-accept streak); true accepts, including the >10 force-accept
    *  resync for a client persisting past corrections. */
   private plausible(playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'position' }>, now: number): boolean {
+    // NaN math fails every comparison below — which would LOOK like a
+    // reject, except the first report seeds the anchor unconditionally
+    // (line ~140) and authority mode feeds the sim after this returns
+    // true. One non-finite claim would poison both.
+    if (!Number.isFinite(msg.position.x + msg.position.y + msg.position.z
+        + (msg.velocity?.x ?? 0) + (msg.velocity?.y ?? 0) + (msg.velocity?.z ?? 0)
+        + msg.rotation.yaw + msg.rotation.pitch)) return false;
     const dt = Math.max((now - player.lastPosCheckTime) / 1000, 0.05); // floor: bursts of queued packets report ~1ms gaps
     player.lastPosCheckTime = wallMs(now);
     if (!player.hasReceivedPosition || !player.lastPosCheckPos) {

@@ -455,6 +455,7 @@ export class CombatHandler {
   handleSlam(playerId: string, msg: Extract<ClientMessage, { type: 'slam' }>): ClaimVerdict {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) { this.hb('drop.deadSlam'); return 'shooter dead'; }
+    if (!Number.isFinite(msg.position.x + msg.position.y + msg.position.z)) { this.hb('drop.slamNonFinite'); return 'landing non-finite'; }
     const dx = msg.position.x - player.position.x, dy = msg.position.y - player.position.y, dz = msg.position.z - player.position.z;
     const d2 = dx * dx + dy * dy + dz * dz;
     if (d2 > 60 * 60) { this.hb('drop.slamFar'); this.reject(playerId, 'Slam', `landing ${Math.sqrt(d2).toFixed(0)}m from shadow`, undefined, WeaponType.Slam); return `landing ${Math.sqrt(d2).toFixed(0)}m from shadow`; }

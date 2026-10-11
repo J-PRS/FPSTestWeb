@@ -138,6 +138,7 @@ export class RoomDeployables {
     const k = kind as DeployKind;
     // cap-0 kinds are map-authored only — a client can't plant a generator.
     if (DEPLOY_ITEMS[k].cap === 0) return 'badkind';
+    if (!Number.isFinite(pos.x + pos.y + pos.z)) return 'badpos';
     // Pack gear costs belt charges — the same nugget pool the throws drink
     // from, so a builder pays real economy for every stand it fortifies.
     if (player.beltCharges < DEPLOY_ITEMS[k].cost) {
