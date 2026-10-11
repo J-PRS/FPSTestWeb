@@ -544,6 +544,7 @@ export class Terrain {
   private colliderWire: THREE.LineSegments | null = null;
   private colliderWireCx = NaN;
   private colliderWireCz = NaN;
+  private colliderWireField: object | null = null;
   private debugWireOn = false;
   // Last player pos seen via setDebugWire — feeds the Alt+Q divergence
   // census even when the overlay itself is off.
@@ -566,14 +567,18 @@ export class Terrain {
     if (!on) { return; }
     const hf = getHeightfield();
     if (!hf || !Number.isFinite(px)) { return; }
-    // Native field step — the wireframe's whole job is to show the
-    // collider's REAL lattice, coarsening it would lie about the data.
-    const step = Math.max((hf.worldScale ?? getWorldScale()) / hf.size, 1);
-    // Rebuild only when the player crosses a few lattice cells — the
-    // patch is debug geometry, not per-frame state.
+    // The collider IS the 5m L0 chord now (heightmap.sampleHeight →
+    // shared hmChord) — draw it at that lattice, not texel density:
+    // finer cells would just re-triangulate the same flat facets.
+    const step = CLIPMAP_LEVELS[0].spacing;
+    // Rebuild on a few cells of travel OR a heightfield swap — a stale
+    // patch would draw the previous map's collider (reads as the
+    // "collider floating above the visual" ghost).
     if (Number.isFinite(this.colliderWireCx)
+      && this.colliderWireField === hf.data
       && Math.abs(px - this.colliderWireCx) < step * 4
       && Math.abs(pz - this.colliderWireCz) < step * 4) { return; }
+    this.colliderWireField = hf.data;
     this.colliderWireCx = Math.round(px / step) * step;
     this.colliderWireCz = Math.round(pz / step) * step;
     this.buildColliderWire(this.colliderWireCx, this.colliderWireCz, step);
