@@ -127,7 +127,7 @@ export function findStructureOverlaps(list: readonly StructureSpec[] | undefined
         const frac = (d0 * d1 * oy) / Math.min(va, vb);
         if (frac > worst) { worst = frac; best = { x: d0, y: oy, z: d1 }; }
       }}
-      if (best && worst > 0.35) {out.push({a: i,b: j, ...best});}
+      if (best && worst > 0.35) {out.push(Object.assign({}, {a: i,b: j}, best));}
     }
   }
   return out;
@@ -174,7 +174,8 @@ export function collideStructures(b: SimBall, colliders: readonly StructureColli
     let nx = lx - qx, ny = dy - qy, nz = lz - qz;
     const d2 = nx * nx + ny * ny + nz * nz;
     if (d2 >= b.radius * b.radius) {continue;}
-    let d = 0;
+    // oxlint-disable-next-line init-declarations -- assigned later
+    let d!: number;
     if (d2 > 1e-9) {
       d = Math.sqrt(d2);
       nx /= d; ny /= d; nz /= d;

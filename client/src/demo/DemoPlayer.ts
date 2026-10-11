@@ -110,8 +110,8 @@ export class DemoPlayer {
   seek(time: number): void {
     if (!this.demoData) {return;}
     // Guard against NaN/Infinity (e.g. from corrupted slider events)
-    if (!Number.isFinite(time)) {time = 0;}
-    this.currentTime = Math.max(0, Math.min(time, this.duration));
+    const t = Number.isFinite(time) ? time : 0;
+    this.currentTime = Math.max(0, Math.min(t, this.duration));
     this.frameIndex = pb.findFrameIndex(this, this.currentTime);
     // Reset event pointers and re-emit all events from the beginning, so
     // playback reconstructs all in-flight projectiles and balls at the seek
@@ -144,10 +144,10 @@ export class DemoPlayer {
   // Offline renderers pump this per output frame; O(new events) not O(all).
   scrubTo(time: number): void {
     if (!this.demoData) {return;}
-    if (!Number.isFinite(time)) {time = 0;}
-    time = Math.max(0, Math.min(time, this.duration));
-    if (time < this.currentTime) { this.seek(time); return; }
-    this.currentTime = time;
+    if (!Number.isFinite(time)) {this.seek(0); return;}
+    const t = Math.max(0, Math.min(time, this.duration));
+    if (t < this.currentTime) { this.seek(t); return; }
+    this.currentTime = t;
     this.frameIndex = pb.findFrameIndex(this, this.currentTime);
     const state = pb.getInterpolatedState(this);
     const projCount = pb.findEventIndex(this.demoData.projectileEvents, this.currentTime);
@@ -174,8 +174,8 @@ export class DemoPlayer {
     if (!this.playing || !this.demoData) {return;}
 
     // Guard against NaN/Infinity dt (e.g. from tab visibility quirks)
-    if (!Number.isFinite(dt) || dt < 0) {dt = 0;}
-    this.currentTime += dt * this.playbackSpeed;
+    const step = (Number.isFinite(dt) && dt >= 0) ? dt : 0;
+    this.currentTime += step * this.playbackSpeed;
 
     if (this.currentTime >= this.duration) { pb.handleEndOfPlayback(this); return; }
     if (this.currentTime < 0) { pb.handleRewindWrap(this); return; }
@@ -190,9 +190,12 @@ export class DemoPlayer {
     // For forward playback this is a simple forward slice.
     // For reverse playback, incremental re-emission is impossible (events are
     // timestamp-ordered and we're moving backward), so we seek-reconstruct.
-    let newProjEvents: ProjectileEvent[] = [];
-    let newTargetEvents: TargetEvent[] = [];
-    let newRemoteFrames: RemoteFrame[] = [];
+    // oxlint-disable-next-line init-declarations -- assigned later
+    let newProjEvents!: ProjectileEvent[];
+    // oxlint-disable-next-line init-declarations -- assigned later
+    let newTargetEvents!: TargetEvent[];
+    // oxlint-disable-next-line init-declarations -- assigned later
+    let newRemoteFrames!: RemoteFrame[];
     if (this.playbackSpeed < 0) {
       // Reverse playback: reconstruct full state at the new time.
       ({ newProjEvents, newTargetEvents } = pb.reconstructToTime(this, this.currentTime));

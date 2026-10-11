@@ -47,7 +47,7 @@ export class RoomPickups {
       return;
     }
     const id = ((this.nextId += 1) - 1);
-    const p = { id, pos: { ...pos}, ttl: PICKUP_TTL_S, kind, vel: { x: 0, y: 0, z: 0 }, armT: armS };
+    const p = { id, pos: Object.assign({}, pos), ttl: PICKUP_TTL_S, kind, vel: { x: 0, y: 0, z: 0 }, armT: armS };
     this.settleReachable(p);
     // Drops spawn at the victim's eye height — hmSettleWalkable only
     // grounds pos.y when it slides, so a flat-ground death leaves the
@@ -61,7 +61,7 @@ export class RoomPickups {
     this.pickups.set(id, p);
     logger.debug('Pickup spawned', { room: this.room.name, kind, id });
     weaponStats.recordPickup(this.room.mode, kind, 'spawned');
-    this.room.broadcast(spawnPayload(WORLD_MODEL.pickup!, id, 'id', { pos: { ...p.pos}, kind }) as ServerMessage);
+    this.room.broadcast(spawnPayload(WORLD_MODEL.pickup!, id, 'id', { pos: Object.assign({}, p.pos), kind }) as ServerMessage);
   }
 
   /** Match reset — clear the field and tell clients to drop the gems. */
@@ -76,7 +76,7 @@ export class RoomPickups {
     // rosterRow pins the row shape to the declared rosterFields — a
     // snapshot field that drifts from the declaration warns at build
     // time instead of diffing silently on the client.
-    return [...this.pickups.values()].map((p) => rosterRow(WORLD_MODEL.pickup!, 'id', p.id, { pos: { ...p.pos}, kind: p.kind }) as { id: number; pos: Vec3; kind: PickupKind });
+    return [...this.pickups.values()].map((p) => rosterRow(WORLD_MODEL.pickup!, 'id', p.id, { pos: Object.assign({}, p.pos), kind: p.kind }));
   }
 
   /** Nearest live pickup to a point — bots chase these. */
@@ -151,7 +151,7 @@ export class RoomPickups {
           inv('pickup-below-ground', !Number.isFinite(dg) || p.pos.y >= dg - 0.5,
             { id: p.id, y: Number(p.pos.y.toFixed(1)) });
           // Resting spot is the new truth — one edge resyncs every client.
-          this.room.broadcast(spawnPayload(WORLD_MODEL.pickup!, p.id, 'id', { pos: { ...p.pos}, kind: p.kind }) as ServerMessage);
+          this.room.broadcast(spawnPayload(WORLD_MODEL.pickup!, p.id, 'id', { pos: Object.assign({}, p.pos), kind: p.kind }) as ServerMessage);
         }
       }
       if (p.ttl <= 0) {
@@ -201,7 +201,7 @@ export class RoomPickups {
     for (const pl of players.values()) {
       const prev = this.prevPos.get(pl.id);
       if (prev) { prev.x = pl.position.x; prev.y = pl.position.y; prev.z = pl.position.z; }
-      else {this.prevPos.set(pl.id, { ...pl.position});}
+      else {this.prevPos.set(pl.id, Object.assign({}, pl.position));}
     }
     for (const id of this.prevPos.keys()) {
       if (!this.room.players.getPlayer(id)) {this.prevPos.delete(id);}

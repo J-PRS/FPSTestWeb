@@ -219,7 +219,7 @@ export class BlastRunner {
    *  one-way hops only — a full-RTT term validates ~RTT/2 behind the
    *  ghost (hits landing on a model the shooter already left behind). */
   private rewindTarget(target: PlayerState, targetId: string, shooterId: string, ping: number, bot: boolean, lagMs: number, lagMap?: Record<string, number>): Vec3 {
-    lagMs = lagMap?.[targetId] === undefined ? lagMs : Math.min(Math.max(lagMap[targetId]!, 0), 800);
+    const lag = lagMap?.[targetId] === undefined ? lagMs : Math.min(Math.max(lagMap[targetId]!, 0), 800);
     // Bots read live positions — a bot shooter has no render pipeline,
     // so there is no ghost to rewind toward.
     if (bot) {return { x: target.position.x, y: target.position.y, z: target.position.z };}
@@ -354,7 +354,7 @@ export class BlastRunner {
    *  when this fires; the blast is ours. */
   pop(ownerId: string, pos: Vec3, amount: number): void {
     const lgStats = getWeaponStats(WeaponType.Lightning);
-    this.processAOE(ownerId, { ...pos}, null, { ...lgStats, aoeDamage: Math.min(amount, LG_POP_DMG_CAP),aoeRadius: Math.min(LG_POP_RADIUS_MIN + amount * 0.12, LG_POP_RADIUS_MAX),knockbackForce: 30}, { weapon: WeaponType.Lightning, trusted: true });
+    this.processAOE(ownerId, Object.assign({}, pos), null, Object.assign({}, lgStats, {aoeDamage: Math.min(amount, LG_POP_DMG_CAP),aoeRadius: Math.min(LG_POP_RADIUS_MIN + amount * 0.12, LG_POP_RADIUS_MAX),knockbackForce: 30}), { weapon: WeaponType.Lightning, trusted: true });
   }
 
   /** True when a wall stands between blast point and target chest.
@@ -373,7 +373,7 @@ export class BlastRunner {
     // Power-scaled variants (Slam dive-speed blast) keep the identity
     // fields and multiply the payload envelope — same formula the client
     // predicts with.
-    const stats = power === undefined ? base : (((({ ...base, aoeDamage: base.aoeDamage * power,aoeRadius: base.aoeRadius * power,knockbackForce: base.knockbackForce * power}))));
+    const stats = power === undefined ? base : ((((((Object.assign({}, base, {aoeDamage: base.aoeDamage * power,aoeRadius: base.aoeRadius * power,knockbackForce: base.knockbackForce * power})))))));
     this.processAOE(ownerId, position, excludeTargetId, stats, { weapon: attribWeaponType ?? weaponType, trusted: true, shotId });
     // Live nuggets are fair game too — a shell near a gem can punt it.
     // Both loose objects' knocks live inside processAOE above.

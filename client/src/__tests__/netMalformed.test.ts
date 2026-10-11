@@ -18,7 +18,8 @@ globalThis.fetch = () => new Promise<Response>(() => { return; });
 // continue — never thrown into the connection's onError path where it
 // could cost a reconnect.
 describe('net dispatch — malformed payloads', () => {
-  let h = undefined as unknown as ReturnType<typeof makeDeps>;
+  // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+  let h!: ReturnType<typeof makeDeps>;
   beforeEach(() => { h = makeDeps(); });
 
   it('absorbs a handler throwing on a missing field, keeps dispatching', () => {

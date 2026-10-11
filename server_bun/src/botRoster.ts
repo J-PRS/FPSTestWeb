@@ -155,7 +155,7 @@ export class BotRoster {
     // class read as an anchor instead of just a slower medium.
     if (cls === 'heavy') {
       const lo = this.loadouts.get(p.id);
-      if (lo && lo.far !== WeaponType.Mortar) {this.loadouts.set(p.id, { ...lo, far: WeaponType.Mortar});}
+      if (lo && lo.far !== WeaponType.Mortar) {this.loadouts.set(p.id, Object.assign({}, lo, {far: WeaponType.Mortar}));}
     }
     const delta = CLASS_STATS[cls].maxHealth - CLASS_STATS[prev].maxHealth;
     p.maxHealth += delta;
@@ -240,7 +240,7 @@ export class BotRoster {
           const lo = this.loadouts.get(donor);
           if (lo) {
             const legal = (w: number, fb: WeaponType) => classCanFire(strict, w) ? w : fb;
-            this.loadouts.set(donor, { ...lo, near: legal(lo.near, WeaponType.Chaingun),mid: legal(lo.mid, WeaponType.Disc),far: legal(lo.far, WeaponType.BoltLauncher),side: legal(lo.side, WeaponType.Pistol)});
+            this.loadouts.set(donor, Object.assign({}, lo, { near: legal(lo.near, WeaponType.Chaingun),mid: legal(lo.mid, WeaponType.Disc),far: legal(lo.far, WeaponType.BoltLauncher),side: legal(lo.side, WeaponType.Pistol)}));
           }
         }
         // Technician is the only role that promises the deploy kit —
@@ -268,10 +268,10 @@ export class BotRoster {
           if (lo) {
             const far = getWeaponStats(lo.far)?.aoeRadius > 0 && getWeaponStats(lo.far)?.forceMode !== 'pull' ? lo.far : WeaponType.Disc;
             const mid = getWeaponStats(lo.mid)?.aoeRadius > 0 ? lo.mid : WeaponType.GrenadeLauncher;
-            this.loadouts.set(donor, { ...lo, far,mid});
+            this.loadouts.set(donor, Object.assign({}, lo, {far,mid}));
           }
           if (lo && this.brains.get(donor)?.skill.beltPull && getWeaponStats(lo.belt)?.forceMode !== 'pull') {
-            this.loadouts.set(donor, { ...lo, belt: WeaponType.DiscPull});
+            this.loadouts.set(donor, Object.assign({}, lo, {belt: WeaponType.DiscPull}));
           }
           // Energy economy IS the capper's weapon — a 500m route's
           // sustained jet burns matter far more than any burst or
@@ -289,7 +289,7 @@ export class BotRoster {
         // heal nade is a hybrid, the medic carries the whole archetype.
         if (want === 'medic') {
           const lo = this.loadouts.get(donor);
-          if (lo) {this.loadouts.set(donor, { ...lo, near: WeaponType.HealBeam,belt: WeaponType.HealGrenade});}
+          if (lo) {this.loadouts.set(donor, Object.assign({}, lo, {near: WeaponType.HealBeam,belt: WeaponType.HealGrenade}));}
         }
         // The chaser (LD) lives or dies on catching 30-45 m/s carriers —
         // a mortar or rocket rack can't lead that, and a shotgun can't
@@ -305,7 +305,7 @@ export class BotRoster {
             // lightning gun's hold-on-target model; chaingun when the
             // kit doesn't field beam mechanics anyway.
             const near = closeNear.has(lo.near) ? WeaponType.Lightning : lo.near;
-            if (far !== lo.far || near !== lo.near) {this.loadouts.set(donor, { ...lo, far,near});}
+            if (far !== lo.far || near !== lo.near) {this.loadouts.set(donor, Object.assign({}, lo, {far,near}));}
           }
         }
         // Role kit edits (LD's beam, capper's disc) can change the body's

@@ -137,7 +137,8 @@ export class WtSocketAdapter {
       carry += this.decoder.decode(value, { stream: true });
       // A peer that never sends '\n' grows this buffer forever — cap it.
       if (carry.length > 65_536) { this.close(1009, 'oversize frame'); return; }
-      let nl = 0;
+      // oxlint-disable-next-line init-declarations -- assigned later
+      let nl!: number;
       while ((nl = carry.indexOf('\n')) >= 0) {
         const line = carry.slice(0, nl);
         carry = carry.slice(nl + 1);
@@ -252,7 +253,8 @@ export class WtServer {
   constructor(private game: GameServer) {}
 
   async start(opts: { port: number; certPem: string; keyPem: string }): Promise<boolean> {
-    let mod = undefined as unknown as WtModule;
+    // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+    let mod!: WtModule;
     try {
       const m = await import('@webtransport-bun/webtransport');
       mod = m as unknown as WtModule;

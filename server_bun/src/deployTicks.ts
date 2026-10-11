@@ -63,7 +63,7 @@ export function tickMine(r: RoomDeployables, d: Deployed, _dt: number): void {
       if (p.protectedUntil > simNow()) {continue;}
       const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
       if (dx * dx + dy * dy + dz * dz < MINE_TRIGGER_DIST * MINE_TRIGGER_DIST) {
-        r.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'mineBoom', 'id', d.id, { owner: d.owner, pos: { ...d.pos} }) as ServerMessage);
+        r.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'mineBoom', 'id', d.id, { owner: d.owner, pos: Object.assign({}, d.pos) }) as ServerMessage);
         r.remove(d.id);
         r.room.messages.mineBlast(d.owner, d.pos, MINE_DAMAGE, MINE_BLAST_RADIUS, MINE_KNOCKBACK);
         return;

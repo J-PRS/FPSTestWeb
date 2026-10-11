@@ -7,8 +7,8 @@
 
 import * as THREE from 'three';
 import {
-  mkLoft, mkRevolve, mkAnnulus, profOct, profCircle, morphLoft,
-  scaleRing, tubePath,
+  mkLoft, mkRevolve, mkAnnulus, profOct, profCircle,
+  scaleRing,
   type LoftSection, type Ring2,
 } from '../entities/viewmodel/weaponKit';
 
@@ -21,13 +21,6 @@ export const glowAmber = new THREE.MeshBasicMaterial({ color: 0xFF_B0_40 });
 export const darkMat  = new THREE.MeshStandardMaterial({ color: 0x14_15_18, roughness: 0.9,  metalness: 0.2  });
 
 /** Add mesh w/ shadows on — every kit piece goes through this. */
-function add(g: THREE.Group, m: THREE.Mesh, x = 0, y = 0, z = 0): THREE.Mesh {
-  m.position.set(x, y, z);
-  m.receiveShadow = true;
-  m.castShadow = m.receiveShadow;
-  g.add(m);
-  return m;
-}
 
 // Vertical axis is Y here (buildings) — weaponKit lofts along Z, so kit
 // pieces build in Z then rotate -90° on X. rotUp() is the one-line adapter.

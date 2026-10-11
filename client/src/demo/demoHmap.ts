@@ -69,7 +69,7 @@ export function hmapMatches(hm: DemoHeightmap, field: Heightfield): boolean {
   // Compare sampled heights at the grid points; 1.5m is under the
   // flag-touch window so genuine same-shape maps pass and wrong maps
   // (which disagree by 10m+ somewhere) fail.
-  const other = hmapDownsample({ ...field, worldScale: hm.worldScale}, hm.gridN);
+  const other = hmapDownsample(Object.assign({}, field, {worldScale: hm.worldScale}), hm.gridN);
   let worst = 0;
   const gain = 125 * hm.heightScale;
   for (let i = 0; i < hm.data.length; i += 1) {

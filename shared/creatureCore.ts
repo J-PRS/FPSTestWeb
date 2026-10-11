@@ -122,7 +122,7 @@ export function makeSimCrawler(
   const { x, y, z } = pos;
   const row = SPECIES[species] ?? SPECIES.crawler!;
   const health = uber ? row.health * 3.4 : row.health;
-  const sp: SimTunables = { ...CRAWLER_SIM, HOP_SPEED: CRAWLER_SIM.HOP_SPEED * (row.speed ?? 1),AGGRO_D2: row.aggro ?? CRAWLER_SIM.AGGRO_D2,POUNCE_D2: row.pounceD ?? CRAWLER_SIM.POUNCE_D2};
+  const sp: SimTunables = Object.assign({}, CRAWLER_SIM, {HOP_SPEED: CRAWLER_SIM.HOP_SPEED * (row.speed ?? 1),AGGRO_D2: row.aggro ?? CRAWLER_SIM.AGGRO_D2,POUNCE_D2: row.pounceD ?? CRAWLER_SIM.POUNCE_D2});
   return {
     id, family: 'hop', species, biteDamage: row.bite, sp,
     x, y, z, vx: 0, vy: 0, vz: 0, yaw: 0,

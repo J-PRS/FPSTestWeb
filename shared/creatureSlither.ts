@@ -58,7 +58,7 @@ export function makeSimSlither(
   const { x, y, z } = pos;
   const row = SPECIES[species] ?? SPECIES.snake!;
   const health = uber ? row.health * 4 : row.health;
-  const sp: SlitherTunables = { ...SLITHER_SIM, SPEED: SLITHER_SIM.SPEED * (row.speed ?? 1)};
+  const sp: SlitherTunables = Object.assign({}, SLITHER_SIM, {SPEED: SLITHER_SIM.SPEED * (row.speed ?? 1)});
   const rng = seed >>> 0 || 1;
   return {
     id, family: 'slither', species, biteDamage: row.bite, sp,
@@ -91,7 +91,8 @@ export function stepSlither(
 
   // Per-state steppers return the edge to emit, or null to fall through
   // to integration — the event kinds are the wire.
-  let ev: CrawlerEvent | null = null;
+  // oxlint-disable-next-line init-declarations -- assigned later
+  let ev!: CrawlerEvent | null;
   switch (c.state) {
     case 'windup': { ev = stepCoil(c, dt, geom); break;
     }

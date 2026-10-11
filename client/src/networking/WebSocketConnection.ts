@@ -70,11 +70,7 @@ export class WebSocketConnection {
   private static readonly CONNECT_MS = 10_000;
 
   constructor(config: ConnectionConfig) {
-    this.config = {
-      reconnectInterval: WS_RECONNECT_INTERVAL,
-      maxReconnectAttempts: Infinity, // Unlimited reconnection attempts
-      ...config
-    };
+    this.config = Object.assign({}, {reconnectInterval: WS_RECONNECT_INTERVAL,maxReconnectAttempts: Infinity}, config);
   }
 
   /**

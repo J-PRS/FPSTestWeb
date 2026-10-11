@@ -46,7 +46,8 @@ function loadRec(text: string) {
 }
 
 describe('netReplay — captured wire stream through real handlers', () => {
-  let h = undefined as unknown as ReturnType<typeof makeDeps>;
+  // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+  let h!: ReturnType<typeof makeDeps>;
   beforeEach(() => { h = makeDeps(); });
 
   it('replays the duel capture without throwing', () => {

@@ -201,50 +201,7 @@ export class Terrain {
         polygonOffset: true,
         polygonOffsetFactor: -(CLIPMAP_LEVELS.length - 1 - i),
         polygonOffsetUnits: -(CLIPMAP_LEVELS.length - 1 - i),
-        uniforms: {
-          // Required with lights:true — renderer writes light/shadow state here
-          ...THREE.UniformsLib.lights,
-          heightMap:       { value: this.heightTexture },
-          albedoMap:       { value: null },
-          useAlbedo:       { value: false },
-          matTiles:        { value: null },
-          matAlphaA:       { value: null },
-          matAlphaB:       { value: null },
-          useMats:         { value: false },
-          tileMeters:      { value: 5.86 },
-          tileMeans:       { value: new Float32Array(8).fill(0.5) },
-          hmWorldScale:    { value: DEFAULT_WORLD_SCALE },
-          hmWorldScaleFrag:{ value: DEFAULT_WORLD_SCALE },
-          hScale:          { value: HSCALE },
-          gridOrigin:      { value: new THREE.Vector2(0, 0) },
-          levelScale:      { value: levelScale },
-          gridSpacing:     { value: vertSpacing(i) },
-          innerHalfSize:   { value: cfg.innerHalfSize },
-          innerGridOrigin: { value: new THREE.Vector2(0, 0) },
-          // Seam weld: outer-edge verts morph onto the parent's drawn
-          // chord — needs the coarser level's real lattice step + origin.
-          parentSpacing:   { value: i + 1 < CLIPMAP_LEVELS.length ? vertSpacing(i + 1) : 0 },
-          parentOrigin:    { value: new THREE.Vector2(0, 0) },
-          // Outermost level dissolves into fog near its world edge — every
-          // inner level's outer edge is covered by the next ring.
-          edgeHalf:        { value: i === CLIPMAP_LEVELS.length - 1 ? levelScale * 0.5 : 0 },
-          sunDir:          { value: sunDir.clone().normalize() },
-          sunColor:        { value: new THREE.Color(1, 0.94, 0.8) },
-          ambientColor:    { value: new THREE.Color(0.38, 0.45, 0.55) },
-          hscale:          { value: HSCALE },
-          terrainPreset:   { value: 1 },
-          fogColor:        { value: new THREE.Color(0xBB_D0_E8) },
-          fogStart:        { value: 80 },
-          fogEnd:          { value: 400 },
-          scorchData:      { value: this.scorchArr },
-          scorchEmber:     { value: this.scorchEmberArr },
-          splatData:       { value: this.splatArr },
-          splatTint:       { value: this.splatTintArr },
-          splatDir:        { value: this.splatDirArr },
-          fieldRing:       { value: this.fieldRingArr },
-          fieldTint:       { value: this.fieldTintArr },
-          fieldY:          { value: this.fieldYArr },
-        },
+        uniforms: Object.assign({}, THREE.UniformsLib.lights, {heightMap:       { value: this.heightTexture },albedoMap:       { value: null },useAlbedo:       { value: false },matTiles:        { value: null },matAlphaA:       { value: null },matAlphaB:       { value: null },useMats:         { value: false },tileMeters:      { value: 5.86 },tileMeans:       { value: new Float32Array(8).fill(0.5) },hmWorldScale:    { value: DEFAULT_WORLD_SCALE },hmWorldScaleFrag:{ value: DEFAULT_WORLD_SCALE },hScale:          { value: HSCALE },gridOrigin:      { value: new THREE.Vector2(0, 0) },levelScale:      { value: levelScale },gridSpacing:     { value: vertSpacing(i) },innerHalfSize:   { value: cfg.innerHalfSize },innerGridOrigin: { value: new THREE.Vector2(0, 0) },parentSpacing:   { value: i + 1 < CLIPMAP_LEVELS.length ? vertSpacing(i + 1) : 0 },parentOrigin:    { value: new THREE.Vector2(0, 0) },edgeHalf:        { value: i === CLIPMAP_LEVELS.length - 1 ? levelScale * 0.5 : 0 },sunDir:          { value: sunDir.clone().normalize() },sunColor:        { value: new THREE.Color(1, 0.94, 0.8) },ambientColor:    { value: new THREE.Color(0.38, 0.45, 0.55) },hscale:          { value: HSCALE },terrainPreset:   { value: 1 },fogColor:        { value: new THREE.Color(0xBB_D0_E8) },fogStart:        { value: 80 },fogEnd:          { value: 400 },scorchData:      { value: this.scorchArr },scorchEmber:     { value: this.scorchEmberArr },splatData:       { value: this.splatArr },splatTint:       { value: this.splatTintArr },splatDir:        { value: this.splatDirArr },fieldRing:       { value: this.fieldRingArr },fieldTint:       { value: this.fieldTintArr },fieldY:          { value: this.fieldYArr }}),
       });
 
       const mesh = new THREE.Mesh(i >= 2 ? outerGeo : gridGeo, material);

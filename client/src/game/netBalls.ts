@@ -355,7 +355,7 @@ rbFleetCount += 1;
 }
 
 export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: ChildLogger) {
-  const { scene, balls, targets } = {scene: deps.scene, ...ctx};
+  const { scene, balls, targets } = Object.assign({}, {scene: deps.scene}, ctx);
   const netBallById = new Map<number, Ball>();
   // A P2P host carries no ball sim — peers keep client-side balls there.
   const serverBalls = (): boolean => deps.lazyNetworkManager()?.authoritySims() ?? false;

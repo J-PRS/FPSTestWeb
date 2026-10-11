@@ -225,10 +225,10 @@ export class MoveSim {
    *  first boundary — deterministic replay needs the whole picture. */
   snapshot(): SimSnapshot {
     return {
-      st: { pos: { ...this.state.pos}, vel: { ...this.state.vel}, yaw: this.state.yaw, pitch: this.state.pitch, onGround: this.state.onGround },
-      input: { ...this.input},
+      st: { pos: Object.assign({}, this.state.pos), vel: Object.assign({}, this.state.vel), yaw: this.state.yaw, pitch: this.state.pitch, onGround: this.state.onGround },
+      input: Object.assign({}, this.input),
       wishJump: this.wishJump, allowNextJump: this.allowNextJump,
-      lastJumpableNormal: { ...this.lastJumpableNormal},
+      lastJumpableNormal: Object.assign({}, this.lastJumpableNormal),
       groundedBuffered: this.groundedBuffered, acc: this.acc,
       groundGraceT: this.groundGraceT,
     };

@@ -11,6 +11,7 @@ function envNum(name: string, fallback: number): number {
   if (v === undefined || v === '') {return fallback;}
   const n = Number(v);
   if (!Number.isFinite(n)) {
+    // oxlint-disable-next-line no-console
     console.warn(`[config] ${name}=${v} is not a number — using ${fallback}`);
     return fallback;
   }

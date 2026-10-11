@@ -51,5 +51,5 @@ export function inv(name: string, holds: boolean, ctx?: Record<string, unknown>)
  *  field vs chord). Sites that compare against ground/eye must read the
  *  SAME accessor the mover used — this is that accessor's loud form. */
 export function invEq(name: string, a: number, b: number, eps: number, ctx?: Record<string, unknown>): boolean {
-  return inv(name, Math.abs(a - b) <= eps, {a: Number(a.toFixed(3)),b: Number(b.toFixed(3)),eps, ...ctx});
+  return inv(name, Math.abs(a - b) <= eps, Object.assign({}, {a: Number(a.toFixed(3)),b: Number(b.toFixed(3)),eps}, ctx));
 }

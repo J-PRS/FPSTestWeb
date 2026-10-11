@@ -91,16 +91,16 @@ function applyStatusVisuals(deps: RemotesDeps, playerId: string, remotePlayer: R
   // Corpses hold no channels — the corpse window's row still streams the
   // pre-death bits until respawn clears them server-side, and a cloaked
   // corpse would render nothing at all.
-  if (remotePlayer.isDead) {status = 0;}
-  const cloaked = Boolean(status & STATUS.CLOAK);
+  const s = remotePlayer.isDead ? 0 : status;
+  const cloaked = Boolean(s & STATUS.CLOAK);
   const friendly = cloaked && Boolean(theirTeam) && theirTeam === deps.world.localTeam;
   remotePlayer.setCloakHidden(cloaked && !friendly);
   remotePlayer.setCloakGhosted(cloaked && friendly);
-  remotePlayer.setShielded(Boolean(status & STATUS.SHIELD));
-  remotePlayer.setMending(Boolean(status & STATUS.MEND));
-  remotePlayer.setRegenAura(Boolean(status & STATUS.REGEN));
-  remotePlayer.setDdAura(Boolean(status & STATUS.DD));
-  remotePlayer.setCharged(Boolean(status & STATUS.CHARGED));
+  remotePlayer.setShielded(Boolean(s & STATUS.SHIELD));
+  remotePlayer.setMending(Boolean(s & STATUS.MEND));
+  remotePlayer.setRegenAura(Boolean(s & STATUS.REGEN));
+  remotePlayer.setDdAura(Boolean(s & STATUS.DD));
+  remotePlayer.setCharged(Boolean(s & STATUS.CHARGED));
   if (!cloaked || friendly) {return true;}
   // Fire-reveal: his own shot left the shimmer window open — the marker
   // and bar stay up like any visible enemy until ghostT closes it.

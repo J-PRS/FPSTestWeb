@@ -266,7 +266,7 @@ export class MessageHandler {
     if (seq === undefined) {return;}
     const ok = verdict === true;
     if (!ok) {this.hb(`claimrej.${kind}`);}
-    this.sendToPlayer(id, {kind,seq,ok, ...(ok ? {} : { reason: verdict }), type: 'claimAck' as const});
+    this.sendToPlayer(id, Object.assign({kind,seq,ok}, (ok ? {} : { reason: verdict }), {type: 'claimAck' as const}));
   }
   hbMax(key: string, v: number): void {
     const h = this.roomInfo.health;
@@ -415,7 +415,7 @@ export class MessageHandler {
       // Top level, not inside map: a bare arena (no bases/terrain) still
       // has a name, and the scoreboard title wants it either way.
       mapName: this.roomInfo.mapName?.(),
-      scores: this.roomInfo.scores ? (((({ ...this.roomInfo.scores})))) : undefined,
+      scores: this.roomInfo.scores ? (Object.assign({}, this.roomInfo.scores)) : undefined,
       ffaScores: this.roomInfo.ffaScores?.(),
       map: this.roomInfo.bases || this.roomInfo.structures || this.roomInfo.arena || this.roomInfo.terrain || this.roomInfo.heightScale || this.roomInfo.tileSize || this.roomInfo.fog
         ? (() => { const m = { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena, ambient: this.roomInfo.ambient, terrain: this.roomInfo.terrain, heightScale: this.roomInfo.heightScale, tileSize: this.roomInfo.tileSize, fog: this.roomInfo.fog, terrainTex: this.roomInfo.terrainTex, terrainPreset: this.roomInfo.terrainPreset, sky: this.roomInfo.sky, interiors: this.roomInfo.interiors };
@@ -441,7 +441,7 @@ export class MessageHandler {
       // F5 reload → permanent hash desync + implausible-spawn rejects).
       // The judge anchors reseat on stored truth for the same reason.
       player.lastSeq = 0;
-      player.lastPosCheckPos = { ...player.position};
+      player.lastPosCheckPos = Object.assign({}, player.position);
       player.lastPosCheckTime = wallNow();
       player.consecutiveRejects = 0;
       this.roomInfo.moveMute?.(playerId);
@@ -502,9 +502,9 @@ export class MessageHandler {
       wireIds: this.roomInfo.wireIds?.() ?? {},
       team: player.team,
       localPlayerState: {
-        position: { ...player.position},
-        rotation: { ...player.rotation},
-        velocity: { ...player.velocity},
+        position: Object.assign({}, player.position),
+        rotation: Object.assign({}, player.rotation),
+        velocity: Object.assign({}, player.velocity),
         health: player.health,
         armor: player.armor,
         isDead: player.isDead,
@@ -530,7 +530,7 @@ export class MessageHandler {
     playersData: GameStatePlayer[],
     extras?: Record<string, unknown>,
   ): void {
-    this.sendToPlayer(playerId, {players: playersData,protocolVersion: PROTOCOL_VERSION, ...this.roomEcho(), ...extras, type: 'gameState' as const});
+    this.sendToPlayer(playerId, Object.assign({players: playersData,protocolVersion: PROTOCOL_VERSION}, this.roomEcho(), extras, {type: 'gameState' as const}));
   }
 
   /** Broadcast the playerJoined announce once — gates on the flag so a
@@ -651,9 +651,9 @@ export class MessageHandler {
       players.push({
         id: p.id,
         internalId: p.internalId,
-        position: { ...p.position},
-        rotation: { ...p.rotation},
-        velocity: { ...p.velocity},
+        position: Object.assign({}, p.position),
+        rotation: Object.assign({}, p.rotation),
+        velocity: Object.assign({}, p.velocity),
         health: p.health,
         isDead: p.isDead,
         kills: p.kills,

@@ -18,9 +18,7 @@ export function buildDemoFile(r: DemoRecorder, description = ''): DemoFile {
   const clipStart = frames.length > 0 ? frames[0]!.timestamp : r.elapsedTime - r.bufferSeconds;
   const targetEvents = collectTargetEvents(r.targetEvents, clipStart, r.elapsedTime);
 
-  return {
-    header: {
-      magic: DEMO_MAGIC,
+  return Object.assign({header: Object.assign({magic: DEMO_MAGIC,
       formatVersion: DEMO_FORMAT_VERSION,
       gameVersion: '1.0.0',
       timestamp: Date.now(),
@@ -29,19 +27,12 @@ export function buildDemoFile(r: DemoRecorder, description = ''): DemoFile {
       projectileEventCount: r.projectileEvents.length,
       targetEventCount: targetEvents.length,
       checksum: 0,
-      description,
-      ...startFrame(frames.length > 0 ? frames[0] : null),
-      projectileLifetime: 0,
-      ...r.context,
-      tableHash: 0, // stamped by the writer at serialize time
-    },
+      description}, startFrame(frames.length > 0 ? frames[0] : null), {projectileLifetime: 0}, r.context, {tableHash: 0}), // stamped by the writer at serialize time
     frames,
     projectileEvents: [...r.projectileEvents],
     targetEvents,
-    roster: r.roster.map(e => (((({ ...e}))))),
-    remoteFrames: [...r.remoteFrames],
-    ...(r.heightmap ? { heightmap: r.heightmap } : {}),
-  };
+    roster: r.roster.map(e => Object.assign({}, e)),
+    remoteFrames: [...r.remoteFrames]}, (r.heightmap ? { heightmap: r.heightmap } : {}));
 }
 
 function startFrame(first: DemoFrame | null) {
@@ -84,13 +75,11 @@ export function extractClip(r: DemoRecorder, startTime: number, endTime: number,
   const tgtEvents = collectTargetEvents(r.targetEvents, clipStart, clipEnd);
 
   const [first] = frames;
-  const normFrames = frames.map(f => (((({ ...f, timestamp: f.timestamp - clipStart,frameNumber: (f.frameNumber - first.frameNumber + 65_536) % 65_536})))));
-  const normProj = projEvents.map(e => (((({ ...e, timestamp: e.timestamp - clipStart})))));
-  const normTgt = tgtEvents.map(e => (((({ ...e, timestamp: e.timestamp - clipStart})))));
+  const normFrames = frames.map(f => (Object.assign({}, f, {timestamp: f.timestamp - clipStart,frameNumber: (f.frameNumber - first.frameNumber + 65_536) % 65_536})));
+  const normProj = projEvents.map(e => (Object.assign({}, e, {timestamp: e.timestamp - clipStart})));
+  const normTgt = tgtEvents.map(e => (Object.assign({}, e, {timestamp: e.timestamp - clipStart})));
 
-  return {
-    header: {
-      magic: DEMO_MAGIC,
+  return Object.assign({header: Object.assign({magic: DEMO_MAGIC,
       formatVersion: DEMO_FORMAT_VERSION,
       gameVersion: '1.0.0',
       timestamp: Date.now(),
@@ -103,15 +92,10 @@ export function extractClip(r: DemoRecorder, startTime: number, endTime: number,
       startPosX: first.posX, startPosY: first.posY, startPosZ: first.posZ,
       startYaw: first.yaw, startPitch: first.pitch,
       startVelX: first.velX, startVelY: first.velY, startVelZ: first.velZ,
-      projectileLifetime,
-      ...r.context,
-      tableHash: 0, // stamped by the writer at serialize time
-    },
+      projectileLifetime}, r.context, {tableHash: 0}), // stamped by the writer at serialize time
     frames: normFrames,
     projectileEvents: normProj,
     targetEvents: normTgt,
-    roster: r.roster.map(e => (((({ ...e}))))),
-    remoteFrames: collectRemoteFrames(r.remoteFrames, clipStart, clipEnd),
-    ...(r.heightmap ? { heightmap: r.heightmap } : {}),
-  };
+    roster: r.roster.map(e => Object.assign({}, e)),
+    remoteFrames: collectRemoteFrames(r.remoteFrames, clipStart, clipEnd)}, (r.heightmap ? { heightmap: r.heightmap } : {}));
 }

@@ -126,7 +126,7 @@ const emit = (rig: ReturnType<typeof makePlaybackRig>,
   (rig.mgr as { onPlaybackEvent(e: { projectiles: ProjectileEvent[]; targets: TargetEvent[] }): void }).onPlaybackEvent({ projectiles, targets });
 };
 
-const mkTarget = (over: Partial<TargetEvent>): TargetEvent => ((((({eventType: TargetEventType.Spawned,timestamp: 0,posX: 0,posY: 5,posZ: 0,velX: 0,velY: 0,velZ: 0,targetId: 1,targetType: 0,health: 30,hasPeakPosition: false,peakPosX: 0,peakPosY: 0,peakPosZ: 0, ...over})))));
+const mkTarget = (over: Partial<TargetEvent>): TargetEvent => (((Object.assign({}, {eventType: TargetEventType.Spawned,timestamp: 0,posX: 0,posY: 5,posZ: 0,velX: 0,velY: 0,velZ: 0,targetId: 1,targetType: 0,health: 30,hasPeakPosition: false,peakPosX: 0,peakPosY: 0,peakPosZ: 0}, over))));
 
 describe('playback audit — every lane animates', () => {
   it('creature proxies integrate ballistic drift (gravity species falls)', () => {
@@ -421,7 +421,8 @@ function scrubDemo(demo: DemoFile) {
 // File-level differential audit: replay the real clip through real playback,
 // then every spawned entity must have moved (or died) — never froze midair.
 describe.skipIf(!existsSync(CLIP))('recorded clip audit', () => {
-  let demo = undefined as unknown as ReturnType<typeof deserializeDemo>;
+  // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+  let demo!: ReturnType<typeof deserializeDemo>;
   beforeAll(() => { demo = deserializeDemo(readFileSync(CLIP).buffer); });
 
   it('every spawned ball animates or rests on ground — none hover midair', () => {
@@ -526,7 +527,8 @@ describe.skipIf(!existsSync(CLIP))('recorded clip audit', () => {
 // Crossfire clip carries the lanes henge lacks: 27 creature events, 109 flag,
 // 34 pickup — every lane asserted against real recorded data.
 describe.skipIf(!existsSync(CLIP2))('crossfire clip — remaining lanes on real data', () => {
-  let demo2 = undefined as unknown as DemoFile;
+  // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+  let demo2!: DemoFile;
   beforeAll(() => { demo2 = deserializeDemo(readFileSync(CLIP2).buffer); });
 
   it('every spawned creature animates or dies — none freeze', () => {

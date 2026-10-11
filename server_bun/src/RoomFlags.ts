@@ -98,7 +98,7 @@ export class RoomFlags {
       // Rabbit flags begin unspawned — the FIRST corpse of the match is
       // what brings the flag into the world, exactly like T2.
       const state: FlagState = this.rabbit ? 'unspawned' : 'home';
-      this.flags.set(team, { team, home, pos: { ...home}, vel: { x: 0, y: 0, z: 0 }, state, carrier: null, dropT: 0, carriedAt: 0, droppedAt: 0, holdAcc: 0, airborneBy: null });
+      this.flags.set(team, { team, home, pos: Object.assign({}, home), vel: { x: 0, y: 0, z: 0 }, state, carrier: null, dropT: 0, carriedAt: 0, droppedAt: 0, holdAcc: 0, airborneBy: null });
     }
   }
 
@@ -111,8 +111,8 @@ export class RoomFlags {
       const home = homes[team];
       if (!home) {continue;}
       if (f.home.x === home.x && f.home.y === home.y && f.home.z === home.z) {continue;}
-      f.home = { ...home};
-      if (f.state === 'home') {f.pos = { ...home};}
+      f.home = Object.assign({}, home);
+      if (f.state === 'home') {f.pos = Object.assign({}, home);}
       this.dirty = true;
     }
   }
@@ -121,7 +121,7 @@ export class RoomFlags {
    *  so the new match's first blood re-seeds it. */
   reset(): void {
     for (const f of this.flags.values()) {
-      f.pos = { ...f.home};
+      f.pos = Object.assign({}, f.home);
       f.vel = { x: 0, y: 0, z: 0 };
       f.state = this.rabbit ? 'unspawned' : 'home';
       f.carrier = null;
@@ -144,7 +144,7 @@ export class RoomFlags {
     // placed from it, including by clients who join mid-run while the
     // flag itself is away (a 'home'-state pos alone can't tell them).
     return [...this.flags.values()].filter((f) => f.state !== 'unspawned').map((f) => rosterRow(WORLD_MODEL.flag!, 'team', f.team, {
-      pos: { ...f.pos}, home: { ...f.home},
+      pos: Object.assign({}, f.pos), home: Object.assign({}, f.home),
       // 'unspawned' is filtered above — the wire union only knows live states.
       state: f.state, carrier: f.carrier,
     }) as { team: TeamId; pos: Vec3; home: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null });
@@ -160,9 +160,9 @@ export class RoomFlags {
       this.room.messages.killFeed.say(playerId, 'flagdrop');
       const dp = this.room.players.getPlayer(playerId);
       this.room.bots?.notice('flagdrop', playerId,
-        dp?.team, dp ? (((({ ...dp.position})))) : undefined, 'other');
+        dp?.team, dp ? (Object.assign({}, dp.position)) : undefined, 'other');
       const p = dp;
-      if (p) {f.pos = { ...p.position};}
+      if (p) {f.pos = Object.assign({}, p.position);}
       f.carrier = null;
       f.state = 'dropped';
       f.dropT = FLAG_RESET_S;
@@ -180,7 +180,7 @@ export class RoomFlags {
     for (const f of this.flags.values()) {
       if (f.state !== 'unspawned') {continue;}
       const corpse = this.room.players.getPlayer(playerId);
-      f.pos = corpse ? (((({ ...corpse.position})))) : (((({ ...f.home}))));
+      f.pos = corpse ? Object.assign({}, corpse.position) : Object.assign({}, f.home);
       f.state = 'dropped';
       f.dropT = FLAG_RESET_S;
       f.droppedAt = simNow();
@@ -206,7 +206,7 @@ export class RoomFlags {
     for (const f of this.flags.values()) {
       if (f.state !== 'carried' || f.carrier !== playerId) {continue;}
       const cp = Math.cos(p.rotation.pitch), sp = Math.sin(p.rotation.pitch);
-      f.pos = { ...p.position};
+      f.pos = Object.assign({}, p.position);
       f.carrier = null;
       f.state = 'dropped';
       f.dropT = FLAG_RESET_S;
@@ -218,7 +218,7 @@ export class RoomFlags {
       f.vel.z = p.velocity.z + cp * Math.cos(p.rotation.yaw) * FLAG_THROW_SPEED;
       f.airborneBy = playerId;
       this.room.messages.killFeed.say(playerId, 'flagdrop');
-      this.room.bots?.notice('flagdrop', playerId, p.team, { ...f.pos}, 'other');
+      this.room.bots?.notice('flagdrop', playerId, p.team, Object.assign({}, f.pos), 'other');
       this.room.influence.splat(f.pos, 'opportunity', 1.2);
       this.dirty = true;
     }
@@ -295,7 +295,7 @@ export class RoomFlags {
     for (const p of this.room.players.getAllPlayers().values()) {
       const prev = this.prevPos.get(p.id);
       if (prev) { prev.x = p.position.x; prev.y = p.position.y; prev.z = p.position.z; }
-      else {this.prevPos.set(p.id, { ...p.position});}
+      else {this.prevPos.set(p.id, Object.assign({}, p.position));}
     }
     for (const id of this.prevPos.keys()) {
       if (!this.room.players.getPlayer(id)) {this.prevPos.delete(id);}
@@ -332,7 +332,7 @@ export class RoomFlags {
     if (!carrier || carrier.isDead) {
       // Refresh pos from the corpse when it's still around — otherwise
       // the flag teleports to wherever it was last tracked.
-      if (carrier) {f.pos = { ...carrier.position};}
+      if (carrier) {f.pos = Object.assign({}, carrier.position);}
       f.state = 'dropped';
       f.carrier = null;
       f.dropT = FLAG_RESET_S;
@@ -341,7 +341,7 @@ export class RoomFlags {
       this.dirty = true;
       return null;
     }
-    f.pos = { ...carrier.position};
+    f.pos = Object.assign({}, carrier.position);
     // Rabbit: no cap ring — the carrier IS the score. Every second held
     // pays one FFA point through the same awardFfa → matchEnd funnel.
     if (this.rabbit) {
@@ -367,7 +367,7 @@ export class RoomFlags {
         this.capLog.push({ by: carrier.id, team: f.team, holdMs, capAt: simNow() });
       }
       f.state = 'home';
-      f.pos = { ...f.home};
+      f.pos = Object.assign({}, f.home);
       f.carrier = null;
       f.carriedAt = 0;
       this.room.influence.splat(f.home, 'opportunity', 1.2);
@@ -386,7 +386,7 @@ export class RoomFlags {
     if (f.dropT > 0) {return;}
     if (f.droppedAt) {weaponStats.recordFlag(this.room.mode, 'return', simNow() - f.droppedAt);}
     f.state = 'home';
-    f.pos = { ...f.home};
+    f.pos = Object.assign({}, f.home);
     f.vel = { x: 0, y: 0, z: 0 };
     f.droppedAt = 0;
     this.dirty = true;
@@ -467,7 +467,7 @@ export class RoomFlags {
     if (this.rabbit) {
       logger.info('Rabbit flag grabbed', { room: this.room.name, by: t.id });
       this.room.messages.killFeed.say(t.id, 'flaggrab');
-      this.room.bots?.notice('flaggrab', t.id, undefined, { ...f.pos}, 'other');
+      this.room.bots?.notice('flaggrab', t.id, undefined, Object.assign({}, f.pos), 'other');
       f.state = 'carried';
       f.carrier = t.id;
       f.carriedAt = simNow();
@@ -486,14 +486,14 @@ export class RoomFlags {
       this.retLog.push({ by: t.id, team: f.team, at: simNow() });
       this.room.scoring.awardPersonal(t.id, CTF_PTS.flagReturn);
       f.state = 'home';
-      f.pos = { ...f.home};
+      f.pos = Object.assign({}, f.home);
       f.droppedAt = 0;
       f.airborneBy = null;
       this.dirty = true;
     } else if (t.team && t.team !== f.team) {
       logger.info('Flag grabbed', { room: this.room.name, flag: f.team, by: t.id });
       this.room.messages.killFeed.say(t.id, 'flaggrab');
-      this.room.bots?.notice('flaggrab', t.id, t.team, { ...f.pos}, 'other');
+      this.room.bots?.notice('flaggrab', t.id, t.team, Object.assign({}, f.pos), 'other');
       f.state = 'carried';
       f.carrier = t.id;
       f.airborneBy = null;

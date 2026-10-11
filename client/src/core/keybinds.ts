@@ -54,7 +54,7 @@ function parseSaved(raw: string): Partial<Record<BindAction, string>> {
   return out;
 }
 
-const binds: Record<BindAction, string> = { ...DEFAULTS, ...parseSaved(settings.get('fps-keys'))};
+const binds: Record<BindAction, string> = Object.assign({}, DEFAULTS, parseSaved(settings.get('fps-keys')));
 
 export function codeFor(action: BindAction): string {
   return binds[action];

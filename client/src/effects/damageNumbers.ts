@@ -213,7 +213,8 @@ export class DamageNumberManager {
     const hw = hh * (CELL_W / ATLAS_H);
     const step = hw * 1.7;
     const x0 = -(n.glyphCount - 1) * step * 0.5;
-    for (let gIdx = 0; gIdx < n.glyphCount && quad < MAX_QUADS; ((gIdx += 1) - 1), ((quad += 1) - 1)) {
+    let q = quad;
+    for (let gIdx = 0; gIdx < n.glyphCount && q < MAX_QUADS; ((gIdx += 1) - 1), ((q += 1) - 1)) {
       const ox = x0 + gIdx * step;
       const v = quad * 4;
       for (let k = 0; k < 4; k += 1) {

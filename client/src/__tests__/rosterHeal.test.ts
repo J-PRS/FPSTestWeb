@@ -6,8 +6,6 @@ import { NetworkManager } from '../networking/NetworkManager.js';
 // A gap in any of these is a permanent "server but not client" warn.
 
 const pt = (x = 0, y = 0, z = 0) => ({ x, y, z });
-const R = (yaw = 0, pitch = 0) => ({ yaw, pitch });
-const V = (x = 0, y = 0, z =0) => ({ x, y, z });
 
 function mk(): NetworkManager { return new NetworkManager(); }
 

@@ -670,6 +670,7 @@ function warnOnce(key: string, text: string): void {
   const last = warnOnceSeen.get(key);
   if (last !== undefined && now - last < WARN_ONCE_MS) {return;}
   warnOnceSeen.set(key, now);
+  // oxlint-disable-next-line no-console
   console.warn(text);
 }
 

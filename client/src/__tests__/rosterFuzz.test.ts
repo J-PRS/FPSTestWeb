@@ -38,7 +38,8 @@ const gs = (ids: string[]) => ({
 } as ServerMessage);
 
 describe('rosterFuzz — client roster conformance', () => {
-  let h = undefined as unknown as ReturnType<typeof makeDeps>;
+  // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+  let h!: ReturnType<typeof makeDeps>;
   beforeEach(() => { h = makeDeps(); });
 
   for (const seed of [11, 22, 33, 44, 55]) {

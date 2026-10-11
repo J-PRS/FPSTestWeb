@@ -54,8 +54,8 @@ let fieldLoaded: string | null = null;
 /** Resolves when the first terrain decision lands — a room's map spec
  *  or confirmation that the boot field stays. Offline bot fill waits on
  *  this so it never seeds a roster on the wrong heightmap. */
-let firstTerrainResolve = undefined as unknown as () => void;
-export const firstTerrain = new Promise<void>((r) => { firstTerrainResolve = r; });
+const firstTerrainGate = { resolve: undefined as unknown as () => void };
+export const firstTerrain = new Promise<void>((r) => { firstTerrainGate.resolve = r; });
 // Rooms without a spec terrain reset to the boot field — the SAME bin
 // the server sims (server_bun/heightmap.bin mirrored under assets), so
 // prediction and authority sample one file instead of PNG-vs-bin drift.
@@ -129,7 +129,7 @@ export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: s
       deps.logger.warn(`Terrain load failed for ${file ?? BOOT_HEIGHTMAP}: ${detail}`);
     } finally {
       Ball.terrainSwapping = false;
-      firstTerrainResolve();
+      firstTerrainGate.resolve();
     }
   });
   return terrainSwap;

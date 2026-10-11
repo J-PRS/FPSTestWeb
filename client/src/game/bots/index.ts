@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 
 import { GameBot, EYE } from './botBrain.js';
-import { applyStructureSpecs } from '../structureSpecs.js';
 import { BotWatchdog } from './botWatchdog.js';
 import { SheepMeter } from './botSheep.js';
 import { BOT_LOADOUTS, BOT_ALT_SLOTS, WILDCARD_SLOTS, botClassForLoadout, rollWildcard } from '../../../../shared/botLoadouts.js';

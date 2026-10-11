@@ -147,13 +147,13 @@ export class RoomDeployables {
     }
     const dx = pos.x - player.position.x, dy = pos.y - player.position.y, dz = pos.z - player.position.z;
     if (dx * dx + dy * dy + dz * dz > MAX_PLANT_DIST * MAX_PLANT_DIST) {return 'toofar';}
-    pos = { ...pos, y: this.groundY(pos)};
+    pos = Object.assign({}, pos, { y: this.groundY(pos)});
     player.beltCharges -= DEPLOY_ITEMS[k].cost;
     // Nugget: no planted item — the claim mints a grabbable gem where the
     // pod lands. Net sink of one charge (costs 2, pays 1 back), and the
     // grab is first-come — a fast enemy can steal the thrower's change.
     if (k === 'nugget') {
-      this.room.pickups?.spawn({ ...pos}, 'gem', NUGGET_ARM_S);
+      this.room.pickups?.spawn(Object.assign({}, pos), 'gem', NUGGET_ARM_S);
       return true;
     }
     const owned = [...this.items.values()].filter((d) => d.owner === playerId && d.kind === k);
@@ -170,11 +170,11 @@ export class RoomDeployables {
     // Team stamps at plant time — the spawn edge carries this value, so
     // the hash lane must too (a live owner-team lookup desyncs the moment
     // the planter switches sides). Gear fights for its planting team.
-    this.items.set(id, { id, owner: playerId, kind: k, pos: { ...pos}, ttl: DEPLOY_ITEMS[k].ttlS, fireCd: armDelay, hp: HP[k], armor: 0, respawnT: 0, team: player.team });
+    this.items.set(id, { id, owner: playerId, kind: k, pos: Object.assign({}, pos), ttl: DEPLOY_ITEMS[k].ttlS, fireCd: armDelay, hp: HP[k], armor: 0, respawnT: 0, team: player.team });
     this.refreshSolids();
     logger.info('Deploy placed', { owner: playerId, kind: k, x: Number(pos.x.toFixed(1)), y: Number(pos.y.toFixed(1)), z: Number(pos.z.toFixed(1)) });
     weaponStats.recordDeploy(this.room.mode, k);
-    this.room.broadcast(spawnPayload(WORLD_MODEL.deploy!, id, 'id', { owner: playerId, kind: k, pos: { ...pos}, team: player.team }) as ServerMessage);
+    this.room.broadcast(spawnPayload(WORLD_MODEL.deploy!, id, 'id', { owner: playerId, kind: k, pos: Object.assign({}, pos), team: player.team }) as ServerMessage);
     return true;
   }
 
@@ -208,8 +208,8 @@ export class RoomDeployables {
       if (!KINDS.has(k)) {continue;}
       const id = ((this.nextId += 1) - 1);
       const owner = e.team ? `base:${e.team}` : 'base';
-      this.items.set(id, { id, owner, kind: k, pos: { ...e.pos}, ttl: Infinity, fireCd: 0, hp: HP[k], armor: 0, base: true, team: e.team, respawnT: 0 });
-      this.room.broadcast(spawnPayload(WORLD_MODEL.deploy!, id, 'id', { owner, kind: k, pos: { ...e.pos}, team: e.team }) as ServerMessage);
+      this.items.set(id, { id, owner, kind: k, pos: Object.assign({}, e.pos), ttl: Infinity, fireCd: 0, hp: HP[k], armor: 0, base: true, team: e.team, respawnT: 0 });
+      this.room.broadcast(spawnPayload(WORLD_MODEL.deploy!, id, 'id', { owner, kind: k, pos: Object.assign({}, e.pos), team: e.team }) as ServerMessage);
       logger.info('Base asset seeded', { id, kind: k, team: e.team, x: Number(e.pos.x.toFixed(1)), z: Number(e.pos.z.toFixed(1)) });
     }
     this.refreshSolids();
@@ -268,7 +268,7 @@ export class RoomDeployables {
   }
 
   snapshot(): { id: number; owner: string; kind: DeployKind; pos: Vec3; hp: number; armor: number; team?: TeamId }[] {
-    return [...this.items.values()].map((d) => rosterRow(WORLD_MODEL.deploy!, 'id', d.id, { owner: d.owner, kind: d.kind, pos: { ...d.pos}, hp: d.hp, armor: d.armor, team: this.teamOf(d) }) as { id: number; owner: string; kind: DeployKind; pos: Vec3; hp: number; armor: number; team?: TeamId });
+    return [...this.items.values()].map((d) => rosterRow(WORLD_MODEL.deploy!, 'id', d.id, { owner: d.owner, kind: d.kind, pos: Object.assign({}, d.pos), hp: d.hp, armor: d.armor, team: this.teamOf(d) }) as { id: number; owner: string; kind: DeployKind; pos: Vec3; hp: number; armor: number; team?: TeamId });
   }
 
   /** Creature-sim candidates — `dep:N` ids mirror the client species

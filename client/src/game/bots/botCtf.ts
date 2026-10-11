@@ -9,7 +9,6 @@ import { CtfFlags } from '../ctfFlags.js';
 import { Explosion } from '../../effects/explosion.js';
 import { FLAG_PICKUP_R, TEAM_COLORS, type TeamId, type TeamScores } from '../../../../shared/teams.js';
 import type { GameBot } from './botBrain.js';
-import { applyStructureSpecs } from '../structureSpecs.js';
 import type { StructureSpec } from '../../../../shared/mapSpec.js';
 import { flagReturnFx } from '../flagFx.js';
 import { FLAG_STAND_TOP } from '../../structures/structures.js';

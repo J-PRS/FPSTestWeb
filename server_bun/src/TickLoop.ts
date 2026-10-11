@@ -335,7 +335,7 @@ this.metrics.ticks += 1;
         tickErrors: m.tickErrors,
         phaseMs,
       };
-      logger.debug('Tick bandwidth', { ...this.lastBw, players: playerCount});
+      logger.debug('Tick bandwidth', Object.assign({}, this.lastBw, {players: playerCount}));
       m.tickErrors = 0; m.recordsIdleReaped = m.tickErrors; m.recordsSuppressed = m.recordsIdleReaped; m.recordsBuilt = m.recordsSuppressed; m.ticks = m.recordsBuilt;
         m.tickFramesDropped = m.tickErrors;
         m.bytesSent = m.tickFramesDropped;

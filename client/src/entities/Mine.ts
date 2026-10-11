@@ -6,7 +6,6 @@ import {
   MINE_RADIUS, MINE_ARM_TIME, MINE_TRIGGER_DIST, MINE_LIFE, MINE_BLAST_RADIUS,
   EMERGE_DUR,
 } from '../core/config.js';
-import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
 import type { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm } from './swarms.js';

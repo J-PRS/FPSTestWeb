@@ -77,8 +77,8 @@ this.count += 1;
   }
 
   extractNewest(count: number): T[] {
-    if (count > this.count) {({count} = this);}
-    return this.extractRange(this.count - count, count);
+    const n = Math.min(count, this.count);
+    return this.extractRange(this.count - n, n);
   }
 
   extractAll(): T[] {

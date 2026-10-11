@@ -81,18 +81,19 @@ export function computeStateHash(players: Iterable<[string, HashablePlayer]>): s
 
 
 function mixValue(ph: number, v: unknown): number {
+  let h = ph;
   // null/undefined and '' mix identically (separator only) — an unset
   // edge field and an empty one must not read as different state.
-  if (v == null) { ph ^= 0xFF; return Math.imul(ph, 0x01_00_01_93) >>> 0; }
-  if (typeof v === 'number') { ph ^= v & 0xFF_FF; return Math.imul(ph, 0x01_00_01_93) >>> 0; }
-  if (typeof v === 'boolean') { ph ^= v ? 1 : 0; return Math.imul(ph, 0x01_00_01_93) >>> 0; }
+  if (v == null) { h ^= 0xFF; return Math.imul(h, 0x01_00_01_93) >>> 0; }
+  if (typeof v === 'number') { h ^= v & 0xFF_FF; return Math.imul(h, 0x01_00_01_93) >>> 0; }
+  if (typeof v === 'boolean') { h ^= v ? 1 : 0; return Math.imul(h, 0x01_00_01_93) >>> 0; }
   const s = String(v);
   for (let i = 0; i < s.length; i += 1) {
-    ph ^= s.charCodeAt(i); ph = Math.imul(ph, 0x01_00_01_93) >>> 0;
+    h ^= s.charCodeAt(i); h = Math.imul(h, 0x01_00_01_93) >>> 0;
   }
   // Field separator — concatenated strings alone can't tell
   // ('chase','r') from ('cha','ser').
-  ph ^= 0xFF; return Math.imul(ph, 0x01_00_01_93) >>> 0;
+  h ^= 0xFF; return Math.imul(h, 0x01_00_01_93) >>> 0;
 }
 
 /** Identity + declared lifecycle fields, per kind. Hash inputs ride

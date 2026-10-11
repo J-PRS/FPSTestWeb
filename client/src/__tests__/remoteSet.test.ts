@@ -9,7 +9,7 @@ function mkEnt(id: string): Ent {
 }
 
 function mkSet(over: Partial<ConstructorParameters<typeof RemoteSet<Ent, St>>[0]> = {}) {
-  const hooks = {create: vi.fn((id: string) => mkEnt(id)),isLive: vi.fn((id: string, s: St | undefined) => id.startsWith('BOT-') || s?.ping != null),onRemove: vi.fn(),onCreate: vi.fn(), ...over};
+  const hooks = Object.assign({}, {create: vi.fn((id: string) => mkEnt(id)),isLive: vi.fn((id: string, s: St | undefined) => id.startsWith('BOT-') || s?.ping != null),onRemove: vi.fn(),onCreate: vi.fn()}, over);
   return { set: new RemoteSet<Ent, St>(hooks), hooks };
 }
 

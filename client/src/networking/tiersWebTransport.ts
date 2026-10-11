@@ -110,7 +110,8 @@ export class WebTransportGameTransport implements GameTransport {
   // reliable-binary frames in a JSON envelope — the stream is text-framed
   // so raw bytes would corrupt it (how ball segments arrive on wt).
   private dispatchLine(line: string): void {
-    let m = undefined as unknown as ServerMessage | { type: 'bin'; d: string };
+    // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+    let m: ServerMessage | { type: 'bin'; d: string };
     try { m = JSON.parse(line); } catch { return; /* malformed */ }
     if (m.type === 'gameState' && (m as { caps?: { binLane?: number } }).caps?.binLane && !this.binStream) {
       this.openBinLane();

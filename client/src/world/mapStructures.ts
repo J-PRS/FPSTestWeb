@@ -206,7 +206,8 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
   }
   for (const s of list.filter((s) => s.kind !== 'stand' && s.kind !== 'hull' && s.kind !== 'kit' && s.kind !== 'shield')) {
     const key = s.kind === 'root' ? 'root' : (s.team ?? 'neutral');
-    let g = undefined as unknown as THREE.BufferGeometry;
+    // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+    let g!: THREE.BufferGeometry;
     if (s.kind === 'root') {
       // Twisted-root arch (Quicksand): half-torus, legs at ±size.x on the
       // local X axis, apex ~size.x above base, tube radius size.y.
@@ -276,6 +277,7 @@ function buildColliderGizmos(list: StructureSpec[], scene: THREE.Scene): void {
         : s.kind === 'root' ? 2 : 1;
       if (s.kind === 'stand' && nOut > 0) {
         const c = colliders[ci];
+        // oxlint-disable-next-line no-console
         console.log(`[standCollider] spec pos=(${fmt(s.pos.x)},${fmt(s.pos.y)},${fmt(s.pos.z)}) size=(${fmt(s.size.x)},${fmt(s.size.y)},${fmt(s.size.z)}) scale=${s.scale ?? 1} → box center y=${fmt(c.cy)} span=[${fmt(c.cy - c.hy)}..${fmt(c.cy + c.hy)}] baseOffset=${fmt(c.cy - c.hy - s.pos.y)}`);
       }
       ci += nOut;

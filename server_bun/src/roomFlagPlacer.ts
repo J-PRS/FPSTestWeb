@@ -220,7 +220,9 @@ export class FlagPlacer {
       ...(spec.spawns ?? []),
       ...(spec.structures ?? []).map(s => ({ x: s.pos.x, y: 0, z: s.pos.z })),
     ];
-    let a = undefined as unknown as Vec3like, b = undefined as unknown as Vec3like;
+    // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+    // oxlint-disable-next-line init-declarations -- assigned later
+    let a!: Vec3like, b;
     if (pts.length >= 2) {
       let cx = 0, cz = 0;
       for (const p of pts) { cx += p.x; cz += p.z; }
@@ -268,7 +270,7 @@ export class FlagPlacer {
   snapFlagBases(bases: { alpha: Vec3like; bravo: Vec3like }): { alpha: Vec3; bravo: Vec3 } {
     const snapBase = (v: Vec3like): Vec3 => {
       const p = this.deShelf(v);
-      return { ...v, x: p.x,z: p.z,y: this.standTop(p.x, p.z)};
+      return Object.assign({}, v, {x: p.x,z: p.z,y: this.standTop(p.x, p.z)});
     };
     return { alpha: snapBase(bases.alpha), bravo: snapBase(bases.bravo) };
   }

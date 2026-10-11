@@ -112,7 +112,7 @@ export class ConnectionManager {
   private frame(msg: ServerMessage, only?: string, exclude?: string): string {
     this.outSeq += 1;
     const seq = this.outSeq;
-    const data = JSON.stringify({ ...(msg as object), ev: seq});
+    const data = JSON.stringify(Object.assign({}, (msg as object), {ev: seq}));
     if (!NO_JOURNAL_TYPES.has((msg as { type: string }).type)) {
       const volatile_ = VOLATILE_TYPES.has((msg as { type: string }).type);
       this.journal.push({ seq, data, only, exclude, volatile: volatile_, at: wallNow() });

@@ -3,7 +3,7 @@ import { BotBrain, type BrainCtx } from '../../../shared/botBrain.js';
 
 const flat = () => 0;
 function ctx(pos: { x: number; y: number; z: number }, groundY: (x: number, z: number) => number = flat, extra: Partial<BrainCtx> = {}): BrainCtx {
-  return {pos,enemies: [],groundY,now: 0, ...extra};
+  return Object.assign({}, {pos,enemies: [],groundY,now: 0}, extra);
 }
 
 const wall = (x: number) => (x > 3 ? 20 : 0);
@@ -40,8 +40,8 @@ describe('BotBrain pathing', () => {
     // picks goal-forward since 654dc716; the block is what makes it sidestep.)
     const aheadWall = (x: number, z: number) => (z > 3 ? 20 : 0);
     b.think(0.4, ctx(pos, aheadWall, { objective }));
-    let out = b.think(1.5, ctx(pos, aheadWall, { objective }));
-    out = b.think(0.1, ctx(pos, aheadWall, { objective }));
+    b.think(1.5, ctx(pos, aheadWall, { objective }));
+    const out = b.think(0.1, ctx(pos, aheadWall, { objective }));
     // Detour must leave the +z line — x dominates the straight shot
     expect(Math.abs(out.dest.x)).toBeGreaterThan(5);
   });

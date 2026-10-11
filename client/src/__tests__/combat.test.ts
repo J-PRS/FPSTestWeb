@@ -66,24 +66,24 @@ describe('validateHitClaim', () => {
     // Rocket speed 120, 1s airtime, no drop — lands ~120m out
     const hitPos = { x: 120, y: 60, z: 0 };
     const targetPos = { x: 120, y: 60 + PLAYER_HEIGHT / 2, z: 0 };
-    const v = validateHitClaim({ ...base, hitPos,targetPos});
+    const v = validateHitClaim(Object.assign({}, base, {hitPos,targetPos}));
     expect(v.ok).toBe(true);
   });
 
   it('rejects a hit beyond ballistic reach', () => {
-    const v = validateHitClaim({ ...base, hitPos: { x: 900, y: 60, z: 0 },targetPos: { x: 900, y: 60, z: 0 }});
+    const v = validateHitClaim(Object.assign({}, base, {hitPos: { x: 900, y: 60, z: 0 },targetPos: { x: 900, y: 60, z: 0 }}));
     expect(v.ok).toBe(false);
   });
 
   it('rejects airtime beyond wall-clock age', () => {
-    const v = validateHitClaim({ ...base, airtime: 5,hitPos: { x: 120, y: 60, z: 0 },targetPos: { x: 120, y: 60, z: 0 }});
+    const v = validateHitClaim(Object.assign({}, base, {airtime: 5,hitPos: { x: 120, y: 60, z: 0 },targetPos: { x: 120, y: 60, z: 0 }}));
     expect(v.ok).toBe(false);
   });
 
   it('rejects a target outside capsule + wake radius', () => {
     const hitPos = { x: 120, y: 60, z: 0 };
     const farTarget = { x: 120, y: 60, z: 100 };
-    const v = validateHitClaim({ ...base, hitPos,targetPos: farTarget});
+    const v = validateHitClaim(Object.assign({}, base, {hitPos,targetPos: farTarget}));
     expect(v.ok).toBe(false);
   });
 });

@@ -524,7 +524,8 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   // or after Chrome blocked the page for prior losses — same cure:
   // reload gets a fresh page (and a fresh loss budget). The 1s delay
   // lets a transient GPU churn settle instead of thrash-reloading.
-  let renderer = undefined as unknown as THREE.WebGLRenderer;
+  // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+  let renderer!: THREE.WebGLRenderer;
   try {
     renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   } catch (error) {

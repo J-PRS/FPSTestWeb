@@ -171,7 +171,8 @@ export class SnapshotBuffer {
     // Both directions bounded: pin on big rewinds (backward warp), glide
     // forward at ~wall rate (the pin's own release otherwise snaps the
     // remote ahead as desired reasserts).
-    let renderTime = 0;
+    // oxlint-disable-next-line init-declarations -- assigned later
+    let renderTime!: number;
     if (this.lastRenderTime === -Infinity) {
       renderTime = desired;
     } else {

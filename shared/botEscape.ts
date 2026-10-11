@@ -178,7 +178,7 @@ s.orbitStreak += 1;
     s.stuckStreak = 0;
     s.orbitStreak = 0;
     s.detourT = 0;
-    s.progressPos = { ...pos};
+    s.progressPos = Object.assign({}, pos);
     return dest;
   }
   if (distSq(pos, s.progressPos) < 2.25) {
@@ -193,7 +193,7 @@ s.stuckStreak += 1;
   } else {
     s.stuckStreak = 0;
   }
-  s.progressPos = { ...pos};
+  s.progressPos = Object.assign({}, pos);
   return s.detourT > 0 && s.detour ? s.detour : dest;
 }
 

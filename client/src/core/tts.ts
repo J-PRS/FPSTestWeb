@@ -125,7 +125,8 @@ export function speakVgs(text: string, who?: string): void {
     liveVoice.delete(key);
     startAt = t + delay;
   }
-  let pcm: unknown = undefined; // sam-js returns Float32Array | Boolean
+  // oxlint-disable-next-line init-declarations -- set by sam-js
+  let pcm!: unknown; // sam-js returns Float32Array | Boolean
   try {
     pcm = samFor(who).buf32(text);
   } catch {
@@ -138,7 +139,7 @@ export function speakVgs(text: string, who?: string): void {
   const buf = ctx.createBuffer(1, pcm.length, SAM_RATE);
   buf.copyToChannel(pcm as Float32Array<ArrayBuffer>, 0);
   const src = playRadioVoice(ctx, bus, buf, startAt);
-  liveVoice.set(key, { ...src, startT: startAt,boundaryS: wordBoundary(text, who, buf.duration)});
+  liveVoice.set(key, Object.assign({}, src, {startT: startAt,boundaryS: wordBoundary(text, who, buf.duration)}));
   src.src.onended = () => { if (liveVoice.get(key)?.src === src.src) {liveVoice.delete(key);} };
 }
 

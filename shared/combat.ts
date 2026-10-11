@@ -297,7 +297,7 @@ function arcBlockedAt(
 ): number | null {
   const steps = Math.max(4, Math.min(240, Math.ceil(airtime / ARC_STEP_S)));
   const dt = airtime / steps;
-  const v = { ...projectile.velocity};
+  const v = Object.assign({}, projectile.velocity);
   let px = projectile.origin.x, py = projectile.origin.y, pz = projectile.origin.z;
   for (let i = 1; i <= steps; i += 1) {
     v.y += g * dt;

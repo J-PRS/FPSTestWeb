@@ -379,12 +379,7 @@ dropCensus.total += 1;
     // Defense-in-depth: server already excludes self from tickUpdate,
     // but skip local player here too in case of any server-side regression
     if (u.playerId === this.h.getLocalPlayerId()) {return;}
-    this.h.upsertRemotePlayer(u.playerId, {
-      // Declared wire fields copy straight from the model — a field the
-      // handler forgot lands as a key the record still owns.
-      ...(rowPatch(WORLD_MODEL.player.updateFields!, u as unknown as Record<string, unknown>) as Partial<RemotePlayerState>),
-      internalId: u.internalId || undefined,
-    });
+    this.h.upsertRemotePlayer(u.playerId, Object.assign({}, (rowPatch(WORLD_MODEL.player.updateFields!, u as unknown as Record<string, unknown>) as Partial<RemotePlayerState>), {internalId: u.internalId || undefined}));
     this.h.onPlayerUpdate?.(u.playerId, u.position, u.rotation, serverMs, u.velocity);
   }
 
@@ -412,7 +407,7 @@ dropCensus.total += 1;
   private handlePlayerRespawn(data: Extract<ServerMessage, { type: 'playerRespawn' }>): void {
     // Update REMOTE player in storage (local player respawn handled by callback)
     if (data.position) {
-      this.h.upsertRemotePlayer(data.playerId, { ...(rowPatch(WORLD_MODEL.player.events!.playerRespawn!, data as unknown as Record<string, unknown>) as Partial<RemotePlayerState>), velocity: { x: 0, y: 0, z: 0 },isDead: false,health: 100});
+      this.h.upsertRemotePlayer(data.playerId, Object.assign({}, (rowPatch(WORLD_MODEL.player.events!.playerRespawn!, data as unknown as Record<string, unknown>) as Partial<RemotePlayerState>), {velocity: { x: 0, y: 0, z: 0 },isDead: false,health: 100}));
     }
     this.h.onPlayerRespawn?.(data.playerId, data.position, data.rotation, data.armorClass);
   }

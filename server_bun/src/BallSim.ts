@@ -147,18 +147,7 @@ export class BallSim {
     const out = [];
     for (const b of this.balls.values()) {
       if (b.dead) {continue;}
-      out.push(rosterRow(WORLD_MODEL.ball!, 'id', b.id, {
-        variant: b.variant, colorIdx: b.colorIdx,
-        position: { x: b.x, y: b.y, z: b.z },
-        velocity: { x: b.vx, y: b.vy, z: b.vz },
-        // Roster doubles as the hash lane's heal: enraged/targetId must be
-        // the COMMITTED segment regime (same as contractRoster), not live
-        // — b.targetId retargets mid-leg, so a live value heals the client
-        // to a regime the hash then reads as divergent forever.
-        ...(this.segRegime.get(b.id) ?? { enraged: b.enraged, targetId: b.targetId }), tp: this.targetSnap(b),
-        et: b.enrageTimer, slowT: b.slowTimer, damp: b.dampNextBounce ? 1 : 0,
-        t: this.simTime,
-      }));
+      out.push(rosterRow(WORLD_MODEL.ball!, 'id', b.id, Object.assign({}, {variant: b.variant,colorIdx: b.colorIdx,position: { x: b.x, y: b.y, z: b.z },velocity: { x: b.vx, y: b.vy, z: b.vz }}, (this.segRegime.get(b.id) ?? { enraged: b.enraged, targetId: b.targetId }), {tp: this.targetSnap(b),et: b.enrageTimer,slowT: b.slowTimer,damp: b.dampNextBounce ? 1 : 0,t: this.simTime})));
     }
     return out as { id: number; variant: number; colorIdx: number; position: SimVec; velocity: SimVec; enraged: boolean; targetId: string | null; tp?: SimVec | null; et?: number; slowT?: number; damp?: boolean; t: number }[];
   }

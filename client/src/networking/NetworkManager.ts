@@ -594,9 +594,9 @@ this.sendDrops += 1;
     if (!existing) {
       // Vec defaults are shared literals — clone or the first in-place
       // update corrupts every roster entry built after this one.
-      next.position = { ...ROSTER_DEFAULTS.position!};
-      next.rotation = { ...ROSTER_DEFAULTS.rotation!};
-      next.velocity = { ...ROSTER_DEFAULTS.velocity!};
+      next.position = Object.assign({}, ROSTER_DEFAULTS.position!);
+      next.rotation = Object.assign({}, ROSTER_DEFAULTS.rotation!);
+      next.velocity = Object.assign({}, ROSTER_DEFAULTS.velocity!);
     }
     for (const k of ROSTER_FIELDS) {
       // Vec fields are handled below — storing the patch ref would alias
@@ -670,7 +670,7 @@ this.sendDrops += 1;
     // Assign sequence number and store in state history for reconciliation
     this.sequenceCounter += 1;
     const seq = this.sequenceCounter;
-    this.stateHistory.set(seq, { position: { ...position}, velocity: { ...velocity}, rotation: { ...rotation} });
+    this.stateHistory.set(seq, { position: Object.assign({}, position), velocity: Object.assign({}, velocity), rotation: Object.assign({}, rotation) });
     if (this.stateHistory.size > this.STATE_HISTORY_MAX) {
       const oldest = this.stateHistory.keys().next().value;
       if (oldest !== undefined) {this.stateHistory.delete(oldest);}
@@ -762,7 +762,7 @@ this.sendDrops += 1;
     if (!cur || cur.isDead === isDead) {return null;}
     // Server position is truth either way: a revive anchors at the
     // respawn point, a kill pins the corpse where the server saw it die.
-    this.upsertRemotePlayer(playerId, {isDead,health, ...(position ? { position } : {})});
+    this.upsertRemotePlayer(playerId, Object.assign({}, {isDead,health}, (position ? { position } : {})));
     return isDead ? 'killed' : 'revived';
   }
 
@@ -785,7 +785,7 @@ this.sendDrops += 1;
     if (a.excludeTargetId && a.excludeTargetId !== 'local') {
       this.ledger.noteShot(`aoe:${a.excludeTargetId}`, a.excludeTargetId, a.weaponType);
     }
-    this.send({ ...a, excludeTargetId: a.excludeTargetId ?? null,projectileId: a.projectileId ?? undefined,fireAt: this.serverNowMs(),type: 'aoeShot' as const});
+    this.send(Object.assign({}, a, {excludeTargetId: a.excludeTargetId ?? null,projectileId: a.projectileId ?? undefined,fireAt: this.serverNowMs(),type: 'aoeShot' as const}));
   }
 
   /** Slam landing intent — the server derives blast power from its own
@@ -809,7 +809,7 @@ this.sendDrops += 1;
    *  spawn hint + echo binding; the server derives truth itself. */
   sendShotFired(a: { weaponType?: number; dir?: { x: number; y: number; z: number }; pos?: { x: number; y: number; z: number }; shotId?: string }): void {
     if (!this.connected) {return;}
-    this.send({type: 'shotFired' as const, ...a, fireAt: this.serverNowMs()});
+    this.send(Object.assign({}, {type: 'shotFired' as const}, a, {fireAt: this.serverNowMs()}));
   }
 
   sendProjectileDestroy(projectileId: string, shotId?: string): void {

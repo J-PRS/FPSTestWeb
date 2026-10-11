@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { bodyMat, darkMat, mkTube, mkSoftBox } from './weaponKit.js';
+import { bodyMat, darkMat, mkTube } from './weaponKit.js';
 
 // Sidearm + tool builders — compact silhouettes so the hold-out swap
 // reads instantly. Split from weaponsGeo.ts; builders return invisible

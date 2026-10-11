@@ -266,7 +266,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
 
   // Declared remote teleport (another player's warp): snap the visual —
   // interpolating across a 50m gap reads as a rocket-flight glitch
-  networkManager.onRemoteTeleport = (playerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }) => {
+  networkManager.onRemoteTeleport = (playerId: string, position: { x: number; y: number; z: number }, _velocity: { x: number; y: number; z: number }) => {
     const rp = deps.world.remotePlayers.get(playerId);
     if (!rp) {return;}
     // teleportTo writes straight into position/previousPosition/interp — a

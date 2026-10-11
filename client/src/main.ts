@@ -110,7 +110,8 @@ const ambientLayers = [
   new AmbientParticles(scene, 'embers'),
   new AmbientParticles(scene, 'ash'),
 ];
-let groundMist = undefined as unknown as GroundMist; // needs terrain — created in init()
+// oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+let groundMist!: GroundMist; // needs terrain — created in init()
 const ambientBirds = new AmbientBirds(scene); // kettle of buzzards on a thermal
 
 // ---- Renderer ----
@@ -120,14 +121,22 @@ renderer.setClearColor(FOG_COLOR);
 
 // ---- Game state ----
 let demoManager: DemoManager | null = null;
-let terrain = undefined as unknown as Terrain;
-let player = undefined as unknown as Player;
-let viewModel = undefined as unknown as ViewModel;
-let vmSetup = undefined as unknown as ReturnType<typeof createViewModelScene>;
-let hud = undefined as unknown as HUD;
-let healthBarSystem = undefined as unknown as HealthBarSystem;
-let damageNumberManager = undefined as unknown as DamageNumberManager;
-let networkManager = undefined as unknown as NetworkManager;
+// oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+let terrain!: Terrain;
+// oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+let player!: Player;
+// oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+let viewModel!: ViewModel;
+// oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+let vmSetup!: ReturnType<typeof createViewModelScene>;
+// oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+let hud!: HUD;
+// oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+let healthBarSystem!: HealthBarSystem;
+// oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+let damageNumberManager!: DamageNumberManager;
+// oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+let networkManager!: NetworkManager;
 /** Room-join sockets open at boot start (before the handler deps bind)
  *  so the handshake overlaps init — connectPhase awaits this instead of
  *  connecting late. Null for classic/solo/p2p paths. */
@@ -136,7 +145,8 @@ let earlyConnP: Promise<void> | null = null;
 const world = createWorldState();
 const {remotePlayers} = world;
 let dummyUpdate: ((dt: number) => void) | null = null; // ?dummy debug hook
-let effects = undefined as unknown as EffectsManager;
+// oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+let effects!: EffectsManager;
 
 // ---- Input tracking ----
 const inputTracking = setupInputTracking(logger);
@@ -148,22 +158,29 @@ const explosionTracker = new ExplosionTracker();
 const fragMessages = new FragMessages();
 
 // ---- Combat pipeline (fire handlers, projectile updates, impact/force) ----
-let combat = undefined as unknown as ReturnType<typeof createCombat>;
+// oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+let combat!: ReturnType<typeof createCombat>;
 let teamBots: TeamBots | null = null; // ?mode=nuggets
 
 // ---- Remote player lifecycle (game/remotes.ts); created in init() ----
-let remotes = undefined as unknown as ReturnType<typeof createRemotes>;
-let playerSheep = undefined as unknown as PlayerSheep;
+// oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+let remotes!: ReturnType<typeof createRemotes>;
+// oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+let playerSheep!: PlayerSheep;
 
 // ---- Demo playback lifecycle (game/demoLifecycle.ts); created in init() ----
-let demoLifecycle = undefined as unknown as ReturnType<typeof createDemoLifecycle>;
+// oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+let demoLifecycle!: ReturnType<typeof createDemoLifecycle>;
 
 // ---- Ambient entities: balls/crawlers/turretters/rollers/nuggets ----
-let entities = undefined as unknown as ReturnType<typeof createEntities>;
-let waveDirector = undefined as unknown as ReturnType<typeof createWaveDirector>;
+// oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+let entities!: ReturnType<typeof createEntities>;
+// oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+let waveDirector!: ReturnType<typeof createWaveDirector>;
 
 // ---- Frame loop + render pass (game/gameLoop.ts); created in init() ----
-let gameLoop = undefined as unknown as ReturnType<typeof createGameLoop>;
+// oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+let gameLoop!: ReturnType<typeof createGameLoop>;
 
 // ---- Boot ----
 const serverEndpoints = resolveServerEndpoints();
@@ -511,7 +528,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
       entities.deployables.remoteSpawn(((depId += 1) - 1), {
         owner: d.team ? `base:${d.team}` : 'base',
         kind: d.kind as DeployKind,
-        pos: { ...d.pos, y},
+        pos: Object.assign({}, d.pos, {y}),
         team: d.team,
       });
     }

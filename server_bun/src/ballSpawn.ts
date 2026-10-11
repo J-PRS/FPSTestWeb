@@ -78,7 +78,8 @@ export const BRAIN_BUCKETS = 8;
  *  posOverride = splitter children at a corpse. */
 export function spawnBall(h: SpawnHost, variant: BallVariant, near?: SimVec, posOverride?: SimVec): SimBall {
   const field = h.field!;
-  let x = 0, z = 0;
+  // oxlint-disable-next-line init-declarations -- both branches assign
+  let x!: number, z!: number;
   if (posOverride) {
     ({x} = posOverride); ({z} = posOverride);
   } else {

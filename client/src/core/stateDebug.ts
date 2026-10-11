@@ -489,7 +489,7 @@ hashCheckCount += 1;
         // forever (the audit just re-warns). Edges stay the primary
         // writer — this only corrects ones that never landed.
         // Species is constructor-fixed; a mismatch there stays a warn.
-        for (const [id, , state, uber, targetId] of serverCreatureFields) {
+        for (const [id, , state, , targetId] of serverCreatureFields) {
           const c = creatureById.get(id);
           if (c?.sim && (c.sim.state !== state || (c.sim.targetId ?? null) !== (targetId ?? null))) {
             seedReplicaState(c.sim, state);

@@ -103,7 +103,7 @@ export class RoomMoveSim {
       const pos = reportedPos?.(pid);
       if (pos && Number.isFinite(pos.x + pos.y + pos.z)) {
         sh.sim.setState({
-          pos: { x: pos.x, y: pos.y, z: pos.z }, vel: { ...old.state.vel},
+          pos: { x: pos.x, y: pos.y, z: pos.z }, vel: Object.assign({}, old.state.vel),
           yaw: old.state.yaw, pitch: old.state.pitch, onGround: old.state.onGround,
         });
       }
@@ -301,11 +301,11 @@ this.structEpoch += 1;
     if (seq !== undefined && seq <= sh.lastInputSeq) {return false;}
     if (seq === undefined) {
       if (input.jetHeld !== undefined) {sh.jetWanted = input.jetHeld;}
-      sh.sim.setInput({ ...input, jetHeld: sh.jetWanted && sh.energy > 0});
+      sh.sim.setInput(Object.assign({}, input, {jetHeld: sh.jetWanted && sh.energy > 0}));
     } else {
       sh.lastInputSeq = seq;
       if (input.jetHeld !== undefined) {sh.jetWanted = input.jetHeld;}
-      sh.sim.setInput({ ...input, jetHeld: sh.jetWanted && sh.energy > 0});
+      sh.sim.setInput(Object.assign({}, input, {jetHeld: sh.jetWanted && sh.energy > 0}));
       // The anchor carries the input that runs FORWARD from this seq —
       // anchoredCompare replays anchor(k).inp over [k, k+1), so a
       // pre-apply snapshot would replay the input that just ended and
@@ -313,7 +313,7 @@ this.structEpoch += 1;
       sh.seqStates.set(seq, {
         snap: sh.sim.snapshot(),
         tick: sh.simTicks,
-        inp: { ...sh.sim.input},
+        inp: Object.assign({}, sh.sim.input),
         e: sh.energy,
       });
       if (sh.seqStates.size > 32) {evictEldest(sh.seqStates);}
@@ -568,7 +568,7 @@ sh.gapStreak += 1;
           // hop/jet fires instead of collapsing into the final state.
           const slice = dt / edges.length;
           for (const e of edges) {
-            sh.sim.setInput({ ...e.input, jetHeld: jetting});
+            sh.sim.setInput(Object.assign({}, e.input, {jetHeld: jetting}));
             sh.sim.update(slice);
           }
         } else {

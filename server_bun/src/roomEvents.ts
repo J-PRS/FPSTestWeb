@@ -47,6 +47,7 @@ export class EventBus {
   }
   readonly emit: RoomEventSink = (e) => {
     for (const cb of this.subs) {
+      // oxlint-disable-next-line no-console
       try { cb(e); } catch (error) { console.error('[EventBus] subscriber threw', error); }
     }
   };

@@ -19,7 +19,8 @@ class FakeWorker {
 }
 
 // oxlint-disable-next-line consistent-type-imports -- lazy class type; typeof import() has no import type equivalent
-let WorkerTransport = undefined as unknown as typeof import('../networking/WorkerTransport.js').WorkerTransport;
+// oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+let WorkerTransport!: typeof import('../networking/WorkerTransport.js').WorkerTransport;
 
 function makeConfig(): ConnectionConfig {
   return {

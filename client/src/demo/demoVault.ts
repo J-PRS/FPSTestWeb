@@ -63,7 +63,7 @@ export class DemoVault {
     try {
       const db = await this.db();
       const tx = db.transaction([STORE, META_STORE], 'readwrite');
-      const meta = { ...entry};
+      const meta = Object.assign({}, entry);
       delete (meta as { data?: unknown }).data;
       await tx.objectStore(STORE).put(entry);
       await tx.objectStore(META_STORE).put(meta);
@@ -110,7 +110,7 @@ export class DemoVault {
     try {
       const tx = db.transaction([STORE, META_STORE], 'readwrite');
       for await (const cursor of tx.objectStore(STORE).iterate()) {
-        const m = ((({ ...cursor.value}))) as VaultEntry;
+        const m = (((((Object.assign({}, cursor.value)))))) as VaultEntry;
         delete (m as { data?: unknown }).data;
         await tx.objectStore(META_STORE).put(m);
       }

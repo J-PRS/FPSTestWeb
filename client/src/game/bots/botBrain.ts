@@ -167,16 +167,16 @@ export class GameBot extends RemotePlayer {
     // NaN dmg fails `botHp <= 0` forever — an unkillable bot.
     if (!Number.isFinite(dmg)) { inv('bot-damage-finite', false, { dmg }); return false; }
     // Plated et al — the server's applyDamage applies the same resist.
-    dmg *= 1 - effectiveResist(this.mods, this.botHp, this.botMaxHp);
+    let d = dmg * (1 - effectiveResist(this.mods, this.botHp, this.botMaxHp));
     // Held shield burns tank instead of flesh — same exchange rate the
     // server shadow models (10 hp per energy point).
     if ((this.status & STATUS.SHIELD) && this.energy > 0) {
-      const absorbed = Math.min(dmg, this.energy * ENERGY.shieldDmgPerEnergy);
+      const absorbed = Math.min(d, this.energy * ENERGY.shieldDmgPerEnergy);
       this.energy -= absorbed / ENERGY.shieldDmgPerEnergy;
-      dmg -= absorbed;
+      d -= absorbed;
       if (this.energy <= 0.5) {this.dropSkill(STATUS.SHIELD);}
     }
-    this.botHp -= dmg;
+    this.botHp -= d;
     this.brain.takeHit(fromPos, attackerId); // recoil + foe score live in the shared brain
     this.flinch(); // RemotePlayer 'hit' oneshot — the model reacts, not just the brain
     if (this.botHp <= 0) {
@@ -239,14 +239,7 @@ export class GameBot extends RemotePlayer {
     // cells: teammates re-query each other's cached LOS marches and steer
     // probes instead of recomputing them.
     const gyc = sharedGroundYCache;
-    const out = this.brain.think(dt, {
-      pos,
-      team: this.team === 'ffa' ? undefined : this.team,
-      vel: this.velocity,
-      enemies: ctx.enemies,
-      objective: ctx.objective ?? undefined,
-      pickup: ctx.nugget?.pos,
-      groundY: (x, z) => {
+    const out = this.brain.think(dt, Object.assign({}, {pos,team: this.team === 'ffa' ? undefined : this.team,vel: this.velocity,enemies: ctx.enemies,objective: ctx.objective ?? undefined,pickup: ctx.nugget?.pos,groundY: (x: number, z: number) => {
         // ~2m cells, not 4cm: getHeight is a smooth bilinear heightmap
         // read, so meter snapping is invisible to the senses — and wider
         // cells give the shared memo a much higher hit rate.
@@ -264,45 +257,11 @@ export class GameBot extends RemotePlayer {
           gyc.set(k, v);
         }
         return v;
-      },
-      solids: Projectile.solidColliders,
-      solidIndex: Projectile.solidIndex,
-      others: ctx.others,
-      allies: ctx.allies,
-      engageRange: ctx.engageRange,
-      sounds: ctx.sounds,
-      threats: ctx.threats,
-      infiltrating: ctx.infiltrating,
-      running: ctx.running,
-      runner: ctx.runner,
-      wave: ctx.wave,
-      marshal: ctx.marshal,
-      posted: ctx.posted,
-      thief: ctx.thief ?? null,
-      huntCreatures: ctx.huntCreatures,
-      repair: ctx.repair ?? null,
-      notice: ctx.notice ?? null,
-      confidence: ctx.confidence,
-      now: performance.now(),
-      // The real tank + hp — fear, mend, shield, and retreat gates all
-      // read these; without them every status decision saw a full sheet.
-      energy: this.energy,
-      healthFrac: this.botHp / this.botMaxHp,
-      // Aim lead uses the muzzle speed of the weapon this bot would
-      // pick at that range — mirrors the server's senses hook. The
-      // draw is skill-biased: phenoms reach for their gun, and the
-      // aim error scores the same matrix so pick and aim agree.
-      // Every pick-based weapon sense — ONE shared factory with the
-      // server senses, so the offline feed can't drift the formulas
-      // (this is where beams used to lead like shells: `speed || 60`
-      // erased the hitscan 0).
-      ...botWeaponHooks(
+      },solids: Projectile.solidColliders,solidIndex: Projectile.solidIndex,others: ctx.others,allies: ctx.allies,engageRange: ctx.engageRange,sounds: ctx.sounds,threats: ctx.threats,infiltrating: ctx.infiltrating,running: ctx.running,runner: ctx.runner,wave: ctx.wave,marshal: ctx.marshal,posted: ctx.posted,thief: ctx.thief ?? null,huntCreatures: ctx.huntCreatures,repair: ctx.repair ?? null,notice: ctx.notice ?? null,confidence: ctx.confidence,now: performance.now(),energy: this.energy,healthFrac: this.botHp / this.botMaxHp}, botWeaponHooks(
         (d) => pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d, (t) => aimSkillFor(this.brain.skill, t, 0), this.brain.skill.courage) as WeaponType,
         this.loadout ?? BOT_LOADOUTS[0]!,
-      ),
-      aimSkill: (d, targetSpeed) =>
-        aimSkillFor(this.brain.skill, pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d, (t) => aimSkillFor(this.brain.skill, t, 0), this.brain.skill.courage), targetSpeed),
-    });
+      ), {aimSkill: (d: number, targetSpeed: number) =>
+        aimSkillFor(this.brain.skill, pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d, (t) => aimSkillFor(this.brain.skill, t, 0), this.brain.skill.courage), targetSpeed)}));
     const {dest} = out;
     this.lastDest.set(dest.x, dest.y, dest.z);
     this.lastMove = out.move;

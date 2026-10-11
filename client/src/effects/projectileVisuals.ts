@@ -88,21 +88,7 @@ function getGlowMat(color: number, opacity: number, flash: boolean, cone = false
     // to the resting hue and the pulse writes near-white at the crest.
     const c = new THREE.Color(color);
     if (flash) {c.lerp(_white, 0.7);}
-    m = new THREE.MeshBasicMaterial({
-      color: c.multiplyScalar(EMIT_GAIN), transparent: true, opacity,
-      depthWrite: false, side: THREE.DoubleSide,
-      // Energy collar: additive so the skirt ADDS light instead of a
-      // tinted veil. The filament pattern rides in `map`, NOT alphaMap —
-      // additive pixels only add their RGB, so dark texels already read
-      // as gaps; going through the alpha channel suppressed the whole
-      // cone in this pipeline (verified: invisible with alphaMap, solid
-      // with it nulled).
-      // fog: false — scene.fog blends fragments toward fog color, but an
-      // additive skirt can only ADD: distant texels would add fog-gray
-      // and read opaque instead of transparent. Distant shells keep the
-      // glow un-fogged so it stays a bright streak, not a gray sail.
-      ...(cone ? { blending: THREE.AdditiveBlending, map: getConeAlphaTex(), fog: false } : {}),
-    });
+    m = new THREE.MeshBasicMaterial((((Object.assign({}, {color: c.multiplyScalar(EMIT_GAIN),transparent: true,opacity,depthWrite: false,side: THREE.DoubleSide}, (cone ? { blending: THREE.AdditiveBlending, map: getConeAlphaTex(), fog: false } : {}))))));
     GLOW_MAT_CACHE.set(key, m);
   }
   return m;

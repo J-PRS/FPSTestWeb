@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { predictAt, newNetBag, type NetStatics } from '../entities/ballNet.js';
-import { makeSimBall, BALL_GRAVITY } from '../../../shared/ballSim.js';
+import { makeSimBall } from '../../../shared/ballSim.js';
 import type { Heightfield } from '../../../shared/heightfield.js';
 import * as THREE from 'three';
 

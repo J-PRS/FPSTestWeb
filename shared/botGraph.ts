@@ -229,7 +229,8 @@ falling += 1;
       chain.push(c);
       if (walked >= ahead) {break;}
     }
-    let target = 0;
+    // oxlint-disable-next-line init-declarations -- assigned later
+    let target!: number;
     if (walked >= ahead) {target = c;}
     else if (c === goal && chain.length > 1 && this.solidIndex
       // Goal inside the horizon AND a wall on the beeline: emit the

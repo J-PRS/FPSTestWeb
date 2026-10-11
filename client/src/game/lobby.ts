@@ -284,7 +284,8 @@ export class Lobby {
 
   private async refreshRooms(): Promise<void> {
     this.rows.textContent = '';
-    let rooms: RoomRow[] = [];
+    // oxlint-disable-next-line init-declarations -- assigned later
+    let rooms!: RoomRow[];
     // RTT of the /rooms fetch itself = the server ping — green/amber/red.
     const t0 = performance.now();
     try {

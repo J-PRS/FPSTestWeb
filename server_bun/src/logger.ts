@@ -68,10 +68,12 @@ class Logger {
   }
 
   debug(msg: string, data?: unknown): void {
+    // oxlint-disable-next-line no-console
     if (this.shouldLog('debug')) {console.debug(this.format('debug', msg, data));}
   }
 
   info(msg: string, data?: unknown): void {
+    // oxlint-disable-next-line no-console
     if (this.shouldLog('info')) {console.log(this.format('info', msg, data));}
   }
 
@@ -100,6 +102,7 @@ burst.n += 1;
     const collapsed = this.collapse(this.warnBurst, msg);
     if (collapsed === null) {return;}
     const line = this.format('warn', collapsed, data);
+    // oxlint-disable-next-line no-console
     console.warn(line);
     this.toFile(line);
   }
@@ -109,6 +112,7 @@ burst.n += 1;
     const collapsed = this.collapse(this.errorBurst, msg);
     if (collapsed === null) {return;}
     const line = this.format('error', collapsed, data);
+    // oxlint-disable-next-line no-console
     console.error(line);
     this.toFile(line);
   }

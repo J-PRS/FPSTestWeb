@@ -190,7 +190,7 @@ export interface BoltOpts {
 const BOLT_TRAIL_PTS = 12;
 
 export function spawnBolt(o: BoltOpts, world: LabWorld): SimEntity & { sim: SimProjectile; done: boolean } {
-  const p: SimProjectile = { pos: { ...o.pos}, vel: { ...o.vel}, age: 0 };
+  const p: SimProjectile = { pos: Object.assign({}, o.pos), vel: Object.assign({}, o.vel), age: 0 };
   const mesh = new THREE.Mesh(
     new THREE.SphereGeometry(o.radius ?? 0.3, 10, 10),
     new THREE.MeshBasicMaterial({ color: o.color ?? 0xFF_E0_8A }),
@@ -369,7 +369,7 @@ export interface ShellOpts {
 
 export function spawnShell(o: ShellOpts, world: LabWorld): SimEntity & { sim: SimProjectile; done: boolean; detonate(directHit?: boolean): void } {
   const config = getProjectileConfig(o.weaponType)!;
-  const p: SimProjectile = { pos: { ...o.pos}, vel: { ...o.vel}, age: 0 };
+  const p: SimProjectile = { pos: Object.assign({}, o.pos), vel: Object.assign({}, o.vel), age: 0 };
   const pos = new THREE.Vector3(o.pos.x, o.pos.y, o.pos.z);
   const vel = new THREE.Vector3(o.vel.x, o.vel.y, o.vel.z);
   const built = buildProjectileMeshes(world.scene, config, pos);

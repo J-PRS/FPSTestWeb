@@ -92,27 +92,31 @@ export function isWireFrame(u8: Uint8Array): boolean {
 // Quantizers — shared by both encoders so position and tick records can
 // never drift out of sync (each would silently decode differently).
 function packVel(d: DataView, o: number, v: WireVec3): number {
-  d.setInt16(o, Math.round(v.x * 10), true); o += 2;
-  d.setInt16(o, Math.round(v.y * 10), true); o += 2;
-  d.setInt16(o, Math.round(v.z * 10), true); o += 2;
-  return o;
+  let off = o;
+  d.setInt16(off, Math.round(v.x * 10), true); off += 2;
+  d.setInt16(off, Math.round(v.y * 10), true); off += 2;
+  d.setInt16(off, Math.round(v.z * 10), true); off += 2;
+  return off;
 }
 function unpackVel(d: DataView, o: number, out: WireVec3): number {
-  out.x = d.getInt16(o, true) / 10; o += 2;
-  out.y = d.getInt16(o, true) / 10; o += 2;
-  out.z = d.getInt16(o, true) / 10; o += 2;
-  return o;
+  let off = o;
+  out.x = d.getInt16(off, true) / 10; off += 2;
+  out.y = d.getInt16(off, true) / 10; off += 2;
+  out.z = d.getInt16(off, true) / 10; off += 2;
+  return off;
 }
 function packRot(d: DataView, o: number, rot: WireRot): number {
+  let off = o;
   const yaw2pi = ((rot.yaw % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
-  d.setUint16(o, Math.round(yaw2pi * (65_535 / (Math.PI * 2))), true); o += 2;
-  d.setInt16(o, Math.round(Math.max(-Math.PI, Math.min(Math.PI, rot.pitch)) * (32_767 / Math.PI)), true); o += 2;
-  return o;
+  d.setUint16(off, Math.round(yaw2pi * (65_535 / (Math.PI * 2))), true); off += 2;
+  d.setInt16(off, Math.round(Math.max(-Math.PI, Math.min(Math.PI, rot.pitch)) * (32_767 / Math.PI)), true); off += 2;
+  return off;
 }
 function unpackRot(d: DataView, o: number, out: WireRot): number {
-  out.yaw = d.getUint16(o, true) * ((Math.PI * 2) / 65_535); o += 2;
-  out.pitch = d.getInt16(o, true) * (Math.PI / 32_767); o += 2;
-  return o;
+  let off = o;
+  out.yaw = d.getUint16(off, true) * ((Math.PI * 2) / 65_535); off += 2;
+  out.pitch = d.getInt16(off, true) * (Math.PI / 32_767); off += 2;
+  return off;
 }
 
 // ---- C→S position ----
@@ -199,10 +203,11 @@ export function decodePosition(u8: Uint8Array, into?: WirePosition): WirePositio
 // dead-capacity safety, not a reachable bound.
 const POS_Q = 0.04;
 const packPos = (d: DataView, o: number, x: number, y: number, z: number): number => {
-  d.setInt32(o, Math.max(-2_147_483_648, Math.min(2_147_483_647, Math.round(x / POS_Q))), true); o += 4;
-  d.setInt32(o, Math.max(-2_147_483_648, Math.min(2_147_483_647, Math.round(y / POS_Q))), true); o += 4;
-  d.setInt32(o, Math.max(-2_147_483_648, Math.min(2_147_483_647, Math.round(z / POS_Q))), true); o += 4;
-  return o;
+  let off = o;
+  d.setInt32(off, Math.max(-2_147_483_648, Math.min(2_147_483_647, Math.round(x / POS_Q))), true); off += 4;
+  d.setInt32(off, Math.max(-2_147_483_648, Math.min(2_147_483_647, Math.round(y / POS_Q))), true); off += 4;
+  d.setInt32(off, Math.max(-2_147_483_648, Math.min(2_147_483_647, Math.round(z / POS_Q))), true); off += 4;
+  return off;
 };
 
 /** Pre-encode one player's record — done ONCE per tick, shared across recipients. */
@@ -274,7 +279,9 @@ export function tickFrameScratch(cap = 2048): TickFrameScratch {
 export function encodeTickFrame(ackSeq: number, tickSeq: number, inputAck: number, records: Uint8Array[], type: number = WIRE_TICK, into?: TickFrameScratch): Uint8Array {
   let total = 15;
   for (const r of records) {total += r.length;}
-  let u8 = undefined as unknown as Uint8Array, d = undefined as unknown as DataView;
+  // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+  // oxlint-disable-next-line init-declarations -- assigned later
+  let u8!: Uint8Array, d;
   if (into) {
     if (into.buf.byteLength < total) {
       // Grow to the next power-of-two above need — resize-once amortized.
@@ -342,7 +349,8 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
   let o = 15;
   for (let i = 0; i < count; i += 1) {
     if (o >= u8.length) {return null;}
-    let playerId = '';
+    // oxlint-disable-next-line init-declarations -- assigned later
+    let playerId!: string;
     let wireId = 0;
     if (v3) {
       if (o + 29 > u8.length) {return null;}
@@ -361,7 +369,8 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
     }
     // v4 decodes into the per-wireId slot so masked groups inherit the
     // last-decoded values; flat slots stay for v1/v3 frames.
-    let u: WireTickPlayer | undefined = undefined;
+    // oxlint-disable-next-line init-declarations -- assigned later
+    let u!: WireTickPlayer | undefined;
     let v4HadBase = false;
     if (v4) {
       u = pool?.byId?.get(wireId);
@@ -418,7 +427,8 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
       pool?.byId?.set(wireId, u);
       continue;
     }
-    let px = 0, py = 0, pz = 0;
+    // oxlint-disable-next-line init-declarations -- assigned by branch below
+    let px!: number, py!: number, pz!: number;
     if (v1) {
       px = d.getFloat32(o, true); o += 4;
       py = d.getFloat32(o, true); o += 4;

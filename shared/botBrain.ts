@@ -652,7 +652,7 @@ export class BotBrain {
     // Radio commands carry an implied position — a same-team "Defend our
     // flag!" or "Cover me!" sticks for a stretch instead of dying with the
     // notice tick, so a dutiful bot actually rotates toward the call.
-    if (ctx.notice?.goal) {this.radioGoal = { ...ctx.notice.goal, until: now + 25_000};}
+    if (ctx.notice?.goal) {this.radioGoal = Object.assign({}, ctx.notice.goal, {until: now + 25_000});}
     if (this.radioGoal && (now > this.radioGoal.until || distSqXZ(this.radioGoal, pos) < 25 * 25)) {this.radioGoal = null;}
     ctx.radio = this.radioGoal;
 
@@ -714,6 +714,7 @@ export class BotBrain {
       const f = (v: BotVec) => `${v.x.toFixed(0)},${v.z.toFixed(0)}`;
       const spd = ctx.vel ? Math.hypot(ctx.vel.x, ctx.vel.y, ctx.vel.z) : 0;
       const bg = this.breachUntil > now ? ` bg=${f(this.breachGoal)}` : '';
+      // oxlint-disable-next-line no-console
       console.log(`trace t=${(now / 1000).toFixed(1)} pos=${f(pos)} v=${spd.toFixed(1)} ej=${this.escapeS.escapeJetT.toFixed(1)} goal=${f(ctx.objective ?? pos)} d0=${f(d0)} d1=${f(d1)} d2=${f(d2)}${bg}`);
     }
 

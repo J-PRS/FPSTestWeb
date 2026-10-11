@@ -514,7 +514,7 @@ sh.divergences += 1;
       if (tick < targetTick - 1) {return;}
       const st = probe.state;
       const d = Math.hypot(reportPos.x - st.pos.x, reportPos.y - st.pos.y, reportPos.z - st.pos.z);
-      if (d < bestD) { bestD = d; best = { ...st, pos: Object.assign({}, st.pos),vel: Object.assign({}, st.vel)}; }
+      if (d < bestD) { bestD = d; best = Object.assign({}, st, {pos: Object.assign({}, st.pos),vel: Object.assign({}, st.vel)}); }
     });
     return best ?? probe.state;
   }

@@ -132,7 +132,7 @@ export class MatchClock {
     setMatchMuted(true);
     const {host} = this;
     const spec = host.modeSpec!;
-    const scores = spec.teams ? ((({ ...host.scores}))) : Object.fromEntries(host.ffaScores);
+    const scores = spec.teams ? Object.assign({}, host.scores) : Object.fromEntries(host.ffaScores);
     host.broadcast({ type: spec.teams ? 'matchEnd' : 'ffaMatchEnd', winner: w, scores } as ServerMessage);
     host.onMatchEnd?.({ room: host.room, mode: host.mode, winner: w, scores, players: host.matchPlayers() });
     host.onEnded?.(w);
@@ -165,7 +165,7 @@ export class MatchClock {
     this.endsAt = host.getHumanCount() > 0 ? simNow() + spec.timeLimitS * 1000 : 0;
     this.warned = false;
     this.overtime = false;
-    host.broadcast({ type: 'matchStart', mode: host.mode, scores: { ...host.scores} });
+    host.broadcast({ type: 'matchStart', mode: host.mode, scores: Object.assign({}, host.scores) });
     host.onStarted?.();
   }
 }

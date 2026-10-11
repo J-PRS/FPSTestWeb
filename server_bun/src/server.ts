@@ -171,9 +171,13 @@ if (CONFIG.wtPort > 0) {
 
 // Boot banner bypasses the log level — a server that prints nothing looks
 // dead. It's once-per-process, so it can never add to the chatter floor.
+// oxlint-disable-next-line no-console
 console.log(`FPS Bun Server started port=${CONFIG.port} tick=${CONFIG.tickRate} maxPlayers=${CONFIG.maxPlayers} respawnMs=${CONFIG.respawnDelayMs}`);
+// oxlint-disable-next-line no-console
 console.log(`WebSocket: ws://localhost:${CONFIG.port}/ws`);
+// oxlint-disable-next-line no-console
 console.log(`Health:    http://localhost:${CONFIG.port}/health`);
+// oxlint-disable-next-line no-console
 console.log(`RTC relay: ws://localhost:${CONFIG.port}/rtc?room=CODE`);
 
 // Fleet worker heartbeat — under fleet.ts this process is one of N

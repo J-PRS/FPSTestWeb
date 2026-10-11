@@ -135,7 +135,7 @@ export class Room {
     if (this.healthTimer < 15) {return;}
     this.healthTimer = 0;
     if (this.health.size === 0) {return;}
-    logger.debug('Room health', {room: this.name,humans: this.players.getHumanCount(), ...Object.fromEntries(this.health)});
+    logger.debug('Room health', Object.assign({room: this.name,humans: this.players.getHumanCount()}, Object.fromEntries(this.health)));
     // Fold the window into since-boot totals. gapMax is a gauge (the
     // worst single sample), not a counter — merge by max, not sum.
     for (const [k, v] of this.health) {
@@ -215,7 +215,7 @@ export class Room {
     (broadcast) => { this.structs.attach(); if (broadcast) {this.structs.pushUpdate();} },
     (snapped) => {
       if (this.modeSpec?.teams) {
-        this.players.teamBases = { alpha: { ...snapped.alpha}, bravo: { ...snapped.bravo} };
+        this.players.teamBases = { alpha: Object.assign({}, snapped.alpha), bravo: Object.assign({}, snapped.bravo) };
       }
     },
     (rings) => {
@@ -489,7 +489,7 @@ export class Room {
       // Ride structure floors: a generator seeded inside a genhouse must
       // stand on its deck (seated high over terrain), not drown in it.
       // max() keeps authored elevations — tower sentries never descend.
-      this.deployables.seedBase(this.spec.deploys.map(e => ((((({ ...e, pos: Object.assign({}, e.pos, {y: Math.max(e.pos.y, this.flagPlacer.deployFloor(e.pos.x, e.pos.z, e.pos.y))})})))))));
+      this.deployables.seedBase(this.spec.deploys.map(e => Object.assign({}, e, {pos: Object.assign({}, e.pos, {y: Math.max(e.pos.y, this.flagPlacer.deployFloor(e.pos.x, e.pos.z, e.pos.y))})})));
     }
     this.projectiles = new RoomProjectiles(this, field);
     this.projectiles.attachStructures(this.structs.eff());
@@ -573,7 +573,7 @@ export class Room {
       // bias toward a floating/under-terrain authored base sends players
       // to where the flag was authored, not where it actually is.
       const snapped = this.flagPlacer.snapFlagBases({ alpha: bases.alpha, bravo: bases.bravo });
-      this.players.teamBases = { alpha: { ...snapped.alpha}, bravo: { ...snapped.bravo} };
+      this.players.teamBases = { alpha: Object.assign({}, snapped.alpha), bravo: Object.assign({}, snapped.bravo) };
     }
     this.pickups = new RoomPickups(this);
     this.pickups.onCollect = (pid, kind) => {
@@ -983,7 +983,7 @@ export class Room {
   pushNoise(pos: Vec3): void {
     const now = simNow();
     while (this.noises.length > 0 && now - this.noises[0]!.at > Room.NOISE_TTL) {this.noises.shift();}
-    this.noises.push({ pos: { ...pos}, at: now });
+    this.noises.push({ pos: Object.assign({}, pos), at: now });
     if (this.noises.length > Room.NOISE_MAX) {this.noises.shift();}
     this.influence.splat(pos, 'opportunity', 0.4);
   }
@@ -1057,7 +1057,7 @@ export class Room {
     this.creatureSim.colliders = this.ballSim.colliders;
     // The echo carries the merged list too — joiners get stand hulls in
     // their gameState structures, and combat occlusion sees the dais.
-    this.messages.setMap({ ...spec, structures: this.structs.eff()});
+    this.messages.setMap(Object.assign({}, spec, { structures: this.structs.eff() }));
     this.structs.baseline(); // the push below is what clients hold now
     this.broadcast({
       type: 'mapUpdate',

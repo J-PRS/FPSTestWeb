@@ -28,8 +28,11 @@ export function netLogger(name: string): NetLogger {
     if (sink) { sink(level, name, msg, ctx); return; }
     if (level === 'debug') {return;}
     const line = `[${name}] ${msg}`;
+    // oxlint-disable-next-line no-console
     if (level === 'error') {console.error(line, ctx ?? '');}
+    // oxlint-disable-next-line no-console
     else if (level === 'warn') {console.warn(line, ctx ?? '');}
+    // oxlint-disable-next-line no-console
     else {console.info(line, ctx ?? '');}
   };
   return {

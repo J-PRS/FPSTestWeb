@@ -221,7 +221,8 @@ export class P2PHost {
       return;
     }
 
-    let raw: unknown = undefined;
+    // oxlint-disable-next-line init-declarations -- assigned later
+    let raw!: unknown;
     try { raw = JSON.parse(data); } catch { return; }
 
     const playerId = this.links.get(link);

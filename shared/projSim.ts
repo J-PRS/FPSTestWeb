@@ -20,7 +20,7 @@ export interface SimProjectile {
 /** Integrate one step: gravity on vel.y, then pos += vel*dt.
  *  Returns the start-of-step position for swept checks. */
 export function projStep(p: SimProjectile, dt: number, gravity: number): Vec3 {
-  const from = { ...p.pos};
+  const from = Object.assign({}, p.pos);
   p.vel.y += gravity * dt;
   p.pos.x += p.vel.x * dt;
   p.pos.y += p.vel.y * dt;

@@ -32,7 +32,7 @@ export class InputStream {
   get seq(): number { return this.inputSeq; }
 
   private journal(seq: number, input: MoveInput): void {
-    this.inputJournal.push({ seq, t: performance.now(), input: { ...input} });
+    this.inputJournal.push({ seq, t: performance.now(), input: Object.assign({}, input) });
     if (this.inputJournal.length > InputStream.INPUT_JOURNAL_MAX) {this.inputJournal.shift();}
   }
 
@@ -47,12 +47,12 @@ export class InputStream {
     // In-packet redundancy: the previous edge rides along so a single
     // lost packet heals instantly instead of via the watchdog RTT —
     // the server's seq gates make the double-apply a no-op when both land.
-    const prev = this.lastSentEdge ? { seq: this.lastSentEdge.seq, input: { ...this.lastSentEdge.input}, rotation: { ...this.lastSentEdge.rotation} } : undefined;
+    const prev = this.lastSentEdge ? { seq: this.lastSentEdge.seq, input: Object.assign({}, this.lastSentEdge.input), rotation: Object.assign({}, this.lastSentEdge.rotation) } : undefined;
     this.journal(seq, input);
-    this.lastInputState = { ...input};
-    this.lastInputRotation = { ...rotation};
-    this.lastSentEdge = { seq, input: { ...input}, rotation: { ...rotation} };
-    send({seq,input,rotation, ...(prev ? { prev } : {}), type: 'inputMove' as const});
+    this.lastInputState = Object.assign({}, input);
+    this.lastInputRotation = Object.assign({}, rotation);
+    this.lastSentEdge = { seq, input: Object.assign({}, input), rotation: Object.assign({}, rotation) };
+    send(Object.assign({}, {seq,input,rotation}, (prev ? { prev } : {}), {type: 'inputMove' as const}));
   }
 
   /** Hard-tolerance answer: the server's consumed input watermark fell
@@ -64,7 +64,7 @@ export class InputStream {
     const seq = this.inputSeq;
     this.journal(seq, this.lastInputState);
     logger.info(`inputSync: re-emitting input at seq ${seq} (server consumed ${lastSeq})`);
-    send({ type: 'inputMove', seq, input: { ...this.lastInputState}, rotation: this.lastInputRotation });
+    send({ type: 'inputMove', seq, input: Object.assign({}, this.lastInputState), rotation: this.lastInputRotation });
   }
 
   /** Journal entries with seq > `after` — what the server hadn't consumed
@@ -80,7 +80,7 @@ export class InputStream {
       const gapStart = performance.now() - gapMs;
       const [first] = this.inputJournal;
       if (!first || first.t > gapStart) {
-        this.inputJournal.unshift({ seq: after, t: gapStart, input: { ...this.lastInputState} });
+        this.inputJournal.unshift({ seq: after, t: gapStart, input: Object.assign({}, this.lastInputState) });
       }
     }
     return this.inputJournal;

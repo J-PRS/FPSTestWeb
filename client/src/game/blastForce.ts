@@ -214,7 +214,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     // NaN center/params make every `d >= radius` compare FALSE — every
     // Forceable resolves the envelope against NaN and eats a NaN dir.
     if (!Number.isFinite(a.pos.x + a.pos.y + a.pos.z + a.radius + a.force)) {return;}
-    const { pos, radius, force, forceMode, forceMultiplier, aoeDamage } = a;
+    const { pos, radius, force, forceMode, aoeDamage } = a;
     const scales = a.weaponType === undefined ? undefined : getWeaponStats(a.weaponType).aoeScales;
     const applyTo = (t: Forceable, f: number) =>
       forceMode === 'push' ? t.applyKnockback(pos, Math.min(f, BLAST_IMPULSE_MAX)) : t.applyPull(pos, Math.min(f, BLAST_IMPULSE_MAX));
@@ -267,7 +267,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       }
     }
     const kbForce = force * KNOCKBACK_SCALE;
-    applyForceToBalls({ ...a, force: kbForce}, applyTo);
+    applyForceToBalls(Object.assign({}, a, {force: kbForce}), applyTo);
     applyForceToNuggets(pos, radius, kbForce, forceMode);
     applyForceToRemotes(a);
     // Deployables in the envelope — the offline mirror of the server's

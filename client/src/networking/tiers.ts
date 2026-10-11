@@ -11,6 +11,7 @@
 
 import {type ConnectionConfig, WebSocketConnection} from './WebSocketConnection.js';
 import type { GameTransport } from './transport.js';
+import type { ServerMessage } from '../../../shared/protocol.js';
 import { netLogger } from './netLog.js';
 import { tryWebTransport } from './tiersWebTransport.js';
 
@@ -37,7 +38,7 @@ function muteable(config: ConnectionConfig): { config: ConnectionConfig; arm(): 
   };
   return {
     arm() { armed = true; },
-    config: { ...config, ...wrapped},
+    config: Object.assign({}, config, wrapped),
   };
 }
 
@@ -332,9 +333,7 @@ export class TieredTransport implements GameTransport {
     // Inner transports see wrapped callbacks — a drop re-arms the probe
     // here, mirroring WebSocketConnection's own reconnect loop so a WT/RTC
     // session survives a blip instead of dying on first packet loss.
-    const innerConfig: ConnectionConfig = {
-      ...this.config,
-      onDisconnect: (code, reason) => {
+    const innerConfig: ConnectionConfig = Object.assign({}, this.config, {onDisconnect: (code?: number, reason?: string) => {
         // Stale generation — a losing probe's teardown or a superseded
         // attempt's timer. Forward nothing, schedule nothing.
         if (gen !== this.gen) {return;}
@@ -362,10 +361,7 @@ this.attempts += 1;
         this.attempts = 0;
         this.connectedAt = Date.now();
         this.config.onConnect?.();
-      },
-      onMessage: (data) => { if (gen === this.gen) {this.config.onMessage?.(data);} },
-      onBinaryMessage: (data) => { if (gen === this.gen) {this.config.onBinaryMessage?.(data);} },
-    };
+      },onMessage: (data: ServerMessage) => { if (gen === this.gen) {this.config.onMessage?.(data);} },onBinaryMessage: (data: Uint8Array) => { if (gen === this.gen) {this.config.onBinaryMessage?.(data);} }});
     connectGameTransport(innerConfig, this.opts).then((t) => {
       if (this.closed || gen !== this.gen) { t.disconnect(); return; }
       this.inner = t;

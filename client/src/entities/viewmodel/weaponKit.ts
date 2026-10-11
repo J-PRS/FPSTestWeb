@@ -198,7 +198,7 @@ export const mkLoft = (sections: LoftSection[], mat: THREE.Material, cap = true,
  *  butt-joint. Rings need equal point counts; resampleRing fixes that.
  *  t=0 returns a, t=1 returns b. */
 export const morphRing = (a: Ring2, b: Ring2, t: number): Ring2 => {
-  if (a.length !== b.length) {b = resampleRing(b, a.length);}
+  const bb = a.length === b.length ? b : resampleRing(b, a.length);
   return a.map(([ax, ay], i) => {
     const [bx, by] = b[i]!;
     return [ax + (bx - ax) * t, ay + (by - ay) * t] as [number, number];

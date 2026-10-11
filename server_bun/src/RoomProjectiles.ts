@@ -220,14 +220,14 @@ export class RoomProjectiles {
     // ceiling; spawned inside it → sweep every tick as before.
     const terrainAt = this.field ? timeToCeiling(origin.y, vel.y, g, this.fieldMax + stats.bodyRadius) : 0;
     this.projs.set(id, {
-      id, ownerId, weaponType, stats, p: { pos: { ...origin}, vel, age: 0 }, terrainAt,
+      id, ownerId, weaponType, stats, p: { pos: Object.assign({}, origin), vel, age: 0 }, terrainAt,
       ownerTeam: owner.team,
       ttl: jitteredTtl(stats, idSeed(id)) ?? HARD_TTL_S,
     });
     // shotId/pellet are the intent's nonce — the shooter's predicted
     // shell binds its server identity off this echo (linkOwnProjectile).
     this.room.broadcast(spawnPayload(WORLD_MODEL.projectile!, id, 'projectileId', {
-      ownerId, position: { ...origin}, velocity: vel, weaponType, shotId, pellet,
+      ownerId, position: Object.assign({}, origin), velocity: vel, weaponType, shotId, pellet,
     }) as ServerMessage);
     return id;
   }
@@ -260,8 +260,8 @@ export class RoomProjectiles {
           p.pos.z = t.position.z + proj.stuck.off.z;
         }
       }
-      const from = proj.stuck ? (((({ ...p.pos})))) : projStep(p, dt, stats.gravity ? GRAVITY : 0);
-      if (p.age >= proj.ttl || p.pos.y < FLOOR_Y) { this.detonate(proj, { ...p.pos}); continue; }
+      const from = proj.stuck ? ((((((Object.assign({}, p.pos))))))) : projStep(p, dt, stats.gravity ? GRAVITY : 0);
+      if (p.age >= proj.ttl || p.pos.y < FLOOR_Y) { this.detonate(proj, Object.assign({}, p.pos)); continue; }
       if (proj.stuck) {continue;} // frozen — only the fuse ends it now
 
       // Ray-burst discharge (remote railgun): crossing rayDelay turns the

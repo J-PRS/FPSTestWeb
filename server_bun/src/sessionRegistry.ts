@@ -214,6 +214,6 @@ this.anomalies.reclaimNonLive += 1;
    *  anomaly counters. Anomalies > 0 is a paging condition: they mean
    *  lifecycle code disagreed with the state machine. */
   metrics(): { census: Record<SessionState, number>; transitions: Record<string, number>; anomalies: { illegal: number; rebegin: number; seatWithoutBegin: number; reclaimNonLive: number } } {
-    return { census: this.census(), transitions: Object.fromEntries(this.edgeTotals), anomalies: { ...this.anomalies} };
+    return { census: this.census(), transitions: Object.fromEntries(this.edgeTotals), anomalies: Object.assign({}, this.anomalies) };
   }
 }

@@ -216,37 +216,8 @@ export class ServerBotSenses {
     const bias = skill ? (t: number) => aimSkillFor(skill, t, 0) : undefined;
     const parties = sharedParties ?? this.partiesOf(p);
     const bp = sharedEnv.thinkProf ? (k: string, t0: number) => sharedEnv.thinkProf!.set(k, (sharedEnv.thinkProf!.get(k) ?? 0) + sharedEnv.wallPerf!() - t0) : null;
-    const ctx: BrainCtx = {
-      id: p.id,
-      team: p.team,
-      pos: p.position,
-      vel: p.velocity,
-      enemies: parties.enemies,
-      objective: goal?.pos ?? null,
-      infiltrating: goal?.infiltrating ?? false,
-      running: goal?.running ?? false,
-      runner: goal?.runner ?? false,
-      wave: goal?.wave ?? false,
-      marshal: goal?.marshal ?? false,
-      pushLive: p.team === 'alpha' || p.team === 'bravo' ? this.pushFor(p.team) !== null : false,
-      posted: goal?.posted ?? 0,
-      // Team rooms drop nuggets on creature kills — bots farm them too,
-      // which is what keeps a bot-filled match's scoreboard moving. The
-      // chase is weighed like a player weighs it: only gems in real
-      // reach, and a contested gem costs a hurt bot nothing but a death
-      // walk — a healthy one fights through for it.
-      pickup: bp ? (() => { const t = sharedEnv.wallPerf!(); const v = this.pickupFor(p, parties.enemies) ?? undefined; bp('sense:pickup', t); return v; })() : (this.pickupFor(p, parties.enemies) ?? undefined),
-      // Gem-economy rooms make hunting creatures the actual objective;
-      // on any map that spawns real creatures they're threats worth
-      // shooting too. Structureless-free: pops is {} where spec doesn't
-      // declare `creatures`.
-      huntCreatures: this.room.mode === 'nuggets'
-        || Object.values(this.room.creatureSim.pops).some((cap) => cap > 0),
-      // Structures read as raised ground — brains route around walls
-      // and onto platforms instead of pushing into solid geometry.
-      // The steer/roll/LOS fans probe clustered cells — answers memo
-      // per 4m cell, flushed when the structure epoch moves.
-      groundY: (x, z) => {
+    const ctx: BrainCtx = Object.assign({}, {id: p.id,team: p.team,pos: p.position,vel: p.velocity,enemies: parties.enemies,objective: goal?.pos ?? null,infiltrating: goal?.infiltrating ?? false,running: goal?.running ?? false,runner: goal?.runner ?? false,wave: goal?.wave ?? false,marshal: goal?.marshal ?? false,pushLive: p.team === 'alpha' || p.team === 'bravo' ? this.pushFor(p.team) !== null : false,posted: goal?.posted ?? 0,pickup: bp ? (() => { const t = sharedEnv.wallPerf!(); const v = this.pickupFor(p, parties.enemies) ?? undefined; bp('sense:pickup', t); return v; })() : (this.pickupFor(p, parties.enemies) ?? undefined),huntCreatures: this.room.mode === 'nuggets'
+        || Object.values(this.room.creatureSim.pops).some((cap) => cap > 0),groundY: (x, z) => {
         const t0 = sharedEnv.thinkProf ? sharedEnv.wallPerf!() : 0;
         const ep = this.room.moveSim.structureEpoch;
         if (ep !== this.groundEpoch) { this.groundMemo.clear(); this.groundEpoch = ep; }
@@ -264,52 +235,15 @@ export class ServerBotSenses {
         }
         if (sharedEnv.thinkProf) {sharedEnv.thinkProf.set('sense:groundY', (sharedEnv.thinkProf.get('sense:groundY') ?? 0) + sharedEnv.wallPerf!() - t0);}
         return y;
-      },
-      route: this.routing.routeOf(p),
-      others: parties.others,
-      allies: parties.allies,
-      // Mortar heavies acquire siege-range targets; others hold the
-      // duel band. The shared brain takes max(FIRE_RANGE, this).
-      engageRange: this.loadouts.get(id)?.far === WeaponType.Mortar ? 95 : undefined,
-      thief: this.routing.thiefOf(p.team ?? ''),
-      // Every pick-based weapon sense (lead speed, reach, fuse, arc
-      // drop, orbit, cadence, self-splash) comes from the one shared
-      // factory — a hand-mirrored copy would drift the formulas the
-      // offline feed reads.
-      ...botWeaponHooks(
+      },route: this.routing.routeOf(p),others: parties.others,allies: parties.allies,engageRange: this.loadouts.get(id)?.far === WeaponType.Mortar ? 95 : undefined,thief: this.routing.thiefOf(p.team ?? '')}, botWeaponHooks(
         (d) => pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage) as WeaponType,
         this.loadouts.get(id) ?? BOT_LOADOUTS[0]!,
-      ),
-      // The bot's skill matrix scored against the weapon it would
-      // actually draw at that range — pick and aim stay consistent.
-      ...(skill ? {
+      ), (skill ? {
         aimSkill: (d: number, targetSpeed: number) =>
           aimSkillFor(skill, pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage), targetSpeed),
-      } : {}),
-      // Wall occlusion for the LOS sense — bots stop wasting ammo on
-      // targets behind structures they'd never see through anyway.
-      solids: this.room.ballSim.colliders,
-      solidIndex: this.room.ballSim.colliderIndex,
-      // The shadow tank is the truth — brains read it to gate jets, shields,
-      // mends (moveSkill times botMoves' hop-descent tap; undefined = skilled).
-      energy: this.room.moveSim.energyOf(id) ?? undefined, moveSkill: skill?.movement,
-      healthFrac: p.maxHealth > 0 ? p.health / p.maxHealth : 1,
-      confidence: this.confidenceOf(p),
-      // Inbound shells feed the dodge sense — bots sidestep rockets
-      // like a human reading the arc instead of eating every volley.
-      threats: bp ? (() => { const t = sharedEnv.wallPerf!(); const v = this.room.projectiles.incomingNear(p.position, 12); bp('sense:threats', t); return v; })() : this.room.projectiles.incomingNear(p.position, 12),
-      sounds: bp ? (() => { const t = sharedEnv.wallPerf!(); const v = this.room.noisesNear(p.position, 50); bp('sense:sounds', t); return v; })() : this.room.noisesNear(p.position, 50),
-      // Influence reads are team-relative: the quiet dir flees toward
-      // where THIS side isn't bleeding; the hot cell is shared scent.
-      imapQuietDir: (v: BotVec) =>
-        this.room.influence.quietestDir(v, this.room.influence.dangerLayer(p.team ?? 'alpha')),
-      imapHottest: (v: BotVec) => this.room.influence.hottestNear(v, 'opportunity'),
-      imapDanger: (v: BotVec) =>
-        this.room.influence.value(v, this.room.influence.dangerLayer(p.team ?? 'alpha')),
-      notice: this.notices.for(id, p.team, now),
-      repair: builder === false ? null : this.repairJob(p), // scan walks every deployable — only builders read it
-      now,
-    };
+      } : {}), {solids: this.room.ballSim.colliders,solidIndex: this.room.ballSim.colliderIndex,energy: this.room.moveSim.energyOf(id) ?? undefined,moveSkill: skill?.movement,healthFrac: p.maxHealth > 0 ? p.health / p.maxHealth : 1,confidence: this.confidenceOf(p),threats: bp ? (() => { const t = sharedEnv.wallPerf!(); const v = this.room.projectiles.incomingNear(p.position, 12); bp('sense:threats', t); return v; })() : this.room.projectiles.incomingNear(p.position, 12),sounds: bp ? (() => { const t = sharedEnv.wallPerf!(); const v = this.room.noisesNear(p.position, 50); bp('sense:sounds', t); return v; })() : this.room.noisesNear(p.position, 50),imapQuietDir: (v: BotVec) =>
+        this.room.influence.quietestDir(v, this.room.influence.dangerLayer(p.team ?? 'alpha')),imapHottest: (v: BotVec) => this.room.influence.hottestNear(v, 'opportunity'),imapDanger: (v: BotVec) =>
+        this.room.influence.value(v, this.room.influence.dangerLayer(p.team ?? 'alpha')),notice: this.notices.for(id, p.team, now),repair: builder === false ? null : this.repairJob(p), now});
     // Squad spot-report: reports land via reportSpots() AFTER the bot's
     // think (they're its verified sightings); here it only reads what
     // the squad's eyes already banked — as legal as the thief beacon.

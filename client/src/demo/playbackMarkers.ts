@@ -9,7 +9,6 @@ import * as THREE from 'three';
 import {type TargetEvent, TargetEventType, TARGETTYPE_KILL, TARGETTYPE_FLAG, TARGETTYPE_PICKUP_BASE} from './types.js';
 import { Explosion } from '../effects/explosion.js';
 import type { PlaybackWorld } from './playbackReconstruction.js';
-import { fastForward } from './playbackFF.js';
 import * as sfxUtil from '../core/sfx/util.js';
 import * as sfxPlayer from '../core/sfx/player.js';
 
@@ -125,7 +124,7 @@ export function applyPlaybackMarkerEvent(world: PlaybackWorld, ev: TargetEvent, 
 
 /** Seek path — flags/pickups spawn at their recorded state; kills and
  *  dead flags/pickups skip (they're transient edges). */
-export function reconstructSeekMarker(world: PlaybackWorld, ev: TargetEvent, seekTime: number): void {
+export function reconstructSeekMarker(world: PlaybackWorld, ev: TargetEvent, _seekTime: number): void {
   if (ev.targetType === TARGETTYPE_KILL) {return;} // past bursts aren't rebuilt
   if (ev.targetType === TARGETTYPE_FLAG) {
     const flag = world.playbackFlags.get(ev.targetId);

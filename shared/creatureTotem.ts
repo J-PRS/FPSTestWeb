@@ -87,7 +87,7 @@ export function makeSimTotem(
   const { x, y, z } = pos;
   const row = SPECIES[species] ?? SPECIES.totem!;
   const health = uber ? row.health * 2.5 : row.health;
-  const sp: TotemTunables = { ...TOTEM_SIM, REFIRE: uber ? TOTEM_UBER.REFIRE : TOTEM_SIM.REFIRE,CHARGE: uber ? TOTEM_UBER.CHARGE : TOTEM_SIM.CHARGE};
+  const sp: TotemTunables = Object.assign({}, TOTEM_SIM, {REFIRE: uber ? TOTEM_UBER.REFIRE : TOTEM_SIM.REFIRE,CHARGE: uber ? TOTEM_UBER.CHARGE : TOTEM_SIM.CHARGE});
   return {
     id, family: 'totem', species, biteDamage: uber ? row.bite * 2 : row.bite, sp,
     x, y, z, vx: 0, vy: 0, vz: 0, yaw: 0,

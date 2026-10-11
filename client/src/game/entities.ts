@@ -213,20 +213,7 @@ export function createEntities(deps: EntitiesDeps) {
   // Assigned right after the kit — brains reference it lazily, so the
   // constructor order (kit → deployables) doesn't matter to call sites.
   const kit = createSpeciesKit(deps, targets, () => deployables);
-  const deployables = new Deployables({
-    ...deps,
-    targets,
-    lazyCombat: () => deps.lazyCombat?.(),
-    enemyBots: deps.deployEnemyBots,
-    botFoes: deps.deployBotFoes,
-    damageBot: deps.deployDamageBot,
-    basePower: deps.deployBasePower,
-    damageNumbers: deps.deployDamageNumbers?.(),
-    showItemBar: deps.deployItemBar,
-    // Nugget pack offline: the pod lands and mints a local gem (connected
-    // play uses the server's pickupSpawn edge instead).
-    dropNugget: (pos) => spawnNuggetsAt(pos, 1, _noVel),
-  });
+  const deployables = new Deployables((((Object.assign({}, deps, {targets,lazyCombat: () => deps.lazyCombat?.(),enemyBots: deps.deployEnemyBots,botFoes: deps.deployBotFoes,damageBot: deps.deployDamageBot,basePower: deps.deployBasePower,damageNumbers: deps.deployDamageNumbers?.(),showItemBar: deps.deployItemBar,dropNugget: (pos: THREE.Vector3) => spawnNuggetsAt(pos, 1, _noVel)})))));
   const {
     removeTarget, aggroFor, reportTargetDamage, kickDust, atCap,
   } = kit;

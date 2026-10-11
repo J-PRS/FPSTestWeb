@@ -91,7 +91,8 @@ export class RemoteDeployables {
     }
     const terrain = this.deps.lazyTerrain();
     const at = new THREE.Vector3(pos.x, pos.y, pos.z);
-    let item = undefined as unknown as Item;
+    // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+    let item!: Item;
     if (kind === 'shield') {
       // The dome IS the deployable — no proxy sphere for this kind; the
       // field must be visible or enemies can't read what ate their shell.
@@ -321,9 +322,10 @@ export class RemoteDeployables {
    *  field plants; base gear hulks in place like the server's). */
   private hurtItem(it: Item, dmg: number): void {
     if (!this.offline()) {return;}
-    if (it.v.armor > 0) { const soaked = Math.min(it.v.armor, dmg); it.v.armor -= soaked; dmg -= soaked; }
+    let d = dmg;
+    if (it.v.armor > 0) { const soaked = Math.min(it.v.armor, d); it.v.armor -= soaked; d -= soaked; }
     if (it.v.health <= 0) {return;}
-    it.v.health -= dmg;
+    it.v.health -= d;
     if (it.v.health <= 0 && it.serverId !== undefined) {
       it.respawnT = BASE_RESPAWN_S;
       this.down(it.serverId);

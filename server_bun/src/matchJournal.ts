@@ -31,7 +31,7 @@ export class MatchJournal {
     room: string; mode: string; winner: string; scores: Record<string, number>;
     players?: { id: string; team?: string; kills: number; deaths: number }[];
   }): void {
-    const entry = {t: wallNow(), ...rec};
+    const entry = Object.assign({}, {t: wallNow()}, rec);
     this.ring.push(entry);
     if (this.ring.length > 100) {this.ring.shift();}
     try {
@@ -66,7 +66,8 @@ export class MatchJournal {
       const text = await file.text();
       for (const line of text.split('\n')) {
         if (!line.trim()) {continue;}
-        let rec = undefined as unknown as { winner?: string; players?: { id: string; team?: string; kills?: number; deaths?: number }[] };
+        // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+        let rec: { winner?: string; players?: { id: string; team?: string; kills?: number; deaths?: number }[] };
         try { rec = JSON.parse(line); } catch { continue; }
         for (const p of rec.players ?? []) {
           const row = agg.get(p.id) ?? { playerId: p.id, matches: 0, wins: 0, kills: 0, deaths: 0 };

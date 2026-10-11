@@ -46,7 +46,8 @@ export function connectP2P(opts: { signalUrl: string; timeoutMs?: number }): Pro
       // A malformed signal frame must not kill the handshake — an exception
       // inside this async listener surfaces as an unhandled rejection and
       // silently aborts ICE relay.
-      let msg: SignalMsg | null = null;
+      // oxlint-disable-next-line init-declarations -- assigned later
+      let msg!: SignalMsg | null;
       try { msg = JSON.parse(ev.data as string) as SignalMsg; } catch { return; }
       if (msg === null || typeof msg !== 'object') {return;}
       try {

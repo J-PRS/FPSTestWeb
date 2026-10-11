@@ -11,7 +11,6 @@ import { makeScores } from '../../../shared/teams.js';
 // Bots.rekeyBot fans a jersey swap out to every id-keyed meter — these
 // pins lock each hop so a map added without a rekey fails loudly instead
 // of leaking a dead-id receipt (the §2.88 bug class).
-interface Peek { [k: string]: Map<string, unknown> | Set<string> | undefined }
 
 const mkSenses = () => new BotSenses({
   bots: [],

@@ -5,7 +5,8 @@ import { TREE , type VgsNode } from '../game/vgsTree.js';
 
 type Handler = (e: KeyboardEvent) => void;
 
-let keydown = undefined as unknown as Handler;
+// oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+let keydown!: Handler;
 
 const press = (code: string, key = code.slice(3).toLowerCase()) =>
   keydown({

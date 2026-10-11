@@ -56,10 +56,11 @@ export function glitch(kind: string, detail: Record<string, unknown> = {}): void
   const n = glitchCounts[kind];
   if (n <= 3 || n % 100 === 0) {
     // Lazy import would devolve the module graph — Logger is core like us.
+    // oxlint-disable-next-line no-console
     console.error(`[GLITCH:${kind}]`, JSON.stringify(detail));
   }
 }
-export function glitchCountsDump(): Record<string, number> { return { ...glitchCounts}; }
+export function glitchCountsDump(): Record<string, number> { return Object.assign({}, glitchCounts); }
 
 registerDiag('glitches', () => glitchCountsDump());
 

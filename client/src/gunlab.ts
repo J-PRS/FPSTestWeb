@@ -161,7 +161,7 @@ orbit.addEventListener('change', trackDir); // debounced inside — safe per fra
     const root = 'g' in built ? built.g : built;
     root.visible = true;
     const r = gapScan(root);
-    if (r.orphans || r.clusters > 1) {results.push({wt, ...r});}
+    if (r.orphans || r.clusters > 1) {results.push(Object.assign({}, {wt}, r));}
   }
   return results;
 };
@@ -172,7 +172,7 @@ orbit.addEventListener('change', trackDir); // debounced inside — safe per fra
     const root = 'g' in built ? built.g : built;
     root.visible = true;
     const r = volScan(root);
-    if (r.inverted) {results.push({wt, ...r});}
+    if (r.inverted) {results.push(Object.assign({}, {wt}, r));}
   }
   return results;
 };
@@ -586,7 +586,8 @@ async function unionToggle(): Promise<void> {
   const t0 = performance.now();
   const { Manifold, parts, manis, rejected, inV, inT } = await manifoldParts(g);
   if (manis.length === 0) {return;}
-  let solid: any = undefined;
+  // oxlint-disable-next-line init-declarations -- assigned later
+  let solid!: any;
   try {
     solid = Manifold.union(manis);
     if (solid.isEmpty()) { console.warn('[union] empty result'); return; }
@@ -801,13 +802,6 @@ function paintRail(): void {
 function paintTools(): void {
   const tools = document.createElement('div');
   tools.className = 'tools';
-  const mk = (label: string, fn: () => void) => {
-    const b = document.createElement('button');
-    b.textContent = label;
-    b.addEventListener('click', fn);
-    tools.append(b);
-    return b;
-  };
   // FOV slider FIRST — it shapes the FPS view, which is what the lab is
   // for. Game viewmodel runs at 55, but per-weapon judgement sometimes
   // wants tighter/wider. Persisted like the rest of the lab state.

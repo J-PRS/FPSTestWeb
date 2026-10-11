@@ -118,7 +118,7 @@ export class BotFire {
       const radius = cfg.aoeRadius * bot.perkMods.aoeRadius;
       const dmg = cfg.aoeDamage * bot.perkMods.directDamage;
       const p = new Projectile(this.host.scene(), muzzle, d, bot.vel,
-        (((({ ...cfg, aoeRadius: radius,aoeDamage: dmg,needsServerTracking: false})))));
+        ((((((Object.assign({}, cfg, {aoeRadius: radius,aoeDamage: dmg,needsServerTracking: false}))))))));
       p.shooterId = bot.playerId;
       p.shooterTeam = bot.team;
       // 'local' isn't in remotePlayerPositions — this lets a bot shell
@@ -165,7 +165,8 @@ export class BotFire {
     if (!stats || stats.speed <= 0 || !cfg) {return;}
     const dx = aim.x - bot.position.x, dz = aim.z - bot.position.z;
     const d = Math.hypot(dx, dz) || 1;
-    let pitch = 0;
+    // oxlint-disable-next-line init-declarations -- assigned later
+    let pitch!: number;
     if (stats.rayDelay) {
       pitch = 0.15;
     } else {
@@ -184,7 +185,7 @@ export class BotFire {
     const p = new Projectile(this.host.scene(),
       _shotMuzzle.set(bot.position.x, bot.position.y + 1.4, bot.position.z),
       _shotDir.set(vx / vl, vy / vl, vz / vl), bot.vel,
-      (((({ ...cfg, aoeRadius: cfg.aoeRadius * bot.perkMods.aoeRadius,aoeDamage: cfg.aoeDamage * bot.perkMods.directDamage,needsServerTracking: false})))));
+      ((((((Object.assign({}, cfg, {aoeRadius: cfg.aoeRadius * bot.perkMods.aoeRadius,aoeDamage: cfg.aoeDamage * bot.perkMods.directDamage,needsServerTracking: false}))))))));
     p.shooterId = bot.playerId;
     p.sweepLocal = () => { const pl = this.host.player(); return pl.isDead ? null : pl.pos; };
     p.localClass = () => this.host.player().appliedClass;
@@ -234,7 +235,7 @@ export class BotFire {
         const len = Math.hypot(hx, hy, hz) || 1;
         const p = new Projectile(this.host.scene(),
           _shotMuzzle.set(mx, my, mz), _shotDir.set(hx / len, hy / len, hz / len), bot.vel,
-          (((({ ...cfg, needsServerTracking: false})))));
+          ((((((Object.assign({}, cfg, {needsServerTracking: false}))))))));
         p.shooterId = bot.playerId;
         p.shooterTeam = bot.team;
         this.host.world().projectiles.push(p);

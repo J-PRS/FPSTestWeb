@@ -65,7 +65,7 @@ export class HitLedger {
           if (acc > 0) {c.chargeBank.discharge(shooterId, v, Math.min(acc, damage));}
         }
       }
-      logger.debug(opts.label, {shooter: shooterId,target: targetId,damage,targetHealth: result.newHealth, ...opts.extra});
+      logger.debug(opts.label, Object.assign({}, {shooter: shooterId,target: targetId,damage,targetHealth: result.newHealth}, opts.extra));
       c.broadcast(eventPayload(WORLD_MODEL.player!, 'playerHit', 'targetId', targetId, { shooterId, damage, health: result.newHealth, armor: result.newArmor, seq: (this.hitSeq += 1), shotId: opts.shotId }) as ServerMessage);
       return;
     }
@@ -148,7 +148,7 @@ export class HitLedger {
     // kills++/killTotal must agree or suicides pad the scoreboard and
     // can even fake "first blood".
     if (shooterId !== 'environment' && shooterId !== targetId) {c.playerManager.addKill(shooterId);}
-    logger.info(`${opts.label} → kill`, { shooter: shooterId, target: targetId, damage, ...opts.extra });
+    logger.info(`${opts.label} → kill`, Object.assign({}, {shooter: shooterId,target: targetId,damage}, opts.extra));
     const shooterStreak = shooterId === 'environment' ? undefined
       : (c.playerManager.getPlayer(shooterId)?.streak ?? 0) + 1;
     c.broadcast(eventPayload(WORLD_MODEL.player!, 'playerKill', 'targetId', targetId, { shooterId, weapon: opts.weapon, streak: shooterStreak, air: opts.air }) as ServerMessage);

@@ -70,7 +70,7 @@ export const PERK_ORDER: PerkId[] = ['none', 'featherjets', 'plated', 'vitality'
 
 export function perkMods(id: string | undefined | null): PerkMods {
   const p = PERKS[(id ?? 'none') as PerkId];
-  return p ? (((({ ...ZERO, ...p.mods})))) : (((({ ...ZERO}))));
+  return p ? Object.assign({}, ZERO, p.mods) : Object.assign({}, ZERO);
 }
 
 /** Plated is an underdog plate — resist only counts below 80% max HP,

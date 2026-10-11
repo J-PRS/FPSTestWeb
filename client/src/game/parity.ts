@@ -66,7 +66,7 @@ export function sweepDamageEchoes(now: number): void {
     const e = dmgEchoes[i]!;
     if (now - e.t > 900) {
       const fate = e.shotId ? shellFates.get(e.shotId) : undefined;
-      const detail: Record<string, unknown> = {victim: e.victim,dmg: e.dmg, ...(e.wt === undefined ? {} : { wt: e.wt })};
+      const detail: Record<string, unknown> = Object.assign({}, {victim: e.victim,dmg: e.dmg}, (e.wt === undefined ? {} : { wt: e.wt }));
       if (fate && e.at) {
         detail.srvAt = `${fate.at.x.toFixed(0)},${fate.at.y.toFixed(0)},${fate.at.z.toFixed(0)}`;
         detail.offM = Number(Math.hypot(fate.at.x - e.at.x, fate.at.y - e.at.y, fate.at.z - e.at.z).toFixed(1));

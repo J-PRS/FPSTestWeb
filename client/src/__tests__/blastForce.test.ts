@@ -63,7 +63,7 @@ const mkRig = (): Rig => {
   };
 };
 
-const args = (over: Partial<BlastArgs> = {}): BlastArgs => ((((({pos: new THREE.Vector3(0, 0, 0),radius: 10,force: 20,forceMode: 'push',forceMultiplier: 1,aoeDamage: 40,directHitTargetId: null, ...over})))));
+const args = (over: Partial<BlastArgs> = {}): BlastArgs => ((((Object.assign({}, {pos: new THREE.Vector3(0, 0, 0),radius: 10,force: 20,forceMode: 'push',forceMultiplier: 1,aoeDamage: 40,directHitTargetId: null}, over)))));
 
 describe('applyExplosionForce — local player', () => {
   it('own blast shoves the player and stamps the prediction', () => {
@@ -189,7 +189,8 @@ describe('applyExplosionForce — balls and nuggets', () => {
       takeDamage: vi.fn((d: number) => { health -= d; if (health <= 0) { (ball as { dead: boolean }).dead = true; return true; } return false; }),
     } as unknown as Targetable & { health: number };
   };
-  let ball = undefined as unknown as Targetable & { health: number };
+  // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+  let ball!: Targetable & { health: number };
 
   it('ball in radius takes falloff damage; lethal hit reports destroyed', () => {
     const r = mkRig();

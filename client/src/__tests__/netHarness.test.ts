@@ -18,7 +18,8 @@ globalThis.fetch = () => new Promise<Response>(() => { return; });
 
 
 describe('netHarness — real wire messages through real handlers', () => {
-  let h = undefined as unknown as ReturnType<typeof makeDeps>;
+  // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+  let h!: ReturnType<typeof makeDeps>;
   beforeEach(() => { h = makeDeps(); });
 
   it('gameState populates world meta + remote roster', () => {

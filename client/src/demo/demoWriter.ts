@@ -237,7 +237,7 @@ export function serializeDemo(data: DemoFile): ArrayBuffer {
 
     // v5 trailer sections — u8 count, then tag+len+payload per section.
     view.setUint8(((offset += 1) - 1), data.heightmap ? 1 : 0);
-    offset = writeHmapSection(view, offset, data.heightmap);
+    writeHmapSection(view, offset, data.heightmap);
 
     // Compute and write checksum over everything after the checksum field
     const checksumOffset = 1 + 4 + 2 + gameVersionBytes.length + 8 + 4 + 4 + 4 + 4;

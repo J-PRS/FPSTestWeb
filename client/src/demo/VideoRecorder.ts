@@ -152,9 +152,9 @@ export class VideoRecorder {
       outer:
       for (const cand of ladders) {
         for (const variant of [
-          (((({ ...base, codec: cand.codec,bitrateMode: 'quantizer'})))) as VideoEncoderConfig,
-          (((({ ...base, codec: cand.codec,bitrateMode: 'variable'})))) as VideoEncoderConfig,
-          (((({ ...base, codec: cand.codec,latencyMode: 'realtime'})))) as VideoEncoderConfig,
+          (Object.assign({}, base, {codec: cand.codec,bitrateMode: 'quantizer'})) as VideoEncoderConfig,
+          (Object.assign({}, base, {codec: cand.codec,bitrateMode: 'variable'})) as VideoEncoderConfig,
+          (Object.assign({}, base, {codec: cand.codec,latencyMode: 'realtime'})) as VideoEncoderConfig,
         ]) {
           const { supported } = await VideoEncoder.isConfigSupported(variant);
           if (supported) {
@@ -231,7 +231,7 @@ export class VideoRecorder {
       };
       try {
         const { supported } = await AudioEncoder.isConfigSupported(cfg);
-        if (supported) {return { ...src, ...cand};}
+        if (supported) {return Object.assign({}, src, cand);}
       } catch { /* next candidate */ }
     }
     return null;

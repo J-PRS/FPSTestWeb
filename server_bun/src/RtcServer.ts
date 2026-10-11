@@ -157,7 +157,8 @@ export class RtcServer {
 
   onMessage(ws: ServerWebSocket<WebSocketData>, message: string | ArrayBuffer): void {
     if (typeof message !== 'string') {return;}
-    let m = undefined as unknown as { type?: string; sdp?: string };
+    // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+    let m: { type?: string; sdp?: string };
     try { m = JSON.parse(message); } catch { return; }
     if (m.type !== 'offer' || typeof m.sdp !== 'string') {return;}
     // Each offer spawns a native PeerConnection — cap in-flight ones.

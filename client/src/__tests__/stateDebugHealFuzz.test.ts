@@ -16,8 +16,8 @@ import type { SnapshotPlayer } from '../../../shared/protocol.js';
 function mulberry(seed: number) {
   return () => {
     // oxlint-disable-next-line prefer-math-trunc -- int32 wrap is the point
-    seed |= 0; seed = (seed + 0x6D_2B_79_F5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    let s = (seed | 0); s = (s + 0x6D_2B_79_F5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
   };
@@ -60,7 +60,7 @@ describe('stateDebug heal-loop conformance fuzz', () => {
   for (const seed of [7, 42, 1337, 20_240, 999_983]) {
     it(`seed ${seed}: roster converges to server truth under churn`, () => {
       const rnd = mulberry(seed);
-      const { nm, ctx, remotePlayers, localPlayer } = mk();
+      const { nm, remotePlayers, localPlayer } = mk();
       const server = new Map<string, ServerP>();
       // Pending snapshot replies ride a queue that can be dropped/reordered —
       // exactly what a WAN does to the request→reply pair.

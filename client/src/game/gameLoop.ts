@@ -575,11 +575,7 @@ function wireDebugKeys(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud
   // window.__perf — live phase table for headless probes + manual reads;
   // the watchdog dump uses the same data for shipped logs.
   window.__perf =
-    () => ({ ...perf.snapshot(), gpu: gpuMs(), ...budget.stats() as unknown as Record<string, number>, ...fxJobStats(),
-      // info reset lives in perf.begin — counters span every pass of the
-      // previous frame (scene+shadow+composer+viewmodel), not just the last.
-      draws: deps.rendererSetup.renderer.info.render.calls,
-      trisK: Number((deps.rendererSetup.renderer.info.render.triangles / 1000).toFixed(0)) });
+    () => (Object.assign({}, perf.snapshot(), {gpu: gpuMs()}, budget.stats() as unknown as Record<string, number>, fxJobStats(), {draws: deps.rendererSetup.renderer.info.render.calls,trisK: Number((deps.rendererSetup.renderer.info.render.triangles / 1000).toFixed(0))}));
   // Debug-only handles (__renderScan/__scene/__renderer, geoNaN watch)
   // stay off prod — __perf/__trailDump/__renderDump stay since the shipped
   // watchdog dump reads them.
