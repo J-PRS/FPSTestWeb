@@ -383,6 +383,15 @@ violation instead of a symptom hunt.
   counting the half-applied-state hazard in the dump.
   `send dropped — no live lane` is the send-side counterpart:
   legit during the connect window, counted + lastType logged.
+- **Ball sim-clock (verified bounded):** `estSimNow` is
+  monotonic-clamped (never rewinds — extrapolation consumers read
+  positions off it), re-anchors its floor on far-behind stamps,
+  and EMAs the sim→wall rate only on Δarrival >0.2s samples so
+  join bursts can't poison the rate. `ballEventAge` clamps 0.6s.
+  The soak's `simT 2.4s > simNow` rubberbands were the leg
+  free-run between sparse join-window segments — the documented
+  catch-all regime, self-correcting per segment, not a steady
+  divergence. Canary working as designed.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
