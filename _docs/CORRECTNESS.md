@@ -518,6 +518,18 @@ violation instead of a symptom hunt.
   replay phantom effects, self-repeating echoes (yourHealth/
   ping/stateHash/gameState) never journal, and evictions +
   reclaim gaps are counted (`journalDropped`/`reclaimGap`).
+- **Tick fanout records (verified sealed):** egress chokepoint
+  invariants `wire-row-finite`/`wire-row-coherent` (alive row at
+  hp<=0 is a lie) /`corpse-no-channels` (a dead row claiming
+  jet/ski means a write re-armed post-mortem). Delta basis
+  follows the wireId, never the slot — roster shuffles can't
+  misencode. Fresh wireIds + the ~1s intro window force FULL
+  records (masked deltas are undecodable until the first full
+  lands — a tier-skipped full would leave far clients' decode
+  pools stale forever). Suppression windows break on any status
+  transition; the two-clock discipline keeps `wallNow`
+  (suppression/silence) and `simT` (regen/dd/forceSend) domains
+  unmixed.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
