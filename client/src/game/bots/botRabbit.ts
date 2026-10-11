@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 
-import { FLAG_PICKUP_R } from '../../../shared/teams.js';
-import { GRAVITY } from '../core/config.js';
-import { mkFlagMesh } from './ctfFlags.js';
+import { FLAG_PICKUP_R } from '../../../../shared/teams.js';
+import { GRAVITY } from '../../core/config.js';
+import { mkFlagMesh } from '../ctfFlags.js';
 
 const _indAnchor = new THREE.Vector3();
 

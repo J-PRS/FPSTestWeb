@@ -1,5 +1,5 @@
-import { cloakDrainPerSec, ENERGY } from '../../../shared/movement.js';
-import { STATUS, MEND_HP_PER_SEC } from '../../../shared/status.js';
+import { cloakDrainPerSec, ENERGY } from '../../../../shared/movement.js';
+import { STATUS, MEND_HP_PER_SEC } from '../../../../shared/status.js';
 import type { GameBot } from './botBrain.js';
 
 // The bot's honest energy tank: rising-edge activation costs, held

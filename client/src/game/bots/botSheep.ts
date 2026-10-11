@@ -1,6 +1,6 @@
-import type { Terrain } from '../world/terrain.js';
-import { SheepCore, type SheepVec } from '../../../shared/botSheep.js';
-import { isBotId } from '../../../shared/botNames.js';
+import type { Terrain } from '../../world/terrain.js';
+import { SheepCore, type SheepVec } from '../../../../shared/botSheep.js';
+import { isBotId } from '../../../../shared/botNames.js';
 
 /** The meter only reads body state — the same tick runs on bots and on
  *  the local player (playerSheep.ts feeds a Player through this shape). */

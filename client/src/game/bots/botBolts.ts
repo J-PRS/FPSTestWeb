@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import * as sfx from '../core/sfx.js';
+import * as sfx from '../../core/sfx.js';
 import { GameBot } from './botBrain.js';
 import type { BotFire } from './botFire.js';
-import { WeaponType } from '../../../shared/weapons.js';
+import { WeaponType } from '../../../../shared/weapons.js';
 
 type BoltHost = BotFire;
 const _shotMuzzle = new THREE.Vector3();

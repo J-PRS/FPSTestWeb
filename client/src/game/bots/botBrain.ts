@@ -1,25 +1,25 @@
 import * as THREE from 'three';
 import * as en from './botEnergy.js';
 
-import { Projectile } from '../projectiles/Projectile.js';
-import { RemotePlayer } from '../entities/RemotePlayer.js';
-import type { Terrain } from '../world/terrain.js';
-import type { Nugget } from '../entities/Nugget.js';
-import { MovementController, type MovementState } from '../entities/movement.js';
-import { ENERGY } from '../../../shared/movement.js';
-import type { StructureSpec } from '../../../shared/mapSpec.js';
-import { TEAM_COLORS, type TeamId } from '../../../shared/teams.js';
-import { BotBrain, BOT_EYE, type BrainOut } from '../../../shared/botBrain.js';
-import { CLASS_STATS, type ArmorClass } from '../../../shared/botClasses.js';
-import { BOT_LOADOUTS, pickBotWeapon, adaptLoadout, botClassForLoadout, type LoadoutSlot } from '../../../shared/botLoadouts.js';
-import { aimSkillFor } from '../../../shared/botSkill.js';
-import { botRand } from '../../../shared/botRand.js';
-import { botWeaponHooks } from '../../../shared/botWeaponHooks.js';
-import { type WeaponType } from '../../../shared/weapons.js';
-import { STATUS } from '../../../shared/status.js';
-import type { ChatterKind } from '../../../shared/botTaunts.js';
-import type { BotLoadout } from '../../../shared/botLoadouts.js';
-import { perkMods, effectiveResist, type PerkMods } from '../../../shared/perks.js';
+import { Projectile } from '../../projectiles/Projectile.js';
+import { RemotePlayer } from '../../entities/RemotePlayer.js';
+import type { Terrain } from '../../world/terrain.js';
+import type { Nugget } from '../../entities/Nugget.js';
+import { MovementController, type MovementState } from '../../entities/movement.js';
+import { ENERGY } from '../../../../shared/movement.js';
+import type { StructureSpec } from '../../../../shared/mapSpec.js';
+import { TEAM_COLORS, type TeamId } from '../../../../shared/teams.js';
+import { BotBrain, BOT_EYE, type BrainOut } from '../../../../shared/botBrain.js';
+import { CLASS_STATS, type ArmorClass } from '../../../../shared/botClasses.js';
+import { BOT_LOADOUTS, pickBotWeapon, adaptLoadout, botClassForLoadout, type LoadoutSlot } from '../../../../shared/botLoadouts.js';
+import { aimSkillFor } from '../../../../shared/botSkill.js';
+import { botRand } from '../../../../shared/botRand.js';
+import { botWeaponHooks } from '../../../../shared/botWeaponHooks.js';
+import { type WeaponType } from '../../../../shared/weapons.js';
+import { STATUS } from '../../../../shared/status.js';
+import type { ChatterKind } from '../../../../shared/botTaunts.js';
+import type { BotLoadout } from '../../../../shared/botLoadouts.js';
+import { perkMods, effectiveResist, type PerkMods } from '../../../../shared/perks.js';
 
 /**
  * GameBot — an in-world fake player. A GameBot is a RemotePlayer registered

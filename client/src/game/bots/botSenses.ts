@@ -9,13 +9,13 @@
  */
 
 import type * as THREE from 'three';
-import { losClear, BRAWL_RANGE, FOE_CONE_MIN_DOT, type BrainCtx } from '../../../shared/botBrain.js';
-import { classCapsule } from '../../../shared/botClasses.js';
-import { shootRevealed } from '../../../shared/status.js';
-import { NOISE_TTL_MS } from '../../../shared/wire.js';
+import { losClear, BRAWL_RANGE, FOE_CONE_MIN_DOT, type BrainCtx } from '../../../../shared/botBrain.js';
+import { classCapsule } from '../../../../shared/botClasses.js';
+import { shootRevealed } from '../../../../shared/status.js';
+import { NOISE_TTL_MS } from '../../../../shared/wire.js';
 import type { GameBot } from './botBrain.js';
-import type { Terrain } from '../world/terrain.js';
-import type { Targetable } from '../entities/balls.js';
+import type { Terrain } from '../../world/terrain.js';
+import type { Targetable } from '../../entities/balls.js';
 
 export interface SenseHost {
   readonly bots: GameBot[];

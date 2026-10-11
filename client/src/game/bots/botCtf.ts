@@ -5,21 +5,21 @@
  * this owns the "flags see the roster" glue.
  */
 import * as THREE from 'three';
-import { CtfFlags } from './ctfFlags.js';
-import { Explosion } from '../effects/explosion.js';
-import { FLAG_PICKUP_R, TEAM_COLORS, type TeamId, type TeamScores } from '../../../shared/teams.js';
+import { CtfFlags } from '../ctfFlags.js';
+import { Explosion } from '../../effects/explosion.js';
+import { FLAG_PICKUP_R, TEAM_COLORS, type TeamId, type TeamScores } from '../../../../shared/teams.js';
 import type { GameBot } from './botBrain.js';
-import { applyStructureSpecs } from './structureSpecs.js';
-import type { StructureSpec } from '../../../shared/mapSpec.js';
-import { flagReturnFx } from './flagFx.js';
-import { FLAG_STAND_TOP } from '../structures/structures.js';
-import * as sfx from '../core/sfx.js';
+import { applyStructureSpecs } from '../structureSpecs.js';
+import type { StructureSpec } from '../../../../shared/mapSpec.js';
+import { flagReturnFx } from '../flagFx.js';
+import { FLAG_STAND_TOP } from '../../structures/structures.js';
+import * as sfx from '../../core/sfx.js';
 
 const _flagBurst = new THREE.Vector3();
 const _touchers: [string, THREE.Vector3, THREE.Vector3][] = [];
 
 export interface CtfBridgeDeps {
-  lazyTerrain(): import('../world/terrain.js').Terrain;
+  lazyTerrain(): import('../../world/terrain.js').Terrain;
   lazyScene(): THREE.Scene;
   lazyCamera(): THREE.Camera;
   lazyPlayer(): { pos: THREE.Vector3; isDead: boolean; mods: { pickupRadius: number };
@@ -44,13 +44,13 @@ export interface CtfBridgeWiring {
   /** Personal-score payout — botMatch's awardPersonal. */
   onPersonalPoints?(id: string, pts: number): void;
   /** Flag edge → room chatter sense (the server's bots.notice mirror). */
-  onFlagNotice?(kind: 'flaggrab' | 'flagcap' | 'flagreturn' | 'flagdrop', actorId: string, actorTeam?: string): void;
+  onFlagNotice?(kind: 'flaggrab' | 'flagcap' | 'flagreturn' | 'flagdrop', actorId: string, actorTeam?: string, at?: { x: number; y: number; z: number }): void;
   /** Authored base positions from a solo map spec — wins over the
    *  ±70m-around-player default when present. */
   bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } };
   /** The spec's structure list — stand hulls merge OVER it (the solid
    *  world is replaced wholesale, never appended). */
-  structures?: import('../../../shared/mapSpec.js').StructureSpec[];
+  structures?: import('../../../../shared/mapSpec.js').StructureSpec[];
 }
 
 export class CtfBridge {
@@ -71,7 +71,7 @@ export class CtfBridge {
       onPersonalPoints: (id, pts) => w.onPersonalPoints?.(id, pts),
       onFlagEvent: (kind, team, at, actor) => {
         const chatKind = { taken: 'flaggrab', dropped: 'flagdrop', returned: 'flagreturn', captured: 'flagcap' } as const;
-        if (actor) w.onFlagNotice?.(chatKind[kind], actor.id, actor.team);
+        if (actor) w.onFlagNotice?.(chatKind[kind], actor.id, actor.team, at);
         sfx.flagCue(kind, team === w.playerTeam);
         // 'at' is the stand on a return — same converge ceremony as the
         // online path; no streak, the offline room doesn't keep a
@@ -87,6 +87,16 @@ export class CtfBridge {
 
   /** Objective data the per-bot ctx asks for. */
   objectiveInfoFor(bot: GameBot) { return this.ctf.objectiveInfoFor(bot); }
+
+  /** A team's flag spot for radio-call aims: carried=false → the stand
+   *  (home anchor), carried=true → the live flag pos (the thief's
+   *  broadcast location — public info). */
+  flagPos(team: string, carried: boolean): { x: number; y: number; z: number } | undefined {
+    const m = this.ctf.markers().find((m) => m.team === team);
+    if (!m) return undefined;
+    if (carried) return m.state === 'carried' ? { x: m.pos.x, y: m.pos.y, z: m.pos.z } : undefined;
+    return { x: m.home.x, y: m.home.y, z: m.home.z };
+  }
 
   /** Flag-zone test — botMatch's CTF_PTS.flagZoneKill bonus reads it. */
   nearStand(pos: { x: number; y: number; z: number }, r: number): boolean {

@@ -9,20 +9,20 @@
 
 import * as THREE from 'three';
 import { GameBot, BOT_DMG } from './botBrain.js';
-import { BOT_LOADOUTS, pickBotWeaponSafe } from '../../../shared/botLoadouts.js';
-import { aimSkillFor } from '../../../shared/botSkill.js';
-import { getProjectileConfig } from '../projectiles/index.js';
-import { Projectile } from '../projectiles/Projectile.js';
-import { SLOT_DEFS } from '../weapons.js';
-import { WeaponType, getWeaponStats, WEAPON_FIRE_INTERVAL_S } from '../../../shared/weapons.js';
-import { GRAVITY } from '../../../shared/movement.js';
-import { MELEE_RANGE, MELEE_DAMAGE } from '../core/config.js';
-import * as sfx from '../core/sfx.js';
+import { BOT_LOADOUTS, pickBotWeaponSafe } from '../../../../shared/botLoadouts.js';
+import { aimSkillFor } from '../../../../shared/botSkill.js';
+import { getProjectileConfig } from '../../projectiles/index.js';
+import { Projectile } from '../../projectiles/Projectile.js';
+import { SLOT_DEFS } from '../../weapons.js';
+import { WeaponType, getWeaponStats, WEAPON_FIRE_INTERVAL_S } from '../../../../shared/weapons.js';
+import { GRAVITY } from '../../../../shared/movement.js';
+import { MELEE_RANGE, MELEE_DAMAGE } from '../../core/config.js';
+import * as sfx from '../../core/sfx.js';
 import { claimShot, tickBolts, disposeBolts } from './botBolts.js';
-import { poissonDisc } from '../utils/poissonSpread.js';
-import type { RemotePlayer } from '../entities/RemotePlayer.js';
-import type { Targetable } from '../entities/balls.js';
-import type { ArmorClass } from '../../../shared/botClasses.js';
+import { poissonDisc } from '../../utils/poissonSpread.js';
+import type { RemotePlayer } from '../../entities/RemotePlayer.js';
+import type { Targetable } from '../../entities/balls.js';
+import type { ArmorClass } from '../../../../shared/botClasses.js';
 
 const _shotDir = new THREE.Vector3();
 const _shotMuzzle = new THREE.Vector3();
@@ -194,13 +194,16 @@ export class BotFire {
     sfx.shotAt(_shotMuzzle, wt, bot.vel);
   }
 
-  /** First push-class AOE weapon in the kit — pull weapons would drag
-   *  the bot toward its own feet. */
+  /** First push-class AOE weapon in the kit that can actually LAUNCH —
+   *  pull weapons would drag the bot toward its own feet, and splash
+   *  without shove (Bombard: 9m radius, 12 m/s knockback) is a feet
+   *  blast that costs health and goes nowhere. Mirrors the server's
+   *  botArsenal.propelWeapon — same kit, same pick. */
   private propelWeapon(bot: GameBot): number {
     const lo = bot.loadout ?? BOT_LOADOUTS[0]!;
     const pick = [lo.mid, lo.far].find((wt) => {
       const s = getWeaponStats(wt);
-      return s && s.aoeRadius > 0 && s.speed > 0 && s.forceMode !== 'pull';
+      return s && s.aoeRadius > 0 && s.speed > 0 && s.forceMode !== 'pull' && s.knockbackForce >= 20;
     });
     return pick ?? WeaponType.Disc;
   }

@@ -1,26 +1,26 @@
 import * as THREE from 'three';
 
 import { GameBot, EYE } from './botBrain.js';
-import { applyStructureSpecs } from './structureSpecs.js';
+import { applyStructureSpecs } from '../structureSpecs.js';
 import { BotWatchdog } from './botWatchdog.js';
 import { SheepMeter } from './botSheep.js';
-import { BOT_LOADOUTS, BOT_ALT_SLOTS, WILDCARD_SLOTS, botClassForLoadout, rollWildcard } from '../../../shared/botLoadouts.js';
-import { botRand } from '../../../shared/botRand.js';
-import { WeaponType } from '../../../shared/weapons.js';
-import type { Nugget } from '../entities/Nugget.js';
-import type { Targetable } from '../entities/balls.js';
-import type { GameContext } from './context.js';
-import { MODES, makeScores, type TeamId, type TeamScores, type ModeId } from '../../../shared/teams.js';
-import type { Terrain } from '../world/terrain.js';
+import { BOT_LOADOUTS, BOT_ALT_SLOTS, WILDCARD_SLOTS, botClassForLoadout, rollWildcard } from '../../../../shared/botLoadouts.js';
+import { botRand } from '../../../../shared/botRand.js';
+import { WeaponType } from '../../../../shared/weapons.js';
+import type { Nugget } from '../../entities/Nugget.js';
+import type { Targetable } from '../../entities/balls.js';
+import type { GameContext } from '../context.js';
+import { MODES, makeScores, type TeamId, type TeamScores, type ModeId } from '../../../../shared/teams.js';
+import type { Terrain } from '../../world/terrain.js';
 import { CtfBridge } from './botCtf.js';
 import { RabbitBridge } from './botRabbit.js';
-import { FlagRunBridge } from './flagRun.js';
-import * as sfx from '../core/sfx.js';
+import { FlagRunBridge } from '../flagRun.js';
+import * as sfx from '../../core/sfx.js';
 import { BotSenses } from './botSenses.js';
 import { BotFire } from './botFire.js';
 import { respawnBotF, hitF, hurtLocal, botKilledF, botSay, botSayDrain } from './botKill.js';
-import { chatter, type ChatterKind } from '../../../shared/botTaunts.js';
-import { RoomNoticer } from '../../../shared/roomNoticer.js';
+import { chatter, chatKindFor, vgsCommandFor, radioAimFor, type ChatterKind } from '../../../../shared/botTaunts.js';
+import { RoomNoticer } from '../../../../shared/roomNoticer.js';
 import { winText, checkWin, resetMatch, creditKill, creditDamage, collect, pushScore, syncLocalTeam, awardPersonal } from './botMatch.js';
 
 /**
@@ -39,9 +39,9 @@ import { winText, checkWin, resetMatch, creditKill, creditDamage, collect, pushS
  * scatter — the same Omicron delay as the pvptest harness bots.
  */
 
-import { BOT_NAMES } from '../../../shared/botNames.js';
-import { CLASS_STATS, classCapsule, classMass } from '../../../shared/botClasses.js';
-import type { BodyCapsule } from '../../../shared/movement.js';
+import { BOT_NAMES } from '../../../../shared/botNames.js';
+import { CLASS_STATS, classCapsule, classMass } from '../../../../shared/botClasses.js';
+import type { BodyCapsule } from '../../../../shared/movement.js';
 
 export interface BotsDeps extends GameContext {
   lazyScene(): THREE.Scene;
@@ -77,7 +77,7 @@ interface BotHooks {
   damageCreature(id: number, dmg: number, attackerId: string): boolean;
   /** A builder bot wants to plant — owner wrapper keeps the item's foes,
    *  anchors, and heals pointed at the bot, not the local player. */
-  botDeploy?(kind: string, pos: { x: number; y: number; z: number }, owner: import('./deployables.js').DeployOwner): void;
+  botDeploy?(kind: string, pos: { x: number; y: number; z: number }, owner: import('../deployables.js').DeployOwner): void;
   /** Damaged friendly deployable the bot could weld — mirrors the
    *  server senses' repairJob scan (nearest within ~45m). */
   botRepairJob?(team: string, pos: THREE.Vector3, botId: string): { key: string; pos: THREE.Vector3; frac: number } | null;
@@ -119,7 +119,7 @@ export class TeamBots {
     /** Solo map spec (maps/<X>.json resolved client-side) — feeds flag
      *  homes and authored spawn anchors; absent = the old around-player
      *  ±70m default bases. */
-    private mapSpec?: import('../../../shared/mapSpec.js').MapSpec,
+    private mapSpec?: import('../../../../shared/mapSpec.js').MapSpec,
   ) {
     this.spec = MODES[mode]; // param props assign after field inits — do it here
     this.deps.world.mode = mode; // wire rooms set this on gameState; offline must too (scoreboard title)
@@ -201,7 +201,11 @@ export class TeamBots {
         onCapture: () => pushScore(this),
         onFeed: (t) => this.hooks.remoteKillFeed(t),
         onPersonalPoints: (id, n) => awardPersonal(this, id, n),
-        onFlagNotice: (kind, actorId, actorTeam) => this.notice(kind, actorId, actorTeam),
+        onFlagNotice: (kind, actorId, actorTeam, at) =>
+          // Grabs/drops pin the flag spot for the DEFENDING side — the
+          // grabber's team already knows where their runner is.
+          this.notice(kind, actorId, actorTeam,
+            kind === 'flaggrab' || kind === 'flagdrop' ? at : undefined, 'other'),
         bases: this.mapSpec?.bases,
         structures: this.mapSpec?.structures,
       });
@@ -398,8 +402,14 @@ export class TeamBots {
     if (!bot.wantSay) return;
     const tgt = bot.wantSay.target;
     const c = chatter(bot.wantSay.kind, bot.playerId,
-      tgt === 'local' ? 'YOU' : tgt?.replace('bot:', ''));
-    if (c) this.notice('reply', bot.playerId, bot.team ?? undefined);
+      tgt === 'local' ? 'YOU' : tgt?.replace('bot:', ''),
+      { d: bot.wantSay.d, h: bot.wantSay.h });
+    if (c) {
+      // A spoken command chord is a real call — teammates get the pin,
+      // same as the wire's botSpoke→radio path. Barks stay replies.
+      const goal = c.vgs ? this.radioGoal(c.vgs, bot.playerId) : undefined;
+      this.notice(goal ? 'ack' : 'reply', bot.playerId, bot.team ?? undefined, goal);
+    }
     botSay(bot.playerId, c?.text ?? null, c?.vgs, c?.team && bot.team !== null);
     bot.wantSay = null;
   }
@@ -485,8 +495,36 @@ export class TeamBots {
 
   /** Flag/killFeed-worthy room event → chatter sense. The CTF bridge
    *  pushes these; the actor never hears their own ping. */
-  notice(kind: ChatterKind, actorId: string, actorTeam?: string): void {
-    this.notices.notice(kind, actorId, actorTeam, performance.now());
+  notice(kind: ChatterKind, actorId: string, actorTeam?: string, goal?: { x: number; y: number; z: number },
+    goalSide?: 'same' | 'other'): void {
+    this.notices.notice(kind, actorId, actorTeam, performance.now(), goal, goalSide);
+  }
+
+  /** The local player's own chat/VGS — offline never sees the wire, so
+   *  this is the parity hook a real room gets through Room's chat event:
+   *  classify the line, mention-check it, aim team commands at a spot. */
+  hearLocal(text: string, team: boolean, vgs?: string): void {
+    const kind = chatKindFor(text)
+      ?? (vgs ? vgsCommandFor(vgs) : null)
+      ?? (this.bots.some((b) => text.toLowerCase().includes(b.playerId.slice(4).toLowerCase())) ? 'mention' : null);
+    const goal = vgs && team ? this.radioGoal(vgs) : undefined;
+    if (kind) this.notice(kind, 'local', this.teamOf.get('local'), goal);
+  }
+
+  /** Same chord→spot resolution Room.radioGoal runs on the wire —
+   *  offline flag stands live in the ctf bridge, actor pos is the local
+   *  player's. */
+  private radioGoal(chord: string, actorId = 'local'): { x: number; y: number; z: number } | undefined {
+    const aim = radioAimFor(chord);
+    if (!aim) return undefined;
+    if (aim === 'actor') {
+      const a = actorId === 'local' ? this.deps.lazyPlayer().pos : this.bots.find((b) => b.playerId === actorId)?.position;
+      return a ? { x: a.x, y: a.y, z: a.z } : undefined;
+    }
+    const team = this.teamOf.get(actorId);
+    if (!team) return undefined;
+    if (aim === 'carrier') return this.ctf?.flagPos(team, true);
+    return this.ctf?.flagPos(aim === 'own' ? team : team === 'alpha' ? 'bravo' : 'alpha', false);
   }
 
   /** Mirrors ServerBotSenses.confidenceOf — the goal picker's nerve
@@ -586,7 +624,12 @@ export class TeamBots {
   /** DM kill credit — a player/bot frag vs a creature frag. */
   creditKill(id: string, isCreature: boolean, victimPos?: { x: number; y: number; z: number }): void {
     creditKill(this, id, isCreature, victimPos);
+    this.deathStreak.delete(id); // a frag clears the victim's tilt counter — server's announce does the same
   }
+
+  /** Unanswered-death counter per victim — feeds the 'tilt' line at 3+,
+   *  the offline mirror of server killFeed.deathStreak. */
+  readonly deathStreak = new Map<string, number>();
 
   /** CTF damage points — hitF/hurtLocal call after their gates so
    *  friendly or rabbit-blocked damage never banks. */

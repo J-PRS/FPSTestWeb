@@ -1,14 +1,15 @@
 import * as THREE from 'three';
 
-import { WeaponType, CONC_JET_DRAIN, getWeaponStats } from '../../../shared/weapons.js';
-import { TEAM_COLORS, type TeamId } from '../../../shared/teams.js';
-import * as sfx from '../core/sfx.js';
-import { PlayerDebris } from '../effects/debris.js';
-import { killTaunt, deathTaunt, comboTailFor, comboCutDelayMs } from '../../../shared/botTaunts.js';
-import { chatSink } from './chat.js';
-import { noteKill } from '../core/stateDebug.js';
+import { WeaponType, CONC_JET_DRAIN, getWeaponStats } from '../../../../shared/weapons.js';
+import { TEAM_COLORS, type TeamId } from '../../../../shared/teams.js';
+import * as sfx from '../../core/sfx.js';
+import { PlayerDebris } from '../../effects/debris.js';
+import { killTaunt, deathTaunt, comboTailFor, comboCutDelayMs, chatter, noteFrag, bulliedBy } from '../../../../shared/botTaunts.js';
+import { tauntRand } from '../../../../shared/botRand.js';
+import { chatSink } from '../chat.js';
+import { noteKill } from '../../core/stateDebug.js';
 import { GameBot } from './botBrain.js';
-import type { TeamBots } from './bots.js';
+import type { TeamBots } from './index.js';
 
 // Kill + respawn bookkeeping — the local-authority half of fragging:
 // bot respawns, player→bot hit funnel, the local player's own death.
@@ -185,16 +186,55 @@ export function botKilledF(b: TeamBots, killerId: string, bot: GameBot, weapon?:
 /** Feed row + taunts + the local-player frag banner — all the "tell the
  *  humans a kill happened" work of botKilledF. */
 function killChatter(b: TeamBots, killerId: string, bot: GameBot, weapon?: number, air?: number): void {
+    // kn = killer's display name (the {t} of death/props lines),
+    // vn = victim's (the {v} of kill lines) — passing kn to killTaunt
+    // once made a bot name himself as the fragged one.
     const kn = killerId === 'local' ? 'YOU' : killerId.replace('bot:', '');
+    const vn = bot.playerId.replace('bot:', '');
     noteKill(killerId === 'local' ? 'local' : killerId, bot.playerId, weapon);
-    b.hooks.killFeed(kn, bot.playerId.replace('bot:', ''), killerId === 'local', false,
+    noteFrag(killerId, bot.playerId); // the one-sided ledger — bully check reads it below
+    b.hooks.killFeed(kn, vn, killerId === 'local', false,
       { shooter: b.teamOf.get(killerId), target: bot.team, weapon, air });
+    // A long-airtime explosive shell = the brag kill (server killFeed's
+    // skillKill, mirrored) — the killer may hype it, the victim may
+    // give props, and a quiet killer can close the beat with thanks.
+    const skill = (air ?? 0) >= 0.5 && weapon != null && (getWeaponStats(weapon)?.aoeRadius ?? 0) > 0;
     if (killerId !== 'local') {
-      const kt = killTaunt(killerId, kn);
-      botSay(killerId, kt?.text ?? null, kt?.vgs);
+      if (skill) {
+        const c = chatter('air', killerId, vn);
+        botSay(killerId, c?.text ?? null, c?.vgs);
+      } else {
+        const kt = killTaunt(killerId, vn);
+        botSay(killerId, kt?.text ?? null, kt?.vgs);
+      }
     }
-    const dt = deathTaunt(bot.playerId, kn);
-    botSay(bot.playerId, dt?.text ?? null, dt?.vgs);
+    const dStreak = (b.deathStreak.get(bot.playerId) ?? 0) + 1;
+    b.deathStreak.set(bot.playerId, dStreak);
+    if (bulliedBy(bot.playerId, killerId)) {
+      const c = chatter('bully', bot.playerId, kn);
+      botSay(bot.playerId, c?.text ?? null, c?.vgs, c?.team);
+    } else if (dStreak >= 3) {
+      const c = chatter('tilt', bot.playerId, kn); // three unanswered deaths — server's victimLine order
+      botSay(bot.playerId, c?.text ?? null, c?.vgs, c?.team);
+    } else {
+      // Same qualification roll as the server's hardShot: air-lobs earn
+      // props more often, routine deaths mostly stay quiet.
+      const qual = skill || Math.abs(bot.vel.y) > 10;
+      const c = qual && tauntRand() < (skill ? 0.7 : 0.45)
+        ? chatter('props', bot.playerId, kn) : null;
+      if (c) {
+        botSay(bot.playerId, c.text, c.vgs, c.team);
+        if (killerId !== 'local' && tauntRand() < 0.5) {
+          setTimeout(() => { // the thanks beat — only lands if the killer didn't gloat
+            const t = chatter('thanks', killerId, vn);
+            botSay(killerId, t?.text ?? null, t?.vgs, t?.team);
+          }, 2500 + tauntRand() * 2000);
+        }
+      } else {
+        const dt = deathTaunt(bot.playerId, kn);
+        botSay(bot.playerId, dt?.text ?? null, dt?.vgs);
+      }
+    }
     if (killerId === 'local') {
       // Same center headline the wire path (onPlayerKill) gives connected
       // frags — offline kills were feed-row-only and read as no credit.

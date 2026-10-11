@@ -1,4 +1,4 @@
-import { TEAM_COLORS, TEAM_LABEL, MODES, CTF_PTS, CTF_DMG_PER_PTS, CTF_FLAG_ZONE_R, bank, type TeamId, type TeamScores, type ModeId } from '../../../shared/teams.js';
+import { TEAM_COLORS, TEAM_LABEL, MODES, CTF_PTS, CTF_DMG_PER_PTS, CTF_FLAG_ZONE_R, bank, type TeamId, type TeamScores, type ModeId } from '../../../../shared/teams.js';
 import type { GameBot } from './botBrain.js';
 import type { CtfBridge } from './botCtf.js';
 import type { RabbitBridge } from './botRabbit.js';
