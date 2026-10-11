@@ -7,6 +7,19 @@
 import * as THREE from 'three';
 import { UNGRADE_GLSL } from '../core/gradeGlsl.js';
 import { markProbe } from '../core/fxDiag.js';
+import { FX_FOG } from '../world/directionalFog.js';
+
+// Shared fog attenuation — ShaderMaterials ignore scene.fog, so a shield
+// used to glow through the fog wall at any distance. Additive fields
+// fade to nothing (not to fog color): emitted light scatters out.
+const FOG_PARS = /* glsl */ `
+  uniform float fogNear;
+  uniform float fogFar;
+`;
+const FOG_VERT = /* glsl */ `
+  vFog = clamp((distance(wp.xyz, cameraPosition) - fogNear) / max(fogFar - fogNear, 1.0), 0.0, 1.0);
+`;
+const fogUniforms = (): Record<string, THREE.IUniform> => ({ fogNear: FX_FOG.near, fogFar: FX_FOG.far });
 
 // Skinned variant — the field is a shell CLONED from the model's own
 // skinned meshes, inflated along the skinned normal. Reads as a contoured
@@ -16,9 +29,11 @@ const VERT_SKINNED = /* glsl */ `
   #include <common>
   #include <skinning_pars_vertex>
   uniform float uInflate;
+  ${FOG_PARS}
   varying vec3 vNormalW;
   varying vec3 vPosW;
   varying vec3 vLocal;
+  varying float vFog;
   void main() {
     #include <skinbase_vertex>
     #include <beginnormal_vertex>
@@ -30,19 +45,23 @@ const VERT_SKINNED = /* glsl */ `
     vec4 wp = modelMatrix * vec4(transformed, 1.0);
     vPosW = wp.xyz;
     vNormalW = normalize(mat3(modelMatrix) * objectNormal);
+    ${FOG_VERT}
     gl_Position = projectionMatrix * viewMatrix * wp;
   }
 `;
 
 const VERT = /* glsl */ `
+  ${FOG_PARS}
   varying vec3 vNormalW;
   varying vec3 vPosW;
   varying vec3 vLocal;
+  varying float vFog;
   void main() {
     vLocal = position;
     vNormalW = normalize(mat3(modelMatrix) * normal);
     vec4 wp = modelMatrix * vec4(position, 1.0);
     vPosW = wp.xyz;
+    ${FOG_VERT}
     gl_Position = projectionMatrix * viewMatrix * wp;
   }
 `;
@@ -54,6 +73,7 @@ const FRAG = /* glsl */ `
   varying vec3 vNormalW;
   varying vec3 vPosW;
   varying vec3 vLocal;
+  varying float vFog;
 
   // Pointy-top hex distance on a 2D lattice — drives the cell borders.
   float hexDist(vec2 p) {
@@ -93,6 +113,7 @@ const FRAG = /* glsl */ `
 
     float a = 0.10 + fres * 0.55 + hexEdge * 0.18 + sweep * 0.05;
     a += uHit * (0.35 + hexEdge * 0.4); // soaked hits flare the lattice
+    a *= 1.0 - vFog; // fog wall swallows the field like everything else
     vec3 col = mix(uColor, vec3(0.85, 0.97, 1.0), fres * 0.6 + uHit * 0.5);
     gl_FragColor = vec4(ungradeColor(col), clamp(a, 0.0, 0.9));
     #include <tonemapping_fragment>
@@ -102,7 +123,7 @@ const FRAG = /* glsl */ `
 
 /** The raw field material — for callers that wrap their own geometry
  *  (viewmodel gun overlay). They own mesh lifecycle + uTime ticking. */
-export function makeShieldMaterial(color = 0x3fa8dd): THREE.ShaderMaterial {
+export function makeShieldMaterial(color = 0x3F_A8_DD): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     vertexShader: VERT,
     fragmentShader: FRAG,
@@ -110,11 +131,11 @@ export function makeShieldMaterial(color = 0x3fa8dd): THREE.ShaderMaterial {
     depthWrite: false,
     side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending,
-    uniforms: {
+    uniforms: Object.assign(fogUniforms(), {
       uTime: { value: Math.random() * 100 },
       uHit: { value: 0 },
       uColor: { value: new THREE.Color(color) },
-    },
+    }),
   });
 }
 
@@ -128,14 +149,10 @@ export interface ShieldBubble {
   dispose(): void;
 }
 
-export function makeShieldBubble(parent: THREE.Object3D, radius = 2.2, color = 0x3fa8dd): ShieldBubble {
-  return makeShieldedMesh(parent, new THREE.SphereGeometry(radius, 32, 20), color);
-}
-
 /** Same field, wrapped around arbitrary geometry (the first-person gun).
  *  `parent` is whatever the mesh should be added to — a Scene for world
  *  bubbles, the viewmodel group for the gun overlay. */
-export function makeShieldedMesh(parent: THREE.Object3D, geometry: THREE.BufferGeometry, color = 0x3fa8dd): ShieldBubble {
+export function makeShieldedMesh(parent: THREE.Object3D, geometry: THREE.BufferGeometry, color = 0x3F_A8_DD): ShieldBubble {
   const mat = new THREE.ShaderMaterial({
     vertexShader: VERT,
     fragmentShader: FRAG,
@@ -143,11 +160,11 @@ export function makeShieldedMesh(parent: THREE.Object3D, geometry: THREE.BufferG
     depthWrite: false,
     side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending,
-    uniforms: {
+    uniforms: Object.assign(fogUniforms(), {
       uTime: { value: Math.random() * 100 }, // desync bubbles on the field
       uHit: { value: 0 },
       uColor: { value: new THREE.Color(color) },
-    },
+    }),
   });
   const mesh = new THREE.Mesh(geometry, mat);
   mesh.visible = false;
@@ -173,12 +190,16 @@ export function makeShieldedMesh(parent: THREE.Object3D, geometry: THREE.BufferG
  *  share skeleton/bind so the shell hugs the body through every pose and
  *  inherits the model's scale — no per-frame position updates needed.
  *  Returns null if the model has no skinned meshes yet (not loaded). */
-export function makeContouredShield(modelRoot: THREE.Object3D, color = 0x3fa8dd): ShieldBubble | null {
+export function makeShieldBubble(parent: THREE.Object3D, radius = 2.2, color = 0x3F_A8_DD): ShieldBubble {
+  return makeShieldedMesh(parent, new THREE.SphereGeometry(radius, 32, 20), color);
+}
+
+export function makeContouredShield(modelRoot: THREE.Object3D, color = 0x3F_A8_DD): ShieldBubble | null {
   const sources: THREE.SkinnedMesh[] = [];
   modelRoot.traverse((o) => {
-    if ((o as THREE.SkinnedMesh).isSkinnedMesh) sources.push(o as THREE.SkinnedMesh);
+    if ((o as THREE.SkinnedMesh).isSkinnedMesh) {sources.push(o as THREE.SkinnedMesh);}
   });
-  if (sources.length === 0) return null;
+  if (sources.length === 0) {return null;}
 
   const mat = new THREE.ShaderMaterial({
     vertexShader: VERT_SKINNED,
@@ -187,12 +208,12 @@ export function makeContouredShield(modelRoot: THREE.Object3D, color = 0x3fa8dd)
     depthWrite: false,
     side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending,
-    uniforms: {
+    uniforms: Object.assign(fogUniforms(), {
       uTime: { value: Math.random() * 100 },
       uHit: { value: 0 },
       uColor: { value: new THREE.Color(color) },
       uInflate: { value: 0.04 },
-    },
+    }),
   });
 
   const clones: THREE.SkinnedMesh[] = [];
@@ -203,7 +224,7 @@ export function makeContouredShield(modelRoot: THREE.Object3D, color = 0x3fa8dd)
     // verts can leave the bind-pose bounds, so don't let culling hide it.
     clone.frustumCulled = false;
     clone.visible = false;
-    clone.raycast = () => {}; // shield is cosmetic — never eats ray hits
+    clone.raycast = (): void => undefined; // shield is cosmetic — never eats ray hits
     src.add(clone);
     clones.push(clone);
   }
@@ -214,7 +235,7 @@ export function makeContouredShield(modelRoot: THREE.Object3D, color = 0x3fa8dd)
   const facade = new THREE.Group();
   Object.defineProperty(facade, 'visible', {
     get: () => clones[0]?.visible ?? false,
-    set: (v: boolean) => { for (const c of clones) c.visible = v; },
+    set: (v: boolean) => { for (const c of clones) {c.visible = v;} },
   });
 
   return {
@@ -225,7 +246,7 @@ export function makeContouredShield(modelRoot: THREE.Object3D, color = 0x3fa8dd)
       mat.uniforms.uHit.value = Math.max(0, mat.uniforms.uHit.value - dt * 4);
     },
     dispose() {
-      for (const c of clones) c.parent?.remove(c); // geometry is the model's — not ours to dispose
+      for (const c of clones) {c.parent?.remove(c);} // geometry is the model's — not ours to dispose
       mat.dispose();
     },
   };

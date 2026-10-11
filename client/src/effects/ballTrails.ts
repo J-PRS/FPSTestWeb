@@ -12,6 +12,7 @@ import * as THREE from 'three';
 import { acquireBatch, retireBatch, type BatchMap } from '../core/batchPool.js';
 import { markProbe, registerDiag } from '../core/fxDiag.js';
 import { fxBufferHeight } from '../core/fxViewport.js';
+import { FX_FOG } from '../world/directionalFog.js';
 import { urlParams } from '../core/params.js';
 
 const TRAIL_COUNT = 14;
@@ -52,7 +53,7 @@ export function getTrailTex(): THREE.Texture {
     const S = 64, c = document.createElement('canvas');
     c.height = S;
     c.width = c.height;
-    const ctx = c.getContext('2d')!;
+    const ctx = c.getContext('2d') as CanvasRenderingContext2D;
     const g = ctx.createRadialGradient(S/2, S/2, 0, S/2, S/2, S/2);
     g.addColorStop(0,    'rgba(255,255,255,1)');
     g.addColorStop(0.25, 'rgba(255,255,255,0.55)');
@@ -74,15 +75,22 @@ function trailMat(): THREE.ShaderMaterial {
         // viewport height in px — world size -> gl_PointSize needs it and
         // projectionMatrix[1][1]; updated per frame in fade()
         uHeight: { value: 800 },
+        // ShaderMaterials ignore scene.fog — bind the shared range so
+        // distant dots die in the fog wall instead of painting through.
+        fogNear: FX_FOG.near,
+        fogFar: FX_FOG.far,
       },
       vertexShader: /* glsl */`
         attribute float aSize;
         attribute vec4 aColor;
         varying vec4 vColor;
         uniform float uHeight;
+        uniform float fogNear;
+        uniform float fogFar;
         void main() {
-          vColor = aColor;
           vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          float fog = clamp((-mv.z - fogNear) / max(fogFar - fogNear, 1.0), 0.0, 1.0);
+          vColor = vec4(aColor.rgb, aColor.a * (1.0 - fog));
           gl_PointSize = aSize * (uHeight * projectionMatrix[1][1] * 0.5) / -mv.z;
           gl_Position = projectionMatrix * mv;
         }`,
@@ -126,7 +134,7 @@ class DotBatch {
     this.points.frustumCulled = false;
     scene.add(this.points);
     markProbe(this.points, { kind: 'fxMesh', label: 'ballTrailDots' });
-    for (let s = BATCH_TRAILS - 1; s >= 0; s--) {this.free.push(s);}
+    for (let s = BATCH_TRAILS - 1; s >= 0; s -= 1) {this.free.push(s);}
   }
 
   dispose(): void {
@@ -187,7 +195,7 @@ const dotBatches: BatchMap<THREE.Scene, DotBatch> = new Map();
 /** Take a slot from any non-full batch for the scene; grow on demand. */
 function acquireDotSlot(scene: THREE.Scene): { batch: DotBatch; slot: number } {
   const batch = acquireBatch(dotBatches, scene, s => new DotBatch(s), b => b.free.length > 0);
-  return { batch, slot: batch.free.pop()! };
+  return { batch, slot: batch.free.pop() as number };
 }
 
 /** Return the slot; an emptied overflow batch retires (batch[0] stays). */
@@ -239,7 +247,7 @@ export class BallTrailDots {
 
   /** Dust-burst at takeoff/land — count dots now, timer not involved. */
   burst(count: number, pos: THREE.Vector3, radius: number, tint: THREE.Color): void {
-    for (let i = 0; i < count; i++) {this.spawn(pos, radius, tint);}
+    for (let i = 0; i < count; i += 1) {this.spawn(pos, radius, tint);}
   }
 
   get size(): number { return this.dots.length; }
@@ -263,14 +271,14 @@ export class BallTrailDots {
     d.haloSz = radius * (1.8 + Math.random() * 2) * this.sizeMul;
     d.coreSz = radius * (0.9 + Number(Math.random())) * this.sizeMul;
     d.tint.copy(tint);
-    if (this.dots.length >= this.maxDots) {freeDot(this.dots.shift()!);}
+    if (this.dots.length >= this.maxDots) {freeDot(this.dots.shift() as TrailDot);}
     this.dots.push(d);
   }
 
   fade(dt: number): void {
     if (this.slot < 0) {return;}
     trimDotPool();
-    for (let i = this.dots.length - 1; i >= 0; i--) {
+    for (let i = this.dots.length - 1; i >= 0; i -= 1) {
       const d = this.dots[i];
       d.age += dt;
       if (d.age >= d.life) {
@@ -285,7 +293,7 @@ export class BallTrailDots {
     // gl_PointSize is in FRAMEBUFFER px — the buffer is innerHeight/pscale
     // in chunky modes and upscales afterward, so feeding the CSS height
     // made trails render pscale× too big (the chunky-mode fat trails).
-    trailMat().uniforms.uHeight!.value = fxBufferHeight();
+    trailMat().uniforms.uHeight.value = fxBufferHeight();
     let w = 0; // live-dot write cursor over the attribute pair
     for (const d of this.dots) {
       const t = 1 - d.age / d.life;
@@ -306,12 +314,12 @@ export class BallTrailDots {
       this.batch.colAttr.setXYZW(h, d.tint.r, d.tint.g, d.tint.b, haloA);
       _tmpC.copy(d.tint).lerp(_white, 0.65);
       this.batch.colAttr.setXYZW(c, _tmpC.r, _tmpC.g, _tmpC.b, coreA);
-      w++;
+      w += 1;
     }
     // Zero freed tail slots only when the live count shrank — a stable
     // roster re-zeroes nothing (the tail was already zeroed last shrink).
     if (w < this._lastLive) {
-      for (let s = this.base + w * 2; s < this.base + this.maxDots * 2; s++) {this.batch.sizeAttr.setX(s, 0);}
+      for (let s = this.base + w * 2; s < this.base + this.maxDots * 2; s += 1) {this.batch.sizeAttr.setX(s, 0);}
     }
     // Skip the buffer upload when nothing lives — an idle trail was still
     // pushing 3 attribute uploads per ball per frame (~100/frame total).
@@ -326,7 +334,7 @@ export class BallTrailDots {
   dispose(): void {
     if (this.slot >= 0) {
       // bury the slot's points before handing it back
-      for (let s = this.base; s < this.base + SLOT_VERTS; s++) {this.batch.sizeAttr.setX(s, 0);}
+      for (let s = this.base; s < this.base + SLOT_VERTS; s += 1) {this.batch.sizeAttr.setX(s, 0);}
       this.batch.mark(this.base, this.base + SLOT_VERTS);
       this.batch.flush();
       releaseDotSlot(this.scene, this.batch, this.slot);

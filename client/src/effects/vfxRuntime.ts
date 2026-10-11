@@ -394,7 +394,7 @@ export interface TrailDriverHost {
    *  correction-sweep hosts, where the sweep IS the motion to hide. */
   emitOnJump?: boolean;
 }
-export interface DriveLayer { emitSegment(): void; teleport(): void }
+export interface DriveLayer { emitSegment(dt?: number): void; teleport(): void }
 // `follow` is the live-pos anchor RibbonTrail re-pins its head to — the
 // driver binds it so the tip tracks the host between pushes instead of
 // rendering one frame of travel behind.
@@ -434,7 +434,7 @@ export class TrailDriver {
       for (const r of this.ribbons) {r.clear();}
       for (const e of this.emitters) {e.teleport();}
     }
-    if (this.shouldEmit(jump)) {this.emit();}
+    if (this.shouldEmit(jump)) {this.emit(dt);}
     this.last.copy(pos);
   }
 
@@ -446,9 +446,9 @@ export class TrailDriver {
     return !jump || this.host.emitOnJump !== false;
   }
 
-  private emit(): void {
+  private emit(dt: number): void {
     const { pos, vel } = this.host;
-    for (const e of this.emitters) {e.emitSegment();}
+    for (const e of this.emitters) {e.emitSegment(dt);}
     if (this.host.ribbonEmitting?.() ?? true) {
       for (const r of this.ribbons) {r.push(pos, vel);}
     }

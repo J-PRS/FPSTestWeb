@@ -52,6 +52,9 @@ class SparkBatch {
     this.geo.setAttribute('color', this.colAttr);
     this.mesh = new THREE.LineSegments(this.geo, new THREE.LineBasicMaterial({
       vertexColors: true, transparent: true, blending: THREE.AdditiveBlending,
+      // Dead slices are black verts collapsed at the origin — without
+      // fog:false the fog mix repaints them as a fog-colored speck.
+      fog: false,
     }));
     this.mesh.layers.enable(BLOOM_LAYER);
     this.mesh.frustumCulled = false;

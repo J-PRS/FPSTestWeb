@@ -54,3 +54,16 @@ export function updateDirectionalFog(fog: THREE.Fog, camera: THREE.Camera, sunDi
   camera.getWorldDirection(_camDir);
   return fogTint(_base, _camDir, sunDir, _tinted);
 }
+
+// Shared fog-range uniforms for ShaderMaterials — scene.fog only reaches
+// built-in materials, so world-space FX shaders (shields, dot trails)
+// bind these objects and get the same near/far the terrain is fed.
+// Synced once per frame in gameLoop.syncFog.
+export const FX_FOG = {
+  near: { value: 0 },
+  far: { value: 1e9 },
+};
+export function syncFxFog(fog: THREE.Fog): void {
+  FX_FOG.near.value = fog.near;
+  FX_FOG.far.value = fog.far;
+}

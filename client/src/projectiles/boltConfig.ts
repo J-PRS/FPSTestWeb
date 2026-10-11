@@ -63,5 +63,8 @@ export const BOLT_CONFIG: ProjectileConfig = {
   ribbonTrail: true,
   ribbonWidth: 0.55,
   ribbonLife: 0.3,
+  // Emitter ramp-in — streak spawns at 10% width+life, full over 0.1s,
+  // so a fresh shot isn't a fat ribbon in the face at the muzzle.
+  ribbonRampIn: 0.2,
   ribbonColor: 0xff7733,
 };

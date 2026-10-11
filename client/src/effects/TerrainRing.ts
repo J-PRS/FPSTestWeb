@@ -60,6 +60,10 @@ function makePool(scene: THREE.Scene): RingPool {
     vertexColors: true, transparent: true, opacity: 1,
     side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
     depthWrite: false,
+    // fog:false is load-bearing: the fade only scales vertex RGB to
+    // black (alpha stays 1), so the fog mix would repainted dead rings
+    // as fog-colored silhouettes until a new shot reused the slot.
+    fog: false,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
   });
   const mesh = new THREE.Mesh(geo, mat);

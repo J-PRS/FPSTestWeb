@@ -95,6 +95,11 @@ export class RibbonTrail {
   // Per-sample width multiplier — default 1. Slash/swipe callers pinch
   // the ends to 0 so strokes read as blades, not constant-width bars.
   private ws = new Float32Array(MAX_SAMPLES).fill(1);
+  // Per-sample view-angle factor — billboard ribbons multiply width by
+  // sin(dir-to-camera): a streak flying along the view axis presents its
+  // whole face otherwise (the giant end-on wedge), so it shrinks to a
+  // point instead. 1 for non-billboard ribbons and un-sided samples.
+  private sf = new Float32Array(MAX_SAMPLES).fill(1);
   // Last written fade bucket per ribbon position (-1 = never written).
   // Fades only need rewriting when they cross a 1/255 step — a parked
   // camera + mature trail writes nothing at all.
@@ -311,6 +316,7 @@ export class RibbonTrail {
     this.starvedPushes = 0;
     this._lf.fill(-1);
     this.ws.fill(1);
+    this.sf.fill(1);
     this.rampDur = 0;
     this.rampFrom = 1;
     this.emitScale = 1;
@@ -416,6 +422,7 @@ export class RibbonTrail {
     this.liveFrom = 0;
     this.starvedPushes = 0;
     this.ws.fill(1);
+    this.sf.fill(1);
     // The fade buckets are stale after a clear — a reused index whose
     // fresh fq coincidentally matches the old bucket would skip its
     // color write and leave the segment black/invisible.
@@ -556,7 +563,7 @@ export class RibbonTrail {
       const s3 = this.sideFor(s, rebillboard);
       if (s3) { sx = s3[0]!; sy = s3[1]!; sz = s3[2]!; }
     }
-    const w = this.width * this.emitScale * 0.5 * fade * this.ws[s];
+    const w = this.width * this.emitScale * 0.5 * fade * this.ws[s] * this.sf[s];
     pos[o] = this.px[s] - sx * w;
     pos[o + 1] = this.py[s] - sy * w;
     pos[o + 2] = this.pz[s] - sz * w;
@@ -575,7 +582,14 @@ export class RibbonTrail {
     const len = Math.hypot(sx, sy, sz);
     // isFinite, not just >eps: NaN len passes `<=` comparisons (NaN < x
     // is false), so a NaN cross product used to normalize into NaN verts.
-    if (!Number.isFinite(len) || len <= 1e-6) { RibbonTrail.nanSides++; return null; }
+    if (!Number.isFinite(len) || len <= 1e-6) { RibbonTrail.nanSides++; this.sf[s] = 0; return null; }
+    // len = |d||v|·sinθ — the same cross-product magnitude the side axis
+    // normalizes away. Below ~19° the strip is nearly end-on: fade width
+    // with the angle instead of showing the whole face.
+    const dlen = Math.hypot(this.dx[s]!, this.dy[s]!, this.dz[s]!);
+    const vlen = Math.hypot(vx, vy, vz);
+    const sin = len / Math.max(dlen * vlen, 1e-9);
+    this.sf[s] = Math.min(1, sin * 3);
     const o = RibbonTrail._s3;
     o[0] = sx / len; o[1] = sy / len; o[2] = sz / len;
     return o;

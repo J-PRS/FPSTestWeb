@@ -145,6 +145,9 @@ export class TrailBatch {
       depthWrite: false,
       blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
+      // Same ghost class as TerrainRing: fades scale vertex RGB only, so
+      // the fog mix repainted dead ribbon quads as fog-colored streaks.
+      fog: false,
     });
     this.mesh = new THREE.Mesh(this.geo, mat);
     this.mesh.frustumCulled = false;
