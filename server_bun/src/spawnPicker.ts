@@ -8,6 +8,7 @@ import type { PlayerState, Vec3 } from './types.ts';
 import type { SpawnPoint } from '../../shared/mapSpec.ts';
 import { CONFIG } from './config.ts';
 import type { TeamId } from '../../shared/teams.ts';
+import { inv } from '../../shared/invariants.ts';
 
 export interface SpawnPickerHost {
   players(): Map<string, PlayerState>;
@@ -119,14 +120,20 @@ export class SpawnPicker {
    *  volumes; using the center spawned every player at one exact spot. */
   private scatter(anchor: SpawnPoint): Vec3 {
     const out: Vec3 = { x: anchor.x, y: anchor.y, z: anchor.z };
+    const groundAt = this.host.groundAt();
     if (anchor.r && anchor.r > 0) {
       const a = this.host.rng() * Math.PI * 2;
       const d = anchor.r * Math.sqrt(this.host.rng());
       out.x += Math.cos(a) * d;
       out.z += Math.sin(a) * d;
-      const g = this.host.groundAt()?.(out.x, out.z);
+      const g = groundAt?.(out.x, out.z);
       if (g !== undefined && out.y < g) out.y = g;
     }
+    // Postcondition: a spawn born under its surface is the buried-bot
+    // seed — name it at the pick, not after the corpse renders sunk.
+    const g2 = groundAt?.(out.x, out.z);
+    inv('spawn-above-ground', g2 === undefined || out.y >= g2 - 0.5,
+      { x: out.x, y: out.y, z: out.z, ground: g2 });
     return out;
   }
 

@@ -1,3 +1,4 @@
+2026-10-10 - correctness: inv(spawn-above-ground) postcondition in SpawnPicker.scatter — a spawn born under its surface is named at the pick with coords+ground, not after the corpse renders sunk
 2026-10-10 - correctness: finite gates on deployable damage writes — hurt() chokepoint + blast sweep dmg check; NaN dmg can no longer silent-poison deploy replicas
 2026-10-10 - correctness: state-diff heal loop refuses non-finite snapshot truth — local hp adopt, missing-member mint, and healRemoteHealth all skip NaN rows
 2026-10-10 - correctness: inv(wire-vel-sane) at remote snapshot ingest — finite-but-absurd velocity (>300 m/s) is counted then capped before it can stretch a mesh through the extrapolation window
