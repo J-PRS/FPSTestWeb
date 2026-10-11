@@ -143,6 +143,14 @@ violation instead of a symptom hunt.
   travel, not `vel*dt` — interp/shadow hosts no longer leave a head gap.
 - **Deploy-plant lane:** kind/cap checks, `badpos` finite gate,
   `MAX_PLANT_DIST` bounds, belt economy, `groundY` reseats claimed Y.
+- **Team-flip coherence:** `players.setTeam` + `moveSim.setTeam` fire
+  together at rebalance; all game-logic reads are live `p.team` (FF,
+  flag grab/cap); the deployable team-stamp at plant is deliberate
+  (gear fights for its planting team).
+- **Heal credit (by design):** team rooms refuse `heal` claims — gems
+  heal server-side AT collect (the collect is the intent; a claim could
+  be dropped). `healCredit` only exists for the refused lane; free-form
+  heal stays live in non-team rooms.
 - **Map/lifecycle hygiene:** `dropPlayer` clears cadence maps, `untrack`
   frees sim shadows, room removal deletes wireIds+lastSentPositions;
   v4 wireId remint can't inherit masked fields (remove evicts byId);
