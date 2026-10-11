@@ -83,7 +83,34 @@ export class WireIn {
     else this.binary(data as Uint8Array);
   }
 
+  /** Inbound that lands before the app binds its handler deps (the
+   *  `h.*` hooks fill in during wireNetworkHandlers) queues here — the
+   *  socket is opened at boot start to overlap the handshake with
+   *  init, and a worldstate hitting unbound hooks would desync
+   *  silently. Flushed through the normal dispatch on markReady. */
+  private early: (ServerMessage | Uint8Array)[] = [];
+  private ready = true; // boot arms the queue only for the early-connect window
+  private earlyDrops = 0;
+
+  armEarlyQueue(): void { this.ready = false; }
+
+  markReady(): void {
+    this.ready = true;
+    const q = this.early;
+    this.early = [];
+    if (this.earlyDrops > 0) logger.warn(`wireIn dropped ${this.earlyDrops} early messages over the 512 cap`);
+    for (const m of q) this.dispatch(m);
+  }
+
+  private gate(data: ServerMessage | Uint8Array): boolean {
+    if (this.ready) return false;
+    if (this.early.length < 512) this.early.push(data);
+    else this.earlyDrops++;
+    return true;
+  }
+
   message(data: ServerMessage): void {
+    if (this.gate(data)) return;
     this.h.noteRx(JSON.stringify(data).length); // rx approximation — JSON events are sparse
     // Offset cursor: every reliable frame carries a room-scoped `ev`.
     // Replays only ever carry seq > our watermark, so tracking the max
@@ -126,6 +153,7 @@ export class WireIn {
   }
 
   binary(data: Uint8Array): void {
+    if (this.gate(data)) return;
     this.h.noteRx(data.length);
     if (!isWireFrame(data)) {
       logger.debug(`Received non-wire binary message: ${data.length} bytes`);

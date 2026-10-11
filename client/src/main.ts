@@ -125,6 +125,10 @@ let hud: HUD;
 let healthBarSystem: HealthBarSystem;
 let damageNumberManager: DamageNumberManager;
 let networkManager: NetworkManager;
+/** Room-join sockets open at boot start (before the handler deps bind)
+ *  so the handshake overlaps init — connectPhase awaits this instead of
+ *  connecting late. Null for classic/solo/p2p paths. */
+let earlyConnP: Promise<void> | null = null;
 // All shared mutable entity collections live in world — see game/worldState.ts
 const world = createWorldState();
 const {remotePlayers} = world;
@@ -168,10 +172,34 @@ let soloSpec: { spec: MapSpec; map: MapSnapshot } | null = null;
 async function init(): Promise<void> {
   profiler.markTime('initStart');
   watchDeployVersion();
+  networkManager = new NetworkManager();
+  networkManager.armWireQueue();
+  const onlineBoot = Boolean(urlParams.room) || Boolean(urlParams.p2p);
+  // The veil probe and the socket flight are pure network — kick both
+  // now so they overlap ALL of init instead of stacking after it.
+  // wireIn queues inbound until wireNetworkHandlers binds the deps
+  // (markWireReady right after it returns). p2p/classic keep the late
+  // connectServer path — they need machinery that isn't built yet.
+  const earlyWire = Boolean(urlParams.room) && !urlParams.p2p && urlParams.mode !== 'classic';
+  if (onlineBoot && urlParams.mode !== 'classic' && settings.get('fps-session-token')) {
+    void serverEndpoints
+      .then((ep) => pingServer(ep.httpUrl))
+      .then((live) => { if (live) {armSessionVeil(); profiler.markTime('veilProbed');} })
+      .catch(() => { /* dead-host probe — the offline world owns first frames */ });
+  }
+  earlyConnP = earlyWire
+    ? serverEndpoints.then(async (ep) => {
+        profiler.markTime('networkConnectStart');
+        try {
+          await networkManager.connect(ep.wsUrl, undefined, ep.fleet && ep.lobbyUrl ? () => fleetWorkerUrl(ep.lobbyUrl!) : undefined);
+          profiler.markTime('networkConnected');
+          logger.info(`Connected to server at ${ep.wsUrl}`);
+        } catch (error) { logger.error('Failed to connect to server', error); }
+      })
+    : null;
   // Probe the saved last-room BEFORE the boot heightmap: when it pings
   // live, its terrain loads as the boot field and the default map is
   // never resident — no default-field flash on F5.
-  const onlineBoot = Boolean(urlParams.room) || Boolean(urlParams.p2p);
   // Solo-with-a-map: ?map= without a room is the SOLO tab's pick — fetch
   // the spec JSON off the same static /maps route the wire path uses and
   // resolve it client-side (resolveMapSpec is shared/, pure).
@@ -251,7 +279,6 @@ async function init(): Promise<void> {
   }
 
   // Initialize networking — NetworkManager owns the WebSocket transport
-  networkManager = new NetworkManager();
   profiler.markTime('networkInit');
   wireNetworkLocal();
 
@@ -307,6 +334,9 @@ async function init(): Promise<void> {
     retireOfflineBots: () => { teamBots?.dispose(); teamBots = null; },
     hearLocalChat: (t, tm, v) => teamBots?.hearLocal(t, tm, v),
   });
+  // Deps bound — inbound that queued during the early socket flight
+  // flushes through the normal dispatch now, in wire order.
+  networkManager.markWireReady();
 
   // Frame loop — everything mutable is passed via deps getters. The
   // loop starts BEFORE the handshake completes: first frames + shader
@@ -408,18 +438,24 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   // body — but only a LIVE host earns the restore veil. Dead server
   // means the offline world owns the first frames outright; a "restoring"
   // curtain over a connect that can never land is the wrong order.
-  if (!classicMode && !soloMode && settings.get('fps-session-token')) {
-    if (await pingServer((await serverEndpoints).httpUrl)) {armSessionVeil();}
-    profiler.markTime('veilProbed');
+  // Room-join sockets already flew at boot start (earlyConnP) — the
+  // veil probe kicked alongside them and arms whenever it lands.
+  if (earlyConnP) {
+    await earlyConnP;
+  } else {
+    if (!classicMode && !soloMode && settings.get('fps-session-token')) {
+      if (await pingServer((await serverEndpoints).httpUrl)) {armSessionVeil();}
+      profiler.markTime('veilProbed');
+    }
+    const ep = await serverEndpoints;
+    await connectServer({
+      serverUrl, classicMode: classicMode || soloMode, networkManager, logger, fragMessages, profiler,
+      bootMap: soloSpec?.spec ?? soloSpec?.map ?? savedMap,
+      // Fleet reconnects re-ask the matchmaker for a live worker — retrying
+      // the dead worker's direct URL forever would never land anywhere.
+      resolveUrl: ep.fleet && ep.lobbyUrl ? () => fleetWorkerUrl(ep.lobbyUrl!) : undefined,
+    });
   }
-  const ep = await serverEndpoints;
-  await connectServer({
-    serverUrl, classicMode: classicMode || soloMode, networkManager, logger, fragMessages, profiler,
-    bootMap: soloSpec?.spec ?? soloSpec?.map ?? savedMap,
-    // Fleet reconnects re-ask the matchmaker for a live worker — retrying
-    // the dead worker's direct URL forever would never land anywhere.
-    resolveUrl: ep.fleet && ep.lobbyUrl ? () => fleetWorkerUrl(ep.lobbyUrl!) : undefined,
-  });
   player.serverOwnsHealth = () => networkManager.isConnected();
 
   // Spec maps spawn you at an authored anchor (team spawn > generic

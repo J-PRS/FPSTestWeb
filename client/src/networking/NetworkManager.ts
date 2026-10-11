@@ -165,6 +165,11 @@ export class NetworkManager {
   get lastTickSeq(): number { return this.wireIn.tickSeq; }
   /** Contained wire-handler throws — the Alt+Q census reads it. */
   get handlerThrows(): number { return this.wireIn.handlerThrows; }
+  /** Boot only: queue inbound until wireNetworkHandlers binds the deps —
+   *  lets the socket fly during init without dropping world-bearing
+   *  messages on unbound hooks. markWireReady flushes in order. */
+  armWireQueue(): void { this.wireIn.armEarlyQueue(); }
+  markWireReady(): void { this.wireIn.markReady(); }
   /** Server position correction — the dispatch lives in wireIn but is
    *  routed through here so tests can wrap/count it. */
   handleCorrection(data: Parameters<WireIn['handleCorrection']>[0]): void {
