@@ -5,6 +5,9 @@ import type { PlayerModel } from './PlayerModel.js';
 import { BallTrailDots } from '../effects/ballTrails.js';
 import { TrailDriver } from '../effects/vfxRuntime.js';
 import { pickLocomotionAnim } from './locomotionAnim.js';
+import { bodyGroundLift, easeGroundLift } from './bodyGround.js';
+import { classCapsule } from '../../../shared/botClasses.js';
+import { glitch } from '../core/fxDiag.js';
 
 // Model-anim drive — turns RemotePlayer's movement/state into PlayerModel
 // animation: locomotion/jet/jump picks, landing pulse, air trail, shoot/hit
@@ -14,6 +17,8 @@ import { pickLocomotionAnim } from './locomotionAnim.js';
 const _trailTint = new THREE.Color(0.75, 0.85, 1); // cool air-sheen — jets tint it warmer on top
 
 export interface AnimHost {
+  readonly playerId: string;
+  readonly armorClass?: string;
   readonly position: THREE.Vector3;
   /** Start-of-frame pos — speed derivation copies it out at the end. */
   readonly previousPosition: THREE.Vector3;
@@ -63,10 +68,31 @@ export class RemoteAnim {
     this.airTrail = null;
   }
 
+  private _groundLift = 0;
+  private _buriedAcc = 0;
+
   tickModel(dt: number): void {
     const {h} = this;
     if (!h.loaded) {return;}
-    h.model.setPosition(h.position.x, h.feetY, h.position.z);
+    // Rendered-feet lift vs the drawn terrain chord (wire/sim truth
+    // unchanged — aim, hits and the blob shadow stay on position). The
+    // lift self-heals the legit under-field wire dips; a remote STILL
+    // buried past the lift cap is the anomaly worth counting — the wire
+    // is holding it deep enough that no render floor can cover.
+    let lift = 0;
+    if (h.terrain) {
+      lift = easeGroundLift(this._groundLift,
+        bodyGroundLift(h.terrain, h.position.x, h.position.z, h.feetY, classCapsule(h.armorClass).radius),
+        dt);
+      this._groundLift = lift;
+      this._buriedAcc += dt;
+      if (this._buriedAcc >= 0.3) {
+        this._buriedAcc = 0;
+        const depth = h.terrain.getRenderedHeight(h.position.x, h.position.z) - (h.feetY + lift);
+        if (depth > 0.4) {glitch('remote-buried', { id: h.playerId, depth: +depth.toFixed(1), lift: +lift.toFixed(1) });}
+      }
+    }
+    h.model.setPosition(h.position.x, h.feetY + lift, h.position.z);
     h.model.setRotation(h.rotation.yaw, h.rotation.pitch, h.rotation.roll);
     // dt=0 (paused/first frame) would blow speed to Infinity → 'ski' flicker
     const speed = this._speed = dt > 0 ? h.position.distanceTo(h.previousPosition) / dt : 0;

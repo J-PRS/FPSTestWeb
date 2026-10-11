@@ -41,8 +41,11 @@ export function setStructureTopAt(fn: StructAt | undefined): void { structAt = f
  *  hits and shadows stay on sim truth). */
 export function bodyGroundLift(terrain: Terrain, x: number, z: number, feetY: number, radius = RING): number {
   const maxTop = feetY + MAX_LIFT;
+  // getRenderedHeight, not just the field: the drawn level-0 chord
+  // bridges gullies ABOVE the smooth field — a lift computed off the
+  // field alone still leaves the mesh under the visible surface there.
   const s = (px: number, pz: number): number =>
-    Math.max(terrain.getHeight(px, pz), structAt?.(px, pz, maxTop) ?? -Infinity);
+    Math.max(terrain.getRenderedHeight(px, pz), structAt?.(px, pz, maxTop) ?? -Infinity);
   const c = s(x, z);
   if (feetY > c + SKIP_ABOVE) {return 0;}
   const r = radius, rd = radius * Math.SQRT1_2; // diagonals reach the same ring
