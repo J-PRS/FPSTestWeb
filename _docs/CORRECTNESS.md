@@ -576,6 +576,27 @@ violation instead of a symptom hunt.
   events; stopping a clip hands the live map back before
   recording resumes (a clip's embedded grid can't leak into the
   next recording's HMAP trailer).
+- **Settings ingest (verified sealed):** every `fps-*` key
+  funnels through a typed schema — corrupted/NaN numerics fall
+  back to defaults at read (`Number.isFinite` gate), writes go
+  through `String(value)` so no object leaks in; storage-disabled
+  browsers degrade to a memory fallback instead of throwing
+  through the toggle path; identity keys live in sessionStorage
+  so two tabs can't fight over the same player id.
+- **Chat/VGS flood lane (verified sealed):** T2 flood control
+  verbatim — 4 messages per 5s trips a 10s mute for that type
+  (the line grays in place so the sender sees what died), text
+  gated to 1-200 chars, team flag coerced boolean. VGS lines
+  ride the same chat claim (keypath alongside, not a second
+  channel) so the voice menu can't bypass the window.
+- **Heightfield gain sync (fixed):** the collider reads
+  `HSCALE * hmScale` while the shader reads an `hScale` uniform —
+  two knobs that must move together. `bootPrimeTerrain` (solo
+  `?map=` / saved-room probe) and the demo HMAP inject/restore
+  set `hmScale` without re-syncing the uniform — vortex drew at
+  1x while the sim stood on 1.5x. `applyHeightfieldScale()`
+  pushes the resident gain/span into the uniforms; called after
+  `new Terrain`, demo inject, and demo restore.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
