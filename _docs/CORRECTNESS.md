@@ -604,6 +604,14 @@ violation instead of a symptom hunt.
   holds (departed-player ghosts can't draw attacks). Stalk/chase
   memory lives in a WeakMap — it dies with the entity, and the
   1.6×-leash give-up bounds how long a stale target holds.
+- **Audio voice pool (verified sealed):** one-shots ride a
+  capped voice pool — overflow steals the oldest
+  strictly-lower-priority voice (world < self < UI/stinger);
+  release disconnects the node AND `freeInput`s the positional
+  chain (a freed voice would otherwise leave its lp/pan tail on
+  the world bus — connected nodes aren't collectable); remote
+  move audio is a pooled loop pair per remote, capped, evicting
+  only silent slots.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
