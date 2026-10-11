@@ -408,6 +408,8 @@ export class GameServer {
         if (!ps || typeof ps.id !== 'string' || typeof ps.token !== 'string') continue;
         // A corrupt blob must not seed NaN bodies into a live room.
         if (!ps.pos || !Number.isFinite(ps.pos.x) || !Number.isFinite(ps.pos.y) || !Number.isFinite(ps.pos.z)) continue;
+        if (ps.vel && !(Number.isFinite(ps.vel.x) && Number.isFinite(ps.vel.y) && Number.isFinite(ps.vel.z))) continue;
+        if (ps.health !== undefined && !Number.isFinite(ps.health)) continue;
         if (room.players.getPlayer(ps.id)) continue;
         const p = room.players.addPlayer(ps.id, ps.team, ps.perk ?? 'none', ps.armorClass ?? 'medium');
         p.position = { ...ps.pos };
