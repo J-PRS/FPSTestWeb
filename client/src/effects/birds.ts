@@ -231,16 +231,30 @@ export class AmbientBirds {
   aggro(): void { if (this.active) this.aggroT = AGGRO_TIME; }
 
   /** Dynamic-quality switch — hides the flock and skips the flock sim.
-   *  Live birds keep their slots in targets but stay parked. */
+   *  Live birds keep their slots in targets but stay parked. The hide
+   *  happens HERE, not in update(): the caller gates update() on the
+   *  same quality level, so an update-side hide would leave the last
+   *  matrices parked mid-air — the frozen-buzzard bug. */
   setActive(on: boolean): void {
     this.active = on;
+    if (!on && !this.hidden) {
+      for (const b of this.birds) this.flock.setMatrixAt(b.slot, _zero);
+      this.flock.instanceMatrix.needsUpdate = true;
+      this.hidden = true;
+    } else if (on) {
+      this.hidden = false;
+    }
   }
   private active = true;
+  private hidden = false;
 
   update(dt: number, playerPos: THREE.Vector3, terrain: Terrain, playerDead = false): void {
     if (!this.active) {
-      for (const b of this.birds) this.flock.setMatrixAt(b.slot, _zero);
-      this.flock.instanceMatrix.needsUpdate = true;
+      if (!this.hidden) {
+        for (const b of this.birds) this.flock.setMatrixAt(b.slot, _zero);
+        this.flock.instanceMatrix.needsUpdate = true;
+        this.hidden = true;
+      }
       return;
     }
     this.seedFlock(playerPos, terrain);
