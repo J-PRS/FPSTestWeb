@@ -135,7 +135,8 @@ export class Rakk implements Targetable, SwarmSlotOwner {
       }
       case 'climb': { this.tickClimb(dt, terrain); break;
       }
-    }
+          default: { break; }
+}
 
     this.pos.addScaledVector(this.vel, dt);
     const gy = terrain.getHeight(this.pos.x, this.pos.z);

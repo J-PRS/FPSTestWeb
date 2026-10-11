@@ -23,8 +23,8 @@ export const crcTable = (() => {
 
 export function crc32(data: Uint8Array): number {
   let crc = 0xFF_FF_FF_FF;
-  for (let i = 0; i < data.length; i += 1) {
-    crc = crcTable[(crc ^ data[i]!) & 0xFF]! ^ (crc >>> 8);
+  for (const b of data) {
+    crc = crcTable[(crc ^ b) & 0xFF]! ^ (crc >>> 8);
   }
   return (crc ^ 0xFF_FF_FF_FF) >>> 0;
 }
@@ -34,8 +34,8 @@ function writeString(view: DataView, offset: number, str: string): number {
   const bytes = new TextEncoder().encode(str);
   view.setUint16(offset, bytes.length, true);
   offset += 2;
-  for (let i = 0; i < bytes.length; i += 1) {
-    view.setUint8(((offset += 1) - 1), bytes[i]!);
+  for (const b of bytes) {
+    view.setUint8(((offset += 1) - 1), b);
   }
   return offset;
 }

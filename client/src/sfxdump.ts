@@ -39,7 +39,7 @@ async function render(name: string, secs: number, fn: () => void): Promise<strin
   const wav = floatToWav(pcm, sr);
   let bin = '';
   const bytes = new Uint8Array(wav);
-  for (let i = 0; i < bytes.length; i += 1) {bin += String.fromCharCode(bytes[i]!);}
+  for (const b of bytes) {bin += String.fromCharCode(b);}
   console.log(`rendered ${name} (${pcm.length} samples)`);
   return btoa(bin);
 }

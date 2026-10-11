@@ -165,7 +165,7 @@ export class Terrain {
     // overlap border). Outer rings get a coarser grid: at 800m+ a heightmap
     // texel is already tens of meters, so 80-div tessellation only buys
     // triangles nobody can see.
-    const {divisions} = CLIPMAP_LEVELS[0];
+    const [{divisions}] = CLIPMAP_LEVELS;
     this.gridGeo = createFlatGridGeometry(divisions, 1);
     const {gridGeo} = this;
     const outerGeo = createFlatGridGeometry(divisions / 2, 1);
@@ -448,9 +448,10 @@ n += 1; sum += d; sumAbs += Math.abs(d);
       this.fieldRingArr[o + 2] = s.domeY === undefined ? s.r : -s.r;
       this.fieldRingArr[o + 3] = s.intensity;
       this.fieldYArr[i] = s.domeY ?? 0;
-      this.fieldTintArr[i * 3] = s.tint[0];
-      this.fieldTintArr[i * 3 + 1] = s.tint[1];
-      this.fieldTintArr[i * 3 + 2] = s.tint[2];
+      const [tint0, tint1, tint2] = s.tint;
+      this.fieldTintArr[i * 3] = tint0;
+      this.fieldTintArr[i * 3 + 1] = tint1;
+      this.fieldTintArr[i * 3 + 2] = tint2;
     }
 
     this.splatArr.fill(0);
@@ -654,7 +655,7 @@ n += 1; sum += d; sumAbs += Math.abs(d);
    *  finest whose snapped square contains the point — the same
    *  coverage rule the shader's inner-hole discard uses. */
   getRenderedHeight(wx: number, wz: number): number {
-    let {spacing} = CLIPMAP_LEVELS[0];
+    let [{spacing}] = CLIPMAP_LEVELS;
     for (const level of this.levels) {
       if (Math.abs(wx - level.gridOrigin.x) < level.halfSize && Math.abs(wz - level.gridOrigin.y) < level.halfSize) {
         ({spacing} = level);

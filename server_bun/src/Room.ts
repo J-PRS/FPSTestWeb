@@ -458,7 +458,8 @@ export class Room {
         }
         case 'flagDrop': { this.flags?.dropIfCarrier(e.playerId); break;
         }
-      }
+              default: { break; }
+}
     });
     // Posted roles spawn at home — a defender materializing on a
     // front-line sphere 400m out spends the next minute hiking, which
@@ -488,7 +489,7 @@ export class Room {
       // Ride structure floors: a generator seeded inside a genhouse must
       // stand on its deck (seated high over terrain), not drown in it.
       // max() keeps authored elevations — tower sentries never descend.
-      this.deployables.seedBase(this.spec.deploys.map(e => (((({ ...e, pos: Object.assign({}, e.pos, {y: Math.max(e.pos.y, this.flagPlacer.deployFloor(e.pos.x, e.pos.z, e.pos.y))})}))))));
+      this.deployables.seedBase(this.spec.deploys.map(e => (((({ ...e, pos: { ...e.pos, y: Math.max(e.pos.y, this.flagPlacer.deployFloor(e.pos.x, e.pos.z, e.pos.y))}}))))));
     }
     this.projectiles = new RoomProjectiles(this, field);
     this.projectiles.attachStructures(this.structs.eff());

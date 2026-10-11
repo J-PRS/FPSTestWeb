@@ -96,7 +96,7 @@ export class WebTransportGameTransport implements GameTransport {
       // legitimately exceeds it. 4MB keeps the guard without killing
       // real frames.
       if (carry.length > 4 * 1024 * 1024) { this.declareDead('wt line overflow'); this.wt.close(); return; }
-      let nl: number = 0;
+      let nl = 0;
       while ((nl = carry.indexOf('\n')) >= 0) {
         const line = carry.slice(0, nl);
         carry = carry.slice(nl + 1);

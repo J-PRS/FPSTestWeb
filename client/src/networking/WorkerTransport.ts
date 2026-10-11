@@ -163,7 +163,8 @@ export class WorkerTransport implements GameTransport {
           }
           case 'ev': { if ('j' in ev) {this.config.onMessage?.(ev.j);} else {this.config.onBinaryMessage?.(ev.b);} break;
           }
-        }
+                  default: { break; }
+}
       } catch (error) {
         logger.error(`drain dispatch threw on ${ev.kind}`, error instanceof Error ? error.message : String(error));
       }

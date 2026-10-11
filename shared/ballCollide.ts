@@ -174,7 +174,7 @@ export function collideStructures(b: SimBall, colliders: readonly StructureColli
     let nx = lx - qx, ny = dy - qy, nz = lz - qz;
     const d2 = nx * nx + ny * ny + nz * nz;
     if (d2 >= b.radius * b.radius) {continue;}
-    let d: number = 0;
+    let d = 0;
     if (d2 > 1e-9) {
       d = Math.sqrt(d2);
       nx /= d; ny /= d; nz /= d;

@@ -351,7 +351,8 @@ clipGen += 1;
       }
       case 'Escape': { window.location.href = exitTo; break;
       }
-    }
+          default: { break; }
+}
   });
 
   // Tracked drag: the canvas follows the finger (translate only, no

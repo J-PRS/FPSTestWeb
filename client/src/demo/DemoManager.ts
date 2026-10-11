@@ -203,7 +203,7 @@ export class DemoManager implements demoIO.DemoIOHost {
     // main.ts hands us renderer.domElement up front; the largest-canvas
     // probe only survives for contexts that never wired one (clip feed).
     if (!this.video.hasCanvas) {
-      const canvas = [...document.querySelectorAll('canvas')].toSorted((a, b) => b.width * b.height - a.width * a.height)[0];
+      const [canvas] = [...document.querySelectorAll('canvas')].toSorted((a, b) => b.width * b.height - a.width * a.height);
       if (!canvas) { this.ui.setStatus('no canvas'); return false; }
       this.video.setCanvas(canvas);
     }

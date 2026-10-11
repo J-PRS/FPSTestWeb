@@ -160,6 +160,8 @@ export class InfluenceMap {
   /** One decay pass per room tick — sim clock, so warps stay honest. */
   tick(_dt: number): void {
     for (const g of Object.values(this.layers)) {
+      // In-place decay: the layer array is long-lived and shared, map() would re-identity it per tick.
+      // oxlint-disable-next-line prefer-for-of
       for (let i = 0; i < g.length; i += 1) {g[i]! *= DECAY;}
     }
   }

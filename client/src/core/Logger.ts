@@ -143,7 +143,8 @@ export namespace Logger {
             console.error(fullMessage, context || '');
             break;
           }
-        }
+                  default: { break; }
+}
       } finally {
         writingToConsole = false;
       }
@@ -287,7 +288,7 @@ lastFoldCount += 1;
     if (shipUrl || shipQueue.length === 0) {return;}
     const qp = new URLSearchParams(window.location.search);
     let host = qp.get('server')?.trim() ?? '';
-    let url: string = '';
+    let url = '';
     if (host && (/^(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1)/.test(host) || host.includes(':'))) {
       url = `http://${host.replace(/^https?:\/\//, '')}/client-log`;
     } else {

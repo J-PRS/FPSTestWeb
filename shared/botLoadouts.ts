@@ -198,7 +198,8 @@ export function pickBotWeapon(lo: BotLoadout, distXZ: number, dist: number, skil
       }
       case 'far': { return dist < BOT_NEAR_M ? Math.max(0, dist / BOT_NEAR_M - 0.4) : Math.min(1, dist / BOT_FAR_M);
       }
-    }
+          default: { const _exhaustive: never = slot; return 0; }
+}
   };
   let best: { w: number; s: number } = { w: lo.mid, s: 0 };
   // First combat-usable non-explosive — the `nonAoeOnly` fallback when

@@ -27,7 +27,8 @@ export function stripHipXZ(clip: THREE.AnimationClip, extraRoots?: ReadonlySet<s
     const node = normBone(tr.name.slice(0, tr.name.indexOf('.')));
     if (!ROOT_POS_BONES.has(node) && !node.endsWith('pelvis') && !(extraRoots?.has(node))) {continue;}
     const v = tr.values;
-    for (let i = 3; i < v.length; i += 3) { v[i] = v[0]; v[i + 2] = v[2]; }
+    const [v0, , v2] = v;
+  for (let i = 3; i < v.length; i += 3) { v[i] = v0; v[i + 2] = v2; }
   }
 }
 

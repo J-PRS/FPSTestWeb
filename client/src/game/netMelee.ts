@@ -119,7 +119,8 @@ export function seedReplicaState(
       if (s.hopTimer !== undefined && sp.BLINK_IN_S !== undefined) {s.hopTimer = sp.BLINK_IN_S;}
       break;
     }
-  }
+      default: { break; }
+}
 }
 
 export function applyNetEdgeSim<S extends NetSimState>(e: NetDrivenLike<S>, m: NetEdgeMsg): void {

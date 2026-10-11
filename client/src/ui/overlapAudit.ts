@@ -27,7 +27,7 @@ export interface OverlapHit { a: string; b: string; px: number }
 
 function name(el: Element): string {
   if (el.id) {return `#${el.id}`;}
-  const cls = [...el.classList][0];
+  const [cls] = el.classList;
   if (cls) {return `${el.tagName.toLowerCase()}.${cls}`;}
   // Anonymous div — a text snippet beats a bare "div" when reading reports.
   const txt = el.textContent?.trim().replace(/\s+/g, ' ').slice(0, 24);

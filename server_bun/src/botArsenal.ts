@@ -490,7 +490,7 @@ s[kind] += 1; this.propels.set(id, s);
     // Ballistic lob: range = v²·sin(2θ)/|g| — solve θ for the target's
     // distance instead of guessing a pitch, since the grenade's 13m
     // splash can't cover a 15m overshoot. Rails stay flat.
-    let pitch: number = 0;
+    let pitch = 0;
     if (stats.rayDelay) {
       pitch = 0.15;
     } else {

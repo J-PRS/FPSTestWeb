@@ -239,7 +239,8 @@ export function stepTotem(
       }
       return null;
     }
-  }
+      default: { break; }
+}
   return null;
 }
 

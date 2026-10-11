@@ -660,7 +660,8 @@ function wireOk(wire: KindFieldDecl['wire'], v: unknown): boolean {
       return typeof o === 'object' && o !== null &&
         typeof o.yaw === 'number' && typeof o.pitch === 'number';
     }
-  }
+    default: { const _exhaustive: never = wire; return false; }
+}
 }
 
 const warnOnceSeen = new Map<string, number>();

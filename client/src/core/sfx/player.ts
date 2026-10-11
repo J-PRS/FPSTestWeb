@@ -172,7 +172,8 @@ function powerupTail(kind: string, g: GainNode): void {
     }
     case 'tag': { noise(0.05, 0.1, g, 'bandpass', 4200, 2600, 3); break;
     }
-  }
+      default: { break; }
+}
 }
 
 export function equip(): void {

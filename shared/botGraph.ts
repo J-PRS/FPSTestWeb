@@ -229,7 +229,7 @@ falling += 1;
       chain.push(c);
       if (walked >= ahead) {break;}
     }
-    let target: number = 0;
+    let target = 0;
     if (walked >= ahead) {target = c;}
     else if (c === goal && chain.length > 1 && this.solidIndex
       // Goal inside the horizon AND a wall on the beeline: emit the

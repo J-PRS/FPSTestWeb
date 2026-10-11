@@ -195,7 +195,8 @@ w.onmessage = (e: MessageEvent<Down>) => {
       resolveWaiters.delete(m.seq);
       break;
     }
-  }
+      default: { break; }
+}
 };
 
 // DedicatedWorkerGlobalScope.onmessage assignment is the actual entry —

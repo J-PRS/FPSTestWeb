@@ -268,7 +268,7 @@ this.reconnectAttempts += 1;
       // of replaying 100 stale positions into the live socket.
       let type: string | undefined = undefined;
       if (typeof data === 'string') {
-        try { type = (JSON.parse(data) as { type?: string }).type; } catch { /* unparseable: queue anyway */ }
+        try { ({type} = JSON.parse(data) as { type?: string }); } catch { /* unparseable: queue anyway */ }
       }
       if (data instanceof Uint8Array) {
         this.messageQueue = this.messageQueue.filter(m => !(m.data instanceof Uint8Array));

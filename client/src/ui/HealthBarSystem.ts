@@ -379,7 +379,7 @@ export class HealthBarSystem {
     bar.healthEl.style.width = `${BAR_WIDTH * healthRatio}px`;
 
     if ((bar.flashTimer > 0 || bar.delayTimer > 0) && damageRatio > 0) {
-      let whiteWidth: number = 0;
+      let whiteWidth = 0;
       if (bar.delayTimer > 0) {
         whiteWidth = BAR_WIDTH * damageRatio;
       } else {

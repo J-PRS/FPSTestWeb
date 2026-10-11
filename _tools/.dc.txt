@@ -1,0 +1,13 @@
+client/src/networking/p2p/signalling.ts:53:9
+client/src/networking/WorkerTransport.ts:157:9
+client/src/core/Logger.ts:132:9
+client/src/game/netMelee.ts:94:3
+shared/worldModel.ts:642:3
+shared/botLoadouts.ts:192:5
+client/src/entities/Rakk.ts:131:5
+client/src/core/sfx/player.ts:162:3
+shared/creatureFlyer.ts:113:3
+shared/creatureTotem.ts:216:3
+client/src/networking/netWorker.ts:149:3
+server_bun/src/Room.ts:402:7
+client/src/feed/clipFeed.ts:343:5

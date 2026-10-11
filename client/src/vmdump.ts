@@ -67,7 +67,7 @@ if (q.get('export')) {
     for (const m of glow) {m.visible = true;}
     const bytes = new Uint8Array(glb);
     let bin = '';
-    for (let i = 0; i < bytes.length; i += 1) {bin += String.fromCharCode(bytes[i]);}
+    for (const b of bytes) {bin += String.fromCharCode(b);}
     out[wt] = btoa(bin);
     g.visible = false;
   }

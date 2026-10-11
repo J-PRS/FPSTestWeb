@@ -42,7 +42,7 @@ export function applyDebugHooks(deps: DebugHooksDeps): ((dt: number) => void) | 
       const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw);
       const rx = Math.cos(player.yaw), rz = -Math.sin(player.yaw);
       remotes.forEach((rp, i) => {
-        const off = spots[i][2];
+        const [, , off] = spots[i]!;
         const x = player.pos.x + fx * 5 + rx * off;
         const z = player.pos.z + fz * 5 + rz * off;
         const y = Math.max(player.pos.y + 0.3, (deps.terrain?.getHeight(x, z) ?? -Infinity) + 0.05);

@@ -93,7 +93,8 @@ export function connectP2P(opts: { signalUrl: string; timeoutMs?: number }): Pro
             fail(new Error('peer left during handshake'));
             break;
           }
-        }
+                  default: { break; }
+}
       } catch (error) {
         logger.error('signalling error', error);
         fail(error as Error);

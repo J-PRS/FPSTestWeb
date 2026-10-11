@@ -137,7 +137,7 @@ export class WtSocketAdapter {
       carry += this.decoder.decode(value, { stream: true });
       // A peer that never sends '\n' grows this buffer forever — cap it.
       if (carry.length > 65_536) { this.close(1009, 'oversize frame'); return; }
-      let nl: number = 0;
+      let nl = 0;
       while ((nl = carry.indexOf('\n')) >= 0) {
         const line = carry.slice(0, nl);
         carry = carry.slice(nl + 1);

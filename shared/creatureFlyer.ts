@@ -119,7 +119,8 @@ export function stepFlyer(
     }
     case 'climb': { ev = stepClimb(c, dt, field); break;
     }
-  }
+      default: { break; }
+}
   if (ev !== null) {return ev;}
 
   const px = c.x, py = c.y, pz = c.z;
