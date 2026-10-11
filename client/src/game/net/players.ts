@@ -329,6 +329,12 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
       // shouldering ordnance the authority still calls class-locked.
       if (armorClass) player.armorClass = armorClass as ArmorClass;
       player.resetLifeState();
+      // A non-finite respawn pos would poison pos/lastSentPos/movement —
+      // the same wire-ingest class gated everywhere else on this lane.
+      if (!finiteVec(position)) {
+        logger.warn(`local respawn dropped: non-finite position`);
+        return;
+      }
       player.pos.set(position.x, position.y, position.z);
       noteLocalSnap();
       deps.setLastSentPos({ x: position.x, y: position.y, z: position.z });
@@ -342,6 +348,10 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
     }
 
     // Reset existing remote player on respawn
+    if (!finiteVec(position)) {
+      logger.warn(`remote respawn ${playerId} dropped: non-finite position`);
+      return;
+    }
     const remotePlayer = deps.world.remotePlayers.get(playerId);
     if (remotePlayer) {
       const playerData = nm().getPlayers().get(playerId);
