@@ -195,17 +195,22 @@ type RoomInfo = Parameters<NonNullable<NetworkManager['onGameState']>>[2];
  *  localTeam) untouched: only the server sends a room name. */
 function applyMatchMeta(ctx: NetCtx, roomInfo: RoomInfo): void {
   const { deps } = ctx;
+  const scores = roomInfo?.scores && Number.isFinite(roomInfo.scores.alpha + roomInfo.scores.bravo)
+    ? roomInfo.scores : undefined;
+  const ffaScores = roomInfo?.ffaScores && !Object.values(roomInfo.ffaScores).some(v => !Number.isFinite(v))
+    ? roomInfo.ffaScores : undefined;
+  const matchEndsAt = Number.isFinite(roomInfo?.matchEndsAt) ? roomInfo!.matchEndsAt : undefined;
   if (roomInfo?.room !== undefined) {
     deps.world.localTeam = roomInfo.team;
-    deps.world.teamScores = roomInfo.scores ?? null;
-    deps.world.ffaScores = new Map(Object.entries(roomInfo.ffaScores ?? {}));
-    deps.world.matchEndsAt = roomInfo.matchEndsAt ?? null;
+    deps.world.teamScores = scores ?? null;
+    deps.world.ffaScores = new Map(Object.entries(ffaScores ?? {}));
+    deps.world.matchEndsAt = matchEndsAt ?? null;
     return;
   }
   if (roomInfo?.team !== undefined) {deps.world.localTeam = roomInfo.team;}
-  if (roomInfo?.scores) {deps.world.teamScores = roomInfo.scores;}
-  if (roomInfo?.matchEndsAt) {deps.world.matchEndsAt = roomInfo.matchEndsAt;}
-  if (roomInfo?.ffaScores) {deps.world.ffaScores = new Map(Object.entries(roomInfo.ffaScores));}
+  if (scores) {deps.world.teamScores = scores;}
+  if (matchEndsAt !== undefined) {deps.world.matchEndsAt = matchEndsAt;}
+  if (ffaScores) {deps.world.ffaScores = new Map(Object.entries(ffaScores));}
 }
 
 /** Chat lines summarizing what we just joined — clock, room, team, board. */
