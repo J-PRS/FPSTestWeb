@@ -1,3 +1,4 @@
+/* oxlint-disable unicorn/require-post-message-target-origin -- every postMessage here targets the dedicated Worker (no targetOrigin param exists) */
 /**
  * WorkerTransport — GameTransport facade that lives on the main thread
  * while the real socket stack runs inside netWorker. Inbound events are
@@ -67,8 +68,8 @@ export class WorkerTransport implements GameTransport {
 
   constructor(private readonly config: ConnectionConfig) {
     this.worker = new Worker(new URL('./netWorker.ts', import.meta.url), { type: 'module' });
-    this.worker.onmessage = (e: MessageEvent<Ev>): void => this.enqueue(e.data);
-    this.worker.onerror = (e): void => {
+    this.worker.addEventListener('message', (e: MessageEvent<Ev>): void => this.enqueue(e.data));
+    this.worker.addEventListener('error', (e): void => {
       logger.error('net worker error', e.message);
       config.onError?.(new Error(e.message || 'net worker crashed'));
       // A crashed worker is a dead lane — fire 'down' so the session
@@ -79,7 +80,7 @@ export class WorkerTransport implements GameTransport {
       this.drain();
       this.open = false;
       config.onDisconnect?.(1006, 'net worker crashed');
-    };
+    });
     this.worker.postMessage({ kind: 'init', net: urlParams.net ?? undefined });
   }
 

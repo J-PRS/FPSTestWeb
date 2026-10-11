@@ -51,8 +51,8 @@ class InstBucket {
   constructor(geo: THREE.BufferGeometry, readonly mat: THREE.MeshBasicMaterial) { 
     this.alphaAttr = new THREE.InstancedBufferAttribute(new Float32Array(POOL_MAX), 1);
     this.alphaAttr.setUsage(THREE.DynamicDrawUsage);
-    geo = geo.clone();
-    geo.setAttribute('aAlpha', this.alphaAttr);
+    const g = geo.clone();
+    g.setAttribute('aAlpha', this.alphaAttr);
     mat.onBeforeCompile = (sh): void => {
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', '#include <common>\nattribute float aAlpha;\nvarying float vAlpha;')

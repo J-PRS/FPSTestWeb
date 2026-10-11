@@ -445,7 +445,7 @@ this.pushed += 1;
 
   update(dt: number, camPos?: THREE.Vector3): void {
     this.lastUpdateAt = performance.now();
-    camPos = camPos ?? sharedCamPos ?? undefined;
+    const cam = camPos ?? sharedCamPos ?? undefined;
     this.time += dt;
     this.emitScale = this.rampDur > 0 ? Math.min(1, this.rampFrom + (1 - this.rampFrom) * (this.time / this.rampDur)) : 1;
     if (this.follow && this.count > 0) {
@@ -464,7 +464,7 @@ RibbonTrail.followJumps += 1;
       }
     }
     if (!this.slotAlive() || this.count < 2) {return;}
-    const { camMoved, rebillboard } = this.cameraState(camPos);
+    const { camMoved, rebillboard } = this.cameraState(cam);
     const {pos} = this.batch;
     const base = this.slot * RIBBON_FLOATS_PER_SLOT;
     // Positions only move when new samples arrive (or a billboard needs

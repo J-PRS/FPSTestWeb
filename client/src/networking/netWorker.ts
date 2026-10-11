@@ -1,3 +1,4 @@
+/* oxlint-disable unicorn/require-post-message-target-origin -- WorkerGlobalScope postMessage has no targetOrigin param */
 /**
  * Net worker — owns the whole transport stack (tier race, ws/wt/rtc
  * lanes, reconnect machinery) on a dedicated event loop. Why it exists:

@@ -219,7 +219,7 @@ export class GameServer {
       return;
     }
     const text = message;
-    let raw: unknown = undefined;
+    let raw!: unknown; // oxlint-disable-line init-declarations -- assigned in try/catch below
     try {
       raw = JSON.parse(text);
     } catch {

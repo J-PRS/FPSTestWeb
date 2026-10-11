@@ -59,7 +59,7 @@ describe('WorkerTransport drain', (): void => {
 
   it('dispatches non-tick events (the path that returns the input array)', async (): Promise<void> => {
     const config = makeConfig();
-    new WorkerTransport(config);
+    const _t = new WorkerTransport(config);
     FakeWorker.last.emit({ kind: 'ev', j: { type: 'matchNotice', text: 'hi' }, at: Date.now() });
     FakeWorker.last.emit({ kind: 'err', msg: 'boom' });
     flushDrain();
@@ -69,7 +69,7 @@ describe('WorkerTransport drain', (): void => {
 
   it('still dispatches when ticks coalesce (the filtered-array path)', async (): Promise<void> => {
     const config = makeConfig();
-    new WorkerTransport(config);
+    const _t2 = new WorkerTransport(config);
     const tick = (seq: number): Uint8Array<ArrayBuffer> => {
       const u8 = new Uint8Array(32);
       u8[0] = 0x54; u8[1] = 0x07; // MAGIC + WIRE_TICK_V4

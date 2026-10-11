@@ -257,11 +257,12 @@ export class MoveJudge {
     const reportNow = wallNow();
     // Clamp the claimed velocity before it touches the shadow or the
     // tolerance math (see REPORT_VEL_CAP).
+    let velClamped = vel;
     if (vel) {
       const m = Math.hypot(vel.x, vel.y, vel.z);
       if (m > REPORT_VEL_CAP) {
         const k = REPORT_VEL_CAP / m;
-        vel = { x: vel.x * k, y: vel.y * k, z: vel.z * k };
+        velClamped = { x: vel.x * k, y: vel.y * k, z: vel.z * k };
       }
     }
     if (sh.lastReportAt > 0) {
@@ -281,14 +282,14 @@ export class MoveJudge {
       // The guess-run during the mute built momentum the client never
       // had — adopt the reported velocity too or the leftover vel
       // carries the shadow ~10m ahead for one divergence blip.
-      if (vel) {s.vel = { x: vel.x, y: vel.y, z: vel.z };}
+      if (velClamped) {s.vel = { x: velClamped.x, y: velClamped.y, z: velClamped.z };}
       s.onGround = true;
       sh.seqStates.clear(); // pre-seed journal anchors the discarded guess
       sh.lastRepPos = { x: pos.x, y: pos.y, z: pos.z };
       return null;
     }
     if (phase === 'stale-epoch') {return null;}
-    if (vel) { s.vel.x = vel.x; s.vel.y = vel.y; s.vel.z = vel.z; }
+    if (velClamped) { s.vel.x = velClamped.x; s.vel.y = velClamped.y; s.vel.z = velClamped.z; }
     // Report-to-report step — tracked on every judged report so a
     // step-function teleport reads as teleport even while the shadow
     // sits elsewhere (drift and forge look identical as report-vs-

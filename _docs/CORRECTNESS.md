@@ -589,6 +589,14 @@ violation instead of a symptom hunt.
   gated to 1-200 chars, team flag coerced boolean. VGS lines
   ride the same chat claim (keypath alongside, not a second
   channel) so the voice menu can't bypass the window.
+- **Chat broadcast lane (verified sealed):** the server `chat`
+  claim re-validates at decode (text 1-200, `vgs` `/^[A-Z]{1,8}$/`,
+  team coerced), re-truncates to 280 at relay, and stays
+  room-scoped — `broadcast()` only reaches the room's sockets.
+  Team channel resolves the sender's team server-side; a ffa
+  client claiming `team` returns early instead of silently
+  filtering to nobody. Bots read via a separate `emit` (squad
+  notices), never via the wire path.
 - **Heightfield gain sync (fixed):** the collider reads
   `HSCALE * hmScale` while the shader reads an `hScale` uniform —
   two knobs that must move together. `bootPrimeTerrain` (solo

@@ -613,7 +613,7 @@ async function initDemo(): Promise<void> {
   const { playerData, inputData } = playerProviders(player);
   demoManager.setDataProviders(playerData, inputData);
 
-  new CoolShotsPanel({
+  const _coolShots = new CoolShotsPanel({
     demoManager,
     overlay,
     requestLock,

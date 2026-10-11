@@ -33,12 +33,13 @@ export function applyStatus(b: GameBot, claim: number, dt: number): void {
     const antes: [number, number][] = [
       [STATUS.MEND, ENERGY.mendCost], [STATUS.SHIELD, ENERGY.shieldCost], [STATUS.CLOAK, ENERGY.cloakCost],
     ];
+    let held = claim;
     for (const [bit, cost] of antes) {
       if (!(rising & bit)) {continue;}
       if (b.energy >= cost) {b.energy -= cost;}
-      else {claim &= ~bit;}
+      else {held &= ~bit;}
     }
-    b.status = claim & (STATUS.MEND | STATUS.SHIELD | STATUS.CLOAK);
+    b.status = held & (STATUS.MEND | STATUS.SHIELD | STATUS.CLOAK);
     // Held drains — the brain re-declares every think, so a bit it
     // can't afford to keep simply drops here.
     const drain = (bit: number, perSec: number): void => {

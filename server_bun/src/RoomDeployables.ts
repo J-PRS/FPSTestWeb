@@ -147,13 +147,13 @@ export class RoomDeployables {
     }
     const dx = pos.x - player.position.x, dy = pos.y - player.position.y, dz = pos.z - player.position.z;
     if (dx * dx + dy * dy + dz * dz > MAX_PLANT_DIST * MAX_PLANT_DIST) {return 'toofar';}
-    pos = Object.assign({}, pos, { y: this.groundY(pos)});
+    const p2 = Object.assign({}, pos, { y: this.groundY(pos)});
     player.beltCharges -= DEPLOY_ITEMS[k].cost;
     // Nugget: no planted item — the claim mints a grabbable gem where the
     // pod lands. Net sink of one charge (costs 2, pays 1 back), and the
     // grab is first-come — a fast enemy can steal the thrower's change.
     if (k === 'nugget') {
-      this.room.pickups?.spawn(Object.assign({}, pos), 'gem', NUGGET_ARM_S);
+      this.room.pickups?.spawn(Object.assign({}, p2), 'gem', NUGGET_ARM_S);
       return true;
     }
     const owned = [...this.items.values()].filter((d): boolean => d.owner === playerId && d.kind === k);
@@ -170,11 +170,11 @@ export class RoomDeployables {
     // Team stamps at plant time — the spawn edge carries this value, so
     // the hash lane must too (a live owner-team lookup desyncs the moment
     // the planter switches sides). Gear fights for its planting team.
-    this.items.set(id, { id, owner: playerId, kind: k, pos: Object.assign({}, pos), ttl: DEPLOY_ITEMS[k].ttlS, fireCd: armDelay, hp: HP[k], armor: 0, respawnT: 0, team: player.team });
+    this.items.set(id, { id, owner: playerId, kind: k, pos: Object.assign({}, p2), ttl: DEPLOY_ITEMS[k].ttlS, fireCd: armDelay, hp: HP[k], armor: 0, respawnT: 0, team: player.team });
     this.refreshSolids();
-    logger.info('Deploy placed', { owner: playerId, kind: k, x: Number(pos.x.toFixed(1)), y: Number(pos.y.toFixed(1)), z: Number(pos.z.toFixed(1)) });
+    logger.info('Deploy placed', { owner: playerId, kind: k, x: Number(p2.x.toFixed(1)), y: Number(p2.y.toFixed(1)), z: Number(p2.z.toFixed(1)) });
     weaponStats.recordDeploy(this.room.mode, k);
-    this.room.broadcast(spawnPayload(WORLD_MODEL.deploy!, id, 'id', { owner: playerId, kind: k, pos: Object.assign({}, pos), team: player.team }) as ServerMessage);
+    this.room.broadcast(spawnPayload(WORLD_MODEL.deploy!, id, 'id', { owner: playerId, kind: k, pos: Object.assign({}, p2), team: player.team }) as ServerMessage);
     return true;
   }
 
@@ -314,13 +314,14 @@ export class RoomDeployables {
    *  can paint the overcharge. */
   private hurt(d: Deployed, dmg: number, by: string): void {
     if (!Number.isFinite(dmg)) {return;} // NaN would silent-poison the replica
+    let left = dmg;
     if (d.armor > 0) {
-      const soaked = Math.min(d.armor, dmg);
+      const soaked = Math.min(d.armor, left);
       d.armor -= soaked;
-      dmg -= soaked;
+      left -= soaked;
     }
     if (d.hp <= 0) {return;} // downed base hulk — hits are noise, not damage
-    d.hp -= dmg;
+    d.hp -= left;
     this.sendHp(d);
     if (d.hp <= 0) {
       if (d.base) {

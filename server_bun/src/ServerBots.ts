@@ -626,7 +626,7 @@ hurtCount += 1;
         this.applyStatus(id, p, out, now);
         const sh0 = this.room.moveSim.simState(id);
         this.firePhase(id, p, out, { goal, now, sh: sh0, nuggetNear, ctx });
-        prof[3]! += performance.now() - tm; tm = performance.now();
+        prof[3]! += performance.now() - tm; 
         this.supportNade(id, p, brain, now, nuggetNear);
         this.healAlly(id, p, brain, now);
         this.lastOut.set(id, out);

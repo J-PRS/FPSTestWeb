@@ -92,7 +92,7 @@ export class CtfBridge {
    *  (home anchor), carried=true → the live flag pos (the thief's
    *  broadcast location — public info). */
   flagPos(team: string, carried: boolean): { x: number; y: number; z: number } | undefined {
-    const m = this.ctf.markers().find((m): boolean => m.team === team);
+    const m = this.ctf.markers().find((mk): boolean => mk.team === team);
     if (!m) {return undefined;}
     if (carried) {return m.state === 'carried' ? { x: m.pos.x, y: m.pos.y, z: m.pos.z } : undefined;}
     return { x: m.home.x, y: m.home.y, z: m.home.z };

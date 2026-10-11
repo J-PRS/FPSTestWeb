@@ -341,8 +341,8 @@ export const mkAnnulus = (outer: Ring2, inner: Ring2, zBack: number, zFront: num
   // Counts mismatch? Re-sample the inner to the outer's count so e.g. a
   // hex rim can carry a 12-sided bore. Starts must be angle-aligned.
   validateRing(outer, 'annulus outer');
-  if (inner.length === seg) {validateRing(inner, 'annulus inner');}
-  else {inner = resampleRing(inner, seg);}
+  const bore = inner.length === seg ? inner : resampleRing(inner, seg);
+  if (inner.length === seg) {validateRing(bore, 'annulus inner');}
   const pos: number[] = [], uv: number[] = [];
   const quadW = (a: number[], b: number[], c: number[], d: number[], uvr: [number, number, number, number]): void => {
     const [u0, u1, v0, v1] = uvr;
@@ -350,7 +350,7 @@ export const mkAnnulus = (outer: Ring2, inner: Ring2, zBack: number, zFront: num
     uv.push(u0, v0, u1, v0, u1, v1, u0, v0, u1, v1, u0, v1);
   };
   const oPt = (j: number, z: number): number[] => [...outer[j % seg]!, z];
-  const iPt = (j: number, z: number): number[] => [...inner[j % seg]!, z];
+  const iPt = (j: number, z: number): number[] => [...bore[j % seg]!, z];
   for (let j = 0; j < seg; j += 1) {
     const u0 = j / seg, u1 = (j + 1) / seg;
     quadW(oPt(j, zBack), oPt(j, zFront), oPt(j + 1, zFront), oPt(j + 1, zBack), [u0, u1, zBack, zFront]); // outer wall (outward)

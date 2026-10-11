@@ -237,7 +237,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
       // fall back to the stock launcher.
       const vm = d.lazyViewModel();
       if (vm) {
-        const wid = SLOT_DEFS.some((d): boolean => d.weaponType === state.weaponType) ? state.weaponType : 0;
+        const wid = SLOT_DEFS.some((def): boolean => def.weaponType === state.weaponType) ? state.weaponType : 0;
         if (wid !== d.playbackWid) { d.playbackWid = wid; vm.switchWeapon(wid); }
       }
     }

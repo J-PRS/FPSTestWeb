@@ -673,7 +673,6 @@ export class BotRouting {
           && simNow() - frStale.at < 90_000 && dist3(frStale.stand, enemyStand) < 1) {
           this.routeHold.set(p.id, { stand: enemyStand, pos: Object.assign({}, enemyStand), at: simNow() });
           goalPos = Object.assign({}, enemyStand);
-          routed = goalPos !== pick;
         } else {
         // The flood's own near-stand route point joins the ring as a
         // scored candidate — the saddle the cheapest path funnels

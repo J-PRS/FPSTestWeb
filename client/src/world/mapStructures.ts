@@ -266,7 +266,7 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
     shieldPanes.push({ team: s.team, mesh: pane });
     built.add(pane);
   }
-  for (const s of list.filter((s): boolean => s.kind !== 'stand' && s.kind !== 'hull' && s.kind !== 'kit' && s.kind !== 'shield')) {
+  for (const s of list.filter((st): boolean => st.kind !== 'stand' && st.kind !== 'hull' && st.kind !== 'kit' && st.kind !== 'shield')) {
     const key = s.kind === 'root' ? 'root' : (s.team ?? 'neutral');
     // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
     let g!: THREE.BufferGeometry;

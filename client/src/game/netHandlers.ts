@@ -92,7 +92,7 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
   };
   // V rides the same chat wire — tactical lines team-scoped, emotes global.
   // Self-contained like Chat — its key routing lives on window.
-  new Vgs({
+  const _vgs = new Vgs({
     send: (text, team, chord): void => { networkManager.sendChat(text, team, chord); deps.hearLocalChat?.(text, team, chord); },
     echo: (text, team, chord): void => chat.echoSelf(text, team, chord),
     speak: (text): void => speakVgs(text, networkManager.getLocalPlayerId()),
