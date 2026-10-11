@@ -12,6 +12,11 @@ const _targetPos = new THREE.Vector3();
 const _toTarget = new THREE.Vector3();
 const _projected = new THREE.Vector3();
 
+/** Backquote debug overlay — sheep meters (the server's bot mobility
+ *  stat) only draw under it. The everyday badge over a head is HP. */
+let debugOverlays = false;
+export function setDebugOverlays(v: boolean): void { debugOverlays = v; }
+
 export class PlayerIndicators {
   private readonly container: HTMLElement;
   private readonly indicators = new Map<string, HTMLDivElement>();
@@ -44,8 +49,8 @@ export class PlayerIndicators {
     camera.getWorldDirection(_cameraDir);
   }
 
-  update(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, opts: { isDead?: boolean; friendly?: boolean; variant?: string; sheep?: number; bot?: boolean; cls?: string } = {}): void {
-    const { isDead = false, friendly = false, variant, sheep, bot, cls } = opts;
+  update(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, opts: { isDead?: boolean; friendly?: boolean; variant?: string; sheep?: number; bot?: boolean; cls?: string; hp?: number } = {}): void {
+    const { isDead = false, friendly = false, variant, sheep, bot, cls, hp } = opts;
     let indicator = this.indicators.get(playerId);
     if (!indicator) {
       indicator = document.createElement('div');
@@ -61,7 +66,7 @@ export class PlayerIndicators {
     const clsKey = cls === 'light' || cls === 'heavy' ? cls : 'medium';
     for (const k of ['light', 'medium', 'heavy']) {indicator.classList.toggle(`cls-${k}`, !variant && clsKey === k);}
     if (variant) {for (const c of variant.split(' ')) {indicator.classList.add(c);}}
-    this.updateSheepBadge(playerId, indicator, sheep);
+    this.updateSheepBadge(playerId, indicator, sheep, hp);
 
     if (isDead) {
       indicator.classList.add('hidden');
@@ -132,24 +137,28 @@ export class PlayerIndicators {
     }
   }
 
-  /** Sheep badge — the server's bot mobility meter, floated over the
-   *  head so a sheepish bot can be eyeballed, not just read in logs. */
-  private updateSheepBadge(playerId: string, indicator: HTMLElement, sheep: number | undefined): void {
-    const shown = sheep !== undefined && sheep > 0;
-    // textContent writes dirty the DOM every frame — the rounded value
-    // only changes ~1/s, so skip the write unless the display changed.
-    const v = shown ? Math.round(sheep) : -1;
-    if (this.lastSheep.get(playerId) === v) {return;}
-    this.lastSheep.set(playerId, v);
+  /** Head badge — HP by default; under the backquote debug overlay the
+   *  server's sheep meter takes the slot instead (that's where the
+   *  pedestrian-vs-skier read lives for triage). */
+  private updateSheepBadge(playerId: string, indicator: HTMLElement, sheep: number | undefined, hp: number | undefined): void {
+    const sheepMode = debugOverlays && sheep !== undefined && sheep > 0;
+    const v = sheepMode ? Math.round(sheep!) : hp !== undefined ? Math.round(hp) : -1;
+    // The mode is packed into the cache key — toggling debug must rewrite
+    // the badge even when sheep and hp happen to round to the same number.
+    const key = v < 0 ? -1 : v * 2 + (sheepMode ? 1 : 0);
+    if (this.lastSheep.get(playerId) === key) {return;}
+    this.lastSheep.set(playerId, key);
     let badge = indicator.firstElementChild as HTMLElement | null;
-    if (shown) {
+    if (v >= 0) {
       if (!badge) {
         badge = document.createElement('span');
         badge.className = 'sheep-badge';
         indicator.append(badge);
       }
       badge.textContent = `${v}`;
-      badge.style.color = sheep! >= 60 ? '#ff6b6b' : sheep! >= 30 ? '#ffd166' : '#7ddf7d';
+      badge.style.color = sheepMode
+        ? (sheep! >= 60 ? '#ff6b6b' : sheep! >= 30 ? '#ffd166' : '#7ddf7d')
+        : (v >= 60 ? '#7ddf7d' : v >= 30 ? '#ffd166' : '#ff6b6b');
     } else if (badge) {
       badge.remove();
     }

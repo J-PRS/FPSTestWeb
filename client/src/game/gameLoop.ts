@@ -20,6 +20,7 @@ import { updateVfx } from '../effects/vfx.js';
 import { collectDiag } from '../core/fxDiag.js';
 import '../core/visAudit.js'; // side-effect: registers the Alt+Q visAudit section
 import { setLogOverlayVisible } from '../ui/logPanel.js';
+import { setDebugOverlays } from '../ui/hud/indicators.js';
 import { reportHudOverlap } from '../ui/overlapAudit.js';
 import { installGeoNaNWatch } from '../core/geoNaN.js';
 import * as sfxAudio from '../core/sfx/world.js';
@@ -596,6 +597,9 @@ function wireDebugKeys(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud
       deps.lazyHud().setEntCountsVisible(show);
       // The log mirror rides the same debug view.
       setLogOverlayVisible(show);
+      // Sheep meters over remote heads are debug data too — the
+      // standing badge is HP without the overlay.
+      setDebugOverlays(show);
       // Debug chrome changes the corner stack — audit for collisions the
       // frame after the layout settles.
       if (show) {requestAnimationFrame(() => requestAnimationFrame(reportHudOverlap));}
