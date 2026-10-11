@@ -108,6 +108,15 @@ export function getWorldScale(): number {
   return hmWorldScale;
 }
 
+/** Push the resident field's gain/span into the render uniforms — call
+ *  wherever the module state is set outside applyTerrain (boot prime,
+ *  demo inject/restore) or the mesh draws at the old gain while the
+ *  collider already samples the new one. */
+export function applyHeightfieldScale(terrain: { setHeightScale(v: number): void; setWorldScale(v: number): void }): void {
+  terrain.setHeightScale(HSCALE * hmScale);
+  terrain.setWorldScale(hmWorldScale);
+}
+
 export async function loadHeightfieldBin(url: string): Promise<void> {
   const buf = new Uint8Array(await (await fetch(url)).arrayBuffer());
   const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);

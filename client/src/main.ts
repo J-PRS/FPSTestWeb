@@ -76,7 +76,7 @@ import { LoadProfiler } from './utils/profiling.js';
 import { createScene } from './world/scene.js';
 import { createViewModelScene } from './world/viewmodelScene.js';
 import { Terrain } from './world/terrain.js';
-import { loadHeightfieldBin } from './world/heightmap.js';
+import { loadHeightfieldBin, applyHeightfieldScale } from './world/heightmap.js';
 import { SWARM_SPECS } from './game/species/registry.js';
 import { initSwarms } from './entities/swarms.js';
 import type { Bolt } from './entities/Turretter.js';
@@ -220,6 +220,9 @@ async function init(): Promise<void> {
   profiler.markTime('heightmapLoaded');
 
   terrain = new Terrain(scene, sun.position.clone().normalize());
+  // A primed field (solo ?map= / saved-room probe) already carries its
+  // gain in hmScale — the fresh Terrain built its uniforms at 1x.
+  applyHeightfieldScale(terrain);
   profiler.markTime('terrainCreated');
 
   // Instanced enemy rendering — one draw call per species-part. Species

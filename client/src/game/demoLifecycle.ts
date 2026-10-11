@@ -23,7 +23,7 @@ import { clearPlaybackMarkers, updatePlaybackFlags } from '../demo/playbackMarke
 import { hmapMatches } from '../demo/demoHmap.js';
 import { feedMode } from '../feed/feedMode.js';
 import { disposeSwings } from '../effects/swingTrails.js';
-import { getHeightfield, injectHeightmapBytes } from '../world/heightmap.js';
+import { getHeightfield, injectHeightmapBytes, applyHeightfieldScale } from '../world/heightmap.js';
 import * as sfxWorld from '../core/sfx/world.js';
 
 const logger = new ChildLogger('DemoPlayback');
@@ -257,7 +257,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
     demoManager.fetchCoolShotsFromServer();
     // Hand the live map back before recording resumes — a clip's embedded
     // grid must never leak into the next recording's HMAP trailer.
-    if (d.hmRestore) {d.hmRestore(); d.hmRestore = null; d.lazyTerrain().reloadHeightmap();}
+    if (d.hmRestore) {d.hmRestore(); d.hmRestore = null; applyHeightfieldScale(d.lazyTerrain()); d.lazyTerrain().reloadHeightmap();}
     // Resume recording for new cool shots — the feed never records.
     if (!feedMode.on) {demoManager.startRecording();}
     onPlaybackStop();
@@ -275,6 +275,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
       const live = getHeightfield();
       if (!live || !hmapMatches(emb, live)) {
         d.hmRestore = injectHeightmapBytes(emb.data, emb.gridN, emb.heightScale, emb.worldScale);
+        applyHeightfieldScale(d.lazyTerrain());
         d.lazyTerrain().reloadHeightmap();
         demoManager.ui.setStatus(live ? 'map mismatch — embedded terrain' : 'embedded terrain');
         logger.warn(live
