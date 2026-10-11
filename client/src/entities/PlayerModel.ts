@@ -168,7 +168,7 @@ export class PlayerModel {
           if (this._disposed) { resolve(); return; }
           this.onModelLoaded({ scene: SkeletonUtils.clone(gltf.scene) as THREE.Group, animations: gltf.animations.map((c): THREE.AnimationClip => c.clone()) }, mann, knight);
           resolve();
-        },
+        return; },
         (error): void => {
           // A dev-server restart (or any transient fetch failure) must not
           // kill the model for the whole session — an invisible player is
@@ -189,13 +189,14 @@ export class PlayerModel {
             this.pose = new PoseControl(this.variant);
             const fbShoot = CLASS_BODY_SPEC[this.variant]?.anims?.['shoot'];
             this.pose.wantSpineLock = !fbShoot || fbShoot.startsWith('UAL_');
-            this.load().then(resolve, reject);
+            // oxlint-disable-next-line promise/no-nesting -- executor forwards the fallback rig's load outcome
+            this.load().then(resolve, reject).catch((): void => undefined);
             return;
           }
           logger.error('Failed to load', error);
           reject(error);
         }
-      );
+      ).catch((): void => undefined);
       };
       attempt();
     });

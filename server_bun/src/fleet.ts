@@ -80,7 +80,7 @@ function spawnWorker(id: string, port: number): void {
     // The next beat gap flips it down in the directory; respawn quickly
     // so rooms it held re-open for placement rather than dangling.
     setTimeout((): void => spawnWorker(id, port), delay);
-  });
+  return; }).catch((): void => undefined);
 }
 
 for (let i = 0; i < WORKERS; i += 1) {

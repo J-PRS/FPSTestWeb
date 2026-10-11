@@ -931,8 +931,8 @@ function paintTools(): void {
   // union (rendered weld) and shell (per-part carve) share one row —
   // they're the same question asked two ways.
   const [unionB, shellB, metalB] = row([
-    ['⛛ union', (): void => { unionToggle().then(paintRail); }],
-    ['◨ shell', (): void => { shellToggle().then(paintRail); }],
+    ['⛛ union', (): void => { unionToggle().then(paintRail).catch((): void => undefined); }],
+    ['◨ shell', (): void => { shellToggle().then(paintRail).catch((): void => undefined); }],
     ['▤ metal', (): void => { metalToggle(); paintRail(); }],
   ]);
   unionB!.classList.toggle('active', unionOn);

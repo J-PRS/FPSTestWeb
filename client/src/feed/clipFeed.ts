@@ -310,7 +310,7 @@ clipGen += 1;
     const e = current();
     if (!e?.filename) {return;}
     navigator.clipboard?.writeText(`${window.location.origin}/clips/${e.filename}`)
-      .then((): void => { btnShare.textContent = '✓'; setTimeout((): void => { btnShare.textContent = '⤴'; }, 1200); })
+      .then((): void => { btnShare.textContent = '✓'; setTimeout((): void => { btnShare.textContent = '⤴'; }, 1200); return; })
       .catch((): void => { return; });
   });
   const toggleClear = (): void => {

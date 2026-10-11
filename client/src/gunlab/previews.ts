@@ -314,7 +314,7 @@ export const CLASSES: [label: string, build: () => THREE.Group][] = [
         pm.setScale(CLASS_MODEL_SCALE[cls]); // real tier silhouette, not raw rig height
         pm.setPosition(x, 0, 0);
         pm.setRotation(0, 0); // setRotation adds the rig's authored yaw — 0 is the rig's forward
-      });
+      return; }).catch((): void => undefined);
       models.push(pm);
       const label = mkTextSprite(cls, ly);
       label.position.x = x;

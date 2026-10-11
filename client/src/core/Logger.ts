@@ -450,7 +450,7 @@ if (typeof window !== 'undefined') {
           toast('Clipboard unavailable — dumped to console', false);
           console.log('[Logger] Clipboard unavailable — dumped to console');
         }
-      });
+      return; }).catch((): void => undefined);
     }
   });
 

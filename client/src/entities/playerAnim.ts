@@ -434,7 +434,7 @@ export class PlayerAnim {
     loadBakedUALClips(this.host.variant).then((baked): void => {
       if (baked && baked.size > 0) {adopt(baked);}
       else {runtimeBake();}
-    }).catch(runtimeBake);
+    return; }).catch(runtimeBake);
   }
 
   /** Per-frame: weight fades, the stalled-cover guard, then pose

@@ -252,7 +252,7 @@ r[event] += 1;
       } catch (error) {
         logger.warn('WeaponStats flush failed', error);
       }
-    });
+    return; }).catch((): void => undefined);
   }
 
   start(): void {

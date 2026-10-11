@@ -37,7 +37,7 @@ export class PlayerModelLod {
       this.lodLoadP = this.loadLod().then((geos): void => {
         this.lodGeos = geos;
         if (this.lod === 1) {this.apply();}
-      }).catch((): void => { this.lodLoadP = null; });
+      return; }).catch((): void => { this.lodLoadP = null; });
     }
   }
 

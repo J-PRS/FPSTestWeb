@@ -205,7 +205,7 @@ export class CoolShotManager {
         this.coolShots = this.coolShots.filter((s): boolean => s === entry || s.filename !== serverFilename);
         this.onChanged?.(this.coolShots);
       }
-    }).catch((error): void => {
+    return; }).catch((error): void => {
       // Upload failing must not eat the local copy — it stays downloadable.
       logger.warn('Clip upload failed', error);
     });
@@ -272,7 +272,7 @@ export class CoolShotManager {
         if (entry.filename) {
           this.playFromServer(entry.filename);
         }
-      });
+      return; }).catch((): void => undefined);
     }
   }
 

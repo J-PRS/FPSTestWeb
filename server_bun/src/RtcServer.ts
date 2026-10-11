@@ -152,7 +152,8 @@ export class RtcServer {
     this.signalSockets.add(ws);
     loadNd().then((ok): void => {
       if (!ok) {ws.close(1013, 'rtc unavailable');}
-    });
+      return;
+    }).catch((): void => undefined);
   }
 
   onMessage(ws: ServerWebSocket<WebSocketData>, message: string | ArrayBuffer): void {

@@ -190,7 +190,7 @@ export class DemoManager implements demoIO.DemoIOHost {
         }
         this.pendingExportShotId = null;
         this.ui.setStatus(ok ? 'video saved' : 'video failed');
-      });
+      return; }).catch((): void => undefined);
       return;
     }
     // First F9 on a Chromium build: pick the clips folder once and every
@@ -212,7 +212,7 @@ export class DemoManager implements demoIO.DemoIOHost {
       this.ui.setVideoRecording(true);
       recChip(true);
       this.ui.setStatus(this.video.usingHardware ? 'rec video (gpu)' : 'rec video');
-    });
+    return; }).catch((): void => undefined);
     return true;
   }
 
@@ -232,7 +232,7 @@ export class DemoManager implements demoIO.DemoIOHost {
     const name = `kribes_coolshot_${demoIO.timestampStr()}_${lifetime.toFixed(1)}s.mp4`;
     clipSink.saveClip(name, blob).then((ok): void => {
       if (ok) {this.ui.setStatus('cool shot mp4 saved');}
-    });
+    return; }).catch((): void => undefined);
     return name;
   }
 

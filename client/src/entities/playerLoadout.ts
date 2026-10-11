@@ -146,7 +146,7 @@ export class PlayerLoadout {
         m.setVisible(false);
         m.setColliderVisible(false);
         old.dispose();
-      }).catch((error): void => {
+      return; }).catch((error): void => {
         // load() rejects after 4 retries — revert to the still-alive old
         // model instead of leaving h.model on a corpse that never loads.
         this.h.model = old;

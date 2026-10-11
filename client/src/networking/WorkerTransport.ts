@@ -120,7 +120,7 @@ export class WorkerTransport implements GameTransport {
     }
     if (ev.kind === 'resolve') {
       Promise.resolve(this.config.resolveUrl?.() ?? null)
-        .then((url): void => this.worker.postMessage({ kind: 'resolved', seq: ev.seq, url }));
+        .then((url): void => this.worker.postMessage({ kind: 'resolved', seq: ev.seq, url })).catch((): void => undefined);
       return;
     }
     if (ev.kind === 'rtt') {

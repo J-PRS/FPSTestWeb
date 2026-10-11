@@ -89,7 +89,7 @@ export class GameServer {
             if (!room.moveSim.hasField) {room.moveSim.attachField(this.field, (pid) => room.players.getPlayer(pid)?.position);}
             room.projectiles.attachField(this.field);
           }
-        })
+        return; })
         .catch((error): void => logger.warn('BallSim disabled — heightmap load failed', { err: String(error) }));
     } else {
       logger.warn('BallSim disabled — not running under Bun');

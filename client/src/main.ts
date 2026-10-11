@@ -609,7 +609,7 @@ async function initDemo(): Promise<void> {
   // Silently re-arm the previously-picked clips folder (no prompt — the
   // handle reuses its stored permission until Chrome asks for a re-grant,
   // which happens inside the next F9 gesture via pickClipsDir).
-  import('./demo/clipSink.js').then((m): Promise<boolean> => m.restoreClipsDir());
+  import('./demo/clipSink.js').then((m): Promise<boolean> => m.restoreClipsDir()).catch((): void => undefined);
   const { playerData, inputData } = playerProviders(player);
   demoManager.setDataProviders(playerData, inputData);
 
@@ -663,7 +663,7 @@ async function init(): Promise<void> {
   if (onlineBoot && urlParams.mode !== 'classic' && settings.get('fps-session-token')) {
     serverEndpoints
       .then((ep): Promise<boolean> => pingServer(ep.httpUrl))
-      .then((live): void => { if (live) {armSessionVeil(); profiler.markTime('veilProbed');} })
+      .then((live): void => { if (live) {armSessionVeil(); profiler.markTime('veilProbed');} return; })
       .catch((): void => { /* dead-host probe — the offline world owns first frames */ });
   }
   earlyConnP = earlyWire
@@ -674,7 +674,7 @@ async function init(): Promise<void> {
           profiler.markTime('networkConnected');
           logger.info(`Connected to server at ${ep.wsUrl}`);
         } catch (error) { logger.error('Failed to connect to server', error); }
-      })
+      return; })
     : null;
   // Probe the saved last-room BEFORE the boot heightmap: when it pings
   // live, its terrain loads as the boot field and the default map is
@@ -752,7 +752,7 @@ async function init(): Promise<void> {
     Promise.race([firstTerrain, new Promise((r): NodeJS.Timeout => setTimeout(r, 8000))])
       // Hold the roster kick-off until frames stabilize — spawning a full
       // bot match mid-compile-hitch seeds bad sim from frame one.
-      .then(async (): Promise<void> => { await gameLoop?.whenStable(); if (!teamBots && !networkManager.isConnected() && mode) {setupOfflineMode(mode, soloSpec?.spec);} });
+      .then(async (): Promise<void> => { await gameLoop?.whenStable(); if (!teamBots && !networkManager.isConnected() && mode) {setupOfflineMode(mode, soloSpec?.spec);} return; }).catch((): void => undefined);
   }
 
   // ?yaw/?pitch/?dummy headless-screenshot hooks — see game/debugHooks.ts.
@@ -1045,4 +1045,4 @@ init().then(async (): Promise<void> => {
     const { key, value } = (e as CustomEvent<{ key: string; value: unknown }>).detail;
     if (key === 'fps-debug' && value === 1 && isDevHost()) {wireDebugTools();}
   });
-});
+return; }).catch((): void => undefined);

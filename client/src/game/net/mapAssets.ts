@@ -139,6 +139,7 @@ export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: s
   terrainWanted = key;
   if (terrainActive === key) {return;}
   const { deps } = ctx;
+  // oxlint-disable-next-line promise/always-return -- serialized swap task resolves void on every path
   terrainSwap = terrainSwap.then(async (): Promise<void> => {
     if (terrainActive === key || terrainWanted !== key) {return;}
     Ball.terrainSwapping = true;
@@ -203,7 +204,7 @@ export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: s
       Ball.terrainSwapping = false;
       firstTerrainGate.resolve();
     }
-  });
+  return undefined; });
   return terrainSwap;
 }
 

@@ -52,10 +52,10 @@ export class WebTransportGameTransport implements GameTransport {
       this.dr = wt.datagrams.readable.getReader();
       this.pumpReliable(this.rr);
       this.pumpDatagrams(this.dr);
-      for (const d of this.preOpen) {this.writer.write(this.encoder.encode(`${d  }\n`)).catch((): void => { return; });}
+      for (const d of this.preOpen) {this.flushDatagram(d);}
       this.preOpen.length = 0;
       this.config.onConnect?.();
-    }).catch((error): void => {
+    return; }).catch((error): void => {
       logger.warn(`wt connect failed mid-setup: ${error instanceof Error ? `${error.name} ${error.message}` : String(error)}`);
       this.config.onError?.(error instanceof Error ? error : new Error(String(error)));
       this.config.onDisconnect?.(1006, 'webtransport failed');
@@ -65,7 +65,7 @@ export class WebTransportGameTransport implements GameTransport {
     wt.closed.then(
       (): void => this.declareDead('webtransport closed'),
       (error): void => this.declareDead(`webtransport closed: ${error instanceof Error ? `${error.name} ${error.message}` : String(error)}`),
-    );
+    ).catch((): void => undefined);
   }
 
   /** The one place a dead lane becomes a disconnect event — EVERY death
@@ -188,12 +188,16 @@ export class WebTransportGameTransport implements GameTransport {
     // onConnect fires only after the stream is live, but a same-tick send
     // can still race the writer assignment — hold those briefly.
     if (!this.writer) { this.preOpen.push(payload); return true; }
-    // A write can outlive the session — teardown rejects it; that's a
-    // normal close, not an error.
-    this.writer.write(this.encoder.encode(`${payload  }\n`)).catch((error): void => {
+    this.flushDatagram(payload);
+    return true;
+  }
+
+  // A write can outlive the session — teardown rejects it; that's a
+  // normal close, not an error.
+  private flushDatagram(payload: string): void {
+    this.writer?.write(this.encoder.encode(`${payload  }\n`)).catch((error): void => {
       logger.warn(`wt reliable write failed: ${error instanceof Error ? `${error.name} ${error.message}` : String(error)}`);
     });
-    return true;
   }
 
   connected(): boolean { return this.open; }

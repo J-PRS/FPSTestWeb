@@ -93,7 +93,7 @@ export async function connectServer(ctx: ConnectCtx): Promise<void> {
     networkManager.connect(serverUrl, undefined, ctx.resolveUrl).then((): void => {
       profiler.markTime('networkConnected');
       logger.info(`Connected to server at ${serverUrl}`);
-    }).catch((error): void => {
+    return; }).catch((error): void => {
       logger.error('Failed to connect to server', error);
     });
   }

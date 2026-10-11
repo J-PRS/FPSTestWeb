@@ -372,7 +372,7 @@ this.attempts += 1;
       t.connect(url);
       for (const d of this.pending) {t.send(d);}
       this.pending.length = 0;
-    }).catch((error): void => {
+    return; }).catch((error): void => {
       if (gen !== this.gen) {return;}
       this.config.onError?.(error instanceof Error ? error : new Error(String(error)));
     });

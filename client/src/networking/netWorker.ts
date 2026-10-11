@@ -24,7 +24,7 @@ import type { ServerMessage } from '../../../shared/protocol.js';
 // dedicated-worker scope for the worker global APIs.
 const w = self as unknown as {
   postMessage(m: unknown, transfer?: Transferable[]): void;
-  onmessage: ((e: MessageEvent) => void) | null;
+  addEventListener(type: string, cb: (e: MessageEvent) => void): void;
 };
 
 type Up =
