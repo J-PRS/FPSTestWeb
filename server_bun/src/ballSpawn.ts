@@ -89,7 +89,8 @@ export function spawnBall(h: SpawnHost, variant: BallVariant, near?: SimVec, pos
     x = cx + Math.cos(ang) * dist;
     z = cz + Math.sin(ang) * dist;
   }
-  const y = posOverride ? posOverride.y : hmHeight(field, x, z) + 40 + h.rng() * 40;
+  const ground = hmHeight(field, x, z);
+  const y = posOverride ? posOverride.y : (Number.isFinite(ground) ? ground : 0) + 40 + h.rng() * 40;
   const ang = h.rng() * Math.PI * 2;
   const spd = h.rng() * 20;
   const b = makeSimBall(
