@@ -9,10 +9,9 @@ export const terrainVert = /* glsl */`
   uniform float hScale;
   uniform vec2 gridOrigin;
   uniform float levelScale;
-  uniform float gridSpacing;
-  uniform float innerHalfSize;
-  uniform float innerSpacing;
-  uniform vec2 innerGridOrigin;
+  uniform float gridSpacing;   // REAL vertex spacing of this level's mesh
+  uniform float parentSpacing; // next-coarser level's real vertex spacing (0 = outermost)
+  uniform vec2 parentOrigin;   // next-coarser level's snapped gridOrigin
 
   varying vec3 vNormal;
   varying vec3 vWorldPos;
@@ -25,44 +24,42 @@ export const terrainVert = /* glsl */`
     return texture2D(heightMap, uv).r * hScale;
   }
 
-  // Bilinear interpolation of the next-finer level's grid heights
-  // The inner level's grid corner is at innerGridOrigin - innerHalfSize
-  // (innerGridOrigin is the grid CENTER, not the corner)
-  float sampleInnerHeight(vec2 worldXZ) {
-    vec2 corner = innerGridOrigin - innerHalfSize;
-    vec2 local = worldXZ - corner;
-    vec2 cell = floor(local / innerSpacing);
-    vec2 f = fract(local / innerSpacing);
-    vec2 p00 = corner + cell * innerSpacing;
-    float h00 = sampleHeightGPU(p00);
-    float h10 = sampleHeightGPU(p00 + vec2(innerSpacing, 0.0));
-    float h01 = sampleHeightGPU(p00 + vec2(0.0, innerSpacing));
-    float h11 = sampleHeightGPU(p00 + vec2(innerSpacing, innerSpacing));
-    // Single exit — ANGLE's "uninitialized f_sampleInnerHeight" warn came
-    // from the early return leaving its generated return var unset.
-    float h = mix(mix(h00, h10, f.x), mix(h01, h11, f.x), f.y);
-    if (innerHalfSize <= 0.0) h = sampleHeightGPU(worldXZ);
-    return h;
+  // The parent ring's drawn surface: a two-triangle linear chord of the
+  // field over the parent's coarser lattice — the SAME diagonal split the
+  // flat-grid index buffer uses. (An earlier scheme morphed the COARSE
+  // ring toward the fine chord instead: a linear interp between two
+  // coarser-lattice chord values can never equal the fine level's 5m
+  // boundary polyline, so hairline T-junction holes survived every LOD
+  // edge. The classic fix welds from the FINE side — morph the outer
+  // verts onto the parent's drawn surface, where they coincide by
+  // construction.)
+  float parentChord(vec2 worldXZ) {
+    vec2 local = worldXZ - parentOrigin;
+    vec2 cell0 = floor(local / parentSpacing) * parentSpacing;
+    vec2 f = (local - cell0) / parentSpacing;
+    vec2 c00 = parentOrigin + cell0;
+    float s00 = sampleHeightGPU(c00);
+    float s10 = sampleHeightGPU(c00 + vec2(parentSpacing, 0.0));
+    float s01 = sampleHeightGPU(c00 + vec2(0.0, parentSpacing));
+    float s11 = sampleHeightGPU(c00 + vec2(parentSpacing, parentSpacing));
+    return f.x + f.y <= 1.0
+      ? s00 + (s10 - s00) * f.x + (s01 - s00) * f.y
+      : s11 + (s10 - s11) * (1.0 - f.y) + (s01 - s11) * (1.0 - f.x);
   }
 
-  // Morph heights near the inner boundary to match the finer level,
-  // using circular distance for rounder, less noticeable transitions
+  // Near this level's outer edge, morph field height onto the parent
+  // chord — full blend at the interior edge row, so the boundary
+  // polyline lies ON the parent's triangles at every vertex and the
+  // discard-hole seam is watertight regardless of lattice parity.
   float getMorphHeight(vec2 worldXZ) {
-    float outerH = sampleHeightGPU(worldXZ);
-    if (innerHalfSize <= 0.0) return outerH;
-    vec2 d = abs(worldXZ - innerGridOrigin);
+    float h = sampleHeightGPU(worldXZ);
+    if (parentSpacing <= 0.0) return h;
+    vec2 d = abs(worldXZ - gridOrigin);
     float dist = max(d.x, d.y);
-    // 100% inner-height region extends BEYOND the discard boundary by 3 inner spacings.
-    // This ensures all vertices of triangles spanning the discard boundary are at full inner
-    // height, so the per-fragment interpolated height at the boundary exactly matches the
-    // inner level. Without this, per-vertex morphing creates a height step at the seam.
-    float morphStart = innerHalfSize + innerSpacing * 3.0;
-    float morphEnd = innerHalfSize + innerSpacing * 9.0;
-    if (dist <= morphStart) return sampleInnerHeight(worldXZ);
-    if (dist >= morphEnd) return outerH;
-    float blend = smoothstep(morphStart, morphEnd, dist);
-    float innerH = sampleInnerHeight(worldXZ);
-    return mix(innerH, outerH, blend);
+    float halfOuter = levelScale * 0.5;
+    float morphStart = halfOuter - parentSpacing * 2.0;
+    if (dist <= morphStart) return h;
+    return mix(h, parentChord(worldXZ), smoothstep(morphStart, halfOuter, dist));
   }
 
   void main() {
@@ -71,25 +68,10 @@ export const terrainVert = /* glsl */`
     float eps = gridSpacing * 0.5;
     float h = getMorphHeight(worldXZ);
 
-    // For normals, use raw GPU height if far from morph boundary (saves 4× sampleInnerHeight)
-    vec2 d = abs(worldXZ - innerGridOrigin);
-    float dist = max(d.x, d.y);
-    float morphStart = innerHalfSize + innerSpacing * 3.0;
-    float morphEnd = innerHalfSize + innerSpacing * 9.0;
-    bool nearBoundary = innerHalfSize > 0.0 && dist > morphStart - eps && dist < morphEnd + eps;
-
-    float hL, hR, hD, hU;
-    if (nearBoundary) {
-      hL = getMorphHeight(worldXZ - vec2(eps, 0.0));
-      hR = getMorphHeight(worldXZ + vec2(eps, 0.0));
-      hD = getMorphHeight(worldXZ - vec2(0.0, eps));
-      hU = getMorphHeight(worldXZ + vec2(0.0, eps));
-    } else {
-      hL = sampleHeightGPU(worldXZ - vec2(eps, 0.0));
-      hR = sampleHeightGPU(worldXZ + vec2(eps, 0.0));
-      hD = sampleHeightGPU(worldXZ - vec2(0.0, eps));
-      hU = sampleHeightGPU(worldXZ + vec2(0.0, eps));
-    }
+    float hL = getMorphHeight(worldXZ - vec2(eps, 0.0));
+    float hR = getMorphHeight(worldXZ + vec2(eps, 0.0));
+    float hD = getMorphHeight(worldXZ - vec2(0.0, eps));
+    float hU = getMorphHeight(worldXZ + vec2(0.0, eps));
     vNormal = normalize(vec3(hL - hR, 2.0 * eps, hD - hU));
 
     vec3 worldPos = vec3(worldXZ.x, h, worldXZ.y);

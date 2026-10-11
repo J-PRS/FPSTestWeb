@@ -142,6 +142,15 @@ export class Terrain {
     this.gridGeo = createFlatGridGeometry(divisions, 1);
     const gridGeo = this.gridGeo;
     const outerGeo = createFlatGridGeometry(divisions / 2, 1);
+    // Real vertex spacing per level — outer rings run the half-division
+    // grid, so their lattice is coarser than cfg.spacing claims (20→40,
+    // 40→80). The inner-morph shader and the origin snap must use THIS:
+    // sampling the inner seam on a 20m grid that doesn't exist, or
+    // snapping the origin to non-lattice steps, is what opened the
+    // distant LOD holes.
+    const geoDivs = (i: number) => (i >= 2 ? divisions / 2 : divisions);
+    const vertSpacing = (i: number) =>
+      CLIPMAP_LEVELS[i].spacing * CLIPMAP_LEVELS[i].divisions / geoDivs(i);
 
     for (let i = 0; i < CLIPMAP_LEVELS.length; i++) {
       const cfg = CLIPMAP_LEVELS[i];
@@ -154,9 +163,12 @@ export class Terrain {
         // Outermost ring alpha-dissolves into the sky past ~80% of its
         // extent (edgeHalf) — transparent so the world edge has no seam.
         transparent: i === CLIPMAP_LEVELS.length - 1,
-        polygonOffset: i > 0,
-        polygonOffsetFactor: -1,
-        polygonOffsetUnits: -1,
+        // Overlap band (each level's border cell rides under its parent):
+        // finer levels must win coincident depth or coarse rings paint
+        // over the seam — graded offset per level, finest closest.
+        polygonOffset: true,
+        polygonOffsetFactor: -(CLIPMAP_LEVELS.length - 1 - i),
+        polygonOffsetUnits: -(CLIPMAP_LEVELS.length - 1 - i),
         uniforms: {
           // Required with lights:true — renderer writes light/shadow state here
           ...THREE.UniformsLib.lights,
@@ -174,10 +186,13 @@ export class Terrain {
           hScale:          { value: HSCALE },
           gridOrigin:      { value: new THREE.Vector2(0, 0) },
           levelScale:      { value: levelScale },
-          gridSpacing:     { value: cfg.spacing },
+          gridSpacing:     { value: vertSpacing(i) },
           innerHalfSize:   { value: cfg.innerHalfSize },
-          innerSpacing:    { value: i > 0 ? CLIPMAP_LEVELS[i - 1].spacing : 0.0 },
           innerGridOrigin: { value: new THREE.Vector2(0, 0) },
+          // Seam weld: outer-edge verts morph onto the parent's drawn
+          // chord — needs the coarser level's real lattice step + origin.
+          parentSpacing:   { value: i + 1 < CLIPMAP_LEVELS.length ? vertSpacing(i + 1) : 0.0 },
+          parentOrigin:    { value: new THREE.Vector2(0, 0) },
           // Outermost level dissolves into fog near its world edge — every
           // inner level's outer edge is covered by the next ring.
           edgeHalf:        { value: i === CLIPMAP_LEVELS.length - 1 ? levelScale * 0.5 : 0.0 },
@@ -212,7 +227,7 @@ export class Terrain {
       this.levels.push({
         mesh,
         material,
-        spacing: cfg.spacing,
+        spacing: vertSpacing(i),
         innerHalfSize: cfg.innerHalfSize,
         halfSize: levelScale * 0.5,
         gridOrigin: new THREE.Vector2(0, 0),
@@ -308,7 +323,8 @@ export class Terrain {
   update(px: number, pz: number): void {
     for (let i = 0; i < this.levels.length; i++) {
       const level = this.levels[i];
-      // Snap grid origin to this level's spacing to prevent vertex swimming
+      // Snap grid origin to the vertex lattice (not cfg.spacing — outer
+      // rings are coarser than that) or verts swim through the heightmap
       const ox = Math.round(px / level.spacing) * level.spacing;
       const oz = Math.round(pz / level.spacing) * level.spacing;
       level.gridOrigin.set(ox, oz);
@@ -319,6 +335,15 @@ export class Terrain {
         const inner = this.levels[i - 1];
         level.innerGridOrigin.copy(inner.gridOrigin);
         level.material.uniforms.innerGridOrigin.value.copy(inner.gridOrigin);
+      }
+
+      // The seam-morph chord needs the PARENT's snapped origin — compute
+      // it directly (same snap formula) rather than reading a value the
+      // parent level won't write until its own iteration.
+      if (i + 1 < this.levels.length) {
+        const ps = this.levels[i + 1]!.spacing;
+        level.material.uniforms.parentOrigin.value.set(
+          Math.round(px / ps) * ps, Math.round(pz / ps) * ps);
       }
     }
 
