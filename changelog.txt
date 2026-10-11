@@ -1,3 +1,4 @@
+2026-10-10 - correctness: state-diff heal loop refuses non-finite snapshot truth — local hp adopt, missing-member mint, and healRemoteHealth all skip NaN rows
 2026-10-10 - correctness: inv(wire-vel-sane) at remote snapshot ingest — finite-but-absurd velocity (>300 m/s) is counted then capped before it can stretch a mesh through the extrapolation window
 2026-10-10 - correctness: remote roster + deployable ingest finite gates — playerHit roster patch, playerJoined first-sighting health, deployHp handler, deployable roster spawn all refuse non-finite vitals
 2026-10-11 - Skill ante halved: ENERGY.skillCost 50 -> 30 — blink/dash/slam/warp/bounce now cost half the tank instead of 83%, so a trick leaves real jet mobility behind

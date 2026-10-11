@@ -628,7 +628,7 @@ export function wireStateDebug(ctx: StateDebugContext): void {
         const player = ctx.getPlayer();
         for (const sp of serverPlayers) {
           if (sp.id === localId) {
-            if (!player.isDead && Math.abs(player.health - sp.health) > 0.5) {player.health = sp.health;}
+            if (!player.isDead && Number.isFinite(sp.health) && Math.abs(player.health - sp.health) > 0.5) {player.health = sp.health;}
             continue;
           }
           const cp = clientPlayers.get(sp.id);
@@ -637,14 +637,14 @@ export function wireStateDebug(ctx: StateDebugContext): void {
           // nothing else mints the roster record. Seed it from snapshot
           // truth; the first-seen-update path spawns the entity when the
           // next live record lands (dead members stay unspawned by design).
-          if (!cp) {
+          if (!cp && Number.isFinite(sp.position.x + sp.position.y + sp.position.z + sp.health)) {
             networkManager.upsertRemotePlayer(sp.id, {
               position: sp.position,
               health: sp.health,
               isDead: sp.isDead,
             });
           }
-          if (cp && Math.abs(cp.health - sp.health) > 0.5) {networkManager.healRemoteHealth(sp.id, sp.health);}
+          if (cp && Number.isFinite(sp.health) && Math.abs(cp.health - sp.health) > 0.5) {networkManager.healRemoteHealth(sp.id, sp.health);}
           // Liveness heal — kill/respawn events muted by a resync gap or
           // dropped elsewhere leave isDead divergent forever (health heals
           // above, the flag itself never did). Server owns liveness; mirror
