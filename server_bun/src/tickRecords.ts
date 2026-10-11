@@ -133,6 +133,12 @@ export class TickFanout {
         + p.velocity.x + p.velocity.y + p.velocity.z
         + p.rotation.yaw + p.rotation.pitch + p.health),
         { id: playerId, pos: p.position, hp: p.health });
+      // Coherence, not just representation: a row claiming alive at
+      // hp<=0 is a lie even when every field is finite — the dead
+      // write pairs are atomic. (No upper bound: seeded/superbot pools
+      // legitimately sit over class max.)
+      inv('wire-row-coherent', p.isDead || p.health > 0,
+        { id: playerId, hp: p.health, dead: p.isDead });
       snap.x = p.position.x; snap.y = p.position.y; snap.z = p.position.z;
       snap.vx = p.velocity.x; snap.vy = p.velocity.y; snap.vz = p.velocity.z;
       snap.yaw = p.rotation.yaw; snap.pitch = p.rotation.pitch;
