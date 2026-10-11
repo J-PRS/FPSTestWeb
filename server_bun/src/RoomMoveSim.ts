@@ -361,7 +361,9 @@ export class RoomMoveSim {
    *  the same delta or every blast reads as a divergence. */
   applyImpulse(playerId: string, dv: Vec3Like): void {
     const sh = this.shadows.get(playerId);
-    if (!sh) return;
+    // sim-vel names a poisoned shadow but doesn't fix it — a NaN dv
+    // writes straight into the sim's velocity, so the funnel drops it.
+    if (!sh || !Number.isFinite(dv.x + dv.y + dv.z)) return;
     const v = sh.sim.state.vel;
     v.x += dv.x; v.y += dv.y; v.z += dv.z;
     sh.lastImpulseAt = wallNow();
