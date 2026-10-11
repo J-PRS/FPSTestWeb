@@ -268,6 +268,13 @@ violation instead of a symptom hunt.
   Per-player maps (`wireIds`, `v4Last`, `lastSentPositions`,
   `chatPace`) all purge on removal; `introSeq` full-window reseeds
   decode baselines on seat/reclaim/nack.
+- **Flood control + buff fields (verified sealed):** `rateLimiter.check`
+  gates every message type (muted chat echoes back grayed, warn
+  throttle can't itself flood, per-type hb counters). Every
+  playerId-keyed server map purges on disconnect — including
+  `rateLimitWarnings`. Buff/timer fields (`regenUntil`, `ddUntil`,
+  `charge`, `armor`) are server-owned: pickups/blast grant under
+  POWERUP caps, death zeroes, no claim path writes them.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
