@@ -108,6 +108,63 @@ violation instead of a symptom hunt.
   ±1310m "parked" desync is the documented prior bug); vel/rot/health
   all clamp; `handleTeleport` reseats `lastValid*` so a resync can't
   resume from a corpse-side anchor.
+- **NaN-floor containment:** `hmHeight`/`hmChord` stay poison-in/poison-
+  out (sim parity); every consumer gates — a NaN floor isn't a floor.
+  ~40 sites: spawn/teleport/flag/pickup invariants, bot unbury rescue,
+  remoteDeath bounce, flag rabbit drop+tumble, botSheep/brain/spawnSpot,
+  crawler spawn/emerge/land, ballRage, Baneling land+steer, ball spawn,
+  deployables ground, pod land/attach, Grub, nugget, ballSpawn.
+- **Wire-ingest lanes:** player rows (pos+vel+rot+t), balls, crawlers,
+  pickups, flags, deployables — all drop non-finite with warns; the
+  roster-join vs per-tick asymmetry that leaked `deployHp` is closed.
+- **Trust boundary:** `MoveSim.setInput` clamps forward/right to [-1,1]
+  finite and coerces booleans — doctored magnitude can't speedhack.
+- **Clock domains:** `SimMs` vs `WallMs` audited — `forceSendUntil` read
+  on the sim clock fixed (perma-forced/stale sends under warped time).
+- **Cadence:** per-weapon `fireWindows` gate restored — the dead-write
+  class (gate written only in a `.old` file) that let a 2s-interval
+  mortar claim ~13 shots/s.
+- **Damage-write family closed:** `damage-finite` at `applyHit`,
+  `deployable-hurt-finite`, `creature-damage-finite` (all four kinds),
+  `ball-damage-finite`, `bot-damage-finite` — a NaN dmg made its target
+  unkillable because `hp <= 0` was never true.
+- **Anti-cheat lanes verified:** `plausible()` rejects >50m/>300m/s,
+  seq>lastSeq monotonic (not zeroed at death), transit =
+  min(clientEma, serverEma+slack) two-channel, input seq-journal cap 8,
+  env claims finite/self-only/capped/proximity/cadence/healCredit.
+- **Impulse ingest:** `applyKnockback`/`applyPull` finite-gate wire
+  `force` before it enters `vel`.
+- **Pools bounded:** `pool-positive` (correct formula yielding ≤0 max
+  = a spawn-kill), `energy-bounds`/`local-energy-bounds`,
+  `local-health-finite` with NaN recovery, belt-charge economy (every
+  decrement behind a sufficiency check; regen `min(BELT_MAX,+1)`-capped),
+  armor min/max-clamped at every write.
+- **Projectile trails:** emit lead measures the emitter's real per-frame
+  travel, not `vel*dt` — interp/shadow hosts no longer leave a head gap.
+- **Deploy-plant lane:** kind/cap checks, `badpos` finite gate,
+  `MAX_PLANT_DIST` bounds, belt economy, `groundY` reseats claimed Y.
+- **Map/lifecycle hygiene:** `dropPlayer` clears cadence maps, `untrack`
+  frees sim shadows, room removal deletes wireIds+lastSentPositions;
+  v4 wireId remint can't inherit masked fields (remove evicts byId);
+  entity lists all prune via `updateDeadList`; snapshot journal sorted-
+  insert with `latestT` never rewinding; flag-carrier coherence swept
+  20Hz; repair lane re-derives range/LOS/team/rate server-side; deploy
+  ticks skip `isDead`; contact bodies read gated positions only.
+
+## Remaining
+
+- `shared/ballSim.ts:293` `applySimDamage` needs the same finite dmg
+  gate (file in-flight, JP to fold).
+- Armed canaries awaiting live evidence: `spawn/teleport/flag-above-
+  ground` (residual bot-sink CINDER-11 seed), `corpse-no-channels`,
+  `anim-bind` (T-pose census — needs live repro + alt+q dump),
+  `pool-positive`, `energy-bounds`/`local-energy-bounds`,
+  `sim-pos`/`sim-vel`, `impulse-finite`, `deploy-hp-finite`,
+  `*-damage-finite` family, `teleport-spam`.
+- JP open items: GL_INVALID_OPERATION sampler spam, melee-whiff,
+  camera spinout, disk-space warning.
+- `swarm.ts` (in-flight) fails tsc: `fogU` missing on
+  `InstancedBlobShadows` — JP's file.
 
 ## When adding a system
 
