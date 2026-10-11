@@ -236,5 +236,8 @@ export function sampleNormal(wx: number, wz: number): THREE.Vector3 {
   const hR = sampleHeight(wx + e, wz);
   const hD = sampleHeight(wx, wz - e);
   const hU = sampleHeight(wx, wz + e);
-  return _normalTmp.set(hL - hR, 2 * e, hD - hU).normalize();
+  const n = _normalTmp.set(hL - hR, 2 * e, hD - hU).normalize();
+  // NaN heights normalize to a NaN vector — feeding it to a quaternion
+  // renders the mesh invisible; flat ground is the honest fallback.
+  return Number.isFinite(n.x) && Number.isFinite(n.z) ? n : n.set(0, 1, 0);
 }
