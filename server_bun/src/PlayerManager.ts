@@ -333,6 +333,10 @@ export class PlayerManager {
     invEq('health-pool-formula', player.maxHealth,
       CONFIG.playerMaxHealth + perkMods(player.perk).maxHealth + CLASS_STATS[player.armorClass as keyof typeof CLASS_STATS].maxHealth,
       0.01, { id: playerId, cls: player.armorClass, perk: player.perk });
+    // A correct formula can still yield a dead pool — a negative class
+    // bonus deep enough is a spawn-kill, not a class. invEq catches
+    // drift from the formula; this catches a legal-but-absurd result.
+    inv('pool-positive', player.maxHealth > 0, { id: playerId, max: player.maxHealth });
 
     const spawn = this.spawnPicker.pick(playerId, player.team);
     player.position = { ...spawn };

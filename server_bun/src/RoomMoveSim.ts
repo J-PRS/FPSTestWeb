@@ -4,6 +4,7 @@ import { perkMods } from '../../shared/perks.ts';
 import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
 import { SolidWorld } from '../../shared/solidWorld.ts';
+import { inv } from '../../shared/invariants.ts';
 import { structureColliders, type StructureCollider } from '../../shared/ballCollide.ts';
 import { FieldSurface, MoveJudge, TRANSIT_EMA_CAP_MS, type Shadow } from './moveJudge.ts';
 import type { StructureSpec } from '../../shared/mapSpec.ts';
@@ -522,6 +523,10 @@ export class RoomMoveSim {
       // ride forever; drain to empty once, then let regen rebuild it.
       if (!Number.isFinite(sh.energy)) sh.energy = 0;
       sh.energy = Math.max(0, sh.energy);
+      // Pool law: energy lives in [0, cap]. grant/regen both clamp —
+      // an over-cap read here means a write path added without one.
+      inv('energy-bounds', sh.energy <= ENERGY.max * sh.energyMax + 0.01,
+        { id: pid, e: +sh.energy.toFixed(1), cap: +(ENERGY.max * sh.energyMax).toFixed(1) });
       if (sh.energy <= 0) sh.jetLockT = ENERGY.jetLockout;
       sh.sim.setInput({ jetHeld: jetting });
       // Resting shadows skip the integrator: quiet input + ~zero
