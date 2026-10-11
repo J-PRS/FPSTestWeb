@@ -45,6 +45,9 @@ describe('scenario: bombard', () => {
     freeze(room, a.id, { x: 0, y: 61.1, z: 0 });
     freeze(room, b.id, { x: 10, y: 62, z: 0 });
     room.players.getPlayer(a.id)!.armorClass = 'heavy';
+    // Seed a pool deep enough to expose the whole line — a stock light's
+    // 125hp floor would clip the delta at the pool, not the damage.
+    pb.maxHealth = pb.health = 200;
     const hp0 = pb.health;
     room.messages.handleMessage(a.id, {
       type: 'shotFired', dir: { x: 1, y: 0, z: 0 }, pos: { x: 0, y: 61.1, z: 0 },

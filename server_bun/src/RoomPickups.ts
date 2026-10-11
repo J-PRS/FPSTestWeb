@@ -16,6 +16,7 @@ import { aoeImpulse } from '../../shared/combat.ts';
 import { hmHeight, hmChord, hmSettleWalkable } from '../../shared/heightfield.ts';
 import { NUG_TUMBLE, type PickupKind } from '../../shared/pickups.ts';
 import { GRAVITY } from '../../shared/movement.ts';
+import { inv } from '../../shared/invariants.ts';
 
 const PICKUP_R = 2.2;   // planar grab radius, same feel as flag pickup
 const PICKUP_TTL_S = 60; // dropped loot decays — no infinite accumulation
@@ -139,6 +140,11 @@ export class RoomPickups {
         if (Math.abs(p.vel.x) < NUG_TUMBLE.settle && Math.abs(p.vel.z) < NUG_TUMBLE.settle && Math.abs(p.vel.y) < NUG_TUMBLE.settle) {
           p.vel.x = p.vel.y = p.vel.z = 0;
           this.settleReachable(p);
+          // The rest spot is what every client draws — under the drawn
+          // surface is the nugget-burial class, not a cosmetic offset.
+          inv('pickup-below-ground', !this.room.field ||
+            p.pos.y >= Math.max(hmHeight(this.room.field, p.pos.x, p.pos.z), hmChord(this.room.field, p.pos.x, p.pos.z)) - 0.5,
+            { id: p.id, y: +p.pos.y.toFixed(1) });
           // Resting spot is the new truth — one edge resyncs every client.
           this.room.broadcast(spawnPayload(WORLD_MODEL.pickup!, p.id, 'id', { pos: { ...p.pos }, kind: p.kind }) as ServerMessage);
         }

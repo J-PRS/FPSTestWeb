@@ -1,5 +1,6 @@
 import type * as THREE from 'three';
 import { lerpAngle, wrapAngleDelta } from '../../../shared/angles.ts';
+import { inv } from '../../../shared/invariants.ts';
 
 function clampNum(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
@@ -93,6 +94,11 @@ export class SnapshotBuffer {
     vel: { x: number; y: number; z: number },
     arriveMs = Date.now(),
   ): number {
+    // The wire boundary: a NaN/Infinity here poisons the Hermite and
+    // every render derived from it — name it at the gate, never let it
+    // propagate into a "sometimes teleports" report.
+    inv('wire-pos-finite', Number.isFinite(pos.x + pos.y + pos.z + vel.x + vel.y + vel.z + rot.yaw + rot.pitch + t),
+      { t, x: pos.x, y: pos.y, z: pos.z });
     const prev = this.lastArrive;
     const gap = prev > 0 ? arriveMs - prev : 0;
     this.lastArrive = arriveMs;

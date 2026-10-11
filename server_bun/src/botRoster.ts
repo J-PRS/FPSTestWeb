@@ -15,6 +15,9 @@ import { botRand } from '../../shared/botRand.ts';
 import { BOT_NAMES } from '../../shared/botNames.ts';
 import { CLASS_FITNESS, ROLE_PRIORITY, STRICT_CLASS, type BotRole } from '../../shared/flagGoals.ts';
 import { isSuper } from './superBot.ts';
+import { invEq } from '../../shared/invariants.ts';
+import { perkMods } from '../../shared/perks.ts';
+import { CONFIG } from './config.ts';
 import { healPool } from './healPool.ts';
 import { wallNow } from './wallClock.ts';
 import { WORLD_MODEL, spawnPayload } from '../../shared/worldModel.ts';
@@ -109,7 +112,7 @@ export class BotRoster {
       this.thinkPhase.set(id, this.nextIdx % this.thinkDiv);
       // Legal body: the bot gets a move shadow exactly like a human join —
       // brains emit inputs, the sim owns motion, energy model included.
-      this.room.moveSim.track(id, p.position, p.rotation.yaw, p.perk, p.team, true);
+      this.room.moveSim.track(id, p.position, p.rotation.yaw, p.perk, p.team, true, cls);
     }
     if (n > 0) logger.info('Bots spawned', { room: this.room.name, count: n });
   }
@@ -141,7 +144,7 @@ export class BotRoster {
    *  current HP follows the delta (gaining plating grants the points,
    *  dropping it just clamps). The move shadow's ground scale makes the
    *  class legally different — a light capper really out-runs a heavy. */
-  private applyClass(p: { id: string; maxHealth: number; health: number }, cls: ArmorClass): void {
+  private applyClass(p: { id: string; perk: string; maxHealth: number; health: number }, cls: ArmorClass): void {
     // Unseeded map means the class bonus is ALREADY baked into maxHealth
     // by addPlayer (spawn calls this right after) — treating prev as
     // "no class" re-adds the bonus: heavies read 300, mediums 150, and
@@ -157,8 +160,20 @@ export class BotRoster {
     const delta = CLASS_STATS[cls].maxHealth - CLASS_STATS[prev].maxHealth;
     p.maxHealth += delta;
     healPool(p, Math.max(0, delta));
+    // The pool is base+perk+class, always — a double-add or a stale-prev
+    // refit breaks it and the badge/HUD start lying. invEq fires with
+    // the offending numbers instead of another 300hp-heavy report.
+    invEq('health-pool-formula', p.maxHealth,
+      CONFIG.playerMaxHealth + perkMods(p.perk).maxHealth + CLASS_STATS[cls].maxHealth,
+      0.01, { id: p.id, cls, prev, perk: p.perk });
     this.room.moveSim.setSpeedScale(p.id, CLASS_STATS[cls].speedScale);
     this.room.moveSim.setBody(p.id, CLASS_STATS[cls].mass, CLASS_STATS[cls].eyeHeight, CLASS_STATS[cls].radius);
+    // Same class of bug as the unbury loop: record and sim must agree on
+    // the body. The shadow may not exist yet (spawn applies the class
+    // before track) — when it does, its eye IS the class eye.
+    const simEye = this.room.moveSim.eyeOf(p.id);
+    if (simEye !== undefined) invEq('sim-eye-class-eye', simEye, CLASS_STATS[cls].eyeHeight,
+      0.001, { id: p.id, cls });
   }
 
   /** Rebalance squad roles ~every 5s. Needs are computed per team: a flag

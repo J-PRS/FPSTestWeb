@@ -203,8 +203,14 @@ export class CombatHandler {
     // ~200 warns/4min, all stamped by a handful of senders). Throttle
     // per player+kind like notifyDrop does for the wire side; the exact
     // counts still land in the rej.* heartbeat keys.
-    this.rejectWarn(`${playerId}:${kind}`,
-      `${kind} rejected: ${playerId}${targetId ? ` → ${targetId}` : ''}: ${reason}`);
+    if (reason === 'shooter dead') {
+      // A late volley is netcode working — verdict + drop.deadShot carry
+      // the signal; a warn per race reads as soak jank at 64 clients.
+      logger.debug(`${kind} rejected: ${playerId}: ${reason}`);
+    } else {
+      this.rejectWarn(`${playerId}:${kind}`,
+        `${kind} rejected: ${playerId}${targetId ? ` → ${targetId}` : ''}: ${reason}`);
+    }
     // Rejected claims can leave predicted self-damage stuck client-side —
     // ship our health value so the shooter resyncs instead of drifting.
     const health = this.playerManager.getPlayer(playerId)?.health;
@@ -318,7 +324,14 @@ export class CombatHandler {
    *  dir stays cosmetic — observers only use it to aim a beam flash. */
   handleShotFired(playerId: string, msg: Extract<ClientMessage, { type: 'shotFired' }>): void {
     const player = this.playerManager.getPlayer(playerId);
-    if (!player || player.isDead) { this.reject(playerId, 'Shot', 'shooter dead', undefined, msg.weaponType, msg.shotId); return; }
+    // A dead-shooter claim is a client dead-gate breach — counted on the
+    // handler ledger (inv stays out: handler-level tests legitimately
+    // exercise this path, the breach signal is the reject verdict).
+    if (!player || player.isDead) {
+      this.hb('drop.deadShot');
+      this.reject(playerId, 'Shot', 'shooter dead', undefined, msg.weaponType, msg.shotId);
+      return;
+    }
     const now = wallNow();
     if (typeof msg.fireAt === 'number' && Number.isFinite(msg.fireAt)) this.deps.uplinkNote?.(playerId, msg.fireAt);
     const dir = msg.dir && finiteVec(msg.dir) ? msg.dir : undefined;

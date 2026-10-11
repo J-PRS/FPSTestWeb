@@ -1,6 +1,7 @@
 import { MoveSim, ENERGY, cloakDrainPerSec, type BodyCapsule, type MoveInput, type MoveState, type Vec3Like } from '../../shared/movement.ts';
 import { STATUS } from '../../shared/status.ts';
 import { perkMods } from '../../shared/perks.ts';
+import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
 import { SolidWorld } from '../../shared/solidWorld.ts';
 import { structureColliders, type StructureCollider } from '../../shared/ballCollide.ts';
@@ -109,7 +110,7 @@ export class RoomMoveSim {
     // Replay seats taken while the field was still loading — reseated
     // grace arms them since pre-gameState frames may still be in flight.
     for (const [pid, t] of this.pendingTrack) {
-      this.track(pid, t.pos, t.yaw, t.perk, t.team, t.bot);
+      this.track(pid, t.pos, t.yaw, t.perk, t.team, t.bot, t.armorClass);
       this.markReseated(pid);
     }
     this.pendingTrack.clear();
@@ -161,13 +162,13 @@ export class RoomMoveSim {
   /** Seats that arrived before the field — attachTerrain resolves async,
    *  so a join mid-load used to drop here and leave the player shadowless
    *  for the whole session: no reconcile, no corrections, no transit. */
-  private pendingTrack = new Map<string, { pos: Vec3Like; yaw: number; perk?: string; team?: string; bot?: boolean }>();
+  private pendingTrack = new Map<string, { pos: Vec3Like; yaw: number; perk?: string; team?: string; bot?: boolean; armorClass?: string }>();
 
   /** Call on join/spawn — seeds the sim at the reported spot. `team`
    *  feeds team-gated colliders (gate shields pass allies). */
-  track(playerId: string, pos: Vec3Like, yaw: number, perk?: string, team?: string, bot?: boolean): void {
+  track(playerId: string, pos: Vec3Like, yaw: number, perk?: string, team?: string, bot?: boolean, armorClass?: string): void {
     if (!this.surface) {
-      this.pendingTrack.set(playerId, { pos: { x: pos.x, y: pos.y, z: pos.z }, yaw, perk, team, bot });
+      this.pendingTrack.set(playerId, { pos: { x: pos.x, y: pos.y, z: pos.z }, yaw, perk, team, bot, armorClass });
       return;
     }
     const state: MoveState = {
@@ -193,6 +194,15 @@ export class RoomMoveSim {
       gapStreak: 0, gapAt: 0, deferStreak: 0, lastHintAt: 0, lastReportAt: 0, reportEma: 0,
       transitEma: 0, clientTransitEma: 0, serverTransitEma: 0, transitVar: 0, reportVar: 0,
     });
+    // The sim body derives from the class at creation — the default eye
+    // otherwise survives a pre-track setBody no-op (applyClass ran before
+    // the shadow existed, the eyeOf-vs-class mismatch behind the unbury
+    // loop). One write site for eye per lifecycle event: track + setBody.
+    if (armorClass && armorClass in CLASS_STATS) {
+      const st = CLASS_STATS[armorClass as ArmorClass];
+      this.setBody(playerId, st.mass, st.eyeHeight, st.radius);
+      this.setSpeedScale(playerId, st.speedScale);
+    }
   }
 
   untrack(playerId: string): void { this.shadows.delete(playerId); this.pendingTrack.delete(playerId); }

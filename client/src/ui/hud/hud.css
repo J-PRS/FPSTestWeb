@@ -363,7 +363,7 @@ body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) 
   bottom: 100%;
   left: 50%;
   transform: translate(-50%, -4px);
-  font: 700 11px/1 monospace;
+  font: 700 12px/1 monospace;
   text-shadow: 0 0 4px #000;
   white-space: nowrap;
 }

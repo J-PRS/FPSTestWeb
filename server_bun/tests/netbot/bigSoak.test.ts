@@ -77,10 +77,18 @@ describe('netbot — stress soak', () => {
     const t1 = t();
     const sum = (k: 'shots' | 'fireIntents' | 'hitsDealt' | 'kills' | 'deaths' | 'corrections') =>
       t1.reduce((a, x) => a + (x[k] ?? 0), 0);
-    const rejects = t1.reduce((a, x) => a + [...x.rejects.values()].reduce((p, q) => p + q, 0), 0);
+    // 'shooter dead' is a gameplay verdict, not a transport reject —
+    // a shot honestly in flight when the shooter died gets refused on
+    // arrival, same as a real player's late volley. It belongs in its
+    // own bucket; only claim-layer rejects trip the zero assert.
+    let deadShots = 0;
+    let rejects = 0;
+    for (const x of t1) for (const [reason, n] of x.rejects) {
+      if (reason.includes('shooter dead')) deadShots += n; else rejects += n;
+    }
     const corr = t1.map((x) => x.corrections).sort((a, b) => a - b);
     const pick = (q: number) => corr[Math.min(corr.length - 1, Math.floor(corr.length * q))];
-    console.log(`bigSoak: n=${N_BOTS} shots=${sum('shots')} hits=${sum('hitsDealt')} kills=${sum('kills')} deaths=${sum('deaths')} rejects=${rejects} ticks min=${Math.min(...t1.map((x) => x.ticks))} max=${Math.max(...t1.map((x) => x.ticks))} corrections p50=${pick(0.5)} p95=${pick(0.95)} max=${corr[corr.length - 1]}`);
+    console.log(`bigSoak: n=${N_BOTS} shots=${sum('shots')} hits=${sum('hitsDealt')} kills=${sum('kills')} deaths=${sum('deaths')} rejects=${rejects} deadShots=${deadShots} ticks min=${Math.min(...t1.map((x) => x.ticks))} max=${Math.max(...t1.map((x) => x.ticks))} corrections p50=${pick(0.5)} p95=${pick(0.95)} max=${corr[corr.length - 1]}`);
 
     // The war happened at density: sustained combat across 64 clients.
     expect(sum('shots')).toBeGreaterThan(N_BOTS);
@@ -89,6 +97,9 @@ describe('netbot — stress soak', () => {
     // The property the harness exists for — deferred claims absorb
     // reorders even at 64-client fanout; a healthy session has none.
     expect(rejects).toBe(0);
+    // The dead-shot budget: each death races at most ~1 in-flight claim —
+    // a flood here means corpses are still firing, not honest lag.
+    expect(deadShots).toBeLessThanOrEqual(sum('deaths'));
     // Nobody sat a ghost: every client kept receiving the tick stream.
     for (const b of bots) expect(b.nc.tel.gameStates).toBeGreaterThan(0);
     // Roster convergence: every observer sees essentially the whole

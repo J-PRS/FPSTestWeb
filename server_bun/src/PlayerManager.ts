@@ -12,6 +12,7 @@ import type { SpawnPoint } from '../../shared/mapSpec.ts';
 import type { TeamId } from '../../shared/teams.ts';
 import { SPAWN_PROTECT_MS } from '../../shared/constants.ts';
 import { simNow, simMs } from './simClock.ts';
+import { inv, invEq } from '../../shared/invariants.ts';
 import { wallNow, wallMs } from './wallClock.ts';
 
 let internalIdCounter = 0;
@@ -272,7 +273,13 @@ export class PlayerManager {
       incoming -= soaked;
     }
     target.lastDamageAt = simMs(simNow()); // regenerator ramp resets on any hit that lands
+    const preHp = target.health;
     target.health -= incoming;
+    // The pool law: THIS hit must not overshoot the pool. Seeded pools
+    // (scenario fixtures, superbot, claimed records) may legitimately
+    // sit over max already — only a path that PUSHES over is named.
+    inv('health-in-pool', target.health <= target.maxHealth + 0.01 || preHp > target.maxHealth + 0.01,
+      { id: targetId, hp: +target.health.toFixed(1), max: target.maxHealth, dmg: +incoming.toFixed(1) });
     if (target.health <= 0) {
       target.health = 0;
       target.isDead = true;
@@ -311,6 +318,12 @@ export class PlayerManager {
       player.maxHealth = CONFIG.playerMaxHealth + perkMods(player.perk).maxHealth + CLASS_STATS[player.armorClass as keyof typeof CLASS_STATS].maxHealth;
     }
     player.pendingPerk = undefined;
+
+    // The refit formula is the only source of a health pool —
+    // a missing class-bonus or double-add shows up here by name.
+    invEq('health-pool-formula', player.maxHealth,
+      CONFIG.playerMaxHealth + perkMods(player.perk).maxHealth + CLASS_STATS[player.armorClass as keyof typeof CLASS_STATS].maxHealth,
+      0.01, { id: playerId, cls: player.armorClass, perk: player.perk });
 
     const spawn = this.spawnPicker.pick(playerId, player.team);
     player.position = { ...spawn };
