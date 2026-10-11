@@ -147,7 +147,10 @@ export function wireWorld(ctx: NetCtx): void {
       // doesn't name is from the old room: keeping it leaves a ghost body
       // that renders and collides-feels real but can never update.
       if (!pos) { deps.world.remotePlayers.remove(id); continue; }
-      _reseatPos.set(pos?.x ?? rp.position.x, pos?.y ?? rp.position.y, pos?.z ?? rp.position.z);
+      // Roster pos bypasses the net.push finite gate — a NaN row would
+      // reseat the remote into a poisoned motion state.
+      if (!finiteVec(pos)) { deps.world.remotePlayers.remove(id); continue; }
+      _reseatPos.set(pos.x, pos.y, pos.z);
       rp.teleportTo(_reseatPos);
     }
     applyRoomInfo(ctx, players.length, roomInfo);
