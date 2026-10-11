@@ -154,6 +154,12 @@ violation instead of a symptom hunt.
 - **Impulse ingest:** `applyKnockback`/`applyPull` finite-gate wire
   `force` before it enters `vel`; `ExplosionTracker.addExplosion`
   drops non-finite pos/force (gib impulse math reads it at kill).
+  Client blast fan-out sealed at the funnel: `applyExplosionForce`
+  drops non-finite pos/radius/force before it sweeps every Forceable
+  (player shove, balls, creatures, nuggets, remotes, deployable splash).
+  Write sites gated: `remoteInterp.predict` (NaN seed → NaN ghost vel
+  on a cleared buffer), `Nugget.serverRest`/`applyKnockback`/`applyPull`,
+  `parity.noteShellFate` (NaN srvAt poisoned divergence diffs).
 - **Pools bounded:** `pool-positive` (correct formula yielding ≤0 max
   = a spawn-kill), `energy-bounds`/`local-energy-bounds`,
   `local-health-finite` with NaN recovery, belt-charge economy (every
