@@ -152,8 +152,15 @@ class SpeciesKitImpl {
     // ARE. The creature still bites — it just bites your ghost. Whiff it:
     // "oh shit I dodged that" moments are earned by being somewhere else.
     if (reach !== undefined) {
+      // netDriven attackers replay the authority's sim — the strike was
+      // already adjudicated server-side, so the reach gate can only ever
+      // false-positive on replica lag (the soak's ×33 scarab siege: a
+      // stationary replica 10-20m behind truth reads as a reach lie, and
+      // the whiff then DROPPED the damage claim entirely — server-valid
+      // hits landing as damage-from-nowhere echoes instead).
+      const netDriven = attacker !== undefined && (attacker as { sim?: unknown }).sim;
       const d = fromPos.distanceTo(p.pos);
-      if (d > reach) {
+      if (d > reach && !netDriven) {
         // Ski-speed whiffs are earned dodges, not bugs — the strike fired on
         // a lastSeen snapshot and a fast mover is already gone. Only a whiff
         // against a slow/stationary player means the reach math lied.

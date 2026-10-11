@@ -354,6 +354,19 @@ violation instead of a symptom hunt.
   with `|| 1` length-division and `?? 10` force fallback;
   far-victim gibs take the instanced path (~120m budget) so a
   death spike can't hitch the frame.
+- **Melee whiff lane (live-soak fix):** `hurtPlayer`'s reach gate
+  measured strikes against the attacker's *interpolated* pos — a
+  netDriven replica trailing server truth by ~10-20m read as a
+  stationary attacker way out of reach, the whiff then DROPPED the
+  env-damage claim (server-valid hits landing later as
+  damage-from-nowhere). netDriven attackers now bypass the reach
+  gate: their strike is the replica's own committed sim, and the
+  claim re-adjudicates server-side regardless. Offline creatures
+  (locally-authoritative sims) keep the gate.
+- **Renderer context loss (verified sealed):** `createRenderer`
+  catches WebGL context-creation failure and schedules a reload;
+  `webglcontextlost` reloads immediately — a lost context is
+  unrecoverable for three anyway (khronos: recreate ALL resources).
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
