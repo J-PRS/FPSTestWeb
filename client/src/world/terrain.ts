@@ -460,6 +460,12 @@ export class Terrain {
     const h00 = this.getHeight(x0, z0), h10 = this.getHeight(x0 + s, z0);
     const h01 = this.getHeight(x0, z0 + s), h11 = this.getHeight(x0 + s, z0 + s);
     const tx = (wx - x0) / s, tz = (wz - z0) / s;
-    return (h00 * (1 - tx) + h10 * tx) * (1 - tz) + (h01 * (1 - tx) + h11 * tx) * tz;
+    // The quad renders as two flat triangles split on the (x0+s,z0)↔
+    // (x0,z0+s) diagonal — a bilinear patch sags below that surface
+    // across the diagonal, so decals conforming to a bilinear estimate
+    // still get clipped there. Barycentric on the actual triangle.
+    return tx + tz <= 1
+      ? h00 + (h10 - h00) * tx + (h01 - h00) * tz
+      : h11 + (h10 - h11) * (1 - tz) + (h01 - h11) * (1 - tx);
   }
 }
