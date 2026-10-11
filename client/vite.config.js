@@ -174,6 +174,11 @@ export default defineConfig(({ mode }) => ({
     watch: {
       usePolling: true, // Enable polling for reliable HMR in WSL2/Docker
     },
+    // Pre-transform the boot chain at server start so an F5's import
+    // waterfall hits warm cache instead of per-module transform latency.
+    warmup: {
+      clientFiles: ['./src/main.ts'],
+    },
     // API proxy — lets a single cloudflared tunnel carry the whole app
     // (game ws + demo clips + map assets). Only reachable on tunneled
     // origins; localhost dev still hits :8000 directly. /clips and
