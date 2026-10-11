@@ -289,6 +289,13 @@ violation instead of a symptom hunt.
   BallDebris shards carry per-shard life budgets + deadlineMs
   resumable updates; all swept by `updateDeadList` backward-splice.
   Push volume is bounded upstream by rate-limited wire events.
+- **Remote projectile lifecycle (verified sealed):** a lost
+  `projectileDestroyed` edge can't leak — every replica carries a
+  fuse/terrain death of its own and `onExploded` releases the
+  `remoteProjectiles` entry whichever way it dies. The wire edge
+  only improves blast accuracy (`snapToContact` to the authority's
+  contact point); the map entry is unmapped at destroy-time, not
+  fade-end, so dead records can't accrue.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
