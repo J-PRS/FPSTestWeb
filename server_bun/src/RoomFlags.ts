@@ -198,6 +198,11 @@ export class RoomFlags {
   throwFor(playerId: string): void {
     const p = this.room.players.getPlayer(playerId);
     if (!p || p.isDead) return;
+    // sim-pos/sim-vel name a poisoned shadow but don't fix it — a NaN
+    // carrier vector here would write a NaN flag every client drops.
+    if (!Number.isFinite(p.position.x + p.position.y + p.position.z
+        + p.velocity.x + p.velocity.y + p.velocity.z
+        + p.rotation.yaw + p.rotation.pitch)) return;
     for (const f of this.flags.values()) {
       if (f.state !== 'carried' || f.carrier !== playerId) continue;
       const cp = Math.cos(p.rotation.pitch), sp = Math.sin(p.rotation.pitch);
@@ -227,9 +232,10 @@ export class RoomFlags {
     // ~20m past the killer and the re-touch took seconds; the flag
     // staying near the kill is what keeps rabbit's hot-potato pace.
     const k = this.rabbit ? 0.15 : 0.5;
-    f.vel.x = (vel?.x ?? 0) * k;
-    f.vel.y = (vel?.y ?? 0) * k + 3;
-    f.vel.z = (vel?.z ?? 0) * k;
+    const v = vel && Number.isFinite(vel.x + vel.y + vel.z) ? vel : undefined;
+    f.vel.x = (v?.x ?? 0) * k;
+    f.vel.y = (v?.y ?? 0) * k + 3;
+    f.vel.z = (v?.z ?? 0) * k;
   }
 
   /** A blast shoved a dropped flag — puntable objective, same deal as
