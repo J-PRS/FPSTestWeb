@@ -305,8 +305,10 @@ function restoreLocalPlayer(ctx: NetCtx, localPlayerState: LocalPlayerState): vo
     deps.logger.info(`Reconnect restore replayed: ${journal.length} inputs from seq ${localPlayerState.inputSeq}`);
   } else {
     player.pos.set(p.x, p.y, p.z);
-    player.yaw = localPlayerState.rotation.yaw;
-    player.pitch = localPlayerState.rotation.pitch;
+    if (Number.isFinite(localPlayerState.rotation.yaw + localPlayerState.rotation.pitch)) {
+      player.yaw = localPlayerState.rotation.yaw;
+      player.pitch = localPlayerState.rotation.pitch;
+    }
     player.vel.set(anchorVel.x, anchorVel.y, anchorVel.z);
   }
   noteLocalSnap();
