@@ -296,6 +296,13 @@ violation instead of a symptom hunt.
   only improves blast accuracy (`snapToContact` to the authority's
   contact point); the map entry is unmapped at destroy-time, not
   fade-end, so dead records can't accrue.
+- **Session-edge world reset (verified sealed):** `gameState` purges
+  volatile FX in place (splice — debug ctxs hold the array by
+  reference), removes remotes the new roster doesn't name (ghost
+  bodies) or that read non-finite, reseats every interp anchor
+  (serverMs is per-room — stale anchors froze remotes mid-rubber-
+  band), and reconciles pickups/deployables/flags/map snapshot
+  rather than leaving old-room residue.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
