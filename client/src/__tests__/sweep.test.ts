@@ -14,7 +14,7 @@ function host(over: Partial<SweepHost> & { from?: [number, number, number]; to?:
   const h: SweepHost & { hits: typeof hits } = {
     pos: new THREE.Vector3(...(over.to ?? [0, 1, 0])),
     prevPos: new THREE.Vector3(...(over.from ?? [0, 1, 0])),
-    config: (({bodyRadius: 0.2,terrainOffset: 0.3,hitMin: 0,hitRate: 0, ...over.config})) as ProjectileConfig,
+    config: ((({bodyRadius: 0.2,terrainOffset: 0.3,hitMin: 0,hitRate: 0, ...over.config}))) as ProjectileConfig,
     canBounce: over.canBounce ?? false,
     hitRadius: over.hitRadius ?? 0,
     hitPoint: new THREE.Vector3(),

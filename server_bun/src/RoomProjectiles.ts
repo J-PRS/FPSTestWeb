@@ -260,7 +260,7 @@ export class RoomProjectiles {
           p.pos.z = t.position.z + proj.stuck.off.z;
         }
       }
-      const from = proj.stuck ? (({ ...p.pos})) : projStep(p, dt, stats.gravity ? GRAVITY : 0);
+      const from = proj.stuck ? ((({ ...p.pos}))) : projStep(p, dt, stats.gravity ? GRAVITY : 0);
       if (p.age >= proj.ttl || p.pos.y < FLOOR_Y) { this.detonate(proj, { ...p.pos}); continue; }
       if (proj.stuck) {continue;} // frozen — only the fuse ends it now
 

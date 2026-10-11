@@ -290,7 +290,7 @@ export class BotRouting {
       home: own.home,
       // Own flag's carrier — chase the thief, not the base; velocity
       // rides along so the pick can lead the run, not the wake.
-      thief: ((t) => t ? ({ ...t.pos, vx: t.vel.x,vz: t.vel.z}) : null)(this.thiefOf(me)),
+      thief: ((t) => t ? (({ ...t.pos, vx: t.vel.x,vz: t.vel.z})) : null)(this.thiefOf(me)),
       // Own flag dropped — anyone close enough touches it home.
       dropped: own.state === 'dropped' ? own.pos : null,
       enemyStand,
@@ -558,7 +558,7 @@ export class BotRouting {
             ? { x: enemyStand.x + mx + px2 - ux * pull,
                 y: enemyFlagY,
                 z: enemyStand.z + mz + pz2 - uz * pull }
-            : (({ ...enemyStand}));
+            : ((({ ...enemyStand})));
         } else {
         const inside = dStand < 80;
         // Re-scored EVERY think — the route stays live to foe movement —

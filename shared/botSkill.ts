@@ -55,7 +55,7 @@ export function skillMods(spec: BotSkillSpec | undefined): BotTierMods {
   if (!spec || spec === 'medium') {return BOT_TIERS.medium;}
   if (typeof spec === 'string') {return BOT_TIERS[spec];}
   const m = BOT_TIERS.medium;
-  const out = (({ ...m})) as BotTierMods;
+  const out = ((({ ...m}))) as BotTierMods;
   for (const k of ['aim', 'move', 'react', 'jitter', 'temper'] as const) {
     const t = spec[k];
     if (t) {out[k] = BOT_TIERS[t][k];}

@@ -309,7 +309,7 @@ export class GameServer {
       maxPlayers: CONFIG.maxPlayers,
       spectators: r.spectators.size || undefined,
       // Live match state so the lobby row shows more than occupancy.
-      scores: r.modeSpec?.teams ? (({ ...r.scores})) : undefined,
+      scores: r.modeSpec?.teams ? ((({ ...r.scores}))) : undefined,
       ffaLeader: r.modeSpec?.ffa
         ? [...r.ffaScores.entries()].toSorted((a, b) => b[1] - a[1])[0]
         : undefined,

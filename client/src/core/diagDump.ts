@@ -144,7 +144,7 @@ function pushPerf(lines: string[]): void {
   const pd = window.__perf?.();
   if (!pd) {return;}
   const {gpu, draws, trisK} = pd as Record<string, number>;
-  const rest = ({ ...pd}) as Record<string, number>;
+  const rest = (({ ...pd})) as Record<string, number>;
   delete rest.gpu; delete rest.draws; delete rest.trisK;
   const phasePairs = Object.entries(rest)
     .filter(([k, v]) => !k.startsWith('max:') && !k.startsWith('w:') && k !== 'frame' && typeof v === 'number')

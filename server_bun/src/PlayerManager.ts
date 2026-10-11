@@ -350,7 +350,7 @@ target.deaths += 1;
     // record whose wire rows every client drops: revive at the last
     // finite anchor instead of spawning an invisible player.
     const spawn = Number.isFinite(picked.x + picked.y + picked.z)
-      ? picked : (({ ...player.lastValidPosition}));
+      ? picked : ((({ ...player.lastValidPosition})));
     player.position = { ...spawn};
     player.rotation = { yaw: 0, pitch: 0 };
     player.velocity = { x: 0, y: 0, z: 0 };

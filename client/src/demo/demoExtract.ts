@@ -38,7 +38,7 @@ export function buildDemoFile(r: DemoRecorder, description = ''): DemoFile {
     frames,
     projectileEvents: [...r.projectileEvents],
     targetEvents,
-    roster: r.roster.map(e => (({ ...e}))),
+    roster: r.roster.map(e => ((({ ...e})))),
     remoteFrames: [...r.remoteFrames],
     ...(r.heightmap ? { heightmap: r.heightmap } : {}),
   };
@@ -84,9 +84,9 @@ export function extractClip(r: DemoRecorder, startTime: number, endTime: number,
   const tgtEvents = collectTargetEvents(r.targetEvents, clipStart, clipEnd);
 
   const [first] = frames;
-  const normFrames = frames.map(f => (({ ...f, timestamp: f.timestamp - clipStart,frameNumber: (f.frameNumber - first.frameNumber + 65_536) % 65_536})));
-  const normProj = projEvents.map(e => (({ ...e, timestamp: e.timestamp - clipStart})));
-  const normTgt = tgtEvents.map(e => (({ ...e, timestamp: e.timestamp - clipStart})));
+  const normFrames = frames.map(f => ((({ ...f, timestamp: f.timestamp - clipStart,frameNumber: (f.frameNumber - first.frameNumber + 65_536) % 65_536}))));
+  const normProj = projEvents.map(e => ((({ ...e, timestamp: e.timestamp - clipStart}))));
+  const normTgt = tgtEvents.map(e => ((({ ...e, timestamp: e.timestamp - clipStart}))));
 
   return {
     header: {
@@ -110,7 +110,7 @@ export function extractClip(r: DemoRecorder, startTime: number, endTime: number,
     frames: normFrames,
     projectileEvents: normProj,
     targetEvents: normTgt,
-    roster: r.roster.map(e => (({ ...e}))),
+    roster: r.roster.map(e => ((({ ...e})))),
     remoteFrames: collectRemoteFrames(r.remoteFrames, clipStart, clipEnd),
     ...(r.heightmap ? { heightmap: r.heightmap } : {}),
   };
