@@ -4,7 +4,7 @@ import { POWERUP } from '../../shared/pickups.ts';
 import type { PlayerState } from './types.ts';
 import { logger } from './logger.ts';
 import { classCanFire } from '../../shared/botClasses.ts';
-import { serverSimmed, BELT_THROW_WEAPONS, beltThrowCost, WeaponType, getWeaponStats, REPAIR_RANGE } from '../../shared/weapons.ts';
+import { serverSimmed, BELT_THROW_WEAPONS, beltThrowCost, WeaponType, getWeaponStats, REPAIR_RANGE, WEAPON_FIRE_INTERVAL_S } from '../../shared/weapons.ts';
 import { finiteVec } from '../../shared/wire.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
 import { ColliderIndex } from '../../shared/solidWorld.ts';
@@ -408,6 +408,24 @@ export class CombatHandler {
       if (recent.length >= 20) { this.reject(playerId, 'Shot', 'fire rate (flood)', undefined, msg.weaponType, msg.shotId); return; }
       recent.push(now);
       this.simmedFireTimes.set(playerId, recent);
+      // Per-weapon cadence law — revived from the retired shotClaims: the
+      // flat 20/s flood gate alone lets a mortar (2.0s interval) claim
+      // ~13 simmed shells/sec. Rolling-second arrival bound per
+      // `${playerId}:${weaponType}`; 0.85× interval slack absorbs input
+      // bunching under loss, so legit burst catch-up passes.
+      const interval = msg.weaponType !== undefined ? WEAPON_FIRE_INTERVAL_S[msg.weaponType as WeaponType] : undefined;
+      if (interval !== undefined) {
+        const key = `${playerId}:${msg.weaponType}`;
+        const win = this.fireWindows.get(key) ?? { start: now, count: 0, lastTs: undefined, arr: [] as number[], violations: 0 };
+        this.fireWindows.set(key, win);
+        win.arr = win.arr.filter(t => now - t < 1000);
+        win.arr.push(now);
+        if (win.arr.length >= Math.ceil(1000 / (interval * 850)) + 2) {
+          win.violations++;
+          this.reject(playerId, 'Shot', `fire rate (cadence: ${win.arr.length}/s)`, undefined, msg.weaponType, msg.shotId);
+          return;
+        }
+      }
     }
     this.deps.emit?.({ type: 'fire', playerId });
     const at = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));

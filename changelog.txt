@@ -1,3 +1,4 @@
+2026-10-11 - fix: per-weapon cadence gate on simmed shotFired intents (mortar could claim ~13/s)
 2026-10-11 - fix: finite gate inside applyDeployHp (roster lane bypassed the event-lane check)
 2026-10-11 - fix: finite gate on offline-bot damage (NaN dmg made unkillable bots)
 2026-10-11 - fix: finite gate on ball damage writes (client replica + noted same hole in shared/ballSim)
