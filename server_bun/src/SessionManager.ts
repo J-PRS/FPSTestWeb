@@ -8,6 +8,7 @@ import { isPerkId } from '../../shared/perks.ts';
 import type { SessionRegistry } from './sessionRegistry.ts';
 import { createHmac, randomBytes } from 'node:crypto';
 import { wallNow } from './wallClock.ts';
+import { simNow, simMs } from './simClock.ts';
 import { windowAllow } from './windowLimit.ts';
 import { roomWord } from './wire.ts';
 
@@ -50,6 +51,7 @@ export class SessionManager {
   // forever, so cap it like the other server-lifetime tables.
   private joinWindows = new Map<string, { count: number; start: number }>();
   private static readonly MAX_JOIN_WINDOWS = 1024;
+  private static readonly RECONNECT_PROTECT_MS = 2500;
   private static readonly JOIN_LIMIT = 5;
   private static readonly JOIN_WINDOW_MS = 60_000;
 
@@ -242,6 +244,10 @@ export class SessionManager {
       try { oldSock.close(1000, 'replaced by reconnect'); } catch { /* gone */ }
     }
     room.introSeq = room.tickSeq; // reclaimer's decode baseline reset too
+    // Reconnect shield: the client warms its pipeline behind the session
+    // veil before dropping the player in — the restored body must not be
+    // killable during that window (visible mechanic, not hidden-gfx).
+    existingPlayer.protectedUntil = simMs(simNow() + SessionManager.RECONNECT_PROTECT_MS);
     room.messages.handleHandshake(playerId, undefined, true);
     // Disconnect cancelled any pending respawn — if they come back dead,
     // re-arm it or the restored corpse stays dead forever

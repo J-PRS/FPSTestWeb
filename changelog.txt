@@ -1,3 +1,24 @@
+2026-10-11 - net: reconnect warmup behind the session veil.
+The veil now drops only after gameState lands AND ~45 stable frames
+(<26ms each) have rendered — the loop draws the scene (no sim, no
+input) while veiled so shader compile + texture upload hitches burn
+off before the player drops in. 180-frame cap keeps it bounded. On
+the server, a reclaim grants ~2.5s protectedUntil — the restored
+body is genuinely unkillable during warmup, not just hidden behind
+the curtain.
+
+2026-10-11 - balls: PhysX-honest bounce floor + up-arrival teleports.
+Sub-threshold contacts (|v.n|<6, =0.2*gravity like PhysX
+bounceThresholdVelocity) now SLIDE — normal cancelled, tangential kept —
+instead of elastic-reflecting a feeble kick; kills the micro-skip storm
+(elastic-on-dunes provably diffuses energy into horizontal, per Phys Rev
+E 107.045001). Sub-6 total impacts park to the stall breaker (offline
+path was missing the rest floor entirely). Teleports now preserve speed
+but redirect mostly-up (upFrac 0.75-0.95, random tilt, 14 floor): a flat
+skimmer re-arriving flat just kept skimming. Median hop apex 1.8->25m,
+<2m hops 36k->14k, true flat spells 469/h @ p90 3.5s. Flag:
+BALL_SLIDE_ENABLED/BALL_SLIDE_VN_MIN in shared/ballSim.ts.
+
 2026-10-11 - trails: quarks emit cut now judges the deposit span (pos+lead vs previousWorldPos), not pos alone — a dt-scaled fallback lead on hitch frames could park the emitter km ahead and paint the whole sky gap
 2026-10-11 - ribbons: view-angle width fade on billboard trails — a
 streak flying along the camera axis used to show its whole re-sided

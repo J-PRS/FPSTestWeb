@@ -54,7 +54,14 @@ export function dropSessionVeil(): void {
   if (sessionVeilLabelTimer) { clearTimeout(sessionVeilLabelTimer); sessionVeilLabelTimer = null; }
   sessionVeil?.remove();
   sessionVeil = null;
+  sessionVeilReady = false;
 }
+
+// gameState landed — the loop may drop the veil once frames stabilize
+// (warmup window: shaders/textures must not compile on the player's
+// first interactive frame).
+let sessionVeilReady = false;
+export function isSessionVeilReady(): boolean { return sessionVeilReady; }
 
 /** While veiled there IS no session — the game loop freezes rather than
  *  simulating a boot world the incoming gameState discards anyway. */
@@ -155,7 +162,9 @@ export function wireWorld(ctx: NetCtx): void {
     }
     applyRoomInfo(ctx, players.length, roomInfo);
     if (localPlayerState) {restoreLocalPlayer(ctx, localPlayerState);}
-    dropSessionVeil(); // state is real now — default spawn never painted
+    // Real state landed — the loop drops the veil once frames stabilize
+    // (warmup window; the 8s timer remains the connect-fail escape).
+    sessionVeilReady = true;
   };
 }
 

@@ -31,7 +31,7 @@ import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { createScene } from '../world/scene.js';
 import { updateDirectionalFog, fogHorizon, syncFxFog } from '../world/directionalFog.js';
 import { updateCubeSky, getInteriorsEpoch } from './net/mapAssets.js';
-import { isSessionVeiled } from './net/world.js';
+import { isSessionVeiled, dropSessionVeil, isSessionVeilReady } from './net/world.js';
 import { refreshColliderGizmoVisibility } from '../world/mapStructures.js';
 import type { createRenderer } from '../core/renderer.js';
 import type { Terrain } from '../world/terrain.js';
@@ -179,6 +179,11 @@ export interface LoopState {
    *  instead of hitching their first visible frame. */
   rewarmT?: number;
   lastRemoteCount?: number;
+  /** Veil warmup — sub-26ms frames rendered behind the session veil.
+   *  The veil drops only once gameState landed AND frames are stable,
+   *  so first-draw compiles/uploads happen off the player's clock. */
+  veilStable: number;
+  veilFrames: number;
 }
 
 // fxJob EMA/max bookkeeping lives in loopPerf — see fxJobSample there.
@@ -678,7 +683,7 @@ function fpsCapAllows(st: LoopState, rawElapsed: number): boolean {
 export function createGameLoop(deps: GameLoopDeps) {
   let lastTime = 0;
   let renderElapsed = 0;
-  const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, gpuLevel: 0, cpuLevel: 0, cpuBound: false, headroomAccum: 0, autoPixel: false, fxCursor: 0, fxJobs: [], shadowAcc: 0, renderAcc: 0, warmN: 0, warmed: false };
+  const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, gpuLevel: 0, cpuLevel: 0, cpuBound: false, headroomAccum: 0, autoPixel: false, fxCursor: 0, fxJobs: [], shadowAcc: 0, renderAcc: 0, warmN: 0, warmed: false, veilStable: 0, veilFrames: 0 };
 
   // stats.js perf panels — FPS/MS/MB in a row along the bottom-right,
   // toggled with ` (backquote). stats.js only renders one panel per
@@ -726,10 +731,21 @@ export function createGameLoop(deps: GameLoopDeps) {
     const dt = Math.min(Number.isFinite(rawElapsed) ? Math.max(rawElapsed, 0) : 0, MAX_DELTA_TIME);
     if (Number.isFinite(time)) {lastTime = time;}
     fpsWatchdog(deps, st, budget, perf, rawElapsed, time);
-    // Veiled = waiting on gameState — the boot world under the curtain
-    // is discarded on restore, so don't sim it, render it, or let input
-    // fire into it. Socket events (not this loop) deliver the state.
-    if (isSessionVeiled()) {return;}
+    // Veiled = waiting on gameState — don't sim or take input, but DO
+    // render: shader/pipeline warmup needs real draws or it fires on
+    // the player's first interactive frame. The veil drops once state
+    // landed AND ~45 stable frames ran (180-frame cap = safety valve).
+    if (isSessionVeiled()) {
+      deps.rendererSetup.renderer.render(deps.sceneSetup.scene, deps.camera);
+      st.veilFrames++;
+      if (rawElapsed < 0.026) { st.veilStable++; } else { st.veilStable = 0; }
+      if (isSessionVeilReady() && (st.veilStable >= 45 || st.veilFrames >= 180)) {
+        st.veilStable = 0;
+        st.veilFrames = 0;
+        dropSessionVeil();
+      }
+      return;
+    }
     perf.begin(deps.rendererSetup.renderer);
 
     // Hidden tabs get ~1 rAF/sec — dt clamps to 0.05 so game logic runs in
