@@ -72,7 +72,11 @@ export class PlayerManager {
   });
 
   addPlayer(playerId: string, team?: TeamId, perk: string = 'none', armorClass: string = 'medium', isBot = false): PlayerState {
-    const spawn = this.spawnPicker.pick(playerId, team);
+    const picked = this.spawnPicker.pick(playerId, team);
+    // NaN pick = invisible player server-wide (clients drop its rows) —
+    // a mid-map drop beats a spawn that broadcasts nothing.
+    const spawn = Number.isFinite(picked.x + picked.y + picked.z)
+      ? picked : { x: 0, y: 50, z: 0 };
     const cls = armorClass === 'light' || armorClass === 'heavy' ? armorClass : 'medium';
     const maxHealth = CONFIG.playerMaxHealth + perkMods(perk).maxHealth + CLASS_STATS[cls].maxHealth;
 
@@ -341,7 +345,12 @@ export class PlayerManager {
     // drift from the formula; this catches a legal-but-absurd result.
     inv('pool-positive', player.maxHealth > 0, { id: playerId, max: player.maxHealth });
 
-    const spawn = this.spawnPicker.pick(playerId, player.team);
+    const picked = this.spawnPicker.pick(playerId, player.team);
+    // Degenerate field / poisoned spot table → NaN spawn seeds a NaN
+    // record whose wire rows every client drops: revive at the last
+    // finite anchor instead of spawning an invisible player.
+    const spawn = Number.isFinite(picked.x + picked.y + picked.z)
+      ? picked : { ...player.lastValidPosition };
     player.position = { ...spawn };
     player.rotation = { yaw: 0, pitch: 0 };
     player.velocity = { x: 0, y: 0, z: 0 };
