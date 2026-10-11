@@ -39,6 +39,15 @@ Cannon `cnSeg`/`cnHoop` and Bombard `bbSeg`/`bbHoop` are identical duplicated cl
 (build a segment at running z, advance; crowned hoop = two tapered rings). Revolver's
 `bseg` is a third variant. Hoist: `const st = mkStack(group); st.seg(...); st.hoop(r)`.
 
+## Sizing (as of 2026-10-10)
+
+- 1,522 lines of builders: ballistic 844 + energy 394 + sidearm 284. Kit itself 447.
+- Realistic savings: mkBox ~90 · mkTube offsets ~30 · radialRepeat spin ~15 ·
+  mirrorX ~15 · segStack ~15 → **~165 lines out of the builders (~11%)**, minus
+  ~40 lines of kit additions → ~10% net.
+- Ceiling is real: after this pass, what's left is mostly genuine per-weapon
+  silhouette logic, not boilerplate.
+
 ## Deliberately left alone
 
 - Extrude/shape grips (pistol, revolver plowhandle) — one-off profiles, the curve IS the design.
