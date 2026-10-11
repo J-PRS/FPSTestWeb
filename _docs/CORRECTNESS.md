@@ -193,6 +193,10 @@ violation instead of a symptom hunt.
 - **Join/roster coherence:** `hasReceivedPosition` gates in-world
   membership (unreported joiners spawn no ghost mesh); `joinAnnounced`
   once-per-record; wireIds ship inline in the join snapshot.
+- **Ordering (verified):** stale `tickUpdate` racing `playerLeft` can no
+  longer resurrect a phantom remote — `onPlayerUpdate` requires a roster
+  record (upsert always precedes it for live rows). Membership edges
+  (joined/respawn) mint by design and are ws-order safe.
 - **Lifecycle/leak hygiene (verified):** `RemoteSet.remove`/`prune`
   dispose + fire onRemove; stamp ledgers all bounded (`recentKb` 8,
   `selfBlastStamps` 8, `dmgEchoes` 32+900ms, `shellFates` 64+15s,
