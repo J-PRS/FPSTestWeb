@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, assert, beforeEach, afterEach, vi } from 'vitest';
 import * as THREE from 'three';
 import { RemoteInterp, type InterpHost } from '../entities/remoteInterp.js';
 
@@ -44,8 +44,8 @@ interface Packet { emitT: number; arriveT: number; s: ReturnType<typeof truth>; 
 const q0 = (errs: number[], p: number) => errs[Math.min(errs.length - 1, Math.floor(errs.length * p))]!.toFixed(2);
 
 function runLink(opts: { transit: number; jitter: number; loss: number; secs: number; silentFrom?: number; silentTo?: number; seed?: number; tickMs?: number }) {
-  let rng = opts.seed ?? 12345;
-  const rand = () => (rng = (rng * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  let rng = opts.seed ?? 12_345;
+  const rand = () => (rng = (rng * 1_103_515_245 + 12_345) & 0x7F_FF_FF_FF) / 0x7F_FF_FF_FF;
 
   const h = new Host();
   const interp = new RemoteInterp(h);
@@ -60,7 +60,7 @@ function runLink(opts: { transit: number; jitter: number; loss: number; secs: nu
 
   const errs: number[] = [];
   const snaps: number[] = [];
-  let prev = new THREE.Vector3().copy(h.position);
+  const prev = new THREE.Vector3().copy(h.position);
 
   const totalFrames = Math.floor(opts.secs * 1000 / FRAME_MS);
   for (let f = 0; f < totalFrames; f++) {
@@ -76,7 +76,7 @@ function runLink(opts: { transit: number; jitter: number; loss: number; secs: nu
         queue.push({ emitT: now, arriveT: now + opts.transit + (rand() * 2 - 1) * opts.jitter, s });
       }
     }
-    while (queue.length && queue[0]!.arriveT <= now) {
+    while (queue.length > 0 && queue[0]!.arriveT <= now) {
       const p = queue.shift()!;
       interp.onUpdate(p.s, { yaw: 0, pitch: 0 }, opts.transit * 2, { x: p.s.vx, y: p.s.vy, z: p.s.vz }, p.emitT);
     }
@@ -93,13 +93,13 @@ function runLink(opts: { transit: number; jitter: number; loss: number; secs: nu
     // past speed×frame + slack is a teleport the eye sees.
     const jump = h.position.distanceTo(prev);
     const budget = Math.max(1.5, CRUISE * (FRAME_MS / 1000)) + 0.75;
-    if (jump > budget) snaps.push(jump);
+    if (jump > budget) {snaps.push(jump);}
     prev.copy(h.position);
   }
   errs.sort((a, b) => a - b);
   console.log(`[felt] p50=${q0(errs, 0.5)} p95=${q0(errs, 0.95)} p99=${q0(errs, 0.99)} max=${errs[errs.length - 1]!.toFixed(2)} snaps=${snaps.length}`);
   const q = (p: number) => errs[Math.min(errs.length - 1, Math.floor(errs.length * p))]!;
-  return { p50: q(0.5), p95: q(0.95), p99: q(0.99), max: errs[errs.length - 1]!, snaps: snaps.length, snapMax: snaps.length ? Math.max(...snaps) : 0 };
+  return { p50: q(0.5), p95: q(0.95), p99: q(0.99), max: errs[errs.length - 1]!, snaps: snaps.length, snapMax: snaps.length > 0 ? Math.max(...snaps) : 0 };
 }
 
 describe('felt-state canary (rendered remote vs truth)', () => {
@@ -111,14 +111,14 @@ describe('felt-state canary (rendered remote vs truth)', () => {
     // At ~44 m/s the interp delay (~150ms) alone prices ~6.5m of truth lag
     // the shooter also sees — the felt budget is what a led broadcast aims
     // for, not zero. The hard floor is no visible warp at all.
-    expect(r.snaps, JSON.stringify(r)).toBe(0);
+    assert.equal(r.snaps, 0, JSON.stringify(r));
     expect(r.p95).toBeLessThan(10);
     expect(r.max).toBeLessThan(14);
   });
 
   it('150ms-class link (75ms transit, ±40ms jitter, 3% loss): stays inside the speed-scaled budget', () => {
     const r = runLink({ transit: 75, jitter: 40, loss: 0.03, secs: 20, seed: 777 });
-    expect(r.snaps, JSON.stringify(r)).toBe(0);
+    assert.equal(r.snaps, 0, JSON.stringify(r));
     // ~44 m/s × ~250ms effective render lag — the same speed-scaled ~5m
     // budget the correction path uses, plus the true interp delay.
     expect(r.p95).toBeLessThan(18);
@@ -132,7 +132,7 @@ describe('felt-state canary (rendered remote vs truth)', () => {
     // freshness — the ghost rides ~250ms-old truth between arrivals and
     // must not step at the send rate.
     const r = runLink({ transit: 40, jitter: 25, loss: 0, secs: 15, tickMs: 250, seed: 99 });
-    expect(r.snaps, JSON.stringify(r)).toBe(0);
+    assert.equal(r.snaps, 0, JSON.stringify(r));
     // ~44 m/s × ~300ms effective lag ≈ 13m — the delay cap bounds it,
     // the alternation between buffer and DR must not double it.
     expect(r.p95).toBeLessThan(16);
@@ -144,7 +144,7 @@ describe('felt-state canary (rendered remote vs truth)', () => {
     // between clumps, then several packets at once. The same flap as the
     // suppressed case, arrived at by the wire instead of by tiering.
     const r = runLink({ transit: 40, jitter: 30, loss: 0.15, secs: 15, tickMs: 50, seed: 314 });
-    expect(r.snaps, JSON.stringify(r)).toBe(0);
+    assert.equal(r.snaps, 0, JSON.stringify(r));
     expect(r.p95).toBeLessThan(12);
     expect(r.max).toBeLessThan(20);
   });
@@ -181,7 +181,7 @@ describe('felt-state canary (rendered remote vs truth)', () => {
       h.previousPosition.copy(h.position);
       interp.step(FRAME / 1000, false);
     }
-    expect(h.position.distanceTo(new THREE.Vector3(tp.x, tp.y, tp.z))).toBeLessThan(1.0);
+    expect(h.position.distanceTo(new THREE.Vector3(tp.x, tp.y, tp.z))).toBeLessThan(1);
   });
 
   it('respawn reset re-seats instantly on the corpse-free position', () => {
@@ -224,7 +224,7 @@ describe('felt-state canary (rendered remote vs truth)', () => {
 
   it('silence gap + reconnect: DR runs, rejoin converges with zero snaps', () => {
     const r = runLink({ transit: 75, jitter: 40, loss: 0.02, secs: 20, silentFrom: 8000, silentTo: 9200, seed: 4242 });
-    expect(r.snaps, JSON.stringify(r)).toBe(0);
+    assert.equal(r.snaps, 0, JSON.stringify(r));
     expect(r.max).toBeLessThan(60); // a 1.2s dead-reckon may stray ~v·gap, but never warps
   });
 

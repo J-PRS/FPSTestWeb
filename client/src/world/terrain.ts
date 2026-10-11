@@ -109,6 +109,8 @@ function createFlatGridGeometry(divisions: number, borderCells = 1): THREE.Buffe
 }
 
 export class Terrain {
+  /** Alt+Q terrainDiv probe target — set at construction. */
+  static dbg: Terrain | null = null;
   private scene: THREE.Scene;
   private levels: ClipmapLevel[] = [];
   private heightTexture: THREE.DataTexture;
@@ -163,9 +165,9 @@ export class Terrain {
     // overlap border). Outer rings get a coarser grid: at 800m+ a heightmap
     // texel is already tens of meters, so 80-div tessellation only buys
     // triangles nobody can see.
-    const divisions = CLIPMAP_LEVELS[0].divisions;
+    const {divisions} = CLIPMAP_LEVELS[0];
     this.gridGeo = createFlatGridGeometry(divisions, 1);
-    const gridGeo = this.gridGeo;
+    const {gridGeo} = this;
     const outerGeo = createFlatGridGeometry(divisions / 2, 1);
     // Wireframe as real LINES (same path as the yellow collider lattice)
     // — Mesh.wireframe still rasterizes triangles that co-planar-fight
@@ -221,19 +223,19 @@ export class Terrain {
           innerGridOrigin: { value: new THREE.Vector2(0, 0) },
           // Seam weld: outer-edge verts morph onto the parent's drawn
           // chord — needs the coarser level's real lattice step + origin.
-          parentSpacing:   { value: i + 1 < CLIPMAP_LEVELS.length ? vertSpacing(i + 1) : 0.0 },
+          parentSpacing:   { value: i + 1 < CLIPMAP_LEVELS.length ? vertSpacing(i + 1) : 0 },
           parentOrigin:    { value: new THREE.Vector2(0, 0) },
           // Outermost level dissolves into fog near its world edge — every
           // inner level's outer edge is covered by the next ring.
-          edgeHalf:        { value: i === CLIPMAP_LEVELS.length - 1 ? levelScale * 0.5 : 0.0 },
+          edgeHalf:        { value: i === CLIPMAP_LEVELS.length - 1 ? levelScale * 0.5 : 0 },
           sunDir:          { value: sunDir.clone().normalize() },
-          sunColor:        { value: new THREE.Color(1.0, 0.94, 0.8) },
+          sunColor:        { value: new THREE.Color(1, 0.94, 0.8) },
           ambientColor:    { value: new THREE.Color(0.38, 0.45, 0.55) },
           hscale:          { value: HSCALE },
           terrainPreset:   { value: 1 },
-          fogColor:        { value: new THREE.Color(0xbbd0e8) },
-          fogStart:        { value: 80.0 },
-          fogEnd:          { value: 400.0 },
+          fogColor:        { value: new THREE.Color(0xBB_D0_E8) },
+          fogStart:        { value: 80 },
+          fogEnd:          { value: 400 },
           scorchData:      { value: this.scorchArr },
           scorchEmber:     { value: this.scorchEmberArr },
           splatData:       { value: this.splatArr },
@@ -284,7 +286,7 @@ export class Terrain {
       });
     }
 
-    dbgTerrain = this;
+    Terrain.dbg = this;
     registerDiag('terrainDiv', () => ({ terrainDiv: this.divergenceStats() }));
   }
 
@@ -303,9 +305,9 @@ export class Terrain {
     }
     return {
       samples: n,
-      meanSigned_m: +(sum / n).toFixed(3),   // + = collider above visual
-      meanAbs_m: +(sumAbs / n).toFixed(3),
-      maxAbs_m: +maxAbs.toFixed(3),
+      meanSigned_m: Number((sum / n).toFixed(3)),   // + = collider above visual
+      meanAbs_m: Number((sumAbs / n).toFixed(3)),
+      maxAbs_m: Number(maxAbs.toFixed(3)),
       worstAt: `${worstX},${worstZ}m`,
     };
   }
@@ -316,7 +318,7 @@ export class Terrain {
    *  callers reseat the player right after to avoid a frame under terrain. */
   reloadHeightmap(): void {
     const hm = getHeightmapData();
-    if (!hm) return;
+    if (!hm) {return;}
     this.heightTexture.dispose();
     this.heightTexture = new THREE.DataTexture(
       hm.data, hm.size, hm.size, THREE.RGBAFormat, THREE.UnsignedByteType
@@ -366,11 +368,11 @@ export class Terrain {
    *  replaced texture here is what keeps map rotation off GPU memory. */
   private albedoTex: THREE.Texture | null = null;
   setAlbedo(tex: THREE.Texture | null): void {
-    if (this.albedoTex && this.albedoTex !== tex) this.albedoTex.dispose();
+    if (this.albedoTex && this.albedoTex !== tex) {this.albedoTex.dispose();}
     this.albedoTex = tex;
     for (const level of this.levels) {
       level.material.uniforms.albedoMap.value = tex;
-      level.material.uniforms.useAlbedo.value = !!tex;
+      level.material.uniforms.useAlbedo.value = Boolean(tex);
     }
   }
 
@@ -382,15 +384,15 @@ export class Terrain {
   setMaterialBlend(tiles: THREE.Texture | null, alphaA: THREE.Texture | null,
                    alphaB: THREE.Texture | null, tileMeters: number, means: number[] | null): void {
     const next = [tiles, alphaA, alphaB].filter((t): t is THREE.Texture => t !== null);
-    for (const t of this.matsTex) if (!next.includes(t)) t.dispose();
+    for (const t of this.matsTex) {if (!next.includes(t)) {t.dispose();}}
     this.matsTex = next;
     for (const level of this.levels) {
       level.material.uniforms.matTiles.value = tiles;
       level.material.uniforms.matAlphaA.value = alphaA;
       level.material.uniforms.matAlphaB.value = alphaB;
       level.material.uniforms.tileMeters.value = tileMeters;
-      if (means) level.material.uniforms.tileMeans.value.set(means);
-      level.material.uniforms.useMats.value = !!tiles;
+      if (means) {level.material.uniforms.tileMeans.value.set(means);}
+      level.material.uniforms.useMats.value = Boolean(tiles);
     }
   }
 
@@ -443,7 +445,7 @@ export class Terrain {
       this.fieldRingArr[o] = s.x;
       this.fieldRingArr[o + 1] = s.z;
       // Sign on r selects the shader mode: + flat annulus, − dome contour.
-      this.fieldRingArr[o + 2] = s.domeY !== undefined ? -s.r : s.r;
+      this.fieldRingArr[o + 2] = s.domeY === undefined ? s.r : -s.r;
       this.fieldRingArr[o + 3] = s.intensity;
       this.fieldYArr[i] = s.domeY ?? 0;
       this.fieldTintArr[i * 3] = s.tint[0];
@@ -474,14 +476,14 @@ export class Terrain {
   // and `ember` the caller animates; pass it back to removeScorch when done.
   addScorch(x: number, z: number, r: number) {
     const entry = { x, z, r, intensity: 0.5, ember: 0 };
-    if (this.scorchList.length >= 16) this.scorchList.shift();
+    if (this.scorchList.length >= 16) {this.scorchList.shift();}
     this.scorchList.push(entry);
     return entry;
   }
 
   removeScorch(entry: { x: number; z: number; r: number; intensity: number; ember: number }): void {
     const i = this.scorchList.indexOf(entry);
-    if (i >= 0) this.scorchList.splice(i, 1);
+    if (i !== -1) {this.scorchList.splice(i, 1);}
   }
 
   // Projected ichor stain — same handle contract as addScorch. 24 slots,
@@ -489,29 +491,29 @@ export class Terrain {
   // dx/dz/stretch smear the stain along a landing direction (0 = round pool).
   addSplat(x: number, z: number, r: number, cr: number, cg: number, cb: number, dx = 0, dz = 0, stretch = 0): Splat {
     const entry: Splat = { x, z, r, intensity: 0, cr, cg, cb, dx, dz, stretch };
-    if (this.splatList.length >= 24) this.splatList.shift();
+    if (this.splatList.length >= 24) {this.splatList.shift();}
     this.splatList.push(entry);
     return entry;
   }
 
   removeSplat(entry: Splat): void {
     const i = this.splatList.indexOf(entry);
-    if (i >= 0) this.splatList.splice(i, 1);
+    if (i !== -1) {this.splatList.splice(i, 1);}
   }
 
   // Projected field-ring decal — same contract as addScorch: mutate the
   // returned handle's intensity/tint to animate, pass it back to release.
   addFieldRing(x: number, z: number, r: number, tint: readonly [number, number, number], domeY?: number): FieldRing {
     const entry: FieldRing = { x, z, r, intensity: 0.5, tint };
-    if (domeY !== undefined) entry.domeY = domeY;
-    if (this.fieldRingList.length >= 8) this.fieldRingList.shift();
+    if (domeY !== undefined) {entry.domeY = domeY;}
+    if (this.fieldRingList.length >= 8) {this.fieldRingList.shift();}
     this.fieldRingList.push(entry);
     return entry;
   }
 
   removeFieldRing(entry: FieldRing): void {
     const i = this.fieldRingList.indexOf(entry);
-    if (i >= 0) this.fieldRingList.splice(i, 1);
+    if (i !== -1) {this.fieldRingList.splice(i, 1);}
   }
 
   updateFog(color: THREE.Color, start: number, end: number): void {
@@ -531,7 +533,7 @@ export class Terrain {
     this.gridGeo.dispose();
     this.heightTexture.dispose();
     this.albedoTex?.dispose();
-    for (const t of this.matsTex) t.dispose();
+    for (const t of this.matsTex) {t.dispose();}
     this.matsTex = [];
   }
 
@@ -542,8 +544,8 @@ export class Terrain {
   // ---- F1 debug wireframes: visual clipmap lines + collider lattice ----
   private wireMeshes: THREE.LineSegments[] = [];
   private colliderWire: THREE.LineSegments | null = null;
-  private colliderWireCx = NaN;
-  private colliderWireCz = NaN;
+  private colliderWireCx = Number.NaN;
+  private colliderWireCz = Number.NaN;
   private colliderWireField: object | null = null;
   private debugWireOn = false;
   // Last player pos seen via setDebugWire — feeds the Alt+Q divergence
@@ -562,7 +564,7 @@ export class Terrain {
       this.debugWireOn = on;
       for (const w of this.wireMeshes) { w.visible = on; }
       if (this.colliderWire) { this.colliderWire.visible = on; }
-      if (on) { this.colliderWireCx = NaN; } // force rebuild on enable
+      if (on) { this.colliderWireCx = Number.NaN; } // force rebuild on enable
     }
     if (!on) { return; }
     const hf = getHeightfield();
@@ -594,7 +596,7 @@ export class Terrain {
         const wz = cz - half + iz * step;
         const o = (iz * (n + 1) + ix) * 3;
         verts[o] = wx;
-        verts[o + 1] = this.getHeight(wx, wz) + 0.15; // float hair above the surface or lines z-fight the solid
+        verts[o + 1] = this.getHeight(wx, wz); // depthTest is off — no lift needed; offset would fake divergence
         verts[o + 2] = wz;
       }
     }
@@ -610,16 +612,7 @@ export class Terrain {
         }
       }
     }
-    if (!this.colliderWire) {
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-      this.colliderWire = new THREE.LineSegments(geo,
-        new THREE.LineBasicMaterial({ color: 0xffcc00, depthTest: false }));
-      this.colliderWire.frustumCulled = false;
-      this.colliderWire.renderOrder = 901; // above the cyan clipmap wires
-      // The scene ref wasn't kept — borrow a mesh's parent.
-      this.levels[0]?.mesh.parent?.add(this.colliderWire);
-    } else {
+    if (this.colliderWire) {
       const attr = this.colliderWire.geometry.getAttribute('position') as THREE.BufferAttribute;
       if (attr.count === pos.length / 3) {
         attr.set(pos);
@@ -627,6 +620,15 @@ export class Terrain {
         this.colliderWire.geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
       }
       this.colliderWire.geometry.getAttribute('position').needsUpdate = true;
+    } else {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      this.colliderWire = new THREE.LineSegments(geo,
+        new THREE.LineBasicMaterial({ color: 0xFF_CC_00, depthTest: false }));
+      this.colliderWire.frustumCulled = false;
+      this.colliderWire.renderOrder = 901; // above the cyan clipmap wires
+      // The scene ref wasn't kept — borrow a mesh's parent.
+      this.levels[0]?.mesh.parent?.add(this.colliderWire);
     }
     this.colliderWire.visible = this.debugWireOn;
   }
@@ -652,7 +654,7 @@ export class Terrain {
    *  finest whose snapped square contains the point — the same
    *  coverage rule the shader's inner-hole discard uses. */
   getRenderedHeight(wx: number, wz: number): number {
-    let spacing = CLIPMAP_LEVELS[0].spacing;
+    let {spacing} = CLIPMAP_LEVELS[0];
     for (const level of this.levels) {
       if (Math.abs(wx - level.gridOrigin.x) < level.halfSize && Math.abs(wz - level.gridOrigin.y) < level.halfSize) {
         spacing = level.spacing;
@@ -676,10 +678,9 @@ export class Terrain {
 
 // Plain Alt+Q prints bespoke lines, not registerDiag sections — export
 // the one-liner for diagDump.ts.
-let dbgTerrain: Terrain | null = null;
 /** One-line form for the plain (non-verbose) Alt+Q dump. */
 export function terrainDivLine(): string | null {
-  const s = dbgTerrain?.divergenceStats();
-  if (!s) return null;
+  const s = Terrain.dbg?.divergenceStats();
+  if (!s) {return null;}
   return `terrainDiv: collider-vs-drawn over ${s['samples']} samples r=40m — signed=${s['meanSigned_m']}m meanAbs=${s['meanAbs_m']}m max=${s['maxAbs_m']}m @(${s['worstAt']}) (signed>0 = collider above visual)`;
 }

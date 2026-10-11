@@ -64,7 +64,7 @@ export class CreatureSim {
 
   private aliveCount(species: string): number {
     let n = 0;
-    for (const c of this.crawlers.values()) if (!c.dead && c.species === species) n++;
+    for (const c of this.crawlers.values()) {if (!c.dead && c.species === species) {n++;}}
     return n;
   }
 
@@ -122,7 +122,7 @@ export class CreatureSim {
   roster(): { id: number; position: Vec3; velocity: Vec3; uber: boolean; seed: number; species: string; state: string; targetId: string | null; tp: Vec3 | null; t: number; sk?: number }[] {
     const out = [];
     for (const c of this.crawlers.values()) {
-      if (c.dead) continue;
+      if (c.dead) {continue;}
       out.push(rosterRow(WORLD_MODEL.creature!, 'id', c.id, {
         position: { x: c.x, y: c.y, z: c.z },
         velocity: { x: c.vx, y: c.vy, z: c.vz },
@@ -172,7 +172,7 @@ export class CreatureSim {
 
   private edge(c: SimBeing, kind: 'retarget' | 'windup' | 'pounce' | 'bite' | 'detonate' | 'charge' | 'fire' | 'blink'): void {
     this.brain.noteEdge(c.id);
-    if (kind === 'retarget') this.skipCount.set(c.id, (this.skipCount.get(c.id) ?? 0) + 1);
+    if (kind === 'retarget') {this.skipCount.set(c.id, (this.skipCount.get(c.id) ?? 0) + 1);}
     const msg = verbPayload(WORLD_MODEL.creature!, 'update', 'id', c.id, {
       kind, sk: this.skipCount.get(c.id) ?? 0,
       // For 'blink' the position field carries the committed DESTINATION —
@@ -192,7 +192,7 @@ export class CreatureSim {
     if (n % FAR_SKIP === 0) { this.broadcast(msg); return; }
     for (const [pid, p] of this.players.getAllPlayers()) {
       const d2 = (p.position.x - c.x) ** 2 + (p.position.z - c.z) ** 2;
-      if (d2 > NEAR_D2) continue;
+      if (d2 > NEAR_D2) {continue;}
       this.sendTo(pid, msg);
     }
   }
@@ -202,9 +202,9 @@ export class CreatureSim {
   armorBlast(pos: SimVec, radius: number, amount: number): void {
     const r2 = radius * radius;
     for (const c of this.crawlers.values()) {
-      if (c.dead) continue;
+      if (c.dead) {continue;}
       const d2 = (c.x - pos.x) ** 2 + (c.y - pos.y) ** 2 + (c.z - pos.z) ** 2;
-      if (d2 > r2) continue;
+      if (d2 > r2) {continue;}
       healPool(c, amount, c.maxHealth * ARMORNADE_OVERCAP);
     }
   }
@@ -214,11 +214,11 @@ export class CreatureSim {
    *  hit. skipId keeps a direct-hit crawler from eating blast twice. */
   splashDamage(ownerId: string, pos: SimVec, radius: number, maxDamage: number, skipId?: number): void {
     for (const c of this.crawlers.values()) {
-      if (c.dead || c.id === skipId) continue;
+      if (c.dead || c.id === skipId) {continue;}
       const reach = 'radius' in c ? c.radius : 1.4;
       const d = Math.max(0, Math.hypot(c.x - pos.x, c.y - pos.y, c.z - pos.z) - reach);
       const dmg = aoeDamage(maxDamage, d, radius);
-      if (dmg >= 1) this.handleHit(ownerId, c.id, dmg);
+      if (dmg >= 1) {this.handleHit(ownerId, c.id, dmg);}
     }
   }
 
@@ -237,7 +237,7 @@ export class CreatureSim {
     const back = backMs / 1000;
     let best: { id: number; t: number; d: number } | null = null;
     for (const c of this.crawlers.values()) {
-      if (c.dead) continue;
+      if (c.dead) {continue;}
       // backMs rewinds along velocity — shooter rays validate against
       // the rendered ghost, not sim-now. Linear only: species gravity
       // isn't uniform and hop arcs barely move in ~200ms.
@@ -245,9 +245,9 @@ export class CreatureSim {
         : { x: c.x - c.vx * back, y: c.y + 1 - c.vy * back, z: c.z - c.vz * back };
       const rad = 'radius' in c ? (c.radius as number) : 1.4;
       const d = segPointDist(from, to, center);
-      if (d > rad + extraReach) continue;
+      if (d > rad + extraReach) {continue;}
       const t = segPointT(from, to, center);
-      if (!best || t < best.t) best = { id: c.id, t, d };
+      if (!best || t < best.t) {best = { id: c.id, t, d };}
     }
     return best;
   }
@@ -259,12 +259,12 @@ export class CreatureSim {
     const stats = getWeaponStats(WeaponType.Melee);
     const reach = stats.aoeRadius, dmg = MELEE_CREATURE_DAMAGE;
     for (const c of this.crawlers.values()) {
-      if (c.dead) continue;
+      if (c.dead) {continue;}
       const rad = 'radius' in c ? (c.radius as number) : 1.4;
       const dx = c.x - pos.x, dy = c.y - pos.y, dz = c.z - pos.z;
       const d = Math.hypot(dx, dy, dz);
-      if (d > reach + rad || d < 1e-6) continue;
-      if ((dx / d) * dir.x + (dy / d) * dir.y + (dz / d) * dir.z < MELEE_ARC_DOT) continue;
+      if (d > reach + rad || d < 1e-6) {continue;}
+      if ((dx / d) * dir.x + (dy / d) * dir.y + (dz / d) * dir.z < MELEE_ARC_DOT) {continue;}
       this.handleHit(ownerId, c.id, dmg);
     }
   }
@@ -273,14 +273,14 @@ export class CreatureSim {
    *  on net-driven creatures, pull flips it. Without it a blast visibly
    *  throws them and the next segment yanks them back. */
   knock(pos: SimVec, radius: number, force: number, pull = false): void {
-    if (!Number.isFinite(pos.x + pos.y + pos.z + radius + force)) return;
+    if (!Number.isFinite(pos.x + pos.y + pos.z + radius + force)) {return;}
     const s = pull ? -1 : 1;
     for (const c of this.crawlers.values()) {
-      if (c.dead) continue;
+      if (c.dead) {continue;}
       const rad = 'radius' in c ? (c.radius as number) : 1.4;
       const dx = c.x - pos.x, dy = c.y - pos.y, dz = c.z - pos.z;
       const d = Math.hypot(dx, dy, dz);
-      if (d > radius + rad || d < 1e-6) continue;
+      if (d > radius + rad || d < 1e-6) {continue;}
       c.vx += (dx / d) * force * s;
       c.vy += (dy / d) * force * s;
       c.vz += (dz / d) * force * s;
@@ -291,13 +291,13 @@ export class CreatureSim {
    *  real validation is anticheat-phase). Returns whether it killed. */
   handleHit(playerId: string, id: number, damage: number): HitVerdict {
     const c = this.crawlers.get(id);
-    if (c?.dead) return { killed: false, reason: 'deadball' };
+    if (c?.dead) {return { killed: false, reason: 'deadball' };}
     if (!c || !this.field) {
       logger[this.field ? 'debug' : 'warn']('crawlerHit dropped: unknown id', { playerId, id });
       return { killed: false, reason: 'unknown' };
     }
     const claimer = this.players.getPlayer(playerId);
-    if (!claimer) return { killed: false, reason: 'noclaimer' };
+    if (!claimer) {return { killed: false, reason: 'noclaimer' };}
     const d2 = (claimer.position.x - c.x) ** 2 + (claimer.position.y - c.y) ** 2 + (claimer.position.z - c.z) ** 2;
     if (d2 > 600 * 600) {
       logger.warn('crawlerHit dropped: out of range', { playerId, id });
@@ -305,7 +305,7 @@ export class CreatureSim {
     }
     const dmg = Math.max(1, Math.min(MAX_HIT_CLAIM_DMG, damage));
     const dead = SPECIES_FAMILY[c.family].damage(c, dmg);
-    if (dead) this.kill(c, playerId);
+    if (dead) {this.kill(c, playerId);}
     // Stagger is a timer edge — the next hop decision diverges only if a
     // predictor skips it, and the resync heartbeat bounds that drift.
     return { killed: dead };
@@ -323,14 +323,14 @@ export class CreatureSim {
     if (isBaneling(c)) { this.edge(c, 'detonate'); this.onDetonate?.(c); }
     const pos = { x: c.x, y: c.y, z: c.z };
     this.broadcast(verbPayload(WORLD_MODEL.creature!, 'gone', 'id', c.id, { position: pos, by }) as ServerMessage);
-    if (by) this.onKilled?.(by, pos);
+    if (by) {this.onKilled?.(by, pos);}
   }
 
   /** Gate-adoption cull: every crawler leaves with a 'gone' edge — a bare
    *  crawlers.clear() orphans every replica (wire creatures have no TTL).
    *  Banelings do NOT detonate: a cull is a removal, not a kill. */
   cullAll(): void {
-    for (const c of [...this.crawlers.values()]) {
+    for (const c of this.crawlers.values()) {
       c.dead = true;
       this.crawlers.delete(c.id);
       this.edgeSeq.delete(c.id);
@@ -343,14 +343,14 @@ export class CreatureSim {
   /** Step by real elapsed dt — the room tick calls this once per fire;
    *  tests and embedded hosts drive it directly (sim-time ≠ wall). */
   step(dt: number): void {
-    if (!this.field || this.dormant) return;
+    if (!this.field || this.dormant) {return;}
     this.tickAcc += dt;
     this.tickAcc = Math.min(this.tickAcc, CreatureSim.TICK_CATCHUP_CAP);
-    if (this.tickAcc < TICK_DT) return;
+    if (this.tickAcc < TICK_DT) {return;}
     const alive = this.alivePlayers();
     if (alive.length === 0 && !this.anyTargeted()) { this.tickAcc = 0; return; }
     for (const [species, cap] of Object.entries(this.pops)) {
-      if (cap > 0 && this.aliveCount(species) < cap && alive.length) {
+      if (cap > 0 && this.aliveCount(species) < cap && alive.length > 0) {
         const near = alive[Math.floor(this.rng() * alive.length)]!.pos;
         this.spawnCrawler(near, species);
       }
@@ -365,7 +365,7 @@ export class CreatureSim {
   /** Any creature still holding a committed target — a fully-cloaked room
    *  reports zero alive players but ghost-hunters must keep stepping. */
   private anyTargeted(): boolean {
-    for (const c of this.crawlers.values()) if (!c.dead && c.tgtValid) return true;
+    for (const c of this.crawlers.values()) {if (!c.dead && c.tgtValid) {return true;}}
     return false;
   }
 

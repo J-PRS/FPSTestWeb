@@ -91,7 +91,7 @@ function laneCheck(lane: ReplicaLane, logger: ChildLogger, a: {
     const stuck = a.diffKeys ? [...a.diffKeys].filter((k) => lane.prevKeys.has(k)) : [];
     if (a.diffKeys) {lane.prevKeys = a.diffKeys;}
     persistent = stuck.length > 0 || (!a.diffKeys && lane.streak >= 2);
-    persistDesc = stuck.length ? stuck.slice(0, 6).join(', ') : persistDesc;
+    persistDesc = stuck.length > 0 ? stuck.slice(0, 6).join(', ') : persistDesc;
   }
   if (persistent) {
     logger.warn(`[StateHash] ${a.name} DESYNC tick=${a.tick} ${detail} (persistent ${persistDesc} — ${a.warnWhy})`);
@@ -286,10 +286,10 @@ function noteDrift(streaks: Map<string, number>, driftIds: string[]): { persiste
   for (const id of driftIds) {
     const streak = (streaks.get(id) ?? 0) + 1;
     streaks.set(id, streak);
-    if (streak >= DRIFT_STREAK_WARN) persistentIds.add(id);
+    if (streak >= DRIFT_STREAK_WARN) {persistentIds.add(id);}
   }
   for (const id of streaks.keys()) {
-    if (!drifting.has(id)) streaks.delete(id);
+    if (!drifting.has(id)) {streaks.delete(id);}
   }
   return { persistentIds, transientCount: drifting.size - persistentIds.size };
 }
@@ -452,7 +452,7 @@ export function wireStateDebug(ctx: StateDebugContext): void {
       let detail = `ids=[${[...local.keys()].join(',')}]`;
       if (serverDeployFields) {
         const d = kindFieldDiffs(WORLD_MODEL.deploy!, local, serverDeployFields);
-        if (d.diffs.length) {detail += ` diffs={${d.diffs.slice(0, 6).join(', ')}}`;}
+        if (d.diffs.length > 0) {detail += ` diffs={${d.diffs.slice(0, 6).join(', ')}}`;}
       }
       laneNeedsHeal ||= laneCheck(deployLane, logger, {
         name: 'DEPLOY', tick,
@@ -482,7 +482,7 @@ export function wireStateDebug(ctx: StateDebugContext): void {
       let creatureDiffKeys: Set<string> | null = null;
       if (localCreatureHash !== serverCreatureHash && serverCreatureFields) {
         const d = kindFieldDiffs(WORLD_MODEL.creature!, local, serverCreatureFields);
-        if (d.diffs.length) {detail += ` diff=${d.diffs.slice(0, 6).join(' ')}`;}
+        if (d.diffs.length > 0) {detail += ` diff=${d.diffs.slice(0, 6).join(' ')}`;}
         creatureDiffKeys = new Set(d.diffs);
         // Heal field-level drift the way the snapshot heals player
         // liveness: a lost crawlEvt leaves sim.state/targetId stale
@@ -532,7 +532,7 @@ export function wireStateDebug(ctx: StateDebugContext): void {
       if (localBallHash !== serverBallHash && serverBallFields) {
         const d = kindFieldDiffs(WORLD_MODEL.ball!, localBalls, serverBallFields);
         diffKeys = d.keys;
-        if (d.diffs.length) {detail += ` diff=${d.diffs.slice(0, 6).join(' ')}`;}
+        if (d.diffs.length > 0) {detail += ` diff=${d.diffs.slice(0, 6).join(' ')}`;}
       }
       laneNeedsHeal ||= laneCheck(ballLane, logger, {
         name: 'BALL', tick,
@@ -607,20 +607,22 @@ export function wireStateDebug(ctx: StateDebugContext): void {
         return true;
       });
 
-      if (significantDiffs.length > 0) {
-        logger.warn(`[StateHash] DESYNC DETECTED tick=${tick} hash=${serverHash} vs ${localHashStr} | ${significantDiffs.join('; ')}`, {
-          checks: hashCheckCount,
-          mismatches: hashMismatchCount,
-          matchRate: `${((1 - hashMismatchCount / hashCheckCount) * 100).toFixed(1)}%`,
-          // The last few health events often name the culprit directly —
-          // a kill with no respawn following, a hit that never landed.
-          recentEvents: networkManager.recentEvents().slice(-8),
-        });
-      }
       // Heal on ANY diff, warned or not — a transient isDead flip filtered
       // out of the warn still needs this pass to converge, or it keeps
       // diverging until another diff happens to trigger the block.
       if (diffs.length > 0) {
+        if (significantDiffs.length > 0) {
+          logger.warn(`[StateHash] DESYNC DETECTED tick=${tick} hash=${serverHash} vs ${localHashStr} | ${significantDiffs.join('; ')}`, {
+            checks: hashCheckCount,
+            mismatches: hashMismatchCount,
+            matchRate: `${((1 - hashMismatchCount / hashCheckCount) * 100).toFixed(1)}%`,
+            // The last few health events often name the culprit directly —
+            // a kill with no respawn following, a hit that never landed.
+            recentEvents: networkManager.recentEvents().slice(-8),
+          });
+        } else {
+          logger.debug(`[StateHash] Hash mismatch tick=${tick}: ${transientCount} health echo(s) + ${transientDeadCount} liveness flip(s) in flight, no persistent diffs (combat lag)`);
+        }
         // Heal health divergence — the checker used to warn forever while
         // a silently-dropped hit left local hp divergent for the session.
         // Position stays correction-owned, isDead stays event-owned.
@@ -666,8 +668,6 @@ export function wireStateDebug(ctx: StateDebugContext): void {
           networkManager.remoteDelete(id);
           ctx.remotePlayers.remove?.(id);
         }
-      } else if (diffs.length > 0) {
-        logger.debug(`[StateHash] Hash mismatch tick=${tick}: ${transientCount} health echo(s) + ${transientDeadCount} liveness flip(s) in flight, no persistent diffs (combat lag)`);
       } else {
         logger.info(`[StateHash] Hash mismatch tick=${tick} but positions within tolerance (network lag)`);
       }

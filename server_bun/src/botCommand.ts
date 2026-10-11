@@ -67,7 +67,7 @@ const WANT: Record<CommandKind, number> = {
 const PUSH_FAR_M = 350;
 
 function median(xs: number[]): number {
-  if (!xs.length) return 0;
+  if (xs.length === 0) {return 0;}
   const s = [...xs].sort((a, b) => a - b);
   return s[s.length >> 1]!;
 }
@@ -83,13 +83,13 @@ const AFFINITY: Record<CommandKind, Record<string, number>> = {
   // sitting AT home made him the nearest volunteer every pass, which
   // pulled him off the stand as a named responder. His own goal table
   // still grabs a dropped flag within arm's reach.
-  chase: { ldefense: 1.0, defense: 1.0, offense: 0.6 },
-  return: { ldefense: 1.0, defense: 1.0, technician: 0.9, offense: 0.6 },
-  escort: { capper: 1.0, offense: 1.0, medic: 0.8 },
-  push: { offense: 1.0, infiltrator: 0.9, bombardier: 0.9 },
+  chase: { ldefense: 1, defense: 1, offense: 0.6 },
+  return: { ldefense: 1, defense: 1, technician: 0.9, offense: 0.6 },
+  escort: { capper: 1, offense: 1, medic: 0.8 },
+  push: { offense: 1, infiltrator: 0.9, bombardier: 0.9 },
   // Wrecking the grid IS the bombardier/infiltrator job description —
   // offense volunteers as muscle but shouldn't crowd the named pair.
-  siege: { bombardier: 1.0, infiltrator: 0.9, offense: 0.5 },
+  siege: { bombardier: 1, infiltrator: 0.9, offense: 0.5 },
 };
 /** Distance cost saturates past this transit — on a 1.5km map a 750m
  *  job already reads as "the far side". */
@@ -98,7 +98,7 @@ const FAR_M = 750;
 const HURT_W = 0.5;
 const bidFor = (kind: CommandKind, m: CommandMember, at: BotVec): number => {
   const a = AFFINITY[kind][m.role] ?? 0;
-  if (a <= 0) return -Infinity;
+  if (a <= 0) {return -Infinity;}
   const d = Math.min(FAR_M, Math.hypot(m.pos.x - at.x, m.pos.z - at.z)) / FAR_M;
   return a - d - (1 - (m.hpFrac ?? 1)) * HURT_W;
 };
@@ -112,7 +112,7 @@ export class TeamCommand {
    *  are live; each live slot names its K nearest eligible volunteers,
    *  nearest first, no bot holding two jobs. */
   update(now: number, s: FlagSituation, members: CommandMember[], siege?: BotVec | null): void {
-    if (now - this.reassignT < 2000) return;
+    if (now - this.reassignT < 2000) {return;}
     this.reassignT = now;
     this.contested.clear();
     const slots: Record<CommandKind, (BotVec & { vx?: number; vz?: number }) | null | undefined> = {
@@ -123,7 +123,7 @@ export class TeamCommand {
     // ~180m out forever, near2%). A task only dies with its job slot
     // or its assignee; understaffed slots top up instead of re-rolling.
     const alive = new Set(members.map((m) => m.id));
-    for (const [id, t] of [...this.tasks]) {
+    for (const [id, t] of this.tasks) {
       const slot = slots[t.kind];
       if (!alive.has(id)) { this.tasks.delete(id); continue; }
       if (!slot) {
@@ -134,7 +134,7 @@ export class TeamCommand {
         if (t.kind === 'push' && now - t.born < FLOOD_MS) {
           const m = members.find((mm) => mm.id === id);
           const arrived = m && (m.pos.x - t.goal.x) ** 2 + (m.pos.z - t.goal.z) ** 2 < 40 * 40;
-          if (!arrived) continue;
+          if (!arrived) {continue;}
         }
         this.tasks.delete(id);
         continue;
@@ -155,7 +155,7 @@ export class TeamCommand {
     }
     const free = members.filter((m) => !m.carrier);
     const assign = (kind: CommandKind, at: (BotVec & { vx?: number; vz?: number }) | null | undefined) => {
-      if (!at) return;
+      if (!at) {return;}
       const have = [...this.tasks.values()].filter((t) => t.kind === kind).length;
       const want = kind === 'push'
         ? WANT.push + Math.min(3, Math.floor(median(free.map((m) =>
@@ -207,7 +207,7 @@ export class TeamCommand {
    *  drops that slot from the situation before roleObjective reads it,
    *  so the untasked defender holds home instead of lemming. */
   staffed(id: string, kind: CommandKind): boolean {
-    if (!this.contested.has(kind)) return true; // nobody to staff it anyway
+    if (!this.contested.has(kind)) {return true;} // nobody to staff it anyway
     return this.tasks.get(id)?.kind === kind ? false : true;
   }
 }

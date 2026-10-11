@@ -77,7 +77,7 @@ export class BallSim {
   get colliders(): readonly StructureCollider[] { return this._colliders; }
   set colliders(list: readonly StructureCollider[]) {
     this._colliders = list;
-    this.colliderIndex = list.length ? new ColliderIndex(list) : null;
+    this.colliderIndex = list.length > 0 ? new ColliderIndex(list) : null;
   }
 
   constructor(players: PlayerManager, broadcast: (msg: ServerMessage) => void,
@@ -100,7 +100,7 @@ export class BallSim {
     // the browser, where Bun is undefined — read it via globalThis so the
     // reference doesn't break browser type-checking or bundling.
     const bunFile = (globalThis as { Bun?: { file(p: string): { arrayBuffer(): Promise<ArrayBuffer> } } }).Bun?.file;
-    if (!bunFile) throw new Error('BallSim requires Bun runtime');
+    if (!bunFile) {throw new Error('BallSim requires Bun runtime');}
     const buf = new Uint8Array(await bunFile(heightmapPath).arrayBuffer());
     this.attachField(BallSim.parseHeightmap(buf));
   }
@@ -146,7 +146,7 @@ export class BallSim {
   roster(): { id: number; variant: number; colorIdx: number; position: SimVec; velocity: SimVec; enraged: boolean; targetId: string | null; tp?: SimVec | null; et?: number; slowT?: number; damp?: boolean; t: number }[] {
     const out = [];
     for (const b of this.balls.values()) {
-      if (b.dead) continue;
+      if (b.dead) {continue;}
       out.push(rosterRow(WORLD_MODEL.ball!, 'id', b.id, {
         variant: b.variant, colorIdx: b.colorIdx,
         position: { x: b.x, y: b.y, z: b.z },
@@ -185,7 +185,7 @@ export class BallSim {
   contractRoster(): { id: number; variant: number; enraged: boolean; targetId: string | null }[] {
     const out = [];
     for (const b of this.balls.values()) {
-      if (b.dead) continue;
+      if (b.dead) {continue;}
       const r = this.segRegime.get(b.id) ?? { enraged: b.enraged, targetId: b.targetId };
       out.push({ id: b.id, variant: b.variant, enraged: r.enraged, targetId: r.targetId });
     }
@@ -265,7 +265,7 @@ export class BallSim {
     this.segRegime.delete(b.id);
     const pos = { x: b.x, y: b.y, z: b.z };
     this.broadcast(verbPayload(WORLD_MODEL.ball!, 'gone', 'id', b.id, { position: pos, by }) as ServerMessage);
-    if (by) this.onKilled?.(by, pos, b.variant);
+    if (by) {this.onKilled?.(by, pos, b.variant);}
     // Elite splitter: two child balls at the corpse
     if (b.variant === 3) {
       for (let i = 0; i < 2; i++) {
@@ -281,7 +281,7 @@ export class BallSim {
    *  balls.clear() deletes server truth silently and every replica would
    *  keep rendering its last segment forever (no TTL on wire balls). */
   cullAll(): void {
-    for (const b of [...this.balls.values()]) {
+    for (const b of this.balls.values()) {
       b.dead = true;
       this.balls.delete(b.id);
       this.retargetAcc.delete(b.id);
@@ -294,11 +294,11 @@ export class BallSim {
   /** Step by real elapsed dt — the room tick calls this once per fire;
    *  scenario tests and warp soaks drive it directly (sim-time ≠ wall). */
   step(dt: number): void {
-    if (!this.field || this.dormant) return;
+    if (!this.field || this.dormant) {return;}
     this.tickAcc += dt;
     // Catch up in whole cells; cap keeps a long hiccup from exploding.
     this.tickAcc = Math.min(this.tickAcc, BallSim.TICK_CATCHUP_CAP);
-    if (this.tickAcc < TICK_DT) return;
+    if (this.tickAcc < TICK_DT) {return;}
 
     const alive = alivePlayers(this.players);
     if (alive.length === 0) { this.tickAcc = 0; return; } // room empty — freeze the ecosystem
@@ -321,7 +321,7 @@ export class BallSim {
     this.simTime += TICK_DT;
 
     for (const b of this.balls.values()) {
-      if (b.dead) continue;
+      if (b.dead) {continue;}
 
       // Periodic retarget — committed-target rules, fodder = nearest alive.
       // Retarget broadcasts even without a velocity change: it doubles as a
@@ -360,8 +360,8 @@ export class BallSim {
         const spd = Math.hypot(b.vx, b.vy, b.vz);
         const budget = b.enraged ? ENRAGED_DIVERGENCE_BUDGET_M : DIVERGENCE_BUDGET_M;
         const interval = Math.min(RESYNC_INTERVAL, budget / Math.max(spd, 1));
-        if (rs >= interval) this.segment(b, 'segment');
-        else this.resyncAcc.set(b.id, rs);
+        if (rs >= interval) {this.segment(b, 'segment');}
+        else {this.resyncAcc.set(b.id, rs);}
       }
     }
   }
