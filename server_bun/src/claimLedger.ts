@@ -6,6 +6,9 @@ import { wallNow } from './wallClock.ts';
 const MAX_REWIND_MS = 250;
 
 export function clampPing(ping: number): number {
+  // NaN ping: Math.max(NaN,0)=NaN — rewindPos then walks history with a
+  // NaN target and validates against a garbage sample. No ping = 0.
+  if (!Number.isFinite(ping)) return 0;
   return Math.min(Math.max(ping, 0), MAX_REWIND_MS);
 }
 
@@ -22,7 +25,9 @@ export function shooterTransitMs(transitOf: ((playerId: string) => number) | und
 // Interpolated position at (now - backMs) from the player's rewind buffer.
 export function rewindPos(target: PlayerState, backMs: number): { x: number; y: number; z: number } {
   const h = target.history;
-  if (h.length === 0) return target.position;
+  // NaN backMs: every t-comparison below is false — the walk returns a
+  // garbage sample instead of the present. Present is the safe answer.
+  if (h.length === 0 || !Number.isFinite(backMs)) return target.position;
   const tAt = wallNow() - backMs;
   if (tAt <= h[0]!.t) return h[0]!;
   const last = h[h.length - 1]!;
