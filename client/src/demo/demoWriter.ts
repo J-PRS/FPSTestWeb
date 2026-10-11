@@ -30,7 +30,8 @@ export function crc32(data: Uint8Array): number {
 }
 
 // Write string: uint16 length + UTF-8 bytes
-function writeString(view: DataView, offset: number, str: string): number {
+function writeString(view: DataView, pOffset: number, str: string): number {
+  let offset = pOffset;
   const bytes = new TextEncoder().encode(str);
   view.setUint16(offset, bytes.length, true);
   offset += 2;
@@ -55,7 +56,8 @@ export const REMOTE_FRAME_SIZE = 39;
 // reader, so future sections slot in without a version bump.
 export const SECTION_HMAP = 1;
 
-function writeHmapSection(view: DataView, offset: number, hm: DemoFile['heightmap']): number {
+function writeHmapSection(view: DataView, pOffset: number, hm: DemoFile['heightmap']): number {
+  let offset = pOffset;
   if (!hm) {return offset;}
   view.setUint8(((offset += 1) - 1), SECTION_HMAP);
   const lenPos = offset; offset += 4;
@@ -70,7 +72,8 @@ function writeHmapSection(view: DataView, offset: number, hm: DemoFile['heightma
   return offset;
 }
 
-function writeFrames(view: DataView, offset: number, frames: DemoFile['frames']): number {
+function writeFrames(view: DataView, pOffset: number, frames: DemoFile['frames']): number {
+  let offset = pOffset;
   view.setUint32(offset, frames.length, true); offset += 4;
   for (const f of frames) {
     view.setUint16(offset, f.frameNumber, true); offset += 2;
@@ -93,7 +96,8 @@ function writeFrames(view: DataView, offset: number, frames: DemoFile['frames'])
   return offset;
 }
 
-function writeProjEvents(view: DataView, offset: number, events: DemoFile['projectileEvents']): number {
+function writeProjEvents(view: DataView, pOffset: number, events: DemoFile['projectileEvents']): number {
+  let offset = pOffset;
   view.setUint32(offset, events.length, true); offset += 4;
   for (const e of events) {
     view.setUint8(((offset += 1) - 1), e.eventType);
@@ -119,7 +123,8 @@ function writeProjEvents(view: DataView, offset: number, events: DemoFile['proje
   return offset;
 }
 
-function writeTargetEvents(view: DataView, offset: number, events: DemoFile['targetEvents']): number {
+function writeTargetEvents(view: DataView, pOffset: number, events: DemoFile['targetEvents']): number {
+  let offset = pOffset;
   view.setUint32(offset, events.length, true); offset += 4;
   for (const e of events) {
     view.setUint8(((offset += 1) - 1), e.eventType);
@@ -141,7 +146,8 @@ function writeTargetEvents(view: DataView, offset: number, events: DemoFile['tar
   return offset;
 }
 
-function writeRemoteFrames(view: DataView, offset: number, frames: DemoFile['remoteFrames']): number {
+function writeRemoteFrames(view: DataView, pOffset: number, frames: DemoFile['remoteFrames']): number {
+  let offset = pOffset;
   view.setUint32(offset, frames.length, true); offset += 4;
   for (const f of frames) {
     view.setFloat32(offset, f.timestamp, true); offset += 4;
