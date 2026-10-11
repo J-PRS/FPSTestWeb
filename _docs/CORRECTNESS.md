@@ -463,6 +463,15 @@ violation instead of a symptom hunt.
   un-limited (dropping a declared discontinuity just desyncs
   the client); its abuse is counted via `teleportSpam`, and
   position plausibility lives in moveClaims.
+- **Meta claims (verified sealed):** `skillUse` carries no
+  amount/id — the server re-derives the energy ante (a flood is
+  harmless + rate-capped anyway); `throwFlag` carries no
+  direction — the arc derives from the shadow's truth; class and
+  perk swaps are enum-validated AND banked for next respawn (a
+  mid-life apply would be a free heal + unsynced speed scale);
+  `switchRoom` sanitizes to word grammar + clamps bots ≤24;
+  `snapshotRequest`/`resync` (the expensive ops) capped at
+  3 per 5s; respawn 3/s; chat length-capped + flood-limited.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
