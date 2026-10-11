@@ -12,6 +12,7 @@ import { Explosion } from '../effects/explosion.js';
 import { LightningBeam } from '../effects/lightningBeam.js';
 import { screenShake } from '../effects/screenShake.js';
 import * as sfx from '../core/sfx.js';
+import { inv } from '../../../shared/invariants.js';
 import { WeaponType } from '../../../shared/weapons.js';
 import { DEPLOY_HP } from '../../../shared/deployables.js';
 import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
@@ -379,6 +380,10 @@ export class RemoteDeployables {
   applyDeployHp(id: number, hp: number, armor: number): void {
     const it = this.byId.get(id);
     if (!it) {return;}
+    // Roster reconcile reaches here ungated — a NaN hp/armor row would
+    // write poison straight into replica vitals (NaN can't die, NaN armor
+    // silently bypasses every soak).
+    if (!Number.isFinite(hp) || !Number.isFinite(armor)) { inv('deploy-hp-finite', false, { id, hp, armor }); return; }
     // A drop means something just hit it — surface the same vitals bar a
     // weld shows (rises come from repair claims and stay silent).
     if (hp < it.v.health) {
