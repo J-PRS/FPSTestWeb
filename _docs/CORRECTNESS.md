@@ -327,6 +327,16 @@ violation instead of a symptom hunt.
   `wirePos` rather than snap mid-flight; match-reset →home
   transitions hush via `flagHomeHush` so `flags.reset()` can't
   fake cap/return callouts.
+- **Combat ingest lanes (verified sealed):** `onPlayerHit` drops
+  non-finite damage/health (armor separately guarded), warns on
+  hits-to-corpses; `onShotRejected`/`onYourHealth` finite-gated,
+  yourHealth also warns on heal-channel hp drops (wrong-door
+  write tell); `onKnockback` gated + deduped against self-blast
+  stamps + `recentKb` (bounded 8) so an echo can't double-shove;
+  `onCorrection` drops non-finite authority vectors before
+  rewind+replay, clamps journaled segment dt ≤0.25s;
+  `onRemoteTeleport` gates before `teleportTo`; `onYourCharge`'s
+  ungated scalar fails safe (NaN > 0 is false everywhere).
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
