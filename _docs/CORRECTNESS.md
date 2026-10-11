@@ -547,6 +547,13 @@ violation instead of a symptom hunt.
   scales to the measured arrival cadence; and `clear()` on
   epoch change keeps a stale `latestT` from swallowing every
   fresh push.
+- **Local energy economy (verified sealed):** jet drain/regen
+  runs per-frame on `Player.ts` — NaN resets to 0, floor-clamps
+  at 0, `inv('local-energy-bounds')` counts cap breaches, and
+  hitting empty starts `jetLockT` (the lockout the server-side
+  economy mirrors). Jet gating reads `energy > 0` at input and
+  tick time — a stale frame can't claim a jet the meter can't
+  afford.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
