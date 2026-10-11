@@ -1,3 +1,19 @@
+2026-10-11 - terrain: collider is now the L0 clipmap chord — every 5m
+cell two flat triangles, world-anchored lattice (shared hmChord). The
+bilinear field survives only as corner taps, so movement, projectiles,
+creatures, LOS and spawns all collide with exactly the surface the GPU
+draws near the player — divergence vs the rendered mesh is zero inside
+L0 by construction. Also hides 8-bit heightmap terracing under the
+facet scale. F1 now overlays cyan wireframe on the displaced clipmap
+(depthTest-off LineSegments mirroring the fragment-side inner-hole and
+edge-dissolve cuts) plus a yellow 5m lattice of the collider patch that
+rebuilds on heightfield swaps; Alt+Q prints a terrainDiv line
+(sampleHeight vs getRenderedHeight, now a regression sentinel).
+
+2026-10-11 - maps: vortex.bin resampled 2048->512 (4x box average,
+262KB from 4.2MB; original kept as vortex_2048.bin). Texel ~1.95m is
+still 2.5x finer than the 5m chord lattice.
+
 2026-10-11 - renderer: WebGL context-loss recovery — previously an
 unhandled loss left a dead page, and a page that lost contexts ended
 Chrome-blocked from creating new ones ("web page caused context loss

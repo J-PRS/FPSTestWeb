@@ -4,7 +4,7 @@
   "botFill": 12,
   "terrain": "vortex.bin",
   "tileSize": 1000,
-  "heightScale": 1.5,
+  "heightScale": 1,
   "arena": {
     "x": 0,
     "z": 0,
