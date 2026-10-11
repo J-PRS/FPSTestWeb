@@ -132,7 +132,8 @@ export class Grub implements Targetable, SwarmSlotOwner {
     this.scale = uber ? 3.0 : 0.75; // scale 3 → 3 nuggets — the fat piñata pays out
     if (uber) this.color.set(0xd8a860); // bloated amber — reads pregnant
     this.pos = pos.clone();
-    this.pos.y = terrain.getHeight(pos.x, pos.z) + this.radius;
+    const sg = terrain.getHeight(pos.x, pos.z);
+    if (Number.isFinite(sg)) {this.pos.y = sg + this.radius;}
     this.vel = new THREE.Vector3();
     this.hasSlots = allocSlots('grub', this);
     if (!this.hasSlots) this.dead = true;
@@ -156,7 +157,8 @@ export class Grub implements Targetable, SwarmSlotOwner {
     if (this.emergeT > 0) {
       this.emergeT -= dt;
       const k = 1 - Math.max(0, this.emergeT) / EMERGE_DUR;
-      this.groundY = terrain.getHeight(this.pos.x, this.pos.z);
+      const eg = terrain.getHeight(this.pos.x, this.pos.z);
+      if (Number.isFinite(eg)) {this.groundY = eg;}
       this.pos.y = this.groundY + this.radius - this.emergeDepth * (1 - k * k);
       this.writeInstances(terrain);
       return;
@@ -173,7 +175,8 @@ export class Grub implements Targetable, SwarmSlotOwner {
     this.vel.y = 0;
     this.pos.addScaledVector(this.vel, dt);
     // Glued to the dirt — a maggot doesn't hop
-    this.groundY = terrain.getHeight(this.pos.x, this.pos.z);
+    const tg = terrain.getHeight(this.pos.x, this.pos.z);
+    if (Number.isFinite(tg)) {this.groundY = tg;}
     this.pos.y = this.groundY + this.radius;
 
     const biteD = GRUB_BITE_DIST * MELEE_FAVOR;
