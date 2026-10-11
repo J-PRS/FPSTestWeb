@@ -159,7 +159,14 @@ violation instead of a symptom hunt.
   (player shove, balls, creatures, nuggets, remotes, deployable splash).
   Write sites gated: `remoteInterp.predict` (NaN seed → NaN ghost vel
   on a cleared buffer), `Nugget.serverRest`/`applyKnockback`/`applyPull`,
-  `parity.noteShellFate` (NaN srvAt poisoned divergence diffs).
+  `parity.noteShellFate` (NaN srvAt poisoned divergence diffs). Every
+  creature `applyKnockback`/`applyPull` write site gates too — 14
+  species + Totem's blastPush/blastPull (Mine is a no-op stub).
+- **Roster sink:** `upsertRemotePlayer` drops non-finite pos/rot/vel
+  patches at the write — covers tickUpdate/join/respawn/roster-heal
+  edges in one place. `netCrawlDie` falls back to replica pos when the
+  wire die position is NaN (dust/demo feed). Ball/crawler spawn+seg+evt
+  lanes already finite-gate at `netBalls`/`netCrawlers`.
 - **Pools bounded:** `pool-positive` (correct formula yielding ≤0 max
   = a spawn-kill), `energy-bounds`/`local-energy-bounds`,
   `local-health-finite` with NaN recovery, belt-charge economy (every
