@@ -25,6 +25,7 @@ import type { SimVec, StructureCollider } from './ballSim.js';
 import { segSolidHit } from './solidWorld.js';
 import { SPECIES, speciesFamily, type SpeciesRow } from './species.js';
 import { GRAVITY } from './movement.js';
+import { inv } from './invariants.js';
 
 export const CRAWLER_SIM = {
   GRAVITY,
@@ -252,6 +253,8 @@ function hopLaunch(c: SimCrawler, dt: number, target: SimVec | null, distSq: num
 
 /** Server-side hit application — knockback staggers the hop clock. */
 export function applyCrawlerDamage(c: SimCrawler, damage: number): boolean {
+  // NaN damage fails `health <= 0` forever — an unkillable crawler.
+  if (!Number.isFinite(damage)) { inv('creature-damage-finite', false, { damage }); return false; }
   c.health -= damage;
   c.stunTimer = Math.max(c.stunTimer, c.sp.STUN_S);
   if (c.health <= 0) { c.dead = true; return true; }

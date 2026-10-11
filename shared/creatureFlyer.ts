@@ -12,6 +12,7 @@ import type { SimVec, StructureCollider } from './ballSim.js';
 import { clipMotion, crand, type CrawlerEvent, type SimCrawler } from './creatureCore.js';
 import { SPECIES, speciesFamily, type SpeciesRow } from './species.js';
 import { dir3 } from './botVec.js';
+import { inv } from './invariants.js';
 
 export const FLYER_SIM = {
   ORBIT_R: 16.0,        // circle radius around the prey anchor
@@ -197,6 +198,7 @@ function stepClimb(c: SimFlyer, dt: number, field: Heightfield): CrawlerEvent | 
 }
 
 export function applyFlyerDamage(c: SimFlyer, damage: number): boolean {
+  if (!Number.isFinite(damage)) { inv('creature-damage-finite', false, { damage, kind: 'flyer' }); return false; }
   c.health -= damage;
   c.stunTimer = Math.max(c.stunTimer, c.sp.STUN_S);
   if (c.health <= 0) { c.dead = true; return true; }

@@ -1,3 +1,5 @@
+2026-10-11 - fix: finite gate on all creature damage writes (NaN dmg made unkillable critters)
+2026-10-11 - demo audio parity: playback now mixes the live event mix — ricochet bounces, kill/pickup/flag cues, ball+creature death barks, deployable pops, replayed-remote jet/ski loops (released on stop)
 2026-10-11 - fix: finite gate on knockback/pull impulse ingest (NaN force couldn't reach vel)
 2026-10-11 - fix: streak resets at the kill edge (env deaths bypassed killFeed reset)
 2026-10-10 - fix: forceSendUntil read against wallNow() — it was compared to simT, a cross-domain read that only coincides while both clocks are Date.now() (warped sim = never lapses, frozen = never fires)

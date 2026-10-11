@@ -12,6 +12,7 @@ import type { SimVec, StructureCollider } from './ballSim.js';
 import { clipMotion, type CrawlerEvent, type SimCrawler } from './creatureCore.js';
 import { SPECIES, speciesFamily, type SpeciesRow } from './species.js';
 import { GRAVITY } from './movement.js';
+import { inv } from './invariants.js';
 
 export const SLITHER_SIM = {
   SPEED: 6.5,
@@ -203,6 +204,7 @@ function stepWeave(
 }
 
 export function applySlitherDamage(c: SimSlither, damage: number): boolean {
+  if (!Number.isFinite(damage)) { inv('creature-damage-finite', false, { damage, kind: 'slither' }); return false; }
   c.health -= damage;
   c.stunTimer = Math.max(c.stunTimer, c.sp.STUN_S);
   // A hit breaks the strike — matches the client's applyKnockback.
