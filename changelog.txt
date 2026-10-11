@@ -1,3 +1,16 @@
+2026-10-11 - renderer: WebGL context-loss recovery — previously an
+unhandled loss left a dead page, and a page that lost contexts ended
+Chrome-blocked from creating new ones ("web page caused context loss
+and was blocked"). Now: webglcontextlost reloads the page (all GPU
+state dies with the context — the standard three.js recovery), and a
+construction failure reloads once after 1s for transient GPU resets.
+
+2026-10-11 - maps: vortex — Vortex_Smooth2_2048.png baked to
+maps/vortex.bin via the mapbake pipeline; new dm spec (10 bots, 350m
+arena, 8 scattered ring spawns, tileSize 1000 for the native 1km wrap,
+heightScale 1.5)
+lists it under custom maps.
+
 2026-10-11 - boot: offline spawn also waits for stable FPS.
 The earlier gate held only the match kick-off — the player himself
 was placed and controllable through the compile hitches. Offline
