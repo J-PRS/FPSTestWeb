@@ -9,7 +9,7 @@ import type { Player } from '../entities/Player.js';
 import { RemotePlayer } from '../entities/RemotePlayer.js';
 import type { EffectsManager } from '../effects/effects.js';
 import type { NetworkManager } from '../networking/NetworkManager.js';
-import { Lobby } from './lobby.js';
+import { Lobby , type RoomRow, type MapRow } from './lobby.js';
 import { resolveServerEndpoints } from '../networking/endpoints.js';
 import type { WorldState } from './worldState.js';
 import type { createEntities } from './entities.js';
@@ -32,6 +32,7 @@ import { wireDeployables } from './net/deployables.js';
 import { wireWorld } from './net/world.js';
 import { wireResync } from './net/resync.js';
 import { displayName } from './nameOf.js';
+import type { DemoManager } from '../demo/DemoManager.js';
 
 export interface NetDeps {
   lazyNetworkManager(): NetworkManager;
@@ -43,7 +44,7 @@ export interface NetDeps {
   lazyHealthBarSystem(): HealthBarSystem;
   /** Optional until initDemo runs — net handlers record through it when
    *  present so remote shots/creatures land in the rolling buffer. */
-  lazyDemoManager?(): import('../demo/DemoManager.js').DemoManager | null;
+  lazyDemoManager?(): DemoManager | null;
   fragMessages: FragMessages;
   explosionTracker: ExplosionTracker;
   logger: ChildLogger;
@@ -130,12 +131,12 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
       // worker-local fetch would hide the rest of the fleet.
       const res = await fetch(`${lobbyUrl ?? httpUrl}/rooms`);
       if (!res.ok) {throw new Error(`rooms ${res.status}`);}
-      return res.json() as Promise<import('./lobby.js').RoomRow[]>;
+      return res.json() as Promise<RoomRow[]>;
     },
     listMaps: async () => {
       const res = await fetch(`${httpUrl}/maps`);
       if (!res.ok) {throw new Error(`maps ${res.status}`);}
-      return res.json() as Promise<import('./lobby.js').MapRow[]>;
+      return res.json() as Promise<MapRow[]>;
     },
     quickJoin: async (mode, map, bots, noCreatures, noBalls) => {
       const q = new URLSearchParams({ mode });

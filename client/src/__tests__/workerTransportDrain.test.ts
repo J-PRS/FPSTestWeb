@@ -18,6 +18,7 @@ class FakeWorker {
   emit(data: unknown) { this.onmessage?.({ data } as MessageEvent); }
 }
 
+// oxlint-disable-next-line consistent-type-imports -- lazy class type; typeof import() has no import type equivalent
 let WorkerTransport: typeof import('../networking/WorkerTransport.js').WorkerTransport;
 
 function makeConfig(): ConnectionConfig {

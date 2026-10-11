@@ -249,7 +249,7 @@ export class Totem implements Targetable, SwarmSlotOwner {
     if (this.foot) {getShadows()?.set(this, this.pos, this.radius * 0.9, 0.35);}
   }
 
-  writeInstances(_terrain?: import('../world/terrain.js').Terrain): void {
+  writeInstances(_terrain?: Terrain): void {
     writeTotemInstances(this);
   }
 

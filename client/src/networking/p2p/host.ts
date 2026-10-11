@@ -21,7 +21,7 @@ import { MessageHandler, type RoomInfo } from '../../../../server_bun/src/Messag
 import { RateLimiter } from '../../../../server_bun/src/RateLimiter.js';
 import { validateMessage } from '../../../../server_bun/src/wire.js';
 import { validatePlayerId } from '../../../../server_bun/src/validation.js';
-import { isWireFrame, decodePosition, encodeTickPlayer, encodeTickFrame } from '../../../../shared/wire.js';
+import { isWireFrame, decodePosition, encodeTickPlayer, encodeTickFrame , type WirePosition } from '../../../../shared/wire.js';
 import { wallMs } from '../../../../shared/clockBrand.js';
 import type { ServerMessage } from '../../../../shared/protocol.js';
 import { ChildLogger } from '../../core/Logger.js';
@@ -34,6 +34,7 @@ import { healPool } from '../../../../server_bun/src/healPool.js';
 import { lgChargeAt } from '../../../../shared/combat.js';
 import { simNow } from '../../../../server_bun/src/simClock.js';
 import { getHeightfield } from '../../world/heightmap.js';
+import type { StructureSpec,InteriorSpec,MapSpec } from '../../../../shared/mapSpec.js';
 
 const logger = new ChildLogger('P2PHost');
 
@@ -51,7 +52,7 @@ export class P2PHost {
   private links = new Map<P2PLink, string>(); // link → playerId
   /** Per-link decode slot — position frames are the host's hottest
    *  inbound path; consumers copy field-wise within dispatch. */
-  private decodeScratch = new Map<P2PLink, import('../../../../shared/wire.js').WirePosition>();
+  private decodeScratch = new Map<P2PLink, WirePosition>();
   private byPlayer = new Map<string, P2PLink>();
   private pingCycle = 0;
   /** Stamp of the ping each guest last received — pongs that don't echo
@@ -121,7 +122,7 @@ export class P2PHost {
    *  not whatever map they last saved. Called once the boot map resolves;
    *  gameState map fields read it at handshake. */
   setMap(map: {
-    structures?: import('../../../../shared/mapSpec.js').StructureSpec[];
+    structures?: StructureSpec[];
     arena?: { x: number; z: number; radius: number } | null;
     ambient?: Record<string, number>;
     terrain?: string;
@@ -131,9 +132,9 @@ export class P2PHost {
     terrainTex?: string;
     terrainPreset?: number;
     sky?: string;
-    interiors?: import('../../../../shared/mapSpec.js').InteriorSpec[];
-    spawns?: import('../../../../shared/mapSpec.js').MapSpec['spawns'];
-    teamSpawns?: import('../../../../shared/mapSpec.js').MapSpec['teamSpawns'];
+    interiors?: InteriorSpec[];
+    spawns?: MapSpec['spawns'];
+    teamSpawns?: MapSpec['teamSpawns'];
     bases?: RoomInfo['bases'];
   } | null): void {
     if (!map) {return;}
@@ -252,14 +253,14 @@ export class P2PHost {
     logger.info('P2P peer left', { playerId });
   }
 
-  private freshPosSlot(link: P2PLink): import('../../../../shared/wire.js').WirePosition {
+  private freshPosSlot(link: P2PLink): WirePosition {
     const slot = {
       type: 'position',
       position: { x: 0, y: 0, z: 0 },
       rotation: { yaw: 0, pitch: 0 },
       velocity: { x: 0, y: 0, z: 0 },
       seq: 0, ping: 0,
-    } as import('../../../../shared/wire.js').WirePosition;
+    } as WirePosition;
     this.decodeScratch.set(link, slot);
     return slot;
   }

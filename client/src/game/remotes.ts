@@ -7,7 +7,7 @@ import type { Player } from '../entities/Player.js';
 import { RemotePlayer } from '../entities/RemotePlayer.js';
 import { setFrustumVis } from '../entities/remoteVis.js';
 import type { EffectsManager } from '../effects/effects.js';
-import type { NetworkManager } from '../networking/NetworkManager.js';
+import type { NetworkManager , RemotePlayerState } from '../networking/NetworkManager.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { HUD } from '../ui/hud.js';
 import { rankRows, scoreboardTitle } from '../ui/hud/scoreboard.js';
@@ -76,7 +76,7 @@ function makeRemoteHooks(deps: RemotesDeps) {
   };
 }
 
-type WirePlayerState = import('../networking/NetworkManager.js').RemotePlayerState;
+type WirePlayerState = RemotePlayerState;
 
 function isRemoteActive(deps: RemotesDeps, playerId: string, players: Map<string, WirePlayerState>): boolean {
   return deps.world.remotePlayers.active(playerId, deps.world.remotePlayers.get(playerId), players.get(playerId));

@@ -4,7 +4,7 @@
 
 import type * as THREE from 'three';
 import type { ViewModel } from '../entities/ViewModel.js';
-import type { Ball } from '../entities/balls.js';
+import type { Ball , Targetable } from '../entities/balls.js';
 import type { Nugget } from '../entities/Nugget.js';
 import type { DamageNumberManager } from '../effects/damageNumbers.js';
 import type { SweepObstacle } from '../projectiles/Projectile.js';
@@ -24,6 +24,8 @@ import { WeaponType } from '../../../shared/weapons.js';
 import { classCanFire } from '../../../shared/botClasses.js';
 
 import type { GameContext } from './context.js';
+import type { Deployables } from './deployables.js';
+import type { SpeedLines } from '../effects/speedLines.js';
 
 export interface CombatDeps extends GameContext {
   lazyScene(): THREE.Scene;
@@ -32,9 +34,9 @@ export interface CombatDeps extends GameContext {
   lazyHealthBarSystem(): HealthBarSystem;
   lazyDamageNumbers(): DamageNumberManager;
   /** Deployable registry — the repair beam's heal targets live here. */
-  lazyDeployables?: () => import('./deployables.js').Deployables;
+  lazyDeployables?: () => Deployables;
   /** Optional — melee swing whoosh rides the speed-lines surge path. */
-  lazySpeedLines?: () => import('../effects/speedLines.js').SpeedLines;
+  lazySpeedLines?: () => SpeedLines;
   fragMessages: FragMessages;
   inputTracking: ReturnType<typeof setupInputTracking>;
   explosionTracker: ExplosionTracker;
@@ -57,7 +59,7 @@ export interface CombatDeps extends GameContext {
    *  ('local' when unset; offline bot shells carry their bot id). */
   onCreatureKilled?: (shooterId?: string) => void;
   balls: Ball[];
-  targets: import('../entities/balls.js').Targetable[]; // balls + crawlers — shootable/blastable
+  targets: Targetable[]; // balls + crawlers — shootable/blastable
   nuggets: Nugget[];
 }
 
@@ -169,6 +171,6 @@ export function createCombat(deps: CombatDeps) {
     slam: (pos: THREE.Vector3, impactSpeed: number) => slam(c, pos, impactSpeed),
     updateProjectiles: (dt: number) => updateProjectiles(c, dt),
     updateBeamVisual: () => { updateBeamVisual(); rep.updateBeamVisual(); },
-    hitTargetLocal: (t: import('../entities/balls.js').Targetable, dmg: number, attackerId?: string) => hitTargetLocal(c, t, dmg, attackerId),
+    hitTargetLocal: (t: Targetable, dmg: number, attackerId?: string) => hitTargetLocal(c, t, dmg, attackerId),
   };
 }

@@ -2,7 +2,7 @@ import { reconstructSeek, applyPlaybackEvents, releasePlaybackBeam, type Playbac
 import {type ProjectileEvent, type TargetEvent, RemoteFrameFlags, TARGETTYPE_CREATURE_BASE, demoSpeciesIndex, creatureDemoId, targetDemoId, ProjectileEventType} from '../demo/types.js';
 import type { RemoteSample } from '../demo/DemoRecorder.js';
 import type { DemoManager } from '../demo/index.js';
-import type { Ball } from '../entities/balls.js';
+import type { Ball , Targetable } from '../entities/balls.js';
 import type { DamageNumberManager } from '../effects/damageNumbers.js';
 import type { FragMessages } from '../ui/FragMessages.js';
 import type { HUD } from '../ui/hud.js';
@@ -24,6 +24,19 @@ import { feedMode } from '../feed/feedMode.js';
 import { disposeSwings } from '../effects/swingTrails.js';
 import { getHeightfield, injectHeightmapBytes, applyHeightfieldScale } from '../world/heightmap.js';
 import * as sfxWorld from '../core/sfx/world.js';
+import type { ViewModel } from '../entities/ViewModel.js';
+import type { Crawler } from '../entities/Crawler.js';
+import type { Scarab } from '../entities/Scarab.js';
+import type { Gnat } from '../entities/Gnat.js';
+import type { Snake } from '../entities/Snake.js';
+import type { Baneling } from '../entities/Baneling.js';
+import type { Turretter } from '../entities/Turretter.js';
+import type { Roller } from '../entities/Roller.js';
+import type { Seeker } from '../entities/Seeker.js';
+import type { Overlord } from '../entities/Overlord.js';
+import type { Mine } from '../entities/Mine.js';
+import type { Totem } from '../entities/Totem.js';
+import type { Rakk } from '../entities/Rakk.js';
 
 const logger = new ChildLogger('DemoPlayback');
 
@@ -33,24 +46,24 @@ export interface DemoLifecycleDeps {
   lazyCamera: () => THREE.PerspectiveCamera;
   lazyPlayer: () => Player;
   lazyDemoManager: () => DemoManager | null;
-  lazyViewModel: () => import('../entities/ViewModel.js').ViewModel | null;
+  lazyViewModel: () => ViewModel | null;
   damageNumberManager: () => DamageNumberManager;
   fragMessages: () => FragMessages;
   lazyHud: () => HUD;
   balls: Ball[];
-  targets: import('../entities/balls.js').Targetable[]; // balls+crawlers live here too — keep in sync on removal
-  crawlers: import('../entities/Crawler.js').Crawler[];
-  scarabs: import('../entities/Scarab.js').Scarab[];
-  gnats: import('../entities/Gnat.js').Gnat[];
-  snakes: import('../entities/Snake.js').Snake[];
-  banelings: import('../entities/Baneling.js').Baneling[];
-  turrets: import('../entities/Turretter.js').Turretter[];
-  rollers: import('../entities/Roller.js').Roller[];
-  seekers: import('../entities/Seeker.js').Seeker[];
-  overlords: import('../entities/Overlord.js').Overlord[];
-  mines: import('../entities/Mine.js').Mine[];
-  totems: import('../entities/Totem.js').Totem[];
-  rakks: import('../entities/Rakk.js').Rakk[];
+  targets: Targetable[]; // balls+crawlers live here too — keep in sync on removal
+  crawlers: Crawler[];
+  scarabs: Scarab[];
+  gnats: Gnat[];
+  snakes: Snake[];
+  banelings: Baneling[];
+  turrets: Turretter[];
+  rollers: Roller[];
+  seekers: Seeker[];
+  overlords: Overlord[];
+  mines: Mine[];
+  totems: Totem[];
+  rakks: Rakk[];
   world: WorldState;
   overlay: HTMLElement;
   rendererCanvas: HTMLCanvasElement;
@@ -309,7 +322,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
     // All live species are game objects too — dispose so they don't hang
     // frozen in the scene during playback
     for (const m of d.mines) {m.onDetonate = undefined;} // teardown isn't a detonation
-    type DisposableTarget = import('../entities/balls.js').Targetable & { dispose(): void };
+    type DisposableTarget = Targetable & { dispose(): void };
     for (const list of [d.crawlers, d.turrets, d.rollers, d.seekers, d.overlords, d.mines, d.totems, d.rakks] as DisposableTarget[][]) {
       for (const e of list) {
         e.dispose();

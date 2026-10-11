@@ -21,6 +21,7 @@ import type { RoomEventSink } from './roomEvents.ts';
 import { WORLD_MODEL, spawnPayload, checkIntent } from '../../shared/worldModel.ts';
 import { wallNow, type WallMs } from './wallClock.ts';
 import { simNow } from './simClock.ts';
+import type { StructureSpec } from '../../shared/mapSpec.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
@@ -49,7 +50,7 @@ export interface RoomInfo {
   bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } };
   /** Static structures from the map spec — echoed on gameState so every
    *  client builds the same base compounds/cover. */
-  structures?: import('../../shared/mapSpec.ts').StructureSpec[];
+  structures?: StructureSpec[];
   /** Arena dome from the map spec — center {x,z} + radius. */
   arena?: { x: number; z: number; radius: number };
   /** World-state replay frames the room's registered sims emit —

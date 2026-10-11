@@ -10,7 +10,7 @@ import { logger } from './logger.ts';
 import { WeaponType, getWeaponStats } from '../../shared/weapons.ts';
 import { CLASS_STATS, classCanFire, type ArmorClass } from '../../shared/botClasses.ts';
 import { BOT_LOADOUTS, BOT_ALT_SLOTS, WILDCARD_SLOTS, botClassForLoadout, rollWildcard, adaptLoadout, type BotLoadout, type LoadoutSlot } from '../../shared/botLoadouts.ts';
-import { aimSkillFor } from '../../shared/botSkill.ts';
+import { aimSkillFor , type BotSkillSpec } from '../../shared/botSkill.ts';
 import { botRand } from '../../shared/botRand.ts';
 import { BOT_NAMES } from '../../shared/botNames.ts';
 import { CLASS_FITNESS, ROLE_PRIORITY, STRICT_CLASS, type BotRole } from '../../shared/flagGoals.ts';
@@ -120,11 +120,11 @@ export class BotRoster {
   /** Team's difficulty spec from spec.botSkill — a bare tier covers
    *  the lobby, {alpha,bravo} handicaps sides, and either can be an
    *  axis mix ({aim:'impossible',move:'easy'}); unset is medium. */
-  private tierFor(team: string | undefined): import('../../shared/botSkill.ts').BotSkillSpec {
+  private tierFor(team: string | undefined): BotSkillSpec {
     const s = this.room.spec.botSkill;
     // A team wrapper always carries alpha or bravo; a bare spec is a
     // string or an axis mix, which never does.
-    if (typeof s === 'string' || (s && !('alpha' in s) && !('bravo' in s))) {return s as import('../../shared/botSkill.ts').BotSkillSpec;}
+    if (typeof s === 'string' || (s && !('alpha' in s) && !('bravo' in s))) {return s as BotSkillSpec;}
     if (s) {return (team === 'alpha' ? s.alpha : s.bravo) ?? 'medium';}
     return 'medium';
   }

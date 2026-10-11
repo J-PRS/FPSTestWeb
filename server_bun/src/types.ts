@@ -6,6 +6,7 @@ import type { TeamId } from '../../shared/teams.ts';
 import type { SimMs } from './simClock.ts';
 import type { WallMs } from './wallClock.ts';
 import type { ArmorClass } from '../../shared/botClasses.ts';
+import type { WirePosition } from '../../shared/wire.ts';
 export type {
   Vec3, Rotation,
   ClientMessage, ServerMessage,
@@ -31,7 +32,7 @@ export interface WebSocketData {
   slowSince?: number;
   /** Per-socket decode slot for binary position frames — decodePosition
    *  mutates it in place, consumers copy field-wise within the handler. */
-  posScratch?: import('../../shared/wire.ts').WirePosition;
+  posScratch?: WirePosition;
 }
 
 export interface PlayerState {

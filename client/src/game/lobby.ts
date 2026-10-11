@@ -8,7 +8,7 @@
  * ?room=NAME reload, which stays the shareable link either way.
  */
 
-import { buildLobbyPanel } from './lobbyPanel.js';
+import { buildLobbyPanel , type LobbyPanelEls } from './lobbyPanel.js';
 import { urlParams } from '../core/params.js';
 import { settings } from '../core/settings.js';
 import Logger from '../core/Logger.js';
@@ -78,7 +78,7 @@ export class Lobby {
   private modeSelect: HTMLSelectElement;
   private botsInput: HTMLInputElement;
   private leaveBtn: HTMLButtonElement;
-  private els: import('./lobbyPanel.js').LobbyPanelEls;
+  private els: LobbyPanelEls;
   private maps: MapRow[] = [];
   private mapsFailed = false;
   // MAP picker family filter — the [T2] badge marks Tribes 2 ports;

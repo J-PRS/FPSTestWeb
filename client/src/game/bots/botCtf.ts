@@ -14,12 +14,13 @@ import type { StructureSpec } from '../../../../shared/mapSpec.js';
 import { flagReturnFx } from '../flagFx.js';
 import { FLAG_STAND_TOP } from '../../structures/structures.js';
 import * as sfx from '../../core/sfx.js';
+import type { Terrain } from '../../world/terrain.js';
 
 const _flagBurst = new THREE.Vector3();
 const _touchers: [string, THREE.Vector3, THREE.Vector3][] = [];
 
 export interface CtfBridgeDeps {
-  lazyTerrain(): import('../../world/terrain.js').Terrain;
+  lazyTerrain(): Terrain;
   lazyScene(): THREE.Scene;
   lazyCamera(): THREE.Camera;
   lazyPlayer(): { pos: THREE.Vector3; isDead: boolean; mods: { pickupRadius: number };
@@ -50,7 +51,7 @@ export interface CtfBridgeWiring {
   bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } };
   /** The spec's structure list — stand hulls merge OVER it (the solid
    *  world is replaced wholesale, never appended). */
-  structures?: import('../../../../shared/mapSpec.js').StructureSpec[];
+  structures?: StructureSpec[];
 }
 
 export class CtfBridge {

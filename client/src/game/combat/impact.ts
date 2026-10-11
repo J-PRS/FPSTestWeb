@@ -23,6 +23,7 @@ import { lgDischarge } from './lightning.js';
 import { AoeGizmo } from '../../effects/aoeGizmo.js';
 import { urlParams } from '../../core/params.js';
 import { processProjectileExplosion, type CombatCtx } from '../combat.js';
+import type { Targetable } from '../../entities/balls.js';
 
 const CHAIN_WINDOW = CHAINGUN_RATE * 1.5;
 const CHAIN_RAMP_CAP = 8;
@@ -75,7 +76,7 @@ function hitVerdict(c: CombatCtx, p: Projectile, hitPos: { x: number; y: number;
 // (Turretter) and props (Tumbleweed) — they leave ichor undefined.
 // Droplets paint their own stain where they land (the Wendigo model) —
 // a spray arcing over a ridge stains THAT ground, not the shooter's feet.
-function ichorSpray(c: CombatCtx, ball: import('../../entities/balls.js').Targetable, dir: THREE.Vector3, scale: number): void {
+function ichorSpray(c: CombatCtx, ball: Targetable, dir: THREE.Vector3, scale: number): void {
   if (ball.ichor === undefined) {return;}
   const {deps} = c;
   const hex = ball.ichor;
@@ -103,13 +104,13 @@ function splatAt(c: CombatCtx, x: number, z: number, r: number, hex: number, int
 
 const _splatPos = new THREE.Vector3();
 
-function ichorSplat(c: CombatCtx, ball: import('../../entities/balls.js').Targetable, radius: number): void {
+function ichorSplat(c: CombatCtx, ball: Targetable, radius: number): void {
   splatAt(c, ball.pos.x, ball.pos.z, radius, ball.ichor!);
 }
 
 // Instanced body-part gib burst when the species has one, else the generic
 // shard debris — same visual contract either way.
-function corpseBurst(c: CombatCtx, ball: import('../../entities/balls.js').Targetable, dir: THREE.Vector3): void {
+function corpseBurst(c: CombatCtx, ball: Targetable, dir: THREE.Vector3): void {
   if (burstGibs(ball, ball.pos, dir, ball.vel)) {return;}
   c.deps.world.debrisList.push(new BallDebris(
     c.deps.lazyScene(), c.deps.lazyTerrain(), ball.pos,
@@ -120,7 +121,7 @@ function corpseBurst(c: CombatCtx, ball: import('../../entities/balls.js').Targe
 
 // The body pops AND the ground keeps the stain — death reads as a wound,
 // not a despawn.
-function ichorDeath(c: CombatCtx, ball: import('../../entities/balls.js').Targetable, dir: THREE.Vector3): void {
+function ichorDeath(c: CombatCtx, ball: Targetable, dir: THREE.Vector3): void {
   if (ball.ichor === undefined) {return;}
   ichorSpray(c, ball, dir, 0.55);
   ichorSplat(c, ball, ball.radius * 2.4);
@@ -386,7 +387,7 @@ export function logHitScore(c: CombatCtx, p: Projectile, target: 'ball' | 'playe
 // Shared death pipeline for direct hits AND splash kills — debris,
 // nuggets, kill credit, elite split. Without this a blast kill would
 // silently delete the entity with no payout.
-export function onTargetDestroyed(c: CombatCtx, ball: import('../../entities/balls.js').Targetable, impulse?: THREE.Vector3, weaponType?: number, shooterId?: string): void {
+export function onTargetDestroyed(c: CombatCtx, ball: Targetable, impulse?: THREE.Vector3, weaponType?: number, shooterId?: string): void {
   const {deps} = c;
   // Railgun reward: any kill (direct or its splash) instantly reloads —
   // the "not useless" payoff that turns a slow precision weapon into a
@@ -430,14 +431,14 @@ export function onTargetDestroyed(c: CombatCtx, ball: import('../../entities/bal
 
 /** A non-beam direct hit invests its damage into the victim's banked pop
  *  charge — the rest of the charge stays smoldering, not wasted. */
-export function detonateCharge(p: Projectile, ball: import('../../entities/balls.js').Targetable, dmg: number): void {
+export function detonateCharge(p: Projectile, ball: Targetable, dmg: number): void {
   if (p.config.weaponType !== WeaponType.Lightning) {lgDischarge(ball.id, dmg, ball.pos);}
 }
 
 /** Wind the chaingun's bank on a hit: at the cap the shot dumps a
  *  stagger shove into the victim and the bank resets for another
  *  wind-up — sustained tracking pays in displacement, not damage. */
-export function chaingunBank(c: CombatCtx, p: Projectile, ball: import('../../entities/balls.js').Targetable): void {
+export function chaingunBank(c: CombatCtx, p: Projectile, ball: Targetable): void {
   const now = performance.now() / 1000;
   const st = c.chainRamp.get(ball.id);
   const n = st && now - st.t <= CHAIN_WINDOW ? st.n + 1 : 0;
@@ -454,7 +455,7 @@ export function chaingunBank(c: CombatCtx, p: Projectile, ball: import('../../en
   }
 }
 
-export function handleBallHit(c: CombatCtx, p: Projectile, ball: import('../../entities/balls.js').Targetable): void {
+export function handleBallHit(c: CombatCtx, p: Projectile, ball: Targetable): void {
   const {deps} = c;
   // Airtime ramp is body-contact only — wake hits pay flat directDamage.
   const dmg = scaledDirectDamage(p.config.weaponType, p.directHit ? p.hitAge : undefined) * deps.lazyPlayer().mods.directDamage;
@@ -544,7 +545,7 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
  *  projectile hit runs — aggro report, damage numbers, kill pipeline.
  *  attackerId set ⇒ not mine: apply damage but skip the floating number
  *  (personal feedback is for damage I dealt). */
-export function hitTargetLocal(c: CombatCtx, t: import('../../entities/balls.js').Targetable, dmg: number, attackerId?: string): boolean {
+export function hitTargetLocal(c: CombatCtx, t: Targetable, dmg: number, attackerId?: string): boolean {
   const {deps} = c;
   deps.reportTargetDamage?.(t, dmg);
   if (!attackerId || attackerId === 'local') {

@@ -10,6 +10,8 @@ import { createProjectileRegistry, type ProjectileRegistry } from './projectileR
 import { RemoteSet } from './net/RemoteSet.js';
 import type { RemotePlayerState } from '../networking/NetworkManager.js';
 import type { TeamId } from '../../../shared/teams.js';
+import type { SplatDecal } from '../effects/splat.js';
+import type { PickupKind } from '../../../shared/pickups.js';
 
 /**
  * The shared mutable world: every entity collection the game modules
@@ -34,7 +36,7 @@ export interface WorldState {
   playerDebrisList: PlayerDebris[];
   explosions: Explosion[];
   scorches: ScorchDecal[];
-  splats: import('../effects/splat.js').SplatDecal[];
+  splats: SplatDecal[];
   implosions: Implosion[];
   aoeGizmos: AoeGizmo[]; // ?debug blast-radius wireframes
   // Match meta from the wire — scoreboard needs mode/team/scores to group
@@ -63,7 +65,7 @@ export interface WorldState {
   flagMarkers: Map<TeamId, { mesh: THREE.Group; stand: THREE.Group; home: THREE.Vector3; homeKnown: boolean; carrier: string | null; wirePos: THREE.Vector3 }>;
   /** Server-owned pickup replicas — net/pickups.ts owns the map; the
    *  §4.7 pickup fidelity hash enumerates it. */
-  netPickups: Map<number, { kind: import('../../../shared/pickups.js').PickupKind }>;
+  netPickups: Map<number, { kind: PickupKind }>;
   // Demo playback is a different world than the live one — while set, the
   // wire must not mutate the scene (corrections/projectiles/live balls)
   // and we must not stream recorded camera motion to the server.

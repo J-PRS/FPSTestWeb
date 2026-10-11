@@ -10,6 +10,8 @@
 
 import type { TeamId } from './teams.ts';
 import { KIT_HULLS } from './structKits.js';
+import type { BotSkillSpec,BotTier,BotSkillMix } from './botSkill.ts';
+import type { DeployKind } from './deployables.ts';
 
 export interface BallPopulation {
   /** solo population */
@@ -57,7 +59,7 @@ export interface MapSpec {
   /** Difficulty band for spawned bots — one tier for the whole lobby, or
    *  {alpha,bravo} to handicap sides differently. Per-bot variance rolls
    *  around the band, so a team's bots aren't clones. */
-  botSkill?: import('./botSkill.ts').BotSkillSpec | { alpha?: import('./botSkill.ts').BotSkillSpec; bravo?: import('./botSkill.ts').BotSkillSpec };
+  botSkill?: BotSkillSpec | { alpha?: BotSkillSpec; bravo?: BotSkillSpec };
   /** Spawn weights per ball variant [common, mid, large, elite] — default
    *  [0.84, 0.07, 0.04, 0.05]. Lets a map go all-elite or fodder-only. */
   ballMix?: number[];
@@ -122,9 +124,9 @@ export interface MapSpec {
 }
 
 export interface DeploySpec {
-  kind: import('./deployables.ts').DeployKind;
+  kind: DeployKind;
   pos: Vec3like;
-  team?: import('./teams.ts').TeamId;
+  team?: TeamId;
 }
 
 export interface StructureSpec {
@@ -257,13 +259,13 @@ export function resolveMapSpec(raw: unknown): MapSpec {
 function parseBotSkill(raw: unknown): MapSpec['botSkill'] {
   const TIER = new Set(['easy', 'medium', 'hard', 'impossible']);
   const AXES = ['aim', 'move', 'react', 'jitter', 'temper'] as const;
-  const one = (v: unknown): import('./botSkill.ts').BotSkillSpec | undefined => {
-    if (typeof v === 'string') {return TIER.has(v) ? v as import('./botSkill.ts').BotTier : undefined;}
+  const one = (v: unknown): BotSkillSpec | undefined => {
+    if (typeof v === 'string') {return TIER.has(v) ? v as BotTier : undefined;}
     if (v && typeof v === 'object' && !Array.isArray(v)) {
-      const mix: import('./botSkill.ts').BotSkillMix = {};
+      const mix: BotSkillMix = {};
       for (const k of AXES) {
         const t = (v as Record<string, unknown>)[k];
-        if (typeof t === 'string' && TIER.has(t)) {mix[k] = t as import('./botSkill.ts').BotTier;}
+        if (typeof t === 'string' && TIER.has(t)) {mix[k] = t as BotTier;}
       }
       return Object.keys(mix).length > 0 ? mix : undefined;
     }

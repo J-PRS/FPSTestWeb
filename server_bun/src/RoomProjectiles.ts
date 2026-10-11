@@ -123,7 +123,7 @@ export interface ProjHost {
     shieldBlock(from: Vec3, to: Vec3, shooterId: string): number | null;
     /** Live gear hulls — a shell detonates on contact instead of
      *  phasing through a generator and popping on the wall behind it. */
-    solidCols?: readonly import('../../shared/ballCollide.ts').StructureCollider[];
+    solidCols?: readonly StructureCollider[];
   };
   moveSim?: { structureTop(x: number, z: number): number; transitOf?(playerId: string): number };
 }

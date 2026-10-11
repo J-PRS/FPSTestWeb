@@ -42,6 +42,8 @@ import { winText, checkWin, resetMatch, creditKill, creditDamage, collect, pushS
 import { BOT_NAMES } from '../../../../shared/botNames.js';
 import { CLASS_STATS, classCapsule, classMass } from '../../../../shared/botClasses.js';
 import type { BodyCapsule } from '../../../../shared/movement.js';
+import type { DeployOwner } from '../deployables.js';
+import type { MapSpec } from '../../../../shared/mapSpec.js';
 
 export interface BotsDeps extends GameContext {
   lazyScene(): THREE.Scene;
@@ -77,7 +79,7 @@ interface BotHooks {
   damageCreature(id: number, dmg: number, attackerId: string): boolean;
   /** A builder bot wants to plant — owner wrapper keeps the item's foes,
    *  anchors, and heals pointed at the bot, not the local player. */
-  botDeploy?(kind: string, pos: { x: number; y: number; z: number }, owner: import('../deployables.js').DeployOwner): void;
+  botDeploy?(kind: string, pos: { x: number; y: number; z: number }, owner: DeployOwner): void;
   /** Damaged friendly deployable the bot could weld — mirrors the
    *  server senses' repairJob scan (nearest within ~45m). */
   botRepairJob?(team: string, pos: THREE.Vector3, botId: string): { key: string; pos: THREE.Vector3; frac: number } | null;
@@ -119,7 +121,7 @@ export class TeamBots {
     /** Solo map spec (maps/<X>.json resolved client-side) — feeds flag
      *  homes and authored spawn anchors; absent = the old around-player
      *  ±70m default bases. */
-    private mapSpec?: import('../../../../shared/mapSpec.js').MapSpec,
+    private mapSpec?: MapSpec,
   ) {
     this.spec = MODES[mode]; // param props assign after field inits — do it here
     this.deps.world.mode = mode; // wire rooms set this on gameState; offline must too (scoreboard title)

@@ -52,7 +52,7 @@ import { applyDebugHooks } from './game/debugHooks.js';
 import { createWorldState } from './game/worldState.js';
 import { createCombat } from './game/combat.js';
 import { TeamBots } from './game/bots/index.js';
-import { MODES } from '../../shared/teams.js';
+import { MODES , type ModeId } from '../../shared/teams.js';
 import { firstTerrain, probeBootMap, bootPrimeTerrain, bootApplySavedMap, armSessionVeil, type MapSnapshot } from './game/net/world.js';
 import { resolveMapSpec, parseMapSpecJson, type MapSpec } from '../../shared/mapSpec.js';
 import { seatKits } from '../../shared/structKits.js';
@@ -80,6 +80,7 @@ import { loadHeightfieldBin, applyHeightfieldScale } from './world/heightmap.js'
 import { SWARM_SPECS } from './game/species/registry.js';
 import { initSwarms } from './entities/swarms.js';
 import type { Bolt } from './entities/Turretter.js';
+import type { DeployKind } from '../../shared/deployables.js';
 
 const logger = new ChildLogger('Main');
 
@@ -509,7 +510,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
       const y = floor === Infinity ? Math.max(d.pos.y, terrain.getHeight(d.pos.x, d.pos.z)) : floor;
       entities.deployables.remoteSpawn(depId++, {
         owner: d.team ? `base:${d.team}` : 'base',
-        kind: d.kind as import('../../shared/deployables.js').DeployKind,
+        kind: d.kind as DeployKind,
         pos: { ...d.pos, y},
         team: d.team,
       });
@@ -639,14 +640,14 @@ function setupOfflineMode(mode: string, mapSpec?: MapSpec): void {
         return combat.hitTargetLocal(t, dmg, att); // same pipeline as a projectile hit
       },
       botDeploy: (kind, pos, owner) =>
-        entities.deployables.plantFor(kind as import('./game/deployables.js').DeployKind, pos, owner),
+        entities.deployables.plantFor(kind as DeployKind, pos, owner),
       botRepairJob: (team, pos, botId) => entities.deployables.repairJob(botId, team, pos),
       // ~50hp/s at think cadence — the same heal a human trigger hold does.
       botWeld: (key) => entities.deployables.weld(key, REPAIR_HEAL_PER_TICK) !== null,
     },
     'alpha',
     counts,
-    mode as import('../../shared/teams.js').ModeId,
+    mode as ModeId,
     mapSpec,
   );
   // Flag Run starts you beside the nearest enemy flag — the ring is

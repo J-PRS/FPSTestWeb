@@ -5,6 +5,7 @@ import type { NetDeps } from '../netHandlers.js';
 import type { Chat } from '../chat.js';
 import type { NetworkManager } from '../../networking/NetworkManager.js';
 import type { RemotePlayer } from '../../entities/RemotePlayer.js';
+import type { PickupKind } from '../../../../shared/pickups.js';
 
 export interface NetCtx {
   deps: NetDeps;
@@ -14,7 +15,7 @@ export interface NetCtx {
   /** Both first-seen-update and respawn-into-missing end up here. */
   ensureRemotePlayer(playerId: string, position: { x: number; y: number; z: number }, via: string): RemotePlayer;
   /** Server-owned pickup meshes — gem/dog-tag renderers. */
-  addPickup(id: number, pos: { x: number; y: number; z: number }, kind?: import('../../../../shared/pickups.js').PickupKind): void;
+  addPickup(id: number, pos: { x: number; y: number; z: number }, kind?: PickupKind): void;
   /** Reconcile against the server roster — drop meshes whose ids aren't in
    *  the set (their pickupGone was missed during a disconnect). */
   reconcilePickups(liveIds: ReadonlySet<number>): void;

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { WireTickPlayer } from '../../../shared/wire.js';
 import {
   encodePosition, decodePosition,
   encodeTickPlayer, encodeTickPlayerV3, encodeTickPlayerV4, encodeTickFrame, decodeTickFrame,
@@ -331,7 +332,7 @@ describe('v3 wireId frames', () => {
 });
 
 describe('v4 delta-masked records', () => {
-  const base = (): import('../../../shared/wire.js').WireTickPlayer => ({
+  const base = (): WireTickPlayer => ({
     playerId: '', position: { x: 1, y: 2, z: 3 }, rotation: { yaw: 0.5, pitch: 0.1 },
     velocity: { x: 10, y: 0, z: 5 }, health: 100, isDead: false, ski: 1, jet: 0, status: 0, sheep: 40, ping: 50,
   });

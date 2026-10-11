@@ -5,6 +5,7 @@ import { pickShardGeo, pickShardPrim, shardLaunch, SMOKE_INTERVAL, type DebrisOp
 import { markProbe } from '../core/fxDiag.js';
 import type { Terrain } from '../world/terrain.js';
 import { stepShard, greyShard, shrinkLanded } from './debrisStep.js';
+import type { BallTrailDots } from './ballTrails.js';
 
 type Vec3Like = { x: number; y: number; z: number };
 
@@ -47,7 +48,7 @@ export interface Shard {
   /** Shared-batch dot trail — a slot per airborne shard; fxPuff-per-
    *  interval used to cost ONE quarks ParticleSystem per emission
    *  (300 shards × 33Hz ≈ 10k live systems — the frame tank). */
-  trail?: import('./ballTrails.js').BallTrailDots;
+  trail?: BallTrailDots;
   brush: boolean;
   goo: boolean;
   /** Geometry borrowed from the dying body — never dispose it. */

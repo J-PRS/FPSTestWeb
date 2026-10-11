@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import { Vgs, vgsGate } from '../game/vgs.js';
-import { TREE } from '../game/vgsTree.js';
+import { TREE , type VgsNode } from '../game/vgsTree.js';
 
 type Handler = (e: KeyboardEvent) => void;
 
@@ -84,7 +84,7 @@ describe('Vgs', () => {
 
   it('every tree leaf resolves to a unique chord', () => {
     const seen = new Map<string, string>();
-    const walk = (node: Record<string, import('../game/vgsTree.js').VgsNode>, prefix: string) => {
+    const walk = (node: Record<string, VgsNode>, prefix: string) => {
       for (const [k, n] of Object.entries(node)) {
         const chord = prefix + k;
         if ('line' in n) {

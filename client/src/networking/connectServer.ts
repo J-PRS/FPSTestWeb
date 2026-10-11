@@ -2,6 +2,7 @@ import { urlParams } from '../core/params.js';
 import type { NetworkManager } from './NetworkManager.js';
 import type { ChildLogger } from '../core/Logger.js';
 import type { LoadProfiler } from '../utils/profiling.js';
+import type { MapSnapshot } from '../game/net/mapAssets.js';
 
 export interface ConnectCtx {
   serverUrl: string;
@@ -14,7 +15,7 @@ export interface ConnectCtx {
   profiler: LoadProfiler;
   /** The map this client built — a p2p host must hand it to guests through
    *  gameState or both ends silently live in different worlds. */
-  bootMap?: import('../game/net/mapAssets.js').MapSnapshot | null;
+  bootMap?: MapSnapshot | null;
   /** Fleet only: re-resolve the ws target through the matchmaker before a
    *  reconnect — the room's worker may have re-homed since the last URL. */
   resolveUrl?: () => Promise<string | null>;

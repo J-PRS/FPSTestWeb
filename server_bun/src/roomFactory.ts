@@ -12,12 +12,13 @@ import { logger } from './logger.ts';
 import type { MapCatalog } from './mapCatalog.ts';
 import type { MapSpec } from '../../shared/mapSpec.ts';
 import { hmScaled, type Heightfield } from '../../shared/heightfield.ts';
+import type { SessionRegistry } from './sessionRegistry.ts';
 
 export interface RoomFactoryHost {
   /** Live room index — created rooms register here before returning. */
   rooms: Map<string, Room>;
   /** Session lifecycle owner — rooms read grace state through it. */
-  sessions: import('./sessionRegistry.ts').SessionRegistry;
+  sessions: SessionRegistry;
   maps: MapCatalog;
   /** Shared default field (null until the boot heightmap lands). */
   field(): Heightfield | null;

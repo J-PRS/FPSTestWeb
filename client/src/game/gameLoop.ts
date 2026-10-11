@@ -55,6 +55,7 @@ import type { BodyCapsule } from '../../../shared/movement.js';
 import { isBotId } from '../../../shared/botNames.js';
 import { nanScanTick, nanScanBindProbe } from '../core/nanScan.js';
 import Logger from '../core/Logger.js';
+import type { PlayerSheep } from './playerSheep.js';
 
 const _zeroVel = new THREE.Vector3(); // shared zero for demo playback
 const _sunDir = new THREE.Vector3(); // scratch — directional fog sun lookup
@@ -134,7 +135,7 @@ export interface GameLoopDeps {
   getDummyTick: () => ((dt: number) => void) | null;
   /** Local sheep meter — ticks each frame from hudTick so the crosshair
    *  readout and scoreboard self-row share the smoothed value. */
-  lazyPlayerSheep?: () => import('./playerSheep.js').PlayerSheep;
+  lazyPlayerSheep?: () => PlayerSheep;
 }
 
 // The frame loop + render pass. Everything mutable it touches comes in via

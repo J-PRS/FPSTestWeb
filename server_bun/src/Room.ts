@@ -20,7 +20,7 @@ import { InfluenceMap } from './influenceMap.ts';
 import { hmHeight, hmChord, HM_WORLD_SCALE, type Heightfield } from '../../shared/heightfield.ts';
 import { beamSweepRay } from './beamSweep.ts';
 import type { BeamContact } from './CombatHandler.ts';
-import { NOISE_TTL_MS } from '../../shared/wire.ts';
+import { NOISE_TTL_MS , type V4Last } from '../../shared/wire.ts';
 import { RoomMoveSim } from './RoomMoveSim.ts';
 import { type MapSpec, resolveMapSpec } from '../../shared/mapSpec.ts';
 import { MODES, pickTeam, makeScores, type ModeId, type ModeSpec, type TeamScores, type TeamId } from '../../shared/teams.ts';
@@ -53,6 +53,7 @@ import type { ServerWebSocket } from 'bun';
 
 import { simNow } from './simClock.ts';
 import { wallNow, wallMs, type WallMs } from './wallClock.ts';
+import type { SessionRegistry } from './sessionRegistry.ts';
 
 export class Room {
   readonly name: string;
@@ -83,7 +84,7 @@ export class Room {
    *  assigned post-ctor by the factory. `graceInRoom` replaces the old
    *  per-room disconnected map so the countdown can't outlive the
    *  session it belongs to. */
-  sessions?: import('./sessionRegistry.ts').SessionRegistry;
+  sessions?: SessionRegistry;
   /** Watching sockets — no player record, get broadcasts + ticks. */
   readonly spectators = new Set<string>();
   /** Room-scoped u16 record ids for v3 tick frames — minted lazily on a
@@ -100,7 +101,7 @@ export class Room {
    *  wireId, not by pooled-record slot: slot↔player binding shuffles on
    *  every join/leave/suppression, and a slot-carried basis would emit a
    *  mask computed against a different player's values. */
-  readonly v4Last = new Map<number, import('../../shared/wire.ts').V4Last>();
+  readonly v4Last = new Map<number, V4Last>();
   nextWireId = 1;
   readonly sessionTokens = new Map<string, string>();
   readonly lastSentPositions = new Map<string, { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; jet: number; status: number; sheep: number; t: number }>();
@@ -487,7 +488,7 @@ export class Room {
       // Ride structure floors: a generator seeded inside a genhouse must
       // stand on its deck (seated high over terrain), not drown in it.
       // max() keeps authored elevations — tower sentries never descend.
-      this.deployables.seedBase(this.spec.deploys.map(e => (({ ...e, pos: Object.assign({}, e.pos, {y: Math.max(e.pos.y, this.flagPlacer.deployFloor(e.pos.x, e.pos.z, e.pos.y))})}))));
+      this.deployables.seedBase(this.spec.deploys.map(e => (({ ...e, pos: { ...e.pos, y: Math.max(e.pos.y, this.flagPlacer.deployFloor(e.pos.x, e.pos.z, e.pos.y))}}))));
     }
     this.projectiles = new RoomProjectiles(this, field);
     this.projectiles.attachStructures(this.structs.eff());
