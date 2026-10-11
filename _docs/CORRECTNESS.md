@@ -147,6 +147,12 @@ violation instead of a symptom hunt.
   together at rebalance; all game-logic reads are live `p.team` (FF,
   flag grab/cap); the deployable team-stamp at plant is deliberate
   (gear fights for its planting team).
+- **Score attribution:** self-frag excluded before any award; CTF
+  zone-kill pays before the `ptsPlayerKill` gate; damage economy chains
+  the hit *event* so self/friendly/env never land; `dmgPool` keeps
+  sub-100 remainders across lives; `dropPlayer` removes the row and
+  re-echoes the board; `awardPersonal` in team rooms can never end a
+  match (honor column).
 - **Heal credit (by design):** team rooms refuse `heal` claims — gems
   heal server-side AT collect (the collect is the intent; a claim could
   be dropped). `healCredit` only exists for the refused lane; free-form
