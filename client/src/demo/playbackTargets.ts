@@ -1,9 +1,11 @@
 import * as THREE from 'three';
-import type { TargetEvent } from './types.js';
-import { TargetEventType } from './types.js';
+import { TargetEventType, type TargetEvent } from './types.js';
 import { Ball } from '../entities/balls.js';
 import { BallDebris } from '../effects/debris.js';
-import { fastForward, type PlaybackWorld } from './playbackReconstruction.js';
+import { fastForward } from './playbackFF.js';
+import { SPAWN_POP_S } from '../entities/ballVisual.js';
+import type { PlaybackWorld } from './playbackReconstruction.js';
+import * as sfxWorld from '../core/sfx/world.js';
 
 // Ball/target replay: spawned/seek-rebuilt balls, smooth-snap drift
 // correction, hit flash + debris — everything that reads a TargetEvent.
@@ -15,7 +17,7 @@ export function reconstructSeekTarget(world: PlaybackWorld, ev: TargetEvent, dea
   if (deadBallIds.has(ev.targetType * 65_536 + ev.targetId)) {
     // For Destroyed events on dead balls, spawn debris fast-forwarded to seek time
     if (ev.eventType === TargetEventType.Destroyed) {
-      const debris = new BallDebris(scene, terrain, { x: ev.posX, y: ev.posY, z: ev.posZ }, new THREE.Color(0xFFFFFF), 1);
+      const debris = new BallDebris(scene, terrain, { x: ev.posX, y: ev.posY, z: ev.posZ }, new THREE.Color(0xFF_FF_FF), 1);
       debrisList.push(debris);
       fastForward(seekTime - ev.timestamp, () => !debris.dead, (s) => debris.update(s));
     }
@@ -57,6 +59,13 @@ function smoothSnapBall(ball: Ball, ...rest: [ex: number, ey: number, ez: number
   if (drift >= PLAYBACK_HARD_SNAP_DIST) {
     ball.pos.set(ex, ey, ez);
     ball.vel.set(evx, evy, evz);
+    // A big correction in a recording is usually a leash teleport —
+    // sell the re-arrival like the live one instead of a silent cut.
+    if (drift >= 25) {
+      ball.spawnPopT = SPAWN_POP_S;
+      ball.retireRibbons();
+      ball.trails.burst(12, ball.pos, ball.radius, ball.color);
+    }
   } else {
     const a = PLAYBACK_SMOOTH_FACTOR;
     ball.pos.x += (ex - ball.pos.x) * a;
@@ -68,32 +77,46 @@ function smoothSnapBall(ball: Ball, ...rest: [ex: number, ey: number, ez: number
   }
 }
 
-export function applyPlaybackTargetEvent(world: PlaybackWorld, ev: TargetEvent): void {
+function spawnPlaybackBall(world: PlaybackWorld, ev: TargetEvent): void {
   const { scene, terrain, balls, playbackBallById } = world;
+  const playerPos = world.getPlayer().pos;
+  const existing = playbackBallById.get(ev.targetId);
+  if (existing && !existing.dead) {
+    // Id reuse (allocator wrap, or a synthetic+real pair straddling a
+    // clip boundary): re-keying the map while pushing a second Ball would
+    // orphan the old one — updated by nothing, frozen in the scene.
+    existing.pos.set(ev.posX, ev.posY, ev.posZ);
+    existing.vel.set(ev.velX, ev.velY, ev.velZ);
+    if (ev.health > 0) {existing.health = ev.health;}
+    existing.update(0, terrain, playerPos);
+    return;
+  }
+  if (existing) {
+    // Dead corpse still fading — re-keying would orphan it out of the
+    // map (never ticked = frozen ghost). Hard-remove; the fade is lost
+    // but a frozen ghost is worse.
+    existing.dispose();
+    const i = balls.indexOf(existing);
+    if (i !== -1) {balls.splice(i, 1);}
+  }
+  const ball = new Ball(scene, terrain, ev.targetType as 0 | 1 | 2 | 3);
+  ball.pos.set(ev.posX, ev.posY, ev.posZ);
+  ball.vel.set(ev.velX, ev.velY, ev.velZ);
+  // Apply recorded health when available (e.g. synthetic Spawned from a Hit/Bounce snapshot)
+  if (ev.health > 0) {
+    ball.health = ev.health;
+  }
+  playbackBallById.set(ev.targetId, ball);
+  balls.push(ball);
+  ball.update(0, terrain, playerPos); // sync mesh (ctor doesn't copy pos)
+}
+
+export function applyPlaybackTargetEvent(world: PlaybackWorld, ev: TargetEvent): void {
+  const { terrain, playbackBallById } = world;
   const playerPos = world.getPlayer().pos;
 
   if (ev.eventType === TargetEventType.Spawned) {
-    const existing = playbackBallById.get(ev.targetId);
-    if (existing && !existing.dead) {
-      // Id reuse (allocator wrap, or a synthetic+real pair straddling a
-      // clip boundary): re-keying the map while pushing a second Ball would
-      // orphan the old one — updated by nothing, frozen in the scene.
-      existing.pos.set(ev.posX, ev.posY, ev.posZ);
-      existing.vel.set(ev.velX, ev.velY, ev.velZ);
-      if (ev.health > 0) {existing.health = ev.health;}
-      existing.update(0, terrain, playerPos);
-      return;
-    }
-    const ball = new Ball(scene, terrain, ev.targetType as 0 | 1 | 2 | 3);
-    ball.pos.set(ev.posX, ev.posY, ev.posZ);
-    ball.vel.set(ev.velX, ev.velY, ev.velZ);
-    // Apply recorded health when available (e.g. synthetic Spawned from a Hit/Bounce snapshot)
-    if (ev.health > 0) {
-      ball.health = ev.health;
-    }
-    playbackBallById.set(ev.targetId, ball);
-    balls.push(ball);
-    ball.update(0, terrain, playerPos); // sync mesh (ctor doesn't copy pos)
+    spawnPlaybackBall(world, ev);
     return;
   }
 
@@ -114,11 +137,14 @@ export function applyPlaybackTargetEvent(world: PlaybackWorld, ev: TargetEvent):
     ball.dead = ball.health <= 0;
     ball.update(0, terrain, playerPos);
     world.damageNumberManager.spawn(ball.pos, 1, '#ffffff', world.camera);
-    if (ball.dead) {playbackBallById.delete(ev.targetId);}
+    // Dead stays mapped — updateBallsPlayback ticks updateBallDead (trail
+    // fade, slot free) and splices on `disposed`. Unmapping here freezes
+    // the corpse midair.
   } else if (ev.eventType === TargetEventType.Destroyed) {
     ball.dead = true;
-    world.debrisList.push(new BallDebris(scene, terrain, ball.pos, ball.color, ball.scale));
-    playbackBallById.delete(ev.targetId);
+    // Same death bark the live kill path cues (combat/impact.ts).
+    sfxWorld.enemyCue(ball.pos, (ball as Ball & { dieCue?: 'die' | 'splat' | 'rustle' | 'squawk' }).dieCue ?? 'die');
+    world.debrisList.push(new BallDebris(world.scene, terrain, ball.pos, ball.color, ball.scale));
   }
 }
 

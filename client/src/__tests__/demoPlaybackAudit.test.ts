@@ -10,14 +10,16 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { deserializeDemo } from '../demo/demoReader.js';
-import { applyPlaybackEvents } from '../demo/playbackReconstruction.js';
-import { ProjectileEventType, TargetEventType } from '../demo/types.js';
+import { applyPlaybackEvents, type PlaybackWorld } from '../demo/playbackReconstruction.js';
 import {
+  ProjectileEventType, TargetEventType,
   TARGETTYPE_CREATURE_BASE, TARGETTYPE_DEPLOY_BASE, TARGETTYPE_KILL,
   TARGETTYPE_FLAG, TARGETTYPE_PICKUP_BASE, FLAG_DEMO_ID_BASE,
+  type TargetEvent, type ProjectileEvent, type DemoFile,
 } from '../demo/types.js';
-import type { TargetEvent, ProjectileEvent, DemoFile } from '../demo/types.js';
 import { DemoPlayer } from '../demo/DemoPlayer.js';
+import type { DemoManager } from '../demo/DemoManager.js';
+import type { ViewModel } from '../entities/ViewModel.js';
 import { createDemoLifecycle } from '../game/demoLifecycle.js';
 import { initSwarms } from '../entities/swarms.js';
 import { Ball } from '../entities/balls.js';
@@ -28,6 +30,8 @@ import type { DamageNumberManager } from '../effects/damageNumbers.js';
 import type { FragMessages } from '../ui/FragMessages.js';
 import type { HUD } from '../ui/hud.js';
 
+const noop = (): void => { /* stubbed dep */ };
+
 const CLIP = resolve(dirname(fileURLToPath(import.meta.url)),
   '../../../demos_out/midair_BoltLauncher_0.35s_henge.demo');
 const CLIP2 = resolve(dirname(fileURLToPath(import.meta.url)),
@@ -36,7 +40,7 @@ const CLIP2 = resolve(dirname(fileURLToPath(import.meta.url)),
 const flatTerrain = {
   getHeight: () => 0,
   getNormal: () => new THREE.Vector3(0, 1, 0),
-  reloadHeightmap() {},
+  reloadHeightmap(): void { /* flat stub — nothing to reload */ },
   heightfield: null,
   // InstancedBlobShadows binds the shared uniform objects verbatim —
   // a flat 1×1 black map samples as height 0, same as getHeight().
@@ -49,11 +53,16 @@ const flatTerrain = {
 
 // Build a lifecycle whose world is real playback code over stub scenery —
 // the same injection seam the game uses, so the exercised path is identical.
-function makePlaybackRig() {
+function makePlaybackRig(): {
+  scene: THREE.Scene; balls: Ball[]; mgr: unknown;
+  life: ReturnType<typeof createDemoLifecycle>;
+  viewmodel: { kicks: number; kick(): void };
+  world: PlaybackWorld;
+} {
   const scene = new THREE.Scene();
   const balls: Ball[] = [];
   const targets: Ball[] = [];
-  const viewmodel = { kicks: 0, kick() { this.kicks++; } };
+  const viewmodel = { kicks: 0, kick(): void { this.kicks += 1; } };
   initSwarms(scene, flatTerrain, {
     ball: { capacity: 512, parts: () => [
       { geometry: new THREE.SphereGeometry(1, 4, 3), material: new THREE.MeshBasicMaterial() },
@@ -63,25 +72,26 @@ function makePlaybackRig() {
     debrisList: [] as never[], explosions: [] as never[], implosions: [] as never[],
   } as unknown as WorldState;
   // A stub manager carrying the real wireDemoHandlers graft — the kick
-  // path only exists inside onPlaybackEvent, so tests drive events through
-  // it (not applyPlaybackEvents directly) or leaks past it invisible.
+  // path only exists inside onPlaybackEvent, so tests drive events
+  // through that handler — calling applyPlaybackEvents directly would
+  // leak straight past it.
   const mgr = {
     isPlaying: false, mode: 'playing', currentTime: 0,
     player: { demoData: null },
-    ui: { setStatus() {}, setPlaying() {} },
-    fetchCoolShotsFromServer() {}, startRecording() {}, setRemoteSource() {}, setTargetSnapshotSource() {},
+    ui: { setStatus: noop, setPlaying: noop },
+    fetchCoolShotsFromServer: noop, startRecording: noop, setRemoteSource: noop, setTargetSnapshotSource: noop,
     seekReconstructing: { on: false },
-  } as any;
+  } as unknown as DemoManager;
   const life = createDemoLifecycle({
     lazyScene: () => scene,
     lazyTerrain: () => flatTerrain,
     lazyCamera: () => new THREE.PerspectiveCamera(),
     lazyPlayer: () => ({ pos: new THREE.Vector3(0, 0, 0) } as unknown as Player),
     lazyDemoManager: () => mgr,
-    lazyViewModel: () => viewmodel as any,
-    damageNumberManager: () => ({ spawn() {} } as unknown as DamageNumberManager),
-    fragMessages: () => ({ showScore() {} } as unknown as FragMessages),
-    lazyHud: () => ({ showHitMarker() {} } as unknown as HUD),
+    lazyViewModel: () => viewmodel as unknown as ViewModel,
+    damageNumberManager: () => ({ spawn: noop } as unknown as DamageNumberManager),
+    fragMessages: () => ({ showScore: noop } as unknown as FragMessages),
+    lazyHud: () => ({ showHitMarker: noop } as unknown as HUD),
     balls,
     targets,
     crawlers: [], scarabs: [], gnats: [], snakes: [], banelings: [],
@@ -91,7 +101,7 @@ function makePlaybackRig() {
     overlay: null as unknown as HTMLElement,
     rendererCanvas: null as unknown as HTMLCanvasElement,
   });
-  life.wireDemoHandlers(mgr, () => {});
+  life.wireDemoHandlers(mgr, noop);
   return { scene, balls, life, mgr, viewmodel, world: life.playbackWorld };
 }
 
@@ -277,6 +287,87 @@ describe('playback audit — entities must animate', () => {
     for (let i = 0; i < 18; i++) {rig.life.updatePlaybackProjectiles(1 / 60);}
     expect(r.pos.distanceTo(origin)).toBeGreaterThan(5);
   });
+
+  it('a Hit after the shell unmapped still spawns its blast', () => {
+    // The replayed sim runs live collision — a shell can self-detonate
+    // and drain before its recorded edge. The event is the truth: the
+    // explosion must still fire or the demo silently loses every boom.
+    const rig = makePlaybackRig();
+    const before = rig.world.explosions.length;
+    applyPlaybackEvents(rig.world, { projectiles: [{
+      eventType: ProjectileEventType.Hit, timestamp: 0,
+      posX: 3, posY: 5, posZ: -2, velX: 0, velY: 0, velZ: 0,
+      projectileId: 77, weaponType: 0,
+      surfaceNormalX: 0, surfaceNormalY: 1, surfaceNormalZ: 0,
+      targetId: 0, targetType: 0,
+      hasPeakPosition: false, peakPosX: 0, peakPosY: 0, peakPosZ: 0,
+    }], targets: [] });
+    expect(rig.world.explosions.length).toBe(before + 1);
+    expect(rig.world.explosions[before]!.pos.x).toBeCloseTo(3, 5);
+  });
+});
+
+describe('playback audit — corpse lifecycle', () => {
+  // Ticks the playback loop until every tracked ball drains or the bound
+  // trips — a corpse that never reaches `disposed` is the frozen-midair bug.
+  const drain = (rig: ReturnType<typeof makePlaybackRig>, max = 1200): number => {
+    let n = 0;
+    while (n < max && rig.world.playbackBallById.size > 0) {
+      rig.life.updateBallsPlayback(1 / 60);
+      n++;
+    }
+    return n;
+  };
+
+  it('a recorded kill (Hit→0hp) fades the corpse out of the world', () => {
+    const rig = makePlaybackRig();
+    spawnedBall(rig.world, 50_000, new THREE.Vector3(0, 80, 0));
+    const ball = rig.world.playbackBallById.get(50_000)!;
+    applyPlaybackEvents(rig.world, { projectiles: [], targets: [mkTarget({
+      eventType: TargetEventType.Hit, targetId: 50_000, health: 0,
+      posX: 0, posY: 80, posZ: 0,
+    })] });
+    expect(ball.dead).toBe(true);
+    // Mapped while fading — unmapping here is the frozen-corpse regression.
+    expect(rig.world.playbackBallById.has(50_000)).toBe(true);
+    drain(rig);
+    expect(rig.world.playbackBallById.has(50_000)).toBe(false);
+    expect(rig.balls).not.toContain(ball);
+    expect(ball.disposed).toBe(true);
+  });
+
+  it('Destroyed without a prior Hit drains the corpse and drops debris', () => {
+    const rig = makePlaybackRig();
+    spawnedBall(rig.world, 50_001, new THREE.Vector3(0, 80, 0));
+    const ball = rig.world.playbackBallById.get(50_001)!;
+    const debris0 = rig.world.debrisList.length;
+    applyPlaybackEvents(rig.world, { projectiles: [], targets: [mkTarget({
+      eventType: TargetEventType.Destroyed, targetId: 50_001,
+      posX: 0, posY: 80, posZ: 0,
+    })] });
+    expect(ball.dead).toBe(true);
+    expect(rig.world.debrisList.length).toBe(debris0 + 1);
+    drain(rig);
+    expect(rig.world.playbackBallById.has(50_001)).toBe(false);
+    expect(rig.balls).not.toContain(ball);
+  });
+
+  it('Spawned re-keying over a fading corpse evicts it — no ghost ball', () => {
+    const rig = makePlaybackRig();
+    spawnedBall(rig.world, 50_002, new THREE.Vector3(0, 80, 0));
+    const corpse = rig.world.playbackBallById.get(50_002)!;
+    applyPlaybackEvents(rig.world, { projectiles: [], targets: [mkTarget({
+      eventType: TargetEventType.Destroyed, targetId: 50_002, posY: 80,
+    })] });
+    expect(corpse.dead).toBe(true);
+    // Id reuse while the corpse still fades — the new ball must own the key.
+    spawnedBall(rig.world, 50_002, new THREE.Vector3(5, 60, 0));
+    const fresh = rig.world.playbackBallById.get(50_002)!;
+    expect(fresh).not.toBe(corpse);
+    expect(fresh.dead).toBe(false);
+    expect(rig.balls).not.toContain(corpse);
+    expect(rig.balls).toContain(fresh);
+  });
 });
 
 /** Replays a demo's full event stream through the real lifecycle in one
@@ -381,7 +472,7 @@ describe.skipIf(!existsSync(CLIP))('recorded clip audit', () => {
 
   it('every fired projectile moved or terminated', () => {
     const rig = makePlaybackRig();
-    const world = rig.world;
+    const { world } = rig;
     const origins = new Map<number, THREE.Vector3>();
     let pi = 0, ti = 0;
     const dt = 1 / 30;
@@ -400,11 +491,9 @@ describe.skipIf(!existsSync(CLIP))('recorded clip audit', () => {
       rig.life.updatePlaybackProjectiles(dt);
     }
     const stuck: number[] = [];
-    let live = 0;
     for (const [id, o] of origins) {
       const r = world.playbackProjectileById.get(id);
       if (!r) {continue;} // terminated — fine
-      live++;
       if (r.pos.distanceTo(o) < 0.5) {stuck.push(id);}
     }
     expect(stuck, `stuck shells: ${stuck.join(',')}`).toHaveLength(0);

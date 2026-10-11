@@ -7,8 +7,9 @@ import * as THREE from 'three';
 import type { TargetEvent } from './types.js';
 import { TargetEventType, TARGETTYPE_DEPLOY_BASE } from './types.js';
 import { Explosion } from '../effects/explosion.js';
+import * as sfxExplosions from '../core/sfx/explosions.js';
 import type { PlaybackWorld } from './playbackReconstruction.js';
-import { fastForward } from './playbackReconstruction.js';
+import { fastForward } from './playbackFF.js';
 
 // kindIdx (DEMO_DEPLOY_KINDS order) -> proxy look. Persisted in files —
 // append-only. t = half-extent of the proxy box.
@@ -68,11 +69,12 @@ function kindIdxOf(ev: TargetEvent): number {
   return ev.targetType - TARGETTYPE_DEPLOY_BASE;
 }
 
-function boomIfBlast(world: PlaybackWorld, d: PlaybackDeployable, seekTime: number, evTime: number): void {
+function boomIfBlast(world: PlaybackWorld, d: PlaybackDeployable, seekTime: number, evTime: number, audible = false): void {
   // Mines and sentry guns pop on destruction — the VFX radius is cosmetic.
   if (d.kindIdx !== 1 && d.kindIdx !== 9) {return;}
   const exp = new Explosion(world.scene, d.pos, false, 0, world.terrain, 1);
   world.explosions.push(exp);
+  if (audible) {sfxExplosions.explosionAt(d.pos, d.kindIdx === 9);}
   const ff = seekTime - evTime;
   if (ff > 0) {fastForward(ff, () => !exp.dead, (s) => exp.update(s));}
 }
@@ -115,7 +117,11 @@ export function applyPlaybackDeployableEvent(world: PlaybackWorld, ev: TargetEve
   }
   if (ev.eventType === TargetEventType.Destroyed) {
     d.dead = true;
-    boomIfBlast(world, d, 0, 0);
+    boomIfBlast(world, d, 0, 0, true);
+    // Live path fizzle-pops non-blast deployables too (deployables.ts):
+    // turret booms big, station/drone/shield pop small.
+    if (d.kindIdx === 0) {sfxExplosions.explosionAt(d.pos, true);}
+    else if (d.kindIdx === 2 || d.kindIdx === 3 || d.kindIdx === 4) {sfxExplosions.explosionAt(d.pos, false);}
     d.dispose(world.scene);
     map.delete(ev.targetId);
   }

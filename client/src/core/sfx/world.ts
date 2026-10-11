@@ -9,7 +9,9 @@ import { ctx, play, osc, sample, layer, noise } from './util.js';
 
 
 let loops: { wind: LoopHandle | null; ski: LoopHandle | null; skiTex: LoopHandle | null; jet: LoopHandle | null } | null = null;
-let samplesSwapped = false;
+// Samples land individually — one latch per loop so a slow jet_loop
+// fetch can't strand the pack on the sawtooth while snow_amb was quick.
+const realBound = { wind: false, skiTex: false, jet: false };
 const _right = new THREE.Vector3();
 
 // Pack pitch tracks chassis: light frames whine a touch brighter, heavy
@@ -18,8 +20,9 @@ const JET_RATE: Record<string, number> = { light: 1.05, medium: 1.0, heavy: 0.95
 let jetCls = 'medium';
 
 function jetLoop(cls: string): LoopHandle | null {
-  const r = JET_RATE[cls] ?? 1;
-  return audio.sampleLoop('jet_loop', r) ?? audio.oscLoop('sawtooth', 90 * r);
+  // No synth stand-in: a 90Hz sawtooth reads as a lawnmower, worse than
+  // silence. Null until the real sample lands — swapToRealSamples binds it.
+  return audio.sampleLoop('jet_loop', JET_RATE[cls] ?? 1);
 }
 
 /** Structural player shape — avoids importing Player (cycle). */
@@ -48,21 +51,22 @@ function ensureLoops(): NonNullable<typeof loops> {
   return loops;
 }
 
-// Samples fetch async after unlock — swap the synth placeholders for the
-// real recordings once they land (one shot at it, then stay put).
+// Samples fetch async after unlock — swap each synth placeholder for the
+// real recording as ITS buffer lands (the bank resolves per-file, so the
+// old single latch could lock the sawtooth in when one fetch lagged).
+// Build before stop so a failed rebuild keeps the synth playing.
 function swapToRealSamples(): void {
-  if (samplesSwapped || !(audio.sample('jet_loop') || audio.sample('snow_amb') || audio.sample('ski_scrape'))) return;
-  samplesSwapped = true;
-  const jetBuf = audio.sample('jet_loop') && audio.sampleLoop('jet_loop', JET_RATE[jetCls] ?? 1);
-  const windBuf = audio.sample('snow_amb') && audio.sampleLoop('snow_amb');
+  const l = loops;
+  if (!l) return;
+  const jetBuf = !realBound.jet && audio.sample('jet_loop') && audio.sampleLoop('jet_loop', JET_RATE[jetCls] ?? 1);
+  if (jetBuf) { realBound.jet = true; l.jet?.stop(); l.jet = jetBuf; }
+  const windBuf = !realBound.wind && audio.sample('snow_amb') && audio.sampleLoop('snow_amb');
+  if (windBuf) { realBound.wind = true; l.wind?.stop(); l.wind = windBuf; }
   // ski_scrape is a snow-footstep sample — looped ~2.6x it reads as
   // crunching granular texture under the noise scrape, better than
-  // filtered noise alone. Its rate is fixed at acquire time, so the
-  // swap below just rebuilds the same handle once the buffer lands.
-  const skiBuf = audio.sample('ski_scrape') && audio.sampleLoop('ski_scrape', 2.6);
-  if (jetBuf) { loops!.jet?.stop(); loops!.jet = jetBuf; }
-  if (windBuf) { loops!.wind?.stop(); loops!.wind = windBuf; }
-  if (skiBuf) { loops!.skiTex?.stop(); loops!.skiTex = skiBuf; }
+  // filtered noise alone.
+  const skiBuf = !realBound.skiTex && audio.sample('ski_scrape') && audio.sampleLoop('ski_scrape', 2.6);
+  if (skiBuf) { realBound.skiTex = true; l.skiTex?.stop(); l.skiTex = skiBuf; }
 }
 
 /**
@@ -143,7 +147,7 @@ export function warpJump(pos: THREE.Vector3, emitVel?: THREE.Vector3): void {
 // The wire carries ski but no jet bit — jetting is inferred from a powered
 // climb (vel.y past walking jump apex), same read as the remote animation.
 // Callers gate on cloak/death upstream, so a cloaked jetter stays silent.
-interface RemoteLoops { jet: PositionalLoop | null; ski: PositionalLoop | null; busy: boolean; cls: string; }
+interface RemoteLoops { jet: PositionalLoop | null; ski: PositionalLoop | null; busy: boolean; cls: string; jetSynth: boolean; skiSynth: boolean; }
 const remoteLoops = new Map<string, RemoteLoops>();
 const REMOTE_LOOP_CAP = 6;
 
@@ -162,11 +166,19 @@ function acquireRemoteLoops(id: string, cls: string): RemoteLoops | null {
     if (remoteLoops.size >= REMOTE_LOOP_CAP) return null;
   }
   const r = JET_RATE[cls] ?? 1;
+  const jetReal = audio.sample('jet_loop') !== null;
+  const skiReal = audio.sample('ski_scrape') !== null;
   const l: RemoteLoops = {
-    jet: audio.worldLoop('sample', 'jet_loop', r) ?? audio.worldLoop('osc', 'sawtooth', 90 * r),
+    // Silent until the recording lands — no sawtooth placeholder.
+    jet: jetReal ? audio.worldLoop('sample', 'jet_loop', r) : null,
     ski: audio.worldLoop('sample', 'ski_scrape', 1.3) ?? audio.worldLoop('noise', 'bandpass', 2400),
     busy: false,
     cls,
+    // Fetched async — a remote that jets before the bank lands gets the
+    // sawtooth, which reads as a lawnmower. Flag it so the tick swaps in
+    // the real recording once decoded instead of buzzing all session.
+    jetSynth: !jetReal,
+    skiSynth: !skiReal,
   };
   remoteLoops.set(id, l);
   return l;
@@ -178,6 +190,15 @@ export function remoteMoveAudio(id: string, pos: THREE.Vector3, speed: number, j
   // Respawned into a new tier — the pack pitch follows the chassis.
   if (l && l.cls !== cls) { remoteMoveAudioGone(id); l = (jetting || skiing) ? acquireRemoteLoops(id, cls) : null; }
   if (!l) return;
+  // Late-arriving samples: swap the synth stand-ins like the local loops.
+  if (l.jetSynth && audio.sample('jet_loop')) {
+    const jet = audio.worldLoop('sample', 'jet_loop', JET_RATE[l.cls] ?? 1);
+    if (jet) { l.jetSynth = false; l.jet?.stop(); l.jet = jet; }
+  }
+  if (l.skiSynth && audio.sample('ski_scrape')) {
+    const ski = audio.worldLoop('sample', 'ski_scrape', 1.3);
+    if (ski) { l.skiSynth = false; l.ski?.stop(); l.ski = ski; }
+  }
   l.busy = jetting || skiing;
   l.jet?.setPos(pos, vel); l.jet?.set(jetting ? 0.45 : 0);
   l.ski?.setPos(pos, vel); l.ski?.set(skiing ? Math.min(0.24, 0.035 + speed / 50 * 0.2) : 0);

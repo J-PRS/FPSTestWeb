@@ -180,10 +180,18 @@ export class DemoManager implements demoIO.DemoIOHost {
       const ctx = this.player.isLoaded ? 'demo' : 'live';
       void this.video.stop().then(async blob => {
         const ext = this.video.mimeType.includes('mp4') ? 'mp4' : 'webm';
-        const ok = blob ? await clipSink.saveClip(`kribes_${ctx}_${demoIO.timestampStr()}.${ext}`, blob) : false;
+        const name = `kribes_${ctx}_${demoIO.timestampStr()}.${ext}`;
+        const ok = blob ? await clipSink.saveClip(name, blob) : false;
+        if (ok && this.pendingExportShotId) {
+          // Deliberate export — the vault row alone is invisible: link it
+          // onto the shot (Download MP4 badge) and download the file too.
+          const shot = this.coolShotMgr.list.find(s => s.id === this.pendingExportShotId);
+          if (shot) {shot.mp4Name = name;}
+          void clipSink.exportClip(name);
+        }
+        this.pendingExportShotId = null;
         this.ui.setStatus(ok ? 'video saved' : 'video failed');
       });
-      this.releaseExportFullscreen();
       return;
     }
     // First F9 on a Chromium build: pick the clips folder once and every
@@ -234,32 +242,22 @@ export class DemoManager implements demoIO.DemoIOHost {
    *  fetched clip doesn't record its own loading gap. 0 = disarmed; the
    *  30s staleness window drops an arm whose fetch never resolves. */
   private videoExportArmedAt = 0;
-  /** True while an export holds the fullscreen we entered for it —
-   *  released when the capture stops, never on a user-owned fullscreen. */
-  private exportOwnsFullscreen = false;
+  /** The cool-shot id an EXPORT MP4 is recording for — consumed when the
+   *  capture stops: stamps mp4Name (the shot gains a Download MP4 entry)
+   *  and anchor-downloads the file so a deliberate export lands visibly. */
+  private pendingExportShotId: string | null = null;
 
-  /** Cool-shot context-menu "EXPORT MP4": plays the clip fullscreen with
-   *  the canvas recorder armed; onPlaybackEnd stops+downloads and drops
-   *  fullscreen. The recorder blits into a staged 1920×1080 canvas, so
-   *  the export is fixed 16:9 regardless of window size — fullscreen is
-   *  kept for the view-DURING-record benefit, not the output size. */
+  /** Cool-shot context-menu "EXPORT MP4": plays the clip with the canvas
+   *  recorder armed; onPlaybackEnd stops+downloads. The recorder blits
+   *  into a staged 1920×1080 canvas, so the export is fixed 16:9 at any
+   *  window size — no forced fullscreen, the replay plays windowed. */
   exportCoolShotMp4(id: string): void {
     if (!VideoRecorder.isSupported()) { this.ui.setStatus('no video capture'); return; }
     if (this.video.isRecording) { this.ui.setStatus('video already rolling'); return; }
     this.player.setLoop(false); // looping suppresses onPlaybackEnd = the auto-stop
     this.videoExportArmedAt = Date.now();
-    // Called inside the menu click — transient activation still holds for
-    // a server clip's async fetch because the request happens NOW.
-    void document.documentElement.requestFullscreen?.()
-      .then(() => { this.exportOwnsFullscreen = true; })
-      .catch(() => {}); // gesture rejected — export still works, just windowed
+    this.pendingExportShotId = id;
     this.coolShotMgr.playById(id);
-  }
-
-  private releaseExportFullscreen(): void {
-    if (!this.exportOwnsFullscreen) {return;}
-    this.exportOwnsFullscreen = false;
-    void document.exitFullscreen?.().catch(() => {});
   }
 
   get isRecording(): boolean { return this.mode === 'recording'; }
@@ -301,7 +299,6 @@ export class DemoManager implements demoIO.DemoIOHost {
 
   stopPlayback(): void {
     this.videoExportArmedAt = 0;
-    this.releaseExportFullscreen(); // ESC mid-export returns the window
     this.player.stop();
     this.mode = 'idle';
     this.ui.setPlaying(false);

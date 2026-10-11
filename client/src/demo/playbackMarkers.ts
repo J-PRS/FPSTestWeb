@@ -10,7 +10,9 @@ import type { TargetEvent } from './types.js';
 import { TargetEventType, TARGETTYPE_KILL, TARGETTYPE_FLAG, TARGETTYPE_PICKUP_BASE } from './types.js';
 import { Explosion } from '../effects/explosion.js';
 import type { PlaybackWorld } from './playbackReconstruction.js';
-import { fastForward } from './playbackReconstruction.js';
+import { fastForward } from './playbackFF.js';
+import * as sfxUtil from '../core/sfx/util.js';
+import * as sfxPlayer from '../core/sfx/player.js';
 
 const PICKUP_COLORS = [0xffcc33, 0xdd4444, 0x44dd66, 0xff8833, 0x44ccff, 0xcc44ff]; // gem/tag/heal/armor/regen/dd
 const FLAG_COLORS = [0x55aaff, 0xff8855]; // alpha/beta — matches TEAM_COLORS
@@ -50,11 +52,13 @@ function flagTeamIdx(targetId: number): number {
   return targetId & 0xf; // low nibble of FLAG_DEMO_ID_BASE|teamIdx
 }
 
-export function applyPlaybackMarkerEvent(world: PlaybackWorld, ev: TargetEvent): void {
+export function applyPlaybackMarkerEvent(world: PlaybackWorld, ev: TargetEvent, audible = false): void {
   if (ev.targetType === TARGETTYPE_KILL) {
     // Victim pos + a small red burst — the body gibs ride remoteFrames.
     const pos = new THREE.Vector3(ev.posX, ev.posY, ev.posZ);
     world.explosions.push(new Explosion(world.scene, pos, false, 0, world.terrain, 0.8, 0xdd3333));
+    // Live kills cue a death bark at the body — playback's version.
+    if (audible) {sfxUtil.at(pos, 'robot_die', 0.9);}
     return;
   }
 
@@ -70,6 +74,17 @@ export function applyPlaybackMarkerEvent(world: PlaybackWorld, ev: TargetEvent):
       // health = state code; peakPosX = carrier roster idx + 1. A carried
       // flag parks at its last pos until the per-frame tick re-pins it to
       // the replayed carrier.
+      if (audible) {
+        // Flag cues are global in live play, but a clip is about THE shot —
+        // a grab on the far side of the map is mix noise. Earshot only.
+        const prev = flag.userData.state as number | undefined;
+        const near = world.camera.position.distanceToSquared(flag.position) < 80 * 80;
+        if (near && ev.health !== prev) {
+          if (ev.health === 1) {sfxPlayer.flagCue('taken', false);}
+          else if (ev.health === 2) {sfxPlayer.flagCue('dropped', false);}
+          else if (ev.health === 0 && prev === 2) {sfxPlayer.flagCue('returned', false);}
+        }
+      }
       flag.userData.state = ev.health;
       flag.userData.carrierIdx = ev.peakPosX - 1;
       flag.position.set(ev.posX, ev.posY, ev.posZ);
@@ -97,6 +112,11 @@ export function applyPlaybackMarkerEvent(world: PlaybackWorld, ev: TargetEvent):
     if (ev.eventType === TargetEventType.Destroyed) {
       const p = map.get(ev.targetId);
       if (p) {
+        // Grabbed — gem/tag ping like a pickup, the rest chime like a
+        // powerup, matching the live pickupGrab/powerup split.
+        if (audible) {
+          sfxUtil.at(p.mesh.position, ev.targetType - TARGETTYPE_PICKUP_BASE <= 1 ? 'pickup' : 'powerup');
+        }
         p.dispose(world.scene);
         map.delete(ev.targetId);
       }

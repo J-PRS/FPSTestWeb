@@ -24,6 +24,7 @@ import { hmapMatches } from '../demo/demoHmap.js';
 import { feedMode } from '../feed/feedMode.js';
 import { disposeSwings } from '../effects/swingTrails.js';
 import { getHeightfield, injectHeightmapBytes } from '../world/heightmap.js';
+import * as sfxWorld from '../core/sfx/world.js';
 
 const logger = new ChildLogger('DemoPlayback');
 
@@ -138,6 +139,9 @@ function updateBallsPlayback(d: DemoLifecycleCtx, dt: number): void {
 // Shared cleanup: dispose live + playback transient objects
 function clearTransientObjects(d: DemoLifecycleCtx): void {
   for (const rp of d.playbackRemotes.values()) {rp.dispose();}
+  // Loop audio outlives the replica — each 'pb:' voice must release its
+  // remoteMoveAudio slot or a stopped replay drones on.
+  for (const idx of d.playbackRemotes.keys()) {sfxWorld.remoteMoveAudioGone(`pb:${idx}`);}
   d.playbackRemotes.clear();
   for (const r of d.playbackProjectiles) {r.dispose();}
   d.playbackProjectiles.length = 0;
@@ -339,12 +343,23 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
       }
       rp.update(pos, { yaw: s.yaw, pitch: s.pitch }, dt, 0, { x: s.velX, y: s.velY, z: s.velZ });
       rp.tick(dt, d.lazyCamera().position);
-      rp.setStaleHidden((s.flags & RemoteFrameFlags.Dead) !== 0);
+      const dead = (s.flags & RemoteFrameFlags.Dead) !== 0;
+      rp.setStaleHidden(dead);
+      // Playback remotes bypass net/remotes.ts, which is where jet/ski
+      // audio normally fires — replay the same positional loop decision.
+      // No wireJet bit in the recording, so the powered-climb heuristic
+      // stands in for it; the ski bit IS recorded.
+      sfxWorld.remoteMoveAudio(`pb:${s.rosterIdx}`, rp.position, rp.vel.length(),
+        !dead && s.velY > 4.5, !dead && (s.flags & RemoteFrameFlags.Ski) !== 0,
+        rp.vel, rp.armorClass ?? 'medium');
     }
     // Roster players absent at this time keep their replica but hidden —
     // e.g. they joined after the seek target or hadn't spawned yet.
     for (const [idx, rp] of d.playbackRemotes) {
-      if (!seen.has(idx)) {rp.setStaleHidden(true);}
+      if (!seen.has(idx)) {
+        rp.setStaleHidden(true);
+        sfxWorld.remoteMoveAudioGone(`pb:${idx}`);
+      }
     }
   };
 
@@ -417,7 +432,7 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
   const playbackCreatureById = new Map<number, PlaybackCreature>();
   const playbackDeployableById = new Map<number, PlaybackDeployable>();
   const playbackFlags = new Map<number, THREE.Group>();
-  const playbackPickups = new Map<number, { dispose(scene: THREE.Scene): void }>();
+  const playbackPickups = new Map<number, { mesh: THREE.Object3D; dispose(scene: THREE.Scene): void }>();
   const playbackRemotesMap = new Map<number, RemotePlayer>();
   const playbackProjectileOrigin = new Map<number, THREE.Vector3>();
 

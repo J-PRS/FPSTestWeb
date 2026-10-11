@@ -10,7 +10,8 @@ import type { TargetEvent } from './types.js';
 import { TargetEventType, TARGETTYPE_CREATURE_BASE } from './types.js';
 import { GRAVITY } from '../../../shared/movement.js';
 import type { PlaybackWorld } from './playbackReconstruction.js';
-import { fastForward } from './playbackReconstruction.js';
+import { fastForward } from './playbackFF.js';
+import * as sfxWorld from '../core/sfx/world.js';
 
 // speciesIdx (from DEMO_SPECIES order) -> proxy look. Keys are the file's
 // persisted ids, so this table must stay append-only.
@@ -114,6 +115,9 @@ export function applyPlaybackCreatureEvent(world: PlaybackWorld, ev: TargetEvent
   if (!c || c.dead) {return;}
 
   if (ev.eventType === TargetEventType.Destroyed) {
+    // Generic death cue — species action barks (pounce/zap/skitter) aren't
+    // in the recording; a proxy can't invent them.
+    sfxWorld.enemyCue(c.pos, 'die');
     c.dead = true;
     c.dispose(world.scene);
     map.delete(ev.targetId);

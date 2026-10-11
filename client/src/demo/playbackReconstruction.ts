@@ -4,8 +4,7 @@
 // (apply events incrementally as they arrive).
 
 import * as THREE from 'three';
-import type { ProjectileEvent, TargetEvent } from './types.js';
-import { ProjectileEventType, TargetEventType, isCreatureTargetType, isDeployTargetType, isMiscTargetType, TARGETTYPE_CREATURE_BASE } from './types.js';
+import { ProjectileEventType, TargetEventType, isCreatureTargetType, isDeployTargetType, isMiscTargetType, TARGETTYPE_CREATURE_BASE, type ProjectileEvent, type TargetEvent } from './types.js';
 import type { Ball } from '../entities/balls.js';
 import { reconstructSeekCreature, applyPlaybackCreatureEvent, type PlaybackCreature } from './playbackCreatures.js';
 import { reconstructSeekDeployable, applyPlaybackDeployableEvent, type PlaybackDeployable } from './playbackDeployables.js';
@@ -22,6 +21,10 @@ import type { HUD } from '../ui/hud.js';
 import type { Terrain } from '../world/terrain.js';
 import { ChildLogger } from '../core/Logger.js';
 import { reconstructSeekTarget, applyPlaybackTargetEvent } from './playbackTargets.js';
+import * as sfxWeapons from '../core/sfx/weapons.js';
+import * as sfxExplosions from '../core/sfx/explosions.js';
+import * as sfxUtil from '../core/sfx/util.js';
+import { fastForward } from './playbackFF.js';
 
 const logger = new ChildLogger('DemoPlayback');
 
@@ -51,7 +54,7 @@ export interface PlaybackWorld {
   playbackDeployableById: Map<number, PlaybackDeployable>;
   /** Flag + pickup proxies — keyed by their demo targetIds. */
   playbackFlags: Map<number, THREE.Group>;
-  playbackPickups: Map<number, { dispose(scene: THREE.Scene): void }>;
+  playbackPickups: Map<number, { mesh: THREE.Object3D; dispose(scene: THREE.Scene): void }>;
   /** Resolves a roster idx to the replayed remote player's rendered pos —
    *  wired by the playback lifecycle so a carried flag can ride its carrier. */
   remotePosAt?: (rosterIdx: number) => THREE.Vector3 | null;
@@ -77,7 +80,7 @@ export function releasePlaybackBeam(world: PlaybackWorld, b: PlaybackBeam): void
   else {world.beamPool.push(b);}
 }
 
-export function spawnPlaybackBeam(world: PlaybackWorld, from: THREE.Vector3, to: THREE.Vector3, colorHex = 0x99EEFF): void {
+export function spawnPlaybackBeam(world: PlaybackWorld, from: THREE.Vector3, to: THREE.Vector3, colorHex = 0x99_EE_FF): void {
   _beamDir.subVectors(to, from);
   const len = _beamDir.length();
   if (len < 0.01) {return;}
@@ -99,15 +102,59 @@ export function spawnPlaybackBeam(world: PlaybackWorld, from: THREE.Vector3, to:
   world.beams.push(b);
 }
 
-const FF_DT = 1 / 60;
+// Advance an entity from its event timestamp to the seek time in fixed
+// steps. Lives in playbackFF.ts (leaf module — importing it from here
+// made the reconstruction↔applier import cycle); re-exported for compat.
+export { fastForward };
 
-// Advance an entity from its event timestamp to the seek time in fixed steps
-export function fastForward(ffTime: number, alive: () => boolean, step: (dt: number) => void): void {
-  let rem = ffTime;
-  while (rem > 0 && alive()) {
-    const s = Math.min(FF_DT, rem);
-    step(s);
-    rem -= s;
+// Reconstruct projectile from recorded position + velocity, using weaponType
+function spawnPlaybackProjectile(world: PlaybackWorld, ev: ProjectileEvent): Projectile {
+  const origin = new THREE.Vector3(ev.posX, ev.posY, ev.posZ);
+  const velocity = new THREE.Vector3(ev.velX, ev.velY, ev.velZ);
+  const cfg = getProjectileConfig(ev.weaponType) ?? BOLT_CONFIG;
+  const r = new Projectile(world.scene, origin, new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 0), cfg);
+  r.isRemote = true;
+  r.spawnedThisFrame = false;
+  r.vel.copy(velocity);
+  // Ray-burst replicas discharge deterministically — same hook as the live
+  // wire path so replays paint the rail beam too.
+  if (cfg.rayBurst) {
+    const beamColor = cfg.glowColor;
+    r.onRayBurst = (from, to): void => spawnPlaybackBeam(world, from, to, beamColor);
+  }
+  world.playbackProjectiles.push(r);
+  world.playbackProjectileById.set(ev.projectileId, r);
+  world.playbackProjectileOrigin.set(ev.projectileId, origin.clone());
+  return r;
+}
+
+function reconstructSeekProjectile(world: PlaybackWorld, ev: ProjectileEvent, deadIds: Set<number>, seekTime: number): void {
+  const { scene, terrain, explosions } = world;
+
+  if (deadIds.has(ev.projectileId)) {
+    // For Hit events on dead projectiles, spawn explosion fast-forwarded to seek time
+    if (ev.eventType === ProjectileEventType.Hit) {
+      const hitPos = new THREE.Vector3(ev.posX, ev.posY, ev.posZ);
+      const cfg = getProjectileConfig(ev.weaponType);
+      const exp = new Explosion(scene, hitPos, false, 0, terrain, (cfg?.explosionRadius ?? 6) / 6, cfg?.damageColor);
+      explosions.push(exp);
+      fastForward(seekTime - ev.timestamp, () => !exp.dead, (s) => exp.update(s));
+    }
+    return;
+  }
+
+  if (ev.eventType === ProjectileEventType.Fired) {
+    const r = spawnPlaybackProjectile(world, ev);
+    fastForward(seekTime - ev.timestamp, () => !r.dead && !r.exploded, (s) => r.update(s, terrain));
+    return;
+  }
+
+  if (ev.eventType === ProjectileEventType.Bounce) {
+    const r = world.playbackProjectileById.get(ev.projectileId);
+    if (!r || r.exploded) {return;}
+    r.pos.set(ev.posX, ev.posY, ev.posZ);
+    r.vel.set(ev.velX, ev.velY, ev.velZ);
+    fastForward(seekTime - ev.timestamp, () => !r.dead && !r.exploded, (s) => r.update(s, terrain));
   }
 }
 
@@ -154,110 +201,12 @@ export function reconstructSeek(world: PlaybackWorld, events: { projectiles: Pro
   }
 }
 
-function reconstructSeekProjectile(world: PlaybackWorld, ev: ProjectileEvent, deadIds: Set<number>, seekTime: number): void {
-  const { scene, terrain, explosions } = world;
-
-  if (deadIds.has(ev.projectileId)) {
-    // For Hit events on dead projectiles, spawn explosion fast-forwarded to seek time
-    if (ev.eventType === ProjectileEventType.Hit) {
-      const hitPos = new THREE.Vector3(ev.posX, ev.posY, ev.posZ);
-      const cfg = getProjectileConfig(ev.weaponType);
-      const exp = new Explosion(scene, hitPos, false, 0, terrain, (cfg?.explosionRadius ?? 6) / 6, cfg?.damageColor);
-      explosions.push(exp);
-      fastForward(seekTime - ev.timestamp, () => !exp.dead, (s) => exp.update(s));
-    }
-    return;
-  }
-
-  if (ev.eventType === ProjectileEventType.Fired) {
-    const r = spawnPlaybackProjectile(world, ev);
-    fastForward(seekTime - ev.timestamp, () => !r.dead && !r.exploded, (s) => r.update(s, terrain));
-    return;
-  }
-
-  if (ev.eventType === ProjectileEventType.Bounce) {
-    const r = world.playbackProjectileById.get(ev.projectileId);
-    if (!r || r.exploded) {return;}
-    r.pos.set(ev.posX, ev.posY, ev.posZ);
-    r.vel.set(ev.velX, ev.velY, ev.velZ);
-    fastForward(seekTime - ev.timestamp, () => !r.dead && !r.exploded, (s) => r.update(s, terrain));
-  }
-}
-
-// Reconstruct projectile from recorded position + velocity, using weaponType
-function spawnPlaybackProjectile(world: PlaybackWorld, ev: ProjectileEvent): Projectile {
-  const origin = new THREE.Vector3(ev.posX, ev.posY, ev.posZ);
-  const velocity = new THREE.Vector3(ev.velX, ev.velY, ev.velZ);
-  const cfg = getProjectileConfig(ev.weaponType) ?? BOLT_CONFIG;
-  const r = new Projectile(world.scene, origin, new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 0), cfg);
-  r.isRemote = true;
-  r.spawnedThisFrame = false;
-  r.vel.copy(velocity);
-  // Ray-burst replicas discharge deterministically — same hook as the live
-  // wire path so replays paint the rail beam too.
-  if (cfg.rayBurst) {
-    const beamColor = cfg.glowColor;
-    r.onRayBurst = (from, to) => spawnPlaybackBeam(world, from, to, beamColor);
-  }
-  world.playbackProjectiles.push(r);
-  world.playbackProjectileById.set(ev.projectileId, r);
-  world.playbackProjectileOrigin.set(ev.projectileId, origin.clone());
-  return r;
-}
-
 // Keyframe snapping policy: balls are resimulated with the live render dt between
 // keyframes, so their trajectory drifts slightly from the recording (different dt).
 // Hard-snapping every keyframe (including the 0.5s periodic snapshots) produces
 // visible micro-jumps. Instead, only hard-snap when drift is large (real desync from
 // a bounce-timing mismatch or teleport); for small drift, gently correct toward the
 // recorded state so the motion stays smooth and drift stays bounded over long arcs.
-// Normal playback event processing (forward playback, not seeking)
-export function applyPlaybackEvents(world: PlaybackWorld, events: { projectiles: ProjectileEvent[], targets: TargetEvent[] }): void {
-  // Targets first so balls are spawned/updated before projectile hits reference them
-  for (const ev of events.targets) {
-    if (isCreatureTargetType(ev.targetType)) {
-      applyPlaybackCreatureEvent(world, ev);
-    } else if (isDeployTargetType(ev.targetType)) {
-      applyPlaybackDeployableEvent(world, ev);
-    } else if (isMiscTargetType(ev.targetType)) {
-      applyPlaybackMarkerEvent(world, ev);
-    } else {
-      applyPlaybackTargetEvent(world, ev);
-    }
-  }
-  for (const ev of events.projectiles) {
-    applyPlaybackProjectileEvent(world, ev);
-  }
-}
-function applyPlaybackProjectileEvent(world: PlaybackWorld, ev: ProjectileEvent): void {
-  if (ev.eventType === ProjectileEventType.Fired) {
-    spawnPlaybackProjectile(world, ev);
-    return;
-  }
-
-  const r = world.playbackProjectileById.get(ev.projectileId);
-  if (!r || r.exploded) {return;}
-
-  if (ev.eventType === ProjectileEventType.Bounce) {
-    r.pos.set(ev.posX, ev.posY, ev.posZ);
-    r.vel.set(ev.velX, ev.velY, ev.velZ);
-  } else if (ev.eventType === ProjectileEventType.Hit) {
-    r.pos.set(ev.posX, ev.posY, ev.posZ);
-    r.explode();
-    applyPlaybackProjectileHit(world, ev, r);
-    // Terminal event — drop the lookup entries so a long demo doesn't
-    // accumulate dead shells forever (same contract as netCrawlerById).
-    world.playbackProjectileById.delete(ev.projectileId);
-    world.playbackProjectileOrigin.delete(ev.projectileId);
-  } else if (ev.eventType === ProjectileEventType.Destroyed) {
-    // Remove projectile without explosion (e.g. timeout)
-    r.pos.set(ev.posX, ev.posY, ev.posZ);
-    r.explode();
-    world.playbackProjectileById.delete(ev.projectileId);
-    world.playbackProjectileOrigin.delete(ev.projectileId);
-  }
-}
-
 function applyPlaybackProjectileHit(world: PlaybackWorld, ev: ProjectileEvent, r: Projectile): void {
   const { scene, terrain, explosions, implosions } = world;
 
@@ -276,11 +225,15 @@ function applyPlaybackProjectileHit(world: PlaybackWorld, ev: ProjectileEvent, r
   }
   const acc = computeAccuracy(accRaw, directHit);
 
-  // Spawn correct effect (explosion for push, implosion for pull)
+  // Spawn correct effect (explosion for push, implosion for pull) — the
+  // VFX is playback-owned but the boom rides the same sfx call the live
+  // impact path makes (combat/impact.ts).
   if (r.config.forceMode === 'push') {
     explosions.push(new Explosion(scene, r.pos, directHit, r.age, terrain, r.explosionRadius / 6, r.config.damageColor, r.config.vfx));
+    sfxExplosions.explosionAt(r.pos, directHit, ev.weaponType);
   } else {
     implosions.push(new Implosion(scene, r.pos, r.age, terrain));
+    sfxExplosions.implosionAt(r.pos, directHit);
   }
 
   // Compute frag message from playback data (skip terrain hits)
@@ -299,5 +252,83 @@ function applyPlaybackProjectileHit(world: PlaybackWorld, ev: ProjectileEvent, r
     logger.debug(`Projectile Hit: projPos=(${ev.posX.toFixed(1)},${ev.posY.toFixed(1)},${ev.posZ.toFixed(1)}) ballPos=(${ball.pos.x.toFixed(1)},${ball.pos.y.toFixed(1)},${ball.pos.z.toFixed(1)}) dist=${distBall.toFixed(1)}m`);
   } else if (ev.targetId && ev.targetId !== 0xFF_FF && ev.targetId !== 0) {
     logger.debug(`Projectile Hit: projPos=(${ev.posX.toFixed(1)},${ev.posY.toFixed(1)},${ev.posZ.toFixed(1)}) ball ${ev.targetId} not found`);
+  }
+}
+
+function applyPlaybackProjectileEvent(world: PlaybackWorld, ev: ProjectileEvent): void {
+  if (ev.eventType === ProjectileEventType.Fired) {
+    spawnPlaybackProjectile(world, ev);
+    // Playback has no net handlers — the recorded fire event is where
+    // muzzle audio lives in a live game, so it has to play here.
+    sfxWeapons.shotAt(new THREE.Vector3(ev.posX, ev.posY, ev.posZ), ev.weaponType);
+    return;
+  }
+
+  const r = world.playbackProjectileById.get(ev.projectileId);
+
+  if (ev.eventType === ProjectileEventType.Hit) {
+    if (r) {
+      r.pos.set(ev.posX, ev.posY, ev.posZ);
+      if (!r.exploded) {r.explode();}
+      applyPlaybackProjectileHit(world, ev, r);
+      // Terminal event — drop the lookup entries so a long demo doesn't
+      // accumulate dead shells forever (same contract as netCrawlerById).
+      world.playbackProjectileById.delete(ev.projectileId);
+      world.playbackProjectileOrigin.delete(ev.projectileId);
+    } else {
+      // The replayed sim runs live collision — a shell can self-detonate
+      // (or finish draining and unmap) BEFORE its recorded edge arrives.
+      // The recording is the truth: spawn the blast at the recorded
+      // point, or the demo silently loses the explosion.
+      const { scene, terrain, explosions, implosions } = world;
+      const cfg = getProjectileConfig(ev.weaponType) ?? BOLT_CONFIG;
+      const hitPos = new THREE.Vector3(ev.posX, ev.posY, ev.posZ);
+      if (cfg.forceMode === 'push') {
+        explosions.push(new Explosion(scene, hitPos, false, 0, terrain, (cfg.explosionRadius ?? 6) / 6, cfg.damageColor, cfg.vfx));
+        sfxExplosions.explosionAt(hitPos, false, ev.weaponType);
+      } else {
+        implosions.push(new Implosion(scene, hitPos, 0, terrain));
+        sfxExplosions.implosionAt(hitPos, false);
+      }
+    }
+    return;
+  }
+
+  if (!r || r.exploded) {return;}
+
+  if (ev.eventType === ProjectileEventType.Bounce) {
+    r.pos.set(ev.posX, ev.posY, ev.posZ);
+    r.vel.set(ev.velX, ev.velY, ev.velZ);
+    // Live path pings a ricochet on bounce (projCollide) — only for
+    // bouncing shells (mortar pre-arm etc.), same bounceSfx gate.
+    if (r.config.bounceSfx) {
+      const gain = Math.min(1, r.vel.length() / 40);
+      sfxUtil.at(r.pos, `ricochet${1 + Math.floor(Math.random() * 3)}`, gain, 1, r.vel);
+    }
+  } else if (ev.eventType === ProjectileEventType.Destroyed) {
+    // Remove projectile without explosion (e.g. timeout)
+    r.pos.set(ev.posX, ev.posY, ev.posZ);
+    r.explode();
+    world.playbackProjectileById.delete(ev.projectileId);
+    world.playbackProjectileOrigin.delete(ev.projectileId);
+  }
+}
+
+// Normal playback event processing (forward playback, not seeking)
+export function applyPlaybackEvents(world: PlaybackWorld, events: { projectiles: ProjectileEvent[], targets: TargetEvent[] }): void {
+  // Targets first so balls are spawned/updated before projectile hits reference them
+  for (const ev of events.targets) {
+    if (isCreatureTargetType(ev.targetType)) {
+      applyPlaybackCreatureEvent(world, ev);
+    } else if (isDeployTargetType(ev.targetType)) {
+      applyPlaybackDeployableEvent(world, ev);
+    } else if (isMiscTargetType(ev.targetType)) {
+      applyPlaybackMarkerEvent(world, ev, true);
+    } else {
+      applyPlaybackTargetEvent(world, ev);
+    }
+  }
+  for (const ev of events.projectiles) {
+    applyPlaybackProjectileEvent(world, ev);
   }
 }
