@@ -18,6 +18,7 @@ import { perkMods } from '../../shared/perks.ts';
 import { simNow } from './simClock.ts';
 import { aoeImpulse } from '../../shared/combat.ts';
 import { hmHeight, hmChord, hmSettleWalkable } from '../../shared/heightfield.ts';
+import { inv } from '../../shared/invariants.ts';
 import { GRAVITY } from '../../shared/movement.ts';
 import { CTF_PTS } from '../../shared/teams.ts';
 import { WORLD_MODEL, rosterRow } from '../../shared/worldModel.ts';
@@ -433,7 +434,13 @@ export class RoomFlags {
     if (sp2 < FLAG_SETTLE * FLAG_SETTLE && f.pos.y <= gy + 0.05) {
       f.vel.x = f.vel.y = f.vel.z = 0;
       f.airborneBy = null; // settled — anyone, the thrower included, may touch
-      if (field) hmSettleWalkable(field, f.pos, FLAG_REST_LIFT);
+      if (field) {
+        hmSettleWalkable(field, f.pos, FLAG_REST_LIFT);
+        // Settled spot is a seed like spawn/teleport — resting under the
+        // drawn surface names it instead of a floating/buried flag.
+        const dg = Math.max(hmHeight(field, f.pos.x, f.pos.z), hmChord(field, f.pos.x, f.pos.z));
+        inv('flag-above-ground', f.pos.y >= dg - 0.5, { team: f.team, y: +f.pos.y.toFixed(1), ground: +dg.toFixed(1) });
+      }
     }
     this.dirty = true; // flight is stream-worthy — see the doc comment
   }
