@@ -97,10 +97,12 @@ export class SnapshotBuffer {
     // The wire boundary: a NaN/Infinity here poisons the Hermite and
     // every render derived from it — name it at the gate, never let it
     // propagate into a "sometimes teleports" report.
-    inv('wire-pos-finite', Number.isFinite(pos.x + pos.y + pos.z + vel.x + vel.y + vel.z + rot.yaw + rot.pitch + t),
-      { t, x: pos.x, y: pos.y, z: pos.z });
     const prev = this.lastArrive;
     const gap = prev > 0 ? arriveMs - prev : 0;
+    if (!inv('wire-pos-finite', Number.isFinite(pos.x + pos.y + pos.z + vel.x + vel.y + vel.z + rot.yaw + rot.pitch + t),
+      { t, x: pos.x, y: pos.y, z: pos.z })) {
+      return gap;
+    }
     this.lastArrive = arriveMs;
     const isNewest = t >= this.latestT;
     if (isNewest) {
