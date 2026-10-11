@@ -1,3 +1,4 @@
+2026-10-10 - correctness: inv(wire-vel-sane) at remote snapshot ingest — finite-but-absurd velocity (>300 m/s) is counted then capped before it can stretch a mesh through the extrapolation window
 2026-10-10 - correctness: remote roster + deployable ingest finite gates — playerHit roster patch, playerJoined first-sighting health, deployHp handler, deployable roster spawn all refuse non-finite vitals
 2026-10-11 - Skill ante halved: ENERGY.skillCost 50 -> 30 — blink/dash/slam/warp/bounce now cost half the tank instead of 83%, so a trick leaves real jet mobility behind
 2026-10-10 - correctness: egress chokepoint inv(wire-row-finite) in TickFanout.buildRecords — every broadcast row (pos/vel/rot/hp) asserted finite at the snap write; catches whatever an ingest gate misses before it reaches a decode pool

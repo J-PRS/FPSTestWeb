@@ -134,10 +134,16 @@ export class SnapshotBuffer {
       this.interpDelay = target > this.interpDelay ? target : Math.max(target, this.interpDelay - 10);
     }
 
+    // Finite-but-absurd is the other half of the wire class: no mover
+    // reaches 300 m/s, and a corrupt tangent/extrapolation at that speed
+    // is the stretched-mesh symptom. Count it, then cap to the bound.
+    const spd2 = vel.x * vel.x + vel.y * vel.y + vel.z * vel.z;
+    const velSane = inv('wire-vel-sane', spd2 <= 300 * 300, { spd: Math.sqrt(spd2) });
+    const vScale = velSane ? 1 : 300 / Math.sqrt(spd2);
     const snap = this.pool.pop() ?? { t: 0, x: 0, y: 0, z: 0, yaw: 0, pitch: 0, vx: 0, vy: 0, vz: 0 };
     snap.t = t; snap.x = pos.x; snap.y = pos.y; snap.z = pos.z;
     snap.yaw = rot.yaw; snap.pitch = rot.pitch;
-    snap.vx = vel.x; snap.vy = vel.y; snap.vz = vel.z;
+    snap.vx = vel.x * vScale; snap.vy = vel.y * vScale; snap.vz = vel.z * vScale;
     // Datagram lanes deliver out of order — insert at timeline position,
     // never a plain append: the sampler assumes monotonic t.
     let idx = this.snapshots.length;
