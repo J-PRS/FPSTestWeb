@@ -96,6 +96,14 @@ export class PlayerInput {
     // Die+spectate works from the ghost cam too — suicide flips isDead,
     // which owns the cam and drops the spectating flag on its own.
     if (matchCode('dieSpectate', e.code) && !e.repeat) {h.dieSpectate();}
+    // Dead: respawn and the corpse cam only — weapons/skills/jets while
+    // dead do nothing but queue junk for the first frame back alive
+    // (a melee press from the death cam swung the ghost's fist).
+    if (h.isDead()) {
+      if (!e.repeat && matchCode('respawn', e.code)) {h.respawn();}
+      if (matchCode('camera', e.code)) {h.toggleCamera();}
+      return;
+    }
     // Spectating: only the spectate toggle and raw movement keys (tracked
     // above for the fly cam) respond — no weapons, skills, camera flips
     if (h.isSpectating()) {return;}
