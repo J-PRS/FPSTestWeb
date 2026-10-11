@@ -101,7 +101,7 @@ export class RoomMoveSim {
       sh.sim.bodyRadius = old.bodyRadius;
       Object.assign(sh.sim.input, old.input);
       const pos = reportedPos?.(pid);
-      if (pos) {
+      if (pos && Number.isFinite(pos.x + pos.y + pos.z)) {
         sh.sim.setState({
           pos: { x: pos.x, y: pos.y, z: pos.z }, vel: { ...old.state.vel },
           yaw: old.state.yaw, pitch: old.state.pitch, onGround: old.state.onGround,
@@ -434,7 +434,9 @@ export class RoomMoveSim {
   /** Declared discontinuity (teleport/respawn) — resync without counting. */
   resync(playerId: string, pos: Vec3Like, yaw: number, fullEnergy = false): void {
     const sh = this.shadows.get(playerId);
-    if (!sh) return;
+    // Claim lanes gate upstream, but a NaN spawn/reseat from any caller
+    // still seeds a poisoned shadow — sim-pos can only count it after.
+    if (!sh || !Number.isFinite(pos.x + pos.y + pos.z + yaw)) return;
     const s = sh.sim.state;
     sh.sim.setState({
       pos: { x: pos.x, y: pos.y, z: pos.z },
