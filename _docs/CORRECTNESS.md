@@ -483,6 +483,16 @@ violation instead of a symptom hunt.
   name so a same-named room isn't born frozen. No-audience
   hibernation sleeps sims; unconditional frames every tick keep
   the client loss metric and `ackSeq` pruning honest.
+- **Identity/session lane (verified sealed):** playerIds claim
+  via `HMAC(playerId, secret)` tokens — a taken id can't be
+  stolen by knowing it; reclaim resolves by server-known
+  `roomOfPlayer` (never the claimed room — a mid-grace hop
+  can't orphan the slot) and runs BEFORE the join flood guard
+  (a flapping transport can't throttle the legit owner out).
+  Pre-join keepalives swallowed (not session-killed), joins
+  IP-throttled at 5/min, room + global player caps, spectator
+  squatters evicted by real joins, reclaim stamps
+  `protectedUntil` for the warmup window.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
