@@ -500,6 +500,14 @@ violation instead of a symptom hunt.
   derives from shadow pos/vel/rot + finite gate); `loose`
   finite-gates the corpse vel; `knock` finite-gates the blast
   args at entry (the NaN skip-compare class, fixed earlier).
+- **Command buffer (verified sealed):** client frames queue into
+  `room.commands` capped at 2000 (excess counts `msgsRejected` —
+  the metric IS the surface; per-drop logs would spam), each
+  entry arrival-stamped so a stalled tick can't charge the whole
+  backlog into one limiter window, and drain is per-command
+  contained + arrival-ordered at phase 0 (sims see a
+  deterministic input→sim→fanout order, never mid-frame
+  mutations).
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
