@@ -677,6 +677,16 @@ violation instead of a symptom hunt.
   `Math.min(..., 4)` so a zero dt can't blow up. No accumulator
   state to poison — step fns integrate `pos += vel*dt` directly.
   Verified sealed.
+- **Blast-force lane:** `applyExplosionForce` finite-gates
+  pos/radius/force at entry (a NaN center makes every
+  `d >= radius` compare false — every target eats a NaN dir).
+  Prediction stamps: `selfBlastStamps` capped 8 + 700ms settle
+  (unreturned stamps report `kb-echo` parityMiss, not silent
+  expiry); `recentKb` reverse-dedupe 700ms/8m/0.5f — the knockback
+  echo beating its blast can't double-shove. Impulse clamps
+  `BLAST_IMPULSE_MAX`; spawn-shield suppression is harmless
+  (the wire knockback lands anyway). Covered by blastForce.test
+  (22 cases). Verified sealed.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
