@@ -184,6 +184,12 @@ export interface LoopState {
    *  so first-draw compiles/uploads happen off the player's clock. */
   veilStable: number;
   veilFrames: number;
+  /** Boot warmup — same stability signal as the veil, but for the
+   *  un-veiled start: offline modes gate their spawn/roster kick-off on
+   *  whenStable() so the game doesn't begin mid-hitch. */
+  bootStable: number;
+  bootFrames: number;
+  bootStableResolvers: (() => void)[];
 }
 
 // fxJob EMA/max bookkeeping lives in loopPerf — see fxJobSample there.
@@ -683,7 +689,7 @@ function fpsCapAllows(st: LoopState, rawElapsed: number): boolean {
 export function createGameLoop(deps: GameLoopDeps) {
   let lastTime = 0;
   let renderElapsed = 0;
-  const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, gpuLevel: 0, cpuLevel: 0, cpuBound: false, headroomAccum: 0, autoPixel: false, fxCursor: 0, fxJobs: [], shadowAcc: 0, renderAcc: 0, warmN: 0, warmed: false, veilStable: 0, veilFrames: 0 };
+  const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, gpuLevel: 0, cpuLevel: 0, cpuBound: false, headroomAccum: 0, autoPixel: false, fxCursor: 0, fxJobs: [], shadowAcc: 0, renderAcc: 0, warmN: 0, warmed: false, veilStable: 0, veilFrames: 0, bootStable: 0, bootFrames: 0, bootStableResolvers: [] };
 
   // stats.js perf panels — FPS/MS/MB in a row along the bottom-right,
   // toggled with ` (backquote). stats.js only renders one panel per
@@ -735,6 +741,15 @@ export function createGameLoop(deps: GameLoopDeps) {
     // render: shader/pipeline warmup needs real draws or it fires on
     // the player's first interactive frame. The veil drops once state
     // landed AND ~45 stable frames ran (180-frame cap = safety valve).
+    // Boot warmup counter runs even while veiled — the veil block counts
+    // its own renders separately; here we meter real frames.
+    st.bootFrames++;
+    if (rawElapsed < 0.026) { st.bootStable++; } else { st.bootStable = 0; }
+    if (st.bootStableResolvers.length && (st.bootStable >= 45 || st.bootFrames >= 240)) {
+      const resolvers = st.bootStableResolvers;
+      st.bootStableResolvers = [];
+      for (const r of resolvers) { r(); }
+    }
     if (isSessionVeiled()) {
       deps.rendererSetup.renderer.render(deps.sceneSetup.scene, deps.camera);
       st.veilFrames++;
@@ -883,5 +898,12 @@ export function createGameLoop(deps: GameLoopDeps) {
 
   return {
     start(): void { requestAnimationFrame(loop); },
+    /** Resolves once ~45 consecutive sub-26ms frames rendered (or ~4s
+     *  of frames pass on a weak box — never gates forever). Offline
+     *  starts wait on this so the match doesn't spawn mid-compile-hitch. */
+    whenStable(): Promise<void> {
+      if (st.bootStable >= 45) { return Promise.resolve(); }
+      return new Promise((resolve) => { st.bootStableResolvers.push(resolve); });
+    },
   };
 }

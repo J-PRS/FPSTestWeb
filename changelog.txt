@@ -1,3 +1,10 @@
+2026-10-11 - boot: offline modes wait for stable FPS before starting.
+Solo/classic boots now hold the mode kick-off — player spawn anchor,
+deploys, starting balls, bot roster, demo recording — on the same
+stability signal the reconnect veil uses (~45 consecutive <26ms
+frames, 4s cap so a slow box still starts). The world renders
+instantly; the game just doesn't begin mid-compile-hitch.
+
 2026-10-11 - net: reconnect warmup behind the session veil.
 The veil now drops only after gameState lands AND ~45 stable frames
 (<26ms each) have rendered — the loop draws the scene (no sim, no

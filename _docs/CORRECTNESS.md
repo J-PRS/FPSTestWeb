@@ -239,6 +239,20 @@ violation instead of a symptom hunt.
   insert with `latestT` never rewinding; flag-carrier coherence swept
   20Hz; repair lane re-derives range/LOS/team/rate server-side; deploy
   ticks skip `isDead`; contact bodies read gated positions only.
+- **Session lifecycle (veil + reclaim):** while veiled the loop renders
+  the scene but skips sim/input — warmup draws burn off shader/texture
+  compile hitches before the player drops in; veil drops only after
+  gameState lands AND ~45 stable (<26ms) frames (180-frame cap, 8s
+  failsafe). Server reclaim grants ~2.5s `protectedUntil` — the
+  restored body is unkillable during warmup by a real game mechanic,
+  not hidden under the curtain. A reclaim is NOT a respawn: the seat
+  keeps its record, so the shield is stamped at the reclaim point
+  (`SessionManager`), not at spawn.
+- **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
+  consecutive <26ms frames (4s cap). Offline starts wait on it — the
+  player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
+  don't land mid-compile-hitch. Counter is total-frame-capped so a
+  permanently-slow box can never gate forever.
 
 ## Remaining
 

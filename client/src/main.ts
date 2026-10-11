@@ -273,7 +273,9 @@ async function init(): Promise<void> {
   if (mode || soloSpec) {
     world.onTerrainApplied = () => teamBots?.reseatAll();
     Promise.race([firstTerrain, new Promise((r) => setTimeout(r, 8000))])
-      .then(() => { if (!teamBots && !networkManager.isConnected() && mode) {setupOfflineMode(mode, soloSpec?.spec);} });
+      // Hold the roster kick-off until frames stabilize — spawning a full
+      // bot match mid-compile-hitch seeds bad sim from frame one.
+      .then(async () => { await gameLoop?.whenStable(); if (!teamBots && !networkManager.isConnected() && mode) {setupOfflineMode(mode, soloSpec?.spec);} });
   }
 
   // ?yaw/?pitch/?dummy headless-screenshot hooks — see game/debugHooks.ts.
@@ -463,6 +465,10 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   }
   player.serverOwnsHealth = () => networkManager.isConnected();
 
+  // Offline start waits on stable frames — the player spawn anchor,
+  // deploys, balls and demo recording all land after warmup instead of
+  // mid-compile-hitch (the online path gates on the session veil).
+  if (!networkManager.isConnected()) {await gameLoop.whenStable();}
   // Spec maps spawn you at an authored anchor (team spawn > generic
   // spawn > own base) — origin on a T2 port can be kilometers from play.
   if (soloMode && soloSpec) {
@@ -505,7 +511,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   // Initial balls — offline only. In a room the wire owns the ball
   // population; boot-time locals were duplicate spam on the default map.
   if (!networkManager.isConnected()) {
-    for (let i = 0; i < 8; i++) {entities.spawnBall();}
+    for (let i = 0; i < 4; i++) {entities.spawnBall();} // OG startingSpawnCount
   }
 
   // Auto-start demo recording so cool shots are captured seamlessly —
