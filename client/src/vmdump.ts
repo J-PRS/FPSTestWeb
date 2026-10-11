@@ -9,7 +9,7 @@ if (!isDevHost()) {
   throw new Error('vmdump: dev-only surface');
 }
 
-const q = new URLSearchParams(location.search);
+const q = new URLSearchParams(window.location.search);
 const w = Number.parseInt(q.get('w') ?? '0');
 const ao = q.get('ao') !== 'off';
 

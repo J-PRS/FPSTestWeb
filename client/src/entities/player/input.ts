@@ -316,7 +316,7 @@ export class PlayerInput {
       label();
       spawnsBtn.addEventListener('click', () => {
         settings.set('fps-spawns', settings.get('fps-spawns') ? 0 : 1);
-        location.reload();
+        window.location.reload();
       });
     }
 

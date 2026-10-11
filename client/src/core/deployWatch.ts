@@ -3,7 +3,7 @@
 // connected clients don't run a stale bundle against a live server.
 // Skipped on localhost (dev rebuilds shouldn't yank the page).
 export function watchDeployVersion(): void {
-  if (/^(localhost|127\.|192\.168\.|10\.)/.test(location.hostname)) {return;}
+  if (/^(localhost|127\.|192\.168\.|10\.)/.test(window.location.hostname)) {return;}
   let baseline: string | null = null;
   const poll = async (): Promise<void> => {
     try {
@@ -11,7 +11,7 @@ export function watchDeployVersion(): void {
       if (!r.ok) {return;}
       const v = (await r.text()).trim();
       if (baseline === null) { baseline = v; return; }
-      if (v !== baseline) {location.reload();}
+      if (v !== baseline) {window.location.reload();}
     } catch { /* offline/transient — try again next tick */ }
   };
   poll();

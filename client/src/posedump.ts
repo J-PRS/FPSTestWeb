@@ -11,7 +11,7 @@ if (!isDevHost()) {
   throw new Error('posedump: dev-only surface');
 }
 
-const q = new URLSearchParams(location.search);
+const q = new URLSearchParams(window.location.search);
 const mann = q.get('model') === 'mannequin';
 const wantClip = q.get('clip') ?? '';
 const wantT = Number.parseFloat(q.get('t') ?? '0.4');

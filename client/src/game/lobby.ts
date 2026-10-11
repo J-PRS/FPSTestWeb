@@ -376,14 +376,14 @@ export class Lobby {
     // session is mutually exclusive with a server room — drop it here.
     settings.set('fps-p2p', '');
     settings.set('fps-lobby', 0);
-    const q = new URLSearchParams(location.search);
+    const q = new URLSearchParams(window.location.search);
     q.delete('p2p'); q.delete('lobby');
     if (name === 'default') {
       // Live hop cleans the param; the reload path needs ?room=default
       // present or the boot won't connect at all.
       if (this.deps.switchRoom?.(name, map, bots, mode, unlisted, noCreatures, noBalls)) {
         q.delete('room');
-        history.replaceState(null, '', q.toString() ? `${location.pathname}?${q}` : location.pathname);
+        history.replaceState(null, '', q.toString() ? `${window.location.pathname}?${q}` : window.location.pathname);
         return;
       }
       q.set('room', 'default');
@@ -394,12 +394,12 @@ export class Lobby {
     if (unlisted) {q.set('unlisted', '1');} else {q.delete('unlisted');}
     if (noCreatures) {q.set('nocreatures', '1');} else {q.delete('nocreatures');}
     if (noBalls) {q.set('noballs', '1');} else {q.delete('noballs');}
-    const href = q.toString() ? `${location.pathname}?${q}` : location.pathname;
+    const href = q.toString() ? `${window.location.pathname}?${q}` : window.location.pathname;
     // Live socket: hop in place — the gameState rebuild does the rest.
     if (this.deps.switchRoom?.(name, map, bots, mode, unlisted, noCreatures, noBalls)) {
       history.replaceState(null, '', href);
       return;
     }
-    location.href = href;
+    window.location.href = href;
   }
 }

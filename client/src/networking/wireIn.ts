@@ -324,9 +324,9 @@ dropCensus.total += 1;
       if (tries < 2 && typeof location !== 'undefined') {
         try {
           sessionStorage.setItem('fps-proto-reload', String(tries + 1));
-          const url = new URL(location.href);
+          const url = new URL(window.location.href);
           url.searchParams.set('pv', String(Date.now())); // cache-buster vs CDN staleness
-          location.href = url.toString();
+          window.location.href = url.toString();
         } catch { /* storage/nav both optional — warn already logged */ }
       }
       return;

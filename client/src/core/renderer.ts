@@ -528,12 +528,12 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   try {
     renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   } catch (error) {
-    setTimeout(() => location.reload(), 1000);
+    setTimeout(() => window.location.reload(), 1000);
     throw error;
   }
   renderer.domElement.addEventListener('webglcontextlost', (e) => {
     e.preventDefault();
-    location.reload();
+    window.location.reload();
   });
 
   const fs = makeFloydEngine(renderer);

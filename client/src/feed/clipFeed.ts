@@ -309,7 +309,7 @@ clipGen += 1;
   btnShare.addEventListener('click', () => {
     const e = current();
     if (!e?.filename) {return;}
-    void navigator.clipboard?.writeText(`${location.origin}/clips/${e.filename}`)
+    void navigator.clipboard?.writeText(`${window.location.origin}/clips/${e.filename}`)
       .then(() => { btnShare.textContent = '✓'; setTimeout(() => { btnShare.textContent = '⤴'; }, 1200); })
       .catch(() => {});
   });

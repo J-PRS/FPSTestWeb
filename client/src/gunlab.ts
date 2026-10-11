@@ -850,14 +850,14 @@ function paintTools(): void {
   };
   // Procedural is the default — ?bake opts INTO the GLB swap (vmBaked
   // reads the same flag). View+gun survive the reload via the saved pose.
-  const baked = new URLSearchParams(location.search).has('bake');
+  const baked = new URLSearchParams(window.location.search).has('bake');
   const [, bakeB] = row([
     [state.inspect ? '◈ FPS' : '◉ inspect', () => { setInspect(!state.inspect); paintRail(); }],
     ['▣ baked', () => {
-      const u = new URL(location.href);
+      const u = new URL(window.location.href);
       if (baked) {u.searchParams.delete('bake');} else {u.searchParams.set('bake', '1');}
       flushSave();
-      location.href = u.toString();
+      window.location.href = u.toString();
     }],
   ]);
   bakeB!.classList.toggle('active', baked);
@@ -868,7 +868,7 @@ function paintTools(): void {
   zB!.classList.toggle('active', Boolean(zOverlay));
   // Wear-mask debug — paints R=final wear / G=grime / B=edge flag instead
   // of shading. It's a shader define, so it needs a reload like ?bake.
-  const wearViz = new URLSearchParams(location.search).has('wearviz');
+  const wearViz = new URLSearchParams(window.location.search).has('wearviz');
   // union (rendered weld) and shell (per-part carve) share one row —
   // they're the same question asked two ways.
   const [unionB, shellB, metalB] = row([
@@ -882,10 +882,10 @@ function paintTools(): void {
   const [wireB, wearB] = row([
     ['▧ wire', () => { wireOn = !wireOn; applyWire(); paintRail(); }],
     ['◐ wearviz', () => {
-      const u = new URL(location.href);
+      const u = new URL(window.location.href);
       if (wearViz) {u.searchParams.delete('wearviz');} else {u.searchParams.set('wearviz', '1');}
       flushSave();
-      location.href = u.toString();
+      window.location.href = u.toString();
     }],
   ]);
   wireB!.classList.toggle('active', wireOn);
@@ -1112,7 +1112,7 @@ async function pollBakes(): Promise<void> {
   }
 }
 // Only armed under ?bake — procedural mode has no bake files to watch.
-const pollTimer = new URLSearchParams(location.search).has('bake')
+const pollTimer = new URLSearchParams(window.location.search).has('bake')
   ? setInterval(pollBakes, 1500)
   : 0;
 

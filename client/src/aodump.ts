@@ -13,7 +13,7 @@ if (!isDevHost()) {
   throw new Error('aodump: dev-only surface');
 }
 
-const q = new URLSearchParams(location.search);
+const q = new URLSearchParams(window.location.search);
 
 // ---- scene rig — same lights/exposure as vmdump -------------------------
 const renderer = new THREE.WebGLRenderer({ antialias: true });

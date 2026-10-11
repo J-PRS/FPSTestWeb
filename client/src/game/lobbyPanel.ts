@@ -66,7 +66,7 @@ function label(text: string): HTMLDivElement {
 function p2pGo(p2p: string, lobby: number): void {
   settings.set('fps-p2p', p2p);
   settings.set('fps-lobby', lobby);
-  location.reload();
+  window.location.reload();
 }
 
 function buildP2PButtons(p2pIn: HTMLInputElement): HTMLDivElement {
@@ -117,7 +117,7 @@ function playOffline(mode: string, map: string, bots: number | undefined): void 
   settings.set('fps-mode', mode);
   settings.set('fps-p2p', '');
   settings.set('fps-lobby', 0);
-  const q = new URLSearchParams(location.search);
+  const q = new URLSearchParams(window.location.search);
   for (const k of ['room', 'p2p', 'lobby', 'map', 'bots', 'mode', 'unlisted', 'solo', 'nocreatures', 'noballs']) {q.delete(k);}
   if (mode) {q.set('mode', mode);}
   if (map) {q.set('map', map);}
@@ -129,8 +129,8 @@ function playOffline(mode: string, map: string, bots: number | undefined): void 
   // it is still a live session; without this the boot is indistinguishable
   // from a fresh front-door load and the lobby would re-pop mid-game.
   q.set('solo', '1');
-  const href = q.toString() ? `${location.pathname}?${q}` : location.pathname;
-  location.href = href;
+  const href = q.toString() ? `${window.location.pathname}?${q}` : window.location.pathname;
+  window.location.href = href;
 }
 
 
@@ -256,9 +256,9 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
       leaveServerBtn.addEventListener('click', () => {
         settings.set('fps-p2p', '');
         settings.set('fps-lobby', 0);
-        const q = new URLSearchParams(location.search);
+        const q = new URLSearchParams(window.location.search);
         for (const k of ['room', 'p2p', 'lobby']) {q.delete(k);}
-        location.href = q.toString() ? `${location.pathname}?${q}` : location.pathname;
+        window.location.href = q.toString() ? `${window.location.pathname}?${q}` : window.location.pathname;
       });
     }
 
@@ -480,7 +480,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     srvIn.style.cssText = 'flex:1;min-width:0;';
     srvIn.addEventListener('keydown', (e) => e.stopPropagation());
     const srvBtn = btn('GO');
-    srvBtn.addEventListener('click', () => { settings.set('fps-server', srvIn.value.trim()); location.reload(); });
+    srvBtn.addEventListener('click', () => { settings.set('fps-server', srvIn.value.trim()); window.location.reload(); });
     srvRow.append(srvIn, srvBtn);
 
     // Player name lives in the menu-side PROFILE row (#name-input) —

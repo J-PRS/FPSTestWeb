@@ -605,7 +605,7 @@ function wireDebugKeys(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud
     // keeps the old hard-reload hatch (F5 is flaky under pointer lock).
     if (e.altKey && e.code === 'KeyW') {
       e.preventDefault();
-      if (e.shiftKey) { location.reload(); return; }
+      if (e.shiftKey) { window.location.reload(); return; }
       const rows = [...lastWeaponByPlayer.entries()]
         .filter(([id]) => isBotId(id))
         .map(([id, r]) => `${id} ${WeaponType[r.wt] ?? `w${r.wt}`} shots=${r.n}`);
