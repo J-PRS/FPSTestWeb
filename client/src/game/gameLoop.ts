@@ -29,8 +29,8 @@ import type { NetworkManager } from '../networking/NetworkManager.js';
 import type { HUD } from '../ui/hud.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { createScene } from '../world/scene.js';
-import { updateDirectionalFog, fogHorizon } from '../world/directionalFog.js';
-import { updateCubeSky } from './net/mapAssets.js';
+import { updateDirectionalFog, fogHorizon, syncFxFog } from '../world/directionalFog.js';
+import { updateCubeSky, getInteriorsEpoch } from './net/mapAssets.js';
 import { isSessionVeiled } from './net/world.js';
 import { refreshColliderGizmoVisibility } from '../world/mapStructures.js';
 import type { createRenderer } from '../core/renderer.js';
@@ -41,11 +41,11 @@ import type { createDemoLifecycle } from './demoLifecycle.js';
 import type { createRemotes } from './remotes.js';
 import type { createWaveDirector } from './waveDirector.js';
 import type { WorldState } from './worldState.js';
+import type { MinimapPlayer } from '../ui/minimap.js';
 import { createPerfHud } from '../core/perfHud.js';
 import { createFrameBudget } from '../core/frameBudget.js';
 import { gpuBegin, gpuEnd, gpuMs } from '../core/gpuTimer.js';
 import { lastWeaponByPlayer } from './net/projectiles.js';
-import { getInteriorsEpoch } from './net/mapAssets.js';
 import { fpsWatchdog, resetAutoQuality, fxJobSample, fxJobStats } from './loopPerf.js';
 import { createRenderScan } from './renderScan.js';
 import { settings } from '../core/settings.js';
@@ -79,7 +79,7 @@ let _posJumpLastAt = 0;
 const _birdPosBuf: THREE.Vector3[] = []; // scratch — minimap debug blips
 const _selfShadowOwner = { swarmSlot: -1, shadowSlot: -1 }; // self blob — shared instanced pool slot
 const _selfShadowPos = new THREE.Vector3();
-const _mapBlips: import('../ui/minimap.js').MinimapPlayer[] = []; // scratch — minimap player/bot blips
+const _mapBlips: MinimapPlayer[] = []; // scratch — minimap player/bot blips
 
 // ?mode=classic — solo bounce-and-shoot: balls only, no rage, no roster
 const CLASSIC_MODE = urlParams.isClassic;
@@ -89,9 +89,9 @@ let nanProbeBound = false;
 
 // Dead-checkable effect list — update each, dispose+splice the finished.
 function updateDeadList<T extends { update(dt: number): void; dead: boolean; dispose(): void }>(list: T[], dt: number): void {
-  for (let i = list.length - 1; i >= 0; i--) {
-    list[i]!.update(dt);
-    if (list[i]!.dead) { list[i]!.dispose(); list.splice(i, 1); }
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    list[i]?.update(dt);
+    if (list[i]?.dead) { list[i]?.dispose(); list.splice(i, 1); }
   }
 }
 
@@ -239,6 +239,7 @@ function syncFog(deps: GameLoopDeps, terrain: Terrain): void {
   updateCubeSky(deps.camera, fog.color);
   refreshColliderGizmoVisibility();
   terrain.updateFog(fog.color, fog.near, fog.far);
+  syncFxFog(fog); // world-space ShaderMaterials share the same range
 }
 
 /** Contact bodies the local player's prediction resolves against —
@@ -495,7 +496,10 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   // hiding the FP gun is what stops "your own gun plus your own model".
   viewModel.group.visible = !player.isDead && !player.thirdPerson && !player.isSpectating && !player.input.midHeld;
   const yawDelta = Math.atan2(Math.sin(player.yaw - st.lastYaw), Math.cos(player.yaw - st.lastYaw));
-  viewModel.update(dt, yawDelta, player.pitch - st.lastPitch, player.vel, camera, player.shootAnimTimer > 0);
+  // Paused demo = frozen world — the vm's idle sway/bob reads as the scene
+  // still playing. dt=0 freezes the anims; the weapon itself stays bound
+  // to the recorded frame's weaponType via onPlaybackState.
+  viewModel.update(demoManager?.isPaused ? 0 : dt, yawDelta, player.pitch - st.lastPitch, player.vel, camera, player.shootAnimTimer > 0);
   st.lastYaw = player.yaw;
   st.lastPitch = player.pitch;
   perf.mark('viewmodel');
@@ -719,8 +723,8 @@ export function createGameLoop(deps: GameLoopDeps) {
   function loop(time: number): void {
     requestAnimationFrame(loop);
     const rawElapsed = (time - lastTime) / 1000;
-    const dt = Math.min(rawElapsed, MAX_DELTA_TIME);
-    lastTime = time;
+    const dt = Math.min(Number.isFinite(rawElapsed) ? Math.max(rawElapsed, 0) : 0, MAX_DELTA_TIME);
+    if (Number.isFinite(time)) {lastTime = time;}
     fpsWatchdog(deps, st, budget, perf, rawElapsed, time);
     // Veiled = waiting on gameState — the boot world under the curtain
     // is discarded on restore, so don't sim it, render it, or let input
