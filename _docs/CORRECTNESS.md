@@ -670,6 +670,13 @@ violation instead of a symptom hunt.
   guard `lenSq <= 0`, `segFieldHit` fails safe (NaN steps → loop
   skips → no terrain hit; upstream write gates own pos finiteness).
   No zero-vector → NaN entry point remains. Verified sealed.
+- **Creature sim degenerates:** every `sqrt(distSq)` divide across
+  roller/baneling/slither steering sits behind `distSq > 0.01`
+  (d ≥ 0.1 — never zero); `TOPSPEED/hSpeed` divides only inside
+  `hSpeed > TOPSPEED`; roller downhill boost bounds `drop/dt` via
+  `Math.min(..., 4)` so a zero dt can't blow up. No accumulator
+  state to poison — step fns integrate `pos += vel*dt` directly.
+  Verified sealed.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
