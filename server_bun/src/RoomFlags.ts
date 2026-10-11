@@ -17,7 +17,7 @@ import { weaponStats } from './weaponStats.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { simNow } from './simClock.ts';
 import { aoeImpulse } from '../../shared/combat.ts';
-import { hmHeight, hmSettleWalkable } from '../../shared/heightfield.ts';
+import { hmHeight, hmChord, hmSettleWalkable } from '../../shared/heightfield.ts';
 import { GRAVITY } from '../../shared/movement.ts';
 import { CTF_PTS } from '../../shared/teams.ts';
 import { WORLD_MODEL, rosterRow } from '../../shared/worldModel.ts';
@@ -399,7 +399,7 @@ export class RoomFlags {
     f.pos.x += (best.x - f.pos.x) / d * stepLen;
     f.pos.z += (best.z - f.pos.z) / d * stepLen;
     const field = this.room.field;
-    if (field) f.pos.y = hmHeight(field, f.pos.x, f.pos.z) + FLAG_REST_LIFT;
+    if (field) f.pos.y = Math.max(hmHeight(field, f.pos.x, f.pos.z), hmChord(field, f.pos.x, f.pos.z)) + FLAG_REST_LIFT;
     this.dirty = true;
   }
 
@@ -414,7 +414,10 @@ export class RoomFlags {
     f.pos.x += f.vel.x * dt;
     f.pos.y += f.vel.y * dt;
     f.pos.z += f.vel.z * dt;
-    const gy = field ? hmHeight(field, f.pos.x, f.pos.z) + FLAG_REST_LIFT : f.pos.y;
+    // Drawn-surface floor (same law as nuggets/bots): the chord dips
+    // below the field on convex ground and bridges it on concave — a
+    // flag resting on the smooth field floats or sinks on your screen.
+    const gy = field ? Math.max(hmHeight(field, f.pos.x, f.pos.z), hmChord(field, f.pos.x, f.pos.z)) + FLAG_REST_LIFT : f.pos.y;
     if (f.pos.y <= gy) {
       f.pos.y = gy;
       if (f.vel.y < -2) {
