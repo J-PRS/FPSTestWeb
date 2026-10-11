@@ -650,6 +650,12 @@ violation instead of a symptom hunt.
   remotes, renderOffset decay) and the trail snapped behind on
   hitchy frames. The deposit-span judge below still re-seats on
   true jumps.
+- **Display-name ingest:** `SessionManager.nameSpec` strips C0/C1
+  control bytes AND Unicode format chars (bidi overrides, zero-width,
+  BOM, word joiners) at the trust boundary — a name can't spoof
+  direction or go invisible. Whitespace collapses, 24-char cap.
+  Client renders names via textContent/esc() only (DOM ingest pass),
+  so markup dies twice. Verified sealed, no fix.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
