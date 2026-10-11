@@ -8,6 +8,7 @@ import {
   SKY_RAYLEIGH,
   SKY_MIE_COEFFICIENT,
   SKY_MIE_DIRECTIONAL_G,
+  SKY_RAYLEIGH_DIRECTIONAL,
   SKY_SUN_INTENSITY,
   CLOUDS_ENABLED,
   CLOUD_COUNT,
@@ -39,7 +40,7 @@ export interface SceneSetup {
   scene: THREE.Scene;
   atmosphericSky: AtmosphericSky;
   volumetricClouds: VolumetricClouds | null;
-  sunShafts: SunShafts;
+  sunShafts: SunShafts | null;
   ambient: THREE.AmbientLight;
   sun: THREE.DirectionalLight;
   hemi: THREE.HemisphereLight;
@@ -58,12 +59,14 @@ export function createScene(): SceneSetup {
     rayleigh: SKY_RAYLEIGH,
     mieCoefficient: SKY_MIE_COEFFICIENT,
     mieDirectionalG: SKY_MIE_DIRECTIONAL_G,
+    rayleighDirectional: SKY_RAYLEIGH_DIRECTIONAL,
     sunIntensity: SKY_SUN_INTENSITY,
     fogColor: new THREE.Color(FOG_COLOR),
   });
 
-  // Volumetric Clouds
-  const sunShafts = new SunShafts(scene);
+  // Fake god-ray glare sprite — off by default (blob glare read wrong);
+  // ?shafts=on brings it back. SunShafts itself stays in the codebase.
+  const sunShafts = urlParams.get('shafts') === 'on' ? new SunShafts(scene) : null;
 
   const volumetricClouds = (CLOUDS_ENABLED || urlParams.get('clouds') === 'on')
     ? new VolumetricClouds(scene, {
@@ -122,7 +125,7 @@ export function createScene(): SceneSetup {
 
   /** Camera-dependent mood pass — the shader knows where the sun is. */
   function updateCamera(camera: THREE.Camera): void {
-    sunShafts.update(camera, atmosphericSky.getSunPosition());
+    sunShafts?.update(camera, atmosphericSky.getSunPosition());
     // Shadow frustum follows the viewer: a map-wide 2.4km ortho box only
     // has ~1.2m/texel — every slope acnes — and stops covering off-center
     // play entirely. Snapping the target to a ~2m grid keeps texels from

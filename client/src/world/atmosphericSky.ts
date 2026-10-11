@@ -25,6 +25,7 @@ const atmosphereFragmentShader = /* glsl */`
   uniform float rayleigh;
   uniform float mieCoefficient;
   uniform float mieDirectionalG;
+  uniform float rayleighDirectional;
   uniform float starIntensity;
 
   #define PI 3.141592
@@ -50,7 +51,7 @@ const atmosphereFragmentShader = /* glsl */`
   }
 
   vec3 atmosphere(vec3 r, vec3 r0, vec3 pSun, float iSun, float rPlanet, float rAtmos,
-                  vec3 kRlh, float kMie, float shRlh, float shMie, float g) {
+                  vec3 kRlh, float kMie, float shRlh, float shMie, float g, float rlhDir) {
     pSun = normalize(pSun);
     r = normalize(r);
 
@@ -68,7 +69,8 @@ const atmosphereFragmentShader = /* glsl */`
     float mu = dot(r, pSun);
     float mumu = mu * mu;
     float gg = g * g;
-    float pRlh = 3.0 / (16.0 * PI) * (1.0 + mumu);
+    // rlhDir=1: physical dipole (bright toward+away from sun); 0: flat.
+    float pRlh = 3.0 / (16.0 * PI) * (1.0 + mumu * rlhDir);
     float pMie = 3.0 / (8.0 * PI) * ((1.0 - gg) * (mumu + 1.0))
       / (pow(1.0 + gg - 2.0 * mu * g, 1.5) * (2.0 + gg));
 
@@ -117,7 +119,8 @@ const atmosphereFragmentShader = /* glsl */`
       mieCoefficient,                    // Mie coefficient
       8e3,                               // Rayleigh scale height
       1.2e3,                             // Mie scale height
-      mieDirectionalG                    // Mie preferred direction
+      mieDirectionalG,                   // Mie preferred direction
+      rayleighDirectional                // Rayleigh dipole strength (0 = flat)
     );
 
     // Soft exposure curve (the raw HDR output needs tonemapping)
@@ -166,6 +169,7 @@ export interface AtmosphericSkyParams {
   rayleigh?: number;
   mieCoefficient?: number;
   mieDirectionalG?: number;
+  rayleighDirectional?: number;
   sunIntensity?: number;
   fogColor?: THREE.Color;
   starIntensity?: number;
@@ -191,6 +195,7 @@ export class AtmosphericSky {
         rayleigh: { value: params.rayleigh ?? 1 },
         mieCoefficient: { value: params.mieCoefficient ?? 21e-6 },
         mieDirectionalG: { value: params.mieDirectionalG ?? 0.758 },
+        rayleighDirectional: { value: params.rayleighDirectional ?? 1 },
         turbidity: { value: params.turbidity ?? 10 },
         fogColor: { value: params.fogColor ?? new THREE.Color(0xBBD0E8) },
         horizonColor: { value: params.fogColor?.clone() ?? new THREE.Color(0xBBD0E8) },

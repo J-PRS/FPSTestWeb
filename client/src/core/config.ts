@@ -425,7 +425,8 @@ export const FOG_END = 600; // Linear fog end distance
 export const SKY_TURBIDITY = 10;
 export const SKY_RAYLEIGH = 1; // Multiplier on Earth Rayleigh coefficients
 export const SKY_MIE_COEFFICIENT = 21e-6; // Earth Mie scattering coefficient
-export const SKY_MIE_DIRECTIONAL_G = 0.758; // Mie forward-scatter directionality
+export const SKY_MIE_DIRECTIONAL_G = 0; // 0 = isotropic — no sunward glow blob (was 0.758)
+export const SKY_RAYLEIGH_DIRECTIONAL = 0; // 0 = flat dipole — no bright/dim sky sides (was 1)
 export const SKY_SUN_INTENSITY = 22; // Sun radiance for scattering (not a visible disc)
 
 // Volumetric cloud constants
