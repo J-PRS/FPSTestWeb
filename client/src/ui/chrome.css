@@ -340,11 +340,6 @@ body.lobby-open #loadout-bar { display: none; }
   background: rgba(58,167,255,0.25); border-color: #3aa7ff; color: #fff;
   box-shadow: 0 0 12px rgba(58,167,255,0.25);
 }
-#loadout-bar .lo-tile .lo-tile-sub {
-  font-size: 0.66rem; font-weight: 500; letter-spacing: 0.04em;
-  color: #8fa2b3; text-transform: none;
-}
-#loadout-bar .lo-tile.sel .lo-tile-sub { color: #9fc6ee; }
 #loadout-bar .lo-chip {
   padding: 6px 11px;
   background: rgba(255,255,255,0.06);

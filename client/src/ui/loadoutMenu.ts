@@ -3,8 +3,7 @@
 // game-menu illusion. Chip face + styled option list opening upward.
 import { SKILL_ORDER, Player, type SkillId, BELT_ITEMS, type BeltItem } from '../entities/Player.js';
 import { PERKS, PERK_ORDER, type PerkId } from '../../../shared/perks.js';
-import { CLASS_STATS, type ArmorClass } from '../../../shared/botClasses.js';
-import { MAX_HEALTH } from '../core/config.js';
+import type { ArmorClass } from '../../../shared/botClasses.js';
 import { SLOT_DEFS } from '../weapons.js';
 import { codeFor, codeLabel } from '../core/keybinds.js';
 import type { DeployKind } from '../../../shared/deployables.js';
@@ -286,17 +285,12 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
     for (const t of classTileEls) t.el.classList.toggle('sel', t.v === cur);
   };
   for (const cls of ['light', 'medium', 'heavy'] as const) {
-    const st = CLASS_STATS[cls];
     const t = document.createElement('div');
     t.className = 'lo-tile';
     const name = document.createElement('span');
     name.className = 'lo-tile-name';
     name.textContent = cls.toUpperCase();
-    const sub = document.createElement('span');
-    sub.className = 'lo-tile-sub';
-    sub.textContent = `${MAX_HEALTH + st.maxHealth} HP · ${Math.round(st.speedScale * 100)}% SPD`;
     t.appendChild(name);
-    t.appendChild(sub);
     t.addEventListener('click', (e) => { e.stopPropagation(); pickClass(cls); });
     tiles.appendChild(t);
     classTileEls.push({ v: cls, el: t });
