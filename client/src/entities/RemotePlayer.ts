@@ -13,6 +13,7 @@ import { WeaponType, WEAPON_FIRE_INTERVAL_S } from '../../../shared/weapons.js';
 import { RemoteAuras } from './remoteAuras.js';
 import { RemoteAnim } from './remoteAnim.js';
 import { hideRemote, showRemote, setStaleVis, setCloakVis, setCloakGhost, shootReveal, tickGhostF } from './remoteVis.js';
+import { getShadows } from './swarms.js';
 
 const logger = new ChildLogger('RemotePlayer');
 
@@ -194,6 +195,11 @@ export class RemotePlayer {
 
   /** XZ distance² to the camera — gates the remote anim-LOD tiers below. */
   camDistSq = 0; // public — anim LOD tiers off it
+  /** Instanced blob-shadow pool handles — remotes ride the same pass the
+   *  self blob and creatures do, so a grounded remote reads grounded even
+   *  when the shadow-map pass is off (auto-quality, potato seed). */
+  swarmSlot = -1;
+  shadowSlot = -1;
   /** Camera-frustum test per network tick — offscreen bodies skip the
    *  mixer step entirely (the GPU already culls them; the CPU mixer was
    *  still ticking every bone). */
@@ -223,12 +229,20 @@ export class RemotePlayer {
     }
   }
 
+  private _blobPos = new THREE.Vector3();
   private tickAlive(dt: number): void {
     this.interp.step(dt, this.localDriven);
 
     this.updateAliveModel(dt);
 
     this.gizmo?.follow(this.position);
+
+    const shadows = getShadows();
+    if (shadows) {
+      if (this.shadowSlot < 0) {this.shadowSlot = shadows.alloc(this);}
+      this._blobPos.set(this.position.x, this.feetY, this.position.z);
+      shadows.set(this, this._blobPos, classCapsule(this.armorClass).radius * 1.9, 0.35);
+    }
   }
 
   /** Faint dots on the flight path — readable arc on a jetting bot,
@@ -268,6 +282,9 @@ export class RemotePlayer {
     this._model.setLocomotionReversed(false);
     resetCorpse(this.corpse);
     launchCorpse(this.corpse, explosionPos, explosionForce);
+    // A standing-height blob under a crumpled corpse reads wrong — the
+    // slot re-allocs on the next tickAlive after respawn.
+    getShadows()?.free(this);
 
     // Remove gizmo from scene immediately on death
     if (this.gizmo) {
@@ -403,6 +420,7 @@ export class RemotePlayer {
     // Drop the loaded flag too — a dangling tick (debug hooks, orphaned
     // owner loop) must not walk into a cleared animation map.
     this._loaded = false;
+    getShadows()?.free(this);
     this.auras.dispose();
     this.anim.dispose();
     this._model.dispose();
