@@ -607,7 +607,7 @@ export class Deployables {
   }
 
   sensorPing(id: number, team: string | undefined, targets: { id: string; x: number; y: number; z: number }[]): void {
-    this.remotes.sensorPing(id, team, targets);
+    this.remotes.sensorPing(id, team, targets.filter(t => Number.isFinite(t.x + t.y + t.z)));
   }
 
   remoteTurretShot(id: number, targetId: string): void {
