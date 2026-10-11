@@ -311,6 +311,15 @@ violation instead of a symptom hunt.
   to own plants without double-rendering them, and culls the own
   lane the remote reconcile can't see. `remoteSpawn` drops
   non-finite wire positions at the write site.
+- **Pickup roster lanes (verified sealed):** `addPickup` drops
+  non-finite spawn pos; a recycled id hosting a different kind is
+  collected out rather than patched (kind is constructor-fixed —
+  patching desyncs the pickup hash lane forever); a re-spawn on a
+  live id is a blast-knock rest spot (`serverRest` — itself
+  write-gated). `reconcilePickups` reaps ghosts the gone edges
+  missed; `pickupGone` fades the replica and bounds the belt grant
+  at `BELT_MAX`; `onBuff` finite-gates health/armor and a NaN
+  `until` fails safe (buff never displays).
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
