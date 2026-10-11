@@ -178,7 +178,22 @@ export class RemoteAnim {
       this.animAcc = 0;
       h.model.update(dt);
     }
+    // Zero-coverage census — a visible remote whose mixer holds no
+    // running action IS a T-pose report the stall guard inside didn't
+    // catch (re-entry can re-park on another non-covering clip). Death's
+    // clamped tail and paused oneshot clamps are legit stillness.
+    this._coverAcc += dt;
+    if (this._coverAcc >= 1.5) {
+      this._coverAcc = 0;
+      if (h.onScreen !== false && h.model.anim.currentState !== 'death') {
+        const a = h.model.anim.currentAction;
+        if (!a || (!a.isRunning() && !a.paused)) {
+          glitch('anim-bind', { id: h.playerId, variant: h.model.variant, state: h.model.anim.currentState, clip: h.model.anim.currentClipName, clips: h.model.anim.animations.size });
+        }
+      }
+    }
   }
+  private _coverAcc = 0;
 
   /** Distance-tiered render budget — cast shadows, skinned geo LOD. */
   private tickRenderLod(): void {

@@ -88,6 +88,31 @@ export class PlayerAnim {
   // entity owns world position, and loop clips otherwise translate the
   // mesh out from under the hitbox each cycle. Y stays (the crouch dip).
   registerClip(clip: THREE.AnimationClip, mann: boolean, knight: boolean, rootMotion: Set<string>): void {
+    // Garbage-keyframe guard: corrupt exports (class_heavy ships ~1e26
+    // translation keys in Shoot_SingleShot_AR and ~1e28 translations AND
+    // ~1e32 quats in Reload) throw every vert weighted to the bone past
+    // the skybox — the 'model-stretch' glitch. Bounds per track path are
+    // wide vs authored ranges (cm rigs top out ~50 pos, quats are unit,
+    // bone scales ~1): only bit-rot fails them, and a poisoned track is
+    // dropped whole rather than interpolated into the corruption.
+    clip.tracks = clip.tracks.filter(t => {
+      const cap = t.name.endsWith('.quaternion') ? 2 : t.name.endsWith('.scale') ? 1e3 : 1e4;
+      for (const v of t.values) {if (!Number.isFinite(v) || Math.abs(v) > cap) return false;}
+      return true;
+    });
+    // A clip the filter gutted whole still registers — a zero-track
+    // action runs, covers nothing, and reads as the bind pose for the
+    // clip's duration (polyart's poisoned Shoot/Reload — the "heavy
+    // robot T-posing sometimes" report). Skip it so the candidate
+    // resolver misses onto a real clip.
+    if (clip.tracks.length === 0) {
+      const missKey = `${this.host.variant}:gutted:${clip.name}`;
+      if (!warnedAnimMisses.has(missKey)) {
+        warnedAnimMisses.add(missKey);
+        logger.warn(`Clip fully poisoned, skipped: ${clip.name} (variant ${this.host.variant})`);
+      }
+      return;
+    }
     if (mann || knight || CLASS_BODY_SPEC[this.host.variant]) {
       stripHipXZ(clip, rootMotion);
       clampHipY(clip, 0.25, rootMotion);
