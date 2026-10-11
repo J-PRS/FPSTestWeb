@@ -31,6 +31,7 @@ export function wireMatchEvents(ctx: NetCtx): void {
   let lastLead = '';
   let lastMilestone = -1;
   networkManager.onTeamScore = (scores, winAt) => {
+    if (!Number.isFinite(scores.alpha + scores.bravo + winAt)) return;
     deps.world.teamScores = scores;
     deps.lazyHud().setTeamScore?.(scores.alpha, scores.bravo);
     const top = Math.max(scores.alpha, scores.bravo);
@@ -43,6 +44,7 @@ export function wireMatchEvents(ctx: NetCtx): void {
     }
   };
   networkManager.onFfaScore = (scores, winAt) => {
+    if (Object.values(scores).some(v => !Number.isFinite(v)) || !Number.isFinite(winAt)) return;
     deps.world.ffaScores = new Map(Object.entries(scores));
     const me = nm().getLocalPlayerId();
     const mine = scores[me] ?? 0;
