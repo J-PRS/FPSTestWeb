@@ -34,7 +34,7 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
     // walk to the gap/low section; fire and aim stay live elsewhere.
     if (b.breachUntil > ctx.now) {
       if (Math.hypot(pos.x - b.breachGoal.x, pos.z - b.breachGoal.z) < 6) {b.breachUntil = 0;}
-      else {return { ...b.breachGoal };}
+      else {return { ...b.breachGoal};}
     }
     // Carrying the objective: the run is the job — engaging whoever the
     // hunt found converts the carrier into a duelist mid-route (orbit
@@ -132,13 +132,13 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
           }
         }
       }
-      return { ...ctx.objective };
+      return { ...ctx.objective};
     }
     // Last-leg commitment beats self-preservation: inside ~40m of the
     // objective a wounded bot still crashes the point — dying with the
     // flag in hand beats surviving the approach. Only the feet commit;
     // fire stays live elsewhere.
-    if (ctx.objective && dist3(pos, ctx.objective) < 40) {return { ...ctx.objective };}
+    if (ctx.objective && dist3(pos, ctx.objective) < 40) {return { ...ctx.objective};}
     if (!b.h.hunt) {
       // A builder with hands free welds the stand's wounded gear before
       // wandering on — same "nobody close enough to interrupt" gate the
@@ -208,20 +208,20 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
       const ptx = t.pos.x - pos.x, ptz = t.pos.z - pos.z;
       const ptd = Math.hypot(ptx, ptz) || 1;
       const onRoute = d <= b.h.orbitFar && (ptx * pg.x + ptz * pg.z) / ptd > 0.4;
-      if (!onRoute || pd < 12) {return { ...ctx.pickup };}
+      if (!onRoute || pd < 12) {return { ...ctx.pickup};}
     }
     // The committed-route and crash-the-point rules live above the hunt
     // section (runner/wave always objective; anyone <40m crashes the
     // point), so a hunt that survives to here is by definition a duel
     // the objective hasn't claimed — no second gate needed.
     if (ctx.posted && ctx.objective && dist3(t.pos, ctx.objective) > ctx.posted) {
-      return { ...ctx.objective };
+      return { ...ctx.objective};
     }
     if (d < CLOSE_PRESS_M || d > b.h.orbitFar * (hero ? 0.7 : 1)) {
       // Point-blank or outranged: press straight in either way — inside
       // fist reach the press converts to the punch, outside it to the
       // approach. Holding the orbit at 2m would stare down a barrel.
-      return { ...t.pos };
+      return { ...t.pos};
     }
     // fightPos comes from the last replan tick — "hold" used to mean
     // stand still and shoot, which reads (and meters) as sheeping.

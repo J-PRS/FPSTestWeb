@@ -114,7 +114,7 @@ export function hmParseBin(buf: Uint8Array, heightScale = 1, worldScale?: number
 export function hmScaled(f: Heightfield, heightScale: number, worldScale?: number): Heightfield {
   const ws = worldScale ?? HM_WORLD_SCALE;
   const fws = f.worldScale ?? HM_WORLD_SCALE;
-  return (heightScale === 1 && ws === fws) ? f : { ...f, heightScale, worldScale: ws };
+  return (heightScale === 1 && ws === fws) ? f : ({ ...f, heightScale,worldScale: ws});
 }
 
 /** Plain terrain-only move surface — the server wraps this shape with

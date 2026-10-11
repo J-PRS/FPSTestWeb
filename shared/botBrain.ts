@@ -13,8 +13,7 @@
 
 import { botRand } from './botRand.ts';
 import { sharedEnv } from './env.ts';
-import type { ChatterKind } from './botTaunts.ts';
-import { dir8 } from './botTaunts.ts';
+import {type ChatterKind, dir8} from './botTaunts.ts';
 import { BotSteer } from './botSteer.ts';
 import { BotLines } from './botLines.ts';
 import { BotGoals, type GoalState } from './botGoals.ts';
@@ -653,7 +652,7 @@ export class BotBrain {
     // Radio commands carry an implied position — a same-team "Defend our
     // flag!" or "Cover me!" sticks for a stretch instead of dying with the
     // notice tick, so a dutiful bot actually rotates toward the call.
-    if (ctx.notice?.goal) {this.radioGoal = { ...ctx.notice.goal, until: now + 25_000 };}
+    if (ctx.notice?.goal) {this.radioGoal = { ...ctx.notice.goal, until: now + 25_000};}
     if (this.radioGoal && (now > this.radioGoal.until || distSqXZ(this.radioGoal, pos) < 25 * 25)) {this.radioGoal = null;}
     ctx.radio = this.radioGoal;
 

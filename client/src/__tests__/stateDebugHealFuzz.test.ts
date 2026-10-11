@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { wireStateDebug } from '../core/stateDebug.js';
-import type { StateDebugContext } from '../core/stateDebug.js';
+import {wireStateDebug, type StateDebugContext} from '../core/stateDebug.js';
 import { NetworkManager } from '../networking/NetworkManager.js';
 import type { RemotePlayer } from '../entities/RemotePlayer.js';
 import type { Player } from '../entities/Player.js';

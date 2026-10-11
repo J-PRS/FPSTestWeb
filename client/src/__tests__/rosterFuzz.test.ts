@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { ServerMessage } from '../../../shared/protocol.js';
-import { PROTOCOL_VERSION } from '../../../shared/protocol.js';
+import {type ServerMessage, PROTOCOL_VERSION} from '../../../shared/protocol.js';
 
 vi.mock('../core/sfx.js', () => ({ at: () => {}, shotAt: () => {}, init: () => {}, hitMarker: () => {}, playerHurt: () => {}, shieldHit: () => {}, killConfirm: () => {}, flagCue: () => {}, matchHorn: () => {} }));
 vi.mock('../entities/PlayerModel.js', () => ({

@@ -2,8 +2,7 @@ import type * as THREE from 'three';
 
 import { STATUS } from '../../../shared/status.js';
 import { SHIELD_DMG_PER_ENERGY } from './player/skills.js';
-import type { ShieldBubble } from '../effects/shieldBubble.js';
-import { makeContouredShield, makeShieldBubble } from '../effects/shieldBubble.js';
+import {type ShieldBubble, makeContouredShield, makeShieldBubble} from '../effects/shieldBubble.js';
 
 // Toggle-status family — cloak/shield/mend flags + the wire status byte
 // + the third-person shield bubble + spectator ghost-flight. Split from

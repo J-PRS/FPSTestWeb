@@ -67,13 +67,7 @@ export function makeSimFlyer(
   const row = SPECIES[species] ?? SPECIES.rakk!;
   const health = uber ? row.health * 3.4 : row.health;
   const speed = row.speed ?? 1;
-  const sp: FlyerTunables = {
-    ...FLYER_SIM,
-    ORBIT_SPEED: FLYER_SIM.ORBIT_SPEED * speed,
-    DIVE_SPEED: FLYER_SIM.DIVE_SPEED * speed,
-    ORBIT_R: row.orbitR ?? FLYER_SIM.ORBIT_R,
-    ORBIT_ALT: row.orbitAlt ?? FLYER_SIM.ORBIT_ALT,
-  };
+  const sp: FlyerTunables = { ...FLYER_SIM, ORBIT_SPEED: FLYER_SIM.ORBIT_SPEED * speed,DIVE_SPEED: FLYER_SIM.DIVE_SPEED * speed,ORBIT_R: row.orbitR ?? FLYER_SIM.ORBIT_R,ORBIT_ALT: row.orbitAlt ?? FLYER_SIM.ORBIT_ALT};
   const rng = seed >>> 0 || 1;
   return {
     id, family: 'fly', species, biteDamage: row.bite, sp,

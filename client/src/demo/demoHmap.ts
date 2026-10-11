@@ -8,8 +8,7 @@
 // the grid IS a Heightfield { size, data, stride:1 } — hmHeight() samples
 // it through the exact same path the live map uses.
 
-import type { Heightfield } from '../../../shared/heightfield.js';
-import { hmHeight } from '../../../shared/heightfield.js';
+import {type Heightfield, hmHeight} from '../../../shared/heightfield.js';
 import { crc32 } from './demoWriter.js';
 import type { DemoHeightmap } from './types.js';
 

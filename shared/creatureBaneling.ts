@@ -50,11 +50,7 @@ export function makeSimBaneling(
   const { x, y, z } = pos;
   const row = SPECIES[species] ?? SPECIES.baneling!;
   const health = uber ? row.health * 4 : row.health;
-  const sp: BanelingTunables = {
-    ...BANELING_SIM,
-    TOPSPEED: BANELING_SIM.TOPSPEED * (row.speed ?? 1),
-    ACCEL: BANELING_SIM.ACCEL * (row.speed ?? 1),
-  };
+  const sp: BanelingTunables = { ...BANELING_SIM, TOPSPEED: BANELING_SIM.TOPSPEED * (row.speed ?? 1),ACCEL: BANELING_SIM.ACCEL * (row.speed ?? 1)};
   return {
     id, family: 'baneling', species, biteDamage: uber ? row.bite * 2 : row.bite, sp,
     x, y, z, vx: 0, vy: 0, vz: 0, yaw: 0,

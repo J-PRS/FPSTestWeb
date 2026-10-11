@@ -1,6 +1,6 @@
 // World gravity is authored in shared/movement.ts — the server sims the
 // same fall the client predicts; derive, never copy.
-import { GRAVITY } from '../../../shared/movement.js';
+import {GRAVITY, ENERGY} from '../../../shared/movement.js';
 export { GRAVITY };
 
 // Physics constants for debris and death physics
@@ -41,7 +41,6 @@ export { LG_POP_DMG_CAP, LG_POP_CHARGE_MULT, LG_CHARGE_DRAIN_S as LG_CHARGE_DECA
 
 // Projectile gameplay stats (speed, gravity, hitboxes, damage, fuse) live in
 import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
-import { ENERGY } from '../../../shared/movement.js';
 // shared/weapons.ts — the single source of truth the server validates with.
 // The constants that remain here are visual/VFX scales only.
 export const EXPLOSION_VFX_RADIUS = 6; // explosion VFX scale unit — blastRadius/this = visual size

@@ -14,8 +14,7 @@ import {
   WIRE_BALLSEG, SERVER_TICK_MS,
   type TickDecodePool,
 } from '../../../shared/wire.js';
-import type { ServerMessage, TickUpdatePlayer } from '../../../shared/protocol.js';
-import { PROTOCOL_VERSION } from '../../../shared/protocol.js';
+import {type ServerMessage, type TickUpdatePlayer, PROTOCOL_VERSION} from '../../../shared/protocol.js';
 import { WeaponType } from '../../../shared/weapons.js';
 import { WORLD_MODEL, verbForType, checkPacket, rowPatch } from '../../../shared/worldModel.js';
 import type { RemotePlayerState,NetworkManager } from './NetworkManager.js';

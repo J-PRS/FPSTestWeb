@@ -127,7 +127,7 @@ export function findStructureOverlaps(list: readonly StructureSpec[] | undefined
         const frac = (d0 * d1 * oy) / Math.min(va, vb);
         if (frac > worst) { worst = frac; best = { x: d0, y: oy, z: d1 }; }
       }}
-      if (best && worst > 0.35) {out.push({ a: i, b: j, ...best });}
+      if (best && worst > 0.35) {out.push({a: i,b: j, ...best});}
     }
   }
   return out;

@@ -4,8 +4,7 @@
 // for mines); shots are already handled as projectile Fired events.
 
 import * as THREE from 'three';
-import type { TargetEvent } from './types.js';
-import { TargetEventType, TARGETTYPE_DEPLOY_BASE } from './types.js';
+import {type TargetEvent, TargetEventType, TARGETTYPE_DEPLOY_BASE} from './types.js';
 import { Explosion } from '../effects/explosion.js';
 import * as sfxExplosions from '../core/sfx/explosions.js';
 import type { PlaybackWorld } from './playbackReconstruction.js';

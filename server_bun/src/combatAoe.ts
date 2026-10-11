@@ -2,8 +2,7 @@ import { simMs } from './simClock.ts';
 import type { ClientMessage, Vec3,PlayerState } from './types.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 
-import type { WeaponStats } from '../../shared/weapons.ts';
-import { getWeaponStats, WeaponType } from '../../shared/weapons.ts';
+import {type WeaponStats, getWeaponStats, WeaponType} from '../../shared/weapons.ts';
 import { lgTickDamage, LG_TICK_BASE } from '../../shared/combat.ts';
 import { perkMods } from '../../shared/perks.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';

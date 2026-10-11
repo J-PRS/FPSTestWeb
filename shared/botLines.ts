@@ -108,7 +108,7 @@ export class BotLines {
     const objIsDest = ctx.objective && Math.hypot(ctx.objective.x - dest.x, ctx.objective.z - dest.z) < 40;
     if (ctx.runner && ctx.objective && objIsDest && pos.y - ctx.groundY(pos.x, pos.z) > T.lines.diveAgl && od0 < pos.y * T.lines.diveGlideK) {
       this.wp = { x: ctx.objective.x, y: ctx.objective.y, z: ctx.objective.z };
-      this.wpGoal = { ...dest };
+      this.wpGoal = { ...dest};
       this.lineT = T.lines.commitS;
       return this.wp;
     }
@@ -129,7 +129,7 @@ export class BotLines {
       const gx = (dest.x - pos.x) / gd, gz = (dest.z - pos.z) / gd;
       const wx = (this.wp.x - pos.x) / wpD, wz = (this.wp.z - pos.z) / wpD;
       if (wx * gx + wz * gz > Math.cos(T.lines.cone)) {
-        this.wpGoal = { ...dest };
+        this.wpGoal = { ...dest};
         return this.wp;
       }
     }
@@ -163,7 +163,7 @@ export class BotLines {
     const prof = sharedEnv.thinkProf;
     let tp = prof ? sharedEnv.wallPerf!() : 0;
     if (faceAhead || this.stale >= T.lines.staleLimit || this.orbitGd !== Infinity) {
-      if (this.orbitGd === Infinity) { this.orbitGd = gd; this.orbitFails = 0; this.orbitGoal = { ...dest }; }
+      if (this.orbitGd === Infinity) { this.orbitGd = gd; this.orbitFails = 0; this.orbitGoal = { ...dest}; }
       else {this.orbitFails += 1;}
       let bestPass: BotVec | null = null, bestPassD = 250;
       for (const pass of this.passes) {
@@ -254,7 +254,7 @@ export class BotLines {
         }
       }
       this.wp = wp;
-      this.wpGoal = { ...dest };
+      this.wpGoal = { ...dest};
       this.lineT = T.lines.commitS;
       this.stale = 0;
       if (prof) {prof.set('lines:orbit', (prof.get('lines:orbit') ?? 0) + sharedEnv.wallPerf!() - tp);}
@@ -292,7 +292,7 @@ export class BotLines {
     // latching it would re-roll every think (the residual fan storm);
     // commit the empty result like a null roll: walk at the goal.
     if (this.wp && Math.hypot(this.wp.x - pos.x, this.wp.z - pos.z) <= T.lines.arrive) {this.wp = null;}
-    this.wpGoal = { ...dest };
+    this.wpGoal = { ...dest};
     this.lineT = T.lines.commitS;
     return this.wp ?? dest;
   }

@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { recordFired, recordBounce, recordHit, recordDestroyed } from '../demo/demoEvents.js';
-import { ProjectileEventType } from '../demo/types.js';
+import {ProjectileEventType, type ProjectileEvent} from '../demo/types.js';
 import type { DemoRecorder } from '../demo/DemoRecorder.js';
-import type { ProjectileEvent } from '../demo/types.js';
 
 const V = { x: 1, y: 2, z: 3 };
 

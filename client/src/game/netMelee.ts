@@ -1,12 +1,11 @@
 import type * as THREE from 'three';
 
-import { getHeightfield } from '../world/terrain.js';
+import {getHeightfield, type Terrain} from '../world/terrain.js';
 import { hmHeight, type Heightfield } from '../../../shared/heightfield.js';
 import { commitTarget, type SimTotem } from '../../../shared/creatureSim.js';
 import type { SimVec, StructureCollider } from '../../../shared/ballSim.js';
 import { SIM_TICK_DT } from "../../../shared/wire.js";
 import { Projectile } from '../projectiles/Projectile.js';
-import type { Terrain } from '../world/terrain.js';
 
 /** The state fields every netDriven shared sim carries — the concrete
  *  structs (SimCrawler, SimFlyer, …) extend this per family. */

@@ -58,10 +58,7 @@ export function makeSimSlither(
   const { x, y, z } = pos;
   const row = SPECIES[species] ?? SPECIES.snake!;
   const health = uber ? row.health * 4 : row.health;
-  const sp: SlitherTunables = {
-    ...SLITHER_SIM,
-    SPEED: SLITHER_SIM.SPEED * (row.speed ?? 1),
-  };
+  const sp: SlitherTunables = { ...SLITHER_SIM, SPEED: SLITHER_SIM.SPEED * (row.speed ?? 1)};
   const rng = seed >>> 0 || 1;
   return {
     id, family: 'slither', species, biteDamage: row.bite, sp,

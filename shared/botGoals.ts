@@ -55,7 +55,7 @@ export class BotGoals {
       // posted anchor doesn't take the bait: the revenge push is what
       // shelled HoFs off their stand — he answers with fire, not feet.
       if (!(ctx.posted && ctx.objective && Math.sqrt(distSq(s.revengeFrom, ctx.objective)) > ctx.posted)) {
-        s.goal = { ...s.revengeFrom };
+        s.goal = { ...s.revengeFrom};
         return;
       }
     }
@@ -71,7 +71,7 @@ export class BotGoals {
     // A dry infiltrator can't hold the veil — the nugget loop IS its
     // stealth economy, so feeding the tank outranks pressing the stand.
     if (ctx.infiltrating && ctx.energy !== undefined && ctx.energy < ENERGY.cloakCost + 30 && ctx.pickup) {
-      s.goal = { ...ctx.pickup }; return;
+      s.goal = { ...ctx.pickup}; return;
     }
     // Utility pick — nothing is first-past-the-post anymore: a gem 30m
     // out can outscore a flag 400m off, a distant objective beats a
@@ -136,7 +136,7 @@ export class BotGoals {
       // Hysteresis: the incumbent needs beating by a margin — flipping
       // goals on a 1% re-score reads as bot dithering, not judgment.
       const incumbent = cands.find((c) => distSq(c.goal, s.goal) < 25 * 25);
-      s.goal = incumbent && incumbent.score > best.score * 0.85 ? incumbent.goal : { ...best.goal };
+      s.goal = incumbent && incumbent.score > best.score * 0.85 ? incumbent.goal : ({ ...best.goal});
       return;
     }
     // Wander always offers a candidate, so an empty board only happens
@@ -192,7 +192,7 @@ export class BotGoals {
       if (d < 60 * 60) {return null;} // already has company — a pull here would herd
       if (d < ad && d < 260 * 260) { ad = d; ally = o; }
     }
-    return ally ? { ...ally } : null;
+    return ally ? ({ ...ally}) : null;
   }
 
   /** Hurt with nobody shooting back at: fold toward the nearest ALLY —
@@ -205,7 +205,7 @@ export class BotGoals {
       const d = distSq(pos, o);
       if (d < ad && d > 4) { ad = d; ally = o; }
     }
-    return ally ? { ...ally } : null;
+    return ally ? ({ ...ally}) : null;
   }
 
   /** Heard a fight: investigate the nearest noise. Curiosity is a
@@ -220,6 +220,6 @@ export class BotGoals {
     }
     // Duty tempers wanderlust: the professional hears the fight, the
     // tourist hears the call of the mountain.
-    return loudest && botRand() < (0.15 + this.duty() * 0.5) ? { ...loudest } : null;
+    return loudest && botRand() < (0.15 + this.duty() * 0.5) ? ({ ...loudest}) : null;
   }
 }

@@ -6,8 +6,7 @@
 // the spirit of the shot, and roster snapshots bound the drift.
 
 import * as THREE from 'three';
-import type { TargetEvent } from './types.js';
-import { TargetEventType, TARGETTYPE_CREATURE_BASE } from './types.js';
+import {type TargetEvent, TargetEventType, TARGETTYPE_CREATURE_BASE} from './types.js';
 import { GRAVITY } from '../../../shared/movement.js';
 import type { PlaybackWorld } from './playbackReconstruction.js';
 import { fastForward } from './playbackFF.js';

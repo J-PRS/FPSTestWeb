@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createRemotes } from '../game/remotes.js';
+import {createRemotes, type RemotesDeps} from '../game/remotes.js';
 import { lastWeaponByPlayer } from '../game/net/projectiles.js';
-import type { RemotesDeps } from '../game/remotes.js';
 
 // onRemove is the client depart funnel for wire players — every
 // id-keyed receipt must drain through it or a leaver leaves per-id

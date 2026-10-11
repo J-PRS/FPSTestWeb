@@ -1,6 +1,5 @@
 import { reconstructSeek, applyPlaybackEvents, releasePlaybackBeam, type PlaybackWorld } from '../demo/playbackReconstruction.js';
-import type { ProjectileEvent, TargetEvent } from '../demo/types.js';
-import { RemoteFrameFlags, TARGETTYPE_CREATURE_BASE, demoSpeciesIndex, creatureDemoId, targetDemoId,ProjectileEventType } from '../demo/types.js';
+import {type ProjectileEvent, type TargetEvent, RemoteFrameFlags, TARGETTYPE_CREATURE_BASE, demoSpeciesIndex, creatureDemoId, targetDemoId, ProjectileEventType} from '../demo/types.js';
 import type { RemoteSample } from '../demo/DemoRecorder.js';
 import type { DemoManager } from '../demo/index.js';
 import type { Ball } from '../entities/balls.js';

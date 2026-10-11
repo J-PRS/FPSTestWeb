@@ -3,8 +3,7 @@ import { nextTargetId } from './targetIds.js';
 
 import { GRAVITY, BALL_BASE_RADIUS } from '../core/config.js';
 
-import type { Terrain} from '../world/terrain.js';
-import { getHeightfield } from '../world/terrain.js';
+import {type Terrain, getHeightfield} from '../world/terrain.js';
 import { makeSimBall, type StructureCollider } from '../../../shared/ballSim.js';
 import type { ColliderIndex } from '../../../shared/solidWorld.js';
 import { type Heightfield, hmFingerprint } from '../../../shared/heightfield.js';

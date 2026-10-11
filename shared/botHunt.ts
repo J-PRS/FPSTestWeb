@@ -269,8 +269,7 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
   const ghost = !next && st.hunt?.alive
     && (st.unreachUntil.get(st.hunt.id) ?? 0) <= now
     && now - st.lastSeenAt < PURSUE_MS && dist3(pos, st.lastSeen) < PURSUE_M
-    ? {
-        ...st.hunt,
+    ? { ...st.hunt,
         // The ghost keeps the model's momentum — humans chase where
         // the runner was HEADING, not the spot they vanished from. If
         // the extrapolated line lands on a pickup, that's where he's
@@ -299,7 +298,7 @@ st.huntTick += 1;
     st.lastSeenAt = now;
     st.lastAimY = seen.aimY ?? CENTER_AIM_Y;
     // Opponent-model update — the tracker's running estimate drifts
-    // toward the newest read, never snaps to it.
+    // toward the newest read,never snaps to it.
     const blend = st.leadId === seen.id ? 0.2 : 0.55;
     st.leadId = seen.id;
     st.leadVel.x += (seen.vel.x - st.leadVel.x) * blend;

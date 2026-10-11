@@ -1,5 +1,4 @@
-import type { Heightfield } from '../../shared/heightfield.ts';
-import { hmHeight } from '../../shared/heightfield.ts';
+import {type Heightfield, hmHeight} from '../../shared/heightfield.ts';
 import { type MapSpec, type StructureSpec } from '../../shared/mapSpec.ts';
 import type { ModeSpec } from '../../shared/teams.ts';
 import { structureColliders } from '../../shared/ballSim.ts';

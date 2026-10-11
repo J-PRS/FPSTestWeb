@@ -1,5 +1,4 @@
-import type { Heightfield } from '../../shared/heightfield.ts';
-import { hmHeight } from '../../shared/heightfield.ts';
+import {type Heightfield, hmHeight} from '../../shared/heightfield.ts';
 import { KIT_HULLS, KIT_STAND_TOP } from '../../shared/structKits.ts';
 import type { MapSpec, SpawnPoint, Vec3like } from '../../shared/mapSpec.ts';
 import type { Vec3 } from './types.ts';

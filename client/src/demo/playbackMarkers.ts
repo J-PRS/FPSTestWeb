@@ -6,8 +6,7 @@
 //   226+ pickup — kind-tinted gem; gone removes it.
 
 import * as THREE from 'three';
-import type { TargetEvent } from './types.js';
-import { TargetEventType, TARGETTYPE_KILL, TARGETTYPE_FLAG, TARGETTYPE_PICKUP_BASE } from './types.js';
+import {type TargetEvent, TargetEventType, TARGETTYPE_KILL, TARGETTYPE_FLAG, TARGETTYPE_PICKUP_BASE} from './types.js';
 import { Explosion } from '../effects/explosion.js';
 import type { PlaybackWorld } from './playbackReconstruction.js';
 import { fastForward } from './playbackFF.js';

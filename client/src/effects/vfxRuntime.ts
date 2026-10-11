@@ -4,8 +4,7 @@
 // vfx.ts is "effects are built here". Import the runtime surface below,
 // never reach into the maps directly.
 import * as THREE from 'three';
-import type { ParticleSystem } from 'three.quarks';
-import { BatchedRenderer } from 'three.quarks';
+import {type ParticleSystem, BatchedRenderer} from 'three.quarks';
 import type { IParticleSystem } from 'quarks.core';
 import { markProbe } from '../core/fxDiag.js';
 import { BLOOM_LAYER } from '../core/config.js';

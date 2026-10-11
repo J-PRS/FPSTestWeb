@@ -114,7 +114,7 @@ export function kitConsistent(lo: BotLoadout): boolean {
  *  the kit inconsistent keeps the base weapon instead. */
 export function rollLoadout(lo: BotLoadout, alts: Partial<Record<LoadoutSlot, WeaponType[]>> | undefined, rng: () => number): BotLoadout {
   if (!alts) {return lo;}
-  const out = { ...lo };
+  const out = { ...lo};
   for (const slot of SLOTS) {
     const cands = alts[slot];
     if (!cands?.length) {continue;}
@@ -144,8 +144,8 @@ export function rollWildcard(rng: () => number): BotLoadout {
     far: pick(WILDCARD_SLOTS.far, WeaponType.BoltLauncher), belt: pick(WILDCARD_SLOTS.belt, WeaponType.Grenade),
     side: pick(WILDCARD_SLOTS.side, WeaponType.Pistol),
   };
-  const perks = WILDCARD_PERKS.filter((p) => kitConsistent({ ...kit, perk: p }));
-  return { ...kit, perk: perks[Math.floor(rng() * perks.length)] ?? 'vitality' };
+  const perks = WILDCARD_PERKS.filter((p) => kitConsistent({ ...kit, perk: p}));
+  return { ...kit, perk: perks[Math.floor(rng() * perks.length)] ?? 'vitality'};
 }
 
 /** Respawn adaptation: for each slot the bot can reroll, keep whichever
@@ -153,7 +153,7 @@ export function rollWildcard(rng: () => number): BotLoadout {
  *  toward what this bot actually hits with. */
 export function adaptLoadout(lo: BotLoadout, alts: Partial<Record<LoadoutSlot, WeaponType[]>> | undefined, skill: (w: number) => number, rng?: () => number): BotLoadout {
   if (!alts) {return lo;}
-  const out = { ...lo };
+  const out = { ...lo};
   const r = rng ?? (() => 0.5);
   for (const slot of SLOTS) {
     const cands = alts[slot];
@@ -165,7 +165,7 @@ export function adaptLoadout(lo: BotLoadout, alts: Partial<Record<LoadoutSlot, W
       // matrix don't march in lockstep, but the pick still leans to
       // what this one actually hits with.
       const s = skill(w) * (0.7 + 0.6 * r());
-      if (s > bs && kitConsistent({ ...out, [slot]: w })) { bs = s; best = w; }
+      if (s > bs && kitConsistent({ ...out, [slot]: w})) { bs = s; best = w; }
     }
     out[slot] = best;
   }

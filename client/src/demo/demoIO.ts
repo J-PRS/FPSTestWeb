@@ -5,8 +5,7 @@
  * Extracted so DemoManager stays orchestration-only.
  */
 import { DemoSerializer } from './DemoSerializer.js';
-import { ProjectileEventType } from './types.js';
-import type { DemoFile } from './types.js';
+import {ProjectileEventType, type DemoFile} from './types.js';
 import type { DemoRecorder } from './DemoRecorder.js';
 import type { DemoPlayer } from './DemoPlayer.js';
 import type { DemoUI } from './DemoUI.js';

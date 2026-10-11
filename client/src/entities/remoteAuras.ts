@@ -1,8 +1,7 @@
 import type * as THREE from 'three';
 
 import { classCapsule } from '../../../shared/botClasses.js';
-import type { ShieldBubble } from '../effects/shieldBubble.js';
-import { makeContouredShield, makeShieldBubble } from '../effects/shieldBubble.js';
+import {type ShieldBubble, makeContouredShield, makeShieldBubble} from '../effects/shieldBubble.js';
 
 // Status-aura family — the energy-shield bubble plus the one-bit status
 // auras (mend/regen/dd/charge), identical lazy-glow plumbing per STATUS

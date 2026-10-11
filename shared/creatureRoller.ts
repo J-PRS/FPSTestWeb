@@ -46,10 +46,7 @@ export function makeSimRoller(
   const { x, y, z } = pos;
   const row = SPECIES[species] ?? SPECIES.roller!;
   const health = uber ? row.health * 3.4 : row.health;
-  const sp: RollerTunables = {
-    ...ROLLER_SIM,
-    TOPSPEED: ROLLER_SIM.TOPSPEED * (row.speed ?? 1),
-  };
+  const sp: RollerTunables = { ...ROLLER_SIM, TOPSPEED: ROLLER_SIM.TOPSPEED * (row.speed ?? 1)};
   return {
     id, family: 'roll', species, biteDamage: row.bite, sp,
     x, y, z, vx: 0, vy: 0, vz: 0, yaw: 0,

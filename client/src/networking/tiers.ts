@@ -9,8 +9,7 @@
  * ?net=wt|rtc|ws pins one tier for testing.
  */
 
-import type { ConnectionConfig } from './WebSocketConnection.js';
-import { WebSocketConnection } from './WebSocketConnection.js';
+import {type ConnectionConfig, WebSocketConnection} from './WebSocketConnection.js';
 import type { GameTransport } from './transport.js';
 import { netLogger } from './netLog.js';
 import { tryWebTransport } from './tiersWebTransport.js';

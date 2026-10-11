@@ -1,16 +1,14 @@
 import type { ServerMessage, Vec3, PlayerState } from './types.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import { WORLD_MODEL, eventPayload } from '../../shared/worldModel.ts';
-import type { WeaponStats } from '../../shared/weapons.ts';
-import { getWeaponStats, WeaponType, ARMORNADE_ARMOR, HEALNADE_HEAL, CONC_JET_DRAIN } from '../../shared/weapons.ts';
+import {type WeaponStats, getWeaponStats, WeaponType, ARMORNADE_ARMOR, HEALNADE_HEAL, CONC_JET_DRAIN} from '../../shared/weapons.ts';
 import { healPool } from './healPool.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { classMass } from '../../shared/botClasses.ts';
 import { aoeDamage, aoeImpulseT1At, t1Minbox, KNOCKBACK_SCALE, BLAST_IMPULSE_MAX, LG_POP_DMG_CAP, LG_POP_RADIUS_MIN, LG_POP_RADIUS_MAX, SELF_SPLASH_MAX } from '../../shared/combat.ts';
 import { POWERUP } from '../../shared/pickups.ts';
+import {type ColliderIndex, blastOccluded} from '../../shared/solidWorld.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
-import type { ColliderIndex } from '../../shared/solidWorld.ts';
-import { blastOccluded } from '../../shared/solidWorld.ts';
 import { rewindPos, shooterTransitMs } from './claimLedger.ts';
 import { renderLagOf } from './rewind.ts';
 import { logger } from './logger.ts';

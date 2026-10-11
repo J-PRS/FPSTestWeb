@@ -7,8 +7,7 @@ import { DemoPlayer, type InterpolatedRemote,type PlaybackState } from './DemoPl
 import { DemoUI } from './DemoUI.js';
 import type { IPlayerDataProvider, IInputProvider, Vec3 } from './interfaces.js';
 import type { ProjectileEvent, TargetEvent, DemoFile } from './types.js';
-import { CoolShotManager } from './coolShots.js';
-import type { CoolShotEntry } from './coolShots.js';
+import {CoolShotManager, type CoolShotEntry} from './coolShots.js';
 import { VideoRecorder } from './VideoRecorder.js';
 import * as clipSink from './clipSink.js';
 import { ChildLogger } from '../core/Logger.js';

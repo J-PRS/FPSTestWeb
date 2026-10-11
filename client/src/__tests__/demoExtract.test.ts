@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { extractClip, buildDemoFile } from '../demo/demoExtract.js';
 import { CircularBuffer } from '../demo/CircularBuffer.js';
-import { ProjectileEventType } from '../demo/types.js';
+import {ProjectileEventType, type DemoFrame, type ProjectileEvent} from '../demo/types.js';
 import type { DemoRecorder } from '../demo/DemoRecorder.js';
-import type { DemoFrame, ProjectileEvent } from '../demo/types.js';
 
 const pEvt = (t: number, id: number): ProjectileEvent =>
   ({ timestamp: t, eventType: ProjectileEventType.Fired, projectileId: id } as ProjectileEvent);

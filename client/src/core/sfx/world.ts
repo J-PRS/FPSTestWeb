@@ -1,6 +1,5 @@
 import * as THREE from 'three';
-import { audio } from '../audio.js';
-import type { LoopHandle, PositionalLoop } from '../audio.js';
+import {audio, type LoopHandle, type PositionalLoop} from '../audio.js';
 import { ctx, play, osc, sample, layer, noise } from './util.js';
 
 // ---------------------------------------------------------------------------

@@ -7,11 +7,10 @@
 import * as THREE from 'three';
 import type { DeployTurret } from '../entities/DeployTurret.js';
 import type { Mine } from '../entities/Mine.js';
-import type { DeployStation } from '../entities/DeployStation.js';
+import {type DeployStation, DeployStation as StationClass} from '../entities/DeployStation.js';
 import type { DeployDrone } from '../entities/DeployDrone.js';
 import type { DeployShield } from '../entities/DeployShield.js';
 import type { DeployBeacon } from '../entities/DeployBeacon.js';
-import { DeployStation as StationClass } from '../entities/DeployStation.js';
 import { Explosion } from '../effects/explosion.js';
 import { screenShake } from '../effects/screenShake.js';
 import * as sfx from '../core/sfx.js';

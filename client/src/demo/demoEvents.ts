@@ -1,7 +1,6 @@
-import { ProjectileEventType, TargetEventType, TARGETTYPE_CREATURE_BASE, TARGETTYPE_DEPLOY_BASE, TARGETTYPE_KILL, TARGETTYPE_FLAG, TARGETTYPE_PICKUP_BASE, demoSpeciesIndex, demoDeployKindIndex, demoPickupKindIndex, creatureDemoId, deployDemoId, flagDemoId, pickupDemoId } from './types.js';
+import {ProjectileEventType, TargetEventType, TARGETTYPE_CREATURE_BASE, TARGETTYPE_DEPLOY_BASE, TARGETTYPE_KILL, TARGETTYPE_FLAG, TARGETTYPE_PICKUP_BASE, demoSpeciesIndex, demoDeployKindIndex, demoPickupKindIndex, creatureDemoId, deployDemoId, flagDemoId, pickupDemoId, type ProjectileEvent, type TargetEvent} from './types.js';
 import type { Vec3 } from './interfaces.js';
 import type { DemoRecorder } from './DemoRecorder.js';
-import type { ProjectileEvent, TargetEvent } from './types.js';
 
 // Event recorders — the rate-limited projectile/target event spool.
 // DemoRecorder keeps the flat interface; these take it as the host.
