@@ -472,6 +472,17 @@ violation instead of a symptom hunt.
   `switchRoom` sanitizes to word grammar + clamps bots ≤24;
   `snapshotRequest`/`resync` (the expensive ops) capped at
   3 per 5s; respawn 3/s; chat length-capped + flood-limited.
+- **Server tick loop (verified sealed):** sims take MEASURED
+  elapsed dt clamped to `[TICK_DT, 1s]` — a fixed 50ms would
+  drift ~18% behind wall under load (client replays overshooting
+  every resync); the 1s cap prevents hiccup spirals. Per-room
+  containment: a throwing tick is phase-named, streak-counted,
+  and ~10 consecutive failures quarantine + drain the room
+  (players get a close frame → reconnect to a fresh room, not a
+  frozen world). `faultedRooms` bounded, streak keys cleared per
+  name so a same-named room isn't born frozen. No-audience
+  hibernation sleeps sims; unconditional frames every tick keep
+  the client loss metric and `ackSeq` pruning honest.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
