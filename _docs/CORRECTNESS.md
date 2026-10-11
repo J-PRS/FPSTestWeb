@@ -417,6 +417,14 @@ violation instead of a symptom hunt.
   the warp; divergence is an anti-cheat signal only. Plausibility
   anchors update even on reject (no reject-spiral), and NaN
   reports fail the `isFinite` gate before either mode touches them.
+- **Hit-claim lane (verified sealed):** client claims carry INTENT
+  only — melee sweeps derive their arc point from the server-rewound
+  shooter origin + normalized dir (a forged position can't widen
+  the arc); beam/repair ticks re-raycast server-side off the honest
+  ray; and every path is bounded: 20/s flood gate, per-weapon
+  cadence window (0.85× slack for loss bunching), class-locked
+  weapons rejected, belt charge paid at intent time. No client
+  number reaches damage math unverified.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
