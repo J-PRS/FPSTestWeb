@@ -530,6 +530,14 @@ violation instead of a symptom hunt.
   transition; the two-clock discipline keeps `wallNow`
   (suppression/silence) and `simT` (regen/dd/forceSend) domains
   unmixed.
+- **Client loop dt discipline (verified sealed):** frame dt
+  clamps to `MAX_DELTA_TIME` with NaN/negative guards (a hitch
+  is slow-motion, never a spiral); hidden tabs get a separate
+  wall-clock `fxDt` (2s cap) so cosmetics expire on real time
+  instead of stacking into an AFK overdraw bomb; the fps-cap
+  skips only the render call (sim/input stay full-rate); boot
+  and veil stability meters live next to the frame meter so
+  the same `rawElapsed` sample feeds all of them.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
