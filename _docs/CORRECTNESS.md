@@ -454,6 +454,15 @@ violation instead of a symptom hunt.
   melee half is server-derived anyway (`meleeSweep`: rewound
   origin + reach + `MELEE_ARC_DOT` cone — the client claims a
   swing, never a contact).
+- **Wire schema layer (verified sealed):** every claim type has a
+  rate window tuned to the honest cadence (aoeShot 30/s — GL
+  spam cap above the 24/s held-beam floor; slam 6/s, jump 10/s,
+  shotFired 40/s) plus typed validation (`validateVec3`/`optVec`
+  finiteness, weapon enums, id length caps) — malformed claims
+  die at decode, before any handler. Teleport is deliberately
+  un-limited (dropping a declared discontinuity just desyncs
+  the client); its abuse is counted via `teleportSpam`, and
+  position plausibility lives in moveClaims.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
