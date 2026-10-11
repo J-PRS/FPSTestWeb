@@ -642,6 +642,14 @@ violation instead of a symptom hunt.
   drops non-finite blast points at the entry — a NaN `srvAt`
   would NaN every divergence diff and render as a bogus "far"
   ghost in the dump.
+- **Trail head lead (fixed):** the quarks batcher sims at 30Hz —
+  deposits are ~2 render frames stale, so `emitSegment` leads the
+  emitter by measured displacement ×2. On overshoot it now CLAMPS
+  the measured lead to the cap instead of falling back to
+  `vel·dt·2` — the fallback undershot pos-driven hosts (interp
+  remotes, renderOffset decay) and the trail snapped behind on
+  hitchy frames. The deposit-span judge below still re-seats on
+  true jumps.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster

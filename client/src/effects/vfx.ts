@@ -353,8 +353,12 @@ export class QuarksTrail {
     if (dt > 0) {
       const cap = spd * dt * 4 + 3;
       const mLen = mdx * mdx + mdy * mdy + mdz * mdz;
-      if (Number.isFinite(mLen) && mLen <= cap * cap) {
-        em.position.x += mdx * 2; em.position.y += mdy * 2; em.position.z += mdz * 2;
+      if (Number.isFinite(mLen) && mLen > 1e-12) {
+        // Scale the measured lead down to the cap on overshoot — a vel
+        // fallback undershoots pos-driven hosts (interp remotes,
+        // renderOffset decay) and the trail snaps behind on hitchy frames.
+        const k = Math.min(1, cap / Math.sqrt(mLen)) * 2;
+        em.position.x += mdx * k; em.position.y += mdy * k; em.position.z += mdz * k;
       } else {
         em.position.addScaledVector(vel, dt * 2);
       }
