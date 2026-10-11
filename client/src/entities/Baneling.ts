@@ -164,7 +164,7 @@ export class Baneling implements Targetable, SwarmSlotOwner {
     if (this.airborne) {
       this.vel.y += GRAVITY * dt;
       this.pos.addScaledVector(this.vel, dt);
-      if (this.pos.y - this.radius <= gy) {
+      if (Number.isFinite(gy) && this.pos.y - this.radius <= gy) {
         this.pos.y = gy + this.radius;
         this.airborne = false;
         this.vel.x *= 0.4; this.vel.z *= 0.4;
@@ -186,7 +186,8 @@ export class Baneling implements Targetable, SwarmSlotOwner {
       }
       this.pos.x += this.vel.x * dt;
       this.pos.z += this.vel.z * dt;
-      this.pos.y = terrain.getHeight(this.pos.x, this.pos.z) + this.radius;
+      const mg = terrain.getHeight(this.pos.x, this.pos.z);
+      if (Number.isFinite(mg)) {this.pos.y = mg + this.radius;}
 
       // Fuse is 3D — `dist` is horizontal (steering); hovering overhead
       // shouldn't pop the sac, you have to actually be in the blast.

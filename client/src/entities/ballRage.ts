@@ -90,7 +90,8 @@ export function tickEnrage(b: BallRageHost, dt: number, terrain: Terrain, player
     const ddx = b.pos.x - playerPos.x;
     const ddz = b.pos.z - playerPos.z;
     if (ddx * ddx + ddz * ddz <= BALL_ENRAGE_DASH_DIST * BALL_ENRAGE_DASH_DIST) {
-      const h = b.pos.y - terrain.getHeight(b.pos.x, b.pos.z) - b.radius;
+      const dg = terrain.getHeight(b.pos.x, b.pos.z);
+      const h = b.pos.y - (Number.isFinite(dg) ? dg : 0) - b.radius;
       const t = Math.min(1, Math.max(0, 1 - h / BALL_ENRAGE_TELEGRAPH_H));
       b.emissive.setRGB(0.55 + 0.45 * t, 0.45 * t, 0.35 * t); // red → white-hot
     } else {
@@ -109,7 +110,7 @@ export function tickEnrage(b: BallRageHost, dt: number, terrain: Terrain, player
 
 export function handleGroundBounce(b: BallRageHost, terrain: Terrain, playerPos: THREE.Vector3): void {
   const gy = terrain.getHeight(b.pos.x, b.pos.z);
-  if (b.pos.y - b.radius > gy) {return;}
+  if (!Number.isFinite(gy) || b.pos.y - b.radius > gy) {return;}
   b.pos.y = gy + b.radius;
   const n = terrain.getNormal(b.pos.x, b.pos.z);
   const dot = b.vel.dot(n);
@@ -238,7 +239,8 @@ function teleportNearPlayer(b: BallRageHost, terrain: Terrain, playerPos: THREE.
   const dist = BALL_TELE_MIN + Math.random() * (BALL_TELE_MAX - BALL_TELE_MIN);
   b.pos.x = playerPos.x + Math.cos(ang) * dist;
   b.pos.z = playerPos.z + Math.sin(ang) * dist;
-  b.pos.y = terrain.getHeight(b.pos.x, b.pos.z) + b.radius + BALL_TELE_MARGIN;
+  const tg = terrain.getHeight(b.pos.x, b.pos.z);
+  b.pos.y = (Number.isFinite(tg) ? tg : 0) + b.radius + BALL_TELE_MARGIN;
 
   // Position jumped — cut the ribbons so they don't streak across the teleport
   for (const r of b.ribbons) {r.clear();}
@@ -250,7 +252,7 @@ function teleportNearPlayer(b: BallRageHost, terrain: Terrain, playerPos: THREE.
   b.vel.addScaledVector(n, -2 * dot * BOUNCE);
   b.vel.normalize().multiplyScalar(currentSpeed);
 
-  // Reset energy tracking on teleport (intentional energy reset)
+  // Reset the tracking baseline only — the ball keeps its absolute speed
   b.lastBounceEnergy = 0;
   // Record teleport as a bounce keyframe too (position + velocity reset)
   b.onBounce?.(b.pos.clone(), b.vel.clone());

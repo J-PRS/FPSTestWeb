@@ -109,7 +109,8 @@ export class Crawler implements Targetable, SwarmSlotOwner {
     this.scale = uber ? 1.3 : 0.5;
     if (uber) this.color.set(0x5a1a3a); // brood-purple — the queen reads different
     this.pos = pos.clone();
-    this.pos.y = terrain.getHeight(pos.x, pos.z) + this.radius;
+    const sg = terrain.getHeight(pos.x, pos.z);
+    if (Number.isFinite(sg)) {this.pos.y = sg + this.radius;}
     this.vel = new THREE.Vector3();
     this.hasSlots = allocSlots('crawler', this);
     if (!this.hasSlots) this.dead = true; // swarm full — refuse to exist
@@ -133,7 +134,8 @@ export class Crawler implements Targetable, SwarmSlotOwner {
       // Burrow-in: rise out of the dirt, ease-out — AI stays asleep until surfaced
       this.emergeT -= dt;
       const k = 1 - Math.max(0, this.emergeT) / EMERGE_DUR;
-      this.pos.y = terrain.getHeight(this.pos.x, this.pos.z) + this.radius - this.emergeDepth * (1 - k * k);
+      const eg = terrain.getHeight(this.pos.x, this.pos.z);
+      if (Number.isFinite(eg)) {this.pos.y = eg + this.radius - this.emergeDepth * (1 - k * k);}
       this.animT += dt;
       this.writeInstances(terrain);
       return;
@@ -163,7 +165,7 @@ export class Crawler implements Targetable, SwarmSlotOwner {
     this.pos.addScaledVector(this.vel, dt);
 
     const gy = terrain.getHeight(this.pos.x, this.pos.z);
-    if (this.pos.y - this.radius <= gy) {
+    if (Number.isFinite(gy) && this.pos.y - this.radius <= gy) {
       this.pos.y = gy + this.radius;
       if (this.airborne) this.onLanded?.(this.pos);
       this.airborne = false;

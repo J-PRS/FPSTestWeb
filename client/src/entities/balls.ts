@@ -292,7 +292,7 @@ export class Ball {
       const rx = (Math.random() - 0.5) * 400;
       const rz = (Math.random() - 0.5) * 400;
       const gy = terrain.getHeight(rx, rz);
-      this.pos = new THREE.Vector3(rx, gy + 80 + Math.random() * 60, rz);
+      this.pos = new THREE.Vector3(rx, (Number.isFinite(gy) ? gy : 0) + 80 + Math.random() * 60, rz);
 
       const ang = Math.random() * Math.PI * 2;
       const spd = Math.random() * 20;
