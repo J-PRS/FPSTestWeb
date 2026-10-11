@@ -88,6 +88,10 @@ function isRemoteActive(deps: RemotesDeps, playerId: string, players: Map<string
 // invisible skier is a giveaway). A teammate's cloak is different: it
 // stays on screen wearing the ghost shimmer, so only enemies vanish.
 function applyStatusVisuals(deps: RemotesDeps, playerId: string, remotePlayer: RemotePlayer, status: number, theirTeam: string | undefined): boolean {
+  // Corpses hold no channels — the corpse window's row still streams the
+  // pre-death bits until respawn clears them server-side, and a cloaked
+  // corpse would render nothing at all.
+  if (remotePlayer.isDead) status = 0;
   const cloaked = Boolean(status & STATUS.CLOAK);
   const friendly = cloaked && Boolean(theirTeam) && theirTeam === deps.world.localTeam;
   remotePlayer.setCloakHidden(cloaked && !friendly);

@@ -280,6 +280,16 @@ export class RemotePlayer {
     // code under tickDead — leave it set and the corpse keeps the lean.
     this._model.setBodyLean(0, 0);
     this._model.setLocomotionReversed(false);
+    // Toggle channels die with the player — the corpse's wire row keeps
+    // streaming the pre-death status bits until respawn clears them
+    // server-side, and a corpse glowing shield/mend reads alive.
+    this.auras.setShielded(false);
+    this.auras.setMending(false);
+    // A cloaked corpse must still render — remotes.ts zeroes dead rows'
+    // status words, but bots reach setCloakHidden through botEnergy, so
+    // the entity owns the guarantee at the death edge itself.
+    setCloakVis(this, false);
+    setCloakGhost(this, false);
     resetCorpse(this.corpse);
     launchCorpse(this.corpse, explosionPos, explosionForce);
     // A standing-height blob under a crumpled corpse reads wrong — the
