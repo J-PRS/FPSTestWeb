@@ -145,6 +145,7 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
   function netCrawlDie(m: { id: number; position: { x: number; y: number; z: number }; by?: string | null }): void {
     const c = netCrawlerById.get(m.id);
     if (!c) {return;}
+    if (!finite(m.position)) {m = {...m, position: {x: c.pos.x, y: c.pos.y, z: c.pos.z}};}
     netCrawlerById.delete(m.id);
     appliedSkips.delete(m.id);
     deps.lazyDemoManager()?.recordCreatureDie(m.id, m.position);
