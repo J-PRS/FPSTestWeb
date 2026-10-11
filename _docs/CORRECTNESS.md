@@ -663,6 +663,13 @@ violation instead of a symptom hunt.
   `acc` (0 on NaN) since it bypasses `setState`'s finite guard.
   Inputs already finite-clamped at `setInput`; `setState` gates
   pos/vel/yaw.
+- **Sim vector degenerates:** `inputDirection` skips the /len divide
+  on zero-length input (jump falls back to slope-normal when
+  `dirLen === 0`); jet thrust divides by `hv` only inside
+  `hv > 0`. `projSim` is pure-function — `segPointDist`/`segPointT`
+  guard `lenSq <= 0`, `segFieldHit` fails safe (NaN steps → loop
+  skips → no terrain hit; upstream write gates own pos finiteness).
+  No zero-vector → NaN entry point remains. Verified sealed.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
