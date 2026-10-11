@@ -337,6 +337,14 @@ violation instead of a symptom hunt.
   rewind+replay, clamps journaled segment dt ≤0.25s;
   `onRemoteTeleport` gates before `teleportTo`; `onYourCharge`'s
   ungated scalar fails safe (NaN > 0 is false everywhere).
+- **Match lifecycle lanes (verified sealed):** `onTeamScore`/
+  `onFfaScore` finite-gate before writing `teamScores`/`ffaScores`
+  (a NaN score would poison `Math.max` lead math); matchEnd/
+  ffaMatchEnd scores are display-only — chat text + banner, no
+  state writes; the scoreboard auto-pin only releases what it
+  pinned (deliberate Tab never hijacked); `onMatchStart` resets
+  lead/milestone filters + killStreak + `flagHomeHush` so the new
+  round can't inherit stale announcements.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
