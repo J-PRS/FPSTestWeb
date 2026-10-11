@@ -508,6 +508,16 @@ violation instead of a symptom hunt.
   contained + arrival-ordered at phase 0 (sims see a
   deterministic input→sim→fanout order, never mid-frame
   mutations).
+- **Outbound send lane (verified sealed):** tick frames shed at
+  256KB socket backlog (drop-safe — peers extrapolate); reliable
+  frames queue but ride the drown clock (4MB buffered starts a
+  5s window, then close-1011 so the client reconnects through
+  grace rather than rendering seconds-stale truth). The reclaim
+  journal is bounded (1024, chunked evict), volatile cues
+  (muzzle flash, knockback) expire after 3s so a reclaim can't
+  replay phantom effects, self-repeating echoes (yourHealth/
+  ping/stateHash/gameState) never journal, and evictions +
+  reclaim gaps are counted (`journalDropped`/`reclaimGap`).
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
