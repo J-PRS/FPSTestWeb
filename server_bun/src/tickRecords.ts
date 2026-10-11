@@ -105,7 +105,11 @@ export class TickFanout {
       if (this.skipRecord(room, playerId, p, now)) continue;
       this.tickServerHeals(room, playerId, p, now, simT);
       this.tickChargeEcho(room, playerId, p, now, simT);
-      const forceSend = simT < p.forceSendUntil;
+      // forceSendUntil is WallMs (hit-window bookkeeping, types.ts:105) —
+      // comparing it to simT only coincides while both clocks read
+      // Date.now(): a warped sim clock would never lapse the window and
+      // a frozen one never engages it.
+      const forceSend = wallNow() < p.forceSendUntil;
       const lastSent = room.lastSentPositions.get(playerId);
       const sheep = room.bots.sheepOf(playerId);
       // Buff bits are server-owned (stripped from client claims at
