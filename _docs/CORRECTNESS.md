@@ -399,6 +399,15 @@ violation instead of a symptom hunt.
   `tickPool.byId` cleared per epoch so a reassigned wireId can't
   inherit another player's decoded baseline. Protocol mismatch
   reloads with a storage-bounded budget (never loops).
+- **Input stream lane (verified sealed):** client sends a
+  change-only seq'd stream with the previous edge piggybacked
+  (a single lost packet heals on the next edge); journal bounded
+  at 128, resend re-emits the CURRENT input under a fresh seq
+  (never replays stale edges), and `inputsAfter` re-seeds the
+  held input for the correction gap so steady-key corrections
+  don't hard-snap. Server gates against the pending tail AND the
+  drained watermark (reordered stale edges can't append behind
+  fresh ones), pending bounded 8, seqStates bounded 32.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
