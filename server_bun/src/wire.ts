@@ -64,7 +64,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
   join: {
     limit: { maxCount: 4, windowMs: 10_000 },
     validate: (obj) => typeof obj.playerId === 'string'
-      ? { success: true, data: ((({ ...obj, type: 'join',playerId: obj.playerId}))) as Extract<ClientMessage, { type: 'join' }> }
+      ? { success: true, data: (((({ ...obj, type: 'join',playerId: obj.playerId})))) as Extract<ClientMessage, { type: 'join' }> }
       : { success: false, error: 'join missing playerId' },
     handle: (h, id, m) => {
       if (m.playerId === id) {h.sendWorldState(id);}

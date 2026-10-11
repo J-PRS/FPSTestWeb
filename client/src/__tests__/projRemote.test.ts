@@ -15,7 +15,7 @@ function remoteHost(config: Partial<ProjectileConfig>, from: [number, number, nu
   const h = {
     pos: new THREE.Vector3(...to),
     prevPos: new THREE.Vector3(...from),
-    config: ((({bodyRadius: 0.2,terrainOffset: 0.3, ...config}))) as ProjectileConfig,
+    config: (((({bodyRadius: 0.2,terrainOffset: 0.3, ...config})))) as ProjectileConfig,
     canBounce: false,
     rayFired: false,
     exploded: false,

@@ -160,7 +160,7 @@ export class RoomFlags {
       this.room.messages.killFeed.say(playerId, 'flagdrop');
       const dp = this.room.players.getPlayer(playerId);
       this.room.bots?.notice('flagdrop', playerId,
-        dp?.team, dp ? ((({ ...dp.position}))) : undefined, 'other');
+        dp?.team, dp ? (((({ ...dp.position})))) : undefined, 'other');
       const p = dp;
       if (p) {f.pos = { ...p.position};}
       f.carrier = null;
@@ -180,7 +180,7 @@ export class RoomFlags {
     for (const f of this.flags.values()) {
       if (f.state !== 'unspawned') {continue;}
       const corpse = this.room.players.getPlayer(playerId);
-      f.pos = corpse ? ((({ ...corpse.position}))) : ((({ ...f.home})));
+      f.pos = corpse ? (((({ ...corpse.position})))) : (((({ ...f.home}))));
       f.state = 'dropped';
       f.dropT = FLAG_RESET_S;
       f.droppedAt = simNow();

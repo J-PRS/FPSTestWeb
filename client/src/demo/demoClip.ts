@@ -29,7 +29,7 @@ export function collectRemoteFrames(remoteFrames: RemoteFrame[], clipStart: numb
   }
   out.push(...inWindow);
   out.sort((a, b) => a.timestamp - b.timestamp);
-  return out.map(f => (((({ ...f, timestamp: f.timestamp - clipStart})))));
+  return out.map(f => ((((({ ...f, timestamp: f.timestamp - clipStart}))))));
 }
 
 // Projectile events in [clipStart, clipEnd], plus synthetic Fired events at

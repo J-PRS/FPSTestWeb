@@ -19,7 +19,7 @@ const stubDeps = (remotes = new Map<string, unknown>(), player = stubPlayer()): 
   world: { remotePlayers: remotes },
 } as unknown as EntitiesDeps);
 
-const remote = (over: Record<string, unknown> = {}) => (((({pos: new THREE.Vector3(5, 0, 0),vel: new THREE.Vector3(),isDead: false,lastUpdateTime: Date.now(), ...over}))));
+const remote = (over: Record<string, unknown> = {}) => ((((({pos: new THREE.Vector3(5, 0, 0),vel: new THREE.Vector3(),isDead: false,lastUpdateTime: Date.now(), ...over})))));
 
 describe('AggroKit candidate roster', () => {
   beforeEach(() => { vi.useFakeTimers(); });

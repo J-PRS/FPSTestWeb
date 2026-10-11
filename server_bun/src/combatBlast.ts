@@ -373,7 +373,7 @@ export class BlastRunner {
     // Power-scaled variants (Slam dive-speed blast) keep the identity
     // fields and multiply the payload envelope — same formula the client
     // predicts with.
-    const stats = power === undefined ? base : ((({ ...base, aoeDamage: base.aoeDamage * power,aoeRadius: base.aoeRadius * power,knockbackForce: base.knockbackForce * power})));
+    const stats = power === undefined ? base : (((({ ...base, aoeDamage: base.aoeDamage * power,aoeRadius: base.aoeRadius * power,knockbackForce: base.knockbackForce * power}))));
     this.processAOE(ownerId, position, excludeTargetId, stats, { weapon: attribWeaponType ?? weaponType, trusted: true, shotId });
     // Live nuggets are fair game too — a shell near a gem can punt it.
     // Both loose objects' knocks live inside processAOE above.

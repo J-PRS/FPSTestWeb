@@ -126,7 +126,7 @@ const emit = (rig: ReturnType<typeof makePlaybackRig>,
   (rig.mgr as { onPlaybackEvent(e: { projectiles: ProjectileEvent[]; targets: TargetEvent[] }): void }).onPlaybackEvent({ projectiles, targets });
 };
 
-const mkTarget = (over: Partial<TargetEvent>): TargetEvent => (((({eventType: TargetEventType.Spawned,timestamp: 0,posX: 0,posY: 5,posZ: 0,velX: 0,velY: 0,velZ: 0,targetId: 1,targetType: 0,health: 30,hasPeakPosition: false,peakPosX: 0,peakPosY: 0,peakPosZ: 0, ...over}))));
+const mkTarget = (over: Partial<TargetEvent>): TargetEvent => ((((({eventType: TargetEventType.Spawned,timestamp: 0,posX: 0,posY: 5,posZ: 0,velX: 0,velY: 0,velZ: 0,targetId: 1,targetType: 0,health: 30,hasPeakPosition: false,peakPosX: 0,peakPosY: 0,peakPosZ: 0, ...over})))));
 
 describe('playback audit — every lane animates', () => {
   it('creature proxies integrate ballistic drift (gravity species falls)', () => {

@@ -130,7 +130,7 @@ export class CreatureBrain {
     if (prev && !prev.isDead && (prev.status & STATUS.CLOAK) && !shootRevealed(prev.lastFireSim, simTime) && c.tgtValid) {
       const g = this.confuseGhosts.get(c.id);
       this.confuseGhosts.set(c.id, g
-        ? ((({ ...g, until: simTime + CONFUSE_TTL})))
+        ? (((({ ...g, until: simTime + CONFUSE_TTL}))))
         : { x: c.tx, y: c.ty, z: c.tz, until: simTime + CONFUSE_TTL });
     }
     const g = this.confuseGhosts.get(c.id);
