@@ -795,7 +795,7 @@ export class Room {
       },
       moveTrack: (pid, pos, yaw) => {
         const p = this.players.getPlayer(pid);
-        this.moveSim.track(pid, pos, yaw, p?.perk, p?.team);
+        this.moveSim.track(pid, pos, yaw, p?.perk, p?.team, p?.isBot);
         // Re-seats (room hop) have stale position frames in flight — arm
         // the same grace resync() uses so they can't seed the fresh
         // shadow at the old seat and flag the real spawn landing a cheat.
