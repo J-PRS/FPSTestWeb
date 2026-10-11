@@ -83,7 +83,8 @@ export class DeployStation {
     this.id = nextTargetId();
     this.candId = `dep:${this.id}`;
     this.pos.copy(pos);
-    this.pos.y = terrain.getHeight(pos.x, pos.z);
+    const bg = terrain.getHeight(pos.x, pos.z);
+    if (Number.isFinite(bg)) {this.pos.y = bg;}
 
     this.slot = takeSlot(poolFor(scene).base);
     this.group.add(this.crystal);

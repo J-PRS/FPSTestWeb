@@ -121,7 +121,8 @@ export class Mine implements Targetable, SwarmSlotOwner {
     this.pos = pos.clone();
     // Seat at -0.30 local: prong tips (~-0.26) graze the dirt, the lower
     // cap buries to its shoulder, and the bottom fuse is fully swallowed.
-    this.pos.y = terrain.getHeight(pos.x, pos.z) + this.radius * 0.30;
+    const bg = terrain.getHeight(pos.x, pos.z);
+    if (Number.isFinite(bg)) {this.pos.y = bg + this.radius * 0.30;}
     this.tilt.setFromUnitVectors(new THREE.Vector3(0, 1, 0), terrain.getNormal(pos.x, pos.z));
     this.hasSlots = allocSlots('mine', this);
     if (!this.hasSlots) this.dead = true;

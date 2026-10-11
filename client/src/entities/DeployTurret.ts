@@ -118,7 +118,8 @@ export class DeployTurret {
     this.id = nextTargetId();
     this.candId = `dep:${this.id}`;
     this.pos.copy(pos);
-    this.pos.y = terrain.getHeight(pos.x, pos.z);
+    const bg = terrain.getHeight(pos.x, pos.z);
+    if (Number.isFinite(bg)) {this.pos.y = bg;}
 
     this.slot = poolFor(scene).free.pop() ?? -1;
     this.head.position.y = 1.4;
