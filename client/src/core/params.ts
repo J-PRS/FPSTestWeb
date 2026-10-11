@@ -27,7 +27,9 @@ export const isDevHost = (): boolean =>
 let lastSearch = '';
 let liveParams = new URLSearchParams();
 const live = () => {
-  const s = window.location.search;
+  // Node/bun test hosts have no location — URL params read empty, every
+  // getter falls through to its settings/default leg.
+  const s = typeof window === 'undefined' ? '' : window.location.search;
   if (s !== lastSearch) {
     lastSearch = s;
     liveParams = new URLSearchParams(s);
