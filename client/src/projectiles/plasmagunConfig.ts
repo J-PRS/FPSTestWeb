@@ -10,7 +10,7 @@ import type { ProjectileConfig } from './types.js';
 // Quake-style plasma gun: rapid volley of chunky cyan bolts — chaingun's
 // cadence but a visible projectile with a fat body. Blue-shifted palette
 // so it never reads as the green plasma cannon bolt.
-const W = WEAPONS[23]; // WeaponType.PlasmaGun
+const { 23: W } = WEAPONS; // WeaponType.PlasmaGun
 export const PLASMAGUN_CONFIG: ProjectileConfig = {
   name: 'plasmagun',
   displayName: 'Plasma Gun',

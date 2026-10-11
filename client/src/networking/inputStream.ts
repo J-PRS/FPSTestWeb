@@ -76,7 +76,7 @@ export class InputStream {
     while (this.inputJournal.length > 0 && this.inputJournal[0].seq <= after) {this.inputJournal.shift();}
     if (gapMs > 0 && this.lastInputState) {
       const gapStart = performance.now() - gapMs;
-      const first = this.inputJournal[0];
+      const [first] = this.inputJournal;
       if (!first || first.t > gapStart) {
         this.inputJournal.unshift({ seq: after, t: gapStart, input: { ...this.lastInputState} });
       }

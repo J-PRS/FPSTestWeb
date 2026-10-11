@@ -156,7 +156,7 @@ describe('bot real-weapon fire', () => {
     });
     c.fire.throwBelt(bot);
     expect(bot.wantBelt).toBe(false);
-    const p = c.projectiles[0];
+    const [p] = c.projectiles;
     expect(p).toBeInstanceOf(Projectile);
     expect(getWeaponStats(bot.loadout!.belt).speed).toBeGreaterThan(0);
     expect(p!.vel.y).toBeGreaterThan(0); // ballistic arc — pitched up

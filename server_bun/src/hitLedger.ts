@@ -2,6 +2,11 @@ import { weaponStats } from './weaponStats.ts';
 import { WeaponType } from '../../shared/weapons.ts';
 // Debug probe: shooter-to-impact distance on self-kills — answers
 // "do bots frag themselves with shots that pop at their own feet".
+import { logger } from './logger.ts';
+import { WORLD_MODEL, eventPayload } from '../../shared/worldModel.ts';
+import type { ServerMessage } from './types.ts';
+import type { CombatHandler, CombatDeps } from './CombatHandler.ts';
+import { simNow } from './simClock.ts';
 export const selfKillImpactDist: number[] = [];
 /** Blast point of each self-frag — lets the soak autopsy classify what
  *  the shell actually struck (lip, stray ball, teammate, open air). */
@@ -24,11 +29,6 @@ function probePush<T>(arr: T[], v: T): void {
   arr.push(v);
   if (arr.length > PROBE_CAP) {arr.splice(0, arr.length - PROBE_CAP);}
 }
-import { logger } from './logger.ts';
-import { WORLD_MODEL, eventPayload } from '../../shared/worldModel.ts';
-import type { ServerMessage } from './types.ts';
-import type { CombatHandler, CombatDeps } from './CombatHandler.ts';
-import { simNow } from './simClock.ts';
 
 // Structural slice — the ledger may read hit telemetry deps and write
 // through the broadcast/kill/respawn funnels, nothing else. Pick<> keeps

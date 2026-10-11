@@ -14,8 +14,8 @@ import type { ProjectileConfig } from './types.js';
 // Same lob physics as the mortar (55 m/s, gravity, bounces until fuse)
 // so the read transfers: aim the carrier line, the airburst footprint
 // does the area denial.
-const W = WEAPONS[28];   // MRVLauncher (carrier)
-const WB = WEAPONS[29];  // MRVBomblet (airburst child)
+const { 28: W } = WEAPONS;   // MRVLauncher (carrier)
+const { 29: WB } = WEAPONS;  // MRVBomblet (airburst child)
 
 // Bomblet visual — spawns only on carrier detonation, contact-pops on
 // whatever it lands on. Untracked: damage is the server's cluster

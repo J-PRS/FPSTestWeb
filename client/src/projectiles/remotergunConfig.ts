@@ -11,7 +11,7 @@ import type { ProjectileConfig } from './types.js';
 // impact nade for ~0.4s, then discharges a railgun-class hitscan beam
 // along its velocity and detonates at whatever the beam touches. The
 // hang time is the tell: leading the throw IS aiming the rail.
-const W = WEAPONS[24]; // WeaponType.RemoteRailgun
+const { 24: W } = WEAPONS; // WeaponType.RemoteRailgun
 export const REMOTE_RAILGUN_CONFIG: ProjectileConfig = {
   name: 'remoterailgun',
   displayName: 'Remote Railgun',

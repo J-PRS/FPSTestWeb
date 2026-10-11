@@ -12,7 +12,7 @@ import type { ProjectileConfig } from './types.js';
 // and cooks off on a slow 4s fuse. The lob is deliberately anemic: you
 // can't toss this over a wall, you have to walk it in. Visually a fat
 // dark puck with a hot red glow — a planted bomb should read as planted.
-const W = WEAPONS[33]; // WeaponType.SatchelCharge
+const { 33: W } = WEAPONS; // WeaponType.SatchelCharge
 export const SATCHEL_CONFIG: ProjectileConfig = {
   name: 'satchel',
   displayName: 'Satchel Charge',

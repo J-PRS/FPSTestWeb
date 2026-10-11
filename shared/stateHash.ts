@@ -24,6 +24,7 @@
  *  granularity is precisely the phantom-desync bug this checksum kept
  *  firing (regen windows produced ~0% match rates).
  */
+import type { WorldKindDecl } from './worldModel.ts';
 export type SyncChannel = 'sim' | 'edge' | 'echo';
 
 export const FIELD_CHANNELS: Record<keyof HashablePlayer, SyncChannel> = {
@@ -78,7 +79,6 @@ export function computeStateHash(players: Iterable<[string, HashablePlayer]>): s
  * its own hasher above: its hash shape (quantized sim/echo channels)
  * isn't the declared `fields` list. */
 
-import type { WorldKindDecl } from './worldModel.ts';
 
 function mixValue(ph: number, v: unknown): number {
   // null/undefined and '' mix identically (separator only) — an unset

@@ -80,7 +80,7 @@ function isRootCarrier(nodeName: string, roots: Set<string>): boolean {
 interface Drift { clip: string; node: string; track: THREE.VectorKeyframeTrack; preMax: number; postMax: number; }
 
 function xzMax(v: Float32Array | number[]): number {
-  const x0 = v[0], z0 = v[2];
+  const [x0, , z0] = v;
   let m = 0;
   for (let i = 0; i < v.length; i += 3) {m = Math.max(m, Math.hypot(v[i] - x0, v[i + 2] - z0));}
   return m;
@@ -112,7 +112,7 @@ function rawHeight(g: Glb): number {
   let max = 0;
   for (const n of g.json.nodes || []) {
     const t = n.translation;
-    if (t && t[1] > max) {max = t[1];}
+    if (t && t[1] > max) {([, max] = t);}
   }
   return max || 1;
 }

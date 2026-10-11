@@ -166,9 +166,9 @@ export class PlayerGun {
     this.unit = 1 / ws.x;
     this.baseY = 0.05 * this.unit;
     if (mount?.pos) {
-      this.restX = mount.pos[0];
-      this.baseY = mount.pos[1];
-      this.baseZ = mount.pos[2];
+      ([this.restX] = mount.pos);
+      ([, this.baseY] = mount.pos);
+      ([, , this.baseZ] = mount.pos);
     }
     this.group.position.set(this.restX, this.baseY, this.baseZ);
     // Orientation comes from the manifest: euler rigs (mannequin) roll

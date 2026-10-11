@@ -7,14 +7,6 @@
  * one import site.
  */
 
-export * from './creatureCore.js';
-export * from './creatureFlyer.js';
-export * from './creatureRoller.js';
-export * from './creatureSlither.js';
-export * from './creatureBaneling.js';
-export * from './creatureTotem.js';
-export * from './species.js';
-
 import type { Heightfield } from './heightfield.js';
 import type { SimVec, StructureCollider } from './ballSim.js';
 import { makeSimCrawler, stepCrawler, applyCrawlerDamage, type CrawlerEvent, type SimCrawler } from './creatureCore.js';
@@ -24,6 +16,14 @@ import { makeSimSlither, stepSlither, applySlitherDamage, type SimSlither } from
 import { makeSimBaneling, stepBaneling, applyBanelingDamage, type SimBaneling } from './creatureBaneling.js';
 import { makeSimTotem, stepTotem, applyTotemDamage, type SimTotem } from './creatureTotem.js';
 import type { SpeciesFamily } from './species.js';
+export * from './creatureCore.js';
+export * from './creatureFlyer.js';
+export * from './creatureRoller.js';
+export * from './creatureSlither.js';
+export * from './creatureBaneling.js';
+export * from './creatureTotem.js';
+export * from './species.js';
+
 
 /** Every family shares the same wire/sim field set — the union only
  *  matters at step/damage dispatch, discriminated by the `family` tag

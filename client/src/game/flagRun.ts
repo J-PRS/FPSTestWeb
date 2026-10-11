@@ -489,7 +489,7 @@ this.eN += 1;
       for (const f of this.flags) {
         if (f.team !== myTeam) {continue;}
         const d = f.home.distanceToSquared(bot.position);
-        if (d < hd) { hd = d; home = f.home; }
+        if (d < hd) { hd = d; ({home} = f); }
       }
       return home ? { pos: home.clone(), infiltrating: false, running: true } : null;
     }

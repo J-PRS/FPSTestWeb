@@ -10,7 +10,7 @@ import type { ProjectileConfig } from './types.js';
 // Proxy grenade: a 1-second belt throw whose trigger bubble inflates to
 // 4m over its whole fuse — the wake IS the weapon. Visually it's a small
 // pulsing sensor ball; the threat read is the expanding glow, not size.
-const W = WEAPONS[32]; // WeaponType.ProxyGrenade
+const { 32: W } = WEAPONS; // WeaponType.ProxyGrenade
 export const PROXY_CONFIG: ProjectileConfig = {
   name: 'proxy',
   displayName: 'Proxy Grenade',

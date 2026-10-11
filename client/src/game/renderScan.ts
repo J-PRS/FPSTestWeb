@@ -68,7 +68,7 @@ async function sampleStage(run: () => void, frames: number, r: THREE.WebGLRender
     run();
     timer.end();
     cpu += performance.now() - t0;
-    calls = r.info.render.calls;
+    ({calls} = r.info.render);
     tris = r.info.render.triangles;
   }
   const gpuMs = await timer.read();

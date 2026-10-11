@@ -35,7 +35,7 @@ describe('asset manifest', () => {
     const src = fs.readFileSync(file, 'utf-8');
     const rel = path.relative(SRC, file);
     for (const m of src.matchAll(LIT_RE)) {
-      const p = m[1];
+      const [, p] = m;
       if (p!.includes('${')) {continue;} // template literal — TPL_RE handles it
       if (KNOWN_MISSING.has(p!)) {continue;}
       if (!fs.existsSync(path.join(PUB, p!))) {missing.push(`${rel} -> ${p}`);}

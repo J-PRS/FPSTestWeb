@@ -657,7 +657,7 @@ n += 1; sum += d; sumAbs += Math.abs(d);
     let {spacing} = CLIPMAP_LEVELS[0];
     for (const level of this.levels) {
       if (Math.abs(wx - level.gridOrigin.x) < level.halfSize && Math.abs(wz - level.gridOrigin.y) < level.halfSize) {
-        spacing = level.spacing;
+        ({spacing} = level);
         break;
       }
     }

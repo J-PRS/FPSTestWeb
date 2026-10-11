@@ -80,7 +80,7 @@ export function spawnBall(h: SpawnHost, variant: BallVariant, near?: SimVec, pos
   const field = h.field!;
   let x: number, z: number;
   if (posOverride) {
-    x = posOverride.x; z = posOverride.z;
+    ({x} = posOverride); ({z} = posOverride);
   } else {
     const cx = near ? near.x : 0;
     const cz = near ? near.z : 0;

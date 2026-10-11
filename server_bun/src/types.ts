@@ -1,6 +1,11 @@
 // Wire-facing message + entity types live in shared/protocol.ts — the
 // single source of truth for both client and server. Re-exported here so
 // existing `from './types.ts'` imports keep working.
+import type { Vec3, Rotation, TransportKind } from '../../shared/protocol.ts';
+import type { TeamId } from '../../shared/teams.ts';
+import type { SimMs } from './simClock.ts';
+import type { WallMs } from './wallClock.ts';
+import type { ArmorClass } from '../../shared/botClasses.ts';
 export type {
   Vec3, Rotation,
   ClientMessage, ServerMessage,
@@ -8,11 +13,6 @@ export type {
   TickUpdatePlayer,
 } from '../../shared/protocol.ts';
 
-import type { Vec3, Rotation, TransportKind } from '../../shared/protocol.ts';
-import type { TeamId } from '../../shared/teams.ts';
-import type { SimMs } from './simClock.ts';
-import type { WallMs } from './wallClock.ts';
-import type { ArmorClass } from '../../shared/botClasses.ts';
 export interface WebSocketData {
   playerId: string;
   connectedAt: number;

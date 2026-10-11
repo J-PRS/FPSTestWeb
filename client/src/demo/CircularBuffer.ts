@@ -77,7 +77,7 @@ this.count += 1;
   }
 
   extractNewest(count: number): T[] {
-    if (count > this.count) {count = this.count;}
+    if (count > this.count) {({count} = this);}
     return this.extractRange(this.count - count, count);
   }
 

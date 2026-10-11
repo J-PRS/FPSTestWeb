@@ -59,7 +59,7 @@ export class MatchJournal {
     interface Row { playerId: string; matches: number; wins: number; kills: number; deaths: number }
     const file = Bun.file(this.journalPath);
     let size = -1;
-    try { size = file.size; } catch { /* no journal yet */ }
+    try { ({size} = file); } catch { /* no journal yet */ }
     if (size >= 0 && this.statsCache?.size === size) {return this.statsCache.rows;}
     const agg = new Map<string, Row>();
     try {

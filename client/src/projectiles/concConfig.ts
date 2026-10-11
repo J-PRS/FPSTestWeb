@@ -12,7 +12,7 @@ import type { ProjectileConfig } from './types.js';
 // never arms — bodies phase through, dirt only bounces it, and the 1.5s
 // timer pops the flag-strip envelope. Visual sibling of the frag but
 // icy instead of ember — players should tell them apart mid-flight.
-const S = WEAPONS[34]; // WeaponType.Concussion
+const { 34: S } = WEAPONS; // WeaponType.Concussion
 
 export const CONC_CONFIG: ProjectileConfig = {
   name: 'concussion',

@@ -10,6 +10,7 @@
  * windows a real client message (claim ledgers, rate limits, session
  * timeouts) must keep Date.now().
  */
+import { type SimMs } from '../../shared/clockBrand.ts';
 let warpOffsetMs = 0;
 let frozenBaseMs: number | null = null;
 
@@ -17,7 +18,6 @@ let frozenBaseMs: number | null = null;
  *  wall-epoch number field) is expected without an explicit cast, so a
  *  sim/wall mix fails at tsc instead of desyncing a fast-forwarded soak. */
 export { simMs, type SimMs } from '../../shared/clockBrand.ts';
-import { type SimMs } from '../../shared/clockBrand.ts';
 
 export const simNow = (): SimMs =>
   (frozenBaseMs === null ? Date.now() + warpOffsetMs : frozenBaseMs + warpOffsetMs) as SimMs;

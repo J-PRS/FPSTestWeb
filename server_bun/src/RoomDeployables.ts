@@ -15,7 +15,6 @@ import { aoeDamage } from '../../shared/combat.ts';
 import { REPAIR_RANGE, REPAIR_HEAL_PER_TICK, REPAIR_MIN_TICK_S, REPAIR_ARMOR_MULT, WeaponType } from '../../shared/weapons.ts';
 import { tickDrone, tickMine, tickSensor, tickSentry, tickStation, tickTurret, losClear } from './deployTicks.ts';
 
-export type { DeployKind } from '../../shared/deployables.ts';
 import { DEPLOY_KINDS, DEPLOY_MAX, DEPLOY_HP, type DeployKind } from '../../shared/deployables.ts';
 import { DEPLOY_ITEMS, deploySolid } from '../../shared/deployItems.ts';
 import type { StructureCollider } from '../../shared/ballCollide.ts';
@@ -23,6 +22,7 @@ import { segSolidHit } from '../../shared/solidWorld.ts';
 import { hmHeight, hmChord } from '../../shared/heightfield.ts';
 import { simNow } from './simClock.ts';
 import type { TeamId } from '../../shared/teams.ts';
+export type { DeployKind } from '../../shared/deployables.ts';
 const KINDS = new Set<DeployKind>(DEPLOY_KINDS);
 const MAX_PER_PLAYER = DEPLOY_MAX;
 // Thrown nugget mints a pickup that can't be grabbed for a beat — the

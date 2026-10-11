@@ -476,7 +476,7 @@ export class PlayerModel {
     if (!this.model || !this.model.visible || this.skinnedMeshes.length === 0) {return;}
     this.model.updateMatrixWorld(true);
     let maxSq = 0, bi = -1, bj = -1;
-    const mesh0 = this.skinnedMeshes[0];
+    const [mesh0] = this.skinnedMeshes;
     for (const sm of this.skinnedMeshes) {
       const {bones} = sm.skeleton;
       for (let i = 0; i < bones.length; i += 1) {

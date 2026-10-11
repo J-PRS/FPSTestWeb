@@ -83,7 +83,7 @@ export function extractClip(r: DemoRecorder, startTime: number, endTime: number,
   const projEvents = collectProjectileEvents(r.projectileEvents, clipStart, clipEnd);
   const tgtEvents = collectTargetEvents(r.targetEvents, clipStart, clipEnd);
 
-  const first = frames[0];
+  const [first] = frames;
   const normFrames = frames.map(f => ({ ...f, timestamp: f.timestamp - clipStart,
     frameNumber: (f.frameNumber - first.frameNumber + 65_536) % 65_536,}));
   const normProj = projEvents.map(e => ({ ...e, timestamp: e.timestamp - clipStart}));

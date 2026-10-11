@@ -11,7 +11,7 @@ import type { ProjectileConfig } from './types.js';
 // every shot arcs at half-mortar gravity inside a slight cone (the cone
 // lives in weapons.ts as a per-shot jitter, not a pellet fan). Lime-green
 // palette so a sprinkler volley never reads as blue plasma.
-const W = WEAPONS[25]; // WeaponType.Sprinkler
+const { 25: W } = WEAPONS; // WeaponType.Sprinkler
 export const SPRINKLER_CONFIG: ProjectileConfig = {
   name: 'sprinkler',
   displayName: 'Sprinkler',

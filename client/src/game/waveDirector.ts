@@ -212,7 +212,7 @@ loopCount += 1;
       const affordable = POOL.filter(p => p.minT <= elapsed && p.cost <= credits);
       if (affordable.length > 0) {
         let roll = Math.random() * affordable.reduce((s, p) => s + p.weight, 0);
-        let pick = affordable[0];
+        let [pick] = affordable;
         for (const p of affordable) { roll -= p.weight; if (roll <= 0) { pick = p; break; } }
         credits -= pick.cost;
         deps.logger.debug(`[Director] spend ${pick.cost}c → ${pick.label} (bank ${credits.toFixed(0)})`);

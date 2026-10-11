@@ -9,6 +9,7 @@
  * weaponType is the stable wire ID (binary frames carry it as u8).
  */
 
+import { WeaponType, type WeaponStats, WEAPONS } from './weaponTable.js';
 export const AOE_VFX_SCALE = 0.8;
 
 /** Melee cone half-angle (cos) — ~57°. The client swings this cone for
@@ -51,7 +52,6 @@ export function scaledDirectDamage(weaponType: number, airtime?: number): number
   return w.directDamage * Math.min(AIRTIME_DMG_CAP, 1 + airtime);
 }
 
-import { WeaponType, type WeaponStats, WEAPONS } from './weaponTable.js';
 export { WeaponType, WEAPONS, idSeed, jitteredTtl, RIDE_CATCH_R } from './weaponTable.js';
 export type { WeaponStats } from './weaponTable.js';
 

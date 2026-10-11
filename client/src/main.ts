@@ -247,7 +247,7 @@ async function init(): Promise<void> {
     .catch((error) => logger.warn('PlayerModel load gave up', { error: String(error) }));
 
   vmSetup = createViewModelScene(camera.aspect);
-  viewModel = vmSetup.viewModel;
+  ({viewModel} = vmSetup);
   profiler.markTime('viewmodel');
 
   entities = makeEntities();

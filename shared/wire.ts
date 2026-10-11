@@ -284,7 +284,7 @@ export function encodeTickFrame(ackSeq: number, tickSeq: number, inputAck: numbe
       into.u8 = new Uint8Array(into.buf);
       into.d = new DataView(into.buf);
     }
-    u8 = into.u8; d = into.d;
+    ({u8} = into); ({d} = into);
   } else {
     const buf = new ArrayBuffer(total);
     u8 = new Uint8Array(buf);
