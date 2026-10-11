@@ -13,7 +13,7 @@
  *  re-implemented this over its own terrain class and silently dropped
  *  the maxTop bound, teleporting walkers onto every roof; keep the
  *  forwarding non-negotiable by not letting it be re-written. */
-import { hmHeight, hmNormal, type Heightfield } from './heightfield.ts';
+import { hmHeight, hmChord, hmNormal, type Heightfield } from './heightfield.ts';
 import { SolidWorld } from './solidWorld.ts';
 import type { MoveState, Vec3Like } from './movement.ts';
 
@@ -32,6 +32,18 @@ export class FieldSurface {
   static fromField(f: Heightfield): FieldSurface {
     return new FieldSurface({
       getHeight: (x, z) => hmHeight(f, x, z),
+      getNormal: (x, z, out) => { hmNormal(f, x, z, out as { x: number; y: number; z: number }); return out; },
+    });
+  }
+
+  /** Server bot shadows ground on the RENDERED surface — the level-0
+   *  clipmap draws each 5m quad as two flat triangles whose chord sits
+   *  above the smooth field in gullies, so a bot clamped to hmHeight
+   *  alone sinks under the mesh on every client's screen. Bots only:
+   *  humans predict against the plain field and would diverge on this. */
+  static fromFieldChord(f: Heightfield): FieldSurface {
+    return new FieldSurface({
+      getHeight: (x, z) => Math.max(hmHeight(f, x, z), hmChord(f, x, z)),
       getNormal: (x, z, out) => { hmNormal(f, x, z, out as { x: number; y: number; z: number }); return out; },
     });
   }

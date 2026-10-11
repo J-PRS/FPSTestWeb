@@ -12,7 +12,7 @@ import { WeaponType, getWeaponStats, WEAPON_FIRE_INTERVAL_S, BELT_THROW_COST } f
 import { SELF_SPLASH_MAX } from '../../shared/combat.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { GRAVITY, type MoveState } from '../../shared/movement.ts';
-import { hmHeight } from '../../shared/heightfield.ts';
+import { hmHeight, hmChord } from '../../shared/heightfield.ts';
 import { BOT_LOADOUTS, pickBotWeapon, pickBotWeaponSafe, type BotLoadout } from '../../shared/botLoadouts.ts';
 import { aimSkillFor, type BotSkill } from '../../shared/botSkill.ts';
 import { botRand } from '../../shared/botRand.ts';
@@ -379,7 +379,7 @@ export class BotArsenal implements BeamHost {
       flightT += dt;
       travelled += Math.sqrt(vx * vx + vy * vy + vz * vz) * dt;
       const line = py + stats.bodyRadius;
-      const ground = Math.max(hmHeight(this.room.field, px, pz), this.room.moveSim.structureTop(px, pz));
+      const ground = Math.max(hmHeight(this.room.field, px, pz), hmChord(this.room.field, px, pz), this.room.moveSim.structureTop(px, pz));
       if (ground > line) {
         if (travelled < aoer) return true;
         hitX = px; hitY = py; hitZ = pz;
@@ -653,7 +653,7 @@ export class BotArsenal implements BeamHost {
     // inside the shove envelope — a hop-gait transit (wave members:
     // soak spd@13, near0% arrival) is airborne half the time and was
     // falling through to the crest path that almost never qualifies.
-    const floor = this.room.field ? hmHeight(this.room.field, p.position.x, p.position.z) : p.position.y;
+    const floor = this.room.field ? Math.max(hmHeight(this.room.field, p.position.x, p.position.z), hmChord(this.room.field, p.position.x, p.position.z)) : p.position.y;
     if (!sh.onGround && p.position.y - floor > 6) {
       // Crest blast: jetting up a face, the hill drops away under the
       // bot — a straight-down shot at its own feet banks the blast as

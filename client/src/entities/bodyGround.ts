@@ -16,8 +16,10 @@ import type { Terrain } from '../world/terrain.js';
  *  radius when they have it (heavies bury deeper uphill). */
 const RING = 0.62;
 /** Lift cap: a footprint sample higher than this is a wall/ledge beside
- *  the body, not ground under it — lifting into it reads as levitation. */
-const MAX_LIFT = 1.4;
+ *  the body, not ground under it — lifting into it reads as levitation.
+ *  2.5 covers the deepest wire dip observed (1.9m, MARA-03 soak) plus
+ *  margin; the server-side chord clamp should hold dips under ~0.5. */
+const MAX_LIFT = 2.5;
 /** Pad over the sampled ground: the rendered triangle chord can sit a
  *  couple cm under the bilinear heightfield quad on rough cells — feet
  *  landing exactly at sample height would still nick. */

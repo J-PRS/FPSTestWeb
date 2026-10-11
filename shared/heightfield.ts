@@ -54,6 +54,24 @@ export function hmHeight(f: Heightfield, wx: number, wz: number): number {
   return (h / HM_DIVISOR) * HM_HEIGHT_SCALE * (f.heightScale ?? 1);
 }
 
+/** The RENDERED surface height — the client's level-0 clipmap draws each
+ *  5m quad as two flat triangles split on the (x0+s,z0)↔(x0,z0+s)
+ *  diagonal (world/terrain.ts getRenderedHeight; CLIPMAP_LEVELS[0]
+ *  spacing = CPU_STEP = 5). The smooth field sags below that chord in
+ *  gullies, so bodies clamped to hmHeight alone render under the mesh.
+ *  Ground clamps that must match what the player sees take
+ *  max(hmHeight, hmChord). */
+export function hmChord(f: Heightfield, wx: number, wz: number): number {
+  const s = CPU_STEP;
+  const x0 = Math.floor(wx / s) * s, z0 = Math.floor(wz / s) * s;
+  const h00 = hmHeight(f, x0, z0), h10 = hmHeight(f, x0 + s, z0);
+  const h01 = hmHeight(f, x0, z0 + s), h11 = hmHeight(f, x0 + s, z0 + s);
+  const tx = (wx - x0) / s, tz = (wz - z0) / s;
+  return tx + tz <= 1
+    ? h00 + (h10 - h00) * tx + (h01 - h00) * tz
+    : h11 + (h10 - h11) * (1 - tz) + (h01 - h11) * (1 - tx);
+}
+
 /** Cheap field identity for desync forensics — not a hash, just enough
  *  bits to tell "client is simming a different heightfield than the
  *  server" apart from integrator drift in one log line. */

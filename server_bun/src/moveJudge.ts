@@ -15,6 +15,9 @@ export { FieldSurface };
 
 export interface Shadow {
   sim: MoveSim;
+  /** Server-driven bot — its sim grounds on the chord surface (the
+   *  rendered mesh), not the smooth field clients predict against. */
+  bot?: boolean;
   /** Scratch sim for seq-anchored compares — stepped ahead by the inputs
    *  the report reflects but the shadow hasn't consumed yet. */
   probe?: MoveSim;

@@ -8,7 +8,7 @@
  * The no-heightfield legacy fallback lives here too.
  */
 import type { Vec3 } from './types.ts';
-import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
+import { hmHeight, hmChord, type Heightfield } from '../../shared/heightfield.ts';
 import { classCapsule } from '../../shared/botClasses.ts';
 import type { BrainOut } from '../../shared/botBrain.ts';
 import type { MoveState } from '../../shared/movement.ts';
@@ -43,6 +43,7 @@ export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocit
   const dist = Math.sqrt(dx * dx + dz * dz);
   const sheepGround = Math.max(
     h.field ? hmHeight(h.field, p.position.x, p.position.z) : p.position.y,
+    h.field ? hmChord(h.field, p.position.x, p.position.z) : p.position.y,
     h.room.moveSim.structureTop(p.position.x, p.position.z),
   );
   const sheepHeight = Math.max(0, p.position.y - classCapsule(p.armorClass).eye - sheepGround);
@@ -112,8 +113,11 @@ export function legacyMove(h: DriveHost, id: string, p: { position: Vec3; veloci
   const speed = isSuper(id) ? SPEED * 3 : SPEED;
   p.velocity.x = nx * speed;
   p.velocity.z = nz * speed;
+  // Chord is the rendered surface — a bot clamped to the smooth field
+  // alone sinks under the level-0 mesh in gullies on every client's screen.
   const groundY = Math.max(
     h.field ? hmHeight(h.field, p.position.x, p.position.z) : p.position.y,
+    h.field ? hmChord(h.field, p.position.x, p.position.z) : p.position.y,
     h.room.moveSim.structureTop(p.position.x, p.position.z),
   );
   // p.position is EYE-height (the wire convention — clients render

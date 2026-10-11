@@ -109,7 +109,7 @@ export class BotRoster {
       this.thinkPhase.set(id, this.nextIdx % this.thinkDiv);
       // Legal body: the bot gets a move shadow exactly like a human join —
       // brains emit inputs, the sim owns motion, energy model included.
-      this.room.moveSim.track(id, p.position, p.rotation.yaw, p.perk, p.team);
+      this.room.moveSim.track(id, p.position, p.rotation.yaw, p.perk, p.team, true);
     }
     if (n > 0) logger.info('Bots spawned', { room: this.room.name, count: n });
   }

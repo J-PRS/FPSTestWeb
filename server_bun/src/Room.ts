@@ -17,7 +17,7 @@ import { BallSim } from './BallSim.ts';
 import { CreatureSim } from './CreatureSim.ts';
 import { structureColliders } from '../../shared/ballSim.ts';
 import { InfluenceMap } from './influenceMap.ts';
-import { hmHeight, HM_WORLD_SCALE, type Heightfield } from '../../shared/heightfield.ts';
+import { hmHeight, hmChord, HM_WORLD_SCALE, type Heightfield } from '../../shared/heightfield.ts';
 import { beamSweepRay } from './beamSweep.ts';
 import type { BeamContact } from './CombatHandler.ts';
 import { NOISE_TTL_MS } from '../../shared/wire.ts';
@@ -159,7 +159,7 @@ export class Room {
     for (const p of this.players.getAllPlayers().values()) {
       if (p.isDead || (!p.isBot && !p.hasReceivedPosition)) continue;
       const eye = classCapsule(p.armorClass as ArmorClass).eye;
-      const terrain = hmHeight(this.field, p.position.x, p.position.z);
+      const terrain = Math.max(hmHeight(this.field, p.position.x, p.position.z), hmChord(this.field, p.position.x, p.position.z));
       if (p.position.y - eye >= terrain - 0.5) continue;
       p.position.y = terrain + eye;
       p.velocity.y = Math.max(0, p.velocity.y);

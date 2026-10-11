@@ -24,6 +24,10 @@ import { evictEldest } from './evictEldest.ts';
  */
 export class RoomMoveSim {
   private surface: FieldSurface | null;
+  /** Chord-augmented surface for bot shadows — they must ground on the
+   *  rendered mesh, not the smooth field (see fromFieldChord). Humans
+   *  keep the plain field or their prediction diverges. */
+  private botSurface: FieldSurface | null = null;
   /** Structures held independently of the surface — they can arrive
    *  before OR after the heightfield, and either order must work. */
   private solid: SolidWorld | null = null;
@@ -61,6 +65,7 @@ export class RoomMoveSim {
   constructor(field: Heightfield | null, authoritative = false) {
     this.wantsAuthority = authoritative;
     this.surface = field ? FieldSurface.fromField(field) : null;
+    this.botSurface = field ? FieldSurface.fromFieldChord(field) : null;
     this.authoritative = authoritative && !!field;
     this.judge = new MoveJudge({
       authoritative: () => this.authoritative,
@@ -81,10 +86,12 @@ export class RoomMoveSim {
   attachField(field: Heightfield, reportedPos?: (playerId: string) => Vec3Like | undefined): void {
     this.surface = FieldSurface.fromField(field);
     this.surface.solid = this.solid;
+    this.botSurface = FieldSurface.fromFieldChord(field);
+    this.botSurface.solid = this.solid;
     this.authoritative = this.wantsAuthority;
     for (const [pid, sh] of this.shadows) {
       const old = sh.sim;
-      sh.sim = new MoveSim(this.surface, old.state);
+      sh.sim = new MoveSim(sh.bot && this.botSurface ? this.botSurface : this.surface, old.state);
       // Armor class survives the swap — speed, mass, and eye height all
       // ride the class row, so a stale default would diverge on jets.
       sh.sim.speedScale = old.speedScale;
@@ -102,7 +109,7 @@ export class RoomMoveSim {
     // Replay seats taken while the field was still loading — reseated
     // grace arms them since pre-gameState frames may still be in flight.
     for (const [pid, t] of this.pendingTrack) {
-      this.track(pid, t.pos, t.yaw, t.perk, t.team);
+      this.track(pid, t.pos, t.yaw, t.perk, t.team, t.bot);
       this.markReseated(pid);
     }
     this.pendingTrack.clear();
@@ -124,6 +131,7 @@ export class RoomMoveSim {
   attachStructures(list: readonly StructureSpec[] | undefined): void {
     this.solid = (list?.length || this.dyn?.length) ? new SolidWorld(structureColliders(list ?? []), this.dyn) : null;
     if (this.surface) this.surface.solid = this.solid;
+    if (this.botSurface) this.botSurface.solid = this.solid;
     this.structEpoch++;
   }
 
@@ -136,6 +144,7 @@ export class RoomMoveSim {
     else if (cols.length) {
       this.solid = new SolidWorld([], cols);
       if (this.surface) this.surface.solid = this.solid;
+      if (this.botSurface) this.botSurface.solid = this.solid;
     }
   }
   /** Bumped on every attachStructures — structure-reading caches key on
@@ -152,13 +161,13 @@ export class RoomMoveSim {
   /** Seats that arrived before the field — attachTerrain resolves async,
    *  so a join mid-load used to drop here and leave the player shadowless
    *  for the whole session: no reconcile, no corrections, no transit. */
-  private pendingTrack = new Map<string, { pos: Vec3Like; yaw: number; perk?: string; team?: string }>();
+  private pendingTrack = new Map<string, { pos: Vec3Like; yaw: number; perk?: string; team?: string; bot?: boolean }>();
 
   /** Call on join/spawn — seeds the sim at the reported spot. `team`
    *  feeds team-gated colliders (gate shields pass allies). */
-  track(playerId: string, pos: Vec3Like, yaw: number, perk?: string, team?: string): void {
+  track(playerId: string, pos: Vec3Like, yaw: number, perk?: string, team?: string, bot?: boolean): void {
     if (!this.surface) {
-      this.pendingTrack.set(playerId, { pos: { x: pos.x, y: pos.y, z: pos.z }, yaw, perk, team });
+      this.pendingTrack.set(playerId, { pos: { x: pos.x, y: pos.y, z: pos.z }, yaw, perk, team, bot });
       return;
     }
     const state: MoveState = {
@@ -169,7 +178,8 @@ export class RoomMoveSim {
     };
     const mods = perkMods(perk);
     this.shadows.set(playerId, {
-      sim: new MoveSim(this.surface, state), divergences: 0, lastCorrection: 0, lastImpulseAt: 0,
+      sim: new MoveSim(bot && this.botSurface ? this.botSurface : this.surface, state),
+      bot: bot === true, divergences: 0, lastCorrection: 0, lastImpulseAt: 0,
       severeT: [], cheated: false,
       // Spawn seed is the server's guess — the client's first position
       // report is the authoritative landing spot (client picks its own

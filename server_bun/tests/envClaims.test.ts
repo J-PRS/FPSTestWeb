@@ -34,6 +34,7 @@ function host(over: { players?: Record<string, Partial<P>>; teams?: boolean; env
     },
     deps: { teams: over.teams ?? false, envRange: over.envRange !== undefined ? () => over.envRange : undefined },
     lastHeal: new Map<string, number>(),
+    lastEnvCredit: new Map<string, number>(),
     hb: (k: string) => { beats.push(k); },
     applyHit: (shooterId: string, targetId: string, damage: number) => { hits.push({ shooter: shooterId, target: targetId, damage }); },
     _players: players,
