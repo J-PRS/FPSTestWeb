@@ -153,7 +153,7 @@ export class PoseControl {
   // to its shin tip (the *_end leaf node follows the skinned leg).
   private footSnaps: { foot: THREE.Object3D; shin: THREE.Object3D; tip: THREE.Object3D }[] = [];
 
-  constructor(variant: string = 'cybersoldier') {
+  constructor(variant = 'cybersoldier') {
     holdChains();
     this.holdQuats = HOLD_QUATS[variant] ?? HOLD_QUATS['cybersoldier']!;
   }

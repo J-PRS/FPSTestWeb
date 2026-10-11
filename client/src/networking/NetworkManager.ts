@@ -65,7 +65,7 @@ export class NetworkManager {
   private ws: GameTransport | null = null;
   private localPlayerId: string;
   private sessionToken: string | null;
-  private connected: boolean = false;
+  private connected = false;
   /** performance.now() at the live-join ack — parity counters need it to
    *  skip join-race echoes (events that happened before prediction
    *  existed can't be "unpredicted"). */
@@ -145,16 +145,16 @@ export class NetworkManager {
   public onCrawlDie: ((data: Extract<ServerMessage, { type: 'crawlDie' }>) => void) | null = null;
   public onCrawlRoster: ((data: Extract<ServerMessage, { type: 'crawlRoster' }>) => void) | null = null;
   public onRemoteTeleport: ((playerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }) => void) | null = null;
-  private lastPositionSendTime: number = 0;
+  private lastPositionSendTime = 0;
   private readonly POSITION_SEND_INTERVAL = 50; // 20Hz — extrapolation covers the gap
   private readonly STILL_SEND_INTERVAL = 250; // 4Hz parked heartbeat — server sees identical truth
   private lastSentState?: { px: number; py: number; pz: number; yaw: number; pitch: number };
   // Tick ARRIVAL cadence is the server loop's 50ms interval (20Hz).
   private readonly telemetry = new NetTelemetry(50);
-  private hasLoggedConnectionError: boolean = false;
+  private hasLoggedConnectionError = false;
 
   // --- Client-side prediction: sequence tracking + state history ---
-  private sequenceCounter: number = 0;
+  private sequenceCounter = 0;
   private stateHistory: Map<number, { position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; rotation: { yaw: number; pitch: number } }> = new Map();
   private readonly STATE_HISTORY_MAX = 120; // ~6s at 20Hz
   /** Inbound dispatch — owns the handler table, wire-id roster, tick
@@ -177,7 +177,7 @@ export class NetworkManager {
   }
 
   // --- Ping measurement ---
-  private lastPingSendTime: number = 0;
+  private lastPingSendTime = 0;
   private readonly PING_INTERVAL = 2000; // Send ping every 2 seconds
 
   constructor() {

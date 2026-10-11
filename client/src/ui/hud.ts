@@ -380,7 +380,7 @@ export class HUD {
    *  render frames; the loop ticks faster than renders under fps-cap. */
   markFrame(elapsed: number): void { this.stats.rendered(elapsed); }
 
-  update(dt: number, player: Player, ping: number = 0, packetLoss: number = 0, jitter: number = 0): void {
+  update(dt: number, player: Player, ping = 0, packetLoss = 0, jitter = 0): void {
     this.stats.tick(dt, player, ping, packetLoss, jitter);
 
     // Scoreboard: rebuild rows at 4Hz while open (live ping/frags)

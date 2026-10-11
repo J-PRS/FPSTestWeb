@@ -34,9 +34,9 @@ export class WebSocketConnection {
   readonly tier = 'ws' as const;
   private ws: WebSocket | null = null;
   private config: ConnectionConfig;
-  private reconnectAttempts: number = 0;
+  private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private isConnected: boolean = false;
+  private isConnected = false;
   private messageQueue: { data: string | Uint8Array; type?: string; at: number }[] = [];
   private readonly MAX_QUEUE_SIZE = 100;
   // Queue-staleness policy (mirrors the server journal's volatile split):
@@ -52,7 +52,7 @@ export class WebSocketConnection {
   // transit EMA; a missing RTT sample costs nothing by comparison.
   private static readonly KEEP_ALWAYS = new Set(['join', 'chat', 'classUpdate', 'perkUpdate', 'switchRoom', 'respawn', 'snapshotRequest', 'resync']);
   private static readonly STALE_MS = 3000;
-  private hasLoggedConnectionError: boolean = false;
+  private hasLoggedConnectionError = false;
   // 'close' fires asynchronously — a deliberate disconnect() would
   // otherwise reach the close handler below and schedule a reconnect,
   // resurrecting a session the caller wanted gone.

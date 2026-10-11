@@ -371,7 +371,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   recordTargetHit(targetId: number, position: Vec3, velocity: Vec3, targetType: number, health: number): void {
     ev.recordTargetHit(this, targetId, position, velocity, targetType, health);
   }
-  recordTargetDestroyed(targetId: number, position: Vec3, targetType: number, health: number = 0): void {
+  recordTargetDestroyed(targetId: number, position: Vec3, targetType: number, health = 0): void {
     ev.recordTargetDestroyed(this, targetId, position, targetType, health);
   }
 
@@ -432,11 +432,11 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   }
 
   // Extract all recorded data into a DemoFile
-  buildDemoFile(description: string = ''): DemoFile { return buildDemoFile(this, description); }
+  buildDemoFile(description = ''): DemoFile { return buildDemoFile(this, description); }
 
   // Extract a clip: frames and events within [startTime, endTime].
   // Times are relative to recording start (elapsedTime).
-  extractClip(startTime: number, endTime: number, description: string, projectileLifetime: number = 0): DemoFile | null {
+  extractClip(startTime: number, endTime: number, description: string, projectileLifetime = 0): DemoFile | null {
     return extractClip(this, startTime, endTime, description, projectileLifetime);
   }
 

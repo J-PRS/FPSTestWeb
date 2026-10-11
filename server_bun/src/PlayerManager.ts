@@ -71,7 +71,7 @@ export class PlayerManager {
     rng: () => this.spawnRng(),
   });
 
-  addPlayer(playerId: string, team?: TeamId, perk: string = 'none', armorClass: string = 'medium', isBot = false): PlayerState {
+  addPlayer(playerId: string, team?: TeamId, perk = 'none', armorClass = 'medium', isBot = false): PlayerState {
     const picked = this.spawnPicker.pick(playerId, team);
     // NaN pick = invisible player server-wide (clients drop its rows) —
     // a mid-map drop beats a spawn that broadcasts nothing.

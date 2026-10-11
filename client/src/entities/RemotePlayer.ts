@@ -41,8 +41,8 @@ export class RemotePlayer {
   readonly instanceId: number;
   _model: PlayerModel; // public — vis/anim family reads the loaded model
   previousPosition: THREE.Vector3; // public — anim drive derives speed from it
-  _loaded: boolean = false;
-  private _isDead: boolean = false;
+  _loaded = false;
+  private _isDead = false;
   gizmo: RemoteGizmo | null = null;
   scene: THREE.Scene; // public — RemoteAuras builds bubbles in it
   // Shield bubble + status auras (mend/regen/dd/charge) — the lazy-glow
@@ -50,7 +50,7 @@ export class RemotePlayer {
   auras = new RemoteAuras(this);
   velocity: THREE.Vector3 = new THREE.Vector3(); // public — anim drive reads it
   private angularVelocity: THREE.Vector3 = new THREE.Vector3();
-  private isOnGround: boolean = true;
+  private isOnGround = true;
   terrain: Terrain | null = null; // public — anim drive ground-tests off it
   private corpse!: CorpseState; // ctor assigns — aliases live position/vel/rotation refs
   serverVelocity: THREE.Vector3 = new THREE.Vector3(); // Velocity reported by server (public — interp family reads it)
@@ -173,7 +173,7 @@ export class RemotePlayer {
     });
   }
 
-  update(targetPosition: { x: number; y: number; z: number }, targetRotation: { yaw: number; pitch: number }, dt: number, ping: number = 0, serverVelocity?: { x: number; y: number; z: number }, serverMs?: number): void {
+  update(targetPosition: { x: number; y: number; z: number }, targetRotation: { yaw: number; pitch: number }, dt: number, ping = 0, serverVelocity?: { x: number; y: number; z: number }, serverMs?: number): void {
     this.interp.onUpdate(targetPosition, targetRotation, ping, serverVelocity, serverMs);
     // NOTE: death physics (gravity, bounce, tumble, shrink) are handled in tick()
     // so they run every frame at the real dt — running them here at 20Hz with a

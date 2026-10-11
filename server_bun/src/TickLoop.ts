@@ -35,8 +35,8 @@ export interface TickOps {
 export class TickLoop {
   private tickTimer: ReturnType<typeof setInterval> | null = null;
   private hashTimer: ReturnType<typeof setInterval> | null = null;
-  private lastStatusLine: string = '';
-  private statusRepeatCount: number = 0;
+  private lastStatusLine = '';
+  private statusRepeatCount = 0;
 
   // Tick-bandwidth metrics — aggregated per log window so we can see what
   // interest tiers + suppression are actually saving.

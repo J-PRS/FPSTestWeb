@@ -108,7 +108,7 @@ export class CoolShotManager {
   // If a new cool shot happens during an existing pending clip's wait period,
   // the clips are merged into one longer clip (chain combo).
   // minLifetime is 0.2s during testing phase so clips are easy to trigger. Raise to ~2.0s for production.
-  onHit(projectileLifetime: number, minLifetime: number = 0.2, bufferBefore: number = 5, bufferAfter: number = 5, hitTime?: number, meta?: { weapon?: string; distance?: number }): void {
+  onHit(projectileLifetime: number, minLifetime = 0.2, bufferBefore = 5, bufferAfter = 5, hitTime?: number, meta?: { weapon?: string; distance?: number }): void {
     if (!this.deps.isRecording()) {return;}
     if (projectileLifetime < minLifetime) {return;}
 

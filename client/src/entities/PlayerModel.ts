@@ -562,7 +562,7 @@ export class PlayerModel {
    *  body tilt, not a per-direction clip set (UAL has none). */
   setBodyLean(pitch: number, roll: number): void { this.fx.setBodyLean(pitch, roll); }
 
-  setRotation(yaw: number, pitch: number, roll: number = 0): void {
+  setRotation(yaw: number, pitch: number, roll = 0): void {
     if (this.model) {
       // YXZ so lean pitch/roll resolve in the yawed (facing) frame.
       if (this.model.rotation.order !== 'YXZ') {this.model.rotation.order = 'YXZ';}

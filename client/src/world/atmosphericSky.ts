@@ -179,7 +179,7 @@ export class AtmosphericSky {
   private mesh: THREE.Mesh;
   private material: THREE.ShaderMaterial;
   private sunPosition: THREE.Vector3;
-  private timeOfDay: number = 0.5; // 0-1, 0.5 = noon
+  private timeOfDay = 0.5; // 0-1, 0.5 = noon
 
   constructor(scene: THREE.Scene, params: AtmosphericSkyParams = {}) {
     const geometry = new THREE.SphereGeometry(4000, 64, 32);

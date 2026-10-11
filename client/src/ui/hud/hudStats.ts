@@ -63,7 +63,7 @@ export class HudStats {
 
   constructor(private h: StatsHost) {}
 
-  tick(dt: number, player: Player, ping: number = 0, packetLoss: number = 0, jitter: number = 0): void {
+  tick(dt: number, player: Player, ping = 0, packetLoss = 0, jitter = 0): void {
     const {h} = this;
     this.tickVitals(dt, player);
     this.tickBuffs(player);

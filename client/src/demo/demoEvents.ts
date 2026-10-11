@@ -335,7 +335,7 @@ export function recordTargetHit(b: DemoRecorder, targetId: number, position: Vec
     b.targetEvents.push(e);
   }
 
-export function recordTargetDestroyed(b: DemoRecorder, targetId: number, position: Vec3, targetType: number, health: number = 0): void {
+export function recordTargetDestroyed(b: DemoRecorder, targetId: number, position: Vec3, targetType: number, health = 0): void {
     if (!b.recording || !checkEventRate(b)) {return;}
     const e = b.targetEventPool.pop() ?? ({} as TargetEvent);
     e.eventType = TargetEventType.Destroyed;

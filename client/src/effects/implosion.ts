@@ -58,7 +58,7 @@ export class Implosion {
   private core: Core | null = null;
   private arcs: Arc[] = [];
 
-  constructor(scene: THREE.Scene, pos: THREE.Vector3, age: number = 0, terrain?: Terrain) {
+  constructor(scene: THREE.Scene, pos: THREE.Vector3, age = 0, terrain?: Terrain) {
     // See Explosion — hidden-tab spawns die at birth.
     if (typeof document !== 'undefined' && document.hidden) { this.dead = true; return; }
     this.scene = scene;

@@ -404,7 +404,7 @@ export class BallDebris extends Debris {
   constructor(
     scene: THREE.Scene, terrain: Terrain,
     pos: Vec3Like,
-    color: THREE.Color, scale: number = 1,
+    color: THREE.Color, scale = 1,
     opts?: { bodyRadius?: number; impulseDir?: THREE.Vector3; inheritVel?: THREE.Vector3; kind?: 'rock' | 'brush' | 'goo'; shardGeos?: THREE.BufferGeometry[]; onDropletLand?: (x: number, z: number, dropletR: number, dx: number, dz: number) => void; paintBudget?: number }
   ) {
     const spread = 0.6 * scale;

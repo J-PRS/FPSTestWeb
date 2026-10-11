@@ -29,7 +29,7 @@ export namespace Logger {
   let currentLevel: LogLevel = LogLevel.INFO;
   // Console output is WARN+ only — INFO/DEBUG still land in the Alt+Q buffer
   const consoleLevel: LogLevel = LogLevel.WARN;
-  let currentTag: string = '';
+  let currentTag = '';
   const logBuffer: string[] = [];
   const maxBufferSize = 1000; // Keep last 1000 log entries
   // Trim a whole chunk once over cap+grace instead of shift() per push —
