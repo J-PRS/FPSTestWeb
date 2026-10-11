@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { BotSenses, type SenseHost } from '../game/botSenses.js';
+import { BotSenses, type SenseHost } from '../game/bots/botSenses.js';
 import { NOISE_TTL_MS } from '../../../shared/wire.js';
-import type { GameBot } from '../game/botBrain.js';
+import type { GameBot } from '../game/bots/botBrain.js';
 import type { Targetable } from '../entities/balls.js';
 
 const v = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);

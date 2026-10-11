@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { resetMatch, type MatchHost } from '../game/botMatch.js';
+import { resetMatch, type MatchHost } from '../game/bots/botMatch.js';
 import { makeScores } from '../../../shared/teams.js';
 import * as THREE from 'three';
-import type { GameBot } from '../game/botBrain.js';
+import type { GameBot } from '../game/bots/botBrain.js';
 
 // resetMatch is the offline match-boundary funnel — every per-match
 // receipt must drain through it or a new match inherits stale state.

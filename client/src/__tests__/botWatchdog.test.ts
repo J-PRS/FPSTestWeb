@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
-import { BotWatchdog } from '../game/botWatchdog.js';
-import type { GameBot } from '../game/botBrain.js';
+import { BotWatchdog } from '../game/bots/botWatchdog.js';
+import type { GameBot } from '../game/bots/botBrain.js';
 
 const mkBot = (id: string, pos: THREE.Vector3, modelPos = pos) => ({
   playerId: id,

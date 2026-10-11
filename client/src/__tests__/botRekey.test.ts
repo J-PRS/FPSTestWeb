@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
-import { BotFire, type FireHost } from '../game/botFire.js';
-import { BotWatchdog } from '../game/botWatchdog.js';
-import { BotSenses, type SenseHost } from '../game/botSenses.js';
+import { BotFire, type FireHost } from '../game/bots/botFire.js';
+import { BotWatchdog } from '../game/bots/botWatchdog.js';
+import { BotSenses, type SenseHost } from '../game/bots/botSenses.js';
 import { CtfFlags, type FlagCtx } from '../game/ctfFlags.js';
 import { FlagRunBridge, type FlagRunDeps, type FlagRunWiring } from '../game/flagRun.js';
 import { RoomNoticer } from '../../../shared/roomNoticer.js';

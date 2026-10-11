@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { CtfFlags, type FlagCtx } from '../game/ctfFlags.js';
 import { FLAG_RESET_S } from '../../../shared/teams.js';
-import type { GameBot } from '../game/botBrain.js';
+import type { GameBot } from '../game/bots/botBrain.js';
 
 const mkBot = (id: string, team: string) =>
   ({ playerId: id, team, carryingFlag: false, isDead: false, setBotClass: () => {},

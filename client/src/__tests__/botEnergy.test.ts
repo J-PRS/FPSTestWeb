@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { applyStatus, dropSkill, fuelTick } from '../game/botEnergy.js';
+import { applyStatus, dropSkill, fuelTick } from '../game/bots/botEnergy.js';
 import { ENERGY } from '../../../shared/movement.js';
 import { STATUS } from '../../../shared/status.js';
-import type { GameBot } from '../game/botBrain.js';
+import type { GameBot } from '../game/bots/botBrain.js';
 
 const mkBot = (energy = 100) => ({
   status: 0,

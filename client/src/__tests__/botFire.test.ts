@@ -6,13 +6,13 @@
 // (melee, beam weapons, connected rooms).
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { BotFire, type FireHost } from '../game/botFire.js';
+import { BotFire, type FireHost } from '../game/bots/botFire.js';
 import { Projectile } from '../projectiles/Projectile.js';
 import { BOT_LOADOUTS } from '../../../shared/botLoadouts.js';
 import { WeaponType, getWeaponStats } from '../../../shared/weapons.js';
 import { perkMods } from '../../../shared/perks.js';
 import { SLOT_DEFS } from '../weapons.js';
-import { GameBot } from '../game/botBrain.js';
+import { GameBot } from '../game/bots/botBrain.js';
 
 const scene = new THREE.Scene();
 

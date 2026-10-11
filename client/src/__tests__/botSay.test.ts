@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
-import { botSay, botSayDrain } from '../game/botKill.js';
+import { botSay, botSayDrain } from '../game/bots/botKill.js';
 import { chatSink } from '../game/chat.js';
 
 // botSay queues DOM timers for taunt lines + VGS combo tails — the feed
