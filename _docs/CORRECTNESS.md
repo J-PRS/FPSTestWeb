@@ -626,6 +626,15 @@ violation instead of a symptom hunt.
   double-decode). Remaining `innerHTML` writes interpolate
   numbers or static markup only. A crafted name or chat line is
   inert text everywhere it lands.
+- **Creature replica edge lane (verified sealed):**
+  `applyNetEdgeSim`/`applyNetEdgeTotem` write wire pos/vel
+  ungated by design — every caller gates upstream: `netCrawlSpawn`
+  (:96), `netCrawlEvt` (:122), `netCrawlRoster` (:191). The
+  replay accumulator self-heals (`netAcc` NaN → 0, capped 0.5s —
+  a corrupt edge can't wedge the loop), dead-ctor creatures
+  never register (a wedged-invisible replica can't stale-skip
+  respawns), and `sk` re-credits missed retarget quanta so
+  clients that lost edges don't drift the replay clock.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
