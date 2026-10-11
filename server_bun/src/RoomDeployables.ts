@@ -310,6 +310,7 @@ export class RoomDeployables {
   /** Armor soaks before hp; any change rides out as deployHp so clients
    *  can paint the overcharge. */
   private hurt(d: Deployed, dmg: number, by: string): void {
+    if (!Number.isFinite(dmg)) return; // NaN would silent-poison the replica
     if (d.armor > 0) {
       const soaked = Math.min(d.armor, dmg);
       d.armor -= soaked;
@@ -447,7 +448,7 @@ export class RoomDeployables {
       // at least half its base splash, so clearing a stand costs a few
       // well-placed lobs instead of a dozen grazed edges.
       const dmg = (direct ? damage : Math.max(aoeDamage(aoe, dist, radius, scales), Math.round(aoe * 0.5))) * mult;
-      if (dmg <= 0) continue;
+      if (!Number.isFinite(dmg) || dmg <= 0) continue;
       logger.debug('Deploy hit', { kind: d.kind, dist: +dist.toFixed(1), dmg, hp: d.hp, by: shooterId });
       this.hurt(d, dmg, shooterId);
     }
