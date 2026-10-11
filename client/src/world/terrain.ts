@@ -33,6 +33,7 @@ interface ClipmapLevel {
   material: THREE.ShaderMaterial;
   spacing: number;
   innerHalfSize: number;
+  halfSize: number;
   gridOrigin: THREE.Vector2;
   innerGridOrigin: THREE.Vector2;
 }
@@ -213,6 +214,7 @@ export class Terrain {
         material,
         spacing: cfg.spacing,
         innerHalfSize: cfg.innerHalfSize,
+        halfSize: levelScale * 0.5,
         gridOrigin: new THREE.Vector2(0, 0),
         innerGridOrigin: new THREE.Vector2(0, 0),
       });
@@ -448,14 +450,25 @@ export class Terrain {
     return sampleNormal(wx, wz);
   }
 
-  /** Height of the RENDERED level-0 surface chord at (wx,wz) — the
-   *  clipmap's flat triangles, not the smooth heightfield. A decal that
-   *  conforms to getHeight still gets occluded where the heightfield
-   *  dips mid-cell (a gully the 5m mesh bridges over), so conforming
-   *  decals must also clear this chord. Only valid near the player —
-   *  level 0 always surrounds the camera. */
+  /** Height of the RENDERED surface chord at (wx,wz) — the clipmap's
+   *  flat triangles, not the smooth heightfield. A decal that conforms
+   *  to getHeight still gets occluded where the heightfield dips
+   *  mid-cell (a gully the mesh bridges over), so conforming decals
+   *  must also clear this chord. The chord is computed at the level
+   *  actually drawn there: clipmap rings coarsen with distance (5 →
+   *  40m cells), so a remote 300m out renders against a chord the
+   *  level-0 estimate sits meters below. The drawn level is the
+   *  finest whose snapped square contains the point — the same
+   *  coverage rule the shader's inner-hole discard uses. */
   getRenderedHeight(wx: number, wz: number): number {
-    const s = CLIPMAP_LEVELS[0].spacing;
+    let spacing = CLIPMAP_LEVELS[0].spacing;
+    for (const level of this.levels) {
+      if (Math.abs(wx - level.gridOrigin.x) < level.halfSize && Math.abs(wz - level.gridOrigin.y) < level.halfSize) {
+        spacing = level.spacing;
+        break;
+      }
+    }
+    const s = spacing;
     const x0 = Math.floor(wx / s) * s, z0 = Math.floor(wz / s) * s;
     const h00 = this.getHeight(x0, z0), h10 = this.getHeight(x0 + s, z0);
     const h01 = this.getHeight(x0, z0 + s), h11 = this.getHeight(x0 + s, z0 + s);
