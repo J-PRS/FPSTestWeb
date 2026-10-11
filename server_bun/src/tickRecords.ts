@@ -14,6 +14,7 @@ import type { PlayerState } from './types.ts';
 import { healPerTick, recordSuppressed, type TickRecord } from './tickHelpers.ts';
 import { CONFIG } from './config.ts';
 import { healPool } from './healPool.ts';
+import { inv } from '../../shared/invariants.ts';
 import { simNow } from './simClock.ts';
 import { wallNow , wallMs} from './wallClock.ts';
 
@@ -125,6 +126,13 @@ export class TickFanout {
         snap = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, hp: 0, dead: false, ski: 0, jet: 0, status: 0, sheep: 0, t: 0 };
         room.lastSentPositions.set(playerId, snap);
       }
+      // Egress chokepoint: whatever the ingest gates missed shows up here
+      // before it reaches a client's decode pool. Snap fields ARE the wire.
+      inv('wire-row-finite', Number.isFinite(
+        p.position.x + p.position.y + p.position.z
+        + p.velocity.x + p.velocity.y + p.velocity.z
+        + p.rotation.yaw + p.rotation.pitch + p.health),
+        { id: playerId, pos: p.position, hp: p.health });
       snap.x = p.position.x; snap.y = p.position.y; snap.z = p.position.z;
       snap.vx = p.velocity.x; snap.vy = p.velocity.y; snap.vz = p.velocity.z;
       snap.yaw = p.rotation.yaw; snap.pitch = p.rotation.pitch;

@@ -1,3 +1,4 @@
+2026-10-10 - correctness: egress chokepoint inv(wire-row-finite) in TickFanout.buildRecords — every broadcast row (pos/vel/rot/hp) asserted finite at the snap write; catches whatever an ingest gate misses before it reaches a decode pool
 2026-10-10 - correctness: remaining wire-health writes gated — buff powerup health/armor echoes and gameState localPlayerState restore (armor resets to 0 when absent)
 2026-10-10 - correctness: wire-hit-finite gate on onPlayerHit (damage+health) plus armor/shotRejected health writes — every wire path into local player.health now finite-checked
 2026-10-10 - correctness: spawn anchors lift to the drawn surface — groundAt now max(hmHeight, hmChord), closing the respawn-under-a-gully-apex seed for wire-burial
