@@ -31,7 +31,7 @@ export class MatchJournal {
     room: string; mode: string; winner: string; scores: Record<string, number>;
     players?: { id: string; team?: string; kills: number; deaths: number }[];
   }): void {
-    const entry = { t: wallNow(), ...rec };
+    const entry = {t: wallNow(), ...rec};
     this.ring.push(entry);
     if (this.ring.length > 100) {this.ring.shift();}
     try {

@@ -112,7 +112,7 @@ export class RoomStructures {
     // live when applySpec ran (often the previous map's field), and
     // gameState re-serves that stale list to every reconnect until the
     // map reloads.
-    host.messages.setMap({ ...spec, structures: this.eff() });
+    host.messages.setMap({ ...spec, structures: this.eff()});
     host.broadcast({
       type: 'mapUpdate',
       silent: true,

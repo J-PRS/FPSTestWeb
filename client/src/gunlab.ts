@@ -161,7 +161,7 @@ orbit.addEventListener('change', trackDir); // debounced inside — safe per fra
     const root = 'g' in built ? built.g : built;
     root.visible = true;
     const r = gapScan(root);
-    if (r.orphans || r.clusters > 1) {results.push({ wt, ...r });}
+    if (r.orphans || r.clusters > 1) {results.push({wt, ...r});}
   }
   return results;
 };
@@ -172,7 +172,7 @@ orbit.addEventListener('change', trackDir); // debounced inside — safe per fra
     const root = 'g' in built ? built.g : built;
     root.visible = true;
     const r = volScan(root);
-    if (r.inverted) {results.push({ wt, ...r });}
+    if (r.inverted) {results.push({wt, ...r});}
   }
   return results;
 };

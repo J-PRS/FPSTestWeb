@@ -156,7 +156,7 @@ describe('ballSegment binary codec', () => {
   });
 
   it('omits optional fields cleanly', () => {
-    const s = decodeBallSegment(encodeBallSegment({ ...full, targetId: null, tp: null, damp: false }))!;
+    const s = decodeBallSegment(encodeBallSegment({ ...full, targetId: null,tp: null,damp: false}))!;
     expect(s.targetId).toBeNull();
     expect(s.tp).toBeNull();
     expect(s.damp).toBe(false);
@@ -164,7 +164,7 @@ describe('ballSegment binary codec', () => {
 
   it('is ~3x smaller than JSON', () => {
     const bin = encodeBallSegment(full);
-    const json = JSON.stringify({ type: 'ballSegment', ...full });
+    const json = JSON.stringify({type: 'ballSegment', ...full});
     expect(bin.length).toBeLessThan(json.length / 3);
   });
 
@@ -174,7 +174,7 @@ describe('ballSegment binary codec', () => {
 
   it('decodes each flag bit independently', () => {
     const base = { id: 1, kind: 'segment', position: { x: 0, y: 0, z: 0 }, velocity: { x: 0, y: 0, z: 0 }, et: 0, slowT: 0, t: 1 };
-    const d = (over: object) => decodeBallSegment(encodeBallSegment({ ...base, enraged: false, damp: false, tp: null, targetId: null, ...over }))!;
+    const d = (over: object) => decodeBallSegment(encodeBallSegment({ ...base, enraged: false,damp: false,tp: null,targetId: null, ...over}))!;
     expect(d({ enraged: true }).enraged).toBe(true);
     expect(d({ enraged: true }).damp).toBe(false);
     expect(d({ damp: true }).enraged).toBe(false);
@@ -230,11 +230,7 @@ describe('position frame adversarial decode', () => {
 
 describe('tick frame adversarial decode', () => {
   const rec = (id: string, over: Partial<Parameters<typeof encodeTickPlayer>[0]> = {}) =>
-    encodeTickPlayer({
-      playerId: id, position: { x: 1, y: 2, z: 3 },
-      rotation: { yaw: 0.5, pitch: -0.5 }, velocity: { x: 4, y: 5, z: 6 },
-      health: 300, isDead: false, ping: 55, ski: 1, ...over,
-    });
+    encodeTickPlayer({playerId: id,position: { x: 1, y: 2, z: 3 },rotation: { yaw: 0.5, pitch: -0.5 },velocity: { x: 4, y: 5, z: 6 },health: 300,isDead: false,ping: 55,ski: 1, ...over});
 
   it('decodes every record distinctly (offset drift)', () => {
     const frame = encodeTickFrame(0, 0, 0, [

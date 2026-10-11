@@ -269,7 +269,7 @@ export class FlagPlacer {
   snapFlagBases(bases: { alpha: Vec3like; bravo: Vec3like }): { alpha: Vec3; bravo: Vec3 } {
     const snapBase = (v: Vec3like): Vec3 => {
       const p = this.deShelf(v);
-      return { ...v, x: p.x, z: p.z, y: this.standTop(p.x, p.z) };
+      return { ...v, x: p.x,z: p.z,y: this.standTop(p.x, p.z)};
     };
     return { alpha: snapBase(bases.alpha), bravo: snapBase(bases.bravo) };
   }

@@ -641,8 +641,8 @@ hurtCount += 1;
       // alarm honest without paying a map probe per bot per tick.
       if ((this.room.tickSeq & 3) === ((this.thinkPhase.get(id) ?? 0) & 3)) {this.checkStuck(id, p, brain, now);}
 
-      p.lastValidPosition = { ...p.position };
-      p.lastValidVelocity = { ...p.velocity };
+      p.lastValidPosition = { ...p.position};
+      p.lastValidVelocity = { ...p.velocity};
 p.lastSeq += 1; // tick stream keys staleness off seq
 
       // Bots never send positions, so nothing else feeds their rewind

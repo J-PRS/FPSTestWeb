@@ -58,7 +58,7 @@ export function glitch(kind: string, detail: Record<string, unknown> = {}): void
     console.error(`[GLITCH:${kind}]`, JSON.stringify(detail));
   }
 }
-export function glitchCountsDump(): Record<string, number> { return { ...glitchCounts }; }
+export function glitchCountsDump(): Record<string, number> { return { ...glitchCounts}; }
 
 registerDiag('glitches', () => glitchCountsDump());
 

@@ -98,7 +98,7 @@ export class MoveClaims {
         // Reseat the plausibility anchor at the corrected position: the
         // client's next report legitimately snaps to simTruth.pos, and
         // without this the snap itself reads as a speedhack reject.
-        player.lastPosCheckPos = { ...simTruth.pos };
+        player.lastPosCheckPos = { ...simTruth.pos};
         this.muteJudges(player, playerId, now);
       }
       player.rotation.yaw = msg.rotation.yaw; player.rotation.pitch = msg.rotation.pitch;
@@ -144,7 +144,7 @@ export class MoveClaims {
     const dt = Math.max((now - player.lastPosCheckTime) / 1000, 0.05); // floor: bursts of queued packets report ~1ms gaps
     player.lastPosCheckTime = wallMs(now);
     if (!player.hasReceivedPosition || !player.lastPosCheckPos) {
-      player.lastPosCheckPos = { ...msg.position };
+      player.lastPosCheckPos = { ...msg.position};
       return true;
     }
     // Field-wise anchor update — plausible() runs per position report
@@ -202,7 +202,7 @@ player.consecutiveRejects += 1;
         // one commit: either the client lands at the correction
         // (accepts immediately) or keeps fighting (rejects count up
         // to the force-accept, which then sticks).
-        player.lastPosCheckPos = { ...validState.position };
+        player.lastPosCheckPos = { ...validState.position};
         this.muteJudges(player, playerId, now);
       }
     }
@@ -248,16 +248,16 @@ player.consecutiveRejects += 1;
     const tg = this.h.playerManager.groundAt?.(msg.position.x, msg.position.z);
     inv('teleport-above-ground', tg === undefined || !Number.isFinite(tg) || msg.position.y >= tg - 0.5,
       { id: playerId, y: Number(msg.position.y.toFixed(1)), ground: tg !== undefined && Number.isFinite(tg) ? Number(tg.toFixed(1)) : 'n/a' });
-    player.lastPosCheckPos = { ...msg.position };
+    player.lastPosCheckPos = { ...msg.position};
     player.lastPosCheckTime = wallNow();
     player.consecutiveRejects = 0;
     this.h.playerManager.updatePosition(playerId, msg.position, msg.rotation, msg.velocity, undefined);
     // updatePosition only touches lastValid on a seq bump — a declared
     // teleport has no seq, so seat it manually or the next correction
     // would snap the player back to BEFORE the warp
-    player.lastValidPosition = { ...msg.position };
-    player.lastValidVelocity = { ...msg.velocity };
-    player.lastValidRotation = { ...msg.rotation };
+    player.lastValidPosition = { ...msg.position};
+    player.lastValidVelocity = { ...msg.velocity};
+    player.lastValidRotation = { ...msg.rotation};
     player.hasReceivedPosition = true;
     this.h.announceIfInWorld(player);
     this.h.moveResync(playerId, msg.position, msg.rotation.yaw);
@@ -284,7 +284,7 @@ player.consecutiveRejects += 1;
     const player = this.h.playerManager.getPlayer(playerId);
     if (!player || !player.hasReceivedPosition) {return;}
     const now = wallNow();
-    player.lastPosCheckPos = { ...player.position };
+    player.lastPosCheckPos = { ...player.position};
     player.lastPosCheckTime = now;
     player.consecutiveRejects = 0;
     this.h.moveResync(playerId, player.position, player.rotation.yaw);

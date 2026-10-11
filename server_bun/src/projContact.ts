@@ -125,8 +125,8 @@ function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getW
       if (pd <= capsuleReach(target, reach)) {
         // Wake contact counts as a hit but earns no airtime ramp — the
         // skillshot bonus is body-contact only, like the claim path.
-        if (stats.stick) { r.attach(proj, { ...p.pos }, pid); return true; }
-        r.detonate(proj, { ...p.pos }, pid, undefined, pd <= classCapsule(target.armorClass).radius + stats.bodyRadius);
+        if (stats.stick) { r.attach(proj, { ...p.pos}, pid); return true; }
+        r.detonate(proj, { ...p.pos}, pid, undefined, pd <= classCapsule(target.armorClass).radius + stats.bodyRadius);
         return true;
       }
     }

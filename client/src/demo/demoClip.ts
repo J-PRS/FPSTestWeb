@@ -29,7 +29,7 @@ export function collectRemoteFrames(remoteFrames: RemoteFrame[], clipStart: numb
   }
   out.push(...inWindow);
   out.sort((a, b) => a.timestamp - b.timestamp);
-  return out.map(f => ({ ...f, timestamp: f.timestamp - clipStart}));
+  return out.map(f => (({ ...f, timestamp: f.timestamp - clipStart})));
 }
 
 // Projectile events in [clipStart, clipEnd], plus synthetic Fired events at
@@ -48,22 +48,14 @@ export function collectProjectileEvents(projectileEvents: ProjectileEvent[], cli
       // Bounce — update position/velocity
       const existing = aliveProjectiles.get(e.projectileId);
       if (existing) {
-        aliveProjectiles.set(e.projectileId, {
-          ...existing,
-          posX: e.posX, posY: e.posY, posZ: e.posZ,
-          velX: e.velX, velY: e.velY, velZ: e.velZ,
-        });
+        aliveProjectiles.set(e.projectileId, { ...existing, posX: e.posX,posY: e.posY,posZ: e.posZ,velX: e.velX,velY: e.velY,velZ: e.velZ});
       }
     }
   }
 
   const snapshotProjEvents: ProjectileEvent[] = [];
   for (const [, e] of aliveProjectiles) {
-    snapshotProjEvents.push({
-      ...e,
-      eventType: ProjectileEventType.Fired,
-      timestamp: clipStart,
-    });
+    snapshotProjEvents.push({ ...e, eventType: ProjectileEventType.Fired,timestamp: clipStart});
   }
 
   return [
@@ -83,11 +75,7 @@ export function collectTargetEvents(targetEvents: TargetEvent[], clipStart: numb
   // Create synthetic Spawned events at clipStart for alive targets
   const snapshotEvents: TargetEvent[] = [];
   for (const [, e] of aliveBalls) {
-    snapshotEvents.push({
-      ...e,
-      eventType: TargetEventType.Spawned,
-      timestamp: clipStart,
-    });
+    snapshotEvents.push({ ...e, eventType: TargetEventType.Spawned,timestamp: clipStart});
   }
 
   // Target events that fall inside the clip window
@@ -137,7 +125,7 @@ export function findAliveTargets(targetEvents: TargetEvent[], clipStart: number)
     // Preserve targetType and health if the new event doesn't carry them (legacy 0)
     const targetType = e.targetType === 0 ? existing.targetType : e.targetType;
     const health = e.health === 0 ? existing.health : e.health;
-    aliveBalls.set(k, { ...e, targetType, health });
+    aliveBalls.set(k, { ...e, targetType,health});
   }
   return aliveBalls;
 }
@@ -165,11 +153,7 @@ function recoverMissingSpawns(actualTgtEvents: TargetEvent[], aliveBalls: Map<nu
   const additionalSpawned: TargetEvent[] = [];
   for (const [k, first] of firstEventByKey) {
     if (aliveBalls.has(k) || hasSpawnedInClip.has(k)) {continue;}
-    additionalSpawned.push({
-      ...first,
-      eventType: TargetEventType.Spawned,
-      timestamp: clipStart,
-    });
+    additionalSpawned.push({ ...first, eventType: TargetEventType.Spawned,timestamp: clipStart});
   }
   return additionalSpawned;
 }

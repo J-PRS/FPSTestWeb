@@ -510,7 +510,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
       entities.deployables.remoteSpawn(depId++, {
         owner: d.team ? `base:${d.team}` : 'base',
         kind: d.kind as import('../../shared/deployables.js').DeployKind,
-        pos: { ...d.pos, y },
+        pos: { ...d.pos, y},
         team: d.team,
       });
     }

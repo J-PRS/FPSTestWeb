@@ -62,11 +62,7 @@ const crashStreak = new Map<string, number>();
 function spawnWorker(id: string, port: number): void {
   const proc = Bun.spawn(['bun', join('src', 'server.ts')], {
     cwd: join(import.meta.dir, '..'),
-    env: {
-      ...process.env,
-      FPS_PORT: String(port),
-      FPS_FLEET_REPORT: `http://127.0.0.1:${BASE}/fleet/report`,
-    },
+    env: { ...process.env, FPS_PORT: String(port),FPS_FLEET_REPORT: `http://127.0.0.1:${BASE}/fleet/report`},
     stdout: 'inherit',
     stderr: 'inherit',
   });
@@ -97,7 +93,7 @@ for (let i = 0; i < WORKERS; i += 1) {
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const json = (data: unknown, init?: ResponseInit) =>
-  corsResponse(JSON.stringify(data), { ...init, headers: JSON_HEADERS });
+  corsResponse(JSON.stringify(data), { ...init, headers: JSON_HEADERS});
 
 /** The scheme the client spoke to us — behind TLS the ws upgrade wants
  *  wss; behind the vite/cloudflare proxy the request arrives https. */

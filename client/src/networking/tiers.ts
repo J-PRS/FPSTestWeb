@@ -357,8 +357,7 @@ this.attempts += 1;
             if (!this.closed && this.gen === gen) {this.connect(this.url);}
           }, TieredTransport.BACKOFF_MS);
         }
-      },
-      onConnect: () => {
+      },onConnect: () => {
         if (gen !== this.gen) {return;}
         this.attempts = 0;
         this.connectedAt = Date.now();

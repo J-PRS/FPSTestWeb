@@ -130,7 +130,7 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
     } else if (m.sk === undefined && m.kind === 'retarget') {
       c.netAcc -= SIM_TICK_DT; // pre-sk server: one skip per retarget edge seen
     }
-    c.applyNetEdge({ ...m, kind: m.kind });
+    c.applyNetEdge({ ...m, kind: m.kind});
     deps.lazyDemoManager()?.recordCreatureEdge(m.id, m.position, m.velocity);
     if (m.kind === 'detonate' && c instanceof Baneling) {
       // The pop is an fx edge only — the server's blast funnel already
@@ -145,7 +145,7 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
   function netCrawlDie(m: { id: number; position: { x: number; y: number; z: number }; by?: string | null }): void {
     const c = netCrawlerById.get(m.id);
     if (!c) {return;}
-    if (!finite(m.position)) {m = {...m, position: {x: c.pos.x, y: c.pos.y, z: c.pos.z}};}
+    if (!finite(m.position)) {m = { ...m, position: {x: c.pos.x, y: c.pos.y, z: c.pos.z}};}
     netCrawlerById.delete(m.id);
     appliedSkips.delete(m.id);
     deps.lazyDemoManager()?.recordCreatureDie(m.id, m.position);

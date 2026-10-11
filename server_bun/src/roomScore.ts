@@ -186,7 +186,7 @@ export class RoomScore {
   score(team: TeamId, n = 1): void {
     if (!this.h.modeSpec?.teams) {return;}
     bank(this.h.scores, team, n);
-    this.h.broadcast({ type: 'teamScore', scores: { ...this.h.scores }, winAt: this.h.modeSpec.winAt });
+    this.h.broadcast({ type: 'teamScore', scores: { ...this.h.scores}, winAt: this.h.modeSpec.winAt });
     const w = winner(this.h.scores, this.h.modeSpec.winAt);
     if (w) {this.h.endMatch(w);}
   }

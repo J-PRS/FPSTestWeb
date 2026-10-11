@@ -138,7 +138,7 @@ export function speakVgs(text: string, who?: string): void {
   const buf = ctx.createBuffer(1, pcm.length, SAM_RATE);
   buf.copyToChannel(pcm as Float32Array<ArrayBuffer>, 0);
   const src = playRadioVoice(ctx, bus, buf, startAt);
-  liveVoice.set(key, { ...src, startT: startAt, boundaryS: wordBoundary(text, who, buf.duration) });
+  liveVoice.set(key, { ...src, startT: startAt,boundaryS: wordBoundary(text, who, buf.duration)});
   src.src.onended = () => { if (liveVoice.get(key)?.src === src.src) {liveVoice.delete(key);} };
 }
 

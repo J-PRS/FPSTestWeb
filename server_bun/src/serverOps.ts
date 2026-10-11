@@ -35,14 +35,7 @@ export function getHealthStatus(g: GameServer) {
     // loop is losing a real slice of the 50ms budget, not normal jitter.
     const lagBad = g.ops.tickLagSamples > 100 && g.ops.tickLagMsSum / g.ops.tickLagSamples > 20;
     const degraded = quarantined.length > 0 || lagBad;
-    return {
-      status: degraded ? 'degraded' : 'running',
-      players: totalPlayers(g),
-      maxPlayers: CONFIG.maxPlayers,
-      tickRate: CONFIG.tickRate,
-      ...(quarantined.length > 0 ? { quarantined } : {}),
-      ...(lagBad ? { tickLagMsAvg: Number((g.ops.tickLagMsSum / g.ops.tickLagSamples).toFixed(1)) } : {}),
-    };
+    return {status: degraded ? 'degraded' : 'running',players: totalPlayers(g),maxPlayers: CONFIG.maxPlayers,tickRate: CONFIG.tickRate, ...(quarantined.length > 0 ? { quarantined } : {}), ...(lagBad ? { tickLagMsAvg: Number((g.ops.tickLagMsSum / g.ops.tickLagSamples).toFixed(1)) } : {})};
   }
 
   /** Ops snapshot for /metrics — counts since boot plus tick-lag stats,
@@ -67,7 +60,7 @@ n += 1; fpsSum += s.fps; fpsMin = Math.min(fpsMin, s.fps);
       players: r.playerCount(),
       balls: r.ballSim.ballCount,
       clientStats: n ? { n, fpsAvg: Math.round(fpsSum / n), fpsMin, lossMax, pingMax } : undefined,
-      scores: r.modeSpec?.teams ? { ...r.scores } : undefined,
+      scores: r.modeSpec?.teams ? ({ ...r.scores}) : undefined,
       // Bot CPU per stage as ms/sec over the last 10s window — a room
       // melting on think/drive shows it here instead of needing a soak.
       botMs: r.bots ? {

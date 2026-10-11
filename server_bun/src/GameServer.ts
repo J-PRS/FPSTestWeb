@@ -309,7 +309,7 @@ export class GameServer {
       maxPlayers: CONFIG.maxPlayers,
       spectators: r.spectators.size || undefined,
       // Live match state so the lobby row shows more than occupancy.
-      scores: r.modeSpec?.teams ? { ...r.scores } : undefined,
+      scores: r.modeSpec?.teams ? ({ ...r.scores}) : undefined,
       ffaLeader: r.modeSpec?.ffa
         ? [...r.ffaScores.entries()].toSorted((a, b) => b[1] - a[1])[0]
         : undefined,
@@ -380,7 +380,7 @@ export class GameServer {
         if (!token) {continue;} // pre-seat or bot — nothing to reclaim with
         players.push({
           id, name: p.name, team: p.team, perk: p.perk, armorClass: p.armorClass,
-          pos: { ...p.position }, vel: { ...p.velocity },
+          pos: { ...p.position}, vel: { ...p.velocity},
           yaw: p.rotation.yaw, pitch: p.rotation.pitch,
           health: p.health, isDead: p.isDead, token,
         });
@@ -412,11 +412,11 @@ export class GameServer {
         if (ps.health !== undefined && !Number.isFinite(ps.health)) {continue;}
         if (room.players.getPlayer(ps.id)) {continue;}
         const p = room.players.addPlayer(ps.id, ps.team, ps.perk ?? 'none', ps.armorClass ?? 'medium');
-        p.position = { ...ps.pos };
-        p.velocity = { ...ps.vel };
+        p.position = { ...ps.pos};
+        p.velocity = { ...ps.vel};
         p.rotation.yaw = ps.yaw ?? 0;
         p.rotation.pitch = ps.pitch ?? 0;
-        p.lastValidPosition = { ...ps.pos };
+        p.lastValidPosition = { ...ps.pos};
         if (typeof ps.health === 'number') {p.health = ps.health;}
         p.isDead = ps.isDead === true;
         p.pendingRespawn = p.isDead;
@@ -467,7 +467,7 @@ seated += 1;
     if (now - (this.invalidWarnAt.get(key) ?? 0) >= GameServer.INVALID_WARN_GAP_MS) {
       this.invalidWarnAt.set(key, now);
       if (this.invalidWarnAt.size > 4096) {evictEldest(this.invalidWarnAt);}
-      logger.warn(msg, { playerId, ...data });
+      logger.warn(msg, {playerId, ...data});
     }
   }
 

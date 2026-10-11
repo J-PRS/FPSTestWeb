@@ -3,7 +3,7 @@ import { BotBrain, type BrainCtx } from '../../../shared/botBrain.js';
 
 const flat = () => 0;
 function ctx(pos: { x: number; y: number; z: number }, groundY: (x: number, z: number) => number = flat, extra: Partial<BrainCtx> = {}): BrainCtx {
-  return { pos, enemies: [], groundY, now: 0, ...extra };
+  return {pos,enemies: [],groundY,now: 0, ...extra};
 }
 
 const wall = (x: number) => (x > 3 ? 20 : 0);

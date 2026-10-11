@@ -60,7 +60,7 @@ export class SpawnPicker {
     const raw = teamPool?.length ? teamPool
       : (this.host.spawnPoints() ?? CONFIG.spawnPoints);
     const points: SpawnPoint[] = [];
-    for (const p of raw) {points.push({ ...p });}
+    for (const p of raw) {points.push({ ...p});}
     const groundAt = this.host.groundAt();
     if (groundAt) {
       for (const p of points) {
@@ -88,12 +88,12 @@ export class SpawnPicker {
     if (!obj && bias === 0) {
       const anyFoe = [...this.host.players().entries()].some(
         ([id, p]) => id !== playerId && !p.isDead && (!team || p.team !== team));
-      if (!anyFoe) {return { ...points[Math.floor(this.host.rng() * points.length)]! };}
+      if (!anyFoe) {return { ...points[Math.floor(this.host.rng() * points.length)]!};}
     }
     // Home pull target for points that can't ride the objective pull.
     const ownBase = bias > 0 && (team === 'alpha' || team === 'bravo')
       ? this.host.teamBases()?.[team] : undefined;
-    let best: SpawnPoint = { ...points[0]! };
+    let best: SpawnPoint = { ...points[0]!};
     let bestScore = -Infinity;
     for (const spawn of points) {
       const minFoeDist = this.foeClearance(spawn, playerId, team);
@@ -110,7 +110,7 @@ export class SpawnPicker {
         : minFoeDist) * (spawn.w ?? 1) / 100;
       if (score > bestScore) {
         bestScore = score;
-        best = { ...spawn };
+        best = { ...spawn};
       }
     }
     return best;

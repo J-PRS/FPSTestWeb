@@ -83,7 +83,7 @@ export class PlayerManager {
     const player: PlayerState = {
       id: playerId,
       internalId: nextInternalId(),
-      position: { ...spawn },
+      position: { ...spawn},
       rotation: { yaw: 0, pitch: 0 },
       velocity: { x: 0, y: 0, z: 0 },
       health: maxHealth,
@@ -98,13 +98,13 @@ export class PlayerManager {
       lastSeen: wallNow(),
       pendingRespawn: false,
       lastSeq: 0,
-      lastValidPosition: { ...spawn },
+      lastValidPosition: { ...spawn},
       lastValidVelocity: { x: 0, y: 0, z: 0 },
       lastValidRotation: { yaw: 0, pitch: 0 },
       hasReceivedPosition: false,
       joinAnnounced: false,
       lastPosCheckTime: wallMs(0),
-      lastPosCheckPos: { ...spawn },
+      lastPosCheckPos: { ...spawn},
       consecutiveRejects: 0,
       correctionGraceUntil: wallMs(0),
       ping: 0,
@@ -200,9 +200,9 @@ export class PlayerManager {
     return rosterRow(WORLD_MODEL.player!, 'id', player.id, {
       name: player.name,
       internalId: player.internalId,
-      position: { ...player.position },
-      rotation: { ...player.rotation },
-      velocity: { ...player.velocity },
+      position: { ...player.position},
+      rotation: { ...player.rotation},
+      velocity: { ...player.velocity},
       isDead: player.isDead,
       health: player.health,
       status: player.status,
@@ -246,9 +246,9 @@ export class PlayerManager {
     const player = this.players.get(playerId);
     if (!player) {return null;}
     return {
-      position: { ...player.lastValidPosition },
-      velocity: { ...player.lastValidVelocity },
-      rotation: { ...player.lastValidRotation },
+      position: { ...player.lastValidPosition},
+      velocity: { ...player.lastValidVelocity},
+      rotation: { ...player.lastValidRotation},
       seq: player.lastSeq,
     };
   }
@@ -350,8 +350,8 @@ target.deaths += 1;
     // record whose wire rows every client drops: revive at the last
     // finite anchor instead of spawning an invisible player.
     const spawn = Number.isFinite(picked.x + picked.y + picked.z)
-      ? picked : { ...player.lastValidPosition };
-    player.position = { ...spawn };
+      ? picked : ({ ...player.lastValidPosition});
+    player.position = { ...spawn};
     player.rotation = { yaw: 0, pitch: 0 };
     player.velocity = { x: 0, y: 0, z: 0 };
     player.health = player.maxHealth;
@@ -370,12 +370,12 @@ target.deaths += 1;
     // connection, and zeroing it re-opens the seq gate to stale
     // pre-death frames (seq>0) — they'd regress position to the corpse
     // spot and re-arm held keys.
-    player.lastValidPosition = { ...spawn };
+    player.lastValidPosition = { ...spawn};
     player.lastValidVelocity = { x: 0, y: 0, z: 0 };
     player.lastValidRotation = { yaw: 0, pitch: 0 };
     player.hasReceivedPosition = false;
     player.lastPosCheckTime = wallMs(0);
-    player.lastPosCheckPos = { ...spawn };
+    player.lastPosCheckPos = { ...spawn};
     player.consecutiveRejects = 0;
     // Rewind buffer: corpse-side samples must not survive the respawn —
     // hit validation and muzzle checks would rewind to the death site.
@@ -383,7 +383,7 @@ target.deaths += 1;
     player.history.push({ t: wallNow(), x: spawn.x, y: spawn.y, z: spawn.z });
     player.protectedUntil = simMs(simNow() + SPAWN_PROTECT_MS);
 
-    return { position: { ...player.position }, rotation: { ...player.rotation }, armorClass: player.armorClass };
+    return { position: { ...player.position}, rotation: { ...player.rotation}, armorClass: player.armorClass };
   }
 
   /** Fresh match — wipe everyone's K/D so the journal records per-match

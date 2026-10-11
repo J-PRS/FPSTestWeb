@@ -593,9 +593,9 @@ this.sendDrops += 1;
     if (!existing) {
       // Vec defaults are shared literals — clone or the first in-place
       // update corrupts every roster entry built after this one.
-      next.position = { ...ROSTER_DEFAULTS.position! };
-      next.rotation = { ...ROSTER_DEFAULTS.rotation! };
-      next.velocity = { ...ROSTER_DEFAULTS.velocity! };
+      next.position = { ...ROSTER_DEFAULTS.position!};
+      next.rotation = { ...ROSTER_DEFAULTS.rotation!};
+      next.velocity = { ...ROSTER_DEFAULTS.velocity!};
     }
     for (const k of ROSTER_FIELDS) {
       // Vec fields are handled below — storing the patch ref would alias
@@ -668,7 +668,7 @@ this.sendDrops += 1;
 
     // Assign sequence number and store in state history for reconciliation
     const seq = ++this.sequenceCounter;
-    this.stateHistory.set(seq, { position: { ...position }, velocity: { ...velocity }, rotation: { ...rotation } });
+    this.stateHistory.set(seq, { position: { ...position}, velocity: { ...velocity}, rotation: { ...rotation} });
     if (this.stateHistory.size > this.STATE_HISTORY_MAX) {
       const oldest = this.stateHistory.keys().next().value;
       if (oldest !== undefined) {this.stateHistory.delete(oldest);}
@@ -760,10 +760,7 @@ this.sendDrops += 1;
     if (!cur || cur.isDead === isDead) {return null;}
     // Server position is truth either way: a revive anchors at the
     // respawn point, a kill pins the corpse where the server saw it die.
-    this.upsertRemotePlayer(playerId, {
-      isDead, health,
-      ...(position ? { position } : {}),
-    });
+    this.upsertRemotePlayer(playerId, {isDead,health, ...(position ? { position } : {})});
     return isDead ? 'killed' : 'revived';
   }
 
@@ -787,11 +784,11 @@ this.sendDrops += 1;
       this.ledger.noteShot(`aoe:${a.excludeTargetId}`, a.excludeTargetId, a.weaponType);
     }
     this.send({
-      type: 'aoeShot',
       ...a,
       excludeTargetId: a.excludeTargetId ?? null,
       projectileId: a.projectileId ?? undefined,
       fireAt: this.serverNowMs(),
+      type: 'aoeShot',
     });
   }
 

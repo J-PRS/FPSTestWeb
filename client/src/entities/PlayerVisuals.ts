@@ -91,7 +91,7 @@ export class PlayerVisuals {
   // surface, or steep slopes put the eye inside the mesh and you see the
   // interior of the mountain.
   updateCamera(camera: THREE.PerspectiveCamera, terrain: Terrain, cam: { pos: THREE.Vector3; yaw: number; pitch: number; thirdPerson?: boolean; orbit?: { yaw: number; pitch: number } }): void {
-    pvCam.updateCamera(this, camera, terrain, { thirdPerson: false, ...cam });
+    pvCam.updateCamera(this, camera, terrain, {thirdPerson: false, ...cam});
   }
 
   updateFeetMarker(terrain: Terrain, pos: THREE.Vector3): void { pvCam.updateFeetMarker(this, terrain, pos); }

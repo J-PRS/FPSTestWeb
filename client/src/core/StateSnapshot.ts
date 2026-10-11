@@ -73,11 +73,11 @@ export namespace StateSnapshot {
     for (const [id, player] of players) {
       playerMap.set(id, {
         id,
-        position: { ...player.position },
-        velocity: { ...player.velocity },
+        position: { ...player.position},
+        velocity: { ...player.velocity},
         health: player.health,
         isDead: player.isDead,
-        rotation: player.rotation ? { ...player.rotation } : undefined
+        rotation: player.rotation ? ({ ...player.rotation}) : undefined
       });
     }
 
@@ -89,8 +89,8 @@ export namespace StateSnapshot {
     const projectileData = projectileArray.map(p => ({
       id: p.id,
       ownerId: p.ownerId,
-      position: { ...p.position },
-      velocity: { ...p.velocity }
+      position: { ...p.position},
+      velocity: { ...p.velocity}
     }));
 
     const snapshot: Omit<GameStateSnapshot, 'hash'> = {
@@ -102,10 +102,7 @@ export namespace StateSnapshot {
 
     const hash = computeHash(snapshot);
 
-    return {
-      ...snapshot,
-      hash
-    };
+    return { ...snapshot, hash};
   }
 
   /**
@@ -132,7 +129,7 @@ export namespace StateSnapshot {
    */
   export function exportSnapshots(): void {
     const data = {
-      snapshots: snapshotBuffer.map(s => ({ ...s, players: Array.from(s.players.entries())}))
+      snapshots: snapshotBuffer.map(s => (({ ...s, players: Array.from(s.players.entries())})))
     };
     
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });

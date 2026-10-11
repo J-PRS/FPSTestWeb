@@ -8,7 +8,7 @@ import type { Targetable } from '../entities/balls.js';
 const v = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
 const mkBot = (id: string, team: string, over: Record<string, unknown> = {}) =>
-  ({ playerId: id, team, isDead: false, isCloakHidden: false, ghostT: 0, pos: v(), vel: v(), position: v(), ...over }) as unknown as GameBot;
+  (({playerId: id,team,isDead: false,isCloakHidden: false,ghostT: 0,pos: v(),vel: v(),position: v(), ...over})) as unknown as GameBot;
 
 interface Rig {
   senses: BotSenses;

@@ -79,11 +79,11 @@ export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: V
   const creatureBack = shooterTransit + shooterLag;
   const bc = world.ballSim?.sweepHit(muzzle, end, 0.2, creatureBack);
   if (bc && bc.t <= bestT) {
-    return { ballId: bc.id, contact: at(bc.t), ...beamChain(world, at(bc.t), dir, bc.id, undefined) };
+    return {ballId: bc.id,contact: at(bc.t), ...beamChain(world, at(bc.t), dir, bc.id, undefined)};
   }
   const cc = world.creatureSim?.sweepHit(muzzle, end, 0.2, creatureBack);
   if (cc && cc.t <= bestT) {
-    return { crawlerId: cc.id, contact: at(cc.t), ...beamChain(world, at(cc.t), dir, undefined, cc.id) };
+    return {crawlerId: cc.id,contact: at(cc.t), ...beamChain(world, at(cc.t), dir, undefined, cc.id)};
   }
   if (playerId !== undefined) {return { playerId, contact: at(bestT) };}
   return bestT < 1 ? { contact: at(bestT) } : null;

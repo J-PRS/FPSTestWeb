@@ -67,7 +67,7 @@ function ensureSwarms(): void {
   // The full live registry, shrunk to single-specimen buffers — a new
   // species shows up in the lab the moment it's registered, no lab edit.
   const labSpecs = Object.fromEntries(
-    Object.entries(SWARM_SPECS).map(([k, s]) => [k, { ...s, capacity: 8 }]),
+    Object.entries(SWARM_SPECS).map(([k, s]) => [k, { ...s, capacity: 8}]),
   );
   initSwarms(LAB_SCENE, LAB_TERRAIN, labSpecs);
   swarmsReady = true;

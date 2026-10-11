@@ -267,7 +267,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       }
     }
     const kbForce = force * KNOCKBACK_SCALE;
-    applyForceToBalls({ ...a, force: kbForce }, applyTo);
+    applyForceToBalls({ ...a, force: kbForce}, applyTo);
     applyForceToNuggets(pos, radius, kbForce, forceMode);
     applyForceToRemotes(a);
     // Deployables in the envelope — the offline mirror of the server's

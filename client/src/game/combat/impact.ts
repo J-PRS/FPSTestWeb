@@ -327,7 +327,7 @@ export function spawnClusterBomblets(c: CombatCtx, p: Projectile): void {
     // when the carrier SETS one: fuseless clusters (MRV) drop contact bombs
     // that pop on whatever they land on, not mid-air timers.
     const base = p.config.bomblet ?? BOMBLET_CONFIG;
-    const cfg = fuse ? { ...base, maxLifetime: fuse * (0.6 + Math.random() * 0.8) } : base;
+    const cfg = fuse ? ({ ...base, maxLifetime: fuse * (0.6 + Math.random() * 0.8)}) : base;
     // Bomblet speed lives in the "playerVel" ctor arg: config.speed is 0 and
     // the ctor adds half the inherit term — so pass final velocity × 2.
     // Sphere: carrier velocity in FULL + uniform random kick; cone: 0.8×

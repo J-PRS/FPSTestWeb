@@ -129,7 +129,7 @@ s[kind] += 1; this.propels.set(id, s);
         // scales with target unpredictability: a straight-line runner
         // gets tracked clean even by modest aim, a jinking one doesn't.
         if (live) {
-          if (!tr.lag) {tr.lag = { ...live };}
+          if (!tr.lag) {tr.lag = { ...live};}
           tr.lag.x += (live.x - tr.lag.x) * 0.85;
           tr.lag.y += (live.y - tr.lag.y) * 0.85;
           tr.lag.z += (live.z - tr.lag.z) * 0.85;
@@ -190,7 +190,7 @@ s[kind] += 1; this.propels.set(id, s);
 
   fireAt(p: BotBody, targetId: string, aim: Vec3): void {
     const tr = {
-      targetId, aim: { ...aim },
+      targetId, aim: { ...aim},
       lastPos: this.targetPos(targetId),
       until: this.clock + BotArsenal.TRIGGER_HOLD_MS,
       lag: null as Vec3 | null, err: { x: 0, y: 0, z: 0 },

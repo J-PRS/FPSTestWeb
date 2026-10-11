@@ -71,9 +71,9 @@ function scanMesh(o: THREE.Object3D, hits: Hit[]): void {
 
   const pos = geo.getAttribute('position') as THREE.BufferAttribute | undefined;
   if (pos) {
-    const h = { ...base, attr: 'position' };
+    const h = { ...base, attr: 'position'};
     if (scanArray(pos.array, h)) {hits.push(h);}
-    const huge = { ...base, attr: 'positionHuge' };
+    const huge = { ...base, attr: 'positionHuge'};
     if (scanHuge(pos.array, huge)) {hits.push(huge);}
   }
 
@@ -83,7 +83,7 @@ function scanMesh(o: THREE.Object3D, hits: Hit[]): void {
   // quarks particle data all live in custom attributes)
   for (const [name, attr] of Object.entries(geo.attributes)) {
     if (name === 'position' || name === 'normal' || name === 'uv') {continue;}
-    const h = { ...base, attr: name };
+    const h = { ...base, attr: name};
     if (scanArray((attr as THREE.BufferAttribute).array, h)) {hits.push(h);}
   }
 }
@@ -94,9 +94,9 @@ function scanMesh(o: THREE.Object3D, hits: Hit[]): void {
 function scanInstAndBones(o: THREE.Object3D, base: Hit, hits: Hit[]): void {
   const inst = o as THREE.InstancedMesh;
   if (inst.isInstancedMesh && inst.instanceMatrix) {
-    const h = { ...base, attr: 'instanceMatrix' };
+    const h = { ...base, attr: 'instanceMatrix'};
     if (scanArray(inst.instanceMatrix.array, h)) {hits.push(h);}
-    const hugeM = { ...base, attr: 'instanceMatrixHuge' };
+    const hugeM = { ...base, attr: 'instanceMatrixHuge'};
     if (scanHuge(inst.instanceMatrix.array, hugeM)) {hits.push(hugeM);}
   }
 
@@ -104,16 +104,16 @@ function scanInstAndBones(o: THREE.Object3D, base: Hit, hits: Hit[]): void {
   // and starfields are deliberately huge) and doesn't rasterize anything.
   const bs = (o as THREE.Mesh).geometry?.boundingSphere;
   if (bs && (!Number.isFinite(bs.radius) || !Number.isFinite(bs.center.x))) {
-    const h = { ...base, attr: 'boundingSphere', index: -1, value: bs.radius, count: 1 };
+    const h = { ...base, attr: 'boundingSphere',index: -1,value: bs.radius,count: 1};
     hits.push(h);
   }
 
   const sk = o as THREE.SkinnedMesh;
   const bones = sk.isSkinnedMesh ? sk.skeleton?.boneMatrices : null;
   if (bones) {
-    const h = { ...base, attr: 'boneMatrices' };
+    const h = { ...base, attr: 'boneMatrices'};
     if (scanArray(bones, h)) {hits.push(h);}
-    const hugeB = { ...base, attr: 'boneMatricesHuge' };
+    const hugeB = { ...base, attr: 'boneMatricesHuge'};
     if (scanHuge(bones, hugeB)) {hits.push(hugeB);}
   }
 }
@@ -142,7 +142,7 @@ export function nanScanTransforms(scene: THREE.Scene): Hit[] {
   const hits: Hit[] = [];
   scene.traverse((o) => {
     const base: Hit = { name: label(o), kind: o.type, attr: '', index: -1, value: 0, count: 0 };
-    const mw = { ...base, attr: 'matrixWorld' };
+    const mw = { ...base, attr: 'matrixWorld'};
     if (scanArray(o.matrixWorld.elements, mw)) {hits.push(mw);}
     scanInstAndBones(o, base, hits);
 
@@ -156,9 +156,9 @@ export function nanScanTransforms(scene: THREE.Scene): Hit[] {
       for (const [name, attr] of Object.entries(geo.attributes)) {
         const arr = (attr as THREE.BufferAttribute).array;
         if (!arr) {continue;}
-        const h = { ...base, attr: `${name}(dyn)` };
+        const h = { ...base, attr: `${name}(dyn)`};
         if (scanArray(arr, h)) {hits.push(h);}
-        const huge = { ...base, attr: `${name}Huge(dyn)` };
+        const huge = { ...base, attr: `${name}Huge(dyn)`};
         if (scanHuge(arr, huge)) {hits.push(huge);}
       }
     }
@@ -188,7 +188,7 @@ export function nanScanTick(scene: THREE.Scene, camera?: THREE.Camera): void {
   if (camera) {
     const base: Hit = { name: 'camera', kind: camera.type, attr: '', index: -1, value: 0, count: 0 };
     for (const attr of ['matrixWorld', 'projectionMatrix', 'projectionMatrixInverse'] as const) {
-      const h = { ...base, attr };
+      const h = { ...base, attr};
       if (scanArray((camera[attr] as THREE.Matrix4).elements, h)) {report(h);}
     }
   }

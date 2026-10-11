@@ -140,7 +140,7 @@ export class RoomFactory {
       // only fires on repeated teleport-scale gaps honest drift can't
       // reach (see RoomMoveSim.SEVERE_*).
       room.moveSim.onCheat = (pid, dist, detail) => {
-        logger.warn('Movement cheat detected', { playerId: pid, room: r.name, dist: Number(dist.toFixed(1)), ...detail });
+        logger.warn('Movement cheat detected', {playerId: pid,room: r.name,dist: Number(dist.toFixed(1)), ...detail});
         // Warn instead of kick — flap/reconnect catch-up reports read as
         // teleport-scale divergence, and a kick loop punishes honest lag.
         r.sendToPlayer(pid, { type: 'serverWarn', text: 'SUSPICIOUS BEHAVIOR DETECTED' });

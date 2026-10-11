@@ -413,12 +413,7 @@ dropCensus.total += 1;
   private handlePlayerRespawn(data: Extract<ServerMessage, { type: 'playerRespawn' }>): void {
     // Update REMOTE player in storage (local player respawn handled by callback)
     if (data.position) {
-      this.h.upsertRemotePlayer(data.playerId, {
-        ...(rowPatch(WORLD_MODEL.player.events!.playerRespawn!, data as unknown as Record<string, unknown>) as Partial<RemotePlayerState>),
-        velocity: { x: 0, y: 0, z: 0 },
-        isDead: false,
-        health: 100,
-      });
+      this.h.upsertRemotePlayer(data.playerId, { ...(rowPatch(WORLD_MODEL.player.events!.playerRespawn!, data as unknown as Record<string, unknown>) as Partial<RemotePlayerState>), velocity: { x: 0, y: 0, z: 0 },isDead: false,health: 100});
     }
     this.h.onPlayerRespawn?.(data.playerId, data.position, data.rotation, data.armorClass);
   }

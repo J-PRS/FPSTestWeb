@@ -116,9 +116,9 @@ export class MapCatalog {
     // can host swaps in over the spec's default; one it can't leaves the
     // map's own ruleset in charge (a dm map never sprouts flag stands).
     if (spec && mode && spec.mode !== mode && specModes(spec).includes(mode)) {
-      spec = { ...spec, mode };
+      spec = { ...spec, mode};
     }
-    if (bots !== undefined) {spec = { ...spec, bots, botFill: bots } as MapSpec;}
+    if (bots !== undefined) {spec = ({ ...spec, bots,botFill: bots}) as MapSpec;}
     return { spec, src };
   }
 

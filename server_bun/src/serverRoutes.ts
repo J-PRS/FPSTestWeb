@@ -44,12 +44,12 @@ function opsAllowed(req: Request | undefined, url: URL): boolean {
 const opsClosed = () => corsResponse('unauthorized', { status: 401 });
 
 export function corsResponse(body: BodyInit | null, init?: ResponseInit): Response {
-  return new Response(body, { ...init, headers: { ...CORS_HEADERS, ...init?.headers } });
+  return new Response(body, ({ ...init, headers: Object.assign({}, CORS_HEADERS, init?.headers)}));
 }
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const json = (data: unknown, init?: ResponseInit) =>
-  corsResponse(JSON.stringify(data), { ...init, headers: JSON_HEADERS });
+  corsResponse(JSON.stringify(data), { ...init, headers: JSON_HEADERS});
 
 let _ice: unknown[] | null = null;
 function iceServers(): unknown[] {
@@ -219,7 +219,7 @@ export async function demoRoute(ctx: HttpCtx, req: Request, url: URL): Promise<R
       if (!meta.filename) {
         return json({ success: false, rejected: true, reason: 'Below minimum lifetime' });
       }
-      return json({ success: true, ...meta });
+      return json({success: true, ...meta});
     } catch (error) {
       const msg = (error as Error).message;
       logger.warn('Demo upload failed', { error: msg });

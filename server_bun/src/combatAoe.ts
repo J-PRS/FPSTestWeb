@@ -103,12 +103,7 @@ export class AoeClaims {
     const power = msg.power === undefined
       ? 1
       : Math.min(Math.max(msg.power, 0.2), 1.8);
-    this.h.blast.processAOE(playerId, msg.position, msg.excludeTargetId, {
-      ...stats,
-      aoeDamage: stats.aoeDamage * power,
-      aoeRadius: stats.aoeRadius * power,
-      knockbackForce: stats.knockbackForce * power,
-    }, { weapon: msg.weaponType });
+    this.h.blast.processAOE(playerId, msg.position, msg.excludeTargetId, { ...stats, aoeDamage: stats.aoeDamage * power,aoeRadius: stats.aoeRadius * power,knockbackForce: stats.knockbackForce * power}, { weapon: msg.weaponType });
   }
 
   /** Hitscan-class (Lightning beam): the claim names no projectile —
@@ -160,7 +155,7 @@ export class AoeClaims {
       }, victim.id, victim, false, dmg);
     }
     const scale = lgTickDamage(n) / LG_TICK_BASE;
-    this.h.blast.processAOE(playerId, msg.position, msg.excludeTargetId, { ...stats, aoeDamage: stats.aoeDamage * scale }, { weapon: msg.weaponType });
+    this.h.blast.processAOE(playerId, msg.position, msg.excludeTargetId, { ...stats, aoeDamage: stats.aoeDamage * scale}, { weapon: msg.weaponType });
   }
 
 }

@@ -796,7 +796,7 @@ export function enhanceWeaponMaterial(mat: THREE.Material): void {
   if (mat.userData.__grunge) {return;}
   mat.userData.__grunge = true;
   mat.onBeforeCompile = (sh) => {
-    if (WEARVIZ) {sh.defines = { ...sh.defines, WEARVIZ: 1 };}
+    if (WEARVIZ) {sh.defines = { ...sh.defines, WEARVIZ: 1};}
     sh.uniforms.uWearMap = { value: (mat.userData.__wearTex as THREE.Texture) ?? blankWearTex() };
     sh.uniforms.uGrimeMap = { value: (mat.userData.__grimeTex as THREE.Texture) ?? whiteTex() };
     // Materials can dose the effect up — gunmetal swarm species need a

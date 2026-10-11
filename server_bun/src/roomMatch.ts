@@ -165,7 +165,7 @@ export class MatchClock {
     this.endsAt = host.getHumanCount() > 0 ? simNow() + spec.timeLimitS * 1000 : 0;
     this.warned = false;
     this.overtime = false;
-    host.broadcast({ type: 'matchStart', mode: host.mode, scores: { ...host.scores } });
+    host.broadcast({ type: 'matchStart', mode: host.mode, scores: { ...host.scores} });
     host.onStarted?.();
   }
 }

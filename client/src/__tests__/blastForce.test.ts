@@ -63,16 +63,7 @@ const mkRig = (): Rig => {
   };
 };
 
-const args = (over: Partial<BlastArgs> = {}): BlastArgs => ({
-  pos: new THREE.Vector3(0, 0, 0),
-  radius: 10,
-  force: 20,
-  forceMode: 'push',
-  forceMultiplier: 1,
-  aoeDamage: 40,
-  directHitTargetId: null,
-  ...over,
-});
+const args = (over: Partial<BlastArgs> = {}): BlastArgs => (({pos: new THREE.Vector3(0, 0, 0),radius: 10,force: 20,forceMode: 'push',forceMultiplier: 1,aoeDamage: 40,directHitTargetId: null, ...over}));
 
 describe('applyExplosionForce — local player', () => {
   it('own blast shoves the player and stamps the prediction', () => {

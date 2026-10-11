@@ -558,7 +558,7 @@ export class BotRouting {
             ? { x: enemyStand.x + mx + px2 - ux * pull,
                 y: enemyFlagY,
                 z: enemyStand.z + mz + pz2 - uz * pull }
-            : { ...enemyStand };
+            : ({ ...enemyStand});
         } else {
         const inside = dStand < 80;
         // Re-scored EVERY think — the route stays live to foe movement —
@@ -772,7 +772,7 @@ export class BotRouting {
   private escortSpot(carrier: string | null | undefined, me: TeamId): (Vec3 & { vx?: number; vz?: number }) | null {
     const escortP = carrier ? this.room.players.getPlayer(carrier) : null;
     if (!escortP || escortP.team !== me) {return null;}
-    return { ...escortP.position, vx: escortP.velocity.x, vz: escortP.velocity.z };
+    return { ...escortP.position, vx: escortP.velocity.x,vz: escortP.velocity.z};
   }
 
   /** Closest hostile pressing our stand — the HoF body-block anchor.

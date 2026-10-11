@@ -310,5 +310,5 @@ export function deserializeDemo(buffer: ArrayBuffer): DemoFile {
     const remoteFrames = header.formatVersion >= 3 ? readRemoteFrames(r, roster.length) : [];
     const heightmap = header.formatVersion >= 5 ? readTrailerSections(r) : undefined;
     validateHeaderCounts(header, frames, projectileEvents, targetEvents);
-    return { header, frames, projectileEvents, targetEvents, roster, remoteFrames, ...(heightmap ? { heightmap } : {}) };
+    return {header,frames,projectileEvents,targetEvents,roster,remoteFrames, ...(heightmap ? { heightmap } : {})};
   }
