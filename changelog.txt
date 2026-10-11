@@ -1,3 +1,4 @@
+2026-10-11 - fix: finite gate on knockback/pull impulse ingest (NaN force couldn't reach vel)
 2026-10-11 - fix: streak resets at the kill edge (env deaths bypassed killFeed reset)
 2026-10-10 - fix: forceSendUntil read against wallNow() — it was compared to simT, a cross-domain read that only coincides while both clocks are Date.now() (warped sim = never lapses, frozen = never fires)
 2026-10-10 - correctness: local energy floor + inv(local-energy-bounds) — skill drains can overshoot between frames; pool mirrors the server law [0,cap]
