@@ -239,11 +239,15 @@ export class MoveSim {
     Object.assign(this.input, snap.input);
     this.wishJump = snap.wishJump; this.allowNextJump = snap.allowNextJump;
     Object.assign(this.lastJumpableNormal, snap.lastJumpableNormal);
-    this.groundedBuffered = snap.groundedBuffered; this.acc = snap.acc;
+    this.groundedBuffered = snap.groundedBuffered;
+    this.acc = Number.isFinite(snap.acc) ? snap.acc : 0;
     this.groundGraceT = snap.groundGraceT;
   }
 
   update(dt: number): void {
+    // NaN dt would poison acc permanently — `NaN >= STEP` never drains
+    // and the sim freezes until a snapshot/setState reseed.
+    if (!Number.isFinite(dt)) return;
     this.acc += Math.min(dt, MoveSim.MAX_DT);
     while (this.acc >= MoveSim.STEP) {
       this.acc -= MoveSim.STEP;

@@ -656,6 +656,13 @@ violation instead of a symptom hunt.
   direction or go invisible. Whitespace collapses, 24-char cap.
   Client renders names via textContent/esc() only (DOM ingest pass),
   so markup dies twice. Verified sealed, no fix.
+- **MoveSim accumulator (fixed):** `update(dt)` now gates
+  non-finite dt at the write site — one NaN frame used to poison
+  `acc` permanently (`NaN >= STEP` never drains, movement froze
+  until a snapshot/setState reseed). `applySnapshot` also gates
+  `acc` (0 on NaN) since it bypasses `setState`'s finite guard.
+  Inputs already finite-clamped at `setInput`; `setState` gates
+  pos/vel/yaw.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
