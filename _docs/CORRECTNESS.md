@@ -612,6 +612,13 @@ violation instead of a symptom hunt.
   the world bus — connected nodes aren't collectable); remote
   move audio is a pooled loop pair per remote, capped, evicting
   only silent slots.
+- **Deployable wire lanes (verified sealed):** every ingest is
+  finite-gated — `remoteSpawn` (pos+hp+armor), `mineBoom` (pos,
+  warns on drop), `deployHp` (hp+armor, heal-beam src separate);
+  roster reconcile evicts kind/owner mismatches on reused ids
+  before the absent-id reap (stale replicas can't ghost a new
+  room's counter); own plants get roster hp without a second
+  visual.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
