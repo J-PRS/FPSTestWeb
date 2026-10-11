@@ -121,7 +121,8 @@ violation instead of a symptom hunt.
   (local + remote), jump/jetpack effects, `onMineBoom`,
   `onSentryShot`; `net.push` covers the update lane. Roster/reconcile
   lanes: gameState remote reseat, sensorPing targets, teamScore/
-  ffaScore scoreboard state.
+  ffaScore scoreboard state, roster match-meta (scores/ffaScores/
+  matchEndsAt), restored yaw/pitch on local reseat.
 - **Trust boundary:** `MoveSim.setInput` clamps forward/right to [-1,1]
   finite and coerces booleans — doctored magnitude can't speedhack.
 - **Clock domains:** `SimMs` vs `WallMs` audited — `forceSendUntil` read
