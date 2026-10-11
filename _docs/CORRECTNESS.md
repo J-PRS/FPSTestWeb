@@ -561,6 +561,13 @@ violation instead of a symptom hunt.
   (CombatHandler), so the local ledger is prediction that the
   server ledger shadows; `beltTimer`/`throwLockT` cadence the
   regen. No client charge can go negative or exceed cap.
+- **Warp beacon lane (verified sealed):** the energy ante is
+  paid at throw (a beacon you can't afford can't exist, so the
+  release teleport is already paid); single-instance guard +
+  post-warp cooldown; 6s max-life fizzle; landing clamps
+  `max(beaconY+0.4, groundY+0.4)` — never inside terrain; and
+  `markTeleport` declares the jump so the server's plausibility
+  judge doesn't read it as a speedhack.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
