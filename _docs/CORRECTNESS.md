@@ -119,7 +119,9 @@ violation instead of a symptom hunt.
   roster-join vs per-tick asymmetry that leaked `deployHp` is closed.
   Presence lane sealed too: `onRemoteTeleport`, `onPlayerRespawn`
   (local + remote), jump/jetpack effects, `onMineBoom`,
-  `onSentryShot`; `net.push` covers the update lane.
+  `onSentryShot`; `net.push` covers the update lane. Roster/reconcile
+  lanes: gameState remote reseat, sensorPing targets, teamScore/
+  ffaScore scoreboard state.
 - **Trust boundary:** `MoveSim.setInput` clamps forward/right to [-1,1]
   finite and coerces booleans — doctored magnitude can't speedhack.
 - **Clock domains:** `SimMs` vs `WallMs` audited — `forceSendUntil` read
