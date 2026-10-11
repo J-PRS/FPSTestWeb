@@ -77,7 +77,7 @@ export namespace StateSnapshot {
         velocity: { ...player.velocity},
         health: player.health,
         isDead: player.isDead,
-        rotation: player.rotation ? ({ ...player.rotation}) : undefined
+        rotation: player.rotation ? (({ ...player.rotation})) : undefined
       });
     }
 
@@ -129,7 +129,7 @@ export namespace StateSnapshot {
    */
   export function exportSnapshots(): void {
     const data = {
-      snapshots: snapshotBuffer.map(s => (({ ...s, players: Array.from(s.players.entries())})))
+      snapshots: snapshotBuffer.map(s => ((({ ...s, players: Array.from(s.players.entries())}))))
     };
     
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });

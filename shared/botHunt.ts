@@ -124,7 +124,7 @@ export function newHuntState(spawn: BotVec, spec: BotSkillSpec = 'medium'): Hunt
   return {
     hunt: null,
     seenEnemies: [],
-    lastSeen: { ...spawn },
+    lastSeen: { ...spawn},
     lastSeenVel: { x: 0, y: 0, z: 0 },
     leadVel: { x: 0, y: 0, z: 0 },
     leadId: '',
@@ -212,7 +212,7 @@ function ghostPos(st: HuntState, ctx: BrainCtx, now: number): BotVec {
     y: st.lastSeen.y,
     z: st.lastSeen.z + st.leadVel.z * leadS,
   };
-  if (ctx.pickup && distSqXZ(g, ctx.pickup) < 30 * 30) {return { ...ctx.pickup };}
+  if (ctx.pickup && distSqXZ(g, ctx.pickup) < 30 * 30) {return { ...ctx.pickup};}
   return g;
 }
 
@@ -241,7 +241,7 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
     if (st.unreachUntil.size > 6) {
       for (const [id, until] of st.unreachUntil) {if (until <= now) {st.unreachUntil.delete(id);}}
     }
-    ectx = { ...ctx, enemies };
+    ectx = { ...ctx, enemies};
   }
   const seenAll: BotEnemy[] = [];
   const { player, beast: bestBeast, playerD: bestD, beastD: bestBeastD } = scanVisible(ectx, pos, range, beastRange, seenAll);
@@ -275,7 +275,7 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
         // the extrapolated line lands on a pickup, that's where he's
         // going — chase the errand, not the wake.
         pos: ghostPos(st, ctx, now),
-        vel: { ...st.leadVel },
+        vel: { ...st.leadVel},
       }
     : null;
   st.hunt = next ?? ghost;
@@ -293,8 +293,8 @@ st.huntTick += 1;
   // (soak: posted defenders firing one hillside spot "for no reason").
   const seen = best ?? thief;
   if (seen) {
-    st.lastSeen = { ...seen.pos };
-    st.lastSeenVel = { ...seen.vel };
+    st.lastSeen = { ...seen.pos};
+    st.lastSeenVel = { ...seen.vel};
     st.lastSeenAt = now;
     st.lastAimY = seen.aimY ?? CENTER_AIM_Y;
     // Opponent-model update — the tracker's running estimate drifts

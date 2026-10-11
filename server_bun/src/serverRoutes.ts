@@ -44,7 +44,7 @@ function opsAllowed(req: Request | undefined, url: URL): boolean {
 const opsClosed = () => corsResponse('unauthorized', { status: 401 });
 
 export function corsResponse(body: BodyInit | null, init?: ResponseInit): Response {
-  return new Response(body, ({ ...init, headers: Object.assign({}, CORS_HEADERS, init?.headers)}));
+  return new Response(body, (({ ...init, headers: Object.assign({}, CORS_HEADERS, init?.headers)})));
 }
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };

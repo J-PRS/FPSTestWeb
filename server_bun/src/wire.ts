@@ -64,7 +64,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
   join: {
     limit: { maxCount: 4, windowMs: 10_000 },
     validate: (obj) => typeof obj.playerId === 'string'
-      ? { success: true, data: ({ ...obj, type: 'join',playerId: obj.playerId}) as Extract<ClientMessage, { type: 'join' }> }
+      ? { success: true, data: (({ ...obj, type: 'join',playerId: obj.playerId})) as Extract<ClientMessage, { type: 'join' }> }
       : { success: false, error: 'join missing playerId' },
     handle: (h, id, m) => {
       if (m.playerId === id) {h.sendWorldState(id);}
@@ -100,7 +100,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
           input = { forward: i.forward, right: i.right, jump: i.jump, ski: i.ski, jet: isFiniteNumber(i.jet) ? i.jet : 0 };
         }
       }
-      return { success: true, data: { ...body.data, seq, inputSeq, ping, ...(input ? { input } : {}), type: 'position' } };
+      return { success: true, data: { ...body.data, seq,inputSeq,ping, ...(input ? { input } : {}), type: 'position' as const} };
     },
     handle: (h, id, m) => h.moves.handlePosition(id, m),
   },
@@ -115,7 +115,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     validate: (obj) => {
       const body = validateBody(obj);
       if (!body.success) {return body;}
-      return { success: true, data: { ...body.data, type: 'teleport' } };
+      return { success: true, data: { ...body.data, type: 'teleport' as const} };
     },
     handle: (h, id, m) => h.moves.handleTeleport(id, m),
   },
@@ -247,7 +247,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
         const pe = parseEdge(obj.prev);
         if (typeof pe !== 'string') {prev = pe;}
       }
-      return { success: true, data: { ...edge, prev, type: 'inputMove' } };
+      return { success: true, data: { ...edge, prev,type: 'inputMove' as const} };
     },
     handle: (h, id, m) => {
       const p = h.playerManager.getPlayer(id);

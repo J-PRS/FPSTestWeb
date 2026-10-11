@@ -51,7 +51,7 @@ export class InputStream {
     this.lastInputState = { ...input};
     this.lastInputRotation = { ...rotation};
     this.lastSentEdge = { seq, input: { ...input}, rotation: { ...rotation} };
-    send({ seq, input, rotation, ...(prev ? { prev } : {}), type: 'inputMove' });
+    send({seq,input,rotation, ...(prev ? { prev } : {}), type: 'inputMove' as const});
   }
 
   /** Hard-tolerance answer: the server's consumed input watermark fell

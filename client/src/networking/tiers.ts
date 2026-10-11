@@ -28,16 +28,16 @@ export interface TierOpts { net?: string }
  *  of the winning session. */
 function muteable(config: ConnectionConfig): { config: ConnectionConfig; arm(): void } {
   let armed = false;
+  const wrapped: Partial<ConnectionConfig> = {
+    onConnect: () => { if (armed) {config.onConnect?.();} },
+    onDisconnect: (c, r) => { if (armed) {config.onDisconnect?.(c, r);} },
+    onError: (e) => { if (armed) {config.onError?.(e);} },
+    onMessage: (m) => { if (armed) {config.onMessage?.(m);} },
+    onBinaryMessage: (b) => { if (armed) {config.onBinaryMessage?.(b);} },
+  };
   return {
     arm() { armed = true; },
-    config: {
-      ...config,
-      onConnect: () => { if (armed) {config.onConnect?.();} },
-      onDisconnect: (c, r) => { if (armed) {config.onDisconnect?.(c, r);} },
-      onError: (e) => { if (armed) {config.onError?.(e);} },
-      onMessage: (m) => { if (armed) {config.onMessage?.(m);} },
-      onBinaryMessage: (b) => { if (armed) {config.onBinaryMessage?.(b);} },
-    },
+    config: { ...config, ...wrapped},
   };
 }
 

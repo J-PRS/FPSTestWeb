@@ -80,6 +80,7 @@ for (const [f, sites] of Object.entries(byFile)) {
     }
     if (close < 0) { nSkip++; console.log('NOCLOSE', f, site.row + 1); continue; }
     const inner = text.slice(open + 1, close);
+    if (inner.includes('//') || inner.includes('/*')) { nSkip++; console.log('COMMENT', f, site.row + 1); continue; }
     const segs = splitTopLevel(inner);
     if (!segs.some(s => s.trim().startsWith('...'))) { nSkip++; continue; }
     const parts = [];

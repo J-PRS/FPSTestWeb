@@ -60,7 +60,7 @@ n += 1; fpsSum += s.fps; fpsMin = Math.min(fpsMin, s.fps);
       players: r.playerCount(),
       balls: r.ballSim.ballCount,
       clientStats: n ? { n, fpsAvg: Math.round(fpsSum / n), fpsMin, lossMax, pingMax } : undefined,
-      scores: r.modeSpec?.teams ? ({ ...r.scores}) : undefined,
+      scores: r.modeSpec?.teams ? (({ ...r.scores})) : undefined,
       // Bot CPU per stage as ms/sec over the last 10s window — a room
       // melting on think/drive shows it here instead of needing a soak.
       botMs: r.bots ? {

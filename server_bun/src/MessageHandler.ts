@@ -266,7 +266,7 @@ export class MessageHandler {
     if (seq === undefined) {return;}
     const ok = verdict === true;
     if (!ok) {this.hb(`claimrej.${kind}`);}
-    this.sendToPlayer(id, { kind, seq, ok, ...(ok ? {} : { reason: verdict }), type: 'claimAck' });
+    this.sendToPlayer(id, {kind,seq,ok, ...(ok ? {} : { reason: verdict }), type: 'claimAck' as const});
   }
   hbMax(key: string, v: number): void {
     const h = this.roomInfo.health;
@@ -415,7 +415,7 @@ export class MessageHandler {
       // Top level, not inside map: a bare arena (no bases/terrain) still
       // has a name, and the scoreboard title wants it either way.
       mapName: this.roomInfo.mapName?.(),
-      scores: this.roomInfo.scores ? ({ ...this.roomInfo.scores}) : undefined,
+      scores: this.roomInfo.scores ? (({ ...this.roomInfo.scores})) : undefined,
       ffaScores: this.roomInfo.ffaScores?.(),
       map: this.roomInfo.bases || this.roomInfo.structures || this.roomInfo.arena || this.roomInfo.terrain || this.roomInfo.heightScale || this.roomInfo.tileSize || this.roomInfo.fog
         ? (() => { const m = { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena, ambient: this.roomInfo.ambient, terrain: this.roomInfo.terrain, heightScale: this.roomInfo.heightScale, tileSize: this.roomInfo.tileSize, fog: this.roomInfo.fog, terrainTex: this.roomInfo.terrainTex, terrainPreset: this.roomInfo.terrainPreset, sky: this.roomInfo.sky, interiors: this.roomInfo.interiors };
@@ -530,13 +530,7 @@ export class MessageHandler {
     playersData: GameStatePlayer[],
     extras?: Record<string, unknown>,
   ): void {
-    this.sendToPlayer(playerId, {
-      players: playersData,
-      protocolVersion: PROTOCOL_VERSION,
-      ...this.roomEcho(),
-      ...extras,
-      type: 'gameState',
-    });
+    this.sendToPlayer(playerId, {players: playersData,protocolVersion: PROTOCOL_VERSION, ...this.roomEcho(), ...extras, type: 'gameState' as const});
   }
 
   /** Broadcast the playerJoined announce once — gates on the flag so a

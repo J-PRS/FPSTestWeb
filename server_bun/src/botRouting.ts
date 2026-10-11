@@ -157,7 +157,7 @@ export class BotRouting {
     f.pos = pos;
     f.n = stand !== undefined && f.stand !== undefined && dist3(f.stand, stand) < 1
       ? (f.n ?? 0) + 1 : 1;
-    if (stand !== undefined) {f.stand = { ...stand };}
+    if (stand !== undefined) {f.stand = { ...stand};}
     f.at = simNow();
     this.routeFailed.set(id, f);
   }
@@ -203,7 +203,7 @@ export class BotRouting {
     if (!prev || simNow() - prev.at > BotRouting.PUSH_HOLD_MS) {
       this.pushCalls.set(me, (this.pushCalls.get(me) ?? 0) + 1);
     }
-    this.pushAt.set(me, { pos: { ...pos }, at: simNow() });
+    this.pushAt.set(me, { pos: { ...pos}, at: simNow() });
   }
 
   /** Live push-call for this team, or null once it ages out — the
@@ -290,7 +290,7 @@ export class BotRouting {
       home: own.home,
       // Own flag's carrier — chase the thief, not the base; velocity
       // rides along so the pick can lead the run, not the wake.
-      thief: ((t) => t ? { ...t.pos, vx: t.vel.x, vz: t.vel.z } : null)(this.thiefOf(me)),
+      thief: ((t) => t ? ({ ...t.pos, vx: t.vel.x,vz: t.vel.z}) : null)(this.thiefOf(me)),
       // Own flag dropped — anyone close enough touches it home.
       dropped: own.state === 'dropped' ? own.pos : null,
       enemyStand,
@@ -435,7 +435,7 @@ export class BotRouting {
         }
         let routed = false;
         if (pressing) {
-          goalPos = { ...enemyStand };
+          goalPos = { ...enemyStand};
           routed = true;
         } else if (incLive) {
           // An incumbent entry is a commitment, not a suggestion: chase
@@ -450,17 +450,17 @@ export class BotRouting {
           // but an entry the bot hasn't approached in 30s is a wall.
           const dEntry = Math.hypot(incLive.pos.x - p.position.x, incLive.pos.z - p.position.z);
           if (dEntry < 45) {
-            this.routeHold.set(p.id, { stand: enemyStand, pos: { ...enemyStand }, at: simNow() });
-            goalPos = { ...enemyStand };
+            this.routeHold.set(p.id, { stand: enemyStand, pos: { ...enemyStand}, at: simNow() });
+            goalPos = { ...enemyStand};
           } else if (incLive.minD === undefined || dEntry < incLive.minD - 20) {
             incLive.minD = dEntry;
             incLive.at = simNow();
-            goalPos = { ...incLive.pos };
+            goalPos = { ...incLive.pos};
           } else if (simNow() - incLive.at > 30_000) {
             this.routeHold.delete(p.id);
             this.failRoute(p.id, incLive.pos, enemyStand);
           } else {
-            goalPos = { ...incLive.pos };
+            goalPos = { ...incLive.pos};
           }
           routed = goalPos !== pick;
         }
@@ -508,7 +508,7 @@ export class BotRouting {
           // sees `pressing` instead of re-running the ring probe —
           // laneClear approaches used to leave no trace, so every
           // overshoot re-entered routing and picked a hilltop entry.
-          this.routeHold.set(p.id, { stand: enemyStand, pos: { ...enemyStand }, at: simNow() });
+          this.routeHold.set(p.id, { stand: enemyStand, pos: { ...enemyStand}, at: simNow() });
           // Two human corrections on the final run:
           // - Altitude pull: a ballistic runner can't dive, so aim the
           //   landing short of the flag and skim through it at grab height.
@@ -558,7 +558,7 @@ export class BotRouting {
             ? { x: enemyStand.x + mx + px2 - ux * pull,
                 y: enemyFlagY,
                 z: enemyStand.z + mz + pz2 - uz * pull }
-            : ({ ...enemyStand});
+            : (({ ...enemyStand}));
         } else {
         const inside = dStand < 80;
         // Re-scored EVERY think — the route stays live to foe movement —
@@ -671,8 +671,8 @@ export class BotRouting {
         const frStale = this.routeFailed.get(p.id);
         if (frStale && (frStale.n ?? 0) >= 2 && frStale.stand !== undefined
           && simNow() - frStale.at < 90_000 && dist3(frStale.stand, enemyStand) < 1) {
-          this.routeHold.set(p.id, { stand: enemyStand, pos: { ...enemyStand }, at: simNow() });
-          goalPos = { ...enemyStand };
+          this.routeHold.set(p.id, { stand: enemyStand, pos: { ...enemyStand}, at: simNow() });
+          goalPos = { ...enemyStand};
           routed = goalPos !== pick;
         } else {
         // The flood's own near-stand route point joins the ring as a

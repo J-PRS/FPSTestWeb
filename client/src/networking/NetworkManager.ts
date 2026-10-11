@@ -784,13 +784,7 @@ this.sendDrops += 1;
     if (a.excludeTargetId && a.excludeTargetId !== 'local') {
       this.ledger.noteShot(`aoe:${a.excludeTargetId}`, a.excludeTargetId, a.weaponType);
     }
-    this.send({
-      ...a,
-      excludeTargetId: a.excludeTargetId ?? null,
-      projectileId: a.projectileId ?? undefined,
-      fireAt: this.serverNowMs(),
-      type: 'aoeShot',
-    });
+    this.send({ ...a, excludeTargetId: a.excludeTargetId ?? null,projectileId: a.projectileId ?? undefined,fireAt: this.serverNowMs(),type: 'aoeShot' as const});
   }
 
   /** Slam landing intent — the server derives blast power from its own
@@ -814,7 +808,7 @@ this.sendDrops += 1;
    *  spawn hint + echo binding; the server derives truth itself. */
   sendShotFired(a: { weaponType?: number; dir?: { x: number; y: number; z: number }; pos?: { x: number; y: number; z: number }; shotId?: string }): void {
     if (!this.connected) {return;}
-    this.send({ type: 'shotFired', ...a, fireAt: this.serverNowMs() });
+    this.send({type: 'shotFired' as const, ...a, fireAt: this.serverNowMs()});
   }
 
   sendProjectileDestroy(projectileId: string, shotId?: string): void {
