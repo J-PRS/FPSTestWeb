@@ -309,8 +309,8 @@ function restoreLocalPlayer(ctx: NetCtx, localPlayerState: LocalPlayerState): vo
   noteLocalSnap();
   deps.setLastSentPos({ x: p.x, y: p.y, z: p.z });
 
-  player.health = localPlayerState.health;
-  player.armor = localPlayerState.armor ?? 0;
+  if (Number.isFinite(localPlayerState.health)) player.health = localPlayerState.health;
+  player.armor = Number.isFinite(localPlayerState.armor) ? localPlayerState.armor! : 0;
   player.isDead = localPlayerState.isDead;
   player.syncMovement(); // reseat controller — restored pos/vel otherwise revert
   // A join reseat is a declared discontinuity like any respawn — without

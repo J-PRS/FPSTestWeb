@@ -111,8 +111,8 @@ export function wirePickups(ctx: NetCtx): void {
   networkManager.onBuff = (msg) => {
     if (deps.world.playbackMode) {return;}
     const p = deps.lazyPlayer();
-    if (msg.health !== undefined) {p.health = msg.health;}
-    if (msg.armor !== undefined) {p.armor = msg.armor;}
+    if (msg.health !== undefined && Number.isFinite(msg.health)) {p.health = msg.health;}
+    if (msg.armor !== undefined && Number.isFinite(msg.armor)) {p.armor = msg.armor;}
     if (msg.until !== undefined) {
       if (msg.kind === 'regen') {p.buffUntil.regen = msg.until;}
       if (msg.kind === 'dd') {p.buffUntil.dd = msg.until;}
