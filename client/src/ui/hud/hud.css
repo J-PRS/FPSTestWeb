@@ -576,6 +576,14 @@ body:has(#hud.cm-open) #healthbar-container {
 }
 #team-score .a { color: #55aaff; } #team-score .b { color: #ff8855; }
 #team-score .sep { color: #8899aa; margin: 0 10px; font-weight: 400; font-size: 13px; }
+/* Classic mode's Unity-style top-center: "score - kills" over seconds. */
+#classic-score {
+  position: absolute; top: var(--z-tc-1); left: 50%; transform: translateX(-50%);
+  display: none; text-align: center; pointer-events: none; white-space: nowrap;
+  font: 700 18px/1.3 monospace; letter-spacing: 0.08em; color: #cdd9e5;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 8px #000, 1px 1px 0 #000;
+}
 /* Match meta strip under the score — clock + flag chips. Only shows
    in matches that declare them (same gate as the score strip). */
 #match-status {

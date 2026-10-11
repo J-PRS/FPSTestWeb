@@ -376,6 +376,7 @@ export function logHitScore(c: CombatCtx, p: Projectile, target: 'ball' | 'playe
   const dist = p.hitDistance;
   const air = p.hitAge;
   const score = Math.round(acc * dist * air);
+  deps.lazyPlayer().score += score;
   deps.logger.info(`[Hit] ${target}${targetId ? ` ${targetId}` : ''} direct=${p.directHit} air=${airborne} accRaw=${p.hitAccuracy.toFixed(2)} acc=${acc.toFixed(1)} dist=${dist.toFixed(1)} air=${air.toFixed(2)}s score=${score}`);
   if (airborne) deps.fragMessages.showScore(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`, air);
   deps.lazyHud().showHitMarker();

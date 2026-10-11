@@ -49,6 +49,7 @@ export class HUD {
   private teamScore: HTMLDivElement;
   private tsA: HTMLElement;
   private tsB: HTMLElement;
+  private classicScore: HTMLDivElement;
   armor: HTMLSpanElement  // public — HudStats family paints it;
   armorBar: HTMLDivElement  // public — HudStats family paints it;
   buffsRow: HTMLDivElement  // public — HudStats family paints it;
@@ -87,6 +88,7 @@ export class HUD {
     this.teamScore = d.teamScore;
     this.tsA = d.tsA;
     this.tsB = d.tsB;
+    this.classicScore = d.classicScore;
     this.matchStatus = d.matchStatus;
     this.matchClock = d.matchClock;
     this.flagA = d.flagA;
@@ -210,6 +212,23 @@ export class HUD {
     this.teamScore.style.display = 'block';
     this.tsA.textContent = String(a);
     this.tsB.textContent = String(b);
+  }
+
+  /** ?mode=classic top-center readout — the Unity layout: "score - kills"
+   *  over a running-seconds clock. null hides it (non-classic modes). */
+  private lastClassicKey = '';
+  setClassicScore(parts: { score: number; kills: number; seconds: number } | null): void {
+    if (!parts) {
+      if (this.lastClassicKey !== 'off') { this.lastClassicKey = 'off'; this.classicScore.style.display = 'none'; }
+      return;
+    }
+    this.classicScore.style.display = 'block';
+    // Two children, written independently — the clock rolls at frame rate.
+    const line = `${parts.score} - ${parts.kills}`;
+    const kids = this.classicScore.children;
+    if (kids[0]!.textContent !== line) {kids[0]!.textContent = line;}
+    const time = parts.seconds.toFixed(2);
+    if (kids[1]!.textContent !== time) {kids[1]!.textContent = time;}
   }
 
   /** Match clock + flag chips under the score strip. null hides the
