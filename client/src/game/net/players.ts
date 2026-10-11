@@ -122,6 +122,8 @@ function wirePlayerCombat(ctx: NetCtx): void {
   // Server tells us to apply knockback/pull to our local player
   networkManager.onKnockback = (position: { x: number; y: number; z: number }, force: number, pull?: boolean) => {
     if (deps.world.playbackMode) return; // replay owns the camera's body
+    inv('wire-knockback-finite', finiteVec(position) && Number.isFinite(force), { position, force });
+    if (!finiteVec(position) || !Number.isFinite(force)) return;
     // Already predicted this blast locally at detonation — the echo would
     // double the shove. Consume the stamp and drop the message.
     const stamps = deps.world.selfBlastStamps;

@@ -231,6 +231,12 @@ function checkFlightLegality(args: {
   if (!Number.isFinite(airtime) || airtime < 0) {
     return { ok: false, reason: 'bad airtime' };
   }
+  // NaN position components pass every distance comparison below
+  // (NaN > x is always false) — a non-finite end point would otherwise
+  // sail through reach and target-proximity checks into an accepted hit.
+  if (!Number.isFinite(endPos.x + endPos.y + endPos.z)) {
+    return { ok: false, reason: 'non-finite end position' };
+  }
 
   // Airtime can't exceed wall-clock age since the spawn claim.
   const elapsed = (now - projectile.spawnAt) / 1000;
@@ -334,6 +340,9 @@ export function validateHitClaim(args: {
   // airtime (core body + grown wake) of the target's capsule.
   const stats = getWeaponStats(projectile.weaponType);
   const legalRadius = Math.max(stats.bodyRadius, hitRadiusAt(projectile.weaponType, flight.airtime));
+  if (!Number.isFinite(targetPos.x + targetPos.y + targetPos.z)) {
+    return { ok: false, reason: 'non-finite target position' };
+  }
   const dist = pointToCapsuleDistance(hitPos, targetPos, args.targetClass);
   const bodyRadius = classCapsule(args.targetClass).radius;
   if (dist > bodyRadius + legalRadius + TARGET_SLACK) {
