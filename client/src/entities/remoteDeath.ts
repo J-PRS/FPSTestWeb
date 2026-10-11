@@ -75,9 +75,10 @@ export function stepCorpse(s: CorpseState, dt: number, terrain: Terrain | null):
   s.rotation.pitch += s.angularVelocity.y * dt;
   s.rotation.roll += s.angularVelocity.z * dt;
 
-  // Ground collision with bounce (flat 0 fallback without terrain)
+  // Ground collision with bounce (flat 0 fallback without terrain). A
+  // NaN floor isn't a floor — skip the bounce or the corpse falls forever.
   const groundY = terrain ? terrain.getHeight(s.position.x, s.position.z) : 0;
-  if (s.position.y < groundY) {
+  if (Number.isFinite(groundY) && s.position.y < groundY) {
     s.position.y = groundY;
     s.velocity.y = -s.velocity.y * BOUNCE_Y;
     s.velocity.x *= FRICTION_XZ;
