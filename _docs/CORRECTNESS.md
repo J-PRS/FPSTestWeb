@@ -432,6 +432,13 @@ violation instead of a symptom hunt.
   no sky-forts, no buried claims), per-player cap recycles
   oldest, team stamps at plant time (a later side-switch can't
   desync gear loyalty), owner death clears items AND repair keys.
+- **Pickup collect lane (verified sealed):** no client collect
+  claim exists — the server sweeps swept-segment proximity per
+  tick (a full-speed ski can't tunnel through the ring), armT
+  grace skips still-flying gems, gem/tag kinds require a team,
+  the grab is planar+6y (a jetpack flyover isn't a touch),
+  reach scales with the pickup perk, and `prevPos` prunes
+  departed ids so stale anchors can't span idle time.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
