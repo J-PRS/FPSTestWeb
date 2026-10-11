@@ -44,7 +44,9 @@ export interface BallRageHost {
   emissive: THREE.Color;
   color: THREE.Color;
   trails: { burst(n: number, pos: THREE.Vector3, r: number, c: THREE.Color): void };
-  ribbons: { clear(): void }[];
+  /** Position jump: stop the old tails so they FADE OUT in place —
+   *  never hard-clear; a one-frame vanish reads as a glitch. */
+  retireRibbons(): void;
   spawnPopT: number;
   onBounce?: (pos: THREE.Vector3, vel: THREE.Vector3) => void;
 }
@@ -263,8 +265,9 @@ function teleportNearPlayer(b: BallRageHost, terrain: Terrain, playerPos: THREE.
   const tg = terrain.getHeight(b.pos.x, b.pos.z);
   b.pos.y = (Number.isFinite(tg) ? tg : 0) + b.radius + BALL_TELE_MARGIN;
 
-  // Position jumped — cut the ribbons so they don't streak across the teleport
-  for (const r of b.ribbons) {r.clear();}
+  // Position jumped — retire the ribbons so they fade where they were;
+  // a clear() would vanish the whole tail in one frame.
+  b.retireRibbons();
   // Spring-in + dust puff — the re-arrival should read as an eruption,
   // not a hard pop into existence.
   b.spawnPopT = SPAWN_POP_S;

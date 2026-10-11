@@ -90,8 +90,8 @@ export function tickBallTrails(b: Ball, dt: number, viewPos: THREE.Vector3): voi
     }
     // A segment correction blends through renderOffset over ~0.5s — the
     // render pos sweeps tens of meters and every follower (ribbon, dots)
-    // paints the sweep as a chord. Kill the ribbons while a big blend is
-    // in flight; they restart from the corrected arc when it lands.
+    // paints the sweep as a chord. Retire the ribbons while a big blend
+    // is in flight; fresh ones restart from the corrected arc when it lands.
     const offSq = b.renderOffset.lengthSq();
     if (offSq > 400) {
       if (!b._blendCut) {
@@ -105,8 +105,9 @@ export function tickBallTrails(b: Ball, dt: number, viewPos: THREE.Vector3): voi
           const skew = b.netS.lastSimNow >= 0 ? Math.round((b.netS.simT - b.netS.lastSimNow) * 1000) : 0;
           glitch('render-blend', { netId: b.netId ?? -1, offM: Math.round(Math.sqrt(offSq)), skewMs: skew });
         }
+        // Retire, not clear — the old tails FADE OUT where they were.
+        b.retireRibbons();
       }
-      for (const r of b.ribbons) {r.clear();}
     } else {
       b._blendCut = false;
     }

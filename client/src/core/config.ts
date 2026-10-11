@@ -90,7 +90,8 @@ export const MELEE_LUNGE = 8;    // forward shove on swing
 export { MELEE_CREATURE_DAMAGE as MELEE_DAMAGE } from '../../../shared/weapons.js';
 
 // Game constants
-export const BALL_SPAWN_INTERVAL = 2.5; // Seconds between ball spawns
+// Spawn cadence is the OG RadialSpawner policy in entities.ts: random
+// 0-10s trickle under BALL_MAX + instant refill when the field is empty.
 
 // Ball constants
 // The flight/enrage/teleport envelope is authored in shared/ballSim.ts —
@@ -100,8 +101,9 @@ export {
   BALL_MAX_DIST, BALL_TELE_MIN, BALL_TELE_MAX, BALL_TELE_MARGIN,
   BALL_ENRAGE_FORCE, BALL_ENRAGE_TIMEOUT, BALL_ENRAGE_DASH_DIST,
   BALL_ENRAGE_DASH_SPEED, BALL_BASE_RADIUS,
+  BALL_SLIDE_VN_MIN, BALL_SLIDE_ENABLED, setBallSlide,
 } from '../../../shared/ballSim.js';
-export const BALL_MAX = 10; // Maximum number of balls in play
+export const BALL_MAX = 32; // Maximum number of balls in play (OG maxSpawnCount parity)
 
 // Ball enrage mode: instead of teleporting when out of range, far balls get
 // angry and are pulled toward the player while still bouncing normally.

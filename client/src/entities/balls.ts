@@ -10,7 +10,7 @@ import type { ColliderIndex } from '../../../shared/solidWorld.js';
 import { type Heightfield, hmFingerprint } from '../../../shared/heightfield.js';
 import { type NetBag, newNetBag, type NetStatics, type NetSeg, tickNet, isStaleSeg, applySeg } from './ballNet.js';
 import Logger from '../core/Logger.js';
-import { RibbonTrail } from '../effects/RibbonTrail.js';
+import { RibbonTrail, DyingRibbons } from '../effects/RibbonTrail.js';
 import type { TrailDriver } from '../effects/vfxRuntime.js';
 import { BallTrailDots } from '../effects/ballTrails.js';
 import { tickStallBreaker as tickStall, tickEnrage as tickRage, handleGroundBounce as groundBounce, setEnraged as rageSet } from './ballRage.js';
@@ -227,6 +227,9 @@ export class Ball {
   readonly _rpos = new THREE.Vector3(); // pos + renderOffset, scratch
 
   private static lastBoundFp = '';
+  /** Teleported balls' old tails — stopped, fading where they were left. */
+  private static dyingRibbons = new DyingRibbons();
+  static updateDyingRibbons(dt: number): void { Ball.dyingRibbons.update(dt, Ball.viewPos); }
 
   /** One-time init: the heightfield the shared sim needs for bounce prediction. */
   static initNetMode(force = false): void {
@@ -243,7 +246,8 @@ export class Ball {
   }
 
   constructor(scene: THREE.Scene, terrain: Terrain, variant: 0 | 1 | 2 | 3 = 0,
-    netSpawn?: { id: number; x: number; y: number; z: number; vx: number; vy: number; vz: number; colorIdx: number }) {
+    netSpawn?: { id: number; x: number; y: number; z: number; vx: number; vy: number; vz: number; colorIdx: number },
+    center?: THREE.Vector3) {
     this.scene = scene;
     this.id = nextTargetId();
     this.variant = variant;
@@ -276,10 +280,7 @@ export class Ball {
     // Scale color energy down — additive stacking made full-strength colors
     // eye-searing; these are emission intensities, not hues
     this.trails = new BallTrailDots(scene);
-    this.ribbons = [
-      RibbonTrail.acquire(scene, { color: this.color.clone().multiplyScalar(0.55).getHex(), width: this.radius * 1.2, life: 0.5, billboard: true, tag: 'ball' }),
-      RibbonTrail.acquire(scene, { color: coreColor.multiplyScalar(0.7).getHex(), width: this.radius * 0.45, life: 0.4, billboard: true, tag: 'ball' }),
-    ];
+    this.ribbons = this.acquireRibbons(coreColor);
 
     if (netSpawn) {
       // Server-owned spawn — pos/vel/color come off the wire, nothing rolled
@@ -292,16 +293,20 @@ export class Ball {
         { x: netSpawn.x, y: netSpawn.y, z: netSpawn.z },
         { x: netSpawn.vx, y: netSpawn.vy, z: netSpawn.vz });
     } else {
-      const rx = (Math.random() - 0.5) * 400;
-      const rz = (Math.random() - 0.5) * 400;
-      const gy = terrain.getHeight(rx, rz);
-      // OG-style: born ON the surface and tossed roughly upward — a small
-      // horizontal scatter keeps it from being a straight fountain.
-      this.pos = new THREE.Vector3(rx, (Number.isFinite(gy) ? gy : 0) + this.radius + 1, rz);
-
+      // OG RadialSpawner parity: a point on the 100-400m ring around the
+      // player, dropped ~5m over the surface, tossed UP at 32-64 m/s with
+      // a two-die triangular horizontal scatter (peak 0, tail ±32), the
+      // whole impulse scaled by 1/scale so big variants launch slower.
+      const cx = center?.x ?? 0, cz = center?.z ?? 0;
       const ang = Math.random() * Math.PI * 2;
-      const hs = 3 + Math.random() * 9;
-      this.vel = new THREE.Vector3(Math.cos(ang) * hs, 25 + Math.random() * 20, Math.sin(ang) * hs);
+      const ring = 100 + Math.random() * 300;
+      const rx = cx + Math.cos(ang) * ring, rz = cz + Math.sin(ang) * ring;
+      const gy = terrain.getHeight(rx, rz);
+      this.pos = new THREE.Vector3(rx, (Number.isFinite(gy) ? gy : 0) + this.radius + 5, rz);
+
+      const tri = (): number => (Math.random() + Math.random() - 1) * 32;
+      const k = 1 / this.scale;
+      this.vel = new THREE.Vector3(tri() * k, (32 + Math.random() * 32) * k, tri() * k);
     }
 
     if (!allocSlots('ball', this)) { this.dead = true; this._disposed = true; }
@@ -400,6 +405,32 @@ export class Ball {
   applyNetSegment(seg: NetSeg): void { applySeg(this.netS, this, seg); }
 
   /** Server said dead — the updateDead path fades trails as usual. */
+  private acquireRibbons(coreColor?: THREE.Color): RibbonTrail[] {
+    const core = coreColor ?? this.color.clone().lerp(new THREE.Color(1, 1, 1), 0.7);
+    const out = [
+      RibbonTrail.acquire(this.scene, { color: this.color.clone().multiplyScalar(0.55).getHex(), width: this.radius * 1.2, life: 0.5, billboard: true, tag: 'ball' }),
+      RibbonTrail.acquire(this.scene, { color: core.multiplyScalar(0.7).getHex(), width: this.radius * 0.45, life: 0.4, billboard: true, tag: 'ball' }),
+    ];
+    // TrailDriver sets follow only on the ribbons it was built with —
+    // retired replacements must inherit the tail anchor themselves.
+    for (const r of out) {r.follow = this.pos;}
+    return out;
+  }
+
+  /** Position jump (leash teleport, playback snap): the old tails stop
+   *  emitting and FADE OUT where they were — never a one-frame vanish —
+   *  while fresh ribbons take over at the new spot. Swap is IN PLACE:
+   *  TrailDriver captured this array at construction — a fresh array
+   *  would leave it pushing into the retired ribbons forever. */
+  retireRibbons(): void {
+    // Drop follow BEFORE handing over — else each fading tail's head
+    // sample re-pins to the teleported pos and drags the streak along.
+    for (const r of this.ribbons) {r.follow = null;}
+    Ball.dyingRibbons.fadeAll(this.ribbons);
+    this.ribbons.length = 0;
+    this.ribbons.push(...this.acquireRibbons());
+  }
+
   netKill(): void {
     this.dead = true;
   }

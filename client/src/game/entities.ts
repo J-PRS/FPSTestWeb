@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { BALL_SPAWN_INTERVAL, BALL_MAX } from '../core/config.js';
+import { BALL_MAX } from '../core/config.js';
 import { urlParams } from '../core/params.js';
 import * as sfx from '../core/sfx.js';
 import { createNetBalls } from './netBalls.js';
@@ -67,6 +67,8 @@ function createBallField(f: BallFieldDeps) {
   const { deps, balls, targets } = f;
   const { scene, camera } = deps;
   let ballTimer = 0;
+  // OG RadialSpawner cadence: random 0-10s trickle, instant refill on wipeout
+  let nextBallSpawn = Math.random() * 10;
   let ballSnapshotTimer = 0;
 
 // Wire bounce/peak keyframe callbacks so demo clips replay this ball accurately
@@ -95,7 +97,7 @@ function spawnBall(): void {
 // Shared spawn path — director events need to spawn specific variants
 function spawnBallOfVariant(variant: 0 | 1 | 2 | 3): Ball {
   const dm = deps.lazyDemoManager();
-  const ball = new Ball(scene, deps.lazyTerrain(), variant);
+  const ball = new Ball(scene, deps.lazyTerrain(), variant, undefined, deps.lazyPlayer().pos);
   balls.push(ball);
   targets.push(ball);
   if (ball.variant === 3) ball.onDeath = (t) => spawnSplitChildren(t);
@@ -146,16 +148,23 @@ function updateBalls(dt: number): void {
 
   const netMode = f.serverBalls();
   ballTimer += dt;
-  if (!netMode && ballTimer >= BALL_SPAWN_INTERVAL) {
+  if (!netMode && (balls.length === 0 || ballTimer >= nextBallSpawn)) {
     ballTimer = 0;
+    nextBallSpawn = Math.random() * 10;
     spawnBall();
   }
 
   Ball.viewPos.copy(camera.position); // feeds billboarded ball ribbon trails
+  Ball.updateDyingRibbons(dt); // retired teleport tails fade out where they were
   for (let i = balls.length - 1; i >= 0; i--) {
     const b = balls[i]!;
     if (netMode && !b.netDriven && !b.dead) b.netKill(); // cull pre-connect locals
-    b.update(dt, deps.lazyTerrain(), b.netDriven ? f.netTargetPosFor(b) : f.aggroFor(b, b.pos, dt, PROFILES.fodder));
+    // Classic: docile balls leash straight to the player — aggroFor would
+    // degrade to a wander waypoint near the BALL once its fodder leash drops
+    // the target, and the >200m drift check would never fire again.
+    b.update(dt, deps.lazyTerrain(), b.netDriven ? f.netTargetPosFor(b)
+      : f.classicMode ? deps.lazyPlayer().pos
+      : f.aggroFor(b, b.pos, dt, PROFILES.fodder));
     f.kickDust(b, dt); // bounce frames puff — airborne frames don't
     // Only remove ball when trails have fully faded out
     if (b.disposed) f.removeTarget(balls, i, b);

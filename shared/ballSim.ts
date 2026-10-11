@@ -51,6 +51,15 @@ export const BALL_REST_SPEED = 6.0;
 // (the enrage launch), this just fires it on boredom instead of distance.
 export const BALL_MIN_SPEED = 5.0;
 export const BALL_STALL_TIME = 2.0;
+// Dead-contact threshold — PhysX's bounceThresholdVelocity (~0.2*gravity).
+// A contact whose NORMAL approach speed |v·n| is below this is a
+// zero-restitution slide: the inward normal velocity is cancelled and the
+// tangential rides on, instead of reflecting a feeble kick. Elastic
+// reflection at grazing incidence is the micro-skip storm — PhysX never
+// had it because it never reflected sub-threshold contacts.
+export const BALL_SLIDE_VN_MIN = 6.0;
+export let BALL_SLIDE_ENABLED = true;
+export function setBallSlide(on: boolean): void { BALL_SLIDE_ENABLED = on; }
 
 export type BallVariant = 0 | 1 | 2 | 3;
 
@@ -183,6 +192,7 @@ function enragePull(b: SimBall, dt: number, field: Heightfield, target: SimVec |
   }
   if (b.enrageTimer <= BALL_ENRAGE_TIMEOUT) return undefined;
   b.enraged = false;
+  b.enrageTimer = 0; // budget spent — the next enrage gets a fresh 20s
   if (authoritative) return teleportNearTarget(b, field, target, rand ?? botRand);
   return null; // predictor: let it fly, the event will snap it
 }
@@ -218,24 +228,36 @@ function groundContact(b: SimBall, _dt: number, field: Heightfield, target: SimV
     b.vx = 0; b.vy = 0; b.vz = 0;
     return null;
   }
-  const elasticity = (b.dampNextBounce || impactSpeed > BALL_OVERSPEED) ? 0.5 : BALL_BOUNCE;
-  b.dampNextBounce = false;
-  const k = -(1.0 + elasticity) * dot;
-  b.vx += _n.x * k;
-  b.vy += _n.y * k;
-  b.vz += _n.z * k;
+  let seg: SegmentKind | null = 'bounce';
+  if (BALL_SLIDE_ENABLED && -dot < BALL_SLIDE_VN_MIN) {
+    // Slide, don't reflect — cancel the inward normal component only.
+    // No segment: predictors reach the identical contact and slide too.
+    b.vx -= _n.x * dot;
+    b.vy -= _n.y * dot;
+    b.vz -= _n.z * dot;
+    seg = null;
+  } else {
+    const elasticity = (b.dampNextBounce || impactSpeed > BALL_OVERSPEED) ? 0.5 : BALL_BOUNCE;
+    b.dampNextBounce = false;
+    const k = -(1.0 + elasticity) * dot;
+    b.vx += _n.x * k;
+    b.vy += _n.y * k;
+    b.vz += _n.z * k;
+  }
 
   // Drift check: too far from the committed target → enrage spring (the
   // authority decides; the predictor sees it on the segment event anyway).
   if (target && (b.x - target.x) ** 2 + (b.z - target.z) ** 2 > BALL_MAX_DIST * BALL_MAX_DIST) {
     // launchAt is RNG-free — the predictor commits the same enrage spring
     // the authority does instead of waiting one tick for the segment.
+    // enrageTimer is NOT reset: a dash overshoot that rockets out the far
+    // side re-enrages every bounce, and zeroing the budget each cycle made
+    // the 20s teleport deadline unreachable — balls orbited ±200m forever.
     b.enraged = true;
-    b.enrageTimer = 0;
     launchAt(b, target, Math.SQRT1_2);
     return 'enrage';
   }
-  return 'bounce';
+  return seg;
 }
 
 function launchAt(b: SimBall, target: SimVec, upFrac: number): void {
@@ -270,16 +292,16 @@ function teleportNearTarget(b: SimBall, field: Heightfield, target: SimVec, rand
   b.x = target.x + Math.cos(ang) * dist;
   b.z = target.z + Math.sin(ang) * dist;
   b.y = hmHeight(field, b.x, b.z) + b.radius + BALL_TELE_MARGIN;
-  const speed = Math.hypot(b.vx, b.vy, b.vz) || 1;
-  hmNormal(field, b.x, b.z, _n);
-  const dot = b.vx * _n.x + b.vy * _n.y + b.vz * _n.z;
-  const k = -2.0 * dot * BALL_BOUNCE;
-  b.vx += _n.x * k;
-  b.vy += _n.y * k;
-  b.vz += _n.z * k;
-  const m = Math.hypot(b.vx, b.vy, b.vz) || 1;
-  const s = speed / m;
-  b.vx *= s; b.vy *= s; b.vz *= s;
+  // Preserve speed, redirect mostly UP with random horizontal tilt — same
+  // policy as ballRage.teleportNearPlayer. A flat skimmer re-arriving flat
+  // just keeps skimming; the leash exists to put it back in the air.
+  const speed = Math.max(Math.hypot(b.vx, b.vy, b.vz) || 1, 14);
+  const upFrac = 0.75 + rand() * 0.2;
+  const a2 = rand() * Math.PI * 2;
+  const hsp = speed * Math.sqrt(1 - upFrac * upFrac);
+  b.vx = Math.cos(a2) * hsp;
+  b.vy = speed * upFrac;
+  b.vz = Math.sin(a2) * hsp;
   return 'teleport';
 }
 
