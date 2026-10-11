@@ -157,7 +157,30 @@ violation instead of a symptom hunt.
   heal server-side AT collect (the collect is the intent; a claim could
   be dropped). `healCredit` only exists for the refused lane; free-form
   heal stays live in non-team rooms.
-- **Map/lifecycle hygiene:** `dropPlayer` clears cadence maps, `untrack`
+- **Join/roster coherence:** `hasReceivedPosition` gates in-world
+  membership (unreported joiners spawn no ghost mesh); `joinAnnounced`
+  once-per-record; wireIds ship inline in the join snapshot.
+- **Session reclaim:** server-issued token checked before the connected
+  test; new socket registers BEFORE the zombie is evicted so its close
+  can't re-mark disconnect; missed reliable events replay before the
+  handshake reply; restored-dead re-arms respawn.
+- **Replay/decode baseline:** `replayTo` skips `seq <= fromSeq`,
+  honors only/exclude + volatile TTL; room-wide `introSeq` stamps ~1s
+  of full records on reclaim (documented — records are shared),
+  500ms nack cooldown blocks storms.
+- **Server ray lanes:** `dir` normalized at both beam/repair call sites
+  with `|| 1` fallback; muzzle derived from `rewindPos` not claimed;
+  bounded range; 30/s flood gate.
+- **Spawn selection:** authored anchors lifted to `groundAt`, scatter
+  re-floors finite, `spawn-above-ground` inv at pick, camped points
+  excluded via `foeClearance > CAMPED_R`, team pools isolated.
+- **Per-life reset (`respawnPlayer`):** banked class/perk applies only
+  at new life; `health-pool-formula`+`pool-positive` invs; status/
+  ski/jet zeroed; `lastSeq` preserved (zeroing reopens seq gate to
+  corpse-regression — documented); `lastValid*` reseated.
+- **Map/lifecycle hygiene:** `dropPlayer` clears cadence maps
+  (`lastFireNotify`/`simmedFireTimes`/`fireWindows`/`lastHeal`/
+  `lastEnvCredit`/`chargeBank`/`healTicks`), `untrack`
   frees sim shadows, room removal deletes wireIds+lastSentPositions;
   v4 wireId remint can't inherit masked fields (remove evicts byId);
   entity lists all prune via `updateDeadList`; snapshot journal sorted-
