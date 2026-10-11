@@ -56,16 +56,16 @@ let swarmsReady = false;
 const creatureLayer = new THREE.Group();
 const LAB_SCENE = creatureLayer as unknown as THREE.Scene;
 const LAB_TERRAIN = {
-  getHeight: () => 0,
-  getHeightVisual: () => 0,
-  getNormal: () => new THREE.Vector3(0, 1, 0),
+  getHeight: (): number => 0,
+  getHeightVisual: (): number => 0,
+  getNormal: (): THREE.Vector3 => new THREE.Vector3(0, 1, 0),
   // Decal APIs the deployables call when seating — a real handle object
   // so intensity tweens still land somewhere; there's just no clipmap
   // shader on the other end.
-  addFieldRing: (x: number, z: number, r: number, tint: readonly number[]) => ({ x, z, r, intensity: 0.5, tint }),
-  removeFieldRing: () => undefined,
-  addScorch: () => null,
-  addSplat: () => null,
+  addFieldRing: (x: number, z: number, r: number, tint: readonly number[]): { x: number; z: number; r: number; intensity: number; tint: readonly number[]; } => ({ x, z, r, intensity: 0.5, tint }),
+  removeFieldRing: (): undefined => undefined,
+  addScorch: (): null => null,
+  addSplat: (): null => null,
 } as unknown as Terrain;
 
 function ensureSwarms(): void {
@@ -92,16 +92,16 @@ function creatureProxy(spawn: () => LabEntity): THREE.Group {
   proxy.add(bounds, creatureLayer);
   // Live-body anchor — the swarm's instances sit wherever the creature
   // crawled, so the invisible bounds box can't be trusted to frame it.
-  proxy.userData.liveFocus = () => c.pos;
+  proxy.userData.liveFocus = (): THREE.Vector3 => c.pos;
   // Explicit dispose, NOT a 'removed' listener — inspect re-parents this
   // proxy (vm.group → scene) and 'removed' fires on every reparent,
   // which would slaughter the creature on each mode toggle.
-  proxy.userData.disposeCreature = () => { c.dispose(); previewLive.tick = null; };
+  proxy.userData.disposeCreature = (): void => { c.dispose(); previewLive.tick = null; };
   // Feed playerPos in PROXY space, not world space: inspect mode
   // recentres/rotates the proxy, so a world-space camera pos would leave
   // the AI aiming at a phantom — the barrel misses you by exactly the
   // recentre offset. Local space keeps aim honest under any placement.
-  previewLive.tick = (dt) => {
+  previewLive.tick = (dt): void => {
     proxy.updateMatrixWorld();
     c.update(dt, LAB_TERRAIN, proxy.worldToLocal(cam.getWorldPosition(_camW)));
   };
@@ -113,15 +113,15 @@ function creatureProxy(spawn: () => LabEntity): THREE.Group {
 // species instance (shrunk to lab scale or it orbits past the horizon).
 export const CREATURES: [label: string, build: () => THREE.Group][] = [
   ...Object.entries(SWARM_SPECS)
-    .filter(([, s]) => s.spawn)
+    .filter(([, s]): ((scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3) => LabEntity) | undefined => s.spawn)
     .map(([name, s]): [string, () => THREE.Group] =>
-      [name, () => creatureProxy(() => s.spawn!(LAB_SCENE, LAB_TERRAIN, new THREE.Vector3()))]),
-  ['buzzard', () => creatureProxy(() => {
+      [name, (): THREE.Group<THREE.Object3DEventMap> => creatureProxy((): LabEntity => s.spawn!(LAB_SCENE, LAB_TERRAIN, new THREE.Vector3()))]),
+  ['buzzard', (): THREE.Group<THREE.Object3DEventMap> => creatureProxy(() => {
     const kettle = new AmbientBirds(LAB_SCENE, 0.08);
     return {
       pos: kettle.birds[0]!.group.position, radius: 2.5,
-      update: (dt, _t, p) => kettle.update(dt, p, LAB_TERRAIN),
-      dispose: () => kettle.dispose(),
+      update: (dt, _t, p): void => kettle.update(dt, p, LAB_TERRAIN),
+      dispose: (): void => kettle.dispose(),
     };
   })],
 ];
@@ -131,7 +131,7 @@ export const CREATURES: [label: string, build: () => THREE.Group][] = [
 // builds straight off that map: new kinds appear here automatically.
 const NUGGET_R = 0.3; // Nugget.ts NUGGET_RADIUS — keep in step
 function buildNugget(kind: PickupKind): () => THREE.Group {
-  return () => {
+  return (): THREE.Group<THREE.Object3DEventMap> => {
     const g = new THREE.Group();
     const base = new THREE.Color(PICKUP_ACCENT[kind]);
     const emit = base.clone().lerp(new THREE.Color(0xFF_FF_FF), 0.33).multiplyScalar(EMIT_GAIN);
@@ -163,17 +163,17 @@ function buildNugget(kind: PickupKind): () => THREE.Group {
     // crops the silhouette. Each frame park it just past the body on the
     // far side of the camera (proxy-local space — inspect recentres and
     // rotates the proxy, so a world-space offset would drift).
-    previewLive.tick = () => {
+    previewLive.tick = (): void => {
       g.updateMatrixWorld();
       const local = g.worldToLocal(cam.getWorldPosition(_camW));
       halo.position.copy(local.normalize().multiplyScalar(-0.25));
     };
-    g.userData.disposeCreature = () => { previewLive.tick = null; };
+    g.userData.disposeCreature = (): void => { previewLive.tick = null; };
     return g;
   };
 }
 export const PICKUPS: [label: string, build: () => THREE.Group][] =
-  (Object.keys(PICKUP_ACCENT) as PickupKind[]).map((k) => [k, buildNugget(k)]);
+  (Object.keys(PICKUP_ACCENT) as PickupKind[]).map((k): [PickupKind, () => THREE.Group] => [k, buildNugget(k)]);
 
 // Base structures — the structKit compositions, real builders straight
 // out of structures.ts. Big pieces: liveFocus parks the camera framing
@@ -182,7 +182,7 @@ export const STRUCTURES: [label: string, build: () => THREE.Group][] = [
   // The deployed map verbatim — same bastion.json + resolveMapSpec +
   // KIT_BUILDERS path the game renders, so the lab can never show a
   // stale layout. Flat terrain here (no seatKits): authored y stands.
-  ['[MAP] bastion', () => {
+  ['[MAP] bastion', (): THREE.Group<THREE.Object3DEventMap> => {
     const spec = resolveMapSpec(parseMapSpecJson(JSON.stringify(bastionJson)));
     const g = new THREE.Group();
     for (const s of spec.structures ?? []) {
@@ -205,28 +205,28 @@ export const STRUCTURES: [label: string, build: () => THREE.Group][] = [
       }
     }
     // Frame alpha's compound — the authored cluster center.
-    g.userData.liveFocus = () => new THREE.Vector3(-500, 40, 60);
+    g.userData.liveFocus = (): THREE.Vector3 => new THREE.Vector3(-500, 40, 60);
     return g;
   }],
-  ['bastion', () => {
+  ['bastion', (): THREE.Group<THREE.Object3DEventMap> => {
     const g = mkBastion();
-    g.userData.liveFocus = () => new THREE.Vector3(0, 4, -4);
+    g.userData.liveFocus = (): THREE.Vector3 => new THREE.Vector3(0, 4, -4);
     return g;
   }],
-  ['katastand', () => mkKataStand()],
-  ['bunker',   () => mkBunker(12, 10, 4.2)],
-  ['flagtower', () => mkFlagTower()],
-  ['tower',    () => mkBaseTower(9, 12)],
-  ['wallrun',  () => mkWallRun(18, 4.2)],
-  ['wallgate', () => mkWallGate(18, 4.2, 6)],
-  ['ramp',     () => ramp(5, 12, 2.5)],
-  ['gendome',  () => mkGenDome(5)],
-  ['landpad',  () => mkLandingPad(4.5)],
-  ['commast',  () => mkCommsMast(10)],
-  ['pillar',   () => mkPillar()],
-  ['obelisk',  () => mkObelisk()],
-  ['arch',     () => mkArch()],
-  ['shard',    () => mkShard()],
+  ['katastand', (): THREE.Group<THREE.Object3DEventMap> => mkKataStand()],
+  ['bunker',   (): THREE.Group<THREE.Object3DEventMap> => mkBunker(12, 10, 4.2)],
+  ['flagtower', (): THREE.Group<THREE.Object3DEventMap> => mkFlagTower()],
+  ['tower',    (): THREE.Group<THREE.Object3DEventMap> => mkBaseTower(9, 12)],
+  ['wallrun',  (): THREE.Group<THREE.Object3DEventMap> => mkWallRun(18, 4.2)],
+  ['wallgate', (): THREE.Group<THREE.Object3DEventMap> => mkWallGate(18, 4.2, 6)],
+  ['ramp',     (): THREE.Group<THREE.Object3DEventMap> => ramp(5, 12, 2.5)],
+  ['gendome',  (): THREE.Group<THREE.Object3DEventMap> => mkGenDome(5)],
+  ['landpad',  (): THREE.Group<THREE.Object3DEventMap> => mkLandingPad(4.5)],
+  ['commast',  (): THREE.Group<THREE.Object3DEventMap> => mkCommsMast(10)],
+  ['pillar',   (): THREE.Group<THREE.Object3DEventMap> => mkPillar()],
+  ['obelisk',  (): THREE.Group<THREE.Object3DEventMap> => mkObelisk()],
+  ['arch',     (): THREE.Group<THREE.Object3DEventMap> => mkArch()],
+  ['shard',    (): THREE.Group<THREE.Object3DEventMap> => mkShard()],
 ];
 
 // Deployable previews — real entity instances (real .group, real update
@@ -241,10 +241,10 @@ function itemProxy(spawn: () => LabItem): THREE.Group {
   const it = spawn();
   const proxy = new THREE.Group();
   proxy.add(it.group);
-  proxy.userData.liveFocus = () => it.group.getWorldPosition(new THREE.Vector3());
-  proxy.userData.disposeCreature = () => { it.dispose(LAB_SCENE); previewLive.tick = null; };
+  proxy.userData.liveFocus = (): THREE.Vector3 => it.group.getWorldPosition(new THREE.Vector3());
+  proxy.userData.disposeCreature = (): void => { it.dispose(LAB_SCENE); previewLive.tick = null; };
   if (it.update) {
-    previewLive.tick = (dt) => {
+    previewLive.tick = (dt): void => {
       proxy.updateMatrixWorld();
       it.update!(dt, proxy.worldToLocal(cam.getWorldPosition(_camW)));
     };
@@ -254,7 +254,7 @@ function itemProxy(spawn: () => LabItem): THREE.Group {
 export const ITEMS: [label: string, build: () => THREE.Group][] = [
   // Flag on its floor plate — the flagrun pad + the shared flag mesh,
   // the in-game pair previewed as one piece — plus each half alone.
-  ['flag', () => {
+  ['flag', (): THREE.Group<THREE.Object3DEventMap> => {
     const g = new THREE.Group();
     g.add(mkFlagPlate(TEAM_COLORS.alpha));
     const flag = mkFlagMesh('alpha');
@@ -262,18 +262,18 @@ export const ITEMS: [label: string, build: () => THREE.Group][] = [
     g.add(flag);
     return g;
   }],
-  ['flag alone', () => mkFlagMesh('alpha')],
-  ['stand',     () => mkFlagPlate(TEAM_COLORS.alpha)],
-  ['sentry',  () => itemProxy(() => { const d = new DeployTurret(LAB_SCENE, LAB_TERRAIN, _zero);
-      return { group: d.group, update: (dt) => d.update(dt, []), dispose: (s) => d.dispose(s) }; })],
-  ['shield',  () => itemProxy(() => { const d = new DeployShield(LAB_SCENE, LAB_TERRAIN, _zero);
-      return { group: d.group, update: (dt) => d.update(dt), dispose: (s) => d.dispose(s) }; })],
-  ['station', () => itemProxy(() => { const d = new DeployStation(LAB_SCENE, LAB_TERRAIN, _zero);
-      return { group: d.group, update: (dt, p) => { d.update(dt, p); }, dispose: (s) => d.dispose(s) }; })],
-  ['beacon',  () => itemProxy(() => { const d = new DeployBeacon(LAB_SCENE, LAB_TERRAIN, _zero);
-      return { group: d.group, update: (dt) => d.update(dt), dispose: (s) => d.dispose(s) }; })],
-  ['drone',   () => itemProxy(() => { const d = new DeployDrone(LAB_SCENE, LAB_TERRAIN, _zero);
-      return { group: d.group, update: (dt, p) => d.update(dt, p, 0, []), dispose: (s) => d.dispose(s) }; })],
+  ['flag alone', (): THREE.Group<THREE.Object3DEventMap> => mkFlagMesh('alpha')],
+  ['stand',     (): THREE.Group<THREE.Object3DEventMap> => mkFlagPlate(TEAM_COLORS.alpha)],
+  ['sentry',  (): THREE.Group<THREE.Object3DEventMap> => itemProxy(() => { const d = new DeployTurret(LAB_SCENE, LAB_TERRAIN, _zero);
+      return { group: d.group, update: (dt) => d.update(dt, []), dispose: (s): void => d.dispose(s) }; })],
+  ['shield',  (): THREE.Group<THREE.Object3DEventMap> => itemProxy(() => { const d = new DeployShield(LAB_SCENE, LAB_TERRAIN, _zero);
+      return { group: d.group, update: (dt): void => d.update(dt), dispose: (s): void => d.dispose(s) }; })],
+  ['station', (): THREE.Group<THREE.Object3DEventMap> => itemProxy(() => { const d = new DeployStation(LAB_SCENE, LAB_TERRAIN, _zero);
+      return { group: d.group, update: (dt, p): void => { d.update(dt, p); }, dispose: (s): void => d.dispose(s) }; })],
+  ['beacon',  (): THREE.Group<THREE.Object3DEventMap> => itemProxy(() => { const d = new DeployBeacon(LAB_SCENE, LAB_TERRAIN, _zero);
+      return { group: d.group, update: (dt): void => d.update(dt), dispose: (s): void => d.dispose(s) }; })],
+  ['drone',   (): THREE.Group<THREE.Object3DEventMap> => itemProxy(() => { const d = new DeployDrone(LAB_SCENE, LAB_TERRAIN, _zero);
+      return { group: d.group, update: (dt, p) => d.update(dt, p, 0, []), dispose: (s): void => d.dispose(s) }; })],
 ];
 
 // Class lineup — all three armor classes at once (only three exist, a
@@ -301,7 +301,7 @@ function mkTextSprite(text: string, y: number): THREE.Sprite {
   return s;
 }
 export const CLASSES: [label: string, build: () => THREE.Group][] = [
-  ['classes', () => {
+  ['classes', (): THREE.Group<THREE.Object3DEventMap> => {
     const proxy = new THREE.Group();
     const models: PlayerModel[] = [];
     for (const [cls, x, ly] of CLASS_LINEUP) {
@@ -309,7 +309,7 @@ export const CLASSES: [label: string, build: () => THREE.Group][] = [
       // The gizmo defaults to the generic capsule — without the class
       // sizes the collider wireframe would lie about light/heavy.
       pm.setColliderCapsule(classCapsule(cls));
-      pm.load().then(() => {
+      pm.load().then((): void => {
         if ((pm as unknown as { _disposed?: boolean })._disposed) {return;}
         pm.setScale(CLASS_MODEL_SCALE[cls]); // real tier silhouette, not raw rig height
         pm.setPosition(x, 0, 0);
@@ -326,21 +326,21 @@ export const CLASSES: [label: string, build: () => THREE.Group][] = [
     bounds.visible = false;
     bounds.position.set(0.25, 1.7, 0);
     proxy.add(bounds);
-    proxy.userData.liveFocus = () => new THREE.Vector3(0.25, 1.4, 0);
+    proxy.userData.liveFocus = (): THREE.Vector3 => new THREE.Vector3(0.25, 1.4, 0);
     // Anim rail hook — gunlab's right panel drives all three bodies in
     // lockstep so a state flaw (ski tuck, strafe stride) shows at once.
     proxy.userData.anims = {
-      set: (s: AnimationState) => { for (const m of models) {m.forceAnimationState(s);} },
-      dir: (f: number, side: number) => { for (const m of models) {m.setLocomotionVector(f, side);} },
-      cur: () => models[0]?.animationState,
+      set: (s: AnimationState): void => { for (const m of models) {m.forceAnimationState(s);} },
+      dir: (f: number, side: number): void => { for (const m of models) {m.setLocomotionVector(f, side);} },
+      cur: (): "jump" | "ski" | "idle" | "walk" | "run" | "death" | "hit" | "shoot" | "jet" | "throw" => models[0]?.animationState,
     };
     // Wire toggle rides along: gunlab calls this on every ▧ wire flip so
     // the class hit capsules show exactly while the tri overlay does.
-    proxy.userData.colliderWire = (on: boolean) => {
+    proxy.userData.colliderWire = (on: boolean): void => {
       for (const m of models) {m.setColliderVisible(on, true);}
     };
-    proxy.userData.disposeCreature = () => { for (const m of models) {m.dispose();} previewLive.tick = null; };
-    previewLive.tick = (dt) => { for (const m of models) {m.update(dt);} };
+    proxy.userData.disposeCreature = (): void => { for (const m of models) {m.dispose();} previewLive.tick = null; };
+    previewLive.tick = (dt): void => { for (const m of models) {m.update(dt);} };
     return proxy;
   }],
 ];

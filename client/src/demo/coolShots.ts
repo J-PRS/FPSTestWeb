@@ -194,7 +194,7 @@ export class CoolShotManager {
       clipData,
     };
     // Upload to server; on success, use the server-assigned filename and free local clipData
-    this.uploadClipToServer(clipData).then((serverFilename) => {
+    this.uploadClipToServer(clipData).then((serverFilename): void => {
       if (serverFilename) {
         entry.filename = serverFilename;
         entry.clipData = undefined;
@@ -202,10 +202,10 @@ export class CoolShotManager {
         // merged the server-side copy under the server filename (the
         // local entry still carried its minted name, so dedup missed
         // it) — the same clip would render twice in the panel.
-        this.coolShots = this.coolShots.filter(s => s === entry || s.filename !== serverFilename);
+        this.coolShots = this.coolShots.filter((s): boolean => s === entry || s.filename !== serverFilename);
         this.onChanged?.(this.coolShots);
       }
-    }).catch((error) => {
+    }).catch((error): void => {
       // Upload failing must not eat the local copy — it stays downloadable.
       logger.warn('Clip upload failed', error);
     });
@@ -226,9 +226,9 @@ export class CoolShotManager {
   trimList(): void {
     // toSorted returns a copy — it used to be discarded, so "top by
     // lifetime" quietly kept insertion order instead.
-    const topIds = new Set([...this.coolShots].toSorted((a, b) => b.projectileLifetime - a.projectileLifetime).slice(0, 10).map(s => s.id));
-    const recentIds = new Set([...this.coolShots].toSorted((a, b) => b.timestamp - a.timestamp).slice(0, 10).map(s => s.id));
-    this.coolShots = this.coolShots.filter(s => topIds.has(s.id) || recentIds.has(s.id));
+    const topIds = new Set([...this.coolShots].toSorted((a, b): number => b.projectileLifetime - a.projectileLifetime).slice(0, 10).map(s => s.id));
+    const recentIds = new Set([...this.coolShots].toSorted((a, b): number => b.timestamp - a.timestamp).slice(0, 10).map(s => s.id));
+    this.coolShots = this.coolShots.filter((s): boolean => topIds.has(s.id) || recentIds.has(s.id));
   }
 
   // Rehydrate the list from the vault: entries restored across
@@ -238,7 +238,7 @@ export class CoolShotManager {
     this.vaultLoaded = true;
     const meta = await this.vault.list();
     if (meta.length === 0) {return;}
-    const have = new Set(this.coolShots.map(s => s.id));
+    const have = new Set(this.coolShots.map((s): string => s.id));
     for (const m of meta) {
       if (have.has(m.id)) {continue;}
       this.coolShots.push({ id: m.id, timestamp: m.timestamp, description: m.description, projectileLifetime: m.projectileLifetime, weapon: m.weapon, distance: m.distance, mp4Name: m.mp4Name });
@@ -256,7 +256,7 @@ export class CoolShotManager {
       this.deps.playDemoData(entry.clipData);
       logger.debug(`Playing cool shot: ${entry.description}`);
     } else {
-      this.vault.get(entry.id).then((data) => {
+      this.vault.get(entry.id).then((data): void => {
         if (seq !== this.playSeq) {return;} // a newer play request superseded us
         if (data) {
           this.deps.playDemoData(data);
@@ -277,7 +277,7 @@ export class CoolShotManager {
   }
 
   playById(id: string): void {
-    const index = this.coolShots.findIndex(s => s.id === id);
+    const index = this.coolShots.findIndex((s): boolean => s.id === id);
     if (index !== -1) {this.playAt(index);}
   }
 
@@ -314,7 +314,7 @@ export class CoolShotManager {
   }
 
   async downloadById(id: string): Promise<void> {
-    const entry = this.coolShots.find(s => s.id === id);
+    const entry = this.coolShots.find((s): boolean => s.id === id);
     if (!entry) {
       logger.warn('Cool shot not found:', id);
       return;

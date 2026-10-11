@@ -5,8 +5,8 @@ import { poissonDisc } from '../utils/poissonSpread.js';
 import { ExplosionTracker } from '../utils/ExplosionTracker.js';
 import { FRAG_MESSAGE_DURATION } from '../core/config.js';
 
-describe('poissonDisc', () => {
-  it('returns n points inside the unit disc', () => {
+describe('poissonDisc', (): void => {
+  it('returns n points inside the unit disc', (): void => {
     for (const n of [1, 4, 12, 32]) {
       const pts = poissonDisc(n);
       expect(pts.length).toBe(n);
@@ -14,7 +14,7 @@ describe('poissonDisc', () => {
     }
   });
 
-  it('keeps sampled points apart (no clumping)', () => {
+  it('keeps sampled points apart (no clumping)', (): void => {
     const n = 16;
     const pts = poissonDisc(n);
     const minDist = Math.sqrt(Math.PI / (n * 1.9));
@@ -26,13 +26,13 @@ describe('poissonDisc', () => {
     }
   });
 
-  it('caches per count — repeated calls return the same array', () => {
+  it('caches per count — repeated calls return the same array', (): void => {
     expect(poissonDisc(8)).toBe(poissonDisc(8));
   });
 });
 
-describe('ExplosionTracker', () => {
-  it('returns recorded explosions newest-last with cloned positions', () => {
+describe('ExplosionTracker', (): void => {
+  it('returns recorded explosions newest-last with cloned positions', (): void => {
     const t = new ExplosionTracker();
     const pos = new THREE.Vector3(1, 2, 3);
     t.addExplosion(pos, 100, 'p1');
@@ -45,7 +45,7 @@ describe('ExplosionTracker', () => {
     expect(got[0].position.x).toBe(1);
   });
 
-  it('expires entries past FRAG_MESSAGE_DURATION', () => {
+  it('expires entries past FRAG_MESSAGE_DURATION', (): void => {
     vi.useFakeTimers();
     try {
       const t = new ExplosionTracker();

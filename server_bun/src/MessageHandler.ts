@@ -474,8 +474,8 @@ export class MessageHandler {
     const now = wallNow();
     if (this.rosterCache && now - this.rosterCache.at < 100) {return this.rosterCache.data;}
     const data = [...this.playerManager.getAllPlayers().values()]
-      .filter((p) => p.isBot || p.hasReceivedPosition)
-      .map((p) => this.playerManager.toGameStatePlayer(p));
+      .filter((p): boolean => p.isBot || p.hasReceivedPosition)
+      .map((p): GameStatePlayer => this.playerManager.toGameStatePlayer(p));
     this.rosterCache = { at: now, data };
     return data;
   }
@@ -490,7 +490,7 @@ export class MessageHandler {
 
     // Humans that never reported a position aren't in-world yet — listing
     // them spawns a frozen ghost mesh at the spawn default for the joiner.
-    const playersData = this.inWorldRoster().filter((p) => p.id !== playerId);
+    const playersData = this.inWorldRoster().filter((p): boolean => p.id !== playerId);
 
     this.sendGameState(playerId, playersData, {
       sessionToken,
@@ -627,7 +627,7 @@ export class MessageHandler {
   // MoveClaims host surface — the room's optional moveSim hooks arrive
   // as always-defined delegates so the funnel doesn't sprinkle ?.().
   moveAuthority(): boolean { return this.roomInfo.moveAuthority?.() ?? false; }
-  moveReport(playerId: string, pos: Vec3, yaw: number, vel?: Vec3, inputSeq?: number, rttMs?: number) {
+  moveReport(playerId: string, pos: Vec3, yaw: number, vel?: Vec3, inputSeq?: number, rttMs?: number): { pos: Vec3; vel: Vec3; inputSeq: number; onGround: boolean; } | null {
     return this.roomInfo.moveReport?.(playerId, pos, yaw, vel, inputSeq, rttMs) ?? null;
   }
   moveInput(playerId: string, input: { forward: number; right: number; jump: number; ski: number; jet?: number }, status?: number, seq?: number): boolean | void {
@@ -673,10 +673,10 @@ export class MessageHandler {
     this.sendSimWorldState(playerId);
 
     // Log full state for desync debugging
-    const stateStr = players.map(p =>
+    const stateStr = players.map((p): string =>
       `${p.id}[${p.kills}/${p.deaths}] ${p.isDead ? 'DEAD' : `HP${p.health}`} @(${p.position.x.toFixed(2)},${p.position.y.toFixed(2)},${p.position.z.toFixed(2)})`
     ).join(' | ');
-    const hashInput = players.map(p =>
+    const hashInput = players.map((p): string =>
       `${p.id}:${Math.round(p.position.x)},${Math.round(p.position.y)},${Math.round(p.position.z)}:${p.health}:${p.isDead ? 1 : 0}`
     ).join('|');
     logger.debug(`Snapshot requested by ${playerId} | Server state: ${stateStr} | Hash input: ${hashInput}`);

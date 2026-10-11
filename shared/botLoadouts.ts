@@ -24,17 +24,17 @@ export function botClassForLoadout(lo: BotLoadout): ArmorClass {
   const kit = [lo.near, lo.mid, lo.far, lo.belt, lo.side];
   // Light-frame guns (Railgun/Lightning) pick the body outright — a kit
   // built around them can't ride a heavier chassis.
-  if (kit.some((w) => LIGHT_ONLY_WEAPONS.has(w))) {return 'light';}
+  if (kit.some((w): boolean => LIGHT_ONLY_WEAPONS.has(w))) {return 'light';}
   // Any ordnance slot can carry the tier-lock — authored kits keep it in
   // far/belt, but the bombard lives in mid and a hidden heavy pick would
   // shoulder it on a medium body that can't legally fire it.
-  if (kit.some((w) => HEAVY_ONLY_WEAPONS.has(w))) {return 'heavy';}
+  if (kit.some((w): boolean => HEAVY_ONLY_WEAPONS.has(w))) {return 'heavy';}
   if (lo.perk === 'plated') {return 'heavy';}
   // featherjets wants light, but a kit carrying medium-locked ordnance
   // (Flak/PlasmaGun) can't shoulder it on a light frame — the class gate
   // outranks the perk's silhouette.
   if (lo.perk === 'featherjets') {
-    return kit.some((w) => MEDIUM_ONLY_WEAPONS.has(w)) ? 'medium' : 'light';
+    return kit.some((w): boolean => MEDIUM_ONLY_WEAPONS.has(w)) ? 'medium' : 'light';
   }
   return 'medium';
 }
@@ -105,7 +105,7 @@ const WILDCARD_PERKS: PerkId[] = ['vitality', 'overcharge', 'plated', 'bombardie
  *  far out, ordnance mid still in) must not leave contraband behind. */
 export function kitConsistent(lo: BotLoadout): boolean {
   const cls = botClassForLoadout(lo);
-  return SLOTS.every((s) => classCanFire(cls, lo[s]));
+  return SLOTS.every((s): boolean => classCanFire(cls, lo[s]));
 }
 
 /** Spawn-time reroll: each slot with candidates draws uniformly from
@@ -135,8 +135,8 @@ export function rollWildcard(rng: () => number): BotLoadout {
   // no roll can mix tiers (Railgun + Mortar) no class would fire. Perk
   // is gated last: plated on a light-locked kit would derail the body.
   const cls: ArmorClass = rng() < 0.25 ? 'light' : rng() < 0.67 ? 'medium' : 'heavy';
-  const pick = (pool: WeaponType[], fb: WeaponType) => {
-    const legal = pool.filter((w) => classCanFire(cls, w));
+  const pick = (pool: WeaponType[], fb: WeaponType): WeaponType => {
+    const legal = pool.filter((w): boolean => classCanFire(cls, w));
     return (legal.length > 0 ? legal : [fb])[Math.floor(rng() * (legal.length || 1))] ?? fb;
   };
   const kit = {
@@ -144,7 +144,7 @@ export function rollWildcard(rng: () => number): BotLoadout {
     far: pick(WILDCARD_SLOTS.far, WeaponType.BoltLauncher), belt: pick(WILDCARD_SLOTS.belt, WeaponType.Grenade),
     side: pick(WILDCARD_SLOTS.side, WeaponType.Pistol),
   };
-  const perks = WILDCARD_PERKS.filter((p) => kitConsistent(Object.assign({}, kit, {perk: p})));
+  const perks = WILDCARD_PERKS.filter((p): boolean => kitConsistent(Object.assign({}, kit, {perk: p})));
   return Object.assign({}, kit, {perk: perks[Math.floor(rng() * perks.length)] ?? 'vitality'});
 }
 
@@ -154,7 +154,7 @@ export function rollWildcard(rng: () => number): BotLoadout {
 export function adaptLoadout(lo: BotLoadout, alts: Partial<Record<LoadoutSlot, WeaponType[]>> | undefined, skill: (w: number) => number, rng?: () => number): BotLoadout {
   if (!alts) {return lo;}
   const out = Object.assign({}, lo);
-  const r = rng ?? (() => 0.5);
+  const r = rng ?? ((): number => 0.5);
   for (const slot of SLOTS) {
     const cands = alts[slot];
     if (!cands?.length) {continue;}
@@ -182,7 +182,7 @@ export function pickBotWeapon(lo: BotLoadout, distXZ: number, dist: number, skil
   if (distXZ < BOT_MELEE_M) {return WeaponType.Melee;}
   // Heal slots never feed a combat draw — the med kit fires its beam at
   // ALLIES through the support path; picking it at an enemy is a dry pull.
-  const beltOut = (w: WeaponType, fb: WeaponType) => w === WeaponType.HealBeam ? fb : w;
+  const beltOut = (w: WeaponType, fb: WeaponType): WeaponType => w === WeaponType.HealBeam ? fb : w;
   if (!skill) {return beltOut(dist < BOT_SIDEARM_M ? lo.side : dist < BOT_NEAR_M ? lo.near : dist > BOT_FAR_M ? lo.far : lo.mid, lo.mid);}
   // Triangular band fit: a slot scores 1 dead-center of its range,
   // decaying to 0 one band away — then multiplied by how good the bot

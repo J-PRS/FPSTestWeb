@@ -109,7 +109,7 @@ export class TeamBots {
   private fire: BotFire;
   // Anti-pedestrian meter (idle/ignore/bleed/coverage) lives in
   // botSheep.ts — rates mirror the server meter.
-  sheep = new SheepMeter({ warn: (m) => this.deps.logger.warn(m) });
+  sheep = new SheepMeter({ warn: (m): void => this.deps.logger.warn(m) });
 
   constructor(
     readonly deps: BotsDeps,
@@ -129,22 +129,22 @@ export class TeamBots {
       teamOf: this.teamOf,
       player: () => this.deps.lazyPlayer(),
       world: () => this.deps.world,
-      mode: () => this.mode,
+      mode: (): "nuggets" | "ctf" | "dm" | "tdm" | "rabbit" | "duel" | "flagrun" => this.mode,
       targets: this.deps.targets,
     });
     this.fire = new BotFire({
-      scene: () => this.deps.lazyScene(),
+      scene: (): THREE.Scene<THREE.Object3DEventMap> => this.deps.lazyScene(),
       player: () => this.deps.lazyPlayer(),
       world: () => this.deps.world,
       targets: this.deps.targets,
-      online: () => this.deps.lazyNetworkManager?.()?.isConnected() ?? false,
+      online: (): boolean => this.deps.lazyNetworkManager?.()?.isConnected() ?? false,
       logger: this.deps.logger,
-      damageCreature: (id, dmg, att) => this.hooks.damageCreature(id, dmg, att),
-      creditKill: (id, cr) => this.creditKill(id, cr),
-      botKilled: (k, b, weapon) => botKilledF(this, k, b, weapon),
-      hurtLocal: (d, fp, src, m, att) => hurtLocal(this, d, fp, att, { src, melee: m }),
+      damageCreature: (id, dmg, att): boolean => this.hooks.damageCreature(id, dmg, att),
+      creditKill: (id, cr): void => this.creditKill(id, cr),
+      botKilled: (k, b, weapon): void => botKilledF(this, k, b, weapon),
+      hurtLocal: (d, fp, src, m, att): void => hurtLocal(this, d, fp, att, { src, melee: m }),
     });
-    this.wd = new BotWatchdog(deps.logger, () => this.over !== null);
+    this.wd = new BotWatchdog(deps.logger, (): boolean => this.over !== null);
     const {ffa} = this.spec;
     this.teamOf.set('local', ffa ? 'local' : playerTeam);
     if (ffa) {this.ffaScores.set('local', 0);}
@@ -152,7 +152,7 @@ export class TeamBots {
     const terrain = deps.lazyTerrain();
     const scene = deps.lazyScene();
     let ni = 0;
-    const mk = (team: TeamId, n: number) => {
+    const mk = (team: TeamId, n: number): void => {
       for (let i = 0; i < n; i += 1) {
         const spawn = this.spawnSpot(team);
         const name = ffa ? BOT_NAMES[((ni += 1) - 1) % BOT_NAMES.length] : `${BOT_NAMES[((ni += 1) - 1) % BOT_NAMES.length]}-${team === 'alpha' ? 'A' : 'B'}`;
@@ -199,10 +199,10 @@ export class TeamBots {
         scores: this.scores,
         playerTeam: this.playerTeam as TeamId,
         modsFor: (id) => this.modsFor(id),
-        onCapture: () => pushScore(this),
-        onFeed: (t) => this.hooks.remoteKillFeed(t),
-        onPersonalPoints: (id, n) => awardPersonal(this, id, n),
-        onFlagNotice: (kind, actorId, actorTeam, at) =>
+        onCapture: (): void => pushScore(this),
+        onFeed: (t): void => this.hooks.remoteKillFeed(t),
+        onPersonalPoints: (id, n): void => awardPersonal(this, id, n),
+        onFlagNotice: (kind, actorId, actorTeam, at): void =>
           // Grabs/drops pin the flag spot for the DEFENDING side — the
           // grabber's team already knows where their runner is.
           this.notice(kind, actorId, actorTeam,
@@ -212,7 +212,7 @@ export class TeamBots {
       });
     }
     if (mode === 'rabbit') {
-      this.rabbit = new RabbitBridge(deps, (t) => this.hooks.remoteKillFeed(t));
+      this.rabbit = new RabbitBridge(deps, (t): void => this.hooks.remoteKillFeed(t));
     }
     if (mode === 'flagrun') {
       this.flagrun = new FlagRunBridge(deps, {
@@ -220,8 +220,8 @@ export class TeamBots {
         bots: this.bots,
         teamOf: this.teamOf,
         scores: this.scores,
-        onFeed: (t) => this.hooks.remoteKillFeed(t),
-        onCapture: () => pushScore(this),
+        onFeed: (t): void => this.hooks.remoteKillFeed(t),
+        onCapture: (): void => pushScore(this),
       }, player.pos);
     }
   }
@@ -263,7 +263,7 @@ bn += 1;
     bodies.length = bn;
     this.tickBots(dt, others, bodies);
     this.ctf?.update(dt);
-    this.rabbit?.update(dt, this.collectors(), (id) => this.posOf(id), (id) => this.holdPoint(id));
+    this.rabbit?.update(dt, this.collectors(), (id): THREE.Vector3 | null => this.posOf(id), (id): void => this.holdPoint(id));
     this.rabbit?.tickIndicator();
     this.flagrun?.update(dt);
     this.wd.step(dt, this.bots);
@@ -355,7 +355,7 @@ bn += 1;
       const c = rb.carrierId();
       const bottom = this.bottomFeeders();
       if (c && bot.playerId !== c && !bottom.has(bot.playerId)) {
-        foes = foes.filter(e => e.id === c || bottom.has(e.id));
+        foes = foes.filter((e): boolean => e.id === c || bottom.has(e.id));
       }
     }
     const shot = bot.think(acc, this.ctxFor(bot, foes, others, terrain));
@@ -454,7 +454,7 @@ bn += 1;
     ctx.terrain = terrain;
     ctx.enemies = enemies;
     ctx.nugget = this.spec.flags ? null : this.hooks.nearestNugget(bot.position, 60);
-    const rabbitGoal = this.rabbit?.goalFor(bot.playerId, (id) => this.posOf(id)) ?? null;
+    const rabbitGoal = this.rabbit?.goalFor(bot.playerId, (id): THREE.Vector3 | null => this.posOf(id)) ?? null;
     ctx.objective = info?.pos ?? rabbitGoal;
     ctx.infiltrating = info?.infiltrating ?? false;
     ctx.running = info?.running ?? rabbitGoal !== null;
@@ -507,7 +507,7 @@ bn += 1;
   hearLocal(text: string, team: boolean, vgs?: string): void {
     const kind = chatKindFor(text)
       ?? (vgs ? vgsCommandFor(vgs) : null)
-      ?? (this.bots.some((b) => text.toLowerCase().includes(b.playerId.slice(4).toLowerCase())) ? 'mention' : null);
+      ?? (this.bots.some((b): boolean => text.toLowerCase().includes(b.playerId.slice(4).toLowerCase())) ? 'mention' : null);
     const goal = vgs && team ? this.radioGoal(vgs) : undefined;
     if (kind) {this.notice(kind, 'local', this.teamOf.get('local'), goal);}
   }
@@ -519,7 +519,7 @@ bn += 1;
     const aim = radioAimFor(chord);
     if (!aim) {return undefined;}
     if (aim === 'actor') {
-      const a = actorId === 'local' ? this.deps.lazyPlayer().pos : this.bots.find((b) => b.playerId === actorId)?.position;
+      const a = actorId === 'local' ? this.deps.lazyPlayer().pos : this.bots.find((b): boolean => b.playerId === actorId)?.position;
       return a ? { x: a.x, y: a.y, z: a.z } : undefined;
     }
     const team = this.teamOf.get(actorId);
@@ -610,7 +610,7 @@ bn += 1;
    *  meter follows or the defector leaks a stale cell and restarts
    *  think-stagger/sheep/seen windows from zero. */
   rekeyBot(oldId: string, newId: string): void {
-    const mv = <T>(m: Map<string, T>) => { const v = m.get(oldId); m.delete(oldId); if (v !== undefined) {m.set(newId, v);} };
+    const mv = <T>(m: Map<string, T>): void => { const v = m.get(oldId); m.delete(oldId); if (v !== undefined) {m.set(newId, v);} };
     mv(this.thinkAccum); mv(this.ctxCache); mv(this.ffaScores); mv(this.dmgPool);
     this.senses.rekey(oldId, newId);
     this.sheep.rekey(oldId, newId);
@@ -653,9 +653,9 @@ bn += 1;
       id: bot.playerId,
       team: bot.team,
       pos: bot.position,
-      yaw: () => bot.rotation.yaw,
-      heal: (n) => bot.heal(n),
-      addEnergy: (n) => bot.addEnergy(n),
+      yaw: (): number => bot.rotation.yaw,
+      heal: (n): void => bot.heal(n),
+      addEnergy: (n): void => bot.addEnergy(n),
     });
   }
 
@@ -700,7 +700,7 @@ bn += 1;
   /** Live position by roster id — 'local' or a bot. */
   private posOf(id: string): THREE.Vector3 | null {
     if (id === 'local') {return this.deps.lazyPlayer().pos;}
-    return this.bots.find(b => b.playerId === id)?.position ?? null;
+    return this.bots.find((b): boolean => b.playerId === id)?.position ?? null;
   }
 
   /** Rabbit +1/sec — same FFA board the wire's hold grants write. */
@@ -732,7 +732,7 @@ bn += 1;
 
   /** Per-id perk mods — 'local' reads the live player. */
   private modsFor(id: string) {
-    return id === 'local' ? this.deps.lazyPlayer().mods : this.bots.find(b => b.playerId === id)?.perkMods;
+    return id === 'local' ? this.deps.lazyPlayer().mods : this.bots.find((b): boolean => b.playerId === id)?.perkMods;
   }
 
   collectors(): { id: string; pos: THREE.Vector3; alive: boolean; pickupScale: number }[] {
@@ -763,4 +763,4 @@ const _alliesScratch: THREE.Vector3[] = [];
 const _bottomScratch = new Set<string>();
 const _emptySet: ReadonlySet<string> = new Set();
 // Small accessor so update() reads deps once per frame.
-function deps0(m: TeamBots) { return m.deps; }
+function deps0(m: TeamBots): BotsDeps { return m.deps; }

@@ -83,8 +83,8 @@ export class ServerBots {
     this.field = field;
     this.watchdog = new MobilityWatchdog(room.name);
     this.sheep = new BotSheepMeter(room);
-    this.arsenal = new BotArsenal(room, this.loadouts, (id) => this.lastHuntId(id), (id) => this.brains.get(id)?.currentHuntSeen ?? null, (id) => this.brains.get(id)?.skill);
-    this.roster = new BotRoster(room, this.brains, this.loadouts, this.thinkPhase, (id) => this.untrack(id), ServerBots.THINK_DIV);
+    this.arsenal = new BotArsenal(room, this.loadouts, (id): string | null => this.lastHuntId(id), (id): BotVec | null => this.brains.get(id)?.currentHuntSeen ?? null, (id): BotSkill | undefined => this.brains.get(id)?.skill);
+    this.roster = new BotRoster(room, this.brains, this.loadouts, this.thinkPhase, (id): void => this.untrack(id), ServerBots.THINK_DIV);
     this.sense = new ServerBotSenses(room, field, this.loadouts, this.roster.roleInfo, this.foeNear);
   }
 
@@ -123,10 +123,10 @@ export class ServerBots {
    *  checks, stuck probe, rewind push). Always on: a few timer pairs per
    *  think is noise, and the soak + /metrics both read the same
    *  accumulators (stageMs = ms/sec over the last 10s window). */
-  readonly stageProf = Array.from({ length: 6 }, () => 0);
-  private stageBase = Array.from({ length: 6 }, () => 0);
+  readonly stageProf = Array.from({ length: 6 }, (): number => 0);
+  private stageBase = Array.from({ length: 6 }, (): number => 0);
   private stageWinAt = 0;
-  readonly stageMs = Array.from({ length: 6 }, () => 0);
+  readonly stageMs = Array.from({ length: 6 }, (): number => 0);
   /** Spawn n bots — each is a real roster entry (playerJoined broadcasts)
    *  minus a socket. Roster owns the spawn/role/class bookkeeping. */
   populate(n: number): void {
@@ -215,7 +215,7 @@ export class ServerBots {
       } else {
         const pts = [...this.room.ffaScores.values()];
         const top = Math.max(...pts);
-        const runnerUp = pts.filter((v) => v < top).reduce((a, b) => Math.max(a, b), 0);
+        const runnerUp = pts.filter((v): boolean => v < top).reduce((a, b): number => Math.max(a, b), 0);
         outcome = pts.length > 1 && top - runnerUp <= 1 ? (id === winner ? 'winclose' : 'close') : (id === winner ? 'win' : 'loss');
       }
       const line = endTaunt(id, outcome);
@@ -284,7 +284,7 @@ export class ServerBots {
     if (rising & (STATUS.MEND | STATUS.SHIELD | STATUS.CLOAK)) {
       const names = ([
         [STATUS.MEND, 'MEND'], [STATUS.SHIELD, 'SHIELD'], [STATUS.CLOAK, 'CLOAK'],
-      ] as const).filter(([bit]) => rising & bit).map(([, n]) => n);
+      ] as const).filter(([bit]): number => rising & bit).map(([, n]): "MEND" | "SHIELD" | "CLOAK" => n);
       logger.debug('Bot skill on', { id, skill: names.join('+') });
     }
     p.status = (p.status & ~CLIENT_STATUS_MASK) | claim;
@@ -584,7 +584,7 @@ hurtCount += 1;
         this.room.moveSim.resync(id, p.position, p.rotation.yaw, true);
         // Kit drift: the fresh body rerolls each open slot toward the
         // weapon its skill matrix favors.
-        this.roster.adaptOnRespawn(id, (w) => aimSkillFor(brain.skill, w, 0));
+        this.roster.adaptOnRespawn(id, (w): number => aimSkillFor(brain.skill, w, 0));
       }
 
       // Test-silenced: heartbeat and shadow upkeep still run — only the

@@ -10,17 +10,17 @@ import crossfireRec from './fixtures/crossfire.rec?raw';
 
 import { makeDeps, feed, feedBin } from './netHarness.js';
 import { PROTOCOL_VERSION, type ServerMessage } from '../../../shared/protocol.js';
-vi.mock('../core/sfx.js', () => ({ at: () => { return; }, shotAt: () => { return; }, init: () => { return; }, hitMarker: () => { return; }, playerHurt: () => { return; }, shieldHit: () => { return; }, killConfirm: () => { return; }, flagCue: () => { return; }, matchHorn: () => { return; } }));
-vi.mock('../entities/PlayerModel.js', () => ({
+vi.mock('../core/sfx.js', () => ({ at: (): void => { return; }, shotAt: (): void => { return; }, init: (): void => { return; }, hitMarker: (): void => { return; }, playerHurt: (): void => { return; }, shieldHit: (): void => { return; }, killConfirm: (): void => { return; }, flagCue: (): void => { return; }, matchHorn: (): void => { return; } }));
+vi.mock('../entities/PlayerModel.js', (): { PlayerModel: () => { load: () => Promise<void>; }; } => ({
   // RemotePlayer's GLTF model can't load headless — permissive proxy so any
   // visual method is a no-op while lifecycle code (RemoteSet) runs for real.
-  PlayerModel: function () {
-    return new Proxy({ load: () => Promise.resolve() }, {
-      get: (t, k) => (k in t ? (t as Record<PropertyKey, unknown>)[k] : () => { return; }),
+  PlayerModel: function (): { load: () => Promise<void>; } {
+    return new Proxy({ load: (): Promise<void> => Promise.resolve() }, {
+      get: (t, k): unknown => (k in t ? (t as Record<PropertyKey, unknown>)[k] : (): void => { return; }),
     });
   },
 }));
-globalThis.fetch = () => new Promise<Response>(() => { return; });
+globalThis.fetch = (): Promise<Response> => new Promise<Response>((): void => { return; });
 
 
 // Captures are stamped with whatever protocol the recorder saw —
@@ -38,19 +38,19 @@ function hexToBytes(hex: string): Uint8Array {
   return out;
 }
 
-function loadRec(text: string) {
-  return text.split('\n').filter(Boolean).map((l) => {
+function loadRec(text: string): { ms: number; kind: string; payload: string; }[] {
+  return text.split('\n').filter(Boolean).map((l): { ms: number; kind: string; payload: string; } => {
     const [ms, kind, payload] = l.split('\t');
     return { ms: Number(ms), kind, payload };
   });
 }
 
-describe('netReplay — captured wire stream through real handlers', () => {
+describe('netReplay — captured wire stream through real handlers', (): void => {
   // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
   let h!: ReturnType<typeof makeDeps>;
-  beforeEach(() => { h = makeDeps(); });
+  beforeEach((): void => { h = makeDeps(); });
 
-  it('replays the duel capture without throwing', () => {
+  it('replays the duel capture without throwing', (): void => {
     for (const ev of loadRec(recText)) {
       if (ev.kind === 'json') {feedJson(h.nm, ev.payload);}
       else {feedBin(h.nm, hexToBytes(ev.payload));}
@@ -64,7 +64,7 @@ describe('netReplay — captured wire stream through real handlers', () => {
     expect(h.calls.hud.length).toBeGreaterThan(0);
   });
 
-  it('replays the crossfire capture — ticks populate remotes, deploySpawns route', () => {
+  it('replays the crossfire capture — ticks populate remotes, deploySpawns route', (): void => {
     for (const ev of loadRec(crossfireRec)) {
       if (ev.kind === 'json') {feedJson(h.nm, ev.payload);}
       else {feedBin(h.nm, hexToBytes(ev.payload));}
@@ -72,6 +72,6 @@ describe('netReplay — captured wire stream through real handlers', () => {
     // 3 fleet bots + 4 server bots joined before the recorder did
     expect(h.nm.getPlayers().size).toBeGreaterThan(0);
     // 17 deploySpawn broadcasts in the window — replicas spawned
-    expect(h.calls.deployables.filter((c) => c.startsWith('spawn:')).length).toBeGreaterThan(0);
+    expect(h.calls.deployables.filter((c): boolean => c.startsWith('spawn:')).length).toBeGreaterThan(0);
   });
 });

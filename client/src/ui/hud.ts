@@ -13,7 +13,7 @@ import type { Player } from '../entities/Player.js';
 import type { TeamId } from '../../../shared/teams.js';
 import { feedNames } from '../../../shared/botNames.js';
 
-const countSpan = (n: number) => `<span class="${n > 0 ? 'hot' : 'dim'}">${n}</span>`;
+const countSpan = (n: number): string => `<span class="${n > 0 ? 'hot' : 'dim'}">${n}</span>`;
 
 export class HUD {
   private el: HTMLDivElement;
@@ -464,6 +464,6 @@ export class HUD {
     row.textContent = feedNames(text);
     this.playerList.append(row);
     while (this.playerList.childElementCount > 9) {this.playerList.firstElementChild!.remove();}
-    setTimeout(() => row.remove(), 9000); // hard cut — see feedKill
+    setTimeout((): void => row.remove(), 9000); // hard cut — see feedKill
   }
 }

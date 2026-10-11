@@ -44,14 +44,14 @@ type Down =
   | { kind: 'disconnect' }
   | { kind: 'resolved'; seq: number; url: string | null };
 
-const post = (m: Up) => w.postMessage(m);
+const post = (m: Up): void => w.postMessage(m);
 
 // Transport logs surface in the page's Alt+Q buffer, not just the
 // worker's devtools console — relay them as protocol messages. The ctx
 // rides structured clone: DOM Events (WebTransportError et al.) can't
 // clone and would throw INSIDE the worker — a lane death then reports
 // as a crashed worker instead of a clean disconnect.
-setNetLogSink((level, name, msg, ctx) => {
+setNetLogSink((level, name, msg, ctx): void => {
   try {
     post({ kind: 'nlog', level, name, msg, ctx });
   } catch {
@@ -79,7 +79,7 @@ const SEND_QUEUE_MAX = 64;
 // so the server's own srvPing keeps capturing main-thread stall while
 // this probe reads the clean wire number. Both samples stay meaningful.
 const PING_INTERVAL = 2500;
-setInterval(() => {
+setInterval((): void => {
   if (!connected || !seated || !inner?.connected()) {return;}
   inner.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
 }, PING_INTERVAL);
@@ -93,26 +93,26 @@ function makeConfig(url: string, hasResolver: boolean): ConnectionConfig {
   return {
     url,
     resolveUrl: hasResolver
-      ? () => new Promise<string | null>((res) => {
+      ? (): Promise<string | null> => new Promise<string | null>((res): void => {
           resolveSeq += 1;
           const seq = resolveSeq;
           resolveWaiters.set(seq, res);
           post({ kind: 'resolve', seq });
           // A reply that never comes (disconnect mid-flight, a stalled
           // matchmaker) must not park the reconnect promise forever.
-          setTimeout(() => {
+          setTimeout((): void => {
             if (resolveWaiters.delete(seq)) {res(null);}
           }, 10_000);
         })
       : undefined,
-    onConnect: () => {
+    onConnect: (): void => {
       connected = true;
       for (const q of sendQueue.splice(0)) {inner?.send(q);}
       post({ kind: 'up', tier: inner?.tier });
     },
-    onDisconnect: (code, reason) => { connected = false; post({ kind: 'down', code, reason }); },
-    onError: (e) => post({ kind: 'err', msg: e.message }),
-    onMessage: (m) => {
+    onDisconnect: (code, reason): void => { connected = false; post({ kind: 'down', code, reason }); },
+    onError: (e): void => post({ kind: 'err', msg: e.message }),
+    onMessage: (m): void => {
       // Inbound 'pong' is only ever a reply to a client 'ping' — ours.
       // Consume it here: main feeds its telemetry from the rtt event
       // instead of re-measuring stamp→receipt (which would fold the
@@ -132,7 +132,7 @@ function makeConfig(url: string, hasResolver: boolean): ConnectionConfig {
       }
       post({ kind: 'ev', j: m, at: Date.now() });
     },
-    onBinaryMessage: (b) => {
+    onBinaryMessage: (b): void => {
       // Transfer, don't clone — tick frames arrive at 20Hz and run tens
       // of KB, so a per-frame structured clone was the new dominant copy.
       // Only transferable when the view owns its whole buffer; a subarray
@@ -144,7 +144,7 @@ function makeConfig(url: string, hasResolver: boolean): ConnectionConfig {
   };
 }
 
-w.onmessage = (e: MessageEvent<Down>) => {
+w.onmessage = (e: MessageEvent<Down>): void => {
   const m = e.data;
   switch (m.kind) {
     case 'init': {

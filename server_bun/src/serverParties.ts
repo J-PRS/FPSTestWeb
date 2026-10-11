@@ -26,7 +26,7 @@ const CELL_BIAS = 256; // grid keys assume cells within ±256 (64m cells → ±1
 type Row = { id: string; pos: Vec3; vel: Vec3; team?: string; dead: boolean; cloaked: boolean; aimY: number; en: BotEnemy };
 export type Parties = { enemies: BotEnemy[]; allies: Vec3[]; others: Vec3[]; roster: { id: string; pos: Vec3; team?: string }[] };
 
-const cellKey = (cx: number, cz: number) => ((cx + CELL_BIAS) << 16) | (cz + CELL_BIAS);
+const cellKey = (cx: number, cz: number): number => ((cx + CELL_BIAS) << 16) | (cz + CELL_BIAS);
 
 export class ServerParties {
   constructor(private readonly room: Room) {}
@@ -128,7 +128,7 @@ export class ServerParties {
       const cell = c.grid.get(cellKey(cx, cz));
       if (cell) {for (const i of cell) {idx.push(i);}}
     }}
-    idx.sort((a, b) => a - b);
+    idx.sort((a, b): number => a - b);
     for (const i of idx) {
       const q = c.players[i]!;
       if (q.dead || q.team === me) {continue;}

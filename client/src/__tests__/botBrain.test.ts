@@ -1,19 +1,19 @@
 import { describe, it, expect, vi } from 'vitest';
 import { BotBrain, type BrainCtx } from '../../../shared/botBrain.js';
 
-const flat = () => 0;
+const flat = (): number => 0;
 function ctx(pos: { x: number; y: number; z: number }, groundY: (x: number, z: number) => number = flat, extra: Partial<BrainCtx> = {}): BrainCtx {
   return Object.assign({}, {pos,enemies: [],groundY,now: 0}, extra);
 }
 
-const wall = (x: number) => (x > 3 ? 20 : 0);
+const wall = (x: number): 0 | 20 => (x > 3 ? 20 : 0);
 const enemy = (x: number, z: number): BrainCtx['enemies'] => [
   { id: 'e1', pos: { x, y: 1.6, z }, vel: { x: 0, y: 0, z: 0 }, alive: true },
 ];
-const ridge = (x: number) => (x > 10 && x < 30 ? 30 : 0);
+const ridge = (x: number): 0 | 30 => (x > 10 && x < 30 ? 30 : 0);
 
-describe('BotBrain pathing', () => {
-  it('walks toward the goal on open ground', () => {
+describe('BotBrain pathing', (): void => {
+  it('walks toward the goal on open ground', (): void => {
     const b = new BotBrain({ x: 0, y: 0, z: 0 });
     const pos = { x: 0, y: 0, z: 0 };
     const out = b.think(0.4, ctx(pos, flat, { objective: { x: 100, y: 0, z: 0 } }));
@@ -22,7 +22,7 @@ describe('BotBrain pathing', () => {
     expect(dx).toBeGreaterThan(0); // +x is the goal direction
   });
 
-  it('slides along the contour when the step climbs a wall', () => {
+  it('slides along the contour when the step climbs a wall', (): void => {
     const b = new BotBrain({ x: 0, y: 0, z: 0 });
     // Wall at x>3 — ground jumps 20m; the 4m-ahead probe lands on it
     const pos = { x: 0, y: 0, z: 0 };
@@ -31,14 +31,14 @@ describe('BotBrain pathing', () => {
     expect(Math.abs(out.dest.z)).toBeGreaterThan(Math.abs(out.dest.x));
   });
 
-  it('detours around the blocked line when it has made no progress', () => {
+  it('detours around the blocked line when it has made no progress', (): void => {
     const b = new BotBrain({ x: 0, y: 0, z: 0 });
     const pos = { x: 0, y: 0, z: 0 };
     const objective = { x: 0, y: 0, z: 100 };
     // Wall dead ahead on the goal line — the route-cost fan deflects to
     // a side heading. (On flat ground a no-progress detour legitimately
     // picks goal-forward since 654dc716; the block is what makes it sidestep.)
-    const aheadWall = (x: number, z: number) => (z > 3 ? 20 : 0);
+    const aheadWall = (x: number, z: number): 0 | 20 => (z > 3 ? 20 : 0);
     b.think(0.4, ctx(pos, aheadWall, { objective }));
     b.think(1.5, ctx(pos, aheadWall, { objective }));
     const out = b.think(0.1, ctx(pos, aheadWall, { objective }));
@@ -47,9 +47,9 @@ describe('BotBrain pathing', () => {
   });
 });
 
-describe('BotBrain senses', () => {
+describe('BotBrain senses', (): void => {
 
-  it('acquires and fires on a visible enemy', () => {
+  it('acquires and fires on a visible enemy', (): void => {
     const b = new BotBrain({ x: 0, y: 0, z: 0 });
     const pos = { x: 0, y: 1.6, z: 0 };
     // Reaction delay: a human doesn't shoot the frame an enemy appears —
@@ -59,7 +59,7 @@ describe('BotBrain senses', () => {
     expect(out?.fire?.targetId).toBe('e1');
   });
 
-  it('ignores an enemy behind a hill — no wallhack', () => {
+  it('ignores an enemy behind a hill — no wallhack', (): void => {
     const b = new BotBrain({ x: 0, y: 0, z: 0 });
     const pos = { x: 0, y: 1.6, z: 0 };
     // Ridge 30m tall spanning x∈(10,30) — the eye line eats it
@@ -69,7 +69,7 @@ describe('BotBrain senses', () => {
     expect(out.dest.x).toBeLessThan(10);
   });
 
-  it('holds a good spot instead of orbiting when position-picking', () => {
+  it('holds a good spot instead of orbiting when position-picking', (): void => {
     const b = new BotBrain({ x: 0, y: 0, z: 0 });
     const pos = { x: 0, y: 1.6, z: 0 };
     // Enemy at mid-range on flat ground — "here" should score well enough
@@ -78,7 +78,7 @@ describe('BotBrain senses', () => {
     expect(Math.hypot(out.dest.x - pos.x, out.dest.z - pos.z)).toBeLessThanOrEqual(14);
   });
 
-  it('sidesteps perpendicular to an inbound shell', () => {
+  it('sidesteps perpendicular to an inbound shell', (): void => {
     const b = new BotBrain({ x: 0, y: 0, z: 0 });
     const pos = { x: 0, y: 1.6, z: 0 };
     // Shell closing in from +x — the dodge must move off the x-axis.
@@ -89,7 +89,7 @@ describe('BotBrain senses', () => {
     expect(Math.abs(out.dest.z)).toBeGreaterThan(2);
   });
 
-  it('walks toward a heard fight', () => {
+  it('walks toward a heard fight', (): void => {
     const b = new BotBrain({ x: 0, y: 0, z: 0 });
     const pos = { x: 0, y: 1.6, z: 0 };
     // Noise at +x, 30m out — most personalities take the bait; retry a
@@ -102,7 +102,7 @@ describe('BotBrain senses', () => {
     expect(moved).toBe(true);
   });
 
-  it('avoids wandering back to a death spot', () => {
+  it('avoids wandering back to a death spot', (): void => {
     const b = new BotBrain({ x: 0, y: 0, z: 0 });
     const pos = { x: 0, y: 1.6, z: 0 };
     b.markDeath({ x: 0, y: 0, z: 20 }, 0); // died just north, t=0 to match ctx.now
@@ -113,7 +113,7 @@ describe('BotBrain senses', () => {
     expect(Math.hypot(goal.x, goal.z - 20) > 12 || Math.hypot(goal.x - pos.x, goal.z - pos.z) < 15).toBe(true);
   });
 
-  it('pushes toward an unseen attacker after a hit', () => {
+  it('pushes toward an unseen attacker after a hit', (): void => {
     const b = new BotBrain({ x: 0, y: 0, z: 0 });
     const pos = { x: 0, y: 1.6, z: 0 };
     b.think(0.4, ctx(pos, flat, {})); // settle a wander goal
@@ -124,7 +124,7 @@ describe('BotBrain senses', () => {
     expect(out.dest.x - pos.x).toBeGreaterThan(0);
   });
 
-  it('a hurt non-hero bot retreats from the shooter but keeps firing', () => {
+  it('a hurt non-hero bot retreats from the shooter but keeps firing', (): void => {
     // Force the hero roll off so the fear path is deterministic.
     const roll = vi.spyOn(Math, 'random').mockReturnValue(0.99);
     try {
@@ -145,7 +145,7 @@ describe('BotBrain senses', () => {
     }
   });
 
-  it('a builder parked at a defensive anchor plants a deployable', () => {
+  it('a builder parked at a defensive anchor plants a deployable', (): void => {
     // random=0.0 forces builder=true and the turret roll; cooldown elapses
     // on the first think past the initial stagger.
     const roll = vi.spyOn(Math, 'random').mockReturnValue(0);
@@ -165,7 +165,7 @@ describe('BotBrain senses', () => {
     }
   });
 
-  it('a builder fighting on the stand never plants mid-duel', () => {
+  it('a builder fighting on the stand never plants mid-duel', (): void => {
     const roll = vi.spyOn(Math, 'random').mockReturnValue(0);
     try {
       const b = new BotBrain({ x: 0, y: 1.6, z: 0 });
@@ -181,7 +181,7 @@ describe('BotBrain senses', () => {
     }
   });
 
-  it('a hero bot pushes into the fight even while hurt', () => {
+  it('a hero bot pushes into the fight even while hurt', (): void => {
     // Force the hero roll on — the rising edge of hurt arms hero mode.
     const roll = vi.spyOn(Math, 'random').mockReturnValue(0);
     try {

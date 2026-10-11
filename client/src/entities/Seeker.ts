@@ -92,7 +92,7 @@ export class Seeker implements Targetable, SwarmSlotOwner {
   private static readonly _ctx: SeekerCtx = { dt: 0, distSq: 0, playerPos: null as never };
 
   private static readonly STATES: Record<SeekerState, (s: Seeker, c: SeekerCtx) => void> = {
-    patrol(s, c) {
+    patrol(s, c): void {
       _dir.subVectors(c.playerPos, s.pos);
       const d = _dir.length() || 0.001;
       _dir.multiplyScalar(1 / d);
@@ -103,7 +103,7 @@ export class Seeker implements Targetable, SwarmSlotOwner {
       if (c.distSq < SEEKER_AGGRO_DIST * SEEKER_AGGRO_DIST) {s.state = 'chase';}
       s.glow = 0;
     },
-    chase(s, c) {
+    chase(s, c): void {
       if (c.distSq > SEEKER_AGGRO_DIST * SEEKER_AGGRO_DIST * 1.4) { s.state = 'patrol'; return; }
       _dir.subVectors(c.playerPos, s.pos);
       const d = _dir.length() || 0.001;
@@ -117,7 +117,7 @@ export class Seeker implements Targetable, SwarmSlotOwner {
         s.dartDir.copy(_dir);
       }
     },
-    telegraph(s, c) {
+    telegraph(s, c): void {
       s.telegraphTimer -= c.dt;
       s.vel.multiplyScalar(1 - 4 * c.dt);
       _dir.subVectors(c.playerPos, s.pos);
@@ -140,11 +140,11 @@ export class Seeker implements Targetable, SwarmSlotOwner {
         s.glow = 0.8;
       }
     },
-    dart(s, c) {
+    dart(s, c): void {
       s.dartTimer -= c.dt;
       if (s.dartTimer <= 0) {s.beginRecover();}
     },
-    recover(s, c) {
+    recover(s, c): void {
       s.recoverTimer -= c.dt;
       _dir.subVectors(s.pos, c.playerPos);
       _dir.y = 0.8;

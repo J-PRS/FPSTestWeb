@@ -76,7 +76,7 @@ class GibMeshPool {
     this.mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
     markProbe(this.mesh, { kind: 'gib', label: `gib/${per}`, gib: this });
     scene.add(this.mesh);
-    this.freeIdx = Array.from({ length: GIB_CAP }, (_, i) => GIB_CAP - 1 - i);
+    this.freeIdx = Array.from({ length: GIB_CAP }, (_, i): number => GIB_CAP - 1 - i);
     if (!geo.boundingSphere) {geo.computeBoundingSphere();}
   }
 

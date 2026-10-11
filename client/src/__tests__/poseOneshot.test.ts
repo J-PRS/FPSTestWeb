@@ -8,13 +8,13 @@ import { oneshotOwnsArms } from '../entities/playerPose.js';
 // to bind pose on each trigger pull).
 function action(running: boolean, weight: number): THREE.AnimationAction {
   const a = Object.create(THREE.AnimationAction.prototype);
-  a.isRunning = () => running;
-  a.getEffectiveWeight = () => weight;
+  a.isRunning = (): boolean => running;
+  a.getEffectiveWeight = (): number => weight;
   return a;
 }
 
-describe('oneshotOwnsArms', () => {
-  it('suppresses the hold only while the oneshot owns the arms', () => {
+describe('oneshotOwnsArms', (): void => {
+  it('suppresses the hold only while the oneshot owns the arms', (): void => {
     expect(oneshotOwnsArms(action(true, 0.9), 'UAL_Pistol_Shoot')).toBe(true);
     expect(oneshotOwnsArms(action(true, 0.3), 'UAL_Pistol_Shoot')).toBe(false); // fading out
     expect(oneshotOwnsArms(action(false, 1), 'UAL_Pistol_Shoot')).toBe(false);  // finished

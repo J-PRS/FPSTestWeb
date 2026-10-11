@@ -116,7 +116,7 @@ export class GameBot extends RemotePlayer {
    *  favors — same adaptation BotRoster.adaptOnRespawn runs online. */
   adaptLoadout(): void {
     if (!this.loadout || !this.loadoutAlts) {return;}
-    const next = adaptLoadout(this.loadout, this.loadoutAlts, (w) => aimSkillFor(this.brain.skill, w, 0), botRand);
+    const next = adaptLoadout(this.loadout, this.loadoutAlts, (w): number => aimSkillFor(this.brain.skill, w, 0), botRand);
     if (next === this.loadout) {return;}
     this.setLoadout(next);
     const cls = botClassForLoadout(next);
@@ -139,7 +139,7 @@ export class GameBot extends RemotePlayer {
   /** The brain's skill matrix — the fire resolver biases the draw with it. */
   get skill() { return this.brain.skill; }
   /** Role-adherence scalar — role policy (HoF lean) scales by it. */
-  get dutyLevel() { return this.brain.dutyLevel; }
+  get dutyLevel(): number { return this.brain.dutyLevel; }
   /** MoveSim grounded flag — propel only launches from a stand. */
   get grounded(): boolean { return this.moveState.onGround; }
 
@@ -239,7 +239,7 @@ export class GameBot extends RemotePlayer {
     // cells: teammates re-query each other's cached LOS marches and steer
     // probes instead of recomputing them.
     const gyc = sharedGroundYCache;
-    const out = this.brain.think(dt, Object.assign({}, {pos,team: this.team === 'ffa' ? undefined : this.team,vel: this.velocity,enemies: ctx.enemies,objective: ctx.objective ?? undefined,pickup: ctx.nugget?.pos,groundY: (x: number, z: number) => {
+    const out = this.brain.think(dt, Object.assign({}, {pos,team: this.team === 'ffa' ? undefined : this.team,vel: this.velocity,enemies: ctx.enemies,objective: ctx.objective ?? undefined,pickup: ctx.nugget?.pos,groundY: (x: number, z: number): number => {
         // ~2m cells, not 4cm: getHeight is a smooth bilinear heightmap
         // read, so meter snapping is invisible to the senses — and wider
         // cells give the shared memo a much higher hit rate.
@@ -258,10 +258,10 @@ export class GameBot extends RemotePlayer {
         }
         return v;
       },solids: Projectile.solidColliders,solidIndex: Projectile.solidIndex,others: ctx.others,allies: ctx.allies,engageRange: ctx.engageRange,sounds: ctx.sounds,threats: ctx.threats,infiltrating: ctx.infiltrating,running: ctx.running,runner: ctx.runner,wave: ctx.wave,marshal: ctx.marshal,posted: ctx.posted,thief: ctx.thief ?? null,huntCreatures: ctx.huntCreatures,repair: ctx.repair ?? null,notice: ctx.notice ?? null,confidence: ctx.confidence,now: performance.now(),energy: this.energy,healthFrac: this.botHp / this.botMaxHp}, botWeaponHooks(
-        (d) => pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d, (t) => aimSkillFor(this.brain.skill, t, 0), this.brain.skill.courage) as WeaponType,
+        (d): WeaponType => pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d, (t): number => aimSkillFor(this.brain.skill, t, 0), this.brain.skill.courage) as WeaponType,
         this.loadout ?? BOT_LOADOUTS[0]!,
-      ), {aimSkill: (d: number, targetSpeed: number) =>
-        aimSkillFor(this.brain.skill, pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d, (t) => aimSkillFor(this.brain.skill, t, 0), this.brain.skill.courage), targetSpeed)}));
+      ), {aimSkill: (d: number, targetSpeed: number): number =>
+        aimSkillFor(this.brain.skill, pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d, (t): number => aimSkillFor(this.brain.skill, t, 0), this.brain.skill.courage), targetSpeed)}));
     const {dest} = out;
     this.lastDest.set(dest.x, dest.y, dest.z);
     this.lastMove = out.move;

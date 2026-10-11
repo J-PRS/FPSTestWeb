@@ -41,14 +41,14 @@ function opsAllowed(req: Request | undefined, url: URL): boolean {
   const bearer = req?.headers.get('authorization')?.replace(/^bearer\s+/i, '');
   return bearer === CONFIG.adminToken || url.searchParams.get('key') === CONFIG.adminToken;
 }
-const opsClosed = () => corsResponse('unauthorized', { status: 401 });
+const opsClosed = (): Response => corsResponse('unauthorized', { status: 401 });
 
 export function corsResponse(body: BodyInit | null, init?: ResponseInit): Response {
   return new Response(body, Object.assign({}, init, {headers: Object.assign({}, CORS_HEADERS, init?.headers)}));
 }
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
-const json = (data: unknown, init?: ResponseInit) =>
+const json = (data: unknown, init?: ResponseInit): Response =>
   corsResponse(JSON.stringify(data), Object.assign({}, init, {headers: JSON_HEADERS}));
 
 let _ice: unknown[] | null = null;
@@ -83,35 +83,35 @@ function joinThrottleAllow(ip: string): boolean {
 // get (url, req) — req is only needed by /join for the client IP.
 export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Request) => Response | Promise<Response>> {
   return {
-    '/': () => json(ctx.gameServer.getHealthStatus()),
-    '/health': () => json(ctx.gameServer.getHealthStatus()),
+    '/': (): Response => json(ctx.gameServer.getHealthStatus()),
+    '/health': (): Response => json(ctx.gameServer.getHealthStatus()),
     // Ops metrics — uptime, players, balls, tick-lag stats. Ops-gated.
-    '/metrics': (url, req) => opsAllowed(req, url) ? json(ctx.gameServer.getMetrics()) : opsClosed(),
+    '/metrics': (url, req): Response => opsAllowed(req, url) ? json(ctx.gameServer.getMetrics()) : opsClosed(),
     // Server-browser card — identity + occupancy for master lists / LAN.
-    '/serverinfo': () => json(ctx.gameServer.getServerInfo()),
+    '/serverinfo': (): Response => json(ctx.gameServer.getServerInfo()),
     // Lobby browse — live matches with occupancy.
-    '/rooms': () => json(ctx.gameServer.listRooms()),
+    '/rooms': (): Response => json(ctx.gameServer.listRooms()),
     // Match history ring (also journaled to logs/matches.jsonl).
-    '/matches': () => json(ctx.gameServer.listMatches()),
+    '/matches': (): Response => json(ctx.gameServer.listMatches()),
     // Lifetime per-player aggregates off the match journal.
-    '/stats': async () => json(await ctx.gameServer.getStats()),
+    '/stats': async (): Promise<Response> => json(await ctx.gameServer.getStats()),
     // Balance telemetry — per-mode damage/hits/kills by weapon source,
     // bot-authored share split out (also journaled to weaponstats.jsonl).
-    '/weaponstats': (url, req) => opsAllowed(req, url) ? json(weaponStats.snapshot()) : opsClosed(),
+    '/weaponstats': (url, req): Response => opsAllowed(req, url) ? json(weaponStats.snapshot()) : opsClosed(),
     // Readable dashboard over the same ledger — tables, bars, funnel pcts.
-    '/weaponstats.html': (url, req) => opsAllowed(req, url)
+    '/weaponstats.html': (url, req): Response => opsAllowed(req, url)
       ? corsResponse(WEAPONSTATS_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
       : opsClosed(),
     // Live ops dashboard over /metrics + /health — degraded banner,
     // per-phase tick bars, per-room bot CPU + client tails.
-    '/status': (url, req) => opsAllowed(req, url)
+    '/status': (url, req): Response => opsAllowed(req, url)
       ? corsResponse(STATUS_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
       : opsClosed(),
     // Map list for the menu's match setup — name + mode + default bots.
-    '/maps': () => json(ctx.gameServer.listMaps()),
+    '/maps': (): Response => json(ctx.gameServer.listMaps()),
     // Quick-join: /join?mode=ctf&map=raindance&bots=6 → emptiest live
     // match fitting the request (or a fresh room built from that spec).
-    '/join': (url, req) => {
+    '/join': (url, req): Response => {
       const ip = req ? ctx.requestIP?.(req)?.address : undefined;
       if (ip && !joinThrottleAllow(ip)) {return corsResponse('Too many joins', { status: 429 });}
       const mode = url.searchParams.get('mode') ?? '';
@@ -137,14 +137,14 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Reques
     },
     // WebTransport discovery: browser clients pin self-signed certs via
     // serverCertificateHashes — this is the DER SHA-256 of FPS_WT_CERT.
-    '/wthash': () => json(wtInfo(ctx) ?? { enabled: false }),
+    '/wthash': (): Response => json(wtInfo(ctx) ?? { enabled: false }),
     // WebRTC tier: STUN/TURN servers come from the deployment, not the
     // client build — parsed once at boot from FPS_ICE_SERVERS.
-    '/rtcconfig': () => json({ iceServers: iceServers() }),
+    '/rtcconfig': (): Response => json({ iceServers: iceServers() }),
     // Open P2P lobbies — hosts that marked their room public, still waiting
     // on a guest. Quick-join picks the first (longest waiting).
-    '/rtc/lobbies': () => json(ctx.rtcRelay.lobbies()),
-    '/demos': async () => {
+    '/rtc/lobbies': (): Response => json(ctx.rtcRelay.lobbies()),
+    '/demos': async (): Promise<Response> => {
       const list = await ctx.demoStorage.listDemos();
       logger.info('Demo list requested', { count: list.length, top: list[0]?.projectileLifetime.toFixed(2) ?? 'none' });
       return json({ demos: list });
@@ -169,15 +169,15 @@ export function adminRoute(ctx: HttpCtx, req: Request, url: URL): Response {
   if (req.method !== 'POST') {return corsResponse('POST only', { status: 405 });}
 
   const ADMIN_ACTIONS: Record<string, () => Response> = {
-    '/admin/reload': () => {
+    '/admin/reload': (): Response => {
       const r = ctx.gameServer.reloadRoom(url.searchParams.get('room') ?? '');
       return json({ ok: r === 'ok', result: r }, { status: r === 'ok' ? 200 : 404 });
     },
-    '/admin/kick': () => {
+    '/admin/kick': (): Response => {
       const ok = ctx.gameServer.kickPlayer(url.searchParams.get('player') ?? '');
       return json({ ok }, { status: ok ? 200 : 404 });
     },
-    '/admin/end': () => {
+    '/admin/end': (): Response => {
       const r = ctx.gameServer.forceEndMatch(url.searchParams.get('room') ?? '');
       return json({ ok: r === 'ok', result: r }, { status: r === 'ok' ? 200 : 404 });
     },
@@ -253,7 +253,7 @@ export async function demoRoute(ctx: HttpCtx, req: Request, url: URL): Promise<R
 // for crawlers and chat unfurls (the .demo binary can't render there), then
 // meta-refreshes humans into the feed. FPS_CLIENT_URL points the refresh at
 // wherever the static client lives; empty = same origin (co-hosted deploy).
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+const esc = (s: string): string => s.replace(/[&<>"']/g, (c): string => `&#${c.charCodeAt(0)};`);
 export async function clipRoute(ctx: HttpCtx, url: URL): Promise<Response> {
   const name = url.pathname.slice('/clips/'.length);
   const base = (CONFIG.clientUrl ?? '').replace(/\/$/, '');
@@ -261,7 +261,7 @@ export async function clipRoute(ctx: HttpCtx, url: URL): Promise<Response> {
   let title = 'Best shots';
   let desc = 'Watch the top plays';
   if (name) {
-    const meta = (await ctx.demoStorage.listDemos()).find((m) => m.filename === name);
+    const meta = (await ctx.demoStorage.listDemos()).find((m): boolean => m.filename === name);
     if (meta) {
       title = meta.description || title;
       desc = `${meta.projectileLifetime.toFixed(2)}s air`;

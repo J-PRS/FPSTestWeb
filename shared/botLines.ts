@@ -224,7 +224,7 @@ export class BotLines {
             // for, which beats walking whichever contour feels flat
             // (both arms of a moat read equally flat while one ends
             // at the pass).
-            const crest = (c: { x: number; z: number }) => {
+            const crest = (c: { x: number; z: number }): number => {
               const ddx = dest.x - c.x, ddz = dest.z - c.z;
               const dd = Math.hypot(ddx, ddz);
               if (dd < 1) {return 0;}
@@ -236,7 +236,7 @@ export class BotLines {
               }
               return m;
             };
-            const scoreT = (c: { x: number; z: number }) => {
+            const scoreT = (c: { x: number; z: number }): number => {
               const climb = ctx.groundY(c.x, c.z) - g0;
               return (gd - Math.hypot(dest.x - c.x, dest.z - c.z))
                 + Math.min(Math.max(0, climb), 12) * 2
@@ -357,7 +357,7 @@ export class BotLines {
         drops.push(g);
         prevG = g; prevD = d;
       }
-      const sheer = Math.min(...drops.map((g, i) => g - (i ? drops[i - 1]! : g0)));
+      const sheer = Math.min(...drops.map((g, i): number => g - (i ? drops[i - 1]! : g0)));
       if (sheer < T.lines.sheerVeto) {continue;} // cliff face — don't route bots off sheers
 
       // Best landing on this ray: the deepest pocket that still gains

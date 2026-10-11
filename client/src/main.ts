@@ -90,7 +90,7 @@ const profiler = new LoadProfiler();
 // ---- Camera ----
 const camera = new THREE.PerspectiveCamera(settings.get('fps-fov') || CAMERA_FOV, GAME_ASPECT, CAMERA_NEAR, CAMERA_FAR);
 // Menu FOV field — live via the settings event, no reload needed.
-window.addEventListener('fps:set', (e) => {
+window.addEventListener('fps:set', (e): void => {
   const { key, value } = (e as CustomEvent).detail;
   if (key === 'fps-fov') { camera.fov = value; camera.updateProjectionMatrix(); }
 });
@@ -206,15 +206,15 @@ async function init(): Promise<void> {
   const earlyWire = Boolean(urlParams.room) && !urlParams.p2p && urlParams.mode !== 'classic';
   if (onlineBoot && urlParams.mode !== 'classic' && settings.get('fps-session-token')) {
     serverEndpoints
-      .then((ep) => pingServer(ep.httpUrl))
-      .then((live) => { if (live) {armSessionVeil(); profiler.markTime('veilProbed');} })
-      .catch(() => { /* dead-host probe — the offline world owns first frames */ });
+      .then((ep): Promise<boolean> => pingServer(ep.httpUrl))
+      .then((live): void => { if (live) {armSessionVeil(); profiler.markTime('veilProbed');} })
+      .catch((): void => { /* dead-host probe — the offline world owns first frames */ });
   }
   earlyConnP = earlyWire
-    ? serverEndpoints.then(async (ep) => {
+    ? serverEndpoints.then(async (ep): Promise<void> => {
         profiler.markTime('networkConnectStart');
         try {
-          await networkManager.connect(ep.wsUrl, undefined, ep.fleet && ep.lobbyUrl ? () => fleetWorkerUrl(ep.lobbyUrl!) : undefined);
+          await networkManager.connect(ep.wsUrl, undefined, ep.fleet && ep.lobbyUrl ? (): Promise<string | null> => fleetWorkerUrl(ep.lobbyUrl!) : undefined);
           profiler.markTime('networkConnected');
           logger.info(`Connected to server at ${ep.wsUrl}`);
         } catch (error) { logger.error('Failed to connect to server', error); }
@@ -230,7 +230,7 @@ async function init(): Promise<void> {
     ? await loadSoloSpec(urlParams.map) : null;
   const bootSaved = onlineBoot ? await probeBootMap() : null;
   const soloPrimed = soloSpec?.map && (await serverEndpoints).httpUrl
-    ? await bootPrimeTerrain((await serverEndpoints).httpUrl, soloSpec.map).catch(() => false)
+    ? await bootPrimeTerrain((await serverEndpoints).httpUrl, soloSpec.map).catch((): boolean => false)
     : false;
   if (!soloPrimed && (!bootSaved || !(await bootPrimeTerrain(bootSaved.httpUrl, bootSaved.map)))) {
     await loadHeightfieldBin('/assets/heightmaps/heightmap.bin');
@@ -261,8 +261,8 @@ async function init(): Promise<void> {
   // connectPhase. setVisible(false) still applies in the same
   // microtask the load resolves, so it can never flash rendered.
   player.loadModel()
-    .then(() => profiler.markTime('playerModelLoaded'))
-    .catch((error) => logger.warn('PlayerModel load gave up', { error: String(error) }));
+    .then((): void => profiler.markTime('playerModelLoaded'))
+    .catch((error): void => logger.warn('PlayerModel load gave up', { error: String(error) }));
 
   vmSetup = createViewModelScene(camera.aspect);
   ({viewModel} = vmSetup);
@@ -273,7 +273,7 @@ async function init(): Promise<void> {
 
   // Hybrid wave director — scripted beats + a credit pool spent on an
   // unlocking roster. Lives beside entities, drives its spawn fns.
-  waveDirector = createWaveDirector({ entities, lazyPlayer: () => player, lazyTerrain: () => terrain, logger });
+  waveDirector = createWaveDirector({ entities, lazyPlayer: (): Player => player, lazyTerrain: (): Terrain => terrain, logger });
 
   combat = makeCombat();
   wirePlayerStatusHooks();
@@ -292,11 +292,11 @@ async function init(): Promise<void> {
   // heightmap first would spawn → re-seat in the same breath. Offline
   // (no gameState ever) falls back to the boot field after 8s.
   if (mode || soloSpec) {
-    world.onTerrainApplied = () => teamBots?.reseatAll();
-    Promise.race([firstTerrain, new Promise((r) => setTimeout(r, 8000))])
+    world.onTerrainApplied = (): void | undefined => teamBots?.reseatAll();
+    Promise.race([firstTerrain, new Promise((r): NodeJS.Timeout => setTimeout(r, 8000))])
       // Hold the roster kick-off until frames stabilize — spawning a full
       // bot match mid-compile-hitch seeds bad sim from frame one.
-      .then(async () => { await gameLoop?.whenStable(); if (!teamBots && !networkManager.isConnected() && mode) {setupOfflineMode(mode, soloSpec?.spec);} });
+      .then(async (): Promise<void> => { await gameLoop?.whenStable(); if (!teamBots && !networkManager.isConnected() && mode) {setupOfflineMode(mode, soloSpec?.spec);} });
   }
 
   // ?yaw/?pitch/?dummy headless-screenshot hooks — see game/debugHooks.ts.
@@ -322,20 +322,20 @@ async function init(): Promise<void> {
 
   // Remote player lifecycle: per-frame ticks, pruning, scoreboard
   remotes = createRemotes({
-    lazyNetworkManager: () => networkManager,
-    lazyScene: () => scene,
-    lazyTerrain: () => terrain,
-    lazyCamera: () => camera,
-    lazyPlayer: () => player,
-    lazyHud: () => hud,
-    lazyHealthBarSystem: () => healthBarSystem,
-    lazyEffects: () => effects,
+    lazyNetworkManager: (): NetworkManager => networkManager,
+    lazyScene: (): THREE.Scene<THREE.Object3DEventMap> => scene,
+    lazyTerrain: (): Terrain => terrain,
+    lazyCamera: (): THREE.PerspectiveCamera => camera,
+    lazyPlayer: (): Player => player,
+    lazyHud: (): HUD => hud,
+    lazyHealthBarSystem: (): HealthBarSystem => healthBarSystem,
+    lazyEffects: (): EffectsManager => effects,
     logger,
     world,
-    lazyOfflineFfaScores: () => teamBots?.ffaScores ?? null,
-    lazyPlayerSheep: () => playerSheep,
+    lazyOfflineFfaScores: (): Map<string, number> | null => teamBots?.ffaScores ?? null,
+    lazyPlayerSheep: (): PlayerSheep => playerSheep,
   });
-  playerSheep = new PlayerSheep(() => networkManager.getLocalPlayerId());
+  playerSheep = new PlayerSheep((): string => networkManager.getLocalPlayerId());
 
   // The model load was kicked at playerCtor — it resolves in the
   // background through the connect handshake.
@@ -345,22 +345,22 @@ async function init(): Promise<void> {
 
   // Register all server message handlers (hit/kill/respawn/projectiles/gameState)
   const netCtx = wireNetworkHandlers({
-    lazyNetworkManager: () => networkManager,
-    lazyScene: () => scene,
-    lazyTerrain: () => terrain,
-    lazyPlayer: () => player,
-    lazyEffects: () => effects,
-    lazyHud: () => hud,
-    lazyHealthBarSystem: () => healthBarSystem,
-    lazyDemoManager: () => demoManager,
+    lazyNetworkManager: (): NetworkManager => networkManager,
+    lazyScene: (): THREE.Scene<THREE.Object3DEventMap> => scene,
+    lazyTerrain: (): Terrain => terrain,
+    lazyPlayer: (): Player => player,
+    lazyEffects: (): EffectsManager => effects,
+    lazyHud: (): HUD => hud,
+    lazyHealthBarSystem: (): HealthBarSystem => healthBarSystem,
+    lazyDemoManager: (): DemoManager | null => demoManager,
     fragMessages,
     explosionTracker,
     logger,
     world,
     setLastSentPos: remotes.setLastSentPos,
     entities: () => entities,
-    retireOfflineBots: () => { teamBots?.dispose(); teamBots = null; },
-    hearLocalChat: (t, tm, v) => teamBots?.hearLocal(t, tm, v),
+    retireOfflineBots: (): void => { teamBots?.dispose(); teamBots = null; },
+    hearLocalChat: (t, tm, v): void | undefined => teamBots?.hearLocal(t, tm, v),
   });
   // Deps bound — inbound that queued during the early socket flight
   // flushes through the normal dispatch now, in wire order.
@@ -413,14 +413,14 @@ async function initDemo(): Promise<void> {
   demoManager.video.setCanvas(renderer.domElement);
   // Audio rides the post-compressor mix — null until the first gesture
   // unlocks the AudioContext, so early clips just stay video-only.
-  demoManager.video.setAudioSource(() =>
+  demoManager.video.setAudioSource((): { ctx: AudioContext; node: AudioNode; } | null =>
     audio.context instanceof AudioContext && audio.mixNode
       ? { ctx: audio.context as AudioContext, node: audio.mixNode }
       : null);
   // Silently re-arm the previously-picked clips folder (no prompt — the
   // handle reuses its stored permission until Chrome asks for a re-grant,
   // which happens inside the next F9 gesture via pickClipsDir).
-  import('./demo/clipSink.js').then(m => m.restoreClipsDir());
+  import('./demo/clipSink.js').then((m): Promise<boolean> => m.restoreClipsDir());
   const { playerData, inputData } = playerProviders(player);
   demoManager.setDataProviders(playerData, inputData);
 
@@ -431,7 +431,7 @@ async function initDemo(): Promise<void> {
   });
 
   demoLifecycle = makeDemoLifecycle();
-  demoLifecycle.wireDemoHandlers(demoManager, () => {
+  demoLifecycle.wireDemoHandlers(demoManager, (): void => {
     demoLifecycle.snapshotExistingBallsForRecording(entities.recordBallKeyframes);
   });
 }
@@ -460,7 +460,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   // without it every piece stands at authored y and dirt pokes through
   // decks (bastion terrain varies ~15m under a genhouse footprint).
   if (!classicMode && soloMode && soloSpec) {
-    seatKits(soloSpec.spec.structures, (x, z) => terrain.getHeight(x, z));
+    seatKits(soloSpec.spec.structures, (x, z): number => terrain.getHeight(x, z));
   }
   if (!classicMode) {bootApplySavedMap(netCtx, soloMode ? (soloSpec?.map ?? null) : savedMap);}
   profiler.markTime('savedMapApplied');
@@ -485,10 +485,10 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
       bootMap: soloSpec?.spec ?? soloSpec?.map ?? savedMap,
       // Fleet reconnects re-ask the matchmaker for a live worker — retrying
       // the dead worker's direct URL forever would never land anywhere.
-      resolveUrl: ep.fleet && ep.lobbyUrl ? () => fleetWorkerUrl(ep.lobbyUrl!) : undefined,
+      resolveUrl: ep.fleet && ep.lobbyUrl ? (): Promise<string | null> => fleetWorkerUrl(ep.lobbyUrl!) : undefined,
     });
   }
-  player.serverOwnsHealth = () => networkManager.isConnected();
+  player.serverOwnsHealth = (): boolean => networkManager.isConnected();
 
   // Offline start waits on stable frames — the player spawn anchor,
   // deploys, balls and demo recording all land after warmup instead of
@@ -565,7 +565,7 @@ function killLocal(source: string): void {
   hud.hide();
   hud.setDeathOverlay(true);
   fragMessages.show(`YOU DIED\n${source}`);
-  setTimeout(() => {
+  setTimeout((): void => {
     respawnLapsed = true;
     // L's die+spectate parks the corpse offline too — the deadline lapses
     // and the player stays dead until a dead-state respawn press revives.
@@ -611,25 +611,25 @@ function setupOfflineMode(mode: string, mapSpec?: MapSpec): void {
     : { alpha: Math.floor(want / 2), bravo: Math.ceil(want / 2) };
   teamBots = new TeamBots(
     {
-      lazyPlayer: () => player,
-      lazyTerrain: () => terrain,
-      lazyEffects: () => effects,
-      lazyHud: () => hud,
-      lazyHealthBarSystem: () => healthBarSystem,
-      lazyNetworkManager: () => networkManager,
-      lazyDemoManager: () => demoManager,
-      lazyScene: () => scene,
-      lazyCamera: () => camera,
+      lazyPlayer: (): Player => player,
+      lazyTerrain: (): Terrain => terrain,
+      lazyEffects: (): EffectsManager => effects,
+      lazyHud: (): HUD => hud,
+      lazyHealthBarSystem: (): HealthBarSystem => healthBarSystem,
+      lazyNetworkManager: (): NetworkManager => networkManager,
+      lazyDemoManager: (): DemoManager | null => demoManager,
+      lazyScene: (): THREE.Scene<THREE.Object3DEventMap> => scene,
+      lazyCamera: (): THREE.PerspectiveCamera => camera,
       logger,
       world,
       targets: entities.targets,
     },
     {
-      dropNuggets: (pos, n, vel) => entities.spawnNuggetsAt(pos, n, vel),
-      localPlayerKilled: (killerName) => killLocal(`fragged by ${killerName}`),
-      remoteKillFeed: (text) => { fragMessages.show(text); hud.logEvent(text); },
-      fragBanner: (text) => { fragMessages.showKill(text); hud.logEvent(text); },
-      killFeed: (s, t, ls, lt, meta) => hud.feedKill(s, t, ls, lt, meta),
+      dropNuggets: (pos, n, vel): void => entities.spawnNuggetsAt(pos, n, vel),
+      localPlayerKilled: (killerName): void => killLocal(`fragged by ${killerName}`),
+      remoteKillFeed: (text): void => { fragMessages.show(text); hud.logEvent(text); },
+      fragBanner: (text): void => { fragMessages.showKill(text); hud.logEvent(text); },
+      killFeed: (s, t, ls, lt, meta): void => hud.feedKill(s, t, ls, lt, meta),
       nearestNugget: (pos, maxDist) => {
         let best: typeof entities.nuggets[0] | null = null;
         let bd = maxDist * maxDist;
@@ -650,17 +650,17 @@ function setupOfflineMode(mode: string, mapSpec?: MapSpec): void {
         }
         return best;
       },
-      hasCreatures: () => entities.targets.some(t => !t.scoreless),
-      damageCreature: (id, dmg, att) => {
-        const t = entities.targets.find(x => x.id === id);
+      hasCreatures: (): boolean => entities.targets.some((t): boolean => !t.scoreless),
+      damageCreature: (id, dmg, att): boolean => {
+        const t = entities.targets.find((x): boolean => x.id === id);
         if (!t || t.dead) {return false;}
         return combat.hitTargetLocal(t, dmg, att); // same pipeline as a projectile hit
       },
-      botDeploy: (kind, pos, owner) =>
+      botDeploy: (kind, pos, owner): void =>
         entities.deployables.plantFor(kind as DeployKind, pos, owner),
-      botRepairJob: (team, pos, botId) => entities.deployables.repairJob(botId, team, pos),
+      botRepairJob: (team, pos, botId): { key: string; pos: THREE.Vector3; frac: number; } | null => entities.deployables.repairJob(botId, team, pos),
       // ~50hp/s at think cadence — the same heal a human trigger hold does.
-      botWeld: (key) => entities.deployables.weld(key, REPAIR_HEAL_PER_TICK) !== null,
+      botWeld: (key): boolean => entities.deployables.weld(key, REPAIR_HEAL_PER_TICK) !== null,
     },
     'alpha',
     counts,
@@ -681,58 +681,58 @@ function setupOfflineMode(mode: string, mapSpec?: MapSpec): void {
 function makeEntities(): ReturnType<typeof createEntities> {
   return createEntities({
     scene,
-    lazyTerrain: () => terrain,
+    lazyTerrain: (): Terrain => terrain,
     camera,
-    lazyPlayer: () => player,
-    lazyEffects: () => effects,
-    lazyHud: () => hud,
-    lazyNetworkManager: () => networkManager,
-    lazyDemoManager: () => demoManager,
-    lazyViewModel: () => viewModel,
+    lazyPlayer: (): Player => player,
+    lazyEffects: (): EffectsManager => effects,
+    lazyHud: (): HUD => hud,
+    lazyNetworkManager: (): NetworkManager => networkManager,
+    lazyDemoManager: (): DemoManager | null => demoManager,
+    lazyViewModel: (): ViewModel => viewModel,
     logger,
     world,
-    updateBallsPlayback: (dt) => demoLifecycle.updateBallsPlayback(dt),
+    updateBallsPlayback: (dt): void => demoLifecycle.updateBallsPlayback(dt),
     // Team mode sweeps gems toward whoever's nearest — set once bots spawn.
-    nuggetCollectors: () => teamBots?.collectors() ?? [],
-    onNuggetCollect: (id) => teamBots?.collect(id),
+    nuggetCollectors: (): { id: string; pos: THREE.Vector3; alive: boolean; pickupScale: number; }[] => teamBots?.collectors() ?? [],
+    onNuggetCollect: (id): void | undefined => teamBots?.collect(id),
     lazyCombat: () => combat,
-    deployEnemyBots: () => teamBots?.enemyBotsForLocal() ?? [],
-    deployBotFoes: (team) => teamBots?.enemyBotsForTeam(team) ?? [],
-    deployDamageBot: (id, dmg, from) => teamBots?.hit(id, dmg, from, 'local') ?? false,
+    deployEnemyBots: (): { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean; }[] => teamBots?.enemyBotsForLocal() ?? [],
+    deployBotFoes: (team): { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean; }[] => teamBots?.enemyBotsForTeam(team) ?? [],
+    deployDamageBot: (id, dmg, from): boolean => teamBots?.hit(id, dmg, from, 'local') ?? false,
     // Offline base grid — a shelled generator drops its team's gate
     // panes (colliders + visuals), revive puts them back.
-    deployBasePower: (team, on) => setTeamGridDown(team, !on),
-    deployDamageNumbers: () => damageNumberManager,
-    deployItemBar: (item, ally) => healthBarSystem.showDamage(item, ally),
+    deployBasePower: (team, on): void => setTeamGridDown(team, !on),
+    deployDamageNumbers: (): DamageNumberManager => damageNumberManager,
+    deployItemBar: (item, ally): void => healthBarSystem.showDamage(item, ally),
   });
 }
 
 function makeCombat(): ReturnType<typeof createCombat> {
   return createCombat({
-    lazyScene: () => scene,
-    lazyTerrain: () => terrain,
-    lazyCamera: () => camera,
-    lazyPlayer: () => player,
-    lazyViewModel: () => viewModel,
-    lazyDemoManager: () => demoManager,
-    lazyNetworkManager: () => networkManager,
-    lazyEffects: () => effects,
-    lazyHud: () => hud,
-    lazyHealthBarSystem: () => healthBarSystem,
-    lazyDamageNumbers: () => damageNumberManager,
+    lazyScene: (): THREE.Scene<THREE.Object3DEventMap> => scene,
+    lazyTerrain: (): Terrain => terrain,
+    lazyCamera: (): THREE.PerspectiveCamera => camera,
+    lazyPlayer: (): Player => player,
+    lazyViewModel: (): ViewModel => viewModel,
+    lazyDemoManager: (): DemoManager | null => demoManager,
+    lazyNetworkManager: (): NetworkManager => networkManager,
+    lazyEffects: (): EffectsManager => effects,
+    lazyHud: (): HUD => hud,
+    lazyHealthBarSystem: (): HealthBarSystem => healthBarSystem,
+    lazyDamageNumbers: (): DamageNumberManager => damageNumberManager,
     lazyDeployables: () => entities.deployables,
-    lazySpeedLines: () => speedLines,
+    lazySpeedLines: (): SpeedLines => speedLines,
     fragMessages,
     inputTracking,
     explosionTracker,
     logger,
     world,
-    turretBolts: () => entities.turretBolts(),
-    consumeBolt: (bolt) => entities.consumeBolt(bolt as Bolt),
-    cookBoltsNear: (pos, r) => entities.cookBoltsNear(pos, r),
-    reportTargetDamage: (t, dmg) => entities.reportTargetDamage(t, dmg),
-    botHit: (id, dmg, fromPos, attackerId, weaponType, air) => teamBots?.hit(id, dmg, fromPos, attackerId, { weapon: weaponType, air }) ?? false,
-    onCreatureKilled: (shooterId) => teamBots?.creatureKilled(shooterId ?? 'local'),
+    turretBolts: (): Bolt[] => entities.turretBolts(),
+    consumeBolt: (bolt): void => entities.consumeBolt(bolt as Bolt),
+    cookBoltsNear: (pos, r): THREE.Vector3[] => entities.cookBoltsNear(pos, r),
+    reportTargetDamage: (t, dmg): void => entities.reportTargetDamage(t, dmg),
+    botHit: (id, dmg, fromPos, attackerId, weaponType, air): boolean => teamBots?.hit(id, dmg, fromPos, attackerId, { weapon: weaponType, air }) ?? false,
+    onCreatureKilled: (shooterId): void | undefined => teamBots?.creatureKilled(shooterId ?? 'local'),
     balls: entities.balls,
     targets: entities.targets,
     nuggets: entities.nuggets,
@@ -746,7 +746,7 @@ function wirePlayerStatusHooks(): void {
   // into a dive-bomb: 200hp each, a peck that takes half a health bar.
   // Don't shoot the wildlife.
   entities.targets.push(...ambientBirds.targets);
-  ambientBirds.onPeck = (pos) => {
+  ambientBirds.onPeck = (pos): void => {
     if (player.isDead) {return;}
     player.lastDamageSource = 'pecked to death by a buzzard';
     player.applyKnockback(pos, 18 * player.mods.knockbackTaken);
@@ -762,38 +762,38 @@ function wirePlayerStatusHooks(): void {
   viewModel?.switchWeapon(weaponDef(player.loadout[player.weaponIndex]).weaponType);
   player.model?.setWeapon(weaponDef(player.loadout[player.weaponIndex]).weaponType);
   // Spectator fly: strip the combat HUD, leave only a "SPECTATING" hint
-  player.onSpectate = (on) => {
+  player.onSpectate = (on): void => {
     if (on) { hud.hide(); hud.setSpectatorHint(true); }
     // Died mid-flight: the death path owns the HUD — don't resurface it
     else { hud.setSpectatorHint(false); if (!player.isDead) {hud.show();} }
   };
-  player.onCloak = (on) => { hud.setCloak(on); viewModel.setGhost(on); };
+  player.onCloak = (on): void => { hud.setCloak(on); viewModel.setGhost(on); };
   // Shield: HUD chip + cyan vignette, viewmodel charge glow, synth cues.
-  player.onShield = (on) => {
+  player.onShield = (on): void => {
     hud.setShield(on);
     viewModel.setShield(on);
     if (on) {sfx.shieldOn();} else {sfx.shieldBreak();}
   };
-  player.onMend = (on) => {
+  player.onMend = (on): void => {
     hud.setMend(on);
     viewModel.setMend(on);
     if (on) {sfx.mendOn();} else {sfx.mendOff();}
   };
-  player.onDeploy = () => entities.deployables.deploy();
+  player.onDeploy = (): void => entities.deployables.deploy();
 }
 
 // NetworkManager local wiring: movement sends, offline damage/heal
 // authority (same clamps the server applies so offline can't cheat
 // easier), and the join loadout announcement.
 function wireNetworkLocal(): void {
-  player.onNetworkJump = (pos) => networkManager.sendJump(pos);
-  player.onNetworkJetpack = (pos) => networkManager.sendJetpack(pos);
-  player.onNetworkInput = (input, rotation) => networkManager.sendInputMove(input, rotation);
-  player.onSkillUse = () => networkManager.sendSkillUse();
-  player.onRespawn = (hold) => networkManager.sendRespawn(hold === true);
+  player.onNetworkJump = (pos): void => networkManager.sendJump(pos);
+  player.onNetworkJetpack = (pos): void => networkManager.sendJetpack(pos);
+  player.onNetworkInput = (input, rotation): void => networkManager.sendInputMove(input, rotation);
+  player.onSkillUse = (): void => networkManager.sendSkillUse();
+  player.onRespawn = (hold): void => networkManager.sendRespawn(hold === true);
   // G: online it's a wire claim the server resolves; offline the local
   // flag sims run the identical toss themselves (flagrun + CTF both).
-  player.onThrowFlag = () => {
+  player.onThrowFlag = (): void => {
     if (networkManager.isConnected()) {networkManager.sendThrowFlag(); return;}
     teamBots?.flagrun?.throwLocal();
     teamBots?.ctf?.throwLocal();
@@ -803,7 +803,7 @@ function wireNetworkLocal(): void {
   // players' teams come from the wire roster; offline GameBots carry
   // `team` on the entity itself. FFA leaves localTeam undefined so the
   // right-click simply does nothing there.
-  player.spectateTargets = () => {
+  player.spectateTargets = (): { pos: typeof player.pos; alive: boolean; }[] => {
     if (!world.localTeam) {return [];}
     const out: { pos: typeof player.pos; alive: boolean }[] = [];
     for (const [id, rp] of world.remotePlayers) {
@@ -814,7 +814,7 @@ function wireNetworkLocal(): void {
     return out;
   };
   networkManager.localAuthority = {
-    envDamage: (amount) => {
+    envDamage: (amount): void => {
       const dmg = Math.min(40, Math.max(1, Math.round(amount * (1 - effectiveResist(player.mods, player.health, player.maxHealth)))));
       if (player.isDead) {return;}
       player.health = Math.max(0, player.health - dmg);
@@ -827,30 +827,30 @@ function wireNetworkLocal(): void {
     // past 3s is a held corpse); inside the countdown it just releases
     // a die+spectate hold and the timer revives on schedule — the server
     // refuses to skip the pending timer, so offline must not either.
-    respawn: () => {
+    respawn: (): void => {
       if (!player.isDead) {killLocal('respawned'); return;}
       if (respawnLapsed) {reviveLocal();}
       else {player.respawnHeld = false;}
     },
-    heal: (amount) => {
+    heal: (amount): void => {
       player.health = Math.min(100, player.health + Math.min(25, Math.max(1, Math.round(amount))));
     },
   };
   networkManager.joinPerk = () => player.perk;
-  networkManager.joinClass = () => player.armorClass;
+  networkManager.joinClass = (): "light" | "medium" | "heavy" => player.armorClass;
 }
 
 function makeDemoLifecycle(): ReturnType<typeof createDemoLifecycle> {
   return createDemoLifecycle({
-    lazyScene: () => scene,
-    lazyTerrain: () => terrain,
-    lazyCamera: () => camera,
-    lazyPlayer: () => player,
-    lazyDemoManager: () => demoManager,
-    lazyViewModel: () => viewModel,
-    damageNumberManager: () => damageNumberManager,
-    fragMessages: () => fragMessages,
-    lazyHud: () => hud,
+    lazyScene: (): THREE.Scene<THREE.Object3DEventMap> => scene,
+    lazyTerrain: (): Terrain => terrain,
+    lazyCamera: (): THREE.PerspectiveCamera => camera,
+    lazyPlayer: (): Player => player,
+    lazyDemoManager: (): DemoManager | null => demoManager,
+    lazyViewModel: (): ViewModel => viewModel,
+    damageNumberManager: (): DamageNumberManager => damageNumberManager,
+    fragMessages: (): FragMessages => fragMessages,
+    lazyHud: (): HUD => hud,
     balls: entities.balls,
     targets: entities.targets,
     crawlers: entities.crawlers,
@@ -876,30 +876,30 @@ function makeGameLoop(): ReturnType<typeof createGameLoop> {
     camera,
     sceneSetup,
     rendererSetup,
-    lazyTerrain: () => terrain,
-    lazyPlayer: () => player,
-    lazyViewModel: () => viewModel,
-    vmScene: () => vmSetup.scene,
-    vmCamera: () => vmSetup.camera,
-    lazyHud: () => hud,
-    lazyHealthBarSystem: () => healthBarSystem,
-    damageNumberManager: () => damageNumberManager,
-    lazyNetworkManager: () => networkManager,
-    lazyDemoManager: () => demoManager,
-    lazyEffects: () => effects,
+    lazyTerrain: (): Terrain => terrain,
+    lazyPlayer: (): Player => player,
+    lazyViewModel: (): ViewModel => viewModel,
+    vmScene: (): THREE.Scene<THREE.Object3DEventMap> => vmSetup.scene,
+    vmCamera: (): THREE.PerspectiveCamera => vmSetup.camera,
+    lazyHud: (): HUD => hud,
+    lazyHealthBarSystem: (): HealthBarSystem => healthBarSystem,
+    damageNumberManager: (): DamageNumberManager => damageNumberManager,
+    lazyNetworkManager: (): NetworkManager => networkManager,
+    lazyDemoManager: (): DemoManager | null => demoManager,
+    lazyEffects: (): EffectsManager => effects,
     speedLines,
     ambientLayers,
-    groundMist: () => groundMist,
+    groundMist: (): GroundMist => groundMist,
     ambientBirds,
     entities,
     combat: () => combat,
     remotes: () => remotes,
     demoLifecycle: () => demoLifecycle,
-    waveDirector: () => waveDirector,
-    teamBots: () => teamBots,
+    waveDirector: (): { update: (dt: number) => void; readonly elapsed: number; readonly credits: number; } => waveDirector,
+    teamBots: (): TeamBots | null => teamBots,
     world,
-    getDummyTick: () => dummyUpdate,
-    lazyPlayerSheep: () => playerSheep,
+    getDummyTick: (): ((dt: number) => void) | null => dummyUpdate,
+    lazyPlayerSheep: (): PlayerSheep => playerSheep,
   });
 }
 
@@ -910,12 +910,12 @@ let gameStarted = false;
 const { requestLock } = wireOverlayInput({
   overlay,
   rendererCanvas: renderer.domElement,
-  lazyDemoManager: () => demoManager,
-  lazyHud: () => hud,
+  lazyDemoManager: (): DemoManager | null => demoManager,
+  lazyHud: (): HUD => hud,
   logger,
-  isGameStarted: () => gameStarted,
-  lazyPlayer: () => player,
-  lazyNetworkManager: () => networkManager,
+  isGameStarted: (): boolean => gameStarted,
+  lazyPlayer: (): Player => player,
+  lazyNetworkManager: (): NetworkManager => networkManager,
 });
 
 // Stale-code badge (noreload dev mode): the vite plugin swallows reloads
@@ -928,7 +928,7 @@ const { requestLock } = wireOverlayInput({
 const hot = import.meta.hot as { on(e: string, cb: (d: { count: number; files?: string[] }) => void): void } | undefined;
 if (hot) {
   let badge: HTMLDivElement | null = null;
-  hot.on('stale:changed', (d) => {
+  hot.on('stale:changed', (d): void => {
     noteStale(d.files, d.count);
     const stale = staleCount();
     if (!badge) {
@@ -948,13 +948,13 @@ if (hot) {
 // The clip feed is phone-first — the desktop-required gate must not
 // block it (playback needs no keyboard/mouse).
 if (!feedMode.on) {wireOnboarding();}
-init().then(async () => {
+init().then(async (): Promise<void> => {
   gameStarted = true;
 
   if (feedMode.on) {
     const { startClipFeed } = await import('./feed/clipFeed.js');
     await startClipFeed({ demoManager: demoManager!, hud, overlay, canvas: renderer.domElement,
-      renderNow: () => renderer.render(scene, camera) });
+      renderNow: (): void => renderer.render(scene, camera) });
     return;
   }
 
@@ -964,7 +964,7 @@ init().then(async () => {
 
   // F9 = ShadowPlay-style canvas recorder: WebCodecs/NVENC when available,
   // MediaRecorder fallback, canvas-only (HUD never enters the clip).
-  document.addEventListener('keydown', (e) => {
+  document.addEventListener('keydown', (e): void => {
     if (e.code !== 'F9' || e.repeat) {return;}
     demoManager?.toggleVideoRecord();
   });
@@ -974,21 +974,21 @@ init().then(async () => {
   // bundle. Runs at boot when the flag is set, and again if the menu DEBUG
   // toggle flips on mid-session (fps:set event) — no reload needed.
   let debugWired = false;
-  const wireDebugTools = async () => {
+  const wireDebugTools = async (): Promise<void> => {
     if (debugWired) {return;}
     debugWired = true;
     if (networkManager) {
       const { wireStateDebug } = await import('./core/stateDebug.js');
       wireStateDebug({
         networkManager,
-        getPlayer: () => player,
+        getPlayer: (): Player => player,
         remotePlayers: world.remotePlayers,
         projectiles: world.projectiles,
         getLastSentPos: remotes.getLastSentPos,
         world,
-        teamBots: () => teamBots,
-        getScene: () => scene,
-        getCamera: () => player.camera,
+        teamBots: (): TeamBots | null => teamBots,
+        getScene: (): THREE.Scene<THREE.Object3DEventMap> => scene,
+        getCamera: (): THREE.PerspectiveCamera => player.camera,
         netCreatures: () => [
           ...entities.crawlers, ...entities.scarabs, ...entities.rakks, ...entities.rollers,
           ...entities.gnats, ...entities.snakes, ...entities.banelings, ...entities.totems,
@@ -1006,7 +1006,7 @@ init().then(async () => {
     };
     // .rec captures (gauntlet --record / pvptest record.ts) replay through
     // the live dispatch as gameplay: __playRec('/hunt.rec', 1.5)
-    window.__playRec = async (src, speed) =>
+    window.__playRec = async (src, speed): Promise<() => void> =>
       (await import('./dev/recPlayer.js')).playRec(networkManager, src, speed);
   };
   // Debug wiring (window.__test, __playRec, stateDebug) — dev hosts only.
@@ -1017,9 +1017,9 @@ init().then(async () => {
   installOverlapAudit();
   // Revealing the log panel reshuffles the corner stack — audit the
   // layout once the reveal frame lands.
-  window.addEventListener('fps:altq', () =>
-    requestAnimationFrame(() => requestAnimationFrame(reportHudOverlap)));
-  window.addEventListener('fps:set', (e) => {
+  window.addEventListener('fps:altq', (): number =>
+    requestAnimationFrame((): number => requestAnimationFrame(reportHudOverlap)));
+  window.addEventListener('fps:set', (e): void => {
     const { key, value } = (e as CustomEvent<{ key: string; value: unknown }>).detail;
     if (key === 'fps-debug' && value === 1 && isDevHost()) {wireDebugTools();}
   });

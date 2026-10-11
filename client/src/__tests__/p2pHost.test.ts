@@ -12,25 +12,25 @@ class FakeLink implements P2PLink {
   json: ServerMessage[] = [];
   bin: Uint8Array[] = [];
   closed = false;
-  send(d: string | Uint8Array) {
+  send(d: string | Uint8Array): void {
     if (typeof d === 'string') {this.json.push(JSON.parse(d));}
     else {this.bin.push(d);}
   }
-  close() { this.closed = true; }
-  lastJson(type: string) { return [...this.json].toReversed().find(m => m.type === type); }
+  close(): void { this.closed = true; }
+  lastJson(type: string) { return [...this.json].toReversed().find((m): boolean => m.type === type); }
 }
 
-function join(host: P2PHost, link: FakeLink, id: string) {
+function join(host: P2PHost, link: FakeLink, id: string): void {
   host.onData(link, JSON.stringify({ type: 'join', playerId: id }));
 }
 
-describe('P2PHost', () => {
+describe('P2PHost', (): void => {
   // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
   let host!: P2PHost;
-  beforeEach(() => { vi.useFakeTimers(); host = new P2PHost(); });
-  afterEach(() => { host.stop(); vi.useRealTimers(); });
+  beforeEach((): void => { vi.useFakeTimers(); host = new P2PHost(); });
+  afterEach((): void => { host.stop(); vi.useRealTimers(); });
 
-  it('join produces gameState handshake', () => {
+  it('join produces gameState handshake', (): void => {
     const a = new FakeLink();
     join(host, a, 'HOST');
     const gs = a.lastJson('gameState') as { localPlayerState?: unknown; sessionToken?: string } | undefined;
@@ -38,14 +38,14 @@ describe('P2PHost', () => {
     expect(gs!.localPlayerState).toBeDefined();
   });
 
-  it('rejects invalid playerId and closes the link', () => {
+  it('rejects invalid playerId and closes the link', (): void => {
     const a = new FakeLink();
     join(host, a, '!!bad id with spaces!!');
     expect(a.closed).toBe(true);
     expect(a.lastJson('gameState')).toBeUndefined();
   });
 
-  it('notifies the other peer on join and leave', () => {
+  it('notifies the other peer on join and leave', (): void => {
     const a = new FakeLink(); const b = new FakeLink();
     join(host, a, 'A'); join(host, b, 'B');
     // A join alone must not announce — that spawned ghost meshes at the
@@ -58,14 +58,14 @@ describe('P2PHost', () => {
     expect(a.lastJson('playerLeft')).toMatchObject({ playerId: 'B' });
   });
 
-  it('same-id rejoin evicts the stale link', () => {
+  it('same-id rejoin evicts the stale link', (): void => {
     const a1 = new FakeLink(); const a2 = new FakeLink();
     join(host, a1, 'A'); join(host, a2, 'A');
     expect(a1.closed).toBe(true);
     expect(a2.lastJson('gameState')).toBeDefined();
   });
 
-  it('forwards binary position frames to the peer at tick', () => {
+  it('forwards binary position frames to the peer at tick', (): void => {
     const a = new FakeLink(); const b = new FakeLink();
     join(host, a, 'A'); join(host, b, 'B');
     host.onData(a, encodePosition({ x: 1, y: 2, z: 3 }, { yaw: 0, pitch: 0 }, { x: 0, y: 0, z: 0 }, 1, 0));
@@ -74,17 +74,17 @@ describe('P2PHost', () => {
     const frame = b.bin[b.bin.length - 1];
     expect(isWireFrame(frame)).toBe(true);
     const tick = decodeTickFrame(frame);
-    expect(tick!.updates.some(p => p.playerId === 'A' && p.position.x === 1)).toBe(true);
+    expect(tick!.updates.some((p): boolean => p.playerId === 'A' && p.position.x === 1)).toBe(true);
   });
 
-  it('binary before join is ignored, not fatal', () => {
+  it('binary before join is ignored, not fatal', (): void => {
     const a = new FakeLink();
     host.onData(a, encodePosition({ x: 0, y: 0, z: 0 }, { yaw: 0, pitch: 0 }, { x: 0, y: 0, z: 0 }, 0, 0));
     join(host, a, 'A');
     expect(a.lastJson('gameState')).toBeDefined();
   });
 
-  it('shot claims route through validation and broadcast playerHit', () => {
+  it('shot claims route through validation and broadcast playerHit', (): void => {
     const a = new FakeLink(); const b = new FakeLink();
     join(host, a, 'A'); join(host, b, 'B');
     // Park B at a known spot, then A fires a hit claim at point blank.
@@ -102,7 +102,7 @@ describe('P2PHost', () => {
     expect(hit?.targetId ?? hitToA?.targetId).toBe('B');
   });
 
-  it('a simmed fire intent echoes projectileCreated with the shotId', () => {
+  it('a simmed fire intent echoes projectileCreated with the shotId', (): void => {
     const a = new FakeLink(); const b = new FakeLink();
     join(host, a, 'A'); join(host, b, 'B');
     host.onData(a, encodePosition({ x: 0, y: 60, z: 0 }, { yaw: 0, pitch: 0 }, { x: 0, y: 0, z: 0 }, 1, 0));
@@ -116,7 +116,7 @@ describe('P2PHost', () => {
     expect(spawned!.ownerId).toBe('A');
   });
 
-  it('beam intents resolve through the host sweep — no claims', () => {
+  it('beam intents resolve through the host sweep — no claims', (): void => {
     const a = new FakeLink(); const b = new FakeLink();
     join(host, a, 'A'); join(host, b, 'B');
     // Lightning is light-locked — the class gate would reject the intent.
@@ -132,7 +132,7 @@ describe('P2PHost', () => {
     expect(hit?.targetId ?? hitToA?.targetId).toBe('B');
   });
 
-  it('malformed JSON is dropped without killing the link', () => {
+  it('malformed JSON is dropped without killing the link', (): void => {
     const a = new FakeLink();
     join(host, a, 'A');
     host.onData(a, '{not json');

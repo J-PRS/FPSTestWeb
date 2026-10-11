@@ -462,7 +462,7 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
  *  'wireIds' deltas in one place (probes, netbot, replay tools). */
 export class WireIdRoster {
   readonly ids = new Map<number, string>();
-  readonly pool: TickDecodePool = { slots: [], byId: new Map(), resolveId: (id) => this.ids.get(id) };
+  readonly pool: TickDecodePool = { slots: [], byId: new Map(), resolveId: (id): string | undefined => this.ids.get(id) };
   feed(m: { type?: string; add?: Record<number, string>; wireIds?: Record<number, string> }): void {
     if (m.type === 'wireIds' && m.add) {
       for (const [id, pid] of Object.entries(m.add)) {this.ids.set(Number(id), pid);}

@@ -53,12 +53,12 @@ export function buildKeysMenu(openBtn: HTMLElement, host: HTMLElement): { close(
     const chip = document.createElement('button');
     chip.className = 'keys-chip';
     chip.textContent = codeLabel(codeFor(d.action));
-    chip.addEventListener('click', (e) => {
+    chip.addEventListener('click', (e): void => {
       e.stopPropagation();
       if (chip.classList.contains('capturing')) {return;}
       chip.classList.add('capturing');
       chip.textContent = '···';
-      captureNextInput((code) => {
+      captureNextInput((code): void => {
         chip.classList.remove('capturing');
         if (code) {rebind(d.action, code);}
         refresh();
@@ -96,31 +96,31 @@ export function buildKeysMenu(openBtn: HTMLElement, host: HTMLElement): { close(
     fixedGrid.append(row);
   }
 
-  host.querySelector<HTMLElement>('.keys-close')!.addEventListener('click', (e) => {
+  host.querySelector<HTMLElement>('.keys-close')!.addEventListener('click', (e): void => {
     e.stopPropagation();
     close();
   });
   // Click on the dim backdrop closes; clicks inside the box don't reach it
   // (overlay's own click handler only fires on e.target === overlay anyway).
-  host.addEventListener('click', (e) => {
+  host.addEventListener('click', (e): void => {
     if (e.target === host) {close();}
   });
   // Esc closes the popup — but not while a capture is live (Esc there means
   // "cancel the rebind" and is already consumed by the capture listener).
-  document.addEventListener('keydown', (e) => {
+  document.addEventListener('keydown', (e): void => {
     if (e.code === 'Escape' && host.classList.contains('open') && !isCapturing()) {
       e.stopImmediatePropagation();
       close();
     }
   });
 
-  host.querySelector<HTMLElement>('.keys-reset')!.addEventListener('click', (e) => {
+  host.querySelector<HTMLElement>('.keys-reset')!.addEventListener('click', (e): void => {
     e.stopPropagation();
     resetAll();
     refresh();
   });
 
-  openBtn.addEventListener('click', (e) => {
+  openBtn.addEventListener('click', (e): void => {
     e.stopPropagation();
     open();
   });

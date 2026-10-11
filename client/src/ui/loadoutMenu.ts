@@ -72,7 +72,7 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
     el.append(list);
     let options = initialOptions;
     let currentV = '';
-    const rebuild = () => {
+    const rebuild = (): void => {
       el.style.minWidth = `${dropWidth(options)}px`;
       list.innerHTML = '';
       for (const o of options) {
@@ -95,7 +95,7 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
           it.append(d);
         }
         it.dataset.v = o.v;
-        it.addEventListener('click', (e) => {
+        it.addEventListener('click', (e): void => {
           e.stopPropagation();
           if (o.disabled) {return;} // tier-locked — visible but unshoulderable
           onPick(o.v);
@@ -107,7 +107,7 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
       }
     };
     rebuild();
-    el.addEventListener('click', (e) => {
+    el.addEventListener('click', (e): void => {
       e.stopPropagation();
       const was = el.classList.contains('open');
       openDrop?.classList.remove('open');
@@ -116,16 +116,16 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
     });
     return {
       el,
-      setValue(v) {
+      setValue(v): void {
         currentV = v;
         // faceOpts resolves labels the filtered list can't — an equipped
         // heavy weapon on lighter armor must name itself, not print "6".
-        face.textContent = options.find((o) => o.v === v)?.label
-          ?? faceOpts?.find((o) => o.v === v)?.label ?? v;
-        list.querySelectorAll<HTMLElement>('.lo-opt').forEach((o) =>
+        face.textContent = options.find((o): boolean => o.v === v)?.label
+          ?? faceOpts?.find((o): boolean => o.v === v)?.label ?? v;
+        list.querySelectorAll<HTMLElement>('.lo-opt').forEach((o): boolean =>
           o.classList.toggle('sel', o.dataset.v === v));
       },
-      setOptions(next) {
+      setOptions(next): void {
         options = next;
         rebuild();
         // The equipped value may have survived the filter — re-face it.
@@ -133,8 +133,8 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
       },
       // 'used' = equipped in a sibling slot — a faint tint reads "already
       // in the kit" without competing with this slot's bright .sel.
-      markUsed(used) {
-        list.querySelectorAll<HTMLElement>('.lo-opt').forEach((o) => {
+      markUsed(used): void {
+        list.querySelectorAll<HTMLElement>('.lo-opt').forEach((o): void => {
           const v = o.dataset.v ?? '';
           o.classList.toggle('used', v !== currentV && used.has(v));
         });
@@ -143,7 +143,7 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
   }
 
   // Clicking the bar's dead space closes any open dropup
-  loadoutBar?.addEventListener('click', () => {
+  loadoutBar?.addEventListener('click', (): void => {
     openDrop?.classList.remove('open');
     openDrop = null;
   });
@@ -157,7 +157,7 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
     // (a banked heavy pick CAN hold a mortar; it shoulders at respawn).
     // Faces come from menuKit: the pending kit while a swap is banked.
     const opts = weaponOptsFor(player.armorClass);
-    ui.slotDrops.forEach((d, i) => { d.setOptions?.(opts); d.setValue(String(player.menuKit[i])); });
+    ui.slotDrops.forEach((d, i): void => { d.setOptions?.(opts); d.setValue(String(player.menuKit[i])); });
     markSlotUse(player, ui.slotDrops);
     ui.beltDrop?.setValue(player.beltItem);
     ui.skillDrop?.setValue(player.skill);
@@ -185,7 +185,7 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
  *  list then shows the whole kit at a glance. */
 function markSlotUse(player: Player, slotDrops: Drop[]): void {
   const kit = player.menuKit.map(String);
-  slotDrops.forEach((d, i) => {
+  slotDrops.forEach((d, i): void => {
     const used = new Set(kit);
     used.delete(kit[i]); // this slot's pick keeps the bright .sel, not 'used'
     d.markUsed?.(used);
@@ -207,16 +207,16 @@ function mkCellDom(parent: HTMLElement): { cell: HTMLElement; cap: HTMLSpanEleme
 // ordnance stays listed but tagged [H]/[M]/[L] and grayed out —
 // lockedForClass flags it in the list AND gates it in setLoadoutSlot.
 const TIER_TAG = new Map<string, string>([
-  ...Player.HEAVY_ONLY.map((w) => [String(w), '[H]'] as const),
-  ...Player.MEDIUM_ONLY.map((w) => [String(w), '[M]'] as const),
-  ...Player.LIGHT_ONLY.map((w) => [String(w), '[L]'] as const),
+  ...Player.HEAVY_ONLY.map((w): readonly [string, "[H]"] => [String(w), '[H]'] as const),
+  ...Player.MEDIUM_ONLY.map((w): readonly [string, "[M]"] => [String(w), '[M]'] as const),
+  ...Player.LIGHT_ONLY.map((w): readonly [string, "[L]"] => [String(w), '[L]'] as const),
 ]);
 
 // Locked gear stays listed but grays out against the tier in effect —
 // knowing a mortar exists matters even when you can't shoulder it.
 function weaponOptsFor(cls: ArmorClass): DropOpt[] {
   return SLOT_DEFS
-    .map((def, wid) => {
+    .map((def, wid): { v: string; label: string; sidearm: boolean; disabled: boolean; } => {
       const tag = TIER_TAG.get(String(wid));
       return {
         v: String(wid),
@@ -225,7 +225,7 @@ function weaponOptsFor(cls: ArmorClass): DropOpt[] {
         disabled: Player.lockedForClass(cls, wid),
       };
     })
-    .filter((o) => !o.sidearm)
+    .filter((o): boolean => !o.sidearm)
     // SLOT_DEFS order is wire identity (wid = index) — the MENU sorts by
     // name instead; v stays the wid so picks never reshuffle. Tier-locked
     // entries group at the bottom so restricted gear reads as one block.
@@ -268,7 +268,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   tiles.className = 'lo-tiles';
   armorCells.append(tiles);
   const classTileEls: { v: string; el: HTMLElement }[] = [];
-  const pickClass = (v: string) => {
+  const pickClass = (v: string): void => {
     const player = deps.lazyPlayer();
     player.setArmorClass(v as ArmorClass);
     deps.lazyNetworkManager?.()?.sendClassUpdate(v);
@@ -276,11 +276,11 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
     // now edits that tier's pending kit (live gun untouched until
     // respawn), so faces show the recalled kit and gates follow it.
     const opts = weaponOptsFor(player.armorClass);
-    ui.slotDrops.forEach((d, i) => { d.setOptions?.(opts); d.setValue(String(player.menuKit[i])); });
+    ui.slotDrops.forEach((d, i): void => { d.setOptions?.(opts); d.setValue(String(player.menuKit[i])); });
     markSlotUse(player, ui.slotDrops);
     refreshTiles();
   };
-  const refreshTiles = () => {
+  const refreshTiles = (): void => {
     const cur = deps.lazyPlayer()?.armorClass ?? 'medium';
     for (const t of classTileEls) {t.el.classList.toggle('sel', t.v === cur);}
   };
@@ -291,12 +291,12 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
     name.className = 'lo-tile-name';
     name.textContent = cls.toUpperCase();
     t.append(name);
-    t.addEventListener('click', (e) => { e.stopPropagation(); pickClass(cls); });
+    t.addEventListener('click', (e): void => { e.stopPropagation(); pickClass(cls); });
     tiles.append(t);
     classTileEls.push({ v: cls, el: t });
   }
   // Drop-compatible shim: refreshLoadout drives faces via setValue.
-  ui.classDrop = { el: tiles, setValue: () => refreshTiles() };
+  ui.classDrop = { el: tiles, setValue: (): void => refreshTiles() };
 
   // --- WEAPONS: one numbered cell per slot. No group head — every cell
   // is already captioned, the banner just ate vertical space. ---
@@ -309,7 +309,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   for (let i = 0; i < Player.LOADOUT_SLOTS; i += 1) {
     const { cell, cap } = mkCellDom(weaponCells);
     cap.textContent = `SLOT ${i + 1}`;
-    const drop = mkDrop(weaponOpts, (v) => deps.lazyPlayer().setLoadoutSlot(i, Number(v)), allWeaponOpts);
+    const drop = mkDrop(weaponOpts, (v): void => deps.lazyPlayer().setLoadoutSlot(i, Number(v)), allWeaponOpts);
     cell.append(drop.el);
     ui.slotDrops.push(drop);
   }
@@ -327,7 +327,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
      { v: 'revolver', label: 'Revolver' },
      { v: 'shotgun', label: 'Shotgun' },
      { v: 'repair', label: 'Repair Tool' }],
-    (v) => deps.lazyPlayer().setSidearm(v as 'pistol' | 'revolver' | 'shotgun' | 'repair'),
+    (v): void => deps.lazyPlayer().setSidearm(v as 'pistol' | 'revolver' | 'shotgun' | 'repair'),
   );
   sidearm.cell.append(ui.sidearmDrop.el);
 
@@ -336,31 +336,31 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   ui.beltDrop = mkDrop(
     // No descs — every belt item is one throw away from explaining itself.
     BELT_ITEMS.map((b) => ({ v: b, label: BELT_LABELS[b] })),
-    (v) => deps.lazyPlayer().setBeltItem(v as BeltItem),
+    (v): void => deps.lazyPlayer().setBeltItem(v as BeltItem),
   );
   belt.cell.append(ui.beltDrop.el);
 
   const pack = mkCellDom(kitRowB);
   ui.packLabel = pack.cap;
   ui.packDrop = mkDrop(
-    DEPLOY_KINDS.map((kind) => ({ v: kind, label: DEPLOY_ITEMS[kind].label })),
-    (v) => deps.lazyPlayer().setPackItem(v as DeployKind),
+    DEPLOY_KINDS.map((kind): { v: DeployKind; label: string; } => ({ v: kind, label: DEPLOY_ITEMS[kind].label })),
+    (v): void => deps.lazyPlayer().setPackItem(v as DeployKind),
   );
   pack.cell.append(ui.packDrop.el);
 
   const skill = mkCellDom(kitRowB);
   ui.skillLabel = skill.cap;
   ui.skillDrop = mkDrop(
-    SKILL_ORDER.map((s) => ({ v: s, label: s[0].toUpperCase() + s.slice(1) })),
-    (v) => deps.lazyPlayer().setSkill(v as SkillId),
+    SKILL_ORDER.map((s): { v: SkillId; label: string; } => ({ v: s, label: s[0].toUpperCase() + s.slice(1) })),
+    (v): void => deps.lazyPlayer().setSkill(v as SkillId),
   );
   skill.cell.append(ui.skillDrop.el);
 
   const perk = mkCellDom(kitRowB);
   perk.cap.textContent = 'PERK';
   ui.perkDrop = mkDrop(
-    PERK_ORDER.map((p) => ({ v: p, label: PERKS[p].name, desc: PERKS[p].blurb })),
-    (v) => {
+    PERK_ORDER.map((p): { v: PerkId; label: string; desc: string; } => ({ v: p, label: PERKS[p].name, desc: PERKS[p].blurb })),
+    (v): void => {
       deps.lazyPlayer().setPerk(v as PerkId);
       deps.lazyNetworkManager?.()?.sendPerkUpdate(v);
     },

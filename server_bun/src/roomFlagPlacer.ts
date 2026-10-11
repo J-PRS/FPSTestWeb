@@ -161,7 +161,7 @@ export class FlagPlacer {
    *  otherwise drops bravo players next to alpha's flag on the global
    *  config ring. Three anchors 35m out, snapped to standTop. */
   private autoSpawnRings(bases: { alpha: Vec3; bravo: Vec3 }): { alpha: SpawnPoint[]; bravo: SpawnPoint[] } {
-    const ring = (b: Vec3): SpawnPoint[] => [0, 1, 2].map(i => {
+    const ring = (b: Vec3): SpawnPoint[] => [0, 1, 2].map((i): { x: number; y: number; z: number; r: number; } => {
       const a = (i / 3) * Math.PI * 2;
       const x = b.x + Math.cos(a) * 35, z = b.z + Math.sin(a) * 35;
       return { x, y: this.standTop(x, z), z, r: 10 };
@@ -194,7 +194,7 @@ export class FlagPlacer {
     const {spec} = this.host;
     const pts: Vec3like[] = [
       ...(spec.spawns ?? []),
-      ...(spec.structures ?? []).map(s => ({ x: s.pos.x, y: 0, z: s.pos.z })),
+      ...(spec.structures ?? []).map((s): { x: number; y: number; z: number; } => ({ x: s.pos.x, y: 0, z: s.pos.z })),
     ];
     let cx = spec.arena?.x ?? 0, cz = spec.arena?.z ?? 0;
     if (!spec.arena && pts.length > 0) {
@@ -218,7 +218,7 @@ export class FlagPlacer {
     const {spec} = this.host;
     const pts: Vec3like[] = [
       ...(spec.spawns ?? []),
-      ...(spec.structures ?? []).map(s => ({ x: s.pos.x, y: 0, z: s.pos.z })),
+      ...(spec.structures ?? []).map((s): { x: number; y: number; z: number; } => ({ x: s.pos.x, y: 0, z: s.pos.z })),
     ];
     // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
     // oxlint-disable-next-line init-declarations -- assigned later

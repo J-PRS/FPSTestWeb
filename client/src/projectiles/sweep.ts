@@ -65,7 +65,7 @@ export function sweepTerrain(p: SweepHost, terrain: Terrain): boolean {
   if (minY > maxHeightInRect(p.prevPos.x, p.prevPos.z, p.pos.x, p.pos.z) + offset) {return false;}
   const step = Math.max(0.08, Math.min(0.5, offset));
   const steps = Math.max(1, Math.min(96, Math.ceil(dist / step)));
-  const below = (t: number) => {
+  const below = (t: number): boolean => {
     const sx = p.prevPos.x + dx * t;
     const sy = p.prevPos.y + dy * t;
     const sz = p.prevPos.z + dz * t;

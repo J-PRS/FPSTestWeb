@@ -15,67 +15,67 @@ export function buildSkillsCtx(p: Player, terrain: Terrain, scene: THREE.Scene):
     vel: p.vel,
     scene,
     terrain,
-    isOnGround: () => p.onGround,
-    aimDir: () => p.getAimDir(),
-    syncMovement: () => p.syncMovement(),
-    markTeleport: () => p.markTeleport(),
-    blinkFrame: () => {
+    isOnGround: (): boolean => p.onGround,
+    aimDir: (): THREE.Vector3 => p.getAimDir(),
+    syncMovement: (): void => p.syncMovement(),
+    markTeleport: (): void => p.markTeleport(),
+    blinkFrame: (): void => {
       p.movement.setState({ pos: p.pos, vel: p.vel, yaw: p.yaw, pitch: p.pitch, onGround: false });
       p.visuals.updateCamera(p.camera, terrain, { pos: p.pos, yaw: p.yaw, pitch: p.pitch });
       p.visuals.updateShadowBlob(terrain, p.pos);
     },
-    emitBlink: (a, b) => p.onBlink?.(a, b),
-    emitDash: (a, b) => p.onDash?.(a, b),
-    emitWarpThrow: (a, b) => p.onWarpThrow?.(a, b),
-    emitWarpTick: (a) => p.onWarpTick?.(a),
-    emitWarp: (a, b) => p.onWarp?.(a, b),
-    emitSlam: (a, b) => p.onSlam?.(a, b),
-    emitBounce: (a, b) => p.onBounce?.(a, b),
-    emitCloak: (on) => p.status.setCloaked(on),
-    emitShield: (on) => p.status.setShielded(on),
-    emitMend: (on) => p.status.setMending(on),
-    healSelf: (hp) => { p.health = Math.min(p.maxHealth, p.health + hp); },
-    netHeals: () => p.serverOwnsHealth?.() ?? false,
-    shieldAbsorb: (dmg) => { p.energy = Math.max(0, p.energy - dmg); if (p.energy <= 0) {p.status.setShielded(false);} },
-    energy: () => p.energy,
-    spendEnergy: (n) => { if (p.energy < n) {return false;} p.energy -= n; return true; },
-    skillUsed: () => p.onSkillUse?.(),
-    drainEnergy: (n) => { p.energy = Math.max(0, p.energy - n); },
+    emitBlink: (a, b): void | undefined => p.onBlink?.(a, b),
+    emitDash: (a, b): void | undefined => p.onDash?.(a, b),
+    emitWarpThrow: (a, b): void | undefined => p.onWarpThrow?.(a, b),
+    emitWarpTick: (a): void | undefined => p.onWarpTick?.(a),
+    emitWarp: (a, b): void | undefined => p.onWarp?.(a, b),
+    emitSlam: (a, b): void | undefined => p.onSlam?.(a, b),
+    emitBounce: (a, b): void | undefined => p.onBounce?.(a, b),
+    emitCloak: (on): void => p.status.setCloaked(on),
+    emitShield: (on): void => p.status.setShielded(on),
+    emitMend: (on): void => p.status.setMending(on),
+    healSelf: (hp): void => { p.health = Math.min(p.maxHealth, p.health + hp); },
+    netHeals: (): boolean => p.serverOwnsHealth?.() ?? false,
+    shieldAbsorb: (dmg): void => { p.energy = Math.max(0, p.energy - dmg); if (p.energy <= 0) {p.status.setShielded(false);} },
+    energy: (): number => p.energy,
+    spendEnergy: (n): boolean => { if (p.energy < n) {return false;} p.energy -= n; return true; },
+    skillUsed: (): void | undefined => p.onSkillUse?.(),
+    drainEnergy: (n): void => { p.energy = Math.max(0, p.energy - n); },
   };
 }
 
 export function buildInputCtx(p: Player): PlayerInputHandlers {
   return {
-    isSpectating: () => p.status.spectating,
-    isDead: () => p.isDead,
-    isDeadSpectating: () => p.deadSpectateIdx >= 0,
-    deadSpectateCycle: () => p.deadSpectateCycle(),
-    toggleSpectator: () => p.toggleSpectator(),
-    melee: () => p.tryMelee(),
-    toggleCamera: () => {
+    isSpectating: (): boolean => p.status.spectating,
+    isDead: (): boolean => p.isDead,
+    isDeadSpectating: (): boolean => p.deadSpectateIdx >= 0,
+    deadSpectateCycle: (): void => p.deadSpectateCycle(),
+    toggleSpectator: (): void => p.toggleSpectator(),
+    melee: (): void => p.tryMelee(),
+    toggleCamera: (): void => {
       p.thirdPerson = !p.thirdPerson;
       p.model?.setVisible(p.thirdPerson && !p.isDead);
       // Own bubble exists for spectators/remote eyes only — FP is the
       // gun shell + vignette, so it flips with the camera toggle.
       p.status.syncBubbleVisibility();
     },
-    skillPress: () => p.skills.press(p.skill),
-    skillRelease: () => p.skills.release(p.skill),
-    sidearmWid: () => p.sidearmWid,
-    secondaryDown: (wid) => p.armory.secondaryDown(wid),
-    secondaryUp: () => p.armory.secondaryUp(),
-    deploy: () => { p.model?.weaponThrow(); p.onDeploy?.(); },
-    respawn: () => p.onRespawn?.(),
-    dieSpectate: () => p.dieSpectate(),
-    throwFlag: () => p.onThrowFlag?.(),
-    selectSlot: (i) => p.armory.selectSlot(i),
-    cycleWeapon: (step) => p.armory.cycleWeapon(step),
-    look: (dx, dy) => {
+    skillPress: (): void => p.skills.press(p.skill),
+    skillRelease: (): void => p.skills.release(p.skill),
+    sidearmWid: (): number => p.sidearmWid,
+    secondaryDown: (wid): void => p.armory.secondaryDown(wid),
+    secondaryUp: (): void => p.armory.secondaryUp(),
+    deploy: (): void => { p.model?.weaponThrow(); p.onDeploy?.(); },
+    respawn: (): void | undefined => p.onRespawn?.(),
+    dieSpectate: (): void => p.dieSpectate(),
+    throwFlag: (): void | undefined => p.onThrowFlag?.(),
+    selectSlot: (i): void => p.armory.selectSlot(i),
+    cycleWeapon: (step): void => p.armory.cycleWeapon(step),
+    look: (dx, dy): void => {
       p.yaw -= dx * 0.002 * p.input.sensitivity;
       p.pitch += dy * 0.002 * p.input.sensitivity * (p.input.invertY ? 1 : -1);
       p.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, p.pitch));
     },
-    orbitLook: (dx, dy) => {
+    orbitLook: (dx, dy): void => {
       p.orbit.yaw -= dx * 0.002 * p.input.sensitivity;
       p.orbit.pitch += dy * 0.002 * p.input.sensitivity * (p.input.invertY ? 1 : -1);
       p.orbit.pitch = Math.max(-1.4, Math.min(1.4, p.orbit.pitch));

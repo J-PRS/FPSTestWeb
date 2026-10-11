@@ -11,7 +11,7 @@ import { bodyMat, darkMat, boreMat, brassMat, mkTube, mkBore } from './weaponKit
 export function mkCannon_v1(): THREE.Group {
 const cn = new THREE.Group();
 let cz = 0;
-const cnSeg = (r1: number, r2: number, len: number, mat: THREE.Material) => {
+const cnSeg = (r1: number, r2: number, len: number, mat: THREE.Material): void => {
   cn.add(mkTube(r1, r2, len, cz - len / 2, mat));
   cz -= len;
 };

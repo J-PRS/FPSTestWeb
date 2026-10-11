@@ -60,7 +60,7 @@ export function fpsWatchdog(deps: GameLoopDeps, st: LoopState, budget: ReturnTyp
     // phases over a third of frame time is a CPU-throttled box, and
     // dropping resolution would only shrink the raster it wasn't bound on.
     const phases = perf.snapshot();
-    const jsMs = Object.values(phases).reduce((a, v) => a + v, 0);
+    const jsMs = Object.values(phases).reduce((a, v): number => a + v, 0);
     st.cpuBound = jsMs > (st.lowFpsAccum / st.lowFpsFrames) * 1000 * 0.35;
     dumpPerf(deps, st, budget, perf);
     st.lowFpsFrames = 0; st.lowFpsAccum = 0;
@@ -81,7 +81,7 @@ function dumpPerf(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof c
     dead: player.isDead,
     demo: deps.lazyDemoManager()?.isPlaying ?? false,
     targets: entities.targets.length,
-    balls: entities.balls.filter(b => !b.dead && !b.disposed).length,
+    balls: entities.balls.filter((b): boolean => !b.dead && !b.disposed).length,
     nuggets: entities.nuggets.length,
     remotes: deps.world.remotePlayers.size,
     projectiles: deps.world.projectiles.length,
@@ -276,9 +276,9 @@ function setShadows(deps: GameLoopDeps, on: boolean): void {
   rendererSetup.renderer.shadowMap.enabled = on;
   sceneSetup.sun.castShadow = on;
   // Lit materials cache shadow uniforms — flag for recompile once.
-  sceneSetup.scene.traverse(o => {
+  sceneSetup.scene.traverse((o): void => {
     const m = (o as THREE.Mesh).material;
-    if (m) {(Array.isArray(m) ? m : [m]).forEach(x => { x.needsUpdate = true; });}
+    if (m) {(Array.isArray(m) ? m : [m]).forEach((x): void => { x.needsUpdate = true; });}
   });
   // Deliberately NOT settings.set: fps-shadows is the user's stored pick,
   // the ladder only owns the runtime flag (see wantShadows above).

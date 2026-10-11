@@ -34,10 +34,10 @@ export class PlayerModelLod {
     this.lod = level;
     if (level === 0 || !this.lodGeos) { this.apply(); return; }
     if (!this.lodLoadP) {
-      this.lodLoadP = this.loadLod().then((geos) => {
+      this.lodLoadP = this.loadLod().then((geos): void => {
         this.lodGeos = geos;
         if (this.lod === 1) {this.apply();}
-      }).catch(() => { this.lodLoadP = null; });
+      }).catch((): void => { this.lodLoadP = null; });
     }
   }
 
@@ -46,7 +46,7 @@ export class PlayerModelLod {
   apply(): void {
     if (this.lod === 1 && !this.lodGeos) {return;}
     const toLod = this.lod === 1;
-    this.meshes.forEach((m, i) => {
+    this.meshes.forEach((m, i): void => {
       if (toLod) {
         if (!m.userData.baseGeo) {m.userData.baseGeo = m.geometry;}
         const g = this.lodGeos![i];

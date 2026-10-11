@@ -46,16 +46,16 @@ function accessor(g: Glb, i: number): Float32Array {
   return new Float32Array(src);
 }
 
-const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+const norm = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 /** Same rule PlayerModel computes: ancestor chain of the shallowest skin
  *  joint, plus the static hip names — the carriers of baked root motion. */
 function rootMotionNodes(g: Glb): Set<string> {
   const parents = new Map<number, number>();
-  (g.json.nodes || []).forEach((n: any, i: number) => {
+  (g.json.nodes || []).forEach((n: any, i: number): void => {
     for (const c of n.children || []) {parents.set(c, i);}
   });
-  const depth = (i: number) => { let d = 0; for (let p = parents.get(i); p !== undefined; p = parents.get(p)) {d += 1;} return d; };
+  const depth = (i: number): number => { let d = 0; for (let p = parents.get(i); p !== undefined; p = parents.get(p)) {d += 1;} return d; };
   const set = new Set<string>();
   for (const skin of g.json.skins || []) {
     let root: number | null = null, rd = Infinity;
@@ -130,9 +130,9 @@ const ANIM_TABLES: [file: string, table: Record<string, string | undefined>][] =
   ['class_heavy.glb', POLYART_ANIMS],
 ];
 
-describe('class anims tables resolve to real clips', () => {
+describe('class anims tables resolve to real clips', (): void => {
   for (const [file, table] of ANIM_TABLES) {
-    it(file, () => {
+    it(file, (): void => {
       const g = parseGlb(path.join(MODELS_DIR, file));
       const names = new Set((g.json.animations || []).map((a: any) => a.name));
       for (const [state, clip] of Object.entries(table)) {
@@ -142,9 +142,9 @@ describe('class anims tables resolve to real clips', () => {
   }
 });
 
-describe('class body root motion', () => {
+describe('class body root motion', (): void => {
   for (const [file, fitH] of BODIES) {
-    it(`${file  } — every root track is pinned by stripHipXZ`, () => {
+    it(`${file  } — every root track is pinned by stripHipXZ`, (): void => {
       const g = parseGlb(path.join(MODELS_DIR, file));
       const drifts = clipDrifts(g, rootMotionNodes(g));
       const scale = fitH / rawHeight(g);
@@ -158,7 +158,7 @@ describe('class body root motion', () => {
     });
   }
 
-  it('stripHipXZ pins Vexa Base_HumanPelvis XZ (the regression)', () => {
+  it('stripHipXZ pins Vexa Base_HumanPelvis XZ (the regression)', (): void => {
     const clip = new THREE.AnimationClip('run', 1, [
       new THREE.VectorKeyframeTrack('Base_HumanPelvis.position', [0, 1], [0, 1, 0, 5, 1.2, 3]),
     ]);

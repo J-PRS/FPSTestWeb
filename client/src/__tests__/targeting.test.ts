@@ -8,27 +8,27 @@ const cand = (id: string, x: number, alive = true): TargetCandidate =>
 
 const self = new THREE.Vector3();
 // eval ticks jitter on Math.random — pump enough sim time to guarantee one.
-const evalNow = (t: ThreatTable, cands: TargetCandidate[]) => {
+const evalNow = (t: ThreatTable, cands: TargetCandidate[]): TargetCandidate | null => {
   let out: TargetCandidate | null = null;
   for (let i = 0; i < 20 && !out; i += 1) {out = t.update(0.5, self, cands, PROFILES.hunter);}
   return out;
 };
 
-describe('ThreatTable', () => {
-  it('picks the closest live candidate', () => {
+describe('ThreatTable', (): void => {
+  it('picks the closest live candidate', (): void => {
     const t = new ThreatTable();
     const near = cand('near', 10), far = cand('far', 100);
     expect(evalNow(t, [far, near])).toBe(near);
   });
 
-  it('damage threat pulls aggro over distance', () => {
+  it('damage threat pulls aggro over distance', (): void => {
     const t = new ThreatTable();
     const near = cand('near', 15), far = cand('far', 60);
     t.reportDamage('far', 500);
     expect(evalNow(t, [near, far])).toBe(far);
   });
 
-  it('sticky hysteresis resists ping-pong between equal candidates', () => {
+  it('sticky hysteresis resists ping-pong between equal candidates', (): void => {
     const t = new ThreatTable();
     const a = cand('a', 10), b = cand('b', 12);
     // Commit to a first.
@@ -51,7 +51,7 @@ describe('ThreatTable', () => {
     expect(evalNow(t, [a, b])).toBe(b);
   });
 
-  it('dead target drops instantly (no stalking); leashed-out keeps stalking', () => {
+  it('dead target drops instantly (no stalking); leashed-out keeps stalking', (): void => {
     const t = new ThreatTable();
     const a = cand('a', 10);
     evalNow(t, [a]);
@@ -69,7 +69,7 @@ describe('ThreatTable', () => {
     expect(t.stalking).toBe(true);
   });
 
-  it('lastSeen snapshots only on eval ticks — pursuit chases where you were', () => {
+  it('lastSeen snapshots only on eval ticks — pursuit chases where you were', (): void => {
     const t = new ThreatTable();
     const a = cand('a', 10);
     evalNow(t, [a]);
@@ -79,7 +79,7 @@ describe('ThreatTable', () => {
     expect(t.lastSeen.x).toBe(seen);
   });
 
-  it('forget drops threat and a held target', () => {
+  it('forget drops threat and a held target', (): void => {
     const t = new ThreatTable();
     const a = cand('a', 10);
     evalNow(t, [a]);
@@ -89,7 +89,7 @@ describe('ThreatTable', () => {
     expect(evalNow(t, [])).toBeNull();
   });
 
-  it('threat decays — old damage stops mattering', () => {
+  it('threat decays — old damage stops mattering', (): void => {
     const t = new ThreatTable();
     t.reportDamage('a', 100);
     const a = cand('a', 60), near = cand('near', 10);

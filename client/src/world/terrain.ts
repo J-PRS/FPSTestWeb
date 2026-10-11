@@ -180,8 +180,8 @@ export class Terrain {
     // sampling the inner seam on a 20m grid that doesn't exist, or
     // snapping the origin to non-lattice steps, is what opened the
     // distant LOD holes.
-    const geoDivs = (i: number) => (i >= 2 ? divisions / 2 : divisions);
-    const vertSpacing = (i: number) =>
+    const geoDivs = (i: number): number => (i >= 2 ? divisions / 2 : divisions);
+    const vertSpacing = (i: number): number =>
       CLIPMAP_LEVELS[i].spacing * CLIPMAP_LEVELS[i].divisions / geoDivs(i);
 
     for (let i = 0; i < CLIPMAP_LEVELS.length; i += 1) {
@@ -244,7 +244,7 @@ export class Terrain {
     }
 
     Terrain.dbg = this;
-    registerDiag('terrainDiv', () => ({ terrainDiv: this.divergenceStats() }));
+    registerDiag('terrainDiv', (): { terrainDiv: Record<string, unknown>; } => ({ terrainDiv: this.divergenceStats() }));
   }
 
   /** Collider field (sampleHeight) vs the drawn chord surface around the
@@ -432,7 +432,7 @@ n += 1; sum += d; sumAbs += Math.abs(d);
 
   // Register a projected scorch decal. Returns a handle whose `intensity`
   // and `ember` the caller animates; pass it back to removeScorch when done.
-  addScorch(x: number, z: number, r: number) {
+  addScorch(x: number, z: number, r: number): { x: number; z: number; r: number; intensity: number; ember: number; } {
     const entry = { x, z, r, intensity: 0.5, ember: 0 };
     if (this.scorchList.length >= 16) {this.scorchList.shift();}
     this.scorchList.push(entry);

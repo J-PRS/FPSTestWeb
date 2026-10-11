@@ -49,14 +49,14 @@ const BALL_LAB_COLORS = [0xFF_9A_3A, 0x5A_D0_FF, 0x6F_E3_A5, 0xD9_8A_FF];
 export const LAB_FLAT_FIELD: Heightfield = { size: 8, data: new Uint8Array(8 * 8), stride: 1 };
 
 export const LAB_SURFACE: MoveSurface = {
-  getHeight: (x, z) => hmHeight(LAB_FLAT_FIELD, x, z),
+  getHeight: (x, z): number => hmHeight(LAB_FLAT_FIELD, x, z),
   getNormal: (_x, _z, out) => { out.x = 0; out.y = 1; out.z = 0; return out; },
 };
 
 /** Seeded LCG — entities share it so replays stay deterministic. */
 export function lcg(seed: number): () => number {
   let s = seed >>> 0;
-  return () => ((s = (s * 1_664_525 + 1_013_904_223) >>> 0) / 0xFF_FF_FF_FF);
+  return (): number => ((s = (s * 1_664_525 + 1_013_904_223) >>> 0) / 0xFF_FF_FF_FF);
 }
 
 /* ---------------------------------- */
@@ -83,15 +83,15 @@ export function spawnBall(o: BallOpts, world: LabWorld): SimEntity & { sim: SimB
   const {rand} = o;
   return {
     sim: b, mesh,
-    tick(dt, w) {
+    tick(dt, w): void {
       if (b.dead) {return;}
       const sp = Math.hypot(b.vx, b.vy, b.vz);
       if (sp > BALL_OVERSPEED) { const k = BALL_OVERSPEED / sp; b.vx *= k; b.vy *= k; b.vz *= k; }
       const seg = stepBall(b, dt, w.field, w.target, true, { rand });
       if (seg) {o.onSegment?.(seg);}
     },
-    sync() { mesh.position.set(b.x, b.y, b.z); },
-    dispose() { world.scene.remove(mesh); mesh.geometry.dispose(); },
+    sync(): void { mesh.position.set(b.x, b.y, b.z); },
+    dispose(): void { world.scene.remove(mesh); mesh.geometry.dispose(); },
   };
 }
 
@@ -115,12 +115,12 @@ export function spawnCrawler(o: CrawlerOpts, world: LabWorld): SimEntity & { sim
   world.scene.add(mesh);
   return {
     sim: c, mesh,
-    tick(dt, w) {
+    tick(dt, w): void {
       commitTarget(c, 'prey', w.target);
       const ev = stepCrawler(c, dt, w.field, w.target, true);
       if (ev) {o.onEvent?.(ev);}
     },
-    sync() {
+    sync(): void {
       mesh.position.set(c.x, c.y + 0.8, c.z);
       mesh.rotation.y = -c.yaw;
       (mesh.material as THREE.MeshBasicMaterial).color.setHex(
@@ -128,8 +128,8 @@ export function spawnCrawler(o: CrawlerOpts, world: LabWorld): SimEntity & { sim
       const k = Math.max(0.3, c.health / base);
       mesh.scale.setScalar(c.uber ? 1.6 : 0.7 + 0.3 * k);
     },
-    dump: () => [['state', c.state], ['hp', `${Math.max(0, c.health).toFixed(0)}`]],
-    dispose() { world.scene.remove(mesh); mesh.geometry.dispose(); },
+    dump: (): [string, string][] => [['state', c.state], ['hp', `${Math.max(0, c.health).toFixed(0)}`]],
+    dispose(): void { world.scene.remove(mesh); mesh.geometry.dispose(); },
   };
 }
 
@@ -158,20 +158,20 @@ export function spawnFlyer(o: FlyerOpts, world: LabWorld): SimEntity & { sim: Si
   world.scene.add(pivot);
   return {
     sim: f, mesh: pivot,
-    tick(dt, w) {
+    tick(dt, w): void {
       commitTarget(f, 'prey', w.target);
       const ev = stepFlyer(f, dt, w.field, w.target, true);
       if (ev) {o.onEvent?.(ev);}
     },
-    sync() {
+    sync(): void {
       pivot.position.set(f.x, f.y, f.z);
       pivot.rotation.y = -f.yaw;
       (mesh.material as THREE.MeshBasicMaterial).color.setHex(
         f.dead ? 0x33_3A_44 : FLYER_STATE_COLOR[f.state] ?? 0x8A_A0_B5);
       pivot.scale.setScalar(f.uber ? 1.6 : o.species === 'gnat' ? 0.6 : 1);
     },
-    dump: () => [['state', f.state], ['hp', `${Math.max(0, f.health).toFixed(0)}`]],
-    dispose() { world.scene.remove(pivot); mesh.geometry.dispose(); },
+    dump: (): [string, string][] => [['state', f.state], ['hp', `${Math.max(0, f.health).toFixed(0)}`]],
+    dispose(): void { world.scene.remove(pivot); mesh.geometry.dispose(); },
   };
 }
 
@@ -210,11 +210,11 @@ export function spawnBolt(o: BoltOpts, world: LabWorld): SimEntity & { sim: SimP
 
   const self: SimEntity & { sim: SimProjectile; done: boolean } = {
     sim: p, mesh, done: false,
-    tick(dt, w) {
+    tick(dt, w): void {
       if (self.done) {return;}
       const from = projStep(p, dt, o.gravity ?? GRAVITY);
       let hit = segFieldHit(from, p.pos, w.field);
-      if (!hit && o.walls?.some(wall =>
+      if (!hit && o.walls?.some((wall): boolean =>
         (wall.axis === 'x' ? p.pos.x : wall.axis === 'y' ? p.pos.y : p.pos.z) * Math.sign(wall.at) >= Math.abs(wall.at))) {
         hit = { x: p.pos.x, y: p.pos.y, z: p.pos.z };
       }
@@ -224,15 +224,15 @@ export function spawnBolt(o: BoltOpts, world: LabWorld): SimEntity & { sim: SimP
         o.onDone?.(hit);
       }
     },
-    sync() {
+    sync(): void {
       mesh.position.set(p.pos.x, p.pos.y, p.pos.z);
       history.push({ x: p.pos.x, y: p.pos.y, z: p.pos.z });
       if (history.length > BOLT_TRAIL_PTS) {history.shift();}
-      history.forEach((h, i) => { trailPos[i * 3] = h.x; trailPos[i * 3 + 1] = h.y; trailPos[i * 3 + 2] = h.z; });
+      history.forEach((h, i): void => { trailPos[i * 3] = h.x; trailPos[i * 3 + 1] = h.y; trailPos[i * 3 + 2] = h.z; });
       trailGeo.attributes.position!.needsUpdate = true;
       trailGeo.setDrawRange(0, history.length);
     },
-    dispose() {
+    dispose(): void {
       world.scene.remove(mesh, trail);
       mesh.geometry.dispose();
       trailGeo.dispose();
@@ -253,15 +253,15 @@ function groundSimSpawn<T extends { x: number; y: number; z: number; yaw: number
   const base = sim.health;
   return {
     sim, mesh,
-    tick(dt, w) { const ev = step(sim, dt, w); if (ev) {onEvent?.(ev);} },
-    sync() {
+    tick(dt, w): void { const ev = step(sim, dt, w); if (ev) {onEvent?.(ev);} },
+    sync(): void {
       mesh.position.set(sim.x, sim.y + mesh.scale.y, sim.z);
       mesh.rotation.y = -sim.yaw;
       (mesh.material as THREE.MeshBasicMaterial).color.setHex(sim.dead ? 0x33_3A_44 : color);
       mesh.scale.setScalar(sim.uber ? 1.6 : 0.7 + 0.3 * Math.max(0.3, sim.health / base));
     },
-    dump: () => [['state', sim.state], ['hp', `${Math.max(0, sim.health).toFixed(0)}`]],
-    dispose() { world.scene.remove(mesh); mesh.geometry.dispose(); },
+    dump: (): [string, string][] => [['state', sim.state], ['hp', `${Math.max(0, sim.health).toFixed(0)}`]],
+    dispose(): void { world.scene.remove(mesh); mesh.geometry.dispose(); },
   };
 }
 
@@ -316,13 +316,13 @@ export function spawnTotem(o: { id: number; pos: { x: number; y: number; z: numb
   let flash = 0;
   return {
     sim: c, mesh: body,
-    tick(dt, w) {
+    tick(dt, w): void {
       commitTarget(c, 'prey', w.target);
       const ev = stepTotem(c, dt, w.field, w.target, true);
       if (ev) { o.onEvent?.(ev); if (ev === 'fire') {flash = 0.35;} }
       flash = Math.max(0, flash - dt);
     },
-    sync() {
+    sync(): void {
       body.position.set(c.x, c.y + 2.2 * c.radius, c.z);
       body.rotation.y = Math.PI / 4;
       body.scale.setScalar(c.radius);
@@ -337,8 +337,8 @@ export function spawnTotem(o: { id: number; pos: { x: number; y: number; z: numb
       (beam.material as THREE.LineBasicMaterial).opacity =
         c.state === 'charge' ? 0.45 : flash > 0 ? 1 : 0;
     },
-    dump: () => [['state', c.state], ['shots', String(c.shotsFired)]],
-    dispose() {
+    dump: (): [string, string][] => [['state', c.state], ['shots', String(c.shotsFired)]],
+    dispose(): void {
       world.scene.remove(body, beam);
       body.geometry.dispose();
       beamGeo.dispose();
@@ -373,7 +373,7 @@ export function spawnShell(o: ShellOpts, world: LabWorld): SimEntity & { sim: Si
   const pos = new THREE.Vector3(o.pos.x, o.pos.y, o.pos.z);
   const vel = new THREE.Vector3(o.vel.x, o.vel.y, o.vel.z);
   const built = buildProjectileMeshes(world.scene, config, pos);
-  const trail = new QuarksTrail({ config, pos, vel, age: () => p.age });
+  const trail = new QuarksTrail({ config, pos, vel, age: (): number => p.age });
   const tumble = { x: 0.6, y: 0.8, z: 0.4 };
   let exploded = false;
 
@@ -381,7 +381,7 @@ export function spawnShell(o: ShellOpts, world: LabWorld): SimEntity & { sim: Si
     if (o.hitTest?.(from, p.pos)) {return { hit: true, direct: true };}
     const ground = segFieldHit(from, p.pos, w.field);
     if (ground) {pos.set(ground.x, ground.y, ground.z);}
-    const hit = Boolean(ground) || Boolean(o.walls?.some(wall =>
+    const hit = Boolean(ground) || Boolean(o.walls?.some((wall): boolean =>
       (wall.axis === 'x' ? p.pos.x : wall.axis === 'y' ? p.pos.y : p.pos.z) * Math.sign(wall.at) >= Math.abs(wall.at)))
       || p.age > (o.maxAge ?? config.maxLifetime ?? 30);
     return { hit, direct: false };
@@ -389,7 +389,7 @@ export function spawnShell(o: ShellOpts, world: LabWorld): SimEntity & { sim: Si
 
   const self = {
     sim: p, mesh: built.mesh, done: false as boolean,
-    detonate(directHit = false) {
+    detonate(directHit = false): void {
       if (exploded) {return;}
       exploded = true;
       releaseProjectileInstance(built.mesh);
@@ -400,7 +400,7 @@ export function spawnShell(o: ShellOpts, world: LabWorld): SimEntity & { sim: Si
         undefined, o.blastScale ?? 1, o.tint ?? st.meshColor, o.vfx));
       o.onDone?.({ x: pos.x, y: pos.y, z: pos.z }, directHit);
     },
-    tick(dt: number, w: LabWorld) {
+    tick(dt: number, w: LabWorld): void {
       if (self.done) {return;}
       const from = projStep(p, dt, o.gravity ?? GRAVITY);
       pos.set(p.pos.x, p.pos.y, p.pos.z);
@@ -416,15 +416,15 @@ export function spawnShell(o: ShellOpts, world: LabWorld): SimEntity & { sim: Si
       // Death waits on the visuals: an exploded shell stays until its
       // trail is empty and every ribbon has faded — same rule Projectile
       // uses, so streaks don't cut mid-fade.
-      if (exploded && trail.empty && built.ribbons.every(r => r.done)) {self.done = true;}
+      if (exploded && trail.empty && built.ribbons.every((r): boolean => r.done)) {self.done = true;}
     },
-    sync() {
+    sync(): void {
       if (!exploded) {
         syncProjectileInstance(built.mesh);
         if (built.glowMesh) {syncProjectileInstance(built.glowMesh);}
       }
     },
-    dispose() {
+    dispose(): void {
       trail.dispose();
       for (const r of built.ribbons) {r.dispose();}
       releaseProjectileInstance(built.mesh);
@@ -456,16 +456,16 @@ export function spawnMover(o: MoverOpts, world: LabWorld): SimEntity & { sim: Mo
   world.scene.add(mesh);
   const self: SimEntity & { sim: MoveSim; drive?: (dt: number) => void } = {
     sim, mesh,
-    tick(dt) {
+    tick(dt): void {
       self.drive?.(dt);
       sim.update(dt);
     },
-    sync() {
+    sync(): void {
       const s = sim.state;
       mesh.position.set(s.pos.x, s.pos.y - 1.5, s.pos.z);
       mesh.rotation.y = s.yaw;
     },
-    dump: () => {
+    dump: (): [string, string][] => {
       const s = sim.state;
       return [
         ['pos', `${s.pos.x.toFixed(0)}, ${s.pos.y.toFixed(0)}, ${s.pos.z.toFixed(0)}`],
@@ -473,7 +473,7 @@ export function spawnMover(o: MoverOpts, world: LabWorld): SimEntity & { sim: Mo
         ['onGround', String(s.onGround)],
       ];
     },
-    dispose() { world.scene.remove(mesh); mesh.geometry.dispose(); },
+    dispose(): void { world.scene.remove(mesh); mesh.geometry.dispose(); },
   };
   return self;
 }

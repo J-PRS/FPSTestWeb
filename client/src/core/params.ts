@@ -26,7 +26,7 @@ export const isDevHost = (): boolean =>
 // keyed on the raw string — compare is ~free, reparse only on change.
 let lastSearch = '';
 let liveParams = new URLSearchParams();
-const live = () => {
+const live = (): URLSearchParams => {
   // Node/bun test hosts have no location — URL params read empty, every
   // getter falls through to its settings/default leg.
   const s = typeof window === 'undefined' ? '' : window.location.search;
@@ -38,45 +38,45 @@ const live = () => {
 };
 
 export const urlParams = {
-  get: (k: string) => live().get(k),
-  has: (k: string) => live().has(k),
+  get: (k: string): string | null => live().get(k),
+  has: (k: string): boolean => live().has(k),
   /** Game mode — URL wins (shareable room links carry ?mode=), then the
    *  persisted menu pick ('' | nuggets | ctf | dm | tdm | duel | classic). */
-  get mode() { return live().get('mode') || settings.get('fps-mode') || null; },
+  get mode(): string | null { return live().get('mode') || settings.get('fps-mode') || null; },
   /** classic = solo bounce-and-shoot: balls only, no rage, no roster */
-  get isClassic() { return settings.get('fps-mode') === 'classic'; },
+  get isClassic(): boolean { return settings.get('fps-mode') === 'classic'; },
   /** All-random creature spawns — no scripted beats, everything rolls from t=0 */
-  get randomSpawns() { return settings.get('fps-spawns') === 1; },
+  get randomSpawns(): boolean { return settings.get('fps-spawns') === 1; },
   /** Dev overlays / verbose combat logging — menu toggle OR ?debug (the
    *  param stays as a headless-capture override). Dev hosts only: on a
    *  public deploy the flag reads false no matter what a URL carries. */
-  get debug() { return isDevHost() && (live().has('debug') || settings.get('fps-debug') === 1); },
+  get debug(): boolean { return isDevHost() && (live().has('debug') || settings.get('fps-debug') === 1); },
   /** ?p2p=host:CODE|join:CODE — WebRTC duel via /rtc handshake relay.
    *  URL wins for shareability; falls back to the lobby's saved field. */
-  get p2p() { return live().get('p2p') || settings.get('fps-p2p') || null; },
+  get p2p(): string | null { return live().get('p2p') || settings.get('fps-p2p') || null; },
   /** ?lobby / saved flag — host marks the p2p room public on the relay
    *  so quick-joiners find it via /rtc/lobbies. */
-  get lobby() { return live().has('lobby') || settings.get('fps-lobby') === 1; },
+  get lobby(): boolean { return live().has('lobby') || settings.get('fps-lobby') === 1; },
   /** ?room=NAME — match room on the server (default: 'default'). Lets two
    *  matches coexist on one server; share the URL to share the room. */
-  get room() { return live().get('room'); },
+  get room(): string | null { return live().get('room'); },
   /** ?map=/?bots= — spec hints the join message forwards so a fresh
    *  server-side room rebuilds from the right maps/<X>.json. */
-  get map() { return live().get('map'); },
-  get bots() { const b = live().get('bots'); return b ? Number(b) : undefined; },
+  get map(): string | null { return live().get('map'); },
+  get bots(): number | undefined { const b = live().get('bots'); return b ? Number(b) : undefined; },
   /** ?unlisted — creation-time flag forwarded on join/switchRoom: the
    *  room stays off /rooms and out of quick-join picks. */
-  get unlisted() { return live().has('unlisted'); },
+  get unlisted(): boolean { return live().has('unlisted'); },
   /** ?nocreatures=/?noballs= — creation-time sim gates forwarded on
    *  join/switchRoom: the hosted room skips the species populations. */
-  get noCreatures() { return live().has('nocreatures'); },
-  get noBalls() { return live().has('noballs'); },
+  get noCreatures(): boolean { return live().has('nocreatures'); },
+  get noBalls(): boolean { return live().has('noballs'); },
   /** ?net=wt|rtc — probe that transport tier before falling back to
    *  WebSocket (netcode v2; the UDP tiers are stubbed until server halves
    *  exist). Absent param = straight WS, today's behavior. */
-  get net() { return live().get('net'); },
+  get net(): string | null { return live().get('net'); },
   /** ?fxfull — debug A/B: batched FX buffers (ribbon trails, ball dots)
    *  upload the whole attribute instead of the marked range. If trails
    *  appear with this set, the partial-upload path is the break. */
-  get fxfull() { return live().has('fxfull'); },
+  get fxfull(): boolean { return live().has('fxfull'); },
 };

@@ -259,7 +259,7 @@ export class ViewModel {
     if (!this.chainBarrels) {return;}
     const phi = -this.chainSpin; // rotateOnAxis runs about local -Z
     let bi = -1, by = -Infinity;
-    this.chainBarrels.children.forEach((c, i) => {
+    this.chainBarrels.children.forEach((c, i): void => {
       if (!c.userData.barrel) {return;}
       const y = c.position.x * Math.sin(phi) + c.position.y * Math.cos(phi);
       if (y > by) { by = y; bi = i; }

@@ -29,7 +29,7 @@ class Logger {
       if (!fs) {return;}
       fs.mkdirSync('logs', { recursive: true });
       this.logFile = 'logs/server.log';
-      this.append = (line) => fs.appendFileSync(this.logFile!, `${line  }\n`);
+      this.append = (line): void => fs.appendFileSync(this.logFile!, `${line  }\n`);
     } catch { /* console-only */ }
   }
 

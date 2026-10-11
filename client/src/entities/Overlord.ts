@@ -38,7 +38,7 @@ function hullGeo(): THREE.BufferGeometry {
   }
   return _hullGeo;
 }
-const _tentGeo = (() => {
+const _tentGeo = ((): THREE.ConeGeometry => {
   // Tapered tendril, tip pointing DOWN — hangs from the belly
   const g = new THREE.ConeGeometry(0.16, 1.9, 5);
   g.rotateX(Math.PI);

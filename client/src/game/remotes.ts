@@ -51,7 +51,7 @@ export interface RemotesDeps {
 // stale-player pruning, HUD indicators, scoreboard rows.
 function makeRemoteHooks(deps: RemotesDeps) {
   return {
-    create: (id: string, state: WirePlayerState) => {
+    create: (id: string, state: WirePlayerState): RemotePlayer | undefined => {
       if (state.isDead) {return undefined;}
       const rp = new RemotePlayer(deps.lazyScene(), id, state.position, deps.lazyTerrain(), state.armorClass);
       rp.setClass(state.armorClass);
@@ -59,9 +59,9 @@ function makeRemoteHooks(deps: RemotesDeps) {
     },
     // Bots are hosted in the room sim — they never ping, so the
     // dead-socket gate can't apply to them or they render as ghosts.
-    isLive: (id: string, state: WirePlayerState | undefined) => isBotId(id) || state?.ping != null,
-    onCreate: (id: string, rp: RemotePlayer) => deps.logger.debug('CREATED remote player', { instanceId: rp.instanceId, playerId: id, total: deps.world.remotePlayers.size }),
-    onRemove: (id: string) => {
+    isLive: (id: string, state: WirePlayerState | undefined): boolean => isBotId(id) || state?.ping != null,
+    onCreate: (id: string, rp: RemotePlayer): void => deps.logger.debug('CREATED remote player', { instanceId: rp.instanceId, playerId: id, total: deps.world.remotePlayers.size }),
+    onRemove: (id: string): void => {
       deps.lazyHud().removePlayerIndicator(id);
       deps.lazyHealthBarSystem().forgetPlayer(id);
       sfxWorld.remoteMoveAudioGone(id);
@@ -271,11 +271,11 @@ function cleanupRemotePlayers(deps: RemotesDeps, players: Map<string, WirePlayer
   // humans, or a bot that left keeps an unticked frozen shell forever —
   // shootable, but every claim lands 'Shot: unknown target'.
   deps.world.remotePlayers.prune(
-    (id) => id.startsWith('bot:') || id.startsWith('dummy') || players.has(id),
+    (id): boolean => id.startsWith('bot:') || id.startsWith('dummy') || players.has(id),
     // Local bots/dummies keep their body across death+respawn — the death
     // shrink must NOT reap them or they respawn invisible and off-board.
     // A wire bot's corpse shrink may reap it: roster truth recreates it.
-    (id) => id.startsWith('bot:') || id.startsWith('dummy'),
+    (id): boolean => id.startsWith('bot:') || id.startsWith('dummy'),
   );
 }
 
@@ -307,7 +307,7 @@ function aswStr(id: string): string | null {
   if (!e) {return null;}
   const t = e.a + e.s + e.w;
   if (t <= 0) {return null;}
-  const pct = (v: number) => Math.round((v / t) * 100);
+  const pct = (v: number): number => Math.round((v / t) * 100);
   return `${pct(e.a)}/${pct(e.s)}/${pct(e.w)}`;
 }
 function pruneAsw(live: Set<string>): void {
@@ -368,7 +368,7 @@ function updateScoreboard(deps: RemotesDeps): void {
   // net is string|null — 'bot' rows carry a label, not a transport tier.
   const queriedIds = new Set<string>([localId]);
   const remoteRows: { name: string; frags: number; deaths: number; score: number | null; ping: number | null; net: string | null; self: boolean; dead: boolean; team?: TeamId; sheep?: number | null; bot?: boolean; alive?: number | null; cls?: string; asw?: string | null }[] = [...nm.getPlayers().keys()]
-    .filter(id => id !== localId && isRemoteActive(deps, id, nm.getPlayers()))
+    .filter((id): boolean => id !== localId && isRemoteActive(deps, id, nm.getPlayers()))
     .map(id => {
       queriedIds.add(id);
       const ps = nm.getPlayers().get(id);
@@ -404,13 +404,13 @@ export function createRemotes(deps: RemotesDeps) {
   deps.world.remotePlayers.hooks = makeRemoteHooks(deps);
   // Tint memory keys on ids — same leaver-leak class as aliveSince.
   const prevOnRemove = deps.world.remotePlayers.hooks.onRemove;
-  deps.world.remotePlayers.hooks.onRemove = (id, ent, reason) => {
+  deps.world.remotePlayers.hooks.onRemove = (id, ent, reason): void => {
     lastTintOf.delete(id);
     prevOnRemove?.(id, ent, reason);
   };
 
-  function getLastSentPos() { return lastSentPos; }
-  function setLastSentPos(pos: { x: number; y: number; z: number }) {
+  function getLastSentPos(): { x: number; y: number; z: number; } { return lastSentPos; }
+  function setLastSentPos(pos: { x: number; y: number; z: number }): void {
     lastSentPos.x = pos.x; lastSentPos.y = pos.y; lastSentPos.z = pos.z;
   }
 
@@ -466,14 +466,14 @@ export function createRemotes(deps: RemotesDeps) {
     rosterPollT -= dt;
     if (rosterPollT <= 0) {
       rosterPollT = 0.5;
-      const rosterKey = [...players.keys()].filter(id => id !== localPlayerId).toSorted().join(',');
+      const rosterKey = [...players.keys()].filter((id): boolean => id !== localPlayerId).toSorted().join(',');
       if (rosterKey !== lastRemotePosLog) {
         lastRemotePosLog = rosterKey;
         deps.logger.info(`Remote roster: ${rosterKey || 'none'}`);
       }
     }
 
-    players.forEach((playerState, playerId) => tickRemotePlayer(deps, lastTintOf, playerId, playerState, dt));
+    players.forEach((playerState, playerId): void => tickRemotePlayer(deps, lastTintOf, playerId, playerState, dt));
     const hud = deps.lazyHud();
     const cam = deps.lazyCamera();
     tickOnScreen(deps, cam);
@@ -507,5 +507,5 @@ export function createRemotes(deps: RemotesDeps) {
 
 
 
-  return { networkTick, updateScoreboard: () => updateScoreboard(deps), getLastSentPos, setLastSentPos };
+  return { networkTick, updateScoreboard: (): void => updateScoreboard(deps), getLastSentPos, setLastSentPos };
 }

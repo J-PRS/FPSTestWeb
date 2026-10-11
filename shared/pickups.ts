@@ -39,7 +39,7 @@ const WEIGHTS: [PowerupKind, number][] = [
   ['regen', 3],
   ['dd', 2],
 ];
-const TOTAL_W = WEIGHTS.reduce((a, [, w]) => a + w, 0);
+const TOTAL_W = WEIGHTS.reduce((a, [, w]): number => a + w, 0);
 
 /** Roll a creature-kill drop; null = no powerup this kill. Rolls are
  *  REQUIRED — a default Math.random here is a silent desync source. */

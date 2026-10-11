@@ -19,26 +19,26 @@ import { urlParams } from '../core/params.js';
 // Exported so the hull-parity test can build the REAL mapping — a table
 // duplicated in the test would pin a copy, not the seam.
 export const KIT_BUILDERS: Record<string, (glow: number) => THREE.Group> = {
-  bastion:   (g) => mkBastion(g),
-  tower:     (g) => mkBaseTower(9, 12, g),
-  wallrun:   (g) => mkWallRun(18, 4.2, g),
-  wallstub:  (g) => mkWallRun(8, 4.2, g),
-  curtain:   (g) => mkWallRun(6, 4.2, g),
-  lowwall:   (g) => mkWallRun(7, 2.2, g),
-  wallgate:  (g) => mkWallGate(18, 4.2, 6, g),
-  gendome:   (g) => mkGenDome(5, g),
-  landpad:   (g) => mkLandingPad(4.5, g),
-  commast:   (g) => mkCommsMast(10, g),
-  katastand: (g) => mkKataStand(g),
-  bunker:    (g) => mkBunker(12, 10, 4.2, g),
-  genhouse:  (g) => mkGenHouse(16, 14, 7, g),
-  flagtower: (g) => mkFlagTower(8, 10.5, g),
-  pillar:    (g) => mkPillar(3, 9, g),
-  obelisk:   (g) => mkObelisk(2.4, 12, g),
-  arch:      () => mkArch(),
-  shard:     () => mkShard(),
-  gatehouse: (g) => mkGatehouse(g),
-  ramp:      () => ramp(5, 12, 2.5),
+  bastion:   (g): THREE.Group<THREE.Object3DEventMap> => mkBastion(g),
+  tower:     (g): THREE.Group<THREE.Object3DEventMap> => mkBaseTower(9, 12, g),
+  wallrun:   (g): THREE.Group<THREE.Object3DEventMap> => mkWallRun(18, 4.2, g),
+  wallstub:  (g): THREE.Group<THREE.Object3DEventMap> => mkWallRun(8, 4.2, g),
+  curtain:   (g): THREE.Group<THREE.Object3DEventMap> => mkWallRun(6, 4.2, g),
+  lowwall:   (g): THREE.Group<THREE.Object3DEventMap> => mkWallRun(7, 2.2, g),
+  wallgate:  (g): THREE.Group<THREE.Object3DEventMap> => mkWallGate(18, 4.2, 6, g),
+  gendome:   (g): THREE.Group<THREE.Object3DEventMap> => mkGenDome(5, g),
+  landpad:   (g): THREE.Group<THREE.Object3DEventMap> => mkLandingPad(4.5, g),
+  commast:   (g): THREE.Group<THREE.Object3DEventMap> => mkCommsMast(10, g),
+  katastand: (g): THREE.Group<THREE.Object3DEventMap> => mkKataStand(g),
+  bunker:    (g): THREE.Group<THREE.Object3DEventMap> => mkBunker(12, 10, 4.2, g),
+  genhouse:  (g): THREE.Group<THREE.Object3DEventMap> => mkGenHouse(16, 14, 7, g),
+  flagtower: (g): THREE.Group<THREE.Object3DEventMap> => mkFlagTower(8, 10.5, g),
+  pillar:    (g): THREE.Group<THREE.Object3DEventMap> => mkPillar(3, 9, g),
+  obelisk:   (g): THREE.Group<THREE.Object3DEventMap> => mkObelisk(2.4, 12, g),
+  arch:      (): THREE.Group<THREE.Object3DEventMap> => mkArch(),
+  shard:     (): THREE.Group<THREE.Object3DEventMap> => mkShard(),
+  gatehouse: (g): THREE.Group<THREE.Object3DEventMap> => mkGatehouse(g),
+  ramp:      (): THREE.Group<THREE.Object3DEventMap> => ramp(5, 12, 2.5),
 };
 
 // Static map structures — the server's map spec arrives on gameState and
@@ -97,7 +97,7 @@ export function buildArenaDome(a: { x: number; z: number; radius: number }, grou
   // Tribes-style: the barrier is invisible at range and fades in only near
   // the shell — so both inside-approach and outside-approach measure
   // distance to the shell surface, not the dome center.
-  dome.onBeforeRender = (_r, _s, cam) => {
+  dome.onBeforeRender = (_r, _s, cam): void => {
     const dx = cam.position.x - a.x;
     const dy = cam.position.y - groundY;
     const dz = cam.position.z - a.z;
@@ -125,7 +125,7 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
     // Every material in `built` comes from this file's per-build `mats`
     // (shared kit mats live in structures.ts, not here) — disposing the
     // handful per rebuild is safe; double-dispose is a no-op.
-    built.traverse((o) => {
+    built.traverse((o): void => {
       if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments) {
         o.geometry.dispose();
         // Kit pieces share the kit's module-level palette materials —
@@ -204,7 +204,7 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
     shieldPanes.push({ team: s.team, mesh: pane });
     built.add(pane);
   }
-  for (const s of list.filter((s) => s.kind !== 'stand' && s.kind !== 'hull' && s.kind !== 'kit' && s.kind !== 'shield')) {
+  for (const s of list.filter((s): boolean => s.kind !== 'stand' && s.kind !== 'hull' && s.kind !== 'kit' && s.kind !== 'shield')) {
     const key = s.kind === 'root' ? 'root' : (s.team ?? 'neutral');
     // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
     let g!: THREE.BufferGeometry;
@@ -268,7 +268,7 @@ function buildColliderGizmos(list: StructureSpec[], scene: THREE.Scene): void {
     // at the SAME y. If collider base - spec pos.y ≠ 0, the mismatch is
     // in the collider math; if pos.y itself is high, the server snapped
     // the home onto something under it.
-    const fmt = (n: number) => n.toFixed(2);
+    const fmt = (n: number): string => n.toFixed(2);
     let ci = 0;
     for (const s of list) {
       // Mirror structureColliders' expansion so ci lands on this spec's

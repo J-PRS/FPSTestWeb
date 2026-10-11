@@ -71,7 +71,7 @@ function spawnWorker(id: string, port: number): void {
   logger.info(`[fleet] worker ${id} spawned on :${port} (pid ${proc.pid})`);
   // Surviving a beat interval counts as healthy — crash-looping children
   // back off exponentially (cap 60s) instead of respawn-storming.
-  proc.exited.then((code) => {
+  proc.exited.then((code): void => {
     const lived = wallNow() - spawnedAt;
     const streak = (crashStreak.get(id) ?? 0);
     crashStreak.set(id, lived > FleetDirectory.BEAT_STALE_MS ? 0 : streak + 1);
@@ -79,7 +79,7 @@ function spawnWorker(id: string, port: number): void {
     logger.warn(`[fleet] worker ${id} exited (${code}) — respawning in ${delay}ms`);
     // The next beat gap flips it down in the directory; respawn quickly
     // so rooms it held re-open for placement rather than dangling.
-    setTimeout(() => spawnWorker(id, port), delay);
+    setTimeout((): void => spawnWorker(id, port), delay);
   });
 }
 
@@ -92,7 +92,7 @@ for (let i = 0; i < WORKERS; i += 1) {
 // ---- matchmaker ----------------------------------------------------------
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
-const json = (data: unknown, init?: ResponseInit) =>
+const json = (data: unknown, init?: ResponseInit): Response =>
   corsResponse(JSON.stringify(data), Object.assign({}, init, {headers: JSON_HEADERS}));
 
 /** The scheme the client spoke to us — behind TLS the ws upgrade wants
@@ -106,7 +106,7 @@ function clientSchemes(req: Request): { ws: string; http: string } {
 Bun.serve({
   port: BASE,
   hostname: '0.0.0.0',
-  async fetch(req, srv) {
+  async fetch(req, srv): Promise<Response> {
     const url = new URL(req.url);
     const now = wallNow();
 
@@ -117,9 +117,9 @@ Bun.serve({
       if (ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1') {
         return json({ error: 'loopback only' }, { status: 403 });
       }
-      const body = await req.json().catch(() => null) as
+      const body = await req.json().catch((): null => null) as
         { port?: number; ccu?: number; rooms?: unknown; list?: unknown } | null;
-      const w = [...dir.workers.values()].find((x) => x.port === body?.port);
+      const w = [...dir.workers.values()].find((x): boolean => x.port === body?.port);
       if (!body || !w) {return json({ error: 'unknown worker' }, { status: 400 });}
       const names = Array.isArray(body.rooms) ? body.rooms.filter((r): r is string => typeof r === 'string') : [];
       dir.beat(w.id, names, typeof body.ccu === 'number' ? body.ccu : 0, now);
@@ -176,8 +176,8 @@ Bun.serve({
     if (url.pathname === '/rooms' && req.method === 'GET') {
       dir.sweep(now);
       const rows = [...lobbyRows.entries()]
-        .filter(([id]) => dir.workers.get(id)?.up)
-        .flatMap(([, list]) => list);
+        .filter(([id]): boolean | undefined => dir.workers.get(id)?.up)
+        .flatMap(([, list]): LobbyRow[] => list);
       return json(rows);
     }
 

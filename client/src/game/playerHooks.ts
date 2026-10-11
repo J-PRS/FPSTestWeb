@@ -33,9 +33,9 @@ export function wirePlayerHooks(c: PlayerHookCtx): void {
   const { player, combat, effects, viewModel, speedLines, world, scene, terrain } = c;
   player.onWeaponFire = combat.onWeaponFire;
   player.onBelt = combat.onBelt;
-  player.onWarpThrow = (pos) => { effects.spawnImpact(pos, player.vel); sfx.warpThrow(); };
-  player.onWarpTick = (pos) => effects.spawnWarpTrail(pos); // spark trail ON the beacon
-  player.onWarp = (from, to) => {
+  player.onWarpThrow = (pos): void => { effects.spawnImpact(pos, player.vel); sfx.warpThrow(); };
+  player.onWarpTick = (pos): void => effects.spawnWarpTrail(pos); // spark trail ON the beacon
+  player.onWarp = (from, to): void => {
   // Warp sell, in three beats:
   //  1. DEPARTURE implosion — the space you vacated caves inward (the
   //     collapse reads as "torn out of the world", not "moved").
@@ -57,16 +57,16 @@ export function wirePlayerHooks(c: PlayerHookCtx): void {
   sfx.warpJump(to);
   };
   player.onMelee = combat.onMelee;
-  player.onWeaponSwitch = (i) => { viewModel?.switchWeapon(weaponDef(i).weaponType); sfx.equip(); };
-  player.onJump = (pos) => { effects.spawnJumpDust(pos); sfx.jump(); };
-  player.onLand = (impactSpeed) => sfx.land(impactSpeed);
-  player.onJetpack = (pos) => effects.spawnJetpack(pos);
-  player.onSki = (pos, vel) => effects.spawnSkiDust(pos, vel);
+  player.onWeaponSwitch = (i): void => { viewModel?.switchWeapon(weaponDef(i).weaponType); sfx.equip(); };
+  player.onJump = (pos): void => { effects.spawnJumpDust(pos); sfx.jump(); };
+  player.onLand = (impactSpeed): void => sfx.land(impactSpeed);
+  player.onJetpack = (pos): void => effects.spawnJetpack(pos);
+  player.onSki = (pos, vel): void => effects.spawnSkiDust(pos, vel);
   // Footstep dust — small radius (feet), speed drives the puff size so a
   // sprint kicks visibly more than a stroll
-  player.onFootDust = (pos, vel) => effects.spawnMoveDust(pos, vel, Math.hypot(vel.x, vel.z), 0.5);
-  player.onBounce = (pos, dir) => { effects.spawnBounce(pos, dir); viewModel?.kick(0.5); speedLines.burst(); sfx.bounce(); };
-  player.onBlink = (from, to) => {
+  player.onFootDust = (pos, vel): void => effects.spawnMoveDust(pos, vel, Math.hypot(vel.x, vel.z), 0.5);
+  player.onBounce = (pos, dir): void => { effects.spawnBounce(pos, dir); viewModel?.kick(0.5); speedLines.burst(); sfx.bounce(); };
+  player.onBlink = (from, to): void => {
   // Tracer-style whoosh — cyan streaks stamped along the blink path
   speedLines.surge(from, to, 0x55_CC_FF);
   viewModel?.kick(0.35);
@@ -78,7 +78,7 @@ export function wirePlayerHooks(c: PlayerHookCtx): void {
   effects.spawnBounce(to, _blinkDir);
   sfx.blink();
   };
-  player.onDash = (pos, dir) => {
+  player.onDash = (pos, dir): void => {
   // White-hot streak line along the dash — reads as a boost, not a redirect
   // (bounce's cyan cone is the redirect cue; dash shares no shape language)
   _blinkDir.copy(dir).multiplyScalar(7).add(pos);
@@ -87,7 +87,7 @@ export function wirePlayerHooks(c: PlayerHookCtx): void {
   viewModel?.kick(0.4);
   sfx.dash();
   };
-  player.onSlam = (pos, impactSpeed) => {
+  player.onSlam = (pos, impactSpeed): void => {
   combat.slam(pos, impactSpeed);
   speedLines.burst();
   viewModel?.kick(0.8);

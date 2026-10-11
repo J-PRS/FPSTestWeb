@@ -38,12 +38,12 @@ export function parseRec(text: string): RecLine[] {
 export function playRecLines(nm: NetworkManager, lines: RecLine[], speed = 1): () => void {
   const timers: number[] = [];
   for (const l of lines) {
-    const t = window.setTimeout(() => {
+    const t = window.setTimeout((): void => {
       nm.replayWireMessage(l.json ?? l.bin!);
     }, l.ms / speed);
     timers.push(t);
   }
-  return () => { for (const t of timers) {window.clearTimeout(t);} };
+  return (): void => { for (const t of timers) {window.clearTimeout(t);} };
 }
 
 export async function playRec(nm: NetworkManager, src: string | File, speed = 1): Promise<() => void> {

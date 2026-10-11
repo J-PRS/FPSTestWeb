@@ -7,11 +7,11 @@ import type { DemoManager } from './DemoManager.js';
 export function wirePlayerCallbacks(m: DemoManager): void {
 
     m.player.setCallbacks({
-      onFrameUpdate: (state, events) => {
+      onFrameUpdate: (state, events): void => {
         m.onPlaybackState?.(state);
         m.onPlaybackEvent?.(events);
       },
-      onPlaybackEnd: () => {
+      onPlaybackEnd: (): void => {
         m.mode = 'paused';
         m.ui.setPlaying(false);
         // End of the clip = end of the capture — stop + download here so
@@ -19,10 +19,10 @@ export function wirePlayerCallbacks(m: DemoManager): void {
         if (m.video.isRecording) {m.toggleVideoRecord();}
         m.onPlaybackEnd?.();
       },
-      onTimeUpdate: (current, duration) => {
+      onTimeUpdate: (current, duration): void => {
         m.ui.setTime(current, duration);
       },
-      onSeek: () => {
+      onSeek: (): void => {
         m.onPlaybackSeek?.();
       },
     });
@@ -30,20 +30,20 @@ export function wirePlayerCallbacks(m: DemoManager): void {
 
 export function buildDemoUI(m: DemoManager): void {
     m.ui.setCallbacks({
-      onPlayPause: () => m.togglePlayPause(),
-      onSeek: (time: number) => {
+      onPlayPause: (): void => m.togglePlayPause(),
+      onSeek: (time: number): void => {
         m.player.seek(time);
         // Replicas snap to the interpolated pose at the seek target
         m.onRemotePlayback?.(m.player.getRemoteStates(), 0);
       },
-      onSpeedChange: (speed: number) => {
+      onSpeedChange: (speed: number): void => {
         m.player.setSpeed(speed);
       },
-      onLoop: (loop: boolean) => {
+      onLoop: (loop: boolean): void => {
         m.player.setLoop(loop);
         m.ui.setLoopActive(loop);
       },
-      onStop: () => {
+      onStop: (): void => {
         m.player.stop();
         m.mode = 'idle';
         m.ui.setPlaying(false);
@@ -54,20 +54,20 @@ export function buildDemoUI(m: DemoManager): void {
         // isn't abandoned silently.
         if (m.video.isRecording) {m.toggleVideoRecord();}
       },
-      onSave: () => {
+      onSave: (): void => {
         m.saveDemo();
       },
-      onLoad: (file: File) => {
+      onLoad: (file: File): void => {
         m.loadDemo(file);
       },
-      onRecordToggle: () => {
+      onRecordToggle: (): void => {
         if (m.mode === 'recording') {
           m.stopRecording();
         } else {
           m.startRecording();
         }
       },
-      onVideoToggle: () => {
+      onVideoToggle: (): void => {
         if (m.video.isRecording) { m.toggleVideoRecord(); return; }
         // Demo loaded → clip export: rewind to 0, play, and let
         // onPlaybackEnd stop the recorder. No demo = live canvas capture.

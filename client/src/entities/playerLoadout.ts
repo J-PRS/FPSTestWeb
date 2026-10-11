@@ -79,7 +79,7 @@ export class PlayerLoadout {
   constructor(private h: LoadoutHost) {}
 
   static parseLoadout(raw: string): number[] {
-    const ids = raw.split(',').map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n < SLOT_COUNT);
+    const ids = raw.split(',').map(Number).filter((n): boolean => Number.isInteger(n) && n >= 0 && n < SLOT_COUNT);
     return ids.length === PlayerLoadout.LOADOUT_SLOTS ? ids : [0, 2, 6, 7];
   }
 
@@ -141,12 +141,12 @@ export class PlayerLoadout {
       const old = this.h.model;
       const m = new PlayerModel(this.h.scene, want as PlayerModelVariant, rev);
       this.h.model = m;
-      m.load().then(() => {
+      m.load().then((): void => {
         m.setScale(CLASS_MODEL_SCALE[c]);
         m.setVisible(false);
         m.setColliderVisible(false);
         old.dispose();
-      }).catch((error) => {
+      }).catch((error): void => {
         // load() rejects after 4 retries — revert to the still-alive old
         // model instead of leaving h.model on a corpse that never loads.
         this.h.model = old;

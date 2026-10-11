@@ -44,7 +44,7 @@ export class NetTelemetry {
 
   packetLoss(now: number): number {
     if (this.lastTickAt === 0 || this.tickWindow.length === 0) {return 0;}
-    const missed = this.tickWindow.reduce((s, w) => s + w.missed, 0);
+    const missed = this.tickWindow.reduce((s, w): number => s + w.missed, 0);
     // Denominator is ticks since the FIRST tick ever (capped at the
     // window), not since the first miss — a single early gap otherwise
     // divides by a tiny span and pins the display at 100% for minutes.
@@ -64,7 +64,7 @@ export class NetTelemetry {
   }
 
   jitter(): number {
-    const rtts = this.pingHistory.map((p) => p.rtt);
+    const rtts = this.pingHistory.map((p): number => p.rtt);
     if (rtts.length < 2) {return 0;}
     let sumDiff = 0;
     for (let i = 1; i < rtts.length; i += 1) {

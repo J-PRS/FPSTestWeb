@@ -97,16 +97,16 @@ export class DemoManager implements demoIO.DemoIOHost {
     this.player = new DemoPlayer();
     this.ui = new DemoUI();
     this.coolShotMgr = new CoolShotManager({
-      recorder: () => this.recorder,
-      isRecording: () => this.mode === 'recording',
-      setStatus: (s) => this.ui.setStatus(s),
-      playDemoData: (d) => this.playDemoData(d),
-      downloadDemoFile: (d, f) => demoIO.downloadDemoFile(d, f),
-      timestampStr: () => demoIO.timestampStr(),
-      videoClip: (s, e, l) => this.videoAutoClip(s, e, l),
-      demoEnabled: () => this.autoDemo,
+      recorder: (): DemoRecorder => this.recorder,
+      isRecording: (): boolean => this.mode === 'recording',
+      setStatus: (s): void => this.ui.setStatus(s),
+      playDemoData: (d): void => this.playDemoData(d),
+      downloadDemoFile: (d, f): void => demoIO.downloadDemoFile(d, f),
+      timestampStr: (): string => demoIO.timestampStr(),
+      videoClip: (s, e, l): string | null => this.videoAutoClip(s, e, l),
+      demoEnabled: (): boolean => this.autoDemo,
     });
-    this.coolShotMgr.onChanged = (shots) => this.onCoolShotsChanged?.(shots);
+    this.coolShotMgr.onChanged = (shots): void | undefined => this.onCoolShotsChanged?.(shots);
     // IDB vault rehydrate — fire-and-forget; entries land via onChanged.
     this.coolShotMgr.loadVault();
 
@@ -147,7 +147,7 @@ export class DemoManager implements demoIO.DemoIOHost {
 
   // Roster of the loaded demo — replica creation needs the names
   getRoster(): string[] {
-    return this.player.roster.map(r => r.name);
+    return this.player.roster.map((r): string => r.name);
   }
 
   // Interpolated remote poses at the player's current time (seek recovery)
@@ -177,14 +177,14 @@ export class DemoManager implements demoIO.DemoIOHost {
       this.ui.setVideoRecording(false);
       recChip(false);
       const ctx = this.player.isLoaded ? 'demo' : 'live';
-      this.video.stop().then(async blob => {
+      this.video.stop().then(async( blob): Promise<void> => {
         const ext = this.video.mimeType.includes('mp4') ? 'mp4' : 'webm';
         const name = `kribes_${ctx}_${demoIO.timestampStr()}.${ext}`;
         const ok = blob ? await clipSink.saveClip(name, blob) : false;
         if (ok && this.pendingExportShotId) {
           // Deliberate export — the vault row alone is invisible: link it
           // onto the shot (Download MP4 badge) and download the file too.
-          const shot = this.coolShotMgr.list.find(s => s.id === this.pendingExportShotId);
+          const shot = this.coolShotMgr.list.find((s): boolean => s.id === this.pendingExportShotId);
           if (shot) {shot.mp4Name = name;}
           clipSink.exportClip(name);
         }
@@ -203,11 +203,11 @@ export class DemoManager implements demoIO.DemoIOHost {
     // main.ts hands us renderer.domElement up front; the largest-canvas
     // probe only survives for contexts that never wired one (clip feed).
     if (!this.video.hasCanvas) {
-      const [canvas] = [...document.querySelectorAll('canvas')].toSorted((a, b) => b.width * b.height - a.width * a.height);
+      const [canvas] = [...document.querySelectorAll('canvas')].toSorted((a, b): number => b.width * b.height - a.width * a.height);
       if (!canvas) { this.ui.setStatus('no canvas'); return false; }
       this.video.setCanvas(canvas);
     }
-    this.video.start(60).then((ok) => {
+    this.video.start(60).then((ok): void => {
       if (!ok) { this.ui.setStatus('video unsupported'); return; }
       this.ui.setVideoRecording(true);
       recChip(true);
@@ -230,7 +230,7 @@ export class DemoManager implements demoIO.DemoIOHost {
     const blob = this.video.cutWindow(wallStart, wallEnd);
     if (!blob) {return null;}
     const name = `kribes_coolshot_${demoIO.timestampStr()}_${lifetime.toFixed(1)}s.mp4`;
-    clipSink.saveClip(name, blob).then(ok => {
+    clipSink.saveClip(name, blob).then((ok): void => {
       if (ok) {this.ui.setStatus('cool shot mp4 saved');}
     });
     return name;

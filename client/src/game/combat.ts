@@ -112,21 +112,21 @@ export function createCombat(deps: CombatDeps) {
 
   // Push/pull force on player/creatures/nuggets/remotes + splash damage —
   // game/blastForce.ts. Built first: fire + lightning hooks take it.
-  const blast = createBlastForce(deps, { onTargetDestroyed: (t, impulse, wt) => onTargetDestroyed(c, t, impulse, wt) });
+  const blast = createBlastForce(deps, { onTargetDestroyed: (t, impulse, wt): void => onTargetDestroyed(c, t, impulse, wt) });
   const { applyExplosionForce, applyForceToRemotes, predictLocalShove } = blast;
 
   // Trigger dispatch lives in combat/fire.ts — it fires whatever the
   // WeaponDef says (kick + projectile or pellet fan). 'beam' kinds route to
   // the lightning module, which owns its own tick/raycast loop.
-  const fire = createFire(deps, { onTargetDestroyed: (t, impulse, wt) => onTargetDestroyed(c, t, impulse, wt), applyForceToRemotes });
+  const fire = createFire(deps, { onTargetDestroyed: (t, impulse, wt): void => onTargetDestroyed(c, t, impulse, wt), applyForceToRemotes });
   const { onBelt } = fire;
 
   // Lightning gun (hitscan tick + beam visual + chain fork) lives in
   // combat/lightning.ts — hooks reach back into this module's shared blast
   // path so lgPop runs the identical explosion pipeline.
   const lg = createLightning(deps, {
-    processExplosion: (a) => processProjectileExplosion(c, a),
-    onTargetDestroyed: (t, impulse, wt) => onTargetDestroyed(c, t, impulse, wt),
+    processExplosion: (a): void => processProjectileExplosion(c, a),
+    onTargetDestroyed: (t, impulse, wt): void => onTargetDestroyed(c, t, impulse, wt),
     applyForceToRemotes,
   });
   const { lightning, updateBeamVisual } = lg;
@@ -139,14 +139,14 @@ export function createCombat(deps: CombatDeps) {
     deps,
     applyExplosionForce,
     predictLocalShove,
-    lg: { tickBeam: (dt: number) => { lg.tickBeam(dt); rep.tickBeam(dt); } },
+    lg: { tickBeam: (dt: number): void => { lg.tickBeam(dt); rep.tickBeam(dt); } },
     // Chaingun ramp state: targetId → last hit time + chain count.
     chainRamp: new Map(),
   };
 
 
   return {
-    onWeaponFire: (def: WeaponDef, e: FireEvent) => {
+    onWeaponFire: (def: WeaponDef, e: FireEvent): void => {
       // Class lock is the server's law, not just a loadout-menu filter —
       // any route that shouldered a gated weapon past the menu (gunlab,
       // stale persisted slot, sidearm) must refuse here too, or every
@@ -168,9 +168,9 @@ export function createCombat(deps: CombatDeps) {
     onBelt,
     onMelee: fire.onMelee,
     onLightning: lightning,
-    slam: (pos: THREE.Vector3, impactSpeed: number) => slam(c, pos, impactSpeed),
-    updateProjectiles: (dt: number) => updateProjectiles(c, dt),
-    updateBeamVisual: () => { updateBeamVisual(); rep.updateBeamVisual(); },
-    hitTargetLocal: (t: Targetable, dmg: number, attackerId?: string) => hitTargetLocal(c, t, dmg, attackerId),
+    slam: (pos: THREE.Vector3, impactSpeed: number): void => slam(c, pos, impactSpeed),
+    updateProjectiles: (dt: number): void => updateProjectiles(c, dt),
+    updateBeamVisual: (): void => { updateBeamVisual(); rep.updateBeamVisual(); },
+    hitTargetLocal: (t: Targetable, dmg: number, attackerId?: string): boolean => hitTargetLocal(c, t, dmg, attackerId),
   };
 }

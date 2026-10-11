@@ -231,29 +231,29 @@ function synthDefault(g: GainNode): void {
 }
 
 const SYNTH_SHOTS: Record<number, (g: GainNode) => void> = {
-  [WeaponType.BoltLauncher]:    (g) => { osc('square', 900, 300, 0.12, 0.25, g); noise(0.12, 0.15, g, 'lowpass', 2000, 400); },
-  [WeaponType.Disc]:      (g) => { osc('sawtooth', 1400, 700, 0.18, 0.2, g); noise(0.1, 0.1, g, 'highpass', 3000, 4000); },
-  [WeaponType.DiscPull]:  (g) => { osc('sawtooth', 1400, 700, 0.18, 0.2, g); noise(0.1, 0.1, g, 'highpass', 3000, 4000); },
+  [WeaponType.BoltLauncher]:    (g): void => { osc('square', 900, 300, 0.12, 0.25, g); noise(0.12, 0.15, g, 'lowpass', 2000, 400); },
+  [WeaponType.Disc]:      (g): void => { osc('sawtooth', 1400, 700, 0.18, 0.2, g); noise(0.1, 0.1, g, 'highpass', 3000, 4000); },
+  [WeaponType.DiscPull]:  (g): void => { osc('sawtooth', 1400, 700, 0.18, 0.2, g); noise(0.1, 0.1, g, 'highpass', 3000, 4000); },
   [WeaponType.Chaingun]:  synthChaingun,
-  [WeaponType.Mortar]:    (g) => { osc('sine', 180, 60, 0.25, 0.5, g); noise(0.15, 0.2, g, 'lowpass', 900, 200); },
-  [WeaponType.GrenadeLauncher]: (g) => { osc('triangle', 500, 150, 0.15, 0.35, g); noise(0.1, 0.15, g, 'bandpass', 1200, 400); },
-  [WeaponType.Grenade]:   (g) => { osc('triangle', 600, 200, 0.12, 0.3, g); },
-  [WeaponType.Flak]:      (g) => { noise(0.2, 0.4, g, 'lowpass', 2500, 300); osc('square', 220, 80, 0.15, 0.3, g); },
-  [WeaponType.Shotgun]:   (g) => { noise(0.18, 0.6, g, 'lowpass', 1800, 250); osc('sine', 160, 55, 0.18, 0.5, g); noise(0.05, 0.3, g, 'highpass', 3500, 5000); },
-  [WeaponType.Cannon]:    (g) => { osc('sine', 130, 45, 0.3, 0.7, g); noise(0.25, 0.35, g, 'lowpass', 800, 150); osc('square', 700, 200, 0.06, 0.15, g); },
-  [WeaponType.Bombard]:   (g) => { osc('sine', 95, 32, 0.4, 0.85, g); noise(0.35, 0.4, g, 'lowpass', 600, 120); osc('square', 500, 140, 0.08, 0.18, g); },
+  [WeaponType.Mortar]:    (g): void => { osc('sine', 180, 60, 0.25, 0.5, g); noise(0.15, 0.2, g, 'lowpass', 900, 200); },
+  [WeaponType.GrenadeLauncher]: (g): void => { osc('triangle', 500, 150, 0.15, 0.35, g); noise(0.1, 0.15, g, 'bandpass', 1200, 400); },
+  [WeaponType.Grenade]:   (g): void => { osc('triangle', 600, 200, 0.12, 0.3, g); },
+  [WeaponType.Flak]:      (g): void => { noise(0.2, 0.4, g, 'lowpass', 2500, 300); osc('square', 220, 80, 0.15, 0.3, g); },
+  [WeaponType.Shotgun]:   (g): void => { noise(0.18, 0.6, g, 'lowpass', 1800, 250); osc('sine', 160, 55, 0.18, 0.5, g); noise(0.05, 0.3, g, 'highpass', 3500, 5000); },
+  [WeaponType.Cannon]:    (g): void => { osc('sine', 130, 45, 0.3, 0.7, g); noise(0.25, 0.35, g, 'lowpass', 800, 150); osc('square', 700, 200, 0.06, 0.15, g); },
+  [WeaponType.Bombard]:   (g): void => { osc('sine', 95, 32, 0.4, 0.85, g); noise(0.35, 0.4, g, 'lowpass', 600, 120); osc('square', 500, 140, 0.08, 0.18, g); },
   // thump + whoosh
-  [WeaponType.RocketLauncher]: (g) => { osc('sine', 150, 60, 0.2, 0.5, g); noise(0.3, 0.3, g, 'bandpass', 800, 500, 1.5); },
-  [WeaponType.PlasmaCannon]:   (g) => { osc('sawtooth', 2200, 400, 0.14, 0.18, g); osc('sine', 3300, 900, 0.1, 0.1, g); },
+  [WeaponType.RocketLauncher]: (g): void => { osc('sine', 150, 60, 0.2, 0.5, g); noise(0.3, 0.3, g, 'bandpass', 800, 500, 1.5); },
+  [WeaponType.PlasmaCannon]:   (g): void => { osc('sawtooth', 2200, 400, 0.14, 0.18, g); osc('sine', 3300, 900, 0.1, 0.1, g); },
   [WeaponType.PlasmaGun]:  synthPlasmaGun,
   [WeaponType.Sprinkler]:  synthSprinkler,
-  [WeaponType.Railgun]:   (g) => { osc('sawtooth', 2600, 200, 0.22, 0.25, g); noise(0.15, 0.2, g, 'highpass', 4000, 6000); },
+  [WeaponType.Railgun]:   (g): void => { osc('sawtooth', 2600, 200, 0.22, 0.25, g); noise(0.15, 0.2, g, 'highpass', 4000, 6000); },
   [WeaponType.Lightning]: synthLightning,
-  [WeaponType.Melee]:     (g) => { noise(0.15, 0.45, g, 'bandpass', 300, 2200, 1.4); osc('sine', 110, 45, 0.14, 0.5, g); },
+  [WeaponType.Melee]:     (g): void => { noise(0.15, 0.45, g, 'bandpass', 300, 2200, 1.4); osc('sine', 110, 45, 0.14, 0.5, g); },
   // MRV volley thump — mortar body + a bright spit tail that hints at
   // the burst payload about to scatter.
-  [WeaponType.MRVLauncher]: (g) => { osc('sine', 170, 55, 0.22, 0.55, g); noise(0.18, 0.3, g, 'lowpass', 1100, 250); noise(0.06, 0.2, g, 'bandpass', 1800, 600, 1.3); },
+  [WeaponType.MRVLauncher]: (g): void => { osc('sine', 170, 55, 0.22, 0.55, g); noise(0.18, 0.3, g, 'lowpass', 1100, 250); noise(0.06, 0.2, g, 'bandpass', 1800, 600, 1.3); },
   // Javelin synth fallback — same idea as the layered version: release
   // snap + rising air-tear whoosh + body thump.
-  [WeaponType.Javelin]:   (g) => { noise(0.22, 0.5, g, 'bandpass', 900, 3800, 1.6); osc('sawtooth', 240, 900, 0.16, 0.3, g); osc('sine', 150, 60, 0.18, 0.35, g); },
+  [WeaponType.Javelin]:   (g): void => { noise(0.22, 0.5, g, 'bandpass', 900, 3800, 1.6); osc('sawtooth', 240, 900, 0.16, 0.3, g); osc('sine', 150, 60, 0.18, 0.35, g); },
 };

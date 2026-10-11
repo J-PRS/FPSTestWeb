@@ -102,7 +102,7 @@ export function createWorldState(): WorldState {
   return {
     // Stub hooks — real ones need scene/terrain/nm which don't exist at
     // world-creation time; createRemotes replaces them before first use.
-    remotePlayers: new RemoteSet<RemotePlayer, RemotePlayerState>({ create: () => undefined, isLive: () => true }),
+    remotePlayers: new RemoteSet<RemotePlayer, RemotePlayerState>({ create: (): undefined => undefined, isLive: (): true => true }),
     killCounts: new Map(),
     deathCounts: new Map(),
     killStreak: 0,

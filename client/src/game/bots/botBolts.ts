@@ -43,7 +43,7 @@ function claimLocal(b: BoltHost, bot: GameBot, aim: THREE.Vector3, melee: boolea
 
 function claimCreature(b: BoltHost, bot: GameBot, targetId: string, aim: THREE.Vector3, dmg: number): void {
     const id = Number(targetId.slice(9));
-    const t = b.host.targets.find(x => x.id === id);
+    const t = b.host.targets.find((x): boolean => x.id === id);
     if (t && !t.dead && aim.distanceTo(t.pos) < t.radius + 1) {
       if (b.host.damageCreature(t.id, dmg, bot.playerId)) {b.host.creditKill(bot.playerId, true);}
     }

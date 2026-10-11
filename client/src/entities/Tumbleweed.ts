@@ -104,7 +104,7 @@ function buildTumbleweedGeometry(): THREE.BufferGeometry {
   geo.scale(1, 0.88, 1);
   // Keep ~20 evenly-spread twigs as the debris pool (same squash so shard
   // silhouettes match the live weed — merge copies data, so scale separately)
-  _twigPool = twigs.filter((_, i) => i % 4 === 0);
+  _twigPool = twigs.filter((_, i): boolean => i % 4 === 0);
   for (const t of _twigPool) {t.scale(1, 0.88, 1);}
   geo.computeBoundingSphere();
   return geo;

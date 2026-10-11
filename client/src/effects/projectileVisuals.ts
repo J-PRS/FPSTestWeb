@@ -19,7 +19,7 @@ const GLOW_GEO = new THREE.SphereGeometry(1, 12, 12);
 // the body, skirt flaring backward along -Z. (A forward spearhead read
 // wrong; the wake belongs behind the shell. Own-shell camera overlap is
 // accepted — the proxy hitbox match is a separate problem.)
-const CONE_GEO = (() => {
+const CONE_GEO = ((): THREE.ConeGeometry => {
   const g = new THREE.ConeGeometry(1, 1, 24, 1, true);
   g.rotateX(Math.PI / 2);   // cone axis +Y → +Z (apex forward)
   g.translate(0, 0, -0.5);  // apex at the shell, base 1 unit behind
@@ -164,7 +164,7 @@ function instPoolFor(scene: THREE.Scene, kind: string, geo: THREE.BufferGeometry
     const p = { mesh, free: [], scene, key: k };
     markProbe(mesh, { kind: 'instPool', label: kind, pool: p });
     return p;
-  }, p => p.free.length > 0 || p.mesh.count < INST_CAP);
+  },( p): boolean => p.free.length > 0 || p.mesh.count < INST_CAP);
 }
 
 function instAlloc(pool: InstPool): number {
@@ -202,9 +202,9 @@ export function releaseProjectileInstance(m: THREE.Mesh | null): void {
   delete (m as SlotTag).__inst;
   // Shrink: an overflow mesh whose slots are ALL free is retired — the
   // first pool per kind is the floor so the common case stays one draw.
-  retireBatch(instPools, t.pool.key, t.pool,
-    p => p.free.length === p.mesh.count,
-    p => { p.scene.remove(p.mesh); p.mesh.dispose(); });
+  retireBatch(instPools, t.pool.key, t.pool,(
+    p): boolean => p.free.length === p.mesh.count,(
+    p): void => { p.scene.remove(p.mesh); p.mesh.dispose(); });
 }
 
 /** Instancing census for the Alt+Q dump — pool count per shell kind plus
@@ -393,4 +393,4 @@ export function updateProjectileMesh(
 }
 
 // Alt+Q census section — instanced shell pools (grow/shrink inventory).
-registerDiag('inst', () => ({ inst: instPoolDump() }));
+registerDiag('inst', (): { inst: Record<string, { pools: number; count: number; free: number; }>; } => ({ inst: instPoolDump() }));

@@ -66,7 +66,7 @@ async function connectP2PMode(ctx: ConnectCtx, p2p: string): Promise<void> {
       const dc = connectP2P({ signalUrl: sig.toString() }); // resolves when guest's channel opens
       // Host plays immediately over loopback — no need to wait for a guest
       await networkManager.connect(serverUrl, (cfg) => new LoopbackTransport(host, cfg));
-      dc.then((chan) => host.attachDataChannel(chan)).catch((error) => logger.warn('P2P guest handshake failed', error));
+      dc.then((chan): void => host.attachDataChannel(chan)).catch((error): void => logger.warn('P2P guest handshake failed', error));
       logger.info(`P2P hosting room "${room}"${open ? ' (open lobby)' : ''} — share ?p2p=join:${room}`);
       fragMessages?.show(open
         ? `Open lobby "${room}" — anyone can quick-join`
@@ -90,10 +90,10 @@ export async function connectServer(ctx: ConnectCtx): Promise<void> {
     await connectP2PMode(ctx, p2p);
   } else if (!classicMode) {
     profiler.markTime('networkConnectStart');
-    networkManager.connect(serverUrl, undefined, ctx.resolveUrl).then(() => {
+    networkManager.connect(serverUrl, undefined, ctx.resolveUrl).then((): void => {
       profiler.markTime('networkConnected');
       logger.info(`Connected to server at ${serverUrl}`);
-    }).catch((error) => {
+    }).catch((error): void => {
       logger.error('Failed to connect to server', error);
     });
   }

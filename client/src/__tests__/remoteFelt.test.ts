@@ -27,7 +27,7 @@ class Host implements InterpHost {
 
 // Analytic mover — a big ski carve: position AND velocity known at every t.
 const R = 80, W = 0.55, Y = 4;
-function truth(tMs: number) {
+function truth(tMs: number): { x: number; y: number; z: number; vx: number; vy: number; vz: number; } {
   const t = tMs / 1000;
   return {
     x: R * Math.cos(W * t),
@@ -41,11 +41,11 @@ function truth(tMs: number) {
 const CRUISE = R * W; // ~44 m/s
 
 interface Packet { emitT: number; arriveT: number; s: ReturnType<typeof truth>; }
-const q0 = (errs: number[], p: number) => errs[Math.min(errs.length - 1, Math.floor(errs.length * p))]!.toFixed(2);
+const q0 = (errs: number[], p: number): string => errs[Math.min(errs.length - 1, Math.floor(errs.length * p))]!.toFixed(2);
 
-function runLink(opts: { transit: number; jitter: number; loss: number; secs: number; silentFrom?: number; silentTo?: number; seed?: number; tickMs?: number }) {
+function runLink(opts: { transit: number; jitter: number; loss: number; secs: number; silentFrom?: number; silentTo?: number; seed?: number; tickMs?: number }): { p50: number; p95: number; p99: number; max: number; snaps: number; snapMax: number; } {
   let rng = opts.seed ?? 12_345;
-  const rand = () => (rng = (rng * 1_103_515_245 + 12_345) & 0x7F_FF_FF_FF) / 0x7F_FF_FF_FF;
+  const rand = (): number => (rng = (rng * 1_103_515_245 + 12_345) & 0x7F_FF_FF_FF) / 0x7F_FF_FF_FF;
 
   const h = new Host();
   const interp = new RemoteInterp(h);
@@ -96,17 +96,17 @@ function runLink(opts: { transit: number; jitter: number; loss: number; secs: nu
     if (jump > budget) {snaps.push(jump);}
     prev.copy(h.position);
   }
-  errs.sort((a, b) => a - b);
+  errs.sort((a, b): number => a - b);
   console.log(`[felt] p50=${q0(errs, 0.5)} p95=${q0(errs, 0.95)} p99=${q0(errs, 0.99)} max=${errs[errs.length - 1]!.toFixed(2)} snaps=${snaps.length}`);
-  const q = (p: number) => errs[Math.min(errs.length - 1, Math.floor(errs.length * p))]!;
+  const q = (p: number): number => errs[Math.min(errs.length - 1, Math.floor(errs.length * p))]!;
   return { p50: q(0.5), p95: q(0.95), p99: q(0.99), max: errs[errs.length - 1]!, snaps: snaps.length, snapMax: snaps.length > 0 ? Math.max(...snaps) : 0 };
 }
 
-describe('felt-state canary (rendered remote vs truth)', () => {
-  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(0); });
-  afterEach(() => { vi.useRealTimers(); });
+describe('felt-state canary (rendered remote vs truth)', (): void => {
+  beforeEach((): void => { vi.useFakeTimers(); vi.setSystemTime(0); });
+  afterEach((): void => { vi.useRealTimers(); });
 
-  it('LAN-class link (40ms, no loss): ghost rides truth within the snap floor', () => {
+  it('LAN-class link (40ms, no loss): ghost rides truth within the snap floor', (): void => {
     const r = runLink({ transit: 20, jitter: 5, loss: 0, secs: 12 });
     // At ~44 m/s the interp delay (~150ms) alone prices ~6.5m of truth lag
     // the shooter also sees — the felt budget is what a led broadcast aims
@@ -116,7 +116,7 @@ describe('felt-state canary (rendered remote vs truth)', () => {
     expect(r.max).toBeLessThan(14);
   });
 
-  it('150ms-class link (75ms transit, ±40ms jitter, 3% loss): stays inside the speed-scaled budget', () => {
+  it('150ms-class link (75ms transit, ±40ms jitter, 3% loss): stays inside the speed-scaled budget', (): void => {
     const r = runLink({ transit: 75, jitter: 40, loss: 0.03, secs: 20, seed: 777 });
     assert.equal(r.snaps, 0, JSON.stringify(r));
     // ~44 m/s × ~250ms effective render lag — the same speed-scaled ~5m
@@ -125,7 +125,7 @@ describe('felt-state canary (rendered remote vs truth)', () => {
     expect(r.max).toBeLessThan(25);
   });
 
-  it('tier-suppressed stream (250ms arrivals) on a fast mover: no steps, bounded lag', () => {
+  it('tier-suppressed stream (250ms arrivals) on a fast mover: no steps, bounded lag', (): void => {
     // Interest-tier suppression is the production shape the canary was
     // missing: snapshots arrive 5x slower than the server emits them.
     // The speed-scaled delay cap (~90ms at 44m/s) trades cushion for
@@ -139,7 +139,7 @@ describe('felt-state canary (rendered remote vs truth)', () => {
     expect(r.max).toBeLessThan(22);
   });
 
-  it('bursty uplink (15% loss at 50ms ticks → clumped arrivals): no steps, stays converged', () => {
+  it('bursty uplink (15% loss at 50ms ticks → clumped arrivals): no steps, stays converged', (): void => {
     // Loss turns a dense stream into irregular bursts — ~300-500ms gaps
     // between clumps, then several packets at once. The same flap as the
     // suppressed case, arrived at by the wire instead of by tiering.
@@ -149,7 +149,7 @@ describe('felt-state canary (rendered remote vs truth)', () => {
     expect(r.max).toBeLessThan(20);
   });
 
-  it('undeclared big jump snaps in one frame — never a multi-frame slide', () => {
+  it('undeclared big jump snaps in one frame — never a multi-frame slide', (): void => {
     const h = new Host();
     const interp = new RemoteInterp(h);
     const FRAME = 1000 / 60;
@@ -184,7 +184,7 @@ describe('felt-state canary (rendered remote vs truth)', () => {
     expect(h.position.distanceTo(new THREE.Vector3(tp.x, tp.y, tp.z))).toBeLessThan(1);
   });
 
-  it('respawn reset re-seats instantly on the corpse-free position', () => {
+  it('respawn reset re-seats instantly on the corpse-free position', (): void => {
     const h = new Host();
     const interp = new RemoteInterp(h);
     vi.setSystemTime(0);
@@ -202,7 +202,7 @@ describe('felt-state canary (rendered remote vs truth)', () => {
     expect(h.position.distanceTo(spawn)).toBeLessThan(0.5);
   });
 
-  it('held jet bit keeps a DR remote climbing through a silence gap — no mid-air drop tell', () => {
+  it('held jet bit keeps a DR remote climbing through a silence gap — no mid-air drop tell', (): void => {
     const h = new Host();
     h.wireJet = true; // the wire says this remote is burning
     const interp = new RemoteInterp(h);
@@ -222,13 +222,13 @@ describe('felt-state canary (rendered remote vs truth)', () => {
     expect(h.position.y).toBeGreaterThan(15); // still aloft — never the "why did he drop" tell
   });
 
-  it('silence gap + reconnect: DR runs, rejoin converges with zero snaps', () => {
+  it('silence gap + reconnect: DR runs, rejoin converges with zero snaps', (): void => {
     const r = runLink({ transit: 75, jitter: 40, loss: 0.02, secs: 20, silentFrom: 8000, silentTo: 9200, seed: 4242 });
     assert.equal(r.snaps, 0, JSON.stringify(r));
     expect(r.max).toBeLessThan(60); // a 1.2s dead-reckon may stray ~v·gap, but never warps
   });
 
-  it('mortar spam: re-predicts inside the window cannot keep the ghost ballistic forever', () => {
+  it('mortar spam: re-predicts inside the window cannot keep the ghost ballistic forever', (): void => {
     const h = new Host();
     const interp = new RemoteInterp(h);
     const FRAME = 1000 / 60;

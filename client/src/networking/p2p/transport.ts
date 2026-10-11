@@ -21,8 +21,8 @@ export class LoopbackTransport implements GameTransport {
 
   constructor(private host: P2PHost, private config: ConnectionConfig) {
     this.link = {
-      send: (data) => this.deliver(data),
-      close: () => { this.open = false; this.config.onDisconnect?.(1000, 'host closed'); },
+      send: (data): void => this.deliver(data),
+      close: (): void => { this.open = false; this.config.onDisconnect?.(1000, 'host closed'); },
     };
   }
 
@@ -30,7 +30,7 @@ export class LoopbackTransport implements GameTransport {
     this.open = true;
     // onConnect must fire after the constructor returns — the caller's
     // NetworkManager isn't listening yet on the same tick.
-    queueMicrotask(() => this.config.onConnect?.());
+    queueMicrotask((): void | undefined => this.config.onConnect?.());
   }
 
   send(data: string | Uint8Array): boolean {
@@ -58,7 +58,7 @@ export class DataChannelTransport implements GameTransport {
 
   constructor(private dc: RTCDataChannel, private config: ConnectionConfig) {
     dc.binaryType = 'arraybuffer';
-    dc.addEventListener('message', (ev) => {
+    dc.addEventListener('message', (ev): void => {
       const {data} = ev;
       if (typeof data === 'string') {
         try { this.config.onMessage?.(JSON.parse(data)); } catch (error) { logger.error('dc parse', error); }
@@ -66,15 +66,15 @@ export class DataChannelTransport implements GameTransport {
         this.config.onBinaryMessage?.(new Uint8Array(data));
       }
     });
-    dc.addEventListener('open', () => { this.open = true; this.config.onConnect?.(); });
-    dc.addEventListener('close', () => { this.open = false; this.config.onDisconnect?.(1000, 'peer closed'); });
+    dc.addEventListener('open', (): void => { this.open = true; this.config.onConnect?.(); });
+    dc.addEventListener('close', (): void => { this.open = false; this.config.onDisconnect?.(1000, 'peer closed'); });
   }
 
   connect(): void {
     // The channel may already be open by the time we're constructed.
     if (this.dc.readyState === 'open') {
       this.open = true;
-      queueMicrotask(() => this.config.onConnect?.());
+      queueMicrotask((): void | undefined => this.config.onConnect?.());
     }
   }
 

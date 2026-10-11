@@ -66,7 +66,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     validate: (obj) => typeof obj.playerId === 'string'
       ? { success: true, data: (Object.assign({}, obj, {type: 'join' as const,playerId: obj.playerId})) as Extract<ClientMessage, { type: 'join' }> }
       : { success: false, error: 'join missing playerId' },
-    handle: (h, id, m) => {
+    handle: (h, id, m): void => {
       if (m.playerId === id) {h.sendWorldState(id);}
     },
   },
@@ -79,12 +79,12 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     validate: (obj) => obj.type === 'tickNack'
       ? { success: true, data: { type: 'tickNack' } as Extract<ClientMessage, { type: 'tickNack' }> }
       : { success: false, error: 'tickNack malformed' },
-    handle: (h) => h.roomInfo.nackFulls?.(),
+    handle: (h): void | undefined => h.roomInfo.nackFulls?.(),
   },
 
   position: {
     limit: { maxCount: 30, windowMs: 1000 },
-    validate: (obj) => {
+    validate: (obj): { success: false; error: string; } | { success: true; data: any; } => {
       const body = validateBody(obj);
       if (!body.success) {return body;}
       const seq = isFiniteNumber(obj.seq) ? obj.seq : undefined;
@@ -102,7 +102,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       }
       return { success: true, data: Object.assign({}, body.data, {seq,inputSeq,ping}, (input ? { input } : {}), {type: 'position' as const}) };
     },
-    handle: (h, id, m) => h.moves.handlePosition(id, m),
+    handle: (h, id, m): void => h.moves.handlePosition(id, m),
   },
 
   teleport: {
@@ -117,7 +117,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       if (!body.success) {return body;}
       return { success: true, data: Object.assign({}, body.data, {type: 'teleport' as const}) };
     },
-    handle: (h, id, m) => h.moves.handleTeleport(id, m),
+    handle: (h, id, m): void => h.moves.handleTeleport(id, m),
   },
 
   aoeShot: {
@@ -154,7 +154,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
         },
       };
     },
-    handle: (h, id, m) => {
+    handle: (h, id, m): void => {
       if (h.acceptClaims === false) { h.claimAck(id, 'aoeShot', m.claimSeq, 'outcomes are server-simmed'); return; }
       h.combat.handleAOEShot(id, m);
     },
@@ -184,7 +184,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
         },
       };
     },
-    handle: (h, id, m) => h.combat.handleShotFired(id, m),
+    handle: (h, id, m): void => h.combat.handleShotFired(id, m),
   },
 
   slam: {
@@ -196,7 +196,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       if (!pos.success) {return { success: false, error: `position: ${pos.error}` };}
       return { success: true, data: { type: 'slam', position: pos.data, claimSeq: optClaimSeq(obj.claimSeq) } };
     },
-    handle: (h, id, m) => h.claimAck(id, 'slam', m.claimSeq, h.combat.handleSlam(id, m)),
+    handle: (h, id, m): void => h.claimAck(id, 'slam', m.claimSeq, h.combat.handleSlam(id, m)),
   },
 
   jump: {
@@ -206,7 +206,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       if (!pos.success) {return { success: false, error: `position: ${pos.error}` };}
       return { success: true, data: { type: 'jump', position: pos.data } };
     },
-    handle: (h, id, m) => h.relayPresenceEvent(id, m),
+    handle: (h, id, m): void => h.relayPresenceEvent(id, m),
   },
 
   jetpack: {
@@ -216,7 +216,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       if (!pos.success) {return { success: false, error: `position: ${pos.error}` };}
       return { success: true, data: { type: 'jetpack', position: pos.data } };
     },
-    handle: (h, id, m) => h.relayPresenceEvent(id, m),
+    handle: (h, id, m): void => h.relayPresenceEvent(id, m),
   },
 
   inputMove: {
@@ -249,7 +249,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       }
       return { success: true, data: Object.assign({}, edge, {prev,type: 'inputMove' as const}) };
     },
-    handle: (h, id, m) => {
+    handle: (h, id, m): void => {
       const p = h.playerManager.getPlayer(id);
       if (!p || p.isDead) {return;}
       const apply = (e: { seq?: number; input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number } }): boolean => {
@@ -280,7 +280,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       }
       return { success: true, data: { type: 'projectileDestroy', projectileId: pid.v!, shotId: optShotId(obj.shotId), claimSeq: optClaimSeq(obj.claimSeq) } };
     },
-    handle: (h, id, m) => {
+    handle: (h, id, m): void => {
       if (h.acceptClaims === false) { h.claimAck(id, 'projectileDestroy', m.claimSeq, 'outcomes are server-simmed'); return; }
       h.combat.handleProjectileDestroy(id, m);
     },
@@ -303,7 +303,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
         ? obj.attacker : undefined;
       return { success: true, data: { type: 'environmentDamage', amount: obj.amount, attacker, claimSeq: optClaimSeq(obj.claimSeq) } };
     },
-    handle: (h, id, m) => h.claimAck(id, 'environmentDamage', m.claimSeq, h.combat.handleEnvironmentDamage(id, m)),
+    handle: (h, id, m): void => h.claimAck(id, 'environmentDamage', m.claimSeq, h.combat.handleEnvironmentDamage(id, m)),
   },
 
   heal: {
@@ -322,7 +322,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     // have no server-side entity to adjudicate an intent against. The
     // bounds live in handleHeal — 25/call, 1.5s cadence, healCredit in
     // team rooms — not in re-derivation, so the claim gate doesn't apply.
-    handle: (h, id, m) => h.claimAck(id, 'heal', m.claimSeq, h.combat.handleHeal(id, m)),
+    handle: (h, id, m): void => h.claimAck(id, 'heal', m.claimSeq, h.combat.handleHeal(id, m)),
   },
 
   creatureHit: {
@@ -339,7 +339,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       const kz = isFiniteNumber(obj.kz) ? obj.kz : undefined;
       return { success: true, data: { type: 'creatureHit', id: obj.id, damage: obj.damage, kx, ky, kz, claimSeq: optClaimSeq(obj.claimSeq) } };
     },
-    handle: (h, id, m) => {
+    handle: (h, id, m): void => {
       const v = h.acceptClaims === false ? null : h.ballSim?.handleHit(id, m.id, m.damage, m.kx, m.ky, m.kz);
       h.claimAck(id, 'creatureHit', m.claimSeq, v ? (v.reason ?? true) : 'gone');
     },
@@ -359,7 +359,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       // so accepting them would be dead grammar clients could forge.
       return { success: true, data: { type: 'crawlerHit', id: obj.id, damage: obj.damage, claimSeq: optClaimSeq(obj.claimSeq) } };
     },
-    handle: (h, id, m) => {
+    handle: (h, id, m): void => {
       const v = h.acceptClaims === false ? null : h.creatureSim?.handleHit(id, m.id, m.damage);
       h.claimAck(id, 'crawlerHit', m.claimSeq, v ? (v.reason ?? true) : 'gone');
     },
@@ -376,7 +376,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       if (!dpos.success) {return { success: false, error: `position: ${dpos.error}` };}
       return { success: true, data: { type: 'deploy', kind: kind as DeployKind, position: dpos.data, claimSeq: optClaimSeq(obj.claimSeq) } };
     },
-    handle: (h, id, m) => h.claimAck(id, 'deploy', m.claimSeq, h.roomInfo.onDeploy?.(id, m.kind, m.position) ?? 'gone'),
+    handle: (h, id, m): void => h.claimAck(id, 'deploy', m.claimSeq, h.roomInfo.onDeploy?.(id, m.kind, m.position) ?? 'gone'),
   },
 
   repair: {
@@ -388,7 +388,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       }
       return { success: true, data: { type: 'repair', targetId: obj.targetId, claimSeq: optClaimSeq(obj.claimSeq) } };
     },
-    handle: (h, id, m) => h.claimAck(id, 'repair', m.claimSeq, h.acceptClaims === false ? 'outcomes are server-simmed' : (h.roomInfo.onRepair?.(id, m.targetId) ?? 'gone')),
+    handle: (h, id, m): void => h.claimAck(id, 'repair', m.claimSeq, h.acceptClaims === false ? 'outcomes are server-simmed' : (h.roomInfo.onRepair?.(id, m.targetId) ?? 'gone')),
   },
 
   // Mirror-only claim: the server re-derives the energy ante itself —
@@ -397,10 +397,10 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     // Deliberate presses; the ante re-derivation keeps floods harmless
     // but each claim still echoes a claimAck, so bound the lane anyway.
     limit: { maxCount: 8, windowMs: 1000 },
-    validate: (obj) => {
+    validate: (obj): { success: true; data: { type: "skillUse"; claimSeq: number | undefined; }; } => {
       return { success: true, data: { type: 'skillUse', claimSeq: optClaimSeq(obj.claimSeq) } };
     },
-    handle: (h, id, m) => h.claimAck(id, 'skillUse', m.claimSeq, h.roomInfo.onSkillUse?.(id) ?? 'gone'),
+    handle: (h, id, m): void => h.claimAck(id, 'skillUse', m.claimSeq, h.roomInfo.onSkillUse?.(id) ?? 'gone'),
   },
 
   snapshotRequest: {
@@ -408,10 +408,10 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     // most expensive message per byte a client can send. Legit uses are
     // join-time and a rare manual resync.
     limit: { maxCount: 3, windowMs: 5000 },
-    validate: () => {
+    validate: (): { success: true; data: { type: "snapshotRequest"; }; } => {
       return { success: true, data: { type: 'snapshotRequest' } };
     },
-    handle: (h, id) => { h.hb('snapreq'); h.handleSnapshotRequest(id); },
+    handle: (h, id): void => { h.hb('snapreq'); h.handleSnapshotRequest(id); },
   },
 
   // Deliberate respawn — `hold` (the L bind) parks the corpse for
@@ -421,33 +421,33 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     // A held-corpse player hits respawn again to revive — L then a quick
     // click must both land. 3/s still refuses a stuck-key kill-feed flood.
     limit: { maxCount: 3, windowMs: 1000 },
-    validate: (obj) => {
+    validate: (obj): { success: true; data: { type: "respawn"; hold: true | undefined; }; } => {
       return { success: true, data: { type: 'respawn', hold: obj.hold === true ? true : undefined } };
     },
-    handle: (h, id, m) => h.combat.respawnRequest(id, m.hold === true),
+    handle: (h, id, m): void => h.combat.respawnRequest(id, m.hold === true),
   },
 
   // Carried-flag throw: no payload — the arc derives from the shadow's
   // position/velocity/rotation truth, never a client-claimed direction.
   throwFlag: {
     limit: { maxCount: 4, windowMs: 1000 }, // spam-tossing churns flagUpdate for everyone
-    validate: () => {
+    validate: (): { success: true; data: { type: "throwFlag"; }; } => {
       return { success: true, data: { type: 'throwFlag' } };
     },
-    handle: (h, id) => h.roomInfo.onThrowFlag?.(id),
+    handle: (h, id): void | undefined => h.roomInfo.onThrowFlag?.(id),
   },
 
   resync: {
     // Same cost shape as snapshotRequest (sendWorldState) plus a shadow
     // reseat — a manual desync escape hatch, not a stream.
     limit: { maxCount: 3, windowMs: 5000 },
-    validate: () => {
+    validate: (): { success: true; data: { type: "resync"; }; } => {
       return { success: true, data: { type: 'resync' } };
     },
     // Reseat BEFORE the replay goes out — the shadow and the echoed
     // localPlayerState must describe the same spot or the client's
     // post-snap reports/shots get judged against the stale anchor.
-    handle: (h, id) => { h.hb('resync'); h.moves.handleResyncSeat(id); h.sendWorldState(id); },
+    handle: (h, id): void => { h.hb('resync'); h.moves.handleResyncSeat(id); h.sendWorldState(id); },
   },
 
   classUpdate: {
@@ -462,7 +462,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     // Tribes rule: the tier swap banks on the next respawn — applying
     // it mid-life would be a free heal and flip the sim's speed scale
     // without the shadow knowing.
-    handle: (h, id, m) => {
+    handle: (h, id, m): void => {
       const p = h.playerManager.getPlayer(id);
       // The validator allows exactly light|medium|heavy; this `in` guard
       // keeps the table honest if CLASS_STATS' keys ever drift from that.
@@ -478,7 +478,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       }
       return { success: true, data: { type: 'perkUpdate', perk: obj.perk } };
     },
-    handle: (h, id, m) => {
+    handle: (h, id, m): void => {
       const p = h.playerManager.getPlayer(id);
       if (p && isPerkId(m.perk)) {p.pendingPerk = m.perk;}
     },
@@ -513,7 +513,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       return { success: true, data: { type: 'chat', text: obj.text, team: obj.team === true ? true : undefined, vgs } };
     },
     // Room-scoped relay — broadcast() only reaches this room's sockets.
-    handle: (h, id, m) => {
+    handle: (h, id, m): void => {
       const sender = h.playerManager.getPlayer(id);
       // Truncate — the relay is the broadcast ceiling too, so an
       // oversized payload would amplify one client's bandwidth into
@@ -557,7 +557,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       }
       return { success: true, data: { type: 'clientStats', fps: fields.fps as number, jsMs: fields.jsMs as number, ping: fields.ping as number, loss: fields.loss as number, jitter: fields.jitter as number, renderLagMs, renderLag } };
     },
-    handle: (h, id, m) => {
+    handle: (h, id, m): void => {
       const p = h.playerManager.getPlayer(id);
       if (!p) {return;}
       p.lastSeen = wallNow();
@@ -572,7 +572,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       }
       return { success: true, data: { type: 'ping', timestamp: obj.timestamp } };
     },
-    handle: (h, id, m) => {
+    handle: (h, id, m): void => {
       const p = h.playerManager.getPlayer(id);
       if (!p) {return;}
       p.lastSeen = wallNow(); // ping is a liveness signal too —
@@ -591,7 +591,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       }
       return { success: true, data: { type: 'pong', timestamp: obj.timestamp } };
     },
-    handle: (h, id, m) => {
+    handle: (h, id, m): void => {
       const p = h.playerManager.getPlayer(id);
       if (!p) {return;}
       p.lastSeen = wallNow();

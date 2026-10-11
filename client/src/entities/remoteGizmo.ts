@@ -46,8 +46,8 @@ export class RemoteGizmo {
   private shown = true;
 
   constructor(scene: THREE.Scene, startPos: { x: number; y: number; z: number }) {
-    this.pool = acquireBatch(pools, scene, makePool,
-      p => p.free.length > 0 || p.mesh.count < MAX_GIZMOS);
+    this.pool = acquireBatch(pools, scene, makePool,(
+      p): boolean => p.free.length > 0 || p.mesh.count < MAX_GIZMOS);
     this.slot = this.pool.free.length > 0 ? this.pool.free.pop()! : ((this.pool.mesh.count += 1) - 1);
     this.setColor(0x00_FF_00);
     this.follow(startPos);
@@ -90,8 +90,8 @@ export class RemoteGizmo {
     this.pool.free.push(this.slot);
     const {scene} = this.pool;
     this.slot = -1;
-    retireBatch(pools, scene, this.pool,
-      p => p.free.length === p.mesh.count,
-      p => { p.scene.remove(p.mesh); p.mesh.dispose(); });
+    retireBatch(pools, scene, this.pool,(
+      p): boolean => p.free.length === p.mesh.count,(
+      p): void => { p.scene.remove(p.mesh); p.mesh.dispose(); });
   }
 }

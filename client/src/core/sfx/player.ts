@@ -245,7 +245,7 @@ export function flagCue(kind: 'taken' | 'dropped' | 'returned' | 'captured', min
   const g = c.createGain(); g.connect(bus);
   if (!play(g, 0.6, undefined, 2)) {return;}
   const t0 = c.currentTime;
-  const note = (f: number, dt: number, dur: number, peak: number, type: OscillatorType = 'triangle') => {
+  const note = (f: number, dt: number, dur: number, peak: number, type: OscillatorType = 'triangle'): void => {
     const o = c.createOscillator(); const g2 = c.createGain();
     o.type = type;
     o.frequency.setValueAtTime(f, t0 + dt);
@@ -281,7 +281,7 @@ export function matchHorn(kind: 'start' | 'win' | 'end'): void {
   const g = c.createGain(); g.connect(bus);
   if (!play(g, 1, undefined, 2)) {return;}
   const t0 = c.currentTime;
-  const note = (f: number, dt: number, dur: number, peak: number, type: OscillatorType = 'sawtooth') => {
+  const note = (f: number, dt: number, dur: number, peak: number, type: OscillatorType = 'sawtooth'): void => {
     const o = c.createOscillator(); const g2 = c.createGain();
     o.type = type;
     o.frequency.setValueAtTime(f, t0 + dt);

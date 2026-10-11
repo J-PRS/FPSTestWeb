@@ -40,14 +40,14 @@ export namespace StateSnapshot {
    */
   export function computeHash(snapshot: Omit<GameStateSnapshot, 'hash'>): string {
     const sortedPlayerIds = Array.from(snapshot.players.keys()).toSorted();
-    const playerData = sortedPlayerIds.map(id => {
+    const playerData = sortedPlayerIds.map((id): string => {
       const player = snapshot.players.get(id)!;
       return `${id}:${player.position.x},${player.position.y},${player.position.z}:${player.health}:${player.isDead}`;
     }).join('|');
 
     const projectileData = snapshot.projectiles
       .toSorted((a, b) => a.id.localeCompare(b.id))
-      .map(p => `${p.id}:${p.ownerId}:${p.position.x},${p.position.y},${p.position.z}`)
+      .map((p): string => `${p.id}:${p.ownerId}:${p.position.x},${p.position.y},${p.position.z}`)
       .join('|');
 
     const combined = `${snapshot.timestamp}:${playerData}:${projectileData}`;
@@ -129,7 +129,7 @@ export namespace StateSnapshot {
    */
   export function exportSnapshots(): void {
     const data = {
-      snapshots: snapshotBuffer.map(s => (((((((Object.assign({}, s, {players: Array.from(s.players.entries())})))))))))
+      snapshots: snapshotBuffer.map((s): GameStateSnapshot & { players: [string, EntityState][]; } => (((((((Object.assign({}, s, {players: Array.from(s.players.entries())})))))))))
     };
     
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -190,8 +190,8 @@ export namespace StateSnapshot {
 
   function compareProjectiles(s1: GameStateSnapshot, s2: GameStateSnapshot): string[] {
     const diffs: string[] = [];
-    const p1Ids = new Set(s1.projectiles.map(p => p.id));
-    const p2Ids = new Set(s2.projectiles.map(p => p.id));
+    const p1Ids = new Set(s1.projectiles.map((p): string => p.id));
+    const p2Ids = new Set(s2.projectiles.map((p): string => p.id));
 
     for (const id of p1Ids) {
       if (!p2Ids.has(id)) {diffs.push(`Projectile ${id} missing in snapshot2`);}

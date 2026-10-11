@@ -57,7 +57,7 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
   // A P2P host carries no creature sim — peers keep client-side species.
   const serverCreatures = (): boolean => deps.lazyNetworkManager()?.authoritySims() ?? false;
 
-  const claim = (netId: number, damage: number) =>
+  const claim = (netId: number, damage: number): void =>
     deps.lazyNetworkManager()?.sendCrawlerHit(netId, damage);
   Crawler.hitClaim = claim;
   Scarab.hitClaim = claim;
@@ -155,16 +155,16 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
 
   function netCrawlRoster(m: { crawlers: { id: number; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; uber: boolean; seed: number; species?: string; state: string; targetId: string | null; tp?: { x: number; y: number; z: number } | null; t?: number; sk?: number; ph?: number; od?: number }[] }): void {
     reconcileReplicas(netCrawlerById, m.crawlers, {
-      rowId: (r) => r.id,
-      isDead: (c) => c.dead,
-      ensure: (r) => {
+      rowId: (r): number => r.id,
+      isDead: (c): boolean => c.dead,
+      ensure: (r): NetBeing | undefined => {
         netCrawlSpawn({ id: r.id, position: r.position, seed: r.seed, uber: r.uber, species: r.species, targetId: r.targetId, tp: r.tp, state: r.state });
         // Roster-born replicas inherit the row's absolute skip count —
         // seeding 0 would replay every past retarget skip again.
         if (r.sk !== undefined && Number.isFinite(r.sk)) {appliedSkips.set(r.id, r.sk);}
         return netCrawlerById.get(r.id);
       },
-      apply: (c, r) => {
+      apply: (c, r): void => {
         // Species+uber are constructor-fixed: a wrong replica (id
         // recycled, corrupt spawn edge) can never patch its way to truth
         // — the roster is authoritative, so kill it and respawn the
@@ -220,7 +220,7 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
       },
       // Server-truth cull: a crawler we hold that's not on the roster died
       // while our events were in flight.
-      reap: (c, id) => {
+      reap: (c, id): void => {
         appliedSkips.delete(id);
         deps.lazyDemoManager()?.recordCreatureDie(id, c.pos);
         c.dead = true;

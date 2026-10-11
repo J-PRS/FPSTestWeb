@@ -33,8 +33,8 @@ function driveCamera(cam: THREE.PerspectiveCamera, pos: THREE.Vector3, yaw: numb
   cam.updateMatrixWorld(true);
 }
 
-describe('LG beam anchor under strafing', () => {
-  it('stays welded to the gun while strafing right at 30 m/s', () => {
+describe('LG beam anchor under strafing', (): void => {
+  it('stays welded to the gun while strafing right at 30 m/s', (): void => {
     const cam = new THREE.PerspectiveCamera(90, 16 / 9, 0.1, 1000);
     const pos = new THREE.Vector3(0, 50, 0);
     const dt = 1 / 60;
@@ -54,7 +54,7 @@ describe('LG beam anchor under strafing', () => {
     }
   });
 
-  it('stays welded while strafing diagonally and turning', () => {
+  it('stays welded while strafing diagonally and turning', (): void => {
     const cam = new THREE.PerspectiveCamera(90, 16 / 9, 0.1, 1000);
     const pos = new THREE.Vector3(100, 30, -40);
     const dt = 1 / 60;
@@ -73,7 +73,7 @@ describe('LG beam anchor under strafing', () => {
     }
   });
 
-  it('anchor sits at the gun on screen, not at the eye', () => {
+  it('anchor sits at the gun on screen, not at the eye', (): void => {
     const cam = new THREE.PerspectiveCamera(90, 16 / 9, 0.1, 1000);
     const pos = new THREE.Vector3(0, 50, 0);
     driveCamera(cam, pos, 0.7, 0.1);

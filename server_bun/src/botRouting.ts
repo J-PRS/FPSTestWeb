@@ -102,15 +102,15 @@ export class BotRouting {
   flow: TerrainFlow | null = null;
   routeOf(p: { team?: string }) {
     if (!this.field) {return undefined;}
-    this.flow ??= new TerrainFlow((x, z) => hmHeight(this.field!, x, z),
+    this.flow ??= new TerrainFlow((x, z): number => hmHeight(this.field!, x, z),
       BOT_TUNING.graph.extent, BOT_TUNING.graph.cell, this.room.ballSim.colliders);
     const {flow} = this;
     // Danger feed is per-team and live: the walk deflects around cells
     // where THIS side keeps dying, so two rooms' routes diverge without
     // a second flood.
-    const danger = (x: number, z: number) =>
+    const danger = (x: number, z: number): number =>
       this.room.influence.value({ x, y: 0, z }, this.room.influence.dangerLayer(p.team ?? 'alpha'));
-    return (fx: number, fz: number, tx: number, tz: number, ahead: number) =>
+    return (fx: number, fz: number, tx: number, tz: number, ahead: number): BotVec | null =>
       flow.route(fx, fz, tx, tz, ahead, danger, p.team);
   }
 
@@ -290,7 +290,7 @@ export class BotRouting {
       home: own.home,
       // Own flag's carrier — chase the thief, not the base; velocity
       // rides along so the pick can lead the run, not the wake.
-      thief: ((t) => t ? Object.assign({}, t.pos, {vx: t.vel.x, vz: t.vel.z}) : null)(this.thiefOf(me)),
+      thief: ((t): (BotVec & { vx: number; vz: number; }) | null => t ? Object.assign({}, t.pos, {vx: t.vel.x, vz: t.vel.z}) : null)(this.thiefOf(me)),
       // Own flag dropped — anyone close enough touches it home.
       dropped: own.state === 'dropped' ? own.pos : null,
       enemyStand,

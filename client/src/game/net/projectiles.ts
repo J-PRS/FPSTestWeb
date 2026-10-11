@@ -86,7 +86,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     }
   };
 
-  networkManager.onProjectileCreated = (projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number, shotId?: string, pellet?: number) => {
+  networkManager.onProjectileCreated = (projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number, shotId?: string, pellet?: number): void => {
     if (deps.world.playbackMode) {return;} // live shots don't belong in the replay
     noteWeapon(ownerId, weaponType);
     // For own projectiles: link the server id to the local shell by nonce.
@@ -132,7 +132,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     // spawn-derived) — hook the beam flash so observers see the rail too.
     if (cfg.rayBurst) {
       const beamColor = cfg.glowColor;
-      remoteProjectile.onRayBurst = (from, to) => {
+      remoteProjectile.onRayBurst = (from, to): void => {
         deps.lazyEffects().spawnBeam(from, to, beamColor);
         sfx.at(from, 'shot_energy', 0.9, 1.3);
       };
@@ -150,7 +150,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     // Wire destroy only covers server-simmed shells — claim-path replicas
     // die locally on fuse/terrain, so record the death wherever it happens
     // and release the map entry either way.
-    remoteProjectile.onExploded = () => {
+    remoteProjectile.onExploded = (): void => {
       deps.lazyDemoManager?.()?.recordRemoteProjectileDestroyed(projectileId, remoteProjectile.pos);
       remoteProjectiles.delete(projectileId);
     };
@@ -163,7 +163,7 @@ export function wireProjectiles(ctx: NetCtx): void {
   // Hitscan fire relay — observers get muzzle audio at the shooter's
   // server-stamped position plus a recoil kick on the remote model; beams
   // also paint a short tracer along the claimed aim dir.
-  networkManager.onPlayerShot = (id, weaponType, pos, dir) => {
+  networkManager.onPlayerShot = (id, weaponType, pos, dir): void => {
     if (deps.world.playbackMode) {return;}
     noteWeapon(id, weaponType);
     const rp = deps.world.remotePlayers.get(id);
@@ -196,7 +196,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     p.rendered.copy(p.pos);
   };
 
-  networkManager.onProjectileDestroyed = (projectileId: string, shotId?: string, position?: { x: number; y: number; z: number }) => {
+  networkManager.onProjectileDestroyed = (projectileId: string, shotId?: string, position?: { x: number; y: number; z: number }): void => {
     if (deps.world.playbackMode) {return;}
     // Kill remote projectile (explode so trail particles fade out naturally).
     // Delete the map entry now — the visual fade lives on world.projectiles,
@@ -233,7 +233,7 @@ export function wireProjectiles(ctx: NetCtx): void {
   // same-owner shell — parent the replica so it rides dead-center and
   // pops at the host's contact point (own shots already predicted the
   // catch; setting .host again is idempotent).
-  networkManager.onProjRide = (riderId, hostId) => {
+  networkManager.onProjRide = (riderId, hostId): void => {
     const reg = deps.world.projectileRegistry;
     const rider = remoteProjectiles.get(riderId) ?? reg.byId.get(riderId);
     const host = remoteProjectiles.get(hostId) ?? reg.byId.get(hostId);

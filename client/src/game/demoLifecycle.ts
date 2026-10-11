@@ -204,7 +204,7 @@ function snapshotExistingBallsForRecording(d: DemoLifecycleCtx, onBallRecorded?:
 
 function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlaybackStop: () => void): void {
   // Handle projectile events from demo playback: spawn projectiles on Fired, explode on Destroyed
-  demoManager.onPlaybackEvent = (events: { projectiles: ProjectileEvent[], targets: TargetEvent[] }) => {
+  demoManager.onPlaybackEvent = (events: { projectiles: ProjectileEvent[], targets: TargetEvent[] }): void => {
     if (d.seekReconstructing.on) {
       reconstructSeek(d.playbackWorld, events, demoManager.currentTime);
       d.seekReconstructing.on = false;
@@ -223,7 +223,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
     }
     applyPlaybackEvents(d.playbackWorld, events);
   };
-  demoManager.onPlaybackState = (state) => {
+  demoManager.onPlaybackState = (state): void => {
     if (demoManager.isPlaying) {
       const player = d.lazyPlayer();
       player.pos.set(state.posX, state.posY, state.posZ);
@@ -237,20 +237,20 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
       // fall back to the stock launcher.
       const vm = d.lazyViewModel();
       if (vm) {
-        const wid = SLOT_DEFS.some(d => d.weaponType === state.weaponType) ? state.weaponType : 0;
+        const wid = SLOT_DEFS.some((d): boolean => d.weaponType === state.weaponType) ? state.weaponType : 0;
         if (wid !== d.playbackWid) { d.playbackWid = wid; vm.switchWeapon(wid); }
       }
     }
   };
 
   // Demo playback ends — just pause, keep objects visible (frozen)
-  demoManager.onPlaybackEnd = () => {
+  demoManager.onPlaybackEnd = (): void => {
     // No cleanup — objects stay visible as if user pressed pause.
     // Cleanup happens when user explicitly stops playback via ESC.
   };
 
   // User explicitly stops playback (ESC, UI stop button) — full cleanup
-  demoManager.onPlaybackStop = () => {
+  demoManager.onPlaybackStop = (): void => {
     d.world.playbackMode = false;
     // Re-arm so the next replay re-applies its own weapon instead of
     // inheriting whatever the previous clip left selected.
@@ -276,7 +276,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
   };
 
   // Clear live game objects when playback starts so they don't hang frozen in the scene
-  demoManager.onPlaybackStart = () => {
+  demoManager.onPlaybackStart = (): void => {
     // The replay is its own world — the live wire must not fight it
     d.world.playbackMode = true;
     // v5 HMAP: the clip carries its terrain — use it when the live field
@@ -302,7 +302,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
     document.body.classList.remove('menu-open');
     // The feed plays clips without a user gesture — pointer lock would
     // throw (and is meaningless there: no aiming, no input).
-    if (!feedMode.on) {d.rendererCanvas.requestPointerLock()?.catch?.(() => { return; });}
+    if (!feedMode.on) {d.rendererCanvas.requestPointerLock()?.catch?.((): void => { return; });}
     // Live remote players would otherwise stand ghosted inside the replay
     for (const rp of d.world.remotePlayers.values()) {rp.setStaleHidden(true);}
     // Dispose all non-playback balls (live game balls)
@@ -335,7 +335,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
   };
 
   // Clear playback projectiles on seek so they don't get orphaned
-  demoManager.onPlaybackSeek = () => {
+  demoManager.onPlaybackSeek = (): void => {
     d.seekReconstructing.on = true;
     clearTransientObjects(d);
   };
@@ -343,7 +343,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
   // Recorded remote players — states arrive already interpolated at demo
   // time; RemotePlayer's own snapshot buffer gets them as live updates,
   // so replica smoothing is literally the production netcode path.
-  demoManager.onRemotePlayback = (states, dt) => {
+  demoManager.onRemotePlayback = (states, dt): void => {
     const roster = demoManager.getRoster();
     const seen = new Set<number>();
     for (const s of states) {
@@ -382,7 +382,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
   // consumes them synchronously, and ~160 allocs/s of throwaway structs
   // was the recorder's last GC churn.
   const remoteSampleBuf: RemoteSample[] = [];
-  demoManager.setRemoteSource(() => {
+  demoManager.setRemoteSource((): RemoteSample[] => {
     const out = remoteSampleBuf;
     let i = 0;
     for (const [id, rp] of d.world.remotePlayers) {
@@ -450,10 +450,10 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
   const playbackProjectileOrigin = new Map<number, THREE.Vector3>();
 
   const playbackWorld: PlaybackWorld = {
-    get scene() { return deps.lazyScene(); },
-    get terrain() { return deps.lazyTerrain(); },
-    get camera() { return deps.lazyCamera(); },
-    getPlayer: () => deps.lazyPlayer(),
+    get scene(): THREE.Scene<THREE.Object3DEventMap> { return deps.lazyScene(); },
+    get terrain(): Terrain { return deps.lazyTerrain(); },
+    get camera(): THREE.PerspectiveCamera { return deps.lazyCamera(); },
+    getPlayer: (): Player => deps.lazyPlayer(),
     balls: deps.balls,
     debrisList: deps.world.debrisList,
     explosions: deps.world.explosions,
@@ -463,15 +463,15 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
     playbackDeployableById,
     playbackFlags,
     playbackPickups,
-    remotePosAt: (rosterIdx) => playbackRemotesMap.get(rosterIdx)?.position ?? null,
+    remotePosAt: (rosterIdx): THREE.Vector3 | null => playbackRemotesMap.get(rosterIdx)?.position ?? null,
     playbackProjectiles,
     playbackProjectileById,
     playbackProjectileOrigin,
     beams: [],
     beamPool: [],
-    get damageNumberManager() { return deps.damageNumberManager(); },
-    get fragMessages() { return deps.fragMessages(); },
-    get hud() { return deps.lazyHud(); },
+    get damageNumberManager(): DamageNumberManager { return deps.damageNumberManager(); },
+    get fragMessages(): FragMessages { return deps.fragMessages(); },
+    get hud(): HUD { return deps.lazyHud(); },
   };
 
   const d: DemoLifecycleCtx = Object.assign(deps, {
@@ -492,9 +492,9 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
   return {
     playbackWorld,
     playbackBallById,
-    updatePlaybackProjectiles: (dt: number) => updatePlaybackProjectiles(d, dt),
-    updateBallsPlayback: (dt: number) => updateBallsPlayback(d, dt),
-    snapshotExistingBallsForRecording: (cb?: (ball: Ball) => void) => snapshotExistingBallsForRecording(d, cb),
-    wireDemoHandlers: (dm: DemoManager, onStop: () => void) => wireDemoHandlers(d, dm, onStop),
+    updatePlaybackProjectiles: (dt: number): void => updatePlaybackProjectiles(d, dt),
+    updateBallsPlayback: (dt: number): void => updateBallsPlayback(d, dt),
+    snapshotExistingBallsForRecording: (cb?: (ball: Ball) => void): void => snapshotExistingBallsForRecording(d, cb),
+    wireDemoHandlers: (dm: DemoManager, onStop: () => void): void => wireDemoHandlers(d, dm, onStop),
   };
 }

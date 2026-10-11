@@ -33,7 +33,7 @@ export const FLYER_SIM = {
 // Flyer rows live in the unified SPECIES registry; this derived view
 // keeps the old import sites working.
 export const FLYER_SPECIES: Record<string, SpeciesRow> = Object.fromEntries(
-  Object.entries(SPECIES).filter(([, r]) => r.family === 'fly'),
+  Object.entries(SPECIES).filter(([, r]): boolean => r.family === 'fly'),
 );
 
 export type FlyerState = 'orbit' | 'windup' | 'dive' | 'climb';

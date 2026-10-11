@@ -2,7 +2,7 @@ import type { ProjectileEvent, TargetEvent } from './types.js';
 import { lerpAngle } from '../../../shared/angles.ts';
 
 import type { DemoPlayer, PlaybackState } from './DemoPlayer.js';
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 
 export { lerpAngle };
 

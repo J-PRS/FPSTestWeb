@@ -181,11 +181,11 @@ export class CombatHandler {
   ) {
     // Late binding on the static — tests reassign tauntDelayMs after
     // construction and must still steer the delay.
-    this.killFeed = new KillFeed(playerManager, broadcast, () => CombatHandler.tauntDelayMs(),
-      (id, vgs) => this.deps.emit?.({ type: 'botSpoke', id, vgs }), sendToPlayer);
-    this.respawner = new RespawnManager(playerManager, broadcast, (pid, pos, yaw, full) => this.deps.moveResync?.(pid, pos, yaw, full));
+    this.killFeed = new KillFeed(playerManager, broadcast, (): number => CombatHandler.tauntDelayMs(),
+      (id, vgs): void | undefined => this.deps.emit?.({ type: 'botSpoke', id, vgs }), sendToPlayer);
+    this.respawner = new RespawnManager(playerManager, broadcast, (pid, pos, yaw, full): void | undefined => this.deps.moveResync?.(pid, pos, yaw, full));
     this.blast = new BlastRunner(this);
-    this.chargeBank = new ChargeBank((ownerId, target, amount) => this.blast.pop(ownerId, target.position, amount));
+    this.chargeBank = new ChargeBank((ownerId, target, amount): void => this.blast.pop(ownerId, target.position, amount));
     this.aoe = new AoeClaims(this);
   }
 
@@ -370,7 +370,7 @@ w.n += 1;
     // here, so neither a creatureHit claim nor a per-tick aoeShot is
     // needed. Falls through to the cosmetic playerShot relay below.
     if (msg.weaponType === WeaponType.Lightning && dir && this.deps.beamSweep) {
-      const recent = (this.simmedFireTimes.get(playerId) ?? []).filter(t => now - t < 1000);
+      const recent = (this.simmedFireTimes.get(playerId) ?? []).filter((t): boolean => now - t < 1000);
       if (recent.length >= 30) { this.hb('drop.beamFlood'); return; }
       recent.push(now);
       this.simmedFireTimes.set(playerId, recent);
@@ -385,7 +385,7 @@ w.n += 1;
     // server names the weld target off the honest ray, so the per-tick
     // `repair` claim isn't needed. Falls through to the cosmetic relay.
     if (msg.weaponType === WeaponType.Repair && dir && this.deps.repairTarget) {
-      const recent = (this.simmedFireTimes.get(playerId) ?? []).filter(t => now - t < 1000);
+      const recent = (this.simmedFireTimes.get(playerId) ?? []).filter((t): boolean => now - t < 1000);
       if (recent.length >= 30) { this.hb('drop.beamFlood'); return; }
       recent.push(now);
       this.simmedFireTimes.set(playerId, recent);
@@ -399,7 +399,7 @@ w.n += 1;
     if (fireProjectile) {
       // Intents spawn real sims + broadcasts, so they need a real flood
       // gate — the fastest legit simmed weapon is ~13/s; 20/s is spam.
-      const recent = (this.simmedFireTimes.get(playerId) ?? []).filter(t => now - t < 1000);
+      const recent = (this.simmedFireTimes.get(playerId) ?? []).filter((t): boolean => now - t < 1000);
       if (recent.length >= 20) { this.reject(playerId, 'Shot', 'fire rate (flood)', undefined, msg.weaponType, msg.shotId); return; }
       recent.push(now);
       this.simmedFireTimes.set(playerId, recent);
@@ -413,7 +413,7 @@ w.n += 1;
         const key = `${playerId}:${msg.weaponType}`;
         const win = this.fireWindows.get(key) ?? { start: now, count: 0, lastTs: undefined, arr: [] as number[], violations: 0 };
         this.fireWindows.set(key, win);
-        win.arr = win.arr.filter(t => now - t < 1000);
+        win.arr = win.arr.filter((t): boolean => now - t < 1000);
         win.arr.push(now);
         if (win.arr.length >= Math.ceil(1000 / (interval * 850)) + 2) {
 win.violations += 1;
@@ -665,7 +665,7 @@ win.violations += 1;
 
   /** Typing-beat delay — a scenario test steps sim-time only, so it
    *  stubs this to 0 to see taunts inside the frag loop. */
-  static tauntDelayMs: () => number = () => 1200 + tauntRand() * 1800;
+  static tauntDelayMs: () => number = (): number => 1200 + tauntRand() * 1800;
 
   ensureRespawn(playerId: string): void {
     this.respawner.ensure(playerId);

@@ -19,9 +19,9 @@ const gltfCache = new Map<string, Promise<GLTF>>();
 export function loadGltfCached(loader: GLTFLoader, url: string): Promise<GLTF> {
   let p = gltfCache.get(url);
   if (!p) {
-    p = new Promise<GLTF>((res, rej) => loader.load(url, res, undefined, rej));
+    p = new Promise<GLTF>((res, rej): void => loader.load(url, res, undefined, rej));
     gltfCache.set(url, p);
-    p.catch(() => { if (gltfCache.get(url) === p) {gltfCache.delete(url);} });
+    p.catch((): void => { if (gltfCache.get(url) === p) {gltfCache.delete(url);} });
   }
   return p;
 }

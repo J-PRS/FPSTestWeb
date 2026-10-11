@@ -98,8 +98,8 @@ export class RemotePlayer {
       this._model.dispose();
       this._loaded = false;
       this._model = new PlayerModel(this.scene, want, rev);
-      this._model.load().then(() => this.finishModelLoad())
-        .catch((error) => logger.warn('Model swap gave up', { playerId: this.playerId, error: String(error) }));
+      this._model.load().then((): void => this.finishModelLoad())
+        .catch((error): void => logger.warn('Model swap gave up', { playerId: this.playerId, error: String(error) }));
       return;
     }
     if (this._loaded) {this.applyClassScale();}
@@ -164,10 +164,10 @@ export class RemotePlayer {
     this._model = new PlayerModel(scene,
       (CLASS_BODY_VARIANT[_armorClass ?? 'medium'] ?? 'vexa') as PlayerModelVariant,
       CLASS_BODY_MAT_REV.has(_armorClass ?? 'medium'));
-    this.model.load().then(() => {
+    this.model.load().then((): void => {
       this.finishModelLoad();
       logger.debug(`MODEL LOADED`, { playerId, instanceId: this.instanceId, isDead: this._isDead });
-    }).catch((error) => {
+    }).catch((error): void => {
       // load() rejects after 4 retries — the player stays a sphere
       // gizmo; log once instead of an unhandled rejection.
       logger.warn('Model load gave up', { playerId, error: String(error) });

@@ -38,8 +38,8 @@ const CLIP2 = resolve(dirname(fileURLToPath(import.meta.url)),
   '../../../demos_out/midair_Cannon_4.60s_crossfire.demo');
 
 const flatTerrain = {
-  getHeight: () => 0,
-  getNormal: () => new THREE.Vector3(0, 1, 0),
+  getHeight: (): number => 0,
+  getNormal: (): THREE.Vector3 => new THREE.Vector3(0, 1, 0),
   reloadHeightmap(): void { /* flat stub — nothing to reload */ },
   heightfield: null,
   // InstancedBlobShadows binds the shared uniform objects verbatim —
@@ -64,7 +64,7 @@ function makePlaybackRig(): {
   const targets: Ball[] = [];
   const viewmodel = { kicks: 0, kick(): void { this.kicks += 1; } };
   initSwarms(scene, flatTerrain, {
-    ball: { capacity: 512, parts: () => [
+    ball: { capacity: 512, parts: (): { geometry: THREE.SphereGeometry; material: THREE.MeshBasicMaterial; }[] => [
       { geometry: new THREE.SphereGeometry(1, 4, 3), material: new THREE.MeshBasicMaterial() },
     ] },
   });
@@ -83,15 +83,15 @@ function makePlaybackRig(): {
     seekReconstructing: { on: false },
   } as unknown as DemoManager;
   const life = createDemoLifecycle({
-    lazyScene: () => scene,
-    lazyTerrain: () => flatTerrain,
-    lazyCamera: () => new THREE.PerspectiveCamera(),
-    lazyPlayer: () => ({ pos: new THREE.Vector3(0, 0, 0) } as unknown as Player),
-    lazyDemoManager: () => mgr,
-    lazyViewModel: () => viewmodel as unknown as ViewModel,
-    damageNumberManager: () => ({ spawn: noop } as unknown as DamageNumberManager),
-    fragMessages: () => ({ showScore: noop } as unknown as FragMessages),
-    lazyHud: () => ({ showHitMarker: noop } as unknown as HUD),
+    lazyScene: (): THREE.Scene<THREE.Object3DEventMap> => scene,
+    lazyTerrain: (): Terrain => flatTerrain,
+    lazyCamera: (): THREE.PerspectiveCamera => new THREE.PerspectiveCamera(),
+    lazyPlayer: (): Player => ({ pos: new THREE.Vector3(0, 0, 0) } as unknown as Player),
+    lazyDemoManager: (): DemoManager => mgr,
+    lazyViewModel: (): ViewModel => viewmodel as unknown as ViewModel,
+    damageNumberManager: (): DamageNumberManager => ({ spawn: noop } as unknown as DamageNumberManager),
+    fragMessages: (): FragMessages => ({ showScore: noop } as unknown as FragMessages),
+    lazyHud: (): HUD => ({ showHitMarker: noop } as unknown as HUD),
     balls,
     targets,
     crawlers: [], scarabs: [], gnats: [], snakes: [], banelings: [],
@@ -128,8 +128,8 @@ const emit = (rig: ReturnType<typeof makePlaybackRig>,
 
 const mkTarget = (over: Partial<TargetEvent>): TargetEvent => (((Object.assign({}, {eventType: TargetEventType.Spawned,timestamp: 0,posX: 0,posY: 5,posZ: 0,velX: 0,velY: 0,velZ: 0,targetId: 1,targetType: 0,health: 30,hasPeakPosition: false,peakPosX: 0,peakPosY: 0,peakPosZ: 0}, over))));
 
-describe('playback audit — every lane animates', () => {
-  it('creature proxies integrate ballistic drift (gravity species falls)', () => {
+describe('playback audit — every lane animates', (): void => {
+  it('creature proxies integrate ballistic drift (gravity species falls)', (): void => {
     const rig = makePlaybackRig();
     applyPlaybackEvents(rig.world, { projectiles: [], targets: [mkTarget({
       targetId: 901, targetType: TARGETTYPE_CREATURE_BASE + 0, posY: 20,
@@ -142,7 +142,7 @@ describe('playback audit — every lane animates', () => {
     expect(c.mesh.position.y).toBe(c.pos.y);
   });
 
-  it('deployable spawn → scene mesh; down state dims; destroy removes', () => {
+  it('deployable spawn → scene mesh; down state dims; destroy removes', (): void => {
     const rig = makePlaybackRig();
     applyPlaybackEvents(rig.world, { projectiles: [], targets: [mkTarget({
       targetId: 902, targetType: TARGETTYPE_DEPLOY_BASE + 1, // mine — pops on destroy
@@ -161,7 +161,7 @@ describe('playback audit — every lane animates', () => {
     expect(rig.world.explosions.length).toBeGreaterThan(0); // mine pop
   });
 
-  it('flag spawn exists; carried flag re-pins to the replayed carrier', () => {
+  it('flag spawn exists; carried flag re-pins to the replayed carrier', (): void => {
     const rig = makePlaybackRig();
     const flagId = Math.trunc(FLAG_DEMO_ID_BASE);
     applyPlaybackEvents(rig.world, { projectiles: [], targets: [mkTarget({
@@ -171,14 +171,14 @@ describe('playback audit — every lane animates', () => {
     const flag = rig.world.playbackFlags.get(flagId)!;
     expect(flag).toBeTruthy();
     // Carrier pos provider — the seam updatePlaybackFlags consults.
-    rig.world.remotePosAt = (idx: number) => idx === 3 ? new THREE.Vector3(10, 2, -5) : null;
+    rig.world.remotePosAt = (idx: number): THREE.Vector3 | null => idx === 3 ? new THREE.Vector3(10, 2, -5) : null;
     rig.life.updateBallsPlayback(1 / 60);
     expect(flag.position.x).toBeCloseTo(10, 1);
     expect(flag.position.z).toBeCloseTo(-5, 1);
     expect(flag.visible).toBe(true);
   });
 
-  it('pickup spawns a gem and Destroyed removes it', () => {
+  it('pickup spawns a gem and Destroyed removes it', (): void => {
     const rig = makePlaybackRig();
     applyPlaybackEvents(rig.world, { projectiles: [], targets: [mkTarget({
       targetId: 903, targetType: TARGETTYPE_PICKUP_BASE + 0,
@@ -190,7 +190,7 @@ describe('playback audit — every lane animates', () => {
     expect(rig.world.playbackPickups.has(903)).toBe(false);
   });
 
-  it('viewmodel kicks only on local-lane shots (deploy leak regression)', () => {
+  it('viewmodel kicks only on local-lane shots (deploy leak regression)', (): void => {
     const rig = makePlaybackRig();
     const mkFired = (targetId: number): ProjectileEvent => ({
       eventType: ProjectileEventType.Fired, timestamp: 0,
@@ -207,7 +207,7 @@ describe('playback audit — every lane animates', () => {
     expect(rig.viewmodel.kicks).toBe(1);
   });
 
-  it('kill events emit a burst (not silently dropped)', () => {
+  it('kill events emit a burst (not silently dropped)', (): void => {
     const rig = makePlaybackRig();
     const before = rig.world.explosions.length;
     applyPlaybackEvents(rig.world, { projectiles: [], targets: [mkTarget({
@@ -218,8 +218,8 @@ describe('playback audit — every lane animates', () => {
 });
 
 // Real-clip remote-replica audit: interpolation must animate, not freeze.
-describe.skipIf(!existsSync(CLIP))('remote replica interpolation', () => {
-  it('interpolated remotes move between recorded frames', () => {
+describe.skipIf(!existsSync(CLIP))('remote replica interpolation', (): void => {
+  it('interpolated remotes move between recorded frames', (): void => {
     const demo: DemoFile = deserializeDemo(readFileSync(CLIP).buffer);
     const player = new DemoPlayer();
     player.load(demo);
@@ -230,7 +230,7 @@ describe.skipIf(!existsSync(CLIP))('remote replica interpolation', () => {
     expect(s1.length).toBeGreaterThan(0);
     let moved = 0;
     for (const a of s0) {
-      const b = s1.find(r => r.rosterIdx === a.rosterIdx);
+      const b = s1.find((r): boolean => r.rosterIdx === a.rosterIdx);
       if (!b) {continue;}
       const d2 = (a.posX - b.posX) ** 2 + (a.posY - b.posY) ** 2 + (a.posZ - b.posZ) ** 2;
       if (d2 > 0.01) {moved += 1;}
@@ -241,8 +241,8 @@ describe.skipIf(!existsSync(CLIP))('remote replica interpolation', () => {
   });
 });
 
-describe('playback audit — entities must animate', () => {
-  it('spawned playback balls integrate gravity (frozen-ball regression)', () => {
+describe('playback audit — entities must animate', (): void => {
+  it('spawned playback balls integrate gravity (frozen-ball regression)', (): void => {
     const rig = makePlaybackRig();
     // Demo id deliberately differs from Ball's internal nextTargetId() —
     // the exact mismatch that froze every playback ball midair.
@@ -255,7 +255,7 @@ describe('playback audit — entities must animate', () => {
     expect(ball.pos.y).toBeLessThan(y0 - 1); // fell under gravity
   });
 
-  it('non-playback balls are NOT touched by the playback loop', () => {
+  it('non-playback balls are NOT touched by the playback loop', (): void => {
     const rig = makePlaybackRig();
     const live = new Ball(rig.scene, flatTerrain, 0);
     live.pos.set(0, 50, 0); live.vel.set(0, 0, 0);
@@ -265,7 +265,7 @@ describe('playback audit — entities must animate', () => {
     expect(live.pos.y).toBe(y0); // live game balls frozen during playback
   });
 
-  it('fired events produce projectiles that leave their origin', () => {
+  it('fired events produce projectiles that leave their origin', (): void => {
     const rig = makePlaybackRig();
     const ev: ProjectileEvent = {
       eventType: ProjectileEventType.Fired, timestamp: 0,
@@ -282,7 +282,7 @@ describe('playback audit — entities must animate', () => {
     expect(r.pos.distanceTo(origin)).toBeGreaterThan(5);
   });
 
-  it('a Hit after the shell unmapped still spawns its blast', () => {
+  it('a Hit after the shell unmapped still spawns its blast', (): void => {
     // The replayed sim runs live collision — a shell can self-detonate
     // and drain before its recorded edge. The event is the truth: the
     // explosion must still fire or the demo silently loses every boom.
@@ -301,7 +301,7 @@ describe('playback audit — entities must animate', () => {
   });
 });
 
-describe('playback audit — corpse lifecycle', () => {
+describe('playback audit — corpse lifecycle', (): void => {
   // Ticks the playback loop until every tracked ball drains or the bound
   // trips — a corpse that never reaches `disposed` is the frozen-midair bug.
   const drain = (rig: ReturnType<typeof makePlaybackRig>, max = 1200): number => {
@@ -313,7 +313,7 @@ n += 1;
     return n;
   };
 
-  it('a recorded kill (Hit→0hp) fades the corpse out of the world', () => {
+  it('a recorded kill (Hit→0hp) fades the corpse out of the world', (): void => {
     const rig = makePlaybackRig();
     spawnedBall(rig.world, 50_000, new THREE.Vector3(0, 80, 0));
     const ball = rig.world.playbackBallById.get(50_000)!;
@@ -330,7 +330,7 @@ n += 1;
     expect(ball.disposed).toBe(true);
   });
 
-  it('Destroyed without a prior Hit drains the corpse and drops debris', () => {
+  it('Destroyed without a prior Hit drains the corpse and drops debris', (): void => {
     const rig = makePlaybackRig();
     spawnedBall(rig.world, 50_001, new THREE.Vector3(0, 80, 0));
     const ball = rig.world.playbackBallById.get(50_001)!;
@@ -346,7 +346,7 @@ n += 1;
     expect(rig.balls).not.toContain(ball);
   });
 
-  it('Spawned re-keying over a fading corpse evicts it — no ghost ball', () => {
+  it('Spawned re-keying over a fading corpse evicts it — no ghost ball', (): void => {
     const rig = makePlaybackRig();
     spawnedBall(rig.world, 50_002, new THREE.Vector3(0, 80, 0));
     const corpse = rig.world.playbackBallById.get(50_002)!;
@@ -420,12 +420,12 @@ function scrubDemo(demo: DemoFile) {
 
 // File-level differential audit: replay the real clip through real playback,
 // then every spawned entity must have moved (or died) — never froze midair.
-describe.skipIf(!existsSync(CLIP))('recorded clip audit', () => {
+describe.skipIf(!existsSync(CLIP))('recorded clip audit', (): void => {
   // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
   let demo!: ReturnType<typeof deserializeDemo>;
-  beforeAll(() => { demo = deserializeDemo(readFileSync(CLIP).buffer); });
+  beforeAll((): void => { demo = deserializeDemo(readFileSync(CLIP).buffer); });
 
-  it('every spawned ball animates or rests on ground — none hover midair', () => {
+  it('every spawned ball animates or rests on ground — none hover midair', (): void => {
     const rig = makePlaybackRig();
     const {world} = rig;
     const birthPos = new Map<number, THREE.Vector3>();
@@ -465,7 +465,7 @@ describe.skipIf(!existsSync(CLIP))('recorded clip audit', () => {
     expect(birthPos.size).toBeGreaterThan(10); // clip actually had balls
   });
 
-  it('every fired projectile moved or terminated', () => {
+  it('every fired projectile moved or terminated', (): void => {
     const rig = makePlaybackRig();
     const { world } = rig;
     const origins = new Map<number, THREE.Vector3>();
@@ -495,9 +495,9 @@ describe.skipIf(!existsSync(CLIP))('recorded clip audit', () => {
     expect(origins.size).toBeGreaterThan(100);
   });
 
-  it('kick audit — only the clip POV shots kick, nothing else', () => {
-    const zeroShots = demo.projectileEvents.filter(
-      e => e.eventType === ProjectileEventType.Fired && e.targetId === 0 && e.timestamp > 0.01,
+  it('kick audit — only the clip POV shots kick, nothing else', (): void => {
+    const zeroShots = demo.projectileEvents.filter((
+      e): boolean => e.eventType === ProjectileEventType.Fired && e.targetId === 0 && e.timestamp > 0.01,
     );
     // A promoted POV clip: local shots exist but stay a small minority —
     // a foreign-shot leak floods this count (was 18 incl. observer+deploys).
@@ -505,12 +505,12 @@ describe.skipIf(!existsSync(CLIP))('recorded clip audit', () => {
     expect(zeroShots.length).toBeLessThan(20);
     // And the runtime agrees: kicks fired exactly once per local-lane shot.
     const { kicks } = scrubDemo(demo);
-    expect(kicks).toBe(zeroShots.length + demo.projectileEvents.filter(
-      e => e.eventType === ProjectileEventType.Fired && e.targetId === 0 && e.timestamp <= 0.01,
+    expect(kicks).toBe(zeroShots.length + demo.projectileEvents.filter((
+      e): boolean => e.eventType === ProjectileEventType.Fired && e.targetId === 0 && e.timestamp <= 0.01,
     ).length);
   });
 
-  it('roster refs are in bounds and local frames are finite/monotonic', () => {
+  it('roster refs are in bounds and local frames are finite/monotonic', (): void => {
     for (const f of demo.remoteFrames) {
       expect(f.rosterIdx).toBeLessThan(demo.roster.length);
       expect(Number.isFinite(f.posX + f.posY + f.posZ + f.yaw + f.pitch)).toBe(true);
@@ -526,12 +526,12 @@ describe.skipIf(!existsSync(CLIP))('recorded clip audit', () => {
 
 // Crossfire clip carries the lanes henge lacks: 27 creature events, 109 flag,
 // 34 pickup — every lane asserted against real recorded data.
-describe.skipIf(!existsSync(CLIP2))('crossfire clip — remaining lanes on real data', () => {
+describe.skipIf(!existsSync(CLIP2))('crossfire clip — remaining lanes on real data', (): void => {
   // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
   let demo2!: DemoFile;
-  beforeAll(() => { demo2 = deserializeDemo(readFileSync(CLIP2).buffer); });
+  beforeAll((): void => { demo2 = deserializeDemo(readFileSync(CLIP2).buffer); });
 
-  it('every spawned creature animates or dies — none freeze', () => {
+  it('every spawned creature animates or dies — none freeze', (): void => {
     const { world, trace } = scrubDemo(demo2);
     expect(trace.creatureBirths.size).toBeGreaterThan(3);
     const violations: string[] = [];
@@ -547,19 +547,19 @@ describe.skipIf(!existsSync(CLIP2))('crossfire clip — remaining lanes on real 
     expect(violations.join('\n')).toBe('');
   });
 
-  it('marker lanes land: flag events rebuild proxies, pickups spawn, kills burst', () => {
+  it('marker lanes land: flag events rebuild proxies, pickups spawn, kills burst', (): void => {
     const { world, trace } = scrubDemo(demo2);
     expect(trace.flagEvents).toBeGreaterThan(10);
     // Pickups that were spawned and never taken survive the clip in the map.
     expect(trace.pickupSpawns.size).toBeGreaterThan(5);
-    const livePickups = [...trace.pickupSpawns].filter(id => world.playbackPickups.has(id));
+    const livePickups = [...trace.pickupSpawns].filter((id): boolean => world.playbackPickups.has(id));
     expect(world.playbackPickups.size).toBeGreaterThan(0);
     expect(livePickups.length + world.playbackPickups.size).toBeGreaterThanOrEqual(trace.pickupSpawns.size);
     // Kill events emit a visible burst — a silently dropped kill fails here.
     expect(trace.killBursts).toBeGreaterThan(0);
   });
 
-  it('deployable spawns land as scene meshes', () => {
+  it('deployable spawns land as scene meshes', (): void => {
     const { world, trace, scene } = scrubDemo(demo2);
     for (const id of trace.deploySpawns) {
       const d = world.playbackDeployableById.get(id);
@@ -572,8 +572,8 @@ describe.skipIf(!existsSync(CLIP2))('crossfire clip — remaining lanes on real 
 // Cross-lane u16 id aliasing: nextTargetId() sweeps the full space, so in
 // any long recording a ball's id WILL land on flag/pickup/creature
 // namespaces. The alive table must not let lanes clobber each other.
-describe('cross-lane id aliasing', () => {
-  it('a ball Destroyed at a flag-id does not kill the flag snapshot', async () => {
+describe('cross-lane id aliasing', (): void => {
+  it('a ball Destroyed at a flag-id does not kill the flag snapshot', async (): Promise<void> => {
     const { findAliveTargets } = await import('../demo/demoClip.js');
     const flagEv = mkTarget({ targetId: FLAG_DEMO_ID_BASE | 1, targetType: TARGETTYPE_FLAG });
     const ballSpawn = mkTarget({ targetId: FLAG_DEMO_ID_BASE | 1, targetType: 0 });
@@ -584,26 +584,26 @@ describe('cross-lane id aliasing', () => {
     expect(entries[0]!.targetType).toBe(TARGETTYPE_FLAG); // flag survives, ball is gone
   });
 
-  it('a flag edge does not overwrite a live ball snapshot', async () => {
+  it('a flag edge does not overwrite a live ball snapshot', async (): Promise<void> => {
     const { findAliveTargets } = await import('../demo/demoClip.js');
     const ballSpawn = mkTarget({ targetId: FLAG_DEMO_ID_BASE | 1, targetType: 0, posY: 50 });
     const flagEv = mkTarget({ targetId: FLAG_DEMO_ID_BASE | 1, targetType: TARGETTYPE_FLAG });
     const alive = findAliveTargets([ballSpawn, flagEv], 10);
     const entries = [...alive.values()];
     expect(entries).toHaveLength(2);
-    expect(entries.some(e => e.targetType === 0)).toBe(true);
-    expect(entries.some(e => e.targetType === TARGETTYPE_FLAG)).toBe(true);
+    expect(entries.some((e): boolean => e.targetType === 0)).toBe(true);
+    expect(entries.some((e): boolean => e.targetType === TARGETTYPE_FLAG)).toBe(true);
   });
 });
 
 // A re-fired Spawned at a live id (id wrap, or synthetic+real pair at a
 // clip boundary) must re-key the existing ball — not push a second one
 // that nobody updates.
-it('duplicate Spawned at a live id does not orphan a frozen ball', () => {
+it('duplicate Spawned at a live id does not orphan a frozen ball', (): void => {
   const rig = makePlaybackRig();
   spawnedBall(rig.world, 777, new THREE.Vector3(0, 30, 0));
   spawnedBall(rig.world, 777, new THREE.Vector3(10, 40, 0));
   expect(rig.world.playbackBallById.size).toBe(1);
-  expect(rig.balls.filter(b => (rig.world.playbackBallById as Map<number, Ball>).get(777) === b).length).toBe(1);
+  expect(rig.balls.filter((b): boolean => (rig.world.playbackBallById as Map<number, Ball>).get(777) === b).length).toBe(1);
   expect(rig.world.playbackBallById.get(777)!.pos.x).toBe(10); // re-keyed to the latest spawn
 });

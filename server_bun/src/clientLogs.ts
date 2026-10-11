@@ -13,8 +13,8 @@ import { windowAllow } from './windowLimit.js';
 
 export const LOGS_DIR = join(import.meta.dir, '..', '..', 'logs');
 
-const p2 = (n: number) => String(n).padStart(2, '0');
-const logStamp = (t: Date) =>
+const p2 = (n: number): string => String(n).padStart(2, '0');
+const logStamp = (t: Date): string =>
   `${t.getFullYear()}_${p2(t.getMonth() + 1)}_${p2(t.getDate())}-${p2(t.getHours())}_${p2(t.getMinutes())}_${p2(t.getSeconds())}`;
 
 const rotateLog = (p: string): void => {

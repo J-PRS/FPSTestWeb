@@ -330,7 +330,7 @@ export class RoomProjectiles {
   detonate(proj: LiveProj, at: Vec3, directHitId?: string | null, ballId?: number, bodyDirect?: boolean, crawlerId?: number): void {
     // Riders pop where the host died — collect before deleting, their
     // own detonate() mutates the same map.
-    for (const r of [...this.projs.values()].filter(s => s.rides === proj.id)) {
+    for (const r of [...this.projs.values()].filter((s): boolean => s.rides === proj.id)) {
       this.detonate(r, at);
     }
     this.projs.delete(proj.id);
@@ -445,7 +445,7 @@ export class RoomProjectiles {
       const cell = cells.get(((cx + BIAS) << 16) | (cz + BIAS));
       if (cell) {for (const i of cell) {idx.push(i);}}
     }}
-    idx.sort((a, b) => a - b);
+    idx.sort((a, b): number => a - b);
     const out = this.shellOut;
     out.length = 0;
     for (const i of idx) {out.push(list[i]!);}

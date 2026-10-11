@@ -45,7 +45,7 @@ export class RoomScore {
 
   /** Per-player K/D at the horn — the match journal's useful payload. */
   matchPlayers(): { id: string; team?: string; kills: number; deaths: number }[] {
-    return [...this.h.players.getAllPlayers().values()].map((p) => ({
+    return [...this.h.players.getAllPlayers().values()].map((p): { id: string; team: TeamId | undefined; kills: number; deaths: number; } => ({
       id: p.id, team: p.team, kills: p.kills, deaths: p.deaths,
     }));
   }

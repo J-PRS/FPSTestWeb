@@ -129,7 +129,7 @@ shooter.streak += 1;
     if (this.playerManager.killTotal() === 1) {
       this.broadcast({ type: 'matchNotice', text: `${shooterId} draws first blood` });
     }
-    const tier = SPREE_TIERS.find(([n]) => n === streak);
+    const tier = SPREE_TIERS.find(([n]): boolean => n === streak);
     if (tier) {
       this.broadcast({ type: 'matchNotice', text: `${shooterId} is on a ${tier[1]} (${tier[0]})` });
       if (shooterId.startsWith('BOT-')) {
@@ -163,7 +163,7 @@ shooter.streak += 1;
    *  gloat on the frag — quiet killers get the humble answer instead. */
   private thanksBeat(shooterId: string, targetId: string): void {
     if (!shooterId.startsWith('BOT-') || tauntRand() > 0.5) {return;}
-    const t = setTimeout(() => {
+    const t = setTimeout((): void => {
       this.pending.delete(t);
       try { this.say(shooterId, 'thanks', targetId); }
       catch (error) { logger.error('thanks beat failed', { playerId: shooterId, err: error instanceof Error ? error.message : String(error) }); }
@@ -217,14 +217,14 @@ shooter.streak += 1;
    *  than a chorus. */
   matchEnd(entries: { id: string; line: TauntLine }[]): void {
     const step = entries.length > 1 ? Math.min(5000 / entries.length, 1200) : 0;
-    entries.forEach((e, i) => this.botSay(e.id, e.line.text, true, e.line.vgs, false, 200 + i * step + tauntRand() * 400));
+    entries.forEach((e, i): void => this.botSay(e.id, e.line.text, true, e.line.vgs, false, 200 + i * step + tauntRand() * 400));
   }
 
   /** Match-start chatter — the gl-hf opener, tighter spread than the gg
    *  beat since the round is already live. */
   matchStart(entries: { id: string; line: TauntLine }[]): void {
     const step = entries.length > 1 ? Math.min(3000 / entries.length, 900) : 0;
-    entries.forEach((e, i) => this.botSay(e.id, e.line.text, true, e.line.vgs, false, 100 + i * step + tauntRand() * 300));
+    entries.forEach((e, i): void => this.botSay(e.id, e.line.text, true, e.line.vgs, false, 100 + i * step + tauntRand() * 300));
   }
 
   /** A bot's chat line lands like a typed reply — a beat after the
@@ -236,7 +236,7 @@ shooter.streak += 1;
     // Typing pace — a two-letter "ez" lands fast, a gripe takes a beat.
     // Only when the host delays at all (tests pin 0 = instant speech).
     if (delay > 0) {delay += Math.min(line.length * 35, 1400) + extraDelay;}
-    const speak = () => {
+    const speak = (): void => {
       if (!this.playerManager.getPlayer(id)) {return;}
       // Tactical VGS is team-scoped (canon); plain lines and VG*/VV*
       // chords go to everyone — a 'gg' answer must reach the human who
@@ -255,7 +255,7 @@ shooter.streak += 1;
       // channel produces the splice. VGS tails are all global scope.
       const tail = vgs ? comboTailFor(vgs) : undefined;
       if (tail) {
-        const cut = setTimeout(() => {
+        const cut = setTimeout((): void => {
           this.pending.delete(cut);
           try {
             if (!this.playerManager.getPlayer(id)) {return;}
@@ -266,7 +266,7 @@ shooter.streak += 1;
       }
     };
     if (delay <= 0) { speak(); return; }
-    const t = setTimeout(() => { this.pending.delete(t); try { speak(); } catch (error) { logger.error('Bot taunt failed', { playerId: id, err: error instanceof Error ? error.message : String(error) }); } }, delay);
+    const t = setTimeout((): void => { this.pending.delete(t); try { speak(); } catch (error) { logger.error('Bot taunt failed', { playerId: id, err: error instanceof Error ? error.message : String(error) }); } }, delay);
     this.pending.add(t);
   }
 

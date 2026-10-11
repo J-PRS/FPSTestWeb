@@ -221,7 +221,7 @@ export class Strifer implements Targetable, SwarmSlotOwner {
   // Static state table + shared scratch ctx — see Seeker for the pattern.
   private static readonly _ctx: StriferCtx = { dt: 0, terrain: null as never, playerPos: null as never };
   private static readonly STATES: Record<StriferState, (s: Strifer, c: StriferCtx) => void> = {
-    orbit(s, c) {
+    orbit(s, c): void {
       s.orbitPhase += c.dt * (STRIFER_SPEED / STRIFER_ORBIT_R) * s.orbitDir;
       _dir.set(
         c.playerPos.x + Math.cos(s.orbitPhase) * STRIFER_ORBIT_R,
@@ -240,7 +240,7 @@ export class Strifer implements Targetable, SwarmSlotOwner {
       }
     },
     // brake hard and bleed off the volley
-    hover(s, c) {
+    hover(s, c): void {
       s.vel.multiplyScalar(Math.max(0, 1 - 4 * c.dt));
       s.volleyGap -= c.dt;
       if (s.volleyLeft > 0 && s.volleyGap <= 0) {

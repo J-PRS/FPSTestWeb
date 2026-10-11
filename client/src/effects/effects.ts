@@ -10,7 +10,7 @@ import { registerDiag, markProbe } from '../core/fxDiag.js';
 // All live managers (normally one per scene) feed the Alt+Q fx section —
 // buckets/particles/beams were the last unaccounted FX resources.
 const managers: EffectsManager[] = [];
-registerDiag('fx', () => ({ fx: managers.map(m => m.stats()) }));
+registerDiag('fx', (): { fx: Record<string, unknown>[]; } => ({ fx: managers.map((m): { [x: string]: unknown; } => m.stats()) }));
 
 interface Particle {
   bucket: InstBucket;
@@ -53,7 +53,7 @@ class InstBucket {
     this.alphaAttr.setUsage(THREE.DynamicDrawUsage);
     geo = geo.clone();
     geo.setAttribute('aAlpha', this.alphaAttr);
-    mat.onBeforeCompile = (sh) => {
+    mat.onBeforeCompile = (sh): void => {
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', '#include <common>\nattribute float aAlpha;\nvarying float vAlpha;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvAlpha = aAlpha;');
@@ -169,7 +169,7 @@ export class EffectsManager {
     // Same contract as every other FX batch: overflow spawns a sibling
     // bucket (one more draw call) instead of dropping the particle —
     // the old `take() === -1 → return null` silently ate spawn calls.
-    const b = acquireBatch(this.buckets, key, () => {
+    const b = acquireBatch(this.buckets, key, (): InstBucket => {
       const nb = new InstBucket(geo, new THREE.MeshBasicMaterial({
         transparent: true,
         blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
@@ -180,7 +180,7 @@ export class EffectsManager {
       this.scene.add(nb.mesh);
       markProbe(nb.mesh, { kind: 'instPool', label: `fx/${key}`, pool: nb });
       return nb;
-    }, x => x.free.length > 0);
+    },( x): boolean => x.free.length > 0);
     return b;
   }
 
@@ -344,7 +344,7 @@ export class EffectsManager {
         p.bucket.give(p.slot);
         // Empty overflow bucket retires — the first bucket per material
         // combo is the floor so idle capacity contracts.
-        retireBatch(this.buckets, p.bucket.key, p.bucket, b => b.used === 0, b => b.dispose());
+        retireBatch(this.buckets, p.bucket.key, p.bucket,( b): boolean => b.used === 0,( b): void => b.dispose());
         this.deadP.push(p);
         const last = this.particles.length - 1;
         this.particles[i] = this.particles[last];

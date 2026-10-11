@@ -22,7 +22,7 @@ const PART_DOME = 0;
 // octagonal charge plate with caps, fuse nubs, and grip-prongs mirrored
 // top and bottom — a thrown pack can land on either face and still read
 // as planted. Silhouette does "dangerous object" before the blink.
-const _domeGeo = (() => {
+const _domeGeo = ((): THREE.BufferGeometry<THREE.NormalBufferAttributes, THREE.BufferGeometryEventMap> => {
   const plate = new THREE.CylinderGeometry(0.95, 0.95, 0.28, 8);
   const parts: THREE.BufferGeometry[] = [plate];
   for (const s of [1, -1]) {

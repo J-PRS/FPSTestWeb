@@ -68,7 +68,7 @@ const PUSH_FAR_M = 350;
 
 function median(xs: number[]): number {
   if (xs.length === 0) {return 0;}
-  const s = [...xs].sort((a, b) => a - b);
+  const s = [...xs].sort((a, b): number => a - b);
   return s[s.length >> 1]!;
 }
 
@@ -122,7 +122,7 @@ export class TeamCommand {
     // so the wave never finished a leg (soak: tasked members orbited
     // ~180m out forever, near2%). A task only dies with its job slot
     // or its assignee; understaffed slots top up instead of re-rolling.
-    const alive = new Set(members.map((m) => m.id));
+    const alive = new Set(members.map((m): string => m.id));
     for (const [id, t] of this.tasks) {
       const slot = slots[t.kind];
       if (!alive.has(id)) { this.tasks.delete(id); continue; }
@@ -132,7 +132,7 @@ export class TeamCommand {
         // move, so the task keeps its goal until the member arrives or
         // the flood window lapses.
         if (t.kind === 'push' && now - t.born < FLOOD_MS) {
-          const m = members.find((mm) => mm.id === id);
+          const m = members.find((mm): boolean => mm.id === id);
           const arrived = m && (m.pos.x - t.goal.x) ** 2 + (m.pos.z - t.goal.z) ** 2 < 40 * 40;
           if (!arrived) {continue;}
         }
@@ -145,7 +145,7 @@ export class TeamCommand {
       // escort to chasing the carrier's wake (the whole reason carrier
       // holds ran ~10s with escorts never arriving).
       if (t.kind === 'escort') {
-        const m = members.find((mm) => mm.id === id);
+        const m = members.find((mm): boolean => mm.id === id);
         if (m) {
           const eta = Math.min(10, Math.hypot(m.pos.x - slot.x, m.pos.z - slot.z) / 24);
           t.goal.x += (slot.vx ?? 0) * eta;
@@ -153,19 +153,19 @@ export class TeamCommand {
         }
       }
     }
-    const free = members.filter((m) => !m.carrier);
-    const assign = (kind: CommandKind, at: (BotVec & { vx?: number; vz?: number }) | null | undefined) => {
+    const free = members.filter((m): boolean => !m.carrier);
+    const assign = (kind: CommandKind, at: (BotVec & { vx?: number; vz?: number }) | null | undefined): void => {
       if (!at) {return;}
-      const have = [...this.tasks.values()].filter((t) => t.kind === kind).length;
+      const have = [...this.tasks.values()].filter((t): boolean => t.kind === kind).length;
       const want = kind === 'push'
-        ? WANT.push + Math.min(3, Math.floor(median(free.map((m) =>
+        ? WANT.push + Math.min(3, Math.floor(median(free.map((m): number =>
             Math.hypot(m.pos.x - at.x, m.pos.z - at.z))) / PUSH_FAR_M))
         : WANT[kind];
       const pool = free
-        .filter((m) => !this.tasks.has(m.id))
-        .map((m) => ({ m, bid: bidFor(kind, m, at) }))
-        .filter((m) => m.bid > -Infinity)
-        .sort((a, b) => b.bid - a.bid);
+        .filter((m): boolean => !this.tasks.has(m.id))
+        .map((m): { m: CommandMember; bid: number; } => ({ m, bid: bidFor(kind, m, at) }))
+        .filter((m): boolean => m.bid > -Infinity)
+        .sort((a, b): number => b.bid - a.bid);
       for (const { m } of pool.slice(0, Math.max(0, want - have))) {
         // Escort intercept: aiming at where the carrier IS trails a
         // runner you'll never meet — each escort aims at where the
@@ -200,7 +200,7 @@ export class TeamCommand {
 
   /** Test hook — the live assignment list (soak wave probe). */
   debugTasks(): { id: string; kind: string; goal: BotVec }[] {
-    return [...this.tasks.entries()].map(([id, t]) => ({ id, kind: t.kind, goal: t.goal }));
+    return [...this.tasks.entries()].map(([id, t]): { id: string; kind: CommandKind; goal: BotVec; } => ({ id, kind: t.kind, goal: t.goal }));
   }
 
   /** True when a contested slot is staffed by someone else — senses

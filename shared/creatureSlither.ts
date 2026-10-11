@@ -32,7 +32,7 @@ export const SLITHER_SIM = {
 
 // Slither rows live in the unified SPECIES registry; derived view.
 export const SLITHER_SPECIES: Record<string, SpeciesRow> = Object.fromEntries(
-  Object.entries(SPECIES).filter(([, r]) => r.family === 'slither'),
+  Object.entries(SPECIES).filter(([, r]): boolean => r.family === 'slither'),
 );
 
 export type SlitherState = 'slither' | 'windup' | 'lunge';

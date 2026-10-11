@@ -95,7 +95,7 @@ export class PlayerAnim {
     // wide vs authored ranges (cm rigs top out ~50 pos, quats are unit,
     // bone scales ~1): only bit-rot fails them, and a poisoned track is
     // dropped whole rather than interpolated into the corruption.
-    clip.tracks = clip.tracks.filter(t => {
+    clip.tracks = clip.tracks.filter((t): boolean => {
       const cap = t.name.endsWith('.quaternion') ? 2 : t.name.endsWith('.scale') ? 1e3 : 1e4;
       for (const v of t.values) {if (!Number.isFinite(v) || Math.abs(v) > cap) {return false;}}
       return true;
@@ -117,7 +117,7 @@ export class PlayerAnim {
       stripHipXZ(clip, rootMotion);
       clampHipY(clip, 0.25, rootMotion);
       if (mann && isLayeredClip(clip.name)) {
-        clip.tracks = clip.tracks.filter(t => {
+        clip.tracks = clip.tracks.filter((t): boolean => {
           const bn = normBone(t.name.slice(0, t.name.indexOf('.')));
           // Arm tracks always yield; torso quat tracks too (aim layer
           // owns them now) — position tracks stay for the stride bob.
@@ -167,13 +167,13 @@ export class PlayerAnim {
       fwd.set(0, 0, 1).applyQuaternion(q);
       return Math.atan2(fwd.x, fwd.z);
     };
-    const canonical = (() => {
+    const canonical = ((): number | null => {
       // A rig's own authored clips set the convention — a retarget pack
       // can outnumber them (29 baked vs 16 native on class_heavy) and
       // swing the vote to the bake's frame, rotating the native set.
       // When natives exist they alone define canonical; pure-bake rigs
       // fall through to the all-clip vote (and carry clipYawFix anyway).
-      const collect = (names: (n: string) => boolean) => {
+      const collect = (names: (n: string) => boolean): number | null => {
         const buckets = new Map<number, { sum: number; n: number }>();
         for (const [name, a] of this.animations) {
           if (!names(name)) {continue;}
@@ -189,8 +189,8 @@ export class PlayerAnim {
         for (const b of buckets.values()) {if (b.n > best.n) {best = b;}}
         return best.n ? best.sum / best.n : null;
       };
-      const natives = collect(n => !n.startsWith('UAL_'));
-      return natives ?? collect(() => true);
+      const natives = collect((n): boolean => !n.startsWith('UAL_'));
+      return natives ?? collect((): true => true);
     })();
     if (canonical === null) {return;}
     // clipYawFix is an explicit unwind: rigs whose whole retarget set
@@ -398,7 +398,7 @@ export class PlayerAnim {
   retargetUAL(): void {
     const {model} = this.host;
     if (!model) {return;}
-    const adopt = (baked: Map<string, THREE.AnimationClip>) => {
+    const adopt = (baked: Map<string, THREE.AnimationClip>): void => {
       if (this.host.disposed || !this.mixer || !this.host.model) {return;}
       // Baked clips arrive fully cooked — hip-XZ strip and the
       // mannequin aim-layer carve are applied at bake time.
@@ -417,7 +417,7 @@ export class PlayerAnim {
       // the load-time aim-layer build saw an empty table for them.
       // Robot's aim clips carry pitch in the spine tracks, so his mask
       // includes the torso chain (arm-only sweeps horizontally).
-      if ([...baked.keys()].some(n => n.includes('Aim_')))
+      if ([...baked.keys()].some((n): boolean => n.includes('Aim_')))
         {this.host.pose.buildAimLayer(this.mixer, this.animations, this.host.variant === 'robot');}
       // Re-resolve the current state onto the better clip if one landed —
       // the baked names now sit in the same candidate table the state
@@ -425,13 +425,13 @@ export class PlayerAnim {
       // on every rig).
       this.forceAnimationState(this.currentState);
     };
-    const runtimeBake = () =>
+    const runtimeBake = (): Promise<void> =>
       bakeUALClips(model, this.host.variant).then(adopt)
-        .catch((error) => { logger.warn(`UAL bake failed for ${  this.host.variant}`, error); });
+        .catch((error): void => { logger.warn(`UAL bake failed for ${  this.host.variant}`, error); });
     // The offline bake (public/assets/anims/<variant>.glb) ships the
     // whole retarget so load never flashes bind pose or burns a
     // resample; missing file → dev rigs still runtime-bake.
-    loadBakedUALClips(this.host.variant).then(baked => {
+    loadBakedUALClips(this.host.variant).then((baked): void => {
       if (baked && baked.size > 0) {adopt(baked);}
       else {runtimeBake();}
     }).catch(runtimeBake);

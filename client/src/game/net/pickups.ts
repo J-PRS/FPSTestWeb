@@ -26,7 +26,7 @@ export function wirePickups(ctx: NetCtx): void {
   // Shared view for the §4.7 pickup fidelity hash — stateDebug reads the
   // same map; kind is all it needs (id is the key).
   deps.world.netPickups = pickupMeshes as Map<number, { kind: PickupKind }>;
-  const addPickup = (id: number, pos: { x: number; y: number; z: number }, kind: PickupKind = 'gem') => {
+  const addPickup = (id: number, pos: { x: number; y: number; z: number }, kind: PickupKind = 'gem'): void => {
     if (!Number.isFinite(pos.x + pos.y + pos.z)) {deps.logger.warn(`pickup #${id} dropped: non-finite position`); return;}
     deps.lazyDemoManager?.()?.recordPickupSpawned(id, kind, pos);
     const live = pickupMeshes.get(id);
@@ -56,24 +56,24 @@ export function wirePickups(ctx: NetCtx): void {
   };
   // Re-export on ctx — gameState needs it for pickups lying down on join.
   ctx.addPickup = addPickup;
-  ctx.reconcilePickups = (liveIds) => {
+  ctx.reconcilePickups = (liveIds): void => {
     // Ensure is a no-op — the caller feeds each row through addPickup
     // first (spawn edges keep their burst FX), this only reaps ghosts.
     reconcileReplicas(pickupMeshes, [...liveIds], {
-      rowId: (id) => id,
-      ensure: () => undefined,
-      reap: (e, id) => {
+      rowId: (id): number => id,
+      ensure: (): undefined => undefined,
+      reap: (e, id): void => {
         deps.lazyDemoManager?.()?.recordPickupGone(id);
         e.nugget.serverCollect(); // fade; updateNuggets reaps
       },
     });
   };
 
-  networkManager.onPickupSpawn = (id, pos, kind) => {
+  networkManager.onPickupSpawn = (id, pos, kind): void => {
     if (deps.world.playbackMode) {return;} // live match gems don't belong in the replay
     addPickup(id, pos, kind ?? 'gem');
   };
-  networkManager.onPickupGone = (id, by) => {
+  networkManager.onPickupGone = (id, by): void => {
     if (deps.world.playbackMode) {return;}
     const e = pickupMeshes.get(id);
     deps.lazyDemoManager?.()?.recordPickupGone(id);
@@ -109,7 +109,7 @@ export function wirePickups(ctx: NetCtx): void {
 
   // Server-applied powerup landing on us: mirror the numbers, HUD reads
   // player.armor / player.buffUntil each frame.
-  networkManager.onBuff = (msg) => {
+  networkManager.onBuff = (msg): void => {
     if (deps.world.playbackMode) {return;}
     const p = deps.lazyPlayer();
     if (msg.health !== undefined && Number.isFinite(msg.health)) {p.health = msg.health;}

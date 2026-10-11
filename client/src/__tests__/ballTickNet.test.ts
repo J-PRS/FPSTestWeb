@@ -11,12 +11,12 @@ import * as THREE from 'three';
 // starts at y=1000 so terrain contact never confounds the bookkeeping.
 const FLAT: Heightfield = { size: 1, data: new Uint8Array([0]), stride: 1 };
 
-function rig(simNow: () => number | undefined = () => Infinity): { st: NetStatics; bag: ReturnType<typeof newNetBag>; host: NetHost } {
+function rig(simNow: () => number | undefined = (): number => Infinity): { st: NetStatics; bag: ReturnType<typeof newNetBag>; host: NetHost } {
   const st: NetStatics = {
-    field: () => FLAT,
+    field: (): Heightfield => FLAT,
     simNow,
-    colliders: () => [],
-    colliderIndex: () => null,
+    colliders: (): never[] => [],
+    colliderIndex: (): null => null,
   };
   const bag = newNetBag();
   // y=1000 keeps the ball in free space — no terrain/structure contact
@@ -30,8 +30,8 @@ function rig(simNow: () => number | undefined = () => Infinity): { st: NetStatic
   return { st, bag, host };
 }
 
-describe('tickNet — grid discipline', () => {
-  it('consumes only whole 0.05 cells; simT stays on the grid', () => {
+describe('tickNet — grid discipline', (): void => {
+  it('consumes only whole 0.05 cells; simT stays on the grid', (): void => {
     const { st, bag, host } = rig();
     tickNet(st, bag, host, 0.12);
     expect(bag.simT).toBeCloseTo(0.1, 9); // two cells
@@ -40,7 +40,7 @@ describe('tickNet — grid discipline', () => {
     expect(host.pos.x).toBeCloseTo(bag.sim!.x + bag.sim!.vx * 0.02, 9);
   });
 
-  it('a sub-cell dt never steps the sim', () => {
+  it('a sub-cell dt never steps the sim', (): void => {
     const { st, bag, host } = rig();
     tickNet(st, bag, host, 0.03);
     expect(bag.simT).toBe(0);
@@ -48,8 +48,8 @@ describe('tickNet — grid discipline', () => {
     expect(host.pos.y).toBeCloseTo(1000 + 0.5 * BALL_GRAVITY * 0.03 * 0.03, 9);
   });
 
-  it('never runs ahead of the stamped sim clock', () => {
-    const { st, bag, host } = rig(() => 0.07); // only one cell of headroom
+  it('never runs ahead of the stamped sim clock', (): void => {
+    const { st, bag, host } = rig((): number => 0.07); // only one cell of headroom
     tickNet(st, bag, host, 0.2);
     // gated: simT + 0.05 <= simNow → one step at most... but netAcc
     // reaches 0.15, under the 0.5 stall-breaker, so it must hold.
@@ -57,16 +57,16 @@ describe('tickNet — grid discipline', () => {
     expect(bag.netAcc).toBeCloseTo(0.15, 9);
   });
 
-  it('stall-breaker: a full 0.5s bank steps anyway so clock stalls never freeze the sim', () => {
-    const { st, bag, host } = rig(() => 0); // clock claims nothing is replayable
+  it('stall-breaker: a full 0.5s bank steps anyway so clock stalls never freeze the sim', (): void => {
+    const { st, bag, host } = rig((): number => 0); // clock claims nothing is replayable
     tickNet(st, bag, host, 0.5); // banks to exactly the cap
     // gated path can't step (simNow=0), but the stall-breaker drains it.
     expect(bag.simT).toBeCloseTo(0.5, 9);
     expect(bag.netAcc).toBeCloseTo(0, 9);
   });
 
-  it('cell consumption is paced: a burst backlog pays down over frames instead of one leap', () => {
-    const { st, bag, host } = rig(() => 10); // simNow wide open
+  it('cell consumption is paced: a burst backlog pays down over frames instead of one leap', (): void => {
+    const { st, bag, host } = rig((): number => 10); // simNow wide open
     tickNet(st, bag, host, 0.25); // 5 cells available
     expect(bag.simT).toBeCloseTo(0.1, 9); // only 2 cells this call
     expect(bag.netAcc).toBeCloseTo(0.15, 9); // backlog stays banked
@@ -74,13 +74,13 @@ describe('tickNet — grid discipline', () => {
     expect(bag.simT).toBeCloseTo(0.2, 9);
   });
 
-  it('banks at most 0.5s of lead — long hitches cannot fast-forward', () => {
+  it('banks at most 0.5s of lead — long hitches cannot fast-forward', (): void => {
     const { st, bag, host } = rig();
     tickNet(st, bag, host, 2);
     expect(bag.simT).toBeLessThanOrEqual(0.5 + 1e-9);
   });
 
-  it('marks parked when the sim has fully settled', () => {
+  it('marks parked when the sim has fully settled', (): void => {
     const { st, bag, host } = rig();
     bag.sim!.vx = 0; bag.sim!.vy = 0; bag.sim!.vz = 0;
     tickNet(st, bag, host, 0.01);

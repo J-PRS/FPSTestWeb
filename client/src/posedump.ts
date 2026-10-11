@@ -77,12 +77,12 @@ if (pvariant) {
     F: [1, 0], FR: [0.7, 0.7], R: [0, 1], BR: [-0.7, 0.7],
     B: [-1, 0], BL: [-0.7, -0.7], L: [0, -1], FL: [0.7, -0.7],
   };
-  const poll = () => {
+  const poll = (): void => {
     const model = pm.object3D;
     const anims = (pm as unknown as { animations: Map<string, unknown> }).animations;
     // Retargeted frames can land outside the bind-pose bounds — same fix
     // the raw path applies below.
-    model?.traverse(o => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) {o.frustumCulled = false;} });
+    model?.traverse((o): void => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) {o.frustumCulled = false;} });
     // Wait for the GLB AND the async retarget bake — natives fill the map
     // first, so a bare size check would race past the bake every time.
     // Mannequin bakes the KevDev set (UAL clips are native); robot bakes
@@ -104,7 +104,7 @@ if (pvariant) {
     const d = (size / 2) / Math.tan(camera.fov * Math.PI / 360) * 1.12;
     camera.position.set(c.x + d * 0.55, c.y + size * 0.14, c.z + d);
     camera.lookAt(c);
-    renderer.setAnimationLoop(() => { pm.update(1 / 60); renderer.render(scene, camera); });
+    renderer.setAnimationLoop((): void => { pm.update(1 / 60); renderer.render(scene, camera); });
     (window as unknown as { __cam: THREE.PerspectiveCamera }).__cam = camera;
     window.__clips = [...anims.keys()];
     window.__ready = true;
@@ -117,7 +117,7 @@ const url = knight ? '/assets/models/knight.glb'
   : q.get('glb') ? `/assets/models/${q.get('glb')}.glb`
   : ual2 ? '/assets/models/mannequin2.glb'
   : mann ? '/assets/models/mannequin.glb' : '/assets/models/RobotExpressive.glb';
-mkGltfLoader().load(url, (gltf) => {
+mkGltfLoader().load(url, (gltf): void => {
   const model = gltf.scene;
   // Same world scale the game uses (robot 0.5, mannequin fit-2m).
   const box0 = new THREE.Box3().setFromObject(model);
@@ -125,13 +125,13 @@ mkGltfLoader().load(url, (gltf) => {
   const classScale = Number.parseFloat(q.get('scale') ?? '1') || 1;
   model.scale.setScalar((mann || ual2 || knight ? 2 / size0.y : 0.5) * classScale);
   model.rotation.y = Math.PI * 0.8; // 3/4 front — galleries read better than flat profile
-  model.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) {o.frustumCulled = false;} });
+  model.traverse((o): void => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) {o.frustumCulled = false;} });
   scene.add(model);
 
   const mixer = new THREE.AnimationMixer(model);
-  const boot = (clips: THREE.AnimationClip[]) => {
-    window.__clips = clips.map(c => c.name);
-    const clip = clips.find(c => c.name === wantClip) ?? clips[0];
+  const boot = (clips: THREE.AnimationClip[]): void => {
+    window.__clips = clips.map((c): string => c.name);
+    const clip = clips.find((c): boolean => c.name === wantClip) ?? clips[0];
     if (clip) {
       const action = mixer.clipAction(clip);
       action.play();
@@ -141,7 +141,7 @@ mkGltfLoader().load(url, (gltf) => {
     }
     finish();
   };
-  const finish = () => {
+  const finish = (): void => {
     // Frame the posed model — bounds AFTER the pose is applied so death/jump
     // clips don't get cropped.
     model.updateMatrixWorld(true);
@@ -154,14 +154,14 @@ mkGltfLoader().load(url, (gltf) => {
     camera.position.set(c.x + d * 0.55, c.y + size * 0.14, c.z + d);
     camera.lookAt(c);
 
-    renderer.setAnimationLoop(() => renderer.render(scene, camera));
+    renderer.setAnimationLoop((): void => renderer.render(scene, camera));
     renderer.render(scene, camera);
     window.__ready = true;
   };
   // UAL2's mannequin ships bone-identical but clip-less — its clips live in
   // robot-anims2.glb, same UE-style rig, so they bind natively.
   if (ual2) {
-    mkGltfLoader().load('/assets/models/robot-anims2.glb', (g) => boot(g.animations));
+    mkGltfLoader().load('/assets/models/robot-anims2.glb', (g): void => boot(g.animations));
   } else {
     boot(gltf.animations);
   }

@@ -39,7 +39,7 @@ export function zScan(root: THREE.Object3D): { pairs: number; at: number[][]; fl
   const tris: ZTri[] = [];
   const names: string[] = [''];
   let meshId = 0;
-  root.traverse((o) => {
+  root.traverse((o): void => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) {return;}
 meshId += 1;
@@ -73,7 +73,7 @@ meshId += 1;
       // Project to the plane's dominant 2D axes for the SAT overlap.
       const an = new THREE.Vector3(Math.abs(x.n.x), Math.abs(x.n.y), Math.abs(x.n.z));
       const drop = an.x > an.y ? (an.x > an.z ? 0 : 2) : (an.y > an.z ? 1 : 2);
-      const proj = (v: THREE.Vector3) => drop === 0 ? new THREE.Vector2(v.y, v.z) : drop === 1 ? new THREE.Vector2(v.x, v.z) : new THREE.Vector2(v.x, v.y);
+      const proj = (v: THREE.Vector3): THREE.Vector2 => drop === 0 ? new THREE.Vector2(v.y, v.z) : drop === 1 ? new THREE.Vector2(v.x, v.z) : new THREE.Vector2(v.x, v.y);
       const xa = x.p.map(proj), ya = y.p.map(proj);
       if (!zOverlap2d(xa, ya)) {continue;}
       // Clip x's projected tri by y's half-planes — the INTERSECTION is
@@ -84,7 +84,7 @@ meshId += 1;
         const p = ya[e]!, q = ya[(e + 1) % 3]!;
         const nx = -(q.y - p.y), ny = q.x - p.x; // edge normal
         const sign = Math.sign(nx * (cx - p.x) + ny * (cy - p.y)) || 1; // inside = centroid side
-        const inside = (v: THREE.Vector2) => sign * (nx * (v.x - p.x) + ny * (v.y - p.y)) >= -1e-9;
+        const inside = (v: THREE.Vector2): boolean => sign * (nx * (v.x - p.x) + ny * (v.y - p.y)) >= -1e-9;
         const out: THREE.Vector2[] = [];
         for (let k = 0; k < poly.length; k += 1) {
           const s = poly[k]!, t = poly[(k + 1) % poly.length]!;
@@ -119,7 +119,7 @@ pairs += 1;
       }
       if (at.length < 6) {
         const c = x.p[0].clone().add(x.p[1]).add(x.p[2]).multiplyScalar(1 / 3);
-        at.push(c.toArray().map(v => Number(v.toFixed(3))));
+        at.push(c.toArray().map((v): number => Number(v.toFixed(3))));
         who.push(`${names[x.m]}~${names[y.m]}`);
       }
     }
@@ -134,8 +134,8 @@ export function holeScan(root: THREE.Object3D): { holes: number; at: number[][];
   const edges = new Map<string, ERef[]>();
   const names: string[] = [''];
   let meshId = 0;
-  const pk = (v: THREE.Vector3) => `${v.x.toFixed(3)},${v.y.toFixed(3)},${v.z.toFixed(3)}`;
-  root.traverse((o) => {
+  const pk = (v: THREE.Vector3): string => `${v.x.toFixed(3)},${v.y.toFixed(3)},${v.z.toFixed(3)}`;
+  root.traverse((o): void => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) {return;}
 meshId += 1;
@@ -165,7 +165,7 @@ meshId += 1;
 holes += 1;
     if (at.length < 8) {
       const e = l[0]!;
-      at.push(e.a.clone().add(e.b).multiplyScalar(0.5).toArray().map(v => Number(v.toFixed(3))));
+      at.push(e.a.clone().add(e.b).multiplyScalar(0.5).toArray().map((v): number => Number(v.toFixed(3))));
       who.push(names[e.m]!);
     }
   }
@@ -175,7 +175,7 @@ holes += 1;
 export function gapScan(root: THREE.Object3D): { orphans: number; who: string[]; at: number[][]; clusters: number } {
   root.updateMatrixWorld(true);
   const parts: { m: THREE.Mesh; box: THREE.Box3 }[] = [];
-  root.traverse((o) => {
+  root.traverse((o): void => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) {return;}
     m.geometry.computeBoundingBox();
@@ -183,17 +183,17 @@ export function gapScan(root: THREE.Object3D): { orphans: number; who: string[];
     parts.push({ m, box });
   });
   const EPS2 = 0.002;
-  const touch = (a: THREE.Box3, b: THREE.Box3) =>
+  const touch = (a: THREE.Box3, b: THREE.Box3): boolean =>
     a.min.x - EPS2 <= b.max.x && b.min.x - EPS2 <= a.max.x &&
     a.min.y - EPS2 <= b.max.y && b.min.y - EPS2 <= a.max.y &&
     a.min.z - EPS2 <= b.max.z && b.min.z - EPS2 <= a.max.z;
   // Union-find over box-overlap: cluster count + orphan detection in one pass.
-  const parent = parts.map((_, i) => i);
+  const parent = parts.map((_, i): number => i);
   const find = (i: number): number => parent[i] === i ? i : (parent[i] = find(parent[i]!));
   for (let i = 0; i < parts.length; i += 1)
     {for (let j = i + 1; j < parts.length; j += 1)
       {if (touch(parts[i]!.box, parts[j]!.box)) {parent[find(i)] = find(j);}}}
-  const roots = new Set(parts.map((_, i) => find(i)));
+  const roots = new Set(parts.map((_, i): number => find(i)));
   // Orphan = a cluster of one (not merely a small cluster).
   const size = new Map<number, number>();
   for (let i = 0; i < parts.length; i += 1) {size.set(find(i), (size.get(find(i)) ?? 0) + 1);}
@@ -202,7 +202,7 @@ export function gapScan(root: THREE.Object3D): { orphans: number; who: string[];
   const who: string[] = [], at: number[][] = [];
   for (const o of orphans.slice(0, 8)) {
     who.push(o.m.name || o.m.geometry.type);
-    at.push(o.box.getCenter(_tmpC).toArray().map(v => Number(v.toFixed(3))));
+    at.push(o.box.getCenter(_tmpC).toArray().map((v): number => Number(v.toFixed(3))));
   }
   return { orphans: orphans.length, who, at, clusters: roots.size };
 }
@@ -212,7 +212,7 @@ export function gapScan(root: THREE.Object3D): { orphans: number; who: string[];
 export function volScan(root: THREE.Object3D): { inverted: number; who: string[] } {
   root.updateMatrixWorld(true);
   const who: string[] = [];
-  root.traverse((o) => {
+  root.traverse((o): void => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) {return;}
     const pos = m.geometry.getAttribute('position');

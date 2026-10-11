@@ -8,7 +8,7 @@ type Handler = (e: KeyboardEvent) => void;
 // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
 let keydown!: Handler;
 
-const press = (code: string, key = code.slice(3).toLowerCase()) =>
+const press = (code: string, key = code.slice(3).toLowerCase()): void =>
   keydown({
     code, key,
     preventDefault: vi.fn(),
@@ -18,25 +18,25 @@ const press = (code: string, key = code.slice(3).toLowerCase()) =>
 
 const deps = () => ({
   send: vi.fn(),
-  isConnected: vi.fn(() => true),
+  isConnected: vi.fn((): boolean => true),
   echo: vi.fn(),
   speak: vi.fn(),
 });
 
-beforeEach(() => {
+beforeEach((): () => void => {
   const win = globalThis.window as unknown as Record<string, unknown>;
   const add = win.addEventListener as (t: string, fn: Handler) => void;
-  win.addEventListener = (t: string, fn: Handler) => {
+  win.addEventListener = (t: string, fn: Handler): void => {
     if (t === 'keydown') {keydown = fn;}
   };
-  return () => { win.addEventListener = add; };
+  return (): void => { win.addEventListener = add; };
 });
 
-const make = () => new Vgs(depsRef);
+const make = (): Vgs => new Vgs(depsRef);
 let depsRef = deps();
 
-describe('Vgs', () => {
-  it('V opens the menu, chord letters pick a line (VGS = SHAZBOT)', () => {
+describe('Vgs', (): void => {
+  it('V opens the menu, chord letters pick a line (VGS = SHAZBOT)', (): void => {
     depsRef = deps();
     make();
     press('KeyV', 'v');
@@ -51,7 +51,7 @@ describe('Vgs', () => {
     expect(vgsGate.active).toBe(false);
   });
 
-  it('tactical categories scope to team (VAF = attack flag)', () => {
+  it('tactical categories scope to team (VAF = attack flag)', (): void => {
     depsRef = deps();
     make();
     press('KeyV', 'v');
@@ -60,7 +60,7 @@ describe('Vgs', () => {
     expect(depsRef.send).toHaveBeenCalledWith('Get the enemy flag!', true, 'VAF');
   });
 
-  it('offline echoes the line locally instead of sending silently', () => {
+  it('offline echoes the line locally instead of sending silently', (): void => {
     depsRef = deps();
     depsRef.isConnected.mockReturnValue(false);
     make();
@@ -71,7 +71,7 @@ describe('Vgs', () => {
     expect(depsRef.echo).toHaveBeenCalledWith('Yes!', false, 'VGY');
   });
 
-  it('invalid chord or Escape cancels without sending', () => {
+  it('invalid chord or Escape cancels without sending', (): void => {
     depsRef = deps();
     make();
     press('KeyV', 'v');
@@ -83,9 +83,9 @@ describe('Vgs', () => {
     expect(depsRef.send).not.toHaveBeenCalled();
   });
 
-  it('every tree leaf resolves to a unique chord', () => {
+  it('every tree leaf resolves to a unique chord', (): void => {
     const seen = new Map<string, string>();
-    const walk = (node: Record<string, VgsNode>, prefix: string) => {
+    const walk = (node: Record<string, VgsNode>, prefix: string): void => {
       for (const [k, n] of Object.entries(node)) {
         const chord = prefix + k;
         if ('line' in n) {

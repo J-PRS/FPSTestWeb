@@ -4,8 +4,8 @@
 import { describe, it, expect } from 'vitest';
 import { CircularBuffer } from '../demo/CircularBuffer.js';
 
-describe('CircularBuffer', () => {
-  it('wraps and evicts oldest in order', () => {
+describe('CircularBuffer', (): void => {
+  it('wraps and evicts oldest in order', (): void => {
     const b = new CircularBuffer<number>(3);
     b.add(1); b.add(2); b.add(3); b.add(4); // 1 evicted
     expect(b.Count).toBe(3);
@@ -13,10 +13,10 @@ describe('CircularBuffer', () => {
     expect(b.peekNewest()).toBe(4);
     expect(b.get(0)).toBe(2);
     expect(b.get(2)).toBe(4);
-    expect(() => b.get(3)).toThrow();
+    expect((): number => b.get(3)).toThrow();
   });
 
-  it('slotForNext enables zero-alloc reuse on a full ring', () => {
+  it('slotForNext enables zero-alloc reuse on a full ring', (): void => {
     const b = new CircularBuffer<{ v: number }>(2);
     b.add({ v: 1 }); b.add({ v: 2 });
     const slot = b.slotForNext();
@@ -27,7 +27,7 @@ describe('CircularBuffer', () => {
     expect(b.peekOldest().v).toBe(2);
   });
 
-  it('extracts ranges and clears', () => {
+  it('extracts ranges and clears', (): void => {
     const b = new CircularBuffer<number>(5);
     for (let i = 0; i < 4; i += 1) {b.add(i);}
     expect(b.extractNewest(2)).toEqual([2, 3]);
@@ -35,11 +35,11 @@ describe('CircularBuffer', () => {
     expect(b.IsEmpty).toBe(true);
   });
 
-  it('findIndexAfterTimestamp lands on the first newer item', () => {
+  it('findIndexAfterTimestamp lands on the first newer item', (): void => {
     const b = new CircularBuffer<{ t: number }>(8);
     for (const t of [1, 2, 3, 4, 5]) {b.add({ t });}
-    expect(b.findIndexAfterTimestamp(2.5, (x) => x.t)).toBe(2); // {t:3}
-    expect(b.findIndexAfterTimestamp(5, (x) => x.t)).toBe(-1);  // nothing newer
-    expect(b.findIndexAfterTimestamp(0, (x) => x.t)).toBe(0);
+    expect(b.findIndexAfterTimestamp(2.5, (x): number => x.t)).toBe(2); // {t:3}
+    expect(b.findIndexAfterTimestamp(5, (x): number => x.t)).toBe(-1);  // nothing newer
+    expect(b.findIndexAfterTimestamp(0, (x): number => x.t)).toBe(0);
   });
 });

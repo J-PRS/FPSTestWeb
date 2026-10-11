@@ -90,14 +90,14 @@ export class WebSocketConnection {
 
       const sock = this.ws;
       if (this.connectTimer) {clearTimeout(this.connectTimer);}
-      this.connectTimer = setTimeout(() => {
+      this.connectTimer = setTimeout((): void => {
         if (this.ws === sock && sock.readyState === WebSocket.CONNECTING) {
           logger.warn(`connect handshake stuck ${WebSocketConnection.CONNECT_MS}ms — closing to retry`);
           sock.close();
         }
       }, WebSocketConnection.CONNECT_MS);
 
-      this.ws.addEventListener('open', () => {
+      this.ws.addEventListener('open', (): void => {
         logger.info('WebSocket connected');
         this.isConnected = true;
         this.reconnectAttempts = 0;
@@ -121,7 +121,7 @@ export class WebSocketConnection {
         if (stale > 0) {logger.info(`reconnect flush dropped ${stale} stale queued message(s)`);}
       });
 
-      this.ws.addEventListener('close', (event) => {
+      this.ws.addEventListener('close', (event): void => {
         logger.info(`WebSocket disconnected: ${event.code} - ${event.reason}`);
         this.isConnected = false;
         
@@ -144,14 +144,14 @@ this.reconnectAttempts += 1;
           } else {
             logger.info(`Reconnection attempt ${this.reconnectAttempts} in ${delay}ms`);
           }
-          this.reconnectTimer = setTimeout(() => {
+          this.reconnectTimer = setTimeout((): void => {
             // Fleet: re-resolve through the matchmaker — the room may
             // have re-homed onto a live worker since this URL died. Only
             // async when a resolver exists: an unconditional await pushed
             // plain-WS reconnects past the timer tick for no benefit.
             const resolve = this.config.resolveUrl;
             if (!resolve) { this.connect(); return; }
-            (async () => {
+            (async (): Promise<void> => {
               try {
                 const next = await resolve();
                 if (next && next !== this.config.url) {
@@ -165,7 +165,7 @@ this.reconnectAttempts += 1;
         }
       });
 
-      this.ws.addEventListener('error', (error) => {
+      this.ws.addEventListener('error', (error): void => {
         if (!this.hasLoggedConnectionError) {
           logger.error('WebSocket error:', error);
           this.hasLoggedConnectionError = true;
@@ -175,7 +175,7 @@ this.reconnectAttempts += 1;
         }
       });
 
-      this.ws.addEventListener('message', (event) => {
+      this.ws.addEventListener('message', (event): void => {
         try {
           const {data} = event;
           if (typeof data === 'string') {
@@ -267,9 +267,9 @@ this.reconnectAttempts += 1;
         try { ({type} = JSON.parse(data) as { type?: string }); } catch { /* unparseable: queue anyway */ }
       }
       if (data instanceof Uint8Array) {
-        this.messageQueue = this.messageQueue.filter(m => !(m.data instanceof Uint8Array));
+        this.messageQueue = this.messageQueue.filter((m): boolean => !(m.data instanceof Uint8Array));
       } else if (type !== undefined && WebSocketConnection.KEEP_NEWEST.has(type)) {
-        this.messageQueue = this.messageQueue.filter(m => m.type !== type);
+        this.messageQueue = this.messageQueue.filter((m): boolean => m.type !== type);
       }
       if (this.messageQueue.length < this.MAX_QUEUE_SIZE) {
         this.messageQueue.push({ data, type, at: Date.now() });

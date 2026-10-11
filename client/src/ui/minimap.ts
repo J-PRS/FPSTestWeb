@@ -41,9 +41,9 @@ export class Minimap {
     // Settings-panel toggle — applies live, no reload
     const btn = document.querySelector('#minimap-toggle');
     if (btn) {
-      const label = () => { btn.textContent = this.cross ? 'MINIMAP: CROSSHAIR' : 'MINIMAP: CORNER'; };
+      const label = (): void => { btn.textContent = this.cross ? 'MINIMAP: CROSSHAIR' : 'MINIMAP: CORNER'; };
       label();
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (): void => {
         this.cross = !this.cross;
         settings.set('fps-minimap', this.cross ? 1 : 0);
         this.applyMode();

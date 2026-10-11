@@ -43,9 +43,9 @@ export class EventBus {
   private subs = new Set<RoomEventSink>();
   on(cb: RoomEventSink): () => void {
     this.subs.add(cb);
-    return () => this.subs.delete(cb);
+    return (): boolean => this.subs.delete(cb);
   }
-  readonly emit: RoomEventSink = (e) => {
+  readonly emit: RoomEventSink = (e): void => {
     for (const cb of this.subs) {
       // oxlint-disable-next-line no-console
       try { cb(e); } catch (error) { console.error('[EventBus] subscriber threw', error); }

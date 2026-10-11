@@ -75,7 +75,7 @@ done += 1;
   return {
     each,
     sweep,
-    stats() {
+    stats(): { [x: string]: { perFrame: number; worstItemMs: number; backlog: number; }; } {
       const out: Record<string, { perFrame: number; worstItemMs: number; backlog: number }> = {};
       for (const [k, s] of stats) {
         out[k] = {
@@ -86,6 +86,6 @@ done += 1;
       }
       return out;
     },
-    reset(name: string) { stats.delete(name); },
+    reset(name: string): void { stats.delete(name); },
   };
 }

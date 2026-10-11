@@ -60,16 +60,16 @@ export class CtfBridge {
     this.ctf = new CtfFlags({
       lazyTerrain: deps.lazyTerrain,
       lazyScene: deps.lazyScene,
-      carrierPos: (id) => this.carrierPos(id),
-      teamOf: (id) => w.teamOf.get(id),
-      pickupRadiusOf: (id) => FLAG_PICKUP_R * (w.modsFor(id)?.pickupRadius ?? 1),
-      touchers: () => this.touchers(w.bots),
+      carrierPos: (id): THREE.Vector3 | null => this.carrierPos(id),
+      teamOf: (id): string | undefined => w.teamOf.get(id),
+      pickupRadiusOf: (id): number => FLAG_PICKUP_R * (w.modsFor(id)?.pickupRadius ?? 1),
+      touchers: (): [string, THREE.Vector3, THREE.Vector3][] => this.touchers(w.bots),
       bots: w.bots,
       scores: w.scores,
-      onCapture: (t) => w.onCapture(t),
-      onFeed: (t) => w.onFeed(t),
-      onPersonalPoints: (id, pts) => w.onPersonalPoints?.(id, pts),
-      onFlagEvent: (kind, team, at, actor) => {
+      onCapture: (t): void => w.onCapture(t),
+      onFeed: (t): void => w.onFeed(t),
+      onPersonalPoints: (id, pts): void | undefined => w.onPersonalPoints?.(id, pts),
+      onFlagEvent: (kind, team, at, actor): void => {
         const chatKind = { taken: 'flaggrab', dropped: 'flagdrop', returned: 'flagreturn', captured: 'flagcap' } as const;
         if (actor) {w.onFlagNotice?.(chatKind[kind], actor.id, actor.team, at);}
         sfx.flagCue(kind, team === w.playerTeam);
@@ -92,7 +92,7 @@ export class CtfBridge {
    *  (home anchor), carried=true → the live flag pos (the thief's
    *  broadcast location — public info). */
   flagPos(team: string, carried: boolean): { x: number; y: number; z: number } | undefined {
-    const m = this.ctf.markers().find((m) => m.team === team);
+    const m = this.ctf.markers().find((m): boolean => m.team === team);
     if (!m) {return undefined;}
     if (carried) {return m.state === 'carried' ? { x: m.pos.x, y: m.pos.y, z: m.pos.z } : undefined;}
     return { x: m.home.x, y: m.home.y, z: m.home.z };

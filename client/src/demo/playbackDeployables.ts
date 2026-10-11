@@ -75,7 +75,7 @@ function boomIfBlast(world: PlaybackWorld, d: PlaybackDeployable, seekTime: numb
   world.explosions.push(exp);
   if (audible) {sfxExplosions.explosionAt(d.pos, d.kindIdx === 9);}
   const ff = seekTime - evTime;
-  if (ff > 0) {fastForward(ff, () => !exp.dead, (s) => exp.update(s));}
+  if (ff > 0) {fastForward(ff, (): boolean => !exp.dead, (s): void => exp.update(s));}
 }
 
 export function reconstructSeekDeployable(world: PlaybackWorld, ev: TargetEvent, deadIds: Set<number>, seekTime: number): void {

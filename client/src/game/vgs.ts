@@ -42,7 +42,7 @@ function nodeScope(n: VgsNode): 'global' | 'team' | 'mixed' {
   return scope ?? 'mixed';
 }
 
-const scopeColor = (s: 'global' | 'team' | 'mixed') =>
+const scopeColor = (s: 'global' | 'team' | 'mixed'): "#fd8" | "#7d7" | "#ccc" =>
   s === 'global' ? '#fd8' : s === 'team' ? '#7d7' : '#ccc';
 
 export interface VgsDeps {
@@ -70,10 +70,10 @@ export class Vgs {
       'font:13px/1.5 monospace;color:#fff;background:rgba(0,0,0,.65);' +
       'border:1px solid #555;padding:6px 10px;min-width:220px;pointer-events:none;';
     document.body.append(this.menu);
-    window.addEventListener('keydown', (e) => this.onKey(e), true);
+    window.addEventListener('keydown', (e): void => this.onKey(e), true);
     // While the menu is up the keys belong to it entirely — keyup too,
     // so a release can't reach game handlers that never saw the press.
-    window.addEventListener('keyup', (e) => {
+    window.addEventListener('keyup', (e): void => {
       if (this.active) { e.preventDefault(); e.stopImmediatePropagation(); }
     }, true);
   }
@@ -142,14 +142,14 @@ export class Vgs {
 
   private rearm(): void {
     clearTimeout(this.timer);
-    this.timer = window.setTimeout(() => this.close(), TIMEOUT_MS);
+    this.timer = window.setTimeout((): void => this.close(), TIMEOUT_MS);
   }
 
   private render(): void {
     this.menu.textContent = '';
     const crumb = document.createElement('div');
     crumb.style.color = '#9cf';
-    crumb.textContent = `VGS${  this.path.length > 0 ? ` ▸ ${this.path.map((n) => n.label).join(' ▸ ')}` : ''}`;
+    crumb.textContent = `VGS${  this.path.length > 0 ? ` ▸ ${this.path.map((n): string => n.label).join(' ▸ ')}` : ''}`;
     this.menu.append(crumb);
     for (const [k, n] of Object.entries(this.node)) {
       const row = document.createElement('div');

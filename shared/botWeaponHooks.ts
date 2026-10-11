@@ -24,7 +24,7 @@ export function botWeaponHooks(pick: (d: number) => WeaponType, lo: BotLoadout) 
       const ws = getWeaponStats(pick(d));
       return ws.fuseOnly ? ws.maxLifetime : undefined;
     },
-    weaponGravity: (d: number) => getWeaponStats(pick(d)).gravity,
+    weaponGravity: (d: number): boolean => getWeaponStats(pick(d)).gravity,
     // Where the fight positioner should orbit: a burst weapon's expected
     // hit fraction is the capsule footprint vs the cone at range, so the
     // distance is where the fan lands the damage still needed. Single-

@@ -62,7 +62,7 @@ export class RoomStructures {
   private emittedStands: string | null = null;
   private standsJson(): string {
     // Shields ride the diff too — a generator flip changes which panes emit.
-    return JSON.stringify(this.eff().filter((s) => s.kind === 'stand' || s.kind === 'shield'));
+    return JSON.stringify(this.eff().filter((s): boolean => s.kind === 'stand' || s.kind === 'shield'));
   }
 
   /** The spec's authored structures — the flag socket is visual-only
@@ -75,7 +75,7 @@ export class RoomStructures {
     // deployables construct after the first moveSim/ballSim attach —
     // pre-seed the grid reads live, so a missing table means powered.
     const authored = (host.spec.structures ?? []).filter(
-      (s) => s.kind !== 'shield' || !s.team || (host.deployables?.teamPowered(s.team) ?? true),
+      (s): boolean => s.kind !== 'shield' || !s.team || (host.deployables?.teamPowered(s.team) ?? true),
     );
     // 'hull' is the collider-only kind — the client mesh builder skips it
     // (GLB interiors already render), while every sim AND the wire echo
@@ -91,7 +91,7 @@ export class RoomStructures {
     // map file can't know the terrain, and a floating/buried compound is
     // worse than an advisory height. Spec objects are shared with the
     // wire echo, so the mutation reaches clients as the real position.
-    if (host.field) {seatKits(host.spec.structures, (x, z) => hmHeight(host.field!, x, z));}
+    if (host.field) {seatKits(host.spec.structures, (x, z): number => hmHeight(host.field!, x, z));}
     const list = this.eff();
     host.moveSim.attachStructures(list);
     host.projectiles?.attachStructures(list);

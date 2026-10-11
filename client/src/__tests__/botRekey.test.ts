@@ -12,24 +12,24 @@ import { makeScores } from '../../../shared/teams.js';
 // pins lock each hop so a map added without a rekey fails loudly instead
 // of leaking a dead-id receipt (the §2.88 bug class).
 
-const mkSenses = () => new BotSenses({
+const mkSenses = (): BotSenses => new BotSenses({
   bots: [],
   teamOf: new Map(),
   player: () => ({ pos: new THREE.Vector3(), vel: new THREE.Vector3(), isDead: false,
     isCloaked: false, lastFireAt: 0, health: 100, maxHealth: 100 }),
-  world: () => ({ remotePlayers: new Map(), explosions: [], projectiles: [] }),
-  mode: () => 'solo',
+  world: (): { remotePlayers: Map<any, any>; explosions: never[]; projectiles: never[]; } => ({ remotePlayers: new Map(), explosions: [], projectiles: [] }),
+  mode: (): string => 'solo',
   targets: [],
 } as unknown as SenseHost);
 
-const mkFlags = () => {
+const mkFlags = (): CtfFlags => {
   const ctx: FlagCtx = {
-    lazyTerrain: () => ({ getHeight: () => 0 }) as unknown as ReturnType<FlagCtx['lazyTerrain']>,
-    lazyScene: () => new THREE.Scene(),
-    carrierPos: () => null,
-    teamOf: () => undefined,
-    pickupRadiusOf: () => 2,
-    touchers: () => [],
+    lazyTerrain: () => ({ getHeight: (): number => 0 }) as unknown as ReturnType<FlagCtx['lazyTerrain']>,
+    lazyScene: (): THREE.Scene<THREE.Object3DEventMap> => new THREE.Scene(),
+    carrierPos: (): null => null,
+    teamOf: (): undefined => undefined,
+    pickupRadiusOf: (): number => 2,
+    touchers: (): never[] => [],
     bots: [],
     scores: makeScores(),
     onCapture: vi.fn(),
@@ -39,10 +39,10 @@ const mkFlags = () => {
   return new CtfFlags(ctx, new THREE.Vector3());
 };
 
-const mkFlagRun = () => new FlagRunBridge({
-  lazyTerrain: () => ({ getHeight: () => 0 }) as unknown as ReturnType<FlagRunDeps['lazyTerrain']>,
-  lazyScene: () => new THREE.Scene(),
-  lazyCamera: () => new THREE.PerspectiveCamera(),
+const mkFlagRun = (): FlagRunBridge => new FlagRunBridge({
+  lazyTerrain: () => ({ getHeight: (): number => 0 }) as unknown as ReturnType<FlagRunDeps['lazyTerrain']>,
+  lazyScene: (): THREE.Scene<THREE.Object3DEventMap> => new THREE.Scene(),
+  lazyCamera: (): THREE.PerspectiveCamera => new THREE.PerspectiveCamera(),
   lazyPlayer: () => ({ pos: new THREE.Vector3(), isDead: false,
     mods: { pickupRadius: 2 }, yaw: 0, pitch: 0 }),
   lazyHud: () => ({ updateFlagIndicator: vi.fn() }),
@@ -56,8 +56,8 @@ const mkFlagRun = () => new FlagRunBridge({
   onCapture: vi.fn(),
 } as unknown as FlagRunWiring, new THREE.Vector3());
 
-describe('rekey migrates every id-keyed meter', () => {
-  it('BotFire carries the shot-cadence receipt', () => {
+describe('rekey migrates every id-keyed meter', (): void => {
+  it('BotFire carries the shot-cadence receipt', (): void => {
     const fire = new BotFire({} as FireHost);
     const peek = fire as unknown as { lastShotAt: Map<string, number> };
     peek.lastShotAt.set('bot:a-A', 1234);
@@ -66,8 +66,8 @@ describe('rekey migrates every id-keyed meter', () => {
     expect(peek.lastShotAt.get('bot:a-B')).toBe(1234);
   });
 
-  it('BotWatchdog carries samples, anchors and warn sets', () => {
-    const wd = new BotWatchdog({ warn: vi.fn(), info: vi.fn() }, () => false);
+  it('BotWatchdog carries samples, anchors and warn sets', (): void => {
+    const wd = new BotWatchdog({ warn: vi.fn(), info: vi.fn() }, (): false => false);
     const peek = wd as unknown as {
       logic: Map<string, THREE.Vector3>; render: Map<string, THREE.Vector3>;
       anchor: Map<string, { p: THREE.Vector3; t: number }>;
@@ -88,7 +88,7 @@ describe('rekey migrates every id-keyed meter', () => {
     }
   });
 
-  it('BotSenses carries the foeSeen raycast cache', () => {
+  it('BotSenses carries the foeSeen raycast cache', (): void => {
     const senses = mkSenses();
     const peek = senses as unknown as { foeSeenCache: Map<string, { t: number; v: boolean }> };
     peek.foeSeenCache.set('c-A', { t: 10, v: true });
@@ -97,7 +97,7 @@ describe('rekey migrates every id-keyed meter', () => {
     expect(peek.foeSeenCache.get('c-B')).toEqual({ t: 10, v: true });
   });
 
-  it('CtfFlags keeps the specialist role on the rekeyed body', () => {
+  it('CtfFlags keeps the specialist role on the rekeyed body', (): void => {
     const flags = mkFlags();
     const peek = flags as unknown as { roles: Map<string, string> };
     peek.roles.set('cap-A', 'capper');
@@ -106,7 +106,7 @@ describe('rekey migrates every id-keyed meter', () => {
     expect(peek.roles.get('cap-B')).toBe('capper');
   });
 
-  it('FlagRunBridge carries touch positions and speeds', () => {
+  it('FlagRunBridge carries touch positions and speeds', (): void => {
     const run = mkFlagRun();
     const peek = run as unknown as { lastTouchPos: Map<string, THREE.Vector3>; lastTouchV: Map<string, number> };
     const p = new THREE.Vector3(4, 5, 6);
@@ -117,7 +117,7 @@ describe('rekey migrates every id-keyed meter', () => {
     expect(peek.lastTouchV.get('r-B')).toBe(42);
   });
 
-  it('RoomNoticer carries receipts and re-points a pending actor', () => {
+  it('RoomNoticer carries receipts and re-points a pending actor', (): void => {
     const n = new RoomNoticer();
     n.notice('flagcap', 'actor', 'alpha', 1000);
     n.for('watcher-A', 'bravo', 1001); // consumes the event → seen receipt

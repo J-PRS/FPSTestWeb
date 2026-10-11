@@ -29,20 +29,20 @@ function makeTimer(r: THREE.WebGLRenderer): { begin(): void; end(): void; read()
   const gl = r.getContext() as WebGL2RenderingContext;
   const ext = gl.getExtension('EXT_disjoint_timer_query_webgl2') as GlTimerExt | null;
   const queries: WebGLQuery[] = [];
-  if (!ext) {return { begin() { return; }, end() { return; }, async read() { return null; } };}
+  if (!ext) {return { begin(): void { return; }, end(): void { return; }, async read(): Promise<null> { return null; } };}
   return {
-    begin() {
+    begin(): void {
       const q = gl.createQuery();
       if (q) { queries.push(q); gl.beginQuery(ext.TIME_ELAPSED_EXT, q); }
     },
-    end() { gl.endQuery(ext.TIME_ELAPSED_EXT); },
-    async read() {
+    end(): void { gl.endQuery(ext.TIME_ELAPSED_EXT); },
+    async read(): Promise<number | null> {
       const deadline = performance.now() + 3000;
       let total = 0, n = 0;
       for (const q of queries) {
         while (performance.now() < deadline &&
                !gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) {
-          await new Promise(res => setTimeout(res, 5));
+          await new Promise((res): NodeJS.Timeout => setTimeout(res, 5));
         }
         if (gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) {
           total += gl.getQueryParameter(q, gl.QUERY_RESULT) as number;
@@ -77,7 +77,7 @@ async function sampleStage(run: () => void, frames: number, r: THREE.WebGLRender
   return out;
 }
 
-export function createRenderScan(deps: GameLoopDeps) {
+export function createRenderScan(deps: GameLoopDeps): (framesPerStage?: number) => Promise<Record<string, StageResult>> {
   return async (framesPerStage = 40): Promise<Record<string, StageResult>> => {
     const { rendererSetup, sceneSetup, camera } = deps;
     const r = rendererSetup.renderer;
@@ -86,20 +86,20 @@ export function createRenderScan(deps: GameLoopDeps) {
     const prevInfoReset = r.info.autoReset;
     r.info.autoReset = false;
     try {
-      const bareScene = () => r.render(sceneSetup.scene, camera);
+      const bareScene = (): void => r.render(sceneSetup.scene, camera);
       const out: Record<string, StageResult> = {};
       // Stage 1: scene color+depth only, stale shadow map — no shadow pass.
       shadow.autoUpdate = false; shadow.needsUpdate = false;
       out.scene = await sampleStage(bareScene, framesPerStage, r);
       // Stage 2: same but the shadow map re-renders every frame.
-      out.sceneShadow = await sampleStage(() => { shadow.needsUpdate = true; bareScene(); }, framesPerStage, r);
+      out.sceneShadow = await sampleStage((): void => { shadow.needsUpdate = true; bareScene(); }, framesPerStage, r);
       // Stage 3: the real pipeline — composer or bare depending on mode.
       shadow.autoUpdate = prevAutoUpdate; shadow.needsUpdate = true;
-      out.full = await sampleStage(() => rendererSetup.render(0.016), framesPerStage, r);
+      out.full = await sampleStage((): void => rendererSetup.render(0.016), framesPerStage, r);
       // Stage 4: viewmodel overlay pass on its own.
       const vmScene = deps.vmScene(), vmCam = deps.vmCamera();
       vmCam.quaternion.copy(camera.quaternion);
-      out.viewmodel = await sampleStage(() => { r.clearDepth(); r.render(vmScene, vmCam); }, framesPerStage, r);
+      out.viewmodel = await sampleStage((): void => { r.clearDepth(); r.render(vmScene, vmCam); }, framesPerStage, r);
       return out;
     } finally {
       shadow.autoUpdate = prevAutoUpdate;

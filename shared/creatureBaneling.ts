@@ -25,7 +25,7 @@ export const BANELING_SIM = {
 
 // Baneling rows live in the unified SPECIES registry; derived view.
 export const BANELING_SPECIES: Record<string, SpeciesRow> = Object.fromEntries(
-  Object.entries(SPECIES).filter(([, r]) => r.family === 'baneling'),
+  Object.entries(SPECIES).filter(([, r]): boolean => r.family === 'baneling'),
 );
 
 export type BanelingState = 'chase';

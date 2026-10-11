@@ -246,7 +246,7 @@ function hexHalf(side: 1 | -1): THREE.Shape {
     const a = (k * Math.PI) / 3 + Math.PI / 6; // flat flanks, ridge top/bottom — the slit cuts the flat sides
     hex.push(new THREE.Vector2(Math.cos(a) * DISC_HEX_R, Math.sin(a) * DISC_HEX_R));
   }
-  const inside = (p: THREE.Vector2) => side * p.y >= DISC_SLIT_HALF;
+  const inside = (p: THREE.Vector2): boolean => side * p.y >= DISC_SLIT_HALF;
   const out: THREE.Vector2[] = [];
   for (let i = 0; i < hex.length; i += 1) {
     const cur = hex[i]!;
@@ -653,7 +653,7 @@ return sg;
 export function mkCannon(): THREE.Group {
 const cn = new THREE.Group();
 let cz = 0; // running z, barrel extends toward -Z from breech
-const cnSeg = (r1: number, r2: number, len: number, mat: THREE.Material) => {
+const cnSeg = (r1: number, r2: number, len: number, mat: THREE.Material): void => {
   cn.add(mkTube(r1, r2, len, cz - len / 2, mat));
   cz -= len;
 };
@@ -663,7 +663,7 @@ const cnSeg = (r1: number, r2: number, len: number, mat: THREE.Material) => {
 // stacked donuts instead of one machined barrel.
 // Crowned hoop — /\ profile instead of a flat band; sits only ~7mm
 // proud of the tube so it reads as a shrunk-on ring, not a collar.
-const cnHoop = (r: number) => {
+const cnHoop = (r: number): void => {
   cnSeg(r, r + 0.006, 0.012, darkMat);
   cnSeg(r + 0.006, r, 0.012, darkMat);
 };
@@ -700,11 +700,11 @@ return cn;
 export function mkBombard(): THREE.Group {
 const bb = new THREE.Group();
 let bz = 0;
-const bbSeg = (r1: number, r2: number, len: number, mat: THREE.Material) => {
+const bbSeg = (r1: number, r2: number, len: number, mat: THREE.Material): void => {
   bb.add(mkTube(r1, r2, len, bz - len / 2, mat));
   bz -= len;
 };
-const bbHoop = (r: number) => {
+const bbHoop = (r: number): void => {
   bbSeg(r, r + 0.008, 0.016, darkMat);
   bbSeg(r + 0.008, r, 0.016, darkMat);
 };

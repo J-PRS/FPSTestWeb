@@ -1,12 +1,12 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { urlParams } from '../core/params.js';
 
-const setSearch = (s: string) => { (window as { location: { search: string } }).location.search = s; };
+const setSearch = (s: string): void => { (window as { location: { search: string } }).location.search = s; };
 
-beforeEach(() => setSearch(''));
+beforeEach((): void => setSearch(''));
 
-describe('urlParams live reads', () => {
-  it('reads location.search at call time, not a boot snapshot', () => {
+describe('urlParams live reads', (): void => {
+  it('reads location.search at call time, not a boot snapshot', (): void => {
     setSearch('?room=alpha&bots=4');
     expect(urlParams.room).toBe('alpha');
     expect(urlParams.bots).toBe(4);
@@ -18,19 +18,19 @@ describe('urlParams live reads', () => {
     expect(urlParams.bots).toBeUndefined();
   });
 
-  it('mode: URL wins over the persisted setting', () => {
+  it('mode: URL wins over the persisted setting', (): void => {
     setSearch('?mode=ctf');
     expect(urlParams.mode).toBe('ctf');
   });
 
-  it('missing keys → null/undefined, never throws', () => {
+  it('missing keys → null/undefined, never throws', (): void => {
     expect(urlParams.room).toBeNull();
     expect(urlParams.bots).toBeUndefined();
     expect(urlParams.net).toBeNull();
     expect(urlParams.p2p).toBeNull();
   });
 
-  it('debug is on for ?debug even without the menu flag', () => {
+  it('debug is on for ?debug even without the menu flag', (): void => {
     setSearch('?debug');
     expect(urlParams.debug).toBe(true);
   });

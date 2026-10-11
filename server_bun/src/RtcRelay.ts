@@ -24,7 +24,7 @@ export class RtcRelay {
     for (const [room, since] of this.openRooms) {
       if ((this.rooms.get(room)?.size ?? 0) === 1) {out.push({ room, since });}
     }
-    return out.toSorted((a, b) => a.since - b.since);
+    return out.toSorted((a, b): number => a.since - b.since);
   }
 
   onOpen(ws: ServerWebSocket<WebSocketData>): void {
@@ -72,7 +72,7 @@ export class RtcRelay {
     if (members.size === 0) {
       this.rooms.delete(room);
       this.openRooms.delete(room);
-    } else if (![...members].some((m) => m.data.open)) {
+    } else if (![...members].some((m): boolean | undefined => m.data.open)) {
       // The OPEN member left — a lone guest isn't a joinable lobby.
       this.openRooms.delete(room);
     }

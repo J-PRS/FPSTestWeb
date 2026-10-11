@@ -24,7 +24,7 @@ export interface NetLogger {
 }
 
 export function netLogger(name: string): NetLogger {
-  const emit = (level: NetLogLevel, msg: string, ctx?: unknown) => {
+  const emit = (level: NetLogLevel, msg: string, ctx?: unknown): void => {
     if (sink) { sink(level, name, msg, ctx); return; }
     if (level === 'debug') {return;}
     const line = `[${name}] ${msg}`;
@@ -36,9 +36,9 @@ export function netLogger(name: string): NetLogger {
     else {console.info(line, ctx ?? '');}
   };
   return {
-    debug: (m, c) => emit('debug', m, c),
-    info: (m, c) => emit('info', m, c),
-    warn: (m, c) => emit('warn', m, c),
-    error: (m, c) => emit('error', m, c),
+    debug: (m, c): void => emit('debug', m, c),
+    info: (m, c): void => emit('info', m, c),
+    warn: (m, c): void => emit('warn', m, c),
+    error: (m, c): void => emit('error', m, c),
   };
 }

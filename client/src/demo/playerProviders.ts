@@ -7,18 +7,18 @@ import { weaponDef } from '../weapons.js';
 export function playerProviders(player: Player): { playerData: IPlayerDataProvider; inputData: IInputProvider } {
   return {
     playerData: {
-      get posX() { return player.pos.x; },
-      get posY() { return player.pos.y; },
-      get posZ() { return player.pos.z; },
-      get velX() { return player.vel.x; },
-      get velY() { return player.vel.y; },
-      get velZ() { return player.vel.z; },
-      get yaw() { return player.yaw; },
-      get pitch() { return player.pitch; },
+      get posX(): number { return player.pos.x; },
+      get posY(): number { return player.pos.y; },
+      get posZ(): number { return player.pos.z; },
+      get velX(): number { return player.vel.x; },
+      get velY(): number { return player.vel.y; },
+      get velZ(): number { return player.vel.z; },
+      get yaw(): number { return player.yaw; },
+      get pitch(): number { return player.pitch; },
       get weaponType() { return weaponDef(player.currentWeapon).weaponType; },
     },
     inputData: {
-      get inputFlags() {
+      get inputFlags(): number {
         const input = player.getInputState();
         let flags = 0;
         if (input.forward > 0) {flags |= InputFlags.Forward;}
@@ -31,12 +31,12 @@ export function playerProviders(player: Player): { playerData: IPlayerDataProvid
         if (input.beltHeld) {flags |= InputFlags.Disc;} // flag name kept for demo-format compat
         return flags;
       },
-      get mouseDeltaX() { return 0; },
-      get mouseDeltaY() { return 0; },
-      get jetpackFlags() {
+      get mouseDeltaX(): number { return 0; },
+      get mouseDeltaY(): number { return 0; },
+      get jetpackFlags(): number {
         return player.getInputState().jetHeld ? JetpackFlags.Active : JetpackFlags.None;
       },
-      get jetpackFuel() { return player.energy; },
+      get jetpackFuel(): number { return player.energy; },
     },
   };
 }

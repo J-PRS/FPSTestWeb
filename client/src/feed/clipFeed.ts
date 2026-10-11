@@ -80,7 +80,7 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
   const btnExit = el('button', 'feed-btn', rail, '✕');
   const progress = el('div', 'feed-progress', root);
   const progressFill = el('div', 'feed-progress-fill', progress);
-  progress.addEventListener('click', (ev) => {
+  progress.addEventListener('click', (ev): void => {
     const dur = dm.player.duration;
     if (dur <= 0) {return;}
     const rect = progress.getBoundingClientRect();
@@ -166,7 +166,7 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
 
   // Spring/landing: both panes ease to their resting offsets together.
   function slidePanes(dir: 1 | -1, commit: boolean, ms: number): Promise<void> {
-    return new Promise((resolve) => {
+    return new Promise((resolve): void => {
       const vh = window.innerHeight;
       const ease = `transform ${ms}ms ease-out`;
       poster.style.transition = ease;
@@ -182,7 +182,7 @@ export async function startClipFeed(d: FeedDeps): Promise<void> {
   // plain miss — a throw inside a pager transition would strand
   // `advancing` with the poster frozen over the feed.
   const resolveClip = (e: CoolShotEntry): Promise<DemoFile | null> =>
-    dm.coolShotMgr.resolveClipData(e).catch(() => null);
+    dm.coolShotMgr.resolveClipData(e).catch((): null => null);
 
   function mountPlay(data: DemoFile): boolean {
     try {
@@ -241,7 +241,7 @@ clipGen += 1;
     // Dead-clip watchdog — fire-and-forget playback gives no failure
     // signal, so a clip that never starts gets skipped on a timer.
     const g = clipGen;
-    setTimeout(() => {
+    setTimeout((): void => {
       if (g === clipGen && dm.mode !== 'playing' && dm.mode !== 'paused') {go(1);}
     }, DEAD_CLIP_MS);
     // Warm the next clip so the swipe lands with no network gap.
@@ -259,7 +259,7 @@ clipGen += 1;
     const data = await ready;
     play(ni, data);
     // Let one real frame render beneath the placeholder before reveal.
-    requestAnimationFrame(() => hidePoster());
+    requestAnimationFrame((): void => hidePoster());
   }
 
   async function go(dir: 1 | -1): Promise<void> {
@@ -283,7 +283,7 @@ clipGen += 1;
     // double-skip. Also yields to a manual seek/pause — either means
     // the user took the wheel.
     const g = clipGen;
-    setTimeout(() => {
+    setTimeout((): void => {
       if (advancing || g !== clipGen) {return;}
       // 'paused' is overloaded: manual pause (hold the feed) AND the mode
       // natural end leaves — the lifecycle parks the clock at duration,
@@ -297,23 +297,23 @@ clipGen += 1;
   // The lifecycle's own onPlaybackEnd only freezes the last frame — the
   // feed chains the auto-advance behind it.
   const prevEnd = dm.onPlaybackEnd;
-  dm.onPlaybackEnd = () => { prevEnd?.(); scheduleNext(); };
+  dm.onPlaybackEnd = (): void => { prevEnd?.(); scheduleNext(); };
 
-  btnUp.addEventListener('click', () => go(-1));
-  btnDown.addEventListener('click', () => go(1));
-  btnPause.addEventListener('click', () => dm.togglePlayPause());
-  btnSave.addEventListener('click', () => {
+  btnUp.addEventListener('click', (): Promise<void> => go(-1));
+  btnDown.addEventListener('click', (): Promise<void> => go(1));
+  btnPause.addEventListener('click', (): void => dm.togglePlayPause());
+  btnSave.addEventListener('click', (): void => {
     const e = current();
     if (e) {dm.downloadCoolShotById(e.id);}
   });
-  btnShare.addEventListener('click', () => {
+  btnShare.addEventListener('click', (): void => {
     const e = current();
     if (!e?.filename) {return;}
     navigator.clipboard?.writeText(`${window.location.origin}/clips/${e.filename}`)
-      .then(() => { btnShare.textContent = '✓'; setTimeout(() => { btnShare.textContent = '⤴'; }, 1200); })
-      .catch(() => { return; });
+      .then((): void => { btnShare.textContent = '✓'; setTimeout((): void => { btnShare.textContent = '⤴'; }, 1200); })
+      .catch((): void => { return; });
   });
-  const toggleClear = () => {
+  const toggleClear = (): void => {
     clearScreen = !clearScreen;
     root.classList.toggle('feed-clear', clearScreen);
   };
@@ -321,13 +321,13 @@ clipGen += 1;
   // Auto-routed (touch) exits keep the ?play opt-out so they don't loop
   // back into the feed; URL-routed exits drop to / normally.
   const exitTo = feedMode.auto ? '/?play' : '/';
-  btnExit.addEventListener('click', () => { window.location.href = exitTo; });
+  btnExit.addEventListener('click', (): void => { window.location.href = exitTo; });
 
   // Wheel deltas accumulate — a mouse notch arrives as one big event,
   // but precision trackpads stream many small ones that never reach a
   // per-event threshold (the feed would never move on a laptop pad).
   let wheelAcc = 0;
-  window.addEventListener('wheel', (ev) => {
+  window.addEventListener('wheel', (ev): void => {
     const now = performance.now();
     if (now < wheelLock) {wheelAcc = 0; return;}
     if (Math.sign(ev.deltaY) !== Math.sign(wheelAcc)) {wheelAcc = 0;}
@@ -339,7 +339,7 @@ clipGen += 1;
     go(dir as 1 | -1);
   }, { passive: true });
 
-  window.addEventListener('keydown', (ev) => {
+  window.addEventListener('keydown', (ev): void => {
     switch (ev.code) {
       case 'ArrowDown': { go(1); break;
       }
@@ -360,7 +360,7 @@ clipGen += 1;
   // back otherwise. touch-action:none is set while the feed runs so the
   // browser doesn't fight the gesture with pull-to-refresh.
   d.canvas.style.touchAction = 'none';
-  window.addEventListener('touchstart', (ev) => {
+  window.addEventListener('touchstart', (ev): void => {
     if (entries.length === 0 || advancing) {return;}
     drag = {
       startY: ev.touches[0]!.clientY,
@@ -368,7 +368,7 @@ clipGen += 1;
       mounted: false, dir: 1, ni: index, ready: null,
     };
   }, { passive: true });
-  window.addEventListener('touchmove', (ev) => {
+  window.addEventListener('touchmove', (ev): void => {
     if (!drag) {return;}
     const y = ev.touches[0]!.clientY;
     drag.samples.push({ t: performance.now(), y });
@@ -390,7 +390,7 @@ clipGen += 1;
       trackPanes(off, drag.dir);
     }
   }, { passive: true });
-  window.addEventListener('touchend', (ev) => {
+  window.addEventListener('touchend', (ev): void => {
     if (!drag) {return;}
     const d0 = drag;
     drag = null;
@@ -399,7 +399,7 @@ clipGen += 1;
     // Flick velocity from the recent sample window — a short fast fling
     // commits even when the travel was small.
     const now = performance.now();
-    const s0 = d0.samples.find(s => now - s.t <= 120) ?? d0.samples[0]!;
+    const s0 = d0.samples.find((s): boolean => now - s.t <= 120) ?? d0.samples[0]!;
     const v = now > s0.t ? (s0.y - endY) / (now - s0.t) : 0; // px/ms, + = up
     const dir: 1 | -1 = (Math.abs(v) > 0.01 ? v : dy) >= 0 ? 1 : -1;
     if (!d0.mounted || advancing) {return;} // tap — nothing mounted
@@ -408,14 +408,14 @@ clipGen += 1;
       advancing = dir;
       const {ni} = d0;
       const ready = d0.ready ?? resolveClip(entries[ni]!);
-      (async () => {
+      (async (): Promise<void> => {
         await commitAdvance(dir, ni, ready);
         advancing = 0;
       })();
     } else {
       // Spring back — the outgoing clip never paused, so the restore is
       // pure CSS: both panes ease home and the poster drops.
-      (async () => {
+      (async (): Promise<void> => {
         await slidePanes(d0.dir, false, SLIDE_MS);
         hidePoster();
       })();
@@ -424,7 +424,7 @@ clipGen += 1;
 
   // Progress bar + pause icon ride their own rAF — the demo UI's time
   // updates target its hidden transport bar, not the feed.
-  const tick = () => {
+  const tick = (): void => {
     const dur = dm.player.duration;
     progressFill.style.width = dur > 0 ? `${(dm.player.currentTimeValue / dur) * 100}%` : '0%';
     btnPause.textContent = dm.mode === 'playing' ? '❚❚' : '▶';
@@ -444,7 +444,7 @@ clipGen += 1;
   }
   logger.info(`Clip feed: ${entries.length} clip(s)`);
   if (feedMode.startAt) {
-    const at = entries.findIndex(e => e.filename === feedMode.startAt || e.id === feedMode.startAt);
+    const at = entries.findIndex((e): boolean => e.filename === feedMode.startAt || e.id === feedMode.startAt);
     if (at === -1) {logger.warn(`Deep-link clip not on the server: ${feedMode.startAt}`);}
     else {index = at;}
   }

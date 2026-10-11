@@ -35,7 +35,7 @@ export function structureTopAt(x: number, z: number, maxTop = Infinity): number 
 export function applyStructureSpecs(list: readonly StructureSpec[] | undefined, movement?: MoveStructures): void {
   specList = list ?? [];
   if (movement) {move = movement;}
-  const eff = specList.filter((s) => s.kind !== 'shield' || !s.team || !gridDown.has(s.team));
+  const eff = specList.filter((s): boolean => s.kind !== 'shield' || !s.team || !gridDown.has(s.team));
   const cols = structureColliders(eff);
   live = cols.length > 0 ? new SolidWorld(cols) : null;
   setStructureTopAt(live ? structureTopAt : undefined);

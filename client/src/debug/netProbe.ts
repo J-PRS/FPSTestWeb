@@ -139,7 +139,7 @@ let refreshTimer = 0;
 
 function corrPerMin(): number {
   const cutoff = performance.now() - 60_000;
-  corrWindow = corrWindow.filter(t => t > cutoff);
+  corrWindow = corrWindow.filter((t): boolean => t > cutoff);
   return corrWindow.length;
 }
 
@@ -148,10 +148,10 @@ function panelHtml(): string {
   const loss = stats?.getPacketLoss() ?? 0;
   const jitter = stats?.getJitter() ?? -1;
   const avg = corrCount ? corrErrSum / corrCount : 0;
-  const top = [...rejects.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
-    .map(([r, n]) => `${r} ×${n}`).join('<br>');
+  const top = [...rejects.entries()].sort((a, b): number => b[1] - a[1]).slice(0, 5)
+    .map(([r, n]): string => `${r} ×${n}`).join('<br>');
   const recent = events.slice(-8).reverse()
-    .map(e => `<div style="opacity:0.7">${((performance.now() - e.t) / 1000).toFixed(1)}s ${e.line}</div>`).join('');
+    .map((e): string => `<div style="opacity:0.7">${((performance.now() - e.t) / 1000).toFixed(1)}s ${e.line}</div>`).join('');
   return `<b>NET</b> ping ${ping}ms · loss ${loss}% · jitter ${jitter}ms<br>` +
     `corr ${corrPerMin()}/min · max ${corrErrMax.toFixed(1)}m · avg ${avg.toFixed(2)}m<br>` +
     `spawnDrift ${spawnDriftMax.toFixed(2)}m/s over ${spawnDriftN}<br>${ 
@@ -174,13 +174,13 @@ function togglePanel(): void {
   toggle.style.cssText = 'display:block;margin-top:6px;cursor:pointer;opacity:0.85';
   const cb = document.createElement('input');
   cb.type = 'checkbox'; cb.checked = ghostOn;
-  cb.onchange = () => { ghostOn = cb.checked; };
+  cb.onchange = (): void => { ghostOn = cb.checked; };
   toggle.append(cb, ' ghost corrections (red=server, green=predicted)');
   const body = document.createElement('div');
   body.id = 'netprobe-body';
   panelEl.append(body, toggle);
   document.body.append(panelEl);
-  const refresh = () => {
+  const refresh = (): void => {
     if (body.isConnected) { body.innerHTML = panelHtml(); pruneGhosts(); }
   };
   refresh();
@@ -192,7 +192,7 @@ let armed = false;
 export function initNetProbe(): void {
   if (armed || typeof window === 'undefined') {return;}
   armed = true;
-  document.addEventListener('keydown', (e) => {
+  document.addEventListener('keydown', (e): void => {
     if (e.altKey && e.code === 'KeyN') { e.preventDefault(); togglePanel(); }
   });
 }
@@ -202,7 +202,7 @@ export function diagLines(): string[] {
   const avg = corrCount ? corrErrSum / corrCount : 0;
   const out = [`netprobe: corr=${corrCount} (${corrPerMin()}/min) max=${corrErrMax.toFixed(1)}m avg=${avg.toFixed(2)}m spawnDrift=${spawnDriftMax.toFixed(2)}m/s/${spawnDriftN}`];
   if (rejects.size > 0) {
-    out.push(`  claims: ${[...rejects.entries()].map(([r, n]) => `${r} ×${n}`).join(' | ')}`);
+    out.push(`  claims: ${[...rejects.entries()].map(([r, n]): string => `${r} ×${n}`).join(' | ')}`);
   }
   for (const e of events.slice(-12)) {
     out.push(`  -${((performance.now() - e.t) / 1000).toFixed(1)}s ${e.line}`);

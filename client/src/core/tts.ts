@@ -140,7 +140,7 @@ export function speakVgs(text: string, who?: string): void {
   buf.copyToChannel(pcm as Float32Array<ArrayBuffer>, 0);
   const src = playRadioVoice(ctx, bus, buf, startAt);
   liveVoice.set(key, Object.assign({}, src, {startT: startAt,boundaryS: wordBoundary(text, who, buf.duration)}));
-  src.src.onended = () => { if (liveVoice.get(key)?.src === src.src) {liveVoice.delete(key);} };
+  src.src.onended = (): void => { if (liveVoice.get(key)?.src === src.src) {liveVoice.delete(key);} };
 }
 
 /** Typed chat read-aloud — deliberately the plain system voice, NOT the

@@ -79,7 +79,7 @@ class SpeciesKitImpl {
   constructor(
     private deps: EntitiesDeps,
     private targets: Targetable[],
-    private deployables: () => DeployableRef | null = () => null,
+    private deployables: () => DeployableRef | null = (): null => null,
   ) {
     this.aggro = new AggroKit(deps, targets, this.deployables);
     this.targetReg = this.aggro.targetReg;
@@ -261,7 +261,7 @@ fold.count += 1;
   // entities entering a band together doesn't all tick on the same frame
   // (the server sims stagger the same way).
   readonly LOD_BUCKETS = 8;
-  readonly lodPhase = (e: Targetable, tier: number) => tier * (((e.id ?? 0) % this.LOD_BUCKETS) / this.LOD_BUCKETS);
+  readonly lodPhase = (e: Targetable, tier: number): number => tier * (((e.id ?? 0) % this.LOD_BUCKETS) / this.LOD_BUCKETS);
   readonly lodAcc = new WeakMap<Targetable, number>();
 
   updateSpecies = <T extends Targetable & { dispose(): void }>(s: Species<T>, dt: number): void  => {
@@ -361,7 +361,7 @@ fold.count += 1;
 
 }
 
-export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[], deployables?: () => DeployableRef | null) {
+export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[], deployables?: () => DeployableRef | null): SpeciesKitImpl {
   return new SpeciesKitImpl(deps, targets, deployables);
 }
 

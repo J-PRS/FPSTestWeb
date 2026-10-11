@@ -56,25 +56,25 @@ function ctx(online = false): Ctx {
     fire: undefined as unknown as BotFire,
   };
   c.host = {
-    scene: () => scene,
-    player: () => ({ pos: new THREE.Vector3(1e6, 0, 1e6), isDead: false, appliedClass: 'medium' as const }),
-    world: () => ({ projectiles, remotePlayers: remotePlayers as Map<string, never> }),
+    scene: (): THREE.Scene<THREE.Object3DEventMap> => scene,
+    player: (): { pos: THREE.Vector3; isDead: false; appliedClass: "medium"; } => ({ pos: new THREE.Vector3(1e6, 0, 1e6), isDead: false, appliedClass: 'medium' as const }),
+    world: (): { projectiles: Projectile[]; remotePlayers: Map<string, never>; } => ({ projectiles, remotePlayers: remotePlayers as Map<string, never> }),
     targets: [],
-    online: () => online,
-    logger: { debug: () => { return; } },
-    damageCreature: (id, dmg, attackerId) => { c.creatures.push({ id, dmg, attacker: attackerId }); return false; },
-    creditKill: () => { return; },
-    botKilled: (killerId, _b, weapon) => { c.kills.push({ killer: killerId, weapon }); },
-    hurtLocal: (dmg, _fp, src) => { c.hurtLocal.push({ dmg, src }); },
+    online: (): boolean => online,
+    logger: { debug: (): void => { return; } },
+    damageCreature: (id, dmg, attackerId): false => { c.creatures.push({ id, dmg, attacker: attackerId }); return false; },
+    creditKill: (): void => { return; },
+    botKilled: (killerId, _b, weapon): void => { c.kills.push({ killer: killerId, weapon }); },
+    hurtLocal: (dmg, _fp, src): void => { c.hurtLocal.push({ dmg, src }); },
   };
   c.fire = new BotFire(c.host);
   return c;
 }
 
-const aimAt = (dx: number, dy = 0, dz = 0) => new THREE.Vector3(dx, dy, dz);
+const aimAt = (dx: number, dy = 0, dz = 0): THREE.Vector3 => new THREE.Vector3(dx, dy, dz);
 
-describe('bot real-weapon fire', () => {
-  it('every loadout fires a real Projectile at mid range', () => {
+describe('bot real-weapon fire', (): void => {
+  it('every loadout fires a real Projectile at mid range', (): void => {
     for (let i = 0; i < BOT_LOADOUTS.length; i += 1) {
       const c = ctx();
       c.fire.resolveShot(fakeBot(i), 'e1', aimAt(30, 1.6, 0));
@@ -88,7 +88,7 @@ describe('bot real-weapon fire', () => {
     }
   });
 
-  it('shell speed and gravity match the weapon table — no invented ballistics', () => {
+  it('shell speed and gravity match the weapon table — no invented ballistics', (): void => {
     // Force a known weapon: loadout primary at close-mid band.
     const c = ctx();
     const bot = fakeBot(0);
@@ -100,14 +100,14 @@ describe('bot real-weapon fire', () => {
     expect(p.config.gravity).toBe(stats.gravity);
   });
 
-  it('shotgun/flak weapons spawn the full pellet fan', () => {
+  it('shotgun/flak weapons spawn the full pellet fan', (): void => {
     // Locate a (loadout, band-range) pair whose pick carries pellets,
     // then fire inside that band and count the fan.
     let fired = false;
     for (let i = 0; i < BOT_LOADOUTS.length && !fired; i += 1) {
       const lo = BOT_LOADOUTS[i]!;
       for (const [wt, range] of [[lo.near, 12], [lo.mid, 25], [lo.far, 80]] as const) {
-        const pellets = SLOT_DEFS.find(w => w.weaponType === wt)?.pellets;
+        const pellets = SLOT_DEFS.find((w): boolean => w.weaponType === wt)?.pellets;
         if (!pellets || pellets.count <= 1) {continue;}
         const c = ctx();
         c.fire.resolveShot(fakeBot(i), 'e1', aimAt(range, 1.6, 0));
@@ -120,25 +120,25 @@ describe('bot real-weapon fire', () => {
     expect(fired, 'a pellet loadout exists and fanned').toBe(true);
   });
 
-  it('melee range never spawns a shell — it resolves as a legal melee swing', () => {
+  it('melee range never spawns a shell — it resolves as a legal melee swing', (): void => {
     const c = ctx();
     c.fire.resolveShot(fakeBot(0), 'e1', aimAt(1, 0, 0));
     expect(c.projectiles.length).toBe(0);
   });
 
-  it('connected rooms never spawn local shells — the claim path owns attribution', () => {
+  it('connected rooms never spawn local shells — the claim path owns attribution', (): void => {
     const c = ctx(true); // online
     c.fire.resolveShot(fakeBot(0), 'e1', aimAt(30, 1.6, 0));
     expect(c.projectiles.length).toBe(0);
   });
 
-  it('kill claims carry the real weapon id through to the kill feed', () => {
+  it('kill claims carry the real weapon id through to the kill feed', (): void => {
     const c = ctx();
     // claimShot gates on `instanceof GameBot` — borrow its prototype.
     const victim = Object.setPrototypeOf({
       pos: new THREE.Vector3(1, 0, 0),
       isDead: false,
-      takeDamageLocal: () => true,
+      takeDamageLocal: (): boolean => true,
     }, GameBot.prototype) as GameBot;
     c.remotePlayers.set('victim', victim);
     c.fire.resolveShot(fakeBot(0), 'victim', aimAt(1, 0, 0));
@@ -146,7 +146,7 @@ describe('bot real-weapon fire', () => {
     expect(c.kills[0]!.weapon).toBe(WeaponType.Melee);
   });
 
-  it('belt throws spawn a real lobbed grenade projectile', () => {
+  it('belt throws spawn a real lobbed grenade projectile', (): void => {
     const c = ctx();
     const bot = fakeBot(0);
     bot.wantBelt = true;

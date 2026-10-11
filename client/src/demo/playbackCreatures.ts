@@ -89,7 +89,7 @@ export function reconstructSeekCreature(world: PlaybackWorld, ev: TargetEvent, d
   if (ev.eventType === TargetEventType.Spawned) {
     const c = new PlaybackCreature(world.scene, speciesIdxOf(ev), new THREE.Vector3(ev.posX, ev.posY, ev.posZ), new THREE.Vector3(ev.velX, ev.velY, ev.velZ));
     map.set(ev.targetId, c);
-    fastForward(seekTime - ev.timestamp, () => !c.dead, (s) => c.update(s));
+    fastForward(seekTime - ev.timestamp, (): boolean => !c.dead, (s): void => c.update(s));
     return;
   }
 
@@ -97,7 +97,7 @@ export function reconstructSeekCreature(world: PlaybackWorld, ev: TargetEvent, d
   if (!c || c.dead) {return;}
   c.pos.set(ev.posX, ev.posY, ev.posZ);
   c.vel.set(ev.velX, ev.velY, ev.velZ);
-  fastForward(seekTime - ev.timestamp, () => !c.dead, (s) => c.update(s));
+  fastForward(seekTime - ev.timestamp, (): boolean => !c.dead, (s): void => c.update(s));
 }
 
 /** Forward playback — events arrive in timestamp order as demo time passes. */

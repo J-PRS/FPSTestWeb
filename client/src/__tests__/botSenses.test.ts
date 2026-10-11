@@ -5,9 +5,9 @@ import { NOISE_TTL_MS } from '../../../shared/wire.js';
 import type { GameBot } from '../game/bots/botBrain.js';
 import type { Targetable } from '../entities/balls.js';
 
-const v = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+const v = (x = 0, y = 0, z = 0): THREE.Vector3 => new THREE.Vector3(x, y, z);
 
-const mkBot = (id: string, team: string, over: Record<string, unknown> = {}) =>
+const mkBot = (id: string, team: string, over: Record<string, unknown> = {}): GameBot =>
   ((((Object.assign({}, {playerId: id,team,isDead: false,isCloakHidden: false,ghostT: 0,pos: v(),vel: v(),position: v()}, over))))) as unknown as GameBot;
 
 interface Rig {
@@ -33,14 +33,14 @@ const mkRig = (): Rig => {
     bots, teamOf,
     player: () => playerState,
     world: () => worldState,
-    mode: () => state.modeId,
+    mode: (): string => state.modeId,
     targets,
   };
   return { senses: new BotSenses(host as SenseHost), bots, teamOf, worldState, playerState, targets, state };
 };
 
-describe('enemyBotsForTeam', () => {
-  it('includes the local player only when hostile, and marks cloaked/dead as not alive', () => {
+describe('enemyBotsForTeam', (): void => {
+  it('includes the local player only when hostile, and marks cloaked/dead as not alive', (): void => {
     const r = mkRig();
     r.teamOf.set('local', 'alpha');
     r.playerState.isCloaked = true;
@@ -51,12 +51,12 @@ describe('enemyBotsForTeam', () => {
     expect(out[0]!.playerId).toBe('local');
     expect(out[0]!.alive).toBe(false); // cloaked → not targetable
     const sameTeam = r.senses.enemyBotsForTeam('alpha');
-    expect(sameTeam.some((e) => e.playerId === 'local')).toBe(false);
+    expect(sameTeam.some((e): boolean => e.playerId === 'local')).toBe(false);
   });
 });
 
-describe('recentNoises', () => {
-  it('earshot is 50m and age gate tracks the wire noise TTL', () => {
+describe('recentNoises', (): void => {
+  it('earshot is 50m and age gate tracks the wire noise TTL', (): void => {
     const r = mkRig();
     r.worldState.explosions.push(
       { pos: v(10, 0, 0), age: 1 },
@@ -66,12 +66,12 @@ describe('recentNoises', () => {
     );
     const out = r.senses.recentNoises(v());
     expect(out).toHaveLength(2);
-    expect(out.every((o) => o.x === 10)).toBe(true);
+    expect(out.every((o): boolean => o.x === 10)).toBe(true);
   });
 });
 
-describe('incomingNear', () => {
-  it('a round inside 12m only counts while closing', () => {
+describe('incomingNear', (): void => {
+  it('a round inside 12m only counts while closing', (): void => {
     const r = mkRig();
     r.worldState.projectiles.push(
       { pos: v(5, 0, 0), vel: v(-1, 0, 0) },  // closing on the origin
@@ -84,8 +84,8 @@ describe('incomingNear', () => {
   });
 });
 
-describe('enemyList', () => {
-  it('hostile local player + hostile remotes enter; same-team and self stay out', () => {
+describe('enemyList', (): void => {
+  it('hostile local player + hostile remotes enter; same-team and self stay out', (): void => {
     const r = mkRig();
     r.teamOf.set('local', 'alpha');
     r.teamOf.set('p1', 'alpha');  // hostile remote
@@ -95,14 +95,14 @@ describe('enemyList', () => {
     r.worldState.remotePlayers.set('p1', { pos: v(5, 0, 0), vel: v(), isDead: false, isCloakHidden: false, ghostT: 0 });
     r.worldState.remotePlayers.set('p2', { pos: v(5, 0, 0), vel: v(), isDead: false, isCloakHidden: false, ghostT: 0 });
     const out = r.senses.enemyList(me);
-    const ids = out.map((e) => e.id);
+    const ids = out.map((e): string => e.id);
     expect(ids).toContain('local');
     expect(ids).toContain('p1');
     expect(ids).not.toContain('p2');
     expect(ids).not.toContain('me');
   });
 
-  it('all live scored creatures enter the list; dead and scoreless stay out', () => {
+  it('all live scored creatures enter the list; dead and scoreless stay out', (): void => {
     const r = mkRig();
     const me = mkBot('me', 'bravo');
     r.targets.push(
@@ -112,7 +112,7 @@ describe('enemyList', () => {
       { id: 'decor', pos: v(7, 0, 0), vel: v(), dead: false, scoreless: true } as unknown as Targetable,
     );
     const out = r.senses.enemyList(me);
-    const ids = out.map((e) => e.id);
+    const ids = out.map((e): string => e.id);
     expect(ids).toContain('creature:c9');
     expect(ids).toContain('creature:c10'); // the whole roster, not just nearest
     expect(ids).not.toContain('creature:dead1');

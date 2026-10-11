@@ -27,7 +27,7 @@ function* walk(dir: string): Generator<string> {
 // their reason, never silently. Empty while the manifest is clean.
 const KNOWN_MISSING = new Set<string>();
 
-describe('asset manifest', () => {
+describe('asset manifest', (): void => {
   const missing: string[] = [];
   const missingDirs = new Set<string>();
   for (const file of walk(SRC)) {
@@ -46,10 +46,10 @@ describe('asset manifest', () => {
       if (dir.length > 1 && !fs.existsSync(path.join(PUB, dir))) {missingDirs.add(`${rel} -> ${dir}`);}
     }
   }
-  it('every literal asset path exists under client/public', () => {
+  it('every literal asset path exists under client/public', (): void => {
     expect(missing).toEqual([]);
   });
-  it('every dynamic-path directory prefix exists', () => {
+  it('every dynamic-path directory prefix exists', (): void => {
     expect([...missingDirs]).toEqual([]);
   });
 });

@@ -9,7 +9,7 @@ import { demoTableHash } from './demoTables.js';
 
 // Writer half of the demo codec — record encoders + serialize(). The
 // reader lives in demoReader.ts; record sizes are shared from here.
-export const crcTable = (() => {
+export const crcTable = ((): Uint32Array<ArrayBuffer> => {
   const table = new Uint32Array(256);
   for (let i = 0; i < 256; i += 1) {
     let crc = i;
@@ -180,8 +180,8 @@ export function serializeDemo(data: DemoFile): ArrayBuffer {
     const framesSize = 4 + data.frames.length * FRAME_SIZE; // uint32 frame count + frames
     const projEventsSize = 4 + data.projectileEvents.length * PROJECTILE_EVENT_SIZE;
     const targetEventsSize = 4 + data.targetEvents.length * TARGET_EVENT_SIZE;
-    const rosterBytes = data.roster.map(r => 2 + new TextEncoder().encode(r.name).length);
-    const rosterSize = 2 + rosterBytes.reduce((a, b) => a + b, 0);
+    const rosterBytes = data.roster.map((r): number => 2 + new TextEncoder().encode(r.name).length);
+    const rosterSize = 2 + rosterBytes.reduce((a, b): number => a + b, 0);
     const remoteFramesSize = 4 + data.remoteFrames.length * REMOTE_FRAME_SIZE;
     // v5 trailer: u8 section count + per-section tag/len/payload.
     const hmapSize = data.heightmap ? 1 + 4 + 2 + 4 + 4 + 4 + 4 + data.heightmap.data.length : 0;

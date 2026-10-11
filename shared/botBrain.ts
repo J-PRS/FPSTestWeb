@@ -340,12 +340,12 @@ export class BotBrain {
     wanderWp: { x: 0, y: 0, z: 0 },
   };
   private readonly goals = new BotGoals(
-    () => this.goalS,
-    () => this.wanderlust,
-    () => this.steerer.headingVec(),
-    (p) => this.nearDeath(p),
-    () => this.duty,
-    () => this.social,
+    (): GoalState => this.goalS,
+    (): number => this.wanderlust,
+    (): { x: number; z: number; } => this.steerer.headingVec(),
+    (p): boolean => this.nearDeath(p),
+    (): number => this.duty,
+    (): number => this.social,
   );
   // Ski/jet/jump hint intents live in botMoves.ts — host closures read
   // the escape burst latch and the live hunt target.
@@ -542,7 +542,7 @@ export class BotBrain {
   private helpUntil = 0;
   private sayHelp(ctx: BrainCtx): BrainOut['say'] {
     if (!ctx.running || ctx.now < this.helpUntil) {return undefined;}
-    const close = ctx.enemies.some((e) => e.alive && distSqXZ(e.pos, ctx.pos) < 90 * 90);
+    const close = ctx.enemies.some((e): boolean => e.alive && distSqXZ(e.pos, ctx.pos) < 90 * 90);
     if (!close) {return undefined;}
     this.helpUntil = ctx.now + 30_000;
     return { kind: 'callfor' };
@@ -645,8 +645,8 @@ export class BotBrain {
     // Opt-in stage profiler — FPS_THINK_PROF seeds thinkProf + wallPerf;
     // absent, the wrapper costs one undefined check per stage.
     const prof = sharedEnv.thinkProf;
-    const pf = prof ? sharedEnv.wallPerf! : () => 0;
-    const pm = (stage: string, t0: number) => { if (prof) {prof.set(stage, (prof.get(stage) ?? 0) + pf() - t0);} };
+    const pf = prof ? sharedEnv.wallPerf! : (): number => 0;
+    const pm = (stage: string, t0: number): void => { if (prof) {prof.set(stage, (prof.get(stage) ?? 0) + pf() - t0);} };
     let tp = pf();
 
     // Radio commands carry an implied position — a same-team "Defend our
@@ -660,7 +660,7 @@ export class BotBrain {
     this.thinkT -= dt;
     if (this.thinkT <= 0) {
       this.thinkT = hero ? T.brain.thinkS * T.brain.heroThinkK : T.brain.thinkS;
-      pickHunt(this.h, ctx, pos, now, { hero, fearing }, (c, p) => this.goals.pick(c, p));
+      pickHunt(this.h, ctx, pos, now, { hero, fearing }, (c, p): void => this.goals.pick(c, p));
     }
     pm('hunt', tp);
     let say = this.pickSay(ctx, hurtEdge, hero, wasHunt);
@@ -711,7 +711,7 @@ export class BotBrain {
     const {traceId} = sharedEnv;
     if (ctx.id && traceId && ctx.id.includes(traceId)
       && ctx.objective && Math.hypot(pos.x - ctx.objective.x, pos.z - ctx.objective.z) > 30) {
-      const f = (v: BotVec) => `${v.x.toFixed(0)},${v.z.toFixed(0)}`;
+      const f = (v: BotVec): string => `${v.x.toFixed(0)},${v.z.toFixed(0)}`;
       const spd = ctx.vel ? Math.hypot(ctx.vel.x, ctx.vel.y, ctx.vel.z) : 0;
       const bg = this.breachUntil > now ? ` bg=${f(this.breachGoal)}` : '';
       // oxlint-disable-next-line no-console

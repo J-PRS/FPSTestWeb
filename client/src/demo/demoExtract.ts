@@ -59,7 +59,7 @@ export function extractClip(r: DemoRecorder, startTime: number, endTime: number,
   if (clipEnd <= clipStart) {return null;}
 
   const startIdx = r.frameBuffer.findIndexAfterTimestamp(
-    clipStart - 0.001, f => f.timestamp
+    clipStart - 0.001,( f): number => f.timestamp
   );
   if (startIdx < 0) {return null;}
 
@@ -75,7 +75,7 @@ export function extractClip(r: DemoRecorder, startTime: number, endTime: number,
   const tgtEvents = collectTargetEvents(r.targetEvents, clipStart, clipEnd);
 
   const [first] = frames;
-  const normFrames = frames.map(f => (Object.assign({}, f, {timestamp: f.timestamp - clipStart,frameNumber: (f.frameNumber - first.frameNumber + 65_536) % 65_536})));
+  const normFrames = frames.map((f): DemoFrame & { timestamp: number; frameNumber: number; } => (Object.assign({}, f, {timestamp: f.timestamp - clipStart,frameNumber: (f.frameNumber - first.frameNumber + 65_536) % 65_536})));
   const normProj = projEvents.map(e => (Object.assign({}, e, {timestamp: e.timestamp - clipStart})));
   const normTgt = tgtEvents.map(e => (Object.assign({}, e, {timestamp: e.timestamp - clipStart})));
 

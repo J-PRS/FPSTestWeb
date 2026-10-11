@@ -96,7 +96,7 @@ function updateDeadList<T extends { update(dt: number): void; dead: boolean; dis
   }
 }
 
-const _aliveCount = (l: { dead: boolean }[]) => { let n = 0; for (const e of l) {if (!e.dead) {n += 1;}} return n; };
+const _aliveCount = (l: { dead: boolean }[]): number => { let n = 0; for (const e of l) {if (!e.dead) {n += 1;}} return n; };
 
 // Live-explosion ceiling — a busy room stacks blasts until particles
 // and draw calls crush the frame (seen: 155 live, 30k particles). Past
@@ -267,7 +267,7 @@ const _contactBodies: BodyCapsule[] = [];
 /** Stage 1 — world sim: player, terrain, entities, wave director,
  *  projectiles. Returns demoPaused for the later stages. */
 interface TickFrame { dt: number; player: Player; networkManager: NetworkManager; demoManager: DemoManager | null }
-const fmtBps = (b: number) => b >= 1_048_576 ? `${(b / 1_048_576).toFixed(1)}MB/s` : b >= 1024 ? `${(b / 1024).toFixed(1)}KB/s` : `${Math.round(b)}B/s`;
+const fmtBps = (b: number): string => b >= 1_048_576 ? `${(b / 1_048_576).toFixed(1)}MB/s` : b >= 1024 ? `${(b / 1024).toFixed(1)}KB/s` : `${Math.round(b)}B/s`;
 function simTick(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, f: TickFrame, terrain: Terrain): boolean {
   const { dt, player, demoManager, networkManager } = f;
   // Offline pause: a hidden tab rAFs ~1/s, so the local match would crawl
@@ -372,14 +372,14 @@ function fxTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cre
     nanScanTick(deps.sceneSetup.scene, deps.camera);
     if (!nanProbeBound) {
       nanProbeBound = true;
-      nanScanBindProbe(() => ({ scene: deps.sceneSetup.scene, camera: deps.camera }));
+      nanScanBindProbe((): { scene: THREE.Scene<THREE.Object3DEventMap>; camera: THREE.PerspectiveCamera; } => ({ scene: deps.sceneSetup.scene, camera: deps.camera }));
     }
   }
   st.fxJobs.length = 0;
   st.fxJobs.push(
-    ['effects', () => deps.lazyEffects().update(fxDt)],
-    ['debris', () => updateDeadList(deps.world.debrisList, fxDt)],
-    ['pdebris', () => {
+    ['effects', (): void => deps.lazyEffects().update(fxDt)],
+    ['debris', (): void => updateDeadList(deps.world.debrisList, fxDt)],
+    ['pdebris', (): void => {
       const list = deps.world.playerDebrisList;
       const cam = deps.camera.position;
       // A nearby mass kill otherwise turns this one job into a 7ms+
@@ -405,13 +405,13 @@ function fxTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cre
         if (d.dead) { d.dispose(); list.splice(i, 1); }
       }
     }],
-    ['gibs', () => updateGibs(fxDt)],
-    ['swipes', () => updateSwings(fxDt, deps.camera)],
-    ['scorch', () => {
+    ['gibs', (): void => updateGibs(fxDt)],
+    ['swipes', (): void => updateSwings(fxDt, deps.camera)],
+    ['scorch', (): void => {
       updateDeadList(deps.world.scorches, fxDt);
       updateDeadList(deps.world.splats, fxDt);
     }],
-    ['explosions', () => {
+    ['explosions', (): void => {
       const ex = deps.world.explosions;
       for (let i = 0; i <= ex.length - MAX_LIVE_EXPLOSIONS; i += 1) {ex[i]!.dead = true;}
       // Same 260m rule as the vfx sim-pause — a blast past it is sub-pixel,
@@ -426,12 +426,12 @@ function fxTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cre
         if (e.dead) { e.dispose(); ex.splice(i, 1); }
       }
     }],
-    ['implosions', () => updateDeadList(deps.world.implosions, fxDt)],
-    ['aoegiz', () => updateDeadList(deps.world.aoeGizmos, fxDt)],
+    ['implosions', (): void => updateDeadList(deps.world.implosions, fxDt)],
+    ['aoegiz', (): void => updateDeadList(deps.world.aoeGizmos, fxDt)],
   );
   if (st.fxCursor > 0) {st.fxJobs.push(...st.fxJobs.splice(0, st.fxCursor));}
   st.fxCursor = (st.fxCursor + 1) % st.fxJobs.length;
-  budget.each('fxdecay', st.fxJobs, FX_MS_CAP, ([name, run]) => {
+  budget.each('fxdecay', st.fxJobs, FX_MS_CAP, ([name, run]): void => {
     const t0 = performance.now();
     run();
     fxJobSample(name, performance.now() - t0);
@@ -469,7 +469,7 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
     }
   }
   // Entity-count text is a slow-moving counter — 10Hz is plenty.
-  budget.sweep('census', 100, () => hud.setEntityCounts(censusEntities(deps, entities)));
+  budget.sweep('census', 100, (): void => hud.setEntityCounts(censusEntities(deps, entities)));
   // Belt charges ARE the nugget wallet — spawn stock + pickups, spent by
   // throws/deploys. (nuggetsCollected only counts pickups, so the HUD
   // read 0 at spawn even though the belt economy starts at BELT_MAX.)
@@ -496,7 +496,7 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   // Dead and cloaked riders are dropped — no corpse pings, no cloak leak.
   const wirePlayers = networkManager.getPlayers();
   let blipN = 0;
-  deps.world.remotePlayers.forEach((rp, id) => {
+  deps.world.remotePlayers.forEach((rp, id): void => {
     // A fire-revealed cloak (ghostT live) blips like any visible rider —
     // the shimmer window already sold him out to eyes and HUD.
     if (rp.isDead || (rp.isCloakHidden && rp.ghostT <= 0)) {return;}
@@ -557,7 +557,7 @@ blipN += 1;
 // toggled with ` (backquote). stats.js only renders one panel per
 // instance, so use one per metric; panels are 80px wide + 8px gap.
 function makeStatsPanels(): Stats[] {
-  return [0, 1, 2].map((panel, i) => {
+  return [0, 1, 2].map((panel, i): Stats => {
     const s = new Stats();
     s.showPanel(panel);
     const dom = s.dom as HTMLElement;
@@ -596,7 +596,7 @@ function wireDebugKeys(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud
   // (ribbons/vfx/inst/swarm…). Sections come from registerDiag() in the
   // owning modules, so new censuses never touch this wiring.
   window.__trailDump = collectDiag;
-  document.addEventListener('keydown', (e) => {
+  document.addEventListener('keydown', (e): void => {
     // Alt+W — bot weapon audit: last gun each bot drew + its shot count,
     // so "do they fire real weapons" is a one-keypress read. Alt+Shift+W
     // keeps the old hard-reload hatch (F5 is flaky under pointer lock).
@@ -604,8 +604,8 @@ function wireDebugKeys(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud
       e.preventDefault();
       if (e.shiftKey) { window.location.reload(); return; }
       const rows = [...lastWeaponByPlayer.entries()]
-        .filter(([id]) => isBotId(id))
-        .map(([id, r]) => `${id} ${WeaponType[r.wt] ?? `w${r.wt}`} shots=${r.n}`);
+        .filter(([id]): boolean => isBotId(id))
+        .map(([id, r]): string => `${id} ${WeaponType[r.wt] ?? `w${r.wt}`} shots=${r.n}`);
       Logger.info(rows.length > 0 ? `[botweapons] ${rows.join(' | ')}` : '[botweapons] no bot fire seen yet');
       return;
     }
@@ -625,7 +625,7 @@ function wireDebugKeys(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud
       setDebugOverlays(show);
       // Debug chrome changes the corner stack — audit for collisions the
       // frame after the layout settles.
-      if (show) {requestAnimationFrame(() => requestAnimationFrame(reportHudOverlap));}
+      if (show) {requestAnimationFrame((): number => requestAnimationFrame(reportHudOverlap));}
     }
   });
 }
@@ -694,7 +694,7 @@ function fpsCapAllows(st: LoopState, rawElapsed: number): boolean {
   return true;
 }
 
-export function createGameLoop(deps: GameLoopDeps) {
+export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(): Promise<void>; } {
   let lastTime = 0;
   let renderElapsed = 0;
   const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, gpuLevel: 0, cpuLevel: 0, cpuBound: false, headroomAccum: 0, autoPixel: false, fxCursor: 0, fxJobs: [], shadowAcc: 0, renderAcc: 0, warmN: 0, warmed: false, veilStable: 0, veilFrames: 0, bootStable: 0, bootFrames: 0, bootStableResolvers: [] };
@@ -709,9 +709,9 @@ export function createGameLoop(deps: GameLoopDeps) {
   // never picked. No reload — ladders gate on the setting live.
   const autoqBtn = document.querySelector('#autoq-toggle') as HTMLButtonElement | null;
   if (autoqBtn) {
-    const label = () => { autoqBtn.classList.toggle('on', Boolean(settings.get('fps-autoq'))); };
+    const label = (): void => { autoqBtn.classList.toggle('on', Boolean(settings.get('fps-autoq'))); };
     label();
-    autoqBtn.addEventListener('click', () => {
+    autoqBtn.addEventListener('click', (): void => {
       const on = !settings.get('fps-autoq');
       settings.set('fps-autoq', on);
       if (!on) {resetAutoQuality(deps, st);}
@@ -724,9 +724,9 @@ export function createGameLoop(deps: GameLoopDeps) {
   const FPS_CAPS = [0, 30, 60, 120];
   const capBtn = document.querySelector('#fpscap-toggle') as HTMLButtonElement | null;
   if (capBtn) {
-    const label = () => { const c = settings.get('fps-cap'); capBtn.textContent = c > 0 ? `FPS CAP: ${c}` : 'FPS CAP: OFF'; };
+    const label = (): void => { const c = settings.get('fps-cap'); capBtn.textContent = c > 0 ? `FPS CAP: ${c}` : 'FPS CAP: OFF'; };
     label();
-    capBtn.addEventListener('click', () => {
+    capBtn.addEventListener('click', (): void => {
       const i = FPS_CAPS.indexOf(settings.get('fps-cap'));
       settings.set('fps-cap', FPS_CAPS[(i + 1) % FPS_CAPS.length]!);
       st.renderAcc = 0;
@@ -786,7 +786,7 @@ st.veilFrames += 1;
     // Late-bound once: the ops uplink reads the perf EMA (JS frame cost +
     // real present rate) but perf doesn't exist until the loop starts.
     if (!networkManager.statsSource) {
-      networkManager.statsSource = () => {
+      networkManager.statsSource = (): { fps: number; jsMs: number; renderLagMs: number; renderLag: Record<string, number>; } => {
         const s = perf.snapshot();
         // Per-victim render delay map — rewinding every victim by the
         // MAX delay validates ~500ms behind a fast ghost the shooter is
@@ -794,7 +794,7 @@ st.veilFrames += 1;
         // renderLagMs stays as the fallback for old wires/creatures.
         let renderLagMs = 0;
         const renderLag: Record<string, number> = {};
-        deps.world.remotePlayers.forEach((rp, id) => {
+        deps.world.remotePlayers.forEach((rp, id): void => {
           renderLag[id] = rp.renderDelayMs;
           if (rp.renderDelayMs > renderLagMs) {renderLagMs = rp.renderDelayMs;}
         });
@@ -826,7 +826,7 @@ st.veilFrames += 1;
       renderFrame(fxDt); // damage numbers ride fxDt — same hidden-tab decay fix
     }
     perf.mark('render');
-    perf.end(deps.rendererSetup.renderer, () => {
+    perf.end(deps.rendererSetup.renderer, (): string => {
       const bw = deps.lazyNetworkManager().bandwidth();
       return `tgt ${deps.entities.targets.length} rem ${deps.world.remotePlayers.size}\n` +
         `net ↑${fmtBps(bw.up)} ↓${fmtBps(bw.down)}`;
@@ -837,7 +837,7 @@ st.veilFrames += 1;
     const { camera, rendererSetup, sceneSetup } = deps;
     // FLOYD overlay hook — idempotent; the VM draw runs inside fsRender so
     // the gun lands in the readPixels buffer and gets dithered too.
-    rendererSetup.setOverlayPass(() => {
+    rendererSetup.setOverlayPass((): void => {
       const vm = deps.lazyViewModel(), vmc = deps.vmCamera();
       if (!vm.group.visible) {return;}
       vmc.aspect = camera.aspect;
@@ -911,7 +911,7 @@ st.veilFrames += 1;
      *  starts wait on this so the match doesn't spawn mid-compile-hitch. */
     whenStable(): Promise<void> {
       if (st.bootStable >= 45) { return Promise.resolve(); }
-      return new Promise((resolve) => { st.bootStableResolvers.push(resolve); });
+      return new Promise((resolve): void => { st.bootStableResolvers.push(resolve); });
     },
   };
 }

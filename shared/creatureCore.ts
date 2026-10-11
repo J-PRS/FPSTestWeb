@@ -48,7 +48,7 @@ type SimTunables = { readonly [K in keyof typeof CRAWLER_SIM]: number };
  *  the numbers. The rows live in the unified SPECIES registry
  *  (species.ts); this derived view keeps the old import sites working. */
 export const MELEE_SPECIES: Record<string, SpeciesRow> = Object.fromEntries(
-  Object.entries(SPECIES).filter(([, r]) => r.family === 'hop'),
+  Object.entries(SPECIES).filter(([, r]): boolean => r.family === 'hop'),
 );
 export const isHopSpecies = (species: string): boolean => speciesFamily(species) === 'hop';
 

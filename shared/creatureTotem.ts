@@ -48,7 +48,7 @@ const TOTEM_UBER = {
 
 // Totem rows live in the unified SPECIES registry; derived view.
 export const TOTEM_SPECIES: Record<string, SpeciesRow> = Object.fromEntries(
-  Object.entries(SPECIES).filter(([, r]) => r.family === 'totem'),
+  Object.entries(SPECIES).filter(([, r]): boolean => r.family === 'totem'),
 );
 
 export type TotemState = 'aim' | 'charge' | 'blinkOut' | 'blinkIn';

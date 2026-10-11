@@ -54,38 +54,38 @@ export interface FamilyDef {
 export const SPECIES_FAMILY: Record<SpeciesFamily, FamilyDef> = {
   hop: {
     make: makeSimCrawler,
-    step: (c, dt, f, t, a, col) => c.family === 'hop' ? stepCrawler(c, dt, f, t, a, col) : null,
-    damage: (c, d) => c.family === 'hop' ? applyCrawlerDamage(c, d) : false,
-    lift: () => 0,
+    step: (c, dt, f, t, a, col): CrawlerEvent | null => c.family === 'hop' ? stepCrawler(c, dt, f, t, a, col) : null,
+    damage: (c, d): boolean => c.family === 'hop' ? applyCrawlerDamage(c, d) : false,
+    lift: (): number => 0,
   },
   fly: {
     make: makeSimFlyer,
-    step: (c, dt, f, t, a, col) => isFlyer(c) ? stepFlyer(c, dt, f, t, a, col) : null,
-    damage: (c, d) => isFlyer(c) ? applyFlyerDamage(c, d) : false,
-    lift: (c) => isFlyer(c) ? c.sp.ORBIT_ALT : 0, // flyers enter at cruise alt
+    step: (c, dt, f, t, a, col): CrawlerEvent | null => isFlyer(c) ? stepFlyer(c, dt, f, t, a, col) : null,
+    damage: (c, d): boolean => isFlyer(c) ? applyFlyerDamage(c, d) : false,
+    lift: (c): number => isFlyer(c) ? c.sp.ORBIT_ALT : 0, // flyers enter at cruise alt
   },
   roll: {
     make: makeSimRoller,
-    step: (c, dt, f, t, a, col) => isRoller(c) ? stepRoller(c, dt, f, t, a, col) : null,
-    damage: (c, d) => isRoller(c) ? applyRollerDamage(c, d) : false,
-    lift: () => 1.6, // rollers ride the surface
+    step: (c, dt, f, t, a, col): CrawlerEvent | null => isRoller(c) ? stepRoller(c, dt, f, t, a, col) : null,
+    damage: (c, d): boolean => isRoller(c) ? applyRollerDamage(c, d) : false,
+    lift: (): number => 1.6, // rollers ride the surface
   },
   slither: {
     make: makeSimSlither,
-    step: (c, dt, f, t, a, col) => isSlither(c) ? stepSlither(c, dt, f, t, a, col) : null,
-    damage: (c, d) => isSlither(c) ? applySlitherDamage(c, d) : false,
-    lift: () => 0.5, // belly on the dirt
+    step: (c, dt, f, t, a, col): CrawlerEvent | null => isSlither(c) ? stepSlither(c, dt, f, t, a, col) : null,
+    damage: (c, d): boolean => isSlither(c) ? applySlitherDamage(c, d) : false,
+    lift: (): number => 0.5, // belly on the dirt
   },
   baneling: {
     make: makeSimBaneling,
-    step: (c, dt, f, t, a, col) => isBaneling(c) ? stepBaneling(c, dt, f, t, a, col) : null,
-    damage: (c, d) => isBaneling(c) ? applyBanelingDamage(c, d) : false,
-    lift: () => 0.7, // sac skims low
+    step: (c, dt, f, t, a, col): CrawlerEvent | null => isBaneling(c) ? stepBaneling(c, dt, f, t, a, col) : null,
+    damage: (c, d): boolean => isBaneling(c) ? applyBanelingDamage(c, d) : false,
+    lift: (): number => 0.7, // sac skims low
   },
   totem: {
     make: makeSimTotem,
-    step: (c, dt, f, t, a, col) => isTotem(c) ? stepTotem(c, dt, f, t, a, col) : null,
-    damage: (c, d) => isTotem(c) ? applyTotemDamage(c, d) : false,
-    lift: () => 0,
+    step: (c, dt, f, t, a, col): CrawlerEvent | null => isTotem(c) ? stepTotem(c, dt, f, t, a, col) : null,
+    damage: (c, d): boolean => isTotem(c) ? applyTotemDamage(c, d) : false,
+    lift: (): number => 0,
   },
 };

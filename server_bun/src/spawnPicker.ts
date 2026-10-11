@@ -87,7 +87,7 @@ export class SpawnPicker {
     const bias = obj ? obj.w : (this.host.homeBias?.(playerId) ?? (teamPool ? 0 : 2));
     if (!obj && bias === 0) {
       const anyFoe = [...this.host.players().entries()].some(
-        ([id, p]) => id !== playerId && !p.isDead && (!team || p.team !== team));
+        ([id, p]): boolean => id !== playerId && !p.isDead && (!team || p.team !== team));
       if (!anyFoe) {return Object.assign({}, points[Math.floor(this.host.rng() * points.length)]!);}
     }
     // Home pull target for points that can't ride the objective pull.

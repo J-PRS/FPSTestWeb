@@ -131,13 +131,13 @@ export class MapCatalog {
   private rotation(): string[] {
     if (this.rotationList === undefined) {
       const env = (process.env.FPS_MAP_ROTATION ?? '').split(',')
-        .map(s => s.trim()).filter(Boolean);
+        .map((s): string => s.trim()).filter(Boolean);
       if (env.length > 0) {this.rotationList = env;}
       else {
         try {
           const raw = readFileSync(`${MAPS_DIR}/rotation.json`, 'utf8');
           const list = JSON.parse(raw);
-          this.rotationList = Array.isArray(list) ? list.filter(s => typeof s === 'string') : [];
+          this.rotationList = Array.isArray(list) ? list.filter((s): boolean => typeof s === 'string') : [];
         } catch { this.rotationList = null; }
       }
     }
@@ -184,7 +184,7 @@ export class MapCatalog {
   private buildList(): { name: string; mode: string; modes: string[]; bots: number; t2: boolean }[] {
     try {
       return readdirSync(MAPS_DIR)
-        .filter((f) => f.endsWith('.json') && f !== 'rotation.json') // rotation.json is a playlist, not a map
+        .filter((f): boolean => f.endsWith('.json') && f !== 'rotation.json') // rotation.json is a playlist, not a map
         .map((f) => {
           const spec = this.loadMapSpec(f.slice(0, -5));
           return {
@@ -196,7 +196,7 @@ export class MapCatalog {
             hidden: spec?.hidden === true,
           };
         })
-        .filter((r) => !r.hidden)
+        .filter((r): boolean => !r.hidden)
         .toSorted((a, b) => a.name.localeCompare(b.name));
     } catch {
       return [];

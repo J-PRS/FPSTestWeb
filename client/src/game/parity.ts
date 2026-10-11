@@ -44,7 +44,7 @@ export function expectDamageEcho(victim: string, dmg: number, wt?: number, shotI
 }
 
 export function confirmDamageEcho(victim: string): void {
-  const i = dmgEchoes.findIndex(e => e.victim === victim);
+  const i = dmgEchoes.findIndex((e): boolean => e.victim === victim);
   if (i !== -1) {dmgEchoes.splice(i, 1);}
 }
 
@@ -85,7 +85,7 @@ export function sweepDamageEchoes(now: number): void {
  *  newest-first so a paste shows WHICH predictions died. */
 export function parityLines(): string[] {
   const lines: string[] = [];
-  const byKind = [...counts.entries()].map(([k, n]) => `${k}=${n}`).join(' ');
+  const byKind = [...counts.entries()].map(([k, n]): string => `${k}=${n}`).join(' ');
   lines.push(`parity: misses=${total}${byKind ? ` ${byKind}` : ''}`);
   for (const r of rows.slice(-8).reverse()) {
     lines.push(`  parity-${r.kind}: ${r.detail}`);

@@ -96,7 +96,7 @@ function wingOutGeo(): THREE.BufferGeometry {
     // Finger struts — thin quads fanning from the wrist to each scallop
     // point; merged in so they share the part's material and instance.
     const fingers: [number, number][] = [[1.9, 0.3], [1.25, -0.35], [0.6, -0.55]];
-    const struts = fingers.map(([fx, fy]) => {
+    const struts = fingers.map(([fx, fy]): THREE.BoxGeometry => {
       const len = Math.hypot(fx - 0.05, fy - 0.35);
       const g = new THREE.BoxGeometry(len, 0.05, 0.03);
       const a = Math.atan2(fy - 0.35, fx - 0.05);

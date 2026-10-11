@@ -55,12 +55,12 @@ function morphHeight(p: [number, number], own: [number, number], levelScale: num
 // The parent ring's drawn surface IS the tri-chord — same function.
 const parentSurface = parentChord;
 
-describe('LOD seam weld', () => {
+describe('LOD seam weld', (): void => {
   // Boundary verts (dist >= halfSize) must land exactly on the parent's
   // drawn surface — that's what makes the discard-hole seam watertight.
   // Sweeps player positions that snap inner/outer origins to opposite
   // lattice parities, the case the old coarse→fine morph left cracked.
-  it('outer-edge verts lie exactly on the parent surface at any parity', () => {
+  it('outer-edge verts lie exactly on the parent surface at any parity', (): void => {
     for (const px of [0, 2.5, 7.5, 33.3]) {
       for (let i = 0; i < LEVELS.length - 1; i += 1) {
         const lvl = LEVELS[i];
@@ -81,7 +81,7 @@ describe('LOD seam weld', () => {
   // Residual between the fine edge TRIANGLE and the parent surface is
   // bounded by the quad-split fold only — not the field-vs-chord meters
   // the old scheme leaked at every seam.
-  it('edge-tri residual stays within the triangle-split fold', () => {
+  it('edge-tri residual stays within the triangle-split fold', (): void => {
     const px = 7.5; // worst-case parity
     for (let i = 0; i < LEVELS.length - 1; i += 1) {
       const lvl = LEVELS[i];
@@ -107,7 +107,7 @@ describe('LOD seam weld', () => {
     }
   });
 
-  it('unmorphed interior keeps raw field height', () => {
+  it('unmorphed interior keeps raw field height', (): void => {
     const [lvl, parent] = LEVELS;
     const own: [number, number] = [100, 100];
     const pSpacing = parent.vertSpacing;

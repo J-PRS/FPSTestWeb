@@ -22,7 +22,7 @@ const ALIASES = new Map<number, number>([
 ]);
 
 const builders = new Map<number, () => THREE.Group>(MODEL_BUILDERS);
-builders.set(WeaponType.Chaingun, () => mkChaingun().g);
+builders.set(WeaponType.Chaingun, (): THREE.Group<THREE.Object3DEventMap> => mkChaingun().g);
 
 export interface HandWeaponModel {
   geo: THREE.BufferGeometry;
@@ -46,7 +46,7 @@ export function handWeaponGeo(wt: number): HandWeaponModel | undefined {
   group.updateMatrixWorld(true);
   const parts: THREE.BufferGeometry[] = [];
   const mats: THREE.Material[] = [];
-  group.traverse((o) => {
+  group.traverse((o): void => {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh) {return;}
     // Mixed indexed/non-indexed sources won't merge — flatten first.
@@ -60,7 +60,7 @@ export function handWeaponGeo(wt: number): HandWeaponModel | undefined {
   // useGroups keeps the per-part material split — without it the merged
   // gun renders in one stock grey and the glow bits lose their emissive.
   const merged = mergeGeometries(parts, true);
-  parts.forEach((p) => p.dispose());
+  parts.forEach((p): void => p.dispose());
   if (!merged) {return undefined;}
 
   // -Z barrel → +Z, then scale to the hand-prop footprint (~1.05m) and

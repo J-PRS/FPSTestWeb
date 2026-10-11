@@ -11,7 +11,7 @@ import { capFor } from './ambientCaps.js';
 
 // Ambient family — destructible props that aren't really enemies.
 // Tumbleweeds: wind-blown ambience you can shoot.
-export function createAmbientSpecies({ deps, kit, targets }: SpeciesCtx) {
+export function createAmbientSpecies({ deps, kit, targets }: SpeciesCtx): { weeds: Tumbleweed[]; spawnWeed: () => void; updateWeeds: (dt: number) => void; } {
   const { scene } = deps;
   const { burrow, updateSpecies, kickDust, atCap } = kit;
 
@@ -41,7 +41,7 @@ export function createAmbientSpecies({ deps, kit, targets }: SpeciesCtx) {
     list: weeds, interval: WEED_SPAWN_INTERVAL, t: 0,
     decor: true, // ambience — ?nocreatures gates combat species, not set dressing
     spawn: spawnWeed,
-    tick: (w, dt) => { w.update(dt, deps.lazyTerrain(), deps.lazyPlayer().pos); kickDust(w, dt); },
+    tick: (w, dt): void => { w.update(dt, deps.lazyTerrain(), deps.lazyPlayer().pos); kickDust(w, dt); },
   };
   function updateWeeds(dt: number): void { updateSpecies(weedSpecies, dt); }
 

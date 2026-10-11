@@ -31,8 +31,8 @@ export class FieldSurface {
 
   static fromField(f: Heightfield): FieldSurface {
     return new FieldSurface({
-      getHeight: (x, z) => hmHeight(f, x, z),
-      getNormal: (x, z, out) => { hmNormal(f, x, z, out as { x: number; y: number; z: number }); return out; },
+      getHeight: (x, z): number => hmHeight(f, x, z),
+      getNormal: (x, z, out): Vec3Like => { hmNormal(f, x, z, out as { x: number; y: number; z: number }); return out; },
     });
   }
 
@@ -43,8 +43,8 @@ export class FieldSurface {
    *  humans predict against the plain field and would diverge on this. */
   static fromFieldChord(f: Heightfield): FieldSurface {
     return new FieldSurface({
-      getHeight: (x, z) => Math.max(hmHeight(f, x, z), hmChord(f, x, z)),
-      getNormal: (x, z, out) => { hmNormal(f, x, z, out as { x: number; y: number; z: number }); return out; },
+      getHeight: (x, z): number => Math.max(hmHeight(f, x, z), hmChord(f, x, z)),
+      getNormal: (x, z, out): Vec3Like => { hmNormal(f, x, z, out as { x: number; y: number; z: number }); return out; },
     });
   }
 

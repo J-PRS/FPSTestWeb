@@ -66,8 +66,8 @@ export class P2PHost {
   readonly mode = 'p2p';
   private fieldAttached = false;
 
-  get players() { return this.playerManager; }
-  get messages() { return this.messageHandler; }
+  get players(): PlayerManager { return this.playerManager; }
+  get messages(): MessageHandler { return this.messageHandler; }
   rng(): number { return Math.random(); }
   /** No bots on P2P — blasts have nobody to wake. */
   pushNoise(): void { /* intentionally silent */ }
@@ -82,40 +82,40 @@ export class P2PHost {
     // Peers send the same fire/beam intents a dedicated server takes.
     // claimsAccepted stays true — the roster surfaces this host can't
     // sim (creatures, deployables, repair) still adjudicate claims.
-    fireProjectile: (pid, wt, origin, dir, vel, shotId) =>
+    fireProjectile: (pid, wt, origin, dir, vel, shotId): string | null =>
       this.projectiles.spawn(pid, wt, origin, dir, vel, shotId),
     beamSweep: (pid, muzzle, dir, range) =>
       beamSweepRay({
         players: this.playerManager,
         field: getHeightfield(),
         solids: this.projectiles.solidColliders,
-        transitOf: (tpid) => this.moveShadows.transitOf(tpid),
+        transitOf: (tpid): number => this.moveShadows.transitOf(tpid),
       }, pid, muzzle, dir, range),
     // Movement reconciles like dedicated: inputs queue on the shadow,
     // reports judge it, resync/energy ride the same hooks.
-    moveInput: (pid, i, status, seq) => this.moveShadows.queueInput(pid, {
+    moveInput: (pid, i, status, seq): boolean => this.moveShadows.queueInput(pid, {
       forward: i.forward, right: i.right,
       jumpPressed: Boolean(i.jump), jumpHeld: Boolean(i.jump), skiHeld: Boolean(i.ski),
       jetHeld: Boolean(i.jet),
     }, status, seq),
     moveReport: (pid, pos, yaw, vel, inputSeq, rttMs) => this.moveShadows.reconcile(pid, pos, yaw, vel, inputSeq, rttMs),
-    inputSeqOf: (pid) => this.moveShadows.inputSeqOf(pid),
-    transitOf: (pid) => this.moveShadows.transitOf(pid),
-    transitNote: (pid, rtt, stamp) => {
+    inputSeqOf: (pid): number => this.moveShadows.inputSeqOf(pid),
+    transitOf: (pid): number => this.moveShadows.transitOf(pid),
+    transitNote: (pid, rtt, stamp): void => {
       if (this.lastPingStamp.get(pid) !== stamp) {return;}
       this.moveShadows.feedTransit(pid, rtt);
     },
-    drainEnergy: (pid, n) => this.moveShadows.drainEnergy(pid, n),
-    onSkillUse: (pid) => this.moveShadows.drainEnergy(pid, ENERGY.skillCost) ? true : 'gone',
-    energyOf: (pid) => this.moveShadows.energyOf(pid),
-    moveResync: (pid, pos, yaw, fullEnergy) => this.moveShadows.resync(pid, pos, yaw, fullEnergy),
-    moveTrack: (pid, pos, yaw) => {
+    drainEnergy: (pid, n): boolean => this.moveShadows.drainEnergy(pid, n),
+    onSkillUse: (pid): true | "gone" => this.moveShadows.drainEnergy(pid, ENERGY.skillCost) ? true : 'gone',
+    energyOf: (pid): number | null => this.moveShadows.energyOf(pid),
+    moveResync: (pid, pos, yaw, fullEnergy): void => this.moveShadows.resync(pid, pos, yaw, fullEnergy),
+    moveTrack: (pid, pos, yaw): void => {
       const p = this.playerManager.getPlayer(pid);
       this.moveShadows.track(pid, pos, yaw, p?.perk, p?.team);
       this.moveShadows.markReseated(pid);
     },
-    moveMute: (pid) => this.moveShadows.markReseated(pid),
-    moveUntrack: (pid) => this.moveShadows.untrack(pid),
+    moveMute: (pid): void => this.moveShadows.markReseated(pid),
+    moveUntrack: (pid): void => this.moveShadows.untrack(pid),
   };
 
   /** The host's own world — guests must build THIS terrain/structures,
@@ -167,12 +167,12 @@ export class P2PHost {
 
   constructor() {
     this.projectiles = new RoomProjectiles(this, null);
-    this.playerManager.energyBurn = (pid, n) => this.moveShadows.drainEnergy(pid, n);
+    this.playerManager.energyBurn = (pid, n): boolean => this.moveShadows.drainEnergy(pid, n);
     this.messageHandler = new MessageHandler(
       this.playerManager,
       this.rateLimiter,
-      (msg, exclude) => this.broadcast(msg, exclude),
-      (pid, msg) => this.sendJSON(pid, msg),
+      (msg, exclude): void => this.broadcast(msg, exclude),
+      (pid, msg): void => this.sendJSON(pid, msg),
       this.roomInfo,
     );
 
@@ -183,10 +183,10 @@ export class P2PHost {
     // every host alt-tab. Worker timers survive; fall back if unavailable.
     try {
       this.tickClock = new Worker(new URL('./tickClock.ts', import.meta.url), { type: 'module' });
-      this.tickClock.onmessage = () => this.tick();
+      this.tickClock.onmessage = (): void => this.tick();
     } catch {
       logger.warn('Worker clock unavailable — host tick will throttle while the tab is hidden');
-      this.tickTimer = setInterval(() => this.tick(), 50);
+      this.tickTimer = setInterval((): void => this.tick(), 50);
     }
   }
 
@@ -195,18 +195,18 @@ export class P2PHost {
   attachDataChannel(dc: RTCDataChannel): void {
     dc.binaryType = 'arraybuffer';
     const link: P2PLink = {
-      send: (data) => {
+      send: (data): void => {
         if (dc.readyState !== 'open') {return;}
         if (typeof data === 'string') {dc.send(data);}
         else {dc.send(new Uint8Array(data));}
       },
-      close: () => { try { dc.close(); } catch { /* gone */ } },
+      close: (): void => { try { dc.close(); } catch { /* gone */ } },
     };
-    dc.addEventListener('message', (ev) => {
+    dc.addEventListener('message', (ev): void => {
       const {data} = ev;
       this.onData(link, data instanceof ArrayBuffer ? new Uint8Array(data) : data as string);
     });
-    dc.addEventListener('close', () => this.onClose(link));
+    dc.addEventListener('close', (): void => this.onClose(link));
     logger.info('Guest DataChannel attached');
   }
 
@@ -331,7 +331,7 @@ export class P2PHost {
     // rides every position frame).
     if ((this.pingCycle += 1) % 10 === 0 && this.byPlayer.size > 0) {
       const ids = [...this.byPlayer.keys()];
-      const pid = ids.find((id) => !this.lastPingStamp.has(id))
+      const pid = ids.find((id): boolean => !this.lastPingStamp.has(id))
         ?? ids[(Math.trunc(this.pingCycle / 10)) % ids.length]!;
       const stamp = Date.now();
       this.lastPingStamp.set(pid, stamp);

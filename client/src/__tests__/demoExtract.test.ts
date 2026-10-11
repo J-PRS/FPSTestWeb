@@ -10,9 +10,9 @@ const pEvt = (t: number, id: number): ProjectileEvent =>
 const frame = (t: number, n = 0): DemoFrame =>
   ({ timestamp: t, frameNumber: n, posX: 0, posY: 0, posZ: 0, yaw: 0, pitch: 0, velX: 0, velY: 0, velZ: 0 }) as DemoFrame;
 
-const host = (times: number[], startN = 0) => {
+const host = (times: number[], startN = 0): DemoRecorder => {
   const buf = new CircularBuffer<DemoFrame>(64);
-  times.forEach((t, i) => buf.add(frame(t, startN + i)));
+  times.forEach((t, i): void => buf.add(frame(t, startN + i)));
   return {
     frameBuffer: buf,
     elapsedTime: times.at(-1) ?? 0,
@@ -24,32 +24,32 @@ const host = (times: number[], startN = 0) => {
   } as unknown as DemoRecorder;
 };
 
-describe('extractClip', () => {
-  it('empty buffer → null', () => {
+describe('extractClip', (): void => {
+  it('empty buffer → null', (): void => {
     expect(extractClip(host([]), 0, 5, 'x')).toBeNull();
   });
 
-  it('window outside the recording → null', () => {
+  it('window outside the recording → null', (): void => {
     const r = host([0, 1, 2]);
     expect(extractClip(r, 9, 12, 'x')).toBeNull();
   });
 
-  it('slices, renormalizes timestamps, and clamps to buffer extent', () => {
+  it('slices, renormalizes timestamps, and clamps to buffer extent', (): void => {
     const r = host([0, 1, 2, 3, 4, 5]);
     const clip = extractClip(r, 1.5, 4, 'mid')!;
     expect(clip).not.toBeNull();
     expect(clip.header.duration).toBeCloseTo(2.5, 5); // the requested window
-    expect(clip.frames.map((f) => f.timestamp)).toEqual([0.5, 1.5, 2.5]);
+    expect(clip.frames.map((f): number => f.timestamp)).toEqual([0.5, 1.5, 2.5]);
     expect(clip.header.totalFrames).toBe(3);
   });
 
-  it('frame numbers survive the 65536 wrap', () => {
+  it('frame numbers survive the 65536 wrap', (): void => {
     const r = host([0, 1, 2, 3], 65_534); // crosses the wrap mid-clip
     const clip = extractClip(r, 1, 3, 'wrap')!;
-    expect(clip.frames.map((f) => f.frameNumber)).toEqual([0, 1, 2]);
+    expect(clip.frames.map((f): number => f.frameNumber)).toEqual([0, 1, 2]);
   });
 
-  it('a still-live projectile injects a synthetic Fired at clipStart', () => {
+  it('a still-live projectile injects a synthetic Fired at clipStart', (): void => {
     const r = host([0, 1, 2, 3, 4]);
     r.projectileEvents.push(pEvt(0.5, 1), pEvt(2.5, 2), pEvt(6, 3));
     const clip = extractClip(r, 2, 4, 'w')!;
@@ -64,7 +64,7 @@ describe('extractClip', () => {
     expect(clip.header.projectileEventCount).toBe(2);
   });
 
-  it('a projectile killed before the window gets no synthetic spawn', () => {
+  it('a projectile killed before the window gets no synthetic spawn', (): void => {
     const r = host([0, 1, 2, 3, 4]);
     r.projectileEvents.push(
       { timestamp: 0.5, eventType: ProjectileEventType.Fired, projectileId: 1 } as ProjectileEvent,
@@ -74,7 +74,7 @@ describe('extractClip', () => {
     expect(clip.projectileEvents.length).toBe(0);
   });
 
-  it('startPose comes from the clip first frame, not the recording head', () => {
+  it('startPose comes from the clip first frame, not the recording head', (): void => {
     const r = host([0, 1, 2, 3]);
     r.frameBuffer.getUnsafe(2).posX = 42;
     const clip = extractClip(r, 1.5, 3, 'tail')!;
@@ -82,8 +82,8 @@ describe('extractClip', () => {
   });
 });
 
-describe('buildDemoFile', () => {
-  it('stamps counts from the actual arrays', () => {
+describe('buildDemoFile', (): void => {
+  it('stamps counts from the actual arrays', (): void => {
     const r = host([0, 1, 2]);
     const f = buildDemoFile(r, 'desc');
     expect(f.header.totalFrames).toBe(3);

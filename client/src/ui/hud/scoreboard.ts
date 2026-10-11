@@ -23,7 +23,7 @@ function prettifyMapName(file: string): string {
     .replace(/_nef$/i, '') // T2-conversion marker, not part of the name
     .split(/[\s_-]/)
     .filter(Boolean)
-    .map(w => MAP_ACRONYMS.has(w.toLowerCase()) ? w.toUpperCase() : w[0]!.toUpperCase() + w.slice(1))
+    .map((w): string => MAP_ACRONYMS.has(w.toLowerCase()) ? w.toUpperCase() : w[0]!.toUpperCase() + w.slice(1))
     .join(' ');
 }
 
@@ -53,7 +53,7 @@ const FRAG_RANKED: ReadonlySet<string> = new Set(['dm', 'tdm', 'duel']);
  *  ties render deterministically. */
 export function rankRows(mode: string | undefined, rows: SbRow[]): SbRow[] {
   const byFrags = FRAG_RANKED.has(mode ?? '');
-  return rows.slice().sort((a, b) =>
+  return rows.slice().sort((a, b): number =>
     (byFrags
       ? b.frags - a.frags || (b.score ?? 0) - (a.score ?? 0)
       : (b.score ?? b.frags) - (a.score ?? a.frags) || b.frags - a.frags)
@@ -162,16 +162,16 @@ export class Scoreboard {
     if (this.refresh > 0) {return;}
     this.refresh = 0.25;
     // Any row carrying a team → split into sections; otherwise flat FFA.
-    const hasTeams = this.rows.some(r => r.team);
+    const hasTeams = this.rows.some((r): TeamId | undefined => r.team);
     if (!hasTeams) {
-      this.tbody.replaceChildren(...this.rows.map((r, i) => sbRowEl(r, String(i + 1))));
+      this.tbody.replaceChildren(...this.rows.map((r, i): HTMLTableRowElement => sbRowEl(r, String(i + 1))));
       return;
     }
     const kids: HTMLElement[] = [];
     for (const team of ['alpha', 'bravo'] as const) {
       // # restarts per team — the split makes size imbalance readable at
       // a glance (a 9-row team vs a 3-row team is obvious).
-      const trs = this.rows.filter(r => r.team === team).map((r, i) => sbRowEl(r, String(i + 1)));
+      const trs = this.rows.filter((r): boolean => r.team === team).map((r, i): HTMLTableRowElement => sbRowEl(r, String(i + 1)));
       if (trs.length === 0) {continue;}
       // Team label is redundant — name cells are already alpha/bravo
       // tinted. The row survives as a tinted hairline divider so the
@@ -184,8 +184,8 @@ export class Scoreboard {
       kids.push(th, ...trs);
     }
     // Teamless stragglers (spectators, unteamed) under their own header.
-    const rest = this.rows.filter(r => !r.team);
-    if (rest.length > 0) {kids.push(...rest.map((r, i) => sbRowEl(r, String(i + 1))));}
+    const rest = this.rows.filter((r): boolean => !r.team);
+    if (rest.length > 0) {kids.push(...rest.map((r, i): HTMLTableRowElement => sbRowEl(r, String(i + 1))));}
     this.tbody.replaceChildren(...kids);
   }
 }

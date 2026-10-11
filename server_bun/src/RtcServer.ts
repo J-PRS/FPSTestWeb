@@ -150,7 +150,7 @@ export class RtcServer {
 
   onOpen(ws: ServerWebSocket<WebSocketData>): void {
     this.signalSockets.add(ws);
-    loadNd().then((ok) => {
+    loadNd().then((ok): void => {
       if (!ok) {ws.close(1013, 'rtc unavailable');}
     });
   }
@@ -180,14 +180,14 @@ export class RtcServer {
     let closedOnce = false;
     // Half-open peer guard: if signaling finished but no datachannel
     // arrives (client vanished mid-handshake), don't hold the PC forever.
-    const staleTimer = setTimeout(() => {
+    const staleTimer = setTimeout((): void => {
       if (!opened) {
         this.peers.delete(ws);
         try { pc.close(); } catch { /* gone */ }
       }
     }, 30_000);
     let dcCount = 0;
-    pc.onDataChannel((dc) => {
+    pc.onDataChannel((dc): void => {
       // The offer cap bounds peers, not channels — a single accepted
       // peer could mint unlimited adapterOf entries by spamming
       // datachannels. Legit flow opens exactly two (game + ctrl).
@@ -197,12 +197,12 @@ export class RtcServer {
       }
       adapter.attach(dc as DataChannelLabeled);
       this.adapterOf.set(dc, adapter);
-      dc.onMessage((msg) => this.game.onMessage(sock, msg instanceof Uint8Array ? msg : String(msg)));
-      dc.onOpen(() => {
+      dc.onMessage((msg): void => this.game.onMessage(sock, msg instanceof Uint8Array ? msg : String(msg)));
+      dc.onOpen((): void => {
         // game.onOpen once — whichever channel opens first starts the session
         if (!opened) { opened = true; clearTimeout(staleTimer); this.livePeers.add(ws); this.game.onOpen(sock); }
       });
-      dc.onClosed(() => {
+      dc.onClosed((): void => {
         this.adapterOf.delete(dc);
         // Two channels (game/ctrl) die together — only the first close
         // runs the grace path, else every RTC player logs disconnect twice.
@@ -215,7 +215,7 @@ export class RtcServer {
         }
       });
     });
-    pc.onGatheringStateChange((state) => {
+    pc.onGatheringStateChange((state): void => {
       if (state !== 'complete' || ws.readyState !== 1) {return;}
       const local = pc.localDescription();
       if (!local) {return;}

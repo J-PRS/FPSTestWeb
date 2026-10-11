@@ -13,8 +13,8 @@ const MID_RUN_ROLL_BYTES = 32 * 1024 * 1024;
 // so a spamming appender still filled the disk through the roll itself.
 const OLD_KEEP = 16;
 
-const p2 = (n: number) => String(n).padStart(2, '0');
-const logStamp = (t: Date) =>
+const p2 = (n: number): string => String(n).padStart(2, '0');
+const logStamp = (t: Date): string =>
   `${t.getFullYear()}_${p2(t.getMonth() + 1)}_${p2(t.getDate())}-${p2(t.getHours())}_${p2(t.getMinutes())}_${p2(t.getSeconds())}`;
 
 /** Rolls `p` to an OLD/ sibling with its mtime stamped in the name when
@@ -43,9 +43,9 @@ export function rotateLogIfBig(p: string): void {
 function pruneOld(oldDir: string): void {
   try {
     const files = readdirSync(oldDir)
-      .map((f) => join(oldDir, f))
-      .filter((p) => statSync(p).isFile())
-      .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
+      .map((f): string => join(oldDir, f))
+      .filter((p): boolean => statSync(p).isFile())
+      .sort((a, b): number => statSync(b).mtimeMs - statSync(a).mtimeMs);
     for (const p of files.slice(OLD_KEEP)) {unlinkSync(p);}
   } catch { /* pruning is best-effort like rotation itself */ }
 }

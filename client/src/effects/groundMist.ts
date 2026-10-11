@@ -35,7 +35,7 @@ export class GroundMist {
       const z = (Math.random() * 2 - 1) * SAMPLE_RANGE;
       candidates.push({ x, z, h: terrain.getHeightVisual(x, z) });
     }
-    candidates.sort((a, b) => a.h - b.h);
+    candidates.sort((a, b): number => a.h - b.h);
 
     const geo = new THREE.PlaneGeometry(16, 6);
     const tex = getGlowTexture(128);

@@ -162,21 +162,21 @@ export class PoseControl {
    *  writes into them every frame. */
   keyBones(): THREE.Object3D[] {
     return [
-      ...this.aimBones.map(b => b.bone),
-      ...this.steadyBones.map(b => b.bone),
-      ...this.footSnaps.flatMap(f => [f.foot, f.shin, f.tip]),
+      ...this.aimBones.map((b): THREE.Object3D<THREE.Object3DEventMap> => b.bone),
+      ...this.steadyBones.map((b): THREE.Object3D<THREE.Object3DEventMap> => b.bone),
+      ...this.footSnaps.flatMap((f): THREE.Object3D<THREE.Object3DEventMap>[] => [f.foot, f.shin, f.tip]),
     ];
   }
 
   get aimBoneCount(): number { return this.aimBones.length; }
 
   aimBoneNames(): string {
-    return this.aimBones.map(b => b.bone.name).join(', ') || 'NONE';
+    return this.aimBones.map((b): string => b.bone.name).join(', ') || 'NONE';
   }
 
   /** Live-tune the hold pose (posedump iteration loop) — deg per role. */
-  debugSetHold(upper: [number, number, number], lower: [number, number, number], hand: [number, number, number], lUpper: [number, number, number] = upper.map(v => -v) as [number, number, number], lLower: [number, number, number] = lower, lHand: [number, number, number] = hand): void {
-    const rads = [upper, lower, hand, lUpper, lLower, lHand].map(e =>
+  debugSetHold(upper: [number, number, number], lower: [number, number, number], hand: [number, number, number], lUpper: [number, number, number] = upper.map((v): number => -v) as [number, number, number], lLower: [number, number, number] = lower, lHand: [number, number, number] = hand): void {
+    const rads = [upper, lower, hand, lUpper, lLower, lHand].map((e): THREE.Quaternion =>
       new THREE.Quaternion().setFromEuler(new THREE.Euler(e[0] * Math.PI / 180, e[1] * Math.PI / 180, e[2] * Math.PI / 180)));
     for (const hb of this.holdBones) {hb.off.copy(rads[hb.role] ?? new THREE.Quaternion());}
   }
@@ -224,7 +224,7 @@ export class PoseControl {
     const mk = (name: string): THREE.AnimationAction | null => {
       const src = animations.get(name)?.getClip();
       if (!src) {return null;}
-      const tracks = src.tracks.filter(t =>
+      const tracks = src.tracks.filter((t): boolean =>
         mask.has(normBone(t.name.slice(0, t.name.indexOf('.')))));
       if (tracks.length === 0) {return null;}
       const clip = new THREE.AnimationClip(`${name  }.aim`, src.duration, tracks);

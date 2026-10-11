@@ -14,7 +14,7 @@ import { BRAWL_RANGE } from '../../../shared/botBrain.js';
  * wire humans' server meter, so tuning you feel is what bots get.
  */
 export class PlayerSheep {
-  private meter = new SheepMeter({ warn: (m) => Logger.warn(`[sheep] ${m}`) });
+  private meter = new SheepMeter({ warn: (m): void => Logger.warn(`[sheep] ${m}`) });
   private body: SheepBody;
   private prevShoot = 0;
 

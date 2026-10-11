@@ -84,13 +84,13 @@ export class BallSim {
               broadcastBinaryReliable?: (data: Uint8Array) => void) {
     this.players = players;
     this.broadcast = broadcast;
-    this.broadcastBinaryReliable = broadcastBinaryReliable ?? (() => { return; });
+    this.broadcastBinaryReliable = broadcastBinaryReliable ?? ((): void => { return; });
     this.combat = new BallCombat({
-      balls: () => this.balls,
-      field: () => this.field,
+      balls: (): Map<number, SimBall> => this.balls,
+      field: (): Heightfield | null => this.field,
       players,
-      segment: (b, kind) => this.segment(b, kind),
-      kill: (b, by) => this.kill(b, by),
+      segment: (b, kind): void => this.segment(b, kind),
+      kill: (b, by): void => this.kill(b, by),
     });
   }
 
@@ -110,7 +110,7 @@ export class BallSim {
   dormant = false;
   /** Spawn/host-side randomness — tests inject a seeded fn so scenario
    *  runs are reproducible; the wire only carries resolved outcomes. */
-  rng: () => number = () => botRand();
+  rng: () => number = (): number => botRand();
 
   /** Attach an already-loaded heightfield — rooms share one parsed field
    *  rather than re-reading the file each. The room tick drives step();

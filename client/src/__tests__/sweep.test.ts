@@ -7,9 +7,9 @@ import type { ProjectileConfig } from '../projectiles/types';
 import type { SweepObstacle } from '../projectiles/Projectile';
 
 // Flat ground at y=0 — the host is a plain object, no scene needed.
-const flatTerrain = { getHeight: () => 0 } as any;
+const flatTerrain = { getHeight: (): number => 0 } as any;
 
-function host(over: Partial<SweepHost> & { from?: [number, number, number]; to?: [number, number, number]; config?: Partial<ProjectileConfig> } = {}) {
+function host(over: Partial<SweepHost> & { from?: [number, number, number]; to?: [number, number, number]; config?: Partial<ProjectileConfig> } = {}): SweepHost & { hits: { x: number; y: number; z: number; t: number; }[]; } {
   const hits: { x: number; y: number; z: number; t: number }[] = [];
   const h: SweepHost & { hits: typeof hits } = {
     pos: new THREE.Vector3(...(over.to ?? [0, 1, 0])),
@@ -24,43 +24,43 @@ function host(over: Partial<SweepHost> & { from?: [number, number, number]; to?:
     wakeBallDistances: new Map(),
     wakePlayerDistances: new Map(),
     hits,
-    hitAt(x, y, z, t) { hits.push({ x, y, z, t }); this.hitPoint.set(x, y, z); this.hitPointValid = true; },
+    hitAt(x, y, z, t): void { hits.push({ x, y, z, t }); this.hitPoint.set(x, y, z); this.hitPointValid = true; },
   };
   return h;
 }
 
-describe('sweepTerrain', () => {
-  it('hits ground on a downward arc and refines hitPoint near the crossing', () => {
+describe('sweepTerrain', (): void => {
+  it('hits ground on a downward arc and refines hitPoint near the crossing', (): void => {
     const h = host({ from: [0, 5, 0], to: [0, -5, 0] });
     expect(sweepTerrain(h, flatTerrain)).toBe(true);
     // offset 0.3 → contact where y crosses 0.3, i.e. t≈0.47 → y≈0.3
     expect(h.hitPoint.y).toBeCloseTo(0.3, 1);
   });
 
-  it('misses a path that stays above ground', () => {
+  it('misses a path that stays above ground', (): void => {
     const h = host({ from: [0, 5, 0], to: [10, 5, 0] });
     expect(sweepTerrain(h, flatTerrain)).toBe(false);
     expect(h.hitPointValid).toBe(false);
   });
 });
 
-describe('sweepPlayer', () => {
+describe('sweepPlayer', (): void => {
   // Eye pos for a player standing at (0,0,0): y = EYE_OFFSET.
   const eye = new THREE.Vector3(0, EYE_OFFSET, 0);
 
-  it('direct hit through the capsule center', () => {
+  it('direct hit through the capsule center', (): void => {
     const h = host({ from: [-5, CAPSULE_CENTER_Y, 0], to: [5, CAPSULE_CENTER_Y, 0] });
     expect(sweepPlayer(h, eye, 'p1')).toBe(true);
     expect(h.directHit).toBe(true);
     expect(h.minHitDist).toBeLessThan(PLAYER_RADIUS);
   });
 
-  it('misses a sweep past the capsule', () => {
+  it('misses a sweep past the capsule', (): void => {
     const h = host({ from: [-5, 30, 0], to: [5, 30, 0] });
     expect(sweepPlayer(h, eye, 'p1')).toBe(false);
   });
 
-  it('wake hit only fires after passing closest approach', () => {
+  it('wake hit only fires after passing closest approach', (): void => {
     // Expanding radius 2: sweep that grazes — distance never under core.
     const from: [number, number, number] = [-5, CAPSULE_CENTER_Y, 1.5];
     const mid: [number, number, number] = [0.5, CAPSULE_CENTER_Y, 1.5]; // just past closest approach
@@ -75,8 +75,8 @@ describe('sweepPlayer', () => {
   });
 });
 
-describe('sweepObstacle', () => {
-  it('detects a crossing segment-vs-segment intercept', () => {
+describe('sweepObstacle', (): void => {
+  it('detects a crossing segment-vs-segment intercept', (): void => {
     const h = host({ from: [0, 0, -5], to: [0, 0, 5] });
     const bolt: SweepObstacle = {
       pos: new THREE.Vector3(3, 0, 0),      // moving across our path
@@ -89,7 +89,7 @@ describe('sweepObstacle', () => {
     expect(h.hits[0]!.t).toBeCloseTo(0.5, 5);
   });
 
-  it('misses when segments never come within radii', () => {
+  it('misses when segments never come within radii', (): void => {
     const h = host({ from: [0, 0, -5], to: [0, 0, 5] });
     const bolt: SweepObstacle = {
       pos: new THREE.Vector3(10, 0, 0),

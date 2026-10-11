@@ -64,7 +64,7 @@ export function getSwarm(species: string): SpeciesSwarm | null {
   const swarm = new SpeciesSwarm(registryScene, parts, spec.capacity);
   // Aim-probe tags — a crosshair hit on any part mesh resolves to this
   // species + the owning entity through swarm.ownerAt.
-  swarm.meshes.forEach((m, i) => markProbe(m, { kind: 'species', species, swarm, part: i }));
+  swarm.meshes.forEach((m, i): void => markProbe(m, { kind: 'species', species, swarm, part: i }));
   swarms.set(species, swarm);
   return swarm;
 }
@@ -149,4 +149,4 @@ export function swarmStats(): Record<string, unknown> {
 // InstancedBlobShadows.set flag their own buffers dirty per write.
 
 // Alt+Q census section — species/gib/shadow swarm inventory.
-registerDiag('swarm', () => ({ swarm: swarmStats() }));
+registerDiag('swarm', (): { swarm: Record<string, unknown>; } => ({ swarm: swarmStats() }));

@@ -84,7 +84,7 @@ function ichorSpray(c: CombatCtx, ball: Targetable, dir: THREE.Vector3, scale: n
     deps.lazyScene(), deps.lazyTerrain(), ball.pos,
     _ichorCol.setHex(hex), scale,
     { impulseDir: dir, kind: 'goo', paintBudget: 4,
-      onDropletLand: (x, z, r, dx, dz) => splatAt(c, x, z, r * (4 + Math.random() * 2.5), hex, 0.5, dx, dz) },
+      onDropletLand: (x, z, r, dx, dz): void => splatAt(c, x, z, r * (4 + Math.random() * 2.5), hex, 0.5, dx, dz) },
   ));
 }
 
@@ -265,8 +265,8 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
   // local) but never send the claim — the authority's shell arrives at
   // the same contact and declares it via broadcasts.
   const sendAOE = !claimable || claimLegal === false || (serverSimmed(weaponType) && networkManager.authorityShells())
-    ? () => { return; }
-    : (pos: { x: number; y: number; z: number }, targetId: string | null) =>
+    ? (): void => { return; }
+    : (pos: { x: number; y: number; z: number }, targetId: string | null): void =>
     networkManager.sendAOEShot({
       position: pos, weaponType, excludeTargetId: targetId,
       // hitAge is 0 when the projectile detonated without a swept hit

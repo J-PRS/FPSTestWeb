@@ -6,15 +6,15 @@ import { RibbonTrail } from '../effects/RibbonTrail.js';
 // Trails need no GL — BufferGeometry is pure data; the batch mesh just
 // sits in the scene graph.
 const scene = new THREE.Scene();
-const pos = (x = 0) => new THREE.Vector3(x, 0, 0);
-const vel = () => new THREE.Vector3(0, 0, 10);
+const pos = (x = 0): THREE.Vector3 => new THREE.Vector3(x, 0, 0);
+const vel = (): THREE.Vector3 => new THREE.Vector3(0, 0, 10);
 
 const slot = (r: RibbonTrail): number => (r as unknown as { slot: number }).slot;
-const batch = (r: RibbonTrail) =>
+const batch = (r: RibbonTrail): { used: Set<number>; free: number[]; } =>
   (r as unknown as { batch: { used: Set<number>; free: number[] } }).batch;
 
-describe('RibbonTrail pooling + slots', () => {
-  it('acquired trails claim distinct packed slots', () => {
+describe('RibbonTrail pooling + slots', (): void => {
+  it('acquired trails claim distinct packed slots', (): void => {
     const a = RibbonTrail.acquire(scene, { color: 0xFF_00_00 });
     const b = RibbonTrail.acquire(scene, { color: 0x00_FF_00 });
     expect(slot(a)).not.toBe(slot(b));
@@ -24,7 +24,7 @@ describe('RibbonTrail pooling + slots', () => {
     a.dispose();
   });
 
-  it('released slots return to the free list and get re-handed out', () => {
+  it('released slots return to the free list and get re-handed out', (): void => {
     const a = RibbonTrail.acquire(scene, { color: 0xFF_00_00 });
     const s = slot(a);
     a.dispose();
@@ -34,7 +34,7 @@ describe('RibbonTrail pooling + slots', () => {
     b.dispose();
   });
 
-  it('pooled instances are reused after dispose', () => {
+  it('pooled instances are reused after dispose', (): void => {
     const a = RibbonTrail.acquire(scene, { color: 0xFF_00_00 });
     a.dispose();
     const b = RibbonTrail.acquire(scene, { color: 0x00_FF_00 });
@@ -42,7 +42,7 @@ describe('RibbonTrail pooling + slots', () => {
     b.dispose();
   });
 
-  it('done flips true only after the last sample outlives its life', () => {
+  it('done flips true only after the last sample outlives its life', (): void => {
     const r = RibbonTrail.acquire(scene, { color: 0xFF_00_00, width: 0.5, life: 0.1 }); // life 0.1s
     r.push(pos(0), vel());
     r.push(pos(1), vel());
@@ -53,7 +53,7 @@ describe('RibbonTrail pooling + slots', () => {
     r.dispose();
   });
 
-  it('clear() drops samples and zeroes slot colors (teleport streak)', () => {
+  it('clear() drops samples and zeroes slot colors (teleport streak)', (): void => {
     const r = RibbonTrail.acquire(scene, { color: 0xFF_00_00 });
     r.push(pos(0), vel());
     r.push(pos(1), vel());
@@ -66,7 +66,7 @@ describe('RibbonTrail pooling + slots', () => {
   // ---- lifecycle invariants pinned before the P1/P2 restructure ----
   // These describe the contract the overhaul keeps, not the bugs it kills.
 
-  it('a full ring rewrite keeps vert 0 at the CURRENT oldest sample', () => {
+  it('a full ring rewrite keeps vert 0 at the CURRENT oldest sample', (): void => {
     // Push past MAX_SAMPLES so every push evicts — each vert's sample
     // assignment shifts. Buffer vert 0 must track the live oldest, not
     // the position it was first written with (the stale-vert streak).
@@ -85,7 +85,7 @@ describe('RibbonTrail pooling + slots', () => {
     r.dispose();
   });
 
-  it('a position discontinuity cuts the strip instead of drawing a chord', () => {
+  it('a position discontinuity cuts the strip instead of drawing a chord', (): void => {
     const r = RibbonTrail.acquire(scene, { color: 0xFF_00_00 });
     r.push(pos(0), vel());
     r.push(pos(1), vel());
@@ -96,7 +96,7 @@ describe('RibbonTrail pooling + slots', () => {
     r.dispose();
   });
 
-  it('push after dispose counts a zombie and writes nothing', () => {
+  it('push after dispose counts a zombie and writes nothing', (): void => {
     const r = RibbonTrail.acquire(scene, { color: 0xFF_00_00 });
     r.dispose();
     const before = RibbonTrail.zombiePushes;
@@ -104,7 +104,7 @@ describe('RibbonTrail pooling + slots', () => {
     expect(RibbonTrail.zombiePushes).toBe(before + 1);
   });
 
-  it('double dispose is safe — the pool never hands one ribbon to two owners', () => {
+  it('double dispose is safe — the pool never hands one ribbon to two owners', (): void => {
     const r = RibbonTrail.acquire(scene, { color: 0xFF_00_00 });
     r.dispose();
     r.dispose(); // inPool guard — a second push would double-list it
@@ -119,7 +119,7 @@ describe('RibbonTrail pooling + slots', () => {
   // P2 generational slots: a handle whose slot was re-issued to a new
   // owner must refuse writes — the batch's gen word proves staleness
   // where slot index alone can't.
-  it('a stale gen handle refuses to paint the new owner\u2019s slot', () => {
+  it('a stale gen handle refuses to paint the new owner\u2019s slot', (): void => {
     const a = RibbonTrail.acquire(scene, { color: 0xFF_00_00 });
     const s = slot(a);
     const b = (a as unknown as { batch: { release(n: number): void; claim(): number } }).batch;
@@ -139,7 +139,7 @@ describe('RibbonTrail pooling + slots', () => {
     c.dispose();
   });
 
-  it('a stale releaseSlot can\u2019t steal the slot back from its new owner', () => {
+  it('a stale releaseSlot can\u2019t steal the slot back from its new owner', (): void => {
     const a = RibbonTrail.acquire(scene, { color: 0xFF_00_00 });
     const s = slot(a);
     const ba = (a as unknown as { batch: { release(n: number): void } }).batch;
@@ -152,7 +152,7 @@ describe('RibbonTrail pooling + slots', () => {
     c.dispose();
   });
 
-  it('done ribbons the owner stopped ticking get swept as stale', () => {
+  it('done ribbons the owner stopped ticking get swept as stale', (): void => {
     const r = RibbonTrail.acquire(scene, { color: 0xFF_00_00, life: 0.05 });
     r.push(pos(0), vel());
     r.push(pos(1), vel());
@@ -166,7 +166,7 @@ describe('RibbonTrail pooling + slots', () => {
     expect(RibbonTrail.reapedStale).toBe(before + 1);
   });
 
-  it('sweepStale drains a stopped orphan mid-fade instead of waiting on done forever', () => {
+  it('sweepStale drains a stopped orphan mid-fade instead of waiting on done forever', (): void => {
     const r = RibbonTrail.acquire(scene, { color: 0xFF_00_00, life: 0.05 });
     r.push(pos(0), vel());
     r.push(pos(1), vel());

@@ -29,50 +29,50 @@ export function makeDeps() {
     yaw: 0, pitch: 0, onGround: true,
     health: 100, armor: 0, isDead: false, isShielded: false,
     buffUntil: { regen: 0, dd: 0 },
-    absorbShieldDamage() { return; }, applyPull() { return; }, applyKnockback() { return; },
-    heal() { return; }, grantJetBoost() { return; }, syncMovement() { return; }, markTeleport() { return; },
+    absorbShieldDamage(): void { return; }, applyPull(): void { return; }, applyKnockback(): void { return; },
+    heal(): void { return; }, grantJetBoost(): void { return; }, syncMovement(): void { return; }, markTeleport(): void { return; },
     // Correction render-ease seam — a spy so tests can see the ease fired
     // (and so a missing wiring throws instead of being swallowed).
-    noteRenderSnap(jump: THREE.Vector3) { calls.renderSnap.push(jump.length()); },
+    noteRenderSnap(jump: THREE.Vector3): void { calls.renderSnap.push(jump.length()); },
     movement: {
-      setState() { return; }, setInput() { return; }, update() { return; }, setStructures() { return; },
-      getState: () => ({ pos: new THREE.Vector3(), vel: new THREE.Vector3(), onGround: true }),
+      setState(): void { return; }, setInput(): void { return; }, update(): void { return; }, setStructures(): void { return; },
+      getState: (): { pos: THREE.Vector3; vel: THREE.Vector3; onGround: boolean; } => ({ pos: new THREE.Vector3(), vel: new THREE.Vector3(), onGround: true }),
     },
   };
   const deps: NetDeps = {
-    lazyNetworkManager: () => nm,
-    lazyScene: () => scene,
-    lazyTerrain: () => ({ getHeight: () => 0, reloadHeightmap() { return; } }) as never,
-    lazyPlayer: () => player as never,
-    lazyEffects: () => ({ spawnJumpDust() { return; }, spawnJetpack() { return; }, spawnBeam() { return; } }) as never,
-    lazyHud: () => new Proxy({}, { get: (_t, k) => (a?: unknown) => { calls.hud.push(`${String(k)}`); return a; } }) as never,
-    lazyHealthBarSystem: () => new Proxy({}, { get: () => () => { return; } }) as never,
-    fragMessages: { show: (m: string) => calls.frag.push(m) } as never,
+    lazyNetworkManager: (): NetworkManager => nm,
+    lazyScene: (): THREE.Scene<THREE.Object3DEventMap> => scene,
+    lazyTerrain: (): never => ({ getHeight: (): number => 0, reloadHeightmap(): void { return; } }) as never,
+    lazyPlayer: (): never => player as never,
+    lazyEffects: (): never => ({ spawnJumpDust(): void { return; }, spawnJetpack(): void { return; }, spawnBeam(): void { return; } }) as never,
+    lazyHud: (): never => new Proxy({}, { get: (_t, k): (a?: unknown) => unknown => (a?: unknown): unknown => { calls.hud.push(`${String(k)}`); return a; } }) as never,
+    lazyHealthBarSystem: (): never => new Proxy({}, { get: (): () => void => (): void => { return; } }) as never,
+    fragMessages: { show: (m: string): number => calls.frag.push(m) } as never,
     explosionTracker: new ExplosionTracker(),
     // dispatch() swallows handler throws into a warn — in tests a thrown
     // handler is always a bug (partial state applied), so fail loudly.
     logger: {
-      debug() { return; }, info() { return; }, error() { return; },
-      warn(m: string) { if (m.startsWith('Handler threw')) {throw new Error(m);} },
+      debug(): void { return; }, info(): void { return; }, error(): void { return; },
+      warn(m: string): void { if (m.startsWith('Handler threw')) {throw new Error(m);} },
     } as never,
     world,
-    setLastSentPos() { return; },
-    entities: () => ({
-      netBallSpawn: () => calls.entities.push('ballSpawn'),
-      netBallSegment: () => calls.entities.push('ballSegment'),
-      netBallDie: () => calls.entities.push('ballDie'),
-      netBallRoster: () => calls.entities.push('ballRoster'),
+    setLastSentPos(): void { return; },
+    entities: (): never => ({
+      netBallSpawn: (): number => calls.entities.push('ballSpawn'),
+      netBallSegment: (): number => calls.entities.push('ballSegment'),
+      netBallDie: (): number => calls.entities.push('ballDie'),
+      netBallRoster: (): number => calls.entities.push('ballRoster'),
       deployables: {
-        remoteIds: () => [] as number[],
-        remoteSpawn: (id: number) => calls.deployables.push(`spawn:${id}`),
-        remoteRemove: (id: number) => calls.deployables.push(`gone:${id}`),
-        remoteTurretShot: (id: number) => calls.deployables.push(`shot:${id}`),
-        remoteMineBoom: (id: number) => calls.deployables.push(`boom:${id}`),
+        remoteIds: (): number[] => [] as number[],
+        remoteSpawn: (id: number): number => calls.deployables.push(`spawn:${id}`),
+        remoteRemove: (id: number): number => calls.deployables.push(`gone:${id}`),
+        remoteTurretShot: (id: number): number => calls.deployables.push(`shot:${id}`),
+        remoteMineBoom: (id: number): number => calls.deployables.push(`boom:${id}`),
         // reconcileDeployables (gameState roster path) reads these — a
         // stub without them throws mid-handler and half-applies state.
-        remoteReplicas: () => new Map(),
-        applyDeployHp: () => { return; },
-        cullOwn: () => { return; },
+        remoteReplicas: (): Map<any, any> => new Map(),
+        applyDeployHp: (): void => { return; },
+        cullOwn: (): void => { return; },
       },
     }) as never,
   };
@@ -81,5 +81,5 @@ export function makeDeps() {
   return { nm: nm as unknown as NmWithDispatch, world, calls, player };
 }
 
-export const feed = (nm: NmWithDispatch, m: ServerMessage) => nm.replayWireMessage(m);
-export const feedBin = (nm: NmWithDispatch, frame: Uint8Array) => nm.replayWireMessage(frame);
+export const feed = (nm: NmWithDispatch, m: ServerMessage): void => nm.replayWireMessage(m);
+export const feedBin = (nm: NmWithDispatch, frame: Uint8Array): void => nm.replayWireMessage(frame);

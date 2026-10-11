@@ -156,11 +156,11 @@ export class RoomDeployables {
       this.room.pickups?.spawn(Object.assign({}, pos), 'gem', NUGGET_ARM_S);
       return true;
     }
-    const owned = [...this.items.values()].filter((d) => d.owner === playerId && d.kind === k);
+    const owned = [...this.items.values()].filter((d): boolean => d.owner === playerId && d.kind === k);
     // At cap: recycle the oldest rather than refuse — Tribes remote-arms
     // behavior, keeps the feel without an unbounded pile.
     if (owned.length >= MAX_PER_PLAYER[k]) {
-      owned.sort((a, b) => a.ttl - b.ttl);
+      owned.sort((a, b): number => a.ttl - b.ttl);
       this.remove(owned[0]!.id);
     }
     const id = ((this.nextId += 1) - 1);

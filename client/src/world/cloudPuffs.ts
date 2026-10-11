@@ -120,7 +120,7 @@ const MAX_PUFFS = 96;
 
 export function buildPuffGeometry(base: Float32Array, noiseSize: number, yMin: number, yMax: number): THREE.BufferGeometry {
   const centers: number[] = [], radii: number[] = [], seeds: number[] = [];
-  const push = (x: number, y: number, z: number, r: number, s: number) => {
+  const push = (x: number, y: number, z: number, r: number, s: number): void => {
     centers.push(x, y, z);
     radii.push(r);
     seeds.push(s);

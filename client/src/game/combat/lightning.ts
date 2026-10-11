@@ -99,7 +99,7 @@ function lgBallNode(deps: CombatDeps): { mesh: THREE.Mesh; mat: THREE.MeshLamber
   }
   lgBall = null;
   let best: THREE.Mesh | null = null, bestR = 0;
-  g?.traverse((o) => {
+  g?.traverse((o): void => {
     const m = o as THREE.Mesh;
     if (!m.isMesh || (m.geometry as THREE.BufferGeometry).type !== 'SphereGeometry') {return;}
     m.geometry.computeBoundingSphere();
@@ -171,7 +171,7 @@ function lgPop(deps: CombatDeps, hooks: LightningHooks, pos: THREE.Vector3, acc:
     // detonates the banked charge itself.
     sendAOE: deps.lazyNetworkManager()?.authorityShells()
       ? undefined
-      : (p, targetId) => deps.lazyNetworkManager()?.sendAOEShot({ position: p, weaponType: WeaponType.Lightning, excludeTargetId: targetId }),
+      : (p, targetId): void => deps.lazyNetworkManager()?.sendAOEShot({ position: p, weaponType: WeaponType.Lightning, excludeTargetId: targetId }),
     explosionTint: 0x8F_DC_FF, vfxRadius: radius * 0.8, weaponType: WeaponType.Lightning,
   });
 }
@@ -307,7 +307,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
     rampP: new Map(),
     shroud: new Map(), // charged-enemy glow — telegraphs the banked pop
   };
-  dischargeFx = (pos, amount) => lgPop(deps, hooks, pos, amount);
+  dischargeFx = (pos, amount): void => lgPop(deps, hooks, pos, amount);
 
   // Beam start: the muzzle node's actual rendered pixel, unprojected into
   // world space through the main camera — FOV difference between the
@@ -397,5 +397,5 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
   }
 
 
-  return { lightning, updateBeamVisual: () => updateBeamVisual(deps, lg), tickBeam: (dt: number) => tickBeam(deps, lg, dt) };
+  return { lightning, updateBeamVisual: (): void => updateBeamVisual(deps, lg), tickBeam: (dt: number): void => tickBeam(deps, lg, dt) };
 }

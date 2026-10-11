@@ -20,15 +20,15 @@ u.timeline.style.cssText = `
   -webkit-appearance: none; appearance: none;
   height: 6px; background: #333; border-radius: 3px; outline: none;
 `;
-u.timeline.addEventListener('input', () => {
+u.timeline.addEventListener('input', (): void => {
   const time = Number.parseFloat(u.timeline.value);
   u.callbacks?.onSeek(time);
 });
 // While the thumb is held, setTime must not write .value back — playback
 // would keep resetting the slider under the cursor and the emitted seeks
 // chase stale positions (classic scrub fight).
-u.timeline.addEventListener('pointerdown', () => { u.timelineDragging = true; });
-window.addEventListener('pointerup', () => { u.timelineDragging = false; });
+u.timeline.addEventListener('pointerdown', (): void => { u.timelineDragging = true; });
+window.addEventListener('pointerup', (): void => { u.timelineDragging = false; });
 
 // Inject thumb styling (pseudo-elements can't be set via inline styles)
 if (!document.querySelector('#demo-ui-slider-style')) {
@@ -77,7 +77,7 @@ for (const speed of [0.25, 0.5, 1, 2, 4]) {
   u.speedSelect.append(opt);
 }
 u.speedSelect.value = '1';
-u.speedSelect.addEventListener('change', () => {
+u.speedSelect.addEventListener('change', (): void => {
   u.callbacks?.onSpeedChange(Number.parseFloat(u.speedSelect.value));
 });
 
@@ -86,7 +86,7 @@ u.loopBtn = document.createElement('button');
 u.loopBtn.textContent = '↻';
 u.loopBtn.style.cssText = btnStyle('#333');
 u.loopBtn.title = 'Loop';
-u.loopBtn.addEventListener('click', () => {
+u.loopBtn.addEventListener('click', (): void => {
   u.callbacks?.onLoop(!u.loopBtn.classList.contains('active'));
 });
 
@@ -95,21 +95,21 @@ u.saveBtn = document.createElement('button');
 u.saveBtn.textContent = 'Save';
 u.saveBtn.style.cssText = btnStyle('#2a5a2a');
 u.saveBtn.title = 'Save demo to file';
-u.saveBtn.addEventListener('click', () => u.callbacks?.onSave());
+u.saveBtn.addEventListener('click', (): void | undefined => u.callbacks?.onSave());
 
 // MP4 export button — records the render canvas live during playback
 u.videoBtn = document.createElement('button');
 u.videoBtn.textContent = 'MP4';
 u.videoBtn.style.cssText = btnStyle('#5a2a2a');
 u.videoBtn.title = 'Record canvas to mp4/webm while playing';
-u.videoBtn.addEventListener('click', () => u.callbacks?.onVideoToggle());
+u.videoBtn.addEventListener('click', (): void | undefined => u.callbacks?.onVideoToggle());
 
 // Load input (hidden file input)
 u.loadInput = document.createElement('input');
 u.loadInput.type = 'file';
 u.loadInput.accept = '.demo';
 u.loadInput.style.display = 'none';
-u.loadInput.addEventListener('change', () => {
+u.loadInput.addEventListener('change', (): void => {
   if (u.loadInput.files && u.loadInput.files[0]) {
     u.callbacks?.onLoad(u.loadInput.files[0]);
   }

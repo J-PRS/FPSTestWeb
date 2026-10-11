@@ -65,8 +65,8 @@ function mkFile(): DemoFile {
   };
 }
 
-describe('demo round-trip', () => {
-  it('writer→reader preserves all recorded fields', () => {
+describe('demo round-trip', (): void => {
+  it('writer→reader preserves all recorded fields', (): void => {
     const src = mkFile();
     const out = deserializeDemo(serializeDemo(src));
 
@@ -104,17 +104,17 @@ describe('demo round-trip', () => {
     expect(te.health).toBeCloseTo(150, 3);
     expect(te.hasPeakPosition).toBe(false);
 
-    expect(out.roster.map((r) => r.name)).toEqual(['alpha_bot', 'bravo_bot']);
+    expect(out.roster.map((r): string => r.name)).toEqual(['alpha_bot', 'bravo_bot']);
     const rf = out.remoteFrames[0]!;
     expect(rf.rosterIdx).toBe(0);
     expect(rf.posZ).toBeCloseTo(15, 3);
     expect(rf.flags).toBe(0b11);
   });
 
-  it('reader rejects a corrupted payload', () => {
+  it('reader rejects a corrupted payload', (): void => {
     const buf = serializeDemo(mkFile());
     const bytes = new Uint8Array(buf);
     bytes[bytes.length - 10]! ^= 0xFF;
-    expect(() => deserializeDemo(buf)).toThrow();
+    expect((): DemoFile => deserializeDemo(buf)).toThrow();
   });
 });

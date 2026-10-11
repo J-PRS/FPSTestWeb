@@ -58,7 +58,7 @@ function buildMaxGrid(): void {
  *  callers must treat 0 as "unknown", not "flat". */
 export function maxHeightInRect(wx0: number, wz0: number, wx1: number, wz1: number): number {
   if (!hmData || !hmSize) {return 0;}
-  const toCell = (w: number) => {
+  const toCell = (w: number): number => {
     const u = (((w / hmWorldScale) % 1) + 1) % 1;
     return Math.min(MAXGRID - 1, Math.floor(u * MAXGRID));
   };
@@ -67,7 +67,7 @@ export function maxHeightInRect(wx0: number, wz0: number, wx1: number, wz1: numb
   // superset still can't under-report the max).
   const xa = toCell(wx0), xb = toCell(wx1);
   const za = toCell(wz0), zb = toCell(wz1);
-  const span = (a: number, b: number) => {
+  const span = (a: number, b: number): number => {
     const d = (b - a + MAXGRID) % MAXGRID;
     return Math.min(d, MAXGRID - 1) + 1;
   };
@@ -241,7 +241,7 @@ export function injectHeightmapBytes(
   hmData = rgba; hmSize = size; hmScale = heightScale; hmWorldScale = worldScale;
   buildMaxGrid();
   _hvc.clear();
-  return () => restoreHeightmap(prev);
+  return (): void => restoreHeightmap(prev);
 }
 
 export function restoreHeightmap(snap: HeightmapSnapshot): void {

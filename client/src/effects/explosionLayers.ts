@@ -127,7 +127,7 @@ export class ExplosionLayers implements VariantHost {
 
   private spawnBaseLayers(pos: THREE.Vector3, mult: number, directHit: boolean, heavy = false): void {
     const dh = directHit;
-    const dhBoost = (v: number) => (dh ? v : 1);
+    const dhBoost = (v: number): number => (dh ? v : 1);
     const dhLife = dhBoost(1.4), dhSize = dhBoost(1.2);
     // 'heavy' (concussion: mortar/cannon/warhead) — slower, dirtier, more
     // smoke. HE reads as a thump with a black tail, not a clean fireball.

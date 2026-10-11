@@ -43,7 +43,7 @@ if (q.get('export')) {
   for (const [wt, g] of vm.weapons) {
     g.visible = true;
     const glow: THREE.Mesh[] = [];
-    g.traverse((o) => {
+    g.traverse((o): void => {
       const m = o as THREE.Mesh;
       if (!m.isMesh) {return;}
       // Glow parts stay procedural — they're neon-bright, not baked metal.
@@ -62,8 +62,8 @@ if (q.get('export')) {
       geo.setAttribute('color', new THREE.BufferAttribute(arr, 3));
     });
     for (const m of glow) {m.visible = false;}
-    const glb: ArrayBuffer = await new Promise((res, rej) =>
-      exporter.parse(g, (r) => res(r as ArrayBuffer), rej, { binary: true }));
+    const glb: ArrayBuffer = await new Promise((res, rej): void =>
+      exporter.parse(g, (r): void => res(r as ArrayBuffer), rej, { binary: true }));
     for (const m of glow) {m.visible = true;}
     const bytes = new Uint8Array(glb);
     let bin = '';
@@ -77,7 +77,7 @@ if (q.get('export')) {
 if (q.get('export')) {throw 0;} // export mode ends above — __ready already set
 if (!ao) {
   // Unbake: drop the vertex-color attribute so we capture the pre-AO look.
-  vm.group.traverse((o) => {
+  vm.group.traverse((o): void => {
     if (!(o as THREE.Mesh).isMesh) {return;}
     const m = o as THREE.Mesh;
     m.geometry.deleteAttribute('color');
@@ -93,7 +93,7 @@ for (let i = 0; i < 60; i += 1) {vm.update(1 / 60, 0, 0, zeroVel, camera);}
 if (q.get('close')) {
   // Detach the active weapon from the viewmodel rig and frame it directly —
   // view-space shots are too small to judge shading detail.
-  const active = vm.group.children.find(c => c.visible && c !== vm.flashMesh) as THREE.Group;
+  const active = vm.group.children.find((c): boolean => c.visible && c !== vm.flashMesh) as THREE.Group;
   camera.remove(vm.group);
   if (active) {
     active.position.set(0, 0, 0);
@@ -108,5 +108,5 @@ if (q.get('close')) {
 }
 // Keep rendering — the baked GLB+texture swap lands asynchronously, so a
 // fixed early frame would screenshot pre-swap procedural meshes.
-renderer.setAnimationLoop(() => renderer.render(scene, camera));
+renderer.setAnimationLoop((): void => renderer.render(scene, camera));
 window.__ready = true;

@@ -5,12 +5,12 @@ import { NetworkManager } from '../networking/NetworkManager.js';
 // seeding missing roster members, retiring stale ones, and liveness flips.
 // A gap in any of these is a permanent "server but not client" warn.
 
-const pt = (x = 0, y = 0, z = 0) => ({ x, y, z });
+const pt = (x = 0, y = 0, z = 0): { x: number; y: number; z: number; } => ({ x, y, z });
 
 function mk(): NetworkManager { return new NetworkManager(); }
 
-describe('roster heal primitives', () => {
-  it('upsertRemotePlayer seeds a member lost to a dropped join edge', () => {
+describe('roster heal primitives', (): void => {
+  it('upsertRemotePlayer seeds a member lost to a dropped join edge', (): void => {
     const nm = mk();
     expect(nm.remoteHas('p1')).toBe(false);
     nm.upsertRemotePlayer('p1', { position: pt(1, 2, 3), health: 80, isDead: false });
@@ -24,7 +24,7 @@ describe('roster heal primitives', () => {
     expect(nm.getPlayers().get('p2')!.position).toEqual(pt(0, 500, 0));
   });
 
-  it('never mints the local player, and partial patches preserve fields', () => {
+  it('never mints the local player, and partial patches preserve fields', (): void => {
     const nm = mk();
     // localPlayerId is unset until connect — a patch must still reject ''.
     nm.upsertRemotePlayer('', { health: 1 });
@@ -35,7 +35,7 @@ describe('roster heal primitives', () => {
     expect(nm.getPlayers().get('p1')!.isDead).toBe(true);
   });
 
-  it('patchRemotePlayer refuses to mint on one-off edges', () => {
+  it('patchRemotePlayer refuses to mint on one-off edges', (): void => {
     const nm = mk();
     expect(nm.patchRemotePlayer('ghost', { health: 10 })).toBe(false);
     expect(nm.remoteHas('ghost')).toBe(false);
@@ -44,7 +44,7 @@ describe('roster heal primitives', () => {
     expect(nm.getPlayers().get('p1')!.health).toBe(30);
   });
 
-  it('healRemoteHealth heals existing members but never materializes phantoms', () => {
+  it('healRemoteHealth heals existing members but never materializes phantoms', (): void => {
     const nm = mk();
     nm.healRemoteHealth('ghost', 10);
     expect(nm.remoteHas('ghost')).toBe(false);
@@ -53,7 +53,7 @@ describe('roster heal primitives', () => {
     expect(nm.getPlayers().get('p1')!.health).toBe(25);
   });
 
-  it('healRemoteLife flips liveness exactly once and reports direction', () => {
+  it('healRemoteLife flips liveness exactly once and reports direction', (): void => {
     const nm = mk();
     nm.upsertRemotePlayer('p1', { health: 100, isDead: false, position: pt(5, 0, 5) });
     expect(nm.healRemoteLife('p1', true, 0, pt(9, 1, 9))).toBe('killed');
@@ -68,7 +68,7 @@ describe('roster heal primitives', () => {
     expect(nm.remoteHas('ghost')).toBe(false);
   });
 
-  it('remoteDelete retires a member the server no longer has', () => {
+  it('remoteDelete retires a member the server no longer has', (): void => {
     const nm = mk();
     nm.upsertRemotePlayer('p1', { health: 80 });
     expect(nm.remoteHas('p1')).toBe(true);

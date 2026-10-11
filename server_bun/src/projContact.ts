@@ -154,7 +154,7 @@ function creatureSweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof 
       z: from.z + (p.pos.z - from.z) * best.t,
     };
     const bodyDirect = best === bc
-      ? (() => { const ball = r.room.ballSim?.ballAt(bc!.id); return ball !== undefined && ball !== null && bc!.d <= ball.radius + stats.bodyRadius; })()
+      ? ((): boolean => { const ball = r.room.ballSim?.ballAt(bc!.id); return ball !== undefined && ball !== null && bc!.d <= ball.radius + stats.bodyRadius; })()
       : best.d <= stats.bodyRadius + 1;
     if (stats.stick) { r.attach(proj, at); return true; }
     r.detonate(proj, at, null, best === bc ? best.id : undefined, bodyDirect, best === cc ? best.id : undefined);

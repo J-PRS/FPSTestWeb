@@ -55,7 +55,7 @@ let fieldLoaded: string | null = null;
  *  or confirmation that the boot field stays. Offline bot fill waits on
  *  this so it never seeds a roster on the wrong heightmap. */
 const firstTerrainGate = { resolve: undefined as unknown as () => void };
-export const firstTerrain = new Promise<void>((r) => { firstTerrainGate.resolve = r; });
+export const firstTerrain = new Promise<void>((r): void => { firstTerrainGate.resolve = r; });
 // Rooms without a spec terrain reset to the boot field — the SAME bin
 // the server sims (server_bun/heightmap.bin mirrored under assets), so
 // prediction and authority sample one file instead of PNG-vs-bin drift.
@@ -67,7 +67,7 @@ export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: s
   terrainWanted = key;
   if (terrainActive === key) {return;}
   const { deps } = ctx;
-  terrainSwap = terrainSwap.then(async () => {
+  terrainSwap = terrainSwap.then(async (): Promise<void> => {
     if (terrainActive === key || terrainWanted !== key) {return;}
     Ball.terrainSwapping = true;
     try {
@@ -156,7 +156,7 @@ const SKY_SOLVE_PX = 32;
 type SkyEdge = Uint16Array; // per-texel r+g+b, one edge of a 32px face
 // GL cube adjacency (mirrors seamcheck.py ADJA): slot, edge, neighbor
 // slot, neighbor edge, whether the neighbor edge runs reversed.
-const SKY_PAIRS: [number, number, number, number, boolean][] = (() => {
+const SKY_PAIRS: [number, number, number, number, boolean][] = ((): [0 | 2 | 1 | 5 | 4 | 3, 0 | 2 | 1 | 3, 0 | 2 | 1 | 5 | 4 | 3, 0 | 2 | 1 | 3, boolean][] => {
   const s = { px: 0, nx: 1, py: 2, ny: 3, pz: 4, nz: 5 } as const;
   const e = { T: 0, R: 1, B: 2, L: 3 } as const;
   const adj: [keyof typeof s, keyof typeof e, keyof typeof s, keyof typeof e, boolean][] = [
@@ -168,10 +168,10 @@ const SKY_PAIRS: [number, number, number, number, boolean][] = (() => {
     ['nz','T','py','T',false],['nz','R','nx','L',false],['nz','B','ny','B',false],['nz','L','px','R',false],
   ];
   const seen = new Set<string>();
-  return adj.filter(([f, fe, g, ge]) => {
+  return adj.filter(([f, fe, g, ge]): boolean => {
     const k = [f + fe, g + ge].toSorted().join('|');
     return seen.has(k) ? false : (seen.add(k), true);
-  }).map(([f, fe, g, ge, fl]) => [s[f], e[fe], s[g], e[ge], fl]);
+  }).map(([f, fe, g, ge, fl]): [0 | 2 | 1 | 5 | 4 | 3, 0 | 2 | 1 | 3, 0 | 2 | 1 | 5 | 4 | 3, 0 | 2 | 1 | 3, boolean] => [s[f], e[fe], s[g], e[ge], fl]);
 })();
 
 /** 8 orientations per face: k<4 = pure quarter-turns, k>=4 = mirrored
@@ -179,7 +179,7 @@ const SKY_PAIRS: [number, number, number, number, boolean][] = (() => {
 function skyOrientEdges(d: Uint8ClampedArray): SkyEdge[][] {
   const S = SKY_SOLVE_PX;
   const out: SkyEdge[][] = [];
-  const sum = (x: number, y: number) => {
+  const sum = (x: number, y: number): number => {
     const i = (y * S + x) * 4;
     return d[i]! + d[i + 1]! + d[i + 2]!;
   };
@@ -224,7 +224,7 @@ interface SkyCand { s: number; assign: number[]; orient: number[] }
 function skyCandPush(list: SkyCand[], s: number, assign: number[], orient: number[], cap = 64): void {
   if (list.length >= cap && s >= list[list.length - 1]!.s) {return;}
   list.push({ s, assign: assign.slice(), orient: orient.slice() });
-  list.sort((a, b) => a.s - b.s);
+  list.sort((a, b): number => a.s - b.s);
   if (list.length > cap) {list.length = cap;}
 }
 
@@ -256,7 +256,7 @@ function skyCapFaces(data: Uint8ClampedArray[]): { up: number; dn: number } {
     scores.push(Math.max(Math.abs(skyAxisGrad(d, false)), Math.abs(skyAxisGrad(d, true))));
     lum.push(l);
   }
-  const ranked = [0, 1, 2, 3, 4, 5].toSorted((a, b) => scores[a]! - scores[b]!);
+  const ranked = [0, 1, 2, 3, 4, 5].toSorted((a, b): number => scores[a]! - scores[b]!);
   const [a, b] = ranked;
   return lum[a!]! > lum[b!]! ? { up: a!, dn: b! } : { up: b!, dn: a! };
 }
@@ -333,7 +333,7 @@ function skyAssemble(faces: (HTMLImageElement | HTMLCanvasElement)[]): typeof fa
   small.width = small.height;
   const sctx = small.getContext('2d', { willReadFrequently: true })!;
   const data: Uint8ClampedArray[] = [];
-  const E = faces.map((img, fi) => {
+  const E = faces.map((img, fi): SkyEdge[][] => {
     sctx.drawImage(img, 0, 0, S, S);
     const d = sctx.getImageData(0, 0, S, S).data;
     data[fi] = d;
@@ -348,7 +348,7 @@ function skyAssemble(faces: (HTMLImageElement | HTMLCanvasElement)[]): typeof fa
     const perm = skySolvePerm(E);
     if (perm.length > 0 && perm[0]!.s < Math.min(ident, cands[0]!.s) * 0.75) {
       cands.push(...perm);
-      cands.sort((a, b) => a.s - b.s);
+      cands.sort((a, b): number => a.s - b.s);
     }
   }
   const pick = skyPickUpright(cands, caps);
@@ -437,12 +437,12 @@ async function applySky(deps: NetCtx['deps'], httpUrl: string, skyDir: string | 
   }
   // Baked ports ship .webp faces; .png is the fallback for a sky
   // dropped in by hand without the converter.
-  const base = (f: string) => `${httpUrl}/maps/${skyDir}/${f}`;
+  const base = (f: string): string => `${httpUrl}/maps/${skyDir}/${f}`;
   try {
     const loader = new THREE.ImageLoader();
-    const faces = await Promise.all(SKY_FACES.map(async (f, i) => {
+    const faces = await Promise.all(SKY_FACES.map(async (f, i): Promise<HTMLCanvasElement | HTMLImageElement> => {
       const img = await loader.loadAsync(`${base(f)}.webp`)
-        .catch(() => loader.loadAsync(`${base(f)}.png`));
+        .catch((): Promise<HTMLImageElement> => loader.loadAsync(`${base(f)}.png`));
       if (!SKY_VFLIP.has(SKY_FACES[i]!)) {return img;}
       const c = document.createElement('canvas');
       c.width = img.width; c.height = img.height;
@@ -517,7 +517,7 @@ async function loadMats(dirUrl: string): Promise<{
   // alphas.bin is cell-major: weights packed [cell*count + layer], not
   // [layer*grid² + cell]. Reading planar spreads every layer at ~0.25
   // over the whole map — the tiled detail covered the entire terrain.
-  const pack = (offset: number) => {
+  const pack = (offset: number): THREE.DataTexture => {
     const rgba = new Uint8Array(grid * grid * 4);
     for (let c = 0; c < 4; c += 1) {
       const layer = offset + c;
@@ -535,8 +535,8 @@ async function loadMats(dirUrl: string): Promise<{
   const atlas = document.createElement('canvas');
   atlas.width = 1024; atlas.height = 512;
   const g = atlas.getContext('2d')!;
-  const means = Array.from({ length: 8 }, () => 0.5);
-  await Promise.all(man.tiles.slice(0, 8).map(async (path, k) => {
+  const means = Array.from({ length: 8 }, (): number => 0.5);
+  await Promise.all(man.tiles.slice(0, 8).map(async (path, k): Promise<void> => {
     const img = new Image();
     // Cross-origin atlas bake — without this the canvas taints and
     // CanvasTexture's upload throws SecurityError (silent grey terrain).
@@ -656,7 +656,7 @@ function canonInteriorMat(mat: THREE.Material): { key: string; mat: THREE.Materi
       fog: std.fog,
     });
     lam.name = std.name;
-    lam.onBeforeCompile = (sh) => {
+    lam.onBeforeCompile = (sh): void => {
       sh.uniforms.uIntHscale = interiorHscale;
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec3 vIntWorld;\nvarying vec3 vIntDelta;')
@@ -701,8 +701,8 @@ async function fetchGlb(httpUrl: string, file: string): Promise<THREE.Group | nu
   let p = glbCache.get(name);
   if (!p) {
     p = glbLoader.loadAsync(`${httpUrl}/maps/t2/dif/${name}`)
-      .then((g) => g.scene)
-      .catch(() => null);
+      .then((g): THREE.Group<THREE.Object3DEventMap> => g.scene)
+      .catch((): null => null);
     glbCache.set(name, p);
   }
   const out = await p;
@@ -742,7 +742,7 @@ interiorsEpoch += 1;
   const buckets = new Map<string, { mat: THREE.Material; geos: THREE.BufferGeometry[] }>();
   const mergedGeo: THREE.BufferGeometry[] = interiorGeos;
   const kept: THREE.Mesh[] = [];
-  await Promise.all(list.map(async (spec) => {
+  await Promise.all(list.map(async (spec): Promise<void> => {
     const src = await fetchGlb(httpUrl, spec.file);
     if (!src) { missing.add(spec.file); return; }
     const inst = src.clone(true);
@@ -765,7 +765,7 @@ interiorsEpoch += 1;
     inst.matrixAutoUpdate = false;
     inst.matrix.copy(m);
     inst.updateMatrixWorld(true);
-    inst.traverse((o) => {
+    inst.traverse((o): void => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) {return;}
       const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];

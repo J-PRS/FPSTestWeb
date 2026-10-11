@@ -133,7 +133,7 @@ export class AmbientBirds {
     this.flapAttr = new THREE.InstancedBufferAttribute(new Float32Array(BIRD_COUNT), 1);
     this.flapAttr.setUsage(THREE.DynamicDrawUsage);
     geo.setAttribute('aFlap', this.flapAttr);
-    mat.onBeforeCompile = (sh) => {
+    mat.onBeforeCompile = (sh): void => {
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', `#include <common>
           attribute float wingSide;
@@ -190,10 +190,10 @@ export class AmbientBirds {
       this.targets.push({
         id: bb.id,
         variant: 0,
-        get pos() { return bb.group.position; },
+        get pos(): THREE.Vector3 { return bb.group.position; },
         vel: bb.vel,
-        get dead() { return bb.dead; },
-        get health() { return bb.health; },
+        get dead(): boolean { return bb.dead; },
+        get health(): number { return bb.health; },
         maxHealth: BIRD_HEALTH,
         radius: BIRD_RADIUS,
         color: bb.color,
@@ -202,7 +202,7 @@ export class AmbientBirds {
         lootless: true, // wildlife pays nothing — no frags, no nuggets
         debrisKind: 'brush' as const, // feathers, not rocks
         dieCue: 'squawk' as const, // dying bird screech, not the alien squeal
-        takeDamage: (dmg) => {
+        takeDamage: (dmg): boolean => {
           bb.health -= dmg;
           this.aggro(); // one shot = the whole flock is coming
           bb.flapAmp = 1;
@@ -212,13 +212,13 @@ export class AmbientBirds {
           }
           return false;
         },
-        applyKnockback: (from, f) => {
+        applyKnockback: (from, f): void => {
           _next.copy(bb.group.position).sub(from).normalize();
           bb.kb.addScaledVector(_next, f * 0.4);
           bb.flapAmp = 1;
           this.aggro(); // blast wakes them too
         },
-        applyPull: (to, f) => {
+        applyPull: (to, f): void => {
           _next.copy(to).sub(bb.group.position).normalize();
           bb.kb.addScaledVector(_next, f * 0.4);
           this.aggro();

@@ -78,7 +78,7 @@ export class Room {
    *  consumers (bot populate → spawn scatter) run before a harness can
    *  assign `room.rng`, so a plain Math.random default made every room
    *  after the first diverge — spawn layout is part of the seed. */
-  rng: () => number = () => botRand();
+  rng: () => number = (): number => botRand();
 
   /** Grace seats live on the registry session itself (timer included) —
    *  assigned post-ctor by the factory. `graceInRoom` replaces the old
@@ -212,13 +212,13 @@ export class Room {
   // collider re-attach + skinny mapUpdate push; spawn-anchor re-seat).
   // Declared before the ctor's wireModeFeatures/flags init uses it.
   readonly flagPlacer = new FlagPlacer(this,
-    (broadcast) => { this.structs.attach(); if (broadcast) {this.structs.pushUpdate();} },
-    (snapped) => {
+    (broadcast): void => { this.structs.attach(); if (broadcast) {this.structs.pushUpdate();} },
+    (snapped): void => {
       if (this.modeSpec?.teams) {
         this.players.teamBases = { alpha: Object.assign({}, snapped.alpha), bravo: Object.assign({}, snapped.bravo) };
       }
     },
-    (rings) => {
+    (rings): void => {
       // Auto-derived stands mint their own spawn rings — but authored
       // teamSpawns still win when a base-less spec bothered to ship them.
       if (this.modeSpec?.teams && !this.spec.teamSpawns) {
@@ -325,7 +325,7 @@ export class Room {
   constructor(name: string, field: Heightfield | null, mode = '', spec?: MapSpec, moveAuthority = false) {
     // Invariant violations land on the room health counters — /metrics
     // exposes them as inv:<name> totals next to the existing tallies.
-    setInvariantSink((n, ctx) => { this.healthBump(`inv:${n}`); logger.warn(`INVARIANT ${n}`, ctx ?? {}); });
+    setInvariantSink((n, ctx): void => { this.healthBump(`inv:${n}`); logger.warn(`INVARIANT ${n}`, ctx ?? {}); });
     this.name = name;
     this.field = field;
     this.moveAuthority = moveAuthority && Boolean(field);
@@ -336,14 +336,14 @@ export class Room {
     this.messages = new MessageHandler(
       this.players,
       this.rateLimiter,
-      (msg, exclude) => this.connections.broadcast(msg, exclude),
-      (pid, msg) => this.connections.sendToPlayer(pid, msg),
+      (msg, exclude): void => this.connections.broadcast(msg, exclude),
+      (pid, msg): void => this.connections.sendToPlayer(pid, msg),
       this.handlerInfo(name),
     );
     this.moveSim = new RoomMoveSim(field, this.moveAuthority);
     // Player-vs-player contact: every shadow resolves against the live
     // roster (corpses don't block), so a defender's body is real cover.
-    this.moveSim.bodySource = () => {
+    this.moveSim.bodySource = (): ({ id: string; } & BodyCapsule)[] => {
       const out: ({ id: string } & BodyCapsule)[] = [];
       for (const p of this.players.getAllPlayers().values()) {
         if (p.isDead) {continue;}
@@ -356,40 +356,40 @@ export class Room {
     // Hard-tolerance trip: the client's input watermark outran our consumed
     // seq for ≥3 reports — an input edge died in flight (dead-lane drop).
     // Ask it to re-emit its current input; cooldown lives on the shadow.
-    this.moveSim.onInputGap = (pid, lastSeq) => {
+    this.moveSim.onInputGap = (pid, lastSeq): void => {
       this.health?.set('inputgap', (this.health?.get('inputgap') ?? 0) + 1);
       this.connections.sendToPlayer(pid, { type: 'inputSync', lastSeq });
     };
     // Reclaim desync accounting — journal wraps and reclaim gaps are the
     // only ways a reconnected client silently loses event history.
-    this.connections.onJournalWrap = (n) => this.healthBump('journalWrap', n);
-    this.connections.onReclaimGap = (_pid, n) => this.healthBump('reclaimGap', n);
+    this.connections.onJournalWrap = (n): void => this.healthBump('journalWrap', n);
+    this.connections.onReclaimGap = (_pid, n): void => this.healthBump('reclaimGap', n);
     // A drowned socket is a client-side or path failure — count each
     // forced close so it shows in room health, not just the close log.
-    this.connections.onDrowned = () => this.healthBump('drownedSock', 1);
+    this.connections.onDrowned = (): void => this.healthBump('drownedSock', 1);
     this.moveSim.attachStructures(this.structs.eff());
     // Shield soak burns the same tank the jet model owns — without this
     // a shielded player under fire runs the sim tank ahead of the real one.
-    this.players.energyBurn = (pid, n) => this.moveSim.drainEnergy(pid, n);
+    this.players.energyBurn = (pid, n): boolean => this.moveSim.drainEnergy(pid, n);
     // Closure over this.field — a mid-match terrain swap must not leave
     // spawn anchors snapping to the old map.
     // Anchors lift to the drawn surface, not just the field — an authored
     // point under a chord bridge (gully apex) would otherwise respawn a
     // body whose wire pos sits under the mesh it renders on.
-    this.players.groundAt = (x, z) => (this.field ? Math.max(hmHeight(this.field, x, z), hmChord(this.field, x, z)) : 0);
+    this.players.groundAt = (x, z): number => (this.field ? Math.max(hmHeight(this.field, x, z), hmChord(this.field, x, z)) : 0);
     this.ballSim = new BallSim(
       this.players,
-      (msg) => this.connections.broadcast(msg),
-      (data) => this.connections.broadcastBinaryReliable(data),
+      (msg): void => this.connections.broadcast(msg),
+      (data): void => this.connections.broadcastBinaryReliable(data),
     );
     if (this.noBalls) {this.ballSim.population = { base: 0, perPlayer: 0, max: 0 };}
     else if (this.spec.balls) {this.ballSim.population = this.spec.balls;}
-    this.ballSim.onKilled = (by, pos, variant) => this.scoring.nonPlayerKill(by, pos, variant);
+    this.ballSim.onKilled = (by, pos, variant): void => this.scoring.nonPlayerKill(by, pos, variant);
     this.ballSim.colliders = structureColliders(this.structs.eff());
     if (this.spec.ballMix) {this.ballSim.ballMix = this.spec.ballMix;}
     if (this.spec.spawns) {this.players.spawnPoints = this.spec.spawns;}
     this.players.teamSpawns = this.spec.teamSpawns ?? null;
-    this.players.spawnRng = () => this.rng();
+    this.players.spawnRng = (): number => this.rng();
     this.messages.setBallSim(this.ballSim);
     if (field) {this.ballSim.attachField(field);}
     this.creatureSim = this.initCreatures(field);
@@ -398,7 +398,7 @@ export class Room {
     // consumer reads only the kinds it cares about. A spoken line is
     // itself an event worth a reply — the squad sees it on their own
     // think phases, so an answer lands a beat later like real chat.
-    this.events.on((e) => {
+    this.events.on((e): void => {
       switch (e.type) {
         case 'kill': { this.scoring.onKill(e.targetId, e.shooterId); break;
         }
@@ -465,7 +465,7 @@ export class Room {
     // front-line sphere 400m out spends the next minute hiking, which
     // reads as wandering on every post/flag metric. Runners keep pure
     // foe-clearance scoring so the forward spheres stay useful.
-    this.players.spawnHomeBias = (id) => {
+    this.players.spawnHomeBias = (id): 1.6 | undefined => {
       const role = this.bots?.roleOf(id);
       return role === 'hof' || role === 'ldefense' || role === 'defense' || role === 'technician' ? 1.6 : undefined;
     };
@@ -505,12 +505,12 @@ export class Room {
    *  and a squad chorus of "Quiet!" would spam the feed worse. */
   private noteChatPace(id: string): void {
     const now = simNow();
-    const hits = (this.chatPace.get(id) ?? []).filter((t) => now - t < 8000);
+    const hits = (this.chatPace.get(id) ?? []).filter((t): boolean => now - t < 8000);
     hits.push(now);
     if (hits.length < 4) { this.chatPace.set(id, hits); return; }
     this.chatPace.delete(id); // burst spent — re-arm on the next run
     if (tauntRand() >= 0.12) {return;}
-    const bots = [...this.players.getAllPlayers().values()].filter((p) => p.id.startsWith('BOT-') && !p.isDead);
+    const bots = [...this.players.getAllPlayers().values()].filter((p): boolean => p.id.startsWith('BOT-') && !p.isDead);
     if (bots.length > 0) {this.messages.killFeed.say(bots[Math.trunc((tauntRand() * bots.length))]!.id, 'quiet', id);}
   }
 
@@ -538,12 +538,12 @@ export class Room {
   private initCreatures(field: Heightfield | null): CreatureSim {
     const creatureSim = new CreatureSim(
       this.players,
-      (msg) => this.connections.broadcast(msg),
-      (pid, msg) => this.connections.sendToPlayer(pid, msg),
+      (msg): void => this.connections.broadcast(msg),
+      (pid, msg): void => this.connections.sendToPlayer(pid, msg),
     );
     creatureSim.pops = this.noCreatures ? {} : (this.spec.creatures ?? {});
     creatureSim.colliders = this.ballSim.colliders;
-    creatureSim.onBite = (c, targetId) => {
+    creatureSim.onBite = (c, targetId): void => {
       // dep:N ids are deployables — gnaw their hp, not a player.
       if (targetId.startsWith('dep:')) {
         this.deployables.gnaw(targetId, c.biteDamage);
@@ -551,14 +551,14 @@ export class Room {
       }
       this.messages.crawlerBite(targetId, c.biteDamage, c.species, { x: c.x, y: c.y, z: c.z });
     };
-    creatureSim.extraTargets = () => this.deployables.creatureTargets();
-    creatureSim.targetPos = (id) => id.startsWith('dep:') ? this.deployables.posOf(id) : null;
-    creatureSim.onDetonate = (b) => {
+    creatureSim.extraTargets = (): { id: string; pos: Vec3; }[] => this.deployables.creatureTargets();
+    creatureSim.targetPos = (id): Vec3 | null => id.startsWith('dep:') ? this.deployables.posOf(id) : null;
+    creatureSim.onDetonate = (b): void => {
       const pos = { x: b.x, y: b.y, z: b.z };
       this.messages.mineBlast('environment', pos, b.biteDamage, b.blastRadius, 14);
       this.pushNoise(pos); // bots hear the pop like any other blast
     };
-    creatureSim.onKilled = (by, pos) => this.scoring.nonPlayerKill(by, pos, 0);
+    creatureSim.onKilled = (by, pos): void => this.scoring.nonPlayerKill(by, pos, 0);
     this.messages.setCreatureSim(creatureSim);
     if (field) {creatureSim.attachField(field);}
     return creatureSim;
@@ -576,7 +576,7 @@ export class Room {
       this.players.teamBases = { alpha: Object.assign({}, snapped.alpha), bravo: Object.assign({}, snapped.bravo) };
     }
     this.pickups = new RoomPickups(this);
-    this.pickups.onCollect = (pid, kind) => {
+    this.pickups.onCollect = (pid, kind): void => {
       const p = this.players.getPlayer(pid);
       if (!p) {return;}
       if (kind === 'gem' || kind === 'tag') {
@@ -641,28 +641,28 @@ export class Room {
   private registerSims(): void {
     // World sims step first — bots and downstream systems see post-step
     // wildlife positions inside the same tick.
-    this.sims.push({ name: 'balls', tick: (dt) => this.ballSim.step(dt), worldState: () => [{ type: 'ballRoster', balls: this.ballSim.roster() }] });
-    this.sims.push({ name: 'crawl', tick: (dt) => this.creatureSim.step(dt), worldState: () => [{ type: 'crawlRoster', crawlers: this.creatureSim.roster() }] });
-    this.sims.push({ name: 'bots', tick: (dt) => this.bots.tick(dt) });
-    if (this.flags) {this.sims.push({ name: 'flags', tick: (dt) => this.tickFlags(dt), worldState: () => [{ type: 'flagUpdate', flags: this.flags!.snapshot() }] });}
-    if (this.pickups) {this.sims.push({ name: 'pickups', tick: (dt) => this.pickups!.tick(dt), worldState: () => this.pickups!.snapshot().map((p) => ({ type: 'pickupSpawn', id: p.id, pos: p.pos, kind: p.kind }) as ServerMessage) });}
-    this.sims.push({ name: 'unbury', tick: (dt) => this.unburyTick(dt) });
+    this.sims.push({ name: 'balls', tick: (dt): void => this.ballSim.step(dt), worldState: () => [{ type: 'ballRoster', balls: this.ballSim.roster() }] });
+    this.sims.push({ name: 'crawl', tick: (dt): void => this.creatureSim.step(dt), worldState: () => [{ type: 'crawlRoster', crawlers: this.creatureSim.roster() }] });
+    this.sims.push({ name: 'bots', tick: (dt): void => this.bots.tick(dt) });
+    if (this.flags) {this.sims.push({ name: 'flags', tick: (dt): void => this.tickFlags(dt), worldState: () => [{ type: 'flagUpdate', flags: this.flags!.snapshot() }] });}
+    if (this.pickups) {this.sims.push({ name: 'pickups', tick: (dt): void => this.pickups!.tick(dt), worldState: (): ServerMessage[] => this.pickups!.snapshot().map((p) => ({ type: 'pickupSpawn', id: p.id, pos: p.pos, kind: p.kind }) as ServerMessage) });}
+    this.sims.push({ name: 'unbury', tick: (dt): void => this.unburyTick(dt) });
     if (this.spec.arena) {
       const arena = new RoomArena(this, this.spec.arena);
-      this.sims.push({ name: 'arena', tick: (dt) => arena.tick(dt) });
+      this.sims.push({ name: 'arena', tick: (dt): void => arena.tick(dt) });
     }
     // Deployables join the worldState replay: only edges streamed before,
     // so a mid-game joiner saw a compound it never spawned — permanent
     // DEPLOY/flag/pickup hash desyncs until something happened to change.
-    this.sims.push({ name: 'deploy', tick: (dt) => this.deployables.tick(dt), worldState: () => this.deployables.snapshot().map((d) => ({ type: 'deploySpawn', id: d.id, owner: d.owner, kind: d.kind, pos: d.pos, team: d.team }) as ServerMessage) });
-    this.sims.push({ name: 'proj', tick: (dt) => this.projectiles.tick(dt) });
-    this.sims.push({ name: 'move', tick: (dt) => this.moveSim.tick(dt) });
-    this.sims.push({ name: 'health', tick: (dt) => this.healthTick(dt) });
+    this.sims.push({ name: 'deploy', tick: (dt): void => this.deployables.tick(dt), worldState: (): ServerMessage[] => this.deployables.snapshot().map((d) => ({ type: 'deploySpawn', id: d.id, owner: d.owner, kind: d.kind, pos: d.pos, team: d.team }) as ServerMessage) });
+    this.sims.push({ name: 'proj', tick: (dt): void => this.projectiles.tick(dt) });
+    this.sims.push({ name: 'move', tick: (dt): void => this.moveSim.tick(dt) });
+    this.sims.push({ name: 'health', tick: (dt): void => this.healthTick(dt) });
     // Server-side RTT probe: round-robin one human per cadence tick so
     // the move shadow's transit EMA has a channel the client can't
     // fabricate (it cross-checks the ping riding position frames).
-    this.sims.push({ name: 'ping', tick: () => this.pingTick() });
-    this.sims.push({ name: 'influence', tick: (dt) => this.influence.tick(dt) });
+    this.sims.push({ name: 'ping', tick: (): void => this.pingTick() });
+    this.sims.push({ name: 'influence', tick: (dt): void => this.influence.tick(dt) });
     this.moveSim.health = this.health;
   }
 
@@ -677,12 +677,12 @@ export class Room {
   private lastPingStamp = new Map<string, number>();
   private pingTick(): void {
     if ((this.pingCycle += 1) % 10 !== 0) {return;}
-    const humans = [...this.players.getAllPlayers().values()].filter((p) => !p.isBot);
+    const humans = [...this.players.getAllPlayers().values()].filter((p): boolean => !p.isBot);
     if (humans.length === 0) {return;}
     // Unmeasured humans jump the queue — the client channel stands alone
     // until the first pong lands, and join grace shouldn't outlast a
     // full round-robin sweep in a big room.
-    const target = humans.find((p) => !this.lastPingStamp.has(p.id))
+    const target = humans.find((p): boolean => !this.lastPingStamp.has(p.id))
       ?? humans[(Math.trunc(this.pingCycle / 10)) % humans.length]!;
     const stamp = wallNow();
     this.lastPingStamp.set(target.id, stamp);
@@ -709,7 +709,7 @@ export class Room {
       solids: this.projectiles.solidColliders,
       dynSolids: this.deployables.solidCols,
       ballSim: this.ballSim, creatureSim: this.creatureSim,
-      transitOf: (pid) => this.moveSim.transitOf(pid),
+      transitOf: (pid): number => this.moveSim.transitOf(pid),
     }, shooterId, muzzle, dir, range);
   }
 
@@ -726,7 +726,7 @@ export class Room {
   readonly scoring = new RoomScore(this);
   /** Per-player FFA scoreboard — lives on RoomScore now; kept as the
    *  public name GameServer/tests already read. */
-  get ffaScores() { return this.scoring.ffaScores; }
+  get ffaScores(): Map<string, number> { return this.scoring.ffaScores; }
 
   /** Match lifecycle — clock/leader/reset funnel lives in roomMatch.ts;
    *  matchHost adapts Room's fields to the leaf interface it takes. */
@@ -744,22 +744,22 @@ export class Room {
       teams: this.modeSpec?.teams,
       friendlyFire: CONFIG.friendlyFire,
       winAt: this.modeSpec?.winAt,
-      ffaScores: () => Object.fromEntries(this.scoring.ffaScores),
+      ffaScores: (): { [k: string]: number; } => Object.fromEntries(this.scoring.ffaScores),
       // Registry stores playerId->u16; the wire roster ships the
       // inverse so receivers resolve a frame's u16 to an identity.
-      wireIds: () => {
+      wireIds: (): { [x: number]: string; } => {
         const out: Record<number, string> = {};
         for (const [pid, id] of this.wireIds) {out[id] = pid;}
         return out;
       },
-      simsWorldState: () => this.sims.flatMap((s) => s.worldState?.() ?? []),
+      simsWorldState: (): ServerMessage[] => this.sims.flatMap((s): ServerMessage[] => s.worldState?.() ?? []),
       bases: this.spec.bases,
       structures: this.structs.eff(),
       arena: this.spec.arena,
       ambient: this.spec.ambient,
       // Authored spec title wins; the maps/<X>.json source filename is the
       // fallback — set post-ctor by the factory, refreshed by rotation.
-      mapName: () => this.spec.name ?? (this.mapSrc || undefined),
+      mapName: (): string | undefined => this.spec.name ?? (this.mapSrc || undefined),
       terrain: this.spec.terrain,
       heightScale: this.spec.heightScale,
       tileSize: this.spec.tileSize,
@@ -769,7 +769,7 @@ export class Room {
       sky: this.spec.sky,
       interiors: this.spec.interiors,
       emit: this.events.emit,
-      rng: () => this.rng(),
+      rng: (): number => this.rng(),
       flags: () => this.flags?.snapshot() ?? [],
       pickups: () => this.pickups?.snapshot() ?? [],
       // tickNack: reuse the introSeq full-window — every record goes full
@@ -777,7 +777,7 @@ export class Room {
       // nacked or not (records are shared; scoping per-socket isn't
       // possible without per-socket encodes). 500ms room cooldown so a
       // nack-storm can't hold the room on fulls permanently.
-      nackFulls: () => {
+      nackFulls: (): void => {
         const now = wallNow();
         if (now - this.lastNackAt < 500) {return;}
         // A window still paying out covers every client — re-stamping
@@ -786,25 +786,25 @@ export class Room {
         this.lastNackAt = now;
         this.introSeq = this.tickSeq;
       },
-      fireProjectile: (pid, wt, origin, dir, vel, shotId) => this.projectiles.spawn(pid, wt, origin, dir, vel, shotId),
-      beamSweep: (pid, muzzle, dir, range) => this.beamSweep(pid, muzzle, dir, range),
+      fireProjectile: (pid, wt, origin, dir, vel, shotId): string | null => this.projectiles.spawn(pid, wt, origin, dir, vel, shotId),
+      beamSweep: (pid, muzzle, dir, range): BeamContact | null => this.beamSweep(pid, muzzle, dir, range),
       ballHit: (pid, id, dmg) => this.ballSim.handleHit(pid, id, dmg),
       crawlerHit: (pid, id, dmg) => this.creatureSim.handleHit(pid, id, dmg),
-      repairTarget: (pid, muz, dir, range) => this.deployables.repairTarget(pid, muz, dir, range),
-      onDeploy: (pid, kind, pos) => this.deployables.handleDeploy(pid, kind, pos),
-      onRepair: (pid, targetId) => this.deployables.repair(pid, targetId),
+      repairTarget: (pid, muz, dir, range): number | null => this.deployables.repairTarget(pid, muz, dir, range),
+      onDeploy: (pid, kind, pos): string | true => this.deployables.handleDeploy(pid, kind, pos),
+      onRepair: (pid, targetId): string | true => this.deployables.repair(pid, targetId),
       deployables: () => this.deployables.snapshot(),
       influence: this.influence,
-      matchEndsAt: () => this.matchClock.timeLeftMs() > 0 ? simNow() + this.matchClock.timeLeftMs() : 0,
-      moveInput: (pid, i, status, seq) => this.moveSim.queueInput(pid, {
+      matchEndsAt: (): number => this.matchClock.timeLeftMs() > 0 ? simNow() + this.matchClock.timeLeftMs() : 0,
+      moveInput: (pid, i, status, seq): boolean => this.moveSim.queueInput(pid, {
         forward: i.forward, right: i.right,
         jumpPressed: Boolean(i.jump), jumpHeld: Boolean(i.jump), skiHeld: Boolean(i.ski),
         jetHeld: Boolean(i.jet),
       }, status, seq),
       moveReport: (pid, pos, yaw, vel, inputSeq, rttMs) => this.moveSim.reconcile(pid, pos, yaw, vel, inputSeq, rttMs),
-      inputSeqOf: (pid) => this.moveSim.inputSeqOf(pid),
-      transitOf: (pid) => this.moveSim.transitOf(pid),
-      transitNote: (pid, rtt, stamp) => {
+      inputSeqOf: (pid): number => this.moveSim.inputSeqOf(pid),
+      transitOf: (pid): number => this.moveSim.transitOf(pid),
+      transitNote: (pid, rtt, stamp): void => {
         if (this.lastPingStamp.get(pid) !== stamp) {return;}
         this.moveSim.feedTransit(pid, rtt);
         // Echo the server-measured RTT back — the client's own ping/pong
@@ -812,7 +812,7 @@ export class Room {
         // "client/server" and splits a busy renderer from a slow wire.
         this.sendToPlayer(pid, { type: 'srvPing', rtt });
       },
-      uplinkNote: (pid, fireAt) => {
+      uplinkNote: (pid, fireAt): void => {
         // (arrival − declared instant) is this claim's uplink transit —
         // bounded so a wildly off clock (or forged stamp) degrades to the
         // ping/pong channel instead of poisoning the EMA.
@@ -821,23 +821,23 @@ export class Room {
       },
       // The rabbit dep's presence IS the mode check — CombatHandler gates
       // all PvP damage on the carrier being one side of the pair.
-      rabbitCarrier: this.mode === 'rabbit' ? () => this.flags?.carrierId() ?? null : undefined,
-      rabbitFlagLive: this.mode === 'rabbit' ? () => this.flags?.spawned() ?? false : undefined,
-      rabbitBottom: this.mode === 'rabbit' ? () => this.scoring.bottomFeeders() : undefined,
-      drainEnergy: (pid, n) => this.moveSim.drainEnergy(pid, n),
+      rabbitCarrier: this.mode === 'rabbit' ? (): string | null => this.flags?.carrierId() ?? null : undefined,
+      rabbitFlagLive: this.mode === 'rabbit' ? (): boolean => this.flags?.spawned() ?? false : undefined,
+      rabbitBottom: this.mode === 'rabbit' ? (): Set<string> => this.scoring.bottomFeeders() : undefined,
+      drainEnergy: (pid, n): boolean => this.moveSim.drainEnergy(pid, n),
       // Instant-skill claim: the client already spent the energy locally —
       // mirror the same ante on the shadow or the tank drifts 50 apart.
-      onSkillUse: (pid) => this.moveSim.drainEnergy(pid, ENERGY.skillCost) ? true : 'gone',
-      onThrowFlag: (pid) => this.flags?.throwFor(pid),
-      energyOf: (pid) => this.moveSim.energyOf(pid),
-      moveResync: (pid, pos, yaw, fullEnergy) => {
+      onSkillUse: (pid): true | "gone" => this.moveSim.drainEnergy(pid, ENERGY.skillCost) ? true : 'gone',
+      onThrowFlag: (pid): void | undefined => this.flags?.throwFor(pid),
+      energyOf: (pid): number | null => this.moveSim.energyOf(pid),
+      moveResync: (pid, pos, yaw, fullEnergy): void => {
         this.moveSim.resync(pid, pos, yaw, fullEnergy);
         // Resync re-anchors the shadow — also refresh the class speed
         // scale so a respawn-applied tier swap propagates (moveTrack
         // only re-reads it at handshake).
         this.applyClassScale(pid);
       },
-      moveTrack: (pid, pos, yaw) => {
+      moveTrack: (pid, pos, yaw): void => {
         const p = this.players.getPlayer(pid);
         this.moveSim.track(pid, pos, yaw, p?.perk, p?.team, p?.isBot, p?.armorClass);
         // Re-seats (room hop) have stale position frames in flight — arm
@@ -846,8 +846,8 @@ export class Room {
         this.moveSim.markReseated(pid);
         this.applyClassScale(pid);
       },
-      moveMute: (pid) => this.moveSim.markReseated(pid),
-      moveUntrack: (pid) => {
+      moveMute: (pid): void => this.moveSim.markReseated(pid),
+      moveUntrack: (pid): void => {
         this.moveSim.untrack(pid);
         this.lastPingStamp.delete(pid);
       },
@@ -855,13 +855,13 @@ export class Room {
       // it on their own think phases, so an answer (if any) lands a beat
       // later like real chat, not a scripted call-and-response.
 
-      moveAuthority: () => this.moveAuthority,
+      moveAuthority: (): boolean => this.moveAuthority,
       health: this.health,
-      envRange: (pid) => {
+      envRange: (pid): number => {
         const p = this.players.getPlayer(pid);
         return p ? this.ballSim.nearestBallDist(p.position.x, p.position.y, p.position.z) : Infinity;
       },
-      preyNear: (pos, shooterId) => {
+      preyNear: (pos, shooterId): { ball: number; crawler: number; foe: number; } => {
         let crawler = Infinity;
         for (const c of this.creatureSim.crawlers.values()) {
           const d = Math.hypot(c.x - pos.x, c.y - pos.y, c.z - pos.z);
@@ -891,17 +891,17 @@ export class Room {
       modeSpec: this.modeSpec,
       scores: this.scores,
       ffaScores: this.scoring.ffaScores,
-      getHumanCount: () => this.players.getHumanCount(),
-      matchPlayers: () => this.scoring.matchPlayers(),
-      broadcast: (msg) => this.broadcast(msg),
-      endCleanup: () => {
+      getHumanCount: (): number => this.players.getHumanCount(),
+      matchPlayers: (): { id: string; team?: string; kills: number; deaths: number; }[] => this.scoring.matchPlayers(),
+      broadcast: (msg): void => this.broadcast(msg),
+      endCleanup: (): void => {
         this.flags?.reset();
         this.pickups?.clear();
         this.deployables.clearAll();
         this.players.resetStats();
       },
-      reshuffleBots: () => {
-        const bots = [...this.players.getAllPlayers().values()].filter((p) => p.isBot);
+      reshuffleBots: (): void => {
+        const bots = [...this.players.getAllPlayers().values()].filter((p): boolean | undefined => p.isBot);
         if (bots.length < 2 || !this.modeSpec?.teams) {return;}
         // Fisher-Yates on botRand so harness replays stay deterministic,
         // then alternate alpha/bravo — sizes stay even, loyalties don't.
@@ -909,23 +909,23 @@ export class Room {
           const j = Math.floor(botRand() * (i + 1));
           [bots[i], bots[j]] = [bots[j]!, bots[i]!];
         }
-        bots.forEach((p, i) => { p.team = i % 2 === 0 ? 'alpha' : 'bravo'; });
+        bots.forEach((p, i): void => { p.team = i % 2 === 0 ? 'alpha' : 'bravo'; });
         for (const p of bots) {
           this.players.respawnPlayer(p.id);
           this.broadcast(eventPayload(WORLD_MODEL.player!, 'teamUpdate', 'playerId', p.id, { team: p.team! }) as ServerMessage);
         }
       },
-      rotate: () => this.onRotate?.() ?? null,
-      applySpec: (s) => this.applySpec(s),
-      onMatchEnd: (r) => this.onMatchEnd?.(r),
+      rotate: (): MapSpec | null => this.onRotate?.() ?? null,
+      applySpec: (s): void => this.applySpec(s),
+      onMatchEnd: (r): void | undefined => this.onMatchEnd?.(r),
       // 'match' isn't a bot id — nobody's actor-excluded, so every bot
       // sees the gg notice on its own think phase and the usual dice
       // decide who bothers replying. matchEnd adds the staggered
       // outcome lines on top — the shared chatter cooldown keeps the
       // two paths from double-speaking the same bot.
-      onEnded: (w) => { this.bots.notice('gg', 'match'); this.bots.matchEnd(w); },
+      onEnded: (w): void => { this.bots.notice('gg', 'match'); this.bots.matchEnd(w); },
       // The opener half of the beat — gl-hf as the round goes live.
-      onStarted: () => this.bots.matchStart(),
+      onStarted: (): void => this.bots.matchStart(),
     };
   }
 
@@ -1092,7 +1092,7 @@ export class Room {
     for (const p of [...this.players.getAllPlayers().values()]) {
       if (excess <= 0) {break;}
       if (!p.isBot) {continue;}
-      this.removePlayerCompletely(p.id, 'adminReload', () => { return; });
+      this.removePlayerCompletely(p.id, 'adminReload', (): void => { return; });
 excess -= 1;
     }
   }

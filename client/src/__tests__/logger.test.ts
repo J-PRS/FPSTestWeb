@@ -4,8 +4,8 @@
 import { describe, it, expect } from 'vitest';
 import { Logger } from '../core/Logger.js';
 
-describe('Logger ring buffer', () => {
-  it('stays bounded under sustained spam and keeps the newest lines', () => {
+describe('Logger ring buffer', (): void => {
+  it('stays bounded under sustained spam and keeps the newest lines', (): void => {
     for (let i = 0; i < 2500; i += 1) {Logger.pushRaw(`spam-${i}`);}
     const logs = Logger.getLogs();
     expect(logs.length).toBeLessThanOrEqual(1000 + 128);

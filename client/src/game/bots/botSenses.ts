@@ -37,7 +37,7 @@ export type EnemyEntry = { id: string; pos: THREE.Vector3; vel: THREE.Vector3; a
 type BotEntry = { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean };
 
 // Scratch BrainCtx for losClear — fields it doesn't read stay unset.
-const _losCtx: BrainCtx = { pos: { x: 0, y: 0, z: 0 }, enemies: [], groundY: () => 0, now: 0 };
+const _losCtx: BrainCtx = { pos: { x: 0, y: 0, z: 0 }, enemies: [], groundY: (): number => 0, now: 0 };
 const _enemies: EnemyEntry[] = [];
 // Pooled plain-vec + entry scratches: the lists below are consumed
 // synchronously by the bot's think(), so the same entries can be
@@ -212,7 +212,7 @@ export class BotSenses {
       const dx = e.pos.x - bot.position.x, dz = e.pos.z - bot.position.z;
       const gd = Math.hypot(dx, dz) || 1;
       if ((dx * fx + dz * fz) / gd < FOE_CONE_MIN_DOT) {continue;}
-      _losCtx.groundY = (x, z) => terrain.getHeight(x, z);
+      _losCtx.groundY = (x, z): number => terrain.getHeight(x, z);
       _losCtx.now = now;
       _losCtx.team = bot.team === 'ffa' ? undefined : bot.team;
       if (losClear(_losCtx, bot.position, e.pos)) { v = true; break; }

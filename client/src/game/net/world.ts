@@ -41,7 +41,7 @@ export function armSessionVeil(): void {
   sessionVeil = el;
   // A label implies a wait — only show it if the veil outlives ~1s,
   // which means the restore hit a genuinely slow path.
-  sessionVeilLabelTimer = setTimeout(() => {
+  sessionVeilLabelTimer = setTimeout((): void => {
     const label = document.createElement('span');
     label.textContent = 'RECONNECTING'; // player's frame, not the protocol's — F5 with a stored token IS a rejoin
     sessionVeil?.append(label);
@@ -74,45 +74,45 @@ export function wireWorld(ctx: NetCtx): void {
 
   // Server-owned creatures — events only; the client replays the shared
   // sim between segments.
-  networkManager.onBallSpawn = (data) => {
+  networkManager.onBallSpawn = (data): void => {
     if (deps.world.playbackMode) {return;}
     deps.entities().netBallSpawn(data);
   };
-  networkManager.onBallSegment = (data) => {
+  networkManager.onBallSegment = (data): void => {
     if (deps.world.playbackMode) {return;}
     deps.entities().netBallSegment(data);
   };
-  networkManager.onBallDie = (data) => {
+  networkManager.onBallDie = (data): void => {
     if (deps.world.playbackMode) {return;}
     deps.entities().netBallDie(data);
   };
-  networkManager.onBallRoster = (data) => {
+  networkManager.onBallRoster = (data): void => {
     if (deps.world.playbackMode) {return;}
     deps.entities().netBallRoster(data);
   };
 
   // Server-owned melee species — crawl* events drive netDriven Crawler
   // instances replaying shared/creatureSim.ts (see game/netCrawlers.ts).
-  networkManager.onCrawlSpawn = (data) => {
+  networkManager.onCrawlSpawn = (data): void => {
     if (deps.world.playbackMode) {return;}
     deps.entities().netCrawlSpawn(data);
   };
-  networkManager.onCrawlEvt = (data) => {
+  networkManager.onCrawlEvt = (data): void => {
     if (deps.world.playbackMode) {return;}
     deps.entities().netCrawlEvt(data);
   };
-  networkManager.onCrawlDie = (data) => {
+  networkManager.onCrawlDie = (data): void => {
     if (deps.world.playbackMode) {return;}
     deps.entities().netCrawlDie(data);
   };
-  networkManager.onCrawlRoster = (data) => {
+  networkManager.onCrawlRoster = (data): void => {
     if (deps.world.playbackMode) {return;}
     deps.entities().netCrawlRoster(data);
   };
 
   // Admin hot-reload — the room's map spec changed mid-match. Rebuild the
   // static geometry exactly like the join path does from gameState.
-  networkManager.onMapUpdate = (map) => {
+  networkManager.onMapUpdate = (map): void => {
     if (map.mapName) {deps.world.mapName = map.mapName;}
     buildStructures(map.structures ?? [], deps.lazyScene(), deps.lazyTerrain());
     applyStructureSpecs(map.structures, deps.lazyPlayer().movement);
@@ -123,18 +123,18 @@ export function wireWorld(ctx: NetCtx): void {
     }
     if (map.terrain || map.heightScale || map.tileSize) {
       applyTerrain(ctx, map.terrain ?? null, map.terrainTex, map.sky, map.heightScale, map.tileSize, map.terrainPreset)
-        .catch((error) => ctx.deps.logger.warn(`applyTerrain failed: ${error instanceof Error ? error.message : String(error)}`));
+        .catch((error): void => ctx.deps.logger.warn(`applyTerrain failed: ${error instanceof Error ? error.message : String(error)}`));
     }
     applyMapFog(ctx, map.fog);
     applyInteriors(ctx, map.interiors)
-      .catch((error) => ctx.deps.logger.warn(`applyInteriors failed: ${error instanceof Error ? error.message : String(error)}`));
-    resolveServerEndpoints().then(({ httpUrl }) => saveLastRoomMap(httpUrl, map))
-      .catch((error) => ctx.deps.logger.warn(`saveLastRoomMap failed: ${error instanceof Error ? error.message : String(error)}`));
+      .catch((error): void => ctx.deps.logger.warn(`applyInteriors failed: ${error instanceof Error ? error.message : String(error)}`));
+    resolveServerEndpoints().then(({ httpUrl }): void => saveLastRoomMap(httpUrl, map))
+      .catch((error): void => ctx.deps.logger.warn(`saveLastRoomMap failed: ${error instanceof Error ? error.message : String(error)}`));
     if (!map.silent) {chat.add(null, 'map updated by admin');}
   };
 
   // Initial connection and reconnection — full roster + local restore.
-  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: PickupKind }[]; flags?: { team: TeamId; pos: { x: number; y: number; z: number }; home?: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; team?: string }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; terrainTex?: string; terrainPreset?: number; sky?: string; interiors?: InteriorSpec[] } }) => {
+  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: PickupKind }[]; flags?: { team: TeamId; pos: { x: number; y: number; z: number }; home?: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; team?: string }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; terrainTex?: string; terrainPreset?: number; sky?: string; interiors?: InteriorSpec[] } }): void => {
     logger.info(`gameState room=${roomInfo?.room} mapKeys=${roomInfo?.map ? Object.keys(roomInfo.map).join(',') : 'none'}`);
     // The snapshot replaces the world — any volatile layer still alive
     // pre-reconnect is stale fast-forward, not truth. Purge before
@@ -183,14 +183,14 @@ function applyRoomInfo(ctx: NetCtx, playerCount: number, roomInfo?: Parameters<N
   // Pickups still lying on the field when we (re)joined — the roster is
   // authoritative both ways: spawn what's there, drop ghosts whose
   // pickupGone we missed while disconnected.
-  ctx.reconcilePickups(new Set((roomInfo.pickups ?? []).map(p => p.id)));
+  ctx.reconcilePickups(new Set((roomInfo.pickups ?? []).map((p): number => p.id)));
   for (const p of roomInfo.pickups ?? []) {ctx.addPickup(p.id, p.pos, p.kind ?? 'gem');}
   reconcileDeployables(ctx, roomInfo.deployables);
   applyMapSnapshot(ctx, roomInfo.map);
   // Remember this room's map — F5 boots straight into it while the
   // socket round-trips instead of flashing the default field.
-  resolveServerEndpoints().then(({ httpUrl }) => saveLastRoomMap(httpUrl, roomInfo.map))
-    .catch((error) => ctx.deps.logger.warn(`saveLastRoomMap failed: ${error instanceof Error ? error.message : String(error)}`));
+  resolveServerEndpoints().then(({ httpUrl }): void => saveLastRoomMap(httpUrl, roomInfo.map))
+    .catch((error): void => ctx.deps.logger.warn(`saveLastRoomMap failed: ${error instanceof Error ? error.message : String(error)}`));
   // Flags mid-flight when we joined — same path as a flagUpdate broadcast.
   // An empty/absent list on a room hop must also clear the old room's
   // banners and HUD chips, so fire it either way.
@@ -207,7 +207,7 @@ function applyMatchMeta(ctx: NetCtx, roomInfo: RoomInfo): void {
   const { deps } = ctx;
   const scores = roomInfo?.scores && Number.isFinite(roomInfo.scores.alpha + roomInfo.scores.bravo)
     ? roomInfo.scores : undefined;
-  const ffaScores = roomInfo?.ffaScores && !Object.values(roomInfo.ffaScores).some(v => !Number.isFinite(v))
+  const ffaScores = roomInfo?.ffaScores && !Object.values(roomInfo.ffaScores).some((v): boolean => !Number.isFinite(v))
     ? roomInfo.ffaScores : undefined;
   const matchEndsAt = Number.isFinite(roomInfo?.matchEndsAt) ? roomInfo!.matchEndsAt : undefined;
   if (roomInfo?.room !== undefined) {
@@ -237,8 +237,8 @@ function announceRoom(ctx: NetCtx, playerCount: number, roomInfo?: RoomInfo): vo
     chat.add(null, `you are on ${roomInfo.team.toUpperCase()}${roomInfo.scores ? ` — ALPHA ${roomInfo.scores.alpha} : BRAVO ${roomInfo.scores.bravo}` : ''}`);
   }
   if (roomInfo?.ffaScores && Object.keys(roomInfo.ffaScores).length > 0) {
-    const top = Object.entries(roomInfo.ffaScores).toSorted((a, b) => b[1] - a[1]).slice(0, 3);
-    chat.add(null, `dm board — ${top.map(([id, s]) => `${id} ${s}`).join(' / ')}`);
+    const top = Object.entries(roomInfo.ffaScores).toSorted((a, b): number => b[1] - a[1]).slice(0, 3);
+    chat.add(null, `dm board — ${top.map(([id, s]): string => `${id} ${s}`).join(' / ')}`);
   }
 }
 
@@ -262,9 +262,9 @@ function applyMapSnapshot(ctx: NetCtx, map?: MapSnapshot): void {
   setAmbientCaps(map?.ambient);
   applyMapFog(ctx, map?.fog);
   applyTerrain(ctx, map?.terrain ?? null, map?.terrainTex, map?.sky, map?.heightScale, map?.tileSize, map?.terrainPreset)
-    .catch((error) => ctx.deps.logger.warn(`applyTerrain failed: ${error instanceof Error ? error.message : String(error)}`));
+    .catch((error): void => ctx.deps.logger.warn(`applyTerrain failed: ${error instanceof Error ? error.message : String(error)}`));
   applyInteriors(ctx, map?.interiors)
-    .catch((error) => ctx.deps.logger.warn(`applyInteriors failed: ${error instanceof Error ? error.message : String(error)}`));
+    .catch((error): void => ctx.deps.logger.warn(`applyInteriors failed: ${error instanceof Error ? error.message : String(error)}`));
 }
 
 /** Local-player half of gameState — position/rotation/health restore on

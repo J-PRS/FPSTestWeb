@@ -204,14 +204,14 @@ n += 1;
    *  binary-only client would never even start the drain clock. The
    *  reclaim's ballRoster reseeds ball truth, so the skip is honest. */
   broadcastBinaryReliable(data: Uint8Array): void {
-    this.connections.forEach((ws, pid) => {
+    this.connections.forEach((ws, pid): void => {
       if (ws.readyState === 1 && this.drownCheck(pid, ws) === 'ok') {ws.send(data);}
     });
   }
 
   broadcast(msg: ServerMessage, excludePlayerId?: string): void {
     const data = this.frame(msg, undefined, excludePlayerId);
-    this.connections.forEach((ws, pid) => {
+    this.connections.forEach((ws, pid): void => {
       if (excludePlayerId !== undefined && pid === excludePlayerId) {return;}
       if (ws.readyState === 1 && this.drownCheck(pid, ws) === 'ok') {
         ws.send(data);
@@ -237,7 +237,7 @@ n += 1;
    *  'server restarting' on the reconnect banner instead of a mystery
    *  drop that looks like their own connection died. */
   closeAll(code: number, reason: string): void {
-    this.connections.forEach((ws) => {
+    this.connections.forEach((ws): void => {
       if (ws.readyState === 1) {
         try { ws.close(code, reason); } catch { /* already closing */ }
       }

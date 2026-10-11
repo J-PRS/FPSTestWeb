@@ -31,17 +31,17 @@ export function applyDebugHooks(deps: DebugHooksDeps): ((dt: number) => void) | 
     const spots: [id: string, cls: 'light' | 'medium' | 'heavy', off: number][] = [
       ['dummy_l', 'light', -3.2], ['dummy_m', 'medium', 0], ['dummy_h', 'heavy', 3.2],
     ];
-    const remotes = spots.map(([id, cls]) => {
+    const remotes = spots.map(([id, cls]): RemotePlayer => {
       const rp = new RemotePlayer(deps.scene, id, { x: player.pos.x, y: player.pos.y, z: player.pos.z }, deps.terrain);
       rp.setClass(cls);
       deps.remotePlayers.set(id, rp);
       return rp;
     });
     const scratch = new THREE.Vector3();
-    return (_dt: number) => {
+    return (_dt: number): void => {
       const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw);
       const rx = Math.cos(player.yaw), rz = -Math.sin(player.yaw);
-      remotes.forEach((rp, i) => {
+      remotes.forEach((rp, i): void => {
         const [, , off] = spots[i]!;
         const x = player.pos.x + fx * 5 + rx * off;
         const z = player.pos.z + fz * 5 + rz * off;
@@ -68,12 +68,12 @@ export function applyDebugHooks(deps: DebugHooksDeps): ((dt: number) => void) | 
   deps.scene.add(marker);
   const scratch = new THREE.Vector3();
 
-  return (_dt: number) => {
+  return (_dt: number): void => {
     const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw);
     // Float above eye — never buried in terrain
     dummy.teleportTo(scratch.set(player.pos.x + fx * 4, player.pos.y + 2, player.pos.z + fz * 4));
     const m = dummy.model?.object3D;
-    deps.logger.debug(`[dummy] pos=${dummy.position.toArray().map(v => v.toFixed(1)).join(',')} modelPos=${m ? m.getWorldPosition(scratch).toArray().map(v => v.toFixed(1)).join(',') : 'none'} visible=${m?.visible} scale=${m?.scale.x.toFixed(3)}`);
+    deps.logger.debug(`[dummy] pos=${dummy.position.toArray().map((v): string => v.toFixed(1)).join(',')} modelPos=${m ? m.getWorldPosition(scratch).toArray().map((v): string => v.toFixed(1)).join(',') : 'none'} visible=${m?.visible} scale=${m?.scale.x.toFixed(3)}`);
     marker.position.copy(dummy.position);
     dummy.rotation.yaw = player.yaw + Math.PI;
     dummy.rotation.pitch = dummyPitch;

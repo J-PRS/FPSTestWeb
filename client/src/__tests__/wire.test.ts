@@ -7,8 +7,8 @@ import {
   tickEncodeScratch, v4Last,encodeBallSegment,decodeBallSegment
 } from '../../../shared/wire';
 
-describe('position frame round-trip', () => {
-  it('preserves position exactly (float32)', () => {
+describe('position frame round-trip', (): void => {
+  it('preserves position exactly (float32)', (): void => {
     const pos = { x: 123.456, y: -78.9, z: 0.5 };
     const rot = { yaw: 1.234, pitch: -0.9 };
     const vel = { x: 12.34, y: -5.6, z: 100.1 };
@@ -21,28 +21,28 @@ describe('position frame round-trip', () => {
     expect(decoded!.ping).toBe(37);
   });
 
-  it('quantizes velocity to 0.1 m/s', () => {
+  it('quantizes velocity to 0.1 m/s', (): void => {
     const vel = { x: 1.04, y: 1.05, z: 1.06 };
     const d = decodePosition(encodePosition({ x: 0, y: 0, z: 0 }, { yaw: 0, pitch: 0 }, vel, 1, 0))!;
     expect(d.velocity.x).toBeCloseTo(1, 5);
     expect(d.velocity.z).toBeCloseTo(1.1, 5);
   });
 
-  it('wraps yaw into [0, 2π) and clamps pitch', () => {
+  it('wraps yaw into [0, 2π) and clamps pitch', (): void => {
     const neg = decodePosition(encodePosition({ x: 0, y: 0, z: 0 }, { yaw: -0.5, pitch: 99 }, { x: 0, y: 0, z: 0 }, 1, 0))!;
     expect(neg.rotation.yaw).toBeGreaterThanOrEqual(0);
     expect(neg.rotation.yaw).toBeCloseTo(Math.PI * 2 - 0.5, 2);
     expect(neg.rotation.pitch).toBeCloseTo(Math.PI, 4);
   });
 
-  it('rejects non-wire and truncated frames', () => {
+  it('rejects non-wire and truncated frames', (): void => {
     expect(decodePosition(new Uint8Array([0x00, 0x01, 2, 3]))).toBeNull();
     expect(decodePosition(new Uint8Array(10))).toBeNull();
     const good = encodePosition({ x: 0, y: 0, z: 0 }, { yaw: 0, pitch: 0 }, { x: 0, y: 0, z: 0 }, 1, 0);
     expect(decodePosition(good.slice(0, 10))).toBeNull();
   });
 
-  it('round-trips inputSeq and decodes old 30-byte frames without it', () => {
+  it('round-trips inputSeq and decodes old 30-byte frames without it', (): void => {
     const pos = { x: 1, y: 2, z: 3 };
     const rot = { yaw: 0, pitch: 0 };
     const vel = { x: 0, y: 0, z: 0 };
@@ -58,8 +58,8 @@ describe('position frame round-trip', () => {
   });
 });
 
-describe('tick frame round-trip', () => {
-  it('decodes all player records with fields intact', () => {
+describe('tick frame round-trip', (): void => {
+  it('decodes all player records with fields intact', (): void => {
     const p1 = encodeTickPlayer({
       playerId: 'player_abc', position: { x: 1, y: 2, z: 3 },
       rotation: { yaw: 0.5, pitch: -0.5 }, velocity: { x: 4, y: 5, z: 6 },
@@ -89,7 +89,7 @@ describe('tick frame round-trip', () => {
     expect(b!.rotation.pitch).toBeCloseTo(0.2, 2);
   });
 
-  it('position quantization stays within POS_Q/2 at any in-range coordinate', () => {
+  it('position quantization stays within POS_Q/2 at any in-range coordinate', (): void => {
     // POS_Q=0.04 i16 grid: decoded pos may drift ≤2cm — fine for the
     // interp-only consumers (upsertRemotePlayer), a hard error if any
     // future path seeds sim state from tick records.
@@ -113,7 +113,7 @@ describe('tick frame round-trip', () => {
     }
   });
 
-  it('rejects truncated frames', () => {
+  it('rejects truncated frames', (): void => {
     const p = encodeTickPlayer({
       playerId: 'a', position: { x: 0, y: 0, z: 0 },
       rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 },
@@ -123,7 +123,7 @@ describe('tick frame round-trip', () => {
     expect(decodeTickFrame(frame.slice(0, frame.length - 5))).toBeNull();
   });
 
-  it('isWireFrame gates the magic byte only', () => {
+  it('isWireFrame gates the magic byte only', (): void => {
     expect(isWireFrame(new Uint8Array([0x54, WIRE_POSITION]))).toBe(true);
     expect(isWireFrame(new Uint8Array([0x53, WIRE_POSITION]))).toBe(false);
     expect(isWireFrame(new Uint8Array([0x54]))).toBe(false);
@@ -131,7 +131,7 @@ describe('tick frame round-trip', () => {
 });
 
 
-describe('ballSegment binary codec', () => {
+describe('ballSegment binary codec', (): void => {
   const full = {
     id: 42, kind: 'enrage',
     position: { x: 12.5, y: -3.25, z: 999.5 },
@@ -140,7 +140,7 @@ describe('ballSegment binary codec', () => {
     et: 12.34, slowT: 1.9, damp: true, t: 1234.5,
   };
 
-  it('round-trips all fields', () => {
+  it('round-trips all fields', (): void => {
     const s = decodeBallSegment(encodeBallSegment(full))!;
     expect(s).not.toBeNull();
     expect(s.id).toBe(42);
@@ -156,24 +156,24 @@ describe('ballSegment binary codec', () => {
     expect(s.t).toBeCloseTo(1234.5);
   });
 
-  it('omits optional fields cleanly', () => {
+  it('omits optional fields cleanly', (): void => {
     const s = decodeBallSegment(encodeBallSegment(Object.assign({}, full, {targetId: null,tp: null,damp: false})))!;
     expect(s.targetId).toBeNull();
     expect(s.tp).toBeNull();
     expect(s.damp).toBe(false);
   });
 
-  it('is ~3x smaller than JSON', () => {
+  it('is ~3x smaller than JSON', (): void => {
     const bin = encodeBallSegment(full);
     const json = JSON.stringify(Object.assign({type: 'ballSegment'}, full));
     expect(bin.length).toBeLessThan(json.length / 3);
   });
 
-  it('rejects garbage', () => {
+  it('rejects garbage', (): void => {
     expect(decodeBallSegment(new Uint8Array(10))).toBeNull();
   });
 
-  it('decodes each flag bit independently', () => {
+  it('decodes each flag bit independently', (): void => {
     const base = { id: 1, kind: 'segment', position: { x: 0, y: 0, z: 0 }, velocity: { x: 0, y: 0, z: 0 }, et: 0, slowT: 0, t: 1 };
     const d = (over: object) => decodeBallSegment(encodeBallSegment(Object.assign({}, base, {enraged: false,damp: false,tp: null,targetId: null}, over)))!;
     expect(d({ enraged: true }).enraged).toBe(true);
@@ -185,20 +185,20 @@ describe('ballSegment binary codec', () => {
     expect(d({ tp: { x: 5, y: 6, z: 7 } }).targetId).toBeNull();
   });
 
-  it('falls back to bounce on an unknown kind index', () => {
+  it('falls back to bounce on an unknown kind index', (): void => {
     const bin = encodeBallSegment({ id: 1, kind: 'enrage', position: { x: 0, y: 0, z: 0 }, velocity: { x: 0, y: 0, z: 0 }, enraged: false, damp: false, tp: null, targetId: null, et: 0, slowT: 0, t: 0 });
     bin[6] = 200; // kind index beyond SEG_KINDS
     expect(decodeBallSegment(bin)!.kind).toBe('bounce');
   });
 
-  it('rejects a targetId length that overruns the frame', () => {
+  it('rejects a targetId length that overruns the frame', (): void => {
     const bin = encodeBallSegment({ id: 1, kind: 'segment', position: { x: 0, y: 0, z: 0 }, velocity: { x: 0, y: 0, z: 0 }, enraged: false, damp: false, tp: null, targetId: 'player_abc', et: 0, slowT: 0, t: 0 });
     // Corrupt the trailing idLen so the declared id runs past the buffer.
     bin[bin.length - 'player_abc'.length - 1] = 200;
     expect(decodeBallSegment(bin)).toBeNull();
   });
 
-  it('rejects truncation at every record boundary', () => {
+  it('rejects truncation at every record boundary', (): void => {
     const bin = encodeBallSegment({ id: 1, kind: 'segment', position: { x: 1, y: 2, z: 3 }, velocity: { x: 4, y: 5, z: 6 }, enraged: true, damp: true, tp: { x: 7, y: 8, z: 9 }, targetId: 'p', et: 1, slowT: 2, t: 3 });
     // The decoder's floor is 44B; anything shorter must fail, and so must
     // a frame whose optional tail is cut mid-field.
@@ -208,11 +208,11 @@ describe('ballSegment binary codec', () => {
   });
 });
 
-describe('position frame adversarial decode', () => {
-  const enc = (pos: { x: number; y: number; z: number }) =>
+describe('position frame adversarial decode', (): void => {
+  const enc = (pos: { x: number; y: number; z: number }): Uint8Array<ArrayBufferLike> =>
     encodePosition(pos, { yaw: 0, pitch: 0 }, { x: 0, y: 0, z: 0 }, 1, 0);
 
-  it('rejects absurd and non-finite positions', () => {
+  it('rejects absurd and non-finite positions', (): void => {
     // 8192m bound — the JSON validator's same radius.
     expect(decodePosition(enc({ x: 9000, y: 0, z: 0 }))).toBeNull();
     // Sphere, not per-axis: 6000 on two axes exceeds the bound together.
@@ -229,11 +229,11 @@ describe('position frame adversarial decode', () => {
   });
 });
 
-describe('tick frame adversarial decode', () => {
-  const rec = (id: string, over: Partial<Parameters<typeof encodeTickPlayer>[0]> = {}) =>
+describe('tick frame adversarial decode', (): void => {
+  const rec = (id: string, over: Partial<Parameters<typeof encodeTickPlayer>[0]> = {}): Uint8Array<ArrayBufferLike> =>
     encodeTickPlayer(Object.assign({playerId: id,position: { x: 1, y: 2, z: 3 },rotation: { yaw: 0.5, pitch: -0.5 },velocity: { x: 4, y: 5, z: 6 },health: 300,isDead: false,ping: 55,ski: 1}, over));
 
-  it('decodes every record distinctly (offset drift)', () => {
+  it('decodes every record distinctly (offset drift)', (): void => {
     const frame = encodeTickFrame(0, 0, 0, [
       rec('p_one', { health: 111, velocity: { x: 1, y: 0, z: 0 } }),
       rec('p_two', { health: 222, velocity: { x: 0, y: 2, z: 0 } }),
@@ -252,13 +252,13 @@ describe('tick frame adversarial decode', () => {
     expect(d.updates[2]!.velocity.z).toBeCloseTo(3);
   });
 
-  it('rejects a declared count larger than the records present', () => {
+  it('rejects a declared count larger than the records present', (): void => {
     const frame = encodeTickFrame(0, 0, 0, [rec('p1')]);
     frame[14] = 9; // count claims 9 records; only one record follows
     expect(decodeTickFrame(frame)).toBeNull();
   });
 
-  it('decodes isDead/ski/status flag bits independently', () => {
+  it('decodes isDead/ski/status flag bits independently', (): void => {
     const frame = encodeTickFrame(0, 0, 0, [
       rec('alive', { isDead: false, ski: 0, status: 0 }),
       rec('dead_ski', { isDead: true, ski: 1, status: 0 }),
@@ -273,7 +273,7 @@ describe('tick frame adversarial decode', () => {
     expect(d.updates[2]!.isDead).toBe(false);
   });
 
-  it('round-trips positions past the old i16 bound', () => {
+  it('round-trips positions past the old i16 bound', (): void => {
     // i16×0.04 saturated at ±1310m and clamped skiers mid-map (the dunes
     // z-freeze desync); i32 keeps the same step with ±85Mm of headroom.
     const frame = encodeTickFrame(0, 0, 0, [rec('far', { position: { x: 5000, y: -5000, z: 0 } })]);
@@ -282,7 +282,7 @@ describe('tick frame adversarial decode', () => {
     expect(d.updates[0]!.position.y).toBeCloseTo(-5000, 1);
   });
 
-  it('surfaces sheep only when non-zero', () => {
+  it('surfaces sheep only when non-zero', (): void => {
     const frame = encodeTickFrame(0, 0, 0, [
       rec('sheepy', { sheep: 42 }),
       rec('nosheep', { sheep: 0 }),
@@ -293,14 +293,14 @@ describe('tick frame adversarial decode', () => {
   });
 });
 
-describe('v3 wireId frames', () => {
-  const roster = () => {
+describe('v3 wireId frames', (): void => {
+  const roster = (): WireIdRoster => {
     const r = new WireIdRoster();
     r.feed({ type: 'wireIds', add: { 7: 'player_seven', 9: 'player_nine' } });
     return r;
   };
 
-  it('resolves wireIds through the roster', () => {
+  it('resolves wireIds through the roster', (): void => {
     const recs = [
       encodeTickPlayerV3(7, { playerId: '', position: { x: 1, y: 2, z: 3 }, rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 }, health: 100, isDead: false, ski: 0 }),
       encodeTickPlayerV3(9, { playerId: '', position: { x: 4, y: 5, z: 6 }, rotation: { yaw: 1, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 }, health: 200, isDead: true, ski: 1 }),
@@ -314,7 +314,7 @@ describe('v3 wireId frames', () => {
     expect(d.updates[1]!.isDead).toBe(true);
   });
 
-  it('decodes unresolved ids as empty playerId', () => {
+  it('decodes unresolved ids as empty playerId', (): void => {
     const r = roster();
     const d = decodeTickFrame(encodeTickFrame(0, 0, 0, [
       encodeTickPlayerV3(55, { playerId: '', position: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 }, health: 0, isDead: false, ski: 0 }),
@@ -323,7 +323,7 @@ describe('v3 wireId frames', () => {
     expect(d.updates[0]!.playerId).toBe('');
   });
 
-  it('gameState feed replaces the roster wholesale', () => {
+  it('gameState feed replaces the roster wholesale', (): void => {
     const r = roster();
     r.feed({ type: 'gameState', wireIds: { 1: 'fresh_one' } });
     expect(r.ids.get(7)).toBeUndefined();
@@ -331,13 +331,13 @@ describe('v3 wireId frames', () => {
   });
 });
 
-describe('v4 delta-masked records', () => {
+describe('v4 delta-masked records', (): void => {
   const base = (): WireTickPlayer => ({
     playerId: '', position: { x: 1, y: 2, z: 3 }, rotation: { yaw: 0.5, pitch: 0.1 },
     velocity: { x: 10, y: 0, z: 5 }, health: 100, isDead: false, ski: 1, jet: 0, status: 0, sheep: 40, ping: 50,
   });
 
-  it('unchanged groups mask out; decode inherits the retained values', () => {
+  it('unchanged groups mask out; decode inherits the retained values', (): void => {
     const r = new WireIdRoster();
     r.feed({ type: 'wireIds', add: { 7: 'player_seven' } });
     const enc = tickEncodeScratch();
@@ -361,7 +361,7 @@ describe('v4 delta-masked records', () => {
     expect(d2.updates[0]!.sheep).toBe(40);
   });
 
-  it('a changed field rides the wire even when others mask out', () => {
+  it('a changed field rides the wire even when others mask out', (): void => {
     const r = new WireIdRoster();
     r.feed({ type: 'wireIds', add: { 7: 'player_seven' } });
     const enc = tickEncodeScratch();
@@ -375,7 +375,7 @@ describe('v4 delta-masked records', () => {
     expect(d.updates[0]!.health).toBe(30);
   });
 
-  it('wireId reuse forces a full record — no field inheritance across players', () => {
+  it('wireId reuse forces a full record — no field inheritance across players', (): void => {
     const enc = tickEncodeScratch();
     const last = v4Last();
     encodeTickPlayerV4(7, base(), enc, last, false);
@@ -386,7 +386,7 @@ describe('v4 delta-masked records', () => {
     expect(rec.length).toBe(30);
   });
 
-  it('a single lost frame self-heals — the K-deep basis resends the field', () => {
+  it('a single lost frame self-heals — the K-deep basis resends the field', (): void => {
     const r = new WireIdRoster();
     r.feed({ type: 'wireIds', add: { 7: 'player_seven' } });
     const enc = tickEncodeScratch();
@@ -405,7 +405,7 @@ describe('v4 delta-masked records', () => {
     expect(healed.updates[0]!.health).toBe(12);
   });
 
-  it('a torn-then-healed link resyncs on the forced full record', () => {
+  it('a torn-then-healed link resyncs on the forced full record', (): void => {
     const r = new WireIdRoster();
     r.feed({ type: 'wireIds', add: { 7: 'player_seven' } });
     const enc = tickEncodeScratch();
@@ -424,7 +424,7 @@ describe('v4 delta-masked records', () => {
     expect(healed.updates[0]!.health).toBe(12);
   });
 
-  it('a masked delta with no decode baseline drops, then the full record seats it', () => {
+  it('a masked delta with no decode baseline drops, then the full record seats it', (): void => {
     // Mid-join window: the roster knows wireId 7 but this receiver never
     // decoded a full record for it — inheriting masked groups would read
     // zeros (health=0 ghost) until the next forced-full.

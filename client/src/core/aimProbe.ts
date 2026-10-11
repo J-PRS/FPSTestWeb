@@ -21,18 +21,18 @@ const MAX_HITS = 5;
  *  `42m ribbon {"slot":20,"owner":true,...}`. Empty when nothing tags. */
 export function aimProbe(scene: THREE.Scene, camera: THREE.Camera): string[] {
   const objs: THREE.Object3D[] = [];
-  scene.traverse(o => { if (o.userData.dbg) {objs.push(o);} });
+  scene.traverse((o): void => { if (o.userData.dbg) {objs.push(o);} });
   _ray.setFromCamera(_ndc, camera);
   const hits = _ray.intersectObjects(objs, false);
-  if (hits.length > 0) {return hits.slice(0, MAX_HITS).map(h => `${h.distance.toFixed(0)}m ${describeHit(h)}`);}
+  if (hits.length > 0) {return hits.slice(0, MAX_HITS).map((h): string => `${h.distance.toFixed(0)}m ${describeHit(h)}`);}
   // Nothing tagged under the reticle — blind spot report. Raycast the
   // whole scene and describe what IS there by type/parent/material, so a
   // frozen thing made by an untagged system still names itself (that's
   // the signal to give it a markProbe).
   return _ray.intersectObjects(scene.children, true)
-    .filter(h => h.object.visible && !h.object.userData.dbg)
+    .filter((h): boolean => h.object.visible && !h.object.userData.dbg)
     .slice(0, MAX_HITS)
-    .map(h => `${h.distance.toFixed(0)}m untagged ${describeRaw(h.object)}`);
+    .map((h): string => `${h.distance.toFixed(0)}m untagged ${describeRaw(h.object)}`);
 }
 
 /** Type + parent chain + name — enough to find which subsystem owns an

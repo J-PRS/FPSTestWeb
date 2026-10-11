@@ -62,7 +62,7 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
       const g = new Gnat(scene, deps.lazyTerrain(), cloud.center.clone().add(new THREE.Vector3(
         (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 8)), queen);
       g.joinCloud(cloud);
-      g.onNip = (gn) => bite(gn, GNAT_NIP_FORCE, GNAT_NIP_DAMAGE, 'drained by gnats', { dmg: 3, text: 'drained by the gnat queen' }, GNAT_NIP_DIST + 2);
+      g.onNip = (gn): boolean => bite(gn, GNAT_NIP_FORCE, GNAT_NIP_DAMAGE, 'drained by gnats', { dmg: 3, text: 'drained by the gnat queen' }, GNAT_NIP_DIST + 2);
       gnats.push(g);
       targets.push(g);
     }
@@ -71,7 +71,7 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
   const gnatSpecies: Species<Gnat> = {
     list: gnats, interval: GNAT_SPAWN_INTERVAL, t: -25,
     spawn: spawnGnatCloud,
-    tick: (g, dt) => g.update(dt, deps.lazyTerrain(), aggroFor(g, g.pos, dt, PROFILES.flyer)),
+    tick: (g, dt): void => g.update(dt, deps.lazyTerrain(), aggroFor(g, g.pos, dt, PROFILES.flyer)),
   };
   function updateGnats(dt: number): void {
     // Cloud centers stalk the player loosely — the swarm hovers over you
@@ -80,7 +80,7 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
     for (let i = gnatClouds.length - 1; i >= 0; i -= 1) {
       const c = gnatClouds[i]!;
       // Retire clouds with no living members
-      if (!gnats.some(g => !g.dead && g.cloud === c)) {
+      if (!gnats.some((g): boolean => !g.dead && g.cloud === c)) {
         gnatClouds.splice(i, 1);
         continue;
       }
@@ -97,7 +97,7 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
     if (atCap(seekers, capFor('seeker', SEEKER_MAX))) {return;}
     const u = uber ?? rollUber();
     const s = new Seeker(scene, deps.lazyTerrain(), ringPos(SEEKER_SPAWN_MIN, SEEKER_SPAWN_MAX), u);
-    s.onSting = (sk) => bite(sk, SEEKER_STING_FORCE, SEEKER_STING_DAMAGE, 'stung to death by a seeker', { force: 1.5, text: 'run through by a lancer' }, SEEKER_STING_DIST + 1);
+    s.onSting = (sk): boolean => bite(sk, SEEKER_STING_FORCE, SEEKER_STING_DAMAGE, 'stung to death by a seeker', { force: 1.5, text: 'run through by a lancer' }, SEEKER_STING_DIST + 1);
     seekers.push(s);
     targets.push(s);
   }
@@ -105,7 +105,7 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
   const seekerSpecies: Species<Seeker> = {
     list: seekers, interval: SEEKER_SPAWN_INTERVAL, t: -40,
     spawn: spawnSeeker,
-    tick: (s, dt) => { s.update(dt, deps.lazyTerrain(), aggroFor(s, s.pos, dt, PROFILES.flyer), aggroVelFor(s)); kickTrail(s, dt); },
+    tick: (s, dt): void => { s.update(dt, deps.lazyTerrain(), aggroFor(s, s.pos, dt, PROFILES.flyer), aggroVelFor(s)); kickTrail(s, dt); },
   };
   function updateSeekers(dt: number): void { updateSpecies(seekerSpecies, dt); }
 
@@ -115,7 +115,7 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
     if (atCap(rakks, capFor('rakk', RAKK_MAX))) {return;}
     const u = uber ?? rollUber();
     const r = new Rakk(scene, deps.lazyTerrain(), ringPos(RAKK_SPAWN_MIN, RAKK_SPAWN_MAX), u);
-    r.onClawHit = (rk) => {
+    r.onClawHit = (rk): void => {
       const hit = hurtPlayer(rk.pos, RAKK_CLAW_FORCE * (rk.uber ? 1.5 : 1), RAKK_CLAW_DAMAGE * (rk.uber ? 2 : 1),
         rk.uber ? 'carried off by an elder rakk' : 'shredded by a rakk', rk.radius + RAKK_CLAW_DIST + 1, rk);
       if (hit && rk.uber) {
@@ -126,7 +126,7 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
         player.vel.addScaledVector(rk.vel, 0.3);
       }
     };
-    r.onDive = (rk) => { deps.lazyEffects().spawnJumpDust(rk.pos); sfx.enemyCue(rk.pos, 'dart'); }; // wing-tuck puff — silhouette cue
+    r.onDive = (rk): void => { deps.lazyEffects().spawnJumpDust(rk.pos); sfx.enemyCue(rk.pos, 'dart'); }; // wing-tuck puff — silhouette cue
     rakks.push(r);
     targets.push(r);
   }
@@ -134,7 +134,7 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
   const rakkSpecies: Species<Rakk> = {
     list: rakks, interval: RAKK_SPAWN_INTERVAL, t: -80,
     spawn: spawnRakk,
-    tick: (r, dt) => { r.update(dt, deps.lazyTerrain(), aggroFor(r, r.pos, dt, PROFILES.flyer)); kickTrail(r, dt); },
+    tick: (r, dt): void => { r.update(dt, deps.lazyTerrain(), aggroFor(r, r.pos, dt, PROFILES.flyer)); kickTrail(r, dt); },
   };
   function updateRakks(dt: number): void { updateSpecies(rakkSpecies, dt); }
 
@@ -144,10 +144,10 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
     if (atCap(strifers, capFor('strifer', STRIFER_MAX))) {return;}
     const u = uber ?? rollUber();
     const st = new Strifer(scene, deps.lazyTerrain(), ringPos(STRIFER_SPAWN_MIN, STRIFER_SPAWN_MAX), u);
-    st.onBoltHit = (x, pos) => hurtPlayer(pos, STRIFER_BOLT_FORCE, STRIFER_BOLT_DAMAGE * (x.uber ? 2 : 1),
+    st.onBoltHit = (x, pos): boolean => hurtPlayer(pos, STRIFER_BOLT_FORCE, STRIFER_BOLT_DAMAGE * (x.uber ? 2 : 1),
       x.uber ? 'raked by an elder strifer' : 'shot down by a strifer', 3, x);
-    st.onBoltLand = (pos) => deps.lazyEffects().spawnImpact(pos, new THREE.Vector3(0, 1, 0));
-    st.onFire = (x) => sfx.enemyCue(x.pos, 'zap');
+    st.onBoltLand = (pos): void => deps.lazyEffects().spawnImpact(pos, new THREE.Vector3(0, 1, 0));
+    st.onFire = (x): void => sfx.enemyCue(x.pos, 'zap');
     strifers.push(st);
     targets.push(st);
   }
@@ -155,7 +155,7 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
   const striferSpecies: Species<Strifer> = {
     list: strifers, interval: STRIFER_SPAWN_INTERVAL, t: -30,
     spawn: spawnStrifer,
-    tick: (st, dt) => { st.update(dt, deps.lazyTerrain(), aggroFor(st, st.pos, dt, PROFILES.flyer), aggroVelFor(st)); kickTrail(st, dt); },
+    tick: (st, dt): void => { st.update(dt, deps.lazyTerrain(), aggroFor(st, st.pos, dt, PROFILES.flyer), aggroVelFor(st)); kickTrail(st, dt); },
   };
   function updateStrifers(dt: number): void { updateSpecies(striferSpecies, dt); }
 

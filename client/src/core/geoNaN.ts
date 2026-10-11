@@ -41,7 +41,7 @@ function reportNaN(geo: THREE.BufferGeometry): void {
   let owner = '(detached)';
   let tag: string | undefined = undefined;
   try {
-    scene?.traverse((o) => {
+    scene?.traverse((o): void => {
       const g = (o as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;
       if (g === geo) {
         owner = pathOf(o);
@@ -78,5 +78,5 @@ export function installGeoNaNWatch(s: THREE.Scene): void {
     const r = this.boundingSphere?.radius;
     if (r !== undefined && r !== r) {reportNaN(this);} // NaN only
   };
-  registerDiag('geoNaN', () => ({ geoNaN: [...hits.values()] }));
+  registerDiag('geoNaN', (): { geoNaN: NanHit[]; } => ({ geoNaN: [...hits.values()] }));
 }

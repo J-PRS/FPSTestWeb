@@ -158,7 +158,7 @@ const fragmentShader = /* glsl */`
 const _vnoise = (x: number, y: number, period: number): number => {
   const xi = Math.floor(x), yi = Math.floor(y);
   const xf = _smooth(x - xi), yf = _smooth(y - yi);
-  const w = (v: number) => ((v % period) + period) % period;
+  const w = (v: number): number => ((v % period) + period) % period;
   const a = noiseHash(w(xi), w(yi)), b = noiseHash(w(xi + 1), w(yi));
   const c = noiseHash(w(xi), w(yi + 1)), d = noiseHash(w(xi + 1), w(yi + 1));
   return a + (b - a) * xf + (c - a) * yf + (a - b - c + d) * xf * yf;

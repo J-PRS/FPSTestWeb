@@ -87,7 +87,7 @@ export class SheepCore {
    *  body keeps its earned meter instead of reading as a fresh leash. */
   rekey(oldId: string, newId: string): void {
     if (oldId === newId) {return;}
-    const mv = <T>(m: Map<string, T>) => { const v = m.get(oldId); m.delete(oldId); if (v !== undefined) {m.set(newId, v);} };
+    const mv = <T>(m: Map<string, T>): void => { const v = m.get(oldId); m.delete(oldId); if (v !== undefined) {m.set(newId, v);} };
     mv(this.meter); mv(this.cov); mv(this.lastFire); mv(this.eSm); mv(this.eLast);
     mv(this.eParts); mv(this.provenUntil); mv(this.why);
     if (this.maxed.delete(oldId)) {this.maxed.add(newId);}

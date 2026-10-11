@@ -39,7 +39,7 @@ function savedText(shotTime: number, airtimeSec: number, chain: number): string 
 }
 
 function retire(el: HTMLDivElement): void {
-  setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 400); }, ENTRY_LIFE_MS);
+  setTimeout((): void => { el.style.opacity = '0'; setTimeout((): void => el.remove(), 400); }, ENTRY_LIFE_MS);
 }
 
 /** shotTime = seconds into the recording/match when the shot was fired. */
@@ -68,7 +68,7 @@ export function feedShotPending(waitSec: number): PendingFeed {
   label.style.position = 'relative';
   label.textContent = 'saving clip…';
   el.append(fill, label);
-  const arm = (sec: number) => {
+  const arm = (sec: number): void => {
     fill.style.transitionDuration = `${Math.max(0.2, sec)}s`;
     fill.style.transform = 'scaleX(0)';
     // Force a reflow so the restarted transition always animates from 0.
@@ -77,12 +77,12 @@ export function feedShotPending(waitSec: number): PendingFeed {
   };
   arm(waitSec);
   return {
-    extend(waitSec2: number) { arm(waitSec2); },
-    done(shotTime: number, airtimeSec: number, chain: number) {
+    extend(waitSec2: number): void { arm(waitSec2); },
+    done(shotTime: number, airtimeSec: number, chain: number): void {
       fill.remove();
       label.textContent = savedText(shotTime, airtimeSec, chain);
       retire(el);
     },
-    discard() { el.remove(); },
+    discard(): void { el.remove(); },
   };
 }

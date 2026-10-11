@@ -194,20 +194,20 @@ const dotBatches: BatchMap<THREE.Scene, DotBatch> = new Map();
 
 /** Take a slot from any non-full batch for the scene; grow on demand. */
 function acquireDotSlot(scene: THREE.Scene): { batch: DotBatch; slot: number } {
-  const batch = acquireBatch(dotBatches, scene, s => new DotBatch(s), b => b.free.length > 0);
+  const batch = acquireBatch(dotBatches, scene,( s): DotBatch => new DotBatch(s),( b): boolean => b.free.length > 0);
   return { batch, slot: batch.free.pop() as number };
 }
 
 /** Return the slot; an emptied overflow batch retires (batch[0] stays). */
 function releaseDotSlot(scene: THREE.Scene, batch: DotBatch, slot: number): void {
   batch.free.push(slot);
-  retireBatch(dotBatches, scene, batch, b => b.free.length === BATCH_TRAILS, b => b.dispose());
+  retireBatch(dotBatches, scene, batch,( b): boolean => b.free.length === BATCH_TRAILS,( b): void => b.dispose());
 }
 
 // Alt+Q census — a trail that emits but draws nothing shows here as a
 // live slot with a dead batch (freed verts, culled/invisible Points).
-registerDiag('ballDots', () => ({
-  ballDots: [...dotBatches.values()].flat().map(b => ({
+registerDiag('ballDots', (): { ballDots: { free: number; visible: boolean; inScene: boolean; }[]; } => ({
+  ballDots: [...dotBatches.values()].flat().map((b): { free: number; visible: boolean; inScene: boolean; } => ({
     free: b.free.length,
     visible: b.points.visible,
     inScene: Boolean(b.points.parent),

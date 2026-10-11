@@ -222,17 +222,17 @@ export class NetworkManager {
     this.lastUrl = url;
     this.lastFactory = makeTransport;
     this.lastRxAt = Date.now();
-    this.stallTimer ??= setInterval(() => this.checkStall(), 1000);
-    return new Promise((resolve, reject) => {
+    this.stallTimer ??= setInterval((): void => this.checkStall(), 1000);
+    return new Promise((resolve, reject): void => {
       try {
         // Default: the whole transport stack runs on the net worker —
         // Blink starves ws dispatch under input/render load, so the wire
         // lives on its own event loop. Tests/node have no Worker.
-        const factory = makeTransport ?? ((cfg) => typeof Worker === 'undefined' ? new TieredTransport(cfg) : new WorkerTransport(cfg));
+        const factory = makeTransport ?? ((cfg): TieredTransport | WorkerTransport => typeof Worker === 'undefined' ? new TieredTransport(cfg) : new WorkerTransport(cfg));
         this.ws = factory({
           url,
           resolveUrl,
-          onConnect: () => {
+          onConnect: (): void => {
             // Join handshake — must precede the queued-message flush,
             // which WebSocketConnection guarantees (onConnect first)
             this.send({
@@ -265,7 +265,7 @@ export class NetworkManager {
             this.pendingCmds = [];
             resolve();
           },
-          onDisconnect: (code, reason) => {
+          onDisconnect: (code, reason): void => {
             // 1008 = server rejected our session — drop stored identity so
             // auto-reconnect joins fresh instead of looping on bad creds
             if (code === 1008) {this.resetIdentity(reason);}
@@ -288,17 +288,17 @@ export class NetworkManager {
             // freeze with them. gameState re-seeds the map on reconnect.
             this.players.clear();
           },
-          onError: (error) => {
+          onError: (error): void => {
             if (!this.hasLoggedConnectionError) {
               logger.error('Connection error', error);
               this.hasLoggedConnectionError = true;
             }
             reject(error);
           },
-          onMessage: (data) => this.wireIn.message(data),
-          onBinaryMessage: (data) => this.wireIn.binary(data),
+          onMessage: (data): void => this.wireIn.message(data),
+          onBinaryMessage: (data): void => this.wireIn.binary(data),
           // Worker-measured RTT — wire-honest (no main-loop queue delay).
-          onRtt: (rtt) => this.telemetry.onPong(Date.now() - rtt, Date.now()),
+          onRtt: (rtt): void => this.telemetry.onPong(Date.now() - rtt, Date.now()),
         });
         this.ws.connect(url);
       } catch (error) {
@@ -349,7 +349,7 @@ export class NetworkManager {
     this.ws?.disconnect();
     this.ws = null;
     this.connected = false;
-    this.connect(url, this.lastFactory).catch(() => { /* probe errors are already logged */ });
+    this.connect(url, this.lastFactory).catch((): void => { /* probe errors are already logged */ });
   }
 
   /** Online session whose socket is down right now (reconnect loop
@@ -524,7 +524,7 @@ this.sendDrops += 1;
   }
 
   resendInputs(lastSeq: number): void {
-    this.inputs.resend(lastSeq, (m) => this.send(m), this.isConnected());
+    this.inputs.resend(lastSeq, (m): void => this.send(m), this.isConnected());
   }
 
   ackInputs(inputAck: number): void {
@@ -724,7 +724,7 @@ this.sendDrops += 1;
     // journal keeps the entry regardless, so skipping the fast path
     // loses nothing (inputSync re-requests on the server's word).
     if (!this.isConnected()) {return;}
-    this.inputs.sendMove(input, rotation, (m) => this.send(m));
+    this.inputs.sendMove(input, rotation, (m): void => this.send(m));
   }
 
   /** Journal entries with seq > `after` — what the server hadn't consumed

@@ -30,7 +30,7 @@ export function wireMatchEvents(ctx: NetCtx): void {
   // (within 10 of the cap) where each point actually matters.
   let lastLead = '';
   let lastMilestone = -1;
-  networkManager.onTeamScore = (scores, winAt) => {
+  networkManager.onTeamScore = (scores, winAt): void => {
     if (!Number.isFinite(scores.alpha + scores.bravo + winAt)) {return;}
     deps.world.teamScores = scores;
     deps.lazyHud().setTeamScore?.(scores.alpha, scores.bravo);
@@ -43,8 +43,8 @@ export function wireMatchEvents(ctx: NetCtx): void {
       lastMilestone = milestone;
     }
   };
-  networkManager.onFfaScore = (scores, winAt) => {
-    if (Object.values(scores).some(v => !Number.isFinite(v)) || !Number.isFinite(winAt)) {return;}
+  networkManager.onFfaScore = (scores, winAt): void => {
+    if (Object.values(scores).some((v): boolean => !Number.isFinite(v)) || !Number.isFinite(winAt)) {return;}
     deps.world.ffaScores = new Map(Object.entries(scores));
     const me = nm().getLocalPlayerId();
     const mine = scores[me] ?? 0;
@@ -57,7 +57,7 @@ export function wireMatchEvents(ctx: NetCtx): void {
       chat.add(null, `you: ${mine} pts (leader ${lead}/${winAt})`);
     }
   };
-  networkManager.onFfaMatchEnd = (winner, scores) => {
+  networkManager.onFfaMatchEnd = (winner, scores): void => {
     const me = nm().getLocalPlayerId();
     const iWon = winner === me;
     chat.add(null, winner === 'draw'
@@ -68,7 +68,7 @@ export function wireMatchEvents(ctx: NetCtx): void {
     deps.lazyHud().setScoreboardCountdown?.(10);
     pinScoreboard();
   };
-  networkManager.onMatchEnd = (winner, scores) => {
+  networkManager.onMatchEnd = (winner, scores): void => {
     const iWon = winner === deps.world.localTeam;
     chat.add(null, winner === 'draw'
       ? `DRAW ${scores.alpha}:${scores.bravo} — time's up, new match starting`
@@ -78,7 +78,7 @@ export function wireMatchEvents(ctx: NetCtx): void {
     deps.lazyHud().setScoreboardCountdown?.(10);
     pinScoreboard();
   };
-  networkManager.onMatchStart = (mode) => {
+  networkManager.onMatchStart = (mode): void => {
     deps.lazyHud().setScoreboardCountdown?.(null);
     releaseScoreboard();
     // endCleanup reset the flags to 'home' just before this broadcast —
@@ -94,8 +94,8 @@ export function wireMatchEvents(ctx: NetCtx): void {
     chat.add(null, `match start — ${mode || 'arena'}`);
     sfx.matchHorn('start');
   };
-  networkManager.onMatchNotice = (text) => chat.add(null, text);
-  networkManager.onServerWarn = (text) => {
+  networkManager.onMatchNotice = (text): HTMLDivElement => chat.add(null, text);
+  networkManager.onServerWarn = (text): void => {
     deps.lazyHud().serverWarn(text);
     chat.add(null, text);
   };

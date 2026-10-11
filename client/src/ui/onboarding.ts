@@ -26,7 +26,7 @@ const card = (title: string, body: string, btnText: string | null): HTMLDivEleme
     b.style.cssText =
       'margin-top:18px;padding:8px 26px;font:inherit;letter-spacing:0.14em;cursor:pointer;' +
       'color:#eaf4ff;background:rgba(58,167,255,0.16);border:1px solid rgba(58,167,255,0.5);border-radius:4px;';
-    b.addEventListener('click', () => el.remove());
+    b.addEventListener('click', (): void => el.remove());
     box.append(b);
   }
   el.append(box);

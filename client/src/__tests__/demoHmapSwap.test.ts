@@ -21,10 +21,10 @@ const rampField = (size: number, gain: number): Heightfield => {
 };
 
 const prior = snapshotHeightmap();
-afterEach(() => {restoreHeightmap(prior); setHeightScale(1); setWorldScale(1500);});
+afterEach((): void => {restoreHeightmap(prior); setHeightScale(1); setWorldScale(1500);});
 
-describe('embedded heightmap playback swap', () => {
-  it('inject serves the embedded grid through getHeightfield + sampleHeight', () => {
+describe('embedded heightmap playback swap', (): void => {
+  it('inject serves the embedded grid through getHeightfield + sampleHeight', (): void => {
     const n = 4;
     // Texel (0,0)=0, (1,0)=128 → halfway point ~64/255*125*gain(=2)
     const data = new Uint8Array([0, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
@@ -42,7 +42,7 @@ describe('embedded heightmap playback swap', () => {
     expect(hMid).toBeCloseTo((128 / 255) * 125 * 2 * 0.5, 1);
   });
 
-  it('restore hands the previous field back — no embedded leak', () => {
+  it('restore hands the previous field back — no embedded leak', (): void => {
     const live = new Uint8Array(4).fill(200);
     injectHeightmapBytes(live, 2, 1, 1500);
     const before = getHeightfield()!;
@@ -57,7 +57,7 @@ describe('embedded heightmap playback swap', () => {
     expect(back.size).toBe(2);
   });
 
-  it('restore to EMPTY leaves sampleHeight at the no-map answer', () => {
+  it('restore to EMPTY leaves sampleHeight at the no-map answer', (): void => {
     const emb = new Uint8Array(4).fill(100);
     const restore = injectHeightmapBytes(emb, 2, 1, 1500);
     restore();
@@ -65,7 +65,7 @@ describe('embedded heightmap playback swap', () => {
     expect(sampleHeight(10, 10)).toBe(0);
   });
 
-  it('match gate: same-terrain live field wins (no swap), different loses', () => {
+  it('match gate: same-terrain live field wins (no swap), different loses', (): void => {
     // Record a demo on field A
     const fieldA = rampField(64, 3);
     const emb: DemoHeightmap = hmapDownsample(fieldA, 32);

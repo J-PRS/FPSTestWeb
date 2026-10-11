@@ -15,7 +15,7 @@ export enum LogLevel {
 
 /** Local-time ISO stamp (`2026-10-02T19:15:48.852+02:00`) — toISOString
  *  is UTC-only, which made Alt+Q dumps read wrong vs wall clock. */
-const padN = (n: number, w = 2) => String(n).padStart(w, '0');
+const padN = (n: number, w = 2): string => String(n).padStart(w, '0');
 function tsLocal(d = new Date()): string {
   const p = padN;
   const off = -d.getTimezoneOffset(); // minutes EAST of UTC
@@ -59,13 +59,13 @@ export namespace Logger {
     const origError = console.error.bind(console);
     const fmtArg = (a: unknown): string =>
       a instanceof Error ? (a.stack ?? a.message) :
-      typeof a === 'object' ? (() => { try { return JSON.stringify(a); } catch { return String(a); } })() :
+      typeof a === 'object' ? ((): string => { try { return JSON.stringify(a); } catch { return String(a); } })() :
       String(a);
-    console.warn = (...args: unknown[]) => {
+    console.warn = (...args: unknown[]): void => {
       if (writingToConsole) { origWarn(...args); return; }
       log(LogLevel.WARN, `[console.warn] ${args.map(fmtArg).join(' ')}`);
     };
-    console.error = (...args: unknown[]) => {
+    console.error = (...args: unknown[]): void => {
       if (writingToConsole) { origError(...args); return; }
       log(LogLevel.ERROR, `[console.error] ${args.map(fmtArg).join(' ')}`);
     };
@@ -257,8 +257,8 @@ lastFoldCount += 1;
 
   export function initShipping(httpUrl: string): void {
     shipUrl = `${httpUrl.replace(/\/$/, '')}/client-log`;
-    setInterval(() => flushShipping(), 5000);
-    document.addEventListener('visibilitychange', () => {
+    setInterval((): void => flushShipping(), 5000);
+    document.addEventListener('visibilitychange', (): void => {
       if (document.visibilityState === 'hidden') {flushShipping(true);}
     });
   }
@@ -270,11 +270,11 @@ lastFoldCount += 1;
   export function installErrorHooks(): void {
     if (errorHooksInstalled) {return;}
     errorHooksInstalled = true;
-    window.addEventListener('error', (e) => {
+    window.addEventListener('error', (e): void => {
       error(`UNCAUGHT ${e.message}`, { file: e.filename, line: e.lineno, stack: (e.error as Error)?.stack });
       flushBootCrash();
     });
-    window.addEventListener('unhandledrejection', (e) => {
+    window.addEventListener('unhandledrejection', (e): void => {
       error('UNHANDLED REJECTION', { reason: String(e.reason), stack: (e.reason as Error)?.stack });
       flushBootCrash();
     });
@@ -299,7 +299,7 @@ lastFoldCount += 1;
     const body = `${shipQueue.splice(0, shipQueue.length).join('\n')  }\n`;
     try {
       if (navigator.sendBeacon) {navigator.sendBeacon(url, body);}
-      else {fetch(url, { method: 'POST', body, keepalive: true }).catch(() => { return; });}
+      else {fetch(url, { method: 'POST', body, keepalive: true }).catch((): void => { return; });}
     } catch { /* shipping must never break the game */ }
   }
 
@@ -310,7 +310,7 @@ lastFoldCount += 1;
       if (beacon && navigator.sendBeacon) {
         navigator.sendBeacon(shipUrl, body);
       } else {
-        fetch(shipUrl, { method: 'POST', body, keepalive: true }).catch(() => { return; });
+        fetch(shipUrl, { method: 'POST', body, keepalive: true }).catch((): void => { return; });
       }
     } catch { /* shipping must never break the game */ }
   }
@@ -388,11 +388,11 @@ if (viteEnv?.LOG_LEVEL) {
 }
 
 // Expose export function globally for manual export
-const fmtArgs = (args: unknown[]) =>
-  args.map(a => (typeof a === 'string' ? a : (() => { try { return JSON.stringify(a); } catch { return String(a); } })())).join(' ');
+const fmtArgs = (args: unknown[]): string =>
+  args.map((a): string => (typeof a === 'string' ? a : ((): string => { try { return JSON.stringify(a); } catch { return String(a); } })())).join(' ');
 
 if (typeof window !== 'undefined') {
-  window.exportClientLogs = () => Logger.exportLogs();
+  window.exportClientLogs = (): void => Logger.exportLogs();
 
   // Capture raw console.* calls that bypass the logger into the same buffer
   // (logger output is excluded via isWritingToConsole to avoid duplicates)
@@ -401,7 +401,7 @@ if (typeof window !== 'undefined') {
     // log/info stay buffered for Alt+Q but don't hit the console — only
     // warn/error pass through (mirrors the Logger console filter)
     const passthrough = m === 'warn' || m === 'error';
-    console[m] = (...args: unknown[]) => {
+    console[m] = (...args: unknown[]): void => {
       // Raw console lines keep their level for the panel's coloring —
       // log/info read as INFO, warn/error stay warn/error.
       const lvl = m === 'warn' ? LogLevel.WARN : m === 'error' ? LogLevel.ERROR : LogLevel.INFO;
@@ -413,7 +413,7 @@ if (typeof window !== 'undefined') {
   // Alt+Q — copy last 300 log lines to clipboard without opening devtools
   let toastEl: HTMLDivElement | null = null;
   let toastTimer = 0;
-  const toast = (msg: string, ok = true) => {
+  const toast = (msg: string, ok = true): void => {
     if (!toastEl) {
       toastEl = document.createElement('div');
       toastEl.id = 'altq-toast';
@@ -424,9 +424,9 @@ if (typeof window !== 'undefined') {
     toastEl.style.borderColor = ok ? 'rgba(120,255,180,0.5)' : 'rgba(255,120,120,0.5)';
     toastEl.style.opacity = '1';
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { toastEl!.style.opacity = '0'; }, 1500) as unknown as number;
+    toastTimer = setTimeout((): void => { toastEl!.style.opacity = '0'; }, 1500) as unknown as number;
   };
-  document.addEventListener('keydown', (e) => {
+  document.addEventListener('keydown', (e): void => {
     // F1 — same visuals-only debug flag the menu DEBUG toggle writes
     // (settings.fps-debug); every consumer reads urlParams.debug live,
     // so no reload. Browsers own F1 for help — preventDefault keeps it.
@@ -442,7 +442,7 @@ if (typeof window !== 'undefined') {
     if (e.altKey && e.code === 'KeyQ') {
       e.preventDefault();
       const verbose = e.ctrlKey;
-      Logger.copyLogs(300, verbose).then(n => {
+      Logger.copyLogs(300, verbose).then((n): void => {
         if (n >= 0) {
           toast(`Copied ${n} log lines${verbose ? ' (full census)' : ''}`);
           console.log(`[Logger] Copied ${n} log lines to clipboard`);

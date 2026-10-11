@@ -42,7 +42,7 @@ const KINDS: Record<AmbientKind, KindConfig> = {
     count: 220, size: 0.14, opacity: 0.22,
     vel: { x: 1.4, y: 0.15, z: 0.6 }, velSpread: 0.4,
     wobble: 0.6, blink: false, spawnY: 'shell',
-    colors: () => Math.random() < 0.15
+    colors: (): THREE.Color => Math.random() < 0.15
       ? _c.setRGB(0.55, 0.85, 1)
       : _c.setRGB(1, 0.9 + Math.random() * 0.1, 0.65 + Math.random() * 0.2),
   },
@@ -53,14 +53,14 @@ const KINDS: Record<AmbientKind, KindConfig> = {
     count: 60, size: 0.1, opacity: 0.5,
     vel: { x: 0.4, y: 0.8, z: 0.2 }, velSpread: 0.6,
     wobble: 1, blink: true, spawnY: 'ground',
-    colors: () => _c.setRGB(1, 0.45 + Math.random() * 0.2, 0.1),
+    colors: (): THREE.Color => _c.setRGB(1, 0.45 + Math.random() * 0.2, 0.1),
   },
   // Ash fall — gray-white flecks settling slowly, heavier sway
   ash: {
     count: 120, size: 0.16, opacity: 0.18,
     vel: { x: 0.9, y: -0.7, z: 0.5 }, velSpread: 0.5,
     wobble: 1.2, blink: false, spawnY: 'sky',
-    colors: () => {
+    colors: (): THREE.Color => {
       const g = 0.55 + Math.random() * 0.3;
       return _c.setRGB(g, g, g * 0.95);
     },

@@ -21,7 +21,7 @@ export function applyStatus(b: GameBot, claim: number, dt: number): void {
     b.status = claim & (STATUS.MEND | STATUS.SHIELD | STATUS.CLOAK);
     // Held drains — the brain re-declares every think, so a bit it
     // can't afford to keep simply drops here.
-    const drain = (bit: number, perSec: number) => {
+    const drain = (bit: number, perSec: number): void => {
       if (!(b.status & bit)) {return;}
       b.energy -= perSec * dt;
       if (b.energy <= 0) { b.energy = 0; dropSkill(b, bit); }

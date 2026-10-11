@@ -69,7 +69,7 @@ export class TickLoop {
   bandwidthWindow() { return this.lastBw; }
   /** Rooms stopped for repeated tick failures — /metrics surfaces this
    *  so a dead room is visible on the status page, not just in logs. */
-  quarantinedRooms() { return [...this.faultedRooms]; }
+  quarantinedRooms(): string[] { return [...this.faultedRooms]; }
 
   /** Fault state is name-keyed, not instance-keyed — when a room leaves
    *  the roster without a drain (room-cap recycle), a remint under the
@@ -104,7 +104,7 @@ export class TickLoop {
 
   private startTickBroadcast(): void {
     const tickMs = 1000 / CONFIG.tickRate;
-    this.tickTimer = setInterval(() => {
+    this.tickTimer = setInterval((): void => {
       const now0 = wallNow();
       // Tick lag: how late this interval fired vs the nominal cadence.
       // Sustained lag = sim clock drifts behind wall time — the skew that
@@ -346,7 +346,7 @@ this.metrics.ticks += 1;
   }
 
   private startHashBroadcast(): void {
-    this.hashTimer = setInterval(() => {
+    this.hashTimer = setInterval((): void => {
       for (const room of this.rooms.values()) {
         if (this.tickQuarantined.has(room.name)) {continue;}
         try { this.broadcastStateHash(room); }
@@ -372,9 +372,9 @@ this.metrics.tickErrors += 1;
     // both generated from the kind's declaration so emit and diff can't
     // drift apart. Omitted where the roster is empty — a room without
     // that kind doesn't emit a meaningless constant.
-    const emitLane = <T extends { id: number }>(kind: WorldKindDecl, roster: T[]) =>
+    const emitLane = <T extends { id: number }>(kind: WorldKindDecl, roster: T[]): { hash: string; fields: unknown[][]; } | undefined =>
       roster.length > 0
-        ? { hash: replicaHash(kind, roster.map((e) => [e.id, e] as [number, Record<string, unknown>])),
+        ? { hash: replicaHash(kind, roster.map((e): [number, Record<string, unknown>] => [e.id, e] as [number, Record<string, unknown>])),
             fields: kindFields(kind, roster) }
         : undefined;
     // Hash the committed wire regime, not the live sim derivative —
@@ -389,7 +389,7 @@ this.metrics.tickErrors += 1;
     // undefined) keeps a client ghost replica tripping the check.
     const flagHash = room.flags
       ? replicaHash(WORLD_MODEL.flag!, [...room.flags.flags].filter(
-          ([, f]) => f.state !== 'unspawned') as Iterable<[string, Record<string, unknown>]>)
+          ([, f]): boolean => f.state !== 'unspawned') as Iterable<[string, Record<string, unknown>]>)
       : undefined;
     const pickupLane = emitLane(WORLD_MODEL.pickup!, room.pickups?.snapshot() ?? []);
     const timestamp = wallNow();
@@ -413,7 +413,7 @@ this.metrics.tickErrors += 1;
 
     // Periodic status summary - suppress duplicates, batch with count
     const players = room.players.getAllPlayers();
-    const summary = Array.from(players.entries()).map(([id, p]) =>
+    const summary = Array.from(players.entries()).map(([id, p]): string =>
       `${id}[${p.kills}/${p.deaths}] ${p.isDead ? 'DEAD' : `HP${p.health}`} @(${p.position.x.toFixed(0)},${p.position.y.toFixed(0)},${p.position.z.toFixed(0)})`
     ).join(' | ');
     const statusLine = `Status [${room.name} · ${playerCount} players] ${summary}`;

@@ -38,6 +38,6 @@ export function setSharedEnv(env: SharedEnv): void {
  * scenario tests pin a fake. Cooldown-style uses get real ms once the
  * host seeds it — before that, quiet-by-default beats lying about time.
  */
-let nowFn: () => number = () => 0;
+let nowFn: () => number = (): number => 0;
 export const sharedNow = (): number => nowFn();
 export function setSharedNow(now: () => number): void { nowFn = now; }

@@ -72,7 +72,7 @@ function ensurePanel(): void {
 
   body = document.createElement('div');
   body.className = 'lp-body';
-  body.addEventListener('scroll', () => {
+  body.addEventListener('scroll', (): void => {
     // Re-stick only when scrolled back to the tail — new lines must not
     // yank a review scroll back to the bottom.
     stick = body!.scrollTop + body!.clientHeight >= body!.scrollHeight - 8;

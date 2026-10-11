@@ -339,9 +339,9 @@ export class Player {
   /** Right-click while dead: orbit the next living teammate. */
   deadSpectateCycle(): void {
     const ts = this.spectateTargets?.() ?? [];
-    const aliveIdx = ts.map((t, i) => (t.alive ? i : -1)).filter((i) => i >= 0);
+    const aliveIdx = ts.map((t, i): number => (t.alive ? i : -1)).filter((i): boolean => i >= 0);
     if (aliveIdx.length === 0) { this.deadSpectateIdx = -1; return; }
-    const next = aliveIdx.find((i) => i > this.deadSpectateIdx) ?? aliveIdx[0] ?? -1;
+    const next = aliveIdx.find((i): boolean => i > this.deadSpectateIdx) ?? aliveIdx[0] ?? -1;
     if (this.deadSpectateIdx < 0) { this.orbit.yaw = this.yaw; this.orbit.pitch = 0.25; }
     this.deadSpectateIdx = next;
   }

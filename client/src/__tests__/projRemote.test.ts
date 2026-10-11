@@ -7,11 +7,11 @@ import { BOLT_CONFIG } from '../projectiles/index';
 import type { ProjectileConfig } from '../projectiles/types';
 import type { Terrain } from '../world/terrain';
 
-const flatTerrain = { getHeight: () => 0 } as unknown as Terrain;
+const flatTerrain = { getHeight: (): number => 0 } as unknown as Terrain;
 
 // Minimal SweepHost stand-in — tickRemote only reads config/canBounce/
 // rayFired, runs sweepTerrain on pos/prevPos, then explode()/stickAt().
-function remoteHost(config: Partial<ProjectileConfig>, from: [number, number, number], to: [number, number, number]) {
+function remoteHost(config: Partial<ProjectileConfig>, from: [number, number, number], to: [number, number, number]): Projectile & { exploded: boolean; stuck: boolean; } {
   const h = {
     pos: new THREE.Vector3(...to),
     prevPos: new THREE.Vector3(...from),
@@ -22,14 +22,14 @@ function remoteHost(config: Partial<ProjectileConfig>, from: [number, number, nu
     stuck: false,
     hitPoint: new THREE.Vector3(),
     hitPointValid: false,
-    glue: { stickAt: () => { h.stuck = true; } },
-    explode() { h.exploded = true; },
+    glue: { stickAt: (): void => { h.stuck = true; } },
+    explode(): void { h.exploded = true; },
   };
   return h as unknown as Projectile & { exploded: boolean; stuck: boolean };
 }
 
-describe('tickRemote', () => {
-  it('pops a contact-fused replica (no armTime/bounce/stick/embed) on terrain', () => {
+describe('tickRemote', (): void => {
+  it('pops a contact-fused replica (no armTime/bounce/stick/embed) on terrain', (): void => {
     // Plasma-shaped config: the server's destroy edge is a loss-prone
     // hint — without a terrain sweep the replica streaks ~870m through
     // the world until the 10s backstop.
@@ -38,7 +38,7 @@ describe('tickRemote', () => {
     expect(h.exploded).toBe(true);
   });
 
-  it('leaves the same replica alive while airborne', () => {
+  it('leaves the same replica alive while airborne', (): void => {
     const h = remoteHost({}, [0, 5, 0], [10, 5, 0]);
     expect(tickRemote(h, flatTerrain)).toBe(false);
     expect(h.exploded).toBe(false);
@@ -48,8 +48,8 @@ describe('tickRemote', () => {
 // A remote shell seeds renderOffset so it visibly leaves the shooter's
 // rendered muzzle — the blend must converge on sim truth fast enough
 // that dodgers never aim at the decoy.
-describe('remote muzzle blend', () => {
-  it('rendered converges on the true path inside ~200ms, pos never lies', () => {
+describe('remote muzzle blend', (): void => {
+  it('rendered converges on the true path inside ~200ms, pos never lies', (): void => {
     const scene = new THREE.Scene();
     const p = new Projectile(scene, new THREE.Vector3(0, 50, 0), new THREE.Vector3(1, 0, 0), new THREE.Vector3(), BOLT_CONFIG);
     p.spawnedThisFrame = false;

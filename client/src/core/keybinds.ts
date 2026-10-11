@@ -41,7 +41,7 @@ export const BIND_DEFS: BindDef[] = [
   { action: 'slot3',   label: 'Weapon slot 4', def: 'Digit4' },
 ];
 
-const DEFAULTS = Object.fromEntries(BIND_DEFS.map(d => [d.action, d.def])) as Record<BindAction, string>;
+const DEFAULTS = Object.fromEntries(BIND_DEFS.map((d): [BindAction, string] => [d.action, d.def])) as Record<BindAction, string>;
 
 function parseSaved(raw: string): Partial<Record<BindAction, string>> {
   const out: Partial<Record<BindAction, string>> = {};
@@ -95,7 +95,7 @@ export function resetAll(): void {
 }
 
 function persist(): void {
-  settings.set('fps-keys', BIND_DEFS.map(d => `${d.action}=${binds[d.action]}`).join(','));
+  settings.set('fps-keys', BIND_DEFS.map((d): string => `${d.action}=${binds[d.action]}`).join(','));
 }
 
 // ---- Display --------------------------------------------------------------
@@ -128,24 +128,24 @@ let cancelActive: (() => void) | null = null;
 
 export function captureNextInput(onDone: (code: string | null) => void): void {
   capturing = true;
-  const finish = (code: string | null) => {
+  const finish = (code: string | null): void => {
     capturing = false;
     cancelActive = null;
     document.removeEventListener('keydown', onKey, true);
     document.removeEventListener('mousedown', onMouse, true);
     onDone(code);
   };
-  const onKey = (e: KeyboardEvent) => {
+  const onKey = (e: KeyboardEvent): void => {
     e.preventDefault();
     e.stopImmediatePropagation();
     finish(e.code === 'Escape' ? null : e.code);
   };
-  const onMouse = (e: MouseEvent) => {
+  const onMouse = (e: MouseEvent): void => {
     e.preventDefault();
     e.stopImmediatePropagation();
     finish(`Mouse${e.button}`);
   };
-  cancelActive = () => finish(null);
+  cancelActive = (): void => finish(null);
   document.addEventListener('keydown', onKey, true);
   document.addEventListener('mousedown', onMouse, true);
 }

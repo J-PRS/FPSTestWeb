@@ -88,8 +88,8 @@ export function structureColliders(list: readonly StructureSpec[] | undefined): 
 export function findStructureOverlaps(list: readonly StructureSpec[] | undefined, eps = 0.3): { a: number; b: number; x: number; y: number; z: number }[] {
   const out: { a: number; b: number; x: number; y: number; z: number }[] = [];
   if (!list?.length) {return out;}
-  const perSpec = list.map((s) => structureColliders([s]));
-  const gatePair = (i: number, j: number) =>
+  const perSpec = list.map((s): StructureCollider[] => structureColliders([s]));
+  const gatePair = (i: number, j: number): boolean =>
     (list[i]!.kind === 'shield' && list[j]!.kind === 'kit' && list[j]!.piece === 'gatehouse') ||
     (list[j]!.kind === 'shield' && list[i]!.kind === 'kit' && list[i]!.piece === 'gatehouse');
   for (let i = 0; i < list.length; i += 1) {
@@ -107,7 +107,7 @@ export function findStructureOverlaps(list: readonly StructureSpec[] | undefined
         if (oy <= eps) {continue;}
         const dx = cb.cx - ca.cx, dz = cb.cz - ca.cz;
         // Face axes of each box in world XZ: local x ↦ (cos,−sin), z ↦ (sin,cos).
-        const proj = (c: StructureCollider, ax: number, az: number) =>
+        const proj = (c: StructureCollider, ax: number, az: number): number =>
           c.hx * Math.abs(c.cos * ax - c.sin * az) + c.hz * Math.abs(c.sin * ax + c.cos * az);
         const axes = [
           [ca.cos, -ca.sin, ca.hx, proj(cb, ca.cos, -ca.sin)],

@@ -121,14 +121,14 @@ export function wireFlags(ctx: NetCtx): void {
   // Team-colored blast where the flag just changed hands — the grab pop,
   // the drop puff, and the big capture detonation read instantly without
   // watching the killfeed.
-  const burst = (f: { team: TeamId; pos: { x: number; y: number; z: number } }, scale: number) =>
+  const burst = (f: { team: TeamId; pos: { x: number; y: number; z: number } }, scale: number): void =>
     burstAt(f.pos, scale, f.team);
-  const burstAt = (pos: { x: number; y: number; z: number }, scale: number, team: TeamId) => {
+  const burstAt = (pos: { x: number; y: number; z: number }, scale: number, team: TeamId): void => {
     deps.world.explosions.push(new Explosion(
       deps.lazyScene(), _burstPos.set(pos.x, pos.y + 1.2, pos.z),
       false, 0, deps.lazyTerrain(), scale, TEAM_COLORS[team]));
   };
-  const callout = (f: { team: TeamId; state: string; carrier: string | null; pos: { x: number; y: number; z: number } }, hush: boolean) => {
+  const callout = (f: { team: TeamId; state: string; carrier: string | null; pos: { x: number; y: number; z: number } }, hush: boolean): void => {
     const prev = prevState.get(f.team);
     prevState.set(f.team, f.state);
     const rabbit = deps.world.mode === 'rabbit';
@@ -141,16 +141,16 @@ export function wireFlags(ctx: NetCtx): void {
     const mine = f.team === deps.world.localTeam;
     const iAmCarrier = f.carrier === networkManager.getLocalPlayerId();
     const frag = deps.fragMessages;
-    const log = (text: string) => deps.lazyHud().logEvent(text, mine ? 'mine' : 'foe');
+    const log = (text: string): void => deps.lazyHud().logEvent(text, mine ? 'mine' : 'foe');
     // The 'home' update that scores already cleared its carrier — the
     // marker still holds the id, so name the actual scorer, not 'Someone'.
     const carrierName = (f.carrier ?? deps.world.flagMarkers.get(f.team)?.carrier ?? null)
       ?.replace('bot:', '') ?? null;
     if (rabbit) {
-      rabbitCallout(f, iAmCarrier, carrierName, (s) => burst(f, s), frag, log);
+      rabbitCallout(f, iAmCarrier, carrierName, (s): void => burst(f, s), frag, log);
       return;
     }
-    ctfCallout(f, { prev, mine, iAmCarrier, carrierName, frag, log, burst: (s) => burst(f, s), homeCallout: () => homeCallout(f, prev, mine, frag, log, carrierName) });
+    ctfCallout(f, { prev, mine, iAmCarrier, carrierName, frag, log, burst: (s): void => burst(f, s), homeCallout: (): void => homeCallout(f, prev, mine, frag, log, carrierName) });
   };
   /** Home transition: carried→home = capture, dropped→home = return. */
   const homeCallout = (
@@ -159,7 +159,7 @@ export function wireFlags(ctx: NetCtx): void {
     frag: { show(t: string): void },
     log: (t: string) => void,
     carrierName: string | null,
-  ) => {
+  ): void => {
     const scored = prev === 'carried';
     frag.show(scored ? (mine ? 'THEY SCORED!' : 'CAPTURED!') : (mine ? 'FLAG RETURNED' : 'ENEMY FLAG RETURNED'));
     sfx.flagCue(scored ? 'captured' : 'returned', mine);
@@ -189,16 +189,16 @@ export function wireFlags(ctx: NetCtx): void {
       : deps.world.remotePlayers.get(id)?.pos ?? null;
   };
 
-  networkManager.onFlagUpdate = (flags) => {
+  networkManager.onFlagUpdate = (flags): void => {
     // Post-matchStart broadcast carries the reset transitions — hush
     // exactly this update, then announce edges normally again.
     const hush = deps.world.flagHomeHush;
     deps.world.flagHomeHush = false;
     reconcileReplicas(flagMeshes, flags, {
-      rowId: (f) => f.team,
-      ensure: (f) => ensureFlagMesh(f.team),
-      apply: (_vis, f) => applyFlagUpdate(f, hush),
-      reap: (vis, team) => {
+      rowId: (f): "alpha" | "bravo" => f.team,
+      ensure: (f): FlagVis => ensureFlagMesh(f.team),
+      apply: (_vis, f): void => applyFlagUpdate(f, hush),
+      reap: (vis, team): void => {
         deps.lazyScene().remove(vis.flag, vis.stand);
         wasDropped.delete(team);
         prevState.delete(team);

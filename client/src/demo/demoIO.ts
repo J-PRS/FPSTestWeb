@@ -102,7 +102,7 @@ export function updateHitMarkers(h: DemoIOHost, data: DemoFile): void {
   // header's recorded best lifetime (80% band catches float jitter and
   // near-equal combo partners). Full recordings (lifetime 0) show all hot.
   const best = data.header.projectileLifetime;
-  const isHot = (lifetime: number) => best <= 0 || lifetime >= best * 0.8;
+  const isHot = (lifetime: number): boolean => best <= 0 || lifetime >= best * 0.8;
 
   const hitTimes: { t: number; hot: boolean }[] = [];
   const shotTimes: { t: number; hot: boolean }[] = [];

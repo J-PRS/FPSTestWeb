@@ -74,11 +74,11 @@ s[kind] += 1; this.propels.set(id, s);
     public room: Room,
     public loadouts: Map<string, BotLoadout>,
     private lastHuntCb: (botId: string) => string | null,
-    private huntSeenCb: (botId: string) => BotVec | null = () => null,
+    private huntSeenCb: (botId: string) => BotVec | null = (): null => null,
     /** The shooter brain's skill matrix — biases the draw toward the
      *  gun the bot is actually good with (same bias the senses use,
      *  so advertised weaponSpeed and fired weapon agree). */
-    private skillOfCb: (botId: string) => BotSkill | undefined = () => undefined,
+    private skillOfCb: (botId: string) => BotSkill | undefined = (): undefined => undefined,
   ) {}
 
   /** BeamHost surface — botBeam resolves super-bot contact through it. */
@@ -328,7 +328,7 @@ s[kind] += 1; this.propels.set(id, s);
     const wt = this.pickWeapon(lo, Math.hypot(dx, dz), dist, p.id);
     if (!this.rateOk(p.id, wt)) {return;}
     weaponStats.recordShot(this.room.mode, `w${wt}`, dist);
-    const j = () => (botRand() - 0.5) * 0.07;
+    const j = (): number => (botRand() - 0.5) * 0.07;
     const dir = { x: dx / dist + j(), y: dy / dist + j(), z: dz / dist + j() };
     const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
     dir.x /= l; dir.y /= l; dir.z /= l;
@@ -366,7 +366,7 @@ s[kind] += 1; this.propels.set(id, s);
     // autopsy: most untraded selfK was a foe body eating the shell
     // inside the shooter's blast envelope and surviving it).
     const foes = [...this.room.players.getAllPlayers().values()]
-      .filter((q) => q.id !== shooterId && !q.isDead && (!shooterTeam || q.team !== shooterTeam));
+      .filter((q): boolean => q.id !== shooterId && !q.isDead && (!shooterTeam || q.team !== shooterTeam));
     let bodyHit: { health: number } | null = null;
     // Flight pops on segments; this march samples points — a razor lip
     // apex between two samples is invisible to the check but real to
@@ -446,7 +446,7 @@ s[kind] += 1; this.propels.set(id, s);
 
   pickWeapon(lo: BotLoadout, distXZ: number, dist: number, botId?: string): number {
     const s = botId ? this.skillOfCb(botId) : undefined;
-    const skill = s ? (t: number) => aimSkillFor(s, t, 0) : undefined;
+    const skill = s ? (t: number): number => aimSkillFor(s, t, 0) : undefined;
     // The wounded-explosive gate lives in shared pickBotWeaponSafe so
     // offline bots get the same self-preservation.
     if (!botId) {return pickBotWeapon(lo, distXZ, dist, skill, s?.courage);}
@@ -521,7 +521,7 @@ s[kind] += 1; this.propels.set(id, s);
    *  self-damage, 12 m/s of shard thump) qualify as a jump gun — the
    *  feet blast cost a third of the bot's health and moved it a step. */
   private propelWeapon(lo: BotLoadout): number {
-    const pick = [lo.mid, lo.far].find((wt) => {
+    const pick = [lo.mid, lo.far].find((wt): boolean => {
       const s = getWeaponStats(wt);
       return s && s.aoeRadius > 0 && s.speed > 0 && s.forceMode !== 'pull' && s.knockbackForce >= 20;
     });

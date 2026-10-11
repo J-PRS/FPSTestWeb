@@ -94,9 +94,9 @@ function spawnSquad(scene: THREE.Scene, team: TeamId, bots: FlagBot[]): void {
     });
     bots.push(bot);
   }
-  const ids = bots.filter(b => b.team === team).map(b => b.name);
-  for (const bot of bots.filter(b => b.team === team)) {
-    bot.role = assignRole(bot.name, ids, WIRE_ROLES, id => bots.find(o => o.name === id)?.cls);
+  const ids = bots.filter((b): boolean => b.team === team).map((b): string => b.name);
+  for (const bot of bots.filter((b): boolean => b.team === team)) {
+    bot.role = assignRole(bot.name, ids, WIRE_ROLES,( id): "light" | "medium" | "heavy" | undefined => bots.find((o): boolean => o.name === id)?.cls);
   }
 }
 
@@ -208,12 +208,12 @@ function mkCombat(world: LabWorld, bots: FlagBot[], flags: Record<TeamId, LabFla
       vel: { x: (aim.x - s.pos.x) / d * st.speed, y: (aim.y - s.pos.y) / d * st.speed, z: (aim.z - s.pos.z) / d * st.speed },
       gravity: st.gravity ? GRAVITY : 0,
       maxAge: 2.5,
-      hitTest: (from, pos) => foes.some(foe => {
+      hitTest: (from, pos): boolean => foes.some((foe): boolean => {
         if (foe.dead > 0) { return false; }
         const fp = foe.sim.state.pos;
         return segPointDist(from, pos, { x: fp.x, y: fp.y, z: fp.z }) < 1.4;
       }),
-      onDone: (impact, directHit) => {
+      onDone: (impact, directHit): void => {
         if (directHit && impact) { applyHit(foes, impact, st.directDamage, s.pos); }
       },
     }, world) as ReturnType<typeof spawnShell> & { from: FlagBot };
@@ -223,22 +223,22 @@ function mkCombat(world: LabWorld, bots: FlagBot[], flags: Record<TeamId, LabFla
 
   const thinkOne = (a: FlagBot): void => {
     const s = a.sim.state;
-    const foes = bots.filter(b => b.team !== a.team);
-    const mates = bots.filter(b => b.team === a.team && b !== a);
+    const foes = bots.filter((b): boolean => b.team !== a.team);
+    const mates = bots.filter((b): boolean => b.team === a.team && b !== a);
     const { objective, runner, posted } = objectiveFor(a, flags, foes);
     const out = a.brain.think(1 / 60, {
       pos: s.pos,
       vel: s.vel,
-      enemies: foes.filter(f => f.dead <= 0)
+      enemies: foes.filter((f): boolean => f.dead <= 0)
         .map(f => ({ id: f.name, pos: f.sim.state.pos, vel: f.sim.state.vel, alive: true, aimY: -0.7 })),
-      allies: mates.filter(m => m.dead <= 0).map(m => m.sim.state.pos),
-      groundY: (x, z) => hmHeight(LAB_FLAT_FIELD, x, z),
+      allies: mates.filter((m): boolean => m.dead <= 0).map(m => m.sim.state.pos),
+      groundY: (x, z): number => hmHeight(LAB_FLAT_FIELD, x, z),
       now,
       energy: a.energy,
       healthFrac: a.hp / BOT_HP,
-      threats: shells.filter(sh => sh.from.team !== a.team).map(sh => sh.sim.pos),
-      weaponSpeed: d => pickAtRange(a, d).st.speed,
-      weaponGravity: d => pickAtRange(a, d).st.gravity,
+      threats: shells.filter((sh): boolean => sh.from.team !== a.team).map(sh => sh.sim.pos),
+      weaponSpeed:( d): number => pickAtRange(a, d).st.speed,
+      weaponGravity:( d): boolean => pickAtRange(a, d).st.gravity,
       objective,
       runner,
       posted,
@@ -335,7 +335,7 @@ export function flagScrim(scene: THREE.Scene): LabInstance {
   };
 
   return {
-    tick(dt) {
+    tick(dt): void {
       world.time += dt;
       for (const a of bots) {
         if (a.dead > 0) {
@@ -350,7 +350,7 @@ export function flagScrim(scene: THREE.Scene): LabInstance {
       tickFlags(dt);
       combat.tick(dt);
     },
-    sync() {
+    sync(): void {
       for (const a of bots) {
         a.mesh.position.set(a.sim.state.pos.x, a.sim.state.pos.y - 1.5, a.sim.state.pos.z);
         a.mesh.rotation.y = a.yaw;
@@ -360,7 +360,7 @@ export function flagScrim(scene: THREE.Scene): LabInstance {
       }
       for (const sh of combat.shells) { sh.sync(); }
     },
-    dump() {
+    dump(): [string, string][] {
       const rows: [string, string][] = [
         ['score a/b', `${score.alpha}/${score.bravo}`],
         ['flag alpha', flags.alpha.state + (flags.alpha.state === 'dropped' ? ` ${flags.alpha.dropT.toFixed(0)}s` : '')],
@@ -374,7 +374,7 @@ export function flagScrim(scene: THREE.Scene): LabInstance {
       }
       return rows;
     },
-    dispose() {
+    dispose(): void {
       for (const a of bots) { scene.remove(a.mesh); a.mesh.geometry.dispose(); }
       for (const f of [flags.alpha, flags.bravo]) {
         scene.remove(f.mesh, f.stand);

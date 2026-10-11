@@ -25,31 +25,31 @@ interface PoolEntry {
 }
 
 const POOL: PoolEntry[] = [
-  { cost: 4,  minT: 0,   weight: 5, label: 'grub',       spawn: (e) => e.spawnGrub() },
-  { cost: 5,  minT: 0,   weight: 5, label: 'scarab pack', spawn: (e) => e.spawnScarab() },
-  { cost: 6,  minT: 15,  weight: 4, label: 'gnat cloud', spawn: (e) => e.spawnGnatCloud() },
-  { cost: 6,  minT: 0,   weight: 4, label: 'ball',       spawn: (e) => e.spawnBall() },
-  { cost: 10, minT: 0,   weight: 4, label: 'crawler',    spawn: (e) => e.spawnCrawler() },
-  { cost: 11, minT: 30,  weight: 4, label: 'viper',      spawn: (e) => e.spawnSnake() },
-  { cost: 12, minT: 40,  weight: 3, label: 'seeker',     spawn: (e) => e.spawnSeeker() },
-  { cost: 14, minT: 75,  weight: 3, label: 'rakk',       spawn: (e) => e.spawnRakk() },
-  { cost: 15, minT: 90,  weight: 3, label: 'boulder',     spawn: (e) => e.spawnRoller() },
-  { cost: 20, minT: 120, weight: 2, label: 'turretter',  spawn: (e) => e.spawnTurretter() },
-  { cost: 25, minT: 150, weight: 2, label: 'overlord',      spawn: (e) => e.spawnOverlord() },
-  { cost: 28, minT: 180, weight: 2, label: 'totem',      spawn: (e) => e.spawnTotem() },
-  { cost: 60, minT: 300, weight: 1, label: 'uber totem', spawn: (e) => e.spawnUberTotem() },
-  { cost: 30, minT: 150, weight: 1, label: 'elite ball', spawn: (e) => e.spawnEliteBall() },
+  { cost: 4,  minT: 0,   weight: 5, label: 'grub',       spawn: (e): void => e.spawnGrub() },
+  { cost: 5,  minT: 0,   weight: 5, label: 'scarab pack', spawn: (e): void => e.spawnScarab() },
+  { cost: 6,  minT: 15,  weight: 4, label: 'gnat cloud', spawn: (e): void => e.spawnGnatCloud() },
+  { cost: 6,  minT: 0,   weight: 4, label: 'ball',       spawn: (e): void => e.spawnBall() },
+  { cost: 10, minT: 0,   weight: 4, label: 'crawler',    spawn: (e): void => e.spawnCrawler() },
+  { cost: 11, minT: 30,  weight: 4, label: 'viper',      spawn: (e): void => e.spawnSnake() },
+  { cost: 12, minT: 40,  weight: 3, label: 'seeker',     spawn: (e): void => e.spawnSeeker() },
+  { cost: 14, minT: 75,  weight: 3, label: 'rakk',       spawn: (e): void => e.spawnRakk() },
+  { cost: 15, minT: 90,  weight: 3, label: 'boulder',     spawn: (e): void => e.spawnRoller() },
+  { cost: 20, minT: 120, weight: 2, label: 'turretter',  spawn: (e): void => e.spawnTurretter() },
+  { cost: 25, minT: 150, weight: 2, label: 'overlord',      spawn: (e): void => e.spawnOverlord() },
+  { cost: 28, minT: 180, weight: 2, label: 'totem',      spawn: (e): void => e.spawnTotem() },
+  { cost: 60, minT: 300, weight: 1, label: 'uber totem', spawn: (e): void => e.spawnUberTotem() },
+  { cost: 30, minT: 150, weight: 1, label: 'elite ball', spawn: (e): void => e.spawnEliteBall() },
   // Ubers — rare, expensive, late. Named threats, not population filler.
-  { cost: 25, minT: 200, weight: 0.8, label: 'dreadbeetle',  spawn: (e) => e.spawnScarab(undefined, true) },
-  { cost: 18, minT: 150, weight: 0.8, label: 'bloatgrub',    spawn: (e) => e.spawnGrub(undefined, true) },
-  { cost: 22, minT: 200, weight: 0.8, label: 'gnat queen',   spawn: (e) => e.spawnGnatCloud(true) },
-  { cost: 45, minT: 300, weight: 0.7, label: 'matriarch',    spawn: (e) => e.spawnCrawler(undefined, true) },
-  { cost: 28, minT: 220, weight: 0.7, label: 'king serpent', spawn: (e) => e.spawnSnake(undefined, true) },
-  { cost: 32, minT: 240, weight: 0.8, label: 'avalanche',    spawn: (e) => e.spawnRoller(true) },
-  { cost: 24, minT: 160, weight: 0.8, label: 'lancer',       spawn: (e) => e.spawnSeeker(true) },
-  { cost: 30, minT: 220, weight: 0.7, label: 'elder rakk',   spawn: (e) => e.spawnRakk(true) },
-  { cost: 42, minT: 280, weight: 0.7, label: 'siege turret', spawn: (e) => e.spawnTurretter(true) },
-  { cost: 55, minT: 340, weight: 0.6, label: 'broodmother',  spawn: (e) => e.spawnOverlord(true) },
+  { cost: 25, minT: 200, weight: 0.8, label: 'dreadbeetle',  spawn: (e): void => e.spawnScarab(undefined, true) },
+  { cost: 18, minT: 150, weight: 0.8, label: 'bloatgrub',    spawn: (e): void => e.spawnGrub(undefined, true) },
+  { cost: 22, minT: 200, weight: 0.8, label: 'gnat queen',   spawn: (e): void => e.spawnGnatCloud(true) },
+  { cost: 45, minT: 300, weight: 0.7, label: 'matriarch',    spawn: (e): void => e.spawnCrawler(undefined, true) },
+  { cost: 28, minT: 220, weight: 0.7, label: 'king serpent', spawn: (e): void => e.spawnSnake(undefined, true) },
+  { cost: 32, minT: 240, weight: 0.8, label: 'avalanche',    spawn: (e): void => e.spawnRoller(true) },
+  { cost: 24, minT: 160, weight: 0.8, label: 'lancer',       spawn: (e): void => e.spawnSeeker(true) },
+  { cost: 30, minT: 220, weight: 0.7, label: 'elder rakk',   spawn: (e): void => e.spawnRakk(true) },
+  { cost: 42, minT: 280, weight: 0.7, label: 'siege turret', spawn: (e): void => e.spawnTurretter(true) },
+  { cost: 55, minT: 340, weight: 0.6, label: 'broodmother',  spawn: (e): void => e.spawnOverlord(true) },
 ];
 
 // ---- Scripted beats: authored moments on the clock -------------------------
@@ -66,10 +66,10 @@ function ringOf(d: DirectorDeps, n: number, dist: number, fn: (pos: THREE.Vector
 }
 
 const WAVES: WaveBeat[] = [
-  { at: 50,  name: 'Crawler surround',   run: (d) => ringOf(d, 5, 30, (p) => d.entities.spawnCrawler(p)) },
-  { at: 100, name: 'Seeker pair + pack', run: (d) => { d.entities.spawnSeeker(); d.entities.spawnSeeker(); ringOf(d, 3, 35, (p) => d.entities.spawnCrawler(p)); } },
-  { at: 160, name: 'Rakk flock',         run: (d) => { d.entities.spawnRakk(); d.entities.spawnRakk(); d.entities.spawnRakk(); } },
-  { at: 220, name: 'Mine rain',          run: (d) => {
+  { at: 50,  name: 'Crawler surround',   run: (d): void => ringOf(d, 5, 30, (p): void => d.entities.spawnCrawler(p)) },
+  { at: 100, name: 'Seeker pair + pack', run: (d): void => { d.entities.spawnSeeker(); d.entities.spawnSeeker(); ringOf(d, 3, 35, (p): void => d.entities.spawnCrawler(p)); } },
+  { at: 160, name: 'Rakk flock',         run: (d): void => { d.entities.spawnRakk(); d.entities.spawnRakk(); d.entities.spawnRakk(); } },
+  { at: 220, name: 'Mine rain',          run: (d): void => {
       const p = d.lazyPlayer().pos;
       for (let i = 0; i < 6; i += 1) {
         const a = Math.random() * Math.PI * 2, r = 8 + Math.random() * 22;
@@ -78,13 +78,13 @@ const WAVES: WaveBeat[] = [
         d.entities.plantMine(new THREE.Vector3(p.x + Math.cos(a) * r, 0, p.z + Math.sin(a) * r), i === 0);
       }
     } },
-  { at: 290, name: 'Elite + enrage storm', run: (d) => {
+  { at: 290, name: 'Elite + enrage storm', run: (d): void => {
       d.entities.spawnEliteBall();
       for (const b of d.entities.balls) {if (!b.dead) {b.enrage();}}
     } },
-  { at: 360, name: 'Siege: totem + wall', run: (d) => {
+  { at: 360, name: 'Siege: totem + wall', run: (d): void => {
       d.entities.spawnTotem();
-      ringOf(d, 4, 40, (p) => d.entities.spawnCrawler(p));
+      ringOf(d, 4, 40, (p): void => d.entities.spawnCrawler(p));
     } },
 ];
 const WAVE_LOOP = 120; // after the last beat, loop on a 2-minute cycle at higher intensity
@@ -107,33 +107,33 @@ const RANDOM_MODE = urlParams.randomSpawns;
 const CLASSIC_MODE = urlParams.isClassic;
 
 const RANDOM_POOL: { weight: number; label: string; spawn: (e: ReturnType<typeof createEntities>) => void }[] = [
-  { weight: 6, label: 'scarab pack', spawn: (e) => e.spawnScarab() },
-  { weight: 6, label: 'grub',       spawn: (e) => e.spawnGrub() },
-  { weight: 4, label: 'gnat cloud', spawn: (e) => e.spawnGnatCloud() },
-  { weight: 5, label: 'ball',       spawn: (e) => e.spawnBall() },
-  { weight: 4, label: 'crawler',    spawn: (e) => e.spawnCrawler() },
-  { weight: 3, label: 'viper',      spawn: (e) => e.spawnSnake() },
-  { weight: 2.5, label: 'seeker',     spawn: (e) => e.spawnSeeker() },
-  { weight: 2, label: 'rakk',       spawn: (e) => e.spawnRakk() },
-  { weight: 1.5, label: 'boulder',     spawn: (e) => e.spawnRoller() },
-  { weight: 1, label: 'turretter',  spawn: (e) => e.spawnTurretter() },
-  { weight: 0.7, label: 'overlord',   spawn: (e) => e.spawnOverlord() },
-  { weight: 0.6, label: 'totem',      spawn: (e) => e.spawnTotem() },
-  { weight: 0.2, label: 'uber totem', spawn: (e) => e.spawnUberTotem() },
-  { weight: 0.4, label: 'elite ball', spawn: (e) => e.spawnEliteBall() },
+  { weight: 6, label: 'scarab pack', spawn: (e): void => e.spawnScarab() },
+  { weight: 6, label: 'grub',       spawn: (e): void => e.spawnGrub() },
+  { weight: 4, label: 'gnat cloud', spawn: (e): void => e.spawnGnatCloud() },
+  { weight: 5, label: 'ball',       spawn: (e): void => e.spawnBall() },
+  { weight: 4, label: 'crawler',    spawn: (e): void => e.spawnCrawler() },
+  { weight: 3, label: 'viper',      spawn: (e): void => e.spawnSnake() },
+  { weight: 2.5, label: 'seeker',     spawn: (e): void => e.spawnSeeker() },
+  { weight: 2, label: 'rakk',       spawn: (e): void => e.spawnRakk() },
+  { weight: 1.5, label: 'boulder',     spawn: (e): void => e.spawnRoller() },
+  { weight: 1, label: 'turretter',  spawn: (e): void => e.spawnTurretter() },
+  { weight: 0.7, label: 'overlord',   spawn: (e): void => e.spawnOverlord() },
+  { weight: 0.6, label: 'totem',      spawn: (e): void => e.spawnTotem() },
+  { weight: 0.2, label: 'uber totem', spawn: (e): void => e.spawnUberTotem() },
+  { weight: 0.4, label: 'elite ball', spawn: (e): void => e.spawnEliteBall() },
   // Ubers — same weight tier as the named elites
-  { weight: 0.3, label: 'dreadbeetle',  spawn: (e) => e.spawnScarab(undefined, true) },
-  { weight: 0.3, label: 'bloatgrub',    spawn: (e) => e.spawnGrub(undefined, true) },
-  { weight: 0.3, label: 'gnat queen',   spawn: (e) => e.spawnGnatCloud(true) },
-  { weight: 0.25, label: 'matriarch',   spawn: (e) => e.spawnCrawler(undefined, true) },
-  { weight: 0.25, label: 'king serpent', spawn: (e) => e.spawnSnake(undefined, true) },
-  { weight: 0.3, label: 'avalanche',    spawn: (e) => e.spawnRoller(true) },
-  { weight: 0.3, label: 'lancer',       spawn: (e) => e.spawnSeeker(true) },
-  { weight: 0.25, label: 'elder rakk',  spawn: (e) => e.spawnRakk(true) },
-  { weight: 0.25, label: 'siege turret', spawn: (e) => e.spawnTurretter(true) },
-  { weight: 0.2, label: 'broodmother',  spawn: (e) => e.spawnOverlord(true) },
+  { weight: 0.3, label: 'dreadbeetle',  spawn: (e): void => e.spawnScarab(undefined, true) },
+  { weight: 0.3, label: 'bloatgrub',    spawn: (e): void => e.spawnGrub(undefined, true) },
+  { weight: 0.3, label: 'gnat queen',   spawn: (e): void => e.spawnGnatCloud(true) },
+  { weight: 0.25, label: 'matriarch',   spawn: (e): void => e.spawnCrawler(undefined, true) },
+  { weight: 0.25, label: 'king serpent', spawn: (e): void => e.spawnSnake(undefined, true) },
+  { weight: 0.3, label: 'avalanche',    spawn: (e): void => e.spawnRoller(true) },
+  { weight: 0.3, label: 'lancer',       spawn: (e): void => e.spawnSeeker(true) },
+  { weight: 0.25, label: 'elder rakk',  spawn: (e): void => e.spawnRakk(true) },
+  { weight: 0.25, label: 'siege turret', spawn: (e): void => e.spawnTurretter(true) },
+  { weight: 0.2, label: 'broodmother',  spawn: (e): void => e.spawnOverlord(true) },
 ];
-const RANDOM_WEIGHT_TOTAL = RANDOM_POOL.reduce((s, p) => s + p.weight, 0);
+const RANDOM_WEIGHT_TOTAL = RANDOM_POOL.reduce((s, p): number => s + p.weight, 0);
 
 // Budget ramp: 14 alive at t=0, +1 per 20s, hard-capped at 40 — the world
 // fills in over the first minutes instead of dumping the cap instantly.
@@ -159,7 +159,7 @@ function aliveCount(e: ReturnType<typeof createEntities>): number {
  * Left 4 Dead / VS-style: the timeline gives pacing, the pool gives chaos.
  * ?spawns=random replaces all of it with flat weighted-random spawning.
  */
-export function createWaveDirector(deps: DirectorDeps) {
+export function createWaveDirector(deps: DirectorDeps): { update: (dt: number) => void; readonly elapsed: number; readonly credits: number; } {
   let elapsed = 0;
   let credits = 0; // empty opening bank — ambient timers carry the first minute
   let spendTimer = 12; // first spend ~12s in, not instantly
@@ -209,9 +209,9 @@ loopCount += 1;
     spendTimer -= dt;
     if (spendTimer <= 0) {
       spendTimer = SPEND_INTERVAL;
-      const affordable = POOL.filter(p => p.minT <= elapsed && p.cost <= credits);
+      const affordable = POOL.filter((p): boolean => p.minT <= elapsed && p.cost <= credits);
       if (affordable.length > 0) {
-        let roll = Math.random() * affordable.reduce((s, p) => s + p.weight, 0);
+        let roll = Math.random() * affordable.reduce((s, p): number => s + p.weight, 0);
         let [pick] = affordable;
         for (const p of affordable) { roll -= p.weight; if (roll <= 0) { pick = p; break; } }
         credits -= pick.cost;
@@ -221,5 +221,5 @@ loopCount += 1;
     }
   }
 
-  return { update, get elapsed() { return elapsed; }, get credits() { return credits; } };
+  return { update, get elapsed(): number { return elapsed; }, get credits(): number { return credits; } };
 }

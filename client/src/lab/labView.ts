@@ -63,25 +63,25 @@ class LabView {
     this.dumpEl = this.root.querySelector('#lab-dump')!;
     this.blurbEl = this.root.querySelector('#lab-blurb')!;
     this.listEl = this.root.querySelector('#lab-list')!;
-    this.root.querySelector('#lab-close')!.addEventListener('click', () => this.close());
+    this.root.querySelector('#lab-close')!.addEventListener('click', (): void => this.close());
 
     for (const s of SCENARIOS) {
       const btn = document.createElement('button');
       btn.className = 'lab-item';
       btn.dataset.id = s.id;
       btn.innerHTML = `${s.name}<span class="lab-item-blurb">${s.blurb}</span>`;
-      btn.addEventListener('click', () => this.select(s.id));
+      btn.addEventListener('click', (): void => this.select(s.id));
       this.listEl.append(btn);
     }
 
-    this.canvas.addEventListener('pointerdown', () => { this.dragging = true; });
-    window.addEventListener('pointerup', () => { this.dragging = false; });
-    this.canvas.addEventListener('pointermove', (e) => {
+    this.canvas.addEventListener('pointerdown', (): void => { this.dragging = true; });
+    window.addEventListener('pointerup', (): void => { this.dragging = false; });
+    this.canvas.addEventListener('pointermove', (e): void => {
       if (!this.dragging) {return;}
       this.yaw -= e.movementX * 0.006;
       this.pitch = Math.max(0.05, Math.min(1.5, this.pitch + e.movementY * 0.006));
     });
-    this.canvas.addEventListener('wheel', (e) => {
+    this.canvas.addEventListener('wheel', (e): void => {
       e.preventDefault();
       this.dist = Math.max(15, Math.min(300, this.dist * (1 + Math.sign(e.deltaY) * 0.1)));
     }, { passive: false });
@@ -89,7 +89,7 @@ class LabView {
     // ESC closes the lab — capture phase so it beats the menu toggle in
     // overlayInput (which would otherwise open/close the ESC menu under
     // the lab in the same keystroke).
-    document.addEventListener('keydown', (e) => {
+    document.addEventListener('keydown', (e): void => {
       if (e.code === 'Escape' && this.open) {
         e.stopPropagation();
         this.close();
@@ -141,7 +141,7 @@ class LabView {
   }
 
   private select(id: string): void {
-    const s = SCENARIOS.find(x => x.id === id);
+    const s = SCENARIOS.find((x): boolean => x.id === id);
     if (!s) {return;}
     this.instance?.dispose();
     this.instance = null;
@@ -244,11 +244,11 @@ export function wireLabButton(): void {
     gunBtn?.remove();
     return;
   }
-  gunBtn?.addEventListener('click', () =>
+  gunBtn?.addEventListener('click', (): Window | null =>
     window.open('gunlab.html', '_blank'));
   if (!btn) {return;}
-  window.__labDump = () => (lab?.open ? lab.dumpRows() : undefined);
-  btn.addEventListener('click', () => {
+  window.__labDump = (): [string, [string, string][]] | undefined => (lab?.open ? lab.dumpRows() : undefined);
+  btn.addEventListener('click', (): void => {
     lab ??= new LabView();
     lab.toggle();
   });

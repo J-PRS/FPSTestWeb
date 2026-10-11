@@ -184,7 +184,7 @@ export class VideoRecorder {
       this.videoH = src.height;
       this.fpsNow = fps;
       this.enc = new VideoEncoder({
-        output: (c, meta) => {
+        output: (c, meta): void => {
           if (meta?.decoderConfig) {this.decConf = meta.decoderConfig;}
           // stop() detaches the muxer while the encoder still drains its
           // queue — late chunks belong to no file; drop them, don't throw.
@@ -195,7 +195,7 @@ export class VideoRecorder {
           while (this.ring.length > 0 && this.ring[0]!.ts < cutoff) {this.ring.shift();}
         },
         // A dead encoder must fail the clip, not silently record nothing.
-        error: () => { this.encFailed = true; },
+        error: (): void => { this.encFailed = true; },
       });
       this.enc.configure(config);
       this.vmux = chosen.muxCodec;
@@ -242,7 +242,7 @@ export class VideoRecorder {
    *  timestamped by sample count so they stay glued to the wall base. */
   private async startAudio(a: { ctx: AudioContext; node: AudioNode; codec: string; muxCodec: 'aac' | 'opus' }): Promise<void> {
     this.aenc = new AudioEncoder({
-      output: (c, meta) => {
+      output: (c, meta): void => {
         if (meta?.decoderConfig) {this.aDecConf = meta.decoderConfig;}
         if (this.mux) {this.mux.addAudioChunk(c, meta);}
         const ts = this.encWall + c.timestamp / 1000;
@@ -250,7 +250,7 @@ export class VideoRecorder {
         const cutoff = ts - VideoRecorder.RING_MS;
         while (this.aring.length > 0 && this.aring[0]!.ts < cutoff) {this.aring.shift();}
       },
-      error: () => { this.encFailed = true; },
+      error: (): void => { this.encFailed = true; },
     });
     this.aenc.configure({ codec: a.codec, sampleRate: a.ctx.sampleRate, numberOfChannels: 2, bitrate: 128_000 });
     this.aSampleRate = a.ctx.sampleRate;
@@ -264,7 +264,7 @@ export class VideoRecorder {
       URL.revokeObjectURL(url);
     }
     this.aWorklet = new AudioWorkletNode(a.ctx, 'cap', { numberOfInputs: 1, numberOfOutputs: 0 });
-    this.aWorklet.port.onmessage = (e: MessageEvent<Float32Array[]>) => this.onPcm(e.data[0]!, e.data[1]!);
+    this.aWorklet.port.onmessage = (e: MessageEvent<Float32Array[]>): void => this.onPcm(e.data[0]!, e.data[1]!);
     a.node.connect(this.aWorklet);
     this.aSamples = 0;
     this.aPendL = [];
@@ -295,7 +295,7 @@ export class VideoRecorder {
   }
 
   private startMediaRecorder(fps: number): boolean {
-    const mime = MIME_PREFERENCES.find(m => MediaRecorder.isTypeSupported(m));
+    const mime = MIME_PREFERENCES.find((m): boolean => MediaRecorder.isTypeSupported(m));
     if (!mime) {return false;}
     try {
       const stream = (this.staged ? this.stage! : this.canvas!).captureStream(fps);
@@ -315,7 +315,7 @@ export class VideoRecorder {
     }
     this.mime = mime;
     this.chunks = [];
-    this.recorder.ondataavailable = (e) => { if (e.data.size > 0) {this.chunks.push(e.data);} };
+    this.recorder.ondataavailable = (e): void => { if (e.data.size > 0) {this.chunks.push(e.data);} };
     this.recorder.start(250); // periodic chunks so a crash keeps most of the clip
     return true;
   }
@@ -348,10 +348,10 @@ export class VideoRecorder {
         return null;
       }
     }
-    return new Promise((resolve) => {
+    return new Promise((resolve): void => {
       const r = this.recorder;
       if (!r) { resolve(null); return; }
-      r.onstop = () => {
+      r.onstop = (): void => {
         const type = this.mime.split(';')[0] || 'video/webm';
         resolve(this.chunks.length > 0 ? new Blob(this.chunks, { type }) : null);
         this.chunks = [];
@@ -469,7 +469,7 @@ this.frames += 1;
     a.href = url;
     a.download = `${filename}.${ext}`;
     a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    setTimeout((): void => URL.revokeObjectURL(url), 10_000);
     return true;
   }
 }

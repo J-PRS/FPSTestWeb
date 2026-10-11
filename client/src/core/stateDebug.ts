@@ -88,7 +88,7 @@ lane.streak += 1;
   let persistent = lane.streak >= 2;
   let persistDesc = `across ${lane.streak} checks`;
   if (a.perKey) {
-    const stuck = a.diffKeys ? [...a.diffKeys].filter((k) => lane.prevKeys.has(k)) : [];
+    const stuck = a.diffKeys ? [...a.diffKeys].filter((k): boolean => lane.prevKeys.has(k)) : [];
     if (a.diffKeys) {lane.prevKeys = a.diffKeys;}
     persistent = stuck.length > 0 || (!a.diffKeys && lane.streak >= 2);
     persistDesc = stuck.length > 0 ? stuck.slice(0, 6).join(', ') : persistDesc;
@@ -311,7 +311,7 @@ function reportStateComparison(
   logger: ChildLogger,
   clientSnapshot: ReturnType<typeof StateSnapshot.create>,
   serverPlayers: SnapshotPlayer[],
-) {
+): { hashMatch: boolean; playerDifferences: string[]; projectileDifferences: string[]; } {
   const serverPlayerMap = new Map<string, Omit<EntityState, 'id'>>();
   for (const p of serverPlayers) {
     serverPlayerMap.set(p.id, {
@@ -363,7 +363,7 @@ function reportStateComparison(
 export function wireStateDebug(ctx: StateDebugContext): void {
   const { networkManager, logger } = ctx;
 
-  networkManager.onSnapshot = (players: SnapshotPlayer[], timestamp: number) => {
+  networkManager.onSnapshot = (players: SnapshotPlayer[], timestamp: number): void => {
     if (pendingServerSnapshot) {
       pendingServerSnapshot(players, timestamp);
       pendingServerSnapshot = null;
@@ -386,7 +386,7 @@ export function wireStateDebug(ctx: StateDebugContext): void {
   const creatureLane: ReplicaLane = { streak: 0, prevKeys: new Set() };
   const ballLane: ReplicaLane = { streak: 0, prevKeys: new Set() };
 
-  networkManager.onStateHash = (serverHash: string, tick: number, playerCount: number, _timestamp: number, replica?: Record<string, { hash: string; fields?: unknown[][] } | undefined>) => {
+  networkManager.onStateHash = (serverHash: string, tick: number, playerCount: number, _timestamp: number, replica?: Record<string, { hash: string; fields?: unknown[][] } | undefined>): void => {
     // During demo playback the world shows the replay, not the live wire —
     // every lane would compare server truth against the recorded past and
     // report phantom desyncs.
@@ -416,7 +416,7 @@ hashCheckCount += 1;
         name: 'FLAG', tick,
         serverHash: serverFlagHash,
         localHash: replicaHash(WORLD_MODEL.flag!, local),
-        detail: `states=${JSON.stringify(Object.fromEntries([...local].map(([t, f]) => [t, `${f.state}:${f.carrier ?? '-'}`])))}`,
+        detail: `states=${JSON.stringify(Object.fromEntries([...local].map(([t, f]): [string, string] => [t, `${f.state}:${f.carrier ?? '-'}`])))}`,
         warnWhy: 'a flagUpdate edge never landed',
         transientWhy: 'flagUpdate in flight',
       });
@@ -585,7 +585,7 @@ hashMismatchCount += 1;
     const clientPlayers = new Map(allPlayers);
     networkManager.sendSnapshotRequest();
 
-    pendingServerSnapshot = (serverPlayers: SnapshotPlayer[], _ts: number) => {
+    pendingServerSnapshot = (serverPlayers: SnapshotPlayer[], _ts: number): void => {
       const { diffs, healthDriftIds, deadDriftIds, memberDriftIds } = diffServerSnapshot(serverPlayers, clientPlayers);
       const { persistentIds, transientCount } = noteDrift(healthDriftStreak, healthDriftIds);
       const { persistentIds: persistentDeadIds, transientCount: transientDeadCount } = noteDrift(deadDriftStreak, deadDriftIds);
@@ -597,7 +597,7 @@ hashMismatchCount += 1;
       // that persists across checks is real desync. Membership gaps are
       // the same shape: a join/leave edge racing the roster heals via
       // upsert/remoteDelete in this very pass.
-      const significantDiffs = diffs.filter(d => {
+      const significantDiffs = diffs.filter((d): boolean => {
         const h = /^\[echo\] Player (\S+) health/.exec(d);
         if (h) {return persistentIds.has(h[1]!);}
         const e = /^\[edge\] Player (\S+) isDead/.exec(d);
@@ -662,7 +662,7 @@ hashMismatchCount += 1;
         // (lost playerLeft) warns "client but not server" on every check
         // forever. The snapshot is the membership authority — retire both
         // the record and the entity.
-        const serverIds = new Set(serverPlayers.map((sp) => sp.id));
+        const serverIds = new Set(serverPlayers.map((sp): string => sp.id));
         for (const id of clientPlayers.keys()) {
           if (id === localId || serverIds.has(id)) {continue;}
           networkManager.remoteDelete(id);
@@ -677,7 +677,7 @@ hashMismatchCount += 1;
   // Alt+Q/export header — live game state for bug reports. Keyed toward
   // "why didn't X happen" questions: death/respawn state, connection health,
   // what the server thinks vs what we have.
-  Logger.setDiagnostics((verbose: boolean) => diagLines(ctx, verbose));
+  Logger.setDiagnostics((verbose: boolean): string[] => diagLines(ctx, verbose));
 
   exposeDebugWindowFunctions(ctx);
 }
@@ -686,7 +686,7 @@ function exposeDebugWindowFunctions(ctx: StateDebugContext): void {
   if (typeof window === 'undefined') {return;}
   const { networkManager, logger } = ctx;
 
-  window.takeClientSnapshot = () => {
+  window.takeClientSnapshot = (): GameStateSnapshot => {
     const playerMap = new Map<string, Omit<EntityState, 'id'>>();
     const player = ctx.getPlayer();
     playerMap.set('local', {
@@ -722,7 +722,7 @@ function exposeDebugWindowFunctions(ctx: StateDebugContext): void {
     return snapshot;
   };
 
-  window.requestServerSnapshot = () => {
+  window.requestServerSnapshot = (): void => {
     if (networkManager.isConnected()) {
       networkManager.sendSnapshotRequest();
       logger.info('Requested server snapshot');
@@ -731,11 +731,11 @@ function exposeDebugWindowFunctions(ctx: StateDebugContext): void {
     }
   };
 
-  window.exportClientSnapshots = () => {
+  window.exportClientSnapshots = (): void => {
     StateSnapshot.exportSnapshots();
   };
 
-  window.compareState = () => {
+  window.compareState = (): void => {
     if (!networkManager.isConnected()) {
       logger.warn('Not connected');
       return;
@@ -744,7 +744,7 @@ function exposeDebugWindowFunctions(ctx: StateDebugContext): void {
     const clientSnapshot = window.takeClientSnapshot!();
     logger.info('Client snapshot hash:', clientSnapshot.hash);
 
-    pendingServerSnapshot = (serverPlayers: SnapshotPlayer[], _timestamp: number) =>
+    pendingServerSnapshot = (serverPlayers: SnapshotPlayer[], _timestamp: number): { hashMatch: boolean; playerDifferences: string[]; projectileDifferences: string[]; } =>
       reportStateComparison(logger, clientSnapshot, serverPlayers);
 
     networkManager.sendSnapshotRequest();

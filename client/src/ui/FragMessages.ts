@@ -1,6 +1,6 @@
 import { FRAG_MESSAGE_DURATION, FRAG_MESSAGE_FADE } from '../core/config.js';
 
-const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
 export class FragMessages {
   private scoreDiv: HTMLDivElement;
@@ -56,7 +56,7 @@ export class FragMessages {
   ];
 
   showScore(msg: string, air = 0): void {
-    const tier = FragMessages.SCORE_TIERS.find(t => air >= t[0])!;
+    const tier = FragMessages.SCORE_TIERS.find((t): boolean => air >= t[0])!;
     const [head, ...rest] = msg.split('\n');
     this.scoreDiv.innerHTML =
       `<div style="font-size:${tier[1]};font-weight:600;color:#cfe0ff;letter-spacing:0.1em;text-shadow:1px 1px 3px #000">${esc(head ?? '')}</div>${ 
@@ -70,7 +70,7 @@ export class FragMessages {
     this.scoreDiv.style.transition = 'none';
     this.scoreDiv.style.opacity = '1';
     clearTimeout(this.fadeTimer);
-    this.fadeTimer = setTimeout(() => {
+    this.fadeTimer = setTimeout((): void => {
       this.scoreDiv.style.transition = `opacity ${FRAG_MESSAGE_FADE}ms ease`;
       this.scoreDiv.style.opacity = '0';
     }, FRAG_MESSAGE_DURATION);

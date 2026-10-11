@@ -57,7 +57,7 @@ export function clampHipY(clip: THREE.AnimationClip, maxDev = 0.25, extraRoots?:
 // the loaded hierarchy once per model.
 export function computeRootMotionNodes(model: THREE.Object3D): Set<string> {
   const set = new Set<string>();
-  model.traverse(o => {
+  model.traverse((o): void => {
     const sk = o as THREE.SkinnedMesh;
     if (!sk.isSkinnedMesh || !sk.skeleton) {return;}
     let root: THREE.Object3D | null = null, rootDepth = Infinity;

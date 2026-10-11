@@ -546,7 +546,7 @@ export function checkPacket(
   // containers, and envelopes share the contract: absent-declared fields
   // may be missing, null is the wire's absent sentinel, anything else
   // must satisfy wireOk.
-  const checkFields = (fs: KindFieldDecl[] | undefined, m: Record<string, unknown>, tag: string) => {
+  const checkFields = (fs: KindFieldDecl[] | undefined, m: Record<string, unknown>, tag: string): void => {
     for (const f of fs ?? []) {
       if (!(f.name in m)) {
         if (f.absent === undefined) {
@@ -559,7 +559,7 @@ export function checkPacket(
       }
     }
   };
-  const check = (m: Record<string, unknown>) => checkFields(fields, m, '');
+  const check = (m: Record<string, unknown>): void => checkFields(fields, m, '');
   // Row-wrapped verbs (tickUpdate's updates[], roster arrays) check each
   // row — the fields live there, not at message level. Roster feeds pick
   // the container for THEIR kind: gameState carries every roster, so a
@@ -710,7 +710,7 @@ export function verbForType(type: string): { kind: WorldKindDecl; verb: string }
  *  ORDER comes from the declaration, so the server's emit and the
  *  client's diff can never disagree about which slot is which field. */
 export function fieldNames(kind: WorldKindDecl): string[] {
-  return kind.fields.map((f) => f.name);
+  return kind.fields.map((f): string => f.name);
 }
 
 /** Union of a kind's declared field names across the given slots —
@@ -738,7 +738,7 @@ export function kindFields(kind: WorldKindDecl, roster: Iterable<{ id: number }>
   const out: unknown[][] = [];
   for (const e of roster) {
     const r = e as unknown as Record<string, unknown>;
-    out.push([e.id, ...decls.map((d) => r[d.name] ?? d.absent ?? null)]);
+    out.push([e.id, ...decls.map((d): {} | null => r[d.name] ?? d.absent ?? null)]);
   }
   return out;
 }

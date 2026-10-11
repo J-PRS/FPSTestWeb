@@ -217,10 +217,10 @@ export class Ball {
   private _netImp = new THREE.Vector3(); // pending knockback impulse → next claim
   /** ballNet reads Ball's statics through closures — no circular import. */
   private static readonly NET_S: NetStatics = {
-    field: () => Ball.field,
-    simNow: () => Ball.netSimNow?.(),
-    colliders: () => Ball.colliders,
-    colliderIndex: () => Ball.colliderIndex,
+    field: (): Heightfield | null => Ball.field,
+    simNow: (): number | undefined => Ball.netSimNow?.(),
+    colliders: (): readonly StructureCollider[] => Ball.colliders,
+    colliderIndex: (): ColliderIndex | null => Ball.colliderIndex,
   };
   readonly renderOffset = new THREE.Vector3(); // public: ballNet blends segment corrections into it
   readonly _rpos = new THREE.Vector3(); // pos + renderOffset, scratch

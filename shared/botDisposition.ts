@@ -69,8 +69,8 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
         // same seed): the flood trickles in one at a time, so waiting
         // for mass just burns the patience window — a single arrival
         // is the best convergence signal this wave produces.
-        const wave = (ctx.allies ?? []).some((a) => dist3(a, ctx.objective!) < 130);
-        const wingman = (ctx.allies ?? []).some((a) => dist3(a, pos) < 45);
+        const wave = (ctx.allies ?? []).some((a): boolean => dist3(a, ctx.objective!) < 130);
+        const wingman = (ctx.allies ?? []).some((a): boolean => dist3(a, pos) < 45);
         // 35s patience for the capper, 45s for wave members: the call
         // posts at route start (~75s ETA), big-map waves transit 40s+ —
         // 25s still released the capper before his flood landed, and a

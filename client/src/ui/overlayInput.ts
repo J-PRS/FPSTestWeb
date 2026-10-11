@@ -24,7 +24,7 @@ export interface OverlayInputDeps {
 // Overlay / pointer-lock / global key handling: ESC menu flow (Krunker-style —
 // any lock exit opens the menu), scoreboard Tab, demo playback arrow keys,
 // F4 pixel toggle, F6 demo UI, Space pause.
-export function wireOverlayInput(deps: OverlayInputDeps) {
+export function wireOverlayInput(deps: OverlayInputDeps): { requestLock: () => void; } {
   const { overlay, rendererCanvas, logger } = deps;
 
   // Loadout bar lives in its own module — it builds the chip/dropup DOM and
@@ -59,13 +59,13 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
     audio.unlock();
     const p = rendererCanvas.requestPointerLock();
     if (p && typeof (p as Promise<void>).catch === 'function') {
-      (p as Promise<void>).catch(() => {
+      (p as Promise<void>).catch((): void => {
         logger.info('Pointer lock on cooldown — browser requires a brief delay after exiting lock. Click again to re-enter.');
       });
     }
   }
 
-  document.addEventListener('pointerlockchange', () => {
+  document.addEventListener('pointerlockchange', (): void => {
     logger.debug(`Pointer lock changed: locked=${document.pointerLockElement === rendererCanvas}`);
     if (document.pointerLockElement === rendererCanvas) {
       setOverlay(false);
@@ -85,10 +85,10 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
     const dm = deps.lazyDemoManager();
     if (!dm?.isPlaying) {return false;}
     const action = ({
-      ArrowUp: () => dm.togglePlayPause(),
-      ArrowDown: () => dm.restart(),
-      ArrowLeft: () => dm.seekBy(-2),
-      ArrowRight: () => dm.seekBy(2),
+      ArrowUp: (): void => dm.togglePlayPause(),
+      ArrowDown: (): void => dm.restart(),
+      ArrowLeft: (): void => dm.seekBy(-2),
+      ArrowRight: (): void => dm.seekBy(2),
     } as Record<string, () => void>)[e.code];
     if (!action) {return false;}
     e.preventDefault();
@@ -114,7 +114,7 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
     }
   }
 
-  document.addEventListener('keydown', (e) => {
+  document.addEventListener('keydown', (e): void => {
     // A keybind capture owns the next keystroke — it must not leak into
     // menu/demo handling (its listener already stops propagation, this is
     // belt-and-braces for ordering across modules)
@@ -141,7 +141,7 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
     }
   });
 
-  document.addEventListener('keyup', (e) => {
+  document.addEventListener('keyup', (e): void => {
     if (e.code === 'Tab') {
       e.preventDefault();
       deps.lazyHud().setScoreboardVisible(false);
@@ -156,13 +156,13 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
     }
   });
 
-  overlay.addEventListener('click', (e) => {
+  overlay.addEventListener('click', (e): void => {
     if (e.target !== overlay) {return;}
     const dm = deps.lazyDemoManager();
     if (dm?.isPlaying) { dm.stopPlayback(); return; }
     requestLock();
   });
-  rendererCanvas.addEventListener('click', () => {
+  rendererCanvas.addEventListener('click', (): void => {
     if (deps.lazyDemoManager()?.isPlaying) {return;}
     if (document.pointerLockElement !== rendererCanvas) {requestLock();}
   });

@@ -70,7 +70,7 @@ export class RemoteDeployables {
 
   /** deploySpawn echo for a plant we already rendered locally. */
   ackLocal(id: number, items: Item[]): void {
-    const live = items.filter(i => !i.dead);
+    const live = items.filter((i): boolean => !i.dead);
     const newest = live[live.length - 1];
     if (newest) { newest.serverId = id; this.byId.set(id, newest); }
   }
@@ -101,10 +101,10 @@ export class RemoteDeployables {
       if (hp !== undefined) { s.health = hp; s.armor = armor ?? 0; }
       item = {
         kind, candId: `rdep:${id}`, pos: s.pos, dead: false,
-        hurt: () => { return; },
-        update: (dt) => s.update(dt),
-        dispose: () => s.dispose(this.deps.scene),
-        v: s, owner, flash: () => s.flash(),
+        hurt: (): void => { return; },
+        update: (dt): void => s.update(dt),
+        dispose: (): void => s.dispose(this.deps.scene),
+        v: s, owner, flash: (): void => s.flash(),
       };
     } else if (kind === 'turret') {
       const t = new DeployTurret(this.deps.scene, terrain, at);
@@ -112,10 +112,10 @@ export class RemoteDeployables {
       if (hp !== undefined) { t.health = hp; t.armor = armor ?? 0; }
       item = {
         kind, candId: `rdep:${id}`, pos: t.pos, dead: false,
-        hurt: () => { return; }, // server owns its lifetime — deployGone removes it
+        hurt: (): void => { return; }, // server owns its lifetime — deployGone removes it
         // Remote sentries still scan and aim — pure cosmetics, no firing.
         update: (dt) => t.update(dt, this.enemies()),
-        dispose: () => t.dispose(this.deps.scene),
+        dispose: (): void => t.dispose(this.deps.scene),
         v: t, owner,
       };
     } else if (kind === 'beacon') {
@@ -135,14 +135,14 @@ export class RemoteDeployables {
       // Drones chase their owner's shadow server-side — mirror that anchor
       // here or the visual stays parked at the pod's landing spot.
       const update = kind === 'drone'
-        ? () => {
+        ? (): void => {
             const op = this.deps.lazyNetworkManager().getPlayers().get(owner)?.position;
             if (op) {group.position.set(op.x, op.y + 2.5, op.z);}
           }
-        : () => { return; };
+        : (): void => { return; };
       item = {
         kind, candId: `rdep:${id}`, pos: group.position, dead: false,
-        hurt: () => { return; }, update, dispose: () => this.deps.scene.remove(group),
+        hurt: (): void => { return; }, update, dispose: (): THREE.Scene<THREE.Object3DEventMap> => this.deps.scene.remove(group),
         v: { health: hp ?? DEPLOY_V_CAP[kind], armor: armor ?? 0, maxHealth: DEPLOY_V_CAP[kind] },
         owner,
       };
@@ -161,9 +161,9 @@ export class RemoteDeployables {
     if (hp !== undefined) { b.health = hp; b.armor = armor ?? 0; }
     return {
       kind: 'beacon', candId: `rdep:${_id}`, pos: b.pos, dead: false,
-      hurt: () => { return; },
-      update: (dt) => b.update(dt),
-      dispose: () => b.dispose(this.deps.scene),
+      hurt: (): void => { return; },
+      update: (dt): void => b.update(dt),
+      dispose: (): void => b.dispose(this.deps.scene),
       v: b, owner,
     };
   }
@@ -271,8 +271,8 @@ export class RemoteDeployables {
     if (wrecked) { glowMat.color.setHex(0x18_1C_22); group.rotation.z = 0.07; group.scale.y = 0.82; }
     const item: Item = {
       kind, candId: `rdep:${at.x.toFixed(0)},${at.z.toFixed(0)}`, pos: group.position, dead: false,
-      hurt: (dmg) => this.hurtItem(item, dmg),
-      update: (dt) => {
+      hurt: (dmg): void => this.hurtItem(item, dmg),
+      update: (dt): void => {
         if (spin) {spin.rotation.y += dt * 0.8;}
         // Sentry watch sweep — a live base gun scans its arc; a downed
         // one freezes mid-bearing, which doubles as a dead giveaway.
@@ -298,11 +298,11 @@ export class RemoteDeployables {
           }
         }
       },
-      dispose: () => this.deps.scene.remove(group),
+      dispose: (): THREE.Scene<THREE.Object3DEventMap> => this.deps.scene.remove(group),
       v: { health: hp ?? DEPLOY_V_CAP[kind], armor: armor ?? 0, maxHealth: DEPLOY_V_CAP[kind] },
       downed,
       head: isSentry ? head : undefined,
-      setDown: (down) => {
+      setDown: (down): void => {
         downed = down;
         glowMat.color.setHex(down ? 0x18_1C_22 : teamColor);
         if (down) { group.rotation.z = 0.07; group.scale.y = 0.82; }

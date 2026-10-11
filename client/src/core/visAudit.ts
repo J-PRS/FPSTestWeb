@@ -32,25 +32,25 @@ export interface VisAuditResult {
   limit: number;
 }
 
-const tagOf = (o: THREE.Object3D) =>
+const tagOf = (o: THREE.Object3D): string =>
   (o.userData?.probe?.kind as string) || (o.userData?.dbg?.kind as string) || (o.userData?.kind as string) || o.name || o.type;
 
 export function auditScene(scene: THREE.Scene): VisAuditResult {
   const out: VisAuditResult = { scanned: 0, offenders: [], limit: SEG_LIMIT };
 
-  scene.traverse((o) => {
+  scene.traverse((o): void => {
     const geo = (o as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;
     const pos = geo?.attributes?.position;
     const arr = pos?.array as ArrayLike<number> | undefined;
     if (!geo || !arr || arr.length === 0) {return;}
     o.updateWorldMatrix(true, false);
     const m = o.matrixWorld.elements;
-    const mX = (v: number) => m[0] * arr[v * 3] + m[4] * arr[v * 3 + 1] + m[8] * arr[v * 3 + 2] + m[12];
-    const mY = (v: number) => m[1] * arr[v * 3] + m[5] * arr[v * 3 + 1] + m[9] * arr[v * 3 + 2] + m[13];
-    const mZ = (v: number) => m[2] * arr[v * 3] + m[6] * arr[v * 3 + 1] + m[10] * arr[v * 3 + 2] + m[14];
+    const mX = (v: number): number => m[0] * arr[v * 3] + m[4] * arr[v * 3 + 1] + m[8] * arr[v * 3 + 2] + m[12];
+    const mY = (v: number): number => m[1] * arr[v * 3] + m[5] * arr[v * 3 + 1] + m[9] * arr[v * 3 + 2] + m[13];
+    const mZ = (v: number): number => m[2] * arr[v * 3] + m[6] * arr[v * 3 + 1] + m[10] * arr[v * 3 + 2] + m[14];
     let maxEdge = 0, nan = 0;
     let at = [0, 0, 0];
-    const check = (a: number, b: number) => {
+    const check = (a: number, b: number): void => {
       const dx = mX(a) - mX(b), dy = mY(a) - mY(b), dz = mZ(a) - mZ(b);
       const e = dx * dx + dy * dy + dz * dz;
       if (!isFinite(e)) {nan += 1; return; }
@@ -88,7 +88,7 @@ out.scanned += 1;
       // matrixWorld.elements[12..14] — no Vector3 needed (THREE is a
       // type-only import in this file).
       const step = Math.max(1, Math.floor(skel.bones.length / 64));
-      const px = (i: number) => { skel.bones[i].updateWorldMatrix(true, false); return skel.bones[i].matrixWorld.elements; };
+      const px = (i: number): ArrayLike<number> => { skel.bones[i].updateWorldMatrix(true, false); return skel.bones[i].matrixWorld.elements; };
       for (let i = 0; i < skel.bones.length; i += step) {
         const ea = px(i);
         for (let j = i + step; j < skel.bones.length; j += step) {
@@ -126,13 +126,13 @@ out.scanned += 1;
   return out;
 }
 
-registerDiag('visAudit', () => {
+registerDiag('visAudit', (): { visAudit: string; } => {
   const scene = (window as unknown as { __test?: { scene?: THREE.Scene } }).__test?.scene;
   if (!scene) {return { visAudit: 'no scene' };}
   const r = auditScene(scene);
   return {
     visAudit: r.offenders.length > 0
-      ? `${r.offenders.length} offenders / ${r.scanned} scanned: ${r.offenders.slice(0, 5).map(o => `${o.tag}@${o.edge}m`).join(', ')}`
+      ? `${r.offenders.length} offenders / ${r.scanned} scanned: ${r.offenders.slice(0, 5).map((o): string => `${o.tag}@${o.edge}m`).join(', ')}`
       : `clean — ${r.scanned} objects scanned`,
   };
 });

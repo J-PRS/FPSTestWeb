@@ -27,8 +27,8 @@ import type { ServerMessage } from '../../shared/protocol.ts';
 // authored kits place there — measures raw per-weapon lethality with
 // kit frequency removed (innate per-weapon skill still biases picks).
 const RANDLO = (() => {
-  const slot = (k: 'near' | 'mid' | 'far' | 'belt' | 'side') =>
-    [...new Set(BOT_LOADOUTS.map((l) => l[k]))];
+  const slot = (k: 'near' | 'mid' | 'far' | 'belt' | 'side'): WeaponType[] =>
+    [...new Set(BOT_LOADOUTS.map((l): WeaponType => l[k]))];
   return { near: slot('near'), mid: slot('mid'), far: slot('far'), belt: slot('belt'), side: slot('side') };
 })();
 const pickOf = <T,>(pool: T[]): T => pool[Math.floor(botRand() * pool.length) % pool.length]!;
@@ -107,7 +107,7 @@ export class BotRoster {
       this.brains.set(id, new BotBrain(p.position, this.tierFor(p.team)));
       // The spawn pick is thoughtful, not flat: the fresh brain's skill
       // matrix rerolls every open slot toward what this bot hits with.
-      this.adaptOnRespawn(id, (w) => aimSkillFor(this.brains.get(id)!.skill, w, 0), 'spawn');
+      this.adaptOnRespawn(id, (w): number => aimSkillFor(this.brains.get(id)!.skill, w, 0), 'spawn');
       if (wildcard) {logger.info('Bot wildcard kit', { id, room: this.room.name, kit: { near: this.loadouts.get(id)!.near, mid: this.loadouts.get(id)!.mid, far: this.loadouts.get(id)!.far, belt: this.loadouts.get(id)!.belt, side: this.loadouts.get(id)!.side, perk: loadout.perk } });}
       this.thinkPhase.set(id, this.nextIdx % this.thinkDiv);
       // Legal body: the bot gets a move shadow exactly like a human join —
@@ -197,7 +197,7 @@ export class BotRoster {
    *  lanes they free up are actually covered. */
   private rebalanceTeam(ids: string[]): void {
     // Never reassign a carrier — the flagGoal carrier check owns them.
-    const free = ids.filter((id) => {
+    const free = ids.filter((id): boolean => {
       const p = this.room.players.getPlayer(id);
       if (!p || p.isDead) {return true;} // corpses re-role freely on respawn
       for (const f of this.room.flags!.flags.values()) {
@@ -208,7 +208,7 @@ export class BotRoster {
     // Specialists are sticky: donors only come from the generic pool
     // (offense/defense), and a bot is consumed once per cycle — else the
     // same body flip-flops capper→hof→technician on every pass.
-    const donors = free.filter((id) => !ROLE_PRIORITY.some((w) => this.roles.get(id) === w.role));
+    const donors = free.filter((id): boolean => !ROLE_PRIORITY.some((w): boolean => this.roles.get(id) === w.role));
     for (const { role: want, want: need, minSquad } of ROLE_PRIORITY) {
       if (ids.length < minSquad) {break;}
       let have = 0;
@@ -239,7 +239,7 @@ export class BotRoster {
           // Swap each illegal slot for a legal staple of the same band.
           const lo = this.loadouts.get(donor);
           if (lo) {
-            const legal = (w: number, fb: WeaponType) => classCanFire(strict, w) ? w : fb;
+            const legal = (w: number, fb: WeaponType): number => classCanFire(strict, w) ? w : fb;
             this.loadouts.set(donor, Object.assign({}, lo, { near: legal(lo.near, WeaponType.Chaingun),mid: legal(lo.mid, WeaponType.Disc),far: legal(lo.far, WeaponType.BoltLauncher),side: legal(lo.side, WeaponType.Pistol)}));
           }
         }
@@ -362,16 +362,16 @@ excess -= 1;
     const alts = this.alts.get(id);
     if (!lo || !alts) {return;}
     const next = adaptLoadout(lo, alts, skill, botRand);
-    const moved = (['near', 'mid', 'far', 'belt', 'side'] as const).filter((s) => next[s] !== lo[s]);
+    const moved = (['near', 'mid', 'far', 'belt', 'side'] as const).filter((s): boolean => next[s] !== lo[s]);
     if (moved.length === 0) {return;}
     this.loadouts.set(id, next);
-    logger.info('Bot adapted kit', { id, room: this.room.name, at, swapped: moved.map((s) => `${s}:${lo[s]}->${next[s]}`) });
+    logger.info('Bot adapted kit', { id, room: this.room.name, at, swapped: moved.map((s): string => `${s}:${lo[s]}->${next[s]}`) });
     this.refitClass(id);
   }
 
   private retire(id: string): void {
     this.untrackBot(id);
-    this.room.removePlayerCompletely(id, 'botFill', (m, o) => logger.info(m, o));
+    this.room.removePlayerCompletely(id, 'botFill', (m, o): void => logger.info(m, o));
   }
 
   /** Forget a removed bot's roster state — untrack stays in ServerBots

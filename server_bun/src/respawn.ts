@@ -112,7 +112,7 @@ export class RespawnManager {
     const existing = this.timers.get(playerId);
     if (existing) {clearTimeout(existing);}
     this.dueAt.set(playerId, simNow() + CONFIG.respawnDelayMs);
-    const timer = setTimeout(() => {
+    const timer = setTimeout((): void => {
       this.timers.delete(playerId);
       this.dueAt.delete(playerId);
       // Held corpse (die-and-spectate) — the deadline lapses silently;

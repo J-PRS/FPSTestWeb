@@ -46,7 +46,7 @@ export function coalesceTickFrames(evs: Ev[]): Ev[] {
     }
   }
   if (lastTick < 0) {return evs;}
-  return evs.filter((e, i) => {
+  return evs.filter((e, i): boolean => {
     if (e.kind !== 'ev' || !('b' in e) || i === lastTick) {return true;}
     return !(e.b.length >= 10 && e.b[0] === MAGIC && TICK_KINDS.has(e.b[1]!));
   });
@@ -67,8 +67,8 @@ export class WorkerTransport implements GameTransport {
 
   constructor(private readonly config: ConnectionConfig) {
     this.worker = new Worker(new URL('./netWorker.ts', import.meta.url), { type: 'module' });
-    this.worker.onmessage = (e: MessageEvent<Ev>) => this.enqueue(e.data);
-    this.worker.onerror = (e) => {
+    this.worker.onmessage = (e: MessageEvent<Ev>): void => this.enqueue(e.data);
+    this.worker.onerror = (e): void => {
       logger.error('net worker error', e.message);
       config.onError?.(new Error(e.message || 'net worker crashed'));
       // A crashed worker is a dead lane — fire 'down' so the session
@@ -106,7 +106,7 @@ export class WorkerTransport implements GameTransport {
     // a beat to shut its lane down, then retire it or dead workers pile
     // up across stall-reconnects.
     const w = this.worker;
-    setTimeout(() => w.terminate(), 500);
+    setTimeout((): void => w.terminate(), 500);
   }
 
   private enqueue(ev: Ev): void {
@@ -119,7 +119,7 @@ export class WorkerTransport implements GameTransport {
     }
     if (ev.kind === 'resolve') {
       Promise.resolve(this.config.resolveUrl?.() ?? null)
-        .then((url) => this.worker.postMessage({ kind: 'resolved', seq: ev.seq, url }));
+        .then((url): void => this.worker.postMessage({ kind: 'resolved', seq: ev.seq, url }));
       return;
     }
     if (ev.kind === 'rtt') {
@@ -141,7 +141,7 @@ export class WorkerTransport implements GameTransport {
     // land in the same batch — free stall coalescing, ~0 added latency
     // when the loop is healthy.
     if (!this.drainTimer) {
-      this.drainTimer = setTimeout(() => { this.drainTimer = null; this.drain(); }, 0);
+      this.drainTimer = setTimeout((): void => { this.drainTimer = null; this.drain(); }, 0);
     }
   }
 

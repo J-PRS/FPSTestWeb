@@ -131,10 +131,10 @@ export class PlayerInput {
 
   private bindInput(): void {
     const {h} = this;
-    document.addEventListener('keydown', (e) => this.onKeyDown(e));
+    document.addEventListener('keydown', (e): void => this.onKeyDown(e));
     // Mouse wheel cycles weapons (down = next, up = previous). Accumulate
     // deltaY so smooth-scroll/trackpads switch once per gesture, not per tick.
-    document.addEventListener('wheel', (e) => {
+    document.addEventListener('wheel', (e): void => {
       if (this.frozen) {return;}
       if (!document.pointerLockElement) {return;}
       this.wheelAcc += e.deltaY;
@@ -143,7 +143,7 @@ export class PlayerInput {
       this.wheelAcc = 0;
       h.cycleWeapon(step);
     }, { passive: true });
-    document.addEventListener('keyup', (e) => {
+    document.addEventListener('keyup', (e): void => {
       if (this.frozen) {return;}
       this.keys[e.code] = false;
       if (matchCode('jump', e.code)) {this.jumpHeld = false;}
@@ -151,7 +151,7 @@ export class PlayerInput {
       if (matchCode('belt', e.code)) {this.beltHeld = false;}
       if (matchCode('sidearm', e.code)) {h.secondaryUp();}
     });
-    document.addEventListener('mousedown', (e) => {
+    document.addEventListener('mousedown', (e): void => {
       if (this.frozen) {return;}
       if (!document.pointerLockElement) {return;} // ignore clicks that lock the cursor
       this.keys[`Mouse${e.button}`] = true;
@@ -176,7 +176,7 @@ export class PlayerInput {
       if (matchCode('dieSpectate', `Mouse${e.button}`)) {h.dieSpectate();}
       if (matchCode('throwFlag', `Mouse${e.button}`)) {h.throwFlag();}
     });
-    document.addEventListener('mouseup', (e) => {
+    document.addEventListener('mouseup', (e): void => {
       if (this.frozen) {return;}
       this.keys[`Mouse${e.button}`] = false;
       if (e.button === 0) {this.mouseHeld = false;}
@@ -185,14 +185,14 @@ export class PlayerInput {
       if (matchCode('skill', `Mouse${e.button}`)) {h.skillRelease();}
       if (matchCode('belt', `Mouse${e.button}`)) {this.beltHeld = false;}
     });
-    document.addEventListener('contextmenu', (e) => e.preventDefault());
+    document.addEventListener('contextmenu', (e): void => e.preventDefault());
     // Chrome's pointer-lock quirk: mousemoves queued before lock fire after
     // it, each carrying a delta from the old cursor position — up to a full
     // screen of phantom movement per event (~50-120° spinout warns). It isn't
     // always a single event, so swallow everything for a short settle window
     // rather than just the first one. Clamped per-event deltas stay: a real
     // violent flick is <100px anyway.
-    document.addEventListener('pointerlockchange', () => {
+    document.addEventListener('pointerlockchange', (): void => {
       if (document.pointerLockElement) {this.lockSettleUntil = performance.now() + 80;}
       // Lock dropped (ESC menu, alt-tab, OS dialog): any held key/button's
       // release may never reach the page — a missed mouseup leaves jets
@@ -200,8 +200,8 @@ export class PlayerInput {
       else {this.clearAll();}
     });
     // Same hazard when the window loses focus mid-hold.
-    window.addEventListener('blur', () => this.clearAll());
-    document.addEventListener('mousemove', (e) => {
+    window.addEventListener('blur', (): void => this.clearAll());
+    document.addEventListener('mousemove', (e): void => {
       if (!document.pointerLockElement || this.frozen) {return;}
       if (performance.now() < this.lockSettleUntil) {return;}
       const mx = Math.max(-800, Math.min(800, e.movementX));
@@ -217,9 +217,9 @@ export class PlayerInput {
     const nameInput = document.querySelector('#name-input') as HTMLInputElement | null;
     if (nameInput) {
       nameInput.value = settings.get('fps-name');
-      nameInput.addEventListener('focus', () => nameInput.select());
-      nameInput.addEventListener('input', () => settings.set('fps-name', nameInput.value.trim()));
-      nameInput.addEventListener('keydown', (e) => e.stopPropagation());
+      nameInput.addEventListener('focus', (): void => nameInput.select());
+      nameInput.addEventListener('input', (): void => settings.set('fps-name', nameInput.value.trim()));
+      nameInput.addEventListener('keydown', (e): void => e.stopPropagation());
     }
 
     // ESC-menu invert-Y toggle — .tog markup carries the state box;
@@ -227,7 +227,7 @@ export class PlayerInput {
     const invertYBtn = document.querySelector('#invert-y-toggle') as HTMLButtonElement | null;
     if (invertYBtn) {
       invertYBtn.classList.toggle('on', this.invertY);
-      invertYBtn.addEventListener('click', () => {
+      invertYBtn.addEventListener('click', (): void => {
         this.invertY = !this.invertY;
         settings.set('fps-invert-y', this.invertY);
         invertYBtn.classList.toggle('on', this.invertY);
@@ -241,15 +241,15 @@ export class PlayerInput {
     if (sensInput) {
       sensInput.value = (this.sensitivity * 10).toString();
       // Click/focus selects the whole value so typing replaces it outright
-      sensInput.addEventListener('focus', () => sensInput.select());
-      sensInput.addEventListener('input', () => {
+      sensInput.addEventListener('focus', (): void => sensInput.select());
+      sensInput.addEventListener('input', (): void => {
         const v = Number.parseFloat(sensInput.value);
         if (!isFinite(v)) {return;}
         this.sensitivity = Math.max(0.5, Math.min(100, v)) / 10;
         settings.set('fps-sens', this.sensitivity);
       });
       // Don't let WASD-type keys inside the field reach game input
-      sensInput.addEventListener('keydown', (e) => e.stopPropagation());
+      sensInput.addEventListener('keydown', (e): void => e.stopPropagation());
     }
 
     // FOV fields — vertical is the stored/canonical value (camera.fov);
@@ -258,23 +258,23 @@ export class PlayerInput {
     const fovInput = document.querySelector('#fov-input') as HTMLInputElement | null;
     const fovHInput = document.querySelector('#fov-h-input') as HTMLInputElement | null;
     if (fovInput && fovHInput) {
-      const aspect = () => window.innerWidth / Math.max(1, window.innerHeight);
-      const vToH = (v: number) => 2 * Math.atan(Math.tan(v * Math.PI / 360) * aspect()) * 180 / Math.PI;
-      const hToV = (h: number) => 2 * Math.atan(Math.tan(h * Math.PI / 360) / aspect()) * 180 / Math.PI;
-      const syncH = () => { fovHInput.value = String(Math.round(vToH(settings.get('fps-fov')))); };
+      const aspect = (): number => window.innerWidth / Math.max(1, window.innerHeight);
+      const vToH = (v: number): number => 2 * Math.atan(Math.tan(v * Math.PI / 360) * aspect()) * 180 / Math.PI;
+      const hToV = (h: number): number => 2 * Math.atan(Math.tan(h * Math.PI / 360) / aspect()) * 180 / Math.PI;
+      const syncH = (): void => { fovHInput.value = String(Math.round(vToH(settings.get('fps-fov')))); };
       fovInput.value = String(settings.get('fps-fov'));
       syncH();
       for (const el of [fovInput, fovHInput]) {
-        el.addEventListener('focus', () => el.select());
-        el.addEventListener('keydown', (e) => e.stopPropagation());
+        el.addEventListener('focus', (): void => el.select());
+        el.addEventListener('keydown', (e): void => e.stopPropagation());
       }
-      fovInput.addEventListener('input', () => {
+      fovInput.addEventListener('input', (): void => {
         const v = Number.parseFloat(fovInput.value);
         if (!isFinite(v)) {return;}
         settings.set('fps-fov', Math.max(50, Math.min(140, Math.round(v))));
         syncH();
       });
-      fovHInput.addEventListener('input', () => {
+      fovHInput.addEventListener('input', (): void => {
         const h = Number.parseFloat(fovHInput.value);
         if (!isFinite(h)) {return;}
         settings.set('fps-fov', Math.max(50, Math.min(140, Math.round(hToV(h)))));
@@ -294,12 +294,12 @@ export class PlayerInput {
         if (volVal) {volVal.textContent = `${pct}%`;}
       };
       volPaint();
-      volInput.addEventListener('input', () => {
+      volInput.addEventListener('input', (): void => {
         const v = Number.parseFloat(volInput.value);
         if (isFinite(v)) {audio.setVolume(Math.max(0, Math.min(1, v)));}
         volPaint();
       });
-      volInput.addEventListener('keydown', (e) => e.stopPropagation());
+      volInput.addEventListener('keydown', (e): void => e.stopPropagation());
     }
 
     // Dev-tools row: hidden markup unless this is an operator's host
@@ -312,9 +312,9 @@ export class PlayerInput {
     // (Solo/bot mode selection lives in the play hub's OFFLINE tab.)
     const spawnsBtn = document.querySelector('#spawns-toggle') as HTMLButtonElement | null;
     if (spawnsBtn) {
-      const label = () => { spawnsBtn.textContent = settings.get('fps-spawns') ? 'SPAWNS: RANDOM' : 'SPAWNS: SCRIPTED'; };
+      const label = (): void => { spawnsBtn.textContent = settings.get('fps-spawns') ? 'SPAWNS: RANDOM' : 'SPAWNS: SCRIPTED'; };
       label();
-      spawnsBtn.addEventListener('click', () => {
+      spawnsBtn.addEventListener('click', (): void => {
         settings.set('fps-spawns', settings.get('fps-spawns') ? 0 : 1);
         window.location.reload();
       });
@@ -322,9 +322,9 @@ export class PlayerInput {
 
     const debugBtn = document.querySelector('#debug-toggle') as HTMLButtonElement | null;
     if (debugBtn) {
-      const label = () => { debugBtn.classList.toggle('on', Boolean(settings.get('fps-debug'))); };
+      const label = (): void => { debugBtn.classList.toggle('on', Boolean(settings.get('fps-debug'))); };
       label();
-      debugBtn.addEventListener('click', () => {
+      debugBtn.addEventListener('click', (): void => {
         settings.set('fps-debug', settings.get('fps-debug') ? 0 : 1);
         // No reload: every debug consumer reads urlParams.debug live (or
         // hears the fps:set event this set() just fired).
@@ -335,9 +335,9 @@ export class PlayerInput {
     // Read live per message — no reload needed.
     const ttsBtn = document.querySelector('#tts-chat-toggle') as HTMLButtonElement | null;
     if (ttsBtn) {
-      const label = () => { ttsBtn.classList.toggle('on', Boolean(settings.get('fps-tts-chat'))); };
+      const label = (): void => { ttsBtn.classList.toggle('on', Boolean(settings.get('fps-tts-chat'))); };
       label();
-      ttsBtn.addEventListener('click', () => {
+      ttsBtn.addEventListener('click', (): void => {
         settings.set('fps-tts-chat', !settings.get('fps-tts-chat'));
         label();
       });
@@ -348,9 +348,9 @@ export class PlayerInput {
     // vgs.ts reads the setting per keypress.
     const vgsKeysBtn = document.querySelector('#vgs-keys-toggle') as HTMLButtonElement | null;
     if (vgsKeysBtn) {
-      const label = () => { vgsKeysBtn.textContent = settings.get('fps-vgs-physical') ? 'VGS KEYS: PHYSICAL' : 'VGS KEYS: LAYOUT'; };
+      const label = (): void => { vgsKeysBtn.textContent = settings.get('fps-vgs-physical') ? 'VGS KEYS: PHYSICAL' : 'VGS KEYS: LAYOUT'; };
       label();
-      vgsKeysBtn.addEventListener('click', () => {
+      vgsKeysBtn.addEventListener('click', (): void => {
         settings.set('fps-vgs-physical', !settings.get('fps-vgs-physical'));
         label();
       });

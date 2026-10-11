@@ -72,8 +72,8 @@ export class TerrainFlow {
     // Binary heap of cell indices ordered by dist — no library needed
     // for 10k nodes; a push-down/pop-up two-function heap.
     const heap: number[] = [goal];
-    const less = (a: number, b: number) => dist[a]! < dist[b]!;
-    const push = (c: number) => {
+    const less = (a: number, b: number): boolean => dist[a]! < dist[b]!;
+    const push = (c: number): void => {
       heap.push(c);
       let i = heap.length - 1;
       while (i > 0) {

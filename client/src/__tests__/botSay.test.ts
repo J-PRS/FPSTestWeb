@@ -7,28 +7,28 @@ import { chatSink } from '../game/chat.js';
 // outlives the match, so drain must kill every pending line or a dead
 // roster taunts into the next room's chat.
 
-describe('botSay lifecycle', () => {
+describe('botSay lifecycle', (): void => {
   const adds: string[] = [];
 
-  beforeEach(() => {
+  beforeEach((): void => {
     vi.useFakeTimers();
     adds.length = 0;
-    chatSink.add = (_from, text) => { adds.push(text); return document.createElement('div'); };
+    chatSink.add = (_from, text): HTMLDivElement => { adds.push(text); return document.createElement('div'); };
     Object.defineProperty(document, 'hidden', { value: false, configurable: true });
   });
-  afterEach(() => {
+  afterEach((): void => {
     vi.useRealTimers();
     chatSink.add = undefined;
     botSayDrain(); // never leak timers between tests
   });
 
-  it('delivers the line after its beat', () => {
+  it('delivers the line after its beat', (): void => {
     botSay('bot:PICO-05', 'ez {v}');
     vi.advanceTimersByTime(4000);
     expect(adds).toEqual(['ez {v}']);
   });
 
-  it('drain kills pending lines — a dead match cannot taunt', () => {
+  it('drain kills pending lines — a dead match cannot taunt', (): void => {
     botSay('bot:PICO-05', 'ez');
     botSay('bot:MARA-03', 'wp');
     botSayDrain();
@@ -36,7 +36,7 @@ describe('botSay lifecycle', () => {
     expect(adds).toEqual([]);
   });
 
-  it('drain kills the combo tail, not just the head', () => {
+  it('drain kills the combo tail, not just the head', (): void => {
     vi.spyOn(Math, 'random').mockReturnValue(0); // roll under COMBO_CHANCE
     botSay('bot:PICO-05', 'unused', 'VGTG'); // "I am the greatest!" → combo-eligible
     botSayDrain();
@@ -44,7 +44,7 @@ describe('botSay lifecycle', () => {
     expect(adds).toEqual([]); // neither head nor tail
   });
 
-  it('hidden tab drops the line instead of queuing a stale taunt', () => {
+  it('hidden tab drops the line instead of queuing a stale taunt', (): void => {
     Object.defineProperty(document, 'hidden', { value: true, configurable: true });
     botSay('bot:PICO-05', 'wp');
     vi.advanceTimersByTime(4000);

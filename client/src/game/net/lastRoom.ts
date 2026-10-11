@@ -31,7 +31,7 @@ export function loadLastRoomMap(host: string): MapSnapshot | null {
 export async function pingServer(httpUrl: string, timeoutMs = 1200): Promise<boolean> {
   try {
     const ac = new AbortController();
-    const t = setTimeout(() => ac.abort(), timeoutMs);
+    const t = setTimeout((): void => ac.abort(), timeoutMs);
     try { await fetch(`${httpUrl}/rooms`, { signal: ac.signal, cache: 'no-cache' }); }
     finally { clearTimeout(t); }
     return true;

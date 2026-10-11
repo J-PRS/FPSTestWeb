@@ -156,7 +156,7 @@ this.anomalies.reclaimNonLive += 1;
       // onExpire runs the full teardown funnel — if it throws, the
       // player is never reaped (ghost session + leaked slot). Wrap so
       // the failure logs with the victim instead of going unhandled.
-      s.graceTimer = setTimeout(() => {
+      s.graceTimer = setTimeout((): void => {
         try { onExpire(); }
         catch (error) { logger.error('Grace expiry failed', { playerId, err: error instanceof Error ? error.message : String(error) }); }
       }, graceMs);
@@ -171,7 +171,7 @@ this.anomalies.reclaimNonLive += 1;
     const s: Session = { state: 'grace', gen: (this.genCounter += 1), at: wallNow(), room };
     this.sessions.set(playerId, s);
     this.bumpGrace(room, +1);
-    s.graceTimer = setTimeout(() => {
+    s.graceTimer = setTimeout((): void => {
       try { onExpire(); }
       catch (error) { logger.error('Grace expiry failed', { playerId, err: error instanceof Error ? error.message : String(error) }); }
     }, graceMs);

@@ -165,13 +165,15 @@ function netBallDie(deps: EntitiesDeps, netBallById: Map<number, Ball>,
 // Per-ball throttle folds repeats into ×N; the fleet aggregate folds
 // THROTTLED warns into one 10s summary — a desync storm reads as a
 // number, not a scroll.
-export function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: number) => number, estSimNow: () => number, logger: ChildLogger) {
+interface RbMsg { id: number; kind?: string; position: Vec3Msg; velocity: Vec3Msg; t?: number; enraged?: boolean; et?: number; slowT?: number; damp?: boolean; tp?: Vec3Msg | null }
+
+export function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: number) => number, estSimNow: () => number, logger: ChildLogger): { check: (b: Ball, m: RbMsg) => void; rbFleetFlush: () => void; } {
   const _truthPos = new THREE.Vector3();
   const _msgPos = new THREE.Vector3();
   // predictAt's world view — same field/colliders/clock the live replay reads.
   const NET_PROBE_S = {
     field: () => Ball.netField,
-    simNow: () => estSimNow(),
+    simNow: (): number => estSimNow(),
     colliders: () => Ball.colliders,
     colliderIndex: () => Ball.colliderIndex,
   };
@@ -253,7 +255,6 @@ rbFleetCount += 1;
     _truthPos.set(s.x + s.vx * rem, s.y + s.vy * rem, s.z + s.vz * rem);
   }
 
-  interface RbMsg { id: number; kind?: string; position: Vec3Msg; velocity: Vec3Msg; t?: number; enraged?: boolean; et?: number; slowT?: number; damp?: boolean; tp?: Vec3Msg | null }
 
   /** Noise gates between the error measurement and the warn — every early
    *  out is a divergence that's the design working, not a desync signal. */
@@ -359,16 +360,16 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
   const netBallById = new Map<number, Ball>();
   // A P2P host carries no ball sim — peers keep client-side balls there.
   const serverBalls = (): boolean => deps.lazyNetworkManager()?.authoritySims() ?? false;
-  Ball.hitClaim = (netId, dmg, ix, iy, iz) =>
+  Ball.hitClaim = (netId, dmg, ix, iy, iz): void =>
     deps.lazyNetworkManager()?.sendCreatureHit(netId, dmg, ix, iy, iz);
 
-  const ballClock = makeBallClock(() => deps.lazyNetworkManager()?.getPing() ?? 0);
+  const ballClock = makeBallClock((): number => deps.lazyNetworkManager()?.getPing() ?? 0);
   const { estSimNow, ballEventAge } = ballClock;
   Ball.netSimNow = estSimNow;
 
   // A non-finite component in authority state (server fault, hostile p2p
   // peer) silently poisons the replay sim — drop the edge and warn.
-  const finiteMsg = (m: { position: Vec3Msg; velocity: Vec3Msg; tp?: Vec3Msg | null }) =>
+  const finiteMsg = (m: { position: Vec3Msg; velocity: Vec3Msg; tp?: Vec3Msg | null }): boolean =>
     finiteVec(m.position) && finiteVec(m.velocity) && (!m.tp || finiteVec(m.tp));
 
   function netBallSpawn(m: { id: number; variant: number; colorIdx: number; position: Vec3Msg; velocity: Vec3Msg; t?: number; enraged?: boolean; targetId?: string | null; tp?: Vec3Msg | null; et?: number; slowT?: number; damp?: boolean }): void {
@@ -440,9 +441,9 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
   // unreliable lane) would otherwise ghost forever — nothing else removes it.
   function netBallRoster(m: { balls: { id: number; variant: number; colorIdx: number; position: Vec3Msg; velocity: Vec3Msg; t?: number; enraged?: boolean; targetId?: string | null; tp?: Vec3Msg | null; et?: number; slowT?: number; damp?: boolean }[] }): void {
     reconcileReplicas(netBallById, m.balls, {
-      rowId: (r) => r.id,
-      ensure: (r) => { netBallSpawn(r); return netBallById.get(r.id); },
-      reap: (b) => b.netKill(),
+      rowId: (r): number => r.id,
+      ensure: (r): Ball | undefined => { netBallSpawn(r); return netBallById.get(r.id); },
+      reap: (b): void => b.netKill(),
     });
     // Membership reconcile alone left existing replicas running on stale
     // regime fields (enraged/targetId/timers) — a missed retarget edge
@@ -486,6 +487,6 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
   }
 
   return { serverBalls, netBallSpawn, netBallSegment,
-    netBallDie: (m: { id: number; position: { x: number; y: number; z: number }; by?: string | null }) => netBallDie(deps, netBallById, m),
+    netBallDie: (m: { id: number; position: { x: number; y: number; z: number }; by?: string | null }): void => netBallDie(deps, netBallById, m),
     netBallRoster, netTargetPosFor };
 }

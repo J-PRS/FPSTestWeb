@@ -71,7 +71,7 @@ export class PlayerModel {
   }
 
   /** Live-tune the hold pose (posedump iteration loop) — deg per role. */
-  debugSetHold(upper: [number, number, number], lower: [number, number, number], hand: [number, number, number], lUpper: [number, number, number] = upper.map(v => -v) as [number, number, number], lLower: [number, number, number] = lower, lHand: [number, number, number] = hand): void {
+  debugSetHold(upper: [number, number, number], lower: [number, number, number], hand: [number, number, number], lUpper: [number, number, number] = upper.map((v): number => -v) as [number, number, number], lLower: [number, number, number] = lower, lHand: [number, number, number] = hand): void {
     this.pose.debugSetHold(upper, lower, hand, lUpper, lLower, lHand);
   }
   // Weapon-swap dip — mirrors the first-person viewmodel's lower→raise:
@@ -146,7 +146,7 @@ export class PlayerModel {
     this.pose.wantSpineLock = !shootClip || shootClip.startsWith('UAL_');
     // The gun controller owns the mesh; a baked-geo swap invalidates the
     // wireframe capture, so it reaches back through this hook.
-    this.gunCtl.onGeoSwap = () => { if (this.mats.wireframeOn) {this.mats.captureWireframe(this.model);} };
+    this.gunCtl.onGeoSwap = (): void => { if (this.mats.wireframeOn) {this.mats.captureWireframe(this.model);} };
   }
 
   async load(): Promise<void> {
@@ -155,21 +155,21 @@ export class PlayerModel {
     const knight = this.variant === 'knight';
     const url = RIG_MANIFEST[this.variant]?.url ?? '/assets/models/RobotExpressive.glb';
 
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve, reject): void => {
       let attempts = 0;
       let fellBack = false;
-      const attempt = () => {
+      const attempt = (): void => {
       // One parse per rig URL for the whole session — SkeletonUtils.clone
       // hands each remote its own skeleton bound to shared geometry and
       // textures. A roomful of same-class bots used to pay a full GLB
       // decode + GPU upload apiece.
       loadGltfCached(loader, url).then(
-        (gltf) => {
+        (gltf): void => {
           if (this._disposed) { resolve(); return; }
-          this.onModelLoaded({ scene: SkeletonUtils.clone(gltf.scene) as THREE.Group, animations: gltf.animations.map((c) => c.clone()) }, mann, knight);
+          this.onModelLoaded({ scene: SkeletonUtils.clone(gltf.scene) as THREE.Group, animations: gltf.animations.map((c): THREE.AnimationClip => c.clone()) }, mann, knight);
           resolve();
         },
-        (error) => {
+        (error): void => {
           // A dev-server restart (or any transient fetch failure) must not
           // kill the model for the whole session — an invisible player is
           // worse than a late one. Retry with backoff before giving up.
@@ -210,7 +210,7 @@ export class PlayerModel {
     // the posed size and the fit math explodes the model ~100x. The
     // skeleton has to be posed for the bake to mean anything.
     this.model.updateMatrixWorld(true);
-    this.model.traverse((c) => (c as THREE.SkinnedMesh).skeleton?.update());
+    this.model.traverse((c): void => (c as THREE.SkinnedMesh).skeleton?.update());
     const box = new THREE.Box3().setFromObject(this.model, true);
     const size = box.getSize(new THREE.Vector3());
     const {min} = box;
@@ -218,7 +218,7 @@ export class PlayerModel {
     logger.debug(`Model bounding box: size=(${size.x.toFixed(2)},${size.y.toFixed(2)},${size.z.toFixed(2)}) min=(${min.x.toFixed(2)},${min.y.toFixed(2)},${min.z.toFixed(2)}) max=(${max.x.toFixed(2)},${max.y.toFixed(2)},${max.z.toFixed(2)})`);
 
     // Enable shadow casting + grab aim/attachment bones
-    this.model.traverse((child) => this.prepareChild(child));
+    this.model.traverse((child): void => this.prepareChild(child));
     this.computeDistalBones();
     // Model may finish loading while a far-LOD swap is already armed —
     // the freshly captured skinnedMeshes need the swap applied now.
@@ -301,9 +301,9 @@ export class PlayerModel {
 
   private skinnedMeshes: THREE.SkinnedMesh[] = [];
   private readonly lodCtl = new PlayerModelLod(this.skinnedMeshes,
-    () => mkGltfLoader().loadAsync(RIG_MANIFEST[this.variant].lodUrl!).then((g) => {
+    () => mkGltfLoader().loadAsync(RIG_MANIFEST[this.variant].lodUrl!).then((g): THREE.BufferGeometry<THREE.NormalBufferAttributes, THREE.BufferGeometryEventMap>[] => {
       const geos: THREE.BufferGeometry[] = [];
-      g.scene.traverse((o) => {
+      g.scene.traverse((o): void => {
         if ((o as THREE.SkinnedMesh).isSkinnedMesh) {geos.push(smoothShade((o as THREE.SkinnedMesh).geometry));}
       });
       return geos;
@@ -617,12 +617,12 @@ export class PlayerModel {
     if (on) {
       if (this.ghostBaseline) {return;}
       this.ghostBaseline = new Map();
-      this.model.traverse((child) => {
+      this.model.traverse((child): void => {
         const mesh = child as THREE.Mesh;
         const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
         if (!mat) {return;}
         this.ghostBaseline!.set(mesh, mat);
-        mesh.material = Array.isArray(mat) ? mat.map((m) => PlayerModel.ghostOf(m)) : PlayerModel.ghostOf(mat);
+        mesh.material = Array.isArray(mat) ? mat.map((m): THREE.Material<THREE.MaterialEventMap> => PlayerModel.ghostOf(m)) : PlayerModel.ghostOf(mat);
       });
       return;
     }

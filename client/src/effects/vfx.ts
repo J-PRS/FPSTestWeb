@@ -61,7 +61,7 @@ function normalMat(): THREE.MeshBasicMaterial {
  *  every other burst in flight. */
 export function impactBurst(pos: THREE.Vector3, vel: THREE.Vector3): void {
   if (!vfxReady()) {return;}
-  const ps = takeSystem('impact', () => new ParticleSystem({
+  const ps = takeSystem('impact', (): ParticleSystem => new ParticleSystem({
     duration: 0.35,
     looping: false,
     startLife: new IntervalValue(0.12, 0.27),
@@ -95,7 +95,7 @@ export function impactBurst(pos: THREE.Vector3, vel: THREE.Vector3): void {
   // velocity-aligned slivers as fragments. Skipped under particle
   // pressure (the puff above is the minimum readable hit).
   if (vfxPressure() > 0.6) {
-    const streaks = takeSystem('impactStreak', () => new ParticleSystem({
+    const streaks = takeSystem('impactStreak', (): ParticleSystem => new ParticleSystem({
       duration: 0.25,
       looping: false,
       startLife: new IntervalValue(0.1, 0.2),
@@ -147,7 +147,7 @@ function trailKey(config: ProjectileConfig): string {
     config.trailLifeMax, config.trailBaseSize, config.trailSizeRange,
     config.trailScaleMin, config.trailScaleMax, config.trailSpread,
     config.trailOpacity, config.trailParticleGravity, config.trailRampIn,
-    config.trailColors.map(c => `${c.r},${c.g},${c.b}`).join(';')].join(',');
+    config.trailColors.map((c): string => `${c.r},${c.g},${c.b}`).join(';')].join(',');
 }
 
 /** Trail as ONE batched quarks system per projectile: the old pool-per-
@@ -190,18 +190,18 @@ export class QuarksTrail {
     if (config.trailParticlesPerUnit <= 0) {trailStats.noRate += 1; return; }
     this.key = trailKey(config);
     if ((pools.get(this.key)?.length ?? 0) > 0) {trailStats.reused += 1;} else {trailStats.built += 1;}
-    this.ps = takeSystem(this.key, () => {
+    this.ps = takeSystem(this.key, (): ParticleSystem => {
       // Gradient + alpha fade built from the config's arbitrary-length
       // trailColors — same lerp the per-particle loop used to do by hand.
       const cols = config.trailColors;
-      const colorStops: [QV3, number][] = cols.map((c, i) =>
+      const colorStops: [QV3, number][] = cols.map((c, i): [QV3, number] =>
         [new QV3(c.r, c.g, c.b), cols.length > 1 ? i / (cols.length - 1) : 0]);
       const alphaStops: [number, number][] = [[config.trailOpacity, 0], [0, 1]];
       const smin = config.trailScaleMin, smax = config.trailScaleMax;
 
       const behaviors: ConstructorParameters<typeof ParticleSystem>[0]['behaviors'] = [
         new ColorOverLife(new Gradient(colorStops, alphaStops)),
-        new SizeOverLife(new FnValue(t => smin + (smax - smin) * t)),
+        new SizeOverLife(new FnValue((t): number => smin + (smax - smin) * t)),
       ];
       // Old loop did vel.y += gravity*dt (positive lifts — sprinkler droplets)
       if (config.trailParticleGravity) {
@@ -269,7 +269,7 @@ export class QuarksTrail {
       emT: ps ? Number(ps.time.toFixed(2)) : null,
       travel: Number(((ps?.emissionState as { travelDistance?: number } | undefined)?.travelDistance ?? -1).toFixed(2)),
       emVis: ps?.emitter.visible ?? null,
-      emRoot: ps ? (() => {
+      emRoot: ps ? ((): string => {
         let o: THREE.Object3D = ps.emitter;
         while (o.parent) {o = o.parent;}
         return o.type;
@@ -278,16 +278,16 @@ export class QuarksTrail {
       // Double-checkout detector: a trail ps that also sits in a pool means
       // two owners share one system — emit bookkeeping is then torn between
       // them (the classic "sometimes no trail" split-brain).
-      inPool: ps ? [...(pools.get(this.key) ?? [])].some(e => e.ps === ps) : null,
+      inPool: ps ? [...(pools.get(this.key) ?? [])].some((e): boolean => e.ps === ps) : null,
       // Emitter WORLD position vs the first live particle's spawn point —
       // particles drifting far from the emitter mean the distance deposit
       // landed at a stale matrixWorld (parked-teleport burst elsewhere),
       // not at the muzzle.
-      emW: ps ? (() => {
+      emW: ps ? ((): string => {
         const e = ps.emitter.matrixWorld.elements;
         return `${e[12]!.toFixed(1)},${e[13]!.toFixed(1)},${e[14]!.toFixed(1)}`;
       })() : '-',
-      p0: ps && ps.particleNum > 0 ? (() => {
+      p0: ps && ps.particleNum > 0 ? ((): string => {
         const p = (ps as unknown as { particles: { position: THREE.Vector3 }[] }).particles[0]!;
         return `${p.position.x.toFixed(1)},${p.position.y.toFixed(1)},${p.position.z.toFixed(1)}`;
       })() : '-',
@@ -484,7 +484,7 @@ export function fxPuff(pos: THREE.Vector3, spec: PuffSpec): void {
   // buckets (~30k parked systems) — the 13ms vfx frame.
   const kind = `puff:${_q(spec.lifeMin, 0.1)}:${_q(spec.lifeMax, 0.1)}:${_q(ss, 0.1)}` +
     `:${spec.additive ? 1 : 0}:${spec.gravity === false ? 0 : 1}:${_qc(spec.colA)}:${_qc(spec.colB)}`;
-  const ps = takeSystem(kind, () => {
+  const ps = takeSystem(kind, (): ParticleSystem => {
     const em = new PuffEmitter(spec);
     const sys = new ParticleSystem({
     duration: spec.lifeMax + 0.05,
@@ -509,7 +509,7 @@ export function fxPuff(pos: THREE.Vector3, spec: PuffSpec): void {
         new Gradient([[new QV3(...spec.colB), 0], [new QV3(...spec.colB), 1]],
           [[0.6, 0], [0, 1]]))),
       // shrink 1.7→0.3 over life — the old s=(0.3+t·1.4) formula
-      new SizeOverLife(new FnValue(t => 0.3 + (1 - t) * 1.4)),
+      new SizeOverLife(new FnValue((t): number => 0.3 + (1 - t) * 1.4)),
       new RotationOverLife(new IntervalValue(-2, 2)),
     ],
     });
@@ -542,7 +542,7 @@ class FnValue implements FunctionValueGenerator {
 
 // Grow-in over the first 12% then linear shrink — the shape the old
 // pooled particles used (t<0.12 ? t/0.12 : 1-t).
-const GROW_SHRINK = new FnValue(t => (t < 0.12 ? t / 0.12 : 1 - t));
+const GROW_SHRINK = new FnValue((t): number => (t < 0.12 ? t / 0.12 : 1 - t));
 
 interface QVec {
   x: number; y: number; z: number;
@@ -609,8 +609,8 @@ const _eVel = new THREE.Vector3();
 const shapeOf = new WeakMap<ParticleSystem, BlastEmitter>();
 
 // Spec-quantizers hoisted out of burstKey — they're recreated per call otherwise.
-const _q = (v?: number, step = 0.05) => v === undefined ? '' : Math.round(v / step) * step;
-const _qc = (c?: number[]) => c === undefined ? '' : c.map(v => Math.round(v * 20) / 20).join('-');
+const _q = (v?: number, step = 0.05): number | "" => v === undefined ? '' : Math.round(v / step) * step;
+const _qc = (c?: number[]): string => c === undefined ? '' : c.map((v): number => Math.round(v * 20) / 20).join('-');
 
 function burstKey(kind: string, spec: BlastSpec | ImplodeSpec, additive: boolean): string {
   const s = spec as BlastSpec & ImplodeSpec;
@@ -675,7 +675,7 @@ export interface ImplodeSpec {
 export function implodeBurst(pos: THREE.Vector3, spec: ImplodeSpec, additive: boolean): void {
   if (queueIfCold(burstKey('implode', spec, additive))) {
     const p = pos.clone();
-    buildQueue.push(() => spawnImplodeBurst(p, spec, additive));
+    buildQueue.push((): void => spawnImplodeBurst(p, spec, additive));
     return;
   }
   spawnImplodeBurst(pos, spec, additive);
@@ -684,7 +684,7 @@ export function implodeBurst(pos: THREE.Vector3, spec: ImplodeSpec, additive: bo
 function spawnImplodeBurst(pos: THREE.Vector3, spec: ImplodeSpec, additive: boolean): void {
   if (!vfxReady()) {return;}
   const w = spec.stagger ?? 0;
-  const ps = takeSystem(burstKey('implode', spec, additive), () => new ParticleSystem({
+  const ps = takeSystem(burstKey('implode', spec, additive), (): ParticleSystem => new ParticleSystem({
     duration: spec.lifeMax + w + 0.05,
     looping: false,
     startLife: new IntervalValue(spec.lifeMin, spec.lifeMax),
@@ -739,7 +739,7 @@ export interface BlastSpec {
  *  replacement for spawnBurst's per-particle pooled meshes/sprites.
  *  `kind: 'glow'` = additive, 'smoke'/'solid' = normal blend. */
 /** gVar spreads the green channel per-particle — organic fire variance. */
-function blastColorGen(spec: BlastSpec) {
+function blastColorGen(spec: BlastSpec): Gradient | RandomColorBetweenGradient {
   const g1 = new Gradient([[new QV3(...spec.c1), 0], [new QV3(...spec.c2), 1]],
     [[spec.opacity, 0], [0, 1]]);
   return spec.gVar
@@ -754,7 +754,7 @@ function blastColorGen(spec: BlastSpec) {
 function blastBursts(count: number, w: number) {
   if (w <= 0) {return [{ time: 0, count: new ConstantValue(count), cycle: 0, interval: 0.01, probability: 1 }];}
   return [[0, Math.ceil(count * 0.6)], [w * 0.45, Math.ceil(count * 0.25)], [w, Math.floor(count * 0.15)]]
-    .filter(b => b[1] > 0)
+    .filter((b): boolean => b[1] > 0)
     .map(([time, c]) => ({ time, count: new ConstantValue(c), cycle: 0, interval: 0.01, probability: 1 }));
 }
 
@@ -762,7 +762,7 @@ export function blastBurst(pos: THREE.Vector3, spec: BlastSpec,
     additive: boolean): void {
   if (queueIfCold(burstKey('blast', spec, additive))) {
     const p = pos.clone();
-    buildQueue.push(() => spawnBlastBurst(p, spec, additive));
+    buildQueue.push((): void => spawnBlastBurst(p, spec, additive));
     return;
   }
   spawnBlastBurst(pos, spec, additive);
@@ -778,7 +778,7 @@ function spawnBlastBurst(pos: THREE.Vector3, spec: BlastSpec,
   // so a mass-explosion pileup doesn't turn into 30k CPU-simmed quads.
   const bursts = blastBursts(Math.max(1, Math.round(spec.count * vfxPressure())), w);
   const em = new BlastEmitter(spec.elvBase ?? 0.5, spec.elvSpan ?? Math.PI, Boolean(spec.planar), spec.vy, spec.dir, spec.spread);
-  const ps = takeSystem(burstKey('blast', spec, additive), () => {
+  const ps = takeSystem(burstKey('blast', spec, additive), (): ParticleSystem => {
     const sys = new ParticleSystem({
     duration: lifeMax + w + 0.05,
     looping: false,

@@ -30,7 +30,7 @@ interface Forceable {
 // damage the funnel will never confirm (then resyncing it back).
 const solids = () => Projectile.solidColliders;
 
-const occluded = (pos: THREE.Vector3, target: THREE.Vector3) =>
+const occluded = (pos: THREE.Vector3, target: THREE.Vector3): boolean =>
   solids().length > 0 && blastOccluded(pos, target, solids());
 
 // Splash damage-number color follows the weapon — getProjectileConfig
@@ -182,7 +182,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     // and a stale window double-shoves + strands a false kb-echo stamp.
     // Same 8m + force match as the stamp consume in players.ts — replica
     // explode positions diverge from the server's blast center past 3m.
-    const dup = rkb.findIndex(s => now - s.t < 700 &&
+    const dup = rkb.findIndex((s): boolean => now - s.t < 700 &&
       Math.hypot(s.x - pos.x, s.y - pos.y, s.z - pos.z) < 8 &&
       (s.f === undefined || Math.abs(s.f - force) < 0.5));
     if (dup !== -1) {rkb.splice(dup, 1); return true;}
@@ -216,7 +216,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     if (!Number.isFinite(a.pos.x + a.pos.y + a.pos.z + a.radius + a.force)) {return;}
     const { pos, radius, force, forceMode, aoeDamage } = a;
     const scales = a.weaponType === undefined ? undefined : getWeaponStats(a.weaponType).aoeScales;
-    const applyTo = (t: Forceable, f: number) =>
+    const applyTo = (t: Forceable, f: number): void =>
       forceMode === 'push' ? t.applyKnockback(pos, Math.min(f, BLAST_IMPULSE_MAX)) : t.applyPull(pos, Math.min(f, BLAST_IMPULSE_MAX));
 
     const player = deps.lazyPlayer();

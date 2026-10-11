@@ -223,16 +223,16 @@ export class RemoteAnim {
       this.trailDriver = new TrailDriver(
         {
           pos: this._trailAnchor, vel: h.velocity,
-          emitting: () => this._trailOn,
+          emitting: (): boolean => this._trailOn,
           emitOnJump: false, // a snapshot-correction sweep IS the streak to hide
-          maxStep: (d) => Math.max(6, this._speed * d * 4),
+          maxStep: (d): number => Math.max(6, this._speed * d * 4),
         },
         [{
-          emitSegment: () => {
+          emitSegment: (): void => {
             if (!this.airTrail) {this.airTrail = new BallTrailDots(h.scene, { opacity: 0.32, sizeMul: 0.45, interval: 0.05, maxDots: 18 });}
             this.airTrail.emit(this._trailDt, this._trailAnchor, h.velocity, 0.4, _trailTint);
           },
-          teleport: () => { /* dots fade fast — emit suppression is the cut */ },
+          teleport: (): void => { /* dots fade fast — emit suppression is the cut */ },
         }],
       );
     }

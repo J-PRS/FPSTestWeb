@@ -24,7 +24,7 @@ function clipNames(file: string): Set<string> {
   const buf = fs.readFileSync(path.join(MODELS_DIR, file));
   const jsonLen = buf.readUInt32LE(12);
   const json = JSON.parse(buf.subarray(20, 20 + jsonLen).toString('utf8'));
-  return new Set((json.animations || []).map((a: { name: string }) => a.name));
+  return new Set((json.animations || []).map((a: { name: string }): string => a.name));
 }
 
 const STATES: AnimationState[] = ['idle', 'walk', 'run', 'jump', 'death', 'ski', 'hit', 'shoot', 'jet'];
@@ -58,17 +58,17 @@ function available(variant: string): Set<string> {
 /** First candidate the loaded set actually has — the runtime walks the
  *  same list, so this can never drift from what ships. */
 function resolveClip(avail: Set<string>, variant: string, state: AnimationState, dir: LocoDir): string | null {
-  const hit = clipCandidates(variant, state, dir).find(c => avail.has(c.name));
+  const hit = clipCandidates(variant, state, dir).find((c): boolean => avail.has(c.name));
   return hit ? hit.name : null;
 }
 
-describe('anim coverage matrix — every variant resolves every state to a real clip', () => {
+describe('anim coverage matrix — every variant resolves every state to a real clip', (): void => {
   const dirs: LocoDir[] = ['F', 'L'];
   for (const variant of Object.keys(RIGS)) {
     const avail = available(variant);
     for (const state of STATES) {
       for (const dir of dirs) {
-        it(`${variant} ${state} ${dir}`, () => {
+        it(`${variant} ${state} ${dir}`, (): void => {
           const clip = resolveClip(avail, variant, state, dir);
           expect(clip, `${variant}/${state}/${dir} resolved to nothing`).not.toBeNull();
           expect(avail.has(clip!), `${variant}/${state}/${dir} → '${clip}' not in clip set`).toBe(true);

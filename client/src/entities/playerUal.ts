@@ -117,7 +117,7 @@ function unwindDirYaw(clip: THREE.AnimationClip, model: THREE.Object3D, target: 
 }
 
 function loadSources(env?: UalBakeEnv): Promise<UalSource[]> {
-  ualSource ??= (async () => {
+  ualSource ??= (async (): Promise<UalSource[]> => {
     const sources: UalSource[] = [];
     for (const spec of SPECS) {
       const gltf = env?.loadGltf
@@ -128,22 +128,22 @@ function loadSources(env?: UalBakeEnv): Promise<UalSource[]> {
       // No meshes in the trimmed GLBs — the joints arrive as plain
       // Object3Ds. retargetClip only needs .skeleton.bones to iterate.
       const srcBones: THREE.Object3D[] = [];
-      src.traverse(o => {
+      src.traverse((o): void => {
         const n = normBone(o.name);
         if (n.startsWith(spec.prefix) && (!spec.exclude || !spec.exclude.test(o.name))) {srcBones.push(o);}
       });
       (src as unknown as { skeleton: object }).skeleton = {
         bones: srcBones,
         // PropertyBinding.findNode resolves track node names through this.
-        getBoneByName(n: string) { return srcBones.find(b => b.name === n); },
+        getBoneByName(n: string): THREE.Object3D<THREE.Object3DEventMap> | undefined { return srcBones.find((b): boolean => b.name === n); },
       };
-      const srcByNorm = new Map(srcBones.map(b => [normBone(b.name), b]));
+      const srcByNorm = new Map(srcBones.map((b): [string, THREE.Object3D<THREE.Object3DEventMap>] => [normBone(b.name), b]));
       const srcHip = srcByNorm.get(spec.hip);
       if (!srcHip) {throw new Error(`UAL rig missing hip ${spec.hip} in ${spec.url}`);}
       sources.push({ spec, src, srcBones, srcByNorm, srcHip, clips: gltf.animations });
     }
     return sources;
-  })().catch(error => {
+  })().catch((error): Promise<UalSource[]> => {
     logger.warn('UAL anims failed to load — native clips only', error);
     ualSource = null; // let a later model retry (e.g. transient 404)
     return Promise.reject(error);
@@ -167,7 +167,7 @@ export async function bakeUALClips(model: THREE.Object3D, variant: string, env?:
   // of one mesh following clips while the rest hold bind pose.
   let target = undefined as THREE.SkinnedMesh | undefined;
   let firstSkin = undefined as THREE.SkinnedMesh | undefined;
-  model.traverse(o => {
+  model.traverse((o): void => {
     if (!(o as THREE.SkinnedMesh).isSkinnedMesh) {return;}
     const sm = o as THREE.SkinnedMesh;
     firstSkin ??= sm;
@@ -184,7 +184,7 @@ export async function bakeUALClips(model: THREE.Object3D, variant: string, env?:
   const rest = target.skeleton.bones.map(b => ({
     b, p: b.position.clone(), q: b.quaternion.clone(), s: b.scale.clone(),
   }));
-  const restoreRest = () => {
+  const restoreRest = (): void => {
     for (const r of rest) { r.b.position.copy(r.p); r.b.quaternion.copy(r.q); r.b.scale.copy(r.s); }
     model.updateMatrixWorld(true);
   };
@@ -211,7 +211,7 @@ export async function bakeUALClips(model: THREE.Object3D, variant: string, env?:
   for (const [name, clip] of baked) {
     stripHipXZ(clip, roots);
     if (variant === 'mannequin' && isLayeredClip(name)) {
-      clip.tracks = clip.tracks.filter(t => {
+      clip.tracks = clip.tracks.filter((t): boolean => {
         const bn = normBone(t.name.slice(0, t.name.indexOf('.')));
         if (AIM_BONE_MASK.has(bn)) {return false;}
         if (t.name.endsWith('.quaternion') && AIM_TORSO_BONES.has(bn)) {return false;}
@@ -281,8 +281,8 @@ export function loadBakedUALClips(variant: string): Promise<Map<string, THREE.An
   let p = bakedFileByVariant.get(variant);
   if (!p) {
     p = mkGltfLoader().loadAsync(`/assets/anims/${variant}.glb`)
-      .then(gltf => gltf.animations.length > 0 ? new Map(gltf.animations.map(c => [c.name, c])) : null)
-      .catch(() => null);
+      .then((gltf): Map<string, THREE.AnimationClip> | null => gltf.animations.length > 0 ? new Map(gltf.animations.map((c): [string, THREE.AnimationClip] => [c.name, c])) : null)
+      .catch((): null => null);
     bakedFileByVariant.set(variant, p);
   }
   return p;
@@ -340,7 +340,7 @@ function bakeSource(
       : /^(Hips|Abdomen|Torso_1|Neck|Head)$/;
     if (!TORSO.test(tName.replace(/_\d+$/, ''))) {continue;}
     const tb = target.skeleton.getBoneByName(tName);
-    const sb = srcBones.find(b => b.name === sName);
+    const sb = srcBones.find((b): boolean => b.name === sName);
     if (!tb || !sb) {continue;}
     sb.getWorldQuaternion(qs).invert();
     // Rest quat in SKELETON space — retarget runs with
@@ -356,7 +356,7 @@ function bakeSource(
   // armature carries a different axis convention — the cybersoldier's
   // hip sits ~25 units down a rotated frame, and a local ratio lifted
   // his body ~7m off his capsule.
-  const tgtHip = target.skeleton.bones.find(b => names[b.name] === srcHip.name);
+  const tgtHip = target.skeleton.bones.find((b): boolean => names[b.name] === srcHip.name);
   const srcHipWorld = new THREE.Vector3();
   srcHip.getWorldPosition(srcHipWorld);
   const tgtHipWorld = new THREE.Vector3();
@@ -380,7 +380,7 @@ function bakeSource(
     if (!tgtHip || !tgtHipBind) {return;}
     // Every skeleton copy's hip needs the same correction — fanned-out
     // tracks arrive named for their own joint variant.
-    const srcTr = srcClip.tracks.find(t => t.name === `${srcHip.name  }.position`);
+    const srcTr = srcClip.tracks.find((t): boolean => t.name === `${srcHip.name  }.position`);
     const interp = srcTr
       ? (srcTr as unknown as { createInterpolant(): { evaluate(t: number): ArrayLike<number> } }).createInterpolant()
       : null;
@@ -406,7 +406,7 @@ function bakeSource(
   // keyframes must bind each skin's own joint copy (Hips, Hips_1, ...).
   // base (dedupe-stripped) → all real node names carrying that bone.
   const altNames = new Map<string, string[]>();
-  model.traverse(o => {
+  model.traverse((o): void => {
     if (!(o as THREE.SkinnedMesh).isSkinnedMesh) {return;}
     for (const b of (o as THREE.SkinnedMesh).skeleton.bones) {
       const base = b.name.replace(/_\d+$/, '');

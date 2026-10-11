@@ -11,7 +11,7 @@ import { NUG_TUMBLE } from '../../../shared/pickups.js';
 
 // Tighter falloff than the shared glow: hot core, fast edge fade — the
 // halo marks the item at range without washing a big blob over it.
-const getNuggetTex = () => getGlowTexture(32, 0.12, 0.5);
+const getNuggetTex = (): THREE.Texture<unknown, THREE.TextureEventMap> => getGlowTexture(32, 0.12, 0.5);
 
 const NUGGET_RADIUS = 0.3;
 const INHERIT_VEL = 0.5;      // fraction of destroyed target's velocity
@@ -104,9 +104,9 @@ export class Nugget {
     this.vel.z += (Math.random() - 0.5) * 4;
 
     if (parts) {
-      this.pools = poolsFor(scene, parts.body, parts.accent, () => metalMat(parts.bodyColor));
+      this.pools = poolsFor(scene, parts.body, parts.accent, (): THREE.MeshStandardMaterial => metalMat(parts.bodyColor));
     } else {
-      this.pools = poolsFor(scene, NUGGET_GEO, null, () => new THREE.MeshBasicMaterial({ color: 0xFF_FF_FF }));
+      this.pools = poolsFor(scene, NUGGET_GEO, null, (): THREE.MeshBasicMaterial => new THREE.MeshBasicMaterial({ color: 0xFF_FF_FF }));
     }
     this.slot = takeSlot(this.pools.body);
     this.writeInstance();

@@ -55,12 +55,12 @@ export class PlayerDistal {
     for (const k of keys) {
       for (let o = k; o && o !== model; o = o.parent!) {essential.add(o);}
     }
-    this.distalBones = this.bones.filter(b => {
+    this.distalBones = this.bones.filter((b): boolean => {
       if (essential.has(b)) {return false;}
       const nb = normBone(b.name);
       return HELPER_BONES.test(nb) || !LIMB_BONES.test(nb);
     });
-    this.distalNameSet = new Set(this.distalBones.map(b => normBone(b.name)));
+    this.distalNameSet = new Set(this.distalBones.map((b): string => normBone(b.name)));
   }
 
   /** Clip variant with every distal-bone track removed. */
@@ -68,7 +68,7 @@ export class PlayerDistal {
     let a = this.farActions.get(action);
     if (!a) {
       const src = action.getClip();
-      const tracks = src.tracks.filter(t =>
+      const tracks = src.tracks.filter((t): boolean =>
         !this.distalNameSet.has(normBone(t.name.slice(0, t.name.indexOf('.')))));
       a = mixer.clipAction(new THREE.AnimationClip(`${src.name}.far`, src.duration, tracks));
       this.farActions.set(action, a);

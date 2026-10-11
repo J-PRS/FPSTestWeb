@@ -19,7 +19,7 @@ export function reconstructSeekTarget(world: PlaybackWorld, ev: TargetEvent, dea
     if (ev.eventType === TargetEventType.Destroyed) {
       const debris = new BallDebris(scene, terrain, { x: ev.posX, y: ev.posY, z: ev.posZ }, new THREE.Color(0xFF_FF_FF), 1);
       debrisList.push(debris);
-      fastForward(seekTime - ev.timestamp, () => !debris.dead, (s) => debris.update(s));
+      fastForward(seekTime - ev.timestamp, (): boolean => !debris.dead, (s): void => debris.update(s));
     }
     return;
   }
@@ -31,7 +31,7 @@ export function reconstructSeekTarget(world: PlaybackWorld, ev: TargetEvent, dea
     playbackBallById.set(ev.targetId, ball);
     balls.push(ball);
     ball.update(0, terrain, playerPos); // sync mesh (ctor doesn't copy pos)
-    fastForward(seekTime - ev.timestamp, () => !ball.dead, (s) => ball.update(s, terrain, playerPos));
+    fastForward(seekTime - ev.timestamp, (): boolean => !ball.dead, (s): void => ball.update(s, terrain, playerPos));
     return;
   }
 
@@ -45,7 +45,7 @@ export function reconstructSeekTarget(world: PlaybackWorld, ev: TargetEvent, dea
       if (ball.health <= 0) {ball.dead = true;}
     }
     ball.update(0, terrain, playerPos);
-    fastForward(seekTime - ev.timestamp, () => !ball.dead, (s) => ball.update(s, terrain, playerPos));
+    fastForward(seekTime - ev.timestamp, (): boolean => !ball.dead, (s): void => ball.update(s, terrain, playerPos));
   }
 }
 

@@ -236,7 +236,7 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
   const BRAWL_M = 25;
   let ectx = ctx;
   if (st.unreachUntil.size > 0 || st.foeScore.size > 0) {
-    const enemies = ctx.enemies.filter((e) => (st.unreachUntil.get(e.id) ?? 0) <= now
+    const enemies = ctx.enemies.filter((e): boolean => (st.unreachUntil.get(e.id) ?? 0) <= now
       && (hero || dreadOf(st, e.id) < 2 || dist3(pos, e.pos) < BRAWL_M));
     if (st.unreachUntil.size > 6) {
       for (const [id, until] of st.unreachUntil) {if (until <= now) {st.unreachUntil.delete(id);}}

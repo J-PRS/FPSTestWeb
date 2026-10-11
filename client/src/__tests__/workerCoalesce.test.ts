@@ -19,11 +19,11 @@ function segFrame(): Uint8Array {
   return u8;
 }
 
-const j = (type: string) => ({ kind: 'ev' as const, j: { type } as never, at: 0 });
-const b = (u8: Uint8Array) => ({ kind: 'ev' as const, b: u8, at: 0 });
+const j = (type: string): { kind: "ev"; j: never; at: number; } => ({ kind: 'ev' as const, j: { type } as never, at: 0 });
+const b = (u8: Uint8Array): { kind: "ev"; b: Uint8Array<ArrayBufferLike>; at: number; } => ({ kind: 'ev' as const, b: u8, at: 0 });
 
-describe('coalesceTickFrames', () => {
-  it('keeps only the newest tick frame in a backlog', () => {
+describe('coalesceTickFrames', (): void => {
+  it('keeps only the newest tick frame in a backlog', (): void => {
     const evs = [b(tickFrame(10)), j('playerHit'), b(tickFrame(12)), b(tickFrame(11)), j('chat')];
     const out = coalesceTickFrames(evs);
     expect(out).toHaveLength(3);
@@ -32,17 +32,17 @@ describe('coalesceTickFrames', () => {
     expect(out[2]).toEqual(j('chat'));
   });
 
-  it('passes through non-tick frames and order', () => {
+  it('passes through non-tick frames and order', (): void => {
     const evs = [b(segFrame()), b(segFrame()), j('gameState')];
     expect(coalesceTickFrames(evs)).toHaveLength(3);
   });
 
-  it('single tick survives unchanged', () => {
+  it('single tick survives unchanged', (): void => {
     const evs = [b(tickFrame(7))];
     expect(coalesceTickFrames(evs)).toHaveLength(1);
   });
 
-  it('keeps the last-positioned newest tick, not an earlier-seq one', () => {
+  it('keeps the last-positioned newest tick, not an earlier-seq one', (): void => {
     const evs = [b(tickFrame(20)), b(tickFrame(15))];
     const out = coalesceTickFrames(evs);
     expect(out).toHaveLength(1);

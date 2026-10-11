@@ -70,12 +70,12 @@ export class WtSocketAdapter {
     this.remoteAddress = session.peer?.ip ?? 'webtransport';
     // The client's first action after connect is creating THE reliable
     // bidi stream — grab it and start pumping both lanes.
-    this.acceptReliable().catch((error) => this.die(`reliable pump: ${error instanceof Error ? error.message : error}`));
-    this.pumpDatagrams().catch((error) => { logger.warn('wt dg lane ended', { e: String(error) }); }); // session death ends the iterator
+    this.acceptReliable().catch((error): void => this.die(`reliable pump: ${error instanceof Error ? error.message : error}`));
+    this.pumpDatagrams().catch((error): void => { logger.warn('wt dg lane ended', { e: String(error) }); }); // session death ends the iterator
     // Every lane here rejects with E_SESSION_CLOSED when the peer drops —
     // an unhandled rejection in the native addon's stream callbacks kills
     // the whole bun process, so each one is caught at its boundary.
-    session.closed.then(() => this.die('session.closed')).catch((error) => this.die(`session.closed err: ${error instanceof Error ? error.message : error}`));
+    session.closed.then((): void => this.die('session.closed')).catch((error): void => this.die(`session.closed err: ${error instanceof Error ? error.message : error}`));
   }
 
   private asSocket(): ServerWebSocket<WebSocketData> {
@@ -97,8 +97,8 @@ export class WtSocketAdapter {
     for (;;) {
       const { value: stream, done: streamDone } = await reader.read();
       if (streamDone || !stream) {return;}
-      if (((idx += 1) - 1) === 0) {this.pumpText(stream).catch((error) => this.die(`reliable pump: ${error instanceof Error ? error.message : error}`));}
-      else {this.pumpBin(stream).catch(() => { return; });}
+      if (((idx += 1) - 1) === 0) {this.pumpText(stream).catch((error): void => this.die(`reliable pump: ${error instanceof Error ? error.message : error}`));}
+      else {this.pumpBin(stream).catch((): void => { return; });}
     }
   }
 
@@ -194,7 +194,7 @@ export class WtSocketAdapter {
         msg.length >= 2 && msg[0] === 0x54 &&
         (msg[1] === WIRE_TICK || msg[1] === WIRE_TICK_V3 || msg[1] === WIRE_TICK_V4) &&
         msg.byteLength <= WT_MAX_DATAGRAM) {
-      this.session.sendDatagram(msg).catch(() => { return; });
+      this.session.sendDatagram(msg).catch((): void => { return; });
       return msg.byteLength;
     }
     // Stream-2 (caps.binLane opt-in): oversized TICK frames only — raw
@@ -211,8 +211,8 @@ export class WtSocketAdapter {
         msg.byteLength <= 0xFF_FF) {
       const v = new DataView(this.binScratch);
       v.setUint16(0, msg.byteLength);
-      this.binWriter.write(new Uint8Array(this.binScratch)).catch(() => { return; });
-      this.binWriter.write(msg).catch(() => { return; });
+      this.binWriter.write(new Uint8Array(this.binScratch)).catch((): void => { return; });
+      this.binWriter.write(msg).catch((): void => { return; });
       return msg.byteLength;
     }
     if (!this.writer) {return 0;}
@@ -223,7 +223,7 @@ export class WtSocketAdapter {
     const line = typeof msg === 'string' ? msg
       : `{"type":"bin","d":"${Buffer.from(msg).toString('base64')}"}`;
     const bytes = this.encoder.encode(`${line  }\n`);
-    this.writer.write(bytes).catch(() => { return; });
+    this.writer.write(bytes).catch((): void => { return; });
     return bytes.byteLength;
   }
 
@@ -266,7 +266,7 @@ export class WtServer {
       this.server = mod.createServer({
         port: opts.port,
         tls: { certPem: opts.certPem, keyPem: opts.keyPem, allowSelfSigned: true },
-        onSession: (session) => this.onSession(session),
+        onSession: (session): void => this.onSession(session),
       });
       // The native addon throws E_SESSION_CLOSED inside its stream-start
       // callbacks on peer drop — if any of those escape our adapter
@@ -274,11 +274,11 @@ export class WtServer {
       // known-benign code at the boundary. Anything else still crashes.
       if (!WtServer.sessionCloseGuardInstalled) {
         WtServer.sessionCloseGuardInstalled = true;
-        process.on('unhandledRejection', (err) => { if (!swallow(err)) {throw err;} });
+        process.on('unhandledRejection', (err): void => { if (!swallow(err)) {throw err;} });
         // The addon also throws E_SESSION_CLOSED synchronously inside
         // stream-start callbacks — that lands as uncaughtException, not a
         // rejection, so the rejection-only guard used to miss it.
-        process.on('uncaughtException', (err) => {
+        process.on('uncaughtException', (err): void => {
           if (swallow(err)) { logger.warn('WT session died mid-stream (E_SESSION_CLOSED)', {}); return; }
           // Preserve crash-on-unknown semantics — throwing from inside an
           // uncaughtException handler just recurses, so exit directly.
@@ -302,7 +302,7 @@ export class WtServer {
   }
 
   async stop(): Promise<void> {
-    await this.server?.close().catch(() => { return; });
+    await this.server?.close().catch((): void => { return; });
     this.server = null;
   }
 }

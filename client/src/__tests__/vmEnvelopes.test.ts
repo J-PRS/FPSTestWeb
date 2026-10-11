@@ -23,21 +23,21 @@ const mkHost = (built: number[]): EnvHost => {
     fistGroup: new THREE.Group(),
     shieldShells: [],
     shellColor: 0,
-    setShield: () => { return; },
-    muzzleZ: () => -0.35,
-    muzzleGroupPos: () => false,
+    setShield: (): void => { return; },
+    muzzleZ: (): number => -0.35,
+    muzzleGroupPos: (): false => false,
   };
 };
 
-describe('VmEnvelopes.switchWeapon', () => {
-  it('arming the already-active weapon still unhides it (spawn with BoltLauncher)', () => {
+describe('VmEnvelopes.switchWeapon', (): void => {
+  it('arming the already-active weapon still unhides it (spawn with BoltLauncher)', (): void => {
     const h = mkHost([0, 1, 2]);
     const env = new VmEnvelopes(h);
     env.switchWeapon(0); // wt 0 === default activeWeapon — the old early-return left it hidden
     expect(h.weapons.get(0)!.visible).toBe(true);
   });
 
-  it('a same-weapon re-switch does not re-dip or hide anything', () => {
+  it('a same-weapon re-switch does not re-dip or hide anything', (): void => {
     const h = mkHost([0]);
     h.weapons.get(0)!.visible = true;
     const env = new VmEnvelopes(h);
@@ -46,7 +46,7 @@ describe('VmEnvelopes.switchWeapon', () => {
     expect(env.tick(0.1).switchDip).toBe(0);
   });
 
-  it('a real switch still hides the old gun and shows the new one', () => {
+  it('a real switch still hides the old gun and shows the new one', (): void => {
     const h = mkHost([0, 1]);
     h.weapons.get(0)!.visible = true;
     const env = new VmEnvelopes(h);

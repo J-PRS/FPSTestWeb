@@ -120,7 +120,7 @@ function scanInstAndBones(o: THREE.Object3D, base: Hit, hits: Hit[]): void {
 
 export function nanScanScene(scene: THREE.Scene): Hit[] {
   const hits: Hit[] = [];
-  scene.traverse((o) => {
+  scene.traverse((o): void => {
     // matrixWorld NaN: the attribute buffers stay clean — the GPU-side
     // NaN only appears after modelViewMatrix × position. Same triangle.
     const h: Hit = { name: label(o), kind: o.type, attr: 'matrixWorld', index: -1, value: 0, count: 0 };
@@ -134,13 +134,13 @@ export function nanScanScene(scene: THREE.Scene): Hit[] {
 // matrix that goes NaN for exactly one frame draws the covering triangle,
 // then recomputes clean — a scan every N frames would always miss it.
 // Those arrays are tiny (matrices, not vertex buffers), so scan every frame.
-const isDynAttr = (a: unknown) =>
+const isDynAttr = (a: unknown): boolean =>
   (a as THREE.BufferAttribute).usage === THREE.DynamicDrawUsage
   || (a as THREE.InstancedBufferAttribute).isInstancedBufferAttribute === true;
 
 export function nanScanTransforms(scene: THREE.Scene): Hit[] {
   const hits: Hit[] = [];
-  scene.traverse((o) => {
+  scene.traverse((o): void => {
     const base: Hit = { name: label(o), kind: o.type, attr: '', index: -1, value: 0, count: 0 };
     const mw = Object.assign({}, base, {attr: 'matrixWorld'});
     if (scanArray(o.matrixWorld.elements, mw)) {hits.push(mw);}
@@ -204,7 +204,7 @@ export function nanScanTick(scene: THREE.Scene, camera?: THREE.Camera): void {
 // stay clean. Shares the Alt+Q aim probe: tagged FX objects report their
 // owner/slot/pool identity, not just mesh type.
 export function nanScanBindProbe(getCtx: () => { scene: THREE.Scene; camera: THREE.Camera }): void {
-  window.addEventListener('keydown', (e) => {
+  window.addEventListener('keydown', (e): void => {
     if (e.code !== 'KeyB') {return;}
     const { scene, camera } = getCtx();
     const rows = aimProbe(scene, camera);

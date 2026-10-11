@@ -16,7 +16,7 @@ import { pickBotWeapon, type BotLoadout } from '../../../shared/botLoadouts.js';
 import { LAB_FLAT_FIELD } from './simKit.js';
 
 export const BOT_SURFACE: MoveSurface = {
-  getHeight: (x, z) => hmHeight(LAB_FLAT_FIELD, x, z),
+  getHeight: (x, z): number => hmHeight(LAB_FLAT_FIELD, x, z),
   getNormal: (_x, _z, out) => { out.x = 0; out.y = 1; out.z = 0; return out; },
 };
 export const BOT_HP = 100;

@@ -15,7 +15,7 @@ import type { StateDebugContext } from './stateDebug.js';
 // Capped so a long session doesn't grow it unboundedly.
 const battleLog: string[] = [];
 const BATTLE_LOG_MAX = 40;
-const killName = (id: string) => id.replace(/^bot:/, '');
+const killName = (id: string): string => id.replace(/^bot:/, '');
 
 /** Called by the kill handlers — "shooter killed target with weapon"
  *  lines for the dump's battle-log section. */
@@ -25,7 +25,7 @@ export function noteKill(shooterId: string, targetId: string, weapon?: number): 
   if (battleLog.length > BATTLE_LOG_MAX) {battleLog.splice(0, battleLog.length - BATTLE_LOG_MAX);}
 }
 
-export const fmt = (v: { x: number; y: number; z: number }) =>
+export const fmt = (v: { x: number; y: number; z: number }): string =>
   `(${v.x.toFixed(1)},${v.y.toFixed(1)},${v.z.toFixed(1)})`;
 
 /** Chrome-only JS heap gauge — absent in Firefox/Safari, so the line
@@ -114,8 +114,8 @@ function pushProjectiles(lines: string[], ctx: StateDebugContext): void {
   let ribbonWarns = 0;
   for (const pr of ctx.projectiles) {
     const d = pr.dbg();
-    const rib = d.ribbons.map(r => `${r.slot}:${r.count}${r.stopped ? '!' : ''}${r.lit ? 'L' : ''}${r.starved ? `~${r.starved}` : ''}`).join(',');
-    if (d.ribbons.some(r => r.count < 2 && r.starved > 10)) {ribbonWarns += 1;}
+    const rib = d.ribbons.map((r): string => `${r.slot}:${r.count}${r.stopped ? '!' : ''}${r.lit ? 'L' : ''}${r.starved ? `~${r.starved}` : ''}`).join(',');
+    if (d.ribbons.some((r): boolean => r.count < 2 && r.starved > 10)) {ribbonWarns += 1;}
     lines.push(`  proj ${pr.config.name} age=${pr.age.toFixed(2)}${pr.exploded ? ' EX' : ''} q=${JSON.stringify(d.trail)} rib=[${rib}]`);
   }
   if (ribbonWarns) {lines.push(`ribbonWarns: ${ribbonWarns} projectiles emit pushes but have NO ribbon samples`);}
@@ -147,26 +147,26 @@ function pushPerf(lines: string[]): void {
   const rest = ((((Object.assign({}, pd))))) as Record<string, number>;
   delete rest.gpu; delete rest.draws; delete rest.trisK;
   const phasePairs = Object.entries(rest)
-    .filter(([k, v]) => !k.startsWith('max:') && !k.startsWith('w:') && k !== 'frame' && typeof v === 'number')
-    .map(([k, v]) => `${k}=${v}`);
+    .filter(([k, v]): boolean => !k.startsWith('max:') && !k.startsWith('w:') && k !== 'frame' && typeof v === 'number')
+    .map(([k, v]): string => `${k}=${v}`);
   // budget stats arrive as {perFrame,worstItemMs,backlog} objects —
   // flatten to k:field so they survive the number-only filter above.
   for (const [k, v] of Object.entries(pd)) {
     if (typeof v === 'object' && v) {
-      phasePairs.push(...Object.entries(v as Record<string, number>).map(([f, n]) => `${k}.${f}=${n}`));
+      phasePairs.push(...Object.entries(v as Record<string, number>).map(([f, n]): string => `${k}.${f}=${n}`));
     }
   }
   lines.push(`perf: frame=${rest['frame']}ms gpu=${gpu?.toFixed(1) ?? '?'}ms draws=${draws} tris=${trisK}k`);
   lines.push(`  ${phasePairs.join(' ')}`);
-  const maxPairs = Object.entries(rest).filter(([k]) => k.startsWith('max:'));
+  const maxPairs = Object.entries(rest).filter(([k]): boolean => k.startsWith('max:'));
   if (maxPairs.length > 0) {
-    lines.push(`  spikes: ${maxPairs.map(([k, v]) => `${k.slice(4)}=${v}`).join(' ')}`);
+    lines.push(`  spikes: ${maxPairs.map(([k, v]): string => `${k.slice(4)}=${v}`).join(' ')}`);
   }
   // Worst frame in the last ~5s with its own phase split — catches the
   // transient dips the EMA row smooths away.
-  const wPairs = Object.entries(rest).filter(([k]) => k.startsWith('w:'));
+  const wPairs = Object.entries(rest).filter(([k]): boolean => k.startsWith('w:'));
   if (wPairs.length > 0) {
-    lines.push(`  worst: ${wPairs.map(([k, v]) => `${k.slice(2)}=${v}`).join(' ')}`);
+    lines.push(`  worst: ${wPairs.map(([k, v]): string => `${k.slice(2)}=${v}`).join(' ')}`);
   }
 }
 
@@ -239,13 +239,13 @@ const BALL_DOTS_DEF = { timer: 0, lastLive: 0 };
 function pushTrailCensus(lines: string[], ctx: StateDebugContext): void {
   const td = window.__trailDump?.() as TrailDump | undefined;
   if (!td) {return;}
-  if (td.stats) {lines.push(`trailStats: ${Object.entries(td.stats).map(([k, v]) => `${k}=${v}`).join(' ')}`);}
+  if (td.stats) {lines.push(`trailStats: ${Object.entries(td.stats).map(([k, v]): string => `${k}=${v}`).join(' ')}`);}
   if (td.pools) {lines.push(`pools: ${JSON.stringify(td.pools)}`);}
   pushCapped(lines, 'trail', td.trails, 24, TRAIL_ROW_DEF);
   lines.push(`ribbons: ${td.ribbons?.length ?? 0} live ${JSON.stringify(td.ribbonBatch ?? null)}`);
   // Position-tagged rows — a frozen streak on screen maps to a slot by its
   // head/mid coords; sorted by fullness so the longest streaks lead.
-  const rs = (td.ribbons ?? []).slice().sort((a, b) => ((b.count as number) ?? 0) - ((a.count as number) ?? 0)).slice(0, 16);
+  const rs = (td.ribbons ?? []).slice().sort((a, b): number => ((b.count as number) ?? 0) - ((a.count as number) ?? 0)).slice(0, 16);
   for (const r of rs) {lines.push(`  rib ${JSON.stringify(slim(r, RIB_ROW_DEF))}`);}
   const orphans = td.ribbonOrphans;
   if (orphans && orphans.count > 0) {
@@ -271,7 +271,7 @@ function pushTrailExtras(lines: string[], td: TrailDump, ctx: StateDebugContext)
   if (td.fx) {lines.push(`fx: ${JSON.stringify(td.fx)}`);}
   // NaN-geometry sniffer rows — owner path + attr signature, so the next
   // "radius is NaN" console burst already names its source.
-  if (td.geoNaN?.length) {lines.push(`geoNaN: ${td.geoNaN.map(h => `${h.uuid}@${h.at}s ${h.owner}${h.tag ? `<${h.tag}>` : ''}`).join(' | ')}`);}
+  if (td.geoNaN?.length) {lines.push(`geoNaN: ${td.geoNaN.map((h): string => `${h.uuid}@${h.at}s ${h.owner}${h.tag ? `<${h.tag}>` : ''}`).join(' | ')}`);}
   pushBallCensus(lines, td);
   pushShellAudit(lines, ctx);
   pushUnclaimed(lines, td);
@@ -298,9 +298,9 @@ function pushUnclaimed(lines: string[], td: TrailDump): void {
 // early; the offWorld count catches shells that escaped the sane-bounds
 // box (a garbage trail census usually traces back to one of these).
 function pushShellAudit(lines: string[], ctx: StateDebugContext): void {
-  const aged = ctx.projectiles.slice().sort((a, b) => b.age - a.age).slice(0, 5);
+  const aged = ctx.projectiles.slice().sort((a, b): number => b.age - a.age).slice(0, 5);
   if (aged.length > 0) {
-    lines.push(`oldest: ${aged.map(pr => `${pr.config.name}@${pr.age.toFixed(1)}s(${pr.pos.x.toFixed(0)},${pr.pos.y.toFixed(0)},${pr.pos.z.toFixed(0)})`).join(' ')}`);
+    lines.push(`oldest: ${aged.map((pr): string => `${pr.config.name}@${pr.age.toFixed(1)}s(${pr.pos.x.toFixed(0)},${pr.pos.y.toFixed(0)},${pr.pos.z.toFixed(0)})`).join(' ')}`);
   }
   let offWorld = 0;
   for (const pr of ctx.projectiles) {
@@ -320,7 +320,7 @@ function pushBallCensus(lines: string[], td: TrailDump): void {
       const s = slim(r, BALL_ROW_DEF);
       // Nested rib/dots records get their own defaults — same idea as
       // the flat slim, one level down.
-      if (Array.isArray(s.rib)) {s.rib = (s.rib as Record<string, unknown>[]).map(x => slim(x, BALL_RIB_DEF));}
+      if (Array.isArray(s.rib)) {s.rib = (s.rib as Record<string, unknown>[]).map((x): { [x: string]: unknown; } => slim(x, BALL_RIB_DEF));}
       if (s.dots && typeof s.dots === 'object') {s.dots = slim(s.dots as Record<string, unknown>, BALL_DOTS_DEF);}
       lines.push(`  ball ${JSON.stringify(s)}`);
     }
@@ -332,13 +332,13 @@ function pushWorld(lines: string[], w: StateDebugContext['world']): void {
   const clock = w.matchEndsAt ? ` endsIn=${Math.max(0, Math.ceil((w.matchEndsAt - Date.now()) / 1000))}s` : '';
   lines.push(`mode: ${w.mode ?? '(none)'} localTeam: ${w.localTeam ?? '-'}${w.playbackMode ? ' PLAYBACK' : ''}${clock}`);
   if (w.teamScores) {lines.push(`teamScores: alpha=${w.teamScores.alpha} bravo=${w.teamScores.bravo}`);}
-  if (w.ffaScores?.size) {lines.push(`ffaScores: ${[...w.ffaScores.entries()].map(([id, s]) => `${id.replace('bot:', '')}=${s}`).join(' ')}`);}
+  if (w.ffaScores?.size) {lines.push(`ffaScores: ${[...w.ffaScores.entries()].map(([id, s]): string => `${id.replace('bot:', '')}=${s}`).join(' ')}`);}
 }
 
 function pushBots(lines: string[], ctx: StateDebugContext): void {
   const tb = ctx.teamBots?.();
   if (!tb) {return;}
-  const alive = tb.bots.filter(b => !b.isDead).length;
+  const alive = tb.bots.filter((b): boolean => !b.isDead).length;
   lines.push(`teamBots: ${alive}/${tb.bots.length} alive over=${tb.over ?? '-'} score=${tb.scores.alpha}:${tb.scores.bravo} localTeam=${tb.teamOf.get('local') ?? '-'}`);
   for (const b of tb.bots) {
     lines.push(`  bot ${b.playerId.replace('bot:', '')} team=${b.team} dead=${b.isDead} hp=${b.botHp ?? '?'} sheep=${(b as { sheep?: number }).sheep ?? 0} pos=${fmt(b.position)}`);

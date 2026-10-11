@@ -10,8 +10,8 @@ import type { Terrain } from '../world/terrain.js';
 // teleported it to the top. Bastion live repro: POS JUMP 10m/18m snaps
 // onto the alpha bastion hull at (-450, ~20, 110) → y≈38.
 const flatTerrain = {
-  getHeight: () => 0,
-  getNormal: () => ({ x: 0, y: 1, z: 0 }),
+  getHeight: (): number => 0,
+  getNormal: (): { x: number; y: number; z: number; } => ({ x: 0, y: 1, z: 0 }),
 } as unknown as Terrain;
 
 const mkState = (): MovementState => ({
@@ -26,8 +26,8 @@ const TALL_BOX = [{
   size: { x: 8, y: 12, z: 8 },
 }];
 
-describe('client surface reach', () => {
-  it('walking into a tall structure stops at the face, never snaps to the roof', () => {
+describe('client surface reach', (): void => {
+  it('walking into a tall structure stops at the face, never snaps to the roof', (): void => {
     const mc = new MovementController(flatTerrain, mkState());
     mc.setStructures(TALL_BOX);
     mc.setInput({ forward: 1 });
@@ -44,7 +44,7 @@ describe('client surface reach', () => {
     expect(s.pos.z).toBeLessThan(6.5);
   });
 
-  it('knee-high ledges still step up', () => {
+  it('knee-high ledges still step up', (): void => {
     const mc = new MovementController(flatTerrain, mkState());
     mc.setStructures([{
       kind: 'box' as const,

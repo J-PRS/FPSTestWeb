@@ -129,7 +129,7 @@ export class Lobby {
     // Mode order is a curated popularity ramp (team staples first, niche
     // FFA last), not alphabetical — a mode picker is a recommendation.
     const MODE_ORDER = ['ctf', 'tdm', 'nuggets', 'dm', 'rabbit', 'duel'];
-    const modes = [...new Set(this.maps.flatMap((m) => m.modes.length > 0 ? m.modes : (m.mode ? [m.mode] : [])))]
+    const modes = [...new Set(this.maps.flatMap((m): string[] => m.modes.length > 0 ? m.modes : (m.mode ? [m.mode] : [])))]
       .toSorted((a, b) => (MODE_ORDER.indexOf(a) + 1 || 99) - (MODE_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b));
     this.fillModeSel(this.modeSelect, modes, 'ANY');
     if (this.soloSels) {
@@ -172,11 +172,11 @@ export class Lobby {
 
   bindSoloSelects(modeSel: HTMLSelectElement, mapSel: HTMLSelectElement): void {
     this.soloSels = { mode: modeSel, map: mapSel };
-    modeSel.addEventListener('change', () => this.fillMapSel(this.soloSels!));
-    mapSel.addEventListener('change', () => {
+    modeSel.addEventListener('change', (): void => this.fillMapSel(this.soloSels!));
+    mapSel.addEventListener('change', (): void => {
       // A map pick with no mode chosen adopts the spec's own ruleset —
       // the label already advertises it ("BASTION · CTF · 8 bots").
-      const m = this.maps.find((x) => x.name === mapSel.value);
+      const m = this.maps.find((x): boolean => x.name === mapSel.value);
       if (m?.mode && modeSel.value === '') {
         modeSel.value = m.mode;
         // Real change: the toggle row relights and the map list refilters
@@ -209,9 +209,9 @@ export class Lobby {
     // map rulesets at all — the mode stamps its own layout onto bare
     // terrain. Restrict those to our own spec maps: an 800m circuit
     // square wants a real core heightmap, not a T2 port's bounds.
-    const catalogModes = new Set(this.maps.flatMap((m) => m.modes.length > 0 ? m.modes : (m.mode ? [m.mode] : [])));
+    const catalogModes = new Set(this.maps.flatMap((m): string[] => m.modes.length > 0 ? m.modes : (m.mode ? [m.mode] : [])));
     const procedural = Boolean(mode) && !catalogModes.has(mode);
-    const rows = this.maps.filter((m) =>
+    const rows = this.maps.filter((m): boolean =>
       this.mapFam[m.t2 ? 't2' : 'custom'] &&
       (!procedural || !m.t2) &&
       (!mode || procedural ||
@@ -278,7 +278,7 @@ export class Lobby {
       document.body.classList.add('lobby-open');
       this.refresh();
       this.refreshMaps();
-      this.timer = setInterval(() => this.refresh(), POLL_MS);
+      this.timer = setInterval((): void => this.refresh(), POLL_MS);
     }
   }
 
@@ -304,9 +304,9 @@ export class Lobby {
     // Default lobby first — it's the immortal room — then favorites
     // (browser-column convention), then alphabetical.
     const favs = this.favSet();
-    const rank = (r: RoomRow) => (r.name === 'default' ? 0 : favs.has(r.name) ? 1 : 2);
-    rooms.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
-    const cur = rooms.find((r) => r.name === this.currentRoom());
+    const rank = (r: RoomRow): 0 | 1 | 2 => (r.name === 'default' ? 0 : favs.has(r.name) ? 1 : 2);
+    rooms.sort((a, b): number => rank(a) - rank(b) || a.name.localeCompare(b.name));
+    const cur = rooms.find((r): boolean => r.name === this.currentRoom());
     const online = this.online();
     // Dedupe: "ctf-1 · CTF · CTF" is three fields agreeing, not info —
     // keep each token only when it adds something.
@@ -344,7 +344,7 @@ export class Lobby {
     const star = document.createElement('span');
     star.className = 'lb-fav';
     star.textContent = this.isFav(r.name) ? '★' : '☆';
-    star.addEventListener('click', (e) => {
+    star.addEventListener('click', (e): void => {
       e.stopPropagation();
       this.toggleFav(r.name);
     });
@@ -364,7 +364,7 @@ export class Lobby {
       && !room.includes(r.map.toUpperCase()) ? `${r.map} ` : '';
     meta.textContent = `${modeTxt}${mapTxt}${r.players}/${r.maxPlayers}${scoreTxt}${r.winAt ? ` →${r.winAt}` : ''}${clock}`;
     row.append(star, name, meta);
-    row.addEventListener('click', () => this.join(r.name));
+    row.addEventListener('click', (): void => this.join(r.name));
     this.rows.append(row);
   }
 

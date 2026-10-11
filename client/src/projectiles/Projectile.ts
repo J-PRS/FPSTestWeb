@@ -251,12 +251,12 @@ export class Projectile {
     this.trail = new QuarksTrail({
       config,
       pos: this.rendered, vel: this.vel,
-      age: () => this.age,
+      age: (): number => this.age,
     });
 
     this.ribbons = v.ribbons;
     this.driver = new TrailDriver(
-      { pos: this.rendered, vel: this.vel, emitting: () => !this.exploded },
+      { pos: this.rendered, vel: this.vel, emitting: (): boolean => !this.exploded },
       [this.trail],
       this.ribbons,
     );
@@ -297,7 +297,7 @@ export class Projectile {
 
     // Embedded shells outlive their trails — the planted corpse IS the
     // effect, so death waits on the mesh removal too.
-    if (this.exploded && this.trail.empty && this.ribbons.every(r => r.done)
+    if (this.exploded && this.trail.empty && this.ribbons.every((r): boolean => r.done)
         && (!this.glue.embedded || this.projectileRemoved)) {
       this.dead = true;
     }

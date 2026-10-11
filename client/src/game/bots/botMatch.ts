@@ -153,8 +153,8 @@ export function syncLocalTeam(m: MatchHost): void {
   m.teamOf.set('local', lt);
   const other: TeamId = lt === 'alpha' ? 'bravo' : 'alpha';
   const wantAllies = Math.floor(m.bots.length / 2);
-  while (m.bots.filter(b => b.team === lt).length > wantAllies) {
-    const b = m.bots.find(x => x.team === lt);
+  while (m.bots.filter((b): boolean => b.team === lt).length > wantAllies) {
+    const b = m.bots.find((x): boolean => x.team === lt);
     if (!b) {break;}
     // Jersey swap — rename the id so the scoreboard's -A/-B suffix
     // stays truthful, then re-key every roster that holds it.

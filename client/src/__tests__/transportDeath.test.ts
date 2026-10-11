@@ -11,14 +11,14 @@ import { WebTransportGameTransport } from '../networking/tiersWebTransport.js';
 
 function makeStream() {
   const box = { ctrl: undefined as unknown as ReadableStreamDefaultController<Uint8Array> };
-  const readable = new ReadableStream<Uint8Array>({ start: (c) => { box.ctrl = c; } });
-  const writable = new WritableStream<Uint8Array>({ write: () => Promise.resolve() });
+  const readable = new ReadableStream<Uint8Array>({ start: (c): void => { box.ctrl = c; } });
+  const writable = new WritableStream<Uint8Array>({ write: (): Promise<void> => Promise.resolve() });
   return { readable, writable, ctrl: box.ctrl };
 }
 
 function fakeWt() {
   const gate = { res: undefined as unknown as () => void, rej: undefined as unknown as (e: unknown) => void };
-  const closed = new Promise<void>((res, rej) => { gate.res = res; gate.rej = rej; });
+  const closed = new Promise<void>((res, rej): void => { gate.res = res; gate.rej = rej; });
   const closeResolve = gate.res, closeReject = gate.rej;
   const stream = makeStream();
   const dgrams = makeStream();
@@ -27,12 +27,12 @@ function fakeWt() {
     closed,
     createBidirectionalStream: async () => ({ writable: stream.writable, readable: stream.readable }),
     datagrams: { readable: dgrams.readable },
-    close: vi.fn(() => { closeResolve(); }),
+    close: vi.fn((): void => { closeResolve(); }),
   };
   return { wt: wt as unknown as WebTransport, stream, dgrams, closeResolve, closeReject };
 }
 
-function makeConfig() {
+function makeConfig(): ConnectionConfig {
   const cfg: ConnectionConfig = {
     url: 'ws://x/ws',
     onConnect: vi.fn(),
@@ -49,14 +49,14 @@ async function connectWt() {
   const config = makeConfig();
   const t = new WebTransportGameTransport(config, wt);
   t.connect();
-  await vi.waitFor(() => expect(config.onConnect).toHaveBeenCalled());
+  await vi.waitFor((): void => expect(config.onConnect).toHaveBeenCalled());
   return { t, config, stream, dgrams, closeResolve, closeReject };
 }
 
-const flush = () => new Promise<void>((r) => setTimeout(r, 0));
+const flush = (): Promise<void> => new Promise<void>((r): NodeJS.Timeout => setTimeout(r, 0));
 
-describe('WebTransport lane-death contract', () => {
-  it('reliable stream ending mid-session declares dead', async () => {
+describe('WebTransport lane-death contract', (): void => {
+  it('reliable stream ending mid-session declares dead', async (): Promise<void> => {
     const { t, config, stream } = await connectWt();
     stream.ctrl.close(); // server ended the bidi stream without closing the session
     await flush();
@@ -64,7 +64,7 @@ describe('WebTransport lane-death contract', () => {
     expect(t.connected()).toBe(false);
   });
 
-  it('a legit oversized frame no longer silently disconnects — it declares dead', async () => {
+  it('a legit oversized frame no longer silently disconnects — it declares dead', async (): Promise<void> => {
     const { config, stream } = await connectWt();
     // The bug: a >64KB gameState line silently disconnected. Now: guard is
     // 4MB AND the overflow declares dead so the tier reprobes.
@@ -76,28 +76,28 @@ describe('WebTransport lane-death contract', () => {
     expect(config.onDisconnect).toHaveBeenCalledWith(1006, 'wt line overflow');
   });
 
-  it('reliable stream reset declares dead', async () => {
+  it('reliable stream reset declares dead', async (): Promise<void> => {
     const { config, stream } = await connectWt();
     stream.ctrl.error(new Error('boom'));
     await flush();
     expect(config.onDisconnect).toHaveBeenCalledWith(1006, 'wt reliable stream reset: Error boom');
   });
 
-  it('wt.closed resolving declares dead', async () => {
+  it('wt.closed resolving declares dead', async (): Promise<void> => {
     const { config, closeResolve } = await connectWt();
     closeResolve();
     await flush();
     expect(config.onDisconnect).toHaveBeenCalledWith(1006, 'webtransport closed');
   });
 
-  it('wt.closed REJECTING declares dead (abnormal close)', async () => {
+  it('wt.closed REJECTING declares dead (abnormal close)', async (): Promise<void> => {
     const { config, closeReject } = await connectWt();
     closeReject(new Error('quic reset'));
     await flush();
     expect(config.onDisconnect).toHaveBeenCalledWith(1006, 'webtransport closed: Error quic reset');
   });
 
-  it('datagram lane ending degrades to reliable-only — the session lives', async () => {
+  it('datagram lane ending degrades to reliable-only — the session lives', async (): Promise<void> => {
     const { config, t, dgrams } = await connectWt();
     dgrams.ctrl.close();
     await flush();
@@ -106,7 +106,7 @@ describe('WebTransport lane-death contract', () => {
     expect(t.send(new Uint8Array([1, 2, 3]))).toBe(true);
   });
 
-  it('multiple detectors firing still yields ONE onDisconnect', async () => {
+  it('multiple detectors firing still yields ONE onDisconnect', async (): Promise<void> => {
     const { config, stream, dgrams } = await connectWt();
     stream.ctrl.close();
     dgrams.ctrl.close();
@@ -114,7 +114,7 @@ describe('WebTransport lane-death contract', () => {
     expect(config.onDisconnect).toHaveBeenCalledTimes(1);
   });
 
-  it('deliberate disconnect() stays silent — teardown must not impersonate a drop', async () => {
+  it('deliberate disconnect() stays silent — teardown must not impersonate a drop', async (): Promise<void> => {
     const { t, config } = await connectWt();
     t.disconnect();
     await flush();
@@ -122,7 +122,7 @@ describe('WebTransport lane-death contract', () => {
     expect(t.connected()).toBe(false);
   });
 
-  it('a well-formed line still parses and dispatches (no regression)', async () => {
+  it('a well-formed line still parses and dispatches (no regression)', async (): Promise<void> => {
     const { config, stream } = await connectWt();
     stream.ctrl.enqueue(new TextEncoder().encode('{"type":"matchNotice","text":"hi"}\n'));
     await flush();
@@ -130,7 +130,7 @@ describe('WebTransport lane-death contract', () => {
     expect(config.onDisconnect).not.toHaveBeenCalled();
   });
 
-  it('a big legit frame (>64KB, under 4MB) is delivered, not killed', async () => {
+  it('a big legit frame (>64KB, under 4MB) is delivered, not killed', async (): Promise<void> => {
     const { config, stream } = await connectWt();
     const big = JSON.stringify({ type: 'serverWarn', text: 'x'.repeat(100 * 1024) });
     stream.ctrl.enqueue(new TextEncoder().encode(`${big  }\n`));

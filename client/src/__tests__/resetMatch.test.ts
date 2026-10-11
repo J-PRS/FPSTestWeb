@@ -8,13 +8,13 @@ import type { GameBot } from '../game/bots/botBrain.js';
 // receipt must drain through it or a new match inherits stale state.
 // A new keyed map added without a reset hop fails here instead of
 // leaking the last match's meters into the next.
-const mkBot = (id: string, isDead: boolean) => ({
+const mkBot = (id: string, isDead: boolean): GameBot => ({
   playerId: id, carryingFlag: true, isDead,
   botHp: 10, botMaxHp: 100, sheep: 40, sheepShown: 40,
   position: new THREE.Vector3(),
 } as unknown as GameBot);
 
-const mkHost = () => {
+const mkHost = (): { m: MatchHost; bots: GameBot[]; } => {
   const bots = [mkBot('a', true), mkBot('b', false)];
   const m = {
     over: 'alpha' as string | null,
@@ -37,8 +37,8 @@ const mkHost = () => {
   return { m, bots };
 };
 
-describe('resetMatch purges per-match state', () => {
-  it('zeroes the scoreboard, damage pool, flags and sheep meters', () => {
+describe('resetMatch purges per-match state', (): void => {
+  it('zeroes the scoreboard, damage pool, flags and sheep meters', (): void => {
     const { m, bots } = mkHost();
     resetMatch(m);
     expect(m.over).toBeNull();

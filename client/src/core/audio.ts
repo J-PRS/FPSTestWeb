@@ -69,7 +69,7 @@ export class AudioEngine {
 
   /** Must be called from a user gesture (pointer lock click qualifies). */
   unlock(): void {
-    if (this.ctx) { (this.ctx as AudioContext).resume().catch(() => undefined); return; }
+    if (this.ctx) { (this.ctx as AudioContext).resume().catch((): undefined => undefined); return; }
     const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!AC) {return;}
     this.wire(new AC());
@@ -103,12 +103,12 @@ export class AudioEngine {
       'g_loud-powerful-ballista-crossbow-shot_2_5865d',
       'g_powerful-deep-scifi-weapon-shot-game-sound_1_2fa9a',
     ];
-    return Promise.all(names.map(n => fetch(`/sfx/${n.includes('.') ? n : `${n}.ogg`}`)
-      .then(res => res.ok ? res.arrayBuffer() : undefined)
-      .then(ab => ab === undefined ? undefined : ctx.decodeAudioData(ab))
-      .then(buf => buf ? this.buffers.set(n.replace(/\.[^.]+$/, ''), buf) : undefined)
-      .catch(() => undefined), // synth fallback covers it
-    )).then(() => undefined);
+    return Promise.all(names.map((n): Promise<Map<string, AudioBuffer> | undefined> => fetch(`/sfx/${n.includes('.') ? n : `${n}.ogg`}`)
+      .then((res): Promise<ArrayBuffer> | undefined => res.ok ? res.arrayBuffer() : undefined)
+      .then((ab): Promise<AudioBuffer> | undefined => ab === undefined ? undefined : ctx.decodeAudioData(ab))
+      .then((buf): Map<string, AudioBuffer> | undefined => buf ? this.buffers.set(n.replace(/\.[^.]+$/, ''), buf) : undefined)
+      .catch((): undefined => undefined), // synth fallback covers it
+    )).then((): undefined => undefined);
   }
 
   /** Offline-rendering hook for the WAV dump pipeline — attaches a
@@ -210,7 +210,7 @@ export class AudioEngine {
     return true;
   }
   releaseVoice(node: AudioNode): void {
-    const i = this.voiceTab.findIndex(v => v.node === node);
+    const i = this.voiceTab.findIndex((v): boolean => v.node === node);
     if (i !== -1) {this.voiceTab.splice(i, 1);}
   }
 
@@ -235,8 +235,8 @@ export class AudioEngine {
     src.start();
     let alive = true;
     return {
-      set: (v) => { if (alive) {g.gain.setTargetAtTime(v, c.currentTime, 0.08);} },
-      stop: () => { if (alive) { alive = false; src.stop(); src.disconnect(); filt.disconnect(); g.disconnect(); } },
+      set: (v): void => { if (alive) {g.gain.setTargetAtTime(v, c.currentTime, 0.08);} },
+      stop: (): void => { if (alive) { alive = false; src.stop(); src.disconnect(); filt.disconnect(); g.disconnect(); } },
     };
   }
 
@@ -254,8 +254,8 @@ export class AudioEngine {
     src.start();
     let alive = true;
     return {
-      set: (v) => { if (alive) {g.gain.setTargetAtTime(v, c.currentTime, 0.08);} },
-      stop: () => { if (alive) { alive = false; src.stop(); src.disconnect(); g.disconnect(); } },
+      set: (v): void => { if (alive) {g.gain.setTargetAtTime(v, c.currentTime, 0.08);} },
+      stop: (): void => { if (alive) { alive = false; src.stop(); src.disconnect(); g.disconnect(); } },
     };
   }
 
@@ -315,9 +315,9 @@ export class AudioEngine {
     };
     let alive = true;
     return {
-      set: (v) => { if (alive) {inten.gain.setTargetAtTime(v, c.currentTime, 0.08);} },
+      set: (v): void => { if (alive) {inten.gain.setTargetAtTime(v, c.currentTime, 0.08);} },
       setPos,
-      stop: () => { if (alive) { alive = false; kill(); inten.disconnect(); dist.disconnect(); lp.disconnect(); pan.disconnect(); } },
+      stop: (): void => { if (alive) { alive = false; kill(); inten.disconnect(); dist.disconnect(); lp.disconnect(); pan.disconnect(); } },
     };
   }
 
@@ -333,12 +333,12 @@ export class AudioEngine {
     o.start();
     let alive = true;
     return {
-      set: (v) => {
+      set: (v): void => {
         if (!alive) {return;}
         g.gain.setTargetAtTime(v * 0.3, c.currentTime, 0.06);
         o.frequency.setTargetAtTime(freq * (1 + v * 0.8), c.currentTime, 0.06);
       },
-      stop: () => { if (alive) { alive = false; o.stop(); o.disconnect(); g.disconnect(); } },
+      stop: (): void => { if (alive) { alive = false; o.stop(); o.disconnect(); g.disconnect(); } },
     };
   }
 }

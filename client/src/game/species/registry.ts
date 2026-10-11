@@ -24,26 +24,26 @@ import { ballParts } from '../../entities/balls.js';
 import { Tumbleweed, weedParts } from '../../entities/Tumbleweed.js';
 
 export const SWARM_SPECS: Record<string, SwarmSpec> = {
-  crawler:   { parts: crawlerParts,   capacity: 512, spawn: (s, t, p) => new Crawler(s, t, p) },
-  scarab:    { parts: scarabParts,    capacity: 512, spawn: (s, t, p) => new Scarab(s, t, p) },
-  grub:      { parts: grubParts,      capacity: 256, spawn: (s, t, p) => new Grub(s, t, p) },
-  snake:     { parts: snakeParts,     capacity: 256, spawn: (s, t, p) => new Snake(s, t, p) },
-  gnat:      { parts: gnatParts,      capacity: 256, spawn: (s, t, p) => new Gnat(s, t, p) },
-  roller:    { parts: rollerParts,    capacity: 256, spawn: (s, t, p) => new Roller(s, t, p) },
-  seeker:    { parts: seekerParts,    capacity: 256, spawn: (s, t, p) => new Seeker(s, t, p) },
-  rakk:      { parts: rakkParts,      capacity: 256, spawn: (s, t, p) => new Rakk(s, t, p) },
-  strifer:   { parts: striferParts,   capacity: 128, spawn: (s, t, p) => new Strifer(s, t, p) },
+  crawler:   { parts: crawlerParts,   capacity: 512, spawn: (s, t, p): Crawler => new Crawler(s, t, p) },
+  scarab:    { parts: scarabParts,    capacity: 512, spawn: (s, t, p): Scarab => new Scarab(s, t, p) },
+  grub:      { parts: grubParts,      capacity: 256, spawn: (s, t, p): Grub => new Grub(s, t, p) },
+  snake:     { parts: snakeParts,     capacity: 256, spawn: (s, t, p): Snake => new Snake(s, t, p) },
+  gnat:      { parts: gnatParts,      capacity: 256, spawn: (s, t, p): Gnat => new Gnat(s, t, p) },
+  roller:    { parts: rollerParts,    capacity: 256, spawn: (s, t, p): Roller => new Roller(s, t, p) },
+  seeker:    { parts: seekerParts,    capacity: 256, spawn: (s, t, p): Seeker => new Seeker(s, t, p) },
+  rakk:      { parts: rakkParts,      capacity: 256, spawn: (s, t, p): Rakk => new Rakk(s, t, p) },
+  strifer:   { parts: striferParts,   capacity: 128, spawn: (s, t, p): Strifer => new Strifer(s, t, p) },
   mine:      { parts: mineParts,      capacity: 512, bake: true, // steel shell — gunmetal bake like the turretter
                spawn: (s, t, p) => { // update(dt, playerPos) — no terrain arg, adapt it
                  const m = new Mine(s, t, p);
                  return { pos: m.pos, radius: m.radius,
-                   update: (dt, _t, pp) => m.update(dt, pp), dispose: () => m.dispose() };
+                   update: (dt, _t, pp): void => m.update(dt, pp), dispose: (): void => m.dispose() };
                } },
-  overlord:  { parts: overlordParts,  capacity: 64,  spawn: (s, t, p) => new Overlord(s, t, p) },
-  baneling:  { parts: banelingParts,  capacity: 128, spawn: (s, t, p) => new Baneling(s, t, p) },
-  totem:     { parts: totemParts,     capacity: 64,  spawn: (s, t, p) => new Totem(s, t, p) },
+  overlord:  { parts: overlordParts,  capacity: 64,  spawn: (s, t, p): Overlord => new Overlord(s, t, p) },
+  baneling:  { parts: banelingParts,  capacity: 128, spawn: (s, t, p): Baneling => new Baneling(s, t, p) },
+  totem:     { parts: totemParts,     capacity: 64,  spawn: (s, t, p): Totem => new Totem(s, t, p) },
   turretter: { parts: turretterParts, capacity: 64, bake: true, // gunmetal — same pipeline as viewmodel weapons
-               spawn: (s, t, p) => new Turretter(s, t, p) },
+               spawn: (s, t, p): Turretter => new Turretter(s, t, p) },
   ball:      { parts: ballParts,      capacity: 512 },
-  tumbleweed:{ parts: weedParts,      capacity: 64,  spawn: (s, t, p) => new Tumbleweed(s, t, p) },
+  tumbleweed:{ parts: weedParts,      capacity: 64,  spawn: (s, t, p): Tumbleweed => new Tumbleweed(s, t, p) },
 };

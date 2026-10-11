@@ -55,14 +55,14 @@ export class PlayerMats {
       child.material = Array.isArray(child.material) ? child.material.map(swap) : swap(child.material);
     }
     child.material = Array.isArray(child.material)
-      ? child.material.map((m) => this.ownMaterial(m))
+      ? child.material.map((m): THREE.Material<THREE.MaterialEventMap> => this.ownMaterial(m))
       : this.ownMaterial(child.material);
     // Capture emissive materials for the damage flash — dedupe,
     // a GLB often shares one material across several meshes.
     const mats = Array.isArray(child.material) ? child.material : [child.material];
     for (const m of mats) {
       if ((m as THREE.MeshStandardMaterial).isMeshStandardMaterial
-        && !this.flashMats.some(f => f.m === m)) {
+        && !this.flashMats.some((f): boolean => f.m === m)) {
         const sm = m as THREE.MeshStandardMaterial;
         this.flashMats.push({ m: sm, e: sm.emissive.clone(), i: sm.emissiveIntensity });
       }
@@ -75,7 +75,7 @@ export class PlayerMats {
   captureWireframe(model: THREE.Group | null): void {
     if (!model) {return;}
     const mats = new Set<THREE.Material>();
-    model.traverse((o) => {
+    model.traverse((o): void => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) {return;}
       for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {mats.add(m);}
@@ -95,7 +95,7 @@ export class PlayerMats {
   /** Per-model material clones — frees their GPU program refs; shared
    *  geometry/textures belong to the cached gltf and stay alive. */
   dispose(): void {
-    this.clones.forEach((m) => m.dispose());
+    this.clones.forEach((m): void => m.dispose());
     this.clones.clear();
   }
 }

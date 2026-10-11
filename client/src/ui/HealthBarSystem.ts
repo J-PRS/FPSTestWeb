@@ -212,7 +212,7 @@ export class HealthBarSystem {
       r.bar.maxHealth = item.v.maxHealth;
       this.updateBar(r.bar, dt,
         _targetPos.set(item.pos.x, item.pos.y + 1.6, item.pos.z),
-        cameraPos, cameraDir, () => this.removeRepair(item));
+        cameraPos, cameraDir, (): void => this.removeRepair(item));
       const cap = item.v.maxHealth * REPAIR_ARMOR_MULT;
       r.armorEl.style.display = item.v.armor > 0.5 ? 'block' : 'none';
       r.armorEl.style.width = `${BAR_WIDTH * Math.min(1, item.v.armor / cap)}px`;
@@ -238,7 +238,7 @@ export class HealthBarSystem {
       bar.maxHealth = this.maxFor(playerId, (rp as { armorClass?: string } | undefined)?.armorClass);
       // pos is EYE height — a small margin above it is already over the head
       const targetPos = _targetPos.set(pos.x, pos.y + 0.5, pos.z);
-      this.updateBar(bar, dt, targetPos, cameraPos, cameraDir, () => this.removeBar(playerId));
+      this.updateBar(bar, dt, targetPos, cameraPos, cameraDir, (): void => this.removeBar(playerId));
     }
   }
 
@@ -248,7 +248,7 @@ export class HealthBarSystem {
       ball.pos.y + ball.radius + 0.5,
       ball.pos.z
     );
-    this.updateBar(bar, dt, targetPos, cameraPos, cameraDir, () => this.removeBallBar(ball));
+    this.updateBar(bar, dt, targetPos, cameraPos, cameraDir, (): void => this.removeBallBar(ball));
   }
 
   /** Class-aware pool — heavy reads against 200, not 100. */

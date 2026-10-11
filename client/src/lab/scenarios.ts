@@ -52,14 +52,14 @@ const FLAT = LAB_FLAT_FIELD;
  *  identically (teleport rolls included). */
 function lcg(seed: number): () => number {
   let s = seed >>> 0;
-  return () => ((s = (s * 1_664_525 + 1_013_904_223) >>> 0) / 0xFF_FF_FF_FF);
+  return (): number => ((s = (s * 1_664_525 + 1_013_904_223) >>> 0) / 0xFF_FF_FF_FF);
 }
 
 /** Scenario boilerplate: run a shared world, tick each entity, merge dumps.
  *  Adding a new sim = one spawnX call; the entity owns its step + mesh. */
 function labOf(entities: SimEntity[], world: LabWorld, extra?: Partial<LabInstance>): LabInstance {
   return {
-    tick(dt) {
+    tick(dt): void {
       world.time += dt;
       extra?.tick?.(dt);
       for (const e of entities) {e.tick(dt, world);}
@@ -69,13 +69,13 @@ function labOf(entities: SimEntity[], world: LabWorld, extra?: Partial<LabInstan
         if (fx.dead) { fx.dispose(); world.effects.splice(i, 1); }
       }
     },
-    sync() { for (const e of entities) {e.sync();} },
-    dump() {
+    sync(): void { for (const e of entities) {e.sync();} },
+    dump(): [string, string][] {
       const rows = extra?.dump?.() ?? [];
       for (const e of entities) {if (e.dump) {rows.push(...e.dump());}}
       return rows;
     },
-    dispose() {
+    dispose(): void {
       for (const e of entities) {e.dispose();}
       for (const fx of world.effects) {fx.dispose();}
       world.effects.length = 0;
@@ -106,16 +106,16 @@ function ballCourt(scene: THREE.Scene): LabInstance {
       vel: { x: -Math.sin(a) * 8, y: 0, z: Math.cos(a) * 8 },
       enraged: i === 0,
       rand,
-      onSegment: k => SEG_COUNTS.set(k, (SEG_COUNTS.get(k) ?? 0) + 1),
+      onSegment:( k): Map<string, number> => SEG_COUNTS.set(k, (SEG_COUNTS.get(k) ?? 0) + 1),
     }, world);
   });
 
   const hunter = balls[0]!.sim;
   const lab = labOf(balls, world, {
-    dump() {
+    dump(): [string, string][] {
       const rows: [string, string][] = [
-        ['balls', String(balls.filter(x => !x.sim.dead).length)],
-        ['enraged', String(balls.filter(x => x.sim.enraged).length)],
+        ['balls', String(balls.filter((x): boolean => !x.sim.dead).length)],
+        ['enraged', String(balls.filter((x): boolean => x.sim.enraged).length)],
         ['hunter pos', `${hunter.x.toFixed(1)}, ${hunter.y.toFixed(1)}, ${hunter.z.toFixed(1)}`],
         ['hunter spd', Math.hypot(hunter.vx, hunter.vy, hunter.vz).toFixed(1)],
       ];
@@ -124,14 +124,14 @@ function ballCourt(scene: THREE.Scene): LabInstance {
     },
   });
   const baseSync = lab.sync.bind(lab);
-  lab.sync = () => {
+  lab.sync = (): void => {
     world.target!.x = Math.cos(world.time * 0.4) * 20;
     world.target!.z = Math.sin(world.time * 0.4) * 20;
     baseSync();
     targetMesh.position.set(world.target!.x, world.target!.y, world.target!.z);
   };
   const baseDispose = lab.dispose.bind(lab);
-  lab.dispose = () => { baseDispose(); scene.remove(targetMesh); targetMesh.geometry.dispose(); };
+  lab.dispose = (): void => { baseDispose(); scene.remove(targetMesh); targetMesh.geometry.dispose(); };
   return lab;
 }
 
@@ -153,7 +153,7 @@ function mortarVolley(scene: THREE.Scene): LabInstance {
   const shells: (ReturnType<typeof spawnBolt>)[] = [];
   let side = 0, fired = 0, landed = 0, cd = 0;
 
-  const launch = () => {
+  const launch = (): void => {
     const from = side === 0 ? padA.position : padB.position;
     const to = side === 0 ? padB.position : padA.position;
     side ^= 1;
@@ -166,7 +166,7 @@ function mortarVolley(scene: THREE.Scene): LabInstance {
       vel: { x: (dx / dist) * v * Math.SQRT1_2, y: v * Math.SQRT1_2, z: (dz / dist) * v * Math.SQRT1_2 },
       radius: 0.5,
       color: side === 1 ? 0xFF_E0_8A : 0x9A_DC_FF,
-      onDone(hit) {
+      onDone(hit): void {
 landed += 1;
         if (hit) {
           const m = new THREE.Mesh(new THREE.SphereGeometry(1.4, 10, 10), impactMat);
@@ -181,7 +181,7 @@ fired += 1;
   };
 
   return {
-    tick(dt) {
+    tick(dt): void {
       world.time += dt;
       cd -= dt;
       if (cd <= 0) { launch(); cd = 1.1; }
@@ -193,15 +193,15 @@ fired += 1;
         if (im.t > 0.6) { scene.remove(im.m); im.m.geometry.dispose(); impacts.splice(i, 1); }
       }
     },
-    sync() { for (const s of shells) {s.sync();} },
-    dump() {
+    sync(): void { for (const s of shells) {s.sync();} },
+    dump(): [string, string][] {
       return [
-        ['shells in air', String(shells.filter(s => !s.done).length)],
+        ['shells in air', String(shells.filter((s): boolean => !s.done).length)],
         ['fired', String(fired)],
         ['landed', String(landed)],
       ];
     },
-    dispose() {
+    dispose(): void {
       for (const s of shells) {s.dispose();}
       for (const im of impacts) { scene.remove(im.m); im.m.geometry.dispose(); }
       scene.remove(padA, padB);
@@ -242,7 +242,7 @@ function duel(scene: THREE.Scene): LabInstance {
   const bolts: Bolt[] = [];
   let shots = 0, hits = 0, deaths = 0;
 
-  const fire = (f: Fighter, foe: Fighter) => {
+  const fire = (f: Fighter, foe: Fighter): void => {
     // Aim with trivial lead: close-range flat shot, vel foe moves.
     const tof = f.pos.distanceTo(foe.pos) / DUEL_SPEED;
     const aim = _aim.copy(foe.pos).addScaledVector(foe.vel, tof);
@@ -256,7 +256,7 @@ shots += 1;
 
   const _aim = new THREE.Vector3();
   return {
-    tick(dt) {
+    tick(dt): void {
       for (const f of [a, b]) {
         // Drift on a slow wander circle — keeps the duel visually alive
         // without needing the full BotBrain wiring for a lab viewer.
@@ -297,10 +297,10 @@ deaths += 1;
         }
       }
     },
-    sync() {
+    sync(): void {
       for (const bolt of bolts) {bolt.m.position.set(bolt.p.pos.x, bolt.p.pos.y, bolt.p.pos.z);}
     },
-    dump() {
+    dump(): [string, string][] {
       return [
         ['A hp', String(Math.max(0, a.hp))],
         ['B hp', String(Math.max(0, b.hp))],
@@ -311,7 +311,7 @@ deaths += 1;
         ['bolts live', String(bolts.length)],
       ];
     },
-    dispose() {
+    dispose(): void {
       for (const f of [a, b]) { scene.remove(f.mesh); f.mesh.geometry.dispose(); }
       for (const bolt of bolts) {scene.remove(bolt.m);}
       tracerGeo.dispose();
@@ -332,7 +332,7 @@ function crawlerPack(scene: THREE.Scene): LabInstance {
     return spawnCrawler({
       id: i, species: i % 2 ? 'scarab' : 'crawler', uber: i === 0,
       pos: { x: Math.cos(a) * 25, y: 0, z: Math.sin(a) * 25 },
-      onEvent: ev => events.set(ev, (events.get(ev) ?? 0) + 1),
+      onEvent:( ev): Map<string, number> => events.set(ev, (events.get(ev) ?? 0) + 1),
     }, world);
   });
 
@@ -343,26 +343,26 @@ function crawlerPack(scene: THREE.Scene): LabInstance {
   scene.add(preyMesh);
 
   const lab = labOf(pack, world, {
-    dump() {
+    dump(): [string, string][] {
       const rows: [string, string][] = [
-        ['pack', String(pack.filter(p => !p.sim.dead).length)],
-        ['chasing', String(pack.filter(p => p.sim.state === 'chase').length)],
-        ['winding up', String(pack.filter(p => p.sim.state === 'windup').length)],
-        ['wandering', String(pack.filter(p => p.sim.state === 'wander').length)],
+        ['pack', String(pack.filter((p): boolean => !p.sim.dead).length)],
+        ['chasing', String(pack.filter((p): boolean => p.sim.state === 'chase').length)],
+        ['winding up', String(pack.filter((p): boolean => p.sim.state === 'windup').length)],
+        ['wandering', String(pack.filter((p): boolean => p.sim.state === 'wander').length)],
       ];
       for (const [k, n] of events) {rows.push([`ev:${k}`, String(n)]);}
       return rows;
     },
   });
   const baseSync = lab.sync.bind(lab);
-  lab.sync = () => {
+  lab.sync = (): void => {
     world.target!.x = Math.cos(world.time * 0.3) * 18;
     world.target!.z = Math.sin(world.time * 0.5) * 18;
     baseSync();
     preyMesh.position.set(world.target!.x, world.target!.y, world.target!.z);
   };
   const baseDispose = lab.dispose.bind(lab);
-  lab.dispose = () => { baseDispose(); scene.remove(preyMesh); preyMesh.geometry.dispose(); };
+  lab.dispose = (): void => { baseDispose(); scene.remove(preyMesh); preyMesh.geometry.dispose(); };
   return lab;
 }
 
@@ -379,7 +379,7 @@ function flyerRing(scene: THREE.Scene): LabInstance {
     return spawnFlyer({
       id: i, species: i % 3 === 2 ? 'gnat' : 'rakk', uber: i === 0,
       pos: { x: Math.cos(a) * 30, y: 14, z: Math.sin(a) * 30 },
-      onEvent: ev => events.set(ev, (events.get(ev) ?? 0) + 1),
+      onEvent:( ev): Map<string, number> => events.set(ev, (events.get(ev) ?? 0) + 1),
     }, world);
   });
 
@@ -390,26 +390,26 @@ function flyerRing(scene: THREE.Scene): LabInstance {
   scene.add(preyMesh);
 
   const lab = labOf(flock, world, {
-    dump() {
+    dump(): [string, string][] {
       const rows: [string, string][] = [
-        ['flock', String(flock.filter(f => !f.sim.dead).length)],
-        ['orbiting', String(flock.filter(f => f.sim.state === 'orbit').length)],
-        ['diving', String(flock.filter(f => f.sim.state === 'dive').length)],
-        ['climbing', String(flock.filter(f => f.sim.state === 'climb').length)],
+        ['flock', String(flock.filter((f): boolean => !f.sim.dead).length)],
+        ['orbiting', String(flock.filter((f): boolean => f.sim.state === 'orbit').length)],
+        ['diving', String(flock.filter((f): boolean => f.sim.state === 'dive').length)],
+        ['climbing', String(flock.filter((f): boolean => f.sim.state === 'climb').length)],
       ];
       for (const [k, n] of events) {rows.push([`ev:${k}`, String(n)]);}
       return rows;
     },
   });
   const baseSync = lab.sync.bind(lab);
-  lab.sync = () => {
+  lab.sync = (): void => {
     world.target!.x = Math.cos(world.time * 0.25) * 16;
     world.target!.z = Math.sin(world.time * 0.4) * 16;
     baseSync();
     preyMesh.position.set(world.target!.x, world.target!.y, world.target!.z);
   };
   const baseDispose = lab.dispose.bind(lab);
-  lab.dispose = () => { baseDispose(); scene.remove(preyMesh); preyMesh.geometry.dispose(); };
+  lab.dispose = (): void => { baseDispose(); scene.remove(preyMesh); preyMesh.geometry.dispose(); };
   return lab;
 }
 
@@ -421,7 +421,7 @@ function flyerRing(scene: THREE.Scene): LabInstance {
 function speciesPack(scene: THREE.Scene): LabInstance {
   const world: LabWorld = { scene, field: FLAT, target: { x: 0, y: 0.5, z: 0 }, time: 0, effects: [] };
   const events = new Map<string, number>();
-  const onEvent = (ev: string) => events.set(ev, (events.get(ev) ?? 0) + 1);
+  const onEvent = (ev: string): Map<string, number> => events.set(ev, (events.get(ev) ?? 0) + 1);
   const pack: SimEntity[] = [];
   for (let i = 0; i < 4; i += 1) {
     const a = (i / 4) * Math.PI * 2;
@@ -439,21 +439,21 @@ function speciesPack(scene: THREE.Scene): LabInstance {
   scene.add(preyMesh);
 
   const lab = labOf(pack, world, {
-    dump() {
+    dump(): [string, string][] {
       const rows: [string, string][] = [['pack', String(pack.length)]];
       for (const [k, n] of events) {rows.push([`ev:${k}`, String(n)]);}
       return rows;
     },
   });
   const baseSync = lab.sync.bind(lab);
-  lab.sync = () => {
+  lab.sync = (): void => {
     world.target!.x = Math.cos(world.time * 0.3) * 18;
     world.target!.z = Math.sin(world.time * 0.5) * 18;
     baseSync();
     preyMesh.position.set(world.target!.x, world.target!.y, world.target!.z);
   };
   const baseDispose = lab.dispose.bind(lab);
-  lab.dispose = () => { baseDispose(); scene.remove(preyMesh); preyMesh.geometry.dispose(); };
+  lab.dispose = (): void => { baseDispose(); scene.remove(preyMesh); preyMesh.geometry.dispose(); };
   return lab;
 }
 
@@ -465,7 +465,7 @@ function speciesPack(scene: THREE.Scene): LabInstance {
 function totemField(scene: THREE.Scene): LabInstance {
   const world: LabWorld = { scene, field: FLAT, target: { x: 0, y: 0.5, z: 0 }, time: 0, effects: [] };
   const events = new Map<string, number>();
-  const onEvent = (ev: string) => events.set(ev, (events.get(ev) ?? 0) + 1);
+  const onEvent = (ev: string): Map<string, number> => events.set(ev, (events.get(ev) ?? 0) + 1);
   const totems = [
     spawnTotem({ id: 1, pos: { x: -20, y: 0, z: -10 }, onEvent }, world),
     spawnTotem({ id: 2, pos: { x: 22, y: 0, z: -6 }, onEvent }, world),
@@ -479,25 +479,25 @@ function totemField(scene: THREE.Scene): LabInstance {
   scene.add(preyMesh);
 
   const lab = labOf(totems, world, {
-    dump() {
+    dump(): [string, string][] {
       const rows: [string, string][] = [
         ['totems', String(totems.length)],
-        ['charging', String(totems.filter(t => t.sim.state === 'charge').length)],
-        ['shots', String(totems.reduce((n, t) => n + t.sim.shotsFired, 0))],
+        ['charging', String(totems.filter((t): boolean => t.sim.state === 'charge').length)],
+        ['shots', String(totems.reduce((n, t): number => n + t.sim.shotsFired, 0))],
       ];
       for (const [k, n] of events) {rows.push([`ev:${k}`, String(n)]);}
       return rows;
     },
   });
   const baseSync = lab.sync.bind(lab);
-  lab.sync = () => {
+  lab.sync = (): void => {
     world.target!.x = Math.cos(world.time * 0.3) * 14;
     world.target!.z = Math.sin(world.time * 0.45) * 14;
     baseSync();
     preyMesh.position.set(world.target!.x, world.target!.y, world.target!.z);
   };
   const baseDispose = lab.dispose.bind(lab);
-  lab.dispose = () => { baseDispose(); scene.remove(preyMesh); preyMesh.geometry.dispose(); };
+  lab.dispose = (): void => { baseDispose(); scene.remove(preyMesh); preyMesh.geometry.dispose(); };
   return lab;
 }
 
@@ -509,7 +509,7 @@ function totemField(scene: THREE.Scene): LabInstance {
 function banelingRush(scene: THREE.Scene): LabInstance {
   const world: LabWorld = { scene, field: FLAT, target: { x: 0, y: 0.5, z: 0 }, time: 0, effects: [] };
   const events = new Map<string, number>();
-  const onEvent = (ev: string) => events.set(ev, (events.get(ev) ?? 0) + 1);
+  const onEvent = (ev: string): Map<string, number> => events.set(ev, (events.get(ev) ?? 0) + 1);
   const pack = Array.from({ length: 7 }, (_, i) => {
     const a = (i / 7) * Math.PI * 2;
     return spawnBaneling({
@@ -526,24 +526,24 @@ function banelingRush(scene: THREE.Scene): LabInstance {
   scene.add(preyMesh);
 
   const lab = labOf(pack, world, {
-    dump() {
+    dump(): [string, string][] {
       const rows: [string, string][] = [
-        ['pack', String(pack.filter(b => !b.sim.dead).length)],
-        ['chasing', String(pack.filter(b => b.sim.state === 'chase').length)],
+        ['pack', String(pack.filter((b): boolean => !b.sim.dead).length)],
+        ['chasing', String(pack.filter((b): boolean => b.sim.state === 'chase').length)],
       ];
       for (const [k, n] of events) {rows.push([`ev:${k}`, String(n)]);}
       return rows;
     },
   });
   const baseSync = lab.sync.bind(lab);
-  lab.sync = () => {
+  lab.sync = (): void => {
     world.target!.x = Math.cos(world.time * 0.35) * 15;
     world.target!.z = Math.sin(world.time * 0.5) * 15;
     baseSync();
     preyMesh.position.set(world.target!.x, world.target!.y, world.target!.z);
   };
   const baseDispose = lab.dispose.bind(lab);
-  lab.dispose = () => { baseDispose(); scene.remove(preyMesh); preyMesh.geometry.dispose(); };
+  lab.dispose = (): void => { baseDispose(); scene.remove(preyMesh); preyMesh.geometry.dispose(); };
   return lab;
 }
 
@@ -576,7 +576,7 @@ const HILL_Z = (32.5 / 64) * 1500;
 
 function skiRun(scene: THREE.Scene): LabInstance {
   const surface: MoveSurface = {
-    getHeight: (x, z) => hmHeight(HILL, x, z),
+    getHeight: (x, z): number => hmHeight(HILL, x, z),
     getNormal: (x, z, out) => { hmNormal(HILL, x, z, out); return out; },
   };
   const startY = hmHeight(HILL, HILL_X, HILL_Z);
@@ -616,7 +616,7 @@ function skiRun(scene: THREE.Scene): LabInstance {
 
   let jets = 0, runs = 0;
   const _n = { x: 0, y: 1, z: 0 };
-  mover.drive = dt => {
+  mover.drive =( dt): void => {
     const s = sim.state;
     // Steer toward the local downhill — same read a skier's eyes do:
     // probe the normal; downhill is -grad ≈ (nx,0,nz) of the surface normal.
@@ -646,14 +646,14 @@ runs += 1;
   };
 
   const lab = labOf([mover], world, {
-    dump: () => [
+    dump: (): [string, string][] => [
       ['yaw', sim.state.yaw.toFixed(2)],
       ['jet time', `${jets.toFixed(1)}s`],
       ['runs', String(runs)],
     ],
   });
   const baseDispose = lab.dispose.bind(lab);
-  lab.dispose = () => { baseDispose(); scene.remove(terrain); terrain.geometry.dispose(); };
+  lab.dispose = (): void => { baseDispose(); scene.remove(terrain); terrain.geometry.dispose(); };
   return lab;
 }
 
@@ -674,7 +674,7 @@ function botDuel(scene: THREE.Scene, loA: BotLoadout, loB: BotLoadout): LabInsta
   const shells: (ReturnType<typeof spawnShell> & { from: BotAgent; wt: number })[] = [];
   let now = 0, deaths = 0, fires = 0, hits = 0;
 
-  const fire = (f: BotAgent, foe: BotAgent, aim: BotVec) => {
+  const fire = (f: BotAgent, foe: BotAgent, aim: BotVec): void => {
     const s = f.sim.state;
     const d = Math.hypot(aim.x - s.pos.x, aim.y - s.pos.y, aim.z - s.pos.z) || 1;
     const { st, wt } = pickAtRange(f, d);
@@ -685,11 +685,11 @@ function botDuel(scene: THREE.Scene, loA: BotLoadout, loB: BotLoadout): LabInsta
       vel: { x: (aim.x - s.pos.x) / d * st.speed, y: (aim.y - s.pos.y) / d * st.speed, z: (aim.z - s.pos.z) / d * st.speed },
       gravity: st.gravity ? GRAVITY : 0,
       maxAge: 2.5,
-      hitTest: (from, pos) => {
+      hitTest: (from, pos): boolean => {
         const fp = foe.sim.state.pos;
         return foe.dead <= 0 && segPointDist(from, pos, { x: fp.x, y: fp.y, z: fp.z }) < 1.4;
       },
-      onDone: (impact, directHit) => {
+      onDone: (impact, directHit): void => {
         if (!directHit || !impact) {return;}
         foe.hp -= st.directDamage;
 hits += 1;
@@ -716,14 +716,14 @@ fires += 1;
       enemies: foe.dead <= 0
         ? [{ id: foe.name, pos: foe.sim.state.pos, vel: foe.sim.state.vel, alive: true, aimY: -0.7 }]
         : [],
-      groundY: (x, z) => hmHeight(FLAT, x, z),
+      groundY: (x, z): number => hmHeight(FLAT, x, z),
       now,
       energy: a.energy,
       healthFrac: a.hp / BOT_HP,
       // Inbound shells feed the dodge sense — same channel the game host fills.
-      threats: shells.filter(b => b.from !== a).map(b => b.sim.pos),
-      weaponSpeed: d => pickAtRange(a, d).st.speed,
-      weaponGravity: d => pickAtRange(a, d).st.gravity,
+      threats: shells.filter((b): boolean => b.from !== a).map(b => b.sim.pos),
+      weaponSpeed:( d): number => pickAtRange(a, d).st.speed,
+      weaponGravity:( d): boolean => pickAtRange(a, d).st.gravity,
     });
     a.lastDest = out.dest;
     a.lastMove = out.move;
@@ -731,7 +731,7 @@ fires += 1;
   };
 
   return {
-    tick(dt) {
+    tick(dt): void {
       now += dt * 1000;
       for (const a of [A, B]) {
         if (a.dead > 0) {
@@ -753,14 +753,14 @@ fires += 1;
         if (fx.dead) { fx.dispose(); world.effects.splice(i, 1); }
       }
     },
-    sync() {
+    sync(): void {
       for (const a of [A, B]) {
         a.mesh.position.set(a.sim.state.pos.x, a.sim.state.pos.y - 1.5, a.sim.state.pos.z);
         a.mesh.rotation.y = a.yaw;
       }
       for (const s of shells) {s.sync();}
     },
-    dump() {
+    dump(): [string, string][] {
       return [
         ['alpha hp/en', `${Math.max(0, A.hp)}/${A.energy.toFixed(0)}`],
         ['beta hp/en', `${Math.max(0, B.hp)}/${B.energy.toFixed(0)}`],
@@ -774,7 +774,7 @@ fires += 1;
         ['shells live', String(shells.length)],
       ];
     },
-    dispose() {
+    dispose(): void {
       for (const a of [A, B]) { scene.remove(a.mesh); a.mesh.geometry.dispose(); }
       for (const s of shells) {s.dispose();}
       for (const fx of world.effects) {fx.dispose();}
@@ -801,7 +801,7 @@ const GYM_EXCLUDE = new Set<number>([
 // Low-arc ballistic solve: elevation that lands a shell of speed v on
 // the target after g drop — flat-fired gravity lanes fell short of the
 // wall before this. Falls back to 45° when v can't reach the range.
-function ballisticVel(from: { x: number; y: number; z: number }, to: { x: number; y: number; z: number }, v: number, g: number) {
+function ballisticVel(from: { x: number; y: number; z: number }, to: { x: number; y: number; z: number }, v: number, g: number): { x: number; y: number; z: number; } {
   const dx = to.x - from.x, dz = to.z - from.z;
   const R = Math.hypot(dx, dz) || 1;
   const h = to.y - from.y;
@@ -815,13 +815,13 @@ function ballisticVel(from: { x: number; y: number; z: number }, to: { x: number
 function weaponGym(scene: THREE.Scene): LabInstance {
   const world: LabWorld = { scene, field: FLAT, target: null, time: 0, effects: [] };
   const lanes = Object.keys(WeaponType)
-    .filter(k => isNaN(Number(k)))
+    .filter((k): boolean => isNaN(Number(k)))
     .map(name => ({ name, wt: WeaponType[name as keyof typeof WeaponType] as number, st: getWeaponStats(WeaponType[name as keyof typeof WeaponType]) }))
     // No projectile config = no visual identity to showcase — beam,
     // hitscan, and belt types all land in GYM_EXCLUDE first anyway.
     .filter(l => !GYM_EXCLUDE.has(l.wt) && l.st.speed > 0 && getProjectileConfig(l.wt))
     // Same gun twice would only prove the table — dedupe by ballistics.
-    .filter((l, i, arr) => arr.findIndex(o => o.st.speed === l.st.speed && o.st.gravity === l.st.gravity) === i);
+    .filter((l, i, arr): boolean => arr.findIndex((o): boolean => o.st.speed === l.st.speed && o.st.gravity === l.st.gravity) === i);
 
   const W = lanes.length, PITCH = 10;
   const x0 = -((W - 1) * PITCH) / 2;
@@ -842,7 +842,7 @@ function weaponGym(scene: THREE.Scene): LabInstance {
     return { name: l.name, wt: l.wt, st: l.st, x, pad, fired: 0, done: 0, cd: 0.3 + i * 0.15 };
   });
 
-  const fireLane = (l: (typeof laneFx)[number]) => {
+  const fireLane = (l: (typeof laneFx)[number]): void => {
     const from = { x: l.x, y: 2, z: -40 };
     const to = { x: l.x, y: 5, z: 54 };
     const vel = l.st.gravity
@@ -858,7 +858,7 @@ function weaponGym(scene: THREE.Scene): LabInstance {
       // Blast scaled to the weapon's real aoe radius — a mortar's boom
       // reads wide next to a disc's pop without any hardcoded sizes.
       blastScale: l.st.aoeRadius > 0 ? l.st.aoeRadius / 6 : 0.6,
-      onDone: () => {l.done += 1; },
+      onDone: (): void => {l.done += 1; },
     }, world);
     shells.push(s);
 l.fired += 1;
@@ -866,7 +866,7 @@ l.fired += 1;
   };
 
   return {
-    tick(dt) {
+    tick(dt): void {
       world.time += dt;
       for (const l of laneFx) {
         l.cd -= dt;
@@ -883,13 +883,13 @@ l.fired += 1;
         if (fx.dead) { fx.dispose(); world.effects.splice(i, 1); }
       }
     },
-    sync() { for (const s of shells) {s.sync();} },
-    dump() {
+    sync(): void { for (const s of shells) {s.sync();} },
+    dump(): [string, string][] {
       const rows: [string, string][] = [['lanes', String(laneFx.length)]];
       for (const l of laneFx) {rows.push([l.name.toLowerCase(), `${l.fired}/${l.done} v${l.st.speed} g${l.st.gravity ? 1 : 0}`]);}
       return rows;
     },
-    dispose() {
+    dispose(): void {
       for (const s of shells) {s.dispose();}
       for (const fx of world.effects) {fx.dispose();}
       world.effects.length = 0;
@@ -906,9 +906,9 @@ l.fired += 1;
 
 export const SCENARIOS: LabScenario[] = [
   { id: 'weapon-gym', name: 'WEAPON GYM', blurb: 'every weapon firing its real ballistics downrange', create: weaponGym },
-  { id: 'bot-duel', name: 'BOT DUEL', blurb: 'real BotBrain minds on MoveSim bodies', create: scene => botDuel(scene, BOT_LOADOUTS[0]!, BOT_LOADOUTS[1]!) },
-  { id: 'clash-artillery', name: 'MORTAR vs BRUISER', blurb: 'artillery loadout vs shotgun/cannon bruiser', create: scene => botDuel(scene, BOT_LOADOUTS[7]!, BOT_LOADOUTS[5]!) },
-  { id: 'clash-beam', name: 'HOSER vs BEAM RIDER', blurb: 'sprinkler vitality vs lightning/railgun overcharge', create: scene => botDuel(scene, BOT_LOADOUTS[4]!, BOT_LOADOUTS[8]!) },
+  { id: 'bot-duel', name: 'BOT DUEL', blurb: 'real BotBrain minds on MoveSim bodies', create:( scene): LabInstance => botDuel(scene, BOT_LOADOUTS[0]!, BOT_LOADOUTS[1]!) },
+  { id: 'clash-artillery', name: 'MORTAR vs BRUISER', blurb: 'artillery loadout vs shotgun/cannon bruiser', create:( scene): LabInstance => botDuel(scene, BOT_LOADOUTS[7]!, BOT_LOADOUTS[5]!) },
+  { id: 'clash-beam', name: 'HOSER vs BEAM RIDER', blurb: 'sprinkler vitality vs lightning/railgun overcharge', create:( scene): LabInstance => botDuel(scene, BOT_LOADOUTS[4]!, BOT_LOADOUTS[8]!) },
   { id: 'duel', name: 'DUEL', blurb: 'two fighters trade hitscan-ish bolts', create: duel },
   { id: 'ball-court', name: 'BALL COURT', blurb: 'ballSim bounce + one enraged hunter', create: ballCourt },
   { id: 'mortar-volley', name: 'MORTAR VOLLEY', blurb: 'projStep gravity arcs + terrain impacts', create: mortarVolley },

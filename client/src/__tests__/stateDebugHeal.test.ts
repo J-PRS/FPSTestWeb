@@ -10,17 +10,17 @@ import type { SnapshotPlayer } from '../../../shared/protocol.js';
 // heal from server truth. Unpinned until now — a regression here degrades
 // to "warns forever" instead of converging.
 
-const log = { debug: () => { return; }, info: () => { return; }, warn: vi.fn(), error: () => { return; } };
+const log = { debug: (): void => { return; }, info: (): void => { return; }, warn: vi.fn(), error: (): void => { return; } };
 
-function mk() {
+function mk(): { nm: NetworkManager; ctx: StateDebugContext; remotePlayers: Map<string, RemotePlayer>; } {
   const nm = new NetworkManager();
   const remotePlayers = new Map<string, RemotePlayer>();
   const ctx: StateDebugContext = {
     networkManager: nm,
-    getPlayer: () => ({ health: 100, isDead: false }) as unknown as Player,
+    getPlayer: (): Player => ({ health: 100, isDead: false }) as unknown as Player,
     remotePlayers: remotePlayers as StateDebugContext['remotePlayers'],
     projectiles: [],
-    getLastSentPos: () => ({ x: 0, y: 0, z: 0 }),
+    getLastSentPos: (): { x: number; y: number; z: number; } => ({ x: 0, y: 0, z: 0 }),
     world: { mode: 'test' },
     logger: log as unknown as StateDebugContext['logger'],
   };
@@ -33,21 +33,21 @@ function snap(id: string, position: { x: number; y: number; z: number }, health:
   return { id, internalId: 0, position, rotation: 0, velocity: { x: 0, y: 0, z: 0 }, health, isDead, kills: 0, deaths: 0 } as unknown as SnapshotPlayer;
 }
 
-function driveSnapshot(ctx: StateDebugContext, serverPlayers: SnapshotPlayer[]) {
+function driveSnapshot(ctx: StateDebugContext, serverPlayers: SnapshotPlayer[]): void {
   const nm = ctx.networkManager;
   let requested = false;
   const origSend = nm.sendSnapshotRequest.bind(nm);
-  nm.sendSnapshotRequest = () => { requested = true; origSend(); };
+  nm.sendSnapshotRequest = (): void => { requested = true; origSend(); };
   // Deliberately-mismatched server hash — 'zz' can't equal a computed FNV.
   nm.onStateHash?.('zz', 1, serverPlayers.length + 1, Date.now());
   expect(requested).toBe(true);
   nm.onSnapshot?.(serverPlayers, Date.now());
 }
 
-describe('stateDebug snapshot heal', () => {
-  beforeEach(() => { vi.clearAllMocks(); });
+describe('stateDebug snapshot heal', (): void => {
+  beforeEach((): void => { vi.clearAllMocks(); });
 
-  it('a player the server has but the client lacks gets roster-seeded', () => {
+  it('a player the server has but the client lacks gets roster-seeded', (): void => {
     const { nm, ctx } = mk();
     driveSnapshot(ctx, [snap('ghost-1', { x: 1, y: 2, z: 3 }, 80, false)]);
     const p = nm.getPlayers().get('ghost-1');
@@ -55,25 +55,25 @@ describe('stateDebug snapshot heal', () => {
     expect(p!.health).toBe(80);
   });
 
-  it('a roster member the server dropped gets remoteDelete-d', () => {
+  it('a roster member the server dropped gets remoteDelete-d', (): void => {
     const { nm, ctx, remotePlayers } = mk();
     nm.upsertRemotePlayer('stale-1', { position: { x: 0, y: 0, z: 0 }, health: 100, isDead: false });
     remotePlayers.set('stale-1', {} as RemotePlayer);
     let removed: string | null = null;
-    (remotePlayers as StateDebugContext['remotePlayers']).remove = (id) => { removed = id; return true; };
+    (remotePlayers as StateDebugContext['remotePlayers']).remove = (id): true => { removed = id; return true; };
     driveSnapshot(ctx, []);
     expect(nm.getPlayers().has('stale-1'), 'stale member must be retired').toBe(false);
     expect(removed).toBe('stale-1');
   });
 
-  it('health diverges beyond tolerance → healRemoteHealth lands', () => {
+  it('health diverges beyond tolerance → healRemoteHealth lands', (): void => {
     const { nm, ctx } = mk();
     nm.upsertRemotePlayer('p1', { position: { x: 0, y: 0, z: 0 }, health: 100, isDead: false });
     driveSnapshot(ctx, [snap('p1', { x: 0, y: 0, z: 0 }, 40, false)]);
     expect(nm.getPlayers().get('p1')!.health).toBe(40);
   });
 
-  it('liveness flip mirrors into the entity', () => {
+  it('liveness flip mirrors into the entity', (): void => {
     const { nm, ctx, remotePlayers } = mk();
     nm.upsertRemotePlayer('p1', { position: { x: 0, y: 0, z: 0 }, health: 100, isDead: false });
     const rp = { respawn: vi.fn(), playDeath: vi.fn() } as unknown as RemotePlayer;
@@ -83,7 +83,7 @@ describe('stateDebug snapshot heal', () => {
     expect(rp.playDeath, 'dead flip must mirror to the entity').toHaveBeenCalled();
   });
 
-  it('matching-ish snapshot still heals but warns only on real diffs', () => {
+  it('matching-ish snapshot still heals but warns only on real diffs', (): void => {
     const { nm, ctx } = mk();
     nm.upsertRemotePlayer('p1', { position: { x: 0, y: 0, z: 0 }, health: 99, isDead: false });
     driveSnapshot(ctx, [

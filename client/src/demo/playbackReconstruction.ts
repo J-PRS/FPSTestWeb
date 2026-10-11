@@ -138,14 +138,14 @@ function reconstructSeekProjectile(world: PlaybackWorld, ev: ProjectileEvent, de
       const cfg = getProjectileConfig(ev.weaponType);
       const exp = new Explosion(scene, hitPos, false, 0, terrain, (cfg?.explosionRadius ?? 6) / 6, cfg?.damageColor);
       explosions.push(exp);
-      fastForward(seekTime - ev.timestamp, () => !exp.dead, (s) => exp.update(s));
+      fastForward(seekTime - ev.timestamp, (): boolean => !exp.dead, (s): void => exp.update(s));
     }
     return;
   }
 
   if (ev.eventType === ProjectileEventType.Fired) {
     const r = spawnPlaybackProjectile(world, ev);
-    fastForward(seekTime - ev.timestamp, () => !r.dead && !r.exploded, (s) => r.update(s, terrain));
+    fastForward(seekTime - ev.timestamp, (): boolean => !r.dead && !r.exploded, (s): void => r.update(s, terrain));
     return;
   }
 
@@ -154,7 +154,7 @@ function reconstructSeekProjectile(world: PlaybackWorld, ev: ProjectileEvent, de
     if (!r || r.exploded) {return;}
     r.pos.set(ev.posX, ev.posY, ev.posZ);
     r.vel.set(ev.velX, ev.velY, ev.velZ);
-    fastForward(seekTime - ev.timestamp, () => !r.dead && !r.exploded, (s) => r.update(s, terrain));
+    fastForward(seekTime - ev.timestamp, (): boolean => !r.dead && !r.exploded, (s): void => r.update(s, terrain));
   }
 }
 

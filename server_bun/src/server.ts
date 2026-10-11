@@ -42,7 +42,7 @@ rotateLogs();
 let wtCertHash: string | null = null;
 // requestIP binds lazily — `server` doesn't exist until Bun.serve below
 // returns, but no request can arrive before that.
-const httpCtx = { gameServer, demoStorage, rtcRelay, wtCertHash: () => wtCertHash, requestIP: (req: Request) => server.requestIP(req) };
+const httpCtx = { gameServer, demoStorage, rtcRelay, wtCertHash: (): string | null => wtCertHash, requestIP: (req: Request): Bun.SocketAddress | null => server.requestIP(req) };
 const ROUTES = makeRoutes(httpCtx);
 
 const server = Bun.serve<WebSocketData>({
@@ -54,31 +54,31 @@ const server = Bun.serve<WebSocketData>({
     data: {} as WebSocketData,
     maxPayloadLength: CONFIG.maxPayloadLength,
 
-    open(ws) {
+    open(ws): void {
       if (ws.data.rtc) { rtcRelay.onOpen(ws); return; }
       if (ws.data.rtcs) { rtcServer.onOpen(ws); return; }
       gameServer.onOpen(ws);
     },
 
-    message(ws, message) {
+    message(ws, message): void {
       if (ws.data.rtc) { rtcRelay.onMessage(ws, message as string | ArrayBuffer); return; }
       if (ws.data.rtcs) { rtcServer.onMessage(ws, message as string | ArrayBuffer); return; }
       gameServer.onMessage(ws, message as string | ArrayBuffer);
     },
 
-    close(ws) {
+    close(ws): void {
       if (ws.data.rtc) { rtcRelay.onClose(ws); return; }
       if (ws.data.rtcs) { rtcServer.onClose(ws); return; }
       gameServer.onClose(ws);
     },
 
-    drain(ws) {
+    drain(ws): void {
       if (ws.data.rtc || ws.data.rtcs) {return;}
       gameServer.onDrain(ws);
     },
   },
 
-  async fetch(req, srv) {
+  async fetch(req, srv): Promise<Response | undefined> {
     const url = new URL(req.url);
 
     // Handle CORS preflight
@@ -113,7 +113,7 @@ const server = Bun.serve<WebSocketData>({
     if (url.pathname === '/dev/shutdown') {
       const ip = server.requestIP(req)?.address;
       if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') {
-        setImmediate(() => shutdown());
+        setImmediate((): Promise<void> => shutdown());
         return corsResponse('shutting down', { status: 200 });
       }
       return corsResponse('loopback only', { status: 403 });
@@ -185,18 +185,18 @@ console.log(`RTC relay: ws://localhost:${CONFIG.port}/rtc?room=CODE`);
 // beats and serves the aggregated /rooms lobby list from `list`.
 const fleetReport = process.env.FPS_FLEET_REPORT;
 if (fleetReport) {
-  setInterval(() => {
+  setInterval((): void => {
     const rooms = [...gameServer.rooms.values()];
     fetch(fleetReport, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         port: CONFIG.port,
-        ccu: rooms.reduce((n, r) => n + r.playerCount() + r.spectators.size, 0),
-        rooms: rooms.map((r) => r.name),
+        ccu: rooms.reduce((n, r): number => n + r.playerCount() + r.spectators.size, 0),
+        rooms: rooms.map((r): string => r.name),
         list: gameServer.listRooms(),
       }),
-    }).catch(() => { /* matchmaker restarting — the next beat retries */ });
+    }).catch((): void => { /* matchmaker restarting — the next beat retries */ });
   }, 2000);
 }
 
@@ -204,10 +204,10 @@ if (fleetReport) {
 // sweeps) or a rejected promise must not drop every player in every room.
 // Room ticks have their own finer quarantine — whatever reaches here
 // bypassed it, so log at error level rather than swallowing silently.
-process.on('unhandledRejection', (reason) => {
+process.on('unhandledRejection', (reason): void => {
   logger.error('Unhandled rejection (process survived)', { err: reason instanceof Error ? reason.stack ?? reason.message : String(reason) });
 });
-process.on('uncaughtException', (e) => {
+process.on('uncaughtException', (e): void => {
   logger.error('Uncaught exception (process survived)', { err: e.stack ?? e.message });
 });
 
@@ -232,16 +232,16 @@ async function shutdown(): Promise<void> {
     gameServer.stop();
   } finally {
     // Exit is the contract — a handoff/stop failure must still die.
-    setTimeout(() => process.exit(0), 500).unref();
+    setTimeout((): never => process.exit(0), 500).unref();
   }
 }
 
-process.on('SIGINT', () => {
+process.on('SIGINT', (): void => {
   logger.info('SIGINT received, shutting down...');
   shutdown();
 });
 
-process.on('SIGTERM', () => {
+process.on('SIGTERM', (): void => {
   logger.info('SIGTERM received, shutting down...');
   shutdown();
 });

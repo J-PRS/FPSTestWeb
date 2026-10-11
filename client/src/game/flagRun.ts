@@ -144,7 +144,7 @@ export class FlagRunBridge {
       { x: around.x - half, z: around.z - half }, { x: around.x + half, z: around.z - half },
       { x: around.x + half, z: around.z + half }, { x: around.x - half, z: around.z + half },
     ];
-    raw.forEach((p, i) => {
+    raw.forEach((p, i): void => {
       const team: TeamId = i % 2 === 0 ? 'alpha' : 'bravo';
       const home = new THREE.Vector3(p.x, terrain.getHeight(p.x, p.z), p.z);
       this.corners.push(home);
@@ -190,22 +190,22 @@ export class FlagRunBridge {
   private async loadTasGhost(): Promise<void> {
     const terrain = this.deps.lazyTerrain();
     const scene = this.deps.lazyScene();
-    const data = await fetch('/assets/tas_paths.json').then(r => r.json()).catch(() => null);
+    const data = await fetch('/assets/tas_paths.json').then((r): Promise<any> => r.json()).catch((): null => null);
     if (!data) { this.w.onFeed('TAS ghost: no tas_paths.json — run .devin_tas.ts first.'); return; }
     const want = urlParams.get('tas');
     const key = want && want.includes('->') ? want : Object.keys(data)[0]!;
     const leg = data[key];
     if (!leg) { this.w.onFeed(`TAS ghost: no leg ${key} — have: ${Object.keys(data).join(' ')}`); return; }
-    this.tasPts = leg.samples.map((s: { x: number; z: number; agl: number }) =>
+    this.tasPts = leg.samples.map((s: { x: number; z: number; agl: number }): THREE.Vector3 =>
       new THREE.Vector3(s.x, terrain.getHeight(s.x, s.z) + s.agl, s.z));
-    this.tasJet = leg.samples.map((s: { j: number }) => s.j === 1);
+    this.tasJet = leg.samples.map((s: { j: number }): boolean => s.j === 1);
     // Real-sim proof: replay the recorded input tape (yaw + jetHeld, ski
     // held, forward) through a fresh MoveSim on the live terrain — the
     // SAME physics class the player/bot entities run — and fly the
     // marker on the re-simulated positions, not the recorded ones.
     const simPts: THREE.Vector3[] = [];
     const surface: MoveSurface = {
-      getHeight: (x, z) => terrain.getHeight(x, z),
+      getHeight: (x, z): number => terrain.getHeight(x, z),
       getNormal: (x, z, out) => { const n = terrain.getNormal(x, z); out.x = n.x; out.y = n.y; out.z = n.z; return out; },
     };
     const start2 = this.tasPts[0]!;
@@ -246,7 +246,7 @@ export class FlagRunBridge {
     // Carried-flag prop — the leg is a grab→cap flight, so the marker
     // needs the enemy standard on its back or it reads as a stray spark.
     const start = this.tasPts[0]!;
-    const src = this.flags.reduce((a, b) => a.home.distanceToSquared(start) < b.home.distanceToSquared(start) ? a : b);
+    const src = this.flags.reduce((a, b): CircuitFlag => a.home.distanceToSquared(start) < b.home.distanceToSquared(start) ? a : b);
     this.tasSrc = src;
     const prop = mkFlagMesh(src.team);
     prop.scale.setScalar(0.9);
@@ -323,7 +323,7 @@ export class FlagRunBridge {
   /** Spawn/respawn anchor — beside the nearest live enemy flag. */
   spawnPoint(): THREE.Vector3 | null {
     const p = this.playerPos;
-    if (!p) {return this.flags.find(f => f.team !== this.w.playerTeam)?.home ?? null;}
+    if (!p) {return this.flags.find((f): boolean => f.team !== this.w.playerTeam)?.home ?? null;}
     let best: THREE.Vector3 | null = null, bd = Infinity;
     for (const f of this.flags) {
       if (f.team === this.w.playerTeam || f.state === 'carried') {continue;}
@@ -379,9 +379,9 @@ this.eN += 1;
     // a bot capper (?bots=N on flagrun puts rostered cappers on the
     // circuit so a spectator can watch a run).
     const posOf = (id: string): THREE.Vector3 | null =>
-      id === 'local' ? player.pos : this.w.bots.find(b => b.playerId === id)?.position ?? null;
+      id === 'local' ? player.pos : this.w.bots.find((b): boolean => b.playerId === id)?.position ?? null;
     const deadOf = (id: string): boolean =>
-      id === 'local' ? player.isDead : this.w.bots.find(b => b.playerId === id)?.isDead ?? true;
+      id === 'local' ? player.isDead : this.w.bots.find((b): boolean => b.playerId === id)?.isDead ?? true;
     for (const f of this.flags) {
       if (f.state === 'carried') {
         const cPos = f.carrier ? posOf(f.carrier) : null;
@@ -471,11 +471,11 @@ this.eN += 1;
   }
 
   private friendlyHomes(team: TeamId): THREE.Vector3[] {
-    return this.flags.filter(f => f.team === team).map(f => f.home);
+    return this.flags.filter((f): boolean => f.team === team).map((f): THREE.Vector3 => f.home);
   }
 
   private setBotCarry(id: string | null, v: boolean): void {
-    const b = id ? this.w.bots.find(x => x.playerId === id) : undefined;
+    const b = id ? this.w.bots.find((x): boolean => x.playerId === id) : undefined;
     if (b) {b.carryingFlag = v;}
   }
 

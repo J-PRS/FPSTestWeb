@@ -13,7 +13,7 @@ export interface GibPart { mesh: THREE.SkinnedMesh; indices: number[] }
 
 export function buildGibParts(model: THREE.Group): GibPart[] | null {
   const out: GibPart[] = [];
-  model.traverse((o) => {
+  model.traverse((o): void => {
     const sk = o as THREE.SkinnedMesh;
     if (!sk.isSkinnedMesh) {return;}
     const geo = sk.geometry;

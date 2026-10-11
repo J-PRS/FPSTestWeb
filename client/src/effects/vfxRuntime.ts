@@ -355,10 +355,10 @@ function shrinkPools(now: number): void {
     const all: Entry[] = [];
     for (const pool of pools.values())
       {for (const e of pool) {all.push({ ps: e.ps, idleAt: e.idleAt, pool });}}
-    all.sort((a, b) => a.idleAt - b.idleAt);
+    all.sort((a, b): number => a.idleAt - b.idleAt);
     for (let i = 0; i < all.length - POOL_MAX_TOTAL; i += 1) {
       const e = all[i]!;
-      const idx = e.pool.findIndex(x => x.ps === e.ps);
+      const idx = e.pool.findIndex((x): boolean => x.ps === e.ps);
       if (idx !== -1) {e.pool.splice(idx, 1);}
       retirePooled(e.ps);
     }
@@ -500,8 +500,8 @@ roll.pools += 1;
     roll.depth += v.length;
     top.push({ k, n: v.length });
   }
-  top.sort((a, b) => b.n - a.n);
-  const topPools = top.slice(0, 8).map(t => `${t.n}x ${t.k.slice(0, 80)}`);
+  top.sort((a, b): number => b.n - a.n);
+  const topPools = top.slice(0, 8).map((t): string => `${t.n}x ${t.k.slice(0, 80)}`);
   let paused = 0, pooledN = 0;
   if (batcher) {
     for (const ps of batcher.systemToBatchIndex.keys()) {

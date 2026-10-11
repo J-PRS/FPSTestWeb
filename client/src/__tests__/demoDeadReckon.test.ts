@@ -22,10 +22,10 @@ function rec(): { r: DemoRecorder; p: IPlayerDataProvider; i: IInputProvider } {
 }
 
 // dt must exceed tickInterval — equal-to-interval hits FP-boundary misses.
-const tick = (r: DemoRecorder) => r.update(0.02);
+const tick = (r: DemoRecorder): void => r.update(0.02);
 
-describe('DemoRecorder dead-reckon', () => {
-  it('skips bit-identical frames, writes on any drift', () => {
+describe('DemoRecorder dead-reckon', (): void => {
+  it('skips bit-identical frames, writes on any drift', (): void => {
     const { r, p } = rec();
     tick(r); tick(r); tick(r);
     expect(r.frameCount).toBe(1); // 2nd/3rd identical → skipped
@@ -40,7 +40,7 @@ describe('DemoRecorder dead-reckon', () => {
     expect(r.frameCount).toBe(3);
   });
 
-  it('deadReckon=false records verbatim', () => {
+  it('deadReckon=false records verbatim', (): void => {
     const { r } = rec();
     r.deadReckon = false;
     for (let k = 0; k < 5; k += 1) {tick(r);}

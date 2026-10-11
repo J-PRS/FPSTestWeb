@@ -39,7 +39,7 @@ export class WebTransportGameTransport implements GameTransport {
 
   connect(): void {
     const {wt} = this;
-    wt.ready.then(async () => {
+    wt.ready.then(async (): Promise<void> => {
       this.open = true;
       // Reliable JSON lane: one bidi stream, newline-delimited frames.
       const stream = await wt.createBidirectionalStream();
@@ -52,10 +52,10 @@ export class WebTransportGameTransport implements GameTransport {
       this.dr = wt.datagrams.readable.getReader();
       this.pumpReliable(this.rr);
       this.pumpDatagrams(this.dr);
-      for (const d of this.preOpen) {this.writer.write(this.encoder.encode(`${d  }\n`)).catch(() => { return; });}
+      for (const d of this.preOpen) {this.writer.write(this.encoder.encode(`${d  }\n`)).catch((): void => { return; });}
       this.preOpen.length = 0;
       this.config.onConnect?.();
-    }).catch((error) => {
+    }).catch((error): void => {
       logger.warn(`wt connect failed mid-setup: ${error instanceof Error ? `${error.name} ${error.message}` : String(error)}`);
       this.config.onError?.(error instanceof Error ? error : new Error(String(error)));
       this.config.onDisconnect?.(1006, 'webtransport failed');
@@ -63,8 +63,8 @@ export class WebTransportGameTransport implements GameTransport {
     // wt.closed REJECTS on abnormal close — an unhandled rejection for
     // every failed probe (the log-spam bug). Rejection = closed.
     wt.closed.then(
-      () => this.declareDead('webtransport closed'),
-      (error) => this.declareDead(`webtransport closed: ${error instanceof Error ? `${error.name} ${error.message}` : String(error)}`),
+      (): void => this.declareDead('webtransport closed'),
+      (error): void => this.declareDead(`webtransport closed: ${error instanceof Error ? `${error.name} ${error.message}` : String(error)}`),
     );
   }
 
@@ -117,7 +117,7 @@ export class WebTransportGameTransport implements GameTransport {
       this.openBinLane();
     }
     if (m.type === 'bin' && typeof (m as { d?: string }).d === 'string') {
-      this.config.onBinaryMessage?.(Uint8Array.from(atob((m as { d: string }).d), (c) => c.charCodeAt(0)));
+      this.config.onBinaryMessage?.(Uint8Array.from(atob((m as { d: string }).d), (c): number => c.charCodeAt(0)));
     } else {
       this.config.onMessage?.(m as ServerMessage);
     }
@@ -128,7 +128,7 @@ export class WebTransportGameTransport implements GameTransport {
       const stream = await this.wt.createBidirectionalStream();
       // A second stream could have been opened by a later gameState
       // (resync replays the caps) — keep the first, drop the extra.
-      if (this.binStream) { stream.readable.cancel().catch(() => { return; }); stream.writable.close().catch(() => { return; }); return; }
+      if (this.binStream) { stream.readable.cancel().catch((): void => { return; }); stream.writable.close().catch((): void => { return; }); return; }
       this.binStream = stream;
       const rr = stream.readable.getReader();
       let carry = new Uint8Array(0);
@@ -177,20 +177,20 @@ export class WebTransportGameTransport implements GameTransport {
     // the reliable stream (enveloped).
     if (data instanceof Uint8Array && data.byteLength <= WT_MAX_DATAGRAM) {
       if (this.dgWriter) {
-        this.dgWriter.write(data).catch(() => { return; });
+        this.dgWriter.write(data).catch((): void => { return; });
         return true;
       }
     }
     // Binary must be enveloped too — decoding arbitrary bytes as UTF-8
     // mangled them before this ever worked.
     const payload = typeof data === 'string' ? data
-      : `{"type":"bin","d":"${btoa(Array.from(data, (b) => String.fromCharCode(b)).join(''))}"}`;
+      : `{"type":"bin","d":"${btoa(Array.from(data, (b): string => String.fromCharCode(b)).join(''))}"}`;
     // onConnect fires only after the stream is live, but a same-tick send
     // can still race the writer assignment — hold those briefly.
     if (!this.writer) { this.preOpen.push(payload); return true; }
     // A write can outlive the session — teardown rejects it; that's a
     // normal close, not an error.
-    this.writer.write(this.encoder.encode(`${payload  }\n`)).catch((error) => {
+    this.writer.write(this.encoder.encode(`${payload  }\n`)).catch((error): void => {
       logger.warn(`wt reliable write failed: ${error instanceof Error ? `${error.name} ${error.message}` : String(error)}`);
     });
     return true;
@@ -223,17 +223,17 @@ export async function tryWebTransport(config: ConnectionConfig): Promise<GameTra
     // dies with ERR_CONNECTION_RESET before the handshake starts.
     const rawHost = new URL(httpBase).hostname;
     const host = rawHost === 'localhost' ? '127.0.0.1' : rawHost;
-    const hashBytes = Uint8Array.from(atob(info.sha256), (c) => c.charCodeAt(0));
+    const hashBytes = Uint8Array.from(atob(info.sha256), (c): number => c.charCodeAt(0));
     const wt = new WebTransport(`https://${host}:${info.port}`, {
       serverCertificateHashes: [{ algorithm: 'sha-256', value: hashBytes }],
     });
     // Failed probes leave wt.closed rejected with no subscriber —
     // unhandledrejection noise. Swallow it here; the winning session's
     // close is handled by WebTransportGameTransport's own subscription.
-    wt.closed.catch(() => { return; });
+    wt.closed.catch((): void => { return; });
     try {
       // The probe IS the session — don't handshake twice.
-      await Promise.race([wt.ready, new Promise((_, rej) => setTimeout(rej, 3000))]);
+      await Promise.race([wt.ready, new Promise((_, rej): NodeJS.Timeout => setTimeout(rej, 3000))]);
     } catch {
       // A losing probe otherwise leaks a pending session (Chrome caps at
       // 64 — reconnects exhausted it before the miss cache existed).

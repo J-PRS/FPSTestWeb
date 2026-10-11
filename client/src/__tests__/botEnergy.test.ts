@@ -4,7 +4,7 @@ import { ENERGY } from '../../../shared/movement.js';
 import { STATUS } from '../../../shared/status.js';
 import type { GameBot } from '../game/bots/botBrain.js';
 
-const mkBot = (energy = 100) => ({
+const mkBot = (energy = 100): GameBot => ({
   status: 0,
   energy,
   energyCap: 100,
@@ -22,15 +22,15 @@ const mkBot = (energy = 100) => ({
   setCloakGhosted: vi.fn(),
 }) as unknown as GameBot;
 
-describe('applyStatus', () => {
-  it('rising-edge activation costs are paid per bit', () => {
+describe('applyStatus', (): void => {
+  it('rising-edge activation costs are paid per bit', (): void => {
     const b = mkBot(100);
     applyStatus(b, STATUS.MEND | STATUS.SHIELD, 0.1);
     expect(b.status).toBe(STATUS.MEND | STATUS.SHIELD);
     expect(b.energy).toBeCloseTo(100 - ENERGY.mendCost - ENERGY.shieldCost - ENERGY.mendDrain * 0.1 - ENERGY.shieldDrain * 0.1, 5);
   });
 
-  it('holding a bit across calls charges no activation again', () => {
+  it('holding a bit across calls charges no activation again', (): void => {
     const b = mkBot(100);
     applyStatus(b, STATUS.MEND, 0.1);
     const afterFirst = b.energy;
@@ -38,13 +38,13 @@ describe('applyStatus', () => {
     expect(afterFirst - b.energy).toBeCloseTo(ENERGY.mendDrain * 0.1, 5);
   });
 
-  it('unaffordable bits are silently dropped from the claim', () => {
+  it('unaffordable bits are silently dropped from the claim', (): void => {
     const b = mkBot(5); // below every activation cost
     applyStatus(b, STATUS.MEND | STATUS.SHIELD | STATUS.CLOAK, 0.1);
     expect(b.status).toBe(0);
   });
 
-  it('a held drain that empties the tank drops the skill', () => {
+  it('a held drain that empties the tank drops the skill', (): void => {
     const b = mkBot(ENERGY.mendCost + 1); // barely affords the activation
     applyStatus(b, STATUS.MEND, 0.1); // pays cost + drains — starving the same call drops it
     expect(b.status & STATUS.MEND).toBe(0);
@@ -58,14 +58,14 @@ describe('applyStatus', () => {
     expect(c.setMending).toHaveBeenLastCalledWith(false);
   });
 
-  it('mend channel heals at the server rate and clamps at max hp', () => {
+  it('mend channel heals at the server rate and clamps at max hp', (): void => {
     const b = mkBot(100);
     b.botHp = 95;
     applyStatus(b, STATUS.MEND, 1);
     expect(b.botHp).toBe(100);
   });
 
-  it('cloak drain scales with horizontal speed', () => {
+  it('cloak drain scales with horizontal speed', (): void => {
     const slow = mkBot(100);
     const fast = mkBot(100);
     fast.velocity.x = ENERGY.cloakDrainSpeedMps; // max-drain speed
@@ -74,15 +74,15 @@ describe('applyStatus', () => {
     expect(fast.energy).toBeLessThan(slow.energy);
   });
 
-  it('non-status bits in the claim never latch', () => {
+  it('non-status bits in the claim never latch', (): void => {
     const b = mkBot(100);
     applyStatus(b, STATUS.MEND | 0x4_00, 0.1);
     expect(b.status & 0x4_00).toBe(0);
   });
 });
 
-describe('dropSkill', () => {
-  it('clears the bit and the matching visual flag', () => {
+describe('dropSkill', (): void => {
+  it('clears the bit and the matching visual flag', (): void => {
     const b = mkBot();
     b.status = STATUS.SHIELD;
     dropSkill(b, STATUS.SHIELD);
@@ -91,8 +91,8 @@ describe('dropSkill', () => {
   });
 });
 
-describe('fuelTick', () => {
-  it('jets drain while thrusting; regen applies anywhere off throttle', () => {
+describe('fuelTick', (): void => {
+  it('jets drain while thrusting; regen applies anywhere off throttle', (): void => {
     const b = mkBot(50);
     fuelTick(b, 1, true);
     expect(b.energy).toBeCloseTo(50 - ENERGY.jetDrain, 5);
@@ -106,7 +106,7 @@ describe('fuelTick', () => {
     expect(c.energy).toBeCloseTo(50 + ENERGY.jetCharge, 5);
   });
 
-  it('regens toward the cap; a held channel suppresses regen', () => {
+  it('regens toward the cap; a held channel suppresses regen', (): void => {
     const b = mkBot(50);
     fuelTick(b, 1, false);
     expect(b.energy).toBeCloseTo(50 + ENERGY.jetCharge, 5);

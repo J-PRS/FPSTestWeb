@@ -143,7 +143,7 @@ export class RoomFlags {
     // home rides every snapshot — the stand mesh + socket marker are
     // placed from it, including by clients who join mid-run while the
     // flag itself is away (a 'home'-state pos alone can't tell them).
-    return [...this.flags.values()].filter((f) => f.state !== 'unspawned').map((f) => rosterRow(WORLD_MODEL.flag!, 'team', f.team, {
+    return [...this.flags.values()].filter((f): boolean => f.state !== 'unspawned').map((f) => rosterRow(WORLD_MODEL.flag!, 'team', f.team, {
       pos: Object.assign({}, f.pos), home: Object.assign({}, f.home),
       // 'unspawned' is filtered above — the wire union only knows live states.
       state: f.state, carrier: f.carrier,

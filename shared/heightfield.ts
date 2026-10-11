@@ -121,8 +121,8 @@ export function hmScaled(f: Heightfield, heightScale: number, worldScale?: numbe
  *  structure solids (FieldSurface); bots and tools use it bare. */
 export function hmSurface(f: Heightfield): { getHeight(x: number, z: number): number; getNormal(x: number, z: number, out: { x: number; y: number; z: number }): { x: number; y: number; z: number } } {
   return {
-    getHeight: (x, z) => hmHeight(f, x, z),
-    getNormal: (x, z, out) => { hmNormal(f, x, z, out); return out; },
+    getHeight: (x, z): number => hmHeight(f, x, z),
+    getNormal: (x, z, out): { x: number; y: number; z: number; } => { hmNormal(f, x, z, out); return out; },
   };
 }
 

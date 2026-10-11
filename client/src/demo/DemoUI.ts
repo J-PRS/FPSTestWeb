@@ -53,14 +53,14 @@ export class DemoUI {
     this.playBtn.textContent = '▶';
     this.playBtn.style.cssText = this.btnStyle('#333');
     this.playBtn.title = 'Play/Pause';
-    this.playBtn.addEventListener('click', () => this.callbacks?.onPlayPause());
+    this.playBtn.addEventListener('click', (): void | undefined => this.callbacks?.onPlayPause());
 
     // Stop button
     this.stopBtn = document.createElement('button');
     this.stopBtn.textContent = '■';
     this.stopBtn.style.cssText = this.btnStyle('#333');
     this.stopBtn.title = 'Stop';
-    this.stopBtn.addEventListener('click', () => this.callbacks?.onStop());
+    this.stopBtn.addEventListener('click', (): void | undefined => this.callbacks?.onStop());
 
     this.initTimeline();
 
@@ -76,7 +76,7 @@ export class DemoUI {
     loadBtn.textContent = 'Load';
     loadBtn.style.cssText = this.btnStyle('#2a3a5a');
     loadBtn.title = 'Load demo from file';
-    loadBtn.addEventListener('click', () => this.loadInput.click());
+    loadBtn.addEventListener('click', (): void => this.loadInput.click());
 
     // Status label
     this.statusLabel = document.createElement('span');

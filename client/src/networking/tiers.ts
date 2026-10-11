@@ -30,14 +30,14 @@ export interface TierOpts { net?: string }
 function muteable(config: ConnectionConfig): { config: ConnectionConfig; arm(): void } {
   let armed = false;
   const wrapped: Partial<ConnectionConfig> = {
-    onConnect: () => { if (armed) {config.onConnect?.();} },
-    onDisconnect: (c, r) => { if (armed) {config.onDisconnect?.(c, r);} },
-    onError: (e) => { if (armed) {config.onError?.(e);} },
-    onMessage: (m) => { if (armed) {config.onMessage?.(m);} },
-    onBinaryMessage: (b) => { if (armed) {config.onBinaryMessage?.(b);} },
+    onConnect: (): void => { if (armed) {config.onConnect?.();} },
+    onDisconnect: (c, r): void => { if (armed) {config.onDisconnect?.(c, r);} },
+    onError: (e): void => { if (armed) {config.onError?.(e);} },
+    onMessage: (m): void => { if (armed) {config.onMessage?.(m);} },
+    onBinaryMessage: (b): void => { if (armed) {config.onBinaryMessage?.(b);} },
   };
   return {
-    arm() { armed = true; },
+    arm(): void { armed = true; },
     config: Object.assign({}, config, wrapped),
   };
 }
@@ -55,8 +55,8 @@ export async function connectGameTransport(config: ConnectionConfig, opts?: Tier
   const wtC = muteable(config);
   const rtcC = muteable(config);
   const [wt, rtc] = await Promise.all([
-    probeWt ? tryWebTransport(wtC.config).catch(() => null) : null,
-    probeRtc ? tryWebRTC(rtcC.config).catch(() => null) : null,
+    probeWt ? tryWebTransport(wtC.config).catch((): null => null) : null,
+    probeRtc ? tryWebRTC(rtcC.config).catch((): null => null) : null,
   ]);
   // Only an actual probe refreshes the miss window — a skipped probe must
   // not extend the cache or the tier never gets retried.
@@ -106,37 +106,37 @@ class ServerRtcTransport implements GameTransport {
     private ctrl?: RTCDataChannel,
   ) {
     dc.binaryType = 'arraybuffer';
-    dc.addEventListener('message', (ev) => {
+    dc.addEventListener('message', (ev): void => {
       const {data} = ev;
       if (data instanceof ArrayBuffer) {config.onBinaryMessage?.(new Uint8Array(data));}
       else if (typeof data === 'string') {
         try { config.onMessage?.(JSON.parse(data)); } catch { /* malformed */ }
       }
     });
-    dc.addEventListener('open', () => { this.open = true; config.onConnect?.(); });
+    dc.addEventListener('open', (): void => { this.open = true; config.onConnect?.(); });
     // Two lanes share one SCTP association — the server counts the seat
     // live while EITHER is open (RtcSocketAdapter.readyState), so a
     // single-lane close must not flap the whole session. Only declare
     // disconnect when nothing is left to talk on.
-    dc.addEventListener('close', () => this.checkDead('game'));
-    ctrl?.addEventListener('close', () => this.checkDead('ctrl'));
+    dc.addEventListener('close', (): void => this.checkDead('game'));
+    ctrl?.addEventListener('close', (): void => this.checkDead('ctrl'));
     // ICE watchdog lives here (was in tryWebRTC): it calls declareDead
     // directly, so a dead association reconnects even if the datachannel
     // 'close' events never dispatch — 'disconnected' is a grace state
     // that often recovers; 'failed'/'closed' are terminal.
-    pc?.addEventListener('iceconnectionstatechange', () => {
+    pc?.addEventListener('iceconnectionstatechange', (): void => {
       logger.warn(`rtc ice: ${pc.iceConnectionState}`);
       const s = pc.iceConnectionState;
       if (s === 'failed' || s === 'closed') {
         this.killLanes(`ice ${s}`);
       } else if (s === 'disconnected') {
-        setTimeout(() => {
+        setTimeout((): void => {
           const now = pc.iceConnectionState;
           if (now === 'disconnected' || now === 'failed') {this.killLanes(`ice ${now}`);}
         }, 2500);
       }
     });
-    ctrl?.addEventListener('message', (ev) => {
+    ctrl?.addEventListener('message', (ev): void => {
       const {data} = ev;
       // Binary CAN arrive here — the server pushes ball segments down the
       // reliable lane, which is this channel on RTC. Dropping them was a
@@ -150,7 +150,7 @@ class ServerRtcTransport implements GameTransport {
   connect(): void {
     if (this.dc.readyState === 'open') {
       this.open = true;
-      queueMicrotask(() => this.config.onConnect?.());
+      queueMicrotask((): void | undefined => this.config.onConnect?.());
     }
   }
   send(data: string | Uint8Array): boolean {
@@ -219,9 +219,9 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
     // deployment property, not a client constant; LAN/dev needs neither.
     const httpBase = config.url.replace(/^wss?:/, `http${  config.url.startsWith('wss') ? 's' : ''  }:`).replace(/\/ws$/, '');
     const iceServers = await fetch(`${httpBase}/rtcconfig`, { signal: AbortSignal.timeout(4000) })
-      .then((r) => r.json())
+      .then((r): Promise<any> => r.json())
       .then((j) => (Array.isArray(j?.iceServers) ? j.iceServers : []))
-      .catch(() => []);
+      .catch((): never[] => []);
     pc = new RTCPeerConnection({ iceServers });
     const conn = pc;
     // Lane split: 'game' is unordered with bounded retransmits — it carries
@@ -240,33 +240,33 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
     const offer = await conn.createOffer();
     await conn.setLocalDescription(offer);
     if (conn.iceGatheringState !== 'complete') {
-      await new Promise<void>((res) => {
+      await new Promise<void>((res): void => {
         const t = setTimeout(res, 2500);
-        conn.addEventListener('icegatheringstatechange', () => {
+        conn.addEventListener('icegatheringstatechange', (): void => {
           if (conn.iceGatheringState === 'complete') { clearTimeout(t); res(); }
         });
       });
     }
     const sdp = conn.localDescription?.sdp ?? offer.sdp;
-    const answer = await new Promise<RTCSessionDescriptionInit>((res, rej) => {
+    const answer = await new Promise<RTCSessionDescriptionInit>((res, rej): void => {
       // Server gathers its own ICE (STUN) before answering — that window
       // is seconds, so a LAN-era 3s timeout would always fall back to ws
       // for internet peers. 10s covers a slow srflx gather.
-      const timer = setTimeout(() => rej(new Error('rtc signal timeout')), 10_000);
-      signal.addEventListener('message', (ev) => {
+      const timer = setTimeout((): void => rej(new Error('rtc signal timeout')), 10_000);
+      signal.addEventListener('message', (ev): void => {
         try {
           const m = JSON.parse(ev.data);
           if (m.type === 'answer') { clearTimeout(timer); res(m); }
         } catch { /* not ours */ }
       });
-      signal.addEventListener('error', () => rej(new Error('rtc signal error')));
+      signal.addEventListener('error', (): void => rej(new Error('rtc signal error')));
       // The signal ws can already be OPEN here — it connected while we
       // were awaiting createOffer+ICE gather, so 'open' never refires and
       // the probe would sit out its 3s timeout. Send immediately when so.
       if (signal.readyState === WebSocket.OPEN) {
         signal.send(JSON.stringify({ type: 'offer', sdp }));
       } else {
-        signal.addEventListener('open', () => signal.send(JSON.stringify({ type: 'offer', sdp })));
+        signal.addEventListener('open', (): void => signal.send(JSON.stringify({ type: 'offer', sdp })));
       }
     });
     await conn.setRemoteDescription(answer);
@@ -283,7 +283,7 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
     const s = signalRef;
     if (s && s.readyState !== WebSocket.CLOSED && s.readyState !== WebSocket.CLOSING) {
       if (s.readyState === WebSocket.OPEN) {s.close();}
-      else {s.addEventListener('open', () => s.close(), { once: true });}
+      else {s.addEventListener('open', (): void => s.close(), { once: true });}
     }
     return null;
   }
@@ -333,7 +333,7 @@ export class TieredTransport implements GameTransport {
     // Inner transports see wrapped callbacks — a drop re-arms the probe
     // here, mirroring WebSocketConnection's own reconnect loop so a WT/RTC
     // session survives a blip instead of dying on first packet loss.
-    const innerConfig: ConnectionConfig = Object.assign({}, this.config, {onDisconnect: (code?: number, reason?: string) => {
+    const innerConfig: ConnectionConfig = Object.assign({}, this.config, {onDisconnect: (code?: number, reason?: string): void => {
         // Stale generation — a losing probe's teardown or a superseded
         // attempt's timer. Forward nothing, schedule nothing.
         if (gen !== this.gen) {return;}
@@ -352,23 +352,23 @@ export class TieredTransport implements GameTransport {
         if (this.inner instanceof WebSocketConnection) {return;}
         if (this.attempts < (this.config.maxReconnectAttempts ?? Infinity)) {
 this.attempts += 1;
-          this.reconnectTimer = setTimeout(() => {
+          this.reconnectTimer = setTimeout((): void => {
             if (!this.closed && this.gen === gen) {this.connect(this.url);}
           }, TieredTransport.BACKOFF_MS);
         }
-      },onConnect: () => {
+      },onConnect: (): void => {
         if (gen !== this.gen) {return;}
         this.attempts = 0;
         this.connectedAt = Date.now();
         this.config.onConnect?.();
-      },onMessage: (data: ServerMessage) => { if (gen === this.gen) {this.config.onMessage?.(data);} },onBinaryMessage: (data: Uint8Array) => { if (gen === this.gen) {this.config.onBinaryMessage?.(data);} }});
-    connectGameTransport(innerConfig, this.opts).then((t) => {
+      },onMessage: (data: ServerMessage): void => { if (gen === this.gen) {this.config.onMessage?.(data);} },onBinaryMessage: (data: Uint8Array): void => { if (gen === this.gen) {this.config.onBinaryMessage?.(data);} }});
+    connectGameTransport(innerConfig, this.opts).then((t): void => {
       if (this.closed || gen !== this.gen) { t.disconnect(); return; }
       this.inner = t;
       t.connect(url);
       for (const d of this.pending) {t.send(d);}
       this.pending.length = 0;
-    }).catch((error) => {
+    }).catch((error): void => {
       if (gen !== this.gen) {return;}
       this.config.onError?.(error instanceof Error ? error : new Error(String(error)));
     });
@@ -386,7 +386,7 @@ this.attempts += 1;
       return true;
     }
     if (data instanceof Uint8Array) {
-      this.pending = this.pending.filter(m => !(m instanceof Uint8Array));
+      this.pending = this.pending.filter((m): boolean => !(m instanceof Uint8Array));
     }
     if (this.pending.length < 100) {this.pending.push(data);}
     return false;

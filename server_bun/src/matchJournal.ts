@@ -80,7 +80,7 @@ row.matches += 1;
         }
       }
     } catch { /* no journal yet — empty leaderboard */ }
-    const rows = [...agg.values()].toSorted((a, b) => b.wins - a.wins || b.kills - a.kills);
+    const rows = [...agg.values()].toSorted((a, b): number => b.wins - a.wins || b.kills - a.kills);
     if (size >= 0) {this.statsCache = { size, rows };}
     return rows;
   }

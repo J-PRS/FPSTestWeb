@@ -120,7 +120,7 @@ function sparkAlloc(scene: THREE.Scene, n: number): { batch: SparkBatch; base: n
   // not a side effect: free-list splices are only kept when they fit.
   let hit: SparkBatch | undefined = undefined;
   let base = -1;
-  const batch = acquireBatch(sparkBatches, scene, s => new SparkBatch(s), b => {
+  const batch = acquireBatch(sparkBatches, scene,( s): SparkBatch => new SparkBatch(s),( b): boolean => {
     base = b.alloc(n);
     if (base < 0) {return false;}
     hit = b;
@@ -132,7 +132,7 @@ function sparkAlloc(scene: THREE.Scene, n: number): { batch: SparkBatch; base: n
 
 function sparkRelease(batch: SparkBatch, scene: THREE.Scene, start: number, n: number): void {
   batch.release(start, n);
-  retireBatch(sparkBatches, scene, batch, b => b.used === 0, b => b.dispose());
+  retireBatch(sparkBatches, scene, batch,( b): boolean => b.used === 0,( b): void => b.dispose());
 }
 
 export class ExplosionSparks {

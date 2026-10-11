@@ -13,8 +13,8 @@ function sample(buf: SnapshotBuffer, fallback = _pos): { pos: THREE.Vector3; rot
   return { pos: p, rot: r };
 }
 
-describe('SnapshotBuffer', () => {
-  it('interpolates between the two snapshots bracketing renderTime', () => {
+describe('SnapshotBuffer', (): void => {
+  it('interpolates between the two snapshots bracketing renderTime', (): void => {
     const buf = new SnapshotBuffer();
     const now = Date.now();
     // 100ms-cadence stream — delay covers one interval, so renderTime
@@ -28,7 +28,7 @@ describe('SnapshotBuffer', () => {
     expect(pos.x).toBeLessThan(1.2);
   });
 
-  it('extrapolates bounded past the newest snapshot instead of freezing', () => {
+  it('extrapolates bounded past the newest snapshot instead of freezing', (): void => {
     const buf = new SnapshotBuffer();
     const now = Date.now();
     buf.push(now - 400, {x:0,y:0,z:0}, {yaw:0,pitch:0}, {x:10,y:0,z:0});
@@ -41,7 +41,7 @@ describe('SnapshotBuffer', () => {
     expect(pos.x).toBeLessThan(1);
   });
 
-  it('covers a tier-suppressed stream instead of freezing on the clamp', () => {
+  it('covers a tier-suppressed stream instead of freezing on the clamp', (): void => {
     const buf = new SnapshotBuffer();
     const now = Date.now();
     // Interest-tier suppression: snapshots at ~500ms spacing (tier 10).
@@ -57,7 +57,7 @@ describe('SnapshotBuffer', () => {
     expect(pos.x).toBeLessThan(60);
   });
 
-  it('caps extrapolation at MAX_EXTRAPOLATE no matter how stale', () => {
+  it('caps extrapolation at MAX_EXTRAPOLATE no matter how stale', (): void => {
     const buf = new SnapshotBuffer();
     const now = Date.now();
     // Stale feed: last packet arrived 5s ago (arriveMs), same server time.
@@ -67,7 +67,7 @@ describe('SnapshotBuffer', () => {
     expect(pos.x).toBeCloseTo(2.5, 1);
   });
 
-  it('falls back to the target position with an empty buffer', () => {
+  it('falls back to the target position with an empty buffer', (): void => {
     const buf = new SnapshotBuffer();
     const fb = new THREE.Vector3(7, 8, 9);
     const { pos } = sample(buf, fb);
@@ -75,7 +75,7 @@ describe('SnapshotBuffer', () => {
     expect(pos.y).toBe(8);
   });
 
-  it('recycles snapshots on clear without losing state', () => {
+  it('recycles snapshots on clear without losing state', (): void => {
     const buf = new SnapshotBuffer();
     const now = Date.now();
     buf.push(now - 150, {x:1,y:2,z:3}, {yaw:0,pitch:0}, {x:0,y:0,z:0});
@@ -91,7 +91,7 @@ describe('SnapshotBuffer', () => {
     expect(pos.x).toBeLessThan(7);
   });
 
-  it('keeps the render clock and timeline monotonic on reordered packets', () => {
+  it('keeps the render clock and timeline monotonic on reordered packets', (): void => {
     const buf = new SnapshotBuffer();
     const now = Date.now();
     // In-order history, then a datagram-lane reorder: an old snapshot
@@ -110,7 +110,7 @@ describe('SnapshotBuffer', () => {
     expect(buf.size).toBe(3);
   });
 
-  it('re-anchors the render clock after clear() on a rewound server clock', () => {
+  it('re-anchors the render clock after clear() on a rewound server clock', (): void => {
     const buf = new SnapshotBuffer();
     const now = Date.now();
     // Old room's epoch: high tick times.
@@ -127,7 +127,7 @@ describe('SnapshotBuffer', () => {
     expect(pos.x).toBeLessThan(10);
   });
 
-  it('speed-scales the interp delay — fast movers never ride a 500ms cushion', () => {
+  it('speed-scales the interp delay — fast movers never ride a 500ms cushion', (): void => {
     const fast = new SnapshotBuffer();
     const walk = new SnapshotBuffer();
     const now = Date.now();
@@ -146,7 +146,7 @@ describe('SnapshotBuffer', () => {
     expect(walk.interpDelay).toBeGreaterThan(250);
   });
 
-  it('keeps the yaw lerp on the shortest arc across ±PI', () => {
+  it('keeps the yaw lerp on the shortest arc across ±PI', (): void => {
     const buf = new SnapshotBuffer();
     const now = Date.now();
     // Snap pair wrapping through PI: -3.0 → +3.0 should pass through ±PI,

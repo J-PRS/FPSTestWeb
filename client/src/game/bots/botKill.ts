@@ -46,7 +46,7 @@ export function hurtLocal(b: TeamBots, dmg: number, fromPos: THREE.Vector3, atta
     // offline AND online (predicted blast + this knock + the deduped
     // wire echo read as a blink). Blastless hits (bolts, melee) keep it.
     const blastPays = opts.weapon !== undefined && getWeaponStats(opts.weapon).aoeRadius > 0;
-    const knock = () => { if (!blastPays) {p.applyKnockback(fromPos, (opts.melee ? 6 : 4) * p.mods.knockbackTaken);} };
+    const knock = (): void => { if (!blastPays) {p.applyKnockback(fromPos, (opts.melee ? 6 : 4) * p.mods.knockbackTaken);} };
     // Connected room: health is server truth. A local write gets stomped
     // by the next yourHealth echo — report through the self-damage channel
     // (same as creature melee) and let the wire echo apply it. Feedback
@@ -139,14 +139,14 @@ export function botSay(id: string, line: string | null, vgs?: string, team?: boo
     // Chatter is transient like debris/audio — while hidden the timers
     // still fire but nothing queues, so alt-tab returns to a live feed,
     // not a burst of stale taunts (same rule the fx classes follow).
-    const t = setTimeout(() => { sayTimers.delete(t); if (!document.hidden) {chatSink.add?.(name, line, team, vgs);} }, delay);
+    const t = setTimeout((): void => { sayTimers.delete(t); if (!document.hidden) {chatSink.add?.(name, line, team, vgs);} }, delay);
     sayTimers.add(t);
     // VGS-combo intent — a rare second chord timed to hard-cut the first
     // sample mid-word ("I am the— SHAZBOT!"). Tails are global-scope
     // chords, so they land wherever the starter did.
     const tail = vgs ? comboTailFor(vgs) : undefined;
     if (tail) {
-      const cut = setTimeout(() => { sayTimers.delete(cut); if (!document.hidden) {chatSink.add?.(name, tail.text, false, tail.chord);} }, delay + comboCutDelayMs(line));
+      const cut = setTimeout((): void => { sayTimers.delete(cut); if (!document.hidden) {chatSink.add?.(name, tail.text, false, tail.chord);} }, delay + comboCutDelayMs(line));
       sayTimers.add(cut);
     }
   }
@@ -225,7 +225,7 @@ function killChatter(b: TeamBots, killerId: string, bot: GameBot, weapon?: numbe
       if (c) {
         botSay(bot.playerId, c.text, c.vgs, c.team);
         if (killerId !== 'local' && tauntRand() < 0.5) {
-          setTimeout(() => { // the thanks beat — only lands if the killer didn't gloat
+          setTimeout((): void => { // the thanks beat — only lands if the killer didn't gloat
             const t = chatter('thanks', killerId, vn);
             botSay(killerId, t?.text ?? null, t?.vgs, t?.team);
           }, 2500 + tauntRand() * 2000);

@@ -73,7 +73,7 @@ export class GameServer {
     const bunFile = (globalThis as { Bun?: { file(p: string): { arrayBuffer(): Promise<ArrayBuffer> } } }).Bun?.file;
     if (bunFile) {
       bunFile(heightmapPath).arrayBuffer()
-        .then(ab => {
+        .then((ab): void => {
           this.field = BallSim.parseHeightmap(new Uint8Array(ab));
           // Rooms that already exist (players joined before the load
           // finished) get the field attached now.
@@ -90,14 +90,14 @@ export class GameServer {
             room.projectiles.attachField(this.field);
           }
         })
-        .catch(error => logger.warn('BallSim disabled — heightmap load failed', { err: String(error) }));
+        .catch((error): void => logger.warn('BallSim disabled — heightmap load failed', { err: String(error) }));
     } else {
       logger.warn('BallSim disabled — not running under Bun');
     }
 
     // The broadcast engine — owns both timers; teardown delegates back
     // here so playerRoom/ops stay in one place.
-    this.tickLoop = new TickLoop(this.rooms, this.ops, (room, id, reason) => this.removePlayerCompletely(room, id, reason));
+    this.tickLoop = new TickLoop(this.rooms, this.ops, (room, id, reason): void => this.removePlayerCompletely(room, id, reason));
     this.tickLoop.start();
     // SessionManager owns the join handshake: identity claims, join
     // throttle, grace-period reclaim, spectate.
@@ -105,27 +105,27 @@ export class GameServer {
       rooms: this.rooms,
       playerRoom: this.playerRoom,
       specRooms: this.specRooms,
-      roomFor: (n, m, mp, b, u, nc, nb) => this.factory.roomFor(n, m, mp, b, u, nc, nb),
-      roomOfPlayer: (id) => this.roomOfPlayer(id),
-      totalPlayers: () => opsTotalPlayers(this),
+      roomFor: (n, m, mp, b, u, nc, nb): Room | null => this.factory.roomFor(n, m, mp, b, u, nc, nb),
+      roomOfPlayer: (id): Room | undefined => this.roomOfPlayer(id),
+      totalPlayers: (): number => opsTotalPlayers(this),
       ops: this.ops,
       registry: this.registry,
-      departSpectator: (id, reason, closeCode) => this.departSpectator(id, reason, closeCode),
+      departSpectator: (id, reason, closeCode): boolean => this.departSpectator(id, reason, closeCode),
     });
     this.factory = new RoomFactory({
       rooms: this.rooms,
       sessions: this.registry,
       maps: this.maps,
-      field: () => this.field,
-      recordEnd: (rec) => this.journal.recordEnd(rec),
-      kickPlayer: (pid) => this.kickPlayer(pid),
-      forgetRoom: (name) => this.tickLoop.forgetRoom(name),
+      field: (): Heightfield | null => this.field,
+      recordEnd: (rec): void => this.journal.recordEnd(rec),
+      kickPlayer: (pid): boolean => this.kickPlayer(pid),
+      forgetRoom: (name): void => this.tickLoop.forgetRoom(name),
     });
     this.switcher = new RoomSwitcher({
-      roomOfPlayer: (id) => this.roomOfPlayer(id),
-      roomFor: (n, m, mp, b, u, nc, nb) => this.factory.roomFor(n, m, mp, b, u, nc, nb),
-      removePlayerCompletely: (r, id, reason) => this.removePlayerCompletely(r, id, reason),
-      totalPlayers: () => opsTotalPlayers(this),
+      roomOfPlayer: (id): Room | undefined => this.roomOfPlayer(id),
+      roomFor: (n, m, mp, b, u, nc, nb): Room | null => this.factory.roomFor(n, m, mp, b, u, nc, nb),
+      removePlayerCompletely: (r, id, reason): void => this.removePlayerCompletely(r, id, reason),
+      totalPlayers: (): number => opsTotalPlayers(this),
       specRooms: this.specRooms,
       playerRoom: this.playerRoom,
       sessions: this.sessions,
@@ -179,7 +179,7 @@ export class GameServer {
     // Join deadline: a socket that connects but never completes the join
     // handshake would otherwise sit forever (QUIC/RTC peers don't die on
     // their own quickly). 15s is generous — real clients join in ms.
-    setTimeout(() => {
+    setTimeout((): void => {
       if (!ws.data.playerId && ws.readyState === 1) {ws.close(1000, 'join timeout');}
     }, CONFIG.joinTimeoutMs).unref?.();
   }
@@ -287,7 +287,7 @@ export class GameServer {
     // The grace countdown arms inside the session itself — reclaim and
     // terminate clear it, so the timer can't outlive the seat.
     this.registry.disconnect(playerId, 'socket closed', this.reconnectGraceMs,
-      () => this.removePlayerCompletely(room, playerId, 'grace period'));
+      (): void => this.removePlayerCompletely(room, playerId, 'grace period'));
     room.connections.unregister(playerId);
     room.rateLimiter.removePlayer(playerId);
     room.messages.onPlayerDisconnected(playerId);
@@ -301,7 +301,7 @@ export class GameServer {
 
   /** Lobby listing — live matches a client can join by name. */
   listRooms() {
-    return [...this.rooms.values()].filter(r => !r.unlisted).map(r => ({
+    return [...this.rooms.values()].filter((r): boolean => !r.unlisted).map(r => ({
       name: r.name,
       mode: r.mode || undefined,
       map: this.maps.mapNameOf(r.name),
@@ -311,7 +311,7 @@ export class GameServer {
       // Live match state so the lobby row shows more than occupancy.
       scores: r.modeSpec?.teams ? (Object.assign({}, r.scores)) : undefined,
       ffaLeader: r.modeSpec?.ffa
-        ? [...r.ffaScores.entries()].toSorted((a, b) => b[1] - a[1])[0]
+        ? [...r.ffaScores.entries()].toSorted((a, b): number => b[1] - a[1])[0]
         : undefined,
       winAt: r.modeSpec?.winAt,
       // Lobby countdown — ms until the horn; omitted when the clock isn't armed.
@@ -426,7 +426,7 @@ export class GameServer {
         room.sessionTokens.set(ps.id, ps.token);
         this.playerRoom.set(ps.id, room);
         this.registry.seedGrace(ps.id, room.name, this.reconnectGraceMs,
-          () => this.removePlayerCompletely(room, ps.id, 'grace period'));
+          (): void => this.removePlayerCompletely(room, ps.id, 'grace period'));
         room.messages.onPlayerDisconnected(ps.id);
 seated += 1;
       }
@@ -517,7 +517,7 @@ this.ops.msgsRejected += 1;
 
   private removePlayerCompletely(room: Room, playerId: string, reason: string): void {
     this.registry.terminate(playerId, reason);
-    room.removePlayerCompletely(playerId, reason, (m, o) => logger.info(m, o));
+    room.removePlayerCompletely(playerId, reason, (m, o): void => logger.info(m, o));
     this.playerRoom.delete(playerId);
 this.ops.leaves += 1;
   }

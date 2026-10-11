@@ -6,34 +6,34 @@ const BASE = new THREE.Color(0xBB_D0_E8);
 const SUN = new THREE.Vector3(1, 0.4, 0).normalize();
 const out = new THREE.Color();
 
-describe('fogTint', () => {
-  it('looking at the sun warms the haze', () => {
+describe('fogTint', (): void => {
+  it('looking at the sun warms the haze', (): void => {
     fogTint(BASE, new THREE.Vector3(1, 0, 0), SUN, out);
     expect(out.r).toBeGreaterThan(BASE.r);
     expect(out.b).toBeLessThan(BASE.b);
   });
 
-  it('looking away cools the haze', () => {
+  it('looking away cools the haze', (): void => {
     fogTint(BASE, new THREE.Vector3(-1, 0, 0), SUN, out);
     expect(out.b).toBeGreaterThan(BASE.b);
     expect(out.r).toBeLessThan(BASE.r);
   });
 
-  it('perpendicular view leaves base nearly unchanged', () => {
+  it('perpendicular view leaves base nearly unchanged', (): void => {
     fogTint(BASE, new THREE.Vector3(0, 0, 1), SUN, out);
     expect(out.r).toBeCloseTo(BASE.r, 2);
     expect(out.g).toBeCloseTo(BASE.g, 2);
     expect(out.b).toBeCloseTo(BASE.b, 2);
   });
 
-  it('looking straight up ignores the sun entirely', () => {
+  it('looking straight up ignores the sun entirely', (): void => {
     fogTint(BASE, new THREE.Vector3(0, 1, 0), SUN, out);
     expect(out.r).toBeCloseTo(BASE.r, 5);
     expect(out.g).toBeCloseTo(BASE.g, 5);
     expect(out.b).toBeCloseTo(BASE.b, 5);
   });
 
-  it('never mutates the base color', () => {
+  it('never mutates the base color', (): void => {
     const before = BASE.clone();
     fogTint(BASE, new THREE.Vector3(1, 0, 0), SUN, out);
     expect(BASE.equals(before)).toBe(true);

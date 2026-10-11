@@ -81,7 +81,7 @@ export class TrailBatch {
     this.free.push(slot);
     // Keep descending so pop() hands out the smallest slot — used slots
     // stay packed at the front of the index buffer for drawRange.
-    this.free.sort((x, y) => y - x);
+    this.free.sort((x, y): number => y - x);
   }
 
   // Union of what's already queued on the attrs since the last render.
@@ -191,12 +191,12 @@ export class TrailBatch {
 const batches: BatchMap<THREE.Scene, TrailBatch> = new Map();
 
 export function claimableBatch(scene: THREE.Scene): TrailBatch {
-  return acquireBatch(batches, scene, s => new TrailBatch(s), b => b.free.length > 0);
+  return acquireBatch(batches, scene,( s): TrailBatch => new TrailBatch(s),( b): boolean => b.free.length > 0);
 }
 
 /** Retire an emptied overflow batch — batch 0 is the floor. */
 export function retireBatchIfOverflow(b: TrailBatch): void {
-  retireBatch(batches, b.scene, b, x => x.used.size === 0, x => { x.scene.remove(x.mesh); x.geo.dispose(); });
+  retireBatch(batches, b.scene, b,( x): boolean => x.used.size === 0,( x): void => { x.scene.remove(x.mesh); x.geo.dispose(); });
 }
 
 /** Any nonzero float in a slot's color span = pixels still on screen.

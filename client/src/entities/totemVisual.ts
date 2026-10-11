@@ -14,7 +14,7 @@ const _shaftGeo = new THREE.CylinderGeometry(0.35, 0.7, 4.2, 4); // 4-sided obel
 const _capGeo = new THREE.ConeGeometry(0.5, 1, 4);
 // Aim beam — a thin quad stretched between totem and player during charge;
 // origin at the totem end so scaling +z extends it downrange.
-const _beamGeo = (() => {
+const _beamGeo = ((): THREE.PlaneGeometry => {
   const g = new THREE.PlaneGeometry(1, 1);
   g.rotateY(Math.PI / 2); // lies along +z
   g.translate(0, 0, 0.5);

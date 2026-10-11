@@ -187,7 +187,7 @@ export class PlayerIndicators {
   }
 
   clear(): void {
-    this.indicators.forEach(i => i.remove());
+    this.indicators.forEach((i): void => i.remove());
     this.indicators.clear();
     this.lastSize.clear();
     this.lastSheep.clear();

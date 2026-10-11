@@ -52,9 +52,9 @@ const mkRig = (): Rig => {
     lazyHud: () => hud,
     lazyHealthBarSystem: () => hbs,
     lazyDamageNumbers: () => dmgNumbers,
-    lazyCamera: () => null,
+    lazyCamera: (): null => null,
     lazyNetworkManager: () => net,
-    lazyDemoManager: () => null,
+    lazyDemoManager: (): null => null,
   } as unknown as CombatDeps;
 
   return {
@@ -65,8 +65,8 @@ const mkRig = (): Rig => {
 
 const args = (over: Partial<BlastArgs> = {}): BlastArgs => ((((Object.assign({}, {pos: new THREE.Vector3(0, 0, 0),radius: 10,force: 20,forceMode: 'push',forceMultiplier: 1,aoeDamage: 40,directHitTargetId: null}, over)))));
 
-describe('applyExplosionForce — local player', () => {
-  it('own blast shoves the player and stamps the prediction', () => {
+describe('applyExplosionForce — local player', (): void => {
+  it('own blast shoves the player and stamps the prediction', (): void => {
     const r = mkRig();
     r.player.pos.set(5, 0, 0);
     r.blast.applyExplosionForce(args());
@@ -75,7 +75,7 @@ describe('applyExplosionForce — local player', () => {
     expect(r.stamps[0]).toMatchObject({ x: 0, y: 0, z: 0 });
   });
 
-  it('self splash is scaled down hard; enemy blast is full falloff damage', () => {
+  it('self splash is scaled down hard; enemy blast is full falloff damage', (): void => {
     const r = mkRig();
     r.player.pos.set(5, 0, 0); // dist 5 of radius 10 → falloff dmg = 40 * 0.5 = 20
     r.blast.applyExplosionForce(args());
@@ -90,7 +90,7 @@ describe('applyExplosionForce — local player', () => {
     expect(r2.player.lastDamageSource).toContain('blast');
   });
 
-  it('shielded self splash burns energy instead of health', () => {
+  it('shielded self splash burns energy instead of health', (): void => {
     const r = mkRig();
     r.player.pos.set(5, 0, 0);
     r.player.isShielded = true;
@@ -99,7 +99,7 @@ describe('applyExplosionForce — local player', () => {
     expect(r.net.sendEnvironmentDamage).not.toHaveBeenCalled();
   });
 
-  it('own direct hit on self flashes the direct amount; server pays the damage', () => {
+  it('own direct hit on self flashes the direct amount; server pays the damage', (): void => {
     const r = mkRig();
     r.player.pos.set(5, 0, 0);
     // My own shell tags 'local' — the shot claim can't resolve, so the
@@ -110,7 +110,7 @@ describe('applyExplosionForce — local player', () => {
     expect(r.net.sendEnvironmentDamage).not.toHaveBeenCalled();
   });
 
-  it('enemy shell direct-hit on me is server-paid — no self claim', () => {
+  it('enemy shell direct-hit on me is server-paid — no self claim', (): void => {
     const r = mkRig();
     r.player.pos.set(5, 0, 0);
     r.blast.applyExplosionForce(args({ shooterId: 'bot:7', directHitTargetId: 'local' }));
@@ -118,7 +118,7 @@ describe('applyExplosionForce — local player', () => {
     expect(r.net.sendEnvironmentDamage).not.toHaveBeenCalled();
   });
 
-  it('outside knockback reach → no shove, no stamp, no damage', () => {
+  it('outside knockback reach → no shove, no stamp, no damage', (): void => {
     const r = mkRig();
     r.player.pos.set(50, 0, 0);
     r.blast.applyExplosionForce(args());
@@ -134,9 +134,9 @@ const mkRemote = (x: number) => ({
   applyPredictedKnockback: vi.fn(),
 });
 
-describe('applyForceToRemotes', () => {
+describe('applyForceToRemotes', (): void => {
 
-  it('remote inside radius gets predicted knockback + health-bar damage', () => {
+  it('remote inside radius gets predicted knockback + health-bar damage', (): void => {
     const r = mkRig();
     const rp = mkRemote(5);
     r.remotes.set('p1', rp);
@@ -146,7 +146,7 @@ describe('applyForceToRemotes', () => {
     expect(r.hud.showHitMarker).toHaveBeenCalled();
   });
 
-  it('a direct-hit target gets knockback but no splash preview', () => {
+  it('a direct-hit target gets knockback but no splash preview', (): void => {
     const r = mkRig();
     const rp = mkRemote(5);
     r.remotes.set('p1', rp);
@@ -156,7 +156,7 @@ describe('applyForceToRemotes', () => {
     expect(r.hud.showHitMarker).not.toHaveBeenCalled();
   });
 
-  it('bot-authored blast skips MY hitmarker and routes through botHit', () => {
+  it('bot-authored blast skips MY hitmarker and routes through botHit', (): void => {
     const r = mkRig();
     const rp = mkRemote(5);
     r.remotes.set('p1', rp);
@@ -168,7 +168,7 @@ describe('applyForceToRemotes', () => {
     expect(r.hbs.predictDamage).not.toHaveBeenCalled();
   });
 
-  it('remote outside radius → nothing predicted', () => {
+  it('remote outside radius → nothing predicted', (): void => {
     const r = mkRig();
     const rp = mkRemote(50);
     r.remotes.set('p1', rp);
@@ -177,22 +177,22 @@ describe('applyForceToRemotes', () => {
   });
 });
 
-describe('applyExplosionForce — balls and nuggets', () => {
-  const mkBall = (x: number, hp = 30) => {
+describe('applyExplosionForce — balls and nuggets', (): void => {
+  const mkBall = (x: number, hp = 30): Targetable & { health: number; } => {
     let health = hp;
     return {
       pos: new THREE.Vector3(x, 0, 0),
       vel: new THREE.Vector3(),
       dead: false, radius: 1, hitRadius: 1, variant: 0, id: 'ball1', hideHealthBar: false,
-      get health() { return health; },
+      get health(): number { return health; },
       applyKnockback: vi.fn(), applyPull: vi.fn(),
-      takeDamage: vi.fn((d: number) => { health -= d; if (health <= 0) { (ball as { dead: boolean }).dead = true; return true; } return false; }),
+      takeDamage: vi.fn((d: number): boolean => { health -= d; if (health <= 0) { (ball as { dead: boolean }).dead = true; return true; } return false; }),
     } as unknown as Targetable & { health: number };
   };
   // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
   let ball!: Targetable & { health: number };
 
-  it('ball in radius takes falloff damage; lethal hit reports destroyed', () => {
+  it('ball in radius takes falloff damage; lethal hit reports destroyed', (): void => {
     const r = mkRig();
     ball = mkBall(5, 10); // 20 dmg at dist 5 > 10 hp
     r.balls.push(ball);
@@ -203,7 +203,7 @@ describe('applyExplosionForce — balls and nuggets', () => {
     expect(r.hooks.onTargetDestroyed).toHaveBeenCalled();
   });
 
-  it('ball outside radius untouched; surviving hit spawns health bar', () => {
+  it('ball outside radius untouched; surviving hit spawns health bar', (): void => {
     const r = mkRig();
     const far = mkBall(50);
     const near = mkBall(5, 100); // survives 20
@@ -213,7 +213,7 @@ describe('applyExplosionForce — balls and nuggets', () => {
     expect(r.hbs.spawnBall).toHaveBeenCalled();
   });
 
-  it('nuggets scatter at boosted force, dead/collected skip', () => {
+  it('nuggets scatter at boosted force, dead/collected skip', (): void => {
     const r = mkRig();
     const live = { pos: new THREE.Vector3(5, 0, 0), dead: false, collected: false, applyKnockback: vi.fn(), applyPull: vi.fn() };
     const dead = { pos: new THREE.Vector3(5, 0, 0), dead: true, collected: false, applyKnockback: vi.fn(), applyPull: vi.fn() };
@@ -230,8 +230,8 @@ describe('applyExplosionForce — balls and nuggets', () => {
 // Remote-blast prediction: the replica is visual-only for damage, but the
 // shove must be predicted so its wire knockback dedupes — and the echo
 // that raced in BEFORE the replica exploded must consume, not double.
-describe('predictLocalShove — remote-blast knockback dedup', () => {
-  it('shoves + stamps so the server echo is eaten', () => {
+describe('predictLocalShove — remote-blast knockback dedup', (): void => {
+  it('shoves + stamps so the server echo is eaten', (): void => {
     const r = mkRig();
     const applied = r.blast.predictLocalShove(new THREE.Vector3(5, 0, 0), 10, 30, 'push', 'bot:ENEMY-1');
     expect(applied).toBe(true);
@@ -240,7 +240,7 @@ describe('predictLocalShove — remote-blast knockback dedup', () => {
     expect(r.stamps[0].x).toBe(5);
   });
 
-  it('a raced raw echo at the same center consumes — no second shove', () => {
+  it('a raced raw echo at the same center consumes — no second shove', (): void => {
     const r = mkRig();
     (r.deps.world as { recentKb: { x: number; y: number; z: number; t: number }[] }).recentKb
       .push({ x: 5, y: 0, z: 0, t: performance.now() });
@@ -251,7 +251,7 @@ describe('predictLocalShove — remote-blast knockback dedup', () => {
     expect((r.deps.world as { recentKb: unknown[] }).recentKb).toHaveLength(0);
   });
 
-  it('outside the envelope: no shove, no stamp, untouched echo survives', () => {
+  it('outside the envelope: no shove, no stamp, untouched echo survives', (): void => {
     const r = mkRig();
     const w = r.deps.world as { recentKb: { x: number; y: number; z: number; t: number }[] };
     w.recentKb.push({ x: 60, y: 0, z: 0, t: performance.now() });

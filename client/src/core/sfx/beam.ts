@@ -54,7 +54,7 @@ export function beamLoopStop(): void {
   if (!c) { try { g.disconnect(); } catch { /* noop */ } return; }
   g.gain.setTargetAtTime(0.0001, c.currentTime, 0.05);
   for (const s of srcs) { try { s.stop(c.currentTime + 0.25); } catch { /* noop */ } }
-  setTimeout(() => { try { g.disconnect(); } catch { /* noop */ } }, 400);
+  setTimeout((): void => { try { g.disconnect(); } catch { /* noop */ } }, 400);
 }
 
 export function lgSizzle(pos: THREE.Vector3): void {

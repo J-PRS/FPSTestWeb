@@ -229,7 +229,7 @@ export class CtfFlags {
       if (!list) { list = []; byTeam.set(t, list); }
       list.push(b.playerId);
     }
-    const WANT = ROLE_PRIORITY.filter((w) => CtfFlags.SUPPORTED.has(w.role));
+    const WANT = ROLE_PRIORITY.filter((w): boolean => CtfFlags.SUPPORTED.has(w.role));
     for (const ids of byTeam.values()) { this.assignTeamRoles(ids, WANT); }
   }
 
@@ -237,14 +237,14 @@ export class CtfFlags {
    *  specialists pull from the generic pool and the remainder splits
    *  offense/defense by parity. */
   private assignTeamRoles(ids: string[], WANT: typeof ROLE_PRIORITY): void {
-    const free = ids.filter((id) => {
+    const free = ids.filter((id): boolean => {
       for (const f of this.flags.values()) { if (f.carrier === id) { return false; } }
       return true;
     });
     // Specialists are sticky: donors only come from the generic pool
     // (offense/defense), and a body is consumed once per cycle.
-    const isSpecial = (id: string): boolean => WANT.some((w) => this.roles.get(id) === w.role);
-    const donors = free.filter((id) => !isSpecial(id));
+    const isSpecial = (id: string): boolean => WANT.some((w): boolean => this.roles.get(id) === w.role);
+    const donors = free.filter((id): boolean => !isSpecial(id));
     for (const { role, want, minSquad } of WANT) {
       if (ids.length < minSquad) { break; }
       this.fillRole(ids, role, want, donors);
@@ -261,13 +261,13 @@ export class CtfFlags {
    *  re-fit the body — a hof in a medium body is a medium standing on a
    *  flag, and the sim+silhouette must agree (server roster's table). */
   private fillRole(ids: string[], role: BotRole, want: number, donors: string[]): void {
-    let have = ids.filter((id) => this.roles.get(id) === role).length;
+    let have = ids.filter((id): boolean => this.roles.get(id) === role).length;
     while (have < want) {
       const donor = donors.shift();
       if (!donor) { break; }
       this.roles.set(donor, role as 'capper' | 'ldefense' | 'hof' | 'infiltrator');
       const strict = STRICT_CLASS[role];
-      if (strict) { this.ctx.bots.find((b) => b.playerId === donor)?.setBotClass(strict); }
+      if (strict) { this.ctx.bots.find((b): boolean => b.playerId === donor)?.setBotClass(strict); }
       have += 1;
     }
   }
@@ -356,7 +356,7 @@ export class CtfFlags {
         vel.z + cp * Math.cos(yaw) * 20);
       f.airborneBy = carrierId;
       f.dropT = FLAG_RESET_S;
-      const bot = this.ctx.bots.find(b => b.playerId === carrierId);
+      const bot = this.ctx.bots.find((b): boolean => b.playerId === carrierId);
       if (bot) { bot.carryingFlag = false; }
       this.ctx.onFlagEvent?.('dropped', team, f.pos, { id: carrierId, team: this.ctx.teamOf(carrierId) });
     }
@@ -391,7 +391,7 @@ export class CtfFlags {
       f.pos.y = this.ctx.lazyTerrain().getHeight(at.x, at.z);
       f.flyVel.set(0, 0, 0); f.airborneBy = null;
       f.dropT = FLAG_RESET_S;
-      const bot = this.ctx.bots.find(b => b.playerId === carrierId);
+      const bot = this.ctx.bots.find((b): boolean => b.playerId === carrierId);
       if (bot) { bot.carryingFlag = false; }
       this.ctx.onFlagEvent?.('dropped', team, f.pos, { id: carrierId, team: this.ctx.teamOf(carrierId) });
     }
@@ -466,7 +466,7 @@ export class CtfFlags {
     ctx.onFlagEvent?.('captured', team, f.home, { id: carrier, team: carrierTeam });
     ctx.onFeed(`${carrier === 'local' ? 'YOU' : carrier.replace('bot:', '')} captured the ${TEAM_LABEL[team]} flag!`);
     if (carrier === 'local') { sfx.pickup(); }
-    const bot = ctx.bots.find(b => b.playerId === carrier);
+    const bot = ctx.bots.find((b): boolean => b.playerId === carrier);
     if (bot) { bot.carryingFlag = false; }
     f.carrier = null; f.state = 'home'; f.pos.copy(f.home);
     f.flyVel.set(0, 0, 0); f.airborneBy = null;
@@ -514,7 +514,7 @@ export class CtfFlags {
       ctx.onFlagEvent?.('taken', team, f.pos, { id, team: tTeam });
       f.state = 'carried'; f.carrier = id;
       f.flyVel.set(0, 0, 0); f.airborneBy = null;
-      const bot = ctx.bots.find(b => b.playerId === id);
+      const bot = ctx.bots.find((b): boolean => b.playerId === id);
       if (bot) { bot.carryingFlag = true; }
       ctx.onFeed(`${id === 'local' ? 'YOU' : id.replace('bot:', '')} took the ${TEAM_LABEL[team]} flag!`);
       return;

@@ -57,7 +57,7 @@ export interface TotemFsmHost {
 }
 
 export const TOTEM_STATES: Record<TotemState, (t: TotemFsmHost, c: TotemCtx) => void> = {
-  materialize(t, _c) {
+  materialize(t, _c): void {
     const p = 1 - Math.max(0, t.stateTimer / TOTEM_MATERIALIZE);
     t.bodyScale = 0.3 + p * 0.7;
     t.eyeScale = 0.4 + p * 0.4;
@@ -68,7 +68,7 @@ export const TOTEM_STATES: Record<TotemState, (t: TotemFsmHost, c: TotemCtx) => 
       t.eyeBright = 0.8;
     }
   },
-  aim(t, c) {
+  aim(t, c): void {
     t.refire -= c.dt;
     t.eyeBright = 0.8;
     t.eyeScale = 1.1;
@@ -97,7 +97,7 @@ export const TOTEM_STATES: Record<TotemState, (t: TotemFsmHost, c: TotemCtx) => 
       t.beamOn = true;
     }
   },
-  charge(t, c) {
+  charge(t, c): void {
     t.chargeTimer -= c.dt;
     const charge = t.uber ? UBER_TOTEM_CHARGE : TOTEM_CHARGE;
     const w0 = t.uber ? UBER_TOTEM_BEAM_WIDTH : 0.65;
@@ -116,7 +116,7 @@ export const TOTEM_STATES: Record<TotemState, (t: TotemFsmHost, c: TotemCtx) => 
 t.shotsFired += 1;
     }
   },
-  blinkOut(t, _c) {
+  blinkOut(t, _c): void {
     t.bodyScale = Math.max(0, t.stateTimer / 0.25);
     if (t.stateTimer <= 0) {
       t.pos.copy(t.blinkTarget);
@@ -127,7 +127,7 @@ t.shotsFired += 1;
       t.stateTimer = 1.1; // long arrival telegraph — shimmer warns before the body exists
     }
   },
-  blinkIn(t, _c) {
+  blinkIn(t, _c): void {
     // Shimmer column stands at the arrival spot well before the body
     // appears — a ~1s warning shimmer you can pre-aim or just walk to.
     t.shimmerOn = true;

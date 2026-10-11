@@ -37,21 +37,21 @@ export class DeployAdopter {
   adoptTurret(t: DeployTurret, owner?: DeployOwner): void {
     const item: Item = {
       kind: 'turret', candId: t.candId, pos: t.pos, dead: false,
-      hurt: (dmg) => t.takeDamage(dmg),
+      hurt: (dmg): void => t.takeDamage(dmg),
       v: t,
-      update: (dt) => {
+      update: (dt): void => {
         const shot = t.update(dt, this.host.foesFor(owner));
         if (!shot) {return;}
         this.rockets.spawn(shot.muzzle, shot.target, 1, owner?.id);
         sfx.shotAt(shot.muzzle, WeaponType.RocketLauncher); // thump + whoosh
       },
-      dispose: () => t.dispose(this.deps.scene),
+      dispose: (): void => t.dispose(this.deps.scene),
       owner: owner?.id,
       team: owner?.team,
     };
     // Keep item.dead in step with the entity's — gnaw damage lands on `t`.
     const {hurt} = item;
-    item.hurt = (dmg) => { hurt(dmg); if (t.dead) {this.host.killItem(item);} };
+    item.hurt = (dmg): void => { hurt(dmg); if (t.dead) {this.host.killItem(item);} };
     this.items.push(item);
   }
 
@@ -61,27 +61,27 @@ export class DeployAdopter {
     const p = this.deps.lazyPlayer();
     const item: Item = {
       kind: 'drone', candId: d.candId, pos: d.pos, dead: false,
-      hurt: (dmg) => d.takeDamage(dmg),
+      hurt: (dmg): void => d.takeDamage(dmg),
       v: d,
-      update: (dt) => {
+      update: (dt): void => {
         // Anchor is the plant owner — a bot's drone chases the bot.
         const shot = d.update(dt, owner?.pos ?? p.pos, owner ? owner.yaw() : p.yaw, this.host.foesFor(owner));
         if (!shot) {return;}
         this.rockets.spawn(shot.muzzle, shot.target, 0.6, owner?.id);
         sfx.shotAt(shot.muzzle, WeaponType.RocketLauncher);
       },
-      dispose: () => d.dispose(this.deps.scene),
+      dispose: (): void => d.dispose(this.deps.scene),
       owner: owner?.id,
       team: owner?.team,
     };
     const {hurt} = item;
-    item.hurt = (dmg) => { hurt(dmg); if (d.dead) {this.host.killItem(item);} };
+    item.hurt = (dmg): void => { hurt(dmg); if (d.dead) {this.host.killItem(item);} };
     this.items.push(item);
   }
 
   adoptMine(m: Mine, owner?: DeployOwner): void {
     const player = this.deps.lazyPlayer();
-    m.onDetonate = (mine) => {
+    m.onDetonate = (mine): void => {
       this.deps.world.explosions.push(new Explosion(
         this.deps.scene, mine.pos, false, 0, this.deps.lazyTerrain(),
         mine.blastRadius / EXPLOSION_VFX_RADIUS, 0xFF_AA_44));
@@ -110,9 +110,9 @@ export class DeployAdopter {
     const nearest = new THREE.Vector3();
     const item: Item = {
       kind: 'mine', candId: `dep:${m.id}`, pos: m.pos, dead: false,
-      hurt: () => { m.takeDamage(); }, // mines pop on any hit
+      hurt: (): void => { m.takeDamage(); }, // mines pop on any hit
       v: m,
-      update: (dt) => {
+      update: (dt): void => {
         // Trigger proxy: the nearest hostile to THIS mine. Mine.update was
         // written for player-proximity; we feed it our enemy instead.
         let bx = 0, by = 0, bz = 0, bd = Infinity;
@@ -128,7 +128,7 @@ export class DeployAdopter {
         m.update(dt, nearest);
         if (m.dead) {this.host.killItem(item);}
       },
-      dispose: () => m.dispose(),
+      dispose: (): void => m.dispose(),
       owner: owner?.id,
       team: owner?.team,
     };
@@ -142,9 +142,9 @@ export class DeployAdopter {
     const p = this.deps.lazyPlayer();
     const item: Item = {
       kind: 'station', candId: s.candId, pos: s.pos, dead: false,
-      hurt: (dmg) => s.takeDamage(dmg),
+      hurt: (dmg): void => s.takeDamage(dmg),
       v: s,
-      update: (dt) => {
+      update: (dt): void => {
         // Field owner gets the charge — a bot's pad heals the bot.
         const who = owner ?? p;
         if (!s.update(dt, who.pos)) {return;}
@@ -156,12 +156,12 @@ export class DeployAdopter {
           p.heal(StationClass.HP_RATE * dt);
         }
       },
-      dispose: () => s.dispose(this.deps.scene),
+      dispose: (): void => s.dispose(this.deps.scene),
       owner: owner?.id,
       team: owner?.team,
     };
     const {hurt} = item;
-    item.hurt = (dmg) => { hurt(dmg); if (s.dead) {this.host.killItem(item);} };
+    item.hurt = (dmg): void => { hurt(dmg); if (s.dead) {this.host.killItem(item);} };
     this.items.push(item);
   }
 
@@ -171,16 +171,16 @@ export class DeployAdopter {
   adoptBeacon(b: DeployBeacon, owner?: DeployOwner): void {
     const item: Item = {
       kind: 'beacon', candId: b.candId, pos: b.pos, dead: false,
-      hurt: (dmg) => b.takeDamage(dmg),
+      hurt: (dmg): void => b.takeDamage(dmg),
       v: b,
-      update: (dt) => b.update(dt),
-      dispose: () => b.dispose(this.deps.scene),
+      update: (dt): void => b.update(dt),
+      dispose: (): void => b.dispose(this.deps.scene),
       owner: owner?.id,
       team: owner?.team,
       beacon: b,
     };
     const {hurt} = item;
-    item.hurt = (dmg) => { hurt(dmg); if (b.dead) {this.host.killItem(item);} };
+    item.hurt = (dmg): void => { hurt(dmg); if (b.dead) {this.host.killItem(item);} };
     this.items.push(item);
   }
 
@@ -190,16 +190,16 @@ export class DeployAdopter {
   adoptShield(s: DeployShield, owner?: DeployOwner): void {
     const item: Item = {
       kind: 'shield', candId: s.candId, pos: s.pos, dead: false,
-      hurt: (dmg) => s.takeDamage(dmg),
+      hurt: (dmg): void => s.takeDamage(dmg),
       v: s,
-      update: (dt) => s.update(dt),
-      dispose: () => s.dispose(this.deps.scene),
+      update: (dt): void => s.update(dt),
+      dispose: (): void => s.dispose(this.deps.scene),
       owner: owner?.id,
       team: owner?.team,
-      flash: () => s.flash(),
+      flash: (): void => s.flash(),
     };
     const {hurt} = item;
-    item.hurt = (dmg) => { hurt(dmg); if (s.dead) {this.host.killItem(item);} };
+    item.hurt = (dmg): void => { hurt(dmg); if (s.dead) {this.host.killItem(item);} };
     this.items.push(item);
   }
 }

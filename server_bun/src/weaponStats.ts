@@ -237,7 +237,7 @@ r[event] += 1;
   private flush(): void {
     if (!this.dirty) {return;}
     this.dirty = false;
-    statsFile().then(async (paths) => {
+    statsFile().then(async (paths): Promise<void> => {
       if (!paths) {return;}
       try {
         const { appendFileSync, mkdirSync } = await import('node:fs');
@@ -256,7 +256,7 @@ r[event] += 1;
   }
 
   start(): void {
-    const t = setInterval(() => this.flush(), FLUSH_MS);
+    const t = setInterval((): void => this.flush(), FLUSH_MS);
     // Client tsc sees setInterval as the DOM overload (returns number) —
     // unref exists on the Node/Bun timer but not that signature.
     (t as unknown as { unref?: () => void }).unref?.();

@@ -13,9 +13,9 @@ class FakeWorker {
   posted: unknown[] = [];
   terminated = false;
   constructor() { FakeWorker.last = this; }
-  postMessage(m: unknown) { this.posted.push(m); }
-  terminate() { this.terminated = true; }
-  emit(data: unknown) { this.onmessage?.({ data } as MessageEvent); }
+  postMessage(m: unknown): void { this.posted.push(m); }
+  terminate(): void { this.terminated = true; }
+  emit(data: unknown): void { this.onmessage?.({ data } as MessageEvent); }
 }
 
 // oxlint-disable-next-line consistent-type-imports -- lazy class type; typeof import() has no import type equivalent
@@ -33,21 +33,21 @@ function makeConfig(): ConnectionConfig {
   };
 }
 
-beforeEach(async () => {
+beforeEach(async (): Promise<void> => {
   vi.useFakeTimers();
   vi.stubGlobal('Worker', FakeWorker);
   ({ WorkerTransport } = await import('../networking/WorkerTransport.js'));
 });
 
-afterEach(() => {
+afterEach((): void => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 const flushDrain = () => vi.advanceTimersByTime(1);
 
-describe('WorkerTransport drain', () => {
-  it('dispatches an "up" event — onConnect fires (the queue-aliasing regression)', async () => {
+describe('WorkerTransport drain', (): void => {
+  it('dispatches an "up" event — onConnect fires (the queue-aliasing regression)', async (): Promise<void> => {
     const config = makeConfig();
     const t = new WorkerTransport(config);
     t.connect();
@@ -57,7 +57,7 @@ describe('WorkerTransport drain', () => {
     expect(t.connected()).toBe(true);
   });
 
-  it('dispatches non-tick events (the path that returns the input array)', async () => {
+  it('dispatches non-tick events (the path that returns the input array)', async (): Promise<void> => {
     const config = makeConfig();
     new WorkerTransport(config);
     FakeWorker.last.emit({ kind: 'ev', j: { type: 'matchNotice', text: 'hi' }, at: Date.now() });
@@ -67,10 +67,10 @@ describe('WorkerTransport drain', () => {
     expect(config.onError).toHaveBeenCalledTimes(1);
   });
 
-  it('still dispatches when ticks coalesce (the filtered-array path)', async () => {
+  it('still dispatches when ticks coalesce (the filtered-array path)', async (): Promise<void> => {
     const config = makeConfig();
     new WorkerTransport(config);
-    const tick = (seq: number) => {
+    const tick = (seq: number): Uint8Array<ArrayBuffer> => {
       const u8 = new Uint8Array(32);
       u8[0] = 0x54; u8[1] = 0x07; // MAGIC + WIRE_TICK_V4
       new DataView(u8.buffer).setUint32(6, seq, true);

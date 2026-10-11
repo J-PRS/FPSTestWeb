@@ -16,8 +16,8 @@ import type { Terrain } from '../world/terrain';
 // entry once made the sticky launcher fire rockets. These tests pin the
 // invariants the registry now carries structurally.
 
-describe('weapon registry', () => {
-  it('every slot def has a unique weaponType and a sane rate', () => {
+describe('weapon registry', (): void => {
+  it('every slot def has a unique weaponType and a sane rate', (): void => {
     const seen = new Set<number>();
     for (const def of SLOT_DEFS) {
       expect(seen.has(def.weaponType), `dup weaponType ${def.weaponType}`).toBe(false);
@@ -27,14 +27,14 @@ describe('weapon registry', () => {
     }
   });
 
-  it('weaponDef(wid) round-trips and falls back to rocket for bad wids', () => {
+  it('weaponDef(wid) round-trips and falls back to rocket for bad wids', (): void => {
     for (let wid = 0; wid < SLOT_COUNT; wid += 1) {
       expect(weaponDef(wid)).toBe(SLOT_DEFS[wid]);
     }
     expect(weaponDef(999)).toBe(SLOT_DEFS[0]);
   });
 
-  it('fan weapons declare pellets; beams are hitscan only', () => {
+  it('fan weapons declare pellets; beams are hitscan only', (): void => {
     const BEAM_WEAPONS = new Set([WeaponType.Lightning, WeaponType.Repair]);
     for (const def of SLOT_DEFS) {
       if (def.kind === 'fan') {expect(def.pellets).toBeDefined();}
@@ -43,7 +43,7 @@ describe('weapon registry', () => {
     }
   });
 
-  it('every client config resolves to shared stats (wire id valid)', () => {
+  it('every client config resolves to shared stats (wire id valid)', (): void => {
     for (const c of WEAPON_CONFIGS) {
       expect(WEAPONS[c.weaponType], `${c.name} has no WEAPONS entry`).toBeDefined();
       const w = WEAPONS[c.weaponType];
@@ -62,12 +62,12 @@ describe('weapon registry', () => {
     }
   });
 
-  it('bombard is heavy-only, server-simmed, and tops the direct-damage table', () => {
+  it('bombard is heavy-only, server-simmed, and tops the direct-damage table', (): void => {
     const w = WEAPONS[WeaponType.Bombard];
     expect(w).toBeDefined();
     // Highest flat direct hit among PRIMARIES — the planted satchel
     // (belt item) is allowed to keep the overall record.
-    const PRIMARIES = new Set(SLOT_DEFS.map((d) => d.weaponType));
+    const PRIMARIES = new Set(SLOT_DEFS.map((d): WeaponType => d.weaponType));
     for (const [wt, s] of Object.entries(WEAPONS)) {
       if (!PRIMARIES.has(Number(wt))) {continue;}
       expect(s.directDamage, `w${wt} out-damages the bombard`).toBeLessThanOrEqual(w.directDamage);
@@ -82,7 +82,7 @@ describe('weapon registry', () => {
     expect(HEAVY_ONLY_WEAPONS.has(WeaponType.Bombard)).toBe(true);
     // The slot-space gate must agree with the wire-space gate — the bombard
     // slot def is the last SLOT_DEFS entry and both lists must carry it.
-    const wid = SLOT_DEFS.findIndex((d) => d.weaponType === WeaponType.Bombard);
+    const wid = SLOT_DEFS.findIndex((d): boolean => d.weaponType === WeaponType.Bombard);
     expect(wid).toBeGreaterThanOrEqual(0);
     expect(PlayerLoadout.HEAVY_ONLY).toContain(wid);
     // Client contract: never explodes, always crumbles, no bounce flags.
@@ -93,7 +93,7 @@ describe('weapon registry', () => {
     expect(BOMBARD_CONFIG.bodyRadius).toBe(w.bodyRadius);
   });
 
-  it('every ray-burst weapon declares delay+range in shared stats', () => {
+  it('every ray-burst weapon declares delay+range in shared stats', (): void => {
     for (const c of WEAPON_CONFIGS) {
       const w = getWeaponStats(c.weaponType);
       if (c.rayBurst) {
@@ -106,7 +106,7 @@ describe('weapon registry', () => {
 
 // Remote railgun: the mid-flight hitscan discharge is the only client-side
 // mechanic in the codebase where a projectile teleports — pin the behavior.
-const flatTerrain = { getHeight: () => 0 } as unknown as Terrain;
+const flatTerrain = { getHeight: (): number => 0 } as unknown as Terrain;
 
 function stepUntil(p: Projectile, cond: () => boolean, maxSeconds = 10): void {
   const dt = 1 / 60;
@@ -120,12 +120,12 @@ function spawnRRG(origin: THREE.Vector3, dir: THREE.Vector3): Projectile {
   return p;
 }
 
-describe('ray-burst discharge (remote railgun)', () => {
-  it('discharges the beam at rayDelay and dies at the hit/range endpoint', () => {
+describe('ray-burst discharge (remote railgun)', (): void => {
+  it('discharges the beam at rayDelay and dies at the hit/range endpoint', (): void => {
     const p = spawnRRG(new THREE.Vector3(0, 50, 0), new THREE.Vector3(1, 0, 0));
     let beam: { from: THREE.Vector3; to: THREE.Vector3 } | null = null;
-    p.onRayBurst = (from, to) => { beam = { from, to }; };
-    stepUntil(p, () => p.exploded);
+    p.onRayBurst = (from, to): void => { beam = { from, to }; };
+    stepUntil(p, (): boolean => p.exploded);
     expect(beam).not.toBeNull();
     // Beam originated ~0.4s of flight down-range (~22m + gravity sag)
     expect(beam!.from.x).toBeGreaterThan(15);
@@ -135,7 +135,7 @@ describe('ray-burst discharge (remote railgun)', () => {
     expect(p.exploded).toBe(true);
   });
 
-  it('detonates on a target inside the beam path', () => {
+  it('detonates on a target inside the beam path', (): void => {
     const p = spawnRRG(new THREE.Vector3(0, 50, 0), new THREE.Vector3(1, 0, 0));
     // Beam dir follows velocity — flat flight now, so the beam line stays
     // level at y=50 and crosses x=70 on the throw axis.

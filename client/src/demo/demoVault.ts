@@ -39,7 +39,7 @@ export class DemoVault {
     // record a clip (and jsdom tests, where IDB may not exist).
     if (!this.dbp) {
       this.dbp = openDB(DB_NAME, 3, {
-        upgrade(db, _oldVersion, _newVersion, tx) {
+        upgrade(db, _oldVersion, _newVersion, tx): void {
           if (!db.objectStoreNames.contains(STORE)) {
             db.createObjectStore(STORE, { keyPath: 'id' });
           }
@@ -54,7 +54,7 @@ export class DemoVault {
           }
         },
       });
-      this.dbp.catch(() => { this.dbp = null; });
+      this.dbp.catch((): void => { this.dbp = null; });
     }
     return this.dbp;
   }
@@ -96,7 +96,7 @@ export class DemoVault {
       ]);
       if (metaCount !== clipCount) {await this.backfillMeta(db);}
       const all = await db.getAll(META_STORE) as VaultMeta[];
-      all.sort((a, b) => b.timestamp - a.timestamp);
+      all.sort((a, b): number => b.timestamp - a.timestamp);
       return all;
     } catch (error) {
       logger.warn('Vault list failed', error);

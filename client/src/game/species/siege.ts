@@ -57,7 +57,7 @@ function plantMineImpl(deps: SpeciesCtx['deps'], kit: SiegeKit,
   const m = new Mine(scene, deps.lazyTerrain(), pos, uber);
   burrow(m); // planted mines bury themselves — thematic even from an Overlord drop
   const player = deps.lazyPlayer();
-  m.onDetonate = (mine) => {
+  m.onDetonate = (mine): void => {
     // Mine pop — compact dirty-orange blast, not a rocket. Doombloom's
     // blastRadius field carries its doubled envelope.
     deps.world.explosions.push(new Explosion(scene, mine.pos, false, 0, deps.lazyTerrain(), mine.blastRadius / EXPLOSION_VFX_RADIUS, 0xFF_77_33));
@@ -89,7 +89,7 @@ function spawnBanelingImpl(deps: SpeciesCtx['deps'], kit: SiegeKit,
   const b = new Baneling(scene, deps.lazyTerrain(), pos, uber);
   if (b.dead) { b.dispose(); return; }
   const player = deps.lazyPlayer();
-  b.onDetonate = (bane) => {
+  b.onDetonate = (bane): void => {
     // blastRadius is per-instance — a goliath pops 1.7× wider
     deps.world.explosions.push(new Explosion(scene, bane.pos, false, 0, deps.lazyTerrain(), bane.blastRadius / EXPLOSION_VFX_RADIUS, 0x77_FF_44));
     sfx.explosionAt(bane.pos, true);
@@ -112,18 +112,18 @@ function spawnTotemImpl(deps: SpeciesCtx['deps'], kit: SiegeKit,
   const { ringPos, boltPop, hurtPlayer } = kit;
   if (deps.lazyDemoManager()?.isPlaying) {return;}
   const cap = uber ? UBER_TOTEM_MAX : capFor('totem', TOTEM_MAX);
-  if (totems.filter(t => !t.dead && (!uber || t.uber)).length >= cap) {return;}
+  if (totems.filter((t): boolean => !t.dead && (!uber || t.uber)).length >= cap) {return;}
   const bolt = uber
     ? { scale: 0.6, color: 0xFF_AA_33, popDur: 3, force: 14, dmg: UBER_TOTEM_BOLT_DAMAGE, text: 'sniped by the grand totem' }
     : { scale: 0.35, color: 0xFF_55_66, popDur: 2, force: 8, dmg: TOTEM_BOLT_DAMAGE, text: 'struck down by a totem' };
   const t = new Totem(scene, deps.lazyTerrain(), ringPos(TOTEM_SPAWN_MIN, TOTEM_SPAWN_MAX), uber);
-  t.onBoltLand = (pos) => boltPop(pos, bolt.scale, bolt.color, bolt.popDur);
-  t.onBoltHit = (_x, pos) => {
+  t.onBoltLand = (pos): void => boltPop(pos, bolt.scale, bolt.color, bolt.popDur);
+  t.onBoltHit = (_x, pos): void => {
     if (hurtPlayer(pos, bolt.force, bolt.dmg, bolt.text, 3, t)) {
       boltPop(pos.clone(), bolt.scale, bolt.color, bolt.popDur);
     }
   };
-  t.onBlink = (pos) => { deps.lazyEffects().spawnJumpDust(pos); sfx.enemyCue(pos, 'zap'); }; // departure puff at the old spot
+  t.onBlink = (pos): void => { deps.lazyEffects().spawnJumpDust(pos); sfx.enemyCue(pos, 'zap'); }; // departure puff at the old spot
   totems.push(t);
   targets.push(t);
 }
@@ -152,10 +152,10 @@ export function createSiegeSpecies({ deps, kit, targets }: SpeciesCtx) {
     if (atCap(turrets, capFor('turret', TURRET_MAX))) {return;}
     const u = uber ?? rollUber();
     const t = new Turretter(scene, deps.lazyTerrain(), ringPos(TURRET_SPAWN_MIN, TURRET_SPAWN_MAX), u);
-    t.onLanded = (pos) => boltPop(pos, 0.4, 0xFF_88_44, 2.4);
-    t.onLaunch = (pos) => { deps.lazyEffects().spawnJumpDust(pos); sfx.enemyCue(pos, 'launch'); };
-    t.onBoltLand = (pos) => boltPop(pos, 0.3, 0xFF_AA_44, 1.8);
-    t.onBoltHit = (x, pos) => {
+    t.onLanded = (pos): void => boltPop(pos, 0.4, 0xFF_88_44, 2.4);
+    t.onLaunch = (pos): void => { deps.lazyEffects().spawnJumpDust(pos); sfx.enemyCue(pos, 'launch'); };
+    t.onBoltLand = (pos): void => boltPop(pos, 0.3, 0xFF_AA_44, 1.8);
+    t.onBoltHit = (x, pos): void => {
       // Damage judges from the IMPACT point — the shell lands tens of
       // meters from the turret, so reach in the shooter's frame whiffs
       // every legit hit (was: explosion VFX in your face, zero damage).
@@ -171,7 +171,7 @@ export function createSiegeSpecies({ deps, kit, targets }: SpeciesCtx) {
   const turretSpecies: Species<Turretter> = {
     list: turrets, interval: TURRET_SPAWN_INTERVAL, t: -70,
     spawn: spawnTurretter,
-    tick: (t, dt) => t.update(dt, deps.lazyTerrain(), aggroFor(t, t.pos, dt, PROFILES.artillery), aggroVelFor(t)),
+    tick: (t, dt): void => t.update(dt, deps.lazyTerrain(), aggroFor(t, t.pos, dt, PROFILES.artillery), aggroVelFor(t)),
   };
   function updateTurrets(dt: number): void { updateSpecies(turretSpecies, dt); }
 
@@ -219,7 +219,7 @@ export function createSiegeSpecies({ deps, kit, targets }: SpeciesCtx) {
     const u = uber ?? rollUber();
     const m = new Overlord(scene, deps.lazyTerrain(), ringPos(OVERLORD_SPAWN_MIN, OVERLORD_SPAWN_MAX), u);
     deps.lazyEffects().spawnJumpDust(m.pos); // eruption dust — it lifts off out of the dirt
-    m.onMineDrop = (overlord) => {
+    m.onMineDrop = (overlord): void => {
       spawnBaneling(overlord.pos); // drops to the terrain and immediately rolls
       if (overlord.uber) {
         // Broodmother twin drop — a second sac spills out right behind
@@ -245,19 +245,19 @@ export function createSiegeSpecies({ deps, kit, targets }: SpeciesCtx) {
   const overlordSpecies: Species<Overlord> = {
     list: overlords, interval: OVERLORD_SPAWN_INTERVAL, t: -100,
     spawn: spawnOverlord,
-    tick: (m, dt) => { m.update(dt, deps.lazyTerrain(), aggroFor(m, m.pos, dt, PROFILES.siege)); kickTrail(m, dt); },
+    tick: (m, dt): void => { m.update(dt, deps.lazyTerrain(), aggroFor(m, m.pos, dt, PROFILES.siege)); kickTrail(m, dt); },
   };
   function updateOverlords(dt: number): void {
     updateSpecies(overlordSpecies, dt);
-    reapSpecies(mines, targets, dt, (m) => m.update(dt, aggroFor(m, m.pos, dt, PROFILES.fodder)));
-    reapSpecies(banelings, targets, dt, (b) => { b.update(dt, deps.lazyTerrain(), aggroFor(b, b.pos, dt, PROFILES.hunter)); kickDust(b, dt); });
+    reapSpecies(mines, targets, dt, (m): void => m.update(dt, aggroFor(m, m.pos, dt, PROFILES.fodder)));
+    reapSpecies(banelings, targets, dt, (b): void => { b.update(dt, deps.lazyTerrain(), aggroFor(b, b.pos, dt, PROFILES.hunter)); kickDust(b, dt); });
   }
   function spawnUberTotem(): void { spawnTotem(true); }
 
   const totemSpecies: Species<Totem> = {
     list: totems, interval: TOTEM_SPAWN_INTERVAL, t: -120,
     spawn: spawnTotem,
-    tick: (t, dt) => t.update(dt, deps.lazyTerrain(), aggroFor(t, t.pos, dt, PROFILES.sniper), aggroVelFor(t)),
+    tick: (t, dt): void => t.update(dt, deps.lazyTerrain(), aggroFor(t, t.pos, dt, PROFILES.sniper), aggroVelFor(t)),
   };
   function updateTotems(dt: number): void { updateSpecies(totemSpecies, dt); }
 

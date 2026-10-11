@@ -70,7 +70,7 @@ export class CreatureSim {
 
   /** Spawn/host-side randomness — tests inject a seeded fn so scenario
    *  runs are reproducible; the per-creature LCG stays the wire seed. */
-  rng: () => number = () => botRand();
+  rng: () => number = (): number => botRand();
   /** Bite delivery — Room wires this to the damage funnel. */
   onBite: ((crawler: SimBeing, targetId: string) => void) | null = null;
   /** Extra gnawables — Room injects deployable candidates (`dep:N` ids)
@@ -91,14 +91,14 @@ export class CreatureSim {
     this.broadcast = broadcast;
     this.sendTo = sendTo ?? null;
     this.brain = new CreatureBrain({
-      field: () => this.field!,
-      colliders: () => this.colliders as StructureCollider[] | undefined,
-      simTime: () => this.simTime,
-      nearestPlayer: (c, alive) => this.nearestPlayer(c, alive),
-      snapTarget: (c) => this.snapTarget(c),
-      edge: (c, kind) => this.edge(c, kind),
-      onBite: (c, pid) => this.onBite?.(c, pid),
-      kill: (c) => this.kill(c),
+      field: (): Heightfield => this.field!,
+      colliders: (): StructureCollider[] | undefined => this.colliders as StructureCollider[] | undefined,
+      simTime: (): number => this.simTime,
+      nearestPlayer: (c, alive): { id: string; pos: SimVec; } | null => this.nearestPlayer(c, alive),
+      snapTarget: (c): void => this.snapTarget(c),
+      edge: (c, kind): void => this.edge(c, kind),
+      onBite: (c, pid): void | undefined => this.onBite?.(c, pid),
+      kill: (c): void => this.kill(c),
       playerState: (id) => this.players.getPlayer(id) ?? null,
     });
   }

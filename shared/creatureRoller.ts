@@ -22,7 +22,7 @@ export const ROLLER_SIM = {
 
 // Roller rows live in the unified SPECIES registry; derived view.
 export const ROLLER_SPECIES: Record<string, SpeciesRow> = Object.fromEntries(
-  Object.entries(SPECIES).filter(([, r]) => r.family === 'roll'),
+  Object.entries(SPECIES).filter(([, r]): boolean => r.family === 'roll'),
 );
 
 export type RollerState = 'roll';

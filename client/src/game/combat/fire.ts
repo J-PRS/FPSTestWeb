@@ -99,7 +99,7 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   // the normal explosion claim at the resolved endpoint — this is pure FX.
   if (config.rayBurst) {
     const beamColor = config.glowColor;
-    p.onRayBurst = (from, to) => {
+    p.onRayBurst = (from, to): void => {
       deps.lazyEffects().spawnBeam(from, to, beamColor);
       sfx.at(from, 'shot_energy', 0.9, 1.3);
     };
@@ -183,7 +183,7 @@ function onBelt(deps: CombatDeps, _e: FireArgs, item: BeltItem): void {
   deps.lazyViewModel()?.startThrow(timeScale);
   // Dying mid wind-up must not release — the server rejects dead-player
   // claims, leaving a local ghost projectile.
-  setTimeout(() => {
+  setTimeout((): void => {
     const pl = deps.lazyPlayer();
     if (pl.isDead || pl.beltCharges < cost) {return;}
     pl.beltCharges -= cost;
@@ -370,9 +370,9 @@ function melee(deps: CombatDeps, hooks: FireHooks, e: FireArgs): void {
 export function createFire(deps: CombatDeps, hooks: FireHooks) {
 
   return {
-    spawnProjectile: (c: ProjectileConfig, e: FireArgs, quiet = false) => spawnProjectile(deps, c, e, quiet),
-    fireWeapon: (d: WeaponDef, e: FireArgs) => fireWeapon(deps, d, e),
-    onBelt: (e: FireArgs, item: BeltItem) => onBelt(deps, e, item),
-    onMelee: (e: FireArgs) => melee(deps, hooks, e),
+    spawnProjectile: (c: ProjectileConfig, e: FireArgs, quiet = false): Projectile | undefined => spawnProjectile(deps, c, e, quiet),
+    fireWeapon: (d: WeaponDef, e: FireArgs): void => fireWeapon(deps, d, e),
+    onBelt: (e: FireArgs, item: BeltItem): void => onBelt(deps, e, item),
+    onMelee: (e: FireArgs): void => melee(deps, hooks, e),
   };
 }

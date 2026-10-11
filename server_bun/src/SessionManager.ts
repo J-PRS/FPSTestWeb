@@ -265,7 +265,7 @@ export class SessionManager {
    *  flush before the socket tears down. */
   private static rejectIdentity(ws: ServerWebSocket<WebSocketData>, reason: string): void {
     try { ws.send(JSON.stringify({ type: 'sessionRejected', reason })); } catch { /* half-dead lane */ }
-    setTimeout(() => { try { ws.close(1008, reason); } catch { /* gone */ } }, 25);
+    setTimeout((): void => { try { ws.close(1008, reason); } catch { /* gone */ } }, 25);
   }
 
   /** Spectator seating: broadcasts + tick stream only, no player slot. */

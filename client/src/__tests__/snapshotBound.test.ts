@@ -5,12 +5,12 @@ import { SnapshotBuffer } from '../entities/remoteSnapshots.js';
 // ring under sustained 20Hz push would be the same leak class as
 // shipQueue/claimLedger (§2.27). Pin the bound: after a long burst the
 // buffer holds only the recent window, never the full history.
-describe('SnapshotBuffer bound', () => {
+describe('SnapshotBuffer bound', (): void => {
   const POS = { x: 0, y: 0, z: 0 };
   const ROT = { yaw: 0, pitch: 0 };
   const VEL = { x: 0, y: 0, z: 0 };
 
-  it('stays windowed under a long sustained stream', () => {
+  it('stays windowed under a long sustained stream', (): void => {
     const b = new SnapshotBuffer();
     let t = 0;
     for (let i = 0; i < 2000; i += 1) {
@@ -23,7 +23,7 @@ describe('SnapshotBuffer bound', () => {
     expect(b.size).toBeLessThanOrEqual(32);
   });
 
-  it('keeps at least 2 snapshots for interpolation', () => {
+  it('keeps at least 2 snapshots for interpolation', (): void => {
     const b = new SnapshotBuffer();
     for (let i = 0; i < 100; i += 1) { b.push(i * 50, POS, ROT, VEL, i * 50); }
     expect(b.size).toBeGreaterThanOrEqual(2);

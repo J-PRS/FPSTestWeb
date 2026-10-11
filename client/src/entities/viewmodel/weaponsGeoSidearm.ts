@@ -98,7 +98,7 @@ const revolver = new THREE.Group();
 const BORE_Y = 0.055;
 // hseg=3 on the long sections — one-ring tubes bake flat-black when a
 // rim ring occludes them (AO resolves per-vertex along the length).
-const bseg = (r1: number, r2: number, len: number, z: number) => {
+const bseg = (r1: number, r2: number, len: number, z: number): void => {
   const t = mkTube(r1, r2, len, z, bodyMat, 3);
   t.position.y = BORE_Y;
   revolver.add(t);

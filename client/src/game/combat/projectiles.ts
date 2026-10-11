@@ -34,7 +34,7 @@ const BOLT_CHAIN_PASSES = 3;       // bounded worklist — a chain can't run awa
 // ?debug / menu DEBUG — show the real gameplay blast radius as a wireframe
 // sphere on every detonation (the dome VFX is only 80% of it by design).
 // Read live per blast — the menu toggle applies without a reload.
-const aoeDebug = () => urlParams.debug;
+const aoeDebug = (): boolean => urlParams.debug;
 
 // Remote player positions for projectile collision — rebuilt per frame into
 // the same Map (zeroed allocations in the hot loop)
@@ -119,7 +119,7 @@ export function slam(c: CombatCtx, pos: THREE.Vector3, impactSpeed: number): voi
   // derives power from its own velocity shadow and runs the blast.
   const sendAOE = networkManager.authorityShells()
     ? undefined
-    : (p: { x: number; y: number; z: number }, _targetId: string | null) =>
+    : (p: { x: number; y: number; z: number }, _targetId: string | null): void =>
       networkManager.sendAOEShot({ position: p, weaponType: WeaponType.Slam, excludeTargetId: _targetId, power });
   if (networkManager.isConnected()) {networkManager.sendSlam({ x: pos.x, y: pos.y, z: pos.z });}
   processProjectileExplosion(c, {
@@ -204,7 +204,7 @@ export function updateProjectiles(c: CombatCtx, dt: number): void {
   remotePlayerPositions.clear();
   const remotePlayerClasses = _remotePlayerClasses;
   remotePlayerClasses.clear();
-  deps.world.remotePlayers.forEach((rp, playerId) => {
+  deps.world.remotePlayers.forEach((rp, playerId): void => {
     if (!rp.isDead) {
       remotePlayerPositions.set(playerId, rp.position);
       if (rp.armorClass) {remotePlayerClasses.set(playerId, rp.armorClass);}

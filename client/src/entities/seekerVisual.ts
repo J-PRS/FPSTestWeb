@@ -33,7 +33,7 @@ function bodyGeo(): THREE.BufferGeometry {
 // Wing: bee teardrop with the root at the origin so the flap euler is a
 // real hinge, forewing + a smaller hindwing swept further back. Left
 // wing is the same shape yawed π — no negative-scale mirror.
-const _wingGeo = (() => {
+const _wingGeo = ((): THREE.BufferGeometry<THREE.NormalBufferAttributes, THREE.BufferGeometryEventMap> => {
   const shape = new THREE.Shape();
   shape.moveTo(0, 0);
   shape.bezierCurveTo(0.5, 0.34, 1.3, 0.42, 1.65, 0.08);

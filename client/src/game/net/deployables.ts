@@ -9,9 +9,9 @@ import type { DeployKind } from '../../../../shared/deployables.js';
 export function wireDeployables(ctx: NetCtx): void {
   const { deps, networkManager } = ctx;
   const mgr = () => deps.entities().deployables;
-  const localId = () => deps.lazyNetworkManager().getLocalPlayerId();
+  const localId = (): string => deps.lazyNetworkManager().getLocalPlayerId();
 
-  networkManager.onDeploySpawn = (id, owner, kind, pos, team) => {
+  networkManager.onDeploySpawn = (id, owner, kind, pos, team): void => {
     deps.lazyDemoManager?.()?.recordDeploySpawned(id, kind, pos);
     if (owner === localId()) { mgr().ackLocal(id); return; } // pod path already rendered it
     mgr().remoteSpawn(id, { owner, kind, pos, team });
@@ -19,36 +19,36 @@ export function wireDeployables(ctx: NetCtx): void {
     // reads as a throw, not a teleporting object.
     deps.world.remotePlayers.get(owner)?.playThrow();
   };
-  networkManager.onDeployGone = (id) => {
+  networkManager.onDeployGone = (id): void => {
     mgr().remoteRemove(id);
     deps.lazyDemoManager?.()?.recordDeployGone(id);
   };
-  networkManager.onDeployDown = (id) => {
+  networkManager.onDeployDown = (id): void => {
     mgr().remoteDown(id);
     deps.lazyDemoManager?.()?.recordDeployHp(id, 0);
   };
-  networkManager.onDeployUp = (id) => {
+  networkManager.onDeployUp = (id): void => {
     mgr().remoteUp(id);
     deps.lazyDemoManager?.()?.recordDeployHp(id, 1);
   };
-  networkManager.onSensorPing = (id, team, targets) => mgr().sensorPing(id, team, targets);
-  networkManager.onTurretShot = (id, _owner, targetId) => {
+  networkManager.onSensorPing = (id, team, targets): void => mgr().sensorPing(id, team, targets);
+  networkManager.onTurretShot = (id, _owner, targetId): void => {
     mgr().remoteTurretShot(id, targetId);
     const target = targetId === localId() ? deps.lazyPlayer().pos
       : deps.world.remotePlayers.get(targetId)?.position;
     if (target) {deps.lazyDemoManager?.()?.recordDeployShot(id, target);}
   };
-  networkManager.onSentryShot = (id, owner, x, y, z) => {
+  networkManager.onSentryShot = (id, owner, x, y, z): void => {
     if (!Number.isFinite(x + y + z)) {deps.logger.warn(`sentryShot #${id} dropped: non-finite target`); return;}
     mgr().remoteSentryShot(id, owner, x, y, z);
     deps.lazyDemoManager?.()?.recordDeployShot(id, { x, y, z });
   };
-  networkManager.onMineBoom = (id, pos) => {
+  networkManager.onMineBoom = (id, pos): void => {
     if (!Number.isFinite(pos.x + pos.y + pos.z)) {deps.logger.warn(`mineBoom #${id} dropped: non-finite position`); return;}
     mgr().remoteMineBoom(id, pos);
     deps.lazyDemoManager?.()?.recordDeployBoom(id, pos);
   };
-  networkManager.onDeployHp = (id, hp, armor, src) => {
+  networkManager.onDeployHp = (id, hp, armor, src): void => {
     if (!Number.isFinite(hp + (armor ?? 0))) {return;}
     mgr().applyDeployHp(id, hp, armor);
     deps.lazyDemoManager?.()?.recordDeployHp(id, hp);
@@ -72,7 +72,7 @@ export function reconcileDeployables(ctx: NetCtx, roster: { id: number; owner: s
     if (e && (e.kind !== d.kind || e.owner !== d.owner)) {mgr.remoteRemove(d.id);}
   }
   const live = reconcileReplicas(mgr.remoteReplicas(), roster ?? [], {
-    rowId: (d) => d.id,
+    rowId: (d): number => d.id,
     ensure: (d) => {
       // Deployables that predate the record window get adopted here — same
       // trick the creature roster lane uses.
@@ -86,7 +86,7 @@ export function reconcileDeployables(ctx: NetCtx, roster: { id: number; owner: s
       mgr.remoteSpawn(d.id, { owner: d.owner, kind: d.kind, pos: d.pos, hp: d.hp, armor: d.armor, team: d.team });
       return mgr.remoteReplicas().get(d.id);
     },
-    reap: (_e, id) => {
+    reap: (_e, id): void => {
       mgr.remoteRemove(id);
       ctx.deps.lazyDemoManager?.()?.recordDeployGone(id);
     },

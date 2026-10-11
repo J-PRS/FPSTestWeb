@@ -5,5 +5,5 @@
  * throttling, so the 20Hz cadence survives — the sim itself still runs
  * on the main thread off the posted beats.
  */
-const timer = setInterval(() => postMessage(0), 50);
-onmessage = (e) => { if (e.data === 'stop') {clearInterval(timer);} };
+const timer = setInterval((): void => postMessage(0), 50);
+onmessage = (e): void => { if (e.data === 'stop') {clearInterval(timer);} };

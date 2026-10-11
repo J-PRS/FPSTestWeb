@@ -6,7 +6,7 @@ import type { DemoRecorder } from '../demo/DemoRecorder.js';
 const V = { x: 1, y: 2, z: 3 };
 
 // Host stub — only the fields the event recorders read/write.
-const host = () => ({
+const host = (): DemoRecorder => ({
   recording: true,
   elapsedTime: 0,
   lastEventResetTime: -10,
@@ -16,8 +16,8 @@ const host = () => ({
   projectileEvents: [] as ProjectileEvent[],
 }) as unknown as DemoRecorder;
 
-describe('projectile event spool', () => {
-  it('recordFired stamps ids 1..65535 then wraps', () => {
+describe('projectile event spool', (): void => {
+  it('recordFired stamps ids 1..65535 then wraps', (): void => {
     const b = host();
     expect(recordFired(b, V, V, 9)).toBe(1);
     expect(recordFired(b, V, V, 9)).toBe(2);
@@ -26,7 +26,7 @@ describe('projectile event spool', () => {
     expect(recordFired(b, V, V, 9)).toBe(1); // wrapped, never 0 (sentinel)
   });
 
-  it('id 0 is the dead sentinel — dependents never record it', () => {
+  it('id 0 is the dead sentinel — dependents never record it', (): void => {
     const b = host();
     recordBounce(b, 0, V, V, V);
     recordHit(b, 0, V, 7, 1, 0);
@@ -34,20 +34,20 @@ describe('projectile event spool', () => {
     expect(b.projectileEvents.length).toBe(0);
   });
 
-  it('not recording → nothing spools', () => {
+  it('not recording → nothing spools', (): void => {
     const b = host();
     b.recording = false;
     expect(recordFired(b, V, V, 1)).toBe(0);
     expect(b.projectileEvents.length).toBe(0);
   });
 
-  it('event types stamp the right record', () => {
+  it('event types stamp the right record', (): void => {
     const b = host();
     const id = recordFired(b, V, V, 4);
     recordBounce(b, id, V, V, { x: 0, y: 1, z: 0 });
     recordHit(b, id, V, 42, 1, 2);
     recordDestroyed(b, id, V);
-    const types = b.projectileEvents.map((e) => e.eventType);
+    const types = b.projectileEvents.map((e): ProjectileEventType => e.eventType);
     expect(types).toEqual([
       ProjectileEventType.Fired,
       ProjectileEventType.Bounce,
@@ -59,7 +59,7 @@ describe('projectile event spool', () => {
     expect(b.projectileEvents[0]!.weaponType).toBe(4);
   });
 
-  it('rate cap drops a flood but resets on the next second', () => {
+  it('rate cap drops a flood but resets on the next second', (): void => {
     const b = host();
     b.elapsedTime = 0;
     let ok = 0;
@@ -69,7 +69,7 @@ describe('projectile event spool', () => {
     expect(recordFired(b, V, V, 1)).not.toBe(0);
   });
 
-  it('dead events recycle through the pool — no churn per spawn', () => {
+  it('dead events recycle through the pool — no churn per spawn', (): void => {
     const b = host();
     recordFired(b, V, V, 1);
     const dead = b.projectileEvents.pop()!;

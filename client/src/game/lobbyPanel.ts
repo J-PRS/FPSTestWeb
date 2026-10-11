@@ -70,7 +70,7 @@ function p2pGo(p2p: string, lobby: number): void {
 }
 
 function buildP2PButtons(p2pIn: HTMLInputElement): HTMLDivElement {
-  const code = () => p2pIn.value.trim() || 'duel';
+  const code = (): string => p2pIn.value.trim() || 'duel';
   const wrap = document.createElement('div');
   wrap.className = 'lb-quick';
   wrap.style.cssText = 'align-items:center;';
@@ -89,16 +89,16 @@ function buildP2PButtons(p2pIn: HTMLInputElement): HTMLDivElement {
   pubBtn.style.cssText = 'flex:1;padding:4px 8px;';
   pubBtn.textContent = 'PUBLIC';
   pubBtn.title = 'listed publicly — quick-joinable';
-  pubBtn.addEventListener('click', () => {
+  pubBtn.addEventListener('click', (): void => {
     pub = !pub;
     pubBtn.classList.toggle('on', pub);
   });
   pubRow.append(pubBtn);
   const specs: [string, () => void][] = [
-    ['HOST', () => p2pGo(`host:${code()}`, pub ? 1 : 0)],
-    ['JOIN', () => p2pGo(`join:${code()}`, 0)],
+    ['HOST', (): void => p2pGo(`host:${code()}`, pub ? 1 : 0)],
+    ['JOIN', (): void => p2pGo(`join:${code()}`, 0)],
     // Quick join: the relay hands back the oldest open lobby.
-    ['QUICK JOIN', () => p2pGo('quick', 0)],
+    ['QUICK JOIN', (): void => p2pGo('quick', 0)],
   ];
   for (const [text, fn] of specs) {
     const b = btn(text);
@@ -150,17 +150,17 @@ function mapPicker(h: LobbyPanelHost): { select: HTMLSelectElement; thumb: HTMLI
   // <img> 404 spams the console, so probe with fetch first: a missing
   // thumb quietly hides, a present one loads from cache.
   let probe = 0;
-  const update = async () => {
+  const update = async (): Promise<void> => {
     const url = select.value && h.deps.mapThumbUrl ? h.deps.mapThumbUrl(select.value) : '';
     probe += 1;
     const gen = probe;
     if (!url) { thumb.style.display = 'none'; return; }
-    const ok = await fetch(url).then((r) => r.ok).catch(() => false);
+    const ok = await fetch(url).then((r): boolean => r.ok).catch((): boolean => false);
     if (gen !== probe) {return;} // selection moved on while probing
     thumb.style.display = ok ? 'block' : 'none';
     if (ok) {thumb.src = url;}
   };
-  thumb.addEventListener('error', () => { thumb.style.display = 'none'; });
+  thumb.addEventListener('error', (): void => { thumb.style.display = 'none'; });
   select.addEventListener('change', update);
   // Refills change the selection without firing 'change' — watch the
   // option list so the preview tracks mode filtering too.
@@ -175,13 +175,13 @@ function modeToggleRow(sel: HTMLSelectElement): HTMLDivElement {
   const row = document.createElement('div');
   row.className = 'lb-quick';
   row.style.cssText = 'flex-wrap:wrap;margin-bottom:2px;';
-  const rebuild = () => {
+  const rebuild = (): void => {
     row.textContent = '';
     for (const o of sel.options) {
       const b = btn(o.textContent ?? o.value);
       b.dataset.v = o.value;
       b.classList.toggle('active', o.value === sel.value);
-      b.addEventListener('click', () => {
+      b.addEventListener('click', (): void => {
         sel.value = o.value;
         sel.dispatchEvent(new Event('change'));
       });
@@ -190,13 +190,13 @@ function modeToggleRow(sel: HTMLSelectElement): HTMLDivElement {
   };
   // Programmatic picks (map auto-adopts its default ruleset) fire
   // 'change' without touching the option list — resync actives on it.
-  const sync = () => {
+  const sync = (): void => {
     for (const x of row.children) {
       (x as HTMLElement).classList.toggle('active', (x as HTMLElement).dataset.v === sel.value);
     }
   };
   sel.addEventListener('change', sync);
-  new MutationObserver(() => { rebuild(); }).observe(sel, { childList: true });
+  new MutationObserver((): void => { rebuild(); }).observe(sel, { childList: true });
   rebuild();
   return row;
 }
@@ -208,21 +208,21 @@ function mapListBox(sel: HTMLSelectElement): HTMLDivElement {
   const box = document.createElement('div');
   box.className = 'lb-maplist';
   box.style.cssText = 'flex:0 0 44%;min-width:0;max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;';
-  const rebuild = () => {
+  const rebuild = (): void => {
     box.textContent = '';
     for (const o of sel.options) {
       const b = btn(o.textContent ?? o.value);
       b.dataset.v = o.value;
       b.style.cssText = 'flex:none;text-align:left;font-size:0.66rem;padding:7px 9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
       b.classList.toggle('active', o.value === sel.value);
-      b.addEventListener('click', () => {
+      b.addEventListener('click', (): void => {
         sel.value = o.value;
         sel.dispatchEvent(new Event('change'));
       });
       box.append(b);
     }
   };
-  const sync = () => {
+  const sync = (): void => {
     for (const x of box.children) {
       (x as HTMLElement).classList.toggle('active', (x as HTMLElement).dataset.v === sel.value);
     }
@@ -239,7 +239,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     // a floating HUD button during gameplay was HUD clutter. The panel
     // mounts inside #overlay so menu-close takes it down too.
     const openBtn = document.getElementById('lobby-open');
-    if (openBtn) {openBtn.addEventListener('click', () => h.toggle());}
+    if (openBtn) {openBtn.addEventListener('click', (): void => h.toggle());}
 
     // ESC-menu disconnect — the classic "leave server" is a one-shot
     // reload to a clean URL: solo boot IS the disconnected state, so no
@@ -247,14 +247,14 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     // menu open because in-place switchRoom hops change the room without
     // a reload.
     const leaveServerBtn = document.getElementById('leave-server');
-    const syncLeaveBtn = () => {
+    const syncLeaveBtn = (): void => {
       if (!leaveServerBtn) {return;}
       const online = urlParams.room != null || urlParams.p2p != null || settings.get('fps-p2p') !== '';
       leaveServerBtn.style.display = online ? 'block' : 'none';
     };
     if (leaveServerBtn) {
       syncLeaveBtn();
-      leaveServerBtn.addEventListener('click', () => {
+      leaveServerBtn.addEventListener('click', (): void => {
         settings.set('fps-p2p', '');
         settings.set('fps-lobby', 0);
         const q = new URLSearchParams(window.location.search);
@@ -273,14 +273,14 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     tabBar.className = 'lb-tabs';
     const tabs = new Map<string, HTMLDivElement>();
     const tabBtns: HTMLButtonElement[] = [];
-    const showTab = (name: string) => {
+    const showTab = (name: string): void => {
       for (const [n, el] of tabs) {el.style.display = n === name ? 'block' : 'none';}
       for (const b of tabBtns) {b.classList.toggle('active', b.dataset.tab === name);}
     };
     for (const name of ['JOIN', 'HOST', 'OFFLINE', 'P2P']) {
       const b = btn(name);
       b.dataset.tab = name;
-      b.addEventListener('click', () => showTab(name));
+      b.addEventListener('click', (): void => showTab(name));
       tabBtns.push(b);
       tabBar.append(b);
       const page = document.createElement('div');
@@ -297,7 +297,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     const refreshBtn = btn('↻');
     refreshBtn.title = 'refresh list';
     refreshBtn.style.cssText = 'font-size:0.7rem;padding:2px 8px;';
-    refreshBtn.addEventListener('click', () => { h.refresh(); refreshLobsFn(); });
+    refreshBtn.addEventListener('click', (): void => { h.refresh(); refreshLobsFn(); });
     // Server-level RTT — one ping covers every room row (they all live
     // on the same host), so it lives in the header, not a column.
     const pingEl = document.createElement('span');
@@ -314,7 +314,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     // meaningful while you're in a named match.
     const leaveBtn = btn('LEAVE');
     leaveBtn.style.cssText = 'font-size:0.6rem;padding:2px 8px;';
-    leaveBtn.addEventListener('click', () => h.join('default'));
+    leaveBtn.addEventListener('click', (): void => h.join('default'));
     hereRow.append(here, leaveBtn);
     const rows = document.createElement('div');
     rows.className = 'lb-rows';
@@ -329,7 +329,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     nameInput.placeholder = 'auto';
     nameInput.className = 'lb-input';
     nameInput.style.cssText = 'flex:1;min-width:0;';
-    nameInput.addEventListener('keydown', (e) => {
+    nameInput.addEventListener('keydown', (e): void => {
       e.stopPropagation();
       if (e.key === 'Enter') {hostBtn.click();}
     });
@@ -340,7 +340,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     // Hidden store — the toggle row beside it is the actual UI; the
     // select keeps serving fillMapSelect/handler reads.
     modeSelect.style.display = 'none';
-    modeSelect.addEventListener('change', () => h.fillMapSelect());
+    modeSelect.addEventListener('change', (): void => h.fillMapSelect());
     modeRow.append(modeSelect);
     // Toggle row is a page-level block under the MODE field — inside the
     // flex field it shares the row and wraps at half width.
@@ -356,7 +356,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
       for (const [kind, text] of [['t2', 'T2'], ['custom', 'CUSTOM']] as const) {
         const b = btn(text);
         b.classList.toggle('active', h.mapFamOn(kind));
-        b.addEventListener('click', () => {
+        b.addEventListener('click', (): void => {
           h.toggleMapFam(kind);
           for (const f of famBtns) {f.b.classList.toggle('active', h.mapFamOn(f.kind));}
         });
@@ -371,7 +371,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     const privBtn = btn('PRIVATE');
     privBtn.classList.toggle('active', settings.get('fps-unlisted') === 1);
     privBtn.title = 'unlisted — not on the public room list';
-    privBtn.addEventListener('click', () => {
+    privBtn.addEventListener('click', (): void => {
       const on = settings.get('fps-unlisted') !== 1;
       settings.set('fps-unlisted', on ? 1 : 0);
       privBtn.classList.toggle('active', on);
@@ -389,7 +389,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
         const b = btn(label_);
         b.title = tip;
         b.classList.toggle('active', settings.get(key) !== 1);
-        b.addEventListener('click', () => {
+        b.addEventListener('click', (): void => {
           const off = settings.get(key) !== 1;
           settings.set(key, off ? 1 : 0);
           b.classList.toggle('active', !off);
@@ -408,11 +408,11 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     botsInput.placeholder = 'map default';
     botsInput.className = 'lb-input';
     botsInput.style.cssText = 'width:110px;text-align:right;';
-    botsInput.addEventListener('keydown', (e) => e.stopPropagation());
+    botsInput.addEventListener('keydown', (e): void => e.stopPropagation());
     botsRow.append(botsInput);
     const hostBtn = btn('PLAY');
     hostBtn.style.cssText = 'width:100%;margin-top:6px;border-color:rgba(58,167,255,0.4);';
-    hostBtn.addEventListener('click', async () => {
+    hostBtn.addEventListener('click', async (): Promise<void> => {
       hostBtn.disabled = true;
       try {
         const map = mapSelect.value;
@@ -437,7 +437,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     quick.className = 'lb-quick';
     for (const mode of ['ctf', 'tdm', 'dm', 'nuggets']) {
       const b = btn(mode.toUpperCase());
-      b.addEventListener('click', async () => {
+      b.addEventListener('click', async (): Promise<void> => {
         b.disabled = true;
         try { h.join((await h.deps.quickJoin(mode)).room); }
         catch { b.disabled = false; }
@@ -454,7 +454,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     input.style.flex = '1';
     // Named-room joins honor the HOST MATCH pickers — a fresh room spins up
     // from the selected spec + bot count instead of always landing bare.
-    const named = () => {
+    const named = (): void => {
       const v = input.value.trim();
       if (!v) {return;}
       const map = mapSelect.value || undefined;
@@ -462,7 +462,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
       const bots = botsInput.value === '' ? undefined : Math.max(0, Math.min(24, Number(botsInput.value) || 0));
       h.join(v, map, bots, mode);
     };
-    input.addEventListener('keydown', (e) => {
+    input.addEventListener('keydown', (e): void => {
       e.stopPropagation();
       if (e.key === 'Enter') {named();}
     });
@@ -479,9 +479,9 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     srvIn.value = settings.get('fps-server');
     srvIn.className = 'lb-input';
     srvIn.style.cssText = 'flex:1;min-width:0;';
-    srvIn.addEventListener('keydown', (e) => e.stopPropagation());
+    srvIn.addEventListener('keydown', (e): void => e.stopPropagation());
     const srvBtn = btn('GO');
-    srvBtn.addEventListener('click', () => { settings.set('fps-server', srvIn.value.trim()); window.location.reload(); });
+    srvBtn.addEventListener('click', (): void => { settings.set('fps-server', srvIn.value.trim()); window.location.reload(); });
     srvRow.append(srvIn, srvBtn);
 
     // Player name lives in the menu-side PROFILE row (#name-input) —
@@ -495,7 +495,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     // one-shot — a dead code sitting in the box reads as a feature.
     p2pIn.className = 'lb-input';
     p2pIn.style.cssText = 'flex:1;min-width:0;';
-    p2pIn.addEventListener('keydown', (e) => e.stopPropagation());
+    p2pIn.addEventListener('keydown', (e): void => e.stopPropagation());
     p2pRow.append(p2pIn);
     const p2pBtns = buildP2PButtons(p2pIn);
 
@@ -504,7 +504,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     const lobLbl = label('OPEN LOBBIES');
     const lobRows = document.createElement('div');
     lobRows.className = 'lb-rows';
-    const refreshLobsFn = async () => {
+    const refreshLobsFn = async (): Promise<void> => {
       lobRows.textContent = '';
       if (!h.deps.listP2pLobbies) {return;}
       try {
@@ -515,12 +515,12 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
           const row = btn(`${l.room}  ·  ${Math.max(0, Math.round((Date.now() - l.since) / 60_000))}m`);
           row.classList.add('lb-room');
           row.style.textAlign = 'left';
-          row.addEventListener('click', () => p2pGo(`join:${l.room}`, 0));
+          row.addEventListener('click', (): void => p2pGo(`join:${l.room}`, 0));
           lobRows.append(row);
         }
       } catch { /* relay unreachable — same failure class as /rooms */ }
     };
-    const refreshLobs = () => { refreshLobsFn(); };
+    const refreshLobs = (): void => { refreshLobsFn(); };
     refreshLobs();
 
     // Advanced paths shelved for now — JOIN is browser + quick-join only.
@@ -562,11 +562,11 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     soloBotsIn.placeholder = 'map default';
     soloBotsIn.className = 'lb-input';
     soloBotsIn.style.cssText = 'width:110px;text-align:right;';
-    soloBotsIn.addEventListener('keydown', (e) => e.stopPropagation());
+    soloBotsIn.addEventListener('keydown', (e): void => e.stopPropagation());
     soloBotsRow.append(soloBotsIn);
     const soloBtn = btn('PLAY');
     soloBtn.style.cssText = 'width:100%;margin-top:6px;border-color:rgba(58,167,255,0.4);';
-    soloBtn.addEventListener('click', () => {
+    soloBtn.addEventListener('click', (): void => {
       const bots = soloBotsIn.value === '' ? undefined : Math.max(0, Math.min(24, Number(soloBotsIn.value) || 0));
       playOffline(soloModeSel.value, soloMapSel.value, bots);
     });
@@ -590,7 +590,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     // hides it anyway, but the poll timer would keep burning for nothing.
     let menuWasOpen = false;
     let doorShown = false;
-    new MutationObserver(() => {
+    new MutationObserver((): void => {
       const menuOpen = document.body.classList.contains('menu-open');
       if (!menuOpen && panel.style.display !== 'none') {h.toggle();}
       // No session at all → the browser IS the front door: the FIRST

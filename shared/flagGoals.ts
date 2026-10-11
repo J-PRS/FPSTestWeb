@@ -187,7 +187,7 @@ export function roleObjective(role: string, s: FlagSituation, commit = 1, side =
  *  reach. With a threat inbound it interposes — plants a few meters
  *  toward the incoming line so a capping run hits a heavy's hitbox
  *  before it hits the flag. */
-function hofGoal(s: FlagSituation, commit: number) {
+function hofGoal(s: FlagSituation, commit: number): { x: number; y: number; z: number; } {
   const T = BOT_TUNING.hof;
   if (s.dropped && Math.hypot(s.dropped.x - s.home.x, s.dropped.z - s.home.z) < T.dropR) {return s.dropped;}
   if (s.threat) {
@@ -210,7 +210,7 @@ function hofGoal(s: FlagSituation, commit: number) {
  *  carrier closing on home pulls midfield defense OUT to meet him —
  *  early escort beats a late body-block: the carrier's most fragile
  *  leg is the approach, where chasers converge. */
-function defenseGoal(s: FlagSituation, role: string, side: number) {
+function defenseGoal(s: FlagSituation, role: string, side: number): { x: number; y: number; z: number; } {
   if (s.thief) {return s.thief;}
   if (s.dropped) {return s.dropped;}
   if (s.escort && Math.hypot(s.escort.x - s.home.x, s.escort.z - s.home.z) < 260) {return s.escort;}
@@ -230,7 +230,7 @@ function defenseGoal(s: FlagSituation, role: string, side: number) {
 
 /** Capper: the flag route is the job — escort a carrier teammate,
  *  otherwise press the stand. Only a dropped own flag pulls it off-route. */
-function capperGoal(s: FlagSituation) {
+function capperGoal(s: FlagSituation): { x: number; y: number; z: number; } {
   if (s.escort) {return s.escort;}
   if (s.dropped) {return s.dropped;}
   if (s.enemyStand) {return s.enemyStand;}
@@ -243,7 +243,7 @@ function capperGoal(s: FlagSituation) {
  *  flag — parking ON the stand is the capper's death, not the
  *  bombardier's job. Falls back to escort/home when there's no stand
  *  to shell. */
-function bombardierGoal(s: FlagSituation) {
+function bombardierGoal(s: FlagSituation): { x: number; y: number; z: number; } {
   if (s.enemyStand) {
     const dx = s.home.x - s.enemyStand.x, dz = s.home.z - s.enemyStand.z;
     const d = Math.hypot(dx, dz);
@@ -264,7 +264,7 @@ function bombardierGoal(s: FlagSituation) {
 
 /** Infiltrator: slips in to wreck gear / grab — the stand press holds
  *  even when nobody's home so the cloak keeps covering the breach. */
-function infiltratorGoal(s: FlagSituation) {
+function infiltratorGoal(s: FlagSituation): { x: number; y: number; z: number; } {
   if (s.escort) {return s.escort;}
   // The push call outranks a routine stand press — the breach is timed
   // to the capper's arrival, not whenever the saboteur wandered up.
@@ -278,7 +278,7 @@ function infiltratorGoal(s: FlagSituation) {
  *  then hang ~40m behind whoever presses the stand (close enough to
  *  beam the breachers, far enough to live), a dropped flag pulls like
  *  everyone else's, home otherwise. */
-function medicGoal(s: FlagSituation) {
+function medicGoal(s: FlagSituation): { x: number; y: number; z: number; } {
   if (s.escort) {return s.escort;}
   if (s.dropped) {return s.dropped;}
   if (s.enemyStand) {
@@ -297,7 +297,7 @@ function medicGoal(s: FlagSituation) {
  *  while our flag is out the score is blocked anyway, so returning it
  *  beats shadowing a carrier who legally can't cap yet. Then escort,
  *  then press the enemy stand to clear it for the capper. */
-function offenseGoal(s: FlagSituation) {
+function offenseGoal(s: FlagSituation): { x: number; y: number; z: number; } {
   // The llama deny: grabbing THEIR flag removes the cap condition
   // outright while chasing a fast carrier the last stretch is a lost
   // footrace. Urgency is a field, not a cutoff — odds of the deny play

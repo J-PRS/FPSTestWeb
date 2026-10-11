@@ -106,7 +106,7 @@ export async function fetchFromServer(m: CoolShotManager): Promise<void> {
       }));
       logger.debug(`Fetched ${serverDemos.length} demos from server`);
 
-      const localFilenames = new Set(m.coolShots.map(s => s.filename));
+      const localFilenames = new Set(m.coolShots.map((s): string | undefined => s.filename));
       for (const sd of serverDemos) {
         if (!localFilenames.has(sd.filename)) {
           m.coolShots.push(sd);

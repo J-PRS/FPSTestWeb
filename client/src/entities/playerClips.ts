@@ -208,7 +208,7 @@ export const CLASS_BODY_SPEC: Record<string, {
   walkDirs?: RigManifest['walkDirs'];
 }> = Object.fromEntries(
   Object.entries(RIG_MANIFEST)
-    .filter(([, r]) => r.fitH !== undefined && r.fixedScale === undefined && r.url.includes('/class_'))
+    .filter(([, r]): boolean => r.fitH !== undefined && r.fixedScale === undefined && r.url.includes('/class_'))
     .map(([k, r]) => [k, { url: r.url, yaw: r.yaw, fitH: r.fitH!, anims: r.anims, gunLocal: r.gunLocal, mount: r.mount, walkDirs: r.walkDirs }]),
 );
 
@@ -397,7 +397,7 @@ export const MANNEQUIN_KEVDEV_BONE_MAP: Record<string, string> = {
 
 // `_N` tails are GLTFLoader dedupe suffixes (multi-skin GLBs repeat joint
 // names), not authored bones — strip before normalizing.
-export const normBone = (s: string) => s.replace(/_\d+$/, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+export const normBone = (s: string): string => s.replace(/_\d+$/, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
 // Vexa rig → kevdev B-* names. The Base_Human* chain is semantically 1:1
 // with the robot's — extra limb segments (Upperarm2/3, digits, lash/eye

@@ -20,16 +20,16 @@ export function collectRemoteFrames(remoteFrames: RemoteFrame[], clipStart: numb
     if (f.timestamp >= clipStart) {break;}
     lastBefore.set(f.rosterIdx, f);
   }
-  const inWindow = remoteFrames.filter(
-    f => f.timestamp >= clipStart && f.timestamp <= clipEnd
+  const inWindow = remoteFrames.filter((
+    f): boolean => f.timestamp >= clipStart && f.timestamp <= clipEnd
   );
   const out: RemoteFrame[] = [];
   for (const [, f] of lastBefore) {
     out.push(Object.assign({}, f, {timestamp: clipStart}));
   }
   out.push(...inWindow);
-  out.sort((a, b) => a.timestamp - b.timestamp);
-  return out.map(f => (((Object.assign({}, f, {timestamp: f.timestamp - clipStart})))));
+  out.sort((a, b): number => a.timestamp - b.timestamp);
+  return out.map((f): RemoteFrame & { timestamp: number; } => (((Object.assign({}, f, {timestamp: f.timestamp - clipStart})))));
 }
 
 // Projectile events in [clipStart, clipEnd], plus synthetic Fired events at
@@ -60,8 +60,8 @@ export function collectProjectileEvents(projectileEvents: ProjectileEvent[], cli
 
   return [
     ...snapshotProjEvents,
-    ...projectileEvents.filter(
-      e => e.timestamp >= clipStart && e.timestamp <= clipEnd
+    ...projectileEvents.filter((
+      e): boolean => e.timestamp >= clipStart && e.timestamp <= clipEnd
     ),
   ];
 }
@@ -79,8 +79,8 @@ export function collectTargetEvents(targetEvents: TargetEvent[], clipStart: numb
   }
 
   // Target events that fall inside the clip window
-  const actualTgtEvents = targetEvents.filter(
-    e => e.timestamp >= clipStart && e.timestamp <= clipEnd
+  const actualTgtEvents = targetEvents.filter((
+    e): boolean => e.timestamp >= clipStart && e.timestamp <= clipEnd
   );
 
   return [

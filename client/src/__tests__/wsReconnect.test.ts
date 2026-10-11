@@ -11,30 +11,30 @@ class FakeWS {
   sent: unknown[] = [];
   private listeners = new Map<string, ((e?: unknown) => void)[]>();
   constructor(public url: string) { FakeWS.instances.push(this); }
-  addEventListener(name: string, fn: (e?: unknown) => void) {
+  addEventListener(name: string, fn: (e?: unknown) => void): void {
     const l = this.listeners.get(name) ?? []; l.push(fn); this.listeners.set(name, l);
   }
-  send(d: unknown) { this.sent.push(d); }
-  close() { this.readyState = FakeWS.CLOSED; this.fire('close', { code: 1000, reason: '' }); }
-  fire(name: string, e?: unknown) {
+  send(d: unknown): void { this.sent.push(d); }
+  close(): void { this.readyState = FakeWS.CLOSED; this.fire('close', { code: 1000, reason: '' }); }
+  fire(name: string, e?: unknown): void {
     if (name === 'open') {this.readyState = FakeWS.OPEN;}
     if (name === 'close') {this.readyState = FakeWS.CLOSED;}
     for (const fn of this.listeners.get(name) ?? []) {fn(e);}
   }
 }
 
-describe('WebSocketConnection reconnect contract', () => {
-  beforeEach(() => {
+describe('WebSocketConnection reconnect contract', (): void => {
+  beforeEach((): void => {
     FakeWS.instances = [];
     vi.stubGlobal('WebSocket', FakeWS);
     vi.useFakeTimers();
   });
-  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+  afterEach((): void => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
-  const conn = (interval = 1000) =>
+  const conn = (interval = 1000): WebSocketConnection =>
     new WebSocketConnection({ url: 'ws://x', reconnectInterval: interval });
 
-  it('deliberate disconnect() never schedules a reconnect', () => {
+  it('deliberate disconnect() never schedules a reconnect', (): void => {
     const c = conn();
     c.connect();
     FakeWS.instances[0]!.fire('open');
@@ -43,7 +43,7 @@ describe('WebSocketConnection reconnect contract', () => {
     expect(FakeWS.instances).toHaveLength(1); // 'close' fired but no re-dial
   });
 
-  it('a session that died before stabilizing backs off 4x (flap damper)', () => {
+  it('a session that died before stabilizing backs off 4x (flap damper)', (): void => {
     const c = conn(1000);
     c.connect();
     const ws = FakeWS.instances[0]!;
@@ -56,7 +56,7 @@ describe('WebSocketConnection reconnect contract', () => {
     expect(FakeWS.instances).toHaveLength(2);
   });
 
-  it('a long-lived session retries at the base interval', () => {
+  it('a long-lived session retries at the base interval', (): void => {
     const c = conn(1000);
     c.connect();
     const ws = FakeWS.instances[0]!;
@@ -67,18 +67,18 @@ describe('WebSocketConnection reconnect contract', () => {
     expect(FakeWS.instances).toHaveLength(2);
   });
 
-  it('offline queue caps at 100 and KEEP_NEWEST dedupes volatile types', () => {
+  it('offline queue caps at 100 and KEEP_NEWEST dedupes volatile types', (): void => {
     const c = conn();
     c.connect();                            // socket still CONNECTING → queued
     for (let i = 0; i < 60; i += 1) {c.send(JSON.stringify({ type: 'position', i }));}
     for (let i = 0; i < 60; i += 1) {c.send(JSON.stringify({ type: 'claim', i }));}
     const q = (c as unknown as { messageQueue: unknown[] }).messageQueue;
     expect(q.length).toBeLessThanOrEqual(100);
-    const positions = (q as { type?: string }[]).filter(m => m.type === 'position');
+    const positions = (q as { type?: string }[]).filter((m): boolean => m.type === 'position');
     expect(positions).toHaveLength(1);      // only the freshest position kept
   });
 
-  it('a handshake stuck in CONNECTING is closed at 10s so the retry loop keeps cycling', () => {
+  it('a handshake stuck in CONNECTING is closed at 10s so the retry loop keeps cycling', (): void => {
     // The zombie: a black-holed host fires no events for the OS TCP
     // timeout (~2min); each retry starves that whole window. The connect
     // timer closes the socket instead, its 'close' re-arms the loop.
@@ -92,7 +92,7 @@ describe('WebSocketConnection reconnect contract', () => {
     expect(FakeWS.instances).toHaveLength(2);            // re-dialed, not starved
   });
 
-  it('an opened socket is left alone by the handshake watchdog', () => {
+  it('an opened socket is left alone by the handshake watchdog', (): void => {
     const c = conn(1000);
     c.connect();
     const ws = FakeWS.instances[0]!;
@@ -102,12 +102,12 @@ describe('WebSocketConnection reconnect contract', () => {
     expect(FakeWS.instances).toHaveLength(1);
   });
 
-  it('binary frames dedupe to the newest while queued', () => {
+  it('binary frames dedupe to the newest while queued', (): void => {
     const c = conn();
     c.connect();
     c.send(new Uint8Array([1, 2]));
     c.send(new Uint8Array([3, 4]));
     const q = (c as unknown as { messageQueue: { data: unknown }[] }).messageQueue;
-    expect(q.filter(m => m.data instanceof Uint8Array)).toHaveLength(1);
+    expect(q.filter((m): boolean => m.data instanceof Uint8Array)).toHaveLength(1);
   });
 });

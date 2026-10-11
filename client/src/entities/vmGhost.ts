@@ -23,7 +23,7 @@ export function ghostify(v: ViewModel, m: THREE.Material): void {
     // Shared-palette materials (bodyMat/darkMat serve every weapon) may
     // already be in the set — a second capture would store the faded
     // 0.3 as the restore value and stick them translucent forever.
-    if (v.ghostMats.some(g => g.m === m)) {return;}
+    if (v.ghostMats.some((g): boolean => g.m === m)) {return;}
     v.ghostMats.push({ m, opacity: m.opacity, transparent: m.transparent, depthWrite: m.depthWrite });
     m.opacity = Math.min(m.opacity, m.transparent ? 0.25 : 0.3);
     m.transparent = true;
@@ -52,7 +52,7 @@ export function setGhost(v: ViewModel, on: boolean): void {
     }
     const seen = new Set<THREE.Material>();
     const toShell: THREE.Mesh[] = [];
-    v.group.traverse((o) => {
+    v.group.traverse((o): void => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) {
         const spr = o as THREE.Sprite;
@@ -90,7 +90,7 @@ export function setShield(v: ViewModel, on: boolean, color = 0x66_CC_FF): void {
     const src = v.weapons.get(v.activeWeapon);
     if (!src) {return;}
     const shell = src.clone(true);
-    shell.traverse((o) => {
+    shell.traverse((o): void => {
       const m = o as THREE.Mesh;
       if (m.isMesh) {m.material = makeShieldMaterial(color);}
     });
@@ -101,7 +101,7 @@ export function setShield(v: ViewModel, on: boolean, color = 0x66_CC_FF): void {
 /** Tick the field animation on the gun shells (called from update). */
 export function updateShieldShells(v: ViewModel, dt: number): void {
     for (const s of v.shieldShells) {
-      s.traverse((o) => {
+      s.traverse((o): void => {
         const m = (o as THREE.Mesh).material as THREE.ShaderMaterial;
         if (m?.uniforms?.uTime) {m.uniforms.uTime.value += dt;}
       });

@@ -7,11 +7,11 @@ export type { DeployKind } from './deployItems.ts';
 
 export const DEPLOY_KINDS: readonly DeployKind[] = Object.keys(DEPLOY_ITEMS) as DeployKind[];
 export const DEPLOY_MAX: Record<DeployKind, number> = Object.fromEntries(
-  Object.entries(DEPLOY_ITEMS).map(([k, d]) => [k, d.cap]),
+  Object.entries(DEPLOY_ITEMS).map(([k, d]): [string, number] => [k, d.cap]),
 ) as Record<DeployKind, number>;
 // Planted hp — server owns it, client mirrors it for local visuals until
 // the first deployHp tick lands. (nugget never plants an item — it mints
 // a pickup — so its cap/hp entries are table-fillers for the Record.)
 export const DEPLOY_HP: Record<DeployKind, number> = Object.fromEntries(
-  Object.entries(DEPLOY_ITEMS).map(([k, d]) => [k, d.hp]),
+  Object.entries(DEPLOY_ITEMS).map(([k, d]): [string, number] => [k, d.hp]),
 ) as Record<DeployKind, number>;

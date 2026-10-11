@@ -26,24 +26,24 @@ export class CoolShotsPanel {
   }
 
   private setup(): void {
-    this.demoManager.onCoolShotsChanged = (shots) => this.renderCoolShots(shots);
+    this.demoManager.onCoolShotsChanged = (shots): void => this.renderCoolShots(shots);
 
     // Autorecord toggles — state lives in DemoManager (localStorage),
     // the buttons only mirror it.
-    const bind = (id: string, get: () => boolean, set: (on: boolean) => void) => {
+    const bind = (id: string, get: () => boolean, set: (on: boolean) => void): void => {
       const btn = document.getElementById(id);
       if (!btn) {return;}
-      const sync = () => btn.classList.toggle('on', get());
-      btn.addEventListener('click', () => { set(!get()); sync(); });
+      const sync = (): boolean => btn.classList.toggle('on', get());
+      btn.addEventListener('click', (): void => { set(!get()); sync(); });
       sync();
     };
-    bind('cs-toggle-demo', () => this.demoManager.coolShotDemo, (v) => { this.demoManager.coolShotDemo = v; });
-    bind('cs-toggle-mp4', () => this.demoManager.coolShotMp4, (v) => { this.demoManager.coolShotMp4 = v; });
+    bind('cs-toggle-demo', (): boolean => this.demoManager.coolShotDemo, (v): void => { this.demoManager.coolShotDemo = v; });
+    bind('cs-toggle-mp4', (): boolean => this.demoManager.coolShotMp4, (v): void => { this.demoManager.coolShotMp4 = v; });
     
     // Refresh "time ago" labels every second — but only while the panel
     // is actually up: a closed overlay re-render is a 1Hz DOM rebuild
     // nobody sees. Same skip for a backgrounded tab.
-    setInterval(() => {
+    setInterval((): void => {
       if (document.hidden || this.overlay.style.display === 'none') {return;}
       if (this.lastCoolShots.length > 0) {
         this.renderCoolShots(this.lastCoolShots);
@@ -73,12 +73,12 @@ export class CoolShotsPanel {
     // distance, so multi-word names initial only when the pair overflows.
     let weapon = shot.weapon ?? '';
     if (weapon && dist && (weapon.length + dist.length) > 15 && weapon.includes(' ')) {
-      weapon = weapon.split(/\s+/).map(w => w[0]).join('');
+      weapon = weapon.split(/\s+/).map((w): string => w[0]).join('');
     }
     const meta = [weapon, dist].filter(Boolean).join(' · ');
     // Server-merged entries carry uploader-supplied strings (weapon) —
     // textContent keeps a crafted name inert.
-    const span = (cls: string, text: string) => {
+    const span = (cls: string, text: string): void => {
       const s = document.createElement('span');
       s.className = cls;
       s.textContent = text;
@@ -92,12 +92,12 @@ export class CoolShotsPanel {
     span('fmt fmt-demo', 'DEMO');
     if (shot.mp4Name) {span('fmt fmt-mp4', 'MP4');}
     span('time-ago', this.timeAgo(shot.timestamp));
-    item.addEventListener('click', () => {
+    item.addEventListener('click', (): void => {
       this.demoManager.playCoolShotById(shot.id);
       this.overlay.style.display = 'none';
       this.requestLock();
     });
-    item.addEventListener('contextmenu', (e) => {
+    item.addEventListener('contextmenu', (e): void => {
       e.preventDefault();
       this.openMenu(e.clientX, e.clientY, shot);
     });
@@ -119,30 +119,30 @@ export class CoolShotsPanel {
     this.closeMenu();
     const menu = document.createElement('div');
     menu.className = 'cool-shot-menu';
-    const act = (label: string, fn: () => void) => {
+    const act = (label: string, fn: () => void): void => {
       const b = document.createElement('button');
       b.textContent = label;
-      b.addEventListener('click', (e) => {
+      b.addEventListener('click', (e): void => {
         e.stopPropagation();
         this.closeMenu();
         fn();
       });
       menu.append(b);
     };
-    act('Play', () => {
+    act('Play', (): void => {
       this.demoManager.playCoolShotById(shot.id);
       this.overlay.style.display = 'none';
       this.requestLock();
     });
-    act('Download .demo', () => {
+    act('Download .demo', (): void => {
       this.demoManager.downloadCoolShotById(shot.id);
     });
     if (shot.mp4Name) {
-      act('Download MP4', () => {
+      act('Download MP4', (): void => {
         exportClip(shot.mp4Name!);
       });
     }
-    act('Export MP4', () => {
+    act('Export MP4', (): void => {
       this.demoManager.exportCoolShotMp4(shot.id);
       this.overlay.style.display = 'none';
       this.requestLock();
@@ -154,13 +154,13 @@ export class CoolShotsPanel {
     menu.style.left = `${Math.max(0, Math.min(x, innerWidth - mw - 4))}px`;
     menu.style.top = `${Math.max(0, Math.min(y, innerHeight - mh - 4))}px`;
     this.menu = menu;
-    const dismiss = (e: Event) => {
+    const dismiss = (e: Event): void => {
       if (menu.contains(e.target as Node)) {return;}
       this.closeMenu();
       document.removeEventListener('pointerdown', dismiss, true);
       document.removeEventListener('keydown', key, true);
     };
-    const key = (e: KeyboardEvent) => {
+    const key = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') { this.closeMenu(); e.stopPropagation(); }
       document.removeEventListener('pointerdown', dismiss, true);
       document.removeEventListener('keydown', key, true);
@@ -184,10 +184,10 @@ export class CoolShotsPanel {
 
     // Top 10 by lifetime (already sorted descending by lifetime)
     const top10 = shots.slice(0, 10);
-    top10.forEach((shot, i) => this.renderShotItem(this.coolShotsTop, shot, i + 1));
+    top10.forEach((shot, i): void => this.renderShotItem(this.coolShotsTop, shot, i + 1));
 
     // Recent 10 by timestamp (most recent first)
-    const recent10 = shots.toSorted((a, b) => b.timestamp - a.timestamp).slice(0, 10);
-    recent10.forEach((shot, i) => this.renderShotItem(this.coolShotsRecent, shot, i + 1));
+    const recent10 = shots.toSorted((a, b): number => b.timestamp - a.timestamp).slice(0, 10);
+    recent10.forEach((shot, i): void => this.renderShotItem(this.coolShotsRecent, shot, i + 1));
   }
 }

@@ -36,7 +36,7 @@ const T0 = performance.now();
 let lapT = T0;
 // Reload-to-reload timing: beforeunload stamps wall-clock so the next
 // boot reports the full F5 round trip (unload → server → module eval).
-addEventListener('beforeunload', () => {
+addEventListener('beforeunload', (): void => {
   try { localStorage.setItem('gunlab.unloadAt', String(Date.now())); } catch { /* private mode */ }
 });
 const reloadGap = ((): number | null => {
@@ -57,7 +57,7 @@ lap('module imports');
 interface LabState { wt: number; inspect: boolean; yaw: number; pitch: number; cam?: number[]; tgt?: number[]; fov?: number; z?: boolean; cat?: string; pick?: string }
 // Persisted so noreload-mode F5s come back to the same gun+angle — the
 // window park only survives HMR accepts.
-const saved = (() => {
+const saved = ((): LabState | undefined => {
   try {
     const s = JSON.parse(localStorage.getItem('gunlab') ?? '') as LabState;
     return s;
@@ -119,7 +119,7 @@ orbit.enableDamping = true;
 orbit.enabled = false;
 orbit.minDistance = 0.06; // never let the camera into the mesh
 orbit.maxDistance = 8;
-const trackDir = () => {
+const trackDir = (): void => {
   // Remember where the camera sits relative to the target — weapon
   // swaps refit distance along THIS line so the angle never jumps.
   const d = camera.position.clone().sub(orbit.target);
@@ -186,7 +186,7 @@ function dumpWeapon(wt: number, root: THREE.Object3D, name: string): string {
   let meshes = 0, verts = 0, tris = 0, bytes = 0;
   const attrs = new Set<string>();
   const wb = new THREE.Box3();
-  root.traverse((o) => {
+  root.traverse((o): void => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) {return;}
 meshes += 1;
@@ -229,7 +229,7 @@ let statEl: HTMLDivElement | null = null;
 let statAt = 0;
 function statRoot(): THREE.Object3D | undefined {
   return inspectAnchor ?? archiveGroup ??
-    vm.group.children.find(c => c.visible && c !== vm.flashMesh && c !== vm.flashMesh2);
+    vm.group.children.find((c): boolean => c.visible && c !== vm.flashMesh && c !== vm.flashMesh2);
 }
 function updateStats(): void {
   if (!statEl) {return;}
@@ -240,7 +240,7 @@ function updateStats(): void {
   const mats = new Set<THREE.Material>();
   const wb = new THREE.Box3();
   const _b = new THREE.Box3();
-  root.traverse((o) => {
+  root.traverse((o): void => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) {return;}
     if ((m as THREE.InstancedMesh).isInstancedMesh) {insts += 1;}
@@ -304,7 +304,7 @@ async function infoDump(all = false): Promise<void> {
     }
     const g = vm.weapons.get(state.wt);
     if (!g) { flashStatus('no active weapon'); return; }
-    const name = MODEL_BUILDERS.find(([wt]) => wt === state.wt)?.[1].name || '?';
+    const name = MODEL_BUILDERS.find(([wt]): boolean => wt === state.wt)?.[1].name || '?';
     lines.push(dumpWeapon(state.wt, g, `${name} (live)`));
   }
   await navigator.clipboard?.writeText(lines.join('\n'));
@@ -319,7 +319,7 @@ let zOverlay: THREE.Mesh | null = null;
 function zPaint(on: boolean): void {
   if (zOverlay) { scene.remove(zOverlay); zOverlay.geometry.dispose(); zOverlay = null; }
   if (!on) {return;}
-  const root = inspectAnchor ?? vm.group.children.find(c => c.visible && c !== vm.flashMesh);
+  const root = inspectAnchor ?? vm.group.children.find((c): boolean => c.visible && c !== vm.flashMesh);
   if (!root) { flashStatus('no active weapon'); return; }
   const { pairs, flagVerts } = zScan(root);
   if (!pairs) { flashStatus('zcheck: clean'); return; }
@@ -393,9 +393,9 @@ function applyWire(): void {
   const cw = (inspectAnchor ?? archiveGroup)?.userData.colliderWire as ((on: boolean) => void) | undefined;
   cw?.(wireOn);
   if (!wireOn) {return;}
-  const root = inspectAnchor ?? vm.group.children.find(c => c.visible && c !== vm.flashMesh && c !== vm.flashMesh2);
+  const root = inspectAnchor ?? vm.group.children.find((c): boolean => c.visible && c !== vm.flashMesh && c !== vm.flashMesh2);
   if (!root) {return;}
-  root.traverse((o) => {
+  root.traverse((o): void => {
     const m = o as THREE.Mesh;
     if (!m.isMesh || !m.visible) {return;}
     // White underlay: every tri edge, including flat-face seams.
@@ -440,7 +440,7 @@ function setInspect(on: boolean): void {
     applyWire();
     return;
   }
-  const active = vm.group.children.find(c => c.visible && c !== vm.flashMesh) as THREE.Group | undefined;
+  const active = vm.group.children.find((c): boolean => c.visible && c !== vm.flashMesh) as THREE.Group | undefined;
   if (!active) {return;}
   inspectAnchor = active;
   scene.add(active);
@@ -465,7 +465,7 @@ function setInspect(on: boolean): void {
 }
 
 function disposeVm(v: ViewModel): void {
-  v.group.traverse((o) => {
+  v.group.traverse((o): void => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) {return;}
     m.geometry.dispose();
@@ -490,7 +490,7 @@ function rebuild(): void {
   for (let i = 0; i < 60; i += 1) {vm.update(1 / 60, 0, 0, zeroVel, camera);}
   // A creature/pickup/archive pick died with the old group — respawn it.
   if (state.pick) {
-    const hit = [...ARCHIVE_BUILDERS, ...CREATURES, ...PICKUPS, ...CLASSES, ...STRUCTURES].find(([l]) => l === state.pick);
+    const hit = [...ARCHIVE_BUILDERS, ...CREATURES, ...PICKUPS, ...CLASSES, ...STRUCTURES].find(([l]): boolean => l === state.pick);
     if (hit) {selectArchive(hit[0], hit[1] as () => THREE.Group);}
   }
   if (wasInspect) {setInspect(true);}
@@ -523,7 +523,7 @@ async function manifoldParts(g: THREE.Group): Promise<{ Manifold: any; parts: TH
   const { Manifold, Mesh: MMesh } = await mani();
   g.updateWorldMatrix(true, true);
   const parts: THREE.Mesh[] = [];
-  g.traverse((o) => {
+  g.traverse((o): void => {
     const m = o as THREE.Mesh;
     if (m.isMesh && (m.material as THREE.Material).type !== 'MeshBasicMaterial') {parts.push(m);}
   });
@@ -610,7 +610,7 @@ async function unionToggle(): Promise<void> {
   // here (this was the original point of the union preview anyway).
   bakeVertexAO(wrap);
   const hidden: THREE.Object3D[] = [];
-  g.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && (m.material as THREE.Material).type !== 'MeshBasicMaterial') { m.visible = false; hidden.push(m); } });
+  g.traverse((o): void => { const m = o as THREE.Mesh; if (m.isMesh && (m.material as THREE.Material).type !== 'MeshBasicMaterial') { m.visible = false; hidden.push(m); } });
   g.add(out);
   unioned = { mesh: out, hidden };
   unionOn = true;
@@ -642,7 +642,7 @@ async function shellToggle(): Promise<void> {
   let carved = 0, outT = 0;
   for (let i = 0; i < manis.length; i += 1) {
     const m = parts[i]!;
-    const rest = Manifold.union(manis.filter((_, j) => j !== i));
+    const rest = Manifold.union(manis.filter((_, j): boolean => j !== i));
     const cut = manis[i].subtract(rest);
     rest.delete?.();
     const om = cut.getMesh();
@@ -695,7 +695,7 @@ function metalToggle(): void {
   if (!g) {return;}
   if (metalOn) {unmetal(); return;}
   let n = 0;
-  g.traverse((o) => {
+  g.traverse((o): void => {
     const m = o as THREE.Mesh;
     if (!m.isMesh || (m.material as THREE.Material).type !== 'MeshLambertMaterial') {return;}
     if (!metaled.has(m)) {metaled.set(m, m.material as THREE.Material);}
@@ -729,7 +729,7 @@ function paintAnimRail(): void {
     const b = document.createElement('button');
     b.textContent = s;
     if (s === animSel) {b.classList.add('active');}
-    b.addEventListener('click', () => { animSel = s; hook.set(s); paintAnimRail(); });
+    b.addEventListener('click', (): void => { animSel = s; hook.set(s); paintAnimRail(); });
     animRail.append(b);
   }
   if (!hook.dir) {return;}
@@ -739,7 +739,7 @@ function paintAnimRail(): void {
     const b = document.createElement('button');
     b.textContent = label;
     b.disabled = label === '·';
-    b.addEventListener('click', () => hook.dir!(f, s));
+    b.addEventListener('click', (): void => hook.dir!(f, s));
     drow.append(b);
   }
   animRail.append(drow);
@@ -760,7 +760,7 @@ function paintRail(): void {
     if ((state.cat ?? 'weapons') === id) {o.selected = true;}
     catSel.append(o);
   }
-  catSel.addEventListener('change', () => { state.cat = catSel.value; saveState(); paintRail(); });
+  catSel.addEventListener('change', (): void => { state.cat = catSel.value; saveState(); paintRail(); });
   rail.append(catSel);
   const catTable = state.cat === 'classes' ? CLASSES : state.cat === 'creatures' ? CREATURES : state.cat === 'items' ? ITEMS : state.cat === 'pickups' ? PICKUPS : state.cat === 'structures' ? STRUCTURES : null;
   if (catTable) {
@@ -768,18 +768,18 @@ function paintRail(): void {
       const b = document.createElement('button');
       b.textContent = label;
       if (archiveLabel === label && archiveGroup) {b.classList.add('active');}
-      b.addEventListener('click', () => selectArchive(label, build));
+      b.addEventListener('click', (): void => selectArchive(label, build));
       rail.append(b);
     }
     paintTools();
     return;
   }
-  const wts = [...vm.weapons.keys()].toSorted((a, b) => a - b);
+  const wts = [...vm.weapons.keys()].toSorted((a, b): number => a - b);
   for (const wt of wts) {
     const b = document.createElement('button');
     b.textContent = `${wt} ${WeaponType[wt] ?? '?'}`;
     if (wt === state.wt) {b.classList.add('active');}
-    b.addEventListener('click', () => select(wt));
+    b.addEventListener('click', (): void => select(wt));
     rail.append(b);
   }
   // Archive shelf — retired builders, for A/B against the live versions.
@@ -792,7 +792,7 @@ function paintRail(): void {
       const b = document.createElement('button');
       b.textContent = `† ${label}`;
       if (archiveLabel === label && archiveGroup) {b.classList.add('active');}
-      b.addEventListener('click', () => selectArchive(label, mkArc));
+      b.addEventListener('click', (): void => selectArchive(label, mkArc));
       rail.append(b);
     }
   }
@@ -813,7 +813,7 @@ function paintTools(): void {
   fovIn.type = 'range';
   fovIn.min = '35'; fovIn.max = '110'; fovIn.step = '1';
   fovIn.value = String(camera.fov);
-  fovIn.addEventListener('input', () => {
+  fovIn.addEventListener('input', (): void => {
     camera.fov = Number(fovIn.value);
     camera.updateProjectionMatrix();
     fovVal.textContent = `${fovIn.value}°`;
@@ -821,7 +821,7 @@ function paintTools(): void {
     saveState();
   });
   // Right-click snaps back to the game's viewmodel FOV.
-  fovIn.addEventListener('contextmenu', (e) => {
+  fovIn.addEventListener('contextmenu', (e): void => {
     e.preventDefault();
     fovIn.value = '55';
     fovIn.dispatchEvent(new Event('input'));
@@ -832,7 +832,7 @@ function paintTools(): void {
   const row = (labels: [label: string, fn: () => void][]): HTMLButtonElement[] => {
     const div = document.createElement('div');
     div.className = 'btnrow';
-    const bs = labels.map(([label, fn]) => {
+    const bs = labels.map(([label, fn]): HTMLButtonElement => {
       const b = document.createElement('button');
       b.textContent = label;
       b.addEventListener('click', fn);
@@ -846,8 +846,8 @@ function paintTools(): void {
   // reads the same flag). View+gun survive the reload via the saved pose.
   const baked = new URLSearchParams(window.location.search).has('bake');
   const [, bakeB] = row([
-    [state.inspect ? '◈ FPS' : '◉ inspect', () => { setInspect(!state.inspect); paintRail(); }],
-    ['▣ baked', () => {
+    [state.inspect ? '◈ FPS' : '◉ inspect', (): void => { setInspect(!state.inspect); paintRail(); }],
+    ['▣ baked', (): void => {
       const u = new URL(window.location.href);
       if (baked) {u.searchParams.delete('bake');} else {u.searchParams.set('bake', '1');}
       flushSave();
@@ -857,7 +857,7 @@ function paintTools(): void {
   bakeB!.classList.toggle('active', baked);
   const [, zB] = row([
     ['▦ sheet', shotSheet],
-    ['⚠ z', () => { zPaint(!zOverlay); state.z = Boolean(zOverlay); saveState(); paintRail(); }],
+    ['⚠ z', (): void => { zPaint(!zOverlay); state.z = Boolean(zOverlay); saveState(); paintRail(); }],
   ]);
   zB!.classList.toggle('active', Boolean(zOverlay));
   // Wear-mask debug — paints R=final wear / G=grime / B=edge flag instead
@@ -866,16 +866,16 @@ function paintTools(): void {
   // union (rendered weld) and shell (per-part carve) share one row —
   // they're the same question asked two ways.
   const [unionB, shellB, metalB] = row([
-    ['⛛ union', () => { unionToggle().then(paintRail); }],
-    ['◨ shell', () => { shellToggle().then(paintRail); }],
-    ['▤ metal', () => { metalToggle(); paintRail(); }],
+    ['⛛ union', (): void => { unionToggle().then(paintRail); }],
+    ['◨ shell', (): void => { shellToggle().then(paintRail); }],
+    ['▤ metal', (): void => { metalToggle(); paintRail(); }],
   ]);
   unionB!.classList.toggle('active', unionOn);
   shellB!.classList.toggle('active', shellOn);
   metalB!.classList.toggle('active', metalOn);
   const [wireB, wearB] = row([
-    ['▧ wire', () => { wireOn = !wireOn; applyWire(); paintRail(); }],
-    ['◐ wearviz', () => {
+    ['▧ wire', (): void => { wireOn = !wireOn; applyWire(); paintRail(); }],
+    ['◐ wearviz', (): void => {
       const u = new URL(window.location.href);
       if (wearViz) {u.searchParams.delete('wearviz');} else {u.searchParams.set('wearviz', '1');}
       flushSave();
@@ -885,15 +885,15 @@ function paintTools(): void {
   wireB!.classList.toggle('active', wireOn);
   wearB!.classList.toggle('active', wearViz);
   const [, statB] = row([
-    ['ⓘ info', () => infoDump()],
-    ['▦ stat', () => toggleStats()],
-    ['▣ src', () => copyBuilderSrc()],
+    ['ⓘ info', (): Promise<void> => infoDump()],
+    ['▦ stat', (): void => toggleStats()],
+    ['▣ src', (): Promise<void> => copyBuilderSrc()],
   ]);
   statB!.classList.toggle('active', statOn);
   row([
-    ['▸ kick', () => vm.kick(1)],
-    ['▸ punch', () => vm.punch(false)],
-    ['▸ throw', () => vm.startThrow()],
+    ['▸ kick', (): void => vm.kick(1)],
+    ['▸ punch', (): void => vm.punch(false)],
+    ['▸ throw', (): void => vm.startThrow()],
   ]);
   rail.append(tools);
 }
@@ -921,7 +921,7 @@ function shotSheet(): void {
   const keepPos = camera.position.clone();
   const keepQuat = camera.quaternion.clone();
   const keepAspect = camera.aspect;
-  const shot = (cx: number, cy: number, label: string) => {
+  const shot = (cx: number, cy: number, label: string): void => {
     renderer.render(scene, camera);
     g2.drawImage(renderer.domElement, cx * cell, cy * cell, cell, cell);
     g2.fillStyle = '#8f8';
@@ -980,13 +980,13 @@ function shotSheet(): void {
   // dataURL park for the /gunsheet middleware — it polls window for this
   // rather than scraping the canvas (toBlob is async either way).
   (window as unknown as { __sheetPNG?: string }).__sheetPNG = comp.toDataURL('image/png');
-  comp.toBlob((b) => {
+  comp.toBlob((b): void => {
     if (!b) {return;}
     // Clipboard for instant paste; /shot middleware drops the file in
     // client/shots/ so agents can read it without a download dance.
     const name = `w${state.wt}_sheet.png`;
     navigator.clipboard?.write?.([new ClipboardItem({ 'image/png': b })])
-      .catch(() => flashStatus('clipboard blocked — file still saved'));
+      .catch((): void => flashStatus('clipboard blocked — file still saved'));
     fetch(`/shot?name=${name}`, { method: 'POST', body: b });
   });
   flashStatus(`w${state.wt} sheet → clipboard + shots/`);
@@ -998,7 +998,7 @@ function shotSheet(): void {
 // vite dev serves the modules unminified.
 const GEO_SOURCES = import.meta.glob('./entities/viewmodel/*.ts', { query: '?raw', import: 'default' });
 async function copyBuilderSrc(): Promise<void> {
-  const entry = MODEL_BUILDERS.find(([wt]) => wt === state.wt);
+  const entry = MODEL_BUILDERS.find(([wt]): boolean => wt === state.wt);
   if (!entry) { flashStatus('no builder'); return; }
   const name = entry[1].name || 'mk?';
   const head = `export function ${name}`;
@@ -1080,7 +1080,7 @@ function select(wt: number): void {
 
 function flashStatus(msg: string): void {
   statusEl.innerHTML = `<span class="hot">${msg}</span>`;
-  setTimeout(() => { statusEl.innerHTML = ''; }, 1500);
+  setTimeout((): void => { statusEl.innerHTML = ''; }, 1500);
 }
 
 // --- baked-asset watch: HEAD signatures on this weapon's bake files ---
@@ -1114,13 +1114,13 @@ const pollTimer = new URLSearchParams(window.location.search).has('bake')
 // OrbitControls on the canvas — these listeners only feed the sway. ---
 let dragging = false, lastX = 0, lastY = 0;
 let lookDX = 0, lookDY = 0;
-addEventListener('mousedown', (e) => {
+addEventListener('mousedown', (e): void => {
   if ((e.target as HTMLElement).tagName === 'BUTTON') {return;}
   lastX = e.clientX; lastY = e.clientY;
   dragging = true;
 });
-addEventListener('mouseup', () => { dragging = false; });
-addEventListener('keydown', (e) => {
+addEventListener('mouseup', (): void => { dragging = false; });
+addEventListener('keydown', (e): void => {
   if (e.altKey && e.code === 'KeyQ') { e.preventDefault(); infoDump(false); return; }
   if (e.altKey && e.code === 'KeyW') { e.preventDefault(); infoDump(true); return; }
   if (e.code === 'ArrowDown' || e.code === 'ArrowUp') {
@@ -1128,12 +1128,12 @@ addEventListener('keydown', (e) => {
     const step = e.code === 'ArrowDown' ? 1 : -1;
     const table = state.cat === 'classes' ? CLASSES : state.cat === 'creatures' ? CREATURES : state.cat === 'items' ? ITEMS : state.cat === 'pickups' ? PICKUPS : state.cat === 'structures' ? STRUCTURES : null;
     if (table?.length) {
-      const i = table.findIndex(([l]) => l === archiveLabel);
+      const i = table.findIndex(([l]): boolean => l === archiveLabel);
       const next = table[(i + step + table.length) % table.length];
       selectArchive(next[0], next[1]);
       return;
     }
-    const wts = [...vm.weapons.keys()].toSorted((a, b) => a - b);
+    const wts = [...vm.weapons.keys()].toSorted((a, b): number => a - b);
     if (wts.length > 0) {
       const i = wts.indexOf(state.wt);
       select(wts[(i + step + wts.length) % wts.length]);
@@ -1145,7 +1145,7 @@ addEventListener('keydown', (e) => {
   setInspect(!state.inspect);
   paintRail();
 });
-addEventListener('mousemove', (e) => {
+addEventListener('mousemove', (e): void => {
   lookDX = e.clientX - lastX; lookDY = e.clientY - lastY;
   lastX = e.clientX; lastY = e.clientY;
   if (state.inspect || !dragging) { lookDX = 0; lookDY = 0; }
@@ -1165,8 +1165,8 @@ pickDot.renderOrder = 999;
 scene.add(pickDot);
 let pickDotTimer: ReturnType<typeof setTimeout> | undefined = undefined;
 let downX = 0, downY = 0;
-addEventListener('mousedown', (e) => { downX = e.clientX; downY = e.clientY; });
-addEventListener('mouseup', (e) => {
+addEventListener('mousedown', (e): void => { downX = e.clientX; downY = e.clientY; });
+addEventListener('mouseup', (e): void => {
   if (Math.hypot(e.clientX - downX, e.clientY - downY) > 4) {return;}
   if ((e.target as HTMLElement).tagName === 'BUTTON') {return;}
   pickPiece(e.clientX, e.clientY);
@@ -1178,7 +1178,7 @@ function pickPiece(cx: number, cy: number): void {
   // Raycaster doesn't honor visible=false — skip hits inside a hidden
   // subtree (the non-active weapons parked invisible in vm.group).
   const hit = raycaster.intersectObject(root, true)
-    .find(h => { for (let o: THREE.Object3D | null = h.object; o && o !== root.parent; o = o.parent) {if (!o.visible) {return false;}} return true; });
+    .find((h): boolean => { for (let o: THREE.Object3D | null = h.object; o && o !== root.parent; o = o.parent) {if (!o.visible) {return false;}} return true; });
   if (!hit) {return;}
   // Path label: ancestor chain up to the weapon group, e.g.
   // "Chaingun › barrels[2] CylinderGeometry @(0.09, 0, -0.55)".
@@ -1216,16 +1216,16 @@ function pickPiece(cx: number, cy: number): void {
   if (mesh.userData.flashTimer) {clearTimeout(mesh.userData.flashTimer as number);}
   if (mesh.material !== pickFlashMat) {mesh.userData.origMat = mesh.material;}
   mesh.material = pickFlashMat;
-  mesh.userData.flashTimer = setTimeout(() => {
+  mesh.userData.flashTimer = setTimeout((): void => {
     mesh.material = mesh.userData.origMat;
     mesh.userData.flashTimer = 0;
   }, 280);
   pickDot.position.copy(hit.point);
   pickDot.visible = true;
   clearTimeout(pickDotTimer);
-  pickDotTimer = setTimeout(() => { pickDot.visible = false; }, 700);
+  pickDotTimer = setTimeout((): void => { pickDot.visible = false; }, 700);
 }
-addEventListener('resize', () => {
+addEventListener('resize', (): void => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
@@ -1241,7 +1241,7 @@ const savedTgt = state.tgt ? [...state.tgt] : null;
 // Restore the parked non-weapon pick (archive/creature/pickup).
 if (state.pick) {
   const tables = [...ARCHIVE_BUILDERS, ...CREATURES, ...PICKUPS, ...CLASSES, ...STRUCTURES];
-  const hit = tables.find(([l]) => l === state.pick);
+  const hit = tables.find(([l]): boolean => l === state.pick);
   if (hit) {selectArchive(hit[0], hit[1] as () => THREE.Group);}
   else {state.pick = undefined;}
 }
@@ -1261,12 +1261,12 @@ if (state.inspect) {
 if (state.z) {zPaint(true);} // remembered ⚠z — after inspect restore (TDZ)
 lap(`restore pick=${state.pick ?? '-'} inspect=${Boolean(state.inspect)} z=${Boolean(state.z)}`);
 // First painted frame ≈ interactive — module eval + init + first render.
-requestAnimationFrame(() => {
+requestAnimationFrame((): void => {
   const tti = performance.now().toFixed(0);
   console.log(`[gunlab] interactive: nav+${tti}ms${reloadGap === null ? '' : ` f5-total ${Date.now() - Number(localStorage.getItem('gunlab.unloadAt'))}ms`}`);
 });
 let last = performance.now();
-renderer.setAnimationLoop(() => {
+renderer.setAnimationLoop((): void => {
   const now = performance.now();
   const dt = Math.min((now - last) / 1000, 0.1);
   last = now;
@@ -1309,7 +1309,7 @@ renderer.setAnimationLoop(() => {
 // tears down THIS instance or every accept would stack renderers/pollers.
 if (import.meta.hot) {
   import.meta.hot.accept();
-  import.meta.hot.dispose(() => {
+  import.meta.hot.dispose((): void => {
     renderer.setAnimationLoop(null);
     clearInterval(pollTimer);
     orbit.dispose();

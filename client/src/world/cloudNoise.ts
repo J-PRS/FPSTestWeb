@@ -15,7 +15,7 @@ export const noiseHash = (x: number, y: number): number => {
   h = (h ^ (h >> 13)) * 1_274_126_177 | 0;
   return ((h ^ (h >> 16)) >>> 0) / 4_294_967_295;
 };
-export const _smooth = (t: number) => t * t * (3 - 2 * t);
+export const _smooth = (t: number): number => t * t * (3 - 2 * t);
 
 // Sample a normalized CPU field with repeat-wrapping, bilinear.
 export function sampleBase(base: Float32Array, size: number, u: number, v: number): number {

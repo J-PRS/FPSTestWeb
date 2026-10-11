@@ -74,7 +74,7 @@ export class BotFire {
     const dx = aim.x - bot.position.x, dy = aim.y - bot.position.y, dz = aim.z - bot.position.z;
     const dist = Math.hypot(dx, dy, dz) || 1;
     const wt = pickBotWeaponSafe(lo, Math.hypot(dx, dz), dist, bot.botHp,
-      bot.skill ? (t) => aimSkillFor(bot.skill, t, 0) : undefined, bot.skill?.courage);
+      bot.skill ? (t): number => aimSkillFor(bot.skill, t, 0) : undefined, bot.skill?.courage);
     const melee = wt === WeaponType.Melee || dist <= MELEE_RANGE;
     if (!this.canFire(bot.playerId, melee ? WeaponType.Melee : (wt as WeaponType))) {return;}
     const cfg = melee ? undefined : getProjectileConfig(wt);
@@ -111,7 +111,7 @@ export class BotFire {
   private spawnShells(bot: GameBot, wt: number, cfg: NonNullable<ReturnType<typeof getProjectileConfig>>, nx: number, ny: number, nz: number): void {
     const dir = _shotDir.set(nx, ny, nz);
     const muzzle = _shotMuzzle.set(bot.position.x, bot.position.y + 1.4, bot.position.z);
-    const pellets = SLOT_DEFS.find(w => w.weaponType === wt)?.pellets;
+    const pellets = SLOT_DEFS.find((w): boolean => w.weaponType === wt)?.pellets;
     for (const d of pelletDirs(dir, pellets?.count ?? 1, pellets?.spread ?? 0)) {
       // Perk mods the server folds in: bombardier widens the boom,
       // sharpshooter tightens it (damage scaling lands at claim time).
@@ -123,11 +123,11 @@ export class BotFire {
       p.shooterTeam = bot.team;
       // 'local' isn't in remotePlayerPositions — this lets a bot shell
       // actually CONNECT with you instead of relying on a trigger-time claim.
-      p.sweepLocal = () => {
+      p.sweepLocal = (): THREE.Vector3 | null => {
         const pl = this.host.player();
         return pl.isDead ? null : pl.pos;
       };
-      p.localClass = () => this.host.player().appliedClass;
+      p.localClass = (): "light" | "medium" | "heavy" => this.host.player().appliedClass;
       this.host.world().projectiles.push(p);
     }
     // Positional — sfx.shoot is the LOCAL voice (full volume at the ear);
@@ -140,7 +140,7 @@ export class BotFire {
     if (!targetId) {return null;}
     if (targetId === 'local') { const p = this.host.player(); return p.isDead ? null : p.pos; }
     if (targetId.startsWith('creature:')) {
-      const t = this.host.targets.find(x => x.id === Number(targetId.slice(9)));
+      const t = this.host.targets.find((x): boolean => x.id === Number(targetId.slice(9)));
       return t && !t.dead ? t.pos : null;
     }
     const rp = this.host.world().remotePlayers.get(targetId);
@@ -187,8 +187,8 @@ export class BotFire {
       _shotDir.set(vx / vl, vy / vl, vz / vl), bot.vel,
       ((((((Object.assign({}, cfg, {aoeRadius: cfg.aoeRadius * bot.perkMods.aoeRadius,aoeDamage: cfg.aoeDamage * bot.perkMods.directDamage,needsServerTracking: false}))))))));
     p.shooterId = bot.playerId;
-    p.sweepLocal = () => { const pl = this.host.player(); return pl.isDead ? null : pl.pos; };
-    p.localClass = () => this.host.player().appliedClass;
+    p.sweepLocal = (): THREE.Vector3 | null => { const pl = this.host.player(); return pl.isDead ? null : pl.pos; };
+    p.localClass = (): "light" | "medium" | "heavy" => this.host.player().appliedClass;
     this.host.world().projectiles.push(p);
     sfx.shotAt(_shotMuzzle, wt, bot.vel);
   }
@@ -200,7 +200,7 @@ export class BotFire {
    *  botArsenal.propelWeapon — same kit, same pick. */
   private propelWeapon(bot: GameBot): number {
     const lo = bot.loadout ?? BOT_LOADOUTS[0]!;
-    const pick = [lo.mid, lo.far].find((wt) => {
+    const pick = [lo.mid, lo.far].find((wt): boolean => {
       const s = getWeaponStats(wt);
       return s && s.aoeRadius > 0 && s.speed > 0 && s.forceMode !== 'pull' && s.knockbackForce >= 20;
     });
@@ -267,7 +267,7 @@ function pelletDirs(dir: THREE.Vector3, count: number, spread: number): THREE.Ve
   _pelletUp.crossVectors(_pelletRight, dir);
   const rot = Math.random() * Math.PI * 2;
   const cs = Math.cos(rot), sn = Math.sin(rot);
-  return poissonDisc(count).map(pt => {
+  return poissonDisc(count).map((pt): THREE.Vector3 => {
     const ox = (pt.x * cs - pt.y * sn) * spread;
     const oy = (pt.x * sn + pt.y * cs) * spread;
     return dir.clone().addScaledVector(_pelletRight, ox).addScaledVector(_pelletUp, oy).normalize();

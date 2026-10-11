@@ -34,8 +34,8 @@ export class BotGoals {
     private wanderlust: () => number,
     private headingVec: () => { x: number; z: number },
     private nearDeath: (p: { x: number; z: number }) => boolean,
-    private duty: () => number = () => 1,
-    private social: () => number = () => 0.5,
+    private duty: () => number = (): number => 1,
+    private social: () => number = (): number => 0.5,
   ) {}
 
   /** The bot's nerve — where on the solo↔social dial it sits right now.
@@ -81,7 +81,7 @@ export class BotGoals {
     const wander = this.wanderCandidate(ctx, pos);
     const heard = this.heardGoal(ctx, pos);
     const cands: Array<{ goal: BotVec; score: number }> = [];
-    const offer = (goal: BotVec | null | undefined, weight: number, ignoreScent = false) => {
+    const offer = (goal: BotVec | null | undefined, weight: number, ignoreScent = false): void => {
       if (!goal) {return;}
       const d = Math.sqrt(distSq(pos, goal));
       const reach = 1 / (1 + d / 140);
@@ -135,7 +135,7 @@ export class BotGoals {
       for (const c of cands) {if (c.score > best.score) {best = c;}}
       // Hysteresis: the incumbent needs beating by a margin — flipping
       // goals on a 1% re-score reads as bot dithering, not judgment.
-      const incumbent = cands.find((c) => distSq(c.goal, s.goal) < 25 * 25);
+      const incumbent = cands.find((c): boolean => distSq(c.goal, s.goal) < 25 * 25);
       s.goal = incumbent && incumbent.score > best.score * 0.85 ? incumbent.goal : ((((((Object.assign({}, best.goal)))))));
       return;
     }

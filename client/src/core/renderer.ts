@@ -404,12 +404,12 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
 
   // Alt+Q census — enabled flag + which pass currently owns the screen
   // blit. The chain is static so labels can be hardcoded in order.
-  const dumpPasses = () => ([
+  const dumpPasses = (): string[] => ([
     ['scene', scenePass], ['sanitize', sanitizePass], ['bloom', bloomMergePass],
     ['sanitize2', postBloomSanitize], ['dirt', dirtPass], ['aces', acesPass],
     ['contrast', contrastPass], ['upscale', upscalePass], ['xbr', xbrPass],
     ['fxaa', fxaaPass], ['smaa', smaaPass],
-  ] as [string, Pass][]).map(([n, p]) => `${n}${p.enabled ? '' : ':off'}${p.renderToScreen ? '>SCR' : ''}`);
+  ] as [string, Pass][]).map(([n, p]): string => `${n}${p.enabled ? '' : ':off'}${p.renderToScreen ? '>SCR' : ''}`);
 
   return { composer, scenePass, bloomMergePass, postBloomSanitize, dirtPass, contrastPass, upscalePass, upscaleEffect, xbrPass, xbrEffect, syncRenderToScreen, applyAA, dumpPasses };
 }
@@ -423,7 +423,7 @@ function makeUpdateRendererSize(renderer: THREE.WebGLRenderer,
     fsCanvas: HTMLCanvasElement, fs: ReturnType<typeof makeFloydEngine>,
     getters: SizingGetters): () => void {
   const { pscale, pmode, resScale, pixelRatio } = getters;
-  return () => {
+  return (): void => {
     // RAW/ATKINSON never touch the composer: render straight into a low-res
     // canvas and let CSS upscale it — colors are identical to direct
     // rendering by construction, and it's the cheapest path.
@@ -452,10 +452,10 @@ function wireSegRow(id: string, current: () => number,
     pick: (v: number) => void): (v: number) => void {
   const row = document.getElementById(id);
   const btns = row ? [...row.querySelectorAll('button')] : [];
-  const mark = (v: number) => {
+  const mark = (v: number): void => {
     for (const b of btns) {b.classList.toggle('active', Number(b.dataset['v']) === v);}
   };
-  btns.forEach((b, i) => b.addEventListener('click', () => pick(Number(b.dataset['v'] ?? i))));
+  btns.forEach((b, i): void => b.addEventListener('click', (): void => pick(Number(b.dataset['v'] ?? i))));
   mark(current());
   return mark;
 }
@@ -466,13 +466,13 @@ function wireAARow(applyAA: (v: number) => void, onChange?: (v: number) => void)
   let aaMode = settings.get('fps-aa');
   applyAA(aaMode);
   onChange?.(aaMode);
-  const mark = wireSegRow('aa-row', () => aaMode,
-    (v) => { aaMode = v; settings.set('fps-aa', v); applyAA(v); onChange?.(v); mark(v); });
+  const mark = wireSegRow('aa-row', (): number => aaMode,
+    (v): void => { aaMode = v; settings.set('fps-aa', v); applyAA(v); onChange?.(v); mark(v); });
 }
 
 // ESC-menu toggles: seed the toggle labels from resolved modes and
 // return the buttons wired to the caller's callbacks.
-function wireToggleButtons(modes: RenderModes, onBm: () => void, onPp: () => void) {
+function wireToggleButtons(modes: RenderModes, onBm: () => void, onPp: () => void): { bloomToggleBtn: HTMLButtonElement; postproToggleBtn: HTMLButtonElement; } {
   const bloomToggleBtn = document.getElementById('bloom-toggle')! as HTMLButtonElement;
   const postproToggleBtn = document.getElementById('postpro-toggle')! as HTMLButtonElement;
   // Player-facing label is GLOW — "bloom" carries washed-out baggage and
@@ -493,7 +493,7 @@ function makeRender(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
     camera: THREE.PerspectiveCamera, composer: EffectComposer,
     fs: ReturnType<typeof makeFloydEngine>, ctx: RenderCtx): (dt?: number) => void {
   const { pmode, fsOverlay, shadowTick, scenePass } = ctx;
-  return (dt?: number) => {
+  return (dt?: number): void => {
     shadowTick();
     scenePass.vmDraw = fsOverlay(); // viewmodel rides the composer buffer in every chain mode
     if (pmode() === 3) {
@@ -529,10 +529,10 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   try {
     renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   } catch (error) {
-    setTimeout(() => window.location.reload(), 1000);
+    setTimeout((): void => window.location.reload(), 1000);
     throw error;
   }
-  renderer.domElement.addEventListener('webglcontextlost', (e) => {
+  renderer.domElement.addEventListener('webglcontextlost', (e): void => {
     e.preventDefault();
     window.location.reload();
   });
@@ -562,7 +562,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   }
 
   const updateRendererSize = makeUpdateRendererSize(renderer, fsCanvas, fs,
-    { pscale: () => pscale, pmode: pmodeEff, resScale: () => resScale,
+    { pscale: (): number => pscale, pmode: pmodeEff, resScale: (): number => resScale,
       pixelRatio: getPixelRatio });
 
   updateRendererSize();
@@ -619,8 +619,8 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   let shadowTick = 0; renderer.shadowMap.autoUpdate = false;
 
   const render = makeRender(renderer, scene, camera, composer, fs,
-    { pmode: pmodeEff, fsOverlay: () => fsOverlay, scenePass,
-      shadowTick: () => { if ((((shadowTick += 1) - 1) & 1) === 0) {renderer.shadowMap.needsUpdate = true;} } });
+    { pmode: pmodeEff, fsOverlay: (): (() => void) | null => fsOverlay, scenePass,
+      shadowTick: (): void => { if ((((shadowTick += 1) - 1) & 1) === 0) {renderer.shadowMap.needsUpdate = true;} } });
 
   // Seg-row markers — assigned by wireSegRow below; setPixel fires them
   // so auto-quality steps re-light the row too.
@@ -655,7 +655,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   function syncPmodeLocks(): void {
     const locked = pscale <= 1;
     const row = document.getElementById('pmode-row');
-    row?.querySelectorAll('button').forEach((b) => {
+    row?.querySelectorAll('button').forEach((b): void => {
       const v = Number(b.dataset['v'] ?? 0);
       b.disabled = locked && v > 0;
       // Locked reads as RAW — a dimmed active SMOOTH would read "still on".
@@ -671,7 +671,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   function syncAALocks(): void {
     const locked = pmodeEff() === 1;
     const row = document.getElementById('aa-row');
-    row?.querySelectorAll('button').forEach((b) => {
+    row?.querySelectorAll('button').forEach((b): void => {
       const v = Number(b.dataset['v'] ?? 0);
       b.disabled = locked && (v === 1 || v === 2);
       b.classList.toggle('active', v === aaEff());
@@ -712,28 +712,28 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   }
 
   // Setup window resize handler
-  window.addEventListener('resize', () => { camera.aspect = GAME_ASPECT; camera.updateProjectionMatrix(); applyBufferSizes(); });
+  window.addEventListener('resize', (): void => { camera.aspect = GAME_ASPECT; camera.updateProjectionMatrix(); applyBufferSizes(); });
 
   const { bloomToggleBtn, postproToggleBtn } = wireToggleButtons(modes,
-    () => setBloomEnabled(!bloomEnabled),
-    () => setPostProcessingEnabled(!postproEnabled));
+    (): void => setBloomEnabled(!bloomEnabled),
+    (): void => setPostProcessingEnabled(!postproEnabled));
 
   // applyBufferSizes (not just updateRendererSize): pixel/composer
   // pass enables are only re-evaluated on that path.
-  markPscale = wireSegRow('pscale-row', () => pscale,
-    (v) => setPixel(v, pmode));
-  markPmode = wireSegRow('pmode-row', () => pmode,
-    (v) => setPixel(pscale, v));
+  markPscale = wireSegRow('pscale-row', (): number => pscale,
+    (v): void => setPixel(v, pmode));
+  markPmode = wireSegRow('pmode-row', (): number => pmode,
+    (v): void => setPixel(pscale, v));
   syncPmodeLocks(); // boot: 1× scale starts with non-RAW locked
   // applyAA wrapper takes the picked v (wireAARow calls it before onChange
   // updates our aaMode) — clamps to 0 whenever a non-RAW mode is live.
-  wireAARow((v) => applyAA(pmodeEff() === 1 && (v === 1 || v === 2) ? 0 : v), (v) => { aaMode = v; });
+  wireAARow((v): void => applyAA(pmodeEff() === 1 && (v === 1 || v === 2) ? 0 : v), (v): void => { aaMode = v; });
   syncAALocks(); // boot: non-RAW pixel mode starts with AA locked
 
   // AA>0 pulls the composer in even with post+glow off — FXAA/SMAA are
   // composer passes and MSAA is its buffer flag; without this the whole
   // ANTIALIAS row silently no-ops on the direct-render path.
-  const needsComposerNow = () => (pscale > 1 && (pmode === 1 || pmode === 2)) || bloomEnabled || postproEnabled ||
+  const needsComposerNow = (): boolean => (pscale > 1 && (pmode === 1 || pmode === 2)) || bloomEnabled || postproEnabled ||
     aaEff() > 0 || (resScale < 1 && pscale === 1 && settings.get('fps-filter') === 2);
 
   // Alt+Q render census — the pipeline state that produced the frame:
@@ -758,16 +758,16 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     contrastPass,
     render,
     needsComposer: needsComposerNow,
-    setOverlayPass: (fn) => { fsOverlay = fn; },
-    isFloyd: () => pmodeEff() === 3,
-    isPostProcessingEnabled: () => postproEnabled,
-    isBloomEnabled: () => bloomEnabled,
+    setOverlayPass: (fn): void => { fsOverlay = fn; },
+    isFloyd: (): boolean => pmodeEff() === 3,
+    isPostProcessingEnabled: (): boolean => postproEnabled,
+    isBloomEnabled: (): boolean => bloomEnabled,
     setBloomEnabled,
     updateRendererSize,
     // checkMaterialsReady throws inside three when a material added
     // mid-compile never receives a currentProgram — benign, but the
     // rejection was surfacing as a pageerror in probes.
-    warmup: () => { renderer.compileAsync(scene, camera).catch(() => { /* late-added material */ }); },
+    warmup: (): void => { renderer.compileAsync(scene, camera).catch((): void => { /* late-added material */ }); },
     setPixel,
     setResScale,
     setPostProcessingEnabled,

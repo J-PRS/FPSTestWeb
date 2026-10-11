@@ -1286,24 +1286,24 @@ export function killTaunt(botId: string, victim: string): TauntLine | null {
   const repeat = tauntNow() - (lastKillOn.get(key) ?? Number.NEGATIVE_INFINITY) < REPEAT_KILL_MS;
   lastKillOn.set(key, tauntNow());
   if (lastKillOn.size > 256) {lastKillOn.delete(lastKillOn.keys().next().value!);}
-  return maybe(botId, () => repeat
-    ? tauntPick(REPEAT_KILL_LINES, REPEAT_KILL_VGS, (l) => l.replace('{v}', victim))
-    : tauntPick(KILL_LINES, KILL_VGS, (l) => l.replace('{v}', victim)));
+  return maybe(botId, (): TauntLine => repeat
+    ? tauntPick(REPEAT_KILL_LINES, REPEAT_KILL_VGS, (l): string => l.replace('{v}', victim))
+    : tauntPick(KILL_LINES, KILL_VGS, (l): string => l.replace('{v}', victim)));
 }
 
 /** One taunt line when `botId` was fragged by `other`. */
 export function deathTaunt(botId: string, killer: string): TauntLine | null {
-  return maybe(botId, () => tauntPick(DEATH_LINES, DEATH_VGS, (l) => l.replace('{k}', killer)));
+  return maybe(botId, (): TauntLine => tauntPick(DEATH_LINES, DEATH_VGS, (l): string => l.replace('{k}', killer)));
 }
 
 /** One taunt line when `botId` died to nobody (fall, own blast, lava). */
 export function envDeathTaunt(botId: string): TauntLine | null {
-  return maybe(botId, () => tauntPick(ENV_DEATH_LINES, ENV_DEATH_VGS, (l) => l));
+  return maybe(botId, (): TauntLine => tauntPick(ENV_DEATH_LINES, ENV_DEATH_VGS, (l): string => l));
 }
 
 /** One boast line when `botId` hits a spree tier. */
 export function spreeTaunt(botId: string): TauntLine | null {
-  return maybe(botId, () => tauntPick(SPREE_LINES, SPREE_VGS, (l) => l));
+  return maybe(botId, (): TauntLine => tauntPick(SPREE_LINES, SPREE_VGS, (l): string => l));
 }
 
 /** A human chat line → the chatter kind it might trigger, or null.

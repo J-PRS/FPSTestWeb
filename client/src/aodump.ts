@@ -74,7 +74,7 @@ const U = {
 function enhance(mat: THREE.Material): void {
   if (mat.userData['__tuned']) {return;}
   mat.userData['__tuned'] = true;
-  mat.onBeforeCompile = (sh) => {
+  mat.onBeforeCompile = (sh): void => {
     Object.assign(sh.uniforms, U);
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
@@ -153,12 +153,12 @@ function enhance(mat: THREE.Material): void {
   // Re-patching an already-compiled material (async baked-GLB swap) needs a
   // real needsUpdate — setting it inside onBeforeCompile is a no-op.
   mat.needsUpdate = true;
-  mat.customProgramCacheKey = () => 'aodump'; // single program per material type
+  mat.customProgramCacheKey = (): string => 'aodump'; // single program per material type
   console.log('[aodump] patched', mat.type, 'name=', mat.name || '(anon)');
 }
 
 function applyTo(group: THREE.Group): void {
-  group.traverse((o) => {
+  group.traverse((o): void => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) {return;}
     if ((m.material as THREE.Material).type === 'MeshBasicMaterial') {return;}
@@ -184,7 +184,7 @@ function rebake(): void {
 }
 
 // ---- weapon picker -----------------------------------------------------------
-const wnames = Object.entries(WeaponType).filter(([, v]) => typeof v === 'number') as [string, number][];
+const wnames = Object.entries(WeaponType).filter(([, v]): boolean => typeof v === 'number') as [string, number][];
 let currentW = Number.parseInt(q.get('w') ?? '0');
 function show(wt: number): void {
   currentW = wt;
@@ -195,14 +195,14 @@ function show(wt: number): void {
 
 // ---- UI ---------------------------------------------------------------------
 const panel = document.querySelector('#panel')!;
-const h = (t: string) => { const e = document.createElement('h3'); e.textContent = t; panel.append(e); };
-const slider = (label: string, u: { value: number }, lo: number, hi: number, step = 0.01) => {
+const h = (t: string): void => { const e = document.createElement('h3'); e.textContent = t; panel.append(e); };
+const slider = (label: string, u: { value: number }, lo: number, hi: number, step = 0.01): void => {
   const row = document.createElement('div'); row.className = 'row';
   const l = document.createElement('label'); l.textContent = label;
   const inp = document.createElement('input'); inp.type = 'range';
   inp.min = String(lo); inp.max = String(hi); inp.step = String(step); inp.value = String(u.value);
   const val = document.createElement('span'); val.className = 'val'; val.textContent = String(u.value);
-  inp.addEventListener('input', () => { u.value = Number(inp.value); val.textContent = inp.value; });
+  inp.addEventListener('input', (): void => { u.value = Number(inp.value); val.textContent = inp.value; });
   row.append(l, inp, val); panel.append(row);
 };
 
@@ -211,7 +211,7 @@ const wrow = document.createElement('div'); wrow.id = 'wrow';
 for (const [name, id] of wnames) {
   const b = document.createElement('button');
   b.textContent = name;
-  b.addEventListener('click', () => { show(id); for (const x of wrow.children) {(x as HTMLElement).classList.remove('on');} b.classList.add('on'); });
+  b.addEventListener('click', (): void => { show(id); for (const x of wrow.children) {(x as HTMLElement).classList.remove('on');} b.classList.add('on'); });
   wrow.append(b);
 }
 panel.append(wrow);
@@ -220,7 +220,7 @@ h('BAKE');
 const aoBtn = document.createElement('button');
 aoBtn.textContent = 'AO ON';
 const bakeBtn = document.createElement('button'); bakeBtn.textContent = 'BAKE NOW';
-aoBtn.addEventListener('click', () => { aoOn = !aoOn; aoBtn.textContent = aoOn ? 'AO ON' : 'AO OFF'; aoBtn.classList.toggle('on', aoOn); });
+aoBtn.addEventListener('click', (): void => { aoOn = !aoOn; aoBtn.textContent = aoOn ? 'AO ON' : 'AO OFF'; aoBtn.classList.toggle('on', aoOn); });
 bakeBtn.addEventListener('click', rebake);
 panel.append(aoBtn, bakeBtn);
 if (aoOn) {aoBtn.classList.add('on');}
@@ -229,7 +229,7 @@ h('VIEW');
 const views: [string, number][] = [['FINAL', 0], ['AO', 1], ['WEAR ATTR', 2], ['EDGE', 3], ['NORMAL', 4]];
 for (const [label, v] of views) {
   const b = document.createElement('button'); b.textContent = label;
-  b.addEventListener('click', () => { U.uView.value = v; });
+  b.addEventListener('click', (): void => { U.uView.value = v; });
   panel.append(b);
 }
 
@@ -274,7 +274,7 @@ if (!isNaN(qv)) {U.uView.value = qv;}
 rebake();
 show(currentW);
 
-addEventListener('resize', () => {
+addEventListener('resize', (): void => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
@@ -283,9 +283,9 @@ addEventListener('resize', () => {
 // The baked-GLB swap is async — meshes arrive AFTER applyTo first ran, so
 // keep re-running it until every lit material carries the tunable patch
 // (the __tuned guard makes it a no-op for already-patched materials).
-setInterval(() => { for (const [, g] of vm.weapons) {applyTo(g);} }, 400);
+setInterval((): void => { for (const [, g] of vm.weapons) {applyTo(g);} }, 400);
 
-renderer.setAnimationLoop(() => {
+renderer.setAnimationLoop((): void => {
   controls.update();
   renderer.render(scene, camera);
 });

@@ -12,7 +12,7 @@ export function ctx(): BaseAudioContext | null { return audio.context; }
 export function play(node: AudioNode, dur: number, chain?: GainNode, prio = 0): boolean {
   const c = ctx();
   if (!c || !audio.takeVoice(prio, node, chain)) {return false;}
-  setTimeout(() => {
+  setTimeout((): void => {
     audio.releaseVoice(node);
     node.disconnect();
     // Positional calls pass their worldInput node as `chain` — without

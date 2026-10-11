@@ -69,7 +69,7 @@ export class VmBaked {
     // boot for ~2.3s before this function's first fetch ever fired.
     // Yield per weapon: the bake streams in over the first seconds of
     // menu/play instead of blocking TTI.
-    const yieldFrame = () => new Promise<void>((r) => setTimeout(r, 0));
+    const yieldFrame = (): Promise<void> => new Promise<void>((r): NodeJS.Timeout => setTimeout(r, 0));
     for (const [wt, g] of this.h.weapons) {
       await yieldFrame();
       if (!bakeAll && !ALWAYS_BAKE.has(wt)) {
@@ -80,7 +80,7 @@ export class VmBaked {
       // GLB fetch doesn't flash the old model for a frame. Restored on
       // failure below.
       const forced = !bakeAll;
-      if (forced) {g.traverse((o) => { if ((o as THREE.Mesh).isMesh) {o.visible = false;} });}
+      if (forced) {g.traverse((o): void => { if ((o as THREE.Mesh).isMesh) {o.visible = false;} });}
       if (done.has(g)) {continue;}
       done.add(g);
       try {
@@ -93,13 +93,13 @@ export class VmBaked {
         // non-HTML body is a real bake.
         const ct = probe.headers.get('content-type') ?? '';
         if (!probe.ok || ct.includes('html')) {
-          if (forced) {g.traverse((o) => { if ((o as THREE.Mesh).isMesh) {o.visible = true;} });}
+          if (forced) {g.traverse((o): void => { if ((o as THREE.Mesh).isMesh) {o.visible = true;} });}
           bakeVertexAO(g, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });
           continue;
         }
         await this.swapBaked(wt, g, loader, texLoader);
       } catch (error) {
-        if (forced) {g.traverse((o) => { if ((o as THREE.Mesh).isMesh) {o.visible = true;} });}
+        if (forced) {g.traverse((o): void => { if ((o as THREE.Mesh).isMesh) {o.visible = true;} });}
         bakeVertexAO(g, { grime: GRIME_WEAPONS.has(wt), wearBoost: WEAR_BOOST.get(wt) });
         // A missing bake is the normal case — 404s surface as
         // Event/ProgressEvent (ImageLoader) or "Not Found"/404 Errors —
@@ -145,12 +145,12 @@ export class VmBaked {
     // "keep Basic parts procedural" rule would leave the old mkBore disc
     // floating at its authored spot.
     const dropAll = ALWAYS_BAKE.has(wt);
-    g.traverse((o) => {
+    g.traverse((o): void => {
       const m = o as THREE.Mesh;
       if (m.isMesh && (dropAll || (m.material as THREE.Material).type !== 'MeshBasicMaterial')) {swap.add(o);}
     });
     for (const o of swap) { o.parent?.remove(o); }
-    gltf.scene.traverse((o: THREE.Object3D) => {
+    gltf.scene.traverse((o: THREE.Object3D): void => {
       const m = o as THREE.Mesh;
       if (!m.isMesh) {return;}
       const inBarrels = spin && (o === spin.node || spin.node.children.includes(o) || o.parent === spin.node);
@@ -162,7 +162,7 @@ export class VmBaked {
     const edgeTex = await this.loadEdgeTex(wt, texLoader);
     const grimeTex = await this.loadWeaponTex(wt, 'grime', texLoader);
     if (edgeTex || grimeTex) {
-      gltf.scene.traverse((o: THREE.Object3D) => {
+      gltf.scene.traverse((o: THREE.Object3D): void => {
         const m = o as THREE.Mesh;
         if (!m.isMesh) {return;}
         m.geometry.userData.__keepUv = true;
@@ -182,7 +182,7 @@ export class VmBaked {
     if (this.h.ghostMats.length > 0) {
       const seen = new Set<THREE.Material>();
       const toShell: THREE.Mesh[] = [];
-      gltf.scene.traverse((o: THREE.Object3D) => {
+      gltf.scene.traverse((o: THREE.Object3D): void => {
         const mesh = o as THREE.Mesh;
         if (!mesh.isMesh) {return;}
         const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
@@ -237,7 +237,7 @@ export class VmBaked {
   private async adoptChainSpin(scene: THREE.Object3D, wt: number, texLoader: THREE.TextureLoader):
     Promise<{ node: THREE.Object3D; barrelMat: THREE.MeshLambertMaterial | null } | null> {
     let node: THREE.Object3D | undefined = undefined;
-    scene.traverse((o) => { if (!node && o.name.startsWith('barrels')) {node = o;} });
+    scene.traverse((o): void => { if (!node && o.name.startsWith('barrels')) {node = o;} });
     if (!node) {return null;}
     this.h.chainBarrels = node as THREE.Group;
     let barrelMat: THREE.MeshLambertMaterial | null = null;

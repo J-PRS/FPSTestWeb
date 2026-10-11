@@ -25,10 +25,10 @@ function makeSystem(): ParticleSystem {
   });
 }
 
-const emissionState = (ps: ParticleSystem) => ps.emissionState as unknown as EmissionState;
+const emissionState = (ps: ParticleSystem): EmissionState => ps.emissionState as unknown as EmissionState;
 
-describe('activateSystem (pooled-emitter checkout)', () => {
-  it('zeroes the distance-emission debt a parked pooled system carries', () => {
+describe('activateSystem (pooled-emitter checkout)', (): void => {
+  it('zeroes the distance-emission debt a parked pooled system carries', (): void => {
     const ps = makeSystem();
     // Simulate the residue a pooled entry brings back: it emitted at its
     // previous owner's muzzle, then sat parked hundreds of meters away.
@@ -51,7 +51,7 @@ describe('activateSystem (pooled-emitter checkout)', () => {
     expect(st.previousWorldPos!.distanceTo(muzzle)).toBeLessThan(1e-4);
   });
 
-  it('refreshes matrixWorld before baselining — same-frame position writes count', () => {
+  it('refreshes matrixWorld before baselining — same-frame position writes count', (): void => {
     const ps = makeSystem();
     const muzzle = new THREE.Vector3(-30, 5, 120);
     // Position written but matrixWorld never flushed — the classic first-
@@ -64,14 +64,14 @@ describe('activateSystem (pooled-emitter checkout)', () => {
     expect(st.previousWorldPos!.distanceTo(muzzle)).toBeLessThan(1e-4);
   });
 
-  it('unpauses systems that come back distance-paused from the pool', () => {
+  it('unpauses systems that come back distance-paused from the pool', (): void => {
     const ps = makeSystem();
     ps.paused = true;
     activateSystem(ps, new THREE.Vector3(1, 2, 3));
     expect(ps.paused).toBe(false);
   });
 
-  it('applies orientation when given one', () => {
+  it('applies orientation when given one', (): void => {
     const ps = makeSystem();
     const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
     activateSystem(ps, new THREE.Vector3(), q);
@@ -79,8 +79,8 @@ describe('activateSystem (pooled-emitter checkout)', () => {
   });
 });
 
-describe('resyncEmission', () => {
-  it('is idempotent — a second resync keeps the baseline', () => {
+describe('resyncEmission', (): void => {
+  it('is idempotent — a second resync keeps the baseline', (): void => {
     const ps = makeSystem();
     const pos = new THREE.Vector3(7, 8, 9);
     activateSystem(ps, pos);
@@ -94,14 +94,14 @@ describe('resyncEmission', () => {
 // TrailDriver (VFX P1): the emit-vs-jump decision lives in ONE place —
 // updateVfx ticks registered drivers; a host discontinuity cuts every
 // layer without any caller declaring a teleport.
-const fakeLayer = () => ({ emits: 0, teleports: 0,
-  emitSegment() {this.emits += 1; }, teleport() {this.teleports += 1; } });
-const fakeRibbon = () => ({ pushes: 0, clears: 0,
-  push() {this.pushes += 1; }, clear() {this.clears += 1; } });
+const fakeLayer = (): { emits: number; teleports: number; emitSegment(): void; teleport(): void; } => ({ emits: 0, teleports: 0,
+  emitSegment(): void {this.emits += 1; }, teleport(): void {this.teleports += 1; } });
+const fakeRibbon = (): { pushes: number; clears: number; push(): void; clear(): void; } => ({ pushes: 0, clears: 0,
+  push(): void {this.pushes += 1; }, clear(): void {this.clears += 1; } });
 
-describe('TrailDriver', () => {
+describe('TrailDriver', (): void => {
 
-  it('emits on ordinary travel, cuts every layer on a jump — no caller teleport', () => {
+  it('emits on ordinary travel, cuts every layer on a jump — no caller teleport', (): void => {
     const host = { pos: new THREE.Vector3(0, 0, 0), vel: new THREE.Vector3(10, 0, 0) };
     const layer = fakeLayer(); const rib = fakeRibbon();
     const d = new TrailDriver(host, [layer], [rib]);
@@ -114,10 +114,10 @@ describe('TrailDriver', () => {
     d.release();
   });
 
-  it('stops emitting when the host reports dead, keeps sampling pos', () => {
+  it('stops emitting when the host reports dead, keeps sampling pos', (): void => {
     let alive = true;
     const host = { pos: new THREE.Vector3(), vel: new THREE.Vector3(5, 0, 0),
-      emitting: () => alive };
+      emitting: (): boolean => alive };
     const layer = fakeLayer(); const rib = fakeRibbon();
     const d = new TrailDriver(host, [layer], [rib]);
     d.tick(0.016); expect(layer.emits).toBe(1);
@@ -126,13 +126,13 @@ describe('TrailDriver', () => {
     d.release();
   });
 
-  it('emitOnJump=false suppresses the jump frame entirely; ribbonEmitting gates pushes', () => {
+  it('emitOnJump=false suppresses the jump frame entirely; ribbonEmitting gates pushes', (): void => {
     let moving = true;
     const host = {
       pos: new THREE.Vector3(0, 0, 0), vel: new THREE.Vector3(10, 0, 0),
-      ribbonEmitting: () => moving,
+      ribbonEmitting: (): boolean => moving,
       emitOnJump: false, // correction-sweep host: the sweep IS the motion to hide
-      maxStep: (d: number) => Math.max(6, 10 * d * 4),
+      maxStep: (d: number): number => Math.max(6, 10 * d * 4),
     };
     const layer = fakeLayer(); const rib = fakeRibbon();
     const d = new TrailDriver(host, [layer], [rib]);
@@ -146,7 +146,7 @@ describe('TrailDriver', () => {
     d.release();
   });
 
-  it('release() unregisters — updateVfx no longer ticks it', () => {
+  it('release() unregisters — updateVfx no longer ticks it', (): void => {
     const host = { pos: new THREE.Vector3(), vel: new THREE.Vector3(1, 0, 0) };
     const layer = fakeLayer();
     const d = new TrailDriver(host, [layer]);

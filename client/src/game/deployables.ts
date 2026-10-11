@@ -46,7 +46,7 @@ export type { DeployKind } from '../../../shared/deployables.js';
 // Derived from the shared belt registry — caps/labels can no longer diverge
 // from the server authority (drone max 1 vs 2 did once).
 export const DEPLOY_DEFS: { kind: DeployKind; label: string; max: number }[] =
-  DEPLOY_KINDS.map((kind) => ({ kind, label: DEPLOY_ITEMS[kind].label.toUpperCase(), max: DEPLOY_MAX[kind] }));
+  DEPLOY_KINDS.map((kind): { kind: DeployKind; label: string; max: number; } => ({ kind, label: DEPLOY_ITEMS[kind].label.toUpperCase(), max: DEPLOY_MAX[kind] }));
 
 // Sentry mini-rockets live in deployRockets.ts — a real flying body with
 // mild homing, smoke trail, and a blast on contact.
@@ -172,17 +172,17 @@ export class Deployables {
 
   constructor(private deps: DeployDeps) {
     this.rockets = new DeployRockets(deps);
-    this.remotes = new RemoteDeployables(deps, this.rockets, () => this._enemies);
+    this.remotes = new RemoteDeployables(deps, this.rockets, (): Foe[] => this._enemies);
     this.adopter = new DeployAdopter(deps, this.rockets, this.items, {
-      foesFor: (o) => this.foesFor(o),
-      killItem: (i) => this.killItem(i),
+      foesFor: (o): Foe[] => this.foesFor(o),
+      killItem: (i): void => this.killItem(i),
     });
   }
 
   /** Pack item is a loadout choice (ESC menu), not a cycle — X throws
    *  whatever you packed. */
-  private get selDef() {
-    return DEPLOY_DEFS.find(d => d.kind === this.deps.lazyPlayer().packItem) ?? DEPLOY_DEFS[0]!;
+  private get selDef(): { kind: DeployKind; label: string; max: number; } {
+    return DEPLOY_DEFS.find((d): boolean => d.kind === this.deps.lazyPlayer().packItem) ?? DEPLOY_DEFS[0]!;
   }
 
   /** Throw the selected pack item — the pod arcs out along the crosshair,
@@ -197,7 +197,7 @@ export class Deployables {
     // Belt-throw ceremony: weapon lowers, pod releases at THROW_RELEASE.
     p.throwLockT = THROW_TOTAL;
     this.deps.lazyViewModel?.()?.startThrow();
-    const live = this.items.filter(i => i.kind === def.kind && !i.dead);
+    const live = this.items.filter((i): boolean => i.kind === def.kind && !i.dead);
     if (live.length >= def.max) {
       // T2 rule: a new plant retires your oldest of that kind
       const oldest = live[0]!;
@@ -205,7 +205,7 @@ export class Deployables {
     }
     // Aim captured at release, not at keypress — the wind-up is long
     // enough to swing the throw across the sky.
-    setTimeout(() => {
+    setTimeout((): void => {
       if (p.isDead) {return;} // corpse doesn't release the wind-up
       const dir = new THREE.Vector3(
         Math.cos(p.pitch) * Math.sin(p.yaw),
@@ -383,9 +383,9 @@ export class Deployables {
    *  the item arrives directly (mirrors the server's handleDeploy, not
    *  the player's thrown pod). Per-owner kind caps apply. */
   plantFor(kind: DeployKind, pos: { x: number; y: number; z: number }, owner: DeployOwner): void {
-    const def = DEPLOY_DEFS.find(d => d.kind === kind);
+    const def = DEPLOY_DEFS.find((d): boolean => d.kind === kind);
     if (!def) {return;}
-    const live = this.items.filter(i => i.kind === kind && !i.dead && i.owner === owner.id);
+    const live = this.items.filter((i): boolean => i.kind === kind && !i.dead && i.owner === owner.id);
     if (live.length >= def.max) {live[0]!.dead = true;}
     const terrain = this.deps.lazyTerrain();
     const at = new THREE.Vector3(pos.x, pos.y, pos.z);
@@ -547,7 +547,7 @@ export class Deployables {
   /** Resolve a brain's repair key to a heal — returns the welded item so
    *  the caller can paint the work, null when the item died mid-walk. */
   weld(key: string, n: number): Item | null {
-    const find = (list: Iterable<Item>) => {
+    const find = (list: Iterable<Item>): Item | null => {
       for (const i of list) {if (this.keyOf(i) === key && !i.dead) {return i;}}
       return null;
     };
@@ -607,7 +607,7 @@ export class Deployables {
   }
 
   sensorPing(id: number, team: string | undefined, targets: { id: string; x: number; y: number; z: number }[]): void {
-    this.remotes.sensorPing(id, team, targets.filter(t => Number.isFinite(t.x + t.y + t.z)));
+    this.remotes.sensorPing(id, team, targets.filter((t): boolean => Number.isFinite(t.x + t.y + t.z)));
   }
 
   remoteTurretShot(id: number, targetId: string): void {
@@ -668,7 +668,7 @@ export class Deployables {
   /** Creature contact damage — speciesKit calls this when a committed
    *  hunter is gnawing on a deployable. dmg is per-tick-scaled by caller. */
   hurt(candId: string, dmg: number): void {
-    const it = this.items.find(i => i.candId === candId && !i.dead);
+    const it = this.items.find((i): boolean => i.candId === candId && !i.dead);
     it?.hurt(dmg);
   }
 
@@ -691,8 +691,8 @@ export class Deployables {
   private domeObstacle(i: Item, remote: boolean): SweepObstacle {
     return {
       pos: i.pos, prevPos: i.pos, radius: DeployShield.RADIUS,
-      blocks: (p) => remote ? this.remoteShellHostile(i, p.shooterId) : this.localShellHostile(i, p.shooterId),
-      onBlocked: () => i.flash?.(),
+      blocks: (p): boolean => remote ? this.remoteShellHostile(i, p.shooterId) : this.localShellHostile(i, p.shooterId),
+      onBlocked: (): void | undefined => i.flash?.(),
     };
   }
 
@@ -701,12 +701,12 @@ export class Deployables {
    *  YOUR shells, your dome eats enemy-bot fire. */
   private localShellHostile(i: Item, shooterId: string | null): boolean {
     if (!i.owner) { // the local player's dome — hostile = enemy bots
-      return shooterId != null && Boolean(this.deps.enemyBots?.().some(b => b.playerId === shooterId));
+      return shooterId != null && Boolean(this.deps.enemyBots?.().some((b): boolean => b.playerId === shooterId));
     }
     // Bot-owned dome: the bot's foe list names who's hostile; 'local'
     // covers the player's own shells (shooterId null → 'local').
     const shooter = shooterId ?? 'local';
-    return Boolean(this.deps.botFoes?.(i.team ?? '').some(f => f.playerId === shooter));
+    return Boolean(this.deps.botFoes?.(i.team ?? '').some((f): boolean => f.playerId === shooter));
   }
 
   /** Remote (server-owned) domes: teammates pass, everyone else eats the
@@ -754,7 +754,7 @@ export class Deployables {
     return this._candList;
   }
 
-  get count(): number { return this.items.filter(i => !i.dead).length; }
+  get count(): number { return this.items.filter((i): boolean => !i.dead).length; }
 
   /** Solid hulls for the prediction MoveSim — mirrors the server's
    *  RoomDeployables.solidCols (same DEPLOY_ITEMS bodyR/bodyH boxes) so
@@ -767,7 +767,7 @@ export class Deployables {
 
   private refreshSolidCols(): void {
     this.solidCols.length = 0;
-    const push = (i: Item) => {
+    const push = (i: Item): void => {
       if (i.dead || !deploySolid(i.kind)) {return;}
       const def = DEPLOY_ITEMS[i.kind];
       this.solidCols.push({
@@ -823,7 +823,7 @@ export class Deployables {
   private readonly _beaconDir = new THREE.Vector3();
 
   private updateBeaconAim(): void {
-    const beacon = this.items.find(i => i.kind === 'beacon' && !i.dead && i.owner === undefined);
+    const beacon = this.items.find((i): boolean => i.kind === 'beacon' && !i.dead && i.owner === undefined);
     const hud = this.deps.lazyHud();
     const cam = this.deps.camera;
     if (!beacon) { hud.updateBeaconAim(null, null, cam, true); return; }

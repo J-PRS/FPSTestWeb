@@ -81,7 +81,7 @@ function makePool(scene: THREE.Scene): RingPool {
 }
 
 function acquireRingSlot(scene: THREE.Scene): { pool: RingPool; slot: number } {
-  const p = acquireBatch(pools, scene, makePool, b => b.live < MAX_RINGS);
+  const p = acquireBatch(pools, scene, makePool,( b): boolean => b.live < MAX_RINGS);
 p.live += 1;
   return { pool: p, slot: p.free.pop()! };
 }
@@ -89,7 +89,7 @@ p.live += 1;
 function releaseRingSlot(pool: RingPool, slot: number): void {
   pool.free.push(slot);
 pool.live -= 1;
-  retireBatch(pools, pool.scene, pool, p => p.live === 0, p => {
+  retireBatch(pools, pool.scene, pool,( p): boolean => p.live === 0,( p): void => {
     for (const m of p.meshes) {p.scene.remove(m);}
     p.geo.dispose();
     for (const m of p.mats) {m.dispose();}

@@ -3,29 +3,29 @@
 if (typeof globalThis.localStorage === 'undefined') {
   const store = new Map<string, string>();
   (globalThis as Record<string, unknown>).localStorage = {
-    getItem: (k: string) => store.get(k) ?? null,
-    setItem: (k: string, v: string) => { store.set(k, String(v)); },
-    removeItem: (k: string) => { store.delete(k); },
-    clear: () => store.clear(),
-    get length() { return store.size; },
-    key: (i: number) => [...store.keys()][i] ?? null,
+    getItem: (k: string): string | null => store.get(k) ?? null,
+    setItem: (k: string, v: string): void => { store.set(k, String(v)); },
+    removeItem: (k: string): void => { store.delete(k); },
+    clear: (): void => store.clear(),
+    get length(): number { return store.size; },
+    key: (i: number): string => [...store.keys()][i] ?? null,
   };
 }
 if (typeof globalThis.sessionStorage === 'undefined') {
   const store = new Map<string, string>();
   (globalThis as Record<string, unknown>).sessionStorage = {
-    getItem: (k: string) => store.get(k) ?? null,
-    setItem: (k: string, v: string) => { store.set(k, String(v)); },
-    removeItem: (k: string) => { store.delete(k); },
-    clear: () => store.clear(),
+    getItem: (k: string): string | null => store.get(k) ?? null,
+    setItem: (k: string, v: string): void => { store.set(k, String(v)); },
+    removeItem: (k: string): void => { store.delete(k); },
+    clear: (): void => store.clear(),
   };
 }
 if (typeof globalThis.window === 'undefined') {
   (globalThis as Record<string, unknown>).window = {
     location: { search: '', href: 'http://localhost/' },
-    addEventListener: () => { return; },
-    removeEventListener: () => { return; },
-    dispatchEvent: () => true,
+    addEventListener: (): void => { return; },
+    removeEventListener: (): void => { return; },
+    dispatchEvent: (): boolean => true,
     setTimeout: globalThis.setTimeout.bind(globalThis),
     clearTimeout: globalThis.clearTimeout.bind(globalThis),
   };
@@ -42,32 +42,32 @@ if (typeof globalThis.document === 'undefined') {
   // Enough of the DOM for module-level listeners/setup in Logger/hud-adjacent
   // modules; tests that exercise real DOM behavior should mount jsdom instead.
   (globalThis as Record<string, unknown>).document = {
-    addEventListener: () => { return; },
-    removeEventListener: () => { return; },
-    getElementById: () => null,
-    querySelector: () => null,
-    querySelectorAll: () => [],
+    addEventListener: (): void => { return; },
+    removeEventListener: (): void => { return; },
+    getElementById: (): null => null,
+    querySelector: (): null => null,
+    querySelectorAll: (): never[] => [],
     // Test seam — every element the stub makes, so tests can find module-
     // cached nodes (shotFeed's stack) that never reach document.body.
     _all: [] as unknown[],
-    createElement: () => {
+    createElement: (): Record<string, unknown> & { children: unknown[]; } => {
       const el: Record<string, unknown> & { children: unknown[] } = {
         style: {},
         // Canvas 2d is drawn into, never read back — a bare ctx suffices
         // for procedural-texture builders under the node environment.
         getContext: () => ({
-          createImageData: (w: number, h: number) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
-          getImageData: (_x: number, _y: number, w: number, h: number) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
-          putImageData: () => { return; },
-          createRadialGradient: () => ({ addColorStop: () => { return; } }),
-          createLinearGradient: () => ({ addColorStop: () => { return; } }),
-          fillRect: () => { return; },
-          clearRect: () => { return; },
-          drawImage: () => { return; },
+          createImageData: (w: number, h: number): { width: number; height: number; data: Uint8ClampedArray<ArrayBuffer>; } => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
+          getImageData: (_x: number, _y: number, w: number, h: number): { width: number; height: number; data: Uint8ClampedArray<ArrayBuffer>; } => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
+          putImageData: (): void => { return; },
+          createRadialGradient: (): { addColorStop: () => void; } => ({ addColorStop: (): void => { return; } }),
+          createLinearGradient: (): { addColorStop: () => void; } => ({ addColorStop: (): void => { return; } }),
+          fillRect: (): void => { return; },
+          clearRect: (): void => { return; },
+          drawImage: (): void => { return; },
         }),
         children: [] as unknown[],
         firstChild: null,
-        get lastElementChild() { return el.children.at(-1) ?? null; },
+        get lastElementChild(): {} | null { return el.children.at(-1) ?? null; },
         innerHTML: '',
         id: '',
         maxLength: 0,
@@ -75,11 +75,11 @@ if (typeof globalThis.document === 'undefined') {
         width: 0,
         height: 0,
         _parent: null as { children: unknown[] } | null,
-        addEventListener: () => { return; },
-        append(...nodes: unknown[]) { for (const n of nodes) { el.children.push(n); if (n && typeof n === 'object') {(n as Record<string, unknown>)._parent = el;} } },
-        prepend(n: unknown) { el.children.unshift(n); (n as Record<string, unknown>)._parent = el; },
-        appendChild(n: unknown) { el.children.push(n); (n as Record<string, unknown>)._parent = el; return n; },
-        remove() {
+        addEventListener: (): void => { return; },
+        append(...nodes: unknown[]): void { for (const n of nodes) { el.children.push(n); if (n && typeof n === 'object') {(n as Record<string, unknown>)._parent = el;} } },
+        prepend(n: unknown): void { el.children.unshift(n); (n as Record<string, unknown>)._parent = el; },
+        appendChild(n: unknown): unknown { el.children.push(n); (n as Record<string, unknown>)._parent = el; return n; },
+        remove(): void {
           const p = el._parent as { children: unknown[] } | null;
           if (p) { const i = p.children.indexOf(el); if (i !== -1) {p.children.splice(i, 1);} }
         },
@@ -87,8 +87,8 @@ if (typeof globalThis.document === 'undefined') {
       (globalThis.document as unknown as { _all: unknown[] })._all.push(el);
       return el;
     },
-    createTextNode: (s: string) => ({ textContent: s }),
-    body: { append: () => { return; }, appendChild: () => { return; }, removeChild: () => { return; } },
+    createTextNode: (s: string): { textContent: string; } => ({ textContent: s }),
+    body: { append: (): void => { return; }, appendChild: (): void => { return; }, removeChild: (): void => { return; } },
     hidden: false,
   };
 }

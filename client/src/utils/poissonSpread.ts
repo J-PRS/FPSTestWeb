@@ -18,7 +18,7 @@ export function poissonDisc(n: number): { x: number; y: number }[] {
   const cell = minDist / Math.SQRT2;
   const gridSize = Math.ceil(2 / cell) + 1;
   const grid = new Int32Array(gridSize * gridSize).fill(-1);
-  const cellOf = (x: number, y: number) =>
+  const cellOf = (x: number, y: number): number =>
     Math.min(gridSize - 1, Math.floor((x + 1) / cell)) +
     Math.min(gridSize - 1, Math.floor((y + 1) / cell)) * gridSize;
 

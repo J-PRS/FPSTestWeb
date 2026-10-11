@@ -70,12 +70,12 @@ export class RoomMoveSim {
     this.botSurface = field ? FieldSurface.fromFieldChord(field) : null;
     this.authoritative = authoritative && Boolean(field);
     this.judge = new MoveJudge({
-      authoritative: () => this.authoritative,
-      divergenceM: () => this.divergenceM,
-      correctMs: () => this.correctMs,
-      health: () => this.health,
-      onCheat: (id, d, detail) => this.onCheat?.(id, d, detail),
-      surface: () => this.surface,
+      authoritative: (): boolean => this.authoritative,
+      divergenceM: (): number => this.divergenceM,
+      correctMs: (): number => this.correctMs,
+      health: (): Map<string, number> | undefined => this.health,
+      onCheat: (id, d, detail): void | undefined => this.onCheat?.(id, d, detail),
+      surface: (): FieldSurface | null => this.surface,
     });
   }
 
@@ -486,14 +486,14 @@ sh.gapStreak += 1;
       // (order matters when 3+ capsules overlap).
       const idx: number[] = [];
       const scratch: BodyCapsule[] = [];
-      bodiesNear = (x, z) => {
+      bodiesNear = (x, z): BodyCapsule[] => {
         idx.length = 0; scratch.length = 0;
         const cx = Math.floor(x / CELL), cz = Math.floor(z / CELL);
         for (let dx = -1; dx <= 1; dx += 1) {for (let dz = -1; dz <= 1; dz += 1) {
           const cell = grid.get(((cx + dx + BIAS) << 16) | (cz + dz + BIAS));
           if (cell) {for (const i of cell) {idx.push(i);}}
         }}
-        idx.sort((a, b) => a - b);
+        idx.sort((a, b): number => a - b);
         for (const i of idx) {scratch.push(bodies[i]!);}
         return scratch;
       };
@@ -555,8 +555,8 @@ sh.gapStreak += 1;
       const resting = s.onGround && s.pos.y - groundY > -0.5 && s.pos.y - groundY < sh.sim.eyeHeight + 0.5
         && Math.abs(s.vel.x) + Math.abs(s.vel.y) + Math.abs(s.vel.z) < 0.05
         && !inp.forward && !inp.right && !inp.jumpHeld && !inp.jumpPressed && !inp.skiHeld && !inp.jetHeld
-        && (!edges || edges.every(e => !e.input.forward && !e.input.right && !e.input.jumpHeld && !e.input.jumpPressed && !e.input.skiHeld && !e.input.jetHeld))
-        && (!bodiesNear || !bodiesNear(s.pos.x, s.pos.z).some(b => b.id !== pid && Math.abs(b.x - s.pos.x) < 2.5 && Math.abs(b.z - s.pos.z) < 2.5));
+        && (!edges || edges.every((e): boolean => !e.input.forward && !e.input.right && !e.input.jumpHeld && !e.input.jumpPressed && !e.input.skiHeld && !e.input.jetHeld))
+        && (!bodiesNear || !bodiesNear(s.pos.x, s.pos.z).some((b): boolean => b.id !== pid && Math.abs(b.x - s.pos.x) < 2.5 && Math.abs(b.z - s.pos.z) < 2.5));
       if (!resting) {
         // MoveSim.update() sub-steps internally at its own 1/60 quantum —
         // feed it the raw tick delta. Count consumed steps ourselves for

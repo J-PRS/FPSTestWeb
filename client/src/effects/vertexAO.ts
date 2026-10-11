@@ -82,10 +82,10 @@ interface EdgeCtx {
   pk(i: number): string;
 }
 
-const faceDot = (faceN: Float32Array, t1: number, t2: number) =>
+const faceDot = (faceN: Float32Array, t1: number, t2: number): number =>
   faceN[t1 * 3]! * faceN[t2 * 3]! + faceN[t1 * 3 + 1]! * faceN[t2 * 3 + 1]! + faceN[t1 * 3 + 2]! * faceN[t2 * 3 + 2]!;
 
-const flagEdge = (ctx: EdgeCtx, list: EdgeRef[]) => {
+const flagEdge = (ctx: EdgeCtx, list: EdgeRef[]): void => {
   // Flag in ALL THREE corners of channel c — storing it only at the
   // opposite corner interpolates the flag to zero exactly at the edge
   // it marks (vAedge.c ≈ bary.c → 0), so the line could never draw.
@@ -101,7 +101,7 @@ function collectEdges(pos: THREE.BufferAttribute, triCount: number): { faceN: Fl
   // parts (0.015–0.035 walls/floors) collapse into each other: distinct
   // edges merge into one list and a sharp pair's flag lands on a
   // coplanar seam — the "slanted line on a flat face" bug.
-  const pk = (i: number) => `${pos.getX(i).toFixed(4)},${pos.getY(i).toFixed(4)},${pos.getZ(i).toFixed(4)}`;
+  const pk = (i: number): string => `${pos.getX(i).toFixed(4)},${pos.getY(i).toFixed(4)},${pos.getZ(i).toFixed(4)}`;
   const edges: EdgeMap = new Map();
   const _e = new THREE.Vector3();
   for (let t = 0; t < triCount; t += 1) {
@@ -115,7 +115,7 @@ function collectEdges(pos: THREE.BufferAttribute, triCount: number): { faceN: Fl
     // Passing the vertex index (3t+2) instead of the slot was the
     // phantom-line bug: only tri 0's slots coincided, every other tri
     // scattered its flag into a DIFFERENT tri's channels.
-    const add = (a: number, b: number, c: number) => {
+    const add = (a: number, b: number, c: number): void => {
       const key = pk(a) < pk(b) ? `${pk(a)}|${pk(b)}` : `${pk(b)}|${pk(a)}`;
       let l = edges.get(key);
       if (!l) {edges.set(key, l = []);}
@@ -179,7 +179,7 @@ function propagateContinuations(ctx: EdgeCtx): void {
     }
   }
   const _d = new THREE.Vector3(), _d2 = new THREE.Vector3();
-  const dirOf = (e: EdgeRef, out: THREE.Vector3) =>
+  const dirOf = (e: EdgeRef, out: THREE.Vector3): THREE.Vector3 =>
     out.set(pos.getX(e.b) - pos.getX(e.a), pos.getY(e.b) - pos.getY(e.a), pos.getZ(e.b) - pos.getZ(e.a)).normalize();
   const queue = [...flagged];
   while (queue.length > 0) {
@@ -194,7 +194,7 @@ function propagateContinuations(ctx: EdgeCtx): void {
         if (Math.abs(_d.dot(_d2)) < 0.995) {continue;} // not a straight continuation
         // Continuation must sit in a tri coplanar with one of the
         // flagged edge's incident faces — else it's a different crease.
-        const coplanar = l2.some(r2 => list.some(r => 1 - faceDot(faceN, r2.t, r.t) < 0.02));
+        const coplanar = l2.some((r2): boolean => list.some((r): boolean => 1 - faceDot(faceN, r2.t, r.t) < 0.02));
         if (!coplanar) {continue;}
         flagEdge(ctx, l2);
         flagged.add(k2);
@@ -214,11 +214,11 @@ function healTJunctions(ctx: EdgeCtx): void {
   const { pos, edges, flagged } = ctx;
   const _m = new THREE.Vector3(), _pa = new THREE.Vector3(), _pb = new THREE.Vector3(), _cp = new THREE.Vector3();
   const _d = new THREE.Vector3(), _d2 = new THREE.Vector3();
-  const segOf = (e: EdgeRef) => {
+  const segOf = (e: EdgeRef): void => {
     _pa.set(pos.getX(e.a), pos.getY(e.a), pos.getZ(e.a));
     _pb.set(pos.getX(e.b), pos.getY(e.b), pos.getZ(e.b));
   };
-  const pointOnSeg = (p: THREE.Vector3, a: THREE.Vector3, b: THREE.Vector3) => {
+  const pointOnSeg = (p: THREE.Vector3, a: THREE.Vector3, b: THREE.Vector3): boolean => {
     _d2.subVectors(b, a);
     const len = _d2.length();
     if (len < 1e-9) {return false;}
@@ -363,7 +363,7 @@ function wNoise3(x: number, y: number, z: number): number {
   const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z);
   let fx = x - ix, fy = y - iy, fz = z - iz;
   fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy); fz = fz * fz * (3 - 2 * fz);
-  const c = (dx: number, dy: number, dz: number) => wHash3(ix + dx, iy + dy, iz + dz);
+  const c = (dx: number, dy: number, dz: number): number => wHash3(ix + dx, iy + dy, iz + dz);
   return c(0, 0, 0) * (1 - fx) * (1 - fy) * (1 - fz)
     + c(1, 0, 0) * fx * (1 - fy) * (1 - fz)
     + c(0, 1, 0) * (1 - fx) * fy * (1 - fz)
@@ -373,9 +373,9 @@ function wNoise3(x: number, y: number, z: number): number {
     + c(0, 1, 1) * (1 - fx) * fy * fz
     + c(1, 1, 1) * fx * fy * fz;
 }
-const wFbm3 = (x: number, y: number, z: number) =>
+const wFbm3 = (x: number, y: number, z: number): number =>
   0.5 * wNoise3(x, y, z) + 0.25 * wNoise3(x * 2.17, y * 2.17, z * 2.17) + 0.125 * wNoise3(x * 4.31, y * 4.31, z * 4.31);
-const sstep = (a: number, b: number, v: number) => {
+const sstep = (a: number, b: number, v: number): number => {
   const t = Math.max(0, Math.min(1, (v - a) / (b - a)));
   return t * t * (3 - 2 * t);
 };
@@ -571,7 +571,7 @@ cnt[vi] += 1;
  *  thresholded shallower (~15°) than the wear line so panel seams,
  *  collar roots and lip junctions all collect dirt. */
 function bakeGrime(geo: THREE.BufferGeometry, pos: THREE.BufferAttribute, count: number, triCount: number, idx: THREE.BufferAttribute | null): void {
-  const pk = (i: number) => `${pos.getX(i).toFixed(4)},${pos.getY(i).toFixed(4)},${pos.getZ(i).toFixed(4)}`;
+  const pk = (i: number): string => `${pos.getX(i).toFixed(4)},${pos.getY(i).toFixed(4)},${pos.getZ(i).toFixed(4)}`;
   const edges = new Map<string, EdgeRef[]>();
   const faceN = new Float32Array(triCount * 3);
   const faceC = new Float32Array(triCount * 3);
@@ -645,7 +645,7 @@ function hardEdgeDivergence(pos: THREE.BufferAttribute, nor: THREE.BufferAttribu
 // jitter made every vertex sample a different sky, so occlusion halos
 // came out lopsided and speckled. One shared dir set gives smooth AO
 // gradients; the shader's fbm supplies the surface mottle instead.
-const HEMI_DIRS: [number, number, number][] = (() => {
+const HEMI_DIRS: [number, number, number][] = ((): [number, number, number][] => {
   const dirs: [number, number, number][] = [];
   const golden = Math.PI * (3 - Math.sqrt(5));
   for (let i = 0; i < RAYS; i += 1) {
@@ -722,7 +722,7 @@ function bakeMesh(mesh: THREE.Mesh, occluder: THREE.Mesh, rayDist: number, grime
 /** Curvature-only bake for meshes that already carry baked AO textures
  *  (the vmBaked swap path) — same wear attribute + shader, no raycast AO. */
 export function bakeWearOnly(group: THREE.Group, opts: { grime?: boolean; wearBoost?: number } = {}): void {
-  group.traverse((o) => {
+  group.traverse((o): void => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) {return;}
     ensureNonIndexed(m);
@@ -750,7 +750,7 @@ export function bakeVertexAO(group: THREE.Group, opts: { grime?: boolean; wearBo
   // positions; baking scene-space AO into it double-darkens the swarm
   // species that already got their own bake via SwarmSpec.bake.
   const meshes: THREE.Mesh[] = [];
-  group.traverse((o) => { if ((o as THREE.Mesh).isMesh && !(o as THREE.InstancedMesh).isInstancedMesh) {meshes.push(o as THREE.Mesh);} });
+  group.traverse((o): void => { if ((o as THREE.Mesh).isMesh && !(o as THREE.InstancedMesh).isInstancedMesh) {meshes.push(o as THREE.Mesh);} });
   if (meshes.length === 0) {return;}
 
   const occluderGeo = mergeGeometries(meshes);
@@ -795,7 +795,7 @@ export function bakeVertexAO(group: THREE.Group, opts: { grime?: boolean; wearBo
 export function enhanceWeaponMaterial(mat: THREE.Material): void {
   if (mat.userData.__grunge) {return;}
   mat.userData.__grunge = true;
-  mat.onBeforeCompile = (sh) => {
+  mat.onBeforeCompile = (sh): void => {
     if (WEARVIZ) {sh.defines = Object.assign({}, sh.defines, {WEARVIZ: 1});}
     sh.uniforms.uWearMap = { value: (mat.userData.__wearTex as THREE.Texture) ?? blankWearTex() };
     sh.uniforms.uGrimeMap = { value: (mat.userData.__grimeTex as THREE.Texture) ?? whiteTex() };

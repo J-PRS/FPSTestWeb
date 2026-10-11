@@ -6,7 +6,7 @@ import type { HUD } from '../hud.js';
 // vignette/countdown, spectator hint, status-effect chip+vignette.
 // All flip DOM elements only; field state lives on the HUD.
 
-const paintFlagChip = (el: HTMLElement, st?: string) => {
+const paintFlagChip = (el: HTMLElement, st?: string): void => {
   el.style.display = st ? '' : 'none';
   if (!st) {return;}
   el.textContent = st === 'home' ? '⚑' : st === 'carried' ? '⚑ TAKEN' : '⚑ LOOSE';
@@ -42,7 +42,7 @@ export function feedKill(h: HUD, shooter: string, target: string, localIsShooter
     while (h.killFeed.childElementCount > 6) {h.killFeed.firstElementChild!.remove();}
     // Hard expiry — a fading ghost row reads as a smear while the stack
     // snaps up through it; classic feeds just cut the row in one frame.
-    setTimeout(() => row.remove(), 5200);
+    setTimeout((): void => row.remove(), 5200);
     // Kills render ONCE, here — the #player-list log (logEvent) keeps the
     // non-frag timeline (flags, match text) or every kill doubles up.
   }

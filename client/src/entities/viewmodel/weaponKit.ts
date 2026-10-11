@@ -62,12 +62,12 @@ export interface LoftSection { z: number; ring?: Ring2; point?: [number, number]
 
 /** Same profile, scaled — the CAD "offset" move. Use for tapers/steps
  *  instead of re-authoring the ring. */
-export const scaleRing = (r: Ring2, s: number): Ring2 => r.map(([x, y]) => [x * s, y * s] as [number, number]);
+export const scaleRing = (r: Ring2, s: number): Ring2 => r.map(([x, y]): [number, number] => [x * s, y * s] as [number, number]);
 /** Twist a ring around its center — rotated sections make rifled/spiral
  *  forms and let you clock hex flats wherever they read best. */
 export const rotRing = (r: Ring2, rad: number): Ring2 => {
   const c = Math.cos(rad), s = Math.sin(rad);
-  return r.map(([x, y]) => [x * c - y * s, x * s + y * c] as [number, number]);
+  return r.map(([x, y]): [number, number] => [x * c - y * s, x * s + y * c] as [number, number]);
 };
 
 /** Circular ring profile. */
@@ -138,7 +138,7 @@ const validateLoft = (sections: LoftSection[]): void => {
  *  UVs are surface-relative: u wraps the ring, v runs the length. */
 export const mkLoft = (sections: LoftSection[], mat: THREE.Material, cap = true, smooth = false): THREE.Mesh => {
   validateLoft(sections);
-  const seg = (sections.find(s => s.ring)?.ring ?? []).length;
+  const seg = (sections.find((s): Ring2 | undefined => s.ring)?.ring ?? []).length;
   const pos: number[] = [], uv: number[] = [];
   const pt = (s: LoftSection): [number, number, number] => [s.point![0] + (s.dx ?? 0), s.point![1] + (s.dy ?? 0), s.z];
   const ring = (s: LoftSection, j: number): [number, number, number] => {
@@ -199,7 +199,7 @@ export const mkLoft = (sections: LoftSection[], mat: THREE.Material, cap = true,
  *  t=0 returns a, t=1 returns b. */
 export const morphRing = (a: Ring2, b: Ring2, t: number): Ring2 => {
   const bb = a.length === b.length ? b : resampleRing(b, a.length);
-  return a.map(([ax, ay], i) => {
+  return a.map(([ax, ay], i): [number, number] => {
     const [bx, by] = b[i]!;
     return [ax + (bx - ax) * t, ay + (by - ay) * t] as [number, number];
   });
@@ -300,7 +300,7 @@ export const notchRing = (r: Ring2, edge: number, spans: [number, number][], dep
     return [p[0] * (1 - depth / l), p[1] * (1 - depth / l)];
   };
   const out = r.slice(0, edge + 1);
-  for (const [t0, t1] of [...spans].toSorted((x, y) => x[0] - y[0])) {
+  for (const [t0, t1] of [...spans].toSorted((x, y): number => x[0] - y[0])) {
     const s = slope * (t1 - t0);
     out.push(lerp(t0), dip(lerp(t0 + s)), dip(lerp(t1 - s)), lerp(t1));
   }

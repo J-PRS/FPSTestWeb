@@ -35,7 +35,7 @@ const mutedIds = (): Set<string> => {
   try { return new Set(JSON.parse(settings.get('fps-muted')) as string[]); }
   catch { return new Set(); }
 };
-const saveMuted = (s: Set<string>) => settings.set('fps-muted', JSON.stringify([...s]));
+const saveMuted = (s: Set<string>): void => settings.set('fps-muted', JSON.stringify([...s]));
 
 const MAX_LINES = 8;
 const FADE_MS = 12_000;
@@ -82,7 +82,7 @@ export class Chat {
     document.body.append(root);
 
     // Capture phase: while composing, keys are ours alone.
-    window.addEventListener('keydown', (e) => this.onKey(e), true);
+    window.addEventListener('keydown', (e): void => this.onKey(e), true);
     chatSink.add = (from, text, team, vgs, muted): HTMLDivElement => this.add(from, text, team, vgs, muted);
   }
 
@@ -147,7 +147,7 @@ export class Chat {
     }
     if (cmd === '/muted') {
       const s = mutedIds();
-      this.add(null, s.size > 0 ? `muted: ${[...s].map((id) => this.nameOf(id)).join(', ')}` : 'nobody muted');
+      this.add(null, s.size > 0 ? `muted: ${[...s].map((id): string => this.nameOf(id)).join(', ')}` : 'nobody muted');
       return true;
     }
     return false;
@@ -255,7 +255,7 @@ export class Chat {
     // it doesn't shrink `children`, and a null firstChild makes ?.remove()
     // no-op forever (infinite loop once >MAX_LINES lines land within FADE_MS).
     while (this.feed.children.length > MAX_LINES) {this.feed.children[0]?.remove();}
-    setTimeout(() => line.remove(), FADE_MS);
+    setTimeout((): void => line.remove(), FADE_MS);
     return line;
   }
 }

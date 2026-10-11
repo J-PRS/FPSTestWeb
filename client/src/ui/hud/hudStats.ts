@@ -93,7 +93,7 @@ export class HudStats {
     const loadoutKey = `${player.loadout.join(',')  }|${  player.weaponIndex}`;
     if (loadoutKey !== this.lastWeapon) {
       this.lastWeapon = loadoutKey;
-      player.loadout.forEach((wid, i) => {
+      player.loadout.forEach((wid, i): void => {
         const s = h.weaponSlots[i];
         if (!s) {return;}
         s.textContent = `${i + 1} ${HudStats.WEAPON_SHORT[wid] ?? '?'}`;
@@ -230,7 +230,7 @@ this.fpsFrames += 1;
       'inset 0 0 18vmax rgba(90,200,255,0.55), inset 0 0 5vmax rgba(140,220,255,0.4)';
     // Restore the red shadow for the next real hit — damage() resets it.
     clearTimeout(this.shieldVignetteReset);
-    this.shieldVignetteReset = window.setTimeout(() => {
+    this.shieldVignetteReset = window.setTimeout((): void => {
       h.dmgVignette.style.boxShadow = '';
     }, 300);
     if (fromPos) {this.pointAt(fromPos);}

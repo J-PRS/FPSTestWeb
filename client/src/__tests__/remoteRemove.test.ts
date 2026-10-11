@@ -19,18 +19,18 @@ const mkDeps = () => {
     lazyHud: () => hud,
     lazyHealthBarSystem: () => healthbars,
     logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
-    lazyNetworkManager: () => ({}),
-    lazyScene: () => ({}),
-    lazyTerrain: () => ({}),
-    lazyCamera: () => ({}),
-    lazyPlayer: () => ({}),
-    lazyEffects: () => ({}),
+    lazyNetworkManager: (): {} => ({}),
+    lazyScene: (): {} => ({}),
+    lazyTerrain: (): {} => ({}),
+    lazyCamera: (): {} => ({}),
+    lazyPlayer: (): {} => ({}),
+    lazyEffects: (): {} => ({}),
   } as unknown as RemotesDeps;
   return { deps, world, hud, healthbars };
 };
 
-describe('remote onRemove purges per-player receipts', () => {
-  it('a leaver drops out of lastWeaponByPlayer, HUD and health bars — scores persist', () => {
+describe('remote onRemove purges per-player receipts', (): void => {
+  it('a leaver drops out of lastWeaponByPlayer, HUD and health bars — scores persist', (): void => {
     const { deps, world, hud, healthbars } = mkDeps();
     createRemotes(deps);
     const onRemove = world.remotePlayers.hooks.onRemove as (id: string) => void;

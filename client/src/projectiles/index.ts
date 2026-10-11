@@ -66,11 +66,11 @@ export const WEAPON_CONFIGS: ProjectileConfig[] = [BOLT_CONFIG, DISC_CONFIG, GRE
 // WEAPON_CONFIGS stays weaponType-keyed (find-by-id) and includes belt items.
 
 export function getProjectileConfig(weaponType: number): ProjectileConfig | undefined {
-  return WEAPON_CONFIGS.find((c) => c.weaponType === weaponType);
+  return WEAPON_CONFIGS.find((c): boolean => c.weaponType === weaponType);
 }
 
 export function getProjectileConfigByName(name: string): ProjectileConfig | undefined {
-  return WEAPON_CONFIGS.find((c) => c.name === name);
+  return WEAPON_CONFIGS.find((c): boolean => c.name === name);
 }
 
 /** Unified accuracy formula: 1-10 scale, direct hits = max */

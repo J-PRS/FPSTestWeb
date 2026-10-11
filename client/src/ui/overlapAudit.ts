@@ -49,7 +49,7 @@ function isChrome(el: Element, vw: number, vh: number): boolean {
 export function auditHudOverlap(): OverlapHit[] {
   const vw = window.innerWidth, vh = window.innerHeight;
   const els = [...document.querySelectorAll(CHROME_ROOTS)]
-    .filter((el) => isChrome(el, vw, vh));
+    .filter((el): boolean => isChrome(el, vw, vh));
 
   const hits: OverlapHit[] = [];
   for (let i = 0; i < els.length; i += 1) {

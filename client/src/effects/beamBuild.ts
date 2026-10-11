@@ -35,8 +35,8 @@ function mkRibbon(color: number, opacity: number): THREE.Mesh {
   return m;
 }
 
-export function buildBeam(b: LightningBeam, scene: THREE.Scene, tint?: { glow: number; core: number; chain: number; hit: number; sparkTop: number }) {
-    b.beamPts = Array.from({ length: SEGS + 1 }, () => new THREE.Vector3());
+export function buildBeam(b: LightningBeam, scene: THREE.Scene, tint?: { glow: number; core: number; chain: number; hit: number; sparkTop: number }): void {
+    b.beamPts = Array.from({ length: SEGS + 1 }, (): THREE.Vector3 => new THREE.Vector3());
 
     // Two crossed ribbons in ONE geometry (X cross-section) — volumetric
     // from every angle, and it can't degenerate into a screen-filling fan
@@ -48,12 +48,12 @@ export function buildBeam(b: LightningBeam, scene: THREE.Scene, tint?: { glow: n
     // fork off the main bolt
     b.chainCore = mkRibbon(tint?.chain ?? 0x9F_D4_FF, 0.7);
     b.chainCore.visible = false;
-    b.chainPts = Array.from({ length: SEGS + 1 }, () => new THREE.Vector3());
+    b.chainPts = Array.from({ length: SEGS + 1 }, (): THREE.Vector3 => new THREE.Vector3());
     // Damage arc: same ribbon machinery at the core color — a second,
     // jaggier bolt riding the main shaft while the tip bites
     b.arc = mkRibbon(tint?.core ?? 0xEA_F6_FF, 0.9);
     b.arc.visible = false;
-    b.arcPts = Array.from({ length: SEGS + 1 }, () => new THREE.Vector3());
+    b.arcPts = Array.from({ length: SEGS + 1 }, (): THREE.Vector3 => new THREE.Vector3());
     b.group.add(b.glow, b.core, b.chainCore, b.arc);
     // Aim-probe tags — a stuck lightning bolt was indistinguishable from a
     // ribbon streak on screen before these names existed.

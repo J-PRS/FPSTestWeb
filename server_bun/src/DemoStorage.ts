@@ -40,7 +40,7 @@ export class DemoStorage {
   constructor(demosDir: string) {
     this.demosDir = demosDir;
     this.ensureDir();
-    this.loadIndex().then(() => this.reconcileIndex()).catch((error) => {
+    this.loadIndex().then((): Promise<void> => this.reconcileIndex()).catch((error): void => {
       logger.warn('DemoStorage index failed to load — starting empty', error);
     });
   }
@@ -48,13 +48,13 @@ export class DemoStorage {
   private async reconcileIndex(): Promise<void> {
     try {
       const files = await readdir(this.demosDir);
-      const demoFiles = files.filter(f => f.endsWith('.demo'));
+      const demoFiles = files.filter((f): boolean => f.endsWith('.demo'));
       let added = 0;
       for (const filename of demoFiles) {
         // Live membership check, not a snapshot: the ctor doesn't await
         // this reconcile, so a saveDemo in flight writes its file before
         // index.push — a snapshotted 'known' double-indexes it.
-        if (this.index.some(m => m.filename === filename)) {continue;}
+        if (this.index.some((m): boolean => m.filename === filename)) {continue;}
         try {
           const data = await readFile(join(this.demosDir, filename));
           const ab = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
@@ -63,7 +63,7 @@ export class DemoStorage {
           // The readFile yield is a race window: a saveDemo landing inside
           // it already pushed this filename — re-check or the index rows
           // outnumber the files on disk.
-          if (this.index.some(m => m.filename === filename)) {continue;}
+          if (this.index.some((m): boolean => m.filename === filename)) {continue;}
           this.index.push({
             filename,
             projectileLifetime: header.projectileLifetime,
@@ -77,7 +77,7 @@ added += 1;
         }
       }
       if (added > 0) {
-        this.index.sort((a, b) => b.projectileLifetime - a.projectileLifetime);
+        this.index.sort((a, b): number => b.projectileLifetime - a.projectileLifetime);
         await this.saveIndex();
         logger.info(`Reconciled ${added} orphaned demo(s) into index`);
       }
@@ -128,7 +128,7 @@ added += 1;
   private parseDemoHeader(buf: ArrayBuffer): { projectileLifetime: number; description: string; duration: number } {
     const view = new DataView(buf);
     let offset = 0;
-    const need = (n: number) => {
+    const need = (n: number): void => {
       if (offset + n > view.byteLength) {throw new Error('Malformed demo header');}
     };
 
@@ -205,7 +205,7 @@ added += 1;
     // second with equal air-time mint the same name and would silently
     // clobber — suffix until the name is free on disk and in the index.
     const base = `clip_${ts}_${header.projectileLifetime.toFixed(1)}s`;
-    const taken = new Set(this.index.map(m => m.filename));
+    const taken = new Set(this.index.map((m): string => m.filename));
     let filename = `${base}.demo`;
     for (let n = 2; existsSync(join(this.demosDir, filename)) || taken.has(filename); n += 1) {
       filename = `${base}_${n}.demo`;
@@ -224,17 +224,17 @@ added += 1;
 
     // The async ctor reconcile may have already adopted this file —
     // pushing unconditionally would index it twice.
-    if (!this.index.some(m => m.filename === meta.filename)) {
+    if (!this.index.some((m): boolean => m.filename === meta.filename)) {
       this.index.push(meta);
     }
-    this.index.sort((a, b) => b.projectileLifetime - a.projectileLifetime);
+    this.index.sort((a, b): number => b.projectileLifetime - a.projectileLifetime);
 
     // Cap the live index — the tail is lowest-lifetime, gzip it to
     // archive rather than delete outright.
     if (this.index.length > CONFIG.demoMaxClips) {
       const removed = this.index.splice(CONFIG.demoMaxClips);
       const archiveDir = join(this.demosDir, ARCHIVE_DIR);
-      await mkdir(archiveDir, { recursive: true }).catch(() => { return; });
+      await mkdir(archiveDir, { recursive: true }).catch((): void => { return; });
       for (const r of removed) {
         try {
           const src = join(this.demosDir, r.filename);
@@ -255,7 +255,7 @@ added += 1;
     const c = this.listCache;
     if (c && wallNow() - c.at < DemoStorage.LIST_TTL_MS) {return c.rows;}
     // Filter out stale entries whose files were deleted
-    const valid = this.index.filter(m => existsSync(join(this.demosDir, m.filename)));
+    const valid = this.index.filter((m): boolean => existsSync(join(this.demosDir, m.filename)));
     if (valid.length !== this.index.length) {
       const removed = this.index.length - valid.length;
       logger.info(`Cleaning ${removed} stale demo entries from index`);
@@ -263,7 +263,7 @@ added += 1;
       await this.saveIndex();
     }
     // Only list demos that meet the minimum lifetime threshold for "cool shots"
-    const cool = this.index.filter(m => m.projectileLifetime >= CONFIG.minDemoLifetime);
+    const cool = this.index.filter((m): boolean => m.projectileLifetime >= CONFIG.minDemoLifetime);
     this.listCache = { at: wallNow(), rows: cool };
     return cool;
   }

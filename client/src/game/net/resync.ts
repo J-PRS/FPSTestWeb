@@ -38,7 +38,7 @@ export function wireResync(ctx: NetCtx): void {
   const { deps, networkManager } = ctx;
   let hiddenAt: number | null = null;
 
-  document.addEventListener('visibilitychange', () => {
+  document.addEventListener('visibilitychange', (): void => {
     if (document.hidden) {
       hiddenAt = performance.now();
       return;

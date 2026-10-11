@@ -53,7 +53,7 @@ export class ServerBotSenses {
    *  retired bot's whole footprint prunes through one forget(). */
   readonly routing: BotRouting;
   /** ServerBots reads the per-team push-call counter directly. */
-  get pushCalls() { return this.routing.pushCalls; }
+  get pushCalls(): Map<TeamId, number> { return this.routing.pushCalls; }
 
   /** Squad spotting board — the team's shared eyes (see spotBoard.ts). */
   private readonly spotBoard: SpotBoard;
@@ -213,11 +213,11 @@ export class ServerBotSenses {
   build(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; health: number; maxHealth: number; kills?: number; deaths?: number }, goal: { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; marshal?: boolean; posted?: number } | null, now: number, skill?: BotSkill, sharedParties?: ReturnType<ServerBotSenses['partiesOf']>, builder?: boolean): BrainCtx {
     // Competence-biased draw: the weapon pick and the aim error read
     // the same matrix, so a phenom both reaches for its gun and lands it.
-    const bias = skill ? (t: number) => aimSkillFor(skill, t, 0) : undefined;
+    const bias = skill ? (t: number): number => aimSkillFor(skill, t, 0) : undefined;
     const parties = sharedParties ?? this.partiesOf(p);
-    const bp = sharedEnv.thinkProf ? (k: string, t0: number) => sharedEnv.thinkProf!.set(k, (sharedEnv.thinkProf!.get(k) ?? 0) + sharedEnv.wallPerf!() - t0) : null;
-    const ctx: BrainCtx = Object.assign({}, {id: p.id,team: p.team,pos: p.position,vel: p.velocity,enemies: parties.enemies,objective: goal?.pos ?? null,infiltrating: goal?.infiltrating ?? false,running: goal?.running ?? false,runner: goal?.runner ?? false,wave: goal?.wave ?? false,marshal: goal?.marshal ?? false,pushLive: p.team === 'alpha' || p.team === 'bravo' ? this.pushFor(p.team) !== null : false,posted: goal?.posted ?? 0,pickup: bp ? (() => { const t = sharedEnv.wallPerf!(); const v = this.pickupFor(p, parties.enemies) ?? undefined; bp('sense:pickup', t); return v; })() : (this.pickupFor(p, parties.enemies) ?? undefined),huntCreatures: this.room.mode === 'nuggets'
-        || Object.values(this.room.creatureSim.pops).some((cap) => cap > 0),groundY: (x, z) => {
+    const bp = sharedEnv.thinkProf ? (k: string, t0: number): Map<string, number> => sharedEnv.thinkProf!.set(k, (sharedEnv.thinkProf!.get(k) ?? 0) + sharedEnv.wallPerf!() - t0) : null;
+    const ctx: BrainCtx = Object.assign({}, {id: p.id,team: p.team,pos: p.position,vel: p.velocity,enemies: parties.enemies,objective: goal?.pos ?? null,infiltrating: goal?.infiltrating ?? false,running: goal?.running ?? false,runner: goal?.runner ?? false,wave: goal?.wave ?? false,marshal: goal?.marshal ?? false,pushLive: p.team === 'alpha' || p.team === 'bravo' ? this.pushFor(p.team) !== null : false,posted: goal?.posted ?? 0,pickup: bp ? ((): BotVec | undefined => { const t = sharedEnv.wallPerf!(); const v = this.pickupFor(p, parties.enemies) ?? undefined; bp('sense:pickup', t); return v; })() : (this.pickupFor(p, parties.enemies) ?? undefined),huntCreatures: this.room.mode === 'nuggets'
+        || Object.values(this.room.creatureSim.pops).some((cap): boolean => cap > 0),groundY: (x, z): number => {
         const t0 = sharedEnv.thinkProf ? sharedEnv.wallPerf!() : 0;
         const ep = this.room.moveSim.structureEpoch;
         if (ep !== this.groundEpoch) { this.groundMemo.clear(); this.groundEpoch = ep; }
@@ -236,13 +236,13 @@ export class ServerBotSenses {
         if (sharedEnv.thinkProf) {sharedEnv.thinkProf.set('sense:groundY', (sharedEnv.thinkProf.get('sense:groundY') ?? 0) + sharedEnv.wallPerf!() - t0);}
         return y;
       },route: this.routing.routeOf(p),others: parties.others,allies: parties.allies,engageRange: this.loadouts.get(id)?.far === WeaponType.Mortar ? 95 : undefined,thief: this.routing.thiefOf(p.team ?? '')}, botWeaponHooks(
-        (d) => pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage) as WeaponType,
+        (d): WeaponType => pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage) as WeaponType,
         this.loadouts.get(id) ?? BOT_LOADOUTS[0]!,
       ), (skill ? {
-        aimSkill: (d: number, targetSpeed: number) =>
+        aimSkill: (d: number, targetSpeed: number): number =>
           aimSkillFor(skill, pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage), targetSpeed),
-      } : {}), {solids: this.room.ballSim.colliders,solidIndex: this.room.ballSim.colliderIndex,energy: this.room.moveSim.energyOf(id) ?? undefined,moveSkill: skill?.movement,healthFrac: p.maxHealth > 0 ? p.health / p.maxHealth : 1,confidence: this.confidenceOf(p),threats: bp ? (() => { const t = sharedEnv.wallPerf!(); const v = this.room.projectiles.incomingNear(p.position, 12); bp('sense:threats', t); return v; })() : this.room.projectiles.incomingNear(p.position, 12),sounds: bp ? (() => { const t = sharedEnv.wallPerf!(); const v = this.room.noisesNear(p.position, 50); bp('sense:sounds', t); return v; })() : this.room.noisesNear(p.position, 50),imapQuietDir: (v: BotVec) =>
-        this.room.influence.quietestDir(v, this.room.influence.dangerLayer(p.team ?? 'alpha')),imapHottest: (v: BotVec) => this.room.influence.hottestNear(v, 'opportunity'),imapDanger: (v: BotVec) =>
+      } : {}), {solids: this.room.ballSim.colliders,solidIndex: this.room.ballSim.colliderIndex,energy: this.room.moveSim.energyOf(id) ?? undefined,moveSkill: skill?.movement,healthFrac: p.maxHealth > 0 ? p.health / p.maxHealth : 1,confidence: this.confidenceOf(p),threats: bp ? ((): Vec3[] => { const t = sharedEnv.wallPerf!(); const v = this.room.projectiles.incomingNear(p.position, 12); bp('sense:threats', t); return v; })() : this.room.projectiles.incomingNear(p.position, 12),sounds: bp ? ((): Vec3[] => { const t = sharedEnv.wallPerf!(); const v = this.room.noisesNear(p.position, 50); bp('sense:sounds', t); return v; })() : this.room.noisesNear(p.position, 50),imapQuietDir: (v: BotVec): { x: number; z: number; } =>
+        this.room.influence.quietestDir(v, this.room.influence.dangerLayer(p.team ?? 'alpha')),imapHottest: (v: BotVec): { x: number; z: number; v: number; } | null => this.room.influence.hottestNear(v, 'opportunity'),imapDanger: (v: BotVec): number =>
         this.room.influence.value(v, this.room.influence.dangerLayer(p.team ?? 'alpha')),notice: this.notices.for(id, p.team, now),repair: builder === false ? null : this.repairJob(p), now});
     // Squad spot-report: reports land via reportSpots() AFTER the bot's
     // think (they're its verified sightings); here it only reads what
@@ -281,7 +281,7 @@ export class ServerBotSenses {
     // so a nuggets map spreads the fleet over the field instead of every
     // brain locking the same nearest gem. Elsewhere it's opportunism.
     const nuggets = this.room.mode === 'nuggets';
-    const worthIt = (d: number) => nuggets
+    const worthIt = (d: number): boolean => nuggets
       ? d < 160 || botRand() < (d < 260 ? 0.6 : d < 320 ? 0.3 : 0.08)
       : d < 140;
     let best: BotVec | null = null, bestD = Infinity;

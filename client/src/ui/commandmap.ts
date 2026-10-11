@@ -125,7 +125,7 @@ export class CommandMap {
     const step = W / RES;
     const img = this.ctx.createImageData(RES, RES);
     let hMin = Infinity, hMax = -Infinity;
-    const hAt = (px: number, py: number) => sampleHeight((px / RES - 0.5) * W, (py / RES - 0.5) * W);
+    const hAt = (px: number, py: number): number => sampleHeight((px / RES - 0.5) * W, (py / RES - 0.5) * W);
     for (let py = 0; py < RES; py += 1) {
       for (let px = 0; px < RES; px += 1) {
         const h = hAt(px, py);

@@ -62,7 +62,7 @@ export function glitch(kind: string, detail: Record<string, unknown> = {}): void
 }
 export function glitchCountsDump(): Record<string, number> { return Object.assign({}, glitchCounts); }
 
-registerDiag('glitches', () => glitchCountsDump());
+registerDiag('glitches', (): { [x: string]: number; } => glitchCountsDump());
 
 export function markProbe(obj: { userData: Record<string, unknown> }, tag: DbgTag): void {
   obj.userData.dbg = tag;

@@ -61,14 +61,14 @@ export class PlayerManager {
   spawnObjective?: (playerId: string) => { pos: Vec3; w: number } | null;
 
   private readonly spawnPicker = new SpawnPicker({
-    players: () => this.players,
-    spawnPoints: () => this.spawnPoints,
-    teamSpawns: () => this.teamSpawns,
-    teamBases: () => this.teamBases,
-    homeBias: (id) => this.spawnHomeBias?.(id),
-    objective: (id) => this.spawnObjective?.(id) ?? null,
-    groundAt: () => this.groundAt,
-    rng: () => this.spawnRng(),
+    players: (): Map<string, PlayerState> => this.players,
+    spawnPoints: (): SpawnPoint[] | null => this.spawnPoints,
+    teamSpawns: (): { alpha?: SpawnPoint[]; bravo?: SpawnPoint[]; } | null => this.teamSpawns,
+    teamBases: (): { alpha: Vec3; bravo: Vec3; } | null => this.teamBases,
+    homeBias: (id): number | undefined => this.spawnHomeBias?.(id),
+    objective: (id): { pos: Vec3; w: number; } | null => this.spawnObjective?.(id) ?? null,
+    groundAt: (): ((x: number, z: number) => number) | undefined => this.groundAt,
+    rng: (): number => this.spawnRng(),
   });
 
   addPlayer(playerId: string, team?: TeamId, perk = 'none', armorClass = 'medium', isBot = false): PlayerState {

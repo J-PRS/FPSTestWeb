@@ -11,21 +11,21 @@ function engine(listenerVel = new THREE.Vector3()): AudioEngine {
   return e;
 }
 
-describe('dopplerRate', () => {
-  it('approaching emitters pitch up, receding pitch down', () => {
+describe('dopplerRate', (): void => {
+  it('approaching emitters pitch up, receding pitch down', (): void => {
     const e = engine();
     const at = new THREE.Vector3(50, 0, 0);
     expect(e.dopplerRate(at, new THREE.Vector3(-40, 0, 0))).toBeGreaterThan(1);
     expect(e.dopplerRate(at, new THREE.Vector3(40, 0, 0))).toBeLessThan(1);
   });
 
-  it('perpendicular motion does not bend', () => {
+  it('perpendicular motion does not bend', (): void => {
     const e = engine();
     const r = e.dopplerRate(new THREE.Vector3(50, 0, 0), new THREE.Vector3(0, 0, 40));
     expect(r).toBeCloseTo(1, 5);
   });
 
-  it('a moving listener counts too — skiing toward a source bends it up', () => {
+  it('a moving listener counts too — skiing toward a source bends it up', (): void => {
     const e = engine(new THREE.Vector3(40, 0, 0));
     expect(e.dopplerRate(new THREE.Vector3(50, 0, 0))).toBeGreaterThan(1);
     // Listener retreating reads the same as the emitter retreating.
@@ -33,18 +33,18 @@ describe('dopplerRate', () => {
     expect(e2.dopplerRate(new THREE.Vector3(50, 0, 0))).toBeLessThan(1);
   });
 
-  it('relative velocity cancels — matching velocities stay flat', () => {
+  it('relative velocity cancels — matching velocities stay flat', (): void => {
     const e = engine(new THREE.Vector3(40, 0, 0));
     expect(e.dopplerRate(new THREE.Vector3(50, 0, 0), new THREE.Vector3(40, 0, 0))).toBeCloseTo(1, 5);
   });
 
-  it('no bend inside 2m or past max distance', () => {
+  it('no bend inside 2m or past max distance', (): void => {
     const e = engine();
     expect(e.dopplerRate(new THREE.Vector3(1, 0, 0), new THREE.Vector3(-40, 0, 0))).toBe(1);
     expect(e.dopplerRate(new THREE.Vector3(300, 0, 0), new THREE.Vector3(-40, 0, 0))).toBe(1);
   });
 
-  it('clamps to the musical range even at extreme closing speeds', () => {
+  it('clamps to the musical range even at extreme closing speeds', (): void => {
     const e = engine();
     const r = e.dopplerRate(new THREE.Vector3(50, 0, 0), new THREE.Vector3(-500, 0, 0));
     expect(r).toBeLessThanOrEqual(1.45);

@@ -7,38 +7,38 @@ import * as THREE from 'three';
 // equal-stamp second segments MUST apply — two edges in one server tick
 // share the 50ms stamp and the second is fresher truth in wire order.
 // Dropping it replayed a dead leg for a whole interval (the 5-15m warns).
-describe('isStaleSeg — wire-order boundary', () => {
-  it('drops strictly-older stamps', () => {
+describe('isStaleSeg — wire-order boundary', (): void => {
+  it('drops strictly-older stamps', (): void => {
     const bag = newNetBag();
     bag.legT0 = 10;
     expect(isStaleSeg(bag, 9.9)).toBe(true);
   });
 
-  it('applies equal stamps — same-tick second segments are fresher truth', () => {
+  it('applies equal stamps — same-tick second segments are fresher truth', (): void => {
     const bag = newNetBag();
     bag.legT0 = 10;
     expect(isStaleSeg(bag, 10)).toBe(false);
   });
 
-  it('applies newer stamps', () => {
+  it('applies newer stamps', (): void => {
     const bag = newNetBag();
     bag.legT0 = 10;
     expect(isStaleSeg(bag, 10.1)).toBe(false);
   });
 
-  it('never drops unstamped segments', () => {
+  it('never drops unstamped segments', (): void => {
     const bag = newNetBag();
     bag.legT0 = 10;
     expect(isStaleSeg(bag, undefined)).toBe(false);
   });
 
-  it('accepts everything before the first stamp (legT0 = -1)', () => {
+  it('accepts everything before the first stamp (legT0 = -1)', (): void => {
     const bag = newNetBag();
     expect(isStaleSeg(bag, 0.01)).toBe(false);
   });
 });
 
-describe('applySeg — same-tick re-anchor', () => {
+describe('applySeg — same-tick re-anchor', (): void => {
   function host(): NetHost {
     return {
       pos: new THREE.Vector3(), vel: new THREE.Vector3(),
@@ -52,7 +52,7 @@ describe('applySeg — same-tick re-anchor', () => {
     tp: null, simT: t, hard: false,
   });
 
-  it('a second segment on the same stamp re-anchors instead of being dropped', () => {
+  it('a second segment on the same stamp re-anchors instead of being dropped', (): void => {
     const bag = newNetBag();
     bag.sim = makeSimBall(1, 0, 0, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
     const h = host();
@@ -62,7 +62,7 @@ describe('applySeg — same-tick re-anchor', () => {
     expect(bag.legT0).toBe(5);
   });
 
-  it('the sim cursor rewinds to the fresh stamp so the whole gap replays', () => {
+  it('the sim cursor rewinds to the fresh stamp so the whole gap replays', (): void => {
     const bag = newNetBag();
     bag.sim = makeSimBall(1, 0, 0, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
     bag.simT = 12; // stepped ahead

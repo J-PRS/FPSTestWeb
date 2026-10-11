@@ -13,8 +13,8 @@ import type { SnapshotPlayer } from '../../../shared/protocol.js';
 // server truth — membership, health, liveness — with no ghosts.
 // Everything funnels through the real wireStateDebug path.
 
-function mulberry(seed: number) {
-  return () => {
+function mulberry(seed: number): () => number {
+  return (): number => {
     // oxlint-disable-next-line prefer-math-trunc -- int32 wrap is the point
     let s = (seed | 0); s = (s + 0x6D_2B_79_F5) | 0;
     let t = Math.imul(s ^ (s >>> 15), 1 | s);
@@ -23,7 +23,7 @@ function mulberry(seed: number) {
   };
 }
 
-const log = { debug: () => { return; }, info: () => { return; }, warn: () => { return; }, error: () => { return; } };
+const log = { debug: (): void => { return; }, info: (): void => { return; }, warn: (): void => { return; }, error: (): void => { return; } };
 
 interface ServerP { id: string; x: number; y: number; z: number; health: number; isDead: boolean }
 
@@ -33,15 +33,15 @@ function mk(localHealth = 100) {
   const localPlayer = { health: localHealth, isDead: false } as unknown as Player;
   const ctx: StateDebugContext = {
     networkManager: nm,
-    getPlayer: () => localPlayer,
+    getPlayer: (): Player => localPlayer,
     remotePlayers: remotePlayers as StateDebugContext['remotePlayers'],
     projectiles: [],
-    getLastSentPos: () => ({ x: 0, y: 0, z: 0 }),
+    getLastSentPos: (): { x: number; y: number; z: number; } => ({ x: 0, y: 0, z: 0 }),
     world: { mode: 'test' },
     logger: log as unknown as StateDebugContext['logger'],
   };
   wireStateDebug(ctx);
-  (remotePlayers as StateDebugContext['remotePlayers']).remove = (id: string) => remotePlayers.delete(id);
+  (remotePlayers as StateDebugContext['remotePlayers']).remove = (id: string): boolean => remotePlayers.delete(id);
   return { nm, ctx, remotePlayers, localPlayer };
 }
 
@@ -53,12 +53,12 @@ function snap(p: ServerP): SnapshotPlayer {
   } as unknown as SnapshotPlayer;
 }
 
-describe('stateDebug heal-loop conformance fuzz', () => {
-  beforeEach(() => { vi.useFakeTimers(); });
-  afterEach(() => { vi.useRealTimers(); });
+describe('stateDebug heal-loop conformance fuzz', (): void => {
+  beforeEach((): void => { vi.useFakeTimers(); });
+  afterEach((): void => { vi.useRealTimers(); });
 
   for (const seed of [7, 42, 1337, 20_240, 999_983]) {
-    it(`seed ${seed}: roster converges to server truth under churn`, () => {
+    it(`seed ${seed}: roster converges to server truth under churn`, (): void => {
       const rnd = mulberry(seed);
       const { nm, remotePlayers, localPlayer } = mk();
       const server = new Map<string, ServerP>();
@@ -66,7 +66,7 @@ describe('stateDebug heal-loop conformance fuzz', () => {
       // exactly what a WAN does to the request→reply pair.
       const replyQueue: SnapshotPlayer[][] = [];
 
-      const fireCheck = () => {
+      const fireCheck = (): void => {
         // 'zz' can never equal the computed FNV — every call is a mismatch,
         // so every pending reply heals. Server id must always include the
         // local player (real snapshots do).
@@ -76,7 +76,7 @@ describe('stateDebug heal-loop conformance fuzz', () => {
           health: localPlayer.health, isDead: false,
         }].map(snap));
       };
-      const deliver = () => {
+      const deliver = (): void => {
         const batch = replyQueue.shift();
         if (batch) {nm.onSnapshot?.(batch, Date.now());}
       };
@@ -101,7 +101,7 @@ describe('stateDebug heal-loop conformance fuzz', () => {
           // Client-side divergence lands with no edge: partial roster,
           // stale health, ghost member.
           const act = rnd();
-          const clientIds = [...nm.getPlayers().keys()].filter(id => id !== nm.getLocalPlayerId());
+          const clientIds = [...nm.getPlayers().keys()].filter((id): boolean => id !== nm.getLocalPlayerId());
           if (act < 0.35 && ids.length > 0) {
             const miss = ids[Math.floor(rnd() * ids.length)]!;
             nm.getPlayers().delete(miss); // join edge never arrived

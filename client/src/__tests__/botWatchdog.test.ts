@@ -3,26 +3,26 @@ import * as THREE from 'three';
 import { BotWatchdog } from '../game/bots/botWatchdog.js';
 import type { GameBot } from '../game/bots/botBrain.js';
 
-const mkBot = (id: string, pos: THREE.Vector3, modelPos = pos) => ({
+const mkBot = (id: string, pos: THREE.Vector3, modelPos = pos): { playerId: string; position: THREE.Vector3; isDead: boolean; model: GameBot["model"]; } => ({
   playerId: id,
   position: pos,
   isDead: false,
-  model: { getModelPosition: (out: THREE.Vector3) => { out.copy(modelPos); return true; } } as unknown as GameBot['model'],
+  model: { getModelPosition: (out: THREE.Vector3): boolean => { out.copy(modelPos); return true; } } as unknown as GameBot['model'],
 });
 
-const mkWd = (matchOver = () => false) => {
+const mkWd = (matchOver = (): boolean => false) => {
   const log = { warn: vi.fn(), info: vi.fn() };
   return { wd: new BotWatchdog(log, matchOver), log };
 };
 
 // The watchdog samples every 4s (WD_DT) and judges net travel over 10s
 // windows (WD_STUCK_T/WD_STUCK_D). step() is fed dt slices like the loop.
-const stepN = (wd: BotWatchdog, bots: any[], seconds: number) => {
+const stepN = (wd: BotWatchdog, bots: any[], seconds: number): void => {
   for (let i = 0; i < seconds; i += 1) {wd.step(1, bots);}
 };
 
-describe('BotWatchdog', () => {
-  it('warns on net displacement under the stuck threshold, once per episode', () => {
+describe('BotWatchdog', (): void => {
+  it('warns on net displacement under the stuck threshold, once per episode', (): void => {
     const { wd, log } = mkWd();
     const b = mkBot('b1', new THREE.Vector3());
     stepN(wd, [b], 17); // ~16s in place → first window closes
@@ -32,7 +32,7 @@ describe('BotWatchdog', () => {
     expect(log.warn).toHaveBeenLastCalledWith(expect.stringContaining('pinned'));
   });
 
-  it('re-arms after the bot recovers', () => {
+  it('re-arms after the bot recovers', (): void => {
     const { wd, log } = mkWd();
     const p = new THREE.Vector3();
     const b = mkBot('b1', p);
@@ -46,7 +46,7 @@ describe('BotWatchdog', () => {
     expect(log.warn).toHaveBeenCalledTimes(2);
   });
 
-  it('jiggling in place still counts as stuck (net travel, not motion)', () => {
+  it('jiggling in place still counts as stuck (net travel, not motion)', (): void => {
     const { wd, log } = mkWd();
     const p = new THREE.Vector3();
     const b = mkBot('b1', p);
@@ -58,14 +58,14 @@ describe('BotWatchdog', () => {
     expect(log.warn).toHaveBeenCalledTimes(1);
   });
 
-  it('match-over stillness is not a failure', () => {
-    const { wd, log } = mkWd(() => true);
+  it('match-over stillness is not a failure', (): void => {
+    const { wd, log } = mkWd((): true => true);
     const b = mkBot('b1', new THREE.Vector3());
     stepN(wd, [b], 17);
     expect(log.warn).not.toHaveBeenCalled();
   });
 
-  it('render stall: logic moves, model frozen → one warn, then recover', () => {
+  it('render stall: logic moves, model frozen → one warn, then recover', (): void => {
     const { wd, log } = mkWd();
     const logic = new THREE.Vector3();
     const modelPos = new THREE.Vector3(); // never moves
@@ -80,7 +80,7 @@ describe('BotWatchdog', () => {
     expect(log.info).toHaveBeenCalledWith(expect.stringContaining('render recovered'));
   });
 
-  it('whole-squad freeze needs two consecutive all-stuck windows', () => {
+  it('whole-squad freeze needs two consecutive all-stuck windows', (): void => {
     const { wd, log } = mkWd();
     const bots = [mkBot('a', new THREE.Vector3()), mkBot('b', new THREE.Vector3(10, 0, 0))];
     stepN(wd, bots, 17); // first all-stuck window — individual warns only

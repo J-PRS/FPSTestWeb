@@ -8,18 +8,18 @@ import type { HullBox } from '../structures/structKit.ts';
 // must never disagree or a shot/player behaves differently per side.
 // Builders emit their own userData.hulls sidecar (authored next to the
 // geometry), so the check is builder-hull vs table-hull, not a guess.
-describe('kit hull parity', () => {
-  test('every KIT_HULLS piece has a builder and vice versa', () => {
+describe('kit hull parity', (): void => {
+  test('every KIT_HULLS piece has a builder and vice versa', (): void => {
     for (const piece of KIT_PIECES) {expect(KIT_BUILDERS[piece], `no builder for '${piece}'`).toBeTruthy();}
     for (const key of Object.keys(KIT_BUILDERS)) {expect(KIT_HULLS[key], `no hulls for builder '${key}'`).toBeTruthy();}
   });
 
-  test('builder sidecar hulls match the server table', () => {
+  test('builder sidecar hulls match the server table', (): void => {
     for (const [piece, build] of Object.entries(KIT_BUILDERS)) {
       const hulls = (build(0).userData.hulls as HullBox[] | undefined) ?? [];
       const table = KIT_HULLS[piece] ?? [];
       expect(hulls.length, `${piece}: hull count`).toBe(table.length);
-      hulls.forEach((h, i) => {
+      hulls.forEach((h, i): void => {
         const t = table[i]!;
         for (const axis of ['x', 'y', 'z'] as const) {
           expect(h.pos[axis], `${piece}[${i}].pos.${axis}`).toBeCloseTo(t.pos[axis], 5);

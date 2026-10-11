@@ -75,10 +75,10 @@ function createBallField(f: BallFieldDeps) {
 function recordBallKeyframes(ball: Ball): void {
   const dm = deps.lazyDemoManager();
   if (!dm?.isRecording) {return;}
-  ball.onBounce = (pos, vel) => {
+  ball.onBounce = (pos, vel): void => {
     dm.recordTargetBounce(ball.id, { x: pos.x, y: pos.y, z: pos.z }, { x: vel.x, y: vel.y, z: vel.z }, ball.variant);
   };
-  ball.onPeak = (pos, vel) => {
+  ball.onPeak = (pos, vel): void => {
     dm.recordTargetPeak(ball.id, { x: pos.x, y: pos.y, z: pos.z }, { x: vel.x, y: vel.y, z: vel.z }, ball.variant);
   };
 }
@@ -100,7 +100,7 @@ function spawnBallOfVariant(variant: 0 | 1 | 2 | 3): Ball {
   const ball = new Ball(scene, deps.lazyTerrain(), variant, undefined, deps.lazyPlayer().pos);
   balls.push(ball);
   targets.push(ball);
-  if (ball.variant === 3) {ball.onDeath = (t) => spawnSplitChildren(t);}
+  if (ball.variant === 3) {ball.onDeath = (t): void => spawnSplitChildren(t);}
   if (dm?.isRecording) {
     dm.recordTargetSpawned(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.variant);
     recordBallKeyframes(ball);
@@ -212,8 +212,8 @@ export function createEntities(deps: EntitiesDeps) {
   // LOD ticking, dust/bolt emitters) lives in game/speciesKit.ts.
   // Assigned right after the kit — brains reference it lazily, so the
   // constructor order (kit → deployables) doesn't matter to call sites.
-  const kit = createSpeciesKit(deps, targets, () => deployables);
-  const deployables = new Deployables((((Object.assign({}, deps, {targets,lazyCombat: () => deps.lazyCombat?.(),enemyBots: deps.deployEnemyBots,botFoes: deps.deployBotFoes,damageBot: deps.deployDamageBot,basePower: deps.deployBasePower,damageNumbers: deps.deployDamageNumbers?.(),showItemBar: deps.deployItemBar,dropNugget: (pos: THREE.Vector3) => spawnNuggetsAt(pos, 1, _noVel)})))));
+  const kit = createSpeciesKit(deps, targets, (): Deployables => deployables);
+  const deployables = new Deployables((((Object.assign({}, deps, {targets,lazyCombat: () => deps.lazyCombat?.(),enemyBots: deps.deployEnemyBots,botFoes: deps.deployBotFoes,damageBot: deps.deployDamageBot,basePower: deps.deployBasePower,damageNumbers: deps.deployDamageNumbers?.(),showItemBar: deps.deployItemBar,dropNugget: (pos: THREE.Vector3): void => spawnNuggetsAt(pos, 1, _noVel)})))));
   const {
     removeTarget, aggroFor, reportTargetDamage, kickDust, atCap,
   } = kit;
@@ -250,8 +250,8 @@ export function createEntities(deps: EntitiesDeps) {
   // else that calls the spawn API (director picks/beats, boot seeds).
   // Wire-owned spawns (netBalls/netCrawlers) never route through here.
   const noSpawn = <A extends unknown[]>(off: boolean, fn: (...a: A) => void): ((...a: A) => void) =>
-    off ? () => { return; } : fn;
-  const gateC = <A extends unknown[]>(fn: (...a: A) => void) => noSpawn(urlParams.noCreatures, fn);
+    off ? (): void => { return; } : fn;
+  const gateC = <A extends unknown[]>(fn: (...a: A) => void): (...a: A) => void => noSpawn(urlParams.noCreatures, fn);
 
   // ---- Nuggets (pickup gems dropped by destroyed targets) ----
   function updateNuggets(dt: number): void {
@@ -307,7 +307,7 @@ nuggetsCollected += 1;
   return {
     balls, crawlers, scarabs, grubs, snakes, gnats, turrets, rollers, seekers, overlords, mines, totems, rakks, weeds, strifers, targets, nuggets, banelings,
     spawnNuggetsAt,
-    getNuggetsCollected: () => nuggetsCollected,
+    getNuggetsCollected: (): number => nuggetsCollected,
     spawnBall: noSpawn(urlParams.noBalls, spawnBall),
     spawnCrawler: gateC(melee.spawnCrawler), spawnScarab: gateC(melee.spawnScarab), spawnGrub: gateC(melee.spawnGrub), spawnSnake: gateC(melee.spawnSnake),
     spawnGnatCloud: gateC(flyers.spawnGnatCloud), spawnSeeker: gateC(flyers.spawnSeeker), spawnRakk: gateC(flyers.spawnRakk),
@@ -319,7 +319,7 @@ nuggetsCollected += 1;
     shieldObstacles: () => deployables.shieldObstacles(),
     reportTargetDamage,
     deployables,
-    updateDeployables: (dt: number) => deployables.update(dt),
+    updateDeployables: (dt: number): void => deployables.update(dt),
     netBallSpawn, netBallSegment, netBallDie, netBallRoster,
     netCrawlSpawn, netCrawlEvt, netCrawlDie, netCrawlRoster,
     updateBalls,
@@ -332,7 +332,7 @@ nuggetsCollected += 1;
     // All per-species ticks in one iterable — gameLoop iterates, so adding
     // a species never touches the loop. Deployables stay separate (they
     // aren't a species — no spawn cadence, no targets registry).
-    updateSpeciesAll: (dt: number) => {
+    updateSpeciesAll: (dt: number): void => {
       melee.updateCrawlers(dt); melee.updateScarabs(dt); melee.updateGrubs(dt);
       melee.updateSnakes(dt); melee.updateRollers(dt);
       flyers.updateGnats(dt); flyers.updateSeekers(dt); flyers.updateRakks(dt); flyers.updateStrifers(dt);

@@ -31,7 +31,7 @@ export class WireIn {
   private readonly wireIds = new Map<number, string>();
   /** Decode slots reused every tick — upsert deep-fills roster vecs so
    *  rostered values never alias a slot (see decodeTickFrame pool docs). */
-  private readonly tickPool: TickDecodePool = { slots: [], byId: new Map(), resolveId: (id) => this.wireIds.get(id) };
+  private readonly tickPool: TickDecodePool = { slots: [], byId: new Map(), resolveId: (id): string | undefined => this.wireIds.get(id) };
 
   private lastTickSeq = -1; // highest server tickSeq applied — stale frames drop
   /** ?dropticks=N test hook — see the tick-path comment below. */
@@ -194,11 +194,11 @@ this.handlerThrows += 1;
   }
 
   private readonly handlers: { [K in ServerMessage['type']]: (data: Extract<ServerMessage, { type: K }>) => void } = {
-    gameState: (data) => this.handleGameState(data),
-    tickUpdate: (data) => this.handleTickUpdate(data),
-    playerJoined: (data) => this.handlePlayerJoined(data),
-    playerLeft: (data) => this.handlePlayerLeft(data),
-    wireIds: (data) => {
+    gameState: (data): void => this.handleGameState(data),
+    tickUpdate: (data): void => this.handleTickUpdate(data),
+    playerJoined: (data): void => this.handlePlayerJoined(data),
+    playerLeft: (data): void => this.handlePlayerLeft(data),
+    wireIds: (data): void => {
       for (const [id, pid] of Object.entries(data.add)) {this.wireIds.set(Number(id), pid);}
       for (const id of data.remove ?? []) {
         this.wireIds.delete(id);
@@ -207,66 +207,66 @@ this.handlerThrows += 1;
         this.tickPool.byId?.delete(id);
       }
     },
-    teamUpdate: (data) => { this.h.patchRemotePlayer(data.playerId, { team: data.team }); },
-    playerRespawn: (data) => this.handlePlayerRespawn(data),
-    playerHit: (data) => this.handlePlayerHit(data),
-    buff: (data) => this.h.onBuff?.(data),
-    yourHealth: (data) => this.h.onYourHealth?.(data.health),
-    yourCharge: (data) => this.h.onYourCharge?.(data.charge),
-    playerKill: (data) => this.handlePlayerKill(data),
-    knockback: (data) => this.h.onKnockback?.(data.position, data.force, data.pull),
-    jump: (data) => this.h.onPlayerJump?.(data.playerId, data.position),
-    jetpack: (data) => this.h.onPlayerJetpack?.(data.playerId, data.position),
-    projectileCreated: (data) => this.h.onProjectileCreated?.(data.projectileId, data.ownerId, data.position, data.velocity, data.weaponType, data.shotId, data.pellet),
-    playerShot: (data) => this.h.onPlayerShot?.(data.id, data.weaponType, data.pos, data.dir),
-    projectileDestroyed: (data) => this.h.onProjectileDestroyed?.(data.projectileId, data.shotId, data.position ?? undefined),
-    snapshot: (data) => this.h.onSnapshot?.(data.players || [], data.timestamp || Date.now()),
-    stateHash: (data) => this.h.onStateHash?.(data.hash, data.tick, data.playerCount, data.timestamp, data.replica),
-    correction: (data) => this.h.handleCorrection(data),
-    inputSync: (data) => this.h.resendInputs(data.lastSeq),
-    claimAck: (data) => this.h.ackClaim(data),
-    teleport: (data) => this.h.onRemoteTeleport?.(data.playerId, data.position, data.velocity),
-    ballSpawn: (data) => this.h.onBallSpawn?.(data),
-    ballSegment: (data) => this.h.onBallSegment?.(data),
-    ballDie: (data) => this.h.onBallDie?.(data),
-    ballRoster: (data) => this.h.onBallRoster?.(data),
-    crawlSpawn: (data) => this.h.onCrawlSpawn?.(data),
-    crawlEvt: (data) => this.h.onCrawlEvt?.(data),
-    crawlDie: (data) => this.h.onCrawlDie?.(data),
-    crawlRoster: (data) => this.h.onCrawlRoster?.(data),
+    teamUpdate: (data): void => { this.h.patchRemotePlayer(data.playerId, { team: data.team }); },
+    playerRespawn: (data): void => this.handlePlayerRespawn(data),
+    playerHit: (data): void => this.handlePlayerHit(data),
+    buff: (data): void | undefined => this.h.onBuff?.(data),
+    yourHealth: (data): void | undefined => this.h.onYourHealth?.(data.health),
+    yourCharge: (data): void | undefined => this.h.onYourCharge?.(data.charge),
+    playerKill: (data): void => this.handlePlayerKill(data),
+    knockback: (data): void | undefined => this.h.onKnockback?.(data.position, data.force, data.pull),
+    jump: (data): void | undefined => this.h.onPlayerJump?.(data.playerId, data.position),
+    jetpack: (data): void | undefined => this.h.onPlayerJetpack?.(data.playerId, data.position),
+    projectileCreated: (data): void | undefined => this.h.onProjectileCreated?.(data.projectileId, data.ownerId, data.position, data.velocity, data.weaponType, data.shotId, data.pellet),
+    playerShot: (data): void | undefined => this.h.onPlayerShot?.(data.id, data.weaponType, data.pos, data.dir),
+    projectileDestroyed: (data): void | undefined => this.h.onProjectileDestroyed?.(data.projectileId, data.shotId, data.position ?? undefined),
+    snapshot: (data): void | undefined => this.h.onSnapshot?.(data.players || [], data.timestamp || Date.now()),
+    stateHash: (data): void | undefined => this.h.onStateHash?.(data.hash, data.tick, data.playerCount, data.timestamp, data.replica),
+    correction: (data): void => this.h.handleCorrection(data),
+    inputSync: (data): void => this.h.resendInputs(data.lastSeq),
+    claimAck: (data): void => this.h.ackClaim(data),
+    teleport: (data): void | undefined => this.h.onRemoteTeleport?.(data.playerId, data.position, data.velocity),
+    ballSpawn: (data): void | undefined => this.h.onBallSpawn?.(data),
+    ballSegment: (data): void | undefined => this.h.onBallSegment?.(data),
+    ballDie: (data): void | undefined => this.h.onBallDie?.(data),
+    ballRoster: (data): void | undefined => this.h.onBallRoster?.(data),
+    crawlSpawn: (data): void | undefined => this.h.onCrawlSpawn?.(data),
+    crawlEvt: (data): void | undefined => this.h.onCrawlEvt?.(data),
+    crawlDie: (data): void | undefined => this.h.onCrawlDie?.(data),
+    crawlRoster: (data): void | undefined => this.h.onCrawlRoster?.(data),
     // Server-issued RTT probe — echo it back untouched so the server
     // measures round-trip itself instead of trusting our reported ping.
-    ping: (data) => this.h.pingReceived(data.timestamp),
-    pong: (data) => this.h.pongReceived(data.timestamp),
-    srvPing: (data) => { this.h.serverPingMs = typeof data.rtt === 'number' ? data.rtt : null; },
-    chat: (data) => this.h.onChat?.(data.playerId, data.text, data.team === true, typeof data.vgs === 'string' ? data.vgs : undefined, data.muted === true),
-    flagUpdate: (data) => this.h.onFlagUpdate?.(data.flags),
-    matchNotice: (data) => this.h.onMatchNotice?.(data.text),
-    serverWarn: (data) => this.h.onServerWarn?.(data.text),
+    ping: (data): void => this.h.pingReceived(data.timestamp),
+    pong: (data): void => this.h.pongReceived(data.timestamp),
+    srvPing: (data): void => { this.h.serverPingMs = typeof data.rtt === 'number' ? data.rtt : null; },
+    chat: (data): void | undefined => this.h.onChat?.(data.playerId, data.text, data.team === true, typeof data.vgs === 'string' ? data.vgs : undefined, data.muted === true),
+    flagUpdate: (data): void | undefined => this.h.onFlagUpdate?.(data.flags),
+    matchNotice: (data): void | undefined => this.h.onMatchNotice?.(data.text),
+    serverWarn: (data): void | undefined => this.h.onServerWarn?.(data.text),
     // WT/RTC path of the 1008 identity reject — the close code is lost
     // on those tiers, so the server sends this before closing.
-    sessionRejected: (data) => this.h.rejectSession(data.reason),
-    pickupSpawn: (data) => this.h.onPickupSpawn?.(data.id, data.pos, data.kind),
-    pickupGone: (data) => this.h.onPickupGone?.(data.id, data.by ?? null),
-    teamScore: (data) => this.h.onTeamScore?.(data.scores, data.winAt),
-    ffaScore: (data) => this.h.onFfaScore?.(data.scores, data.winAt),
-    ffaMatchEnd: (data) => this.h.onFfaMatchEnd?.(data.winner, data.scores),
-    matchEnd: (data) => this.h.onMatchEnd?.(data.winner, data.scores),
-    matchStart: (data) => this.h.onMatchStart?.(data.mode, data.scores),
-    mapUpdate: (data) => this.h.onMapUpdate?.(data),
-    projRide: (data) => this.h.onProjRide?.(data.projectileId, data.host),
-    deploySpawn: (data) => this.h.onDeploySpawn?.(data.id, data.owner, data.kind, data.pos, data.team),
-    deployGone: (data) => this.h.onDeployGone?.(data.id),
-    deployDown: (data) => this.h.onDeployDown?.(data.id, data.kind, data.team, data.respawnS),
-    deployUp: (data) => this.h.onDeployUp?.(data.id),
-    sensorPing: (data) => this.h.onSensorPing?.(data.id, data.team, data.targets),
-    turretShot: (data) => this.h.onTurretShot?.(data.id, data.owner, data.targetId),
-    sentryShot: (data) => this.h.onSentryShot?.(data.id, data.owner, data.x, data.y, data.z),
-    mineBoom: (data) => this.h.onMineBoom?.(data.id, data.pos),
-    deployHp: (data) => this.h.onDeployHp?.(data.id, data.hp, data.armor, data.src),
+    sessionRejected: (data): void => this.h.rejectSession(data.reason),
+    pickupSpawn: (data): void | undefined => this.h.onPickupSpawn?.(data.id, data.pos, data.kind),
+    pickupGone: (data): void | undefined => this.h.onPickupGone?.(data.id, data.by ?? null),
+    teamScore: (data): void | undefined => this.h.onTeamScore?.(data.scores, data.winAt),
+    ffaScore: (data): void | undefined => this.h.onFfaScore?.(data.scores, data.winAt),
+    ffaMatchEnd: (data): void | undefined => this.h.onFfaMatchEnd?.(data.winner, data.scores),
+    matchEnd: (data): void | undefined => this.h.onMatchEnd?.(data.winner, data.scores),
+    matchStart: (data): void | undefined => this.h.onMatchStart?.(data.mode, data.scores),
+    mapUpdate: (data): void | undefined => this.h.onMapUpdate?.(data),
+    projRide: (data): void | undefined => this.h.onProjRide?.(data.projectileId, data.host),
+    deploySpawn: (data): void | undefined => this.h.onDeploySpawn?.(data.id, data.owner, data.kind, data.pos, data.team),
+    deployGone: (data): void | undefined => this.h.onDeployGone?.(data.id),
+    deployDown: (data): void | undefined => this.h.onDeployDown?.(data.id, data.kind, data.team, data.respawnS),
+    deployUp: (data): void | undefined => this.h.onDeployUp?.(data.id),
+    sensorPing: (data): void | undefined => this.h.onSensorPing?.(data.id, data.team, data.targets),
+    turretShot: (data): void | undefined => this.h.onTurretShot?.(data.id, data.owner, data.targetId),
+    sentryShot: (data): void | undefined => this.h.onSentryShot?.(data.id, data.owner, data.x, data.y, data.z),
+    mineBoom: (data): void | undefined => this.h.onMineBoom?.(data.id, data.pos),
+    deployHp: (data): void | undefined => this.h.onDeployHp?.(data.id, data.hp, data.armor, data.src),
     // Server refused a hit claim — worth surfacing: a healthy client
     // should basically never see this, so it's a desync tell.
-    shotRejected: (data) => {
+    shotRejected: (data): void => {
 rejectCensus.total += 1;
       rejectCensus.byReason.set(data.reason, (rejectCensus.byReason.get(data.reason) ?? 0) + 1);
       rejectCensus.last = `${data.reason}${data.targetId ? ` →${data.targetId}` : ''}`;
@@ -283,7 +283,7 @@ rejectCensus.total += 1;
     },
     // Honest-lag discard (dead shooter/target) — not a reject, but the
     // predicted hit still needs clearing or the ledger warns phantom.
-    claimDropped: (data) => {
+    claimDropped: (data): void => {
 dropCensus.total += 1;
       dropCensus.byReason.set(data.reason, (dropCensus.byReason.get(data.reason) ?? 0) + 1);
       dropCensus.last = `${data.reason}${data.targetId ? ` →${data.targetId}` : ''}`;

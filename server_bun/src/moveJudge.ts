@@ -463,7 +463,7 @@ sh.divergences += 1;
   private noteSevere(sh: Shadow, playerId: string, dist: number, severeM: number, detail?: Record<string, unknown>): void {
     if (dist <= severeM || sh.cheated) {return;}
     const now = wallNow();
-    sh.severeT = sh.severeT.filter((t) => now - t < SEVERE_MS);
+    sh.severeT = sh.severeT.filter((t): boolean => now - t < SEVERE_MS);
     sh.severeT.push(now);
     if (sh.severeT.length >= SEVERE_N) {
       sh.cheated = true;
@@ -487,7 +487,7 @@ sh.divergences += 1;
       if (k <= reportSeq && (anchorSeq === undefined || k > anchorSeq)) {anchorSeq = k;}
       else if (k > reportSeq) {after.push(e);}
     }
-    after.sort((x, y) => x.tick - y.tick);
+    after.sort((x, y): number => x.tick - y.tick);
     const anchor = anchorSeq === undefined ? undefined : sh.seqStates.get(anchorSeq);
     if (!anchor) {return s;}
     sh.probe ??= new MoveSim(this.host.surface()!, anchor.snap.st);
@@ -510,7 +510,7 @@ sh.divergences += 1;
     // forgave a real post-reseed divergence in the soak.)
     let best: MoveState | null = null;
     let bestD = Infinity;
-    this.replayWindow(sh, probe, anchor, segs, (tick) => {
+    this.replayWindow(sh, probe, anchor, segs, (tick): void => {
       if (tick < targetTick - 1) {return;}
       const st = probe.state;
       const d = Math.hypot(reportPos.x - st.pos.x, reportPos.y - st.pos.y, reportPos.z - st.pos.z);

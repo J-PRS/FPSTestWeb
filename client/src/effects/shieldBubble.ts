@@ -172,12 +172,12 @@ export function makeShieldedMesh(parent: THREE.Object3D, geometry: THREE.BufferG
   markProbe(mesh, { kind: 'fxMesh', label: 'shieldBubble' });
   return {
     mesh,
-    flash() { mat.uniforms.uHit.value = 1; },
-    update(dt) {
+    flash(): void { mat.uniforms.uHit.value = 1; },
+    update(dt): void {
       mat.uniforms.uTime.value += dt;
       mat.uniforms.uHit.value = Math.max(0, mat.uniforms.uHit.value - dt * 4);
     },
-    dispose() {
+    dispose(): void {
       parent.remove(mesh);
       mesh.geometry.dispose();
       mat.dispose();
@@ -196,7 +196,7 @@ export function makeShieldBubble(parent: THREE.Object3D, radius = 2.2, color = 0
 
 export function makeContouredShield(modelRoot: THREE.Object3D, color = 0x3F_A8_DD): ShieldBubble | null {
   const sources: THREE.SkinnedMesh[] = [];
-  modelRoot.traverse((o) => {
+  modelRoot.traverse((o): void => {
     if ((o as THREE.SkinnedMesh).isSkinnedMesh) {sources.push(o as THREE.SkinnedMesh);}
   });
   if (sources.length === 0) {return null;}
@@ -234,18 +234,18 @@ export function makeContouredShield(modelRoot: THREE.Object3D, color = 0x3F_A8_D
   // implicit; the shell rides the skeleton).
   const facade = new THREE.Group();
   Object.defineProperty(facade, 'visible', {
-    get: () => clones[0]?.visible ?? false,
-    set: (v: boolean) => { for (const c of clones) {c.visible = v;} },
+    get: (): boolean => clones[0]?.visible ?? false,
+    set: (v: boolean): void => { for (const c of clones) {c.visible = v;} },
   });
 
   return {
     mesh: facade,
-    flash() { mat.uniforms.uHit.value = 1; },
-    update(dt) {
+    flash(): void { mat.uniforms.uHit.value = 1; },
+    update(dt): void {
       mat.uniforms.uTime.value += dt;
       mat.uniforms.uHit.value = Math.max(0, mat.uniforms.uHit.value - dt * 4);
     },
-    dispose() {
+    dispose(): void {
       for (const c of clones) {c.parent?.remove(c);} // geometry is the model's — not ours to dispose
       mat.dispose();
     },

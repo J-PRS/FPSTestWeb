@@ -46,8 +46,8 @@ export class RoomFactory {
       const bunFile = (globalThis as { Bun?: { file(p: string): { arrayBuffer(): Promise<ArrayBuffer> } } }).Bun?.file;
       p = bunFile
         ? bunFile(join(import.meta.dir, '..', '..', 'maps', file)).arrayBuffer()
-            .then(ab => BallSim.parseHeightmap(new Uint8Array(ab), heightScale, worldScale))
-            .catch(error => { logger.warn('map terrain load failed', { file, err: String(error) }); return null; })
+            .then((ab): Heightfield => BallSim.parseHeightmap(new Uint8Array(ab), heightScale, worldScale))
+            .catch((error): null => { logger.warn('map terrain load failed', { file, err: String(error) }); return null; })
         : Promise.resolve(null);
       this.fields.set(key, p);
     }
@@ -64,9 +64,9 @@ export class RoomFactory {
     // the shared field object is never mutated.
     const scale = spec.heightScale ?? 1;
     const wscale = spec.tileSize;
-    const def = () => Promise.resolve(this.host.field()).then(f => f && hmScaled(f, scale, wscale));
+    const def = (): Promise<Heightfield | null> => Promise.resolve(this.host.field()).then((f): Heightfield | null => f && hmScaled(f, scale, wscale));
     const target = spec.terrain ? this.loadField(spec.terrain, scale, wscale) : def();
-    target.then(f => {
+    target.then((f): void => {
       if (!f || this.host.rooms.get(roomName) !== room) {return;}
       room.field = f;
       room.ballSim.attachField(f);
@@ -76,7 +76,7 @@ export class RoomFactory {
       // host had then (often null) — re-snap now that the real one is in.
       room.refreshFlagHomes();
       logger.info('Room terrain attached', { room: roomName, terrain: spec.terrain ?? 'default' });
-    }).catch((error) => {
+    }).catch((error): void => {
       // Room stays up on the null field rather than crashing the boot —
       // without this log a bad terrain file reads as invisible terrain.
       logger.warn('Room terrain load failed — running without heightfield', { room: roomName, error });
@@ -136,18 +136,18 @@ export class RoomFactory {
       // `room` is a mutable let — bind a const for the closures or TS
       // widens them back to Room | undefined.
       const r = room;
-      room.onMatchEnd = (rec) => this.host.recordEnd(rec);
+      room.onMatchEnd = (rec): void => this.host.recordEnd(rec);
       // Judge mode counts divergences instead of correcting — the kick
       // only fires on repeated teleport-scale gaps honest drift can't
       // reach (see RoomMoveSim.SEVERE_*).
-      room.moveSim.onCheat = (pid, dist, detail) => {
+      room.moveSim.onCheat = (pid, dist, detail): void => {
         logger.warn('Movement cheat detected', Object.assign({}, {playerId: pid,room: r.name,dist: Number(dist.toFixed(1))}, detail));
         // Warn instead of kick — flap/reconnect catch-up reports read as
         // teleport-scale divergence, and a kick loop punishes honest lag.
         r.sendToPlayer(pid, { type: 'serverWarn', text: 'SUSPICIOUS BEHAVIOR DETECTED' });
       };
-      room.onRotate = () => this.host.maps.nextRotationSpec(r);
-      room.onTerrain = (s) => this.attachTerrain(r, s);
+      room.onRotate = (): MapSpec | null => this.host.maps.nextRotationSpec(r);
+      room.onTerrain = (s): void => this.attachTerrain(r, s);
       if (spec?.terrain || spec?.heightScale || spec?.tileSize) {this.attachTerrain(room, spec);}
       this.host.rooms.set(name, room);
       logger.info('Room created', { room: name, mode: room.mode });

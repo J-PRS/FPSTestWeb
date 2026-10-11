@@ -115,8 +115,8 @@ export class FleetDirectory {
     return names;
   }
 
-  status() {
-    return [...this.workers.values()].map((w) => ({
+  status(): { id: string; port: number; up: boolean; ccu: number; rooms: string[]; }[] {
+    return [...this.workers.values()].map((w): { id: string; port: number; up: boolean; ccu: number; rooms: string[]; } => ({
       id: w.id,
       port: w.port,
       up: w.up,

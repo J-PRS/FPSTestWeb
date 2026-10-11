@@ -44,7 +44,7 @@ export function buildWeaponMeshes(parent: THREE.Group, muzzleZ: Record<number, n
   // Chaingun needs its barrels group back; DiscPull reuses the Disc group —
   // neither can live in the plain builder table.
   const chain = mkChaingun();
-  const models: [number, THREE.Group][] = MODEL_BUILDERS.map(([wt, mk]) => [wt, mk()]);
+  const models: [number, THREE.Group][] = MODEL_BUILDERS.map(([wt, mk]): [number, THREE.Group<THREE.Object3DEventMap>] => [wt, mk()]);
   models.push([WeaponType.Chaingun, chain.g]);
   for (const [wt, g] of models) {
     weapons.set(wt, g);

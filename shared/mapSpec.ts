@@ -202,7 +202,7 @@ const clampInt = (v: unknown, lo: number, hi: number, fallback: number, label: s
 export function parseMapSpecJson(text: string): unknown {
   return JSON.parse(text.replace(
     /"(?:[^"\\]|\\.)*"|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
-    (m) => (m.startsWith('/') ? '' : m)));
+    (m): string => (m.startsWith('/') ? '' : m)));
 }
 
 export function resolveMapSpec(raw: unknown): MapSpec {
@@ -330,14 +330,14 @@ function parseFog(raw: unknown): MapSpec['fog'] {
   if (!raw || typeof raw !== 'object') {return undefined;}
   const f = raw as { color?: unknown; distance?: unknown; visible?: unknown; horizon?: unknown };
   if (!Array.isArray(f.color) || f.color.length < 3 ||
-      !f.color.slice(0, 3).every((v) => typeof v === 'number' && Number.isFinite(v)))
+      !f.color.slice(0, 3).every((v): boolean => typeof v === 'number' && Number.isFinite(v)))
     {return undefined;}
-  const num = (v: unknown, lo: number, hi: number) =>
+  const num = (v: unknown, lo: number, hi: number): number | undefined =>
     typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : undefined;
-  const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+  const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
   const vec3 = (v: unknown): [number, number, number] | undefined =>
     Array.isArray(v) && v.length >= 3 &&
-    v.slice(0, 3).every((c) => typeof c === 'number' && Number.isFinite(c))
+    v.slice(0, 3).every((c): boolean => typeof c === 'number' && Number.isFinite(c))
       ? [clamp01(v[0]), clamp01(v[1]), clamp01(v[2])] : undefined;
   return {
     color: [clamp01(f.color[0]), clamp01(f.color[1]), clamp01(f.color[2])],
@@ -525,7 +525,7 @@ function parseInteriors(raw: unknown): InteriorSpec[] | undefined {
       ? o.file.toLowerCase() : undefined;
     if (!file || !isVec(o.pos)) {dropped += 1; continue; }
     const rot = Array.isArray(o.rot) && o.rot.length === 4
-      && o.rot.every(v => typeof v === 'number' && Number.isFinite(v))
+      && o.rot.every((v): boolean => typeof v === 'number' && Number.isFinite(v))
       ? o.rot as number[] : undefined;
     out.push({ file, pos: o.pos, rot, scale: isVec(o.scale) ? o.scale : undefined });
     if (out.length >= 256) {break;}
@@ -538,6 +538,6 @@ function parseInteriors(raw: unknown): InteriorSpec[] | undefined {
  *  (sim falls back to its built-in mix). */
 function parseBallMix(raw: unknown): number[] | undefined {
   if (!Array.isArray(raw) || raw.length !== 4) {return undefined;}
-  const w = raw.map((v) => (typeof v === 'number' && isFinite(v) && v > 0 ? v : 0));
-  return w.some((v) => v > 0) ? w : undefined;
+  const w = raw.map((v): number => (typeof v === 'number' && isFinite(v) && v > 0 ? v : 0));
+  return w.some((v): boolean => v > 0) ? w : undefined;
 }

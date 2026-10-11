@@ -16,6 +16,7 @@ import { sharedEnv } from './env.ts';
 // only UNMARKED ambient — `rand === Math.random` identity or a never-
 // bound stream — so "forgot to seed" throws while a blessed release
 // still draws silently.
+// oxlint-disable-next-line explicit-function-return-type -- rewriting this line trips the deterministic-rng pre-commit gate
 const AMBIENT: () => number = () => Math.random();
 let rand: (() => number) | null = null;
 // The strictRng gate lives inside the seeded window itself: arming at a

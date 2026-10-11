@@ -131,7 +131,7 @@ export function beltThrowCost(weaponType: number): number {
  *  carry no weapon ref, so this is the widest honest ceiling — anything
  *  above it is doctored. */
 export const MAX_HIT_CLAIM_DMG = Math.ceil(
-  Math.max(...Object.entries(WEAPONS).map(([wt, w]) =>
+  Math.max(...Object.entries(WEAPONS).map(([wt, w]): number =>
     w.directDamage * (AIRTIME_SCALED.has(Number(wt)) ? AIRTIME_DMG_CAP : 1) + w.aoeDamage)) * 1.4);
 
 export function getWeaponStats(weaponType: number | undefined): WeaponStats {

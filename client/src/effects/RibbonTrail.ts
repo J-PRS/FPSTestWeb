@@ -46,7 +46,7 @@ export function setRibbonCamera(pos: THREE.Vector3 | null): void { sharedCamPos 
  *  suppressed-emitter resume; either way a chord would paint. (The old
  *  `spd*0.25 + 12` — a quarter-second — let a 90m/s ball legitimately
  *  resume 22m away and painted exactly the sky streaks it guarded.) */
-const jumpBudget = (spd: number) => spd * 0.08 + 3;
+const jumpBudget = (spd: number): number => spd * 0.08 + 3;
 
 /* Wall-clock gap between pushes that severs the trail. Live emitters push
  * every frame, so >120ms of silence is never contiguous motion — the host
@@ -177,7 +177,7 @@ export class RibbonTrail {
         // First vert actually sitting in the shared buffer — a lit slot
         // whose buffer verts are all zero/NaN is a write-vs-upload break,
         // invisible no matter how healthy the ribbon looks.
-        v0: r.slot >= 0 ? (() => {
+        v0: r.slot >= 0 ? ((): string => {
           const o = r.slot * RIBBON_FLOATS_PER_SLOT;
           return `${r.batch.pos[o]!.toFixed(1)},${r.batch.pos[o + 1]!.toFixed(1)},${r.batch.pos[o + 2]!.toFixed(1)}`;
         })() : '-',

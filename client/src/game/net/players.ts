@@ -31,7 +31,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
   const { deps, networkManager, nm } = ctx;
   const {logger} = deps;
 
-  networkManager.onPlayerHit = (shooterId: string, targetId: string, damage: number, health: number, armor?: number) => {
+  networkManager.onPlayerHit = (shooterId: string, targetId: string, damage: number, health: number, armor?: number): void => {
     if (deps.world.playbackMode) {return;}
     inv('wire-hit-finite', Number.isFinite(damage) && Number.isFinite(health), { damage, health, shooterId, targetId });
     if (!Number.isFinite(damage) || !Number.isFinite(health)) {return;}
@@ -77,7 +77,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
   // Rejected claim: a predicted self-blast that never happened server-side
   // leaves our health low until the next real event. Adopt the server's
   // value so state-hash health checks stop screaming desync.
-  networkManager.onShotRejected = (reason, _targetId, weaponType, health) => {
+  networkManager.onShotRejected = (reason, _targetId, weaponType, health): void => {
     if (deps.world.playbackMode) {return;}
     const player = deps.lazyPlayer();
     // The authority says this pick is class-locked — a stale slot keeps
@@ -97,7 +97,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
   // Server-healed hp (regen perk, mend channel, regen powerup) — arrives
   // at ~2Hz while a channel is live; adopt it wholesale, the server owns
   // these sources so its value can only ever be right.
-  networkManager.onYourHealth = (health) => {
+  networkManager.onYourHealth = (health): void => {
     if (deps.world.playbackMode) {return;}
     const player = deps.lazyPlayer();
     // A NaN echo would silently poison HUD + regen math — the
@@ -116,14 +116,14 @@ function wirePlayerCombat(ctx: NetCtx): void {
   // Own LG charge echo — the carrier can't see the CHARGED aura, so the
   // warning is audible: each echo crackles at the player's own position,
   // a steady sizzle while the bank is live.
-  networkManager.onYourCharge = (charge) => {
+  networkManager.onYourCharge = (charge): void => {
     if (deps.world.playbackMode) {return;}
     deps.world.selfCharge = charge;
     if (charge > 0) {sfx.lgSizzle(deps.lazyPlayer().pos);}
   };
 
   // Server tells us to apply knockback/pull to our local player
-  networkManager.onKnockback = (position: { x: number; y: number; z: number }, force: number, pull?: boolean) => {
+  networkManager.onKnockback = (position: { x: number; y: number; z: number }, force: number, pull?: boolean): void => {
     if (deps.world.playbackMode) {return;} // replay owns the camera's body
     inv('wire-knockback-finite', finiteVec(position) && Number.isFinite(force), { position, force });
     if (!finiteVec(position) || !Number.isFinite(force)) {return;}
@@ -138,7 +138,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
     // diverges from the server's blast center under drain lag (a 3m
     // match missed real echoes → double-shove + false kb-echo miss);
     // force disambiguates two blasts inside the same 700ms window.
-    const i = stamps.findIndex(s => now - s.t < 700 &&
+    const i = stamps.findIndex((s): boolean => now - s.t < 700 &&
       Math.hypot(s.x - position.x, s.y - position.y, s.z - position.z) < 8 &&
       (s.f === undefined || Math.abs(s.f - force) < 0.5));
     if (i !== -1) { stamps.splice(i, 1); return; }
@@ -149,7 +149,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
     // it just isn't an anomaly, and the explosion already painted.
     // Only a shove with no blast anywhere near earns the log + phantom FX.
     const seen = deps.explosionTracker.getRecentExplosions()
-      .some(e => Date.now() - e.timestamp < 800 && e.position.distanceTo(from) < 12)
+      .some((e): boolean => Date.now() - e.timestamp < 800 && e.position.distanceTo(from) < 12)
       // A triggered mine's blast has no projectile replica and its
       // deployDown races the echo — a live mine nearby IS the blast.
       || deps.entities().deployables.mineNear(from, 12);
@@ -188,7 +188,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
   //                 so our converged position already includes what we did
   //                 during the round trip. No replay data (old server) →
   //                 hard snap fallback.
-  networkManager.onCorrection = (_seq: number, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, inputSeq?: number, grounded?: boolean) => {
+  networkManager.onCorrection = (_seq: number, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, inputSeq?: number, grounded?: boolean): void => {
     // During demo playback corrections fire constantly (recorded positions
     // desync from what the server last accepted) and would warp the replay.
     if (deps.world.playbackMode) {return;}
@@ -266,7 +266,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
 
   // Declared remote teleport (another player's warp): snap the visual —
   // interpolating across a 50m gap reads as a rocket-flight glitch
-  networkManager.onRemoteTeleport = (playerId: string, position: { x: number; y: number; z: number }, _velocity: { x: number; y: number; z: number }) => {
+  networkManager.onRemoteTeleport = (playerId: string, position: { x: number; y: number; z: number }, _velocity: { x: number; y: number; z: number }): void => {
     const rp = deps.world.remotePlayers.get(playerId);
     if (!rp) {return;}
     // teleportTo writes straight into position/previousPosition/interp — a
@@ -278,7 +278,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
     rp.teleportTo(new THREE.Vector3(position.x, position.y, position.z));
   };
 
-  networkManager.onPlayerKill = (shooterId, targetId, weapon, air) => onPlayerKill(ctx, shooterId, targetId, weapon, air);
+  networkManager.onPlayerKill = (shooterId, targetId, weapon, air): void => onPlayerKill(ctx, shooterId, targetId, weapon, air);
 }
 
 /** Updates, respawns, join/leave, movement events — the presence wire. */
@@ -286,19 +286,19 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
   const { deps, networkManager, nm, ensureRemotePlayer } = ctx;
   const {logger} = deps;
 
-  networkManager.onPlayerJump = (_playerId: string, position: { x: number; y: number; z: number }) => {
+  networkManager.onPlayerJump = (_playerId: string, position: { x: number; y: number; z: number }): void => {
     if (!finiteVec(position)) {return;} // non-finite wire pos would poison the particle pool
     const pos = new THREE.Vector3(position.x, position.y, position.z);
     deps.lazyEffects().spawnJumpDust(pos);
   };
 
-  networkManager.onPlayerJetpack = (_playerId: string, position: { x: number; y: number; z: number }) => {
+  networkManager.onPlayerJetpack = (_playerId: string, position: { x: number; y: number; z: number }): void => {
     if (!finiteVec(position)) {return;}
     const pos = new THREE.Vector3(position.x, position.y, position.z);
     deps.lazyEffects().spawnJetpack(pos);
   };
 
-  networkManager.onPlayerUpdate = (playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, serverMs: number, velocity?: { x: number; y: number; z: number }) => {
+  networkManager.onPlayerUpdate = (playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, serverMs: number, velocity?: { x: number; y: number; z: number }): void => {
     // Safety: never process local player as a remote player
     if (playerId === nm().getLocalPlayerId()) {return;}
     const remotePlayer = deps.world.remotePlayers.get(playerId);
@@ -319,7 +319,7 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
     ensureRemotePlayer(playerId, position, 'onPlayerUpdate');
   };
 
-  networkManager.onPlayerRespawn = (playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, armorClass?: string) => {
+  networkManager.onPlayerRespawn = (playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, armorClass?: string): void => {
     if (deps.world.playbackMode) {return;}
     // Check if local player respawned
     if (playerId === nm().getLocalPlayerId()) {
@@ -368,7 +368,7 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
     }
   };
 
-  networkManager.onPlayerJoined = (playerId: string, position: { x: number; y: number; z: number }, _rotation: { yaw: number; pitch: number }) => {
+  networkManager.onPlayerJoined = (playerId: string, position: { x: number; y: number; z: number }, _rotation: { yaw: number; pitch: number }): void => {
     if (deps.world.playbackMode) {return;}
     // Safety: server excludes self from playerJoined broadcast, but guard anyway
     if (playerId === nm().getLocalPlayerId()) {return;}
@@ -380,7 +380,7 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
     // RemotePlayer will be created in the main loop when networkManager.getPlayers() includes this player
   };
 
-  networkManager.onPlayerLeft = (playerId: string) => {
+  networkManager.onPlayerLeft = (playerId: string): void => {
     if (deps.world.remotePlayers.remove(playerId)) {
       logger.info(`Remote player removed (playerLeft): ${playerId}`);
     }

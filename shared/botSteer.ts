@@ -119,7 +119,7 @@ export class BotSteer {
       if (this.memory.length > 24) {this.memory.shift();}
     }
     this.memory = this.memory.filter(
-      (m) => now - m.t < T.steer.memMs && distSqXZ(m, pos) < T.steer.memRange * T.steer.memRange,
+      (m): boolean => now - m.t < T.steer.memMs && distSqXZ(m, pos) < T.steer.memRange * T.steer.memRange,
     );
 
     // Separation bodies are the only others a slot can ever see —
