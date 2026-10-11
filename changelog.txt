@@ -1,3 +1,4 @@
+2026-10-10 - correctness: inv(teleport-above-ground) in handleTeleport — a declared warp landing under the chord floor counts with coords, never refused (client already moved)
 2026-10-10 - correctness: inv(spawn-above-ground) postcondition in SpawnPicker.scatter — a spawn born under its surface is named at the pick with coords+ground, not after the corpse renders sunk
 2026-10-10 - correctness: finite gates on deployable damage writes — hurt() chokepoint + blast sweep dmg check; NaN dmg can no longer silent-poison deploy replicas
 2026-10-10 - correctness: state-diff heal loop refuses non-finite snapshot truth — local hp adopt, missing-member mint, and healRemoteHealth all skip NaN rows

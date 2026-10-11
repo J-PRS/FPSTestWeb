@@ -6,6 +6,7 @@ import { CONFIG } from './config.ts';
 import { pushRewindSample } from './rewind.ts';
 import { wallNow , wallMs} from './wallClock.ts';
 import { CLIENT_STATUS_MASK } from '../../shared/status.ts';
+import { inv } from '../../shared/invariants.ts';
 
 // Movement-claim family — position reports, declared teleports, and the
 // plausibility judge that guards them. Split from MessageHandler so the
@@ -241,6 +242,12 @@ export class MoveClaims {
       }
     }
     this.lastTeleport.set(playerId, now + 3000);
+    // A declared warp landing under the floor is the same buried-body
+    // seed a bad spawn is — counted, never refused (the client already
+    // moved; refusing recreates the warp as impossibly-fast reports).
+    const tg = this.h.playerManager.groundAt?.(msg.position.x, msg.position.z);
+    inv('teleport-above-ground', tg === undefined || msg.position.y >= tg - 0.5,
+      { id: playerId, y: +msg.position.y.toFixed(1), ground: +tg!.toFixed(1) });
     player.lastPosCheckPos = { ...msg.position };
     player.lastPosCheckTime = wallNow();
     player.consecutiveRejects = 0;
