@@ -438,7 +438,10 @@ export class Player {
   update(dt: number): void {
     // Dying while spectating: death owns the cam now â€” drop the flag so
     // respawn doesn't leave the player stuck flying
-    if (this.isDead) {this.status.setCloaked(false);} // corpse can't stay hidden
+    // Corpse holds no channels — server reset status=0, so a stale client
+    // bit becomes a phantom rising edge on the next inputMove (fresh cost,
+    // ghost aura). Cloak already cleared; shield/mend share the same law.
+    if (this.isDead) {this.status.setCloaked(false); this.status.setShielded(false); this.status.setMending(false);}
     if (this.status.spectating && this.isDead) {
       this.status.spectating = false;
       this.onSpectate?.(false);
