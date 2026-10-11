@@ -7,6 +7,7 @@ import { REMOTE_PLAYER_FIXED_DT, DEBUG_LOG_SAMPLE_RATE } from '../../core/config
 import * as sfx from '../../core/sfx.js';
 import type { ArmorClass } from '../../../../shared/botClasses.js';
 import { finiteVec } from '../../../../shared/wire.js';
+import { inv } from '../../../../shared/invariants.js';
 import { weaponDef } from '../../weapons.js';
 import { PlayerLoadout } from '../../entities/playerLoadout.js';
 import { onPlayerKill } from './playerKill.js';
@@ -96,6 +97,10 @@ function wirePlayerCombat(ctx: NetCtx): void {
   networkManager.onYourHealth = (health) => {
     if (deps.world.playbackMode) return;
     const player = deps.lazyPlayer();
+    // A NaN echo would silently poison HUD + regen math — the
+    // 'hp=NaN' bug class lands here. Named, dropped.
+    inv('wire-health-finite', Number.isFinite(health), { health });
+    if (!Number.isFinite(health)) return;
     // The heal/regen channel should only ever raise hp — a drop means
     // some server-side resync is quietly writing health through the
     // wrong door, which is exactly the 'damage came from nowhere' tell.

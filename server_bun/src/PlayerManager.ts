@@ -210,6 +210,9 @@ export class PlayerManager {
 
   updatePosition(playerId: string, position: Vec3, rotation: Rotation, velocity: Vec3, seq?: number): void {
     const player = this.players.get(playerId);
+    // Wire boundary: a non-finite claim would poison lastValid* and the
+    // broadcast for every observer — refuse it before it lands.
+    if (!Number.isFinite(position.x + position.y + position.z + velocity.x + velocity.y + velocity.z + rotation.yaw + rotation.pitch)) return;
     // A stale/reordered report must not regress position — all lanes are
     // ordered now, but a replayed or duplicated packet would otherwise
     // teleport the player backward through plausible() checks.

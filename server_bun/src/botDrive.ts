@@ -15,6 +15,7 @@ import type { MoveState } from '../../shared/movement.ts';
 import type { BotSheepMeter } from './botSheep.ts';
 import type { BotArsenal } from './botArsenal.ts';
 import { isSuper } from './superBot.ts';
+import { inv } from '../../shared/invariants.ts';
 import type { MobilityWatchdog, MobilitySample } from './botMobility.ts';
 import type { Room } from './Room.ts';
 
@@ -71,6 +72,11 @@ export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocit
   // can hover a meter off the position (steerer micro-orbit), which
   // would count a bot that has effectively arrived as grinding forever.
   h.checkSheep(id, p, { trying: dist >= 2 && !out.move?.park, ski: !!out.move?.ski, airborne: !sh.onGround, jetting: !!out.move?.jet, dt }, now);
+  // The shadow's write is the bot's whole wire truth — a NaN/Infinity
+  // here broadcasts poison to every observer with no warn. Named once.
+  inv('bot-pos-finite',
+    Number.isFinite(sh.pos.x + sh.pos.y + sh.pos.z + sh.vel.x + sh.vel.y + sh.vel.z),
+    { id, pos: { x: +sh.pos.x.toFixed(1), y: +sh.pos.y.toFixed(1), z: +sh.pos.z.toFixed(1) } });
   p.position.x = sh.pos.x; p.position.y = sh.pos.y; p.position.z = sh.pos.z;
   p.velocity.x = sh.vel.x; p.velocity.y = sh.vel.y; p.velocity.z = sh.vel.z;
   // Ski bit rides the tick flag byte (bit 2) — drives remote dust.
