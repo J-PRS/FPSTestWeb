@@ -349,14 +349,14 @@ export const mkAnnulus = (outer: Ring2, inner: Ring2, zBack: number, zFront: num
     pos.push(...a, ...b, ...c, ...a, ...c, ...d);
     uv.push(u0, v0, u1, v0, u1, v1, u0, v0, u1, v1, u0, v1);
   };
-  const O = (j: number, z: number): number[] => [...outer[j % seg]!, z];
-  const I = (j: number, z: number): number[] => [...inner[j % seg]!, z];
+  const oPt = (j: number, z: number): number[] => [...outer[j % seg]!, z];
+  const iPt = (j: number, z: number): number[] => [...inner[j % seg]!, z];
   for (let j = 0; j < seg; j += 1) {
     const u0 = j / seg, u1 = (j + 1) / seg;
-    quadW(O(j, zBack), O(j, zFront), O(j + 1, zFront), O(j + 1, zBack), [u0, u1, zBack, zFront]); // outer wall (outward)
-    quadW(I(j, zBack), I(j + 1, zBack), I(j + 1, zFront), I(j, zFront), [u0, u1, zBack, zFront]); // inner wall (faces the hole)
-    quadW(O(j, zBack), O(j + 1, zBack), I(j + 1, zBack), I(j, zBack), [u0, u1, 0, 1]);           // back face (+Z)
-    quadW(O(j, zFront), I(j, zFront), I(j + 1, zFront), O(j + 1, zFront), [u0, u1, 0, 1]);        // front face (−Z)
+    quadW(oPt(j, zBack), oPt(j, zFront), oPt(j + 1, zFront), oPt(j + 1, zBack), [u0, u1, zBack, zFront]); // outer wall (outward)
+    quadW(iPt(j, zBack), iPt(j + 1, zBack), iPt(j + 1, zFront), iPt(j, zFront), [u0, u1, zBack, zFront]); // inner wall (faces the hole)
+    quadW(oPt(j, zBack), oPt(j + 1, zBack), iPt(j + 1, zBack), iPt(j, zBack), [u0, u1, 0, 1]);           // back face (+Z)
+    quadW(oPt(j, zFront), iPt(j, zFront), iPt(j + 1, zFront), oPt(j + 1, zFront), [u0, u1, 0, 1]);        // front face (−Z)
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));

@@ -34,7 +34,7 @@ const BOLT_CHAIN_PASSES = 3;       // bounded worklist — a chain can't run awa
 // ?debug / menu DEBUG — show the real gameplay blast radius as a wireframe
 // sphere on every detonation (the dome VFX is only 80% of it by design).
 // Read live per blast — the menu toggle applies without a reload.
-const AOE_DEBUG = () => urlParams.debug;
+const aoeDebug = () => urlParams.debug;
 
 // Remote player positions for projectile collision — rebuilt per frame into
 // the same Map (zeroed allocations in the hot loop)
@@ -72,7 +72,7 @@ function blastFx(c: CombatCtx, a: ExplosionArgs): void {
     }
     deps.world.scorches.push(new ScorchDecal(deps.lazyScene(), deps.lazyTerrain(), pos, vfx * 0.6));
   }
-  if (AOE_DEBUG()) {deps.world.aoeGizmos.push(new AoeGizmo(deps.lazyScene(), pos, radius));}
+  if (aoeDebug()) {deps.world.aoeGizmos.push(new AoeGizmo(deps.lazyScene(), pos, radius));}
 }
 
 export function processProjectileExplosion(c: CombatCtx, a: ExplosionArgs): void {

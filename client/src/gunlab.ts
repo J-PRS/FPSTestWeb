@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeVertices, toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
-import ManifoldModule from 'manifold-3d';
+import ManifoldModuleFactory from 'manifold-3d';
 import manifoldWasmUrl from 'manifold-3d/manifold.wasm?url';
 import { ViewModel } from './entities/ViewModel.js';
 import { MODEL_BUILDERS } from './entities/viewmodel/weaponsGeo.js';
@@ -512,7 +512,7 @@ let unioned: { mesh: THREE.Mesh; hidden: THREE.Object3D[] } | null = null;
 let maniMod: any = null;
 async function mani(): Promise<any> {
   if (!maniMod) {
-    maniMod = await (ManifoldModule as any)({ locateFile: () => manifoldWasmUrl });
+    maniMod = await (ManifoldModuleFactory as any)({ locateFile: () => manifoldWasmUrl });
     maniMod.setup();
   }
   return maniMod;

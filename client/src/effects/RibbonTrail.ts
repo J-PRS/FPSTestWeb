@@ -46,7 +46,7 @@ export function setRibbonCamera(pos: THREE.Vector3 | null): void { sharedCamPos 
  *  suppressed-emitter resume; either way a chord would paint. (The old
  *  `spd*0.25 + 12` — a quarter-second — let a 90m/s ball legitimately
  *  resume 22m away and painted exactly the sky streaks it guarded.) */
-const JUMP_BUDGET = (spd: number) => spd * 0.08 + 3;
+const jumpBudget = (spd: number) => spd * 0.08 + 3;
 
 /* Wall-clock gap between pushes that severs the trail. Live emitters push
  * every frame, so >120ms of silence is never contiguous motion — the host
@@ -383,7 +383,7 @@ RibbonTrail.nanPushes += 1;
       const jx = pos.x + ox - this.px[this.head]!;
       const jy = pos.y + oy - this.py[this.head]!;
       const jz = pos.z + oz - this.pz[this.head]!;
-      const jump = JUMP_BUDGET(spd);
+      const jump = jumpBudget(spd);
       if (jx * jx + jy * jy + jz * jz > jump * jump
         || performance.now() - this.lastPushMs > PUSH_GAP_MS) {
         // Writer-side cut — if trail-smear still fires on this tag next
@@ -455,7 +455,7 @@ this.pushed += 1;
       const jx = this.follow.x + this._ox - this.px[this.head];
       const jy = this.follow.y + this._oy - this.py[this.head];
       const jz = this.follow.z + this._oz - this.pz[this.head];
-      const jumpM = JUMP_BUDGET(this.lastSpd);
+      const jumpM = jumpBudget(this.lastSpd);
       if (jx * jx + jy * jy + jz * jz > jumpM * jumpM) {
         this.clear();
 RibbonTrail.followJumps += 1;

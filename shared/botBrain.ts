@@ -646,7 +646,7 @@ export class BotBrain {
     // absent, the wrapper costs one undefined check per stage.
     const prof = sharedEnv.thinkProf;
     const pf = prof ? sharedEnv.wallPerf! : () => 0;
-    const P = (stage: string, t0: number) => { if (prof) {prof.set(stage, (prof.get(stage) ?? 0) + pf() - t0);} };
+    const pm = (stage: string, t0: number) => { if (prof) {prof.set(stage, (prof.get(stage) ?? 0) + pf() - t0);} };
     let tp = pf();
 
     // Radio commands carry an implied position — a same-team "Defend our
@@ -662,7 +662,7 @@ export class BotBrain {
       this.thinkT = hero ? T.brain.thinkS * T.brain.heroThinkK : T.brain.thinkS;
       pickHunt(this.h, ctx, pos, now, { hero, fearing }, (c, p) => this.goals.pick(c, p));
     }
-    P('hunt', tp);
+    pm('hunt', tp);
     let say = this.pickSay(ctx, hurtEdge, hero, wasHunt);
     this.goalS.wanderT -= dt;
     // detourT decays here, with the other timers — decrementing it inside
@@ -676,7 +676,7 @@ export class BotBrain {
     // --- choose the step destination ---
     const d0 = pickDest(this, dt, ctx, pos, fearing, hero);
     let dest = d0;
-    P('dest', tp);
+    pm('dest', tp);
 
     // --- line planning: commit to a terrain-sampled landing spot ---
     // Posted bots skip it — ski lines arc around the objective on
@@ -697,7 +697,7 @@ export class BotBrain {
     tp = pf();
     const d1 = ctx.posted || breaching ? dest : this.lines.plan(dt, ctx, pos, dest);
     dest = d1;
-    P('lines', tp);
+    pm('lines', tp);
 
     // --- context steering: senses score every direction ---
     tp = pf();
@@ -705,7 +705,7 @@ export class BotBrain {
     this.steerer.setWeave(this.weave);
     const d2 = breaching ? dest : this.steerer.steer(dt, ctx, pos, dest);
     dest = d2;
-    P('steer', tp);
+    pm('steer', tp);
     // Env-gated decision-chain trace: which stage rewrites the step.
     // FPS_TRACE=<playerId> — soaks print stage deltas for one bot.
     const {traceId} = sharedEnv;
@@ -878,7 +878,7 @@ export class BotBrain {
 
     // --- dodge: sidestep the nearest closing shell ---
     dest = dodge(ctx, pos, dest, hero);
-    P('escape', tp);
+    pm('escape', tp);
 
     tp = pf();
     // --- fire ---
@@ -899,11 +899,11 @@ export class BotBrain {
     // worth more words than scoreboard commentary.
     if (!say && ctx.notice) {say = { kind: ctx.notice.kind, target: ctx.notice.actor };}
 
-    P('fire+', tp);
+    pm('fire+', tp);
     this.lastDest = dest;
     tp = pf();
     const move = this.moves.hints(dt, ctx, pos, dest);
-    P('moves', tp);
+    pm('moves', tp);
     this.lastPark = Boolean(move?.park);
     this.lastPosted = ctx.posted ?? 0;
     return { dest, move, fire, status: statusIntent(this, ctx, fearing), belt, deploy, repair, say };

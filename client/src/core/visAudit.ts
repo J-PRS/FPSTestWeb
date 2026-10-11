@@ -45,16 +45,16 @@ export function auditScene(scene: THREE.Scene): VisAuditResult {
     if (!geo || !arr || arr.length === 0) {return;}
     o.updateWorldMatrix(true, false);
     const m = o.matrixWorld.elements;
-    const X = (v: number) => m[0] * arr[v * 3] + m[4] * arr[v * 3 + 1] + m[8] * arr[v * 3 + 2] + m[12];
-    const Y = (v: number) => m[1] * arr[v * 3] + m[5] * arr[v * 3 + 1] + m[9] * arr[v * 3 + 2] + m[13];
-    const Z = (v: number) => m[2] * arr[v * 3] + m[6] * arr[v * 3 + 1] + m[10] * arr[v * 3 + 2] + m[14];
+    const mX = (v: number) => m[0] * arr[v * 3] + m[4] * arr[v * 3 + 1] + m[8] * arr[v * 3 + 2] + m[12];
+    const mY = (v: number) => m[1] * arr[v * 3] + m[5] * arr[v * 3 + 1] + m[9] * arr[v * 3 + 2] + m[13];
+    const mZ = (v: number) => m[2] * arr[v * 3] + m[6] * arr[v * 3 + 1] + m[10] * arr[v * 3 + 2] + m[14];
     let maxEdge = 0, nan = 0;
     let at = [0, 0, 0];
     const check = (a: number, b: number) => {
-      const dx = X(a) - X(b), dy = Y(a) - Y(b), dz = Z(a) - Z(b);
+      const dx = mX(a) - mX(b), dy = mY(a) - mY(b), dz = mZ(a) - mZ(b);
       const e = dx * dx + dy * dy + dz * dz;
       if (!isFinite(e)) {nan += 1; return; }
-      if (e > maxEdge) { maxEdge = e; at = [Math.trunc(X(a)), Math.trunc(Y(a)), Math.trunc(Z(a))]; }
+      if (e > maxEdge) { maxEdge = e; at = [Math.trunc(mX(a)), Math.trunc(mY(a)), Math.trunc(mZ(a))]; }
     };
 
     const anyO = o as unknown as { isLine?: boolean; isLineSegments?: boolean; isInstancedMesh?: boolean; count?: number; instanceMatrix?: { array: ArrayLike<number> } };

@@ -28,7 +28,7 @@ function lcg(seed: number) {
   return () => (s = (s * 1_664_525 + 1_013_904_223) >>> 0) / 0x1_00_00_00_00;
 }
 
-const GS = (ids: string[]) => ({
+const gs = (ids: string[]) => ({
   type: 'gameState', players: ids.map((id) => ({
     id, internalId: id.toLowerCase(), position: { x: 0, y: 0, z: 0 },
     rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 },
@@ -45,7 +45,7 @@ describe('rosterFuzz — client roster conformance', () => {
     it(`seed ${seed}: membership tracks model through chaos`, () => {
       const rnd = lcg(seed);
       const opsSeen = new Set<string>();
-      feed(h.nm, GS([]));
+      feed(h.nm, gs([]));
       // members: ids the client should hold. tickSeen: ids that got ≥1
       // tick record (entity materializes on first tick, not on join).
       const members = new Set<string>();
@@ -109,7 +109,7 @@ describe('rosterFuzz — client roster conformance', () => {
           members.add(keep);
           if (carried) {tickSeen.add(keep);}
           opsSeen.add('gs');
-          feed(h.nm, GS([keep]));
+          feed(h.nm, gs([keep]));
         }
         assertTruth(tag);
       }

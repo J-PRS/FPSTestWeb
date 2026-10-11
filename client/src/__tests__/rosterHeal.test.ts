@@ -5,7 +5,7 @@ import { NetworkManager } from '../networking/NetworkManager.js';
 // seeding missing roster members, retiring stale ones, and liveness flips.
 // A gap in any of these is a permanent "server but not client" warn.
 
-const P = (x = 0, y = 0, z = 0) => ({ x, y, z });
+const pt = (x = 0, y = 0, z = 0) => ({ x, y, z });
 const R = (yaw = 0, pitch = 0) => ({ yaw, pitch });
 const V = (x = 0, y = 0, z =0) => ({ x, y, z });
 
@@ -15,15 +15,15 @@ describe('roster heal primitives', () => {
   it('upsertRemotePlayer seeds a member lost to a dropped join edge', () => {
     const nm = mk();
     expect(nm.remoteHas('p1')).toBe(false);
-    nm.upsertRemotePlayer('p1', { position: P(1, 2, 3), health: 80, isDead: false });
+    nm.upsertRemotePlayer('p1', { position: pt(1, 2, 3), health: 80, isDead: false });
     const e = nm.getPlayers().get('p1')!;
     expect(e.health).toBe(80);
-    expect(e.position).toEqual(P(1, 2, 3));
+    expect(e.position).toEqual(pt(1, 2, 3));
     // Vec fields clone out of shared defaults — a second member must not
     // inherit p1's numbers through an aliased literal.
     nm.upsertRemotePlayer('p2', { health: 50 });
     // Fresh members default to y=500 sky-spawn until a position record lands.
-    expect(nm.getPlayers().get('p2')!.position).toEqual(P(0, 500, 0));
+    expect(nm.getPlayers().get('p2')!.position).toEqual(pt(0, 500, 0));
   });
 
   it('never mints the local player, and partial patches preserve fields', () => {
@@ -57,15 +57,15 @@ describe('roster heal primitives', () => {
 
   it('healRemoteLife flips liveness exactly once and reports direction', () => {
     const nm = mk();
-    nm.upsertRemotePlayer('p1', { health: 100, isDead: false, position: P(5, 0, 5) });
-    expect(nm.healRemoteLife('p1', true, 0, P(9, 1, 9))).toBe('killed');
+    nm.upsertRemotePlayer('p1', { health: 100, isDead: false, position: pt(5, 0, 5) });
+    expect(nm.healRemoteLife('p1', true, 0, pt(9, 1, 9))).toBe('killed');
     const e = nm.getPlayers().get('p1')!;
     expect(e.isDead).toBe(true);
-    expect(e.position).toEqual(P(9, 1, 9)); // corpse pinned where server saw it die
+    expect(e.position).toEqual(pt(9, 1, 9)); // corpse pinned where server saw it die
     expect(nm.healRemoteLife('p1', true, 0)).toBeNull(); // no double-flip
-    expect(nm.healRemoteLife('p1', false, 100, P(0, 0, 0))).toBe('revived');
+    expect(nm.healRemoteLife('p1', false, 100, pt(0, 0, 0))).toBe('revived');
     expect(nm.getPlayers().get('p1')!.isDead).toBe(false);
-    expect(nm.getPlayers().get('p1')!.position).toEqual(P(0, 0, 0));
+    expect(nm.getPlayers().get('p1')!.position).toEqual(pt(0, 0, 0));
     expect(nm.healRemoteLife('ghost', true, 0)).toBeNull(); // no phantom
     expect(nm.remoteHas('ghost')).toBe(false);
   });
