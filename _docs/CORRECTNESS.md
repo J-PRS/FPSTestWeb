@@ -619,6 +619,13 @@ violation instead of a symptom hunt.
   before the absent-id reap (stale replicas can't ghost a new
   room's counter); own plants get roster hp without a second
   visual.
+- **DOM text ingest (verified sealed):** wire strings (chat,
+  names, frag text) reach the DOM via `textContent` only, or
+  through `innerHTML` with every interpolated piece wrapped in
+  `esc()` (`&` first, then `<` — no tag can form, no entity
+  double-decode). Remaining `innerHTML` writes interpolate
+  numbers or static markup only. A crafted name or chat line is
+  inert text everywhere it lands.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
