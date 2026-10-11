@@ -312,9 +312,11 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
       return;
     }
 
-    // Don't create RemotePlayer for dead players — wait for respawn event
+    // Don't create RemotePlayer for dead players — wait for respawn event.
+    // Absent record = departed (playerLeft purges the roster row): a stale
+    // update racing the delete must not resurrect a phantom remote.
     const playerData = nm().getPlayers().get(playerId);
-    if (playerData?.isDead) return;
+    if (!playerData || playerData.isDead) return;
     logger.debug(`onPlayerUpdate called for unknown player: ${playerId}, creating...`);
     ensureRemotePlayer(playerId, position, 'onPlayerUpdate');
   };
