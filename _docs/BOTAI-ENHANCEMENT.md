@@ -138,9 +138,9 @@ Worth stating, since the temptation is real:
 
 | Item | Addresses | Effort | Why first |
 |---|---|---|---|
-| Enemy intercept prediction (extend escort-lead to hunts) | anticipation | S | biggest "wow it read me" per line |
-| Per-opponent W/L record → fear/press | duel IQ | S | cheap, compounds with nerve |
-| Fire-burst/relocation beat in orbit | combat dance | S-M | most visible mechanical tell |
+| ~~Enemy intercept prediction~~ **shipped**: lost-LOS ghost snaps onto a sensed pickup near its extrapolated line (botHunt.ghostPos) | anticipation | S | biggest "wow it read me" per line |
+| ~~Per-opponent W/L record → fear/press~~ **shipped**: `foeScore` tallies hits+deaths per attacker; dread ≥2 filters a nemesis from acquisition unless brawl-range/hero (botHunt.dreadOf) | duel IQ | S | cheap, compounds with nerve |
+| ~~Fire-burst/relocation beat in orbit~~ **shipped**: `beatT` alternates settled burst (orbit 0.3×) and relocate swing (1.8×) in botDisposition | combat dance | S-M | most visible mechanical tell |
 | Pickup spot memory + denial + top-up | resource control | M | classic arena-bot depth |
 | Lane memory → route penalty | route planning | M | fixes "feeds the same lane" |
 | Threat-exposure criterion in steering | positioning | M | defensive solidity |

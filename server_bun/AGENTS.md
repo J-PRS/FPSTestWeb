@@ -14,13 +14,22 @@ bun src/server.ts           # run (FPS_PORT, FPS_MAP, FPS_SBOTS,
 
 ## Map
 
-- `Room.ts` — match container; wires sims + the damage funnel.
-- `CombatHandler.ts` — outcome adjudication (intents, respawn, killFeed).
-  Combat claims are refused on dedicated (`claimsAccepted=false`); the
-  residual `claimLedger` path stays for P2P hosts + ambient heals.
-- `RoomProjectiles/BallSim/CreatureSim/RoomMoveSim/RoomFlags/RoomPickups/
-  RoomDeployables/ServerBots` — the authoritative sims; edges out.
-- `MessageHandler/connections` — validation → sim → broadcast.
+- `Room.ts` + `room*.ts`/`Room*.ts` — match container + sim cluster
+  (RoomMoveSim, RoomProjectiles, RoomFlags, RoomPickups, RoomDeployables,
+  RoomArena, roomScore/roomMatch/roomFactory/roomSwitch/roomFlagPlacer);
+  wires sims + the damage funnel.
+- `CombatHandler.ts` + `combat*`/`envClaims`/`hitLedger`/`killFeed` —
+  outcome adjudication (intents, respawn, killFeed). Combat claims are
+  refused on dedicated (`claimsAccepted=false`); the residual
+  `claimLedger` path stays for P2P hosts + ambient heals.
+- `moveClaims`/`moveJudge`/`rewind`/`claimLedger`/`validation` —
+  movement-claim adjudication.
+- `bot*.ts`/`ServerBots`/`superBot`/`serverSenses`/`serverAttacks` — the
+  bot army (brains, arsenal, routing, roster, commands).
+- `TickLoop`/`tickHelpers`/`tickRecords`/`simClock` — tick pipeline.
+- `MessageHandler`/`ConnectionManager`/`SessionManager`/`Rtc*`/`Wt*` —
+  transports: validation → sim → broadcast.
+- `BallSim`/`CreatureSim`/`creature*` — ambient entity sims.
 - `wire.ts` + `shared/worldModel.ts` — every entity kind declares its
   wire shape once; emits generate, inbound packets/intents/envelopes
   shape-check at dispatch. New fields go in the declaration, not

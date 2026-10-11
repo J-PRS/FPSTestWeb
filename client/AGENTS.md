@@ -15,9 +15,16 @@ npm run dev                        # vite dev server
 ## Map
 
 - `game/net/` — wire decode → netHandlers → local state. Handle edges
-  here, not in render code.
+  here, not in render code. `game/net*.ts` (netBalls/netCrawlers/
+  netHandlers/netMelee) is the same cluster, flat.
 - `entities/` — RemotePlayer, species visuals (instanced), balls.
-- `game/` — bots.ts (offline brains), deployables, lobby, remotes.
+  `Player*`/`player*` is the local player assembly cluster; `Deploy*`/
+  `deploy*` are deployable bodies; capitalized creature files = species.
+- `game/` — `bots/` (offline brains), deployables, lobby, remotes.
+  `flag*`/`ctfFlags`/`flagRun` = flag modes, `combat`+`blastForce` =
+  client-side damage funnel.
+- `projectiles/*Config.ts` — per-weapon tables; `Projectile.ts` is the
+  sim, `proj*` the collision/remote/stuck paths.
 - `world/` — terrain/sky/scene; `effects/` — ALL transient VFX.
 - Prediction: local player replays the same `shared/movement.ts` sim;
   corrections rewind + replay journaled inputs.

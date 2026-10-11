@@ -29,6 +29,12 @@ bun _tools/e2e/perf.ts --compare _tools/e2e/baseline.json   # perf regression vs
 - `maps/` spec JSONs · `_tools/` soaks + headless capture · `ROADMAP.md`
   is the living manifesto (read first, keep current) · `changelog.txt`
   prepend `YYYY-MM-DD - <summary>` ASCII.
+- Filename prefixes are the clusters (flat dirs by design):
+  `bot*` bot brains · `Room*`/`room*` match sim · `combat*`/`envClaims`/
+  `hitLedger`/`killFeed` damage funnel · `moveClaims`/`moveJudge`/`rewind`/
+  `claimLedger`/`validation` claim adjudication · `Player*`/`player*`
+  local player assembly · `*Config.ts` weapon tables · `creature*`
+  species sim · `tick*`/`TickLoop`/`simClock` tick pipeline.
 
 ## Rules of the road
 
