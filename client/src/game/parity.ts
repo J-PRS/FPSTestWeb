@@ -49,6 +49,9 @@ export function confirmDamageEcho(victim: string): void {
 }
 
 export function noteShellFate(shotId: string, at: { x: number; y: number; z: number }): void {
+  // Wire blast point — NaN turns every divergence diff against it into
+  // NaN meters, which renders as a bogus "far" ghost in the dump.
+  if (!Number.isFinite(at.x + at.y + at.z)) return;
   shellFates.set(shotId, { at, t: performance.now() });
   if (shellFates.size > 64) {
     // Sweep stale entries lazily — fates older than the confirm window
