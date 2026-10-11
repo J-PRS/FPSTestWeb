@@ -1,5 +1,7 @@
 import * as THREE from 'three';
-import { getHeightmapData, getWorldScale, getHeightScale, sampleHeight, sampleNormal, sampleHeightVisual } from './heightmap.js';
+import { getHeightmapData, getHeightfield, getWorldScale, getHeightScale, sampleHeight, sampleNormal, sampleHeightVisual } from './heightmap.js';
+import { registerDiag } from '../core/fxDiag.js';
+import { terrainVert, terrainFrag } from './terrainShaders.js';
 import { TERRAIN_HEIGHT_SCALE, TERRAIN_WORLD_SCALE } from '../core/config.js';
 
 // Heightmap loading/sampling + the shared Heightfield live in heightmap.ts —
@@ -8,6 +10,31 @@ export { getHeightfield } from './heightmap.js';
 
 const HSCALE = TERRAIN_HEIGHT_SCALE;
 const DEFAULT_WORLD_SCALE = TERRAIN_WORLD_SCALE;
+
+// F1 overlay for the DRAWN clipmap — flat cyan lines, no shading, so a
+// divergent visual surface reads at a glance. Must mirror the solid
+// frag's two visibility cuts or every ring's coarse interior sheet
+// renders over the finer levels: the inner-hole discard (finer ring
+// owns that region) and the outermost level's world-edge dissolve.
+// Wire verts ride the SAME displacement — depthTest is off on the wire
+// material, so no lift hack is needed; lines sit exactly on the surface.
+const TERRAIN_WIRE_VERT = terrainVert;
+const TERRAIN_WIRE_FRAG = /* glsl */`
+  varying vec3 vWorldPos;
+  varying vec3 vCameraPos;
+  uniform float innerHalfSize;
+  uniform vec2 innerGridOrigin;
+  uniform float edgeHalf;
+  void main() {
+    if (innerHalfSize > 0.0) {
+      vec2 d = abs(vWorldPos.xz - innerGridOrigin);
+      if (max(d.x, d.y) < innerHalfSize) discard;
+    }
+    if (edgeHalf > 0.5 &&
+        length(vWorldPos - vCameraPos) > edgeHalf * 0.55) discard;
+    gl_FragColor = vec4(0.0, 0.9, 1.0, 1.0);
+  }
+`;
 
 export interface FieldRing {
   x: number; z: number; r: number;
@@ -81,8 +108,6 @@ function createFlatGridGeometry(divisions: number, borderCells = 1): THREE.Buffe
   return geo;
 }
 
-import { terrainVert, terrainFrag } from './terrainShaders.js';
-
 export class Terrain {
   private scene: THREE.Scene;
   private levels: ClipmapLevel[] = [];
@@ -142,6 +167,11 @@ export class Terrain {
     this.gridGeo = createFlatGridGeometry(divisions, 1);
     const gridGeo = this.gridGeo;
     const outerGeo = createFlatGridGeometry(divisions / 2, 1);
+    // Wireframe as real LINES (same path as the yellow collider lattice)
+    // — Mesh.wireframe still rasterizes triangles that co-planar-fight
+    // their own fill; line primitives behave like the collider overlay.
+    const gridWireGeo = new THREE.WireframeGeometry(gridGeo);
+    const outerWireGeo = new THREE.WireframeGeometry(outerGeo);
     // Real vertex spacing per level — outer rings run the half-division
     // grid, so their lattice is coarser than cfg.spacing claims (20→40,
     // 40→80). The inner-morph shader and the origin snap must use THIS:
@@ -216,6 +246,25 @@ export class Terrain {
       });
 
       const mesh = new THREE.Mesh(i >= 2 ? outerGeo : gridGeo, material);
+      // F1 debug wireframe — same geometry + shared uniforms, so the
+      // cyan lines trace the EXACT displaced surface. Solid fill stays.
+      const wireMat = new THREE.ShaderMaterial({
+        vertexShader: TERRAIN_WIRE_VERT,
+        fragmentShader: TERRAIN_WIRE_FRAG,
+        uniforms: material.uniforms,
+        // Debug overlay: the solid fill occludes co-planar lines at
+        // grazing angles no matter the lift — draw on top instead.
+        depthTest: false,
+      });
+      const wire = new THREE.LineSegments(i >= 2 ? outerWireGeo : gridWireGeo, wireMat);
+      wire.visible = false;
+      wire.renderOrder = 900;
+      wire.frustumCulled = false;
+      wire.matrixAutoUpdate = false;
+      wire.matrixWorldAutoUpdate = false;
+      wire.updateMatrixWorld(true);
+      scene.add(wire);
+      this.wireMeshes.push(wire);
       mesh.receiveShadow = true;
       mesh.frustumCulled = false; // world-space extent is set via uniforms, not mesh transform
       // Clipmap levels never move — geometry does the panning in-shader.
@@ -234,6 +283,31 @@ export class Terrain {
         innerGridOrigin: new THREE.Vector2(0, 0),
       });
     }
+
+    dbgTerrain = this;
+    registerDiag('terrainDiv', () => ({ terrainDiv: this.divergenceStats() }));
+  }
+
+  /** Collider field (sampleHeight) vs the drawn chord surface around the
+   *  last-seen player pos — Alt+Q's numeric version of the F1 overlay. */
+  divergenceStats(): Record<string, unknown> {
+    const px = this.dbgPx, pz = this.dbgPz;
+    const r = 40, step = CLIPMAP_LEVELS[0].spacing;
+    let n = 0, sum = 0, sumAbs = 0, maxAbs = 0, worstX = 0, worstZ = 0;
+    for (let dz = -r; dz <= r; dz += step) {
+      for (let dx = -r; dx <= r; dx += step) {
+        const d = sampleHeight(px + dx, pz + dz) - this.getRenderedHeight(px + dx, pz + dz);
+        n++; sum += d; sumAbs += Math.abs(d);
+        if (Math.abs(d) > maxAbs) { maxAbs = Math.abs(d); worstX = dx; worstZ = dz; }
+      }
+    }
+    return {
+      samples: n,
+      meanSigned_m: +(sum / n).toFixed(3),   // + = collider above visual
+      meanAbs_m: +(sumAbs / n).toFixed(3),
+      maxAbs_m: +maxAbs.toFixed(3),
+      worstAt: `${worstX},${worstZ}m`,
+    };
   }
 
   /** Hot-swap the heightfield (map change via gameState): re-upload the
@@ -465,6 +539,93 @@ export class Terrain {
     return sampleHeight(wx, wz);
   }
 
+  // ---- F1 debug wireframes: visual clipmap lines + collider lattice ----
+  private wireMeshes: THREE.LineSegments[] = [];
+  private colliderWire: THREE.LineSegments | null = null;
+  private colliderWireCx = NaN;
+  private colliderWireCz = NaN;
+  private debugWireOn = false;
+  // Last player pos seen via setDebugWire — feeds the Alt+Q divergence
+  // census even when the overlay itself is off.
+  private dbgPx = 0;
+  private dbgPz = 0;
+
+  /** F1 debug overlay: cyan lines on the DRAWN clipmap (shared uniforms,
+   *  same displaced verts — the solid fill stays) plus a yellow wire
+   *  patch of the COLLIDER surface — getHeight's bilinear field, the
+   *  ground the sims actually stand on — around the player. Divergence
+   *  between the two colors IS the visual-vs-physics gap. */
+  setDebugWire(on: boolean, px = 0, pz = 0): void {
+    this.dbgPx = px; this.dbgPz = pz;
+    if (on !== this.debugWireOn) {
+      this.debugWireOn = on;
+      for (const w of this.wireMeshes) { w.visible = on; }
+      if (this.colliderWire) { this.colliderWire.visible = on; }
+      if (on) { this.colliderWireCx = NaN; } // force rebuild on enable
+    }
+    if (!on) { return; }
+    const hf = getHeightfield();
+    if (!hf || !Number.isFinite(px)) { return; }
+    // Native field step — the wireframe's whole job is to show the
+    // collider's REAL lattice, coarsening it would lie about the data.
+    const step = Math.max((hf.worldScale ?? getWorldScale()) / hf.size, 1);
+    // Rebuild only when the player crosses a few lattice cells — the
+    // patch is debug geometry, not per-frame state.
+    if (Number.isFinite(this.colliderWireCx)
+      && Math.abs(px - this.colliderWireCx) < step * 4
+      && Math.abs(pz - this.colliderWireCz) < step * 4) { return; }
+    this.colliderWireCx = Math.round(px / step) * step;
+    this.colliderWireCz = Math.round(pz / step) * step;
+    this.buildColliderWire(this.colliderWireCx, this.colliderWireCz, step);
+  }
+
+  private buildColliderWire(cx: number, cz: number, step: number): void {
+    const half = 80; // meters of patch around the player
+    const n = Math.ceil((half * 2) / step);
+    const verts = new Float32Array((n + 1) * (n + 1) * 3);
+    for (let iz = 0; iz <= n; iz++) {
+      for (let ix = 0; ix <= n; ix++) {
+        const wx = cx - half + ix * step;
+        const wz = cz - half + iz * step;
+        const o = (iz * (n + 1) + ix) * 3;
+        verts[o] = wx;
+        verts[o + 1] = this.getHeight(wx, wz) + 0.15; // float hair above the surface or lines z-fight the solid
+        verts[o + 2] = wz;
+      }
+    }
+    const segs = n * (n + 1) * 2;
+    const pos = new Float32Array(segs * 6);
+    let o = 0;
+    const at = (ix: number, iz: number): number => (iz * (n + 1) + ix) * 3;
+    for (let iz = 0; iz < n; iz++) {
+      for (let ix = 0; ix < n; ix++) {
+        for (const [a, b] of [[at(ix, iz), at(ix + 1, iz)], [at(ix, iz), at(ix, iz + 1)]]) {
+          pos.set(verts.subarray(a!, a! + 3), o); pos.set(verts.subarray(b!, b! + 3), o + 3);
+          o += 6;
+        }
+      }
+    }
+    if (!this.colliderWire) {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      this.colliderWire = new THREE.LineSegments(geo,
+        new THREE.LineBasicMaterial({ color: 0xffcc00, depthTest: false }));
+      this.colliderWire.frustumCulled = false;
+      this.colliderWire.renderOrder = 901; // above the cyan clipmap wires
+      // The scene ref wasn't kept — borrow a mesh's parent.
+      this.levels[0]?.mesh.parent?.add(this.colliderWire);
+    } else {
+      const attr = this.colliderWire.geometry.getAttribute('position') as THREE.BufferAttribute;
+      if (attr.count === pos.length / 3) {
+        attr.set(pos);
+      } else {
+        this.colliderWire.geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      }
+      this.colliderWire.geometry.getAttribute('position').needsUpdate = true;
+    }
+    this.colliderWire.visible = this.debugWireOn;
+  }
+
   // Visual callers only (debris, dust, birds): 1m-cell memo of the same
   // bilinear — decoration can't afford exactness but can afford reuse.
   getHeightVisual(wx: number, wz: number): number {
@@ -506,4 +667,14 @@ export class Terrain {
       ? h00 + (h10 - h00) * tx + (h01 - h00) * tz
       : h11 + (h10 - h11) * (1 - tz) + (h01 - h11) * (1 - tx);
   }
+}
+
+// Plain Alt+Q prints bespoke lines, not registerDiag sections — export
+// the one-liner for diagDump.ts.
+let dbgTerrain: Terrain | null = null;
+/** One-line form for the plain (non-verbose) Alt+Q dump. */
+export function terrainDivLine(): string | null {
+  const s = dbgTerrain?.divergenceStats();
+  if (!s) return null;
+  return `terrainDiv: collider-vs-drawn over ${s['samples']} samples r=40m — signed=${s['meanSigned_m']}m meanAbs=${s['meanAbs_m']}m max=${s['maxAbs_m']}m @(${s['worstAt']}) (signed>0 = collider above visual)`;
 }

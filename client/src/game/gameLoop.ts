@@ -251,6 +251,10 @@ function syncFog(deps: GameLoopDeps, terrain: Terrain): void {
   deps.sceneSetup.atmosphericSky.setHorizonColor(fogHorizon() ?? tinted);
   updateCubeSky(deps.camera, fog.color);
   refreshColliderGizmoVisibility();
+  // F1 terrain overlay — cyan wire on the drawn clipmap, yellow wire
+  // patch on the collider lattice around the player.
+  const pp = deps.lazyPlayer().pos;
+  terrain.setDebugWire(urlParams.debug, pp.x, pp.z);
   terrain.updateFog(fog.color, fog.near, fog.far);
   syncFxFog(fog); // world-space ShaderMaterials share the same range
 }
