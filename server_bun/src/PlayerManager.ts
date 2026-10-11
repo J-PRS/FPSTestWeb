@@ -295,6 +295,9 @@ export class PlayerManager {
       target.status = 0; // death strips every channel — a cloaked/mending corpse is a lie
       target.skiing = 0; target.jetting = 0; // held keys die too — the wire bit can't outlive the body
       target.deaths++;
+      // Killstreak counts the current life — deaths++ without this let
+      // a dead player's wire streak keep climbing across lives.
+      target.streak = 0;
       target.pendingRespawn = true;
       target.armor = 0;
       target.regenUntil = simMs(0);
