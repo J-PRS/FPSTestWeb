@@ -248,6 +248,19 @@ violation instead of a symptom hunt.
   not hidden under the curtain. A reclaim is NOT a respawn: the seat
   keeps its record, so the shield is stamped at the reclaim point
   (`SessionManager`), not at spawn.
+- **Session/transport lanes (all verified sealed):** input journal
+  bounded 128 + seq-ordered + drop-on-resync; `dropInputJournal`
+  precedes `sendResync` so corrections hard-snap instead of replaying
+  the hidden interval; spawn dedup via `byId.has(id)` on balls and
+  crawlers (dead-ctor never registers so roster respawn can retry);
+  map-swap serialized through `terrainSwap` chain with wanted-key
+  dedupe and abort-before-commit; spectators are read-only — the
+  `specRooms.has → return` gate precedes ALL game dispatch, binary
+  included; roomSwitch cooldown bounded + dead-hop denied pre-roomFor
+  + straggler reports muted via `correctionGraceUntil`; fire cadence
+  windows rolling-1s per weapon, purged on disconnect; `tickNack`
+  double-gated (500ms room cooldown + no re-stamp while a full
+  window pays out).
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
