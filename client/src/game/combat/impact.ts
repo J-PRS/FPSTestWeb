@@ -518,7 +518,7 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
   // (no playerHit echo within ~RTT) counts as a ghost hit in the dump.
   // P2P/claim rooms already ledger the outcome through claimSeq instead.
   if (deps.lazyNetworkManager()?.authoritySims()) {
-    expectDamageEcho(playerId, directDamage, p.config.weaponType);
+    expectDamageEcho(playerId, directDamage, p.config.weaponType, p.shotId, { x: p.pos.x, y: p.pos.y, z: p.pos.z });
   }
   const airborne = targetPlayer
     ? targetPlayer.feetY - deps.lazyTerrain().getHeight(hitPos.x, hitPos.z) > 0.6

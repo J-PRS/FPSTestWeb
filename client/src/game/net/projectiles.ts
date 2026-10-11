@@ -9,6 +9,7 @@ import { WeaponType, getWeaponStats } from '../../../../shared/weapons.js';
 import { Explosion } from '../../effects/explosion.js';
 import { swingSwipe } from '../../effects/swingTrails.js';
 import { MELEE_RANGE, EXPLOSION_VFX_RADIUS } from '../../core/config.js';
+import { noteShellFate } from '../parity.js';
 import type { NetCtx } from './ctx.js';
 
 /** Last weapon + shot count seen per shooter — every remote fire event
@@ -208,6 +209,10 @@ export function wireProjectiles(ctx: NetCtx): void {
     const localProjectile = registry.byId.get(projectileId)
       ?? (shotId ? registry.byShotId.get(shotId) : undefined);
     if (localProjectile) {
+      // The authority's blast point for MY shell — damage-echo ghosts
+      // diff it against where the hit painted to tell trajectory
+      // divergence (srvAt far) from a shell that never ran (srvAt none).
+      if (position) {noteShellFate(shotId ?? localProjectile.shotId ?? projectileId, position);}
       snapToContact(localProjectile, position);
       localProjectile.explode();
       registry.byId.delete(projectileId);

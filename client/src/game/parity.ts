@@ -28,11 +28,18 @@ export function parityMiss(kind: string, detail: Record<string, unknown>): void 
 // "my hit landed but did no damage". Stamp each predicted remote hit;
 // a playerHit/kill naming the same victim confirms it, ~RTT of silence
 // counts it as a ghost hit.
-type DmgEcho = { victim: string; dmg: number; wt?: number; t: number };
+type DmgEcho = { victim: string; dmg: number; wt?: number; shotId?: string | null; at?: { x: number; y: number; z: number }; t: number };
 const dmgEchoes: DmgEcho[] = [];
+// Where each of MY shells actually detonated server-side (projectileDestroyed
+// wire point), keyed by shotId — the fate half of the ghost-hit question.
+// An unconfirmed echo + a fate far from the painted contact = trajectory
+// divergence (server spawned/flight differed); an echo with NO fate = the
+// server shell never even ran — intent lost, spawn refused, or its destroy
+// never arrived.
+const shellFates = new Map<string, { at: { x: number; y: number; z: number }; t: number }>();
 
-export function expectDamageEcho(victim: string, dmg: number, wt?: number): void {
-  dmgEchoes.push({ victim, dmg, wt, t: performance.now() });
+export function expectDamageEcho(victim: string, dmg: number, wt?: number, shotId?: string | null, at?: { x: number; y: number; z: number }): void {
+  dmgEchoes.push({ victim, dmg, wt, shotId, at, t: performance.now() });
   if (dmgEchoes.length > 32) {dmgEchoes.shift();}
 }
 
@@ -41,11 +48,31 @@ export function confirmDamageEcho(victim: string): void {
   if (i >= 0) {dmgEchoes.splice(i, 1);}
 }
 
+export function noteShellFate(shotId: string, at: { x: number; y: number; z: number }): void {
+  shellFates.set(shotId, { at, t: performance.now() });
+  if (shellFates.size > 64) {
+    // Sweep stale entries lazily — fates older than the confirm window
+    // can't be needed by any live echo.
+    const now = performance.now();
+    for (const [k, f] of shellFates) {if (now - f.t > 15000) {shellFates.delete(k);}}
+  }
+}
+
 export function sweepDamageEchoes(now: number): void {
   for (let i = dmgEchoes.length - 1; i >= 0; i--) {
     const e = dmgEchoes[i]!;
     if (now - e.t > 900) {
-      parityMiss('dmg-echo', { victim: e.victim, dmg: e.dmg, ...(e.wt !== undefined ? { wt: e.wt } : {}) });
+      const fate = e.shotId ? shellFates.get(e.shotId) : undefined;
+      const detail: Record<string, unknown> = { victim: e.victim, dmg: e.dmg, ...(e.wt !== undefined ? { wt: e.wt } : {}) };
+      if (fate && e.at) {
+        detail.srvAt = `${fate.at.x.toFixed(0)},${fate.at.y.toFixed(0)},${fate.at.z.toFixed(0)}`;
+        detail.offM = +Math.hypot(fate.at.x - e.at.x, fate.at.y - e.at.y, fate.at.z - e.at.z).toFixed(1);
+      } else if (fate) {
+        detail.srvAt = `${fate.at.x.toFixed(0)},${fate.at.y.toFixed(0)},${fate.at.z.toFixed(0)}`;
+      } else {
+        detail.srvAt = 'none'; // server shell never detonated — intent died before it ran
+      }
+      parityMiss('dmg-echo', detail);
       dmgEchoes.splice(i, 1);
     }
   }
