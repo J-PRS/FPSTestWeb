@@ -650,6 +650,14 @@ export class Player {
 
   private checkCameraSpinout(dt: number, intentionalOrbit = false): void {
     const q = this.camera.quaternion;
+    // angleTo(NaN) is NaN — never >35 — so a poisoned quaternion spins
+    // out silently forever. Recover the pose from yaw/pitch once.
+    if (!Number.isFinite(q.x + q.y + q.z + q.w)) {
+      logger.warn('Camera quaternion NaN — rebuilt from yaw/pitch', { yaw: this.yaw, pitch: this.pitch });
+      this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
+      this._camQuatValid = false;
+      return;
+    }
     if (this._camQuatValid && this._spinoutCd <= 0 && !intentionalOrbit) {
       const deg = q.angleTo(this._prevCamQuat) * 180 / Math.PI;
       if (deg > 35) {

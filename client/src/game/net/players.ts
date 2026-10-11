@@ -338,8 +338,10 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
       player.pos.set(position.x, position.y, position.z);
       noteLocalSnap();
       deps.setLastSentPos({ x: position.x, y: position.y, z: position.z });
-      player.yaw = rotation.yaw;
-      player.pitch = rotation.pitch;
+      if (Number.isFinite(rotation.yaw + rotation.pitch)) {
+        player.yaw = rotation.yaw;
+        player.pitch = rotation.pitch;
+      }
       player.syncMovement(); // reseat controller or its snapshot overwrites the respawn
       player.markTeleport(); // spawn point can sit >50m from the corpse
       deps.lazyHud().show();
