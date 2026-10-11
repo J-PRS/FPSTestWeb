@@ -230,7 +230,16 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
     // between volleys like a real duelist.
     b.holding = b.h.fightPos === null;
     if (b.h.fightPos) return b.h.fightPos;
-    b.orbitA += dt * (b.orbitDir * 0.55);
+    // The beat: settle and shoot, then swing wide. Direction flips and
+    // radius jinks already break up the carousel; the cadence is what
+    // makes it read like a duelist choosing a moment instead of a fan
+    // blade orbiting on rails.
+    b.beatT -= dt;
+    if (b.beatT <= 0) {
+      b.beatMove = !b.beatMove;
+      b.beatT = b.beatMove ? 0.5 + botRand() * 0.5 : 0.9 + botRand() * 0.9;
+    }
+    b.orbitA += dt * (b.orbitDir * 0.55) * (b.beatMove ? 1.8 : 0.3);
     b.orbitFlipT -= dt;
     if (b.orbitFlipT <= 0) {
       b.orbitFlipT = 1.2 + botRand() * 1.4;

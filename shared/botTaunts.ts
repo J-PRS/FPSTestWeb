@@ -203,6 +203,10 @@ const CONTACT_LINES = [
   'thermal hit {t}',
   'ping {t}',
   'tango {t}',
+  'contact {d}',
+  'spotted {t} {d}',
+  'movement {d}',
+  'eyes {d}',
 ];
 
 /** Hunt dropped — they broke LOS or died before the bot finished. */
@@ -219,6 +223,7 @@ const LOST_LINES = [
   'mirage',
   'skied out of view',
   'who was that',
+  'lost them heading {d}',
 ];
 
 /** Committed to chasing the beacon-marked flag carrier. */
@@ -233,6 +238,8 @@ const THIEF_LINES = [
   'flag is outbound',
   'chasing {t}',
   'bring our flag back',
+  'carrier heading {d}',
+  'thief {d} side',
 ];
 
 /** Rising edge of fear — below FEAR_HP with no hero roll. */
@@ -248,6 +255,8 @@ const FEAR_LINES = [
   'plating held, barely',
   'taking evasive',
   'need heals',
+  'im at {h}',
+  'down to {h} hp',
 ];
 
 /** Rising edge of a hero roll — low HP, last-stand mode instead. */
@@ -746,6 +755,60 @@ const SORRY_LINES = [
   'worse has happened',
 ];
 
+/** The bot keeps dying to one specific enemy and has never answered —
+ *  the one-sided rivalry beat. Rare because the pair condition is rare;
+ *  the name fill keeps it personal. Works for any killer id — a bot
+ *  doing the bullying gets the same read, not just a human. */
+const BULLY_LINES = [
+  'why you bully me {t}',
+  'every time {t}',
+  '{t} again. of course',
+  'leave me alone {t}',
+  'i havent even touched you {t}',
+  'target fixation {t}?',
+  'am i your quest target {t}',
+  'one-sided rivalry {t}',
+  'what did i do {t}',
+  'ok {t} has a problem with me',
+  'i exist purely for {t} scoreboard',
+  'personal vendetta noted {t}',
+  'free kill, enjoy it {t}',
+  'is this a bounty thing {t}',
+];
+
+/** The shooter just landed a real skill kill — long airtime shell or
+ *  a midair victim. The HYPE half of the exchange: the victim's 'props'
+ *  pool answers it, then a quiet shooter may close the beat with
+ *  'thanks'. Tribes air-discs were THE brag kill — this is the whoohoo. */
+const AIR_LINES = [
+  'DID YOU SEE THAT {t}',
+  'whoohoo',
+  'MIDAIR {t}',
+  'that one was for you {t}',
+  'air mail',
+  'special delivery {t}',
+  'read you like a book {t}',
+  'clip it',
+  'somebody record that',
+  'the hang time on that',
+  'ski faster next time {t}',
+  'orbital strike {t}',
+];
+
+/** The carrier is running with hostiles close — the "cover me" call.
+ *  When it comes out as VDM/VNE the room's radio wiring turns the chord
+ *  into an actual escort pin on the speaker. */
+const CALLFOR_LINES = [
+  'cover me',
+  'escort home',
+  'im exposed on the run',
+  'someone run with me',
+  'theyre on my six',
+  'need a hand here',
+  'flag is loose with me, cover',
+  'get me home',
+];
+
 /** Earnest warmth about the game/map/lobby — the wholesome half of FPS
  *  culture. Bots agree rather than stand there like furniture. */
 const WHOLESOME_LINES = [
@@ -952,7 +1015,7 @@ export type ChatterKind =
   | 'tilt' | 'fist' | 'gg' | 'salty' | 'mention'
   | 'revenge' | 'streakend' | 'quiet' | 'witness' | 'props'
   | 'hello' | 'thanks' | 'sorry' | 'wholesome' | 'mald'
-  | 'question' | 'lag' | 'bye' | 'ack';
+  | 'question' | 'lag' | 'bye' | 'ack' | 'bully' | 'air' | 'callfor';
 
 const CHATTER_POOLS: Record<ChatterKind, string[]> = {
   contact: CONTACT_LINES,
@@ -991,6 +1054,9 @@ const CHATTER_POOLS: Record<ChatterKind, string[]> = {
   lag: LAG_LINES,
   bye: BYE_LINES,
   ack: ACK_LINES,
+  air: AIR_LINES,
+  callfor: CALLFOR_LINES,
+  bully: BULLY_LINES,
 };
 
 /** Canon VGS alternates — some kinds have a real quick-chat chord, and
@@ -1024,7 +1090,9 @@ const VGS_FOR: Partial<Record<ChatterKind, string[]>> = {
   props:      ['VGCS', 'VGCY', 'VGCA', 'VGCN'],
   streakend:  ['VGTB', 'VGTT'],
   hello:      ['VGH'],
-  thanks:     ['VGRA'],
+  thanks:     ['VGRT', 'VGRA'],
+  air:        ['VGW', 'VGTG', 'VGCA'],
+  callfor:    ['VDM', 'VNE', 'VNS'],
   sorry:      ['VGRA'],
   wholesome:  ['VGCA', 'VGCY', 'VGW'],
   mald:       ['VGTA', 'VGTW'],
@@ -1032,6 +1100,7 @@ const VGS_FOR: Partial<Record<ChatterKind, string[]>> = {
   lag:        ['VGO'],
   bye:        ['VGB'],
   ack:        ['VSTC', 'VSTO'],
+  bully:      ['VGS', 'VGQ'],
 };
 const VGS_CHANCE = 0.4;
 
@@ -1042,7 +1111,43 @@ const VGS_CHANCE = 0.4;
  *  host can keep "Defend our flag!" off the enemy feed. Bot VGS picks
  *  avoid VV* entirely — a team-scoped reply would never reach an
  *  enemy who prompted it. */
-export function chatter(kind: ChatterKind, botId: string, other?: string): { text: string; vgs?: string; team?: boolean } | null {
+/** 8-way compass for the {d} fill — callouts get a bearing, the thing
+ *  real VGS-era binds printed as $l. North = -z (map convention). */
+const COMPASS = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'] as const;
+export function dir8(dx: number, dz: number): string {
+  const a = Math.atan2(dx, -dz); // 0 = north, clockwise
+  return COMPASS[Math.round(a / (Math.PI / 4)) & 7]!;
+}
+
+/** Where a team VGS command points — the call implies a POSITION, not
+ *  just a vibe. The intent is side-relative ('own' = the caller's flag
+ *  stand); hosts resolve it to a world pos since they own the flag
+ *  table. Chords not here are flavor, not orders — bots ack but don't move. */
+export type RadioAim = 'own' | 'enemy' | 'actor' | 'carrier';
+const RADIO_AIM: Readonly<Record<string, RadioAim>> = {
+  VDB: 'own', VDF: 'own', VDE: 'own', VDR: 'own', VDG: 'own', VDS: 'own', VDT: 'own', VFD: 'own',
+  VAA: 'enemy', VAB: 'enemy', VAF: 'enemy', VAG: 'enemy', VAS: 'enemy', VAD: 'enemy',
+  VAC: 'carrier', VTF: 'carrier', VFR: 'carrier',
+  VDM: 'actor', VNE: 'actor', VNS: 'actor', VNC: 'actor', VNH: 'actor', VFT: 'actor',
+  VWE: 'actor', VWS: 'actor', VWW: 'actor',
+};
+export function radioAimFor(chord: string): RadioAim | undefined {
+  return RADIO_AIM[chord];
+}
+
+/** {d}/{h} fills: callers that know bearing/health pass them; absent
+ *  fills degrade gracefully ('contact {d}' → 'contact', 'im at {h}' →
+ *  'im at low'). */
+function fillLine(line: string, other?: string, f?: { d?: string; h?: string }): string {
+  let out = line;
+  if (other) out = out.replace(/\{t\}/g, other).replace(/\{v\}/g, other);
+  else out = out.replace(/ ?\{[tv]\}/g, ''); // unfilled name tokens never print raw
+  out = out.replace(/ ?\{d\}/g, f?.d ? ` ${f.d}` : '');
+  out = out.replace(/\{h\}/g, f?.h ?? 'low');
+  return out;
+}
+
+export function chatter(kind: ChatterKind, botId: string, other?: string, fill?: { d?: string; h?: string }): { text: string; vgs?: string; team?: boolean } | null {
   return maybe(botId, () => {
     const vgs = VGS_FOR[kind];
     if (vgs && tauntRand() < VGS_CHANCE) {
@@ -1050,7 +1155,7 @@ export function chatter(kind: ChatterKind, botId: string, other?: string): { tex
       return { text: vgsText(chord), vgs: chord, team: vgsTeam(chord) };
     }
     const line = pickLine(CHATTER_POOLS[kind]);
-    return { text: other ? line.replace('{t}', other).replace('{v}', other) : line };
+    return { text: fillLine(line, other, fill) };
   });
 }
 
@@ -1156,6 +1261,23 @@ function tauntPick(pool: string[], chords: string[], fill: (line: string) => str
 const lastKillOn = new Map<string, number>();
 const REPEAT_KILL_MS = 90_000;
 
+/** Ordered pair kill ledger — 'killer|victim' → count. Hosts feed every
+ *  player-kill through noteFrag so bulliedBy can ask the real question:
+ *  has this victim EVER answered this killer? The ledger is identity-
+ *  blind on purpose — a bot farming another bot earns the same line
+ *  as a human doing it. */
+const pairKills = new Map<string, number>();
+export function noteFrag(killerId: string, victimId: string): void {
+  if (killerId === victimId || killerId === 'environment') return;
+  pairKills.set(`${killerId}|${victimId}`, (pairKills.get(`${killerId}|${victimId}`) ?? 0) + 1);
+  if (pairKills.size > 512) pairKills.delete(pairKills.keys().next().value!);
+}
+/** victim has died to killer 3+ times and has zero frags back. */
+export function bulliedBy(victimId: string, killerId: string): boolean {
+  return (pairKills.get(`${killerId}|${victimId}`) ?? 0) >= 3
+    && !pairKills.get(`${victimId}|${killerId}`);
+}
+
 /** One taunt line for a kill where `botId` fragged `other`, or null when
  *  the bot stays quiet (cooldown or dice). The same victim inside 90s
  *  flips the pool to dominance lines — VGTW lives there, not in deaths. */
@@ -1232,6 +1354,7 @@ export function vgsCommandFor(chord: string): ChatterKind | null {
 export function resetTauntCooldowns(): void {
   lastSpoke.clear();
   lastKillOn.clear();
+  pairKills.clear();
   recentByPool.clear();
   matchMuted = false;
 }

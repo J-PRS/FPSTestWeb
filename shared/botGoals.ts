@@ -125,6 +125,10 @@ export class BotGoals {
     // drifted-to ally's own goals move it on, never a formed unit.
     const buddy = this.buddyAnchor(ctx, pos);
     if (buddy) offer(buddy, this.nerve(ctx) * 0.55);
+    // A same-team VGS callout left a pin: commited roles hold their post —
+    // everyone else weighs the call like a heard fight, duty-scaled so a
+    // loner bot can still shrug off "cover me".
+    if (ctx.radio && !committed) offer(ctx.radio, 0.35 + this.duty() * 0.45);
     if (wander && !ctx.posted) offer(wander, 0.35);
     if (cands.length > 0) {
       let best = cands[0]!;

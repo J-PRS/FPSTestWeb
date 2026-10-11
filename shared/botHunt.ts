@@ -202,6 +202,20 @@ export function noteFoeDeath(st: HuntState, now: number): void {
   if (f) f.deaths++;
 }
 
+/** Lost-LOS extrapolation: momentum lead plus one anticipation step —
+ * a runner heading at a pack is going to the pack, so when the lead
+ * point lands near the sensed pickup the ghost snaps onto it. */
+function ghostPos(st: HuntState, ctx: BrainCtx, now: number): BotVec {
+  const leadS = Math.min(1.2, (now - st.lastSeenAt) / 1000);
+  const g = {
+    x: st.lastSeen.x + st.leadVel.x * leadS,
+    y: st.lastSeen.y,
+    z: st.lastSeen.z + st.leadVel.z * leadS,
+  };
+  if (ctx.pickup && distSqXZ(g, ctx.pickup) < 30 * 30) return { ...ctx.pickup };
+  return g;
+}
+
 export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number, mood: { hero: boolean; fearing: boolean }, pickGoal: (ctx: BrainCtx, pos: BotVec) => void): void {
   const { hero, fearing } = mood;
   // Armament reach widens acquisition for siege weapons — a mortar heavy
@@ -258,12 +272,10 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
     ? {
         ...st.hunt,
         // The ghost keeps the model's momentum — humans chase where
-        // the runner was HEADING, not the spot they vanished from.
-        pos: {
-          x: st.lastSeen.x + st.leadVel.x * Math.min(1.2, (now - st.lastSeenAt) / 1000),
-          y: st.lastSeen.y,
-          z: st.lastSeen.z + st.leadVel.z * Math.min(1.2, (now - st.lastSeenAt) / 1000),
-        },
+        // the runner was HEADING, not the spot they vanished from. If
+        // the extrapolated line lands on a pickup, that's where he's
+        // going — chase the errand, not the wake.
+        pos: ghostPos(st, ctx, now),
         vel: { ...st.leadVel },
       }
     : null;

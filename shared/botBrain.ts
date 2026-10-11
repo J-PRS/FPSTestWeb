@@ -14,6 +14,7 @@
 import { botRand } from './botRand.ts';
 import { sharedEnv } from './env.ts';
 import type { ChatterKind } from './botTaunts.ts';
+import { dir8 } from './botTaunts.ts';
 import { BotSteer } from './botSteer.ts';
 import { BotLines } from './botLines.ts';
 import { BotGoals, type GoalState } from './botGoals.ts';
@@ -156,7 +157,11 @@ export interface BrainCtx {
    *  this bot's side — cheer/groan/alert/reply). `actor` is whoever
    *  caused it, so lines can name them ({t}). Each bot sees it on its
    *  own think phase — reactions dribble out; brains only emit edges. */
-  notice?: { kind: ChatterKind; actor?: string } | null;
+  notice?: { kind: ChatterKind; actor?: string; goal?: BotVec } | null;
+  /** A live radio callout's implied position (host resolved the chord
+   *  to a spot — defend-the-stand, chase-the-carrier, cover-the-caller).
+   *  Brain-owned: set each think, consumed by the goal picker. */
+  radio?: BotVec | null;
   /** Nuggets-style economy rooms: when no player threatens, prefer
    *  creature targets (id prefix `b:`) — farming is the objective, and a
    *  human would do the same. Enemies still outrank food when close. */
@@ -244,7 +249,7 @@ export interface BrainOut {
   /** Situation chatter edge — the senses noticed something worth a line.
    *  The host resolves kind→text through botTaunts.chatter (chance +
    *  cooldown live there), so brains never speak directly. */
-  say?: { kind: ChatterKind; target?: string };
+  say?: { kind: ChatterKind; target?: string; d?: string; h?: string };
 }
 
 const FLINCH_S = 0.4;
@@ -423,6 +428,15 @@ export class BotBrain {
   orbitDir = 1;
   orbitFlipT = 1;
   orbitMul = 1;
+  /** Combat-dance beat: duels alternate a settled "burst" phase (orbit
+   *  crawls — feet quiet, aim steady) with a "relocate" swing (orbit
+   *  races to a new angle). The rhythm is what reads human; a constant
+   *  carousel doesn't. beatMove=true means the swing is live. */
+  beatT = 1;
+  /** A teammate's VGS command stuck a pin: where the call points and
+   *  until when. Heard fresh → offered to pick() as long as it's warm. */
+  private radioGoal: (BotVec & { until: number }) | null = null;
+  beatMove = false;
   /** Last think resolved to stand-and-shoot — a legal hold, not a stall.
    *  Hosts read this to keep stall/mobility watchdogs honest. */
   holding = false;
@@ -519,19 +533,44 @@ export class BotBrain {
     // higher-priority line fires would leak a stale 'underfire' next tick.
     const underfire = this.sayThreats(ctx);
     const bored = this.sayBored(ctx);
-    if (hurtEdge) return { kind: hero ? 'hero' : 'fear' };
-    return this.sayHunt(ctx, wasHunt) ?? underfire ?? bored;
+    if (hurtEdge) return { kind: hero ? 'hero' : 'fear', h: this.hpTag(ctx) };
+    return this.sayHelp(ctx) ?? this.sayHunt(ctx, wasHunt) ?? underfire ?? bored;
+  }
+
+  /** Carrier under pressure calls for an escort — when the line comes
+   *  out as VDM/VNE the radio layer turns the chord into a real pin on
+   *  this bot's position, so the shout is a call for help, not flavor. */
+  private helpUntil = 0;
+  private sayHelp(ctx: BrainCtx): BrainOut['say'] {
+    if (!ctx.running || ctx.now < this.helpUntil) return undefined;
+    const close = ctx.enemies.some((e) => e.alive && distSqXZ(e.pos, ctx.pos) < 90 * 90);
+    if (!close) return undefined;
+    this.helpUntil = ctx.now + 30_000;
+    return { kind: 'callfor' };
+  }
+
+  /** {h} fill for wound lines — "im at 23hp" reads human, "im hurt" is a bot line. */
+  private hpTag(ctx: BrainCtx): string | undefined {
+    return ctx.healthFrac != null ? `${Math.round(ctx.healthFrac * 100)}hp` : undefined;
+  }
+
+  /** {d} fill for spotting lines — compass bearing from self to the
+   *  last-seen ground, so "contact sw" names where, not just who. */
+  private dirTag(ctx: BrainCtx, at?: BotVec | null): string | undefined {
+    const t = at ?? this.h.lastSeen;
+    if (!t) return undefined;
+    return dir8(t.x - ctx.pos.x, t.z - ctx.pos.z);
   }
 
   /** Hunt edge: acquired a player (or committed to the thief) / lost them. */
   private sayHunt(ctx: BrainCtx, wasHunt: string | null): BrainOut['say'] {
     const huntNow = this.h.hunt?.id ?? null;
     if (huntNow && !wasHunt) {
-      return huntNow === ctx.thief?.id ? { kind: 'thief', target: huntNow }
+      return huntNow === ctx.thief?.id ? { kind: 'thief', target: huntNow, d: this.dirTag(ctx, ctx.thief.pos) }
         : huntNow.startsWith('b:') ? undefined
-        : { kind: 'contact', target: huntNow };
+        : { kind: 'contact', target: huntNow, d: this.dirTag(ctx) };
     }
-    if (wasHunt && !huntNow) return { kind: 'lost', target: wasHunt };
+    if (wasHunt && !huntNow) return { kind: 'lost', target: wasHunt, d: this.dirTag(ctx) };
     return undefined;
   }
 
@@ -539,7 +578,7 @@ export class BotBrain {
   private sayThreats(ctx: BrainCtx): BrainOut['say'] {
     const threats = (ctx.threats?.length ?? 0) > 0 || this.hitSay;
     this.hitSay = false;
-    const say = threats && !this.threatLatch ? { kind: 'underfire' } as const : undefined;
+    const say = threats && !this.threatLatch ? { kind: 'underfire' as const, h: this.hpTag(ctx) } : undefined;
     this.threatLatch = threats;
     return say;
   }
@@ -610,6 +649,13 @@ export class BotBrain {
     const pf = prof ? sharedEnv.wallPerf! : () => 0;
     const P = (stage: string, t0: number) => { if (prof) prof.set(stage, (prof.get(stage) ?? 0) + pf() - t0); };
     let tp = pf();
+
+    // Radio commands carry an implied position — a same-team "Defend our
+    // flag!" or "Cover me!" sticks for a stretch instead of dying with the
+    // notice tick, so a dutiful bot actually rotates toward the call.
+    if (ctx.notice?.goal) this.radioGoal = { ...ctx.notice.goal, until: now + 25_000 };
+    if (this.radioGoal && (now > this.radioGoal.until || distSqXZ(this.radioGoal, pos) < 25 * 25)) this.radioGoal = null;
+    ctx.radio = this.radioGoal;
 
     // --- pick a hunt target / refresh the goal (slow cadence) ---
     this.thinkT -= dt;
