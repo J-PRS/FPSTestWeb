@@ -261,6 +261,13 @@ violation instead of a symptom hunt.
   windows rolling-1s per weapon, purged on disconnect; `tickNack`
   double-gated (500ms room cooldown + no re-stamp while a full
   window pays out).
+- **Tick fanout / wireId lifecycle (verified sealed):** retired u16
+  ids reissued only after a quiet window; a fresh mint forces a fresh
+  `v4Last` basis AND a full record — a masked record could otherwise
+  hand receivers the departed owner's hp/flags (documented in-code).
+  Per-player maps (`wireIds`, `v4Last`, `lastSentPositions`,
+  `chatPace`) all purge on removal; `introSeq` full-window reseeds
+  decode baselines on seat/reclaim/nack.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
