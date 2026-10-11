@@ -40,7 +40,7 @@ export function segPointDist(a: Vec3, b: Vec3, c: Vec3): number {
     ? Math.max(0, Math.min(1, (acx * abx + acy * aby + acz * abz) / lenSq))
     : 0;
   const dx = acx - abx * t, dy = acy - aby * t, dz = acz - abz * t;
-  return Math.sqrt(dx * dx + dy * dy + dz * dz);
+  return (dx * dx + dy * dy + dz * dz) ** 0.5;
 }
 
 /** Closest-approach parameter of segment [a,b] to point c — WHERE along
@@ -60,7 +60,7 @@ export function segPointT(a: Vec3, b: Vec3, c: Vec3): number {
 const TERRAIN_SAMPLE_STEP = 0.4;
 export function segFieldHit(a: Vec3, b: Vec3, field: Heightfield): Vec3 | null {
   const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
-  const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  const len = (dx * dx + dy * dy + dz * dz) ** 0.5;
   const steps = Math.max(1, Math.ceil(len / TERRAIN_SAMPLE_STEP));
   for (let i = 1; i <= steps; i += 1) {
     const t = i / steps;

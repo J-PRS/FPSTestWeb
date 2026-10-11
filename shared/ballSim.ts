@@ -190,7 +190,7 @@ function enragePull(b: SimBall, dt: number, field: Heightfield, target: SimVec |
   const dx = target.x - b.x;
   const dy = target.y + b.radius - b.y;
   const dz = target.z - b.z;
-  const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  const d = (dx * dx + dy * dy + dz * dz) ** 0.5;
   if (d > 0.001) {
     const f = BALL_ENRAGE_FORCE * dt / d;
     b.vx += dx * f;
@@ -271,9 +271,9 @@ function launchAt(b: SimBall, target: SimVec, upFrac: number): void {
   b.gt = 0; // new arc — the cached time-to-ground is stale
   const pdx = target.x - b.x;
   const pdz = target.z - b.z;
-  const pd = Math.sqrt(pdx * pdx + pdz * pdz) || 0.001;
+  const pd = (pdx * pdx + pdz * pdz) ** 0.5 || 0.001;
   const speed = Math.min(BALL_MAX_SPEED, Math.max(Math.hypot(b.vx, b.vy, b.vz), BALL_ENRAGE_DASH_SPEED * 0.5));
-  const h = Math.sqrt(1 - upFrac * upFrac);
+  const h = (1 - upFrac * upFrac) ** 0.5;
   b.vx = (pdx / pd) * speed * h;
   b.vz = (pdz / pd) * speed * h;
   b.vy = Math.max(speed * upFrac, (target.y - b.y) * 0.8);
@@ -283,7 +283,7 @@ function dashAt(b: SimBall, target: SimVec): void {
   b.gt = 0;
   const pdx = target.x - b.x;
   const pdz = target.z - b.z;
-  const pd = Math.sqrt(pdx * pdx + pdz * pdz) || 0.001;
+  const pd = (pdx * pdx + pdz * pdz) ** 0.5 || 0.001;
   const hSpeed = Math.max(Math.hypot(b.vx, b.vz), BALL_ENRAGE_DASH_SPEED * 0.5);
   const t = Math.max(0.15, pd / hSpeed);
   const vy = (target.y - b.y + 0.5 * Math.abs(BALL_GRAVITY) * t * t) / t;
@@ -305,7 +305,7 @@ function teleportNearTarget(b: SimBall, field: Heightfield, target: SimVec, rand
   const speed = Math.max(Math.hypot(b.vx, b.vy, b.vz) || 1, 14);
   const upFrac = 0.75 + rand() * 0.2;
   const a2 = rand() * Math.PI * 2;
-  const hsp = speed * Math.sqrt(1 - upFrac * upFrac);
+  const hsp = speed * (1 - upFrac * upFrac) ** 0.5;
   b.vx = Math.cos(a2) * hsp;
   b.vy = speed * upFrac;
   b.vz = Math.sin(a2) * hsp;

@@ -38,7 +38,7 @@ export function fireAtBall(h: BeamHost, p: BotBody, ball: number, aim: Vec3, pic
   const dxb = aim.x - muzzle.x;
   const dyb = aim.y - muzzle.y;
   const dzb = aim.z - muzzle.z;
-  const lenb = Math.sqrt(dxb * dxb + dyb * dyb + dzb * dzb) || 1;
+  const lenb = (dxb * dxb + dyb * dyb + dzb * dzb) ** 0.5 || 1;
   const lo = h.loadouts.get(p.id) ?? pickDefault;
   const wt = h.pickWeapon(lo, Math.hypot(dxb, dzb), lenb);
   if (!h.rateOk(p.id, wt)) {return;}

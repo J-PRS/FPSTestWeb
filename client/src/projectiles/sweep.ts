@@ -48,7 +48,7 @@ export function sweepTerrain(p: SweepHost, terrain: Terrain): boolean {
   const dx = p.pos.x - p.prevPos.x;
   const dy = p.pos.y - p.prevPos.y;
   const dz = p.pos.z - p.prevPos.z;
-  const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  const dist = (dx * dx + dy * dy + dz * dz) ** 0.5;
   // Bouncers collide on their body radius — a sphere rests ON the
   // dirt, not center-deep in it. Non-bouncers explode on contact so
   // the shallow offset is fine (the ball never visually sits there).
@@ -136,7 +136,7 @@ export function sweepBall(p: SweepHost, ball: Targetable): boolean {
   const dx = p.pos.x - p.prevPos.x;
   const dy = p.pos.y - p.prevPos.y;
   const dz = p.pos.z - p.prevPos.z;
-  const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  const dist = (dx * dx + dy * dy + dz * dz) ** 0.5;
   const steps = Math.max(1, Math.ceil(dist / STEP));
   const coreThresh = tr + p.config.bodyRadius; // direct hit = body overlaps target
   const wakeThresh = tr + p.hitRadius; // expanding wake
@@ -150,7 +150,7 @@ export function sweepBall(p: SweepHost, ball: Targetable): boolean {
     const sz = p.prevPos.z + dz * t;
     const e = targetDelta(ball, sx, sy, sz);
     const d2 = e.x * e.x + e.y * e.y + e.z * e.z;
-    const d = Math.sqrt(d2);
+    const d = (d2) ** 0.5;
     if (d < minDist) {minDist = d;}
 
     // Passed center when distance increases from the previous step
@@ -207,7 +207,7 @@ export function sweepPlayer(p: SweepHost, playerPos: THREE.Vector3, playerId: st
     const vy = p.pos.y - centerY;
     const clampedY = Math.max(-capHalf, Math.min(capHalf, vy));
     const yDelta = vy - clampedY;
-    const totalDist = Math.sqrt(hx * hx + yDelta * yDelta + hz * hz);
+    const totalDist = (hx * hx + yDelta * yDelta + hz * hz) ** 0.5;
 
     const directThresh = capRadius + p.config.bodyRadius;
     if (totalDist <= capRadius + p.hitRadius) {
@@ -236,7 +236,7 @@ export function sweepPlayer(p: SweepHost, playerPos: THREE.Vector3, playerId: st
   const clampedY = Math.max(-capHalf, Math.min(capHalf, vy));
   const yDelta = vy - clampedY;
 
-  const totalDist = Math.sqrt(vx * vx + yDelta * yDelta + vz * vz);
+  const totalDist = (vx * vx + yDelta * yDelta + vz * vz) ** 0.5;
 
   const directThresh = capRadius + p.config.bodyRadius;
   if (totalDist <= capRadius + p.hitRadius) {
@@ -289,7 +289,7 @@ export function sweepObstacle(p: SweepHost, o: SweepObstacle): boolean {
   const d2 = cx * cx + cy * cy + cz * cz;
   const thresh = p.config.bodyRadius + o.radius;
   if (d2 > thresh * thresh) {return false;}
-  p.minHitDist = Math.sqrt(d2);
+  p.minHitDist = (d2) ** 0.5;
   p.directHit = true;
   p.hitAt(
     p.prevPos.x + dx * t,

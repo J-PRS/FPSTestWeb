@@ -148,7 +148,7 @@ export class BlastRunner {
     const dz = player.position.z - position.z;
     const distSq = dx * dx + dy * dy + dz * dz;
     if (distSq <= 250_000) {return true;} // 500m squared
-    this.h.reject(playerId, 'AOE', `blast too far from shooter (${Math.sqrt(distSq).toFixed(0)}m)`, undefined, weapon);
+    this.h.reject(playerId, 'AOE', `blast too far from shooter (${((distSq) ** 0.5).toFixed(0)}m)`, undefined, weapon);
     return false;
   }
 
@@ -242,7 +242,7 @@ export class BlastRunner {
     const tdx = tpos.x - ctx.pos.x;
     const tdy = tpos.y - ctx.pos.y;
     const tdz = tpos.z - ctx.pos.z;
-    const dist = Math.sqrt(tdx * tdx + tdy * tdy + tdz * tdz);
+    const dist = (tdx * tdx + tdy * tdy + tdz * tdz) ** 0.5;
     // T1 impulse reaches to surface distance = radius (~minbox past the
     // center rim) — the early cut has to use the same envelope.
     if (!Number.isFinite(dist) || dist - t1Minbox(target.armorClass) > ctx.radius) {return;}
@@ -395,7 +395,7 @@ export class BlastRunner {
       const dx = target.position.x - pos.x;
       const dy = target.position.y - pos.y;
       const dz = target.position.z - pos.z;
-      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const dist = (dx * dx + dy * dy + dz * dz) ** 0.5;
       if (dist - t1Minbox(target.armorClass) > radius) {continue;}
       // Spawn-shielded targets take the hit but not the shove — same gap
       // splashOne closes: "invulnerable" targets that still launch read

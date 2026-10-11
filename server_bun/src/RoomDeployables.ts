@@ -101,7 +101,7 @@ function segSphereEnter(from: Vec3, to: Vec3, c: Vec3, r: number): number | null
   const b = 2 * (mx * dx + my * dy + mz * dz);
   const disc = b * b - 4 * a * cc;
   if (disc < 0) {return null;}
-  const t = (-b - Math.sqrt(disc)) / (2 * a);
+  const t = (-b - (disc) ** 0.5) / (2 * a);
   return t >= 0 && t <= 1 ? t : null;
 }
 
@@ -384,7 +384,7 @@ export class RoomDeployables {
       const perp2 = (cx * cx + cy * cy + cz * cz) - proj * proj;
       if (perp2 >= 1.1 * 1.1) {continue;}
       if (!this.weldable(p, d, playerId)) {continue;}
-      const entry = proj - Math.sqrt(1.1 * 1.1 - perp2);
+      const entry = proj - (1.1 * 1.1 - perp2) ** 0.5;
       if (entry < bestT) { bestT = Math.max(entry, 0); best = d.id; }
     }
     return best;
@@ -441,7 +441,7 @@ export class RoomDeployables {
     const aoe = splash ?? damage;
     for (const d of this.items.values()) {
       const dx = d.pos.x - center.x, dy = d.pos.y - center.y, dz = d.pos.z - center.z;
-      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const dist = (dx * dx + dy * dy + dz * dz) ** 0.5;
       if (dist > radius) {continue;}
       // Contact hit — the blast center landed inside the item's body
       // radius (a sticky glued ON the turret): pays the direct line, no

@@ -146,7 +146,7 @@ s[kind] += 1; this.propels.set(id, s);
             tr.diff += (goal - tr.diff) * 0.3; // ease so one jink tick doesn't flip the grade
           }
         }
-        const e = tr.err, s = Math.sqrt(dt);
+        const e = tr.err, s = (dt) ** 0.5;
         const sig = tr.sig * (0.35 + 1.3 * tr.diff);
         // Unit motion axis for ahead/behind weighting (zero speed → isotropic).
         const v = tr.tv, vl = v ? Math.hypot(v.x, v.y, v.z) : 0;
@@ -261,8 +261,8 @@ s[kind] += 1; this.propels.set(id, s);
     if (!target || target.isDead) {return;}
     const muzzle = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
     const dx0 = aim.x - muzzle.x, dy0 = aim.y - muzzle.y, dz0 = aim.z - muzzle.z;
-    const dist = Math.sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0) || 1;
-    const distXZ = Math.sqrt(dx0 * dx0 + dz0 * dz0);
+    const dist = (dx0 * dx0 + dy0 * dy0 + dz0 * dz0) ** 0.5 || 1;
+    const distXZ = (dx0 * dx0 + dz0 * dz0) ** 0.5;
     // Range-band weapon select — same judgment a player makes: a fist
     // inside 3m, the hold-out in knife range, hitscan close, the loadout's
     // mid-band primary, rockets at standoff. The fist check rides planar
@@ -293,7 +293,7 @@ s[kind] += 1; this.propels.set(id, s);
     const ax = aim.x - muzzle.x;
     const ay = aim.y - muzzle.y;
     const az = aim.z - muzzle.z;
-    const alen = Math.sqrt(ax * ax + ay * ay + az * az) || 1;
+    const alen = (ax * ax + ay * ay + az * az) ** 0.5 || 1;
     const dir = { x: ax / alen, y: ay / alen, z: az / alen };
     if (this.selfBlastBlocked(muzzle, dir, wt, p.velocity, p.id, this.room.players.getPlayer(p.id)?.team ?? undefined)) {return;}
     if (!this.room.projectiles.spawn(p.id, wt, muzzle, dir, p.velocity)) {
@@ -377,7 +377,7 @@ s[kind] += 1; this.propels.set(id, s);
       vy += g * dt;
       px += vx * dt; py += vy * dt; pz += vz * dt;
       flightT += dt;
-      travelled += Math.sqrt(vx * vx + vy * vy + vz * vz) * dt;
+      travelled += (vx * vx + vy * vy + vz * vz) ** 0.5 * dt;
       const line = py + stats.bodyRadius;
       const ground = Math.max(hmHeight(this.room.field, px, pz), hmChord(this.room.field, px, pz), this.room.moveSim.structureTop(px, pz));
       if (ground > line) {

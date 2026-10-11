@@ -41,7 +41,7 @@ export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocit
   const { out, sh, dt, now } = frame;
   const dx = out.dest.x - p.position.x;
   const dz = out.dest.z - p.position.z;
-  const dist = Math.sqrt(dx * dx + dz * dz);
+  const dist = (dx * dx + dz * dz) ** 0.5;
   const sheepGround = Math.max(
     h.field ? hmHeight(h.field, p.position.x, p.position.z) : p.position.y,
     h.field ? hmChord(h.field, p.position.x, p.position.z) : p.position.y,
@@ -113,7 +113,7 @@ function commitMoveInput(h: DriveHost, id: string, p: { status: number }, out: B
 export function legacyMove(h: DriveHost, id: string, p: { position: Vec3; velocity: Vec3; rotation: { yaw: number }; lastSeq: number; armorClass: string }, dest: Vec3, dt: number): boolean {
   const dx = dest.x - p.position.x;
   const dz = dest.z - p.position.z;
-  const dist = Math.sqrt(dx * dx + dz * dz);
+  const dist = (dx * dx + dz * dz) ** 0.5;
   if (dist < 0.5) { p.velocity.x = 0; p.velocity.z = 0;p.lastSeq += 1; return true; }
   const nx = dx / dist, nz = dz / dist;
   const speed = isSuper(id) ? SPEED * 3 : SPEED;

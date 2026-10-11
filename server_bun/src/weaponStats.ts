@@ -79,7 +79,7 @@ const SPEED_BIN = 5;
 // physics anomaly that belongs in one 'fast' bucket, not a fresh mint.
 const speedBin = (v: { x: number; y: number; z: number } | null): string => {
   if (!v) {return 'unk';}
-  const s = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+  const s = (v.x * v.x + v.y * v.y + v.z * v.z) ** 0.5;
   return s >= 150 ? '150+' : String(Math.floor(s / SPEED_BIN) * SPEED_BIN);
 };
 

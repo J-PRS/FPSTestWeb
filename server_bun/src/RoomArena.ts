@@ -29,7 +29,7 @@ export class RoomArena {
     for (const p of this.room.players.getAllPlayers().values()) {
       if (p.isDead) { this.outsideSince.delete(p.id); this.warned.delete(p.id); continue; }
       const dx = p.position.x - cx, dz = p.position.z - cz;
-      const d = Math.sqrt(dx * dx + dz * dz);
+      const d = (dx * dx + dz * dz) ** 0.5;
       if (d <= r) { this.outsideSince.delete(p.id); this.warned.delete(p.id); continue; }
       const since = this.outsideSince.get(p.id);
       if (since === undefined) { this.outsideSince.set(p.id, now); continue; }

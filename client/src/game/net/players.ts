@@ -201,7 +201,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
     }
     const player = deps.lazyPlayer();
     const dx = player.pos.x - position.x, dy = player.pos.y - position.y, dz = player.pos.z - position.z;
-    const err = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const err = (dx * dx + dy * dy + dz * dz) ** 0.5;
     // Feel over accuracy: the ignore band scales with speed — at cruise
     // a ~5m snap is 0.1s of travel (invisible), at standstill ~1.2m
     // still reads. The server suppresses the same band; drift stays

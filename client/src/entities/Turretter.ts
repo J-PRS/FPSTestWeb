@@ -260,7 +260,7 @@ export class Turretter implements Targetable {
   private updatePlanted(dt: number, playerPos: THREE.Vector3, playerVel?: THREE.Vector3): void {
     const dx = playerPos.x - this.pos.x;
     const dz = playerPos.z - this.pos.z;
-    const dist = Math.sqrt(dx * dx + dz * dz);
+    const dist = (dx * dx + dz * dz) ** 0.5;
 
     // Relaunch: far away AND past the dwell floor — the two conditions
     // together are what prevent ping-pong.

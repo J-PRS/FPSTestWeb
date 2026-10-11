@@ -153,7 +153,7 @@ export class MoveClaims {
     const dx = msg.position.x - player.lastPosCheckPos.x;
     const dy = msg.position.y - player.lastPosCheckPos.y;
     const dz = msg.position.z - player.lastPosCheckPos.z;
-    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const dist = (dx * dx + dy * dy + dz * dz) ** 0.5;
     const speed = dist / dt;
     player.lastPosCheckPos.x = msg.position.x;
     player.lastPosCheckPos.y = msg.position.y;

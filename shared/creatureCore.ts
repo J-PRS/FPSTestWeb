@@ -209,7 +209,7 @@ function windupPounce(c: SimCrawler, dt: number, target: SimVec | null): Crawler
     c.state = 'chase';
     if (target) {
       const dx = target.x - c.x, dz = target.z - c.z;
-      const pd = Math.sqrt(dx * dx + dz * dz) || 0.001;
+      const pd = (dx * dx + dz * dz) ** 0.5 || 0.001;
       const t = Math.max(0.15, pd / c.sp.POUNCE_SPEED);
       c.vx = (dx / pd) * c.sp.POUNCE_SPEED;
       c.vz = (dz / pd) * c.sp.POUNCE_SPEED;
@@ -230,7 +230,7 @@ function hopLaunch(c: SimCrawler, dt: number, target: SimVec | null, distSq: num
 
   if (target && distSq < c.sp.AGGRO_D2) {
     c.state = 'chase';
-    const d = Math.sqrt(distSq) || 0.001;
+    const d = (distSq) ** 0.5 || 0.001;
     c.vx = ((target.x - c.x) / d) * c.sp.HOP_SPEED;
     c.vz = ((target.z - c.z) / d) * c.sp.HOP_SPEED;
     c.vy = c.sp.HOP_UP;

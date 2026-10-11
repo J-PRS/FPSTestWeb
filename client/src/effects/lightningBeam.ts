@@ -238,9 +238,9 @@ export class LightningBeam {
     const verts = mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
     for (let i = 0; i <= SEGS; i += 1) {
       const p = pts[i]!;
-      const dCam = Math.sqrt(
-        (p.x - this.camPos.x) ** 2 + (p.y - this.camPos.y) ** 2 + (p.z - this.camPos.z) ** 2,
-      );
+      const dCam = (
+        (p.x - this.camPos.x) ** 2 + (p.y - this.camPos.y) ** 2 + (p.z - this.camPos.z) ** 2
+      ) ** 0.5;
       const w = halfW * Math.min(1, Math.max(0.45, dCam / 2));
       const prev = pts[Math.max(0, i - 1)]!;
       const next = pts[Math.min(SEGS, i + 1)]!;

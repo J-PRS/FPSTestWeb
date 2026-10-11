@@ -99,7 +99,7 @@ export class RoomPickups {
     const s = pull ? -1 : 1;
     for (const p of this.pickups.values()) {
       const dx = p.pos.x - at.x, dy = p.pos.y - at.y, dz = p.pos.z - at.z;
-      const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const d = (dx * dx + dy * dy + dz * dz) ** 0.5;
       if (d >= radius) {continue;}
       const mag = aoeImpulse(force, d, radius) * 0.4 * s; // nugs are light but grounded — fraction of player shove
       p.vel.x += (dx / (d || 1)) * mag;

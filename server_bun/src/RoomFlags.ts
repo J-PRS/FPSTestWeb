@@ -249,7 +249,7 @@ export class RoomFlags {
     for (const f of this.flags.values()) {
       if (f.state !== 'dropped') {continue;}
       const dx = f.pos.x - at.x, dy = f.pos.y - at.y, dz = f.pos.z - at.z;
-      const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const d = (dx * dx + dy * dy + dz * dz) ** 0.5;
       if (d >= radius) {continue;}
       const mag = aoeImpulse(force, d, radius) * FLAG_KNOCK * s;
       f.vel.x += (dx / (d || 1)) * mag;
@@ -404,7 +404,7 @@ export class RoomFlags {
       if (d2 < bestD2) { bestD2 = d2; best = p.position; }
     }
     if (!best) {return;}
-    const d = Math.sqrt(bestD2) || 1;
+    const d = (bestD2) ** 0.5 || 1;
     const stepLen = Math.min(RABBIT_MAGNET_SPEED * dt, d);
     f.pos.x += (best.x - f.pos.x) / d * stepLen;
     f.pos.z += (best.z - f.pos.z) / d * stepLen;

@@ -224,7 +224,7 @@ export class Crawler implements Targetable, SwarmSlotOwner {
 
     if (distSq < CRAWLER_AGGRO_DIST * CRAWLER_AGGRO_DIST) {
       this.state = 'chase';
-      const d = Math.sqrt(distSq) || 0.001;
+      const d = (distSq) ** 0.5 || 0.001;
       this.vel.set(
         ((playerPos.x - this.pos.x) / d) * CRAWLER_HOP_SPEED,
         CRAWLER_HOP_UP,
@@ -244,7 +244,7 @@ export class Crawler implements Targetable, SwarmSlotOwner {
   private pounce(playerPos: THREE.Vector3): void {
     const dx = playerPos.x - this.pos.x;
     const dz = playerPos.z - this.pos.z;
-    const pd = Math.sqrt(dx * dx + dz * dz) || 0.001;
+    const pd = (dx * dx + dz * dz) ** 0.5 || 0.001;
     const hSpeed = CRAWLER_POUNCE_SPEED;
     const t = Math.max(0.15, pd / hSpeed);
     const vy = (playerPos.y - this.pos.y + 0.5 * Math.abs(GRAVITY) * t * t) / t;

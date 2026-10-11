@@ -155,7 +155,7 @@ export function hmNormal(f: Heightfield, wx: number, wz: number, out: { x: numbe
   const nx = hL - hR;
   const ny = 2 * e;
   const nz = hD - hU;
-  const il = 1 / Math.sqrt(nx * nx + ny * ny + nz * nz);
+  const il = 1 / (nx * nx + ny * ny + nz * nz) ** 0.5;
   out.x = nx * il;
   out.y = ny * il;
   out.z = nz * il;

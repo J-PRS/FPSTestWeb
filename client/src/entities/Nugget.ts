@@ -249,7 +249,7 @@ export class Nugget {
    *  this math becomes a nugrest snap when the server publishes its rest. */
   private serverKnock(from: THREE.Vector3, force: number, sign: 1 | -1): void {
     const dx = this.pos.x - from.x, dy = this.pos.y - from.y, dz = this.pos.z - from.z;
-    const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+    const d = (dx * dx + dy * dy + dz * dz) ** 0.5 || 1;
     this.vel.x += (dx / d) * force * sign;
     this.vel.z += (dz / d) * force * sign;
     this.vel.y += Math.abs(force) * NUG_TUMBLE.upPop;
@@ -291,7 +291,7 @@ export class Nugget {
     if (dSq < 0.5 * 0.5) {return;}
     // The predicted tumble overshot the server's rest — the "knocked it
     // and it snapped back" report. Loud counter, not a silent snap.
-    parityMiss('nugrest', { dM: Math.round(Math.sqrt(dSq) * 10) / 10 });
+    parityMiss('nugrest', { dM: Math.round((dSq) ** 0.5 * 10) / 10 });
     this.pos.set(p.x, p.y, p.z);
     this.vel.set(0, 0, 0);
     this.settled = true;

@@ -172,8 +172,8 @@ export class TeamCommand {
         // carrier will be when the escort's own run lands (est ~24m/s
         // with committed feet + flatRun; the old 12m/s estimate fired
         // before the movement batch existed and lands behind the run).
-        const eta = kind === 'escort' ? Math.min(10, Math.sqrt(
-          (m.pos.x - at.x) ** 2 + (m.pos.z - at.z) ** 2) / 24) : 0;
+        const eta = kind === 'escort' ? Math.min(10, (
+          (m.pos.x - at.x) ** 2 + (m.pos.z - at.z) ** 2) ** 0.5 / 24) : 0;
         this.tasks.set(m.id, { kind, born: now, goal: {
           x: at.x + (at.vx ?? 0) * eta,
           y: at.y,

@@ -194,7 +194,7 @@ export function pointToCapsuleDistance(point: Vec3Like, eyePos: Vec3Like, cls?: 
   const dy = Math.max(0, Math.abs(point.y - centerY) - cap.half);
   const dx = point.x - eyePos.x;
   const dz = point.z - eyePos.z;
-  return Math.sqrt(dx * dx + dy * dy + dz * dz);
+  return (dx * dx + dy * dy + dz * dz) ** 0.5;
 }
 
 // Slack allowances — the client's hit position is an end-of-frame sample and
@@ -257,7 +257,7 @@ function checkFlightLegality(args: {
   const dx = endPos.x - projectile.origin.x;
   const dy = endPos.y - projectile.origin.y;
   const dz = endPos.z - projectile.origin.z;
-  const claimedReach = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  const claimedReach = (dx * dx + dy * dy + dz * dz) ** 0.5;
   if (claimedReach > maxReach) {
     return { ok: false, reason: `end ${claimedReach.toFixed(1)}m beyond reach ${maxReach.toFixed(1)}m` };
   }
