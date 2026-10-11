@@ -196,7 +196,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       if (!pos.success) return { success: false, error: `position: ${pos.error}` };
       return { success: true, data: { type: 'slam', position: pos.data, claimSeq: optClaimSeq(obj.claimSeq) } };
     },
-    handle: (h, id, m) => h.combat.handleSlam(id, m),
+    handle: (h, id, m) => h.claimAck(id, 'slam', m.claimSeq, h.combat.handleSlam(id, m)),
   },
 
   jump: {

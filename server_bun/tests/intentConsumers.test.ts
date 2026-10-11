@@ -19,7 +19,7 @@ const ALL_CLIENT_TYPES = [
   'deploy', 'environmentDamage', 'heal', 'inputMove', 'jetpack', 'join', 'jump',
   'perkUpdate', 'ping', 'pong', 'position', 'projectileDestroy', 'repair', 'respawn',
   'resync', 'shotFired', 'skillUse', 'slam', 'snapshotRequest', 'switchRoom',
-  'teleport', 'throwFlag',
+  'teleport', 'throwFlag', 'tickNack',
 ] as const satisfies readonly ClientMessage['type'][];
 
 // Enum-like fields reject a generic 'sentinel' string — pin valid values

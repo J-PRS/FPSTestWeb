@@ -433,16 +433,17 @@ export class CombatHandler {
    *  lands while the pre-impact speed is still the freshest sample).
    *  Position gets a loose plausibility gate against the shadow — a
    *  slam teleported across the map is rejected, not adjudicated. */
-  handleSlam(playerId: string, msg: Extract<ClientMessage, { type: 'slam' }>): void {
+  handleSlam(playerId: string, msg: Extract<ClientMessage, { type: 'slam' }>): ClaimVerdict {
     const player = this.playerManager.getPlayer(playerId);
-    if (!player || player.isDead) { this.hb('drop.deadSlam'); return; }
+    if (!player || player.isDead) { this.hb('drop.deadSlam'); return 'shooter dead'; }
     const dx = msg.position.x - player.position.x, dy = msg.position.y - player.position.y, dz = msg.position.z - player.position.z;
     const d2 = dx * dx + dy * dy + dz * dz;
-    if (d2 > 60 * 60) { this.hb('drop.slamFar'); this.reject(playerId, 'Slam', `landing ${Math.sqrt(d2).toFixed(0)}m from shadow`, undefined, WeaponType.Slam); return; }
+    if (d2 > 60 * 60) { this.hb('drop.slamFar'); this.reject(playerId, 'Slam', `landing ${Math.sqrt(d2).toFixed(0)}m from shadow`, undefined, WeaponType.Slam); return `landing ${Math.sqrt(d2).toFixed(0)}m from shadow`; }
     const speed = Math.hypot(player.velocity.x, player.velocity.y, player.velocity.z);
     const power = Math.min(Math.max((speed - 30) / 50, 0.2), 1.8);
     this.blast.serverBlast(playerId, msg.position, WeaponType.Slam, null, undefined, undefined, power);
     this.hb('slam.server');
+    return true;
   }
 
   handleAOEShot(playerId: string, msg: Extract<ClientMessage, { type: 'aoeShot' }>): void {
