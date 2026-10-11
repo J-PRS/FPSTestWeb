@@ -554,6 +554,13 @@ violation instead of a symptom hunt.
   economy mirrors). Jet gating reads `energy > 0` at input and
   tick time — a stale frame can't claim a jet the meter can't
   afford.
+- **Belt charge economy (verified sealed):** every write is
+  bounded — throws/deploys check `beltCharges < cost` first,
+  spends floor at 0, pickup/award `+1`s clamp at `BELT_MAX`,
+  spawn resets to `BELT_MAX`. Server re-charges at claim intent
+  (CombatHandler), so the local ledger is prediction that the
+  server ledger shadows; `beltTimer`/`throwLockT` cadence the
+  regen. No client charge can go negative or exceed cap.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
