@@ -58,7 +58,9 @@ export function dropSkill(b: GameBot, bit: number): void {
    *  overcharge's pool regen both land here. */
 export function fuelTick(b: GameBot, dt: number, jet: boolean): void {
     if (jet) {b.energy = Math.max(0, b.energy - ENERGY.jetDrain * b.mods.jetDrain * dt);}
-    else if (b.moveState.onGround && b.energy < b.energyCap) {
+    // Player rule (Player.tickEnergy): regen anywhere off the jet —
+    // grounded or airborne — but a held channel suppresses it.
+    else if (!(b.status & (STATUS.MEND | STATUS.SHIELD | STATUS.CLOAK)) && b.energy < b.energyCap) {
       b.energy = Math.min(b.energyCap, b.energy + ENERGY.jetCharge * b.mods.jetRegen * b.mods.energyRegen * dt);
     }
   }

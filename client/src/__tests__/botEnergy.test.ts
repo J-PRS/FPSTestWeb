@@ -92,28 +92,29 @@ describe('dropSkill', () => {
 });
 
 describe('fuelTick', () => {
-  it('jets drain while thrusting; grounded regen applies when off throttle', () => {
+  it('jets drain while thrusting; regen applies anywhere off throttle', () => {
     const b = mkBot(50);
     fuelTick(b, 1, true);
     expect(b.energy).toBeCloseTo(50 - ENERGY.jetDrain, 5);
     const c = mkBot(50);
     fuelTick(c, 1, false);
     expect(c.energy).toBeCloseTo(50 + ENERGY.jetCharge, 5);
+    // Player rule: airborne still regens — only jets/channels starve it.
     c.moveState.onGround = false;
     c.energy = 50;
-    fuelTick(c, 1, false); // airborne: no regen
-    expect(c.energy).toBe(50);
+    fuelTick(c, 1, false);
+    expect(c.energy).toBeCloseTo(50 + ENERGY.jetCharge, 5);
   });
 
-  it('grounded-and-idle regens toward the cap, airborne does not', () => {
+  it('regens toward the cap; a held channel suppresses regen', () => {
     const b = mkBot(50);
     fuelTick(b, 1, false);
     expect(b.energy).toBeCloseTo(50 + ENERGY.jetCharge, 5);
     fuelTick(b, 100, false);
     expect(b.energy).toBe(100); // cap
-    b.moveState.onGround = false;
     b.energy = 50;
+    b.status = STATUS.SHIELD;
     fuelTick(b, 1, false);
-    expect(b.energy).toBe(50);
+    expect(b.energy).toBe(50); // channel competes for the tank, never fills it
   });
 });

@@ -3,16 +3,15 @@ import * as THREE from 'three';
 import { MAX_ENERGY, MAX_HEALTH, JET_DRAIN, JET_CHARGE, MELEE_COOLDOWN, MELEE_LUNGE } from '../core/config.js';
 
 import type { Terrain } from '../world/terrain.js';
-import { PlayerSkills } from './player/skills.js'
-import { buildSkillsCtx, buildInputCtx } from './playerCtor.js';;
+import { PlayerSkills } from './player/skills.js';
+import { buildSkillsCtx, buildInputCtx } from './playerCtor.js';
 import { perkMods, PERK_ORDER, REGEN_DELAY_S, type PerkId } from '../../../shared/perks.js';
 import { CLASS_STATS, CLASS_MODEL_SCALE, type ArmorClass } from '../../../shared/botClasses.js';
 import { SPAWN_PROTECT_MS } from '../../../shared/constants.js';
 import { inv } from '../../../shared/invariants.js';
 import { PlayerStatus } from './playerStatus.js';
 
-import type { MovementState } from './movement.js';
-import { MovementController } from './movement.js';
+import { MovementController, type MovementState } from './movement.js';
 import { type WeaponDef } from '../weapons.js';
 import { settings } from '../core/settings.js';
 import * as read from './playerRead.js';
@@ -95,7 +94,7 @@ export class Player {
    *  mid-match pick and the respawn that applies it — swapping speed/HP
    *  mid-life would desync the shadow and hand out free heals. */
   appliedClass: ArmorClass = 'medium';
-  get mods() { return perkMods(this.appliedPerk); }
+  get mods(): ReturnType<typeof perkMods> { return perkMods(this.appliedPerk); }
   /** Pool cap after the perk multiplier — cloak/shield/mend share it. */
   get energyCap(): number { return MAX_ENERGY * this.mods.energyMax; }
   get maxHealth(): number { return MAX_HEALTH + this.mods.maxHealth + CLASS_STATS[this.appliedClass].maxHealth; }
@@ -134,6 +133,8 @@ export class Player {
   }
 
   kills = 0;
+  /** Hit-score points (acc·dist·air) — the classic-mode top-center score. */
+  score = 0;
   isDead = false;
   private wasObserving = false;
   /** Verb phrase for the death message ("devoured by a crawler") — set by
@@ -339,8 +340,8 @@ export class Player {
   deadSpectateCycle(): void {
     const ts = this.spectateTargets?.() ?? [];
     const aliveIdx = ts.map((t, i) => (t.alive ? i : -1)).filter((i) => i >= 0);
-    if (!aliveIdx.length) { this.deadSpectateIdx = -1; return; }
-    const next = aliveIdx.find((i) => i > this.deadSpectateIdx) ?? aliveIdx[0]!;
+    if (aliveIdx.length === 0) { this.deadSpectateIdx = -1; return; }
+    const next = aliveIdx.find((i) => i > this.deadSpectateIdx) ?? aliveIdx[0] ?? -1;
     if (this.deadSpectateIdx < 0) { this.orbit.yaw = this.yaw; this.orbit.pitch = 0.25; }
     this.deadSpectateIdx = next;
   }
@@ -619,7 +620,7 @@ export class Player {
     // overshoot between frames), over-cap means a write skipped its clamp.
     this.energy = Math.max(0, this.energy);
     inv('local-energy-bounds', this.energy <= this.energyCap + 0.01,
-      { e: +this.energy.toFixed(1), cap: +this.energyCap.toFixed(1) });
+      { e: Number(this.energy.toFixed(1)), cap: Number(this.energyCap.toFixed(1)) });
     if (this.energy <= 0) {this.jetLockT = ENERGY.jetLockout;}
 
     // Regenerator perk â€” MP regenerates in the server tick; offline we
@@ -628,8 +629,8 @@ export class Player {
     // reset by any hp drop.
     if ((this.mods.regen > 0 || this.mods.regenRamp > 0) && !(this.serverOwnsHealth?.() ?? false) && !this.isDead) {
       const now = performance.now();
-      if (this.health < this._prevHealth) this._regenBaseT = now;
-      if (!this._regenBaseT) this._regenBaseT = now;
+      if (this.health < this._prevHealth) {this._regenBaseT = now;}
+      if (!this._regenBaseT) {this._regenBaseT = now;}
       const rate = this.mods.regen + this.mods.regenRamp * Math.max(0, (now - this._regenBaseT) / 1000 - REGEN_DELAY_S);
       this.health = Math.min(this.maxHealth, this.health + rate * dt);
     }
