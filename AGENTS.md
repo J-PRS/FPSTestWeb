@@ -15,8 +15,16 @@ cd client && ./node_modules/.bin/vitest run      # client tests
 cd client && npx -y oxlint src                   # lint
 bun _tools/e2e/all.ts                            # headless E2E (locked-PC safe): smoke/duo/p2p/lobby/reconnect/perf
 bun _tools/e2e/perf.ts --compare _tools/e2e/baseline.json   # perf regression vs baseline
+bash _tools/check.sh                             # DEFINITION OF DONE — run before handing back
 # bun: export PATH="$HOME/.bun/bin:$PATH"   (Windows, Git Bash)
 ```
+
+**Definition of done:** `bash _tools/check.sh` exits 0. It lints+fixes
+the changed files, typechecks the client, runs related vitest tests, and
+runs `bun test` when `shared/` or `server_bun/` changed. The individual
+commands above are for debugging; check.sh is the gate. A git
+`pre-commit` hook lint-fixes staged files — keep it fast, don't add the
+suite to it.
 
 Ports: game client (Vite) **:5400**, game server (Bun) **:8000**.
 `:5173` is a different project's dev server — not the game.
