@@ -425,6 +425,13 @@ violation instead of a symptom hunt.
   cadence window (0.85× slack for loss bunching), class-locked
   weapons rejected, belt charge paid at intent time. No client
   number reaches damage math unverified.
+- **Deploy-plant lane (verified sealed):** kind whitelist (cap-0
+  kinds are map-authored only), `isFinite` pos gate, belt-charge
+  economy, `MAX_PLANT_DIST` reach bound, `groundY` pins the
+  claimed Y to the rendered surface (chord+terrain+colliders —
+  no sky-forts, no buried claims), per-player cap recycles
+  oldest, team stamps at plant time (a later side-switch can't
+  desync gear loyalty), owner death clears items AND repair keys.
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
