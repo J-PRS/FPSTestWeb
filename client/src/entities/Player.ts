@@ -5,9 +5,10 @@ import { MAX_ENERGY, MAX_HEALTH, JET_DRAIN, JET_CHARGE, MELEE_COOLDOWN, MELEE_LU
 import type { Terrain } from '../world/terrain.js';
 import { PlayerSkills } from './player/skills.js'
 import { buildSkillsCtx, buildInputCtx } from './playerCtor.js';;
-import { perkMods, PERK_ORDER, type PerkId } from '../../../shared/perks.js';
+import { perkMods, PERK_ORDER, REGEN_DELAY_S, type PerkId } from '../../../shared/perks.js';
 import { CLASS_STATS, CLASS_MODEL_SCALE, type ArmorClass } from '../../../shared/botClasses.js';
 import { SPAWN_PROTECT_MS } from '../../../shared/constants.js';
+import { inv } from '../../../shared/invariants.js';
 import { PlayerStatus } from './playerStatus.js';
 
 import type { MovementState } from './movement.js';
@@ -608,18 +609,26 @@ export class Player {
       this.energy = Math.min(this.energyCap, this.energy + JET_CHARGE * this.mods.jetRegen * this.mods.energyRegen * dt);
     }
 
+    // NaN is sticky through Math.max/min — a poisoned tank rides forever.
+    // Drain to empty once and let regen rebuild, same rule as the server.
+    if (!Number.isFinite(this.energy)) {this.energy = 0;}
     if (this.energy <= 0) {this.jetLockT = ENERGY.jetLockout;}
 
     // Regenerator perk â€” MP regenerates in the server tick; offline we
     // tick it here so the perk works without a connection. Ramp mirrors
-    // the server rule: unhurt seconds Ã— regenRamp, reset by any hp drop.
+    // the server rule: unhurt seconds past REGEN_DELAY_S Ã— regenRamp,
+    // reset by any hp drop.
     if ((this.mods.regen > 0 || this.mods.regenRamp > 0) && !(this.serverOwnsHealth?.() ?? false) && !this.isDead) {
       const now = performance.now();
       if (this.health < this._prevHealth) this._regenBaseT = now;
       if (!this._regenBaseT) this._regenBaseT = now;
-      const rate = this.mods.regen + this.mods.regenRamp * (now - this._regenBaseT) / 1000;
+      const rate = this.mods.regen + this.mods.regenRamp * Math.max(0, (now - this._regenBaseT) / 1000 - REGEN_DELAY_S);
       this.health = Math.min(this.maxHealth, this.health + rate * dt);
     }
+    // Every ingest gate protects the wire paths — this is the local
+    // write-side catch: a NaN pool can't heal through Math.min and
+    // rides forever. Name it, snap to full.
+    if (!inv('local-health-finite', Number.isFinite(this.health), { hp: this.health })) {this.health = this.maxHealth;}
     this._prevHealth = this.health;
     return isJetting;
   }

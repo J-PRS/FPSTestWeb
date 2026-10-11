@@ -1,3 +1,4 @@
+2026-10-10 - correctness: local pool NaN containment — inv(local-health-finite) snaps a poisoned pool to full + energy drains to empty; NaN is sticky through Math.max/min so both pools self-heal once instead of riding forever
 2026-10-10 - correctness: energy-pool NaN containment — grantEnergy/drainEnergy refuse non-finite amounts (Math.max(0, NaN) = NaN, one poison write kills jets/skills forever); tick clamp self-heals a NaN pool to empty instead of riding it
 2026-10-10 - correctness: inv(wire-row-coherent) at tick egress — a broadcast row claiming alive with hp<=0 is a lie even when finite; dead write pairs are atomic so it can never legitimately occur
 2026-10-10 - correctness: inv(teleport-above-ground) in handleTeleport — a declared warp landing under the chord floor counts with coords, never refused (client already moved)
