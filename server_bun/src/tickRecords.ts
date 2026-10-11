@@ -139,6 +139,11 @@ export class TickFanout {
       // legitimately sit over class max.)
       inv('wire-row-coherent', p.isDead || p.health > 0,
         { id: playerId, hp: p.health, dead: p.isDead });
+      // Cross-field law: a dead row carries no channels and no held keys —
+      // death strips all three at the kill edge, so a corpse claiming
+      // cloak/jet/ski means a write path re-armed them post-mortem.
+      inv('corpse-no-channels', !p.isDead || (p.status === 0 && p.skiing === 0 && p.jetting === 0),
+        { id: playerId, status: p.status, ski: p.skiing, jet: p.jetting });
       snap.x = p.position.x; snap.y = p.position.y; snap.z = p.position.z;
       snap.vx = p.velocity.x; snap.vy = p.velocity.y; snap.vz = p.velocity.z;
       snap.yaw = p.rotation.yaw; snap.pitch = p.rotation.pitch;

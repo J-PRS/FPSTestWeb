@@ -1,3 +1,4 @@
+2026-10-10 - correctness: inv(corpse-no-channels) on wire rows — a dead row claiming status/ski/jet bits means a write path re-armed a corpse
 2026-10-10 - correctness: corpses hold no channels anywhere — remotes.ts zeroes dead rows status words, playDeath clears shield/mend auras + decloaks so dead entities never render ghost-glow or nothing-at-all
 2026-10-10 - correctness: death clears all toggle channels (cloak+shield+mend) — a stale bit became a phantom rising edge on respawn (fresh cost, ghost aura)
 2026-10-10 - correctness: deployables + all creature families floor on the drawn chord surface (max(hmHeight, hmChord)) — closing the buried-object class across every rest/contact read
