@@ -52,7 +52,8 @@ export interface DbgTag {
  *  per-frame offender can't flood the shipped log). */
 const glitchCounts: Record<string, number> = {};
 export function glitch(kind: string, detail: Record<string, unknown> = {}): void {
-  const n = (glitchCounts[kind] = (glitchCounts[kind] ?? 0) + 1);
+  glitchCounts[kind] = (glitchCounts[kind] ?? 0) + 1;
+  const n = glitchCounts[kind];
   if (n <= 3 || n % 100 === 0) {
     // Lazy import would devolve the module graph — Logger is core like us.
     console.error(`[GLITCH:${kind}]`, JSON.stringify(detail));

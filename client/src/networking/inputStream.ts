@@ -42,7 +42,8 @@ export class InputStream {
     this.lastSentInput = key;
     // Change-only stream → unordered transports can deliver stale events
     // after fresh ones; the seq lets the server drop them.
-    const seq = (this.inputSeq += 1);
+    this.inputSeq += 1;
+    const seq = this.inputSeq;
     // In-packet redundancy: the previous edge rides along so a single
     // lost packet heals instantly instead of via the watchdog RTT —
     // the server's seq gates make the double-apply a no-op when both land.
@@ -59,7 +60,8 @@ export class InputStream {
    *  the current input with a fresh seq so the shadow converges. */
   resend(lastSeq: number, send: (m: ClientMessage) => void, connected: boolean): void {
     if (!this.lastInputState || !connected) {return;}
-    const seq = (this.inputSeq += 1);
+    this.inputSeq += 1;
+    const seq = this.inputSeq;
     this.journal(seq, this.lastInputState);
     logger.info(`inputSync: re-emitting input at seq ${seq} (server consumed ${lastSeq})`);
     send({ type: 'inputMove', seq, input: { ...this.lastInputState}, rotation: this.lastInputRotation });

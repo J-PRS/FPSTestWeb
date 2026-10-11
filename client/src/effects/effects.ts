@@ -333,7 +333,7 @@ export class EffectsManager {
       }
       const t = b.life / b.maxLife;
       b.mat.opacity = t * 0.85;
-      b.mesh.scale.x = b.mesh.scale.z = 0.14 * (0.4 + t); // the collapse sells the discharge
+      b.mesh.scale.z = 0.14 * (0.4 + t); b.mesh.scale.x = b.mesh.scale.z; // the collapse sells the discharge
     }
     const gravity = GRAVITY;
     const highOf = new Map<InstBucket, number>();

@@ -668,7 +668,8 @@ this.sendDrops += 1;
     this.lastSentState.yaw = rotation.yaw; this.lastSentState.pitch = rotation.pitch;
 
     // Assign sequence number and store in state history for reconciliation
-    const seq = (this.sequenceCounter += 1);
+    this.sequenceCounter += 1;
+    const seq = this.sequenceCounter;
     this.stateHistory.set(seq, { position: { ...position}, velocity: { ...velocity}, rotation: { ...rotation} });
     if (this.stateHistory.size > this.STATE_HISTORY_MAX) {
       const oldest = this.stateHistory.keys().next().value;

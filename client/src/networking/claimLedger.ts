@@ -91,7 +91,8 @@ export class ClaimLedger {
    *  → legacy fire-and-forget, no ack expected. */
   stamp(kind: string, sparse = false): number | undefined {
     if (sparse && (((this.creatureClaimN += 1) - 1) & 3) !== 0) {return undefined;}
-    const seq = (this.claimSeq += 1);
+    this.claimSeq += 1;
+    const seq = this.claimSeq;
     this.pendingClaims.set(seq, { kind, t: performance.now() });
     if (this.pendingClaims.size > 256) {
       // Acks aren't arriving at all — every waiting entry died with its

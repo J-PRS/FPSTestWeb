@@ -711,7 +711,7 @@ function bakeMesh(mesh: THREE.Mesh, occluder: THREE.Mesh, rayDist: number, grime
     let s = 0;
     for (const i of l) {s += colors[i * 3]!;}
     const a = s / l.length;
-    for (const i of l) {colors[i * 3] = colors[i * 3 + 1] = colors[i * 3 + 2] = a;}
+    for (const i of l) {colors[i * 3 + 2] = a; colors[i * 3 + 1] = colors[i * 3 + 2]; colors[i * 3] = colors[i * 3 + 1];}
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   bakeWear(geo, grime, wearBoost);

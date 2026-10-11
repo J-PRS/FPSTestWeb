@@ -211,7 +211,8 @@ function enragePull(b: SimBall, dt: number, field: Heightfield, target: SimVec |
  *  terrain while predictors (which walk the real field) parked early:
  *  a 20-90m prediction divergence per event. 800 probes/s is nothing. */
 function groundContact(b: SimBall, _dt: number, field: Heightfield, target: SimVec | null): SegmentKind | null {
-  const gy = b.ggy = hmHeight(field, b.x, b.z);
+  b.ggy = hmHeight(field, b.x, b.z);
+  const gy = b.ggy;
   b.gx = b.x; b.gz = b.z; b.gt = 0;
   if (b.y - b.radius > gy) {return null;}
   b.y = gy + b.radius;

@@ -94,7 +94,8 @@ function makeConfig(url: string, hasResolver: boolean): ConnectionConfig {
     url,
     resolveUrl: hasResolver
       ? () => new Promise<string | null>((res) => {
-          const seq = (resolveSeq += 1);
+          resolveSeq += 1;
+          const seq = resolveSeq;
           resolveWaiters.set(seq, res);
           post({ kind: 'resolve', seq });
           // A reply that never comes (disconnect mid-flight, a stalled

@@ -490,7 +490,8 @@ sh.divergences += 1;
     after.sort((x, y) => x.tick - y.tick);
     const anchor = anchorSeq === undefined ? undefined : sh.seqStates.get(anchorSeq);
     if (!anchor) {return s;}
-    const probe = (sh.probe ??= new MoveSim(this.host.surface()!, anchor.snap.st));
+    sh.probe ??= new MoveSim(this.host.surface()!, anchor.snap.st);
+    const {probe} = sh;
     // The probe replays the SAME body — a heavy's weaker jets would
     // replay as a phantom climb if mass/eye fell back to defaults.
     probe.mass = sh.sim.mass; probe.eyeHeight = sh.sim.eyeHeight;

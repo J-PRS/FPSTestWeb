@@ -118,7 +118,7 @@ export function findStructureOverlaps(list: readonly StructureSpec[] | undefined
         let d0 = Infinity, d1 = Infinity;
         for (const [ax, az, ra, rb] of axes) {
           const dep = ra + rb - Math.abs(dx * ax + dz * az);
-          if (dep <= eps) { d0 = d1 = 0; break; }
+          if (dep <= eps) { d1 = 0; d0 = d1; break; }
           if (dep < d0) { d1 = d0; d0 = dep; } else if (dep < d1) {d1 = dep;}
         }
         if (d0 <= eps) {continue;}

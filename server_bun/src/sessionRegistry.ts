@@ -137,7 +137,8 @@ this.anomalies.reclaimNonLive += 1;
       logger.error('reclaim on non-live session', { playerId, from: s.state, reason });
       return undefined;
     }
-    s.gen = (this.genCounter += 1);
+    this.genCounter += 1;
+    s.gen = this.genCounter;
     s.at = wallNow();
     return s.gen;
   }

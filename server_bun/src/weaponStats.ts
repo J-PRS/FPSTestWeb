@@ -110,7 +110,8 @@ export class WeaponStats {
 
   private static readonly MAX_SOURCES = 64;
   private row(mode: string, source: string): WeaponRow {
-    const m = (this.table[mode] ??= {});
+    this.table[mode] ??= {};
+    const m = this.table[mode];
     // Source keys are 'w<client-claimed weaponType>' — arbitrary numbers
     // mint arbitrary keys, so overflow folds into a shared 'other' row.
     const key = source in m || Object.keys(m).length < WeaponStats.MAX_SOURCES ? source : 'other';
@@ -141,7 +142,8 @@ r.hits += 1;
 r.shots += 1;
     if (dist !== undefined && Number.isFinite(dist)) {
       const band = dist < 10 ? '<10' : dist < 25 ? '10-25' : dist < 60 ? '25-60' : dist < 120 ? '60-120' : '120+';
-      const d = (r.dist ??= {});
+      r.dist ??= {};
+      const d = r.dist;
       d[band] = (d[band] ?? 0) + 1;
     }
     this.dirty = true;
@@ -150,7 +152,8 @@ r.shots += 1;
   /** A kill location, binned to a CELL-meter grid cell. */
   recordDeath(mode: string, pos: { x: number; z: number }): void {
     if (!this.modeOk(mode)) {return;}
-    const m = (this.deaths[mode] ??= {});
+    this.deaths[mode] ??= {};
+    const m = this.deaths[mode];
     // Cell coords derive from client position claims — unbounded
     // magnitude mints unbounded cells, so overflow folds into 'far'.
     const raw = `${Math.round(pos.x / CELL)},${Math.round(pos.z / CELL)}`;
@@ -162,9 +165,11 @@ r.shots += 1;
   /** Engagement time for a finished duel (ms, first-hit → kill). */
   recordTtk(mode: string, source: string, ms: number): void {
     if (!this.modeOk(mode)) {return;}
-    const m = (this.ttk[mode] ??= {});
+    this.ttk[mode] ??= {};
+    const m = this.ttk[mode];
     const key = source in m || Object.keys(m).length < WeaponStats.MAX_SOURCES ? source : 'other';
-    const r = (m[key] ??= { n: 0, totalMs: 0 });
+    m[key] ??= { n: 0, totalMs: 0 };
+    const r = m[key];
 r.n += 1; r.totalMs += ms;
     this.dirty = true;
   }
@@ -172,7 +177,8 @@ r.n += 1; r.totalMs += ms;
   /** Flag lifecycle: 'cap' adds holdMs (pickup→cap), 'return' dropMs. */
   recordFlag(mode: string, kind: 'cap' | 'return', ms: number): void {
     if (!this.modeOk(mode)) {return;}
-    const r = (this.flags[mode] ??= { caps: 0, holdMs: 0, returns: 0, dropMs: 0 });
+    this.flags[mode] ??= { caps: 0, holdMs: 0, returns: 0, dropMs: 0 };
+    const r = this.flags[mode];
     if (kind === 'cap') {r.caps += 1; r.holdMs += ms; }
     else {r.returns += 1; r.dropMs += ms; }
     this.dirty = true;
@@ -181,7 +187,8 @@ r.n += 1; r.totalMs += ms;
   /** Kill-moment speeds (m/s) for shooter and victim, 5 m/s buckets. */
   recordKillSpeed(mode: string, shooterVel: { x: number; y: number; z: number } | null, victimVel: { x: number; y: number; z: number } | null): void {
     if (!this.modeOk(mode)) {return;}
-    const r = (this.speeds[mode] ??= { shooter: {}, victim: {}, airShooter: 0, airVictim: 0 });
+    this.speeds[mode] ??= { shooter: {}, victim: {}, airShooter: 0, airVictim: 0 };
+    const r = this.speeds[mode];
     const sb = speedBin(shooterVel), vb = speedBin(victimVel);
     r.shooter[sb] = (r.shooter[sb] ?? 0) + 1;
     r.victim[vb] = (r.victim[vb] ?? 0) + 1;
@@ -194,8 +201,10 @@ r.n += 1; r.totalMs += ms;
    *  on TTL, 'refused' when the pool cap swallowed the spawn. */
   recordPickup(mode: string, kind: string, event: 'spawned' | 'banked' | 'decayed' | 'refused'): void {
     if (!this.modeOk(mode)) {return;}
-    const m = (this.pickups[mode] ??= {});
-    const r = (m[kind] ??= { spawned: 0, banked: 0, decayed: 0, refused: 0 });
+    this.pickups[mode] ??= {};
+    const m = this.pickups[mode];
+    m[kind] ??= { spawned: 0, banked: 0, decayed: 0, refused: 0 };
+    const r = m[kind];
 r[event] += 1;
     this.dirty = true;
   }
@@ -203,7 +212,8 @@ r[event] += 1;
   /** A deployable was placed (turret/mine/station/drone). */
   recordDeploy(mode: string, kind: string): void {
     if (!this.modeOk(mode)) {return;}
-    const m = (this.deploys[mode] ??= {});
+    this.deploys[mode] ??= {};
+    const m = this.deploys[mode];
     m[kind] = (m[kind] ?? 0) + 1;
     this.dirty = true;
   }

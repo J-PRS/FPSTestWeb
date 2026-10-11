@@ -33,7 +33,7 @@ export class PlayerSheep {
     this.body.pos = player.pos;
     this.body.vel = player.vel;
     // Fresh life is unproven — the meter re-earns credibility each spawn.
-    if (player.isDead) { this.meter.clear(this.body.playerId); this.body.sheep = this.body.sheepShown = 100; return; }
+    if (player.isDead) { this.meter.clear(this.body.playerId); this.body.sheepShown = 100; this.body.sheep = this.body.sheepShown; return; }
     if (this.prevShoot <= 0 && player.shootAnimTimer > 0) {this.meter.markShot(this.body.playerId);}
     this.prevShoot = player.shootAnimTimer;
     const foe = this.foeNear(player, remotes, localTeam);
