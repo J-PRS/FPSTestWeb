@@ -160,6 +160,10 @@ violation instead of a symptom hunt.
 - **Join/roster coherence:** `hasReceivedPosition` gates in-world
   membership (unreported joiners spawn no ghost mesh); `joinAnnounced`
   once-per-record; wireIds ship inline in the join snapshot.
+- **Room-switch lane:** dead players denied before `roomFor` (can't
+  dodge respawn or churn map specs); cooldown; `correctionGraceUntil`
+  mutes in-flight stragglers; pending class/perk rides; session
+  re-seated; `markReseated` arms shadow drain.
 - **Session reclaim:** server-issued token checked before the connected
   test; new socket registers BEFORE the zombie is evicted so its close
   can't re-mark disconnect; missed reliable events replay before the
