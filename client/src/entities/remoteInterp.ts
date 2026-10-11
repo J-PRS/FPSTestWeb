@@ -363,16 +363,11 @@ export class RemoteInterp {
     p.y += this.simulatedVelocity.y * dt;
     p.z += this.simulatedVelocity.z * dt;
 
-    // Same rendered-terrain floor as the placement + simStep paths — a
-    // converge chasing a wire sample under the visible ground (server's
-    // smooth field dips below the level-0 chord in gullies) otherwise
-    // dives the body underground for the whole horizon.
-    if (this.h.terrain) {
-      const gY = Math.max(this.h.terrain.getHeight(p.x, p.z), this.h.terrain.getRenderedHeight(p.x, p.z));
-      const {eye} = classCapsule(this.h.armorClass);
-      if (p.y < gY + eye) {p.y = gY + eye;}
-    }
-
+    // No terrain floor here — the wire is the truth. Clamping converge to
+    // the rendered chord while the server holds the body below it (a real
+    // under-field dip, rescued server-side by unbury) traps the replica at
+    // the surface for the whole dip: remotes hovered 5-12m off their wire
+    // positions, unreadable as aim targets.
     this.h.rotation.yaw = rot.yaw;
     this.h.rotation.pitch = rot.pitch;
     this.convergeTimer = Math.max(0, this.convergeTimer - dt);
