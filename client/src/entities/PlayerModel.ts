@@ -9,13 +9,6 @@ import { ChildLogger } from '../core/Logger.js';
 import { glitch } from '../core/fxDiag.js';
 import { buildGibParts, bakeDeathParts, type GibPart } from './playerGibs.js';
 
-const logger = new ChildLogger('PlayerModel');
-
-// Locomotion clip surgery (stripHipXZ/dampenSway/DIR8) lives in
-// playerClipSurgery.ts — extracted so the layered-anim carve-up is
-// testable without loading the rig.
-
-export type { AnimationState } from './playerClips.js';
 import { CLASS_BODY_SPEC, RIG_MANIFEST,
   normBone, type AnimationState } from './playerClips.js';
 import { computeRootMotionNodes } from './playerClipSurgery.js';
@@ -28,6 +21,13 @@ import { PlayerModelLod, smoothShade } from './playerModelLod.js';
 import { PlayerMats } from './playerMats.js';
 import { PoseControl } from './playerPose.js';
 import { WeaponType } from '../../../shared/weapons.js';
+const logger = new ChildLogger('PlayerModel');
+
+// Locomotion clip surgery (stripHipXZ/dampenSway/DIR8) lives in
+// playerClipSurgery.ts — extracted so the layered-anim carve-up is
+// testable without loading the rig.
+
+export type { AnimationState } from './playerClips.js';
 
 export type PlayerModelVariant = 'robot' | 'mannequin' | 'knight' | 'scifisoldier' | 'cybersoldier' | 'vexa' | 'polyart';
 

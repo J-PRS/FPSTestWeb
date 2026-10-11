@@ -8,6 +8,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import recText from './fixtures/duel.rec?raw';
 import crossfireRec from './fixtures/crossfire.rec?raw';
 
+import { makeDeps, feed, feedBin } from './netHarness.js';
+import { PROTOCOL_VERSION, type ServerMessage } from '../../../shared/protocol.js';
 vi.mock('../core/sfx.js', () => ({ at: () => {}, shotAt: () => {}, init: () => {}, hitMarker: () => {}, playerHurt: () => {}, shieldHit: () => {}, killConfirm: () => {}, flagCue: () => {}, matchHorn: () => {} }));
 vi.mock('../entities/PlayerModel.js', () => ({
   // RemotePlayer's GLTF model can't load headless — permissive proxy so any
@@ -20,8 +22,6 @@ vi.mock('../entities/PlayerModel.js', () => ({
 }));
 globalThis.fetch = () => new Promise<Response>(() => {});
 
-import { makeDeps, feed, feedBin } from './netHarness.js';
-import { PROTOCOL_VERSION, type ServerMessage } from '../../../shared/protocol.js';
 
 // Captures are stamped with whatever protocol the recorder saw —
 // re-versioning gameState keeps the replay testing handlers, not the

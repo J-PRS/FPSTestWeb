@@ -31,6 +31,11 @@ import { CLASS_MODEL_SCALE, classCapsule, type ArmorClass } from '../../../share
 // The one live-body tick — whichever preview proxy is parked owns it.
 // gunlab's render loop reads it through this holder so proxy builders
 // can install/clear it without reaching into the main module.
+import { mkBastion, mkBaseTower, mkWallRun, mkWallGate, mkGenDome, mkLandingPad, mkCommsMast, mkKataStand, mkBunker, mkFlagTower, mkPillar, mkObelisk, mkArch, mkShard } from '../structures/structures.js';
+import { ramp } from '../structures/structKit.js';
+import { KIT_BUILDERS } from '../world/mapStructures.js';
+import { resolveMapSpec, parseMapSpecJson } from '../../../shared/mapSpec.js';
+import bastionJson from '../../../maps/bastion.json';
 export const previewLive: { tick: ((dt: number) => void) | null } = { tick: null };
 
 // Camera world position is what creature AI and deployable tracking
@@ -171,11 +176,6 @@ export const PICKUPS: [label: string, build: () => THREE.Group][] =
 // Base structures — the structKit compositions, real builders straight
 // out of structures.ts. Big pieces: liveFocus parks the camera framing
 // on the compound center rather than the group origin.
-import { mkBastion, mkBaseTower, mkWallRun, mkWallGate, mkGenDome, mkLandingPad, mkCommsMast, mkKataStand, mkBunker, mkFlagTower, mkPillar, mkObelisk, mkArch, mkShard } from '../structures/structures.js';
-import { ramp } from '../structures/structKit.js';
-import { KIT_BUILDERS } from '../world/mapStructures.js';
-import { resolveMapSpec, parseMapSpecJson } from '../../../shared/mapSpec.js';
-import bastionJson from '../../../maps/bastion.json';
 export const STRUCTURES: [label: string, build: () => THREE.Group][] = [
   // The deployed map verbatim — same bastion.json + resolveMapSpec +
   // KIT_BUILDERS path the game renders, so the lab can never show a

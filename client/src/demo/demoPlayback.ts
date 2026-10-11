@@ -1,10 +1,10 @@
 import type { ProjectileEvent, TargetEvent } from './types.js';
 import { lerpAngle } from '../../../shared/angles.ts';
 
+import type { DemoPlayer, PlaybackState } from './DemoPlayer.js';
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 export { lerpAngle };
-import type { DemoPlayer, PlaybackState } from './DemoPlayer.js';
 
 // Playback internals — loop-wrap handling, seek reconstruction, event
 // window collection and frame interpolation. DemoPlayer is the host;

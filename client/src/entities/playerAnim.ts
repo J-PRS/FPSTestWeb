@@ -2,8 +2,6 @@ import * as THREE from 'three';
 
 import { ChildLogger } from '../core/Logger.js';
 
-const logger = new ChildLogger('PlayerModel');
-
 import { ONESHOT_CLIPS, clipCandidates,
   CLASS_BODY_SPEC, CLASS_BODY_DEATH_CLIPS, RIG_MANIFEST,
   normBone, type AnimationState } from './playerClips.js';
@@ -13,6 +11,8 @@ import { bakeUALClips, loadBakedUALClips } from './playerUal.js';
 import type { PoseControl } from './playerPose.js';
 import type { PlayerDistal } from './playerDistal.js';
 import type { PlayerModelVariant } from './PlayerModel.js';
+const logger = new ChildLogger('PlayerModel');
+
 
 // A missing clip is authored into the GLB — the variant's whole fleet
 // misses the same set, so the dedupe is (variant, clip) per session,

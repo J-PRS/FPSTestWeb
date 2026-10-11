@@ -12,9 +12,9 @@ import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots } from './swarms.js';
 import type { SwarmSlotOwner } from './swarm.js';
 import { writeRakkInstances } from './rakkVisual.js';
-export { rakkParts } from './rakkVisual.js';
 import { type SimFlyer, makeSimFlyer, stepFlyer } from '../../../shared/creatureSim.js';
 import { bindNetSim, applyNetEdgeSim, updateNetSim, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
+export { rakkParts } from './rakkVisual.js';
 
 const _dir = new THREE.Vector3();
 const _scratch = new THREE.Vector3();

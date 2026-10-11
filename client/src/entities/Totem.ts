@@ -17,8 +17,8 @@ import { allocSlots, freeSlots, getShadows } from './swarms.js';
 import type { SwarmSlotOwner } from './swarm.js';
 import { TerrainFoot } from '../effects/terrainFoot.js';
 import { writeTotemInstances } from './totemVisual.js';
-export { totemParts } from './totemVisual.js';
 import { beginBlinkF, lineClear, solveBeam, fireBeam, blastPush, blastPull } from './totemBeam.js';
+export { totemParts } from './totemVisual.js';
 
 
 /**

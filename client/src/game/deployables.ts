@@ -37,11 +37,11 @@ import type { GameContext } from './context.js';
 import type { Targetable } from '../entities/balls.js';
 import type { TargetCandidate } from './targeting.js';
 
-export type { DeployKind } from '../../../shared/deployables.js';
 import { DEPLOY_KINDS, DEPLOY_MAX, type DeployKind } from '../../../shared/deployables.js';
 import { RemoteDeployables } from './remoteDeployables.js';
 import { DEPLOY_ITEMS, deploySolid } from '../../../shared/deployItems.js';
 import type { StructureCollider } from '../../../shared/ballCollide.js';
+export type { DeployKind } from '../../../shared/deployables.js';
 
 // Derived from the shared belt registry — caps/labels can no longer diverge
 // from the server authority (drone max 1 vs 2 did once).

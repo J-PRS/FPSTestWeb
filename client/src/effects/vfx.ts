@@ -25,10 +25,10 @@ import {
   queueIfCold, buildQueue, activeTrailPs, trailStats,
   poolDump, trailDriverCount,
 } from './vfxRuntime.js';
-export { initVfx, vfxStats, setVfxQualityScale, vfxPressure, updateVfx, trailStats, poolDump } from './vfxRuntime.js';
 import { EMIT_GAIN, GRAVITY } from '../core/config.js';
 import { getGlowTexture, getPuffTexture } from './glowTexture.js';
 import type { ProjectileConfig } from '../projectiles/types.js';
+export { initVfx, vfxStats, setVfxQualityScale, vfxPressure, updateVfx, trailStats, poolDump } from './vfxRuntime.js';
 
 const _upQ = new QV3(0, 1, 0);
 

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {type ServerMessage, PROTOCOL_VERSION} from '../../../shared/protocol.js';
 
+import { makeDeps, feed, feedBin } from './netHarness.js';
 vi.mock('../core/sfx.js', () => ({ at: () => {}, shotAt: () => {}, init: () => {}, hitMarker: () => {}, playerHurt: () => {}, shieldHit: () => {}, killConfirm: () => {}, flagCue: () => {}, matchHorn: () => {} }));
 // RemotePlayer's GLTF model fetch can't run headless — visual shell only.
 vi.mock('../entities/PlayerModel.js', () => ({
@@ -12,7 +13,6 @@ vi.mock('../entities/PlayerModel.js', () => ({
 }));
 globalThis.fetch = () => new Promise<Response>(() => {});
 
-import { makeDeps, feed, feedBin } from './netHarness.js';
 
 // Malformed-payload contract: one bad message must be absorbed — warn +
 // continue — never thrown into the connection's onError path where it

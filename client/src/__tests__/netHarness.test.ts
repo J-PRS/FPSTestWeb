@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {type ServerMessage, PROTOCOL_VERSION} from '../../../shared/protocol.js';
 
+import { makeDeps, feed } from './netHarness.js';
 vi.mock('../core/sfx.js', () => ({ at: () => {}, shotAt: () => {}, init: () => {}, hitMarker: () => {}, playerHurt: () => {}, shieldHit: () => {}, killConfirm: () => {}, flagCue: () => {}, matchHorn: () => {} }));
 // RemotePlayer's GLTF model fetch can't run headless — visual shell only,
 // the lifecycle under test lives in RemoteSet, not the mesh.
@@ -15,7 +16,6 @@ vi.mock('../entities/PlayerModel.js', () => ({
 // keep it pending forever so it never builds DOM in tests.
 globalThis.fetch = () => new Promise<Response>(() => {});
 
-import { makeDeps, feed } from './netHarness.js';
 
 describe('netHarness — real wire messages through real handlers', () => {
   let h: ReturnType<typeof makeDeps>;

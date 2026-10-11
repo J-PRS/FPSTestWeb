@@ -12,9 +12,9 @@ import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots } from './swarms.js';
 import type { SwarmSlotOwner } from './swarm.js';
 import { writeRollerInstances } from './rollerVisual.js';
-export { rollerParts } from './rollerVisual.js';
 import { type SimRoller, makeSimRoller, stepRoller } from '../../../shared/creatureSim.js';
 import { bindNetSim, applyNetEdgeSim, updateNetSim, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
+export { rollerParts } from './rollerVisual.js';
 
 const _dir = new THREE.Vector3();
 const _axis = new THREE.Vector3();

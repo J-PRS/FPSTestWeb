@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {type ServerMessage, PROTOCOL_VERSION} from '../../../shared/protocol.js';
 
+import { makeDeps, feed } from './netHarness.js';
+import { RemotePlayer } from '../entities/RemotePlayer.js';
 vi.mock('../core/sfx.js', () => ({ at: () => {}, shotAt: () => {}, init: () => {}, hitMarker: () => {}, playerHurt: () => {}, shieldHit: () => {}, killConfirm: () => {}, flagCue: () => {}, matchHorn: () => {} }));
 vi.mock('../entities/PlayerModel.js', () => ({
   PlayerModel: function () {
@@ -11,8 +13,6 @@ vi.mock('../entities/PlayerModel.js', () => ({
 }));
 globalThis.fetch = () => new Promise<Response>(() => {});
 
-import { makeDeps, feed } from './netHarness.js';
-import { RemotePlayer } from '../entities/RemotePlayer.js';
 
 // Real dispose runs full aura/anim/model teardown — outside this invariant's
 // scope and unavailable in jsdom; stub it.
