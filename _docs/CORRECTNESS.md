@@ -447,6 +447,13 @@ violation instead of a symptom hunt.
   rejected outright in simmed mode (`acceptClaims===false`) —
   the server re-casts the weld target off the honest ray, so
   the claim's targetId is never trusted.
+- **Creature-hit claims (verified sealed):** `crawlerHit`/
+  `creatureHit` reject unknown/dead ids, bound range at 600m
+  (deliberately lenient — the shadow judge is the real
+  anticheat), clamp damage to `MAX_HIT_CLAIM_DMG`, and the
+  melee half is server-derived anyway (`meleeSweep`: rewound
+  origin + reach + `MELEE_ARC_DOT` cone — the client claims a
+  swing, never a contact).
 - **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
   consecutive <26ms frames (4s cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
