@@ -496,11 +496,18 @@ export class RoomMoveSim {
       // onGround lies at seed/resync (setState writes it true even for
       // a mid-air drop) — the gate measures rest against the real
       // ground under it, or a dropped body never starts falling.
+      const surf = sh.bot && this.botSurface ? this.botSurface : this.surface;
       const groundY = Math.max(
-        this.surface ? this.surface.getHeight(s.pos.x, s.pos.z) : s.pos.y,
+        surf ? surf.getHeight(s.pos.x, s.pos.z) : s.pos.y,
         this.structureTop(s.pos.x, s.pos.z),
       );
-      const resting = s.onGround && s.pos.y - groundY < sh.sim.eyeHeight + 0.5
+      // A sunk shadow is NOT resting — pos.y - groundY goes negative,
+      // which passed the upper bound alone, so a bot seeded under
+      // terrain (respawn anchor, stale resync) parked forever instead
+      // of stepping back onto the floor. 2Hz unbury was the only
+      // rescue — that was the ~1s sink-then-pop cycle, 514 rescues in
+      // one 15-minute soak.
+      const resting = s.onGround && s.pos.y - groundY > -0.5 && s.pos.y - groundY < sh.sim.eyeHeight + 0.5
         && Math.abs(s.vel.x) + Math.abs(s.vel.y) + Math.abs(s.vel.z) < 0.05
         && !inp.forward && !inp.right && !inp.jumpHeld && !inp.jumpPressed && !inp.skiHeld && !inp.jetHeld
         && (!edges || edges.every(e => !e.input.forward && !e.input.right && !e.input.jumpHeld && !e.input.jumpPressed && !e.input.skiHeld && !e.input.jetHeld))
