@@ -722,6 +722,56 @@ violation instead of a symptom hunt.
     solo/classic spawn and `reviveLocal` — weapon pulls out instead of
     pop-in.
 
+- **Mid-match team flips:** `rebalanceTeams` only ever moves bots
+  (`!p.isBot` skip — flipping a human is hostile), so the client's
+  teamUpdate→patchRemotePlayer lane can never target the local id
+  (patchRemotePlayer rightly refuses to mint remotes). A flipped bot
+  carrier is `flagCarrierDied`'d first — tickCarried requires
+  carrier.team !== flag.team, so without the drop the flag would pin
+  'carried' forever. Verified sealed.
+- **Pickup collect lane:** no client claim exists — the grab is a
+  swept-segment test of the server's own shadow path vs the pickup's
+  server pos (a point check lets a ski-through miss). `isDead` skip,
+  team required on score pickups, `armT` no-grab while flying, ttl
+  decay, `MAX_PICKUPS` cap, `pickup-below-ground` invariant on the rest
+  spot. Rewards cap at apply (belt ≤ `BELT_MAX`, energy/heal bounded).
+  Verified sealed.
+- **Score/matchEnd boundary:** cap is atomic — `state=home +
+  carrier=null` lands before the score returns, so a second tick can't
+  re-score. `score()` banks only in team modes; `endMatch` is one-shot
+  via `intermissionAt` (a late cap during standings can't re-broadcast
+  or restart the countdown) and `setMatchMuted` silences post-horn
+  contacts. `awardPersonal` shares the ffa board but can never end a
+  match — PTS is honor, not the win. Rabbit pays bounded per-second
+  holdAcc. Verified sealed.
+- **Respawn claim lane:** K-press routes through the self-frag funnel
+  (`serverHit` 99999 — buffs can't half-eat the request). `respawnNow`
+  while dead can't skip a pending countdown (click-beats-timer hole
+  closed); a held corpse only revives on the dead-state claim. `fire()`
+  aborts on a null `respawnPlayer` result; post-snap stragglers ride
+  `correctionGraceUntil`; reconnect re-arms dead players (`ensure`);
+  a timer throw logs instead of stranding someone dead. Verified sealed.
+- **Class/perk claims:** `classUpdate`/`perkUpdate` enum-validate and
+  rate-limit (10/s), then BANK to `pendingClass`/`pendingPerk` — the
+  Tribes rule means a swap can never apply mid-life (a mid-life class
+  flip is a free heal + speed-scale change under the shadow's feet).
+  `respawnPlayer` applies the bank under `health-pool-formula` invEq.
+  `switchRoom` words sanitize room/map/mode and clamp `bots` 0-24.
+  Verified sealed.
+- **PvP damage lane:** no client damage claim exists — `applyDamage`
+  is reached only from server-side resolution (blast sims, envClaims,
+  `serverHit`, hitLedger). `serverHit` drops dead targets and friendly
+  fire before the economy runs; the ball/creature `hit` claims are
+  bounded by `acceptClaims` + sim-side `handleHit` validation.
+  Verified sealed.
+- **Declared-jump discipline:** every legit client pos snap declares —
+  `markTeleport`/`noteLocalSnap` on the wire respawn, join reseat
+  (world.ts), warp-beacon release, and all five main.ts anchor/spawn
+  sites — so the server's plausibility judge reseats its anchor instead
+  of rubber-banding a valid jump. Non-player pos writes (bots, flags,
+  deployables, demo reseat, ballRage scatter) are local-only or
+  server-owned and never need the declaration. Verified sealed.
+
 - **Deploy placement claims:** `handleDeploy` gates every forgeable
   axis — player alive, kind enum + cap-0 rejection (a client cannot
   plant a generator), pos finite + within `MAX_PLANT_DIST` of the
