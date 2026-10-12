@@ -134,6 +134,7 @@ const ANIM_TABLES: [file: string, table: Record<string, string | undefined>][] =
 
 describe('class anims tables resolve to real clips', (): void => {
   for (const [file, table] of ANIM_TABLES) {
+    // oxlint-disable-next-line valid-title -- table-driven titles name the GLB under test
     it(file, (): void => {
       const g = parseGlb(path.join(MODELS_DIR, file));
       const names = new Set((g.json.animations || []).map((a: any) => a.name));

@@ -79,7 +79,7 @@ async function shutdown(): Promise<void> {
 function killPortHolders(port: number): boolean {
   const out = Bun.spawnSync(['netstat', '-ano', '-p', 'tcp']).stdout.toString();
   const pids = [...out.matchAll(/^\s*TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)\s*$/gm)]
-    .filter((m) => Number(m[1]) === port).map((m) => m[2]!);
+    .filter((m): boolean => Number(m[1]) === port).map((m): string => m[2]!);
   for (const pid of pids) {
     const img = Bun.spawnSync(['tasklist', '/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH']).stdout.toString();
     if (!/bun\.exe/i.test(img)) { logger.error(`:${port} held by non-bun pid ${pid} — refusing to kill`); return false; }

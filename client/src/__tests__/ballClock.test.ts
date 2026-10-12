@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { makeBallClock, pruneNetBalls } from '../game/netBalls.js';
 
-const mk = (): { netKill: () => never; } => ({ netKill: (): never => { throw new Error('must not kill'); } });
+const mkX = (): { netKill: () => never; } => ({ netKill: (): never => { throw new Error('must not kill'); } });
 
 
 // The server-sim clock: estSimNow rides an EMA of the sim→wall rate so a
@@ -62,8 +62,8 @@ describe('makeBallClock — sim-clock estimate', (): void => {
 describe('pruneNetBalls — roster reconciliation', (): void => {
   it('netKills tracked balls missing from the roster', (): void => {
     const killed: number[] = [];
-    const mk = (): { netKill: () => number; } => ({ netKill: (): number => killed.push(0) });
-    const map = new Map<number, { netKill(): void }>([[1, mk()], [2, mk()], [3, mk()]]);
+    const mkLog = (): { netKill: () => number; } => ({ netKill: (): number => killed.push(0) });
+    const map = new Map<number, { netKill(): void }>([[1, mkLog()], [2, mkLog()], [3, mkLog()]]);
     pruneNetBalls(map, new Set([2]));
     expect([...map.keys()]).toEqual([2]);
     expect(killed).toHaveLength(2);
@@ -71,7 +71,7 @@ describe('pruneNetBalls — roster reconciliation', (): void => {
 
 
   it('leaves a fully-matching roster untouched', (): void => {
-    const map = new Map<number, { netKill(): void }>([[1, mk()]]);
+    const map = new Map<number, { netKill(): void }>([[1, mkX()]]);
     pruneNetBalls(map, new Set([1, 9]));
     expect(map.size).toBe(1);
   });

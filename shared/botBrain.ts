@@ -20,8 +20,6 @@ import { BotGoals, type GoalState } from './botGoals.ts';
 import { BotMoves } from './botMoves.ts';
 import { segSolidHit, type ColliderIndex } from './solidWorld.ts';
 
-const f = (v: BotVec): string => `${v.x.toFixed(0)},${v.z.toFixed(0)}`;
-
 import type { StructureCollider } from './ballSim.ts';
 import {
   newHuntState, pickHunt, pickFire, preyUnreachable,
@@ -33,6 +31,8 @@ import { driftForm, type BotSkill, type BotSkillSpec } from './botSkill.ts';
 import { pickDest, pickDeploy, pickRepair, statusIntent } from './botDisposition.ts';
 import { dist3, distSqXZ, dirXZ, type BotVec } from './botVec.ts';
 import { BOT_TUNING as T } from './botTuning.ts';
+
+const f = (v: BotVec): string => `${v.x.toFixed(0)},${v.z.toFixed(0)}`;
 
 // Combat half lives in botHunt.ts — re-export so existing imports keep
 // resolving (losClear/BOT_EYE/BOT_FIRE_RANGE are the public surface).

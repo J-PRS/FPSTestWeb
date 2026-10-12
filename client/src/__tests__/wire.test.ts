@@ -7,19 +7,19 @@ import {
   tickEncodeScratch, v4Last,encodeBallSegment,decodeBallSegment
 } from '../../../shared/wire';
 
-const enc = (pos: { x: number; y: number; z: number }): Uint8Array<ArrayBufferLike> =>
+const encPos = (pos: { x: number; y: number; z: number }): Uint8Array<ArrayBufferLike> =>
   encodePosition(pos, { yaw: 0, pitch: 0 }, { x: 0, y: 0, z: 0 }, 1, 0);
 
-const rec = (id: string, over: Partial<Parameters<typeof encodeTickPlayer>[0]> = {}): Uint8Array<ArrayBufferLike> =>
+const recTick = (id: string, over: Partial<Parameters<typeof encodeTickPlayer>[0]> = {}): Uint8Array<ArrayBufferLike> =>
   encodeTickPlayer(Object.assign({playerId: id,position: { x: 1, y: 2, z: 3 },rotation: { yaw: 0.5, pitch: -0.5 },velocity: { x: 4, y: 5, z: 6 },health: 300,isDead: false,ping: 55,ski: 1}, over));
 
-const roster = (): WireIdRoster => {
+const mkRoster = (): WireIdRoster => {
   const r = new WireIdRoster();
   r.feed({ type: 'wireIds', add: { 7: 'player_seven', 9: 'player_nine' } });
   return r;
 };
 
-const base = (): WireTickPlayer => ({
+const baseTickP = (): WireTickPlayer => ({
   playerId: '', position: { x: 1, y: 2, z: 3 }, rotation: { yaw: 0.5, pitch: 0.1 },
   velocity: { x: 10, y: 0, z: 5 }, health: 100, isDead: false, ski: 1, jet: 0, status: 0, sheep: 40, ping: 50,
 });
@@ -229,16 +229,16 @@ describe('position frame adversarial decode', (): void => {
 
   it('rejects absurd and non-finite positions', (): void => {
     // 8192m bound — the JSON validator's same radius.
-    expect(decodePosition(enc({ x: 9000, y: 0, z: 0 }))).toBeNull();
+    expect(decodePosition(encPos({ x: 9000, y: 0, z: 0 }))).toBeNull();
     // Sphere, not per-axis: 6000 on two axes exceeds the bound together.
-    expect(decodePosition(enc({ x: 6000, y: 6000, z: 0 }))).toBeNull();
-    expect(decodePosition(enc({ x: 8191, y: 0, z: 0 }))).not.toBeNull();
+    expect(decodePosition(encPos({ x: 6000, y: 6000, z: 0 }))).toBeNull();
+    expect(decodePosition(encPos({ x: 8191, y: 0, z: 0 }))).not.toBeNull();
 
-    const nan = enc({ x: 0, y: 0, z: 0 });
+    const nan = encPos({ x: 0, y: 0, z: 0 });
     new DataView(nan.buffer).setFloat32(6, Number.NaN, true); // pos.x
     expect(decodePosition(nan)).toBeNull();
 
-    const inf = enc({ x: 0, y: 0, z: 0 });
+    const inf = encPos({ x: 0, y: 0, z: 0 });
     new DataView(inf.buffer).setFloat32(10, Number.POSITIVE_INFINITY, true); // pos.y
     expect(decodePosition(inf)).toBeNull();
   });
@@ -248,9 +248,9 @@ describe('tick frame adversarial decode', (): void => {
 
   it('decodes every record distinctly (offset drift)', (): void => {
     const frame = encodeTickFrame(0, 0, 0, [
-      rec('p_one', { health: 111, velocity: { x: 1, y: 0, z: 0 } }),
-      rec('p_two', { health: 222, velocity: { x: 0, y: 2, z: 0 } }),
-      rec('p_three', { health: 333, velocity: { x: 0, y: 0, z: 3 } }),
+      recTick('p_one', { health: 111, velocity: { x: 1, y: 0, z: 0 } }),
+      recTick('p_two', { health: 222, velocity: { x: 0, y: 2, z: 0 } }),
+      recTick('p_three', { health: 333, velocity: { x: 0, y: 0, z: 3 } }),
     ]);
     const d = decodeTickFrame(frame)!;
     expect(d.count).toBe(3);
@@ -266,16 +266,16 @@ describe('tick frame adversarial decode', (): void => {
   });
 
   it('rejects a declared count larger than the records present', (): void => {
-    const frame = encodeTickFrame(0, 0, 0, [rec('p1')]);
+    const frame = encodeTickFrame(0, 0, 0, [recTick('p1')]);
     frame[14] = 9; // count claims 9 records; only one record follows
     expect(decodeTickFrame(frame)).toBeNull();
   });
 
   it('decodes isDead/ski/status flag bits independently', (): void => {
     const frame = encodeTickFrame(0, 0, 0, [
-      rec('alive', { isDead: false, ski: 0, status: 0 }),
-      rec('dead_ski', { isDead: true, ski: 1, status: 0 }),
-      rec('statused', { isDead: false, ski: 0, status: 0x30 }),
+      recTick('alive', { isDead: false, ski: 0, status: 0 }),
+      recTick('dead_ski', { isDead: true, ski: 1, status: 0 }),
+      recTick('statused', { isDead: false, ski: 0, status: 0x30 }),
     ]);
     const d = decodeTickFrame(frame)!;
     expect(d.updates[0]!.isDead).toBe(false);
@@ -289,7 +289,7 @@ describe('tick frame adversarial decode', (): void => {
   it('round-trips positions past the old i16 bound', (): void => {
     // i16×0.04 saturated at ±1310m and clamped skiers mid-map (the dunes
     // z-freeze desync); i32 keeps the same step with ±85Mm of headroom.
-    const frame = encodeTickFrame(0, 0, 0, [rec('far', { position: { x: 5000, y: -5000, z: 0 } })]);
+    const frame = encodeTickFrame(0, 0, 0, [recTick('far', { position: { x: 5000, y: -5000, z: 0 } })]);
     const d = decodeTickFrame(frame)!;
     expect(d.updates[0]!.position.x).toBeCloseTo(5000, 1);
     expect(d.updates[0]!.position.y).toBeCloseTo(-5000, 1);
@@ -297,8 +297,8 @@ describe('tick frame adversarial decode', (): void => {
 
   it('surfaces sheep only when non-zero', (): void => {
     const frame = encodeTickFrame(0, 0, 0, [
-      rec('sheepy', { sheep: 42 }),
-      rec('nosheep', { sheep: 0 }),
+      recTick('sheepy', { sheep: 42 }),
+      recTick('nosheep', { sheep: 0 }),
     ]);
     const d = decodeTickFrame(frame)!;
     expect(d.updates[0]!.sheep).toBe(42);
@@ -313,7 +313,7 @@ describe('v3 wireId frames', (): void => {
       encodeTickPlayerV3(7, { playerId: '', position: { x: 1, y: 2, z: 3 }, rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 }, health: 100, isDead: false, ski: 0 }),
       encodeTickPlayerV3(9, { playerId: '', position: { x: 4, y: 5, z: 6 }, rotation: { yaw: 1, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 }, health: 200, isDead: true, ski: 1 }),
     ];
-    const r = roster();
+    const r = mkRoster();
     const d = decodeTickFrame(encodeTickFrame(1, 2, 3, recs, WIRE_TICK_V3), r.pool)!;
     expect(d.updates[0]!.wireId).toBe(7);
     expect(d.updates[0]!.playerId).toBe('player_seven');
@@ -323,7 +323,7 @@ describe('v3 wireId frames', (): void => {
   });
 
   it('decodes unresolved ids as empty playerId', (): void => {
-    const r = roster();
+    const r = mkRoster();
     const d = decodeTickFrame(encodeTickFrame(0, 0, 0, [
       encodeTickPlayerV3(55, { playerId: '', position: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 }, health: 0, isDead: false, ski: 0 }),
     ], WIRE_TICK_V3), r.pool)!;
@@ -332,7 +332,7 @@ describe('v3 wireId frames', (): void => {
   });
 
   it('gameState feed replaces the roster wholesale', (): void => {
-    const r = roster();
+    const r = mkRoster();
     r.feed({ type: 'gameState', wireIds: { 1: 'fresh_one' } });
     expect(r.ids.get(7)).toBeUndefined();
     expect(r.ids.get(1)).toBe('fresh_one');
@@ -346,7 +346,7 @@ describe('v4 delta-masked records', (): void => {
     r.feed({ type: 'wireIds', add: { 7: 'player_seven' } });
     const enc = tickEncodeScratch();
     const last = v4Last();
-    const p = base();
+    const p = baseTickP();
     // First encode is always full (fresh slot).
     const full = encodeTickPlayerV4(7, p, enc, last, false);
     expect(full.length).toBe(30);
@@ -370,7 +370,7 @@ describe('v4 delta-masked records', (): void => {
     r.feed({ type: 'wireIds', add: { 7: 'player_seven' } });
     const enc = tickEncodeScratch();
     const last = v4Last();
-    const p = base();
+    const p = baseTickP();
     encodeTickPlayerV4(7, p, enc, last, false);
     p.health = 30; // took damage between ticks — must surface on the wire
     const delta = encodeTickPlayerV4(7, p, enc, last, false);
@@ -382,11 +382,11 @@ describe('v4 delta-masked records', (): void => {
   it('wireId reuse forces a full record — no field inheritance across players', (): void => {
     const enc = tickEncodeScratch();
     const last = v4Last();
-    encodeTickPlayerV4(7, base(), enc, last, false);
+    encodeTickPlayerV4(7, baseTickP(), enc, last, false);
     // Slot's wireId was 7; a new player reusing the slot with wireId 9
     // must encode all groups or the decoder inherits the old owner's
     // fields.
-    const rec = encodeTickPlayerV4(9, base(), enc, last, false);
+    const rec = encodeTickPlayerV4(9, baseTickP(), enc, last, false);
     expect(rec.length).toBe(30);
   });
 
@@ -395,7 +395,7 @@ describe('v4 delta-masked records', (): void => {
     r.feed({ type: 'wireIds', add: { 7: 'player_seven' } });
     const enc = tickEncodeScratch();
     const last = v4Last();
-    const p = base();
+    const p = baseTickP();
     decodeTickFrame(encodeTickFrame(0, 1, 0, [encodeTickPlayerV4(7, p, enc, last, false)], WIRE_TICK_V4), r.pool);
     // Health changes on a frame the link "loses" (never decoded) — but
     // the K-basis keeps carrying it for the next V4_BASIS_DEPTH-1 ticks.
@@ -414,7 +414,7 @@ describe('v4 delta-masked records', (): void => {
     r.feed({ type: 'wireIds', add: { 7: 'player_seven' } });
     const enc = tickEncodeScratch();
     const last = v4Last();
-    const p = base();
+    const p = baseTickP();
     decodeTickFrame(encodeTickFrame(0, 1, 0, [encodeTickPlayerV4(7, p, enc, last, false)], WIRE_TICK_V4), r.pool);
     // A burst loss longer than the basis window eats the field: health
     // changes at t2 and frames t2..t4 all die (each carried hp), so the
@@ -436,7 +436,7 @@ describe('v4 delta-masked records', (): void => {
     r.feed({ type: 'wireIds', add: { 7: 'player_seven' } });
     const enc = tickEncodeScratch();
     const last = v4Last();
-    const p = base();
+    const p = baseTickP();
     encodeTickPlayerV4(7, p, enc, last, false); // the join burst this client missed
     p.position.x = 2;
     const delta = encodeTickPlayerV4(7, p, enc, last, false);

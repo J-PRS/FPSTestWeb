@@ -12,14 +12,6 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { deserializeDemo } from '../demo/demoReader.js';
 
-const mkFired = (targetId: number): ProjectileEvent => ({
-  eventType: ProjectileEventType.Fired, timestamp: 0,
-  posX: 0, posY: 10, posZ: 0, velX: 0, velY: 0, velZ: 60,
-  projectileId: targetId + 100, weaponType: 254, surfaceNormalX: 0,
-  surfaceNormalY: 0, surfaceNormalZ: 0, targetId, targetType: 0,
-  hasPeakPosition: false, peakPosX: 0, peakPosY: 0, peakPosZ: 0,
-});
-
 import { applyPlaybackEvents, type PlaybackWorld } from '../demo/playbackReconstruction.js';
 import {
   ProjectileEventType, TargetEventType,
@@ -39,6 +31,14 @@ import type { WorldState } from '../game/worldState.js';
 import type { DamageNumberManager } from '../effects/damageNumbers.js';
 import type { FragMessages } from '../ui/FragMessages.js';
 import type { HUD } from '../ui/hud.js';
+
+const mkFired = (targetId: number): ProjectileEvent => ({
+  eventType: ProjectileEventType.Fired, timestamp: 0,
+  posX: 0, posY: 10, posZ: 0, velX: 0, velY: 0, velZ: 60,
+  projectileId: targetId + 100, weaponType: 254, surfaceNormalX: 0,
+  surfaceNormalY: 0, surfaceNormalZ: 0, targetId, targetType: 0,
+  hasPeakPosition: false, peakPosX: 0, peakPosY: 0, peakPosZ: 0,
+});
 
 const noop = (): void => { /* stubbed dep */ };
 

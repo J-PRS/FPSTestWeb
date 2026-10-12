@@ -10,7 +10,8 @@ import { NetworkManager, type RemotePlayerState } from '../networking/NetworkMan
 import { wireNetworkHandlers, type NetDeps } from '../game/netHandlers.js';
 import { createWorldState } from '../game/worldState.js';
 import { ExplosionTracker } from '../utils/ExplosionTracker.js';
-import type { ServerMessage } from '../../../shared/protocol.js';
+import type { ServerMessage } from '../../../shared/protocol.js';
+import { vi } from 'vitest';
   const scene = new THREE.Scene();
 
 // replayWireMessage is the public wire-feed seam — same dispatch path a
@@ -32,7 +33,7 @@ export function makeDeps() {
     health: 100, armor: 0, isDead: false, isShielded: false,
     buffUntil: { regen: 0, dd: 0 },
     absorbShieldDamage(): void { return; }, applyPull(): void { return; }, applyKnockback(): void { return; },
-    heal(): void { return; }, grantJetBoost(): void { return; }, syncMovement(): void { return; }, markTeleport(): void { return; },
+    heal: vi.fn((): void => { return; }), grantJetBoost: vi.fn((): void => { return; }), syncMovement(): void { return; }, markTeleport(): void { return; },
     // Correction render-ease seam — a spy so tests can see the ease fired
     // (and so a missing wiring throws instead of being swallowed).
     noteRenderSnap(jump: THREE.Vector3): void { calls.renderSnap.push(jump.length()); },
@@ -60,6 +61,8 @@ export function makeDeps() {
     world,
     setLastSentPos(): void { return; },
     entities: (): never => ({
+      // wirePickups pushes spawned Nuggets here.
+      nuggets: [] as unknown[],
       netBallSpawn: (): number => calls.entities.push('ballSpawn'),
       netBallSegment: (): number => calls.entities.push('ballSegment'),
       netBallDie: (): number => calls.entities.push('ballDie'),

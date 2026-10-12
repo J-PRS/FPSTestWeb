@@ -54,7 +54,7 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
     const httpBase = config.url.replace(/^wss?:/, `http${  config.url.startsWith('wss') ? 's' : ''  }:`).replace(/\/ws$/, '');
     const iceServers = await fetch(`${httpBase}/rtcconfig`, { signal: AbortSignal.timeout(4000) })
       .then((r): Promise<{ iceServers?: RTCIceServer[] }> => r.json())
-      .then((j) => (Array.isArray(j?.iceServers) ? j.iceServers : []))
+      .then((j): RTCIceServer[] => (Array.isArray(j?.iceServers) ? j.iceServers : []))
       .catch((): never[] => []);
     pc = new RTCPeerConnection({ iceServers });
     const conn = pc;
@@ -166,7 +166,7 @@ export async function connectGameTransport(config: ConnectionConfig, opts?: Tier
 
 // Negative tier cache — a failed WT probe leaves the QUIC session pending
 // in Chrome (cap: 64 per profile). Retrying every reconnect tick exhausts
-// it ("Too many pending WebTransport sessions") and the transport starts
+// QUIC cap ("Too many pending WebTransport sessions") and the transport starts
 const missUntil = { wt: 0, rtc: 0 };
 
 /**

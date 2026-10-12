@@ -61,6 +61,17 @@ _tools/io_dif/
 # Tool binaries/dumps + asset scratch — local only, not for git
 _tools/vmdump/.tb/
 _tools/vmdump/tbout/
+_tools/*.glb
+_tools/*.jpg
+_tools/*.jpeg
+_tools/*.zip
+# Image/scratch formats never belong in git (stripped from history Oct 2026)
+*.bmp
+*.tga
+*.psd
+*.blend1
+*.exr
+soak_*.txt
 client/tmp_assets/
 zzz/
 ZZZ_ROOT/

@@ -28,7 +28,7 @@ function tsLocal(d = new Date()): string {
 // oxlint-disable-next-line no-namespace -- grouped statics are the public API shape
 export namespace Logger {
   const fmtArg = (a: unknown): string =>
-    (() => {
+    ((): string => {
       if (a instanceof Error) {return a.stack ?? a.message;}
       if (typeof a === 'object') {try { return JSON.stringify(a); } catch { return String(a); }}
       return String(a);

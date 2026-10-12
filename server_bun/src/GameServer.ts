@@ -307,7 +307,7 @@ export class GameServer {
       map: this.maps.mapNameOf(r.name),
       players: r.playerCount(),
       maxPlayers: CONFIG.maxPlayers,
-      spectators: r.spectators.size || undefined,
+      spectators: r.spectators.size > 0 ? r.spectators.size : undefined,
       // Live match state so the lobby row shows more than occupancy.
       scores: r.modeSpec?.teams ? (Object.assign({}, r.scores)) : undefined,
       ffaLeader: r.modeSpec?.ffa
