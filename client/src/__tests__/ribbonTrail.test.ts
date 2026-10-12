@@ -1,3 +1,4 @@
+/* oxlint-disable vitest/no-conditional-in-test -- table/fuzz harness: branchy drives and ?? fallbacks ARE the test logic */
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 

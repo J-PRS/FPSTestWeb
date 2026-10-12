@@ -1,3 +1,4 @@
+/* oxlint-disable vitest/no-conditional-in-test -- table/fuzz harness: branchy drives and ?? fallbacks ARE the test logic */
 import { describe, expect, test } from 'vitest';
 import { KIT_BUILDERS } from '../world/mapStructures.ts';
 import { KIT_HULLS, KIT_PIECES } from '../../../shared/structKits.ts';

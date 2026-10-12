@@ -1,3 +1,4 @@
+/* oxlint-disable vitest/no-conditional-in-test -- table/fuzz harness: branchy drives and ?? fallbacks ARE the test logic */
 // Bot fire integrity — "bots are legal players" means their trigger
 // pull must spawn REAL projectiles in the same pipeline as the player's
 // shells. These tests prove the actual gun leaves the barrel: pellet

@@ -1,3 +1,4 @@
+/* oxlint-disable vitest/no-conditional-in-test -- table/fuzz harness: branchy drives and ?? fallbacks ARE the test logic */
 /**
  * Root-motion audit — every class body GLB's clips are checked for hip XZ
  * translation (root motion), the thing that drags the mesh out from under

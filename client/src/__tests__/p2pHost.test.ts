@@ -1,3 +1,4 @@
+/* oxlint-disable vitest/no-conditional-in-test -- table/fuzz harness: branchy drives and ?? fallbacks ARE the test logic */
 /**
  * P2PHost authority tests — fake P2PLinks stand in for loopback/DataChannel,
  * exercising join → handshake → tick → shot → leave against the REAL server

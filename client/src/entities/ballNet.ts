@@ -119,11 +119,13 @@ export function tickNet(st: NetStatics, bag: NetBag, host: NetHost, dt: number):
   // mirrors the authority instead of waiting two seconds for the event.
   const tgt = s.tgtValid ? (_tgt.x = s.tx, _tgt.y = s.ty, _tgt.z = s.tz, _tgt) : null;
   const field = st.field();
-  while (field && cellsLeft > 0 && bag.netAcc >= 0.05 && bag.simT + 0.05 <= simNow) {
-cellsLeft -= 1;
-    bag.netAcc -= 0.05;
-    bag.simT += 0.05;
-    stepBall(s, 0.05, field, tgt, false, { colliders: st.colliders(), colliderIndex: st.colliderIndex() ?? undefined });
+  if (field) {
+    while (cellsLeft > 0 && bag.netAcc >= 0.05 && bag.simT + 0.05 <= simNow) {
+      cellsLeft -= 1;
+      bag.netAcc -= 0.05;
+      bag.simT += 0.05;
+      stepBall(s, 0.05, field, tgt, false, { colliders: st.colliders(), colliderIndex: st.colliderIndex() ?? undefined });
+    }
   }
   if (bag.netAcc >= 0.5 && field) {
     // Clock-estimate stalls must never freeze the sim — but a stale
@@ -309,9 +311,11 @@ export function predictAt(st: NetStatics, bag: NetBag, t: number, out: THREE.Vec
   const simNow = st.simNow() ?? Infinity;
   let cur = bag.simT;
   const end = Math.min(t, simNow, cur + 8); // stale legs can't chase ∞
-  while (field && cur + 0.05 <= end) {
-    cur += 0.05;
-    stepBall(s, 0.05, field, tgt, false, { colliders: st.colliders(), colliderIndex: st.colliderIndex() ?? undefined });
+  if (field) {
+    while (cur + 0.05 <= end) {
+      cur += 0.05;
+      stepBall(s, 0.05, field, tgt, false, { colliders: st.colliders(), colliderIndex: st.colliderIndex() ?? undefined });
+    }
   }
   const rem = Math.max(0, Math.min(0.05, end - cur));
   out.set(s.x + s.vx * rem, s.y + s.vy * rem + 0.5 * BALL_GRAVITY * rem * rem, s.z + s.vz * rem);

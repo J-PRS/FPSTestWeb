@@ -1,3 +1,4 @@
+/* oxlint-disable vitest/no-conditional-in-test -- table/fuzz harness: branchy drives and ?? fallbacks ARE the test logic */
 // Replay a real captured wire stream through the real handler pipeline.
 // Fixture: _tools/pvptest/record.ts output — a live duel room with 3 fleet
 // bots + 3 server bots. Feeds json through handleMessage and binary frames

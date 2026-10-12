@@ -1,3 +1,4 @@
+/* oxlint-disable vitest/no-conditional-in-test -- fuzz/audit harness: random-op branches and tree walks ARE the test logic */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {type ServerMessage, PROTOCOL_VERSION} from '../../../shared/protocol.js';
 

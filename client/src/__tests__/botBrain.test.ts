@@ -1,3 +1,4 @@
+/* oxlint-disable vitest/no-conditional-in-test -- table/fuzz harness: branchy drives and ?? fallbacks ARE the test logic */
 import { describe, it, expect, vi } from 'vitest';
 import { BotBrain, type BrainCtx } from '../../../shared/botBrain.js';
 

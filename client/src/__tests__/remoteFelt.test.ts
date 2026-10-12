@@ -1,3 +1,4 @@
+/* oxlint-disable vitest/no-conditional-in-test -- table/fuzz harness: branchy drives and ?? fallbacks ARE the test logic */
 import { describe, it, expect, assert, beforeEach, afterEach, vi } from 'vitest';
 import * as THREE from 'three';
 import { RemoteInterp, type InterpHost } from '../entities/remoteInterp.js';

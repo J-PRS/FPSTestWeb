@@ -1,3 +1,4 @@
+/* oxlint-disable vitest/no-conditional-in-test -- fuzz/audit harness: random-op branches and tree walks ARE the test logic */
 // Playback differential audit — validates what demovalidate cannot: that a
 // deserialized .demo, driven through the REAL playback runtime
 // (createDemoLifecycle + applyPlaybackEvents), produces a world that moves.

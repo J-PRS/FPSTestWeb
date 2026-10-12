@@ -203,11 +203,13 @@ function weaponOptsFor(cls: ArmorClass): DropOpt[] {
     })
     .filter((o): boolean => !o.sidearm)
     // SLOT_DEFS order is wire identity (wid = index) — the MENU sorts by
-    // name instead; v stays the wid so picks never reshuffle. Tier-locked
-    // entries group at the bottom so restricted gear reads as one block.
+    // name instead; v stays the wid so picks never reshuffle. Order by
+    // pickability: universal, then this class's tagged ordnance, then
+    // the locked tiers — everything you CAN shoulder reads as one block.
     .toSorted((a, b) => {
-      const ar = a.label.startsWith('[') ? 1 : 0, br = b.label.startsWith('[') ? 1 : 0;
-      return ar - br || a.label.localeCompare(b.label);
+      const rank = (o: { disabled: boolean; label: string }): number =>
+        o.disabled ? 2 : o.label.startsWith('[') ? 1 : 0;
+      return rank(a) - rank(b) || a.label.localeCompare(b.label);
     });
 }
 
@@ -273,6 +275,7 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
         it.dataset.v = o.v;
         it.addEventListener('click', (e): void => {
           e.stopPropagation();
+          // oxlint-disable-next-line vitest/no-conditional-in-test -- rule misfires on the it() item-builder above
           if (o.disabled) {return;} // tier-locked — visible but unshoulderable
           onPick(o.v);
           el.classList.remove('open');
