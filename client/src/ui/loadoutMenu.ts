@@ -276,6 +276,7 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
         it.addEventListener('click', (e): void => {
           e.stopPropagation();
           // oxlint-disable-next-line vitest/no-conditional-in-test -- rule misfires on the it() item-builder above
+          // oxlint-disable-next-line vitest/no-conditional-in-test -- rule misfires on the it() item-builder above
           if (o.disabled) {return;} // tier-locked — visible but unshoulderable
           onPick(o.v);
           el.classList.remove('open');

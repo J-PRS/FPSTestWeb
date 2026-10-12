@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-explicit-any -- test stubs are deliberately loosely typed */
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { BotFire, type FireHost } from '../game/bots/botFire.js';

@@ -84,6 +84,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
 
   position: {
     limit: { maxCount: 30, windowMs: 1000 },
+    // oxlint-disable-next-line typescript/no-explicit-any -- decode boundary: validated payloads flow out as any by design
     validate: (obj): { success: false; error: string; } | { success: true; data: any; } => {
       const body = validateBody(obj);
       if (!body.success) {return body;}

@@ -1,103 +1,103 @@
 /* oxlint-disable vitest/no-conditional-in-test -- table/fuzz harness: branchy drives and ?? fallbacks ARE the test logic */
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-
-import { Vgs, vgsGate } from '../game/vgs.js';
-import { TREE , type VgsNode } from '../game/vgsTree.js';
-
-type Handler = (e: KeyboardEvent) => void;
-
-// oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
-let keydown!: Handler;
-
-const press = (code: string, key = code.slice(3).toLowerCase()): void =>
-  keydown({
-    code, key,
-    preventDefault: vi.fn(),
-    stopImmediatePropagation: vi.fn(),
-    target: null,
-  } as unknown as KeyboardEvent);
-
-const deps = () => ({
-  send: vi.fn(),
-  isConnected: vi.fn((): boolean => true),
-  echo: vi.fn(),
-  speak: vi.fn(),
-});
-
-beforeEach((): () => void => {
-  const win = globalThis.window as unknown as Record<string, unknown>;
-  const add = win.addEventListener as (t: string, fn: Handler) => void;
-  win.addEventListener = (t: string, fn: Handler): void => {
-    if (t === 'keydown') {keydown = fn;}
-  };
-  return (): void => { win.addEventListener = add; };
-});
-
-const make = (): Vgs => new Vgs(depsRef);
-let depsRef = deps();
-
-describe('Vgs', (): void => {
-  it('V opens the menu, chord letters pick a line (VGS = SHAZBOT)', (): void => {
-    depsRef = deps();
-    make();
-    press('KeyV', 'v');
-    expect(vgsGate.active).toBe(true);
-    press('KeyG', 'g');
-    press('KeyS', 's');
-    expect(depsRef.send).toHaveBeenCalledWith('SHAZBOT!', false, 'VGS');
-    expect(depsRef.speak).toHaveBeenCalledWith('SHAZBOT!');
-    // Own line always echoes locally (Tribes feel); the wire echo
-    // dedupes in Chat.add via pendingSelf.
-    expect(depsRef.echo).toHaveBeenCalledWith('SHAZBOT!', false, 'VGS');
-    expect(vgsGate.active).toBe(false);
-  });
-
-  it('tactical categories scope to team (VAF = attack flag)', (): void => {
-    depsRef = deps();
-    make();
-    press('KeyV', 'v');
-    press('KeyA', 'a');
-    press('KeyF', 'f');
-    expect(depsRef.send).toHaveBeenCalledWith('Get the enemy flag!', true, 'VAF');
-  });
-
-  it('offline echoes the line locally instead of sending silently', (): void => {
-    depsRef = deps();
-    depsRef.isConnected.mockReturnValue(false);
-    make();
-    press('KeyV', 'v');
-    press('KeyG', 'g');
-    press('KeyY', 'y');
-    expect(depsRef.send).toHaveBeenCalledWith('Yes!', false, 'VGY');
-    expect(depsRef.echo).toHaveBeenCalledWith('Yes!', false, 'VGY');
-  });
-
-  it('invalid chord or Escape cancels without sending', (): void => {
-    depsRef = deps();
-    make();
-    press('KeyV', 'v');
-    press('KeyZ', 'z'); // no Z at root
-    expect(vgsGate.active).toBe(false);
-    press('KeyV', 'v');
-    press('Escape', 'Escape');
-    expect(vgsGate.active).toBe(false);
-    expect(depsRef.send).not.toHaveBeenCalled();
-  });
-
-  it('every tree leaf resolves to a unique chord', (): void => {
-    const seen = new Map<string, string>();
-    const walk = (node: Record<string, VgsNode>, prefix: string): void => {
-      for (const [k, n] of Object.entries(node)) {
-        const chord = prefix + k;
-        if ('line' in n) {
-          // oxlint-disable-next-line vitest/no-conditional-expect -- leaf-vs-walk branch in the tree walk
-          expect(seen.has(chord), `dup chord ${chord}`).toBe(false);
-          seen.set(chord, n.label);
-        } else {walk(n.children, chord);}
-      }
-    };
-    walk(TREE, 'V');
-    expect(seen.size).toBeGreaterThan(30);
-    expect(seen.get('VGS')).toBe('Shazbot');
-  });
-});
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+
+import { Vgs, vgsGate } from '../game/vgs.js';
+import { TREE , type VgsNode } from '../game/vgsTree.js';
+
+type Handler = (e: KeyboardEvent) => void;
+
+// oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
+let keydown!: Handler;
+
+const press = (code: string, key = code.slice(3).toLowerCase()): void =>
+  keydown({
+    code, key,
+    preventDefault: vi.fn(),
+    stopImmediatePropagation: vi.fn(),
+    target: null,
+  } as unknown as KeyboardEvent);
+
+const deps = () => ({
+  send: vi.fn(),
+  isConnected: vi.fn((): boolean => true),
+  echo: vi.fn(),
+  speak: vi.fn(),
+});
+let depsRef = deps();
+
+beforeEach((): () => void => {
+  const win = globalThis.window as unknown as Record<string, unknown>;
+  const add = win.addEventListener as (t: string, fn: Handler) => void;
+  win.addEventListener = (t: string, fn: Handler): void => {
+    if (t === 'keydown') {keydown = fn;}
+  };
+  return (): void => { win.addEventListener = add; };
+});
+
+const make = (): Vgs => new Vgs(depsRef);
+
+describe('Vgs', (): void => {
+  it('V opens the menu, chord letters pick a line (VGS = SHAZBOT)', (): void => {
+    depsRef = deps();
+    make();
+    press('KeyV', 'v');
+    expect(vgsGate.active).toBe(true);
+    press('KeyG', 'g');
+    press('KeyS', 's');
+    expect(depsRef.send).toHaveBeenCalledWith('SHAZBOT!', false, 'VGS');
+    expect(depsRef.speak).toHaveBeenCalledWith('SHAZBOT!');
+    // Own line always echoes locally (Tribes feel); the wire echo
+    // dedupes in Chat.add via pendingSelf.
+    expect(depsRef.echo).toHaveBeenCalledWith('SHAZBOT!', false, 'VGS');
+    expect(vgsGate.active).toBe(false);
+  });
+
+  it('tactical categories scope to team (VAF = attack flag)', (): void => {
+    depsRef = deps();
+    make();
+    press('KeyV', 'v');
+    press('KeyA', 'a');
+    press('KeyF', 'f');
+    expect(depsRef.send).toHaveBeenCalledWith('Get the enemy flag!', true, 'VAF');
+  });
+
+  it('offline echoes the line locally instead of sending silently', (): void => {
+    depsRef = deps();
+    depsRef.isConnected.mockReturnValue(false);
+    make();
+    press('KeyV', 'v');
+    press('KeyG', 'g');
+    press('KeyY', 'y');
+    expect(depsRef.send).toHaveBeenCalledWith('Yes!', false, 'VGY');
+    expect(depsRef.echo).toHaveBeenCalledWith('Yes!', false, 'VGY');
+  });
+
+  it('invalid chord or Escape cancels without sending', (): void => {
+    depsRef = deps();
+    make();
+    press('KeyV', 'v');
+    press('KeyZ', 'z'); // no Z at root
+    expect(vgsGate.active).toBe(false);
+    press('KeyV', 'v');
+    press('Escape', 'Escape');
+    expect(vgsGate.active).toBe(false);
+    expect(depsRef.send).not.toHaveBeenCalled();
+  });
+
+  it('every tree leaf resolves to a unique chord', (): void => {
+    const seen = new Map<string, string>();
+    const walk = (node: Record<string, VgsNode>, prefix: string): void => {
+      for (const [k, n] of Object.entries(node)) {
+        const chord = prefix + k;
+        if ('line' in n) {
+          // oxlint-disable-next-line vitest/no-conditional-expect -- leaf-vs-walk branch in the tree walk
+          expect(seen.has(chord), `dup chord ${chord}`).toBe(false);
+          seen.set(chord, n.label);
+        } else {walk(n.children, chord);}
+      }
+    };
+    walk(TREE, 'V');
+    expect(seen.size).toBeGreaterThan(30);
+    expect(seen.get('VGS')).toBe('Shazbot');
+  });
+});

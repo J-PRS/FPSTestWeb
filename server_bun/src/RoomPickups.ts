@@ -76,7 +76,7 @@ export class RoomPickups {
     // rosterRow pins the row shape to the declared rosterFields — a
     // snapshot field that drifts from the declaration warns at build
     // time instead of diffing silently on the client.
-    return [...this.pickups.values()].map((p): { [x: string]: unknown; } => rosterRow(WORLD_MODEL.pickup!, 'id', p.id, { pos: Object.assign({}, p.pos), kind: p.kind }));
+    return [...this.pickups.values()].map((p): { id: number; pos: Vec3; kind: PickupKind } => rosterRow(WORLD_MODEL.pickup!, 'id', p.id, { pos: Object.assign({}, p.pos), kind: p.kind }) as { id: number; pos: Vec3; kind: PickupKind });
   }
 
   /** Nearest live pickup to a point — bots chase these. */

@@ -217,7 +217,7 @@ export class ServerBotSenses {
     const parties = sharedParties ?? this.partiesOf(p);
     const bp = sharedEnv.thinkProf ? (k: string, t0: number): Map<string, number> => sharedEnv.thinkProf!.set(k, (sharedEnv.thinkProf!.get(k) ?? 0) + sharedEnv.wallPerf!() - t0) : null;
     const ctx: BrainCtx = Object.assign({}, {id: p.id,team: p.team,pos: p.position,vel: p.velocity,enemies: parties.enemies,objective: goal?.pos ?? null,infiltrating: goal?.infiltrating ?? false,running: goal?.running ?? false,runner: goal?.runner ?? false,wave: goal?.wave ?? false,marshal: goal?.marshal ?? false,pushLive: p.team === 'alpha' || p.team === 'bravo' ? this.pushFor(p.team) !== null : false,posted: goal?.posted ?? 0,pickup: bp ? ((): BotVec | undefined => { const t = sharedEnv.wallPerf!(); const v = this.pickupFor(p, parties.enemies) ?? undefined; bp('sense:pickup', t); return v; })() : (this.pickupFor(p, parties.enemies) ?? undefined),huntCreatures: this.room.mode === 'nuggets'
-        || Object.values(this.room.creatureSim.pops).some((cap): boolean => cap > 0),groundY: (x, z): number => {
+        || Object.values(this.room.creatureSim.pops).some((cap): boolean => cap > 0),groundY: (x: number, z: number): number => {
         const t0 = sharedEnv.thinkProf ? sharedEnv.wallPerf!() : 0;
         const ep = this.room.moveSim.structureEpoch;
         if (ep !== this.groundEpoch) { this.groundMemo.clear(); this.groundEpoch = ep; }

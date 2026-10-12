@@ -279,6 +279,7 @@ function emitEdgeDebug(geo: THREE.BufferGeometry, ctx: EdgeCtx, triCount: number
       if (1 - faceDot(faceN, x.t, y.t) > SHARP_DIHEDRAL) {sharpN += 1; flaggedN += l.length; }
     }
     let set = 0; for (let i = 0; i < count * 3; i += 1) {if (aedge[i]! > 0) {set += 1;}}
+    // oxlint-disable-next-line typescript/no-explicit-any -- debug flag on window
     if ((window as any).__edgebakeLog) {console.log(`[edgebake] tris=${triCount} edges=${edges.size} shared=${shared} bnd=${bnd} sharp=${sharpN} flagverts=${set}/${count}`);}
   }
 }

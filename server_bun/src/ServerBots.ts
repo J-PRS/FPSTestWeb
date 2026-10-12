@@ -614,7 +614,7 @@ hurtCount += 1;
         // Income in reach — a nugget the bot could realistically touch
         // lowers the spend reserve (refill is basically planned).
         const pk = ctx.pickup;
-        const nuggetNear = Boolean(pk) && Math.hypot(pk.x - p.position.x, pk.z - p.position.z) < 60;
+        const nuggetNear = pk != null && Math.hypot(pk.x - p.position.x, pk.z - p.position.z) < 60;
         out = brain.think(dt * ServerBots.THINK_DIV, ctx);
         prof[2]! += performance.now() - tm; tm = performance.now();
         // Situation chatter edge — killFeed.say resolves the kind through

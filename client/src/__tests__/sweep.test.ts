@@ -2,12 +2,13 @@ import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 
 import { sweepTerrain, sweepPlayer, sweepObstacle, type SweepHost } from '../projectiles/sweep';
+import type { Terrain } from '../world/terrain.js';
 import { PLAYER_RADIUS, CAPSULE_CENTER_Y, EYE_OFFSET } from '../core/config';
 import type { ProjectileConfig } from '../projectiles/types';
 import type { SweepObstacle } from '../projectiles/Projectile';
 
 // Flat ground at y=0 — the host is a plain object, no scene needed.
-const flatTerrain = { getHeight: (): number => 0 } as any;
+const flatTerrain = { getHeight: (): number => 0 } as unknown as Terrain;
 
 function host(over: Partial<SweepHost> & { from?: [number, number, number]; to?: [number, number, number]; config?: Partial<ProjectileConfig> } = {}): SweepHost & { hits: { x: number; y: number; z: number; t: number; }[]; } {
   const hits: { x: number; y: number; z: number; t: number }[] = [];

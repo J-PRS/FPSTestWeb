@@ -132,7 +132,7 @@ export class MatchClock {
     setMatchMuted(true);
     const {host} = this;
     const spec = host.modeSpec!;
-    const scores = spec.teams ? Object.assign({}, host.scores) : Object.fromEntries(host.ffaScores);
+    const scores = (spec.teams ? Object.assign({}, host.scores) : Object.fromEntries(host.ffaScores)) as Record<string, number>;
     host.broadcast({ type: spec.teams ? 'matchEnd' : 'ffaMatchEnd', winner: w, scores } as ServerMessage);
     host.onMatchEnd?.({ room: host.room, mode: host.mode, winner: w, scores, players: host.matchPlayers() });
     host.onEnded?.(w);

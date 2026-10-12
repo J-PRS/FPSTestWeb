@@ -19,6 +19,7 @@ import { Explosion } from '../effects/explosion.js';
 import { updateVfx } from '../effects/vfx.js';
 import { collectDiag } from '../core/fxDiag.js';
 // oxlint-disable-next-line import/no-unassigned-import
+// oxlint-disable-next-line import/no-unassigned-import
 import '../core/visAudit.js'; // side-effect: registers the Alt+Q visAudit section
 import { setLogOverlayVisible } from '../ui/logPanel.js';
 import { setDebugOverlays } from '../ui/hud/indicators.js';

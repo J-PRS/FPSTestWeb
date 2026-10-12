@@ -52,7 +52,7 @@ export async function resolveServerEndpoints(): Promise<ServerEndpoints> {
   let fleet = urlParams.has('fleet');
   if (!host) {
     try {
-      const cfg = await fetch('server.json', { cache: 'no-cache' }).then((r): Promise<any> => r.json()) as { server?: string; fleet?: boolean };
+      const cfg = await fetch('server.json', { cache: 'no-cache' }).then((r): Promise<{ server?: string; fleet?: boolean }> => r.json());
       host = cfg.server?.trim() ?? '';
       if (cfg.fleet) {fleet = true;}
     } catch { /* no server.json — stay local */ }

@@ -190,7 +190,7 @@ export class FlagRunBridge {
   private async loadTasGhost(): Promise<void> {
     const terrain = this.deps.lazyTerrain();
     const scene = this.deps.lazyScene();
-    const data = await fetch('/assets/tas_paths.json').then((r): Promise<any> => r.json()).catch((): null => null);
+    const data = await fetch('/assets/tas_paths.json').then((r): Promise<Record<string, { samples: { x: number; z: number; agl: number; j: number; yaw: number }[]; t: number; miss?: number }>> => r.json()).catch((): null => null);
     if (!data) { this.w.onFeed('TAS ghost: no tas_paths.json — run .devin_tas.ts first.'); return; }
     const want = urlParams.get('tas');
     const key = want && want.includes('->') ? want : Object.keys(data)[0]!;
@@ -209,7 +209,7 @@ export class FlagRunBridge {
       getNormal: (x, z, out) => { const n = terrain.getNormal(x, z); out.x = n.x; out.y = n.y; out.z = n.z; return out; },
     };
     const start2 = this.tasPts[0]!;
-    const leg2 = leg as { samples: { yaw: number; j: number }[] };
+    const leg2 = leg;
     const sim = new MoveSim(surface, {
       pos: { x: start2.x, y: start2.y, z: start2.z },
       vel: { x: 0, y: 0, z: 0 },
