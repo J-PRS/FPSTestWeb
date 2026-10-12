@@ -110,15 +110,14 @@ export function applyPlaybackMarkerEvent(world: PlaybackWorld, ev: TargetEvent, 
     }
     if (ev.eventType === TargetEventType.Destroyed) {
       const p = map.get(ev.targetId);
-      if (p) {
-        // Grabbed — gem/tag ping like a pickup, the rest chime like a
-        // powerup, matching the live pickupGrab/powerup split.
-        if (audible) {
-          sfxUtil.at(p.mesh.position, ev.targetType - TARGETTYPE_PICKUP_BASE <= 1 ? 'pickup' : 'powerup');
-        }
-        p.dispose(world.scene);
-        map.delete(ev.targetId);
+      if (!p) {return;}
+      // Grabbed — gem/tag ping like a pickup, the rest chime like a
+      // powerup, matching the live pickupGrab/powerup split.
+      if (audible) {
+        sfxUtil.at(p.mesh.position, ev.targetType - TARGETTYPE_PICKUP_BASE <= 1 ? 'pickup' : 'powerup');
       }
+      p.dispose(world.scene);
+      map.delete(ev.targetId);
     }
   }
 }
@@ -149,13 +148,11 @@ export function reconstructSeekMarker(world: PlaybackWorld, ev: TargetEvent, _se
 export function updatePlaybackFlags(world: PlaybackWorld): void {
   for (const flag of world.playbackFlags.values()) {
     const carrierIdx = flag.userData.carrierIdx as number | undefined;
-    if (flag.userData.state === 1 && carrierIdx !== undefined && carrierIdx >= 0) {
-      const pos = world.remotePosAt?.(carrierIdx);
-      if (pos) {
-        flag.position.copy(pos).add(_carryOffset);
-        flag.visible = true;
-      }
-    }
+    if (flag.userData.state !== 1 || carrierIdx === undefined || carrierIdx < 0) {continue;}
+    const pos = world.remotePosAt?.(carrierIdx);
+    if (!pos) {continue;}
+    flag.position.copy(pos).add(_carryOffset);
+    flag.visible = true;
   }
 }
 

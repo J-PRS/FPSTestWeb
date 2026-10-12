@@ -319,6 +319,10 @@ export class ViewModel {
     this.env.startThrow(timeScale);
   }
 
+  draw(): void {
+    this.env.draw();
+  }
+
   // Cloak ghosting — a true "whole-layer" fade, not per-surface alpha.
   // Each opaque mesh gets an invisible depth-only clone that renders in the
   // opaque pass BEFORE the transparent weapon: the silhouette's depth lands

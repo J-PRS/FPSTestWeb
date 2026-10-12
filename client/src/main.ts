@@ -539,7 +539,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   // deploys, balls and demo recording all land after warmup instead of
   // mid-compile-hitch (the online path gates on the session veil).
   if (!networkManager.isConnected()) {await gameLoop.whenStable();}
-  if (classicMode || soloMode) {player.unfreezeInput();}
+  if (classicMode || soloMode) {player.unfreezeInput(); viewModel.draw();}
   // Spec maps spawn you at an authored anchor (team spawn > generic
   // spawn > own base) — origin on a T2 port can be kilometers from play.
   if (soloMode && soloSpec) {
@@ -714,6 +714,18 @@ async function init(): Promise<void> {
 
   player = new Player(terrain, camera, scene);
   profiler.markTime('playerCtor');
+  // Solo spec anchor up front — the camera renders warmup frames from the
+  // real spawn point instead of the origin, so connectPhase's post-stable
+  // placement is a same-spot reassert, not a visible jump.
+  if (!onlineBoot && soloSpec) {
+    const a0 = soloSpec.spec.teamSpawns?.alpha?.[0] ?? soloSpec.spec.spawns?.[0] ?? soloSpec.spec.bases?.alpha;
+    if (a0) {
+      player.pos.set(a0.x, terrain.getHeight(a0.x, a0.z) + 2, a0.z);
+      noteLocalSnap();
+      player.syncMovement();
+      player.markTeleport();
+    }
+  }
   // The GLB is a ~0.4-0.6s fetch+parse the first-person camera never
   // draws — kicking it at construction overlaps it with the rest of
   // init and the connect handshake instead of serializing it before
@@ -901,6 +913,7 @@ function reviveLocal(): void {
   noteLocalSnap();
   player.syncMovement();
   player.markTeleport();
+  viewModel.draw();
   hud.show();
   hud.setDeathOverlay(false);
 }

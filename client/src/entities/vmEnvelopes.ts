@@ -68,6 +68,13 @@ export class VmEnvelopes {
     this.throwScale = timeScale;
   }
 
+  // Spawn draw — jump straight to the throw envelope's raise segment so
+  // the weapon reads "pulled out" on a fresh life instead of pop-in.
+  draw(): void {
+    this.throwT = THROW_RELEASE;
+    this.throwScale = 1;
+  }
+
   // Melee swing: sweeps the weapon aside instead of kicking — reads as a
   // punch, not a shot. No flash (melee isn't a discharge). `landed` runs
   // the connect variant — the apex hold stretches so the hit visibly STOPS

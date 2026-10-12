@@ -709,6 +709,18 @@ violation instead of a symptom hunt.
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
   don't land mid-compile-hitch. Counter is total-frame-capped so a
   permanently-slow box can never gate forever.
+  - Solo spec maps now seat the spawn anchor AT construction (warmup
+    frames render from the real spawn) — the post-stable placement is a
+    same-spot reassert, not a camera jump.
+  - `st.bootReleased` latches on release; `waveDirector.update` (the
+    visible match timer) is gated on it so 'spawned' and 'clock
+    started' are one event — post-release hitches don't re-gate.
+  - HUD vitals snap `ghostPct`/`lastHealthPct` to truth on the
+    dead→alive edge — respawning into a partial hp pool no longer
+    renders the ghost drain that read as fresh damage.
+  - `viewModel.draw()` (throw envelope's raise segment) plays on
+    solo/classic spawn and `reviveLocal` — weapon pulls out instead of
+    pop-in.
 
 - **Deploy placement claims:** `handleDeploy` gates every forgeable
   axis — player alive, kind enum + cap-0 rejection (a client cannot

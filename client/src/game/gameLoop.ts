@@ -193,6 +193,9 @@ export interface LoopState {
   bootStable: number;
   bootFrames: number;
   bootStableResolvers: (() => void)[];
+  /** Latches once the boot-warmup release fires — post-release hitches
+   *  must NOT re-gate the systems booted behind whenStable(). */
+  bootReleased: boolean;
 }
 
 // fxJob EMA/max bookkeeping lives in loopPerf — see fxJobSample there.
@@ -268,14 +271,14 @@ const _contactBodies: BodyCapsule[] = [];
 
 /** Stage 1 — world sim: player, terrain, entities, wave director,
  *  projectiles. Returns demoPaused for the later stages. */
-interface TickFrame { dt: number; player: Player; networkManager: NetworkManager; demoManager: DemoManager | null }
+interface TickFrame { dt: number; player: Player; networkManager: NetworkManager; demoManager: DemoManager | null; bootReleased: boolean }
 const fmtBps = (b: number): string => {
   if (b >= 1_048_576) {return `${(b / 1_048_576).toFixed(1)}MB/s`;}
   if (b >= 1024) {return `${(b / 1024).toFixed(1)}KB/s`;}
   return `${Math.round(b)}B/s`;
 };
 
-function tickEntities(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, dt: number, demoPlaying: boolean): void {
+function tickEntities(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, dt: number, demoPlaying: boolean, bootReleased: boolean): void {
   const {entities} = deps;
   entities.updateBalls(dt);
   perf.mark('balls');
@@ -289,7 +292,10 @@ function tickEntities(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>
   // Ambient population is an offline feature — connected rooms own
   // their balls/creatures on the wire; the director spawning locals
   // alongside them was the busy double-population on join.
-  if (!demoPlaying && !deps.lazyNetworkManager().isConnected()) {deps.waveDirector().update(dt);}
+  // The director's clock is the visible match timer — gating on the
+  // same release that unfreezes the player keeps 'spawned' and 'clock
+  // started' as one event instead of a timer running behind the veil.
+  if (!demoPlaying && !deps.lazyNetworkManager().isConnected() && bootReleased) {deps.waveDirector().update(dt);}
   if (!demoPlaying) {entities.updateNuggets(dt);}
   deps.teamBots?.()?.update(dt);
   perf.mark('bots');
@@ -300,6 +306,7 @@ function tickEntities(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>
 
 
 function simTick(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, f: TickFrame, terrain: Terrain): boolean {
+  const {bootReleased} = f;
   const { dt, player, demoManager, networkManager } = f;
   // Offline pause: a hidden tab rAFs ~1/s, so the local match would crawl
   // at 5% speed and bots keep slowly fighting — a real pause matches user
@@ -353,7 +360,7 @@ bodyN += 1;
   const demoPaused = tickDemo(deps, dt);
   if (demoPaused) {return true;}
 
-  tickEntities(deps, perf, dt, demoManager?.isPlaying ?? false);
+  tickEntities(deps, perf, dt, demoManager?.isPlaying ?? false, bootReleased);
   return false;
 }
 
@@ -705,7 +712,7 @@ function fpsCapAllows(st: LoopState, rawElapsed: number): boolean {
 export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(): Promise<void>; } {
   let lastTime = 0;
   let renderElapsed = 0;
-  const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, gpuLevel: 0, cpuLevel: 0, cpuBound: false, headroomAccum: 0, autoPixel: false, fxCursor: 0, fxJobs: [], shadowAcc: 0, renderAcc: 0, warmN: 0, warmed: false, veilStable: 0, veilFrames: 0, bootStable: 0, bootFrames: 0, bootStableResolvers: [] };
+  const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, gpuLevel: 0, cpuLevel: 0, cpuBound: false, headroomAccum: 0, autoPixel: false, fxCursor: 0, fxJobs: [], shadowAcc: 0, renderAcc: 0, warmN: 0, warmed: false, veilStable: 0, veilFrames: 0, bootStable: 0, bootFrames: 0, bootStableResolvers: [], bootReleased: false };
 
   // stats.js perf panels — FPS/MS/MB in a row along the bottom-right,
   // toggled with ` (backquote). stats.js only renders one panel per
@@ -764,6 +771,7 @@ st.bootFrames += 1;
     if (st.bootStableResolvers.length > 0 && (st.bootStable >= 45 || st.bootFrames >= 240)) {
       const resolvers = st.bootStableResolvers;
       st.bootStableResolvers = [];
+      st.bootReleased = true;
       for (const r of resolvers) { r(); }
     }
     if (isSessionVeiled()) {
@@ -790,7 +798,7 @@ st.veilFrames += 1;
     const networkManager = deps.lazyNetworkManager();
     const demoManager = deps.lazyDemoManager();
 
-    const frame: TickFrame = { dt, player, networkManager, demoManager };
+    const frame: TickFrame = { dt, player, networkManager, demoManager, bootReleased: st.bootReleased };
     // Late-bound once: the ops uplink reads the perf EMA (JS frame cost +
     // real present rate) but perf doesn't exist until the loop starts.
     if (!networkManager.statsSource) {
