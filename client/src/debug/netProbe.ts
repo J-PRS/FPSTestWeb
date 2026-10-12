@@ -150,7 +150,7 @@ function panelHtml(): string {
   const avg = corrCount ? corrErrSum / corrCount : 0;
   const top = [...rejects.entries()].toSorted((a, b): number => b[1] - a[1]).slice(0, 5)
     .map(([r, n]): string => `${r} ×${n}`).join('<br>');
-  const recent = events.slice(-8).reverse()
+  const recent = events.slice(-8).toReversed()
     .map((e): string => `<div style="opacity:0.7">${((performance.now() - e.t) / 1000).toFixed(1)}s ${e.line}</div>`).join('');
   return `<b>NET</b> ping ${ping}ms · loss ${loss}% · jitter ${jitter}ms<br>` +
     `corr ${corrPerMin()}/min · max ${corrErrMax.toFixed(1)}m · avg ${avg.toFixed(2)}m<br>` +

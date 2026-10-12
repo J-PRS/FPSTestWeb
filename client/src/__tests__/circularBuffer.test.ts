@@ -13,7 +13,7 @@ describe('CircularBuffer', (): void => {
     expect(b.peekNewest()).toBe(4);
     expect(b.get(0)).toBe(2);
     expect(b.get(2)).toBe(4);
-    expect((): number => b.get(3)).toThrow();
+    expect((): number => b.get(3)).toThrow('out of range');
   });
 
   it('slotForNext enables zero-alloc reuse on a full ring', (): void => {

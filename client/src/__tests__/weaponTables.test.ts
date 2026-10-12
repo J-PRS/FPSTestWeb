@@ -36,11 +36,9 @@ describe('weapon registry', (): void => {
 
   it('fan weapons declare pellets; beams are hitscan only', (): void => {
     const BEAM_WEAPONS = new Set([WeaponType.Lightning, WeaponType.Repair]);
-    for (const def of SLOT_DEFS) {
-      if (def.kind === 'fan') {expect(def.pellets).toBeDefined();}
-      if (def.kind === 'beam') {expect(BEAM_WEAPONS.has(def.weaponType)).toBe(true);}
-      if (BEAM_WEAPONS.has(def.weaponType)) {expect(def.kind).toBe('beam');}
-    }
+    SLOT_DEFS.filter((def): boolean => def.kind === 'fan').forEach((def): void => { expect(def.pellets).toBeDefined(); });
+    SLOT_DEFS.filter((def): boolean => def.kind === 'beam').forEach((def): void => { expect(BEAM_WEAPONS.has(def.weaponType)).toBe(true); });
+    SLOT_DEFS.filter((def): boolean => BEAM_WEAPONS.has(def.weaponType)).forEach((def): void => { expect(def.kind).toBe('beam'); });
   });
 
   it('every client config resolves to shared stats (wire id valid)', (): void => {
@@ -52,7 +50,7 @@ describe('weapon registry', (): void => {
       expect(c.aoeRadius).toBe(w.aoeRadius);
       // aoeDamage is inert when there's no splash (chaingun keeps a
       // placeholder) — only real AOE weapons must agree on it.
-      if (c.aoeRadius > 0) {expect(c.aoeDamage).toBe(w.aoeDamage);}
+      expect(c.aoeRadius <= 0 || c.aoeDamage === w.aoeDamage, `${c.name} aoeDamage must match when radius > 0`).toBe(true);
       expect(c.bodyRadius).toBe(w.bodyRadius);
     }
     const seen = new Set<number>();
@@ -96,10 +94,8 @@ describe('weapon registry', (): void => {
   it('every ray-burst weapon declares delay+range in shared stats', (): void => {
     for (const c of WEAPON_CONFIGS) {
       const w = getWeaponStats(c.weaponType);
-      if (c.rayBurst) {
-        expect(w.rayDelay).toBe(c.rayBurst.delay);
-        expect(w.rayRange).toBe(c.rayBurst.range);
-      }
+      expect(c.rayBurst === undefined || w.rayDelay === c.rayBurst.delay, 'rayDelay matches burst').toBe(true);
+      expect(c.rayBurst === undefined || w.rayRange === c.rayBurst.range, 'rayRange matches burst').toBe(true);
     }
   });
 });

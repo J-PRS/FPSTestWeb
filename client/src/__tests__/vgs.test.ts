@@ -89,6 +89,7 @@ describe('Vgs', (): void => {
       for (const [k, n] of Object.entries(node)) {
         const chord = prefix + k;
         if ('line' in n) {
+          // oxlint-disable-next-line vitest/no-conditional-expect -- leaf-vs-walk branch in the tree walk
           expect(seen.has(chord), `dup chord ${chord}`).toBe(false);
           seen.set(chord, n.label);
         } else {walk(n.children, chord);}

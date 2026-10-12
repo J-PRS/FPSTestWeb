@@ -8,6 +8,7 @@ import { deserializeDemo } from './demoReader.js';
 
 // Facade — the codec halves live in demoWriter.ts (record encoders,
 // crc32, record sizes) and demoReader.ts (bounds-checked cursor).
+// oxlint-disable-next-line no-namespace -- grouped statics are the public API shape
 export namespace DemoSerializer {
   export function serialize(data: DemoFile): ArrayBuffer {
     return serializeDemo(data);

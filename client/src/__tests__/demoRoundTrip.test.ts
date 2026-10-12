@@ -115,6 +115,6 @@ describe('demo round-trip', (): void => {
     const buf = serializeDemo(mkFile());
     const bytes = new Uint8Array(buf);
     bytes[bytes.length - 10]! ^= 0xFF;
-    expect((): DemoFile => deserializeDemo(buf)).toThrow();
+    expect((): DemoFile => deserializeDemo(buf)).toThrow(/demo/i);
   });
 });

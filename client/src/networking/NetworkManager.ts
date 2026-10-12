@@ -188,7 +188,7 @@ export class NetworkManager {
     if (stored) {
       this.localPlayerId = stored;
     } else {
-      this.localPlayerId = `player_${Math.random().toString(36).substr(2, 9)}`;
+      this.localPlayerId = `player_${Math.random().toString(36).slice(2, 11)}`;
       settings.set('fps-player-id', this.localPlayerId);
     }
     // Session token issued by the server on first join — required to
@@ -314,7 +314,7 @@ export class NetworkManager {
     settings.remove('fps-player-id');
     settings.remove('fps-session-token');
     this.sessionToken = null;
-    this.localPlayerId = `player_${Math.random().toString(36).substr(2, 9)}`;
+    this.localPlayerId = `player_${Math.random().toString(36).slice(2, 11)}`;
     settings.set('fps-player-id', this.localPlayerId);
     logger.info(`Session rejected (${reason}) — rejoining as ${this.localPlayerId}`);
   }

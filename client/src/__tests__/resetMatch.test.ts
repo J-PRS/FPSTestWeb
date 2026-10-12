@@ -50,7 +50,7 @@ describe('resetMatch purges per-match state', (): void => {
     expect((m.flagrun as { reset: unknown }).reset).toHaveBeenCalled();
     for (const b of bots) {
       expect(b.carryingFlag).toBe(false);
-      if (!b.isDead) {expect(b.sheep).toBe(100); expect(b.sheepShown).toBe(100);}
+      if (b.isDead) {continue;} expect(b.sheep).toBe(100); expect(b.sheepShown).toBe(100);
     }
     expect(m.respawnBot).toHaveBeenCalledTimes(1); // only the dead one
     expect(m.hooks.remoteKillFeed).toHaveBeenCalledWith(expect.stringContaining('NEW MATCH'));

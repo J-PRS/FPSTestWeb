@@ -63,10 +63,11 @@ export function scarabParts(): SwarmPart[] {
     map: getGlowTexture(), color: 0xFF_CC_44, transparent: true, blending: THREE.AdditiveBlending,
     depthWrite: false, side: THREE.DoubleSide,
   });}
+  _eyeGeo ??= new THREE.PlaneGeometry(1, 1);
   return [
     { geometry: bodyGeo(), material: _bodyMat, castShadow: true },
     { geometry: legGeo(), material: _bodyMat, per: LEGS_PER },
-    { geometry: _eyeGeo ??= new THREE.PlaneGeometry(1, 1), material: _eyeMat, per: EYES_PER },
+    { geometry: _eyeGeo, material: _eyeMat, per: EYES_PER },
   ];
 }
 

@@ -1,3 +1,4 @@
+// oxlint-disable-next-line import/no-unassigned-import
 import './core/polyfills.js'; // toSorted etc. — older engines
 import * as THREE from 'three';
 import { setInvariantSink } from '../../shared/invariants.js';

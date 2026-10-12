@@ -39,21 +39,23 @@ const _upQ = new QV3(0, 1, 0);
 let _impactMat: THREE.MeshBasicMaterial | null = null;
 let _normalMat: THREE.MeshBasicMaterial | null = null;
 function impactMat(): THREE.MeshBasicMaterial {
-  return _impactMat ??= new THREE.MeshBasicMaterial({
+  _impactMat ??= new THREE.MeshBasicMaterial({
     map: getGlowTexture(), transparent: true, depthWrite: false,
     blending: THREE.AdditiveBlending,
     // HDR-hot tint: particle vertex colors × EMIT_GAIN push every additive
     // emitter (trails, flashes, glow layers) past the bloom threshold.
     color: new THREE.Color(EMIT_GAIN, EMIT_GAIN, EMIT_GAIN),
   });
+  return _impactMat;
 }
 function normalMat(): THREE.MeshBasicMaterial {
   // Blotchy asymmetric puff — smoke/debris quads NEED a non-symmetric
   // silhouette or RotationOverLife spins an invisible radial sprite.
-  return _normalMat ??= new THREE.MeshBasicMaterial({
+  _normalMat ??= new THREE.MeshBasicMaterial({
     map: getPuffTexture(), transparent: true, depthWrite: false,
     blending: THREE.NormalBlending,
   });
+  return _normalMat;
 }
 
 /** Bullet-impact puff: a short cone of hot sparks kicked back along the

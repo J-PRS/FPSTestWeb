@@ -99,7 +99,9 @@ describe('rosterFuzz — client roster conformance', (): void => {
           tickSeen.add(id); // respawn materializes the entity too (ctx.ts: respawn-into-missing)
           dead.delete(id);
           feed(h.nm, { type: 'playerRespawn', playerId: id, position: { x: 1, y: 2, z: 3 }, rotation: { yaw: 0, pitch: 0 } } as ServerMessage);
+          // oxlint-disable-next-line vitest/no-conditional-expect -- expect lives in the respawn roll branch of the fuzz switch
           expect(h.nm.getPlayers().get(id)!.isDead, `respawn must revive ${tag}`).toBe(false);
+          // oxlint-disable-next-line vitest/no-conditional-expect -- expect lives in the respawn roll branch of the fuzz switch
           expect(h.nm.getPlayers().get(id)!.health, `respawn must reset hp ${tag}`).toBe(100);
         } else { // gameState replace — the room hop: membership resets wholesale
           const keep = freshId();

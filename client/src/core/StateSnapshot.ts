@@ -31,6 +31,7 @@ export interface GameStateSnapshot {
   hash: string;
 }
 
+// oxlint-disable-next-line no-namespace -- grouped statics are the public API shape
 export namespace StateSnapshot {
   const snapshotBuffer: GameStateSnapshot[] = [];
   const MAX_SNAPSHOTS = 50; // Keep last 50 snapshots

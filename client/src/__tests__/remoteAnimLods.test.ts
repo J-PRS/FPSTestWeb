@@ -31,9 +31,7 @@ describe('pickAnimCadence', (): void => {
   it('every decimated tier still qualifies for distal-bone freeze', (): void => {
     // stepMixer gates distal freezing on animDt >= 1/30 — no tier may
     // fall inside (0, 1/30) or the freeze table silently stops applying.
-    for (const d of [61, 100, 121, 400]) {
-      const c = pickAnimCadence(true, d * d, true);
-      if (c > 0) {expect(c).toBeGreaterThanOrEqual(1 / 30);}
-    }
+    const cs = [61, 100, 121, 400].map((d): number => pickAnimCadence(true, d * d, true));
+    cs.filter((c): boolean => c > 0).forEach((c): void => { expect(c).toBeGreaterThanOrEqual(1 / 30); });
   });
 });

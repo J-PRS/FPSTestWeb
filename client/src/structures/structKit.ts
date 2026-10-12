@@ -35,7 +35,7 @@ function rotUp(m: THREE.Mesh): THREE.Mesh {
 // bottom→top section list skins the mesh inside-out.
 /** Sections helper: top → bottom ordering, the winding mkLoft wants. */
 export const topDown = (...secs: LoftSection[]): LoftSection[] =>
-  secs = secs.toSorted((a, b): number => b.z - a.z);
+  secs.toSorted((a, b): number => b.z - a.z);
 
 /** Raked talus skirt — the T2 "grounded into the mountain" flare.
  *  ring = top profile, flare = foot radius multiplier (1.4 ≈ 40% overhang).

@@ -87,7 +87,7 @@ export function parityLines(): string[] {
   const lines: string[] = [];
   const byKind = [...counts.entries()].map(([k, n]): string => `${k}=${n}`).join(' ');
   lines.push(`parity: misses=${total}${byKind ? ` ${byKind}` : ''}`);
-  for (const r of rows.slice(-8).reverse()) {
+  for (const r of rows.slice(-8).toReversed()) {
     lines.push(`  parity-${r.kind}: ${r.detail}`);
   }
   return lines;

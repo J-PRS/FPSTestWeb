@@ -25,6 +25,7 @@ function tsLocal(d = new Date()): string {
     `${off >= 0 ? '+' : '-'}${p(Math.floor(a / 60))}:${p(a % 60)}`;
 }
 
+// oxlint-disable-next-line no-namespace -- grouped statics are the public API shape
 export namespace Logger {
   let currentLevel: LogLevel = LogLevel.INFO;
   // Console output is WARN+ only — INFO/DEBUG still land in the Alt+Q buffer
