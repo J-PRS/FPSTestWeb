@@ -123,19 +123,17 @@ export class HudStats {
     // Bar %, not raw hp — heavy runs a 200hp pool and light 75, so the
     // width must normalize or heavies read "full" through half a healthbar.
     const healthPct = Math.round((player.health / player.maxHealth) * 100);
-    // Respawn into a partial pool (restored body) must not read as a hit —
-    // the ghost trail only means "you just lost hp", so on the dead→alive
-    // edge both needles snap to truth.
-    const revived = this.prevIsDead && !player.isDead;
+    // A first sample or restored life has no previous health to lose.
+    const resetHealth = this.lastHealthPct < 0 || (this.prevIsDead && !player.isDead);
     this.prevIsDead = player.isDead;
-    if (revived) {
+    if (resetHealth) {
       this.lastHealthPct = healthPct;
       this.ghostPct = healthPct;
       h.healthBar.style.width = `${healthPct}%`;
       h.ghostBar.style.width = '0%';
       h.ghostBar.style.left = `${healthPct}%`;
     }
-    if (!revived && healthPct !== this.lastHealthPct) {
+    if (!resetHealth && healthPct !== this.lastHealthPct) {
       this.lastHealthPct = healthPct;
       h.healthBar.style.width = `${healthPct}%`;
       // Damage → ghost holds the old width and drains down; heal → snap

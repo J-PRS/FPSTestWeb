@@ -57,3 +57,23 @@ describe('VmEnvelopes.switchWeapon', (): void => {
     expect(h.activeWeapon).toBe(1);
   });
 });
+
+describe('VmEnvelopes.draw', (): void => {
+  it('starts lowered and raises without replaying a belt windup', (): void => {
+    const env = new VmEnvelopes(mkHost([0]));
+    env.draw();
+    expect(env.tick(0).dip).toBe(1);
+    const raising = env.tick(0.15).dip;
+    expect(raising).toBeGreaterThan(0);
+    expect(raising).toBeLessThan(1);
+    expect(env.tick(0.3).dip).toBe(0);
+  });
+
+  it('does not inherit the previous belt throw time scale', (): void => {
+    const env = new VmEnvelopes(mkHost([0]));
+    env.startThrow(3);
+    env.draw();
+    expect(env.tick(0).dip).toBe(1);
+    expect(env.tick(0.4).dip).toBe(0);
+  });
+});

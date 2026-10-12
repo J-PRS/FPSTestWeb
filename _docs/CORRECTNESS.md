@@ -704,23 +704,28 @@ violation instead of a symptom hunt.
   `BLAST_IMPULSE_MAX`; spawn-shield suppression is harmless
   (the wire knockback lands anyway). Covered by blastForce.test
   (22 cases). Verified sealed.
-- **Boot stability gate:** `gameLoop.whenStable()` resolves on ~45
-  consecutive <26ms frames (4s cap). Offline starts wait on it — the
+- **Boot stability gate:** `gameLoop.whenStable()` resolves on 45
+  consecutive positive, finite <26ms frames (240-frame fallback, not
+  a wall-clock cap). Offline starts wait on it — the
   player spawn anchor, deploys, balls, `setupOfflineMode` bot roster
   don't land mid-compile-hitch. Counter is total-frame-capped so a
   permanently-slow box can never gate forever.
   - Solo spec maps now seat the spawn anchor AT construction (warmup
     frames render from the real spawn) — the post-stable placement is a
     same-spot reassert, not a camera jump.
-  - `st.bootReleased` latches on release; `waveDirector.update` (the
-    visible match timer) is gated on it so 'spawned' and 'clock
-    started' are one event — post-release hitches don't re-gate.
-  - HUD vitals snap `ghostPct`/`lastHealthPct` to truth on the
-    dead→alive edge — respawning into a partial hp pool no longer
-    renders the ghost drain that read as fresh damage.
+  - `BootWarmup` latches independently of registered waiters; early
+    and late callers share one release. Hitches cannot re-gate it.
+    Offline entities, the wave timer, and the weapon remain held
+    while warmup or the player's input freeze is still active.
+  - HUD vitals snap `ghostPct`/`lastHealthPct` to truth on the first
+    sample and the dead→alive edge — restoring a partial hp pool
+    no longer renders the ghost drain that read as fresh damage.
   - `viewModel.draw()` (throw envelope's raise segment) plays on
     solo/classic spawn and `reviveLocal` — weapon pulls out instead of
     pop-in.
+  - Regression coverage: 18 tests across boot warmup, HUD health,
+    and weapon envelopes pass. Live spawn/camera behavior is still
+    unverified; unit coverage is not an end-to-end verdict.
 
 - **Mid-match team flips:** `rebalanceTeams` only ever moves bots
   (`!p.isBot` skip — flipping a human is hostile), so the client's
@@ -764,6 +769,11 @@ violation instead of a symptom hunt.
   fire before the economy runs; the ball/creature `hit` claims are
   bounded by `acceptClaims` + sim-side `handleHit` validation.
   Verified sealed.
+- **Presence-event relays:** `jump`/`jetpack` validate a Vec3 then only
+  `relayPresenceEvent` — remote VFX echo, zero physics authority. The
+  physics-moving types (`knockback`, `playerHit`) are server→client
+  only; no inbound handler exists for either, so a client cannot
+  declare a shove or a hit. Verified sealed.
 - **Declared-jump discipline:** every legit client pos snap declares —
   `markTeleport`/`noteLocalSnap` on the wire respawn, join reseat
   (world.ts), warp-beacon release, and all five main.ts anchor/spawn

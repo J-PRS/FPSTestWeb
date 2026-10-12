@@ -58,6 +58,7 @@ import { isBotId } from '../../../shared/botNames.js';
 import { nanScanTick, nanScanBindProbe } from '../core/nanScan.js';
 import { Logger } from '../core/Logger.js';
 import type { PlayerSheep } from './playerSheep.js';
+import { BootWarmup } from './bootWarmup.js';
 
 const _zeroVel = new THREE.Vector3(); // shared zero for demo playback
 const _sunDir = new THREE.Vector3(); // scratch — directional fog sun lookup
@@ -190,12 +191,7 @@ export interface LoopState {
   /** Boot warmup — same stability signal as the veil, but for the
    *  un-veiled start: offline modes gate their spawn/roster kick-off on
    *  whenStable() so the game doesn't begin mid-hitch. */
-  bootStable: number;
-  bootFrames: number;
-  bootStableResolvers: (() => void)[];
-  /** Latches once the boot-warmup release fires — post-release hitches
-   *  must NOT re-gate the systems booted behind whenStable(). */
-  bootReleased: boolean;
+  bootWarmup: BootWarmup;
 }
 
 // fxJob EMA/max bookkeeping lives in loopPerf — see fxJobSample there.
@@ -360,6 +356,8 @@ bodyN += 1;
   const demoPaused = tickDemo(deps, dt);
   if (demoPaused) {return true;}
 
+  // Keep camera/terrain warmup running without putting an offline match in play.
+  if (!demoManager?.isPlaying && !networkManager.isConnected() && (!bootReleased || player.inputFrozen)) {return false;}
   tickEntities(deps, perf, dt, demoManager?.isPlaying ?? false, bootReleased);
   return false;
 }
@@ -532,7 +530,8 @@ blipN += 1;
   // hiding it would strip the shooter POV from cool-shot clips.
   // The middle-click orbit cam IS a third-person view while it's on —
   // hiding the FP gun is what stops "your own gun plus your own model".
-  viewModel.group.visible = !player.isDead && !player.thirdPerson && !player.isSpectating && !player.input.midHeld;
+  const bootWaiting = !networkManager.isConnected() && !demoManager?.isPlaying && (!f.bootReleased || player.inputFrozen);
+  viewModel.group.visible = !bootWaiting && !player.isDead && !player.thirdPerson && !player.isSpectating && !player.input.midHeld;
   const yawDelta = Math.atan2(Math.sin(player.yaw - st.lastYaw), Math.cos(player.yaw - st.lastYaw));
   // Paused demo = frozen world — the vm's idle sway/bob reads as the scene
   // still playing. dt=0 freezes the anims; the weapon itself stays bound
@@ -712,7 +711,7 @@ function fpsCapAllows(st: LoopState, rawElapsed: number): boolean {
 export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(): Promise<void>; } {
   let lastTime = 0;
   let renderElapsed = 0;
-  const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, gpuLevel: 0, cpuLevel: 0, cpuBound: false, headroomAccum: 0, autoPixel: false, fxCursor: 0, fxJobs: [], shadowAcc: 0, renderAcc: 0, warmN: 0, warmed: false, veilStable: 0, veilFrames: 0, bootStable: 0, bootFrames: 0, bootStableResolvers: [], bootReleased: false };
+  const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, gpuLevel: 0, cpuLevel: 0, cpuBound: false, headroomAccum: 0, autoPixel: false, fxCursor: 0, fxJobs: [], shadowAcc: 0, renderAcc: 0, warmN: 0, warmed: false, veilStable: 0, veilFrames: 0, bootWarmup: new BootWarmup() };
 
   // stats.js perf panels — FPS/MS/MB in a row along the bottom-right,
   // toggled with ` (backquote). stats.js only renders one panel per
@@ -766,14 +765,7 @@ export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(
     // landed AND ~45 stable frames ran (180-frame cap = safety valve).
     // Boot warmup counter runs even while veiled — the veil block counts
     // its own renders separately; here we meter real frames.
-st.bootFrames += 1;
-    if (rawElapsed < 0.026) {st.bootStable += 1; } else { st.bootStable = 0; }
-    if (st.bootStableResolvers.length > 0 && (st.bootStable >= 45 || st.bootFrames >= 240)) {
-      const resolvers = st.bootStableResolvers;
-      st.bootStableResolvers = [];
-      st.bootReleased = true;
-      for (const r of resolvers) { r(); }
-    }
+    st.bootWarmup.tick(rawElapsed);
     if (isSessionVeiled()) {
       deps.rendererSetup.renderer.render(deps.sceneSetup.scene, deps.camera);
 st.veilFrames += 1;
@@ -798,7 +790,7 @@ st.veilFrames += 1;
     const networkManager = deps.lazyNetworkManager();
     const demoManager = deps.lazyDemoManager();
 
-    const frame: TickFrame = { dt, player, networkManager, demoManager, bootReleased: st.bootReleased };
+    const frame: TickFrame = { dt, player, networkManager, demoManager, bootReleased: st.bootWarmup.released };
     // Late-bound once: the ops uplink reads the perf EMA (JS frame cost +
     // real present rate) but perf doesn't exist until the loop starts.
     if (!networkManager.statsSource) {
@@ -922,12 +914,11 @@ st.veilFrames += 1;
 
   return {
     start(): void { requestAnimationFrame(loop); },
-    /** Resolves once ~45 consecutive sub-26ms frames rendered (or ~4s
-     *  of frames pass on a weak box — never gates forever). Offline
+    /** Resolves once ~45 consecutive sub-26ms frames rendered (or 240
+     *  frames pass on a weak box — never gates forever). Offline
      *  starts wait on this so the match doesn't spawn mid-compile-hitch. */
     whenStable(): Promise<void> {
-      if (st.bootStable >= 45) { return Promise.resolve(); }
-      return new Promise((resolve): void => { st.bootStableResolvers.push(resolve); });
+      return st.bootWarmup.whenStable();
     },
   };
 }
