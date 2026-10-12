@@ -204,6 +204,7 @@ export class QuarksTrail {
 
       const behaviors: ConstructorParameters<typeof ParticleSystem>[0]['behaviors'] = [
         new ColorOverLife(new Gradient(colorStops, alphaStops)),
+        // oxlint-disable-next-line no-use-before-define -- class declared below; constructed lazily
         new SizeOverLife(new FnValue((t): number => smin + (smax - smin) * t)),
       ];
       // Old loop did vel.y += gravity*dt (positive lifts — sprinkler droplets)
@@ -514,6 +515,7 @@ export function fxPuff(pos: THREE.Vector3, spec: PuffSpec): void {
         new Gradient([[new QV3(...spec.colB), 0], [new QV3(...spec.colB), 1]],
           [[0.6, 0], [0, 1]]))),
       // shrink 1.7→0.3 over life — the old s=(0.3+t·1.4) formula
+      // oxlint-disable-next-line no-use-before-define -- class declared below; constructed lazily
       new SizeOverLife(new FnValue((t): number => 0.3 + (1 - t) * 1.4)),
       new RotationOverLife(new IntervalValue(-2, 2)),
     ],

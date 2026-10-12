@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-explicit-any -- Manifold WASM + window debug handles */
 // gunlab — live weapon inspection page (/gunlab.html). Left rail = one
 // button per viewmodel weapon; FPS pose or detached turntable inspect.
 // Live updates: vite HMR re-runs this module on code edits (state parked

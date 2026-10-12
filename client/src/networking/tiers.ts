@@ -107,6 +107,7 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
     signal.close();
     // ICE diagnostics/watchdog live on the transport — it can declare the
     // session dead directly instead of hoping channel 'close' events fire.
+    // oxlint-disable-next-line no-use-before-define -- class declared below; only instantiated at call time
     return new ServerRtcTransport(dc, config, conn, ctrl);
   } catch {
     // Failed probe — the ICE/DTLS machinery keeps running without this.

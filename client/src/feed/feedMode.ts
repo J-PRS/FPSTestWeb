@@ -9,9 +9,9 @@ const requested = seg?.[1] ?? (q.get('feed') || null);
 // Touch-only devices can't play — the onboarding gate would bounce them —
 // so phones/tablets land on the feed instead. ?play opts back into the
 // game for anything with enough input (hybrids, plugged-in peripherals).
-const demoStartAt = (requested: string | null): string | null => {
-  if (requested === null) {return null;}
-  return requested.endsWith('.demo') ? requested : `${requested}.demo`;
+const demoStartAt = (req: string | null): string | null => {
+  if (req === null) {return null;}
+  return req.endsWith('.demo') ? req : `${req}.demo`;
 };
 const coarse = typeof window === 'undefined' ? false
   : (window.matchMedia?.('(pointer: coarse)').matches ?? false) && navigator.maxTouchPoints > 0;
