@@ -4,6 +4,13 @@
 import * as THREE from 'three';
 import { ChildLogger } from '../../core/Logger.js';
 
+const band = (x: number, invert: boolean): string => {
+  if (x >= 60) {return invert ? '#ff6b6b' : '#7ddf7d';}
+  if (x >= 30) {return '#ffd166';}
+  return invert ? '#7ddf7d' : '#ff6b6b';
+};
+
+
 const logger = new ChildLogger('HUD');
 
 const _cameraPos = new THREE.Vector3();
@@ -151,6 +158,7 @@ export class PlayerIndicators {
     if (this.lastSheep.get(playerId) === key) {return;}
     this.lastSheep.set(playerId, key);
     let badge = indicator.firstElementChild as HTMLElement | null;
+
     if (v >= 0) {
       if (!badge) {
         badge = document.createElement('span');
@@ -158,11 +166,6 @@ export class PlayerIndicators {
         indicator.append(badge);
       }
       badge.textContent = `${v}`;
-      const band = (x: number, invert: boolean): string => {
-        if (x >= 60) {return invert ? '#ff6b6b' : '#7ddf7d';}
-        if (x >= 30) {return '#ffd166';}
-        return invert ? '#7ddf7d' : '#ff6b6b';
-      };
       badge.style.color = sheepMode ? band(sheep!, true) : band(v, false);
     } else if (badge) {
       badge.remove();

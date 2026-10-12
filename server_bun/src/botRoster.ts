@@ -26,9 +26,10 @@ import type { ServerMessage } from '../../shared/protocol.ts';
 // FPS_SOAK_RANDLO=1: every slot draws from the union of weapons the
 // authored kits place there — measures raw per-weapon lethality with
 // kit frequency removed (innate per-weapon skill still biases picks).
+const slot = (k: 'near' | 'mid' | 'far' | 'belt' | 'side'): WeaponType[] =>
+  [...new Set(BOT_LOADOUTS.map((l): WeaponType => l[k]))];
+
 const RANDLO = (() => {
-  const slot = (k: 'near' | 'mid' | 'far' | 'belt' | 'side'): WeaponType[] =>
-    [...new Set(BOT_LOADOUTS.map((l): WeaponType => l[k]))];
   return { near: slot('near'), mid: slot('mid'), far: slot('far'), belt: slot('belt'), side: slot('side') };
 })();
 const pickOf = <T,>(pool: T[]): T => pool[Math.floor(botRand() * pool.length) % pool.length]!;

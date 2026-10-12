@@ -133,6 +133,7 @@ mkGltfLoader().load(url, (gltf): void => {
   const boot = (clips: THREE.AnimationClip[]): void => {
     window.__clips = clips.map((c): string => c.name);
     const clip = clips.find((c): boolean => c.name === wantClip) ?? clips[0];
+  // oxlint-disable-next-line consistent-function-scoping -- captures callback-local model/camera/renderer
   const finish = (): void => {
     // Frame the posed model — bounds AFTER the pose is applied so death/jump
     // clips don't get cropped.

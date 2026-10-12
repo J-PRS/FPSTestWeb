@@ -3,6 +3,15 @@ import { isStaleSeg, newNetBag, applySeg, type NetHost } from '../entities/ballN
 import { makeSimBall } from '../../../shared/ballSim.js';
 import * as THREE from 'three';
 
+function host(): NetHost {
+  return {
+    pos: new THREE.Vector3(), vel: new THREE.Vector3(),
+    renderOffset: new THREE.Vector3(), emissive: new THREE.Color(),
+    enraged: false, enrageTimer: 0, dampNextBounce: false, dead: false,
+  };
+}
+
+
 // The wire-ordering contract: strictly-older stamps are stale (rewind),
 // equal-stamp second segments MUST apply — two edges in one server tick
 // share the 50ms stamp and the second is fresher truth in wire order.
@@ -38,19 +47,13 @@ describe('isStaleSeg — wire-order boundary', (): void => {
   });
 });
 
+const seg = (x: number, t: number) => ({
+  px: x, py: 5, pz: 0, vx: 10, vy: 0, vz: 0,
+  enraged: false, targetId: null, lead: 0.1, timers: undefined,
+  tp: null, simT: t, hard: false,
+});
+
 describe('applySeg — same-tick re-anchor', (): void => {
-  function host(): NetHost {
-    return {
-      pos: new THREE.Vector3(), vel: new THREE.Vector3(),
-      renderOffset: new THREE.Vector3(), emissive: new THREE.Color(),
-      enraged: false, enrageTimer: 0, dampNextBounce: false, dead: false,
-    };
-  }
-  const seg = (x: number, t: number) => ({
-    px: x, py: 5, pz: 0, vx: 10, vy: 0, vz: 0,
-    enraged: false, targetId: null, lead: 0.1, timers: undefined,
-    tp: null, simT: t, hard: false,
-  });
 
   it('a second segment on the same stamp re-anchors instead of being dropped', (): void => {
     const bag = newNetBag();

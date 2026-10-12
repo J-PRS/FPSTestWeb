@@ -3,6 +3,9 @@ import { SELF_SPLASH_MAX } from './combat.ts';
 import type { PerkId } from './perks.ts';
 import { HEAVY_ONLY_WEAPONS, MEDIUM_ONLY_WEAPONS, LIGHT_ONLY_WEAPONS, classCanFire, type ArmorClass } from './botClasses.ts';
 
+const beltOut = (w: WeaponType, fb: WeaponType): WeaponType => w === WeaponType.HealBeam ? fb : w;
+
+
 /** A bot's kit — weapon picked by engagement range, perk set at spawn so
  *  maxHealth and the move shadow's jet economy match a real loadout.
  *  Shared by the server roster and offline GameBots so both sides field
@@ -184,7 +187,6 @@ export function pickBotWeapon(lo: BotLoadout, distXZ: number, dist: number, skil
   if (distXZ < BOT_MELEE_M) {return WeaponType.Melee;}
   // Heal slots never feed a combat draw — the med kit fires its beam at
   // ALLIES through the support path; picking it at an enemy is a dry pull.
-  const beltOut = (w: WeaponType, fb: WeaponType): WeaponType => w === WeaponType.HealBeam ? fb : w;
   if (!skill) {
     let slotPick = lo.mid;
     if (dist < BOT_SIDEARM_M) {slotPick = lo.side;}

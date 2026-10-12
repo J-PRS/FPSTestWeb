@@ -11,6 +11,16 @@ import { swingSwipe } from '../../effects/swingTrails.js';
 import { MELEE_RANGE, EXPLOSION_VFX_RADIUS } from '../../core/config.js';
 import { noteShellFate } from '../parity.js';
 import type { NetCtx } from './ctx.js';
+const snapToContact = (p: Projectile, at?: { x: number; y: number; z: number }): void => {
+  if (!at || !Number.isFinite(at.x + at.y + at.z)) {return;}
+  p.pos.set(at.x, at.y, at.z);
+  p.prevPos.copy(p.pos);
+  p.hitPoint.copy(p.pos);
+  p.hitPointValid = true; // the blast renders HERE, not a stale sweep point
+  p.renderOffset.set(0, 0, 0);
+  p.rendered.copy(p.pos);
+};
+
 
 /** Last weapon + shot count seen per shooter — every remote fire event
  *  funnels through here (botFire markers included), so alt+w can audit
@@ -187,15 +197,6 @@ export function wireProjectiles(ctx: NetCtx): void {
   // the replay stood would center the predicted blast meters off the
   // real one (every blast stamp then misses its knockback echo and the
   // shove lands twice). Snap to the wire point before exploding.
-  const snapToContact = (p: Projectile, at?: { x: number; y: number; z: number }): void => {
-    if (!at || !Number.isFinite(at.x + at.y + at.z)) {return;}
-    p.pos.set(at.x, at.y, at.z);
-    p.prevPos.copy(p.pos);
-    p.hitPoint.copy(p.pos);
-    p.hitPointValid = true; // the blast renders HERE, not a stale sweep point
-    p.renderOffset.set(0, 0, 0);
-    p.rendered.copy(p.pos);
-  };
 
   networkManager.onProjectileDestroyed = (projectileId: string, shotId?: string, position?: { x: number; y: number; z: number }): void => {
     if (deps.world.playbackMode) {return;}

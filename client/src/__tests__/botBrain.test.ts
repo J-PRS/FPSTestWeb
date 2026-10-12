@@ -2,6 +2,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { BotBrain, type BrainCtx } from '../../../shared/botBrain.js';
 
+const aheadWall = (x: number, z: number): 0 | 20 => (z > 3 ? 20 : 0);
+
+
 const flat = (): number => 0;
 function ctx(pos: { x: number; y: number; z: number }, groundY: (x: number, z: number) => number = flat, extra: Partial<BrainCtx> = {}): BrainCtx {
   return Object.assign({}, {pos,enemies: [],groundY,now: 0}, extra);
@@ -32,6 +35,7 @@ describe('BotBrain pathing', (): void => {
     expect(Math.abs(out.dest.z)).toBeGreaterThan(Math.abs(out.dest.x));
   });
 
+
   it('detours around the blocked line when it has made no progress', (): void => {
     const b = new BotBrain({ x: 0, y: 0, z: 0 });
     const pos = { x: 0, y: 0, z: 0 };
@@ -39,7 +43,6 @@ describe('BotBrain pathing', (): void => {
     // Wall dead ahead on the goal line — the route-cost fan deflects to
     // a side heading. (On flat ground a no-progress detour legitimately
     // picks goal-forward since 654dc716; the block is what makes it sidestep.)
-    const aheadWall = (x: number, z: number): 0 | 20 => (z > 3 ? 20 : 0);
     b.think(0.4, ctx(pos, aheadWall, { objective }));
     b.think(1.5, ctx(pos, aheadWall, { objective }));
     const out = b.think(0.1, ctx(pos, aheadWall, { objective }));

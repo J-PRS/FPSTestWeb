@@ -19,6 +19,9 @@ import { BotLines } from './botLines.ts';
 import { BotGoals, type GoalState } from './botGoals.ts';
 import { BotMoves } from './botMoves.ts';
 import { segSolidHit, type ColliderIndex } from './solidWorld.ts';
+
+const f = (v: BotVec): string => `${v.x.toFixed(0)},${v.z.toFixed(0)}`;
+
 import type { StructureCollider } from './ballSim.ts';
 import {
   newHuntState, pickHunt, pickFire, preyUnreachable,
@@ -709,9 +712,9 @@ export class BotBrain {
     // Env-gated decision-chain trace: which stage rewrites the step.
     // FPS_TRACE=<playerId> — soaks print stage deltas for one bot.
     const {traceId} = sharedEnv;
+
     if (ctx.id && traceId && ctx.id.includes(traceId)
       && ctx.objective && Math.hypot(pos.x - ctx.objective.x, pos.z - ctx.objective.z) > 30) {
-      const f = (v: BotVec): string => `${v.x.toFixed(0)},${v.z.toFixed(0)}`;
       const spd = ctx.vel ? Math.hypot(ctx.vel.x, ctx.vel.y, ctx.vel.z) : 0;
       const bg = this.breachUntil > now ? ` bg=${f(this.breachGoal)}` : '';
       // oxlint-disable-next-line no-console

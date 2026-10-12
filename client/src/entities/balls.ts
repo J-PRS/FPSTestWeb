@@ -18,6 +18,9 @@ import { allocSlots, freeSlots, getShadows, type SwarmPart } from './swarms.js';
 import { registerDiag } from '../core/fxDiag.js';
 import { inv } from '../../../shared/invariants.js';
 
+const tri = (): number => (Math.random() + Math.random() - 1) * 32;
+
+
 const BALL_GRAVITY   = GRAVITY;
 
 // One shared geometry for every ball — radius baked in, per-ball scale lives
@@ -281,6 +284,7 @@ export class Ball {
     this.trails = new BallTrailDots(scene);
     this.ribbons = this.acquireRibbons(coreColor);
 
+
     if (netSpawn) {
       // Server-owned spawn — pos/vel/color come off the wire, nothing rolled
       this.netDriven = true;
@@ -303,7 +307,6 @@ export class Ball {
       const gy = terrain.getHeight(rx, rz);
       this.pos = new THREE.Vector3(rx, (Number.isFinite(gy) ? gy : 0) + this.radius + 5, rz);
 
-      const tri = (): number => (Math.random() + Math.random() - 1) * 32;
       const k = 1 / this.scale;
       this.vel = new THREE.Vector3(tri() * k, (32 + Math.random() * 32) * k, tri() * k);
     }

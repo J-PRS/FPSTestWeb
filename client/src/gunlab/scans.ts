@@ -11,6 +11,8 @@
 // when its tris face outward, NEGATIVE when it's inside-out; catches
 // the inverted-mesh bug holeScan can't since it's still watertight.
 import * as THREE from 'three';
+const pk = (v: THREE.Vector3): string => `${v.x.toFixed(3)},${v.y.toFixed(3)},${v.z.toFixed(3)}`;
+
 
 const A = new THREE.Vector3(), B = new THREE.Vector3(), C = new THREE.Vector3();
 const EDGE = new THREE.Vector3();
@@ -140,7 +142,6 @@ export function holeScan(root: THREE.Object3D): { holes: number; at: number[][];
   const edges = new Map<string, ERef[]>();
   const names: string[] = [''];
   let meshId = 0;
-  const pk = (v: THREE.Vector3): string => `${v.x.toFixed(3)},${v.y.toFixed(3)},${v.z.toFixed(3)}`;
   root.traverse((o): void => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) {return;}

@@ -31,6 +31,12 @@ import { SpotBoard } from './spotBoard.ts';
 import { ServerParties } from './serverParties.ts';
 import { sharedEnv } from '../../shared/env.ts';
 
+const nuggetChance = (d: number): number => {
+  if (d < 260) {return 0.6;}
+  if (d < 320) {return 0.3;}
+  return 0.08;
+};
+
 export class ServerBotSenses {
   constructor(
     private readonly room: Room,
@@ -273,6 +279,7 @@ export class ServerBotSenses {
   /** Which gem to chase: nearest within real reach, unless the bot is so
    *  hurt the contested walk is suicide. Enemies near the GEM camp the
    *  grab — a healthy bot accepts that trade, a wounded one doesn't. */
+
   private pickupFor(p: { id: string; team?: string; position: Vec3; health: number; maxHealth: number }, foes: BotEnemy[]): BotVec | null {
     const snaps = this.parties.tick().pickups;
     if (snaps.length === 0) {return null;}
@@ -281,11 +288,6 @@ export class ServerBotSenses {
     // so a nuggets map spreads the fleet over the field instead of every
     // brain locking the same nearest gem. Elsewhere it's opportunism.
     const nuggets = this.room.mode === 'nuggets';
-    const nuggetChance = (d: number): number => {
-      if (d < 260) {return 0.6;}
-      if (d < 320) {return 0.3;}
-      return 0.08;
-    };
     const worthIt = (d: number): boolean => nuggets
       ? d < 160 || botRand() < nuggetChance(d)
       : d < 140;

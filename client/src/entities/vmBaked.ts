@@ -41,6 +41,8 @@ const WEAR_BOOST = new Map<number, number>([[WeaponType.Chaingun, 0.7]]);
 // is the shipping look; re-add the id here if a new bake ships.
 const ALWAYS_BAKE = new Set<number>([]);
 
+const yieldFrame = (): Promise<void> => new Promise<void>((r): NodeJS.Timeout => setTimeout(r, 0));
+
 export class VmBaked {
   constructor(private h: BakedHost) {}
 
@@ -69,7 +71,6 @@ export class VmBaked {
     // boot for ~2.3s before this function's first fetch ever fired.
     // Yield per weapon: the bake streams in over the first seconds of
     // menu/play instead of blocking TTI.
-    const yieldFrame = (): Promise<void> => new Promise<void>((r): NodeJS.Timeout => setTimeout(r, 0));
     for (const [wt, g] of this.h.weapons) {
       await yieldFrame();
       if (!bakeAll && !ALWAYS_BAKE.has(wt)) {

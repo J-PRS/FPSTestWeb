@@ -56,6 +56,22 @@ export interface WireEntry<K extends ClientMessage['type']> {
 /** Types without their own bucket share this one. */
 export const WIRE_DEFAULT_LIMIT: RateLimit = { maxCount: 120, windowMs: 1000 };
 
+const parseEdge = (raw: unknown): { seq?: number; input: { forward: number; right: number; jump: number; ski: number; jet: number; status: number }; rotation: { yaw: number; pitch: number } } | string => {
+  const input = (raw as Record<string, unknown>)?.input;
+  if (typeof input !== 'object' || input === null) {return 'input must be an object';}
+  const i = input as Record<string, unknown>;
+  if (!isFiniteNumber(i.forward) || !isFiniteNumber(i.right) || !isFiniteNumber(i.jump) || !isFiniteNumber(i.ski)) {
+    return 'input fields must be finite numbers';
+  }
+  const rot = validateRotation((raw as Record<string, unknown>).rotation);
+  if (!rot.success) {return `rotation: ${rot.error}`;}
+  return {
+    seq: isFiniteNumber((raw as Record<string, unknown>).seq) ? (raw as Record<string, unknown>).seq as number : undefined,
+    input: { forward: i.forward, right: i.right, jump: i.jump, ski: i.ski, jet: isFiniteNumber(i.jet) ? i.jet : 0, status: isFiniteNumber(i.status) ? i.status : 0 },
+    rotation: rot.data,
+  };
+};
+
 export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
   // The handshake join never reaches a room — but a RETRY does: a client
   // whose gameState reply was lost resends join on an already-seated
@@ -224,21 +240,6 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
   inputMove: {
     limit: { maxCount: 120, windowMs: 1000 },
     validate: (obj) => {
-      const parseEdge = (raw: unknown): { seq?: number; input: { forward: number; right: number; jump: number; ski: number; jet: number; status: number }; rotation: { yaw: number; pitch: number } } | string => {
-        const input = (raw as Record<string, unknown>)?.input;
-        if (typeof input !== 'object' || input === null) {return 'input must be an object';}
-        const i = input as Record<string, unknown>;
-        if (!isFiniteNumber(i.forward) || !isFiniteNumber(i.right) || !isFiniteNumber(i.jump) || !isFiniteNumber(i.ski)) {
-          return 'input fields must be finite numbers';
-        }
-        const rot = validateRotation((raw as Record<string, unknown>).rotation);
-        if (!rot.success) {return `rotation: ${rot.error}`;}
-        return {
-          seq: isFiniteNumber((raw as Record<string, unknown>).seq) ? (raw as Record<string, unknown>).seq as number : undefined,
-          input: { forward: i.forward, right: i.right, jump: i.jump, ski: i.ski, jet: isFiniteNumber(i.jet) ? i.jet : 0, status: isFiniteNumber(i.status) ? i.status : 0 },
-          rotation: rot.data,
-        };
-      };
       const edge = parseEdge(obj);
       if (typeof edge === 'string') {return { success: false, error: edge };}
       // prev is optional redundancy: same shape, validated the same —

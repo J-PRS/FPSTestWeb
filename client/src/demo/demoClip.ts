@@ -71,13 +71,14 @@ export function collectProjectileEvents(projectileEvents: ProjectileEvent[], cli
 // Same (targetType, targetId) identity as findAliveTargets — a raw-id
 // check here would skip a needed synthetic spawn the moment an unrelated
 // lane reuses the id.
+const keyOf = (e: TargetEvent): number => e.targetType * 65_536 + e.targetId;
+
 function recoverMissingSpawns(actualTgtEvents: TargetEvent[], aliveBalls: Map<number, TargetEvent>, clipStart: number): TargetEvent[] {
-  const keyOf = (e: TargetEvent): number => e.targetType * 65_536 + e.targetId;
   const firstEventByKey = new Map<number, TargetEvent>();
   const hasSpawnedInClip = new Set<number>();
   for (const e of actualTgtEvents) {
     if (e.targetType === TARGETTYPE_KILL) {continue;}
-    const k = keyOf(e);
+    const k = keyOfM(e);
     if (!firstEventByKey.has(k)) {
       firstEventByKey.set(k, e);
     }
@@ -108,7 +109,6 @@ function recoverMissingSpawns(actualTgtEvents: TargetEvent[], aliveBalls: Map<nu
 // targetType, so the key mirrors that split.
 export function findAliveTargets(targetEvents: TargetEvent[], clipStart: number): Map<number, TargetEvent> {
   const aliveBalls = new Map<number, TargetEvent>();
-  const keyOf = (e: TargetEvent): number => e.targetType * 65_536 + e.targetId;
   for (const e of targetEvents) {
     if (e.timestamp >= clipStart) {break;}
     // Kill markers carry a victim ROSTER INDEX in targetId, not an entity
@@ -116,7 +116,7 @@ export function findAliveTargets(targetEvents: TargetEvent[], clipStart: number)
     // them into the alive table both synthesizes phantom spawns at
     // clipStart and clobbers a same-id ball's snapshot entry.
     if (e.targetType === TARGETTYPE_KILL) {continue;}
-    const k = keyOf(e);
+    const k = keyOfM(e);
     if (e.eventType === TargetEventType.Destroyed) {
       aliveBalls.delete(k);
       continue;
@@ -160,3 +160,6 @@ export function collectTargetEvents(targetEvents: TargetEvent[], clipStart: numb
     ...actualTgtEvents,
   ];
 }
+
+const keyOfM = (e: TargetEvent): number => e.targetType * 65_536 + e.targetId;
+

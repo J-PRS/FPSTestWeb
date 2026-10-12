@@ -411,15 +411,16 @@ function parsePathField(raw: unknown, tail: RegExp, maxDepth = 2, label = 'path'
 
 
 
+const num = (v: unknown, lo: number, hi: number): number | undefined =>
+  typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : undefined;
+const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
+
 function parseFog(raw: unknown): MapSpec['fog'] {
   if (!raw || typeof raw !== 'object') {return undefined;}
   const f = raw as { color?: unknown; distance?: unknown; visible?: unknown; horizon?: unknown };
   if (!Array.isArray(f.color) || f.color.length < 3 ||
       !f.color.slice(0, 3).every((v): boolean => typeof v === 'number' && Number.isFinite(v)))
     {return undefined;}
-  const num = (v: unknown, lo: number, hi: number): number | undefined =>
-    typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : undefined;
-  const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
   const vec3 = (v: unknown): [number, number, number] | undefined =>
     Array.isArray(v) && v.length >= 3 &&
     v.slice(0, 3).every((c): boolean => typeof c === 'number' && Number.isFinite(c))

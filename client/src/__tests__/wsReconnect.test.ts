@@ -23,6 +23,9 @@ class FakeWS {
   }
 }
 
+const conn = (interval = 1000): WebSocketConnection =>
+  new WebSocketConnection({ url: 'ws://x', reconnectInterval: interval });
+
 describe('WebSocketConnection reconnect contract', (): void => {
   beforeEach((): void => {
     FakeWS.instances = [];
@@ -31,8 +34,6 @@ describe('WebSocketConnection reconnect contract', (): void => {
   });
   afterEach((): void => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
-  const conn = (interval = 1000): WebSocketConnection =>
-    new WebSocketConnection({ url: 'ws://x', reconnectInterval: interval });
 
   it('deliberate disconnect() never schedules a reconnect', (): void => {
     const c = conn();

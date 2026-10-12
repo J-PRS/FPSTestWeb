@@ -30,6 +30,8 @@ const BOLT_SPEED = 60; // m/s — the melee swing's visual bolt
 
 type BotBody = { id: string; position: Vec3; velocity: Vec3; armorClass: string };
 
+const j = (): number => (botRand() - 0.5) * 0.07;
+
 export class BotArsenal implements BeamHost {
   /** Propel cooldown + the post-shove jet pin — owned here because only
    *  firing decisions set them; the driver just reads the pin so the
@@ -320,6 +322,7 @@ s[kind] += 1; this.propels.set(id, s);
    *  stand while closing (disc/GL/bolt, whatever the loadout bands
    *  pick). A few degrees of scatter: chip fire, not a snipe. Same
    *  legal spawn + self-blast checks a player shot goes through. */
+
   firePoint(p: BotBody, point: Vec3): void {
     const muzzle = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
     const dx = point.x - muzzle.x, dy = point.y - muzzle.y, dz = point.z - muzzle.z;
@@ -328,7 +331,6 @@ s[kind] += 1; this.propels.set(id, s);
     const wt = this.pickWeapon(lo, Math.hypot(dx, dz), dist, p.id);
     if (!this.rateOk(p.id, wt)) {return;}
     weaponStats.recordShot(this.room.mode, `w${wt}`, dist);
-    const j = (): number => (botRand() - 0.5) * 0.07;
     const dir = { x: dx / dist + j(), y: dy / dist + j(), z: dz / dist + j() };
     const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
     dir.x /= l; dir.y /= l; dir.z /= l;

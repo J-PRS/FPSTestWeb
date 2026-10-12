@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ConnectionConfig } from '../networking/WebSocketConnection.js';
 
+const tick = (seq: number): Uint8Array<ArrayBuffer> => {
+  const u8 = new Uint8Array(32);
+  u8[0] = 0x54; u8[1] = 0x07; // MAGIC + WIRE_TICK_V4
+  new DataView(u8.buffer).setUint32(6, seq, true);
+  return u8;
+};
+
+
 // WorkerTransport drain regression — coalesceTickFrames returns its input
 // array unchanged when nothing coalesces, so clearing `pending` in place
 // emptied the dispatch list too: EVERY event (incl. 'up') was swallowed and
@@ -67,15 +75,10 @@ describe('WorkerTransport drain', (): void => {
     expect(config.onError).toHaveBeenCalledTimes(1);
   });
 
+
   it('still dispatches when ticks coalesce (the filtered-array path)', async (): Promise<void> => {
     const config = makeConfig();
     const _t2 = new WorkerTransport(config);
-    const tick = (seq: number): Uint8Array<ArrayBuffer> => {
-      const u8 = new Uint8Array(32);
-      u8[0] = 0x54; u8[1] = 0x07; // MAGIC + WIRE_TICK_V4
-      new DataView(u8.buffer).setUint32(6, seq, true);
-      return u8;
-    };
     FakeWorker.last.emit({ kind: 'ev', b: tick(1), at: 0 });
     FakeWorker.last.emit({ kind: 'ev', b: tick(2), at: 0 });
     FakeWorker.last.emit({ kind: 'ev', j: { type: 'chat' }, at: 0 });

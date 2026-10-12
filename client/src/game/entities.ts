@@ -198,6 +198,9 @@ function recordBallSnapshots(dt: number): void {
 // hittable entity lands in it. Per-family species blocks live in
 // game/species/*.ts; this file keeps balls/nuggets (they're networked
 // and demo-recorded) and orchestrates the rest.
+const noSpawn = <A extends unknown[]>(off: boolean, fn: (...a: A) => void): ((...a: A) => void) =>
+  off ? (): void => { return; } : fn;
+
 export function createEntities(deps: EntitiesDeps) {
   const { scene, logger } = deps;
 
@@ -254,8 +257,6 @@ export function createEntities(deps: EntitiesDeps) {
   // timers are gated in speciesKit.updateSpecies; these cover everything
   // else that calls the spawn API (director picks/beats, boot seeds).
   // Wire-owned spawns (netBalls/netCrawlers) never route through here.
-  const noSpawn = <A extends unknown[]>(off: boolean, fn: (...a: A) => void): ((...a: A) => void) =>
-    off ? (): void => { return; } : fn;
   const gateC = <A extends unknown[]>(fn: (...a: A) => void): (...a: A) => void => noSpawn(urlParams.noCreatures, fn);
 
   // ---- Nuggets (pickup gems dropped by destroyed targets) ----

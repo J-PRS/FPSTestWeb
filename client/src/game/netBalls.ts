@@ -355,6 +355,9 @@ rbFleetCount += 1;
   return { check, rbFleetFlush };
 }
 
+const finiteMsg = (m: { position: Vec3Msg; velocity: Vec3Msg; tp?: Vec3Msg | null }): boolean =>
+  finiteVec(m.position) && finiteVec(m.velocity) && (!m.tp || finiteVec(m.tp));
+
 export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: ChildLogger) {
   const { scene, balls, targets } = Object.assign({}, {scene: deps.scene}, ctx);
   const netBallById = new Map<number, Ball>();
@@ -369,8 +372,6 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
 
   // A non-finite component in authority state (server fault, hostile p2p
   // peer) silently poisons the replay sim — drop the edge and warn.
-  const finiteMsg = (m: { position: Vec3Msg; velocity: Vec3Msg; tp?: Vec3Msg | null }): boolean =>
-    finiteVec(m.position) && finiteVec(m.velocity) && (!m.tp || finiteVec(m.tp));
 
   function netBallSpawn(m: { id: number; variant: number; colorIdx: number; position: Vec3Msg; velocity: Vec3Msg; t?: number; enraged?: boolean; targetId?: string | null; tp?: Vec3Msg | null; et?: number; slowT?: number; damp?: boolean }): void {
     if (!finiteMsg(m)) {logger.warn(`ball spawn #${m.id} dropped: non-finite vector`); return;}

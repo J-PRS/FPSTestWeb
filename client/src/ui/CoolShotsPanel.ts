@@ -7,6 +7,14 @@ interface CoolShotsPanelDependencies {
   requestLock: () => void;
 }
 
+const bind = (id: string, get: () => boolean, set: (on: boolean) => void): void => {
+  const btn = document.getElementById(id);
+  if (!btn) {return;}
+  const sync = (): boolean => btn.classList.toggle('on', get());
+  btn.addEventListener('click', (): void => { set(!get()); sync(); });
+  sync();
+};
+
 export class CoolShotsPanel {
   private coolShotsTop: HTMLElement;
   private coolShotsRecent: HTMLElement;
@@ -30,13 +38,6 @@ export class CoolShotsPanel {
 
     // Autorecord toggles — state lives in DemoManager (localStorage),
     // the buttons only mirror it.
-    const bind = (id: string, get: () => boolean, set: (on: boolean) => void): void => {
-      const btn = document.getElementById(id);
-      if (!btn) {return;}
-      const sync = (): boolean => btn.classList.toggle('on', get());
-      btn.addEventListener('click', (): void => { set(!get()); sync(); });
-      sync();
-    };
     bind('cs-toggle-demo', (): boolean => this.demoManager.coolShotDemo, (v): void => { this.demoManager.coolShotDemo = v; });
     bind('cs-toggle-mp4', (): boolean => this.demoManager.coolShotMp4, (v): void => { this.demoManager.coolShotMp4 = v; });
     

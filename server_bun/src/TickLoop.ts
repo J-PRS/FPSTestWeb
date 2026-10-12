@@ -32,6 +32,12 @@ export interface TickOps {
  *  suppression) and the low-rate state-hash/status broadcast. Owns no
  *  room state — rooms live in the directory map GameServer passes in;
  *  teardown (idle reap, grace expiry) is delegated via onRemove. */
+const emitLane = <T extends { id: number }>(kind: WorldKindDecl, roster: T[]): { hash: string; fields: unknown[][]; } | undefined =>
+  roster.length > 0
+    ? { hash: replicaHash(kind, roster.map((e): [number, Record<string, unknown>] => [e.id, e] as [number, Record<string, unknown>])),
+        fields: kindFields(kind, roster) }
+    : undefined;
+
 export class TickLoop {
   private tickTimer: ReturnType<typeof setInterval> | null = null;
   private hashTimer: ReturnType<typeof setInterval> | null = null;
@@ -372,11 +378,6 @@ this.metrics.tickErrors += 1;
     // both generated from the kind's declaration so emit and diff can't
     // drift apart. Omitted where the roster is empty — a room without
     // that kind doesn't emit a meaningless constant.
-    const emitLane = <T extends { id: number }>(kind: WorldKindDecl, roster: T[]): { hash: string; fields: unknown[][]; } | undefined =>
-      roster.length > 0
-        ? { hash: replicaHash(kind, roster.map((e): [number, Record<string, unknown>] => [e.id, e] as [number, Record<string, unknown>])),
-            fields: kindFields(kind, roster) }
-        : undefined;
     // Hash the committed wire regime, not the live sim derivative —
     // enraged/targetId re-derive inside each integrator and churn on
     // healthy links; only last-segment state is comparable across ends.

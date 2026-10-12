@@ -50,6 +50,8 @@ export interface PlayerInputHandlers {
   orbitLook(dx: number, dy: number): void;
 }
 
+const aspect = (): number => window.innerWidth / Math.max(1, window.innerHeight);
+
 export class PlayerInput {
   keys: Record<string, boolean> = {};
   mouseHeld = false;
@@ -258,8 +260,8 @@ export class PlayerInput {
     // Live-applied via the fps:set event (main.ts listens).
     const fovInput = document.querySelector('#fov-input') as HTMLInputElement | null;
     const fovHInput = document.querySelector('#fov-h-input') as HTMLInputElement | null;
+
     if (fovInput && fovHInput) {
-      const aspect = (): number => window.innerWidth / Math.max(1, window.innerHeight);
       const vToH = (v: number): number => 2 * Math.atan(Math.tan(v * Math.PI / 360) * aspect()) * 180 / Math.PI;
       const hToV = (h: number): number => 2 * Math.atan(Math.tan(h * Math.PI / 360) / aspect()) * 180 / Math.PI;
       const syncH = (): void => { fovHInput.value = String(Math.round(vToH(settings.get('fps-fov')))); };

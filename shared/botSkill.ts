@@ -13,6 +13,9 @@
 import { WeaponType } from './weapons.ts';
 import type { BotVec } from './botVec.ts';
 
+const clamp = (v: number): number => Math.min(1.5, Math.max(0.45, v));
+
+
 export type AimAxis = 'snap' | 'track' | 'arcLead' | 'arcJudge';
 
 export interface AxisPair { moving: number; still: number }
@@ -103,7 +106,6 @@ export function rollSkill(spawn: BotVec, spec: BotSkillSpec = 'medium'): BotSkil
   const seed = Math.imul(Math.trunc(spawn.x), 73_856_093) ^ Math.imul(Math.trunc(spawn.z), 19_349_663) ^ Math.imul(Math.trunc(spawn.y), 83_492_791);
   const rng = prng(seed || 1);
   const mods = skillMods(spec);
-  const clamp = (v: number): number => Math.min(1.5, Math.max(0.45, v));
   const axis = (): AxisPair => {
     const base = (0.55 + rng() * 0.9) * mods.aim;
     const spread = 0.3;

@@ -7,6 +7,23 @@ import {
   tickEncodeScratch, v4Last,encodeBallSegment,decodeBallSegment
 } from '../../../shared/wire';
 
+const enc = (pos: { x: number; y: number; z: number }): Uint8Array<ArrayBufferLike> =>
+  encodePosition(pos, { yaw: 0, pitch: 0 }, { x: 0, y: 0, z: 0 }, 1, 0);
+
+const rec = (id: string, over: Partial<Parameters<typeof encodeTickPlayer>[0]> = {}): Uint8Array<ArrayBufferLike> =>
+  encodeTickPlayer(Object.assign({playerId: id,position: { x: 1, y: 2, z: 3 },rotation: { yaw: 0.5, pitch: -0.5 },velocity: { x: 4, y: 5, z: 6 },health: 300,isDead: false,ping: 55,ski: 1}, over));
+
+const roster = (): WireIdRoster => {
+  const r = new WireIdRoster();
+  r.feed({ type: 'wireIds', add: { 7: 'player_seven', 9: 'player_nine' } });
+  return r;
+};
+
+const base = (): WireTickPlayer => ({
+  playerId: '', position: { x: 1, y: 2, z: 3 }, rotation: { yaw: 0.5, pitch: 0.1 },
+  velocity: { x: 10, y: 0, z: 5 }, health: 100, isDead: false, ski: 1, jet: 0, status: 0, sheep: 40, ping: 50,
+});
+
 describe('position frame round-trip', (): void => {
   it('preserves position exactly (float32)', (): void => {
     const pos = { x: 123.456, y: -78.9, z: 0.5 };
@@ -209,8 +226,6 @@ describe('ballSegment binary codec', (): void => {
 });
 
 describe('position frame adversarial decode', (): void => {
-  const enc = (pos: { x: number; y: number; z: number }): Uint8Array<ArrayBufferLike> =>
-    encodePosition(pos, { yaw: 0, pitch: 0 }, { x: 0, y: 0, z: 0 }, 1, 0);
 
   it('rejects absurd and non-finite positions', (): void => {
     // 8192m bound — the JSON validator's same radius.
@@ -230,8 +245,6 @@ describe('position frame adversarial decode', (): void => {
 });
 
 describe('tick frame adversarial decode', (): void => {
-  const rec = (id: string, over: Partial<Parameters<typeof encodeTickPlayer>[0]> = {}): Uint8Array<ArrayBufferLike> =>
-    encodeTickPlayer(Object.assign({playerId: id,position: { x: 1, y: 2, z: 3 },rotation: { yaw: 0.5, pitch: -0.5 },velocity: { x: 4, y: 5, z: 6 },health: 300,isDead: false,ping: 55,ski: 1}, over));
 
   it('decodes every record distinctly (offset drift)', (): void => {
     const frame = encodeTickFrame(0, 0, 0, [
@@ -294,11 +307,6 @@ describe('tick frame adversarial decode', (): void => {
 });
 
 describe('v3 wireId frames', (): void => {
-  const roster = (): WireIdRoster => {
-    const r = new WireIdRoster();
-    r.feed({ type: 'wireIds', add: { 7: 'player_seven', 9: 'player_nine' } });
-    return r;
-  };
 
   it('resolves wireIds through the roster', (): void => {
     const recs = [
@@ -332,10 +340,6 @@ describe('v3 wireId frames', (): void => {
 });
 
 describe('v4 delta-masked records', (): void => {
-  const base = (): WireTickPlayer => ({
-    playerId: '', position: { x: 1, y: 2, z: 3 }, rotation: { yaw: 0.5, pitch: 0.1 },
-    velocity: { x: 10, y: 0, z: 5 }, health: 100, isDead: false, ski: 1, jet: 0, status: 0, sheep: 40, ping: 50,
-  });
 
   it('unchanged groups mask out; decode inherits the retained values', (): void => {
     const r = new WireIdRoster();

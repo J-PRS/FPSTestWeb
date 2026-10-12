@@ -11,6 +11,15 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { deserializeDemo } from '../demo/demoReader.js';
+
+const mkFired = (targetId: number): ProjectileEvent => ({
+  eventType: ProjectileEventType.Fired, timestamp: 0,
+  posX: 0, posY: 10, posZ: 0, velX: 0, velY: 0, velZ: 60,
+  projectileId: targetId + 100, weaponType: 254, surfaceNormalX: 0,
+  surfaceNormalY: 0, surfaceNormalZ: 0, targetId, targetType: 0,
+  hasPeakPosition: false, peakPosX: 0, peakPosY: 0, peakPosZ: 0,
+});
+
 import { applyPlaybackEvents, type PlaybackWorld } from '../demo/playbackReconstruction.js';
 import {
   ProjectileEventType, TargetEventType,
@@ -191,15 +200,9 @@ describe('playback audit — every lane animates', (): void => {
     expect(rig.world.playbackPickups.has(903)).toBe(false);
   });
 
+
   it('viewmodel kicks only on local-lane shots (deploy leak regression)', (): void => {
     const rig = makePlaybackRig();
-    const mkFired = (targetId: number): ProjectileEvent => ({
-      eventType: ProjectileEventType.Fired, timestamp: 0,
-      posX: 0, posY: 10, posZ: 0, velX: 0, velY: 0, velZ: 60,
-      projectileId: targetId + 100, weaponType: 254, surfaceNormalX: 0,
-      surfaceNormalY: 0, surfaceNormalZ: 0, targetId, targetType: 0,
-      hasPeakPosition: false, peakPosX: 0, peakPosY: 0, peakPosZ: 0,
-    });
     // The deploy-shot bug: a turret bolt minted targetId 0 → kicked.
     emit(rig, [mkFired(5)], []); // remote shooter rosterIdx 4
     emit(rig, [mkFired(3)], []); // remote shooter rosterIdx 2
@@ -302,17 +305,18 @@ describe('playback audit — entities must animate', (): void => {
   });
 });
 
+const drain = (rig: ReturnType<typeof makePlaybackRig>, max = 1200): number => {
+  let n = 0;
+  while (n < max && rig.world.playbackBallById.size > 0) {
+    rig.life.updateBallsPlayback(1 / 60);
+n += 1;
+  }
+  return n;
+};
+
 describe('playback audit — corpse lifecycle', (): void => {
   // Ticks the playback loop until every tracked ball drains or the bound
   // trips — a corpse that never reaches `disposed` is the frozen-midair bug.
-  const drain = (rig: ReturnType<typeof makePlaybackRig>, max = 1200): number => {
-    let n = 0;
-    while (n < max && rig.world.playbackBallById.size > 0) {
-      rig.life.updateBallsPlayback(1 / 60);
-n += 1;
-    }
-    return n;
-  };
 
   it('a recorded kill (Hit→0hp) fades the corpse out of the world', (): void => {
     const rig = makePlaybackRig();

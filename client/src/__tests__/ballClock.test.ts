@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { makeBallClock, pruneNetBalls } from '../game/netBalls.js';
 
+const mk = (): { netKill: () => never; } => ({ netKill: (): never => { throw new Error('must not kill'); } });
+
+
 // The server-sim clock: estSimNow rides an EMA of the sim→wall rate so a
 // lagging server tick can't push prediction ahead of authority, and
 // ballEventAge measures true staleness (stamp → arrival), not ping/2.
@@ -66,8 +69,8 @@ describe('pruneNetBalls — roster reconciliation', (): void => {
     expect(killed).toHaveLength(2);
   });
 
+
   it('leaves a fully-matching roster untouched', (): void => {
-    const mk = (): { netKill: () => never; } => ({ netKill: (): never => { throw new Error('must not kill'); } });
     const map = new Map<number, { netKill(): void }>([[1, mk()]]);
     pruneNetBalls(map, new Set([1, 9]));
     expect(map.size).toBe(1);

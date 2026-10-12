@@ -117,6 +117,8 @@ export function buildArenaDome(a: { x: number; z: number; radius: number }, grou
 // player hitbox + AOE blast gizmos. Drawn straight from structureColliders
 // output, so the overlay IS the set the sim resolves against (dif hulls,
 // stands, cover) rather than a second guess at it.
+const fmt = (n: number): string => n.toFixed(2);
+
 function buildColliderGizmos(list: StructureSpec[], scene: THREE.Scene): void {
   if (colliderGizmos) {
     scene.remove(colliderGizmos);
@@ -126,13 +128,13 @@ function buildColliderGizmos(list: StructureSpec[], scene: THREE.Scene): void {
   }
   const colliders = structureColliders(list);
   if (colliders.length === 0) {return;}
+
   if (urlParams.debug) {
     // Stand float probe — the wire spec vs the OBB it becomes. A dais
     // mesh anchors at home.y (ground); its skirt collider should start
     // at the SAME y. If collider base - spec pos.y ≠ 0, the mismatch is
     // in the collider math; if pos.y itself is high, the server snapped
     // the home onto something under it.
-    const fmt = (n: number): string => n.toFixed(2);
     let ci = 0;
     for (const s of list) {
       // Mirror structureColliders' expansion so ci lands on this spec's

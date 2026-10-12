@@ -56,21 +56,22 @@ function buildMaxGrid(): void {
 /** Scaled world height of the tallest texel anywhere under the XZ rect
  *  (world coords, wrapped like sampleHeight). Returns 0 before data loads —
  *  callers must treat 0 as "unknown", not "flat". */
+const toCell = (w: number): number => {
+  const u = (((w / hmWorldScale) % 1) + 1) % 1;
+  return Math.min(MAXGRID - 1, Math.floor(u * MAXGRID));
+};
+const span = (a: number, b: number): number => {
+  const d = (b - a + MAXGRID) % MAXGRID;
+  return Math.min(d, MAXGRID - 1) + 1;
+};
+
 export function maxHeightInRect(wx0: number, wz0: number, wx1: number, wz1: number): number {
   if (!hmData || !hmSize) {return 0;}
-  const toCell = (w: number): number => {
-    const u = (((w / hmWorldScale) % 1) + 1) % 1;
-    return Math.min(MAXGRID - 1, Math.floor(u * MAXGRID));
-  };
   // Walk cells from each end mod MAXGRID — a seam-crossing rect covers
   // its real cells; a rect spanning the world just scans the row (a
   // superset still can't under-report the max).
   const xa = toCell(wx0), xb = toCell(wx1);
   const za = toCell(wz0), zb = toCell(wz1);
-  const span = (a: number, b: number): number => {
-    const d = (b - a + MAXGRID) % MAXGRID;
-    return Math.min(d, MAXGRID - 1) + 1;
-  };
   const nx = span(xa, xb), nz = span(za, zb);
   let m = 0;
   for (let iz = 0; iz < nz; iz += 1) {

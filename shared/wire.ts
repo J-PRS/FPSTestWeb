@@ -14,6 +14,9 @@
 
 import { STATUS_MASK } from './status.js';
 
+const snap = (): V4Snap => ({ wireId: -1, velX: 0, velY: 0, velZ: 0, yaw: 0, pitch: 0, hp: -1, flags: -1, sheepJet: -1 });
+
+
 const MAGIC = 0x54; // 'T'
 
 export const WIRE_POSITION = 0x01;
@@ -529,7 +532,6 @@ export interface V4Last {
   slots: V4Snap[];
 }
 export function v4Last(): V4Last {
-  const snap = (): V4Snap => ({ wireId: -1, velX: 0, velY: 0, velZ: 0, yaw: 0, pitch: 0, hp: -1, flags: -1, sheepJet: -1 });
   return { ringPos: 0, slots: Array.from({ length: V4_BASIS_DEPTH }, snap) };
 }
 
