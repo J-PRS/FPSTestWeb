@@ -68,7 +68,7 @@ const PUSH_FAR_M = 350;
 
 function median(xs: number[]): number {
   if (xs.length === 0) {return 0;}
-  const s = [...xs].sort((a, b): number => a - b);
+  const s = xs.toSorted((a, b): number => a - b);
   return s[s.length >> 1]!;
 }
 
@@ -165,7 +165,7 @@ export class TeamCommand {
         .filter((m): boolean => !this.tasks.has(m.id))
         .map((m): { m: CommandMember; bid: number; } => ({ m, bid: bidFor(kind, m, at) }))
         .filter((m): boolean => m.bid > -Infinity)
-        .sort((a, b): number => b.bid - a.bid);
+        .toSorted((a, b): number => b.bid - a.bid);
       for (const { m } of pool.slice(0, Math.max(0, want - have))) {
         // Escort intercept: aiming at where the carrier IS trails a
         // runner you'll never meet — each escort aims at where the

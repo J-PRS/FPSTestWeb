@@ -744,7 +744,7 @@ export function kindFields(kind: WorldKindDecl, roster: Iterable<{ id: number }>
   const out: unknown[][] = [];
   for (const e of roster) {
     const r = e as unknown as Record<string, unknown>;
-    out.push([e.id, ...decls.map((d): {} | null => r[d.name] ?? d.absent ?? null)]);
+    out.push([e.id, ...decls.map((d): object | null => r[d.name] ?? d.absent ?? null)]);
   }
   return out;
 }

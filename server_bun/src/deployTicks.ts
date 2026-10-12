@@ -45,7 +45,7 @@ export function tickDrone(r: RoomDeployables, d: Deployed, dt: number): void {
     const dTeam = r.teamOf(d);
     let target: string | null = null;
     let bestD2 = DRONE_RANGE * DRONE_RANGE;
-    for (const [pid, p] of r.room.players.getAllPlayers()) {
+    for (const [_pid, p] of r.room.players.getAllPlayers()) {
       if (p.isDead || pid === d.owner) {continue;}
       if (dTeam && p.team === dTeam) {continue;}
       if (p.protectedUntil > simNow()) {continue;}
@@ -93,7 +93,7 @@ export function tickStation(r: RoomDeployables, d: Deployed, dt: number): void {
     if (d.fireCd > 0) {return;}
     d.fireCd = STATION_HEAL_CD;
     const dTeam = r.teamOf(d);
-    for (const [pid, p] of r.room.players.getAllPlayers()) {
+    for (const [_pid, p] of r.room.players.getAllPlayers()) {
       if (p.isDead) {continue;}
       if (dTeam && p.team !== dTeam) {continue;}
       const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;

@@ -67,7 +67,7 @@ if (typeof globalThis.document === 'undefined') {
         }),
         children: [] as unknown[],
         firstChild: null,
-        get lastElementChild(): {} | null { return el.children.at(-1) ?? null; },
+        get lastElementChild(): object | null { return el.children.at(-1) ?? null; },
         innerHTML: '',
         id: '',
         maxLength: 0,

@@ -224,7 +224,7 @@ export class BlastRunner {
     // so there is no ghost to rewind toward.
     if (bot) {return { x: target.position.x, y: target.position.y, z: target.position.z };}
     const targetTransit = this.h.deps.transitOf?.(targetId) ?? 0;
-    const back = shooterTransitMs(this.h.deps.transitOf, shooterId, ping) + lagMs - targetTransit;
+    const back = shooterTransitMs(this.h.deps.transitOf, shooterId, ping) + lag - targetTransit;
     return rewindPos(target, Math.max(0, back));
   }
 

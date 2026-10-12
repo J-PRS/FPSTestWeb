@@ -19,12 +19,12 @@ const mkDeps = () => {
     lazyHud: () => hud,
     lazyHealthBarSystem: () => healthbars,
     logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
-    lazyNetworkManager: (): {} => ({}),
-    lazyScene: (): {} => ({}),
-    lazyTerrain: (): {} => ({}),
-    lazyCamera: (): {} => ({}),
-    lazyPlayer: (): {} => ({}),
-    lazyEffects: (): {} => ({}),
+    lazyNetworkManager: (): object => ({}),
+    lazyScene: (): object => ({}),
+    lazyTerrain: (): object => ({}),
+    lazyCamera: (): object => ({}),
+    lazyPlayer: (): object => ({}),
+    lazyEffects: (): object => ({}),
   } as unknown as RemotesDeps;
   return { deps, world, hud, healthbars };
 };

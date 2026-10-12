@@ -1,3 +1,4 @@
+/* oxlint-disable no-extend-native -- deliberate Array.prototype shims for engines < Chrome 110 */
 // Copying array methods landed in Chrome 110 (toSorted/toReversed) and
 // 112 (toSpliced/with) — older engines throw "x is not a function" deep
 // in HUD/diag paths. Shim the four we use; mutating under the hood is

@@ -114,7 +114,7 @@ export function assignRole(
   playable: BotRole[] = WIRE_ROLES,
   kitOf?: (id: string) => string | undefined,
 ): BotRole {
-  const ids = [...teammateIds].sort();
+  const ids = teammateIds.toSorted();
   const me = ids.indexOf(myId);
   if (me === -1) {return 'offense';}
   const mine = new Map<string, BotRole>();

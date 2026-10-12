@@ -60,8 +60,8 @@ describe('rosterFuzz — client roster conformance', (): void => {
         health: Math.floor(rnd() * 100), isDead: rnd() < 0.2,
       });
       const assertTruth = (op: string): void => {
-        const client = [...h.nm.getPlayers().keys()].filter((k): boolean => k !== 'tester-local').sort();
-        const want = ids().sort();
+        const client = [...h.nm.getPlayers().keys()].filter((k): boolean => k !== 'tester-local').toSorted();
+        const want = ids().toSorted();
         expect(client, `membership after ${op}`).toEqual(want);
         // Entity ⊆ members, and only tick-seen members materialize.
         for (const [id] of h.world.remotePlayers) {

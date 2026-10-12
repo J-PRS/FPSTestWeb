@@ -68,7 +68,7 @@ function pushTrailCensus(lines: string[], ctx: StateDebugContext): void {
   lines.push(`ribbons: ${td.ribbons?.length ?? 0} live ${JSON.stringify(td.ribbonBatch ?? null)}`);
   // Position-tagged rows — a frozen streak on screen maps to a slot by its
   // head/mid coords; sorted by fullness so the longest streaks lead.
-  const rs = (td.ribbons ?? []).slice().sort((a, b): number => ((b.count as number) ?? 0) - ((a.count as number) ?? 0)).slice(0, 16);
+  const rs = (td.ribbons ?? []).toSorted((a, b): number => ((b.count as number) ?? 0) - ((a.count as number) ?? 0)).slice(0, 16);
   for (const r of rs) {lines.push(`  rib ${JSON.stringify(slim(r, RIB_ROW_DEF))}`);}
   const orphans = td.ribbonOrphans;
   if (orphans && orphans.count > 0) {
@@ -337,7 +337,7 @@ function pushBallCensus(lines: string[], td: TrailDump): void {
 // early; the offWorld count catches shells that escaped the sane-bounds
 // box (a garbage trail census usually traces back to one of these).
 function pushShellAudit(lines: string[], ctx: StateDebugContext): void {
-  const aged = ctx.projectiles.slice().sort((a, b): number => b.age - a.age).slice(0, 5);
+  const aged = ctx.projectiles.toSorted((a, b): number => b.age - a.age).slice(0, 5);
   if (aged.length > 0) {
     lines.push(`oldest: ${aged.map((pr): string => `${pr.config.name}@${pr.age.toFixed(1)}s(${pr.pos.x.toFixed(0)},${pr.pos.y.toFixed(0)},${pr.pos.z.toFixed(0)})`).join(' ')}`);
   }

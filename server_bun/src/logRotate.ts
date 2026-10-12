@@ -24,7 +24,7 @@ function pruneOld(oldDir: string): void {
     const files = readdirSync(oldDir)
       .map((f): string => join(oldDir, f))
       .filter((p): boolean => statSync(p).isFile())
-      .sort((a, b): number => statSync(b).mtimeMs - statSync(a).mtimeMs);
+      .toSorted((a, b): number => statSync(b).mtimeMs - statSync(a).mtimeMs);
     for (const p of files.slice(OLD_KEEP)) {unlinkSync(p);}
   } catch { /* pruning is best-effort like rotation itself */ }
 }

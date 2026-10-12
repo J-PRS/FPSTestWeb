@@ -143,7 +143,7 @@ export async function listClips(): Promise<VaultClip[]> {
       q.addEventListener('error', (): void => res([]));
     });
     return rows.map((r): { name: string; size: number; at: number; } => ({ name: r.name, size: r.blob.size, at: r.at }))
-      .sort((a, b): number => b.at - a.at);
+      .toSorted((a, b): number => b.at - a.at);
   } catch { return []; }
 }
 

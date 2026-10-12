@@ -55,7 +55,7 @@ const FRAG_RANKED: ReadonlySet<string> = new Set(['dm', 'tdm', 'duel']);
  *  ties render deterministically. */
 export function rankRows(mode: string | undefined, rows: SbRow[]): SbRow[] {
   const byFrags = FRAG_RANKED.has(mode ?? '');
-  return rows.slice().sort((a, b): number =>
+  return rows.toSorted((a, b): number =>
     (byFrags
       ? b.frags - a.frags || (b.score ?? 0) - (a.score ?? 0)
       : (b.score ?? b.frags) - (a.score ?? a.frags) || b.frags - a.frags)

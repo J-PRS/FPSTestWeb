@@ -148,7 +148,7 @@ function panelHtml(): string {
   const loss = stats?.getPacketLoss() ?? 0;
   const jitter = stats?.getJitter() ?? -1;
   const avg = corrCount ? corrErrSum / corrCount : 0;
-  const top = [...rejects.entries()].sort((a, b): number => b[1] - a[1]).slice(0, 5)
+  const top = [...rejects.entries()].toSorted((a, b): number => b[1] - a[1]).slice(0, 5)
     .map(([r, n]): string => `${r} ×${n}`).join('<br>');
   const recent = events.slice(-8).reverse()
     .map((e): string => `<div style="opacity:0.7">${((performance.now() - e.t) / 1000).toFixed(1)}s ${e.line}</div>`).join('');

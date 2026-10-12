@@ -219,7 +219,7 @@ export const mkLoft = (sections: LoftSection[], mat: THREE.Material, cap = true,
 export const morphRing = (a: Ring2, b: Ring2, t: number): Ring2 => {
   const bb = a.length === b.length ? b : resampleRing(b, a.length);
   return a.map(([ax, ay], i): [number, number] => {
-    const [bx, by] = b[i]!;
+    const [bx, by] = bb[i]!;
     return [ax + (bx - ax) * t, ay + (by - ay) * t] as [number, number];
   });
 };
