@@ -78,6 +78,47 @@ export function structureColliders(list: readonly StructureSpec[] | undefined): 
   return out;
 }
 
+/** XZ OBB SAT depth test for one collider pair. Returns the two
+ *  shallowest separating depths + Y overlap as {x,y,z} or null when
+ *  separated/inside the authored-joint tolerance. */
+const obbPairDepth = (ca: StructureCollider, cb: StructureCollider, eps: number): { x: number; y: number; z: number } | null => {
+  const oy = Math.min(ca.cy + ca.hy, cb.cy + cb.hy) - Math.max(ca.cy - ca.hy, cb.cy - cb.hy);
+  if (oy <= eps) {return null;}
+  const dx = cb.cx - ca.cx, dz = cb.cz - ca.cz;
+  // Face axes of each box in world XZ: local x ↦ (cos,−sin), z ↦ (sin,cos).
+  const proj = (c: StructureCollider, ax: number, az: number): number =>
+    c.hx * Math.abs(c.cos * ax - c.sin * az) + c.hz * Math.abs(c.sin * ax + c.cos * az);
+  const axes = [
+    [ca.cos, -ca.sin, ca.hx, proj(cb, ca.cos, -ca.sin)],
+    [ca.sin, ca.cos, ca.hz, proj(cb, ca.sin, ca.cos)],
+    [cb.cos, -cb.sin, cb.hx, proj(ca, cb.cos, -cb.sin)],
+    [cb.sin, cb.cos, cb.hz, proj(ca, cb.sin, cb.cos)],
+  ] as const;
+  let d0 = Infinity, d1 = Infinity;
+  for (const [ax, az, ra, rb] of axes) {
+    const dep = ra + rb - Math.abs(dx * ax + dz * az);
+    if (dep <= eps) { return null; }
+    if (dep < d0) { d1 = d0; d0 = dep; } else if (dep < d1) {d1 = dep;}
+  }
+  return { x: d0, y: oy, z: d1 };
+};
+
+/** Worst containment fraction across one spec-pair's collider set.
+ *  Returns the {x,y,z} overlap record or null when under the 0.35 flag. */
+const worstPairFrac = (ci: readonly StructureCollider[], cj: readonly StructureCollider[], eps: number): { x: number; y: number; z: number } | null => {
+  let worst = 0;
+  let best: { x: number; y: number; z: number } | null = null;
+  for (const ca of ci) {for (const cb of cj) {
+    const dep = obbPairDepth(ca, cb, eps);
+    if (!dep) {continue;}
+    // The two shallowest SAT depths bound the intersection footprint.
+    const va = 8 * ca.hx * ca.hy * ca.hz, vb = 8 * cb.hx * cb.hy * cb.hz;
+    const frac = (dep.x * dep.z * dep.y) / Math.min(va, vb);
+    if (frac > worst) { worst = frac; best = dep; }
+  }}
+  return worst > 0.35 ? best : null;
+};
+
 /** Authored-layout lint: which pairs of spec entries interpenetrate.
  *  Compares each entry's expanded collider set (kit hulls, not the
  *  placeholder size) as yaw-OBBs approximated by their XZ AABB + Y span.
@@ -100,34 +141,8 @@ export function findStructureOverlaps(list: readonly StructureSpec[] | undefined
       // the overlap swallowing a real fraction of the smaller box.
       // XZ is true 2D OBB SAT (project on all four face axes) — an
       // AABB approx inflates yawed pieces into phantom containment.
-      let worst = 0;
-      let best: { x: number; y: number; z: number } | null = null;
-      for (const ca of perSpec[i]!) {for (const cb of perSpec[j]!) {
-        const oy = Math.min(ca.cy + ca.hy, cb.cy + cb.hy) - Math.max(ca.cy - ca.hy, cb.cy - cb.hy);
-        if (oy <= eps) {continue;}
-        const dx = cb.cx - ca.cx, dz = cb.cz - ca.cz;
-        // Face axes of each box in world XZ: local x ↦ (cos,−sin), z ↦ (sin,cos).
-        const proj = (c: StructureCollider, ax: number, az: number): number =>
-          c.hx * Math.abs(c.cos * ax - c.sin * az) + c.hz * Math.abs(c.sin * ax + c.cos * az);
-        const axes = [
-          [ca.cos, -ca.sin, ca.hx, proj(cb, ca.cos, -ca.sin)],
-          [ca.sin, ca.cos, ca.hz, proj(cb, ca.sin, ca.cos)],
-          [cb.cos, -cb.sin, cb.hx, proj(ca, cb.cos, -cb.sin)],
-          [cb.sin, cb.cos, cb.hz, proj(ca, cb.sin, cb.cos)],
-        ] as const;
-        let d0 = Infinity, d1 = Infinity;
-        for (const [ax, az, ra, rb] of axes) {
-          const dep = ra + rb - Math.abs(dx * ax + dz * az);
-          if (dep <= eps) { d1 = 0; d0 = d1; break; }
-          if (dep < d0) { d1 = d0; d0 = dep; } else if (dep < d1) {d1 = dep;}
-        }
-        if (d0 <= eps) {continue;}
-        // The two shallowest SAT depths bound the intersection footprint.
-        const va = 8 * ca.hx * ca.hy * ca.hz, vb = 8 * cb.hx * cb.hy * cb.hz;
-        const frac = (d0 * d1 * oy) / Math.min(va, vb);
-        if (frac > worst) { worst = frac; best = { x: d0, y: oy, z: d1 }; }
-      }}
-      if (best && worst > 0.35) {out.push(Object.assign({}, {a: i,b: j}, best));}
+      const hit = worstPairFrac(perSpec[i]!, perSpec[j]!, eps);
+      if (hit) {out.push(Object.assign({}, {a: i,b: j}, hit));}
     }
   }
   return out;

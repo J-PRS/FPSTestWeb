@@ -718,6 +718,8 @@ violation instead of a symptom hunt.
   before the spend, per-player cap recycles the oldest unit.
   Verified sealed.
 
+- **gameState ingest (join/restore lane)** — verified sealed: roster replaces wholesale (unlisted remote removed; NaN roster pos removed before teleportTo), match meta finite-gated (scores sum, ffaScores values, matchEndsAt; room-scope clears residue; offline untouched), pickups reconcile + per-row finite-gated addPickup, flags re-fired either way so a hop clears old banners. Fixed: respawnMs gate now finite + >0 (negative would corrupt the HUD countdown — display-only, server owns respawn timing).
+
 ## Remaining
 
 - `shared/ballSim.ts:293` `applySimDamage` needs the same finite dmg

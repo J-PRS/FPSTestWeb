@@ -57,11 +57,11 @@ describe('netHarness — real wire messages through real handlers', (): void => 
 
   it('pickup spawn/gone and gem collect grant local effects', (): void => {
     feed(h.nm, { type: 'gameState', players: [], protocolVersion: PROTOCOL_VERSION } as ServerMessage);
-    const spawnSpy = vi.spyOn(h.nm, 'onPickupSpawn');
+    const spawnSpy = vi.spyOn(h.nm as unknown as { onPickupSpawn: unknown }, 'onPickupSpawn');
     feed(h.nm, { type: 'pickupSpawn', id: 7, pos: { x: 0, y: 0, z: 0 }, kind: 'gem' } as ServerMessage);
     expect(spawnSpy).toHaveBeenCalled();
     expect(h.world.netPickups?.has(7)).toBe(true);
-    feed(h.nm, { type: 'pickupGone', id: 7, by: h.nm.getLocalPlayerId() } as ServerMessage);
+    feed(h.nm, { type: 'pickupGone', id: 7, by: (h.nm as unknown as { getLocalPlayerId(): string }).getLocalPlayerId() } as ServerMessage);
     // Server-verified collect — the handler grants the offline reward itself.
     expect(h.player.heal).toHaveBeenCalledWith(0.2);
     expect(h.player.grantJetBoost).toHaveBeenCalled();

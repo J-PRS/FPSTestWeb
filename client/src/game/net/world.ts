@@ -162,7 +162,7 @@ function applyRoomInfo(ctx: NetCtx, playerCount: number, roomInfo?: Parameters<N
   if (roomInfo.mapName) {deps.world.mapName = roomInfo.mapName;}
   if (roomInfo.room !== undefined) {deps.retireOfflineBots?.();}
   applyMatchMeta(ctx, roomInfo);
-  if (roomInfo.respawnMs) {deps.world.respawnMs = roomInfo.respawnMs;}
+  if (Number.isFinite(roomInfo.respawnMs) && roomInfo.respawnMs! > 0) {deps.world.respawnMs = roomInfo.respawnMs!;}
   announceRoom(ctx, playerCount, roomInfo);
   // Pickups still lying on the field when we (re)joined — the roster is
   // authoritative both ways: spawn what's there, drop ghosts whose
