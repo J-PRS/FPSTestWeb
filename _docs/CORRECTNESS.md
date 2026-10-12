@@ -483,6 +483,15 @@ violation instead of a symptom hunt.
   name so a same-named room isn't born frozen. No-audience
   hibernation sleeps sims; unconditional frames every tick keep
   the client loss metric and `ackSeq` pruning honest.
+- **Hibernation wake (verified sealed):** the no-audience early
+  return sits before `lastStepAt` updates, so a room asleep for
+  any span collapses the gap to a single `dt≤1s` step on wake —
+  no catch-up storm (the 1s cap's exact purpose), just a bounded
+  resume. `simNow` is wall-based, so deployable TTLs / respawn
+  lapses / flag timers keep expiring during dormancy and reap in
+  bulk on the first awake tick — wall-time semantics preserved.
+  Sim-lifetime reads are `simMs`-branded against wall-epoch fields
+  so a sim/wall mix fails at tsc, not at resync.
 - **Identity/session lane (verified sealed):** playerIds claim
   via `HMAC(playerId, secret)` tokens — a taken id can't be
   stolen by knowing it; reclaim resolves by server-known

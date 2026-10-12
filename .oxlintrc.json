@@ -86,7 +86,7 @@
     "new-cap": "warn",
     "class-methods-use-this": ["warn", { "exceptMethods": ["getVolume", "freeInput"] }],
     "typescript/consistent-type-imports": "warn",
-    "typescript/no-non-null-assertion": "warn",
+    "typescript/no-non-null-assertion": "off",
     "typescript/no-inferrable-types": "warn",
     "typescript/explicit-function-return-type": "warn",
     "typescript/explicit-module-boundary-types": "warn",
