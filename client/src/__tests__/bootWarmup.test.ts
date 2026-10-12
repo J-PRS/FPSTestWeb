@@ -6,41 +6,40 @@ function frames(gate: BootWarmup, count: number, seconds = 1 / 60): void {
 }
 
 describe('boot warmup', (): void => {
-  it('releases all early waiters only after consecutive stable frames', (): Promise<void> => {
+  it('releases all early waiters only after consecutive stable frames', async (): Promise<void> => {
     const gate = new BootWarmup();
     const resolved = vi.fn();
     const first = gate.whenStable().then(resolved);
     const second = gate.whenStable().then(resolved);
     frames(gate, 44);
-    return Promise.resolve().then((): Promise<void> => {
-      expect(gate.released).toBe(false);
-      expect(resolved).not.toHaveBeenCalled();
-      gate.tick(1 / 60);
-      return Promise.all([first, second]).then((): void => {
-        expect(gate.released).toBe(true);
-        expect(resolved).toHaveBeenCalledTimes(2);
-      });
-    });
+    await Promise.resolve();
+    expect(gate.released).toBe(false);
+    expect(resolved).not.toHaveBeenCalled();
+    gate.tick(1 / 60);
+    await Promise.all([first, second]);
+    expect(gate.released).toBe(true);
+    expect(resolved).toHaveBeenCalledTimes(2);
   });
 
-  it('releases without waiters and serves late callers after a hitch', (): Promise<void> => {
+  it('releases without waiters and serves late callers after a hitch', async (): Promise<void> => {
     const gate = new BootWarmup();
     frames(gate, 45);
     expect(gate.released).toBe(true);
     gate.tick(0.1);
-    return gate.whenStable().then((): void => {expect(gate.released).toBe(true);});
+    await gate.whenStable();
+    expect(gate.released).toBe(true);
   });
 
-  it('uses the frame cap on a persistently slow machine', (): Promise<void> => {
+  it('uses the frame cap on a persistently slow machine', async (): Promise<void> => {
     const gate = new BootWarmup();
     const waiting = gate.whenStable();
     frames(gate, 239, 0.1);
     expect(gate.released).toBe(false);
     gate.tick(0.1);
-    return waiting.then((): Promise<void> => {
-      gate.tick(0.1);
-      return gate.whenStable().then((): void => {expect(gate.released).toBe(true);});
-    });
+    await waiting;
+    gate.tick(0.1);
+    await gate.whenStable();
+    expect(gate.released).toBe(true);
   });
 
   it.each([0.026, 0.1, 0, -1, Number.NaN, Number.POSITIVE_INFINITY])(

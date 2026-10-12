@@ -210,6 +210,15 @@ function tickDemo(deps: GameLoopDeps, dt: number): boolean {
   return demoManager?.isPaused ?? false;
 }
 
+// Offline boot hold: while warmup hasn't released (or the input freeze it
+// raised is still on), render the world but keep the match out of play —
+// entities don't tick and the viewmodel stays hidden. Online rooms and
+// demo playback are never held: the server doesn't wait for our shaders.
+function bootHoldActive(f: TickFrame): boolean {
+  return !f.demoManager?.isPlaying && !f.networkManager.isConnected()
+    && (!f.bootReleased || f.player.inputFrozen);
+}
+
 // Species census for the bottom-left debug readout — in-place count,
 // no per-frame filter arrays.
 function censusEntities(deps: GameLoopDeps, entities: ReturnType<typeof createEntities>) {
@@ -356,8 +365,7 @@ bodyN += 1;
   const demoPaused = tickDemo(deps, dt);
   if (demoPaused) {return true;}
 
-  // Keep camera/terrain warmup running without putting an offline match in play.
-  if (!demoManager?.isPlaying && !networkManager.isConnected() && (!bootReleased || player.inputFrozen)) {return false;}
+  if (bootHoldActive(f)) {return false;}
   tickEntities(deps, perf, dt, demoManager?.isPlaying ?? false, bootReleased);
   return false;
 }
@@ -453,6 +461,29 @@ function fxTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cre
   st.fxJobs.length = 0;
 }
 
+// Player/bot minimap blips — same friend-or-foe rule as the overhead
+// markers: wire team (or GameBot.team) matching localTeam = green, else
+// red. Dead and cloaked riders are dropped — no corpse pings, no cloak
+// leak.
+function fillMapBlips(deps: GameLoopDeps, networkManager: TickFrame['networkManager']): void {
+  const wirePlayers = networkManager.getPlayers();
+  let blipN = 0;
+  deps.world.remotePlayers.forEach((rp, id): void => {
+    // A fire-revealed cloak (ghostT live) blips like any visible rider —
+    // the shimmer window already sold him out to eyes and HUD.
+    if (rp.isDead || (rp.isCloakHidden && rp.ghostT <= 0)) {return;}
+    const team = (rp as { team?: string }).team ?? wirePlayers.get(id)?.team;
+    // Reused buffer — a fresh object per remote per frame was ~1.2k
+    // throwaway blips/s of pure GC churn.
+    let b = _mapBlips[blipN];
+    if (!b) { b = { x: 0, z: 0, friendly: false, bot: false }; _mapBlips.push(b); }
+    b.x = rp.position.x; b.z = rp.position.z;
+    b.friendly = Boolean(team) && team === deps.world.localTeam; b.bot = isBotId(id);
+blipN += 1;
+  });
+  _mapBlips.length = blipN;
+}
+
 /** Stage 3 — HUD + viewmodel + ambient/atmosphere, then render. */
 function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof createFrameBudget>, perf: ReturnType<typeof createPerfHud>, f: TickFrame, fxDt: number): void {
   const { dt, player, networkManager, demoManager } = f;
@@ -504,25 +535,7 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   // Every frame — a rotating radar at the 25Hz sweep cadence reads as
   // visibly choppy next to the 60fps world, and the redraw is ~30 arcs.
   deps.ambientBirds.positions(_birdPosBuf);
-  // Player/bot blips — same friend-or-foe rule as the overhead markers:
-  // wire team (or GameBot.team) matching localTeam = green, else red.
-  // Dead and cloaked riders are dropped — no corpse pings, no cloak leak.
-  const wirePlayers = networkManager.getPlayers();
-  let blipN = 0;
-  deps.world.remotePlayers.forEach((rp, id): void => {
-    // A fire-revealed cloak (ghostT live) blips like any visible rider —
-    // the shimmer window already sold him out to eyes and HUD.
-    if (rp.isDead || (rp.isCloakHidden && rp.ghostT <= 0)) {return;}
-    const team = (rp as { team?: string }).team ?? wirePlayers.get(id)?.team;
-    // Reused buffer — a fresh object per remote per frame was ~1.2k
-    // throwaway blips/s of pure GC churn.
-    let b = _mapBlips[blipN];
-    if (!b) { b = { x: 0, z: 0, friendly: false, bot: false }; _mapBlips.push(b); }
-    b.x = rp.position.x; b.z = rp.position.z;
-    b.friendly = Boolean(team) && team === deps.world.localTeam; b.bot = isBotId(id);
-blipN += 1;
-  });
-  _mapBlips.length = blipN;
+  fillMapBlips(deps, networkManager);
   hud.updateMinimap(entities.targets, entities.nuggets, player.pos, player.yaw, _birdPosBuf, _mapBlips);
   if (hud.commandMapOpen) {hud.updateCommandMap(player.pos, player.yaw, _mapBlips, deps.world.flagMarkers);}
 
@@ -530,8 +543,7 @@ blipN += 1;
   // hiding it would strip the shooter POV from cool-shot clips.
   // The middle-click orbit cam IS a third-person view while it's on —
   // hiding the FP gun is what stops "your own gun plus your own model".
-  const bootWaiting = !networkManager.isConnected() && !demoManager?.isPlaying && (!f.bootReleased || player.inputFrozen);
-  viewModel.group.visible = !bootWaiting && !player.isDead && !player.thirdPerson && !player.isSpectating && !player.input.midHeld;
+  viewModel.group.visible = !bootHoldActive(f) && !player.isDead && !player.thirdPerson && !player.isSpectating && !player.input.midHeld;
   const yawDelta = Math.atan2(Math.sin(player.yaw - st.lastYaw), Math.cos(player.yaw - st.lastYaw));
   // Paused demo = frozen world — the vm's idle sway/bob reads as the scene
   // still playing. dt=0 freezes the anims; the weapon itself stays bound

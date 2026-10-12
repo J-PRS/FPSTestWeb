@@ -7,8 +7,9 @@
     "typeAware": true
   },
   "rules": {
-    // Only exist under type-aware mode — the async ban makes
-    // floating/misused promises the exact class raw .then chains rot into.
+    // Only exist under type-aware mode — these catch lost/misused
+    // promises inside async fns too, which is why the blanket
+    // oxc/no-async-await ban is off in the base config.
     "typescript/no-floating-promises": "warn",
     "typescript/no-misused-promises": "warn",
     "typescript/no-unnecessary-condition": "warn",
