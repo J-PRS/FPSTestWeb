@@ -42,6 +42,7 @@ rotateLogs();
 let wtCertHash: string | null = null;
 // requestIP binds lazily — `server` doesn't exist until Bun.serve below
 // returns, but no request can arrive before that.
+// oxlint-disable-next-line no-use-before-define -- lazily bound, see comment above
 const httpCtx = { gameServer, demoStorage, rtcRelay, wtCertHash: (): string | null => wtCertHash, requestIP: (req: Request): Bun.SocketAddress | null => server.requestIP(req) };
 const ROUTES = makeRoutes(httpCtx);
 
@@ -78,7 +79,7 @@ async function shutdown(): Promise<void> {
 function reclaimStaleBun(port: number): boolean {
   const out = Bun.spawnSync(['netstat', '-ano', '-p', 'tcp']).stdout.toString();
   const pids = [...out.matchAll(/^TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)\s*$/gm)]
-    .filter((m) => Number(m[1]!) === port).map((m) => m[2]!);
+    .filter((m) => Number(m[1]) === port).map((m) => m[2]!);
   for (const pid of pids) {
     const img = Bun.spawnSync(['tasklist', '/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH']).stdout.toString();
     if (!/bun\.exe/i.test(img)) { logger.error(`:${port} held by non-bun pid ${pid} — refusing to kill`); return false; }
@@ -181,11 +182,13 @@ const serve = (): ReturnType<typeof Bun.serve<WebSocketData>> => Bun.serve<WebSo
   },
 });
 
-let server: ReturnType<typeof serve>;
-try { server = serve(); } catch (error) {
-  if (!/EADDRINUSE/i.test(String(error)) || !reclaimStaleBun(CONFIG.port)) {throw error;}
-  server = serve();
-}
+const server: ReturnType<typeof serve> = ((): ReturnType<typeof serve> => {
+  try { return serve(); } catch (error) {
+    const busy = (error as { code?: string }).code === 'EADDRINUSE' || /in use|EADDRINUSE/i.test(String(error));
+    if (!busy || !reclaimStaleBun(CONFIG.port)) {throw error;}
+    return serve();
+  }
+})();
 
 gameServer.setBunServer(server);
 

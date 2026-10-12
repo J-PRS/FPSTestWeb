@@ -35,7 +35,9 @@ export function wireMatchEvents(ctx: NetCtx): void {
     deps.world.teamScores = scores;
     deps.lazyHud().setTeamScore?.(scores.alpha, scores.bravo);
     const top = Math.max(scores.alpha, scores.bravo);
-    const lead = scores.alpha === scores.bravo ? 'tie' : scores.alpha > scores.bravo ? 'alpha' : 'bravo';
+    let lead = 'bravo';
+if (scores.alpha === scores.bravo) {lead = 'tie';}
+else if (scores.alpha > scores.bravo) {lead = 'alpha';}
     const milestone = Math.floor(top / 10);
     if (lead !== lastLead || milestone > lastMilestone || top >= winAt - 10) {
       chat.add(null, `ALPHA ${scores.alpha} : ${scores.bravo} BRAVO  (first to ${winAt})`);

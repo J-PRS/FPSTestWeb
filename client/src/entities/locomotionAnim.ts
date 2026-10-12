@@ -23,7 +23,16 @@ export function pickLocomotionAnim(current: AnimationState, speed: number, skiin
       return 'ski';
     }
   }
-  if (current === 'run') {return speed > 6 ? 'run' : speed > 1.5 ? 'walk' : 'idle';}
-  if (current === 'walk') {return speed < 0.8 ? 'idle' : speed > 9 ? 'run' : 'walk';}
-  return speed > 1.5 ? (speed > 8 ? 'run' : 'walk') : 'idle';
+  if (current === 'run') {
+  if (speed > 6) {return 'run';}
+  if (speed > 1.5) {return 'walk';}
+  return 'idle';
+}
+  if (current === 'walk') {
+  if (speed < 0.8) {return 'idle';}
+  if (speed > 9) {return 'run';}
+  return 'walk';
+}
+  if (speed <= 1.5) {return 'idle';}
+return speed > 8 ? 'run' : 'walk';
 }

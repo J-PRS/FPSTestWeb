@@ -321,7 +321,10 @@ this.metrics.recordsIdleReaped += 1;
         // Egress is quadratic in roster — the far-field past 600m is a
         // speck on screen, so it earns a record only every 8th tick while
         // the 400-600m band keeps the 150ms worst-case cadence.
-        const tier = dSq < 22_500 ? 1 : dSq < 160_000 ? 2 : dSq < 360_000 ? 3 : 8; // 150m / 400m / 600m
+        let tier = 8;
+if (dSq < 22_500) {tier = 1;}
+else if (dSq < 160_000) {tier = 2;}
+else if (dSq < 360_000) {tier = 3;} // 150m / 400m / 600m
         // force = hit/knockback window: real positions must reach every
         // observer at full rate while they extrapolate the knockback
         if (r.force || seq % tier === 0) {others.push(r.data);}

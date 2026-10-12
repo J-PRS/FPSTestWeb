@@ -134,9 +134,12 @@ export class SheepCore {
     // Rate-capped drain: a high-E burst (60m/s plummet) used to zero a
     // full meter in a second, reading as a reset. Faster play still
     // drains faster — just never in a single step.
+    let drain = 18;
+    if (excused) {drain = 2;}
+    else if (s.hasDest) {drain = 9;}
     const base = s.dt * (tribesing
       ? -Math.min(12 + bonusSpeed * 0.6 + (s.jetting ? 15 : 0), 30)
-      : excused ? 2 : s.hasDest ? 9 : 18);
+      : drain);
     if (base > 0) {why.idle += base;}
     meter += base;
 

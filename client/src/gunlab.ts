@@ -19,6 +19,8 @@ import { CREATURES, PICKUPS, ITEMS, CLASSES, STRUCTURES, previewLive, initPrevie
 import type { AnimationState } from './entities/playerClips.js';
 import { zScan, holeScan, gapScan, volScan } from './gunlab/scans.js';
 
+const CAT_TABLES = { classes: CLASSES, creatures: CREATURES, items: ITEMS, pickups: PICKUPS, structures: STRUCTURES } as const;
+
 // Asset-iteration tool, not a player surface: on a prod host the page
 // renders a closed sign and the whole lab below is skipped. Static hosts
 // still serve the file — this is the same isDevHost gate the ESC-menu
@@ -263,8 +265,9 @@ function updateStats(): void {
     if (m.geometry.boundingBox) {wb.union(_b.copy(m.geometry.boundingBox).applyMatrix4(m.matrixWorld));}
   });
   const s = wb.isEmpty() ? new THREE.Vector3() : wb.getSize(new THREE.Vector3());
-  const label = inspectAnchor ? `${inspectAnchor.name || 'inspect'}` :
-    archiveGroup ? archiveLabel : `w${state.wt}`;
+  let label = `w${state.wt}`;
+  if (inspectAnchor) {label = `${inspectAnchor.name || 'inspect'}`;}
+  else if (archiveGroup) {label = archiveLabel;}
   statEl.textContent =
     `${label}\n` +
     `${meshes} meshes${insts ? ` + ${insts} inst` : ''} · ${mats.size} mats\n` +
@@ -289,7 +292,7 @@ function paintRail(): void {
   }
   catSel.addEventListener('change', (): void => { state.cat = catSel.value; saveState(); paintRail(); });
   rail.append(catSel);
-  const catTable = state.cat === 'classes' ? CLASSES : state.cat === 'creatures' ? CREATURES : state.cat === 'items' ? ITEMS : state.cat === 'pickups' ? PICKUPS : state.cat === 'structures' ? STRUCTURES : null;
+  const catTable = CAT_TABLES[state.cat as keyof typeof CAT_TABLES] ?? null;
   if (catTable) {
     for (const [label, build] of catTable) {
       const b = document.createElement('button');
@@ -1142,7 +1145,7 @@ addEventListener('keydown', (e): void => {
   if (e.code === 'ArrowDown' || e.code === 'ArrowUp') {
     e.preventDefault();
     const step = e.code === 'ArrowDown' ? 1 : -1;
-    const table = state.cat === 'classes' ? CLASSES : state.cat === 'creatures' ? CREATURES : state.cat === 'items' ? ITEMS : state.cat === 'pickups' ? PICKUPS : state.cat === 'structures' ? STRUCTURES : null;
+    const table = CAT_TABLES[state.cat as keyof typeof CAT_TABLES] ?? null;
     if (table?.length) {
       const i = table.findIndex(([l]): boolean => l === archiveLabel);
       const next = table[(i + step + table.length) % table.length];

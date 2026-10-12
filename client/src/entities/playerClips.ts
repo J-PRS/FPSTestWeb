@@ -316,7 +316,9 @@ export function clipCandidates(variant: string, state: AnimationState, dir: Loco
     // pure lateral/back sectors onto them — forward diagonals keep the
     // forward stride (strafe clips only for actual strafing).
     if (state === 'walk' && dir !== 'F' && dir !== 'FL' && dir !== 'FR' && spec.walkDirs) {
-      const axis = dir === 'L' ? 'L' : dir === 'R' ? 'R' : 'B';
+      let axis: keyof typeof spec.walkDirs = 'B';
+      if (dir === 'L') {axis = 'L';}
+      else if (dir === 'R') {axis = 'R';}
       const n = spec.walkDirs[axis];
       if (n) {out.push({ name: n, dir: true });}
     }
@@ -340,12 +342,13 @@ export function clipCandidates(variant: string, state: AnimationState, dir: Loco
       // to face travel) — taken raw, strafing pivots the whole rig off
       // the aim. He stays on the reversed-walk + lean fallback instead.
       const fwdHemi = dir === 'FL' || dir === 'FR' || dir === 'L' || dir === 'R';
-      const set = state === 'run' ? (fwdHemi ? 'Sprint01' : 'Run01') : 'Walk01';
+      const set = state === 'run' && fwdHemi ? 'Sprint01' : state === 'run' ? 'Run01' : 'Walk01';
       out.push({ name: `UAL_${set}_${DIR_SUFFIX[dir]}`, dir: true });
     }
   }
   const ov = VARIANT_CLIP_OVERRIDES[variant]?.[state];
-  for (const n of ov === undefined ? [] : Array.isArray(ov) ? ov : [ov]) {out.push({ name: n, dir: false });}
+  const ovList = ov === undefined ? [] : Array.isArray(ov) ? ov : [ov];
+for (const n of ovList) {out.push({ name: n, dir: false });}
   out.push({ name: ANIM_NAMES[state][0], dir: false }, { name: ANIM_NAMES[state][1], dir: false });
   return out;
 }

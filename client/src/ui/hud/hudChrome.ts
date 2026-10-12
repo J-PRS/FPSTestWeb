@@ -9,7 +9,9 @@ import type { HUD } from '../hud.js';
 const paintFlagChip = (el: HTMLElement, st?: string): void => {
   el.style.display = st ? '' : 'none';
   if (!st) {return;}
-  el.textContent = st === 'home' ? '⚑' : st === 'carried' ? '⚑ TAKEN' : '⚑ LOOSE';
+  el.textContent = '⚑ LOOSE';
+if (st === 'home') {el.textContent = '⚑';}
+else if (st === 'carried') {el.textContent = '⚑ TAKEN';}
   el.classList.toggle('taken', st !== 'home');
 };
 
@@ -35,7 +37,10 @@ export function feedKill(h: HUD, shooter: string, target: string, localIsShooter
     const airTag = air !== undefined && air >= 0.1 ? ` [${air.toFixed(1)}s]` : '';
     w.textContent = wName || airTag ? ` ${wName}${airTag} ` : '';
     const t = document.createElement('span');
-    t.className = `kf-t${  localIsTarget ? ' dead' : tTeam ? ` tm-${tTeam[0]}` : ''}`;
+    let deadCls = '';
+if (localIsTarget) {deadCls = ' dead';}
+else if (tTeam) {deadCls = ` tm-${tTeam[0]}`;}
+t.className = `kf-t${deadCls}`;
     t.textContent = suicide ? 'self' : (tName ?? botDisplayName(target));
     row.append(s, w, t);
     h.killFeed.append(row);

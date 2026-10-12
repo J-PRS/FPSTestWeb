@@ -249,10 +249,12 @@ export class Turretter implements Targetable {
     // Damage flash and the mid-air "shoot me now" glow both ride the dome.
     const flash = this.flashTimer > 0;
     const hot = !this.planted;
-    swarm.setColor(PART_DOME, slot,
-      flash ? 4 : hot ? DOME_R * 3 : DOME_R,
-      flash ? 4 : hot ? DOME_G * 2 : DOME_G,
-      flash ? 4 : hot ? DOME_B : DOME_B);
+    let domeR = DOME_R;
+    let domeG = DOME_G;
+    let domeB = DOME_B;
+    if (flash) {domeR = 4; domeG = 4; domeB = 4;}
+    else if (hot) {domeR *= 3; domeG *= 2;}
+    swarm.setColor(PART_DOME, slot, domeR, domeG, domeB);
     swarm.setColor(PART_EYE, slot,
       hot ? 2 : 1, hot ? 1 : 0.53, hot ? 0.4 : 0.19);
   }

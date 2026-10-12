@@ -103,7 +103,9 @@ export class SpawnPicker {
       // respawner inside the enemy's defended base. Unsafe points fall
       // back to the home pull, which already penalizes the transit.
       const objOk = Boolean(obj) && minFoeDist > SpawnPicker.CAMPED_R;
-      const pullPos = objOk ? obj!.pos : obj ? ownBase : (bias > 0 ? ownBase : undefined);
+      let pullPos;
+if (objOk) {pullPos = obj!.pos;}
+else if (obj || bias > 0) {pullPos = ownBase;}
       const pullW = objOk ? obj!.w : bias;
       const score = (pullPos
         ? minFoeDist - pullW * Math.hypot(spawn.x - pullPos.x, spawn.z - pullPos.z)

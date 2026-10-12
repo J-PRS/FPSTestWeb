@@ -18,7 +18,10 @@ function serverIce(): { hostname: string; port: number; relayer?: boolean }[] {
     if (!Array.isArray(raw)) {return [];}
     const out: { hostname: string; port: number; relayer?: boolean }[] = [];
     for (const e of raw) {
-      const urls = typeof e === 'string' ? [e] : (Array.isArray(e?.urls) ? e.urls : (e?.urls ? [e.urls] : []));
+      let urls: string[] = [];
+if (typeof e === 'string') {urls = [e];}
+else if (Array.isArray(e?.urls)) {urls = e.urls;}
+else if (e?.urls) {urls = [e.urls];}
       for (const u of urls) {
         const m = typeof u === 'string' && u.match(/^(stun|turn)s?:\/\/([^:/]+):?(\d+)?/);
         if (m) {out.push({ hostname: m[2]!, port: m[3] ? Number(m[3]) : 3478, relayer: m[1]!.startsWith('turn') });}
@@ -110,7 +113,9 @@ class RtcSocketAdapter {
     const fast = typeof msg !== 'string' && msg[0] === 0x54 && (msg[1] === WIRE_TICK || msg[1] === WIRE_TICK_V3 || msg[1] === WIRE_TICK_V4);
     const lane = fast ? this.game : this.ctrl;
     const alt = fast ? this.ctrl : this.game;
-    const dc = lane?.isOpen() ? lane : alt?.isOpen() ? alt : null;
+    let dc = null;
+if (lane?.isOpen()) {dc = lane;}
+else if (alt?.isOpen()) {dc = alt;}
     if (!dc) {return 0;}
     // isOpen() can lag the real channel state on close races; a failed
     // send must not take down the whole broadcast path.

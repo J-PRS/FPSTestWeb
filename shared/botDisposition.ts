@@ -268,8 +268,10 @@ export function pickDeploy(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, 
     // by temperament — drones roam the stand's perimeter so they're
     // the pick when the anchor is already watched.
     const roll = botRand();
-    const kind: string = (ctx.healthFrac ?? 1) < 0.4 ? 'station'
-      : roll < 0.55 ? 'turret' : roll < 0.85 ? 'mine' : 'drone';
+    let kind: string = 'drone';
+    if ((ctx.healthFrac ?? 1) < 0.4) {kind = 'station';}
+    else if (roll < 0.55) {kind = 'turret';}
+    else if (roll < 0.85) {kind = 'mine';}
     const a = botRand() * Math.PI * 2;
     const r = 4 + botRand() * 6;
     const px = pos.x + Math.cos(a) * r, pz = pos.z + Math.sin(a) * r;
