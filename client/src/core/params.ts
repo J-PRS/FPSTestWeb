@@ -25,17 +25,41 @@ export const isDevHost = (): boolean =>
 // DO run per-frame per-remote (collider gizmo tint), so the parse is
 // keyed on the raw string — compare is ~free, reparse only on change.
 let lastSearch = '';
+let lastPath = '';
 let liveParams = new URLSearchParams();
+let liveRoom = '';
 const live = (): URLSearchParams => {
   // Node/bun test hosts have no location — URL params read empty, every
   // getter falls through to its settings/default leg.
   const s = typeof window === 'undefined' ? '' : window.location.search;
-  if (s !== lastSearch) {
+  const p = typeof window === 'undefined' ? '' : window.location.pathname;
+  if (s !== lastSearch || p !== lastPath) {
     lastSearch = s;
+    lastPath = p;
     liveParams = new URLSearchParams(s);
+    // Canonical share link is the PATH: /s/<room>. ?room= stays readable
+    // for old links; nothing writes it anymore.
+    const m = /^\/s\/([^/?#]+)/.exec(p);
+    liveRoom = m ? decodeURIComponent(m[1]) : '';
   }
   return liveParams;
 };
+
+/** Creation hints that must survive the join-time reload — written by
+ *  Lobby.join() right before navigation, consumed by the join payload.
+ *  Once the room exists its spec is server-side, so stale hints only
+ *  matter if the room was disposed since (same semantics ?map/?bots
+ *  in the URL used to give). */
+export interface JoinSpec { map?: string; bots?: number; mode?: string }
+export function readJoinSpec(): JoinSpec {
+  try {
+    const v = JSON.parse(settings.get('fps-join-spec')) as JoinSpec;
+    return v && typeof v === 'object' ? v : {};
+  } catch { return {}; }
+}
+export function writeJoinSpec(spec: JoinSpec): void {
+  settings.set('fps-join-spec', JSON.stringify(spec));
+}
 
 export const urlParams = {
   get: (k: string): string | null => live().get(k),
@@ -57,20 +81,32 @@ export const urlParams = {
   /** ?lobby / saved flag — host marks the p2p room public on the relay
    *  so quick-joiners find it via /rtc/lobbies. */
   get lobby(): boolean { return live().has('lobby') || settings.get('fps-lobby') === 1; },
-  /** ?room=NAME — match room on the server (default: 'default'). Lets two
-   *  matches coexist on one server; share the URL to share the room. */
-  get room(): string | null { return live().get('room'); },
-  /** ?map=/?bots= — spec hints the join message forwards so a fresh
-   *  server-side room rebuilds from the right maps/<X>.json. */
+  /** Room identity is the PATH — /s/NAME. The ?room= fallback keeps old
+   *  shared links working. */
+  get room(): string | null { live(); return liveRoom || liveParams.get('room'); },
+  /** SOLO session intent — the old ?solo marker, now a persisted setting;
+   *  the param stays as a headless-harness override. */
+  get solo(): boolean { return live().has('solo') || settings.get('fps-solo') === 1; },
+  /** Solo field pick — URL override first (harnesses), then the SOLO
+   *  tab's persisted choice. */
+  get soloMap(): string | null { return live().get('map') || settings.get('fps-solo-map') || null; },
+  get soloBots(): number | undefined {
+    const b = live().get('bots');
+    if (b) {return Number(b);}
+    const s = settings.get('fps-solo-bots');
+    return s >= 0 ? s : undefined;
+  },
+  /** ?map=/?bots= — URL-only creation hints (harnesses + legacy links).
+   *  Interactive joins carry hints via readJoinSpec instead. */
   get map(): string | null { return live().get('map'); },
   get bots(): number | undefined { const b = live().get('bots'); return b ? Number(b) : undefined; },
   /** ?unlisted — creation-time flag forwarded on join/switchRoom: the
    *  room stays off /rooms and out of quick-join picks. */
-  get unlisted(): boolean { return live().has('unlisted'); },
+  get unlisted(): boolean { return live().has('unlisted') || settings.get('fps-unlisted') === 1; },
   /** ?nocreatures=/?noballs= — creation-time sim gates forwarded on
    *  join/switchRoom: the hosted room skips the species populations. */
-  get noCreatures(): boolean { return live().has('nocreatures'); },
-  get noBalls(): boolean { return live().has('noballs'); },
+  get noCreatures(): boolean { return live().has('nocreatures') || settings.get('fps-nocreatures') === 1; },
+  get noBalls(): boolean { return live().has('noballs') || settings.get('fps-noballs') === 1; },
   /** ?net=wt|rtc — probe that transport tier before falling back to
    *  WebSocket (netcode v2; the UDP tiers are stubbed until server halves
    *  exist). Absent param = straight WS, today's behavior. */

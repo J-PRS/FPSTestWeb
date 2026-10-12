@@ -405,7 +405,7 @@ function setupOfflineMode(mode: string, mapSpec?: MapSpec): void {
   // Bot roster: explicit ?bots wins, then the map's own count, then the
   // mode's classic spread. Non-flagrun modes split N across both sides
   // (the player occupies one alpha slot already).
-  const want = urlParams.bots ?? mapSpec?.bots ?? mapSpec?.botFill;
+  const want = urlParams.soloBots ?? mapSpec?.bots ?? mapSpec?.botFill;
   let counts;
   if (mode === 'flagrun') {counts = { alpha: want ?? 0, bravo: 0 };}
   else if (want === undefined) {counts = spec.ffa ? { alpha: 5, bravo: 4 } : { alpha: 4, bravo: 5 };}
@@ -552,7 +552,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
       player.markTeleport();
     }
     if (s.name) {world.mapName = s.name;}
-    else {world.mapName = urlParams.map ?? undefined;}
+    else {world.mapName = urlParams.soloMap ?? undefined;}
     world.mode = mode ?? s.mode;
     // Deploys — generators/sentries are server-seeded in rooms; offline
     // they spawn as remote items (same visuals + repair/weld paths).
@@ -656,7 +656,21 @@ async function init(): Promise<void> {
   watchDeployVersion();
   networkManager = new NetworkManager();
   networkManager.armWireQueue();
+  // Boot resume: a bare '/' load with a remembered room rejoins it — the
+  // canonical /s/<room> path is written BEFORE anything reads urlParams,
+  // so every downstream consumer (early wire, join payload, lobby) sees
+  // the resumed identity. Explicit leaves clear fps-last-room, so its
+  // presence means "was in a match and never left". A solo pick
+  // (fps-solo) suppresses the resume — the player chose offline.
+  if (!urlParams.room && !urlParams.p2p && !urlParams.solo && settings.get('fps-last-room')) {
+    const resume = settings.get('fps-last-room');
+    history.replaceState(null, '', `/s/${encodeURIComponent(resume)}${window.location.search}`);
+  }
   const onlineBoot = Boolean(urlParams.room) || Boolean(urlParams.p2p);
+  if (urlParams.room) {
+    settings.set('fps-last-room', urlParams.room);
+    settings.set('fps-solo', 0);
+  }
   // The veil probe and the socket flight are pure network — kick both
   // now so they overlap ALL of init instead of stacking after it.
   // wireIn queues inbound until wireNetworkHandlers binds the deps
@@ -685,8 +699,8 @@ async function init(): Promise<void> {
   // Solo-with-a-map: ?map= without a room is the SOLO tab's pick — fetch
   // the spec JSON off the same static /maps route the wire path uses and
   // resolve it client-side (resolveMapSpec is shared/, pure).
-  soloSpec = !onlineBoot && urlParams.map
-    ? await loadSoloSpec(urlParams.map) : null;
+  soloSpec = !onlineBoot && urlParams.soloMap
+    ? await loadSoloSpec(urlParams.soloMap) : null;
   const bootSaved = onlineBoot ? await probeBootMap() : null;
   const soloPrimed = soloSpec?.map && (await serverEndpoints).httpUrl
     ? await bootPrimeTerrain((await serverEndpoints).httpUrl, soloSpec.map).catch((): boolean => false)

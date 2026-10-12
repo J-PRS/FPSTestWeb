@@ -1,3 +1,18 @@
+2026-10-12 - url: room identity is the path — /s/<room> is the shareable
+link; everything else moved to settings. Lobby joins write /s/<name>
+(replaceState on live hop, href on reload); creation hints (map/bots/
+mode) ride a persisted fps-join-spec consumed by the join payload
+instead of living in the query string; the unlisted/creatures/balls
+gates ride their existing fps-* settings. ?room= still reads for old
+links; nothing writes it. Solo picks persist as fps-solo*/fps-mode and
+playOffline reloads a clean '/'. Boot resume: a bare '/' with a
+remembered fps-last-room (and no solo intent) rewrites to /s/<room>
+before anything reads urlParams — closed tab reopens into the match;
+explicit leave-server clears it. Free fix: join payload mode no longer
+leaks the saved solo pick into room mints (lobby ANY bug). Dev-only
+query params (net/debug/headless hooks) unchanged. NOTE: prod static
+hosts need a /s/* → index.html rewrite; vite dev handles it natively.
+
 2026-10-11 - terrain: collider is now the L0 clipmap chord — every 5m
 cell two flat triangles, world-anchored lattice (shared hmChord). The
 bilinear field survives only as corner taps, so movement, projectiles,

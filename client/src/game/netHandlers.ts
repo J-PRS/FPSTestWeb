@@ -124,7 +124,7 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
   wireResync(ctx);
 
   // Lobby browser — corner button lists the server's live rooms; joining
-  // reloads with ?room=NAME (membership is fixed at connect time).
+  // reloads onto /s/NAME (membership is fixed at connect time).
   resolveServerEndpoints().then(({ httpUrl, lobbyUrl, fleet }): Lobby => new Lobby({
     listRooms: async (): Promise<RoomRow[]> => {
       // Fleet: the matchmaker aggregates every worker's /rooms — a

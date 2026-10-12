@@ -110,29 +110,26 @@ function buildP2PButtons(p2pIn: HTMLInputElement): HTMLDivElement {
   return wrap;
 }
 
-/** Solo match setup — the offline twin of HOST's PLAY: reloads onto a
- *  URL carrying ?mode/?map/?bots and NO ?room/?p2p, which is what keeps
+/** Solo match setup — the offline twin of HOST's PLAY: persists the picks
+ *  to settings and reloads onto a clean '/' — no room, no p2p is what keeps
  *  the boot offline (see connectPhase: no room = no socket). '' mode is
  *  free roam — pick a ruleset to get bots/flags/scoring. */
-function playOffline(mode: string, map: string, bots: number | undefined): void {
+function playOffline(mode: string, map: string, bots: number | undefined): void {
+  // Solo picks are client state — they persist as settings and the URL
+  // reloads clean. ?mode/?map/?bots stay readable as harness overrides.
+  settings.set('fps-last-room', '');
+  settings.set('fps-solo', 1);
+  settings.set('fps-solo-map', map);
+  settings.set('fps-solo-bots', bots ?? -1);
   settings.set('fps-mode', mode);
   settings.set('fps-p2p', '');
   settings.set('fps-lobby', 0);
   const q = new URLSearchParams(window.location.search);
   for (const k of ['room', 'p2p', 'lobby', 'map', 'bots', 'mode', 'unlisted', 'solo', 'nocreatures', 'noballs']) {q.delete(k);}
-  if (mode) {q.set('mode', mode);}
-  if (map) {q.set('map', map);}
-  if (bots !== undefined) {q.set('bots', String(bots));}
-  // Same sim gates as HOST — the local spawner reads the URL params too.
-  if (settings.get('fps-nocreatures') === 1) {q.set('nocreatures', '1');}
-  if (settings.get('fps-noballs') === 1) {q.set('noballs', '1');}
-  // Marker param — a free-roam pick writes no mode/map/bots at all, but
-  // it is still a live session; without this the boot is indistinguishable
-  // from a fresh front-door load and the lobby would re-pop mid-game.
-  q.set('solo', '1');
-  const href = q.toString() ? `${window.location.pathname}?${q}` : window.location.pathname;
-  window.location.href = href;
-}
+  const href = q.size > 0 ? `/?${q}` : '/';
+  window.location.href = href;
+}
+
 
 
 /** MAP picker + pre-rendered thumbnail preview — the image swaps on
@@ -259,8 +256,10 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
         settings.set('fps-p2p', '');
         settings.set('fps-lobby', 0);
         const q = new URLSearchParams(window.location.search);
-        for (const k of ['room', 'p2p', 'lobby']) {q.delete(k);}
-        window.location.href = q.toString() ? `${window.location.pathname}?${q}` : window.location.pathname;
+        for (const k of ['room', 'p2p', 'lobby']) {q.delete(k);}
+        settings.set('fps-last-room', '');
+        settings.set('fps-solo', 0);
+        window.location.href = q.size > 0 ? `/?${q}` : '/';
       });
     }
 
@@ -600,7 +599,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
       const inGame = urlParams.room != null || urlParams.p2p != null
         || settings.get('fps-p2p') !== ''
         || urlParams.mode != null || urlParams.map != null
-        || urlParams.bots !== undefined || urlParams.has('solo');
+        || urlParams.bots !== undefined || urlParams.solo;
       if (menuOpen && !menuWasOpen) {
         syncLeaveBtn();
         if (!doorShown && !inGame && panel.style.display === 'none') {h.toggle();}

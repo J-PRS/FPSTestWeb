@@ -5,11 +5,11 @@
  * Joining a room first tries an in-place hop — the server's switchRoom
  * re-seats the live session and answers with a fresh gameState the normal
  * reconnect path rebuilds from. Offline/degraded clients fall back to the
- * ?room=NAME reload, which stays the shareable link either way.
+ * /s/NAME reload — the path is the shareable link either way.
  */
 
 import { buildLobbyPanel , type LobbyPanelEls } from './lobbyPanel.js';
-import { urlParams } from '../core/params.js';
+import { urlParams, writeJoinSpec } from '../core/params.js';
 import { settings } from '../core/settings.js';
 import { Logger } from '../core/Logger.js';
 
@@ -382,30 +382,22 @@ export class Lobby {
     // Already there — a reload would boot us into the same seat anyway.
     // Offline solo has no room, so 'default' is a real join target.
     if (name === this.currentRoom() && this.online()) {return;}
-    // map/bots/mode ride the URL so a disposed room rebuilds with its
-    // spec intact — and so refresh/share land in this same match. A duel
-    // session is mutually exclusive with a server room — drop it here.
+    // Room identity is the path: /s/<name>. Creation hints (map/bots/mode)
+    // ride fps-join-spec so the reload path can mint a disposed room with
+    // its spec intact — the URL stays shareable-clean. The sim gates are
+    // already persisted fps-* settings; a duel session is mutually
+    // exclusive with a server room — drop it here.
     settings.set('fps-p2p', '');
     settings.set('fps-lobby', 0);
+    settings.set('fps-solo', 0);
+    settings.set('fps-last-room', name);
+    writeJoinSpec({ map, bots, mode });
+    if (unlisted) {settings.set('fps-unlisted', 1);}
+    if (noCreatures) {settings.set('fps-nocreatures', 1);}
+    if (noBalls) {settings.set('fps-noballs', 1);}
     const q = new URLSearchParams(window.location.search);
-    q.delete('p2p'); q.delete('lobby');
-    if (name === 'default') {
-      // Live hop cleans the param; the reload path needs ?room=default
-      // present or the boot won't connect at all.
-      if (this.deps.switchRoom?.(name, map, bots, mode, unlisted, noCreatures, noBalls)) {
-        q.delete('room');
-        history.replaceState(null, '', q.toString() ? `${window.location.pathname}?${q}` : window.location.pathname);
-        return;
-      }
-      q.set('room', 'default');
-    } else {q.set('room', name);}
-    for (const [k, v] of [['map', map], ['bots', bots], ['mode', mode]] as const) {
-      if (v !== undefined && v !== '') {q.set(k, String(v));} else {q.delete(k);}
-    }
-    if (unlisted) {q.set('unlisted', '1');} else {q.delete('unlisted');}
-    if (noCreatures) {q.set('nocreatures', '1');} else {q.delete('nocreatures');}
-    if (noBalls) {q.set('noballs', '1');} else {q.delete('noballs');}
-    const href = q.toString() ? `${window.location.pathname}?${q}` : window.location.pathname;
+    for (const k of ['room', 'p2p', 'lobby', 'map', 'bots', 'mode', 'unlisted', 'solo', 'nocreatures', 'noballs']) {q.delete(k);}
+    const href = `/s/${encodeURIComponent(name)}${q.size > 0 ? `?${q}` : ''}`;
     // Live socket: hop in place — the gameState rebuild does the rest.
     if (this.deps.switchRoom?.(name, map, bots, mode, unlisted, noCreatures, noBalls)) {
       history.replaceState(null, '', href);

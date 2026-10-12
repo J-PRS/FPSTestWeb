@@ -48,6 +48,11 @@ type Schema = {
   'fps-session-token': string; // server-issued reclaim token
   'fps-muted': string;        // JSON string[] — playerIds muted client-side
   'fps-onboarded': number;    // 1 = first-run controls card already shown
+  'fps-last-room': string;    // server room the client last joined — boot resume target
+  'fps-solo': number;         // 1 = player chose a solo session (lobby stays shut on boot)
+  'fps-solo-map': string;     // SOLO tab's map pick ('' = default field)
+  'fps-solo-bots': number;    // SOLO tab's bot count (-1 = map default)
+  'fps-join-spec': string;    // JSON {map?,bots?,mode?} — creation hints for the next room join
 };
 
 const DEFAULTS: Schema = {
@@ -94,6 +99,11 @@ const DEFAULTS: Schema = {
   'fps-session-token': '',
   'fps-muted': '[]',
   'fps-onboarded': 0,
+  'fps-last-room': '',
+  'fps-solo': 0,
+  'fps-solo-map': '',
+  'fps-solo-bots': -1,
+  'fps-join-spec': '{}',
 };
 
 const parse = {

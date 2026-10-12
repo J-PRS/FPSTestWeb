@@ -7,7 +7,7 @@ import { TieredTransport } from './tiers.js';
 import { WorkerTransport } from './WorkerTransport.js';
 import type { GameTransport, TransportFactory } from './transport.js';
 import { NetTelemetry } from './netTelemetry.js';
-import { urlParams } from '../core/params.js';
+import { urlParams, readJoinSpec } from '../core/params.js';
 import { settings } from '../core/settings.js';
 import type { TeamId } from '../../../shared/teams.js';
 import { ClaimLedger, noteMutedClaim } from './claimLedger.js';
@@ -244,9 +244,12 @@ export class NetworkManager {
               // saw so the server replays only the missed frames.
               resumeSeq: this.sessionToken ? this.wireIn.evWatermark : undefined,
               room: urlParams.room ?? undefined,
-              mode: urlParams.mode ?? undefined,
-              map: urlParams.map ?? undefined,
-              bots: urlParams.bots,
+              // Creation hints: explicit ?mode wins, then the persisted
+              // join-spec — NOT fps-mode, which is the solo tab's pick
+              // and mustn't leak into room mints (lobby ANY bug).
+              mode: urlParams.get('mode') ?? readJoinSpec().mode,
+              map: urlParams.map ?? readJoinSpec().map,
+              bots: urlParams.bots ?? readJoinSpec().bots,
               unlisted: urlParams.unlisted || undefined,
               noCreatures: urlParams.noCreatures || undefined,
               noBalls: urlParams.noBalls || undefined,
