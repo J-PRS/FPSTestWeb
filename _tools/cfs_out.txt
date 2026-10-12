@@ -1,0 +1,208 @@
+### client/src/__tests__/workerTransportDrain.test.ts:73 tick [73-78]
+    const tick = (seq: number): Uint8Array<ArrayBuffer> => {
+      const u8 = new Uint8Array(32);
+      u8[0] = 0x54; u8[1] = 0x07; // MAGIC + WIRE_TICK_V4
+      new DataView(u8.buffer).setUint32(6, seq, true);
+      return u8;
+    };
+### client/src/__tests__/ballStaleSeg.test.ts:42 host [1-1]
+import { describe, it, expect } from 'vitest';
+### client/src/__tests__/ballStaleSeg.test.ts:49 seg [49-53]
+  const seg = (x: number, t: number) => ({
+    px: x, py: 5, pz: 0, vx: 10, vy: 0, vz: 0,
+    enraged: false, targetId: null, lead: 0.1, timers: undefined,
+    tp: null, simT: t, hard: false,
+  });
+### client/src/__tests__/wsReconnect.test.ts:34 conn [34-35]
+  const conn = (interval = 1000): WebSocketConnection =>
+    new WebSocketConnection({ url: 'ws://x', reconnectInterval: interval });
+### client/src/__tests__/ballClock.test.ts:70 mk [70-70]
+    const mk = (): { netKill: () => never; } => ({ netKill: (): never => { throw new Error('must not kill'); } });
+### client/src/game/net/projectiles.ts:26 snapToContact [1-4]
+// Server-authoritative projectile lifecycle — remote spawns/destroys and
+// the pending-link handshake for our own shots.
+
+import * as THREE from 'three';
+### client/src/__tests__/demoPlaybackAudit.test.ts:196 mkFired [196-202]
+    const mkFired = (targetId: number): ProjectileEvent => ({
+      eventType: ProjectileEventType.Fired, timestamp: 0,
+      posX: 0, posY: 10, posZ: 0, velX: 0, velY: 0, velZ: 60,
+      projectileId: targetId + 100, weaponType: 254, surfaceNormalX: 0,
+      surfaceNormalY: 0, surfaceNormalZ: 0, targetId, targetType: 0,
+      hasPeakPosition: false, peakPosX: 0, peakPosY: 0, peakPosZ: 0,
+    });
+### client/src/__tests__/demoPlaybackAudit.test.ts:308 drain [308-315]
+  const drain = (rig: ReturnType<typeof makePlaybackRig>, max = 1200): number => {
+    let n = 0;
+    while (n < max && rig.world.playbackBallById.size > 0) {
+      rig.life.updateBallsPlayback(1 / 60);
+n += 1;
+    }
+    return n;
+  };
+### client/src/world/heightmap.ts:59 toCell [1-1]
+import * as THREE from 'three';
+### client/src/world/heightmap.ts:59 span [1-1]
+import * as THREE from 'three';
+### client/src/demo/demoClip.ts:74 keyOf [1-11]
+/**
+ * demoClip — the clip-window collectors behind DemoRecorder.extractClip.
+ * Each walks an append-ordered event list and rebuilds the entities that
+ * were alive at clipStart as synthetic spawn events, so a clip plays
+ * back correctly even when the real Spawned fired before the window
+ * (or was pruned by the circular buffer).
+ */
+import {
+  ProjectileEventType, TargetEventType, TARGETTYPE_KILL,
+  type ProjectileEvent, type TargetEvent, type RemoteFrame,
+} from './types.js';
+### client/src/demo/demoClip.ts:109 keyOf [75-75]
+  const keyOf = (e: TargetEvent): number => e.targetType * 65_536 + e.targetId;
+### client/src/entities/balls.ts:306 tri [306-306]
+      const tri = (): number => (Math.random() + Math.random() - 1) * 32;
+### client/src/game/netBalls.ts:715 finiteMsg [1-1]
+import * as THREE from 'three';
+### client/src/game/entities.ts:401 noSpawn [1-1]
+import * as THREE from 'three';
+### client/src/core/Logger.ts:56 fmtArg [1-6]
+/**
+ * Centralized logging system for client-side code
+ * Matches server Logger.ts implementation for consistency
+ */
+
+import { settings } from './settings.js';
+### shared/wire.ts:531 snap [1-15]
+/**
+ * Binary wire codec for the hot path (position up, tickUpdate down).
+ *
+ * Frame = [MAGIC][type][payload]. JSON remains for rare/reliable events
+ * (join, hits, knockback, stateHash) — only the ~20Hz streams go binary.
+ *
+ * position:  28B  (vs ~140B JSON)
+ * tickUpdate: 7B header + ~39B/player (vs ~150B/player JSON)
+ *
+ * Quantization: velocity i16 @0.1 m/s (max ±3276), yaw u16 over [0,2π),
+ * pitch i16 over [-π,π], health u16, ping u8. Sub-cm/sub-degree precision —
+ * far below interp error.
+ */
+
+import { STATUS_MASK } from './status.js';
+### shared/mapSpec.ts:414 num [1-4]
+/**
+ * Declarative match definition — a room named <X> looks for maps/<X>.json
+ * next to the server and takes its mode + creature population from it.
+ * Everything is optional; missing fields fall back to these defaults, so a
+### shared/mapSpec.ts:414 clamp01 [1-4]
+/**
+ * Declarative match definition — a room named <X> looks for maps/<X>.json
+ * next to the server and takes its mode + creature population from it.
+ * Everything is optional; missing fields fall back to these defaults, so a
+### shared/botSkill.ts:102 clamp [1-9]
+/** Per-bot skill matrix — rolled once at spawn, drifts slightly across a
+ *  match. Axes are independent draws: a bot can be a snap phenom AND a
+ *  mortar artist, or hopeless at both, like a real lobby. Each aim axis
+ *  splits vs-moving (lead/prediction) from vs-stationary (placement) —
+ *  a mortar-vs-stand phenom can be terrible at leading a skier.
+ *
+ *  Rolls run on a PRIVATE PRNG seeded from the spawn point — never
+ *  botRand. Deterministic harnesses mock botRand's stream and pin exact
+ *  duel outcomes; drawing skill numbers off that stream would silently
+### client/src/entities/player/input.ts:523 aspect [523-523]
+      const aspect = (): number => window.innerWidth / Math.max(1, window.innerHeight);
+### shared/botLoadouts.ts:183 beltOut [1-1]
+import { WeaponType, getWeaponStats } from './weapons.ts';
+### client/src/ui/hud/indicators.ts:161 band [161-165]
+      const band = (x: number, invert: boolean): string => {
+        if (x >= 60) {return invert ? '#ff6b6b' : '#7ddf7d';}
+        if (x >= 30) {return '#ffd166';}
+        return invert ? '#7ddf7d' : '#ff6b6b';
+      };
+### client/src/entities/vmBaked.ts:72 yieldFrame [72-72]
+    const yieldFrame = (): Promise<void> => new Promise<void>((r): NodeJS.Timeout => setTimeout(r, 0));
+### shared/botBrain.ts:714 f [714-714]
+      const f = (v: BotVec): string => `${v.x.toFixed(0)},${v.z.toFixed(0)}`;
+### server_bun/src/wire.ts:227 parseEdge [227-241]
+      const parseEdge = (raw: unknown): { seq?: number; input: { forward: number; right: number; jump: number; ski: number; jet: number; status: number }; rotation: { yaw: number; pitch: number } } | string => {
+        const input = (raw as Record<string, unknown>)?.input;
+        if (typeof input !== 'object' || input === null) {return 'input must be an object';}
+        const i = input as Record<string, unknown>;
+        if (!isFiniteNumber(i.forward) || !isFiniteNumber(i.right) || !isFiniteNumber(i.jump) || !isFiniteNumber(i.ski)) {
+          return 'input fields must be finite numbers';
+        }
+        const rot = validateRotation((raw as Record<string, unknown>).rotation);
+        if (!rot.success) {return `rotation: ${rot.error}`;}
+        return {
+          seq: isFiniteNumber((raw as Record<string, unknown>).seq) ? (raw as Record<string, unknown>).seq as number : undefined,
+          input: { forward: i.forward, right: i.right, jump: i.jump, ski: i.ski, jet: isFiniteNumber(i.jet) ? i.jet : 0, status: isFiniteNumber(i.status) ? i.status : 0 },
+          rotation: rot.data,
+        };
+      };
+### client/src/world/mapStructures.ts:135 fmt [135-135]
+    const fmt = (n: number): string => n.toFixed(2);
+### client/src/posedump.ts:265 finish [1-7]
+// Pose screenshot page — one model, one clip, on a flat white background,
+
+// framed tight for review galleries. Never referenced by the game.
+
+//   /posedump.html?model=robot|mannequin&clip=<name>&t=<seconds>
+
+// window.__clips lists clip names once loaded; window.__ready when posed.
+### server_bun/src/TickLoop.ts:375 emitLane [375-375]
+    const emitLane = <T extends { id: number }>(kind: WorldKindDecl, roster: T[]): { hash: string; fields: unknown[][]; } | undefined =>
+### client/src/gunlab/scans.ts:137 pk [1-11]
+// gunlab geometry scans — the lab's mesh lints, all pure functions
+// over a built Object3D. zScan: coplanar triangle pairs are what
+// shimmer — collect world-space triangles, bucket by plane (normal +
+// offset), then SAT-test overlaps within a bucket. holeScan:
+// welded-edge census — an edge referenced by exactly one triangle is
+// an open rim, i.e. a hole boundary (or an intentionally open face
+// like mkBore's disc — the report doesn't judge intent). gapScan:
+// floating-part lint via AABB union-find — a part whose box touches
+// no other part's box is detached geometry. volScan: signed-volume
+// winding census (divergence theorem) — a closed mesh sums positive
+// when its tris face outward, NEGATIVE when it's inside-out; catches
+### client/src/__tests__/ctfFlags.test.ts:139 mk [139-139]
+    const mk = (n: number, team: string): GameBot[] => Array.from({ length: n }, (_, i): GameBot => mkBot(`${team}:${i}`, team));
+### client/src/ui/CoolShotsPanel.ts:33 bind [33-39]
+    const bind = (id: string, get: () => boolean, set: (on: boolean) => void): void => {
+      const btn = document.getElementById(id);
+      if (!btn) {return;}
+      const sync = (): boolean => btn.classList.toggle('on', get());
+      btn.addEventListener('click', (): void => { set(!get()); sync(); });
+      sync();
+    };
+### client/src/__tests__/botBrain.test.ts:42 aheadWall [42-42]
+    const aheadWall = (x: number, z: number): 0 | 20 => (z > 3 ? 20 : 0);
+### server_bun/src/serverSenses.ts:284 nuggetChance [284-288]
+    const nuggetChance = (d: number): number => {
+      if (d < 260) {return 0.6;}
+      if (d < 320) {return 0.3;}
+      return 0.08;
+    };
+### client/src/ui/loadoutMenu.ts:210 rank [210-210]
+      const rank = (o: { disabled: boolean; label: string }): number =>
+### client/src/ui/loadoutMenu.ts:231 closeDrops [1-4]
+// Loadout bar — the bottom-center chip row of the ESC menu. Custom
+// dropups, not <select>: a native popup is OS chrome and breaks the
+// game-menu illusion. Chip face + styled option list opening upward.
+import { SKILL_ORDER, Player, type SkillId, BELT_ITEMS, type BeltItem } from '../entities/Player.js';
+### client/src/__tests__/wire.test.ts:212 enc [212-212]
+  const enc = (pos: { x: number; y: number; z: number }): Uint8Array<ArrayBufferLike> =>
+### client/src/__tests__/wire.test.ts:233 rec [233-233]
+  const rec = (id: string, over: Partial<Parameters<typeof encodeTickPlayer>[0]> = {}): Uint8Array<ArrayBufferLike> =>
+### client/src/__tests__/wire.test.ts:297 roster [297-301]
+  const roster = (): WireIdRoster => {
+    const r = new WireIdRoster();
+    r.feed({ type: 'wireIds', add: { 7: 'player_seven', 9: 'player_nine' } });
+    return r;
+  };
+### client/src/__tests__/wire.test.ts:335 base [335-338]
+  const base = (): WireTickPlayer => ({
+    playerId: '', position: { x: 1, y: 2, z: 3 }, rotation: { yaw: 0.5, pitch: 0.1 },
+    velocity: { x: 10, y: 0, z: 5 }, health: 100, isDead: false, ski: 1, jet: 0, status: 0, sheep: 40, ping: 50,
+  });
+### server_bun/src/botRoster.ts:30 slot [30-31]
+  const slot = (k: 'near' | 'mid' | 'far' | 'belt' | 'side'): WeaponType[] =>
+    [...new Set(BOT_LOADOUTS.map((l): WeaponType => l[k]))];
+### server_bun/src/botArsenal.ts:331 j [331-331]
+    const j = (): number => (botRand() - 0.5) * 0.07;
