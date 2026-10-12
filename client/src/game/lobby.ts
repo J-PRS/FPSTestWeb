@@ -13,6 +13,11 @@ import { urlParams } from '../core/params.js';
 import { settings } from '../core/settings.js';
 import { Logger } from '../core/Logger.js';
 
+const modesOf = (m: { modes: string[]; mode?: string }): string[] => {
+  if (m.modes.length > 0) {return m.modes;}
+  return m.mode ? [m.mode] : [];
+};
+
 export interface RoomRow {
   name: string;
   mode?: string;
@@ -129,7 +134,7 @@ export class Lobby {
     // Mode order is a curated popularity ramp (team staples first, niche
     // FFA last), not alphabetical — a mode picker is a recommendation.
     const MODE_ORDER = ['ctf', 'tdm', 'nuggets', 'dm', 'rabbit', 'duel'];
-    const modes = [...new Set(this.maps.flatMap((m): string[] => m.modes.length > 0 ? m.modes : (m.mode ? [m.mode] : [])))]
+    const modes = [...new Set(this.maps.flatMap(modesOf))]
       .toSorted((a, b) => (MODE_ORDER.indexOf(a) + 1 || 99) - (MODE_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b));
     this.fillModeSel(this.modeSelect, modes, 'ANY');
     if (this.soloSels) {
@@ -209,7 +214,7 @@ export class Lobby {
     // map rulesets at all — the mode stamps its own layout onto bare
     // terrain. Restrict those to our own spec maps: an 800m circuit
     // square wants a real core heightmap, not a T2 port's bounds.
-    const catalogModes = new Set(this.maps.flatMap((m): string[] => m.modes.length > 0 ? m.modes : (m.mode ? [m.mode] : [])));
+    const catalogModes = new Set(this.maps.flatMap(modesOf));
     const procedural = Boolean(mode) && !catalogModes.has(mode);
     const rows = this.maps.filter((m): boolean =>
       this.mapFam[m.t2 ? 't2' : 'custom'] &&
@@ -292,7 +297,8 @@ export class Lobby {
       rooms = await this.deps.listRooms();
       const ms = Math.round(performance.now() - t0);
       this.els.pingEl.textContent = `${ms}ms`;
-      this.els.pingEl.style.color = ms < 60 ? '#6fcf8f' : ms < 120 ? '#ffd76f' : '#f88';
+      this.els.pingEl.style.color = ms < 60 ? '#6fcf8f' : '#ffd76f';
+      if (ms >= 120) {this.els.pingEl.style.color = '#f88';}
     } catch {
       this.els.pingEl.textContent = '';
       const err = document.createElement('div');
@@ -304,7 +310,10 @@ export class Lobby {
     // Default lobby first — it's the immortal room — then favorites
     // (browser-column convention), then alphabetical.
     const favs = this.favSet();
-    const rank = (r: RoomRow): 0 | 1 | 2 => (r.name === 'default' ? 0 : favs.has(r.name) ? 1 : 2);
+    const rank = (r: RoomRow): 0 | 1 | 2 => {
+      if (r.name === 'default') {return 0;}
+      return favs.has(r.name) ? 1 : 2;
+    };
     rooms.sort((a, b): number => rank(a) - rank(b) || a.name.localeCompare(b.name));
     const cur = rooms.find((r): boolean => r.name === this.currentRoom());
     const online = this.online();
@@ -353,8 +362,9 @@ export class Lobby {
     name.style.flex = '1';
     const meta = document.createElement('span');
     meta.className = 'meta';
-    const scoreTxt = r.scores ? `  ${r.scores.alpha}:${r.scores.bravo}`
-      : r.ffaLeader ? `  ${r.ffaLeader[0]} ${r.ffaLeader[1]}pts` : '';
+    let scoreTxt = '';
+    if (r.scores) {scoreTxt = `  ${r.scores.alpha}:${r.scores.bravo}`;}
+    else if (r.ffaLeader) {scoreTxt = `  ${r.ffaLeader[0]} ${r.ffaLeader[1]}pts`;}
     const clock = r.timeLeftMs ? ` ${Math.ceil(r.timeLeftMs / 60_000)}m` : '';
     // Same dedupe as the header — a room named after its mode doesn't
     // need "ctf" three times in one line.

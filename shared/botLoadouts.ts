@@ -134,7 +134,9 @@ export function rollWildcard(rng: () => number): BotLoadout {
   // a light wildcard keeps light-locked guns, a heavy may draw MRV, and
   // no roll can mix tiers (Railgun + Mortar) no class would fire. Perk
   // is gated last: plated on a light-locked kit would derail the body.
-  const cls: ArmorClass = rng() < 0.25 ? 'light' : rng() < 0.67 ? 'medium' : 'heavy';
+  let cls: ArmorClass = 'heavy';
+  if (rng() < 0.25) {cls = 'light';}
+  else if (rng() < 0.67) {cls = 'medium';}
   const pick = (pool: WeaponType[], fb: WeaponType): WeaponType => {
     const legal = pool.filter((w): boolean => classCanFire(cls, w));
     return (legal.length > 0 ? legal : [fb])[Math.floor(rng() * (legal.length || 1))] ?? fb;
@@ -183,7 +185,13 @@ export function pickBotWeapon(lo: BotLoadout, distXZ: number, dist: number, skil
   // Heal slots never feed a combat draw — the med kit fires its beam at
   // ALLIES through the support path; picking it at an enemy is a dry pull.
   const beltOut = (w: WeaponType, fb: WeaponType): WeaponType => w === WeaponType.HealBeam ? fb : w;
-  if (!skill) {return beltOut(dist < BOT_SIDEARM_M ? lo.side : dist < BOT_NEAR_M ? lo.near : dist > BOT_FAR_M ? lo.far : lo.mid, lo.mid);}
+  if (!skill) {
+    let slotPick = lo.mid;
+    if (dist < BOT_SIDEARM_M) {slotPick = lo.side;}
+    else if (dist < BOT_NEAR_M) {slotPick = lo.near;}
+    else if (dist > BOT_FAR_M) {slotPick = lo.far;}
+    return beltOut(slotPick, lo.mid);
+  }
   // Triangular band fit: a slot scores 1 dead-center of its range,
   // decaying to 0 one band away — then multiplied by how good the bot
   // is with that gun. Utility (right range) and skill (right weapon)

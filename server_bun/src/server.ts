@@ -72,7 +72,23 @@ async function shutdown(): Promise<void> {
 
 
 
-const server = Bun.serve<WebSocketData>({
+// EADDRINUSE here is almost always a bun --watch orphan holding the port
+// after a crash — Windows never delivers SIGTERM to it. Reclaim only from
+// bun.exe holders; anything else is a real conflict and stays untouched.
+function reclaimStaleBun(port: number): boolean {
+  const out = Bun.spawnSync(['netstat', '-ano', '-p', 'tcp']).stdout.toString();
+  const pids = [...out.matchAll(/^TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)\s*$/gm)]
+    .filter((m) => Number(m[1]!) === port).map((m) => m[2]!);
+  for (const pid of pids) {
+    const img = Bun.spawnSync(['tasklist', '/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH']).stdout.toString();
+    if (!/bun\.exe/i.test(img)) { logger.error(`:${port} held by non-bun pid ${pid} — refusing to kill`); return false; }
+    Bun.spawnSync(['taskkill', '/F', '/PID', pid]);
+    logger.warn(`stale bun (pid ${pid}) killed — it held :${port}`);
+  }
+  return pids.length > 0;
+}
+
+const serve = (): ReturnType<typeof Bun.serve<WebSocketData>> => Bun.serve<WebSocketData>({
   port: CONFIG.port,
   hostname: '0.0.0.0',
   idleTimeout: CONFIG.idleTimeoutSec,
@@ -138,7 +154,7 @@ const server = Bun.serve<WebSocketData>({
     // (1006, silent). Loopback-only: the caller asks, we run the normal
     // shutdown() — players get their 'server restarting' close frames.
     if (url.pathname === '/dev/shutdown') {
-      const ip = server.requestIP(req)?.address;
+      const ip = srv.requestIP(req)?.address;
       if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') {
         setImmediate((): Promise<void> => shutdown());
         return corsResponse('shutting down', { status: 200 });
@@ -164,6 +180,12 @@ const server = Bun.serve<WebSocketData>({
     return corsResponse('Not found', { status: 404 });
   },
 });
+
+let server: ReturnType<typeof serve>;
+try { server = serve(); } catch (error) {
+  if (!/EADDRINUSE/i.test(String(error)) || !reclaimStaleBun(CONFIG.port)) {throw error;}
+  server = serve();
+}
 
 gameServer.setBunServer(server);
 

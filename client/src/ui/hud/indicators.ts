@@ -142,7 +142,9 @@ export class PlayerIndicators {
    *  pedestrian-vs-skier read lives for triage). */
   private updateSheepBadge(playerId: string, indicator: HTMLElement, sheep: number | undefined, hp: number | undefined): void {
     const sheepMode = debugOverlays && sheep !== undefined && sheep > 0;
-    const v = sheepMode ? Math.round(sheep!) : hp === undefined ? -1 : Math.round(hp);
+    let v = -1;
+    if (sheepMode) {v = Math.round(sheep!);}
+    else if (hp !== undefined) {v = Math.round(hp);}
     // The mode is packed into the cache key — toggling debug must rewrite
     // the badge even when sheep and hp happen to round to the same number.
     const key = v < 0 ? -1 : v * 2 + (sheepMode ? 1 : 0);
@@ -156,9 +158,12 @@ export class PlayerIndicators {
         indicator.append(badge);
       }
       badge.textContent = `${v}`;
-      badge.style.color = sheepMode
-        ? (sheep! >= 60 ? '#ff6b6b' : sheep! >= 30 ? '#ffd166' : '#7ddf7d')
-        : (v >= 60 ? '#7ddf7d' : v >= 30 ? '#ffd166' : '#ff6b6b');
+      const band = (x: number, invert: boolean): string => {
+        if (x >= 60) {return invert ? '#ff6b6b' : '#7ddf7d';}
+        if (x >= 30) {return '#ffd166';}
+        return invert ? '#7ddf7d' : '#ff6b6b';
+      };
+      badge.style.color = sheepMode ? band(sheep!, true) : band(v, false);
     } else if (badge) {
       badge.remove();
     }

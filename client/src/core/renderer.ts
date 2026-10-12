@@ -272,7 +272,7 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
     // pixels; the mipmap halo can't lift the whole frame into a veil.
     luminanceThreshold: 1.3,
     luminanceSmoothing: 0.25,
-    intensity: 1.25,
+    intensity: 5, // Was 1.25
     radius: 0.5,
   });
 

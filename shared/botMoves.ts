@@ -203,9 +203,10 @@ export class BotMoves {
     // arrive fast and dry beats arrive slow and tanked.
     const odTap = ctx.objective ? Math.hypot(ctx.objective.x - pos.x, ctx.objective.z - pos.z) : Infinity;
     const strikeTap = ctx.runner === true && odTap < T.moves.strikeGd;
-    const tapFloor = (this.jetWhy === 'tap' || this.jetWhy === 'tail')
-      ? (strikeTap ? T.moves.strikeTapMin : T.moves.tapEnergyMin)
-      : T.moves.tankedMin;
+    let tapFloor = T.moves.tankedMin;
+    if (this.jetWhy === 'tap' || this.jetWhy === 'tail') {
+      tapFloor = strikeTap ? T.moves.strikeTapMin : T.moves.tapEnergyMin;
+    }
     // REVERTED: pressured carriers banking shieldReserve — same-seed
     // soak caps flat (13) but med hold fell 8.1->5.0s: slowing under
     // pursuit lets the chaser close sooner; speed IS the carrier's
@@ -513,7 +514,14 @@ export class BotMoves {
     // destHigh burn is a sputter that buys no altitude. Banking (8/s
     // regen, ~2s to a full hop) is always the better move; mid-burn
     // latches ride the regen inflow past this floor.
-    const why = rise > T.moves.climbRise ? 'climb' : targetHigh ? 'prey' : destHigh ? 'destHigh' : hop ? 'hop' : runIn ? 'runIn' : tap ? 'tap' : boost ? 'boost' : '-';
+    let why = '-';
+    if (rise > T.moves.climbRise) {why = 'climb';}
+    else if (targetHigh) {why = 'prey';}
+    else if (destHigh) {why = 'destHigh';}
+    else if (hop) {why = 'hop';}
+    else if (runIn) {why = 'runIn';}
+    else if (tap) {why = 'tap';}
+    else if (boost) {why = 'boost';}
     if (why === '-') {return false;}
     if (ctx.energy !== undefined && ctx.energy < T.moves.mountE) { this.jetWhy = '-'; return false; }
     this.jetWhy = why;

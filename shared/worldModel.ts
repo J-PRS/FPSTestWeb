@@ -468,7 +468,9 @@ export function verbPayload(
   id: number | string,
   vals: Record<string, unknown>,
 ): Record<string, unknown> {
-  const fields = verb === 'spawn' ? kind.spawnFields : verb === 'update' ? kind.updateFields : kind.goneFields;
+  let fields = kind.goneFields;
+  if (verb === 'spawn') {fields = kind.spawnFields;}
+  else if (verb === 'update') {fields = kind.updateFields;}
   const msg: Record<string, unknown> = { type: kind.verbs[verb], [idField]: id };
   emitFields(kind, kind.verbs[verb]!, fields, idField, vals, msg);
   return msg;
@@ -576,14 +578,13 @@ export function checkPacket(
   verb: 'spawn' | 'update' | 'gone' | (string & {}),
   msg: Record<string, unknown>,
 ): void {
-  const fields =
-    verb === 'spawn' ? kind.spawnFields :
-    // flag-style kinds whose update verb IS the roster broadcast check
-    // rows against rosterFields — there is no per-row updateFields list.
-    verb === 'update' ? (kind.updateFields ?? kind.rosterFields) :
-    verb === 'gone' ? kind.goneFields :
-    verb === 'roster' ? kind.rosterFields :
-    kind.events?.[verb];
+  let fields = kind.events?.[verb];
+  if (verb === 'spawn') {fields = kind.spawnFields;}
+  // flag-style kinds whose update verb IS the roster broadcast check
+  // rows against rosterFields — there is no per-row updateFields list.
+  else if (verb === 'update') {fields = kind.updateFields ?? kind.rosterFields;}
+  else if (verb === 'gone') {fields = kind.goneFields;}
+  else if (verb === 'roster') {fields = kind.rosterFields;}
   const label = verb in kind.verbs ? (kind.verbs as Record<string, string>)[verb]! : verb;
   // One field-list check for every surface — rows, cross-kind roster
   // containers, and envelopes share the contract: absent-declared fields

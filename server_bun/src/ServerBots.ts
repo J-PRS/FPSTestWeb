@@ -211,12 +211,15 @@ export class ServerBots {
       if (winner === 'draw') {outcome = 'draw';}
       else if (spec?.teams) {
         const margin = Math.abs(this.room.scores.alpha - this.room.scores.bravo);
-        outcome = margin <= 1 ? (p.team === winner ? 'winclose' : 'close') : (p.team === winner ? 'win' : 'loss');
+        if (p.team === winner) {outcome = margin <= 1 ? 'winclose' : 'win';}
+        else {outcome = margin <= 1 ? 'close' : 'loss';}
       } else {
         const pts = [...this.room.ffaScores.values()];
         const top = Math.max(...pts);
         const runnerUp = pts.filter((v): boolean => v < top).reduce((a, b): number => Math.max(a, b), 0);
-        outcome = pts.length > 1 && top - runnerUp <= 1 ? (id === winner ? 'winclose' : 'close') : (id === winner ? 'win' : 'loss');
+        const tight = pts.length > 1 && top - runnerUp <= 1;
+        if (id === winner) {outcome = tight ? 'winclose' : 'win';}
+        else {outcome = tight ? 'close' : 'loss';}
       }
       const line = endTaunt(id, outcome);
       if (line) {entries.push({ id, line });}
@@ -300,7 +303,9 @@ export class ServerBots {
     const c = this.room.players.getPlayer(id)?.beltCharges ?? 0;
     if (c < cost) {return false;}
     if (highValue) {return true;}
-    const reserve = c >= BELT_MAX ? 0 : nuggetNear ? 1 : 2;
+    let reserve = 2;
+    if (c >= BELT_MAX) {reserve = 0;}
+    else if (nuggetNear) {reserve = 1;}
     return c - cost >= reserve;
   }
 

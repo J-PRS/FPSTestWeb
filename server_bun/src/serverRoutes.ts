@@ -303,10 +303,11 @@ export async function mapBinRoute(url: URL): Promise<Response> {
   }
   const f = Bun.file(`${import.meta.dir}/../../maps/${file}`);
   if (!(await f.exists())) {return corsResponse('Not found', { status: 404 });}
-  const ct = file.endsWith('.png') ? 'image/png'
-    : file.endsWith('.webp') ? 'image/webp'
-    : file.endsWith('.glb') ? 'model/gltf-binary'
-    : file.match(/\.jpe?g$/) ? 'image/jpeg'
-    : file.endsWith('.json') ? 'application/json' : 'application/octet-stream';
+  let ct = 'application/octet-stream';
+  if (file.endsWith('.png')) {ct = 'image/png';}
+  else if (file.endsWith('.webp')) {ct = 'image/webp';}
+  else if (file.endsWith('.glb')) {ct = 'model/gltf-binary';}
+  else if (file.match(/\.jpe?g$/)) {ct = 'image/jpeg';}
+  else if (file.endsWith('.json')) {ct = 'application/json';}
   return corsResponse(f, { headers: { 'Content-Type': ct } });
 }

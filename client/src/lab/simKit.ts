@@ -166,9 +166,12 @@ export function spawnFlyer(o: FlyerOpts, world: LabWorld): SimEntity & { sim: Si
     sync(): void {
       pivot.position.set(f.x, f.y, f.z);
       pivot.rotation.y = -f.yaw;
-      (mesh.material as THREE.MeshBasicMaterial).color.setHex(
-        f.dead ? 0x33_3A_44 : FLYER_STATE_COLOR[f.state] ?? 0x8A_A0_B5);
-      pivot.scale.setScalar(f.uber ? 1.6 : o.species === 'gnat' ? 0.6 : 1);
+      const baseCol = FLYER_STATE_COLOR[f.state] ?? 0x8A_A0_B5;
+      (mesh.material as THREE.MeshBasicMaterial).color.setHex(f.dead ? 0x33_3A_44 : baseCol);
+      let scale = 1;
+      if (f.uber) {scale = 1.6;}
+      else if (o.species === 'gnat') {scale = 0.6;}
+      pivot.scale.setScalar(scale);
     },
     dump: (): [string, string][] => [['state', f.state], ['hp', `${Math.max(0, f.health).toFixed(0)}`]],
     dispose(): void { world.scene.remove(pivot); mesh.geometry.dispose(); },
@@ -215,7 +218,7 @@ export function spawnBolt(o: BoltOpts, world: LabWorld): SimEntity & { sim: SimP
       const from = projStep(p, dt, o.gravity ?? GRAVITY);
       let hit = segFieldHit(from, p.pos, w.field);
       if (!hit && o.walls?.some((wall): boolean =>
-        (wall.axis === 'x' ? p.pos.x : wall.axis === 'y' ? p.pos.y : p.pos.z) * Math.sign(wall.at) >= Math.abs(wall.at))) {
+        p.pos[wall.axis] * Math.sign(wall.at) >= Math.abs(wall.at))) {
         hit = { x: p.pos.x, y: p.pos.y, z: p.pos.z };
       }
       if (hit || p.age > (o.maxAge ?? 30)) {
@@ -335,7 +338,7 @@ export function spawnTotem(o: { id: number; pos: { x: number; y: number; z: numb
       pts.setXYZ(1, eye.x + c.lockDirX * c.lockDist, eye.y + c.lockDirY * c.lockDist, eye.z + c.lockDirZ * c.lockDist);
       pts.needsUpdate = true;
       (beam.material as THREE.LineBasicMaterial).opacity =
-        c.state === 'charge' ? 0.45 : flash > 0 ? 1 : 0;
+        flash > 0 ? 1 : (c.state === 'charge' ? 0.45 : 0);
     },
     dump: (): [string, string][] => [['state', c.state], ['shots', String(c.shotsFired)]],
     dispose(): void {

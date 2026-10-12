@@ -141,7 +141,11 @@ r.hits += 1;
     const r = this.row(mode, source);
 r.shots += 1;
     if (dist !== undefined && Number.isFinite(dist)) {
-      const band = dist < 10 ? '<10' : dist < 25 ? '10-25' : dist < 60 ? '25-60' : dist < 120 ? '60-120' : '120+';
+      let band = '120+';
+      if (dist < 10) {band = '<10';}
+      else if (dist < 25) {band = '10-25';}
+      else if (dist < 60) {band = '25-60';}
+      else if (dist < 120) {band = '60-120';}
       r.dist ??= {};
       const d = r.dist;
       d[band] = (d[band] ?? 0) + 1;

@@ -59,7 +59,10 @@ function autoScale(deps: GameLoopDeps, st: LoopState, dir: number): void {
   shedPostPasses(rendererSetup, next >= 4);
   // Quarks sim is pure CPU — on weak GPUs (usually weak CPUs too, e.g.
   // chromebooks) thin burst density before the pressure curve engages.
-  setVfxQualityScale(next >= 4 ? 0.45 : next >= 2 ? 0.7 : 1);
+  let vfxScale = 1;
+  if (next >= 4) {vfxScale = 0.45;}
+  else if (next >= 2) {vfxScale = 0.7;}
+  setVfxQualityScale(vfxScale);
   st.gpuLevel = next;
   Logger[dir < 0 ? 'warn' : 'info'](`auto-quality: gpu level ${next} (${dir < 0 ? 'sustained low fps' : 'headroom'})`);
 }
@@ -182,7 +185,10 @@ function baselinePixel(): { p: number; m: number } {
 }
 // GPU level ↔ (pscale, pmode): 2→2x, 3→3x, 4→4x, 5→4x + dithered.
 function tierOf(p: number, m: number): number {
-  return p <= 1 ? 0 : p === 2 ? 2 : p === 3 ? 3 : m >= 2 ? 5 : 4;
+  if (p <= 1) {return 0;}
+  if (p === 2) {return 2;}
+  if (p === 3) {return 3;}
+  return m >= 2 ? 5 : 4;
 }
 function tierToPM(next: number, baseP: number, baseM: number): { p: number; m: number } {
   if (next <= 1) {return { p: baseP, m: baseM };}
@@ -230,7 +236,10 @@ function autoScaleCpu(deps: GameLoopDeps, st: LoopState, dir: number): void {
   const next = Math.min(cap, Math.max(0, st.cpuLevel - dir));
   if (next === st.cpuLevel) {return;}
   const ambientOn = next === 0;
-  setVfxQualityScale(next === 0 ? 1 : next === 1 ? 0.6 : 0.4);
+  let vfxScale = 0.4;
+  if (next === 0) {vfxScale = 1;}
+  else if (next === 1) {vfxScale = 0.6;}
+  setVfxQualityScale(vfxScale);
   for (const layer of deps.ambientLayers) {layer.setActive(ambientOn);}
   deps.groundMist().setActive(ambientOn);
   deps.ambientBirds.setActive(ambientOn);

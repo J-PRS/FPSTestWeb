@@ -87,9 +87,9 @@ if (pvariant) {
     // first, so a bare size check would race past the bake every time.
     // Mannequin bakes the KevDev set (UAL clips are native); robot bakes
     // the full UAL set including UAL2's Slide.
-    const need = pvariant === 'mannequin'
-      ? anims.has('UAL_Walk01_Left')
-      : pvariant === 'robot' ? anims.has('UAL_Slide_Loop') : anims.size > 0;
+    let need = anims.size > 0;
+    if (pvariant === 'mannequin') {need = anims.has('UAL_Walk01_Left');}
+    else if (pvariant === 'robot') {need = anims.has('UAL_Slide_Loop');}
     if (!model || !anims || !need) { setTimeout(poll, 120); return; }
     if (wantDir && DIRV[wantDir]) {(pm as unknown as { setLocomotionVector(f: number, s: number): void })
       .setLocomotionVector(DIRV[wantDir][0], DIRV[wantDir][1]);}
@@ -113,10 +113,11 @@ if (pvariant) {
 } else {
 const ual2 = q.get('model') === 'ual2';
 const knight = q.get('model') === 'knight';
-const url = knight ? '/assets/models/knight.glb'
-  : q.get('glb') ? `/assets/models/${q.get('glb')}.glb`
-  : ual2 ? '/assets/models/mannequin2.glb'
-  : mann ? '/assets/models/mannequin.glb' : '/assets/models/RobotExpressive.glb';
+let url = '/assets/models/RobotExpressive.glb';
+if (knight) {url = '/assets/models/knight.glb';}
+else if (q.get('glb')) {url = `/assets/models/${q.get('glb')}.glb`;}
+else if (ual2) {url = '/assets/models/mannequin2.glb';}
+else if (mann) {url = '/assets/models/mannequin.glb';}
 mkGltfLoader().load(url, (gltf): void => {
   const model = gltf.scene;
   // Same world scale the game uses (robot 0.5, mannequin fit-2m).

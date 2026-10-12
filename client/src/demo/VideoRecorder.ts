@@ -440,18 +440,22 @@ this.frames += 1;
       // Retimestamp relative to the leading keyframe so the clip starts at 0.
       // The muxer only learns decoderConfig from a meta that carries it —
       // the stored meta may lack one, so fall back to the last config seen.
-      const meta = i === keyIdx
-        ? (r.m?.decoderConfig ? r.m : this.decConf ? { decoderConfig: this.decConf } : r.m)
-        : undefined;
+      let meta;
+      if (i === keyIdx) {
+        meta = r.m;
+        if (!meta?.decoderConfig && this.decConf) {meta = { decoderConfig: this.decConf };}
+      }
       mux.addVideoChunk(r.c, meta, Math.round((r.ts - base) * 1000));
     }
     if (this.aCodec) {
       let firstAudio = true;
       for (const r of this.aring) {
         if (r.ts < base || r.ts > this.ring[endIdx]!.ts) {continue;}
-        const meta = firstAudio
-          ? (r.m?.decoderConfig ? r.m : this.aDecConf ? { decoderConfig: this.aDecConf } : r.m)
-          : undefined;
+        let meta;
+        if (firstAudio) {
+          meta = r.m;
+          if (!meta?.decoderConfig && this.aDecConf) {meta = { decoderConfig: this.aDecConf };}
+        }
         mux.addAudioChunk(r.c, meta, Math.round((r.ts - base) * 1000));
         firstAudio = false;
       }
