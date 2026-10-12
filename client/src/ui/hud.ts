@@ -119,7 +119,10 @@ export class HUD {
     this.lastSheepShown = shown;
     if (shown <= 0) { this.sheepReadout.textContent = ''; return; }
     this.sheepReadout.textContent = `${shown}`;
-    this.sheepReadout.style.color = shown >= 60 ? '#ff6b6b' : shown >= 30 ? '#ffd166' : '#7ddf7d';
+    let sheepColor = '#7ddf7d';
+    if (shown >= 60) {sheepColor = '#ff6b6b';}
+    else if (shown >= 30) {sheepColor = '#ffd166';}
+    this.sheepReadout.style.color = sheepColor;
   }
 
   /** Total mechanical energy (KE+PE) as equivalent flat-ground speed —

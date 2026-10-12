@@ -15,6 +15,11 @@ import { FLAG_STAND_TOP } from '../../structures/structures.js';
 import * as sfx from '../../core/sfx.js';
 import type { Terrain } from '../../world/terrain.js';
 
+const flagBurstScale = (kind: string): number => {
+  if (kind === 'captured') {return 2.4;}
+  if (kind === 'dropped') {return 1;}
+  return 1.4;
+};
 const _flagBurst = new THREE.Vector3();
 const _touchers: [string, THREE.Vector3, THREE.Vector3][] = [];
 
@@ -79,7 +84,7 @@ export class CtfBridge {
         if (kind === 'returned') {flagReturnFx(at, team, null);}
         deps.world.explosions.push(new Explosion(
           deps.lazyScene(), _flagBurst.copy(at).setY(at.y + 1.2), false, 0,
-          deps.lazyTerrain(), kind === 'captured' ? 2.4 : kind === 'dropped' ? 1 : 1.4,
+          deps.lazyTerrain(), flagBurstScale(kind),
           TEAM_COLORS[team]));
       },
     }, deps.lazyPlayer().pos, w.bases, w.structures);

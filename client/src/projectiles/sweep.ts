@@ -284,7 +284,8 @@ export function sweepObstacle(p: SweepHost, o: SweepObstacle): boolean {
   const rz = dz - (o.pos.z - o.prevPos.z);
   const bb = rx * rx + ry * ry + rz * rz;
   let t = bb > 1e-8 ? -(ax * rx + ay * ry + az * rz) / bb : 0;
-  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  if (t < 0) {t = 0;}
+else if (t > 1) {t = 1;}
   const cx = ax + rx * t, cy = ay + ry * t, cz = az + rz * t;
   const d2 = cx * cx + cy * cy + cz * cz;
   const thresh = p.config.bodyRadius + o.radius;

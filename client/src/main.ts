@@ -406,9 +406,10 @@ function setupOfflineMode(mode: string, mapSpec?: MapSpec): void {
   // mode's classic spread. Non-flagrun modes split N across both sides
   // (the player occupies one alpha slot already).
   const want = urlParams.bots ?? mapSpec?.bots ?? mapSpec?.botFill;
-  const counts = mode === 'flagrun' ? { alpha: want ?? 0, bravo: 0 }
-    : want === undefined ? spec.ffa ? { alpha: 5, bravo: 4 } : { alpha: 4, bravo: 5 }
-    : { alpha: Math.floor(want / 2), bravo: Math.ceil(want / 2) };
+  let counts;
+  if (mode === 'flagrun') {counts = { alpha: want ?? 0, bravo: 0 };}
+  else if (want === undefined) {counts = spec.ffa ? { alpha: 5, bravo: 4 } : { alpha: 4, bravo: 5 };}
+  else {counts = { alpha: Math.floor(want / 2), bravo: Math.ceil(want / 2) };}
   teamBots = new TeamBots(
     {
       lazyPlayer: (): Player => player,

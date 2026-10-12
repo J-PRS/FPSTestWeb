@@ -77,7 +77,9 @@ export class Rakk implements Targetable, SwarmSlotOwner {
     this.netId = b.id;
     this.id = 0x50_00_00_00 + b.id;
     bindNetSim(this, makeSimFlyer, b);
-    this.state = b.state === 'windup' ? 'dive' : b.state === 'orbit' ? 'orbit' : 'climb';
+    this.state = 'climb';
+if (b.state === 'windup') {this.state = 'dive';}
+else if (b.state === 'orbit') {this.state = 'orbit';}
   }
 
   applyNetEdge(m: { position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; kind: string; targetId: string | null; tp?: { x: number; y: number; z: number } | null }): void {

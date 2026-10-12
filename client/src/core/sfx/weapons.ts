@@ -21,9 +21,9 @@ function shootInto(g: GainNode, weaponType: number): void {
   // keeps successive cracks from phasing into a drone. Bolt launcher's
   // 0.29 isn't drift-jitter: it's the authored 1.5–2.0 pitch randomization
   // around the 1.75 base rate.
-  const layerJitter = weaponType === WeaponType.Chaingun ? 0.3
-    : weaponType === WeaponType.BoltLauncher ? 0.29
-    : 0.1;
+  let layerJitter = 0.1;
+  if (weaponType === WeaponType.Chaingun) {layerJitter = 0.3;}
+  else if (weaponType === WeaponType.BoltLauncher) {layerJitter = 0.29;}
   if (layered && layer(g, layered, layerJitter)) {return;}
   const s = SHOT_SAMPLES[weaponType];
   if (s && sample(s[0], g, s[1], s[2])) {return;}

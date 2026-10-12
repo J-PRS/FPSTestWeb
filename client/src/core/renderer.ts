@@ -171,7 +171,9 @@ function makeFloydEngine(renderer: THREE.WebGLRenderer) {
       const si = srcRow + x * 4, di = dstRow + x * 4, ei = x * 3;
       for (let c = 0; c < 3; c += 1) {
         const v = src[si + c] + errA[ei + c];
-        const q = v < 0 ? 0 : v > 255 ? 255 : Math.round(v / step) * step;
+        let q = Math.round(v / step) * step;
+if (v < 0) {q = 0;}
+else if (v > 255) {q = 255;}
         const e = v - q;
         errA[ei + ahead + c] += e * 0.4375;
         errB[ei + c]         += e * 0.3125;
@@ -322,12 +324,16 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   // the dirt to diffract, so a dirt-only frame would do nothing.
   // 1k AVIF (28KB) — the 4k/5MB source is wasteful for a screen-fit
   // multiplier mask; artifacts are invisible inside additive glow.
-  const dirtTex = new THREE.TextureLoader().load('/assets/LensDirt/LensDirt03_1k.avif');
+  const dirtTex = new THREE.TextureLoader().load('/assets/LensDirt/LensDirt03_1k.webp');
   const dirtEffect = new Effect('LensDirt', LENS_DIRT_GLSL, {
     uniforms: new Map<string, THREE.Uniform>([
       ['dirtMap', new THREE.Uniform(dirtTex)],
-      ['dirtIntensity', new THREE.Uniform(3)], // 03 is a dark map — needs the boost to read
-      ['dirtThreshold', new THREE.Uniform(1.15)], // under the 1.3 bloom gate so halo shoulders count
+      // Unity-style: dirt × the isolated bloom composite. BloomEffect's
+      // .texture IS its mip-chain output RT — the dirt pass runs after
+      // bloomMerge so it's already filled. Fog can't fake it: the bloom
+      // buffer only holds light that cleared the 1.3 gate.
+      ['bloomTex', new THREE.Uniform(bloomEffect.texture)],
+      ['dirtIntensity', new THREE.Uniform(3)],
     ]),
   });
   const dirtPass = new EffectPass(camera, dirtEffect);
@@ -395,7 +401,10 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   function applyAA(v: number): void {
     fxaaPass.enabled = v === 1;
     smaaPass.enabled = v === 2;
-    composer.multisampling = v === 3 ? 2 : v === 4 ? 4 : 0;
+    let ms = 0;
+if (v === 3) {ms = 2;}
+else if (v === 4) {ms = 4;}
+composer.multisampling = ms;
     syncRenderToScreen();
   }
 

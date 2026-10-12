@@ -63,9 +63,10 @@ export function wireProjectiles(ctx: NetCtx): void {
   // FIFO, no position inference, immune to rejected/dropped claims).
   const linkOwnProjectile = (projectileId: string, shotId?: string, pellet?: number): void => {
     const registry = deps.world.projectileRegistry;
-    const localProjectile = shotId
-      ? (pellet === undefined ? registry.byShotId.get(shotId) : registry.byFanSlot.get(`${shotId}#${pellet}`))
-      : undefined;
+    let localProjectile;
+    if (shotId) {
+      localProjectile = pellet === undefined ? registry.byShotId.get(shotId) : registry.byFanSlot.get(`${shotId}#${pellet}`);
+    }
     if (!localProjectile) {
       // A missing entry after the nonce mint is either an echo that
       // outlived a fast-popping shell (nonce pruned at death — benign)

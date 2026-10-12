@@ -7,6 +7,14 @@ import type { ExplosionSparks } from './explosionSparks.js';
 import { BlastVariants, type BurstLayer, type VariantHost } from './blastVariants.js';
 import { markProbe } from '../core/fxDiag.js';
 
+const layerOpacity = (kind: string): number => {
+  if (kind === 'smoke') {return 0.55;}
+  if (kind === 'glow') {return 0.9;}
+  return 1;
+};
+
+
+
 // Per-weapon blast layer recipes — the spawn side of Explosion. Each
 // variant returns true after laying its full recipe so the caller falls
 // through to the shared powder blast only when no variant applies.
@@ -109,7 +117,9 @@ export class ExplosionLayers implements VariantHost {
     }
     // Billboard footprints the old mesh/sprite scales implied:
     // glow sprite 2.5×, smoke 4×, solid sphere ≈ 2×.
-    const sMul = l.kind === 'smoke' ? 4 : l.kind === 'solid' ? 2 : 2.5;
+    let sMul = 2.5;
+if (l.kind === 'smoke') {sMul = 4;}
+else if (l.kind === 'solid') {sMul = 2;}
     blastBurst(pos, {
       count: Math.floor(l.count * l.countMult),
       elvBase: l.elvBase, elvSpan: l.elvSpan, planar: l.planar,
@@ -118,7 +128,7 @@ export class ExplosionLayers implements VariantHost {
       sizeMin: l.sizeMin * l.sizeBoost * sMul, sizeMax: (l.sizeMin + l.sizeVar) * l.sizeBoost * sMul,
       gravity: l.gravity,
       c1: [r1, g1, b1], c2: [r2, g2, b2],
-      opacity: l.kind === 'glow' ? 0.9 : l.kind === 'smoke' ? 0.55 : 1,
+      opacity: layerOpacity(l.kind),
       gVar: l.g1Var,
       stagger: l.stagger,
       spin: l.spin,

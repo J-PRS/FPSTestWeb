@@ -5,6 +5,7 @@ import type { PlayerModel } from './PlayerModel.js';
 import { BallTrailDots } from '../effects/ballTrails.js';
 import { TrailDriver } from '../effects/vfxRuntime.js';
 import { pickLocomotionAnim } from './locomotionAnim.js';
+import type { AnimationState } from './playerClips.js';
 import { bodyGroundLift, easeGroundLift } from './bodyGround.js';
 import { classCapsule } from '../../../shared/botClasses.js';
 import { glitch } from '../core/fxDiag.js';
@@ -258,9 +259,9 @@ export class RemoteAnim {
   private tickAnimState(dt: number, speed: number, airborne: boolean): void {
     const {h} = this;
     const jetting = airborne && h.velocity.y > 3;
-    const state = airborne
-      ? (jetting ? 'jet' : 'jump')
-      : pickLocomotionAnim(h.model.animationState, speed, h.wireSki);
+    let state: AnimationState;
+    if (airborne) {state = jetting ? 'jet' : 'jump';}
+    else {state = pickLocomotionAnim(h.model.animationState, speed, h.wireSki);}
     h.model.setAnimationState(state);
     const sin = Math.sin(h.rotation.yaw), cos = Math.cos(h.rotation.yaw);
     const fwd = h.velocity.x * sin + h.velocity.z * cos;

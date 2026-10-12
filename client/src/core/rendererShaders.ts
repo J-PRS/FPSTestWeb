@@ -271,16 +271,28 @@ export const BLOOM_MERGE_GLSL = /* glsl */ `
     }
   `;
 
-// Lens dirt (Unity's Bloom Dirtiness): a screen-fit smudge/dust texture
-// multiplied by the POST-bloom luminance — the merged frame already
-// carries the halo, so excess-over-threshold re-boosts exactly where
-// glow exists. Clean frames multiply to ~0: dirt never shades the scene.
+// Lens dirt, Unity PPv2-style: smudge texture × the ISOLATED bloom
+// buffer (the blurred mip composite), added over the frame. Unity:
+//   color += bloomTex*intensity + dirtTex*bloomTex*dirtIntensity
+// The bloom composite already holds only above-threshold light, so no
+// gate is needed — fog luminance never enters the buffer, so dirt can
+// NEVER paint the sky the way a merged-frame luminance threshold can.
 export const LENS_DIRT_GLSL = `
 uniform sampler2D dirtMap;
+uniform sampler2D bloomTex;
 uniform float dirtIntensity;
-uniform float dirtThreshold;
 void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
   vec3 dirt = texture2D(dirtMap, uv).rgb;
-  float excess = max(0.0, luminance(inputColor.rgb) - dirtThreshold);
-  outputColor = vec4(inputColor.rgb + dirt * excess * dirtIntensity, inputColor.a);
+  vec3 bloom = texture2D(bloomTex, uv).rgb;
+  // bloomTex is the RAW mip composite — pre-sanitize, unclamped. Inf/NaN
+  // texels that BLOOM_MERGE_GLSL folds for display live here too, and
+  // Inf*dirt / NaN*0 re-poisons the frame AFTER the last guard — the
+  // black half-screen flash all over again. Same IEEE fold, same 64 cap.
+  bloom.r = bloom.r >= 0.0 ? min(bloom.r, 64.0) : 0.0;
+  bloom.g = bloom.g >= 0.0 ? min(bloom.g, 64.0) : 0.0;
+  bloom.b = bloom.b >= 0.0 ? min(bloom.b, 64.0) : 0.0;
+  dirt.r = dirt.r >= 0.0 ? dirt.r : 0.0;
+  dirt.g = dirt.g >= 0.0 ? dirt.g : 0.0;
+  dirt.b = dirt.b >= 0.0 ? dirt.b : 0.0;
+  outputColor = vec4(inputColor.rgb + dirt * bloom * dirtIntensity, inputColor.a);
 }`;

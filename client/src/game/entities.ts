@@ -162,9 +162,11 @@ function updateBalls(dt: number): void {
     // Classic: docile balls leash straight to the player — aggroFor would
     // degrade to a wander waypoint near the BALL once its fodder leash drops
     // the target, and the >200m drift check would never fire again.
-    b.update(dt, deps.lazyTerrain(), b.netDriven ? f.netTargetPosFor(b)
-      : f.classicMode ? deps.lazyPlayer().pos
-      : f.aggroFor(b, b.pos, dt, PROFILES.fodder));
+    let ballTarget;
+    if (b.netDriven) {ballTarget = f.netTargetPosFor(b);}
+    else if (f.classicMode) {ballTarget = deps.lazyPlayer().pos;}
+    else {ballTarget = f.aggroFor(b, b.pos, dt, PROFILES.fodder);}
+    b.update(dt, deps.lazyTerrain(), ballTarget);
     f.kickDust(b, dt); // bounce frames puff — airborne frames don't
     // Only remove ball when trails have fully faded out
     if (b.disposed) {f.removeTarget(balls, i, b);}

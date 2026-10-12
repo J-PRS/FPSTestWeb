@@ -72,11 +72,9 @@ export class BotRoster {
       const id = `BOT-${BOT_NAMES[(idx - 1) % BOT_NAMES.length]}-${String(idx).padStart(2, '0')}`;
       const kitIdx = (this.nextIdx - 2 + BOT_LOADOUTS.length) % BOT_LOADOUTS.length;
       const wildcard = botRand() < 0.125;
-      const loadout = process.env.FPS_SOAK_RANDLO === '1'
-        ? { perk: 'vitality' as const, near: pickOf(RANDLO.near), mid: pickOf(RANDLO.mid), far: pickOf(RANDLO.far), belt: pickOf(RANDLO.belt), side: pickOf(RANDLO.side) }
-        : wildcard
-          ? rollWildcard(botRand)
-          : BOT_LOADOUTS[kitIdx]!;
+      let loadout;
+      if (process.env.FPS_SOAK_RANDLO === '1') {loadout = { perk: 'vitality' as const, near: pickOf(RANDLO.near), mid: pickOf(RANDLO.mid), far: pickOf(RANDLO.far), belt: pickOf(RANDLO.belt), side: pickOf(RANDLO.side) };}
+      else {loadout = wildcard ? rollWildcard(botRand) : BOT_LOADOUTS[kitIdx]!;}
       this.alts.set(id, wildcard ? WILDCARD_SLOTS : (BOT_ALT_SLOTS[kitIdx] ?? {}));
       // Kit picks the body, then the squad's weighted fill picks the
       // job — plated/mortar kits anchor heavy, featherjets flies light,

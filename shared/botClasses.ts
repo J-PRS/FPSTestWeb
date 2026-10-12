@@ -39,7 +39,9 @@ const TIER_RANK: Record<ArmorClass, number> = { light: 0, medium: 1, heavy: 2 };
 /** The lowest tier allowed to fire weapon `w` (WeaponType id). Light-only
  *  guns report 'light' — the floor IS the ceiling for them. */
 export function minClassForWeapon(w: number): ArmorClass {
-  return HEAVY_ONLY_WEAPONS.has(w) ? 'heavy' : MEDIUM_ONLY_WEAPONS.has(w) ? 'medium' : 'light';
+  if (HEAVY_ONLY_WEAPONS.has(w)) {return 'heavy';}
+  if (MEDIUM_ONLY_WEAPONS.has(w)) {return 'medium';}
+  return 'light';
 }
 
 /** Server-side boundary: may `cls` fire weapon `w`? Unknown class = medium,

@@ -207,17 +207,19 @@ this.paintBudget -= 1;
       const m = this.insts[a.inst]!.mesh;
       m.setColorAt(a.slot, _tmpColor.setRGB(cr, cg, cb));
       if (m.instanceColor) {m.instanceColor.needsUpdate = true;}
-      return { mesh: null, mat: null, inst: a.inst, slot: a.slot,
-        radius: opts.kind === 'brush' ? 0.08 : opts.kind === 'goo' ? 0.06 : Math.max(sw, sh, sd) };
+      let kindRadius = Math.max(sw, sh, sd);
+      if (opts.kind === 'goo') {kindRadius = 0.06;}
+      else if (opts.kind === 'brush') {kindRadius = 0.08;}
+      return { mesh: null, mat: null, inst: a.inst, slot: a.slot, radius: kindRadius };
     }
     const geo = pickShardGeo(part, opts, sw, sh, sd);
     const am = this.allocShardMesh(geo, cr, cg, cb);
     am.mesh.position.set(s.x, s.y, s.z);
     am.mesh.castShadow = false;
     this.scene.add(am.mesh);
-    const radius = part ? (geo.boundingSphere?.radius ?? 0.3) * 0.35
-      : s.sharedGeo ? (geo.boundingSphere?.radius ?? 0.3) * 0.5
-      : Math.max(sw, sh, sd);
+    let radius = Math.max(sw, sh, sd);
+    if (part) {radius = (geo.boundingSphere?.radius ?? 0.3) * 0.35;}
+    else if (s.sharedGeo) {radius = (geo.boundingSphere?.radius ?? 0.3) * 0.5;}
     return { mesh: am.mesh, mat: am.mat, inst: -1, slot: -1, radius };
   }
 

@@ -164,9 +164,10 @@ export class RoomDeployables {
       this.remove(owned[0]!.id);
     }
     const id = ((this.nextId += 1) - 1);
-    const armDelay = k === 'turret' ? TURRET_UNFOLD_S + this.room.rng() * 0.4
-      : k === 'mine' ? MINE_ARM_S
-      : k === 'station' ? STATION_HEAL_CD : 0;
+    let armDelay = 0;
+    if (k === 'turret') {armDelay = TURRET_UNFOLD_S + this.room.rng() * 0.4;}
+    else if (k === 'mine') {armDelay = MINE_ARM_S;}
+    else if (k === 'station') {armDelay = STATION_HEAL_CD;}
     // Team stamps at plant time — the spawn edge carries this value, so
     // the hash lane must too (a live owner-team lookup desyncs the moment
     // the planter switches sides). Gear fights for its planting team.

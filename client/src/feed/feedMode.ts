@@ -9,6 +9,10 @@ const requested = seg?.[1] ?? (q.get('feed') || null);
 // Touch-only devices can't play — the onboarding gate would bounce them —
 // so phones/tablets land on the feed instead. ?play opts back into the
 // game for anything with enough input (hybrids, plugged-in peripherals).
+const demoStartAt = (requested: string | null): string | null => {
+  if (requested === null) {return null;}
+  return requested.endsWith('.demo') ? requested : `${requested}.demo`;
+};
 const coarse = typeof window === 'undefined' ? false
   : (window.matchMedia?.('(pointer: coarse)').matches ?? false) && navigator.maxTouchPoints > 0;
 export const feedMode = {
@@ -17,5 +21,5 @@ export const feedMode = {
   // exit then lands on /?play so it doesn't loop back into the feed.
   auto: seg === null && !q.has('feed') && coarse,
   // Deep-link target: a demo filename with or without the .demo suffix.
-  startAt: requested ? (requested.endsWith('.demo') ? requested : `${requested}.demo`) : null,
+  startAt: demoStartAt(requested),
 };

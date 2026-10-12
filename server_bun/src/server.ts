@@ -43,7 +43,7 @@ let wtCertHash: string | null = null;
 // requestIP binds lazily — `server` doesn't exist until Bun.serve below
 // returns, but no request can arrive before that.
 // oxlint-disable-next-line no-use-before-define -- lazily bound, see comment above
-const httpCtx = { gameServer, demoStorage, rtcRelay, wtCertHash: (): string | null => wtCertHash, requestIP: (req: Request): Bun.SocketAddress | null => server.requestIP(req) };
+const httpCtx = { gameServer, demoStorage, rtcRelay, wtCertHash: (): string | null => wtCertHash, requestIP: (req: Request): Bun.SocketAddress | null => server?.requestIP(req) ?? null };
 const ROUTES = makeRoutes(httpCtx);
 
 // Let the close frames flush before exiting: an immediate process.exit
@@ -76,9 +76,9 @@ async function shutdown(): Promise<void> {
 // EADDRINUSE here is almost always a bun --watch orphan holding the port
 // after a crash — Windows never delivers SIGTERM to it. Reclaim only from
 // bun.exe holders; anything else is a real conflict and stays untouched.
-function reclaimStaleBun(port: number): boolean {
+function killPortHolders(port: number): boolean {
   const out = Bun.spawnSync(['netstat', '-ano', '-p', 'tcp']).stdout.toString();
-  const pids = [...out.matchAll(/^TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)\s*$/gm)]
+  const pids = [...out.matchAll(/^\s*TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)\s*$/gm)]
     .filter((m) => Number(m[1]) === port).map((m) => m[2]!);
   for (const pid of pids) {
     const img = Bun.spawnSync(['tasklist', '/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH']).stdout.toString();
@@ -86,7 +86,21 @@ function reclaimStaleBun(port: number): boolean {
     Bun.spawnSync(['taskkill', '/F', '/PID', pid]);
     logger.warn(`stale bun (pid ${pid}) killed — it held :${port}`);
   }
+  if (pids.length > 0) {Bun.sleepSync(250);} // let the socket fully release
   return pids.length > 0;
+}
+
+function reclaimStaleBun(port: number): Promise<boolean> {
+  // A live supervised server (dev-watch respawns children instantly) is
+  // not "stale" — killing it is whack-a-mole we'd lose. Stale means the
+  // port is held but the game doesn't answer.
+  return fetch(`http://localhost:${port}/metrics`, { signal: AbortSignal.timeout(800) }).then(
+    (r): boolean => {
+      if (r.ok) { logger.error(`:${port} serves a live game server — not stale, refusing takeover`); return false; }
+      return killPortHolders(port);
+    },
+    (): boolean => killPortHolders(port), // not answering = the zombie we reclaim
+  );
 }
 
 const serve = (): ReturnType<typeof Bun.serve<WebSocketData>> => Bun.serve<WebSocketData>({
@@ -182,15 +196,26 @@ const serve = (): ReturnType<typeof Bun.serve<WebSocketData>> => Bun.serve<WebSo
   },
 });
 
-const server: ReturnType<typeof serve> = ((): ReturnType<typeof serve> => {
-  try { return serve(); } catch (error) {
+// The reclaim probe is async but no-async-await is repo law — the bind
+// runs as a flat promise chain and `server` stays a late-bound handle
+// every consumer (requestIP, setBunServer) only reaches after bind.
+let server: ReturnType<typeof serve> | null = null;
+let bindErr: Error | null = null;
+Promise.resolve()
+  .then((): ReturnType<typeof serve> => serve())
+  .catch((error: unknown): Promise<boolean> => {
     const busy = (error as { code?: string }).code === 'EADDRINUSE' || /in use|EADDRINUSE/i.test(String(error));
-    if (!busy || !reclaimStaleBun(CONFIG.port)) {throw error;}
+    if (!busy) {throw error;}
+    bindErr = error instanceof Error ? error : new Error(String(error));
+    return reclaimStaleBun(CONFIG.port);
+  })
+  .then((v): ReturnType<typeof serve> => {
+    if (typeof v !== 'boolean') {return v;}
+    if (!v) {throw bindErr;}
     return serve();
-  }
-})();
-
-gameServer.setBunServer(server);
+  })
+  .then((s): null => { server = s; gameServer.setBunServer(s); return null; })
+  .catch((error): never => { throw error; }); // unhandled rejection = the module-level throw it replaces
 
 // WebTransport tier — opt-in via env (FPS_WT_PORT + cert/key paths).
 // Shares GameServer through the socket adapter; failure here must never

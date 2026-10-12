@@ -293,7 +293,9 @@ fold.count += 1;
 
   // Accumulated LOD dt for one entity this frame — 0 = skip the tick.
   lodTick = (e: Targetable, dSq: number, dt: number): number  => {
-    const tier = dSq > this.AI_LOD_FAR_SQ ? this.AI_LOD_FAR_DT : dSq > this.AI_LOD_MID_SQ ? this.AI_LOD_MID_DT : 0;
+    let tier = 0;
+    if (dSq > this.AI_LOD_FAR_SQ) {tier = this.AI_LOD_FAR_DT;}
+    else if (dSq > this.AI_LOD_MID_SQ) {tier = this.AI_LOD_MID_DT;}
     if (!tier) {return dt;}
     const acc = (this.lodAcc.get(e) ?? this.lodPhase(e, tier)) + dt;
     if (acc < tier) { this.lodAcc.set(e, acc); return 0; }

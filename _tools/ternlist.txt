@@ -1,0 +1,62 @@
+client/src/core/Logger.ts:62: a instanceof Error ? (a.stack ?? a.message) :
+client/src/core/sfx/weapons.ts:24: const layerJitter = weaponType === WeaponType.Chaingun ? 0.3
+client/src/effects/debris.ts:211: radius: opts.kind === 'goo' ? 0.06 : opts.kind === 'brush' ? 0.08 : Math.max(sw, sh, sd) };
+client/src/effects/debris.ts:218: const radius = part ? (geo.boundingSphere?.radius ?? 0.3) * 0.35
+client/src/effects/debrisShards.ts:79: const geo = geoType < 0.4 ? new THREE.TetrahedronGeometry(m, 0)
+client/src/effects/explosionLayers.ts:123: opacity: l.kind === 'smoke' ? 0.55 : l.kind === 'glow' ? 0.9 : 1,
+client/src/entities/playerClips.ts:345: const set = state === 'run' && fwdHemi ? 'Sprint01' : state === 'run' ? 'Run01' : 'Walk01';
+client/src/entities/playerClips.ts:350: const ovList = ov === undefined ? [] : Array.isArray(ov) ? ov : [ov];
+client/src/entities/playerUal.ts:197: const TORSO = variant === 'vexa'
+client/src/entities/playerUal.ts:199: : (variant === 'cybersoldier' || variant === 'polyart')
+client/src/entities/remoteAnim.ts:261: const state = airborne
+client/src/entities/snakePose.ts:92: return (t < 0.1 ? 0.4 - t * 1.2
+client/src/entities/snakePose.ts:93: : t < 0.45 ? 0.28 + (t - 0.1) * 0.17
+client/src/feed/feedMode.ts:20: startAt: requested ? (requested.endsWith('.demo') ? requested : `${requested}.demo`) : null,
+client/src/game/blastForce.ts:242: const selfDmg = selfHit
+client/src/game/bots/botCtf.ts:82: deps.lazyTerrain(), kind === 'dropped' ? 1 : kind === 'captured' ? 2.4 : 1.4,
+client/src/game/bots/index.ts:532: return this.ctf?.flagPos(aim === 'own' ? team : team === 'alpha' ? 'bravo' : 'alpha', false);
+client/src/game/combat/impact.ts:457: const targetId = p.hitBall ? p.hitBall.id : p.hitPlayerId ? 0xFF_FF : 0;
+client/src/game/combat/lightning.ts:132: const target = firing && damaging ? 1 : firing ? 0.55 : 0;
+client/src/game/combat/lightningTrace.ts:169: let s = denom < -1e-6 ? (b * a - wy) / denom : (a > 0 ? 0 : axisH);
+client/src/game/deployables.ts:656: const tint = item.kind === 'shield' ? 0x66_CC_FF : item.kind === 'drone' ? 0x88_DD_FF : 0x55_FF_CC;
+client/src/game/entities.ts:329: b.update(dt, deps.lazyTerrain(), b.netDriven ? f.netTargetPosFor(b)
+client/src/game/flagRun.ts:286: t < HOLD || atEnd ? 0xFF_D8_4D : this.tasJet[i] ? 0x40_FF_90 : 0xFF_40_60);
+client/src/game/flagRun.ts:292: const spdTxt = atEnd ? 'CAP' : t < HOLD ? 'GRAB' : `${spd.toFixed(0)} m/s`;
+client/src/game/gameLoop.ts:272: const fmtBps = (b: number): string => b >= 1_048_576 ? `${(b / 1_048_576).toFixed(1)}MB/s` : b >= 1024 ? 
+client/src/game/net/match.ts:68: deps.fragMessages.show(winner === 'draw' ? 'DRAW' : iWon ? 'VICTORY' : `${winner} WINS`);
+client/src/game/net/match.ts:78: deps.fragMessages.show(winner === 'draw' ? 'DRAW' : iWon ? 'VICTORY' : `${winner.toUpperCase()} WINS`);
+client/src/game/net/playerKill.ts:113: deps.fragMessages.show(shooterId === 'environment'
+client/src/game/net/projectiles.ts:66: const localProjectile = shotId
+client/src/game/netBalls.ts:217: return id === nm?.getLocalPlayerId() ? deps.lazyPlayer().pos
+client/src/game/remoteDeployables.ts:177: const teamColor = team === 'bravo' ? 0xFF_88_55 : team === 'alpha' ? 0x55_AA_FF : 0x99_AA_BB;
+client/src/game/remoteDeployables.ts:185: const plinthR = kind === 'baseturret' ? 2.2 : kind === 'generator' ? 3.4 : 1.6;
+client/src/game/species/melee.ts:75: const n = u ? 1 : pos ? 1 : SCARAB_PACK_MIN + Math.floor(Math.random() * (SCARAB_PACK_MAX - SCARAB_PACK_M
+client/src/game/speciesKit.ts:296: const tier = dSq > this.AI_LOD_FAR_SQ ? this.AI_LOD_FAR_DT : dSq > this.AI_LOD_MID_SQ ? this.AI_LOD_MID_D
+client/src/gunlab/scans.ts:78: const proj = (v: THREE.Vector3): THREE.Vector2 => drop === 1 ? new THREE.Vector2(v.x, v.z) : drop === 1 ?
+client/src/lab/scenarios.ts:271: (f.mesh.material as THREE.MeshBasicMaterial).color.setHex(f.flash > 0 ? 0xFF_FF_FF : (f === a ? 0x5A_D0_F
+client/src/lab/simKit.ts:341: flash > 0 ? 1 : c.state === 'charge' ? 0.45 : 0;
+client/src/main.ts:409: const counts = mode === 'flagrun' ? { alpha: want ?? 0, bravo: 0 }
+client/src/main.ts:410: : want === undefined ? spec.ffa ? { alpha: 5, bravo: 4 } : { alpha: 4, bravo: 5 }
+client/src/networking/tiers.ts:505: const dc = lane?.readyState === 'open' ? lane : alt?.readyState === 'open' ? alt : null;
+client/src/projectiles/projStuck.ts:86: const anchor = this.stuckTo ? (this.stuckTo.dead ? null : this.stuckTo.pos)
+client/src/ui/hud.ts:122: this.sheepReadout.style.color = shown >= 60 ? '#ff6b6b' : shown >= 30 ? '#ffd166' : '#7ddf7d';
+client/src/ui/hud/hudChrome.ts:102: const txt = held ? 'DEAD — CLICK TO RESPAWN'
+client/src/ui/hud/hudStats.ts:193: this.fpsValue < 40 ? '#f44' :
+client/src/ui/hud/hudStats.ts:194: this.fpsValue < 50 ? '#f80' :
+client/src/ui/hud/scoreboard.ts:139: const cells = [String(r.frags), String(r.deaths), r.score === null ? '—' : String(r.score), r.net ?? '—',
+client/src/ui/hud/scoreboard.ts:51: const map = mapName ? prettifyMapName(mapName) : (label ? 'Default' : '');
+client/src/ui/loadoutMenu.ts:211: o.disabled ? 2 : o.label.startsWith('[') ? 1 : 0;
+client/src/ui/logPanel.ts:29: return m[1] === 'ERROR' ? LogLevel.ERROR : m[1] === 'WARN' ? LogLevel.WARN
+client/src/weapons.ts:74: kind: opts.pellets ? 'fan'
+client/src/world/mapStructures.ts:140: const nOut = s.kind === 'kit' ? (KIT_HULLS[s.piece ?? '']?.length ?? 0)
+server_bun/src/RoomDeployables.ts:167: const armDelay = k === 'turret' ? TURRET_UNFOLD_S + this.room.rng() * 0.4
+server_bun/src/RoomDeployables.ts:168: : k === 'mine' ? MINE_ARM_S
+server_bun/src/botArsenal.ts:688: const movingCap = surge ? strike ? 50 : 55 : 12;
+server_bun/src/botRoster.ts:75: const loadout = process.env.FPS_SOAK_RANDLO === '1'
+server_bun/src/serverSenses.ts:285: ? d < 160 || botRand() < (d < 260 ? 0.6 : d < 320 ? 0.3 : 0.08)
+server_bun/src/wire.ts:37: v === undefined ? { ok: true }
+shared/botBrain.ts:568: return huntNow === ctx.thief?.id ? { kind: 'thief', target: huntNow, d: this.dirTag(ctx, ctx.thief.pos) }
+shared/botClasses.ts:42: return HEAVY_ONLY_WEAPONS.has(w) ? 'heavy' : MEDIUM_ONLY_WEAPONS.has(w) ? 'medium' : 'light';
+shared/botGraph.ts:64: const ti = team === 'bravo' ? 1 : team === 'alpha' ? 0 : 2;
+shared/combat.ts:279: return n <= 4 ? 4 : n <= 9 ? 3 : 2;
+shared/movement.ts:260: this.wishJump = MOVEMENT_CONFIG.autoHop

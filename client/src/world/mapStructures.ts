@@ -137,8 +137,9 @@ function buildColliderGizmos(list: StructureSpec[], scene: THREE.Scene): void {
     for (const s of list) {
       // Mirror structureColliders' expansion so ci lands on this spec's
       // first produced box: kits → one per KIT_HULLS row, root → 2 feet.
-      const nOut = s.kind === 'kit' ? (KIT_HULLS[s.piece ?? '']?.length ?? 0)
-        : s.kind === 'root' ? 2 : 1;
+      let nOut = 1;
+      if (s.kind === 'kit') {nOut = KIT_HULLS[s.piece ?? '']?.length ?? 0;}
+      else if (s.kind === 'root') {nOut = 2;}
       if (s.kind === 'stand' && nOut > 0) {
         const c = colliders[ci];
         // oxlint-disable-next-line no-console

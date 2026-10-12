@@ -99,8 +99,9 @@ export function setDeathOverlay(h: HUD, on: boolean): void {
 export function updateDeathCountdown(h: HUD, respawnMs: number, held = false): void {
     if (!h.deathClock) {return;}
     const left = Math.max(0, respawnMs - (performance.now() - h.diedAt));
-    const txt = held ? 'DEAD — CLICK TO RESPAWN'
-      : left > 0 ? `RESPAWN IN ${(left / 1000).toFixed(1)}` : 'RESPAWNING';
+    let txt = 'RESPAWNING';
+    if (held) {txt = 'DEAD — CLICK TO RESPAWN';}
+    else if (left > 0) {txt = `RESPAWN IN ${(left / 1000).toFixed(1)}`;}
     if (txt !== h.lastDeathTxt) {
       h.deathClock.textContent = txt;
       h.lastDeathTxt = txt;

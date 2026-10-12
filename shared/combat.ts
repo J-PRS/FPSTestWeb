@@ -137,7 +137,9 @@ export function hitRadiusAt(weaponType: number | undefined, airtime: number): nu
  *  1-based tick count. */
 export const LG_TICK_BASE = 4;
 export function lgTickDamage(n: number): number {
-  return n <= 4 ? 4 : n <= 9 ? 3 : 2;
+  if (n <= 4) {return 4;}
+if (n <= 9) {return 3;}
+return 2;
 }
 
 /** Gap after which a beam's ramp resets — misses within the window keep

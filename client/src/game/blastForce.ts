@@ -239,14 +239,13 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       // me is server-paid already — stay silent.
       const selfHit = a.directHitTargetId === 'local';
       const enemyBlast = a.shooterId && a.shooterId !== 'local';
-      const selfDmg = selfHit
-        ? (enemyBlast ? 0 : aoeDamage * player.mods.selfDamage)
-        : enemyBlast
-          ? aoeDamageOf(aoeDamage, dpx, radius, scales)
-          // A feet-shot launch pays up to SELF_SPLASH_MAX — same rule
-          // the server charges bots, so the disc-jump is a real spend
-          // for humans too. The perk still shaves it.
-          : Math.min(aoeDamageOf(aoeDamage, dpx, radius, scales) + SELF_SPLASH_MAX * (1 - dpx / radius), SELF_SPLASH_MAX) * player.mods.selfDamage;
+      // A feet-shot launch pays up to SELF_SPLASH_MAX — same rule
+      // the server charges bots, so the disc-jump is a real spend
+      // for humans too. The perk still shaves it.
+      let selfDmg;
+      if (selfHit) {selfDmg = enemyBlast ? 0 : aoeDamage * player.mods.selfDamage;}
+      else if (enemyBlast) {selfDmg = aoeDamageOf(aoeDamage, dpx, radius, scales);}
+      else {selfDmg = Math.min(aoeDamageOf(aoeDamage, dpx, radius, scales) + SELF_SPLASH_MAX * (1 - dpx / radius), SELF_SPLASH_MAX) * player.mods.selfDamage;}
       if (selfDmg >= 1 && !player.isDead) {
         // Shield soaks self-splash too — the server holds health steady so
         // the only thing to report is the energy burn + its flash.

@@ -194,13 +194,10 @@ function bakeSource(
     // mannequin's spine rest pose leans differently than the chibi robot's,
     // and absolute copy bakes a constant forward hunch into every clip.
     // Delta-map the torso, keep limbs absolute.
-    const TORSO = variant === 'vexa'
-      ? /^Base_Human(Pelvis|Spine1|Ribcage|Neck|Head)$/
-      : (variant === 'cybersoldier' || variant === 'polyart')
-      ? /^(Hips|Spine|Chest|Neck|Head)$/
-      : variant === 'mannequin'
-      ? /^DEF-(hips|spine001|spine003|neck|head)$/
-      : /^(Hips|Abdomen|Torso_1|Neck|Head)$/;
+    let TORSO = /^(Hips|Abdomen|Torso_1|Neck|Head)$/;
+    if (variant === 'vexa') {TORSO = /^Base_Human(Pelvis|Spine1|Ribcage|Neck|Head)$/;}
+    else if (variant === 'cybersoldier' || variant === 'polyart') {TORSO = /^(Hips|Spine|Chest|Neck|Head)$/;}
+    else if (variant === 'mannequin') {TORSO = /^DEF-(hips|spine001|spine003|neck|head)$/;}
     if (!TORSO.test(tName.replace(/_\d+$/, ''))) {continue;}
     const tb = target.skeleton.getBoneByName(tName);
     const sb = srcBones.find((b): boolean => b.name === sName);

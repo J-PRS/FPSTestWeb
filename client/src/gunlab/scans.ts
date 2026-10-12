@@ -72,8 +72,14 @@ meshId += 1;
       if (Math.abs(x.d - y.d) > 5e-4) {continue;}
       // Project to the plane's dominant 2D axes for the SAT overlap.
       const an = new THREE.Vector3(Math.abs(x.n.x), Math.abs(x.n.y), Math.abs(x.n.z));
-      const drop = an.x > an.y ? (an.x > an.z ? 0 : 2) : (an.y > an.z ? 1 : 2);
-      const proj = (v: THREE.Vector3): THREE.Vector2 => drop === 0 ? new THREE.Vector2(v.y, v.z) : drop === 1 ? new THREE.Vector2(v.x, v.z) : new THREE.Vector2(v.x, v.y);
+      let drop = 2;
+if (an.x > an.y && an.x > an.z) {drop = 0;}
+else if (an.y > an.z) {drop = 1;}
+      const proj = (v: THREE.Vector3): THREE.Vector2 => {
+        if (drop === 0) {return new THREE.Vector2(v.y, v.z);}
+        if (drop === 1) {return new THREE.Vector2(v.x, v.z);}
+        return new THREE.Vector2(v.x, v.y);
+      };
       const xa = x.p.map(proj), ya = y.p.map(proj);
       if (!zOverlap2d(xa, ya)) {continue;}
       // Clip x's projected tri by y's half-planes — the INTERSECTION is

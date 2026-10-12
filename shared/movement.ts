@@ -257,9 +257,9 @@ export class MoveSim {
 
   private step(dt: number): void {
     // Auto-hop: jump key acts as hold-to-jump.
-    this.wishJump = MOVEMENT_CONFIG.autoHop
-      ? this.input.jumpHeld
-      : (this.input.jumpPressed ? true : this.wishJump && this.input.jumpHeld);
+    if (MOVEMENT_CONFIG.autoHop) {this.wishJump = this.input.jumpHeld;}
+    else if (this.input.jumpPressed) {this.wishJump = true;}
+    else {this.wishJump = this.wishJump && this.input.jumpHeld;}
 
     this.groundedBuffered = this.checkGrounded();
 

@@ -89,10 +89,12 @@ const _segB = new Float32Array(SEGS_PER);
 /** Anatomical profile head→tail: head bulge, neck pinch, max girth
  *  ~40% back, whiplash tail. Slim — fat reads grub, not viper. */
 function segWidth(t: number): number {
-  return (t < 0.1 ? 0.4 - t * 1.2
-       : t < 0.45 ? 0.28 + (t - 0.1) * 0.17
-       : t < 0.8 ? 0.34 - (t - 0.45) * 0.55
-       :            0.145 - (t - 0.8) * 0.55) * 1.3;
+  let w;
+  if (t < 0.1) {w = 0.4 - t * 1.2;}
+  else if (t < 0.45) {w = 0.28 + (t - 0.1) * 0.17;}
+  else if (t < 0.8) {w = 0.34 - (t - 0.45) * 0.55;}
+  else {w = 0.145 - (t - 0.8) * 0.55;}
+  return w * 1.3;
 }
 
 /** Aim each lobe along the real 3D chain direction between its placed

@@ -59,9 +59,11 @@ export namespace Logger {
     const origWarn = console.warn.bind(console);
     const origError = console.error.bind(console);
     const fmtArg = (a: unknown): string =>
-      a instanceof Error ? (a.stack ?? a.message) :
-      typeof a === 'object' ? ((): string => { try { return JSON.stringify(a); } catch { return String(a); } })() :
-      String(a);
+      (() => {
+        if (a instanceof Error) {return a.stack ?? a.message;}
+        if (typeof a === 'object') {try { return JSON.stringify(a); } catch { return String(a); }}
+        return String(a);
+      })();
     console.warn = (...args: unknown[]): void => {
       if (writingToConsole) { origWarn(...args); return; }
       log(LogLevel.WARN, `[console.warn] ${args.map(fmtArg).join(' ')}`);
@@ -405,7 +407,9 @@ if (typeof window !== 'undefined') {
     console[m] = (...args: unknown[]): void => {
       // Raw console lines keep their level for the panel's coloring —
       // log/info read as INFO, warn/error stay warn/error.
-      const lvl = m === 'warn' ? LogLevel.WARN : m === 'error' ? LogLevel.ERROR : LogLevel.INFO;
+      let lvl = LogLevel.INFO;
+if (m === 'warn') {lvl = LogLevel.WARN;}
+else if (m === 'error') {lvl = LogLevel.ERROR;}
       if (!Logger.isWritingToConsole()) {Logger.pushRaw(`${tsLocal()} [${m.toUpperCase()}] ${fmtArgs(args)}`, lvl);}
       if (passthrough) {orig(...args);}
     };

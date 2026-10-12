@@ -653,7 +653,9 @@ export class Deployables {
     item.dead = true;
     if (item.kind === 'station' || item.kind === 'drone' || item.kind === 'shield') {
       // Fizzle-pop — smaller than the turret's, still tells you it died.
-      const tint = item.kind === 'drone' ? 0x88_DD_FF : item.kind === 'shield' ? 0x66_CC_FF : 0x55_FF_CC;
+      let tint = 0x55_FF_CC;
+  if (item.kind === 'drone') {tint = 0x88_DD_FF;}
+  else if (item.kind === 'shield') {tint = 0x66_CC_FF;}
       this.deps.world.explosions.push(new Explosion(
         this.deps.scene, item.pos, false, 0, this.deps.lazyTerrain(), 0.9, tint));
       sfx.explosionAt(item.pos, false);

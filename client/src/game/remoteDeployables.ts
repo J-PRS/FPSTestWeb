@@ -174,7 +174,9 @@ export class RemoteDeployables {
    *  and breathes a thin smoke wisp until it's welded or respawns. The
    *  deck plinth stays lit either way — the socket reads even dead. */
   private baseAssetItem(kind: 'generator' | 'sensor' | 'baseturret', at: THREE.Vector3, hp?: number, armor?: number, team?: string): Item {
-    const teamColor = team === 'alpha' ? 0x55_AA_FF : team === 'bravo' ? 0xFF_88_55 : 0x99_AA_BB;
+    let teamColor = 0x99_AA_BB;
+  if (team === 'alpha') {teamColor = 0x55_AA_FF;}
+  else if (team === 'bravo') {teamColor = 0xFF_88_55;}
     const group = new THREE.Group();
     const glowMat = new THREE.MeshBasicMaterial({ color: teamColor });
     const darkMat = new THREE.MeshLambertMaterial({ color: 0x39_42_4E });
@@ -182,7 +184,9 @@ export class RemoteDeployables {
     // Mounting plinth — a low deck plate with team-lit trim that stays
     // intact when the asset dies, so the site reads as a socket even
     // while its hulk is dark. Sits below the slumped wreck.
-    const plinthR = kind === 'generator' ? 3.4 : kind === 'baseturret' ? 2.2 : 1.6;
+    let plinthR = 1.6;
+  if (kind === 'generator') {plinthR = 3.4;}
+  else if (kind === 'baseturret') {plinthR = 2.2;}
     const plinth = new THREE.Mesh(
       new THREE.CylinderGeometry(plinthR, plinthR + 0.4, 0.35, 8), darkMat);
     plinth.position.y = 0.18;

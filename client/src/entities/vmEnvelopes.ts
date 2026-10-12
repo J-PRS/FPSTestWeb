@@ -167,7 +167,9 @@ export class VmEnvelopes {
     else if (t < PUNCH_IN + hold) {env = 1;}
     else {env = 1 - (t - PUNCH_IN - hold) / PUNCH_OUT;}
     // Fist leads: it jabs in on the weapon's way out and snaps back first
-    const ft = t < PUNCH_IN ? t / PUNCH_IN : t < PUNCH_IN + hold + 0.05 ? 1 : Math.max(0, 1 - (t - PUNCH_IN - hold - 0.05) / 0.12);
+    let ft = Math.max(0, 1 - (t - PUNCH_IN - hold - 0.05) / 0.12);
+    if (t < PUNCH_IN) {ft = t / PUNCH_IN;}
+    else if (t < PUNCH_IN + hold + 0.05) {ft = 1;}
     const ease = 1 - (1 - ft) * (1 - ft); // ease-out — fast launch, lands hard
     this.h.fistGroup.position.lerpVectors(FIST_OFF, FIST_JAB, ease);
     return env;

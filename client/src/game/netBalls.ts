@@ -106,8 +106,8 @@ export function makeBallClock(getPing: () => number) {
 
 function targetPosForId(deps: EntitiesDeps, id: string | null | undefined): THREE.Vector3 | null {
   const nm = deps.lazyNetworkManager();
-  return id === nm?.getLocalPlayerId() ? deps.lazyPlayer().pos
-    : (id ? deps.world.remotePlayers.get(id)?.pos ?? null : null);
+  if (id === nm?.getLocalPlayerId()) {return deps.lazyPlayer().pos;}
+  return id ? deps.world.remotePlayers.get(id)?.pos ?? null : null;
 }
 
 // Terrain forensics: a bounce stamp lands at ground contact, so truth.y

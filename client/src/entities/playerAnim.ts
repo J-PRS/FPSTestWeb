@@ -96,7 +96,9 @@ export class PlayerAnim {
     // bone scales ~1): only bit-rot fails them, and a poisoned track is
     // dropped whole rather than interpolated into the corruption.
     clip.tracks = clip.tracks.filter((t): boolean => {
-      const cap = t.name.endsWith('.quaternion') ? 2 : t.name.endsWith('.scale') ? 1e3 : 1e4;
+      let cap = 1e4;
+if (t.name.endsWith('.quaternion')) {cap = 2;}
+else if (t.name.endsWith('.scale')) {cap = 1e3;}
       for (const v of t.values) {if (!Number.isFinite(v) || Math.abs(v) > cap) {return false;}}
       return true;
     });

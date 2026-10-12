@@ -173,8 +173,10 @@ export interface RakkVisHost {
 // Flap amplitude+rate by state — dive folds the wings, climb rows hard.
 function wingbeat(r: RakkVisHost): number {
   const dive = r.state === 'dive';
-  const flapAmp = dive ? 0.12 : r.state === 'climb' ? 1 : 0.55;
-  const flapRate = dive ? 3 : r.state === 'climb' ? 13 : 6;
+  let flapAmp = r.state === 'climb' ? 1 : 0.55;
+if (dive) {flapAmp = 0.12;}
+  let flapRate = r.state === 'climb' ? 13 : 6;
+if (dive) {flapRate = 3;}
   return Math.sin(r.animT * flapRate) * flapAmp;
 }
 

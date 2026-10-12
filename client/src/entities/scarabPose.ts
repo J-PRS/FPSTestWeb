@@ -52,7 +52,8 @@ export function writeInstances(sc: Scarab, terrain: Terrain): void {
 
     // Six legs, 3 per side — frantic alternating scuttle, way faster than
     // the crawler's: scarabs are all legs and panic.
-    const amp = sc.airborne ? 0.06 : (sc.vel.lengthSq() > 4 ? 0.6 : 0.2);
+    let amp = sc.vel.lengthSq() > 4 ? 0.6 : 0.2;
+if (sc.airborne) {amp = 0.06;}
     for (let i = 0; i < LEGS_PER; i += 1) {
       const side = i < 3 ? -1 : 1;
       const k = i % 3; // 0 front → 2 rear

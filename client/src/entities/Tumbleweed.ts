@@ -50,7 +50,10 @@ function growStem(twigs: THREE.BufferGeometry[], origin: THREE.Vector3, dir: THR
     d.addScaledVector(_radial, -d.dot(_radial) * TANGLE);
     // Soft shell confinement: above r=0.9 bend inward, below r=0.3 outward —
     // density piles up in the mid-shell where the silhouette lives
-    d.addScaledVector(_radial, r > 0.9 ? -0.5 : r < 0.3 ? 0.4 : 0);
+    let push = 0;
+if (r > 0.9) {push = -0.5;}
+else if (r < 0.3) {push = 0.4;}
+d.addScaledVector(_radial, push);
     d.normalize();
     p.addScaledVector(d, STEP_LEN);
     pts.push(p.clone());

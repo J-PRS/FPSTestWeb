@@ -337,8 +337,10 @@ export function spawnTotem(o: { id: number; pos: { x: number; y: number; z: numb
       pts.setXYZ(0, eye.x, eye.y, eye.z);
       pts.setXYZ(1, eye.x + c.lockDirX * c.lockDist, eye.y + c.lockDirY * c.lockDist, eye.z + c.lockDirZ * c.lockDist);
       pts.needsUpdate = true;
-      (beam.material as THREE.LineBasicMaterial).opacity =
-        flash > 0 ? 1 : (c.state === 'charge' ? 0.45 : 0);
+      let beamOpacity = 0;
+      if (flash > 0) {beamOpacity = 1;}
+      else if (c.state === 'charge') {beamOpacity = 0.45;}
+      (beam.material as THREE.LineBasicMaterial).opacity = beamOpacity;
     },
     dump: (): [string, string][] => [['state', c.state], ['shots', String(c.shotsFired)]],
     dispose(): void {
@@ -385,7 +387,7 @@ export function spawnShell(o: ShellOpts, world: LabWorld): SimEntity & { sim: Si
     const ground = segFieldHit(from, p.pos, w.field);
     if (ground) {pos.set(ground.x, ground.y, ground.z);}
     const hit = Boolean(ground) || Boolean(o.walls?.some((wall): boolean =>
-      (wall.axis === 'x' ? p.pos.x : wall.axis === 'y' ? p.pos.y : p.pos.z) * Math.sign(wall.at) >= Math.abs(wall.at)))
+      (p.pos[wall.axis]) * Math.sign(wall.at) >= Math.abs(wall.at)))
       || p.age > (o.maxAge ?? config.maxLifetime ?? 30);
     return { hit, direct: false };
   };

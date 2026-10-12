@@ -252,7 +252,9 @@ class ServerRtcTransport implements GameTransport {
     const binary = typeof data !== 'string';
     const lane = binary ? this.dc : this.ctrl;
     const alt = binary ? this.ctrl : this.dc;
-    const dc = lane?.readyState === 'open' ? lane : alt?.readyState === 'open' ? alt : null;
+    let dc = null;
+    if (lane?.readyState === 'open') {dc = lane;}
+    else if (alt?.readyState === 'open') {dc = alt;}
     if (!dc) {return false;}
     if (typeof data === 'string') {dc.send(data);}
     else {dc.send(new Uint8Array(data));}

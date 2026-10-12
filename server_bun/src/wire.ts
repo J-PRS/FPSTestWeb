@@ -33,10 +33,11 @@ import { wallNow } from './wallClock.ts';
 /** weaponType is a claim the cadence law and belt costs key off — an
  *  out-of-table index skips every per-weapon gate while getWeaponStats
  *  silently defaults to BoltLauncher. Unknown ids are malformed, period. */
-const optWeaponType = (v: unknown): { ok: boolean; v?: number } =>
-  v === undefined ? { ok: true }
-    : Number.isInteger(v) && (v as number) in WEAPONS ? { ok: true, v: v as number }
-    : { ok: false };
+const optWeaponType = (v: unknown): { ok: boolean; v?: number } => {
+  if (v === undefined) {return { ok: true };}
+  if (Number.isInteger(v) && (v as number) in WEAPONS) {return { ok: true, v: v as number };}
+  return { ok: false };
+};
 
 export interface RateLimit {
   maxCount: number;

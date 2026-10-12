@@ -72,7 +72,7 @@ export function createMeleeSpecies({ deps, kit, targets }: SpeciesCtx) {
     // One spawn attempt = a whole pack, clustered on the same burrow spot.
     // An uber roll drops ONE dreadbeetle instead — a pack of those is a raid boss.
     const base = pos ?? ringPos(SCARAB_SPAWN_MIN, SCARAB_SPAWN_MAX);
-    const n = u ? 1 : pos ? 1 : SCARAB_PACK_MIN + Math.floor(Math.random() * (SCARAB_PACK_MAX - SCARAB_PACK_MIN + 1));
+    const n = u || pos ? 1 : SCARAB_PACK_MIN + Math.floor(Math.random() * (SCARAB_PACK_MAX - SCARAB_PACK_MIN + 1));
     for (let k = 0; k < n; k += 1) {
       if (atCap(scarabs, capFor('scarab', SCARAB_MAX))) {break;}
       const s = new Scarab(scene, deps.lazyTerrain(), base.clone().add(new THREE.Vector3(

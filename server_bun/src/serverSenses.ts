@@ -281,8 +281,13 @@ export class ServerBotSenses {
     // so a nuggets map spreads the fleet over the field instead of every
     // brain locking the same nearest gem. Elsewhere it's opportunism.
     const nuggets = this.room.mode === 'nuggets';
+    const nuggetChance = (d: number): number => {
+      if (d < 260) {return 0.6;}
+      if (d < 320) {return 0.3;}
+      return 0.08;
+    };
     const worthIt = (d: number): boolean => nuggets
-      ? d < 160 || botRand() < (d < 260 ? 0.6 : d < 320 ? 0.3 : 0.08)
+      ? d < 160 || botRand() < nuggetChance(d)
       : d < 140;
     let best: BotVec | null = null, bestD = Infinity;
     for (const g of snaps) {

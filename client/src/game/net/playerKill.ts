@@ -110,11 +110,11 @@ export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, w
     deps.lazyHud().hide();
     deps.lazyHud().setDeathOverlay(true);
     deps.world.killStreak = 0;
-    deps.fragMessages.show(shooterId === 'environment'
-      ? `YOU DIED\n${player.lastDamageSource || 'claimed by the wasteland'}`
-      : shooterId === targetId
-        ? `YOU DIED\nfragged yourself`
-        : `YOU DIED\nfragged by ${displayName(shooterId, roster)}`);
+    let deathMsg;
+    if (shooterId === 'environment') {deathMsg = `YOU DIED\n${player.lastDamageSource || 'claimed by the wasteland'}`;}
+    else if (shooterId === targetId) {deathMsg = 'YOU DIED\nfragged yourself';}
+    else {deathMsg = `YOU DIED\nfragged by ${displayName(shooterId, roster)}`;}
+    deps.fragMessages.show(deathMsg);
     return;
   }
 

@@ -129,7 +129,8 @@ function updateBall(deps: CombatDeps, firing: boolean, damaging: boolean, dt: nu
   const ball = lgBallNode(deps);
   if (!ball) {return;}
   const { mesh, mat } = ball;
-  const target = firing ? (damaging ? 1 : 0.55) : 0;
+  let target = 0;
+  if (firing) {target = damaging ? 1 : 0.55;}
   const cur = mesh.userData.__flare ?? 0;
   const flare = cur + (target - cur) * Math.min(dt * 10, 1);
   mesh.userData.__flare = flare;

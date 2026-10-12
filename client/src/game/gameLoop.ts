@@ -269,7 +269,11 @@ const _contactBodies: BodyCapsule[] = [];
 /** Stage 1 — world sim: player, terrain, entities, wave director,
  *  projectiles. Returns demoPaused for the later stages. */
 interface TickFrame { dt: number; player: Player; networkManager: NetworkManager; demoManager: DemoManager | null }
-const fmtBps = (b: number): string => b >= 1_048_576 ? `${(b / 1_048_576).toFixed(1)}MB/s` : b >= 1024 ? `${(b / 1024).toFixed(1)}KB/s` : `${Math.round(b)}B/s`;
+const fmtBps = (b: number): string => {
+  if (b >= 1_048_576) {return `${(b / 1_048_576).toFixed(1)}MB/s`;}
+  if (b >= 1024) {return `${(b / 1024).toFixed(1)}KB/s`;}
+  return `${Math.round(b)}B/s`;
+};
 
 function tickEntities(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, dt: number, demoPlaying: boolean): void {
   const {entities} = deps;

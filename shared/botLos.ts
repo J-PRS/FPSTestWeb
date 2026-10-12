@@ -40,7 +40,9 @@ function losKey(ctx: BrainCtx, from: BotVec, to: BotVec): number {
   // 12 bits per axis: 4096-cell range ≈ 6km — covers any field span.
   // Team rides the key: a gate transparent to its owners is opaque to
   // everyone else, so a shared answer would leak across sides.
-  const t = ctx.team === 'alpha' ? 1 : ctx.team === 'bravo' ? 2 : 0;
+  let t = 0;
+if (ctx.team === 'alpha') {t = 1;}
+else if (ctx.team === 'bravo') {t = 2;}
   return (((ax * 4096 + az) * 4096 + bx) * 4096 + bz) * 4 + t;
 }
 

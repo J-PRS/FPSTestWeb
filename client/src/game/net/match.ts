@@ -65,7 +65,10 @@ else if (scores.alpha > scores.bravo) {lead = 'alpha';}
     chat.add(null, winner === 'draw'
       ? 'DRAW — time\'s up, new match starting'
       : `${winner} WINS the deathmatch — ${scores[winner]} pts — new match starting`);
-    deps.fragMessages.show(winner === 'draw' ? 'DRAW' : iWon ? 'VICTORY' : `${winner} WINS`);
+    let endMsg;
+    if (winner === 'draw') {endMsg = 'DRAW';}
+    else {endMsg = iWon ? 'VICTORY' : `${winner} WINS`;}
+    deps.fragMessages.show(endMsg);
     sfx.matchHorn(iWon ? 'win' : 'end');
     deps.lazyHud().setScoreboardCountdown?.(10);
     pinScoreboard();
@@ -75,7 +78,10 @@ else if (scores.alpha > scores.bravo) {lead = 'alpha';}
     chat.add(null, winner === 'draw'
       ? `DRAW ${scores.alpha}:${scores.bravo} — time's up, new match starting`
       : `${winner.toUpperCase()} WINS ${scores.alpha}:${scores.bravo} — new match starting`);
-    deps.fragMessages.show(winner === 'draw' ? 'DRAW' : iWon ? 'VICTORY' : `${winner.toUpperCase()} WINS`);
+    let endMsg;
+    if (winner === 'draw') {endMsg = 'DRAW';}
+    else {endMsg = iWon ? 'VICTORY' : `${winner.toUpperCase()} WINS`;}
+    deps.fragMessages.show(endMsg);
     sfx.matchHorn(iWon ? 'win' : 'end');
     deps.lazyHud().setScoreboardCountdown?.(10);
     pinScoreboard();

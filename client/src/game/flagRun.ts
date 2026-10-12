@@ -282,14 +282,18 @@ export class FlagRunBridge {
     const dot = this.tasGhost.children[1] as THREE.Mesh;
     dot.position.lerpVectors(this.tasPts[i]!, this.tasPts[i + 1]!, ft - i);
     const atEnd = t >= flight + HOLD;
-    (dot.material as THREE.MeshBasicMaterial).color.setHex(
-      t < HOLD || atEnd ? 0xFF_D8_4D : this.tasJet[i] ? 0x40_FF_90 : 0xFF_40_60);
+    let dotColor = 0xFF_40_60;
+    if (t < HOLD || atEnd) {dotColor = 0xFF_D8_4D;}
+    else if (this.tasJet[i]) {dotColor = 0x40_FF_90;}
+    (dot.material as THREE.MeshBasicMaterial).color.setHex(dotColor);
     // The real source flag leaves its stand while the ghost carries it —
     // otherwise the "grab" shows a copy flying and the original seated.
     if (this.tasSrc) {this.tasSrc.mesh.visible = t < HOLD || atEnd;}
     // Live speed label over the marker (sample-spacing / step duration).
     const spd = this.tasPts[i + 1]!.distanceTo(this.tasPts[i]!) / this.tasStep;
-    const spdTxt = atEnd ? 'CAP' : t < HOLD ? 'GRAB' : `${spd.toFixed(0)} m/s`;
+    let spdTxt = `${spd.toFixed(0)} m/s`;
+    if (atEnd) {spdTxt = 'CAP';}
+    else if (t < HOLD) {spdTxt = 'GRAB';}
     if (spdTxt !== this.tasSpeedTxt && this.tasSpeedCtx && this.tasSpeedTex) {
       this.tasSpeedTxt = spdTxt;
       const c = this.tasSpeedCtx;

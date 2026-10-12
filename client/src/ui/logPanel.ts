@@ -26,8 +26,10 @@ const LEVEL_CLASS: Partial<Record<LogLevel, string>> = {
 function levelOf(line: string): LogLevel {
   const m = line.match(/\[(ERROR|WARN|INFO|DEBUG|LOG)\]/);
   if (!m) {return LogLevel.INFO;}
-  return m[1] === 'ERROR' ? LogLevel.ERROR : m[1] === 'WARN' ? LogLevel.WARN
-    : m[1] === 'DEBUG' || m[1] === 'LOG' ? LogLevel.DEBUG : LogLevel.INFO;
+  if (m[1] === 'ERROR') {return LogLevel.ERROR;}
+  if (m[1] === 'WARN') {return LogLevel.WARN;}
+  if (m[1] === 'DEBUG' || m[1] === 'LOG') {return LogLevel.DEBUG;}
+  return LogLevel.INFO;
 }
 
 function appendLine(line: string, level: LogLevel): void {

@@ -42,8 +42,11 @@ function nodeScope(n: VgsNode): 'global' | 'team' | 'mixed' {
   return scope ?? 'mixed';
 }
 
-const scopeColor = (s: 'global' | 'team' | 'mixed'): "#fd8" | "#7d7" | "#ccc" =>
-  s === 'global' ? '#fd8' : s === 'team' ? '#7d7' : '#ccc';
+const scopeColor = (s: 'global' | 'team' | 'mixed'): "#fd8" | "#7d7" | "#ccc" => {
+  if (s === 'global') {return '#fd8';}
+  if (s === 'team') {return '#7d7';}
+  return '#ccc';
+};
 
 export interface VgsDeps {
   /** Wire chat — team flag scopes the line; chord is the keypath ("VGS")

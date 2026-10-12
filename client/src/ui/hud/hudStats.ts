@@ -189,10 +189,10 @@ this.fpsFrames += 1;
       this.fpsFrames = 0;
     }
     this.setText(this.h.fps, 'fps', String(this.fpsValue));
-    const fpsColor =
-      this.fpsValue < 40 ? '#f44' :
-      this.fpsValue < 50 ? '#f80' :
-      this.fpsValue < 59 ? '#ff4' : '#8cf';
+    let fpsColor = '#8cf';
+    if (this.fpsValue < 40) {fpsColor = '#f44';}
+    else if (this.fpsValue < 50) {fpsColor = '#f80';}
+    else if (this.fpsValue < 59) {fpsColor = '#ff4';}
     if (fpsColor !== this.lastFpsColor) {
       this.lastFpsColor = fpsColor;
       this.h.fps.style.color = fpsColor;

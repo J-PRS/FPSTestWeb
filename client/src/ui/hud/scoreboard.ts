@@ -24,7 +24,9 @@ function prettifyMapName(file: string): string {
  *  title still carries both halves (UT/Quake convention: mode · map). */
 export function scoreboardTitle(mode?: string, mapName?: string): string {
   const label = MODES[mode as ModeId]?.label ?? mode?.toUpperCase() ?? '';
-  const map = mapName ? prettifyMapName(mapName) : (label ? 'Default' : '');
+  let map = '';
+  if (mapName) {map = prettifyMapName(mapName);}
+  else if (label) {map = 'Default';}
   return [label, map].filter(Boolean).join(' · ');
 }
 
@@ -47,7 +49,14 @@ const CLASS_SHORT: Record<string, string> = { light: 'LGT', medium: 'MED', heavy
  *  1pt/creature, so sorting by score lets a creature-farmer outrank a
  *  frag leader; tdm sends kill pts to the TEAM score, leaving personal
  *  PTS empty — frags are the only rank either way. */
-const FRAG_RANKED: ReadonlySet<string> = new Set(['dm', 'tdm', 'duel']);
+const FRAG_RANKED: ReadonlySet<string> = new Set(['dm', 'tdm', 'duel']);
+
+const scoreboardPing = (ping: number | string | null): string => {
+  if (ping == null) {return '—';}
+  if (typeof ping === 'string') {return ping;}
+  return String(Math.round(ping));
+};
+
 
 /** Row ordering per mode. Objective modes (ctf, flagrun, rabbit) pay
  *  personal pts for caps/returns/damage/hold-time — pts is the honor
@@ -68,7 +77,7 @@ export function rankRows(mode: string | undefined, rows: SbRow[]): SbRow[] {
 function sbRowEl(r: SbRow, num = ''): HTMLTableRowElement {
   const tr = document.createElement('tr');
   tr.className = `${r.self ? 'self' : ''}${r.dead ? ' dead' : ''}${r.team ? ` sb-${r.team}` : ''}`;
-  const cells = [String(r.frags), String(r.deaths), r.score === null ? '—' : String(r.score), r.net ?? '—', r.ping === null ? '—' : typeof r.ping === 'string' ? r.ping : String(Math.round(r.ping)), r.sheep == null ? '—' : `${Math.round(r.sheep)}%`, r.alive == null ? '—' : `${r.alive}s`, r.asw ?? '—'];
+  const cells = [String(r.frags), String(r.deaths), r.score === null ? '—' : String(r.score), r.net ?? '—', scoreboardPing(r.ping), r.sheep == null ? '—' : `${Math.round(r.sheep)}%`, r.alive == null ? '—' : `${r.alive}s`, r.asw ?? '—'];
   const numTd = document.createElement('td');
   numTd.textContent = num;
   tr.append(numTd);

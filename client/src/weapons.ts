@@ -69,10 +69,12 @@ export interface WeaponDef {
 
 function def(weaponType: WeaponType, rate: number, config: ProjectileConfig,
              kick: number, opts: { auto?: boolean; pellets?: { count: number; spread: number }; spread?: number; sidearm?: boolean } = {}): WeaponDef {
+  let kind: WeaponDef['kind'] = 'projectile';
+  if (opts.pellets) {kind = 'fan';}
+  else if (weaponType === WeaponType.Lightning || weaponType === WeaponType.Repair) {kind = 'beam';}
   return {
     weaponType, rate, config, kick,
-    kind: opts.pellets ? 'fan'
-      : weaponType === WeaponType.Lightning || weaponType === WeaponType.Repair ? 'beam' : 'projectile',
+    kind,
     auto: opts.auto ?? false,
     pellets: opts.pellets,
     spread: opts.spread,

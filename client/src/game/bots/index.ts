@@ -529,7 +529,9 @@ bn += 1;
     const team = this.teamOf.get(actorId);
     if (!team) {return undefined;}
     if (aim === 'carrier') {return this.ctf?.flagPos(team, true);}
-    return this.ctf?.flagPos(aim === 'own' ? team : team === 'alpha' ? 'bravo' : 'alpha', false);
+    let flagTeam = team;
+    if (aim !== 'own') {flagTeam = team === 'alpha' ? 'bravo' : 'alpha';}
+    return this.ctf?.flagPos(flagTeam, false);
   }
 
   /** Mirrors ServerBotSenses.confidenceOf — the goal picker's nerve

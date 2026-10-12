@@ -268,7 +268,9 @@ shots += 1;
         f.pos.y = 1.6;
         f.cd -= dt;
         f.flash = Math.max(0, f.flash - dt * 4);
-        (f.mesh.material as THREE.MeshBasicMaterial).color.setHex(f.flash > 0 ? 0xFF_FF_FF : (f === a ? 0x5A_D0_FF : 0xFF_6A_4D));
+        let boltColor = f === a ? 0x5A_D0_FF : 0xFF_6A_4D;
+        if (f.flash > 0) {boltColor = 0xFF_FF_FF;}
+        (f.mesh.material as THREE.MeshBasicMaterial).color.setHex(boltColor);
       }
       if (a.cd <= 0 && b.hp > 0) { fire(a, b); a.cd = 0.6 + rand() * 0.3; }
       if (b.cd <= 0 && a.hp > 0) { fire(b, a); b.cd = 0.7 + rand() * 0.3; }

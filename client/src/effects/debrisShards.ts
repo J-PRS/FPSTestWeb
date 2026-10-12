@@ -54,7 +54,9 @@ export function pickShardPrim(opts: DebrisOptions): number {
   if (opts.kind === 'brush') {return 3;}
   if (opts.kind === 'goo') {return 4;}
   const t = Math.random();
-  return t < 0.4 ? 0 : t < 0.7 ? 1 : 2;
+  if (t < 0.4) {return 0;}
+if (t < 0.7) {return 1;}
+return 2;
 }
 
 export function pickShardGeo(part: DebrisPart | undefined, opts: DebrisOptions, sw: number, sh: number, sd: number): THREE.BufferGeometry {
@@ -74,9 +76,10 @@ export function pickShardGeo(part: DebrisPart | undefined, opts: DebrisOptions, 
   }
   const geoType = Math.random();
   const m = Math.max(sw, sh, sd);
-  const geo = geoType < 0.4 ? new THREE.TetrahedronGeometry(m, 0)
-    : geoType < 0.7 ? new THREE.DodecahedronGeometry(m, 0)
-    : new THREE.IcosahedronGeometry(m, 0);
+  let geo;
+  if (geoType < 0.4) {geo = new THREE.TetrahedronGeometry(m, 0);}
+  else if (geoType < 0.7) {geo = new THREE.DodecahedronGeometry(m, 0);}
+  else {geo = new THREE.IcosahedronGeometry(m, 0);}
   geo.scale(sw / m, sh / m, sd / m);
   return geo;
 }

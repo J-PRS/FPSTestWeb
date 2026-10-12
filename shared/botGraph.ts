@@ -61,7 +61,9 @@ export class TerrainFlow {
    *  shields are air to their own team, so each side floods its own
    *  base differently. */
   private fieldFor(goal: number, team?: string): { parent: Int32Array; dist: Float32Array } {
-    const ti = team === 'alpha' ? 0 : team === 'bravo' ? 1 : 2;
+    let ti = 2;
+if (team === 'alpha') {ti = 0;}
+else if (team === 'bravo') {ti = 1;}
     const key = goal * 3 + ti;
     const hit = this.fields.get(key);
     if (hit) {return hit;}

@@ -83,9 +83,9 @@ export class ProjStuck {
   // miss, not a hit. Returns true while still glued (caller returns).
   tickStuck(): boolean {
     const {h} = this;
-    const anchor = this.stuckTo ? (this.stuckTo.dead ? null : this.stuckTo.pos)
-      : this.stuckPlayerId ? (this.stuckMap?.get(this.stuckPlayerId) ?? null)
-      : null;
+    let anchor = null;
+    if (this.stuckTo) {anchor = this.stuckTo.dead ? null : this.stuckTo.pos;}
+    else if (this.stuckPlayerId) {anchor = this.stuckMap?.get(this.stuckPlayerId) ?? null;}
     if (this.stuckTo || this.stuckPlayerId) {
       if (anchor) {
         h.pos.copy(anchor).add(this.stuckOffset);

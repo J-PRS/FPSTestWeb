@@ -565,9 +565,9 @@ export class BotBrain {
   private sayHunt(ctx: BrainCtx, wasHunt: string | null): BrainOut['say'] {
     const huntNow = this.h.hunt?.id ?? null;
     if (huntNow && !wasHunt) {
-      return huntNow === ctx.thief?.id ? { kind: 'thief', target: huntNow, d: this.dirTag(ctx, ctx.thief.pos) }
-        : huntNow.startsWith('b:') ? undefined
-        : { kind: 'contact', target: huntNow, d: this.dirTag(ctx) };
+      if (huntNow === ctx.thief?.id) {return { kind: 'thief', target: huntNow, d: this.dirTag(ctx, ctx.thief.pos) };}
+      if (huntNow.startsWith('b:')) {return undefined;}
+      return { kind: 'contact', target: huntNow, d: this.dirTag(ctx) };
     }
     if (wasHunt && !huntNow) {return { kind: 'lost', target: wasHunt, d: this.dirTag(ctx) };}
     return undefined;

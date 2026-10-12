@@ -166,7 +166,9 @@ function rayCapsuleEntry(eyePos: THREE.Vector3, hitT: number, cls?: string): num
   const denom = a * a - 1;                 // −(Dx²+Dz²): 0 for a vertical ray
   // Unclamped line-line closest axis param, then clamp to the segment and
   // re-optimize the ray param for the clamped point.
-  let s = denom < -1e-6 ? (b * a - wy) / denom : (a > 0 ? 0 : axisH);
+  let s;
+  if (denom < -1e-6) {s = (b * a - wy) / denom;}
+  else {s = a > 0 ? 0 : axisH;}
   s = Math.min(Math.max(s, 0), axisH);
   let t = s * a - b;
   t = Math.min(Math.max(t, 0), hitT);

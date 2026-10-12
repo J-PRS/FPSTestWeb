@@ -91,7 +91,8 @@ export class MatchClock {
     const spec = this.host.modeSpec!;
     if (spec.teams) {
       const s = this.host.scores;
-      return s.alpha === s.bravo ? null : s.alpha > s.bravo ? 'alpha' : 'bravo';
+      if (s.alpha === s.bravo) {return null;}
+return s.alpha > s.bravo ? 'alpha' : 'bravo';
     }
     let top: string | null = null, topPts = -1, tied = false;
     for (const [id, pts] of this.host.ffaScores) {
@@ -109,7 +110,8 @@ export class MatchClock {
     let w = 'draw';
     if (spec.teams) {
       const s = this.host.scores;
-      w = s.alpha === s.bravo ? 'draw' : s.alpha > s.bravo ? 'alpha' : 'bravo';
+      if (s.alpha === s.bravo) {w = 'draw';}
+else {w = s.alpha > s.bravo ? 'alpha' : 'bravo';}
     } else {
       let best = -Infinity;
       for (const [id, s] of this.host.ffaScores) {

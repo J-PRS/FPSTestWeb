@@ -229,7 +229,9 @@ export function recordProjectileHit(c: CombatCtx, p: Projectile): void {
   const {deps} = c;
   const demoManager = deps.lazyDemoManager();
   if (demoManager?.isRecording && p.demoProjectileId) {
-    const targetId = p.hitBall ? p.hitBall.id : (p.hitPlayerId ? 0xFF_FF : 0);
+    let targetId = 0;
+  if (p.hitBall) {targetId = p.hitBall.id;}
+  else if (p.hitPlayerId) {targetId = 0xFF_FF;}
     // Lane tag for the id: ball variant for ball hits so playback looks the
     // victim up in the right map; HIT_TARGET_NONE otherwise (terrain, and
     // today's anonymous 0xFFFF player hit).

@@ -78,7 +78,10 @@ function ctfCallout(
   c: CalloutCtx,
 ): void {
   if (f.state === 'carried') {
-    c.frag.show(c.iAmCarrier ? 'YOU HAVE THE FLAG!' : c.mine ? 'OUR FLAG TAKEN!' : 'ENEMY FLAG TAKEN!');
+    let flagMsg = 'ENEMY FLAG TAKEN!';
+if (c.iAmCarrier) {flagMsg = 'YOU HAVE THE FLAG!';}
+else if (c.mine) {flagMsg = 'OUR FLAG TAKEN!';}
+c.frag.show(flagMsg);
     sfx.flagCue('taken', c.mine);
     c.burst(1.4);
     c.log(`${c.iAmCarrier ? 'You' : (c.carrierName ?? 'Someone')} took the ${f.team} flag`);
@@ -161,7 +164,10 @@ export function wireFlags(ctx: NetCtx): void {
     carrierName: string | null,
   ): void => {
     const scored = prev === 'carried';
-    frag.show(scored ? (mine ? 'THEY SCORED!' : 'CAPTURED!') : (mine ? 'FLAG RETURNED' : 'ENEMY FLAG RETURNED'));
+    let retMsg;
+if (scored) {retMsg = mine ? 'THEY SCORED!' : 'CAPTURED!';}
+else {retMsg = mine ? 'FLAG RETURNED' : 'ENEMY FLAG RETURNED';}
+frag.show(retMsg);
     sfx.flagCue(scored ? 'captured' : 'returned', mine);
     // The 'home' update's pos is the flag's OWN stand — for a capture the
     // celebration belongs at the cap spot, i.e. the carrier's position at

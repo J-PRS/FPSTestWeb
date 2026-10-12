@@ -142,7 +142,9 @@ export class ModelFx {
     if (t < 0) {return 0;}
     t += dt;
     this[field] = t;
-    const e = t < up ? t / up : t < up + hold ? 1 : Math.max(0, 1 - (t - up - hold) / down);
+    let e = Math.max(0, 1 - (t - up - hold) / down);
+if (t < up) {e = t / up;}
+else if (t < up + hold) {e = 1;}
     if (e <= 0 && t > up + hold) {this[field] = -1;}
     return e;
   }
