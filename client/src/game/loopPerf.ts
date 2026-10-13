@@ -9,6 +9,7 @@ import { urlParams } from '../core/params.js';
 import { settings } from '../core/settings.js';
 import { Logger } from '../core/Logger.js';
 import { vfxStats, setVfxQualityScale } from '../effects/vfx.js';
+import { setForcedRemoteLod } from '../entities/remoteAnim.js';
 import type { createFrameBudget } from '../core/frameBudget.js';
 import type { createPerfHud } from '../core/perfHud.js';
 import type { GameLoopDeps, LoopState } from './gameLoop.js';
@@ -56,6 +57,10 @@ function autoScale(deps: GameLoopDeps, st: LoopState, dir: number): void {
   // Full-sky raster FX shed before the deepest pixel drop: the cloud dome
   // shades every skyward fragment on a GPU that already can't keep up.
   deps.sceneSetup.volumetricClouds?.setEnabled(next < 3);
+  // Skinned-vert shed rides the same rung as the sky shader: remote
+  // models are the tri-heavy object class, and resScale can't reach
+  // vertex cost. Forced lod1 at ≥3; restored on recovery.
+  setForcedRemoteLod(next >= 3 ? 1 : null);
   shedPostPasses(rendererSetup, next >= 4);
   // Quarks sim is pure CPU — on weak GPUs (usually weak CPUs too, e.g.
   // chromebooks) thin burst density before the pressure curve engages.

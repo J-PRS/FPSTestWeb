@@ -164,6 +164,12 @@ export default defineConfig(({ mode }) => ({
     host: '0.0.0.0',
     allowedHosts: ['.trycloudflare.com'],
     cors: true,
+    headers: {
+      // Dev-only: opts the page into the JS Self-Profiling API
+      // (new Profiler) for livesoak CPU breakdowns. Browsers that
+      // don't implement it ignore the policy entirely.
+      'Document-Policy': 'js-profiling',
+    },
     hmr: {
       // Conditionally use WSS/443 only when accessing through cloudflared tunnel
       protocol: process.env.VITE_HMR_URL ? "wss" : "ws",

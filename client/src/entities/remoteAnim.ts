@@ -17,6 +17,12 @@ import { glitch } from '../core/fxDiag.js';
 
 const _trailTint = new THREE.Color(0.75, 0.85, 1); // cool air-sheen — jets tint it warmer on top
 
+/** Auto-quality override: gpu ladder ≥3 pins every remote to the
+ *  decimated rig regardless of distance — skinned verts are the saving
+ *  that scales with remote count, and resScale can't reach it. */
+let _forcedRemoteLod: 0 | 1 | null = null;
+export function setForcedRemoteLod(level: 0 | 1 | null): void { _forcedRemoteLod = level; }
+
 export interface AnimHost {
   readonly playerId: string;
   readonly armorClass?: string;
@@ -219,8 +225,13 @@ export class RemoteAnim {
     // Past ~70m swap to the ~1.2k-tri decimated rig — vertex/skinning
     // cost per remote drops ~80% where the silhouette delta is unreadable.
     // Hysteresis keeps hovering players from flapping the swap each frame.
-    if (this._lodLevel === 0 && h.camDistSq > 70 * 70) { this._lodLevel = 1; h.model.setLod(1); }
-    else if (this._lodLevel === 1 && h.camDistSq < 55 * 55) { this._lodLevel = 0; h.model.setLod(0); }
+    // Forced LOD (auto-quality ladder) wins over distance — geometry shed
+    // is the one saving that scales with remote count, not pixel count.
+    let distLod = this._lodLevel;
+    if (h.camDistSq > 70 * 70) {distLod = 1;}
+    else if (h.camDistSq < 55 * 55) {distLod = 0;}
+    const want = Math.max(distLod, _forcedRemoteLod ?? 0) as 0 | 1;
+    if (want !== this._lodLevel) { this._lodLevel = want; h.model.setLod(want); }
   }
   private _castShadow = true;
   private _lodLevel: 0 | 1 = 0;
