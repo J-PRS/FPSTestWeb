@@ -118,8 +118,10 @@ export class BotLines {
     // A per-think terrain fan on a 600m commute re-yaws the chain every
     // commit window (katabatic autopsy: carrier orbited one basin 240s
     // on fresh pocket picks, dHome oscillating 680-850). Flood hops are
-    // monotone by construction, so the chain converges.
-    if (ctx.runner && ctx.route) {
+    // monotone by construction, so the chain converges. `running` covers
+    // opportunistic carriers (a defender who picks up a dropped flag) —
+    // the carry leg has the same orbit shape regardless of role.
+    if ((ctx.runner || ctx.running) && ctx.route) {
       const hop = ctx.route(pos.x, pos.z, dest.x, dest.z, aheadFor(ctx));
       if (hop) {
         this.wp = hop;
