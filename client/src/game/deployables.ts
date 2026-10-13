@@ -293,7 +293,10 @@ export class Deployables {
       pod.beacon.group.position.copy(pod.pos);
     }
 
-    const groundY = terrain.getHeight(pod.pos.x, pod.pos.z);
+    // Collide with the drawn surface, not the smooth field — on convex
+    // ground the flat triangles dip under bilinear and a field rest
+    // reads as a pod hovering (same gap the Nugget rest fixed).
+    const groundY = terrain.getRenderedHeight(pod.pos.x, pod.pos.z);
     if (Number.isFinite(groundY) && pod.pos.y - POD_RADIUS <= groundY) {
       const n = terrain.getNormal(pod.pos.x, pod.pos.z);
       if (n.y >= DEPLOY_SLOPE) {
@@ -317,7 +320,7 @@ export class Deployables {
     const impact = Math.abs(pod.vel.y);
     pod.landed = true;
     pod.ttl = 0; // consumed — the item lives in this.items now
-    const seat = terrain.getHeight(pod.pos.x, pod.pos.z);
+    const seat = terrain.getRenderedHeight(pod.pos.x, pod.pos.z);
     if (Number.isFinite(seat)) {pod.pos.y = seat;}
     if (pod.turret) {
       const t = pod.turret;

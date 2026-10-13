@@ -171,7 +171,7 @@ export class Mine implements Targetable, SwarmSlotOwner {
   /** Re-seat on terrain after a ballistic landing (thrown pack mines) —
    *  re-aligns the dome to the slope under its new resting spot. */
   seatOn(terrain: Terrain): void {
-    this.pos.y = terrain.getHeight(this.pos.x, this.pos.z) + this.radius * 0.3;
+    this.pos.y = terrain.getRenderedHeight(this.pos.x, this.pos.z) + this.radius * 0.3;
     this.tilt.setFromUnitVectors(new THREE.Vector3(0, 1, 0), terrain.getNormal(this.pos.x, this.pos.z));
   }
 
