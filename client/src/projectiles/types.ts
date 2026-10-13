@@ -63,6 +63,9 @@ export interface ProjectileConfig {
   ribbonLife?: number;
   ribbonRampIn?: number; // emitter ramp-in seconds: streak spawns at 10% life+width, grows to full — the mesh spawn-grow applied to the trail
   ribbonColor?: number;
+  /** Quake-2 coil — a thin ribbon sub-sampled onto a helix around the
+   *  flight path, layered over the straight core lanes (effects/railSpiral). */
+  railSpiral?: boolean;
   bounces?: boolean; // bounce off terrain instead of exploding (grenade launcher); fuse still applies
   bounceSfx?: string; // /sfx/<name>.ogg ping played positionally on each bounce
   bounceRestitution?: number; // velocity kept along the terrain normal per bounce

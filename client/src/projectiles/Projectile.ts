@@ -11,6 +11,7 @@ import type { Terrain } from '../world/terrain.js';
 import type { ProjectileConfig } from './types.js';
 
 import { RibbonTrail } from '../effects/RibbonTrail.js';
+import { RailSpiral } from '../effects/railSpiral.js';
 
 import { QuarksTrail } from '../effects/vfx.js';
 import { TrailDriver } from '../effects/vfxRuntime.js';
@@ -226,7 +227,7 @@ export class Projectile {
   private trail: QuarksTrail;
   private projectileRemoved = false;
   private disposed = false;
-  private ribbons: RibbonTrail[] = [];
+  private ribbons: (RibbonTrail | RailSpiral)[] = [];
   // Runtime-owned emit/jump decisions for every trail layer (P1) —
   // pos discontinuities need no caller teleport(): the driver cuts all
   // layers when its own last-sample says the host jumped.
@@ -255,6 +256,9 @@ export class Projectile {
     });
 
     this.ribbons = v.ribbons;
+    // Q2 coil rides the same ribbons list: the driver push()es it the
+    // frame travel once, and it internally re-samples onto its helix.
+    if (config.railSpiral) {this.ribbons.push(new RailSpiral(scene, config));}
     this.driver = new TrailDriver(
       { pos: this.rendered, vel: this.vel, emitting: (): boolean => !this.exploded },
       [this.trail],

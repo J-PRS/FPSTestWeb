@@ -61,6 +61,7 @@ export const RAILGUN_CONFIG: ProjectileConfig = {
   trailMeshType: 'sphere',
   // 3 lanes = the corkscrew band — wide, long-lived, bright cyan
   ribbonTrail: true,
+  railSpiral: true,
   ribbonWidth: 0.55,
   ribbonLife: 0.4,
   ribbonColor: 0x55_BB_FF,
