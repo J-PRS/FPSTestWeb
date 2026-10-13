@@ -80,6 +80,63 @@ the frame is a flat spread, no hog:
 Caveat: trace `parentId` chains are sparse — leaf self-times are the
 trustworthy column; "total" undercounts deep paths.
 
+## Profiling toolkit (researched, ranked by unique signal)
+
+- **LoAF** (`PerformanceObserver('long-animation-frame')`) — per >50ms
+  frame, `scripts[]` attribution: sourceURL + function name + char pos +
+  invoker + forcedStyleAndLayoutDuration. Lightweight enough for field
+  use — the docs recommend it over the Self-Profiling API for that.
+  CAVEAT: excludes Web Workers — WorkerTransport lane is invisible.
+- **JS Self-Profiling API** — real V8 stack samples; heavyweight, dev
+  only (we used it). Header: Document-Policy js-profiling.
+- **User Timing marks** — phase attribution; our __perf/perfHud already
+  implements the zero-GC version (lite-profiler's model).
+- **about:tracing** — CrGpuMain vs CrRendererMain: the native view of
+  GPU-process work that gl.finish approximates.
+- **Spector.js** — frame-level GL call capture + state (extension,
+  embeddable, ships an MCP server). Forensics, not throughput.
+- **WebGPU Inspector** — RenderDoc-style, WebGPU only (n/a: WebGL2).
+- **Needle Inspector** — three.js scene-graph devtools + MCP.
+
+Recommended composite for this game: __perf phases + LoAF (main) +
+botMs/worker timers (workers) + gl.finish (GPU).
+
+### Server-side (Bun)
+
+- `bun --cpu-prof --cpu-prof-md` — JSC sampling profiler; writes
+  .cpuprofile (DevTools-loadable) plus a grep-friendly hot-functions
+  markdown table. Windows caveat: JSC samples at ~15.6ms quantum —
+  capture needs LONG soak windows for meaningful resolution.
+  Recipe: `bun --cpu-prof-md src/server.ts` under a fleet soak.
+- Node tools (clinic.js flame, --perf-basic-prof) don't apply to Bun.
+
+### Production telemetry (the real low-end proof)
+
+Real games don't profile on dev machines — they ship fixed-bucket
+frame-time histograms from every session: one integer increment per
+frame (~free), flushed at end, p50/p95/p99 server-side. For the
+"school laptop" claim this is the honest instrument: an opt-in
+`fps-telemetry` flag + /stats ingest would report the actual
+low-end floor from real hardware, not CDP guesses.
+Tracy is the native-games gold standard; the histogram is the
+web-appropriate version of the same idea.
+
+### Memory / GC axis
+
+- **Heap snapshots (compare two)** — leak detection; MCP tool
+  `take_heapsnapshot` can drive it.
+- **Allocation timeline** — objects allocated-and-still-live over a
+  window: the "what's churning GC" instrument.
+- **`renderer.info.memory`** — three.js GPU-resource census
+  (geometries/textures/programs/buffers): GPU objects need explicit
+  dispose() — JS GC can't see them.
+- **Three.js bottleneck shape**: draw-call *submission* is the classic
+  WebGL CPU hog — projectObject/setProgram/renderBufferDirect hot means
+  too many material/geometry combos, not too much math. Matches our
+  `render` phase profile under throttle (11.6ms @4x ≈ 2.9ms native).
+- `renderer.info.autoReset=false` + manual reset() for multi-pass
+  frames, or per-pass stats get stomped.
+
 ## Reproduce
 
 ```js

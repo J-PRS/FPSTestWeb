@@ -333,6 +333,13 @@ export class PlayerModel {
 
   setBonesFrozen(frozen: boolean): void {
     this.distal.setBonesFrozen(frozen);
+    // Per-bone flags still leave every node walked each frame — freezing
+    // the rig root drops the whole subtree out of updateMatrixWorld.
+    // Stale matrices are invisible while offscreen; unfreeze recomposes.
+    if (this.model) {
+      this.model.matrixWorldAutoUpdate = !frozen;
+      if (!frozen) { this.model.updateMatrixWorld(true); }
+    }
   }
 
   private computeDistalBones(): void {
