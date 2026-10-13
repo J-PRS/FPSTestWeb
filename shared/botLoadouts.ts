@@ -47,16 +47,16 @@ export const BOT_LOADOUTS: BotLoadout[] = [
   { perk: 'bombardier',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.RemoteRailgun, side: WeaponType.Pistol   }, // siege
   { perk: 'plated',      near: WeaponType.Chaingun, mid: WeaponType.PlasmaCannon, far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.Revolver }, // anchor — heavies can't shoulder medium-only Cannon either
   { perk: 'overcharge',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.RemoteRailgun, side: WeaponType.Pistol   }, // skirmisher
-  { perk: 'vitality',    near: WeaponType.Chaingun, mid: WeaponType.Sprinkler, far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.Pistol   }, // hose — area denial
+  { perk: 'lifesteal',    near: WeaponType.Chaingun, mid: WeaponType.Sprinkler, far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.Pistol   }, // hose — area denial
   { perk: 'plated',      near: WeaponType.Shotgun,  mid: WeaponType.Bombard,   far: WeaponType.BoltLauncher,       belt: WeaponType.Javelin,       side: WeaponType.Revolver }, // bruiser — big slugs (Railgun is light-frame gear, Cannon medium)
   { perk: 'featherjets', near: WeaponType.Flak,     mid: WeaponType.GrenadeLauncher, far: WeaponType.BoltLauncher, belt: WeaponType.ImpactGrenade, side: WeaponType.Pistol }, // skirmisher — shove tools; Flak forces medium, so no heavy RL
   { perk: 'bombardier',  near: WeaponType.Chaingun, mid: WeaponType.PlasmaCannon, far: WeaponType.Mortar,     belt: WeaponType.ClusterBomb,   side: WeaponType.Pistol   }, // artillery
   { perk: 'overcharge',  near: WeaponType.Lightning, mid: WeaponType.Disc,     far: WeaponType.Railgun,       belt: WeaponType.DiscPull,      side: WeaponType.Pistol   }, // beam rider
-  { perk: 'vitality',    near: WeaponType.Shotgun,  mid: WeaponType.Sticky,    far: WeaponType.RocketLauncher, belt: WeaponType.ClusterBomb,   side: WeaponType.Revolver }, // trapper
-  { perk: 'vitality',    near: WeaponType.Shotgun,  mid: WeaponType.PlasmaGun, far: WeaponType.Disc,          belt: WeaponType.ArmorGrenade,  side: WeaponType.Pistol   }, // support — plates the push
-  { perk: 'vitality',    near: WeaponType.HealBeam, mid: WeaponType.Disc,      far: WeaponType.Disc,          belt: WeaponType.HealGrenade,   side: WeaponType.Pistol   }, // medic — beam on the push, burst for the pack
+  { perk: 'lifesteal',    near: WeaponType.Shotgun,  mid: WeaponType.Sticky,    far: WeaponType.RocketLauncher, belt: WeaponType.ClusterBomb,   side: WeaponType.Revolver }, // trapper
+  { perk: 'lifesteal',    near: WeaponType.Shotgun,  mid: WeaponType.PlasmaGun, far: WeaponType.Disc,          belt: WeaponType.ArmorGrenade,  side: WeaponType.Pistol   }, // support — plates the push
+  { perk: 'lifesteal',    near: WeaponType.HealBeam, mid: WeaponType.Disc,      far: WeaponType.Disc,          belt: WeaponType.HealGrenade,   side: WeaponType.Pistol   }, // medic — beam on the push, burst for the pack
   { perk: 'overcharge',  near: WeaponType.Chaingun, mid: WeaponType.PlasmaGun, far: WeaponType.BoltLauncher,        belt: WeaponType.HealGrenade,   side: WeaponType.Pistol   }, // field medic — fighter first, heals what it walks past
-  { perk: 'vitality',    near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.HealBeam }, // pocket beam — fighter with a zap for hurt allies
+  { perk: 'lifesteal',    near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.HealBeam }, // pocket beam — fighter with a zap for hurt allies
 ];
 
 export type LoadoutSlot = 'near' | 'mid' | 'far' | 'belt' | 'side';
@@ -100,7 +100,7 @@ export const WILDCARD_SLOTS: Record<LoadoutSlot, WeaponType[]> = {
   belt: [WeaponType.Grenade, WeaponType.RemoteRailgun, WeaponType.ImpactGrenade, WeaponType.ClusterBomb, WeaponType.Javelin, WeaponType.ArmorGrenade, WeaponType.DiscPull, WeaponType.MRVLauncher],
   side: [WeaponType.Pistol, WeaponType.Revolver],
 };
-const WILDCARD_PERKS: PerkId[] = ['vitality', 'overcharge', 'plated', 'bombardier', 'featherjets'];
+const WILDCARD_PERKS: PerkId[] = ['lifesteal', 'overcharge', 'plated', 'bombardier', 'featherjets'];
 
 /** Kit consistency gate: every slot must be fireable under the kit's
  *  own derived class — an MRV belt can land on a heavy kit, never on a
@@ -150,7 +150,7 @@ export function rollWildcard(rng: () => number): BotLoadout {
     side: pick(WILDCARD_SLOTS.side, WeaponType.Pistol),
   };
   const perks = WILDCARD_PERKS.filter((p): boolean => kitConsistent(Object.assign({}, kit, {perk: p})));
-  return Object.assign({}, kit, {perk: perks[Math.floor(rng() * perks.length)] ?? 'vitality'});
+  return Object.assign({}, kit, {perk: perks[Math.floor(rng() * perks.length)] ?? 'lifesteal'});
 }
 
 /** Respawn adaptation: for each slot the bot can reroll, keep whichever

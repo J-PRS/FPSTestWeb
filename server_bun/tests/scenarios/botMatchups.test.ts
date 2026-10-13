@@ -22,13 +22,13 @@ const KIT = {
   siege: BOT_LOADOUTS[1]!,       // CG / Disc / Rocket — bombardier
   anchor: BOT_LOADOUTS[2]!,      // CG / PlasmaGun / Disc — plated
   skirmisher: BOT_LOADOUTS[3]!,  // CG / Disc / Rocket — overcharge
-  hose: BOT_LOADOUTS[4]!,        // CG / Sprinkler / Rocket — vitality
+  hose: BOT_LOADOUTS[4]!,        // CG / Sprinkler / Rocket — lifesteal
   bruiser: BOT_LOADOUTS[5]!,     // Shotgun / Cannon / Railgun — plated
   flanker: BOT_LOADOUTS[6]!,     // Flak / GrenadeLauncher / RocketLauncher
   artillery: BOT_LOADOUTS[7]!,   // CG / PlasmaCannon / Mortar — bombardier
   beam: BOT_LOADOUTS[8]!,        // Lightning / Disc / Railgun — overcharge
-  trapper: BOT_LOADOUTS[9]!,     // Shotgun / Sticky / RocketLauncher — vitality
-  support: BOT_LOADOUTS[10]!,    // Shotgun / PlasmaGun / Rocket — vitality
+  trapper: BOT_LOADOUTS[9]!,     // Shotgun / Sticky / RocketLauncher — lifesteal
+  support: BOT_LOADOUTS[10]!,    // Shotgun / PlasmaGun / Rocket — lifesteal
 } satisfies Record<string, BotLoadout>;
 
 function botsOf(room: Room): PlayerState[] {
@@ -54,7 +54,7 @@ function duel(loA: BotLoadout, loB: BotLoadout, distM: number, seed: number, max
     pin(room, a!.id, { x: -distM / 2, y: 32, z: 0 });
     pin(room, b!.id, { x: distM / 2, y: 32, z: 0 });
     step(room, 1);
-    if (a!.isDead || b!.isDead) break;
+    if (a!.isDead || b!.isDead) {break;}
   }
   return a!.isDead ? 'b' : b!.isDead ? 'a' : '-';
 }
@@ -141,7 +141,7 @@ describe('scenario: matchup sanity', () => {
       pin(room, a!.id, { x: -12.5, y: 32, z: 0 });
       pin(room, b!.id, { x: 12.5, y: 32, z: 0 });
       step(room, 1);
-      if (a!.isDead || b!.isDead) break;
+      if (a!.isDead || b!.isDead) {break;}
     }
     expect(a!.isDead || b!.isDead || a!.health < a!.maxHealth || b!.health < b!.maxHealth).toBe(true);
   });

@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import * as sfx from '../../core/sfx.js';
 import { PlayerDebris } from '../../effects/debris.js';
+import { lifestealBurst } from '../../effects/vfx.js';
 import { TEAM_COLORS, type TeamId } from '../../../../shared/teams.js';
 import { displayName } from '../nameOf.js';
 import { noteKill } from '../../core/stateDebug.js';
@@ -83,7 +84,9 @@ function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlaye
 
 /** A kill landed somewhere: feed row for everyone, death overlay when it's
  *  you, frag headline + streak when it's yours, ragdoll for the victim. */
-export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, weapon?: number, air?: number): void {
+const _stealPos = new THREE.Vector3();
+
+export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, weapon?: number, air?: number, steal?: boolean): void {
   const { deps, nm } = ctx;
   const {logger} = deps;
   if (deps.world.playbackMode) {return;}
@@ -140,5 +143,15 @@ export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, w
   if (remotePlayer) {
     gibVictim(ctx, shooterId, targetId, remotePlayer);
     logger.info(`Player ${targetId} killed by ${shooterId}`);
+  }
+
+  // Lifesteal edge — server flags `steal` only when the heal actually
+  // paid; the red implode lands on the KILLER (own face in first person,
+  // chest on a remote body).
+  if (steal) {
+    const pos = shooterId === localId
+      ? deps.lazyPlayer().pos
+      : deps.world.remotePlayers.get(shooterId)?.position;
+    if (pos) {_stealPos.copy(pos); _stealPos.y -= 0.4; lifestealBurst(_stealPos);}
   }
 }

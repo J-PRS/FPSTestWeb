@@ -26,7 +26,7 @@ const VALID_BODIES: Record<string, Record<string, unknown>> = {
   deploy: { kind: 'turret', position: { x: 0, y: 60, z: 0 } },
   snapshotRequest: {},
   classUpdate: { armorClass: 'heavy' },
-  perkUpdate: { perk: 'vitality' },
+  perkUpdate: { perk: 'regenerator' },
   switchRoom: { room: 'duel', mode: 'dm', map: 'arena', bots: 4 },
 };
 
@@ -52,7 +52,7 @@ describe('validateMessage coverage', () => {
       const r = validateMessage({ type, ...VALID_BODIES[type], ...opts });
       expect(r.success).toBe(true);
       if (r.success) {
-        for (const k of keys) expect((r.data as Record<string, unknown>)[k]).toEqual(opts[k]);
+        for (const k of keys) {expect((r.data as Record<string, unknown>)[k]).toEqual(opts[k]);}
       }
     }
   });

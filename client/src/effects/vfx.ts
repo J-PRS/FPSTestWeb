@@ -710,6 +710,20 @@ function spawnImplodeBurst(pos: THREE.Vector3, spec: ImplodeSpec, additive: bool
 
 
 
+/** Lifesteal — the melee-heal payoff: blood-red wisps converging into
+ *  the killer's chest. Additive so it glows; reads the same imploding
+ *  "life pulled in" on a remote body and in the local player's own face. */
+export function lifestealBurst(pos: THREE.Vector3): void {
+  implodeBurst(pos, {
+    count: 22, rMin: 0.4, rMax: 2.6,
+    spdMin: 9, spdMax: 15, swirl: 2.5,
+    lifeMin: 0.22, lifeMax: 0.42,
+    sizeMin: 0.22, sizeMax: 0.45,
+    c1: [1, 0.18, 0.12], c2: [0.45, 0.02, 0.06],
+    opacity: 0.9, stagger: 0.05,
+  }, true);
+}
+
 /** Inward variant of blastBurst — same batching, shell → center. */
 export function implodeBurst(pos: THREE.Vector3, spec: ImplodeSpec, additive: boolean): void {
   if (queueIfCold(burstKey('implode', spec, additive))) {

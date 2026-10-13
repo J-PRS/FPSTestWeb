@@ -1,5 +1,7 @@
 import { weaponStats } from './weaponStats.ts';
 import { WeaponType } from '../../shared/weapons.ts';
+import { perkMods } from '../../shared/perks.ts';
+import { healPool } from './healPool.ts';
 // Debug probe: shooter-to-impact distance on self-kills — answers
 // "do bots frag themselves with shots that pop at their own feet".
 import { logger } from './logger.ts';
@@ -45,7 +47,7 @@ export class HitLedger {
   private duelStart = new Map<string, number>();
   private hitSeq = 0; // per-room monotonic — reconnect replays carry stale seqs
 
-  applyHit(c: LedgerHost, shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number }, opts: { label: string; extra?: Record<string, unknown>; weapon?: number; shotId?: string; air?: number }): void {
+  applyHit(c: LedgerHost, shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number; endedStreak?: number }, opts: { label: string; extra?: Record<string, unknown>; weapon?: number; shotId?: string; air?: number }): void {
     c.hb('hit');
     c.hb('dmg', Math.round(damage));
     if (result.killed) {c.hb('kill');}
@@ -71,7 +73,7 @@ export class HitLedger {
     }
     const corpse = c.playerManager.getPlayer(targetId);
     if (corpse) {c.chargeBank.corpse(shooterId, corpse);} // banked LG charge goes off on the body
-    this.creditKill(c, shooterId, targetId, damage, opts);
+    this.creditKill(c, shooterId, targetId, damage, opts, result.endedStreak);
   }
 
   /** Telemetry + duel bookkeeping for one applied hit — weapon spread,
@@ -143,16 +145,25 @@ export class HitLedger {
 
   /** The kill tail: score credit, kill broadcast, spree callouts, and the
    *  respawn timer — every damage path converges here. */
-  private creditKill(c: LedgerHost, shooterId: string, targetId: string, damage: number, opts: { label: string; extra?: Record<string, unknown>; weapon?: number; air?: number }): void {
+  private creditKill(c: LedgerHost, shooterId: string, targetId: string, damage: number, opts: { label: string; extra?: Record<string, unknown>; weapon?: number; air?: number }, endedStreak?: number): void {
     // Self-frags are deaths, not kills — the kill feed already says so;
     // kills++/killTotal must agree or suicides pad the scoreboard and
     // can even fake "first blood".
     if (shooterId !== 'environment' && shooterId !== targetId) {c.playerManager.addKill(shooterId);}
+    // Lifesteal: a melee frag pays the kill back as health. Every hit
+    // still deals its listed damage — the survivability only lands on
+    // the kill edge, so hits-to-kill stays countable.
+    let steal = false;
+    if (opts.weapon === WeaponType.Melee && shooterId !== 'environment' && shooterId !== targetId) {
+      const shooter = c.playerManager.getPlayer(shooterId);
+      const mh = shooter ? perkMods(shooter.perk).meleeHeal : 0;
+      if (shooter && mh > 0 && !shooter.isDead) {healPool(shooter, shooter.maxHealth * mh); steal = true;}
+    }
     logger.info(`${opts.label} → kill`, Object.assign({}, {shooter: shooterId,target: targetId,damage}, opts.extra));
     const shooterStreak = shooterId === 'environment' ? undefined
       : (c.playerManager.getPlayer(shooterId)?.streak ?? 0) + 1;
-    c.broadcast(eventPayload(WORLD_MODEL.player!, 'playerKill', 'targetId', targetId, { shooterId, weapon: opts.weapon, streak: shooterStreak, air: opts.air }) as ServerMessage);
-    c.killFeed.announce(shooterId, targetId, opts.weapon, opts.label, opts.air);
+    c.broadcast(eventPayload(WORLD_MODEL.player!, 'playerKill', 'targetId', targetId, { shooterId, weapon: opts.weapon, streak: shooterStreak, air: opts.air, steal }) as ServerMessage);
+    c.killFeed.announce(shooterId, targetId, opts.weapon, opts.label, opts.air, endedStreak);
     c.deps.emit?.({ type: 'kill', targetId, shooterId });
     c.respawner.schedule(targetId);
   }

@@ -31,7 +31,14 @@ if [ -n "$CLIENT_FILES" ]; then
 fi
 
 if echo "$CHANGED" | grep -qE '^(shared|server_bun)/'; then
-  (cd server_bun && bun test)
+  # Two parallel shards — the netbot tests are ~85% of wall time (real
+  # sockets, wall-clock bound); everything else is seconds. ~207s → ~125s.
+  (cd server_bun && bun test tests/netbot) & slow=$!
+  (cd server_bun && bun test tests/scenarios tests/net tests/*.test.ts) & fast=$!
+  rc=0
+  wait $slow || rc=1
+  wait $fast || rc=1
+  [ $rc -eq 0 ]
 fi
 
 # Visual checkpoint: scene-visible code can't be verified by typecheck —

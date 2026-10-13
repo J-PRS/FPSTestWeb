@@ -56,9 +56,11 @@ export class KillFeed {
     }
   }
 
-  announce(shooterId: string, targetId: string, weapon?: number, label?: string, air?: number): void {
+  announce(shooterId: string, targetId: string, weapon?: number, label?: string, air?: number, endedStreak?: number): void {
     const victim = this.playerManager.getPlayer(targetId);
-    const ended = victim?.streak ?? 0;
+    // endedStreak is the streak captured at the kill — applyDamage has
+    // already zeroed victim.streak by the time we run.
+    const ended = endedStreak ?? victim?.streak ?? 0;
     if (victim) {victim.streak = 0;}
     noteFrag(shooterId, targetId); // pair ledger must precede victimLine's bullied check
     if (targetId.startsWith('BOT-')) {this.victimLine(targetId, shooterId, weapon, air);}

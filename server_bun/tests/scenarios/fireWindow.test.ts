@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import { mkRoom, watch, twoPlayers } from './harness.ts';
+import { WEAPON_FIRE_INTERVAL_S, WeaponType } from '../../../shared/weapons.ts';
 import type { ServerMessage } from '../../../shared/protocol.ts';
 
 // The simmed-intent flood gate (CombatHandler.simmedFireTimes): a rolling
@@ -13,7 +14,7 @@ const GUN = 3; // Chaingun — simmed, open to every class
 function spyRejects(room: ReturnType<typeof mkRoom>, pid: string): ServerMessage[] {
   const out: ServerMessage[] = [];
   const orig = room.connections.sendToPlayer.bind(room.connections);
-  room.connections.sendToPlayer = (id, m) => { if (id === pid) out.push(m); else orig(id, m); };
+  room.connections.sendToPlayer = (id, m) => { if (id === pid) {out.push(m);} else {orig(id, m);} };
   return out;
 }
 
@@ -31,18 +32,24 @@ describe('scenario: intent flood gate', () => {
     const w = watch(room);
     const [a] = twoPlayers(room);
     const rejects = spyRejects(room, a.id);
-    for (let i = 0; i < 10; i++) fire(room, a.id);
+    for (let i = 0; i < 10; i++) {fire(room, a.id);}
     expect(w.count('projectileCreated')).toBe(10);
     expect(rejects.filter((m) => m.type === 'shotRejected')).toHaveLength(0);
   });
 
-  it('a rolling-second swarm past 20 intents rejects, no shells spawn', () => {
+  it('a rolling-second swarm past the cadence bound rejects, no shells spawn', () => {
     const room = mkRoom({ bots: 2 }, 'tdm');
     const w = watch(room);
     const [a] = twoPlayers(room);
     const rejects = spyRejects(room, a.id);
-    for (let i = 0; i < 25; i++) fire(room, a.id);
-    expect(w.count('projectileCreated')).toBe(20);
-    expect(rejects.filter((m) => m.type === 'shotRejected')).toHaveLength(5);
+    // Two gates: the flat 20/s flood bound AND the per-weapon cadence law
+    // (CombatHandler.fireWindows: ceil(1000/(interval*850))+2). Chaingun's
+    // 0.09s interval caps at 15 admits — derive it, don't magic-number it.
+    const interval = WEAPON_FIRE_INTERVAL_S[WeaponType.Chaingun]!;
+    const cadenceAdmits = Math.ceil(1000 / (interval * 850)) + 2 - 1;
+    const expected = Math.min(20, cadenceAdmits);
+    for (let i = 0; i < 25; i++) {fire(room, a.id);}
+    expect(w.count('projectileCreated')).toBe(expected);
+    expect(rejects.filter((m) => m.type === 'shotRejected')).toHaveLength(25 - expected);
   });
 });

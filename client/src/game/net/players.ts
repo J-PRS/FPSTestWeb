@@ -380,7 +380,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
     rp.teleportTo(new THREE.Vector3(position.x, position.y, position.z));
   };
 
-  networkManager.onPlayerKill = (shooterId, targetId, weapon, air): void => onPlayerKill(ctx, shooterId, targetId, weapon, air);
+  networkManager.onPlayerKill = (shooterId, targetId, weapon, air, steal): void => onPlayerKill(ctx, shooterId, targetId, weapon, air, steal);
 }
 
 

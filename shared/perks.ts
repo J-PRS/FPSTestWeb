@@ -10,7 +10,7 @@
  * name, never scattered).
  */
 
-export type PerkId = 'none' | 'featherjets' | 'plated' | 'vitality' | 'regenerator' | 'overcharge' | 'sharpshooter' | 'bombardier' | 'juggernaut' | 'scavenger' | 'lightfoot' | 'airtank' | 'reach';
+export type PerkId = 'none' | 'featherjets' | 'plated' | 'lifesteal' | 'regenerator' | 'overcharge' | 'sharpshooter' | 'bombardier' | 'juggernaut' | 'scavenger' | 'lightfoot' | 'airtank' | 'reach';
 
 export interface PerkMods {
   /** Jet fuel burn multiplier (1 = normal, 0.7 = 30% thriftier). */
@@ -21,6 +21,10 @@ export interface PerkMods {
   damageResist: number;
   /** Flat bonus to max health. */
   maxHealth: number;
+  /** Fraction of max health restored on a MELEE kill (1 = heal to full).
+   *  Event-shaped survivability: hits-to-kill math never changes — the
+   *  payoff only lands on a kill edge, not inside every hit. */
+  meleeHeal: number;
   /** Passive health regen, hp per second. */
   regen: number;
   /** Extra regen accrued per unhurt second (ramps up the longer you go untouched). */
@@ -43,7 +47,7 @@ export interface PerkMods {
   pickupRadius: number;
 }
 
-const ZERO: PerkMods = { jetDrain: 1, jetRegen: 1, damageResist: 0, maxHealth: 0, regen: 0, regenRamp: 0, energyRegen: 1, directDamage: 1, aoeRadius: 1, knockbackTaken: 1, healBoost: 1, selfDamage: 1, energyMax: 1, pickupRadius: 1 };
+const ZERO: PerkMods = { jetDrain: 1, jetRegen: 1, damageResist: 0, maxHealth: 0, meleeHeal: 0, regen: 0, regenRamp: 0, energyRegen: 1, directDamage: 1, aoeRadius: 1, knockbackTaken: 1, healBoost: 1, selfDamage: 1, energyMax: 1, pickupRadius: 1 };
 
 /** Regenerator wind-up: the ramp only accrues after this many unhurt
  *  seconds — sustained combat denies the perk entirely instead of
@@ -54,7 +58,7 @@ export const PERKS: Record<PerkId, { name: string; blurb: string; mods: Partial<
   none:        { name: 'No Perk',     blurb: '', mods: {} },
   featherjets: { name: 'Featherjets', blurb: 'Jets burn 20% less', mods: { jetDrain: 0.8 } },
   plated:      { name: 'Plated',      blurb: 'Take 25% less damage below 80% health', mods: { damageResist: 0.25 } },
-  vitality:    { name: 'Vitality',    blurb: '+50 max health', mods: { maxHealth: 50 } },
+  lifesteal:   { name: 'Lifesteal',   blurb: 'Melee kills heal you to full', mods: { meleeHeal: 1 } },
   regenerator: { name: 'Regenerator', blurb: 'Regenerate up to 4 hp/s — kicks in after 5s unhurt, then ramps', mods: { regenRamp: 0.4 } },
   overcharge:  { name: 'Overcharge',  blurb: 'Energy recharges 50% faster', mods: { energyRegen: 1.5 } },
   sharpshooter:{ name: 'Sharpshooter',blurb: '+20% direct hits, −40% blast radius', mods: { directDamage: 1.2, aoeRadius: 0.6 } },
@@ -66,7 +70,7 @@ export const PERKS: Record<PerkId, { name: string; blurb: string; mods: Partial<
   reach:       { name: 'Reach',       blurb: 'Grab pickups and flags from 25% farther', mods: { pickupRadius: 1.25 } },
 };
 
-export const PERK_ORDER: PerkId[] = ['none', 'featherjets', 'plated', 'vitality', 'regenerator', 'overcharge', 'sharpshooter', 'bombardier', 'juggernaut', 'scavenger', 'lightfoot', 'airtank', 'reach'];
+export const PERK_ORDER: PerkId[] = ['none', 'featherjets', 'plated', 'lifesteal', 'regenerator', 'overcharge', 'sharpshooter', 'bombardier', 'juggernaut', 'scavenger', 'lightfoot', 'airtank', 'reach'];
 
 export function perkMods(id: string | undefined | null): PerkMods {
   const p = PERKS[(id ?? 'none') as PerkId];

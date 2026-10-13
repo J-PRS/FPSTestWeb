@@ -1,16 +1,13 @@
 import { describe, it, expect } from 'bun:test';
-import { PERKS, PERK_ORDER, perkMods, effectiveResist, isPerkId, type PerkId } from '../../shared/perks.ts';
+import { PERKS, PERK_ORDER, perkMods, effectiveResist, isPerkId, type PerkId, type PerkMods } from '../../shared/perks.ts';
 
 // The perk table is server-enforced economy: the wire validator gates
 // join.perk through isPerkId, applyDamage reads effectiveResist, the
 // heal cap reads maxHealth. A drifted row silently buffs or dead-perks
 // a loadout — pin the contract both ends share.
 
-const MOD_KEYS = [
-  'jetDrain', 'jetRegen', 'damageResist', 'maxHealth', 'regen', 'regenRamp',
-  'energyRegen', 'directDamage', 'aoeRadius', 'knockbackTaken',
-  'healBoost', 'selfDamage', 'energyMax', 'pickupRadius',
-] as const;
+// Derived from the ZERO row — a new mod key can never drift past this list.
+const MOD_KEYS = Object.keys(perkMods('none')) as (keyof PerkMods)[];
 
 describe('perks', () => {
   it('PERK_ORDER covers every PerkId exactly once', () => {
@@ -32,15 +29,16 @@ describe('perks', () => {
         if (k !== 'maxHealth' && k !== 'regen' && k !== 'regenRamp' && k !== 'damageResist') {
           expect(v as number, `${id}.${k}`).toBeLessThanOrEqual(3);
         }
-        if (k === 'damageResist') expect(v as number).toBeLessThan(1);
+        if (k === 'damageResist') {expect(v as number).toBeLessThan(1);}
       }
     }
   });
 
   it('perkMods: unknown/absent ids fall back to the ZERO row, never null', () => {
     const zero = perkMods('none');
+    const ADDITIVE: readonly string[] = new Set(['maxHealth', 'regen', 'regenRamp', 'damageResist', 'meleeHeal']);
     for (const k of MOD_KEYS) {
-      expect(zero[k]).toBe(k === 'maxHealth' || k === 'regen' || k === 'regenRamp' || k === 'damageResist' ? 0 : 1);
+      expect(zero[k]).toBe(ADDITIVE.has(k) ? 0 : 1);
     }
     expect(perkMods(undefined)).toEqual(zero);
     expect(perkMods(null)).toEqual(zero);
@@ -67,7 +65,7 @@ describe('perks', () => {
   });
 
   it('isPerkId gates the wire: every union member in, junk out', () => {
-    for (const id of Object.keys(PERKS)) expect(isPerkId(id)).toBe(true);
+    for (const id of Object.keys(PERKS)) {expect(isPerkId(id)).toBe(true);}
     expect(isPerkId('god')).toBe(false);
     expect(isPerkId('')).toBe(false);
     expect(isPerkId(undefined)).toBe(false);

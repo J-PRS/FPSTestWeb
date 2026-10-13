@@ -26,10 +26,11 @@ describe('scenario: class/perk swaps bank on respawn', () => {
     const room = mkRoom({ bots: 1 });
     const p = firstPlayer(room);
     const basePerk = p.perk;
-    room.messages.handleMessage(p.id, { type: 'perkUpdate', perk: 'vitality' });
+    room.messages.handleMessage(p.id, { type: 'perkUpdate', perk: 'regenerator' });
     expect(p.perk).toBe(basePerk);
+    expect(p.pendingPerk).toBe('regenerator');
     room.players.respawnPlayer(p.id);
-    expect(p.perk).toBe('vitality');
+    expect(p.perk).toBe('regenerator');
     expect(p.pendingPerk).toBeUndefined();
   });
 });

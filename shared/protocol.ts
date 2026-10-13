@@ -221,7 +221,10 @@ export type ServerMessage =
       streak?: number;
       /** Projectile airtime (s) at the kill — feed shows `[1.3s]` so long
        *  lobs get credit. Absent for hitscan/melee/env kills. */
-      air?: number }
+      air?: number;
+      /** Lifesteal perk healed the shooter on this frag — clients render
+       *  the red implode VFX on the killer. */
+      steal?: boolean }
   | { type: 'knockback'; targetId: string; position: Vec3; force: number; pull?: boolean }
   | { type: 'playerRespawn'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; armorClass?: string }
   | { type: 'jump'; playerId: string; position: Vec3 }

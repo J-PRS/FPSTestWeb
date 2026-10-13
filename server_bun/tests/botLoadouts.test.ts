@@ -14,7 +14,7 @@ import { SELF_SPLASH_MAX } from '../../shared/combat.ts';
 // gate the room uses.
 
 const lo = (over: Partial<BotLoadout> = {}): BotLoadout => ({
-  perk: 'vitality', near: WeaponType.Chaingun, mid: WeaponType.Disc,
+  perk: 'lifesteal', near: WeaponType.Chaingun, mid: WeaponType.Disc,
   far: WeaponType.BoltLauncher, belt: WeaponType.Grenade,
   side: WeaponType.Pistol, ...over,
 });
@@ -70,8 +70,8 @@ describe('botLoadouts', () => {
     // dist 6 sits inside the disc's 10m blast — the cautious draw the
     // splash-free sidearm while a disc specialist with nerve keeps it.
     const skill = (w: number) => w === WeaponType.Disc ? 1 : 0.3;
-    const cautious = pickBotWeapon(kit, 6, 6, skill, 0.0);
-    const bold = pickBotWeapon(kit, 6, 6, skill, 1.0);
+    const cautious = pickBotWeapon(kit, 6, 6, skill, 0);
+    const bold = pickBotWeapon(kit, 6, 6, skill, 1);
     expect(getWeaponStats(cautious).aoeRadius).toBeLessThanOrEqual(0);
     expect(bold).toBe(WeaponType.Disc);
   });

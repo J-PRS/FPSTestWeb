@@ -365,7 +365,7 @@ function melee(deps: CombatDeps, hooks: FireHooks, e: FireArgs): void {
       weaponType: WeaponType.Melee, dir: { x: e.dir.x, y: e.dir.y, z: e.dir.z },
     });
   }
-  hooks.applyForceToRemotes({ pos: _meleeHitPos, radius: stats.aoeRadius, force: stats.knockbackForce, forceMode: 'push', aoeDamage: stats.aoeDamage, directHitTargetId: null, forceMultiplier: 1 });
+  hooks.applyForceToRemotes({ pos: _meleeHitPos, radius: stats.aoeRadius, force: stats.knockbackForce, forceMode: 'push', aoeDamage: stats.aoeDamage, directHitTargetId: null, forceMultiplier: 1, weaponType: WeaponType.Melee });
 }
 export function createFire(deps: CombatDeps, hooks: FireHooks) {
 

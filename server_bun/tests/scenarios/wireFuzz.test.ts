@@ -62,17 +62,21 @@ describe('wire conformance fuzz', () => {
           }
         } else if (roll < 0.62) {
           const ids = alive().filter((id) => !silenced.has(id));
-          if (ids.length) {
+          if (ids.length > 0) {
             const p = room.players.getPlayer(ids[Math.floor(rng() * ids.length)]!) as PlayerState | undefined;
             if (p) {
               const f = Math.floor(rng() * 7);
               if (f === 0) { p.position = { x: (rng() - 0.5) * 800, y: (rng() - 0.5) * 200, z: (rng() - 0.5) * 800 }; room.moveSim.resync(p.id, p.position, 0); }
-              else if (f === 1) p.velocity = { x: (rng() - 0.5) * 60, y: (rng() - 0.5) * 40, z: (rng() - 0.5) * 60 };
+              else if (f === 1) {p.velocity = { x: (rng() - 0.5) * 60, y: (rng() - 0.5) * 40, z: (rng() - 0.5) * 60 };}
               else if (f === 2) { p.rotation = { yaw: rng() * Math.PI * 2, pitch: (rng() - 0.5) * 2 }; }
-              else if (f === 3) p.health = Math.floor(rng() * p.maxHealth);
-              else if (f === 4) p.isDead = !p.isDead;
-              else if (f === 5) p.status = Math.floor(rng() * 16);
+              else if (f === 3) {p.health = Math.floor(rng() * p.maxHealth);}
+              else if (f === 4) {p.isDead = !p.isDead;}
+              else if (f === 5) {p.status = Math.floor(rng() * 16);}
               else { p.skiing = rng() < 0.5 ? 1 : 0; p.jetting = rng() < 0.5 ? 1 : 0; }
+              // Death strips channels/held keys at the kill edge — the
+              // raw flip must model that or corpse-no-channels fires on
+              // a state no wire path can produce.
+              if (p.isDead) { p.status = 0; p.skiing = 0; p.jetting = 0; }
             }
           }
         } else if (roll < 0.72) {
@@ -82,7 +86,7 @@ describe('wire conformance fuzz', () => {
           // player would (legally) stay silent forever. A silenced
           // socket that speaks again resumes normal records.
           const ids = alive();
-          if (ids.length) {
+          if (ids.length > 0) {
             const p = room.players.getPlayer(ids[Math.floor(rng() * ids.length)]!);
             if (p) {
               if (silenced.has(p.id)) {
@@ -91,7 +95,7 @@ describe('wire conformance fuzz', () => {
               } else {
                 p.lastSeen = wallMs(wallNow() - 6000 - Math.floor(rng() * 2000));
                 const lastSent = room.lastSentPositions.get(p.id);
-                if (lastSent) lastSent.t = wallNow() - 3000;
+                if (lastSent) {lastSent.t = wallNow() - 3000;}
                 silenced.add(p.id);
               }
             }
@@ -100,7 +104,7 @@ describe('wire conformance fuzz', () => {
           // Loss burst: drop the next 1-4 frames on a random replica —
           // the masked-delta staleness class.
           const lane = lanes[Math.floor(rng() * lanes.length)]!;
-          for (let k = 0; k <= Math.floor(rng() * 4) && lane.frames.length; k++) lane.frames.shift();
+          for (let k = 0; k <= Math.floor(rng() * 4) && lane.frames.length > 0; k++) {lane.frames.shift();}
         } else {
           // Deep reorder: reverse a replica's queued frames — the
           // out-of-order baseline class.
@@ -111,14 +115,14 @@ describe('wire conformance fuzz', () => {
         // Each op drains a random subset of lanes — delivery lag is part
         // of the model (a replica behind by N frames is a live client
         // on a bad link).
-        for (const [i, rep] of reps.entries()) if (rng() < 0.7) fuzzDrain(rep, lanes[i]!, rng);
+        for (const [i, rep] of reps.entries()) {if (rng() < 0.7) {fuzzDrain(rep, lanes[i]!, rng);}}
       }
 
       // Clean window: flush everything, then enough ticks for every
       // staggered full record (15-tick window) to land on every replica.
       for (let t = 0; t < 20; t++) {
         step(room, 1);
-        for (const [i, rep] of reps.entries()) fuzzDrain(rep, lanes[i]!, rng);
+        for (const [i, rep] of reps.entries()) {fuzzDrain(rep, lanes[i]!, rng);}
       }
       assertFuzzConverged(room, reps, `seed=${seed}`);
       teardown();

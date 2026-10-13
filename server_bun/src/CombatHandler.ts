@@ -647,7 +647,7 @@ win.violations += 1;
     return shooter.ddUntil > simNow() ? POWERUP.ddMult : 1;
   }
 
-  applyHit(shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number }, opts: { label: string; extra?: Record<string, unknown>; weapon?: number; shotId?: string; air?: number }): void {
+  applyHit(shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number; endedStreak?: number }, opts: { label: string; extra?: Record<string, unknown>; weapon?: number; shotId?: string; air?: number }): void {
     this.hitLedger.applyHit(this, shooterId, targetId, damage, result, opts);
   }
 

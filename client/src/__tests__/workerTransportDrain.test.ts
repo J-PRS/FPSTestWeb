@@ -16,14 +16,20 @@ const tick = (seq: number): Uint8Array<ArrayBuffer> => {
 
 class FakeWorker {
   static last: FakeWorker;
-  onmessage: ((e: MessageEvent) => void) | null = null;
-  onerror: ((e: ErrorEvent) => void) | null = null;
+  private listeners = new Map<string, ((e: never) => void)[]>();
   posted: unknown[] = [];
   terminated = false;
   constructor() { FakeWorker.last = this; }
   postMessage(m: unknown): void { this.posted.push(m); }
   terminate(): void { this.terminated = true; }
-  emit(data: unknown): void { this.onmessage?.({ data } as MessageEvent); }
+  addEventListener(type: string, fn: (e: never) => void): void {
+    let l = this.listeners.get(type);
+    if (!l) { l = []; this.listeners.set(type, l); }
+    l.push(fn);
+  }
+  emit(data: unknown): void {
+    for (const fn of this.listeners.get('message') ?? []) {fn({ data } as never);}
+  }
 }
 
 // oxlint-disable-next-line consistent-type-imports -- lazy class type; typeof import() has no import type equivalent

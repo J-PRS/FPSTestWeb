@@ -60,16 +60,16 @@ describe('PlayerManager', () => {
     expect(p.status).toBe(0);
   });
 
-  it('plated perk resists damage, vitality raises the health cap', () => {
+  it('plated perk resists damage, lifesteal leaves the health cap alone', () => {
     const pm = new PlayerManager();
     pm.addPlayer('tank', undefined, 'plated');
-    pm.addPlayer('tough', undefined, 'vitality');
+    pm.addPlayer('tough', undefined, 'lifesteal');
     pm.breakShield('tank'); pm.breakShield('tough');
     // Underdog plate: full-health hits punch straight through…
     expect(pm.applyDamage('tank', 40).newHealth).toBe(85);
     // …resist kicks in only below 80% max HP.
     expect(pm.applyDamage('tank', 40).newHealth).toBe(55);  // 85 - 40*0.75
-    expect(pm.getPlayer('tough')!.health).toBe(175);        // 100 + 50 + 25
+    expect(pm.getPlayer('tough')!.health).toBe(125);        // 100 + 25 — perks don't touch the pool
   });
 
   it('kills player when health reaches 0', () => {

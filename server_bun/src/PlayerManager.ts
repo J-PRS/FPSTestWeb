@@ -253,26 +253,26 @@ export class PlayerManager {
     };
   }
 
-  applyDamage(targetId: string, damage: number): { killed: boolean; newHealth: number; newArmor: number } {
+  applyDamage(targetId: string, damage: number): { killed: boolean; newHealth: number; newArmor: number; endedStreak: number } {
     const target = this.players.get(targetId);
     if (!target || target.isDead) {
-      return { killed: false, newHealth: 0, newArmor: 0 };
+      return { killed: false, newHealth: 0, newArmor: 0, endedStreak: 0 };
     }
     if (simNow() < target.protectedUntil) {
-      return { killed: false, newHealth: target.health, newArmor: target.armor };
+      return { killed: false, newHealth: target.health, newArmor: target.armor, endedStreak: 0 };
     }
     // NaN damage would write NaN into health — health<=0 is never true
     // on NaN, so the player becomes unkillable AND broadcasts NaN hp.
     inv('damage-finite', Number.isFinite(damage) && damage >= 0, { id: targetId, dmg: damage });
     if (!Number.isFinite(damage) || damage < 0) {
-      return { killed: false, newHealth: target.health, newArmor: target.armor };
+      return { killed: false, newHealth: target.health, newArmor: target.armor, endedStreak: 0 };
     }
     // Energy shield: while the flag is up the hit routes to the player's
     // energy tank, not their health — the client drains dmg/10 energy and
     // drops the flag when the pool bottoms out (inputMove carries it).
     if (target.status & STATUS.SHIELD) {
       this.energyBurn?.(targetId, damage / ENERGY.shieldDmgPerEnergy);
-      return { killed: false, newHealth: target.health, newArmor: target.armor };
+      return { killed: false, newHealth: target.health, newArmor: target.armor, endedStreak: 0 };
     }
 
     // Perk damage resist — the join-declared table owns the modifier,
@@ -300,17 +300,20 @@ export class PlayerManager {
       target.skiing = 0; target.jetting = 0; // held keys die too — the wire bit can't outlive the body
 target.deaths += 1;
       // Killstreak counts the current life — deaths++ without this let
-      // a dead player's wire streak keep climbing across lives.
+      // a dead player's wire streak keep climbing across lives. The
+      // ended streak rides out on the result: applyDamage zeroes it
+      // before the kill feed reads victim.streak for the callout.
+      const endedStreak = target.streak;
       target.streak = 0;
       target.pendingRespawn = true;
       target.armor = 0;
       target.regenUntil = simMs(0);
       target.ddUntil = simMs(0);
       // NOTE: `charge` survives the kill — applyHit pops the corpse's bank.
-      return { killed: true, newHealth: 0, newArmor: 0 };
+      return { killed: true, newHealth: 0, newArmor: 0, endedStreak };
     }
 
-    return { killed: false, newHealth: target.health, newArmor: target.armor };
+    return { killed: false, newHealth: target.health, newArmor: target.armor, endedStreak: 0 };
   }
 
   respawnPlayer(playerId: string): { position: Vec3; rotation: Rotation; armorClass: string } | null {

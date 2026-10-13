@@ -339,7 +339,11 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
         { name: 'shooterId', wire: 'str', channel: 'edge' },
         { name: 'weapon', wire: 'num', channel: 'edge', absent: null },
         { name: 'streak', wire: 'num', channel: 'edge', absent: null },
-        { name: 'air', wire: 'num', channel: 'echo', absent: null },
+        { name: 'air', wire: 'num', channel: 'echo', absent: null },
+        // Lifesteal perk paid out on this frag — drives the red implode
+        // VFX on the killer; declared so the effect never plays for a
+        // melee kill that didn't heal.
+        { name: 'steal', wire: 'bool', channel: 'edge', absent: null },
       ],
       teamUpdate: [
         { name: 'team', wire: 'str', channel: 'edge' },
