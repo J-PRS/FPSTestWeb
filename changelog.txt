@@ -1,3 +1,4 @@
+2026-10-12 - net: ball replay convergence — makeBallClock re-anchors on epoch rewind (room re-mint poisoned estSimNow forever → permanent rubberband storm), applySeg steps the event lead immediately (no 6x sprint/jumpcut on every heartbeat), predictAt evaluates at the stamp not the clock estimate (the watch measured batch spacing as desync), and lit materials get a one-shot refresh after the first shadow raster (stale sampler2DShadow binding → GL_INVALID_OPERATION per draw).
 2026-10-12 - url: room identity is the path — /s/<room> is the shareable
 link; everything else moved to settings. Lobby joins write /s/<name>
 (replaceState on live hop, href on reload); creation hints (map/bots/

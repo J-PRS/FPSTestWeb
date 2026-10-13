@@ -41,6 +41,22 @@ describe('makeBallClock — sim-clock estimate', (): void => {
     expect(c.estSimNow()).toBeCloseTo(10 + 1.5, 9);
   });
 
+  it('re-anchors on epoch rewind — a stamp >30s below the max is a new timeline', (): void => {
+    const c = makeBallClock((): number => 0);
+    wall(100); c.noteStamp(400); // old epoch — server sim clock later rewound
+    wall(100.5);
+    expect(c.estSimNow()).toBeCloseTo(400.5, 9);
+    c.noteStamp(97); // new epoch — 303s below max, can't be in-epoch
+    wall(101);
+    // Anchored on the new epoch: ~97.5, not 401 — the gate engages again.
+    expect(c.estSimNow()).toBeLessThan(110);
+    expect(c.estSimNow()).toBeGreaterThan(97);
+    // In-epoch noise still can't rewind: small-below stamps are ignored.
+    c.noteStamp(96);
+    wall(101.5);
+    expect(c.estSimNow()).toBeGreaterThan(97);
+  });
+
   it('ballEventAge clamps to [0, 0.6] and measures stamp-to-arrival age', (): void => {
     const c = makeBallClock((): number => 0);
     wall(100); c.noteStamp(10);

@@ -5,9 +5,9 @@ import type { Heightfield } from '../../../shared/heightfield.js';
 import * as THREE from 'three';
 
 // predictAt is the rubberband watch's probe: it must clone-and-step the
-// live replay (never mutate it), bound its horizon to min(t, simNow,
-// simT+8), and land the sub-cell remainder ballistically — the same
-// contract tickNet renders by.
+// live replay (never mutate it), evaluate at the stamp's sim-time bounded
+// by simT+8 (never the clock estimate — est-truncation read batch spacing
+// as desync), and land the sub-cell remainder ballistically.
 const FLAT: Heightfield = { size: 1, data: new Uint8Array([0]), stride: 1 };
 
 function rig(simNow: () => number | undefined = (): number => Infinity) {
@@ -39,11 +39,12 @@ describe('predictAt — probe bounds and isolation', (): void => {
     expect(out.x).toBeCloseTo(steppedX + 10 * 0.02, 6);
   });
 
-  it('clamps the horizon to the stamped sim clock', (): void => {
+  it('evaluates at the stamp, ignoring the clock estimate', (): void => {
     const { st, bag } = rig((): number => 0.1);
     predictAt(st, bag, 5, out);
-    // end = min(5, 0.10, 8) = 0.10 → 2 cells
-    expect(out.x).toBeCloseTo(10 * 0.1, 6);
+    // end = min(5, 0+8) = 5 → the probe reaches the stamp's sim-time even
+    // when the estimate lags it — batch spacing is not divergence.
+    expect(out.x).toBeCloseTo(10 * 5, 4);
   });
 
   it('caps the chase at simT + 8s — stale legs cannot runaway', (): void => {

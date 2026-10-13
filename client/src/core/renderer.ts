@@ -625,10 +625,38 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   // Half-rate shadow updates: the pass re-rasterizes every caster each
   // frame (~46% of the frame measured); one frame of lag is invisible.
   let shadowTick = 0; renderer.shadowMap.autoUpdate = false;
+  // Lit materials that compile before the lazy shadow-map allocation
+  // exists keep directionalShadowMap bound to unit 0 — every one of
+  // their draws then logs GL_INVALID_OPERATION (texture/sampler type
+  // mismatch) forever. One needsUpdate pass after the first raster
+  // rebinds them for the session; the cost hides inside boot warmup.
+  let litShadowRefresh = false;
 
   const render = makeRender(renderer, scene, camera, composer, fs,
     { pmode: pmodeEff, fsOverlay: (): (() => void) | null => fsOverlay, scenePass,
-      shadowTick: (): void => { if ((((shadowTick += 1) - 1) & 1) === 0) {renderer.shadowMap.needsUpdate = true;} } });
+      shadowTick: (): void => {
+        if ((((shadowTick += 1) - 1) & 1) === 0) {renderer.shadowMap.needsUpdate = true;}
+        if (!litShadowRefresh && renderer.shadowMap.enabled && shadowTick > 4) {
+          litShadowRefresh = true;
+          const seen = new Set<THREE.Material>();
+          scene.traverse((o): void => {
+            const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+            if (!m) {return;}
+            const list = Array.isArray(m) ? m : [m];
+            for (const mm of list) {
+              if (seen.has(mm)) {continue;}
+              seen.add(mm);
+              if ((mm as THREE.ShaderMaterial).isShaderMaterial ||
+                  (mm as THREE.MeshLambertMaterial).isMeshLambertMaterial ||
+                  (mm as THREE.MeshPhongMaterial).isMeshPhongMaterial ||
+                  (mm as THREE.MeshStandardMaterial).isMeshStandardMaterial ||
+                  (mm as THREE.MeshToonMaterial).isMeshToonMaterial) {
+                mm.needsUpdate = true;
+              }
+            }
+          });
+        }
+      } });
 
   // Seg-row markers — assigned by wireSegRow below; setPixel fires them
   // so auto-quality steps re-light the row too.

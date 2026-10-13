@@ -404,7 +404,7 @@ export class Ball {
 
   isStaleSegment(t: number | undefined): boolean { return isStaleSeg(this.netS, t); }
 
-  applyNetSegment(seg: NetSeg): void { applySeg(this.netS, this, seg); }
+  applyNetSegment(seg: NetSeg): void { applySeg(Ball.NET_S, this.netS, this, seg); }
 
   /** Server said dead — the updateDead path fades trails as usual. */
   private acquireRibbons(coreColor?: THREE.Color): RibbonTrail[] {

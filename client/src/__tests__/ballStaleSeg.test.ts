@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isStaleSeg, newNetBag, applySeg, type NetHost } from '../entities/ballNet.js';
+import { isStaleSeg, newNetBag, applySeg, type NetHost, type NetStatics } from '../entities/ballNet.js';
 import { makeSimBall } from '../../../shared/ballSim.js';
 import * as THREE from 'three';
 
@@ -47,6 +47,12 @@ describe('isStaleSeg — wire-order boundary', (): void => {
   });
 });
 
+// No heightfield — the lead-step branch stays off, so these tests isolate
+// the stale/anchor rules from the replay integrator.
+const NO_FIELD: NetStatics = {
+  field: () => null, simNow: () => undefined, colliders: () => [], colliderIndex: () => null,
+};
+
 const seg = (x: number, t: number) => ({
   px: x, py: 5, pz: 0, vx: 10, vy: 0, vz: 0,
   enraged: false, targetId: null, lead: 0.1, timers: undefined,
@@ -59,8 +65,8 @@ describe('applySeg — same-tick re-anchor', (): void => {
     const bag = newNetBag();
     bag.sim = makeSimBall(1, 0, 0, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
     const h = host();
-    applySeg(bag, h, seg(10, 5));
-    applySeg(bag, h, seg(30, 5)); // same stamp, newer wire truth
+    applySeg(NO_FIELD, bag, h, seg(10, 5));
+    applySeg(NO_FIELD, bag, h, seg(30, 5)); // same stamp, newer wire truth
     expect(bag.sim!.x).toBe(30); // second segment won
     expect(bag.legT0).toBe(5);
   });
@@ -70,7 +76,7 @@ describe('applySeg — same-tick re-anchor', (): void => {
     bag.sim = makeSimBall(1, 0, 0, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
     bag.simT = 12; // stepped ahead
     const h = host();
-    applySeg(bag, h, seg(10, 10));
+    applySeg(NO_FIELD, bag, h, seg(10, 10));
     expect(bag.simT).toBe(10); // cursor re-anchored to the stamp
   });
 });

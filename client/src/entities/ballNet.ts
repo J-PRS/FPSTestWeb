@@ -233,7 +233,7 @@ function blendSegCorrection(host: NetHost, s: SimBall, seg: NetSeg): void {
  *  (≈half RTT) because the event is already stale when it arrives —
  *  without this every bounce visibly rewinds the ball before re-flying.
  *  The >20m trail-cut already handles teleport discontinuities. */
-export function applySeg(bag: NetBag, host: NetHost, seg: NetSeg): void {
+export function applySeg(st: NetStatics, bag: NetBag, host: NetHost, seg: NetSeg): void {
   const s = bag.sim;
   if (!s) {return;}
   const {simT} = seg;
@@ -270,15 +270,14 @@ export function applySeg(bag: NetBag, host: NetHost, seg: NetSeg): void {
   else {s.tgtValid = false;}
   bag.netTargetId = seg.targetId;
   bag.netEnraged = seg.enraged;
-  // Do NOT step the lead age here: a partial-width step leaves the sim
-  // cursor off the server's 0.05 grid permanently — every subsequent
-  // prediction step is phase-shifted, bounce contacts resolve at
-  // different points, and elastic reflections compound the error into
-  // the 20-100m rubberbands the logs show. Bank the age instead: the
-  // update loop consumes whole cells only (sim stays exactly on-grid),
-  // and the render path ballistically extrapolates the sub-step
-  // remainder — which is all the lead was ever for.
-  bag.netAcc = Math.min(seg.lead ?? 0, 0.5);
+  // Step the event's lead age NOW, not banked for later: banking it in
+  // netAcc drained 2 cells/frame, so a ~0.5s-late stamp made the ball
+  // sprint 6x for ~5 frames — the per-heartbeat follow-jump stream.
+  // Whole cells only: a partial-width step leaves the cursor off the
+  // server's 0.05 grid and phase-shifts every later contact.
+  const lead = Math.min(seg.lead ?? 0, 1);
+  const cells = Math.floor(lead / 0.05);
+  const field = st.field();
   // The leg's flight clock anchors to the stamped sim time — update()
   // measures T as estSimNow−legT0 so server-clock drift can't skew it.
   bag.legT0 = simT ?? -1; // unstamped event → wall-time fallback
@@ -288,6 +287,14 @@ export function applySeg(bag: NetBag, host: NetHost, seg: NetSeg): void {
   // gate replay the whole stamp→now gap on the new leg instead of just
   // the banked-lead cells.
   if (simT !== undefined) {bag.simT = simT;}
+  if (field && cells > 0) {
+    const tgt = s.tgtValid ? (_tgt.x = s.tx, _tgt.y = s.ty, _tgt.z = s.tz, _tgt) : null;
+    for (let i = 0; i < cells; i += 1) {
+      bag.simT += 0.05;
+      stepBall(s, 0.05, field, tgt, false, { colliders: st.colliders(), colliderIndex: st.colliderIndex() ?? undefined });
+    }
+  }
+  bag.netAcc = field && cells > 0 ? lead - cells * 0.05 : Math.min(lead, 0.5);
   bag.parked = false;
   blendSegCorrection(host, s, seg);
 }
@@ -308,9 +315,13 @@ export function predictAt(st: NetStatics, bag: NetBag, t: number, out: THREE.Vec
   const s = Object.assign({}, live);
   const tgt = s.tgtValid ? (_probeTgt.x = s.tx, _probeTgt.y = s.ty, _probeTgt.z = s.tz, _probeTgt) : null;
   const field = st.field();
-  const simNow = st.simNow() ?? Infinity;
   let cur = bag.simT;
-  const end = Math.min(t, simNow, cur + 8); // stale legs can't chase ∞
+  // The probe answers "did the replay diverge?" — it must evaluate at the
+  // STAMP's sim-time, not the clock estimate: capping at simNow compared
+  // sim@est to truth@m.t and read the inter-batch spacing as desync
+  // (~2.4s of travel = the 100-300m warn bursts). cur+8 still bounds the
+  // horizon — stale legs can't chase ∞.
+  const end = Math.min(t, cur + 8);
   if (field) {
     while (cur + 0.05 <= end) {
       cur += 0.05;
