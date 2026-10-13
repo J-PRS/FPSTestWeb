@@ -30,6 +30,9 @@ export interface SessionDeps {
   /** Single spectator exit path (GameServer.departSpectator) — roster,
    *  connection, specRooms index and session record die together. */
   departSpectator(playerId: string, reason: string, closeCode?: number): boolean;
+  /** Full teardown of a player seat (roster + grace + indexes) — used by
+   *  a different-room join to retire the stale seat before re-seating. */
+  removePlayerCompletely(room: Room, playerId: string, reason: string): void;
 }
 
 /** Join handshake + persistent identity. Handles four join shapes:
@@ -113,7 +116,14 @@ export class SessionManager {
     // this path, and throttling it locks a legit player out of their own
     // seat — reclaim is already authenticated by the session token.
     const reclaimRoom = this.d.roomOfPlayer(playerId);
-    if (reclaimRoom) {
+    // …but only for the SAME room: an explicit ?room=B while a grace seat
+    // lingers in A is intent to move, not a flapping transport. Retire the
+    // old seat now (one-seat-per-id is load-bearing — the lifecycle fuzz
+    // enforces it) and fall through to a normal join in the new room.
+    if (reclaimRoom && reclaimRoom.name !== roomName) {
+      this.d.removePlayerCompletely(reclaimRoom, playerId, 'different-room join');
+      logger.info('Different-room join retired grace seat', { playerId, from: reclaimRoom.name, to: roomName });
+    } else if (reclaimRoom) {
       const ok = this.reclaim(ws, reclaimRoom, playerId, token, resumeSeq);
       // Reclaim skips roomFor, so the joiner's sim gates would never be
       // consulted — a re-host with noBalls inside the grace window lands

@@ -37,6 +37,7 @@ function mkSessions(room: ReturnType<typeof mkRoom>) {
       ops,
       registry,
       departSpectator: () => false,
+      removePlayerCompletely: () => undefined,
     }),
     playerRoom, ops, registry,
   };

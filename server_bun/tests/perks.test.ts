@@ -36,7 +36,7 @@ describe('perks', () => {
 
   it('perkMods: unknown/absent ids fall back to the ZERO row, never null', () => {
     const zero = perkMods('none');
-    const ADDITIVE: readonly string[] = new Set(['maxHealth', 'regen', 'regenRamp', 'damageResist', 'meleeHeal']);
+    const ADDITIVE = new Set(['maxHealth', 'regen', 'regenRamp', 'damageResist', 'meleeHeal']);
     for (const k of MOD_KEYS) {
       expect(zero[k]).toBe(ADDITIVE.has(k) ? 0 : 1);
     }

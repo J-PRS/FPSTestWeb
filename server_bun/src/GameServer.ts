@@ -111,6 +111,7 @@ export class GameServer {
       ops: this.ops,
       registry: this.registry,
       departSpectator: (id, reason, closeCode): boolean => this.departSpectator(id, reason, closeCode),
+      removePlayerCompletely: (r, id, reason): void => this.removePlayerCompletely(r, id, reason),
     });
     this.factory = new RoomFactory({
       rooms: this.rooms,
