@@ -195,3 +195,15 @@ still *decides* rather than predicts.
   dead-evict → ensure → apply → reap) and the worldModel declarations
   exist to generate `kind.make()` — what remains is the replicas
   themselves consuming the declaration instead of hand-built classes.
+
+### C5 — Navigation: route owns the runner, point-seek is escape-only
+- **Status**: LANDED (pilot) 2026-10-13 — `runner`+`ctx.route` legs ride
+  the flood carrot every think (pure pursuit); steerer beelines routed
+  hops at any range. capRun 0 caps/480s → grab@108s, cap@~176s.
+- **What dies when extended**: stale/orbitGd/orbitFails/traverseDir/
+  passes (~100+ lines of orbit compensation in botLines.plan) shrink to
+  "no-route fallback" only; seek-point becomes an escape hatch, not a
+  navigation model. Next: `running` transits, then soak-verified retire.
+- **Cost**: offline bots have no flood (`ctx.route` undefined) — they
+  keep the old machinery; port a light flow field or accept it.
+- **Ref**: `_docs/2026-10-13_BOT_NAV_ORBITS.md`

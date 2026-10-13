@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import type { Terrain } from '../world/terrain.js';
 import { TEAM_COLORS, TEAM_LABEL, FLAG_HOME_R, FLAG_RESET_S, CTF_PTS, bank, type TeamId, type TeamScores } from '../../../shared/teams.js';
 import type { GameBot } from './bots/botBrain.js';
-import { roleObjective, roleSide, ROLE_PRIORITY, STRICT_CLASS, type BotRole } from '../../../shared/flagGoals.js';
+import { roleObjective, roleSide, ROLE_PRIORITY, STRICT_CLASS, misfitClass, type BotRole } from '../../../shared/flagGoals.js';
 import * as sfx from '../core/sfx.js';
 import { mkFlagStand, FLAG_STAND_TOP } from '../structures/structures.js';
 import { wornMetalMat } from '../entities/procMetal.js';
@@ -267,7 +267,8 @@ export class CtfFlags {
       if (!donor) { break; }
       this.roles.set(donor, role as 'capper' | 'ldefense' | 'hof' | 'infiltrator');
       const strict = STRICT_CLASS[role];
-      if (strict) { this.ctx.bots.find((b): boolean => b.playerId === donor)?.setBotClass(strict); }
+      // Rare misfit body on purpose — heavy capper / light HoF comedy.
+      if (strict) { this.ctx.bots.find((b): boolean => b.playerId === donor)?.setBotClass(misfitClass(strict, Math.random)); }
       have += 1;
     }
   }

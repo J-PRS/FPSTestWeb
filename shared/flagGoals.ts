@@ -90,6 +90,15 @@ export const STRICT_CLASS: Partial<Record<BotRole, 'light' | 'medium' | 'heavy'>
   hof: 'heavy', technician: 'heavy',
 };
 
+/** ~7% of strict re-fits pick a WRONG body on purpose — a heavy capper
+ *  or light HoF reads as human comedy, not a roster bug. Rare enough the
+ *  role still reads; the job is unchanged, only the chassis lies.
+ *  Shared so the offline lobby rolls the same table the server does. */
+export function misfitClass(strict: 'light' | 'medium' | 'heavy', rand: () => number): 'light' | 'medium' | 'heavy' {
+  if (rand() >= 0.07) {return strict;}
+  return (['light', 'medium', 'heavy'] as const).filter((c): boolean => c !== strict)[Math.floor(rand() * 2)]!;
+}
+
 /** Kit → role fitness. A guideline, not a lock: offense/defense accept
  *  every class (heavy offense and light harassers are both classic), the
  *  runners (capper/infiltrator) pull light, and the planted specialists

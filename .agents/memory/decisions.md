@@ -11,3 +11,6 @@ history in place.
 - 2026-10-11 — check.sh is the done-gate; pre-commit stays fast (lint+size floor+sentinels), full suites stay out of hooks so nobody reaches for --no-verify
 - 2026-10-11 — kill/death counts NOT cleared in remotePlayers onRemove (fires on corpse→respawn swaps; zeroing wiped K/D) — test pins persistence
 - 2026-10-11 — x|0 kept with scoped oxlint-disable in hash/hot code; Math.trunc elsewhere
+- 2026-10-13 — deep dives get ref docs IMMEDIATELY (user rule): research like nav/orbits, filters, netcode goes into _docs/<date>-<topic>.md before moving on — searchable knowledge, not chat scrollback
+- 2026-10-13 — bot orbiting is a model bug, not tuning: runner+routed legs ride the flood carrot (pure pursuit); point-seek latches are escape-only. See _docs/2026-10-13_BOT_NAV_ORBITS.md
+- 2026-10-13 — never hard-delete files, even scratch/debug: soft-delete or move to the appropriate folder (_tools/debug/ for probes)

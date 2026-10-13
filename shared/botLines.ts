@@ -113,6 +113,23 @@ export class BotLines {
       return this.wp;
     }
 
+    // Runner with a route: the flood already priced the whole leg — take
+    // its next hop and skip the pocket rescore + orbit machinery below.
+    // A per-think terrain fan on a 600m commute re-yaws the chain every
+    // commit window (katabatic autopsy: carrier orbited one basin 240s
+    // on fresh pocket picks, dHome oscillating 680-850). Flood hops are
+    // monotone by construction, so the chain converges.
+    if (ctx.runner && ctx.route) {
+      const hop = ctx.route(pos.x, pos.z, dest.x, dest.z, aheadFor(ctx));
+      if (hop) {
+        this.wp = hop;
+        this.wpGoal = Object.assign({}, dest);
+        this.lineT = T.lines.commitS;
+        this.stale = 0;
+        return hop;
+      }
+    }
+
     const wpD = this.wp ? Math.hypot(this.wp.x - pos.x, this.wp.z - pos.z) : Infinity;
     const drifted = this.wpGoal ? Math.hypot(dest.x - this.wpGoal.x, dest.z - this.wpGoal.z) > T.lines.redest : true;
     // A roll that found no line (all rays vetoed or floor-failed) still

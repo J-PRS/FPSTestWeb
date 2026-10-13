@@ -13,7 +13,7 @@ import { BOT_LOADOUTS, BOT_ALT_SLOTS, WILDCARD_SLOTS, botClassForLoadout, rollWi
 import { aimSkillFor , type BotSkillSpec } from '../../shared/botSkill.ts';
 import { botRand } from '../../shared/botRand.ts';
 import { BOT_NAMES } from '../../shared/botNames.ts';
-import { CLASS_FITNESS, ROLE_PRIORITY, STRICT_CLASS, type BotRole } from '../../shared/flagGoals.ts';
+import { CLASS_FITNESS, ROLE_PRIORITY, STRICT_CLASS, misfitClass, type BotRole } from '../../shared/flagGoals.ts';
 import { isSuper } from './superBot.ts';
 import { invEq } from '../../shared/invariants.ts';
 import { perkMods } from '../../shared/perks.ts';
@@ -74,7 +74,7 @@ export class BotRoster {
       const kitIdx = (this.nextIdx - 2 + BOT_LOADOUTS.length) % BOT_LOADOUTS.length;
       const wildcard = botRand() < 0.125;
       let loadout;
-      if (process.env.FPS_SOAK_RANDLO === '1') {loadout = { perk: 'vitality' as const, near: pickOf(RANDLO.near), mid: pickOf(RANDLO.mid), far: pickOf(RANDLO.far), belt: pickOf(RANDLO.belt), side: pickOf(RANDLO.side) };}
+      if (process.env.FPS_SOAK_RANDLO === '1') {loadout = { perk: 'lifesteal' as const, near: pickOf(RANDLO.near), mid: pickOf(RANDLO.mid), far: pickOf(RANDLO.far), belt: pickOf(RANDLO.belt), side: pickOf(RANDLO.side) };}
       else {loadout = wildcard ? rollWildcard(botRand) : BOT_LOADOUTS[kitIdx]!;}
       this.alts.set(id, wildcard ? WILDCARD_SLOTS : (BOT_ALT_SLOTS[kitIdx] ?? {}));
       // Kit picks the body, then the squad's weighted fill picks the
@@ -226,19 +226,22 @@ export class BotRoster {
         donors.splice(donors.indexOf(donor), 1);
         this.roles.set(donor, want);
         const strict = STRICT_CLASS[want];
+        // Rare misfit body: the role still reads, the chassis lies —
+        // a heavy capper or light HoF is comedy, not a roster bug.
+        const cls = strict && misfitClass(strict, botRand);
         const donorP = this.room.players.getPlayer(donor);
-        if (donorP && strict) {
+        if (donorP && cls) {
           // The sim re-fit alone leaves the wire record on the kit
           // class — a strict hof would stream 'medium' while playing
           // heavy mass/speed, i.e. a medium skin on a heavy sim.
-          donorP.armorClass = strict;
-          this.applyClass(donorP, strict);
+          donorP.armorClass = cls;
+          this.applyClass(donorP, cls);
           // A strict body can't carry class-locked guns — a heavy forced
           // onto a beam-rider kit would hold a railgun it may not fire.
           // Swap each illegal slot for a legal staple of the same band.
           const lo = this.loadouts.get(donor);
           if (lo) {
-            const legal = (w: number, fb: WeaponType): number => classCanFire(strict, w) ? w : fb;
+            const legal = (w: number, fb: WeaponType): number => classCanFire(cls, w) ? w : fb;
             this.loadouts.set(donor, Object.assign({}, lo, { near: legal(lo.near, WeaponType.Chaingun),mid: legal(lo.mid, WeaponType.Disc),far: legal(lo.far, WeaponType.BoltLauncher),side: legal(lo.side, WeaponType.Pistol)}));
           }
         }

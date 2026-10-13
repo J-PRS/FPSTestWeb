@@ -97,8 +97,13 @@ export class BotSteer {
     // quiet-approach ring waypoints ~140m out, and at 60-160m the slot
     // scorer could orbit him around the stand for minutes (katabatic
     // grab@218s — the return-leg fix has to be symmetric).
+    // Routed legs beeline at ANY range: dest is already the flood's
+    // next hop (~40-90m), so gating on objective distance (~600m) meant
+    // the slot scorer orbited the carrier between every hop forever.
+    // Un-routed legs (offline — no flood) keep the old 160m window.
     // beelineClear still gates on real structure in the way.
-    if (beelineClear && (objD < (ctx.running || ctx.runner ? 160 : 40) || ctx.posted)) {
+    if (beelineClear && (ctx.posted || objD < 40
+      || (ctx.runner || ctx.running) && (ctx.route || objD < 160))) {
       // Posted anchors take the beeline at any range: slot scoring can
       // mask every goalward slot (slope probes on a ridgeline stand) and
       // the least-dangerous fallback walks the defender hundreds of
