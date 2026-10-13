@@ -51,7 +51,6 @@ export function wirePlayerHooks(c: PlayerHookCtx): void {
   ));
   effects.spawnBounce(to, player.vel);
   effects.spawnJetpack(to); // extra sparks at the landing anchor
-  viewModel?.kick(0.7);
   screenShake.blast(to, 5.5, player.pos);
   screenShake.add(0.3);
   sfx.warpJump(to);
@@ -65,11 +64,10 @@ export function wirePlayerHooks(c: PlayerHookCtx): void {
   // Footstep dust — small radius (feet), speed drives the puff size so a
   // sprint kicks visibly more than a stroll
   player.onFootDust = (pos, vel): void => effects.spawnMoveDust(pos, vel, Math.hypot(vel.x, vel.z), 0.5);
-  player.onBounce = (pos, dir): void => { effects.spawnBounce(pos, dir); viewModel?.kick(0.5); speedLines.burst(); sfx.bounce(); };
+  player.onBounce = (pos, dir): void => { effects.spawnBounce(pos, dir); speedLines.burst(); sfx.bounce(); };
   player.onBlink = (from, to): void => {
   // Tracer-style whoosh — cyan streaks stamped along the blink path
   speedLines.surge(from, to, 0x55_CC_FF);
-  viewModel?.kick(0.35);
   // Cyan flash at both ends — departure pop + arrival streak along the path.
   // A blocked warp can land on its origin: normalize of a zero vector is NaN.
   _blinkDir.subVectors(to, from);
@@ -84,13 +82,11 @@ export function wirePlayerHooks(c: PlayerHookCtx): void {
   _blinkDir.copy(dir).multiplyScalar(7).add(pos);
   speedLines.surge(pos, _blinkDir, 0xFF_F2_CC, 10);
   effects.spawnJumpDust(pos);
-  viewModel?.kick(0.4);
   sfx.dash();
   };
   player.onSlam = (pos, impactSpeed): void => {
   combat.slam(pos, impactSpeed);
   speedLines.burst();
-  viewModel?.kick(0.8);
   effects.spawnJumpDust(pos);
   sfx.slam();
   };}
