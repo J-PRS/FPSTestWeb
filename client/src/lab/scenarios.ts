@@ -910,7 +910,7 @@ export const SCENARIOS: LabScenario[] = [
   { id: 'weapon-gym', name: 'WEAPON GYM', blurb: 'every weapon firing its real ballistics downrange', create: weaponGym },
   { id: 'bot-duel', name: 'BOT DUEL', blurb: 'real BotBrain minds on MoveSim bodies', create:( scene): LabInstance => botDuel(scene, BOT_LOADOUTS[0]!, BOT_LOADOUTS[1]!) },
   { id: 'clash-artillery', name: 'MORTAR vs BRUISER', blurb: 'artillery loadout vs shotgun/cannon bruiser', create:( scene): LabInstance => botDuel(scene, BOT_LOADOUTS[7]!, BOT_LOADOUTS[5]!) },
-  { id: 'clash-beam', name: 'HOSER vs BEAM RIDER', blurb: 'sprinkler vitality vs lightning/railgun overcharge', create:( scene): LabInstance => botDuel(scene, BOT_LOADOUTS[4]!, BOT_LOADOUTS[8]!) },
+  { id: 'clash-beam', name: 'HOSER vs BEAM RIDER', blurb: 'sprinkler lifesteal vs lightning/railgun overcharge', create:( scene): LabInstance => botDuel(scene, BOT_LOADOUTS[4]!, BOT_LOADOUTS[8]!) },
   { id: 'duel', name: 'DUEL', blurb: 'two fighters trade hitscan-ish bolts', create: duel },
   { id: 'ball-court', name: 'BALL COURT', blurb: 'ballSim bounce + one enraged hunter', create: ballCourt },
   { id: 'mortar-volley', name: 'MORTAR VOLLEY', blurb: 'projStep gravity arcs + terrain impacts', create: mortarVolley },

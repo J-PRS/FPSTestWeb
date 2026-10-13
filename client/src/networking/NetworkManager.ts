@@ -78,7 +78,7 @@ export class NetworkManager {
   /** REMOTE players only — local player is never stored here */
   private players: Map<string, RemotePlayerState> = new Map();
   public onPlayerHit: ((shooterId: string, targetId: string, damage: number, health: number, armor?: number) => void) | null = null;
-  public onPlayerKill: ((shooterId: string, targetId: string, weapon?: number, air?: number) => void) | null = null;
+  public onPlayerKill: ((shooterId: string, targetId: string, weapon?: number, air?: number, steal?: boolean) => void) | null = null;
   public onPlayerRespawn: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, armorClass?: string) => void) | null = null;
   public onPlayerJump: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
   public onPlayerJetpack: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;

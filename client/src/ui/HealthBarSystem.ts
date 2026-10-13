@@ -233,7 +233,7 @@ export class HealthBarSystem {
       this.tagAlly(bar, playerState?.team ?? (rp as { team?: string } | undefined)?.team, localTeam);
 
       const pos = rp ? rp.position : playerState!.position;
-      // Wire class decides the pool — vitality's +50 stays invisible until
+      // Wire class decides the pool — class bonuses stay invisible until
       // the roster carries it, which still beats a flat 100 for heavies.
       bar.maxHealth = this.maxFor(playerId, (rp as { armorClass?: string } | undefined)?.armorClass);
       // pos is EYE height — a small margin above it is already over the head

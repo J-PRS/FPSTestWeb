@@ -445,7 +445,7 @@ dedupCensus.hitSeqDrops += 1;
     // Same phantom-row guard as hits — a kill for a departed target must
     // not mint a stub corpse.
     this.h.patchRemotePlayer(data.targetId, { isDead: true, health: 0 });
-    this.h.onPlayerKill?.(data.shooterId, data.targetId, data.weapon, data.air);
+    this.h.onPlayerKill?.(data.shooterId, data.targetId, data.weapon, data.air, data.steal);
   }
 
   /** Routed through the NetworkManager seam so tests can wrap/count it. */
