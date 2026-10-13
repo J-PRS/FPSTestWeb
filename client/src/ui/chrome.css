@@ -171,6 +171,9 @@ body.menu-open #frag-msg { display: none !important; }
 #overlay .btn-row .btn-pair { display: flex; gap: 6px; }
 #overlay .btn-row .btn-pair button { flex: 1; }
 #overlay .btn-row .btn-pair .field-row { flex: 1; min-width: 0; }
+/* #dev-tools wraps two btn-pair rows — as one flex child of .btn-row its
+   inner rows stacked flush; re-column it with the same 6px gap. */
+#overlay .btn-row #dev-tools:not([hidden]) { display: flex; flex-direction: column; gap: 6px; }
 #overlay .btn-row button.active {
   border-color: #3aa7ff; color: #fff;
   background: rgba(58,167,255,0.22);

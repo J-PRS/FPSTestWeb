@@ -23,6 +23,7 @@ import { collectDiag } from '../core/fxDiag.js';
 import '../core/visAudit.js'; // side-effect: registers the Alt+Q visAudit section
 import { setLogOverlayVisible } from '../ui/logPanel.js';
 import { setDebugOverlays } from '../ui/hud/indicators.js';
+import { setBootVeil } from '../ui/hud/hudChrome.js';
 import { reportHudOverlap } from '../ui/overlapAudit.js';
 import { installGeoNaNWatch } from '../core/geoNaN.js';
 import * as sfxAudio from '../core/sfx/world.js';
@@ -192,6 +193,9 @@ export interface LoopState {
    *  un-veiled start: offline modes gate their spawn/roster kick-off on
    *  whenStable() so the game doesn't begin mid-hitch. */
   bootWarmup: BootWarmup;
+  /** HUD is hidden while the boot hold runs — transition-tracked so the
+   *  release show() can't stomp a hide() someone else owns. */
+  hudHeld?: boolean;
 }
 
 // fxJob EMA/max bookkeeping lives in loopPerf — see fxJobSample there.
@@ -491,6 +495,13 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   const hud = deps.lazyHud();
   const viewModel = deps.lazyViewModel();
   const terrain = deps.lazyTerrain();
+
+  // Boot hold hides the HUD too — the world renders through warmup but
+  // ammo/health/timer shouldn't flash over the frozen match. Transition-
+  // gated so release can't stomp another owner's hide() (spectate/death).
+  const held = bootHoldActive(f);
+  if (held && !st.hudHeld) { st.hudHeld = true; hud.hide(); setBootVeil(true); }
+  else if (!held && st.hudHeld) { st.hudHeld = false; hud.show(); setBootVeil(false); }
 
   hud.update(dt, player, networkManager.getPing(), networkManager.getPacketLoss(), networkManager.getJitter());
   hud.setConnDown(networkManager.connectionDown(), networkManager.connectionDownReason());

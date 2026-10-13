@@ -632,6 +632,24 @@ body:has(#hud.cm-open) #healthbar-container {
   color: #cfe8ff; font: 700 26px/1 Rajdhani, sans-serif; letter-spacing: 0.2em;
   text-shadow: 0 1px 4px #000; opacity: 0.9;
 }
+/* Boot veil — blurs the world through the offline FPS warmup, then
+ * dissolves on release. backdrop-filter transitions on the compositor,
+ * so the unblur stays smooth even while rAF is still hitching. */
+#boot-veil {
+  position: fixed; inset: 0; pointer-events: none; z-index: 6;
+  backdrop-filter: blur(14px) brightness(0.8);
+  -webkit-backdrop-filter: blur(14px) brightness(0.8);
+  opacity: 1;
+  transition: opacity 0.45s ease-out,
+              backdrop-filter 0.45s ease-out,
+              -webkit-backdrop-filter 0.45s ease-out;
+}
+#boot-veil.releasing {
+  opacity: 0;
+  backdrop-filter: blur(0px) brightness(1);
+  -webkit-backdrop-filter: blur(0px) brightness(1);
+}
+
 /* Status chrome — one chip + one edge vignette per effect, tinted per kind */
 .status-vignette { position: fixed; inset: 0; pointer-events: none; z-index: 4; }
 .status-vignette.cloak {

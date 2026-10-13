@@ -108,6 +108,25 @@ export function updateDeathCountdown(h: HUD, respawnMs: number, held = false): v
     }
   }
 
+  /** Boot veil: one blurred overlay while the FPS warmup hold runs.
+ *  Release only flips a class — the blur dissolve itself animates on the
+ *  compositor and the node is dropped once transparent. */
+let bootVeil: HTMLDivElement | null = null;
+export function setBootVeil(on: boolean): void {
+    if (on && !bootVeil) {
+      bootVeil = document.createElement('div');
+      bootVeil.id = 'boot-veil';
+      document.body.append(bootVeil);
+    } else if (!on && bootVeil) {
+      const el = bootVeil;
+      bootVeil = null;
+      el.classList.add('releasing');
+      // A node that reached opacity 0 is dead weight — drop it after the
+      // dissolve; the timeout doubles as a skipped-transitionend fallback.
+      setTimeout((): void => el.remove(), 700);
+    }
+  }
+
   // Spectator chrome: HUD hides entirely while flying; this hint is all
   // that remains so the exit key stays discoverable.
 export function setSpectatorHint(h: HUD, on: boolean): void {
