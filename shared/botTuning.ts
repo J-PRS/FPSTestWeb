@@ -51,7 +51,10 @@ export const BOT_TUNING = {
     pursuitR: 90,        // m — REVERTED carrier-shield experiment's ring, kept for reference
     shieldReserve: 36,   // energy — REVERTED: pressured carriers banking for SHIELD slowed them into the kill (med hold 8.1->5.0s, caps flat)
     hopRiseLo: 0.5,      // m — jet-assist hop rise lower bound
-    hopRiseHi: 3,        // m — jet-assist hop rise upper bound
+    hopRiseHi: 4,        // m — jet-assist hop rise upper bound; the 3-4m band
+                         // is the face-plant dead zone (too tall for jump apex
+                         // ~0.87, below climbRise): dunes bleed autopsy showed
+                         // -200..-1100E into +2..3m lips the hop couldn't see
     climbRise: 4,        // m rise ahead that counts as a climb (sweep: small rises ski through, jetting them is the waste)
     sustainedProbe: 18,  // m — REVERTED sustained-climb experiment, kept for reference
     sustainedGrade: 0.3, // rise/m — REVERTED: deep-probe climbs lost E to the face
@@ -62,7 +65,8 @@ export const BOT_TUNING = {
     jumpUphillSpeed: 3,  // m/s — uphill hop when slower than this
     hopSpeed: 6.4,       // m/s — momentum hop only above this
     hopGdFar: 60,        // m — far goal hop gate
-    hopRiseFar: 3,       // m — far hops skip steep rises
+    hopRiseFar: 4,       // m — far hops skip steep rises; 3-4m faces are the
+                         // bleed band — hop+jets over the lip beats the plant
     hopDescRise: 0.12,   // rise/m — a descent past this stays glued:
                          // grounded contact is what pumps gravity into speed
     runnerHopGd: 28,     // m — hop chains die at the orbit-watch ring: a hop landing on the 9m deck sails over the pole at 10-15m/s; inside this ring the runner touches down and the brake/crawl own the approach

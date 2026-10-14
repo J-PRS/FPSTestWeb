@@ -1,0 +1,792 @@
+{
+  "meta": {
+    "room": "prof-a",
+    "map": "crossfire",
+    "bots": 10,
+    "secs": 20,
+    "cpuThrottle": 1,
+    "extra": "",
+    "when": "2026-10-13T18:09:43.101Z"
+  },
+  "phases": {
+    "trisK": {
+      "mean": 508.1,
+      "max": 597,
+      "n": 10
+    },
+    "draws": {
+      "mean": 301.8,
+      "max": 325,
+      "n": 10
+    },
+    "gpu": {
+      "mean": 109.49,
+      "max": 143.03,
+      "n": 10
+    },
+    "render": {
+      "mean": 43.24,
+      "max": 322.41,
+      "n": 10
+    },
+    "frame": {
+      "mean": 32.21,
+      "max": 199.12,
+      "n": 10
+    },
+    "fx": {
+      "mean": 1.93,
+      "max": 3.85,
+      "n": 10
+    },
+    "player": {
+      "mean": 1.48,
+      "max": 3.05,
+      "n": 10
+    },
+    "vfx": {
+      "mean": 1.33,
+      "max": 2.47,
+      "n": 10
+    },
+    "balls": {
+      "mean": 1.02,
+      "max": 4.5,
+      "n": 10
+    },
+    "proj": {
+      "mean": 0.74,
+      "max": 1.57,
+      "n": 10
+    },
+    "explosions": {
+      "mean": 0.42,
+      "max": 1.14,
+      "n": 10
+    },
+    "viewmodel": {
+      "mean": 0.29,
+      "max": 0.74,
+      "n": 10
+    },
+    "species": {
+      "mean": 0.27,
+      "max": 0.52,
+      "n": 10
+    },
+    "pdebris": {
+      "mean": 0.12,
+      "max": 0.3,
+      "n": 10
+    },
+    "healthbars": {
+      "mean": 0.06,
+      "max": 0.09,
+      "n": 10
+    },
+    "ambient": {
+      "mean": 0.05,
+      "max": 0.4,
+      "n": 10
+    },
+    "bots": {
+      "mean": 0.05,
+      "max": 0.1,
+      "n": 10
+    },
+    "scene": {
+      "mean": 0.02,
+      "max": 0.05,
+      "n": 10
+    },
+    "effects": {
+      "mean": 0.02,
+      "max": 0.03,
+      "n": 10
+    },
+    "debris": {
+      "mean": 0.02,
+      "max": 0.08,
+      "n": 10
+    },
+    "gibs": {
+      "mean": 0.01,
+      "max": 0.01,
+      "n": 10
+    },
+    "hud": {
+      "mean": 0,
+      "max": 0,
+      "n": 10
+    },
+    "swipes": {
+      "mean": 0,
+      "max": 0.01,
+      "n": 10
+    },
+    "scorch": {
+      "mean": 0,
+      "max": 0.01,
+      "n": 10
+    },
+    "implosions": {
+      "mean": 0,
+      "max": 0,
+      "n": 10
+    },
+    "aoegiz": {
+      "mean": 0,
+      "max": 0.01,
+      "n": 10
+    }
+  },
+  "renderStages": {
+    "scene": {
+      "cpuMs": 1.35,
+      "calls": 286,
+      "tris": 596452,
+      "gpuMs": 108.793
+    },
+    "sceneShadow": {
+      "cpuMs": 2.575,
+      "calls": 314,
+      "tris": 600918,
+      "gpuMs": 108.916
+    },
+    "full": {
+      "cpuMs": 2.175,
+      "calls": 342,
+      "tris": 602119,
+      "gpuMs": 111.997
+    },
+    "viewmodel": {
+      "cpuMs": 0.138,
+      "calls": 22,
+      "tris": 700,
+      "gpuMs": 0.281
+    }
+  },
+  "gpuDrainMs": {
+    "n": 325,
+    "p50": 2.1,
+    "p95": 3.9,
+    "p99": 9,
+    "max": 1152.4
+  },
+  "hotFunctions": [
+    {
+      "fn": "WebGLUniforms @:44585",
+      "self": 5.8,
+      "total": 5.8
+    },
+    {
+      "fn": "gpuId @:169",
+      "self": 1.2,
+      "total": 1.2
+    },
+    {
+      "fn": "sweepSmear @:259",
+      "self": 1,
+      "total": 1
+    },
+    {
+      "fn": "projectObject @:51125",
+      "self": 0.5,
+      "total": 0.6
+    },
+    {
+      "fn": "copySampleValue_ @:29229",
+      "self": 0.4,
+      "total": 0.4
+    },
+    {
+      "fn": "sweepBall @:103",
+      "self": 0.4,
+      "total": 0.5
+    },
+    {
+      "fn": "sub @:681",
+      "self": 0.4,
+      "total": 0.4
+    },
+    {
+      "fn": "getParameters @:45281",
+      "self": 0.4,
+      "total": 0.4
+    },
+    {
+      "fn": "(anon) @:1",
+      "self": 0.3,
+      "total": 0.3
+    },
+    {
+      "fn": "evaluate @:29148",
+      "self": 0.3,
+      "total": 0.8
+    },
+    {
+      "fn": "segSolidHit @:80",
+      "self": 0.3,
+      "total": 0.4
+    },
+    {
+      "fn": "querySegment @:40",
+      "self": 0.3,
+      "total": 0.3
+    },
+    {
+      "fn": "fade @:303",
+      "self": 0.3,
+      "total": 0.5
+    },
+    {
+      "fn": "tick @:434",
+      "self": 0.3,
+      "total": 0.8
+    },
+    {
+      "fn": "spawn @:285",
+      "self": 0.3,
+      "total": 0.3
+    },
+    {
+      "fn": "(anon) @:34",
+      "self": 0.3,
+      "total": 0.4
+    },
+    {
+      "fn": "tickAge @:67",
+      "self": 0.3,
+      "total": 0.4
+    },
+    {
+      "fn": "renderCoolShots @:179",
+      "self": 0.1,
+      "total": 0.3
+    },
+    {
+      "fn": "_qc @:461",
+      "self": 0.1,
+      "total": 0.1
+    },
+    {
+      "fn": "renderObject @:51253",
+      "self": 0.1,
+      "total": 7.1
+    },
+    {
+      "fn": "spawn @:969",
+      "self": 0.1,
+      "total": 0.3
+    },
+    {
+      "fn": "fire @:1427",
+      "self": 0.1,
+      "total": 0.1
+    },
+    {
+      "fn": "setFromRotationMatrix @:372",
+      "self": 0.1,
+      "total": 0.1
+    },
+    {
+      "fn": "multiplyMatrices @:8092",
+      "self": 0.1,
+      "total": 0.1
+    },
+    {
+      "fn": "update @:478",
+      "self": 0.1,
+      "total": 0.3
+    }
+  ],
+  "loaf": [
+    {
+      "dur": 105.3,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 7,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 110,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 10.1,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 107.9,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 7.7,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 110.3,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 7.3,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 105.8,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 7.6,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 113.1,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 7.8,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 110,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 7.7,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 107.1,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 5.7,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 106.5,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 7.4,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 107.7,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 6.6,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 110.2,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 7.8,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 106.5,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 5.7,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 115.9,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 7.6,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 107,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 7.2,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 109,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 6.6,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 115.3,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 11.7,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 120.1,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 7.3,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 112.2,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 7.8,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 113.2,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 9.4,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 107.2,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 6.5,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 110.9,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 7.2,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 111.4,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 6.6,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 121,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 7.3,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 125.8,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 7.8,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 118,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 8.1,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 114.9,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 6.5,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 111.1,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 6.2,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 109.8,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 5.4,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 142.4,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 8.9,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 111.7,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 5.6,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 106.5,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 6.6,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 108,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 6.6,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 110.4,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 6.7,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 107.4,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 6.8,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 109.8,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 8.3,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 118.3,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 6,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 115,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 8.6,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 111.1,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 7.2,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 114.4,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 9,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    },
+    {
+      "dur": 110.2,
+      "block": 0,
+      "scripts": [
+        {
+          "fn": "loop",
+          "ms": 5.4,
+          "file": "gameLoop.ts?t=1791911850291",
+          "forced": 0
+        }
+      ]
+    }
+  ],
+  "census": {
+    "objs": 2307,
+    "skin": 55,
+    "bones": 3095,
+    "inst": 62,
+    "mats": 135
+  }
+}

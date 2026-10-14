@@ -49,7 +49,7 @@ export function measureCap(
     bases,
   }, 'ctf', opts.seed ?? 9001, false, fld);
   const w = watch(room);
-  if (!room.flags) throw new Error('ctf room has no flags');
+  if (!room.flags) {throw new Error('ctf room has no flags');}
   if (opts.bareFlags) {
     // Room merges dais hulls into the sims' structure list — override
     // with authored-only so the flag stands on bare ground.
@@ -65,7 +65,7 @@ export function measureCap(
   const bots = [...room.players.getAllPlayers().values()].filter((p) => p.isBot);
   const alpha = bots.find((p) => p.team === 'alpha');
   const bravo = bots.find((p) => p.team === 'bravo');
-  if (!alpha || !bravo) throw new Error('missing a bot on each team');
+  if (!alpha || !bravo) {throw new Error('missing a bot on each team');}
   // One side's designated runner: featherjets chaser kit re-fits light,
   // and the roster role makes the stand the job, not the fight.
   const capper = alpha;
@@ -89,7 +89,7 @@ export function measureCap(
   for (const p of bots) {
     if (p !== capper) {
       room.bots.quiet.add(p.id);
-      if (p.team === 'alpha') ctl.roster.roles.set(p.id, 'offense');
+      if (p.team === 'alpha') {ctl.roster.roles.set(p.id, 'offense');}
     }
   }
 
@@ -113,16 +113,47 @@ export function measureCap(
     const v2 = capper.velocity.x ** 2 + capper.velocity.y ** 2 + capper.velocity.z ** 2;
     return 0.5 * v2 + 28 * Math.max(0, capper.position.y - hmHeight(fld, capper.position.x, capper.position.z));
   };
+  // Spendable energy: ½v² + g·(altitude ABOVE the destination). The AGL
+  // metric reads a grounded climb as a loss (h~0 while v falls) when
+  // it's really conversion — height over the flag is the bank a route
+  // can cash into speed; height below it is debt the tank must repay.
+  const flagY = bases.bravo.y;
+  const spendE = () => {
+    const v2 = capper.velocity.x ** 2 + capper.velocity.y ** 2 + capper.velocity.z ** 2;
+    return 0.5 * v2 + 28 * (capper.position.y - flagY);
+  };
+  // Bleed forensics: a sharp spendable-E drop is a REAL loss — landing
+  // on flat/rising ground killing vy, ground friction on a ski-released
+  // climb, or thrust spent fighting a face. Conversions don't count
+  // here: banked altitude still reads in the total.
+  let ePrev = 0, dropAcc = 0, dropT0 = 0;
+  const drops: { t: number; dE: number; v: number; agl: number; dy: number; slope: number; air: boolean; jet: string }[] = [];
   // Long budget — deaths reset the run and a second attempt is honest
   // capper behavior (nobody caps first try on a defended stand).
   for (let i = 0; i < simBudgetS * 20 && stat.caps === 0; i++) {
-    if (Date.now() - t0 > wallBudget) break;
+    if (Date.now() - t0 > wallBudget) {break;}
     step(room, 1, dt);
     simT += dt;
     const bravoFlag = room.flags!.flags.get('bravo')!;
     if (!capper.isDead) {
       const e = mechE();
       if (!carrying) { aSum += e; aSamples++; if (e > stat.peakE) {stat.peakE = e;} }
+      const se = spendE();
+      if (!carrying && ePrev - se > 0) {
+        dropAcc += ePrev - se;
+        if (ePrev - se > 400) {dropT0 = dropT0 || simT;}
+      } else if (dropAcc > 0) {
+        if (dropAcc > 150) {
+          const agl = capper.position.y - hmHeight(fld, capper.position.x, capper.position.z);
+          const spd = Math.hypot(capper.velocity.x, capper.velocity.z);
+          const nvx = spd > 0.5 ? capper.velocity.x / spd : 0, nvz = spd > 0.5 ? capper.velocity.z / spd : 0;
+          const slope = hmHeight(fld, capper.position.x + nvx * 8, capper.position.z + nvz * 8) - hmHeight(fld, capper.position.x, capper.position.z);
+          drops.push({ t: dropT0 || simT, dE: dropAcc, v: spd, agl, dy: capper.position.y - flagY, slope, air: agl > 2, jet: ctl.brains.get(capper.id)?.jetDebug.why ?? '?' });
+          if (drops.length > 12) {drops.shift();}
+        }
+        dropAcc = 0; dropT0 = 0;
+      }
+      ePrev = se;
     }
     if (!carrying && bravoFlag.carrier === capper.id) {
       carrying = true;
@@ -131,10 +162,10 @@ export function measureCap(
       lastPos = { ...capper.position };
     }
     if (carrying) {
-      if (lastPos) stat.pathM += Math.hypot(
+      if (lastPos) {stat.pathM += Math.hypot(
         capper.position.x - lastPos.x,
         capper.position.y - lastPos.y,
-        capper.position.z - lastPos.z);
+        capper.position.z - lastPos.z);}
       lastPos = { ...capper.position };
       eSum += mechE(); eSamples++;
       if (bravoFlag.state === 'dropped') {
@@ -191,6 +222,12 @@ export function measureCap(
       `grabV=${stat.grabV.toFixed(1)}m/s approachE=${stat.approachE.toFixed(0)} peakE=${stat.peakE.toFixed(0)} ` +
       `avgE=${stat.avgE.toFixed(0)} caps=${stat.caps}`,
     );
+    for (const d of drops) {
+      console.log(
+        `    bleed t=${d.t.toFixed(0)}s -${d.dE.toFixed(0)}E v=${d.v.toFixed(0)} agl=${d.agl.toFixed(0)} ` +
+        `slope8m=${d.slope.toFixed(1)} dy=${d.dy.toFixed(0)} ${d.air ? 'AIR' : 'GND'} jet=${d.jet}`,
+      );
+    }
   }
   return stat;
 }
