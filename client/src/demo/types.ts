@@ -1,5 +1,7 @@
 // creature ids. Ordered to match shared/deployItems.ts — keep stable.
 
+import type { ResultToken } from '../../../shared/resultToken.ts';
+
 export const TARGETTYPE_KILL = 224;
 
 // Demo system data types - binary-efficient structures for recording/replay
@@ -472,6 +474,9 @@ export interface DemoFile {
   remoteFrames: RemoteFrame[];     // empty on v1/v2 files
 
   heightmap?: DemoHeightmap;       // absent unless the recorder saw terrain
+  // v7 trailer: server-signed result receipt (SECTION_TOKEN) — the
+  // leaderboard submission pairs demo+token in one file. Absent offline.
+  matchToken?: ResultToken;
 
 }
 

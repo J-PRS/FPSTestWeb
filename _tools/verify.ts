@@ -242,6 +242,21 @@ for (const e of demo.projectileEvents) {
   projs.delete(e.projectileId);
 }
 
+// Receipt check — a signed matchToken trailer pairs the demo with the
+// server's attested outcome. --key <secret> (or KRIBES_SIGN_KEY env)
+// verifies the HMAC; absent a key we report presence only.
+if (demo.matchToken) {
+  const tk = demo.matchToken;
+  const key = process.env.KRIBES_SIGN_KEY ?? null;
+  if (key) {
+    const { verifyToken } = await import('../shared/resultToken.ts');
+    const ok = await verifyToken(tk, key);
+    console.log(`  matchToken ${ok ? 'SIG-VALID' : 'SIG-INVALID'} match=${tk.matchId} room=${tk.room} mode=${tk.mode} events=${tk.eventHash} sig=${tk.sig.slice(0, 12)}…`);
+    if (!ok) { console.log('VERDICT bad-token — the embedded receipt was forged or the key is wrong'); process.exit(1); }
+  } else {
+    console.log(`  matchToken present (set KRIBES_SIGN_KEY to verify the sig) match=${tk.matchId} events=${tk.eventHash}`);
+  }
+}
 console.log(`demo: ${file}`);
 console.log(`  mode=${h.mode} room=${h.room} player=${h.playerName} dur=${h.duration.toFixed(1)}s frames=${demo.frames.length} v=${h.formatVersion} seed=0x${h.runSeed.toString(16)}`);
 console.log(`  hmap ${demo.heightmap.gridN}² worldScale=${demo.heightmap.worldScale} heightScale=${demo.heightmap.heightScale} — contact eps bounded by downsample quantization`);

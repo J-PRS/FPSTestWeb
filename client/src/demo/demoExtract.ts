@@ -48,7 +48,7 @@ export function buildDemoFile(r: DemoRecorder, description = ''): DemoFile {
     projectileEvents: [...r.projectileEvents],
     targetEvents,
     roster: r.roster.map(e => Object.assign({}, e)),
-    remoteFrames: [...r.remoteFrames]}, (r.heightmap ? { heightmap: r.heightmap } : {}));
+    remoteFrames: [...r.remoteFrames]}, Object.assign({}, (r.heightmap ? { heightmap: r.heightmap } : {}), (r.matchToken ? { matchToken: r.matchToken } : {})));
 }
 
 export function extractClip(r: DemoRecorder, startTime: number, endTime: number, description: string, projectileLifetime = 0): DemoFile | null {
@@ -99,5 +99,5 @@ export function extractClip(r: DemoRecorder, startTime: number, endTime: number,
     projectileEvents: normProj,
     targetEvents: normTgt,
     roster: r.roster.map(e => Object.assign({}, e)),
-    remoteFrames: collectRemoteFrames(r.remoteFrames, clipStart, clipEnd)}, (r.heightmap ? { heightmap: r.heightmap } : {}));
+    remoteFrames: collectRemoteFrames(r.remoteFrames, clipStart, clipEnd)}, Object.assign({}, (r.heightmap ? { heightmap: r.heightmap } : {}), (r.matchToken ? { matchToken: r.matchToken } : {})));
 }

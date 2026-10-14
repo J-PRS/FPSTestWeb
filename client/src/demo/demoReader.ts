@@ -8,7 +8,8 @@ import {
   DEMO_MAGIC,DEMO_FORMAT_VERSION,
   type DemoFile,type DemoRosterEntry,type DemoHeightmap} from './types.js';
 
-import { crc32, FRAME_SIZE, PROJECTILE_EVENT_SIZE, TARGET_EVENT_SIZE, REMOTE_FRAME_SIZE, SECTION_HMAP } from './demoWriter.js';
+import type { ResultToken } from '../../../shared/resultToken.ts';
+import { crc32, FRAME_SIZE, PROJECTILE_EVENT_SIZE, TARGET_EVENT_SIZE, REMOTE_FRAME_SIZE, SECTION_HMAP, SECTION_TOKEN } from './demoWriter.js';
 
 
 // CRC32 lookup table
@@ -273,14 +274,16 @@ function validateHeaderCounts(header: DemoFile['header'], frames: DemoFrame[], p
 
 // v5 trailer: tagged optional sections after remoteFrames. Unknown tags
 // are skipped so newer sections don't break older readers of this file.
-function readTrailerSections(r: Reader): DemoHeightmap | undefined {
-  if (r.remaining === 0) {return undefined;}
+function readTrailerSections(r: Reader): { hmap?: DemoHeightmap; token?: ResultToken } {
+  if (r.remaining === 0) {return {};}
   const count = r.u8();
   let hmap: DemoHeightmap | undefined = undefined;
+  let token: ResultToken | undefined = undefined;
   for (let i = 0; i < count; i += 1) {
     r.ensure(1 + 4, 'trailer section header');
     const tag = r.u8();
     const len = r.u32();
+    if (tag === SECTION_TOKEN) {token = JSON.parse(new TextDecoder().decode(r.bytes(len))) as ResultToken; continue;}
     if (tag !== SECTION_HMAP) {r.skip(len); continue;}
     const before = r.remaining;
     const gridN = r.u16();
@@ -298,7 +301,7 @@ function readTrailerSections(r: Reader): DemoHeightmap | undefined {
     if (consumed > len) {throw new Error('HMAP section overruns its length');}
     r.skip(len - consumed);
   }
-  return hmap;
+  return { hmap, token };
 }
 
 export function deserializeDemo(buffer: ArrayBuffer): DemoFile {
@@ -310,7 +313,8 @@ export function deserializeDemo(buffer: ArrayBuffer): DemoFile {
     const targetEvents = readTargetEvents(r);
     const roster = header.formatVersion >= 3 ? readRoster(r) : [];
     const remoteFrames = header.formatVersion >= 3 ? readRemoteFrames(r, roster.length) : [];
-    const heightmap = header.formatVersion >= 5 ? readTrailerSections(r) : undefined;
+    const trailer = header.formatVersion >= 5 ? readTrailerSections(r) : {};
     validateHeaderCounts(header, frames, projectileEvents, targetEvents);
-    return Object.assign({}, {header,frames,projectileEvents,targetEvents,roster,remoteFrames}, (heightmap ? { heightmap } : {}));
+    return Object.assign({}, {header,frames,projectileEvents,targetEvents,roster,remoteFrames},
+      (trailer.hmap ? { heightmap: trailer.hmap } : {}), (trailer.token ? { matchToken: trailer.token } : {}));
   }

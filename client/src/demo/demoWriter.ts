@@ -56,6 +56,7 @@ export const REMOTE_FRAME_SIZE = 39;
 // u8 tag + u32 payloadLen + payload. Unknown tags are skipped by the
 // reader, so future sections slot in without a version bump.
 export const SECTION_HMAP = 1;
+export const SECTION_TOKEN = 2;
 
 function writeHmapSection(view: DataView, pOffset: number, hm: DemoFile['heightmap']): number {
   let offset = pOffset;
@@ -186,7 +187,8 @@ export function serializeDemo(data: DemoFile): ArrayBuffer {
     const remoteFramesSize = 4 + data.remoteFrames.length * REMOTE_FRAME_SIZE;
     // v5 trailer: u8 section count + per-section tag/len/payload.
     const hmapSize = data.heightmap ? 1 + 4 + 2 + 4 + 4 + 4 + 4 + data.heightmap.data.length : 0;
-    const trailerSize = 1 + hmapSize;
+    const tokenSize = data.matchToken ? 1 + 4 + new TextEncoder().encode(JSON.stringify(data.matchToken)).length : 0;
+    const trailerSize = 1 + hmapSize + tokenSize;
     const totalSize = totalHeaderSize + framesSize + projEventsSize + targetEventsSize + rosterSize + remoteFramesSize + trailerSize;
 
     const buffer = new ArrayBuffer(totalSize);
@@ -241,8 +243,14 @@ export function serializeDemo(data: DemoFile): ArrayBuffer {
     offset = writeRemoteFrames(view, offset, data.remoteFrames);
 
     // v5 trailer sections — u8 count, then tag+len+payload per section.
-    view.setUint8(((offset += 1) - 1), data.heightmap ? 1 : 0);
-    writeHmapSection(view, offset, data.heightmap);
+    const tokenBytes = data.matchToken ? new TextEncoder().encode(JSON.stringify(data.matchToken)) : null;
+    view.setUint8(((offset += 1) - 1), (data.heightmap ? 1 : 0) + (tokenBytes ? 1 : 0));
+    offset = writeHmapSection(view, offset, data.heightmap);
+    if (tokenBytes) {
+      view.setUint8(((offset += 1) - 1), SECTION_TOKEN);
+      view.setUint32(offset, tokenBytes.length, true); offset += 4;
+      new Uint8Array(buffer, offset, tokenBytes.length).set(tokenBytes);
+    }
 
     // Compute and write checksum over everything after the checksum field
     const checksumOffset = 1 + 4 + 2 + gameVersionBytes.length + 8 + 4 + 4 + 4 + 4;

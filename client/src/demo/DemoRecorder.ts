@@ -12,6 +12,7 @@ import * as ev from './demoEvents.js';
 import { buildDemoFile, extractClip } from './demoExtract.js';
 import { hmapDownsample } from './demoHmap.js';
 import type { Heightfield } from '../../../shared/heightfield.js';
+import type { ResultToken } from '../../../shared/resultToken.ts';
 
 const DEFAULT_BUFFER_SECONDS = 30;
 const DEFAULT_TICK_RATE = 60; // frames per second
@@ -130,6 +131,8 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   bufferSeconds: number;
   nextProjectileId = 1;
 
+  /** Server-signed result receipt — embedded into the demo on save. */
+  public matchToken: ResultToken | null = null;
   private playerData: IPlayerDataProvider | null = null;
   private inputData: IInputProvider | null = null;
 

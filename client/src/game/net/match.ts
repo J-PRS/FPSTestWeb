@@ -86,6 +86,12 @@ else if (scores.alpha > scores.bravo) {lead = 'alpha';}
     deps.lazyHud().setScoreboardCountdown?.(10);
     pinScoreboard();
   };
+  // Signed result receipt → the in-progress recording. The demo's
+  // SECTION_TOKEN trailer then carries demo+receipt as one artifact.
+  networkManager.onMatchToken = (token): void => {
+    const dm = deps.lazyDemoManager?.();
+    if (dm?.recorder.isRecording) {dm.recorder.matchToken = token;}
+  };
   networkManager.onMatchStart = (mode): void => {
     deps.lazyHud().setScoreboardCountdown?.(null);
     releaseScoreboard();

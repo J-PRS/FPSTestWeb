@@ -197,6 +197,18 @@ field itself to end of file.
    (b) srcHash lets playback verify "map exists and matches the action"
    and swap in the embedded grid when it doesn't.
 
+   **tag 2 — TOKEN** (server-signed result receipt):
+
+   | Field | Type |
+   |-------|------|
+   | token | UTF-8 JSON `ResultToken` (shared/resultToken.ts) |
+
+   Written when a `matchToken` arrives while the recorder is live —
+   the demo file then carries demo+receipt as one submission artifact.
+   `_tools/verify.ts` prints `SIG-VALID`/`SIG-INVALID` when
+   `KRIBES_SIGN_KEY` is set, presence only otherwise. Absent on offline
+   (serverless) recordings.
+
 ## Version history
 
 - v1: original (no projectileLifetime)
