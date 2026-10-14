@@ -85,3 +85,24 @@ export async function verifyToken(token: ResultToken, secret: string): Promise<b
 export type VerifyVerdict =
   | 'valid' | 'bad-token' | 'bad-format' | 'impossible-trajectory'
   | 'event-mismatch' | 'hash-mismatch' | 'stale-version';
+
+// Challenge seed — the offline counterpart to a matchToken. A server-
+// witnessed run carries the receipt; a solo run has no witness, so the
+// server attests the SEED instead: runSeed binds to a minted value the
+// client couldn't choose, and the dice-parity gates do the rest.
+export interface Challenge {
+  seed: number;
+  exp: number;   // wallNow ms — stale seeds can't be hoarded for farming
+  sig: string;   // HMAC over `${seed}.${exp}`
+}
+
+export async function signChallenge(seed: number, exp: number, secret: string): Promise<string> {
+  const sig = await crypto.subtle.sign('HMAC', await hmacKey(secret), enc.encode(`${seed}.${exp}`));
+  return hex(sig);
+}
+
+export async function verifyChallenge(c: Challenge, secret: string, nowMs: number): Promise<boolean> {
+  if (!Number.isInteger(c.seed) || !Number.isFinite(c.exp)) {return false;}
+  if (c.exp <= nowMs) {return false;}
+  return (await signChallenge(c.seed, c.exp, secret)) === c.sig;
+}

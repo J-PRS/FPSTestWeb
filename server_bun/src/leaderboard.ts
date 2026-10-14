@@ -22,10 +22,11 @@
 import { join } from 'node:path';
 import { mkdirSync, appendFileSync, readFileSync, existsSync } from 'node:fs';
 import { deserializeDemo } from '../../client/src/demo/demoReader.ts';
-import { verifyToken } from '../../shared/resultToken.ts';
+import { verifyToken, verifyChallenge, signChallenge, type Challenge } from '../../shared/resultToken.ts';
 import { ProjectileEventType, TargetEventType } from '../../client/src/demo/types.ts';
 import { SIGN_SECRET } from './resultSigner.ts';
 import { wallNow } from './wallClock.ts';
+import { verifySolo } from './verifySolo.ts';
 import { logger } from './logger.ts';
 
 const BOARD = join(import.meta.dir, '..', '..', 'logs', 'leaderboard.jsonl');
@@ -33,6 +34,7 @@ mkdirSync(join(import.meta.dir, '..', '..', 'logs'), { recursive: true });
 
 export interface BoardEntry {
   t: number;
+  attest: 'token' | 'seed';   // token = server-witnessed match; seed = challenge-bound solo run
   matchId: string;
   room: string;
   mode: string;
@@ -46,7 +48,7 @@ export interface BoardEntry {
 
 export interface SubmitResult {
   ok: boolean;
-  verdict: 'ranked' | 'bad-format' | 'no-token' | 'bad-token' | 'duplicate';
+  verdict: 'ranked' | 'bad-format' | 'no-token' | 'bad-token' | 'duplicate' | 'event-mismatch';
   entry?: BoardEntry;
   error?: string;
 }
@@ -64,7 +66,16 @@ if (existsSync(BOARD)) {
   }
 }
 
-export async function submitDemo(buf: ArrayBuffer): Promise<SubmitResult> {
+// Challenge mint — one call = one seed the client must bind runSeed to.
+// Short expiry: hoarded seeds would let a client precompute legal runs.
+const CHALLENGE_TTL_MS = 30 * 60_000;
+export async function mintChallenge(): Promise<Challenge> {
+  const seed = (Math.random() * 0xFF_FF_FF_FF) >>> 0;
+  const exp = wallNow() + CHALLENGE_TTL_MS;
+  return { seed, exp, sig: await signChallenge(seed, exp, SIGN_SECRET ?? '') };
+}
+
+export async function submitDemo(buf: ArrayBuffer, challenge?: Challenge | null): Promise<SubmitResult> {
   let demo;
   try {
     demo = deserializeDemo(buf);
@@ -72,12 +83,31 @@ export async function submitDemo(buf: ArrayBuffer): Promise<SubmitResult> {
     return { ok: false, verdict: 'bad-format', error: (error as Error).message };
   }
   const tk = demo.matchToken;
-  if (!tk) { return { ok: false, verdict: 'no-token' }; }
+  let attest: BoardEntry['attest'] = 'token';
   if (!SIGN_SECRET) { return { ok: false, verdict: 'bad-token', error: 'server has no signing key — cannot attest' }; }
-  if (!(await verifyToken(tk, SIGN_SECRET))) { return { ok: false, verdict: 'bad-token' }; }
+  if (tk) {
+    if (!(await verifyToken(tk, SIGN_SECRET))) { return { ok: false, verdict: 'bad-token' }; }
+  } else {
+    // Solo path — no server witnessed the run, so the runSeed must bind
+    // to a challenge this server minted: the client couldn't pick the
+    // dice stream, which is what makes the spawn-dice gates meaningful.
+    attest = 'seed';
+    if (!challenge || !(await verifyChallenge(challenge, SIGN_SECRET, wallNow()))) {
+      return { ok: false, verdict: 'no-token', error: 'solo submissions need a live challenge seed (GET /challenge)' };
+    }
+    if (challenge.seed !== demo.header.runSeed) {
+      return { ok: false, verdict: 'bad-token', error: 'runSeed does not match the minted challenge' };
+    }
+    if (!demo.header.runSeed) { return { ok: false, verdict: 'bad-token', error: 'unseeded demo' }; }
+    // The seed binding alone is cosmetic — replay the dice stream and
+    // require the recorded events to land on it before ranking.
+    const sv = verifySolo(demo);
+    if (!sv.ok) { return { ok: false, verdict: 'event-mismatch', error: sv.reason }; }
+  }
 
   const player = demo.header.playerName || 'unknown';
-  const key = `${tk.matchId}|${player}`;
+  const matchId = tk?.matchId ?? `solo-${demo.header.runSeed.toString(16)}`;
+  const key = `${matchId}|${player}`;
   if (seen.has(key)) { return { ok: false, verdict: 'duplicate' }; }
 
   const shots = demo.projectileEvents.filter(e => e.eventType === ProjectileEventType.Fired).length;
@@ -87,17 +117,18 @@ export async function submitDemo(buf: ArrayBuffer): Promise<SubmitResult> {
 
   const entry: BoardEntry = {
     t: wallNow(),
-    matchId: tk.matchId,
-    room: tk.room,
-    mode: tk.mode,
+    matchId,
+    room: tk ? tk.room : demo.header.room,
+    mode: tk ? tk.mode : demo.header.mode,
     player,
     kills, shots, spawns,
     durationS: Math.round(demo.header.duration * 10) / 10,
+    attest,
     ok: true,
   };
   seen.add(key);
   appendFileSync(BOARD, `${JSON.stringify(entry)}\n`);
-  logger.info('Leaderboard ranked', { player, kills, matchId: tk.matchId });
+  logger.info('Leaderboard ranked', { player, kills, matchId });
   return { ok: true, verdict: 'ranked', entry };
 }
 

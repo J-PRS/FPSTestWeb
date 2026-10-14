@@ -212,8 +212,17 @@ export async function leaderboardRoute(ctx: HttpCtx, req: Request, url: URL): Pr
     if (body.byteLength > 16 * 1024 * 1024) {
       return json({ ok: false, error: 'Upload too large' }, { status: 413 });
     }
-    const r = await lb.submitDemo(body);
+    let chal = null;
+    const chalParam = url.searchParams.get('chal');
+    if (chalParam) {
+      try { chal = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(chalParam), c => c.charCodeAt(0)))); }
+      catch { return json({ ok: false, error: 'bad challenge param' }, { status: 400 }); }
+    }
+    const r = await lb.submitDemo(body, chal);
     return json(r, { status: r.ok ? 200 : 422 });
+  }
+  if (url.pathname === '/challenge' && req.method === 'GET') {
+    return json(await lb.mintChallenge());
   }
   if (url.pathname === '/leaderboard' && req.method === 'GET') {
     return json({ board: lb.board(url.searchParams.get('mode') ?? undefined) });

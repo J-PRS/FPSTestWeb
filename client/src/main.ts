@@ -17,7 +17,7 @@ import { feedMode } from './feed/feedMode.js';
 import { simRngSeed, lcg32 } from '../../shared/simRand.js';
 import { spawnRngSeed } from '../../shared/spawnDice.js';
 import { botRng } from '../../shared/botRand.js';
-import { setRunSeed, mintSeed } from './demo/demoSeed.js';
+import { setRunSeed, mintSeed, getChallenge, fetchChallenge } from './demo/demoSeed.js';
 import { watchDeployVersion } from './core/deployWatch.js';
 import { noteStale, staleCount } from './core/staleFiles.js';
 import { createRenderer, GAME_ASPECT } from './core/renderer.js';
@@ -190,6 +190,9 @@ let gameLoop!: ReturnType<typeof createGameLoop>;
 
 // ---- Boot ----
 const serverEndpoints = resolveServerEndpoints();
+// Ranked-solo challenge — minted by the backend so runSeed isn't self-
+// chosen. Kick it at boot; makeEntities binds it if it landed in time.
+serverEndpoints.then(ep => fetchChallenge(ep.httpUrl)).catch(() => {});
 /** SOLO tab's ?map= pick, resolved client-side before init's heightmap
  *  step — module scope because connectPhase consumes it after init's
  *  locals are gone. */
@@ -373,7 +376,7 @@ function makeEntities(): ReturnType<typeof createEntities> {
   // spawn placement, spread, bomblets); botRand gets a sibling stream so
   // offline bots replay identically too. The demo header stamps the seed
   // so a verifier can walk the identical dice sequence.
-  const runSeed = mintSeed();
+  const runSeed = getChallenge()?.seed ?? mintSeed();
   simRngSeed(runSeed);
   spawnRngSeed(runSeed);
   botRng(lcg32(runSeed ^ 0x5A_17_9E_37));

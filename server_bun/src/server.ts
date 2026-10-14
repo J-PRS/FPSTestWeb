@@ -183,7 +183,7 @@ const serve = (): ReturnType<typeof Bun.serve<WebSocketData>> => Bun.serve<WebSo
     // Prefix routes — path carries params (admin query args, demo filename).
     if (url.pathname.startsWith('/admin/')) {return adminRoute(httpCtx, req, url);}
     if (url.pathname.startsWith('/demos/')) {return demoRoute(httpCtx, req, url);}
-    if (url.pathname.startsWith('/leaderboard')) {return leaderboardRoute(httpCtx, req, url);}
+    if (url.pathname.startsWith('/leaderboard') || url.pathname === '/challenge') {return leaderboardRoute(httpCtx, req, url);}
     // Clip-feed deep links — OG card for crawlers, refresh into the client.
     if (url.pathname === '/clips' || url.pathname.startsWith('/clips/')) {
       return clipRoute(httpCtx, url);
