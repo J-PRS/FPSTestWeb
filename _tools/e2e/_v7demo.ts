@@ -5,7 +5,9 @@ import { writeFileSync } from 'node:fs';
 // Record a short v7 demo headlessly (classic aim mode — balls solo),
 // pull the serialized bytes out of the page, save next to demos_out.
 const stack = await upStack();
-const c = await launchClient(stack.clientUrl('&room=v7demo-0&bots=2&mode=classic'));
+// TRUE offline: no server param — the client owns ball spawning
+// (server-owned balls draw from server RNG, a different stream).
+const c = await launchClient(`http://localhost:5400/?mode=classic&bots=0`);
 await c.waitFor(`window.__test && window.__test.demoManager`, 30000);
 // Let the run accumulate ~25s of recorded play.
 await new Promise((r) => setTimeout(r, 25_000));

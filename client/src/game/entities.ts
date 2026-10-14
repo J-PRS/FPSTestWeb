@@ -36,6 +36,7 @@ import { createSiegeSpecies } from './species/siege.js';
 
 import { createAmbientSpecies } from './species/ambient.js';
 import { simRand } from '../../../shared/simRand.js';
+import { spawnRand, drawSplitVel } from '../../../shared/spawnDice.js';
 
 
 
@@ -139,7 +140,7 @@ function createBallField(f: BallFieldDeps) {
 
   // OG RadialSpawner cadence: random 0-10s trickle, instant refill on wipeout
 
-  let nextBallSpawn = simRand() * 10;
+  let nextBallSpawn = spawnRand() * 10;
 
   let ballSnapshotTimer = 0;
 
@@ -257,11 +258,11 @@ function spawnSplitChildren(t: Targetable): void {
 
     const child = new Ball(scene, deps.lazyTerrain(), 0);
 
-    const a = simRand() * Math.PI * 2;
-
     child.pos.copy(t.pos);
 
-    child.vel.set(Math.cos(a) * 14, 9 + simRand() * 6, Math.sin(a) * 14);
+    const sv = drawSplitVel(spawnRand);
+
+    child.vel.set(sv.x, sv.y, sv.z);
 
     balls.push(child);
 
@@ -303,7 +304,7 @@ function updateBalls(dt: number): void {
 
     ballTimer = 0;
 
-    nextBallSpawn = simRand() * 10;
+    nextBallSpawn = spawnRand() * 10;
 
     spawnBall();
 

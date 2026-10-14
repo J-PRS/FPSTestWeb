@@ -20,10 +20,11 @@ import { readFileSync } from 'node:fs';
 import { deserializeDemo } from '../client/src/demo/demoReader.ts';
 import { hmapToField } from '../client/src/demo/demoHmap.ts';
 import { MoveSim } from '../shared/movement.ts';
-import { hmSurface } from '../shared/heightfield.ts';
+import { hmSurface, hmHeight } from '../shared/heightfield.ts';
 import { InputFlags, JetpackFlags, TargetEventType, type DemoFrame } from '../client/src/demo/types.ts';
-import { makeSimBall, stepBall, type SimBall } from '../shared/ballSim.ts';
+import { makeSimBall, stepBall, BALL_BASE_RADIUS, BALL_VARIANT_SCALE, type SimBall } from '../shared/ballSim.ts';
 import { lcg32 } from '../shared/simRand.ts';
+import { drawBallSpawn, drawSplitVel, drawVariant, SPAWN_SEED_XOR } from '../shared/spawnDice.ts';
 
 const file = process.argv[2];
 if (!file) { console.error('usage: bun _tools/verify.ts <file.demo> [--eps N]'); process.exit(2); }
@@ -135,6 +136,70 @@ for (const e of demo.targetEvents) {
   rec.b.vx = e.velX; rec.b.vy = e.velY; rec.b.vz = e.velZ;
 }
 
+// ---- spawn-dice parity -------------------------------------------------
+// The runSeed-keyed spawn stream must produce every recorded Spawned
+// event in order: ambient = [timer] + [variant?] + ctor draws; split
+// child = ctor draws (consumed before pos overwrite) + split-vel draw.
+// Split detection: a child records pos = parent's live position, not a
+// ring offset — check the parent's last truth before deciding.
+const BALL_COLOR_COUNT = 7;
+// Variant pool in play? The mode string lies (settings-vs-URL flag) —
+// the data doesn't: a variant>0 spawn proves pickVariant drew.
+const ambientSpawns = demo.targetEvents.filter((e) => e.targetType < 64 && e.eventType === TargetEventType.Spawned);
+const hasVariants = ambientSpawns.some((e) => e.targetType !== 0);
+const spawnStream = lcg32((h.runSeed ^ SPAWN_SEED_XOR) >>> 0);
+spawnStream(); // field-init timer draw (nextBallSpawn at field ctor)
+let spawnN = 0, spawnBad = 0, ambientIdx = 0;
+let spawnWorst = 0, spawnWorstId = -1;
+
+const livePos = new Map<number, { x: number; y: number; z: number }>();
+
+for (const e of demo.targetEvents) {
+  if (e.targetType >= 64) {continue;}
+  if (e.eventType === TargetEventType.Destroyed) { livePos.delete(e.targetId); continue; }
+  if (e.eventType === TargetEventType.Spawned) {
+    // Split child: sits at another live ball's last pos — ambient rings
+    // sit 100-400m off the player, so a 2m parent match is decisive.
+    let isSplit = false;
+    for (const p of livePos.values()) {
+      if (Math.hypot(p.x - e.posX, p.y - e.posY, p.z - e.posZ) < 2) { isSplit = true; break; }
+    }
+    const variant = e.targetType as 0 | 1 | 2 | 3;
+    if (!isSplit) {
+      // Draw contract: boot fill (first 4 ambient) = [variant?]+[ctor];
+      // trickle = [timer]+[variant?]+[ctor]. Variant roll only exists in
+      // the ambient pool — classic spawns go straight to the ctor.
+      if (ambientIdx >= 4) {spawnStream();} // trickle timer
+      if (hasVariants) {drawVariant(spawnStream);}
+      ambientIdx += 1;
+    }
+    const draw = drawBallSpawn(spawnStream, variant, BALL_COLOR_COUNT);
+    let exp: { x: number; y: number; z: number };
+    let ev: { x: number; y: number; z: number };
+    if (isSplit) {
+      const sv = drawSplitVel(spawnStream);
+      exp = { x: e.posX, y: e.posY, z: e.posZ }; // pos inherits parent — only vel verifies
+      ev = sv;
+    } else {
+      const p = playerPosAt(e.timestamp);
+      const rx = p.x + draw.offX, rz = p.z + draw.offZ;
+      exp = { x: rx, y: hmHeight(field, rx, rz) + BALL_BASE_RADIUS * BALL_VARIANT_SCALE[variant] + 5, z: rz };
+      ev = draw.vel;
+    }
+    // The dice decide X/Z + vel — Y is terrain-derived, so the coarse
+    // hmap trailer's quantization noise lives there (±~5m). Hard-check
+    // the dice outputs; report Y separately.
+    const posErr = Math.hypot(exp.x - e.posX, exp.z - e.posZ);
+    const velErr = Math.hypot(ev.x - e.velX, ev.y - e.velY, ev.z - e.velZ);
+    const err = Math.max(posErr, velErr);
+    spawnN += 1;
+    if (err > EPS) {spawnBad += 1;}
+    if (err > spawnWorst) { spawnWorst = err; spawnWorstId = e.targetId; }
+  }
+  // Track the last truth per id for split detection — every event re-seeds.
+  livePos.set(e.targetId, { x: e.posX, y: e.posY, z: e.posZ });
+}
+
 console.log(`demo: ${file}`);
 console.log(`  mode=${h.mode} room=${h.room} player=${h.playerName} dur=${h.duration.toFixed(1)}s frames=${demo.frames.length} v=${h.formatVersion} seed=0x${h.runSeed.toString(16)}`);
 console.log(`  hmap ${demo.heightmap.gridN}² worldScale=${demo.heightmap.worldScale} heightScale=${demo.heightmap.heightScale} — contact eps bounded by downsample quantization`);
@@ -143,6 +208,13 @@ if (worstFrame) {
 }
 if (legN > 0) {
   console.log(`  ball legs ${legN}: ${legOver} over eps (${((legOver / legN) * 100).toFixed(0)}%), worst ${legWorst.toFixed(2)}m ball=${legWorstId} — unrecorded knock legs legitimately diverge`);
+}
+if (spawnN > 0) {
+  console.log(`  spawn dice ${spawnN}: ${spawnBad} mismatched, worst ${spawnWorst.toFixed(2)}m ball=${spawnWorstId}`);
+}
+if (spawnBad > 0) {
+  console.log(`VERDICT hash-mismatch — spawn dice diverged at ball ${spawnWorstId}; a fabricated Spawned event can't hide in the seeded stream`);
+  process.exit(1);
 }
 if (firstBad) {
   const { f, dx, dy, dz } = firstBad;

@@ -17,8 +17,8 @@ import { writeBallInstance, tickBallRenderPos, tickBallTrails, updateBallDead, S
 import { allocSlots, freeSlots, getShadows, type SwarmPart } from './swarms.js';
 import { registerDiag } from '../core/fxDiag.js';
 import { inv } from '../../../shared/invariants.js';
+import { drawBallSpawn, drawVariant, spawnRand } from '../../../shared/spawnDice.js';
 
-const tri = (): number => (Math.random() + Math.random() - 1) * 32;
 
 
 const BALL_GRAVITY   = GRAVITY;
@@ -256,6 +256,10 @@ export class Ball {
     this.scene = scene;
     this.id = nextTargetId();
     this.variant = variant;
+    // The whole ambient spawn's dice in one shared draw — verifier
+    // replays this exact sequence against the run's seed. Net-driven
+    // spawns consume nothing (wire is truth).
+    const spawn = netSpawn ? null : drawBallSpawn(spawnRand, variant, BALL_COLORS.length);
 
     if (variant === 3) {
       // Elite — big violet splitter; death spawns two children
@@ -274,7 +278,7 @@ export class Ball {
       // ambient draw in a replicated entity's construction (§5 inv 3).
       this.color = netSpawn
         ? BALL_COLORS[netSpawn.colorIdx % BALL_COLORS.length]!.clone()
-        : BALL_COLORS[Math.floor(Math.random() * BALL_COLORS.length)]!.clone();
+        : BALL_COLORS[spawn!.colorIdx % BALL_COLORS.length]!.clone();
     }
     this.maxHealth = this.health;
     this.radius = BALL_BASE_RADIUS * this.scale;
@@ -304,14 +308,11 @@ export class Ball {
       // a two-die triangular horizontal scatter (peak 0, tail ±32), the
       // whole impulse scaled by 1/scale so big variants launch slower.
       const cx = center?.x ?? 0, cz = center?.z ?? 0;
-      const ang = Math.random() * Math.PI * 2;
-      const ring = 100 + Math.random() * 300;
-      const rx = cx + Math.cos(ang) * ring, rz = cz + Math.sin(ang) * ring;
+      const rx = cx + spawn!.offX, rz = cz + spawn!.offZ;
       const gy = terrain.getHeight(rx, rz);
       this.pos = new THREE.Vector3(rx, (Number.isFinite(gy) ? gy : 0) + this.radius + 5, rz);
 
-      const k = 1 / this.scale;
-      this.vel = new THREE.Vector3(tri() * k, (32 + Math.random() * 32) * k, tri() * k);
+      this.vel = new THREE.Vector3(spawn!.vel.x, spawn!.vel.y, spawn!.vel.z);
     }
 
     if (!allocSlots('ball', this)) { this.dead = true; this._disposed = true; }
@@ -494,9 +495,5 @@ registerDiag('balls', () => ({
 export type { NetSeg } from './ballNet.js';
 
 export function pickVariant(): 0 | 1 | 2 | 3 {
-  const r = Math.random();
-  if (r < 0.08) {return 3;} // elites are rare — each one is an event
-  if (r < 0.18) {return 2;}
-  if (r < 0.38) {return 1;}
-  return 0;
+  return drawVariant(spawnRand); // elites are rare — each one is an event
 }
