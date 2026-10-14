@@ -35,7 +35,6 @@ import { createFlyerSpecies } from './species/flyers.js';
 import { createSiegeSpecies } from './species/siege.js';
 
 import { createAmbientSpecies } from './species/ambient.js';
-import { simRand } from '../../../shared/simRand.js';
 import { spawnRand, drawSplitVel } from '../../../shared/spawnDice.js';
 
 
