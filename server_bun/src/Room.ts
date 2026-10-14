@@ -889,6 +889,9 @@ export class Room {
   /** Built in the constructor — field-initializer order would read
    *  mode/modeSpec before they're assigned. */
   private matchHost(): MatchHost {
+    // Getters read through `self` — object-literal `this` would bind to
+    // the literal itself (the recursion bug this fixes avoided).
+    const self = this;
     return {
       room: this.name,
       mode: this.mode,
@@ -898,8 +901,8 @@ export class Room {
       getHumanCount: (): number => this.players.getHumanCount(),
       matchPlayers: (): { id: string; team?: string; kills: number; deaths: number; }[] => this.scoring.matchPlayers(),
       broadcast: (msg): void => this.broadcast(msg),
-      resultSigner: this.resultSigner,
-      mapSrc: this.mapSrc,
+      get resultSigner(): import('./resultSigner.ts').ResultSigner | null | undefined { return self.resultSigner; },
+      get mapSrc(): string | undefined { return self.mapSrc; },
       endCleanup: (): void => {
         this.flags?.reset();
         this.pickups?.clear();
