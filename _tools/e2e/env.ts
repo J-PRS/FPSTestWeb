@@ -56,7 +56,10 @@ function udpFree(port: number): Promise<boolean> {
 async function spawnGameServer(procs: Subprocess[], from: number): Promise<number> {
   for (let port = from; port < from + 60; port++) {
     if (!await udpFree(port)) continue;
-    const proc = spawn([process.execPath, 'src/server.ts'], {
+    // E2E_CPU_PROF=1 → bun CPU-profiles the game server and writes a
+    // grep-friendly markdown report on exit (_tools/e2e/profout/).
+    const prof = process.env.E2E_CPU_PROF ? ['--cpu-prof', '--cpu-prof-md', '--cpu-prof-dir', `${REPO}_tools/e2e/profout`] : [];
+    const proc = spawn([process.execPath, ...prof, 'src/server.ts'], {
       cwd: `${REPO}server_bun`,
       env: { ...process.env, FPS_PORT: String(port) },
       stdout: 'pipe', stderr: 'pipe',
@@ -108,7 +111,17 @@ async function spawnGameServer(procs: Subprocess[], from: number): Promise<numbe
 export async function upStack(opts: { clientPort?: number; serverPort?: number } = {}): Promise<Stack> {
   const procs: Subprocess[] = [];
   serverLogBufs.length = 0;
-  const down = () => { for (const p of procs) { try { p.kill(); } catch { /* already dead */ } } };
+  const down = () => {
+    for (const p of procs) {
+      try {
+        // cpu-prof only flushes on a graceful exit — SIGTERM first, hard
+        // kill after a beat. On Windows bun may still not flush; then run
+        // the profiled server standalone instead.
+        if (process.env.E2E_CPU_PROF) {p.kill('SIGTERM'); setTimeout(() => { try { p.kill(); } catch { /* dead */ } }, 1500);}
+        else {p.kill();}
+      } catch { /* already dead */ }
+    }
+  };
 
   const serverPort = opts.serverPort ?? await spawnGameServer(procs, 8477);
 

@@ -81,7 +81,8 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
 
   function applyForceToBalls(
     a: BlastArgs,
-    applyTo: (t: Forceable, f: number) => void
+    applyTo: (t: Forceable, f: number) => void,
+    los = true,
   ): void {
     const { pos, radius, aoeDamage, weaponType } = a;
     const scales = weaponType === undefined ? undefined : getWeaponStats(weaponType).aoeScales;
@@ -92,7 +93,11 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       // One envelope for every blast effect — the creature's own body
       // radius still counts (a surface graze is contact, like players).
       const threshold = radius + br;
-      if (db >= threshold || occluded(pos, ball.pos)) {continue;}
+      // The server's prey knock ignores occlusion — a flat distance
+      // envelope — so los:false mirrors authority for knock prediction.
+      // Boundary matches the server's `d > envelope` skip: a graze at
+      // exactly radius+body still eats the shove there.
+      if (db > threshold || (los && occluded(pos, ball.pos))) {continue;}
       applyTo(ball, a.force * a.forceMultiplier);
       // Splash actually hurts enemies — falloff-scaled like players, with
       // the same damage number + health bar feedback as direct hits
@@ -289,9 +294,14 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
   function applyForceToPrey(pos: THREE.Vector3, radius: number, force: number, forceMode: 'push' | 'pull'): void {
     if (!Number.isFinite(pos.x + pos.y + pos.z + radius + force)) {return;}
     const kbForce = force * KNOCKBACK_SCALE;
+    // No BLAST_IMPULSE_MAX here — the server's prey knock is the flat,
+    // uncapped dir*force envelope (knockbackForce reaches 45 on the heavy
+    // launchers). The player cap exists for feel, not authority: capping
+    // the prediction under-shoved prey on exactly the blasts big enough
+    // to rubberband hardest.
     const applyTo = (t: Forceable, f: number): void =>
-      forceMode === 'push' ? t.applyKnockback(pos, Math.min(f, BLAST_IMPULSE_MAX)) : t.applyPull(pos, Math.min(f, BLAST_IMPULSE_MAX));
-    applyForceToBalls({ pos, radius, force: kbForce, forceMode, forceMultiplier: 1, aoeDamage: 0, directHitTargetId: null }, applyTo);
+      forceMode === 'push' ? t.applyKnockback(pos, f) : t.applyPull(pos, f);
+    applyForceToBalls({ pos, radius, force: kbForce, forceMode, forceMultiplier: 1, aoeDamage: 0, directHitTargetId: null }, applyTo, false);
     applyForceToNuggets(pos, radius, kbForce, forceMode);
   }
 
