@@ -198,6 +198,29 @@ const demoIps = new Map<string, { count: number; start: number }>();
 const DEMO_IP_LIMIT = 12;
 const DEMO_IP_WINDOW_MS = 60_000;
 
+// Leaderboard — submit rides the same IP budget as demo uploads (it's
+// the same body size class); the gates live in leaderboard.ts.
+export async function leaderboardRoute(ctx: HttpCtx, req: Request, url: URL): Promise<Response> {
+  const lb = await import('./leaderboard.ts');
+  if (url.pathname === '/leaderboard/submit' && req.method === 'POST') {
+    const ip = ctx.requestIP?.(req)?.address;
+    if (ip && ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1' &&
+        !windowAllow(demoIps, ip, wallNow(), DEMO_IP_WINDOW_MS, DEMO_IP_LIMIT, 1024)) {
+      return json({ ok: false, error: 'Too many submissions' }, { status: 429 });
+    }
+    const body = await req.arrayBuffer();
+    if (body.byteLength > 16 * 1024 * 1024) {
+      return json({ ok: false, error: 'Upload too large' }, { status: 413 });
+    }
+    const r = await lb.submitDemo(body);
+    return json(r, { status: r.ok ? 200 : 422 });
+  }
+  if (url.pathname === '/leaderboard' && req.method === 'GET') {
+    return json({ board: lb.board(url.searchParams.get('mode') ?? undefined) });
+  }
+  return corsResponse('Not found', { status: 404 });
+}
+
 export async function demoRoute(ctx: HttpCtx, req: Request, url: URL): Promise<Response> {
   if (url.pathname === '/demos/upload' && req.method === 'POST') {
     const ip = ctx.requestIP?.(req)?.address;
