@@ -55,9 +55,9 @@ export function verifySolo(demo: DemoFile): SoloVerdict {
   const base = { spawnN: 0, spawnBad: 0, spawnWorst: 0, spawnWorstId: -1,
     trajWorst: 0, trajFrame: -1, legN: 0, legOver: 0, legWorst: 0,
     projN: 0, projOver: 0, projWorst: 0 };
-  if (!h.runSeed) { return { ok: false, reason: 'unseeded demo (v<7 or unseeded run)', ...base }; }
-  if (!demo.heightmap) { return { ok: false, reason: 'no hmap trailer', ...base }; }
-  if (demo.frames.length === 0) { return { ok: false, reason: 'no frames', ...base }; }
+  if (!h.runSeed) { return Object.assign({ ok: false, reason: 'unseeded demo (v<7 or unseeded run)' }, base); }
+  if (!demo.heightmap) { return Object.assign({ ok: false, reason: 'no hmap trailer' }, base); }
+  if (demo.frames.length === 0) { return Object.assign({ ok: false, reason: 'no frames' }, base); }
 
   const field = hmapToField(demo.heightmap);
 
@@ -93,7 +93,7 @@ export function verifySolo(demo: DemoFile): SoloVerdict {
     if (err > EPS && !firstBad) { firstBad = f; }
   }
   if (firstBad) {
-    return { ok: false, reason: `impossible-trajectory — frame ${firstBad.frameNumber} t=${firstBad.timestamp.toFixed(2)} (${trajWorst.toFixed(2)}m)`, ...base, trajWorst, trajFrame };
+    return Object.assign({ ok: false, reason: `impossible-trajectory — frame ${firstBad.frameNumber} t=${firstBad.timestamp.toFixed(2)} (${trajWorst.toFixed(2)}m)` }, base, { trajWorst, trajFrame });
   }
 
   // ---- spawn-dice gate -------------------------------------------------
@@ -184,7 +184,8 @@ export function verifySolo(demo: DemoFile): SoloVerdict {
   }
 
   if (spawnBad > 0) {
-    return { ok: false, reason: `spawn dice diverged at ball ${spawnWorstId} (${spawnWorst.toFixed(2)}m)`, ...base, trajWorst, trajFrame, spawnN, spawnBad, spawnWorst, spawnWorstId, legN, legOver, legWorst };
+    return Object.assign({ ok: false, reason: `spawn dice diverged at ball ${spawnWorstId} (${spawnWorst.toFixed(2)}m)` }, base,
+      { trajWorst, trajFrame, spawnN, spawnBad, spawnWorst, spawnWorstId, legN, legOver, legWorst });
   }
 
   // ---- projectile legs (evidence only) ---------------------------------
@@ -213,5 +214,5 @@ export function verifySolo(demo: DemoFile): SoloVerdict {
     rec.x = e.posX; rec.y = e.posY; rec.z = e.posZ;
   }
 
-  return { ok: true, ...base, trajWorst, trajFrame, spawnN, spawnBad, spawnWorst, spawnWorstId, legN, legOver, legWorst, projN, projOver, projWorst };
+  return Object.assign({ ok: true }, base, { trajWorst, trajFrame, spawnN, spawnBad, spawnWorst, spawnWorstId, legN, legOver, legWorst, projN, projOver, projWorst });
 }
