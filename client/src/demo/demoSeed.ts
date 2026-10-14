@@ -2,6 +2,7 @@
 // Kept as a module slot so the recorder reads it lazily at record start
 // (main.ts mints it at entity boot; a verifier reads the header field).
 
+import type { Challenge } from '../../../shared/resultToken.ts';
 let runSeed = 0;
 
 /** Wall-clock entropy is fine for seed CHOICE — the seed itself is what
@@ -15,8 +16,6 @@ export function getRunSeed(): number { return runSeed; }
 // to (GET /challenge). Fetched at boot; makeEntities uses it if it
 // landed in time, else the run is unranked local mint. The challenge
 // JSON itself rides along for the submit step (?chal=).
-import type { Challenge } from '../../../shared/resultToken.ts';
-
 let challenge: Challenge | null = null;
 export const setChallenge = (c: Challenge | null): void => { challenge = c; };
 export const getChallenge = (): Challenge | null => challenge;
