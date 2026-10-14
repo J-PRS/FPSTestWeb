@@ -21,11 +21,13 @@
 // Variant draws only exist when the pool saw a non-0 variant — the mode
 // string lies, the data doesn't.
 
+import { join } from 'node:path';
+import { readFileSync, readdirSync } from 'node:fs';
 import { lcg32 } from '../../shared/simRand.ts';
 import { drawBallSpawn, drawSplitVel, drawVariant, SPAWN_SEED_XOR } from '../../shared/spawnDice.ts';
 import { makeSimBall, stepBall, type SimBall } from '../../shared/ballSim.ts';
-import { hmapToField } from '../../client/src/demo/demoHmap.ts';
-import { hmSurface } from '../../shared/heightfield.ts';
+import { hmapToField, hmapFingerprint } from '../../client/src/demo/demoHmap.ts';
+import { hmParseBin, hmSurface, type Heightfield } from '../../shared/heightfield.ts';
 import { MoveSim, GRAVITY } from '../../shared/movement.ts';
 import { WEAPONS } from '../../shared/weaponTable.ts';
 import {
@@ -33,8 +35,30 @@ import {
   type DemoFile, type DemoFrame,
 } from '../../client/src/demo/types.ts';
 
+// Map resolution: the trailer's srcHash fingerprints the full-res field
+// it was recorded on — scan maps/*.bin once, match it, and the whole
+// verification runs at survey precision instead of 96² quantization.
+// Unknown hash (deleted/unshipped map) falls back to the trailer.
+const mapsDir = join(import.meta.dir, '..', '..', 'maps');
+let fieldCache: Map<number, Heightfield | null> | null = null;
+function fieldFor(hm: NonNullable<DemoFile['heightmap']>): { field: Heightfield; fullRes: boolean } {
+  fieldCache ??= ((): Map<number, Heightfield | null> => {
+    const m = new Map<number, Heightfield | null>();
+    try {
+      for (const f of readdirSync(mapsDir).filter((n): boolean => n.endsWith('.bin'))) {
+        const field = hmParseBin(new Uint8Array(readFileSync(join(mapsDir, f))), hm.heightScale, hm.worldScale);
+        m.set(hmapFingerprint(field), field);
+      }
+    } catch { /* maps dir absent — trailer-only */ }
+    return m;
+  })();
+  const real = fieldCache.get(hm.srcHash);
+  return real ? { field: real, fullRes: true } : { field: hmapToField(hm), fullRes: false };
+}
+
 const BALL_COLOR_COUNT = 7;
-const EPS = 2.5;        // coarse hmap trailer bounds contact epsilon
+const EPS_COARSE = 2.5; // 96² trailer quantization bounds contact eps
+const EPS_TIGHT = 0.5;  // full-res map resolved by srcHash — no quantization
 const BALL_STEP = 0.05; // client's fixed sim cadence
 const PROJ_STEP = 0.02;
 
@@ -59,7 +83,8 @@ export function verifySolo(demo: DemoFile): SoloVerdict {
   if (!demo.heightmap) { return Object.assign({ ok: false, reason: 'no hmap trailer' }, base); }
   if (demo.frames.length === 0) { return Object.assign({ ok: false, reason: 'no frames' }, base); }
 
-  const field = hmapToField(demo.heightmap);
+  const { field, fullRes } = fieldFor(demo.heightmap);
+  const EPS = fullRes ? EPS_TIGHT : EPS_COARSE;
 
   // ---- trajectory gate -------------------------------------------------
   const surface = hmSurface(field);

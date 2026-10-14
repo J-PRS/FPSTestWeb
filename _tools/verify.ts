@@ -18,9 +18,10 @@
 // against the real map file (--map maps/x.bin) tightens it.
 import { readFileSync } from 'node:fs';
 import { deserializeDemo } from '../client/src/demo/demoReader.ts';
+import { hmapFingerprint } from '../client/src/demo/demoHmap.ts';
 import { hmapToField } from '../client/src/demo/demoHmap.ts';
 import { MoveSim } from '../shared/movement.ts';
-import { hmSurface, hmHeight } from '../shared/heightfield.ts';
+import { hmSurface, hmHeight, hmParseBin } from '../shared/heightfield.ts';
 import { InputFlags, JetpackFlags, TargetEventType, type DemoFrame } from '../client/src/demo/types.ts';
 import { makeSimBall, stepBall, BALL_BASE_RADIUS, BALL_VARIANT_SCALE, type SimBall } from '../shared/ballSim.ts';
 import { lcg32 } from '../shared/simRand.ts';
@@ -56,7 +57,23 @@ if (!h.runSeed && !noSeed) {
 if (demo.frames.length === 0) { console.log('VERDICT bad-format — no frames'); process.exit(1); }
 if (!demo.heightmap) { console.log('VERDICT bad-format — no hmap trailer; cannot rebuild the surface'); process.exit(1); }
 
-const field = hmapToField(demo.heightmap);
+// --map maps/x.bin — the trailer is a coarse copy of the real field;
+// fingerprint equality proves the map identity AND tightens the whole
+// verification (real-res terrain vs ~1-4m downsample quantization).
+let field = hmapToField(demo.heightmap);
+const mapArg = process.argv.indexOf('--map');
+if (mapArg > 0) {
+  const { readFileSync: rf } = await import('node:fs');
+  const real = hmParseBin(new Uint8Array(rf(process.argv[mapArg + 1]!)),
+    demo.heightmap.heightScale, demo.heightmap.worldScale);
+  if (hmapFingerprint(real) === demo.heightmap.srcHash) {
+    field = real;
+    console.log(`  map identity PROVEN — trailer srcHash matches the real field; terrain at full res`);
+  } else {
+    console.log(`VERDICT map-mismatch — trailer srcHash 0x${demo.heightmap.srcHash.toString(16)} != ${process.argv[mapArg + 1]}`);
+    process.exit(1);
+  }
+}
 const surface = hmSurface(field);
 const sim = new MoveSim(surface, {
   pos: { x: h.startPosX, y: h.startPosY, z: h.startPosZ },
