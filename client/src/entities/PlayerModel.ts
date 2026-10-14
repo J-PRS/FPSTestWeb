@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mkGltfLoader, loadGltfCached } from '../gltfLoad';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import { PLAYER_RADIUS, CAPSULE_CYLINDER_HEIGHT, CAPSULE_CENTER_Y } from '../core/config.js';
 import { urlParams } from '../core/params.js';
@@ -220,6 +221,7 @@ export class PlayerModel {
 
     // Enable shadow casting + grab aim/attachment bones
     this.model.traverse((child): void => this.prepareChild(child));
+    this.mergeSkinnedParts();
     this.computeDistalBones();
     // Model may finish loading while a far-LOD swap is already armed —
     // the freshly captured skinnedMeshes need the swap applied now.
@@ -301,6 +303,9 @@ export class PlayerModel {
   }
 
   private skinnedMeshes: THREE.SkinnedMesh[] = [];
+  /** merged-mesh i → original part indices — remapLod merges the lod1
+   *  geo list into the same buckets so the swap stays aligned. */
+  private lodGeoBuckets: number[][] | null = null;
   private readonly lodCtl = new PlayerModelLod(this.skinnedMeshes,
     () => mkGltfLoader().loadAsync(RIG_MANIFEST[this.variant].lodUrl!).then((g): THREE.BufferGeometry<THREE.NormalBufferAttributes, THREE.BufferGeometryEventMap>[] => {
       const geos: THREE.BufferGeometry[] = [];
@@ -308,7 +313,8 @@ export class PlayerModel {
         if ((o as THREE.SkinnedMesh).isSkinnedMesh) {geos.push(smoothShade((o as THREE.SkinnedMesh).geometry));}
       });
       return geos;
-    }));
+    }),
+    (gs) => this.mergedLodGeos(gs));
 
   /** setScale() multiplier on top of the rig fit — the collider gizmo
    *  divides by this too so the debug wire stays at the sim capsule. */
@@ -340,6 +346,88 @@ export class PlayerModel {
       this.model.matrixWorldAutoUpdate = !frozen;
       if (!frozen) { this.model.updateMatrixWorld(true); }
     }
+  }
+
+  /** Every skinned PART is its own draw call sharing one skeleton —
+   *  5-10 parts per remote ≈ most of the scene's draw mass. Merge parts
+   *  that share material + bindMatrix + parent + local transform into
+   *  one SkinnedMesh per bucket; anything that doesn't match stays
+   *  unmerged rather than risk a visual diff. Same verts, same skin —
+   *  fewer submissions. */
+  private mergeSkinnedParts(): void {
+    const parts = this.skinnedMeshes;
+    if (parts.length < 2) {return;}
+    const buckets = new Map<string, THREE.SkinnedMesh[]>();
+    for (const sm of parts) {
+      const mats = Array.isArray(sm.material) ? sm.material : [sm.material];
+      if (mats.length !== 1) {return;} // multi-material part — leave the whole model split
+      const m = mats[0]!;
+      const key = [
+        m.name, m.type,
+        sm.bindMatrix.elements.join(','),
+        sm.position.toArray().join(','), sm.quaternion.toArray().join(','), sm.scale.toArray().join(','),
+        sm.parent?.uuid ?? '',
+      ].join('|');
+      let b = buckets.get(key);
+      if (!b) {buckets.set(key, b = []);}
+      b.push(sm);
+    }
+    if (buckets.size === parts.length) {return;} // nothing shares — merge would save nothing
+    // Plan every bucket first — a mid-merge attribute failure aborts
+    // before any part leaves the scene.
+    const merged: THREE.SkinnedMesh[] = [];
+    const geoBuckets: number[][] = [];
+    const detach: THREE.SkinnedMesh[] = [];
+    for (const grp of buckets.values()) {
+      if (grp.length === 1) {
+        merged.push(grp[0]!);
+        geoBuckets.push([parts.indexOf(grp[0]!)]);
+        continue;
+      }
+      const geo = mergeGeometries(grp.map((s): THREE.BufferGeometry => s.geometry), false);
+      if (!geo) {return;} // attribute mismatch — keep the whole model split
+      const mm = new THREE.SkinnedMesh(geo, grp[0]!.material);
+      mm.name = `merged:${grp[0]!.name}+${grp.length - 1}`;
+      mm.bind(grp[0]!.skeleton, grp[0]!.bindMatrix.clone());
+      mm.castShadow = grp[0]!.castShadow;
+      mm.receiveShadow = grp[0]!.receiveShadow;
+      mm.frustumCulled = grp[0]!.frustumCulled;
+      // baseGeo stash must be the merged BASE geo — if lod1 was already
+      // applied, current geometry is the decimated one.
+      if (grp.some((s): boolean => Boolean(s.userData.baseGeo))) {
+        const base = mergeGeometries(grp.map((s): THREE.BufferGeometry => (s.userData.baseGeo as THREE.BufferGeometry) ?? s.geometry), false);
+        if (base) {mm.userData.baseGeo = base;}
+      }
+      mm.computeBoundingSphere();
+      if (mm.boundingSphere) {mm.boundingSphere.radius += 0.6;}
+      mm.userData.srcParent = grp[0]!.parent;
+      merged.push(mm);
+      detach.push(...grp);
+      geoBuckets.push(grp.map((s): number => parts.indexOf(s)));
+    }
+    // All buckets planned — swap the graph in one shot.
+    for (const mm of merged) {
+      if (mm.name.startsWith('merged:')) {
+        (mm.userData.srcParent as THREE.Object3D | null)?.add(mm);
+        delete mm.userData.srcParent;
+      }
+    }
+    for (const s of detach) {s.removeFromParent();}
+    this.skinnedMeshes.length = 0;
+    this.skinnedMeshes.push(...merged);
+    this.lodGeoBuckets = geoBuckets;
+  }
+
+  /** remapLod hook — merges the lod1 geo list into the same material
+   *  buckets mergeSkinnedParts produced. Identity until buckets exist. */
+  private mergedLodGeos(gs: THREE.BufferGeometry[]): THREE.BufferGeometry[] {
+    const b = this.lodGeoBuckets;
+    if (!b) {return gs;}
+    return b.map((idxs): THREE.BufferGeometry => {
+      if (idxs.length === 1) {return gs[idxs[0]!]!;}
+      const merged = mergeGeometries(idxs.map((i): THREE.BufferGeometry => gs[i]!), false);
+      return merged ?? gs[idxs[0]!]!;
+    });
   }
 
   private computeDistalBones(): void {
