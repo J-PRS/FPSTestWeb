@@ -21,7 +21,9 @@ import { deserializeDemo } from '../client/src/demo/demoReader.ts';
 import { hmapToField } from '../client/src/demo/demoHmap.ts';
 import { MoveSim } from '../shared/movement.ts';
 import { hmSurface } from '../shared/heightfield.ts';
-import { InputFlags, JetpackFlags, type DemoFrame } from '../client/src/demo/types.ts';
+import { InputFlags, JetpackFlags, TargetEventType, type DemoFrame } from '../client/src/demo/types.ts';
+import { makeSimBall, stepBall, type SimBall } from '../shared/ballSim.ts';
+import { lcg32 } from '../shared/simRand.ts';
 
 const file = process.argv[2];
 if (!file) { console.error('usage: bun _tools/verify.ts <file.demo> [--eps N]'); process.exit(2); }
@@ -77,11 +79,70 @@ for (const f of demo.frames) {
   if (err > EPS && !firstBad) { firstBad = { f, dx, dy, dz }; }
 }
 
+// ---- event tier: ball legs ---------------------------------------------
+// Each targetEvent carries full pos+vel — every event re-seeds the leg,
+// so a leg verifies its own span: sim forward from the last recorded
+// truth to this event's timestamp, compare. Balls hunt the local player
+// (target = replayed pos); the live client stepped at fixed 0.05s —
+// replicate that cadence exactly. A splash knock between events IS a
+// legitimate divergence source (knocks aren't recorded), so legs are
+// reported as a distribution, not individually fatal: a forged run
+// diverges systematically, honest knock wobble hits a leg or two.
+const BALL_STEP = 0.05;
+const balls = new Map<number, { b: SimBall; lastT: number }>();
+let legN = 0, legOver = 0, legWorst = 0, legWorstId = -1;
+
+// Player pos interp between stored frames — the hunt target the live
+// sim saw. Outside the recorded window the endpoints pin.
+const playerPosAt = (t: number): { x: number; y: number; z: number } => {
+  const fr = demo.frames;
+  if (t <= fr[0]!.timestamp) {return { x: fr[0]!.posX, y: fr[0]!.posY, z: fr[0]!.posZ };}
+  for (let i = 1; i < fr.length; i += 1) {
+    if (fr[i]!.timestamp >= t) {
+      const a = fr[i - 1]!, b2 = fr[i]!;
+      const k = (t - a.timestamp) / Math.max(1e-6, b2.timestamp - a.timestamp);
+      return { x: a.posX + (b2.posX - a.posX) * k, y: a.posY + (b2.posY - a.posY) * k, z: a.posZ + (b2.posZ - a.posZ) * k };
+    }
+  }
+  const l = fr[fr.length - 1]!;
+  return { x: l.posX, y: l.posY, z: l.posZ };
+};
+
+for (const e of demo.targetEvents) {
+  if (e.targetType >= 64) {continue;} // ball lane only — variants 0-63
+  const rec = balls.get(e.targetId);
+  if (e.eventType === TargetEventType.Spawned || !rec) {
+    balls.set(e.targetId, {
+      b: makeSimBall(e.targetId, e.targetType as 0 | 1 | 2 | 3, 0,
+        { x: e.posX, y: e.posY, z: e.posZ }, { x: e.velX, y: e.velY, z: e.velZ }),
+      lastT: e.timestamp,
+    });
+    continue;
+  }
+  // Step the leg in 0.05 quanta — the same cadence the client's replay ran.
+  let rem = e.timestamp - rec.lastT;
+  while (rem > 1e-6) {
+    const dt = Math.min(BALL_STEP, rem);
+    stepBall(rec.b, dt, field, playerPosAt(rec.lastT + dt), false);
+    rec.lastT += dt; rem -= dt;
+  }
+  const err = Math.hypot(rec.b.x - e.posX, rec.b.y - e.posY, rec.b.z - e.posZ);
+  legN += 1;
+  if (err > EPS) {legOver += 1;}
+  if (err > legWorst) { legWorst = err; legWorstId = e.targetId; }
+  // Re-seed on truth — legs verify independently.
+  rec.b.x = e.posX; rec.b.y = e.posY; rec.b.z = e.posZ;
+  rec.b.vx = e.velX; rec.b.vy = e.velY; rec.b.vz = e.velZ;
+}
+
 console.log(`demo: ${file}`);
 console.log(`  mode=${h.mode} room=${h.room} player=${h.playerName} dur=${h.duration.toFixed(1)}s frames=${demo.frames.length} v=${h.formatVersion} seed=0x${h.runSeed.toString(16)}`);
 console.log(`  hmap ${demo.heightmap.gridN}² worldScale=${demo.heightmap.worldScale} heightScale=${demo.heightmap.heightScale} — contact eps bounded by downsample quantization`);
 if (worstFrame) {
   console.log(`  worst divergence ${worst.toFixed(2)}m at frame ${worstFrame.frameNumber} t=${worstFrame.timestamp.toFixed(2)}`);
+}
+if (legN > 0) {
+  console.log(`  ball legs ${legN}: ${legOver} over eps (${((legOver / legN) * 100).toFixed(0)}%), worst ${legWorst.toFixed(2)}m ball=${legWorstId} — unrecorded knock legs legitimately diverge`);
 }
 if (firstBad) {
   const { f, dx, dy, dz } = firstBad;
