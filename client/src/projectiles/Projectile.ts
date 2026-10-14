@@ -479,6 +479,7 @@ export class Projectile {
     // Late-join ribbons miss the driver's ctor follow-bind — without this
     // the armed streak's tip trails the shell by a frame of travel.
     armed.follow = this.rendered;
+    armed.followManaged = true;
     this.ribbons.push(armed);
   }
 

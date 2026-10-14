@@ -128,6 +128,10 @@ export class RibbonTrail {
   /** Optional host-side context merged into a follow-jump payload — names
    *  which host state (blend offset, suppressed emit) a fired cut rode. */
   jumpHint?: () => Record<string, unknown>;
+  /** True when a TrailDriver binds this follow — the driver's own maxStep
+   *  gate is the jump policy for managed hosts, so the re-pin guard here
+   *  stays a safety cut but stops reporting managed jumps as anomalies. */
+  followManaged = false;
   private _ox = 0; private _oy = 0; private _oz = 0; // last lane offset — re-applied on follow re-pin
   // Owning subsystem ('proj:disc', 'ball', 'sentry') — every census/probe
   // row names the owner so a frozen streak is identified, not hunted.
@@ -322,6 +326,7 @@ RibbonTrail.reapedStale += 1;
     this.rampFrom = 1;
     this.emitScale = 1;
     this.follow = null;
+    this.followManaged = false;
     this.jumpHint = undefined; // pooled ribbons must not leak a prior owner's hint closure
     this.claimSlot(scene);
   }
@@ -462,8 +467,10 @@ this.pushed += 1;
       const jumpM = jumpBudget(this.lastSpd);
       if (jx * jx + jy * jy + jz * jz > jumpM * jumpM) {
         this.clear();
-RibbonTrail.followJumps += 1;
-        glitch('follow-jump', Object.assign({ tag: this.tag, slot: this.slot, gapM: Math.round(Math.hypot(jx, jy, jz)) }, this.jumpHint?.()));
+        RibbonTrail.followJumps += 1;
+        if (!this.followManaged) {
+          glitch('follow-jump', Object.assign({ tag: this.tag, slot: this.slot, gapM: Math.round(Math.hypot(jx, jy, jz)) }, this.jumpHint?.()));
+        }
         return;
       }
     }
@@ -609,6 +616,8 @@ RibbonTrail.followJumps += 1;
     this.head = -1;
     this.count = 0;
     this.follow = null;
+    this.followManaged = false;
+    this.jumpHint = undefined;
     this.releaseSlot();
     const pool = this.billboard ? RibbonTrail.poolBillboard : RibbonTrail.poolFixed;
     pool.push(this);

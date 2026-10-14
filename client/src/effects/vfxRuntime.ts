@@ -399,7 +399,7 @@ export interface DriveLayer { emitSegment(dt?: number): void; teleport(): void }
 // `follow` is the live-pos anchor RibbonTrail re-pins its head to — the
 // driver binds it so the tip tracks the host between pushes instead of
 // rendering one frame of travel behind.
-export interface DriveRibbon { push(pos: THREE.Vector3, vel: THREE.Vector3): void; clear(): void; follow?: THREE.Vector3 | null }
+export interface DriveRibbon { push(pos: THREE.Vector3, vel: THREE.Vector3): void; clear(): void; follow?: THREE.Vector3 | null; followManaged?: boolean }
 
 const drivers = new Set<TrailDriver>();
 export function trailDriverCount(): number { return drivers.size; }
@@ -411,7 +411,7 @@ export class TrailDriver {
     private readonly emitters: DriveLayer[],
     private readonly ribbons: DriveRibbon[] = [],
   ) {
-    for (const r of this.ribbons) {r.follow = host.pos;}
+    for (const r of this.ribbons) {r.follow = host.pos; r.followManaged = true;}
     drivers.add(this);
   }
   release(): void { drivers.delete(this); }

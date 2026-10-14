@@ -100,6 +100,10 @@ export interface CombatCtx {
   /** Local-body shove prediction only — remote blasts use this so the
    *  wire knockback dedupes against a stamp instead of landing raw. */
   predictLocalShove: ReturnType<typeof createBlastForce>['predictLocalShove'];
+  /** Remote-authored blasts shove replayed prey sims too — without this
+   *  enemy explosions left client ball/nugget replays ballistic until the
+   *  next segment re-anchor (the 15-30m rubberband bursts). */
+  applyForceToPrey: ReturnType<typeof createBlastForce>['applyForceToPrey'];
   lg: { tickBeam: (dt: number) => void };
   chainRamp: Map<number, { t: number; n: number }>;
 }
@@ -113,7 +117,7 @@ export function createCombat(deps: CombatDeps) {
   // Push/pull force on player/creatures/nuggets/remotes + splash damage —
   // game/blastForce.ts. Built first: fire + lightning hooks take it.
   const blast = createBlastForce(deps, { onTargetDestroyed: (t, impulse, wt): void => onTargetDestroyed(c, t, impulse, wt) });
-  const { applyExplosionForce, applyForceToRemotes, predictLocalShove } = blast;
+  const { applyExplosionForce, applyForceToRemotes, predictLocalShove, applyForceToPrey } = blast;
 
   // Trigger dispatch lives in combat/fire.ts — it fires whatever the
   // WeaponDef says (kick + projectile or pellet fan). 'beam' kinds route to
@@ -139,6 +143,7 @@ export function createCombat(deps: CombatDeps) {
     deps,
     applyExplosionForce,
     predictLocalShove,
+    applyForceToPrey,
     lg: { tickBeam: (dt: number): void => { lg.tickBeam(dt); rep.tickBeam(dt); } },
     // Chaingun ramp state: targetId → last hit time + chain count.
     chainRamp: new Map(),

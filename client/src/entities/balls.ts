@@ -435,6 +435,7 @@ export class Ball {
     // correction while mesh+deposits blend — the follow-jump stream.
     for (const r of out) {
       r.follow = this._rpos;
+      r.followManaged = true;
       r.jumpHint = (): Record<string, unknown> => ({ off: Math.round(this.renderOffset.length() * 10) / 10, v: Math.round(this.vel.length()), acc: Math.round(this.netS.netAcc * 1000) });
     }
     return out;

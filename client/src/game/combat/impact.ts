@@ -413,6 +413,11 @@ export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
       const blastPos = p.hitPointValid ? p.hitPoint : p.pos;
       const bloom = p.directHit ? directHitAoeBonus(p.config.weaponType) : 1;
       c.predictLocalShove(blastPos, p.config.aoeRadius * bloom, p.force, p.forceMode, p.shooterId ?? undefined);
+      // Replayed prey sims (balls/nuggets) get the same predicted shove --
+      // the authority knocks them on the blast tick, so without this they
+      // flew ballistic until the next segment re-anchored them (~0.5s of
+      // visible rubberband per remote blast near a swarm).
+      c.applyForceToPrey(blastPos, p.config.aoeRadius * bloom, p.force, p.forceMode);
     }
     return;
   }

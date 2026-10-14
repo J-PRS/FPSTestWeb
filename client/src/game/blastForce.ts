@@ -279,5 +279,21 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     }
   }
 
-  return { applyExplosionForce, applyForceToRemotes, predictLocalShove };
+  /** Blast knock on the replayed prey sims (balls + nuggets) for REMOTE-
+   *  authored explosions. The authority shoves them instantly via the
+   *  'prey' knock event, so a client that waits for the next segment
+   *  eats ~0.5s × force of divergence — the 'segment rubberband' bursts
+   *  whenever a bot blast salted a swarm. Players aren't here: the wire
+   *  knockback echo + predictLocalShove own them. Damage stays server-
+   *  declared (aoeDamage 0 → feedback skipped, kill edges confirm). */
+  function applyForceToPrey(pos: THREE.Vector3, radius: number, force: number, forceMode: 'push' | 'pull'): void {
+    if (!Number.isFinite(pos.x + pos.y + pos.z + radius + force)) {return;}
+    const kbForce = force * KNOCKBACK_SCALE;
+    const applyTo = (t: Forceable, f: number): void =>
+      forceMode === 'push' ? t.applyKnockback(pos, Math.min(f, BLAST_IMPULSE_MAX)) : t.applyPull(pos, Math.min(f, BLAST_IMPULSE_MAX));
+    applyForceToBalls({ pos, radius, force: kbForce, forceMode, forceMultiplier: 1, aoeDamage: 0, directHitTargetId: null }, applyTo);
+    applyForceToNuggets(pos, radius, kbForce, forceMode);
+  }
+
+  return { applyExplosionForce, applyForceToRemotes, predictLocalShove, applyForceToPrey };
 }
