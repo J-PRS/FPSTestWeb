@@ -89,6 +89,7 @@ export class RemoteAnim {
 
   private _groundLift = 0;
   private _buriedAcc = 0;
+  private _buriedStreak = 0;
 
   tickModel(dt: number): void {
     const {h} = this;
@@ -112,7 +113,17 @@ export class RemoteAnim {
         // field too = the server's sim really sank (unbury-class bug);
         // wire fine on field but under the chord = the drawn mesh bridges
         // the gully at this LOD and the lift cap is the only cover.
-        if (depth > 0.4) {glitch('remote-buried', { id: h.playerId, depth: Number(depth.toFixed(1)), lift: Number(lift.toFixed(1)), fieldD: Number((h.terrain.getHeight(h.position.x, h.position.z) - h.feetY).toFixed(1)) });}
+        // Persistence gate: the server unbury rescues sim-owned bodies on
+        // a 0.5s cadence, so a single buried sample is usually a dip the
+        // server already owns and heals — only a depth that survives a
+        // second sample (past one rescue cycle) is the anomaly worth
+        // counting.
+        if (depth > 0.4) {
+          this._buriedStreak += 1;
+          if (this._buriedStreak >= 2) {
+            glitch('remote-buried', { id: h.playerId, depth: Number(depth.toFixed(1)), lift: Number(lift.toFixed(1)), fieldD: Number((h.terrain.getHeight(h.position.x, h.position.z) - h.feetY).toFixed(1)) });
+          }
+        } else {this._buriedStreak = 0;}
       }
     }
     h.model.setPosition(h.position.x, h.feetY + lift, h.position.z);

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { getSwarm, freeSlots } from './swarms.js';
 import { GRAVITY } from '../core/config.js';
 import { TrailDriver } from '../effects/vfxRuntime.js';
+import { jumpBudget } from '../effects/RibbonTrail.js';
 import { glitch } from '../core/fxDiag.js';
 // Type-only back-import — Ball calls into these helpers per tick, so a
 // value import would make the pair a runtime cycle. viewPos comes in as
@@ -109,6 +110,16 @@ export function tickBallTrails(b: Ball, dt: number, viewPos: THREE.Vector3): voi
         b.retireRibbons();
       }
     } else {
+      // Mid-size folds keep their ribbons anchored to _rpos, but the
+      // offset's exp decay can slide that anchor faster than the ribbon
+      // jump budget — at low fps one frame moves it most of the offset
+      // and the follow guard fires a follow-jump for a cut it was going
+      // to make anyway. When this frame's projected slide outruns the
+      // budget, retire quietly instead: same cut, graceful fade, no
+      // false-positive glitch.
+      const off = Math.sqrt(offSq);
+      const spd = Math.max(1e-4, Math.sqrt(b.vel.lengthSq()));
+      if (off > 0.5 && off * (1 - Math.exp(-10 * dt)) > jumpBudget(spd)) {b.retireRibbons();}
       b._blendCut = false;
     }
     b.trails.fade(dt);

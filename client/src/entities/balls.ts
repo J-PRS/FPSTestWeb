@@ -433,7 +433,10 @@ export class Ball {
     // retired replacements must inherit the tail anchor themselves. The
     // anchor is _rpos (pos + renderOffset): raw pos snaps on every segment
     // correction while mesh+deposits blend — the follow-jump stream.
-    for (const r of out) {r.follow = this._rpos;}
+    for (const r of out) {
+      r.follow = this._rpos;
+      r.jumpHint = (): Record<string, unknown> => ({ off: Math.round(this.renderOffset.length() * 10) / 10, v: Math.round(this.vel.length()), acc: Math.round(this.netS.netAcc * 1000) });
+    }
     return out;
   }
 

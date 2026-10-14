@@ -44,7 +44,7 @@ export function setRibbonCamera(pos: THREE.Vector3 | null): void { sharedCamPos 
  *  suppressed-emitter resume; either way a chord would paint. (The old
  *  `spd*0.25 + 12` — a quarter-second — let a 90m/s ball legitimately
  *  resume 22m away and painted exactly the sky streaks it guarded.) */
-const jumpBudget = (spd: number): number => spd * 0.08 + 3;
+export const jumpBudget = (spd: number): number => spd * 0.08 + 3;
 
 /* Wall-clock gap between pushes that severs the trail. Live emitters push
  * every frame, so >120ms of silence is never contiguous motion — the host
@@ -125,6 +125,9 @@ export class RibbonTrail {
   // position before verts are written — the strip stays welded to the
   // body instead of floating one frame behind.
   follow: THREE.Vector3 | null = null;
+  /** Optional host-side context merged into a follow-jump payload — names
+   *  which host state (blend offset, suppressed emit) a fired cut rode. */
+  jumpHint?: () => Record<string, unknown>;
   private _ox = 0; private _oy = 0; private _oz = 0; // last lane offset — re-applied on follow re-pin
   // Owning subsystem ('proj:disc', 'ball', 'sentry') — every census/probe
   // row names the owner so a frozen streak is identified, not hunted.
@@ -319,6 +322,7 @@ RibbonTrail.reapedStale += 1;
     this.rampFrom = 1;
     this.emitScale = 1;
     this.follow = null;
+    this.jumpHint = undefined; // pooled ribbons must not leak a prior owner's hint closure
     this.claimSlot(scene);
   }
 
@@ -382,12 +386,14 @@ RibbonTrail.nanPushes += 1;
       const jy = pos.y + oy - this.py[this.head]!;
       const jz = pos.z + oz - this.pz[this.head]!;
       const jump = jumpBudget(spd);
-      if (jx * jx + jy * jy + jz * jz > jump * jump
-        || performance.now() - this.lastPushMs > PUSH_GAP_MS) {
-        // Writer-side cut — if trail-smear still fires on this tag next
-        // soak, the chord isn't reaching here (partial-rewrite residue),
-        // not a missing owner clear().
-        glitch('trail-jumpcut', { tag: this.tag, gapM: Math.round(Math.hypot(jx, jy, jz)) });
+      const spatialJump = jx * jx + jy * jy + jz * jz > jump * jump;
+      if (spatialJump || performance.now() - this.lastPushMs > PUSH_GAP_MS) {
+        // Spatial jump = a caller skipped teleport()/clear() — anomaly.
+        // Pure time gap = a starved emitter resuming: the designed
+        // fresh-trail path, no chord was ever at risk — don't log it.
+        if (spatialJump) {
+          glitch('trail-jumpcut', { tag: this.tag, gapM: Math.round(Math.hypot(jx, jy, jz)) });
+        }
         this.clear();
       }
     }
@@ -457,7 +463,7 @@ this.pushed += 1;
       if (jx * jx + jy * jy + jz * jz > jumpM * jumpM) {
         this.clear();
 RibbonTrail.followJumps += 1;
-        glitch('follow-jump', { tag: this.tag, slot: this.slot, gapM: Math.round(Math.hypot(jx, jy, jz)) });
+        glitch('follow-jump', Object.assign({ tag: this.tag, slot: this.slot, gapM: Math.round(Math.hypot(jx, jy, jz)) }, this.jumpHint?.()));
         return;
       }
     }
