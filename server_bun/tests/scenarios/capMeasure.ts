@@ -14,6 +14,12 @@ export interface RunStat {
   avgSpeed: number;     // pathM / carryT — the capper's honest route pace
   avgE: number;         // mean mechanical energy ½v²+g·hAGL while carrying
   caps: number;
+  grabV: number;        // speed through the stand at the grab instant —
+                        // THE capper stat: llama walk-in vs speed grab
+  peakE: number;        // max mechanical E banked during the approach —
+                        // the potential-to-kinetic reserve the route built
+  approachE: number;    // mean E through the approach — a runner who only
+                        // hops low bleeds ~0; skiing banks altitude into E
 }
 
 export interface MeasureOpts {
@@ -87,7 +93,7 @@ export function measureCap(
     }
   }
 
-  const stat: RunStat = { grabT: 0, carryT: 0, pathM: 0, avgSpeed: 0, avgE: 0, caps: 0 };
+  const stat: RunStat = { grabT: 0, carryT: 0, pathM: 0, avgSpeed: 0, avgE: 0, caps: 0, grabV: 0, peakE: 0, approachE: 0 };
   const dt = 0.05;
   let simT = 0;
   // Wall-clock watchdog: a degenerate genome (or plain bad luck) can
@@ -102,6 +108,7 @@ export function measureCap(
   // alone hides that a route dumped altitude for nothing. E is
   // measured against local ground so banked potential counts.
   let eSum = 0, eSamples = 0;
+  let aSum = 0, aSamples = 0;
   const mechE = () => {
     const v2 = capper.velocity.x ** 2 + capper.velocity.y ** 2 + capper.velocity.z ** 2;
     return 0.5 * v2 + 28 * Math.max(0, capper.position.y - hmHeight(fld, capper.position.x, capper.position.z));
@@ -113,9 +120,14 @@ export function measureCap(
     step(room, 1, dt);
     simT += dt;
     const bravoFlag = room.flags!.flags.get('bravo')!;
+    if (!capper.isDead) {
+      const e = mechE();
+      if (!carrying) { aSum += e; aSamples++; if (e > stat.peakE) {stat.peakE = e;} }
+    }
     if (!carrying && bravoFlag.carrier === capper.id) {
       carrying = true;
       stat.grabT = simT;
+      stat.grabV = Math.hypot(capper.velocity.x, capper.velocity.z);
       lastPos = { ...capper.position };
     }
     if (carrying) {
@@ -139,6 +151,7 @@ export function measureCap(
         stat.carryT = simT - stat.grabT;
         stat.avgSpeed = stat.carryT > 0 ? stat.pathM / stat.carryT : 0;
         stat.avgE = eSamples > 0 ? eSum / eSamples : 0;
+        stat.approachE = aSamples > 0 ? aSum / aSamples : 0;
         break;
       }
       if (bravoFlag.state === 'home') {
@@ -146,6 +159,7 @@ export function measureCap(
         stat.carryT = simT - stat.grabT;
         stat.avgSpeed = stat.carryT > 0 ? stat.pathM / stat.carryT : 0;
         stat.avgE = eSamples > 0 ? eSum / eSamples : 0;
+        stat.approachE = aSamples > 0 ? aSum / aSamples : 0;
         break;
       }
     }
@@ -174,6 +188,7 @@ export function measureCap(
     console.log(
       `capper run [${tag}]: grab@${stat.grabT.toFixed(1)}s carry=${stat.carryT.toFixed(1)}s ` +
       `path=${stat.pathM.toFixed(0)}m avgSpeed=${stat.avgSpeed.toFixed(1)}m/s ` +
+      `grabV=${stat.grabV.toFixed(1)}m/s approachE=${stat.approachE.toFixed(0)} peakE=${stat.peakE.toFixed(0)} ` +
       `avgE=${stat.avgE.toFixed(0)} caps=${stat.caps}`,
     );
   }
