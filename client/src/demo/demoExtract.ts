@@ -43,7 +43,7 @@ export function buildDemoFile(r: DemoRecorder, description = ''): DemoFile {
       projectileEventCount: r.projectileEvents.length,
       targetEventCount: targetEvents.length,
       checksum: 0,
-      description}, startFrame(frames.length > 0 ? frames[0] : null), {projectileLifetime: 0}, r.context, {tableHash: 0}), // stamped by the writer at serialize time
+      description}, startFrame(frames.length > 0 ? frames[0] : null), {projectileLifetime: 0}, r.context, {tableHash: 0, runSeed: 0}), // stamped by the writer at serialize time
     frames,
     projectileEvents: [...r.projectileEvents],
     targetEvents,
@@ -94,7 +94,7 @@ export function extractClip(r: DemoRecorder, startTime: number, endTime: number,
       startPosX: first.posX, startPosY: first.posY, startPosZ: first.posZ,
       startYaw: first.yaw, startPitch: first.pitch,
       startVelX: first.velX, startVelY: first.velY, startVelZ: first.velZ,
-      projectileLifetime}, r.context, {tableHash: 0}), // stamped by the writer at serialize time
+      projectileLifetime}, r.context, {tableHash: 0, runSeed: 0}), // stamped by the writer at serialize time
     frames: normFrames,
     projectileEvents: normProj,
     targetEvents: normTgt,

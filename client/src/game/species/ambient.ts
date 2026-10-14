@@ -4,6 +4,7 @@ import {
   WEED_MAX, WEED_SPAWN_INTERVAL, WEED_SPAWN_MIN, WEED_SPAWN_MAX,
   WEED_WIND_X, WEED_WIND_Z,
 } from '../../core/config.js';
+import { simRand } from '../../../../shared/simRand.js';
 import type { Species } from '../speciesKit.js';
 import { Tumbleweed } from '../../entities/Tumbleweed.js';
 import type { SpeciesCtx } from './context.js';
@@ -23,15 +24,15 @@ export function createAmbientSpecies({ deps, kit, targets }: SpeciesCtx): { weed
     const player = deps.lazyPlayer();
     // Spawn upwind so it rolls across the player's field of view; a lateral
     // jitter keeps the parade from becoming a conveyor line.
-    const dist = WEED_SPAWN_MIN + Math.random() * (WEED_SPAWN_MAX - WEED_SPAWN_MIN);
-    const side = (Math.random() - 0.5) * WEED_SPAWN_MAX;
+    const dist = WEED_SPAWN_MIN + simRand() * (WEED_SPAWN_MAX - WEED_SPAWN_MIN);
+    const side = (simRand() - 0.5) * WEED_SPAWN_MAX;
     const pos = new THREE.Vector3(
       player.pos.x - weedWind.x * dist - weedWind.z * side,
       0,
       player.pos.z - weedWind.z * dist + weedWind.x * side,
     );
     // ~1 in 8 is a megaweed — 2x ball, 6x hp, 3 nuggets
-    const w = new Tumbleweed(scene, deps.lazyTerrain(), pos, Math.random() < 0.125);
+    const w = new Tumbleweed(scene, deps.lazyTerrain(), pos, simRand() < 0.125);
     burrow(w);
     weeds.push(w);
     targets.push(w);

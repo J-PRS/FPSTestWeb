@@ -11,6 +11,7 @@ import {
   ROLLER_MAX, ROLLER_SPAWN_INTERVAL, ROLLER_SPAWN_MIN, ROLLER_SPAWN_MAX,
   ROLLER_HIT_DAMAGE, ROLLER_HIT_FORCE,
 } from '../../core/config.js';
+import { simRand } from '../../../../shared/simRand.js';
 import * as sfx from '../../core/sfx.js';
 import type { Species } from '../speciesKit.js';
 import { PROFILES } from '../targeting.js';
@@ -45,7 +46,7 @@ export function createMeleeSpecies({ deps, kit, targets }: SpeciesCtx) {
       // Matriarch births a scarab — cap-checked, positioned just off her hip
       if (atCap(scarabs, capFor('scarab', SCARAB_MAX))) {return;}
       const s = new Scarab(scene, deps.lazyTerrain(), cr.pos.clone().add(new THREE.Vector3(
-        (Math.random() - 0.5) * 3, 0, (Math.random() - 0.5) * 3)));
+        (simRand() - 0.5) * 3, 0, (simRand() - 0.5) * 3)));
       s.onBite = (sc): boolean => bite(sc, SCARAB_BITE_FORCE, SCARAB_BITE_DAMAGE, 'swarmed by scarabs', undefined, SCARAB_BITE_DIST + 1);
       s.onLanded = (p): void => deps.lazyEffects().spawnJumpDust(p);
       scarabs.push(s);
@@ -72,11 +73,11 @@ export function createMeleeSpecies({ deps, kit, targets }: SpeciesCtx) {
     // One spawn attempt = a whole pack, clustered on the same burrow spot.
     // An uber roll drops ONE dreadbeetle instead — a pack of those is a raid boss.
     const base = pos ?? ringPos(SCARAB_SPAWN_MIN, SCARAB_SPAWN_MAX);
-    const n = u || pos ? 1 : SCARAB_PACK_MIN + Math.floor(Math.random() * (SCARAB_PACK_MAX - SCARAB_PACK_MIN + 1));
+    const n = u || pos ? 1 : SCARAB_PACK_MIN + Math.floor(simRand() * (SCARAB_PACK_MAX - SCARAB_PACK_MIN + 1));
     for (let k = 0; k < n; k += 1) {
       if (atCap(scarabs, capFor('scarab', SCARAB_MAX))) {break;}
       const s = new Scarab(scene, deps.lazyTerrain(), base.clone().add(new THREE.Vector3(
-        (Math.random() - 0.5) * 6, 0, (Math.random() - 0.5) * 6)), u);
+        (simRand() - 0.5) * 6, 0, (simRand() - 0.5) * 6)), u);
       s.onBite = (sc): boolean => bite(sc, SCARAB_BITE_FORCE, SCARAB_BITE_DAMAGE, 'swarmed by scarabs', { force: 2.5, dmg: 3, text: 'trampled by a dreadbeetle' }, SCARAB_BITE_DIST + 1);
       s.onLanded = (p): void => deps.lazyEffects().spawnJumpDust(p);
       if (!pos) {burrow(s);}
@@ -103,7 +104,7 @@ export function createMeleeSpecies({ deps, kit, targets }: SpeciesCtx) {
       // cap-checked so a bloatgrub chain can't flood the field.
       for (let k = 0; k < 3 && !atCap(grubs, capFor('grub', GRUB_MAX)); k += 1) {
         const child = new Grub(scene, deps.lazyTerrain(), mother.pos.clone().add(new THREE.Vector3(
-          (Math.random() - 0.5) * 2, 0, (Math.random() - 0.5) * 2)));
+          (simRand() - 0.5) * 2, 0, (simRand() - 0.5) * 2)));
         child.onBite = g.onBite; // same wiring — children are normal grubs
         grubs.push(child);
         targets.push(child);

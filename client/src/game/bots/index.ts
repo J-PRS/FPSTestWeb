@@ -21,6 +21,7 @@ import { respawnBotF, hitF, hurtLocal, botKilledF, botSay, botSayDrain } from '.
 import { chatter, chatKindFor, vgsCommandFor, radioAimFor, type ChatterKind } from '../../../../shared/botTaunts.js';
 import { RoomNoticer } from '../../../../shared/roomNoticer.js';
 import { winText, checkWin, resetMatch, creditKill, creditDamage, collect, pushScore, syncLocalTeam, awardPersonal } from './botMatch.js';
+import { simRand } from '../../../../shared/simRand.js';
 
 /**
  * TeamBots — the mode referee. Bot brains/bodies live in botBrain.ts;
@@ -578,13 +579,13 @@ bn += 1;
       return Number.isFinite(g) ? g : 0;
     };
     if (pool?.length) {
-      const p = pool[Math.floor(Math.random() * pool.length)]!;
-      const jx = (Math.random() - 0.5) * 8, jz = (Math.random() - 0.5) * 8;
+      const p = pool[Math.floor(simRand() * pool.length)]!;
+      const jx = (simRand() - 0.5) * 8, jz = (simRand() - 0.5) * 8;
       return new THREE.Vector3(p.x + jx, floorAt(p.x + jx, p.z + jz) + EYE, p.z + jz);
     }
     const player = this.deps.lazyPlayer();
-    const a = Math.random() * Math.PI * 2;
-    const r = 20 + Math.random() * 40;
+    const a = simRand() * Math.PI * 2;
+    const r = 20 + simRand() * 40;
     const sx = player.pos.x + Math.cos(a) * r, sz = player.pos.z + Math.sin(a) * r;
     return new THREE.Vector3(sx, floorAt(sx, sz) + EYE, sz);
   }

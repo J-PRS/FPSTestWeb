@@ -121,6 +121,8 @@ function readDemoHeader(r: Reader, buffer: ArrayBuffer): DemoFile['header'] {
 
   // v6: content-table fingerprint; 0 on older files (nothing to compare)
   const tableHash = formatVersion >= 6 ? r.u32() : 0;
+  // v7: run's sim-RNG seed; 0 on older files (unverifiable stream)
+  const runSeed = formatVersion >= 7 ? r.u32() : 0;
 
   // Verify checksum
   const checksumOffset = 1 + 4 + 2 + new TextEncoder().encode(gameVersion).length + 8 + 4 + 4 + 4 + 4;
@@ -134,7 +136,7 @@ function readDemoHeader(r: Reader, buffer: ArrayBuffer): DemoFile['header'] {
     totalFrames, projectileEventCount, targetEventCount, checksum, description,
     startPosX, startPosY, startPosZ, startYaw, startPitch,
     startVelX, startVelY, startVelZ, projectileLifetime,
-    room, mode, playerName, tableHash,
+    room, mode, playerName, tableHash, runSeed,
   };
 }
 

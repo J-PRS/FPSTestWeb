@@ -9,6 +9,7 @@ import {
   ProjectileEventType, TargetEventType,
   type DemoFile, type ProjectileEvent, type TargetEvent, type RemoteFrame,
 } from '../demo/types.js';
+import { setRunSeed } from '../demo/demoSeed.js';
 
 function mkFile(): DemoFile {
   const header = createHeader();
@@ -109,6 +110,13 @@ describe('demo round-trip', (): void => {
     expect(rf.rosterIdx).toBe(0);
     expect(rf.posZ).toBeCloseTo(15, 3);
     expect(rf.flags).toBe(0b11);
+  });
+
+  it('v7 stamps the run seed into the file', (): void => {
+    setRunSeed(0xCA_FE_BA_BE);
+    const out = deserializeDemo(serializeDemo(mkFile()));
+    expect(out.header.runSeed).toBe(0xCA_FE_BA_BE);
+    setRunSeed(0); // unpollute for sibling tests
   });
 
   it('reader rejects a corrupted payload', (): void => {

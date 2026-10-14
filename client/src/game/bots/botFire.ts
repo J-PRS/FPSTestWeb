@@ -23,6 +23,7 @@ import { poissonDisc } from '../../utils/poissonSpread.js';
 import type { RemotePlayer } from '../../entities/RemotePlayer.js';
 import type { Targetable } from '../../entities/balls.js';
 import type { ArmorClass } from '../../../../shared/botClasses.js';
+import { simRand } from '../../../../shared/simRand.js';
 
 const _shotDir = new THREE.Vector3();
 const _shotMuzzle = new THREE.Vector3();
@@ -52,7 +53,7 @@ function pelletDirs(dir: THREE.Vector3, count: number, spread: number): THREE.Ve
   _pelletRight.crossVectors(dir, _pelletUp0);
   if (_pelletRight.lengthSq() < 1e-8) {_pelletRight.set(1, 0, 0);} else {_pelletRight.normalize();}
   _pelletUp.crossVectors(_pelletRight, dir);
-  const rot = Math.random() * Math.PI * 2;
+  const rot = simRand() * Math.PI * 2;
   const cs = Math.cos(rot), sn = Math.sin(rot);
   return poissonDisc(count).map((pt): THREE.Vector3 => {
     const ox = (pt.x * cs - pt.y * sn) * spread;

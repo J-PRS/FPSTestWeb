@@ -11,6 +11,7 @@ import {
   STRIFER_MAX, STRIFER_SPAWN_INTERVAL, STRIFER_SPAWN_MIN, STRIFER_SPAWN_MAX,
   STRIFER_BOLT_DAMAGE, STRIFER_BOLT_FORCE,
 } from '../../core/config.js';
+import { simRand } from '../../../../shared/simRand.js';
 import * as sfx from '../../core/sfx.js';
 import type { Species } from '../speciesKit.js';
 import { PROFILES } from '../targeting.js';
@@ -44,9 +45,9 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
     const player = deps.lazyPlayer();
     const cloud = {
       center: new THREE.Vector3(
-        player.pos.x + (Math.random() - 0.5) * 30,
+        player.pos.x + (simRand() - 0.5) * 30,
         deps.lazyTerrain().getHeight(base.x, base.z) + GNAT_ORBIT_ALT + 8,
-        player.pos.z + (Math.random() - 0.5) * 30,
+        player.pos.z + (simRand() - 0.5) * 30,
       ),
       nipGate: 0,
     };
@@ -54,13 +55,13 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
     // Uber roll = a QUEEN — one big tanky gnat with a small escort retinue,
     // not a whole cloud of queens.
     const n = u
-      ? 1 + Math.floor(Math.random() * 3) + 2      // queen + 2-4 escorts
-      : GNAT_CLOUD_MIN + Math.floor(Math.random() * (GNAT_CLOUD_MAX - GNAT_CLOUD_MIN + 1));
+      ? 1 + Math.floor(simRand() * 3) + 2      // queen + 2-4 escorts
+      : GNAT_CLOUD_MIN + Math.floor(simRand() * (GNAT_CLOUD_MAX - GNAT_CLOUD_MIN + 1));
     for (let k = 0; k < n; k += 1) {
       if (atCap(gnats, capFor('gnat', GNAT_MAX))) {break;}
       const queen = u && k === 0; // firstborn is the queen
       const g = new Gnat(scene, deps.lazyTerrain(), cloud.center.clone().add(new THREE.Vector3(
-        (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 8)), queen);
+        (simRand() - 0.5) * 8, (simRand() - 0.5) * 4, (simRand() - 0.5) * 8)), queen);
       g.joinCloud(cloud);
       g.onNip = (gn): boolean => bite(gn, GNAT_NIP_FORCE, GNAT_NIP_DAMAGE, 'drained by gnats', { dmg: 3, text: 'drained by the gnat queen' }, GNAT_NIP_DIST + 2);
       gnats.push(g);

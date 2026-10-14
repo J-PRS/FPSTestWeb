@@ -14,6 +14,9 @@ import { Logger, ChildLogger } from './core/Logger.js';
 import { settings } from './core/settings.js';
 import { urlParams, isDevHost } from './core/params.js';
 import { feedMode } from './feed/feedMode.js';
+import { simRngSeed, lcg32 } from '../../shared/simRand.js';
+import { botRng } from '../../shared/botRand.js';
+import { setRunSeed, mintSeed } from './demo/demoSeed.js';
 import { watchDeployVersion } from './core/deployWatch.js';
 import { noteStale, staleCount } from './core/staleFiles.js';
 import { createRenderer, GAME_ASPECT } from './core/renderer.js';
@@ -365,6 +368,14 @@ function makeCombat(): ReturnType<typeof createCombat> {
 
 
 function makeEntities(): ReturnType<typeof createEntities> {
+  // One seed per run — simRand drives all sim-truth dice (wave picks,
+  // spawn placement, spread, bomblets); botRand gets a sibling stream so
+  // offline bots replay identically too. The demo header stamps the seed
+  // so a verifier can walk the identical dice sequence.
+  const runSeed = mintSeed();
+  simRngSeed(runSeed);
+  botRng(lcg32(runSeed ^ 0x5A_17_9E_37));
+  setRunSeed(runSeed);
   return createEntities({
     scene,
     lazyTerrain: (): Terrain => terrain,

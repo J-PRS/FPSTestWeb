@@ -25,7 +25,7 @@ positive int is almost certainly a demo of this game.
 | Field              | Type | Notes |
 |--------------------|------|-------|
 | magic              | u8   | 0x44  |
-| formatVersion      | i32  | 1..6  |
+| formatVersion      | i32  | 1..7  |
 | gameVersion        | str  | e.g. "1.0.0" |
 | timestamp          | f64  | ms since Unix epoch (recording wall clock) |
 | duration           | f32  | seconds |
@@ -42,6 +42,7 @@ positive int is almost certainly a demo of this game.
 | mode               | str  | v3+ only; game mode |
 | playerName         | str  | v3+ only |
 | tableHash          | u32  | v6+ only; CRC32 of the persisted enum tables |
+| runSeed            | u32  | v7+ only; the run's sim-RNG seed |
 
 **tableHash (v6+)** — the file's `targetType` values are indices into
 ordered tables (species, deploy kinds, pickup kinds, ball variants), not
@@ -212,6 +213,10 @@ field itself to end of file.
   cross-lane id aliasing), + tableHash u32 at end of header (content
   table fingerprint — a species/kind/variant reorder warns instead of
   silently remapping old clips)
+- v7: + runSeed u32 at end of header — the run's seeded sim-RNG stream
+  (shared/simRand.ts). A verifier re-seeds and replays the identical
+  dice sequence: fabricated Spawned events, doctored trajectories and
+  lucky-RNG claims can't hide. 0 on older files = unverifiable stream.
 
 ## Known limits (for future re-implementers)
 

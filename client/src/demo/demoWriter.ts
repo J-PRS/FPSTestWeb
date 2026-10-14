@@ -3,6 +3,7 @@
 // Format: magic(1) + version(4) + header fields + frames + events
 
 import type { DemoFile } from './types.js';
+import { getRunSeed } from './demoSeed.js';
 import { demoTableHash } from './demoTables.js';
 
 // CRC32 lookup table
@@ -169,7 +170,7 @@ function writeRemoteFrames(view: DataView, pOffset: number, frames: DemoFile['re
 export function serializeDemo(data: DemoFile): ArrayBuffer {
 
     // Calculate total size
-    const headerSize = 1 + 4 + 2 + 0 + 8 + 4 + 4 + 4 + 4 + 4 + 2 + 0 + 12 + 8 + 12 + 4 + 2 + 0 + 2 + 0 + 2 + 0 + 4; // fixed + 5 strings + projectileLifetime + v6 tableHash
+    const headerSize = 1 + 4 + 2 + 0 + 8 + 4 + 4 + 4 + 4 + 4 + 2 + 0 + 12 + 8 + 12 + 4 + 2 + 0 + 2 + 0 + 2 + 0 + 4 + 4; // fixed + 5 strings + projectileLifetime + v6 tableHash + v7 runSeed
     const gameVersionBytes = new TextEncoder().encode(data.header.gameVersion);
     const descBytes = new TextEncoder().encode(data.header.description);
     const roomBytes = new TextEncoder().encode(data.header.room);
@@ -220,6 +221,10 @@ export function serializeDemo(data: DemoFile): ArrayBuffer {
     // Stamped at write time, not taken from the caller — the hash must
     // describe the tables the running build actually wrote ids against.
     view.setUint32(offset, demoTableHash(), true); offset += 4;
+    // Run seed rides with the file — a verifier replays the whole dice
+    // stream from it, so the header field is stamped at write time like
+    // tableHash rather than trusting the caller's copy.
+    view.setUint32(offset, getRunSeed(), true); offset += 4;
 
     offset = writeFrames(view, offset, data.frames);
 

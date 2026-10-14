@@ -11,6 +11,7 @@ import { chatSink } from '../chat.js';
 import { noteKill } from '../../core/stateDebug.js';
 import { GameBot } from './botBrain.js';
 import type { TeamBots } from './index.js';
+import { simRand } from '../../../../shared/simRand.js';
 
 const _stealPos = new THREE.Vector3();
 const sayTimers = new Set<ReturnType<typeof setTimeout>>();
@@ -43,7 +44,7 @@ export function respawnBotF(b: TeamBots, bot: GameBot): void {
 export function botSay(id: string, line: string | null, vgs?: string, team?: boolean): void {
     if (!line) {return;}
     const name = id.replace('bot:', '');
-    const delay = 1200 + Math.random() * 1800;
+    const delay = 1200 + simRand() * 1800;
     // Chatter is transient like debris/audio — while hidden the timers
     // still fire but nothing queues, so alt-tab returns to a live feed,
     // not a burst of stale taunts (same rule the fx classes follow).

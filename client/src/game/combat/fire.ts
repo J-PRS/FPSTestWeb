@@ -10,6 +10,7 @@ import {
   ARMORNADE_CONFIG, PROXY_CONFIG, SATCHEL_CONFIG, HEALNADE_CONFIG,
   CONC_CONFIG,
 } from '../../projectiles/index.js';
+import { simRand } from '../../../../shared/simRand.js';
 import type { WeaponDef } from '../../weapons.js';
 import { BELT_THROW_TIME, type BeltItem } from '../../entities/Player.js';
 import type { ProjectileConfig } from '../../projectiles/types.js';
@@ -200,7 +201,7 @@ function onBelt(deps: CombatDeps, _e: FireArgs, item: BeltItem): void {
 function spawnFan(deps: CombatDeps, config: ProjectileConfig, e: FireArgs, count: number, spread: number): void {
   sfx.shoot(config.weaponType);
   const pts = poissonDisc(count);
-  const rot = Math.random() * Math.PI * 2;
+  const rot = simRand() * Math.PI * 2;
   const cs = Math.cos(rot), sn = Math.sin(rot);
   _flakRight.crossVectors(e.dir, _flakUp0);
   if (_flakRight.lengthSq() < 1e-8) {_flakRight.set(1, 0, 0);} else {_flakRight.normalize();}
@@ -248,7 +249,7 @@ function fireWeapon(deps: CombatDeps, def: WeaponDef, e: FireArgs): void {
     _flakRight.crossVectors(e.dir, _flakUp0);
     if (_flakRight.lengthSq() < 1e-8) {_flakRight.set(1, 0, 0);} else {_flakRight.normalize();}
     _flakUp.crossVectors(_flakRight, e.dir);
-    const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * def.spread;
+    const a = simRand() * Math.PI * 2, r = Math.sqrt(simRand()) * def.spread;
     _flakDir.copy(e.dir)
       .addScaledVector(_flakRight, Math.cos(a) * r)
       .addScaledVector(_flakUp, Math.sin(a) * r)

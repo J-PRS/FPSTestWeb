@@ -5,6 +5,7 @@ import type { Player } from '../entities/Player.js';
 import type { Terrain } from '../world/terrain.js';
 import type { ChildLogger } from '../core/Logger.js';
 import { urlParams } from '../core/params.js';
+import { simRand } from '../../../shared/simRand.js';
 
 interface DirectorDeps {
   entities: ReturnType<typeof createEntities>;
@@ -58,7 +59,7 @@ interface WaveBeat { at: number; name: string; run: (d: DirectorDeps) => void }
 
 function ringOf(d: DirectorDeps, n: number, dist: number, fn: (pos: THREE.Vector3) => void): void {
   const p = d.lazyPlayer().pos;
-  const off = Math.random() * Math.PI * 2;
+  const off = simRand() * Math.PI * 2;
   for (let i = 0; i < n; i += 1) {
     const a = off + (i / n) * Math.PI * 2;
     fn(new THREE.Vector3(p.x + Math.cos(a) * dist, 0, p.z + Math.sin(a) * dist));
@@ -72,7 +73,7 @@ const WAVES: WaveBeat[] = [
   { at: 220, name: 'Mine rain',          run: (d): void => {
       const p = d.lazyPlayer().pos;
       for (let i = 0; i < 6; i += 1) {
-        const a = Math.random() * Math.PI * 2, r = 8 + Math.random() * 22;
+        const a = simRand() * Math.PI * 2, r = 8 + simRand() * 22;
         // One doombloom hidden in the rain — clear the field carelessly
         // and the whole garden goes up at once.
         d.entities.plantMine(new THREE.Vector3(p.x + Math.cos(a) * r, 0, p.z + Math.sin(a) * r), i === 0);
@@ -174,7 +175,7 @@ export function createWaveDirector(deps: DirectorDeps): { update: (dt: number) =
     randomT = Math.max(RANDOM_INTERVAL_MIN, RANDOM_INTERVAL_BASE - elapsed * RANDOM_INTERVAL_RAMP);
     const budget = Math.min(RANDOM_BUDGET_MAX, RANDOM_BUDGET_BASE + Math.floor(elapsed / RANDOM_BUDGET_RAMP_T));
     if (aliveCount(deps.entities) >= budget) {return;}
-    let roll = Math.random() * RANDOM_WEIGHT_TOTAL;
+    let roll = simRand() * RANDOM_WEIGHT_TOTAL;
     for (const p of RANDOM_POOL) {
       roll -= p.weight;
       if (roll <= 0) {
@@ -199,7 +200,7 @@ export function createWaveDirector(deps: DirectorDeps): { update: (dt: number) =
 waveIdx += 1;
     } else if (waveIdx >= WAVES.length && elapsed >= WAVES[WAVES.length - 1].at + WAVE_LOOP * (loopCount + 1)) {
       // Loop: re-fire a random late-game beat
-      const late = WAVES[Math.max(0, WAVES.length - 3) + Math.floor(Math.random() * 3)];
+      const late = WAVES[Math.max(0, WAVES.length - 3) + Math.floor(simRand() * 3)];
       deps.logger.info(`[Director] loop ${loopCount + 1}: ${late.name} @ ${elapsed.toFixed(0)}s`);
       late.run(deps);
 loopCount += 1;
@@ -211,7 +212,7 @@ loopCount += 1;
       spendTimer = SPEND_INTERVAL;
       const affordable = POOL.filter((p): boolean => p.minT <= elapsed && p.cost <= credits);
       if (affordable.length > 0) {
-        let roll = Math.random() * affordable.reduce((s, p): number => s + p.weight, 0);
+        let roll = simRand() * affordable.reduce((s, p): number => s + p.weight, 0);
         let [pick] = affordable;
         for (const p of affordable) { roll -= p.weight; if (roll <= 0) { pick = p; break; } }
         credits -= pick.cost;
