@@ -253,6 +253,7 @@ this.handlerThrows += 1;
     ffaMatchEnd: (data): void | undefined => this.h.onFfaMatchEnd?.(data.winner, data.scores),
     matchEnd: (data): void | undefined => this.h.onMatchEnd?.(data.winner, data.scores),
     matchStart: (data): void | undefined => this.h.onMatchStart?.(data.mode, data.scores),
+    matchToken: (data): void | undefined => this.h.onMatchToken?.(data.token),
     mapUpdate: (data): void | undefined => this.h.onMapUpdate?.(data),
     projRide: (data): void | undefined => this.h.onProjRide?.(data.projectileId, data.host),
     deploySpawn: (data): void | undefined => this.h.onDeploySpawn?.(data.id, data.owner, data.kind, data.pos, data.team),

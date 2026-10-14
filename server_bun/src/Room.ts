@@ -154,6 +154,10 @@ export class Room {
    *  stays nonzero there's a real leak to hunt. */
   private unburyAcc = 0;
   private unburyLogN = 0;
+  /** Leaderboard receipt minter — roomFactory wires one per room onto the
+   *  event bus; roomMatch mints the signed token at matchEnd. Optional:
+   *  unsigned dev rooms still get the record, just no signature. */
+  resultSigner: import('./resultSigner.ts').ResultSigner | null = null;
   private unburyTick(dt: number): void {
     if (!this.field) {return;}
     this.unburyAcc += dt;
@@ -292,7 +296,7 @@ export class Room {
   readonly moveAuthority: boolean;
   /** Match-results journal hook — GameServer writes matches.jsonl and
    *  feeds /matches from it. Fired on every win condition. */
-  onMatchEnd?: (record: { room: string; mode: string; winner: string; scores: Record<string, number>; players: { id: string; team?: string; kills: number; deaths: number }[] }) => void;
+  onMatchEnd?: (record: { room: string; mode: string; winner: string; scores: Record<string, number>; players: { id: string; team?: string; kills: number; deaths: number }[]; token?: import('../../shared/resultToken.ts').ResultToken }) => void;
   /** Map-rotation hook — GameServer returns the next same-mode spec at
    *  the horn, or null to replay the current map. */
   onRotate?: () => MapSpec | null;
@@ -894,6 +898,8 @@ export class Room {
       getHumanCount: (): number => this.players.getHumanCount(),
       matchPlayers: (): { id: string; team?: string; kills: number; deaths: number; }[] => this.scoring.matchPlayers(),
       broadcast: (msg): void => this.broadcast(msg),
+      resultSigner: this.resultSigner,
+      mapSrc: this.mapSrc,
       endCleanup: (): void => {
         this.flags?.reset();
         this.pickups?.clear();

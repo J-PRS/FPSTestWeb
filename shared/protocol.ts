@@ -359,6 +359,9 @@ export type ServerMessage =
   | { type: 'ffaMatchEnd'; winner: string; scores: Record<string, number> }
   | { type: 'matchEnd'; winner: TeamId | 'draw'; scores: { alpha: number; bravo: number } }
   | { type: 'matchStart'; mode: string; scores: { alpha: number; bravo: number } }
+  // Signed match receipt — leaderboard submissions pair the player's demo
+  // with this token; sig is null when the server runs without a key.
+  | { type: 'matchToken'; token: import('./resultToken.ts').ResultToken }
   // Admin hot-reload: the room's map spec changed — clients rebuild
   // structures/dome from this instead of re-joining for a gameState.
   | { type: 'mapUpdate'; mapName?: string; silent?: boolean; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; terrainTex?: string; terrainPreset?: number; sky?: string; interiors?: { file: string; pos: Vec3; rot?: number[]; scale?: Vec3 }[] };

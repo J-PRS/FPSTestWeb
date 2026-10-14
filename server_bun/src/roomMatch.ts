@@ -3,6 +3,8 @@ import type { ModeSpec, TeamScores } from '../../shared/teams.ts';
 import type { MapSpec } from '../../shared/mapSpec.ts';
 import { simNow } from './simClock.ts';
 import { setMatchMuted } from '../../shared/botTaunts.ts';
+import type { ResultToken } from '../../shared/resultToken.ts';
+import type { ResultSigner, MatchRecord } from './resultSigner.ts';
 
 /** The pieces of Room the match lifecycle touches — typed as an
  *  interface so RoomMatchClock stays a leaf (no Room import cycle). */
@@ -15,11 +17,13 @@ export interface MatchHost {
   getHumanCount(): number;
   matchPlayers(): { id: string; team?: string; kills: number; deaths: number }[];
   broadcast(msg: ServerMessage): void;
+  resultSigner?: ResultSigner | null;
+  mapSrc?: string;
   endCleanup(): void;          // flags/pickups/deployables/stats reset
   rotate(): MapSpec | null;    // next same-mode spec, or null to replay
   applySpec(spec: MapSpec): void;
   reshuffleBots?(): void;      // re-deal bot team assignments for the next match
-  onMatchEnd?: (record: { room: string; mode: string; winner: string; scores: Record<string, number>; players: { id: string; team?: string; kills: number; deaths: number }[] }) => void;
+  onMatchEnd?: (record: MatchRecord & { token?: ResultToken }) => void;
   onEnded?: (winner: string) => void;  // the horn fired — bots get their 'gg' beat
   onStarted?(): void;                  // a match went live — bots get their gl-hf beat
 }
@@ -136,7 +140,20 @@ else {w = s.alpha > s.bravo ? 'alpha' : 'bravo';}
     const spec = host.modeSpec!;
     const scores = (spec.teams ? Object.assign({}, host.scores) : Object.fromEntries(host.ffaScores)) as Record<string, number>;
     host.broadcast({ type: spec.teams ? 'matchEnd' : 'ffaMatchEnd', winner: w, scores } as ServerMessage);
-    host.onMatchEnd?.({ room: host.room, mode: host.mode, winner: w, scores, players: host.matchPlayers() });
+    const rec: MatchRecord & { token?: ResultToken } = { room: host.room, mode: host.mode, winner: w, scores, players: host.matchPlayers() };
+    // Signed leaderboard receipt: mint carries the whole match's
+    // outcome-event hash — async (crypto.subtle) so the token broadcast +
+    // journal record land a microtask late. Unsigned dev rooms skip the
+    // round trip entirely.
+    if (host.resultSigner) {
+      void host.resultSigner.mint(rec, host.mapSrc).then((token): void => {
+        rec.token = token;
+        host.broadcast({ type: 'matchToken', token });
+        host.onMatchEnd?.(rec);
+      });
+    } else {
+      host.onMatchEnd?.(rec);
+    }
     host.onEnded?.(w);
     this.intermissionAt = simNow() + MatchClock.INTERMISSION_MS;
   }

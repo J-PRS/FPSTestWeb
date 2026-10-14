@@ -13,6 +13,7 @@ import type { MapCatalog } from './mapCatalog.ts';
 import type { MapSpec } from '../../shared/mapSpec.ts';
 import { hmScaled, type Heightfield } from '../../shared/heightfield.ts';
 import type { SessionRegistry } from './sessionRegistry.ts';
+import { ResultSigner, SIGN_SECRET, nextMatchId } from './resultSigner.ts';
 
 export interface RoomFactoryHost {
   /** Live room index — created rooms register here before returning. */
@@ -136,6 +137,10 @@ export class RoomFactory {
       // `room` is a mutable let — bind a const for the closures or TS
       // widens them back to Room | undefined.
       const r = room;
+      // Leaderboard receipt: one signer per room, fed by every bus event.
+      // mint() at matchEnd carries the whole match's outcome chain.
+      r.resultSigner = new ResultSigner(SIGN_SECRET, () => nextMatchId(r.name));
+      r.events.on((e): void => { r.resultSigner?.feed(e); });
       room.onMatchEnd = (rec): void => this.host.recordEnd(rec);
       // Judge mode counts divergences instead of correcting — the kick
       // only fires on repeated teleport-scale gaps honest drift can't
