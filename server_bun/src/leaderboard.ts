@@ -119,6 +119,6 @@ export function board(mode?: string): BoardEntry[] {
     } catch { /* skip corrupt lines */ }
   }
   return [...best.values()]
-    .sort((a, b) => b.kills - a.kills || b.shots - a.shots)
+    .toSorted((a, b) => b.kills - a.kills || b.shots - a.shots)
     .slice(0, 50);
 }
