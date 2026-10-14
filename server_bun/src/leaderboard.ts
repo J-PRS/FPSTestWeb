@@ -48,7 +48,7 @@ export interface BoardEntry {
 
 export interface SubmitResult {
   ok: boolean;
-  verdict: 'ranked' | 'bad-format' | 'no-token' | 'bad-token' | 'duplicate' | 'event-mismatch';
+  verdict: 'ranked' | 'bad-format' | 'no-token' | 'bad-token' | 'duplicate' | 'event-mismatch' | 'impossible-trajectory';
   entry?: BoardEntry;
   error?: string;
 }
@@ -103,7 +103,11 @@ export async function submitDemo(buf: ArrayBuffer, challenge?: Challenge | null)
     // The seed binding alone is cosmetic — replay the dice stream and
     // require the recorded events to land on it before ranking.
     const sv = verifySolo(demo);
-    if (!sv.ok) { return { ok: false, verdict: 'event-mismatch', error: sv.reason }; }
+    if (!sv.ok) {
+      return { ok: false,
+        verdict: sv.reason?.startsWith('impossible-trajectory') ? 'impossible-trajectory' : 'event-mismatch',
+        error: sv.reason };
+    }
   }
 
   const player = demo.header.playerName || 'unknown';
