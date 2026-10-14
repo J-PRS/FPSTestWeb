@@ -40,6 +40,10 @@ export interface AnimHost {
   readonly model: PlayerModel;
   readonly loaded: boolean;
   wireSki: boolean | undefined;
+  /** True while dead-reckoning/converge owns the body — those paths skip
+   *  the terrain floor deliberately, so a buried sample during them is
+   *  expected-transient, not an unbury-class anomaly. */
+  readonly isSimulating: boolean;
   tickGhost(dt: number): void;
   tickAuras(dt: number): void;
 }
@@ -114,13 +118,20 @@ export class RemoteAnim {
         // wire fine on field but under the chord = the drawn mesh bridges
         // the gully at this LOD and the lift cap is the only cover.
         // Persistence gate: the server unbury rescues sim-owned bodies on
-        // a 0.5s cadence, so a single buried sample is usually a dip the
-        // server already owns and heals — only a depth that survives a
-        // second sample (past one rescue cycle) is the anomaly worth
-        // counting.
+        // a 0.5s cadence and the converge window runs ~0.35s, so a dip
+        // needs ~three samples (~0.9s) to outlive every legitimate rescue
+        // — shorter streaks count the server's own heal window as a bug.
+        // `sim` names whether the body was mid dead-reckoning/converge:
+        // those paths deliberately skip the terrain floor while chasing
+        // wire truth, so a buried converge is expected-transient, while a
+        // buried steady-state sample is the unbury-class anomaly.
         if (depth > 0.4) {
           this._buriedStreak += 1;
-          if (this._buriedStreak >= 2) {
+          // Buried mid dead-reckoning/converge is the ghost's own
+          // extrapolation sinking (server never logged an unbury for
+          // these — wire truth was above ground all along). Only a
+          // steady-state burial is the anomaly the alarm exists for.
+          if (this._buriedStreak >= 3 && !h.isSimulating) {
             glitch('remote-buried', { id: h.playerId, depth: Number(depth.toFixed(1)), lift: Number(lift.toFixed(1)), fieldD: Number((h.terrain.getHeight(h.position.x, h.position.z) - h.feetY).toFixed(1)) });
           }
         } else {this._buriedStreak = 0;}
