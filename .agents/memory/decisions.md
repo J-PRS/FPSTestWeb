@@ -14,3 +14,4 @@ history in place.
 - 2026-10-13 — deep dives get ref docs IMMEDIATELY (user rule): research like nav/orbits, filters, netcode goes into _docs/<date>-<topic>.md before moving on — searchable knowledge, not chat scrollback
 - 2026-10-13 — bot orbiting is a model bug, not tuning: runner+routed legs ride the flood carrot (pure pursuit); point-seek latches are escape-only. See _docs/2026-10-13_BOT_NAV_ORBITS.md
 - 2026-10-13 — never hard-delete files, even scratch/debug: soft-delete or move to the appropriate folder (_tools/debug/ for probes)
+- runner flood cost profile (cheaper climb/wall for runners): sampled 4 configs, response is discontinuous (kata 133↔413s across 0.005 climbTax) — corridor choice flips between basins, no stable optimum; REVERTED, kata wander lives in the staging layer not the flood

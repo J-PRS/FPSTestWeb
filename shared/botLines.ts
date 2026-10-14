@@ -123,6 +123,11 @@ export class BotLines {
     // the carry leg has the same orbit shape regardless of role.
     if ((ctx.runner || ctx.running) && ctx.route) {
       const hop = ctx.route(pos.x, pos.z, dest.x, dest.z, aheadFor(ctx));
+      // Runner crest-aim REVERTED: aiming at the flood's first crest
+      // bought a faster dunes carry (30s/29m/s) but regressed its grab
+      // (50→70s) and broke katabatic outright — the crest sits ON the
+      // path, but heading straight at it skips the bends the flood
+      // priced around, so the runner climbs into walls it can't pay.
       if (hop) {
         this.wp = hop;
         this.wpGoal = Object.assign({}, dest);
