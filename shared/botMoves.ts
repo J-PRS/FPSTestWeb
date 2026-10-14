@@ -474,6 +474,11 @@ export class BotMoves {
     // (which are not discretionary) with nothing.
     const boostTank = ctx.energy === undefined || ctx.energy > T.moves.boostEnergyMin;
     const boost = !bank && speed < T.moves.boostSpeedMax && (ctx.objective ? od > T.moves.boostGdMin : gd > T.moves.boostGdMin) && boostTank && rise <= T.moves.boostRise && !airborne;
+    // Transit burn REVERTED: airborne sustained jets balloon the hop
+    // arcs (altitude, not speed — grabV 50→13, dunes 50→93s). Grounded-
+    // only was dead code: the hop chain leaves no grounded flat ticks.
+    // Flat-transit speed already comes from descent tail taps; the real
+    // limiter mid-route is terrain supply, not jet policy.
     // Run-in burn: a committed runner closing on a near-level objective
     // keeps thrusting to ~26m/s — the human play is arriving through
     // the flag at speed, not floating in at hop-chain pace. Jets add
