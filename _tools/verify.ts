@@ -25,6 +25,9 @@ import { InputFlags, JetpackFlags, TargetEventType, type DemoFrame } from '../cl
 import { makeSimBall, stepBall, BALL_BASE_RADIUS, BALL_VARIANT_SCALE, type SimBall } from '../shared/ballSim.ts';
 import { lcg32 } from '../shared/simRand.ts';
 import { drawBallSpawn, drawSplitVel, drawVariant, SPAWN_SEED_XOR } from '../shared/spawnDice.ts';
+import { WEAPONS } from '../shared/weaponTable.ts';
+import { GRAVITY } from '../shared/movement.ts';
+import { ProjectileEventType } from '../client/src/demo/types.ts';
 
 const file = process.argv[2];
 if (!file) { console.error('usage: bun _tools/verify.ts <file.demo> [--eps N]'); process.exit(2); }
@@ -34,7 +37,8 @@ const EPS = epsArg > 0 ? Number(process.argv[epsArg + 1]) : 2.5;
 const demo = deserializeDemo(new Uint8Array(readFileSync(file)).buffer as ArrayBuffer);
 const h = demo.header;
 
-if (!h.runSeed) {
+const noSeed = process.argv.includes('--no-seed');
+if (!h.runSeed && !noSeed) {
   console.log(`VERDICT stale-version — runSeed=0 (format v${h.formatVersion}); the dice stream isn't verifiable on this file`);
   process.exit(1);
 }
@@ -49,12 +53,18 @@ const sim = new MoveSim(surface, {
   yaw: h.startYaw, pitch: h.startPitch, onGround: false,
 });
 
-let prevT = 0;
+// Frame 0 IS the anchor — clips keep absolute timestamps, so dt must
+// start there, not at 0 (a 5.75s bogus integration leg otherwise).
+const noTraj = process.argv.includes('--no-traj');
+let prevT = demo.frames[0]!.timestamp;
 let worst = 0;
 let worstFrame: DemoFrame | null = null;
 let firstBad: { f: DemoFrame; dx: number; dy: number; dz: number } | null = null;
 
-for (const f of demo.frames) {
+// Trajectory verify only means something for the recording player —
+// remote-sampled clips (bot POV, spectate) carry server truth, not
+// replayable input; --no-traj skips it.
+for (const f of noTraj ? [] : demo.frames) {
   const dt = Math.max(0, f.timestamp - prevT);
   prevT = f.timestamp;
   // Dead-reckon dedup means a gap holds the LAST input — the recorder
@@ -147,14 +157,14 @@ const BALL_COLOR_COUNT = 7;
 // the data doesn't: a variant>0 spawn proves pickVariant drew.
 const ambientSpawns = demo.targetEvents.filter((e) => e.targetType < 64 && e.eventType === TargetEventType.Spawned);
 const hasVariants = ambientSpawns.some((e) => e.targetType !== 0);
-const spawnStream = lcg32((h.runSeed ^ SPAWN_SEED_XOR) >>> 0);
-spawnStream(); // field-init timer draw (nextBallSpawn at field ctor)
+const spawnStream = h.runSeed ? lcg32((h.runSeed ^ SPAWN_SEED_XOR) >>> 0) : null;
+spawnStream?.(); // field-init timer draw (nextBallSpawn at field ctor)
 let spawnN = 0, spawnBad = 0, ambientIdx = 0;
 let spawnWorst = 0, spawnWorstId = -1;
 
 const livePos = new Map<number, { x: number; y: number; z: number }>();
 
-for (const e of demo.targetEvents) {
+for (const e of spawnStream ? demo.targetEvents : []) {
   if (e.targetType >= 64) {continue;}
   if (e.eventType === TargetEventType.Destroyed) { livePos.delete(e.targetId); continue; }
   if (e.eventType === TargetEventType.Spawned) {
@@ -169,15 +179,15 @@ for (const e of demo.targetEvents) {
       // Draw contract: boot fill (first 4 ambient) = [variant?]+[ctor];
       // trickle = [timer]+[variant?]+[ctor]. Variant roll only exists in
       // the ambient pool — classic spawns go straight to the ctor.
-      if (ambientIdx >= 4) {spawnStream();} // trickle timer
-      if (hasVariants) {drawVariant(spawnStream);}
+      if (ambientIdx >= 4) {spawnStream?.();} // trickle timer
+      if (hasVariants && spawnStream) {drawVariant(spawnStream);}
       ambientIdx += 1;
     }
-    const draw = drawBallSpawn(spawnStream, variant, BALL_COLOR_COUNT);
+    const draw = drawBallSpawn(spawnStream ?? lcg32(0), variant, BALL_COLOR_COUNT);
     let exp: { x: number; y: number; z: number };
     let ev: { x: number; y: number; z: number };
     if (isSplit) {
-      const sv = drawSplitVel(spawnStream);
+      const sv = drawSplitVel(spawnStream ?? lcg32(0));
       exp = { x: e.posX, y: e.posY, z: e.posZ }; // pos inherits parent — only vel verifies
       ev = sv;
     } else {
@@ -200,6 +210,38 @@ for (const e of demo.targetEvents) {
   livePos.set(e.targetId, { x: e.posX, y: e.posY, z: e.posZ });
 }
 
+// ---- projectile legs ---------------------------------------------------
+// Same re-seed model: each projectile event carries pos+vel, so legs
+// verify their own span ballistically (vel.y += GRAVITY*dt — no drag in
+// the sim). A forged Hit/Bounce at an unreachable pos lands as a bad
+// leg; unrecorded terrain contacts are the knock-class caveat again.
+const PROJ_STEP = 0.02;
+const projs = new Map<number, { x: number; y: number; z: number; vx: number; vy: number; vz: number; lastT: number; grav: boolean }>();
+let projN = 0, projOver = 0, projWorst = 0, projWorstId = -1;
+
+for (const e of demo.projectileEvents) {
+  let rec = projs.get(e.projectileId);
+  if (!rec || e.eventType === ProjectileEventType.Fired || e.eventType === ProjectileEventType.Bounce) {
+    rec = { x: e.posX, y: e.posY, z: e.posZ, vx: e.velX, vy: e.velY, vz: e.velZ, lastT: e.timestamp,
+            grav: WEAPONS[e.weaponType]?.gravity === true };
+    projs.set(e.projectileId, rec);
+    continue;
+  }
+  // Hit / Destroyed — sim the leg ballistically, compare event pos.
+  let rem = e.timestamp - rec.lastT;
+  while (rem > 1e-6) {
+    const dt = Math.min(PROJ_STEP, rem);
+    if (rec.grav) {rec.vy += GRAVITY * dt;}
+    rec.x += rec.vx * dt; rec.y += rec.vy * dt; rec.z += rec.vz * dt;
+    rec.lastT += dt; rem -= dt;
+  }
+  const err = Math.hypot(rec.x - e.posX, rec.y - e.posY, rec.z - e.posZ);
+  projN += 1;
+  if (err > EPS) {projOver += 1;}
+  if (err > projWorst) { projWorst = err; projWorstId = e.projectileId; }
+  projs.delete(e.projectileId);
+}
+
 console.log(`demo: ${file}`);
 console.log(`  mode=${h.mode} room=${h.room} player=${h.playerName} dur=${h.duration.toFixed(1)}s frames=${demo.frames.length} v=${h.formatVersion} seed=0x${h.runSeed.toString(16)}`);
 console.log(`  hmap ${demo.heightmap.gridN}² worldScale=${demo.heightmap.worldScale} heightScale=${demo.heightmap.heightScale} — contact eps bounded by downsample quantization`);
@@ -211,6 +253,10 @@ if (legN > 0) {
 }
 if (spawnN > 0) {
   console.log(`  spawn dice ${spawnN}: ${spawnBad} mismatched, worst ${spawnWorst.toFixed(2)}m ball=${spawnWorstId}`);
+}
+if (projN > 0) {
+  console.log(`  proj legs ${projN}: ${projOver} over eps (${((projOver / projN) * 100).toFixed(0)}%), worst ${projWorst.toFixed(2)}m proj=${projWorstId}`);
+  console.log(`  (proj legs verify LOCAL ballistic truth only — networked demos' Hits are server truth and legitimately diverge; server outcomes ride resultToken, not this gate)`);
 }
 if (spawnBad > 0) {
   console.log(`VERDICT hash-mismatch — spawn dice diverged at ball ${spawnWorstId}; a fabricated Spawned event can't hide in the seeded stream`);
