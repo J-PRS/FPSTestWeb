@@ -36,6 +36,17 @@ const EPS = epsArg > 0 ? Number(process.argv[epsArg + 1]) : 2.5;
 
 const demo = deserializeDemo(new Uint8Array(readFileSync(file)).buffer as ArrayBuffer);
 const h = demo.header;
+// Score recompute — the events ARE the score. Nothing in the file
+// asserts a points claim, so the honest output is what the stream
+// proves: shots, ball hits (targetId in the ball lane), spawns served.
+{
+  const shots = demo.projectileEvents.filter((e): boolean => e.eventType === ProjectileEventType.Fired).length;
+  const ballHits = demo.projectileEvents.filter((e): boolean =>
+    e.eventType === ProjectileEventType.Hit && e.targetId !== 0 && e.targetType < 64).length;
+  const spawns = demo.targetEvents.filter((e): boolean => e.eventType === TargetEventType.Spawned).length;
+  const acc = shots > 0 ? (ballHits / shots * 100).toFixed(0) : '0';
+  console.log(`  score recompute: ${ballHits} kills / ${shots} shots (${acc}% acc) / ${spawns} spawns served — the events prove this, no claimed score exists in-file`);
+}
 
 const noSeed = process.argv.includes('--no-seed');
 if (!h.runSeed && !noSeed) {
