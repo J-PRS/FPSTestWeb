@@ -350,7 +350,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
     sfx.shoot(WeaponType.Lightning);
 
     if (hitTarget) {
-      hitTarget.applyKnockback(player.pos, stats.knockbackForce); // the pin
+      hitTarget.applyKnockback(player.pos, stats.knockbackForce, true); // the pin — directed shove rides the claim
       zapTarget(deps, hooks, lg, hitTarget, 1, cam);
       deps.lazyHud().showHitMarker();
 
@@ -359,7 +359,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
       const chainT = pickChain(deps, _lgHit, hitTarget);
       if (chainT) {
         lg.beam.fireChain(_lgHit, chainT.pos);
-        chainT.applyKnockback(hitTarget.pos, stats.knockbackForce * 0.6);
+        chainT.applyKnockback(hitTarget.pos, stats.knockbackForce * 0.6, true);
         zapTarget(deps, hooks, lg, chainT, LG_CHAIN_DMG_SCALE, cam);
       }
     } else {

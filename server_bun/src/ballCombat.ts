@@ -127,7 +127,7 @@ export class BallCombat {
    *  anticheat-phase concern; a bogus claim costs a shoved ball, not state.
    *  `killed` feeds kill-edge telemetry; `reason` names a claim the sim
    *  never touched (echoed to the claimant inside claimAck). */
-  handleHit(playerId: string, id: number, damage: number, _kx?: number, _ky?: number, _kz?: number): HitVerdict {
+  handleHit(playerId: string, id: number, damage: number, kx?: number, ky?: number, kz?: number): HitVerdict {
     const b = this.host.balls().get(id);
     // A claim on a just-killed ball is the normal aim→claim race — the
     // corpse still rendered when the shot was fired. Debug, not warn.
@@ -168,10 +168,15 @@ export class BallCombat {
     // (direct+splash, perk-boosted) instead of a flat 300.
     const dmg = Math.max(1, Math.min(MAX_HIT_CLAIM_DMG, damage));
 
-    // The claim's impulse is ignored: the blast event itself knocks prey
-    // (emit 'knock' kind 'prey'), so applying it here would shove twice —
-    // once predicted client-side, twice server-side, then a resync snap.
-    if (applySimDamage(b, dmg, 0, 0, 0)) {
+    // Directed shoves (melee sweep, lightning pin) carry their impulse on
+    // the claim — the client already predicted it, so authority must apply
+    // the same push or the ball rubberbands on the next segment. AoE blast
+    // knock never rides claims ('knock' kind 'prey' event covers it), so a
+    // claimed impulse can't double-shove. Cap keeps a forged claim honest.
+    let ix = kx ?? 0, iy = ky ?? 0, iz = kz ?? 0;
+    const im = Math.hypot(ix, iy, iz);
+    if (im > 60) { const k = 60 / im; ix *= k; iy *= k; iz *= k; }
+    if (applySimDamage(b, dmg, ix, iy, iz)) {
       this.host.kill(b, playerId);
       return { killed: true };
     }

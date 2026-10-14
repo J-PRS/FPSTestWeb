@@ -157,3 +157,35 @@ may be active — guard reentrancy (nested render passes) with an
 silently — INVALID_OPERATION on all later queries; (4) stale gl.getError
 flags (1282) outlive the call that set them — don't read it as "this
 call failed".
+
+## Outcomes (what the profiling bought)
+
+- **Rig-root freeze** (`20eff1db`): offscreen remotes' whole bone subtree
+  drops out of updateMatrixWorld — botiso frame 6.32→4.48ms, render
+  3.70→2.47ms, worst 19→6.2ms.
+- **Skinned-part merge** (`dd1956ea`): mannequin GLB parts (5-10
+  SkinnedMeshes/remote, one skeleton) merge per
+  material+bindMatrix+parent bucket → ~1 draw per rig, verified live
+  (`merged:head1+4`). LOD1 geo list remaps through the same bucket
+  table; baseGeo stashes merge too.
+- **Flat profile verdict**: top self-time leaf was WebGLUniforms ~6%
+  (≈20% of real frame work — thread ~75% idle). No micro-optimizable
+  hog; cost is a work CLASS (per-draw submission). Improve by removing
+  draws/bones, not tuning functions.
+- **Materials**: 134 instances ≈ 7 designs (Lambert/Basic clones via
+  GLB load + per-remote reskin); 42 GPU programs is the real
+  state-switch driver (define-combination variants). Dedup saves
+  uniform uploads, not program switches.
+- **Batching audit**: shells/trails/deployables/swarm/gibs already
+  InstancedMesh (INST_CAP pools); remaining ~150 anonymous draws are
+  singletons (flag mesh+pole pairs, healthbars, markers, wireframe
+  duplicates) — long tail, not a swarm problem.
+- **Shadow pass**: renderScan showed +28 draws only — already
+  throttled (every-2nd-frame + follow frustum + PCFShadowMap). NOT the
+  #1 lever regardless of generic advice.
+- **Harness**: `bun _tools/e2e/profile.ts --room X --bots N --secs S
+  --cpu N` → phases + renderScan stages + GPU drain + JS self-profile
+  hot fns + LoAF + census → JSON in _tools/e2e/profout/.
+- **Still open**: anonymous-singleton census (which systems own the
+  remaining draws), sampleHeightmap memo, Bun --cpu-prof-md soak,
+  real-iGPU proof (nvidia-smi -lgc / hardware).

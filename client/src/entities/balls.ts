@@ -76,8 +76,11 @@ export interface Targetable {
   /** serverPaid: the authority's sim already settles this damage (shell
    *  contact / shell splash) — skip the hit claim or it pays twice. */
   takeDamage(damage: number, opts?: { serverPaid?: boolean }): boolean;
-  applyKnockback(from: THREE.Vector3, force: number): void;
-  applyPull(to: THREE.Vector3, force: number): void;
+  /** claim=true only for directed-hit shoves (melee, lightning pin) whose
+   *  impulse must ride the next creatureHit claim; AoE blasts are
+   *  predict-only — the server's blast knock() already shoves authority. */
+  applyKnockback(from: THREE.Vector3, force: number, claim?: boolean): void;
+  applyPull(to: THREE.Vector3, force: number, claim?: boolean): void;
   /** Wire identity for net-driven targets — kill/damage records must key
    *  on netId, not the client 0x40xx id, or replay never sees the edge. */
   netDriven?: boolean;
@@ -390,15 +393,28 @@ export class Ball {
     return false;
   }
 
-  applyKnockback(from: THREE.Vector3, force: number): void {
+  applyKnockback(from: THREE.Vector3, force: number, claim = false): void {
     const dir = this.pos.clone().sub(from).normalize();
-    if (this.netDriven) { this._netImp.addScaledVector(dir, force); return; }
+    if (this.netDriven) {
+      // Predicted shove on the replay sim — the server's knock()/hit impulse
+      // is the identical math, so the next segment confirms instead of
+      // yanking 20-50m (the render-blend/follow-jump storm).
+      const s = this.netS.sim;
+      if (s) { s.vx += dir.x * force; s.vy += dir.y * force; s.vz += dir.z * force; s.gt = 0; }
+      if (claim) { this._netImp.addScaledVector(dir, force); }
+      return;
+    }
     this.vel.addScaledVector(dir, force);
   }
 
-  applyPull(to: THREE.Vector3, force: number): void {
+  applyPull(to: THREE.Vector3, force: number, claim = false): void {
     const dir = to.clone().sub(this.pos).normalize();
-    if (this.netDriven) { this._netImp.addScaledVector(dir, force); return; }
+    if (this.netDriven) {
+      const s = this.netS.sim;
+      if (s) { s.vx += dir.x * force; s.vy += dir.y * force; s.vz += dir.z * force; s.gt = 0; }
+      if (claim) { this._netImp.addScaledVector(dir, force); }
+      return;
+    }
     this.vel.addScaledVector(dir, force);
   }
 
@@ -414,8 +430,10 @@ export class Ball {
       RibbonTrail.acquire(this.scene, { color: core.multiplyScalar(0.7).getHex(), width: this.radius * 0.45, life: 0.4, billboard: true, tag: 'ball' }),
     ];
     // TrailDriver sets follow only on the ribbons it was built with —
-    // retired replacements must inherit the tail anchor themselves.
-    for (const r of out) {r.follow = this.pos;}
+    // retired replacements must inherit the tail anchor themselves. The
+    // anchor is _rpos (pos + renderOffset): raw pos snaps on every segment
+    // correction while mesh+deposits blend — the follow-jump stream.
+    for (const r of out) {r.follow = this._rpos;}
     return out;
   }
 

@@ -9,7 +9,7 @@ await c.waitFor(`t.world.remotePlayers.entities.size >= 5`, 20000);
 await new Promise(r => setTimeout(r, 12000)); // steady state at 1x
 
 const cdp = await (c.page as any).createCDPSession();
-await cdp.send('Emulation.setCPUThrottlingRate', { rate: 16 });
+await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
 await new Promise(r => setTimeout(r, 15000)); // throttle stabilizes
 
 const perf = await c.page.evaluate(`window.__perf()`);

@@ -136,10 +136,14 @@ export function tickNet(st: NetStatics, bag: NetBag, host: NetHost, dt: number):
     // 50-190m. Cap the lead at 1s past the estimate; past that a
     // parked ball reads better than a guaranteed-wrong one.
     const leadCap = simNow === Infinity ? Infinity : simNow + 1;
-    // Uncapped on purpose: with the clock frozen only this path can drain
-    // the bank — pacing it would strand the sim mid-flight indefinitely,
-    // and post-silence continuity is lost regardless.
-    while (bag.netAcc >= 0.05 && bag.simT + 0.05 <= leadCap) {
+    // The bank is capped at 0.5s so a stalled-clock burst is finite — but
+    // draining it in ONE frame leaps the ball speed×0.5s (the acc=50
+    // ball-step/follow-jump stream under low fps). Pace at ~2x real-time:
+    // the backlog clears over a few frames, the fold stays small, and a
+    // frozen clock still converges — just smoothly.
+    let burst = Math.max(4, Math.ceil(dt / 0.05) * 2);
+    while (burst > 0 && bag.netAcc >= 0.05 && bag.simT + 0.05 <= leadCap) {
+      burst -= 1;
       bag.netAcc -= 0.05;
       bag.simT += 0.05;
       stepBall(s, 0.05, field, tgt, false, { colliders: st.colliders(), colliderIndex: st.colliderIndex() ?? undefined });
@@ -297,6 +301,10 @@ export function applySeg(st: NetStatics, bag: NetBag, host: NetHost, seg: NetSeg
   bag.netAcc = field && cells > 0 ? lead - cells * 0.05 : Math.min(lead, 0.5);
   bag.parked = false;
   blendSegCorrection(host, s, seg);
+  // Re-anchor the step tracker to post-snap truth or the next tickNet
+  // measures the correction AGAIN as a gap and folds it into renderOffset
+  // a second time (the 20-50m render-blend/follow-jump double-blend).
+  bag.px = s.x; bag.py = s.y; bag.pz = s.z;
 }
 
 /** Predicted position at sim-time `t`: clone the live replay sim and step

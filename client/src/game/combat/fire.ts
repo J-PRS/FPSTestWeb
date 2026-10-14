@@ -330,7 +330,7 @@ function melee(deps: CombatDeps, hooks: FireHooks, e: FireArgs): void {
     if (dist > MELEE_RANGE + (t.hitRadius ?? t.radius)) {continue;}
     _meleeToT.divideScalar(dist || 1);
     if (_meleeToT.dot(e.dir) < MELEE_ARC_DOT) {continue;}
-    t.applyKnockback(player.pos, stats.knockbackForce);
+    t.applyKnockback(player.pos, stats.knockbackForce, true); // directed shove — server recomputes the same impulse in meleeSweep
     deps.lazyDamageNumbers().spawn(t.pos, MELEE_DAMAGE, '#aaddff', deps.lazyCamera());
     deps.reportTargetDamage?.(t, MELEE_DAMAGE);
     if (t.takeDamage(MELEE_DAMAGE, { serverPaid })) {hooks.onTargetDestroyed(t, t.vel, WeaponType.Melee);}

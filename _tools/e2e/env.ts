@@ -115,7 +115,8 @@ export async function upStack(opts: { clientPort?: number; serverPort?: number }
   const clientPort = await (async () => {
     if (opts.clientPort) return opts.clientPort;
     for (let port = 5399; port < 5459; port++) {
-      const p = spawn(['npx', 'vite', '--port', String(port), '--strictPort'], {
+      // Windows: npx is a .cmd shim, uv_spawn needs the explicit filename.
+      const p = spawn([process.platform === 'win32' ? 'npx.cmd' : 'npx', 'vite', '--port', String(port), '--strictPort'], {
         cwd: `${REPO}client`,
         env: { ...process.env },
         stdout: 'ignore', stderr: 'ignore',
