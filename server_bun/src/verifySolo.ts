@@ -72,13 +72,14 @@ export interface SoloVerdict {
   // evidence tiers
   legN: number; legOver: number; legWorst: number;
   projN: number; projOver: number; projWorst: number;
+  unbacked: number;
 }
 
 export function verifySolo(demo: DemoFile): SoloVerdict {
   const h = demo.header;
   const base = { spawnN: 0, spawnBad: 0, spawnWorst: 0, spawnWorstId: -1,
     trajWorst: 0, trajFrame: -1, legN: 0, legOver: 0, legWorst: 0,
-    projN: 0, projOver: 0, projWorst: 0 };
+    projN: 0, projOver: 0, projWorst: 0, unbacked: 0 };
   if (!h.runSeed) { return Object.assign({ ok: false, reason: 'unseeded demo (v<7 or unseeded run)' }, base); }
   if (!demo.heightmap) { return Object.assign({ ok: false, reason: 'no hmap trailer' }, base); }
   if (demo.frames.length === 0) { return Object.assign({ ok: false, reason: 'no frames' }, base); }
@@ -239,5 +240,17 @@ export function verifySolo(demo: DemoFile): SoloVerdict {
     rec.x = e.posX; rec.y = e.posY; rec.z = e.posZ;
   }
 
-  return Object.assign({ ok: true }, base, { trajWorst, trajFrame, spawnN, spawnBad, spawnWorst, spawnWorstId, legN, legOver, legWorst, projN, projOver, projWorst });
+  // Hit↔shot linkage (evidence): ball dmg/kill events without a
+  // projectile event in the blast window indicate fabricated kills.
+  let unbacked = 0;
+  for (const e of demo.targetEvents) {
+    if (e.targetType >= 64) { continue; }
+    if (e.eventType !== TargetEventType.Hit && e.eventType !== TargetEventType.Destroyed) { continue; }
+    const near = demo.projectileEvents.some(p =>
+      Math.abs(p.timestamp - e.timestamp) < 0.25 &&
+      Math.hypot(p.posX - e.posX, p.posY - e.posY, p.posZ - e.posZ) < 12);
+    if (!near) { unbacked += 1; }
+  }
+
+  return Object.assign({ ok: true }, base, { trajWorst, trajFrame, spawnN, spawnBad, spawnWorst, spawnWorstId, legN, legOver, legWorst, projN, projOver, projWorst, unbacked });
 }

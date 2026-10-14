@@ -301,6 +301,24 @@ if (projN > 0) {
   console.log(`  proj legs ${projN}: ${projOver} over eps (${((projOver / projN) * 100).toFixed(0)}%), worst ${projWorst.toFixed(2)}m proj=${projWorstId}`);
   console.log(`  (proj legs verify LOCAL ballistic truth only — networked demos' Hits are server truth and legitimately diverge; server outcomes ride resultToken, not this gate)`);
 }
+// Hit↔shot linkage — every ball Hit/Destroyed should be backed by a
+// projectile event near it in space+time (blast radius covers splash).
+// Evidence tier: unbacked kills are suspicious, not fatal — the kill-
+// cause surface isn't fully modeled (melee? enrage? future weapons).
+{
+  const projs = demo.projectileEvents;
+  let unbacked = 0, hits = 0;
+  for (const e of demo.targetEvents) {
+    if (e.targetType >= 64) {continue;}
+    if (e.eventType !== TargetEventType.Hit && e.eventType !== TargetEventType.Destroyed) {continue;}
+    hits += 1;
+    const near = projs.some((p): boolean =>
+      Math.abs(p.timestamp - e.timestamp) < 0.25 &&
+      Math.hypot(p.posX - e.posX, p.posY - e.posY, p.posZ - e.posZ) < 12);
+    if (!near) {unbacked += 1;}
+  }
+  if (hits > 0) {console.log(`  hit linkage: ${hits} ball dmg/kill events, ${unbacked} unbacked by any projectile event (±0.25s, 12m blast window)`);}
+}
 if (spawnBad > 0) {
   console.log(`VERDICT hash-mismatch — spawn dice diverged at ball ${spawnWorstId}; a fabricated Spawned event can't hide in the seeded stream`);
   process.exit(1);
