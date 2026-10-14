@@ -222,7 +222,8 @@ export async function leaderboardRoute(ctx: HttpCtx, req: Request, url: URL): Pr
     return json(r, { status: r.ok ? 200 : 422 });
   }
   if (url.pathname === '/challenge' && req.method === 'GET') {
-    return json(await lb.mintChallenge());
+    const c = await lb.mintChallenge();
+    return c ? json(c) : json({ error: 'signing disabled (KRIBES_SIGN_KEY unset)' }, { status: 503 });
   }
   if (url.pathname === '/leaderboard' && req.method === 'GET') {
     return json({ board: lb.board(url.searchParams.get('mode') ?? undefined) });

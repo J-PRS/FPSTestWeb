@@ -20,9 +20,10 @@ let challenge: Challenge | null = null;
 export const setChallenge = (c: Challenge | null): void => { challenge = c; };
 export const getChallenge = (): Challenge | null => challenge;
 
-export function fetchChallenge(httpUrl: string): void {
-  fetch(`${httpUrl}/challenge`)
+export function fetchChallenge(httpUrl: string): Promise<void> {
+  return fetch(`${httpUrl}/challenge`)
     .then(r => (r.ok ? r.json() : null))
     .then((c: Challenge | null) => { challenge = c; })
+    .then(() => undefined)
     .catch(() => { challenge = null; });
 }

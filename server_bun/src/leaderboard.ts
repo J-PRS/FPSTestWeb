@@ -69,10 +69,11 @@ if (existsSync(BOARD)) {
 // Challenge mint — one call = one seed the client must bind runSeed to.
 // Short expiry: hoarded seeds would let a client precompute legal runs.
 const CHALLENGE_TTL_MS = 30 * 60_000;
-export async function mintChallenge(): Promise<Challenge> {
+export async function mintChallenge(): Promise<Challenge | null> {
+  if (!SIGN_SECRET) {return null;}   // keyless server can't attest anything
   const seed = (Math.random() * 0xFF_FF_FF_FF) >>> 0;
   const exp = wallNow() + CHALLENGE_TTL_MS;
-  return { seed, exp, sig: await signChallenge(seed, exp, SIGN_SECRET ?? '') };
+  return { seed, exp, sig: await signChallenge(seed, exp, SIGN_SECRET) };
 }
 
 export async function submitDemo(buf: ArrayBuffer, challenge?: Challenge | null): Promise<SubmitResult> {

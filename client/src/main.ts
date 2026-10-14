@@ -191,8 +191,9 @@ let gameLoop!: ReturnType<typeof createGameLoop>;
 // ---- Boot ----
 const serverEndpoints = resolveServerEndpoints();
 // Ranked-solo challenge — minted by the backend so runSeed isn't self-
-// chosen. Kick it at boot; makeEntities binds it if it landed in time.
-serverEndpoints.then(ep => fetchChallenge(ep.httpUrl)).catch(() => {});
+// chosen. Entity boot awaits it with a bound so ranked runs bind
+// deterministically; a dead backend degrades to local mint (unranked).
+const challengeReady = serverEndpoints.then(ep => fetchChallenge(ep.httpUrl)).catch(() => {});
 /** SOLO tab's ?map= pick, resolved client-side before init's heightmap
  *  step — module scope because connectPhase consumes it after init's
  *  locals are gone. */
@@ -769,6 +770,9 @@ async function init(): Promise<void> {
   ({viewModel} = vmSetup);
   profiler.markTime('viewmodel');
 
+  // Ranked-solo: give the minted seed a bounded window to land — a run
+  // that started before it arrived would verify nothing anyway.
+  await Promise.race([challengeReady, new Promise((r): void => { setTimeout(r, 1500); })]);
   entities = makeEntities();
   profiler.markTime('entities');
 
