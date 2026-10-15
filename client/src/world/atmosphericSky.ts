@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { UNGRADE_GLSL } from '../core/gradeGlsl.js';
+import type { AtmosphereSpec } from '../../../shared/mapSpec.js';
 
 // Atmospheric scattering shader based on wwwtyro/glsl-atmosphere
 // Rayleigh and Mie scattering for realistic sky colors
@@ -207,11 +208,48 @@ export class AtmosphericSky {
     
     this.mesh = new THREE.Mesh(geometry, this.material);
     this.mesh.name = '__sky'; // map specs with a baked skybox hide this
+    // Per-map `atmosphere` overrides reach this instance through the mesh
+    // (mapAssets has only the scene) — same trick as the baked-sky hide.
+    this.mesh.userData.sky = this;
     scene.add(this.mesh);
     
     // Mid-morning sun: high enough for bright light, angled enough to be
     // visible in the sky and to give directional shading.
     this.setTimeOfDay(0.38);
+
+    // Boot atmosphere — spec overrides are multipliers on these, so a map
+    // that omits a field (or carries no atmosphere at all) keeps this look.
+    const u0 = this.material.uniforms;
+    this.baseAtmosphere = {
+      rayleigh: (u0.rayleigh!.value as number),
+      mie: (u0.mieCoefficient!.value as number),
+      star: (u0.starIntensity!.value as number),
+      sun: (u0.sunIntensity!.value as number),
+    };
+  }
+
+  private baseAtmosphere = { rayleigh: 1, mie: 21e-6, star: 0.9, sun: 22 };
+
+  /** Per-map sky tuning. rayleigh/mie/sunIntensity are multipliers on the
+   *  engine defaults; starIntensity is absolute. Absent fields untouched. */
+  setAtmosphere(params: AtmosphereSpec): void {
+    const u = this.material.uniforms;
+    const b = this.baseAtmosphere;
+    if (params.rayleigh !== undefined) {u.rayleigh!.value = b.rayleigh * params.rayleigh;}
+    if (params.mie !== undefined) {u.mieCoefficient!.value = b.mie * params.mie;}
+    if (params.starIntensity !== undefined) {u.starIntensity!.value = params.starIntensity;}
+    if (params.sunIntensity !== undefined) {u.sunIntensity!.value = b.sun * params.sunIntensity;}
+  }
+
+  /** Restore the boot sky — a map with no `atmosphere` runs this so a room
+   *  hop can't inherit the previous map's tint. */
+  resetAtmosphere(): void {
+    const u = this.material.uniforms;
+    const b = this.baseAtmosphere;
+    u.rayleigh!.value = b.rayleigh;
+    u.mieCoefficient!.value = b.mie;
+    u.starIntensity!.value = b.star;
+    u.sunIntensity!.value = b.sun;
   }
 
   setTimeOfDay(t: number): void {

@@ -245,7 +245,7 @@ function autoScaleCpu(deps: GameLoopDeps, st: LoopState, dir: number): void {
   if (next === 0) {vfxScale = 1;}
   else if (next === 1) {vfxScale = 0.6;}
   setVfxQualityScale(vfxScale);
-  for (const layer of deps.ambientLayers) {layer.setActive(ambientOn);}
+  deps.weather.setQuality(ambientOn);
   deps.groundMist().setActive(ambientOn);
   deps.ambientBirds.setActive(ambientOn);
   // Stepping back up restores the baseline pick, not necessarily OFF.
@@ -302,7 +302,7 @@ export function resetAutoQuality(deps: GameLoopDeps, st: LoopState): void {
   if (deps.rendererSetup.renderer.shadowMap.enabled !== settings.get('fps-shadows')) {
     setShadows(deps, settings.get('fps-shadows'));
   }
-  for (const layer of deps.ambientLayers) {layer.setActive(true);}
+  deps.weather.setQuality(true);
   deps.groundMist().setActive(true);
   deps.ambientBirds.setActive(true);
   deps.sceneSetup.volumetricClouds?.setEnabled(true);

@@ -2,6 +2,7 @@
 // (scorch decals, fog, lighting). Kept apart from terrain.ts so the clipmap
 // machinery reads without two pages of shader text.
 import { UNGRADE_GLSL } from '../core/gradeGlsl.js';
+import { TERRAIN_PRESET_GLSL } from './terrainPresets.js';
 
 export const terrainVert = /* glsl */`
   uniform sampler2D heightMap;
@@ -192,6 +193,31 @@ export const terrainFrag = /* glsl */`
     return v;
   }
   float fbm(vec2 p) { return fbmErosion(p, 6); }
+
+  // --- Band-limited detail fBm (close-range surface texture) ---
+  // A single small noise is just one repeating tile. Layered octaves are what
+  // read as real detail; the standard tricks that stop it looking patterned:
+  //   * detuned lacunarity (2.03, not exactly 2) so octaves never line up;
+  //   * a domain ROTATION per octave (m2) so their zero-crossings diverge;
+  //   * a per-octave offset so the lattices don't share features;
+  //   * band-limiting: an octave whose wavelength falls below the pixel
+  //     footprint (~dist * pixelAngle) fades out — this doubles as the AA, so
+  //     the layer can never shimmer at distance.
+  // baseWl is the coarsest octave's wavelength in metres.
+  float detailFbm(vec2 wp, float dist, float baseWl) {
+    float v = 0.0, a = 0.5, f = 1.0;
+    float pixWl = dist * 0.0022; // ≈ world size of one pixel
+    for (int i = 0; i < 5; i++) {
+      float wl = baseWl / f;
+      float keep = smoothstep(0.0, 1.0, wl / max(pixWl, 1e-4));
+      if (keep <= 0.001) break;
+      v += a * keep * noise(wp / wl + vec2(float(i) * 13.7, float(i) * 7.1));
+      a *= 0.55;
+      f *= 2.03;
+      wp = m2 * wp;
+    }
+    return v;
+  }
 
   uniform vec4 scorchData[16]; // x, z, radius, intensity (w<=0 = unused slot)
   uniform float scorchEmber[16]; // per-slot ember rim glow (0 = none)
@@ -638,6 +664,8 @@ export const terrainFrag = /* glsl */`
       #include <colorspace_fragment>
       return;
     }
+
+    ${TERRAIN_PRESET_GLSL}
 
     // --- mixed preset: full noise suite ---
     vec2 warp = vec2(fbm(uv), fbm(uv + vec2(5.2, 1.3)));

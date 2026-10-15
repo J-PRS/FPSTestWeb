@@ -21,6 +21,7 @@ import type { HUD } from '../ui/hud.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { ExplosionTracker } from '../utils/ExplosionTracker.js';
 import type { Terrain } from '../world/terrain.js';
+import type { AmbientWeather } from '../effects/ambientWeather.js';
 
 import type { NetCtx } from './net/ctx.js';
 import { wireMatchEvents } from './net/match.js';
@@ -38,6 +39,7 @@ export interface NetDeps {
   lazyNetworkManager(): NetworkManager;
   lazyScene(): THREE.Scene;
   lazyTerrain(): Terrain;
+  lazyWeather(): AmbientWeather;
   lazyPlayer(): Player;
   lazyEffects(): EffectsManager;
   lazyHud(): HUD;

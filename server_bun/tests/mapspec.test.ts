@@ -22,7 +22,7 @@ describe('resolveMapSpec — path-traversal boundary', () => {
   it('drops paths with wrong extensions or oversize input', () => {
     expect(resolveMapSpec({ terrain: 'a/x.png' }).terrain).toBeUndefined(); // needs .bin
     expect(resolveMapSpec({ terrainTex: 'a/x.bin' }).terrainTex).toBeUndefined(); // needs image
-    expect(resolveMapSpec({ terrain: 'a/'.padEnd(140, 'b') + 'x.bin' }).terrain).toBeUndefined();
+    expect(resolveMapSpec({ terrain: `${'a/'.padEnd(140, 'b')  }x.bin` }).terrain).toBeUndefined();
   });
 });
 
@@ -45,6 +45,32 @@ describe('resolveMapSpec — clamps and defaults', () => {
     expect(resolveMapSpec({ mode: 'ct f;drop' }).mode).toBeUndefined();
     expect(resolveMapSpec({ modes: Array(20).fill('dm') }).modes).toHaveLength(8);
     expect(resolveMapSpec({ modes: ['ctf', 42, 'dm'] }).modes).toEqual(['ctf', 'dm']);
+  });
+
+  it('terrainPreset accepts the extended palette ids (0..6)', () => {
+    for (const p of [1, 2, 3, 4, 5, 6]) {
+      expect(resolveMapSpec({ terrainPreset: p }).terrainPreset).toBe(p);
+    }
+    expect(resolveMapSpec({ terrainPreset: 0 }).terrainPreset).toBeUndefined(); // 0 = default
+    expect(resolveMapSpec({ terrainPreset: 9 }).terrainPreset).toBe(6);
+  });
+
+  it('weather keeps known kinds, clamps intensity, drops the rest', () => {
+    expect(resolveMapSpec({ weather: { snow: 1.5, embers: 2 } }).weather)
+      .toEqual({ snow: 1.5, embers: 2 });
+    expect(resolveMapSpec({ weather: { dust: 5 } }).weather).toEqual({ dust: 2 });
+    expect(resolveMapSpec({ weather: { lava: 1, ash: -1 } }).weather).toEqual({ ash: 0 });
+    expect(resolveMapSpec({ weather: 'snow' }).weather).toBeUndefined();
+    expect(resolveMapSpec({ weather: {} }).weather).toBeUndefined();
+  });
+
+  it('atmosphere clamps multipliers, drops unknown/non-numeric', () => {
+    expect(resolveMapSpec({ atmosphere: { rayleigh: 0.8, mie: 3.5, sunIntensity: 0.9 } }).atmosphere)
+      .toEqual({ rayleigh: 0.8, mie: 3.5, sunIntensity: 0.9 });
+    expect(resolveMapSpec({ atmosphere: { mie: 999 } }).atmosphere).toEqual({ mie: 20 });
+    expect(resolveMapSpec({ atmosphere: { starIntensity: -4 } }).atmosphere).toEqual({ starIntensity: 0 });
+    expect(resolveMapSpec({ atmosphere: { nope: 1 } }).atmosphere).toBeUndefined();
+    expect(resolveMapSpec({ atmosphere: [] }).atmosphere).toBeUndefined();
   });
 });
 

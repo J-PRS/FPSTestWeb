@@ -45,7 +45,8 @@ export function makeDeps() {
   const deps: NetDeps = {
     lazyNetworkManager: (): NetworkManager => nm,
     lazyScene: (): THREE.Scene<THREE.Object3DEventMap> => scene,
-    lazyTerrain: (): never => ({ getHeight: (): number => 0, reloadHeightmap(): void { return; } }) as never,
+    lazyTerrain: (): never => ({ getHeight: (): number => 0, reloadHeightmap(): void { return; } }) as never,
+    lazyWeather: (): never => ({ setWeather(): void { return; } }) as never,
     lazyPlayer: (): never => player as never,
     lazyEffects: (): never => ({ spawnJumpDust(): void { return; }, spawnJetpack(): void { return; }, spawnBeam(): void { return; } }) as never,
     lazyHud: (): never => new Proxy({}, { get: (_t, k): (a?: unknown) => unknown => (a?: unknown): unknown => { calls.hud.push(`${String(k)}`); return a; } }) as never,

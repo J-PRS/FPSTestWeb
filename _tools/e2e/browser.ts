@@ -49,7 +49,14 @@ export interface Client {
   waitFor(expr: string, timeoutMs?: number): Promise<unknown>;
 }
 
-export async function launchClient(clientUrl: string): Promise<Client> {
+export interface LaunchOpts {
+  /** JS evaluated before any page script — seed localStorage here (settings
+   *  are read once at boot; a post-load write is too late). Specs that
+   *  need deterministic quality use it to pin `fps-autoq` off. */
+  preload?: string;
+}
+
+export async function launchClient(clientUrl: string, opts: LaunchOpts = {}): Promise<Client> {
   const browser: Browser = await puppeteer.launch({
     executablePath: CHROME,
     headless: true,
@@ -64,6 +71,7 @@ export async function launchClient(clientUrl: string): Promise<Client> {
   });
   const page = await browser.newPage();
   await page.evaluateOnNewDocument(POINTER_LOCK_STUB);
+  if (opts.preload) {await page.evaluateOnNewDocument(opts.preload);}
   // Vite's HMR client rejects with "WebSocket closed without opened" when
   // the page loads faster than the dev-server socket — dev-server noise,
   // not game code. Keep real page errors loud.

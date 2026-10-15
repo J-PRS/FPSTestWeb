@@ -291,8 +291,8 @@ n += 1; sum += d; sumAbs += Math.abs(d);
     }
   }
 
-  /** Procedural palette (spec.terrainPreset: 0=mixed, 1=desert,
-   *  2=grassland) — uniform-only, no texture state. */
+  /** Procedural palette (spec.terrainPreset: 0=mixed, 1=desert, 2=grassland,
+   *  3=snow, 4=volcanic, 5=badlands, 6=coast) — uniform-only, no texture state. */
   setPreset(p: number): void {
     for (const level of this.levels) {
       level.material.uniforms.terrainPreset.value = p;

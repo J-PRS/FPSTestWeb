@@ -122,6 +122,8 @@ export class RoomStructures {
       terrainTex: spec.terrainTex,
       terrainPreset: spec.terrainPreset,
       sky: spec.sky,
+      weather: spec.weather,
+      atmosphere: spec.atmosphere,
       interiors: spec.interiors,
     });
   }

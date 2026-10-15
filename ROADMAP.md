@@ -322,6 +322,24 @@ solve when a check can possibly matter, skip provably-dead ticks; plus
    heightfields per room (lazy, cached, shared). Shared brain landed:
    shared/botBrain.ts drives offline GameBots AND server bots — one
    personality, both runtimes.
+   Per-map LOOK landed (2026-10-15, native maps — no T2 port):
+   `terrainPreset` widened 0..6 (snow/volcanic/badlands/coast live in
+   world/terrainPresets.ts, spliced into the terrain frag shader) plus
+   two new MapSpec blocks — `weather` {dust,embers,ash,snow intensity}
+   (ABSENT = the old dust+embers+ash trio, so pre-weather maps render
+   byte-identical) and `atmosphere` {rayleigh,mie,sunIntensity
+   multipliers + absolute starIntensity on the procedural sky} -
+   threaded spec → Room/roomStructures/MessageHandler → gameState/
+   mapUpdate → client MapSnapshot/world.ts. Four new rooms: whiteout
+   (snow, ctf), caldera (volcanic, ctf), hoodoo (badlands, dm), lagoon
+   (coast, ctf). `_tools/mapbake/genmap.js` is the field generator
+   (domain warp, ridge, tileable tilt, mesas, crater, rim ring, sea
+   sink) with terrainstats.js + hillshade.js as the measurement loop —
+   authoring a field that MATCHES the T2 relief profile (sd 20-30m,
+   mean slope 29-33deg, energy from ~20m to ~200m) is the whole game;
+   the first cut measured sd 7-18m and read as a flat plate. Verified
+   by `_tools/e2e/weather.ts` (uniforms + per-layer draw ranges per
+   map) because check.sh's visual gate only ever shoots ONE map.
 4. ~~Server-owned teams/score~~ — landed: rooms assign alpha/bravo on
    join (before spawn — team-base spawning), teamScore/matchEnd/
    matchStart broadcast, match journal → logs/matches.jsonl + /matches.

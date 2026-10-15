@@ -1,0 +1,39 @@
+{
+  "name": "Caldera",
+  "mode": "ctf",
+  "bots": 8,
+  "botFill": 12,
+  "bases": {
+    "alpha": { "x": -330, "y": 0, "z": 0 },
+    "bravo": { "x": 330, "y": 0, "z": 0 }
+  },
+  "teamSpawns": {
+    "alpha": [
+      { "x": -330, "y": 0, "z": -30, "r": 40 },
+      { "x": -360, "y": 0, "z": 35, "r": 40 }
+    ],
+    "bravo": [
+      { "x": 330, "y": 0, "z": -30, "r": 40 },
+      { "x": 360, "y": 0, "z": 35, "r": 40 }
+    ]
+  },
+  "spawns": [
+    { "x": -330, "y": 0, "z": 0, "r": 38 },
+    { "x": 330, "y": 0, "z": 0, "r": 38 },
+    { "x": -170, "y": 0, "z": -220, "r": 36 },
+    { "x": 170, "y": 0, "z": 220, "r": 36 },
+    { "x": 0, "y": 0, "z": 0 }
+  ],
+  "structures": [],
+  "terrain": "caldera.bin",
+  "heightScale": 1.3,
+  "terrainPreset": 4,
+  "fog": {
+    "color": [0.58, 0.43, 0.36],
+    "distance": 170.0,
+    "visible": 850.0
+  },
+  "atmosphere": { "rayleigh": 0.85, "mie": 2.6, "sunIntensity": 1.0 },
+  "weather": { "embers": 0.8, "ash": 0.6 },
+  "_notes": "Caldera = volcanic basin (terrainPreset 4), central crater + rim, ctf, embers+ash"
+}

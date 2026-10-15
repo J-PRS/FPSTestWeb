@@ -771,6 +771,8 @@ export class Room {
       terrainTex: this.spec.terrainTex,
       terrainPreset: this.spec.terrainPreset,
       sky: this.spec.sky,
+      weather: this.spec.weather,
+      atmosphere: this.spec.atmosphere,
       interiors: this.spec.interiors,
       emit: this.events.emit,
       rng: (): number => this.rng(),
@@ -891,6 +893,7 @@ export class Room {
   private matchHost(): MatchHost {
     // Getters read through `self` — object-literal `this` would bind to
     // the literal itself (the recursion bug this fixes avoided).
+    // oxlint-disable-next-line no-this-alias -- the returned literal's getters need this outer scope
     const self = this;
     return {
       room: this.name,
@@ -1082,6 +1085,8 @@ export class Room {
       terrainTex: spec.terrainTex,
       terrainPreset: spec.terrainPreset,
       sky: spec.sky,
+      weather: spec.weather,
+      atmosphere: spec.atmosphere,
       interiors: spec.interiors,
     });
     // Rotate the sims' heightfield WITH the broadcast — clients rebuild on

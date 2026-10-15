@@ -34,7 +34,7 @@ import { DamageNumberManager } from './effects/damageNumbers.js';
 import { EffectsManager } from './effects/effects.js';
 import { initVfx } from './effects/vfx.js';
 import { SpeedLines } from './effects/speedLines.js';
-import { AmbientParticles } from './effects/ambientParticles.js';
+import { AmbientWeather } from './effects/ambientWeather.js';
 import { GroundMist } from './effects/groundMist.js';
 import { AmbientBirds } from './effects/birds.js';
 
@@ -109,13 +109,9 @@ const { scene, sun } = sceneSetup;
 // the actual velocity vector; flying through them gives real relative motion
 const speedLines = new SpeedLines(scene);
 
-// Ambient particle layers — one Points cloud each; motes respawn in a
-// sphere around the camera so the world always feels inhabited.
-const ambientLayers = [
-  new AmbientParticles(scene, 'dust'),
-  new AmbientParticles(scene, 'embers'),
-  new AmbientParticles(scene, 'ash'),
-];
+// Ambient particle weather — one owner for the dust/embers/ash/snow layers;
+// the room's map spec picks which drift (absent = the default trio).
+const ambientWeather = new AmbientWeather(scene);
 // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
 let groundMist!: GroundMist; // needs terrain — created in init()
 const ambientBirds = new AmbientBirds(scene); // kettle of buzzards on a thermal
@@ -216,7 +212,7 @@ function makeGameLoop(): ReturnType<typeof createGameLoop> {
     lazyDemoManager: (): DemoManager | null => demoManager,
     lazyEffects: (): EffectsManager => effects,
     speedLines,
-    ambientLayers,
+    weather: ambientWeather,
     groundMist: (): GroundMist => groundMist,
     ambientBirds,
     entities,
@@ -853,6 +849,7 @@ async function init(): Promise<void> {
     lazyNetworkManager: (): NetworkManager => networkManager,
     lazyScene: (): THREE.Scene<THREE.Object3DEventMap> => scene,
     lazyTerrain: (): Terrain => terrain,
+    lazyWeather: (): AmbientWeather => ambientWeather,
     lazyPlayer: (): Player => player,
     lazyEffects: (): EffectsManager => effects,
     lazyHud: (): HUD => hud,

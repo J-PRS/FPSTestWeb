@@ -23,6 +23,7 @@
   CI runs it on every push; `_tools/pvptest/soakreport.ts` headless
   fleet+server audit.
 - **Recent Changes:**
+  - 4 new native maps (whiteout/caldera/hoodoo/lagoon) + per-map look: terrainPreset widened 0..6 (snow/volcanic/badlands/coast in `client/src/world/terrainPresets.ts`), new MapSpec `weather` {dust,embers,ash,snow} (absent = the old default trio, so older maps render unchanged) and `atmosphere` {rayleigh/mie/sunIntensity multipliers + absolute starIntensity}, threaded spec → Room/roomStructures/MessageHandler → gameState/mapUpdate → client. Field generator + measurement loop in `_tools/mapbake/` (genmap.js / terrainstats.js / hillshade.js); verified by `_tools/e2e/weather.ts` + a new map-switch latency spec in `_tools/e2e/mapswitch.ts`
   - Modes arc: all six advertised modes real end-to-end — rabbit (T2
     rules + offline RabbitBridge), duel/tdm offline wiring, FFA bot
     senses fix (dm/duel/rabbit were inert in soaks), 69 map×mode pairs

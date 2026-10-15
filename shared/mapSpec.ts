@@ -22,6 +22,25 @@ export interface BallPopulation {
   max: number;
 }
 
+/** Ambient particle kinds a map may dial — mirrors the client's AmbientKind. */
+export const WEATHER_KINDS = ['dust', 'embers', 'ash', 'snow'] as const;
+export type WeatherKind = (typeof WEATHER_KINDS)[number];
+/** Per-kind particle intensity: 0 = off, 1 = full, 2 = thick. A kind left
+ *  out is off; an absent `weather` block means the engine's default trio. */
+export type WeatherSpec = Partial<Record<WeatherKind, number>>;
+/** Procedural-atmosphere overrides — mirrors the client's
+ *  AtmosphericSkyParams. Absent fields keep the engine SKY_* constants. */
+export interface AtmosphereSpec {
+  /** Rayleigh multiplier — 1 = engine default, >1 deepens/saturates sky. */
+  rayleigh?: number;
+  /** Mie multiplier — 1 = engine default, >1 hazier/smokier air. */
+  mie?: number;
+  /** Night star field brightness (absolute; 0 hides stars). */
+  starIntensity?: number;
+  /** Sun radiance multiplier — 1 = engine default, <1 dims/overcast. */
+  sunIntensity?: number;
+}
+
 export interface MapSpec {
   /** Human title for HUD/chrome ("Dangerous Crossing"). Absent = the
    *  spec's filename, prettified client-side. */
@@ -84,11 +103,21 @@ export interface MapSpec {
    *  client-only dressing; the sims never read it. */
   terrainTex?: string;
   /** Procedural palette id for the terrain shader (0=mixed, 1=desert,
-   *  2=grassland). Client-only; absent = the shader's default desert. */
+   *  2=grassland, 3=snow, 4=volcanic, 5=badlands, 6=coast). Client-only;
+   *  absent = the shader's default desert. */
   terrainPreset?: number;
   /** Skybox dir under maps/ containing px/nx/py/ny/pz/nz.png — replaces
    *  the procedural sky when set. Client-only. */
   sky?: string;
+  /** Ambient particle weather — per-kind intensity {dust,embers,ash,snow}.
+   *  0 = off, 1 = full, >1 thickens. Absent = the engine's default trio
+   *  (dust+embers+ash), so pre-weather maps render unchanged. Client-only
+   *  dressing — the sims never read it. */
+  weather?: WeatherSpec;
+  /** Procedural-sky tuning (scattering/haze/star/sun). Overrides the
+   *  engine's SKY_* constants for this map; ignored when a baked `sky`
+   *  box replaces the procedural dome. Client-only. */
+  atmosphere?: AtmosphereSpec;
   /** Static structures — axis-aligned boxes the server echoes into
    *  gameState so every client builds the same base compounds/cover.
    *  `kind` selects the renderer; `pos` is the piece's center. */
@@ -433,6 +462,34 @@ function parseFog(raw: unknown): MapSpec['fog'] {
   };
 }
 
+/** Weather intensities — known kinds only, clamped 0..2. An empty result
+ *  is undefined so the client falls back to the default trio. */
+function parseWeather(raw: unknown): WeatherSpec | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {return undefined;}
+  const out: WeatherSpec = {};
+  let bad = 0;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!(WEATHER_KINDS as readonly string[]).includes(k) || typeof v !== 'number' || !Number.isFinite(v)) {
+      bad += 1; continue;
+    }
+    out[k as WeatherKind] = Math.max(0, Math.min(2, v));
+  }
+  if (bad) {specWarn(`weather: ${bad} unknown/invalid kind(s) dropped`);}
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/** Atmosphere overrides — finite, clamped to ranges the shader stays sane in. */
+function parseAtmosphere(raw: unknown): AtmosphereSpec | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {return undefined;}
+  const o = raw as Record<string, unknown>;
+  const out: AtmosphereSpec = {};
+  if (typeof o.rayleigh === 'number' && Number.isFinite(o.rayleigh)) {out.rayleigh = Math.max(0, Math.min(10, o.rayleigh));}
+  if (typeof o.mie === 'number' && Number.isFinite(o.mie)) {out.mie = Math.max(0, Math.min(20, o.mie));}
+  if (typeof o.starIntensity === 'number' && Number.isFinite(o.starIntensity)) {out.starIntensity = Math.max(0, Math.min(3, o.starIntensity));}
+  if (typeof o.sunIntensity === 'number' && Number.isFinite(o.sunIntensity)) {out.sunIntensity = Math.max(0, Math.min(5, o.sunIntensity));}
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 
 
 function parseTileSize(raw: unknown): number | undefined {
@@ -544,8 +601,10 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     tileSize: parseTileSize((src as { tileSize?: unknown }).tileSize),
     fog: parseFog((src as { fog?: unknown }).fog),
     terrainTex: parsePathField((src as { terrainTex?: unknown }).terrainTex, /\.(?:png|jpe?g|webp)$/, 2, 'terrainTex'),
-    terrainPreset: clampInt((src as { terrainPreset?: unknown }).terrainPreset, 0, 2, 0, 'terrainPreset') || undefined,
+    terrainPreset: clampInt((src as { terrainPreset?: unknown }).terrainPreset, 0, 6, 0, 'terrainPreset') || undefined,
     sky: parsePathField((src as { sky?: unknown }).sky, /[\w-]{1,64}$/, 2, 'sky'),
+    weather: parseWeather((src as { weather?: unknown }).weather),
+    atmosphere: parseAtmosphere((src as { atmosphere?: unknown }).atmosphere),
     structures: parseStructures((src as { structures?: unknown }).structures),
     deploys: parseDeploys((src as { deploys?: unknown }).deploys),
     interiors: parseInteriors((src as { interiors?: unknown }).interiors),

@@ -1,0 +1,40 @@
+{
+  "name": "Lagoon",
+  "mode": "ctf",
+  "bots": 8,
+  "botFill": 12,
+  "bases": {
+    "alpha": { "x": -165, "y": 0, "z": 0 },
+    "bravo": { "x": 165, "y": 0, "z": 0 }
+  },
+  "teamSpawns": {
+    "alpha": [
+      { "x": -165, "y": 0, "z": -40, "r": 40 },
+      { "x": -185, "y": 0, "z": 40, "r": 40 }
+    ],
+    "bravo": [
+      { "x": 165, "y": 0, "z": -40, "r": 40 },
+      { "x": 185, "y": 0, "z": 40, "r": 40 }
+    ]
+  },
+  "spawns": [
+    { "x": -160, "y": 0, "z": 0, "r": 42 },
+    { "x": 160, "y": 0, "z": 0, "r": 42 },
+    { "x": 0, "y": 0, "z": -150 },
+    { "x": 0, "y": 0, "z": 150 },
+    { "x": -110, "y": 0, "z": 110 },
+    { "x": 110, "y": 0, "z": -110 }
+  ],
+  "structures": [],
+  "terrain": "lagoon.bin",
+  "heightScale": 1.6,
+  "terrainPreset": 6,
+  "fog": {
+    "color": [0.70, 0.80, 0.81],
+    "distance": 220.0,
+    "visible": 1050.0
+  },
+  "atmosphere": { "rayleigh": 1.25, "mie": 1.2, "sunIntensity": 1.05 },
+  "weather": { "dust": 0.5 },
+  "_notes": "Lagoon = coastal (terrainPreset 6): sea-grass over sand beaches + shallow water, heightScale spread so the shoreline bands land right; island plateau, ctf"
+}

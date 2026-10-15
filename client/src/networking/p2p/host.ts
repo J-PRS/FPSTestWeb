@@ -34,7 +34,7 @@ import { healPool } from '../../../../server_bun/src/healPool.js';
 import { lgChargeAt } from '../../../../shared/combat.js';
 import { simNow } from '../../../../server_bun/src/simClock.js';
 import { getHeightfield } from '../../world/heightmap.js';
-import type { StructureSpec,InteriorSpec,MapSpec } from '../../../../shared/mapSpec.js';
+import type { StructureSpec,InteriorSpec,WeatherSpec,AtmosphereSpec,MapSpec } from '../../../../shared/mapSpec.js';
 
 const logger = new ChildLogger('P2PHost');
 
@@ -132,6 +132,8 @@ export class P2PHost {
     terrainTex?: string;
     terrainPreset?: number;
     sky?: string;
+    weather?: WeatherSpec;
+    atmosphere?: AtmosphereSpec;
     interiors?: InteriorSpec[];
     spawns?: MapSpec['spawns'];
     teamSpawns?: MapSpec['teamSpawns'];
@@ -148,6 +150,8 @@ export class P2PHost {
     this.roomInfo.terrainTex = map.terrainTex;
     this.roomInfo.terrainPreset = map.terrainPreset;
     this.roomInfo.sky = map.sky;
+    this.roomInfo.weather = map.weather;
+    this.roomInfo.atmosphere = map.atmosphere;
     this.roomInfo.interiors = map.interiors;
     // Authored spawn anchors — the host assigns spawn positions, so a
     // spec map should land guests where the map says, not at origin.

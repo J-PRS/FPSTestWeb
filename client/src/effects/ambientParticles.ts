@@ -13,7 +13,7 @@ import type { Terrain } from '../world/terrain.js';
 // bias the spawn height — embers seed near the ground, ash falls from
 // above). Particles live in world space, so flying through them gives true
 // relative motion — they read as part of the world, not a screen overlay.
-export type AmbientKind = 'dust' | 'embers' | 'ash';
+export type AmbientKind = 'dust' | 'embers' | 'ash' | 'snow';
 
 interface KindConfig {
   count: number;
@@ -63,6 +63,17 @@ const KINDS: Record<AmbientKind, KindConfig> = {
     colors: (): THREE.Color => {
       const g = 0.55 + Math.random() * 0.3;
       return _c.setRGB(g, g, g * 0.95);
+    },
+  },
+  // Snow — pale flakes drifting out of a still sky. Slower + larger than
+  // ash so a blizzard reads as weather, not volcanic debris.
+  snow: {
+    count: 260, size: 0.19, opacity: 0.5,
+    vel: { x: 0.55, y: -0.95, z: 0.35 }, velSpread: 0.4,
+    wobble: 1.4, blink: false, spawnY: 'sky',
+    colors: (): THREE.Color => {
+      const g = 0.86 + Math.random() * 0.14;
+      return _c.setRGB(g, g, Math.min(1, g + 0.03));
     },
   },
 };
@@ -129,6 +140,15 @@ export class AmbientParticles {
    *  integration so CPU-throttled machines shed the whole cost. */
   setActive(on: boolean): void { this.points.visible = on; this.active = on; }
   private active = true;
+
+  /** Per-map weather intensity: 0 = off, 1 = full, >1 thickens (denser
+   *  draw range + hotter opacity). Independent of setActive — the weather
+   *  owner composes the two. */
+  setIntensity(k: number): void {
+    this.points.geometry.setDrawRange(0, Math.round(this.cfg.count * Math.min(1, Math.max(0, k))));
+    const mat = this.points.material as THREE.PointsMaterial;
+    mat.opacity = k <= 0 ? 0 : this.cfg.opacity * (k <= 1 ? 1 : Math.min(1.6, k));
+  }
 
   private cfg: KindConfig;
 

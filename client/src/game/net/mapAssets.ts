@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { mkGltfLoader } from '../../gltfLoad';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import type { StructureSpec, InteriorSpec } from '../../../../shared/mapSpec.js';
+import type { StructureSpec, InteriorSpec, WeatherSpec, AtmosphereSpec } from '../../../../shared/mapSpec.js';
 import { Ball } from '../../entities/balls.js';
 import { urlParams } from '../../core/params.js';
 import type { NetCtx } from './ctx.js';
@@ -22,7 +22,7 @@ import { loadLastRoomMap, pingServer } from './lastRoom.js';
 
 const _q = new THREE.Quaternion();
 
-export type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; terrainTex?: string; terrainPreset?: number; sky?: string; interiors?: InteriorSpec[] };
+export type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; terrainTex?: string; terrainPreset?: number; sky?: string; weather?: WeatherSpec; atmosphere?: AtmosphereSpec; interiors?: InteriorSpec[] };
 
 /** Mission haze — spec.fog re-tints the whole atmosphere. distance → fog
  *  near, visible → fog far (T2's authored range for the terrain). Absent
@@ -41,13 +41,29 @@ export function applyMapFog(ctx: NetCtx, fog?: MapSnapshot['fog']): void {
   setFogHorizon(fog?.horizon ? _horizonColor.setRGB(fog.horizon[0], fog.horizon[1], fog.horizon[2], THREE.SRGBColorSpace) : null);
   sceneFog.color.copy(_fogColor);
   sceneFog.near = fog?.distance ?? FOG_START;
-  sceneFog.far = Math.max(fog?.visible ?? FOG_END, sceneFog.near + 1);
-}
-
-/** Fetch the room's heightfield and swap the live terrain over to it.
- *  Serializes concurrent loads — a mapUpdate racing a re-join can't
- *  finish out of order and leave the older field resident. */
-let terrainSwap: Promise<void> = Promise.resolve();
+  sceneFog.far = Math.max(fog?.visible ?? FOG_END, sceneFog.near + 1);
+}
+
+/** Per-map ambient particles — weather intensity per kind. Absent = the
+ *  engine default trio, so a pre-weather map renders unchanged. */
+export function applyWeather(ctx: NetCtx, weather?: WeatherSpec): void {
+  ctx.deps.lazyWeather().setWeather(weather);
+}
+
+/** Per-map procedural-sky tuning — reaches the AtmosphericSky instance
+ *  through the scene (it tags its mesh `__sky`; a baked skybox hides that
+ *  mesh, making the override a no-op). No atmosphere → reset to boot sky. */
+export function applyAtmosphere(ctx: NetCtx, atmosphere?: AtmosphereSpec): void {
+  const sky = ctx.deps.lazyScene().getObjectByName('__sky')?.userData.sky as
+    { setAtmosphere(p: AtmosphereSpec): void; resetAtmosphere(): void } | undefined;
+  if (!sky) {return;}
+  if (atmosphere) {sky.setAtmosphere(atmosphere);} else {sky.resetAtmosphere();}
+}
+
+/** Fetch the room's heightfield and swap the live terrain over to it.
+ *  Serializes concurrent loads — a mapUpdate racing a re-join can't
+ *  finish out of order and leave the older field resident. */
+let terrainSwap: Promise<void> = Promise.resolve();
 let terrainActive: string | null = null;
 /** Latest requested spec key — a queued swap that ran late (the boot's
  *  saved-map prime trailing a reconnect) must not commit after a newer

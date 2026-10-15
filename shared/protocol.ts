@@ -14,7 +14,7 @@
 import type { PickupKind } from './pickups.js';
 import type { DeployKind } from './deployables.js';
 import type { TeamId } from './teams.ts';
-import type { StructureSpec } from './mapSpec.ts';
+import type { AtmosphereSpec, StructureSpec, WeatherSpec } from './mapSpec.ts';
 export const PROTOCOL_VERSION = 14; // tick positions widened i16→i32 ×0.04 (±1310m saturation desync)
 
 export interface Vec3 {
@@ -364,7 +364,7 @@ export type ServerMessage =
   | { type: 'matchToken'; token: import('./resultToken.ts').ResultToken }
   // Admin hot-reload: the room's map spec changed — clients rebuild
   // structures/dome from this instead of re-joining for a gameState.
-  | { type: 'mapUpdate'; mapName?: string; silent?: boolean; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; terrainTex?: string; terrainPreset?: number; sky?: string; interiors?: { file: string; pos: Vec3; rot?: number[]; scale?: Vec3 }[] };
+  | { type: 'mapUpdate'; mapName?: string; silent?: boolean; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; terrainTex?: string; terrainPreset?: number; sky?: string; weather?: WeatherSpec; atmosphere?: AtmosphereSpec; interiors?: { file: string; pos: Vec3; rot?: number[]; scale?: Vec3 }[] };
 
 export interface GameStatePlayer {
   id: string;

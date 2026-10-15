@@ -11,7 +11,7 @@ import type { ViewModel } from '../entities/ViewModel.js';
 import type { DamageNumberManager } from '../effects/damageNumbers.js';
 import type { EffectsManager } from '../effects/effects.js';
 import type { SpeedLines } from '../effects/speedLines.js';
-import type { AmbientParticles } from '../effects/ambientParticles.js';
+import type { AmbientWeather } from '../effects/ambientWeather.js';
 import type { GroundMist } from '../effects/groundMist.js';
 import type { AmbientBirds } from '../effects/birds.js';
 import { screenShake } from '../effects/screenShake.js';
@@ -124,7 +124,7 @@ export interface GameLoopDeps {
   lazyDemoManager: () => DemoManager | null;
   lazyEffects: () => EffectsManager;
   speedLines: SpeedLines;
-  ambientLayers: AmbientParticles[];
+  weather: AmbientWeather;
   groundMist: () => GroundMist;
   ambientBirds: AmbientBirds;
   entities: ReturnType<typeof createEntities>;
@@ -570,7 +570,7 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   deps.speedLines.update(fxDt, camera.position, demoManager?.isPlaying ? _zeroVel : player.vel);
 
   if (st.cpuLevel === 0) {
-    for (const layer of deps.ambientLayers) {layer.update(fxDt, camera.position, terrain);}
+    deps.weather.update(fxDt, camera.position, terrain);
     deps.groundMist().update(fxDt, camera.position);
     deps.ambientBirds.update(fxDt, player.pos, terrain, player.isDead);
   }

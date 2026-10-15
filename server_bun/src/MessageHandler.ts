@@ -21,7 +21,7 @@ import type { RoomEventSink } from './roomEvents.ts';
 import { WORLD_MODEL, spawnPayload, checkIntent } from '../../shared/worldModel.ts';
 import { wallNow, type WallMs } from './wallClock.ts';
 import { simNow } from './simClock.ts';
-import type { StructureSpec } from '../../shared/mapSpec.ts';
+import type { AtmosphereSpec, StructureSpec, WeatherSpec } from '../../shared/mapSpec.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
@@ -77,6 +77,9 @@ export interface RoomInfo {
   terrainPreset?: number;
   terrainTex?: string;
   sky?: string;
+  /** Ambient particle weather + procedural-sky tuning — client dressing only. */
+  weather?: WeatherSpec;
+  atmosphere?: AtmosphereSpec;
   /** Interior placements (T2 .dif→.glb buildings) — client dressing only. */
   interiors?: { file: string; pos: { x: number; y: number; z: number }; rot?: number[]; scale?: { x: number; y: number; z: number } }[];
   /** Domain-event sink — combat/chat notifications (kill, hit, fire,
@@ -318,7 +321,7 @@ export class MessageHandler {
   /** Admin hot-reload — re-point the map echo fields so the next gameState
    *  (joiners/spectators) carries the new layout. In-room clients get the
    *  matching `mapUpdate` broadcast from Room.applySpec. */
-  setMap(m: Pick<RoomInfo, 'bases' | 'structures' | 'arena' | 'ambient' | 'terrain' | 'heightScale' | 'tileSize' | 'fog' | 'terrainTex' | 'terrainPreset' | 'sky' | 'interiors'>): void {
+  setMap(m: Pick<RoomInfo, 'bases' | 'structures' | 'arena' | 'ambient' | 'terrain' | 'heightScale' | 'tileSize' | 'fog' | 'terrainTex' | 'terrainPreset' | 'sky' | 'weather' | 'atmosphere' | 'interiors'>): void {
     // Explicit field writes (not Object.assign): a spec that omits a
     // field must clear it, not leave the previous map's value behind.
     this.roomInfo.bases = m.bases;
@@ -332,6 +335,8 @@ export class MessageHandler {
     this.roomInfo.terrainTex = m.terrainTex;
     this.roomInfo.terrainPreset = m.terrainPreset;
     this.roomInfo.sky = m.sky;
+    this.roomInfo.weather = m.weather;
+    this.roomInfo.atmosphere = m.atmosphere;
     this.roomInfo.interiors = m.interiors;
     this.attachStructures(m.structures);
   }
@@ -417,8 +422,8 @@ export class MessageHandler {
       mapName: this.roomInfo.mapName?.(),
       scores: this.roomInfo.scores ? (Object.assign({}, this.roomInfo.scores)) : undefined,
       ffaScores: this.roomInfo.ffaScores?.(),
-      map: this.roomInfo.bases || this.roomInfo.structures || this.roomInfo.arena || this.roomInfo.terrain || this.roomInfo.heightScale || this.roomInfo.tileSize || this.roomInfo.fog
-        ? (() => { const m = { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena, ambient: this.roomInfo.ambient, terrain: this.roomInfo.terrain, heightScale: this.roomInfo.heightScale, tileSize: this.roomInfo.tileSize, fog: this.roomInfo.fog, terrainTex: this.roomInfo.terrainTex, terrainPreset: this.roomInfo.terrainPreset, sky: this.roomInfo.sky, interiors: this.roomInfo.interiors };
+      map: this.roomInfo.bases || this.roomInfo.structures || this.roomInfo.arena || this.roomInfo.terrain || this.roomInfo.heightScale || this.roomInfo.tileSize || this.roomInfo.fog || this.roomInfo.weather || this.roomInfo.atmosphere
+        ? (() => { const m = { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena, ambient: this.roomInfo.ambient, terrain: this.roomInfo.terrain, heightScale: this.roomInfo.heightScale, tileSize: this.roomInfo.tileSize, fog: this.roomInfo.fog, terrainTex: this.roomInfo.terrainTex, terrainPreset: this.roomInfo.terrainPreset, sky: this.roomInfo.sky, weather: this.roomInfo.weather, atmosphere: this.roomInfo.atmosphere, interiors: this.roomInfo.interiors };
           logger.debug(`roomEcho map keys: ${Object.keys(m).join(',')} interiors=${m.interiors?.length}`); return m; })()
         : undefined,
       flags: this.roomInfo.flags?.(),
