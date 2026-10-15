@@ -197,7 +197,12 @@ export class PlayerModel {
           logger.error('Failed to load', error);
           reject(error);
         }
-      ).catch((): void => undefined);
+      ).catch((error): void => {
+        // Never silent: a throw while BUILDING a body (before any clip is
+        // registered and before it joins the scene) used to be swallowed
+        // whole — the model simply never appeared and nothing was logged.
+        logger.error('Model load chain failed', error);
+      });
       };
       attempt();
     });
@@ -364,6 +369,12 @@ export class PlayerModel {
       const m = mats[0]!;
       const key = [
         m.name, m.type,
+        // Skeleton identity is part of the bucket: a multi-skin GLB
+        // (class_heavy ships 5 meshes each with its own skin) merged into
+        // one mesh can only bind ONE skeleton, so the rest deform against
+        // foreign bones. Same-skeleton parts still merge (the draw-call
+        // win); cross-skeleton parts stay split.
+        sm.skeleton?.uuid ?? '',
         sm.bindMatrix.elements.join(','),
         sm.position.toArray().join(','), sm.quaternion.toArray().join(','), sm.scale.toArray().join(','),
         sm.parent?.uuid ?? '',
