@@ -14,9 +14,19 @@ if [ -z "$CHANGED" ]; then
 fi
 echo "check: $(echo "$CHANGED" | wc -l) changed files"
 
+# Sanity abort: a real change touches tens of files, never hundreds.
+# A 936-file list once let oxlint --fix rewrite ~190 unrelated files —
+# refuse wholesale churn so a foreign diff can't launder through the gate.
+N=$(echo "$CHANGED" | wc -l)
+if [ "$N" -gt 100 ]; then
+  echo "check: ABORT — $N changed ts/tsx files exceeds the 100-file sanity cap."
+  echo "check: a foreign process likely dirtied the tree; inspect git status first."
+  exit 1
+fi
+
 # Lint first — the fixer may rewrite files, so it runs before tests.
 # (The fixer leaves edits UNSTAGED; staging is the caller's business.)
-echo "$CHANGED" | xargs -n 50 npx -y oxlint --fix
+echo "$CHANGED" | xargs -r -n 50 npx -y oxlint --fix
 
 # tsgo (native tsc) is ~3x faster for the same tsconfig; tsc is the fallback.
 (cd client && npx -y -p @typescript/native-preview tsgo --noEmit) \
