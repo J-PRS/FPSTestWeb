@@ -195,7 +195,7 @@ falling += 1;
     const c0 = this.cellOf(fx, fz);
     if (parent[c0] === -1 && c0 !== goal) {return null;}
     let c = c0;
-    let walked = 0, prev = c;
+    let walked = 0, prev = c, turnAcc = 0;
     // Cells the chain actually walked, so a goal inside the horizon can
     // still emit the path's middle instead of the goal itself — a beeline
     // to a cell the flood reached through a doorway just grinds the wall
@@ -226,6 +226,19 @@ falling += 1;
       if (p === -1) {return null;}
       const dx = (p % this.n) - (c % this.n), dz = (Math.trunc((p / this.n))) - (Math.trunc((c / this.n)));
       walked += Math.hypot(dx, dz) * this.cell;
+      // Bend brake: a 100m lookahead around a hairpin ends off-axis and
+      // the traveller cuts straight across the peak it was routing
+      // around. Stop the walk at sharp cumulative turns — the waypoint
+      // lands on the bend, the traveller follows the curve instead of
+      // tunneling the mountain. Universal: measured off the flood's own
+      // chain, no map knowledge.
+      if (chain.length > 0) {
+        const q = chain[chain.length - 1]!;
+        const qx = (q % this.n) - (prev % this.n), qz = (Math.trunc((q / this.n))) - (Math.trunc((prev / this.n)));
+        const dot = (qx * dx + qz * dz) / (Math.max(0.01, Math.hypot(qx, qz) * Math.hypot(dx, dz)));
+        turnAcc += Math.acos(Math.max(-1, Math.min(1, dot)));
+        if (turnAcc > 1.1 && walked > this.cell * 2) {break;}
+      }
       prev = c;
       c = p;
       chain.push(c);

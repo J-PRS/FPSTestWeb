@@ -144,9 +144,22 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   katabatic (3/3 both seeds, best leg grabV 36.6). Scoreboard:
   `_tools/sweeps/capStat.ts` (`--repeat N` = back to back) and
   `approachProbe.ts`; reference in `_docs/2026-10-15_CAPPER_STRIKE.md`.
-  Open: the 110-220 m terrain-trap bounce — the `botLines` `stuck` escape is
-  gated on `!ctx.running`, but `running` is a ROLE flag (true for a capper's
-  whole run), so that escape is dead for exactly the bot it was written for.
+  Open: churn, not speed — on the *easiest* map (oasis, 166 m) a grab still
+  takes 7-139 s and some runs drop the flag near home and never score. Two
+  live anti-churn layers buy caps with arrival speed (both confirmed on
+  disjoint seed sets): `botLines`' stall escape is the caps/run lever
+  (0.73→0.85), `botGraph`'s bend-brake is the carry lever (85.7→61.9).
+  `running` means "carrying" (measured 225/225 thinks), so that escape is
+  live. Best structural lead left: `botMoves.hints` applies the
+  *grab*-orbit park brake to a carrier at its own stand (measured neutral
+  when gated, but a real carrier can park 20-32 m short of home).
+- Capper tuning is at a **plateau** (2026-10-15b): the surface is
+  discontinuous — `runnerStale` 3-120, the graph brake 1.3-2.2, a carrier
+  brake gate and a time-based stall meter all landed inside noise on three
+  disjoint seed sets (126 runs). Pick on one set, confirm on two unseen
+  sets; <0.05 caps/run or <2 m/s grabV is noise. Next gain must be
+  structural (near-stand churn, drop-and-never-score), not another
+  threshold. Protocol + numbers: `_docs/2026-10-15_CAPPER_STRIKE.md`.
 - Seek checkpoints (2026-10-14): recorder marks every 30s ride a
   versionless SECTION_SNAP trailer (timestamps only); seek/reverse
   replays the tail window through the clip-window synthesis instead of

@@ -122,19 +122,31 @@ export class BotLines {
     // opportunistic carriers (a defender who picks up a dropped flag) —
     // the carry leg has the same orbit shape regardless of role.
     if ((ctx.runner || ctx.running) && ctx.route) {
-      const hop = ctx.route(pos.x, pos.z, dest.x, dest.z, aheadFor(ctx));
       // Runner crest-aim REVERTED: aiming at the flood's first crest
       // bought a faster dunes carry (30s/29m/s) but regressed its grab
       // (50→70s) and broke katabatic outright — the crest sits ON the
       // path, but heading straight at it skips the bends the flood
       // priced around, so the runner climbs into walls it can't pay.
-      if (hop) {
+      const hop = ctx.route(pos.x, pos.z, dest.x, dest.z, aheadFor(ctx));
+      // Stagnation counting must live ABOVE this return — a runner whose
+      // flood hop sits behind a face it can't pay loops the same bounce
+      // forever otherwise (katabatic autopsy: ~128s orbiting ~250m out
+      // on a hop the corridor priced but the jets couldn't climb). Once
+      // the count trips, fall through and let the fan/orbit machinery
+      // own a think; it rejoins the corridor on the first real gain.
+      // Carriers stay locked to the corridor: a mid-carry fall-through
+      // re-plans on the local fan and lengthens the leg (peaks/kata
+      // carry regressed ~10s when the escape covered them).
+      const stuck = !ctx.running && this.stale >= T.lines.runnerStale;
+      if (hop && !stuck) {
+        if (gd > this.lastGd - 8) {this.stale += 1;} else {this.stale = 0;}
+        this.lastGd = gd;
         this.wp = hop;
         this.wpGoal = Object.assign({}, dest);
         this.lineT = T.lines.commitS;
-        this.stale = 0;
         return hop;
       }
+      this.wp = null;
     }
 
     const wpD = this.wp ? Math.hypot(this.wp.x - pos.x, this.wp.z - pos.z) : Infinity;
