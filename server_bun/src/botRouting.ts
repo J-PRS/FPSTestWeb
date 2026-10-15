@@ -93,6 +93,12 @@ export class BotRouting {
    *  wanders its own mini-route instead of parking. */
   private waitSpot = new Map<string, { pos: BotVec; at: number }>();
   static readonly WAIT_TTL_MS = 15_000;
+  /** Capper pass-through commitment — set the moment an approach is fast
+   *  and open, held until the run dies. Without it the final aim flips
+   *  between the pole and a point past it as speed/distance cross the
+   *  14/20 gates, and that flip is a limit cycle in the last 40m
+   *  (katabatic 9002: 20s parked 12-25m out, hop-churning at v~0). */
+  private passCommit = new Map<string, number>();
   /** Per-team commander — names responders for contested jobs so one
    *  thief doesn't empty the home defense (botCommand.ts). */
   private commands = new Map<TeamId, TeamCommand>();
@@ -143,6 +149,7 @@ export class BotRouting {
     this.routeFailed.delete(id);
     this.routePrefs.delete(id);
     this.waitSpot.delete(id);
+    this.passCommit.delete(id);
   }
 
   /** Mark an entry position as failed-to-reach so the next probe can't
@@ -561,10 +568,27 @@ export class BotRouting {
           // Direct-aim threshold raised 6→20m: at 36 m/s the steerer
           // needs ~0.5s to align with the flag; 6m gives 0.17s —
           // not enough to unwrap from the pass-through heading.
-          goalPos = spd > 14 && dStand > 20
-            ? { x: enemyStand.x + mx + px2 - ux * pull,
+          // Commitment latch: the 14/20 gates are entrance criteria, not
+          // a per-think switch — a capper crossing them flips his aim
+          // 10-40m sideways every think, which is the limit cycle above.
+          // Once opened, hold the pass until the run actually dies
+          // (speed gone), so the last 40m is one committed line.
+          if (capper) {
+            if (spd > 14 && dStand > 20) { this.passCommit.set(p.id, simNow()); }
+            else if (spd < 9) { this.passCommit.delete(p.id); }
+          }
+          const passOn = capper && spd > 6 && this.passCommit.has(p.id);
+          // Non-cappers keep the original lead+pull aim whenever the
+          // gates open — only the capper's aim needs the latch.
+          const aimLead = passOn || (!capper && spd > 14 && dStand > 20);
+          // The altitude pull is a landing-short brake for a ballistic
+          // arrival; on a committed pass it fights the very line that
+          // carries speed through the ring, so it only trims.
+          const pullUse = passOn ? pull * 0.35 : pull;
+          goalPos = aimLead
+            ? { x: enemyStand.x + mx + px2 - ux * pullUse,
                 y: enemyFlagY,
-                z: enemyStand.z + mz + pz2 - uz * pull }
+                z: enemyStand.z + mz + pz2 - uz * pullUse }
             : Object.assign({}, enemyStand);
         } else {
         const inside = dStand < 80;

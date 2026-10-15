@@ -134,6 +134,19 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   lives in the staging layer, not the flood. Open: extend routed
   commitment to `running` transits, retire ~100 lines of orbit
   compensation, offline bots have no flood.
+- Bot capping (2026-10-15): the arrival-speed deficit is *retention*, not a
+  cap — mid-route the capper already reads 40-61 m/s; it dies at the stand
+  because the tank is empty there and the aim limit-cycles in the last 40 m.
+  Bank the tank (`botMoves` vetoes every discretionary burn in the bank leg,
+  `strikeBankGd` 200→320) and latch the pass-through aim (`passCommit` in
+  `botRouting`). 3 maps × 5 seeds: grabV 19.1→22.4 m/s, grabT 69.5→44.3 s,
+  carries improved, every T2 map now caps 2 runs in 3. Back-to-back works on
+  katabatic (3/3 both seeds, best leg grabV 36.6). Scoreboard:
+  `_tools/sweeps/capStat.ts` (`--repeat N` = back to back) and
+  `approachProbe.ts`; reference in `_docs/2026-10-15_CAPPER_STRIKE.md`.
+  Open: the 110-220 m terrain-trap bounce — the `botLines` `stuck` escape is
+  gated on `!ctx.running`, but `running` is a ROLE flag (true for a capper's
+  whole run), so that escape is dead for exactly the bot it was written for.
 - Seek checkpoints (2026-10-14): recorder marks every 30s ride a
   versionless SECTION_SNAP trailer (timestamps only); seek/reverse
   replays the tail window through the clip-window synthesis instead of

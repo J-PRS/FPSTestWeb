@@ -538,6 +538,19 @@ export class BotMoves {
     else if (tap) {why = 'tap';}
     else if (boost) {why = 'boost';}
     if (why === '-') {return false;}
+    // Bank leg owns the whole tank: outside the strike window only a real
+    // climb (or a live prey chase) earns a burn. `boost`/`tap` were
+    // vetoed here but the hop chain and `destHigh` kept spending the same
+    // regen, so the strike leg opened at E≈2-13 and the run-in died on
+    // the mountE floor 15m short (katabatic 9002: grabV 9.3). Refilling
+    // costs ~2.4s of hops; it buys the entire run-in window.
+    if (bank && why !== 'climb' && why !== 'prey') {return false;}
+    // The `mountE` start floor is load-bearing even inside the strike
+    // window: letting the leg drain to `strikeTapMin` (2) was measured
+    // WORSE on every axis (5 seeds × 3 maps: grabV 22.4→15.0, oasis
+    // 22.4→8.7) — a capper who arrives with 2E cannot mount the dais and
+    // crawls the last meters in. The deep tap floor only governs the
+    // HOLD latch, which is what carries a burn across the floor.
     if (ctx.energy !== undefined && ctx.energy < T.moves.mountE) { this.jetWhy = '-'; return false; }
     this.jetWhy = why;
     return true;

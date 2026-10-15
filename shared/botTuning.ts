@@ -41,8 +41,12 @@ export const BOT_TUNING = {
     strikeGd: 140,       // m — strike-dive window: inside this a runner drops the comfy gate and
                          // burns to the tap floor — 8v8 soaks showed cappers crossing the defended
                          // 70-150m band at 15-25m/s on dry tanks and dying before the ring
-    strikeBankGd: 200,   // m — bank leg just outside the strike window: discretionary flat-burns
-                         // (boost/tap) veto so regen refills the dive; climb/hop still fire
+    strikeBankGd: 320,   // m — bank leg just outside the strike window: EVERY discretionary burn
+                         // (boost/tap/hop/destHigh) vetoes so regen refills the dive; only a real
+                         // climb or a live prey chase is exempt. Measured: 5 seeds × 3 maps, grabV
+                         // 19.1→22.4, grabT 52.4→44.3, carries improved too. The old 200 window that
+                         // let hop/destHigh fire refilled at the same ~8/s the hop chain spent, so
+                         // the strike leg opened at E≈2-13 and the run-in died on the mountE floor.
     strikeTapMin: 2,     // energy — tap floor inside the strike window (commit everything)
     runInRise: 4,        // m — run-in only when objective near-level
     runInSpeed: 36,      // m/s — run-in stops boosting past this (grab passes read ~34m/s peak = half a real capper's 55-80m/s entry)

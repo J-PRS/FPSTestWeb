@@ -18,6 +18,9 @@ bun _tools/e2e/perf.ts --compare _tools/e2e/baseline.json   # perf regression vs
 bash _tools/check.sh                             # DEFINITION OF DONE — run before handing back
 bash _tools/review.sh                            # dump diff + verifier prompt for a fresh-context review agent
 # bun: export PATH="$HOME/.bun/bin:$PATH"   (Windows, Git Bash)
+# Windows: plain `bash` is WSL and its git counts every CRLF file as
+# changed, so check.sh aborts on its 100-file sanity cap. Use Git Bash:
+# & 'C:\Program Files\Git\bin\bash.exe' -lc "bash _tools/check.sh"
 ```
 
 **Definition of done:** `bash _tools/check.sh` exits 0. It lints+fixes
