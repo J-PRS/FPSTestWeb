@@ -26,6 +26,9 @@ const RECORDED: Record<string, string> = {
   deployUp: 'deployables', deployHp: 'deployables',
   turretShot: 'deployables', sentryShot: 'deployables', mineBoom: 'deployables',
   flagUpdate: 'flags',
+  // Signed match receipt — the demo trailer owns it (DemoRecorder.matchToken
+  // → demoWriter/demoReader), so leaderboard submissions can pair clip+token.
+  matchToken: 'match receipt (demo trailer)',
   pickupSpawn: 'pickups', pickupGone: 'pickups',
   playerKill: 'kills',
   projectileCreated: 'remote projectiles', projectileDestroyed: 'remote projectiles',

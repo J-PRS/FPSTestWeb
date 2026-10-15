@@ -45,8 +45,15 @@ export interface RoomFlag {
   holdAcc: number;
   /** Whose toss is still airborne — the thrower can't instantly re-grab
    *  their own throw (the flag never leaves the touch ring in one tick).
-   *  Cleared the moment the flag settles or changes hands. */
+   *  A hand-off arc is also shorter than the 6m touch ring, so a settled
+   *  toss comes to rest inside the thrower's OWN ring: the guard outlives
+   *  the flight and holds until he steps off the spot he threw from.
+   *  Cleared on any change of hands / return home. */
   airborneBy: string | null;
+  /** Where the toss was released — the spot the thrower has to leave
+   *  before his own settled flag is his again. Only ever read while
+   *  `airborneBy` names him, so a stale value is inert. */
+  throwFrom: { x: number; z: number } | null;
 }
 
 // Dropped-flag ballistics — a nugget-class loose object: pops out of the
@@ -98,7 +105,7 @@ export class RoomFlags {
       // Rabbit flags begin unspawned — the FIRST corpse of the match is
       // what brings the flag into the world, exactly like T2.
       const state: FlagState = this.rabbit ? 'unspawned' : 'home';
-      this.flags.set(team, { team, home, pos: Object.assign({}, home), vel: { x: 0, y: 0, z: 0 }, state, carrier: null, dropT: 0, carriedAt: 0, droppedAt: 0, holdAcc: 0, airborneBy: null });
+      this.flags.set(team, { team, home, pos: Object.assign({}, home), vel: { x: 0, y: 0, z: 0 }, state, carrier: null, dropT: 0, carriedAt: 0, droppedAt: 0, holdAcc: 0, airborneBy: null, throwFrom: null });
     }
   }
 
@@ -128,6 +135,7 @@ export class RoomFlags {
       f.dropT = 0;
       f.holdAcc = 0;
       f.airborneBy = null;
+      f.throwFrom = null;
     }
     this.dirty = true;
     // Match-boundary wipe — consumers window by `at >= runStart`, so a
@@ -217,6 +225,7 @@ export class RoomFlags {
       f.vel.y = p.velocity.y + 3 + sp * FLAG_THROW_SPEED;
       f.vel.z = p.velocity.z + cp * Math.cos(p.rotation.yaw) * FLAG_THROW_SPEED;
       f.airborneBy = playerId;
+      f.throwFrom = { x: p.position.x, z: p.position.z };
       this.room.messages.killFeed.say(playerId, 'flagdrop');
       this.room.bots?.notice('flagdrop', playerId, p.team, Object.assign({}, f.pos), 'other');
       this.room.influence.splat(f.pos, 'opportunity', 1.2);
@@ -389,6 +398,10 @@ export class RoomFlags {
     f.pos = Object.assign({}, f.home);
     f.vel = { x: 0, y: 0, z: 0 };
     f.droppedAt = 0;
+    // Home is a fresh life for the flag: the thrower guard must not follow
+    // it there (it would block him from taking the ENEMY flag at its stand).
+    f.airborneBy = null;
+    f.throwFrom = null;
     this.dirty = true;
   }
 
@@ -444,7 +457,10 @@ export class RoomFlags {
       f.vel.z = 0;
       f.vel.y = f.vel.z;
       f.vel.x = f.vel.y;
-      f.airborneBy = null; // settled — anyone, the thrower included, may touch
+      // The guard survives settle on purpose — the rest spot is a hand-off
+      // arc, shorter than the touch ring, so it lands inside the thrower's
+      // own reach and he would snap it straight back. `throwerMayGrab`
+      // releases it the moment he steps off the release spot.
       if (field) {
         hmSettleWalkable(field, f.pos, FLAG_REST_LIFT);
         // Settled spot is a seed like spawn/teleport — resting under the
@@ -505,16 +521,28 @@ export class RoomFlags {
     }
   }
 
+  /** May the thrower take his own toss back? Not while it flies, and not
+   *  from the release spot once it settles: the lob is a hand-off arc
+   *  (~4m), shorter than the 6m touch ring, so it comes to rest inside his
+   *  own reach and he would snap it straight back. One step off the spot
+   *  and it is his again like anyone else's. */
+  private throwerMayGrab(f: RoomFlag, at: { x: number; z: number }): boolean {
+    if (f.vel.x !== 0 || f.vel.y !== 0 || f.vel.z !== 0) {return false;}
+    if (!f.throwFrom) {return true;}
+    return Math.hypot(at.x - f.throwFrom.x, at.z - f.throwFrom.z) > 1;
+  }
+
   private nearestTouching(f: RoomFlag): { id: string; team?: string } | null {
     let best: { id: string; team?: string; d: number } | null = null;
     for (const p of this.room.players.getAllPlayers().values()) {
       // Rabbit is FFA — hunters carry no team, so the !p.team guard
       // would make the flag untouchable; it's a CTF-only filter.
       if (p.isDead || (!this.rabbit && !p.team)) {continue;}
-      // A thrown flag can't be re-grabbed by its thrower until it
-      // settles — without this a stationary carrier instantly re-catches
-      // their own toss (it never leaves the ring inside one tick).
-      if (p.id === f.airborneBy) {continue;}
+      // A thrown flag can't be re-grabbed by its thrower until it settles,
+      // and a settled toss stays his-blocked until he steps off the spot he
+      // threw from — a hand-off arc lands inside the thrower's own 6m ring,
+      // so without the second half the throw reads as a no-op.
+      if (p.id === f.airborneBy && !this.throwerMayGrab(f, p.position)) {continue;}
       // Swept capsule: closest point on the player's path segment to the
       // flag, so a full-speed graze can't tunnel through the ring the
       // way a snapshot check does. Planar reach + vertical cap keep a

@@ -565,6 +565,10 @@ simplification targets, ranked by leverage:
 6. **Enforced ceilings.** oxlint rules (120-line fns, c15, depth 4, 6
    params) stay the gate; add a file-size watch (~900 lines) to flag the
    next Player.ts/CombatHandler.ts before it needs a burn-down.
+   - 2026-10-15: `client/src/game/combat/impact.ts` (1145) pinned in the
+     watch after the alarm tripped — burn-down target: split the
+     ichor/corpse FX block and the cluster-bomblet block into their own
+     modules, leaving the impact adjudication core.
 
 
 ## Working agreements (from JP, painful lessons)

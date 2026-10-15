@@ -25,9 +25,14 @@ export interface Flag {
   /** Loose-flag ballistic velocity (RoomFlags.vel parity) — nonzero
    *  means the flag is tumbling, not resting. */
   flyVel: THREE.Vector3;
-  /** Whose toss is still airborne — the thrower can't instantly
-   *  re-grab their own throw, same guard the server applies. */
+  /** Whose toss is still airborne - the thrower can't instantly
+   *  re-grab their own throw, same guard the server applies. It outlives
+   *  the flight: a hand-off arc lands inside the thrower's own 6m ring, so
+   *  he must leave the release spot before the flag is his again. */
   airborneBy: string | null;
+  /** Release spot for the guard above - only read while `airborneBy`
+   *  names the thrower, so a stale value is inert. */
+  throwFrom: { x: number; z: number } | null;
 }
 
 export interface FlagCtx {
@@ -177,7 +182,7 @@ export class CtfFlags {
       g.position.copy(home);
       g.position.y += FLAG_STAND_TOP; // pole seats on the platform deck
       ctx.lazyScene().add(stand, g);
-      this.flags.set(team, { mesh: g, stand, home, pos: home.clone(), state: 'home', carrier: null, dropT: 0, vel: new THREE.Vector3(), flyVel: new THREE.Vector3(), airborneBy: null });
+      this.flags.set(team, { mesh: g, stand, home, pos: home.clone(), state: 'home', carrier: null, dropT: 0, vel: new THREE.Vector3(), flyVel: new THREE.Vector3(), airborneBy: null, throwFrom: null });
     }
   }
 
@@ -356,6 +361,7 @@ export class CtfFlags {
         vel.y + 3 + sp * 20,
         vel.z + cp * Math.cos(yaw) * 20);
       f.airborneBy = carrierId;
+      f.throwFrom = { x: pos.x, z: pos.z };
       f.dropT = FLAG_RESET_S;
       const bot = this.ctx.bots.find((b): boolean => b.playerId === carrierId);
       if (bot) { bot.carryingFlag = false; }
@@ -379,7 +385,7 @@ export class CtfFlags {
     }
     if (f.flyVel.lengthSq() < 0.36 && f.pos.y <= gy + 0.05) {
       f.flyVel.set(0, 0, 0);
-      f.airborneBy = null; // settled — the thrower may grab it again
+      // Guard survives settle - see Flag.airborneBy.
     }
   }
 
@@ -426,6 +432,9 @@ export class CtfFlags {
         // or an offline return is a silent teleport.
         if (f.dropT <= 0) {
           f.state = 'home'; f.pos.copy(f.home);
+          // Home is a fresh life for the flag - the thrower guard must not
+          // follow it there (it would block taking the ENEMY flag).
+          f.airborneBy = null;
           this.ctx.onFlagEvent?.('returned', team, f.pos);
         }
       }
@@ -483,6 +492,16 @@ export class CtfFlags {
     return false;
   }
 
+  /** May the thrower take his own toss back? Not while it flies, and not
+   *  from the release spot once it lands: the lob is a hand-off arc (~4m),
+   *  shorter than the 6m touch ring, so it rests inside his own reach and
+   *  he would snap it straight back. One step off and it is his again. */
+  private static throwerMayGrab(f: Flag, at: THREE.Vector3): boolean {
+    if (f.flyVel.x !== 0 || f.flyVel.y !== 0 || f.flyVel.z !== 0) { return false; }
+    if (!f.throwFrom) { return true; }
+    return Math.hypot(at.x - f.throwFrom.x, at.z - f.throwFrom.z) > 1;
+  }
+
   /** Swept grab reach: closest point on the toucher's frame travel
    *  (prev→cur) to the flag, so a 60m/s fly-by can't tunnel between
    *  samples. Returns the squared distance at closest approach. */
@@ -501,7 +520,7 @@ export class CtfFlags {
   private tickTouch(team: TeamId, f: Flag): void {
     const { ctx } = this;
     for (const [id, tp, pp] of ctx.touchers()) {
-      if (id === f.airborneBy) { continue; } // thrower can't re-grab mid-flight
+      if (id === f.airborneBy && !CtfFlags.throwerMayGrab(f, tp)) { continue; } // thrower can't take back his own toss
       const tTeam = ctx.teamOf(id);
       if (CtfFlags.sweepDist2(f, tp, pp) > this.ctx.pickupRadiusOf(id) ** 2) { continue; }
       if (f.state === 'dropped' && tTeam === team) {

@@ -25,13 +25,28 @@ export class RabbitBridge {
    *  means the flag is tumbling, not resting. */
   private flyVel = new THREE.Vector3();
   /** Whose toss is still airborne — the rabbit can't instantly re-grab
-   *  its own throw, same guard the server applies. */
+   *  its own throw, same guard the server applies. It outlives the flight:
+   *  a hand-off arc lands inside your own 6m ring, so you must step off the
+   *  release spot before the flag is yours again. */
   private airborneBy: string | null = null;
+  /** Release spot for the guard above — only read while `airborneBy`
+   *  names the thrower, so a stale value is inert. */
+  private throwFrom: { x: number; z: number } | null = null;
   private readonly group = new THREE.Group();
 
   /** world pos while the flag exists — pos is the loose anchor, group
    *  follows the carrier; the indicator reads whichever is current. */
   flagPos(): THREE.Vector3 { return this.group.position; }
+
+  /** May the thrower take its own toss back? Not while it flies, and not
+   *  from the release spot once it lands: the lob is a hand-off arc, shorter
+   *  than the 6m touch ring, so it rests inside the thrower's own reach and
+   *  he would snap it straight back. One step off and it is his again. */
+  private throwerMayGrab(at: { x: number; z: number }): boolean {
+    if (this.flyVel.x !== 0 || this.flyVel.y !== 0 || this.flyVel.z !== 0) {return false;}
+    if (!this.throwFrom) {return true;}
+    return Math.hypot(at.x - this.throwFrom.x, at.z - this.throwFrom.z) > 1;
+  }
 
   constructor(
     private d: {
@@ -97,6 +112,7 @@ export class RabbitBridge {
       vel.y + 3 + sp * 20,
       vel.z + cp * Math.cos(yaw) * 20);
     this.airborneBy = carrierId;
+    this.throwFrom = { x: pos.x, z: pos.z };
     this.group.position.copy(this.pos);
     this.group.visible = true;
     this.announce('FLAG THROWN');
@@ -138,12 +154,12 @@ export class RabbitBridge {
       }
       if (this.flyVel.lengthSq() < 0.36 && this.pos.y <= gy + 0.05) {
         this.flyVel.set(0, 0, 0);
-        this.airborneBy = null;
+        // Guard survives settle - see the airborneBy field.
       }
       this.group.position.copy(this.pos);
     }
     for (const c of candidates) {
-      if (!c.alive || c.id === this.airborneBy) {continue;}
+      if (!c.alive || (c.id === this.airborneBy && !this.throwerMayGrab(c.pos))) {continue;}
       const r = FLAG_PICKUP_R * c.pickupScale;
       if (c.pos.distanceToSquared(this.pos) > r * r) {continue;}
       this.state = 'carried';

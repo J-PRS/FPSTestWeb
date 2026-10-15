@@ -102,9 +102,14 @@ interface CircuitFlag {
   /** Loose-flag ballistic velocity — mirrors RoomFlags.vel: nonzero
    *  means the flag is tumbling, not resting. */
   flyVel: THREE.Vector3;
-  /** Whose toss is still airborne — same re-grab guard the server
-   *  applies so you can't instantly re-catch your own throw. */
+  /** Whose toss is still airborne - same re-grab guard the server
+   *  applies so you can't instantly re-catch your own throw. It outlives
+   *  the flight: a hand-off arc lands inside your own 6m ring, so you must
+   *  step off the release spot before the flag is yours again. */
   airborneBy: string | null;
+  /** Release spot for the guard above - only read while `airborneBy`
+   *  names the thrower, so a stale value is inert. */
+  throwFrom: { x: number; z: number } | null;
 }
 
 export interface FlagRunWiring {
@@ -158,7 +163,7 @@ export class FlagRunBridge {
       mesh.position.copy(home);
       mesh.position.y += STAND_TOP;
       deps.lazyScene().add(stand, mesh);
-      this.flags.push({ mesh, stand, home, pos: home.clone(), state: 'home', team, carrier: null, dropT: 0, flyVel: new THREE.Vector3(), airborneBy: null });
+      this.flags.push({ mesh, stand, home, pos: home.clone(), state: 'home', team, carrier: null, dropT: 0, flyVel: new THREE.Vector3(), airborneBy: null, throwFrom: null });
     });
     w.onFeed(`FLAG RUN — grab an enemy flag, bank it at any ${TEAM_LABEL[w.playerTeam]} stand.`);
     if (urlParams.has('tas')) {this.loadTasGhost();}
@@ -417,7 +422,7 @@ this.eN += 1;
       }
       // home/dropped both accept touches — swept capsule like CtfFlags.
       for (const [id, tp, pp] of touchers) {
-        if (id === f.airborneBy) {continue;} // thrower can't re-grab mid-flight
+        if (id === f.airborneBy && !this.throwerMayGrab(f, tp)) {continue;} // thrower can't take back his own toss
         const tTeam = this.w.teamOf.get(id);
         if (f.state === 'dropped' && tTeam === f.team) { this.sendHome(f, 'returned'); break; }
         if (tTeam === f.team) {continue;}
@@ -580,12 +585,23 @@ this.lap += 1;
         (player.vel?.y ?? 0) + 3 + sp * 20,
         (player.vel?.z ?? 0) + cp * Math.cos(player.yaw) * 20);
       f.airborneBy = 'local';
+      f.throwFrom = { x: player.pos.x, z: player.pos.z };
       f.dropT = FLAG_RESET_S;
       this.w.onFeed(`${TEAM_LABEL[f.team]} flag thrown!`);
     }
   }
 
-  /** Loose-flag tumble — mirrors RoomFlags.tickBallistic (world
+  /** May the thrower take his own toss back? Not while it flies, and not
+   *  from the release spot once it lands: the lob is a hand-off arc, shorter
+   *  than the 6m touch ring, so it rests inside his own reach and he would
+   *  snap it straight back. One step off and it is his again. */
+  private throwerMayGrab(f: CircuitFlag, at: THREE.Vector3): boolean {
+    if (f.flyVel.x !== 0 || f.flyVel.y !== 0 || f.flyVel.z !== 0) {return false;}
+    if (!f.throwFrom) {return true;}
+    return Math.hypot(at.x - f.throwFrom.x, at.z - f.throwFrom.z) > 1;
+  }
+
+  /** Loose-flag tumble - mirrors RoomFlags.tickBallistic (world
    *  gravity, 0.3 bounce, 4/s skid bleed, 0.6 settle). */
   private tickBallistic(f: CircuitFlag, dt: number): void {
     if (f.flyVel.x === 0 && f.flyVel.y === 0 && f.flyVel.z === 0) {return;}
@@ -601,7 +617,7 @@ this.lap += 1;
     }
     if (f.flyVel.lengthSq() < 0.36 && f.pos.y <= gy + 0.05) {
       f.flyVel.set(0, 0, 0);
-      f.airborneBy = null; // settled — the thrower may grab it again
+      // Guard survives settle - see CircuitFlag.airborneBy.
     }
   }
 }
