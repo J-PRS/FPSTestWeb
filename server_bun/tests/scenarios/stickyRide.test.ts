@@ -40,7 +40,7 @@ describe('scenario: belt sticky rides a shell', () => {
     expect(gones.length).toBeGreaterThanOrEqual(2);
     // Rider pops AT the host's contact point — the gone edges share a spot.
     const [g1, g2] = gones.slice(-2);
-    if (g1.position && g2.position) {
+    if (g1?.position && g2?.position) {
       const d = Math.hypot(g1.position.x - g2.position.x, g1.position.y - g2.position.y, g1.position.z - g2.position.z);
       expect(d).toBeLessThan(1);
     }

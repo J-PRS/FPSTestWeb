@@ -12,7 +12,7 @@ describe('RoomMoveSim', () => {
     const m = new RoomMoveSim(flat);
     m.track('p1', { x: 0, y: 0, z: 0 }, 0);
     m.setInput('p1', { forward: 1, right: 0, jumpPressed: false, jumpHeld: false, skiHeld: false });
-    for (let i = 0; i < 20; i++) m.tick(0.05);
+    for (let i = 0; i < 20; i++) {m.tick(0.05);}
     const pos = m.simPos('p1')!;
     expect(Math.abs(pos.x) + Math.abs(pos.z)).toBeGreaterThan(0.5);
   });
@@ -20,7 +20,7 @@ describe('RoomMoveSim', () => {
   test('honest report reconciles quietly; divergence returns sim truth', () => {
     const m = new RoomMoveSim(flat);
     m.track('p1', { x: 0, y: 0, z: 0 }, 0);
-    for (let i = 0; i < 10; i++) m.tick(0.05);
+    for (let i = 0; i < 10; i++) {m.tick(0.05);}
     // small drift — no divergence
     expect(m.reconcile('p1', { x: 1, y: 0, z: 0 }, 0)).toBeNull();
     // 100m blink — correction state comes back, sim keeps its own truth
@@ -38,12 +38,12 @@ describe('RoomMoveSim', () => {
     m.onCheat = () => flagged++;
     m.track('p1', { x: 0, y: 0, z: 0 }, 0);
     m.reconcile('p1', { x: 1, y: 0, z: 0 }, 0); // seed
-    for (let i = 0; i < 5; i++) m.reconcile('p1', { x: 100 + i, y: 0, z: 0 }, 0);
+    for (let i = 0; i < 5; i++) {m.reconcile('p1', { x: 100 + i, y: 0, z: 0 }, 0);}
     expect(flagged).toBe(1);
     // A drift-scale reporter (honest ~15m) never trips the window.
     m.track('p2', { x: 0, y: 0, z: 0 }, 0);
     m.reconcile('p2', { x: 1, y: 0, z: 0 }, 0);
-    for (let i = 0; i < 5; i++) m.reconcile('p2', { x: 20 + i * 3, y: 0, z: 0 }, 0);
+    for (let i = 0; i < 5; i++) {m.reconcile('p2', { x: 20 + i * 3, y: 0, z: 0 }, 0);}
     expect(flagged).toBe(1);
   });
 
@@ -57,9 +57,9 @@ describe('RoomMoveSim', () => {
   test('pre-resync reports (stale epoch seqs) never flag divergence', async () => {
     const m = new RoomMoveSim(flat, true);
     m.track('p1', { x: 0, y: 0, z: 0 }, 0);
-    for (let i = 0; i < 10; i++) m.tick(0.05);
+    for (let i = 0; i < 10; i++) {m.tick(0.05);}
     m.reconcile('p1', { x: 0, y: 0, z: 0 }, 0); // seed
-    for (let s = 1; s <= 5; s++) m.setInput('p1', { forward: 1 }, 0, s);
+    for (let s = 1; s <= 5; s++) {m.setInput('p1', { forward: 1 }, 0, s);}
     // Server respawns the player 100m away — the journal is cleared.
     m.resync('p1', { x: 100, y: 0, z: 100 }, 0);
     // A report still in flight from the corpse position (stamped seq 4,
@@ -121,7 +121,7 @@ describe('RoomMoveSim', () => {
       m.tick(0.05);
       const v = m.simState('p1')!.vel;
       const h = Math.hypot(v.x, v.z);
-      if (i === 0) first = h;
+      if (i === 0) {first = h;}
     }
     const v = m.simState('p1')!.vel;
     const h = Math.hypot(v.x, v.z);
@@ -131,8 +131,8 @@ describe('RoomMoveSim', () => {
   });
 
   test('config stays in lockstep with the client values', () => {
-    expect(MOVEMENT_CONFIG.jumpSpeed).toBe(7.0);
-    expect(MOVEMENT_CONFIG.maxVelocityGround).toBe(7.0);
+    expect(MOVEMENT_CONFIG.jumpSpeed).toBe(7);
+    expect(MOVEMENT_CONFIG.maxVelocityGround).toBe(7);
   });
 
   test('modeled energy gates the jet claim — infinite jetting dries up', () => {
@@ -146,7 +146,7 @@ describe('RoomMoveSim', () => {
     }
     // 60 energy / 15 per sec ≈ 4s of thrust — after that gravity wins
     // and the player comes back down; an ungated sim would still climb.
-    const y = m.simPos('p1')!.y;
+    const {y} = m.simPos('p1')!;
     expect(peak).toBeGreaterThan(5);
     expect(y).toBeLessThan(peak);
   });
@@ -184,7 +184,7 @@ describe('RoomMoveSim', () => {
     const m = new RoomMoveSim(flat, true);
     expect(m.authoritative).toBe(true);
     m.track('p1', { x: 0, y: 0, z: 0 }, 0);
-    for (let i = 0; i < 10; i++) m.tick(0.05);
+    for (let i = 0; i < 10; i++) {m.tick(0.05);}
     // First report is the spawn-landing seed — snaps the sim, never judges.
     expect(m.reconcile('p1', { x: 0, y: 0, z: 0 }, 0)).toBeNull();
     // 4m off — inside the correction snap budget (max(1.4×tol, 2m)),
@@ -205,7 +205,7 @@ describe('RoomMoveSim', () => {
     expect(m.setInput('p1', { forward: 1 }, 0, 5)).toBe(true);
     // A replayed earlier event must not rewind the input state.
     expect(m.setInput('p1', { forward: 0 }, 0, 3)).toBe(false);
-    for (let i = 0; i < 20; i++) m.tick(0.05);
+    for (let i = 0; i < 20; i++) {m.tick(0.05);}
     const pos = m.simPos('p1')!;
     expect(Math.abs(pos.x) + Math.abs(pos.z)).toBeGreaterThan(0.5);
     // seq-less callers (old clients / tests) always pass.
@@ -218,7 +218,7 @@ describe('RoomMoveSim', () => {
     const m = new RoomMoveSim(flat);
     m.track('p1', { x: 0, y: MOVEMENT_CONFIG.playerHeight, z: 0 }, 0);
     m.setInput('p1', { forward: 1, right: 0, jumpPressed: false, jumpHeld: false, skiHeld: true });
-    for (let i = 0; i < 20; i++) m.tick(0.05);
+    for (let i = 0; i < 20; i++) {m.tick(0.05);}
     const pos = m.simPos('p1')!;
     expect(Math.abs(pos.x) + Math.abs(pos.z)).toBeGreaterThan(0.5);
   });
@@ -231,7 +231,7 @@ describe('RoomMoveSim', () => {
     const m = new RoomMoveSim(flat);
     m.track('p1', { x: 0, y: MOVEMENT_CONFIG.playerHeight, z: 0 }, 0);
     m.setInput('p1', { forward: 1, right: 0, jumpHeld: false, skiHeld: true }, 0, 1);
-    for (let i = 0; i < 60; i++) m.tick(1 / 30); // build up real speed
+    for (let i = 0; i < 60; i++) {m.tick(1 / 30);} // build up real speed
     const s = m.simState('p1')!;
     // A report ~4 steps ahead of the sim — inside probe range (cap 8).
     const ahead = { x: s.pos.x + s.vel.x * (4 / 30), y: s.pos.y, z: s.pos.z + s.vel.z * (4 / 30) };
@@ -292,7 +292,7 @@ describe('RoomMoveSim', () => {
     // Past the defer window the gap is still open — dist 70 > SEVERE_M 60
     // but inside 60 + 30×~0.62s credit: no strike banks.
     await new Promise((r) => setTimeout(r, 620));
-    for (let i = 0; i < 4; i++) m.reconcile('p1', { x: 70 + i, y: 0, z: 0 }, 0, undefined, 9);
+    for (let i = 0; i < 4; i++) {m.reconcile('p1', { x: 70 + i, y: 0, z: 0 }, 0, undefined, 9);}
     expect(flagged).toBe(0);
     // A real teleport is a step function — far past the linear credit.
     m.reconcile('p1', { x: 300, y: 0, z: 0 }, 0, undefined, 10);
@@ -301,11 +301,47 @@ describe('RoomMoveSim', () => {
     expect(flagged).toBe(1);
   });
 
+  test('a closed input gap keeps crediting the catch-up report', async () => {
+    // 64-client soak regression: when the client's frame stream stalls,
+    // the shadow FREE-RUNS the stale input — a ~1.5s stall at ski speed
+    // ends with the catch-up report landing ~99m BEHIND it, precisely
+    // when the streak closes to zero and the open-gap credit vanishes.
+    // That single report banked a strike; the >severeM no-reseat rule
+    // left the standing offset in place, so the same offset banked two
+    // more and latched the cheat flag without any teleport evidence.
+    const m = new RoomMoveSim(flat);
+    let flagged = 0;
+    m.onCheat = () => flagged++;
+    m.track('p1', { x: 0, y: 0, z: 0 }, 0);
+    m.reconcile('p1', { x: 1, y: 0, z: 0 }, 0); // seed
+    const s = m.simState('p1')!;
+    s.vel.x = 60; // ski-speed shadow — the credit is speed × gap age
+    // Open a sustained gap: the report's watermark leads everything the
+    // server has consumed, so the streak arms and stays open.
+    m.reconcile('p1', { x: 5, y: 0, z: 0 }, 0, undefined, 20);
+    await new Promise((r) => setTimeout(r, 1520)); // stall the frame stream
+    // The shadow free-runs the stale held input meanwhile: ~1.5s × 60.
+    s.pos.x = 95;
+    // Catch-up report: same seq (covered) closes the streak, dist ~90
+    // > SEVERE_M 60 — inside the closed-gap credit (60 × 1.5s), so it
+    // banks nothing and the reseat re-anchors the stale shadow.
+    m.reconcile('p1', { x: 5, y: 0, z: 0 }, 0, undefined, 20);
+    expect(flagged).toBe(0);
+    expect(Math.round(s.pos.x)).toBe(5); // snapped to the honest report
+    // Past the grace window the raw bars return: a real teleport still
+    // banks three strikes and latches.
+    await new Promise((r) => setTimeout(r, 2100));
+    m.reconcile('p1', { x: 200, y: 0, z: 0 }, 0, undefined, 21);
+    m.reconcile('p1', { x: 210, y: 0, z: 0 }, 0, undefined, 22);
+    m.reconcile('p1', { x: 220, y: 0, z: 0 }, 0, undefined, 23);
+    expect(flagged).toBe(1);
+  });
+
   test('speed-scaled tolerance absorbs ski-speed drift but not teleports', () => {
     const m = new RoomMoveSim(flat);
     m.track('p1', { x: 0, y: MOVEMENT_CONFIG.playerHeight, z: 0 }, 0);
     m.setInput('p1', { forward: 1, right: 0, skiHeld: true }, 0, 1);
-    for (let i = 0; i < 60; i++) m.tick(1 / 30);
+    for (let i = 0; i < 60; i++) {m.tick(1 / 30);}
     const s = m.simState('p1')!;
     const speed = Math.hypot(s.vel.x, s.vel.z);
     const tol = 10 * (1 + speed / 60);
@@ -342,11 +378,11 @@ describe('RoomMoveSim', () => {
     m.feedUplink('p1', 80);
     expect(m.transitOf('p1')).toBe(80);
     // EMA converges toward the new stream's level.
-    for (let i = 0; i < 20; i++) m.feedUplink('p1', 40);
+    for (let i = 0; i < 20; i++) {m.feedUplink('p1', 40);}
     expect(m.transitOf('p1')).toBeLessThan(60);
     // Negative / NaN samples never touch the channel.
     m.feedUplink('p1', -5);
-    m.feedUplink('p1', NaN);
+    m.feedUplink('p1', Number.NaN);
     expect(m.transitOf('p1')).toBeLessThan(60);
     // Untracked ids are a no-op.
     m.feedUplink('ghost', 80);

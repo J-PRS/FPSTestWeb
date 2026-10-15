@@ -123,6 +123,12 @@ export interface Shadow {
    *  once an uncovered gap outlives INPUT_GAP_DEFER_MS (corrections
    *  never stop; only divergences/severe hits defer). */
   gapAt: number;
+  /** Wall time the streak last closed + how long it had run — the
+   *  catch-up report that closes a gap is the one the free-run deficit
+   *  mostly explains, so the severe credit outlives the streak (see
+   *  GAP_CLOSED_GRACE_MS). */
+  gapClosedAt: number;
+  gapRunMs: number;
   /** Consecutive reports deferred by the pending-coverage gate. Sparse
    *  edges defer one report while the producing inputMove sits parked;
    *  a client streaming edges faster than reports stamps every report
@@ -189,6 +195,18 @@ const INPUT_GAP_DEFER_MS = 600;
  *  unaffected, and a real teleport still clears the bar: it arrives as a
  *  step function while the credit only grows linearly. */
 const GAP_SEVERE_CREDIT_S = 2;
+/** How long after an input-seq streak closes the gap credit stays alive.
+ *  The catch-up report — the one that CLOSES the streak — is the report
+ *  the deficit mostly explains: while its frame stream stalled the
+ *  shadow free-ran the stale input, so it lands speed×stall-behind
+ *  (~99m at ski speed) exactly when the streak drops to zero and the
+ *  open-gap credit vanishes. Without the grace that single report banks
+ *  a strike, the >severeM no-reseat rule leaves the standing offset in
+ *  place, and the same offset banks two more — 64-client soak tremor.
+ *  Neither edge is forgeable: the streak opens only on a server-measured
+ *  watermark lead and closes only when a report stops leading it, so the
+ *  credit is bounded by real starvation (and still capped by GAP_SEVERE_CREDIT_S). */
+const GAP_CLOSED_GRACE_MS = 2000;
 /** Cap on the self-reported RTT credited as link-transit tolerance — a
  *  forged multi-second ping widens the divergence budget by at most
  *  speed×RTT_CAP/2 (~6m at ski speed), far under the SEVERE_M trip. */
@@ -343,7 +361,9 @@ export class MoveJudge {
     // deficit (see GAP_SEVERE_CREDIT_S).
     const gapCredit = sh.gapStreak > 0
       ? speed3d * Math.min((reportNow - sh.gapAt) / 1000, GAP_SEVERE_CREDIT_S)
-      : 0;
+      : (reportNow - sh.gapClosedAt < GAP_CLOSED_GRACE_MS
+        ? speed3d * Math.min(sh.gapRunMs / 1000, GAP_SEVERE_CREDIT_S)
+        : 0);
     const severeM = SEVERE_M + gapCredit;
     if (!gapYoung) {this.noteDivergence(sh, playerId, pos, reportInputSeq, dist, tol, severeM);}
     // Judge mode: the client report is truth (no corrections flow), so a

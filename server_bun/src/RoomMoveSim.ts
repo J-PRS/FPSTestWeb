@@ -192,7 +192,7 @@ this.structEpoch += 1;
       jetWanted: false, jetLockT: 0, skillDrainPerSec: 0, skillSuppressRegen: false, lastStatus: 0,
       lastInputSeq: 0, acc: 0, seqStates: new Map(), simTicks: 0, resyncSeq: -1, resyncAt: 0, pending: [],
       lastRepPos: null,
-      gapStreak: 0, gapAt: 0, deferStreak: 0, lastHintAt: 0, lastReportAt: 0, reportEma: 0,
+      gapStreak: 0, gapAt: 0, gapClosedAt: 0, gapRunMs: 0, deferStreak: 0, lastHintAt: 0, lastReportAt: 0, reportEma: 0,
       transitEma: 0, clientTransitEma: 0, serverTransitEma: 0, transitVar: 0, reportVar: 0,
     });
     // The sim body derives from the class at creation — the default eye
@@ -419,6 +419,15 @@ sh.gapStreak += 1;
         this.onInputGap?.(playerId, sh.lastInputSeq);
       }
     } else {
+      // Streak close: record when and how long it ran. The report that
+      // closes it is the catch-up one — mostly explained by the stall
+      // the shadow free-ran — so the judge keeps crediting the bar for a
+      // short window past the close (GAP_CLOSED_GRACE_MS) instead of
+      // dropping the deficit exactly where it peaks.
+      if (sh.gapStreak > 0) {
+        sh.gapRunMs = wallNow() - sh.gapAt;
+        sh.gapClosedAt = wallNow();
+      }
       sh.gapStreak = 0;
     }
     return this.judge.reconcile(sh, playerId, pos, yaw, vel, reportInputSeq, rttMs);
