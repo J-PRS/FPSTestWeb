@@ -24,7 +24,7 @@ export const BOT_TUNING = {
     parkRingSlow: 2,     // m — brake ring cap when slow
     parkSpeedSplit: 6,   // m/s — fast/slow ring switch
     skiVetoRise: 2.7,    // m — steep-climb grade that releases ski
-    skiVetoSpeed: 7,     // m/s — below this on a steep grade, don't ski
+    skiVetoSpeed: 10,    // m/s — below this on a steep grade, don't ski (energy sweep: 7→10 flips capper from slow grabV=10.2 to fast grabV=17.6; cliff is exactly 10)
     ceilingAgl: 35,      // m AGL — held burn above this is ballooning (evolved: bank altitude early, it pays later)
     comfyEnergy: 35,     // energy floor for discretionary burns
     boostSpeedMax: 12,   // m/s — anti-sheep boost only when slower
@@ -97,6 +97,10 @@ export const BOT_TUNING = {
                          // orbit, so the last leg aims at the pole itself
     redest: 22,          // m — goal drift forcing a re-roll
     staleLimit: 3,       // dead rolls before the give-up path
+    runnerStale: 10,     // thinks of zero net gd progress before a runner abandons
+                         // its flood hop to the fan/orbit machinery — corridor legs
+                         // legitimately run lateral for seconds, so the walker limit
+                         // would fire mid-detour; the kata trap sat flat ~128s
     faceProbeMin: 40,    // m — legs shorter than this skip the early face probe
     faceRise: 0.8,       // rise/m — goal-line slope that counts as a face,
                          // engaging traverse before E bleeds into it
