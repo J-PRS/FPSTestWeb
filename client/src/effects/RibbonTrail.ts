@@ -473,6 +473,13 @@ this.pushed += 1;
         }
         return;
       }
+      // Weld the tip: the head sample is one push old by render time
+      // (drivers push after the host update), so without this the strip
+      // floats a frame of travel behind the body — the head gap. The
+      // fade clock (st[]) stays at push time; only the position re-pins.
+      this.px[this.head] = this.follow.x + this._ox;
+      this.py[this.head] = this.follow.y + this._oy;
+      this.pz[this.head] = this.follow.z + this._oz;
     }
     if (!this.slotAlive() || this.count < 2) {return;}
     const { camMoved, rebillboard } = this.cameraState(cam);
