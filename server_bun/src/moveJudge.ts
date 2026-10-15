@@ -290,6 +290,9 @@ export class MoveJudge {
         sh.reportEma = sh.reportEma === 0 ? dt : sh.reportEma * 0.8 + dt * 0.2;
       }
     }
+    // Report-to-report interval BEFORE the stamp moves — the rate test
+    // below needs the real elapsed time between two client snapshots.
+    const repDtMs = sh.lastReportAt > 0 ? reportNow - sh.lastReportAt : 0;
     sh.lastReportAt = reportNow;
     s.yaw = yaw; // facing is client truth — sim only needs it for input dir
     const phase = this.gatePhase(sh, reportInputSeq);
@@ -359,13 +362,39 @@ export class MoveJudge {
     // can't defend against. An OPEN gap past the defer window keeps
     // banking divergences but the severe bar scales by the starved-input
     // deficit (see GAP_SEVERE_CREDIT_S).
-    const gapCredit = sh.gapStreak > 0
-      ? speed3d * Math.min((reportNow - sh.gapAt) / 1000, GAP_SEVERE_CREDIT_S)
-      : (reportNow - sh.gapClosedAt < GAP_CLOSED_GRACE_MS
-        ? speed3d * Math.min(sh.gapRunMs / 1000, GAP_SEVERE_CREDIT_S)
-        : 0);
-    const severeM = SEVERE_M + gapCredit;
-    if (!gapYoung) {this.noteDivergence(sh, playerId, pos, reportInputSeq, dist, tol, severeM);}
+    let gapCredit = 0;
+    if (sh.gapStreak > 0) {
+      gapCredit = speed3d * Math.min((reportNow - sh.gapAt) / 1000, GAP_SEVERE_CREDIT_S);
+    } else if (reportNow - sh.gapClosedAt < GAP_CLOSED_GRACE_MS) {
+      // Just-closed streak: the catch-up report is the one the free-run
+      // deficit explains, so the credit outlives the close (see
+      // GAP_CLOSED_GRACE_MS).
+      gapCredit = speed3d * Math.min(sh.gapRunMs / 1000, GAP_SEVERE_CREDIT_S);
+    }
+    // Self-admitted step: the gap between this report and the last is
+    // motion the CLIENT itself claims. At a rate the wire already treats
+    // as adoptable (≤ REPORT_VEL_CAP) it also *explains* up to that much
+    // of the report↔shadow offset — a client that stalled and jumped
+    // forward admits the whole jump, so the offset it leaves behind is
+    // stale-shadow, not teleport. Bounded by the same time-capped shape
+    // as the gap credit (speed × elapsed, cap GAP_SEVERE_CREDIT_S) so the
+    // credit can't become a pause-then-hop licence: a hop a real stall
+    // didn't pay for still lands past the bar and banks. Nor can it hide
+    // a teleport — a forged jump arrives as a rate past what the sim can
+    // produce, earns nothing, and (being past the bar) still blocks the
+    // reseat. This subsumes the stall case even when the gap machinery is
+    // still pulsing open/closed.
+    const repRate = repDtMs > 0 ? repJump / (repDtMs / 1000) : Infinity;
+    const repStepCredit = repRate <= REPORT_VEL_CAP
+      ? Math.min(repJump, speed3d * Math.min(repDtMs / 1000, GAP_SEVERE_CREDIT_S))
+      : 0;
+    const severeM = SEVERE_M + Math.max(gapCredit, repStepCredit);
+    if (!gapYoung) {
+      this.noteDivergence(sh, playerId, pos, reportInputSeq, dist, tol, severeM, {
+        gapC: Math.round(gapCredit), repC: Math.round(repStepCredit),
+        repJump: Math.round(repJump), repDt: Math.round(repDtMs),
+      });
+    }
     // Judge mode: the client report is truth (no corrections flow), so a
     // shadow left standing on a stale position measures the SAME offset
     // on every report — one systematic blip (crest timing, transit skew,
@@ -432,7 +461,7 @@ export class MoveJudge {
    *  contact-timing gap (the next correction converges it), so WARN only
    *  on repeats or blow-throughs; count=1 marginal clips are the known
    *  noise floor and stay INFO for later review. */
-  private noteDivergence(sh: Shadow, playerId: string, pos: Vec3Like, reportInputSeq: number | undefined, dist: number, tol: number, severeM: number): void {
+  private noteDivergence(sh: Shadow, playerId: string, pos: Vec3Like, reportInputSeq: number | undefined, dist: number, tol: number, severeM: number, credit?: Record<string, number>): void {
 sh.divergences += 1;
     this.noteHealth(dist);
     // The severe counter gets the same grace the log line does: inside
@@ -445,14 +474,20 @@ sh.divergences += 1;
     // window just can't add new ones.
     if (wallNow() - sh.lastImpulseAt >= 2000) {
       const s = sh.sim.state;
-      this.noteSevere(sh, playerId, dist, severeM, {
+      // The bar and both credits, so a warn is triage-able from the log
+      // alone: severeM vs dist says whether the credit fell short, and
+      // gapC/repC/repJump/repDt say which net failed to cover it.
+      const detail: Record<string, unknown> = {
         simPos: `${s.pos.x.toFixed(1)},${s.pos.y.toFixed(1)},${s.pos.z.toFixed(1)}`,
         repPos: `${pos.x.toFixed(1)},${pos.y.toFixed(1)},${pos.z.toFixed(1)}`,
         simVel: `${s.vel.x.toFixed(1)},${s.vel.y.toFixed(1)},${s.vel.z.toFixed(1)}`,
         inp: `${sh.sim.input.forward},${sh.sim.input.right},${sh.sim.input.skiHeld ? 1 : 0},${sh.sim.input.jetHeld ? 1 : 0}`,
         simTicks: sh.simTicks, inSeq: sh.lastInputSeq, repSeq: reportInputSeq,
         gapStreak: sh.gapStreak, impAgo: sh.lastImpulseAt > 0 ? Math.round(wallNow() - sh.lastImpulseAt) : -1,
-      });
+        severeM: Math.round(severeM),
+      };
+      Object.assign(detail, credit);
+      this.noteSevere(sh, playerId, dist, severeM, detail);
     }
     // Mid-arc knockback skew is transient by construction — the severe
     // counter no longer banks inside the impulse window (above), but the

@@ -337,6 +337,38 @@ describe('RoomMoveSim', () => {
     expect(flagged).toBe(1);
   });
 
+  test('a self-admitted catch-up step is credited; a forged step is not', async () => {
+    // No streak needed: the report↔report step is the client's OWN claim,
+    // and at a legal rate it explains the report↔shadow offset it leaves
+    // behind. A starved client that resumes admits a big step and must not
+    // bank; a forged jump arrives as a rate past the wire's adoptable bar
+    // and banks exactly as before (and, past the bar, still blocks the
+    // reseat). This is the discriminator the soak's residual relied on.
+    const m = new RoomMoveSim(flat);
+    let flagged = 0;
+    m.onCheat = () => flagged++;
+    m.track('p1', { x: 0, y: 0, z: 0 }, 0);
+    m.reconcile('p1', { x: 1, y: 0, z: 0 }, 0); // seed
+    const s = m.simState('p1')!;
+    s.vel.x = 66; // shadow at ski speed — the credit is speed × elapsed
+    await new Promise((r) => setTimeout(r, 1500)); // client stalled, then resumed
+    // Self-admitted catch-up: 99m step over ~1.5s at the shadow's ~66 m/s
+    // is inside REPORT_VEL_CAP and inside the time-capped credit
+    // (66 × 1.5 ≈ 99), so dist 99 ≤ 159 earns no strike and the shadow
+    // reseats. The credit is bounded by speed × elapsed, not the raw
+    // step, so it can never become a pause-then-hop licence.
+    m.reconcile('p1', { x: 100, y: 0, z: 0 }, 0);
+    expect(flagged).toBe(0);
+    expect(Math.round(s.pos.x)).toBe(100);
+    // A forged jump in the same instant: 300m step at an impossible rate
+    // — no credit, strikes bank on each report, no reseat.
+    m.reconcile('p1', { x: 400, y: 0, z: 0 }, 0);
+    m.reconcile('p1', { x: 410, y: 0, z: 0 }, 0);
+    m.reconcile('p1', { x: 420, y: 0, z: 0 }, 0);
+    expect(flagged).toBe(1);
+    expect(Math.round(s.pos.x)).toBe(100); // forged jump never reseats
+  });
+
   test('speed-scaled tolerance absorbs ski-speed drift but not teleports', () => {
     const m = new RoomMoveSim(flat);
     m.track('p1', { x: 0, y: MOVEMENT_CONFIG.playerHeight, z: 0 }, 0);
