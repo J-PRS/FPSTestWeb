@@ -33,7 +33,7 @@ export interface MatchRecord {
 }
 
 export class ResultSigner {
-  private hash = 0x811C9DC5;
+  private hash = 0x81_1C_9D_C5;
   private n = 0;
   private seq = 0;
   constructor(
@@ -41,28 +41,35 @@ export class ResultSigner {
     private readonly matchIdOf: () => string,
   ) {}
 
-  feed(e: RoomEvent): void {
+  feed(e: RoomEvent, atMs?: number): void {
     this.seq += 1;
-    this.hash = fnv1a(this.hash, `${this.seq}|${Math.round(simNow() / 50)}|${canon(e)}`);
+    // `atMs` defaults to the room's own clock but is injectable so a
+    // replay/verifier (and a determinism test) can stamp the grid it
+    // re-derives instead of racing wall clock between two mints.
+    this.hash = fnv1a(this.hash, `${this.seq}|${Math.round((atMs ?? simNow()) / 50)}|${canon(e)}`);
     this.n += 1;
   }
 
-  /** Mint the signed receipt; resets the chain for the next match. */
-  async mint(rec: MatchRecord, mapId?: string): Promise<ResultToken> {
+  /** Mint the signed receipt; resets the chain for the next match.
+   *  `endedAtMs` is the match's own end stamp — it lands inside the
+   *  signed bytes, so a mint whose stamp is never pinned is not
+   *  byte-reproducible (two mints a millisecond apart sign differently).
+   *  Production lets the room pass its own end time. */
+  async mint(rec: MatchRecord, mapId?: string, endedAtMs = Date.now()): Promise<ResultToken> {
     const token: ResultToken = {
       v: 1,
       matchId: this.matchIdOf(),
       room: rec.room,
       mode: rec.mode,
       mapId,
-      endedAtMs: Date.now(),
+      endedAtMs,
       winner: rec.winner,
       scores: rec.scores,
       players: (rec.players ?? []).map((p) => ({ id: p.id, team: p.team, kills: p.kills, deaths: p.deaths })),
       eventHash: `${this.n}:${this.hash.toString(16).padStart(8, '0')}`,
       sig: null,
     };
-    this.hash = 0x811C9DC5;
+    this.hash = 0x81_1C_9D_C5;
     this.n = 0;
     this.seq = 0;
     if (this.secret) {token.sig = await signToken(token, this.secret);}

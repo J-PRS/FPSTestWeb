@@ -40,10 +40,13 @@ describe('ResultSigner', () => {
   });
 
   it('identical event streams produce identical hashes', async () => {
+    // Pin BOTH clocks: the event stamps and the signed endedAtMs. Before
+    // this pinned, the two mints raced wall clock — the full-suite red
+    // was two mints a millisecond apart, not a hash bug.
     const a = new ResultSigner(KEY, () => 'm-same');
     const b = new ResultSigner(KEY, () => 'm-same');
-    for (const s of [a, b]) { s.feed(knock()); s.feed(knock(45)); }
-    const [ta, tb] = await Promise.all([a.mint(rec), b.mint(rec)]);
+    for (const s of [a, b]) { s.feed(knock(), 1_000_000); s.feed(knock(45), 1_000_000); }
+    const [ta, tb] = await Promise.all([a.mint(rec, undefined, 2_000_000), b.mint(rec, undefined, 2_000_000)]);
     expect(ta.eventHash).toBe(tb.eventHash);
     expect(ta.sig).toBe(tb.sig); // same canonical bytes, same key → same sig
   });
@@ -62,7 +65,7 @@ describe('ResultSigner', () => {
     s.feed(knock());
     const t1 = await s.mint(rec);
     const t2 = await s.mint(rec);
-    expect(t2.eventHash).toBe(`0:${  (0x811c9dc5 >>> 0).toString(16).padStart(8, '0')}`);
+    expect(t2.eventHash).toBe(`0:${  (0x811C9DC5 >>> 0).toString(16).padStart(8, '0')}`);
     expect(t1.eventHash).not.toBe(t2.eventHash);
   });
 

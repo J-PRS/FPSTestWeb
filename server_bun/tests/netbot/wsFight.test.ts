@@ -8,20 +8,37 @@ describe('netbot — real clients over real sockets', () => {
     await spawn(4, { pingMs: 20, jitterMs: 150, lossRate: 0 }); // heavy jitter: claims race spawns constantly
     const t = () => bots.map((b) => b.nc.tel);
     // Humanized bots close slower — wait on engagement, not a fixed
-    // window, then drain the in-flight claims before asserting. The
-    // deadline is starvation-aware: while traffic still flows (shots +
-    // snapshots accruing) a suite-starved start gets more runway; a
-    // real stall still fails at the base deadline.
+    // window, then drain the in-flight claims before asserting.
+    //
+    // The measured noise floor is the reason the budget is generous: on
+    // an UNLOADED box this run yields shots=2-4 and hits=1 (fireIntents
+    // queue ~20, but the server's fire throttle leaks ~1 landed hit).
+    // So the whole test hangs on ONE landed hit — under suite load
+    // (4 min of bun test plus a busy desktop) the first engagement can
+    // outlive the old 20s/38s budget and the assert failed on
+    // `shots > 0`, i.e. the bots never got to trade, not on any claim
+    // property. Base 30s / hard cap 60s, and the starvation proxy now
+    // counts kills+deaths too (a fight that trades kills is livelier
+    // still and must keep its runway).
     await untilProgress(
       () => t().reduce((a, x) => a + x.hitsDealt, 0) > 0,
-      () => t().reduce((a, x) => a + x.shots + x.gameStates, 0),
-      20000,
-      { extendMs: 5000, hardCapMs: 38000 },
+      () => t().reduce((a, x) => a + x.shots + x.hitsDealt + x.kills + x.deaths + x.gameStates, 0),
+      30_000,
+      { extendMs: 5000, hardCapMs: 60_000 },
     );
     await sleep(400); // let in-flight claims land
 
     const t1 = t();
-    for (const b of bots) expect(b.nc.tel.gameStates).toBeGreaterThan(0);
+    const sSum = t1.reduce((a, x) => a + x.shots, 0);
+    const cSum = t1.reduce((a, x) => a + x.fireIntents, 0);
+    const dSum = t1.reduce((a, x) => a + x.hitsDealt, 0);
+    const kSum = t1.reduce((a, x) => a + x.kills + x.deaths, 0);
+    const gSum = t1.reduce((a, x) => a + x.gameStates, 0);
+    // One-line telemetry: on a loaded box this is the triage for
+    // "no engagement" (hits landing slower than the fire throttle
+    // leaks them), the same shape bigSoak prints.
+    console.log(`WSFIGHT-TEL shots=${sSum} fire=${cSum} hits=${dSum} kd=${kSum} states=${gSum}`);
+    for (const b of bots) {expect(b.nc.tel.gameStates).toBeGreaterThan(0);}
     const shots = t1.reduce((a, x) => a + x.shots, 0);
     const claims = t1.reduce((a, x) => a + x.fireIntents, 0);
     const dealt = t1.reduce((a, x) => a + x.hitsDealt, 0);
@@ -42,12 +59,12 @@ describe('netbot — real clients over real sockets', () => {
     for (const [id, a] of bots[0]!.nc.roster) {
       for (const other of bots.slice(1)) {
         const b = other.nc.roster.get(id);
-        if (!b) continue;
+        if (!b) {continue;}
         expect(b.health).toBe(a.health);
         // Tick frames drain per-socket, so two observers can sit one
         // frame apart — ~8m covers a jet-speed gap at tick cadence.
         expect(Math.hypot(a.pos.x - b.pos.x, a.pos.y - b.pos.y, a.pos.z - b.pos.z)).toBeLessThan(8);
       }
     }
-  }, 45000);
+  }, 70_000);
 });

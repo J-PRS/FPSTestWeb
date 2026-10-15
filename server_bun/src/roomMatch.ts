@@ -146,7 +146,11 @@ else {w = s.alpha > s.bravo ? 'alpha' : 'bravo';}
     // journal record land a microtask late. Unsigned dev rooms skip the
     // round trip entirely.
     if (host.resultSigner) {
-      void host.resultSigner.mint(rec, host.mapSrc).then((token): void => {
+      // The room's own clock stamps the receipt — same grid the event
+      // hashes are stamped on, so a verifier replaying this match
+      // re-derives byte-identical bytes (wall Date.now() here made the
+      // signed payload depend on when the microtask happened to run).
+      void host.resultSigner.mint(rec, host.mapSrc, simNow()).then((token): void => {
         rec.token = token;
         host.broadcast({ type: 'matchToken', token });
         host.onMatchEnd?.(rec);
