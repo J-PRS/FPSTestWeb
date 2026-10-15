@@ -63,6 +63,7 @@ function mkFile(): DemoFile {
     header, frames, projectileEvents, targetEvents,
     roster: [{ name: 'alpha_bot' }, { name: 'bravo_bot' }],
     remoteFrames,
+    snapshots: [30, 60.5],
   };
 }
 
@@ -110,6 +111,18 @@ describe('demo round-trip', (): void => {
     expect(rf.rosterIdx).toBe(0);
     expect(rf.posZ).toBeCloseTo(15, 3);
     expect(rf.flags).toBe(0b11);
+  });
+
+  it('seek checkpoints survive the trip as a versionless trailer section', (): void => {
+    const out = deserializeDemo(serializeDemo(mkFile()));
+    expect(out.snapshots).toEqual([30, 60.5]);
+  });
+
+  it('a file with no checkpoints reads as undefined, not empty', (): void => {
+    const src = mkFile();
+    delete src.snapshots;
+    const out = deserializeDemo(serializeDemo(src));
+    expect(out.snapshots).toBeUndefined();
   });
 
   it('v7 stamps the run seed into the file', (): void => {

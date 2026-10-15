@@ -9,7 +9,7 @@ import {
   type DemoFile,type DemoRosterEntry,type DemoHeightmap} from './types.js';
 
 import type { ResultToken } from '../../../shared/resultToken.ts';
-import { crc32, FRAME_SIZE, PROJECTILE_EVENT_SIZE, TARGET_EVENT_SIZE, REMOTE_FRAME_SIZE, SECTION_HMAP, SECTION_TOKEN } from './demoWriter.js';
+import { crc32, FRAME_SIZE, PROJECTILE_EVENT_SIZE, TARGET_EVENT_SIZE, REMOTE_FRAME_SIZE, SECTION_HMAP, SECTION_TOKEN, SECTION_SNAP } from './demoWriter.js';
 
 
 // CRC32 lookup table
@@ -35,6 +35,8 @@ import { crc32, FRAME_SIZE, PROJECTILE_EVENT_SIZE, TARGET_EVENT_SIZE, REMOTE_FRA
 //   v6: appended targetType (u8) to each projectileEvent record (older
 //       files read at 59 bytes, default 0 = ball lane) and appended
 //       tableHash (u32) at end of header
+//   trailer: SECTION_SNAP seek checkpoints — versionless by design (old
+//       readers skip the tag); files without it seek replay-from-0.
 // ---------------------------------------------------------------------------
 
 // Reader half of the demo codec — bounds-checked cursor + record readers
@@ -274,16 +276,31 @@ function validateHeaderCounts(header: DemoFile['header'], frames: DemoFrame[], p
 
 // v5 trailer: tagged optional sections after remoteFrames. Unknown tags
 // are skipped so newer sections don't break older readers of this file.
-function readTrailerSections(r: Reader): { hmap?: DemoHeightmap; token?: ResultToken } {
+function readTrailerSections(r: Reader): { hmap?: DemoHeightmap; token?: ResultToken; snapshots?: number[] } {
   if (r.remaining === 0) {return {};}
   const count = r.u8();
   let hmap: DemoHeightmap | undefined = undefined;
   let token: ResultToken | undefined = undefined;
+  let snapshots: number[] | undefined = undefined;
   for (let i = 0; i < count; i += 1) {
     r.ensure(1 + 4, 'trailer section header');
     const tag = r.u8();
     const len = r.u32();
     if (tag === SECTION_TOKEN) {token = JSON.parse(new TextDecoder().decode(r.bytes(len))) as ResultToken; continue;}
+    if (tag === SECTION_SNAP) {
+      const before = r.remaining;
+      r.ensure(4, 'snapshot count');
+      const n = r.u32();
+      if (n > 100_000) {throw new Error(`Invalid snapshot count: ${n} (max 100000)`);}
+      r.ensure(n * 4, 'snapshot array');
+      snapshots = [];
+      for (let k = 0; k < n; k += 1) {snapshots.push(r.f32());}
+      // Skip any padding a future writer adds inside the declared length.
+      const consumed = before - r.remaining;
+      if (consumed > len) {throw new Error('SNAP section overruns its length');}
+      r.skip(len - consumed);
+      continue;
+    }
     if (tag !== SECTION_HMAP) {r.skip(len); continue;}
     const before = r.remaining;
     const gridN = r.u16();
@@ -301,7 +318,7 @@ function readTrailerSections(r: Reader): { hmap?: DemoHeightmap; token?: ResultT
     if (consumed > len) {throw new Error('HMAP section overruns its length');}
     r.skip(len - consumed);
   }
-  return { hmap, token };
+  return { hmap, token, snapshots };
 }
 
 export function deserializeDemo(buffer: ArrayBuffer): DemoFile {
@@ -316,5 +333,6 @@ export function deserializeDemo(buffer: ArrayBuffer): DemoFile {
     const trailer = header.formatVersion >= 5 ? readTrailerSections(r) : {};
     validateHeaderCounts(header, frames, projectileEvents, targetEvents);
     return Object.assign({}, {header,frames,projectileEvents,targetEvents,roster,remoteFrames},
-      (trailer.hmap ? { heightmap: trailer.hmap } : {}), (trailer.token ? { matchToken: trailer.token } : {}));
+      (trailer.hmap ? { heightmap: trailer.hmap } : {}), (trailer.token ? { matchToken: trailer.token } : {}),
+      (trailer.snapshots && trailer.snapshots.length > 0 ? { snapshots: trailer.snapshots } : {}));
   }

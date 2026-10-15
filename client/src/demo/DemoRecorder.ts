@@ -24,6 +24,10 @@ const REMOTE_SAMPLE_HZ = 20;
 // Walkers drift several metres between keyframes and the playback lane only
 // knows ballistic drift — 1s keeps parked-proxy error under a body length.
 const TARGET_SNAPSHOT_INTERVAL = 1;
+// Seek-checkpoint cadence — tail replay after a seek is bounded by one
+// interval (see _docs/2026-10-14_DEMO_SEEK_CHECKPOINTS.md). 4 bytes per
+// mark; matches the rolling ring's order so marks stay inside the window.
+const SEEK_SNAPSHOT_INTERVAL = 30;
 
 // Splice out all events with timestamp < cutoff in one batch (list is
 // append-ordered, so binary search finds the first keeper index).
@@ -104,6 +108,10 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
    *  Lives outside remoteFrames so pooled/pruned frames don't alias it. */
   private lastRemoteByIdx = new Map<number, { posX: number; posY: number; posZ: number; velX: number; velY: number; velZ: number; yaw: number; pitch: number; flags: number }>();
   context: DemoContext = { room: '', mode: '', playerName: '' };
+  /** Seek-checkpoint marks (elapsed seconds, ascending) — emitted every
+   *  SEEK_SNAPSHOT_INTERVAL while recording; serialized as SECTION_SNAP. */
+  snapshots: number[] = [];
+  private lastSnapshotT = -SEEK_SNAPSHOT_INTERVAL;
   /** v5 trailer: coarse u8 downsample of the match terrain — captured
    *  once at start so the file self-describes its battlefield even if
    *  the map file vanishes later. */
@@ -192,6 +200,8 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     this.flagSeen.clear();
     this.lastRemoteSampleT = 0;
     this.lastTargetSnapT = 0;
+    this.snapshots = [];
+    this.lastSnapshotT = -SEEK_SNAPSHOT_INTERVAL;
     this.lastRemoteByIdx.clear();
     this.frameBuffer.clear();
     this.playerData = playerData;
@@ -342,10 +352,18 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   private housekeep(now: number): void {
     this.sampleRemotes(now);
     this.sampleTargets(now);
+    // Checkpoint mark — a seek landing past here replays at most one
+    // interval of tail instead of the whole file (see demoPlayback).
+    if (now - this.lastSnapshotT >= SEEK_SNAPSHOT_INTERVAL) {
+      this.lastSnapshotT = now;
+      this.snapshots.push(now);
+    }
     const cutoff = this.elapsedTime - this.bufferSeconds;
     pruneEventsBefore(this.projectileEvents, cutoff, this.projectileEventPool);
     pruneEventsBefore(this.targetEvents, cutoff, this.targetEventPool);
     pruneEventsBefore(this.remoteFrames, cutoff, this.remoteFramePool);
+    // Marks older than the ring are unseekable — the tail they anchor is gone.
+    while (this.snapshots.length > 0 && this.snapshots[0]! < cutoff) {this.snapshots.shift();}
   }
 
   // Event recorders — the rate-limited projectile/target event spool

@@ -477,6 +477,11 @@ export interface DemoFile {
   // v7 trailer: server-signed result receipt (SECTION_TOKEN) — the
   // leaderboard submission pairs demo+token in one file. Absent offline.
   matchToken?: ResultToken;
+  // Seek checkpoints (SECTION_SNAP): ascending elapsed-time marks where
+  // the recorder guarantees a bounded tail replay (see
+  // _docs/2026-10-14_DEMO_SEEK_CHECKPOINTS.md). Absent on old files —
+  // seek falls back to replay-from-0.
+  snapshots?: number[];
 
 }
 

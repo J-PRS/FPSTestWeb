@@ -1,5 +1,6 @@
 import type { ProjectileEvent, TargetEvent } from './types.js';
 import { lerpAngle } from '../../../shared/angles.ts';
+import { windowProjectileEvents, windowTargetEvents } from './demoClip.js';
 
 import type { DemoPlayer, PlaybackState } from './DemoPlayer.js';
 const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
@@ -113,8 +114,11 @@ export function findEventIndex(events: { timestamp: number }[], time: number): n
 
 
 
-  // Clear all in-flight objects and return every event up to `time`, so the
-  // game can rebuild the full state at that timestamp (seek/reverse playback).
+  // Clear all in-flight objects and return the events that rebuild the
+  // full state at `time` (seek/reverse playback). With checkpoints the
+  // window starts at the nearest mark ≤ time — alive-at-mark entities
+  // re-enter as synthetic baselines (same synthesis as clip extraction),
+  // so the tail replay is O(checkpoint interval), not O(file).
 export function reconstructToTime(p: DemoPlayer, time: number): { newProjEvents: ProjectileEvent[]; newTargetEvents: TargetEvent[]; projCount: number; tgtCount: number } {
     if (!p.demoData) {return { newProjEvents: [], newTargetEvents: [], projCount: 0, tgtCount: 0 };}
     p.lastProjectileEventIndex = 0;
@@ -123,9 +127,23 @@ export function reconstructToTime(p: DemoPlayer, time: number): { newProjEvents:
     p.callbacks.onSeek?.();
     const projCount = findEventIndex(p.demoData.projectileEvents, time);
     const tgtCount = findEventIndex(p.demoData.targetEvents, time);
+    const snaps = p.demoData.snapshots ?? [];
+    let fromT = 0;
+    for (const s of snaps) {
+      if (s <= time) {fromT = s;}
+      else {break;}
+    }
+    if (fromT <= 0) {
+      return {
+        newProjEvents: p.demoData.projectileEvents.slice(0, projCount),
+        newTargetEvents: p.demoData.targetEvents.slice(0, tgtCount),
+        projCount,
+        tgtCount,
+      };
+    }
     return {
-      newProjEvents: p.demoData.projectileEvents.slice(0, projCount),
-      newTargetEvents: p.demoData.targetEvents.slice(0, tgtCount),
+      newProjEvents: windowProjectileEvents(p.demoData.projectileEvents, fromT, time, null),
+      newTargetEvents: windowTargetEvents(p.demoData.targetEvents, fromT, time, null),
       projCount,
       tgtCount,
     };

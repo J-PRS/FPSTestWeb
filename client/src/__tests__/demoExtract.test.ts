@@ -20,6 +20,7 @@ const host = (times: number[], startN = 0): DemoRecorder => {
     targetEvents: [],
     roster: [],
     remoteFrames: [],
+    snapshots: [],
     context: {},
   } as unknown as DemoRecorder;
 };
@@ -89,5 +90,22 @@ describe('buildDemoFile', (): void => {
     expect(f.header.totalFrames).toBe(3);
     expect(f.header.description).toBe('desc');
     expect(f.header.startPosX).toBe(0);
+  });
+
+  it('carries checkpoint marks at absolute time, dropping pre-ring marks', (): void => {
+    const r = host([10, 11, 12]);
+    r.snapshots = [4, 10.5, 12];
+    const f = buildDemoFile(r, 'full')!;
+    expect(f.snapshots).toEqual([10.5, 12]);
+  });
+});
+
+describe('extractClip snapshots', (): void => {
+  it('renormalizes marks with the streams and drops out-of-window marks', (): void => {
+    const r = host([0, 1, 2, 3, 4, 5]);
+    r.snapshots = [0.5, 2.5, 4.5];
+    const clip = extractClip(r, 1.5, 4, 'mid')!;
+    // 2.5 renormalizes to 1; 0.5 predates the window and 4.5 is past clipEnd
+    expect(clip.snapshots).toEqual([1]);
   });
 });

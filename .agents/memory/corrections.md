@@ -13,3 +13,4 @@ rule and delete the lines — memory is a staging area, not an archive.
 - 2026-10-11 — per-ledger-row commits all day → commits batch a settled topic; the 50-line floor now enforces it
 git filter-repo deletes worktree files stripped from HEAD — copy tracked paths out BEFORE rewriting, verify never-pushed files (ls-tree HEAD vs origin), never gc --prune=now mid-commit
 - 2026-10-13 — --no-verify is for a fix that genuinely CANNOT batch, not for a leftover 4-liner; hold it for the next topic batch instead
+- 2026-10-14 — timestamp renormalization is asymmetric across collectors: proj/target renormalize in extractClip, remotes inside collectRemoteFrames — refactoring collectors must preserve which layer shifts or time shifts twice

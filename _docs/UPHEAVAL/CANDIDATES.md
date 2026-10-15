@@ -94,9 +94,12 @@ still *decides* rather than predicts.
   exception in the table, and the table still wins.
 
 ### C1 — Kill the combat claim layer (server-simmed projectiles)
-- **Status**: ENTRY SLICE OF C5 (upheaval-max) — still the first thing to
-  build; under "end result above all" it's step 1 of the world-model
-  unification, not a standalone candidate.
+- **Status**: LANDED 2026-10-01 (was the entry slice of C5) — 'shot' wire
+  claim deleted end-to-end; shotFired intent is the only path; all bodied
+  weapons server-simmed (burst pellet-index echo binding; proxy/satchel
+  server sticks). Only true hitscan (melee/LG/repair/healbeam/slam) +
+  armed deployables remain on claims. Residual claim layer: ~50 lines of
+  rewind util + skill adjudication (see C5 status).
 - **Model collapse**: projectiles join movement's predict/reconcile —
   client predicts a shell locally on fire intent, server sims truth,
   outcomes broadcast. One sim, no adjudication.
@@ -124,7 +127,7 @@ still *decides* rather than predicts.
 - **Costs**: hit-confirm ≤ half-RTT (predicted feedback covers it);
   server CPU sims all live shells (bounded, soak-proven); predicted→server
   shell reconciliation keyed on the spawn echo.
-- **Pilot**: one weapon class (BoltLauncher) server-simmed end-to-end —
+- **Pilot** (done — generalized to every bodied weapon 2026-10-01): one weapon class (BoltLauncher) server-simmed end-to-end —
   human `shotFired` → `RoomProjectiles.spawn` → outcomes broadcast;
   client keeps its predicted shell + feedback, drops the `shot`/`aoeShot`
   senders for that class only. Observable verdict: shot/AOE reject warns

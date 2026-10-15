@@ -57,6 +57,9 @@ export const REMOTE_FRAME_SIZE = 39;
 // reader, so future sections slot in without a version bump.
 export const SECTION_HMAP = 1;
 export const SECTION_TOKEN = 2;
+// Seek checkpoints: u32 count + f32 ascending timestamps. Versionless by
+// design — old readers skip the tag, old files just seek from 0.
+export const SECTION_SNAP = 3;
 
 function writeHmapSection(view: DataView, pOffset: number, hm: DemoFile['heightmap']): number {
   let offset = pOffset;
@@ -188,7 +191,9 @@ export function serializeDemo(data: DemoFile): ArrayBuffer {
     // v5 trailer: u8 section count + per-section tag/len/payload.
     const hmapSize = data.heightmap ? 1 + 4 + 2 + 4 + 4 + 4 + 4 + data.heightmap.data.length : 0;
     const tokenSize = data.matchToken ? 1 + 4 + new TextEncoder().encode(JSON.stringify(data.matchToken)).length : 0;
-    const trailerSize = 1 + hmapSize + tokenSize;
+    const snapCount = data.snapshots?.length ?? 0;
+    const snapSize = snapCount > 0 ? 1 + 4 + 4 + snapCount * 4 : 0;
+    const trailerSize = 1 + hmapSize + tokenSize + snapSize;
     const totalSize = totalHeaderSize + framesSize + projEventsSize + targetEventsSize + rosterSize + remoteFramesSize + trailerSize;
 
     const buffer = new ArrayBuffer(totalSize);
@@ -244,12 +249,20 @@ export function serializeDemo(data: DemoFile): ArrayBuffer {
 
     // v5 trailer sections — u8 count, then tag+len+payload per section.
     const tokenBytes = data.matchToken ? new TextEncoder().encode(JSON.stringify(data.matchToken)) : null;
-    view.setUint8(((offset += 1) - 1), (data.heightmap ? 1 : 0) + (tokenBytes ? 1 : 0));
+    const snaps = data.snapshots ?? [];
+    view.setUint8(((offset += 1) - 1), (data.heightmap ? 1 : 0) + (tokenBytes ? 1 : 0) + (snaps.length > 0 ? 1 : 0));
     offset = writeHmapSection(view, offset, data.heightmap);
     if (tokenBytes) {
       view.setUint8(((offset += 1) - 1), SECTION_TOKEN);
       view.setUint32(offset, tokenBytes.length, true); offset += 4;
       new Uint8Array(buffer, offset, tokenBytes.length).set(tokenBytes);
+      offset += tokenBytes.length;
+    }
+    if (snaps.length > 0) {
+      view.setUint8(((offset += 1) - 1), SECTION_SNAP);
+      view.setUint32(offset, 4 + snaps.length * 4, true); offset += 4;
+      view.setUint32(offset, snaps.length, true); offset += 4;
+      for (const t of snaps) {view.setFloat32(offset, t, true); offset += 4;}
     }
 
     // Compute and write checksum over everything after the checksum field

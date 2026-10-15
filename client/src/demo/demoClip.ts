@@ -14,31 +14,47 @@ import {
 // clipStart per remote whose last sample predates the window — playback
 // shouldn't wait for the next 20Hz sample to place them.
 export function collectRemoteFrames(remoteFrames: RemoteFrame[], clipStart: number, clipEnd: number): RemoteFrame[] {
+  return windowRemoteFrames(remoteFrames, clipStart, clipEnd, clipStart);
+}
+
+// Absolute-timestamp twin of collectRemoteFrames (renormBase null keeps
+// file time) — seek replays a tail window in place instead of minting a
+// renormalized clip.
+export function windowRemoteFrames(remoteFrames: RemoteFrame[], fromT: number, toT: number, renormBase: number | null): RemoteFrame[] {
   const lastBefore = new Map<number, RemoteFrame>();
   for (const f of remoteFrames) {
-    if (f.timestamp >= clipStart) {break;}
+    if (f.timestamp >= fromT) {break;}
     lastBefore.set(f.rosterIdx, f);
   }
   const inWindow = remoteFrames.filter((
-    f): boolean => f.timestamp >= clipStart && f.timestamp <= clipEnd
+    f): boolean => f.timestamp >= fromT && f.timestamp <= toT
   );
   const out: RemoteFrame[] = [];
   for (const [, f] of lastBefore) {
-    out.push(Object.assign({}, f, {timestamp: clipStart}));
+    out.push(Object.assign({}, f, {timestamp: fromT}));
   }
   out.push(...inWindow);
   out.sort((a, b): number => a.timestamp - b.timestamp);
-  return out.map((f): RemoteFrame & { timestamp: number; } => (((Object.assign({}, f, {timestamp: f.timestamp - clipStart})))));
+  if (renormBase === null) {return out;}
+  return out.map((f): RemoteFrame & { timestamp: number; } => (((Object.assign({}, f, {timestamp: f.timestamp - renormBase})))));
 }
 
 // Projectile events in [clipStart, clipEnd], plus synthetic Fired events at
 // clipStart for projectiles that were in-flight when the clip began.
 export function collectProjectileEvents(projectileEvents: ProjectileEvent[], clipStart: number, clipEnd: number): ProjectileEvent[] {
-  // For each projectileId, find the most recent event before clipStart.
-  // If it was Fired or Bounce (not Hit/Destroyed), inject a synthetic Fired at clipStart.
+  // Absolute like always — the caller (extractClip) renormalizes the whole
+  // window in one map; doing it here too would shift time twice.
+  return windowProjectileEvents(projectileEvents, clipStart, clipEnd, null);
+}
+
+// Absolute-timestamp twin of collectProjectileEvents (renormBase null
+// keeps file time) — the seek tail window.
+export function windowProjectileEvents(projectileEvents: ProjectileEvent[], fromT: number, toT: number, renormBase: number | null): ProjectileEvent[] {
+  // For each projectileId, find the most recent event before fromT.
+  // If it was Fired or Bounce (not Hit/Destroyed), inject a synthetic Fired at fromT.
   const aliveProjectiles = new Map<number, ProjectileEvent>();
   for (const e of projectileEvents) {
-    if (e.timestamp >= clipStart) {break;}
+    if (e.timestamp >= fromT) {break;}
     if (e.eventType === ProjectileEventType.Hit || e.eventType === ProjectileEventType.Destroyed) {
       aliveProjectiles.delete(e.projectileId);
     } else if (e.eventType === ProjectileEventType.Fired) {
@@ -54,14 +70,17 @@ export function collectProjectileEvents(projectileEvents: ProjectileEvent[], cli
 
   const snapshotProjEvents: ProjectileEvent[] = [];
   for (const [, e] of aliveProjectiles) {
-    snapshotProjEvents.push(Object.assign({}, e, {eventType: ProjectileEventType.Fired,timestamp: clipStart}));
+    snapshotProjEvents.push(Object.assign({}, e, {eventType: ProjectileEventType.Fired,timestamp: fromT}));
   }
 
+  const actuals = projectileEvents.filter((
+    e): boolean => e.timestamp >= fromT && e.timestamp <= toT
+  );
+  if (renormBase === null) {return [...snapshotProjEvents, ...actuals];}
+  const shift = (t: number): number => t - renormBase;
   return [
-    ...snapshotProjEvents,
-    ...projectileEvents.filter((
-      e): boolean => e.timestamp >= clipStart && e.timestamp <= clipEnd
-    ),
+    ...snapshotProjEvents.map(e => (Object.assign({}, e, {timestamp: shift(e.timestamp)}))),
+    ...actuals.map(e => (Object.assign({}, e, {timestamp: shift(e.timestamp)}))),
   ];
 }
 
@@ -141,24 +160,34 @@ export function findAliveTargets(targetEvents: TargetEvent[], clipStart: number)
 // clipStart for balls that were alive when the clip began (or whose Spawned
 // event was pruned before extractClip ran).
 export function collectTargetEvents(targetEvents: TargetEvent[], clipStart: number, clipEnd: number): TargetEvent[] {
-  const aliveBalls = findAliveTargets(targetEvents, clipStart);
+  // Absolute like always — the caller (extractClip) renormalizes the whole
+  // window in one map; doing it here too would shift time twice.
+  return windowTargetEvents(targetEvents, clipStart, clipEnd, null);
+}
 
-  // Create synthetic Spawned events at clipStart for alive targets
+// Absolute-timestamp twin of collectTargetEvents (renormBase null keeps
+// file time) — the seek tail window.
+export function windowTargetEvents(targetEvents: TargetEvent[], fromT: number, toT: number, renormBase: number | null): TargetEvent[] {
+  const aliveBalls = findAliveTargets(targetEvents, fromT);
+
+  // Create synthetic Spawned events at fromT for alive targets
   const snapshotEvents: TargetEvent[] = [];
   for (const [, e] of aliveBalls) {
-    snapshotEvents.push(Object.assign({}, e, {eventType: TargetEventType.Spawned,timestamp: clipStart}));
+    snapshotEvents.push(Object.assign({}, e, {eventType: TargetEventType.Spawned,timestamp: fromT}));
   }
 
-  // Target events that fall inside the clip window
+  // Target events that fall inside the window
   const actualTgtEvents = targetEvents.filter((
-    e): boolean => e.timestamp >= clipStart && e.timestamp <= clipEnd
+    e): boolean => e.timestamp >= fromT && e.timestamp <= toT
   );
 
-  return [
+  const out = [
     ...snapshotEvents,
-    ...recoverMissingSpawns(actualTgtEvents, aliveBalls, clipStart),
+    ...recoverMissingSpawns(actualTgtEvents, aliveBalls, fromT),
     ...actualTgtEvents,
   ];
+  if (renormBase === null) {return out;}
+  return out.map(e => (Object.assign({}, e, {timestamp: e.timestamp - renormBase})));
 }
 
 const keyOfM = (e: TargetEvent): number => e.targetType * 65_536 + e.targetId;

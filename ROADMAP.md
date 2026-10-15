@@ -94,6 +94,52 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   RoomMoveSim + RoomWeaponSim so peer reports are judged. God-object
   splits in the same stretch: Room 1182→989, serverSenses 1035→345,
   PlayerModel 1456→625 (gun/anim/mats/collider/LOD controllers).
+- Claimless combat (2026-10-01): 'shot' wire claim deleted end-to-end —
+  shotFired intent is the only path, all bodied weapons server-simmed via
+  RoomProjectiles (burst pellet-index echo binding; proxy/satchel server
+  sticks); only true hitscan (melee/LG/repair/healbeam/slam) + armed
+  deployables remain on claims.
+- Demo verification pipeline (2026-10-14): `_tools/verify.ts` replays a
+  demo's input stream through MoveSim on the embedded hmap trailer and
+  verdicts the trajectory (real run passes ~0.9m worst; +30m doctored
+  frame flags impossible-trajectory at that frame). Tiers: spawn-dice
+  parity (`shared/spawnDice.ts` seeded stream per Spawned event),
+  map-identity binding (hmap trailer srcHash, full-res terrain eps
+  2.5m→0.5m), projectile legs replayed ballistically per leg, ball
+  targetEvent legs through stepBall, score recomputed from the event
+  stream, hit↔shot linkage flags unbacked kills. Residual honest limits:
+  creature-behavior rolls still ambient (spawn/event determinism is the
+  contract), ~6% ball-leg divergence from unrecorded blast knocks,
+  ~20% projectile-leg divergence on networked demos is the documented
+  server-truth class.
+- Leaderboard pilot (2026-10-14): signed match receipts (Room mints HMAC
+  ResultToken over the bus event-hash chain at matchEnd, broadcast +
+  journaled; demo carries it as SECTION_TOKEN trailer), `POST
+  /leaderboard/submit` verification gates (format → matchToken sig →
+  stat recompute) appending ranked rows to logs/leaderboard.jsonl,
+  `GET /leaderboard` best-per-player per mode, `GET /challenge`
+  server-signed seed bound to runSeed at boot with spawn-dice parity
+  before ranking, ranked-solo e2e proven (`_tools/e2e/_ranked.ts`).
+  Still a pilot: JSONL store, no auth/rate-limit/moderation; recorder is
+  interest-limited (see DEMO-OMNISCIENT-AUDIT P0s: server-side recording
+  decision + snapshot seek index).
+- Bot capping (2026-10-13/14): nav pilot — runner+route legs ride the
+  flood carrot every think (pure pursuit), steerer beelines routed hops
+  at any range (capRun 0 caps/480s → grab@108s, cap@~176s; dunes grab
+  115s→50s after closing the 3-4m face-plant dead zone). Energy metrics
+  pin the real deficit as retention not propulsion (grabV 12-22 m/s vs
+  T:A 40m/s+; peakE proves the bank works, approachE bleeds between
+  banks). Reverted dead ends recorded: crest-aiming (kata 0 caps),
+  runner-priced flood (corridor flips chaotically, 133↔413s) — wander
+  lives in the staging layer, not the flood. Open: extend routed
+  commitment to `running` transits, retire ~100 lines of orbit
+  compensation, offline bots have no flood.
+- Seek checkpoints (2026-10-14): recorder marks every 30s ride a
+  versionless SECTION_SNAP trailer (timestamps only); seek/reverse
+  replays the tail window through the clip-window synthesis instead of
+  replay-from-0 — match-length scrubs are O(interval). Design in
+  _docs/2026-10-14_DEMO_SEEK_CHECKPOINTS.md; server-side recording stays
+  the later end state for authoritative tournament evidence.
 
 ### Perf review 2026-10-01 — heaviest paths, ranked plan
 

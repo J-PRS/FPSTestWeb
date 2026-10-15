@@ -33,6 +33,9 @@ export function buildDemoFile(r: DemoRecorder, description = ''): DemoFile {
   // an orphaned Destroyed.
   const clipStart = frames.length > 0 ? frames[0]!.timestamp : r.elapsedTime - r.bufferSeconds;
   const targetEvents = collectTargetEvents(r.targetEvents, clipStart, r.elapsedTime);
+  // Checkpoint marks ride absolute here (renormalized only for clips) —
+  // marks older than the ring's leading edge anchor pruned tails.
+  const snapshots = r.snapshots.filter((t): boolean => t >= clipStart);
 
   return Object.assign({header: Object.assign({magic: DEMO_MAGIC,
       formatVersion: DEMO_FORMAT_VERSION,
@@ -48,7 +51,7 @@ export function buildDemoFile(r: DemoRecorder, description = ''): DemoFile {
     projectileEvents: [...r.projectileEvents],
     targetEvents,
     roster: r.roster.map(e => Object.assign({}, e)),
-    remoteFrames: [...r.remoteFrames]}, Object.assign({}, (r.heightmap ? { heightmap: r.heightmap } : {}), (r.matchToken ? { matchToken: r.matchToken } : {})));
+    remoteFrames: [...r.remoteFrames]}, Object.assign({}, (r.heightmap ? { heightmap: r.heightmap } : {}), (r.matchToken ? { matchToken: r.matchToken } : {}), (snapshots.length > 0 ? { snapshots } : {})));
 }
 
 export function extractClip(r: DemoRecorder, startTime: number, endTime: number, description: string, projectileLifetime = 0): DemoFile | null {
@@ -75,6 +78,11 @@ export function extractClip(r: DemoRecorder, startTime: number, endTime: number,
 
   const projEvents = collectProjectileEvents(r.projectileEvents, clipStart, clipEnd);
   const tgtEvents = collectTargetEvents(r.targetEvents, clipStart, clipEnd);
+  // Checkpoints renormalize with the streams — a mark is a timestamp, not
+  // an index, so the same shift applies and out-of-window marks drop.
+  const snapshots = r.snapshots
+    .filter((t): boolean => t >= clipStart && t <= clipEnd)
+    .map((t): number => t - clipStart);
 
   const [first] = frames;
   const normFrames = frames.map((f): DemoFrame & { timestamp: number; frameNumber: number; } => (Object.assign({}, f, {timestamp: f.timestamp - clipStart,frameNumber: (f.frameNumber - first.frameNumber + 65_536) % 65_536})));
@@ -99,5 +107,5 @@ export function extractClip(r: DemoRecorder, startTime: number, endTime: number,
     projectileEvents: normProj,
     targetEvents: normTgt,
     roster: r.roster.map(e => Object.assign({}, e)),
-    remoteFrames: collectRemoteFrames(r.remoteFrames, clipStart, clipEnd)}, Object.assign({}, (r.heightmap ? { heightmap: r.heightmap } : {}), (r.matchToken ? { matchToken: r.matchToken } : {})));
+    remoteFrames: collectRemoteFrames(r.remoteFrames, clipStart, clipEnd)}, Object.assign({}, (r.heightmap ? { heightmap: r.heightmap } : {}), (r.matchToken ? { matchToken: r.matchToken } : {}), (snapshots.length > 0 ? { snapshots } : {})));
 }
