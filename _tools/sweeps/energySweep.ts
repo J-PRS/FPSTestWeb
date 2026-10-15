@@ -89,7 +89,7 @@ let gid = 0;
 function evaluate(genes: number[], tag: string): void {
   genes.forEach((v, i) => set(DIMS[i]![0], v));
   for (const m of MAPS) {
-    const stat = measureCap(m.f, m.bases, { simBudgetS: Math.round(BUDGET * Math.min(3, Math.max(1, m.flagM / 300))), tag: `${tag}:${m.name}` });
+    const stat = measureCap(m.f, m.bases, { simBudgetS: Math.round(Math.max(BUDGET * 1.2, BUDGET * Math.min(3, m.flagM / 300))), tag: `${tag}:${m.name}` });
     const fit = fitness(stat);
     results.push({ genes: genes.slice(), stat, fit });
     appendFileSync(csvPath,

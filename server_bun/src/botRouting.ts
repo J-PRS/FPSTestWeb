@@ -260,12 +260,15 @@ export class BotRouting {
         const w = this.waitSpotFor(p.id, own.home, duty);
         return { pos: w, infiltrating: false, running: true, runner: true };
       }
-      // The home run is the map's most predictable line — every chase
-      // and defender reads it, which is why ~70% of raindance grabs
-      // die en route (avg hold 16s). Scent the approach so the run
-      // bends around the intercept blob instead of plowing through
-      // it; inside ~200m the stand is close — dive straight, a bend
-      // that late only buys the chasers more runway.
+      // The home run is the map's most predictable line — scent the
+      // approach around the intercept blob when far out; inside ~200m
+      // dive straight, a bend that late only buys chasers runway.
+      // No post-grab coast waypoint: the carrier aims at home and the
+      // steerer carves. Coast waypoints are map-tuned (help complex
+      // terrain, hurt open) — a universal bot navigates by heightmap
+      // and physics, not per-map turnaround hacks. Momentum through
+      // the turn comes from the carve suppressor (no jet into reversals)
+      // and ski retention, not from scripted overshoots.
       if (this.room.influence && dist3(p.position, own.home) > 200) {
         const w = this.room.influence.quietApproach(p.position, own.home, this.room.influence.dangerLayer(me), 140);
         return { pos: w, infiltrating: false, running: true, runner: true };
@@ -537,11 +540,13 @@ export class BotRouting {
           if (capper && this.field) {
             const hx = own.home.x - enemyStand.x, hz = own.home.z - enemyStand.z;
             const hd = Math.hypot(hx, hz) || 1;
-            const cx = enemyStand.x + (hx / hd) * BotRouting.PASS_M;
-            const cz = enemyStand.z + (hz / hd) * BotRouting.PASS_M;
-            // …only when the pass point is open airspace — on rim maps
-            // the home-side wrap point sits inside the crater wall and
-            // aiming there buries the run in rock (kata no-grab).
+            // Scale pass-through by distance: at 20m out, aim 10m past;
+            // at 6m, aim direct. A fixed 40m offset at 36 m/s approach
+            // misses the 6m grab radius by 34m — the capper sails past
+            // and orbits for 55+s.
+            const passM = Math.min(BotRouting.PASS_M, dStand * 0.5);
+            const cx = enemyStand.x + (hx / hd) * passM;
+            const cz = enemyStand.z + (hz / hd) * passM;
             if (hmHeight(this.field, cx, cz) - enemyStand.y < 15) {
               px2 = cx - enemyStand.x; pz2 = cz - enemyStand.z;
             }
@@ -553,7 +558,10 @@ export class BotRouting {
           // a braked bot hovering 5-9m/s flapped between the pole and
           // a point 40m past the flag and paced 10-17m out forever
           // (katabatic 9002). Slow/close presses aim the pole.
-          goalPos = spd > 14 && dStand > 6
+          // Direct-aim threshold raised 6→20m: at 36 m/s the steerer
+          // needs ~0.5s to align with the flag; 6m gives 0.17s —
+          // not enough to unwrap from the pass-through heading.
+          goalPos = spd > 14 && dStand > 20
             ? { x: enemyStand.x + mx + px2 - ux * pull,
                 y: enemyFlagY,
                 z: enemyStand.z + mz + pz2 - uz * pull }

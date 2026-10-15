@@ -461,6 +461,16 @@ export class BotMoves {
     // assist over the lip — the up-over-down rhythm that converts energy
     // into speed. A bot that only jets on cliffs never gets dynamic.
     const hop = rise > T.moves.hopRiseLo && rise <= T.moves.hopRiseHi;
+    // Carve suppressor: thrusting into a turn brakes — jet facing runs
+    // at the steerer yaw, and mid-turn that yaw opposes momentum. A
+    // human carves (holds ski, turns, no thrust); the bot should too.
+    // When fast with the destination behind, discretionary speed burns
+    // stay off and the ski turn does the work.
+    const vx = ctx.vel?.x ?? 0, vz = ctx.vel?.z ?? 0;
+    const vSpd = Math.hypot(vx, vz);
+    const tx = dest.x - pos.x, tz = dest.z - pos.z;
+    const tl = Math.hypot(tx, tz) || 1;
+    const turning = vSpd > 20 && (vx * tx + vz * tz) / (vSpd * tl) < -0.5;
     // The anti-sheep move: a bot at walking pace with ground to cover
     // jets to build momentum — but only flat-or-downhill from the
     // deck. Burn while facing uphill buys altitude, not speed (the
@@ -473,7 +483,7 @@ export class BotMoves {
     // that drains to the reserve floor leaves the mid-route climbs
     // (which are not discretionary) with nothing.
     const boostTank = ctx.energy === undefined || ctx.energy > T.moves.boostEnergyMin;
-    const boost = !bank && speed < T.moves.boostSpeedMax && (ctx.objective ? od > T.moves.boostGdMin : gd > T.moves.boostGdMin) && boostTank && rise <= T.moves.boostRise && !airborne;
+    const boost = !turning && !bank && speed < T.moves.boostSpeedMax && (ctx.objective ? od > T.moves.boostGdMin : gd > T.moves.boostGdMin) && boostTank && rise <= T.moves.boostRise && !airborne;
     // Transit burn REVERTED: airborne sustained jets balloon the hop
     // arcs (altitude, not speed — grabV 50→13, dunes 50→93s). Grounded-
     // only was dead code: the hop chain leaves no grounded flat ticks.
@@ -490,7 +500,7 @@ export class BotMoves {
     // while its capper now burns at ~20 — escorts and push bodies have
     // to arrive inside the same window or there is no wave. Marshal
     // staging never trips it: the 110m orbit sits past the gd window.
-    const runIn = (ctx.runner === true || ctx.wave === true) && od > T.moves.runInGdMin &&
+    const runIn = !turning && (ctx.runner === true || ctx.wave === true) && od > T.moves.runInGdMin &&
       od < (strike ? T.moves.strikeGd : T.moves.runInGdMax) &&
       (ctx.objective?.y ?? dest.y) - pos.y < T.moves.runInRise && speed < T.moves.runInSpeed && (comfy || strike);
     // The featherjet: a route-committed runner or wave member on a
@@ -507,7 +517,7 @@ export class BotMoves {
     // at delay 0 vs ~300ms) — the up-jet during a climb buys airtime
     // the flat route never converts. The hold latch still bleeds past
     // landing; this gate only picks when a burn can START.
-    const tap = (ctx.runner === true || ctx.wave === true) && !bank && !comfy && airborne &&
+    const tap = !turning && (ctx.runner === true || ctx.wave === true) && !bank && !comfy && airborne &&
       (ctx.vel?.y ?? 0) < 0 && od > T.moves.boostGdMin &&
       (ctx.objective?.y ?? dest.y) - pos.y < T.moves.runInRise && speed < T.moves.runInSpeed && rise <= T.moves.boostRise;
     // Sustained-climb deep-probe experiment REVERTED: jetting a slow

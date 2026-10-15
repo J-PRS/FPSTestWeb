@@ -103,6 +103,7 @@ export function measureCap(
   const t0 = Date.now();
   const wallBudget = simBudgetS * 800;
   let carrying = false;
+  let lastAliveT = 0;
   let lastPos: PlayerState['position'] | null = null;
   // The capper's real budget is total mechanical energy — speed read
   // alone hides that a route dumped altitude for nothing. E is
@@ -135,6 +136,11 @@ export function measureCap(
     step(room, 1, dt);
     simT += dt;
     const bravoFlag = room.flags!.flags.get('bravo')!;
+    if (capper.isDead) {
+      if (simT - lastAliveT > 5) {break;}
+    } else {
+      lastAliveT = simT;
+    }
     if (!capper.isDead) {
       const e = mechE();
       if (!carrying) { aSum += e; aSamples++; if (e > stat.peakE) {stat.peakE = e;} }

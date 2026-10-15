@@ -94,6 +94,6 @@ export const MODES: Record<ModeId, ModeSpec> = {
 };
 
 /** Flag carry rules — shared client/server. */
-export const FLAG_PICKUP_R = 2.2;   // touch distance to grab/return a flag
+export const FLAG_PICKUP_R = 6;     // touch distance to grab/return a flag — generous enough for a 40m/s ski-pass graze
 export const FLAG_HOME_R = 8;       // capture ring around own base
 export const FLAG_RESET_S = 20;     // dropped flag returns home after this
