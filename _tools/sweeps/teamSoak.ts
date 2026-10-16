@@ -1,0 +1,338 @@
+/**
+ * teamSoak.ts — themed team-vs-team warp soak: one weapon (or kit) per
+ * side, a real map, real spawns, N sim-minutes in a few wall-seconds.
+ *
+ *   bun _tools/sweeps/teamSoak.ts --alpha Railgun --bravo Mortar
+ *   bun _tools/sweeps/teamSoak.ts --alpha Disc --bravo Chaingun --mode ctf --mins 20
+ *   bun _tools/sweeps/teamSoak.ts --alpha Railgun --alpha2 Pistol --bravo Mortar --berserk
+ *
+ * Why: the ladder/balance sweeps pit weapons against a MIXED field, which
+ * answers "which gun wins a lobby" but not "what does a railgun line do
+ * to an artillery battery". Locking a whole side to one weapon makes the
+ * team fight legible — the scoreline, the weapon ledger and the class mix
+ * are all one matchup.
+ *
+ * Mechanics: bots are real roster entries (brains, move shadows, weapons
+ * fed through the normal claim funnel). The kit is injected exactly like
+ * the duel scenarios do it (loadouts map + roster.refitClass) and then the
+ * room is warped on the sim clock, so respawns/shields/match timers lapse
+ * in sim-time — minutes of combat, not minutes of waiting.
+ *
+ *   --alpha W --bravo W   primary for each side (WeaponType name)
+ *   --alpha2/--bravo2 W   optional secondary: slots 2-3 instead of the
+ *                         primary at close range (see BOT_SIDEARM_M)
+ *   --per N               bots PER SIDE (default 8)
+ *   --mins M              sim-minutes to warp (default 10)
+ *   --wall S              hard wall-clock cap in seconds (default 120)
+ *   --map NAME            real map (default katabatic's bare field)
+ *   --mode M              tdm | ctf | dm (default tdm)
+ *   --class T             pin every body to light|medium|heavy (default:
+ *                         kit-faithful — the loadout picks the chassis)
+ *   --berserk             never holster the primary (pickBotWeapon as-is,
+ *                         not pickBotWeaponSafe) — artillery keeps firing
+ *   --arena M             XZ arena radius in metres, 0 = map's own bound
+ *   --seed S              room seed
+ */
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { hmParseBin, hmHeight, type Heightfield } from '../../shared/heightfield.ts';
+import { WeaponType } from '../../shared/weapons.ts';
+import { pickBotWeapon, kitConsistent, type BotLoadout } from '../../shared/botLoadouts.ts';
+import { mkRoom, step, pin } from '../../server_bun/tests/scenarios/harness.ts';
+import { simNow, simNowAdvance } from '../../server_bun/src/simClock.ts';
+import { weaponStats } from '../../server_bun/src/weaponStats.ts';
+
+const arg = (name: string, dflt: string): string => {
+  const i = process.argv.indexOf('--' + name);
+  return i >= 0 ? process.argv[i + 1]! : dflt;
+};
+const has = (name: string): boolean => process.argv.includes('--' + name);
+
+const weapon = (name: string): WeaponType => {
+  const w = (WeaponType as unknown as Record<string, number>)[name];
+  if (w === undefined) {
+    console.error(`teamSoak: unknown weapon "${name}" — try Railgun/Mortar/Disc/Chaingun/...`);
+    process.exit(2);
+  }
+  return w as WeaponType;
+};
+
+const MAP = arg('map', 'katabatic');
+const MODE = arg('mode', 'tdm');
+const PER = Number(arg('per', 8));
+const MINS = Number(arg('mins', 10));
+const WALL_S = Number(arg('wall', 120));
+const SEED = Number(arg('seed', 1337));
+const CLASS = arg('class', '');
+// Contact pressure. TDM/DM have no objective to converge on, and on a 1.5km
+// field 16 bots spread past hunt range and starve (measured: nearest foe
+// 773-798m, hunt 0%, zero shots over 10 sim-min). RoomArena does NOT fix
+// this — its pull-back shove was removed and it only warnings now — so the
+// soak does what a real TDM lobby does to itself: both sides spawn facing
+// each other inside sight range (`--ring` = the half-separation in metres),
+// and re-seat there on every respawn so the fight can't drift apart.
+const RING = Number(arg('ring', MODE === 'ctf' ? 0 : 70));
+// Arena is a DOME for bot roam targets only (RoomArena never shoves), so it
+// stays off unless asked for.
+const ARENA = Number(arg('arena', 0));
+const BERSERK = has('berserk');
+const A_W = weapon(arg('alpha', 'Railgun'));
+const B_W = weapon(arg('bravo', 'Mortar'));
+// Secondary: when set, slots 2+3 use it — the bot still carries the primary
+// long, but draws the secondary inside its own range band.
+const A2_W = arg('alpha2', '') ? weapon(arg('alpha2', '')) : null;
+const B2_W = arg('bravo2', '') ? weapon(arg('bravo2', '')) : null;
+
+/** katabatic's stands live in the _bare spec (t2 ports need their own
+ *  extracted assets); every other map reads straight off its JSON. */
+const SPEC_NAME = MAP === 'katabatic' ? 'katabatic_bare' : MAP;
+const spec = JSON.parse(readFileSync(resolve(import.meta.dir, `../../maps/${SPEC_NAME}.json`), 'utf8')) as {
+  bases?: { alpha: { x: number; z: number }; bravo: { x: number; z: number } };
+  teamSpawns?: Record<string, { x: number; z: number; r?: number; w?: number }[]>;
+  terrain?: string;
+  arena?: { x: number; z: number; radius: number };
+};
+const field: Heightfield = hmParseBin(new Uint8Array(readFileSync(
+  resolve(import.meta.dir, `../../maps/${spec.terrain ?? (MAP === 'katabatic' ? 'katabatic' : MAP) + '.bin'}`))));
+const at = (x: number, z: number) => ({ x, y: hmHeight(field, x, z), z });
+
+const dt = 0.05;               // 20Hz — the live tick
+const BATCH = 20;              // sim-s per warp batch (stamped msgs stay legible)
+const ctf = MODE === 'ctf' && !!spec.bases;
+// Sheep-meter verdicts fire per llama-life and drown the match report —
+// same diversion fastSoak uses; the file keeps them for triage.
+process.env.FPS_SHEEP_LOG ??= resolve(import.meta.dir, '../../run/teamsoak.log');
+
+const room = mkRoom({
+  ...spec,
+  mode: MODE,
+  bots: PER * 2,
+  botFill: PER * 2,
+  arena: ARENA > 0 ? { x: spec.arena?.x ?? 0, z: spec.arena?.z ?? 0, radius: ARENA } : spec.arena,
+  ...(ctf ? {
+    bases: { alpha: at(spec.bases!.alpha.x, spec.bases!.alpha.z), bravo: at(spec.bases!.bravo.x, spec.bases!.bravo.z) },
+    teamSpawns: Object.fromEntries(Object.entries(spec.teamSpawns ?? {}).map(([t, ss]) => [
+      t, ss.map((s) => ({ x: s.x, y: hmHeight(field, s.x, s.z), z: s.z, r: s.r ?? 50, w: s.w ?? 90 })),
+    ])),
+  } : {}),
+}, MODE, SEED, false, field);
+// The soak drives the roster itself — an honored botFill would cull the
+// injected fleet back to the map's own count on the first tick.
+room.spec.botFill = 0;
+
+const ctl = room.bots as unknown as {
+  loadouts: Map<string, BotLoadout>;
+  roster: {
+    alts: Map<string, Partial<Record<string, WeaponType[]>>>;
+    refitClass(id: string): void;
+    applyClass(p: { id: string; maxHealth: number; health: number }, cls: string): void;
+  };
+  arsenal: { pickWeapon(l: BotLoadout, dxz: number, d: number): number };
+};
+// Bench isolation: the wounded-holster gate swaps ANY aoe primary for the
+// sidearm under ~60-75hp — i.e. it holsters the artillery exactly when the
+// artillery matters. --berserk keeps bots on their dealt gun.
+if (BERSERK) {
+  ctl.arsenal.pickWeapon = (l: BotLoadout, dxz: number, d: number): number => pickBotWeapon(l, dxz, d);
+}
+
+const bots = [...room.players.getAllPlayers().values()].filter((p) => p.isBot);
+const sides: Record<'alpha' | 'bravo', { id: string; team: string }[]> = { alpha: [], bravo: [] };
+const badKits: string[] = [];
+const kitOf = (w: WeaponType, second: WeaponType | null): BotLoadout => ({
+  perk: 'none',
+  near: second ?? w, mid: second ?? w, far: w,
+  belt: WeaponType.Grenade, side: WeaponType.Pistol,
+});
+for (const p of bots) {
+  const team = p.team === 'bravo' ? 'bravo' : 'alpha';
+  const w = team === 'alpha' ? A_W : B_W;
+  const second = team === 'alpha' ? A2_W : B2_W;
+  const kit = kitOf(w, second);
+  // Order matters. refitClass derives the body from the kit AND rewrites
+  // `far` to Mortar on any heavy ("heavies shoulder the mortar" — product
+  // behavior we keep), so the kit is written twice: once for the tier
+  // derivation, then again to put the bench's gun back. Without the second
+  // write a "PlasmaCannon team" silently fields Mortar at range.
+  ctl.loadouts.set(p.id, kit);
+  if (CLASS) {
+    p.armorClass = CLASS as typeof p.armorClass;
+    ctl.roster.applyClass(p, CLASS);
+  } else {
+    ctl.roster.refitClass(p.id);
+  }
+  ctl.loadouts.set(p.id, kit);
+  // Kill the per-slot alternates too. Respawn adaptation (adaptLoadout)
+  // rerolls every slot that HAS candidates toward the bot's own skill
+  // matrix — left alone, each team's lock leaks away life by life
+  // (measured: a "railgun vs mortar" run grew Chaingun/Shotgun/BoltLauncher
+  // rows). No candidates = nothing to reroll = the kit the bench dealt.
+  ctl.roster.alts.set(p.id, {});
+  // A kit the body can't legally fire is the quietest way to lose a bench:
+  // every shot is refused as "class-locked weapon" and the ledger reads as
+  // a broken weapon instead of an illegal matchup.
+  if (!kitConsistent({ ...kit, perk: 'none' }) && !badKits.includes(team)) {badKits.push(team);}
+  sides[team].push({ id: p.id, team });
+}
+// Two facing lines around the origin: alpha at -RING, bravo at +RING, each
+// side spread across Z so a squad reads as a squad. `pin` also clears spawn
+// protection — a bench wants bullets flying in the first second.
+const ringPos = (team: 'alpha' | 'bravo', i: number, n: number): { x: number; y: number; z: number } => {
+  const spread = RING * 1.6;
+  const z = n > 1 ? (i / (n - 1) - 0.5) * 2 * spread : 0;
+  const x = team === 'alpha' ? -RING : RING;
+  return { x, y: hmHeight(field, x, z) + 2, z };
+};
+const seat = (team: 'alpha' | 'bravo', i: number): void => {
+  const list = sides[team];
+  const bot = list[i];
+  if (bot) {pin(room, bot.id, ringPos(team, i, list.length));}
+};
+if (RING > 0) {
+  for (let i = 0; i < sides.alpha.length; i += 1) {seat('alpha', i);}
+  for (let i = 0; i < sides.bravo.length; i += 1) {seat('bravo', i);}
+}
+const sideOf = new Map<string, { team: 'alpha' | 'bravo'; i: number }>();
+for (const team of ['alpha', 'bravo'] as const) {
+  sides[team].forEach((b, i) => sideOf.set(b.id, { team, i }));
+}
+// The match never ends mid-warp: endMatch flips scores to a result screen
+// and the soak would measure a dead room.
+(room as { endMatch: (w: string) => void }).endMatch = () => {};
+if (badKits.length) {
+  console.log(`  WARNING: ${badKits.join('/')} kit is not fireable by its own class — every shot will be refused as class-locked. Drop --class, or expect a dud ledger.`);
+}
+
+const classMix = (team: 'alpha' | 'bravo'): string => {
+  const n: Record<string, number> = {};
+  for (const p of bots) {if ((p.team ?? 'alpha') !== team) {continue;} n[p.armorClass ?? '?'] = (n[p.armorClass ?? '?'] ?? 0) + 1;}
+  return Object.entries(n).map(([k, v]) => `${k}x${v}`).join(' ');
+};
+
+// FPS_SIM_PROF=1 (env) — per-sim wall-time rollup so a sudden warp
+// collapse names the phase that owns it instead of being a mystery factor.
+const simProf = process.env.FPS_SIM_PROF
+  ? (() => {
+    const acc = new Map<string, number>();
+    room.sims.forEach((s) => {
+      const inner = s.tick.bind(s);
+      s.tick = (d: number): void => { const t = performance.now(); inner(d); acc.set(s.name ?? '?', (acc.get(s.name ?? '?') ?? 0) + (performance.now() - t)); };
+    });
+    return acc;
+  })()
+  : null;
+
+const statBefore = new Map<string, { shots: number; hits: number; damage: number; kills: number }>();const snapTable = () => weaponStats.snapshot().byMode[MODE] ?? {};
+for (const [k, v] of Object.entries(snapTable())) {statBefore.set(k, { shots: v.shots, hits: v.hits, damage: v.damage, kills: v.kills });}
+
+console.log(`teamSoak: ${PER}v${PER} ${MODE} on ${SPEC_NAME} seed=${SEED} — alpha=${WeaponType[A_W]}${A2_W ? '+' + WeaponType[A2_W] : ''} (${classMix('alpha')}) vs bravo=${WeaponType[B_W]}${B2_W ? '+' + WeaponType[B2_W] : ''} (${classMix('bravo')})`);
+console.log(`  warping up to ${MINS} sim-min (wall cap ${WALL_S}s)${BERSERK ? ' — berserk (no holster)' : ''}${ctf ? ' — flags live' : ''}\n`);
+
+const wall0 = performance.now();
+const maxTicks = Math.floor((MINS * 60) / dt);
+let ticks = 0;
+const lifeStart = new Map<string, number>();
+const lives: Record<'alpha' | 'bravo', number[]> = { alpha: [], bravo: [] };
+const wasDead = new Set<string>();
+// Contact probe — a matchup where the two sides never meet produces a
+// perfectly balanced 0-0 and reads like a bug in the report, so the soak
+// reports the legs it walks: speed (did anyone move), nearest foe (is
+// there anything to shoot) and hunt% (did the brain agree).
+const contact = { spd: 0, nfoe: 0, hunt: 0, n: 0 };
+for (; ticks < maxTicks; ticks += BATCH) {
+  if ((performance.now() - wall0) / 1000 > WALL_S) {break;}
+  simNowAdvance(dt * 1000 * BATCH);
+  step(room, BATCH, dt);
+  room.messages.respawnTick(simNow());
+  const live = [...room.players.getAllPlayers().values()].filter((p) => !p.isDead && p.team);
+  for (const p of live) {
+    let best = Infinity;
+    for (const q of live) {
+      if (q.team === p.team) {continue;}
+      const d = Math.hypot(q.position.x - p.position.x, q.position.z - p.position.z);
+      if (d < best) {best = d;}
+    }
+    if (Number.isFinite(best)) {contact.nfoe += best; contact.n++;}
+    contact.spd += Math.hypot(p.velocity.x, p.velocity.z);
+  }
+  if (room.bots) {contact.hunt += room.bots.huntUptime();}
+  for (const p of room.players.getAllPlayers().values()) {
+    const born = lifeStart.get(p.id);
+    if (p.isDead) {
+      // Life spans are sim-time (the warp clock), not wall-clock — a
+      // 300hp heavy's 3s respawn is 3 sim-seconds however fast we warp.
+      if (born !== undefined) {lives[p.team === 'bravo' ? 'bravo' : 'alpha'].push((simNow() - born) / 1000); lifeStart.delete(p.id);}
+      wasDead.add(p.id);
+    } else {
+      if (born === undefined) {lifeStart.set(p.id, simNow());}
+      // Respawn edge → back to the line, or the teams slowly drift apart
+      // and the match starves exactly like the unpinned run did.
+      if (RING > 0 && wasDead.delete(p.id)) {
+        const s = sideOf.get(p.id);
+        if (s) {seat(s.team, s.i);}
+      }
+    }
+  }
+}
+const wallS = (performance.now() - wall0) / 1000;
+const simS = ticks * dt;
+
+// ── Report ──────────────────────────────────────────────────────────
+const med = (xs: number[]): string => (xs.length ? [...xs].sort((x, y) => x - y)[Math.floor(xs.length / 2)]!.toFixed(0) : '-');
+const players = room.scoring.matchPlayers();
+const bySide = (team: 'alpha' | 'bravo') => {
+  const rows = players.filter((p) => (p.team ?? 'alpha') === team);
+  const k = rows.reduce((n, r) => n + r.kills, 0);
+  const d = rows.reduce((n, r) => n + r.deaths, 0);
+  return { n: rows.length, k, d, kd: k / Math.max(1, d) };
+};
+const a = bySide('alpha'), b = bySide('bravo');
+// Team score is the room's own (TeamScores) — tdm/dm bank frags, ctf banks
+// captures, so the scoreline reads as the mode's real objective.
+const score = `${room.scores.alpha ?? 0}-${room.scores.bravo ?? 0}`;
+
+console.log(`score ${score}   ${simS.toFixed(0)}s sim in ${wallS.toFixed(1)}s wall (${(simS / wallS).toFixed(1)}x)`);
+console.log(`side   bots   K    D    K/D    medLife(s)`);
+for (const [name, s] of [['alpha', a], ['bravo', b]] as const) {
+  console.log(`${name.padEnd(6)} ${String(s.n).padStart(4)} ${String(s.k).padStart(4)} ${String(s.d).padStart(4)}  ${s.kd.toFixed(2).padStart(5)}   ${med(lives[name]).padStart(6)}`);
+}
+if (ctf && room.flags) {
+  const caps = room.flags.capLog.length;
+  const carried = [...room.flags.flags.values()].filter((f) => f.carrier).length;
+  console.log(`flags  caps=${caps} liveCarriers=${carried} states=${[...room.flags.flags.values()].map((f) => f.state).join(',')}`);
+}
+const nBatches = Math.max(1, Math.round(ticks / BATCH));
+console.log(`contact meanSpeed=${(contact.spd / Math.max(1, contact.n)).toFixed(1)}m/s nearestFoe=${(contact.nfoe / Math.max(1, contact.n)).toFixed(0)}m hunt=${(100 * contact.hunt / nBatches).toFixed(0)}% over ${nBatches} samples`);
+if (simProf) {
+  const tot = [...simProf.values()].reduce((a, b) => a + b, 0);
+  console.log(`sims (${tot.toFixed(0)}ms total): ` + [...simProf.entries()].sort((x, y) => y[1] - x[1]).map(([k, v]) => `${k}=${(100 * v / Math.max(1, tot)).toFixed(0)}%`).join(' '));
+}
+
+// Weapon ledger — every row this mode recorded, delta'd from the pre-warp
+// snapshot so a long session's leftovers can't leak into the table.
+const now = snapTable();
+const rows = Object.entries(now)
+  .map(([k, v]) => ({
+    k,
+    shots: v.shots - (statBefore.get(k)?.shots ?? 0),
+    hits: v.hits - (statBefore.get(k)?.hits ?? 0),
+    damage: v.damage - (statBefore.get(k)?.damage ?? 0),
+    kills: v.kills - (statBefore.get(k)?.kills ?? 0),
+  }))
+  .filter((r) => r.shots > 0 || r.hits > 0 || r.damage > 0)
+  .sort((x, y) => y.damage - x.damage);
+const mark = (wid: string): string => {
+  const n = Number(wid.slice(1));
+  if (n === A_W || n === A2_W) {return 'A';}
+  if (n === B_W || n === B2_W) {return 'B';}
+  return ' ';
+};
+console.log(`\nweapon            | side | shots | hits | hits/sh |  dmg  |  kills`);
+for (const r of rows) {
+  const name = WeaponType[Number(r.k.slice(1))] ?? r.k;
+  // hits/shots, NOT accuracy: multi-projectile weapons (MRV bomblets,
+  // shotgun pellets, flak) register one hit event per sub-projectile, so
+  // these legitimately read >100% — that ratio is still the useful number.
+  console.log(`${name.padEnd(17)} |  ${mark(r.k)}   | ${String(r.shots).padStart(5)} | ${String(r.hits).padStart(4)} | ${(r.shots ? (100 * r.hits / r.shots) : 0).toFixed(1).padStart(7)} | ${String(Math.round(r.damage)).padStart(5)} | ${String(r.kills).padStart(5)}`);
+}
+process.exit(0);
