@@ -219,3 +219,52 @@ ring run). One seed/map throughout — treat <±15% edges as noise.
 `RoomArena.ts`, whose own header says the pull-back shove was removed
 (nothing enforces the dome server-side). Anyone trusting that comment
 for contact pressure gets a starved match, as I did.
+
+## Wave 2 — wild lobbies, range curves, cycle coverage, better telemetry
+
+Four more modes and three ledger upgrades, same runner:
+
+**`--wild`**: every bot rolls `rollWildcard` — the closest thing to a real
+lobby. 10 seeds x 8v8 dunes (1,980 kills): BoltLauncher 23% / Mortar 17% /
+Disc 17% own the meta; sidearms take 12.6% of all kills (the wounded-
+holster gate working, not a bug); RocketLauncher 3 kills total; Lightning
+0 (draw-starved — it rolls only on light kits). Kill counts here are
+draw-rate-confounded — read shares, not totals.
+
+**`--force`**: the dealt weapon fires at every range → per-weapon RANGE
+CURVES. Headline corrections: Chaingun's 15m slot was a joke (best at
+25-60, converts to 120+); Mortar is dead under 25m and apexes 60-120;
+RocketLauncher's best band is 25-60, not "far"; Lightning hard-stops at
+60m (LG_RANGE 55 + slack). Bands are now preferences (0.08 floor +
+BOT_NEAR_M 15→25 + plateau near-fit), never hard bans — the user rule:
+bots are allowed to be suboptimal like humans.
+
+**`--cycle`**: a bot walks to the next weapon in the pool on every kill —
+all 32 fireable types in ONE 10-min run. Settled previously un-benched
+weapons: PlasmaCannon (weak, ~0.3 k/10s), all belt throws (they DO fire
+as primaries — DiscPull legitimately works), SatchelCharge/HealGrenade
+(duds as expected).
+
+**Ledger upgrades:**
+- `conn` — pull-level connects deduped on a per-pull nonce (pf-N minted
+  in `RoomProjectiles.spawn` for unclaimed fans). Flak now reads ~46%
+  not 162%. `hits` stays pellet-level for damage accounting.
+- `up(s)` — shots × `WEAPON_FIRE_INTERVAL_S` = trigger-uptime; `dmg/10s`
+  and `k/10s` price weapons per second of firing. Mortar's kill volume is
+  longevity, not lethality (0.32-0.38 k/10s).
+- Per-band hits/damage/kills — the `--force` curve data.
+
+**Ordnance aim (the big finding):** RL was bottom-tier everywhere UNTIL
+bots were taught to aim. `ordnanceAimY` picks max expected damage between
+a direct shot and the ground point under the led position — reachable-disc
+uncertainty (`reachR ~ t²`), splash via `aoeDamageAt`, direct-or-splash
+pricing for grounded targets. Airborne targets score ~0 ground EV and get
+the risky direct automatically. `ORDNANCE_EV=false` restores the ≤4m
+heuristic. RL vs CG same-seed: K/D 0.36 chest-aim → 0.57 heuristic →
+0.65 EV. The gun was half a bot-play problem, not just a stats problem.
+
+**Remaining open items:** RL cadence 2.5→2.0 / speed 48→65 are the last
+stat levers; the CTF stand-clearing bench (deployables + stationary
+defenders) is still unbuilt — needed before declaring RL dead since
+mobile-duel K/D can't measure its real job. Sprinkler/Sticky are the
+true bottom guns across every bench.

@@ -34,9 +34,9 @@ function pruneOld(oldDir: string): void {
 /** Rolls `p` to an OLD/ sibling with its mtime stamped in the name when
  *  it passes 32MB. Sync stat is fine: appenders are throttled/windowed.
  *  Never throws — a bad rotate must never block an append. */
-export function rotateLogIfBig(p: string): void {
+export function rotateLogIfBig(p: string, rollBytes = MID_RUN_ROLL_BYTES): void {
   try {
-    if (!existsSync(p) || statSync(p).size === 0 || statSync(p).size <= MID_RUN_ROLL_BYTES) {return;}
+    if (!existsSync(p) || statSync(p).size === 0 || statSync(p).size <= rollBytes) {return;}
     const dir = dirname(p);
     mkdirSync(join(dir, 'OLD'), { recursive: true });
     const oldDir = join(dir, 'OLD');

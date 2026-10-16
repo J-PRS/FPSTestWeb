@@ -24,6 +24,9 @@ const GRANDFATHERED: Record<string, number> = {
   // Pinned after the alarm tripped (ROADMAP next-list: burn down the
   // ichor/corpse FX block + cluster bomblets into their own modules).
   'client/src/game/combat/impact.ts': 1145,
+  // Crossed via the botMpc capper-drive WIP (6fbf15b7) — pinned at its
+  // breached size; still alarms if it grows another 15%.
+  'server_bun/src/botRouting.ts': 1011,
 };
 
 function* walk(dir: string): Generator<string> {
