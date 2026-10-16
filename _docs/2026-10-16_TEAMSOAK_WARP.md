@@ -172,6 +172,46 @@ room currently has no tick headroom.
 - `teamSoak` measures combat and (in ctf) flag states; it is not a route
   or capper metric - for those use `capStat.ts` / `approachProbe.ts`.
 
+## The full matrix (added later same day)
+
+`_tools/sweeps/teamSoakMatrix.ts` runs every unordered primary pair
+(pool = union of WILDCARD_SLOTS near/mid/far, 16 weapons), one Bun
+process per matchup pooled across cores (`--jobs`), appending each
+report to `_tools/sweeps/out/*.txt`. 136 pairs ≈ 12 min sequential,
+≈ 2 min at 16 jobs. Resume-safe: pairs already logged are skipped.
+
+**Trap 5, found by the matrix: the score column is structurally
+near-tied.** TDM pays a kill point to the shooter AND drops a `tag` on
+the corpse that pays a point to *whoever touches it* — own side or
+enemy, "deny" still pays the denier (`roomScore.ts:131-135`,
+`Room.ts:603`). Ring-seated respawns land bots on their own dead, so
+each side banks kills + own-tags ≈ `K + D` ≈ total carnage either way.
+Concrete worst case: Sticky-vs-Bombard scored **272-324** while kills
+ran **33-268** (K/D 0.12). On this bench the verdict is the K/D +
+medLife table; the score only measures how much dying happened.
+
+**Trap 6: the seat leans bravo for arcing heavies.** Mirrors at ring-70
+aren't all 50/50 — Mortar/RL/MRV/Sticky mirrors read bravo +20-45%
+(spawn-side geometry favours the arc), while hitscan mirrors are clean.
+`--mix` removes the question entirely: each side fields half of each
+weapon, the verdict table reports per-weapon K/D across both teams, and
+a mirror is symmetric by construction (skipped in the matrix).
+
+**`--seat map`**: hands respawns to the real `spawnPicker` (foe
+clearance over the flat `spawns` pool) instead of scripted ring seats —
+team pools/bases are stripped first in non-ctf since authored team
+spheres sit at bases ~400m apart and reintroduce transit starvation.
+
+Mixed-matrix result (dunes, real spawnPicker, 120 pairs, seed 1337):
+Chaingun 1.65 / Flak 1.59 / Bombard 1.50 > Shotgun 1.29 / BoltL 1.24 >
+Disc 1.11 / Lightning 1.05 / PlasmaGun 1.03 > Sprinkler 0.87 / Mortar
+0.87 / Railgun 0.83 / Cannon 0.80 > GrenL 0.75 / MRV 0.73 / RocketL
+0.59 / Sticky 0.45. Versus the ring bench: Bombard is still top but
+chaingun-class guns match it in the arena's close fight; RocketLauncher
+collapses on the small map; Sticky is dead last on both benches. Data:
+`_tools/sweeps/out/matrix_dunes_mix.json` (+ `matrix_kd.json` for the
+ring run). One seed/map throughout — treat <±15% edges as noise.
+
 ## Doc rot found while writing this
 
 `server_bun/tests/scenarios/_ffasoak.ts` justifies its arena with

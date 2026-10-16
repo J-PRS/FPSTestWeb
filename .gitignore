@@ -33,6 +33,8 @@ client/public/assets/models/class_*.glb
 .devin_*
 client/.devin_*
 client/.probe/
+_tools/devin_scratch/
+_tools/sweeps/profout/
 _tools/tmp_probe*
 tas_film*.mp4
 demos_out/
