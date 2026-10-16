@@ -90,7 +90,6 @@ export function windowProjectileEvents(projectileEvents: ProjectileEvent[], from
 // Same (targetType, targetId) identity as findAliveTargets — a raw-id
 // check here would skip a needed synthetic spawn the moment an unrelated
 // lane reuses the id.
-const keyOf = (e: TargetEvent): number => e.targetType * 65_536 + e.targetId;
 
 function recoverMissingSpawns(actualTgtEvents: TargetEvent[], aliveBalls: Map<number, TargetEvent>, clipStart: number): TargetEvent[] {
   const firstEventByKey = new Map<number, TargetEvent>();
