@@ -62,6 +62,7 @@ export class BotMoves {
   private crawl = false;
   holdFor(): number { return this.jetHold; }
 
+  // oxlint-disable-next-line complexity -- a decision table the sweep history tunes as one surface
   hints(dt: number, ctx: BrainCtx, pos: BotVec, dest: BotVec): BrainOut['move'] {
     this.mountWait = false;
     const dx = dest.x - pos.x, dz = dest.z - pos.z;
@@ -115,7 +116,10 @@ export class BotMoves {
     // The watch ring is wider than the lap ring — an orbit swinging
     // 15-25m out reset odBest on every exit before (katabatic 9002:
     // 110s of 5-25m orbits), so the latch arms inside grabWatchGd.
-    if (ctx.runner && !ctx.posted && ctx.objective && od < T.moves.grabWatchGd) {
+    // `!ctx.running`: a carrier's objective is his OWN stand — lapping it
+    // is not a grab orbit, and braking him 20-30m short of home dropped
+    // flags on the doorstep (oasis s1: 90s parked at odHome 20-32).
+    if (ctx.runner && !ctx.running && !ctx.posted && ctx.objective && od < T.moves.grabWatchGd) {
       if (od < this.odBest) {this.odBest = od;}
       // Each grabOrbitS window must close grabOrbitMinGain toward the
       // pole — an orbit that dips a little nearer each lap keeps making
@@ -287,9 +291,12 @@ export class BotMoves {
     const vy = ctx.vel?.y ?? 0;
     const skilledHop = ctx.moveSkill === undefined || ctx.moveSkill >= T.moves.tailTapSkill;
     const enTap = ctx.energy === undefined || ctx.energy > (strikeTap ? T.moves.strikeTapMin : T.moves.tapEnergyMin);
+    // `!travelDescent`: a tail tap over a falling surface buys airtime
+    // the slope would have pumped — same veto the momentum hop gets.
     const tail = (ctx.runner === true || ctx.wave === true) && skilledHop && airborne && vy < 0 &&
       odTap > T.moves.boostGdMin && (ctx.objective?.y ?? dest.y) - pos.y < T.moves.runInRise &&
-      speed < T.moves.tailTapSpeed && rise <= T.moves.boostRise && agl <= T.moves.ceilingAgl && enTap;
+      speed < T.moves.tailTapSpeed && rise <= T.moves.boostRise && agl <= T.moves.ceilingAgl && enTap &&
+      !this.travelDescent(ctx, pos, speed);
     if (tail) {this.jetWhy = 'tail';}
     // The hold latch and the escape ladder both bleed past the wantJet
     // veto: a burn armed outside the glide window keeps thrusting through
@@ -297,7 +304,8 @@ export class BotMoves {
     // trap's own escape jets balloon the runner right back up — the trap
     // feeds the altitude that keeps it armed (flagprobe: capper sustained
     // dy 8-20, orbits forever). Same window, same cut for both.
-    const inGlide = ctx.runner && dyAbove > 6 && od < Math.max(T.moves.grabOrbitGd * 1.5, dyAbove * T.lines.diveGlideK);
+    const fod = ctx.flagPos ? Math.hypot(pos.x - ctx.flagPos.x, pos.z - ctx.flagPos.z) : od;
+    const inGlide = ctx.runner && dyAbove > 6 && fod < Math.max(T.moves.grabOrbitGd * 1.5, dyAbove * T.lines.diveGlideK);
     if (inGlide) {this.jetHold = 0;}
     const jet = !diveRun && (((this.jetHold > 0 || (this.host.escapeJetT() > 0 && !inGlide)) && tanked) || (tail && !inGlide));
     this.jetOut = jet;
@@ -338,9 +346,53 @@ export class BotMoves {
       // (kata carry probe: descents averaged 23m/s vs 29 on flats —
       // the bot was hopping over every pump). Humans hold ski and stay
       // glued; the hop is for flats and climbs.
+      // The descent read also travels: the 6m steer probe reads
+      // micro-bumps on a downslope as flat, so hops kept firing over
+      // pumpable terrain (grabV stuck ~14-21). Probe 12m along the
+      // VELOCITY line — if that drops, the surface under the slide is
+      // falling away and the hop veto stands.
+      // And no hop when the CURRENT ballistic arc already threads the
+      // flag's ±6m vertical window — the hop just raises the arc over
+      // the pole (broadside: a 53m/s pass overflew at dy=33, ungrabbable).
+      // Strike-window deck glue: inside the run-in on flat ground the
+      // hop chain is the only thing keeping the bot airborne — and the
+      // feet blast needs <6m of dirt to pop. Grounded ski is frictionless
+      // too, so gluing the runner costs no speed and opens the 2.2s
+      // heel-blast cadence (the flat-stand path to ~40m/s entry speed).
       jump: (uphill && speed < T.moves.jumpUphillSpeed && !airborne)
-        || (!ctx.posted && !airborne && speed > T.moves.hopSpeed && rise > -T.moves.hopDescRise && (od > T.moves.hopGdFar ? rise <= T.moves.hopRiseFar : od > hopRing)),
+        || (!ctx.posted && !airborne && speed > T.moves.hopSpeed && rise > -T.moves.hopDescRise && !this.travelDescent(ctx, pos, speed) && !this.arcThreadsFlag(ctx, pos, speed, od) && !(ctx.runner === true && od < T.moves.strikeGd && Math.abs(rise) < T.moves.stepRise) && (od > T.moves.hopGdFar ? rise <= T.moves.hopRiseFar : od > hopRing)),
     };
+  }
+
+  /** True when the ground ~12m along the direction of travel falls away
+   *  — the hop chain would leave descent-pump speed on the table. Uses
+   *  velocity, not steer yaw: the surface under the slide is what pumps
+   *  it, not where the bot wants to point. */
+  private travelDescent(ctx: BrainCtx, pos: BotVec, speed: number): boolean {
+    const v = ctx.vel;
+    // Under ~15 m/s there is no pump to protect — a hop down the slope
+    // is free airtime for a slow bot, and gluing him costs the carry.
+    if (!v || speed < 15) {return false;}
+    if (ctx.running) {return false;} // carrier: the lip hop at the
+    // descent bottom IS the escape speed — gluing him rides the slope
+    // into bad lines (sweep: carry 66→114s under a universal glue).
+    const drop = ctx.groundY(pos.x, pos.z)
+      - ctx.groundY(pos.x + (v.x / speed) * 12, pos.z + (v.z / speed) * 12);
+    return drop > T.moves.hopDescRise * 2;
+  }
+
+  /** True when the no-thrust arc reaches the objective's planar ring at
+   *  a grabbable height (±6m matches the pickup's vertical cap) — a hop
+   *  here is altitude the grab can't spend, so hold the arc. Runner
+   *  approaches only; only while the arc can plausibly reach (od < 60m
+   *  of ring time left). */
+  private arcThreadsFlag(ctx: BrainCtx, pos: BotVec, speed: number, od: number): boolean {
+    const v = ctx.vel;
+    if (!ctx.runner || !ctx.objective || !v || od > 60 || speed < 1) {return false;}
+    const tHit = od / speed;
+    if (tHit > 3) {return false;}
+    const yAt = pos.y + (v.y ?? 0) * tHit + 0.5 * GRAVITY * tHit * tHit;
+    return Math.abs(yAt - ctx.objective.y) <= 6;
   }
 
   /** Dead-reckon the no-thrust ballistic arc: march vel + gravity and
@@ -381,6 +433,7 @@ export class BotMoves {
   /** Whether the situation calls for a burn: genuine climbs, airborne
    *  prey, a high destination — or discretionary speed plays when the
    *  tank is comfortable. */
+  // oxlint-disable-next-line complexity -- priced burn decision table; the gates are tuned as one priority-ordered surface
   private wantJet(ctx: BrainCtx, pos: BotVec, dest: BotVec, s: { rise: number; speed: number; gd: number; airborne: boolean }): boolean {
     const { rise, speed, gd, airborne } = s;
     // Posted anchors burn only to climb back onto the post — every
@@ -437,8 +490,16 @@ export class BotMoves {
     // fired out to 45m kept feeding speed into every overshoot
     // (flagprobe: capper orbited dy 8-21, planar 10-46, never touched).
     {
-      const dy = pos.y - (ctx.objective?.y ?? -Infinity);
-      if (ctx.runner && dy > 6 && od < Math.max(T.moves.grabOrbitGd * 1.5, dy * T.lines.diveGlideK)) {
+      // Measure the flag, not the aim point: `od` tracks the objective,
+      // which a committed pass offsets up to ~35m past the pole — an
+      // overhead bot read "far from objective" and kept burning
+      // (broadside: runIn jets at od 8-27, dy 8-16, over the pole).
+      const flagY = ctx.flagPos?.y ?? ctx.objective?.y ?? -Infinity;
+      const fdx = ctx.flagPos ? pos.x - ctx.flagPos.x : 0;
+      const fdz = ctx.flagPos ? pos.z - ctx.flagPos.z : 0;
+      const fod = ctx.flagPos ? Math.hypot(fdx, fdz) : od;
+      const dy = pos.y - flagY;
+      if (ctx.runner && dy > 6 && fod < Math.max(T.moves.grabOrbitGd * 1.5, dy * T.lines.diveGlideK)) {
         this.jetWhy = '-';
         return false;
       }

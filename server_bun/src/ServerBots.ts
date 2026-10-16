@@ -34,6 +34,7 @@ import { ServerBotSenses } from './serverSenses.ts';
 import type { BotRole } from '../../shared/flagGoals.ts';
 import { BotRoster } from './botRoster.ts';
 import { driveMove as driveMoveInto, legacyMove as legacyMoveInto } from './botDrive.ts';
+import { BotMpc } from './botMpc.ts';
 import { simNow } from './simClock.ts';
 import { wallNow } from './wallClock.ts';
 import { botRand } from '../../shared/botRand.ts';
@@ -86,7 +87,16 @@ export class ServerBots {
     this.arsenal = new BotArsenal(room, this.loadouts, (id): string | null => this.lastHuntId(id), (id): BotVec | null => this.brains.get(id)?.currentHuntSeen ?? null, (id): BotSkill | undefined => this.brains.get(id)?.skill);
     this.roster = new BotRoster(room, this.brains, this.loadouts, this.thinkPhase, (id): void => this.untrack(id), ServerBots.THINK_DIV);
     this.sense = new ServerBotSenses(room, field, this.loadouts, this.roster.roleInfo, this.foeNear);
+    this.mpc = new BotMpc(room.moveSim, field);
   }
+
+  /** The committed-run option: while a capper is outbound on the enemy
+   *  flag, the receding-horizon MoveSim search owns his inputs — the
+   *  reactive stack's grabV plateau (~20 m/s vs 61-94 provable) is a
+   *  horizon problem senses can't see past (2026-10-16_CAPPER_REACTIVE_
+   *  LIMITS.md). Armed per think on the ctx flags; released on carry. */
+  private mpc: BotMpc;
+  private readonly mpcArm = new Map<string, BotVec>();
 
   private roster: BotRoster;
   /** A bot's current squad role (post-rebalance) — telemetry reads it
@@ -616,6 +626,17 @@ hurtCount += 1;
         prof[0]! += performance.now() - tm; tm = performance.now();
         const ctx = this.sense.build(id, p, goal, now, brain.skill, parties, brain.builder);
         prof[1]! += performance.now() - tm; tm = performance.now();
+        // MPC arm: the committed flag-run is the option's job — both
+        // legs. Outbound capper targets the flag position; a carrier's
+        // objective is already his own stand, and the carry leg needs
+        // the same speed-out-of-danger the approach did (matchSim:
+        // every ~20 m/s carry died inside 10s at the stand ring).
+        if ((ctx.runner || ctx.running) && ctx.objective && this.field) {
+          this.mpcArm.set(id, ctx.running ? ctx.objective : (ctx.flagPos ?? ctx.objective));
+        } else {
+          this.mpcArm.delete(id);
+          this.mpc.release(id);
+        }
         // Income in reach — a nugget the bot could realistically touch
         // lowers the spend reserve (refill is basically planned).
         const pk = ctx.pickup;
@@ -638,7 +659,18 @@ hurtCount += 1;
       }
       const tm2 = performance.now();
       const sh = this.room.moveSim.simState(id);
-      if (sh) {this.driveMove(id, p, out, sh, dt, now);}
+      const mpcTgt = this.mpcArm.get(id);
+      if (sh && !(mpcTgt && this.mpc.drive(id, mpcTgt))) {
+        if (mpcTgt) {this.mpcArm.delete(id); this.mpc.release(id); this.driveMove(id, p, out, sh, dt, now);}
+        else {this.driveMove(id, p, out, sh, dt, now);}
+      } else if (sh) {
+        // MPC owns inputs; the position commit still mirrors driveMove —
+        // the shadow's write is the bot's whole wire truth.
+        p.position.x = sh.pos.x; p.position.y = sh.pos.y; p.position.z = sh.pos.z;
+        p.velocity.x = sh.vel.x; p.velocity.y = sh.vel.y; p.velocity.z = sh.vel.z;
+        p.rotation.yaw = sh.yaw;
+        p.skiing = 1;
+      }
       else if (this.legacyMove(id, p, out.dest, dt)) {continue;}
       this.stageProf[4]! += performance.now() - tm2;
 

@@ -655,4 +655,17 @@ sh.gapStreak += 1;
   simState(playerId: string): MoveState | null {
     return this.shadows.get(playerId)?.sim.state ?? null;
   }
+
+  /** The shadow sim itself — BotMpc clones it for forward search.
+   *  Read-only in intent: mutating it mutates the live drive. */
+  simOf(playerId: string): MoveSim | null {
+    return this.shadows.get(playerId)?.sim ?? null;
+  }
+
+  /** Energy economy for the MPC planner — the search has to model the
+   *  same tank the shadow drains (drain/regen are perk multipliers). */
+  econOf(playerId: string): { energy: number; jetDrain: number; jetRegen: number; energyRegen: number; energyMax: number } | null {
+    const sh = this.shadows.get(playerId);
+    return sh ? { energy: sh.energy, jetDrain: sh.jetDrain, jetRegen: sh.jetRegen, energyRegen: sh.energyRegen, energyMax: sh.energyMax } : null;
+  }
 }

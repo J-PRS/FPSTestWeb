@@ -99,6 +99,7 @@ export class ServerBotSenses {
   /** Hostile emplacement the bot can legally see — a turret/mine/drone
    *  owned by the other team, near the bot and near what it's after.
    *  The stand's kill-zone is knowledge the room advertises anyway. */
+  // oxlint-disable-next-line complexity -- the gear-scoring ladder; each rung is a measured threat tier
   hostileGear(p: { id: string; team?: string; position: Vec3 }, goal: BotVec | null, sabotage = false): Vec3 | null {
     if (!goal && !sabotage) {return null;}
     let best: Vec3 | null = null;
@@ -216,13 +217,14 @@ export class ServerBotSenses {
 
   /** The sensorium for one think tick — see file header for what's legal
    *  on each channel. */
-  build(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; health: number; maxHealth: number; kills?: number; deaths?: number }, goal: { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; marshal?: boolean; posted?: number } | null, now: number, skill?: BotSkill, sharedParties?: ReturnType<ServerBotSenses['partiesOf']>, builder?: boolean): BrainCtx {
+  // oxlint-disable-next-line complexity, max-params -- the ctx assembler; one field list, one call
+  build(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; health: number; maxHealth: number; kills?: number; deaths?: number }, goal: { pos: BotVec; flagPos?: BotVec | null; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; marshal?: boolean; posted?: number } | null, now: number, skill?: BotSkill, sharedParties?: ReturnType<ServerBotSenses['partiesOf']>, builder?: boolean): BrainCtx {
     // Competence-biased draw: the weapon pick and the aim error read
     // the same matrix, so a phenom both reaches for its gun and lands it.
     const bias = skill ? (t: number): number => aimSkillFor(skill, t, 0) : undefined;
     const parties = sharedParties ?? this.partiesOf(p);
     const bp = sharedEnv.thinkProf ? (k: string, t0: number): Map<string, number> => sharedEnv.thinkProf!.set(k, (sharedEnv.thinkProf!.get(k) ?? 0) + sharedEnv.wallPerf!() - t0) : null;
-    const ctx: BrainCtx = Object.assign({}, {id: p.id,team: p.team,pos: p.position,vel: p.velocity,enemies: parties.enemies,objective: goal?.pos ?? null,infiltrating: goal?.infiltrating ?? false,running: goal?.running ?? false,runner: goal?.runner ?? false,wave: goal?.wave ?? false,marshal: goal?.marshal ?? false,pushLive: p.team === 'alpha' || p.team === 'bravo' ? this.pushFor(p.team) !== null : false,posted: goal?.posted ?? 0,pickup: bp ? ((): BotVec | undefined => { const t = sharedEnv.wallPerf!(); const v = this.pickupFor(p, parties.enemies) ?? undefined; bp('sense:pickup', t); return v; })() : (this.pickupFor(p, parties.enemies) ?? undefined),huntCreatures: this.room.mode === 'nuggets'
+    const ctx: BrainCtx = Object.assign({}, {id: p.id,team: p.team,pos: p.position,vel: p.velocity,enemies: parties.enemies,objective: goal?.pos ?? null,flagPos: goal?.flagPos ?? null,infiltrating: goal?.infiltrating ?? false,running: goal?.running ?? false,runner: goal?.runner ?? false,wave: goal?.wave ?? false,marshal: goal?.marshal ?? false,pushLive: p.team === 'alpha' || p.team === 'bravo' ? this.pushFor(p.team) !== null : false,posted: goal?.posted ?? 0,pickup: bp ? ((): BotVec | undefined => { const t = sharedEnv.wallPerf!(); const v = this.pickupFor(p, parties.enemies) ?? undefined; bp('sense:pickup', t); return v; })() : (this.pickupFor(p, parties.enemies) ?? undefined),huntCreatures: this.room.mode === 'nuggets'
         || Object.values(this.room.creatureSim.pops).some((cap): boolean => cap > 0),groundY: (x: number, z: number): number => {
         const t0 = sharedEnv.thinkProf ? sharedEnv.wallPerf!() : 0;
         const ep = this.room.moveSim.structureEpoch;

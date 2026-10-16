@@ -99,6 +99,12 @@ export class BotRouting {
    *  14/20 gates, and that flip is a limit cycle in the last 40m
    *  (katabatic 9002: 20s parked 12-25m out, hop-churning at v~0). */
   private passCommit = new Map<string, number>();
+  /** Latched descent-head pick — a fan re-scan electing a different
+   *  bearing every think is the same goal-flap disease passCommit
+   *  exists to kill. Held while the bot is outside the head; dropped
+   *  once it crests into the run (its stand distance shrinks under
+   *  the head's) or the pick goes stale. */
+  private headHold = new Map<string, { pos: BotVec; standD: number; at: number }>();
   /** Per-team commander — names responders for contested jobs so one
    *  thief doesn't empty the home defense (botCommand.ts). */
   private commands = new Map<TeamId, TeamCommand>();
@@ -150,6 +156,7 @@ export class BotRouting {
     this.routePrefs.delete(id);
     this.waitSpot.delete(id);
     this.passCommit.delete(id);
+    this.headHold.delete(id);
   }
 
   /** Mark an entry position as failed-to-reach so the next probe can't
@@ -222,13 +229,35 @@ export class BotRouting {
     return c.pos;
   }
 
+  /** Walk a ray outward from `stand` while the ground keeps rising —
+   *  the endpoint is the head of a contiguous descent into the stand,
+   *  i.e. a ski run a capper can convert to grab speed. Small flats are
+   *  forgiven (bumps on a real descent); two consecutive non-rising
+   *  steps end the run. Returns null for run-ins under 60m — too short
+   *  to build speed on. */
+  private runInHead(stand: BotVec, ang: number): BotVec | null {
+    if (!this.field) {return null;}
+    const ca = Math.cos(ang), sa = Math.sin(ang);
+    let lx = stand.x, lz = stand.z, lh = stand.y;
+    let flats = 0;
+    for (let s = 0; s < 20; s += 1) {
+      const nx = lx + ca * 15, nz = lz + sa * 15;
+      const nh = hmHeight(this.field, nx, nz);
+      if (nh > lh + 0.5) { flats = 0; lh = nh; }
+      else if (++flats >= 2) { break; }
+      lx = nx; lz = nz;
+    }
+    return Math.hypot(lx - stand.x, lz - stand.z) >= 60 ? { x: lx, y: lh, z: lz } : null;
+  }
+
   /** CTF objective for a bot: carrying the enemy flag → own base; own flag
    *  carried off → run down the carrier (the carrier's position IS known —
    *  tickUpdate streams it, this is a legal pursuit not a wallhack); own
    *  flag dropped → touch it home; a teammate carrying → escort them;
    *  enemy flag reachable → go grab it. Defenders invert it: their flag
    *  recovery/intercept outranks pressing the enemy stand. */
-  flagGoal(p: { id: string; team?: string; position: Vec3 }, duty = 1, parties?: ReturnType<ServerParties['of']>): { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; marshal?: boolean; posted?: number } | null {
+  // oxlint-disable-next-line max-lines-per-function, complexity -- the CTF goal decision body; its branches are tuned as one surface
+  flagGoal(p: { id: string; team?: string; position: Vec3 }, duty = 1, parties?: ReturnType<ServerParties['of']>): { pos: BotVec; flagPos?: BotVec | null; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; marshal?: boolean; posted?: number } | null {
     const {flags} = this.room;
     if (!flags) {return null;}
     // Rabbit: no teams, one neutral flag. Hunters converge on the flag
@@ -432,7 +461,100 @@ export class BotRouting {
       // (katabatic 9001: four 30s entry detours, zero net progress).
       // Far out the flow-field router owns the approach; its whole job
       // IS terrain-aware routing around exactly these ridges.
-      if (dStand > (capper ? 25 : 20) && !laneClear && dStand < BotRouting.RING_MAX) {
+      //
+      // Descent-head sense — evaluated BEFORE the press/entry split: a
+      // basin approach reads 'no wall' and never reaches entry election,
+      // while the only fast line is over the rim the basin hides
+      // (katabatic 9002: every pass arrived dy +10..+18 and popped over
+      // the pole, grabbed crawling at 6.9). Per bearing, the crest is
+      // the TALLEST ground within 250m — a stand-side apron dip doesn't
+      // end the search. Price of the run: net drop minus the climb-back
+      // (a crest that sheds into a basin then re-climbs the apron pays
+      // that rise twice) minus the detour. An off-axis head must beat
+      // the direct line, so it only detours for real drop.
+      let headGoal: BotVec | null = null;
+      if (capper && !this.passCommit.has(p.id) && dStand > 45) {
+        const held = this.headHold.get(p.id);
+        if (held && (simNow() - held.at >= 30_000 || dStand <= held.standD)) {
+          // Stale, or the bot crested and is now INSIDE the run —
+          // releasing the head is what lets it dive the face.
+          this.headHold.delete(p.id);
+        } else if (held) {
+          // Latched while the head is still ahead — a fan re-scan
+          // electing a different bearing every think is the same
+          // goal-flap disease passCommit exists to kill.
+          if (Math.hypot(held.pos.x - p.position.x, held.pos.z - p.position.z) > 15) {
+            headGoal = held.pos;
+          } else { this.headHold.delete(p.id); }
+        }
+        if (!headGoal) {
+          // One drive, one currency: projected arrival speed at the stand.
+          // Each candidate is a two-seg route pos→via→stand integrated as
+          // a point mass on the terrain profile — descents convert 2g·dh
+          // to speed, climbs bleed it, the tank buys back a transit floor
+          // where the leg starves (jets cap out near 50 anyway), seconds
+          // of extra leg cost a flat tax. Affordability, basin traps and
+          // apron climb-backs are not separate gates: a crest you reach
+          // at v≈4 doesn't buy its dive back fast enough to beat going
+          // straight — it just scores low.
+          const vel0 = this.room.players.getPlayer(p.id)?.velocity;
+          const v0 = vel0 ? Math.max(6, Math.hypot(vel0.x, vel0.z)) : 6;
+          const tank0 = this.room.moveSim.energyOf(p.id) ?? 30;
+          const cols = this.room.ballSim.colliders;
+          const cIdx = this.room.ballSim.colliderIndex ?? undefined;
+          const scoreLeg = (vx2: number, vz2: number): number => {
+            let v = v0, e = tank0, time = 0, hPrev = p.position.y;
+            const pts: [number, number][] = [[p.position.x, p.position.z], [vx2, vz2], [enemyStand.x, enemyStand.z]];
+            for (let l = 1; l < pts.length; l += 1) {
+              const a2 = pts[l - 1]!, b2 = pts[l]!;
+              const len = Math.hypot(b2[0] - a2[0], b2[1] - a2[1]);
+              const steps = Math.max(2, Math.ceil(len / 20));
+              const ds = len / steps;
+              for (let s = 1; s <= steps; s += 1) {
+                const h = hmHeight(this.field!, a2[0] + (b2[0] - a2[0]) * (s / steps), a2[1] + (b2[1] - a2[1]) * (s / steps));
+                v = Math.sqrt(Math.max(16, v * v + 56 * (hPrev - h)));
+                v = Math.max(4, v - ds * 0.06);      // ski drag per meter, tuned to hold ~40 transit
+                time += ds / Math.max(v, 8);
+                if (e > 4 && v < 50) {const dv = Math.min(10 * ds / Math.max(v, 8), 50 - v); v += dv; e -= dv * 1.5;}
+                hPrev = h;
+              }
+            }
+            return v - time * 0.15;
+          };
+          const direct = scoreLeg(enemyStand.x, enemyStand.z);
+          const baseA = Math.atan2(p.position.z - enemyStand.z, p.position.x - enemyStand.x);
+          const body = { x: p.position.x, y: p.position.y + 1, z: p.position.z };
+          let bestScore = direct + 3;
+          for (let o = -4; o <= 4; o += 1) {
+            const a = baseA + o * 0.22;
+            const bx = Math.cos(a), bz = Math.sin(a);
+            let crestD = 0, crestH = -Infinity;
+            for (let t = 10; t <= 250; t += 10) {
+              const lh = hmHeight(this.field, enemyStand.x + bx * t, enemyStand.z + bz * t);
+              if (lh > crestH) { crestH = lh; crestD = t; }
+            }
+            if (crestD < 40 || crestH - enemyStand.y < 8) {continue;}
+            // A near-aligned crest BEYOND the bot is the run it is
+            // already inside — electing it routes him back uphill.
+            if (Math.abs(o) <= 1 && crestD > dStand) {continue;}
+            const hx = enemyStand.x + bx * crestD, hz = enemyStand.z + bz * crestD;
+            // Terrain probes are blind to walls — a head behind a
+            // compound face is no run-in.
+            if (cols.length > 0 && segSolidHit(body, { x: hx, y: crestH + 1, z: hz }, cols, cIdx, me)) {continue;}
+            // Foe tax: the crest is also the stage zone — a head inside
+            // the enemy blob is a run through the kill zone (matchSim:
+            // every lone transit died mid-field). Live foe positions
+            // are on the wire; a human reads the same board.
+            let foesNear = 0;
+            for (const fp of foes) {if (Math.hypot(fp.x - hx, fp.z - hz) < 90) {foesNear += 1;}}
+            const score = scoreLeg(hx, hz) - foesNear * 8;
+            if (score > bestScore) { bestScore = score; headGoal = { x: hx, y: crestH + 1, z: hz }; this.headHold.set(p.id, { pos: headGoal, standD: crestD, at: simNow() }); }
+          }
+        }
+      }
+      if (headGoal) {
+        goalPos = headGoal;
+      } else if (dStand > (capper ? 25 : 20) && !laneClear && dStand < BotRouting.RING_MAX) {
         const inc = this.routeHold.get(p.id);
         const incLive = inc && dist3(inc.stand, enemyStand) < 1 ? inc : null;
         // A pressed-in record (pos≈stand) short-circuits the whole entry
@@ -536,7 +658,12 @@ export class BotRouting {
               (enemyStand.z - p.position.z) * vel.z) / spd);
             mx = enemyStand.x - (p.position.x + (vel.x / spd) * t);
             mz = enemyStand.z - (p.position.z + (vel.z / spd) * t);
-            const mLen = Math.hypot(mx, mz), cap = 15;
+            // Miss-vector cap scales with speed: a hard 15m ceiling
+            // left fast passes uncorrectable — a 30m/s run-in that
+            // drifted >15m off the pole line aimed a fixed 15m aside
+            // and sailed past the ring entirely (surreal s2: od 30→76
+            // at v=31, lap-brake fumble, re-approach grab at 18).
+            const mLen = Math.hypot(mx, mz), cap = Math.max(15, spd * 0.8);
             if (mLen > cap) { mx *= cap / mLen; mz *= cap / mLen; }
           }
           // The grab is a pass-through, not an arrival: a human capper
@@ -551,7 +678,15 @@ export class BotRouting {
             // at 6m, aim direct. A fixed 40m offset at 36 m/s approach
             // misses the 6m grab radius by 34m — the capper sails past
             // and orbits for 55+s.
-            const passM = Math.min(BotRouting.PASS_M, dStand * 0.5);
+            // …and fade the pass-through OUT with speed: steering a
+            // 30m/s line onto a point 15m past the flag bends the whole
+            // trajectory off the pole — the converged path misses the
+            // 6m ring laterally (surreal s2: od 30→76 @31m/s whiff).
+            // A fast capper aims the corrected pole line and lets his
+            // momentum carry the exit; the wrap shape is a slow-bot
+            // tool for landing ON the stand, not through it.
+            const passM = Math.min(BotRouting.PASS_M, dStand * 0.5)
+              * Math.max(0, 1 - spd / 35);
             const cx = enemyStand.x + (hx / hd) * passM;
             const cz = enemyStand.z + (hz / hd) * passM;
             if (hmHeight(this.field, cx, cz) - enemyStand.y < 15) {
@@ -651,7 +786,34 @@ export class BotRouting {
               if (lh < prevH) {drop += prevH - lh;} else {rise += lh - prevH;}
               prevH = lh;
             }
-            score += (drop - rise) * 1.5;
+            // Run-in descent weight 1.5→3: the descent-glue fix made
+            // drop convertible to grab speed (sweep grabV 14→19), so
+            // entries whose run-in keeps falling are worth more — a
+            // 10m net drop now outranks a 30m detour.
+            score += (drop - rise) * 3;
+            // Sustained run-in credit: the drop that converts to grab
+            // speed is the CONTIGUOUS descent ending at the stand — a
+            // leg that dips early then flats in delivers nothing. Walk
+            // backward from the stand and sum the unbroken fall: ~50m
+            // of ski run is what a 40m/s entry is made of (sweep:
+            // net-drop alone left flat-run entries tied with ski runs).
+            // Sample the last ≤90m densely — on a 150m leg the old
+            // whole-leg 8-sample walk spaced ~19m and couldn't tell a
+            // real run-in from a long shallow grade.
+            const legLen = Math.hypot(enemyStand.x - ex, enemyStand.z - ez) || 1;
+            const runWin = Math.min(90, legLen * 0.875);
+            let runIn = 0;
+            prevH = enemyStand.y;
+            for (let s = 1; s <= 8; s += 1) {
+              const t = (s / 8) * runWin;
+              const lx = enemyStand.x + (ex - enemyStand.x) * (t / legLen);
+              const lz = enemyStand.z + (ez - enemyStand.z) * (t / legLen);
+              const lh = hmHeight(this.field!, lx, lz);
+              if (lh <= prevH + 0.5) {break;}  // flat-ish step ends the run
+              runIn += lh - prevH;
+              prevH = lh;
+            }
+            score += Math.min(runIn, 40) * 2;
           }
           for (const e of foes) {
             for (let s = 1; s < 8; s += 1) {
@@ -700,6 +862,7 @@ export class BotRouting {
         // memory decays (90s graveyard window), so the detour sense
         // comes back once the terrain's verdict has room to change.
         const frStale = this.routeFailed.get(p.id);
+        // oxlint-disable-next-line max-depth -- pre-existing inside the entry-election body; flagGoal is tuned as one surface
         if (frStale && (frStale.n ?? 0) >= 2 && frStale.stand !== undefined
           && simNow() - frStale.at < 90_000 && dist3(frStale.stand, enemyStand) < 1) {
           this.routeHold.set(p.id, { stand: enemyStand, pos: Object.assign({}, enemyStand), at: simNow() });
@@ -723,6 +886,20 @@ export class BotRouting {
             + Math.cos(Math.atan2(flowEntry.z - enemyStand.z, flowEntry.x - enemyStand.x) - pref) * prefW;
           if (score > bestScore) { bestScore = score; best = flowEntry; }
         }
+        // Ski-run candidates: ring points miss run-in heads because
+        // descents end where terrain says, not on fixed circles. Each
+        // traced run-in head is a line a human cap route is built on.
+        // oxlint-disable max-depth -- the entry-election body nests deep by design; extracting this loop adds indirection, not clarity
+        if (capper && this.field) {
+          for (let a = 0; a < 12; a += 1) {
+            const ang = (a / 12) * Math.PI * 2;
+            const head = this.runInHead(enemyStand, ang);
+            if (!head) {continue;}
+            const score = scoreEntry(head.x, head.y, head.z) + Math.cos(ang - pref) * prefW;
+            if (score > bestScore) { bestScore = score; best = head; }
+          }
+        }
+        // oxlint-enable max-depth
         for (let a = 0; a < 24; a += 1) {
           // Three radii: close entries are cheap, a closed rim wall
           // only breaks further out — a plateau stand needs the far
@@ -761,7 +938,7 @@ export class BotRouting {
         : (role === 'hof' ? BOT_TUNING.hof.postHome : 90);
       posted = base * (1.35 - 0.5 * duty);
     }
-    return { pos: goalPos, infiltrating: enemyStand !== null && pick !== null &&
+    return { pos: goalPos, flagPos: enemyStand, infiltrating: enemyStand !== null && pick !== null &&
       // dist<8 like the push-call check — a goal parked on the stand is
       // stand-bound regardless of which object holds it; ref equality
       // silently failed for entry-probe picks (cloak read 0%).

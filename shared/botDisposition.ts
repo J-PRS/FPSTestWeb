@@ -102,7 +102,40 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
             };
           }
         }
-      } else if (gd >= 160) {b.stageT = 0;}
+      } else if (gd >= 160) {
+        b.stageT = 0;
+        // Contested-transit loiter: a lone runner crossing a LIVE kill
+        // zone dies in it (matchSim: ~260 kills/5min on lagoon, every
+        // approach leg ended mid-field, 0 grabs on all four maps). He
+        // holds just outside the brawl until the fight thins or his
+        // wave joins — the same "go with the flood" rule as the 160m
+        // staging orbit, but the staging ring is INSIDE the kill zone.
+        // Gate is a live enemy inside ~180m of HIM (the lane is hot):
+        // frozen-harness lanes are foe-free, so capStat's route metric
+        // is untouched. Loiter expires — some run beats never — but at
+        // 60s, not the staging orbit's 35.
+        if (ctx.runner && !ctx.running) {
+          const hot = ctx.enemies.some((e): boolean => e.alive && dist3(e.pos, pos) < 180);
+          const waveNear = (ctx.allies ?? []).some((a): boolean => dist3(a, ctx.objective!) < 130);
+          if (!hot || waveNear) {
+            // Decay, don't zero — `hot` flickers every few seconds on a
+            // live map (probe: enemies in/out of 180m constantly), and
+            // resetting on each lull yanked the capper into the next
+            // cluster. A real lull drains the clock in ~20s.
+            b.loiterT = Math.max(0, b.loiterT - dt * 2.5);
+          }
+          if (b.loiterT > 3 && b.loiterT < 60) {
+            // Repeller pinned at ~92% of his current stand distance —
+            // he orbits his current safe range instead of drifting in.
+            b.standoff = {
+              x: ctx.objective.x, z: ctx.objective.z,
+              radius: gd * 0.92,
+              strength: Math.max(0.25, 0.6 - b.loiterT / 120),
+            };
+          }
+          if (hot && !waveNear) { b.loiterT += dt; }
+        }
+      }
     }
     if ((ctx.running || ctx.runner || ctx.wave) && ctx.objective) {
       // Jink on the run: a committed runner crossing open ground on a

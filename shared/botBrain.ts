@@ -76,6 +76,10 @@ export interface BrainCtx {
   enemies: BotEnemy[];
   /** Objective anchor (CTF flag/base) — outranks pickup and wander. */
   objective?: BotVec | null;
+  /** The real flag position when `objective` is an offset AIM point
+   *  (committed capper passes aim past/beside the pole) — altitude
+   *  vetoes that mean "over the flag" must measure this, not the aim. */
+  flagPos?: BotVec | null;
   /** This bot is carrying the objective (flag carrier running home):
    *  the route rules the feet — hunt press/orbit yields to the line,
    *  while fire stays live for opportunistic shots on the way. */
@@ -448,6 +452,10 @@ export class BotBrain {
   /** Capper staging patience — seconds spent orbiting outside the
    *  defended ring waiting for the push wave to catch up. */
   stageT = 0;
+  /** Contested-transit loiter clock — seconds the capper has held at the
+   *  edge of a live kill zone waiting for the fight to thin or his wave
+   *  to join (pickDest arm/reset). */
+  loiterT = 0;
   /** Hold-off repeller the steerer applies this think — pickDest sets
    *  it while a defended objective is being staged onto. */
   standoff: { x: number; z: number; radius: number; strength: number } | null = null;
@@ -635,6 +643,7 @@ export class BotBrain {
     return { hurtEdge, hero, fearing: hurt && !hero };
   }
 
+  // oxlint-disable-next-line complexity, max-lines-per-function -- the brain's per-think decision pipeline; staged gates read as one flow
   think(dt: number, ctx: BrainCtx): BrainOut {
     const {pos} = ctx;
     const {now} = ctx;
@@ -776,6 +785,7 @@ export class BotBrain {
           // (Probe-false three-strikes: the geometry says a route exists
           // but the escape kit can't find it — same grind, same fix.)
           for (const e of ctx.enemies) {
+            // oxlint-disable-next-line max-depth -- nesting tracks the hunt-failure branches above
             if (e.alive && distSqXZ(e.pos, hp) < 35 * 35) {this.h.unreachUntil.set(e.id, now + 30_000);}
           }
           this.h.unreachUntil.set(this.h.hunt.id, now + 30_000);

@@ -584,6 +584,16 @@ export const terrainFrag = /* glsl */`
       float patchMask = smoothstep(0.25, 0.75, fbm(vWorldPos.xz * 0.008));
       float detail = (macro*0.40 + medium*0.30 + micro*0.15 + triDetail*0.10)
                    * (0.45 + 1.1 * patchMask);
+      // Close-range sub-metre surface grain (projected at 2m -> 14cm),
+      // warped by the domain warp so it never tacks on as a grid. Stolen
+      // from the snow/volcanic presets - hills had nothing below ~2m.
+      float camDistG = length(vWorldPos - vCameraPos);
+      float grainFadeG = 1.0 - smoothstep(50.0, 140.0, camDistG);
+      float grainG = 0.0, triGrainG = 0.0;
+      if (grainFadeG > 0.0) {
+        grainG = detailFbm(vWorldPos.xz + (q - 0.5) * 6.0, camDistG, 2.0);
+        triGrainG = triplanarNoise(vWorldPos, 3.4);
+      }
 
       // Palette: dark root greens -> bright olive tips, dry straw regions,
       // warm dirt, grey strata rock. Wide value range is what keeps it
@@ -625,15 +635,33 @@ export const terrainFrag = /* glsl */`
       // biggest fix for "flat" procedural ground.
       // Drainage darkening: gully streaks on sloped ground only — flat
       // meadow stays clean, hillsides get carved.
+      // Damp meadow gathers in the low, flat valleys - wetter/darker turf.
+      float valleyMaskG = (1.0 - smoothstep(0.08, 0.30, height)) * (1.0 - smoothstep(0.12, 0.30, slope));
+      float wetSpotG = smoothstep(0.40, 0.75, fbm(vWorldPos.xz * 0.012 + q * 0.4));
+      col *= mix(vec3(1.0), vec3(0.72, 0.80, 0.62), valleyMaskG * wetSpotG * 0.45);
+      // Sparse wildflowers - only on open meadow, never dirt/rock/cliffs.
+      float flowerNoiseG = noise(uvFin * 3.8 + q * 4.0) * noise(uvFin * 7.2 + r * 2.5 + 3.1);
+      float flowerMaskG = (1.0 - dirtMask) * (1.0 - slopeBlend)
+                       * smoothstep(0.74, 0.90, flowerNoiseG) * detFade;
+      float fhashG = hash(floor(vWorldPos.xz * 1.6 + vec2(1.7, 9.2)));
+      vec3 fColG = mix(mix(vec3(0.88, 0.80, 0.22), vec3(0.82, 0.38, 0.55), step(0.33, fhashG)),
+                       vec3(0.93, 0.93, 0.88), step(0.85, fhashG) * 0.6);
+      col = mix(col, fColG, flowerMaskG * 0.7);
+      // Pebble scatter on the bare dirt patches.
+      float pebG = noise(uvFin * 2.6 + q * 3.1 + 4.7);
+      float pebMaskG = smoothstep(0.80, 0.94, pebG) * detFade * dirtMask;
+      col = mix(col, cRockG * 0.75, pebMaskG * 0.6);
       col *= 1.0 - smoothstep(0.10, 0.45, slope) * (1.0 - smoothstep(0.25, 0.75, drainage)) * 0.28;
       // Slope shading: flats lift, hillsides drop — reads as grazing light
       // on the relief itself, not just sun-on-normal.
-      col *= mix(1.08, 0.78, smoothstep(0.0, 0.45, slope));
+      col *= mix(1.12, 0.74, smoothstep(0.0, 0.45, slope));
+      float windG = 0.5 + 0.5 * sin((vWorldPos.x * 0.08 + vWorldPos.z * 0.04) + fbm(vWorldPos.xz * 0.004) * 4.0);
+      col *= mix(vec3(0.96, 0.97, 0.90), vec3(1.04, 1.03, 1.00), windG) * (1.0 - slopeBlend * 0.4);
       // Continental tint: km-scale hue drift so the whole map isn't one
       // green — reads as wetter/drier sub-regions at horizon distance.
       col *= mix(vec3(0.88, 1.06, 0.82), vec3(1.10, 0.98, 0.80), smoothstep(0.30, 0.70, fbm(uv * 0.045)));
       col *= 0.90 + 0.18 * detail;
-      col *= 1.0 - (1.0 - smoothstep(0.15, 0.45, micro)) * 0.08 * detFade;
+      col *= 1.0 - (1.0 - smoothstep(0.15, 0.45, micro)) * 0.10 * detFade;
       col *= 1.0 - scorchMask(vWorldPos.xz);
       { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
       float diff = max(dot(vNormal, sunDir), 0.0);
