@@ -152,7 +152,7 @@ export const LG_RAMP_WINDOW_S = 0.3;
  *  DRAIN/s once the beam leaves them. */
 export const LG_POP_DMG_CAP = 320;
 export const LG_POP_CHARGE_MULT = 2;
-export const LG_CHARGE_DRAIN_S = 800;
+export const LG_CHARGE_DRAIN_S = 400; // 800 emptied a full bank in 0.4s — the pop only worked indoors; half that keeps the swap-and-pop window real in open terrain
 export const LG_POP_RADIUS_MAX = 14;
 export const LG_POP_RADIUS_MIN = 3;
 

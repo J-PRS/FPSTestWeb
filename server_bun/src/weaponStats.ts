@@ -40,6 +40,13 @@ export interface WeaponRow {
   /** Shot counts by shooter→aim distance band — a weapon spammed out of
    *  its band shows as volume where it can't connect. */
   dist?: { [band: string]: number };
+  /** Trigger pulls that connected at least once — deduped on shotId so
+   *  a flak fan or an aoe multi-tag counts ONE connect, not one per
+   *  pellet/victim. `hits` stays pellet-level for damage accounting. */
+  conn: number;
+  /** Outcome per distance band — where a gun actually converts vs where
+   *  it just makes noise. `dist` alone can't say that. */
+  band?: { [band: string]: { h: number; d: number; k: number } };
   /** Bot-authored share of damage — >0.9 means the weapon's numbers come
    *  from aim-bot fights, not representative of human play. */
   botDamage: number;
@@ -83,6 +90,8 @@ const speedBin = (v: { x: number; y: number; z: number } | null): string => {
   return s >= 150 ? '150+' : String(Math.floor(s / SPEED_BIN) * SPEED_BIN);
 };
 
+const distBand = (dist: number): string => (dist < 10 ? '<10' : dist < 25 ? '10-25' : dist < 60 ? '25-60' : dist < 120 ? '60-120' : '120+');
+
 const FLUSH_MS = 60_000;
 
 export class WeaponStats {
@@ -96,6 +105,10 @@ export class WeaponStats {
   // 'Mine hit' damage rows for kills-per-placement (deployable value).
   private deploys: { [mode: string]: { [kind: string]: number } } = {};
   private dirty = false;
+  // Pull-level dedupe: `${mode}|${source}|${shotId}` keys — bounded by the
+  // same cap style as the mode table (a flood of unique nonces just folds
+  // into per-hit counting, which is what they are anyway).
+  private seen = new Set<string>();
 
   // Mode names are client-chosen (any word() on join/switchRoom), so
   // every per-mode table shares one cap — a spammer minting unique mode
@@ -115,17 +128,36 @@ export class WeaponStats {
     // Source keys are 'w<client-claimed weaponType>' — arbitrary numbers
     // mint arbitrary keys, so overflow folds into a shared 'other' row.
     const key = source in m || Object.keys(m).length < WeaponStats.MAX_SOURCES ? source : 'other';
-    return (m[key] ??= { hits: 0, damage: 0, kills: 0, shots: 0, botDamage: 0, botKills: 0, dist: {} });
+    return (m[key] ??= { hits: 0, damage: 0, kills: 0, shots: 0, conn: 0, botDamage: 0, botKills: 0, dist: {} });
   }
 
   /** Feed one credited hit. `source` is `w<weaponType>` or a label for
    *  non-weapon damage ('Turret hit', 'Mine hit', 'environment'). */
-  record(mode: string, source: string, damage: number, killed: boolean, botShooter: boolean): void {
+  record(mode: string, source: string, damage: number, killed: boolean, botShooter: boolean, dist?: number, shotId?: string): void {
     if (damage <= 0 || !this.modeOk(mode)) {return;}
     const r = this.row(mode, source);
 r.hits += 1;
+    if (shotId === undefined) {
+      r.conn += 1; // no pull identity — per-hit IS per-pull for this path
+    } else {
+      const sk = `${mode}|${source}|${shotId}`;
+      if (!this.seen.has(sk)) {
+        this.seen.add(sk);r.conn += 1;
+        // Cap the nonce ledger — a long server run mints ids forever;
+        // dropping the oldest quarter keeps dedupe where it matters.
+        if (this.seen.size > 16_384) {
+          let n = 0;
+          for (const k of this.seen) { this.seen.delete(k); if ((n += 1) > 4096) {break;} }
+        }
+      }
+    }
     r.damage += damage;
     if (killed) {r.kills += 1;}
+    if (dist !== undefined && Number.isFinite(dist)) {
+      const b = distBand(dist);
+      const bd = (r.band ??= {})[b] ??= { h: 0, d: 0, k: 0 };
+      bd.h += 1; bd.d += damage; if (killed) {bd.k += 1;}
+    }
     if (botShooter) {
       r.botDamage += damage;
       if (killed) {r.botKills += 1;}
@@ -141,14 +173,10 @@ r.hits += 1;
     const r = this.row(mode, source);
 r.shots += 1;
     if (dist !== undefined && Number.isFinite(dist)) {
-      let band = '120+';
-      if (dist < 10) {band = '<10';}
-      else if (dist < 25) {band = '10-25';}
-      else if (dist < 60) {band = '25-60';}
-      else if (dist < 120) {band = '60-120';}
       r.dist ??= {};
       const d = r.dist;
-      d[band] = (d[band] ?? 0) + 1;
+      const b = distBand(dist);
+      d[b] = (d[b] ?? 0) + 1;
     }
     this.dirty = true;
   }

@@ -43,8 +43,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { hmParseBin, hmHeight, type Heightfield } from '../../shared/heightfield.ts';
-import { WeaponType } from '../../shared/weapons.ts';
-import { pickBotWeapon, kitConsistent, type BotLoadout } from '../../shared/botLoadouts.ts';
+import { WeaponType, WEAPONS, WEAPON_FIRE_INTERVAL_S } from '../../shared/weapons.ts';
+import { pickBotWeapon, kitConsistent, rollWildcard, type BotLoadout } from '../../shared/botLoadouts.ts';
 import { mkRoom, step, pin } from '../../server_bun/tests/scenarios/harness.ts';
 import { simNow, simNowAdvance } from '../../server_bun/src/simClock.ts';
 import { weaponStats } from '../../server_bun/src/weaponStats.ts';
@@ -85,6 +85,16 @@ const ARENA = Number(arg('arena', 0));
 const BERSERK = has('berserk');
 const SEAT = arg('seat', 'ring');
 const MIX = has('mix');
+// --wild: every bot rolls a wildcard kit — the lobby read, not the
+// matchup. The weapon ledger is the payload; the side table is noise.
+const WILD = has('wild');
+// --force: bots always fire the dealt weapon at ANY range — no band fit,
+// no holster gate. Paired with the ledger's per-band table this measures
+// each gun's real range curve instead of the band the AI chose for it.
+const FORCE = has('force');
+// --cycle: every kill walks the killer to the next pool weapon — one run
+// exercises every gun across every fight instead of a 120-run matrix.
+const CYCLE = has('cycle');
 const A_W = weapon(arg('alpha', 'Railgun'));
 const B_W = weapon(arg('bravo', 'Mortar'));
 // Secondary: when set, slots 2+3 use it — the bot still carries the primary
@@ -153,6 +163,9 @@ const ctl = room.bots as unknown as {
 if (BERSERK) {
   ctl.arsenal.pickWeapon = (l: BotLoadout, dxz: number, d: number): number => pickBotWeapon(l, dxz, d);
 }
+if (FORCE) {
+  ctl.arsenal.pickWeapon = (l: BotLoadout): number => l.far;
+}
 
 const bots = [...room.players.getAllPlayers().values()].filter((p) => p.isBot);
 const sides: Record<'alpha' | 'bravo', { id: string; team: string }[]> = { alpha: [], bravo: [] };
@@ -163,8 +176,42 @@ const kitOf = (w: WeaponType, second: WeaponType | null): BotLoadout => ({
   near: second ?? w, mid: second ?? w, far: w,
   belt: WeaponType.Grenade, side: WeaponType.Pistol,
 });
-for (const p of bots) {
+// Own seeded stream for wildcard rolls — keeping the bench off the room's
+// rng keeps a wild run's sim byte-identical to the same room without it.
+let wrs = (SEED * 2654435761) >>> 0 || 1;
+const wrand = (): number => ((wrs = (wrs * 1664525 + 1013904223) >>> 0) / 4294967296);
+// Cycle pool = every fireable WeaponType — the exclusions are mechanical,
+// not curated: submunitions only exist inside their parent's detonation,
+// heals/tools aim at allies, Slam is a skill not a trigger. A weapon that
+// can't fire as a primary still enters the pool and reports a zero-shot
+// dud row — that IS the answer for it.
+const CYCLE_POOL = (Object.keys(WEAPONS).map(Number) as WeaponType[]).filter((w) =>
+  ![WeaponType.ClusterBomblet, WeaponType.MRVBomblet, WeaponType.HealBeam, WeaponType.Repair, WeaponType.Slam].includes(w));
+const arm = (p: { id: string }, w: WeaponType): void => {
+  const kit = kitOf(w, null);
+  ctl.loadouts.set(p.id, kit);
+  ctl.roster.refitClass(p.id);
+  ctl.loadouts.set(p.id, kit); // far->Mortar rewrite on heavies — same double-write
+  wOf.set(p.id, w);
+};
+for (const [bi, p] of bots.entries()) {
   const team = p.team === 'bravo' ? 'bravo' : 'alpha';
+  if (CYCLE) {
+    arm(p, CYCLE_POOL[bi % CYCLE_POOL.length]);
+    sides[team].push({ id: p.id, team });
+    continue;
+  }
+  if (WILD) {
+    // The room's own kit machinery does the rest: wildcard roll, class
+    // derives from the kit, adaptation stays armed (alts untouched).
+    const kit = rollWildcard(wrand);
+    ctl.loadouts.set(p.id, kit);
+    ctl.roster.refitClass(p.id);
+    ctl.loadouts.set(p.id, kit); // far->Mortar rewrite on heavies — same double-write
+    wOf.set(p.id, kit.far);
+    sides[team].push({ id: p.id, team });
+    continue;
+  }
   // --mix: half of EACH side gets each weapon, so both guns fight on both
   // terrain facings in the same match — the report reads per-weapon.
   const w = MIX ? (sides[team].length % 2 === 0 ? A_W : B_W) : (team === 'alpha' ? A_W : B_W);
@@ -245,10 +292,15 @@ const simProf = process.env.FPS_SIM_PROF
   })()
   : null;
 
-const statBefore = new Map<string, { shots: number; hits: number; damage: number; kills: number }>();const snapTable = () => weaponStats.snapshot().byMode[MODE] ?? {};
-for (const [k, v] of Object.entries(snapTable())) {statBefore.set(k, { shots: v.shots, hits: v.hits, damage: v.damage, kills: v.kills });}
+const statBefore = new Map<string, { shots: number; hits: number; damage: number; kills: number; conn: number; dist?: Record<string, number>; band?: Record<string, { h: number; d: number; k: number }> }>();
+const snapTable = () => weaponStats.snapshot().byMode[MODE] ?? {};
+for (const [k, v] of Object.entries(snapTable())) {
+  statBefore.set(k, { shots: v.shots, hits: v.hits, damage: v.damage, kills: v.kills, conn: v.conn ?? 0,
+    dist: v.dist ? { ...v.dist } : undefined,
+    band: v.band ? JSON.parse(JSON.stringify(v.band)) : undefined });
+}
 
-console.log(`teamSoak: ${PER}v${PER} ${MODE} on ${SPEC_NAME} seed=${SEED} — alpha=${WeaponType[A_W]}${A2_W ? '+' + WeaponType[A2_W] : ''} (${classMix('alpha')}) vs bravo=${WeaponType[B_W]}${B2_W ? '+' + WeaponType[B2_W] : ''} (${classMix('bravo')})`);
+console.log(`teamSoak: ${PER}v${PER} ${MODE} on ${SPEC_NAME} seed=${SEED} — ${CYCLE ? `CYCLE pool x${CYCLE_POOL.length} (kill = next gun)` : WILD ? 'ALL WILDCARD kits' : `alpha=${WeaponType[A_W]}${A2_W ? '+' + WeaponType[A2_W] : ''} (${classMix('alpha')}) vs bravo=${WeaponType[B_W]}${B2_W ? '+' + WeaponType[B2_W] : ''} (${classMix('bravo')})`}`);
 console.log(`  warping up to ${MINS} sim-min (wall cap ${WALL_S}s)${BERSERK ? ' — berserk (no holster)' : ''}${ctf ? ' — flags live' : ''}\n`);
 
 const wall0 = performance.now();
@@ -264,6 +316,10 @@ const pushLife = (label: string, s: number): void => {
   l.push(s); lives.set(label, l);
 };
 const wasDead = new Set<string>();
+// Kill-watch for --cycle: scores.kills is the room's own counter, so a
+// delta on any tick means that bot's gun earned the walk to the next pool
+// weapon. The swap lands between batches — the next fire tick sees it.
+const lastKills = new Map<string, number>();
 // Contact probe — a matchup where the two sides never meet produces a
 // perfectly balanced 0-0 and reads like a bug in the report, so the soak
 // reports the legs it walks: speed (did anyone move), nearest foe (is
@@ -286,6 +342,16 @@ for (; ticks < maxTicks; ticks += BATCH) {
     contact.spd += Math.hypot(p.velocity.x, p.velocity.z);
   }
   if (room.bots) {contact.hunt += room.bots.huntUptime();}
+  if (CYCLE) {
+    for (const r of room.scoring.matchPlayers()) {
+      const k = r.kills;
+      if (k > (lastKills.get(r.id) ?? 0)) {
+        lastKills.set(r.id, k);
+        const ix = CYCLE_POOL.indexOf(wOf.get(r.id)!);
+        arm({ id: r.id }, CYCLE_POOL[(ix + 1) % CYCLE_POOL.length]);
+      }
+    }
+  }
   for (const p of room.players.getAllPlayers().values()) {
     const born = lifeStart.get(p.id);
     if (p.isDead) {
@@ -352,6 +418,7 @@ const rows = Object.entries(now)
     hits: v.hits - (statBefore.get(k)?.hits ?? 0),
     damage: v.damage - (statBefore.get(k)?.damage ?? 0),
     kills: v.kills - (statBefore.get(k)?.kills ?? 0),
+    conn: (v.conn ?? 0) - (statBefore.get(k)?.conn ?? 0),
   }))
   .filter((r) => r.shots > 0 || r.hits > 0 || r.damage > 0)
   .sort((x, y) => y.damage - x.damage);
@@ -361,12 +428,38 @@ const mark = (wid: string): string => {
   if (n === B_W || n === B2_W) {return 'B';}
   return ' ';
 };
-console.log(`\nweapon            | side | shots | hits | hits/sh |  dmg  |  kills`);
+// up = trigger-uptime seconds (shots × the weapon's fire interval, with
+// the arsenal's own 0.1s default for unlisted types). dmg/10s and k/10s
+// price a weapon by time-on-trigger, not by how often the AI drew it —
+// that's the column that makes a 10/s belt spam and a 2.5s rocket
+// comparable.
+const intervalOf = (wt: number): number => WEAPON_FIRE_INTERVAL_S[wt as WeaponType] ?? 0.1;
+console.log(`\nweapon            | side | shots | hits | conn% |  dmg  |  kills |   up(s) | dmg/10s | k/10s`);
 for (const r of rows) {
-  const name = WeaponType[Number(r.k.slice(1))] ?? r.k;
-  // hits/shots, NOT accuracy: multi-projectile weapons (MRV bomblets,
-  // shotgun pellets, flak) register one hit event per sub-projectile, so
-  // these legitimately read >100% — that ratio is still the useful number.
-  console.log(`${name.padEnd(17)} |  ${mark(r.k)}   | ${String(r.shots).padStart(5)} | ${String(r.hits).padStart(4)} | ${(r.shots ? (100 * r.hits / r.shots) : 0).toFixed(1).padStart(7)} | ${String(Math.round(r.damage)).padStart(5)} | ${String(r.kills).padStart(5)}`);
+  const wt = Number(r.k.slice(1));
+  const name = WeaponType[wt] ?? r.k;
+  const up = r.shots * intervalOf(wt);
+  // conn% = pulls that tagged ≥1 victim, deduped by shotId — the honest
+  // connect rate. `hits` stays pellet/victim-level for damage accounting
+  // (a flak burst is 1 connect of ~8 hits).
+  console.log(`${name.padEnd(17)} |  ${mark(r.k)}   | ${String(r.shots).padStart(5)} | ${String(r.hits).padStart(4)} | ${(r.shots ? (100 * r.conn / r.shots) : 0).toFixed(1).padStart(5)} | ${String(Math.round(r.damage)).padStart(5)} | ${String(r.kills).padStart(5)} | ${up.toFixed(0).padStart(7)} | ${(10 * r.damage / Math.max(1, up)).toFixed(0).padStart(7)} | ${(10 * r.kills / Math.max(1, up)).toFixed(2).padStart(6)}`);
+}
+// Range curve: shots vs hits/dmg/kills per engagement band, delta'd like
+// the table above. The payoff of --force — where a gun actually works.
+const BANDS = ['<10', '10-25', '25-60', '60-120', '120+'];
+console.log(`\nrange bands       | side | per band: shots|hits|dmg|kills`);
+for (const r of rows) {
+  const prev = statBefore.get(r.k);
+  const cur = now[r.k];
+  const line = BANDS.map((b): string => {
+    const sh = (cur?.dist?.[b] ?? 0) - (prev?.dist?.[b] ?? 0);
+    const bd = cur?.band?.[b];
+    const pbd = prev?.band?.[b];
+    const h = (bd?.h ?? 0) - (pbd?.h ?? 0);
+    const d = Math.round((bd?.d ?? 0) - (pbd?.d ?? 0));
+    const k = (bd?.k ?? 0) - (pbd?.k ?? 0);
+    return `${b.padStart(5)}:${String(sh).padStart(4)}|${String(h).padStart(4)}|${String(d).padStart(5)}|${String(k).padStart(3)}`;
+  }).join('  ');
+  console.log(`${(WeaponType[Number(r.k.slice(1))] ?? r.k).padEnd(17)} |  ${mark(r.k)}   | ${line}`);
 }
 process.exit(0);

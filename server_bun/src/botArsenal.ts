@@ -9,7 +9,7 @@ import type { Room } from './Room.ts';
 import { classCapsule } from '../../shared/botClasses.ts';
 import { logger } from './logger.ts';
 import { WeaponType, getWeaponStats, WEAPON_FIRE_INTERVAL_S, BELT_THROW_COST } from '../../shared/weapons.ts';
-import { SELF_SPLASH_MAX } from '../../shared/combat.ts';
+import { SELF_SPLASH_MAX,aoeDamageAt } from '../../shared/combat.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { GRAVITY, type MoveState } from '../../shared/movement.ts';
 import { hmHeight, hmChord } from '../../shared/heightfield.ts';
@@ -19,6 +19,12 @@ import { botRand } from '../../shared/botRand.ts';
 import { BOT_TUNING as T } from '../../shared/botTuning.ts';
 import type { BotVec, BrainOut } from '../../shared/botBrain.ts';
 import { fireAtBall as beamAtBall, fireSpeedless, type BeamHost } from './botBeam.ts';
+
+// Ordnance aim: expected-damage argmax (true) vs the grounded/airborne
+// heuristic (false). The heuristic stays as the cheap fallback — the EV
+// model costs one aoeDamageAt + a couple of hypot per ordnance pull, but
+// if that ever reads hot in profiling, flip this and the rule returns.
+const ORDNANCE_EV = true;
 import { isSuper } from './superBot.ts';
 import { simNow } from './simClock.ts';
 import { weaponStats } from './weaponStats.ts';
@@ -289,6 +295,29 @@ s[kind] += 1; this.propels.set(id, s);
         { x: (dx0 / dist) * BOLT_SPEED, y: (dy0 / dist) * BOLT_SPEED, z: (dz0 / dist) * BOLT_SPEED },
         WeaponType.Melee, true);
       return;
+    }
+    // Ordnance aim = max expected damage over candidate aim points.
+    // E_direct = directDamage × P(target still inside the hit proxy at
+    // shell arrival) — the target's reachable set grows like accel·t² so
+    // long-range direct shots go improbable on their own. E_ground =
+    // guaranteed splash if the shell lands at the ground point under the
+    // led position, smeared by the same reachable set. Airborne targets
+    // score ~0 ground EV and fall back to the risky direct automatically —
+    // the old `aim.y-gY<=4` threshold is the same decision as a hard
+    // switch (ORDNANCE_EV=false swaps back in one line).
+    const statsW = getWeaponStats(wt);
+    if (statsW.aoeRadius >= 8) {
+      const gY = this.room.field
+        ? Math.max(hmHeight(this.room.field, aim.x, aim.z), hmChord(this.room.field, aim.x, aim.z), this.room.moveSim.structureTop(aim.x, aim.z))
+        : aim.y - 1.5;
+      if (ORDNANCE_EV) {
+        const tImpact = dist / (statsW.speed || 1);
+        const reachR = Math.min(20, 4 * tImpact * tImpact); // ±accel² wobble on the led point
+        const pDirect = Math.min(1, (Math.max(1, statsW.hitMax || 1) / Math.max(1, reachR)) ** 2);
+        const eDirect = (statsW.directDamage || 0) * pDirect;
+        const eGround = aoeDamageAt(Math.hypot(Math.max(0, aim.y - gY - 0.5), reachR * 0.3), wt);
+        if (eGround > eDirect) {aim.y = gY + 0.5;}
+      } else if (aim.y - gY <= 4) {aim.y = gY + 0.5;} // heuristic: hard airborne cutoff
     }
     // The brain's aim already leads by target velocity over real flight
     // time (weaponSpeed hook below) — adding lead here would double it.

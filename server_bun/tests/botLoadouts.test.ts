@@ -42,7 +42,7 @@ describe('botLoadouts', () => {
     expect(botClassForLoadout(lo())).toBe('medium');
   });
 
-  it('range bands: melee < 4.5, sidearm < 8, near < 15, mid to 40, far beyond', () => {
+  it('range bands: melee < 4.5, sidearm < 8, near < 25, mid to 40, far beyond', () => {
     const kit = lo();
     expect(pickBotWeapon(kit, 2, 2)).toBe(WeaponType.Melee);
     expect(pickBotWeapon(kit, 6, 6)).toBe(kit.side);

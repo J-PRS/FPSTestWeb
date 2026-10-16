@@ -410,6 +410,11 @@ export const WEAPONS: Record<number, WeaponStats> = {
     directDamage: 90,
     aoeDamage: 35,
     aoeRadius: 14, // big — but under mortar's 18
+    // Steep inner ring like the mortar's: the band data says RL's kills
+    // all come from placement hits while mid-ring grazes wound and shove
+    // survivors clear. 75/60/30 instead of 67/45/22 — the blast pays for
+    // landing near feet, not for being big.
+    aoeScales: [0.833, 0.667, 0.333],
     knockbackForce: 30, // rocket-jump tier — the tool IS the movement; sits at BLAST_IMPULSE_MAX so point-blank stays the intended apex
     forceMode: 'push',
     speed: 48,

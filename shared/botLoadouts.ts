@@ -12,7 +12,9 @@ const beltOut = (w: WeaponType, fb: WeaponType): WeaponType => w === WeaponType.
  *  the same arsenal. */
 export interface BotLoadout { perk: PerkId; near: WeaponType; mid: WeaponType; far: WeaponType; belt: WeaponType; side: WeaponType }
 
-export const BOT_NEAR_M = 15, BOT_FAR_M = 40;
+// 15 read as knife-only: the force-matrix band table says 'near' guns
+// (shotgun/flak peak at 10-25m, chaingun at 25-60) live well past it.
+export const BOT_NEAR_M = 25, BOT_FAR_M = 40;
 export const BOT_MELEE_M = 4.5;   // fist reach — brains press inside CLOSE_PRESS_M
 // and two capsule bodies hover ~1-2m apart, so the honest closest gap in a
 // chase sits ~4m; 3.0 never opened in soak ledgers (0 w10 rows).
@@ -92,11 +94,14 @@ export const WILDCARD_SLOTS: Record<LoadoutSlot, WeaponType[]> = {
   // Heavy ordnance stays in far/belt — the class gate only reads those
   //  slots for tier-locks, so a mortar in `near` would be invisible to
   //  derivation (and the authored kits never put it there either).
-  near: [WeaponType.Chaingun, WeaponType.Shotgun, WeaponType.Flak, WeaponType.Lightning],
+  // Slot pools follow the measured range curves (teamSoak --force band
+  // table, 2026-10): chaingun peaks at 25-60m, lightning dies past 60m,
+  // rocket connects best at 25-60 — all mid-band guns, not near/far.
+  near: [WeaponType.Shotgun, WeaponType.Flak],
   // Bombard lives in mid — a 160dmg... a direct-hit slug has no business
   // in the far band where only splash reach matters.
-  mid: [WeaponType.Disc, WeaponType.Cannon, WeaponType.GrenadeLauncher, WeaponType.Sprinkler, WeaponType.Sticky, WeaponType.PlasmaGun, WeaponType.Bombard],
-  far: [WeaponType.BoltLauncher, WeaponType.Disc, WeaponType.Mortar, WeaponType.Railgun, WeaponType.RocketLauncher, WeaponType.MRVLauncher],
+  mid: [WeaponType.Chaingun, WeaponType.Lightning, WeaponType.Disc, WeaponType.Cannon, WeaponType.GrenadeLauncher, WeaponType.Sprinkler, WeaponType.Sticky, WeaponType.PlasmaGun, WeaponType.Bombard, WeaponType.RocketLauncher],
+  far: [WeaponType.BoltLauncher, WeaponType.Disc, WeaponType.Mortar, WeaponType.Railgun, WeaponType.MRVLauncher],
   belt: [WeaponType.Grenade, WeaponType.RemoteRailgun, WeaponType.ImpactGrenade, WeaponType.ClusterBomb, WeaponType.Javelin, WeaponType.ArmorGrenade, WeaponType.DiscPull, WeaponType.MRVLauncher],
   side: [WeaponType.Pistol, WeaponType.Revolver],
 };
@@ -202,7 +207,12 @@ export function pickBotWeapon(lo: BotLoadout, distXZ: number, dist: number, skil
     switch (slot) {
       case 'side': { return Math.max(0, 1 - dist / (BOT_NEAR_M * 1.2));
       }
-      case 'near': { return Math.max(0, 1 - Math.abs(dist - BOT_NEAR_M * 0.7) / 14);
+      case 'near': {
+        // Plateau-then-fall, not a triangle: near guns don't decay going
+        // closer (shotgun/flak/CG all convert point-blank per the band
+        // table) — the falloff only exists toward mid.
+        const c = BOT_NEAR_M * 0.7;
+        return dist <= c ? 1 : Math.max(0, 1 - (dist - c) / 14);
       }
       case 'mid': { return Math.max(0, 1 - Math.abs(dist - (BOT_NEAR_M + BOT_FAR_M) / 2) / 25);
       }
@@ -229,7 +239,11 @@ export function pickBotWeapon(lo: BotLoadout, distXZ: number, dist: number, skil
     // play). Dist-scaled so the rule fades in as the foe closes.
     const aoe = getWeaponStats(w).aoeRadius;
     if (aoe > 0 && nonAoeOnly) {continue;}
-    let s = fit(slot) * Math.max(0.1, skill(w));
+    // Floor, not a rule: band fit decays to 0 one band out, which made a
+    // bot NEVER draw its best gun off-band — chaingun was un-drawable at
+    // 40m despite still converting there (force-matrix band data). 0.08
+    // keeps off-band picks rare but possible; skill decides if it leaks.
+    let s = Math.max(fit(slot), 0.08) * Math.max(0.1, skill(w));
     if (aoe > 0 && dist < aoe * 0.8) {s *= 0.08 + courage * 0.5;}
     if (s > best.s) {best = { w, s };}
   }

@@ -53,7 +53,7 @@ export class HitLedger {
     if (result.killed) {c.hb('kill');}
     c.deps.emit?.({ type: 'hit', targetId, shooterId, damage });
     const src = opts.weapon === undefined ? opts.label : `w${opts.weapon}`;
-    this.noteHit(c, shooterId, targetId, src, damage, result.killed, { dist: opts.extra?.dist as number | undefined, pos: opts.extra?.pos as { x: number; y: number; z: number } | undefined });
+    this.noteHit(c, shooterId, targetId, src, damage, result.killed, { dist: opts.extra?.dist as number | undefined, pos: opts.extra?.pos as { x: number; y: number; z: number } | undefined, shotId: opts.shotId });
     if (!result.killed) {
       // Surviving victim pops min(banked, damage) of their LG charge —
       // one rule for every damage path so a splash or mine can't carry
@@ -78,10 +78,16 @@ export class HitLedger {
 
   /** Telemetry + duel bookkeeping for one applied hit — weapon spread,
    *  death spot, kill speed, and first-hit→kill TTK per pairing. */
-  private noteHit(c: LedgerHost, shooterId: string, targetId: string, src: string, damage: number, killed: boolean, impact: { dist?: number; pos?: { x: number; y: number; z: number } } = {}): void {
+  private noteHit(c: LedgerHost, shooterId: string, targetId: string, src: string, damage: number, killed: boolean, impact: { dist?: number; pos?: { x: number; y: number; z: number }; shotId?: string } = {}): void {
     const { dist: impactDist, pos: impactPos } = impact;
     const modeTag = c.deps.mode ?? '';
-    weaponStats.record(modeTag, src, damage, killed, shooterId.startsWith('BOT-'));
+    // Band the hit by live shooter→victim gap — extra.dist is the
+    // optional impact hint; positions are always there and mean the same
+    // thing recordShot bins (shooter→aim distance).
+    const sp = c.playerManager.getPlayer(shooterId)?.position;
+    const tp = c.playerManager.getPlayer(targetId)?.position;
+    const gap = sp && tp ? Math.hypot(tp.x - sp.x, tp.z - sp.z) : impactDist;
+    weaponStats.record(modeTag, src, damage, killed, shooterId.startsWith('BOT-'), gap, impact.shotId);
     const duelKey = `${shooterId}|${targetId}`;
     if (!killed) {
       this.duelStart.set(duelKey, this.duelStart.get(duelKey) ?? simNow());

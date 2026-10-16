@@ -25,8 +25,8 @@ export class ChargeBank {
   }
 
   /** Bank withheld beam damage onto the victim — the walking bomb.
-   *  The bank drains lazily at 5× fill rate once the beam leaves them,
-   *  matching the client's shroud shrink exactly. */
+   *  The bank drains lazily once the beam leaves them (LG_CHARGE_DRAIN_S,
+   *  ~2.5× fill rate), matching the client's shroud shrink exactly. */
   bank(target: PlayerState, withheld: number): void {
     const now = simNow() / 1000;
     target.charge = lgChargeAt(target.charge, target.chargeT, now) + withheld * LG_POP_CHARGE_MULT;

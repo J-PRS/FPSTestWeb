@@ -164,6 +164,14 @@ export const WEAPON_FIRE_INTERVAL_S: Partial<Record<WeaponType, number>> = {
   [WeaponType.Melee]: 0.5,
   [WeaponType.MRVLauncher]: 2.4, // slower than the mortar — one trigger = a whole volley
   [WeaponType.Bombard]: 1.6, // slower than the cannon — 160dmg can't ride a 0.55s cadence
+  // Belt throws: THROW_TOTAL (0.7 release + 0.3 raise) gates the human
+  // toss — 1.0s mirrors it so a bot that somehow draws a belt weapon in a
+  // combat slot obeys the same ceremony instead of defaulting to 0.1s.
+  [WeaponType.Grenade]: 1, [WeaponType.DiscPull]: 1, [WeaponType.ClusterBomb]: 1,
+  [WeaponType.Javelin]: 1, [WeaponType.ImpactGrenade]: 1, [WeaponType.RemoteRailgun]: 1,
+  [WeaponType.ArmorGrenade]: 1, [WeaponType.HealGrenade]: 1, [WeaponType.ProxyGrenade]: 1,
+  [WeaponType.Concussion]: 1, [WeaponType.BeltSticky]: 1,
+  [WeaponType.SatchelCharge]: 1.9, // deliberate two-beat plant (BELT_THROW_TIME.satchel)
 };
 
 /** Belt-sticky ride: which shells may HOST a caught bomb. Only deliberate
