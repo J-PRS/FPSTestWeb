@@ -227,7 +227,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     aoeScales: [0.833, 0.667, 0.333],
     knockbackForce: 45,
     forceMode: 'push',
-    speed: 55,
+    speed: 60,
     gravity: true,
     bodyRadius: 0.3,
     hitMin: 0,
@@ -246,7 +246,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     aoeRadius: 13,
     knockbackForce: 35,
     forceMode: 'push',
-    speed: 55,
+    speed: 60,
     gravity: true,
     bodyRadius: 0.15,
     hitMin: 0,
@@ -282,9 +282,9 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxBounces: 3,          // shards die on the Nth terrain hit
   },
   [WeaponType.PlasmaCannon]: {
-    directDamage: 35,
+    directDamage: 45,
 
-    aoeDamage: 12,
+    aoeDamage: 25,
     aoeRadius: 5.5,
     knockbackForce: 20,
     forceMode: 'push',
@@ -299,7 +299,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
   [WeaponType.PlasmaGun]: {
 
     // Quake 2/3 plasma: rapid volley of fat bolts — chain-like cadence
-    // (~7.7/s, ~108dps) but a visible projectile you can dodge, so it
+    // (10/s, ~140dps) but a visible projectile you can dodge, so it
     // pays below chaingun's effective DPS vs movers and above vs track.
     directDamage: 14,
     aoeDamage: 4,
@@ -374,7 +374,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     aoeRadius: 0,
     knockbackForce: 0,
     forceMode: 'push',
-    speed: 300,
+    speed: 250,
     gravity: false,
     bodyRadius: 0.1,
     hitMin: 0,
@@ -404,9 +404,11 @@ export const WEAPONS: Record<number, WeaponStats> = {
     bounceFriction: 0.85,
   },
   [WeaponType.RocketLauncher]: {
-    // RPG-style missile: flat trajectory, deliberately SLOW (readable in
-    // flight, dodgeable at range) in exchange for the biggest non-mortar
-    // blast. The Tribes/Quake rocket niche the Bolt Launcher never filled.
+    // RPG-style missile: flat trajectory, slower than the Bolt Launcher
+    // but not free to dodge (65 m/s — the 48 shell was readable-in-flight
+    // to the point of never connecting at range) in exchange for the
+    // biggest non-mortar blast. The Tribes/Quake rocket niche the Bolt
+    // Launcher never filled.
     directDamage: 90,
     aoeDamage: 35,
     aoeRadius: 14, // big — but under mortar's 18
@@ -417,7 +419,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     aoeScales: [0.833, 0.667, 0.333],
     knockbackForce: 30, // rocket-jump tier — the tool IS the movement; sits at BLAST_IMPULSE_MAX so point-blank stays the intended apex
     forceMode: 'push',
-    speed: 48,
+    speed: 60, // 48 was deliberately-dodgeable; EV-aim + ~60m/s closed the gap (K/D 0.65->0.72 vs CG forced) — still slower than BoltLauncher (120)
     gravity: false,
     bodyRadius: 0.35,
     hitMin: 0,
@@ -434,7 +436,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     aoeRadius: 0,
     knockbackForce: 4,
     forceMode: 'push',
-    speed: 220,
+    speed: 250,
     gravity: false,
     bodyRadius: 0.12,
     hitMin: 0,
@@ -450,7 +452,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     aoeRadius: 0,
     knockbackForce: 8,
     forceMode: 'push',
-    speed: 260,
+    speed: 250,
     gravity: false,
     bodyRadius: 0.14,
     hitMin: 0,
@@ -469,7 +471,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     aoeRadius: 11,
     knockbackForce: 40,
     forceMode: 'push',
-    speed: 55,
+    speed: 60,
     gravity: true,
     bodyRadius: 0.3,
     hitMin: 0,
@@ -489,7 +491,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     aoeRadius: 11,
     knockbackForce: 40,
     forceMode: 'push',
-    speed: 26,      // half the launcher's muzzle — hangs catchable
+    speed: 20,      // a third of the launcher's muzzle — hangs catchable
     gravity: true,
     bodyRadius: 0.3,
     hitMin: 0,
@@ -508,7 +510,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     aoeRadius: 8,
     knockbackForce: 12, // the pop is only the delivery — the payload shoves
     forceMode: 'push',
-    speed: 42,
+    speed: 40,
     gravity: true,
     bodyRadius: 0.3,
     hitMin: 0,
@@ -557,7 +559,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     aoeRadius: 5,
     knockbackForce: 45, // biggest shove in the belt
     forceMode: 'push',
-    speed: 55,
+    speed: 60,
     gravity: true,
     bodyRadius: 0.25,
     hitMin: 0,
@@ -608,7 +610,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
   },
   [WeaponType.Sprinkler]: {
 
-    // Sprinkler: plasma-gun cadence (~9/s ≈ 108dps on paper) but every bolt
+    // Sprinkler: plasma-gun cadence (~10/s ≈ 140dps on paper) but every bolt
     // arcs under world gravity inside a slight cone — mid-range area
     // denial, not a dueling laser. Lower direct damage + tiny pop so the
     // stream rewards saturation over precision.
@@ -717,7 +719,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     aoeRadius: 6,
     knockbackForce: 22,
     forceMode: 'push',
-    speed: 45,   // thrown lob — enough to clear a doorway, not a dart
+    speed: 40,   // thrown lob — enough to clear a doorway, not a dart
     gravity: true,
     bodyRadius: 0.22,
     hitMin: 0,
@@ -735,7 +737,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     aoeRadius: 17,
     knockbackForce: 75,
     forceMode: 'push',
-    speed: 14,    // an underhand lob — ~10m useful range, no tossing over walls
+    speed: 10,    // an underhand lob — a few meters of range, no tossing over walls
     gravity: true,
     bodyRadius: 0.28,
     hitMin: 0,
@@ -755,7 +757,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     aoeRadius: 8,
     knockbackForce: 15, // the pop is delivery — the rain does the shoving
     forceMode: 'push',
-    speed: 55,          // mortar muzzle — same lob line, different payload
+    speed: 60,          // mortar muzzle — same lob line, different payload
     gravity: true,
     bodyRadius: 0.3,
     hitMin: 0,
@@ -825,6 +827,7 @@ export function idSeed(id: string): number {
     h ^= id.charCodeAt(i);
     h = Math.imul(h, 16_777_619);
   }
+  // oxlint-disable-next-line no-bitwise -- unsigned coercion, Math.trunc keeps the sign
   return h >>> 0 || 1;
 }
 
@@ -834,6 +837,7 @@ export function jitteredTtl(stats: Pick<WeaponStats, 'maxLifetime' | 'ttlJitter'
   if (!stats.maxLifetime) {return undefined;}
   const j = stats.ttlJitter ?? 0;
   if (!j) {return stats.maxLifetime;}
+  // oxlint-disable-next-line no-bitwise -- unsigned coercion, Math.trunc keeps the sign
   return stats.maxLifetime * (1 - j + 2 * j * ((seed >>> 0 || 1) / 4_294_967_296));
 }
 

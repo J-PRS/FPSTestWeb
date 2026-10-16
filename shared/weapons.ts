@@ -154,12 +154,12 @@ export const WEAPON_FIRE_INTERVAL_S: Partial<Record<WeaponType, number>> = {
   [WeaponType.Lightning]: 0.05,
   [WeaponType.Shotgun]: 0.7,
   [WeaponType.Cannon]: 1.25,
-  [WeaponType.RocketLauncher]: 2.5,
+  [WeaponType.RocketLauncher]: 2.5, // A/B'd 2.0: more volume but same kills — dodge-window is the constraint, not cadence
   [WeaponType.Pistol]: 0.22,
   [WeaponType.Revolver]: 0.6,
   [WeaponType.Sticky]: 0.8,
-  [WeaponType.PlasmaGun]: 0.13,
-  [WeaponType.Sprinkler]: 0.11,
+  [WeaponType.PlasmaGun]: 0.1,
+  [WeaponType.Sprinkler]: 0.1,
   [WeaponType.HealBeam]: 0.1, // heal ticks like the repair beam — cadence IS the heal rate
   [WeaponType.Melee]: 0.5,
   [WeaponType.MRVLauncher]: 2.4, // slower than the mortar — one trigger = a whole volley
