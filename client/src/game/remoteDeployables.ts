@@ -6,6 +6,8 @@
 
 import * as THREE from 'three';
 import { DeployTurret } from '../entities/DeployTurret.js';
+import { DeployMortar } from '../entities/DeployMortar.js';
+import { DeployCg } from '../entities/DeployCg.js';
 import { DeployShield } from '../entities/DeployShield.js';
 import { DeployBeacon } from '../entities/DeployBeacon.js';
 import { Explosion } from '../effects/explosion.js';
@@ -18,6 +20,8 @@ import {DEPLOY_HP, type DeployKind} from '../../../shared/deployables.js';
 import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
 import { segSolidHit } from '../../../shared/solidWorld.js';
 import { Projectile } from '../projectiles/Projectile.js';
+import { MORTAR_CONFIG } from '../projectiles/mortarConfig.js';
+import { CHAINGUN_CONFIG } from '../projectiles/chaingunConfig.js';
 import { fxPuff } from '../effects/vfx.js';
 import type { DeployDeps,Item } from './deployables.js';
 
@@ -117,6 +121,29 @@ export class RemoteDeployables {
         update: (dt) => t.update(dt, this.enemies()),
         dispose: (): void => t.dispose(this.deps.scene),
         v: t, owner,
+      };
+    } else if (kind === 'mortar') {
+      const m = new DeployMortar(this.deps.scene, terrain, at);
+      m.unfoldDone();
+      if (hp !== undefined) { m.health = hp; m.armor = armor ?? 0; }
+      item = {
+        kind, candId: `rdep:${id}`, pos: m.pos, dead: false,
+        hurt: (): void => { return; }, // server owns it — deployGone removes
+        // Cosmetic slew only — the server's mortarShot broadcast paints shells.
+        update: (dt): void => { m.update(dt, this.enemies()); },
+        dispose: (): void => m.dispose(this.deps.scene),
+        v: m, owner,
+      };
+    } else if (kind === 'cgturret') {
+      const c = new DeployCg(this.deps.scene, terrain, at);
+      c.unfoldDone();
+      if (hp !== undefined) { c.health = hp; c.armor = armor ?? 0; }
+      item = {
+        kind, candId: `rdep:${id}`, pos: c.pos, dead: false,
+        hurt: (): void => { return; },
+        update: (dt): void => { c.update(dt, this.enemies()); },
+        dispose: (): void => c.dispose(this.deps.scene),
+        v: c, owner,
       };
     } else if (kind === 'beacon') {
       item = this.beaconItem(id, owner, at, hp, armor);
@@ -486,6 +513,21 @@ export class RemoteDeployables {
     // terrain at the target's toes (the damage lands regardless, so the
     // visual was reading as "sentry shoots the ground").
     const target = { pos: new THREE.Vector3(tp.x, tp.y + 1, tp.z), vel: new THREE.Vector3(), alive: true };
+    if (item.kind === 'cgturret') {
+      // CG mount: the wire pulse = a ~3-bolt burst — paint tracer replicas
+      // fanned a hair so the spray reads, not one perfect dart.
+      const muzzle = item.pos.clone().add(new THREE.Vector3(0, 1.35, 0));
+      for (let i = 0; i < 3; i += 1) {
+        const aim = target.pos.clone().add(new THREE.Vector3(
+          (Math.random() - 0.5) * 0.9, (Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.9));
+        const p = new Projectile(this.deps.scene, muzzle,
+          aim.sub(muzzle).normalize(), new THREE.Vector3(), CHAINGUN_CONFIG);
+        p.isRemote = true;
+        this.deps.world.projectiles.push(p);
+      }
+      sfx.shotAt(item.pos, WeaponType.Chaingun);
+      return;
+    }
     this.rockets.spawn(item.pos.clone().add(new THREE.Vector3(0, 1.4, 0)), target, 1, item.owner);
     sfx.shotAt(item.pos, WeaponType.RocketLauncher);
   }
@@ -499,6 +541,24 @@ export class RemoteDeployables {
     const target = { pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(), alive: true };
     this.rockets.spawn(item.pos.clone().add(new THREE.Vector3(0, 2.2, 0)), target, 1, owner);
     sfx.shotAt(item.pos, WeaponType.RocketLauncher);
+  }
+
+  /** Mortar turret fired — the wire carries the solved launch velocity;
+   *  spawn a replica mortar shell on the identical arc. Damage arrives
+   *  through the server's scheduled bolt, not this body. */
+  mortarShot(id: number, _owner: string, vx: number, vy: number, vz: number): void {
+    const item = this.byId.get(id);
+    if (!item) {return;}
+    const muzzle = item.v instanceof DeployMortar
+      ? item.v.muzzleWorld(new THREE.Vector3())
+      : item.pos.clone().add(new THREE.Vector3(0, DEPLOY_ITEMS.mortar.bodyH, 0));
+    const p = new Projectile(this.deps.scene,
+      muzzle,
+      new THREE.Vector3(vx, vy, vz).normalize(), new THREE.Vector3(), MORTAR_CONFIG);
+    p.vel.set(vx, vy, vz);
+    p.isRemote = true;
+    this.deps.world.projectiles.push(p);
+    sfx.shotAt(item.pos, WeaponType.Mortar);
   }
 
   /** Server tripped a mine — paint the blast at the reported position.

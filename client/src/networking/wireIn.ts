@@ -264,6 +264,7 @@ this.handlerThrows += 1;
     sensorPing: (data): void | undefined => this.h.onSensorPing?.(data.id, data.team, data.targets),
     turretShot: (data): void | undefined => this.h.onTurretShot?.(data.id, data.owner, data.targetId),
     sentryShot: (data): void | undefined => this.h.onSentryShot?.(data.id, data.owner, data.x, data.y, data.z),
+    mortarShot: (data): void | undefined => this.h.onMortarShot?.(data.id, data.owner, data.vx, data.vy, data.vz),
     mineBoom: (data): void | undefined => this.h.onMineBoom?.(data.id, data.pos),
     deployHp: (data): void | undefined => this.h.onDeployHp?.(data.id, data.hp, data.armor, data.src),
     // Server refused a hit claim — worth surfacing: a healthy client

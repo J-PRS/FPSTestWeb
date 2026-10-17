@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { buildStructures, buildArenaDome, clearArenaDome } from '../../world/mapStructures.js';
 import type { StructureSpec, InteriorSpec, WeatherSpec, AtmosphereSpec } from '../../../../shared/mapSpec.js';
 import { setAmbientCaps } from '../species/ambientCaps.js';
-import { applyStructureSpecs } from '../structureSpecs.js';
+import { applyStructureSpecs, clearExtraStructures } from '../structureSpecs.js';
 import type { GameStatePlayer, LocalPlayerState } from '../../../../shared/protocol.js';
 import type { NetworkManager } from '../../networking/NetworkManager.js';
 import type { NetCtx } from './ctx.js';
@@ -230,6 +230,9 @@ export function wireWorld(ctx: NetCtx): void {
   networkManager.onMapUpdate = (map): void => {
     if (map.mapName) {deps.world.mapName = map.mapName;}
     buildStructures(map.structures ?? [], deps.lazyScene(), deps.lazyTerrain());
+    // Mode-minted solids die with the world rebuild — a live mode
+    // bridge re-feeds them on its next lattice sync.
+    clearExtraStructures();
     applyStructureSpecs(map.structures, deps.lazyPlayer().movement);
     if (map.arena) {
       buildArenaDome(map.arena, deps.lazyTerrain().getHeight(map.arena.x, map.arena.z), deps.lazyScene());
@@ -304,7 +307,9 @@ function applyMapSnapshot(ctx: NetCtx, map?: MapSnapshot): void {
   // Same collider list the server sims against — ball prediction
   // ricochets off structures identically instead of phasing through.
   // Player collision comes from the same table — a divergence there
-  // reads as walls that let you through.
+  // reads as walls that let you through. clearExtraStructures runs
+  // first: a map swap must not keep the old world's mode solids.
+  clearExtraStructures();
   applyStructureSpecs(map?.structures, deps.lazyPlayer().movement);
   if (map?.arena) {
     buildArenaDome(map.arena, deps.lazyTerrain().getHeight(map.arena.x, map.arena.z), deps.lazyScene());

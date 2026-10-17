@@ -13,7 +13,7 @@ import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
 import { aoeDamage } from '../../shared/combat.ts';
 import { REPAIR_RANGE, REPAIR_HEAL_PER_TICK, REPAIR_MIN_TICK_S, REPAIR_ARMOR_MULT, WeaponType } from '../../shared/weapons.ts';
-import { tickDrone, tickMine, tickSensor, tickSentry, tickStation, tickTurret, losClear } from './deployTicks.ts';
+import { tickCg, tickDrone, tickMine, tickMortar, tickSensor, tickSentry, tickStation, tickTurret, losClear } from './deployTicks.ts';
 
 import { DEPLOY_KINDS, DEPLOY_MAX, DEPLOY_HP, type DeployKind } from '../../shared/deployables.ts';
 import { DEPLOY_ITEMS, deploySolid } from '../../shared/deployItems.ts';
@@ -166,6 +166,8 @@ export class RoomDeployables {
     const id = ((this.nextId += 1) - 1);
     let armDelay = 0;
     if (k === 'turret') {armDelay = TURRET_UNFOLD_S + this.room.rng() * 0.4;}
+    else if (k === 'mortar') {armDelay = DEPLOY_ITEMS.mortar.armS!;}
+    else if (k === 'cgturret') {armDelay = DEPLOY_ITEMS.cgturret.armS!;}
     else if (k === 'mine') {armDelay = MINE_ARM_S;}
     else if (k === 'station') {armDelay = STATION_HEAL_CD;}
     // Team stamps at plant time — the spawn edge carries this value, so
@@ -480,6 +482,8 @@ export class RoomDeployables {
       else if (d.kind === 'drone') {tickDrone(this, d, dt);}
       else if (d.kind === 'sensor') {tickSensor(this, d, dt);}
       else if (d.kind === 'baseturret') {tickSentry(this, d, dt);}
+      else if (d.kind === 'mortar') {tickMortar(this, d, dt);}
+      else if (d.kind === 'cgturret') {tickCg(this, d, dt);}
     }
     // Sentry bolts in flight — the blast lands where the bolt does, so a
     // sidestepping capper genuinely outruns it (non-homing by design).

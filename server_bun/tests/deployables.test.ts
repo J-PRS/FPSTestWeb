@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 import { Room } from '../src/Room.ts';
 import { resolveMapSpec } from '../../shared/mapSpec.ts';
+import { simMs } from '../src/simClock.ts';
 
 const SPEC = resolveMapSpec(null);
 
@@ -51,8 +52,41 @@ describe('RoomDeployables', () => {
     const room = new Room('t', null, '', SPEC);
     addAt(room, 'p1', 0, 0);
     room.messages.handleMessage('p1', { type: 'deploy', kind: 'drone', position: { x: 1, y: 0, z: 0 } });
-    for (let i = 0; i < 1900; i++) room.deployables.tick(0.05); // 95s > 90s drone TTL
+    for (let i = 0; i < 1900; i++) {room.deployables.tick(0.05);} // 95s > 90s drone TTL
     expect(room.deployables.snapshot().length).toBe(0);
+  });
+
+  it('mortar lobs at the mid band, ignores the point-blank dead zone', () => {
+    const room = new Room('t', null, '', SPEC);
+    addAt(room, 'p1', 0, 0);
+    room.messages.handleMessage('p1', { type: 'deploy', kind: 'mortar', position: { x: 2, y: 0, z: 0 } });
+    const foe = addAt(room, 'p2', 40, 0); // inside [20, 95]
+    foe.team = 'bravo'; room.players.getPlayer('p1')!.team = 'alpha';
+    foe.protectedUntil = simMs(0);
+    // Arm delay 1.2s → first shot around tick 25; the bolt is still in
+    // flight (≈0.7s arc) when we check at 1.5s.
+    for (let i = 0; i < 30; i++) {room.deployables.tick(0.05);}
+    expect(room.deployables.bolts.length).toBe(1);
+    // Point-blank target inside minRange: first bolt lands, none re-fire.
+    foe.position.x = 8;
+    for (let i = 0; i < 100; i++) {room.deployables.tick(0.05);}
+    expect(room.deployables.bolts.length).toBe(0);
+  });
+
+  it('chaingun turret shreds a hostile in envelope, pays through the funnel', () => {
+    const room = new Room('t', null, '', SPEC);
+    addAt(room, 'p1', 0, 0);
+    room.messages.handleMessage('p1', { type: 'deploy', kind: 'cgturret', position: { x: 2, y: 0, z: 0 } });
+    const foe = addAt(room, 'p2', 20, 0);
+    foe.team = 'bravo'; room.players.getPlayer('p1')!.team = 'alpha';
+    foe.protectedUntil = simMs(0);
+    const hp0 = foe.health;
+    for (let i = 0; i < 60; i++) {room.deployables.tick(0.05);} // 3s — arm + ~4 pulses
+    expect(foe.health).toBeLessThan(hp0);
+    // Out of envelope → silent.
+    foe.position.x = 80; foe.health = foe.maxHealth;
+    for (let i = 0; i < 60; i++) {room.deployables.tick(0.05);}
+    expect(foe.health).toBe(foe.maxHealth);
   });
 
   it('AOE blast damages and destroys deployables; out-of-range untouched', () => {

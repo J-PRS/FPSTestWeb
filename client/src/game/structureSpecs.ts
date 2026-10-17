@@ -16,6 +16,10 @@ import { setStructureTopAt } from '../entities/bodyGround.js';
 type MoveStructures = { setStructures(l: readonly StructureSpec[] | undefined): void };
 
 let specList: readonly StructureSpec[] = [];
+/** Mode-minted structures (offline conquest's node bases) — hull specs
+ *  merged over the map's list at every apply. Hosted conquest ships its
+ *  node kits IN the wire's structure echo, so this stays empty online. */
+let extraList: readonly StructureSpec[] = [];
 let move: MoveStructures | undefined = undefined;
 const gridDown = new Set<string>();
 /** Live structure world for point/footprint ground queries — rebuilt on
@@ -35,7 +39,7 @@ export function structureTopAt(x: number, z: number, maxTop = Infinity): number 
 export function applyStructureSpecs(list: readonly StructureSpec[] | undefined, movement?: MoveStructures): void {
   specList = list ?? [];
   if (movement) {move = movement;}
-  const eff = specList.filter((s): boolean => s.kind !== 'shield' || !s.team || !gridDown.has(s.team));
+  const eff = [...specList, ...extraList].filter((s): boolean => s.kind !== 'shield' || !s.team || !gridDown.has(s.team));
   const cols = structureColliders(eff);
   live = cols.length > 0 ? new SolidWorld(cols) : null;
   setStructureTopAt(live ? structureTopAt : undefined);
@@ -46,6 +50,24 @@ export function applyStructureSpecs(list: readonly StructureSpec[] | undefined, 
   move?.setStructures(eff);
   setBotStructureSpecs(eff);
 }
+
+/** Mode-geometry colliders — offline mode bridges feed hull specs here
+ *  so their solids block players/bots/balls/shots through the same
+ *  pipeline as authored structures. Empty list = no mode solids. */
+export function setExtraStructures(list: readonly StructureSpec[]): void {
+  extraList = list;
+  applyStructureSpecs(specList);
+}
+
+/** Bump on every extra-list reset — feeders key their dedupe on it so a
+ *  same-content re-feed still lands after a clear (map re-apply edge). */
+let extraGen = 0;
+export function extraStructGen(): number { return extraGen; }
+
+/** Drop mode solids without reapplying — world rebuilds (gameState /
+ *  mapUpdate / solo re-pick) call this before their own apply, so mode
+ *  geometry dies with its world instead of leaking onto the next map. */
+export function clearExtraStructures(): void { extraList = []; extraGen += 1; }
 
 /** Generator power edge — a team's gate panes drop while its generator
  *  is a hulk (collider AND visual), and come back on revive. */

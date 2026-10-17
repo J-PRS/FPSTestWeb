@@ -15,6 +15,8 @@
 
 import * as THREE from 'three';
 import { DeployTurret } from '../entities/DeployTurret.js';
+import { DeployMortar } from '../entities/DeployMortar.js';
+import { DeployCg } from '../entities/DeployCg.js';
 import { Mine } from '../entities/Mine.js';
 import { DeployStation } from '../entities/DeployStation.js';
 import { DeployDrone } from '../entities/DeployDrone.js';
@@ -70,6 +72,8 @@ interface Pod {
   // The item itself IS the thrown body — it unfolds in the air and lands
   // already full-size (same read as a Turretter dropping in).
   turret?: DeployTurret;
+  mortar?: DeployMortar;
+  cgturret?: DeployCg;
   mine?: Mine;
   station?: DeployStation;
   drone?: DeployDrone;
@@ -228,6 +232,8 @@ export class Deployables {
     // The item is constructed at release — it flies folded and finishes
     // unfolding mid-air, so touchdown lands a full-size sentry/dome.
     if (kind === 'turret') {pod.turret = new DeployTurret(this.deps.scene, terrain, pos);}
+    else if (kind === 'mortar') {pod.mortar = new DeployMortar(this.deps.scene, terrain, pos);}
+    else if (kind === 'cgturret') {pod.cgturret = new DeployCg(this.deps.scene, terrain, pos);}
     else if (kind === 'station') {pod.station = new DeployStation(this.deps.scene, terrain, pos);}
     else if (kind === 'drone') {pod.drone = new DeployDrone(this.deps.scene, terrain, pos);}
     else if (kind === 'shield') {pod.shield = new DeployShield(this.deps.scene, terrain, pos);}
@@ -259,26 +265,14 @@ export class Deployables {
     pod.vel.y += GRAVITY * dt;
     pod.pos.addScaledVector(pod.vel, dt);
 
-    if (pod.turret) {
-      pod.turret.tickUnfold(dt); // assembly completes in the air
-      pod.turret.group.rotation.y += dt * 4; // slow tumble reads mass
-      pod.turret.pos.copy(pod.pos);
-      pod.turret.group.position.copy(pod.pos);
-    } else if (pod.station) {
-      pod.station.tickUnfold(dt);
-      pod.station.group.rotation.y += dt * 4;
-      pod.station.pos.copy(pod.pos);
-      pod.station.group.position.copy(pod.pos);
-    } else if (pod.drone) {
-      pod.drone.tickUnfold(dt);
-      pod.drone.group.rotation.y += dt * 4;
-      pod.drone.pos.copy(pod.pos);
-      pod.drone.group.position.copy(pod.pos);
-    } else if (pod.shield) {
-      pod.shield.tickUnfold(dt);
-      pod.shield.group.rotation.y += dt * 4;
-      pod.shield.pos.copy(pod.pos);
-      pod.shield.group.position.copy(pod.pos);
+    // The unfolding kits share one tumble — assemble mid-air, spin, track
+    // the pod's fall. Mine/nugget pods differ below.
+    const flying = pod.turret ?? pod.mortar ?? pod.cgturret ?? pod.station ?? pod.drone ?? pod.shield ?? pod.beacon;
+    if (flying) {
+      flying.tickUnfold(dt); // assembly completes in the air
+      flying.group.rotation.y += dt * 4; // slow tumble reads mass
+      flying.pos.copy(pod.pos);
+      flying.group.position.copy(pod.pos);
     } else if (pod.nugget) {
       pod.nugget.position.copy(pod.pos);
       pod.nugget.rotation.y += dt * 9;  // tumble — the pickup's own two-axis spin, faster in flight
@@ -322,38 +316,24 @@ export class Deployables {
     pod.ttl = 0; // consumed — the item lives in this.items now
     const seat = terrain.getRenderedHeight(pod.pos.x, pod.pos.z);
     if (Number.isFinite(seat)) {pod.pos.y = seat;}
-    if (pod.turret) {
-      const t = pod.turret;
-      t.pos.copy(pod.pos);
-      t.group.position.copy(pod.pos);
-      t.group.quaternion.setFromUnitVectors(_UP, n);
-      t.group.scale.setScalar(1); // snap any unfolding tail to done
-      t.unfoldDone();
-      this.adopter.adoptTurret(t, undefined);
-      pod.turret = undefined; // ownership moved — fizzle cleanup must not dispose it
-    } else if (pod.station) {
-      const s = pod.station;
-      s.pos.copy(pod.pos);
-      s.group.position.copy(pod.pos);
-      s.group.quaternion.setFromUnitVectors(_UP, n);
-      s.unfoldDone();
-      this.adopter.adoptStation(s, undefined);
-      pod.station = undefined;
-    } else if (pod.drone) {
-      const d = pod.drone;
-      d.pos.copy(pod.pos);
-      d.group.position.copy(pod.pos);
-      d.unfoldDone(); // lifts off from the touchdown spot on its own lift
-      this.adopter.adoptDrone(d, undefined);
-      pod.drone = undefined;
-    } else if (pod.shield) {
-      const s = pod.shield;
-      s.pos.copy(pod.pos);
-      s.group.position.copy(pod.pos);
-      s.group.quaternion.setFromUnitVectors(_UP, n);
-      s.unfoldDone();
-      this.adopter.adoptShield(s, undefined);
-      pod.shield = undefined;
+    // Every bolted-down kit shares the seat: snap to the pod spot, tilt to
+    // the face normal, adopt into items. Drone skips the tilt — it lifts
+    // off the touchdown spot on its own lift.
+    const seated = pod.turret ?? pod.mortar ?? pod.cgturret ?? pod.station ?? pod.drone ?? pod.shield ?? pod.beacon;
+    if (seated) {
+      seated.pos.copy(pod.pos);
+      seated.group.position.copy(pod.pos);
+      if (!pod.drone) {seated.group.quaternion.setFromUnitVectors(_UP, n);}
+      seated.group.scale.setScalar(1); // snap any unfolding tail to done
+      seated.unfoldDone();
+      if (pod.turret) { this.adopter.adoptTurret(pod.turret, undefined); pod.turret = undefined; }
+      else if (pod.mortar) { this.adopter.adoptMortar(pod.mortar, undefined); pod.mortar = undefined; }
+      else if (pod.cgturret) { this.adopter.adoptCg(pod.cgturret, undefined); pod.cgturret = undefined; }
+      else if (pod.station) { this.adopter.adoptStation(pod.station, undefined); pod.station = undefined; }
+      else if (pod.drone) { this.adopter.adoptDrone(pod.drone, undefined); pod.drone = undefined; }
+      else if (pod.shield) { this.adopter.adoptShield(pod.shield, undefined); pod.shield = undefined; }
+      else if (pod.beacon) { this.adopter.adoptBeacon(pod.beacon, undefined); pod.beacon = undefined; }
+      // ownership moved — fizzle cleanup must not dispose it
     } else if (pod.mine) {
       pod.mine.pos.copy(pod.pos);
       pod.mine.seatOn(terrain);
@@ -396,6 +376,14 @@ export class Deployables {
       const t = new DeployTurret(this.deps.scene, terrain, at);
       t.unfoldDone();
       this.adopter.adoptTurret(t, owner);
+    } else if (kind === 'mortar') {
+      const m = new DeployMortar(this.deps.scene, terrain, at);
+      m.unfoldDone();
+      this.adopter.adoptMortar(m, owner);
+    } else if (kind === 'cgturret') {
+      const c = new DeployCg(this.deps.scene, terrain, at);
+      c.unfoldDone();
+      this.adopter.adoptCg(c, owner);
     } else if (kind === 'station') {
       const s = new DeployStation(this.deps.scene, terrain, at);
       s.unfoldDone();
@@ -605,25 +593,16 @@ export class Deployables {
   }
 
   /** The remote replica map — roster reconcile owns its lifecycle. */
-  remoteReplicas(): Map<number, Item> {
-    return this.remotes.replicas();
-  }
+  remoteReplicas(): Map<number, Item> { return this.remotes.replicas(); }
 
   sensorPing(id: number, team: string | undefined, targets: { id: string; x: number; y: number; z: number }[]): void {
     this.remotes.sensorPing(id, team, targets.filter((t): boolean => Number.isFinite(t.x + t.y + t.z)));
   }
 
-  remoteTurretShot(id: number, targetId: string): void {
-    this.remotes.turretShot(id, targetId);
-  }
-
-  remoteSentryShot(id: number, owner: string, x: number, y: number, z: number): void {
-    this.remotes.sentryShot(id, owner, x, y, z);
-  }
-
-  remoteMineBoom(id: number, pos: { x: number; y: number; z: number }): void {
-    this.remotes.mineBoom(id, pos);
-  }
+  remoteTurretShot(id: number, targetId: string): void { this.remotes.turretShot(id, targetId); }
+  remoteSentryShot(id: number, owner: string, x: number, y: number, z: number): void { this.remotes.sentryShot(id, owner, x, y, z); }
+  remoteMortarShot(id: number, owner: string, vx: number, vy: number, vz: number): void { this.remotes.mortarShot(id, owner, vx, vy, vz); }
+  remoteMineBoom(id: number, pos: { x: number; y: number; z: number }): void { this.remotes.mineBoom(id, pos); }
 
 
 
@@ -662,7 +641,7 @@ export class Deployables {
       this.deps.world.explosions.push(new Explosion(
         this.deps.scene, item.pos, false, 0, this.deps.lazyTerrain(), 0.9, tint));
       sfx.explosionAt(item.pos, false);
-    } else if (item.kind === 'turret') {
+    } else if (item.kind === 'turret' || item.kind === 'mortar' || item.kind === 'cgturret') {
       this.deps.world.explosions.push(new Explosion(
         this.deps.scene, item.pos, false, 0, this.deps.lazyTerrain(), 1.4, 0xFF_77_44));
       sfx.explosionAt(item.pos, true);
@@ -735,7 +714,10 @@ export class Deployables {
     if (this.deps.lazyNetworkManager().isConnected()) {return;}
     const mult = weapon === WeaponType.Sticky ? 2 : 1;
     const aoe = splash || damage;
-    for (const i of this.remotes.values()) {
+    // Both lists — `items` holds locally-adopted plants (mine and the
+    // bots'); the server's applyBlast sweeps its whole roster, and its
+    // splash is NOT team-checked: your own blast can level your own stand.
+    for (const i of [...this.items, ...this.remotes.values()]) {
       if (i.dead || i.downed) {continue;}
       const dist = i.pos.distanceTo(pos);
       if (dist > radius) {continue;}
@@ -748,6 +730,18 @@ export class Deployables {
         this.deps.showItemBar?.(i, i.team !== undefined && i.team === this.deps.world.localTeam);
       }
     }
+  }
+
+  /** Nearest hostile emplacement an attacker could shell — mirrors the
+   *  server senses' hostileGear scan (enemy-team items in range). */
+  hostileGear(team: string | undefined, pos: THREE.Vector3, range: number): { pos: THREE.Vector3; kind: DeployKind } | null {
+    let best: Item | null = null; let bd = range * range;
+    for (const list of [this.items, this.remotes.values()]) {for (const i of list) {
+      if (i.dead || i.downed || !i.team || i.team === team) {continue;}
+      const d = i.pos.distanceToSquared(pos);
+      if (d < bd) {bd = d; best = i;}
+    }}
+    return best ? { pos: best.pos, kind: best.kind } : null;
   }
 
   /** Creature-targeting candidates — deployed items aggro the wildlife. */
@@ -792,6 +786,8 @@ export class Deployables {
       this.updatePod(pod, dt);
       if (pod.ttl <= 0) {
         pod.turret?.dispose(this.deps.scene);
+        pod.mortar?.dispose(this.deps.scene);
+        pod.cgturret?.dispose(this.deps.scene);
         pod.station?.dispose(this.deps.scene);
         pod.drone?.dispose(this.deps.scene);
         pod.shield?.dispose(this.deps.scene);

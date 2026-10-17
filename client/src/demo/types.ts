@@ -158,7 +158,7 @@ export const TARGETTYPE_DEPLOY_BASE = 128;
 
 export const DEPLOY_ID_FLAG = 0x40_00;
 
-export const DEMO_DEPLOY_KINDS = ['turret', 'mine', 'station', 'drone', 'shield', 'nugget', 'beacon', 'generator', 'sensor', 'baseturret'] as const;
+export const DEMO_DEPLOY_KINDS = ['turret', 'mortar', 'cgturret', 'mine', 'station', 'drone', 'shield', 'nugget', 'beacon', 'generator', 'sensor', 'baseturret'] as const;
 
 export function demoDeployKindIndex(kind: string): number {
 

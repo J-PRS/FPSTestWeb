@@ -43,6 +43,12 @@ export function wireDeployables(ctx: NetCtx): void {
     mgr().remoteSentryShot(id, owner, x, y, z);
     deps.lazyDemoManager?.()?.recordDeployShot(id, { x, y, z });
   };
+  networkManager.onMortarShot = (id, owner, vx, vy, vz): void => {
+    if (!Number.isFinite(vx + vy + vz)) {deps.logger.warn(`mortarShot #${id} dropped: non-finite velocity`); return;}
+    mgr().remoteMortarShot(id, owner, vx, vy, vz);
+    const at = mgr().remoteReplicas().get(id)?.pos;
+    if (at) {deps.lazyDemoManager?.()?.recordDeployShot(id, at);}
+  };
   networkManager.onMineBoom = (id, pos): void => {
     if (!Number.isFinite(pos.x + pos.y + pos.z)) {deps.logger.warn(`mineBoom #${id} dropped: non-finite position`); return;}
     mgr().remoteMineBoom(id, pos);

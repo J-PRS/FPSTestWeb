@@ -44,6 +44,9 @@ export interface RoomStructHost {
   projectiles: { attachStructures(list: StructureSpec[]): void } | null;
   ballSim: BallSim;
   deployables: { teamPowered(team: string): boolean } | null | undefined;
+  /** Pluggable mode's module — its structures() feeds eff() so node
+   *  bases and future mode solids ride the one collider/wire pipeline. */
+  modeModule: { structures?(): StructureSpec[] } | null;
   messages: { setMap(spec: MapSpec): void };
   broadcast(msg: ServerMessage, exclude?: string): void;
   mapSrc: string;
@@ -80,7 +83,11 @@ export class RoomStructures {
     // 'hull' is the collider-only kind — the client mesh builder skips it
     // (GLB interiors already render), while every sim AND the wire echo
     // see the same boxes, so prediction collides identically both sides.
-    return host.spec.interiors?.length ? authored.concat(hullBoxes(host.mapSrc)) : authored;
+    const all = host.spec.interiors?.length ? authored.concat(hullBoxes(host.mapSrc)) : authored;
+    // Module-owned solids last — colliders, ball/projectile sims AND the
+    // wire echo all see conquest bases / future mode geometry as one list.
+    const mode = host.modeModule?.structures?.() ?? [];
+    return mode.length > 0 ? all.concat(mode) : all;
   }
 
   /** Re-attach the merged structure list everywhere it feeds — called

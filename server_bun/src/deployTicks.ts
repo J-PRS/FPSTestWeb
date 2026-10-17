@@ -11,6 +11,7 @@ import {
 } from './RoomDeployables.ts';
 import { healPool } from './healPool.ts';
 import { DEPLOY_ITEMS } from '../../shared/deployItems.ts';
+import { GRAVITY } from '../../shared/movement.ts';
 import { simNow } from './simClock.ts';
 import { wallNow , wallMs} from './wallClock.ts';
 
@@ -129,6 +130,36 @@ export function tickTurret(r: RoomDeployables, d: Deployed, dt: number): void {
     r.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'turretShot', 'id', d.id, { owner: d.owner, targetId: target }) as ServerMessage);
     r.room.messages.turretAttack(d.owner, target, TURRET_DAMAGE);}
 
+const CG_RANGE = DEPLOY_ITEMS.cgturret.range!;
+const CG_FIRE_INTERVAL = DEPLOY_ITEMS.cgturret.fireInterval!;
+const CG_DAMAGE = DEPLOY_ITEMS.cgturret.damage!;
+
+/** Chaingun turret: same nearest-hostile + LOS scan as the sentry, but
+ *  the pulse pays a ~3-bolt burst's damage on the turretShot wire — the
+ *  spray is cosmetic (client paints tracers), the outcome rides the same
+ *  turretAttack funnel so kill credit/protection behave identically. */
+export function tickCg(r: RoomDeployables, d: Deployed, dt: number): void {
+    d.fireCd -= dt;
+    if (d.fireCd > 0) {return;}
+    const dTeam = r.teamOf(d);
+    let target: string | null = null;
+    let bestD2 = CG_RANGE * CG_RANGE;
+    for (const [pid, p] of r.room.players.getAllPlayers()) {
+      if (p.isDead || pid === d.owner) {continue;}
+      if (dTeam && p.team === dTeam) {continue;}
+      if (p.protectedUntil > simNow()) {continue;}
+      const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 >= bestD2) {continue;}
+      if (!losClear(r, d.pos, p.position, dTeam)) {continue;}
+      bestD2 = d2; target = pid;
+    }
+    if (!target) { d.fireCd = 0.15; return; }
+    d.fireCd = CG_FIRE_INTERVAL;
+    r.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'turretShot', 'id', d.id, { owner: d.owner, targetId: target }) as ServerMessage);
+    r.room.messages.turretAttack(d.owner, target, CG_DAMAGE);
+}
+
 const SENTRY_RANGE = DEPLOY_ITEMS.baseturret.range!;
 const SENTRY_FIRE_INTERVAL = DEPLOY_ITEMS.baseturret.fireInterval!;
 const SENTRY_DAMAGE = DEPLOY_ITEMS.baseturret.damage!;
@@ -174,6 +205,67 @@ export function tickSentry(r: RoomDeployables, d: Deployed, dt: number): void {
     };
     r.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'sentryShot', 'id', d.id, { owner: d.owner, x: aim.x, y: aim.y, z: aim.z }) as ServerMessage);
     r.bolts.push({ at: aim, ttl: flight, owner: d.owner, dmg: SENTRY_DAMAGE, rad: SENTRY_BLAST_RADIUS, kb: SENTRY_KNOCKBACK });
+}
+
+const MORTAR_RANGE = DEPLOY_ITEMS.mortar.range!;
+const MORTAR_MIN_RANGE = DEPLOY_ITEMS.mortar.minRange!;
+const MORTAR_FIRE_INTERVAL = DEPLOY_ITEMS.mortar.fireInterval!;
+const MORTAR_DAMAGE = DEPLOY_ITEMS.mortar.damage!;
+const MORTAR_BLAST_RADIUS = DEPLOY_ITEMS.mortar.blastRadius!;
+const MORTAR_KNOCKBACK = DEPLOY_ITEMS.mortar.knockback!;
+const MORTAR_SHELL_SPEED = DEPLOY_ITEMS.mortar.projSpeed!;
+const MORTAR_MUZZLE_UP = 1.6; // tube mouth above the tripod base
+
+/** Field mortar — lobs REAL mortar shells (weapon row 4 gravity/speed)
+ *  over cover onto the nearest hostile inside the [minRange, range]
+ *  band. Deliberately NO losClear: artillery exists to drop over the
+ *  hill the sentry can't shoot through. The bolt lands at the solved
+ *  impact point; the mortarShot broadcast carries launch velocity so
+ *  clients replay the identical arc as a visible shell. */
+export function tickMortar(r: RoomDeployables, d: Deployed, dt: number): void {
+    d.fireCd -= dt;
+    if (d.fireCd > 0) {return;}
+    const dTeam = r.teamOf(d);
+    let target: { x: number; y: number; z: number } | null = null;
+    let tv = { x: 0, y: 0, z: 0 };
+    let bestD2 = MORTAR_RANGE * MORTAR_RANGE;
+    const minD2 = MORTAR_MIN_RANGE * MORTAR_MIN_RANGE;
+    for (const [pid, p] of r.room.players.getAllPlayers()) {
+      if (p.isDead || pid === d.owner) {continue;}
+      if (dTeam && p.team === dTeam) {continue;}
+      if (p.protectedUntil > simNow()) {continue;}
+      const dx = p.position.x - d.pos.x, dz = p.position.z - d.pos.z;
+      const d2 = dx * dx + dz * dz; // horizontal band — the arc eats height
+      if (d2 >= bestD2 || d2 < minD2) {continue;}
+      bestD2 = d2; target = p.position;
+      tv = { x: p.velocity?.x ?? 0, y: p.velocity?.y ?? 0, z: p.velocity?.z ?? 0 };
+    }
+    if (!target) { d.fireCd = 0.25; return; }
+    // One lead iteration: solve the arc to the led point. Low branch of
+    // asin — same family the bot lob solver uses.
+    const g = Math.abs(GRAVITY);
+    const mx = d.pos.x, my = d.pos.y + MORTAR_MUZZLE_UP, mz = d.pos.z;
+    let aim = target;
+    let vx = 0, vy = 0, vz = 0, flight = 0;
+    for (let it = 0; it < 2; it += 1) {
+      const dx = aim.x - mx, dz = aim.z - mz;
+      const R = Math.hypot(dx, dz);
+      const dy = aim.y + 0.5 - my;
+      const s = MORTAR_SHELL_SPEED;
+      const s2 = s * s;
+      const disc = s2 * s2 - g * (g * R * R + 2 * dy * s2);
+      if (disc <= 0) {target = null; break;} // beyond the envelope's reach
+      const pitch = Math.atan2(s2 - Math.sqrt(disc), g * R); // low lob
+      flight = R / (s * Math.cos(pitch));
+      vx = (dx / R) * s * Math.cos(pitch);
+      vy = s * Math.sin(pitch);
+      vz = (dz / R) * s * Math.cos(pitch);
+      aim = { x: target.x + tv.x * flight, y: target.y + tv.y * flight * 0.5, z: target.z + tv.z * flight };
+    }
+    if (!target) { d.fireCd = 0.5; return; }
+    d.fireCd = MORTAR_FIRE_INTERVAL;
+    r.room.broadcast(eventPayload(WORLD_MODEL.deploy!, 'mortarShot', 'id', d.id, { owner: d.owner, vx, vy, vz }) as ServerMessage);
+    r.bolts.push({ at: { x: aim.x, y: aim.y, z: aim.z }, ttl: flight, owner: d.owner, dmg: MORTAR_DAMAGE, rad: MORTAR_BLAST_RADIUS, kb: MORTAR_KNOCKBACK });
 }
 
 const SENSOR_RANGE = DEPLOY_ITEMS.sensor.range!;

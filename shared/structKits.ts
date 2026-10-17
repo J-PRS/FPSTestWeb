@@ -39,8 +39,12 @@ const box = (x: number, y: number, z: number, w: number, h: number, d: number, r
  *  height), so no box approximation eats the air over the slope. The
  *  plinth stays boxy: an octagonal skirt pair is close enough there. */
 const domeHulls = (r: number, b = 1.8): KitHull[] => [
-  box(0, b / 2, 0, r * 1.94, b, r * 1.94),
-  box(0, b / 2, 0, r * 1.94, b, r * 1.94, Math.PI / 4),
+  // Full-width plinth only to grade; the deep footing NECKS below like
+  // the visual skirt's root — a fat underground box would swallow
+  // neighboring walls' hulls in authored compounds.
+  box(0, (b + 0.7) / 2, 0, r * 1.85, b - 0.7, r * 1.85),
+  box(0, (b + 0.7) / 2, 0, r * 1.85, b - 0.7, r * 1.85, Math.PI / 4),
+  box(0, -6, 0, r * 1.2, 10, r * 1.2),                          // buried root piling (−11…−1) — THE ground contact; pieces seat on footprint max so the plinth is intentionally elevated
   { pos: { x: 0, y: b + r / 2, z: 0 }, size: { x: r * 2, y: r, z: r * 2 }, dome: r },
 ];
 
@@ -103,7 +107,9 @@ const BUNKER: KitHull[] = [
 
 export const KIT_HULLS: Record<string, KitHull[]> = {
   // Base pieces
-  katastand: [box(0, 1.6, 0, 6.4, 3.2, 6.4)],
+  // Deck box above grade + a necked root piling below (mirrors the
+  // loft's taper) — fat footing underground would clash with neighbors.
+  katastand: [box(0, 1.95, 0, 6.4, 2.5, 6.4), box(0, -6.5, 0, 4, 13, 4)],
   tower:     [box(0, 6, 0, 9, 12, 9)],
   wallrun:   WALLRUN_18,
   wallstub:  WALLSTUB_8,
@@ -233,7 +239,11 @@ export function seatKits(
     // Enterables with their own deck (genhouse's slab tops at +1m) seat
     // HIGH instead: base on the max sample so the floor clears terrain
     // everywhere inside — walking into a building onto dirt is the bug.
-    const floored = s.piece === 'genhouse';
+    // Node structures too: their footing runs 12m under the base plane
+    // precisely so the piece can seat PROUD — uphill footing buries into
+    // the slope while the dome crown/pedestal deck stays fully exposed.
+    // Center/min seating reads as a half-sunk dome.
+    const floored = s.piece === 'genhouse' || s.piece === 'gendome' || s.piece === 'katastand';
     let min = Infinity, max = -Infinity;
     // Center + the four footprint extremes. Five probes per piece is
     // enough — terrain is a smooth heightfield, a knife-edge between

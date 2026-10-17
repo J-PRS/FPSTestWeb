@@ -209,6 +209,15 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
         { name: 'y', wire: 'num', channel: 'sim' },
         { name: 'z', wire: 'num', channel: 'sim' },
       ],
+      // Mortar turret: the launch VELOCITY rides the wire — clients spawn
+      // a replica mortar shell on the exact arc the server solved; the
+      // blast itself arrives via the scheduled bolt (mineBlast funnel).
+      mortarShot: [
+        { name: 'owner', wire: 'str', channel: 'edge' },
+        { name: 'vx', wire: 'num', channel: 'sim' },
+        { name: 'vy', wire: 'num', channel: 'sim' },
+        { name: 'vz', wire: 'num', channel: 'sim' },
+      ],
       mineBoom: [
         { name: 'owner', wire: 'str', channel: 'edge' },
         { name: 'pos', wire: 'vec3', channel: 'sim' },
@@ -266,6 +275,7 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'hp', wire: 'num', channel: 'sim' },
       { name: 'maxHp', wire: 'num', channel: 'edge' },
       { name: 'build', wire: 'num', channel: 'sim' },
+      { name: 'buildBy', wire: 'str', channel: 'edge' },
       { name: 'core', wire: 'bool', channel: 'edge' },
     ],
   },

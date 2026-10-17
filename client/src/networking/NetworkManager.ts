@@ -132,6 +132,7 @@ export class NetworkManager {
   /** Server sim fired a remote sentry — paint the rocket at the deployable. */
   public onTurretShot: ((id: number, owner: string, targetId: string) => void) | null = null;
   public onSentryShot: ((id: number, owner: string, x: number, y: number, z: number) => void) | null = null;
+  public onMortarShot: ((id: number, owner: string, vx: number, vy: number, vz: number) => void) | null = null;
   /** Server-owned mine exploded — explosion FX only; damage flows via the
    *  normal playerHit/knockback channel. */
   public onMineBoom: ((id: number, pos: { x: number; y: number; z: number }) => void) | null = null;

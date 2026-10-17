@@ -140,6 +140,11 @@ export function mkKataStand(teamGlow = 0x59_F2_FF): THREE.Group {
   const body = mkLoft(topDown(
     { z: 2.6, ring: profOct(5.4, 5.4, 0.7) },
     { z: 0,   ring: profOct(6.4, 6.4, 0.9) },
+    // Buried foundation — nodes seat at CENTER height, so a slope's
+    // downhill edge needs a deep footing to stand on, not air. The
+    // neck-down tip is the root-piling read from skirt().
+    { z: -3,  ring: profOct(6.5, 6.5, 0.9) },
+    { z: -12, ring: profOct(2.1, 2.1, 0.4) },
   ), hullMat);
   body.rotation.x = -Math.PI / 2;
   g.add(body);
@@ -172,7 +177,7 @@ export function mkKataStand(teamGlow = 0x59_F2_FF): THREE.Group {
   );
   band.rotation.x = -Math.PI / 2;
   g.add(band);
-  g.userData.hulls = [{ pos: { x: 0, y: 1.6, z: 0 }, size: { x: 6.4, y: 3.2, z: 6.4 } } satisfies HullBox];
+  g.userData.hulls = [{ pos: { x: 0, y: -4.4, z: 0 }, size: { x: 6.4, y: 15.2, z: 6.4 } } satisfies HullBox];
   return g;
 }
 
@@ -374,7 +379,7 @@ export function mkFlagTower(w = 8, h = 10.5, teamGlow = 0x59_F2_FF, door = 3): T
  *  dark recessed door lintel. Reads "power plant" by silhouette alone. */
 export function mkGenDome(r = 5, teamGlow = 0x59_F2_FF): THREE.Group {
   const g = new THREE.Group();
-  g.add(skirt(profOct(r * 2.1, r * 2.1, r * 0.25), 1.8, 1.22, hullMat, 3));
+  g.add(skirt(profOct(r * 2.1, r * 2.1, r * 0.25), 1.8, 1.22, hullMat, 12));
   const cap = dome(r, hullMat);
   cap.position.y = 1.8;
   g.add(cap);
@@ -387,8 +392,8 @@ export function mkGenDome(r = 5, teamGlow = 0x59_F2_FF): THREE.Group {
   // approximation walls off the air over the slope.
   const b = 1.8;
   g.userData.hulls = [
-    { pos: { x: 0, y: b / 2, z: 0 }, size: { x: r * 1.94, y: b, z: r * 1.94 } },
-    { pos: { x: 0, y: b / 2, z: 0 }, size: { x: r * 1.94, y: b, z: r * 1.94 }, rotY: Math.PI / 4 },
+    { pos: { x: 0, y: b / 2 - 6, z: 0 }, size: { x: r * 1.94, y: b + 12, z: r * 1.94 } },
+    { pos: { x: 0, y: b / 2 - 6, z: 0 }, size: { x: r * 1.94, y: b + 12, z: r * 1.94 }, rotY: Math.PI / 4 },
     { pos: { x: 0, y: b + r / 2, z: 0 }, size: { x: r * 2, y: r, z: r * 2 }, dome: r },
   ] satisfies HullBox[];
   return g;

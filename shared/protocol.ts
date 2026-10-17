@@ -301,7 +301,7 @@ export type ServerMessage =
   | { type: 'flagUpdate'; flags: { team: TeamId; pos: Vec3; home?: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[] }
   // Conquest lattice — the whole node set (≤25 rows) on every edge; the
   // mode's lifecycle is one roster feed, no spawn/gone verbs.
-  | { type: 'nodeUpdate'; nodes: { id: number; gx: number; gz: number; pos: Vec3; owner: 'alpha' | 'bravo' | 'neutral'; hp: number; maxHp: number; build: number; core: boolean }[] }
+  | { type: 'nodeUpdate'; nodes: { id: number; gx: number; gz: number; pos: Vec3; owner: 'alpha' | 'bravo' | 'neutral'; hp: number; maxHp: number; build: number; buildBy: 'alpha' | 'bravo' | null; core: boolean }[] }
   // Server-owned pickups: creature kills drop a nugget gem; touching it
   // banks a team point — replaces trusting client 'bank' claims.
   | { type: 'pickupSpawn'; id: number; pos: Vec3; kind?: PickupKind }
@@ -322,6 +322,9 @@ export type ServerMessage =
   // Base sentry bolt — unlike turretShot the blast lands at the aim point,
   // not on the target: the client paints a straight-line shell to x/y/z.
   | { type: 'sentryShot'; id: number; owner: string; x: number; y: number; z: number }
+  // Mortar turret launch — the arc is carried as solved velocity; clients
+  // spawn a replica shell on the identical ballistic path.
+  | { type: 'mortarShot'; id: number; owner: string; vx: number; vy: number; vz: number }
   // Server-owned mine tripped — clients paint the blast FX; damage itself
   // arrives through playerHit/knockback like everything else.
   | { type: 'mineBoom'; id: number; owner: string; pos: Vec3 }

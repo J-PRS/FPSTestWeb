@@ -6,7 +6,9 @@
 // cap/label for the loadout menu and HUD. Per-kind behavior (throw visual,
 // plant entity class, SFX) still lives with the entity — visuals can't be
 // shared (three.js isn't importable here).
-export type DeployKind = 'turret' | 'mine' | 'station' | 'drone' | 'shield' | 'nugget' | 'beacon'
+import { WEAPONS, WeaponType } from './weaponTable.ts';
+
+export type DeployKind = 'turret' | 'mortar' | 'cgturret' | 'mine' | 'station' | 'drone' | 'shield' | 'nugget' | 'beacon'
   // Authored-only base assets — cap 0 means a player can never plant one;
   // they exist only via the map spec `deploys` block.
   | 'generator' | 'sensor' | 'baseturret';
@@ -59,10 +61,22 @@ export interface DeployItemDef {
   healRate?: number;
   /** Bolt speed m/s (baseturret — real leadable projectile, not hitscan). */
   projSpeed?: number;
+  /** Dead-zone radius (mortar — it lobs, so point-blank is unreachable). */
+  minRange?: number;
 }
 
 export const DEPLOY_ITEMS: Record<DeployKind, DeployItemDef> = {
   turret:  { label: 'Sentry',  cap: 2, hp: 60,  ttlS: 180, cost: 2, range: 42, fireInterval: 1.25, damage: 14, armS: 0.45, bodyR: 0.9, bodyH: 1.7 },
+  // Mortar turret — lobs REAL mortar shells (weapon row 4): arming fuse,
+  // thud-bounce, the same 18m splash. Dead zone below minRange by design:
+  // artillery can't depress to knife range. Shell damage/radius/knockback
+  // come straight from WEAPONS[Mortar] so the two can never drift.
+  mortar:  { label: 'Mortar',  cap: 1, hp: 90,  ttlS: 240, cost: 3, range: 95, minRange: 20, fireInterval: 4, armS: 1.2, projSpeed: WEAPONS[WeaponType.Mortar]!.speed, damage: WEAPONS[WeaponType.Mortar]!.aoeDamage, blastRadius: WEAPONS[WeaponType.Mortar]!.aoeRadius, knockback: WEAPONS[WeaponType.Mortar]!.knockbackForce, bodyR: 1.1, bodyH: 1.5 },
+  // Chaingun turret — suppression emplacement: sprays real CG bolts
+  // (weapon row 3) at high cadence over a shorter, LOS-gated envelope.
+  // Server pays damage as coarse pulses on the turretShot wire (~3 bolts
+  // per pulse); the client paints/fires real 250 m/s bolts either way.
+  cgturret: { label: 'Chaingun', cap: 2, hp: 50,  ttlS: 150, cost: 2, range: 36, fireInterval: 0.6, damage: WEAPONS[WeaponType.Chaingun]!.directDamage * 3, armS: 0.8, bodyR: 0.8, bodyH: 1.5 },
   mine:    { label: 'Mine',    cap: 6, hp: 20,  ttlS: 120, cost: 2, armS: 1, triggerDist: 3.2, blastRadius: 6, blastDamage: 22, knockback: 12, bodyR: 0.5, bodyH: 0.35 },
   station: { label: 'Pad',     cap: 1, hp: 80,  ttlS: 240, cost: 2, range: 9, fireInterval: 0.5, healRate: 0.09, bodyR: 1.4, bodyH: 1.1 },
   drone:   { label: 'Drone',   cap: 2, hp: 40,  ttlS: 90,  cost: 2, range: 35, fireInterval: 1.6, damage: 9, hoverUp: 2.5, bodyR: 0.7, bodyH: 0.6 },

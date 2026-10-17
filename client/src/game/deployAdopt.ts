@@ -11,6 +11,11 @@ import {type DeployStation, DeployStation as StationClass} from '../entities/Dep
 import type { DeployDrone } from '../entities/DeployDrone.js';
 import type { DeployShield } from '../entities/DeployShield.js';
 import type { DeployBeacon } from '../entities/DeployBeacon.js';
+import type { DeployMortar } from '../entities/DeployMortar.js';
+import type { DeployCg } from '../entities/DeployCg.js';
+import { Projectile } from '../projectiles/Projectile.js';
+import { MORTAR_CONFIG } from '../projectiles/mortarConfig.js';
+import { CHAINGUN_CONFIG } from '../projectiles/chaingunConfig.js';
 import { Explosion } from '../effects/explosion.js';
 import { screenShake } from '../effects/screenShake.js';
 import * as sfx from '../core/sfx.js';
@@ -20,6 +25,9 @@ import type { DeployRockets } from './deployRockets.js';
 import type { DeployDeps, DeployOwner, Item } from './deployables.js';
 
 type Foe = { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean; playerId?: string };
+
+const _zeroVel = new THREE.Vector3();
+const _shotDir = new THREE.Vector3();
 
 export interface AdoptHost {
   foesFor(owner?: DeployOwner): Foe[];
@@ -76,6 +84,70 @@ export class DeployAdopter {
     };
     const {hurt} = item;
     item.hurt = (dmg): void => { hurt(dmg); if (d.dead) {this.host.killItem(item);} };
+    this.items.push(item);
+  }
+
+  /** Mortar turret — lobs the REAL player-mortar shell (arming fuse,
+   *  thud-bounce, 18m splash) at hostiles in its [minRange, range] band.
+   *  Offline the local Projectile carries the blast through the normal
+   *  funnel; connected the server owns the shot — the mortarShot wire
+   *  event paints the same arc as a replica. */
+  adoptMortar(m: DeployMortar, owner?: DeployOwner): void {
+    const item: Item = {
+      kind: 'mortar', candId: m.candId, pos: m.pos, dead: false,
+      hurt: (dmg): void => m.takeDamage(dmg),
+      v: m,
+      update: (dt): void => {
+        const shot = m.update(dt, this.host.foesFor(owner));
+        if (!shot || this.deps.lazyNetworkManager().isConnected()) {return;}
+        const p = new Projectile(this.deps.scene, shot.muzzle, _shotDir.copy(shot.vel).normalize(), _zeroVel, MORTAR_CONFIG);
+        p.vel.copy(shot.vel); // exact solved arc — ctor's inherit math is for held weapons
+        p.shooterId = owner?.id ?? null;
+        p.shooterTeam = owner?.team ?? null;
+        if (owner) { // a bot-owned shell can hit the local player; your own can't (same law as bot lobs)
+          p.sweepLocal = (): THREE.Vector3 | null => { const pl = this.deps.lazyPlayer(); return pl.isDead ? null : pl.pos; };
+          p.localClass = (): string | undefined => this.deps.lazyPlayer().appliedClass;
+        }
+        this.deps.world.projectiles.push(p);
+        sfx.shotAt(shot.muzzle, WeaponType.Mortar);
+      },
+      dispose: (): void => m.dispose(this.deps.scene),
+      owner: owner?.id,
+      team: owner?.team,
+    };
+    const {hurt} = item;
+    item.hurt = (dmg): void => { hurt(dmg); if (m.dead) {this.host.killItem(item);} };
+    this.items.push(item);
+  }
+
+  /** Chaingun turret — real CG bolts (weapon row 3) at ~7/s over a
+   *  LOS-gated envelope. Offline each bolt carries the honest sweep;
+   *  connected the server's turretShot pulse owns damage and paints a
+   *  tracer burst instead (remoteDeployables branches on kind). */
+  adoptCg(c: DeployCg, owner?: DeployOwner): void {
+    const item: Item = {
+      kind: 'cgturret', candId: c.candId, pos: c.pos, dead: false,
+      hurt: (dmg): void => c.takeDamage(dmg),
+      v: c,
+      update: (dt): void => {
+        const shot = c.update(dt, this.host.foesFor(owner));
+        if (!shot || this.deps.lazyNetworkManager().isConnected()) {return;}
+        const p = new Projectile(this.deps.scene, shot.muzzle, _shotDir.copy(shot.vel).normalize(), _zeroVel, CHAINGUN_CONFIG);
+        p.vel.copy(shot.vel);
+        p.shooterId = owner?.id ?? null;
+        p.shooterTeam = owner?.team ?? null;
+        if (owner) {
+          p.sweepLocal = (): THREE.Vector3 | null => { const pl = this.deps.lazyPlayer(); return pl.isDead ? null : pl.pos; };
+          p.localClass = (): string | undefined => this.deps.lazyPlayer().appliedClass;
+        }
+        this.deps.world.projectiles.push(p);
+      },
+      dispose: (): void => c.dispose(this.deps.scene),
+      owner: owner?.id,
+      team: owner?.team,
+    };
+    const {hurt} = item;
+    item.hurt = (dmg): void => { hurt(dmg); if (c.dead) {this.host.killItem(item);} };
     this.items.push(item);
   }
 
