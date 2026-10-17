@@ -9,26 +9,31 @@
  */
 
 export const MOVEMENT_CONFIG = {
-  maxVelocityGround: 7,
+  // Walk cap at speedScale 1 — T2's medium (12 m/s). Class scales hit
+  // T2's spread: light ≈15, medium 12, heavy ≈7.
+  maxVelocityGround: 12,
   groundAccelerate: 800,
-  groundFriction: 50,
-  stopThreshold: 1,
+  // T1 traction: GROUNDFORCE/MASS × GROUNDTRACTION = (9·40/9) × 3 = 120 —
+  // the bounded accel that converges grounded velocity toward the walk
+  // wish. It's the force skiing exists to dodge.
+  groundTractionAccel: 120,
   maxPassiveAirvel: 10,
   airControl: 0.2,
   terminalVelocity: 100,
-  jumpSpeed: 7,
+  jumpSpeed: 9.8,
   autoHop: true,
-  // Horizontal overspeed bleed while grounded: blast/slide velocity above
-  // the ground cap decays toward it instead of being hard-clamped — the
-  // clamp used to truncate knockback impulses (including the loft that
-  // makes rocket jumps) before the body ever left the floor.
-  overspeedBleed: 4,
   // Generous grounding — Tribes walkers stay glued: any terrain is
   // walkable at any angle, and a lip/crest under this height never
   // reads airborne (the air-control steal + walk→jump anim flicker a
   // strict gate produced). A real launch — explosion loft, jet burn,
   // jump takeoff — clears the snap via the vel gate.
   groundSnapDistance: 0.6,
+  // Walkers glue downhill harder than movers: a descent can drop past
+  // the 0.6m band in one step, and without a deeper reach the body
+  // goes ballistic over terrain a Tribes walker just walks down
+  // (Torque findContact probes BELOW the feet — this is that probe).
+  // Only reachable below stickSpeed, so movers can't vacuum to dirt.
+  walkGlueDistance: 1.4,
   groundLaunchVel: 3,
   // T1 parity: contact lingers 256ms (MAXJUMPTICKS=8 @ 32ms) after the
   // surface is lost — gentle crest hops stay grounded, real launches don't.
@@ -377,6 +382,19 @@ export class MoveSim {
     // grounded silently capped downhill speed at terminal/sin(slope).
     s.vel.y += GRAVITY * dt;
     if (!s.onGround && s.vel.y < -MOVEMENT_CONFIG.terminalVelocity) {s.vel.y = -MOVEMENT_CONFIG.terminalVelocity;}
+    // T1 ground glue: while grounded, cancel gravity's into-surface
+    // share BEFORE integrating — the Torque order (normal force kills
+    // acc·n each tick) keeps velocity slope-parallel, so a walker
+    // follows the face downhill instead of leaving a one-step gap the
+    // snap band has to chase. Without this, walking down any real slope
+    // detached into a ballistic hop every few steps.
+    if (s.onGround) {
+      const n = this.surface.getNormal(s.pos.x, s.pos.z, _n);
+      const vdn = s.vel.x * n.x + s.vel.y * n.y + s.vel.z * n.z;
+      if (vdn < 0) {
+        s.vel.x -= n.x * vdn; s.vel.y -= n.y * vdn; s.vel.z -= n.z * vdn;
+      }
+    }
 
     s.pos.x += s.vel.x * dt;
     s.pos.y += s.vel.y * dt;
@@ -422,15 +440,11 @@ export class MoveSim {
     const s = this.state;
     const n = this.surface.getNormal(s.pos.x, s.pos.z, _n);
     const dirLen = Math.hypot(dir.x, dir.z);
-
-    // Tangential speed before input accel — the cap below measures
-    // overspeed against this, not the post-accel value, so holding a
-    // direction can never grow speed past the cap (that input-pushed
-    // equilibrium is what let walking reach absurd speeds).
-    const vdn0 = s.vel.x * n.x + s.vel.y * n.y + s.vel.z * n.z;
-    const keep0 = Math.max(vdn0, 0);
-    const tSpeedIn = Math.hypot(s.vel.x - n.x * keep0, s.vel.y - n.y * keep0, s.vel.z - n.z * keep0);
-    if (dirLen > 0) {
+    const maxGround = MOVEMENT_CONFIG.maxVelocityGround * this.speedScale;
+    // T1 has no separate ground accel — the bounded traction force below
+    // IS the motor. Skiers are exempt from traction, so a skier below
+    // walk speed still needs a push-off or he never gets moving.
+    if (this.input.skiHeld && dirLen > 0) {
       // Project input onto the slope surface.
       const dotN = dir.x * n.x + dir.z * n.z;
       let sx = dir.x - n.x * dotN, sz = dir.z - n.z * dotN;
@@ -441,16 +455,6 @@ export class MoveSim {
         s.vel.x += sx * acc * dt;
         s.vel.z += sz * acc * dt;
       }
-    } else if (!this.input.skiHeld) {
-      const speed = Math.hypot(s.vel.x, s.vel.y, s.vel.z);
-      if (speed > MOVEMENT_CONFIG.stopThreshold) {
-        const f = MOVEMENT_CONFIG.groundFriction * dt / speed;
-        s.vel.x -= s.vel.x * f; s.vel.y -= s.vel.y * f; s.vel.z -= s.vel.z * f;
-      } else {
-        s.vel.z = 0;
-        s.vel.y = s.vel.z;
-        s.vel.x = s.vel.y;
-      }
     }
 
     // Redirect velocity along the slope (kill the into-ground component).
@@ -459,29 +463,30 @@ export class MoveSim {
       s.vel.x -= n.x * velDotN; s.vel.y -= n.y * velDotN; s.vel.z -= n.z * velDotN;
     }
 
-    // Tangential-only cap: ground speed limits apply along the surface,
-    // so a walker climbing a steep face gets the same cap as on flat —
-    // a horizontal-only cap let uphill accel pump vel.y unbounded until
-    // the launch gate flicked him airborne in cycles. Velocity leaving
-    // the surface (positive normal) is ballistic and untouched — blast
-    // shoves and landings bleed toward the cap rather than snapping.
-    // …but only for a WALKER: T1 skiing is friction decayed ×0.6/tick —
-    // slope contact stays slippery, so a held ski preserves the slide
-    // (the documented divergence: our grip was slope-agnostic, bleeding
-    // every grounded tick even mid-ski — the hard ceiling on cap speed).
-    const vdn = s.vel.x * n.x + s.vel.y * n.y + s.vel.z * n.z;
-    const keep = Math.max(vdn, 0);
-    const tx = s.vel.x - n.x * keep, ty = s.vel.y - n.y * keep, tz = s.vel.z - n.z * keep;
-    const tSpeed = Math.hypot(tx, ty, tz);
-    const maxGround = MOVEMENT_CONFIG.maxVelocityGround * this.speedScale;
-    if (tSpeed > maxGround && !this.input.skiHeld) {
-      const base = Math.max(tSpeedIn, maxGround);
-      const want = maxGround + (base - maxGround) * Math.max(0, 1 - MOVEMENT_CONFIG.overspeedBleed * dt);
-      const k = Math.min(1, want / tSpeed);
-      s.vel.x = tx * k + n.x * keep; s.vel.y = ty * k + n.y * keep; s.vel.z = tz * k + n.z * keep;
+    // T1 Friction(): while in contact, ground force converges TANGENTIAL
+    // velocity toward the desired move speed with a bounded accel
+    // (GROUNDFORCE/MASS × GROUNDTRACTION = 40×3 = 120 in T1 units).
+    // Traction is why a Tribes walker holds ~walk speed downhill — the
+    // slope pump is drained every contact tick — instead of sliding
+    // into a ski run. It also owns stopping (wish=0) and overspeed
+    // (shoves bleed to cap at the same force). Skiers exempt by design:
+    // ski is literally "break contact with this force".
+    if (!this.input.skiHeld) {
+      const vdn = s.vel.x * n.x + s.vel.y * n.y + s.vel.z * n.z;
+      const keep = Math.max(vdn, 0);
+      const tx = s.vel.x - n.x * keep, ty = s.vel.y - n.y * keep, tz = s.vel.z - n.z * keep;
+      // Wish velocity projected onto the face, capped at walk speed.
+      const wx = dir.x * maxGround, wz = dir.z * maxGround;
+      const wdn = wx * n.x + wz * n.z;
+      const dx = wx - n.x * wdn - tx, dy = -n.y * wdn - ty, dz = wz - n.z * wdn - tz;
+      const dLen = Math.hypot(dx, dy, dz);
+      const force = MOVEMENT_CONFIG.groundTractionAccel * this.speedScale * dt;
+      const k = dLen > force && dLen > 0 ? force / dLen : 1;
+      s.vel.x += dx * k; s.vel.y += dy * k; s.vel.z += dz * k;
     }
   }
 
+  // oxlint-disable-next-line complexity -- the terrain contact state machine (penetration / band / grace) is one decision surface; splitting it re-tunes the branches it interleaves
   private collideTerrain(): void {
     const s = this.state;
     // T1 MAXJUMPTICKS grace: burn the lingering-contact window per step;
@@ -508,34 +513,23 @@ export class MoveSim {
       }
 
       s.pos.y = groundY;
-      // Rising impulses still clipping the surface must not re-ground —
-      // but "rising" means away from the surface: vel.y reads walking
-      // up an 80° face as a launch every step. A blast driven INTO a
-      // rising face (velDotN negative) while still climbing world-up
-      // is a launch too — grounding it here bleeds the arc that a
-      // pre-gate crest launch kept.
-      // A held jet reads as a launch: thrust after this clamp is what
-      // generates the climb, but re-grounding here would eat the whole
-      // burn until vel crosses the 3 m/s gate (~0.9s of dead jet).
+      // T1: contact is contact — grounded state has no velocity gate.
+      // "Rising" can only mean leaving the surface (velDotN past the
+      // launch gate) or a takeoff input; a walker climbing a steep face
+      // legitimately carries vel.y > 3 slope-parallel and must not read
+      // as a launch (the uphill airborne flicker that gate produced).
+      // A real blast launch still separates: velDotN > gate, or the
+      // position simply leaves the band next step.
       const inputTakeoff = this.input.jetHeld || this.input.jumpHeld || this.input.jumpPressed;
-      const rising = inputTakeoff
-        || velDotN > MOVEMENT_CONFIG.groundLaunchVel
-        || (velDotN < -MOVEMENT_CONFIG.groundLaunchVel && s.vel.y > MOVEMENT_CONFIG.groundLaunchVel);
-      if (rising && !inputTakeoff && s.vel.y <= MOVEMENT_CONFIG.groundLaunchVel && this.groundGraceT > 0) {
-        // Geometric bounce off the face, not a takeoff — the lingering
-        // contact survives the same as the banded skim below; the grace
-        // keeps burning (decremented at the top of collideTerrain).
-        // vel.y gate again: a real impulse launch (vel.y past the gate)
-        // inside the grace window is a takeoff, not a face skim — hold
-        // it down and the shove lands flat on every predicting client.
-        s.onGround = true;
-        this.allowNextJump = true;
-      } else {
-        s.onGround = !rising;
-        this.allowNextJump = !rising;
-        this.groundGraceT = rising ? 0 : MOVEMENT_CONFIG.groundGraceT;
-      }
-    } else if (dist < MOVEMENT_CONFIG.groundSnapDistance + (this.input.skiHeld ? MOVEMENT_CONFIG.skiTargetDistance : 0)) {
+      const rising = velDotN > MOVEMENT_CONFIG.groundLaunchVel || (inputTakeoff && velDotN > 0);
+      // A takeoff input held THROUGH a landing (velDotN < 0) is a landing,
+      // not a launch — mark airborne so traction doesn't grip the frame,
+      // but re-arm the jump so held-hop chains refire next step. Gating
+      // rising on bare inputTakeoff made one hop then a permanent slide.
+      s.onGround = !rising && !inputTakeoff;
+      this.allowNextJump = !rising;
+      this.groundGraceT = rising || inputTakeoff ? 0 : MOVEMENT_CONFIG.groundGraceT;
+    } else if (dist < MOVEMENT_CONFIG.groundSnapDistance + (this.input.skiHeld ? MOVEMENT_CONFIG.skiTargetDistance : MOVEMENT_CONFIG.walkGlueDistance)) {
       // Stick to the surface: bumps and crest lips inside the snap
       // distance keep ground contact instead of flipping airborne for a
       // frame or two. The launch gate is surface-normal velocity —
@@ -546,7 +540,7 @@ export class MoveSim {
       // never paid — walkers get stability, movers keep their arc.
       const n = this.surface.getNormal(s.pos.x, s.pos.z, _n, reach);
       const velDotN = s.vel.x * n.x + s.vel.y * n.y + s.vel.z * n.z;
-      const tx0 = s.vel.x - n.x * Math.max(velDotN, 0), ty0 = s.vel.y - n.y * Math.max(velDotN, 0), tz0 = s.vel.z - n.z * Math.max(velDotN, 0);
+      const tx0 = s.vel.x - n.x * Math.max(velDotN, 0), tz0 = s.vel.z - n.z * Math.max(velDotN, 0);
       const stickSpeed = MOVEMENT_CONFIG.maxVelocityGround * this.speedScale * 1.5;
       // Inside the band the surface is still in contact range — grounded
       // persists (T1 contact distance) UNLESS the body is really taking
@@ -557,31 +551,37 @@ export class MoveSim {
       // Skims are safe: crest lip reads velDotN launched while vel.y
       // stays small, so the world-up gate keeps them grounded.
       const takeoff = this.input.jetHeld || this.input.jumpHeld || this.input.jumpPressed;
-      if (!takeoff && s.vel.y <= MOVEMENT_CONFIG.groundLaunchVel) {
+      // Launch = leaving the face (velDotN), not world-up speed — a
+      // steep-face walker's vel.y > 3 is slope-parallel, not a launch.
+      if (!takeoff && velDotN <= MOVEMENT_CONFIG.groundLaunchVel) {
         this.groundGraceT = MOVEMENT_CONFIG.groundGraceT;
         s.onGround = true;
       } else {
         s.onGround = false;
         this.groundGraceT = 0;
       }
-      if (velDotN <= MOVEMENT_CONFIG.groundLaunchVel && Math.hypot(tx0, ty0, tz0) <= stickSpeed && !this.input.jetHeld) {
+      // In-band means NEAR the ground, not touching — only the jump is
+      // re-armed and the normal refreshed. T1 redirects velocity only on
+      // real penetration: killing inward vel here (with the pos snap
+      // gone) parachuted landings at ~0.5m/s inside the band and stalled
+      // held-hop chains for seconds before the next contact.
+      if (velDotN <= MOVEMENT_CONFIG.groundLaunchVel && Math.hypot(tx0, tz0) <= stickSpeed
+        && !(takeoff && velDotN > 0)) {
         this.lastJumpableNormal.x = n.x; this.lastJumpableNormal.y = n.y; this.lastJumpableNormal.z = n.z;
-        if (velDotN < 0) {
-          s.vel.x -= n.x * velDotN; s.vel.y -= n.y * velDotN; s.vel.z -= n.z * velDotN;
-        }
-        s.pos.y = groundY;
         this.allowNextJump = true;
       }
-    } else if (s.vel.y <= MOVEMENT_CONFIG.groundLaunchVel && !this.input.jetHeld && !this.input.jumpHeld && this.groundGraceT > 0) {
+    } else {
       // Outside the snap band without a takeoff input — the crest-lip
       // case T1 covered with MAXJUMPTICKS: still grounded for the grace.
-      // The world-up gate applies here too: a real impulse launch out
-      // of the band keeps flying instead of riding the linger window
-      // (dropping it blurred prediction after a stale reseed ~1m).
-      s.onGround = true;
-    } else {
-      s.onGround = false;
-      this.groundGraceT = 0;
+      // Launch gate is surface-normal like everywhere else: a steep-face
+      // walker's vel.y is slope-parallel and keeps the linger, while a
+      // real impulse launch leaves the face and flies (the world-up gate
+      // here blurred prediction after a stale reseed ~1m).
+      const noTakeoff = !this.input.jetHeld && !this.input.jumpHeld;
+      const ng = this.surface.getNormal(s.pos.x, s.pos.z, _n, reach);
+      const away = s.vel.x * ng.x + s.vel.y * ng.y + s.vel.z * ng.z;
+      s.onGround = noTakeoff && this.groundGraceT > 0 && away <= MOVEMENT_CONFIG.groundLaunchVel;
+      if (!s.onGround) { this.groundGraceT = 0; }
     }
   }
 }

@@ -71,9 +71,9 @@ export const CLASS_STATS: Record<ArmorClass, ClassStats> = {
   // or the pack can't lift the chassis off a stand — heavy sits at 1.2,
   // the heaviest frame that still climbs. Lighter mass also means bigger
   // blast shoves, so the tier spread doubles as the shove gradient.
-  light:  { maxHealth: -25, speedScale: 1.2, mass: 1.1,  eyeHeight: 1.8, radius: 0.5 },
-  medium: { maxHealth: 25,  speedScale: 1,  mass: 1.15, eyeHeight: 2, radius: 0.65 },
-  heavy:  { maxHealth: 100, speedScale: 0.8, mass: 1.2,  eyeHeight: 2.5, radius: 0.8 },
+  light:  { maxHealth: -25, speedScale: 14 / 12, mass: 1.1,  eyeHeight: 1.8, radius: 0.5 },
+  medium: { maxHealth: 25,  speedScale: 11 / 12, mass: 1.15, eyeHeight: 2, radius: 0.65 },
+  heavy:  { maxHealth: 100, speedScale: 8 / 12,  mass: 1.2,  eyeHeight: 2.5, radius: 0.8 },
 };
 
 /** Headroom above the eye — the helmet must live inside the capsule. */
