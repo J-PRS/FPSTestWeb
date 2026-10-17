@@ -4,7 +4,7 @@ import { nextTargetId } from './targetIds.js';
 import { GRAVITY, BALL_BASE_RADIUS } from '../core/config.js';
 
 import {type Terrain, getHeightfield} from '../world/terrain.js';
-import { makeSimBall, type StructureCollider } from '../../../shared/ballSim.js';
+import { makeSimBall, stepBall, applySimDamage, type StructureCollider, type SegmentKind } from '../../../shared/ballSim.js';
 import type { ColliderIndex } from '../../../shared/solidWorld.js';
 import { type Heightfield, hmFingerprint } from '../../../shared/heightfield.js';
 import { type NetBag, newNetBag, type NetStatics, type NetSeg, tickNet, isStaleSeg, applySeg } from './ballNet.js';
@@ -12,7 +12,7 @@ import { Logger } from '../core/Logger.js';
 import { RibbonTrail, DyingRibbons } from '../effects/RibbonTrail.js';
 import type { TrailDriver } from '../effects/vfxRuntime.js';
 import { BallTrailDots } from '../effects/ballTrails.js';
-import { tickStallBreaker as tickStall, tickEnrage as tickRage, handleGroundBounce as groundBounce, setEnraged as rageSet } from './ballRage.js';
+import { tickEnrage as tickRage, setEnraged as rageSet } from './ballRage.js';
 import { writeBallInstance, tickBallRenderPos, tickBallTrails, updateBallDead, SPAWN_POP_S } from './ballVisual.js';
 import { allocSlots, freeSlots, getShadows, type SwarmPart } from './swarms.js';
 import { registerDiag } from '../core/fxDiag.js';
@@ -22,6 +22,7 @@ import { drawBallSpawn, drawVariant, spawnRand } from '../../../shared/spawnDice
 
 
 const BALL_GRAVITY   = GRAVITY;
+const _enrageTint = new THREE.Color(1, 0.12, 0.08);
 
 // One shared geometry for every ball — radius baked in, per-ball scale lives
 // in the instance matrix.
@@ -313,6 +314,13 @@ export class Ball {
       this.pos = new THREE.Vector3(rx, (Number.isFinite(gy) ? gy : 0) + this.radius + 5, rz);
 
       this.vel = new THREE.Vector3(spawn!.vel.x, spawn!.vel.y, spawn!.vel.z);
+      // Local authority: the same shared sim the wire replays — bounce,
+      // enrage pull, stall breaker, leash teleport all live there; this
+      // ball's update() only adds dressing to the events it returns.
+      this.netS.sim = makeSimBall(this.id, variant, spawn!.colorIdx,
+        { x: this.pos.x, y: this.pos.y, z: this.pos.z },
+        { x: this.vel.x, y: this.vel.y, z: this.vel.z });
+      this.netS.sim.health = this.health;
     }
 
     if (!allocSlots('ball', this)) { this.dead = true; this._disposed = true; }
@@ -331,8 +339,7 @@ export class Ball {
     if (this.netDriven && this.netS.sim && Ball.field) {
       tickNet(Ball.NET_S, this.netS, this, dt);
     } else {
-      this.vel.y += BALL_GRAVITY * dt;
-      this.pos.addScaledVector(this.vel, dt);
+      this.tickLocal(dt, playerPos);
     }
 
     tickBallRenderPos(this, dt);
@@ -343,11 +350,6 @@ export class Ball {
     }
 
     tickRage(this, dt, terrain, playerPos);
-
-    if (!this.netDriven) {
-      groundBounce(this, terrain, playerPos);
-      tickStall(this, dt, playerPos);
-    }
     getShadows()?.set(this, this._rpos, this.radius, 0.3);
     writeBallInstance(this);
 
@@ -359,8 +361,60 @@ export class Ball {
     tickBallTrails(this, dt, Ball.viewPos);
   }
 
-  /** Director hook — enrage storms light up every ball at once. */
-  enrage(): void { rageSet(this, true); }
+  /** Director hook — enrage storms light up every ball at once. Writes
+   *  the sim (its own pull does the chasing); rageSet is just the tint. */
+  enrage(): void {
+    const s = this.netS.sim;
+    if (s) {s.enraged = true;}
+    rageSet(this, true);
+  }
+
+  /** Local-authority leg — the same stepBall the wire replays, stepped at
+   *  frame dt against the same heightfield. Segment kinds land as dressing
+   *  (burst/teleport fade/keyframe) instead of wire broadcasts. */
+  private tickLocal(dt: number, playerPos: THREE.Vector3): void {
+    const s = this.netS.sim;
+    const field = Ball.field ?? getHeightfield();
+    if (!s || !field) {
+      this.vel.y += BALL_GRAVITY * dt;
+      this.pos.addScaledVector(this.vel, dt);
+      return;
+    }
+    // The committed target is the live player — offline has no link lag.
+    const ev = stepBall(s, dt, field, playerPos, true,
+      { colliders: Ball.colliders, colliderIndex: Ball.colliderIndex ?? undefined });
+    this.pos.set(s.x, s.y, s.z);
+    this.vel.set(s.vx, s.vy, s.vz);
+    this.enraged = s.enraged;
+    this.enrageTimer = s.enrageTimer;
+    this.slowTimer = s.slowTimer;
+    this.dampNextBounce = s.dampNextBounce;
+    this.health = s.health;
+    if (s.dead) {this.dead = true;}
+    this.dressSegment(ev);
+  }
+
+  /** Event → dressing. onBounce is the demo keyframe — every velocity
+   *  discontinuity records one, same as the pre-sim path did. */
+  private dressSegment(ev: SegmentKind | null): void {
+    if (ev === null) {return;}
+    if (ev === 'teleport') {
+      // Position jumped — retire the tails so they fade where they were,
+      // then spring-in at the new perch.
+      this.retireRibbons();
+      this.spawnPopT = SPAWN_POP_S;
+      this.trails.burst(12, this.pos, this.radius, this.color);
+      this.onBounce?.(this.pos.clone(), this.vel.clone());
+      return;
+    }
+    if (ev === 'lunge' || ev === 'enrage' || ev === 'stall') {
+      this.dashFlash = 0.15;
+      this.trails.burst(8, this._rpos, this.radius, this.enraged ? _enrageTint : this.color);
+    }
+    if (ev === 'bounce' || ev === 'lunge' || ev === 'enrage' || ev === 'stall' || ev === 'knockback' || ev === 'hit') {
+      this.onBounce?.(this.pos.clone(), this.vel.clone());
+    }
+  }
 
   hitTest(px: number, py: number, pz: number, extraRadius = 0): boolean {
     const dx = px - this.pos.x;
@@ -388,8 +442,14 @@ export class Ball {
       this.health = Math.max(0, this.health - damage);
       return false;
     }
-    this.health -= damage;
     this.flashTimer = 0.15;
+    const s = this.netS.sim;
+    if (s) {
+      if (applySimDamage(s, damage, 0, 0, 0)) { this.dead = true; return true; }
+      this.health = s.health;
+      return false;
+    }
+    this.health -= damage;
     if (this.health <= 0) { this.dead = true; return true; }
     return false;
   }
@@ -405,6 +465,10 @@ export class Ball {
       if (claim) { this._netImp.addScaledVector(dir, force); }
       return;
     }
+    // Same write as the net path — the impulse lands in the sim, the next
+    // stepBall just flies the new arc (gt=0: the cached probe is stale).
+    const s = this.netS.sim;
+    if (s) { s.vx += dir.x * force; s.vy += dir.y * force; s.vz += dir.z * force; s.gt = 0; return; }
     this.vel.addScaledVector(dir, force);
   }
 
@@ -416,6 +480,8 @@ export class Ball {
       if (claim) { this._netImp.addScaledVector(dir, force); }
       return;
     }
+    const s = this.netS.sim;
+    if (s) { s.vx += dir.x * force; s.vy += dir.y * force; s.vz += dir.z * force; s.gt = 0; return; }
     this.vel.addScaledVector(dir, force);
   }
 

@@ -101,16 +101,15 @@ export {
   BALL_ENRAGE_FORCE, BALL_ENRAGE_TIMEOUT, BALL_ENRAGE_DASH_DIST,
   BALL_ENRAGE_DASH_SPEED, BALL_BASE_RADIUS,
   BALL_SLIDE_VN_MIN, BALL_SLIDE_ENABLED, setBallSlide,
+  BALL_ENRAGE_ENABLED, setBallEnrage,
 } from '../../../shared/ballSim.js';
 export const BALL_MAX = 32; // Maximum number of balls in play (OG maxSpawnCount parity)
 
 // Ball enrage mode: instead of teleporting when out of range, far balls get
 // angry and are pulled toward the player while still bouncing normally.
-// `let`, not const — ?mode=classic flips it off at boot for the pure
-// bounce-and-shoot ruleset (balls teleport when lost, like the Unity original)
-export let BALL_ENRAGE_ENABLED = true;
-// ESM `let` exports can't be assigned by importers — flip via the setter
-export function setBallEnrage(on: boolean): void { BALL_ENRAGE_ENABLED = on; }
+// ?mode=classic flips it off at boot for the pure bounce-and-shoot ruleset
+// (balls teleport when lost, like the Unity original) — the flag lives in
+// shared/ballSim.ts so the server sim and the local path read one switch.
 // Balls stay enraged until they get a lunge off (or time out) — no distance
 // cooldown, otherwise they'd always calm before reaching dash range
 export const BALL_ENRAGE_TELEGRAPH_H = 8; // Glow ramps to white under this height in dash range
