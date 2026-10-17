@@ -95,7 +95,11 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       return;
     }
 
-    // --- volcanic preset: basalt + rust + olive ash, ember-lit cracks (Caldera) ---
+    // --- volcanic preset: an ash-choked caldera at dusk. Wind-drifted pale ash
+    // on the flats, near-black basalt on the walls, oxidised rust on the
+    // mid-slopes, sulphur at the vents, and a molten pool glowing low in the
+    // basin. Value structure still carries the map in grayscale (ash LIGHT,
+    // basalt DARK); the one saturated accent is ember/magma light.
 #elif TERRAIN_PRESET == 4
     {
       vec2 q = vec2(fbm(uv), fbm(uv + vec2(5.2, 1.3)));
@@ -121,33 +125,60 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       float patchMask = smoothstep(0.25, 0.75, fbm(vWorldPos.xz * 0.007));
       float detail = (macro*0.40 + medium*0.30 + micro*0.15 + triDetail*0.10) * (0.5 + 0.9 * patchMask);
 
-      // Value structure is the point: warm ash + rust PLAINS read LIGHT and
-      // the basalt ridges read DARK, so the map keeps contrast in grayscale.
-      // The single saturated accent is ember light in the ground cracks.
-      vec3 cAsh      = vec3(0.56, 0.53, 0.47) + cell2 * vec3(0.09, 0.09, 0.08);
-      vec3 cRust     = vec3(0.46, 0.28, 0.17) + medium * vec3(0.12, 0.07, 0.03);
-      vec3 cBasalt   = vec3(0.15, 0.145, 0.15) + cell * vec3(0.08, 0.08, 0.09);
-      vec3 cBasaltHi = vec3(0.30, 0.29, 0.28) + triRock * vec3(0.07, 0.07, 0.07);
-      vec3 cSulphur  = vec3(0.58, 0.54, 0.30);
+      // The caldera field is centred on the world origin, so a radial term
+      // cheaply marks the basin (ash apron + molten pool).
+      float rW = length(vWorldPos.xz);
+      float inBasin = 1.0 - smoothstep(215.0, 360.0, rW);
+      float flatness = 1.0 - smoothstep(0.10, 0.40, slope);
+      // Wind-drifted ash ripples over the flats.
+      float drift = noise(vWorldPos.xz * 0.055 + q * 0.8) * 0.5 + noise(vWorldPos.xz * 0.13 + r * 0.5) * 0.5;
 
-      float crest = smoothstep(0.45, 0.80, height);
-      vec3 col = mix(cAsh, cRust, smoothstep(0.15, 0.78, medium));
-      // Steep faces and ridge ribs go dark basalt.
-      col = mix(col, mix(cBasalt, cBasaltHi, ridged), smoothstep(0.30, 0.62, slope));
-      col = mix(col, cBasaltHi, crest * ridged * 0.5);
-      col = mix(col, cSulphur, crest * smoothstep(0.5, 0.8, ridged) * 0.35);
-      // Crack veins — narrow bright cells that stay in the low, flatter ground.
-      float crack = smoothstep(0.80, 0.93, cell2) * (1.0 - smoothstep(0.34, 0.55, slope)) * (1.0 - crest);
+      vec3 cAshDk    = vec3(0.33, 0.30, 0.27);
+      vec3 cAshLt    = vec3(0.64, 0.59, 0.52);
+      vec3 cRust     = vec3(0.44, 0.24, 0.13);
+      vec3 cBasalt   = vec3(0.115, 0.11, 0.115) + cell * vec3(0.05, 0.05, 0.06);
+      vec3 cBasaltHi = vec3(0.27, 0.26, 0.26) + triRock * vec3(0.07, 0.07, 0.07);
+      vec3 cSulphur  = vec3(0.60, 0.54, 0.25);
+
+      float crest = smoothstep(0.50, 0.82, height);
+      // Base: drifted ash grading into rust on the mid-ground.
+      vec3 col = mix(cAshDk, cAshLt, drift);
+      col = mix(col, cRust, smoothstep(0.30, 0.80, medium) * 0.7);
+      // Ash apron: the basin floor stays pale and dusty where it is flat.
+      col = mix(col, mix(cAshDk, cAshLt, drift * 1.15), inBasin * flatness * 0.55);
+      // Walls and ridge ribs go near-black basalt; crests catch a little light.
+      col = mix(col, mix(cBasalt, cBasaltHi, ridged), smoothstep(0.28, 0.60, slope));
+      col = mix(col, cBasaltHi, crest * ridged * 0.55);
+      col = mix(col, cSulphur, crest * smoothstep(0.55, 0.85, ridged) * 0.30);
+      // Crack veins — narrow bright cells in the low, flat ground.
+      float crack = smoothstep(0.80, 0.93, cell2) * flatness * (1.0 - crest);
       col *= 0.86 + 0.26 * detail;
       col *= 1.0 + (grain - 0.5) * 0.45 * grainFade + (triGrain - 0.5) * 0.2 * grainFade;
       col *= 1.0 - scorchMask(vWorldPos.xz);
       { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
+
       float diff = max(dot(vNormal, sunDir), 0.0);
       float shadow = diff * diff;
       float rim = pow(1.0 - max(dot(vNormal, vec3(0,1,0)), 0.0), 2.5) * 0.15;
       vec3 lit = ambientColor + sunColor * shadow * shadowMask + vec3(rim);
       col *= lit;
-      col += crack * vec3(0.70, 0.26, 0.05);
+
+      // Molten pool — the deepest, flattest ground inside the basin. Emissive:
+      // it reads through the sun term, hot yellow at the core, cooling to red.
+      float deep   = 1.0 - smoothstep(0.055, 0.20, height);
+      float molten = deep * inBasin * (1.0 - smoothstep(0.22, 0.50, slope));
+      molten *= 0.55 + 0.45 * noise(vWorldPos.xz * 0.09 + q);
+      vec3 lavaCol = mix(vec3(0.85, 0.17, 0.02), vec3(1.0, 0.60, 0.12), detail * 0.7 + 0.3);
+      col = mix(col, lavaCol, clamp(molten * 1.25, 0.0, 0.92));
+      col += lavaCol * clamp(molten, 0.0, 1.0) * 0.55;
+      // Ember veins glow warmer as they near the basin.
+      col += crack * vec3(0.72, 0.25, 0.05) * (0.55 + 0.45 * inBasin);
+
+      // Obsidian sheen — grazing specular on the steep dark faces.
+      vec3 viewDirV = normalize(vCameraPos - vWorldPos);
+      float sheen = pow(max(dot(reflect(-sunDir, vNormal), viewDirV), 0.0), 22.0);
+      col += sheen * smoothstep(0.42, 0.72, slope) * vec3(0.10, 0.09, 0.12);
+
       col += scorchEmberGlow(vWorldPos.xz);
       col += fieldGlow(vWorldPos);
       vec3 fogDelta = vWorldPos - vCameraPos;
