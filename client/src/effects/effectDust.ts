@@ -10,16 +10,32 @@ const _v3 = new THREE.Vector3();
 // bounce redirect burst. Spawn math only; pooling stays in EffectsManager.
 
 export function spawnJetpack(m: EffectsManager, pos: THREE.Vector3): void {
-    // OLD-TUNING capture variant (temporary).
+    // Two layers, because one can't win both backgrounds. The old single
+    // additive streak vanished against bright sky (additive can't darken
+    // anything) and was too small (0.1m) to read on the ground. Core = hot
+    // additive flame; smoke = normal-blend wisp that stays legible over
+    // sky AND snow.
     _v2.copy(pos); _v2.y -= 1.1; // emit below the feet, like the old -1.1 offset
     fxPuff(_v2, {
       count: 2,
-      pos: [0.15, 0, 0.15],
-      velMin: [-1.25, -20, -1.25], velMax: [1.25, -14, 1.25],
-      lifeMin: 0.18, lifeMax: 0.3,
-      sizeScale: 0.35,
-      colA: [0.3, 0.7, 1], colB: [0.6, 1, 1],
+      pos: [0.16, 0, 0.16],
+      velMin: [-1.4, -24, -1.4], velMax: [1.4, -15, 1.4],
+      lifeMin: 0.16, lifeMax: 0.28,
+      sizeScale: 0.7,
+      colA: [0.45, 0.8, 1], colB: [0.85, 1, 1],
       additive: true,
+    });
+    // Exhaust — slower and longer-lived so it hangs under the pack a beat
+    // and reads as thrust rather than a downward sprite flick.
+    _v3.copy(pos); _v3.y -= 1;
+    fxPuff(_v3, {
+      count: 2,
+      pos: [0.22, 0, 0.22],
+      velMin: [-1.1, -11, -1.1], velMax: [1.1, -5, 1.1],
+      lifeMin: 0.3, lifeMax: 0.5,
+      sizeScale: 1,
+      colA: [0.6, 0.66, 0.76], colB: [0.8, 0.86, 0.95],
+      gravity: false,
     });
   }
 
@@ -119,15 +135,30 @@ export function spawnBounce(m: EffectsManager, pos: THREE.Vector3, dir: THREE.Ve
 
 export function spawnSkiDust(m: EffectsManager, pos: THREE.Vector3, velocity: THREE.Vector3): void {
     const groundY = m.terrain ? m.terrain.getHeightVisual(pos.x, pos.z) : 0;
-    _v2.set(pos.x, groundY + 0.3, pos.z);
+    // Speed-scaled roostertail. The old fixed count-2 grey puff read as one
+    // smudge at every speed and disappeared against snow; a spray that fans
+    // up/out and grows with speed is what actually sells the carve.
+    const sp = Math.hypot(velocity.x, velocity.z);
+    const k = Math.min(1, Math.max(0, (sp - 4) / 26)); // 0 = puttering, 1 = full tuck
+    const spread = 0.35 + k * 0.5;
+    _v2.set(pos.x, groundY + 0.25, pos.z);
     fxPuff(_v2, {
-      count: 2,
-      pos: [0.5, 0, 0.5],
-      velMin: [-0.15, 0.1, -0.15], velMax: [0.15, 0.2, 0.15],
-      shed: [-velocity.x * 0.05, 0, -velocity.z * 0.05],
-      lifeMin: 0.3, lifeMax: 0.6,
-      colA: [0.7, 0.65, 0.55], colB: [0.7, 0.65, 0.55],
-      gravity: false,
+      count: 3 + Math.round(k * 3),
+      pos: [spread, 0.2, spread],
+      // Up-and-out fan — the spray lifts off the ski edges, then gravity
+      // arcs it back down into the trail.
+      velMin: [-0.7 - k * 1.5, 1.6 + k * 2.4, -0.7 - k * 1.5],
+      velMax: [0.7 + k * 1.5, 3 + k * 3.8, 0.7 + k * 1.5],
+      // Keep a slice of the skier's own motion: the plume streams BEHIND
+      // the tracks instead of hanging over the skis.
+      shed: [-velocity.x * (0.05 + k * 0.12), 0, -velocity.z * (0.05 + k * 0.12)],
+      lifeMin: 0.4, lifeMax: 0.7 + k * 0.5,
+      sizeScale: 0.9 + k * 0.6,
+      // HDR cool-white. Under ACES a plain 1.0 white tone-maps to ~0.8 grey
+      // and reads as dark smoke on snow — the additive FX dodge this with
+      // EMIT_GAIN, so normal-blended dust has to overshoot white itself.
+      colA: [1.35, 1.45, 1.7], colB: [1.8, 1.9, 2.05],
+      gravity: true,
     });
   }
 

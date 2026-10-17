@@ -34,6 +34,14 @@ function unshoulderOnPull(p: Player, wid: number): number {
     return p.loadout[p.weaponIndex];
   }
 
+  /** Can a belt throw fire now? Paces on BOTH the 1s belt cadence and the
+   *  throw lock — a stretched throw (satchel ≈ 1.9s) outlasts the cadence,
+   *  so pacing on the cadence alone let a second throw start inside the
+   *  first's wind-up (and its press-gate saw the unspent charges). */
+export function beltThrowReady(beltTimer: number, throwLockT: number): boolean {
+    return beltTimer <= 0 && throwLockT <= 0;
+  }
+
   // Weapon triggers: selected weapon (LMB) plus C/F belt throws.
 export function fireWeapons(p: Player): void {
     let wid = p.armory.secondaryWid ?? p.loadout[p.weaponIndex];
@@ -48,8 +56,11 @@ export function fireWeapons(p: Player): void {
     }
     p.input.firePending = false;
 
-    // Belt item (C key) — the equipped throw; hold to repeat
-    if (p.input.beltHeld && p.beltTimer <= 0) {
+    // Belt item (C key) — the equipped throw; hold to repeat. The throw
+    // lock gates too: a stretched throw (satchel ≈ 1.9s) outlasts the 1s
+    // belt cadence, and pacing on beltTimer alone let a second throw start
+    // inside the first's wind-up.
+    if (p.input.beltHeld && beltThrowReady(p.beltTimer, p.throwLockT)) {
       p.beltTimer = DISC_RATE;
       p.throwLockT = THROW_TOTAL * (BELT_THROW_TIME[p.beltItem] ?? 1);
       p.shootAnimTimer = 0.3; // lob raise — same snap as a shot

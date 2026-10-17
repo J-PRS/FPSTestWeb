@@ -28,6 +28,7 @@ import {
 } from './vfxRuntime.js';
 import { EMIT_GAIN, GRAVITY } from '../core/config.js';
 import { getGlowTexture, getPuffTexture } from './glowTexture.js';
+import { trailEmitLead } from './trailLead.js';
 import type { ProjectileConfig } from '../projectiles/types.js';
 export { initVfx, vfxStats, setVfxQualityScale, vfxPressure, updateVfx, trailStats, poolDump } from './vfxRuntime.js';
 
@@ -138,6 +139,11 @@ export interface QuarksTrailHost {
   pos: THREE.Vector3;
   vel: THREE.Vector3;
   age(): number;
+  /** Sim-true position, used only to measure per-frame travel for the
+   *  emission lead. Hosts that draw `pos + renderOffset` (remote correction
+   *  blends, latency advance) pass the un-offset `pos` here so a correction
+   *  can't inflate the lead. Defaults to `pos` when absent. */
+  travelPos?: THREE.Vector3;
 }
 
 const _tDir = new THREE.Vector3();
@@ -338,34 +344,26 @@ this.segCount += 1;
     const ax = pwp?.x ?? em.position.x, ay = pwp?.y ?? em.position.y, az = pwp?.z ?? em.position.z;
     const jx = pos.x - ax, jy = pos.y - ay, jz = pos.z - az;
     const jumped = jx * jx + jy * jy + jz * jz > jump * jump;
-    // Real per-frame travel — pos-driven hosts (interp remotes, shadow
-    // shells, renderOffset decay) don't move by vel*dt, so a vel-based
-    // lead undershoots and the deposit head lags the mesh. Measure the
-    // anchor's actual displacement instead; identical to vel*dt when
-    // the host is vel-driven. Capped: a resume/jump frame's giant delta
-    // would push the lead past the jump cut the resync just cleared.
-    const mdx = pos.x - this._sx, mdy = pos.y - this._sy, mdz = pos.z - this._sz;
-    this._sx = pos.x; this._sy = pos.y; this._sz = pos.z;
+    // Real per-frame travel, measured from SIM truth (travelPos) — a host
+    // that draws `pos + renderOffset` (remote correction blends, latency
+    // advance) moves the drawn anchor by more than the shell truly travels,
+    // and measuring THAT is what fed the lead overshoot. travelPos defaults
+    // to pos for hosts that draw where they sim.
+    const tp = this.host.travelPos ?? pos;
+    const mdx = tp.x - this._sx, mdy = tp.y - this._sy, mdz = tp.z - this._sz;
+    this._sx = tp.x; this._sy = tp.y; this._sz = tp.z;
     em.position.copy(pos);
-    // Sim-decimation lead: the batcher only sims every other frame, and
-    // quarks spawns distance particles AT the emitter's matrixWorld —
-    // so the freshest particle is always ~2 render frames behind the
-    // mesh (the head gap, ~7m at 200m/s). Lead the emitter by the sim
-    // interval so deposits land at the head's drawn position instead.
-    // Travel math is unaffected — previousWorldPos carries the same
-    // lead, so only the deposit's endpoint shifts forward.
+    // Emitter lead: quarks spawns every distance particle AT the emitter's
+    // matrixWorld and the driver moves the emitter with the freshly-drawn
+    // shell before batcher.update, so the deposit already lands on the mesh
+    // and needs no lead to reach it. The 30Hz batcher only deposits every
+    // OTHER frame, so between deposits the newest clump trails by up to a
+    // frame; lead by half an interval (trailLead.ts) to centre that at
+    // ±½ frame. The old fixed ×2 (measured from the rendered anchor)
+    // always overshot by up to two frames — the "puff ahead" artefact.
     if (dt > 0) {
-      const cap = spd * dt * 4 + 3;
-      const mLen = mdx * mdx + mdy * mdy + mdz * mdz;
-      if (Number.isFinite(mLen) && mLen > 1e-12) {
-        // Scale the measured lead down to the cap on overshoot — a vel
-        // fallback undershoots pos-driven hosts (interp remotes,
-        // renderOffset decay) and the trail snaps behind on hitchy frames.
-        const k = Math.min(1, cap / Math.sqrt(mLen)) * 2;
-        em.position.x += mdx * k; em.position.y += mdy * k; em.position.z += mdz * k;
-      } else {
-        em.position.addScaledVector(vel, dt * 2);
-      }
+      const [lx, ly, lz] = trailEmitLead(mdx, mdy, mdz, spd, dt);
+      em.position.x += lx; em.position.y += ly; em.position.z += lz;
     }
     // emit() deposits previousWorldPos→matrixWorld — judge THAT span, not
     // pos alone: a dt-scaled fallback lead can park the emitter far ahead

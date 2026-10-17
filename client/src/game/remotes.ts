@@ -7,6 +7,7 @@ import type { Player } from '../entities/Player.js';
 import { RemotePlayer } from '../entities/RemotePlayer.js';
 import { setFrustumVis } from '../entities/remoteVis.js';
 import type { EffectsManager } from '../effects/effects.js';
+import { emitLocomotionFx, isCarvingSki } from '../effects/locomotionFx.js';
 import type { NetworkManager , RemotePlayerState } from '../networking/NetworkManager.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { HUD } from '../ui/hud.js';
@@ -125,24 +126,25 @@ function tickRemoteCosmetics(deps: RemotesDeps, playerId: string, remotePlayer: 
   const hud = deps.lazyHud();
   // The wire ski bit doubles as the animation claim — tuck when held,
   // run when released, regardless of how much momentum remains.
-  remotePlayer.wireSki = !playerState.isDead && Boolean(playerState.ski);
-  remotePlayer.wireJet = !playerState.isDead && Boolean(playerState.jet);
-  let skiing = false;
-  if (!playerState.isDead && playerState.ski) {
-    const v = remotePlayer.vel;
+  const ski = !playerState.isDead && Boolean(playerState.ski);
+  const jet = !playerState.isDead && Boolean(playerState.jet);
+  remotePlayer.wireSki = ski;
+  remotePlayer.wireJet = jet;
+  // The wire has no onGround bit — same feet-vs-ground read the ski dust
+  // always used. Only needed when carving, so idle frames skip the probes.
+  let grounded = false;
+  const v = remotePlayer.vel;
+  if (ski) {
     const terrain = deps.lazyTerrain();
     const groundY = Math.max(terrain.getHeight(remotePlayer.position.x, remotePlayer.position.z), terrain.getRenderedHeight(remotePlayer.position.x, remotePlayer.position.z));
-    if (v.x * v.x + v.z * v.z > 10 && remotePlayer.feetY - groundY < 0.8) {
-      skiing = true;
-      deps.lazyEffects().spawnSkiDust(remotePlayer.position, v);
-    }
+    grounded = remotePlayer.feetY - groundY < 0.8;
   }
-  // wireJet rides the sheep byte's top bit — set above from the tick
-  // frame. The powered-climb heuristic is only a fallback for senders
-  // that never claimed it.
+  // Same shared pass the local player and offline bots use — one gate, one
+  // pair of spawn calls, so a remote's trail matches anyone else's.
   const jetting = isJetting(remotePlayer, playerState.isDead);
-  if (jetting) {deps.lazyEffects().spawnJetpack(remotePlayer.position);}
-  sfxWorld.remoteMoveAudio(playerId, remotePlayer.position, remotePlayer.vel.length(), jetting, skiing, remotePlayer.vel, remotePlayer.armorClass);
+  emitLocomotionFx(deps.lazyEffects(), remotePlayer.position, v, grounded, ski, jetting);
+  const skiing = isCarvingSki(v, grounded, ski);
+  sfxWorld.remoteMoveAudio(playerId, remotePlayer.position, v.length(), jetting, skiing, v, remotePlayer.armorClass);
   if (playerState.isDead) {
     hud.removePlayerIndicator(playerId);
   } else {
@@ -503,19 +505,20 @@ export function createRemotes(deps: RemotesDeps) {
     // forEach above never touches them — same red marker as real remotes.
     for (const [id, rp] of deps.world.remotePlayers) {
       if (players.has(id)) {continue;}
+      const gb = rp as { grounded?: boolean; wireSki?: boolean };
       if (rp.isDead) {
         hud.removePlayerIndicator(id);
       } else {
-        // Local bots aren't network remotes — without this they'd jet
-        // silently; wireJet carries the brain's real burn.
-        if (isJetting(rp, false)) {deps.lazyEffects().spawnJetpack(rp.position);}
+        // Local bots aren't network remotes — they used to jet silently and
+        // leave NO ski dust at all. Same shared pass, so a bot's trail reads
+        // exactly like a human's.
+        emitLocomotionFx(deps.lazyEffects(), rp.position, rp.vel, gb.grounded ?? true, Boolean(gb.wireSki), isJetting(rp, false));
         // GameBot carries `team` ('alpha'/'bravo', own id in FFA) — plain
         // RemotePlayers have none and stay enemy red.
         const friendly = (rp as { team?: string }).team === deps.world.localTeam
           && (rp as { team?: string }).team !== undefined;
         hud.updatePlayerIndicator(id, rp.position, cam, { friendly, sheep: (rp as { sheepShown?: number; sheep?: number }).sheepShown ?? (rp as { sheep?: number }).sheep, bot: isBotId(id), cls: rp.armorClass, hp: (rp as { botHp?: number }).botHp });
       }
-      const gb = rp as { grounded?: boolean; wireSki?: boolean };
       aswAccrue(id, rp.isDead, gb.grounded ?? true, gb.wireSki ?? false, dt);
     }
     tickFlagMarkers(deps, localPlayerId, player.pos, hud, cam);

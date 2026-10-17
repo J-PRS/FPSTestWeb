@@ -48,7 +48,7 @@ export function makeDeps() {
     lazyTerrain: (): never => ({ getHeight: (): number => 0, reloadHeightmap(): void { return; } }) as never,
     lazyWeather: (): never => ({ setWeather(): void { return; } }) as never,
     lazyPlayer: (): never => player as never,
-    lazyEffects: (): never => ({ spawnJumpDust(): void { return; }, spawnJetpack(): void { return; }, spawnBeam(): void { return; } }) as never,
+    lazyEffects: (): never => ({ spawnJumpDust(): void { return; }, spawnJetpack(): void { return; }, spawnSkiDust(): void { return; }, spawnBeam(): void { return; } }) as never,
     lazyHud: (): never => new Proxy({}, { get: (_t, k): (a?: unknown) => unknown => (a?: unknown): unknown => { calls.hud.push(`${String(k)}`); return a; } }) as never,
     lazyHealthBarSystem: (): never => new Proxy({}, { get: (): () => void => (): void => { return; } }) as never,
     lazyDamageNumbers: (): never => new Proxy({}, { get: (): () => void => (): void => { return; } }) as never,

@@ -28,8 +28,13 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
     deps.lazyEffects().spawnJumpDust(pos);
   };
 
-  networkManager.onPlayerJetpack = (_playerId: string, position: { x: number; y: number; z: number }): void => {
-    if (!finiteVec(position)) {return;}
+  networkManager.onPlayerJetpack = (playerId: string, position: { x: number; y: number; z: number }): void => {
+    if (!finiteVec(position)) {return;} // non-finite wire pos would poison the particle pool
+    // The sustained plume already comes off the per-tick held-jet wire bit
+    // (tickRemoteCosmetics → emitLocomotionFx); emitting here too would double
+    // its density over the local player's. Keep it only as the fallback for a
+    // sender whose frames omit that bit, so every remote burns one plume.
+    if (nm().getPlayers().get(playerId)?.jet) {return;}
     const pos = new THREE.Vector3(position.x, position.y, position.z);
     deps.lazyEffects().spawnJetpack(pos);
   };

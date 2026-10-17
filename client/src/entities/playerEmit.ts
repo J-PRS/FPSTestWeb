@@ -1,4 +1,5 @@
 import type * as THREE from 'three';
+import { emitLocomotionFx, isCarvingSki, type LocomotionFxSink } from '../effects/locomotionFx.js';
 
 // Move-event FX family — jetpack trail, ski dust, footstep dust, plus
 // the land/jump transitions that hang off the ground-contact edges.
@@ -26,13 +27,24 @@ export interface EmitHost {
 export class PlayerEmit {
   private stepAcc = 0; // footstep-dust distance accumulator
   private lastJetpackSend = 0;
+  // Adapts the host's effect callbacks to the shared locomotion sink, so the
+  // local player emits through the same pass as remotes and offline bots.
+  private sink: LocomotionFxSink = {
+    spawnJetpack: (pos: THREE.Vector3): void => { this.h.onJetpack?.(pos); },
+    spawnSkiDust: (pos: THREE.Vector3, vel: THREE.Vector3): void => { this.h.onSki?.(pos, vel); },
+  };
 
   constructor(private h: EmitHost) {}
 
   moveEvents(isJetting: boolean, skiHeld: boolean, jumpHeld: boolean, dt: number): void {
     const {h} = this;
-    if (isJetting) {this.jetpack();}
-    this.skiDust(skiHeld);
+    // `skiing` is the audio-loop flag; the gate is the shared carve test so it
+    // can't drift from what actually emits dust.
+    h.skiing = isCarvingSki(h.vel, h.onGround, skiHeld);
+    emitLocomotionFx(this.sink, h.pos, h.vel, h.onGround, skiHeld, isJetting);
+    // Tell remotes we're burning — the plume itself is the shared pass above;
+    // this only keeps the wire event for senders whose frames omit the jet bit.
+    if (isJetting) {this.jetpackSend();}
     this.footDust(dt);
 
     h.skills.postMove(h.wasOnGround, h.onGround, h.prevVelY);
@@ -62,25 +74,14 @@ export class PlayerEmit {
     h.wasOnGround = h.onGround;
   }
 
-  // Jetpack trail particles — every frame while burning, plus a ~20/s
-  // throttled network event so remotes see the same plume.
-  private jetpack(): void {
+  // ~20/s throttled network event — a remote whose frames omit the held-jet
+  // bit still sees a plume. The local plume itself rides emitLocomotionFx.
+  private jetpackSend(): void {
     const {h} = this;
-    if (!h.onJetpack) {return;}
-    h.onJetpack(h.pos); // read-only use — no clone, runs every frame
     const now = performance.now();
     if (h.onNetworkJetpack && now - this.lastJetpackSend > 50) {
       this.lastJetpackSend = now;
       h.onNetworkJetpack({ x: h.pos.x, y: h.pos.y, z: h.pos.z });
-    }
-  }
-
-  // Ski dust particles (when space is held, on ground, and moving)
-  private skiDust(skiHeld: boolean): void {
-    const {h} = this;
-    h.skiing = skiHeld && h.onGround && h.vel.lengthSq() > 10;
-    if (h.skiing && h.onSki) {
-      h.onSki(h.pos, h.vel); // read-only use — no clones, runs every frame
     }
   }
 
