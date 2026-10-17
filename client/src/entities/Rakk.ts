@@ -2,18 +2,15 @@ import * as THREE from 'three';
 import { nextTargetId } from './targetIds.js';
 
 import {
-  RAKK_RADIUS, RAKK_HEALTH,
-  RAKK_ORBIT_ALT, RAKK_ORBIT_R, RAKK_SPEED, RAKK_ACCEL,
-  RAKK_DIVE_CD_MIN, RAKK_DIVE_CD_MAX, RAKK_DIVE_SPEED,
-  RAKK_CLAW_DIST, RAKK_CLIMB_T, RAKK_STUN, MELEE_FAVOR,
+  RAKK_RADIUS, RAKK_ORBIT_ALT,
 } from '../core/config.js';
 import type { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots } from './swarms.js';
 import type { SwarmSlotOwner } from './swarm.js';
 import { writeRakkInstances } from './rakkVisual.js';
-import { type SimFlyer, makeSimFlyer, stepFlyer } from '../../../shared/creatureSim.js';
-import { bindNetSim, applyNetEdgeSim, updateNetSim, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
+import { type SimFlyer, makeSimFlyer, stepFlyer, applyFlyerDamage, commitTarget } from '../../../shared/creatureSim.js';
+import { bindNetSim, applyNetEdgeSim, updateNetSim, updateLocalSim, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
 export { rakkParts } from './rakkVisual.js';
 
 const _dir = new THREE.Vector3();
@@ -25,7 +22,6 @@ const _scratch = new THREE.Vector3();
  * flock attack token. Renders into the shared rakk swarm — owns no meshes.
  */
 export class Rakk implements Targetable, SwarmSlotOwner {
-  static attackHeldBy: number | null = null; // flock attack token — one diver at a time
   id: number; // bindNet re-stamps into the net id namespace post-construction
   readonly variant = 0;
   readonly uber: boolean;
@@ -53,12 +49,7 @@ export class Rakk implements Targetable, SwarmSlotOwner {
   roll = 0;
   flash = 0;
 
-  state: 'orbit' | 'dive' | 'climb' = 'orbit'; // public — net replay maps sim states onto it
-  private stateTimer = RAKK_DIVE_CD_MIN + Math.random() * (RAKK_DIVE_CD_MAX - RAKK_DIVE_CD_MIN);
-  private orbitPhase = Math.random() * Math.PI * 2;
-  private orbitDir = Math.random() < 0.5 ? 1 : -1;
-  private diveTarget = new THREE.Vector3();
-  private stunTimer = 0;
+  state: 'orbit' | 'dive' | 'climb' = 'orbit'; // public — pose mirror of sim state (windup reads as dive)
 
   onClawHit?: (rakk: Rakk) => void;
   onDive?: (rakk: Rakk) => void;
@@ -108,13 +99,16 @@ else if (b.state === 'orbit') {this.state = 'orbit';}
     // Uber = "elder": a wingspan you can't miss — and its claw hit TALONS
     // you upward instead of just shredding (wired in entities).
     this.uber = uber;
-    this.maxHealth = uber ? RAKK_HEALTH * 3 : RAKK_HEALTH;
-    this.health = this.maxHealth;
     this.radius = uber ? RAKK_RADIUS * 1.9 : RAKK_RADIUS;
     if (uber) {this.color.set(0x2A_1A_3A);} // near-black elder hide
     this.pos = pos.clone();
     this.pos.y = terrain.getHeight(pos.x, pos.z) + RAKK_ORBIT_ALT;
     this.vel = new THREE.Vector3();
+    // Local authority: the same shared sim the wire replays. bindNet
+    // overwrites it when a server creature owns the id instead.
+    this.sim = makeSimFlyer(this.id, { x: this.pos.x, y: this.pos.y, z: this.pos.z }, uber, this.id, 'rakk');
+    this.health = this.sim.health;
+    this.maxHealth = this.sim.maxHealth;
     this.hasSlots = allocSlots('rakk', this);
     if (!this.hasSlots) {this.dead = true;}
   }
@@ -125,68 +119,21 @@ else if (b.state === 'orbit') {this.state = 'orbit';}
       this.updateNet(dt, terrain);
       return;
     }
-    if (this.stunTimer > 0) {this.stunTimer -= dt;}
     if (this.flash > 0) {this.flash -= dt;}
     this.animT += dt;
-    this.stateTimer -= dt;
+    const s = this.sim;
 
-    switch (this.state) {
-      case 'orbit': { this.tickOrbit(dt, terrain, playerPos); break;
-      }
-      case 'dive': {  this.tickDive(dt, playerPos); break;
-      }
-      case 'climb': { this.tickClimb(dt, terrain); break;
-      }
-          default: { break; }
-}
-
-    this.pos.addScaledVector(this.vel, dt);
-    const gy = terrain.getHeight(this.pos.x, this.pos.z);
-    if (this.pos.y < gy + 1) {this.pos.y = gy + 1;}
-    this.faceVelocity(dt);
+    if (s) {
+      commitTarget(s, 'local', playerPos);
+      const ev = updateLocalSim(this, dt, terrain, stepFlyer, playerPos);
+      this.state = s.state === 'windup' ? 'dive' : s.state;
+      if (ev === 'pounce') {this.onDive?.(this);}
+      if (ev === 'bite') {this.onClawHit?.(this);}
+      if (s.dead) {this.dead = true; return;}
+      this.faceVelocity(dt);
+    }
 
     this.writeInstances();
-  }
-
-  private tickOrbit(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
-    this.orbitPhase += dt * (RAKK_SPEED / RAKK_ORBIT_R) * this.orbitDir;
-    _dir.set(
-      playerPos.x + Math.cos(this.orbitPhase) * RAKK_ORBIT_R,
-      terrain.getHeight(playerPos.x, playerPos.z) + RAKK_ORBIT_ALT + Math.sin(this.animT * 0.8) * 2,
-      playerPos.z + Math.sin(this.orbitPhase) * RAKK_ORBIT_R,
-    );
-    this.steerToward(_dir, RAKK_SPEED, dt);
-    if (Math.random() < dt * 0.08) {this.orbitDir *= -1;}
-
-    if (this.stateTimer <= 0 && Rakk.attackHeldBy === null) {
-      Rakk.attackHeldBy = this.id;
-      this.state = 'dive';
-      this.stateTimer = 1.5;
-      this.diveTarget.copy(playerPos);
-      this.onDive?.(this);
-    }
-  }
-
-  private tickDive(dt: number, playerPos: THREE.Vector3): void {
-    this.steerToward(this.diveTarget, RAKK_DIVE_SPEED, dt);
-    const clawD = RAKK_CLAW_DIST * MELEE_FAVOR;
-    const hit = this.pos.distanceToSquared(playerPos) < clawD * clawD;
-    const passed = this.stateTimer <= 0 || this.pos.distanceToSquared(this.diveTarget) < 4;
-    if (hit) {this.onClawHit?.(this);}
-    if (hit || passed) {
-      this.releaseToken();
-      this.beginClimb();
-    }
-  }
-
-  private tickClimb(dt: number, terrain: Terrain): void {
-    const targetY = terrain.getHeight(this.pos.x, this.pos.z) + RAKK_ORBIT_ALT;
-    this.vel.y += ((targetY - this.pos.y) * 2.5 - this.vel.y) * Math.min(1, 3 * dt);
-    this.capSpeed(RAKK_SPEED * 0.6);
-    if (this.stateTimer <= 0) {
-      this.state = 'orbit';
-      this.stateTimer = RAKK_DIVE_CD_MIN + Math.random() * (RAKK_DIVE_CD_MAX - RAKK_DIVE_CD_MIN);
-    }
   }
 
   // Banked flight read: yaw eases to velocity, roll counters it, pitch
@@ -206,53 +153,40 @@ else if (b.state === 'orbit') {this.state = 'orbit';}
     writeRakkInstances(this);
   }
 
-  private steerToward(target: THREE.Vector3, speed: number, dt: number): void {
-    _scratch.subVectors(target, this.pos);
-    const d = _scratch.length() || 0.001;
-    _scratch.multiplyScalar(1 / d);
-    this.vel.addScaledVector(_scratch, RAKK_ACCEL * dt);
-    this.capSpeed(speed);
-  }
-
-  private capSpeed(max: number): void {
-    const s = this.vel.length();
-    if (s > max) {this.vel.multiplyScalar(max / s);}
-  }
-
-  private beginClimb(): void {
-    this.state = 'climb';
-    this.stateTimer = RAKK_CLIMB_T;
-    this.vel.multiplyScalar(0.4);
-    this.vel.y = Math.abs(this.vel.y) * 0.5 + 6;
-  }
-
-  private releaseToken(): void {
-    if (Rakk.attackHeldBy === this.id) {Rakk.attackHeldBy = null;}
-  }
-
   takeDamage(damage: number, opts?: { serverPaid?: boolean }): boolean {
     if (this.netDriven) {return claimDamageMelee(this, damage, Rakk.hitClaim, opts?.serverPaid);}
-    this.health -= damage;
     this.flash = 0.15;
-    if (this.health <= 0) { this.dead = true; this.releaseToken(); return true; }
+    const s = this.sim;
+    if (s) { if (applyFlyerDamage(s, damage)) { this.dead = true; return true; } }
+    else if ((this.health -= damage) <= 0) { this.dead = true; return true; }
     return false;
   }
 
   applyKnockback(from: THREE.Vector3, force: number): void {
     if (!Number.isFinite(from.x + from.y + from.z + force)) {return;}    _scratch.copy(this.pos).sub(from).normalize();
+    const s = this.sim;
+    if (s) {
+      s.vx += _scratch.x * force; s.vy += _scratch.y * force; s.vz += _scratch.z * force;
+      s.stunTimer = Math.max(s.stunTimer, s.sp.STUN_S);
+      if (s.state === 'dive' || s.state === 'windup') {s.state = 'climb'; this.state = 'climb';} // punt breaks the pass
+      return;
+    }
     this.vel.addScaledVector(_scratch, force);
-    this.stunTimer = RAKK_STUN;
-    if (this.state === 'dive') { this.releaseToken(); this.beginClimb(); }
+    this.state = 'climb';
   }
 
   applyPull(to: THREE.Vector3, force: number): void {
     if (!Number.isFinite(to.x + to.y + to.z + force)) {return;}    _scratch.copy(to).sub(this.pos).normalize();
+    const s = this.sim;
+    if (s) {
+      s.vx += _scratch.x * force; s.vy += _scratch.y * force; s.vz += _scratch.z * force;
+      s.stunTimer = Math.max(s.stunTimer, s.sp.STUN_S);
+      return;
+    }
     this.vel.addScaledVector(_scratch, force);
-    this.stunTimer = RAKK_STUN;
   }
 
   dispose(): void {
-    this.releaseToken();
     if (this.hasSlots) {
       freeSlots('rakk', this);
       this.hasSlots = false;

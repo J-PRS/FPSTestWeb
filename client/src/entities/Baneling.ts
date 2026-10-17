@@ -3,17 +3,15 @@ import { nextTargetId } from './targetIds.js';
 
 import {
   GRAVITY,
-  BANELING_RADIUS, BANELING_HEALTH,
-  BANELING_ACCEL, BANELING_TOPSPEED,
-  BANELING_FUSE_DIST, BANELING_LIFE, BANELING_BLAST_RADIUS,
+  BANELING_RADIUS, BANELING_FUSE_DIST,
 } from '../core/config.js';
 import type { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
-import { type SimBaneling, makeSimBaneling, stepBaneling } from '../../../shared/creatureSim.js';
-import { bindNetSim, applyNetEdgeSim, updateNetSim, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
+import { type SimBaneling, makeSimBaneling, stepBaneling, applyBanelingDamage } from '../../../shared/creatureSim.js';
+import { bindNetSim, applyNetEdgeSim, updateNetSim, updateLocalSim, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
 
 const _dir = new THREE.Vector3();
 const _axis = new THREE.Vector3();
@@ -116,7 +114,6 @@ export class Baneling implements Targetable, SwarmSlotOwner {
 
   private rollQuat = new THREE.Quaternion();
   private flash = 0;
-  private age = 0;
   private airborne = false;
   private glowPulse = 0;
 
@@ -129,16 +126,21 @@ export class Baneling implements Targetable, SwarmSlotOwner {
     this.id = nextTargetId();
     // Uber = "goliath": a wobbling bomb-sack — bigger pop, harder to pop.
     this.uber = uber;
-    this.maxHealth = uber ? BANELING_HEALTH * 4 : BANELING_HEALTH;
-    this.health = this.maxHealth;
     this.radius = uber ? BANELING_RADIUS * 1.7 : BANELING_RADIUS;
-    this.blastRadius = uber ? BANELING_BLAST_RADIUS * 1.7 : BANELING_BLAST_RADIUS;
     if (uber) {this.color.set(0x8A_6A_1A);} // overripe amber — visibly worse
     this.pos = pos.clone();
     const gy = terrain.getHeight(pos.x, pos.z);
     if (this.pos.y < gy + this.radius) {this.pos.y = gy + this.radius;}
     this.airborne = this.pos.y > gy + this.radius + 0.5; // dropped from the overlord's belly
     this.vel = new THREE.Vector3();
+    // Local authority: the same shared sim the wire replays — health and
+    // blastRadius come off the sim so the entity never owns a second
+    // copy of the tunables. bindNet overwrites it when a server creature
+    // owns the id instead.
+    this.sim = makeSimBaneling(this.id, { x: this.pos.x, y: this.pos.y, z: this.pos.z }, uber, this.id, 'baneling');
+    this.health = this.sim.health;
+    this.maxHealth = this.sim.maxHealth;
+    this.blastRadius = this.sim.blastRadius;
     this.hasSlots = allocSlots('baneling', this);
     if (!this.hasSlots) {this.dead = true;}
   }
@@ -156,12 +158,13 @@ export class Baneling implements Targetable, SwarmSlotOwner {
       return;
     }
     if (this.flash > 0) {this.flash -= dt;}
-    this.age += dt;
-
-    const gy = terrain.getHeight(this.pos.x, this.pos.z);
-    let dist = Infinity;
+    const s = this.sim;
+    if (s) {s.age += dt;} // fuse clock ticks even during the airborne leg
 
     if (this.airborne) {
+      // The shared sim has no ballistic leg — the belly drop and blast
+      // punts stay an entity override; the sim is reseated on landing.
+      const gy = terrain.getHeight(this.pos.x, this.pos.z);
       this.vel.y += GRAVITY * dt;
       this.pos.addScaledVector(this.vel, dt);
       if (Number.isFinite(gy) && this.pos.y - this.radius <= gy) {
@@ -170,35 +173,21 @@ export class Baneling implements Targetable, SwarmSlotOwner {
         this.vel.x *= 0.4; this.vel.z *= 0.4;
         this.vel.y = 0;
         this.onLanded?.(this.pos);
+        if (s) {
+          s.x = this.pos.x; s.y = this.pos.y; s.z = this.pos.z;
+          s.vx = this.vel.x; s.vz = this.vel.z;
+        }
       }
-    } else {
-      _dir.set(playerPos.x - this.pos.x, 0, playerPos.z - this.pos.z);
-      dist = _dir.length();
-      if (dist > 0.01) {
-        _dir.divideScalar(dist);
-        this.vel.x += _dir.x * BANELING_ACCEL * dt;
-        this.vel.z += _dir.z * BANELING_ACCEL * dt;
-      }
-      const hSpeed = Math.hypot(this.vel.x, this.vel.z);
-      if (hSpeed > BANELING_TOPSPEED) {
-        const s = BANELING_TOPSPEED / hSpeed;
-        this.vel.x *= s; this.vel.z *= s;
-      }
-      this.pos.x += this.vel.x * dt;
-      this.pos.z += this.vel.z * dt;
-      const mg = terrain.getHeight(this.pos.x, this.pos.z);
-      if (Number.isFinite(mg)) {this.pos.y = mg + this.radius;}
-
-      // Fuse is 3D — `dist` is horizontal (steering); hovering overhead
-      // shouldn't pop the sac, you have to actually be in the blast.
-      if (this.pos.distanceTo(playerPos) < BANELING_FUSE_DIST) { this.detonate(); return; }
+    } else if (s) {
+      const ev = updateLocalSim(this, dt, terrain, stepBaneling, playerPos);
+      if (ev === 'detonate' || s.dead) {this.detonate(); return;}
     }
 
-    if (this.age > BANELING_LIFE) { this.detonate(); return; }
+    const dist = this.pos.distanceTo(playerPos);
 
     // Sac swells and glows harder the closer it gets — the tell you shoot
     const urgency = 1 - Math.min(1, dist / (BANELING_FUSE_DIST * 6));
-    const p = (Math.sin(this.age * 10) + 1) / 2;
+    const p = (Math.sin((s?.age ?? 0) * 10) + 1) / 2;
     this.glowPulse = 0.4 + p * (0.3 + urgency * 0.5) + urgency * 0.3;
 
     const hSpeed = Math.hypot(this.vel.x, this.vel.z);
@@ -245,19 +234,26 @@ export class Baneling implements Targetable, SwarmSlotOwner {
     // + crawlDie decide, so a client can't fake-explode a sac.
     if (this.netDriven) {return claimDamageMelee(this, damage, Baneling.hitClaim, opts?.serverPaid);}
     // Shooting it pops it — that IS the counterplay
-    this.detonate();
+    if (this.sim) {applyBanelingDamage(this.sim, damage);}
+    if (!this.sim || this.sim.dead) {this.detonate();}
     return true;
   }
 
   applyKnockback(from: THREE.Vector3, force: number): void {
     if (!Number.isFinite(from.x + from.y + from.z + force)) {return;}    _dir.copy(this.pos).sub(from).normalize();
+    // Sim owns horizontal motion while grounded; entity vel owns the
+    // airborne leg — both get it, whichever drives wins.
     this.vel.addScaledVector(_dir, force * 1.2); // light sac — blasts punt it
+    const s = this.sim;
+    if (s) {s.vx += _dir.x * force * 1.2; s.vz += _dir.z * force * 1.2;}
     if (this.vel.y > 2) {this.airborne = true;}
   }
 
   applyPull(to: THREE.Vector3, force: number): void {
     if (!Number.isFinite(to.x + to.y + to.z + force)) {return;}    _dir.copy(to).sub(this.pos).normalize();
     this.vel.addScaledVector(_dir, force * 1.2);
+    const s = this.sim;
+    if (s) {s.vx += _dir.x * force * 1.2; s.vz += _dir.z * force * 1.2;}
     if (this.vel.y > 2) {this.airborne = true;}
   }
 

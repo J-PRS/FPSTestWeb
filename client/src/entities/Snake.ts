@@ -2,11 +2,8 @@ import * as THREE from 'three';
 import { nextTargetId } from './targetIds.js';
 
 import {
-  SNAKE_RADIUS, SNAKE_HEALTH, SNAKE_SPEED,
-  SNAKE_AGGRO_DIST, SNAKE_STRIKE_DIST, SNAKE_STRIKE_CD,
-  SNAKE_WINDUP, SNAKE_LUNGE_SPEED, SNAKE_BITE_DIST,
-  SNAKE_LEAP_GRAV, SNAKE_LEAP_OVERSHOOT,
-  EMERGE_DUR, MELEE_FAVOR,
+  SNAKE_RADIUS,
+  EMERGE_DUR,
 } from '../core/config.js';
 import type { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
@@ -14,8 +11,8 @@ import { allocSlots, freeSlots } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
 import { writeInstances, pushTrail } from './snakePose.js';
-import { type SimSlither, makeSimSlither, stepSlither } from '../../../shared/creatureSim.js';
-import { bindNetSim, applyNetEdgeSim, updateNetSim, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
+import { type SimSlither, makeSimSlither, stepSlither, applySlitherDamage, commitTarget } from '../../../shared/creatureSim.js';
+import { bindNetSim, applyNetEdgeSim, updateNetSim, updateLocalSim, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
 
 const _dir = new THREE.Vector3();
 
@@ -83,11 +80,9 @@ export class Snake implements Targetable, SwarmSlotOwner {
   animT = Math.random() * 10;
   yaw = 0; // net replay writes this — drives the segment wave orientation
   flash = 0;
-  private strikeCd = 0;
-  private stunTimer = 0;
-  private struck = false; // the leap already spent its one pass-through bite
 
-  // Strike state machine: 0 = cruising, >0 windup timer, lunging bool
+  // Strike pose flags — mirrors of sim state for the renderer (coil/lunge
+  // pose), not timers: the sim owns the countdowns.
   windup = 0;
   lunge = 0;
 
@@ -137,14 +132,17 @@ export class Snake implements Targetable, SwarmSlotOwner {
   constructor(_scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3, uber = false) {
     this.id = nextTargetId();
     this.uber = uber;
-    this.maxHealth = uber ? SNAKE_HEALTH * 4 : SNAKE_HEALTH;
-    this.health = this.maxHealth;
     this.radius = uber ? SNAKE_RADIUS * 2.4 : SNAKE_RADIUS;
     this.scale = uber ? 3 : 1;
     if (uber) {this.color.set(0x8A_6A_2A);} // bronze king serpent
     this.pos = pos.clone();
     this.pos.y = terrain.getHeight(pos.x, pos.z) + this.radius;
     this.vel = new THREE.Vector3();
+    // Local authority: the same shared sim the wire replays. bindNet
+    // overwrites it when a server creature owns the id instead.
+    this.sim = makeSimSlither(this.id, { x: this.pos.x, y: this.pos.y, z: this.pos.z }, uber, this.id, 'snake');
+    this.health = this.sim.health;
+    this.maxHealth = this.sim.maxHealth;
     this.hasSlots = allocSlots('snake', this);
     if (!this.hasSlots) {this.dead = true;}
   }
@@ -152,103 +150,30 @@ export class Snake implements Targetable, SwarmSlotOwner {
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
     if (this.dead) {return;}
     if (this.netDriven && this.sim) { this.updateNet(dt, terrain); return; }
-    if (this.stunTimer > 0) {this.stunTimer -= dt;}
     if (this.flash > 0) {this.flash -= dt;}
-    if (this.strikeCd > 0) {this.strikeCd -= dt;}
     this.animT += dt;
+    const s = this.sim;
 
-    const dx = playerPos.x - this.pos.x;
-    const dz = playerPos.z - this.pos.z;
-    const distSq = dx * dx + dz * dz;
-    const dy = playerPos.y - this.pos.y;
-    const hitSq = distSq + dy * dy; // true 3D — a viper can't lunge UP at a flyer
-
-    if (this.emergeT > 0) { this.tickEmerge(dt, terrain); return; }
-    this.steer(dt, dx, dz, dy, distSq, hitSq);
-
-    if (this.lunge > 0) {this.tickLeap(dt, terrain, playerPos);}
-    else {
-      this.pos.addScaledVector(this.vel, dt);
+    if (this.emergeT > 0) {
+      this.emergeT -= dt;
+      const k = 1 - Math.max(0, this.emergeT) / EMERGE_DUR;
       this.groundY = terrain.getHeight(this.pos.x, this.pos.z);
-      this.pos.y = this.groundY + this.radius;
-    }
-
-    if (this.vel.lengthSq() > 0.1) {
-      const want = Math.atan2(this.vel.x, this.vel.z);
-      let dyy = want - this.yaw;
-      while (dyy > Math.PI) {dyy -= Math.PI * 2;}
-      while (dyy < -Math.PI) {dyy += Math.PI * 2;}
-      this.yaw += dyy * Math.min(1, 6 * dt); // quick turn — it's a predator
-    }
-
-    this.writeInstances(terrain);
-  }
-
-  /** Leap leg — ballistic arc; no terrain pin until touchdown. The one
-   *  pass-through bite fires mid-flight and the snake keeps going. */
-  private tickLeap(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
-    this.vel.y += SNAKE_LEAP_GRAV * dt;
-    this.pos.addScaledVector(this.vel, dt);
-    this.groundY = terrain.getHeight(this.pos.x, this.pos.z);
-
-    const biteD = SNAKE_BITE_DIST * MELEE_FAVOR;
-    const bdx = playerPos.x - this.pos.x, bdz = playerPos.z - this.pos.z, bdy = playerPos.y - this.pos.y;
-    if (!this.struck && bdx * bdx + bdz * bdz + bdy * bdy < biteD * biteD) {
-      this.struck = true;
-      this.onStrike?.(this);
-    }
-
-    if (this.pos.y <= this.groundY + this.radius || this.lunge <= 0) {
-      this.pos.y = this.groundY + this.radius;
-      this.vel.set(0, 0, 0);
-      this.lunge = 0;
-      this.strikeCd = SNAKE_STRIKE_CD;
-    }
-  }
-
-  private tickEmerge(dt: number, terrain: Terrain): void {
-    this.emergeT -= dt;
-    const k = 1 - Math.max(0, this.emergeT) / EMERGE_DUR;
-    this.groundY = terrain.getHeight(this.pos.x, this.pos.z);
-    this.pos.y = this.groundY + this.radius - this.emergeDepth * (1 - k * k);
-    this.writeInstances(terrain);
-  }
-
-  // Locomotion states: coil telegraph → committed lunge → serpentine
-  // approach → idle decay. The committed lunge is the whole design: once
-  // it fires, dodge means MOVE, not sidestep-a-curve.
-  private steer(dt: number, dx: number, dz: number, dy: number, distSq: number, hitSq: number): void {
-    if (this.windup > 0) {
-      // Coil: nearly stationary, rearing — the telegraph. Cancel nothing;
-      // if you run INTO a coiled snake you deserve the bite.
-      this.windup -= dt;
-      this.vel.set(0, 0, 0);
-      if (this.windup <= 0 && this.stunTimer <= 0) {
-        // Leap THROUGH the target — aim point overshoots, vy solved so
-        // the arc passes at the prey's own height (mirrors stepCoil).
-        const d = Math.sqrt(distSq) || 0.001;
-        const t = Math.max(0.2, (d + SNAKE_LEAP_OVERSHOOT) / SNAKE_LUNGE_SPEED);
-        this.vel.set((dx / d) * SNAKE_LUNGE_SPEED,
-          (dy + 0.5 * Math.abs(SNAKE_LEAP_GRAV) * t * t) / t,
-          (dz / d) * SNAKE_LUNGE_SPEED);
-        this.lunge = t + 0.4;
-        this.struck = false;
-      }
+      this.pos.y = this.groundY + this.radius - this.emergeDepth * (1 - k * k);
+      if (s) {s.x = this.pos.x; s.y = this.pos.y; s.z = this.pos.z;}
+      this.writeInstances(terrain);
       return;
     }
-    if (this.lunge > 0) { this.lunge -= dt; return; }
-    if (this.stunTimer <= 0 && distSq < SNAKE_AGGRO_DIST * SNAKE_AGGRO_DIST) {
-      // Serpentine approach — heading weaves around the target line; the
-      // render lays segments along the S so the whole body side-winds.
-      const wy = Math.atan2(dx, dz) + Math.sin(this.animT * 7) * 0.5;
-      this.vel.set(Math.sin(wy) * SNAKE_SPEED, 0, Math.cos(wy) * SNAKE_SPEED);
-      if (hitSq < SNAKE_STRIKE_DIST * SNAKE_STRIKE_DIST && this.strikeCd <= 0) {
-        this.windup = SNAKE_WINDUP;
-      }
-      return;
+
+    if (s) {
+      commitTarget(s, 'local', playerPos);
+      const ev = updateLocalSim(this, dt, terrain, stepSlither, playerPos);
+      this.windup = s.state === 'windup' ? 1 : 0;
+      this.lunge = s.state === 'lunge' ? 1 : 0;
+      if (ev === 'bite') {this.onStrike?.(this);}
+      if (s.dead) {this.dead = true; return;}
     }
-    this.vel.x *= Math.max(0, 1 - 4 * dt);
-    this.vel.z *= Math.max(0, 1 - 4 * dt);
+    this.groundY = terrain.getHeight(this.pos.x, this.pos.z);
+    this.writeInstances(terrain);
   }
 
   groundY = 0; // terrain height at center — segment heights are deltas
@@ -264,26 +189,36 @@ export class Snake implements Targetable, SwarmSlotOwner {
 
   takeDamage(damage: number, opts?: { serverPaid?: boolean }): boolean {
     if (this.netDriven) {return claimDamageMelee(this, damage, Snake.hitClaim, opts?.serverPaid);}
-    this.health -= damage;
     this.flash = 0.15;
-    if (this.health <= 0) {
-      this.dead = true;
-      return true;
-    }
+    const s = this.sim;
+    if (s) { if (applySlitherDamage(s, damage)) { this.dead = true; return true; } }
+    else if ((this.health -= damage) <= 0) { this.dead = true; return true; }
     return false;
   }
 
   applyKnockback(from: THREE.Vector3, force: number): void {
     if (!Number.isFinite(from.x + from.y + from.z + force)) {return;}    _dir.copy(this.pos).sub(from).normalize();
-    this.vel.addScaledVector(_dir, force * 1.2); // light body — blasts send it
-    this.stunTimer = 0.8;
-    this.windup = 0; this.lunge = 0; // a hit breaks the strike
+    const s = this.sim;
+    if (s) {
+      s.vx += _dir.x * force * 1.2; s.vy += _dir.y * force * 1.2; s.vz += _dir.z * force * 1.2;
+      s.stunTimer = Math.max(s.stunTimer, s.sp.STUN_S);
+      s.state = 'slither'; s.hopTimer = 0; // a hit breaks the strike
+      this.windup = 0; this.lunge = 0;
+      return;
+    }
+    this.vel.addScaledVector(_dir, force * 1.2);
+    this.windup = 0; this.lunge = 0;
   }
 
   applyPull(to: THREE.Vector3, force: number): void {
-    if (!Number.isFinite(to.x + to.y + to.z + force)) {return;}    if (!Number.isFinite(to.x + to.y + to.z + force)) {return;}    _dir.copy(to).sub(this.pos).normalize();
+    if (!Number.isFinite(to.x + to.y + to.z + force)) {return;}    _dir.copy(to).sub(this.pos).normalize();
+    const s = this.sim;
+    if (s) {
+      s.vx += _dir.x * force * 1.2; s.vy += _dir.y * force * 1.2; s.vz += _dir.z * force * 1.2;
+      s.stunTimer = Math.max(s.stunTimer, s.sp.STUN_S);
+      return;
+    }
     this.vel.addScaledVector(_dir, force * 1.2);
-    this.stunTimer = 0.8;
   }
 
   dispose(): void {

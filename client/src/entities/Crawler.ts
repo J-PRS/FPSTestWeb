@@ -2,16 +2,12 @@ import * as THREE from 'three';
 import { nextTargetId } from './targetIds.js';
 
 import {
-  GRAVITY,
-  CRAWLER_RADIUS, CRAWLER_HEALTH,
-  CRAWLER_AGGRO_DIST, CRAWLER_POUNCE_DIST, CRAWLER_WINDUP,
-  CRAWLER_HOP_SPEED, CRAWLER_HOP_UP, CRAWLER_POUNCE_SPEED,
-  CRAWLER_STUN,
-  EMERGE_DUR, MELEE_FAVOR,
+  CRAWLER_RADIUS, CRAWLER_WINDUP,
+  EMERGE_DUR,
 } from '../core/config.js';
 import type { Terrain } from '../world/terrain.js';
-import { type SimCrawler, makeSimCrawler, stepCrawler } from '../../../shared/creatureSim.js';
-import { bindNetSim, applyNetEdgeSim, updateNetSim, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
+import { type SimCrawler, makeSimCrawler, stepCrawler, applyCrawlerDamage, commitTarget } from '../../../shared/creatureSim.js';
+import { bindNetSim, applyNetEdgeSim, updateNetSim, updateLocalSim, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots } from './swarms.js';
 import type { SwarmSlotOwner } from './swarm.js';
@@ -56,12 +52,7 @@ export class Crawler implements Targetable, SwarmSlotOwner {
   flash = 0;  // damage white-flash decay
 
   state: 'wander' | 'chase' | 'windup' = 'wander';
-  private hopTimer = 0;
-  private windupTimer = 0;
-  private stunTimer = 0;
-  private wanderYaw = Math.random() * Math.PI * 2;
-  airborne = true; // net replay writes this from the sim
-  private pounceAirborne = false;
+  airborne = true; // mirrors sim flight — hop arcs land on their own clock
   // Burrow-in state (set by spawn) — slides up out of the ground on emerge
   emergeT = 0;
   emergeDepth = 0;
@@ -103,8 +94,6 @@ export class Crawler implements Targetable, SwarmSlotOwner {
   constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3, uber = false) {
     this.id = nextTargetId();
     this.uber = uber;
-    this.maxHealth = uber ? CRAWLER_HEALTH * 4 : CRAWLER_HEALTH;
-    this.health = this.maxHealth;
     this.radius = uber ? CRAWLER_RADIUS * 2.2 : CRAWLER_RADIUS;
     this.scale = uber ? 1.3 : 0.5;
     if (uber) {this.color.set(0x5A_1A_3A);} // brood-purple — the queen reads different
@@ -112,6 +101,12 @@ export class Crawler implements Targetable, SwarmSlotOwner {
     const sg = terrain.getHeight(pos.x, pos.z);
     if (Number.isFinite(sg)) {this.pos.y = sg + this.radius;}
     this.vel = new THREE.Vector3();
+    // Local authority: the same shared sim the wire replays — health and
+    // AI clocks live there, never a second copy. bindNet overwrites it
+    // when a server creature owns the id instead.
+    this.sim = makeSimCrawler(this.id, { x: this.pos.x, y: this.pos.y, z: this.pos.z }, uber, this.id, 'crawler');
+    this.health = this.sim.health;
+    this.maxHealth = this.sim.maxHealth;
     this.hasSlots = allocSlots('crawler', this);
     if (!this.hasSlots) {this.dead = true;} // swarm full — refuse to exist
   }
@@ -122,13 +117,8 @@ export class Crawler implements Targetable, SwarmSlotOwner {
       this.updateNet(dt, terrain);
       return;
     }
-    if (this.stunTimer > 0) {this.stunTimer -= dt;}
     if (this.flash > 0) {this.flash -= dt;}
-    if (this.glow > 0 && this.state !== 'windup') {this.glow -= dt * 2.5;}
-
-    const dx = playerPos.x - this.pos.x;
-    const dz = playerPos.z - this.pos.z;
-    const distSq = dx * dx + dz * dz;
+    const s = this.sim;
 
     if (this.emergeT > 0) {
       // Burrow-in: rise out of the dirt, ease-out — AI stays asleep until surfaced
@@ -136,9 +126,31 @@ export class Crawler implements Targetable, SwarmSlotOwner {
       const k = 1 - Math.max(0, this.emergeT) / EMERGE_DUR;
       const eg = terrain.getHeight(this.pos.x, this.pos.z);
       if (Number.isFinite(eg)) {this.pos.y = eg + this.radius - this.emergeDepth * (1 - k * k);}
+      if (s) {s.x = this.pos.x; s.y = this.pos.y; s.z = this.pos.z;}
       this.animT += dt;
       this.writeInstances(terrain);
       return;
+    }
+
+    if (s) {
+      // Live aim each frame — offline has no link to lag behind. The
+      // wire model commits on retarget edges; the local sim commits on
+      // every step, the strict-superset cadence.
+      commitTarget(s, 'local', playerPos);
+      const wasAir = this.airborne;
+      const ev = updateLocalSim(this, dt, terrain, stepCrawler, playerPos, { grounded: true });
+      this.state = s.state;
+      if (wasAir && !this.airborne) {this.onLanded?.(this.pos);}
+      if (ev === 'bite') {this.onPounceHit?.(this);}
+      if (s.state === 'windup') {
+        const t = 1 - s.windupTimer / CRAWLER_WINDUP;
+        this.squash = 1 - Math.max(0, t) * 0.4;
+        this.glow = Math.max(0, t) * 0.6;
+      } else {
+        this.squash = 1;
+        if (this.glow > 0) {this.glow -= dt * 2.5;}
+      }
+      if (s.dead) {this.dead = true; return;}
     }
 
     // Matriarch brood: a scarab crawls out every few seconds while she's
@@ -151,107 +163,12 @@ export class Crawler implements Targetable, SwarmSlotOwner {
       }
     }
 
-    this.stepBody(dt, terrain, playerPos, distSq);
-    this.faceTarget(dx, dz, distSq);
-
     this.animT += dt;
     this.writeInstances(terrain);
   }
 
-  /** Ballistic hop integration + ground contact (pounce landing resolves
-   *  here — air hit and ground hit are different radii). */
-  private stepBody(dt: number, terrain: Terrain, playerPos: THREE.Vector3, distSq: number): void {
-    this.vel.y += GRAVITY * dt;
-    this.pos.addScaledVector(this.vel, dt);
-
-    const gy = terrain.getHeight(this.pos.x, this.pos.z);
-    if (Number.isFinite(gy) && this.pos.y - this.radius <= gy) {
-      this.pos.y = gy + this.radius;
-      if (this.airborne) {this.onLanded?.(this.pos);}
-      this.airborne = false;
-      this.vel.set(0, 0, 0);
-      if (this.pounceAirborne) {
-        this.pounceAirborne = false;
-        if (this.pos.distanceToSquared(playerPos) < 6.25 * MELEE_FAVOR * MELEE_FAVOR) {this.onPounceHit?.(this);}
-      }
-      this.groundThink(dt, terrain, playerPos, distSq);
-    } else {
-      this.airborne = true;
-      if (this.pounceAirborne && this.pos.distanceToSquared(playerPos) < 4 * MELEE_FAVOR * MELEE_FAVOR) {
-        this.pounceAirborne = false;
-        this.onPounceHit?.(this);
-      }
-    }
-  }
-
-  private faceTarget(dx: number, dz: number, distSq: number): void {
-    if (this.state === 'windup' && distSq > 0.01) {
-      this.yaw = Math.atan2(dx, dz);
-    } else if (this.vel.lengthSq() > 1) {
-      this.yaw = Math.atan2(this.vel.x, this.vel.z);
-    }
-  }
-
   writeInstances(terrain: Terrain): void {
     writeCrawlerInstances(this, terrain);
-  }
-
-  private groundThink(dt: number, terrain: Terrain, playerPos: THREE.Vector3, distSq: number): void {
-    if (this.stunTimer > 0) {return;}
-
-    if (this.state === 'windup') {
-      this.windupTimer -= dt;
-      const t = 1 - this.windupTimer / CRAWLER_WINDUP;
-      this.squash = 1 - t * 0.4;
-      this.glow = t * 0.6;
-      if (this.windupTimer <= 0) {
-        this.squash = 1;
-        this.pounce(playerPos);
-      }
-      return;
-    }
-
-    if (distSq < CRAWLER_POUNCE_DIST * CRAWLER_POUNCE_DIST) {
-      this.state = 'windup';
-      this.windupTimer = CRAWLER_WINDUP;
-      return;
-    }
-
-    this.hopTimer -= dt;
-    if (this.hopTimer > 0) {return;}
-    this.hopTimer = 0.25 + Math.random() * 0.3;
-
-    if (distSq < CRAWLER_AGGRO_DIST * CRAWLER_AGGRO_DIST) {
-      this.state = 'chase';
-      const d = (distSq) ** 0.5 || 0.001;
-      this.vel.set(
-        ((playerPos.x - this.pos.x) / d) * CRAWLER_HOP_SPEED,
-        CRAWLER_HOP_UP,
-        ((playerPos.z - this.pos.z) / d) * CRAWLER_HOP_SPEED,
-      );
-    } else {
-      this.state = 'wander';
-      if (Math.random() < 0.4) {this.wanderYaw += (Math.random() - 0.5) * 2;}
-      this.vel.set(
-        Math.sin(this.wanderYaw) * CRAWLER_HOP_SPEED * 0.35,
-        CRAWLER_HOP_UP * 0.8,
-        Math.cos(this.wanderYaw) * CRAWLER_HOP_SPEED * 0.35,
-      );
-    }
-  }
-
-  private pounce(playerPos: THREE.Vector3): void {
-    const dx = playerPos.x - this.pos.x;
-    const dz = playerPos.z - this.pos.z;
-    const pd = (dx * dx + dz * dz) ** 0.5 || 0.001;
-    const hSpeed = CRAWLER_POUNCE_SPEED;
-    const t = Math.max(0.15, pd / hSpeed);
-    const vy = (playerPos.y - this.pos.y + 0.5 * Math.abs(GRAVITY) * t * t) / t;
-    this.vel.set((dx / pd) * hSpeed, vy, (dz / pd) * hSpeed);
-    this.airborne = true;
-    this.pounceAirborne = true;
-    this.state = 'chase';
-    this.glow = 0.6;
   }
 
   /** netDriven leg — the shared replay writes pos/vel/yaw/health; the
@@ -278,27 +195,34 @@ export class Crawler implements Targetable, SwarmSlotOwner {
       this.flash = 0.15;
       return claimDamageMelee(this, damage, Crawler.hitClaim, opts?.serverPaid);
     }
-    this.health -= damage;
     this.flash = 0.15;
-    if (this.health <= 0) { this.dead = true; return true; }
+    const s = this.sim;
+    if (s) { if (applyCrawlerDamage(s, damage)) { this.dead = true; return true; } }
+    else if ((this.health -= damage) <= 0) { this.dead = true; return true; }
     return false;
   }
 
   applyKnockback(from: THREE.Vector3, force: number): void {
     if (!Number.isFinite(from.x + from.y + from.z + force)) {return;}    _dir.copy(this.pos).sub(from).normalize();
-    this.vel.addScaledVector(_dir, force);
-    this.stunTimer = CRAWLER_STUN;
-    if (this.state === 'windup') {
-      this.state = 'chase';
-      this.squash = 1;
-      this.glow = 0;
+    const s = this.sim;
+    if (s) {
+      s.vx += _dir.x * force; s.vy += _dir.y * force; s.vz += _dir.z * force;
+      s.stunTimer = Math.max(s.stunTimer, s.sp.STUN_S);
+      if (s.state === 'windup') {s.state = 'chase'; this.squash = 1; this.glow = 0;}
+      return;
     }
+    this.vel.addScaledVector(_dir, force);
   }
 
   applyPull(to: THREE.Vector3, force: number): void {
     if (!Number.isFinite(to.x + to.y + to.z + force)) {return;}    _dir.copy(to).sub(this.pos).normalize();
+    const s = this.sim;
+    if (s) {
+      s.vx += _dir.x * force; s.vy += _dir.y * force; s.vz += _dir.z * force;
+      s.stunTimer = Math.max(s.stunTimer, s.sp.STUN_S);
+      return;
+    }
     this.vel.addScaledVector(_dir, force);
-    this.stunTimer = CRAWLER_STUN;
   }
 
   dispose(): void {

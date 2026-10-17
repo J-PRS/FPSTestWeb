@@ -3,17 +3,16 @@ import { nextTargetId } from './targetIds.js';
 
 import {
   GRAVITY,
-  ROLLER_RADIUS, ROLLER_HEALTH,
-  ROLLER_ACCEL, ROLLER_TOPSPEED,
-  EMERGE_DUR, MELEE_FAVOR,
+  ROLLER_RADIUS,
+  EMERGE_DUR,
 } from '../core/config.js';
 import type { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots } from './swarms.js';
 import type { SwarmSlotOwner } from './swarm.js';
 import { writeRollerInstances } from './rollerVisual.js';
-import { type SimRoller, makeSimRoller, stepRoller } from '../../../shared/creatureSim.js';
-import { bindNetSim, applyNetEdgeSim, updateNetSim, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
+import { type SimRoller, makeSimRoller, stepRoller, applyRollerDamage } from '../../../shared/creatureSim.js';
+import { bindNetSim, applyNetEdgeSim, updateNetSim, updateLocalSim, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
 export { rollerParts } from './rollerVisual.js';
 
 const _dir = new THREE.Vector3();
@@ -49,7 +48,6 @@ export class Roller implements Targetable, SwarmSlotOwner {
   rollQuat = new THREE.Quaternion();
   tint = 0.8 + Math.random() * 0.4; // per-roller rock shade variance
   flash = 0;
-  private hitCooldown = 0; // brief invuln so contact doesn't multi-tick
   private airborne = false;
   // Burrow-in state (set by spawn) — slides up out of the ground on emerge
   emergeT = 0;
@@ -101,13 +99,16 @@ export class Roller implements Targetable, SwarmSlotOwner {
     // Uber = "avalanche": double the boulder, triple the tank, and mass
     // enough that blasts cannot stop it — you dodge it or you die.
     this.uber = uber;
-    this.maxHealth = uber ? ROLLER_HEALTH * 3 : ROLLER_HEALTH;
-    this.health = this.maxHealth;
     this.radius = uber ? ROLLER_RADIUS * 2 : ROLLER_RADIUS;
     if (uber) {this.color.set(0x4A_3A_52);} // dark basalt — reads heavy
     this.pos = pos.clone();
     this.pos.y = terrain.getHeight(pos.x, pos.z) + this.radius;
     this.vel = new THREE.Vector3();
+    // Local authority: the same shared sim the wire replays. bindNet
+    // overwrites it when a server creature owns the id instead.
+    this.sim = makeSimRoller(this.id, { x: this.pos.x, y: this.pos.y, z: this.pos.z }, uber, this.id, 'roller');
+    this.health = this.sim.health;
+    this.maxHealth = this.sim.maxHealth;
     this.hasSlots = allocSlots('roller', this);
     if (!this.hasSlots) {this.dead = true;}
   }
@@ -120,8 +121,7 @@ export class Roller implements Targetable, SwarmSlotOwner {
       return;
     }
     if (this.flash > 0) {this.flash -= dt;}
-    if (this.hitCooldown > 0) {this.hitCooldown -= dt;}
-
+    const s = this.sim;
     const gy = terrain.getHeight(this.pos.x, this.pos.z);
 
     if (this.emergeT > 0) {
@@ -130,10 +130,27 @@ export class Roller implements Targetable, SwarmSlotOwner {
       const k = 1 - Math.max(0, this.emergeT) / EMERGE_DUR;
       this.pos.y = gy + this.radius - this.emergeDepth * (1 - k * k);
       this.vel.set(0, 0, 0);
+      if (s) {s.x = this.pos.x; s.y = this.pos.y; s.z = this.pos.z;}
     } else if (this.airborne) {
-      this.tickAir(dt, terrain, gy);
-    } else {
-      this.tickGround(dt, terrain, playerPos);
+      // The shared sim rides the surface — punts stay an entity override
+      // that hands position back on landing.
+      this.vel.y += GRAVITY * dt;
+      this.pos.addScaledVector(this.vel, dt);
+      if (this.pos.y - this.radius <= gy) {
+        this.pos.y = gy + this.radius;
+        this.airborne = false;
+        this.vel.x *= 0.4; this.vel.z *= 0.4;
+        this.vel.y = 0;
+        this.onLanded?.(this.pos);
+        if (s) {
+          s.x = this.pos.x; s.y = this.pos.y; s.z = this.pos.z;
+          s.vx = this.vel.x; s.vz = this.vel.z;
+        }
+      }
+    } else if (s) {
+      const ev = updateLocalSim(this, dt, terrain, stepRoller, playerPos);
+      if (ev === 'bite') {this.onHit?.(this);}
+      if (s.dead) {this.dead = true; return;}
     }
 
     // Roll rotation: axis = up × velocity, rate = speed / radius
@@ -147,72 +164,40 @@ export class Roller implements Targetable, SwarmSlotOwner {
     this.writeInstances();
   }
 
-  private tickAir(dt: number, terrain: Terrain, gy: number): void {
-    this.vel.y += GRAVITY * dt;
-    this.pos.addScaledVector(this.vel, dt);
-    if (this.pos.y - this.radius <= gy) {
-      this.pos.y = gy + this.radius;
-      this.airborne = false;
-      this.vel.x *= 0.4; this.vel.z *= 0.4;
-      this.vel.y = 0;
-      this.onLanded?.(this.pos);
-    }
-  }
-
-  // Surface steering: home on the player with a top-speed clamp, let
-  // downhill grade feed speed, and ram only on true 3D contact — `dist`
-  // is horizontal (steering); a boulder under a flying player used to
-  // connect through the air.
-  private tickGround(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
-    _dir.set(playerPos.x - this.pos.x, 0, playerPos.z - this.pos.z);
-    const dist = _dir.length();
-    if (dist > 0.01) {
-      _dir.divideScalar(dist);
-      this.vel.x += _dir.x * ROLLER_ACCEL * dt;
-      this.vel.z += _dir.z * ROLLER_ACCEL * dt;
-    }
-    const hSpeed = Math.hypot(this.vel.x, this.vel.z);
-    if (hSpeed > ROLLER_TOPSPEED) {
-      const s = ROLLER_TOPSPEED / hSpeed;
-      this.vel.x *= s; this.vel.z *= s;
-    }
-
-    const prevY = this.pos.y;
-    this.pos.x += this.vel.x * dt;
-    this.pos.z += this.vel.z * dt;
-    this.pos.y = terrain.getHeight(this.pos.x, this.pos.z) + this.radius;
-    const drop = prevY - this.pos.y;
-    if (drop > 0 && hSpeed > 0.1) {
-      const g = -drop / (dt || 1);
-      this.vel.x += _dir.x * Math.min(g * 0.02, 4) * dt;
-      this.vel.z += _dir.z * Math.min(g * 0.02, 4) * dt;
-    }
-
-    if (this.hitCooldown <= 0 && this.pos.distanceTo(playerPos) < this.radius + Number(MELEE_FAVOR)) {
-      this.hitCooldown = 0.6;
-      this.onHit?.(this);
-    }
-  }
-
   takeDamage(damage: number, opts?: { serverPaid?: boolean }): boolean {
     if (this.netDriven) {return claimDamageMelee(this, damage, Roller.hitClaim, opts?.serverPaid);}
-    this.health -= damage;
     this.flash = 0.12;
-    if (this.health <= 0) { this.dead = true; return true; }
+    const s = this.sim;
+    if (s) { if (applyRollerDamage(s, damage)) { this.dead = true; return true; } }
+    else if ((this.health -= damage) <= 0) { this.dead = true; return true; }
     return false;
   }
 
   applyKnockback(from: THREE.Vector3, force: number): void {
     if (!Number.isFinite(from.x + from.y + from.z + force)) {return;}    if (this.uber) {return;} // avalanche — unstoppable mass, that's the whole point
     _dir.copy(this.pos).sub(from).normalize();
-    this.vel.addScaledVector(_dir, force * 0.8); // heavy — blasts shove, not launch
+    const s = this.sim;
+    if (s) {
+      s.vx += _dir.x * force * 0.8; s.vz += _dir.z * force * 0.8;
+      this.vel.x += _dir.x * force * 0.8; this.vel.z += _dir.z * force * 0.8;
+    } else {
+      this.vel.addScaledVector(_dir, force * 0.8); // heavy — blasts shove, not launch
+    }
+    this.vel.y += _dir.y * force * 0.8;
     if (this.vel.y > 3) {this.airborne = true;}    // ...unless it's a big one
   }
 
   applyPull(to: THREE.Vector3, force: number): void {
-    if (!Number.isFinite(to.x + to.y + to.z + force)) {return;}    if (!Number.isFinite(to.x + to.y + to.z + force)) {return;}    if (this.uber) {return;}
+    if (!Number.isFinite(to.x + to.y + to.z + force)) {return;}    if (this.uber) {return;}
     _dir.copy(to).sub(this.pos).normalize();
-    this.vel.addScaledVector(_dir, force * 0.8);
+    const s = this.sim;
+    if (s) {
+      s.vx += _dir.x * force * 0.8; s.vz += _dir.z * force * 0.8;
+      this.vel.x += _dir.x * force * 0.8; this.vel.z += _dir.z * force * 0.8;
+    } else {
+      this.vel.addScaledVector(_dir, force * 0.8);
+    }
+    this.vel.y += _dir.y * force * 0.8;
     if (this.vel.y > 3) {this.airborne = true;}
   }
 

@@ -2,23 +2,26 @@ import * as THREE from 'three';
 import { nextTargetId } from './targetIds.js';
 
 import {
-  TOTEM_RADIUS, TOTEM_HEALTH,
-  TOTEM_RANGE, TOTEM_REFIRE,
+  TOTEM_RADIUS,
   TOTEM_MATERIALIZE,
-  UBER_TOTEM_RADIUS, UBER_TOTEM_HEALTH, UBER_TOTEM_REFIRE,
+  UBER_TOTEM_RADIUS,
   UBER_TOTEM_BEAM_WIDTH,
 } from '../core/config.js';
 import type { Terrain } from '../world/terrain.js';
-import { bindNetTotem, applyNetEdgeTotem, updateNetTotem, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
-import { TOTEM_STATES, type TotemState, type TotemCtx } from './totemFsm.js';
-import { type SimTotem, makeSimTotem, stepTotem } from '../../../shared/creatureSim.js';
+import { bindNetTotem, applyNetEdgeTotem, updateNetTotem, updateLocalSim, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
+import { type SimTotem, makeSimTotem, stepTotem, applyTotemDamage, totemBeamHit, commitTarget } from '../../../shared/creatureSim.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getShadows } from './swarms.js';
 import type { SwarmSlotOwner } from './swarm.js';
 import { TerrainFoot } from '../effects/terrainFoot.js';
 import { writeTotemInstances } from './totemVisual.js';
-import { beginBlinkF, lineClear, solveBeam, fireBeam, blastPush, blastPull } from './totemBeam.js';
 export { totemParts } from './totemVisual.js';
+
+// 'materialize' is spawn dressing — the shared sim has no state for it;
+// the entity runs the grow-in, then hands control to stepTotem.
+type TotemState = 'materialize' | 'aim' | 'charge' | 'blinkOut' | 'blinkIn';
+
+const _v = new THREE.Vector3();
 
 
 /**
@@ -72,16 +75,11 @@ export class Totem implements Targetable, SwarmSlotOwner {
   stateTimer = TOTEM_MATERIALIZE;
   // Stagger lock: every hit sets ~2.1s of "can't blink" — sustained fire
   // pins the obelisk in place. That's the counterplay: it can still shoot
-  // back, but it can't escape while you're landing damage.
+  // back, but it can't escape while you're landing damage. Mirrors the
+  // sim's stunTimer.
   staggerT = 0;
-  chargeTimer = 0;
-  refire: number;
-  shotsFired = 0;
-  blinkTarget = new THREE.Vector3();
-  blinkCd = 0; // random 2–5s between blinks — no pop-pop-pop escapes
-  lockPoint = new THREE.Vector3(); // beam locks here — dodge by moving after lock
-  lockDir = new THREE.Vector3();   // locked firing direction
-  lockDist = TOTEM_RANGE;
+  lockDir = new THREE.Vector3();   // locked firing direction — mirrored from the sim's committed line
+  lockDist = 0;
   beamFade = 0;                    // post-shot beam decay timer
 
   /** netDriven = server-authoritative replay — the shared SimTotem drives
@@ -113,7 +111,6 @@ export class Totem implements Targetable, SwarmSlotOwner {
     }
     if (m.kind === 'charge' && this.sim) {
       this.state = 'charge';
-      this.chargeTimer = this.sim.hopTimer;
       this.lockDir.set(this.sim.lockDirX, this.sim.lockDirY, this.sim.lockDirZ);
       this.lockDist = this.sim.lockDist;
       this.beamOn = true;
@@ -143,18 +140,21 @@ export class Totem implements Targetable, SwarmSlotOwner {
     this.terrain = terrain;
     this.id = nextTargetId();
     this.uber = uber;
-    this.maxHealth = uber ? UBER_TOTEM_HEALTH : TOTEM_HEALTH;
-    this.health = this.maxHealth;
     this.radius = uber ? UBER_TOTEM_RADIUS : TOTEM_RADIUS;
     this.hitRadius = this.radius * 0.68;
     this.capsuleTop = 5.2 * this.radius; // visual top: cap tip at 5.2r
-    this.refire = uber ? UBER_TOTEM_REFIRE : TOTEM_REFIRE;
     // Uber reads as a crowned elder — gold-bronze massif, not obsidian
     this.color = new THREE.Color(uber ? 0x5A_40_20 : 0x2A_24_38);
     this.scale = uber ? 2.4 : 1.4;
 
     this.pos = pos.clone();
     this.pos.y = terrain.getHeight(pos.x, pos.z);
+
+    // Local authority: the same shared sim the wire replays — aim/charge/
+    // blink state machine, lock line, blink perch picks all live there.
+    this.sim = makeSimTotem(this.id, { x: this.pos.x, y: this.pos.y, z: this.pos.z }, uber, this.id, 'totem');
+    this.health = this.sim.health;
+    this.maxHealth = this.sim.maxHealth;
 
     this.hasSlots = allocSlots('totem', this);
     if (!this.hasSlots) {this.dead = true;}
@@ -165,28 +165,46 @@ export class Totem implements Targetable, SwarmSlotOwner {
     this.foot.conform(this.pos.x, this.pos.z, this.pos.y, terrain);
   }
 
-  // FSM lives in totemFsm.ts — states mutate this totem's flat fields
-  // via the TotemFsmHost interface; only the shared scratch ctx stays.
-  private static readonly _ctx: TotemCtx = { dt: 0, dist: 0, playerPos: null as never };
-
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3, playerVel?: THREE.Vector3): void {
     if (this.dead) {return;}
     if (this.netDriven) { this.updateNet(dt, terrain); return; }
     if (this.flash > 0) {this.flash -= dt;}
-    if (this.staggerT > 0) {this.staggerT -= dt;}
-    if (this.blinkCd > 0) {this.blinkCd -= dt;}
+    const s = this.sim;
 
-    this.stateTimer -= dt;
-    const dist = this.pos.distanceTo(playerPos);
-    const ctx = Totem._ctx;
-    ctx.dt = dt; ctx.dist = dist; ctx.playerPos = playerPos; ctx.playerVel = playerVel;
-    TOTEM_STATES[this.state](this, ctx);
-
-    // Beam afterglow — the fired rail flash decays out
-    if (this.beamFade > 0) {
-      this.beamFade -= dt;
-      this.beamOpacity = Math.max(0, this.beamFade / 0.3) * 0.95;
-      if (this.beamFade <= 0) {this.beamOn = false;}
+    if (this.state === 'materialize' || !s) {
+      // Grow-in dressing — the sim has no materialize state; it idles in
+      // 'aim' until the body exists.
+      this.stateTimer -= dt;
+      const p = 1 - Math.max(0, this.stateTimer / TOTEM_MATERIALIZE);
+      this.bodyScale = 0.3 + p * 0.7;
+      this.eyeScale = 0.4 + p * 0.4;
+      this.eyeBright = p * 0.5;
+      if (this.stateTimer <= 0) {
+        this.state = 'aim';
+        this.bodyScale = 1;
+        this.eyeBright = 0.8;
+      }
+    } else {
+      commitTarget(s, 'local', playerPos);
+      const prevState = s.state;
+      const ev = updateLocalSim(this, dt, terrain, stepTotem, playerPos);
+      this.mirrorSim(dt, prevState);
+      if (ev === 'blink') {this.onBlink?.(this.pos);}
+      if (ev === 'fire') {
+        this.onSimFire();
+        // Local authority resolves the locked beam against the LIVE
+        // position — same contract as totemFireTargets on the server.
+        const ex = s.x, ey = s.y + s.sp.EYE_HEIGHT * s.radius, ez = s.z;
+        if (totemBeamHit(s, playerPos.x, playerPos.y + 1, playerPos.z)) {
+          const proj = (playerPos.x - ex) * s.lockDirX + (playerPos.y + 1 - ey) * s.lockDirY + (playerPos.z - ez) * s.lockDirZ;
+          _v.set(ex + s.lockDirX * proj, ey + s.lockDirY * proj, ez + s.lockDirZ * proj);
+          this.onBoltHit?.(this, _v);
+        } else if (s.lockDist < s.sp.RANGE) {
+          _v.set(ex + s.lockDirX * s.lockDist, ey + s.lockDirY * s.lockDist, ez + s.lockDirZ * s.lockDist);
+          this.onBoltLand?.(_v);
+        }
+      }
+      if (s.dead) {this.dead = true; return;}
     }
 
     this.writeInstances();
@@ -201,8 +219,14 @@ export class Totem implements Targetable, SwarmSlotOwner {
     if (this.flash > 0) {this.flash -= dt;}
     const prevState = s.state;
     updateNetTotem(this, dt, terrain, stepTotem);
+    this.mirrorSim(dt, prevState);
+    if (this.foot) {getShadows()?.set(this, this.pos, this.radius * 0.9, 0.35);}
+  }
 
-    // Mirror sim state → visual fields
+  /** Sim state → visual fields — shared by the net replay and the local
+   *  authority paths so blink/charge read identically either way. */
+  private mirrorSim(dt: number, prevState: SimTotem['state']): void {
+    const s = this.sim!;
     this.state = s.state === 'aim' ? 'aim' : (s.state as TotemState);
     if (s.state === 'charge') {
       const charge = s.sp.CHARGE;
@@ -238,7 +262,8 @@ export class Totem implements Targetable, SwarmSlotOwner {
         this.eyeBright = 0.8;
         this.eyeScale = 1.1;
       }
-      // Beam afterglow decay — same as offline.
+      // Beam afterglow decay — the net path's only decay site (local
+      // update() runs its own after the state step).
       if (this.beamFade > 0) {
         this.beamFade -= dt;
         this.beamOpacity = Math.max(0, this.beamFade / 0.3) * 0.95;
@@ -246,19 +271,36 @@ export class Totem implements Targetable, SwarmSlotOwner {
       }
     }
     this.staggerT = s.stunTimer; // the pin telegraph rides the same field
-    if (this.foot) {getShadows()?.set(this, this.pos, this.radius * 0.9, 0.35);}
   }
 
   writeInstances(_terrain?: Terrain): void {
     writeTotemInstances(this);
   }
 
-  beginBlink(playerPos: THREE.Vector3): void { beginBlinkF(this, playerPos); }
-  lineClear(target: THREE.Vector3): boolean { return lineClear(this, target); }
-  solveBeam(): void { solveBeam(this); }
-  fireBeam(playerPos: THREE.Vector3): void { fireBeam(this, playerPos); }
-  applyKnockback(from: THREE.Vector3, force: number): void { blastPush(this, from, force); }
-  applyPull(to: THREE.Vector3, force: number): void { blastPull(this, to, force); }
+  // Anchored — a blast during charge drops the aim. Staggered it can't
+  // even flee: the charge fizzles but the totem holds its ground. Unpinned,
+  // the blast spends the shot budget and the sim relocates on its next
+  // aim step (its own perch rules, not a caller-issued blink).
+  private blastFizzle(): void {
+    const s = this.sim;
+    if (!s || s.state !== 'charge') {return;}
+    if (s.stunTimer > 0 || s.blinkCd > 0) {
+      s.state = 'aim';
+      s.windupTimer = Math.max(s.windupTimer, 0.4); // fizzle — refire isn't free
+    } else {
+      s.state = 'aim';
+      s.shotsFired = s.sp.RELOCATE_SHOTS; // relocate check fires next aim step
+    }
+    this.beamOn = false;
+  }
+
+  applyKnockback(from: THREE.Vector3, force: number): void {
+    if (Number.isFinite(from.x + from.y + from.z + force) && force > 8) {this.blastFizzle();}
+  }
+
+  applyPull(to: THREE.Vector3, force: number): void {
+    if (Number.isFinite(to.x + to.y + to.z + force) && force > 8) {this.blastFizzle();}
+  }
 
   takeDamage(damage: number, opts?: { serverPaid?: boolean }): boolean {
     if (this.netDriven) {
@@ -267,10 +309,10 @@ export class Totem implements Targetable, SwarmSlotOwner {
       return claimDamageMelee(this, damage, Totem.hitClaim, opts?.serverPaid);
     }
     if (this.intangible) {return false;}
-    this.health -= damage;
     this.flash = 0.12;
-    this.staggerT = Math.max(this.staggerT, 2.1); // pinned — can't blink
-    if (this.health <= 0) { this.dead = true; return true; }
+    const s = this.sim;
+    if (s) { if (applyTotemDamage(s, damage)) { this.dead = true; return true; } }
+    else if ((this.health -= damage) <= 0) { this.dead = true; return true; }
     return false;
   }
 

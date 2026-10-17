@@ -2,18 +2,15 @@ import * as THREE from 'three';
 import { nextTargetId } from './targetIds.js';
 
 import {
-  GNAT_RADIUS, GNAT_HEALTH, GNAT_SPEED, GNAT_DART_SPEED,
-  GNAT_ORBIT_R, GNAT_NIP_DIST, GNAT_NIP_CD, GNAT_FLOCK_CD,
-  GNAT_STUN, MELEE_FAVOR,
+  GNAT_RADIUS,
 } from '../core/config.js';
 import type { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
-import { type SimFlyer, makeSimFlyer, stepFlyer } from '../../../shared/creatureSim.js';
-import { bindNetSim, applyNetEdgeSim, updateNetSim, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
+import { type SimFlyer, makeSimFlyer, stepFlyer, applyFlyerDamage, commitTarget } from '../../../shared/creatureSim.js';
+import { bindNetSim, applyNetEdgeSim, updateNetSim, updateLocalSim, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
 
-const _dir = new THREE.Vector3();
 const _scratch = new THREE.Vector3();
 const _root = new THREE.Matrix4();
 const _local = new THREE.Matrix4();
@@ -22,9 +19,6 @@ const _p = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _e = new THREE.Euler();
 const _s = new THREE.Vector3();
-// Shared per-cloud anchor — set by the species tick before each update so
-// every gnat reads the same cloud center without a per-gnat allocation.
-const _cloudCenter = new THREE.Vector3();
 
 // Part indices into the gnat swarm — order must match gnatParts().
 const PART_BODY = 0;
@@ -98,16 +92,6 @@ export class Gnat implements Targetable, SwarmSlotOwner {
   private animT = Math.random() * 10;
   yaw = 0; // net replay writes this — drives the body part orientation
   private flash = 0;
-  private nipCd = Math.random() * GNAT_NIP_CD; // desync the cloud's darts
-  private stunTimer = 0;
-
-  private state: 'cloud' | 'dart' = 'cloud';
-  private dartT = 0;
-  private dartTarget = new THREE.Vector3();
-  private orbitPhase = Math.random() * Math.PI * 2;
-  private orbitDir = Math.random() < 0.5 ? 1 : -1;
-  private orbitR = GNAT_ORBIT_R * (0.6 + Math.random() * 0.7);
-  private altOff = (Math.random() - 0.5) * 3;
 
   onNip?: (gnat: Gnat) => void;
 
@@ -127,7 +111,6 @@ export class Gnat implements Targetable, SwarmSlotOwner {
 
   applyNetEdge(m: { position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; kind: string; targetId: string | null; tp?: { x: number; y: number; z: number } | null }): void {
     applyNetEdgeSim(this, m);
-    if (m.kind === 'pounce') {this.state = 'dart';}
   }
 
   private updateNet(dt: number, terrain: Terrain): void {
@@ -145,18 +128,18 @@ export class Gnat implements Targetable, SwarmSlotOwner {
     // Uber = the cloud's queen: three times the body, actually tanky, and
     // her darts carry a real sting. She shares the cloud — the swarm orbits HER.
     this.uber = uber;
-    this.maxHealth = uber ? GNAT_HEALTH * 4 : GNAT_HEALTH;
-    this.health = this.maxHealth;
     this.radius = uber ? GNAT_RADIUS * 2.4 : GNAT_RADIUS;
     this.scale = uber ? 0.8 : 0.3;
     this.scoreless = !uber; // a queen kill counts
-    if (uber) {
-      this.color.set(0x8A_6A_1A); // wasp queen amber
-      this.orbitR *= 1.6;
-      this.dartT = 0;
-    }
+    if (uber) {this.color.set(0x8A_6A_1A);} // wasp queen amber
     this.pos = pos.clone();
     this.vel = new THREE.Vector3();
+    // Local authority: the same shared sim the wire replays — orbit anchor,
+    // seeded dart cooldown, dart geometry all live there. bindNet
+    // overwrites it when a server creature owns the id instead.
+    this.sim = makeSimFlyer(this.id, { x: this.pos.x, y: this.pos.y, z: this.pos.z }, uber, this.id, 'gnat');
+    this.health = this.sim.health;
+    this.maxHealth = this.sim.maxHealth;
     this.hasSlots = allocSlots('gnat', this);
     if (!this.hasSlots) {this.dead = true;}
   }
@@ -167,83 +150,20 @@ export class Gnat implements Targetable, SwarmSlotOwner {
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
     if (this.dead) {return;}
     if (this.netDriven && this.sim) { this.updateNet(dt, terrain); return; }
-    if (this.stunTimer > 0) {this.stunTimer -= dt;}
     if (this.flash > 0) {this.flash -= dt;}
-    if (this.nipCd > 0) {this.nipCd -= dt;}
-    if (this.cloud.nipGate > 0) {this.cloud.nipGate -= dt;}
     this.animT += dt;
+    const s = this.sim;
 
-    if (this.state === 'dart') {
-      this.tickDart(dt, playerPos);
-    } else {
-      this.tickCloud(dt, playerPos);
-    }
-
-    this.pos.addScaledVector(this.vel, dt);
-    const gy = terrain.getHeight(this.pos.x, this.pos.z);
-    if (this.pos.y < gy + 0.8) {this.pos.y = gy + 0.8;}
-
-    if (this.vel.lengthSq() > 1) {
-      this.yaw = Math.atan2(this.vel.x, this.vel.z);
+    if (s) {
+      commitTarget(s, 'local', playerPos);
+      const ev = updateLocalSim(this, dt, terrain, stepFlyer, playerPos);
+      if (ev === 'bite') {this.onNip?.(this);}
+      if (s.dead) {this.dead = true; return;}
+      if (this.vel.lengthSq() > 1) {
+        this.yaw = Math.atan2(this.vel.x, this.vel.z);
+      }
     }
     this.writeInstances();
-  }
-
-  // Committed nip — a straight dart at the locked target, hit or miss
-  private tickDart(dt: number, playerPos: THREE.Vector3): void {
-    this.dartT -= dt;
-    _dir.copy(this.dartTarget).sub(this.pos);
-    const d = _dir.length() || 0.001;
-    _dir.multiplyScalar(1 / d);
-    this.vel.copy(_dir).multiplyScalar(GNAT_DART_SPEED);
-    const nipD = (this.uber ? GNAT_NIP_DIST * 2.2 : GNAT_NIP_DIST) * MELEE_FAVOR;
-    if (this.pos.distanceToSquared(playerPos) < nipD * nipD) {
-      this.onNip?.(this);
-      this.endDart();
-    } else if (this.dartT <= 0 || d < 1) {
-      this.endDart();
-    }
-  }
-
-  // Cloud life: orbit a ring around the moving center + noise jitter.
-  // The center itself chases the player loosely (entities moves it).
-  private tickCloud(dt: number, playerPos: THREE.Vector3): void {
-    this.orbitPhase += dt * (GNAT_SPEED / this.orbitR) * this.orbitDir;
-    _cloudCenter.copy(this.cloud.center);
-    _dir.set(
-      _cloudCenter.x + Math.cos(this.orbitPhase) * this.orbitR,
-      _cloudCenter.y + this.altOff + Math.sin(this.animT * 1.9) * 0.8,
-      _cloudCenter.z + Math.sin(this.orbitPhase) * this.orbitR,
-    );
-    // Spring toward the orbit point + a buzz jitter — gnats never glide
-    _scratch.subVectors(_dir, this.pos).multiplyScalar(6);
-    _scratch.x += Math.sin(this.animT * 13.7) * 4;
-    _scratch.y += Math.sin(this.animT * 17.3) * 3;
-    _scratch.z += Math.cos(this.animT * 11.1) * 4;
-    this.vel.lerp(_scratch, Math.min(1, dt * 4));
-    // Clamp to gnat speed — the spring can spike when the center teleports
-    const s = this.vel.length();
-    if (s > GNAT_SPEED * 2) {this.vel.multiplyScalar(GNAT_SPEED * 2 / s);}
-
-    // The nip urge — own cooldown AND a cloud-wide gate so the swarm
-    // doesn't dump eight darts in the same second
-    if (this.nipCd <= 0 && this.cloud.nipGate <= 0
-        && this.pos.distanceToSquared(playerPos) < 30 * 30) {
-      this.state = 'dart';
-      this.dartT = this.uber ? 1.4 : 0.8; // queen commits longer — still capped, never a pursuit
-      this.dartTarget.copy(playerPos); // locked on commit — juking works
-      this.dartTarget.y += 1.2;
-      this.nipCd = GNAT_NIP_CD * (0.8 + Math.random() * 0.5);
-      this.cloud.nipGate = GNAT_FLOCK_CD;
-    }
-  }
-
-  private endDart(): void {
-    this.state = 'cloud';
-    // Zip back out — a fast exit vector away from the target so the nip
-    // reads hit-and-run, not hover-in-your-face
-    _scratch.copy(this.pos).sub(this.dartTarget).normalize();
-    this.vel.copy(_scratch).multiplyScalar(GNAT_SPEED * 1.5);
   }
 
   writeInstances(): void {
@@ -279,23 +199,33 @@ export class Gnat implements Targetable, SwarmSlotOwner {
 
   takeDamage(damage: number, opts?: { serverPaid?: boolean }): boolean {
     if (this.netDriven) {return claimDamageMelee(this, damage, Gnat.hitClaim, opts?.serverPaid);}
-    this.health -= damage;
     this.flash = 0.15;
-    if (this.health <= 0) { this.dead = true; return true; }
+    const s = this.sim;
+    if (s) { if (applyFlyerDamage(s, damage)) { this.dead = true; return true; } }
+    else if ((this.health -= damage) <= 0) { this.dead = true; return true; }
     return false;
   }
 
   applyKnockback(from: THREE.Vector3, force: number): void {
     if (!Number.isFinite(from.x + from.y + from.z + force)) {return;}    _scratch.copy(this.pos).sub(from).normalize();
-    this.vel.addScaledVector(_scratch, force * 2); // flies away like a fly
-    this.stunTimer = GNAT_STUN;
-    if (this.state === 'dart') {this.endDart();}
+    const s = this.sim;
+    if (s) {
+      s.vx += _scratch.x * force * 2; s.vy += _scratch.y * force * 2; s.vz += _scratch.z * force * 2;
+      s.stunTimer = Math.max(s.stunTimer, s.sp.STUN_S);
+      return;
+    }
+    this.vel.addScaledVector(_scratch, force * 2);
   }
 
   applyPull(to: THREE.Vector3, force: number): void {
     if (!Number.isFinite(to.x + to.y + to.z + force)) {return;}    _scratch.copy(to).sub(this.pos).normalize();
+    const s = this.sim;
+    if (s) {
+      s.vx += _scratch.x * force * 2; s.vy += _scratch.y * force * 2; s.vz += _scratch.z * force * 2;
+      s.stunTimer = Math.max(s.stunTimer, s.sp.STUN_S);
+      return;
+    }
     this.vel.addScaledVector(_scratch, force * 2);
-    this.stunTimer = GNAT_STUN;
   }
 
   dispose(): void {

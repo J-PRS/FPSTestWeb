@@ -169,6 +169,33 @@ export function updateNetSim<S extends NetSimState>(
   e.writeInstances(terrain);
 }
 
+/** Offline authority — same shared step the wire replays, driven
+ *  frame-paced with the LIVE target position instead of committed
+ *  snapshots (there's no link to lag it). Events surface to the caller
+ *  ('detonate'/'bite') — a netDriven replica never gets them here, they
+ *  arrive as edges; a local sim IS the authority, so it can own them.
+ *  Entity-side overrides are only for legs the shared sim doesn't model
+ *  (belly-drop entrances, blast punts) — the entity flies those locally
+ *  and reseats the sim on landing. */
+export function updateLocalSim<S extends NetSimState>(
+  e: NetDrivenLike<S>, dt: number, terrain: Terrain, step: StepSim<S>,
+  target: SimVec | null, opts?: { grounded?: boolean },
+): unknown {
+  const s = e.sim;
+  const field = getHeightfield();
+  if (!s || !field) {return null;}
+  const ev = step(s, dt, field, target, true, Projectile.solidColliders);
+  e.pos.set(s.x, s.y, s.z);
+  e.vel.set(s.vx, s.vy, s.vz);
+  e.yaw = s.yaw;
+  if (opts?.grounded) {
+    (e as { airborne?: boolean }).airborne = s.y > hmHeight(field, s.x, s.z) + 0.05;
+  }
+  e.health = s.health;
+  e.writeInstances(terrain);
+  return ev;
+}
+
 /** netDriven takeDamage — a claim, never a kill: the authority's crawlDie
  *  decides. Returns true from the caller's takeDamage contract meaning
  *  "handled, not dead" (the flash telegraph is the only local effect the
