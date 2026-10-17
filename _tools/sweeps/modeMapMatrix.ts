@@ -24,11 +24,13 @@ const only = ((): Set<string> | null => {
   return i >= 0 ? new Set(process.argv.slice(i + 1).filter((s) => !s.startsWith('--'))) : null;
 })();
 
-// Custom = no _t2 provenance marker (ported-from-T2 specs declare it).
+// Custom = no _t2 provenance marker AND not delisted — `hidden` specs
+// are dev/experimental arenas the picker excludes; soaking them would
+// be measuring maps players can't reach.
 const custom: string[] = [];
 for (const f of readdirSync(MAPS_DIR).filter((f) => f.endsWith('.json') && f !== 'rotation.json').sort()) {
-  const j = JSON.parse(readFileSync(resolve(MAPS_DIR, f), 'utf8')) as { _t2?: string };
-  if (!j._t2) {custom.push(f.replace('.json', ''));}
+  const j = JSON.parse(readFileSync(resolve(MAPS_DIR, f), 'utf8')) as { _t2?: string; hidden?: boolean };
+  if (!j._t2 && j.hidden !== true) {custom.push(f.replace('.json', ''));}
 }
 
 const MODES = ['ctf', 'tdm', 'nuggets', 'dm', 'rabbit', 'duel', 'flagrun', 'conquest'];
