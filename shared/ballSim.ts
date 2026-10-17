@@ -67,6 +67,11 @@ export const BALL_STALL_TIME = 2;
 export const BALL_SLIDE_VN_MIN = 6;
 export let BALL_SLIDE_ENABLED = true;
 export function setBallSlide(on: boolean): void { BALL_SLIDE_ENABLED = on; }
+// Classic mode (?mode=classic): far balls teleport home instead of
+// enraging — the OG pure bounce-and-shoot ruleset. Same flag story as
+// setBallSlide: the sim reads it, config.ts re-exports it.
+export let BALL_ENRAGE_ENABLED = true;
+export function setBallEnrage(on: boolean): void { BALL_ENRAGE_ENABLED = on; }
 
 export type BallVariant = 0 | 1 | 2 | 3;
 
@@ -167,7 +172,7 @@ function launchAt(b: SimBall, target: SimVec, upFrac: number): void {
  *  stale plane for up to 0.5s, so the authority could tunnel under rising
  *  terrain while predictors (which walk the real field) parked early:
  *  a 20-90m prediction divergence per event. 800 probes/s is nothing. */
-function groundContact(b: SimBall, _dt: number, field: Heightfield, target: SimVec | null): SegmentKind | null {
+function groundContact(b: SimBall, _dt: number, field: Heightfield, target: SimVec | null, authoritative: boolean, rand?: () => number): SegmentKind | null {
   b.ggy = hmHeight(field, b.x, b.z);
   const gy = b.ggy;
   b.gx = b.x; b.gz = b.z; b.gt = 0;
@@ -213,6 +218,10 @@ function groundContact(b: SimBall, _dt: number, field: Heightfield, target: SimV
   // Drift check: too far from the committed target → enrage spring (the
   // authority decides; the predictor sees it on the segment event anyway).
   if (target && (b.x - target.x) ** 2 + (b.z - target.z) ** 2 > BALL_MAX_DIST * BALL_MAX_DIST) {
+    if (!BALL_ENRAGE_ENABLED) {
+      // Classic mode — no rage, the leash just relocates it.
+      return authoritative ? teleportNearTarget(b, field, target, rand ?? botRand) : null;
+    }
     // launchAt is RNG-free — the predictor commits the same enrage spring
     // the authority does instead of waiting one tick for the segment.
     // enrageTimer is NOT reset: a dash overshoot that rockets out the far
@@ -283,7 +292,7 @@ export function stepBall(
   // terrain-resolve first and stay embedded.
   if (world?.colliders && collideStructures(b, world.colliders, world.colliderIndex)) {return 'bounce';}
 
-  return groundContact(b, dt, field, target);
+  return groundContact(b, dt, field, target, authoritative, world?.rand);
 }
 
 function teleportNearTarget(b: SimBall, field: Heightfield, target: SimVec, rand: () => number): SegmentKind {

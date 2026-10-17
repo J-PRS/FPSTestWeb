@@ -8,7 +8,7 @@ import { BALL_GRAVITY } from '../../../shared/ballSim.ts';
 import { join } from 'node:path';
 
 const SECONDS = Number(process.argv[2] ?? 120);
-const MAP = process.argv[3] ?? 'nugwar';
+const MAP = process.argv[3] ?? 'erg';
 
 const room = mkRoom({ mode: 'dm', bots: 1, balls: { base: 40, perPlayer: 0, max: 50 } }, 'dm', 1337);
 const buf = new Uint8Array(await Bun.file(join(import.meta.dir, '..', '..', '..', 'maps', `${MAP}.bin`)).arrayBuffer());
@@ -73,15 +73,15 @@ for (let i = 0; i < TICKS; i++) {
     }
     prev.set(b.id, { x: b.x, y: b.y, z: b.z, spd: spdNow, clr: hNow });
     prevE.set(b.id, eNow);
-    if (b.dead) continue;
+    if (b.dead) {continue;}
     const r = a(b.variant);
     const spd = Math.hypot(b.vx, b.vy, b.vz);
     const h = b.y - hmHeight(field, b.x, b.z);
     r.n++; r.spdSum += spd; r.hSum += Math.max(0, h);
-    if (spd > r.spdMax) r.spdMax = spd;
-    if (h > r.hMax) r.hMax = h;
-    if (h > 0.5) r.airN++;
-    if (b.enraged) r.enrN++;
+    if (spd > r.spdMax) {r.spdMax = spd;}
+    if (h > r.hMax) {r.hMax = h;}
+    if (h > 0.5) {r.airN++;}
+    if (b.enraged) {r.enrN++;}
     if (spd > peakSpd) { peakSpd = spd; peakSpdT = t; }
     if (h > peakH) { peakH = h; peakHT = t; }
   }
@@ -93,16 +93,16 @@ for (const [v, r] of [...acc.entries()].sort()) {
   console.log(`variant${v}: n=${r.n} avgSpd=${(r.spdSum / r.n).toFixed(1)} peakSpd=${r.spdMax.toFixed(1)} avgH=${(r.hSum / r.n).toFixed(1)} peakH=${r.hMax.toFixed(1)} air=${(100 * r.airN / r.n).toFixed(1)}% enraged=${(100 * r.enrN / r.n).toFixed(1)}%`);
 }
 console.log(`global peakSpd=${peakSpd.toFixed(1)} @t${peakSpdT.toFixed(1)} peakH=${peakH.toFixed(1)} @t${peakHT.toFixed(1)}`);
-if (teles.length) {
+if (teles.length > 0) {
   const drift = teles.map(e => e.post - e.pre);
   const clrs = teles.map(e => e.clr);
   const dKE = teles.map(e => e.dKE);
   console.log(`teleports=${teles.length} drift=[${Math.min(...drift).toFixed(2)}..${Math.max(...drift).toFixed(2)}] clr=[${Math.min(...clrs).toFixed(3)}..${Math.max(...clrs).toFixed(3)}] dKE=[${Math.min(...dKE).toFixed(1)}..${Math.max(...dKE).toFixed(1)}]`);
-  for (const e of teles.slice(0, 8)) console.log(`  v${e.v} kind=${e.kind} jump=${e.jump.toFixed(0)}m pre=${e.pre.toFixed(1)} post=${e.post.toFixed(1)} clr=${e.clr.toFixed(3)}`);
+  for (const e of teles.slice(0, 8)) {console.log(`  v${e.v} kind=${e.kind} jump=${e.jump.toFixed(0)}m pre=${e.pre.toFixed(1)} post=${e.post.toFixed(1)} clr=${e.clr.toFixed(3)}`);}
 } else {
   console.log('teleports=0 (none fired in window)');
 }
 const segKinds = new Map<string, number>();
-for (const s of segLog) segKinds.set(s.kind, (segKinds.get(s.kind) ?? 0) + 1);
+for (const s of segLog) {segKinds.set(s.kind, (segKinds.get(s.kind) ?? 0) + 1);}
 console.log(`segments=${segLog.length} byKind=${[...segKinds.entries()].map(([k, n]) => `${k}:${n}`).join(' ')}`);
 console.log(`free-flight E drift max=${eDriftMax.toFixed(3)} J/kg @t${eDriftAt.toFixed(1)}`);

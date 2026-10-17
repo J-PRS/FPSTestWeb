@@ -63,5 +63,5 @@ export class FieldSurface {
     this.g.getNormal(x, z, out);
     return out;
   }
-  resolveBody(s: MoveState, height: number): void { this.solid?.resolveBody(s, height); }
+  resolveBody(s: MoveState, height: number, impact?: { v: number }): void { this.solid?.resolveBody(s, height, impact); }
 }

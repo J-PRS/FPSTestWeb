@@ -1,9 +1,9 @@
 /* oxlint-disable -- scratch soak harness: console is the report channel. */
 /**
  * _classicSoak — headless soak of the OFFLINE classic ("BALLS") ball sim.
- * Drives the real ballRage.ts functions (handleGroundBounce / tickEnrage /
- * tickStallBreaker) with BALL_ENRAGE_ENABLED=false — the same callsite set
- * main.ts makes for mode=classic — on BallRageHost stand-ins.
+ * Drives shared/ballSim.ts's stepBall directly — the same call Ball's
+ * local path makes — with BALL_ENRAGE_ENABLED=false (the ?mode=classic
+ * callsite) on SimBalls over a baked heightfield.
  *
  *   bun _classicSoak.ts [simHours] [ballCount]
  *
@@ -43,57 +43,42 @@ const realConsole = { log: console.log, warn: console.warn, error: console.error
 };
 
 const THREE = await import('three');
-const rage = await import('./src/entities/ballRage.js');
 const cfg = await import('./src/core/config.js');
 const sim = await import('../shared/ballSim.js');
+const hm = await import('../shared/heightfield.js');
 Object.assign(console, realConsole);
 
-cfg.setBallEnrage(false); // the classic-mode callsite
+cfg.setBallEnrage(false); // the classic-mode callsite — ballSim reads it
 
 const argv = (globalThis as { process?: { argv?: string[] } }).process?.argv ?? [];
 const SIM_HOURS = Number.parseFloat(argv[2] ?? '4');
 const N_BALLS = Number.parseInt(argv[3] ?? '30', 10);
 const DT = 1 / 60;
 
-// ---- fake terrain: rolling dunes, finite-difference normal ----
+// ---- fake terrain: rolling dunes, baked to a shared/heightfield ----
+// The sim samples bytes, not functions: bake the analytic field into a
+// wrapped heightmap (worldScale 4000 covers the roam+leash domain; the
+// modulus wrap tiles it harmlessly past that).
 const h = (x: number, z: number): number =>
   24 * Math.sin(x * 0.008) * Math.cos(z * 0.011) + 10 * Math.sin(x * 0.031 + z * 0.017) + 3 * Math.sin(x * 0.13) * Math.sin(z * 0.11);
-const terrain = {
-  getHeight: h,
-  getNormal: (x: number, z: number): InstanceType<typeof THREE.Vector3> => {
-    const e = 0.5;
-    const n = new THREE.Vector3(h(x - e, z) - h(x + e, z), 2 * e, h(x, z - e) - h(x, z + e));
-    return n.normalize();
-  },
-};
-
-// ---- BallRageHost stand-in (same field bag balls.ts publishes) ----
-interface Host {
-  pos: InstanceType<typeof THREE.Vector3>;
-  vel: InstanceType<typeof THREE.Vector3>;
-  radius: number; enraged: boolean; enrageTimer: number; dashFlash: number;
-  dampNextBounce: boolean; lastBounceEnergy: number; slowTimer: number;
-  netDriven: boolean; netS: { netAcc: number };
-  _rpos: InstanceType<typeof THREE.Vector3>;
-  emissive: InstanceType<typeof THREE.Color>; color: InstanceType<typeof THREE.Color>;
-  trails: { burst(): void }; retireRibbons(): void;
-  spawnPopT: number;
-  onBounce?: (p: InstanceType<typeof THREE.Vector3>, v: InstanceType<typeof THREE.Vector3>) => void;
+const HM_N = 1024, HM_WS = 4000;
+const hmData = new Uint8Array(HM_N * HM_N);
+for (let z = 0; z < HM_N; z += 1) {
+  for (let x = 0; x < HM_N; x += 1) {
+    const wx = (x + 0.5) / HM_N * HM_WS, wz = (z + 0.5) / HM_N * HM_WS;
+    hmData[z * HM_N + x] = Math.max(0, Math.min(255, Math.round(h(wx, wz) / 125 * 255)));
+  }
 }
+const field = { size: HM_N, data: hmData, stride: 1, worldScale: HM_WS };
 
-const mkBall = (near: { x: number; z: number }): Host => {
+// ---- SimBall stand-ins — same object Ball's local path steps ----
+const mkBall = (i: number, near: { x: number; z: number }): sim.SimBall => {
   const a = Math.random() * Math.PI * 2, d = 100 + Math.random() * 300;
   const x = near.x + Math.cos(a) * d, z = near.z + Math.sin(a) * d;
   const tri = (): number => (Math.random() + Math.random() - 1) * 32;
-  return {
-    pos: new THREE.Vector3(x, h(x, z) + 1.2 + 5, z),
-    vel: new THREE.Vector3(tri(), 32 + Math.random() * 32, tri()),
-    radius: 1.2, enraged: false, enrageTimer: 0, dashFlash: 0,
-    dampNextBounce: false, lastBounceEnergy: 0, slowTimer: 0,
-    netDriven: false, netS: { netAcc: 0 },
-    _rpos: new THREE.Vector3(), emissive: new THREE.Color(), color: new THREE.Color(),
-    trails: { burst: (): void => undefined }, retireRibbons: (): void => undefined, spawnPopT: 0,
-  };
+  return sim.makeSimBall(i, 0, i % 7,
+    { x, y: h(x, z) + 1.2 + 5, z },
+    { x: tri(), y: 32 + Math.random() * 32, z: tri() });
 };
 
 // ---- roaming player: wander at ski speed, direction drifts ----
@@ -119,55 +104,56 @@ const hopped = new Array<boolean>(N_BALLS).fill(false);
 const flatSince = new Array<number>(N_BALLS).fill(0);
 const flatRuns: number[] = []; // completed flat spells (s)
 const lastBounce = Array.from({ length: N_BALLS }, (): InstanceType<typeof THREE.Vector3> => new THREE.Vector3());
-const balls = Array.from({ length: N_BALLS }, (_, i): Host => {
-  const b = mkBall(player.pos);
-  lastBounce[i]?.copy(b.pos);
-  b.onBounce = (): void => {
-    if (hopped[i] === false) { firstApex.push(apex[i] ?? 0); hopped[i] = true; }
-    if ((apex[i] ?? 0) > 5) {
-      if ((flatSince[i] ?? 0) > 1) { flatRuns.push(flatSince[i] ?? 0); }
-      flatSince[i] = 0;
-    }
-    hopApex.push(apex[i] ?? 0);
-    hopDist.push(Math.hypot(b.pos.x - (lastBounce[i]?.x ?? 0), b.pos.z - (lastBounce[i]?.z ?? 0)));
-    apex[i] = 0;
-    lastBounce[i]?.copy(b.pos);
-  };
+const balls = Array.from({ length: N_BALLS }, (_, i): sim.SimBall => {
+  const b = mkBall(i, player.pos);
+  lastBounce[i]?.copy(new THREE.Vector3(b.x, b.y, b.z));
   return b;
 });
+const onBounce = (i: number, b: sim.SimBall): void => {
+  if (hopped[i] === false) { firstApex.push(apex[i] ?? 0); hopped[i] = true; }
+  if ((apex[i] ?? 0) > 5) {
+    if ((flatSince[i] ?? 0) > 1) { flatRuns.push(flatSince[i] ?? 0); }
+    flatSince[i] = 0;
+  }
+  hopApex.push(apex[i] ?? 0);
+  hopDist.push(Math.hypot(b.x - (lastBounce[i]?.x ?? 0), b.z - (lastBounce[i]?.z ?? 0)));
+  apex[i] = 0;
+  lastBounce[i]?.copy(new THREE.Vector3(b.x, b.y, b.z));
+};
 const playerPos = new THREE.Vector3();
 let teleports = 0, enrages = 0, breaches = 0, jank = 0;
 const farSince = new Map<number, number>();
 let maxD = 0, farTime = 0, totalTime = 0;
 
-const isFar = (b: Host): boolean => (b.pos.x - player.pos.x) ** 2 + (b.pos.z - player.pos.z) ** 2 > sim.BALL_MAX_DIST ** 2;
+const isFar = (b: sim.SimBall): boolean => (b.x - player.pos.x) ** 2 + (b.z - player.pos.z) ** 2 > sim.BALL_MAX_DIST ** 2;
 
 const steps = Math.round(SIM_HOURS * 3600 / DT);
 for (let s = 0; s < steps; s++) {
   stepPlayer(DT);
   playerPos.copy(player.pos);
   for (let i = 0; i < balls.length; i += 1) {
-    const b = balls[i] as Host;
-    const dBefore = Math.hypot(b.pos.x - player.pos.x, b.pos.z - player.pos.z);
+    const b = balls[i]!;
+    const dBefore = Math.hypot(b.x - player.pos.x, b.z - player.pos.z);
 
-    // === the exact legacy call order from Ball.update ===
-    b.vel.y += cfg.GRAVITY * DT;
-    b.pos.addScaledVector(b.vel, DT);
-    rage.tickEnrage(b, DT, terrain as never, playerPos);
-    rage.handleGroundBounce(b, terrain as never, playerPos);
-    rage.tickStallBreaker(b, DT, playerPos);
+    // === the call Ball.tickLocal makes — same sim the wire replays ===
+    const ev = sim.stepBall(b, DT, field, playerPos, true);
+    if (ev !== null) {onBounce(i, b);} // every segment kind is a keyframe
 
     // === jank census ===
-    if (!Number.isFinite(b.pos.x + b.pos.y + b.pos.z + b.vel.x + b.vel.y + b.vel.z)) {
+    if (!Number.isFinite(b.x + b.y + b.z + b.vx + b.vy + b.vz)) {
       jank += 1;
-      if (jank < 5) { console.log(`[JANK] ball ${i} non-finite at t=${(s * DT).toFixed(1)}s pos=(${b.pos.x},${b.pos.y},${b.pos.z}) vel=(${b.vel.x},${b.vel.y},${b.vel.z})`); }
-      b.pos.set(player.pos.x + 50, h(player.pos.x + 50, player.pos.z) + 10, player.pos.z); b.vel.set(0, 0, 0);
+      if (jank < 5) { console.log(`[JANK] ball ${i} non-finite at t=${(s * DT).toFixed(1)}s pos=(${b.x},${b.y},${b.z}) vel=(${b.vx},${b.vy},${b.vz})`); }
+      b.x = player.pos.x + 50; b.y = h(player.pos.x + 50, player.pos.z) + 10; b.z = player.pos.z;
+      b.vx = 0; b.vy = 0; b.vz = 0;
     }
-    const under = h(b.pos.x, b.pos.z) + b.radius - b.pos.y;
+    // "Buried" is measured against the field the SIM samples — comparing
+    // to the analytic h() would flag byte-quantization noise as jank.
+    const gy = Math.max(hm.hmHeight(field, b.x, b.z), hm.hmChord(field, b.x, b.z));
+    const under = gy + b.radius - b.y;
     if (under > 0.5) {
       jank += 1;
       if (jank < 10) { console.log(`[JANK] ball ${i} buried ${under.toFixed(2)}m at t=${(s * DT).toFixed(1)}s`); }
-      b.pos.y = h(b.pos.x, b.pos.z) + b.radius;
+      b.y = gy + b.radius;
     }
     if (b.enraged) { enrages += 1; }
 
@@ -180,11 +166,11 @@ for (let s = 0; s < steps; s++) {
       if (farSince.has(i)) { teleports += 1; farSince.delete(i); }
       if (dBefore > 250 && !far) { teleports += 1; } // came home hard — count leash returns
     }
-    apex[i] = Math.max(apex[i] ?? 0, b.pos.y - h(b.pos.x, b.pos.z) - b.radius);
+    apex[i] = Math.max(apex[i] ?? 0, b.y - h(b.x, b.z) - b.radius);
     // Flat = time spent NEAR the surface without a real hop — soaring
     // through a 60m arc for 4s is not a flat spell, it's the payoff.
-    if (b.pos.y - h(b.pos.x, b.pos.z) - b.radius < 4) { flatSince[i] = (flatSince[i] ?? 0) + DT; }
-    maxD = Math.max(maxD, Math.hypot(b.pos.x - player.pos.x, b.pos.z - player.pos.z));
+    if (b.y - h(b.x, b.z) - b.radius < 4) { flatSince[i] = (flatSince[i] ?? 0) + DT; }
+    maxD = Math.max(maxD, Math.hypot(b.x - player.pos.x, b.z - player.pos.z));
   }
   totalTime += DT;
 }
@@ -201,7 +187,7 @@ console.log(`balls still far    : ${stillFar}`);
 console.log(`leash returns      : ${teleports}`);
 console.log(`max dist seen      : ${maxD.toFixed(0)}m`);
 console.log(`ball-time >200m    : ${(100 * farTime / (totalTime * N_BALLS)).toFixed(2)}%`);
-const avgD = balls.reduce((a, b) => a + Math.hypot(b.pos.x - player.pos.x, b.pos.z - player.pos.z), 0) / N_BALLS;
+const avgD = balls.reduce((a, b) => a + Math.hypot(b.x - player.pos.x, b.z - player.pos.z), 0) / N_BALLS;
 console.log(`final avg dist     : ${avgD.toFixed(0)}m`);
 
 // hop distribution — percentiles of apex height and bounce-to-bounce travel

@@ -318,6 +318,13 @@ export class MessageHandler {
     this.combat.crawlerAttack(targetId, damage, species, from);
   }
 
+  /** MoveSim-measured hard contact — server computes it on the shadow,
+   *  never trusts a claim: fall damage can't be faked upward or dodged
+   *  downward by what a client chooses to report. */
+  fallDamage(targetId: string, damage: number): void {
+    this.combat.serverHit('environment', targetId, damage, 'fell to death', { hb: 'dmg.fall' });
+  }
+
   /** Admin hot-reload — re-point the map echo fields so the next gameState
    *  (joiners/spectators) carries the new layout. In-room clients get the
    *  matching `mapUpdate` broadcast from Room.applySpec. */

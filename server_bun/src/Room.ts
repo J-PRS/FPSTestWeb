@@ -44,7 +44,7 @@ import { MatchClock, type MatchHost } from './roomMatch.ts';
 import { EventBus } from './roomEvents.ts';
 import { MODE_MODULES, type ModeModule } from './modeModules.ts';
 import { RoomScore } from './roomScore.ts';
-import { ENERGY, type BodyCapsule } from '../../shared/movement.ts';
+import { ENERGY, MOVEMENT_CONFIG, type BodyCapsule } from '../../shared/movement.ts';
 import { BELT_MAX } from '../../shared/weapons.ts';
 import { chatKindFor, vgsCommandFor, radioAimFor } from '../../shared/botTaunts.ts';
 import { perkMods } from '../../shared/perks.ts';
@@ -367,6 +367,26 @@ export class Room {
     this.moveSim.onInputGap = (pid, lastSeq): void => {
       this.health?.set('inputgap', (this.health?.get('inputgap') ?? 0) + 1);
       this.connections.sendToPlayer(pid, { type: 'inputSync', lastSeq });
+    };
+    // T1 collision damage: the shadow measured a hard contact — turn it
+    // into hp through the same funnel a bite or blast uses so 'fell to
+    // death' reads in the kill feed and respawns on schedule.
+    this.moveSim.onLanding = (pid, impact): void => {
+      const p = this.players.getPlayer(pid);
+      if (!p || p.isDead) {return;}
+      // T1 charges the full fractional hit — but anything under a
+      // tenth of the bar is absorbed whole (a stubbed toe isn't a
+      // wound; the client still sells dust + thud for the impact).
+      let dmg = (impact - MOVEMENT_CONFIG.fallDamageMinSpeed) * MOVEMENT_CONFIG.fallDamageScale * p.maxHealth;
+      // Featherfall: the soak burns the shadow's modeled tank (same pool
+      // the jet econ owns) before the hit exists — a covered landing
+      // fires nothing at all.
+      const soak = perkMods(p.perk).fallSoak;
+      if (soak > 0) {
+        const covered = Math.min(dmg, (this.moveSim.energyOf(pid) ?? 0) * soak);
+        if (covered > 0) {this.moveSim.drainEnergy(pid, covered / soak); dmg -= covered;}
+      }
+      if (dmg >= p.maxHealth * MOVEMENT_CONFIG.fallDamageAbsorbFrac) {this.messages.fallDamage(pid, dmg);}
     };
     // Reclaim desync accounting — journal wraps and reclaim gaps are the
     // only ways a reconnected client silently loses event history.

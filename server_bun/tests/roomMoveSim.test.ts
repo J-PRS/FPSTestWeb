@@ -94,6 +94,26 @@ describe('RoomMoveSim', () => {
     expect(m.simPos('p1')!.y).toBeLessThan(50);
   });
 
+  test('hard landing fires onLanding at the T1 impact speed; soft never does', () => {
+    const m = new RoomMoveSim(flat);
+    let hits = 0;
+    let impact = 0;
+    m.onLanding = (pid, i): void => { expect(pid).toBe('p1'); hits += 1; impact = Math.max(impact, i); };
+    m.track('p1', { x: 0, y: 60, z: 0 }, 0);
+    for (let i = 0; i < 400 && hits === 0; i++) {m.tick(0.05);}
+    expect(hits).toBe(1);
+    expect(impact).toBeGreaterThan(MOVEMENT_CONFIG.fallDamageMinSpeed);
+    expect(m.simState('p1')!.onGround).toBe(true);
+    // A hop off a 3m ledge (~13 m/s) stays under the 25 m/s floor —
+    // T1 never charged for small drops either.
+    const m2 = new RoomMoveSim(flat);
+    let hits2 = 0;
+    m2.onLanding = (): void => { hits2 += 1; };
+    m2.track('p1', { x: 0, y: MOVEMENT_CONFIG.playerHeight + 3, z: 0 }, 0);
+    for (let i = 0; i < 400; i++) {m2.tick(0.05);}
+    expect(hits2).toBe(0);
+  });
+
   test('walking cannot exceed the ground speed cap', () => {
     // Regression: the overspeed bleed capped against post-input speed,
     // letting input accel push equilibrium far above maxVelocityGround.

@@ -195,8 +195,10 @@ export class SolidWorld {
 
   /** Push a body capsule out of side faces horizontally and stop it
    *  under ceilings. pos.y is the EYE point — feet sit `height` below it
-   *  (per armor class), matching MoveSim's convention. */
-  resolveBody(s: MS, height: number = MOVEMENT_CONFIG.playerHeight): void {
+   *  (per armor class), matching MoveSim's convention. `impact.v`
+   *  accumulates the worst -v·n of every velocity kill — the caller's
+   *  fall-damage meter (T1 charges wall slams, not just landings). */
+  resolveBody(s: MS, height: number = MOVEMENT_CONFIG.playerHeight, impact?: { v: number }): void {
     const r = 0.45;
     const feet = s.pos.y - height;
     const {cands} = this;
@@ -206,17 +208,17 @@ export class SolidWorld {
       // Gate shields pass their own team — the body walks the pane as
       // air while every other team hits it like a wall.
       if (c.passTeam && c.passTeam === s.team) {continue;}
-      this.resolveOne(s, c, r, feet);
+      this.resolveOne(s, c, r, feet, impact);
     }
     if (this.dyn) {for (const c of this.dyn) {
       if (c.passTeam && c.passTeam === s.team) {continue;}
-      this.resolveOne(s, c, r, feet);
+      this.resolveOne(s, c, r, feet, impact);
     }}
   }
 
   /** One collider vs the capsule: ceiling drop or least-penetration
    *  horizontal push + velocity kill into the face. */
-  private resolveOne(s: MS, c: StructureCollider, r: number, feet: number): void {
+  private resolveOne(s: MS, c: StructureCollider, r: number, feet: number, impact?: { v: number }): void {
     const dx = s.pos.x - c.cx, dz = s.pos.z - c.cz;
     const rr = Math.max(c.hx, c.hz) + r + 1;
     if (dx * dx + dz * dz > rr * rr) {return;}
@@ -236,7 +238,7 @@ export class SolidWorld {
       s.pos.x += nx * (push + SKIN);
       s.pos.z += nz * (push + SKIN);
       const dot = s.vel.x * nx + s.vel.z * nz;
-      if (dot < 0) { s.vel.x -= nx * dot; s.vel.z -= nz * dot; }
+      if (dot < 0) { if (impact) {impact.v = Math.max(impact.v, -dot);} s.vel.x -= nx * dot; s.vel.z -= nz * dot; }
       return;
     }
     const top = c.cy + c.hy, bot = c.cy - c.hy;
@@ -255,15 +257,16 @@ export class SolidWorld {
     // and the next floor clamp teleported him onto its top.
     if (feet < bot && s.pos.y > bot && s.pos.y - bot < Math.min(px, pz)) {
       s.pos.y = bot - SKIN;
-      if (s.vel.y > 0) {s.vel.y = 0;}
+      if (s.vel.y > 0) { if (impact) {impact.v = Math.max(impact.v, s.vel.y);} s.vel.y = 0; }
       return;
     }
-    this.pushOut(s, c, lx, lz, px, pz);
+    this.pushOut(s, c, lx, lz, px, pz, impact);
   }
 
   /** Least-penetration horizontal push out of a face, plus the velocity
    *  kill into it — sliding along walls stays free. */
-  private pushOut(s: MS, c: StructureCollider, lx: number, lz: number, px: number, pz: number): void {
+  // oxlint-disable-next-line max-params -- the collision solve wants the resolved local frame, not a re-derived options bag
+  private pushOut(s: MS, c: StructureCollider, lx: number, lz: number, px: number, pz: number, impact?: { v: number }): void {
     // oxlint-disable-next-line init-declarations -- both branches assign
     let pushX!: number, pushZ!: number;
     if (px < pz) {                                  // least-penetration axis
@@ -281,7 +284,7 @@ export class SolidWorld {
     const nx = px < pz ? Math.sign(pushX) * c.cos : -Math.sign(pushZ) * c.sin;
     const nz = px < pz ? Math.sign(pushX) * c.sin : Math.sign(pushZ) * c.cos;
     const dot = s.vel.x * nx + s.vel.z * nz;
-    if (dot < 0) { s.vel.x -= nx * dot; s.vel.z -= nz * dot; }
+    if (dot < 0) { if (impact) {impact.v = Math.max(impact.v, -dot);} s.vel.x -= nx * dot; s.vel.z -= nz * dot; }
   }
 }
 

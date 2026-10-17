@@ -57,6 +57,16 @@ export const MOVEMENT_CONFIG = {
   // steer and lift but can't pump forward speed forever. Ports the
   // maxForwardAccelSpeed rule from the Unity RB_Controller jetpack.
   jetMaxFwdAccel: 50,
+  // T1 collision damage (floodyberry part 3): every contact kill with
+  // -v·n past minSpeed pays (impact - minSpeed) * scale of the health
+  // bar. Damage is a FRACTION — callers multiply by maxHealth. The
+  // normal-component read is what makes downslope landings free at any
+  // speed (skiing exists because v·n ≈ 0, not because of a speed cap).
+  fallDamageMinSpeed: 25,
+  fallDamageScale: 0.005,
+  // Below this share of max hp the landing is absorbed entirely — a
+  // grazed knee shouldn't chip the bar (dust + shake still fire).
+  fallDamageAbsorbFrac: 0.1,
   // Player-vs-player contact: capsule half-width and the elastic share
   // of the bump — a juggernaut eating a capper keeps most of its line,
   // the light one takes the shove (Tribes bodyblock, not a brick wall).
@@ -144,7 +154,7 @@ export interface MoveSurface {
    *  clamp. `height` is the body's eye-above-feet so a heavy's head
    *  clears a taller slab than a light's. Plain heightfield surfaces
    *  leave it undefined. */
-  resolveBody?(s: MoveState, height: number): void;
+  resolveBody?(s: MoveState, height: number, impact?: { v: number }): void;
 }
 
 /** A neighbor body for contact resolution — eye-position capsule like
@@ -215,6 +225,15 @@ export class MoveSim {
   /** Post-impulse airtime window — the ground glue can't re-ground a
    *  blast-launched body before the arc plays out (see impulse()). */
   private impulseT = 0;
+  /** Worst -v·n (m/s) recorded at a contact kill during this update() —
+   *  the T1 impact speed: callers past fallDamageMinSpeed pay
+   *  (impact - min) * scale * maxHealth. Read after update(); transient
+   *  by design (replay re-derives it, snapshots never carry it). */
+  landingImpact = 0;
+  /** resolveBody's out-sink — solid contacts record -v·n here so wall
+   *  and ceiling slams pay the same price as a floor landing (T1's
+   *  impactDot is any surface's normal component). */
+  private readonly _solidImpact = { v: 0 };
 
   setInput(input: Partial<MoveInput>): void {
     // Claimed input is the trust boundary — the server replays these on a
@@ -295,6 +314,7 @@ export class MoveSim {
     // NaN dt would poison acc permanently — `NaN >= STEP` never drains
     // and the sim freezes until a snapshot/setState reseed.
     if (!Number.isFinite(dt)) {return;}
+    this.landingImpact = 0;
     this.acc += Math.min(dt, MoveSim.MAX_DT);
     while (this.acc >= MoveSim.STEP) {
       this.acc -= MoveSim.STEP;
@@ -548,8 +568,12 @@ export class MoveSim {
     // contact sites below refill it. Launches zero it explicitly.
     if (this.groundGraceT > 0) { this.groundGraceT -= MoveSim.STEP; }
     // Solid layers push the capsule out of walls/ceilings first — the
-    // floor clamp below only owns top faces.
-    this.surface.resolveBody?.(s, this.eyeHeight);
+    // floor clamp below only owns top faces. Impact speeds feed the
+    // fall-damage meter the same way terrain contact does (T1 charges
+    // any surface's -v·n, not just floors).
+    this._solidImpact.v = 0;
+    this.surface.resolveBody?.(s, this.eyeHeight, this._solidImpact);
+    this.landingImpact = Math.max(this.landingImpact, this._solidImpact.v);
     const reach = s.pos.y - this.eyeHeight + MOVEMENT_CONFIG.stepUp;
     const groundY = this.surface.getHeight(s.pos.x, s.pos.z, reach) + this.eyeHeight;
     const dist = s.pos.y - groundY;
@@ -564,7 +588,9 @@ export class MoveSim {
       // completely (tangential speed preserved 100%), the positive
       // leaving component is never touched. The snap band is what
       // keeps the body tracking terrain instead of floating.
+      // The pre-kill -v·n is T1's impactDot — fall damage reads it.
       if (velDotN < 0) {
+        this.landingImpact = Math.max(this.landingImpact, -velDotN);
         s.vel.x -= n.x * velDotN; s.vel.y -= n.y * velDotN; s.vel.z -= n.z * velDotN;
       }
 
