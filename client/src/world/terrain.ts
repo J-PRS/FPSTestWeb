@@ -270,6 +270,14 @@ export class Terrain {
     registerDiag('terrainDiv', (): { terrainDiv: Record<string, unknown>; } => ({ terrainDiv: this.divergenceStats() }));
   }
 
+  /** Re-aim the baked sun without a rebuild — per-map `atmosphere.timeOfDay`.
+   *  The terrain bakes its own sunDir uniform (it never reads the scene
+   *  light), so a sky that moves the sun has to reach it here. */
+  setSunDirection(dir: THREE.Vector3): void {
+    const d = dir.clone().normalize();
+    for (const l of this.levels) {l.material.uniforms.sunDir.value.copy(d);}
+  }
+
   /** Collider field (sampleHeight) vs the drawn chord surface around the
    *  last-seen player pos — Alt+Q's numeric version of the F1 overlay. */
   divergenceStats(): Record<string, unknown> {

@@ -181,6 +181,8 @@ export class AtmosphericSky {
   private material: THREE.ShaderMaterial;
   private sunPosition: THREE.Vector3;
   private timeOfDay = 0.5; // 0-1, 0.5 = noon
+  private sunAzimuth = 0; // degrees off +X — sun heading
+  private sunRadiance = 22; // uniform sunIntensity at local noon
 
   constructor(scene: THREE.Scene, params: AtmosphericSkyParams = {}) {
     const geometry = new THREE.SphereGeometry(4000, 64, 32);
@@ -215,6 +217,7 @@ export class AtmosphericSky {
     
     // Mid-morning sun: high enough for bright light, angled enough to be
     // visible in the sky and to give directional shading.
+    this.sunRadiance = params.sunIntensity ?? 22;
     this.setTimeOfDay(0.38);
 
     // Boot atmosphere — spec overrides are multipliers on these, so a map
@@ -225,55 +228,72 @@ export class AtmosphericSky {
       mie: (u0.mieCoefficient!.value as number),
       star: (u0.starIntensity!.value as number),
       sun: (u0.sunIntensity!.value as number),
+      turbidity: (u0.turbidity!.value as number),
+      mieDirG: (u0.mieDirectionalG!.value as number),
+      rayleighDir: (u0.rayleighDirectional!.value as number),
     };
   }
 
-  private baseAtmosphere = { rayleigh: 1, mie: 21e-6, star: 0.9, sun: 22 };
+  private baseAtmosphere = { rayleigh: 1, mie: 21e-6, star: 0.9, sun: 22, turbidity: 10, mieDirG: 0, rayleighDir: 0 };
 
-  /** Per-map sky tuning. rayleigh/mie/sunIntensity are multipliers on the
-   *  engine defaults; starIntensity is absolute. Absent fields untouched. */
+  /** Per-map sky tuning. rayleigh/mie/turbidity/sunIntensity are multipliers
+   *  on the engine defaults; timeOfDay/sunAzimuth move the sun;
+   *  starIntensity/mieDirectionalG/rayleighDirectional are absolute. Absent
+   *  fields untouched. */
   setAtmosphere(params: AtmosphereSpec): void {
     const u = this.material.uniforms;
     const b = this.baseAtmosphere;
     if (params.rayleigh !== undefined) {u.rayleigh!.value = b.rayleigh * params.rayleigh;}
     if (params.mie !== undefined) {u.mieCoefficient!.value = b.mie * params.mie;}
+    if (params.turbidity !== undefined) {u.turbidity!.value = b.turbidity * params.turbidity;}
+    if (params.mieDirectionalG !== undefined) {u.mieDirectionalG!.value = params.mieDirectionalG;}
+    if (params.rayleighDirectional !== undefined) {u.rayleighDirectional!.value = params.rayleighDirectional;}
     if (params.starIntensity !== undefined) {u.starIntensity!.value = params.starIntensity;}
-    if (params.sunIntensity !== undefined) {u.sunIntensity!.value = b.sun * params.sunIntensity;}
+    if (params.timeOfDay !== undefined || params.sunAzimuth !== undefined) {
+      // Elevation first — it rewrites sunIntensity. A map may also pass a
+      // sunIntensity multiplier, applied on top just below.
+      this.setTimeOfDay(params.timeOfDay ?? this.timeOfDay, params.sunAzimuth ?? this.sunAzimuth);
+    }
+    if (params.sunIntensity !== undefined) {u.sunIntensity!.value *= params.sunIntensity;}
   }
 
   /** Restore the boot sky — a map with no `atmosphere` runs this so a room
-   *  hop can't inherit the previous map's tint. */
+   *  hop can't inherit the previous map's tint or sun. */
   resetAtmosphere(): void {
     const u = this.material.uniforms;
     const b = this.baseAtmosphere;
     u.rayleigh!.value = b.rayleigh;
     u.mieCoefficient!.value = b.mie;
+    u.turbidity!.value = b.turbidity;
+    u.mieDirectionalG!.value = b.mieDirG;
+    u.rayleighDirectional!.value = b.rayleighDir;
     u.starIntensity!.value = b.star;
-    u.sunIntensity!.value = b.sun;
+    this.setTimeOfDay(0.38); // restores sunIntensity (base sun at 0.38) too
   }
 
-  setTimeOfDay(t: number): void {
-    this.timeOfDay = t;
-    
-    // Calculate sun position based on time
-    // t = 0 -> midnight, t = 0.25 -> sunrise, t = 0.5 -> noon, t = 0.75 -> sunset
-    const angle = (t - 0.25) * Math.PI * 2; // Offset so 0.5 = noon (straight up)
+  setTimeOfDay(t: number, azimuthDeg = this.sunAzimuth): void {
+    this.timeOfDay = Math.max(0, Math.min(1, t));
+    this.sunAzimuth = ((azimuthDeg % 360) + 360) % 360;
+
+    // Sun position: elevation from t (t = 0 midnight, .25 sunrise,
+    // .5 noon, .75 sunset), heading from sunAzimuth (0 = +X, 90 = +Z).
+    const angle = (this.timeOfDay - 0.25) * Math.PI * 2; // Offset so 0.5 = noon (straight up)
+    const az = (this.sunAzimuth * Math.PI) / 180;
     const sunDist = 1000;
-    
+    const horiz = Math.cos(angle);
+
     this.sunPosition.set(
-      Math.cos(angle) * sunDist,
+      horiz * Math.cos(az) * sunDist,
       Math.sin(angle) * sunDist,
-      0
+      horiz * Math.sin(az) * sunDist
     );
-    
-    // Adjust sun intensity based on time (brighter at noon)
+
+    // Sun radiance tracks elevation (brighter at noon); below the horizon a
+    // dim moon keeps the sky from going fully black.
     const sunHeight = Math.max(0, Math.sin(angle));
-    this.material.uniforms.sunIntensity.value = 22 * sunHeight;
-    
-    // If sun is below horizon, reduce intensity for moon
-    if (sunHeight <= 0) {
-      this.material.uniforms.sunIntensity.value = 2; // Moon intensity
-    }
+    this.material.uniforms.sunIntensity.value = sunHeight > 0
+      ? this.sunRadiance * sunHeight
+      : this.sunRadiance * 0.09; // Moon intensity
   }
 
   getSunPosition(): THREE.Vector3 {

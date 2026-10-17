@@ -39,6 +39,18 @@ export interface AtmosphereSpec {
   starIntensity?: number;
   /** Sun radiance multiplier — 1 = engine default, <1 dims/overcast. */
   sunIntensity?: number;
+  /** Sun elevation, 0–1: 0 = midnight, .25 = sunrise, .5 = noon,
+   *  .75 = sunset. Default .38 (mid-morning). Moves the light, so a dusk
+   *  value rakes shadows long and reddens the sky. */
+  timeOfDay?: number;
+  /** Sun heading in degrees off +X (0 = +X, 90 = +Z). Default 0. */
+  sunAzimuth?: number;
+  /** Atmospheric turbidity multiplier (haze thickness). 1 = engine default. */
+  turbidity?: number;
+  /** Mie forward-scatter lobe 0–.95 — a sunward glow blob. 0 = isotropic. */
+  mieDirectionalG?: number;
+  /** Rayleigh dipole 0–1 — bright/dim sky sides. 0 = flat. */
+  rayleighDirectional?: number;
 }
 
 export interface MapSpec {
@@ -487,6 +499,11 @@ function parseAtmosphere(raw: unknown): AtmosphereSpec | undefined {
   if (typeof o.mie === 'number' && Number.isFinite(o.mie)) {out.mie = Math.max(0, Math.min(20, o.mie));}
   if (typeof o.starIntensity === 'number' && Number.isFinite(o.starIntensity)) {out.starIntensity = Math.max(0, Math.min(3, o.starIntensity));}
   if (typeof o.sunIntensity === 'number' && Number.isFinite(o.sunIntensity)) {out.sunIntensity = Math.max(0, Math.min(5, o.sunIntensity));}
+  if (typeof o.timeOfDay === 'number' && Number.isFinite(o.timeOfDay)) {out.timeOfDay = Math.max(0, Math.min(1, o.timeOfDay));}
+  if (typeof o.sunAzimuth === 'number' && Number.isFinite(o.sunAzimuth)) {out.sunAzimuth = ((o.sunAzimuth % 360) + 360) % 360;}
+  if (typeof o.turbidity === 'number' && Number.isFinite(o.turbidity)) {out.turbidity = Math.max(0, Math.min(10, o.turbidity));}
+  if (typeof o.mieDirectionalG === 'number' && Number.isFinite(o.mieDirectionalG)) {out.mieDirectionalG = Math.max(0, Math.min(0.95, o.mieDirectionalG));}
+  if (typeof o.rayleighDirectional === 'number' && Number.isFinite(o.rayleighDirectional)) {out.rayleighDirectional = Math.max(0, Math.min(1, o.rayleighDirectional));}
   return Object.keys(out).length > 0 ? out : undefined;
 }
 

@@ -55,9 +55,13 @@ export function applyWeather(ctx: NetCtx, weather?: WeatherSpec): void {
  *  mesh, making the override a no-op). No atmosphere → reset to boot sky. */
 export function applyAtmosphere(ctx: NetCtx, atmosphere?: AtmosphereSpec): void {
   const sky = ctx.deps.lazyScene().getObjectByName('__sky')?.userData.sky as
-    { setAtmosphere(p: AtmosphereSpec): void; resetAtmosphere(): void } | undefined;
+    { setAtmosphere(p: AtmosphereSpec): void; resetAtmosphere(): void; getSunDirection(): THREE.Vector3 } | undefined;
   if (!sky) {return;}
   if (atmosphere) {sky.setAtmosphere(atmosphere);} else {sky.resetAtmosphere();}
+  // The terrain bakes its own sun direction, so a sky that re-elevated the
+  // sun (timeOfDay) has to re-aim it here or shading disagrees with the dome.
+  try {ctx.deps.lazyTerrain().setSunDirection(sky.getSunDirection());}
+  catch { /* terrain not resident yet — it inherits the boot sun */ }
 }
 
 /** Fetch the room's heightfield and swap the live terrain over to it.
