@@ -358,11 +358,14 @@ for (; ticks < maxTicks; ticks += BATCH) {
   simNowAdvance(dt * 1000 * BATCH);
   step(room, BATCH, dt);
   room.messages.respawnTick(simNow());
-  const live = [...room.players.getAllPlayers().values()].filter((p) => !p.isDead && p.team);
+  // Teamless modes (dm/rabbit/duel) sample everyone — every other live
+  // body is a foe, or the contact row reads spd=0 on a live fight.
+  const teamless = !room.modeSpec?.teams;
+  const live = [...room.players.getAllPlayers().values()].filter((p) => !p.isDead && (teamless || p.team));
   for (const p of live) {
     let best = Infinity;
     for (const q of live) {
-      if (q.team === p.team) {continue;}
+      if (teamless ? q === p : q.team === p.team) {continue;}
       const d = Math.hypot(q.position.x - p.position.x, q.position.z - p.position.z);
       if (d < best) {best = d;}
     }
@@ -424,13 +427,23 @@ console.log(`${(MIX ? 'weapon' : 'side').padEnd(12)} bots   K    D    K/D    med
 for (const [name, s] of verdict) {
   console.log(`${name.padEnd(12)} ${String(s.n).padStart(4)} ${String(s.k).padStart(4)} ${String(s.d).padStart(4)}  ${s.kd.toFixed(2).padStart(5)}   ${med(lives.get(name) ?? []).padStart(6)}`);
 }
-if (ctf && room.flags) {
+// The room auto-places stands on base-less maps — gate on the room
+// having flags, not on the spec authoring bases, or auto-ctf reads as
+// a fight with no objective column.
+if (room.flags) {
   const caps = room.flags.capLog.length;
   const carried = [...room.flags.flags.values()].filter((f) => f.carrier).length;
   console.log(`flags  caps=${caps} liveCarriers=${carried} states=${[...room.flags.flags.values()].map((f) => f.state).join(',')}`);
 }
 const nBatches = Math.max(1, Math.round(ticks / BATCH));
 console.log(`contact meanSpeed=${(contact.spd / Math.max(1, contact.n)).toFixed(1)}m/s nearestFoe=${(contact.nfoe / Math.max(1, contact.n)).toFixed(0)}m hunt=${(100 * contact.hunt / nBatches).toFixed(0)}% over ${nBatches} samples`);
+// Economy line — the nuggets funnel is kill→drop→touch→bank; a mode that
+// spawns gems nobody banks means the objective isn't being played.
+const pk = weaponStats.snapshot().pickups[MODE];
+if (pk) {
+  console.log('pickups ' + Object.entries(pk).map(([kind, r]) =>
+    `${kind}: spawned=${r.spawned} banked=${r.banked} decayed=${r.decayed}${r.refused ? ` refused=${r.refused}` : ''}`).join('  '));
+}
 if (simProf) {
   const tot = [...simProf.values()].reduce((a, b) => a + b, 0);
   console.log(`sims (${tot.toFixed(0)}ms total): ` + [...simProf.entries()].sort((x, y) => y[1] - x[1]).map(([k, v]) => `${k}=${(100 * v / Math.max(1, tot)).toFixed(0)}%`).join(' '));
