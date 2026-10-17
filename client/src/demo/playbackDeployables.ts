@@ -13,7 +13,7 @@ import { fastForward } from './playbackFF.js';
 // kindIdx (DEMO_DEPLOY_KINDS order) -> proxy look. Persisted in files —
 // append-only. t = half-extent of the proxy box.
 const KIND_SPECS: Record<number, { color: number; w: number; h: number }> = {
-  0: { color: 0x55_5F_77, w: 0.5, h: 1.2 },  // turret
+  0: { color: 0x55_5F_77, w: 0.85, h: 1.5 },  // turret
   1: { color: 0x66_44_22, w: 0.35, h: 0.25 }, // mine
   2: { color: 0x44_77_AA, w: 0.8, h: 0.4 },  // station
   3: { color: 0xAA_AA_44, w: 0.4, h: 0.4 },  // drone

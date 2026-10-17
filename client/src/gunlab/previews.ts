@@ -10,6 +10,8 @@ import * as THREE from 'three';
 import { initSwarms, type LabEntity } from '../entities/swarms.js';
 import { AmbientBirds } from '../effects/birds.js';
 import { DeployTurret } from '../entities/DeployTurret.js';
+import { DeployMortar } from '../entities/DeployMortar.js';
+import { DeployCg } from '../entities/DeployCg.js';
 import { DeployShield } from '../entities/DeployShield.js';
 import { DeployStation } from '../entities/DeployStation.js';
 import { DeployBeacon } from '../entities/DeployBeacon.js';
@@ -19,6 +21,7 @@ import type { Terrain } from '../world/terrain.js';
 import { PICKUP_ACCENT, pickupParts } from '../entities/PickupModel.js';
 import { metalMat } from '../entities/procMetal.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
+import { bakeWearOnly } from '../effects/vertexAO.js';
 import { EMIT_GAIN } from '../core/config.js';
 import type { PickupKind } from '../../../shared/pickups.js';
 import { mkFlagPlate } from '../game/flagRun.js';
@@ -252,6 +255,7 @@ function itemProxy(spawn: () => LabItem): THREE.Group {
   const it = spawn();
   const proxy = new THREE.Group();
   proxy.add(it.group);
+  bakeWearOnly(proxy, { grime: true });
   proxy.userData.liveFocus = (): THREE.Vector3 => it.group.getWorldPosition(new THREE.Vector3());
   proxy.userData.disposeCreature = (): void => { it.dispose(LAB_SCENE); previewLive.tick = null; };
   if (it.update) {
@@ -275,8 +279,11 @@ export const ITEMS: [label: string, build: () => THREE.Group][] = [
   }],
   ['flag alone', (): THREE.Group<THREE.Object3DEventMap> => mkFlagMesh('alpha')],
   ['stand',     (): THREE.Group<THREE.Object3DEventMap> => mkFlagPlate(TEAM_COLORS.alpha)],
-  ['sentry',  (): THREE.Group<THREE.Object3DEventMap> => itemProxy(() => { const d = new DeployTurret(LAB_SCENE, LAB_TERRAIN, _zero);
-      return { group: d.group, update: (dt) => d.update(dt, []), dispose: (s): void => d.dispose(s) }; })],
+  ['sentry',  (): THREE.Group<THREE.Object3DEventMap> => { ensureSwarms(); const d = new DeployTurret(LAB_SCENE, LAB_TERRAIN, _zero); const proxy = new THREE.Group(); proxy.add(d.group, creatureLayer); proxy.userData.liveFocus = (): THREE.Vector3 => d.group.getWorldPosition(new THREE.Vector3()); proxy.userData.disposeCreature = (): void => { d.dispose(LAB_SCENE); previewLive.tick = null; }; previewLive.tick = (dt): void => { proxy.updateMatrixWorld(); d.update(dt, []); }; bakeWearOnly(proxy, { grime: true }); return proxy; }],
+  ['mortar',  (): THREE.Group<THREE.Object3DEventMap> => itemProxy(() => { const d = new DeployMortar(LAB_SCENE, LAB_TERRAIN, _zero);
+      d.unfoldDone(); return { group: d.group, update: (dt) => { d.update(dt, []); }, dispose: (s): void => d.dispose(s) }; })],
+  ['minigun', (): THREE.Group<THREE.Object3DEventMap> => itemProxy(() => { const d = new DeployCg(LAB_SCENE, LAB_TERRAIN, _zero);
+      d.unfoldDone(); return { group: d.group, update: (dt) => { d.update(dt, []); }, dispose: (s): void => d.dispose(s) }; })],
   ['shield',  (): THREE.Group<THREE.Object3DEventMap> => itemProxy(() => { const d = new DeployShield(LAB_SCENE, LAB_TERRAIN, _zero);
       return { group: d.group, update: (dt): void => d.update(dt), dispose: (s): void => d.dispose(s) }; })],
   ['station', (): THREE.Group<THREE.Object3DEventMap> => itemProxy(() => { const d = new DeployStation(LAB_SCENE, LAB_TERRAIN, _zero);

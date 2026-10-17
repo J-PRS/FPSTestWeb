@@ -19,16 +19,18 @@ const FIRE_INTERVAL = 0.15;
 const BOLT_SPEED = WEAPONS[WeaponType.Chaingun]!.speed;
 const TURN_RATE = 5.5;      // rad/s — CG mounts track fast, it's their job
 const AIM_TOL = 0.09;
-const MUZZLE = new THREE.Vector3(0, 0.1, 0.85); // barrel tip, head-local
+const MUZZLE = new THREE.Vector3(0, 0.12, 1); // barrel tip, head-local
 
-const _metal = new THREE.MeshLambertMaterial({ color: 0x46_50_5C });
-const _dark = new THREE.MeshLambertMaterial({ color: 0x22_26_2C });
-const _glow = new THREE.MeshBasicMaterial({ color: 0xFF_EE_66 });
-const _geoBase = new THREE.CylinderGeometry(0.5, 0.75, 0.45, 8);
-const _geoMast = new THREE.CylinderGeometry(0.14, 0.2, 0.8, 6);
-const _geoDome = new THREE.SphereGeometry(0.36, 10, 8);
-const _geoBarrel = new THREE.CylinderGeometry(0.06, 0.075, 1, 6);
-const _geoEye = new THREE.SphereGeometry(0.07, 6, 5);
+const _metal = new THREE.MeshLambertMaterial({ color: 0x46_50_5C, emissive: 0x12_16_1C });
+_metal.userData.__wearInt = 2.2;
+const _dark = new THREE.MeshLambertMaterial({ color: 0x22_26_2C, emissive: 0x08_0A_0E });
+_dark.userData.__wearInt = 2.2;
+const _glow = new THREE.MeshBasicMaterial({ color: 0xFF_AA_55 });
+const _geoBase = new THREE.CylinderGeometry(0.7, 1, 0.55, 8);
+const _geoMast = new THREE.CylinderGeometry(0.2, 0.28, 1, 6);
+const _geoDome = new THREE.SphereGeometry(0.5, 10, 8);
+const _geoBarrel = new THREE.CylinderGeometry(0.1, 0.12, 1.2, 6);
+const _geoEye = new THREE.SphereGeometry(0.12, 6, 5);
 
 const _v = new THREE.Vector3();
 const _aim = new THREE.Vector3();
@@ -72,12 +74,12 @@ export class DeployCg {
     this.head.add(dome);
     for (const side of [-1, 1]) {
       const b = new THREE.Mesh(_geoBarrel, _dark);
-      b.position.set(side * 0.14, 0.02, 0.5);
+      b.position.set(side * 0.2, 0.04, 0.6);
       b.rotation.x = Math.PI / 2;
       this.head.add(b);
     }
     const eye = new THREE.Mesh(_geoEye, _glow);
-    eye.position.set(0, 0.22, 0.3);
+    eye.position.set(0, 0.28, 0.4);
     this.head.add(eye);
     this.group.add(this.head);
 
@@ -85,7 +87,7 @@ export class DeployCg {
       map: getGlowTexture(), color: 0xFF_EE_88, transparent: true,
       blending: THREE.AdditiveBlending, depthWrite: false,
     }));
-    this.flash.scale.setScalar(0.5);
+    this.flash.scale.setScalar(0.7);
     this.flash.position.copy(MUZZLE);
     this.head.add(this.flash);
 
@@ -129,7 +131,7 @@ export class DeployCg {
     const side = this.nextBarrel;
     this.nextBarrel ^= 1;
     this.head.updateWorldMatrix(true, false);
-    const muzzle = _v.copy(MUZZLE).add(_aim.set(side === 0 ? -0.14 : 0.14, 0, 0))
+    const muzzle = _v.copy(MUZZLE).add(_aim.set(side === 0 ? -0.2 : 0.2, 0, 0))
       .applyMatrix4(this.head.matrixWorld).clone();
     const vel = new THREE.Vector3(ax - muzzle.x, ay - muzzle.y, az - muzzle.z)
       .normalize().multiplyScalar(BOLT_SPEED);

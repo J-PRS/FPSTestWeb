@@ -21,18 +21,24 @@ const AIM_TOL = 0.12;
 const MUZZLE_UP = 1.6;       // tube mouth height — matches server tickMortar
 const G = Math.abs(GRAVITY);
 
-const _metal = new THREE.MeshLambertMaterial({ color: 0x6A_70_5C });
-const _dark = new THREE.MeshLambertMaterial({ color: 0x3A_3E_34 });
-const _glow = new THREE.MeshBasicMaterial({ color: 0xFF_99_33 });
-const _geoBase = new THREE.CylinderGeometry(0.7, 0.95, 0.45, 8);
-const _geoPost = new THREE.CylinderGeometry(0.16, 0.24, 0.6, 8);
-const _geoLeg = new THREE.CylinderGeometry(0.07, 0.09, 1.4, 6);
+const _metal = new THREE.MeshLambertMaterial({ color: 0x6A_70_5C, emissive: 0x1A_1E_14 });
+_metal.userData.__wearInt = 2.2;
+const _dark = new THREE.MeshLambertMaterial({ color: 0x3A_3E_34, emissive: 0x0A_0E_08 });
+_dark.userData.__wearInt = 2.2;
+const _glow = new THREE.MeshBasicMaterial({ color: 0xFF_AA_55 });
+const _geoBase = new THREE.CylinderGeometry(0.9, 1.2, 0.55, 8);
+const _geoPost = new THREE.CylinderGeometry(0.22, 0.32, 0.75, 8);
+const _geoLeg = new THREE.CylinderGeometry(0.1, 0.13, 1.7, 6);
 // Cannon barrel — closed tube (open-ended renders its black interior),
 // a fat breech at the butt and a glowing muzzle ring at the mouth.
-const _geoTube = new THREE.CylinderGeometry(0.14, 0.2, 2, 10);
-const _geoBreech = new THREE.BoxGeometry(0.5, 0.7, 0.6);
-const _geoRing = new THREE.TorusGeometry(0.19, 0.045, 6, 12);
-const _geoMouth = new THREE.CircleGeometry(0.15, 10);
+const _geoTube = new THREE.CylinderGeometry(0.18, 0.26, 2.4, 10);
+const _geoBreech = new THREE.BoxGeometry(0.65, 0.9, 0.75);
+const _geoRing = new THREE.TorusGeometry(0.24, 0.06, 6, 12);
+const _geoMouth = new THREE.CircleGeometry(0.2, 10);
+const _geoCollar = new THREE.TorusGeometry(1, 0.1, 6, 24);
+const _geoMantlet = new THREE.BoxGeometry(1.4, 1, 1.2);
+const _geoAmmo = new THREE.BoxGeometry(0.8, 0.7, 0.9);
+const _geoSleeve = new THREE.CylinderGeometry(0.28, 0.28, 0.5, 8);
 
 const _v = new THREE.Vector3();
 
@@ -72,8 +78,12 @@ export class DeployMortar {
     if (Number.isFinite(bg)) {this.pos.y = bg;}
 
     const base = new THREE.Mesh(_geoBase, _dark);
-    base.position.y = 0.25;
+    base.position.y = 0.27;
     this.group.add(base);
+    const collar = new THREE.Mesh(_geoCollar, _metal);
+    collar.rotation.x = Math.PI / 2;
+    collar.position.y = 0.55;
+    this.group.add(collar);
     for (let i = 0; i < 3; i += 1) {
       const leg = new THREE.Mesh(_geoLeg, _metal);
       const a = (i / 3) * Math.PI * 2;
@@ -98,6 +108,15 @@ export class DeployMortar {
     mouth.rotation.x = -Math.PI / 2;
     mouth.position.y = 1;
     this.tube.add(mouth);
+    const mantlet = new THREE.Mesh(_geoMantlet, _dark);
+    mantlet.position.set(0, 0.1, -0.5);
+    this.head.add(mantlet);
+    const ammo = new THREE.Mesh(_geoAmmo, _dark);
+    ammo.position.set(0, 0.05, -1.3);
+    this.head.add(ammo);
+    const sleeve = new THREE.Mesh(_geoSleeve, _metal);
+    sleeve.position.y = 0.9;
+    this.tube.add(sleeve);
     this.head.add(this.tube);
     this.group.add(this.head);
 
