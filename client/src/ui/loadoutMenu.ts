@@ -6,8 +6,7 @@ import { PERKS, PERK_ORDER, type PerkId } from '../../../shared/perks.js';
 import type { ArmorClass } from '../../../shared/botClasses.js';
 import { SLOT_DEFS } from '../weapons.js';
 import { codeFor, codeLabel } from '../core/keybinds.js';
-import type { DeployKind } from '../../../shared/deployables.js';
-import { DEPLOY_KINDS } from '../../../shared/deployables.js';
+import { PACK_KINDS, type DeployKind } from '../../../shared/deployables.js';
 import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
 
 export interface LoadoutDeps {
@@ -158,7 +157,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   const pack = mkCellDom(kitRowB);
   ui.packLabel = pack.cap;
   ui.packDrop = mkDrop(
-    DEPLOY_KINDS.map((kind): { v: DeployKind; label: string; } => ({ v: kind, label: DEPLOY_ITEMS[kind].label })),
+    PACK_KINDS.map((kind): { v: DeployKind; label: string; } => ({ v: kind, label: DEPLOY_ITEMS[kind].label })),
     (v): void => deps.lazyPlayer().setPackItem(v as DeployKind),
   );
   pack.cell.append(ui.packDrop.el);

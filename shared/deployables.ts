@@ -6,6 +6,10 @@ import { DEPLOY_ITEMS, type DeployKind } from './deployItems.ts';
 export type { DeployKind } from './deployItems.ts';
 
 export const DEPLOY_KINDS: readonly DeployKind[] = Object.keys(DEPLOY_ITEMS) as DeployKind[];
+/** Pack-selectable kinds — the throwable pack items only. The map-authored
+ *  base assets (generator/sensor/baseturret) share the table with cap 0 but
+ *  can't be thrown, so they must not surface in the ESC pack menu. */
+export const PACK_KINDS: readonly DeployKind[] = DEPLOY_KINDS.filter((k): boolean => DEPLOY_ITEMS[k].cap > 0);
 export const DEPLOY_MAX: Record<DeployKind, number> = Object.fromEntries(
   Object.entries(DEPLOY_ITEMS).map(([k, d]): [string, number] => [k, d.cap]),
 ) as Record<DeployKind, number>;

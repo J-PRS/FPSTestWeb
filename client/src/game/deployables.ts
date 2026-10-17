@@ -30,7 +30,7 @@ import { screenShake } from '../effects/screenShake.js';
 import * as sfx from '../core/sfx.js';
 import { GRAVITY, BLOOM_LAYER, EMIT_GAIN } from '../core/config.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
-import { WeaponType, REPAIR_ARMOR_MULT, DEPLOY_COST } from '../../../shared/weapons.js';
+import { WeaponType, REPAIR_ARMOR_MULT } from '../../../shared/weapons.js';
 import { aoeDamage } from '../../../shared/combat.js';
 import { weaponDef } from '../weapons.js';
 import { getProjectileConfig } from '../projectiles/index.js';
@@ -42,6 +42,7 @@ import type { TargetCandidate } from './targeting.js';
 import { DEPLOY_KINDS, DEPLOY_MAX, type DeployKind } from '../../../shared/deployables.js';
 import { RemoteDeployables } from './remoteDeployables.js';
 import { DEPLOY_ITEMS, deploySolid } from '../../../shared/deployItems.js';
+import { canThrowPack, packCost, recyclesSeated } from './deployEconomy.js';
 import type { StructureCollider } from '../../../shared/ballCollide.js';
 export type { DeployKind } from '../../../shared/deployables.js';
 
@@ -195,18 +196,16 @@ export class Deployables {
     const p = this.deps.lazyPlayer();
     const def = this.selDef;
     if (p.throwLockT > 0) {return;} // mid-throw — the gun hand is busy
-    // Pack gear pays from the belt pool — the server bills handleDeploy
-    // the same DEPLOY_COST when the pod seats.
-    if (p.beltCharges < DEPLOY_COST) {return;}
+    // The gate pays on release and counts pods already in the air (see
+    // deployEconomy). Charging on touchdown let a high tosser stack free
+    // pods — every airborne throw still saw a full belt and slipped the
+    // cost and the kind cap alike.
+    const seated = this.items.filter((i): boolean => i.kind === def.kind && !i.dead);
+    const airborne = this.pods.reduce((n, pod): number => n + ((pod.kind === def.kind && !pod.landed) ? 1 : 0), 0);
+    if (!canThrowPack(p.beltCharges, packCost(def.kind), seated.length, airborne, def.max)) {return;}
     // Belt-throw ceremony: weapon lowers, pod releases at THROW_RELEASE.
     p.throwLockT = THROW_TOTAL;
     this.deps.lazyViewModel?.()?.startThrow();
-    const live = this.items.filter((i): boolean => i.kind === def.kind && !i.dead);
-    if (live.length >= def.max) {
-      // T2 rule: a new plant retires your oldest of that kind
-      const oldest = live[0]!;
-      oldest.dead = true;
-    }
     // Aim captured at release, not at keypress — the wind-up is long
     // enough to swing the throw across the sky.
     setTimeout((): void => {
@@ -221,6 +220,22 @@ export class Deployables {
   }
 
   private throwPod(kind: DeployKind, p: { pos: THREE.Vector3; vel: THREE.Vector3 }, dir: THREE.Vector3): void {
+    // Belt charge is spent at release — the same beat a belt throw pays.
+    // Re-check on release: the belt can't have grown since the wind-up
+    // gate, but a shot/death in the window must not mint a free pod.
+    const pl = this.deps.lazyPlayer();
+    const cost = packCost(kind);
+    if (pl.beltCharges < cost) {return;}
+    pl.beltCharges -= cost;
+    // Cap recycle lives here, not at the keypress gate: the oldest seated
+    // item of the kind is retired only once the pod actually leaves the
+    // hand, so a death/dry abort in the wind-up can't cost you a plant for
+    // free. (The gate already refused an all-airborne full cap — reaching
+    // here at cap means a seated item exists to recycle.)
+    const cap = DEPLOY_DEFS.find((d): boolean => d.kind === kind)?.max ?? 0;
+    const seated = this.items.filter((i): boolean => i.kind === kind && !i.dead);
+    const airborne = this.pods.reduce((n, pod): number => n + ((pod.kind === kind && !pod.landed) ? 1 : 0), 0);
+    if (recyclesSeated(seated.length, airborne, cap)) {seated[0]!.dead = true;}
     const terrain = this.deps.lazyTerrain();
     const pos = p.pos.clone().addScaledVector(dir, 0.8);
     pos.y += 0.4; // release at chest, not feet
@@ -358,7 +373,8 @@ export class Deployables {
     }
     this.deps.lazyEffects().spawnMoveDust(pod.pos, this._zeroVel, 10, 0.6);
     sfx.land(impact);
-    this.deps.lazyPlayer().beltCharges = Math.max(0, this.deps.lazyPlayer().beltCharges - DEPLOY_COST);
+    // Charge was spent at release (throwPod); this claim is the server's
+    // copy of the same spend, not a second one.
     this.deps.lazyNetworkManager().sendDeploy(pod.kind, pod.pos);
   }
 

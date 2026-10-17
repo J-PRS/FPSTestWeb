@@ -105,7 +105,8 @@ export const CONC_JET_DRAIN = 40;         // jet energy the concussion blast sap
 // deploy: the nuggets you pick up ARE the ordnance you carry.
 export const BELT_MAX = 5;        // spawn stock AND the pickup cap
 export const BELT_THROW_COST = 1; // per belt toss
-export const DEPLOY_COST = 2;     // per pack item (turret/mine/station/drone/shield)
+// Pack items (turret/mine/station/…) are priced per-kind in
+// shared/deployItems.ts (turret 2, mortar 3, …) — not a flat constant.
 // WeaponTypes that ONLY exist as belt throws — any spawn claim carrying
 // one pays BELT_THROW_COST. BeltSticky is its own type so a toss CAN be
 // told from a launcher shot — the old shared type made throws unchargeable.

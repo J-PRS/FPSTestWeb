@@ -21,7 +21,7 @@ import { CLASS_BODY_MAT_REV, CLASS_BODY_VARIANT } from './playerClips.js';
 import * as imp from './playerImpulse.js';
 import { PlayerEmit } from './playerEmit.js';
 import { PlayerLoadout } from './playerLoadout.js';
-import { DEPLOY_KINDS, type DeployKind } from '../../../shared/deployables.js';
+import { PACK_KINDS, type DeployKind } from '../../../shared/deployables.js';
 import { BELT_MAX } from '../../../shared/weapons.js';
 import { ENERGY, MOVEMENT_CONFIG } from '../../../shared/movement.js';
 import { PlayerVisuals } from './PlayerVisuals.js';
@@ -260,7 +260,7 @@ export class Player {
       ? settings.get('fps-sidearm') as 'pistol' | 'revolver' | 'shotgun' | 'repair' : 'pistol';
   // Pack: one deployable on the deploy key — ESC menu picks.
   packItem: DeployKind =
-    (DEPLOY_KINDS as readonly string[]).includes(settings.get('fps-pack'))
+    (PACK_KINDS as readonly string[]).includes(settings.get('fps-pack'))
       ? settings.get('fps-pack') as DeployKind : 'turret';
 
 
