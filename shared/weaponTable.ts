@@ -365,10 +365,11 @@ export const WEAPONS: Record<number, WeaponStats> = {
   },
   [WeaponType.Shotgun]: {
     burst: 10, // one pull registers all pellets at once
-    pelletSpread: 0.035,
-    // Pump pellets: 10 × 7dmg ≈ 70 point-blank, ~3× tighter cone than flak.
-    // Fast slugs (300 m/s) on a 0.4s fuse ≈ 120m of reach — usable at mid
-    // range where flak's lobbed shards scatter into nothing.
+    pelletSpread: 0.065,
+    // Pump pellets: 10 × 7dmg ≈ 70 point-blank — a tighter cone than
+    // flak's wide lob, so it's the mid-band scattergun to flak's doorway.
+    // Fast slugs on a 0.4s fuse give mid-band reach — usable where flak's
+    // lobbed shards scatter into nothing.
     directDamage: 7, // per pellet — 10 pellets ≈ 70 max
     aoeDamage: 0,
     aoeRadius: 0,
