@@ -55,7 +55,7 @@ export const CTF_DMG_PER_PTS = 100;
 export const CTF_FLAG_ZONE_R = 15;
 
 // ---- Game modes ----
-export type ModeId = 'nuggets' | 'ctf' | 'dm' | 'tdm' | 'rabbit' | 'duel' | 'flagrun';
+export type ModeId = 'nuggets' | 'ctf' | 'dm' | 'tdm' | 'rabbit' | 'duel' | 'flagrun' | 'conquest';
 
 export interface ModeSpec {
   /** HUD label + feed wording. */
@@ -91,6 +91,10 @@ export const MODES: Record<ModeId, ModeSpec> = {
   // Flag Run: solo cap circuit — a square of stands alternating teams,
   // two flags a side; bank any enemy flag at either friendly stand.
   flagrun: { label: 'FLAG RUN', teams: true, ffa: false, flags: true, gems: false, winAt: 10, timeLimitS: 1800, ptsPlayerKill: 0, ptsCreatureKill: 0 },
+  // Conquest (UT-Onslaught lattice): node count IS the scoreboard — the
+  // winAt ceiling is unreachable by points so the horn resolves on nodes
+  // held; a dead enemy core ends it early via endMatch.
+  conquest: { label: 'CONQUEST', teams: true, ffa: false, flags: false, gems: false, winAt: 999, timeLimitS: 1200, ptsPlayerKill: 0, ptsCreatureKill: 0 },
 };
 
 /** Flag carry rules — shared client/server. */

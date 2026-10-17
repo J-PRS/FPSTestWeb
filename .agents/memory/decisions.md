@@ -5,6 +5,8 @@ from the code and would get re-litigated without a record. One line each.
 If a decision is reversed, strike it and add the new one — don't edit
 history in place.
 
+- 2026-10-17 — new gamemodes go in MODE_MODULES (server_bun/src/modeModules.ts), never `mode ===` branches in Room/senses: module owns sims/wire/objectiveFor/spawn-pools; Room consults at 5 seams only. Conquest nodes CANNOT be severed (user rule): link chain gates what you can act on next, ownership is permanent until razed. Node respawns ride teamSpawns (synced per capture), score = node count synced through teamScore funnel.
+
 - 2026-10-11 — sky has NO sun disc by design (uniform brightness = no free positional tells); glare sprite stays in code behind `?shafts=on`, off by default
 - 2026-10-11 — Mie g=0 + rayleighDirectional=0: directional scatter flattened on purpose; residual asymmetry from optical-depth integration is accepted
 - 2026-10-11 — oxlint --fix yes, oxfmt NO: codebase is deliberately compact ({return;} one-liners); a prettier-style formatter is a style rewrite, not a cleanup
@@ -38,3 +40,4 @@ history in place.
 - 2026-10-16 - conn% = pull-level connects deduped on per-pull nonce (pf-N minted in spawn for unclaimed fans) - pellet counts (hits) stay for damage accounting, never confuse the two.
 - 2026-10-16 - belt throws in a combat slot got real 1s/1.9s intervals: the WEAPON_FIRE_INTERVAL_S 0.1s default was a lie machine for unlisted weapons (bot miniguns). Any new weapon type needs an entry or it fires at 10/s.
 - 2026-10-16 - verdicts across matrix+wild+cycle: BoltLauncher best on every metric; Lightning elite per trigger-second (269 dmg/10s) but draw-starved by light-lock; RL bottom-tier even buffed+fixed-aim (levers left: cadence/speed) BUT mobile-duel verdict does NOT measure its CTF stand-clearing niche - needs a deployable bench before declaring it dead; Sprinkler/Sticky are the real bottom; Melee 100% connect is honest (reach is the tax).
+- 2026-10-16 - scenario harness rooms pay sync MPC solves inside step() - ~300ms/replan turned 5s soaks into 98s wall runs and 10x throughput bars into 3x. tests/preload.ts pins FPS_MPC_OFF; sweep tools keep armed cappers (no preload).

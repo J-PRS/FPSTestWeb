@@ -241,6 +241,7 @@ this.handlerThrows += 1;
     srvPing: (data): void => { this.h.serverPingMs = typeof data.rtt === 'number' ? data.rtt : null; },
     chat: (data): void | undefined => this.h.onChat?.(data.playerId, data.text, data.team === true, typeof data.vgs === 'string' ? data.vgs : undefined, data.muted === true),
     flagUpdate: (data): void | undefined => this.h.onFlagUpdate?.(data.flags),
+    nodeUpdate: (data): void | undefined => this.h.onNodeUpdate?.(data.nodes),
     matchNotice: (data): void | undefined => this.h.onMatchNotice?.(data.text),
     serverWarn: (data): void | undefined => this.h.onServerWarn?.(data.text),
     // WT/RTC path of the 1008 identity reject — the close code is lost

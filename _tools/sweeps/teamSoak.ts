@@ -444,6 +444,10 @@ if (pk) {
   console.log('pickups ' + Object.entries(pk).map(([kind, r]) =>
     `${kind}: spawned=${r.spawned} banked=${r.banked} decayed=${r.decayed}${r.refused ? ` refused=${r.refused}` : ''}`).join('  '));
 }
+// Pluggable-mode telemetry — a mode module that owns an economy
+// (conquest's lattice churn) reports one line through the same channel.
+const modeTelemetry = room.modeModule?.telemetry?.();
+if (modeTelemetry) {console.log(modeTelemetry);}
 if (simProf) {
   const tot = [...simProf.values()].reduce((a, b) => a + b, 0);
   console.log(`sims (${tot.toFixed(0)}ms total): ` + [...simProf.entries()].sort((x, y) => y[1] - x[1]).map(([k, v]) => `${k}=${(100 * v / Math.max(1, tot)).toFixed(0)}%`).join(' '));

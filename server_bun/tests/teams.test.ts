@@ -26,7 +26,7 @@ describe('teams', () => {
       // flags only on modes that declare them (ctf, rabbit, flagrun).
       expect(m.flags, `${id} flags`).toBe(id === 'ctf' || id === 'rabbit' || id === 'flagrun');
     }
-    expect(Object.keys(MODES).sort()).toEqual(['ctf', 'dm', 'duel', 'flagrun', 'nuggets', 'rabbit', 'tdm']);
+    expect(Object.keys(MODES).sort()).toEqual(['conquest', 'ctf', 'dm', 'duel', 'flagrun', 'nuggets', 'rabbit', 'tdm']);
   });
 
   it('pickTeam alternates onto the smaller team — deterministic by join order', () => {
@@ -59,7 +59,7 @@ describe('teams', () => {
     }
     expect(FLAG_PICKUP_R).toBeLessThan(FLAG_HOME_R);   // grab tighter than cap ring
     expect(FLAG_RESET_S).toBeGreaterThan(0);
-    for (const v of Object.values(CTF_PTS)) expect(v).toBeGreaterThan(0);
+    for (const v of Object.values(CTF_PTS)) {expect(v).toBeGreaterThan(0);}
     expect(CTF_DMG_PER_PTS).toBeGreaterThan(0);
     expect(CTF_FLAG_ZONE_R).toBeGreaterThan(FLAG_PICKUP_R);
   });

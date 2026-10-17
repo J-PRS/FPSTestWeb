@@ -296,6 +296,9 @@ export type ServerMessage =
   | { type: 'chat'; playerId: string; text: string; team?: boolean; vgs?: string; muted?: boolean }
   // --- Match scoreboard (team-mode rooms) --------------------------------
   | { type: 'flagUpdate'; flags: { team: TeamId; pos: Vec3; home?: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[] }
+  // Conquest lattice — the whole node set (≤25 rows) on every edge; the
+  // mode's lifecycle is one roster feed, no spawn/gone verbs.
+  | { type: 'nodeUpdate'; nodes: { id: number; gx: number; gz: number; pos: Vec3; owner: 'alpha' | 'bravo' | 'neutral'; hp: number; maxHp: number; build: number; core: boolean }[] }
   // Server-owned pickups: creature kills drop a nugget gem; touching it
   // banks a team point — replaces trusting client 'bank' claims.
   | { type: 'pickupSpawn'; id: number; pos: Vec3; kind?: PickupKind }

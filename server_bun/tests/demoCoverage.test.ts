@@ -41,6 +41,9 @@ const RECORDED: Record<string, string> = {
 // fails below until it lands in one of these maps.
 const EXEMPT: Record<string, string> = {
   gameState: 'join snapshot — roster adoption covers its actors',
+  // Conquest lattice — no demo lane yet (mode pilot); flagged exempt so a
+  // future lane removal can't silently orphan the type.
+  nodeUpdate: 'conquest pilot — demo lane lands with the mode, not before',
   mapUpdate: 'terrain is excluded from demos by design (action only)',
   chat: 'comms are not action',
   matchNotice: 'meta text, not an actor',

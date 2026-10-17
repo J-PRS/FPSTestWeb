@@ -103,6 +103,8 @@ export class NetworkManager {
   public onMatchToken: ((token: import('../../../shared/resultToken.js').ResultToken) => void) | null = null;
   /** Server-owned flag state (CTF rooms) — pos/state/carrier per team. */
   public onFlagUpdate: ((flags: { team: TeamId; pos: { x: number; y: number; z: number }; home?: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]) => void) | null = null;
+  /** Conquest lattice roster — owner/build/hp/core per node, whole grid. */
+  public onNodeUpdate: ((nodes: { id: number; gx: number; gz: number; pos: { x: number; y: number; z: number }; owner: 'alpha' | 'bravo' | 'neutral'; hp: number; maxHp: number; build: number; core: boolean }[]) => void) | null = null;
   public onMatchNotice: ((text: string) => void) | null = null;
   /** Server anti-cheat flag — renders as a banner, not a disconnect. */
   public onServerWarn: ((text: string) => void) | null = null;

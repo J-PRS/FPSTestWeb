@@ -27,6 +27,7 @@ import type { AmbientWeather } from '../effects/ambientWeather.js';
 import type { NetCtx } from './net/ctx.js';
 import { wireMatchEvents } from './net/match.js';
 import { wireFlags } from './net/flags.js';
+import { wireNodes } from './net/nodes.js';
 import { wirePickups } from './net/pickups.js';
 import { wirePlayers } from './net/players.js';
 import { wireProjectiles } from './net/projectiles.js';
@@ -121,6 +122,7 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
   // handler consumes at runtime (not at wire time — safe either way).
   wireMatchEvents(ctx);
   wireFlags(ctx);
+  wireNodes(ctx);
   wirePickups(ctx);
   wirePlayers(ctx);
   wireProjectiles(ctx);

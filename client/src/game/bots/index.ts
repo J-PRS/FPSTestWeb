@@ -134,7 +134,7 @@ export class TeamBots {
       teamOf: this.teamOf,
       player: () => this.deps.lazyPlayer(),
       world: () => this.deps.world,
-      mode: (): "nuggets" | "ctf" | "dm" | "tdm" | "rabbit" | "duel" | "flagrun" => this.mode,
+      mode: (): ModeId => this.mode,
       targets: this.deps.targets,
     });
     this.fire = new BotFire({

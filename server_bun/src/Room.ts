@@ -42,6 +42,7 @@ import { WORLD_MODEL, verbPayload, eventPayload } from '../../shared/worldModel.
 import { botRand, tauntRand } from '../../shared/botRand.ts';
 import { MatchClock, type MatchHost } from './roomMatch.ts';
 import { EventBus } from './roomEvents.ts';
+import { MODE_MODULES, type ModeModule } from './modeModules.ts';
 import { RoomScore } from './roomScore.ts';
 import { ENERGY, type BodyCapsule } from '../../shared/movement.ts';
 import { BELT_MAX } from '../../shared/weapons.ts';
@@ -210,6 +211,9 @@ export class Room {
   readonly bots: ServerBots;
   /** CTF flag authority — only when the mode has flags AND the map has bases. */
   flags: RoomFlags | null = null;
+  /** The pluggable mode's module (MODE_MODULES registry) — owns its sims,
+   *  wire feed, bot objective and spawn pools behind one seam. */
+  modeModule: ModeModule | null = null;
   // Flag/deploy placement domain — standTop surfaces, shelf rescue,
   // deploy floor, home re-snap — lives in roomFlagPlacer.ts. The
   // callbacks carry the two room-level effects a re-snap has (structure
@@ -482,6 +486,10 @@ export class Room {
       const t = this.bots?.taskGoalFor(id);
       return t ? { pos: t.goal, w: 1.6 } : null;
     };
+    // Mode module BEFORE populate — spawn pools it mints (conquest's
+    // node-linked rings) must cover the bots' initial seating, not just
+    // their respawns.
+    this.modeModule = this.makeModeModule();
     // Bots populate before humans join so team balancing puts humans on
     // the emptier side.
     if (this.spec.bots) {this.bots.populate(this.spec.bots);}
@@ -627,10 +635,19 @@ export class Room {
     this.structs.baseline();
   }
 
+  /** The one seam where a gamemode becomes pluggable — registry lookup,
+   *  null for every mode without a module (all the built-ins today). */
+  private makeModeModule(): ModeModule | null {
+    return MODE_MODULES[this.mode]?.(this) ?? null;
+  }
+
   /** Re-snaps flag homes against the LIVE heightfield — terrain attach
    *  and applySpec re-run it (bases can move with the map). */
   refreshFlagHomes(broadcastUpdate = true): void {
     this.flagPlacer.refreshHomes(broadcastUpdate);
+    // Terrain (re)attach — mode entities re-snap their positions against
+    // the live field the same way flag homes do.
+    this.modeModule?.onTerrain?.();
   }
 
   /** Generator state flips which shield panes exist — colliders and the
@@ -649,6 +666,9 @@ export class Room {
     this.sims.push({ name: 'crawl', tick: (dt): void => this.creatureSim.step(dt), worldState: () => [{ type: 'crawlRoster', crawlers: this.creatureSim.roster() }] });
     this.sims.push({ name: 'bots', tick: (dt): void => this.bots.tick(dt) });
     if (this.flags) {this.sims.push({ name: 'flags', tick: (dt): void => this.tickFlags(dt), worldState: () => [{ type: 'flagUpdate', flags: this.flags!.snapshot() }] });}
+    // The pluggable mode's own sims (conquest's lattice, anything future
+    // modules register) — same tick + join-replay funnel as built-ins.
+    for (const s of this.modeModule?.sims?.() ?? []) {this.sims.push(s);}
     if (this.pickups) {this.sims.push({ name: 'pickups', tick: (dt): void => this.pickups!.tick(dt), worldState: (): ServerMessage[] => this.pickups!.snapshot().map((p) => ({ type: 'pickupSpawn', id: p.id, pos: p.pos, kind: p.kind }) as ServerMessage) });}
     this.sims.push({ name: 'unbury', tick: (dt): void => this.unburyTick(dt) });
     if (this.spec.arena) {
@@ -908,6 +928,7 @@ export class Room {
       get mapSrc(): string | undefined { return self.mapSrc; },
       endCleanup: (): void => {
         this.flags?.reset();
+        this.modeModule?.reset?.();
         this.pickups?.clear();
         this.deployables.clearAll();
         this.players.resetStats();
@@ -1057,6 +1078,10 @@ export class Room {
     this.spec = spec;
     if (spec.spawns) {this.players.spawnPoints = spec.spawns;}
     this.players.teamSpawns = spec.teamSpawns ?? null;
+    // Mode module re-stamps AFTER the spec-side pools land — a module
+    // that owns spawning (conquest's node rings) must win over authored
+    // spheres or a rotation would silently revert to flat-map seating.
+    this.modeModule?.onSpec?.(spec);
     this.structs.attach(); // merged authored + stand hulls; refreshFlagHomes re-runs it post-snap
     // Bases can move with a new spec — re-snap homes (no update push: the
     // mapUpdate below carries the post-snap list). If the terrain is

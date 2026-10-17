@@ -42,6 +42,16 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   open season) — every advertised map×mode pair builds + ticks
   (scenarios/modes.test.ts); offline mirrors all six via TeamBots +
   CtfBridge/RabbitBridge
+- Conquest pilot (2026-10-19): UT-Onslaught-style node lattice, procedural
+  — map span split NxN (3-5 by span), corner cores, touch-to-build 10s,
+  4-adjacent linked frontier, presence-raze or blast to neutral, cores
+  end matches; nodes cannot be severed. Lives behind the new mode-module
+  registry (`server_bun/src/modeModules.ts` — a mode is one file + one
+  line: sims/wire/objectiveFor/reset/onSpec/onTerrain/telemetry), so
+  experimental modes add/remove without touching the core. Node-linked
+  respawns ride the existing teamSpawns picker; bots get objectives via
+  `objectiveFor`; wire = node kind + nodeUpdate roster feed; client
+  `net/nodes.ts` draws rings + beams + territory link lines.
 - P2P over WebRTC DataChannel w/ server relayed handshake + embedded authority
 - Ball sim rubberband fixes: grid-locked replay, closed-form inert legs,
   renderOffset blending, settle threshold, server wall-clock catch-up
@@ -259,7 +269,7 @@ solve when a check can possibly matter, skip provably-dead ticks; plus
    0 rejects, worst pre-snap gap 3.1m).
 3. ~~Map format~~ — landed: `maps/<room>.json` (mode, ball population,
    spawn anchors, bases/objectives, bot count — all clamped with
-   defaults; examples swarm/duel/nugwar/ctf). Server bots populate
+   defaults; examples swarm/duel/erg/ctf). Server bots populate
    matches AND play objectives (flagGoal: grab exposed enemy flag, run
    home as carrier, escort teammate carriers, intercept thieves, return
    dropped own flag; plated bots anchor defense at their stand).
@@ -495,7 +505,7 @@ solve when a check can possibly matter, skip provably-dead ticks; plus
   isolation, reconnect/token reclaim, botFill (fillprobe.ts: retire/refill holds spec.botFill bodies across human join/leave), deployables lifecycle
   (deployprobe.ts: spawn/cap/distance validation, live mine trip +
   turretShot, leave teardown). Numbered ad-hoc rooms inherit their base
-  spec (roomFor strips -N: nugwar-3 → nuggets mode/bots/terrain — was
+  spec (roomFor strips -N: erg-3 → nuggets mode/bots/terrain — was
   silently spec-less); --spec probe validates spectate joins (gameState
   + full tick stream, no roster entry); probe adopts server spawn +
   room terrain so --park doesn't self-inflict correction storms.

@@ -203,8 +203,12 @@ export class ServerBotSenses {
   }
 
   /** CTF objective for a bot — the evaluator lives in botRouting.ts
-   *  beside the route/command memory it spends. */
-  flagGoal(p: { id: string; team?: string; position: Vec3 }, duty = 1, parties?: ReturnType<ServerParties['of']>): { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; marshal?: boolean; posted?: number } | null {
+   *  beside the route/command memory it spends. A pluggable mode module
+   *  answers first: its objectiveFor owns the goal channel outright when
+   *  the mode carries one (conquest's lattice, future mode objectives). */
+  flagGoal(p: { id: string; team?: string; position: Vec3 }, duty = 1, parties?: ReturnType<ServerParties['of']>): { pos: BotVec; flagPos?: BotVec | null; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; marshal?: boolean; posted?: number } | null {
+    const modeGoal = this.room.modeModule?.objectiveFor?.(p);
+    if (modeGoal) {return Object.assign({ infiltrating: false }, modeGoal);}
     return this.routing.flagGoal(p, duty, parties);
   }
 
