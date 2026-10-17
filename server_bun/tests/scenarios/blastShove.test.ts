@@ -17,7 +17,7 @@ describe('scenario: blast knockback', () => {
     // Knockback is private feedback to the victim — tap their channel.
     const toVictim: ServerMessage[] = [];
     const origSend = room.connections.sendToPlayer.bind(room.connections);
-    room.connections.sendToPlayer = (pid, m) => { if (pid === p.id) toVictim.push(m); else origSend(pid, m); };
+    room.connections.sendToPlayer = (pid, m) => { if (pid === p.id) {toVictim.push(m);} else {origSend(pid, m);} };
 
     // Rocket blast at the origin — player 5m east gets pushed east.
     // (Owner is exempt from the sweep, so the shot must come from someone else.)
@@ -36,13 +36,17 @@ describe('scenario: blast knockback', () => {
     const room = mkRoom({ bots: 2 }, 'dm');
     const [shooter, p] = twoPlayers(room);
     freeze(room, shooter.id, { x: -40, y: 31, z: 0 });
-    freeze(room, p.id, { x: 0.5, y: 32, z: 0 }); // shell pops on their chest
+    // ~2.3m out: the T1 impulse curve peaks at minbox+1 — a chest-pop
+    // sits in its designed point-blank dead zone (d clamps to 1m) and
+    // only ever nudges, so staging there measures a weak blast, not
+    // whether the victim's shadow receives the impulse at all.
+    freeze(room, p.id, { x: 2.3, y: 32, z: 0 });
     const hp0 = room.players.getPlayer(p.id)!.health;
     const before = { ...room.moveSim.simPos(p.id)! };
 
     const toVictim: ServerMessage[] = [];
     const origSend = room.connections.sendToPlayer.bind(room.connections);
-    room.connections.sendToPlayer = (pid, m) => { if (pid === p.id) toVictim.push(m); else origSend(pid, m); };
+    room.connections.sendToPlayer = (pid, m) => { if (pid === p.id) {toVictim.push(m);} else {origSend(pid, m);} };
 
     room.messages.serverBlast(shooter.id, { x: 0, y: 31, z: 0 }, WeaponType.BoltLauncher, p.id);
     expect(toVictim.filter((m) => m.type === 'knockback').length).toBe(1);

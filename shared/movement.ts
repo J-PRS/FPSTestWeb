@@ -125,6 +125,12 @@ export interface SimSnapshot {
   groundedBuffered: boolean;
   acc: number;
   groundGraceT: number;
+  /** Eye-above-floor gap at last collideTerrain — gates the grounded
+   *  gravity cancel. Restored so replay keeps the same glue window. */
+  bandDist: number;
+  /** Post-impulse airtime window — restored so replay keeps the same
+   *  re-ground suppression on a blast-launched body. */
+  impulseT: number;
 }
 
 /** What the sim needs from the world: terrain height + surface normal.
@@ -199,6 +205,16 @@ export class MoveSim {
    *  scanning the whole roster — same candidate set, just reachable. */
   bodiesNear?: (x: number, z: number) => Iterable<BodyCapsule>;
   selfId = '';
+  /** Last measured eye-above-floor gap, written by collideTerrain —
+   *  0 at contact, the band distance inside the glue band, Infinity
+   *  airborne. Gates the grounded gravity cancel (applyMovement) so a
+   *  body grounded mid-band while still falling doesn't freeze.
+   *  Starts at contact: a grounded sim that has never collided yet is
+   *  walking, not floating — Infinity starved its first-tick traction. */
+  private bandDist = 0;
+  /** Post-impulse airtime window — the ground glue can't re-ground a
+   *  blast-launched body before the arc plays out (see impulse()). */
+  private impulseT = 0;
 
   setInput(input: Partial<MoveInput>): void {
     // Claimed input is the trust boundary — the server replays these on a
@@ -210,6 +226,26 @@ export class MoveSim {
     if (input.jumpHeld !== undefined) {this.input.jumpHeld = Boolean(input.jumpHeld);}
     if (input.skiHeld !== undefined) {this.input.skiHeld = Boolean(input.skiHeld);}
     if (input.jetHeld !== undefined) {this.input.jetHeld = Boolean(input.jetHeld);}
+  }
+
+  /** External impulse (blast knockback). An upward shove IS a launch —
+   *  impulse velocity isn't contact velocity, but the ground-glue launch
+   *  gate (velDotN > groundLaunchVel) can't tell them apart and quietly
+   *  absorbed every sub-3 m/s blast pop: the victim's shadow sat on the
+   *  floor through the arc (blastShove measured ~0m mid-flight). */
+  impulse(dv: Vec3Like): void {
+    if (!Number.isFinite(dv.x + dv.y + dv.z)) {return;}
+    const v = this.state.vel;
+    v.x += dv.x; v.y += dv.y; v.z += dv.z;
+    if (dv.y > 0) {
+      this.state.onGround = false;
+      this.groundedBuffered = false;
+      this.groundGraceT = 0;
+      // Without the window the very next collideTerrain re-grounds it:
+      // a sub-3 m/s shove reads velDotN below the launch gate and the
+      // band keeps the body grounded while the arc drains into glue.
+      this.impulseT = 0.35;
+    }
   }
 
   setState(s: MoveState): void {
@@ -236,6 +272,8 @@ export class MoveSim {
       lastJumpableNormal: Object.assign({}, this.lastJumpableNormal),
       groundedBuffered: this.groundedBuffered, acc: this.acc,
       groundGraceT: this.groundGraceT,
+      bandDist: this.bandDist,
+      impulseT: this.impulseT,
     };
   }
 
@@ -247,6 +285,10 @@ export class MoveSim {
     this.groundedBuffered = snap.groundedBuffered;
     this.acc = Number.isFinite(snap.acc) ? snap.acc : 0;
     this.groundGraceT = snap.groundGraceT;
+    // Legacy snapshots predate bandDist — derive it from the restored
+    // contact flag: grounded = contact, airborne = outside the band.
+    this.bandDist = snap.bandDist ?? (snap.st.onGround ? 0 : Infinity);
+    this.impulseT = snap.impulseT ?? 0;
   }
 
   update(dt: number): void {
@@ -267,6 +309,7 @@ export class MoveSim {
     else {this.wishJump = this.wishJump && this.input.jumpHeld;}
 
     this.groundedBuffered = this.checkGrounded();
+    this.impulseT = Math.max(0, this.impulseT - dt);
 
     const anyGrounded = this.state.onGround || this.groundedBuffered;
     if (this.allowNextJump && anyGrounded && this.wishJump) {
@@ -382,13 +425,20 @@ export class MoveSim {
     // grounded silently capped downhill speed at terminal/sin(slope).
     s.vel.y += GRAVITY * dt;
     if (!s.onGround && s.vel.y < -MOVEMENT_CONFIG.terminalVelocity) {s.vel.y = -MOVEMENT_CONFIG.terminalVelocity;}
-    // T1 ground glue: while grounded, cancel gravity's into-surface
-    // share BEFORE integrating — the Torque order (normal force kills
-    // acc·n each tick) keeps velocity slope-parallel, so a walker
-    // follows the face downhill instead of leaving a one-step gap the
-    // snap band has to chase. Without this, walking down any real slope
-    // detached into a ballistic hop every few steps.
-    if (s.onGround) {
+    // T1 ground glue: while grounded AT CONTACT distance, cancel
+    // gravity's into-surface share BEFORE integrating — the Torque
+    // order (normal force kills acc·n each tick) keeps velocity
+    // slope-parallel, so a walker follows the face downhill instead of
+    // leaving a one-step gap the snap band has to chase. Without this,
+    // walking down any real slope detached into a ballistic hop every
+    // few steps. The cancel must NOT fire in the outer glue band: a
+    // body falling into the band gets grounded (T1 contact distance)
+    // while still above the floor — canceling gravity there freezes it
+    // mid-air at band edge forever (drop-on-stand tests float ~1.8m up).
+    // Contact = ~0.1m, not groundSnapDistance — at exactly the band's
+    // inner edge the body parked in contact-without-touch and still
+    // floated (0.6m up).
+    if (s.onGround && this.bandDist <= 0.1) {
       const n = this.surface.getNormal(s.pos.x, s.pos.z, _n);
       const vdn = s.vel.x * n.x + s.vel.y * n.y + s.vel.z * n.z;
       if (vdn < 0) {
@@ -458,8 +508,11 @@ export class MoveSim {
     }
 
     // Redirect velocity along the slope (kill the into-ground component).
+    // Contact-distance only — a body grounded mid-band (glue range, not
+    // touching) must keep falling: killing velDotN here parked a drop at
+    // band edge ~0.9m above the face forever.
     const velDotN = s.vel.x * n.x + s.vel.y * n.y + s.vel.z * n.z;
-    if (velDotN < 0) {
+    if (velDotN < 0 && this.bandDist <= 0.1) {
       s.vel.x -= n.x * velDotN; s.vel.y -= n.y * velDotN; s.vel.z -= n.z * velDotN;
     }
 
@@ -471,7 +524,9 @@ export class MoveSim {
     // into a ski run. It also owns stopping (wish=0) and overspeed
     // (shoves bleed to cap at the same force). Skiers exempt by design:
     // ski is literally "break contact with this force".
-    if (!this.input.skiHeld) {
+    // Contact-distance only: mid-band the force bleeds the FALL too —
+    // a drop grounded inside glue range parachuted at crawl speed.
+    if (!this.input.skiHeld && this.bandDist <= 0.1) {
       const vdn = s.vel.x * n.x + s.vel.y * n.y + s.vel.z * n.z;
       const keep = Math.max(vdn, 0);
       const tx = s.vel.x - n.x * keep, ty = s.vel.y - n.y * keep, tz = s.vel.z - n.z * keep;
@@ -500,6 +555,7 @@ export class MoveSim {
     const dist = s.pos.y - groundY;
 
     if (dist < 0) {
+      this.bandDist = 0;
       const n = this.surface.getNormal(s.pos.x, s.pos.z, _n, reach);
       this.lastJumpableNormal.x = n.x; this.lastJumpableNormal.y = n.y; this.lastJumpableNormal.z = n.z;
 
@@ -521,7 +577,8 @@ export class MoveSim {
       // A real blast launch still separates: velDotN > gate, or the
       // position simply leaves the band next step.
       const inputTakeoff = this.input.jetHeld || this.input.jumpHeld || this.input.jumpPressed;
-      const rising = velDotN > MOVEMENT_CONFIG.groundLaunchVel || (inputTakeoff && velDotN > 0);
+      const rising = velDotN > MOVEMENT_CONFIG.groundLaunchVel || (inputTakeoff && velDotN > 0)
+        || (this.impulseT > 0 && velDotN > 0);
       // A takeoff input held THROUGH a landing (velDotN < 0) is a landing,
       // not a launch — mark airborne so traction doesn't grip the frame,
       // but re-arm the jump so held-hop chains refire next step. Gating
@@ -530,6 +587,7 @@ export class MoveSim {
       this.allowNextJump = !rising;
       this.groundGraceT = rising || inputTakeoff ? 0 : MOVEMENT_CONFIG.groundGraceT;
     } else if (dist < MOVEMENT_CONFIG.groundSnapDistance + (this.input.skiHeld ? MOVEMENT_CONFIG.skiTargetDistance : MOVEMENT_CONFIG.walkGlueDistance)) {
+      this.bandDist = dist;
       // Stick to the surface: bumps and crest lips inside the snap
       // distance keep ground contact instead of flipping airborne for a
       // frame or two. The launch gate is surface-normal velocity —
@@ -553,7 +611,9 @@ export class MoveSim {
       const takeoff = this.input.jetHeld || this.input.jumpHeld || this.input.jumpPressed;
       // Launch = leaving the face (velDotN), not world-up speed — a
       // steep-face walker's vel.y > 3 is slope-parallel, not a launch.
-      if (!takeoff && velDotN <= MOVEMENT_CONFIG.groundLaunchVel) {
+      // An impulse's upward velocity IS a launch no matter its size —
+      // impulseT keeps the blast shove from re-grounding in the band.
+      if (!takeoff && velDotN <= MOVEMENT_CONFIG.groundLaunchVel && !(this.impulseT > 0 && velDotN > 0)) {
         this.groundGraceT = MOVEMENT_CONFIG.groundGraceT;
         s.onGround = true;
       } else {
@@ -582,6 +642,7 @@ export class MoveSim {
       const away = s.vel.x * ng.x + s.vel.y * ng.y + s.vel.z * ng.z;
       s.onGround = noTakeoff && this.groundGraceT > 0 && away <= MOVEMENT_CONFIG.groundLaunchVel;
       if (!s.onGround) { this.groundGraceT = 0; }
+      this.bandDist = Infinity;
     }
   }
 }

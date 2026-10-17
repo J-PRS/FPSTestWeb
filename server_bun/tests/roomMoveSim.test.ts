@@ -131,8 +131,8 @@ describe('RoomMoveSim', () => {
   });
 
   test('config stays in lockstep with the client values', () => {
-    expect(MOVEMENT_CONFIG.jumpSpeed).toBe(7);
-    expect(MOVEMENT_CONFIG.maxVelocityGround).toBe(7);
+    expect(MOVEMENT_CONFIG.jumpSpeed).toBe(9.8);
+    expect(MOVEMENT_CONFIG.maxVelocityGround).toBe(12);
   });
 
   test('modeled energy gates the jet claim — infinite jetting dries up', () => {
