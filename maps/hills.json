@@ -22,5 +22,6 @@
     "distance": 160.0,
     "visible": 700.0
   },
-  "_notes": "hills = rolling grassland field (terrainPreset 2), open dm, no structures"
+  "weather": { "ash": 0.35 },
+  "_notes": "hills = rolling grassland field (terrainPreset 2), open dm, no structures. Cool grey-blue haze (green -> grey -> blue); the explicit weather block drops the default ember/ash trio (neutral drift only)."
 }

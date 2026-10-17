@@ -613,6 +613,43 @@ export const terrainFrag = /* glsl */`
         triGrainG = triplanarNoise(vWorldPos, 3.4);
       }
 
+      // Micro terms only where they can resolve: micro (uvFin ~1.4m) and
+      // triGrainG (~0.3m) are fixed-frequency and NOT band-limited, so past
+      // a few tens of metres they fall beneath a pixel and alias into moiré.
+      // grainG (detailFbm) is band-limited and safe to carry further out.
+      float nearFadeG = 1.0 - smoothstep(20.0, 70.0, camDistG);
+
+      // Micro-relief normal. The clipmap lattice is 5m, so the ground
+      // arrives smooth-shaded: grass with no light-catching grain reads as
+      // matte plastic, and no amount of albedo paint can fake missing
+      // relief. Rebuild a normal from the SAME close-range field the grain
+      // uses, via screen-space derivatives (bump-without-tangents,
+      // Mikkelsen; Terrain3D also moves clipmap normals into fragment()
+      // for exactly this reason). Gated identically to the grain so it
+      // fades out before it can shimmer at distance.
+      vec3 nrmG = vNormal;
+      float bumpGrad = 0.0;
+      float bumpFadeG = 1.0 - smoothstep(30.0, 100.0, camDistG);
+      if (bumpFadeG > 0.0) {
+        float hB = grainG * 0.85 + (micro * 0.35 + triGrainG * 0.50) * nearFadeG;
+        vec3 sX = dFdx(vWorldPos);
+        vec3 sY = dFdy(vWorldPos);
+        vec3 r1 = cross(sY, vNormal);
+        vec3 r2 = cross(vNormal, sX);
+        float det = dot(sX, r1);
+        // World-space height gradient over the surface; the det division
+        // makes it independent of the screen-space pixel footprint.
+        vec3 grad = sign(det) * (dFdx(hB) * r1 + dFdy(hB) * r2) / max(abs(det), 1e-3);
+        // Grazing fragments have a near-zero det — the gradient there is
+        // unstable, so damp the bump as the surface turns away from view.
+        float facingG = abs(dot(normalize(vWorldPos - vCameraPos), vNormal));
+        float bAmt = bumpFadeG * smoothstep(0.10, 0.40, facingG);
+        // 0.10 = the height amplitude (metres) folded into the tilt. Faded
+        // in, not gated, so the normal never pops at the 100m boundary.
+        nrmG = normalize(mix(vNormal, normalize(vNormal - grad * 0.10), bAmt));
+        bumpGrad = length(grad) * bAmt;
+      }
+
       // Palette: dark root greens -> bright olive tips, dry straw regions,
       // warm dirt, grey strata rock. Wide value range is what keeps it
       // from reading as flat soup at distance.
@@ -678,11 +715,16 @@ export const terrainFrag = /* glsl */`
       // Continental tint: km-scale hue drift so the whole map isn't one
       // green — reads as wetter/drier sub-regions at horizon distance.
       col *= mix(vec3(0.88, 1.06, 0.82), vec3(1.10, 0.98, 0.80), smoothstep(0.30, 0.70, fbm(uv * 0.045)));
-      col *= 0.90 + 0.18 * detail;
+      col *= 0.88 + 0.24 * detail;
       col *= 1.0 - (1.0 - smoothstep(0.15, 0.45, micro)) * 0.10 * detFade;
+      // Close-range grain finally lands on the albedo too (it used to be
+      // computed and thrown away) — plus a crease darkening driven by the
+      // bump gradient, so the micro-relief reads as turf, not just tint.
+      col *= 1.0 + ((grainG - 0.5) * 0.38 + (triGrainG - 0.5) * 0.22 * nearFadeG) * grainFadeG;
+      col *= 1.0 - clamp(bumpGrad * 0.035, 0.0, 0.22) * grainFadeG;
       col *= 1.0 - scorchMask(vWorldPos.xz);
       { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
-      float diff = max(dot(vNormal, sunDir), 0.0);
+      float diff = max(dot(nrmG, sunDir), 0.0);
       float shadow = diff * diff;
       float rim = pow(1.0 - max(dot(vNormal, vec3(0,1,0)), 0.0), 2.5) * 0.15;
       vec3 lit = ambientColor + sunColor * shadow * shadowMask + vec3(rim);
@@ -690,7 +732,7 @@ export const terrainFrag = /* glsl */`
       // Grass sheen: grazing-angle specular lift on open meadow — turf
       // blades glint; masked off dirt, rock, and shaded faces.
       vec3 viewDir2 = normalize(vCameraPos - vWorldPos);
-      float sheen = pow(max(dot(reflect(-sunDir, vNormal), viewDir2), 0.0), 14.0);
+      float sheen = pow(max(dot(reflect(-sunDir, nrmG), viewDir2), 0.0), 14.0);
       col += sheen * (1.0 - dirtMask) * (1.0 - slopeBlend) * vec3(0.06, 0.05, 0.02) * diff;
       col += scorchEmberGlow(vWorldPos.xz);
       col += fieldGlow(vWorldPos);
