@@ -73,7 +73,7 @@ export const PERKS: Record<PerkId, { name: string; blurb: string; mods: Partial<
   lightfoot:   { name: 'Lightfoot',   blurb: 'Own blasts deal 50% less self-damage', mods: { selfDamage: 0.5 } },
   airtank:     { name: 'Airtank',     blurb: '+50% energy pool', mods: { energyMax: 1.5 } },
   reach:       { name: 'Reach',       blurb: 'Grab pickups and flags from 25% farther', mods: { pickupRadius: 1.25 } },
-  featherfall: { name: 'Featherfall', blurb: 'Hard landings burn energy, not blood — 20hp per point', mods: { fallSoak: 20 } },
+  featherfall: { name: 'Featherfall', blurb: 'Fall damage energy shield, 20 hp per energy point', mods: { fallSoak: 20 } },
 };
 
 export const PERK_ORDER: PerkId[] = ['none', 'featherjets', 'plated', 'lifesteal', 'regenerator', 'overcharge', 'sharpshooter', 'bombardier', 'juggernaut', 'scavenger', 'lightfoot', 'airtank', 'reach', 'featherfall'];

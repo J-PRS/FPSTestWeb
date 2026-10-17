@@ -38,7 +38,7 @@ try {
   const setup = await client.page.evaluate(`(() => {
     const t = window.__test;
     const p = t.player;
-    const g = t.terrain.heightAt ? t.terrain.heightAt(240, 240) : 60;
+    const g = t.terrain.getHeight(240, 240);
     p.pos.set(240, g + 1.7, 240);
     p.vel.set(0, 0, 0);
     p.yaw = 0; p.pitch = 0;
@@ -59,14 +59,16 @@ try {
       const ahead = ${c.ahead}, up = ${c.up};
       const dirX = Math.sin(p.yaw), dirZ = Math.cos(p.yaw);
       const cx = p.pos.x + dirX * ahead, cz = p.pos.z + dirZ * ahead;
-      const g = t.terrain.heightAt ? t.terrain.heightAt(cx, cz) : p.pos.y - 2;
+      const g = t.terrain.getHeight(cx, cz);
       const px = cx, py = g + up, pz = cz;
       const dx = px - p.pos.x, dy = py - p.pos.y, dz = pz - p.pos.z;
       p.yaw = Math.atan2(dx, dz);
       p.pitch = Math.atan2(dy, Math.hypot(dx, dz));
       window.__fxPos = new V(px, py, pz);
       window.__fxVel = new V(Math.sin(p.yaw) * 26, 0, Math.cos(p.yaw) * 26);
-      return { g, pos: [px, py, pz], pitch: p.pitch, yaw: p.yaw };
+      return { g, pos: [px, py, pz], pitch: p.pitch, yaw: p.yaw,
+        visY: t.terrain.getHeightVisual ? t.terrain.getHeightVisual(cx, cz) : null,
+        rendY: t.terrain.getRenderedHeight ? t.terrain.getRenderedHeight(cx, cz) : null };
     })()`);
 
   const emit = (c: (typeof CASES)[number]): Promise<unknown> =>

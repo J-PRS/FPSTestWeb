@@ -18,24 +18,26 @@ const RANGE = DEPLOY_ITEMS.turret.range!;           // acquire envelope
 const FIRE_INTERVAL = DEPLOY_ITEMS.turret.fireInterval!; // mini-rockets: heavier shots, longer beat
 const TURN_RATE = 2.6;      // rad/s traverse — a real slew, not a snap
 const AIM_TOL = 0.18;       // must be on-target within this to fire
-const MUZZLE = new THREE.Vector3(0, 0.05, 0.95); // local to head pivot — tube mouth
+const MUZZLE = new THREE.Vector3(0, 0.08, 1.25); // local to head pivot — tube mouth
 
 const _v = new THREE.Vector3();
 const _aim = new THREE.Vector3();
 
 // Shared across all sentries — a handful of turrets doesn't justify
 // per-instance materials/geometries; geometries die with the module.
-const _metal = new THREE.MeshLambertMaterial({ color: 0x4A_55_60 });
-const _dark = new THREE.MeshLambertMaterial({ color: 0x23_28_2E });
-const _glow = new THREE.MeshBasicMaterial({ color: 0x66_DD_FF });
-const _geoBase = new THREE.CylinderGeometry(0.55, 0.8, 0.5, 8);
-const _geoMast = new THREE.CylinderGeometry(0.16, 0.22, 0.9, 6);
-const _geoDome = new THREE.SphereGeometry(0.42, 10, 8);
+const _metal = new THREE.MeshLambertMaterial({ color: 0x4A_55_60, emissive: 0x14_18_1C });
+_metal.userData.__wearInt = 2.2;
+const _dark = new THREE.MeshLambertMaterial({ color: 0x23_28_2E, emissive: 0x0A_0D_10 });
+_dark.userData.__wearInt = 2.2;
+const _glow = new THREE.MeshBasicMaterial({ color: 0xFF_AA_55 });
+const _geoBase = new THREE.CylinderGeometry(0.75, 1.1, 0.6, 8);
+const _geoMast = new THREE.CylinderGeometry(0.24, 0.32, 1.15, 6);
+const _geoDome = new THREE.SphereGeometry(0.55, 10, 8);
 // Rocket pod: a housing block with two fat launch tubes — the silhouette
 // reads "missile sentry", not "pin gun".
-const _geoPod = new THREE.BoxGeometry(0.5, 0.34, 0.72);
-const _geoTube = new THREE.CylinderGeometry(0.15, 0.17, 1.1, 8);
-const _geoEye = new THREE.SphereGeometry(0.09, 6, 5);
+const _geoPod = new THREE.BoxGeometry(0.72, 0.46, 0.95);
+const _geoTube = new THREE.CylinderGeometry(0.2, 0.24, 1.35, 8);
+const _geoEye = new THREE.SphereGeometry(0.14, 6, 5);
 
 // All sentries share instanced part meshes: 8 draws per turret became 6
 // InstancedMesh draws total once 16v16 deploy farms showed ~40 turrets a
@@ -122,14 +124,14 @@ export class DeployTurret {
     if (Number.isFinite(bg)) {this.pos.y = bg;}
 
     this.slot = poolFor(scene).free.pop() ?? -1;
-    this.head.position.y = 1.4;
+    this.head.position.y = 1.5;
     this.group.add(this.head);
 
     this.flash = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: getGlowTexture(), color: 0xAA_DD_FF, transparent: true,
+      map: getGlowTexture(), color: 0xFF_DD_88, transparent: true,
       blending: THREE.AdditiveBlending, depthWrite: false,
     }));
-    this.flash.scale.setScalar(0.6);
+    this.flash.scale.setScalar(0.9);
     this.flash.position.copy(MUZZLE);
     this.head.add(this.flash);
 
@@ -150,19 +152,19 @@ export class DeployTurret {
     const g = _m.compose(this.group.position, this.group.quaternion, this.group.scale).clone();
     const headM = _m2.compose(this.head.position, this.head.quaternion, _s.set(1, 1, 1)).premultiply(g).clone();
 
-    pool.base.setMatrixAt(i, _m3.makeTranslation(0, 0.25, 0).premultiply(g));
-    pool.mast.setMatrixAt(i, _m3.makeTranslation(0, 0.9, 0).premultiply(g));
+    pool.base.setMatrixAt(i, _m3.makeTranslation(0, 0.3, 0).premultiply(g));
+    pool.mast.setMatrixAt(i, _m3.makeTranslation(0, 1, 0).premultiply(g));
     pool.dome.setMatrixAt(i, headM);
-    pool.pod.setMatrixAt(i, _m3.makeTranslation(0, 0.08, 0.3).premultiply(headM));
+    pool.pod.setMatrixAt(i, _m3.makeTranslation(0, 0.1, 0.4).premultiply(headM));
     for (let t = 0; t < 2; t += 1) {
       const k = this.tubeKick[t]!;
       pool.tube.setMatrixAt(i * 2 + t, _m3.compose(
-        _p.set(t === 0 ? -0.14 : 0.14, 0.08, 0.55 - k * 0.1),
+        _p.set(t === 0 ? -0.2 : 0.2, 0.1, 0.65 - k * 0.14),
         _rx90,
-        _s.set(1, 1 - k * 0.22, 1),
+        _s.set(1, 1 - k * 0.2, 1),
       ).premultiply(headM));
     }
-    pool.eye.setMatrixAt(i, _m3.makeTranslation(0, 0.3, 0.3).premultiply(headM));
+    pool.eye.setMatrixAt(i, _m3.makeTranslation(0, 0.35, 0.45).premultiply(headM));
 
     for (const mesh of [pool.base, pool.mast, pool.dome, pool.pod, pool.tube, pool.eye]) {
       mesh.instanceMatrix.needsUpdate = true;
@@ -279,13 +281,13 @@ export class DeployTurret {
    *  the sentry lands already deployed — not springing up post-touchdown. */
   tickUnfold(dt: number): void {
     tickUnfold(this, dt);
-    this.head.position.y = 0.6 + this.unfoldT * 0.8; // mast rises out of the base
+    this.head.position.y = 0.7 + this.unfoldT * 0.8; // mast rises out of the base
     this.syncMatrices();
   }
 
   unfoldDone(): void {
     unfoldDone(this);
-    this.head.position.y = 1.4;
+    this.head.position.y = 1.5;
   }
 
   /** Repair beam: heal refills health first, overflow banks as armor. */
