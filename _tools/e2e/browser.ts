@@ -57,13 +57,24 @@ export interface LaunchOpts {
 }
 
 export async function launchClient(clientUrl: string, opts: LaunchOpts = {}): Promise<Client> {
+  // E2E_HEADED=1 runs visible Chrome (unlocked PCs only — headed needs a
+  // desktop session). Real GPU + real frame pacing, so game-time matches
+  // wall time and the soak numbers are production-true.
+  const headed = Boolean(process.env.E2E_HEADED);
   const browser: Browser = await puppeteer.launch({
     executablePath: CHROME,
-    headless: true,
-    // SwiftShader by default for determinism; E2E_GPU=1 uses real hardware
-    // GL (perf runs — SwiftShader raster costs skew every phase number).
-    args: process.env.E2E_GPU
-      ? ['--mute-audio', '--no-sandbox']
+    headless: !headed,
+    // SwiftShader by default for determinism; E2E_GPU or headed uses real
+    // hardware GL (SwiftShader raster costs skew every phase number).
+    args: (process.env.E2E_GPU || headed)
+      ? [
+          '--mute-audio', '--no-sandbox', '--start-maximized',
+          // Headed Chrome background-throttles rAF/timers — the game
+          // boots off rAF, so an occluded window can stall the whole
+          // join path before the first frame.
+          '--disable-background-timer-throttling', '--disable-renderer-backgrounding',
+          '--disable-backgrounding-occluded-windows',
+        ]
       : [
           '--use-gl=angle', '--use-angle=swiftshader',
           '--enable-unsafe-swiftshader', '--mute-audio', '--no-sandbox',
@@ -89,6 +100,10 @@ export async function launchClient(clientUrl: string, opts: LaunchOpts = {}): Pr
     console.error(`[console.${m.type()}]`, t.slice(0, 600));
   });
   await page.goto(clientUrl, { waitUntil: 'domcontentloaded' });
+  // Headed windows open behind whatever's on screen; an occluded page
+  // gets its worker threads + ws lanes throttled to a halt (blob-worker
+  // probe: silent >8s). Foreground it or the whole net stack starves.
+  if (headed) {await page.bringToFront();}
 
   const test = <T = Record<string, unknown>>(expr: string): Promise<T> =>
     page.evaluate(`(() => { const t = window.__test; return ${expr}; })()`) as Promise<T>;
