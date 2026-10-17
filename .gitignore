@@ -85,3 +85,11 @@ server_bun/demos/archive/
 .devin-diff/
 .devin-tools/
 _tools/*.b64
+
+# Local scratch captures — profiler dumps, boot-stall probes (never git)
+_bm_*.txt
+_m.cjs
+soak*.txt
+server_bun/suite_*.txt
+_tools/e2e/profout/
+_tools/e2e/_boot*.ts
