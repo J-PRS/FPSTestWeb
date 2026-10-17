@@ -26,6 +26,9 @@
 //   --sea=r,depth              sink everything beyond radius r (lagoon)
 //   --tilt=amp[:x|z]           one sinusoidal run across the tile
 //   --flats=x,z,r[;...]        level pads for bases (blend to their own center)
+//   --elong=4                  stretch noise k× along u — dune-sea ridges.
+//                              Period divides 1, so any positive k stays
+//                              tileable; ridges run along z.
 //   --raw                      skip normalization (keep absolute h)
 //   --vscale=0.38              u8 gain; with normalization + 1.0 => full 0..255
 const { writeFileSync } = await import('node:fs');
@@ -51,6 +54,7 @@ const OCT = (opts.oct ?? '4,9,20,44').split(',').map(Number);
 const AMP = (opts.amp ?? '1,0.62,0.38,0.22').split(',').map(Number);
 const warp = Number(opts.warp ?? 0.6);
 const ridge = Number(opts.ridge ?? 0);
+const elong = Number(opts.elong ?? 1);
 const tilt = String(opts.tilt ?? '').split(':'); const tiltAmp = Number(tilt[0] ?? 0), tiltAxis = tilt[1] ?? 'x';
 const sea = String(opts.sea ?? '').split(',').map(Number);
 
@@ -70,8 +74,8 @@ function noise(u, v, cells, oct) {
          lattice(x1, z1, oct) * fx * fz;
 }
 // fBm and a ridged multifractal over the same octave set.
-function fbmAt(u, v) { let h = 0; for (let i = 0; i < OCT.length; i += 1) { h += noise(u, v, OCT[i], i) * (AMP[i] ?? 0); } return h; }
-function ridgedAt(u, v) { let h = 0, w = 1; for (let i = 0; i < OCT.length; i += 1) { const n = 1 - Math.abs(2 * noise(u, v, OCT[i], i + 31) - 1); h += n * n * w * (AMP[i] ?? 0); w *= 0.85; } return h; }
+function fbmAt(u, v) { let h = 0; for (let i = 0; i < OCT.length; i += 1) { h += noise(u * elong, v, OCT[i], i) * (AMP[i] ?? 0); } return h; }
+function ridgedAt(u, v) { let h = 0, w = 1; for (let i = 0; i < OCT.length; i += 1) { const n = 1 - Math.abs(2 * noise(u * elong, v, OCT[i], i + 31) - 1); h += n * n * w * (AMP[i] ?? 0); w *= 0.85; } return h; }
 
 const h = new Float32Array(N * N);
 // Feature warp: a gentle low-frequency displacement so bowls/plateaus/sea
