@@ -182,6 +182,9 @@ export class CreatureSim {
         : { x: c.x, y: c.y, z: c.z },
       velocity: { x: c.vx, y: c.vy, z: c.vz },
       targetId: c.targetId, tp: this.targetSnap(c), t: this.simTime,
+      // Live LCG — a dropped edge that consumed a crand draw desyncs a
+      // replica's stream forever without it (roster heal is join-only).
+      seed: c.rng,
     }) as ServerMessage;
     if (!this.sendTo) { this.broadcast(msg); return; }
     const n = (this.edgeSeq.get(c.id) ?? 0) + 1;
@@ -189,7 +192,10 @@ export class CreatureSim {
     // The every-4th edge doubles as the resync: broadcast it so far
     // players AND watchers (no player record → unreachable via sendTo)
     // ride the same cadence; near players get every edge on top.
-    if (n % FAR_SKIP === 0) { this.broadcast(msg); return; }
+    // Retarget edges always broadcast — they carry the committed aim
+    // (tp), and a far client's replica otherwise waits ~4 emits for the
+    // next %4 broadcast, drifting ~8s × target speed off the aim.
+    if (n % FAR_SKIP === 0 || kind === 'retarget') { this.broadcast(msg); return; }
     for (const [pid, p] of this.players.getAllPlayers()) {
       const d2 = (p.position.x - c.x) ** 2 + (p.position.z - c.z) ** 2;
       if (d2 > NEAR_D2) {continue;}

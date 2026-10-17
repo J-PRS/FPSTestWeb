@@ -281,7 +281,10 @@ export type ServerMessage =
       /** Cumulative retarget-skip count since spawn — a retarget tick is
        *  a sim step the creature never took; absolute so missed edges
        *  still converge the replay's step budget. */
-      sk?: number }
+      sk?: number;
+      /** Live LCG state — a lost edge that consumed a crand draw desyncs
+       *  the replica's cooldown stream permanently without it. */
+      seed?: number }
   | { type: 'crawlDie'; id: number; position: Vec3; by?: string | null }
   | { type: 'crawlRoster'; crawlers: { id: number; position: Vec3; velocity: Vec3; uber: boolean; seed: number; species: string; state: string; targetId: string | null; tp?: Vec3 | null; t: number; sk?: number; ph?: number; od?: number }[] }
   // Roster for joiners/reconnects — current segment state of every live ball

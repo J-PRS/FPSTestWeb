@@ -55,20 +55,22 @@ describe('distance-tiered edge fanout', () => {
     return c;
   }
 
-  it('near players get every retarget; far players only the resync beat', () => {
+  it('retarget edges broadcast — the resync carrier reaches far replicas', () => {
     const { sim, sent, bcast } = makeRoom();
     addPlayerAt(sim, 'near', 10, 0);   // ~10m from crawler
     addPlayerAt(sim, 'far', 300, 0);   // ~300m — beyond NEAR_D2
     const c = crawlerAt(0, 0);
     priv(sim).crawlers.set(c.id, c);
 
-    for (let i = 0; i < 4; i++) priv(sim).edge(c, 'retarget');
+    for (let i = 0; i < 4; i++) {priv(sim).edge(c, 'retarget');}
 
-    const nearGot = sent.filter(s => s.pid === 'near').length;
-    const farGot = sent.filter(s => s.pid === 'far').length;
-    expect(nearGot).toBe(3);   // 3 of 4 (the 4th went broadcast)
-    expect(farGot).toBe(0);    // nothing direct — rides the broadcast beat
-    expect(bcast.length).toBe(1); // every-4th edge is the shared resync
+    // Retarget edges carry the committed aim (tp) — starving them behind
+    // the every-4th broadcast beat leaves a far replica chasing ~4 emits
+    // of stale aim. They broadcast always now; near/far tiering only
+    // applies to the non-aim edge kinds.
+    expect(sent.filter(s => s.pid === 'near').length).toBe(0);
+    expect(sent.filter(s => s.pid === 'far').length).toBe(0);
+    expect(bcast.length).toBe(4);
   });
 
   it('attack edges still reach near players (combat visuals survive tiering)', () => {
@@ -131,7 +133,7 @@ describe('brain buckets', () => {
     }
     const retargets = calls.filter((c) => c.kind === 'retarget');
     const perTick = new Map<number, number>();
-    for (const r of retargets) perTick.set(r.tick, (perTick.get(r.tick) ?? 0) + 1);
+    for (const r of retargets) {perTick.set(r.tick, (perTick.get(r.tick) ?? 0) + 1);}
     // Without buckets all 8 retargets land in one tick; with buckets they
     // spread ~1 per tick across the interval.
     expect(Math.max(...perTick.values())).toBeLessThanOrEqual(1);
@@ -189,7 +191,7 @@ describe('flyer family (rakk)', () => {
     // 30s window — covers the seeded cooldown + a full attack cycle.
     for (let i = 0; i < 600 && events.filter(e => e === 'bite').length === 0; i++) {
       const ev = stepFlyer(f, 0.05, field, { x: 0, y: 50, z: 0 }, true);
-      if (ev) events.push(ev);
+      if (ev) {events.push(ev);}
     }
     expect(events[0]).toBe('windup');
     expect(events).toContain('pounce');
@@ -238,7 +240,7 @@ describe('roller family', () => {
     const events: string[] = [];
     for (let i = 0; i < 400 && events.length === 0; i++) {
       const ev = stepRoller(r, 0.05, field, { x: 20, y: 1.6, z: 0 }, true);
-      if (ev) events.push(ev);
+      if (ev) {events.push(ev);}
     }
     expect(events[0]).toBe('bite');
     expect(r.x).toBeGreaterThan(5); // actually closed the distance
@@ -252,7 +254,7 @@ describe('roller family', () => {
     const tgt = { x: 1, y: 1.6, z: 0 };
     let bites = 0;
     for (let i = 0; i < 20; i++) { // 1s at melee range — cooldown gates re-bites
-      if (stepRoller(r, 0.05, field, tgt, true) === 'bite') bites++;
+      if (stepRoller(r, 0.05, field, tgt, true) === 'bite') {bites++;}
       r.x = 1; r.y = 1.6; r.z = 0; // hold it on the target
     }
     expect(bites).toBeLessThanOrEqual(2);
@@ -297,7 +299,7 @@ describe('slither family (snake)', () => {
     const events: string[] = [];
     for (let i = 0; i < 120 && events.length < 3; i++) {
       const ev = stepSlither(s, 0.05, field, tgt, true);
-      if (ev) events.push(ev);
+      if (ev) {events.push(ev);}
     }
     // Coil telegraph → lunge launch → contact bite, in order.
     expect(events[0]).toBe('windup');
@@ -311,7 +313,7 @@ describe('slither family (snake)', () => {
     const s = makeSimSlither(10, { x: 0, y: 0.5, z: 0 }, false, 21, 'snake');
     commitTarget(s, 'prey', tgt);
     s.strikeCd = 0;
-    for (let i = 0; i < 40 && s.state !== 'windup'; i++) stepSlither(s, 0.05, field, tgt, true);
+    for (let i = 0; i < 40 && s.state !== 'windup'; i++) {stepSlither(s, 0.05, field, tgt, true);}
     expect(s.state).toBe('windup');
     applySlitherDamage(s, 5);
     expect(s.state).toBe('slither'); // strike broken, not bit through it

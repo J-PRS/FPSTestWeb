@@ -54,6 +54,11 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
   const { crawlers, scarabs, rakks, rollers, gnats, snakes, banelings, totems, targets } = ctx;
   const netCrawlerById = new Map<number, NetBeing>();
   const appliedSkips = new Map<number, number>();
+  // Stamp order per creature: emit order IS stamp order, so an edge with
+  // an older t than the newest applied is a WAN reorder — applying it
+  // overwrites fresher position/target with stale truth (the fuzz's
+  // 110m stale-chase). Balls gate reorders the same way (isStaleSeg).
+  const lastEvtT = new Map<number, number>();
   // A P2P host carries no creature sim — peers keep client-side species.
   const serverCreatures = (): boolean => deps.lazyNetworkManager()?.authoritySims() ?? false;
 
@@ -114,10 +119,12 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
     deps.lazyDemoManager()?.recordCreatureSpawned(m.id, m.species ?? speciesOf(c), m.position);
   }
 
-  function netCrawlEvt(m: { id: number; kind: 'retarget' | 'windup' | 'pounce' | 'bite' | 'detonate' | 'charge' | 'fire' | 'blink'; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; targetId: string | null; tp?: { x: number; y: number; z: number } | null; t?: number; sk?: number }): void {
+  function netCrawlEvt(m: { id: number; kind: 'retarget' | 'windup' | 'pounce' | 'bite' | 'detonate' | 'charge' | 'fire' | 'blink'; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; targetId: string | null; tp?: { x: number; y: number; z: number } | null; t?: number; sk?: number; seed?: number }): void {
     const c = netCrawlerById.get(m.id);
     if (!c) {return;} // event raced ahead of spawn — roster/spawn covers it
     if (!finite(m.position) || !finite(m.velocity) || (m.tp && !finite(m.tp))) {deps.logger.warn(`crawl #${m.id} ${m.kind} dropped: non-finite vector`); return;}
+    if (m.t !== undefined && m.t < (lastEvtT.get(m.id) ?? -Infinity)) {return;} // WAN reorder — stale snap would overwrite fresher truth
+    if (m.t !== undefined) {lastEvtT.set(m.id, m.t);}
     if (m.kind === 'windup' && c.sim && !(c instanceof Totem)) {seedReplicaState(c.sim, 'windup');}
     // Server retargetDue() spends the whole tick on the re-aim — the
     // creature takes no step that tick. `sk` is the cumulative count of
@@ -131,6 +138,12 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
       c.netAcc -= SIM_TICK_DT; // pre-sk server: one skip per retarget edge seen
     }
     c.applyNetEdge(Object.assign({}, m, {kind: m.kind}));
+    // Live LCG rides every edge (roster contract, now on evts too): a
+    // missed edge that consumed a crand draw would offset the replica's
+    // whole cooldown stream permanently — re-sync on arrival instead.
+    if (c.sim && m.seed !== undefined && Number.isFinite(m.seed)) {
+      (c.sim as { rng: number }).rng = m.seed;
+    }
     deps.lazyDemoManager()?.recordCreatureEdge(m.id, m.position, m.velocity);
     if (m.kind === 'detonate' && c instanceof Baneling) {
       // The pop is an fx edge only — the server's blast funnel already
@@ -148,6 +161,7 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
     const mm = finite(m.position) ? m : Object.assign({}, m, {position: {x: c.pos.x, y: c.pos.y, z: c.pos.z}});
     netCrawlerById.delete(mm.id);
     appliedSkips.delete(m.id);
+    lastEvtT.delete(m.id);
     deps.lazyDemoManager()?.recordCreatureDie(m.id, m.position);
     c.dead = true; // updateSpecies' disposed check sweeps it out
     deps.lazyEffects()?.spawnJumpDust?.(new THREE.Vector3(m.position.x, m.position.y, m.position.z));
@@ -172,6 +186,7 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
         if ((r.species && r.species !== speciesOf(c)) || r.uber !== c.uber) {
           netCrawlerById.delete(r.id);
           appliedSkips.delete(r.id);
+          lastEvtT.delete(r.id);
           c.dead = true; // updateSpecies' disposed check sweeps it out
           netCrawlSpawn({ id: r.id, position: r.position, seed: r.seed, uber: r.uber, species: r.species, targetId: r.targetId, tp: r.tp, state: r.state });
           if (r.sk !== undefined && Number.isFinite(r.sk)) {appliedSkips.set(r.id, r.sk);}
