@@ -9,12 +9,25 @@
  *   bun _tools/sweeps/skiProbe.ts                    # every playable map
  *   bun _tools/sweeps/skiProbe.ts --map dunes        # one map
  *   bun _tools/sweeps/skiProbe.ts --balls 500 --secs 120 --seed 7
+ *   bun _tools/sweeps/skiProbe.ts --jet              # best-case jet traverse
  *
  * Read it: %>40 is the ski line (peak horizontal speed above real-ski
- * pace), still% = balls still rolling at the cap (frictionless loops —
- * good if they cross ground, bad if they're trapped oscillating in one
- * bowl), splat% = drops that hit hard enough to charge fall damage —
- * fast terrain that kills you is the katabatic failure mode.
+ * pace); splat% = drops that hit hard enough to charge fall damage (fast
+ * terrain that kills you is the katabatic failure mode); still% = balls
+ * still moving at the cap. still% alone is ambiguous — a frictionless
+ * ball rolling across good ground AND one oscillating forever in a single
+ * bowl both read as "still". loop% splits that out: still-moving balls
+ * whose NET displacement stayed under TRAP_R (they burned a long path
+ * without leaving the pocket), and drift = median net displacement. A
+ * healthy field has high still% with low loop%; a trap bowl is the
+ * reverse.
+ *
+ * --jet re-runs the probe with the jet pulse-boosted on the ground (cut
+ * once airborne, so it stays a traverse and not a flight) and the ball
+ * steering downhill every frame — an idealized jet-skier. It is the
+ * complementary layer to the pure-ski pass: geometry that reads flat can
+ * still be traversable on the tank, so the two bracket "what momentum
+ * alone gives" against "what the tank can rescue".
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -30,8 +43,12 @@ const BALLS = Number(arg('balls', '256'));
 const SECS = Number(arg('secs', '90'));
 const SEED = Number(arg('seed', '1'));
 const MAP = arg('map', '');
+const JET = process.argv.includes('--jet');
 const REST_SPEED = 1.5;   // m/s h-speed = "stopped"
 const REST_HOLD = 1.0;    // sustained seconds under REST_SPEED = rested
+const TRAP_R = 40;        // m — net displacement under this while still rolling = confined
+const TRAP_PATH = 300;    // m — path long enough that small net = a loop, not a short roll
+const JET_TARGET = 25;    // m/s h-speed the jet pass boosts to hold — pulse, don't fly
 
 // Deterministic PRNG — same seed = same drop pattern across runs.
 function mulberry32(a: number): () => number {
@@ -63,6 +80,8 @@ interface Ball {
   lowT: number;
   rested: boolean;
   restX: number; restZ: number;
+  startX: number; startZ: number;
+  lastX: number; lastZ: number;
   maxImpact: number;
   splats: number;
 }
@@ -76,6 +95,7 @@ function runMap(name: string): void {
     spec.heightScale ?? 1, spec.tileSize,
   );
   const surf = hmSurface(field);
+  const _nrm = { x: 0, y: 0, z: 0 };
   const span = field.worldScale ?? 1500;
   const rng = mulberry32(SEED);
   const balls: Ball[] = [];
@@ -86,17 +106,30 @@ function runMap(name: string): void {
       vel: { x: 0, y: 0, z: 0 },
       yaw: 0, pitch: 0, onGround: true,
     });
-    sim.setInput({ skiHeld: true });            // the ice cube
+    sim.setInput(JET ? { skiHeld: true, forward: 1 } : { skiHeld: true }); // the ice cube
     sim.eyeHeight = 0.4; sim.bodyRadius = 0.4;  // ball, not a body
-    balls.push({ sim, peakH: 0, peakV: 0, dist: 0, air: 0, moving: 0, lowT: 0, rested: false, restX: 0, restZ: 0, maxImpact: 0, splats: 0 });
+    balls.push({ sim, peakH: 0, peakV: 0, dist: 0, air: 0, moving: 0, lowT: 0, rested: false, restX: 0, restZ: 0, startX: x, startZ: z, lastX: x, lastZ: z, maxImpact: 0, splats: 0 });
   }
   const dt = 1 / 30;
   for (let t = 0; t < SECS; t += dt) {
     let live = 0;
     for (const b of balls) {
       if (b.rested) {continue;}
+      if (JET) {
+        // Idealized jet-skier: face the fall line so thrust aims downhill,
+        // and PULSE the jet to hold JET_TARGET rather than burning it flat
+        // — continuous thrust just flies (60s airtime, no ground contact,
+        // nothing learned). Pulsing models a skier boosting to keep pace,
+        // so dist/loop/splat stay comparable to the pure-ski pass.
+        const st = b.sim.state;
+        const n = surf.getNormal(st.pos.x, st.pos.z, _nrm);
+        if (Math.hypot(n.x, n.z) > 1e-4) { st.yaw = Math.atan2(n.x, n.z); }
+        const hv = Math.hypot(st.vel.x, st.vel.z);
+        b.sim.setInput({ jetHeld: st.onGround && hv < JET_TARGET, forward: 1 });
+      }
       b.sim.update(dt);
       const s = b.sim.state;
+      b.lastX = s.pos.x; b.lastZ = s.pos.z;
       const v = Math.hypot(s.vel.x, s.vel.y, s.vel.z);
       const hv = Math.hypot(s.vel.x, s.vel.z);
       if (!Number.isFinite(v) || !Number.isFinite(s.pos.x + s.pos.y + s.pos.z)) { b.rested = true; b.restX = s.pos.x; b.restZ = s.pos.z; continue; }
@@ -118,19 +151,24 @@ function runMap(name: string): void {
   // Basin concentration: modal rest cell at 100m grid — high share = the
   // map funnels everyone to one pocket (loot floor / death bowl).
   const cells = new Map<string, number>();
-  let rested = 0, splatters = 0, airSum = 0;
-  const peaks: number[] = [], dists: number[] = [], moves: number[] = [];
+  let rested = 0, splatters = 0, airSum = 0, looped = 0;
+  const peaks: number[] = [], dists: number[] = [], moves: number[] = [], nets: number[] = [];
   for (const b of balls) {
     peaks.push(b.peakH); dists.push(b.dist); moves.push(b.moving);
     airSum += b.air;
     if (b.maxImpact >= MOVEMENT_CONFIG.fallDamageMinSpeed) {splatters += 1;}
+    const ex = b.rested ? b.restX : b.lastX, ez = b.rested ? b.restZ : b.lastZ;
+    const net = Math.hypot(ex - b.startX, ez - b.startZ);
+    nets.push(net);
+    // A loop, not a traverse: still rolling, long path, but never left the pocket.
+    if (!b.rested && net < TRAP_R && b.dist > TRAP_PATH) {looped += 1;}
     if (b.rested) {
       rested += 1;
       const k = `${Math.round(b.restX / 100)},${Math.round(b.restZ / 100)}`;
       cells.set(k, (cells.get(k) ?? 0) + 1);
     }
   }
-  peaks.sort((a, b2) => a - b2); dists.sort((a, b2) => a - b2); moves.sort((a, b2) => a - b2);
+  peaks.sort((a, b2) => a - b2); dists.sort((a, b2) => a - b2); moves.sort((a, b2) => a - b2); nets.sort((a, b2) => a - b2);
   const med = (a: number[]): number => a[Math.floor(a.length / 2)]!;
   const p90 = (a: number[]): number => a[Math.floor(a.length * 0.9)]!;
   const pct = (n: number): string => `${Math.round((n / BALLS) * 100)}%`;
@@ -144,11 +182,12 @@ function runMap(name: string): void {
     `dist:${med(dists).toFixed(0).padStart(5)}/${p90(dists).toFixed(0).padStart(5)}m ` +
     `move:${med(moves).toFixed(0).padStart(3)}s air:${(airSum / BALLS).toFixed(1).padStart(4)}s ` +
     `still:${pct(BALLS - rested).padStart(5)} splat:${pct(splatters).padStart(5)} ` +
+    `loop:${pct(looped).padStart(5)} drift:${med(nets).toFixed(0).padStart(4)}m ` +
     `basin:${rested ? Math.round((top / rested) * 100) : 0}%`,
   );
 }
 
-console.log(`skiProbe — ${BALLS} frictionless balls, ${SECS}s cap, seed ${SEED}, dt 1/30`);
+console.log(`skiProbe — ${BALLS} frictionless balls, ${SECS}s cap, seed ${SEED}, dt 1/30${JET ? '  [jet pass: ground-boosted, downhill-steered]' : ''}`);
 for (const n of names) {
   try { runMap(n); } catch (e) { console.log(`${n.padEnd(22)} FAILED ${(e as Error).message}`); }
 }

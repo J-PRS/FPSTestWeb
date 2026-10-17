@@ -37,6 +37,32 @@ const TPI_REGION_M = 150; // TPI regional window
 const FALL_MIN_DEG = 6;   // a fall line needs at least this much grade to be worth it
 const FALL_STEP_CAP = 4000;
 
+// The reference population is every map spec whose terrain lives under
+// maps/t2/ — the T2 ports ARE the "what good looks like" standard. With
+// --ref each input is located inside that population per axis, so a value
+// reads as a percentile, not an absolute verdict. Higher/lower is not
+// good/bad by itself; the axis says WHY a field sits where it does.
+const REF_METRICS = [
+  ['RELIEF', 'relief',     (r) => r.relief,       'm', 1],
+  ['GRADE',  'med slope',  (r) => r.medSlope,     '°', 0],
+  ['GRADE',  'p90 slope',  (r) => r.p90Slope,     '°', 0],
+  ['SCALE',  'coarse/fine', (r) => r.gradeRatio,  '', 2],
+  ['SCALE',  'grade@64m',  (r) => r.coarseSlope,  '°', 0],
+  ['SHAPE',  'chatter',    (r) => r.chatter,      'm', 1],
+  ['LINE',   'fall drop p90', (r) => r.fallDropP90, 'm', 0],
+  ['LINE',   'fall len p90',  (r) => r.fallLenP90,  'm', 0],
+  ['PADS',   'walkable',   (r) => r.walk,         '%', 0],
+];
+const PCT_SCALE = { walkable: 100 }; // fraction -> percent for display
+
+/** Fraction of ref values strictly below v (0..1), on an ascending array. */
+function fracBelow(sorted, v) {
+  let lo = 0, hi = sorted.length;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (sorted[m] < v) { lo = m + 1; } else { hi = m; } }
+  return lo / sorted.length;
+}
+const pctlWord = (p) => (p < 0.1 ? 'floor' : p < 0.25 ? 'low' : p < 0.75 ? 'mid' : p < 0.9 ? 'high' : 'top');
+
 function spec(bin) { try { return JSON.parse(fs.readFileSync(bin.replace(/\.bin$/, '.json'), 'utf8')); } catch { return {}; } }
 
 function mulberry32(a) {
@@ -209,13 +235,58 @@ function rate(argPath, forced) {
   };
 }
 
+/** Rate every T2-port spec (maps/*.json whose terrain lives under t2/). */
+function referenceResults() {
+  const mapsDir = path.join(__dirname, '..', '..', 'maps');
+  const refs = [];
+  for (const file of fs.readdirSync(mapsDir)) {
+    if (!file.endsWith('.json')) { continue; }
+    const full = path.join(mapsDir, file);
+    let s; try { s = JSON.parse(fs.readFileSync(full, 'utf8')); } catch { continue; }
+    const t = (s.terrain ?? '').replaceAll('\\', '/');
+    if (!t.startsWith('t2/')) { continue; }
+    try { const r = rate(full, {}); if (r) { r.name = path.basename(file, '.json'); refs.push(r); } } catch { /* skip unreadable */ }
+  }
+  return refs;
+}
+
+/** Per-metric distributions (ascending) + a median/IQR summary. */
+function refIndex(refs) {
+  const q = (sorted, p) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))];
+  const idx = {};
+  for (const [axis, label, get, unit, dp] of REF_METRICS) {
+    const vals = refs.map(get).filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
+    if (vals.length === 0) { continue; }
+    idx[label] = { axis, label, get, unit, dp, vals, med: q(vals, 0.5), q1: q(vals, 0.25), q3: q(vals, 0.75) };
+  }
+  return idx;
+}
+
+const dispVal = (label, v) => v * (PCT_SCALE[label] ?? 1);
+
 const bins = process.argv.slice(2).filter((a) => a.endsWith('.bin') || a.endsWith('.json'));
 const out = [];
 for (const bin of bins) {
   try { const r = rate(bin, { hs: opt('hs'), tile: opt('tile') }); if (r) { r.name = bin.endsWith('.json') ? path.basename(bin, '.json') : r.name; out.push(r); } } catch (e) { console.error(bin, 'FAILED', e.message); }
 }
 
-if (WANT_JSON) { console.log(JSON.stringify(out, null, 2)); process.exit(0); }
+// --ref: locate each result inside the T2-port population, per axis.
+let REF = null, REF_IDX = null;
+if (process.argv.includes('--ref')) {
+  REF = referenceResults();
+  REF_IDX = refIndex(REF);
+  for (const r of out) {
+    r.percentiles = {};
+    for (const label of Object.keys(REF_IDX)) {
+      const m = REF_IDX[label];
+      const v = m.get(r);
+      if (!Number.isFinite(v)) { continue; }
+      r.percentiles[label] = { value: v, pctl: fracBelow(m.vals, v) };
+    }
+  }
+}
+
+if (WANT_JSON) { console.log(JSON.stringify(REF ? { refN: REF.length, maps: out } : out, null, 2)); process.exit(0); }
 
 const f = (v, d = 0) => v.toFixed(d);
 for (const r of out) {
@@ -228,5 +299,18 @@ for (const r of out) {
   console.log(`  SHAPE   convex ${f(r.convex * 100)}%  concave ${f(r.concave * 100)}%  planar ${f(r.planar * 100)}%  ridge ${f(r.ridge * 100)}%  valley ${f(r.valley * 100)}%  chatter ${f(r.chatter, 1)}m`);
   console.log(`  LINE    fall-line drop med ${f(r.fallDropMed)}m / p90 ${f(r.fallDropP90)}m  len med ${f(r.fallLenMed)}m / p90 ${f(r.fallLenP90)}m  flow-top1% ${r.channelTopShare < 0 ? 'n/a' : f(r.channelTopShare * 100) + '%'}`);
   console.log(`  PADS    walkable(<38°) ${f(r.walk * 100)}%  flat(<3°) ${f(r.flat * 100)}%  area ${f(r.km2, 2)}km²`);
+  if (REF_IDX) {
+    console.log(`  ── vs ${REF ? REF.length : 0} T2 ports ────────────────────────────────`);
+    for (const label of Object.keys(REF_IDX)) {
+      const m = REF_IDX[label], p = r.percentiles[label];
+      if (!p) { continue; }
+      const val = f(dispVal(label, p.value), m.dp) + m.unit;
+      const refMed = f(dispVal(label, m.med), m.dp) + m.unit;
+      const refIqr = `${f(dispVal(label, m.q1), m.dp)}–${f(dispVal(label, m.q3), m.dp)}${m.unit}`;
+      const bar = '█'.repeat(Math.max(0, Math.round(p.pctl * 10))).padEnd(10, '·');
+      console.log(`  ${m.axis.padEnd(6)} ${label.padEnd(13)} ${val.padStart(7)}  P${String(Math.round(p.pctl * 100)).padStart(2, '0')} ${bar} ${pctlWord(p.pctl).padEnd(5)}  ref med ${refMed} (IQR ${refIqr})`);
+    }
+    console.log('');
+  }
   console.log('');
 }
