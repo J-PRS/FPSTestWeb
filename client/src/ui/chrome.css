@@ -559,6 +559,9 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .lb-tabs .lb-btn { flex: 1; padding: 5px 0; text-align: center; font-size: 0.62rem; opacity: 0.6; }
 .lb-tabs .lb-btn.active { opacity: 1; background: rgba(58,167,255,0.18); color: #fff; border-color: #3aa7ff; }
 .lb-maplist .lb-btn.active { background: rgba(58,167,255,0.18); color: #fff; border-color: #3aa7ff; }
+/* More rows below the scroll cap — the scrollbar is hidden, so the
+   bottom fade is the only "keep scrolling" affordance. */
+.lb-maplist.lb-more { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent); }
 .lb-room { display: flex; align-items: center; gap: 2px; }
 .lb-room .meta { margin-left: auto; float: none; }
 

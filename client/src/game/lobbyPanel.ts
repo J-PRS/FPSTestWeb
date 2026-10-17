@@ -205,13 +205,17 @@ function modeToggleRow(sel: HTMLSelectElement): HTMLDivElement {
 function mapListBox(sel: HTMLSelectElement): HTMLDivElement {
   const box = document.createElement('div');
   box.className = 'lb-maplist';
-  box.style.cssText = 'flex:0 0 44%;min-width:0;max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;';
+  // Row pitch is fixed (14 line + 14 pad + 2 border = 30px) so the cap
+  // can tile whole rows — a mid-row cut read as a clipped item, not
+  // "scroll for more". 12 rows land at 382px; the .lb-more fade is the
+  // overflow hint now that the scrollbar is hidden.
+  box.style.cssText = 'flex:0 0 44%;min-width:0;max-height:382px;overflow-y:auto;scrollbar-width:none;display:flex;flex-direction:column;gap:2px;';
   const rebuild = (): void => {
     box.textContent = '';
     for (const o of sel.options) {
       const b = btn(o.textContent ?? o.value);
       b.dataset.v = o.value;
-      b.style.cssText = 'flex:none;text-align:left;font-size:0.66rem;padding:7px 9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+      b.style.cssText = 'flex:none;text-align:left;font-size:0.66rem;line-height:14px;padding:7px 9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
       b.classList.toggle('active', o.value === sel.value);
       b.addEventListener('click', (): void => {
         sel.value = o.value;
@@ -219,6 +223,7 @@ function mapListBox(sel: HTMLSelectElement): HTMLDivElement {
       });
       box.append(b);
     }
+    box.classList.toggle('lb-more', box.scrollHeight > box.clientHeight + 1);
   };
   const sync = (): void => {
     for (const x of box.children) {
