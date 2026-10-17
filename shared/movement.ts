@@ -72,6 +72,18 @@ export const MOVEMENT_CONFIG = {
   // the light one takes the shove (Tribes bodyblock, not a brick wall).
   playerRadius: 0.6,
   bodyRestitution: 0.55,
+  // Gameplay water (a map `water` block — see MoveSim.waterLevel). A body
+  // whose feet are below the surface is a buoyant volume: linear drag
+  // bleeds every axis (deterministic — no exp), buoyancy cancels gravity
+  // at a partial submergence so a swimmer floats with the eye at the
+  // surface, a sink clamp keeps a diver off the floor, and a water landing
+  // waives fall damage. All scaled by submersion; a map with no water
+  // level runs none of it, so every dry map is bit-identical.
+  waterDrag: 3.2,        // per-second linear damping at full submergence
+  waterBuoy: 46,         // upward accel at full submergence (> |GRAVITY|)
+  waterSinkSpeed: 5,     // terminal sink (m/s) — no free dive to the bed
+  waterSwimAccel: 260,   // horizontal wish push while submerged (m/s²)
+  waterSwimSpeed: 6,     // horizontal speed cap in water (m/s)
 } as const;
 
 /** Jet/skill energy economy — the authoritative copy for the server
@@ -204,6 +216,14 @@ export class MoveSim {
   /** Contact half-width — set per armor class like mass/eyeHeight; a
    *  narrow class is harder to block, same as its hit capsule. */
   bodyRadius: number = MOVEMENT_CONFIG.playerRadius;
+  /** Sea-surface height in world meters — the map's water.level. Undefined
+   *  on a dry map, where water physics is exactly zero. Every host that
+   *  runs a sim (server shadow, client prediction, bots, judge probe)
+   *  copies the level in so the replay stays identical. */
+  waterLevel?: number;
+  /** 0..1 submersion (feet-below-surface / eyeHeight) at the last step —
+   *  host/HUD readout, transient by design (never carried on the wire). */
+  waterSubmersion = 0;
 
   /** Other players' capsules this tick — contact resolve reads it after
    *  terrain so a stand mate is as solid as the deck under him. Hosts
@@ -445,6 +465,38 @@ export class MoveSim {
     // grounded silently capped downhill speed at terminal/sin(slope).
     s.vel.y += GRAVITY * dt;
     if (!s.onGround && s.vel.y < -MOVEMENT_CONFIG.terminalVelocity) {s.vel.y = -MOVEMENT_CONFIG.terminalVelocity;}
+    // Gameplay water: below the surface the body is buoyant. Depth is how
+    // far the FEET sit under; submersion (0..1) scales every force. Drag
+    // runs on all three axes so a fast entry bleeds off, buoyancy cancels
+    // gravity near sub≈0.6 (eye at the surface), the sink clamp stops a
+    // free dive to the bed, and a horizontal swim force + cap keeps water
+    // playable. Past half-submerged the terrain glue is cleared — buoyancy,
+    // not the floor, holds the body. No level → none of this runs.
+    if (this.waterLevel === undefined) {
+      this.waterSubmersion = 0;
+    } else {
+      const depth = this.waterLevel - (s.pos.y - this.eyeHeight);
+      if (depth > 0) {
+        const sub = Math.min(depth / this.eyeHeight, 1);
+        this.waterSubmersion = sub;
+        s.vel.y += MOVEMENT_CONFIG.waterBuoy * sub * dt;
+        const k = Math.max(0, 1 - MOVEMENT_CONFIG.waterDrag * sub * dt);
+        s.vel.x *= k; s.vel.y *= k; s.vel.z *= k;
+        if (sub > 0.15) {
+          const acc = MOVEMENT_CONFIG.waterSwimAccel * sub * dt;
+          s.vel.x += dir.x * acc; s.vel.z += dir.z * acc;
+          const hs = Math.hypot(s.vel.x, s.vel.z);
+          if (hs > MOVEMENT_CONFIG.waterSwimSpeed) {
+            const f = MOVEMENT_CONFIG.waterSwimSpeed / hs;
+            s.vel.x *= f; s.vel.z *= f;
+          }
+        }
+        if (s.vel.y < -MOVEMENT_CONFIG.waterSinkSpeed) {s.vel.y = -MOVEMENT_CONFIG.waterSinkSpeed;}
+        if (sub > 0.5) { s.onGround = false; this.bandDist = Infinity; }
+      } else {
+        this.waterSubmersion = 0;
+      }
+    }
     // T1 ground glue: while grounded AT CONTACT distance, cancel
     // gravity's into-surface share BEFORE integrating — the Torque
     // order (normal force kills acc·n each tick) keeps velocity
@@ -573,7 +625,9 @@ export class MoveSim {
     // any surface's -v·n, not just floors).
     this._solidImpact.v = 0;
     this.surface.resolveBody?.(s, this.eyeHeight, this._solidImpact);
-    this.landingImpact = Math.max(this.landingImpact, this._solidImpact.v);
+    // A water landing is absorbed — splash, no hurt. Only dry contacts
+    // (and the submerged body's own slams) feed the fall-damage meter.
+    if (this.waterSubmersion <= 0) {this.landingImpact = Math.max(this.landingImpact, this._solidImpact.v);}
     const reach = s.pos.y - this.eyeHeight + MOVEMENT_CONFIG.stepUp;
     const groundY = this.surface.getHeight(s.pos.x, s.pos.z, reach) + this.eyeHeight;
     const dist = s.pos.y - groundY;
@@ -590,7 +644,7 @@ export class MoveSim {
       // keeps the body tracking terrain instead of floating.
       // The pre-kill -v·n is T1's impactDot — fall damage reads it.
       if (velDotN < 0) {
-        this.landingImpact = Math.max(this.landingImpact, -velDotN);
+        if (this.waterSubmersion <= 0) {this.landingImpact = Math.max(this.landingImpact, -velDotN);}
         s.vel.x -= n.x * velDotN; s.vel.y -= n.y * velDotN; s.vel.z -= n.z * velDotN;
       }
 

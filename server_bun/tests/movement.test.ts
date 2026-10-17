@@ -20,7 +20,7 @@ const mk = (over: Partial<MoveState> = {}): MoveSim =>
     yaw: 0, pitch: 0, onGround: true, ...over,
   });
 const run = (s: MoveSim, seconds: number, dt = 1 / 60) => {
-  for (let t = 0; t < seconds; t += dt) s.update(dt);
+  for (let t = 0; t < seconds; t += dt) {s.update(dt);}
 };
 
 describe('movement', () => {
@@ -36,7 +36,7 @@ describe('movement', () => {
     const a = mk(), b = mk();
     a.setInput({ forward: 1 }); b.setInput({ forward: 1 });
     a.update(0.1);                                   // one call
-    for (let i = 0; i < 10; i++) b.update(0.01);     // ten calls, same span
+    for (let i = 0; i < 10; i++) {b.update(0.01);}     // ten calls, same span
     expect(a.state.pos).toEqual(b.state.pos);
     expect(a.state.vel).toEqual(b.state.vel);
   });
@@ -71,7 +71,7 @@ describe('movement', () => {
   });
 
   it('airborne fall clamps at terminal velocity', () => {
-    const s = mk({ pos: { x: 0, y: 10000, z: 0 }, onGround: false });
+    const s = mk({ pos: { x: 0, y: 10_000, z: 0 }, onGround: false });
     run(s, 4); // terminal needs ~3.6s of gravity at 28 m/s²
     expect(s.state.vel.y).toBeGreaterThanOrEqual(-MOVEMENT_CONFIG.terminalVelocity - 0.001);
     expect(s.state.vel.y).toBeLessThanOrEqual(-MOVEMENT_CONFIG.terminalVelocity + 0.5);
@@ -141,9 +141,51 @@ describe('movement', () => {
     let prevVy = 0;
     for (let i = 0; i < 240; i++) { // 4s
       s.update(1 / 60);
-      if (prevVy <= 2 && s.state.vel.y > 2) apexes++;
+      if (prevVy <= 2 && s.state.vel.y > 2) {apexes++;}
       prevVy = s.state.vel.y;
     }
     expect(apexes).toBeGreaterThanOrEqual(2); // hopped repeatedly, not once
+  });
+});
+
+describe('movement — water', () => {
+  // Flat floor at y=0, sea surface at 5 → a real water column to fall into.
+  const intoWater = (level = 5): MoveSim => {
+    const s = mk({ pos: { x: 0, y: 40, z: 0 }, onGround: false });
+    s.waterLevel = level;
+    return s;
+  };
+
+  it('a body dropped into water floats with the eye at the surface', () => {
+    const s = intoWater();
+    run(s, 5);
+    // Equilibrium: feet sub≈0.6, so the eye rides just above the surface.
+    expect(s.state.pos.y).toBeGreaterThan(5);
+    expect(s.state.pos.y).toBeLessThan(6.2);
+    expect(Math.abs(s.state.vel.y)).toBeLessThan(1.5);
+    expect(s.waterSubmersion).toBeGreaterThan(0.4);
+  });
+
+  it('entering water absorbs the fall — no landing impact', () => {
+    const s = intoWater();
+    let impact = 0;
+    for (let t = 0; t < 4; t += 1 / 60) {s.update(1 / 60); impact = Math.max(impact, s.landingImpact);}
+    expect(impact).toBe(0);
+  });
+
+  it('a dry map runs none of it — the same drop lands hard', () => {
+    const s = mk({ pos: { x: 0, y: 40, z: 0 }, onGround: false });
+    let impact = 0;
+    for (let t = 0; t < 4; t += 1 / 60) {s.update(1 / 60); impact = Math.max(impact, s.landingImpact);}
+    expect(s.waterSubmersion).toBe(0);
+    expect(impact).toBeGreaterThan(0);
+  });
+
+  it('the swim force moves a submerged body horizontally', () => {
+    const s = intoWater();
+    run(s, 4); // settle at the surface first
+    s.setInput({ forward: 1 });
+    run(s, 1);
+    expect(Math.hypot(s.state.vel.x, s.state.vel.z)).toBeGreaterThan(1);
   });
 });

@@ -6,13 +6,14 @@
 import * as THREE from 'three';
 import { mkGltfLoader } from '../../gltfLoad';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import type { StructureSpec, InteriorSpec, WeatherSpec, AtmosphereSpec } from '../../../../shared/mapSpec.js';
+import type { StructureSpec, InteriorSpec, WeatherSpec, AtmosphereSpec, WaterSpec } from '../../../../shared/mapSpec.js';
 import { Ball } from '../../entities/balls.js';
 import { urlParams } from '../../core/params.js';
 import type { NetCtx } from './ctx.js';
 import { loadHeightfieldBin, setHeightScale, setWorldScale } from '../../world/heightmap.js';
 import { TERRAIN_HEIGHT_SCALE, TERRAIN_WORLD_SCALE, FOG_COLOR, FOG_START, FOG_END } from '../../core/config.js';
-import { setFogBase, setFogHorizon } from '../../world/directionalFog.js';
+import { setFogBase, setFogHorizon } from '../../world/directionalFog.js';
+import { applyWaterSurface } from '../../world/waterSurface.js';
 import { resolveServerEndpoints } from '../../networking/endpoints.js';
 import { loadLastRoomMap, pingServer } from './lastRoom.js';
 // Exports are GL-layout (verified by _tools/tershot/seamcheck.py: py's
@@ -22,7 +23,7 @@ import { loadLastRoomMap, pingServer } from './lastRoom.js';
 
 const _q = new THREE.Quaternion();
 
-export type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; terrainTex?: string; terrainPreset?: number; sky?: string; weather?: WeatherSpec; atmosphere?: AtmosphereSpec; interiors?: InteriorSpec[] };
+export type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; water?: WaterSpec; terrainTex?: string; terrainPreset?: number; sky?: string; weather?: WeatherSpec; atmosphere?: AtmosphereSpec; interiors?: InteriorSpec[] };
 
 /** Mission haze — spec.fog re-tints the whole atmosphere. distance → fog
  *  near, visible → fog far (T2's authored range for the terrain). Absent
@@ -48,6 +49,14 @@ export function applyMapFog(ctx: NetCtx, fog?: MapSnapshot['fog']): void {
  *  engine default trio, so a pre-weather map renders unchanged. */
 export function applyWeather(ctx: NetCtx, weather?: WeatherSpec): void {
   ctx.deps.lazyWeather().setWeather(weather);
+}
+
+/** Gameplay water — builds/removes the sea surface and hands the level to
+ *  local prediction so the client floats exactly like the server shadow.
+ *  Absent = dry map, plane removed. */
+export function applyWater(ctx: NetCtx, water?: WaterSpec): void {
+  ctx.deps.lazyPlayer().movement.setWaterLevel(water?.level);
+  applyWaterSurface(ctx.deps.lazyScene(), water);
 }
 
 /** Per-map procedural-sky tuning — reaches the AtmosphericSky instance

@@ -551,6 +551,7 @@ sh.divergences += 1;
     // The probe replays the SAME body — a heavy's weaker jets would
     // replay as a phantom climb if mass/eye fell back to defaults.
     probe.mass = sh.sim.mass; probe.eyeHeight = sh.sim.eyeHeight;
+    probe.waterLevel = sh.sim.waterLevel;
     probe.restore(anchor.snap);
     // The report is a snapshot from one uplink-transit ago — replaying to
     // simTicks overshoots the probe past the report's true comparison

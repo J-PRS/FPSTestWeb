@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import { buildStructures, buildArenaDome, clearArenaDome } from '../../world/mapStructures.js';
-import type { StructureSpec, InteriorSpec, WeatherSpec, AtmosphereSpec } from '../../../../shared/mapSpec.js';
+import type { StructureSpec, InteriorSpec, WeatherSpec, AtmosphereSpec, WaterSpec } from '../../../../shared/mapSpec.js';
 import { setAmbientCaps } from '../species/ambientCaps.js';
 import { applyStructureSpecs, clearExtraStructures } from '../structureSpecs.js';
 import type { GameStatePlayer, LocalPlayerState } from '../../../../shared/protocol.js';
@@ -17,7 +17,7 @@ import type { TeamId } from '../../../../shared/teams.js';
 import { finiteVec } from '../../../../shared/wire.js';
 import { saveLastRoomMap } from './lastRoom.js';
 import { dropVolatileWorldFx } from './resync.js';
-import { applyTerrain, applyInteriors, applyMapFog, applyWeather, applyAtmosphere, type MapSnapshot } from './mapAssets.js';
+import { applyTerrain, applyInteriors, applyMapFog, applyWeather, applyAtmosphere, applyWater, type MapSnapshot } from './mapAssets.js';
 import type { PickupKind } from '../../../../shared/pickups.js';
 // Boot/terrain machinery lives in mapAssets.js — re-exported so main.ts
 // and lastRoom.ts keep a single import site.
@@ -246,6 +246,7 @@ export function wireWorld(ctx: NetCtx): void {
     applyMapFog(ctx, map.fog);
     applyWeather(ctx, map.weather);
     applyAtmosphere(ctx, map.atmosphere);
+    applyWater(ctx, map.water);
     applyInteriors(ctx, map.interiors)
       .catch((error): void => ctx.deps.logger.warn(`applyInteriors failed: ${error instanceof Error ? error.message : String(error)}`));
     resolveServerEndpoints().then(({ httpUrl }): void => saveLastRoomMap(httpUrl, map))
@@ -254,7 +255,7 @@ export function wireWorld(ctx: NetCtx): void {
   };
 
   // Initial connection and reconnection — full roster + local restore.
-  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: PickupKind }[]; flags?: { team: TeamId; pos: { x: number; y: number; z: number }; home?: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; team?: string }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; terrainTex?: string; terrainPreset?: number; sky?: string; weather?: WeatherSpec; atmosphere?: AtmosphereSpec; interiors?: InteriorSpec[] } }): void => {
+  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: PickupKind }[]; flags?: { team: TeamId; pos: { x: number; y: number; z: number }; home?: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; team?: string }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; water?: WaterSpec; terrainTex?: string; terrainPreset?: number; sky?: string; weather?: WeatherSpec; atmosphere?: AtmosphereSpec; interiors?: InteriorSpec[] } }): void => {
     logger.info(`gameState room=${roomInfo?.room} mapKeys=${roomInfo?.map ? Object.keys(roomInfo.map).join(',') : 'none'}`);
     // The snapshot replaces the world — any volatile layer still alive
     // pre-reconnect is stale fast-forward, not truth. Purge before
@@ -320,6 +321,7 @@ function applyMapSnapshot(ctx: NetCtx, map?: MapSnapshot): void {
   applyMapFog(ctx, map?.fog);
   applyWeather(ctx, map?.weather);
   applyAtmosphere(ctx, map?.atmosphere);
+  applyWater(ctx, map?.water);
   applyTerrain(ctx, map?.terrain ?? null, map?.terrainTex, map?.sky, map?.heightScale, map?.tileSize, map?.terrainPreset)
     .catch((error): void => ctx.deps.logger.warn(`applyTerrain failed: ${error instanceof Error ? error.message : String(error)}`));
   applyInteriors(ctx, map?.interiors)

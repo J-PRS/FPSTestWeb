@@ -396,6 +396,7 @@ export class Room {
     // forced close so it shows in room health, not just the close log.
     this.connections.onDrowned = (): void => this.healthBump('drownedSock', 1);
     this.moveSim.attachStructures(this.structs.eff());
+    this.moveSim.setWaterLevel(this.spec.water?.level);
     // Shield soak burns the same tank the jet model owns — without this
     // a shielded player under fire runs the sim tank ahead of the real one.
     this.players.energyBurn = (pid, n): boolean => this.moveSim.drainEnergy(pid, n);
@@ -808,6 +809,7 @@ export class Room {
       heightScale: this.spec.heightScale,
       tileSize: this.spec.tileSize,
       fog: this.spec.fog,
+      water: this.spec.water,
       terrainTex: this.spec.terrainTex,
       terrainPreset: this.spec.terrainPreset,
       sky: this.spec.sky,
@@ -1127,6 +1129,7 @@ export class Room {
       heightScale: spec.heightScale,
       tileSize: spec.tileSize,
       fog: spec.fog,
+      water: spec.water,
       terrainTex: spec.terrainTex,
       terrainPreset: spec.terrainPreset,
       sky: spec.sky,

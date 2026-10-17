@@ -40,6 +40,10 @@ const ramp = (t) => {
 const bin = process.argv[2];
 if (!bin) { console.error('usage: hillshade.js <bin> [out.png]'); process.exit(1); }
 const out = process.argv[3] ?? bin.replace(/\.bin$/, '.relief.png');
+// --water=<meters>: tint everything below the map's sea level so a coastal
+// field's shoreline/shelf reads at a glance. Off unless given.
+const waterArg = process.argv.find((s) => s.startsWith('--water='));
+const waterM = waterArg ? Number(waterArg.slice(8)) : NaN;
 const buf = fs.readFileSync(bin);
 const w = buf.readUInt32LE(0), h = buf.readUInt32LE(4);
 if (w !== h || buf.byteLength !== 8 + w * h) { console.error('bad header'); process.exit(1); }
@@ -74,7 +78,14 @@ for (let y = 0; y < h; y += 1) {
     const s = Math.min(1.5, shade * 1.25 + 0.12);
     // elevation ramp from the byte value directly
     const el = data[i] / 255;
-    const c = ramp(el);
+    let c = ramp(el);
+    // Sea tint below the requested water level — a flat wash so the shelf
+    // and deep floor still show their relief through it.
+    if (Number.isFinite(waterM) && hC < waterM) {
+      const deep = Math.min(1, (waterM - hC) / 12);
+      const mixTo = (ch, tgt) => ch + (tgt - ch) * (0.45 + 0.4 * deep);
+      c = [mixTo(c[0], 40), mixTo(c[1], 95), mixTo(c[2], 140)];
+    }
     rgb[i * 3] = Math.min(255, c[0] * s);
     rgb[i * 3 + 1] = Math.min(255, c[1] * s);
     rgb[i * 3 + 2] = Math.min(255, c[2] * s);

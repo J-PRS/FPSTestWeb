@@ -174,6 +174,7 @@ export class BotMpc {
           snap: sim.snapshot(),
           mass: sim.mass, eyeHeight: sim.eyeHeight, bodyRadius: sim.bodyRadius,
           speedScale: sim.speedScale,
+          waterLevel: sim.waterLevel,
           e0: econ.energy, ec, tgt: { x: tgt.x, y: tgt.y, z: tgt.z },
           beamW: this.beam(deep ? DEEP_BEAM : TRANSIT_BEAM, deep),
           horizon: deep ? DEEP_HORIZON : TRANSIT_HORIZON,

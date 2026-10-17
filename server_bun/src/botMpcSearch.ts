@@ -16,6 +16,9 @@ export interface MpcPlan { act: { yaw: number; jet: boolean }[]; exp: { x: numbe
 export interface MpcJob {
   snap: SimSnapshot;
   mass: number; eyeHeight: number; bodyRadius: number; speedScale: number;
+  /** Sea surface the search must swim in — mirrors the shadow's level so
+   *  plans don't walk through water the sim would float them out of. */
+  waterLevel?: number;
   e0: number; ec: MpcEcon; tgt: BotVec; beamW: number; horizon: number;
 }
 
@@ -61,6 +64,7 @@ export function runSearch(surface: MoveSurface, field: Heightfield, job: MpcJob)
     {pos: {x: 0, y: 0, z: 0}, vel: {x: 0, y: 0, z: 0}, yaw: 0, pitch: 0, onGround: false} as MoveState);
   scratch.mass = job.mass; scratch.eyeHeight = job.eyeHeight; scratch.bodyRadius = job.bodyRadius;
   scratch.speedScale = job.speedScale;
+  scratch.waterLevel = job.waterLevel;
   // Cold ground edges: warm bookkeeping carried a phantom touchdown into
   // every branch and the beam lost its descent lines (measured 60→18).
   const cold = (s: SimSnapshot): void => {

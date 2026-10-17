@@ -38,6 +38,9 @@ export class RoomMoveSim {
    *  re-attach. */
   private dyn?: readonly StructureCollider[];
   private shadows = new Map<string, Shadow>();
+  /** Map water level (spec.water.level) — undefined on a dry map. Copied
+   *  into every shadow sim so its replay matches the client's prediction. */
+  private waterLevel?: number;
   // Judge mode tolerates prediction noise; authority mode is truth — the
   // client needs tight, frequent acks or its prediction drifts for real.
   // Judge tolerance sits above the systematic offset a different-rate
@@ -102,6 +105,7 @@ export class RoomMoveSim {
       sh.sim.speedScale = old.speedScale;
       sh.sim.mass = old.mass; sh.sim.eyeHeight = old.eyeHeight;
       sh.sim.bodyRadius = old.bodyRadius;
+      sh.sim.waterLevel = old.waterLevel;
       Object.assign(sh.sim.input, old.input);
       const pos = reportedPos?.(pid);
       if (pos && Number.isFinite(pos.x + pos.y + pos.z)) {
@@ -203,6 +207,7 @@ this.structEpoch += 1;
       gapStreak: 0, gapAt: 0, gapClosedAt: 0, gapRunMs: 0, deferStreak: 0, lastHintAt: 0, lastReportAt: 0, reportEma: 0,
       transitEma: 0, clientTransitEma: 0, serverTransitEma: 0, transitVar: 0, reportVar: 0,
     });
+    {const sh = this.shadows.get(playerId); if (sh) {sh.sim.waterLevel = this.waterLevel;}}
     // The sim body derives from the class at creation — the default eye
     // otherwise survives a pre-track setBody no-op (applyClass ran before
     // the shadow existed, the eyeOf-vs-class mismatch behind the unbury
@@ -275,6 +280,14 @@ this.structEpoch += 1;
   setBody(playerId: string, mass: number, eyeHeight: number, bodyRadius: number): void {
     const sh = this.shadows.get(playerId);
     if (sh) { sh.sim.mass = mass; sh.sim.eyeHeight = eyeHeight; sh.sim.bodyRadius = bodyRadius; }
+  }
+
+  /** Map water level — the sea surface the shadows float in. Absent clears
+   *  it, so a hot-reload onto a dry map can't leave the old sea behind.
+   *  Applied to live shadows and every later track(). */
+  setWaterLevel(level?: number): void {
+    this.waterLevel = level;
+    for (const sh of this.shadows.values()) {sh.sim.waterLevel = level;}
   }
 
   /** Command-queue ingress — inputMove does NOT apply on arrival. Edges

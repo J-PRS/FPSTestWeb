@@ -53,6 +53,20 @@ export interface AtmosphereSpec {
   rayleighDirectional?: number;
 }
 
+/** Gameplay water — a global sea level the sims treat as a buoyant volume
+ *  (players/bots slow and float below it), plus the client surface look.
+ *  `level` is world Y in the same meters as terrain height (see heightfield);
+ *  a map is "under water" wherever its terrain samples below `level`. Absent
+ *  = no water at all, so every non-coastal map is unchanged. */
+export interface WaterSpec {
+  /** Sea-surface height in world meters (terrain space). Required. */
+  level: number;
+  /** Near-surface tint [r,g,b] — the shallow look. */
+  color?: [number, number, number];
+  /** Deep-water tint [r,g,b] — where the floor is far below. */
+  deep?: [number, number, number];
+}
+
 export interface MapSpec {
   /** Human title for HUD/chrome ("Dangerous Crossing"). Absent = the
    *  spec's filename, prettified client-side. */
@@ -111,6 +125,8 @@ export interface MapSpec {
    *  swallows the world. `horizon` [r,g,b] overrides the sky's
    *  horizon tint. Absent = engine default haze. Client-only. */
   fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] };
+  /** Gameplay water — one global sea level (see WaterSpec). Absent = dry. */
+  water?: WaterSpec;
   /** Baked terrain albedo under maps/ (e.g. "t2/escalade/albedo.png") —
    *  client-only dressing; the sims never read it. */
   terrainTex?: string;
@@ -474,6 +490,23 @@ function parseFog(raw: unknown): MapSpec['fog'] {
   };
 }
 
+/** Gameplay water — `level` is required and finite; tints are optional
+ *  clamped 0..1 triples. A missing/invalid level drops the block entirely
+ *  so a map never silently gains a sea at world zero. */
+function parseWater(raw: unknown): MapSpec['water'] {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {return undefined;}
+  const w = raw as { level?: unknown; color?: unknown; deep?: unknown };
+  if (typeof w.level !== 'number' || !Number.isFinite(w.level)) {
+    specWarn('water.level: required finite number — water block dropped');
+    return undefined;
+  }
+  const vec3 = (v: unknown): [number, number, number] | undefined =>
+    Array.isArray(v) && v.length >= 3 &&
+    v.slice(0, 3).every((c): boolean => typeof c === 'number' && Number.isFinite(c))
+      ? [clamp01(v[0]), clamp01(v[1]), clamp01(v[2])] : undefined;
+  return { level: Math.max(-500, Math.min(2000, w.level)), color: vec3(w.color), deep: vec3(w.deep) };
+}
+
 /** Weather intensities — known kinds only, clamped 0..2. An empty result
  *  is undefined so the client falls back to the default trio. */
 function parseWeather(raw: unknown): WeatherSpec | undefined {
@@ -621,6 +654,7 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     terrainPreset: clampInt((src as { terrainPreset?: unknown }).terrainPreset, 0, 6, 0, 'terrainPreset') || undefined,
     sky: parsePathField((src as { sky?: unknown }).sky, /[\w-]{1,64}$/, 2, 'sky'),
     weather: parseWeather((src as { weather?: unknown }).weather),
+    water: parseWater((src as { water?: unknown }).water),
     atmosphere: parseAtmosphere((src as { atmosphere?: unknown }).atmosphere),
     structures: parseStructures((src as { structures?: unknown }).structures),
     deploys: parseDeploys((src as { deploys?: unknown }).deploys),

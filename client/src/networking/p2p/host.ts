@@ -34,7 +34,7 @@ import { healPool } from '../../../../server_bun/src/healPool.js';
 import { lgChargeAt } from '../../../../shared/combat.js';
 import { simNow } from '../../../../server_bun/src/simClock.js';
 import { getHeightfield } from '../../world/heightmap.js';
-import type { StructureSpec,InteriorSpec,WeatherSpec,AtmosphereSpec,MapSpec } from '../../../../shared/mapSpec.js';
+import type { StructureSpec,InteriorSpec,WeatherSpec,AtmosphereSpec,WaterSpec,MapSpec } from '../../../../shared/mapSpec.js';
 
 const logger = new ChildLogger('P2PHost');
 
@@ -129,6 +129,7 @@ export class P2PHost {
     heightScale?: number;
     tileSize?: number;
     fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] };
+    water?: WaterSpec;
     terrainTex?: string;
     terrainPreset?: number;
     sky?: string;
@@ -147,6 +148,7 @@ export class P2PHost {
     this.roomInfo.heightScale = map.heightScale;
     this.roomInfo.tileSize = map.tileSize;
     this.roomInfo.fog = map.fog;
+    this.roomInfo.water = map.water;
     this.roomInfo.terrainTex = map.terrainTex;
     this.roomInfo.terrainPreset = map.terrainPreset;
     this.roomInfo.sky = map.sky;
@@ -167,6 +169,7 @@ export class P2PHost {
     // host's collider set — without it a guest who slides off a wall
     // reports a position the shadow can't reproduce (phantom resyncs).
     this.moveShadows.attachStructures(map.structures);
+    this.moveShadows.setWaterLevel(map.water?.level);
   }
 
   constructor() {

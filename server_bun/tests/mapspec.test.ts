@@ -85,3 +85,24 @@ describe('specModes', () => {
     expect(specModes(undefined)).toEqual([]);
   });
 });
+
+describe('resolveMapSpec — water', () => {
+  it('accepts a level with optional tints', () => {
+    const s = resolveMapSpec({ water: { level: 12, color: [0.1, 0.34, 0.4], deep: [0.02, 0.1, 0.2] } });
+    expect(s.water?.level).toBe(12);
+    expect(s.water?.color).toEqual([0.1, 0.34, 0.4]);
+    expect(s.water?.deep).toEqual([0.02, 0.1, 0.2]);
+  });
+
+  it('drops the block when level is missing or non-finite', () => {
+    expect(resolveMapSpec({ water: { color: [0, 0, 0] } }).water).toBeUndefined();
+    expect(resolveMapSpec({ water: { level: Number.NaN } }).water).toBeUndefined();
+    expect(resolveMapSpec({}).water).toBeUndefined();
+  });
+
+  it('clamps tints to 0..1 and level to a sane band', () => {
+    const s = resolveMapSpec({ water: { level: 9999, color: [2, -1, 0.5] } });
+    expect(s.water?.level).toBe(2000);
+    expect(s.water?.color).toEqual([1, 0, 0.5]);
+  });
+});

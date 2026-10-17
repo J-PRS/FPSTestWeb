@@ -78,6 +78,9 @@ export class MovementController {
     this.sim.eyeHeight = eyeHeight;
     this.sim.bodyRadius = bodyRadius;
   }
+  /** Sea-surface height — the map's water.level. Must mirror the server
+   *  shadow or a swim reads as a divergence. Absent clears it. */
+  setWaterLevel(level?: number): void { this.sim.waterLevel = level; }
   /** Other players' capsules for contact resolve — the frame fills this
    *  from the remote roster (server shadows resolve the same bodies). */
   get bodies(): BodyCapsule[] { return this.sim.bodies; }

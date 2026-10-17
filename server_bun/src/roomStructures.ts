@@ -126,6 +126,7 @@ export class RoomStructures {
       arena: spec.arena ?? null,
       ambient: spec.ambient,
       fog: spec.fog,
+      water: spec.water,
       terrainTex: spec.terrainTex,
       terrainPreset: spec.terrainPreset,
       sky: spec.sky,
