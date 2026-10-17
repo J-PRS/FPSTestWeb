@@ -77,8 +77,13 @@ export function handleEnvironmentDamage(h: EnvHost, playerId: string, msg: Extra
     if (!attacker) {
       const range = h.deps.envRange?.(playerId);
       if (range !== undefined && range > 15) {
+        // Counter fires at >15m; the WARN waits for >30m — a pouncer at
+        // 30 m/s covers the 15m gap inside the claim's own transit +
+        // batch delay, so near-misses are lag, not implausibility.
         h.hb('envdmg.far');
-        logger.warn('Environment damage implausible: no creature near', { playerId, dist: Math.round(range) });
+        if (range > 30) {
+          logger.warn('Environment damage implausible: no creature near', { playerId, dist: Math.round(range) });
+        }
       }
     }
     // Splash cadence: a cheat claiming rapid 80dmg blasts under one

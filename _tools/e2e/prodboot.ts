@@ -38,6 +38,10 @@ try {
   const tNav = Date.now();
   // ?debug — prod builds only wire window.__test with it (dev hosts only).
   const client = await launchClient(stack.clientUrl(`&room=prodboot&map=${MAP}&bots=${BOTS}&mode=ctf&net=ws&debug`));
+  const t0 = Date.now();
+  client.page.on('request', (r) => console.log(`  req@${Date.now() - t0}ms ${r.method()} ${r.url().slice(0, 110)}`));
+  client.page.on('requestfinished', (r) => console.log(`  fin@${Date.now() - t0}ms ${r.url().slice(0, 110)}`));
+  client.page.on('requestfailed', (r) => console.log(`  FAIL@${Date.now() - t0}ms ${r.url().slice(0, 110)} ${r.failure()?.errorText}`));
   try {
     await client.waitFor(`t.networkManager && t.networkManager.isConnected()`, 60000);
     const tConn = Date.now() - tNav;

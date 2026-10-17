@@ -64,6 +64,11 @@ export async function launchClient(clientUrl: string, opts: LaunchOpts = {}): Pr
   const browser: Browser = await puppeteer.launch({
     executablePath: CHROME,
     headless: !headed,
+    // Headed on a FRESH profile does ~45s of first-run network work
+    // (variations seed / component updater) that blocks every page fetch;
+    // a persistent dir makes run 2+ warm. Headless keeps clean-profile
+    // determinism.
+    ...(headed ? { userDataDir: `${process.env.TEMP ?? 'C:/TEMP'}/e2e-chrome-profile` } : {}),
     // SwiftShader by default for determinism; E2E_GPU or headed uses real
     // hardware GL (SwiftShader raster costs skew every phase number).
     args: (process.env.E2E_GPU || headed)
@@ -74,6 +79,24 @@ export async function launchClient(clientUrl: string, opts: LaunchOpts = {}): Pr
           // join path before the first frame.
           '--disable-background-timer-throttling', '--disable-renderer-backgrounding',
           '--disable-backgrounding-occluded-windows',
+          // Fresh-profile Chrome WPAD-probes on the first connection —
+          // loopback ws handshakes sat in CONNECTING for ~50s through it.
+          '--no-proxy-server',
+          // Fresh-profile first-run work (default-browser prompt, safety
+          // check) defers network + asset loads ~40s on this box.
+          '--no-first-run', '--no-default-browser-check',
+          // Chrome's local-network-access gate (LNA/PNA successor):
+          // page on localhost:PORT opening ws/fetch to 127.0.0.1:PORT
+          // sat ~40s pending a permission check that never surfaces in
+          // automation — the model load and connect released together.
+          '--disable-features=LocalNetworkAccessChecks,PrivateNetworkAccessSendHeaders,BlockInsecurePrivateNetworkRequests',
+          // Every launch stalls ALL page fetch/ws ~30-45s on this box —
+          // background pings (variations seed, safe-browsing, component
+          // updater) to unreachable Google endpoints gate the socket
+          // scheduler until they time out.
+          '--disable-background-networking', '--disable-component-update',
+          '--safebrowsing-disable-auto-update', '--disable-sync',
+          '--metrics-recording-only', '--disable-breakpad',
         ]
       : [
           '--use-gl=angle', '--use-angle=swiftshader',

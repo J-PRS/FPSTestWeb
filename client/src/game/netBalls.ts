@@ -287,6 +287,16 @@ rbFleetCount += 1;
       logger.debug(`ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m on unreplayed stamp (simT ${simT.toFixed(2)} < t ${m.t.toFixed(2)})`);
       return true;
     }
+    // Join window: the ball clock and replay cursors are still
+    // bootstrapping (estSimNow cold, segments draining in a burst) —
+    // divergence measured in the first seconds is join race, not sim
+    // mismatch. Soaks logged a ~40-warn storm at t≈4s, one per ball,
+    // all with simT ahead of the still-warming clock. Same exemption
+    // the kb-unpredicted parity counter already takes.
+    if ((deps.lazyNetworkManager()?.msSinceConnect?.() ?? Infinity) < 3000) {
+      logger.debug(`ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m in join window`);
+      return true;
+    }
     // A terrain swap leaves prediction on the previous field until the new
     // bin loads and rebinds — every bounce in that window diverges by
     // design, so the warn is noise, not a desync signal.
