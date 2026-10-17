@@ -117,6 +117,13 @@ export class BotGoals {
     if (heard && !(ctx.posted && ctx.objective && distSq(heard, ctx.objective) > ctx.posted * ctx.posted)) {
       offer(heard, 0.2 + this.duty() * 0.5);
     }
+    // Opportunity heat as a destination, not just a steering nudge: gem
+    // drops, hits and corpses all splat it, so a bot that sees no gem
+    // and hears no fight still drifts toward where the money/action is
+    // — the pull a spawn-clustered team needs before first contact.
+    // Committed roles (posted/wave) hold their post, same as heard.
+    const hot = ctx.posted || ctx.wave ? null : ctx.imapHottest?.(pos);
+    if (hot && hot.v > 0.3) {offer({ x: hot.x, y: ctx.groundY(hot.x, hot.z) + BOT_EYE, z: hot.z }, 0.6);}
     // Ally drift: no objective pulling (flag modes have their own squad
     // machinery — this is the TDM/nuggets hint of cohesion), nobody
     // already in company range, and a teammate in real reach. Weight is
@@ -160,14 +167,30 @@ export class BotGoals {
    *  jog across flats. Death spots are skipped outright. */
   private rollWander(ctx: BrainCtx, pos: BotVec): BotVec | null {
     const g0 = ctx.groundY(pos.x, pos.z);
+    // A cold field's best pull is the crowd — every live body's position
+    // is already a legal sense (retreat folds read it), and a lobby
+    // drifts toward where everyone is. The cone blends toward the crowd
+    // centroid with distance — no hard gate, so a team rim-camped ~300m
+    // out still drifts inward instead of lapping the perimeter forever.
+    const h0 = this.headingVec();
+    let hv = h0, pull = 0;
+    let cx = 0, cz = 0, n = 0;
+    for (const o of ctx.others ?? []) { cx += o.x; cz += o.z; n += 1; }
+    if (n > 1) {
+      cx /= n; cz /= n;
+      const dcx = cx - pos.x, dcz = cz - pos.z;
+      pull = Math.min(1, Math.hypot(dcx, dcz) / 180); // full crowd-aim past ~180m
+      hv = { x: h0.x * (1 - pull) + dcx * pull, z: h0.z * (1 - pull) + dcz * pull };
+    }
     let best: BotVec | null = null;
     let bestDrop = -Infinity;
     for (let tries = 0; tries < 3; tries += 1) {
       // Committed lines: a skier picks a direction and holds it — the
       // roll is a forward cone off the current heading with real run
       // length, not a fresh random bearing that reverses mid-carve.
-      const hv = this.headingVec();
-      const a = Math.atan2(hv.z, hv.x) + (botRand() - 0.5) * 2.4;
+      // The cone narrows as the crowd pull grows — a far wanderer
+      // beelines for the lobby, it doesn't slalom to it.
+      const a = Math.atan2(hv.z, hv.x) + (botRand() - 0.5) * 2.4 * (1 - pull);
       const r = (25 + botRand() * 55) * this.wanderlust();
       const wp = { x: pos.x + Math.cos(a) * r, z: pos.z + Math.sin(a) * r };
       if (this.nearDeath(wp)) {continue;}

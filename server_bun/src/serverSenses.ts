@@ -26,16 +26,9 @@ import { DEPLOY_HP } from '../../shared/deployables.ts';
 
 import type { TeamId } from '../../shared/teams.ts';
 import { simNow } from './simClock.ts';
-import { botRand } from '../../shared/botRand.ts';
 import { SpotBoard } from './spotBoard.ts';
 import { ServerParties } from './serverParties.ts';
 import { sharedEnv } from '../../shared/env.ts';
-
-const nuggetChance = (d: number): number => {
-  if (d < 260) {return 0.6;}
-  if (d < 320) {return 0.3;}
-  return 0.08;
-};
 
 export class ServerBotSenses {
   constructor(
@@ -285,14 +278,13 @@ export class ServerBotSenses {
   private pickupFor(p: { id: string; team?: string; position: Vec3; health: number; maxHealth: number }, foes: BotEnemy[]): BotVec | null {
     const snaps = this.parties.tick().pickups;
     if (snaps.length === 0) {return null;}
-    // Greedy like the capper's roam shell, not a wall: close gems always
-    // pull, far ones only sometimes — acceptance odds fall with distance
-    // so a nuggets map spreads the fleet over the field instead of every
-    // brain locking the same nearest gem. Elsewhere it's opportunism.
+    // Nuggets bots KNOW the gem field out to the horizon — the senses
+    // report it wide, and the goal picker's distance falloff decides
+    // whether the walk is worth it (a 400m gem offers at ~0.2 weight;
+    // anything within real reach still wins outright). Elsewhere it's
+    // opportunism — a pickup scan isn't a job there.
     const nuggets = this.room.mode === 'nuggets';
-    const worthIt = (d: number): boolean => nuggets
-      ? d < 160 || botRand() < nuggetChance(d)
-      : d < 140;
+    const worthIt = (d: number): boolean => nuggets ? d < 500 : d < 140;
     let best: BotVec | null = null, bestD = Infinity;
     for (const g of snaps) {
       const d = dist3(p.position, g.pos);

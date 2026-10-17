@@ -148,6 +148,32 @@ describe('BotGoals.pick — ally drift', () => {
   });
 });
 
+describe('BotGoals.pick — opportunity heat', () => {
+  const pos = { x: 0, y: 0, z: 0 };
+
+  it('a hot cell outbids wander when nothing else pulls', () => {
+    const { s, g } = kit();
+    s.wanderT = 50; s.wanderWp = { x: -60, y: 0, z: -60 };
+    g.pick(flat({ imapHottest: () => ({ x: 90, z: 0, v: 0.6 }) }), pos);
+    expect(s.goal.x).toBe(90);
+    expect(s.goal.z).toBe(0);
+  });
+
+  it('a cold cell changes nothing', () => {
+    const { s, g } = kit();
+    s.wanderT = 50; s.wanderWp = { x: -60, y: 0, z: -60 };
+    g.pick(flat({ imapHottest: () => ({ x: 90, z: 0, v: 0.2 }) }), pos);
+    expect(s.goal).toEqual({ x: -60, y: 0, z: -60 });
+  });
+
+  it('a wave member holds the push — heat does not pull it off', () => {
+    const { s, g } = kit();
+    s.wanderT = 50; s.wanderWp = { x: -60, y: 0, z: -60 };
+    g.pick(flat({ wave: true, imapHottest: () => ({ x: 90, z: 0, v: 0.9 }) }), pos);
+    expect(s.goal).toEqual({ x: -60, y: 0, z: -60 });
+  });
+});
+
 describe('BotGoals wander', () => {
   const pos = { x: 0, y: 0, z: 0 };
 
@@ -176,6 +202,16 @@ describe('BotGoals wander', () => {
     botRng(() => 0.5);
     g.pick(flat(), pos);
     expect(s.goal).toEqual({ x: 0, y: 0, z: 0 }); // no valid roll → goal untouched
+  });
+
+  it('far from the crowd, wander rolls aim at its centroid', () => {
+    const { s, g } = kit({ heading: { x: 1, z: 0 } });
+    botRng(() => 0.5);
+    // Bot at (500,0), crowd centroided at origin — heading says +x but
+    // the pull says -x; the roll should land toward the crowd.
+    g.pick(flat({ others: [{ x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, { x: -10, y: 0, z: 0 }] }), { x: 500, y: 0, z: 0 });
+    expect(s.goal.x).toBeLessThan(500);
+    expect(s.goal.x).toBeGreaterThan(400); // a wander roll, not a teleport
   });
 
   it('committed waypoint holds until reached or timed out', () => {

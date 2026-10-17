@@ -458,7 +458,10 @@ bn += 1;
     }
     ctx.terrain = terrain;
     ctx.enemies = enemies;
-    ctx.nugget = this.spec.flags ? null : this.hooks.nearestNugget(bot.position, 60);
+    // Nuggets mode KNOWS the field — wide scan like the server's, and
+    // the goal picker's distance falloff decides whether the hike is
+    // worth it. Elsewhere a short scan is opportunism, not an objective.
+    ctx.nugget = this.spec.flags ? null : this.hooks.nearestNugget(bot.position, this.mode === 'nuggets' ? 500 : 60);
     const rabbitGoal = this.rabbit?.goalFor(bot.playerId, (id): THREE.Vector3 | null => this.posOf(id)) ?? null;
     ctx.objective = info?.pos ?? rabbitGoal;
     ctx.infiltrating = info?.infiltrating ?? false;
