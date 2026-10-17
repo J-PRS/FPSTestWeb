@@ -68,11 +68,12 @@ export async function launchClient(clientUrl: string, opts: LaunchOpts = {}): Pr
     // (variations seed / component updater) that blocks every page fetch;
     // a persistent dir makes run 2+ warm. Headless keeps clean-profile
     // determinism.
-    ...(headed ? { userDataDir: `${process.env.TEMP ?? 'C:/TEMP'}/e2e-chrome-profile` } : {}),
+    ...(headed || process.env.E2E_PROFILE ? { userDataDir: `${process.env.TEMP ?? 'C:/TEMP'}/e2e-chrome-profile` } : {}),
     // SwiftShader by default for determinism; E2E_GPU or headed uses real
     // hardware GL (SwiftShader raster costs skew every phase number).
     args: (process.env.E2E_GPU || headed)
       ? [
+          `--use-angle=${process.env.E2E_ANGLE ?? 'default'}`,
           '--mute-audio', '--no-sandbox', '--start-maximized',
           // Headed Chrome background-throttles rAF/timers — the game
           // boots off rAF, so an occluded window can stall the whole
