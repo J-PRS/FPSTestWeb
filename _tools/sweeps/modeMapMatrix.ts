@@ -31,7 +31,7 @@ for (const f of readdirSync(MAPS_DIR).filter((f) => f.endsWith('.json') && f !==
   if (!j._t2) {custom.push(f.replace('.json', ''));}
 }
 
-const MODES = ['ctf', 'tdm', 'nuggets', 'dm', 'rabbit', 'duel', 'flagrun'];
+const MODES = ['ctf', 'tdm', 'nuggets', 'dm', 'rabbit', 'duel', 'flagrun', 'conquest'];
 
 interface Row { map: string; mode: string; ok: boolean; line: string }
 const rows: Row[] = [];
@@ -50,17 +50,22 @@ for (let at = 0; at < combos.length; at += POOL) {
     const score = out.match(/score ([\d-]+)/);
     const flags = out.match(/flags  caps=(\d+)/);
     const gems = out.match(/gem: spawned=(\d+) banked=(\d+)/);
+    const conq = out.match(/conq nodes a=(\d+) b=(\d+) neutral=(\d+) flips=(\d+)/);
     const kills = [...out.matchAll(/^(alpha|bravo|side)\s+\d+\s+(\d+)\s+\d+/gm)]
       .reduce((a, m) => a + Number(m[2]), 0);
     const spd = Number(contact?.[1] ?? 0), hunt = Number(contact?.[3] ?? 0);
     const tags: string[] = [];
     if (r.exitCode !== 0 || err) {tags.push(`ERR:${(err?.[0] ?? `exit${r.exitCode}`).slice(0, 40)}`);}
-    if (hunt < 10) {tags.push(`hunt=${hunt}%`);}
+    // Conquest spreads a front across the lattice — hunt%/kills read low
+    // by design; the liveness signals are flips (territory churn) and
+    // bots reaching nodes at all (spd). Other modes keep their gauges.
+    if (mode !== 'conquest' && hunt < 10) {tags.push(`hunt=${hunt}%`);}
     if (spd < 5) {tags.push(`spd=${spd}`);}
-    if (kills === 0) {tags.push('no-kills');}
+    if (mode !== 'conquest' && kills === 0) {tags.push('no-kills');}
     if (mode === 'ctf' && flags && Number(flags[1]) === 0) {tags.push('no-caps');}
     if (mode === 'nuggets' && (!gems || Number(gems[2]) === 0)) {tags.push('no-banks');}
-    const obj = mode === 'ctf' ? ` caps=${flags?.[1] ?? '-'}` : mode === 'nuggets' ? ` gems=${gems?.[2] ?? 0}/${gems?.[1] ?? 0}` : '';
+    if (mode === 'conquest' && (!conq || Number(conq[4]) === 0)) {tags.push('no-flips');}
+    const obj = mode === 'ctf' ? ` caps=${flags?.[1] ?? '-'}` : mode === 'nuggets' ? ` gems=${gems?.[2] ?? 0}/${gems?.[1] ?? 0}` : mode === 'conquest' ? ` nodes=${conq?.[1] ?? '?'}-${conq?.[2] ?? '?'} flips=${conq?.[4] ?? '?'}` : '';
     const line = `${map.padEnd(16)} ${mode.padEnd(8)} ${(score?.[1] ?? 'no-score').padEnd(8)} K=${String(kills).padEnd(3)} spd=${spd.toFixed(0).padEnd(2)} hunt=${String(hunt).padEnd(3)}%${obj}`;
     rows.push({ map, mode, ok: tags.length === 0, line });
     console.log(`${tags.length ? 'FAIL' : ' ok '} ${line}${tags.length ? '  ' + tags.join(' ') : ''}`);

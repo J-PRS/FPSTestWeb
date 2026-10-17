@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import type { NetCtx } from './ctx.js';
 import { reconcileReplicas } from '../replicas.js';
 import { TEAM_COLORS, type TeamId } from '../../../../shared/teams.js';
-import { conquestN4 } from '../../../../shared/conquest.js';
+import { conquestN4, conquestActionable } from '../../../../shared/conquest.js';
 
 type NodeOwner = 'alpha' | 'bravo' | 'neutral';
 interface NodeRow {
@@ -120,6 +120,30 @@ export function wireNodes(ctx: NetCtx): void {
     }
   };
 
+  /** The HUD-meaningful subset: cores always pin (yours = defend, theirs
+   *  = the win condition), and whatever the local team can ACT on right
+   *  now — linked neutrals to build, linked enemy nodes to raze. Owned
+   *  non-frontier nodes stay unmarked (beams carry that read already). */
+  const syncMarkers = (rows: NodeRow[]): void => {
+    const marks = deps.world.nodeMarkers;
+    const me = deps.world.localTeam;
+    const nDim = Math.round(Math.sqrt(rows.length)) || 1;
+    const seen = new Set<number>();
+    for (const r of rows) {
+      seen.add(r.id);
+      let m = marks.get(r.id);
+      if (!m) {m = { pos: new THREE.Vector3(), owner: r.owner, core: r.core, gx: r.gx, gz: r.gz, show: false }; marks.set(r.id, m);}
+      m.pos.set(r.pos.x, r.pos.y, r.pos.z);
+      m.owner = r.owner;
+      m.core = r.core;
+      const canAct = me === 'alpha' || me === 'bravo' ? conquestActionable(rows, r, me, nDim) : false;
+      m.show = r.core || (canAct && r.owner !== me);
+    }
+    for (const [id] of marks) {
+      if (!seen.has(id)) {marks.delete(id); deps.lazyHud().removePlayerIndicator(`node:${id}`);}
+    }
+  };
+
   networkManager.onNodeUpdate = (nodes: NodeRow[]): void => {
     if (!linksAdded) {deps.lazyScene().add(links); linksAdded = true;}
     reconcileReplicas(vis, nodes, {
@@ -151,5 +175,6 @@ export function wireNodes(ctx: NetCtx): void {
       },
     });
     rebuildLinks(nodes);
+    syncMarkers(nodes);
   };
 }

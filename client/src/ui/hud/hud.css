@@ -412,6 +412,8 @@ body:has(#hud.cm-open) #healthbar-container {
 .player-indicator.flag.alpha { --ind-bg: #55aaff; }
 .player-indicator.flag.bravo { --ind-bg: #ff8855; }
 .player-indicator.flag.rabbit { --ind-bg: #ffcc44; }
+/* Conquest lattice: unclaimed nodes read grey until a team's beam owns them. */
+.player-indicator.flag.neutral { --ind-bg: #9aa0a8; }
 /* Stand marker — the empty socket the flag diamond plugs into. Hollow
    rotated square, ~40% larger than the flag's mark via negative inset
    (the distance-scaled inline size would otherwise shrink it to match):

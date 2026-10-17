@@ -273,6 +273,22 @@ function tickFlagMarkers(deps: RemotesDeps, localPlayerId: string,
   }
 }
 
+const _nodeAnchor = new THREE.Vector3();
+/** Conquest node pins — same DOM diamonds as the flags. net/nodes.ts
+ *  decides WHICH nodes pin (cores + your frontier) via marker.show;
+ *  this loop only projects. */
+function tickNodeMarkers(deps: RemotesDeps, hud: HUD, cam: THREE.PerspectiveCamera): void {
+  const marks = deps.world.nodeMarkers;
+  if (marks.size === 0) {return;}
+  for (const [id, m] of marks) {
+    if (!m.show) {continue;}
+    // Pin floats above the beam base — readable against the ring at
+    // standoff range, clear of the pillar glow up close.
+    _nodeAnchor.set(m.pos.x, m.pos.y + (m.core ? 12 : 7), m.pos.z);
+    hud.updateFlagIndicator(`node:${id}`, _nodeAnchor, cam, m.owner === 'neutral' ? 'neutral' : m.owner, m.core ? 'stand' : 'flag');
+  }
+}
+
 // Remove disconnected players and dead players that have shrunk to 0
 function cleanupRemotePlayers(deps: RemotesDeps, players: Map<string, WirePlayerState>): void {
   // `bot:` entries are locally driven (Nugget Wars) — the network roster
@@ -503,6 +519,7 @@ export function createRemotes(deps: RemotesDeps) {
       aswAccrue(id, rp.isDead, gb.grounded ?? true, gb.wireSki ?? false, dt);
     }
     tickFlagMarkers(deps, localPlayerId, player.pos, hud, cam);
+    tickNodeMarkers(deps, hud, cam);
     cleanupRemotePlayers(deps, players);
 
     if (deps.world.remotePlayers.size !== previousRemoteCount) {

@@ -375,8 +375,9 @@ export class HUD {
   get commandMapOpen(): boolean { return this.cmdmap.isOpen; }
 
   updateCommandMap(pos: THREE.Vector3, yaw: number, players: Iterable<MinimapPlayer>,
-                   flags: Map<TeamId, { home: THREE.Vector3; homeKnown: boolean; carrier: string | null; wirePos: THREE.Vector3 }>): void {
-    this.cmdmap.update(pos, yaw, players, flags);
+                   flags: Map<TeamId, { home: THREE.Vector3; homeKnown: boolean; carrier: string | null; wirePos: THREE.Vector3 }>,
+                   nodes?: Map<number, { pos: THREE.Vector3; owner: 'alpha' | 'bravo' | 'neutral'; core: boolean }>): void {
+    this.cmdmap.update(pos, yaw, players, flags, nodes);
   }
 
   /** A frame was presented — feeds the FPS readout. Called only on
@@ -399,7 +400,7 @@ export class HUD {
    *  `kind:'stand'` draws the hollow socket the flag diamond nests in —
    *  paired at home they read as one complete mark. */
   updateFlagIndicator(id: string, position: { x: number; y: number; z: number },
-                      camera: THREE.Camera, team: TeamId | 'rabbit', kind: 'flag' | 'stand' = 'flag'): void {
+                      camera: THREE.Camera, team: TeamId | 'rabbit' | 'neutral', kind: 'flag' | 'stand' = 'flag'): void {
     this.indicators.update(id, position, camera, { variant: `${kind} ${team}` });
   }
 

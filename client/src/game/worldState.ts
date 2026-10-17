@@ -63,6 +63,9 @@ export interface WorldState {
    *  `stand` is the permanent pole+base planted at `home` (homeKnown
    *  gates it until the wire/base spec tells us where that is). */
   flagMarkers: Map<TeamId, { mesh: THREE.Group; stand: THREE.Group; home: THREE.Vector3; homeKnown: boolean; carrier: string | null; wirePos: THREE.Vector3 }>;
+  /** Conquest lattice rows — net/nodes.ts owns the map; remotes.ts
+   *  projects `show`-flagged entries into HUD diamonds per frame. */
+  nodeMarkers: Map<number, { pos: THREE.Vector3; owner: 'alpha' | 'bravo' | 'neutral'; core: boolean; gx: number; gz: number; show: boolean }>;
   /** Server-owned pickup replicas — net/pickups.ts owns the map; the
    *  §4.7 pickup fidelity hash enumerates it. */
   netPickups: Map<number, { kind: PickupKind }>;
@@ -122,6 +125,7 @@ export function createWorldState(): WorldState {
     flagStates: {},
     flagHomeHush: false,
     flagMarkers: new Map(),
+    nodeMarkers: new Map(),
     netPickups: new Map(),
     playbackMode: false,
     selfBlastStamps: [],
