@@ -45,6 +45,37 @@ function scanHuge(arr: ArrayLike<number>, hit: Hit, maxBad = 4): number {
   return bad;
 }
 
+// Scale is the hole NaN scans don't see: a bone or model root blown to
+// ×50 keeps every value finite AND every bone within visAudit's 60m
+// spread — while its skinned verts smear across the whole sky. Column
+// lengths of the upper 3×3 give world scale; >8 is never a legit rig.
+function scanScale(el: ArrayLike<number>, hit: Hit, limit = 8): number {
+  const m = Math.max(
+    Math.hypot(el[0]!, el[1]!, el[2]!),
+    Math.hypot(el[4]!, el[5]!, el[6]!),
+    Math.hypot(el[8]!, el[9]!, el[10]!),
+  );
+  if (!(m > limit)) {return 0;}
+  hit.index = -1; hit.value = m; hit.count = 1;
+  return 1;
+}
+
+// Per-bone scale + translation — one inflated or flung bone stretches its
+// verts across the sky while staying finite (under scanHuge's 1e5) and
+// inside visAudit's 60m bone-POSITION spread. Translations bind-space —
+// cm-authored rigs legitimately sit ~100 units off, so flag only >2km.
+function scanBoneScale(bones: Float32Array, base: Hit, hits: Hit[]): void {
+  for (let b = 0; b + 16 <= bones.length; b += 16) {
+    const hs = Object.assign({}, base, {attr: 'boneScale', index: b / 16});
+    if (scanScale(bones.subarray(b, b + 16), hs)) {hits.push(hs); break;}
+    const m = Math.hypot(bones[b + 12]!, bones[b + 13]!, bones[b + 14]!);
+    if (m > 2000) {
+      hits.push(Object.assign({}, base, {attr: 'boneOffset', index: b / 16, value: m, count: 1}));
+      break;
+    }
+  }
+}
+
 function label(o: THREE.Object3D): string {
   const bits = [o.type];
   if (o.name) {bits.push(`"${o.name}"`);}
@@ -90,6 +121,7 @@ function scanInstAndBones(o: THREE.Object3D, base: Hit, hits: Hit[]): void {
     if (scanArray(bones, h)) {hits.push(h);}
     const hugeB = Object.assign({}, base, {attr: 'boneMatricesHuge'});
     if (scanHuge(bones, hugeB)) {hits.push(hugeB);}
+    scanBoneScale(bones, base, hits);
   }
 }
 
@@ -146,6 +178,8 @@ export function nanScanTransforms(scene: THREE.Scene): Hit[] {
     const base: Hit = { name: label(o), kind: o.type, attr: '', index: -1, value: 0, count: 0 };
     const mw = Object.assign({}, base, {attr: 'matrixWorld'});
     if (scanArray(o.matrixWorld.elements, mw)) {hits.push(mw);}
+    const mwScale = Object.assign({}, base, {attr: 'matrixWorldScale'});
+    if (scanScale(o.matrixWorld.elements, mwScale)) {hits.push(mwScale);}
     scanInstAndBones(o, base, hits);
 
     // Dynamic buffers (quarks batcher, ribbons, arc lines) are rewritten
