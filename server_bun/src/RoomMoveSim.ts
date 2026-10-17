@@ -131,6 +131,7 @@ export class RoomMoveSim {
   /** Map structures layered over the field — solid walls and walkable
    *  tops for every sim already tracking (the surface object is shared). */
   attachStructures(list: readonly StructureSpec[] | undefined): void {
+    this.solidSpecs = list ?? [];
     this.solid = (list?.length || this.dyn?.length) ? new SolidWorld(structureColliders(list ?? []), this.dyn) : null;
     if (this.surface) {this.surface.solid = this.solid;}
     if (this.botSurface) {this.botSurface.solid = this.solid;}
@@ -153,6 +154,10 @@ this.structEpoch += 1;
    *  it so a map swap or flag re-snap can't serve stale tops. */
   get structureEpoch(): number { return this.structEpoch; }
   private structEpoch = 0;
+  /** Raw specs for off-thread consumers (the MPC worker rebuilds the
+   *  solid world from these — the colliders themselves aren't shippable). */
+  private solidSpecs: readonly StructureSpec[] = [];
+  get structureSpecs(): readonly StructureSpec[] { return this.solidSpecs; }
 
   /** Structure top face under (x,z), -Infinity when none — bot brains
    *  fold this into their ground model so walls read as raised terrain. */
@@ -364,8 +369,7 @@ this.structEpoch += 1;
     // sim-vel names a poisoned shadow but doesn't fix it — a NaN dv
     // writes straight into the sim's velocity, so the funnel drops it.
     if (!sh || !Number.isFinite(dv.x + dv.y + dv.z)) {return;}
-    const v = sh.sim.state.vel;
-    v.x += dv.x; v.y += dv.y; v.z += dv.z;
+    sh.sim.impulse(dv);
     sh.lastImpulseAt = wallNow();
   }
 

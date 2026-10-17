@@ -16,7 +16,7 @@ const entries: { map: string; mode: string }[] = [];
 for (const file of readdirSync(MAPS_DIR).filter((f) => f.endsWith('.json'))) {
   const raw = JSON.parse(readFileSync(`${MAPS_DIR}/${file}`, 'utf8')) as RawMap;
   const modes = raw.modes?.length ? raw.modes : (raw.mode ? [raw.mode] : []);
-  for (const mode of modes) entries.push({ map: file.replace(/\.json$/, ''), mode });
+  for (const mode of modes) {entries.push({ map: file.replace(/\.json$/, ''), mode });}
 }
 
 describe('every advertised (map, mode) pair is a real mode', () => {
@@ -33,6 +33,9 @@ describe('every advertised (map, mode) pair is a real mode', () => {
         expect(room.flags!.flags.size).toBe(mode === 'rabbit' ? 1 : 2);
       }
       step(room, 10); // ticks must not throw
-    });
+      // 20s: room construction on the heavy fields (terrain flow,
+      // structure index, bot populate) runs 5-12s on a loaded box —
+      // the assert is mode coverage, not build speed.
+    }, 20_000);
   }
 });

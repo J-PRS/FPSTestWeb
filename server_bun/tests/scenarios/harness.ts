@@ -27,7 +27,7 @@ export const flat: Heightfield = { size: 4, data: new Uint8Array(16).fill(60), s
  *  scatter/variant rolls instead of Math.random flake jitter. */
 export function lcg(seed = 42): () => number {
   let s = seed >>> 0 || 1;
-  return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 0x100000000; };
+  return () => { s = (s * 1_664_525 + 1_013_904_223) >>> 0; return s / 0x1_00_00_00_00; };
 }
 
 /** Per-room seeded streams — one injectable botRand stream lives
@@ -56,6 +56,10 @@ export function mkRoom(spec: Partial<MapSpec>, mode = '', seed = 1337, moveAutho
   // stream (a recent-hit re-rolls), which silently re-sequences every
   // behavior roll downstream.
   resetTauntCooldowns();
+  // Harnesses step() in a tight synchronous loop — worker replies never
+  // dispatch while it runs. Pin MPC to its sync path or every capper
+  // silently degrades to the reactive stack for the whole test.
+  process.env.FPS_MPC_SYNC ??= '1';
   // Sim clock starts at wall now; step() advances it with sim ticks so
   // respawns/cooldowns/notice TTLs track sim time, not wall speed — two
   // runs of the same genome must differ only by seed, never by how fast
@@ -94,12 +98,12 @@ export function mkRoom(spec: Partial<MapSpec>, mode = '', seed = 1337, moveAutho
  *  index access under noUncheckedIndexedAccess would force `!` noise. */
 export function firstPlayer(room: Room): PlayerState {
   const p = [...room.players.getAllPlayers().values()][0];
-  if (!p) throw new Error('firstPlayer: empty roster');
+  if (!p) {throw new Error('firstPlayer: empty roster');}
   return p;
 }
 export function twoPlayers(room: Room): [PlayerState, PlayerState] {
   const ps = [...room.players.getAllPlayers().values()];
-  if (ps.length < 2) throw new Error(`twoPlayers: expected 2, got ${ps.length}`);
+  if (ps.length < 2) {throw new Error(`twoPlayers: expected 2, got ${ps.length}`);}
   return [ps[0]!, ps[1]!];
 }
 
@@ -107,9 +111,9 @@ export function twoPlayers(room: Room): [PlayerState, PlayerState] {
  *  like in production, so this drives the exact same ordering. */
 export function step(room: Room, ticks: number, dt = 0.05, profile?: Map<string, number>): void {
   const stream = roomStreams.get(room);
-  if (stream) botRng(stream);
+  if (stream) {botRng(stream);}
   const tstream = tauntStreams.get(room);
-  if (tstream) tauntRng(tstream);
+  if (tstream) {tauntRng(tstream);}
   try {
   for (let i = 0; i < ticks; i++) {
     for (const s of room.sims) {
@@ -124,8 +128,8 @@ export function step(room: Room, ticks: number, dt = 0.05, profile?: Map<string,
     simNowAdvance(dt * 1000);
   }
   } finally {
-    if (stream) botRngRelease();
-    if (tstream) tauntRng(Math.random);
+    if (stream) {botRngRelease();}
+    if (tstream) {tauntRng(Math.random);}
   }
 }
 
@@ -143,7 +147,7 @@ export function roomRng(room: Room): { bot?: () => number; taunt?: () => number 
  *  milliseconds, so it's cleared here too. */
 export function pin(room: Room, playerId: string, pos: Vec3): void {
   const p = room.players.getPlayer(playerId);
-  if (!p) throw new Error(`pin: no player ${playerId}`);
+  if (!p) {throw new Error(`pin: no player ${playerId}`);}
   room.moveSim.resync(playerId, pos, 0);
   p.position = { ...pos };
   p.protectedUntil = simMs(0);
@@ -226,20 +230,20 @@ export function replica(room: Room): Replica {
   room.connections.broadcast = (m: ServerMessage, exclude?: string) => {
     if (m.type === 'wireIds') {
       const w = m as { add?: Record<number, string>; remove?: number[] };
-      for (const [wid, id] of Object.entries(w.add ?? {})) roster.set(Number(wid), id);
-      for (const wid of w.remove ?? []) roster.delete(wid);
+      for (const [wid, id] of Object.entries(w.add ?? {})) {roster.set(Number(wid), id);}
+      for (const wid of w.remove ?? []) {roster.delete(wid);}
     } else if (m.type === 'playerLeft') {
       held.delete((m as { playerId: string }).playerId);
     }
     return prevBroadcast.call(room.connections, m, exclude);
   };
   room.connections.sendBinaryToPlayer = (playerId: string, data: Uint8Array) => {
-    if (playerId !== REPLICA_ID) return prevSendBin.call(room.connections, playerId, data);
+    if (playerId !== REPLICA_ID) {return prevSendBin.call(room.connections, playerId, data);}
     const f = decodeTickFrame(data, pool);
-    if (!f) return 'gone';
+    if (!f) {return 'gone';}
     for (let i = 0; i < f.count; i++) {
       const u = f.updates[i]!;
-      if (!u.playerId) continue; // unresolved wireId — roster arrives on its own event
+      if (!u.playerId) {continue;} // unresolved wireId — roster arrives on its own event
       held.set(u.playerId, { x: u.position.x, y: u.position.y, z: u.position.z, health: u.health, isDead: u.isDead });
     }
     return 'sent';
@@ -262,7 +266,7 @@ export function replica(room: Room): Replica {
         const hp = held.get(id);
         const tp = truth.get(id);
         if (!hp || !tp) {
-          if (hp !== undefined || tp !== undefined) out.push(`${id}: replica=${hp ? 'held' : 'missing'} room=${tp ? 'live' : 'gone'}`);
+          if (hp !== undefined || tp !== undefined) {out.push(`${id}: replica=${hp ? 'held' : 'missing'} room=${tp ? 'live' : 'gone'}`);}
           continue;
         }
         if (Math.round(hp.x) !== Math.round(tp.position.x) || Math.round(hp.y) !== Math.round(tp.position.y) || Math.round(hp.z) !== Math.round(tp.position.z)) {
@@ -274,14 +278,14 @@ export function replica(room: Room): Replica {
         if (Math.floor(Math.round(hp.health) / 4) !== Math.floor(Math.round(tp.health) / 4)) {
           out.push(`${id}: health replica=${hp.health} room=${tp.health}`);
         }
-        if (hp.isDead !== tp.isDead) out.push(`${id}: isDead replica=${hp.isDead} room=${tp.isDead}`);
+        if (hp.isDead !== tp.isDead) {out.push(`${id}: isDead replica=${hp.isDead} room=${tp.isDead}`);}
       }
       return out;
     },
     detach: () => {
       room.spectators.delete(REPLICA_ID);
       const i = room.sims.indexOf(fanoutSim);
-      if (i >= 0) room.sims.splice(i, 1);
+      if (i !== -1) {room.sims.splice(i, 1);}
       room.connections.broadcast = prevBroadcast;
       room.connections.sendBinaryToPlayer = prevSendBin;
     },
