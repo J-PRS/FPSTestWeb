@@ -10,8 +10,7 @@ const _v3 = new THREE.Vector3();
 // bounce redirect burst. Spawn math only; pooling stays in EffectsManager.
 
 export function spawnJetpack(m: EffectsManager, pos: THREE.Vector3): void {
-    // quarks-batched — the per-particle mesh pool stayed 1 draw call per
-    // puff; now the whole stream batches with every other additive system
+    // OLD-TUNING capture variant (temporary).
     _v2.copy(pos); _v2.y -= 1.1; // emit below the feet, like the old -1.1 offset
     fxPuff(_v2, {
       count: 2,
@@ -54,6 +53,37 @@ export function spawnJumpDust(m: EffectsManager, pos: THREE.Vector3): void {
       gravity: GRAVITY,
       c1: [0.7, 0.6, 0.45], c2: [0.8, 0.7, 0.5],
       opacity: 0.6,
+    }, false);
+  }
+
+  // Hard-landing impact — the jump ring reads as a footstep at damage
+  // level; a slam knocks real dirt UP: fast ground ring + an upward
+  // clod fountain, both scaled by the -v·n hit the sim measured.
+export function spawnSlamDust(m: EffectsManager, pos: THREE.Vector3, impact: number): void {
+    const groundY = m.terrain ? m.terrain.getHeightVisual(pos.x, pos.z) : pos.y - 1.8;
+    const s = Math.min(1, Math.max(0.4, (impact - 20) / 60)); // 0.4 at the T1 floor, 1 past ~80 m/s
+    _v2.set(pos.x, groundY + 0.2, pos.z);
+    blastBurst(_v2, {
+      count: Math.round(14 + s * 14),
+      planar: true,
+      spdMin: 4 + s * 4, spdMax: 9 + s * 8, vy: 1.5 + s * 2,
+      lifeMin: 0.35, lifeMax: 0.7,
+      sizeMin: 0.35, sizeMax: 0.6,
+      gravity: GRAVITY,
+      c1: [0.7, 0.6, 0.45], c2: [0.8, 0.7, 0.5],
+      opacity: 0.7,
+    }, false);
+    // The knocked-up clods — a dirt fountain the ring alone can't sell.
+    _v3.set(0, 1, 0);
+    blastBurst(_v2, {
+      count: Math.round(8 + s * 10),
+      dir: _v3, spread: 0.45,
+      spdMin: 5 + s * 6, spdMax: 10 + s * 8, vy: 0,
+      lifeMin: 0.3, lifeMax: 0.6,
+      sizeMin: 0.2, sizeMax: 0.45,
+      gravity: GRAVITY,
+      c1: [0.6, 0.5, 0.38], c2: [0.75, 0.65, 0.5],
+      opacity: 0.8,
     }, false);
   }
 

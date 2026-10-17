@@ -88,4 +88,7 @@ export class MovementController {
   getState(): MovementState { return this.state; }
   setState(newState: MovementState): void { this.sim.setState(newState); }
   update(dt: number): void { this.sim.update(dt); }
+  /** Worst contact -v·n (m/s) since the last update — the T1 impact
+   *  speed the fall-damage gate reads (see shared/movement.ts). */
+  get landingImpact(): number { return this.sim.landingImpact; }
 }

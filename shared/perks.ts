@@ -10,7 +10,7 @@
  * name, never scattered).
  */
 
-export type PerkId = 'none' | 'featherjets' | 'plated' | 'lifesteal' | 'regenerator' | 'overcharge' | 'sharpshooter' | 'bombardier' | 'juggernaut' | 'scavenger' | 'lightfoot' | 'airtank' | 'reach';
+export type PerkId = 'none' | 'featherjets' | 'plated' | 'lifesteal' | 'regenerator' | 'overcharge' | 'sharpshooter' | 'bombardier' | 'juggernaut' | 'scavenger' | 'lightfoot' | 'airtank' | 'reach' | 'featherfall';
 
 export interface PerkMods {
   /** Jet fuel burn multiplier (1 = normal, 0.7 = 30% thriftier). */
@@ -45,9 +45,14 @@ export interface PerkMods {
   energyMax: number;
   /** Pickup + flag touch radius multiplier (1.25 = grab a quarter farther out). */
   pickupRadius: number;
+  /** Fall-damage hp soaked per 1 energy burned (20 = a full tank eats
+   *  1200hp of landings — double the shield skill's 10:1 rate).
+   *  Soak happens before the damage funnel: a covered landing never
+   *  fires a hit at all. */
+  fallSoak: number;
 }
 
-const ZERO: PerkMods = { jetDrain: 1, jetRegen: 1, damageResist: 0, maxHealth: 0, meleeHeal: 0, regen: 0, regenRamp: 0, energyRegen: 1, directDamage: 1, aoeRadius: 1, knockbackTaken: 1, healBoost: 1, selfDamage: 1, energyMax: 1, pickupRadius: 1 };
+const ZERO: PerkMods = { jetDrain: 1, jetRegen: 1, damageResist: 0, maxHealth: 0, meleeHeal: 0, regen: 0, regenRamp: 0, energyRegen: 1, directDamage: 1, aoeRadius: 1, knockbackTaken: 1, healBoost: 1, selfDamage: 1, energyMax: 1, pickupRadius: 1, fallSoak: 0 };
 
 /** Regenerator wind-up: the ramp only accrues after this many unhurt
  *  seconds — sustained combat denies the perk entirely instead of
@@ -68,9 +73,10 @@ export const PERKS: Record<PerkId, { name: string; blurb: string; mods: Partial<
   lightfoot:   { name: 'Lightfoot',   blurb: 'Own blasts deal 50% less self-damage', mods: { selfDamage: 0.5 } },
   airtank:     { name: 'Airtank',     blurb: '+50% energy pool', mods: { energyMax: 1.5 } },
   reach:       { name: 'Reach',       blurb: 'Grab pickups and flags from 25% farther', mods: { pickupRadius: 1.25 } },
+  featherfall: { name: 'Featherfall', blurb: 'Hard landings burn energy, not blood — 20hp per point', mods: { fallSoak: 20 } },
 };
 
-export const PERK_ORDER: PerkId[] = ['none', 'featherjets', 'plated', 'lifesteal', 'regenerator', 'overcharge', 'sharpshooter', 'bombardier', 'juggernaut', 'scavenger', 'lightfoot', 'airtank', 'reach'];
+export const PERK_ORDER: PerkId[] = ['none', 'featherjets', 'plated', 'lifesteal', 'regenerator', 'overcharge', 'sharpshooter', 'bombardier', 'juggernaut', 'scavenger', 'lightfoot', 'airtank', 'reach', 'featherfall'];
 
 export function perkMods(id: string | undefined | null): PerkMods {
   const p = PERKS[(id ?? 'none') as PerkId];

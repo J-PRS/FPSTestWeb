@@ -277,6 +277,7 @@ export class EffectsManager {
   spawnJetpack(pos: THREE.Vector3): void { du.spawnJetpack(this, pos); }
   spawnWarpTrail(pos: THREE.Vector3): void { du.spawnWarpTrail(pos); }
   spawnJumpDust(pos: THREE.Vector3): void { du.spawnJumpDust(this, pos); }
+  spawnSlamDust(pos: THREE.Vector3, impact: number): void { du.spawnSlamDust(this, pos, impact); }
   spawnBounce(pos: THREE.Vector3, dir: THREE.Vector3): void { du.spawnBounce(this, pos, dir); }
   spawnSkiDust(pos: THREE.Vector3, velocity: THREE.Vector3): void { du.spawnSkiDust(this, pos, velocity); }
   spawnMoveDust(pos: THREE.Vector3, vel: THREE.Vector3, speed: number, radius: number): void { du.spawnMoveDust(this, pos, vel, speed, radius); }

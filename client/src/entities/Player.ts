@@ -23,7 +23,7 @@ import { PlayerEmit } from './playerEmit.js';
 import { PlayerLoadout } from './playerLoadout.js';
 import { DEPLOY_KINDS, type DeployKind } from '../../../shared/deployables.js';
 import { BELT_MAX } from '../../../shared/weapons.js';
-import { ENERGY } from '../../../shared/movement.js';
+import { ENERGY, MOVEMENT_CONFIG } from '../../../shared/movement.js';
 import { PlayerVisuals } from './PlayerVisuals.js';
 import { urlParams } from '../core/params.js';
 import { ChildLogger } from '../core/Logger.js';
@@ -361,6 +361,10 @@ export class Player {
   onWarpTick: ((pos: THREE.Vector3) => void) | null = null; // trail emitter while beacon flies
   onWarp: ((from: THREE.Vector3, to: THREE.Vector3) => void) | null = null; // the warp itself
   onSlam: ((pos: THREE.Vector3, impactSpeed: number) => void) | null = null;  // fires on slam impact — speed scales the blast
+  /** T1 collision damage — fires only when the server doesn't own
+   *  health (offline); MP's shadow pays it server-side and the wire
+   *  carries the bar, so predicting it here would double-charge. */
+  onFallDamage: ((impact: number, vImp: number) => void) | null = null;
   onBelt: ((e: FireEvent, item: BeltItem) => void) | null = null;
   /** Instant-skill ante mirror → NetworkManager.sendSkillUse. */
   onSkillUse: (() => void) | null = null;
@@ -581,6 +585,15 @@ export class Player {
 
     // Run physics
     this.movement.update(dt);
+
+    // T1 fall damage — the sim measured the contact's -v·n this frame.
+    // Fires in MP too: the impact dressing is instant prediction feel,
+    // and the featherfall soak must mirror the shadow's drain or the two
+    // tank models diverge — only the health write stays wire-owned.
+    const landing = this.movement.landingImpact;
+    if (landing > MOVEMENT_CONFIG.fallDamageMinSpeed) {
+      this.onFallDamage?.(landing, Math.max(0, -this.prevVelY));
+    }
 
     // Send input to network for client-side prediction
     if (this.onNetworkInput) {

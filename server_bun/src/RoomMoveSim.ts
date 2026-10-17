@@ -1,4 +1,4 @@
-import { MoveSim, ENERGY, cloakDrainPerSec, type BodyCapsule, type MoveInput, type MoveState, type Vec3Like } from '../../shared/movement.ts';
+import { MoveSim, ENERGY, MOVEMENT_CONFIG, cloakDrainPerSec, type BodyCapsule, type MoveInput, type MoveState, type Vec3Like } from '../../shared/movement.ts';
 import { STATUS } from '../../shared/status.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
@@ -59,6 +59,9 @@ export class RoomMoveSim {
    *  inside SEVERE_MS — the kick wiring lives at the Room level (this
    *  sim only knows movement truth). */
   onCheat?: (playerId: string, dist: number, detail?: Record<string, unknown>) => void;
+  /** Worst landing -v·n (m/s) this tick past the T1 damage threshold —
+   *  Room routes it through the damage funnel. */
+  onLanding?: (playerId: string, impact: number) => void;
   /** Live player capsules for body-vs-body contact — the Room supplies
    *  records each tick (corpses excluded upstream); each shadow gets a
    *  self-less view so its own sim does the pushing. */
@@ -571,6 +574,7 @@ sh.gapStreak += 1;
         && (!edges || edges.every((e): boolean => !e.input.forward && !e.input.right && !e.input.jumpHeld && !e.input.jumpPressed && !e.input.skiHeld && !e.input.jetHeld))
         && (!bodiesNear || !bodiesNear(s.pos.x, s.pos.z).some((b): boolean => b.id !== pid && Math.abs(b.x - s.pos.x) < 2.5 && Math.abs(b.z - s.pos.z) < 2.5));
       if (!resting) {
+        let landing = 0;
         // MoveSim.update() sub-steps internally at its own 1/60 quantum —
         // feed it the raw tick delta. Count consumed steps ourselves for
         // the seq-anchored journal (simTicks is in STEP quanta).
@@ -583,10 +587,16 @@ sh.gapStreak += 1;
           for (const e of edges) {
             sh.sim.setInput(Object.assign({}, e.input, {jetHeld: jetting}));
             sh.sim.update(slice);
+            landing = Math.max(landing, sh.sim.landingImpact);
           }
         } else {
           sh.sim.update(dt);
+          landing = Math.max(landing, sh.sim.landingImpact);
         }
+        // T1 fall damage (floodyberry part 3): -v·n at the contact kill
+        // pays (impact - 25) * 0.005 of the bar — the funnel lives one
+        // layer up so respawn/killfeed ride the same path as any death.
+        if (landing > MOVEMENT_CONFIG.fallDamageMinSpeed) {this.onLanding?.(pid, landing);}
       }
       sh.acc += dt;
       const steps = Math.floor(sh.acc / MoveSim.STEP);
