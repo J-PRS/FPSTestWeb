@@ -202,6 +202,9 @@ export class Lobby {
   private fillMapSel(sels: { mode: HTMLSelectElement; map: HTMLSelectElement }): void {
     const mode = sels.mode.value;
     const mapSelect = sels.map;
+    // Remember the pick — a mode swap refills the list and the user's map
+    // survives if it's still legal under the new mode.
+    const keep = mapSelect.value;
     mapSelect.textContent = '';
     if (this.maps.length === 0) {
       const o = document.createElement('option');
@@ -232,12 +235,13 @@ export class Lobby {
       const o = document.createElement('option');
       o.value = m.name;
       o.dataset.mode = mode || m.mode;
-      // The ·MODE suffix is the map's DEFAULT ruleset — shown only on
-      // ANY/FREE ROAM where it disambiguates the pick. With a mode
-      // already chosen it would read as the map overriding that choice.
-      o.textContent = `${m.t2 ? '[T2] ' : ''}${m.name.toUpperCase()}${!mode && m.mode ? ` · ${m.mode.toUpperCase()}` : ''}`;
+      // No ruleset tag on the name — maps are mode-agnostic geometry; a
+      // bare name with ANY picked still boots the map's default mode via
+      // dataset.mode, the mode row owns the override.
+      o.textContent = `${m.t2 ? '[T2] ' : ''}${m.name.toUpperCase()}`;
       mapSelect.append(o);
     }
+    if ([...mapSelect.options].some((o): boolean => o.value === keep)) {mapSelect.value = keep;}
   }
 
   mapFamOn(kind: 't2' | 'custom'): boolean {
