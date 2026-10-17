@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import { mkdirSync, writeFileSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFile } from 'node:child_process';
 import { createRequire } from 'node:module';
 
 // GET /gunsheet?wt=12 → image/png of gunlab's 4-up reference sheet.
@@ -79,6 +80,36 @@ const shotSaver = {
   },
 };
 
+// maps/*.bin + spec .json → <name>.relief.png, regenerated on change while
+// the dev server runs. Uses vite's own watcher (already polling this repo)
+// extended outside root; renders via hillshade.cjs (plain node, no bun).
+const mapRelief = {
+  name: 'map-relief',
+  configureServer(server) {
+    const mapsDir = join(server.config.root, '..', 'maps');
+    const tool = join(server.config.root, '..', '_tools', 'mapbake', 'hillshade.cjs');
+    const pending = new Map();
+    const regen = (file) => {
+      const m = file.match(/[/\\]([^/\\]+)\.(bin|json)$/);
+      if (!m || m[2] === 'json' && !existsSync(join(mapsDir, `${m[1]}.bin`))) {return;}
+      const bin = join(mapsDir, `${m[1]}.bin`);
+      clearTimeout(pending.get(bin)); // genmap writes stream — debounce
+      pending.set(bin, setTimeout(() => {
+        if (!existsSync(bin)) {return;}
+        execFile(process.execPath, [tool, bin], (e) => { if (e) {server.config.logger.warn(`[map-relief] ${m[1]}: ${e.message}`);} });
+      }, 300));
+    };
+    server.watcher.add(join(mapsDir, '*.bin'), join(mapsDir, '*.json'));
+    server.watcher.on('add', regen).on('change', regen);
+    // Backfill any missing relief on boot — one pass, no watcher needed.
+    for (const f of readdirSync(mapsDir)) {
+      if (!f.endsWith('.bin')) {continue;}
+      const png = join(mapsDir, f.replace(/\.bin$/, '.relief.png'));
+      if (!existsSync(png)) {regen(join(mapsDir, f));}
+    }
+  },
+};
+
 // public/ doubles as the .old graveyard — every corpse file gets copied
 // into dist and shipped (~27MB dead weight). Strip .old from the OUTPUT
 // only: sources stay for the scheduled cleanup pass, dev server still
@@ -108,7 +139,7 @@ export default defineConfig(({ mode }) => ({
   // stale-notify plugin SWALLOWS every update and instead pushes a custom
   // event — the client counts changed files in a corner badge.
   // Manual Ctrl+R when you want the new code.
-  plugins: [shotSaver, gunSheet, stripOldAssets, ...(mode === 'noreload' ? [{
+  plugins: [shotSaver, gunSheet, stripOldAssets, mapRelief, ...(mode === 'noreload' ? [{
     name: 'stale-notify',
     configureServer(server) {
       // Vite hard-codes a full-reload for ANY .html change (client env,

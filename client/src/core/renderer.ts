@@ -34,8 +34,9 @@ export interface RendererSetup {
   isBloomEnabled: () => boolean;
   setBloomEnabled: (enabled: boolean) => void;
   updateRendererSize: () => void;
-  /** Parallel-compile every scene material (KHR_parallel_shader_compile)
-   *  so programs don't lazily stall their first draw. */
+  /** Compile every scene material chunked across frames so programs
+   *  don't lazily stall their first draw (or monolithically stall one
+   *  boot frame — compileAsync's link+introspection is serial). */
   warmup: () => void;
   /** Retro pixel pipeline as two axes: integer size divisor (1-4) and
    *  mode (0 raw / 1 smooth-xBR / 2 dithered / 3 atkinson). scale=1
@@ -266,12 +267,12 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   const { bloomEnabled, postproEnabled, pmode, dirtOff } = modes;
   const bloomEffect = new SafeBloomEffect({
     mipmapBlur: true,
-    // HDR linear frame: authored/emitting pixels sit at or above ~1
-    // luminance (sun disc runs far past it) — 1.2 + a wide knee keeps
-    // bloom on emitters and off the fogged horizon band.
-    // Most scene content peaks at fog/sky luminance ~0.9-1.1 even in HDR
-    // linear — 1.2 clears the horizon band while catching fading emitter
-    // pixels; the mipmap halo can't lift the whole frame into a veil.
+    // HDR linear frame: authored/emitting pixels sit at or above ~2
+    // luminance (sun disc runs far past it) — the threshold's job is to
+    // isolate emitters, intensity does the drama. Most scene content peaks
+    // at fog/sky ~0.9-1.1, but snow albedo (0.98) × sun+rim lights to ~1.4
+    // — 1.5 keeps Whiteout's whole field from blooming at intensity 5
+    // while stacked-additive emitters still clear the gate.
     luminanceThreshold: 1.3,
     luminanceSmoothing: 0.25,
     intensity: 5, // Was 1.25

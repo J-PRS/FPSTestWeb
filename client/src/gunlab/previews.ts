@@ -59,6 +59,17 @@ const LAB_TERRAIN = {
   getHeight: (): number => 0,
   getHeightVisual: (): number => 0,
   getNormal: (): THREE.Vector3 => new THREE.Vector3(0, 1, 0),
+  // Swarm blob shadows + terrainBlend read the SAME uniform objects a
+  // real Terrain exposes — a flat 1×1 zero field keeps the stub honest.
+  heightU: (() => {
+    const hmap = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
+    hmap.needsUpdate = true;
+    return {
+      heightMap: { value: hmap as THREE.DataTexture | null },
+      hmWorldScale: { value: 1000 },
+      hScale: { value: 60 },
+    };
+  })(),
   // Decal APIs the deployables call when seating — a real handle object
   // so intensity tweens still land somewhere; there's just no clipmap
   // shader on the other end.

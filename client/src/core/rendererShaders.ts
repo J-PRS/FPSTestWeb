@@ -282,7 +282,11 @@ uniform sampler2D dirtMap;
 uniform sampler2D bloomTex;
 uniform float dirtIntensity;
 void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
-  vec3 dirt = texture2D(dirtMap, uv).rgb;
+  // Cover-fit the dirt texture (CSS background-size:cover): scale the
+  // longer axis out so smudges stay round on any aspect — Unity's
+  // _Bloom_DirtTileOffset does the same, raw uv was stretching them.
+  vec2 dirtUv = (uv - 0.5) * vec2(min(1.0, aspect), min(1.0, 1.0 / aspect)) + 0.5;
+  vec3 dirt = texture2D(dirtMap, dirtUv).rgb;
   vec3 bloom = texture2D(bloomTex, uv).rgb;
   // bloomTex is the RAW mip composite — pre-sanitize, unclamped. Inf/NaN
   // texels that BLOOM_MERGE_GLSL folds for display live here too, and
