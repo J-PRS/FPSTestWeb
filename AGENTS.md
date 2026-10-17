@@ -67,6 +67,20 @@ Ports: game client (Vite) **:5400**, game server (Bun) **:8000**.
 - `.agents/memory/` — read it, and append when you screw up or make a
   non-obvious call. `corrections.md` = "got this wrong → rule";
   `decisions.md` = "chose X over Y because Z". One line each, append-only.
+- Drive-wide file lookup: `C:\Users\JPrice\bin\es.exe <pattern>` (Everything
+  CLI — instant, indexed; use it instead of scanning drives for reference
+  installs or tools).
+- Tribes reference installs (real scripts, mine these for tuning values):
+  T1 scripts `C:\Users\JPrice\Downloads\[Tribes 1]\Tribes 2015\base\scripts\`
+  (e.g. chaingun `muzzleVelocity=425, inheritedVelocityScale=1.0`);
+  T2 `D:\[Games]\Tribes2\GameData\` (base + `Classic\scripts\weapons\`);
+  T:V `D:\[Games2]\VUGames\Tribes Vengeance\`; T:A
+  `C:\Users\JPrice\Documents\My Games\Tribes Ascend\`;
+  `D:\[Games]\Steam\steamapps\common\Tribes`;
+  Legions Overdrive
+  `C:\Users\JPrice\Downloads\[ARCHIVE]\2024.01.05\Legions\game\`
+  (Torque datablocks under `server\game\dataBlocks\weapons\`). In-repo
+  writeups: `_reference\tribes-physics`, `_docs\reference\tribesxt`.
 - Comments say WHY, not WHAT. No secrets. No push. Commit per settled
   topic only. Pre-commit refuses commits under 50 changed lines — batch
   small fixes; a genuine one-liner uses `--no-verify` deliberately.

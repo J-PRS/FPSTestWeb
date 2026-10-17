@@ -1,70 +1,96 @@
-# Tribes 1 physics vs KRIBES MoveSim — 2026-10-04
+# Tribes 1 physics vs KRIBES MoveSim — updated 2026-10-15
 
 Cross-check of `shared/movement.ts` against the floodyberry T1 physics series
-(parts 1-4 in this folder). Mechanism-level comparison; constants are tuned per
-armor class so numbers differ deliberately.
+(parts 1-4 in this folder) and the installed T2 datablocks
+(`D:\[Games]\Tribes2\GameData\base\scripts.vl2\scripts\player.cs`).
+Mechanism-level comparison; numbers are tuned per armor class.
 
 ## Matches the documented model
 
 - **Generous jump grace**: T1 allows a jump for 256ms after last ground
-  contact ("jump smoothly through little bumps"). We go one better — the
-  stick-band keeps `onGround` through bumps outright (cf21a95b+565d33b1), so
-  both jump and anim survive them.
-- **Jump formula**: T1 `impulse = JUMPIMPULSE/MASS`, applied along
-  `upNormal * (surfaceNormal·up)` plus an `orientation` term when moving away
-  from the surface. Ours is the same shape (`jumpSpeed * surfaceY` + the same
-  orientation dot-product branch).
-- **Contact-gated friction**: T1 applies Friction only when
-  `collisionLastTick` — friction is a contact property, not an air property.
-  Ours applies ground accel/friction only while `onGround`.
-- **Walk up any terrain**: confirmed. T1 has no slope limiter either — steep
-  faces resolve through the step-up path; `JUMPSURFACE_MINDOT = 0.2` (~78°)
-  only gates which surfaces *refresh* `lastJumpableNormal`, not which are
-  walkable. Our 80° test matches that behavior.
-- **Bounce is near-zero**: T1 `ELASTICITY = 0.001`. Ours kills the
-  into-normal component on contact — equally dead, no trampoline.
+  contact ("jump smoothly through little bumps"). Ours: `groundGraceT` +
+  `checkGrounded` proximity buffer refill on contact.
+- **Jump formula**: T1 `impulse = JUMPIMPULSE/MASS` along `upNormal·(n·up)`
+  plus an `orientation` term along move direction. Ours is the same shape
+  (`jumpSpeed * surfaceY` + same orientation dot-product branch). Ours is
+  now impulse 9.8 @ gravity 28 → apex 1.71m ≈ T1's 8.33 @ 20 → 1.73m —
+  same hop arc, same ~0.7-0.8s rhythm.
+- **Ground motor = bounded convergence, not a clamp**: T1 `Friction()`
+  converges tangential velocity toward the input wish (`WALKSPEED`) with
+  `GROUNDFORCE/MASS × GROUNDTRACTION ≈ 120 m/s²`, only on contact ticks.
+  Ours: `applyGround` converges to `dir × (12 × speedScale)` at
+  `groundTractionAccel = 120 × speedScale`. Same force, same number.
+  There is no separate ground accel or walk cap in either — the "cap" is
+  just the wish speed, so knockback/shoves bleed at 120/s², never clamp.
+- **Gravity applies always** (was a divergence — fixed): T1 never turns
+  gravity off; contact kills the into-surface component. Ours now applies
+  gravity every tick and cancels `vel·n` **before integrating** while
+  grounded (the Torque order) — downhill velocity stays slope-parallel so
+  the face is followed by motion, not by a position pull.
+- **Contact redirects velocity, never teleports position** (fixed):
+  T1 `UpdatePosition` moves the body only by velocity — on contact it
+  kills `v·n` and re-moves from the original position. Ours clamps only
+  on real penetration (`dist < 0`); the in-band pull-down `pos.y = groundY`
+  was removed — it was the velcro jolt the T1 writeup explicitly warns
+  about, and it visibly snapped every hop landing.
+- **Landing while holding a takeoff input is a landing** (fixed): T1 arms
+  the next jump whenever contact happens. Ours gated "rising" on the
+  input alone, so a held jump could never re-arm — hop once, slide
+  forever. Now `velDotN > 0` is required for a takeoff to read as rising.
+- **Walk up any terrain**: T1 has no slope limiter — `JUMPSURFACE_MINDOT`
+  only gates which surfaces refresh `lastJumpableNormal`. Ours same;
+  launch detection is `velDotN` (leaving the face), never world-up vel.y —
+  steep-face walkers stay grounded at 100%.
+- **Bounce is near-zero**: T1 `ELASTICITY = 0.001`; ours kills `v·n` on
+  contact — equally dead.
+- **Collision damage = -v·n over threshold** (part 3): T1 charges
+  `(impactDot - MINDAMAGESPEED) × DAMAGESCALE` per contact kill —
+  `MoveSim.landingImpact` records the pre-kill `-v·n` on every terrain +
+  solid contact; callers pay `(impact − 25) × 0.005 × maxHealth` at
+  T1-light values (`MOVEMENT_CONFIG.fallDamage*`). Downslopes stay free
+  for the same reason T1's do.
 
-## Real divergences (worth knowing, in impact order)
+## Remaining real divergences (impact order)
 
-1. **Knockback power curve** (part 4) — the big one. T1 uses
-   `power = d/max(d - minHitboxDim, 1) - d/r`: it *ramps up* over the smallest
-   hitbox dimension then falls off, so point-blank blasts are weaker than
-   near-range ones — that asymmetry is what makes disc-jumping strong. We use
-   a plain falloff; disc-jump feel will differ until the curve matches.
-2. **Ski mechanism** (parts 2-3): T1 skiing is `currentFriction` decaying
-   ×0.6 per tick without contact — you "ski" by being airborne recently so
-   ground contacts can't brake you; it is explicitly not a friction toggle.
-   Ours is a held-key flag that preserves 98% of into-slope velocity instead
-   of killing it. Same feel family, different driver — ours is intentional
-   ("skiing: friction toggle only" per config comment) but the T1 model also
-   explains why jump→contact transitions matter: their friction *returns* on
-   contact scaled by the surface normal, so flat contact re-grips fast and
-   slope contact stays slippery. Our ski grip is slope-agnostic.
-3. **Gravity while grounded** (part 2): T1 applies gravity constantly,
-   letting contact + friction cancel it; ours skips gravity while onGround.
-   Same net hold on gentle slopes; on near-vertical faces T1 still pulls the
-   body down while friction fights it — ours hangs until the cap normalizes.
-4. **Side/back walk speed**: T1 `sideSpeed = WALKSPEED - 1` (slower strafing/
-   backpedal). Ours is uniform all directions.
-5. **Side-jet blending** (part 2): T1 side jets engage only after 256ms off
-   ground and fade side power as forward speed approaches JETFORWARD (22 m/s),
-   shifting force to pure up. Ours is a constant up+lateral force with no
-   speed-aware blend.
-6. **Tribes' "move anyway" collision quirk** (part 3): T1 recomputes position
-   from post-collision velocity, producing the slight bounce-away "fluid"
-   feel; the mathematically-correct way (ours: clamp to contact) reads
-   "velcroish" by comparison. Feel-level difference, not a bug.
-7. **Ski-bug note** (part 3): T1 zeroed velocity when the translation loop
-   exceeded max bumps — the dreaded ski bug. Ours can't reproduce (no
-   translation-slice loop); ignore-on-overflow is the documented better answer
-   anyway.
+1. **Knockback power curve** (part 4) — the big one. T1
+   `power = d/max(d - minHitboxDim, 1) - d/r` *ramps up* over the smallest
+   hitbox dimension then falls off — point-blank blasts are weaker than
+   near-range; that asymmetry is what makes disc-jumping strong. We use a
+   plain falloff; disc-jump feel will differ until the curve matches.
+2. **Ski driver** (parts 2-3): T1 skiing is `currentFriction` decaying
+   ×0.6/tick without contact — you ski by being airborne recently, so
+   contacts can't brake you; friction *returns* scaled by `n·up`, so flat
+   contact re-grips and slope contact stays slippery. Ours is a held-key
+   friction exemption plus `skiTargetDistance` reach — slope-agnostic.
+   Feel-family equivalent, different driver. Hop-skiing (the T1 style)
+   also works: `autoHop` refires jump on contact.
+3. **Contact is distance-based, not swept** (part 3): T1 sweeps each move
+   in ~1m slices and detects contact mid-step. Ours integrates then
+   resolves against a heightfield — "contact" is a proximity band +
+   time-grace. This is the honest port given no swept query; it is also
+   why the code has more branches than T1's 30-line UpdatePosition.
+4. **Tribes' "move anyway" quirk** (part 3): T1 recomputes position from
+   post-collision velocity — the slight bounce-away "fluid" feel. Ours
+   clamps to the contact point. Now that position is never snapped down,
+   the residual difference is sub-millimeter.
+5. **Side/back walk speed**: T1 `sideSpeed = WALKSPEED - 1`; T2
+   forward 15/12/7 vs side/back 13/10/5. Ours is direction-blind.
+6. **Side-jet blending** (part 2): T1 side jets engage after 256ms
+   airborne and fade side power toward JETFORWARD 22 m/s. Ours is
+   constant up+lateral with a forward-cap component drop-out.
+7. **Ski-bug note**: T1 zeroed velocity past max collision bumps — the
+   dreaded ski bug. Ours can't reproduce (no slice loop).
 
-## Constants reference (T1 light armor)
+## Constants reference
 
-WALKSPEED 11 · JUMPIMPULSE 75 (÷9 = 8.33 m/s) · GROUNDFORCE 9*40 ·
-GROUNDTRACTION 3 · JETFORCE 236 (÷9 ≈ 26 m/s²) · JETSIDEFORCE 0.8 ·
-JETFORWARD 22 · gravity -20 · MAXENERGY 60 · drain 25 · charge 8(+3) ·
-tick 0.032s · JUMPSURFACE_MINDOT 0.2 · MINDAMAGESPEED 25 · DAMAGESCALE 0.005
+T1 light: WALKSPEED 11 · JUMP 8.33 · gravity -20 · traction 120 ·
+JETFORCE ≈26 m/s² · JETFORWARD 22 · MAXENERGY 60 · drain 25 ·
+tick 0.032s · MAXJUMPTICKS ~256ms.
 
-Ours: walk 7 (class-scaled) · jump 7 · gravity -28 · jet up 35 / side 10 ·
-maxEnergy 60 · drain 15 · charge 8. Same family, heavier gravity/jet feel.
+T2 (installed player.cs): walk fwd L15 / M12 / H7 · side/back L13 M10 H5 ·
+mass L90 M130 H180.
+
+Ours: walk target L14 / M11 / H8 (speedScale × base 12) · jump 9.8 ·
+gravity -28 · traction 120×scale · jet up 35 / side 10 · maxEnergy 60 ·
+drain 15 · charge 8. Heavier gravity+jump, tighter class spread than T2
+(heavy kept at 8 not 7 — heavies also run cap routes here).
