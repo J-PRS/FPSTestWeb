@@ -28,11 +28,15 @@ export function spawnJetpack(m: EffectsManager, pos: THREE.Vector3): void {
   // for feet, which drags the trail under the disc). Sparks shed backward
   // with a slight sag so the arc of the flight path reads.
 export function spawnWarpTrail(pos: THREE.Vector3): void {
+    // Was 2 dull opaque sparks — a teleport beacon's flight must read as
+    // a tracer at 60m. Additive, brighter, larger, longer-lived.
     fxPuff(pos, {
-      count: 2,
-      velMin: [-1, -2, -1], velMax: [1, -0.5, 1],
-      lifeMin: 0.25, lifeMax: 0.4,
-      colA: [0.35, 0.9, 0.95], colB: [0.35, 1, 0.95],
+      count: 4,
+      velMin: [-1.5, -1.5, -1.5], velMax: [1.5, 0.5, 1.5],
+      lifeMin: 0.35, lifeMax: 0.6,
+      sizeScale: 0.8,
+      colA: [0.4, 1.4, 1.3], colB: [0.5, 1.6, 1.4],
+      additive: true,
     });
   }
 
