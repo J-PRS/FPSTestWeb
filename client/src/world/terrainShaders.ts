@@ -103,11 +103,19 @@ export const terrainFrag = /* glsl */`
   #include <shadowmap_pars_fragment>
   #include <shadowmask_pars_fragment>
 
+  // Preset is a COMPILE-TIME define (material.defines), not a uniform —
+  // a runtime branch over six ~100-line palettes compiles all six into
+  // every program; preprocessor exclusion means each program carries
+  // only its own preset (~73KB frag measured at a 30-70s sync D3D
+  // compile on the real-GPU path — the browser hang).
+  #ifndef TERRAIN_PRESET
+  #define TERRAIN_PRESET 0
+  #endif
+
   uniform vec3 sunDir;
   uniform vec3 sunColor;
   uniform vec3 ambientColor;
   uniform float hscale;
-  uniform int terrainPreset; // 0=mixed, 1=desert, 2=grassland
   uniform sampler2D albedoMap;
   uniform bool useAlbedo;
   // T2 material blend layer — real 256px tiles in a 4x2 atlas, blended
@@ -230,9 +238,17 @@ export const terrainFrag = /* glsl */`
   // trick as scorch — drawn INTO the terrain fragment, so it conforms to
   // the displaced surface exactly. A draped mesh can't: the clipmap is a
   // 5m chord approximation and any denser decal drowns under its bumps.
-  uniform vec4 fieldRing[8];  // x, z, ±radius, intensity (w<=0 = unused)
-  uniform vec3 fieldTint[8];  // per-slot color
-  uniform float fieldY[8];    // dome-center Y for shell-contact slots
+  uniform vec4 fieldRing[32]; // x, z, ±radius, intensity (w<=0 = unused)
+  uniform vec3 fieldTint[32]; // per-slot color
+  uniform float fieldY[32];   // dome-center Y for shell-contact slots
+  // Dynamic loop bounds: constant-bound loops over uniform arrays get
+  // fully unrolled by the ANGLE→D3D backend — 72 iterations of decal
+  // math blew the fragment shader to 72KB and ~40s of sync compile per
+  // program (measured: one getProgramParameter blocked 33s). The bound
+  // itself must be a uniform — a literal bound + break still unrolls.
+  uniform int scorchCount;
+  uniform int splatCount;
+  uniform int fieldCount;
 
   // Projected explosion-scorch decals: darken albedo inside each scorch
   // circle with a noise-jittered edge. Applied in the fragment shader so it
@@ -240,7 +256,7 @@ export const terrainFrag = /* glsl */`
   // bridging dips or floating over slopes.
   float scorchMask(vec2 p) {
     float m = 0.0;
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < scorchCount; i++) {
       vec4 s = scorchData[i];
       if (s.w <= 0.0) continue;
       // Mostly circular blast ring with slight edge irregularity
@@ -259,7 +275,7 @@ export const terrainFrag = /* glsl */`
   vec3 splatStain(vec2 p, out float m) {
     vec3 acc = vec3(0.0);
     m = 0.0;
-    for (int i = 0; i < 24; i++) {
+    for (int i = 0; i < splatCount; i++) {
       vec4 s = splatData[i];
       if (s.w <= 0.0) continue;
       vec3 sd = splatDir[i];
@@ -296,7 +312,7 @@ export const terrainFrag = /* glsl */`
   // gets eaten by surface bumps at grazing angles.
   vec3 scorchEmberGlow(vec2 p) {
     float g = 0.0;
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < scorchCount; i++) {
       vec4 s = scorchData[i];
       float eb = scorchEmber[i];
       if (eb <= 0.0) continue;
@@ -318,7 +334,7 @@ export const terrainFrag = /* glsl */`
   //          shell height traces the true contour — cheap, no marching.
   vec3 fieldGlow(vec3 wp) {
     vec3 g = vec3(0.0);
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < fieldCount; i++) {
       vec4 s = fieldRing[i];
       if (s.w <= 0.0) continue;
       float rho = distance(wp.xz, s.xy);
@@ -492,7 +508,8 @@ export const terrainFrag = /* glsl */`
     }
 
     // --- desert preset (sand + dirt + rock only) ---
-    if(terrainPreset == 1) {
+#if TERRAIN_PRESET == 1
+    {
       // Desert only needs: micro, cell, triRock, macro, medium, triDetail
       vec2 warp = vec2(fbm(uv), fbm(uv + vec2(5.2, 1.3)));
       float macro  = fbm(uv + 0.8 * warp);
@@ -551,7 +568,8 @@ export const terrainFrag = /* glsl */`
     }
 
     // --- grassland preset: Ascend-bright olive grass over dirt/rock ---
-    if(terrainPreset == 2) {
+#elif TERRAIN_PRESET == 2
+    {
       // Nested domain warp (IQ's q->r->f idiom): the second warp stage is
       // what turns blobs into organic meadow/scrub regions.
       // Detail fadeout first: fixed-frequency terms at ~1m wavelength
@@ -693,8 +711,8 @@ export const terrainFrag = /* glsl */`
       return;
     }
 
-    ${TERRAIN_PRESET_GLSL}
-
+${TERRAIN_PRESET_GLSL}
+#else
     // --- mixed preset: full noise suite ---
     vec2 warp = vec2(fbm(uv), fbm(uv + vec2(5.2, 1.3)));
     float macro  = fbm(uv  + 0.8 * warp);
@@ -778,6 +796,7 @@ export const terrainFrag = /* glsl */`
     gl_FragColor = vec4(ungradeColor(col), edgeA);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
+#endif
   }
 `;
 

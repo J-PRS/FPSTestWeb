@@ -1,10 +1,13 @@
 // Extra terrain palettes (snow / volcanic / badlands / coast) — split out of
 // terrainShaders.ts to keep that file under the ~900-line size-watch ceiling.
-// Spliced INSIDE the terrain fragment shader's main(), so it leans on that
-// scope: the varyings (vWorldPos/vNormal/vCameraPos), the derived `height`
-// + `slope`, the multi-scale uv sets, the shared noise helpers, and the
-// `terrainPreset` / `shadowMask` uniforms. Every branch returns.
+// Spliced INSIDE the terrain fragment shader's main() as an #elif chain on
+// the compile-time TERRAIN_PRESET define (not the old runtime uniform — dead
+// preset code must never reach the compiler; the six-branch monolith cost
+// ~30-70s of sync D3D compile per program). Leans on the same scope: the
+// varyings, derived `height`/`slope`, uv sets, noise helpers, `shadowMask`.
+// Every branch returns.
 export const TERRAIN_PRESET_GLSL = /* glsl */`
+#elif TERRAIN_PRESET >= 3 && TERRAIN_PRESET <= 6
     // Close-range surface detail. The mesh LOD is 5m and the palette features
     // run 7-31m, so without a sub-metre DETAIL LAYER the ground reads as giant
     // patches and the player feels like an ant. detailFbm() (see the shader
@@ -16,7 +19,8 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
     float grainFade = 1.0 - smoothstep(50.0, 140.0, camDist);
 
     // --- snow preset: bright glacier white over cold rock (Whiteout) ---
-    if(terrainPreset == 3) {
+#if TERRAIN_PRESET == 3
+    {
       float detFade = 1.0 - smoothstep(350.0, 900.0, length(vWorldPos - vCameraPos));
       vec2 q = vec2(fbm(uv), fbm(uv + vec2(5.2, 1.3)));
       vec2 r = vec2(fbm(uv + 2.0 * q + vec2(1.7, 9.2)), fbm(uv + 2.0 * q + vec2(8.3, 2.8)));
@@ -69,6 +73,12 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       float rim = pow(1.0 - max(dot(vNormal, vec3(0,1,0)), 0.0), 2.5) * 0.15;
       vec3 lit = ambientColor + sunColor * shadow * shadowMask + vec3(rim);
       col *= lit;
+      // Snow albedo × full sun clears the 1.3 bloom gate — a HARD cap
+      // flickers (detail noise parks pixels right at the boundary), so
+      // shoulder-compress above 0.9 instead: continuous, hue-preserving,
+      // and even sunlit peaks land ~1.0 — far under the gate.
+      float snowLum = dot(col, vec3(0.2126, 0.7152, 0.0722));
+      col *= (snowLum > 0.9 ? (0.9 + (snowLum - 0.9) * 0.15) : snowLum) / max(snowLum, 0.001);
       col += scorchEmberGlow(vWorldPos.xz);
       col += fieldGlow(vWorldPos);
       vec3 fogDelta = vWorldPos - vCameraPos;
@@ -86,7 +96,8 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
     }
 
     // --- volcanic preset: basalt + rust + olive ash, ember-lit cracks (Caldera) ---
-    if(terrainPreset == 4) {
+#elif TERRAIN_PRESET == 4
+    {
       vec2 q = vec2(fbm(uv), fbm(uv + vec2(5.2, 1.3)));
       vec2 r = vec2(fbm(uv + 2.0 * q + vec2(1.7, 9.2)), fbm(uv + 2.0 * q + vec2(8.3, 2.8)));
       float macro  = fbm(uv + 0.8 * q);
@@ -154,7 +165,8 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
     }
 
     // --- badlands preset: eroded rust/ochre/pale strata (Hoodoo) ---
-    if(terrainPreset == 5) {
+#elif TERRAIN_PRESET == 5
+    {
       vec2 q = vec2(fbm(uv), fbm(uv + vec2(5.2, 1.3)));
       vec2 r = vec2(fbm(uv + 2.0 * q + vec2(1.7, 9.2)), fbm(uv + 2.0 * q + vec2(8.3, 2.8)));
       float macro  = fbm(uv + 0.8 * q);
@@ -229,7 +241,8 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
     // (Lagoon). Water/beach/grass are HEIGHT bands so the shoreline reads from
     // any angle; the thresholds assume the map's heightScale spreads the
     // island top to ~height 0.27 (see maps/lagoon.json). ---
-    if(terrainPreset == 6) {
+#elif TERRAIN_PRESET == 6
+    {
       float detFade = 1.0 - smoothstep(350.0, 900.0, length(vWorldPos - vCameraPos));
       vec2 q = vec2(fbm(uv), fbm(uv + vec2(5.2, 1.3)));
       vec2 r = vec2(fbm(uv + 2.0 * q + vec2(1.7, 9.2)), fbm(uv + 2.0 * q + vec2(8.3, 2.8)));
@@ -301,4 +314,5 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       #include <colorspace_fragment>
       return;
     }
+#endif
 `;

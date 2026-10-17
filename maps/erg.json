@@ -1,0 +1,29 @@
+{
+  "name": "Erg",
+  "mode": "nuggets",
+  "bots": 10,
+  "botFill": 12,
+  "terrain": "erg.bin",
+  "heightScale": 0.6,
+  "tileSize": 900,
+  "arena": {
+    "x": 0,
+    "z": 0,
+    "radius": 300
+  },
+  "creatures": {
+    "snake": 4,
+    "rakk": 3,
+    "totem": 2
+  },
+  "fog": {
+    "color": [
+      0.72,
+      0.55,
+      0.32
+    ],
+    "distance": 220,
+    "visible": 650
+  },
+  "_notes": "erg = dune sea. tileSize 900 squeezes the 1024 field so ridges pack tight (steeper slip faces = ski banks); arena 300 + creatures give the hunt a focal bowl instead of 1500m of empty sand."
+}

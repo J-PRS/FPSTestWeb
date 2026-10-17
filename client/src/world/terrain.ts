@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { getHeightmapData, getHeightfield, getWorldScale, getHeightScale, sampleHeight, sampleNormal, sampleHeightVisual } from './heightmap.js';
 import { registerDiag } from '../core/fxDiag.js';
 import { terrainVert, terrainFrag } from './terrainShaders.js';
+import { urlParams } from '../core/params.js';
 import { TERRAIN_HEIGHT_SCALE, TERRAIN_WORLD_SCALE } from '../core/config.js';
 
 // Heightmap loading/sampling + the shared Heightfield live in heightmap.ts —
@@ -138,9 +139,11 @@ export class Terrain {
   // decal slots like scorch; a mesh ring can't survive the clipmap's
   // 5m chord approximation.
   private fieldRingList: FieldRing[] = [];
-  private fieldRingArr = new Float32Array(8 * 4);
-  private fieldYArr = new Float32Array(8);
-  private fieldTintArr = new Float32Array(8 * 3);
+  // 32 slots — 8 deployables was the old headroom; a conquest lattice
+  // alone wants 25 (5×5 node rings as real terrain decals).
+  private fieldRingArr = new Float32Array(32 * 4);
+  private fieldYArr = new Float32Array(32);
+  private fieldTintArr = new Float32Array(32 * 3);
 
   constructor(scene: THREE.Scene, sunDir: THREE.Vector3) {
     this.scene = scene;
@@ -190,7 +193,24 @@ export class Terrain {
 
       const material = new THREE.ShaderMaterial({
         vertexShader: terrainVert,
-        fragmentShader: terrainFrag,
+        // ?terrainstub=1 — debug escape hatch: flat palette + N·L + fog,
+        // NO procedural stack. Verified 2026-10-17: swapping the ~73KB
+        // procedural frag for this stub takes boot from a 40-70s sync
+        // D3D compile stall to ~1.3s — the fast "is it the shader?" test.
+        fragmentShader: urlParams.get('terrainstub')
+          ? `varying vec3 vNormal; varying vec3 vWorldPos; varying vec3 vCameraPos;
+             uniform vec3 sunDir; uniform vec3 sunColor; uniform vec3 ambientColor;
+             uniform vec3 fogColor; uniform float fogStart; uniform float fogEnd;
+             uniform float innerHalfSize; uniform vec2 innerGridOrigin; uniform float edgeHalf;
+             void main() {
+               if (innerHalfSize > 0.0) { vec2 d = abs(vWorldPos.xz - innerGridOrigin); if (max(d.x, d.y) < innerHalfSize) discard; }
+               vec3 n = normalize(vNormal);
+               vec3 col = vec3(0.62, 0.52, 0.34) * (ambientColor + sunColor * max(dot(n, normalize(sunDir)), 0.0));
+               float f = smoothstep(fogStart, fogEnd, length(vWorldPos - vCameraPos));
+               if (edgeHalf > 0.5) { f = max(f, smoothstep(edgeHalf * 0.8, edgeHalf, length(vWorldPos.xz - vCameraPos.xz))); }
+               gl_FragColor = vec4(mix(col, fogColor, f), f >= 1.0 ? 0.0 : 1.0);
+             }`
+          : terrainFrag,
         lights: true, // binds sun shadow map/matrices — enables USE_SHADOWMAP
         // Outermost ring alpha-dissolves into the sky past ~80% of its
         // extent (edgeHalf) — transparent so the world edge has no seam.
@@ -201,7 +221,10 @@ export class Terrain {
         polygonOffset: true,
         polygonOffsetFactor: -(CLIPMAP_LEVELS.length - 1 - i),
         polygonOffsetUnits: -(CLIPMAP_LEVELS.length - 1 - i),
-        uniforms: Object.assign({}, THREE.UniformsLib.lights, {heightMap:       { value: this.heightTexture },albedoMap:       { value: null },useAlbedo:       { value: false },matTiles:        { value: null },matAlphaA:       { value: null },matAlphaB:       { value: null },useMats:         { value: false },tileMeters:      { value: 5.86 },tileMeans:       { value: new Float32Array(8).fill(0.5) },hmWorldScale:    { value: DEFAULT_WORLD_SCALE },hmWorldScaleFrag:{ value: DEFAULT_WORLD_SCALE },hScale:          { value: HSCALE },gridOrigin:      { value: new THREE.Vector2(0, 0) },levelScale:      { value: levelScale },gridSpacing:     { value: vertSpacing(i) },innerHalfSize:   { value: cfg.innerHalfSize },innerGridOrigin: { value: new THREE.Vector2(0, 0) },parentSpacing:   { value: i + 1 < CLIPMAP_LEVELS.length ? vertSpacing(i + 1) : 0 },parentOrigin:    { value: new THREE.Vector2(0, 0) },edgeHalf:        { value: i === CLIPMAP_LEVELS.length - 1 ? levelScale * 0.5 : 0 },sunDir:          { value: sunDir.clone().normalize() },sunColor:        { value: new THREE.Color(1, 0.94, 0.8) },ambientColor:    { value: new THREE.Color(0.38, 0.45, 0.55) },hscale:          { value: HSCALE },terrainPreset:   { value: 1 },fogColor:        { value: new THREE.Color(0xBB_D0_E8) },fogStart:        { value: 80 },fogEnd:          { value: 400 },scorchData:      { value: this.scorchArr },scorchEmber:     { value: this.scorchEmberArr },splatData:       { value: this.splatArr },splatTint:       { value: this.splatTintArr },splatDir:        { value: this.splatDirArr },fieldRing:       { value: this.fieldRingArr },fieldTint:       { value: this.fieldTintArr },fieldY:          { value: this.fieldYArr }}),
+        // TERRAIN_PRESET picks the palette at COMPILE time — a runtime
+        // uniform meant every program compiled all six preset branches.
+        defines: { TERRAIN_PRESET: 1 },
+        uniforms: Object.assign({}, THREE.UniformsLib.lights, {heightMap:       { value: this.heightTexture },albedoMap:       { value: null },useAlbedo:       { value: false },matTiles:        { value: null },matAlphaA:       { value: null },matAlphaB:       { value: null },useMats:         { value: false },tileMeters:      { value: 5.86 },tileMeans:       { value: new Float32Array(8).fill(0.5) },hmWorldScale:    { value: DEFAULT_WORLD_SCALE },hmWorldScaleFrag:{ value: DEFAULT_WORLD_SCALE },hScale:          { value: HSCALE },gridOrigin:      { value: new THREE.Vector2(0, 0) },levelScale:      { value: levelScale },gridSpacing:     { value: vertSpacing(i) },innerHalfSize:   { value: cfg.innerHalfSize },innerGridOrigin: { value: new THREE.Vector2(0, 0) },parentSpacing:   { value: i + 1 < CLIPMAP_LEVELS.length ? vertSpacing(i + 1) : 0 },parentOrigin:    { value: new THREE.Vector2(0, 0) },edgeHalf:        { value: i === CLIPMAP_LEVELS.length - 1 ? levelScale * 0.5 : 0 },sunDir:          { value: sunDir.clone().normalize() },sunColor:        { value: new THREE.Color(1, 0.94, 0.8) },ambientColor:    { value: new THREE.Color(0.38, 0.45, 0.55) },hscale:          { value: HSCALE },fogColor:        { value: new THREE.Color(0xBB_D0_E8) },fogStart:        { value: 80 },fogEnd:          { value: 400 },scorchData:      { value: this.scorchArr },scorchEmber:     { value: this.scorchEmberArr },splatData:       { value: this.splatArr },splatTint:       { value: this.splatTintArr },splatDir:        { value: this.splatDirArr },fieldRing:       { value: this.fieldRingArr },fieldTint:       { value: this.fieldTintArr },fieldY:          { value: this.fieldYArr },scorchCount:     { value: 0 },splatCount:      { value: 0 },fieldCount:      { value: 0 }}),
       });
 
       const mesh = new THREE.Mesh(i >= 2 ? outerGeo : gridGeo, material);
@@ -292,10 +315,16 @@ n += 1; sum += d; sumAbs += Math.abs(d);
   }
 
   /** Procedural palette (spec.terrainPreset: 0=mixed, 1=desert, 2=grassland,
-   *  3=snow, 4=volcanic, 5=badlands, 6=coast) — uniform-only, no texture state. */
+   *  3=snow, 4=volcanic, 5=badlands, 6=coast) — swaps the TERRAIN_PRESET
+   *  define and rebuilds the program; a preset-pinned program is small,
+   *  so the recompile is fast and happens once per map apply. */
   setPreset(p: number): void {
     for (const level of this.levels) {
-      level.material.uniforms.terrainPreset.value = p;
+      const m = level.material;
+      if (m.defines.TERRAIN_PRESET !== p) {
+        m.defines.TERRAIN_PRESET = p;
+        m.needsUpdate = true;
+      }
     }
   }
 
@@ -428,6 +457,16 @@ n += 1; sum += d; sumAbs += Math.abs(d);
       this.splatDirArr[i * 3 + 1] = s.dz;
       this.splatDirArr[i * 3 + 2] = s.stretch;
     }
+
+    // Dynamic loop bounds keep the decal loops rolled in the compiled
+    // shader — a constant bound invites full unroll even with an early
+    // break (72 iterations of decal math = 33s of sync D3D compile).
+    const u0 = this.levels[0]?.material.uniforms;
+    if (u0) { // shared objects — all levels read the same .value slots
+      u0.scorchCount.value = this.scorchList.length;
+      u0.splatCount.value = this.splatList.length;
+      u0.fieldCount.value = this.fieldRingList.length;
+    }
   }
 
   // Register a projected scorch decal. Returns a handle whose `intensity`
@@ -464,7 +503,7 @@ n += 1; sum += d; sumAbs += Math.abs(d);
   addFieldRing(x: number, z: number, r: number, tint: readonly [number, number, number], domeY?: number): FieldRing {
     const entry: FieldRing = { x, z, r, intensity: 0.5, tint };
     if (domeY !== undefined) {entry.domeY = domeY;}
-    if (this.fieldRingList.length >= 8) {this.fieldRingList.shift();}
+    if (this.fieldRingList.length >= 32) {this.fieldRingList.shift();}
     this.fieldRingList.push(entry);
     return entry;
   }
