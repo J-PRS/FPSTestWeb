@@ -73,7 +73,7 @@ export class PlayerIndicators {
     const clsKey = cls === 'light' || cls === 'heavy' ? cls : 'medium';
     for (const k of ['light', 'medium', 'heavy']) {indicator.classList.toggle(`cls-${k}`, !variant && clsKey === k);}
     if (variant) {for (const c of variant.split(' ')) {indicator.classList.add(c);}}
-    this.updateSheepBadge(playerId, indicator, sheep, hp);
+    this.updateSheepBadge(playerId, indicator, sheep, hp, friendly);
 
     if (isDead) {
       indicator.classList.add('hidden');
@@ -147,14 +147,14 @@ export class PlayerIndicators {
   /** Head badge — HP by default; under the backquote debug overlay the
    *  server's sheep meter takes the slot instead (that's where the
    *  pedestrian-vs-skier read lives for triage). */
-  private updateSheepBadge(playerId: string, indicator: HTMLElement, sheep: number | undefined, hp: number | undefined): void {
+  private updateSheepBadge(playerId: string, indicator: HTMLElement, sheep: number | undefined, hp: number | undefined, friendly: boolean): void {
     const sheepMode = debugOverlays && sheep !== undefined && sheep > 0;
     let v = -1;
     if (sheepMode) {v = Math.round(sheep!);}
     else if (hp !== undefined) {v = Math.round(hp);}
-    // The mode is packed into the cache key — toggling debug must rewrite
-    // the badge even when sheep and hp happen to round to the same number.
-    const key = v < 0 ? -1 : v * 2 + (sheepMode ? 1 : 0);
+    // The mode + team are packed into the cache key — toggling debug or a
+    // team swap must rewrite the badge even when the number is unchanged.
+    const key = v < 0 ? -1 : v * 4 + (sheepMode ? 2 : 0) + (friendly ? 1 : 0);
     if (this.lastSheep.get(playerId) === key) {return;}
     this.lastSheep.set(playerId, key);
     let badge = indicator.firstElementChild as HTMLElement | null;
@@ -166,7 +166,10 @@ export class PlayerIndicators {
         indicator.append(badge);
       }
       badge.textContent = `${v}`;
-      badge.style.color = sheepMode ? band(sheep!, true) : band(v, false);
+      // Team-locked color: the health-gradient read as "which side is
+      // that?" mid-fight — ally green / enemy red carries no HP info
+      // but never lies about allegiance. (sheep debug keeps its band.)
+      badge.style.color = sheepMode ? band(sheep!, true) : friendly ? '#7ddf7d' : '#ff6b6b';
     } else if (badge) {
       badge.remove();
     }
