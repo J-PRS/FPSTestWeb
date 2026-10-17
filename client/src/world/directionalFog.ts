@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 
-// Sun-aware haze: three.js fog has a single flat color, so distant terrain
-// reads the same whether you look at the sun or away from it. Per-fragment
-// direction would need every material's fog chunk patched, so we tint the
-// whole fog color by how far the camera is facing the sun — cheap Mie
-// forward-scatter stand-in. Sunward pushes warm/bright, away cools slightly.
-// The sky's horizon band gets the same tint so fully-fogged ground keeps
-// dissolving into it.
+// Sun-aware haze helper. three.js fog has a single flat color, so distant
+// terrain reads the same whether you look at the sun or away from it.
+// `fogTint` warms the color sunward and cools it away as a cheap Mie
+// forward-scatter stand-in — but it is NOT wired into the per-frame fog:
+// the sky dome's ground/horizon band shares one uniform color, so a
+// camera-dependent tint would swing the dome with the camera and break the
+// seamless terrain→skybox blend. Kept (and tested) as an available utility;
+// directional warmth is served by the sky's Mie glow instead.
 
 // Float color ctor is linear-working-space (no sRGB conversion), so these
 // read darker/more saturated than the numbers suggest.

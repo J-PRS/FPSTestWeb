@@ -32,7 +32,7 @@ import type { NetworkManager } from '../networking/NetworkManager.js';
 import type { HUD } from '../ui/hud.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { createScene } from '../world/scene.js';
-import { updateDirectionalFog, fogHorizon, syncFxFog } from '../world/directionalFog.js';
+import { fogHorizon, syncFxFog } from '../world/directionalFog.js';
 import { updateCubeSky, getInteriorsEpoch } from './net/mapAssets.js';
 import { isSessionVeiled, dropSessionVeil, isSessionVeilReady } from './net/world.js';
 import { refreshColliderGizmoVisibility } from '../world/mapStructures.js';
@@ -62,7 +62,6 @@ import type { PlayerSheep } from './playerSheep.js';
 import { BootWarmup } from './bootWarmup.js';
 
 const _zeroVel = new THREE.Vector3(); // shared zero for demo playback
-const _sunDir = new THREE.Vector3(); // scratch — directional fog sun lookup
 // Frame-jump forensic: compare pos at the same point each frame so any
 // discontinuity — respawn, correction, teleport — lands in the log with
 // its from→to pair. Honest skiing is ~2-4m/frame even at 30fps; 8m only
@@ -253,18 +252,20 @@ function censusEntities(deps: GameLoopDeps, entities: ReturnType<typeof createEn
   };
 }
 
-// Fog uniforms ride the terrain shader — must sync every frame. Fog color
-// follows the sun: looking sunward warms the haze, away cools it; the sky
-// horizon uniform takes the same tint so fogged ground stays seamless.
+// Fog uniforms ride the terrain shader — must sync every frame. The fog
+// color is CONSTANT across the whole view: the terrain haze and the sky
+// dome's ground/horizon band must share one color, or a fully-fogged ridge
+// won't dissolve into the sky. That seamless terrain→skybox blend is the
+// whole point of the haze (T1/T2 dune maps). Directional sun warmth belongs
+// in the sky's Mie glow, NOT a flat fog tint whose color would swing with
+// the camera and break the seam.
 function syncFog(deps: GameLoopDeps, terrain: Terrain): void {
   const {fog} = deps.sceneSetup.scene;
   if (!(fog instanceof THREE.Fog)) {return;}
-  _sunDir.copy(deps.sceneSetup.sun.position).normalize();
-  const tinted = updateDirectionalFog(fog, deps.camera, _sunDir);
-  fog.color.copy(tinted);
-  deps.sceneSetup.atmosphericSky.setFogColor(tinted);
-  deps.sceneSetup.atmosphericSky.setHorizonColor(fogHorizon() ?? tinted);
-  updateCubeSky(deps.camera, fog.color);
+  const fogCol = fog.color; // constant authored/engine haze (see applyMapFog)
+  deps.sceneSetup.atmosphericSky.setFogColor(fogCol);
+  deps.sceneSetup.atmosphericSky.setHorizonColor(fogHorizon() ?? fogCol);
+  updateCubeSky(deps.camera, fogCol);
   refreshColliderGizmoVisibility();
   // F1 terrain overlay — cyan wire on the drawn clipmap, yellow wire
   // patch on the collider lattice around the player.
