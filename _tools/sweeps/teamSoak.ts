@@ -31,10 +31,14 @@
  *   --mode M              tdm | ctf | dm (default tdm)
  *   --class T             pin every body to light|medium|heavy (default:
  *                         kit-faithful — the loadout picks the chassis)
- *   --seat ring|map       ring = two facing lines at +-RING (default);
+ *   --seat ring|map|wide  ring = two facing lines at +-RING (default);
  *                         map = hand spawning to the real spawnPicker —
  *                         foe-clearance scoring over the flat `spawns`
- *                         pool, randomized inside each sphere
+ *                         pool, randomized inside each sphere;
+ *                         wide = re-seat each respawn at a random range
+ *                         (60-200m) from a random enemy — mixes the fight
+ *                         distances so far guns aren't starved by the
+ *                         picker's max-clearance rim spawns
  *   --berserk             never holster the primary (pickBotWeapon as-is,
  *                         not pickBotWeaponSafe) — artillery keeps firing
  *   --arena M             XZ arena radius in metres, 0 = map's own bound
@@ -252,12 +256,36 @@ const ringPos = (team: 'alpha' | 'bravo', i: number, n: number): { x: number; y:
   const x = team === 'alpha' ? -RING : RING;
   return { x, y: hmHeight(field, x, z) + 2, z };
 };
+// Seat rng is separate from the room's stream — seating noise shouldn't
+// perturb the sim's own draws (reproducible across seat modes on a seed).
+let seatState = (SEED * 2654435761) >>> 0 || 1;
+const seatRand = (): number => {
+  seatState = (seatState * 1664525 + 1013904223) >>> 0;
+  return seatState / 4294967296;
+};
+/** wide: drop the respawner at a random 60-200m gap from a random living
+ *  enemy — enough spread that every range band sees traffic, near enough
+ *  that transit never starves the fight. */
+const widePos = (team: 'alpha' | 'bravo'): { x: number; y: number; z: number } => {
+  const foes = sides[team === 'alpha' ? 'bravo' : 'alpha'];
+  let cx = 0, cz = 0, n = 0;
+  for (const f of foes) {
+    const p = room.players.getPlayer(f.id);
+    if (p && !p.isDead) {cx += p.position.x; cz += p.position.z; n += 1;}
+  }
+  if (n) {cx /= n; cz /= n;}
+  const a = seatRand() * Math.PI * 2;
+  const d = 60 + seatRand() * 140;
+  const x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d;
+  return { x, y: hmHeight(field, x, z) + 2, z };
+};
 const seat = (team: 'alpha' | 'bravo', i: number): void => {
   const list = sides[team];
   const bot = list[i];
-  if (bot) {pin(room, bot.id, ringPos(team, i, list.length));}
+  if (!bot) {return;}
+  pin(room, bot.id, SEAT === 'wide' ? widePos(team) : ringPos(team, i, list.length));
 };
-const DO_SEAT = SEAT === 'ring' && RING > 0;
+const DO_SEAT = SEAT === 'wide' || (SEAT === 'ring' && RING > 0);
 if (DO_SEAT) {
   for (let i = 0; i < sides.alpha.length; i += 1) {seat('alpha', i);}
   for (let i = 0; i < sides.bravo.length; i += 1) {seat('bravo', i);}
