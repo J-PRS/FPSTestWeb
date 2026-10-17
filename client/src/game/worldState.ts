@@ -65,7 +65,7 @@ export interface WorldState {
   flagMarkers: Map<TeamId, { mesh: THREE.Group; stand: THREE.Group; home: THREE.Vector3; homeKnown: boolean; carrier: string | null; wirePos: THREE.Vector3 }>;
   /** Conquest lattice rows — net/nodes.ts owns the map; remotes.ts
    *  projects `show`-flagged entries into HUD diamonds per frame. */
-  nodeMarkers: Map<number, { pos: THREE.Vector3; owner: 'alpha' | 'bravo' | 'neutral'; core: boolean; gx: number; gz: number; show: boolean }>;
+  nodeMarkers: Map<number, { pos: THREE.Vector3; owner: 'alpha' | 'bravo' | 'neutral'; core: boolean; gx: number; gz: number; show: boolean; hot: boolean }>;
   /** Server-owned pickup replicas — net/pickups.ts owns the map; the
    *  §4.7 pickup fidelity hash enumerates it. */
   netPickups: Map<number, { kind: PickupKind }>;
@@ -88,6 +88,13 @@ export interface WorldState {
    *  carrier is excluded from tick fanout so the walking-bomb warning
    *  needs this channel. Decays between echoes; drives the crackle tell. */
   selfCharge: number;
+  /** Solo conquest lattice sim (offline only) — soloConquest.ts owns it;
+   *  the loop ticks it, blastForce feeds it the same blast stream the
+   *  server's RoomConquest listens on. */
+  soloConquest?: {
+    tick(dt: number): void;
+    applyBlast(pos: THREE.Vector3, damage: number, radius: number, shooterId: string | undefined, scales?: readonly number[]): void;
+  } | null;
 }
 
 /** FX pools that refuse spawns while the tab is hidden — wire handlers

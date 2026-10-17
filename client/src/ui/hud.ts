@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Minimap , type MinimapPlayer } from './minimap.js';
+import { Minimap , type MinimapPlayer, type MinimapNode } from './minimap.js';
 import { CommandMap } from './commandmap.js';
 import { createHudDom } from './hud/dom.js';
 import { PlayerIndicators } from './hud/indicators.js';
@@ -367,8 +367,8 @@ export class HUD {
     this.connBanner.style.display = 'block';
   }
 
-  updateMinimap(targets: Targetable[], nuggets: Nugget[], pos: THREE.Vector3, yaw: number, birds?: THREE.Vector3[], players?: Iterable<MinimapPlayer>): void {
-    this.minimap.update(targets, nuggets, pos, yaw, birds, players);
+  updateMinimap(targets: Targetable[], nuggets: Nugget[], pos: THREE.Vector3, yaw: number, birds?: THREE.Vector3[], players?: Iterable<MinimapPlayer>, nodes?: Iterable<MinimapNode>): void {
+    this.minimap.update(targets, nuggets, pos, yaw, birds, players, nodes);
   }
 
   toggleCommandMap(force?: boolean): void { this.cmdmap.toggle(force); }

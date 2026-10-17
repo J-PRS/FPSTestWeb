@@ -2,6 +2,7 @@ import type * as THREE from 'three';
 import { Ball, type Targetable } from '../entities/balls.js';
 import type { Nugget } from '../entities/Nugget.js';
 import { settings } from '../core/settings.js';
+import { TEAM_COLORS, type TeamId } from '../../../shared/teams.js';
 
 /**
  * Radar minimap — rotating, player-centered. Up on the map is where the
@@ -18,6 +19,10 @@ const RIM = SIZE / 2 - 6;  // dot-clamp radius in px
 /** A player/bot blip — resolved to friend-or-foe by the caller, which owns
  *  team state. Coords are world xz. */
 export interface MinimapPlayer { x: number; z: number; friendly: boolean; bot?: boolean }
+
+/** A conquest lattice cell — owner color; `hot` marks the contested
+ *  frontier (owned AND enemy-actionable) for either team's focus. */
+export interface MinimapNode { pos: { x: number; z: number }; owner: 'alpha' | 'bravo' | 'neutral'; core: boolean; hot: boolean }
 
 // Per-frame transform basis the draw layers share — computed once in update.
 interface MapBasis { pos: THREE.Vector3; sin: number; cos: number; k: number; mid: number }
@@ -63,7 +68,7 @@ export class Minimap {
          background: rgba(8,12,18,0.55); pointer-events: none;`;
   }
 
-  update(targets: Targetable[], nuggets: Nugget[], pos: THREE.Vector3, yaw: number, birds?: THREE.Vector3[], players?: Iterable<MinimapPlayer>): void {
+  update(targets: Targetable[], nuggets: Nugget[], pos: THREE.Vector3, yaw: number, birds?: THREE.Vector3[], players?: Iterable<MinimapPlayer>, nodes?: Iterable<MinimapNode>): void {
     const c = this.ctx;
     const mid = SIZE / 2;
     c.clearRect(0, 0, SIZE, SIZE);
@@ -74,6 +79,7 @@ export class Minimap {
 
     // Crosshair mode is threats-only — pickups and hazards aren't threats.
     if (!this.cross) {this.drawNuggets(nuggets, t);}
+    this.drawNodes(nodes, t);
     this.drawTargets(targets, t);
     this.drawPlayers(players, t);
     this.drawBirds(birds, t);
@@ -88,6 +94,29 @@ export class Minimap {
       c.lineTo(mid + 4, mid + 4);
       c.closePath();
       c.fill();
+    }
+  }
+
+  // Conquest nodes under everything — territory is context, not threat.
+  // Cell = owner color square; contested frontier cells get a white
+  // threat ring so "the fight is HERE" reads even without team memory.
+  // Cores get a bold double-weight box = the win condition.
+  private drawNodes(nodes: Iterable<MinimapNode> | undefined, t: MapBasis): void {
+    if (!nodes) {return;}
+    const c = this.ctx, m = this._map;
+    for (const n of nodes) {
+      this.toMap(n.pos.x - t.pos.x, n.pos.z - t.pos.z, t.sin, t.cos, t.k, t.mid);
+      const col = n.owner === 'neutral' ? 'rgba(140,148,158,0.8)' : `#${(TEAM_COLORS[n.owner as TeamId] ?? 0xFF_FF_FF).toString(16).padStart(6, '0')}`;
+      c.fillStyle = col;
+      const s = n.core ? 3.4 : 2.4;
+      c.fillRect(m[0] - s, m[1] - s, s * 2, s * 2);
+      if (n.hot) {
+        c.strokeStyle = 'rgba(255,255,255,0.95)';
+        c.lineWidth = 1;
+        c.beginPath();
+        c.arc(m[0], m[1], s + 2, 0, Math.PI * 2);
+        c.stroke();
+      }
     }
   }
 

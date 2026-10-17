@@ -8,7 +8,7 @@
  * whole cost of a new gamemode, and removing it touches nothing else.
  */
 import type { Room } from './Room.ts';
-import type { MapSpec } from '../../shared/mapSpec.ts';
+import type { MapSpec, StructureSpec } from '../../shared/mapSpec.ts';
 import type { BotVec } from '../../shared/botVec.ts';
 import type { Vec3, ServerMessage } from './types.ts';
 import { RoomConquest } from './modeConquest.ts';
@@ -37,6 +37,10 @@ export interface ModeModule {
   /** Match-boundary reset — roomMatch endCleanup calls it alongside
    *  flags.reset()/pickups.clear(). */
   reset?(): void;
+  /** Mode-owned structures — concatenated into RoomStructures.eff(), so
+   *  colliders, ball/projectile sims and the wire echo all see mode
+   *  geometry through the same authored-structure pipeline. */
+  structures?(): StructureSpec[];
   /** Spec swap (map rotation / admin reload) — re-layout on the new map. */
   onSpec?(spec: MapSpec): void;
   /** Live terrain (re)attached — re-snap positions, keep match state. */

@@ -282,6 +282,9 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       const direct = wStats ? (wStats.directDamage || wStats.aoeDamage) : aoeDamage;
       deps.lazyDeployables?.()?.blastRemotes(pos, direct, aoeDamage, radius, scales, a.weaponType);
     }
+    // Solo conquest nodes eat the same blast stream the Room's lattice
+    // listens to — presence-raze's ranged sibling, link-gated inside.
+    deps.world.soloConquest?.applyBlast(pos, aoeDamage, radius, a.shooterId, scales);
   }
 
   /** Blast knock on the replayed prey sims (balls + nuggets) for REMOTE-

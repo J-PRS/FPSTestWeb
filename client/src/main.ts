@@ -52,12 +52,16 @@ import { initLogPanel } from './ui/logPanel.js';
 import { installOverlapAudit, reportHudOverlap } from './ui/overlapAudit.js';
 
 import { effectiveResist } from '../../shared/perks.js';
+import { MOVEMENT_CONFIG } from '../../shared/movement.js';
 import { REPAIR_HEAL_PER_TICK } from '../../shared/weapons.js';
 
 import { applyDebugHooks } from './game/debugHooks.js';
 import { createWorldState } from './game/worldState.js';
 import { createCombat } from './game/combat.js';
 import { TeamBots } from './game/bots/index.js';
+import type { GameBot } from './game/bots/botBrain.js';
+import { SoloConquest } from './game/soloConquest.js';
+import { HM_WORLD_SCALE } from '../../shared/heightfield.js';
 import { MODES , type ModeId } from '../../shared/teams.js';
 import { firstTerrain, probeBootMap, bootPrimeTerrain, bootApplySavedMap, armSessionVeil, type MapSnapshot } from './game/net/world.js';
 import { resolveMapSpec, parseMapSpecJson, type MapSpec } from '../../shared/mapSpec.js';
@@ -163,6 +167,8 @@ const fragMessages = new FragMessages();
 // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
 let combat!: ReturnType<typeof createCombat>;
 let teamBots: TeamBots | null = null; // ?mode=nuggets
+let soloConquest: SoloConquest | null = null; // ?mode=conquest — the offline lattice
+const _conqSpawn = new THREE.Vector3();
 
 // ---- Remote player lifecycle (game/remotes.ts); created in init() ----
 // oxlint-disable-next-line init-declarations -- assigned later (callback/beforeEach)
@@ -282,6 +288,35 @@ function wireNetworkLocal(): void {
     heal: (amount): void => {
       player.health = Math.min(100, player.health + Math.min(25, Math.max(1, Math.round(amount))));
     },
+  };
+  // Fall damage — the sim's T1 impact read. Dressing fires in MP too
+  // (the land thud's -vel.y scale can't see slope/wall slams; cover the
+  // gap or a 20%-bar splat sounds like a footstep). The featherfall
+  // soak runs everywhere so the local tank mirrors the shadow's drain —
+  // only the health write is offline-only (wire owns it in MP).
+  player.onFallDamage = (impact, vImp): void => {
+    const gap = Math.max(0, impact - vImp);
+    if (gap > 0) {sfx.land(gap); player.model?.landPulse(gap);}
+    effects.spawnSlamDust(player.pos, impact);
+    const frac = (impact - MOVEMENT_CONFIG.fallDamageMinSpeed) * MOVEMENT_CONFIG.fallDamageScale;
+    let raw = frac * player.maxHealth;
+    const soak = player.mods.fallSoak;
+    if (soak > 0 && player.energy > 0) {
+      const covered = Math.min(raw, player.energy * soak);
+      player.energy -= covered / soak;
+      raw -= covered;
+      if (covered > 0.01) {sfx.shieldHit();} // the tank took the punch
+    }
+    // Under a tenth of the bar the landing is a shrug, not a wound —
+    // the dust/thud above already sold the impact.
+    if (raw < player.maxHealth * MOVEMENT_CONFIG.fallDamageAbsorbFrac) {return;}
+    if (player.isDead || (player.serverOwnsHealth?.() ?? false)) {return;}
+    const dmg = Math.max(1, Math.round(raw * (1 - effectiveResist(player.mods, player.health, player.maxHealth))));
+    player.health = Math.max(0, player.health - dmg);
+    player.lastDamageSource = 'hard landing';
+    hud.showDamage(player.pos, dmg);
+    sfx.playerHurt();
+    if (player.health <= 0) { teamBots?.localDied(); killLocal('fell to death'); }
   };
   networkManager.joinPerk = () => player.perk;
   networkManager.joinClass = (): "light" | "medium" | "heavy" => player.armorClass;
@@ -475,6 +510,7 @@ function setupOfflineMode(mode: string, mapSpec?: MapSpec): void {
       botRepairJob: (team, pos, botId): { key: string; pos: THREE.Vector3; frac: number; } | null => entities.deployables.repairJob(botId, team, pos),
       // ~50hp/s at think cadence — the same heal a human trigger hold does.
       botWeld: (key): boolean => entities.deployables.weld(key, REPAIR_HEAL_PER_TICK) !== null,
+      hostileGear: (team, pos, range) => entities.deployables.hostileGear(team, pos, range),
     },
     'alpha',
     counts,
@@ -486,6 +522,34 @@ function setupOfflineMode(mode: string, mapSpec?: MapSpec): void {
   const spot = teamBots.flagrun?.spawnPoint();
   if (spot) {
     player.pos.set(spot.x + 3, terrain.getHeight(spot.x + 3, spot.z + 3) + 2, spot.z + 3);
+    noteLocalSnap();
+    player.syncMovement();
+    player.markTeleport();
+  }
+  // Conquest — the same ConquestSim the Room hosts, driven by local
+  // state. Bots were seated at authored spawns before the lattice knew
+  // its rings, so reseat them at their cores (Room's initial seating).
+  if (mode === 'conquest') {
+    soloConquest = new SoloConquest({
+      world, scene,
+      lazyPlayer: (): Player => player,
+      lazyTerrain: (): Terrain => terrain,
+      lazyNetworkManager: (): NetworkManager => networkManager,
+      lazyHud: (): { setTeamScore?(a: number, b: number): void } => hud,
+      setNodeSpawns: (rings): void => { if (teamBots) {teamBots.nodeSpawns = rings;} },
+      teamOfBot: (id): string | undefined => teamBots?.teamOf.get(id),
+      bots: (): GameBot[] => teamBots?.bots ?? [],
+      setWinner: (t): void => { if (teamBots) {teamBots.conquestWin = t;} },
+      setTeamScores: (a, b): void => {
+        if (teamBots) {teamBots.scores.alpha = a; teamBots.scores.bravo = b;}
+        world.teamScores = { alpha: a, bravo: b };
+      },
+    }, mapSpec?.tileSize ?? HM_WORLD_SCALE);
+    teamBots.conquest = soloConquest;
+    world.soloConquest = soloConquest;
+    teamBots.reseatAll();
+    const p = soloConquest.spawnSpot('alpha', _conqSpawn);
+    player.pos.set(p.x, terrain.getHeight(p.x, p.z) + 2, p.z);
     noteLocalSnap();
     player.syncMovement();
     player.markTeleport();
@@ -816,7 +880,7 @@ async function init(): Promise<void> {
   hud = new HUD();
   // Team-score strip only in team modes — dm painted a permanent
   // ALPHA 0 : 0 BRAVO badge over free-for-all play.
-  if (mode === 'nuggets' || mode === 'ctf' || mode === 'flagrun') {hud.setTeamScore(0, 0);}
+  if (mode === 'nuggets' || mode === 'ctf' || mode === 'flagrun' || mode === 'conquest') {hud.setTeamScore(0, 0);}
   healthBarSystem = new HealthBarSystem(camera);
   damageNumberManager = new DamageNumberManager(scene);
   profiler.markTime('hudCreated');
@@ -931,7 +995,11 @@ let respawnLapsed = false;
 /** Offline revive — the mirror of the server's respawnPlayer path. */
 function reviveLocal(): void {
   player.resetLifeState();
-  const spot = teamBots?.flagrun?.spawnPoint();
+  // Conquest respawns on owned territory — the node-linked rule the
+  // server's teamSpawns mint applies here too (cores always count).
+  const conqSpot = (world.localTeam === 'alpha' || world.localTeam === 'bravo')
+    ? soloConquest?.spawnSpot(world.localTeam, _conqSpawn) : undefined;
+  const spot = teamBots?.flagrun?.spawnPoint() ?? conqSpot;
   // Spec maps respawn at authored anchors (team spawn > generic spawn >
   // own base) — same priority as the solo boot spawn.
   const specAnchor = soloSpec?.spec.teamSpawns?.alpha?.[0] ?? soloSpec?.spec.spawns?.[0] ?? soloSpec?.spec.bases?.alpha;

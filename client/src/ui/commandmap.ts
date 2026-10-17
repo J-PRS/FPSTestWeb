@@ -26,6 +26,13 @@ interface FlagBlip {
   wirePos: THREE.Vector3;
 }
 
+interface NodeBlip {
+  pos: THREE.Vector3;
+  owner: 'alpha' | 'bravo' | 'neutral';
+  core: boolean;
+  hot?: boolean;
+}
+
 export class CommandMap {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -59,7 +66,8 @@ export class CommandMap {
   /** Per-frame while open: blit the baked terrain, then stamp objectives
    *  + players + the self arrow in world space. */
   update(pos: THREE.Vector3, yaw: number, players: Iterable<MinimapPlayer>,
-         flags: Map<TeamId, FlagBlip> | undefined): void {
+         flags: Map<TeamId, FlagBlip> | undefined,
+         nodes?: Map<number, NodeBlip>): void {
     if (!this.open) {return;}
     const W = getWorldScale();
     this.ensureBake();
@@ -90,6 +98,31 @@ export class CommandMap {
         c.moveTo(fx, fy - 5); c.lineTo(fx + 5, fy); c.lineTo(fx, fy + 5); c.lineTo(fx - 5, fy);
         c.closePath(); c.fill();
         c.strokeStyle = 'rgba(255,255,255,0.85)'; c.stroke();
+      }
+    }
+
+    // Conquest lattice: each node a cell square colored by owner — the
+    // territory shape is the whole mode, so every node draws (not just
+    // the HUD's actionable subset). Cores get a double box = win cond.
+    if (nodes) {
+      for (const nd of nodes.values()) {
+        const col = nd.owner === 'neutral' ? '#6a7078' : `#${(TEAM_COLORS[nd.owner as TeamId] ?? 0xFF_FF_FF).toString(16).padStart(6, '0')}`;
+        const nx = mx(nd.pos.x), ny = my(nd.pos.z);
+        c.fillStyle = col;
+        c.fillRect(nx - 3.5, ny - 3.5, 7, 7);
+        // Contested frontier — the cell BOTH teams can fight over next.
+        if (nd.hot) {
+          c.strokeStyle = 'rgba(255,255,255,0.95)';
+          c.lineWidth = 1;
+          c.beginPath();
+          c.arc(nx, ny, 5.5, 0, Math.PI * 2);
+          c.stroke();
+        }
+        if (nd.core) {
+          c.strokeStyle = col;
+          c.lineWidth = 1.5;
+          c.strokeRect(nx - 6, ny - 6, 12, 12);
+        }
       }
     }
 

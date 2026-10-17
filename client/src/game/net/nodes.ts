@@ -1,66 +1,111 @@
 // Server-owned conquest lattice — dumb renderers: a ground ring +
 // light pillar per node recolored by owner, plus link lines between
-// same-owner 4-neighbors. All rules live in modeConquest.ts server-side;
-// this file only paints nodeUpdate rosters (same pattern as net/flags).
+// same-owner 4-neighbors. The physical bases (katastand pedestals /
+// gendome cores) aren't drawn here — they arrive as 'kit' structures on
+// the wire echo and build/collide through the standard map pipeline.
+// All rules live in modeConquest.ts server-side; this file only paints
+// nodeUpdate rosters (same pattern as net/flags).
 
 import * as THREE from 'three';
 import type { NetCtx } from './ctx.js';
 import { reconcileReplicas } from '../replicas.js';
 import { TEAM_COLORS, type TeamId } from '../../../../shared/teams.js';
-import { conquestN4, conquestActionable } from '../../../../shared/conquest.js';
+import { CONQUEST, conquestN4, conquestActionable } from '../../../../shared/conquest.js';
+import type { FieldRing } from '../../world/terrain.js';
+import type { RepairTarget } from '../../ui/HealthBarSystem.js';
 
-type NodeOwner = 'alpha' | 'bravo' | 'neutral';
-interface NodeRow {
+export type NodeOwner = 'alpha' | 'bravo' | 'neutral';
+export interface NodeRow {
   id: number; gx: number; gz: number;
   pos: { x: number; y: number; z: number };
-  owner: NodeOwner; hp: number; maxHp: number; build: number; core: boolean;
+  owner: NodeOwner; hp: number; maxHp: number; build: number; buildBy?: string | null; core: boolean;
+}
+
+/** What a node layer needs — NetCtx['deps'] satisfies this structurally;
+ *  the offline bridge passes the same slots, so hosted and solo paint
+ *  identically. */
+export interface NodeLayerDeps {
+  lazyScene(): THREE.Scene;
+  lazyTerrain(): { getHeight(x: number, z: number): number; addFieldRing(x: number, z: number, r: number, tint: readonly [number, number, number]): FieldRing; removeFieldRing(h: FieldRing): void };
+  world: { localTeam?: string; nodeMarkers: Map<number, { pos: THREE.Vector3; owner: NodeOwner; core: boolean; gx: number; gz: number; show: boolean; hot: boolean }> };
+  lazyHud(): { logEvent(text: string, cls?: string): void; removePlayerIndicator(id: string): void };
+  fragMessages: { show(text: string): void };
+  lazyHealthBarSystem(): { showDamage(item: RepairTarget, ally: boolean): void };
 }
 
 const NEUTRAL_COLOR = 0x6A_70_78;
 const colorFor = (owner: NodeOwner): number => (owner === 'neutral' ? NEUTRAL_COLOR : TEAM_COLORS[owner as TeamId]);
 
-// Shared geometry — every node reuses these; materials are per-node
-// (owner recolor is a material tint, not a rebuild).
-const RING_GEO = new THREE.RingGeometry(4.5, 6.5, 28);
-const CORE_RING_GEO = new THREE.RingGeometry(6.5, 9, 36);
+// The ring is a REAL terrain decal: Terrain.addFieldRing draws the
+// annulus into the terrain fragment shader itself, so it conforms to
+// the displaced surface exactly — no draped mesh to slice or float.
+// The shader's band sits at r*0.9 with a faint interior fill.
+const NODE_RING_R = CONQUEST.TOUCH_R / 0.9;
+const CORE_RING_R = CONQUEST.TOUCH_R / 0.9 + 2;
 const BEAM_GEO = new THREE.CylinderGeometry(1.1, 1.7, 1, 10, 1, true);
 const CORE_BEAM_GEO = new THREE.CylinderGeometry(1.9, 2.8, 1, 12, 1, true);
 const BEAM_H = 46;
 const CORE_BEAM_H = 70;
+// The shootable weak point — a glowing shard on the deck. Beams/ring say
+// WHO owns it; the crystal says WHAT you damage.
+const CRYSTAL_GEO = new THREE.OctahedronGeometry(1, 0);
 
 interface NodeVis {
   g: THREE.Group;
-  ring: THREE.Mesh;
+  ring: FieldRing;
+  tint: [number, number, number];
   beam: THREE.Mesh;
-  ringMat: THREE.MeshBasicMaterial;
   beamMat: THREE.MeshBasicMaterial;
+  crystal: THREE.Mesh;
+  crystalMat: THREE.MeshBasicMaterial;
+  /** RepairTarget adapter — vitals bar reads health live off it. */
+  target: RepairTarget;
+  /** hp as of last apply — a drop is the damage edge that pops the bar. */
+  lastHp: number;
   core: boolean;
+  /** Y the beam rises from — the kit base's top (katastand deck ~3.4,
+   *  gendome cap ~7), so it doesn't sprout through the pedestal. */
+  baseTop: number;
 }
 
-function buildVis(row: NodeRow): NodeVis {
+const _col = new THREE.Color();
+function buildVis(row: NodeRow, terrain: ReturnType<NodeLayerDeps['lazyTerrain']>): NodeVis {
   const g = new THREE.Group();
-  const ringMat = new THREE.MeshBasicMaterial({
-    color: colorFor(row.owner), transparent: true, opacity: 0.85,
-    side: THREE.DoubleSide, depthWrite: false,
-  });
+  const col = colorFor(row.owner);
   const beamMat = new THREE.MeshBasicMaterial({
-    color: colorFor(row.owner), transparent: true, opacity: row.core ? 0.42 : 0.3,
+    color: col, transparent: true, opacity: row.core ? 0.42 : 0.3,
     side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending,
   });
-  const ring = new THREE.Mesh(row.core ? CORE_RING_GEO : RING_GEO, ringMat);
-  ring.rotation.x = -Math.PI / 2;
-  ring.position.y = 0.35;
+  const tint: [number, number, number] = [0, 0, 0];
+  _col.setHex(col);
+  tint[0] = _col.r; tint[1] = _col.g; tint[2] = _col.b;
+  const ring = terrain.addFieldRing(row.pos.x, row.pos.z, row.core ? CORE_RING_R : NODE_RING_R, tint);
+  ring.intensity = row.core ? 0.75 : 0.55;
+  const baseTop = row.core ? 7 : 3.4;
   const beam = new THREE.Mesh(row.core ? CORE_BEAM_GEO : BEAM_GEO, beamMat);
   const h = row.core ? CORE_BEAM_H : BEAM_H;
-  beam.position.y = h / 2;
+  beam.position.y = baseTop + h / 2;
   beam.scale.y = h; // unit cylinder stretched to full height
-  g.add(ring, beam);
+  g.add(beam);
+  const crystalMat = new THREE.MeshBasicMaterial({ color: col });
+  const crystal = new THREE.Mesh(CRYSTAL_GEO, crystalMat);
+  const cs = row.core ? 1.6 : 1;
+  crystal.scale.set(cs, cs * 1.9, cs);
+  crystal.position.y = baseTop + cs * 1.2;
+  g.add(crystal);
+  const target: RepairTarget = {
+    pos: new THREE.Vector3(row.pos.x, row.pos.y + baseTop + cs, row.pos.z),
+    dead: false,
+    v: { health: row.hp, armor: 0, maxHealth: row.maxHp },
+  };
   g.position.set(row.pos.x, row.pos.y, row.pos.z);
-  return { g, ring, beam, ringMat, beamMat, core: row.core };
+  return { g, ring, tint, beam, beamMat, crystal, crystalMat, target, lastHp: row.hp, core: row.core, baseTop };
 }
 
-export function wireNodes(ctx: NetCtx): void {
-  const { deps, networkManager } = ctx;
+/** One row roster → one lattice paint. The hosted path feeds wire
+ *  rosters; the offline bridge feeds its own sim's snapshot — same
+ *  reconcile/links/markers/callouts either way. */
+export function createNodeLayer(deps: NodeLayerDeps): { applyRows(nodes: NodeRow[]): void } {
   const vis = new Map<number, NodeVis>();
   const prevOwner = new Map<number, NodeOwner>();
   const prevCoreHp = new Map<number, number>();
@@ -132,44 +177,94 @@ export function wireNodes(ctx: NetCtx): void {
     for (const r of rows) {
       seen.add(r.id);
       let m = marks.get(r.id);
-      if (!m) {m = { pos: new THREE.Vector3(), owner: r.owner, core: r.core, gx: r.gx, gz: r.gz, show: false }; marks.set(r.id, m);}
+      if (!m) {m = { pos: new THREE.Vector3(), owner: r.owner, core: r.core, gx: r.gx, gz: r.gz, show: false, hot: false }; marks.set(r.id, m);}
       m.pos.set(r.pos.x, r.pos.y, r.pos.z);
       m.owner = r.owner;
       m.core = r.core;
+      // HOT = owned and enemy-actionable — the contested frontier. True
+      // for BOTH directions: my node they can raze (defend!) and their
+      // node I can raze (attack!). These are the focus centers.
+      const enemy = r.owner === 'alpha' ? 'bravo' : r.owner === 'bravo' ? 'alpha' : null;
+      m.hot = enemy !== null && conquestActionable(rows, r, enemy, nDim);
       const canAct = me === 'alpha' || me === 'bravo' ? conquestActionable(rows, r, me, nDim) : false;
-      m.show = r.core || (canAct && r.owner !== me);
+      m.show = r.core || m.hot || (canAct && r.owner !== me);
     }
     for (const [id] of marks) {
       if (!seen.has(id)) {marks.delete(id); deps.lazyHud().removePlayerIndicator(`node:${id}`);}
     }
   };
 
-  networkManager.onNodeUpdate = (nodes: NodeRow[]): void => {
+  const applyRows = (nodes: NodeRow[]): void => {
     if (!linksAdded) {deps.lazyScene().add(links); linksAdded = true;}
+    // Nodes the local team can act on right now — they get max ring
+    // intensity ("the structure in this ring is your target").
+    const me = deps.world.localTeam;
+    const nDim = Math.round(Math.sqrt(nodes.length)) || 1;
+    const actionable = new Set<number>();
+    const hot = new Set<number>();
+    if (me === 'alpha' || me === 'bravo') {
+      for (const r of nodes) {
+        if (r.owner !== me && r.buildBy !== me && conquestActionable(nodes, r, me, nDim)) {actionable.add(r.id);}
+        const enemy = r.owner === 'alpha' ? 'bravo' : r.owner === 'bravo' ? 'alpha' : null;
+        if (enemy && conquestActionable(nodes, r, enemy, nDim)) {hot.add(r.id);}
+      }
+    }
     reconcileReplicas(vis, nodes, {
       rowId: (r): number => r.id,
       ensure: (r): NodeVis => {
-        const v = buildVis(r);
+        const v = buildVis(r, deps.lazyTerrain());
         deps.lazyScene().add(v.g);
         vis.set(r.id, v);
         return v;
       },
       apply: (v, r): void => {
         callouts(r);
-        const color = colorFor(r.owner);
-        v.ringMat.color.setHex(color);
+        // Three readable states: neutral untouched = dim grey; under
+        // construction = the BUILDER's color brightening with progress;
+        // owned = team color at full strength. The ring paints the
+        // capture zone, so "what do I shoot" reads as the structure
+        // inside it — actionable-for-me nodes get max intensity to pull
+        // the eye.
+        const builder = (r.buildBy === 'alpha' || r.buildBy === 'bravo') ? r.buildBy : null;
+        const color = colorFor((builder ?? r.owner) as NodeOwner);
+        _col.setHex(color);
+        v.tint[0] = _col.r; v.tint[1] = _col.g; v.tint[2] = _col.b;
+        v.ring.intensity = r.owner === 'neutral'
+          ? (r.build > 0 ? 0.35 + r.build * 0.5 : 0.3)
+          : (actionable.has(r.id) || hot.has(r.id) ? 1 : (r.core ? 0.8 : 0.6));
         v.beamMat.color.setHex(color);
+        v.crystalMat.color.setHex(color);
+        // hp drop edge → floating vitals bar on the crystal, exactly the
+        // feedback a shooter expects from "I hit the target". Ally color
+        // when the node fights for my team.
+        if (r.hp < v.lastHp) {
+          deps.lazyHealthBarSystem().showDamage(v.target, (builder ?? r.owner) === me);
+        }
+        v.lastHp = r.hp;
+        v.target.v.health = r.hp;
+        v.target.v.maxHealth = r.maxHp;
+        // Crystal cracks: shrinks and goes brittle as hp drains.
+        const hpF = Math.max(0, Math.min(1, r.hp / r.maxHp));
+        const cs = (v.core ? 1.6 : 1) * (0.55 + 0.45 * hpF);
+        v.crystal.scale.set(cs, cs * 1.9, cs);
         // Beam reads lattice state at a glance: neutral unbuilt = stub,
-        // building = growing toward full, owned/core = full height.
+        // building = growing toward full, owned/core = full height — and
+        // a WOUNDED node dims its pillar (opacity ∝ hp) so "it's almost
+        // down" reads without a healthbar.
         const h = v.core ? CORE_BEAM_H : BEAM_H;
         const frac = r.owner === 'neutral' ? Math.max(0.08, r.build) : 1;
         v.beam.scale.y = h * frac;
-        v.beam.position.y = (h * frac) / 2;
+        v.beam.position.y = v.baseTop + (h * frac) / 2;
+        v.beamMat.opacity = r.owner === 'neutral'
+          ? (r.core ? 0.42 : 0.3)
+          : 0.12 + 0.38 * Math.max(0, Math.min(1, r.hp / r.maxHp));
       },
       reap: (v, id): void => {
         deps.lazyScene().remove(v.g);
-        v.ringMat.dispose();
+        deps.lazyTerrain().removeFieldRing(v.ring);
+        v.target.dead = true; // drops the vitals bar next frame
         v.beamMat.dispose();
+        v.crystalMat.dispose();
         prevOwner.delete(id);
         prevCoreHp.delete(id);
       },
@@ -177,4 +272,10 @@ export function wireNodes(ctx: NetCtx): void {
     rebuildLinks(nodes);
     syncMarkers(nodes);
   };
+  return { applyRows };
+}
+
+export function wireNodes(ctx: NetCtx): void {
+  const layer = createNodeLayer(ctx.deps);
+  ctx.networkManager.onNodeUpdate = (nodes: NodeRow[]): void => layer.applyRows(nodes);
 }

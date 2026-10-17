@@ -307,6 +307,9 @@ function tickEntities(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>
   if (!demoPlaying && !deps.lazyNetworkManager().isConnected() && bootReleased) {deps.waveDirector().update(dt);}
   if (!demoPlaying) {entities.updateNuggets(dt);}
   deps.teamBots?.()?.update(dt);
+  // Solo conquest lattice — offline only; connected rooms get nodeUpdate
+  // on the wire and this field stays unset.
+  deps.world.soloConquest?.tick(dt);
   perf.mark('bots');
   if (!demoPlaying) {deps.combat()?.updateProjectiles(dt);}
   deps.demoLifecycle().updatePlaybackProjectiles(dt);
@@ -547,8 +550,8 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   // visibly choppy next to the 60fps world, and the redraw is ~30 arcs.
   deps.ambientBirds.positions(_birdPosBuf);
   fillMapBlips(deps, networkManager);
-  hud.updateMinimap(entities.targets, entities.nuggets, player.pos, player.yaw, _birdPosBuf, _mapBlips);
-  if (hud.commandMapOpen) {hud.updateCommandMap(player.pos, player.yaw, _mapBlips, deps.world.flagMarkers);}
+  hud.updateMinimap(entities.targets, entities.nuggets, player.pos, player.yaw, _birdPosBuf, _mapBlips, deps.world.nodeMarkers.values());
+  if (hud.commandMapOpen) {hud.updateCommandMap(player.pos, player.yaw, _mapBlips, deps.world.flagMarkers, deps.world.nodeMarkers);}
 
   // During demo playback the vm mirrors the frame's recorded weaponType —
   // hiding it would strip the shooter POV from cool-shot clips.
@@ -936,7 +939,14 @@ st.veilFrames += 1;
   }
 
   return {
-    start(): void { requestAnimationFrame(loop); },
+    start(): void {
+      // Kick parallel compiles BEFORE frame 1: the tick-60 warmup gate
+      // waits for late content, but every material already in the scene
+      // would otherwise sync-compile inside its first draw — on refresh
+      // that's the multi-second whole-browser ANGLE stall.
+      deps.rendererSetup.warmup();
+      requestAnimationFrame(loop);
+    },
     /** Resolves once ~45 consecutive sub-26ms frames rendered (or 240
      *  frames pass on a weak box — never gates forever). Offline
      *  starts wait on this so the match doesn't spawn mid-compile-hitch. */

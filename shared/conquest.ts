@@ -26,6 +26,12 @@ export const CONQUEST = {
   CORE_HP: 4000,
   /** Respawn sphere minted at each owned node — frontier-forward spawns. */
   NODE_SPAWN_R: 12,
+  /** Coordinator: seconds a bot keeps its node assignment before a
+   *  re-assess — UT's ReAssessStrategy cadence in miniature. */
+  ASSIGN_TTL_S: 18,
+  /** Occupancy cap per node — the ObjectiveCovered rule: a fully
+   *  staffed target doesn't need another body. */
+  NODE_STAFF_MAX: 3,
 } as const;
 
 /** Who can hold a node — 'neutral' is the empty state, never a team. */
