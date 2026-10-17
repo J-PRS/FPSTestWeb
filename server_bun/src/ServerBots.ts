@@ -668,7 +668,12 @@ hurtCount += 1;
         // the shadow's write is the bot's whole wire truth.
         p.position.x = sh.pos.x; p.position.y = sh.pos.y; p.position.z = sh.pos.z;
         p.velocity.x = sh.vel.x; p.velocity.y = sh.vel.y; p.velocity.z = sh.vel.z;
-        p.rotation.yaw = sh.yaw;
+        // Same rule as botDrive: a live trigger faces the target, not the
+        // heading — MPC runners strafe while shooting like everyone else.
+        const mpcAim = this.arsenal.aimPoint(id);
+        p.rotation.yaw = mpcAim
+          ? Math.atan2(mpcAim.x - p.position.x, mpcAim.z - p.position.z)
+          : sh.yaw;
         p.skiing = 1;
       }
       else if (this.legacyMove(id, p, out.dest, dt)) {continue;}

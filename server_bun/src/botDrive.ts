@@ -73,10 +73,16 @@ export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocit
   );
   const sheepHeight = Number.isFinite(sheepGround) ? Math.max(0, p.position.y - classCapsule(p.armorClass).eye - sheepGround) : 0;
   h.sheep.check(id, p, { out, airborne: !sh.onGround, hasDest: dist >= 0.5, foe: (h.foeNear.get(id) ?? 0) > now, dt, height: sheepHeight }, now);
-  if (dist >= 0.5) {
+  const aim = h.arsenal.aimPoint(id);
+  if (aim || dist >= 0.5) {
     // Wrist-speed turn — a snapped 180° reads as a fly-flick while an
     // arc at ~5 rad/s reads as a player swinging their view around.
-    const want = Math.atan2(dx, dz);
+    // A bot's yaw is its crosshair (like a human's): while a trigger is
+    // live it faces the TARGET, not the destination — a body strafing
+    // sideways while its shots land on you reads as a silent aimbot.
+    const want = aim
+      ? Math.atan2(aim.x - p.position.x, aim.z - p.position.z)
+      : Math.atan2(dx, dz);
     let dyaw = want - p.rotation.yaw;
     if (dyaw > Math.PI) {dyaw -= Math.PI * 2;}
     if (dyaw < -Math.PI) {dyaw += Math.PI * 2;}
@@ -87,7 +93,6 @@ export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocit
   // Head tracks the trigger's live aim point (same 5 rad/s slew as the
   // wrist turn); wire pitch is negated — positive looks down — and a
   // disengaged bot relaxes back to level.
-  const aim = h.arsenal.aimPoint(id);
   const wantPitch = aim ? -Math.atan2(aim.y - p.position.y, Math.hypot(aim.x - p.position.x, aim.z - p.position.z)) : 0;
   const dpitch = wantPitch - p.rotation.pitch;
   p.rotation.pitch += Math.max(-5 * dt, Math.min(5 * dt, dpitch));
