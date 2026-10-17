@@ -171,6 +171,10 @@ function wirePlayerCombat(ctx: NetCtx): void {
     // Server-confirmed hit on a remote: flash the marker even when client
     // prediction didn't (e.g. lag-comp rewound the victim into the shot).
     if (shooterId === nm().getLocalPlayerId()) {
+      // Authority-simmed shells never run the client's predict path, so
+      // the damage number has to live on the echo or it never appears.
+      const rp = deps.world.remotePlayers.get(targetId);
+      if (rp) {deps.lazyDamageNumbers().spawn(rp.pos, damage, '#ffe08a', deps.lazyCamera());}
       deps.lazyHud().showHitMarker();
       sfx.hitMarker(false);
     }

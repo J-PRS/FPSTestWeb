@@ -854,6 +854,8 @@ async function init(): Promise<void> {
     lazyEffects: (): EffectsManager => effects,
     lazyHud: (): HUD => hud,
     lazyHealthBarSystem: (): HealthBarSystem => healthBarSystem,
+    lazyDamageNumbers: (): DamageNumberManager => damageNumberManager,
+    lazyCamera: (): THREE.Camera => camera,
     lazyDemoManager: (): DemoManager | null => demoManager,
     fragMessages,
     explosionTracker,

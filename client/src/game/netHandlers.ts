@@ -19,6 +19,7 @@ import { speakVgs } from '../core/tts.js';
 import { Vgs } from './vgs.js';
 import type { HUD } from '../ui/hud.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
+import type { DamageNumberManager } from '../effects/damageNumbers.js';
 import type { ExplosionTracker } from '../utils/ExplosionTracker.js';
 import type { Terrain } from '../world/terrain.js';
 import type { AmbientWeather } from '../effects/ambientWeather.js';
@@ -44,6 +45,8 @@ export interface NetDeps {
   lazyEffects(): EffectsManager;
   lazyHud(): HUD;
   lazyHealthBarSystem(): HealthBarSystem;
+  lazyDamageNumbers(): DamageNumberManager;
+  lazyCamera(): THREE.Camera;
   /** Optional until initDemo runs — net handlers record through it when
    *  present so remote shots/creatures land in the rolling buffer. */
   lazyDemoManager?(): DemoManager | null;

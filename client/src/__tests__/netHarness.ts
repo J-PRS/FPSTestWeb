@@ -50,7 +50,9 @@ export function makeDeps() {
     lazyPlayer: (): never => player as never,
     lazyEffects: (): never => ({ spawnJumpDust(): void { return; }, spawnJetpack(): void { return; }, spawnBeam(): void { return; } }) as never,
     lazyHud: (): never => new Proxy({}, { get: (_t, k): (a?: unknown) => unknown => (a?: unknown): unknown => { calls.hud.push(`${String(k)}`); return a; } }) as never,
-    lazyHealthBarSystem: (): never => new Proxy({}, { get: (): () => void => (): void => { return; } }) as never,
+    lazyHealthBarSystem: (): never => new Proxy({}, { get: (): () => void => (): void => { return; } }) as never,
+    lazyDamageNumbers: (): never => new Proxy({}, { get: (): () => void => (): void => { return; } }) as never,
+    lazyCamera: (): never => ({}) as never,
     fragMessages: { show: (m: string): number => calls.frag.push(m) } as never,
     explosionTracker: new ExplosionTracker(),
     // dispatch() swallows handler throws into a warn — in tests a thrown
