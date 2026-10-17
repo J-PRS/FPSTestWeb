@@ -5,7 +5,7 @@ Env: bun game server on :8000 (`bun src/server.ts` in server_bun — running,
 (SwiftShader WebGL). Pointer lock stubbed element-correct. Temp `__test` hook
 exposes { demoManager, player, entities, world, networkManager, rendererCanvas }.
 
-Primary flow: join `?room=bottest_<ts>&map=nugwar&bots=6` — nugwar spec is
+Primary flow: join `?room=bottest_<ts>&map=erg&bots=6` — erg spec is
 mode 'nuggets' with bots:6; the join's bots=6 sets spec.bots + botFill, so
 ServerBots fills to 6. Bots appear as world.remotePlayers keys 'bot:*'.
 

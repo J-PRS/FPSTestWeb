@@ -17,6 +17,8 @@ export interface MatchHost {
   ctf: CtfBridge | null;
   rabbit: RabbitBridge | null;
   flagrun?: { reset(): void } | null;
+  conquest?: { reset?(): void } | null;
+  conquestWin?: string | null;
   deps: {
     world: { localTeam?: string; remotePlayers: { rename(oldId: string, newId: string): void } };
     lazyHud(): { setTeamScore?(a: number, b: number): void; scoreboardVisible?: boolean; setScoreboardVisible?(v: boolean): void; setScoreboardCountdown?(secLeft: number | null): void };
@@ -76,6 +78,8 @@ export function resetMatch(m: MatchHost): void {
   m.ctf?.reset();
   m.rabbit?.reset();
   m.flagrun?.reset();
+  m.conquest?.reset?.();
+  if (m.conquestWin !== undefined) {m.conquestWin = null;}
   pushScore(m);
   m.hooks.remoteKillFeed(`${m.spec.label} — NEW MATCH`);
 }

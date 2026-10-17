@@ -85,6 +85,9 @@ interface BotHooks {
   botRepairJob?(team: string, pos: THREE.Vector3, botId: string): { key: string; pos: THREE.Vector3; frac: number } | null;
   /** Apply a weld tick — returns true while the item still exists. */
   botWeld?(key: string): boolean;
+  /** Nearest hostile emplacement the bot could shell — mirrors the
+   *  server senses' hostileGear scan. */
+  hostileGear?(team: string | undefined, pos: THREE.Vector3, range: number): { pos: THREE.Vector3; kind: string } | null;
 }
 // Small accessor so update() reads deps once per frame.
 function deps0(m: TeamBots): BotsDeps { return m.deps; }
@@ -109,6 +112,15 @@ export class TeamBots {
   /** Solo cap circuit — flagrun's own ruleset (any-stand cap, lap
    *  timing), not the two-team CtfBridge referee. */
   flagrun: FlagRunBridge | null = null;
+  /** Solo conquest module — owns the lattice when mode is conquest;
+   *  minted by setupOfflineMode after construction. */
+  conquest: { objectiveInfoFor(bot: GameBot): { pos: THREE.Vector3; infiltrating: boolean } | null; reset?(): void } | null = null;
+  /** Node-linked spawn rings — the conquest sim's setSpawns lands here;
+   *  spawnSpot consults them before the authored spec pools. */
+  nodeSpawns: Record<TeamId, { x: number; y: number; z: number; r: number }[]> | null = null;
+  /** Conquest core kill = match end — the update win check reads this
+   *  before checkWin (node counts never reach the 999 winAt). */
+  conquestWin: string | null = null;
   private senses: BotSenses;
   private readonly notices = new RoomNoticer();
   private fire: BotFire;
@@ -274,7 +286,7 @@ bn += 1;
     this.wd.step(dt, this.bots);
     syncLocalTeam(this);
     if (!this.over) {
-      const w = checkWin(this);
+      const w = this.conquestWin ?? checkWin(this);
       if (w) {
         this.over = w;
         this.hooks.remoteKillFeed(winText(this, w) + (this.flagrun?.statsLine() ?? ''));
@@ -388,10 +400,25 @@ bn += 1;
         if (welded) {this.sheep.markShot(bot.playerId);}
         else {bot.wantRepair = null;} // died mid-walk — drop the intent
       }
+      this.trySiege(bot);
       this.fire.tryPropel(bot, Boolean(shot));
     }
     if (shot) {this.sheep.markShot(bot.playerId);}
     this.sheepTick(bot, acc, foes, terrain);
+  }
+
+  /** Offline siege — mirror of ServerBots' hostileGear lob: an idle bot
+   *  with belt charges shells the nearest enemy emplacement. Bots with a
+   *  live hunt target fight that instead (players > gear). */
+  private readonly gearLobT = new Map<string, number>();
+  private trySiege(bot: GameBot): void {
+    if (bot.huntTargetId) {return;}
+    const now = performance.now();
+    if ((this.gearLobT.get(bot.playerId) ?? 0) > now) {return;}
+    const gear = this.hooks.hostileGear?.(bot.team ?? undefined, bot.position, 80);
+    if (!gear) {return;}
+    this.fire.siegeLob(bot, gear.pos);
+    this.gearLobT.set(bot.playerId, now + 4000);
   }
 
   /** Sheep-meter bookkeeping tail of afterThink — foe-sight, dest
@@ -445,7 +472,9 @@ bn += 1;
    *  brains (objective+infiltrating, huntCreatures, hearing, dodge) has
    *  a client-side mirror here. */
   private ctxFor(bot: GameBot, enemies: Parameters<GameBot['think']>[1]['enemies'], others: THREE.Vector3[], terrain: Terrain): Parameters<GameBot['think']>[1] {
-    const info = this.ctf?.objectiveInfoFor(bot) ?? this.flagrun?.objectiveInfoFor(bot);
+    const info = (this.ctf?.objectiveInfoFor(bot) ?? this.flagrun?.objectiveInfoFor(bot) ?? this.conquest?.objectiveInfoFor(bot)) as
+      { pos: THREE.Vector3; infiltrating?: boolean; running?: boolean;
+        thief?: { id: string; pos: THREE.Vector3; vel: THREE.Vector3 } | null } | null;
     let ctx = this.ctxCache.get(bot.playerId);
     if (!ctx) {
       ctx = {
@@ -576,6 +605,16 @@ bn += 1;
    *  ring around the player. FFA pseudo-teams fall through to 'spawns'. */
   spawnSpot(team: string): THREE.Vector3 {
     const terrain = this.deps.lazyTerrain();
+    const rings = this.nodeSpawns?.[team as TeamId];
+    if (rings?.length) {
+      // Conquest spawn spheres — a live point inside the ring, snapped.
+      const ring = rings[Math.floor(simRand() * rings.length)]!;
+      const a = simRand() * Math.PI * 2;
+      const r = simRand() * ring.r;
+      const sx = ring.x + Math.cos(a) * r, sz = ring.z + Math.sin(a) * r;
+      const g = terrain.getHeight(sx, sz);
+      return new THREE.Vector3(sx, (Number.isFinite(g) ? g : 0) + EYE, sz);
+    }
     const pool = this.mapSpec?.teamSpawns?.[team as TeamId] ?? this.mapSpec?.spawns;
     const floorAt = (x: number, z: number): number => {
       const g = terrain.getHeight(x, z);

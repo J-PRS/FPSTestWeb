@@ -175,6 +175,12 @@ export class BotFire {
     if (aim) {this.lobAt(bot, aim);}
   }
 
+  /** Shell a static point with the belt weapon — siege lobs at hostile
+   *  emplacements; the ballistic arc solver already handles range. */
+  siegeLob(bot: GameBot, aim: { x: number; y: number; z: number }): void {
+    this.lobAt(bot, aim);
+  }
+
   /** Lob the belt weapon at an explicit point — ballistic arc solves
    *  θ from the target's range instead of a flat guess. */
   private lobAt(bot: GameBot, aim: { x: number; y: number; z: number }): void {

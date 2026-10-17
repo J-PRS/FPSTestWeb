@@ -11,7 +11,7 @@ import type { Vec3 } from './types.ts';
 import { hmHeight, hmChord, type Heightfield } from '../../shared/heightfield.ts';
 import { classCapsule } from '../../shared/botClasses.ts';
 import type { BrainOut } from '../../shared/botBrain.ts';
-import type { MoveState } from '../../shared/movement.ts';
+import { MOVEMENT_CONFIG, type MoveState } from '../../shared/movement.ts';
 import type { BotSheepMeter } from './botSheep.ts';
 import type { BotArsenal } from './botArsenal.ts';
 import { isSuper } from './superBot.ts';
@@ -96,6 +96,14 @@ export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocit
   const wantPitch = aim ? -Math.atan2(aim.y - p.position.y, Math.hypot(aim.x - p.position.x, aim.z - p.position.z)) : 0;
   const dpitch = wantPitch - p.rotation.pitch;
   p.rotation.pitch += Math.max(-5 * dt, Math.min(5 * dt, dpitch));
+  // Landing flare — the T1 damage floor means a 25+ m/s arrival costs
+  // real health; a human feathers jets on the way down, and the reflex
+  // lives below the brain (a splat is a reflex, not a decision). Gate is
+  // world fall speed + ~0.8s to contact: slope-parallel descents carry
+  // the same vel.y with v·n≈0 and burn a little tank for nothing —
+  // under-flare is cheap, a splat is not.
+  if (out.move && !sh.onGround && sh.vel.y < -MOVEMENT_CONFIG.fallDamageMinSpeed
+    && sheepHeight < -sh.vel.y * 0.8) { out.move.jet = true; }
   commitMoveInput(h, id, p, out, { moving: dist >= 0.5 }, now);
   // 'trying' needs reach, not intent: out.dest re-rolls each think and
   // can hover a meter off the position (steerer micro-orbit), which

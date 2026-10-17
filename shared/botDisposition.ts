@@ -303,7 +303,9 @@ export function pickDeploy(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, 
     const roll = botRand();
     let kind: string = 'drone';
     if ((ctx.healthFrac ?? 1) < 0.4) {kind = 'station';}
-    else if (roll < 0.55) {kind = 'turret';}
+    else if (roll < 0.42) {kind = 'turret';}
+    else if (roll < 0.56) {kind = 'mortar';} // stand artillery — shells the approach lanes
+    else if (roll < 0.72) {kind = 'cgturret';} // suppression spray on the open ground
     else if (roll < 0.85) {kind = 'mine';}
     const a = botRand() * Math.PI * 2;
     const r = 4 + botRand() * 6;
