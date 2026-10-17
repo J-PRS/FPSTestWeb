@@ -619,6 +619,11 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
 
   }
 
+  // Crumble weapons (bombard) present a shard burst, not a blast dome —
+  // spawn it here and flag the blast presenter to skip the dome. Claim,
+  // force and splash still ride the standard path below.
+  if (p.config.crumbles) {spawnCrumbleShards(c, p, p.hitPointValid ? p.hitPoint : p.pos);}
+
   // One AOE message for all weapons — the shared weapon table carries
 
   // weaponType, server resolves stats from it (no per-weapon message types)
@@ -701,6 +706,8 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
 
     pos: blastPos,
 
+    crumbles: p.config.crumbles,
+
     claimLegal,
 
     radius: p.config.aoeRadius * bloom * deps.lazyPlayer().mods.aoeRadius,   // gameplay radius = server truth (incl. perk)
@@ -760,6 +767,15 @@ export function spawnVisualOnly(c: CombatCtx, p: Projectile): void {
     kineticHitFx(c, p, pos);
 
     if (!p.hitBall && !p.hitPlayerId && !p.config.crumbles) {deps.lazyEffects().spawnBulletMark(pos);}
+
+    return;
+
+  }
+
+  if (p.config.crumbles) {
+
+    // Crumble weapons present shards, not a dome — on remote replicas too.
+    spawnCrumbleShards(c, p, pos);
 
     return;
 
@@ -877,49 +893,48 @@ const _crumbCol = new THREE.Color();
 
  *  its own thunk voice so a 60dmg dart doesn't feel like a pistol hit. */
 
-function kineticHitFx(c: CombatCtx, p: Projectile, pos: THREE.Vector3): void {
+/** Crumble weapons (bombard): the ball IS the ordnance — it bursts into
+ *  rock shards at the contact point, riding the same pooled debris a
+ *  creature death would. No dome, just the mass coming apart. Shared by
+ *  the local impact path (which also runs the standard splash) and by
+ *  remote replicas. */
+function spawnCrumbleShards(c: CombatCtx, p: Projectile, pos: THREE.Vector3): void {
 
   const {deps} = c;
 
   deps.lazyEffects().spawnImpact(pos, p.vel);
 
-  if (p.config.crumbles) {
+  _debrisDir.copy(p.vel).normalize();
 
-    // The ball IS the ordnance: it bursts into rock shards at the contact
+  deps.world.debrisList.push(new BallDebris(
 
-    // point, riding the same pooled debris a creature death would — no
+    deps.lazyScene(), deps.lazyTerrain(), pos,
 
-    // explosion, no dome, just the mass coming apart.
+    _crumbCol.setHex(p.config.meshColor), p.config.bodyRadius,
 
-    _debrisDir.copy(p.vel).normalize();
+    { bodyRadius: p.config.bodyRadius, impulseDir: _debrisDir, inheritVel: p.vel, kind: 'rock' },
 
-    deps.world.debrisList.push(new BallDebris(
+  ));
 
-      deps.lazyScene(), deps.lazyTerrain(), pos,
+  // ?debug: show the (small) splash reach like every blast — a crumble
+  // draws no dome, so this is the only read on the damage envelope.
+  if (urlParams.debug && p.config.aoeRadius > 0) {
 
-      _crumbCol.setHex(p.config.meshColor), p.config.bodyRadius,
-
-      { bodyRadius: p.config.bodyRadius, impulseDir: _debrisDir, inheritVel: p.vel, kind: 'rock' },
-
-    ));
-
-    // Crumble shells still carry a real server-side shrapnel sweep —
-
-    // under ?debug show its reach like every blast, else the damage
-
-    // envelope is invisible (noExplosion skips the normal gizmo path).
-
-    if (urlParams.debug && p.config.aoeRadius > 0) {
-
-      deps.world.aoeGizmos.push(new AoeGizmo(deps.lazyScene(), pos, p.config.aoeRadius));
-
-    }
-
-    sfx.explosionAt(pos, false, p.config.weaponType, p.vel);
-
-    return;
+    deps.world.aoeGizmos.push(new AoeGizmo(deps.lazyScene(), pos, p.config.aoeRadius));
 
   }
+
+  sfx.explosionAt(pos, false, p.config.weaponType, p.vel);
+
+}
+
+function kineticHitFx(c: CombatCtx, p: Projectile, pos: THREE.Vector3): void {
+
+  const {deps} = c;
+
+  if (p.config.crumbles) {spawnCrumbleShards(c, p, pos); return;}
+
+  deps.lazyEffects().spawnImpact(pos, p.vel);
 
   if (p.config.embeds === undefined) {return;}
 

@@ -252,6 +252,9 @@ export class Projectile {
     this.trail = new QuarksTrail({
       config,
       pos: this.rendered, vel: this.vel,
+      // Emission lead measures travel from sim truth, never the drawn
+      // (renderOffset-blended) anchor — see effects/trailLead.ts.
+      travelPos: this.pos,
       age: (): number => this.age,
     });
 

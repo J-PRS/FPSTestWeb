@@ -792,12 +792,12 @@ export const WEAPONS: Record<number, WeaponStats> = {
   },
   [WeaponType.Bombard]: {
     // The cannon's bigger, meaner brother: an even fatter iron ball that
-    // NEVER detonates — it shatters into shards on ANY contact (terrain,
-    // walls, shields, bodies; no terrainBounce, no arm window). The
-    // crumble's shards are real now: a tight radial shrapnel sweep pays
-    // near-misses. The player envelope rides directDamage (splash is a
-    // fraction of the direct line by convention) — so eating EVERY shard
-    // tops out at exactly ball-meets-body, never above.
+    // NEVER detonates — it shatters into shards on contact (terrain,
+    // walls, shields, bodies; no arm window). The crumble carries a small
+    // standard 2m splash sphere, so a near-miss at the contact point still
+    // tags — a plain reliable sphere, NOT a shard cone. The player
+    // envelope rides directDamage (splash is a fraction of the direct line
+    // by convention).
     directDamage: 140,   // tops every primary — and the only headline
                          // number actually landable on a body: Mortar's
                          // 120 is fuse-gated (armTime 1.5s ≈ 82m), its
@@ -806,8 +806,9 @@ export const WEAPONS: Record<number, WeaponStats> = {
                          // overall record; also the shrapnel ceiling.
     aoeDamage: 140,      // wildlife splash mirrors the player envelope —
                          // a shard is a shard regardless of what it hits
-    aoeRadius: 9,        // tight shard cone read — a few meters of menace,
-                         // not an artillery dome
+    aoeRadius: 2,        // tiny, reliable tag: the contact point and
+                         // nothing more. (A 9m shard cone read as
+                         // unreliable — most of it never connected.)
     knockbackForce: 12,  // shard thump — staggers, doesn't launch
     forceMode: 'push',
     speed: 100,        // faster than the cannon's 80 — a flat siege slug, not a lob
@@ -817,6 +818,13 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMax: 1.5,         // modest proxy — a siege slug earns contact, not a 2m wake
     hitGrow: 0.5,
     maxLifetime: 6,    // ~570m of carry before the fuse crumbles it mid-air
+    // Bounce SHELVED (it felt strictly worse): maxBounces 0 disables the
+    // skip — the slug crumbles on first dirt contact, as before. The skip
+    // fields stay so it can be re-tried by setting maxBounces 1.
+    terrainBounce: true,
+    bounceRestitution: 0.5,
+    bounceFriction: 0.5,
+    maxBounces: 0,
   },
 };
 

@@ -54,8 +54,9 @@ export interface ProjectileConfig {
   trailMeshType?: 'sphere' | 'ring' | 'disc' | 'billboard'; // trail particle geometry; defaults to sphere
   noExplosion?: boolean; // true = hit produces no explosion/knockback (hitscan-style bullets)
   /** The shell's body IS the ammunition: on contact it bursts into rock
-   *  shards (BallDebris) instead of leaving a bullet mark — the bombard's
-   *  crumble. Only read on the noExplosion path. */
+   *  shards (BallDebris) instead of drawing a blast dome — the bombard's
+   *  crumble. The blast still runs the standard splash sphere; this only
+   *  swaps the dome presentation for debris. */
   crumbles?: boolean;
   ribbonTrail?: boolean; // flat ribbon trail strip (single mesh, cheap) in addition to particles — ON by default; set false to opt out
   ribbonLanes?: number; // 1 = single strip; 3 = main band + 2 offset core lanes (default)

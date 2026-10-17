@@ -75,8 +75,13 @@ describe('weapon registry', (): void => {
     // fraction of directDamage, so the direct line stays the ceiling.
     expect(w.aoeDamage).toBe(w.directDamage);
     expect(w.aoeRadius).toBeGreaterThan(0);
-    expect(w.aoeRadius).toBeLessThan(w.directDamage / 4); // shrapnel, not a mortar shell
-    expect(w.terrainBounce).toBeUndefined(); // crumbles on ANY contact — no skips
+    expect(w.aoeRadius).toBe(2); // a tiny reliable sphere — not a shard cone
+    expect(w.aoeRadius).toBeLessThan(w.directDamage / 4); // splash, not a mortar shell
+    // Bounce experiment is SHELVED: maxBounces 0 = crumble on first contact.
+    expect(w.terrainBounce).toBe(true);
+    expect(w.maxBounces).toBe(0);
+    expect(w.bounceRestitution).toBe(0.5);
+    expect(w.bounceFriction).toBe(0.5);
     expect(serverSimmed(WeaponType.Bombard)).toBe(true);
     expect(HEAVY_ONLY_WEAPONS.has(WeaponType.Bombard)).toBe(true);
     // The slot-space gate must agree with the wire-space gate — the bombard
@@ -84,11 +89,13 @@ describe('weapon registry', (): void => {
     const wid = SLOT_DEFS.findIndex((d): boolean => d.weaponType === WeaponType.Bombard);
     expect(wid).toBeGreaterThanOrEqual(0);
     expect(PlayerLoadout.HEAVY_ONLY).toContain(wid);
-    // Client contract: never explodes, always crumbles, no bounce flags.
-    expect(BOMBARD_CONFIG.noExplosion).toBe(true);
+    // Client contract: no explosion dome, always crumbles, standard 2m
+    // splash sphere; the skip is shelved (maxBounces 0).
+    expect(BOMBARD_CONFIG.noExplosion).toBeUndefined();
     expect(BOMBARD_CONFIG.crumbles).toBe(true);
     expect(BOMBARD_CONFIG.explosionRadius).toBe(0);
-    expect(BOMBARD_CONFIG.bounces).toBeUndefined();
+    expect(BOMBARD_CONFIG.bounces).toBe(true);
+    expect(BOMBARD_CONFIG.maxBounces).toBe(0);
     expect(BOMBARD_CONFIG.bodyRadius).toBe(w.bodyRadius);
   });
 

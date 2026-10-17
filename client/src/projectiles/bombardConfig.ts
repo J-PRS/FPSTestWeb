@@ -4,17 +4,18 @@ import { WEAPONS } from '../../../shared/weapons.js';
 import type { ProjectileConfig } from './types.js';
 
 // Bombard — the heavy's siege slug. Same "giant iron ball" read as the
-// cannon but bigger, and it NEVER detonates: the ball crumbles into
-// shards on any contact (noExplosion + crumbles). The crumble's shards
-// deal real radial damage server-side (WEAPONS aoe envelope) — the
-// visual stays the same burst either way.
+// cannon but bigger, and it NEVER detonates: the ball crumbles into rock
+// shards on contact. The crumble runs the STANDARD 2m splash sphere
+// (client-predicted, server-authoritative) but presents the shard burst
+// instead of a blast dome — `crumbles` swaps the dome for debris on the
+// normal explosion path.
 export const BOMBARD_CONFIG: ProjectileConfig = {
   name: 'bombard',
   displayName: 'Bombard',
   weaponType: 35,
   speed: WEAPONS[35].speed,
   gravity: WEAPONS[35].gravity,
-  explosionRadius: 0, // it crumbles — no blast dome, ever
+  explosionRadius: 0, // no blast dome — the ball comes apart as shards
   force: WEAPONS[35].knockbackForce,
   forceMode: 'push',
   bodyRadius: WEAPONS[35].bodyRadius,
@@ -24,8 +25,7 @@ export const BOMBARD_CONFIG: ProjectileConfig = {
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: WEAPONS[35].aoeDamage,
   aoeRadius: WEAPONS[35].aoeRadius,
-  noExplosion: true, // contact = crumble, not a boom — rides the hitscan-style impact path
-  crumbles: true,    // the ball bursts into rock shards where it lands
+  crumbles: true,    // the ball bursts into rock shards instead of a dome
   vfx: 'kinetic',
   damageColor: '#ffcc88',
   // No trail — same contract as the cannonball: the joke IS the giant ball.
@@ -52,4 +52,9 @@ export const BOMBARD_CONFIG: ProjectileConfig = {
   needsServerTracking: true,
   maxLifetime: WEAPONS[35].maxLifetime,
   trailMeshType: 'sphere',
+  bounces: WEAPONS[35].terrainBounce === true,
+  bounceSfx: 'hg_clang', // iron ball thunk on the single skip
+  bounceRestitution: WEAPONS[35].bounceRestitution,
+  bounceFriction: WEAPONS[35].bounceFriction,
+  maxBounces: WEAPONS[35].maxBounces,
 };

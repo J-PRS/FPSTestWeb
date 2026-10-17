@@ -92,6 +92,10 @@ export interface ExplosionArgs {
    *  means the server will reject it, so nothing the claim pays for
    *  (remote damage/knockback, self splash, plating) may be predicted. */
   claimLegal?: boolean;
+  /** Crumble weapons (bombard): the impact path already spawned the rock
+   *  shards — the blast presenter draws no dome, voice, shake or scorch,
+   *  but still runs the force/splash. */
+  crumbles?: boolean;
 }
 
 export interface CombatCtx {

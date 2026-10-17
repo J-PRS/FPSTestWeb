@@ -48,6 +48,10 @@ const _remotePlayerClasses = new Map<string, string>();
 // Blast presentation layer: explosion/implosion entity, positional audio,
 // screenshake, and the terrain scorch decal. All visuals, no gameplay.
 function blastFx(c: CombatCtx, a: ExplosionArgs): void {
+  // Crumble weapons (bombard) present their shard burst via the impact path
+  // (spawnCrumbleShards) — the blast presenter draws no dome, no boom
+  // voice, no screenshake and no scorch for them.
+  if (a.crumbles) {return;}
   const {deps} = c;
   const { pos, radius, forceMode } = a;
   const directHit = a.directHit ?? false;

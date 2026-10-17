@@ -5,9 +5,9 @@ import type { ServerMessage } from '../../../shared/protocol.ts';
 
 // Bombard — the heavy's non-explosive siege slug. The contract that makes
 // it NOT just a fat rocket: body contact pays the biggest direct line in
-// the game, while ANY other contact crumbles into real shrapnel — a
-// radial shard sweep bounded far under the direct hit (no dome, no
-// mortar-style blast).
+// the game, while any other contact crumbles into a small STANDARD 2m
+// splash sphere (banded falloff, bounded well under the direct hit — no
+// dome, no mortar-style blast).
 describe('scenario: bombard', () => {
   it('a medium cannot shoulder it; a heavy can', () => {
     const room = mkRoom({ bots: 2 }, 'dm');
@@ -16,7 +16,7 @@ describe('scenario: bombard', () => {
     freeze(room, a.id, { x: 0, y: 62, z: 0 });
     const toA: ServerMessage[] = [];
     const origSend = room.connections.sendToPlayer.bind(room.connections);
-    room.connections.sendToPlayer = (pid, m) => { if (pid === a.id) toA.push(m); else origSend(pid, m); };
+    room.connections.sendToPlayer = (pid, m) => { if (pid === a.id) {toA.push(m);} else {origSend(pid, m);} };
 
     const p = room.players.getPlayer(a.id)!;
     p.armorClass = 'medium';
@@ -60,23 +60,23 @@ describe('scenario: bombard', () => {
     expect(hp0 - pb.health).toBeGreaterThanOrEqual(WEAPONS[WeaponType.Bombard]!.directDamage - 0.001);
   });
 
-  it('terrain contact crumbles into shrapnel — bounded splash, no dome', () => {
+  it('terrain contact crumbles into a tiny 2m splash — bounded, no dome', () => {
     const room = mkRoom({ bots: 2 }, 'dm');
     const w = watch(room);
     const [a, b] = twoPlayers(room);
     const pb = room.players.getPlayer(b.id)!;
-    // The slug carries ~95m before dirt contact — firing from x=-80 puts
-    // the crumble point next to a bystander standing just off the line,
-    // inside the shard sweep but far from any direct contact.
+    // The slug carries ~98m before dirt contact (x≈18) — firing from x=-80
+    // puts the crumble point ~1.4m from a bystander placed just PAST it
+    // (ball never reaches them), inside the 2m sphere's rim band.
     freeze(room, a.id, { x: -80, y: 62, z: 0 });
-    freeze(room, b.id, { x: 18, y: 29, z: 3 });
+    freeze(room, b.id, { x: 19.4, y: 29, z: 0 });
     room.players.getPlayer(a.id)!.armorClass = 'heavy';
     const hp0 = pb.health;
     // knockback rides sendToPlayer, not broadcast — intercept like the
     // class-lock test above.
     const toB: ServerMessage[] = [];
     const origSend = room.connections.sendToPlayer.bind(room.connections);
-    room.connections.sendToPlayer = (pid, m) => { if (pid === b.id) toB.push(m); else origSend(pid, m); };
+    room.connections.sendToPlayer = (pid, m) => { if (pid === b.id) {toB.push(m);} else {origSend(pid, m);} };
     room.messages.handleMessage(a.id, {
       type: 'shotFired', dir: { x: 1, y: -0.2, z: 0 }, pos: { x: -80, y: 62, z: 0 },
       weaponType: WeaponType.Bombard,
@@ -84,11 +84,11 @@ describe('scenario: bombard', () => {
     step(room, 60); // the shell arcs down ~15m and dies on dirt
     expect(w.count('projectileCreated')).toBe(1);
     expect(w.count('projectileDestroyed')).toBeGreaterThanOrEqual(1); // the 'gone' edge fired
-    // Shrapnel: paid something, bounded by the direct line — eating every
-    // shard can at most equal ball-meets-body, never exceed it.
+    // Small standard sphere: the rim band pays something, bounded by the
+    // inner band (0.75× direct) — splash can never rival a body hit.
     const dealt = hp0 - pb.health;
     expect(dealt).toBeGreaterThan(0);
-    expect(dealt).toBeLessThanOrEqual(WEAPONS[WeaponType.Bombard]!.directDamage + 0.001);
+    expect(dealt).toBeLessThanOrEqual(WEAPONS[WeaponType.Bombard]!.directDamage * 0.75 + 0.001);
     expect(toB.filter((m) => m.type === 'knockback').length).toBeGreaterThanOrEqual(1);
   });
 });
