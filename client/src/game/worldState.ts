@@ -12,6 +12,7 @@ import type { RemotePlayerState } from '../networking/NetworkManager.js';
 import type { TeamId } from '../../../shared/teams.js';
 import type { SplatDecal } from '../effects/splat.js';
 import type { PickupKind } from '../../../shared/pickups.js';
+import type { SpawnPoint } from '../../../shared/mapSpec.js';
 
 /**
  * The shared mutable world: every entity collection the game modules
@@ -66,6 +67,9 @@ export interface WorldState {
   /** Conquest lattice rows — net/nodes.ts owns the map; remotes.ts
    *  projects `show`-flagged entries into HUD diamonds per frame. */
   nodeMarkers: Map<number, { pos: THREE.Vector3; owner: 'alpha' | 'bravo' | 'neutral'; core: boolean; gx: number; gz: number; show: boolean; hot: boolean }>;
+  /** Effective spawn pools from the map snapshot (or the solo spec) —
+   *  the command map's F1 debug layer draws them. Null on spawn-less maps. */
+  spawnPools: { spawns?: SpawnPoint[]; teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] } } | null;
   /** Server-owned pickup replicas — net/pickups.ts owns the map; the
    *  §4.7 pickup fidelity hash enumerates it. */
   netPickups: Map<number, { kind: PickupKind }>;
@@ -133,6 +137,7 @@ export function createWorldState(): WorldState {
     flagHomeHush: false,
     flagMarkers: new Map(),
     nodeMarkers: new Map(),
+    spawnPools: null,
     netPickups: new Map(),
     playbackMode: false,
     selfBlastStamps: [],

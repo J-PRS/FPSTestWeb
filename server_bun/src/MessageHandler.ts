@@ -21,7 +21,7 @@ import type { RoomEventSink } from './roomEvents.ts';
 import { WORLD_MODEL, spawnPayload, checkIntent } from '../../shared/worldModel.ts';
 import { wallNow, type WallMs } from './wallClock.ts';
 import { simNow } from './simClock.ts';
-import type { AtmosphereSpec, StructureSpec, WaterSpec, WeatherSpec } from '../../shared/mapSpec.ts';
+import type { AtmosphereSpec, SpawnPoint, StructureSpec, WaterSpec, WeatherSpec } from '../../shared/mapSpec.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
@@ -48,6 +48,12 @@ export interface RoomInfo {
   /** Objective anchors from the map spec — echoed on gameState so clients
    *  place flags/bases where the map says, not where the URL guessed. */
   bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } };
+  /** Effective spawn pools — thunks like mapName: mode modules re-mint
+   *  spheres mid-match (conquest node rings), so gameState reads the live
+   *  PlayerManager pools, not the spec's authored copy. Debug dressing
+   *  only (F1 command-map layer). */
+  spawns?: () => SpawnPoint[] | null;
+  teamSpawns?: () => { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] } | null;
   /** Static structures from the map spec — echoed on gameState so every
    *  client builds the same base compounds/cover. */
   structures?: StructureSpec[];
@@ -432,8 +438,8 @@ export class MessageHandler {
       mapName: this.roomInfo.mapName?.(),
       scores: this.roomInfo.scores ? (Object.assign({}, this.roomInfo.scores)) : undefined,
       ffaScores: this.roomInfo.ffaScores?.(),
-      map: this.roomInfo.bases || this.roomInfo.structures || this.roomInfo.arena || this.roomInfo.terrain || this.roomInfo.heightScale || this.roomInfo.tileSize || this.roomInfo.fog || this.roomInfo.water || this.roomInfo.weather || this.roomInfo.atmosphere
-        ? (() => { const m = { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena, ambient: this.roomInfo.ambient, terrain: this.roomInfo.terrain, heightScale: this.roomInfo.heightScale, tileSize: this.roomInfo.tileSize, fog: this.roomInfo.fog, water: this.roomInfo.water, terrainTex: this.roomInfo.terrainTex, terrainPreset: this.roomInfo.terrainPreset, sky: this.roomInfo.sky, weather: this.roomInfo.weather, atmosphere: this.roomInfo.atmosphere, interiors: this.roomInfo.interiors };
+      map: this.roomInfo.bases || this.roomInfo.structures || this.roomInfo.arena || this.roomInfo.terrain || this.roomInfo.heightScale || this.roomInfo.tileSize || this.roomInfo.fog || this.roomInfo.water || this.roomInfo.weather || this.roomInfo.atmosphere || this.roomInfo.spawns?.() || this.roomInfo.teamSpawns?.()
+        ? (() => { const m = { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena, ambient: this.roomInfo.ambient, terrain: this.roomInfo.terrain, heightScale: this.roomInfo.heightScale, tileSize: this.roomInfo.tileSize, fog: this.roomInfo.fog, water: this.roomInfo.water, spawns: this.roomInfo.spawns?.() ?? undefined, teamSpawns: this.roomInfo.teamSpawns?.() ?? undefined, terrainTex: this.roomInfo.terrainTex, terrainPreset: this.roomInfo.terrainPreset, sky: this.roomInfo.sky, weather: this.roomInfo.weather, atmosphere: this.roomInfo.atmosphere, interiors: this.roomInfo.interiors };
           logger.debug(`roomEcho map keys: ${Object.keys(m).join(',')} interiors=${m.interiors?.length}`); return m; })()
         : undefined,
       flags: this.roomInfo.flags?.(),

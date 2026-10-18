@@ -355,7 +355,7 @@ target.deaths += 1;
     const spawn = Number.isFinite(picked.x + picked.y + picked.z)
       ? picked : ((((((Object.assign({}, player.lastValidPosition)))))));
     player.position = Object.assign({}, spawn);
-    player.rotation = { yaw: 0, pitch: 0 };
+    player.rotation = { yaw: Math.atan2(-spawn.x, -spawn.z), pitch: 0 };
     player.velocity = { x: 0, y: 0, z: 0 };
     player.health = player.maxHealth;
     player.isDead = false;

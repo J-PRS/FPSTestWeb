@@ -805,6 +805,10 @@ export class Room {
       // Authored spec title wins; the maps/<X>.json source filename is the
       // fallback — set post-ctor by the factory, refreshed by rotation.
       mapName: (): string | undefined => this.spec.name ?? (this.mapSrc || undefined),
+      // Effective spawn pools, live-read: mode modules re-mint spheres
+      // mid-match (conquest node rings) — the spec's authored copy is stale.
+      spawns: () => this.players.spawnPoints,
+      teamSpawns: () => this.players.teamSpawns,
       terrain: this.spec.terrain,
       heightScale: this.spec.heightScale,
       tileSize: this.spec.tileSize,
@@ -1125,6 +1129,8 @@ export class Room {
       structures: this.structs.eff(),
       arena: spec.arena ?? null,
       ambient: spec.ambient,
+      spawns: this.players.spawnPoints ?? undefined,
+      teamSpawns: this.players.teamSpawns ?? undefined,
       terrain: spec.terrain,
       heightScale: spec.heightScale,
       tileSize: spec.tileSize,

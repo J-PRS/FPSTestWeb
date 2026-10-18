@@ -82,6 +82,10 @@ export class P2PHost {
     // Peers send the same fire/beam intents a dedicated server takes.
     // claimsAccepted stays true — the roster surfaces this host can't
     // sim (creatures, deployables, repair) still adjudicate claims.
+    // Effective spawn pools for the debug map layer — live thunks like
+    // the dedicated room's, since setMap re-points them after ctor.
+    spawns: () => this.playerManager.spawnPoints,
+    teamSpawns: () => this.playerManager.teamSpawns,
     fireProjectile: (pid, wt, origin, dir, vel, shotId): string | null =>
       this.projectiles.spawn(pid, wt, origin, dir, vel, shotId),
     beamSweep: (pid, muzzle, dir, range) =>

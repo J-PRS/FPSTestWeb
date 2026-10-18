@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import type { StructureSpec } from '../../../shared/mapSpec.js';
+import type { SpawnPoint, StructureSpec } from '../../../shared/mapSpec.js';
 import { structureColliders } from '../../../shared/ballCollide.js';
 import { TEAM_COLORS } from '../../../shared/teams.js';
 import {
@@ -55,6 +55,7 @@ const TINTS = {
 
 let built: THREE.Group | null = null;
 let colliderGizmos: THREE.LineSegments | null = null;
+let spawnGizmos: THREE.Group | null = null;
 
 let dome: THREE.Mesh | null = null;
 
@@ -241,6 +242,10 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
     piece.rotation.y = s.rotY ?? 0;
     if (s.scale && s.scale !== 1) {piece.scale.setScalar(s.scale);}
     piece.updateMatrixWorld(true);
+    piece.traverse((o): void => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh && !(m.material instanceof THREE.MeshBasicMaterial)) {m.castShadow = true; m.receiveShadow = true;}
+    });
     built.add(piece);
   }
   // 'shield' panes — team-gated energy fields. Translucent so allies read
@@ -299,6 +304,8 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
     const merged = mergeGeometries(geos, false);
     if (!merged) {continue;}
     const mesh = new THREE.Mesh(merged, mats[key]);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
     mesh.matrixAutoUpdate = false;
     mesh.matrixWorldAutoUpdate = false;
     mesh.updateMatrixWorld(true);
@@ -314,8 +321,44 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
   buildColliderGizmos(list, scene);
 }
 
+/** Spawn-sphere overlay (F1 debug): one wireframe dome per anchor, resting
+ *  on the terrain — authored y=0 anchors are ground-lifted by the picker,
+ *  so a dome reads the zone better than a buried bubble. Neutral pool
+ *  pale grey, team pools in team color. Point anchors get a 2m marker. */
+export function buildSpawnGizmos(pools: { spawns?: SpawnPoint[]; teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] } } | null, scene: THREE.Scene, groundAt: (x: number, z: number) => number): void {
+  if (spawnGizmos) {
+    for (const m of spawnGizmos.children) {
+      (m as THREE.Mesh).geometry.dispose();
+      ((m as THREE.Mesh).material as THREE.Material).dispose();
+    }
+    scene.remove(spawnGizmos);
+    spawnGizmos = null;
+  }
+  if (!pools) {return;}
+  spawnGizmos = new THREE.Group();
+  const add = (s: SpawnPoint, color: number): void => {
+    const r = s.r ?? 2;
+    // Top hemisphere = a zone dome on the ground, not a floating globe.
+    const m = new THREE.Mesh(
+      new THREE.SphereGeometry(r, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color, wireframe: true, transparent: true, opacity: 0.5, depthTest: false }),
+    );
+    m.position.set(s.x, groundAt(s.x, s.z), s.z);
+    m.renderOrder = 999;
+    spawnGizmos!.add(m);
+  };
+  for (const s of pools.spawns ?? []) {add(s, 0xDC_E1_EB);}
+  for (const t of ['alpha', 'bravo'] as const) {
+    for (const s of pools.teamSpawns?.[t] ?? []) {add(s, TEAM_COLORS[t]);}
+  }
+  if (spawnGizmos.children.length === 0) {spawnGizmos = null; return;}
+  spawnGizmos.visible = urlParams.debug;
+  scene.add(spawnGizmos);
+}
+
 /** The debug toggle is live — menu flips mid-session must reach the
  *  overlay, so visibility re-reads the flag each frame. */
 export function refreshColliderGizmoVisibility(): void {
   if (colliderGizmos) {colliderGizmos.visible = urlParams.debug;}
+  if (spawnGizmos) {spawnGizmos.visible = urlParams.debug;}
 }

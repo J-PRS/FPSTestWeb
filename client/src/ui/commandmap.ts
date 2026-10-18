@@ -2,6 +2,8 @@ import type * as THREE from 'three';
 
 import { getHeightmapData, getWorldScale, sampleHeight } from '../world/heightmap.js';
 import { TEAM_COLORS, type TeamId } from '../../../shared/teams.js';
+import type { SpawnPoint } from '../../../shared/mapSpec.js';
+import { urlParams } from '../core/params.js';
 import type { MinimapPlayer } from './minimap.js';
 
 /**
@@ -31,6 +33,12 @@ interface NodeBlip {
   owner: 'alpha' | 'bravo' | 'neutral';
   core: boolean;
   hot?: boolean;
+}
+
+/** Effective spawn pools off the map snapshot — F1 debug layer only. */
+export interface SpawnPools {
+  spawns?: SpawnPoint[];
+  teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] };
 }
 
 export class CommandMap {
@@ -67,7 +75,7 @@ export class CommandMap {
    *  + players + the self arrow in world space. */
   update(pos: THREE.Vector3, yaw: number, players: Iterable<MinimapPlayer>,
          flags: Map<TeamId, FlagBlip> | undefined,
-         nodes?: Map<number, NodeBlip>): void {
+         nodes?: Map<number, NodeBlip>, spawnPools?: SpawnPools | null): void {
     if (!this.open) {return;}
     const W = getWorldScale();
     this.ensureBake();
@@ -101,30 +109,8 @@ export class CommandMap {
       }
     }
 
-    // Conquest lattice: each node a cell square colored by owner — the
-    // territory shape is the whole mode, so every node draws (not just
-    // the HUD's actionable subset). Cores get a double box = win cond.
-    if (nodes) {
-      for (const nd of nodes.values()) {
-        const col = nd.owner === 'neutral' ? '#6a7078' : `#${(TEAM_COLORS[nd.owner as TeamId] ?? 0xFF_FF_FF).toString(16).padStart(6, '0')}`;
-        const nx = mx(nd.pos.x), ny = my(nd.pos.z);
-        c.fillStyle = col;
-        c.fillRect(nx - 3.5, ny - 3.5, 7, 7);
-        // Contested frontier — the cell BOTH teams can fight over next.
-        if (nd.hot) {
-          c.strokeStyle = 'rgba(255,255,255,0.95)';
-          c.lineWidth = 1;
-          c.beginPath();
-          c.arc(nx, ny, 5.5, 0, Math.PI * 2);
-          c.stroke();
-        }
-        if (nd.core) {
-          c.strokeStyle = col;
-          c.lineWidth = 1.5;
-          c.strokeRect(nx - 6, ny - 6, 12, 12);
-        }
-      }
-    }
+    this.drawNodes(nodes, mx);
+    this.drawSpawns(spawnPools, W, mx);
 
     for (const p of players ?? []) {
       c.fillStyle = p.friendly ? 'rgba(68,221,68,0.95)' : 'rgba(255,68,68,0.95)';
@@ -144,6 +130,53 @@ export class CommandMap {
     c.moveTo(0, 7); c.lineTo(-5, -4); c.lineTo(5, -4);
     c.closePath(); c.fill(); c.stroke();
     c.restore();
+  }
+
+  /** Conquest lattice: each node a cell square colored by owner — the
+   *  territory shape is the whole mode, so every node draws (not just
+   *  the HUD's actionable subset). Cores get a double box = win cond. */
+  private drawNodes(nodes: Map<number, NodeBlip> | undefined, m: (w: number) => number): void {
+    if (!nodes) {return;}
+    const c = this.ctx;
+    for (const nd of nodes.values()) {
+      const col = nd.owner === 'neutral' ? '#6a7078' : `#${(TEAM_COLORS[nd.owner as TeamId] ?? 0xFF_FF_FF).toString(16).padStart(6, '0')}`;
+      const nx = m(nd.pos.x), ny = m(nd.pos.z);
+      c.fillStyle = col;
+      c.fillRect(nx - 3.5, ny - 3.5, 7, 7);
+      // Contested frontier — the cell BOTH teams can fight over next.
+      if (nd.hot) {
+        c.strokeStyle = 'rgba(255,255,255,0.95)';
+        c.lineWidth = 1;
+        c.beginPath();
+        c.arc(nx, ny, 5.5, 0, Math.PI * 2);
+        c.stroke();
+      }
+      if (nd.core) {
+        c.strokeStyle = col;
+        c.lineWidth = 1.5;
+        c.strokeRect(nx - 6, ny - 6, 12, 12);
+      }
+    }
+  }
+
+  /** F1 debug layer — spawn spheres. Neutral pool hollow grey rings,
+   *  team pools in team color; `r` draws to scale so a 20m SpawnSphere
+   *  reads as a zone, not a point. Ring centers mark r=0 anchors. */
+  private drawSpawns(pools: SpawnPools | null | undefined, W: number, m: (w: number) => number): void {
+    if (!pools || !urlParams.debug) {return;}
+    const c = this.ctx;
+    const ring = (s: SpawnPoint, col: string): void => {
+      c.strokeStyle = col;
+      c.lineWidth = 1;
+      c.beginPath();
+      c.arc(m(s.x), m(s.z), Math.max(3, (s.r ?? 0) * (RES / W)), 0, Math.PI * 2);
+      c.stroke();
+    };
+    for (const s of pools.spawns ?? []) {ring(s, 'rgba(220,225,235,0.85)');}
+    for (const t of ['alpha', 'bravo'] as const) {
+      const col = `#${(TEAM_COLORS[t]).toString(16).padStart(6, '0')}`;
+      for (const s of pools.teamSpawns?.[t] ?? []) {ring(s, col);}
+    }
   }
 
   /** Hillshade bake: height ramp + NW sun slope lighting. sampleHeight is

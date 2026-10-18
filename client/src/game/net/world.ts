@@ -2,8 +2,8 @@
 // server-owned creature (ball) event channel.
 
 import * as THREE from 'three';
-import { buildStructures, buildArenaDome, clearArenaDome } from '../../world/mapStructures.js';
-import type { StructureSpec, InteriorSpec, WeatherSpec, AtmosphereSpec, WaterSpec } from '../../../../shared/mapSpec.js';
+import { buildStructures, buildArenaDome, clearArenaDome, buildSpawnGizmos } from '../../world/mapStructures.js';
+import type { SpawnPoint, StructureSpec, InteriorSpec, WeatherSpec, AtmosphereSpec, WaterSpec } from '../../../../shared/mapSpec.js';
 import { setAmbientCaps } from '../species/ambientCaps.js';
 import { applyStructureSpecs, clearExtraStructures } from '../structureSpecs.js';
 import type { GameStatePlayer, LocalPlayerState } from '../../../../shared/protocol.js';
@@ -239,6 +239,8 @@ export function wireWorld(ctx: NetCtx): void {
     } else {
       clearArenaDome(deps.lazyScene());
     }
+    deps.world.spawnPools = map.spawns || map.teamSpawns ? { spawns: map.spawns, teamSpawns: map.teamSpawns } : null;
+    installSpawnGizmos(ctx);
     if (map.terrain || map.heightScale || map.tileSize) {
       applyTerrain(ctx, map.terrain ?? null, map.terrainTex, map.sky, map.heightScale, map.tileSize, map.terrainPreset)
         .catch((error): void => ctx.deps.logger.warn(`applyTerrain failed: ${error instanceof Error ? error.message : String(error)}`));
@@ -255,7 +257,7 @@ export function wireWorld(ctx: NetCtx): void {
   };
 
   // Initial connection and reconnection — full roster + local restore.
-  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: PickupKind }[]; flags?: { team: TeamId; pos: { x: number; y: number; z: number }; home?: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; team?: string }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; water?: WaterSpec; terrainTex?: string; terrainPreset?: number; sky?: string; weather?: WeatherSpec; atmosphere?: AtmosphereSpec; interiors?: InteriorSpec[] } }): void => {
+  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: PickupKind }[]; flags?: { team: TeamId; pos: { x: number; y: number; z: number }; home?: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; team?: string }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; water?: WaterSpec; spawns?: SpawnPoint[]; teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] }; terrainTex?: string; terrainPreset?: number; sky?: string; weather?: WeatherSpec; atmosphere?: AtmosphereSpec; interiors?: InteriorSpec[] } }): void => {
     logger.info(`gameState room=${roomInfo?.room} mapKeys=${roomInfo?.map ? Object.keys(roomInfo.map).join(',') : 'none'}`);
     // The snapshot replaces the world — any volatile layer still alive
     // pre-reconnect is stale fast-forward, not truth. Purge before
@@ -302,6 +304,25 @@ export function wireWorld(ctx: NetCtx): void {
  *  join path; mapUpdate handles the same rebuild itself since it always
  *  knows a spec exists. Clears rather than skips on absence: a room hop
  *  re-runs gameState, and the old room's geometry must not survive. */
+/** (Re)build the F1 spawn-sphere domes from the stored pools. The
+ *  heightfield swap resolves async, so domes built against the boot
+ *  field re-seat when the real terrain lands — the chain on
+ *  onTerrainApplied (bot reseat already owns the slot) arms once and
+ *  re-reads the live pools, so reconnects don't stack wrappers. */
+let spawnGizmoHookArmed = false;
+function installSpawnGizmos(ctx: NetCtx): void {
+  const { deps } = ctx;
+  const groundAt = (x: number, z: number): number => deps.lazyTerrain().getHeight(x, z);
+  buildSpawnGizmos(deps.world.spawnPools, deps.lazyScene(), groundAt);
+  if (spawnGizmoHookArmed) {return;}
+  spawnGizmoHookArmed = true;
+  const prev = deps.world.onTerrainApplied;
+  deps.world.onTerrainApplied = (file): void => {
+    prev?.(file);
+    buildSpawnGizmos(deps.world.spawnPools, deps.lazyScene(), groundAt);
+  };
+}
+
 function applyMapSnapshot(ctx: NetCtx, map?: MapSnapshot): void {
   const { deps } = ctx;
   buildStructures(map?.structures ?? [], deps.lazyScene(), deps.lazyTerrain());
@@ -312,6 +333,10 @@ function applyMapSnapshot(ctx: NetCtx, map?: MapSnapshot): void {
   // first: a map swap must not keep the old world's mode solids.
   clearExtraStructures();
   applyStructureSpecs(map?.structures, deps.lazyPlayer().movement);
+  // Spawn pools ride the map snapshot — debug command-map layer only.
+  // Clears on absence: a room hop must not keep the old map's spheres.
+  deps.world.spawnPools = map?.spawns || map?.teamSpawns ? { spawns: map.spawns, teamSpawns: map.teamSpawns } : null;
+  installSpawnGizmos(ctx);
   if (map?.arena) {
     buildArenaDome(map.arena, deps.lazyTerrain().getHeight(map.arena.x, map.arena.z), deps.lazyScene());
   } else {

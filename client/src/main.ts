@@ -624,6 +624,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
     const anchor = s.teamSpawns?.alpha?.[0] ?? s.spawns?.[0] ?? s.bases?.alpha;
     if (anchor) {
       player.pos.set(anchor.x, terrain.getHeight(anchor.x, anchor.z) + 2, anchor.z);
+      player.yaw = Math.atan2(-anchor.x, -anchor.z);
       noteLocalSnap();
       player.syncMovement();
       player.markTeleport();

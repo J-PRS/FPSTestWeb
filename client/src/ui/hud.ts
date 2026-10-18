@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Minimap , type MinimapPlayer, type MinimapNode } from './minimap.js';
-import { CommandMap } from './commandmap.js';
+import { CommandMap, type SpawnPools } from './commandmap.js';
 import { createHudDom } from './hud/dom.js';
 import { PlayerIndicators } from './hud/indicators.js';
 import type { Targetable } from '../entities/balls.js';
@@ -376,8 +376,9 @@ export class HUD {
 
   updateCommandMap(pos: THREE.Vector3, yaw: number, players: Iterable<MinimapPlayer>,
                    flags: Map<TeamId, { home: THREE.Vector3; homeKnown: boolean; carrier: string | null; wirePos: THREE.Vector3 }>,
-                   nodes?: Map<number, { pos: THREE.Vector3; owner: 'alpha' | 'bravo' | 'neutral'; core: boolean }>): void {
-    this.cmdmap.update(pos, yaw, players, flags, nodes);
+                   nodes?: Map<number, { pos: THREE.Vector3; owner: 'alpha' | 'bravo' | 'neutral'; core: boolean }>,
+                   spawnPools?: SpawnPools | null): void {
+    this.cmdmap.update(pos, yaw, players, flags, nodes, spawnPools);
   }
 
   /** A frame was presented — feeds the FPS readout. Called only on

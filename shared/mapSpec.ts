@@ -131,7 +131,8 @@ export interface MapSpec {
    *  client-only dressing; the sims never read it. */
   terrainTex?: string;
   /** Procedural palette id for the terrain shader (0=mixed, 1=desert,
-   *  2=grassland, 3=snow, 4=volcanic, 5=badlands, 6=coast). Client-only;
+   *  2=grassland, 3=snow, 4=volcanic, 5=badlands, 6=coast, 7=desert
+   *  hard-sun — desert palette, pure sun·diff² lighting). Client-only;
    *  absent = the shader's default desert. */
   terrainPreset?: number;
   /** Skybox dir under maps/ containing px/nx/py/ny/pz/nz.png — replaces
@@ -651,7 +652,7 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     tileSize: parseTileSize((src as { tileSize?: unknown }).tileSize),
     fog: parseFog((src as { fog?: unknown }).fog),
     terrainTex: parsePathField((src as { terrainTex?: unknown }).terrainTex, /\.(?:png|jpe?g|webp)$/, 2, 'terrainTex'),
-    terrainPreset: clampInt((src as { terrainPreset?: unknown }).terrainPreset, 0, 6, 0, 'terrainPreset') || undefined,
+    terrainPreset: clampInt((src as { terrainPreset?: unknown }).terrainPreset, 0, 7, 0, 'terrainPreset') || undefined,
     sky: parsePathField((src as { sky?: unknown }).sky, /[\w-]{1,64}$/, 2, 'sky'),
     weather: parseWeather((src as { weather?: unknown }).weather),
     water: parseWater((src as { water?: unknown }).water),
