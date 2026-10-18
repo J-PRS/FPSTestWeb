@@ -8,6 +8,7 @@ import { hmParseBin, hmHeight, hmNormal, hmSurface, HM_HEIGHT_SCALE } from '../.
 import { MoveSim } from '../../shared/movement.js';
 import { isDevHost } from './core/params.js';
 import { terrainFrag } from './world/terrainShaders.js';
+import { hillshadeImage } from './world/hillshade.js';
 import { synthField, erode, talusPass, streamPower, drainage, DEFAULTS, type GenParams, type Drainage } from './maplab/gen.js';
 
 if (!isDevHost()) {
@@ -83,6 +84,8 @@ const mat = new THREE.ShaderMaterial({
     fieldTint: { value: Array.from({ length: 32 }, () => new THREE.Vector3()) },
     fieldY: { value: new Float32Array(32) },
     scorchCount: { value: 0 }, splatCount: { value: 0 }, fieldCount: { value: 0 },
+    dbgStage: { value: -1 },
+    litKnee: { value: 0.85 }, litKeep: { value: 0.2 }, colCap: { value: 0.99 },
   }),
 });
 const terrain = new THREE.Mesh(geo, mat);
@@ -320,31 +323,12 @@ const hmctx = hmcv.getContext('2d')!;
 function paintHeightmap(): void {
   const N = field.size;
   hmcv.width = N; hmcv.height = N;
-  const img = hmctx.createImageData(N, N);
-  const lx = -0.6, ly = 0.75, lz = -0.35;
-  // Normalize the flow tint against the trunk channel, not the cell count
-  // — acc/(N²) keeps even the biggest river at a few percent of range.
-  let accMax = 1;
-  if (drain) { for (const a of drain.acc) { if (a > accMax) { accMax = a; } } }
-  for (let z = 0; z < N; z += 1) {
-    for (let x = 0; x < N; x += 1) {
-      const wx = (x / N - 0.5) * WS, wz = (z / N - 0.5) * WS;
-      const h = hmHeight(field, wx, wz);
-      hmNormal(field, wx, wz, _n);
-      const shade = Math.max(0, _n.x * lx + _n.y * ly + _n.z * lz);
-      const v = Math.min(255, (h / (HM_HEIGHT_SCALE * state.vscale * activeHeightScale)) * 140 + shade * 120);
-      const i = (z * N + x) * 4;
-      const steep = 1 - _n.y > 0.32 && state.slopeOverlay;
-      // D8 drainage tint — convergent flow = cyan threads. These are the
-      // channels the water would cut AND the lines a capper would ski.
-      const flow = drain ? (drain.acc[z * N + x]! / accMax) ** 0.35 : 0;
-      img.data[i] = steep ? 200 : v * (1 - flow) + 30 * flow;
-      img.data[i + 1] = steep ? 60 : v * (1 - flow * 0.6) + 120 * flow;
-      img.data[i + 2] = steep ? 60 : v * 0.9 * (1 - flow * 0.4) + 140 * flow;
-      img.data[i + 3] = 255;
-    }
-  }
-  hmctx.putImageData(img, 0, 0);
+  hmctx.putImageData(hillshadeImage(field, {
+    ws: WS,
+    vmax: HM_HEIGHT_SCALE * state.vscale * activeHeightScale,
+    steep: state.slopeOverlay,
+    drain: drain ?? undefined,
+  }), 0, 0);
 }
 
 const statusEl = document.querySelector<HTMLDivElement>('#status')!;
@@ -366,8 +350,10 @@ function paintStats(genMs: number): void {
   const mean = sum / n;
   const sd = Math.sqrt(Math.max(0, sum2 / n - mean * mean));
   statusEl.innerHTML =
-    `${state.map ? `map ${state.map} · ${field.size}²` : `seed ${state.seed} · ${field.size}²`} · ${genMs.toFixed(0)}ms\n` +
-    `relief ${(mx - mn).toFixed(0)}m · sd ${sd.toFixed(1)}m\n` +
+    `${state.map ? `map ${state.map} · ${field.size}²` : `seed ${state.seed} · ${field.size}²`} · ${genMs.toFixed(0)}ms
+` +
+    `relief ${(mx - mn).toFixed(0)}m · sd ${sd.toFixed(1)}m
+` +
     `unski-able ${(steep / n * 100).toFixed(1)}%`;
 }
 
@@ -413,10 +399,13 @@ function schedule(): void {
 // the same /maps route the game loads. The list arrives async; paintRail
 // repaints once it lands. Falls back to custom-only if the server is down.
 let mapNames: string[] = [];
+let mapT2: boolean[] = [];
 async function loadMapList(): Promise<void> {
   try {
-    const rows = await (await fetch('/maps', { cache: 'no-cache' })).json() as { name: string; hidden?: boolean }[];
-    mapNames = rows.filter((r): boolean => !r.hidden).map((r): string => r.name).toSorted();
+    const rows = await (await fetch('/maps', { cache: 'no-cache' })).json() as { name: string; hidden?: boolean; t2?: boolean }[];
+    const filtered = rows.filter((r): boolean => !r.hidden);
+    mapNames = filtered.sort((a, b) => (a.t2 === b.t2 ? a.name.localeCompare(b.name) : (a.t2 ? 1 : -1))).map((r) => r.name);
+    mapT2 = mapNames.map((n) => filtered.find((r) => r.name === n)?.t2 === true);
     paintRail();
   } catch {
     flash('maps list unavailable — custom only');
@@ -432,7 +421,7 @@ function terrainSelect(): HTMLSelectElement {
   sel.append(custom);
   for (const name of mapNames) {
     const o = document.createElement('option');
-    o.value = name; o.textContent = name;
+    o.value = name; const isT2 = mapT2[mapNames.indexOf(name)] === true; o.textContent = (isT2 ? '[T2] ' : '[C] ') + name;
     if (state.map === name) {o.selected = true;}
     sel.append(o);
   }
@@ -455,9 +444,24 @@ function playButton(): HTMLButtonElement {
   return b;
 }
 
+function stepMap(dir: number): void {
+  if (mapNames.length === 0) {return;}
+  const idx = mapNames.indexOf(state.map);
+  let nextIdx: number;
+  if (idx === -1) { nextIdx = dir > 0 ? 0 : mapNames.length - 1; }
+  else { nextIdx = (idx + dir + mapNames.length) % mapNames.length; }
+  state.map = mapNames[nextIdx]!; save(); refresh(); paintRail();
+}
+
 function paintRail(): void {
   rail.innerHTML = '';
-  rail.append(terrainSelect());
+  const nav = document.createElement('div'); nav.className = 'terrnav';
+  const prev = document.createElement('button'); prev.textContent = '\u25C0';
+  prev.addEventListener('click', (): void => { stepMap(-1); });
+  const sel = terrainSelect();
+  const next = document.createElement('button'); next.textContent = '\u25B6';
+  next.addEventListener('click', (): void => { stepMap(1); });
+  nav.append(prev, sel, next); rail.append(nav);
   let group = '';
   for (const [key, label, min, max, step, g] of SLIDERS) {
     if (g && g !== group) {
@@ -485,40 +489,17 @@ function paintRail(): void {
     row.append(lab, inp, val);
     rail.append(row);
   }
-  const presetRow = document.createElement('div');
-  presetRow.className = 'row';
-  const pl = document.createElement('label'); pl.textContent = 'terrain';
-  const ps = document.createElement('select');
-  const PRESETS: [number, string][] = [[0, 'mixed'], [1, 'desert'], [2, 'grassland'], [3, 'snow'], [4, 'volcanic'], [5, 'badlands'], [6, 'coast']];
-  for (const [v, label] of PRESETS) {
-    const o = document.createElement('option'); o.value = String(v); o.textContent = label;
-    if (state.preset === v) {o.selected = true;}
-    ps.append(o);
-  }
-  ps.addEventListener('change', (): void => {
-    state.preset = Number(ps.value);
-    mat.defines.TERRAIN_PRESET = state.preset;
-    mat.needsUpdate = true; // preset is a compile-time define — recompiles once
-    save();
-  });
-  presetRow.append(pl, ps);
-  rail.append(presetRow);
-  const tiltRow = document.createElement('div');
-  tiltRow.className = 'row';
-  const tl = document.createElement('label'); tl.textContent = 'tilt axis';
-  const ts = document.createElement('select');
-  for (const a of ['x', 'z']) {
-    const o = document.createElement('option'); o.value = a; o.textContent = a;
-    if (state.tiltAxis === a) {o.selected = true;}
-    ts.append(o);
-  }
-  ts.addEventListener('change', (): void => { state.tiltAxis = ts.value as 'x' | 'z'; save(); schedule(); });
-  tiltRow.append(tl, ts);
-  rail.append(tiltRow);
+  rail.append(presetRow());
+  rail.append(tiltRow());
 
   // Probe-only control (not a GenParams key) — must NOT call schedule(),
   // so it lives here instead of SLIDERS. Re-drops live balls on release.
   rail.append(dropHeightRow());
+  rail.append(dbgStageRow());
+  // lit-knee tuning — live uniforms, no regen. See terrainShaders desert block.
+  for (const [key, min, max] of [['litKnee', 0.5, 1], ['litKeep', 0, 0.6], ['colCap', 0.9, 1]] as const) {
+    rail.append(uniformRow(key, min, max));
+  }
 
   const btns = document.createElement('div');
   btns.className = 'group'; btns.textContent = 'view + export';
@@ -566,6 +547,13 @@ function paintRail(): void {
       await navigator.clipboard?.writeText(JSON.stringify(spec, null, 2));
       flash('spec → clipboard');
     }),
+    mk('copy params', async (): Promise<void> => {
+      // Full knob set (synth params + heightScale + preset) so an AI
+      // or a teammate can reproduce the field exactly.
+      const params = Object.assign({}, state);
+      await navigator.clipboard?.writeText(JSON.stringify(params, null, 2));
+      flash('params -> clipboard');
+    }),
     mk('⛸ balls', function (this: HTMLButtonElement): void {
       if (balls.length > 0) { clearBalls(); this.classList.remove('active'); }
       else { dropBalls(); this.classList.add('active'); }
@@ -593,6 +581,79 @@ function dropHeightRow(): HTMLDivElement {
     state.dropHeight = Number(inp.value); val.textContent = String(state.dropHeight); save();
   });
   inp.addEventListener('change', (): void => { if (balls.length > 0) {dropBalls();} });
+  row.append(lab, inp, val);
+  return row;
+}
+
+// Shader stage bisect (desert preset only): -1 full pipeline, then
+// 0 palette / 1 detail / 2 decals / 3 lit / 4 glows / 5 seaTint / 6 fog,
+// 7 sun·diff² / 8 amb+rim / 9 shadowMask alone.
+const DBG_NAMES = ['palette', 'detail', 'decals', 'lit', 'glows', 'seaTint', 'fog', 'sun·diff²', 'amb+rim', 'shadowMsk'];
+function dbgStageRow(): HTMLDivElement {
+  const row = document.createElement('div');
+  row.className = 'row';
+  const lab = document.createElement('label'); lab.textContent = 'dbg stage';
+  const inp = document.createElement('input');
+  inp.type = 'range'; inp.min = '-1'; inp.max = '9'; inp.step = '1';
+  inp.value = String(mat.uniforms.dbgStage!.value as number);
+  const val = document.createElement('span'); val.textContent = 'off';
+  inp.addEventListener('input', (): void => {
+    const v = Number(inp.value);
+    mat.uniforms.dbgStage!.value = v;
+    val.textContent = v < 0 ? 'off' : `${v}: ${DBG_NAMES[v] ?? '?'}`;
+  });
+  row.append(lab, inp, val);
+  return row;
+}
+
+function presetRow(): HTMLDivElement {
+  const row = document.createElement('div');
+  row.className = 'row';
+  const lab = document.createElement('label'); lab.textContent = 'terrain';
+  const sel = document.createElement('select');
+  const PRESETS: [number, string][] = [[0, 'mixed'], [1, 'desert'], [2, 'grassland'], [3, 'snow'], [4, 'volcanic'], [5, 'badlands'], [6, 'coast'], [7, 'desert sun']];
+  for (const [v, label] of PRESETS) {
+    const o = document.createElement('option'); o.value = String(v); o.textContent = label;
+    if (state.preset === v) {o.selected = true;}
+    sel.append(o);
+  }
+  sel.addEventListener('change', (): void => {
+    state.preset = Number(sel.value);
+    mat.defines.TERRAIN_PRESET = state.preset;
+    mat.needsUpdate = true; // preset is a compile-time define — recompiles once
+    save();
+  });
+  row.append(lab, sel);
+  return row;
+}
+
+function tiltRow(): HTMLDivElement {
+  const row = document.createElement('div');
+  row.className = 'row';
+  const lab = document.createElement('label'); lab.textContent = 'tilt axis';
+  const sel = document.createElement('select');
+  for (const a of ['x', 'z']) {
+    const o = document.createElement('option'); o.value = a; o.textContent = a;
+    if (state.tiltAxis === a) {o.selected = true;}
+    sel.append(o);
+  }
+  sel.addEventListener('change', (): void => { state.tiltAxis = sel.value as 'x' | 'z'; save(); schedule(); });
+  row.append(lab, sel);
+  return row;
+}
+
+function uniformRow(key: string, min: number, max: number): HTMLDivElement {
+  const row = document.createElement('div');
+  row.className = 'row';
+  const lab = document.createElement('label'); lab.textContent = key;
+  const inp = document.createElement('input');
+  inp.type = 'range'; inp.min = String(min); inp.max = String(max); inp.step = '0.01';
+  inp.value = String(mat.uniforms[key]!.value as number);
+  const val = document.createElement('span'); val.textContent = inp.value;
+  inp.addEventListener('input', (): void => {
+    mat.uniforms[key]!.value = Number(inp.value);
+    val.textContent = inp.value;
+  });
   row.append(lab, inp, val);
   return row;
 }

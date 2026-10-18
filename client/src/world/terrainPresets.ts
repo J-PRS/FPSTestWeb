@@ -89,7 +89,7 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
       fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
       col = mix(col, fogColor, fogFactor);
-      gl_FragColor = vec4(ungradeColor(col), edgeA);
+      gl_FragColor = vec4(bloomGuard(ungradeColor(col)), edgeA);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
       return;
@@ -189,13 +189,13 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
       fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
       col = mix(col, fogColor, fogFactor);
-      gl_FragColor = vec4(ungradeColor(col), edgeA);
+      gl_FragColor = vec4(bloomGuard(ungradeColor(col)), edgeA);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
       return;
     }
 
-    // --- badlands preset: eroded rust/ochre/pale strata (Hoodoo) ---
+    // --- badlands preset: eroded rust/ochre/pale strata (Rimrock) ---
 #elif TERRAIN_PRESET == 5
     {
       vec2 q = vec2(fbm(uv), fbm(uv + vec2(5.2, 1.3)));
@@ -262,7 +262,7 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
       fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
       col = mix(col, fogColor, fogFactor);
-      gl_FragColor = vec4(ungradeColor(col), edgeA);
+      gl_FragColor = vec4(bloomGuard(ungradeColor(col)), edgeA);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
       return;
@@ -340,7 +340,7 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
       fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
       col = mix(col, fogColor, fogFactor);
-      gl_FragColor = vec4(ungradeColor(col), edgeA);
+      gl_FragColor = vec4(bloomGuard(ungradeColor(col)), edgeA);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
       return;

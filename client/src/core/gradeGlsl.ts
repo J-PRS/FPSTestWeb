@@ -33,4 +33,16 @@ vec3 ungradeColor(vec3 disp) {
   vec3 x = (-B - sqrt(max(B * B - 4.0 * A * C, vec3(0.0)))) / (2.0 * A);
   return max(ACESInputInv * x, vec3(0.0)) / (${TONE_MAPPING_EXPOSURE.toFixed(4)} / 0.6);
 }
+
+// Terrain bloom guard — runs AFTER ungradeColor, in the same HDR-linear
+// space bloom thresholds. Bloom's 1.3 gate has a 0.25 soft knee, so
+// linear luminance from ~1.05 up already blooms partially — sunlit sand
+// lands right on the knee and reads as a smeared emitter. Shoulder-
+// compress linear luminance above 1.0 so lit ground stays below the
+// knee; real emitters (sun disc, trails, VFX) write their own >1 color
+// and never pass through this call.
+vec3 bloomGuard(vec3 c) {
+  float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  return l > 1.0 ? c * ((1.0 + (l - 1.0) * 0.10) / l) : c;
+}
 `;

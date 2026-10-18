@@ -134,6 +134,36 @@ export const terrainFrag = /* glsl */`
   uniform float innerHalfSize;
   uniform vec2 innerGridOrigin;
   uniform float edgeHalf; // outermost level only: world-edge fade radius (0=off)
+  uniform float waterLevel; // sea level world m — < -1e8 = dry map
+  uniform vec3 waterTint;   // shallow tint pushed onto the seabed
+  uniform float waterTime;  // caustic phase clock — ticked CPU-side
+  // Mario Sunshine trick: the sea reads blue because the SEABED is
+  // tinted, not because the surface is opaque — submerged ground grades
+  // toward waterTint with depth, and the ~0.9m band just above the line
+  // darkens (wet sand). One uniform does both shoreline reads.
+  vec3 seaTint(vec3 col, float wy, vec2 wxz) {
+    if (waterLevel < -1e8) { return col; }
+    float d = waterLevel - wy;                                   // >0 submerged
+    col = mix(col, waterTint, clamp(d * 0.22, 0.0, 0.75));
+    if (d > 0.0) {
+      // Caustic web — the sin-warp interference trick (3 iters, pure ALU):
+      // curved wavefront families crossing spike filaments where they
+      // reinforce = the dancing light webs sun draws through chop onto a
+      // bed. Fades with depth — light can't focus through deep water.
+      vec2 p = wxz * 1.6;
+      vec2 k = p;
+      float c = 1.0;
+      for (int n = 0; n < 3; n += 1) {
+        float tt = waterTime * 0.9 * (1.0 - (3.5 / float(n + 1)));
+        k = p + vec2(cos(tt - k.x) + sin(tt + k.y), sin(tt - k.y) + cos(tt + k.x));
+        c += 1.0 / length(vec2(p.x / (sin(k.x + tt) / 0.005), p.y / (cos(k.y + tt) / 0.005)));
+      }
+      c = 1.17 - pow(c / 3.0, 1.4);
+      col += waterTint * pow(abs(c), 8.0) * exp(-d * 0.15) * 0.9;
+    }
+    float wet = clamp(1.0 + d / 0.9, 0.0, 1.0) * step(0.0, -d);
+    return col * (1.0 - 0.3 * wet);
+  }
 
   // --- hash + value noise with analytic derivatives ---
   float hash(vec2 p) {
@@ -249,6 +279,13 @@ export const terrainFrag = /* glsl */`
   uniform int scorchCount;
   uniform int splatCount;
   uniform int fieldCount;
+  uniform int dbgStage; // -1 off; desert-preset stage bisect (maplab tool)
+  // lit knee: sunlit sand crossing display 1.0 skips ungradeColor's
+  // inverse and ACES desaturates it into pale blotches — compress the
+  // smooth lit term so the noisy albedo texture survives untouched.
+  uniform float litKnee;  // where compression starts (display-lit peak)
+  uniform float litKeep;  // fraction of overshoot kept (contrast)
+  uniform float colCap;   // hard ceiling on final lit albedo
 
   // Projected explosion-scorch decals: darken albedo inside each scorch
   // circle with a noise-jittered edge. Applied in the fragment shader so it
@@ -491,6 +528,7 @@ export const terrainFrag = /* glsl */`
       col *= ambientColor * 1.35 + sunColor * diff * shadowMask + vec3(rim);
       col += scorchEmberGlow(vWorldPos.xz);
       col += fieldGlow(vWorldPos);
+      col = seaTint(col, vWorldPos.y, vWorldPos.xz);
       vec3 fogDelta = vWorldPos - vCameraPos;
       float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
       float fogFactor = terrainFogFactor(fogDist);
@@ -501,14 +539,17 @@ export const terrainFrag = /* glsl */`
       float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, fogDist) * smoothstep(0.3, 0.8, height);
       float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
       fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
-      gl_FragColor = vec4(ungradeColor(mix(col, fogColor, fogFactor)), edgeA);
+      gl_FragColor = vec4(bloomGuard(ungradeColor(mix(col, fogColor, fogFactor))), edgeA);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
       return;
     }
 
     // --- desert preset (sand + dirt + rock only) ---
-#if TERRAIN_PRESET == 1
+    // 7 = same palette, hard-sun lighting (ridges): pure sun·diff², no
+    // ambient/rim fill — stylized matte-painting look, and palette·sun
+    // peaks ~0.9 so it can never trip the >1 HDR passthrough.
+#if TERRAIN_PRESET == 1 || TERRAIN_PRESET == 7
     {
       // Desert only needs: micro, cell, triRock, macro, medium, triDetail
       vec2 warp = vec2(fbm(uv), fbm(uv + vec2(5.2, 1.3)));
@@ -537,19 +578,37 @@ export const terrainFrag = /* glsl */`
       float slopeBlend = smoothstep(0.18, 0.45, slope);
       vec3 slopeCol = mix(cDirt, cDesertCliff, smoothstep(0.30, 0.65, slope));
       col = mix(col, slopeCol, slopeBlend);
+      vec3 sPal = col;
       col *= 0.86 + 0.28 * detail;
+      vec3 sDet = col;
       col *= 1.0 - scorchMask(vWorldPos.xz);
       { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
+      vec3 sDec = col;
       float diff = max(dot(vNormal, sunDir), 0.0);
       float shadow = diff * diff;
       float rim = pow(1.0 - max(dot(vNormal, vec3(0,1,0)), 0.0), 2.5) * 0.15;
+#if TERRAIN_PRESET == 7
+      col *= sunColor * shadow * shadowMask;
+#else
       vec3 lit = ambientColor + sunColor * shadow * shadowMask + vec3(rim);
+      // Compress the SMOOTH lit term, not col: the albedo noise texture
+      // survives intact, only the broad sun gradient compresses.
+      float litPeak = max(lit.r, max(lit.g, lit.b));
+      lit *= litPeak > litKnee ? (litKnee + (litPeak - litKnee) * litKeep) / litPeak : 1.0;
       col *= lit;
+      // Hard ceiling for detail spikes the lit-knee can't foresee.
+      float peak = max(col.r, max(col.g, col.b));
+      col *= peak > colCap ? colCap / peak : 1.0;
+#endif
+      vec3 sLit = col;
       col += scorchEmberGlow(vWorldPos.xz);
       col += fieldGlow(vWorldPos);
+      vec3 sGlow = col;
       // Fog distance: dampen the DOWNWARD vertical component so terrain
       // below an airborne camera isn't over-fogged (looking down a valley,
       // ground 200m below shouldn't haze like it's 200m across the map).
+      col = seaTint(col, vWorldPos.y, vWorldPos.xz);
+      vec3 sSea = col;
       vec3 fogDelta = vWorldPos - vCameraPos;
       float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
       float fogFactor = terrainFogFactor(fogDist);
@@ -560,8 +619,22 @@ export const terrainFrag = /* glsl */`
       float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, fogDist) * smoothstep(0.3, 0.8, height);
       float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
       fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
-      col = mix(col, fogColor, fogFactor);
-      gl_FragColor = vec4(ungradeColor(col), edgeA);
+      // dbgStage: freeze the pipeline at a named stage — 0 palette,
+      // 1 detail, 2 decals, 3 lit, 4 glows, 5 seaTint, 6+ full (fog);
+      // 7/8/9 isolate lit components (sun*diff² / ambient+rim / shadowMask).
+      if (dbgStage < 0 || dbgStage == 6 || dbgStage > 9) {
+        col = mix(col, fogColor, fogFactor);
+      } else if (dbgStage == 7) {
+        col = sPal * (sunColor * shadow);
+      } else if (dbgStage == 8) {
+        col = sPal * (ambientColor + vec3(rim));
+      } else if (dbgStage == 9) {
+        col = sPal * vec3(shadowMask);
+      } else {
+        col = dbgStage == 0 ? sPal : dbgStage == 1 ? sDet : dbgStage == 2 ? sDec
+            : dbgStage == 3 ? sLit : dbgStage == 4 ? sGlow : sSea;
+      }
+      gl_FragColor = vec4(bloomGuard(ungradeColor(col)), edgeA);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
       return;
@@ -736,6 +809,7 @@ export const terrainFrag = /* glsl */`
       col += sheen * (1.0 - dirtMask) * (1.0 - slopeBlend) * vec3(0.06, 0.05, 0.02) * diff;
       col += scorchEmberGlow(vWorldPos.xz);
       col += fieldGlow(vWorldPos);
+      col = seaTint(col, vWorldPos.y, vWorldPos.xz);
       vec3 fogDelta = vWorldPos - vCameraPos;
       float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
       float fogFactor = terrainFogFactor(fogDist);
@@ -747,7 +821,7 @@ export const terrainFrag = /* glsl */`
       float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
       fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
       col = mix(col, fogColor, fogFactor);
-      gl_FragColor = vec4(ungradeColor(col), edgeA);
+      gl_FragColor = vec4(bloomGuard(ungradeColor(col)), edgeA);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
       return;
@@ -825,6 +899,7 @@ ${TERRAIN_PRESET_GLSL}
     col += scorchEmberGlow(vWorldPos.xz);
     col += fieldGlow(vWorldPos);
     // Same dampened-downward-distance fog as the desert branch — see above
+    col = seaTint(col, vWorldPos.y);
     vec3 fogDelta = vWorldPos - vCameraPos;
     float dist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
     float fogFactor = terrainFogFactor(dist);
@@ -835,7 +910,7 @@ ${TERRAIN_PRESET_GLSL}
     float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
     fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
     col = mix(col, fogColor, fogFactor);
-    gl_FragColor = vec4(ungradeColor(col), edgeA);
+    gl_FragColor = vec4(bloomGuard(ungradeColor(col)), edgeA);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
 #endif

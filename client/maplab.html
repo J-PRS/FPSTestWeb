@@ -29,10 +29,12 @@
     }
     #rail button.active { background: #2d4a66; border-color: #55aaff; }
     #rail select.terrainsel {
-      display: block; width: 100%; margin: 0 0 8px; padding: 5px 8px;
+      flex: 1; min-width: 0; margin: 0; padding: 5px 8px;
       background: #14202e; color: #9cf; border: 1px solid #55aaff;
       font: inherit; cursor: pointer;
     }
+    #rail .terrnav { display: flex; gap: 4px; margin: 0 0 8px; align-items: center; }
+    #rail .terrnav button { width: auto; flex: 0 0 34px; margin: 0; padding: 5px 4px; text-align: center; }
     #rail .btnrow { display: flex; gap: 4px; }
     #rail .btnrow button { flex: 1; min-width: 0; padding: 5px 4px; }
     #hmview {

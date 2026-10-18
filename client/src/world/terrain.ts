@@ -224,7 +224,7 @@ export class Terrain {
         // TERRAIN_PRESET picks the palette at COMPILE time — a runtime
         // uniform meant every program compiled all six preset branches.
         defines: { TERRAIN_PRESET: 1 },
-        uniforms: Object.assign({}, THREE.UniformsLib.lights, {heightMap:       { value: this.heightTexture },albedoMap:       { value: null },useAlbedo:       { value: false },matTiles:        { value: null },matAlphaA:       { value: null },matAlphaB:       { value: null },useMats:         { value: false },tileMeters:      { value: 5.86 },tileMeans:       { value: new Float32Array(8).fill(0.5) },hmWorldScale:    { value: DEFAULT_WORLD_SCALE },hmWorldScaleFrag:{ value: DEFAULT_WORLD_SCALE },hScale:          { value: HSCALE },gridOrigin:      { value: new THREE.Vector2(0, 0) },levelScale:      { value: levelScale },gridSpacing:     { value: vertSpacing(i) },innerHalfSize:   { value: cfg.innerHalfSize },innerGridOrigin: { value: new THREE.Vector2(0, 0) },parentSpacing:   { value: i + 1 < CLIPMAP_LEVELS.length ? vertSpacing(i + 1) : 0 },parentOrigin:    { value: new THREE.Vector2(0, 0) },edgeHalf:        { value: i === CLIPMAP_LEVELS.length - 1 ? levelScale * 0.5 : 0 },sunDir:          { value: sunDir.clone().normalize() },sunColor:        { value: new THREE.Color(1, 0.94, 0.8) },ambientColor:    { value: new THREE.Color(0.38, 0.45, 0.55) },hscale:          { value: HSCALE },fogColor:        { value: new THREE.Color(0xBB_D0_E8) },fogStart:        { value: 80 },fogEnd:          { value: 400 },scorchData:      { value: this.scorchArr },scorchEmber:     { value: this.scorchEmberArr },splatData:       { value: this.splatArr },splatTint:       { value: this.splatTintArr },splatDir:        { value: this.splatDirArr },fieldRing:       { value: this.fieldRingArr },fieldTint:       { value: this.fieldTintArr },fieldY:          { value: this.fieldYArr },scorchCount:     { value: 0 },splatCount:      { value: 0 },fieldCount:      { value: 0 }}),
+        uniforms: Object.assign({}, THREE.UniformsLib.lights, {heightMap:       { value: this.heightTexture },albedoMap:       { value: null },useAlbedo:       { value: false },matTiles:        { value: null },matAlphaA:       { value: null },matAlphaB:       { value: null },useMats:         { value: false },tileMeters:      { value: 5.86 },tileMeans:       { value: new Float32Array(8).fill(0.5) },hmWorldScale:    { value: DEFAULT_WORLD_SCALE },hmWorldScaleFrag:{ value: DEFAULT_WORLD_SCALE },hScale:          { value: HSCALE },gridOrigin:      { value: new THREE.Vector2(0, 0) },levelScale:      { value: levelScale },gridSpacing:     { value: vertSpacing(i) },innerHalfSize:   { value: cfg.innerHalfSize },innerGridOrigin: { value: new THREE.Vector2(0, 0) },parentSpacing:   { value: i + 1 < CLIPMAP_LEVELS.length ? vertSpacing(i + 1) : 0 },parentOrigin:    { value: new THREE.Vector2(0, 0) },edgeHalf:        { value: i === CLIPMAP_LEVELS.length - 1 ? levelScale * 0.5 : 0 },sunDir:          { value: sunDir.clone().normalize() },sunColor:        { value: new THREE.Color(1, 0.94, 0.8) },ambientColor:    { value: new THREE.Color(0.38, 0.45, 0.55) },hscale:          { value: HSCALE },fogColor:        { value: new THREE.Color(0xBB_D0_E8) },fogStart:        { value: 80 },fogEnd:          { value: 400 },scorchData:      { value: this.scorchArr },scorchEmber:     { value: this.scorchEmberArr },splatData:       { value: this.splatArr },splatTint:       { value: this.splatTintArr },splatDir:        { value: this.splatDirArr },fieldRing:       { value: this.fieldRingArr },fieldTint:       { value: this.fieldTintArr },fieldY:          { value: this.fieldYArr },scorchCount:     { value: 0 },splatCount:      { value: 0 },fieldCount:      { value: 0 },waterLevel:      { value: -1e9 },waterTint:       { value: new THREE.Color(0.12, 0.4, 0.48) },waterTime:       { value: 0 },dbgStage:        { value: -1 },litKnee:         { value: 0.85 },litKeep:         { value: 0.2 },colCap:          { value: 0.99 }}),
       });
 
       const mesh = new THREE.Mesh(i >= 2 ? outerGeo : gridGeo, material);
@@ -323,7 +323,8 @@ n += 1; sum += d; sumAbs += Math.abs(d);
   }
 
   /** Procedural palette (spec.terrainPreset: 0=mixed, 1=desert, 2=grassland,
-   *  3=snow, 4=volcanic, 5=badlands, 6=coast) — swaps the TERRAIN_PRESET
+   *  3=snow, 4=volcanic, 5=badlands, 6=coast, 7=desert hard-sun) — swaps the
+   *  TERRAIN_PRESET
    *  define and rebuilds the program; a preset-pinned program is small,
    *  so the recompile is fast and happens once per map apply. */
   setPreset(p: number): void {
@@ -343,6 +344,16 @@ n += 1; sum += d; sumAbs += Math.abs(d);
     for (const level of this.levels) {
       level.material.uniforms.hScale.value = worldScale;
       level.material.uniforms.hscale.value = worldScale;
+    }
+  }
+
+  /** Sea level in world m — the frag tints submerged ground toward
+   *  waterTint and darkens the wet band above the line. undefined = dry
+   *  map (sentinel keeps the shader branch-free). */
+  setWaterLevel(level: number | undefined, tint?: [number, number, number]): void {
+    for (const lvl of this.levels) {
+      lvl.material.uniforms.waterLevel.value = level ?? -1e9;
+      if (tint) {lvl.material.uniforms.waterTint.value.setRGB(tint[0], tint[1], tint[2], THREE.SRGBColorSpace);}
     }
   }
 
@@ -391,8 +402,10 @@ n += 1; sum += d; sumAbs += Math.abs(d);
   }
 
   update(px: number, pz: number): void {
+    const t = performance.now() * 0.001;
     for (let i = 0; i < this.levels.length; i += 1) {
       const level = this.levels[i];
+      level.material.uniforms.waterTime.value = t; // caustic phase
       // Snap grid origin to the vertex lattice (not cfg.spacing — outer
       // rings are coarser than that) or verts swim through the heightmap
       const ox = Math.round(px / level.spacing) * level.spacing;
