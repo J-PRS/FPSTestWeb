@@ -26,7 +26,7 @@ const MAPS_DIR = join(REPO, 'maps');
 const SHOTS = join(REPO, '_tools/e2e/shots');
 
 /** Control first: a spec with no weather/atmosphere blocks at all. */
-const DEFAULT_CHAIN = ['hills', 'whiteout', 'caldera', 'hoodoo', 'lagoon', 'hills'];
+const DEFAULT_CHAIN = ['hills', 'whiteout', 'caldera', 'rimrock', 'lagoon', 'hills'];
 const CHAIN = process.argv.slice(2).length ? process.argv.slice(2) : DEFAULT_CHAIN;
 
 /** Particle pool sizes in client/src/effects/ambientParticles.ts — the

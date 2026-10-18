@@ -365,6 +365,7 @@
   ],
   "terrain": "peaks.bin",
   "heightScale": 1.6,
+  "tileSize": 1000,
   "creatures": {
     "totem": 2,
     "snake": 2,

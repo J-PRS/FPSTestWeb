@@ -1,0 +1,94 @@
+{
+  "name": "Mirage",
+  "mode": "dm",
+  "bots": 10,
+  "botFill": 12,
+  "spawns": [
+    {
+      "x": -120,
+      "y": 0,
+      "z": 0
+    },
+    {
+      "x": 120,
+      "y": 0,
+      "z": 0
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": -120
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": 120
+    },
+    {
+      "x": -85,
+      "y": 0,
+      "z": -85
+    },
+    {
+      "x": 85,
+      "y": 0,
+      "z": -85
+    },
+    {
+      "x": -85,
+      "y": 0,
+      "z": 85
+    },
+    {
+      "x": 85,
+      "y": 0,
+      "z": 85
+    }
+  ],
+  "structures": [],
+  "terrain": "mirage.bin",
+  "heightScale": 5.2,
+  "terrainPreset": 6,
+  "fog": {
+    "color": [
+      0.72,
+      0.62,
+      0.42
+    ],
+    "horizon": [
+      0.85,
+      0.72,
+      0.5
+    ],
+    "distance": 150,
+    "visible": 700
+  },
+  "atmosphere": {
+    "timeOfDay": 0.55,
+    "sunAzimuth": 30,
+    "rayleigh": 1.1,
+    "mie": 2,
+    "turbidity": 1.8,
+    "mieDirectionalG": 0.7,
+    "rayleighDirectional": 0.5,
+    "sunIntensity": 1.1,
+    "starIntensity": 0
+  },
+  "weather": {
+    "dust": 1
+  },
+  "water": {
+    "level": 4,
+    "color": [
+      0.12,
+      0.35,
+      0.38
+    ],
+    "deep": [
+      0.03,
+      0.12,
+      0.18
+    ]
+  },
+  "_notes": "mirage = native (non-T2) oasis: sandy dunes around a central water pool. terrainPreset 6 (coast) for sand+water bands; dust weather for desert haze. water.level 4 = h01 0.0107, matching the coast preset's water-band edge; pool floor sits at 1.5m so the disc is ~190m across, 2.5m deep."
+}

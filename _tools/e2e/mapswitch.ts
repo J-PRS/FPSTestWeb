@@ -22,7 +22,7 @@ const STALL_MS = Number(process.env.MAPSWITCH_STALL_MS ?? 2500);
 // Distinct terrain bins, so every hop forces a real field swap.
 const CHAIN = process.argv.slice(2).length
   ? process.argv.slice(2)
-  : ['whiteout', 'hills', 'caldera', 'hoodoo', 'lagoon', 'dunes'];
+  : ['whiteout', 'hills', 'caldera', 'rimrock', 'lagoon', 'dunes'];
 
 interface Hop { room: string; sent: boolean; ok: boolean; timedOut: boolean; ms: number; appliedFile: string | null; maxGapMs: number; frames: number; before?: string }
 

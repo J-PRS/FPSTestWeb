@@ -4,12 +4,12 @@
   "bots": 10,
   "botFill": 12,
   "terrain": "erg.bin",
-  "heightScale": 0.6,
-  "tileSize": 900,
+  "heightScale": 0.85,
+  "tileSize": 1300,
   "arena": {
     "x": 0,
     "z": 0,
-    "radius": 300
+    "radius": 380
   },
   "creatures": {
     "snake": 4,
@@ -25,5 +25,5 @@
     "distance": 220,
     "visible": 650
   },
-  "_notes": "erg = dune sea. tileSize 900 squeezes the 1024 field so ridges pack tight (steeper slip faces = ski banks); arena 300 + creatures give the hunt a focal bowl instead of 1500m of empty sand."
+  "_notes": "erg = dune sea. tileSize 1300 + rebaked field (elong 2, damped high octaves, warp 0.8 — kills the glitch-stripe read); heightScale 0.85 = ~106m relief for real ski lines; arena 380 + creatures keep the hunt focal."
 }
