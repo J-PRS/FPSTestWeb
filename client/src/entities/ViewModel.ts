@@ -174,6 +174,21 @@ export class ViewModel {
     return true;
   }
 
+  /** Same round-trip for a live NODE (e.g. the LG emitter ball): syncs
+   *  vmCam to this frame's camera FIRST, then reads the node's world
+   *  transform — reading it before the sync bakes last frame's rotation
+   *  into the position and the anchor detaches under fast turns. */
+  anchorNodeWorld(node: THREE.Object3D, cam: THREE.Camera, out: THREE.Vector3): boolean {
+    this.vmCam.quaternion.copy(cam.quaternion);
+    this.vmCam.updateMatrixWorld();
+    node.getWorldPosition(out); // ancestors recompute under the FRESH vmCam
+    this.vmCam.worldToLocal(out);
+    out.applyMatrix4(this.vmCam.projectionMatrix);
+    cam.updateMatrixWorld();
+    out.unproject(cam);
+    return true;
+  }
+
   /** Same round-trip for an arbitrary vm-space point (e.g. the emitter
    *  ball's world position): renders where the point sits on screen
    *  through vmCam, then back out through the main camera's ray. */

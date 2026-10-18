@@ -38,7 +38,7 @@ export const LG_RATE = 0.05;       // Lightning gun tick — clean 20/s for the 
 // Death-burst economy, beam reach, and the chain fork live in
 // shared/combat.ts — the server banks and traces the same numbers the
 // client predicts.
-export { LG_POP_DMG_CAP, LG_POP_CHARGE_MULT, LG_CHARGE_DRAIN_S as LG_CHARGE_DECAY_S, LG_POP_RADIUS_MAX, LG_POP_RADIUS_MIN, LG_RANGE, LG_CHAIN_RANGE, LG_CHAIN_DMG_SCALE } from '../../../shared/combat.js';
+export { LG_POP_DMG_CAP, LG_POP_CHARGE_MULT, LG_CHARGE_DRAIN_S as LG_CHARGE_DECAY_S, LG_POP_RADIUS_MAX, LG_POP_RADIUS_MIN, LG_RANGE, LG_CHAIN_RANGE, LG_CHAIN_DMG_SCALE, LG_BOUNCE_RANGE, LG_BOUNCE_DMG_SCALE, lgBounceDmgScale } from '../../../shared/combat.js';
 
 // Projectile gameplay stats (speed, gravity, hitboxes, damage, fuse) live in
 // shared/weapons.ts — the single source of truth the server validates with.
@@ -73,7 +73,7 @@ export const SPRINKLER_RATE = 0.11; // ~9/s stream — saturation over precision
 export const SPRINKLER_SPREAD = 0.05; // per-shot cone jitter (dir-offset units, flak-scale)
 export const RAILGUN_RATE = 1.5; // Quake railgun cadence
 export const SHOTGUN_RATE = 0.7; // pump cadence — punchy per shot, not spam
-export const CANNON_RATE = 0.55; // Serious Sam cadence — satisfying thump-thump
+export const CANNON_RATE = 1.25; // must match WEAPON_FIRE_INTERVAL_S[Cannon] — server cadence law
 export const BOMBARD_RATE = 1.6; // siege slug — one 160dmg ball per pull, deliberate cadence
 export const RKT_RATE = 2.5; // RPG cadence — slower than mortar, one missile IS the event
 // Hold-out sidearms (G/T/B) — pulled while the key is held, holstered on release

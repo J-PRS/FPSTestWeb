@@ -5,7 +5,7 @@ import { LightningBeam } from '../../effects/lightningBeam.js';
 import { lgMuzzleAnchor } from '../lgAnchor.js';
 import {
   LG_RANGE, LG_POP_DMG_CAP, LG_POP_RADIUS_MAX, LG_POP_RADIUS_MIN,
-  LG_CHAIN_DMG_SCALE, LG_POP_CHARGE_MULT, LG_CHARGE_DECAY_S,
+  LG_CHAIN_DMG_SCALE, LG_POP_CHARGE_MULT, LG_CHARGE_DECAY_S, LG_BOUNCE_DMG_SCALE, lgBounceDmgScale,
 } from '../../core/config.js';
 import { getWeaponStats, WeaponType } from '../../../../shared/weapons.js';
 import { lgTickDamage, LG_TICK_BASE, LG_RAMP_WINDOW_S } from '../../../../shared/combat.js';
@@ -16,6 +16,7 @@ import type { Targetable } from '../../entities/balls.js';
 
 // Lightning beam scratch — rebuilt per trace, never retained
 const _lgMuzzle = new THREE.Vector3(); // visual start — bottom-right of view
+const _lgBallC = new THREE.Vector3();  // emitter ball world center (anchor path)
 
 type ProcessExplosion = (a: ExplosionArgs) => void;
 
@@ -153,6 +154,18 @@ function lgAnchorLive(deps: CombatDeps, cam: THREE.Camera, out: THREE.Vector3): 
   // air under the crosshair. Anchor at the body model's barrel tip instead.
   if (player.thirdPerson && player.muzzleWorld(out)) {return;}
   const vm = deps.lazyViewModel();
+  // Anchor on the emitter ball's RENDERED pixel — end-to-end it rides the
+  // live mesh (re-searched when a bake swap orphans the cache) so sway,
+  // kick and dips all track. Muzzle node then fixed offset are fallbacks.
+  const ball = lgBallNode(deps);
+  if (vm && ball && vm.anchorNodeWorld(ball.mesh, cam, out)) {
+    // anchorNodeWorld lands the beam on the ball's CENTER pixel — nudge
+    // half a radius back toward the camera so the bolt starts at the
+    // ball's near face, not inside it.
+    _lgBallC.copy(out).sub(cam.position).normalize();
+    out.addScaledVector(_lgBallC, -ball.mesh.geometry.boundingSphere!.radius * 0.5);
+    return;
+  }
   if (!vm?.muzzleAnchorWorld(WeaponType.Lightning, cam, out)) {
     lgMuzzleAnchor(cam, out); // fixed-offset fallback until the node exists
   }
@@ -183,13 +196,14 @@ function lgPop(deps: CombatDeps, hooks: LightningHooks, pos: THREE.Vector3, acc:
 // rotated into world space (vmScene shares the camera quaternion about
 // the eye) — the bolt is welded to the rendered gun, sway and all.
 function updateBeamVisual(deps: CombatDeps, lg: LgState): void {
-  if (!lg.beam || lg.lastFire <= 0 || performance.now() - lg.lastFire > 90) {return;}
+  if (!lg.beam || !lg.beam.visible) {return;}
+  const live = lg.lastFire > 0 && performance.now() - lg.lastFire <= 90;
   const cam = deps.lazyCamera();
   lgAnchorLive(deps, cam, _lgMuzzle);
   // Re-trace EVERY FRAME — the 44ms tick tip goes ~1.7m stale during a
   // strafe, and a live trace tracks the enemy's surface as it moves.
   // Damage stays per-tick; this is purely welding the visual.
-  const { hitT, hitTarget, hitPlayerId } = lgTrace(deps, cam, _traceT); // refreshes _lgHit at the live camera
+  const { hitT, hitTarget, hitPlayerId, bend } = lgTrace(deps, cam, _traceT); // refreshes _lgHit at the live camera
   // Tip is welded to the trace every frame — the trace is exact, and a
   // settling spring only ever read as a broken stub whipping onto the
   // crosshair after the shaft lagged behind.
@@ -197,14 +211,21 @@ function updateBeamVisual(deps: CombatDeps, lg: LgState): void {
   const nowV = performance.now();
   const dtV = Math.min((nowV - lg.tipAt) / 1000, 0.1);
   lg.tipAt = nowV;
-  updateBall(deps, true, hitTarget !== null || hitPlayerId !== null, dtV);
+  updateBall(deps, live, live && (hitTarget !== null || hitPlayerId !== null), dtV);
+  if (!live) {
+    // Fading bolt — keep both ends welded so it dies in place instead of
+    // hanging frozen mid-air while the camera keeps moving.
+    lg.beam.clearChain();
+    lg.beam.weld(_lgMuzzle, lg.beamTo, cam.position, bend);
+    return;
+  }
   if (hitTarget) {
     const chain = pickChain(deps, _lgHit, hitTarget);
     if (chain) {lg.beam.fireChain(_lgHit, chain.pos);} else {lg.beam.clearChain();}
   } else {
     lg.beam.clearChain();
   }
-  lg.beam.fire(_lgMuzzle, lg.beamTo, cam.position, hitT < LG_RANGE, hitTarget !== null || hitPlayerId !== null);
+  lg.beam.fire(_lgMuzzle, lg.beamTo, cam.position, hitT < LG_RANGE, hitTarget !== null || hitPlayerId !== null, bend);
 }
 
 // Beam fades ~80ms after the last tick — driven from updateProjectiles.
@@ -324,7 +345,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
     const stats = getWeaponStats(WeaponType.Lightning);
     if (!lg.beam) {lg.beam = new LightningBeam(deps.lazyScene());}
 
-    const { hitT, hitTarget, hitPlayerId } = lgTrace(deps, cam, _traceT);
+    const { hitT, hitTarget, hitPlayerId, bend } = lgTrace(deps, cam, _traceT);
 
     // beamTo is display state owned by updateBeamVisual — the tick still
     // fires from the raw _lgHit so damage/explosions stay exact.
@@ -341,7 +362,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
 
     // Same anchor as the per-frame refresh — one function, no drift.
     lgAnchorLive(deps, cam, _lgMuzzle);
-    lg.beam.fire(_lgMuzzle, _lgHit, _lgO, hitT < LG_RANGE, hitTarget !== null || hitPlayerId !== null);
+    lg.beam.fire(_lgMuzzle, _lgHit, _lgO, hitT < LG_RANGE, hitTarget !== null || hitPlayerId !== null, bend);
 
     deps.lazyViewModel()?.kick(0.22); // per-tick hum — stacks into a buzz
     // Contact sparks only when the bolt actually lands on something —
@@ -350,8 +371,12 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
     sfx.shoot(WeaponType.Lightning);
 
     if (hitTarget) {
-      hitTarget.applyKnockback(player.pos, stats.knockbackForce, true); // the pin — directed shove rides the claim
-      zapTarget(deps, hooks, lg, hitTarget, 1, cam);
+      // The drag follows the beam — a bounced bolt arrives from the
+      // ground contact, so it drags toward the SKID point (not you),
+      // and the pull softens in the same bands the damage does.
+      const pullScale = bend ? lgBounceDmgScale(bend.distanceTo(_lgHit)) : 1;
+      hitTarget.applyPull(bend ?? player.pos, stats.knockbackForce * pullScale, true);
+      zapTarget(deps, hooks, lg, hitTarget, bend ? lgBounceDmgScale(bend.distanceTo(_lgHit)) : 1, cam);
       deps.lazyHud().showHitMarker();
 
       // Chain fork: arc from the CONTACT POINT to the nearest OTHER enemy
@@ -359,14 +384,14 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
       const chainT = pickChain(deps, _lgHit, hitTarget);
       if (chainT) {
         lg.beam.fireChain(_lgHit, chainT.pos);
-        chainT.applyKnockback(hitTarget.pos, stats.knockbackForce * 0.6, true);
+        chainT.applyPull(hitTarget.pos, stats.knockbackForce * 0.6, true);
         zapTarget(deps, hooks, lg, chainT, LG_CHAIN_DMG_SCALE, cam);
       }
     } else {
       lg.beam?.setCharge(0); // arcing air — nothing banked, nothing to show
     }
 
-    if (hitPlayerId) {zapPlayer(hitPlayerId, stats);}
+    if (hitPlayerId) {zapPlayer(hitPlayerId, stats, bend ? lgBounceDmgScale(bend.distanceTo(_lgHit)) : 1);}
   }
 
   // One beam tick on a remote player: the victim can't ride the generic
@@ -374,7 +399,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
   // ramp), so they take the stepped tick directly. Bots resolve through
   // local authority, peers get the prediction until the server's aoeBeam
   // lands the identical tick.
-  function zapPlayer(hitPlayerId: string, stats: ReturnType<typeof getWeaponStats>): void {
+  function zapPlayer(hitPlayerId: string, stats: ReturnType<typeof getWeaponStats>, dmgScale = 1): void {
     const nowV = performance.now() / 1000;
     const stV = lg.rampP.get(hitPlayerId);
     const nV = stV && nowV - stV.t <= LG_RAMP_WINDOW_S ? stV.n + 1 : 1;
@@ -382,7 +407,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
     if (lg.rampP.size > 32) {
       for (const [id, s] of lg.rampP) {if (nowV - s.t > LG_RAMP_WINDOW_S) {lg.rampP.delete(id);}}
     }
-    const tick = lgTickDamage(nV);
+    const tick = lgTickDamage(nV) * dmgScale;
     // Same per-tick number creatures get (zapTarget) — the beam on a
     // player was hitmarker-only, which read as "beam does no damage".
     if (tick >= 1) {deps.lazyDamageNumbers().spawn(_lgHit, tick, '#8fdcff', deps.lazyCamera());}

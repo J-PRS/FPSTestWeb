@@ -214,9 +214,9 @@ export class DamageNumberManager {
     const step = hw * 1.7;
     const x0 = -(n.glyphCount - 1) * step * 0.5;
     let q = quad;
-    for (let gIdx = 0; gIdx < n.glyphCount && q < MAX_QUADS; ((gIdx += 1) - 1), ((q += 1) - 1)) {
+    for (let gIdx = 0; gIdx < n.glyphCount && q < MAX_QUADS; gIdx += 1, q += 1) {
       const ox = x0 + gIdx * step;
-      const v = quad * 4;
+      const v = q * 4;
       for (let k = 0; k < 4; k += 1) {
         const sx = k === 0 || k === 3 ? -1 : 1;
         const sy = k < 2 ? -1 : 1;
@@ -232,7 +232,7 @@ export class DamageNumberManager {
         colA[ci] = n.r; colA[ci + 1] = n.g; colA[ci + 2] = n.b; colA[ci + 3] = alpha;
       }
     }
-    return quad;
+    return q;
   }
 
   dispose(): void {

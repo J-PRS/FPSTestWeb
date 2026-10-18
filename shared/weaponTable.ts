@@ -117,6 +117,9 @@ export interface WeaponStats {
   bounceRestitution?: number; // normal velocity kept per bounce
   bounceFriction?: number;    // tangential velocity kept per bounce
   maxBounces?: number;        // die on the Nth terrain hit (flak shards); unset = bounce until fuse
+  /** First terrain bounce clamps the remaining fuse to this many seconds
+   *  — a skip becomes a short cook-off instead of free ricochet time. */
+  fuseAfterBounce?: number;
   /** T2 glue bomb: contact STOPS the shell instead of detonating — it
    *  freezes on terrain/walls, glues onto a player it touches (riding
    *  them until the fuse pops), and only `maxLifetime` triggers the
@@ -354,8 +357,8 @@ export const WEAPONS: Record<number, WeaponStats> = {
     directDamage: 4,
     aoeDamage: 2.5,
     aoeRadius: 1.6, // narrow shaft — tracking weapon, not a wake
-    knockbackForce: 4, // the pin: a nudge per tick — it accrues at 22/s, keep it modest
-    forceMode: 'push',
+    knockbackForce: 4, // the drag: a pull nudge per tick — it accrues at 22/s, keep it modest
+    forceMode: 'pull',
     speed: 0,
     gravity: false,
     bodyRadius: 0,
@@ -401,8 +404,9 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitGrow: 1.5,
     maxLifetime: 6, // skitters around until fuse or contact ends it
     terrainBounce: true,
-    bounceRestitution: 0.75, // = client CANNON_BOUNCE_RESTITUTION
-    bounceFriction: 0.85,
+    bounceRestitution: 1, // perfectly elastic — loses nothing off dirt
+    bounceFriction: 1, // tangential kept in full: zero friction
+    fuseAfterBounce: 0.5, // first skip starts a 0.5s cook-off — the ball detonates where it lands, not 6s later
   },
   [WeaponType.RocketLauncher]: {
     // RPG-style missile: flat trajectory, slower than the Bolt Launcher

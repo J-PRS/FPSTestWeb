@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { LG_RANGE, LG_CHAIN_RANGE } from '../../core/config.js';
+import { LG_RANGE, LG_CHAIN_RANGE, LG_BOUNCE_RANGE } from '../../core/config.js';
 import { classCapsule } from '../../../../shared/botClasses.js';
 import { segSolidHit } from '../../../../shared/solidWorld.js';
 import { Projectile } from '../../projectiles/Projectile.js';
@@ -15,6 +15,8 @@ import type { CombatDeps } from '../combat.js';
 export const _lgO = new THREE.Vector3();   // eye position — the honest ray
 export const _lgD = new THREE.Vector3();
 export const _lgHit = new THREE.Vector3();
+export const _lgBend = new THREE.Vector3(); // terrain-bounce corner, when bounced
+const _lgD2 = new THREE.Vector3(); // bounce-pick scratch
 const _lgP = new THREE.Vector3();   // terrain march point
 const _lgTo = new THREE.Vector3();
 const _lgTo2 = new THREE.Vector3(); // chain-pick scratch
@@ -45,7 +47,7 @@ export function pickChain(deps: CombatDeps, from: THREE.Vector3, exclude: (typeo
   return best;
 }
 
-function tracePlayerHit(deps: CombatDeps, hitT: number, traceT: { t: number }): string | null {
+function tracePlayerHit(deps: CombatDeps, hitT: number, traceT: { t: number }, o: THREE.Vector3, d: THREE.Vector3): string | null {
   traceT.t = hitT;
   let hitId: string | null = null;
   for (const [pid, rp] of deps.world.remotePlayers) {
@@ -53,7 +55,7 @@ function tracePlayerHit(deps: CombatDeps, hitT: number, traceT: { t: number }): 
     // Ray vs the class capsule (shared/botClasses — the same shape the
     // server validates). rp.position is eye height; the capsule axis runs
     // feet+R .. feet+HEIGHT−R below it.
-    const entry = rayCapsuleEntry(rp.position, traceT.t, rp.armorClass);
+    const entry = rayCapsuleEntry(rp.position, traceT.t, rp.armorClass, o, d);
     if (entry !== null) { traceT.t = entry; hitId = pid; }
   }
   return hitId;
@@ -62,16 +64,16 @@ function tracePlayerHit(deps: CombatDeps, hitT: number, traceT: { t: number }): 
 
 
 
-function traceTargetHit(deps: CombatDeps, hitT: number, traceT: { t: number }): (typeof deps.targets)[number] | null {
+function traceTargetHit(deps: CombatDeps, hitT: number, traceT: { t: number }, o: THREE.Vector3, d: THREE.Vector3): (typeof deps.targets)[number] | null {
   traceT.t = hitT;
   let hit: (typeof deps.targets)[number] | null = null;
   for (const t of deps.targets) {
     if (t.dead) {continue;}
-    _lgTo.copy(t.pos).sub(_lgO);
+    _lgTo.copy(t.pos).sub(o);
     // Capsule bodies (totem): aim the test at the shaft's midpoint —
     // the feet-sphere misses a beam through the upper half entirely.
     if (t.capsuleTop) {_lgTo.y += t.capsuleTop * 0.5;}
-    const proj = _lgTo.dot(_lgD);
+    const proj = _lgTo.dot(d);
     if (proj < 0 || proj > traceT.t) {continue;}
     const entry = sphereEntry(traceT.t, (t.hitRadius ?? t.radius) + 0.45, proj);
     if (entry !== null) { traceT.t = entry; hit = t; }
@@ -88,6 +90,9 @@ export function lgTrace(deps: CombatDeps, cam: THREE.Camera, traceT: { t: number
   hitT: number;
   hitTarget: (typeof deps.targets)[number] | null;
   hitPlayerId: string | null;
+  /** Terrain-bounce corner — when set, the beam renders two legs and the
+   *  hit pays half damage (server resolves the same skip). */
+  bend: THREE.Vector3 | null;
 } {
   _lgO.copy(cam.position);
   cam.getWorldDirection(_lgD);
@@ -96,6 +101,7 @@ export function lgTrace(deps: CombatDeps, cam: THREE.Camera, traceT: { t: number
   // then bisect the last step — the coarse march alone can leave the tip
   // buried ~1.5m inside a slope.
   let hitT = LG_RANGE;
+  let fieldT = LG_RANGE; // terrain stop distance — a FIELD hit can bounce
   for (let d = 1.5; d <= LG_RANGE; d += 1.5) {
     _lgP.copy(_lgO).addScaledVector(_lgD, d);
     if (_lgP.y < deps.lazyTerrain().getHeight(_lgP.x, _lgP.z)) {
@@ -105,7 +111,7 @@ export function lgTrace(deps: CombatDeps, cam: THREE.Camera, traceT: { t: number
         _lgP.copy(_lgO).addScaledVector(_lgD, mid);
         if (_lgP.y < deps.lazyTerrain().getHeight(_lgP.x, _lgP.z)) {hi = mid;} else {lo = mid;}
       }
-      hitT = lo; break;
+      fieldT = lo; hitT = lo; break;
     }
   }
 
@@ -127,13 +133,53 @@ export function lgTrace(deps: CombatDeps, cam: THREE.Camera, traceT: { t: number
 
   // Targets: ray-vs-sphere, nearest wins — tip lands on the SURFACE entry
   // point (exact aim), never magnetized to the center
-  const hitTarget = traceTargetHit(deps, hitT, traceT);
+  const hitTarget = traceTargetHit(deps, hitT, traceT, _lgO, _lgD);
   hitT = traceT.t;
-  const hitPlayerId = tracePlayerHit(deps, hitT, traceT);
+  const hitPlayerId = tracePlayerHit(deps, hitT, traceT, _lgO, _lgD);
   hitT = traceT.t;
 
   _lgHit.copy(_lgO).addScaledVector(_lgD, hitT);
-  return { hitT, hitTarget, hitPlayerId };
+
+  // Terrain bounce: ground stopped the bolt (not a wall/hull, not an
+  // entity) — skip off the slope once, ≤LG_BOUNCE_RANGE, half damage.
+  // Mirrors the server's beamSweepRay leg-for-leg.
+  if (!hitTarget && !hitPlayerId && fieldT < LG_RANGE && hitT === fieldT) {
+    const bounced = bounceLeg(deps);
+    if (bounced) {return bounced;}
+  }
+  return { hitT, hitTarget, hitPlayerId, bend: null };
+}
+
+// Second leg off the terrain hit in _lgHit: the bolt grounds, then arcs
+// to the nearest enemy within LG_BOUNCE_RANGE of the contact — any angle
+// (the server's beamSweepRay resolves the same pick). Null = nobody near.
+function bounceLeg(deps: CombatDeps): {
+  hitT: number;
+  hitTarget: (typeof deps.targets)[number] | null;
+  hitPlayerId: string | null;
+  bend: THREE.Vector3;
+} | null {
+  _lgBend.copy(_lgHit);
+  let bestD2 = LG_BOUNCE_RANGE * LG_BOUNCE_RANGE;
+  let bTarget: (typeof deps.targets)[number] | null = null;
+  let bPlayer: string | null = null;
+  for (const t of deps.targets) {
+    if (t.dead) {continue;}
+    const d2 = _lgBend.distanceToSquared(t.pos) - (t.hitRadius ?? t.radius) ** 2;
+    if (d2 < bestD2) { bestD2 = d2; bTarget = t; bPlayer = null; _lgTo.copy(t.pos); }
+  }
+  for (const [pid, rp] of deps.world.remotePlayers) {
+    if (rp.isDead) {continue;}
+    // rp.position is eye height — measure to the capsule midpoint so a
+    // contact at the feet still catches a standing enemy.
+    const cap = classCapsule(rp.armorClass);
+    _lgD2.set(rp.position.x, rp.position.y - cap.eye + cap.height * 0.5, rp.position.z);
+    const d2 = _lgBend.distanceToSquared(_lgD2) - cap.radius * cap.radius;
+    if (d2 < bestD2) { bestD2 = d2; bTarget = null; bPlayer = pid; _lgTo.copy(_lgD2); }
+  }
+  if (!bTarget && !bPlayer) {return null;}
+  _lgHit.copy(_lgTo);
+  return { hitT: _lgBend.distanceTo(_lgHit), hitTarget: bTarget, hitPlayerId: bPlayer, bend: _lgBend };
 }
 
 // Ray-vs-sphere entry distance along _lgD for the to-target vector in
@@ -153,16 +199,16 @@ function sphereEntry(hitT: number, r: number, proj: number): number | null {
  *  segment, then back off the surface by sqrt(r²−d²) — the standard
  *  capsule-beam solve (exact for horizontal rays, ≤cm error for steep
  *  ones vs a true cylindrical cast). */
-function rayCapsuleEntry(eyePos: THREE.Vector3, hitT: number, cls?: string): number | null {
+function rayCapsuleEntry(eyePos: THREE.Vector3, hitT: number, cls: string | undefined, o: THREE.Vector3, d: THREE.Vector3): number | null {
   const cap = classCapsule(cls);
   const capPad = cap.radius + 0.2; // beam is thin but not needle-thin
   const yLo = eyePos.y - cap.eye + cap.radius;
   const axisH = (cap.height - 2 * cap.radius); // yLo .. yLo+axisH
-  const wx = _lgO.x - eyePos.x;
-  const wy = _lgO.y - yLo;
-  const wz = _lgO.z - eyePos.z;
-  const a = _lgD.y;                        // axis dir is (0,1,0) → only y matters
-  const b = wx * _lgD.x + wy * _lgD.y + wz * _lgD.z; // w0·D (D normalized)
+  const wx = o.x - eyePos.x;
+  const wy = o.y - yLo;
+  const wz = o.z - eyePos.z;
+  const a = d.y;                        // axis dir is (0,1,0) → only y matters
+  const b = wx * d.x + wy * d.y + wz * d.z; // w0·D (D normalized)
   const denom = a * a - 1;                 // −(Dx²+Dz²): 0 for a vertical ray
   // Unclamped line-line closest axis param, then clamp to the segment and
   // re-optimize the ray param for the clamped point.
@@ -173,9 +219,9 @@ function rayCapsuleEntry(eyePos: THREE.Vector3, hitT: number, cls?: string): num
   let t = s * a - b;
   t = Math.min(Math.max(t, 0), hitT);
   s = Math.min(Math.max(t * a + wy, 0), axisH); // re-solve s for clamped t
-  const px = _lgO.x + _lgD.x * t - eyePos.x;
-  const py = _lgO.y + _lgD.y * t - (yLo + s);
-  const pz = _lgO.z + _lgD.z * t - eyePos.z;
+  const px = o.x + d.x * t - eyePos.x;
+  const py = o.y + d.y * t - (yLo + s);
+  const pz = o.z + d.z * t - eyePos.z;
   const d2 = px * px + py * py + pz * pz;
   if (d2 >= capPad * capPad) {return null;}
   const entry = t - Math.sqrt(capPad * capPad - d2);

@@ -22,6 +22,7 @@ const _dir = new THREE.Vector3();
 const _side = new THREE.Vector3();
 const _up = new THREE.Vector3();
 const _segDir = new THREE.Vector3();
+const _bendDir = new THREE.Vector3();
 
 // Perpendicular basis for a direction — picks the world axis LEAST aligned
 // with dir so the cross product can't degenerate (vertical beams included).
@@ -43,14 +44,30 @@ export class LightningBeam {
   private chainFrom = new THREE.Vector3();
   private chainTo = new THREE.Vector3();
   private chainLive = false;
+  // Contact FX sit OFF the hit surface — pulled toward the camera along
+  // the view vector so the additive glow sprite never half-buries in a
+  // slope (the decal-normal-offset trick, with the viewer ray as the
+  // normal — always correct for the shooter, zero trace plumbing).
+  private hitFx = new THREE.Vector3();
   hitGlow!: THREE.Sprite;
   sparkPoints!: THREE.Points;
   sparkPos!: Float32Array;
   sparkVel!: Float32Array;
   sparkAge!: Float32Array;
   beamPts!: THREE.Vector3[]; // last rolled skeleton (core + glow share it)
+  // Lateral jag factors rolled at the 30ms cadence — re-applied onto the
+  // CURRENT muzzle→tip line every frame, so the whole bolt follows a fast
+  // sweep rigidly instead of kinking the last segment onto the new tip.
+  private jagSide = new Float32Array(SEGS + 1);
+  private jagUp = new Float32Array(SEGS + 1);
+  private arcJagSide = new Float32Array(SEGS + 1);
+  private arcJagUp = new Float32Array(SEGS + 1);
+  private chainJagSide = new Float32Array(SEGS + 1);
+  private chainJagUp = new Float32Array(SEGS + 1);
   private from = new THREE.Vector3();
   private to = new THREE.Vector3();
+  private bend = new THREE.Vector3();  // terrain-bounce corner (hasBend)
+  private hasBend = false;
   private camPos = new THREE.Vector3();
   private jagT = 0;
   private fade = 0;
@@ -86,10 +103,12 @@ export class LightningBeam {
    *  billboarding, hasContact = the tip actually landed on something —
    *  the glow sprite + spark fountain are CONTACT VFX and must not float
    *  at the end of a max-range air shot. */
-  fire(from: THREE.Vector3, to: THREE.Vector3, camPos: THREE.Vector3, hasContact = true, damaging = false): void {
+  fire(from: THREE.Vector3, to: THREE.Vector3, camPos: THREE.Vector3, hasContact = true, damaging = false, bend?: THREE.Vector3 | null): void {
     this.from.copy(from);
     this.to.copy(to);
     this.camPos.copy(camPos);
+    this.hasBend = bend != null;
+    if (bend) {this.bend.copy(bend);}
     // Revive from hidden: update() early-returns while faded, so jagT
     // froze mid-clock and the skeleton still holds the PREVIOUS shot's
     // curve — endpoints weld to the new shot but the interior arcs
@@ -98,10 +117,36 @@ export class LightningBeam {
     if (this.fade <= 0) { this.jagT = 0; }
     this.fade = 1;
     this.group.visible = true;
-    this.hitGlow.position.copy(to);
+    _dir.copy(camPos).sub(to).normalize();
+    this.hitFx.copy(to).addScaledVector(_dir, 0.22);
+    this.hitGlow.position.copy(this.hitFx);
     this.hitGlow.visible = hasContact;
     this.sparkPoints.visible = hasContact;
     this.contact = damaging ? 1 : 0; // re-armed each frame the tip bites
+    // fire() runs AFTER update() in the frame (updateBeamVisual is post-
+    // viewModel) — rebuild here too or the rendered skeleton is one frame
+    // stale at BOTH ends: the fast-flick "beam detaches from gun AND
+    // crosshair" artifact.
+    this.buildSkeleton(this.contact);
+  }
+
+  get visible(): boolean { return this.group.visible; }
+
+  /** Post-release fade weld — endpoints keep riding the gun + live trace
+   *  while the bolt fades, so it shrinks in place instead of freezing
+   *  mid-air for 90ms while the camera moves on. */
+  weld(from: THREE.Vector3, to: THREE.Vector3, camPos: THREE.Vector3, bend?: THREE.Vector3 | null): void {
+    this.from.copy(from);
+    this.to.copy(to);
+    this.camPos.copy(camPos);
+    this.hasBend = bend != null;
+    if (bend) {this.bend.copy(bend);}
+    _dir.copy(camPos).sub(to);
+    if (_dir.lengthSq() > 0.0001) {this.hitFx.copy(to).addScaledVector(_dir.normalize(), 0.22);}
+    this.hitGlow.position.copy(this.hitFx);
+    // Same frame-order fix as fire(): update() already ran this frame —
+    // rebuild now or the fading bolt renders one frame stale at both ends.
+    this.buildSkeleton(this.contact);
   }
 
   /** Optional second hop: beam forks from the hit enemy to a chained one. */
@@ -136,63 +181,21 @@ export class LightningBeam {
     (this.chainCore.material as THREE.MeshBasicMaterial).opacity = 0.7 * f;
     if (this.fade <= 0) { this.group.visible = false; this.chainLive = false; return; }
 
-    // Re-roll the jag skeleton
+    // Re-roll the jag OFFSETS at the flicker cadence — positions are
+    // rebuilt every frame so the skeleton never lags a fast sweep.
     this.jagT -= dt;
     if (this.jagT <= 0) {
       this.jagT = JITTER_TIME;
-      _dir.copy(this.to).sub(this.from);
-      const len = _dir.length();
-      // Degenerate (point-blank) beam: any basis works, just don't NaN
-      if (len < 0.05) { _side.set(1, 0, 0); _up.set(0, 1, 0); }
-      else {perpBasis(_dir, _side, _up);}
       for (let i = 0; i <= SEGS; i += 1) {
-        const t = i / SEGS;
-        const amp = Math.sin(t * Math.PI) * JAG * Math.min(1, len / 30);
-        this.beamPts[i]!.copy(this.from).addScaledVector(_dir, t)
-          .addScaledVector(_side, (Math.random() - 0.5) * amp)
-          .addScaledVector(_up, (Math.random() - 0.5) * amp);
-      }
-      this.writeRibbon(this.core, CORE_W * (1 + c * 1.6 + k * 0.8));
-      this.writeRibbon(this.glow, GLOW_W * (1 + c * 1.4));
-      // Damage arc: same shaft, nearly double the jag — it reads as the
-      // bolt tearing INTO the contact, not just reaching it
-      if (k > 0) {
-        for (let i = 0; i <= SEGS; i += 1) {
-          const t = i / SEGS;
-          const amp = Math.sin(t * Math.PI) * JAG * 1.9 * Math.min(1, len / 30);
-          this.arcPts[i]!.copy(this.from).addScaledVector(_dir, t)
-            .addScaledVector(_side, (Math.random() - 0.5) * amp)
-            .addScaledVector(_up, (Math.random() - 0.5) * amp);
-        }
-        this.writeRibbonPts(this.arc, this.arcPts, CORE_W * 1.3);
-      }
-      // Roll the chain hop too — tighter jag, it's a short fork
-      if (this.chainLive) {
-        _dir.copy(this.chainTo).sub(this.chainFrom);
-        perpBasis(_dir, _side, _up);
-        for (let i = 0; i <= SEGS; i += 1) {
-          const t = i / SEGS;
-          const amp = Math.sin(t * Math.PI) * JAG * 0.6;
-          this.chainPts[i]!.copy(this.chainFrom).addScaledVector(_dir, t)
-            .addScaledVector(_side, (Math.random() - 0.5) * amp)
-            .addScaledVector(_up, (Math.random() - 0.5) * amp);
-        }
-        this.writeRibbonPts(this.chainCore, this.chainPts, CORE_W * 0.9);
+        this.jagSide[i] = Math.random() - 0.5;
+        this.jagUp[i] = Math.random() - 0.5;
+        this.arcJagSide[i] = Math.random() - 0.5;
+        this.arcJagUp[i] = Math.random() - 0.5;
+        this.chainJagSide[i] = Math.random() - 0.5;
+        this.chainJagUp[i] = Math.random() - 0.5;
       }
     }
-
-    // Endpoints ride the CURRENT from/to every frame — the jag pattern may
-    // throttle to 30ms but the weld can't: a stale segment-0 endpoint is
-    // exactly the "beam detaches on fast turns" artifact.
-    this.beamPts[0]!.copy(this.from);
-    this.beamPts[SEGS]!.copy(this.to);
-    this.writeRibbon(this.core, CORE_W * (1 + c * 1.6 + k * 0.8));
-    this.writeRibbon(this.glow, GLOW_W * (1 + c * 1.4));
-    if (k > 0) {
-      this.arcPts[0]!.copy(this.from);
-      this.arcPts[SEGS]!.copy(this.to);
-      this.writeRibbonPts(this.arc, this.arcPts, CORE_W * 1.3);
-    }
+    this.buildSkeleton(k);
 
     // Hit glow throbs
     const pulse = (1.9 + Math.sin(performance.now() * 0.04) * 0.5) * (1 + k * 0.35);
@@ -209,7 +212,7 @@ export class LightningBeam {
         // Respawn: burst outward from the hit point + slight gravity bounce;
         // charged victims boil faster and fling harder.
         this.sparkAge[i] = SPARK_LIFE * (0.5 + Math.random() * 0.5) * (1 + c * 0.6);
-        this.sparkPos[i * 3] = this.to.x; this.sparkPos[i * 3 + 1] = this.to.y; this.sparkPos[i * 3 + 2] = this.to.z;
+        this.sparkPos[i * 3] = this.hitFx.x; this.sparkPos[i * 3 + 1] = this.hitFx.y; this.sparkPos[i * 3 + 2] = this.hitFx.z;
         const a = Math.random() * Math.PI * 2, e = Math.random() * Math.PI - Math.PI / 2;
         const s = SPARK_SPEED * (0.4 + Math.random() * 0.6) * (1 + c * 1.2);
         this.sparkVel[i * 3] = Math.cos(a) * Math.cos(e) * s;
@@ -223,6 +226,64 @@ export class LightningBeam {
       }
     }
     (this.sparkPoints.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+  }
+
+  // Rebuild skeleton + ribbons on CURRENT endpoints — a frozen interior
+  // plus a welded tip was the "last segment detaches" artifact; rolling
+  // only the offsets keeps the 30ms flicker while the bolt stays welded.
+  private buildSkeleton(k: number): void {
+    const c = this.charge;
+    _dir.copy(this.to).sub(this.from); // straight-line delta (also the basis)
+    // Bounced bolt: skeleton rides the two-leg polyline from→bend→to.
+    // Leg vectors stay RAW deltas — params t·legLen fraction-of-leg.
+    let bendT = 0;
+    const legB = _bendDir.copy(this.to).sub(this.bend); // raw delta when bent
+    const useBend = this.hasBend && legB.lengthSq() > 0.002;
+    const len = useBend ? this.bend.distanceTo(this.from) + legB.length() : _dir.length();
+    if (useBend) {bendT = this.bend.distanceTo(this.from) / len;}
+    // Degenerate (point-blank) beam: any basis works, just don't NaN
+    if (len < 0.05) { _side.set(1, 0, 0); _up.set(0, 1, 0); }
+    else {perpBasis(_dir, _side, _up);}
+    const jagAmp = JAG * Math.min(1, len / 30);
+    const pointAt = (t: number, p: THREE.Vector3): THREE.Vector3 => {
+      if (useBend && t > bendT) {return p.copy(this.bend).addScaledVector(legB, (t - bendT) / (1 - bendT));}
+      if (useBend) {return p.copy(this.from).addScaledVector(_segDir.copy(this.bend).sub(this.from), t / bendT);}
+      return p.copy(this.from).addScaledVector(_dir, t);
+    };
+    for (let i = 0; i <= SEGS; i += 1) {
+      const t = i / SEGS;
+      const amp = Math.sin(t * Math.PI) * jagAmp;
+      pointAt(t, this.beamPts[i]!)
+        .addScaledVector(_side, this.jagSide[i]! * amp)
+        .addScaledVector(_up, this.jagUp[i]! * amp);
+    }
+    this.writeRibbon(this.core, CORE_W * (1 + c * 1.6 + k * 0.8));
+    this.writeRibbon(this.glow, GLOW_W * (1 + c * 1.4));
+    // Damage arc: same shaft, nearly double the jag — it reads as the
+    // bolt tearing INTO the contact, not just reaching it
+    if (k > 0) {
+      for (let i = 0; i <= SEGS; i += 1) {
+        const t = i / SEGS;
+        const amp = Math.sin(t * Math.PI) * jagAmp * 1.9;
+        pointAt(t, this.arcPts[i]!)
+          .addScaledVector(_side, this.arcJagSide[i]! * amp)
+          .addScaledVector(_up, this.arcJagUp[i]! * amp);
+      }
+      this.writeRibbonPts(this.arc, this.arcPts, CORE_W * 1.3);
+    }
+    // Chain hop — tighter jag, it's a short fork
+    if (this.chainLive) {
+      _segDir.copy(this.chainTo).sub(this.chainFrom);
+      perpBasis(_segDir, _side, _up);
+      for (let i = 0; i <= SEGS; i += 1) {
+        const t = i / SEGS;
+        const amp = Math.sin(t * Math.PI) * JAG * 0.6;
+        this.chainPts[i]!.copy(this.chainFrom).addScaledVector(_segDir, t)
+          .addScaledVector(_side, this.chainJagSide[i]! * amp)
+          .addScaledVector(_up, this.chainJagUp[i]! * amp);
+      }
+      this.writeRibbonPts(this.chainCore, this.chainPts, CORE_W * 0.9);
+    }
   }
 
   // Fixed-basis crossed ribbons: offsets along the beam's own side/up axes.

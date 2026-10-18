@@ -9,7 +9,7 @@
 import { segFieldHit, segPointDist, segPointT } from '../../shared/projSim.ts';
 import { segSolidHit } from '../../shared/solidWorld.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
-import { LG_CHAIN_RANGE } from '../../shared/combat.ts';
+import { LG_CHAIN_RANGE, LG_BOUNCE_RANGE, lgBounceDmgScale } from '../../shared/combat.ts';
 import { classCapsule } from '../../shared/botClasses.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
 import type { Vec3 } from './types.ts';
@@ -70,9 +70,12 @@ export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: V
   const end = { x: muzzle.x + dir.x * range, y: muzzle.y + dir.y * range, z: muzzle.z + dir.z * range };
   const at = (t: number): Vec3 => ({ x: muzzle.x + (end.x - muzzle.x) * t, y: muzzle.y + (end.y - muzzle.y) * t, z: muzzle.z + (end.z - muzzle.z) * t });
   let bestT = 1;
+  // Terrain kept apart — a FIELD stop can bounce the bolt once; a wall
+  // or hull never can.
+  let fieldT = 1;
   if (world.field) {
     const th = segFieldHit(muzzle, end, world.field);
-    if (th) {bestT = segPointT(muzzle, end, th);}
+    if (th) {fieldT = segPointT(muzzle, end, th); bestT = fieldT;}
   }
   if (world.solids.length > 0) {
     const sh = segSolidHit(muzzle, end, world.solids, undefined, world.players.getPlayer(shooterId)?.team);
@@ -93,30 +96,87 @@ export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: V
   const shooterPing = shooter?.isBot ? 0 : (shooter?.ping ?? 0);
   const shooterLag = shooter?.isBot ? 0 : renderLagOf(shooter);
   const shooterTransit = shooter?.isBot ? 0 : shooterTransitMs(world.transitOf, shooterId, shooterPing);
-  let playerId: string | undefined = undefined;
-  for (const [pid, t] of world.players.getAllPlayers()) {
-    if (pid === shooterId || t.isDead) {continue;}
-    const cap = classCapsule(t.armorClass);
-    const targetTransit = world.transitOf?.(pid) ?? 0;
-    const back = Math.max(0, shooterTransit + renderLagOfTarget(shooter, pid) - targetTransit);
-    const tp = rewindPos(t, back);
-    const c = { x: tp.x, y: tp.y + cap.centerOff, z: tp.z };
-    if (segPointDist(muzzle, end, c) > cap.radius + 0.2 + cap.half) {continue;}
-    const tt = segPointT(muzzle, end, c);
-    if (tt <= bestT) { bestT = tt; playerId = pid; }
-  }
-  // Creature sims run server-side — no uplink staleness in their
-  // history and no broadcast lead, so the ghost sits exactly
-  // shooterTransit + renderDelay back.
   const creatureBack = shooterTransit + shooterLag;
-  const bc = world.ballSim?.sweepHit(muzzle, end, 0.2, creatureBack);
-  if (bc && bc.t <= bestT) {
-    return Object.assign({}, {ballId: bc.id,contact: at(bc.t)}, beamChain(world, at(bc.t), dir, bc.id, undefined));
+
+  // First entity along segment a→b, capped at limitT — shared by the
+  // straight leg and the terrain-bounce leg.
+  const sweepEnts = (a: Vec3, b: Vec3, limitT: number, beamDir: Vec3): BeamContact | null => {
+    let tMin = limitT;
+    let playerId: string | undefined;
+    for (const [pid, t] of world.players.getAllPlayers()) {
+      if (pid === shooterId || t.isDead) {continue;}
+      const cap = classCapsule(t.armorClass);
+      const targetTransit = world.transitOf?.(pid) ?? 0;
+      const back = Math.max(0, shooterTransit + renderLagOfTarget(shooter, pid) - targetTransit);
+      const tp = rewindPos(t, back);
+      const c = { x: tp.x, y: tp.y + cap.centerOff, z: tp.z };
+      if (segPointDist(a, b, c) > cap.radius + 0.2 + cap.half) {continue;}
+      const tt = segPointT(a, b, c);
+      if (tt <= tMin) { tMin = tt; playerId = pid; }
+    }
+    // Creature sims run server-side — no uplink staleness in their
+    // history and no broadcast lead, so the ghost sits exactly
+    // shooterTransit + renderDelay back.
+    const bc = world.ballSim?.sweepHit(a, b, 0.2, creatureBack);
+    if (bc && bc.t <= tMin) {
+      const p = { x: a.x + (b.x - a.x) * bc.t, y: a.y + (b.y - a.y) * bc.t, z: a.z + (b.z - a.z) * bc.t };
+      return Object.assign({}, {ballId: bc.id, contact: p}, beamChain(world, p, beamDir, bc.id, undefined));
+    }
+    const cc = world.creatureSim?.sweepHit(a, b, 0.2, creatureBack);
+    if (cc && cc.t <= tMin) {
+      const p = { x: a.x + (b.x - a.x) * cc.t, y: a.y + (b.y - a.y) * cc.t, z: a.z + (b.z - a.z) * cc.t };
+      return Object.assign({}, {crawlerId: cc.id, contact: p}, beamChain(world, p, beamDir, undefined, cc.id));
+    }
+    if (playerId !== undefined) {
+      return { playerId, contact: { x: a.x + (b.x - a.x) * tMin, y: a.y + (b.y - a.y) * tMin, z: a.z + (b.z - a.z) * tMin } };
+    }
+    return null;
+  };
+
+  const first = sweepEnts(muzzle, end, bestT, dir);
+  if (first) {return first;}
+
+  // Terrain bounce: the bolt grounds, then arcs to the nearest enemy
+  // within LG_BOUNCE_RANGE of the contact — any angle, half damage.
+  // Only when the heightfield is the first stopper — walls and hulls
+  // eat it as before.
+  if (fieldT < 1 && bestT === fieldT) {
+    const bp = at(fieldT);
+    let bestD2 = LG_BOUNCE_RANGE * LG_BOUNCE_RANGE;
+    let pick: BeamContact | null = null;
+    for (const [pid, t] of world.players.getAllPlayers()) {
+      if (pid === shooterId || t.isDead) {continue;}
+      const cap = classCapsule(t.armorClass);
+      const targetTransit = world.transitOf?.(pid) ?? 0;
+      const back = Math.max(0, shooterTransit + renderLagOfTarget(shooter, pid) - targetTransit);
+      const tp = rewindPos(t, back);
+      const c = { x: tp.x, y: tp.y + cap.centerOff, z: tp.z };
+      // Distance to the capsule AXIS — a standing enemy counts even
+      // when the contact is at their feet.
+      const dy = Math.max(-cap.half, Math.min(cap.half, bp.y - c.y));
+      const ay = c.y + dy;
+      const dx = bp.x - c.x, dz = bp.z - c.z, dyy = bp.y - ay;
+      const d2 = dx * dx + dyy * dyy + dz * dz - cap.radius * cap.radius;
+      if (d2 <= bestD2) { bestD2 = d2; pick = { playerId: pid, contact: c }; }
+    }
+    const consider = (kind: 'ball' | 'crawl', id: number, x: number, y: number, z: number): void => {
+      const dx = bp.x - x, dy2 = bp.y - y, dz = bp.z - z;
+      const d2 = dx * dx + dy2 * dy2 + dz * dz;
+      if (d2 <= bestD2) {
+        bestD2 = d2;
+        pick = kind === 'ball' ? { ballId: id, contact: { x, y, z } } : { crawlerId: id, contact: { x, y, z } };
+      }
+    };
+    for (const b of world.ballSim?.balls.values() ?? []) {if (!b.dead) {consider('ball', b.id, b.x, b.y, b.z);}}
+    for (const c of world.creatureSim?.crawlers.values() ?? []) {if (!c.dead) {consider('crawl', c.id, c.x, c.y, c.z);}}
+    if (pick) {
+      pick.dmgScale = lgBounceDmgScale(Math.sqrt(Math.max(0, bestD2)));
+      const cd = { x: pick.contact.x - bp.x, y: pick.contact.y - bp.y, z: pick.contact.z - bp.z };
+      const cl = Math.hypot(cd.x, cd.y, cd.z) || 1;
+      const cdN = { x: cd.x / cl, y: cd.y / cl, z: cd.z / cl };
+      return Object.assign(pick, beamChain(world, pick.contact, cdN, pick.ballId, pick.crawlerId));
+    }
+    return { contact: bp };
   }
-  const cc = world.creatureSim?.sweepHit(muzzle, end, 0.2, creatureBack);
-  if (cc && cc.t <= bestT) {
-    return Object.assign({}, {crawlerId: cc.id,contact: at(cc.t)}, beamChain(world, at(cc.t), dir, undefined, cc.id));
-  }
-  if (playerId !== undefined) {return { playerId, contact: at(bestT) };}
   return bestT < 1 ? { contact: at(bestT) } : null;
 }

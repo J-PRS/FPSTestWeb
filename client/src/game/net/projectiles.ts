@@ -8,7 +8,7 @@ import { BOLT_CONFIG, getProjectileConfig } from '../../projectiles/index.js';
 import { WeaponType, getWeaponStats } from '../../../../shared/weapons.js';
 import { Explosion } from '../../effects/explosion.js';
 import { swingSwipe } from '../../effects/swingTrails.js';
-import { MELEE_RANGE, EXPLOSION_VFX_RADIUS } from '../../core/config.js';
+import { MELEE_RANGE, EXPLOSION_VFX_RADIUS, LG_RANGE, LG_BOUNCE_RANGE } from '../../core/config.js';
 import { noteShellFate } from '../parity.js';
 import type { NetCtx } from './ctx.js';
 const snapToContact = (p: Projectile, at?: { x: number; y: number; z: number }): void => {
@@ -31,6 +31,32 @@ function noteWeapon(id: string, weaponType: number | undefined): void {
   const rec = lastWeaponByPlayer.get(id) ?? { wt: 0, n: 0 };
   rec.wt = weaponType;rec.n += 1;
   lastWeaponByPlayer.set(id, rec);
+}
+
+const _bP = new THREE.Vector3(); // lightning bounce-march scratch
+
+// Lightning terrain bounce, observer side: ground stop → arc to the
+// nearest remote player within LG_BOUNCE_RANGE of the contact (any
+// angle), else the observed bolt terminates at the contact like the
+// shooter's does. Cosmetic — the server's pick is the truth.
+function paintLgBeam(deps: NetCtx['deps'], origin: THREE.Vector3, dir: THREE.Vector3): void {
+  const terr = deps.lazyTerrain();
+  for (let d = 1.5; d <= LG_RANGE; d += 1.5) {
+    _bP.copy(origin).addScaledVector(dir, d);
+    if (_bP.y < terr.getHeight(_bP.x, _bP.z)) {
+      deps.lazyEffects().spawnBeam(origin, _bP, 0x8F_DC_FF);
+      let bestD2 = LG_BOUNCE_RANGE * LG_BOUNCE_RANGE;
+      let hit: THREE.Vector3 | null = null;
+      for (const rp of deps.world.remotePlayers.values()) {
+        if (rp.isDead) {continue;}
+        const d2 = _bP.distanceToSquared(rp.pos) - 0.5; // capsule slack
+        if (d2 < bestD2) { bestD2 = d2; hit = rp.pos; }
+      }
+      if (hit) {deps.lazyEffects().spawnBeam(_bP, hit, 0x8F_DC_FF);}
+      return;
+    }
+  }
+  deps.lazyEffects().spawnBeam(origin, origin.clone().addScaledVector(dir, LG_RANGE), 0x8F_DC_FF);
 }
 
 export function wireProjectiles(ctx: NetCtx): void {
@@ -57,9 +83,8 @@ export function wireProjectiles(ctx: NetCtx): void {
   const cosmeticShot = (ownerId: string, weaponType: number | undefined, origin: THREE.Vector3, dir: THREE.Vector3): boolean => {
     if (weaponType === WeaponType.Melee) {
       meleeFlash(origin, dir);
-    } else if (weaponType !== undefined && getWeaponStats(weaponType).speed <= 0) {
-      const beamCfg = getProjectileConfig(weaponType);
-      deps.lazyEffects().spawnBeam(origin, origin.clone().addScaledVector(dir, 80), beamCfg?.glowColor ?? 0x8F_DC_FF);
+    } else if (weaponType === WeaponType.Lightning) {
+      paintLgBeam(deps, origin, dir);
     } else {
       return false;
     }

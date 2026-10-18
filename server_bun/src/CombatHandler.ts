@@ -39,6 +39,8 @@ export interface BeamContact {
   chainBallId?: number;
   chainCrawlerId?: number;
   chainContact?: Vec3;
+  /** Damage multiplier — the terrain-bounce leg pays half. */
+  dmgScale?: number;
 }
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
@@ -574,17 +576,19 @@ win.violations += 1;
     if (c.playerId) {
       const n = this.chargeBank.step(playerId, c.playerId);
       const victim = this.playerManager.getPlayer(c.playerId);
-      const dmg = lgTickDamage(n) * perkMods(player.perk).directDamage;
+      const scale = c.dmgScale ?? 1;
+      const dmg = lgTickDamage(n) * perkMods(player.perk).directDamage * scale;
       if (victim && !victim.isDead && !this.friendly(playerId, c.playerId)) {
-        this.chargeBank.bank(victim, this.chargeBank.withheldFor(n));
+        this.chargeBank.bank(victim, this.chargeBank.withheldFor(n) * scale);
       }
       this.serverHit(playerId, c.playerId, dmg, 'Lightning', { hb: 'beam.lg', weapon: WeaponType.Lightning });
       return;
     }
-    if (c.ballId !== undefined) {this.creatureTick(playerId, 'ball', c.ballId, c.contact, 1);}
-    if (c.crawlerId !== undefined) {this.creatureTick(playerId, 'crawl', c.crawlerId, c.contact, 1);}
-    if (c.chainBallId !== undefined && c.chainContact) {this.creatureTick(playerId, 'ball', c.chainBallId, c.chainContact, LG_CHAIN_DMG_SCALE);}
-    if (c.chainCrawlerId !== undefined && c.chainContact) {this.creatureTick(playerId, 'crawl', c.chainCrawlerId, c.chainContact, LG_CHAIN_DMG_SCALE);}
+    const s = c.dmgScale ?? 1;
+    if (c.ballId !== undefined) {this.creatureTick(playerId, 'ball', c.ballId, c.contact, s);}
+    if (c.crawlerId !== undefined) {this.creatureTick(playerId, 'crawl', c.crawlerId, c.contact, s);}
+    if (c.chainBallId !== undefined && c.chainContact) {this.creatureTick(playerId, 'ball', c.chainBallId, c.chainContact, LG_CHAIN_DMG_SCALE * s);}
+    if (c.chainCrawlerId !== undefined && c.chainContact) {this.creatureTick(playerId, 'crawl', c.chainCrawlerId, c.chainContact, LG_CHAIN_DMG_SCALE * s);}
   }
 
   private creatureTick(playerId: string, kind: 'ball' | 'crawl', id: number, at: Vec3, scale: number): void {

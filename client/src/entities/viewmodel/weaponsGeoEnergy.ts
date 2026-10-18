@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { BLOOM_LAYER, EMIT_GAIN } from '../../core/config.js';
 import { bodyMat, darkMat, boreMat, brassMat, mkTube, mkBore, mkLoft, mkAnnulus, profCircle, profOct, scaleRing, rotRing, resampleRing, notchRing } from './weaponKit.js';
 
 // Energy-weapon builders — plasma, railgun, lightning. Split from
@@ -334,7 +335,10 @@ return rail;
 // before it ever arcs.
 export function mkLightningGun(): THREE.Group {
 const lg = new THREE.Group();
-const lgHotMat = new THREE.MeshBasicMaterial({ color: 0xCF_EF_FF });
+const lgHotMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xCF_EF_FF).multiplyScalar(EMIT_GAIN) });
+// Prong tips — a gentle hot tick (≈1.4 lum, barely over the bloom knee)
+// so the electrodes read charged without a second star in your face.
+const lgTipMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x66_C8_FF).multiplyScalar(2) });
 
 // Insulated body — slimmer than before so the crown reads wider.
 lg.add(mkTube(0.1, 0.12, 0.4, 0.06, bodyMat));
@@ -371,8 +375,9 @@ for (let i = 0; i < 3; i += 1) {
   // lean composes ON TOP of that or the rod snaps back upright.
   rod.rotation.x = Math.PI / 2 - TILT;
   fork.add(rod);
-  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 6), brassMat);
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 6), lgTipMat);
   tip.position.set(0, RT, ZT);
+  tip.layers.enable(BLOOM_LAYER);
   fork.add(tip);
   lg.add(fork);
 }
@@ -381,12 +386,14 @@ const EMITTER_Z = ZT - 0.01;
 // glows without a fat opaque ball swallowing the prong tips.
 const core = new THREE.Mesh(new THREE.SphereGeometry(0.022, 10, 8), lgHotMat);
 core.position.z = EMITTER_Z;
+core.layers.enable(BLOOM_LAYER);
 lg.add(core);
 const corona = new THREE.Mesh(
   new THREE.SphereGeometry(0.045, 12, 10),
-  new THREE.MeshBasicMaterial({ color: 0x66_C8_FF, transparent: true, opacity: 0.28, depthWrite: false, blending: THREE.AdditiveBlending, fog: false })
+  new THREE.MeshBasicMaterial({ color: new THREE.Color(0x66_C8_FF).multiplyScalar(EMIT_GAIN), transparent: true, opacity: 0.28, depthWrite: false, blending: THREE.AdditiveBlending, fog: false })
 );
 corona.position.z = EMITTER_Z;
+corona.layers.enable(BLOOM_LAYER);
 lg.add(corona);
 // Side glow slits removed — read as floating shards flanking the body.
 lg.visible = false;

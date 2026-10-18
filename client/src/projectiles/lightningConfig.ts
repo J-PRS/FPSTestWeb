@@ -16,7 +16,7 @@ export const LIGHTNING_CONFIG: ProjectileConfig = {
   gravity: false,
   explosionRadius: 0,
   force: S.knockbackForce,
-  forceMode: 'push',
+  forceMode: 'pull',
   bodyRadius: 0,
   hitMin: 0,
   hitMax: 0,
