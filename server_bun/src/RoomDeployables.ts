@@ -447,6 +447,18 @@ export class RoomDeployables {
       const dx = d.pos.x - center.x, dy = d.pos.y - center.y, dz = d.pos.z - center.z;
       const dist = (dx * dx + dy * dy + dz * dz) ** 0.5;
       if (dist > radius) {continue;}
+      if (dist > radius) {continue;}
+      // Friendly fire: a teammate's blast never damages our gear. Self-
+      // splash (own gear, own blast) stays legal - same rule as player
+      // self-splash (rocket jumps). Base assets resolve the shooter's
+      // team from the virtual base:<team> owner id.
+      const deployTeam = this.teamOf(d);
+      const shooterTeam = shooterId.startsWith('base:')
+        ? shooterId.slice(5)
+        : this.room.players.getPlayer(shooterId)?.team;
+      if (deployTeam !== undefined && shooterTeam !== undefined && deployTeam === shooterTeam && shooterId !== d.owner) {
+        continue;
+      }
       // Contact hit — the blast center landed inside the item's body
       // radius (a sticky glued ON the turret): pays the direct line, no
       // falloff. Outside it, splash does its normal aoe scale.

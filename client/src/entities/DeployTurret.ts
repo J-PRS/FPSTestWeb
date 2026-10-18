@@ -67,7 +67,10 @@ function makeInstanced(geo: THREE.BufferGeometry, mat: THREE.Material, count: nu
   const m = new THREE.InstancedMesh(geo, mat, count);
   m.count = count;
   m.frustumCulled = false; // turrets span the map
-  m.castShadow = false;
+  // Lambert instanced depth uses the standard program — the GL failure
+  // that killed instanced shadows was custom-material-specific (swarm.ts).
+  // Basic glow parts (the eye) stay off — they'd cast opaque blobs.
+  m.castShadow = !(mat instanceof THREE.MeshBasicMaterial);
   for (let i = 0; i < count; i += 1) {m.setMatrixAt(i, _zero);}
   scene.add(m);
   return m;

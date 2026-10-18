@@ -18,7 +18,10 @@ export function makePartPool(scene: THREE.Scene, geo: THREE.BufferGeometry, mat:
   const mesh = new THREE.InstancedMesh(geo, mat, cap);
   mesh.count = cap;
   mesh.frustumCulled = false; // units span the map
-  mesh.castShadow = false;
+  // Standard Lambert depth uses the built-in program — the instanced
+  // shadow GL failure was custom-material-specific (swarm.ts). Pass
+  // cast=false for Basic glow parts (they'd cast opaque blobs).
+  mesh.castShadow = !(mat instanceof THREE.MeshBasicMaterial);
   for (let i = 0; i < cap; i += 1) { mesh.setMatrixAt(i, ZERO_M4); }
   mesh.instanceMatrix.needsUpdate = true;
   scene.add(mesh);

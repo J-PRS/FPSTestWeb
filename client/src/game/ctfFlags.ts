@@ -111,6 +111,9 @@ export function mkFlagMesh(team: TeamId, color = TEAM_COLORS[team]): THREE.Group
   pommel.rotation.x = Math.PI; // taper points DOWN
   pommel.position.y = -0.2;
   g.add(pole, bar, bannerL, bannerR, finial, pommel);
+  pole.castShadow = true;
+  bar.castShadow = true;
+  pommel.castShadow = true;
   return g;
 }
 
@@ -177,6 +180,10 @@ export class CtfFlags {
         new THREE.MeshBasicMaterial({ color: new THREE.Color(TEAM_COLORS[team]).multiplyScalar(1.4) }));
       base.position.y = FLAG_STAND_TOP + 0.07; // gem in the socket well
       stand.add(base);
+      stand.traverse((o): void => {
+        const m = o as THREE.Mesh;
+        if (m.isMesh && !(m.material instanceof THREE.MeshBasicMaterial)) {m.castShadow = true; m.receiveShadow = true;}
+      });
       stand.position.copy(home);
       const g = mkFlagMesh(team);
       g.position.copy(home);

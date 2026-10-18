@@ -737,6 +737,11 @@ export class Deployables {
       if (i.dead || i.downed) {continue;}
       const dist = i.pos.distanceTo(pos);
       if (dist > radius) {continue;}
+      // Friendly fire: a teammate's deployable never takes splash from our
+      // blast. Self-owned gear (owner undefined) stays vulnerable to our
+      // own splash, matching player self-splash (rocket jumps).
+      const { localTeam } = this.deps.world;
+      if (i.team !== undefined && localTeam !== undefined && i.team === localTeam && i.owner !== undefined) {continue;}
       const dmg = (dist <= DEPLOY_ITEMS[i.kind].bodyR
         ? damage
         : Math.max(aoeDamage(aoe, dist, radius, scales), Math.round(aoe * 0.5))) * mult;

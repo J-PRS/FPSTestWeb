@@ -155,6 +155,7 @@ export class RemoteDeployables {
       const m = new THREE.Mesh(
         new THREE.SphereGeometry(kind === 'mine' ? 0.3 : 0.5, 8, 6),
         new THREE.MeshLambertMaterial({ color: kind === 'mine' ? 0x8A_5A_2A : 0x4A_55_60 }));
+      m.castShadow = true;
       group.add(m);
       group.position.copy(at);
       group.position.y = terrain.getHeight(at.x, at.z);
@@ -291,6 +292,12 @@ export class RemoteDeployables {
     // Tower-mounted assets author a real y — terrain is a floor for the
     // buried-y convention, not a ceiling on rooftops.
     group.position.y = Math.max(at.y, this.deps.lazyTerrain().getHeight(at.x, at.z));
+    // Lambert hulls cast; Basic glow parts (trim, core, optic) stay off —
+    // they'd stamp opaque blobs.
+    group.traverse((o): void => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh && !(m.material instanceof THREE.MeshBasicMaterial)) {m.castShadow = true;}
+    });
     this.deps.scene.add(group);
     const spin = kind === 'sensor' ? group.children[3]! : null;
     const isSentry = kind === 'baseturret';

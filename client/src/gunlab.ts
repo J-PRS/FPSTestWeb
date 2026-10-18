@@ -587,7 +587,7 @@ function rebuild(): void {
   for (let i = 0; i < 60; i += 1) {vm.update(1 / 60, 0, 0, zeroVel, camera);}
   // A creature/pickup/archive pick died with the old group — respawn it.
   if (state.pick) {
-    const hit = [...ARCHIVE_BUILDERS, ...CREATURES, ...PICKUPS, ...CLASSES, ...STRUCTURES].find(([l]): boolean => l === state.pick);
+    const hit = [...ARCHIVE_BUILDERS, ...CREATURES, ...PICKUPS, ...CLASSES, ...STRUCTURES, ...ITEMS].find(([l]): boolean => l === state.pick);
     if (hit) {selectArchive(hit[0], hit[1] as () => THREE.Group);}
   }
   if (wasInspect) {setInspect(true);}
@@ -1262,7 +1262,7 @@ const savedCam = state.cam ? [...state.cam] : null;
 const savedTgt = state.tgt ? [...state.tgt] : null;
 // Restore the parked non-weapon pick (archive/creature/pickup).
 if (state.pick) {
-  const tables = [...ARCHIVE_BUILDERS, ...CREATURES, ...PICKUPS, ...CLASSES, ...STRUCTURES];
+  const tables = [...ARCHIVE_BUILDERS, ...CREATURES, ...PICKUPS, ...CLASSES, ...STRUCTURES, ...ITEMS];
   const hit = tables.find(([l]): boolean => l === state.pick);
   if (hit) {selectArchive(hit[0], hit[1] as () => THREE.Group);}
   else {state.pick = undefined;}
