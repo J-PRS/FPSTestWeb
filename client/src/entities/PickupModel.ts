@@ -11,6 +11,7 @@ import { blastBurst } from '../effects/vfx.js';
 export const PICKUP_ACCENT: Record<PickupKind, number> = {
   gem:   0xFF_D5_4A, // warm gold
   tag:   0xFF_33_55, // dog-tag red
+  token: 0xBB_66_FF, // headhunt violet — the prize reads at 200m
   heal:  0x44_FF_66, // medkit green
   armor: 0xFF_AA_22, // plating orange
   regen: 0x66_FF_EE, // regen teal
@@ -22,12 +23,20 @@ export const PICKUP_ACCENT: Record<PickupKind, number> = {
 // an energy cell, a dog tag, a caged power core. Each returns a dark
 // gunmetal BODY plus a thin ACCENT part that takes the kind's emissive
 // color, so the tint becomes trim lighting rather than a full-body dye.
-export interface PickupParts { body: THREE.BufferGeometry; accent: THREE.BufferGeometry; bodyColor?: number }
+export interface PickupParts { body: THREE.BufferGeometry; accent: THREE.BufferGeometry; bodyColor?: number; beam?: boolean }
 
 const _parts = new Map<PickupKind, PickupParts | null>();
 
 function buildParts(kind: PickupKind): PickupParts | null {
   switch (kind) {
+    case 'token': {
+      // Octahedron core inside a bigger dark octa shell — slightly larger
+      // than the gem's silhouette, and it carries the sky-beam flag so a
+      // dropped pile reads at render distance.
+      const shell = new THREE.OctahedronGeometry(0.42, 0);
+      const core = new THREE.OctahedronGeometry(0.22, 0);
+      return { body: shell, accent: core, beam: true };
+    }
     case 'heal': {
       // Medical capsule — fat pill with a pale band around the waist.
       const body = mergeGeometries([

@@ -20,7 +20,8 @@ import { BotFire } from './botFire.js';
 import { respawnBotF, hitF, hurtLocal, botKilledF, botSay, botSayDrain } from './botKill.js';
 import { chatter, chatKindFor, vgsCommandFor, radioAimFor, type ChatterKind } from '../../../../shared/botTaunts.js';
 import { RoomNoticer } from '../../../../shared/roomNoticer.js';
-import { winText, checkWin, resetMatch, creditKill, creditDamage, collect, pushScore, syncLocalTeam, awardPersonal } from './botMatch.js';
+import { winText, checkWin, clockWin, resetMatch, creditKill, creditDamage, collect, pushScore, syncLocalTeam, syncHeld, awardPersonal } from './botMatch.js';
+import { decomposeTokens, heldBuffRates, type PickupKind } from '../../../../shared/pickups.js';
 import { simRand } from '../../../../shared/simRand.js';
 
 /**
@@ -45,6 +46,9 @@ import type { BodyCapsule } from '../../../../shared/movement.js';
 import type { DeployOwner } from '../deployables.js';
 import type { MapSpec } from '../../../../shared/mapSpec.js';
 
+const _markPos = new THREE.Vector3(); // headhunt badge anchor scratch
+const _seedVel = new THREE.Vector3(); // seeded tokens drop in place
+
 export interface BotsDeps extends GameContext {
   lazyScene(): THREE.Scene;
   lazyCamera(): THREE.Camera;
@@ -54,8 +58,8 @@ export interface BotsDeps extends GameContext {
 }
 
 interface BotHooks {
-  /** Drop nuggets where a bot died (entities owns the nugget factory). */
-  dropNuggets(pos: THREE.Vector3, n: number, inheritVel: THREE.Vector3): void;
+  /** Drop pickups where a bot died (entities owns the nugget factory). */
+  dropNuggets(pos: THREE.Vector3, n: number, inheritVel: THREE.Vector3, kind?: PickupKind, val?: number): void;
   /** Local player died to a bot — mirrors netHandlers' kill path. */
   localPlayerKilled(killerName: string): void;
   /** Match announcements — win banners, NEW MATCH, flag grabs. Center-screen. */
@@ -102,6 +106,8 @@ export class TeamBots {
   readonly ffaScores = new Map<string, number>();
   readonly dmgPool = new Map<string, number>(); // CTF damage-economy remainder
   over: string | null = null;
+  /** Match-clock origin — headhunt resolves by timeLimitS, not a bank. */
+  matchStart = performance.now();
   readonly spec: (typeof MODES)[ModeId];
 
   // Public — botMatch.ts (the match referee) reads/resets flags through it.
@@ -133,7 +139,7 @@ export class TeamBots {
     readonly hooks: BotHooks,
     private playerTeam: string,
     counts: { alpha: number; bravo: number },
-    private mode: ModeId,
+    readonly mode: ModeId,
     /** Solo map spec (maps/<X>.json resolved client-side) — feeds flag
      *  homes and authored spawn anchors; absent = the old around-player
      *  ±70m default bases. */
@@ -231,6 +237,19 @@ export class TeamBots {
     if (mode === 'rabbit') {
       this.rabbit = new RabbitBridge(deps, (t): void => this.hooks.remoteKillFeed(t));
     }
+    if (mode === 'headhunt') {
+      // Field seeding — the server mints tokens at spawn points; offline
+      // has no RoomPickups, so scatter a ring of 1-coins around the local
+      // spawn. Zero tokens on the field stays 0-0 to the horn.
+      const terr = deps.lazyTerrain();
+      for (let i = 0; i < 10; i += 1) {
+        const a = simRand() * Math.PI * 2;
+        const r = 25 + simRand() * 55;
+        const sx = player.pos.x + Math.cos(a) * r, sz = player.pos.z + Math.sin(a) * r;
+        const gy = terr.getHeight(sx, sz);
+        this.hooks.dropNuggets(new THREE.Vector3(sx, (Number.isFinite(gy) ? gy : 0) + 1.5, sz), 1, _seedVel, 'token', 1);
+      }
+    }
     if (mode === 'flagrun') {
       this.flagrun = new FlagRunBridge(deps, {
         playerTeam: this.playerTeam as TeamId,
@@ -285,8 +304,9 @@ bn += 1;
     this.flagrun?.update(dt);
     this.wd.step(dt, this.bots);
     syncLocalTeam(this);
+    if (this.mode === 'headhunt') {this.headhuntBadges(); this.headhuntDrip(dt);}
     if (!this.over) {
-      const w = this.conquestWin ?? checkWin(this);
+      const w = this.conquestWin ?? clockWin(this) ?? checkWin(this);
       if (w) {
         this.over = w;
         this.hooks.remoteKillFeed(winText(this, w) + (this.flagrun?.statsLine() ?? ''));
@@ -314,6 +334,22 @@ bn += 1;
 
   overAt = 0; // public — botMatch writes it via the host interface
   private sbAutoShown = false;
+
+  /** Headhunt overhead held badges — wire remotes get theirs through
+   *  remotes.ts; offline bots never ride that path so the referee feeds
+   *  the same indicator channel directly. */
+  private headhuntBadges(): void {
+    const hud = this.deps.lazyHud();
+    const cam = this.deps.lazyCamera();
+    const localTeam = this.teamOf.get('local');
+    for (const b of this.bots) {
+      if (b.isDead) { hud.removePlayerIndicator?.(b.playerId); continue; }
+      _markPos.copy(b.position); _markPos.y += 1.6;
+      hud.updatePlayerIndicator?.(b.playerId, _markPos, cam,
+        { friendly: b.team === localTeam, bot: true, cls: b.armorClass, hp: b.botHp, held: b.heldTokens });
+      b.setHeld(b.heldTokens); // the crown is the pile
+    }
+  }
 
   /** Per-bot think pass — interp tick, respawn countdown, brain, fire. */
   private tickBots(dt: number, others: THREE.Vector3[], bodies: BodyCapsule[]): void {
@@ -490,7 +526,7 @@ bn += 1;
     // Nuggets mode KNOWS the field — wide scan like the server's, and
     // the goal picker's distance falloff decides whether the hike is
     // worth it. Elsewhere a short scan is opportunism, not an objective.
-    ctx.nugget = this.spec.flags ? null : this.hooks.nearestNugget(bot.position, this.mode === 'nuggets' ? 500 : 60);
+    ctx.nugget = this.spec.flags ? null : this.hooks.nearestNugget(bot.position, this.mode === 'nuggets' || this.mode === 'headhunt' ? 500 : 60);
     const rabbitGoal = this.rabbit?.goalFor(bot.playerId, (id): THREE.Vector3 | null => this.posOf(id)) ?? null;
     ctx.objective = info?.pos ?? rabbitGoal;
     ctx.infiltrating = info?.infiltrating ?? false;
@@ -512,7 +548,7 @@ bn += 1;
   private fillSenses(ctx: Parameters<GameBot['think']>[1], bot: GameBot, others: THREE.Vector3[]): void {
     // Nuggets rooms farm wildlife for the objective — the server
     // flips the same flag only in economy modes.
-    ctx.huntCreatures = this.mode === 'nuggets' || this.hooks.hasCreatures();
+    ctx.huntCreatures = this.mode === 'nuggets' || this.mode === 'headhunt' || this.hooks.hasCreatures();
     ctx.others = others;
     ctx.allies = this.alliesOf(bot);
     // Mortar heavies reach past the duel band — same reach rule the
@@ -738,9 +774,11 @@ bn += 1;
   localDied(): void {
     const {pos} = this.deps.lazyPlayer();
     const p = this.deps.lazyPlayer();
-    // Same corpse-loot rule bot deaths and the server both run: team
-    // modes drop 3 nuggets so a death feeds the economy, not just pain.
-    if (!this.spec.ffa) {this.hooks.dropNuggets(pos, 3, p.vel);}
+    // Same corpse-loot rule bot deaths and the server both run:
+    // headhunt scatters held tokens + 1 bounty; other team modes drop 3
+    // nuggets so a death feeds the economy, not just pain.
+    if (this.mode === 'headhunt') {this.scatterTokens('local', pos, p.vel, 1);}
+    else if (!this.spec.ffa) {this.hooks.dropNuggets(pos, 3, p.vel);}
     this.ctf?.dropCarried('local', pos);
     this.rabbit?.onDeath('local', pos);
     this.flagrun?.dropCarried('local', pos);
@@ -775,8 +813,44 @@ bn += 1;
 
 
   /** A nugget was collected by 'local' or a bot id — bank it for the team. */
-  collect(collectorId: string): void {
-    collect(this, collectorId);
+  collect(collectorId: string, kind?: string, val?: number): void {
+    collect(this, collectorId, kind, val);
+  }
+
+  /** Headhunt held — 'local' is the player's own counter (the HUD reads
+   *  it directly), bots carry theirs on the GameBot. */
+  heldOf(id: string): number {
+    if (id === 'local') {return this.deps.lazyPlayer().heldTokens;}
+    return this.bots.find((b): boolean => b.playerId === id)?.heldTokens ?? 0;
+  }
+  setHeld(id: string, n: number): void {
+    if (id === 'local') {this.deps.lazyPlayer().heldTokens = n; return;}
+    const b = this.bots.find((x): boolean => x.playerId === id);
+    if (b) {b.heldTokens = n;}
+  }
+  /** Headhunt hoard-drip for bots — the local player's channels run in
+   *  Player.tick (its yourHealth-mirror path), bots tick here. hp only:
+   *  bots carry no armor pool offline and their belt isn't charge-counted. */
+  private headhuntDrip(dt: number): void {
+    const now = performance.now();
+    for (const b of this.bots) {
+      if (b.heldTokens <= 0 || b.botHp <= 0) {continue;}
+      const hb = heldBuffRates(b.heldTokens, now - b.lastHitAt);
+      if (hb.hp > 0) {b.botHp = Math.min(b.botMaxHp, b.botHp + hb.hp * dt);}
+    }
+  }
+
+  /** Headhunt death/leaver scatter — base-3 coin denominations, same
+   *  decompose the server runs (10-held corpse = blue + two whites). */
+  scatterTokens(id: string, pos: THREE.Vector3, vel: THREE.Vector3, bonus: number): void {
+    const held = this.heldOf(id);
+    this.setHeld(id, 0);
+    if (held + bonus > 0) {
+      for (const val of decomposeTokens(held + bonus)) {
+        this.hooks.dropNuggets(pos, 1, vel, 'token', val);
+      }
+    }
+    syncHeld(this);
   }
 
   /** Per-id perk mods — 'local' reads the live player. */
@@ -798,7 +872,11 @@ bn += 1;
 
   dispose(): void {
     botSayDrain(); // queued taunts belong to this match's roster, not the next one's feed
-    for (const b of this.bots) {this.deps.world.remotePlayers.remove(b.playerId);}
+    const hud = this.mode === 'headhunt' ? this.deps.lazyHud() : null;
+    for (const b of this.bots) {
+      hud?.removePlayerIndicator?.(b.playerId);
+      this.deps.world.remotePlayers.remove(b.playerId);
+    }
     this.bots.length = 0;
     this.fire.dispose();
     this.rabbit?.dispose();

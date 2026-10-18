@@ -400,12 +400,12 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   // the multisampled buffer via the composer's setter, the rest toggle a
   // pass. syncRenderToScreen must re-run since the tail pass changed.
   function applyAA(v: number): void {
+    // MSAA hidden: its composer-buffer resolve paints black speckle
+    // artifacts (worst at low res) — a stored MSAA pick behaves as SMAA.
+    if (v >= 3) {v = 2;}
     fxaaPass.enabled = v === 1;
     smaaPass.enabled = v === 2;
-    let ms = 0;
-if (v === 3) {ms = 2;}
-else if (v === 4) {ms = 4;}
-composer.multisampling = ms;
+    composer.multisampling = 0;
     syncRenderToScreen();
   }
 
@@ -473,6 +473,9 @@ function wireSegRow(id: string, current: () => number,
 // Lives at module level so createRenderer stays under the line cap.
 function wireAARow(applyAA: (v: number) => void, onChange?: (v: number) => void): void {
   let aaMode = settings.get('fps-aa');
+  // MSAA picks are hidden (composer-buffer resolve paints black speckle
+  // artifacts, worst at low res) — demote a stored MSAA pick to SMAA.
+  if (aaMode >= 3) {aaMode = 2;}
   applyAA(aaMode);
   onChange?.(aaMode);
   const mark = wireSegRow('aa-row', (): number => aaMode,
@@ -522,7 +525,8 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   let {pmode} = modes;
   let {postproEnabled} = modes;
   let {bloomEnabled} = modes;
-  let aaMode = settings.get('fps-aa');
+  // MSAA hidden (see applyAA) — a stored 3/4 pick reports as SMAA.
+  let aaMode = Math.min(settings.get('fps-aa'), 2);
 
   // high-performance asks the browser to pick the dGPU on dual-GPU
   // machines — default lets the OS park us on the iGPU.
@@ -548,9 +552,11 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
 
   const fs = makeFloydEngine(renderer);
   const fsCanvas = fs.canvasEl;
+  // No z-index anywhere: stack by DOM order — gl → fsCanvas → #hud —
+  // so ATKINSON's 2D canvas covers the GL feed but sits under the HUD.
+  // Appended after renderer.domElement below.
   fsCanvas.style.cssText =
-    'position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;display:none;pointer-events:none;z-index:0';
-  document.body.append(fsCanvas);
+    'position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;display:none;pointer-events:none';
   let fsOverlay: (() => void) | null = null; // viewmodel pass, injected by gameLoop
   // auto-quality degrade — hard-pixel modes force 1 (integer grid).
   // ?res=0.5 pins a starting scale for headless degrade/filter testing.
@@ -578,7 +584,11 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   // Skip the whole shadow-map raster when the scene opted out — the
   // second full-scene pass is the dominant fill cost on weak GPUs.
   renderer.shadowMap.enabled = urlParams.get('shadows') !== 'off' && settings.get('fps-shadows');
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // r184 deprecated PCFSoftShadowMap: WebGLShadowMap mutates .type to
+  // PCFShadowMap on the FIRST raster, so every material compiled before
+  // it keyed SHADOWMAP_TYPE_BASIC (sampler2D) and then sampled the
+  // depth-compare texture — GL_INVALID_OPERATION on every lit draw.
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   // Skip the per-link infoLog query — lazy material variants compile
   // mid-match (new elites, tracers) and a live profile caught the
   // getProgramInfoLog validation stack at ~1.5% of the frame. Compile
@@ -595,6 +605,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   renderer.domElement.style.transform = 'translate(-50%, -50%)';
   renderer.domElement.id = 'gl'; // the underwater sway rule targets it
   document.body.append(renderer.domElement);
+  document.body.append(fsCanvas); // after gl: DOM order = the z-order
 
   const cc = makeComposer(renderer, scene, camera, modes);
   const { composer, scenePass, bloomMergePass, dirtPass, contrastPass, upscalePass, upscaleEffect, xbrPass, xbrEffect, syncRenderToScreen, applyAA, dumpPasses } = cc;
@@ -632,22 +643,26 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   // their draws then logs GL_INVALID_OPERATION (texture/sampler type
   // mismatch) forever. One needsUpdate pass after the first raster
   // rebinds them for the session; the cost hides inside boot warmup.
-  let litShadowRefresh = false;
+  // Late-compiled lit materials (tracers, elites, remote models pooled
+  // mid-match) hit the same unit-0 binding — a one-shot traverse only
+  // heals the boot set, and every later straggler errors per draw for
+  // the session. Re-sweep every ~2s against the SAME seen-set: materials
+  // already healed cost a Set lookup, only new compiles rebind.
+  const litShadowSeen = new Set<THREE.Material>();
+  let litShadowTick = 0;
 
   const render = makeRender(renderer, scene, camera, composer, fs,
     { pmode: pmodeEff, fsOverlay: (): (() => void) | null => fsOverlay, scenePass,
       shadowTick: (): void => {
         if ((((shadowTick += 1) - 1) & 1) === 0) {renderer.shadowMap.needsUpdate = true;}
-        if (!litShadowRefresh && renderer.shadowMap.enabled && shadowTick > 4) {
-          litShadowRefresh = true;
-          const seen = new Set<THREE.Material>();
+        if (renderer.shadowMap.enabled && shadowTick > 4 && (litShadowTick += 1) % 120 === 1) {
           scene.traverse((o): void => {
             const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
             if (!m) {return;}
             const list = Array.isArray(m) ? m : [m];
             for (const mm of list) {
-              if (seen.has(mm)) {continue;}
-              seen.add(mm);
+              if (litShadowSeen.has(mm)) {continue;}
+              litShadowSeen.add(mm);
               if ((mm as THREE.ShaderMaterial).isShaderMaterial ||
                   (mm as THREE.MeshLambertMaterial).isMeshLambertMaterial ||
                   (mm as THREE.MeshPhongMaterial).isMeshPhongMaterial ||

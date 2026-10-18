@@ -5,6 +5,7 @@
   "terrain": "vortex.bin",
   "tileSize": 1000,
   "heightScale": 1,
+  "terrainPreset": 7,
   "arena": {
     "x": 0,
     "z": 0,

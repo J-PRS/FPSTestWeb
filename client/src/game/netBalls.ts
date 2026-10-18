@@ -54,7 +54,11 @@ export function pruneNetBalls(map: Map<number, { netKill(): void }>, liveIds: Se
 // estimate "server now" — event AGE = estNow − stamp measures TRUE
 // staleness including packet loss/retransmit delay, which ping÷2 can't
 // see (at 50% loss, events routinely arrive hundreds of ms late).
-export function makeBallClock(getPing: () => number) {
+export function makeBallClock(getPing: () => number): {
+  noteStamp: (t: number) => void;
+  estSimNow: () => number;
+  ballEventAge: (t?: number) => number;
+} {
   let lastEst = -1;
   // The server's sim clock is setInterval-driven — under load it ticks
   // slower than wall time. Track the sim→wall RATE (Δstamp/Δarrival is
@@ -180,9 +184,45 @@ function netBallDie(deps: EntitiesDeps, netBallById: Map<number, Ball>,
 // number, not a scroll.
 interface RbMsg { id: number; kind?: string; position: Vec3Msg; velocity: Vec3Msg; t?: number; enraged?: boolean; et?: number; slowT?: number; damp?: boolean; tp?: Vec3Msg | null }
 
+/** Cursor-vs-stamp skew classes where err can't measure divergence.
+ *  Behind: the sim never replayed through the stamp (two segments drained
+ *  in one frame — err is event spacing, ~17m at ball speed). Ahead:
+ *  predictAt can't rewind, so err is pure flight lag up to speed×gap —
+ *  the same spanMs<0 class applySeg's foldExplained names; only err
+ *  BEYOND that bound is unaccounted-for divergence. */
+function stampSkew(m: RbMsg, simT: number | undefined, err: number, speed: number): string | null {
+  if (m.t === undefined || simT === undefined) {return null;}
+  if (simT < m.t - SIM_TICK_DT) {return `unreplayed stamp (simT ${simT.toFixed(2)} < t ${m.t.toFixed(2)})`;}
+  if (simT > m.t && err <= speed * (simT - m.t) * 1.5 + 3) {return `ahead cursor (simT ${simT.toFixed(2)} > t ${m.t.toFixed(2)})`;}
+  return null;
+}
+
+/** Fleet aggregate — folds THROTTLED warns into one 10s summary so a
+ *  desync storm reads as a number, not a scroll. */
+function makeRbFleetMeter(logger: ChildLogger): { note: (id: number, err: number) => void; flush: () => void } {
+  const MS = 10_000;
+  let count = 0;
+  let worst = { id: -1, err: 0 };
+  let flushAt = 0;
+  return {
+    note(id: number, err: number): void {
+      count += 1;
+      if (err > worst.err) {worst = { id, err };}
+      if (flushAt === 0) {flushAt = performance.now() + MS;}
+    },
+    flush(): void {
+      if (!count || performance.now() < flushAt) {return;}
+      logger.warn(`ball rubberbands: ${count} suppressed in ${MS / 1000}s${
+        worst.id >= 0 ? `, worst #${worst.id} ${worst.err.toFixed(0)}m` : ''}`);
+      count = 0;
+      worst = { id: -1, err: 0 };
+      flushAt = performance.now() + MS;
+    },
+  };
+}
+
 export function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: number) => number, estSimNow: () => number, logger: ChildLogger): { check: (b: Ball, m: RbMsg) => void; rbFleetFlush: () => void; } {
-  const _truthPos = new THREE.Vector3();
-  const _msgPos = new THREE.Vector3();
+  const _truthPos = new THREE.Vector3(), _msgPos = new THREE.Vector3();
   // predictAt's world view — same field/colliders/clock the live replay reads.
   const NET_PROBE_S = {
     field: () => Ball.netField,
@@ -207,27 +247,7 @@ export function makeRubberbandWatch(deps: EntitiesDeps, ballEventAge: (t?: numbe
     }
   }
   const RB_WARN_MS = 2000;
-  let rbFleetCount = 0;
-  let rbFleetWorst = { id: -1, err: 0 };
-  let rbFleetFlushAt = 0;
-  const RB_FLEET_MS = 10_000;
-
-  function rbFleetNote(id: number, err: number): void {
-rbFleetCount += 1;
-    if (err > rbFleetWorst.err) {rbFleetWorst = { id, err };}
-    if (rbFleetFlushAt === 0) {rbFleetFlushAt = performance.now() + RB_FLEET_MS;}
-  }
-
-  function rbFleetFlush(): void {
-    if (!rbFleetCount) {return;}
-    const nowMs = performance.now();
-    if (nowMs < rbFleetFlushAt) {return;}
-    logger.warn(`ball rubberbands: ${rbFleetCount} suppressed in ${RB_FLEET_MS / 1000}s${ 
-      rbFleetWorst.id >= 0 ? `, worst #${rbFleetWorst.id} ${rbFleetWorst.err.toFixed(0)}m` : ''}`);
-    rbFleetCount = 0;
-    rbFleetWorst = { id: -1, err: 0 };
-    rbFleetFlushAt = nowMs + RB_FLEET_MS;
-  }
+  const rbFleet = makeRbFleetMeter(logger);
 
   /** Where the segment's own state lands by now when replayed through the
    *  same integrator the prediction ran — a ballistic pos+vel*age can't
@@ -282,9 +302,9 @@ rbFleetCount += 1;
     // the cursor — pred sits one event-spacing behind truth and err
     // measures segment spacing (~17m at ball speed), not prediction drift.
     // One cell of slack covers the sim resting mid-grid, not unreplayed.
-    const simT = b.netDiag?.simT;
-    if (m.t !== undefined && simT !== undefined && simT < m.t - SIM_TICK_DT) {
-      logger.debug(`ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m on unreplayed stamp (simT ${simT.toFixed(2)} < t ${m.t.toFixed(2)})`);
+    const skew = stampSkew(m, b.netDiag?.simT, err, speed);
+    if (skew) {
+      logger.debug(`ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m on ${skew}`);
       return true;
     }
     // Join window: the ball clock and replay cursors are still
@@ -340,6 +360,11 @@ rbFleetCount += 1;
       ? _truthPos.distanceTo(_msgPos.set(m.position.x, m.position.y, m.position.z))
       : b.pos.distanceTo(_truthPos);
     if (gated(b, m, kind, err, speed)) {return;}
+    warnDivergence(b, m, kind, err, age);
+  }
+
+  /** Post-gate warn path — only divergences worth a warn line reach here. */
+  function warnDivergence(b: Ball, m: RbMsg, kind: string, err: number, age: number): void {
     // Discontinuity kinds (teleport/spawn/lunge/enrage) carry NO desync
     // signal — they reposition or retarget the ball, so err measures the
     // correction's own size (~legAge×speed), which prediction can never
@@ -352,14 +377,14 @@ rbFleetCount += 1;
       return;
     }
     if (kind !== 'segment') {
-      rbFleetNote(m.id, err);
+      rbFleet.note(m.id, err);
       return;
     }
     const nowMs = performance.now();
     const lastW = rbLastWarn.get(m.id) ?? -Infinity;
     if (nowMs - lastW < RB_WARN_MS) {
       cappedSet(rbSuppressed, m.id, (rbSuppressed.get(m.id) ?? 0) + 1);
-      rbFleetNote(m.id, err);
+      rbFleet.note(m.id, err);
       return;
     }
     const sup = rbSuppressed.get(m.id) ?? 0;
@@ -375,13 +400,23 @@ rbFleetCount += 1;
       rubberbandForensics(deps, b, m));
   }
 
-  return { check, rbFleetFlush };
+  return { check, rbFleetFlush: rbFleet.flush };
 }
 
 const finiteMsg = (m: { position: Vec3Msg; velocity: Vec3Msg; tp?: Vec3Msg | null }): boolean =>
   finiteVec(m.position) && finiteVec(m.velocity) && (!m.tp || finiteVec(m.tp));
 
-export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: ChildLogger) {
+type NetBallRow = RbMsg & { variant: number; colorIdx: number; position: Vec3Msg; velocity: Vec3Msg };
+interface NetBallsApi {
+  serverBalls(): boolean;
+  netBallSpawn(m: NetBallRow): void;
+  netBallSegment(m: RbMsg & { enraged: boolean; targetId: string | null }): void;
+  netBallDie(m: { id: number; position: Vec3Msg; by?: string | null }): void;
+  netBallRoster(m: { balls: NetBallRow[] }): void;
+  netTargetPosFor(b: Ball): THREE.Vector3;
+}
+
+export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: ChildLogger): NetBallsApi {
   const { scene, balls, targets } = Object.assign({}, {scene: deps.scene}, ctx);
   const netBallById = new Map<number, Ball>();
   // A P2P host carries no ball sim — peers keep client-side balls there.

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Minimap , type MinimapPlayer, type MinimapNode } from './minimap.js';
 import { CommandMap, type SpawnPools } from './commandmap.js';
 import { createHudDom } from './hud/dom.js';
+import { tokenTier } from '../../../shared/pickups.js';
 import { PlayerIndicators } from './hud/indicators.js';
 import type { Targetable } from '../entities/balls.js';
 import type { Nugget } from '../entities/Nugget.js';
@@ -49,6 +50,7 @@ export class HUD {
   private teamScore: HTMLDivElement;
   private tsA: HTMLElement;
   private tsB: HTMLElement;
+  private heldCount: HTMLDivElement;
   private classicScore: HTMLDivElement;
   armor: HTMLSpanElement  // public — HudStats family paints it;
   armorBar: HTMLDivElement  // public — HudStats family paints it;
@@ -88,6 +90,7 @@ export class HUD {
     this.teamScore = d.teamScore;
     this.tsA = d.tsA;
     this.tsB = d.tsB;
+    this.heldCount = d.heldCount;
     this.classicScore = d.classicScore;
     this.matchStatus = d.matchStatus;
     this.matchClock = d.matchClock;
@@ -252,6 +255,28 @@ export class HUD {
     this.stats.setText(this.ammo, 'nuggets', String(n));
   }
 
+  /** Headhunt held tokens — the prominent counter above the stat block.
+   *  Font grows with the pile: your number inflating IS the warning
+   *  that you're becoming the lobby's target. null hides it. */
+  private lastHeldKey = '';
+  setHeld(n: number | null): void {
+    if (n === null) {
+      if (this.lastHeldKey !== 'off') { this.lastHeldKey = 'off'; this.heldCount.style.display = 'none'; }
+      return;
+    }
+    const size = Math.min(30, 18 + Math.floor(n * 0.6));
+    const key = `${n}|${size}`;
+    if (key === this.lastHeldKey) {return;}
+    this.lastHeldKey = key;
+    this.heldCount.style.display = 'block';
+    const num = this.heldCount.querySelector('#held-n') as HTMLElement;
+    num.textContent = String(n);
+    num.style.fontSize = `${size}px`;
+    // Top denomination colors your pile — a purple number means you're
+    // carrying a purple-or-better hoard.
+    this.heldCount.style.color = `#${tokenTier(n).color.toString(16).padStart(6, '0')}`;
+  }
+
   setScoreboardVisible(v: boolean): void { this.sb.setVisible(v); }
 
   get scoreboardVisible(): boolean { return this.sb.isVisible; }
@@ -392,7 +417,7 @@ export class HUD {
     this.sb.tick(dt);
   }
 
-  updatePlayerIndicator(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, opts: { isDead?: boolean; friendly?: boolean; sheep?: number; bot?: boolean; cls?: string; hp?: number } = {}): void {
+  updatePlayerIndicator(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, opts: { isDead?: boolean; friendly?: boolean; sheep?: number; bot?: boolean; cls?: string; hp?: number; held?: number } = {}): void {
     this.indicators.update(playerId, position, camera, opts);
   }
 

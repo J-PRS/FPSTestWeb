@@ -19,26 +19,28 @@ import { GRAVITY } from '../../shared/movement.ts';
 import { inv } from '../../shared/invariants.ts';
 
 const PICKUP_R = 2.2;   // planar grab radius, same feel as flag pickup
+const TOKEN_R = 3.8;    // headhunt tokens reach further — scooping a
+                        // scattered pile at ski speed is the mode's loop
 const PICKUP_TTL_S = 60; // dropped loot decays — no infinite accumulation
 const MAX_PICKUPS = 64;  // cap so a ball-farm can't flood the room
 const NUG_FRICTION = NUG_TUMBLE.friction;
 
 export class RoomPickups {
-  private pickups = new Map<number, { id: number; pos: Vec3; ttl: number; kind: PickupKind; vel: Vec3; armT: number }>();
+  private pickups = new Map<number, { id: number; pos: Vec3; ttl: number; kind: PickupKind; val: number; vel: Vec3; armT: number; tacc: number }>();
   private nextId = 1;
   /** Last-tick positions for the sweep — a capper crosses the grab ring
    *  between two 20Hz frames at speed; same swept-capsule rule flags use,
    *  or fast grabs tunnel straight through the nugget. */
   private prevPos = new Map<string, Vec3>();
   /** Set by the room — banks the point or applies the powerup. */
-  onCollect: ((playerId: string, kind: PickupKind) => void) | null = null;
+  onCollect: ((playerId: string, kind: PickupKind, val: number) => void) | null = null;
 
   constructor(private room: Room) {}
 
   /** armS: collect grace — a pack-thrown nugget mints one of these at the
    *  thrower's feet-ish range; the beat keeps the toss from bank-to-self
    *  on the same frame it lands. */
-  spawn(pos: Vec3, kind: PickupKind = 'gem', armS = 0): void {
+  spawn(pos: Vec3, kind: PickupKind = 'gem', armS = 0, val = 1): void {
     if (this.pickups.size >= MAX_PICKUPS) {
       // A saturated pool refusing the objective's income is invisible
       // without this — "kills stopped dropping nuggets" vs "pool full"
@@ -47,7 +49,7 @@ export class RoomPickups {
       return;
     }
     const id = ((this.nextId += 1) - 1);
-    const p = { id, pos: Object.assign({}, pos), ttl: PICKUP_TTL_S, kind, vel: { x: 0, y: 0, z: 0 }, armT: armS };
+    const p = { id, pos: Object.assign({}, pos), ttl: PICKUP_TTL_S, kind, val, vel: { x: 0, y: 0, z: 0 }, armT: armS, tacc: 0 };
     this.settleReachable(p);
     // Drops spawn at the victim's eye height — hmSettleWalkable only
     // grounds pos.y when it slides, so a flat-ground death leaves the
@@ -61,7 +63,7 @@ export class RoomPickups {
     this.pickups.set(id, p);
     logger.debug('Pickup spawned', { room: this.room.name, kind, id });
     weaponStats.recordPickup(this.room.mode, kind, 'spawned');
-    this.room.broadcast(spawnPayload(WORLD_MODEL.pickup!, id, 'id', { pos: Object.assign({}, p.pos), kind }) as ServerMessage);
+    this.room.broadcast(spawnPayload(WORLD_MODEL.pickup!, id, 'id', { pos: Object.assign({}, p.pos), kind, val }) as ServerMessage);
   }
 
   /** Match reset — clear the field and tell clients to drop the gems. */
@@ -72,11 +74,11 @@ export class RoomPickups {
     this.pickups.clear();
   }
 
-  snapshot(): { id: number; pos: Vec3; kind: PickupKind }[] {
+  snapshot(): { id: number; pos: Vec3; kind: PickupKind; val: number }[] {
     // rosterRow pins the row shape to the declared rosterFields — a
     // snapshot field that drifts from the declaration warns at build
     // time instead of diffing silently on the client.
-    return [...this.pickups.values()].map((p): { id: number; pos: Vec3; kind: PickupKind } => rosterRow(WORLD_MODEL.pickup!, 'id', p.id, { pos: Object.assign({}, p.pos), kind: p.kind }) as { id: number; pos: Vec3; kind: PickupKind });
+    return [...this.pickups.values()].map((p): { id: number; pos: Vec3; kind: PickupKind; val: number } => rosterRow(WORLD_MODEL.pickup!, 'id', p.id, { pos: Object.assign({}, p.pos), kind: p.kind, val: p.val }) as { id: number; pos: Vec3; kind: PickupKind; val: number });
   }
 
   /** Nearest live pickup to a point — bots chase these. */
@@ -129,29 +131,39 @@ export class RoomPickups {
     for (const p of this.pickups.values()) {
       p.ttl -= dt;
       if (p.vel.x !== 0 || p.vel.z !== 0 || p.vel.y !== 0) {
-        const bleed = Math.max(0, 1 - NUG_FRICTION * dt);
-        p.pos.x += p.vel.x * dt; p.pos.z += p.vel.z * dt;
-        p.pos.y += p.vel.y * dt; p.vel.y += GRAVITY * dt; // world gravity — no soft loose-object fork
-        // Ground truth is the drawn chord, not the smooth field — on
-        // convex ground the flat triangles dip below the bilinear patch,
-        // so a field-rested gem hangs visibly midair (JP's report).
-        const gy = this.room.field ? Math.max(hmHeight(this.room.field, p.pos.x, p.pos.z), hmChord(this.room.field, p.pos.x, p.pos.z)) + NUG_TUMBLE.groundLift : p.pos.y;
-        if (p.pos.y < gy) { p.pos.y = gy; p.vel.y = 0; }
-        p.vel.x *= bleed; p.vel.z *= bleed; p.vel.y *= bleed;
-        if (Math.abs(p.vel.x) < NUG_TUMBLE.settle && Math.abs(p.vel.z) < NUG_TUMBLE.settle && Math.abs(p.vel.y) < NUG_TUMBLE.settle) {
-          p.vel.z = 0;
-          p.vel.y = p.vel.z;
-          p.vel.x = p.vel.y;
-          this.settleReachable(p);
-          // The rest spot is what every client draws — under the drawn
-          // surface is the nugget-burial class, not a cosmetic offset.
-          const dg = this.room.field
-            ? Math.max(hmHeight(this.room.field, p.pos.x, p.pos.z), hmChord(this.room.field, p.pos.x, p.pos.z))
-            : Number.NaN;
-          inv('pickup-below-ground', !Number.isFinite(dg) || p.pos.y >= dg - 0.5,
-            { id: p.id, y: Number(p.pos.y.toFixed(1)) });
-          // Resting spot is the new truth — one edge resyncs every client.
-          this.room.broadcast(spawnPayload(WORLD_MODEL.pickup!, p.id, 'id', { pos: Object.assign({}, p.pos), kind: p.kind }) as ServerMessage);
+        // Fixed 50ms cells — the client mirror (Nugget.serverTumble)
+        // steps the same grid, so friction bleed composes identically.
+        // Stepping raw tick dt made the bleed partition-sensitive and
+        // rests diverged meters under jitter (the nugrest snaps).
+        p.tacc += dt;
+        while (p.tacc >= 0.05 && (p.vel.x !== 0 || p.vel.z !== 0 || p.vel.y !== 0)) {
+          p.tacc -= 0.05;
+          const step = 0.05;
+          const bleed = Math.max(0, 1 - NUG_FRICTION * step);
+          p.pos.x += p.vel.x * step; p.pos.z += p.vel.z * step;
+          p.pos.y += p.vel.y * step; p.vel.y += GRAVITY * step; // world gravity — no soft loose-object fork
+          // Ground truth is the drawn chord, not the smooth field — on
+          // convex ground the flat triangles dip below the bilinear patch,
+          // so a field-rested gem hangs visibly midair (JP's report).
+          const gy = this.room.field ? Math.max(hmHeight(this.room.field, p.pos.x, p.pos.z), hmChord(this.room.field, p.pos.x, p.pos.z)) + NUG_TUMBLE.groundLift : p.pos.y;
+          if (p.pos.y < gy) { p.pos.y = gy; p.vel.y = 0; }
+          p.vel.x *= bleed; p.vel.z *= bleed; p.vel.y *= bleed;
+          if (Math.abs(p.vel.x) < NUG_TUMBLE.settle && Math.abs(p.vel.z) < NUG_TUMBLE.settle && Math.abs(p.vel.y) < NUG_TUMBLE.settle) {
+            p.vel.z = 0;
+            p.vel.y = p.vel.z;
+            p.vel.x = p.vel.y;
+            p.tacc = 0; // client mirror zeroes its acc on settle too
+            this.settleReachable(p);
+            // The rest spot is what every client draws — under the drawn
+            // surface is the nugget-burial class, not a cosmetic offset.
+            const dg = this.room.field
+              ? Math.max(hmHeight(this.room.field, p.pos.x, p.pos.z), hmChord(this.room.field, p.pos.x, p.pos.z))
+              : Number.NaN;
+            inv('pickup-below-ground', !Number.isFinite(dg) || p.pos.y >= dg - 0.5,
+              { id: p.id, y: Number(p.pos.y.toFixed(1)) });
+            // Resting spot is the new truth — one edge resyncs every client.
+            this.room.broadcast(spawnPayload(WORLD_MODEL.pickup!, p.id, 'id', { pos: Object.assign({}, p.pos), kind: p.kind, val: p.val }) as ServerMessage);
+          }
         }
       }
       if (p.ttl <= 0) {
@@ -162,9 +174,9 @@ export class RoomPickups {
       if (p.armT > 0) { p.armT -= dt; continue; } // still flying — no grabs
       for (const pl of players.values()) {
         if (pl.isDead) {continue;}
-        // Score pickups (gems/tags) only exist in team modes; powerups
-        // are grab-able by anyone alive in any mode.
-        if ((p.kind === 'gem' || p.kind === 'tag') && !pl.team) {continue;}
+        // Score pickups (gems/tags/tokens) only exist in team modes;
+        // powerups are grab-able by anyone alive in any mode.
+        if ((p.kind === 'gem' || p.kind === 'tag' || p.kind === 'token') && !pl.team) {continue;}
         // Swept grab: closest point on this tick's path segment — a
         // point check lets a full-speed ski skip the ring entirely.
         const a = this.prevPos.get(pl.id) ?? pl.position;
@@ -181,7 +193,7 @@ export class RoomPickups {
         // but a jetpack flyover isn't a pickup.
         if (Math.abs(cy - p.pos.y) > 6) {continue;}
         const dx = cx - p.pos.x, dz = cz - p.pos.z;
-        const reach = PICKUP_R * perkMods(pl.perk).pickupRadius;
+        const reach = (p.kind === 'token' ? TOKEN_R : PICKUP_R) * perkMods(pl.perk).pickupRadius;
         if (dx * dx + dz * dz > reach * reach) {continue;}
         this.remove(p.id, pl.id);
         weaponStats.recordPickup(this.room.mode, p.kind, 'banked');
@@ -190,7 +202,7 @@ export class RoomPickups {
         if (p.kind === 'gem' || p.kind === 'tag') {
           logger.debug('Pickup banked', { room: this.room.name, kind: p.kind, by: pl.id });
         }
-        this.onCollect?.(pl.id, p.kind);
+        this.onCollect?.(pl.id, p.kind, p.val);
         break;
       }
     }

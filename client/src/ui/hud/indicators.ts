@@ -3,6 +3,7 @@
 // the projection scratch vectors (runs per-player per-frame, no allocs).
 import * as THREE from 'three';
 import { ChildLogger } from '../../core/Logger.js';
+import { tokenTier } from '../../../../shared/pickups.js';
 
 const band = (x: number, invert: boolean): string => {
   if (x >= 60) {return invert ? '#ff6b6b' : '#7ddf7d';}
@@ -56,8 +57,8 @@ export class PlayerIndicators {
     camera.getWorldDirection(_cameraDir);
   }
 
-  update(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, opts: { isDead?: boolean; friendly?: boolean; variant?: string; sheep?: number; bot?: boolean; cls?: string; hp?: number } = {}): void {
-    const { isDead = false, friendly = false, variant, sheep, bot, cls, hp } = opts;
+  update(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, opts: { isDead?: boolean; friendly?: boolean; variant?: string; sheep?: number; bot?: boolean; cls?: string; hp?: number; held?: number } = {}): void {
+    const { isDead = false, friendly = false, variant, sheep, bot, cls, hp, held } = opts;
     let indicator = this.indicators.get(playerId);
     if (!indicator) {
       indicator = document.createElement('div');
@@ -74,6 +75,7 @@ export class PlayerIndicators {
     for (const k of ['light', 'medium', 'heavy']) {indicator.classList.toggle(`cls-${k}`, !variant && clsKey === k);}
     if (variant) {for (const c of variant.split(' ')) {indicator.classList.add(c);}}
     this.updateSheepBadge(playerId, indicator, sheep, hp, friendly);
+    this.updateHeldBadge(playerId, indicator, held, friendly);
 
     if (isDead) {
       indicator.classList.add('hidden');
@@ -175,6 +177,33 @@ export class PlayerIndicators {
     }
   }
 
+  /** Headhunt held-token badge — stacked above the HP badge, team color,
+   *  font grows with the hoard (a fat count IS the bounty marker). Only
+   *  renders while the wire carries `held` (headhunt rooms). */
+  private readonly lastHeld = new Map<string, number>();
+  private updateHeldBadge(playerId: string, indicator: HTMLElement, held: number | undefined, _friendly: boolean): void {
+    // Count colored by the TOP coin in the pile (tokenTier snaps odd
+    // values to their denomination) — the dot/healthbar already carry
+    // the friend/foe read; the number should carry the bounty.
+    const size = held === undefined ? -1 : Math.min(20, Math.max(11, 11 + Math.floor(held * 0.45)));
+    const key = held === undefined ? -1 : held * 64 + size;
+    if (this.lastHeld.get(playerId) === key) {return;}
+    this.lastHeld.set(playerId, key);
+    let badge = indicator.querySelector('.held-badge') as HTMLElement | null;
+    if (held === undefined) {
+      badge?.remove();
+      return;
+    }
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'held-badge';
+      indicator.append(badge);
+    }
+    badge.textContent = `${held}`;
+    badge.style.color = `#${tokenTier(held).color.toString(16).padStart(6, '0')}`;
+    badge.style.fontSize = `${size}px`;
+  }
+
   // transform keeps the -50% centering from the stylesheet while moving the
   // element on the compositor — layout isn't touched at 60Hz. The packed
   // 0.1px-quantized key skips the style write entirely on still frames.
@@ -192,6 +221,7 @@ export class PlayerIndicators {
       this.indicators.delete(playerId);
       this.lastSize.delete(playerId);
       this.lastSheep.delete(playerId);
+      this.lastHeld.delete(playerId);
       this.lastPos.delete(playerId);
       logger.debug('INDICATOR REMOVED', { playerId, total: this.indicators.size });
     }
@@ -202,6 +232,7 @@ export class PlayerIndicators {
     this.indicators.clear();
     this.lastSize.clear();
     this.lastSheep.clear();
+    this.lastHeld.clear();
     this.lastPos.clear();
   }
 }

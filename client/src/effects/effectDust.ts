@@ -133,6 +133,20 @@ export function spawnBounce(m: EffectsManager, pos: THREE.Vector3, dir: THREE.Ve
     }, false);
   }
 
+// Ski dust tint per terrain preset — the palette lives in the shader, so
+// this is a hand-matched table, not a sample. HDR-scaled like the old
+// cool white (plain 1.0 tone-maps to ~0.8 grey under ACES).
+const SKI_DUST_TINT: Record<number, [number, number, number]> = {
+  0: [1.3, 1.15, 0.9],   // mixed — pale earth
+  1: [1.55, 1.25, 0.8],  // desert — sunlit sand
+  2: [1.15, 1.05, 0.8],  // grassland — dry dirt
+  3: [1.8, 1.9, 2.05],   // snow — the original cool white
+  4: [0.95, 0.85, 0.75], // volcanic — ash grey
+  5: [1.5, 1.1, 0.75],   // badlands — rust sand
+  6: [1.55, 1.3, 0.9],   // coast — beach sand
+  7: [1.55, 1.25, 0.8],  // desert hard-sun
+};
+
 export function spawnSkiDust(m: EffectsManager, pos: THREE.Vector3, velocity: THREE.Vector3): void {
     const groundY = m.terrain ? m.terrain.getHeightVisual(pos.x, pos.z) : 0;
     // Speed-scaled roostertail. The old fixed count-2 grey puff read as one
@@ -140,24 +154,27 @@ export function spawnSkiDust(m: EffectsManager, pos: THREE.Vector3, velocity: TH
     // up/out and grows with speed is what actually sells the carve.
     const sp = Math.hypot(velocity.x, velocity.z);
     const k = Math.min(1, Math.max(0, (sp - 4) / 26)); // 0 = puttering, 1 = full tuck
-    const spread = 0.35 + k * 0.5;
+    const spread = 0.15 + k * 0.2; // narrow band — reads as ski edges, not a smoke wall
     _v2.set(pos.x, groundY + 0.25, pos.z);
+    const tint = SKI_DUST_TINT[m.terrain?.preset ?? 1] ?? SKI_DUST_TINT[1]!;
     fxPuff(_v2, {
       count: 3 + Math.round(k * 3),
-      pos: [spread, 0.2, spread],
-      // Up-and-out fan — the spray lifts off the ski edges, then gravity
-      // arcs it back down into the trail.
-      velMin: [-0.7 - k * 1.5, 1.6 + k * 2.4, -0.7 - k * 1.5],
-      velMax: [0.7 + k * 1.5, 3 + k * 3.8, 0.7 + k * 1.5],
+      pos: [spread, 0.12, spread],
+      // Roostertails are a LOW fan: spray flicks sideways off the ski
+      // edges, barely rises, and gravity drops it into a ground-hugging
+      // trail. Vertical throw stays ~1m even at full tuck — a fountain
+      // over the player's head reads as steam, not carve spray.
+      velMin: [-0.9 - k * 1.8, 0.3 + k * 0.4, -0.9 - k * 1.8],
+      velMax: [0.9 + k * 1.8, 1.1 + k * 0.9, 0.9 + k * 1.8],
       // Keep a slice of the skier's own motion: the plume streams BEHIND
       // the tracks instead of hanging over the skis.
-      shed: [-velocity.x * (0.05 + k * 0.12), 0, -velocity.z * (0.05 + k * 0.12)],
-      lifeMin: 0.4, lifeMax: 0.7 + k * 0.5,
+      shed: [-velocity.x * (0.08 + k * 0.22), 0, -velocity.z * (0.08 + k * 0.22)],
+      lifeMin: 0.3, lifeMax: 0.5 + k * 0.4,
       sizeScale: 0.9 + k * 0.6,
-      // HDR cool-white. Under ACES a plain 1.0 white tone-maps to ~0.8 grey
-      // and reads as dark smoke on snow — the additive FX dodge this with
-      // EMIT_GAIN, so normal-blended dust has to overshoot white itself.
-      colA: [1.35, 1.45, 1.7], colB: [1.8, 1.9, 2.05],
+      // Normal-blended dust has to overshoot albedo or it tone-maps to
+      // dark smoke — the tints are the preset's ground color pushed ~30%
+      // hot (roostertail spray reads brighter than the surface it shed).
+      colA: [tint[0] * 0.85, tint[1] * 0.85, tint[2] * 0.85], colB: tint,
       gravity: true,
     });
   }

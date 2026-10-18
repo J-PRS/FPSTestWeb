@@ -319,6 +319,7 @@ RibbonTrail.reapedStale += 1;
     this.pushed = 0;
     this.liveFrom = 0;
     this.starvedPushes = 0;
+    this.jumpcuts = 0;
     this._lf.fill(-1);
     this.ws.fill(1);
     this.sf.fill(1);
@@ -344,6 +345,9 @@ RibbonTrail.reapedStale += 1;
   // Pushes rejected for near-zero velocity — a ribbon whose starved count
   // climbs while count stays 0 emits nothing (silent no-trail bug).
   private starvedPushes = 0;
+  /** Spatial-jump cuts since acquire — throttles the jumpcut warn so a
+   *  mis-wired owner can't flood the console thousands/sec. */
+  private jumpcuts = 0;
 
   /** Record a new sample at the projectile's current position/facing.
    *  `wScale` tapers the strip at this sample (0 = pin to a point). */
@@ -396,7 +400,10 @@ RibbonTrail.nanPushes += 1;
         // Spatial jump = a caller skipped teleport()/clear() — anomaly.
         // Pure time gap = a starved emitter resuming: the designed
         // fresh-trail path, no chord was ever at risk — don't log it.
-        if (spatialJump) {
+        this.jumpcuts += spatialJump ? 1 : 0;
+        if (spatialJump && (this.jumpcuts <= 3 || this.jumpcuts % 64 === 0)) {
+          // Throttled — a mis-wired owner can otherwise flood console.error
+          // thousands/sec (observed: 9800 msgs in 2s), starving the frame.
           glitch('trail-jumpcut', { tag: this.tag, gapM: Math.round(Math.hypot(jx, jy, jz)) });
         }
         this.clear();

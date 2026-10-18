@@ -63,7 +63,7 @@ function getConeAlphaTex(): THREE.Texture {
   }
   ctx.putImageData(img, 0, 0);
   const t = new THREE.CanvasTexture(cv);
-  t.wrapS = THREE.RepeatWrapping;
+  t.wrapS = THREE.RepeatWrapping; // u wraps around the cone seam
   _coneAlphaTex = t;
   return t;
 }
@@ -254,27 +254,7 @@ export function buildProjectileMeshes(
   const bpool = instPoolFor(scene, `body|${config.meshType}|${config.bodyRadius}|${config.meshColor}`, geo, mat);
   (mesh as SlotTag).__inst = { pool: bpool, slot: instAlloc(bpool) };
 
-  let glowMesh: THREE.Mesh | null = null;
-  if (config.glowShell) {
-    const flash = Boolean(config.glowPulse);
-    const cone = config.glowShape === 'wakeCone';
-    const glowMat = getGlowMat(config.glowColor, config.glowOpacity, flash, cone); // shared
-    const glowGeo = cone ? CONE_GEO : GLOW_GEO;
-    glowMesh = new THREE.Mesh(glowGeo, glowMat);
-    glowMesh.position.copy(pos);
-    glowMesh.layers.enable(BLOOM_LAYER);
-    const gpool = instPoolFor(scene, `glow|${cone ? 'wakeCone' : 'sphere'}|${config.glowColor}|${config.glowOpacity}|${flash ? 'f' : ''}`, glowGeo, glowMat, flash);
-    (glowMesh as SlotTag).__inst = { pool: gpool, slot: instAlloc(gpool) };
-    if (flash) {
-      // Resting tint = base color ÷ crest color, so tint×material lands
-      // back on the configured hue when the pulse is at its trough.
-      const base = new THREE.Color(config.glowColor);
-      const crest = new THREE.Color(config.glowColor).lerp(_white, 0.7);
-      const rest = new THREE.Color(base.r / crest.r, base.g / crest.g, base.b / crest.b);
-      (glowMesh as SlotTag & { __restTint?: THREE.Color }).__restTint = rest;
-      syncProjectileInstanceColor(glowMesh, rest);
-    }
-  }
+  const glowMesh = config.glowShell ? buildGlowMesh(scene, config, pos) : null;
 
   let ribbons: RibbonTrail[] = [];
   // Default ON — a config must opt OUT (`ribbonTrail: false`); opt-in
@@ -304,6 +284,28 @@ export function buildProjectileMeshes(
   return { mesh, glowMesh, ribbons };
 }
 
+function buildGlowMesh(scene: THREE.Scene, config: ProjectileConfig, pos: THREE.Vector3): THREE.Mesh {
+  const flash = Boolean(config.glowPulse);
+  const cone = config.glowShape === 'wakeCone';
+  const glowMat = getGlowMat(config.glowColor, config.glowOpacity, flash, cone); // shared
+  const glowGeo = cone ? CONE_GEO : GLOW_GEO;
+  const glowMesh = new THREE.Mesh(glowGeo, glowMat);
+  glowMesh.position.copy(pos);
+  glowMesh.layers.enable(BLOOM_LAYER);
+  const gpool = instPoolFor(scene, `glow|${cone ? 'wakeCone' : 'sphere'}|${config.glowColor}|${config.glowOpacity}|${flash ? 'f' : ''}`, glowGeo, glowMat, flash);
+  (glowMesh as SlotTag).__inst = { pool: gpool, slot: instAlloc(gpool) };
+  if (flash) {
+    // Resting tint = base color ÷ crest color, so tint×material lands
+    // back on the configured hue when the pulse is at its trough.
+    const base = new THREE.Color(config.glowColor);
+    const crest = new THREE.Color(config.glowColor).lerp(_white, 0.7);
+    const rest = new THREE.Color(base.r / crest.r, base.g / crest.g, base.b / crest.b);
+    (glowMesh as SlotTag & { __restTint?: THREE.Color }).__restTint = rest;
+    syncProjectileInstanceColor(glowMesh, rest);
+  }
+  return glowMesh;
+}
+
 const _velDir = new THREE.Vector3();
 const _lookTarget = new THREE.Vector3();
 const _FORWARD = new THREE.Vector3(0, 0, 1);
@@ -316,80 +318,94 @@ export function updateProjectileMesh(
 ): void {
   const [age, hitRadius, tumble, dt, fuseAge = age] = rest;
   mesh.position.copy(pos);
-  if (glowMesh) {
-    glowMesh.position.copy(pos);
-    // Glow scales with hitRadius (wake hitbox) so they always match
-    const glowMultiplier = config.glowScale ?? 1;
-    // Glow always ramps in at spawn even when the body opts out — a
-    // full-size glow envelope near the muzzle swallows the camera for
-    // the first frames (fullscreen color flash).
-    const start = config.meshStartScale ?? RAMP_IN_START;
-    const maxLife = config.maxLifetime ?? 0;
-    const glowRamp = start + (1 - start) * Math.min(
-      age / Math.min(config.meshRampInDuration ?? RAMP_IN_DUR, maxLife > 0 ? maxLife * 0.4 : RAMP_IN_DUR), 1);
-    let gs = hitRadius * glowMultiplier * glowRamp;
-    const restTint = (glowMesh as SlotTag & { __restTint?: THREE.Color }).__restTint;
-    if (config.glowPulse) {
-      const p = config.glowPulse;
-      if (fuseAge >= 0) {
-        // fuseRamp: blink quickens as the ARMED fuse dies — flight time
-        // doesn't count (sticky shells arm on contact, fuseAge 0 at stick).
-        const hz = p.fuseRamp && config.maxLifetime
-          ? p.hz * (1 + 3 * (fuseAge / config.maxLifetime) ** 2) : p.hz;
-        const s = Math.sin(age * hz * Math.PI * 2);
-        gs *= 1 + p.depth * s;
-        // Same wave drives a color flash toward the material's crest
-        // white — s<0 holds the resting tint so the blink reads OFF/ON.
-        const f = Math.max(0, s) ** 2;
-        _instColor.copy(restTint!).lerp(_white, f);
-        syncProjectileInstanceColor(glowMesh, _instColor);
-      } else if (restTint) {
-        syncProjectileInstanceColor(glowMesh, restTint);
-      }
-    }
-    // Z-fight guard: a shell whose glow radius crosses its own body
-    // surface (sticky: hitMax ≈ bodyRadius, pulsing) shimmers as the
-    // two instanced spheres coincide. The floor ramps too — an unscaled
-    // floor at spawn pins a body-sized glow right at the muzzle.
-    gs = Math.max(gs, (config.bodyRadius * 1.15 + 0.01) * glowRamp);
-    if (config.glowShape === 'wakeCone') {
-      // Shock collar: apex rides the shell, skirt trails -velocity.
-      // Stationary frames keep the last orientation — a parked cone
-      // still reads as the wake envelope.
-      if (vel.lengthSq() > 0.01) {
-        _velDir.copy(vel).normalize();
-        glowMesh.quaternion.setFromUnitVectors(_FORWARD, _velDir);
-      }
-      // The collar radius IS the wake proxy hitbox — not gs (which
-      // carries glowScale shrink). Coupled here so the visual can never
-      // understate the live hit envelope; glowScale only tunes the
-      // skirt's LENGTH for cone shapes.
-      const cr = Math.max(hitRadius * glowRamp, (config.bodyRadius * 1.15 + 0.01) * glowRamp);
-      glowMesh.scale.set(cr, cr, cr * CONE_LEN * glowMultiplier);
-    } else {
-      glowMesh.scale.setScalar(gs);
-    }
-  }
+  if (glowMesh) {updateGlowMesh(glowMesh, pos, vel, config, { age, hitRadius, fuseAge });}
 
   mesh.scale.setScalar(rampInScale(config, age));
-
-  if (vel.lengthSq() > 0.01) {
-    _velDir.copy(vel).normalize();
-    if (config.meshType === 'disc') {
-      _lookTarget.copy(pos).add(_velDir);
-      mesh.lookAt(_lookTarget);
-    } else if (config.meshType === 'ball') {
-      // Spheres don't orient — they tumble. Spin around a fixed random
-      // axis, rate proportional to speed so a lobbed ball visibly rotates
-      _tumbleAxis.set(tumble.x, tumble.y, tumble.z).normalize();
-      mesh.rotateOnAxis(_tumbleAxis, vel.length() * dt * 3);
-    } else {
-      mesh.quaternion.setFromUnitVectors(_FORWARD, _velDir);
-    }
-  }
+  orientProjectileMesh(mesh, pos, vel, tumble, dt, config);
 
   syncProjectileInstance(mesh);
   syncProjectileInstance(glowMesh);
+}
+
+function updateGlowMesh(
+  glowMesh: THREE.Mesh, pos: THREE.Vector3, vel: THREE.Vector3,
+  config: ProjectileConfig, frame: { age: number; hitRadius: number; fuseAge: number },
+): void {
+  const { age, hitRadius, fuseAge } = frame;
+  glowMesh.position.copy(pos);
+  // Glow scales with hitRadius (wake hitbox) so they always match
+  const glowMultiplier = config.glowScale ?? 1;
+  // Glow always ramps in at spawn even when the body opts out — a
+  // full-size glow envelope near the muzzle swallows the camera for
+  // the first frames (fullscreen color flash).
+  const start = config.meshStartScale ?? RAMP_IN_START;
+  const maxLife = config.maxLifetime ?? 0;
+  const glowRamp = start + (1 - start) * Math.min(
+    age / Math.min(config.meshRampInDuration ?? RAMP_IN_DUR, maxLife > 0 ? maxLife * 0.4 : RAMP_IN_DUR), 1);
+  let gs = hitRadius * glowMultiplier * glowRamp;
+  const restTint = (glowMesh as SlotTag & { __restTint?: THREE.Color }).__restTint;
+  if (config.glowPulse) {
+    const p = config.glowPulse;
+    if (fuseAge >= 0) {
+      // fuseRamp: blink quickens as the ARMED fuse dies — flight time
+      // doesn't count (sticky shells arm on contact, fuseAge 0 at stick).
+      const hz = p.fuseRamp && config.maxLifetime
+        ? p.hz * (1 + 3 * (fuseAge / config.maxLifetime) ** 2) : p.hz;
+      const s = Math.sin(age * hz * Math.PI * 2);
+      gs *= 1 + p.depth * s;
+      // Same wave drives a color flash toward the material's crest
+      // white — s<0 holds the resting tint so the blink reads OFF/ON.
+      const f = Math.max(0, s) ** 2;
+      _instColor.copy(restTint!).lerp(_white, f);
+      syncProjectileInstanceColor(glowMesh, _instColor);
+    } else if (restTint) {
+      syncProjectileInstanceColor(glowMesh, restTint);
+    }
+  }
+  // Z-fight guard: a shell whose glow radius crosses its own body
+  // surface (sticky: hitMax ≈ bodyRadius, pulsing) shimmers as the
+  // two instanced spheres coincide. The floor ramps too — an unscaled
+  // floor at spawn pins a body-sized glow right at the muzzle.
+  gs = Math.max(gs, (config.bodyRadius * 1.15 + 0.01) * glowRamp);
+  if (config.glowShape === 'wakeCone') {
+    // Shock collar: apex rides the shell, skirt trails -velocity.
+    // Stationary frames keep the last orientation — a parked cone
+    // still reads as the wake envelope.
+    if (vel.lengthSq() > 0.01) {
+      _velDir.copy(vel).normalize();
+      glowMesh.quaternion.setFromUnitVectors(_FORWARD, _velDir);
+    }
+    // The collar radius IS the wake proxy hitbox — not gs (which
+    // carries glowScale shrink). Coupled here so the visual can never
+    // understate the live hit envelope; glowScale only tunes the
+    // skirt's LENGTH for cone shapes.
+    const cr = Math.max(hitRadius * glowRamp, (config.bodyRadius * 1.15 + 0.01) * glowRamp);
+    glowMesh.scale.set(cr, cr, cr * CONE_LEN * glowMultiplier);
+    // Static fade map — no scroll. The map is directional (apex-hot →
+    // base-fade); any offset animation either rolls it around the
+    // axis (u) or slides the fade off the cone (v).
+  } else {
+    glowMesh.scale.setScalar(gs);
+  }
+}
+
+function orientProjectileMesh(
+  mesh: THREE.Mesh, pos: THREE.Vector3, vel: THREE.Vector3,
+  tumble: { x: number; y: number; z: number }, dt: number, config: ProjectileConfig,
+): void {
+  if (vel.lengthSq() <= 0.01) {return;}
+  _velDir.copy(vel).normalize();
+  if (config.meshType === 'disc') {
+    _lookTarget.copy(pos).add(_velDir);
+    mesh.lookAt(_lookTarget);
+  } else if (config.meshType === 'ball') {
+    // Spheres don't orient — they tumble. Spin around a fixed random
+    // axis, rate proportional to speed so a lobbed ball visibly rotates
+    _tumbleAxis.set(tumble.x, tumble.y, tumble.z).normalize();
+    mesh.rotateOnAxis(_tumbleAxis, vel.length() * dt * 3);
+  } else {
+    mesh.quaternion.setFromUnitVectors(_FORWARD, _velDir);
+  }
 }
 
 // Alt+Q census section — instanced shell pools (grow/shrink inventory).

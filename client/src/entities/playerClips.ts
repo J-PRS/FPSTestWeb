@@ -135,6 +135,13 @@ export interface RigManifest {
     /** Metres to lift the seat along model up — palm mounts seat inside
      *  the fist; a small raise gets the prop riding on the palm. */
     palmUp?: number;
+    /** World mounts only: pin orientation to model-facing + aim pitch
+     *  (seat still follows the fist) — rigs whose hand basis twists
+     *  under the aim layer can't be trusted to aim the prop. */
+    aimPin?: boolean;
+    /** Model-space seat offset in meters, added to the fist position —
+     *  poses that park the hand beside the head need a nudge inward. */
+    aimSeat?: [number, number, number];
   };
   /** Post-bake facing fix: when a rig's retarget sources agree on a hip
    *  convention π off the rig's -Z, alignHipYaw adds this to the canonical
@@ -168,7 +175,11 @@ export const RIG_MANIFEST: Record<string, RigManifest> = {
                   sources: ['ual1', 'ual2', 'kevdev'] },
   mannequin:    { url: '/assets/models/mannequin_opt.glb', lodUrl: '/assets/models/mannequin_lod1.glb',
                   yaw: 0, fitH: 2, ualAlias: true, sources: ['kevdev'],
-                  mount: { euler: [Math.PI / 2, 0, 0] } },
+                  // Aim-pinned world mount: the hand basis twists under
+                  // the aim layer on this rig (gun swept left on shots),
+                  // so orientation is model-forward + pitch; pos is the
+                  // bone-local fist seat solved by _tools/e2e/_gunprobe.ts.
+                  mount: { world: true, aimPin: true, pos: [0.002, 0.059, -0.011], aimSeat: [-0.02, -0.08, -0.06] } },
   knight:       { url: '/assets/models/knight.glb', yaw: 0, fitH: 2, sources: [] },
   // All class rigs author facing -Z (the camera check showed backs at
   // the legacy π flip) — no yaw needed.
@@ -291,8 +302,9 @@ export const VARIANT_CLIP_OVERRIDES: Record<string, Partial<Record<AnimationStat
     // on this rig, so ski rides the tucked Crouch_Fwd.
     ski: ['UAL_Crouch_Fwd_Loop', 'Crouch_Fwd_Loop'],
     // Default stance is armed — the relaxed Idle_Loop dangles the gun at
-    // the thigh; Pistol_Idle holds it raised and reads as "in combat".
-    idle: 'UAL_Pistol_Idle_Loop',
+    // the thigh; Pistol_Idle parks it beside the head on the wrong
+    // (lefty-looking) side; Aim_Neutral is the squared-up grip.
+    idle: 'UAL_Pistol_Aim_Neutral',
     // Bake sources are kevdev-only — UAL_OverhandThrow (UAL2) never
     // lands here, so 'throw' bottomed out on 'Punch', which this rig
     // doesn't ship either (warn + hold pose). Pistol_Shoot's arm

@@ -15,7 +15,7 @@ export interface NetCtx {
   /** Both first-seen-update and respawn-into-missing end up here. */
   ensureRemotePlayer(playerId: string, position: { x: number; y: number; z: number }, via: string): RemotePlayer;
   /** Server-owned pickup meshes — gem/dog-tag renderers. */
-  addPickup(id: number, pos: { x: number; y: number; z: number }, kind?: PickupKind): void;
+  addPickup(id: number, pos: { x: number; y: number; z: number }, kind?: PickupKind, val?: number): void;
   /** Reconcile against the server roster — drop meshes whose ids aren't in
    *  the set (their pickupGone was missed during a disconnect). */
   reconcilePickups(liveIds: ReadonlySet<number>): void;

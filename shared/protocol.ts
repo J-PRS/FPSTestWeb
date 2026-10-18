@@ -190,7 +190,7 @@ export interface TickUpdatePlayer {
 export type ServerMessage =
   // room/mode: which match this state belongs to — set by the room's first
   // joiner, inherited by everyone after (join claims can't redefine it).
-  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; water?: WaterSpec; spawns?: SpawnPoint[]; teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] } }; flags?: { team: TeamId; pos: Vec3; home?: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3; kind?: PickupKind }[]; deployables?: { id: number; owner: string; kind: DeployKind; pos: Vec3; hp?: number; armor?: number; team?: string }[]; matchEndsAt?: number; respawnMs?: number; wireIds?: Record<number, string> }
+  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; water?: WaterSpec; spawns?: SpawnPoint[]; teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] } }; flags?: { team: TeamId; pos: Vec3; home?: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3; kind?: PickupKind; val?: number }[]; deployables?: { id: number; owner: string; kind: DeployKind; pos: Vec3; hp?: number; armor?: number; team?: string }[]; matchEndsAt?: number; respawnMs?: number; wireIds?: Record<number, string> }
   | { type: 'playerJoined'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; team?: TeamId; transport?: TransportKind; armorClass?: string;
       /** Chosen display name (cosmetic — ids are still the identity). */
       name?: string;
@@ -208,6 +208,10 @@ export type ServerMessage =
   // Team reassignment mid-match — team comes through playerJoined/gameState
   // otherwise; this is the only channel for a swap after join (bot rebalance).
   | { type: 'teamUpdate'; playerId: string; team: TeamId }
+  // Headhunt held-token count changed (grab/death/reset) — rare event
+  // channel so the tick frame keeps its fixed binary layout. n is the
+  // carrier's new total; the team's live score is derived from these.
+  | { type: 'playerHeld'; playerId: string; n: number }
   // Server system line — renders unstyled (no "name:" prefix) in chat.
   | { type: 'matchNotice'; text: string }
   // seq lets a re-delivered event (reconnect replay, transport dup) be
@@ -305,7 +309,7 @@ export type ServerMessage =
   | { type: 'nodeUpdate'; nodes: { id: number; gx: number; gz: number; pos: Vec3; owner: 'alpha' | 'bravo' | 'neutral'; hp: number; maxHp: number; build: number; buildBy: 'alpha' | 'bravo' | null; core: boolean }[] }
   // Server-owned pickups: creature kills drop a nugget gem; touching it
   // banks a team point — replaces trusting client 'bank' claims.
-  | { type: 'pickupSpawn'; id: number; pos: Vec3; kind?: PickupKind }
+  | { type: 'pickupSpawn'; id: number; pos: Vec3; kind?: PickupKind; val?: number }
   | { type: 'deploySpawn'; id: number; owner: string; kind: DeployKind; pos: Vec3; team?: TeamId }
   | { type: 'deployGone'; id: number }
   // Base-asset lifecycle — authored gear goes DOWN (not gone) on death
@@ -333,7 +337,7 @@ export type ServerMessage =
   // Server-owned heals (regen perk, mend channel, regen powerup) mutate
   // health silently every tick — self is excluded from tickUpdate, so
   // without this echo the owner's hp drifts until the next hit event.
-  | { type: 'yourHealth'; health: number }
+  | { type: 'yourHealth'; health: number; armor?: number }
   // Your own banked LG charge — own tick records exclude the carrier, so
   // the server echoes it directly while >0 (and once more at 0).
   | { type: 'yourCharge'; charge: number }
@@ -387,6 +391,9 @@ export interface GameStatePlayer {
   isDead: boolean;
   health: number;
   status?: number;
+  /** Headhunt held-token count — rides the roster row for joiners; live
+   *  changes arrive via the playerHeld event. */
+  held?: number;
   /** Team-mode rooms only — absent in free-for-all. */
   team?: TeamId;
   /** Netcode-v2 tier this client connected on — scoreboard NET column. */
@@ -421,4 +428,7 @@ export interface LocalPlayerState {
   /** Spawn shield remaining — the client suppresses the same predicted
    *  blast effects the server refuses to apply during the window. */
   protectedMs?: number;
+  /** Headhunt held tokens — survives the reconnect so the HUD counter
+   *  doesn't zero until the first playerHeld edge. */
+  held?: number;
 }

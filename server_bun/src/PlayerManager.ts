@@ -117,6 +117,8 @@ export class PlayerManager {
       protectedUntil: simMs(simNow() + SPAWN_PROTECT_MS),
       healCredit: 0,
       beltCharges: BELT_MAX,
+      heldTokens: 0,
+      beltAcc: 0,
       armor: 0,
       regenUntil: simMs(0),
       ddUntil: simMs(0),
@@ -206,6 +208,7 @@ export class PlayerManager {
       isDead: player.isDead,
       health: player.health,
       status: player.status,
+      held: player.heldTokens || undefined,
       team: player.team,
       transport: player.transport,
       armorClass: player.armorClass,
@@ -368,6 +371,8 @@ target.deaths += 1;
     player.lastDamageAt = simMs(simNow()); // a fresh life is a fresh ramp
     player.charge = 0;
     player.beltCharges = BELT_MAX;
+    player.heldTokens = 0;
+    player.beltAcc = 0;
     player.pendingRespawn = false;
     // lastSeq survives: the client's frame counter is monotone per
     // connection, and zeroing it re-opens the seq gate to stale

@@ -30,15 +30,14 @@ describe('boot warmup', (): void => {
     expect(gate.released).toBe(true);
   });
 
-  it('uses the frame cap on a persistently slow machine', async (): Promise<void> => {
+  it('uses the wall-clock cap on a persistently slow machine', async (): Promise<void> => {
     const gate = new BootWarmup();
     const waiting = gate.whenStable();
-    frames(gate, 239, 0.1);
+    // 39 slow frames ≈ 3.9s — under the 4s cap, still gated.
+    frames(gate, 39, 0.1);
     expect(gate.released).toBe(false);
-    gate.tick(0.1);
+    gate.tick(0.1); // 4.0s — the cap drops the veil regardless of stability
     await waiting;
-    gate.tick(0.1);
-    await gate.whenStable();
     expect(gate.released).toBe(true);
   });
 

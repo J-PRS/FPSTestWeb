@@ -67,6 +67,11 @@ export class PlayerGun {
   mountPos: [number, number, number] = [0, 0, 0];
   mountQuat: THREE.Quaternion | null = null;
   palms = false;
+  // Aim-pin mounts: hand bases twist under the aim layer on some rigs,
+  // so orientation comes from model facing + aim pitch, position alone
+  // still tracks the fist.
+  aimPin = false;
+  aimSeat: [number, number, number] = [0, 0, 0];
   palmFwd = 0;
   palmFlip = false;
   palmYaw = 0;
@@ -95,7 +100,7 @@ export class PlayerGun {
    *  (mannequin/robot), socket-mounted on class bodies whose armature
    *  frames don't (cyber's bones sit ~98 units off). */
   attach(a: GunAttachArgs): void {
-    const { model, modelScale, classGun } = a;
+    const { model, classGun } = a;
     PlayerGun.shared();
     this.group = new THREE.Group();
     this.mesh = new THREE.Mesh(PlayerGun.geo!, PlayerGun.mat!);
@@ -103,33 +108,15 @@ export class PlayerGun {
     // Measure bone world scale AFTER model.scale so the gun lands
     // real-world size (bones carry the armature's ~100x scale)
     model.updateMatrixWorld(true);
-    if (!a.handBone && classGun) {
-      // Socket fallback: class bodies keep bones in armature frames up to
-      // ~100 units off the rendered mesh (cyber's hips bind at -98Z), so
-      // rigs that never captured a hand bone park the gun on the model
-      // root at the per-variant socket instead.
-      const ws = modelScale;
-      this.group.scale.setScalar(0.7 / ws);
-      this.unit = 1 / ws;
-      this.kickZ = 0.15 * this.unit;
-      // gunLocal is meters above the logical feet; the model root sits
-      // feetOffsetY below them on rigs not authored feet-at-origin. The
-      // FX update rewrites group.position from these base fields each
-      // frame, so the socket lives in the bases, not a one-time set.
-      this.restX = classGun[0] * this.unit;
-      this.baseY = (classGun[1] - a.feetOffsetY) * this.unit;
-      this.baseZ = classGun[2] * this.unit;
-      this.group.position.set(this.restX, this.baseY, this.baseZ);
-      this.group.rotation.y = Math.PI; // barrel -Z = the body's facing
-      this.muzzleFlash = ModelFx.buildMuzzleFlash();
-      this.group.add(this.muzzleFlash);
-      model.add(this.group);
-      if (this.heldWeapon >= 0) {this.setWeapon(this.heldWeapon);}
-      return;
-    }
-    const handBone = a.handBone!;
+    if (!a.handBone) {if (classGun) {this.attachSocket(a);} return;}
+    this.attachBone(a, a.handBone);
+  }
+
+  /** Hand-bone mount — palms / world-frame / per-axis variants. */
+  private attachBone(a: GunAttachArgs, handBone: THREE.Bone): void {
+    const { model, modelScale, mount } = a;
+    const group = this.group!;
     const ws = handBone.getWorldScale(new THREE.Vector3());
-    const {mount} = a;
     logger.debug(`GUN ATTACH`, { hand: handBone.name, worldScale: ws.x });
     if (mount?.palms && a.handBoneL && model) {
       // Palm-line mount: model-root prop driven per frame — position at
@@ -150,16 +137,31 @@ export class PlayerGun {
       // the bone's world transform in follow() — rigs with rotated
       // non-uniform armature scale shear a bone-parented prop into a
       // needle, which no per-axis scale compensation can undo.
+      this.aimPin = Boolean(mount.aimPin);
+      this.aimSeat = mount.aimSeat ?? [0, 0, 0];
       this.mountPos = mount.pos ?? [0, 0, 0];
       this.mountQuat = mount.quat ? new THREE.Quaternion(mount.quat[0], mount.quat[1], mount.quat[2], mount.quat[3]) : new THREE.Quaternion();
       this.mountOnModel(handBone, mount, model, modelScale);
       return;
     }
-    // Per-axis: some rigs (polyart) carry non-uniform bone scale that
-    // squeezes the prop into a needle when only ws.x is compensated.
+    this.attachPerAxis(mount, group, ws);
+    // Muzzle flash: additive sprite at the barrel tip, flashed on
+    // fire() and faded in update(). Cheap (one sprite per remote),
+    // blooms nicely at distance — this is what makes remote fire
+    // readable when tracking small targets in the sky.
+    this.muzzleFlash = ModelFx.buildMuzzleFlash();
+    group.add(this.muzzleFlash);
+    handBone.add(group);
+    if (this.heldWeapon >= 0) {this.setWeapon(this.heldWeapon);}
+  }
+
+  /** Per-axis bone mount: some rigs (polyart) carry non-uniform bone
+   *  scale that squeezes the prop into a needle when only ws.x is
+   *  compensated. */
+  private attachPerAxis(mount: RigMount | undefined, group: THREE.Group, ws: THREE.Vector3): void {
     const gunSize = mount?.size ?? 0.7;
     this.size = gunSize;
-    this.group.scale.set(gunSize / ws.x, gunSize / ws.y, gunSize / ws.z);
+    group.scale.set(gunSize / ws.x, gunSize / ws.y, gunSize / ws.z);
     if (mount?.fat) {this.mesh!.scale.set(mount.fat, mount.fat, 1);}
     this.baseZ = 0.05 / ws.x;
     this.kickZ = 0.15 / ws.x; // recoil distance in bone units
@@ -170,34 +172,49 @@ export class PlayerGun {
       ([, this.baseY] = mount.pos);
       ([, , this.baseZ] = mount.pos);
     }
-    this.group.position.set(this.restX, this.baseY, this.baseZ);
+    group.position.set(this.restX, this.baseY, this.baseZ);
     // Orientation comes from the manifest: euler rigs (mannequin) roll
     // recoil through baseX; quat rigs write baseQuat so fx
     // envelopes compose on top instead of stomping rotation.x/z.
     // Palm axes differ per rig family — quats were solved per rig on the
     // posedump loop, tune via debugSetGunRot.
     if (mount?.euler) {
-      this.group.rotation.set(mount.euler[0], mount.euler[1], mount.euler[2]);
+      group.rotation.set(mount.euler[0], mount.euler[1], mount.euler[2]);
       // Same bone-frame trap as the position kick: rotation.x on an euler
       // mount is arbitrary in bone space, so the fx pitch delta swung the
       // gun sideways. Stash the rest orientation as a quat — the fx path
       // then composes deltas in the gun's own frame (muzzle-up pitch).
-      this.baseQuat = this.group.quaternion.clone();
+      this.baseQuat = group.quaternion.clone();
     } else if (mount?.quat) {
       this.baseQuat = new THREE.Quaternion(mount.quat[0], mount.quat[1], mount.quat[2], mount.quat[3]);
-      this.group.quaternion.copy(this.baseQuat);
+      group.quaternion.copy(this.baseQuat);
     } else {
-      this.group.rotation.y = Math.PI;
+      group.rotation.y = Math.PI;
     }
+  }
 
-    // Muzzle flash: additive sprite at the barrel tip, flashed on
-    // fire() and faded in update(). Cheap (one sprite per remote),
-    // blooms nicely at distance — this is what makes remote fire
-    // readable when tracking small targets in the sky.
+  /** Socket fallback: class bodies keep bones in armature frames up to
+   *  ~100 units off the rendered mesh (cyber's hips bind at -98Z), so
+   *  rigs that never captured a hand bone park the gun on the model
+   *  root at the per-variant socket instead. */
+  private attachSocket(a: GunAttachArgs): void {
+    const { model, modelScale, classGun } = a;
+    const ws = modelScale;
+    this.group!.scale.setScalar(0.7 / ws);
+    this.unit = 1 / ws;
+    this.kickZ = 0.15 * this.unit;
+    // gunLocal is meters above the logical feet; the model root sits
+    // feetOffsetY below them on rigs not authored feet-at-origin. The
+    // FX update rewrites group.position from these base fields each
+    // frame, so the socket lives in the bases, not a one-time set.
+    this.restX = classGun![0] * this.unit;
+    this.baseY = (classGun![1] - a.feetOffsetY) * this.unit;
+    this.baseZ = classGun![2] * this.unit;
+    this.group!.position.set(this.restX, this.baseY, this.baseZ);
+    this.group!.rotation.y = Math.PI; // barrel -Z = the body's facing
     this.muzzleFlash = ModelFx.buildMuzzleFlash();
-    this.group.add(this.muzzleFlash);
-
-    handBone.add(this.group);
+    this.group!.add(this.muzzleFlash);
+    model.add(this.group!);
     if (this.heldWeapon >= 0) {this.setWeapon(this.heldWeapon);}
   }
 
@@ -220,48 +237,57 @@ export class PlayerGun {
   /** Per-frame bone follow for the model-root mounts — rewrites the fx
    *  base fields from the bone's live world transform so tickGunFx
    *  composes kick/swap/throw deltas on top of these. */
-  follow(dt: number, model: THREE.Object3D | null, modelScale: number, handBoneL: THREE.Bone | null): void {
+  follow(dt: number, model: THREE.Object3D | null, modelScale: number, handBoneL: THREE.Bone | null, pitch = 0): void {
     if (!this.mountBone || !this.group || !model) {return;}
     const mb = this.mountBone;
     mb.updateWorldMatrix(true, false);
     mb.localToWorld(_gunV.set(this.mountPos[0], this.mountPos[1], this.mountPos[2]));
     model.worldToLocal(_gunV);
+    _gunV.x += this.aimSeat[0]; _gunV.y += this.aimSeat[1]; _gunV.z += this.aimSeat[2];
     this.restX = _gunV.x; this.baseY = _gunV.y; this.baseZ = _gunV.z;
-    if (this.palms && handBoneL) {
-      // Palm-line mount: the barrel axis is right-palm → left-palm.
-      // Degenerate (hands split for a one-hand clip) → keep the palm
-      // seat but aim model-forward (-Z) instead of a garbage line.
-      handBoneL.getWorldPosition(_gunPalmL);
-      model.worldToLocal(_gunPalmL);
-      _gunDir.subVectors(_gunPalmL, _gunV);
-      const len = _gunDir.length();
-      if (len > 0.03) {_gunDir.divideScalar(len);} else {_gunDir.set(0, 0, -1);}
-      // |z| guard: hand-splits (one-hand clips) give lateral axes —
-      // fall back to model forward. Either z sign is valid: rigs grip
-      // both handednesses (polyart's palm line runs +Z).
-      if (Math.abs(_gunDir.z) < 0.15) {_gunDir.set(0, 0, -1);}
-      if (this.palmFlip) {_gunDir.negate();}
-      // Seat offset along the barrel — right-palm seat alone reads too
-      // far back on two-hand holds (polyart's marine grip).
-      if (this.palmFwd || this.palmUp) {
-        _gunV.addScaledVector(_gunDir, this.palmFwd);
-        _gunV.y += this.palmUp;
-        this.restX = _gunV.x; this.baseY = _gunV.y; this.baseZ = _gunV.z;
-      }
-      // lookAt maps -Z to eye→target; eye=left palm, target=right →
-      // +Z = grip→foregrip = barrel dir. Slerp so clip jitter and
-      // state pops don't buzz the muzzle.
-      if (this.palmFlip) {_gunLook.lookAt(_gunV, _gunPalmL, _gunUp);}
-      else {_gunLook.lookAt(_gunPalmL, _gunV, _gunUp);}
-      _gunQ2.setFromRotationMatrix(_gunLook);
-      if (this.palmYaw) {_gunQ2.premultiply(_gunQYaw.setFromAxisAngle(_gunUp, this.palmYaw));}
-      this.baseQuat!.slerp(_gunQ2, Math.min(dt * 14, 1));
+    if (this.palms && handBoneL) {this.followPalms(model, handBoneL, dt);}
+    else if (this.aimPin) {
+      // Orientation = model forward tilted by aim pitch — the hand
+      // quat is poisoned by the aim layer on these rigs, so only the
+      // seat position (above) follows the bone.
+      this.baseQuat!.setFromAxisAngle(_gunDir.set(1, 0, 0), -pitch);
     } else {
       mb.getWorldQuaternion(_gunQ);
       model.getWorldQuaternion(_gunMQ).invert();
       this.baseQuat!.copy(_gunMQ).multiply(_gunQ).multiply(this.mountQuat!);
     }
     this.group.scale.setScalar(this.size / modelScale);
+  }
+
+  /** Palm-line mount: the barrel axis is right-palm → left-palm.
+   *  Degenerate (hands split for a one-hand clip) → keep the palm
+   *  seat but aim model-forward (-Z) instead of a garbage line. */
+  private followPalms(model: THREE.Object3D, handBoneL: THREE.Bone, dt: number): void {
+    handBoneL.getWorldPosition(_gunPalmL);
+    model.worldToLocal(_gunPalmL);
+    _gunDir.subVectors(_gunPalmL, _gunV);
+    const len = _gunDir.length();
+    if (len > 0.03) {_gunDir.divideScalar(len);} else {_gunDir.set(0, 0, -1);}
+    // |z| guard: hand-splits (one-hand clips) give lateral axes —
+    // fall back to model forward. Either z sign is valid: rigs grip
+    // both handednesses (polyart's palm line runs +Z).
+    if (Math.abs(_gunDir.z) < 0.15) {_gunDir.set(0, 0, -1);}
+    if (this.palmFlip) {_gunDir.negate();}
+    // Seat offset along the barrel — right-palm seat alone reads too
+    // far back on two-hand holds (polyart's marine grip).
+    if (this.palmFwd || this.palmUp) {
+      _gunV.addScaledVector(_gunDir, this.palmFwd);
+      _gunV.y += this.palmUp;
+      this.restX = _gunV.x; this.baseY = _gunV.y; this.baseZ = _gunV.z;
+    }
+    // lookAt maps -Z to eye→target; eye=left palm, target=right →
+    // +Z = grip→foregrip = barrel dir. Slerp so clip jitter and
+    // state pops don't buzz the muzzle.
+    if (this.palmFlip) {_gunLook.lookAt(_gunV, _gunPalmL, _gunUp);}
+    else {_gunLook.lookAt(_gunPalmL, _gunV, _gunUp);}
+    _gunQ2.setFromRotationMatrix(_gunLook);
+    if (this.palmYaw) {_gunQ2.premultiply(_gunQYaw.setFromAxisAngle(_gunUp, this.palmYaw));}
+    this.baseQuat!.slerp(_gunQ2, Math.min(dt * 14, 1));
   }
 
   /** Barrel-tip world point — third-person beam/tracer anchor. */

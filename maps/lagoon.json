@@ -4,46 +4,167 @@
   "bots": 8,
   "botFill": 12,
   "bases": {
-    "alpha": { "x": -300, "y": 0, "z": -45 },
-    "bravo": { "x": 296, "y": 0, "z": 30 }
+    "alpha": {
+      "x": -300,
+      "y": 0,
+      "z": -45
+    },
+    "bravo": {
+      "x": 296,
+      "y": 0,
+      "z": 30
+    }
   },
   "teamSpawns": {
     "alpha": [
-      { "x": -289, "y": 0, "z": -64, "r": 38 },
-      { "x": -343, "y": 0, "z": -33, "r": 38 }
+      {
+        "x": -289,
+        "y": 0,
+        "z": -64,
+        "r": 38
+      },
+      {
+        "x": -343,
+        "y": 0,
+        "z": -33,
+        "r": 38
+      }
     ],
     "bravo": [
-      { "x": 267, "y": 0, "z": 47, "r": 38 },
-      { "x": 325, "y": 0, "z": 47, "r": 38 }
+      {
+        "x": 267,
+        "y": 0,
+        "z": 47,
+        "r": 38
+      },
+      {
+        "x": 325,
+        "y": 0,
+        "z": 47,
+        "r": 38
+      }
     ]
   },
   "spawns": [
-    { "x": -289, "y": 0, "z": -64 },
-    { "x": -268, "y": 0, "z": -13 },
-    { "x": -235, "y": 0, "z": -62 },
-    { "x": 274, "y": 0, "z": -9 },
-    { "x": 220, "y": 0, "z": 10 },
-    { "x": 325, "y": 0, "z": 47 },
-    { "x": -41, "y": 0, "z": -318 },
-    { "x": -114, "y": 0, "z": -296 },
-    { "x": -75, "y": 0, "z": -256 },
-    { "x": 68, "y": 0, "z": 282 },
-    { "x": 18, "y": 0, "z": 239 },
-    { "x": 66, "y": 0, "z": 212 }
+    {
+      "x": 320,
+      "y": 0,
+      "z": 40,
+      "r": 16
+    },
+    {
+      "x": 40,
+      "y": 0,
+      "z": 320,
+      "r": 16
+    },
+    {
+      "x": -320,
+      "y": 0,
+      "z": 40,
+      "r": 16
+    },
+    {
+      "x": -40,
+      "y": 0,
+      "z": 320,
+      "r": 16
+    },
+    {
+      "x": -320,
+      "y": 0,
+      "z": -40,
+      "r": 16
+    },
+    {
+      "x": -40,
+      "y": 0,
+      "z": -320,
+      "r": 16
+    },
+    {
+      "x": 320,
+      "y": 0,
+      "z": -40,
+      "r": 16
+    },
+    {
+      "x": 40,
+      "y": 0,
+      "z": -320,
+      "r": 16
+    },
+    {
+      "x": 240,
+      "y": 0,
+      "z": 240,
+      "r": 16
+    },
+    {
+      "x": -240,
+      "y": 0,
+      "z": 240,
+      "r": 16
+    },
+    {
+      "x": -240,
+      "y": 0,
+      "z": -240,
+      "r": 16
+    },
+    {
+      "x": 240,
+      "y": 0,
+      "z": -240,
+      "r": 16
+    }
   ],
-  "arena": { "x": 0, "z": 0, "radius": 620 },
+  "arena": {
+    "x": 0,
+    "z": 0,
+    "radius": 620
+  },
   "structures": [],
   "terrain": "lagoon.bin",
   "heightScale": 1.6,
   "terrainPreset": 6,
   "fog": {
-    "color": [0.72, 0.82, 0.86],
-    "distance": 150.0,
-    "visible": 1050.0,
-    "horizon": [0.80, 0.89, 0.93]
+    "color": [
+      0.72,
+      0.82,
+      0.86
+    ],
+    "distance": 150,
+    "visible": 1050,
+    "horizon": [
+      0.8,
+      0.89,
+      0.93
+    ]
   },
-  "atmosphere": { "timeOfDay": 0.42, "sunAzimuth": 42, "rayleigh": 1.3, "mie": 1.1, "turbidity": 1.2, "sunIntensity": 1.05 },
-  "weather": { "dust": 0.2 },
-  "water": { "level": 12, "color": [0.10, 0.34, 0.40], "deep": [0.02, 0.10, 0.20] },
+  "atmosphere": {
+    "timeOfDay": 0.42,
+    "sunAzimuth": 42,
+    "rayleigh": 1.3,
+    "mie": 1.1,
+    "turbidity": 1.2,
+    "sunIntensity": 1.05
+  },
+  "weather": {
+    "dust": 0.2
+  },
+  "water": {
+    "level": 2,
+    "color": [
+      0.1,
+      0.34,
+      0.4
+    ],
+    "deep": [
+      0.05,
+      0.15,
+      0.25
+    ]
+  },
   "_notes": "Lagoon = four-island archipelago (terrainPreset 6, coast). Shallow shelf joins the islands, deep central lagoon and open ocean beyond. Water.level 12m must match the generator's --water so terrain, sims and the surface plane agree. Authored with _tools/mapbake/genlagoon.js (engine-world frame)."
 }

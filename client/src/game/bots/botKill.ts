@@ -123,8 +123,11 @@ export function botKilledF(b: TeamBots, killerId: string, bot: GameBot, weapon?:
       new THREE.Color(t === 'alpha' || t === 'bravo' ? TEAM_COLORS[t] : 0xCC_66_FF),
       { inheritVel: bot.vel, parts },
     ));
-    // Kills drop nuggets — bots feed the economy like everything else.
-    if (!b.spec.ffa) {b.hooks.dropNuggets(bot.position, 3, bot.vel);}
+    // Kills drop loot — headhunt scatters the carrier's held tokens
+    // (+1 corpse bounty) in denomination coins; other team modes drop 3
+    // nuggets so a death feeds the economy, not just pain.
+    if (b.mode === 'headhunt') {b.scatterTokens(bot.playerId, bot.position, bot.vel, 1);}
+    else if (!b.spec.ffa) {b.hooks.dropNuggets(bot.position, 3, bot.vel);}
     b.deps.world.killCounts.set(killerId, (b.deps.world.killCounts.get(killerId) ?? 0) + 1);
     b.deps.world.deathCounts.set(bot.playerId, (b.deps.world.deathCounts.get(bot.playerId) ?? 0) + 1);
     b.creditKill(killerId, false, bot.position);

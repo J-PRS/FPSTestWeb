@@ -77,7 +77,10 @@ export function stepCorpse(s: CorpseState, dt: number, terrain: Terrain | null):
 
   // Ground collision with bounce (flat 0 fallback without terrain). A
   // NaN floor isn't a floor — skip the bounce or the corpse falls forever.
-  const groundY = terrain ? terrain.getHeight(s.position.x, s.position.z) : 0;
+  // getRenderedHeight, not the field: the corpse is pure visual and must
+  // rest on the drawn chord — the level-0 mesh bridges gullies ABOVE the
+  // bilinear field, so field-clamped corpses sink under the surface.
+  const groundY = terrain ? terrain.getRenderedHeight(s.position.x, s.position.z) : 0;
   if (Number.isFinite(groundY) && s.position.y < groundY) {
     s.position.y = groundY;
     s.velocity.y = -s.velocity.y * BOUNCE_Y;

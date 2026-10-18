@@ -33,6 +33,10 @@ export interface ModelFxHost {
   /** Hand-mounted guns: palm orientation in gun-parent space, rewritten
    *  each frame — fx envelopes compose on top of it. Null = fixed mount. */
   gunBaseQuat: THREE.Quaternion | null;
+  /** Aim-pinned props re-derive baseQuat from the aim each frame, so the
+   *  recoil kick is a pure delta on top — it drifts off-aim for the
+   *  ~140ms envelope and rides back as it decays. */
+  gunAimPin: boolean;
   /** setRotation's applied roll — lean rebuilds rotation.z from it, so
    *  reading the euler back would double-apply. */
   lastRoll: number;

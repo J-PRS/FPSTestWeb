@@ -44,6 +44,19 @@ export interface AnimHost {
    *  the terrain floor deliberately, so a buried sample during them is
    *  expected-transient, not an unbury-class anomaly. */
   readonly isSimulating: boolean;
+  /** Last raw wire position — the buried alarm measures THIS, not the
+   *  blended `position` (converge/DR artifacts aren't server truth). */
+  readonly wirePosition: THREE.Vector3;
+  /** Records stopped — the body is a frozen last-seen replica, and a
+   *  buried sample on it measures wire staleness, not server ground. */
+  readonly staleHidden: boolean;
+  /** Render-only ground lift the body currently rides (written back so
+   *  HUD markers anchor to the DRAWN body, not the logical feet). */
+  renderLift: number;
+  /** Client wall ms of the last wire update — a stale replica can read
+   *  buried without the server being at fault; the alarm emits this so
+   *  the next fire answers fresh-vs-stale instead of asking. */
+  readonly lastUpdateTime: number;
   tickGhost(dt: number): void;
   tickAuras(dt: number): void;
 }
@@ -95,9 +108,63 @@ export class RemoteAnim {
   private _buriedAcc = 0;
   private _buriedStreak = 0;
 
+  /** Oneshot timers (throw/shoot/hit) pick the animation state while
+   *  live. Returns true when one owns this frame — locomotion only runs
+   *  on a free frame. A fired shot outranks the flinch: the shoot
+   *  oneshot is itself an aimed pose, so a bot shooting mid-hit snaps
+   *  its gun back to aim instead of flailing through the flinch. */
+  private pickOneshot(dt: number): boolean {
+    const {h} = this;
+    if (this.throwT > 0) {
+      this.throwT -= dt;
+      // A belt/deploy swing outranks the armed pose — the arm is
+      // committed to the throw, not the aim.
+      if (this.throwT > 0) {h.model.setAnimationState('throw');}
+      return true;
+    }
+    if (this.shootT > 0) {
+      // Re-arm while already 'shoot' (auto fire) means a new shot —
+      // force replays the clip from its aimed frame; otherwise the
+      // oneshot plays once and every following pull shows nothing.
+      if (this.shootT > this._lastShootT) {h.model.forceAnimationState('shoot');}
+      this.shootT -= dt;
+      if (this.shootT > 0) {h.model.setAnimationState('shoot');}
+      return true;
+    }
+    if (this.hitT > 0) {
+      this.hitT -= dt;
+      if (this.hitT > 0) {h.model.setAnimationState('hit');}
+      return true;
+    }
+    return false;
+  }
+
+  /** 0.3s buried-wire sampler. Measures the last WIRE position (eye →
+   *  feet), not the blended render position: interp clamps to the
+   *  rendered chord every frame and converge/DR deliberately skip the
+   *  floor, so a blended-sample burial only proves the client moved the
+   *  body — while a wire sample under the field IS the server's sim
+   *  sunk. Skipped while simulating (starved wire isn't server truth). */
+  private tickBuried(lift: number): void {
+    const {h} = this;
+    const w = h.wirePosition;
+    const wFeet = w.y - classCapsule(h.armorClass).eye;
+    const depth = w.lengthSq() === 0 ? 0
+      : h.terrain!.getRenderedHeight(w.x, w.z) - wFeet; // (0,0,0) = no wire yet
+    if (depth > 0.4 && !h.isSimulating) {
+      this._buriedStreak += 1;
+      // Streak 8 (~2.4s): the server unbury rescues every 0.5s, but a
+      // tier-skipped remote's wire can still be holding pre-rescue
+      // truth for another ~1.5s — 3 samples was inside that lag.
+      if (this._buriedStreak >= 8) {
+        glitch('remote-buried', { id: h.playerId, depth: Number(depth.toFixed(1)), lift: Number(lift.toFixed(1)), fieldD: Number((h.terrain!.getHeight(w.x, w.z) - wFeet).toFixed(1)), wireMs: Math.round(Date.now() - h.lastUpdateTime) });
+      }
+    } else {this._buriedStreak = 0;}
+  }
+
   tickModel(dt: number): void {
     const {h} = this;
-    if (!h.loaded) {return;}
+    if (!h.loaded || h.staleHidden) {return;}
     // Rendered-feet lift vs the drawn terrain chord (wire/sim truth
     // unchanged — aim, hits and the blob shadow stay on position). The
     // lift self-heals the legit under-field wire dips; a remote STILL
@@ -112,31 +179,10 @@ export class RemoteAnim {
       this._buriedAcc += dt;
       if (this._buriedAcc >= 0.3) {
         this._buriedAcc = 0;
-        const depth = h.terrain.getRenderedHeight(h.position.x, h.position.z) - (h.feetY + lift);
-        // fieldD separates the two buried classes: wire under the SMOOTH
-        // field too = the server's sim really sank (unbury-class bug);
-        // wire fine on field but under the chord = the drawn mesh bridges
-        // the gully at this LOD and the lift cap is the only cover.
-        // Persistence gate: the server unbury rescues sim-owned bodies on
-        // a 0.5s cadence and the converge window runs ~0.35s, so a dip
-        // needs ~three samples (~0.9s) to outlive every legitimate rescue
-        // — shorter streaks count the server's own heal window as a bug.
-        // `sim` names whether the body was mid dead-reckoning/converge:
-        // those paths deliberately skip the terrain floor while chasing
-        // wire truth, so a buried converge is expected-transient, while a
-        // buried steady-state sample is the unbury-class anomaly.
-        if (depth > 0.4) {
-          this._buriedStreak += 1;
-          // Buried mid dead-reckoning/converge is the ghost's own
-          // extrapolation sinking (server never logged an unbury for
-          // these — wire truth was above ground all along). Only a
-          // steady-state burial is the anomaly the alarm exists for.
-          if (this._buriedStreak >= 3 && !h.isSimulating) {
-            glitch('remote-buried', { id: h.playerId, depth: Number(depth.toFixed(1)), lift: Number(lift.toFixed(1)), fieldD: Number((h.terrain.getHeight(h.position.x, h.position.z) - h.feetY).toFixed(1)) });
-          }
-        } else {this._buriedStreak = 0;}
+        this.tickBuried(lift);
       }
     }
+    h.renderLift = lift;
     h.model.setPosition(h.position.x, h.feetY + lift, h.position.z);
     h.model.setRotation(h.rotation.yaw, h.rotation.pitch, h.rotation.roll);
     // dt=0 (paused/first frame) would blow speed to Infinity → 'ski' flicker
@@ -154,27 +200,7 @@ export class RemoteAnim {
     else if (this._airborne) { h.model.landPulse(-this._fallV); this._fallV = 0; }
     this._airborne = airborne;
     this.tickAirTrail(dt, airborne, speed);
-    // A fired shot outranks the flinch — the shoot oneshot is itself an
-    // aimed pose, so a bot shooting mid-hit snaps its gun back to aim
-    // instead of flailing through the flinch with the weapon down.
-    if (this.throwT > 0) {
-      this.throwT -= dt;
-      // A belt/deploy swing outranks the armed pose — the arm is
-      // committed to the throw, not the aim.
-      if (this.throwT > 0) {h.model.setAnimationState('throw');}
-    } else if (this.shootT > 0) {
-      // Re-arm while already 'shoot' (auto fire) means a new shot —
-      // force replays the clip from its aimed frame; otherwise the
-      // oneshot plays once and every following pull shows nothing.
-      if (this.shootT > this._lastShootT) {h.model.forceAnimationState('shoot');}
-      this.shootT -= dt;
-      if (this.shootT > 0) {h.model.setAnimationState('shoot');}
-    } else if (this.hitT > 0) {
-      this.hitT -= dt;
-      if (this.hitT > 0) {h.model.setAnimationState('hit');}
-    } else {
-      this.tickAnimState(dt, speed, airborne);
-    }
+    if (!this.pickOneshot(dt)) {this.tickAnimState(dt, speed, airborne);}
     this._lastShootT = this.shootT;
     h.tickGhost(dt);
     h.tickAuras(dt);

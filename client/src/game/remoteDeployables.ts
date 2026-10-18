@@ -579,6 +579,10 @@ export class RemoteDeployables {
     // dedupes instead of landing raw. DEPLOY_ITEMS.mine is the envelope.
     const d = DEPLOY_ITEMS.mine;
     this.deps.lazyCombat?.()?.predictLocalShove?.(v, d.blastRadius ?? 6, d.knockback ?? 12, 'push');
+    // Same predicted shove the projectile path pays prey sims — the
+    // authority knocks balls/nuggets on the blast tick, so without this
+    // they flew ballistic until the next segment re-anchored them.
+    this.deps.lazyCombat?.()?.applyForceToPrey?.(v, d.blastRadius ?? 6, d.knockback ?? 12, 'push');
   }
 
   update(dt: number): void {

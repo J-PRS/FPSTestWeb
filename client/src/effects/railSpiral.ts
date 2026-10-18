@@ -21,9 +21,6 @@ const STEP = 0.7;         // meters between samples (~11 points per turn)
 const WIDTH = 0.14;
 const LIFE = 0.35;
 const TWO_PI = Math.PI * 2;
-// Ring buffer is 48 samples — a step this small means the coil covers
-// ~34 m of tail behind the shell regardless of speed.
-const MAX_DIST = 60;      // beyond this it's a missed jump-cut, not travel
 
 const _dir = new THREE.Vector3();
 const _right = new THREE.Vector3();
@@ -68,11 +65,23 @@ export class RailSpiral implements DriveRibbon {
     _right.crossVectors(_dir, Math.abs(_dir.y) < 0.95 ? _UP : _FWD).normalize();
     _upAxis.crossVectors(_right, _dir);
     const dist = Number.isFinite(this.last.x) ? this.last.distanceTo(pos) : 0;
-    // Jumps are normally cut by the driver's clear() first; a surviving
-    // giant step means a missed cut — resync, never paint a coil chord.
-    if (dist <= 0 || dist > MAX_DIST) { this.last.copy(pos); return; }
+    // A hop past ~2 turns can't coil-resolve — at low fps a fast shell
+    // legitimately travels tens of meters per frame. Clear the ring so
+    // the next sample starts fresh; painting a chord across the gap just
+    // trips RibbonTrail's own jumpcut warn (the console flood).
+    if (dist <= 0 || dist > 2 * WAVELENGTH) {
+      if (dist > 0) { this.ribbon.clear(); }
+      this.last.copy(pos);
+      return;
+    }
     this.traveled += dist;
-    while (this.last.distanceToSquared(pos) >= STEP * STEP) {
+    // Project the gap onto the flight dir: a reversed/bounced shell would
+    // otherwise walk `last` AWAY from pos forever — the runaway loop that
+    // flooded the console with jumpcuts (each overdrawn ring-buffer
+    // sample reads 40-60m behind the marching head).
+    let remaining = _pt.copy(pos).sub(this.last).dot(_dir);
+    while (remaining >= STEP) {
+      remaining -= STEP;
       this.last.addScaledVector(_dir, STEP);
       this.phase += (STEP / WAVELENGTH) * TWO_PI;
       // Radius ramp: seconds of flight = meters / mps, so the coil is a

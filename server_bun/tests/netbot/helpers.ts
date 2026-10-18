@@ -20,15 +20,23 @@ export function bootServer() {
     port: 0,
     websocket: {
       data: {} as WebSocketData,
-      open(ws) { ws.data.rtcs ? rtc.onOpen(ws) : gs.onOpen(ws); },
+      open(ws) { (ws.data.rtcs ? rtc : gs).onOpen(ws); },
       message(ws, m) { (ws.data.rtcs ? rtc : gs).onMessage(ws, m as string | ArrayBuffer); },
-      close(ws) { ws.data.rtcs ? rtc.onClose(ws) : gs.onClose(ws); },
-      drain(ws) { if (!ws.data.rtcs) gs.onDrain(ws); },
+      close(ws) { (ws.data.rtcs ? rtc : gs).onClose(ws); },
+      drain(ws) { if (!ws.data.rtcs) {gs.onDrain(ws);} },
     },
     fetch(req, srv) {
       const url = new URL(req.url);
+      // Netbots fetch the room's field the way the browser does —
+      // without this every bot falls back to heightmap.bin regardless
+      // of the room's actual map, and mirror-vs-shadow sims diverge
+      // tens of meters at every terrain contact.
+      if (url.pathname.startsWith('/maps/')) {
+        const f = Bun.file(new URL(`../../../maps/${decodeURIComponent(url.pathname.slice(6))}`, import.meta.url));
+        return f.exists().then((ok) => (ok ? new Response(f) : new Response('nf', { status: 404 })));
+      }
       if (url.pathname === '/ws' || url.pathname === '/rtcs') {
-        if (srv.upgrade(req, { data: { playerId: '', connectedAt: Date.now(), rtcs: url.pathname === '/rtcs' } })) return undefined;
+        if (srv.upgrade(req, { data: { playerId: '', connectedAt: Date.now(), rtcs: url.pathname === '/rtcs' } })) {return undefined;}
         return new Response('upgrade failed', { status: 400 });
       }
       return new Response('nf', { status: 404 });
@@ -48,7 +56,7 @@ export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export const until = async (cond: () => boolean, maxMs: number): Promise<boolean> => {
   const deadline = Date.now() + maxMs;
   while (Date.now() < deadline) {
-    if (cond()) return true;
+    if (cond()) {return true;}
     await sleep(250);
   }
   return cond();
@@ -72,7 +80,7 @@ export const untilProgress = async (
   let lastProgress = progress();
   let extendUntil = 0;
   while (Date.now() < Math.max(deadline, extendUntil) && Date.now() < hardCap) {
-    if (cond()) return true;
+    if (cond()) {return true;}
     const p = progress();
     if (p > lastProgress) {
       lastProgress = p;
@@ -120,7 +128,7 @@ export function mkNetbots() {
       await nc.connect();
       await sleep(60);
     }
-    for (const b of bots) b.bot.start();
+    for (const b of bots) {b.bot.start();}
   };
 
   const rejectsOf = () => bots.map((b) => `${b.nc.id}: ${[...b.nc.tel.rejects.entries()].map(([r, n]) => `${r} x${n}`).join(', ') || 'none'}`).join(' | ');

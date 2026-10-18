@@ -140,6 +140,14 @@ export class PoseControl {
     'rigass', 'rigspine1', 'rigspine2', 'rigspine3', 'rigneck', 'righead',
   ]);
   private steadyBones: { bone: THREE.Object3D; bind: THREE.Quaternion }[] = [];
+  /** Aim-pin rigs (mannequin): even with arm/torso quat tracks yielded to
+   *  the aim layer, ground loco still sways the upper body enough to drag
+   *  the gripped weapon toward center. Pin the masked bones to their last
+   *  non-loco pose while walk/run plays — same hold as idle/airborne —
+   *  while legs and hip position bob keep animating underneath. */
+  lockLocoTorso = false;
+  private locoBones: { bone: THREE.Object3D; last: THREE.Quaternion; cached: boolean }[] = [];
+  private locoW = 0;
   // 0→1 ramp while recently fired — drives the spine lock.
   private armedT = 0;
   private armed = 0;
@@ -202,6 +210,9 @@ export class PoseControl {
     }
     if (PoseControl.STEADY_BONES.has(nb)) {
       this.steadyBones.push({ bone: child, bind: child.quaternion.clone() });
+    }
+    if (AIM_BONE_MASK.has(nb) || AIM_TORSO_BONES.has(nb)) {
+      this.locoBones.push({ bone: child, last: new THREE.Quaternion(), cached: false });
     }
   }
 
@@ -297,6 +308,19 @@ export class PoseControl {
         hb.last.identity().slerp(hb.off, this.holdW);
         hb.bone.quaternion.multiply(hb.last);
       }}
+    }
+    // Ground-loco torso pin — post-mixer so the cache captures the fully
+    // layered pose (aim layer included), and the restore lands on top of
+    // whatever the loco clip left in the masked bones. Runs before the
+    // procedural pitch pass so aim still applies on top either way.
+    const loco = this.lockLocoTorso && (state === 'walk' || state === 'run');
+    this.locoW = Math.min(1, Math.max(0, this.locoW + (loco ? 6 : -6) * dt));
+    if (this.locoW > 0 || !loco) {
+      for (const lb of this.locoBones) {
+        if (!lb.cached) { lb.last.copy(lb.bone.quaternion); lb.cached = true; continue; }
+        if (this.locoW > 0) { lb.bone.quaternion.slerp(lb.last, this.locoW); }
+        else { lb.last.copy(lb.bone.quaternion); }
+      }
     }
     if (procPitch) {for (const ab of this.aimBones) {
       if (root) {

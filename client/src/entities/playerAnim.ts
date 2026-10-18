@@ -96,6 +96,14 @@ export class PlayerAnim {
     // bone scales ~1): only bit-rot fails them, and a poisoned track is
     // dropped whole rather than interpolated into the corruption.
     clip.tracks = clip.tracks.filter((t): boolean => {
+      // Non-monotonic/NaN key TIMES are poison too — the interpolant
+      // binary-searches them, lands off the end, and cubic-extrapolates
+      // into km-scale bone fliers (class_heavy: 154 such channels in
+      // Shoot_SingleShot_AR). Can't re-sort without re-sorting values.
+      const ts = t.times;
+      for (let i = 0; i < ts.length; i += 1) {
+        if (!Number.isFinite(ts[i]) || (i > 0 && ts[i] < ts[i - 1])) {return false;}
+      }
       let cap = 1e4;
 if (t.name.endsWith('.quaternion')) {cap = 2;}
 else if (t.name.endsWith('.scale')) {cap = 1e3;}

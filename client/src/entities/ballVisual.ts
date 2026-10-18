@@ -100,9 +100,14 @@ export function tickBallTrails(b: Ball, dt: number, viewPos: THREE.Vector3): voi
         // offM alone can't tell a sim-clock lag (correction ≈ speed×skew,
         // periodic at segment cadence) from an integrator mismatch
         // (bounce/field resolving differently — irregular). skew names it.
-        // First-seg fold is the join/roster heal — a fresh replica
-        // converging onto mid-flight truth, not a correction.
-        if ((b.netS.segsSeen ?? 0) > 1) {
+        // Early folds are the join/roster heal — the seed plus its first
+        // stamped corrections are a fresh replica converging onto
+        // mid-flight truth, not a correction the predictor caused.
+        // foldExplained = the fold was a stamp-behind-cursor rewind or a
+        // burst-drain catch-up (gap inside the cells-stepped budget) —
+        // designed folding, not integrator divergence. Fold still
+        // happens; the warn doesn't.
+        if ((b.netS.segsSeen ?? 0) > 3 && !b.netS.foldExplained) {
           const skew = b.netS.lastSimNow >= 0 ? Math.round((b.netS.simT - b.netS.lastSimNow) * 1000) : 0;
           glitch('render-blend', { netId: b.netId ?? -1, offM: Math.round(Math.sqrt(offSq)), skewMs: skew });
         }

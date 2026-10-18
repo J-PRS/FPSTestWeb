@@ -8,6 +8,7 @@ import type { PickupKind } from '../../../../shared/pickups.js';
 import { BELT_MAX } from '../../../../shared/weapons.js';
 import { pickupBurst, PICKUP_ACCENT, pickupParts } from '../../entities/PickupModel.js';
 import { Nugget } from '../../entities/Nugget.js';
+import { tokenTier } from '../../../../shared/pickups.js';
 import * as THREE from 'three';
 import * as sfxPlayer from '../../core/sfx/player.js';
 
@@ -22,15 +23,15 @@ export function wirePickups(ctx: NetCtx): void {
   // `nuggets` array so blastForce scatters them identically and
   // updateNuggets ticks/disposes them; the server only owns spawn,
   // collect edges, and rest-spot truth.
-  const pickupMeshes = new Map<number, { nugget: Nugget; kind: PickupKind }>();
+  const pickupMeshes = new Map<number, { nugget: Nugget; kind: PickupKind; val: number }>();
   // Shared view for the §4.7 pickup fidelity hash — stateDebug reads the
   // same map; kind is all it needs (id is the key).
   deps.world.netPickups = pickupMeshes as Map<number, { kind: PickupKind }>;
-  const addPickup = (id: number, pos: { x: number; y: number; z: number }, kind: PickupKind = 'gem'): void => {
+  const addPickup = (id: number, pos: { x: number; y: number; z: number }, kind: PickupKind = 'gem', val = 1): void => {
     if (!Number.isFinite(pos.x + pos.y + pos.z)) {deps.logger.warn(`pickup #${id} dropped: non-finite position`); return;}
     deps.lazyDemoManager?.()?.recordPickupSpawned(id, kind, pos);
     const live = pickupMeshes.get(id);
-    if (live && live.kind !== kind) {
+    if (live && (live.kind !== kind || live.val !== val)) {
       // kind is constructor-fixed (it chose the nugget's parts) — a
       // recycled id hosting a different kind can never patch its way to
       // truth and would desync the pickup hash lane forever.
@@ -43,16 +44,20 @@ export function wirePickups(ctx: NetCtx): void {
       live.nugget.serverRest(pos);
       return;
     }
+    // Token denominations carry their own tint/size — the tier IS the
+    // value read (white 1 < green 3 < blue 9 < purple 27).
+    const tier = kind === 'token' ? tokenTier(val) : null;
     const nugget = new Nugget(
       deps.lazyScene(),
       new THREE.Vector3(pos.x, pos.y, pos.z),
       _zeroVel,
-      PICKUP_ACCENT[kind],
+      tier?.color ?? PICKUP_ACCENT[kind],
       pickupParts(kind),
+      tier?.scale ?? 1,
     );
     nugget.serverOwned = true;
     deps.entities().nuggets.push(nugget);
-    pickupMeshes.set(id, { nugget, kind });
+    pickupMeshes.set(id, { nugget, kind, val });
   };
   // Re-export on ctx — gameState needs it for pickups lying down on join.
   ctx.addPickup = addPickup;
@@ -69,9 +74,9 @@ export function wirePickups(ctx: NetCtx): void {
     });
   };
 
-  networkManager.onPickupSpawn = (id, pos, kind): void => {
+  networkManager.onPickupSpawn = (id, pos, kind, val): void => {
     if (deps.world.playbackMode) {return;} // live match gems don't belong in the replay
-    addPickup(id, pos, kind ?? 'gem');
+    addPickup(id, pos, kind ?? 'gem', val ?? 1);
   };
   networkManager.onPickupGone = (id, by): void => {
     if (deps.world.playbackMode) {return;}
@@ -83,9 +88,9 @@ export function wirePickups(ctx: NetCtx): void {
       pickupMeshes.delete(id);
     }
     if (by === nm().getLocalPlayerId()) {
-      // Nuggets are the belt economy's income — gem or tag, one charge
-      // back, capped at the spawn stock. Server owns the truth count.
-      if (e?.kind === 'gem' || e?.kind === 'tag') {
+      // Nuggets are the belt economy's income — gem, tag or token, one
+      // charge back, capped at the spawn stock. Server owns the truth.
+      if (e?.kind === 'gem' || e?.kind === 'tag' || e?.kind === 'token') {
         const p = deps.lazyPlayer();
         p.beltCharges = Math.min(BELT_MAX, p.beltCharges + 1);
       }
@@ -100,6 +105,14 @@ export function wirePickups(ctx: NetCtx): void {
         p.heal(0.2); // predicted — the server's own heal echoes on tickUpdate
         p.grantJetBoost();
         chat.add(null, 'nugget banked +1');
+      } else if (e?.kind === 'token') {
+        // Held score — the playerHeld echo owns the count; the grab still
+        // pays the gem's feel-good rewards.
+        sfxPlayer.powerup('gem');
+        const p = deps.lazyPlayer();
+        p.heal(0.2);
+        p.grantJetBoost();
+        chat.add(null, `token held +${e.val}`);
       } else if (e) {
         sfxPlayer.powerup(e.kind);
       }

@@ -31,7 +31,7 @@ export const JET_DRAIN: number = ENERGY.jetDrain;
 export const JET_CHARGE: number = ENERGY.jetCharge;
 
 // Weapon constants
-export const BOLT_FIRE_RATE = 0.8; // bolt launcher fire rate (seconds)
+export const BOLT_FIRE_RATE = 1; // bolt launcher fire rate (seconds)
 export const DISC_RATE = 1; // Disc fire rate (seconds)
 export const CHAINGUN_RATE = 0.09; // Chaingun fire rate (seconds)
 export const LG_RATE = 0.05;       // Lightning gun tick — clean 20/s for the stepped ramp
@@ -58,7 +58,7 @@ export const GL_RATE = 0.7; // Grenade launcher fire rate (seconds)
 // server sim and client config read the same numbers.
 
 // Flak cannon — UT style: a spray of bouncing shards, direct-hit only
-export const FLAK_RATE = 1.1; // Flak fire rate (seconds)
+export const FLAK_RATE = 1.2; // Flak fire rate (seconds)
 export const FLAK_SHARDS = 9; // Shards per shell
 export const FLAK_SPREAD = 0.1; // Cone half-angle (radians-ish slope factor)
 export const SG_PELLETS = 10;   // pellets per pump
@@ -73,7 +73,7 @@ export const SPRINKLER_RATE = 0.11; // ~9/s stream — saturation over precision
 export const SPRINKLER_SPREAD = 0.05; // per-shot cone jitter (dir-offset units, flak-scale)
 export const RAILGUN_RATE = 1.5; // Quake railgun cadence
 export const SHOTGUN_RATE = 0.7; // pump cadence — punchy per shot, not spam
-export const CANNON_RATE = 1.25; // must match WEAPON_FIRE_INTERVAL_S[Cannon] — server cadence law
+export const CANNON_RATE = 0.7; // must match WEAPON_FIRE_INTERVAL_S[Cannon] — server cadence law
 export const BOMBARD_RATE = 1.6; // siege slug — one 160dmg ball per pull, deliberate cadence
 export const RKT_RATE = 2.5; // RPG cadence — slower than mortar, one missile IS the event
 // Hold-out sidearms (G/T/B) — pulled while the key is held, holstered on release

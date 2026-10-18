@@ -290,6 +290,8 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
     spawnFields: [
       { name: 'pos', wire: 'vec3', channel: 'sim' },
       { name: 'kind', wire: 'str', channel: 'edge' },
+      // Token denomination (1/3/9/27); 1 for every other kind.
+      { name: 'val', wire: 'num', channel: 'edge', absent: 1 },
     ],
     goneFields: [
       { name: 'by', wire: 'str', channel: 'edge' },
@@ -298,6 +300,7 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
     rosterFields: [
       { name: 'pos', wire: 'vec3', channel: 'sim' },
       { name: 'kind', wire: 'str', channel: 'edge', absent: null },
+      { name: 'val', wire: 'num', channel: 'edge', absent: 1 },
     ],
   },
   projectile: {
@@ -384,6 +387,10 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       teamUpdate: [
         { name: 'team', wire: 'str', channel: 'edge' },
       ],
+      // Headhunt: carrier's new held-token total after a grab/drop.
+      playerHeld: [
+        { name: 'n', wire: 'num', channel: 'edge' },
+      ],
       knockback: [
         { name: 'position', wire: 'vec3', channel: 'sim' },
         { name: 'force', wire: 'num', channel: 'sim' },
@@ -459,6 +466,7 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'isDead', wire: 'bool', channel: 'edge' },
       { name: 'health', wire: 'num', channel: 'sim' },
       { name: 'status', wire: 'num', channel: 'edge' },
+      { name: 'held', wire: 'num', channel: 'edge', absent: null },
       { name: 'team', wire: 'str', channel: 'edge', absent: null },
       { name: 'transport', wire: 'str', channel: 'edge', absent: null },
       { name: 'armorClass', wire: 'str', channel: 'edge' },

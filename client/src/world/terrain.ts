@@ -327,7 +327,10 @@ n += 1; sum += d; sumAbs += Math.abs(d);
    *  TERRAIN_PRESET
    *  define and rebuilds the program; a preset-pinned program is small,
    *  so the recompile is fast and happens once per map apply. */
+  /** Active palette id — ground FX (ski dust) tint themselves to match. */
+  preset = 1;
   setPreset(p: number): void {
+    this.preset = p;
     for (const level of this.levels) {
       const m = level.material;
       if (m.defines.TERRAIN_PRESET !== p) {

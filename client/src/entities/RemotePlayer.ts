@@ -12,6 +12,7 @@ import { resetCorpse, launchCorpse, stepCorpse, type CorpseState } from './remot
 import { WeaponType, WEAPON_FIRE_INTERVAL_S } from '../../../shared/weapons.js';
 import { RemoteAuras } from './remoteAuras.js';
 import { RemoteAnim } from './remoteAnim.js';
+import { HeldCrown } from './heldCrown.js';
 import { hideRemote, showRemote, setStaleVis, setCloakVis, setCloakGhost, shootReveal, tickGhostF } from './remoteVis.js';
 import { getShadows } from './swarms.js';
 
@@ -43,6 +44,11 @@ export class RemotePlayer {
   previousPosition: THREE.Vector3; // public — anim drive derives speed from it
   _loaded = false;
   private _isDead = false;
+  /** Headhunt hoard crown — the decomposed token pile orbiting the head,
+   *  lazy-built on first nonzero held. Survives model rebuilds via
+   *  finishModelLoad reattach. */
+  private crown: HeldCrown | null = null;
+  private crownHeld = 0;
   gizmo: RemoteGizmo | null = null;
   scene: THREE.Scene; // public — RemoteAuras builds bubbles in it
   // Shield bubble + status auras (mend/regen/dd/charge) — the lazy-glow
@@ -61,6 +67,9 @@ export class RemotePlayer {
 
   // Public getters for main.ts access (removes need for (as any) casts)
   get lastUpdateTime(): number { return this.interp.lastUpdate; }
+  /** Last raw wire position — diagnostics only (render code reads the
+   *  blended `position`). */
+  get wirePosition(): THREE.Vector3 { return this.interp.wirePosition; }
   // Alias for the Forceable interface (Player/Ball use `pos`, we use `position`)
   get pos(): THREE.Vector3 { return this.position; }
   get isDead(): boolean { return this._isDead; }
@@ -130,6 +139,7 @@ export class RemotePlayer {
       }
       if (this.cloakGhost) {setCloakGhost(this, true);}
       if (this._isDead) {this._model.setScale(this.corpse.scale);}
+      this.applyCrown();
   }
 
   teleportTo(pos: THREE.Vector3): void {
@@ -196,6 +206,10 @@ export class RemotePlayer {
 
   /** XZ distance² to the camera — gates the remote anim-LOD tiers below. */
   camDistSq = 0; // public — anim LOD tiers off it
+  /** Render-only ground clearance the anim layer lifted this body by
+   *  (slope footprint, wire dips). The HUD marker anchors off it or it
+   *  sinks into the body whenever the lift is live. */
+  renderLift = 0;
   /** Instanced blob-shadow pool handles — remotes ride the same pass the
    *  self blob and creatures do, so a grounded remote reads grounded even
    *  when the shadow-map pass is off (auto-quality, potato seed). */
@@ -230,11 +244,37 @@ export class RemotePlayer {
     }
   }
 
+  /** Headhunt held-token crown — set every indicator tick; the ring
+   *  rebuilds only on value change. Death strips the hoard wire-side so
+   *  held=0 hides it without a death hook. */
+  setHeld(held: number): void {
+    if (held === this.crownHeld) {return;}
+    this.crownHeld = held;
+    this.applyCrown();
+  }
+
+  private applyCrown(): void {
+    if (this.crownHeld <= 0 || this._isDead) {
+      this.crown?.set(0);
+      return;
+    }
+    if (!this.crown) {this.crown = new HeldCrown(this.scene);}
+    this.crown.set(this.crownHeld);
+  }
+
   private _blobPos = new THREE.Vector3();
   private tickAlive(dt: number): void {
     this.interp.step(dt, this.localDriven);
 
     this.updateAliveModel(dt);
+
+    // Crown follows the RENDERED model root (slope-lift included) but is
+    // scene-parented — a model child would inherit body roll and lean
+    // the beam off-vertical.
+    if (this.crown) {
+      this.crown.follow(this._model.model ? this._model.model.position : this.position, classCapsule(this.armorClass).height);
+      this.crown.update(dt);
+    }
 
     this.gizmo?.follow(this.position);
 
@@ -276,6 +316,8 @@ export class RemotePlayer {
 
   playDeath(explosionPos?: THREE.Vector3, explosionForce?: number): void {
     this._isDead = true;
+    this.crownHeld = 0; // the corpse spills its hoard — crown dies with it
+    this.crown?.set(0);
     this.anim.hitT = 0;
     // Alive-path visual state (jet/strafe lean, reversed walk) is dead
     // code under tickDead — leave it set and the corpse keeps the lean.
@@ -434,6 +476,8 @@ export class RemotePlayer {
     getShadows()?.free(this);
     this.auras.dispose();
     this.anim.dispose();
+    this.crown?.dispose();
+    this.crown = null;
     this._model.dispose();
     if (this.gizmo) {
       this.gizmo.dispose();

@@ -9,6 +9,8 @@ import type { Room } from './Room.ts';
 import { encodeTickPlayerV4, encodeTickFrame, WIRE_TICK_V4, tickEncodeScratch, tickFrameScratch, v4Last, type TickEncodeScratch } from '../../shared/wire.ts';
 import { STATUS } from '../../shared/status.ts';
 import { lgChargeAt } from '../../shared/combat.ts';
+import { heldBuffRates, POWERUP } from '../../shared/pickups.ts';
+import { BELT_MAX } from '../../shared/weapons.ts';
 import { logger } from './logger.ts';
 import type { PlayerState } from './types.ts';
 import { healPerTick, recordSuppressed, type TickRecord } from './tickHelpers.ts';
@@ -270,14 +272,30 @@ this.metrics.recordsIdleReaped += 1;
    *  tickUpdate — so a low-rate yourHealth echo keeps their hp from
    *  drifting until the next discrete event. */
   private tickServerHeals(room: Room, playerId: string, p: PlayerState, now: number, simT: number): void {
-    const heal = healPerTick(p, simT); // regenUntil is sim domain
-    if (heal <= 0) {return;}
+    let heal = healPerTick(p, simT); // regenUntil is sim domain
+    // Headhunt hoard-drip: held tokens trickle hp/armor/belt, but only
+    // 8s+ after the last hit — HELD_BUFF.graceMs keeps it sustain, not
+    // tanking. Belt accumulates fractionally until a charge lands.
+    const hb = heldBuffRates(p.heldTokens, simT - p.lastDamageAt);
+    heal += hb.hp / CONFIG.tickRate;
+    if (hb.armor > 0) {p.armor = Math.min(POWERUP.maxArmor, p.armor + hb.armor / CONFIG.tickRate);}
+    if (hb.belt > 0 && p.beltCharges < BELT_MAX) {
+      p.beltAcc += hb.belt / CONFIG.tickRate;
+      if (p.beltAcc >= 1) {
+        const n = Math.min(BELT_MAX - p.beltCharges, Math.floor(p.beltAcc));
+        p.beltCharges += n;
+        p.beltAcc -= n;
+      }
+    }
+    if (heal <= 0 && hb.armor <= 0) {return;}
     healPool(p, heal);
     // Capping out always echoes — the channel ends here, so the final
     // converged hp would otherwise wait on the next discrete event.
+    // Armor rides free: remote armor already ships via sim records, the
+    // carrier is the one replica that can't see itself.
     if (now - p.healthEchoAt >= 500 || p.health >= p.maxHealth) {
       p.healthEchoAt = wallMs(now);
-      room.connections.sendToPlayer(playerId, { type: 'yourHealth', health: p.health });
+      room.connections.sendToPlayer(playerId, { type: 'yourHealth', health: p.health, armor: p.armor });
     }
   }
 

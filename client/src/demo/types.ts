@@ -204,7 +204,7 @@ export const PICKUP_ID_FLAG = 0xE0_00;
 
 // Ordered to match shared/pickups.ts — keep stable, ids land in the file.
 
-export const DEMO_PICKUP_KINDS = ['gem', 'tag', 'heal', 'armor', 'regen', 'dd'] as const;
+export const DEMO_PICKUP_KINDS = ['gem', 'tag', 'token', 'heal', 'armor', 'regen', 'dd'] as const;
 
 export function demoPickupKindIndex(kind: string): number {
 

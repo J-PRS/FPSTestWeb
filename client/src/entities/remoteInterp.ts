@@ -68,6 +68,10 @@ export class RemoteInterp {
 
   get simulating(): boolean { return this._simulating; }
   get lastUpdate(): number { return this.lastUpdateTime; }
+  /** Last raw server position — wire truth, untouched by blend/DR.
+   *  Diagnostics that mean "the server sank this body" must read this,
+   *  not the blended host position. */
+  get wirePosition(): THREE.Vector3 { return this.lastServerPosition; }
   /** The render delay this remote's buffer settled on — reported via
    *  clientStats so lag-comp validates at the ghost the shooter saw,
    *  not a fixed 200ms constant that understates jittered links. */

@@ -677,7 +677,7 @@ export function resolveMapSpec(raw: unknown): MapSpec {
 export function specModes(spec: MapSpec | undefined): string[] {
   if (spec?.modes) {return spec.modes;}
   if (!spec?.mode) {return [];}
-  const legal = ['ctf', 'tdm', 'nuggets', 'dm', 'rabbit', 'duel', 'flagrun', 'conquest'];
+  const legal = ['ctf', 'tdm', 'nuggets', 'dm', 'rabbit', 'duel', 'flagrun', 'conquest', 'headhunt'];
   return [...new Set([spec.mode, ...legal])];
 }
 

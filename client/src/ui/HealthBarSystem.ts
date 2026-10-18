@@ -236,8 +236,10 @@ export class HealthBarSystem {
       // Wire class decides the pool — class bonuses stay invisible until
       // the roster carries it, which still beats a flat 100 for heavies.
       bar.maxHealth = this.maxFor(playerId, (rp as { armorClass?: string } | undefined)?.armorClass);
-      // pos is EYE height — a small margin above it is already over the head
-      const targetPos = _targetPos.set(pos.x, pos.y + 0.5, pos.z);
+      // pos is EYE height — a small margin above it is already over the head.
+      // renderLift rides along: the slope lift raises the mesh, not the
+      // logical position, so anchoring raw eye sinks the bar mid-body.
+      const targetPos = _targetPos.set(pos.x, pos.y + ((rp as { renderLift?: number } | undefined)?.renderLift ?? 0) + 0.5, pos.z);
       this.updateBar(bar, dt, targetPos, cameraPos, cameraDir, (): void => this.removeBar(playerId));
     }
   }

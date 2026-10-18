@@ -39,6 +39,7 @@ import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
 import { WORLD_MODEL, verbPayload, eventPayload } from '../../shared/worldModel.ts';
+import { decomposeTokens } from '../../shared/pickups.ts';
 import { botRand, tauntRand } from '../../shared/botRand.ts';
 import { MatchClock, type MatchHost } from './roomMatch.ts';
 import { EventBus } from './roomEvents.ts';
@@ -609,7 +610,7 @@ export class Room {
       this.players.teamBases = { alpha: Object.assign({}, snapped.alpha), bravo: Object.assign({}, snapped.bravo) };
     }
     this.pickups = new RoomPickups(this);
-    this.pickups.onCollect = (pid, kind): void => {
+    this.pickups.onCollect = (pid, kind, val): void => {
       const p = this.players.getPlayer(pid);
       if (!p) {return;}
       if (kind === 'gem' || kind === 'tag') {
@@ -635,6 +636,18 @@ export class Room {
           // PTS column blank and hauling objective pays zero honor.
           this.scoring.awardPersonal(pid, 1);
         }
+        return;
+      }
+      if (kind === 'token') {
+        // Headhunt: the gem's feel-good rewards (heal, jet refill, belt
+        // income) but no bank — the token goes in your pocket and your
+        // team's live score grows by your holding it.
+        healPool(p, Math.min(25, Math.round(20 * perkMods(p.perk).healBoost)));
+        p.forceSendUntil = wallMs(wallNow() + FORCE_SEND_MS);
+        this.moveSim.grantEnergy(pid, ENERGY.max * 0.5 * perkMods(p.perk).energyMax);
+        p.beltCharges = Math.min(BELT_MAX, p.beltCharges + 1);
+        this.scoring.setHeld(p, p.heldTokens + val);
+        this.scoring.awardPersonal(pid, val);
         return;
       }
       this.scoring.applyPowerup(p, kind);
@@ -911,7 +924,22 @@ export class Room {
       health: this.health,
       envRange: (pid): number => {
         const p = this.players.getPlayer(pid);
-        return p ? this.ballSim.nearestBallDist(p.position.x, p.position.y, p.position.z) : Infinity;
+        if (!p) {return Infinity;}
+        // Crawlers count too — envDamage legitimately comes from bites,
+        // not just balls; a balls-only check warned on every true pounce.
+        let d = this.ballSim.nearestBallDist(p.position.x, p.position.y, p.position.z);
+        for (const c of this.creatureSim.crawlers.values()) {
+          if (c.dead) {continue;}
+          const dc = Math.hypot(c.x - p.position.x, c.y - p.position.y, c.z - p.position.z);
+          if (dc < d) {d = dc;}
+        }
+        // Mines/turrets count too — an untagged blastAtPlayer claim from a
+        // tripped mine has no creature near, only the hull it stood next to.
+        for (const dep of this.deployables.items.values()) {
+          const dd = Math.hypot(dep.pos.x - p.position.x, dep.pos.y - p.position.y, dep.pos.z - p.position.z);
+          if (dd < d) {d = dd;}
+        }
+        return d;
       },
       preyNear: (pos, shooterId): { ball: number; crawler: number; foe: number; } => {
         let crawler = Infinity;
@@ -958,6 +986,10 @@ export class Room {
         this.pickups?.clear();
         this.deployables.clearAll();
         this.players.resetStats();
+        // Fresh match means fresh pockets — held tokens don't carry over
+        // (syncHeld flushes the 0s so overhead counters don't go stale).
+        for (const p of this.players.getAllPlayers().values()) {p.heldTokens = 0;}
+        this.scoring.syncHeld();
       },
       reshuffleBots: (): void => {
         const bots = [...this.players.getAllPlayers().values()].filter((p): boolean | undefined => p.isBot);
@@ -984,7 +1016,7 @@ export class Room {
       // two paths from double-speaking the same bot.
       onEnded: (w): void => { this.bots.notice('gg', 'match'); this.bots.matchEnd(w); },
       // The opener half of the beat — gl-hf as the round goes live.
-      onStarted: (): void => this.bots.matchStart(),
+      onStarted: (): void => { this.bots.matchStart(); this.seedHeadhunt(); },
     };
   }
 
@@ -1005,6 +1037,22 @@ export class Room {
 
   endMatch(w: string): void { // public — ScoreHost calls it on a win
     this.matchClock.end(w);
+  }
+
+  /** Match-start token seeding — a field with zero tokens stays 0-0 to
+   *  the horn, so every spawn point gets a pair scattered near it. */
+  private seedHeadhunt(): void {
+    if (this.mode !== 'headhunt' || !this.pickups) {return;}
+    const spawns = this.players.spawnPoints ?? [];
+    for (const s of spawns) {
+      for (let i = 0; i < 2; i += 1) {
+        this.pickups.spawn({
+          x: s.x + (this.rng() - 0.5) * 12,
+          y: s.y,
+          z: s.z + (this.rng() - 0.5) * 12,
+        }, 'token');
+      }
+    }
   }
 
   /** Team point from a server-observed objective (flag cap, gem touch). */
@@ -1183,6 +1231,21 @@ excess -= 1;
     this.flagCarrierDied(playerId);
     this.deployables.clearOwner(playerId);
     this.projectiles.clearOwner(playerId);
+    // Headhunt: a carrier leaving scatters their held tokens where they
+    // stood — same rule as dying with them, minus the corpse bounty.
+    if (this.mode === 'headhunt') {
+      const leaver = this.players.getPlayer(playerId);
+      if (leaver && leaver.heldTokens > 0) {
+        for (const val of decomposeTokens(leaver.heldTokens)) {
+          this.pickups?.spawn({
+            x: leaver.position.x + (this.rng() - 0.5) * 3,
+            y: leaver.position.y,
+            z: leaver.position.z + (this.rng() - 0.5) * 3,
+          }, 'token', 0, val);
+        }
+        leaver.heldTokens = 0;
+      }
+    }
     this.players.removePlayer(playerId);
     this.scoring.dropPlayer(playerId);
     this.messages.onPlayerRemoved(playerId);
@@ -1242,5 +1305,7 @@ excess -= 1;
 counts[big] -= 1;
 counts[small] += 1;
     }
+    // A flipped carrier's tokens change sides — resync the live sums.
+    this.scoring.syncHeld();
   }
 }

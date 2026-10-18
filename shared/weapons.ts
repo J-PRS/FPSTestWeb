@@ -144,17 +144,17 @@ export function getWeaponStats(weaponType: number | undefined): WeaponStats {
  *  drawn weapon can't out-cadence a human with the same gun (a mortar
  *  brain at 0.45s cadence would otherwise out-shoot a player's 2.0s). */
 export const WEAPON_FIRE_INTERVAL_S: Partial<Record<WeaponType, number>> = {
-  [WeaponType.BoltLauncher]: 0.8,
+  [WeaponType.BoltLauncher]: 1,
   [WeaponType.Disc]: 1,
   [WeaponType.Chaingun]: 0.09,
   [WeaponType.Mortar]: 2,
   [WeaponType.GrenadeLauncher]: 0.5,
-  [WeaponType.Flak]: 1.1,
+  [WeaponType.Flak]: 1.2,
   [WeaponType.PlasmaCannon]: 0.28,
   [WeaponType.Railgun]: 1.5,
   [WeaponType.Lightning]: 0.05,
   [WeaponType.Shotgun]: 0.7,
-  [WeaponType.Cannon]: 1.25,
+  [WeaponType.Cannon]: 0.7,
   [WeaponType.RocketLauncher]: 2.5, // A/B'd 2.0: more volume but same kills — dodge-window is the constraint, not cadence
   [WeaponType.Pistol]: 0.22,
   [WeaponType.Revolver]: 0.6,

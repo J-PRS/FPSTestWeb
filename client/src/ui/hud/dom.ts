@@ -35,6 +35,7 @@ export interface HudDom {
   buffsRow: HTMLDivElement;
   scoreboard: HTMLDivElement;
   teamScore: HTMLDivElement; tsA: HTMLElement; tsB: HTMLElement;
+  heldCount: HTMLDivElement;
   classicScore: HTMLDivElement;
   matchStatus: HTMLDivElement; matchClock: HTMLElement; flagA: HTMLElement; flagB: HTMLElement;
   sbRows: HTMLElement;
@@ -88,6 +89,7 @@ export function createHudDom(): HudDom {
       <div id="ent-counts"></div>
       <div id="hud-timer">00:00</div>
       <div id="team-score"><span class="a">ALPHA <b id="ts-a">0</b></span><span class="sep">vs</span><span class="b"><b id="ts-b">0</b> BRAVO</span></div>
+      <div id="held-count"><b id="held-n">0</b></div>
       <div id="classic-score"><div id="cs-line">0 - 0</div><div id="cs-time">0.00</div></div>
       <div id="match-status"><span class="fchip a" id="flag-a">⚑</span><span class="clock" id="match-clock"></span><span class="fchip b" id="flag-b">⚑</span></div>
       <div id="killfeed"></div>
@@ -131,6 +133,7 @@ export function createHudDom(): HudDom {
     const scoreboard = el.querySelector('#scoreboard')! as HTMLDivElement;
     const sbRows = el.querySelector('#sb-rows')! as HTMLElement;
     const teamScore = el.querySelector('#team-score')! as HTMLDivElement;
+    const heldCount = el.querySelector('#held-count')! as HTMLDivElement;
     const tsA = el.querySelector('#ts-a')! as HTMLElement;
     const tsB = el.querySelector('#ts-b')! as HTMLElement;
     const classicScore = el.querySelector('#classic-score')! as HTMLDivElement;
@@ -151,6 +154,6 @@ export function createHudDom(): HudDom {
     fps, crosshair, sheepReadout, energyReadout, groundReadout, hitMarker, dmgVignette, dmgDir, dmgDirArc, ghostBar,
     playerList, ballCountEl, timerEl, weaponSlots, healthBar, energyBar,
     armor, armorBar, buffsRow,
-    scoreboard, sbRows, teamScore, tsA, tsB, classicScore,
+    scoreboard, sbRows, teamScore, tsA, tsB, heldCount, classicScore,
     matchStatus, matchClock, flagA, flagB, killFeed, connBanner };
 }

@@ -21,6 +21,8 @@ import { Ball, pickVariant, type Targetable } from '../entities/balls.js';
 import { targetDemoId } from '../demo/types.js';
 
 import { Nugget } from '../entities/Nugget.js';
+import { PICKUP_ACCENT, pickupParts } from '../entities/PickupModel.js';
+import { tokenTier, type PickupKind } from '../../../shared/pickups.js';
 
 import { BELT_MAX } from '../../../shared/weapons.js';
 
@@ -59,7 +61,7 @@ export interface EntitiesDeps extends GameContext {
 
   nuggetCollectors?: () => { id: string; pos: THREE.Vector3; alive: boolean; pickupScale?: number }[];
 
-  onNuggetCollect?: (collectorId: string) => void;
+  onNuggetCollect?: (collectorId: string, kind?: PickupKind, val?: number) => void;
 
   /** Deployables: combat resolves after entities is built — lazy getter. */
 
@@ -414,9 +416,15 @@ export function createEntities(deps: EntitiesDeps) {
 
   const nuggets: Nugget[] = [];
 
-  function spawnNuggetsAt(pos: THREE.Vector3, count: number, inheritVel: THREE.Vector3): void {
+  function spawnNuggetsAt(pos: THREE.Vector3, count: number, inheritVel: THREE.Vector3, kind: PickupKind = 'gem', val = 1): void {
 
-    for (let i = 0; i < count; i += 1) {nuggets.push(new Nugget(scene, pos, inheritVel));}
+    for (let i = 0; i < count; i += 1) {
+      const tier = kind === 'token' ? tokenTier(val) : null;
+      const n = new Nugget(scene, pos, inheritVel,
+        tier?.color ?? PICKUP_ACCENT[kind], pickupParts(kind), tier?.scale ?? 1);
+      n.kind = kind; n.val = val;
+      nuggets.push(n);
+    }
 
   // Assigned right after the kit — brains reference it lazily, so the
 
@@ -588,7 +596,7 @@ nuggetsCollected += 1;
 
         }
 
-        deps.onNuggetCollect?.(magnetId);
+        deps.onNuggetCollect?.(magnetId, n.kind, n.val);
 
         deps.lazyEffects().spawnImpact(n.pos, n.vel);
 

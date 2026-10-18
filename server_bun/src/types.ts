@@ -120,6 +120,12 @@ export interface PlayerState {
   // Belt/pack charges: BELT_MAX on spawn, −1 per belt toss, −2 per pack
   // deploy, +1 per nugget (gem/tag) touch — one pool, shared/weapons.ts.
   beltCharges: number;
+  // Headhunt held tokens — the mode's live score, dropped wholesale on
+  // death. Distinct from beltCharges: tokens are score, charges are ammo.
+  heldTokens: number;
+  /** Fractional belt-charge drip from HELD_BUFF — accumulates until a
+   *  whole charge lands. */
+  beltAcc: number;
   // Powerup state (creature drops): armor absorbs POWERUP.armorAbsorb of
   // incoming damage until depleted; regen/dd are expiry timestamps.
   armor: number;

@@ -51,6 +51,24 @@ for (let z = 0; z < N; z += 1) {
     if (rd < rimR) {
       const t = rd / rimR;
       bowl = 0.10 + (rimHeight - 0.10) * (t * t * (3 - 2 * t));
+      // Bowl-floor relief — ±7m of ridged dusting read as a pancake at
+      // 125m heightScale. Real dunes: domain-warped swells (~110m), sharp
+      // ridged crags (~70m) and small chop, masked to the interior —
+      // fades in past the katastand clearing and out at the wall, so the
+      // rim silhouette is untouched.
+      const inner = (1 - t) * smoothstep(18, 55, rd);
+      const wu = u + 0.15 * (fbm(u * 3 + 5.5, v * 3 + 4.1) - 0.5);
+      const wv = v + 0.15 * (fbm(u * 3 + 9.4, v * 3 + 6.6) - 0.5);
+      const mound = fbm(wu * 7 + 3.1, wv * 7 + 8.8) - 0.5;
+      const crag = ridged(wu * 11 + 4.7, wv * 11 + 7.9) / 1.6 - 0.5;
+      const chop = fbm(wu * 18 + 6.2, wv * 18 + 2.9) - 0.5;
+      bowl += inner * (0.20 * mound + 0.06 * crag + 0.035 * chop);
+      // Drainage gullies carved into the inner wall face — angular
+      // channels warped by fbm so they wiggle, shallow enough to ski.
+      const wall = smoothstep(0.55, 0.8, t) * (1 - smoothstep(0.92, 1.0, t));
+      const ang = Math.atan2(wrapSigned(wz), wrapSigned(wx));
+      const gully = Math.abs(Math.sin(ang * 7 + 3 * fbm(u * 4 + 2.2, v * 4 + 7.7)));
+      bowl -= wall * (1 - gully) * 0.05;
     } else {
       const t = Math.min(1, (rd - rimR) / 160);
       bowl = rimHeight + 0.50 * (t * t * (3 - 2 * t));

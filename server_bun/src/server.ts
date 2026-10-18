@@ -227,11 +227,28 @@ if (CONFIG.wtPort > 0) {
     const { createHash, X509Certificate } = await import('node:crypto');
     // Dev convenience: a checked-in certs/dev.{crt,key} pair means "WT on"
     // without env wiring — certs/ is dev-only self-signed anyway.
+    const usingDevCert = !CONFIG.wtCertPath;
     const certPath = CONFIG.wtCertPath || `${import.meta.dir}/../certs/dev.crt`;
     const keyPath = CONFIG.wtKeyPath || `${import.meta.dir}/../certs/dev.key`;
     if (!fileExists(certPath) || !fileExists(keyPath)) {
       logger.warn('WebTransport disabled — no cert/key (env or certs/dev.*)', {});
     } else {
+    // Chrome pins only certs that are valid AND ≤14-day-lived, so the dev
+    // pair is minted 13-day — and silently bricks the WT tier every two
+    // weeks when it lapses. Dev pair only: regen at <48h to expiry so an
+    // unchecked-in week never degrades the ladder to bare WS again.
+    if (usingDevCert) {
+      const validTo = new Date(new X509Certificate(rf(certPath, 'utf8')).validTo).getTime();
+      if (validTo - Date.now() < 48 * 3600 * 1000) {
+        const { spawnSync } = await import('node:child_process');
+        // EC + CA:FALSE are load-bearing — Chrome refuses
+        // serverCertificateHashes on RSA and CA certs; openssl req -x509
+        // defaults RSA + CA:TRUE, exactly the rejection we hit.
+        const r = spawnSync('openssl', ['req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:prime256v1', '-keyout', keyPath, '-out', certPath, '-days', '13', '-nodes', '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost,IP:127.0.0.1,IP:::1', '-addext', 'basicConstraints=critical,CA:FALSE'], { stdio: 'pipe' });
+        if (r.status === 0) {logger.info('WebTransport dev cert regenerated (was expiring <48h)', { validTo });}
+        else {logger.warn('WebTransport dev cert expiring but regen failed — WT tier will degrade', { validTo, stderr: String(r.stderr) });}
+      }
+    }
     const certPem = rf(certPath, 'utf8');
     // DER hash is what serverCertificateHashes expects — PEM is just the
     // base64 wrapper, so decode via X509Certificate to get the raw bytes.

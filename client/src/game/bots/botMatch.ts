@@ -1,4 +1,4 @@
-import { type MODES,TEAM_COLORS,TEAM_LABEL,CTF_PTS,CTF_DMG_PER_PTS,CTF_FLAG_ZONE_R,bank,type TeamId,type TeamScores,type ModeId} from '../../../../shared/teams.js';
+import { MODES,TEAM_COLORS,TEAM_LABEL,CTF_PTS,CTF_DMG_PER_PTS,CTF_FLAG_ZONE_R,bank,type TeamId,type TeamScores,type ModeId} from '../../../../shared/teams.js';
 import type { GameBot } from './botBrain.js';
 import type { CtfBridge } from './botCtf.js';
 import type { RabbitBridge } from './botRabbit.js';
@@ -31,12 +31,27 @@ export interface MatchHost {
   respawnBot(bot: GameBot): void;
   /** Jersey swap re-keys every id-keyed meter the host keeps. */
   rekeyBot(oldId: string, newId: string): void;
+  /** Headhunt held tokens — 'local' reads the player, bots their field. */
+  heldOf(id: string): number;
+  setHeld(id: string, n: number): void;
+  /** Match-clock origin for timer-resolved modes (headhunt resolves on
+   *  winAt-held or the horn, whichever comes first). */
+  matchStart: number;
 }
 
 export function winText(m: MatchHost, w: string): string {
   if (!m.spec.ffa) {return `${TEAM_LABEL[w as TeamId]} WINS — ${m.scores.alpha}:${m.scores.bravo}`;}
   const name = w === 'local' ? 'YOU' : w.replace('bot:', '');
   return `${name} WINS the ${m.spec.label.toLowerCase()} — ${m.ffaScores.get(w)} pts`;
+}
+
+/** Timer-resolved modes: at the horn the leader wins; a tie keeps
+ *  playing sudden-death until the live score separates. */
+export function clockWin(m: MatchHost): string | null {
+  if (m.spec !== MODES.headhunt) {return null;}
+  if (performance.now() - m.matchStart < m.spec.timeLimitS * 1000) {return null;}
+  if (m.scores.alpha === m.scores.bravo) {return null;}
+  return m.scores.alpha > m.scores.bravo ? 'alpha' : 'bravo';
 }
 
 export function checkWin(m: MatchHost): string | null {
@@ -54,6 +69,23 @@ export function pushScore(m: MatchHost): void {
   m.deps.lazyHud().setTeamScore?.(m.scores.alpha, m.scores.bravo);
 }
 
+/** Headhunt live score — recompute team totals from everyone's held
+ *  tokens and push the board. Call after any held write. */
+export function syncHeld(m: MatchHost): void {
+  let a = 0;
+  let b = 0;
+  for (const [id, team] of m.teamOf) {
+    const h = m.heldOf(id);
+    if (team === 'alpha') {a += h;}
+    else if (team === 'bravo') {b += h;}
+  }
+  if (m.scores.alpha !== a || m.scores.bravo !== b) {
+    m.scores.alpha = a;
+    m.scores.bravo = b;
+    pushScore(m);
+  }
+}
+
 
 
 /** Match over → wipe scores, flags home. Rounds are seamless: live
@@ -63,7 +95,10 @@ export function pushScore(m: MatchHost): void {
 export function resetMatch(m: MatchHost): void {
   m.over = null;
   m.scores.alpha = 0; m.scores.bravo = 0;
+  m.matchStart = performance.now();
   for (const k of m.ffaScores.keys()) {m.ffaScores.set(k, 0);}
+  // Fresh match means fresh pockets — held tokens don't carry over.
+  for (const id of m.teamOf.keys()) {m.setHeld(id, 0);}
   for (const bot of m.bots) {
     bot.carryingFlag = false;
     if (bot.isDead) {m.respawnBot(bot);}
@@ -123,14 +158,21 @@ export function creditKill(m: MatchHost, id: string, isCreature: boolean, victim
   m.deps.lazyHud().setTeamScore?.(me, lead);
 }
 
-/** A nugget was collected by 'local' or a bot id — bank it for the team. */
-export function collect(m: MatchHost, collectorId: string): void {
+/** A pickup was collected by 'local' or a bot id — tokens pocket into
+ *  held (the live score IS the sum), gems bank for the team. */
+export function collect(m: MatchHost, collectorId: string, kind?: string, val = 1): void {
   if (m.spec.ffa || m.over) {return;} // dm: nuggets heal, don't score
-  // Networked matches score through server-owned gems (RoomPickups
-  // touch) — the teamScore echo is the truth; this local board is the
-  // offline path's own scoreboard.
   const team = m.teamOf.get(collectorId) as TeamId | undefined;
-  if (!team || !m.spec.gems) {return;} // CTF gems heal but don't cap-score
+  if (!team) {return;}
+  if (kind === 'token') {
+    // Headhunt: no bank — the token goes in your pocket and your team's
+    // live score grows by your holding it.
+    m.setHeld(collectorId, m.heldOf(collectorId) + val);
+    awardPersonal(m, collectorId, val);
+    syncHeld(m);
+    return;
+  }
+  if (!m.spec.gems) {return;} // CTF gems heal but don't cap-score
   bank(m.scores, team);
   // Banker credit — mirrors Room.onCollect's awardPersonal so the
   // offline board's PTS column carries nuggets hauled, same as wire.

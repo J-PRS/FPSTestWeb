@@ -536,6 +536,7 @@ export class MessageHandler {
         // Remaining spawn shield — a joiner who lands mid-window has the
         // client predict blasts the server is still refusing to apply.
         protectedMs: Math.max(0, player.protectedUntil - simNow()),
+        held: player.heldTokens || undefined,
       },
     });
 

@@ -14,6 +14,11 @@ cd client && ./node_modules/.bin/tsc --noEmit    # client typecheck
 cd client && ./node_modules/.bin/vitest run      # client tests
 cd client && npx -y oxlint src                   # lint
 bun _tools/e2e/all.ts                            # headless E2E (locked-PC safe): smoke/duo/p2p/lobby/reconnect/perf
+# browser.ts GL backends: default SwiftShader (slow — GLB loads take
+# 60-90s+). E2E_GPU=1 = headless on real GPU (fast, still no window),
+# E2E_HEADED=1 = visible Chrome + GPU (unlocked PCs only). Also
+# launchClient's waitFor() gates on window.__test — pages that don't
+# set it (posedump.html) must poll window.__ready via waitForFunction.
 bun _tools/e2e/perf.ts --compare _tools/e2e/baseline.json   # perf regression vs baseline
 bash _tools/check.sh                             # DEFINITION OF DONE — run before handing back
 bash _tools/review.sh                            # dump diff + verifier prompt for a fresh-context review agent

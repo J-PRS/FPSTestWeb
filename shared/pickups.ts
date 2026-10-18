@@ -4,8 +4,10 @@
  * them, in any mode. One table owns both the wire `kind` strings and the
  * effect numbers so client colors and server tuning stay in lockstep.
  */
-export type PickupKind = 'gem' | 'tag' | 'heal' | 'armor' | 'regen' | 'dd';
-export type PowerupKind = Exclude<PickupKind, 'gem' | 'tag'>;
+export type PickupKind = 'gem' | 'tag' | 'token' | 'heal' | 'armor' | 'regen' | 'dd';
+// Tokens are held-score (headhunt), not a timed buff — they sit with
+// gems/tags on the "score pickup" side of the kind split.
+export type PowerupKind = Exclude<PickupKind, 'gem' | 'tag' | 'token'>;
 
 /** Blast-tumble physics for knocked pickups — RoomPickups runs this
  *  integrator and the client replica MUST match: the server publishes the
@@ -17,6 +19,60 @@ export const NUG_TUMBLE = {
   settle: 0.5,      // per-axis speed below which the tumble ends
   upPop: 0.4,       // up-kick as a fraction of the blast impulse
 } as const;
+
+/** Headhunt denominations — base-3 coins so a hoard scatters a few
+ *  readable objects instead of a confetti flood: a 40-token corpse is
+ *  27+9+3+1, four coins, not forty. Color/size tier IS the value read
+ *  at range — purple beams are jackpots. */
+export const TOKEN_DENOMS = [
+  { val: 27, color: 0xBB_66_FF, scale: 1.7 },  // purple
+  { val: 9,  color: 0x3A_7A_FF, scale: 1.4 },  // blue
+  { val: 3,  color: 0x44_FF_66, scale: 1.2 },  // green
+  { val: 1,  color: 0xE8_E8_E8, scale: 1 },  // neutral white
+] as const;
+
+/** Display tier for a token's wire value — snaps odd values (thrown-in
+ *  singles) to the largest denom they cover, never invents a tier. */
+export function tokenTier(val: number): (typeof TOKEN_DENOMS)[number] {
+  for (const d of TOKEN_DENOMS) {if (val >= d.val) {return d;}}
+  return TOKEN_DENOMS[TOKEN_DENOMS.length - 1];
+}
+
+/** Greedy base-3 split — always exact (the 1-coin is the unit) and
+ *  near-minimal coin count. */
+export function decomposeTokens(n: number): number[] {
+  const out: number[] = [];
+  for (const d of TOKEN_DENOMS) {
+    while (n >= d.val) { out.push(d.val); n -= d.val; }
+  }
+  return out;
+}
+
+/** Headhunt hoard-buffs — the walking jackpot pays for the target it
+ *  paints on itself. Tiers unlock at denomination thresholds and rates
+ *  scale with held count, but EVERY channel mutes for graceMs after the
+ *  carrier takes a hit — the buff is sustain, not tanking. */
+export const HELD_BUFF = {
+  graceMs: 8000,        // last damage inside this → no regen at all
+  hpAt: 3,               // green tier: held >= 3 → hp/s
+  armorAt: 9,            // blue tier:  held >= 9 → + armor/s
+  beltAt: 27,            // purple:    held >= 27 → + belt charges
+  hpPerSec: 1,           // × held — flat 1 hp/s per token, no cap
+  armorPerSec: 1,        // × held — the hoard IS the armor battery
+  beltPerSec: 0.025,     // × held — 27 held ≈ 1 charge/1.5s
+} as const;
+
+/** Per-second hold-buff rates for a carrier; all-zero inside the
+ *  post-damage grace window. Shared so server truth and client
+ *  prediction compute the same drip. `sinceHitMs` = now - lastDamageAt. */
+export function heldBuffRates(held: number, sinceHitMs: number): { hp: number; armor: number; belt: number } {
+  if (held < HELD_BUFF.hpAt || sinceHitMs < HELD_BUFF.graceMs) {return { hp: 0, armor: 0, belt: 0 };}
+  return {
+    hp: held * HELD_BUFF.hpPerSec,
+    armor: held >= HELD_BUFF.armorAt ? held * HELD_BUFF.armorPerSec : 0,
+    belt: held >= HELD_BUFF.beltAt ? held * HELD_BUFF.beltPerSec : 0,
+  };
+}
 
 export const POWERUP = {
   heal: 50,           // flat hp on grab

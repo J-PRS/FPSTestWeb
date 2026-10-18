@@ -491,6 +491,22 @@ this.ops.msgsIn += 1;
 this.ops.msgsRejected += 1;
       return;
     }
+    // Ingest-fast-path: messages whose ordering lives somewhere OTHER
+    // than the command buffer ride it for nothing — parking them just
+    // adds 0-50ms of queue to every reply they send. Telemetry mutates
+    // no sim state (and its transit stamps are arrival-time by design);
+    // position/inputMove/teleport order through the shadow's own seq-
+    // gated pending/setInput machinery — the outer buffer was only ever
+    // delaying p.position/p.lastSeen/corrections for the tick fanout.
+    // Combat claims stay parked: they adjudicate against sim state and
+    // must see this window's earlier commands in wire order.
+    const fast = result.data.type;
+    if (fast === 'ping' || fast === 'pong' || fast === 'clientStats' || fast === 'tickNack'
+      || fast === 'position' || fast === 'inputMove' || fast === 'teleport') {
+      try { room.messages.handleMessage(playerId, result.data, wallNow()); }
+      catch (error) { logger.warn('Telemetry handler threw', { playerId, type: result.data.type, error }); }
+      return;
+    }
     // Command buffer: effects land at phase 0 of the next room tick, in
     // arrival order — sims never see a mid-frame mutation order. The
     // arrival stamp feeds the rate limiter: a stalled tick draining a

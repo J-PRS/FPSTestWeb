@@ -287,7 +287,7 @@ export class ServerBotSenses {
     // whether the walk is worth it (a 400m gem offers at ~0.2 weight;
     // anything within real reach still wins outright). Elsewhere it's
     // opportunism — a pickup scan isn't a job there.
-    const nuggets = this.room.mode === 'nuggets';
+    const nuggets = this.room.mode === 'nuggets' || this.room.mode === 'headhunt';
     const worthIt = (d: number): boolean => nuggets ? d < 500 : d < 140;
     let best: BotVec | null = null, bestD = Infinity;
     for (const g of snaps) {

@@ -7,7 +7,7 @@ import { BallTrailDots } from '../effects/ballTrails.js';
 import { metalMat } from './procMetal.js';
 import { makePartPool, takeSlot, releaseSlot, type PartPool } from './deployPool.js';
 import { parityMiss } from '../game/parity.js';
-import { NUG_TUMBLE } from '../../../shared/pickups.js';
+import { NUG_TUMBLE, type PickupKind } from '../../../shared/pickups.js';
 
 // Tighter falloff than the shared glow: hot core, fast edge fade — the
 // halo marks the item at range without washing a big blob over it.
@@ -26,6 +26,30 @@ const TRAIL_INTERVAL = 0.035;
 const LIFETIME = 30;          // despawn if never picked up
 
 const NUGGET_GEO = new THREE.IcosahedronGeometry(NUGGET_RADIUS, 0);
+// Borderlands-style sky beam for tokens — a tall additive shaft the
+// size doesn't change with distance, so a dropped pile reads at range.
+export const BEAM_GEO = new THREE.CylinderGeometry(0.18, 0.3, 16, 6, 1, true);
+// Vertical alpha ramp (v=0 bottom → v=1 top): solid shaft, dissolving
+// crown — a hard sky cutoff reads as a UI rod, not a light beam.
+export const BEAM_ALPHA = ((): THREE.Texture => {
+  const cv = document.createElement('canvas');
+  cv.width = 1; cv.height = 64;
+  const g = cv.getContext('2d')!;
+  const grad = g.createLinearGradient(0, 64, 0, 0); // canvas bottom = v0 = shaft base
+  grad.addColorStop(0, '#fff');   // opaque at the base
+  grad.addColorStop(0.55, '#fff');
+  grad.addColorStop(1, '#000');   // dissolves to nothing at the crown
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 1, 64);
+  const t = new THREE.CanvasTexture(cv);
+  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+  return t;
+})();
+const BEAM_MAT = new THREE.MeshBasicMaterial({
+  color: 0xFF_FF_FF, transparent: true, opacity: 0.35,
+  blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false,
+  alphaMap: BEAM_ALPHA,
+});
 const _target = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 
@@ -69,6 +93,10 @@ export class Nugget {
   /** Server-owned gem (MP): no magnet, no local collect, no local TTL —
    *  the wire decides when it's picked up; we just run the same physics. */
   serverOwned = false;
+  /** Pickup identity/value — 'token' in headhunt, val = the coin's
+   *  denomination. Collectors read these to route the grab reward. */
+  kind: PickupKind = 'gem';
+  val = 1;
 
   private scene: THREE.Scene;
   private pools: NuggetPools;
@@ -76,9 +104,13 @@ export class Nugget {
   private spinX = 0;
   private spinY = 0;
   private visScale = 1;
+  /** Denomination size — token 9s/27s dwarf the 1-coins so a scattered
+   *  hoard reads its value at a glance. */
+  private sizeMul = 1;
   private pulseColor = new THREE.Color();
   private glow: THREE.Sprite;
   private glowMat: THREE.SpriteMaterial;
+  private beam: THREE.Mesh | null = null;
   private trailFx: BallTrailDots;
   private trailTimer = 0;
   private age = 0;
@@ -91,8 +123,9 @@ export class Nugget {
   /** tint: pickup kind sells itself by color — gold gems, green heals,
    *  red tags — no marquee iconography needed. `parts` swaps the plain
    *  gem for a diegetic shape: dark body + accent part in the tint. */
-  constructor(scene: THREE.Scene, pos: THREE.Vector3, inheritVel: THREE.Vector3, tint = 0xFF_D5_4A, parts: { body: THREE.BufferGeometry; accent: THREE.BufferGeometry; bodyColor?: number } | null = null) {
+  constructor(scene: THREE.Scene, pos: THREE.Vector3, inheritVel: THREE.Vector3, tint = 0xFF_D5_4A, parts: { body: THREE.BufferGeometry; accent: THREE.BufferGeometry; bodyColor?: number; beam?: boolean } | null = null, sizeMul = 1) {
     this.scene = scene;
+    this.sizeMul = sizeMul;
     this.baseColor = new THREE.Color(tint);
     // Emit slightly desaturated so bloom reads hot without clipping to white
     this.emitColor = this.baseColor.clone().lerp(new THREE.Color(0xFF_FF_FF), 0.33);
@@ -128,10 +161,21 @@ export class Nugget {
       polygonOffsetUnits: -4,
     });
     this.glow = new THREE.Sprite(this.glowMat);
-    this.glow.scale.setScalar(2.2);
+    this.glow.scale.setScalar(2.2 * sizeMul);
     this.glow.position.copy(this.pos);
     this.glow.layers.enable(BLOOM_LAYER);
     scene.add(this.glow);
+
+    if (parts?.beam) {
+      // Own material instance — the collect fade dims this shaft only.
+      this.beam = new THREE.Mesh(BEAM_GEO, BEAM_MAT.clone());
+      (this.beam.material as THREE.MeshBasicMaterial).color.copy(this.emitColor);
+      this.beam.scale.x = sizeMul;
+      this.beam.scale.z = sizeMul;
+      this.beam.position.copy(this.pos).y += 8;
+      this.beam.layers.enable(BLOOM_LAYER);
+      scene.add(this.beam);
+    }
 
     // Gold sparkle trail — one slot in the shared dot batch (was a
     // Sprite + SpriteMaterial per dot, one draw call each).
@@ -175,14 +219,15 @@ export class Nugget {
     this.visScale = Math.max(0, 1 - this.collectFade);
     this.writeInstance();
     this.glowMat.opacity = Math.max(0, 0.85 * (1 - this.collectFade));
-    this.glow.scale.setScalar(2.2 * this.visScale);
+    this.glow.scale.setScalar(2.2 * this.sizeMul * this.visScale);
+    if (this.beam) {this.beam.scale.y = this.visScale;}
     if (this.collectFade >= 1 && this.trailFx.size === 0) {this.dead = true;}
   }
 
   private writeInstance(): void {
     if (this.slot < 0) {return;}
     _q.setFromEuler(_e.set(this.spinX, this.spinY, 0));
-    const m = _m.compose(this.pos, _q, _s.setScalar(this.visScale));
+    const m = _m.compose(this.pos, _q, _s.setScalar(this.visScale * this.sizeMul));
     this.pools.body.mesh.setMatrixAt(this.slot, m);
     this.pools.body.mesh.instanceMatrix.needsUpdate = true;
     this.pools.body.mesh.setColorAt(this.slot, this.pulseColor.copy(this.emitColor).multiplyScalar(EMIT_GAIN));
@@ -265,20 +310,28 @@ export class Nugget {
   private tumbleAcc = 0;
   private serverTumble(dt: number, terrain: Terrain): void {
     this.tumbleAcc += dt;
-    if (this.tumbleAcc < 0.05 || this.settled) {return;}
-    const step = Math.min(this.tumbleAcc, 1); // server's own elapsed cap
-    this.tumbleAcc = 0;
-    const bleed = Math.max(0, 1 - NUG_TUMBLE.friction * step);
-    this.pos.addScaledVector(this.vel, step);
-    this.vel.y += GRAVITY * step;
-    // Same chord the server's tumble now uses — mirrored math must
-    // floor against the same surface or the rest snaps never stop.
-    const gy = terrain.getRenderedHeight(this.pos.x, this.pos.z) + NUG_TUMBLE.groundLift;
-    if (this.pos.y < gy) {this.pos.y = gy; this.vel.y = 0;}
-    this.vel.x *= bleed; this.vel.y *= bleed; this.vel.z *= bleed;
-    if (Math.abs(this.vel.x) < NUG_TUMBLE.settle && Math.abs(this.vel.y) < NUG_TUMBLE.settle && Math.abs(this.vel.z) < NUG_TUMBLE.settle) {
-      this.vel.set(0, 0, 0);
-      this.settled = true;
+    if (this.settled) {this.tumbleAcc = 0; return;}
+    // Fixed 50ms cells — the server steps the same grid (RoomPickups),
+    // so friction bleed composes identically. A variable chunk size made
+    // the bleed partition-sensitive: rests landed meters apart = nugrest.
+    while (this.tumbleAcc >= 0.05) {
+      this.tumbleAcc -= 0.05;
+      const step = 0.05;
+      const bleed = Math.max(0, 1 - NUG_TUMBLE.friction * step);
+      this.pos.addScaledVector(this.vel, step);
+      this.vel.y += GRAVITY * step;
+      // Same chord the server's tumble uses — getHeight is the fixed 5m
+      // lattice (shared hmChord); getRenderedHeight is camera-dependent
+      // LOD, so mirroring against it diverged rests by meters at range.
+      const gy = terrain.getHeight(this.pos.x, this.pos.z) + NUG_TUMBLE.groundLift;
+      if (this.pos.y < gy) {this.pos.y = gy; this.vel.y = 0;}
+      this.vel.x *= bleed; this.vel.y *= bleed; this.vel.z *= bleed;
+      if (Math.abs(this.vel.x) < NUG_TUMBLE.settle && Math.abs(this.vel.y) < NUG_TUMBLE.settle && Math.abs(this.vel.z) < NUG_TUMBLE.settle) {
+        this.vel.set(0, 0, 0);
+        this.settled = true;
+        this.tumbleAcc = 0;
+        break;
+      }
     }
   }
 
@@ -324,7 +377,7 @@ export class Nugget {
       this.pulseColor.copy(this.emitColor).multiplyScalar(pulse);
       const y = this.pos.y + Math.sin(this.age * 2.5) * 0.06;
       _q.setFromEuler(_e.set(this.spinX, this.spinY, 0));
-      const m = _m.compose(_target.set(this.pos.x, y, this.pos.z), _q, _s.setScalar(this.visScale));
+      const m = _m.compose(_target.set(this.pos.x, y, this.pos.z), _q, _s.setScalar(this.visScale * this.sizeMul));
       if (this.slot >= 0) {
         this.pools.body.mesh.setMatrixAt(this.slot, m);
         this.pools.body.mesh.instanceMatrix.needsUpdate = true;
@@ -339,12 +392,14 @@ export class Nugget {
       }
       this.glow.position.set(this.pos.x, y, this.pos.z);
       this.glowMat.opacity = 0.7 + Math.sin(this.age * 5) * 0.15;
+      if (this.beam) {this.beam.position.set(this.pos.x, y + 8, this.pos.z);}
       return;
     }
     this.writeInstance();
     // Halo stays welded to the nugget — the polygonOffset bias handles the
     // terrain-graze clip, so no visual lift needed.
     this.glow.position.copy(this.pos);
+    if (this.beam) {this.beam.position.set(this.pos.x, this.pos.y + 8, this.pos.z);}
   }
 
   private emitTrail(dt: number): void {
@@ -362,6 +417,11 @@ export class Nugget {
 
   dispose(): void {
     this.scene.remove(this.glow);
+    if (this.beam) {
+      this.scene.remove(this.beam);
+      (this.beam.material as THREE.Material).dispose();
+      this.beam = null;
+    }
     if (this.slot >= 0) {
       releaseSlot(this.pools.body, this.slot);
       if (this.pools.accent) {releaseSlot(this.pools.accent, this.slot);}

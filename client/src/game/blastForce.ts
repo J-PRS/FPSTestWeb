@@ -177,6 +177,9 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     const shielded = shooterId !== undefined && shooterId !== 'local' && performance.now() < player.protectedUntil;
     if (shielded || dpx - t1Minbox(player.appliedClass) >= radius || occluded(pos, player.pos)) {return false;}
     const now = performance.now();
+    const impulse = Math.min(
+      aoeImpulseT1At(force, pos, player.pos, radius, player.appliedClass) * KNOCKBACK_SCALE * player.mods.knockbackTaken,
+      BLAST_IMPULSE_MAX);
     // Dedup, reverse direction: the knockback echo can beat its blast's
     // replica explode (handlers run on arrival, the predicted shove waits
     // for the next projectile tick). A recorded raw echo at this center
@@ -187,20 +190,22 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     // and a stale window double-shoves + strands a false kb-echo stamp.
     // Same 8m + force match as the stamp consume in players.ts — replica
     // explode positions diverge from the server's blast center past 3m.
+    // recentKb carries the wire's APPLIED impulse — compare against the
+    // same falloff-scaled impulse we would apply, not the raw blast force.
     const dup = rkb.findIndex((s): boolean => now - s.t < 700 &&
       Math.hypot(s.x - pos.x, s.y - pos.y, s.z - pos.z) < 8 &&
-      (s.f === undefined || Math.abs(s.f - force) < 0.5));
+      (s.f === undefined || Math.abs(s.f - impulse) < 0.5));
     if (dup !== -1) {rkb.splice(dup, 1); return true;}
-    const impulse = Math.min(
-      aoeImpulseT1At(force, pos, player.pos, radius, player.appliedClass) * KNOCKBACK_SCALE * player.mods.knockbackTaken,
-      BLAST_IMPULSE_MAX);
     if (forceMode === 'push') {player.applyKnockback(pos, impulse);}
     else {player.applyPull(pos, impulse);}
     // Stamp the prediction — the server echoes this same shove back as a
     // `knockback` message ~RTT later; net/players.ts consumes the stamp
-    // so the blast can't land twice.
+    // so the blast can't land twice. The wire force is the APPLIED
+    // impulse (falloff + perk + cap), not the raw blast force — stamping
+    // the raw value mismatched every non-point-blank echo, which both
+    // stranded the stamp (kb-echo) and let the echo double-shove.
     const stamps = deps.world.selfBlastStamps;
-    stamps.push({ x: pos.x, y: pos.y, z: pos.z, t: now, by: shooterId, f: Math.round(force * 10) / 10 });
+    stamps.push({ x: pos.x, y: pos.y, z: pos.z, t: now, by: shooterId, f: Math.round(impulse * 10) / 10 });
     // Settle older stamps: a predicted self-shove the server never echoed
     // back (~700ms past the 400ms consume window) was rejected server-side —
     // loud parity miss, not a silent expiry.

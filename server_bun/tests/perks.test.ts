@@ -26,7 +26,7 @@ describe('perks', () => {
         expect(v as number, `${id}.${k}`).toBeGreaterThanOrEqual(0);
         // Multipliers must stay inside a sane band — a 0 or 5x modifier
         // is a balance typo, not a perk.
-        if (k !== 'maxHealth' && k !== 'regen' && k !== 'regenRamp' && k !== 'damageResist') {
+        if (k !== 'maxHealth' && k !== 'regen' && k !== 'regenRamp' && k !== 'damageResist' && k !== 'fallSoak') {
           expect(v as number, `${id}.${k}`).toBeLessThanOrEqual(3);
         }
         if (k === 'damageResist') {expect(v as number).toBeLessThan(1);}
@@ -36,7 +36,7 @@ describe('perks', () => {
 
   it('perkMods: unknown/absent ids fall back to the ZERO row, never null', () => {
     const zero = perkMods('none');
-    const ADDITIVE = new Set(['maxHealth', 'regen', 'regenRamp', 'damageResist', 'meleeHeal']);
+    const ADDITIVE = new Set(['maxHealth', 'regen', 'regenRamp', 'damageResist', 'meleeHeal', 'fallSoak']);
     for (const k of MOD_KEYS) {
       expect(zero[k]).toBe(ADDITIVE.has(k) ? 0 : 1);
     }

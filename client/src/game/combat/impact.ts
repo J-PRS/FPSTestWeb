@@ -21,6 +21,8 @@ import { BallDebris } from '../../effects/debris.js';
 import { SplatDecal } from '../../effects/splat.js';
 
 import { Nugget } from '../../entities/Nugget.js';
+import { PICKUP_ACCENT, pickupParts } from '../../entities/PickupModel.js';
+import { tokenTier } from '../../../../shared/pickups.js';
 
 import { burstGibs } from '../../entities/swarms.js';
 
@@ -1040,9 +1042,18 @@ export function onTargetDestroyed(c: CombatCtx, ball: Targetable, impulse?: THRE
 
   if (!ball.lootless && !deps.lazyNetworkManager().authoritySims()) {
 
+    // Headhunt hunts tokens — creature drops feed the hold economy the
+    // same way gems feed the bank economy in nuggets (server parity).
+    const token = deps.world.mode === 'headhunt';
+    const tier = token ? tokenTier(1) : null;
+
     for (let n = 0; n < Math.round(ball.scale); n += 1) {
 
-      deps.nuggets.push(new Nugget(deps.lazyScene(), ball.pos, ball.vel));
+      const ng = new Nugget(deps.lazyScene(), ball.pos, ball.vel,
+        tier?.color ?? PICKUP_ACCENT.gem, token ? pickupParts('token') : null, tier?.scale ?? 1);
+      if (token) {ng.kind = 'token';}
+
+      deps.nuggets.push(ng);
 
     }
 

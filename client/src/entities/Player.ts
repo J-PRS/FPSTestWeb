@@ -6,7 +6,8 @@ import type { Terrain } from '../world/terrain.js';
 import { PlayerSkills } from './player/skills.js';
 import { buildSkillsCtx, buildInputCtx } from './playerCtor.js';
 import { perkMods, PERK_ORDER, REGEN_DELAY_S, type PerkId } from '../../../shared/perks.js';
-import { CLASS_STATS, CLASS_MODEL_SCALE, type ArmorClass } from '../../../shared/botClasses.js';
+import { CLASS_STATS, CLASS_MODEL_SCALE, classCapsule, type ArmorClass } from '../../../shared/botClasses.js';
+import { HeldCrown } from './heldCrown.js';
 import { SPAWN_PROTECT_MS } from '../../../shared/constants.js';
 import { inv } from '../../../shared/invariants.js';
 import { PlayerStatus } from './playerStatus.js';
@@ -23,6 +24,7 @@ import { PlayerEmit } from './playerEmit.js';
 import { PlayerLoadout } from './playerLoadout.js';
 import { PACK_KINDS, type DeployKind } from '../../../shared/deployables.js';
 import { BELT_MAX } from '../../../shared/weapons.js';
+import { heldBuffRates, POWERUP } from '../../../shared/pickups.js';
 import { ENERGY, MOVEMENT_CONFIG } from '../../../shared/movement.js';
 import { PlayerVisuals } from './PlayerVisuals.js';
 import { urlParams } from '../core/params.js';
@@ -70,6 +72,13 @@ export class Player {
   health = 100;
   private _prevHealth = 100;
   private _regenBaseT = 0;
+  /** Last local hp drop — the client-side mirror of the server's
+   *  lastDamageAt, gating HELD_BUFF's grace window. */
+  private _heldHurtT = 0;
+  /** Fractional belt-charge drip for the predicted headhunt hoard buff. */
+  private _beltAcc = 0;
+  private crown: HeldCrown | null = null;
+  private _crownFeet = new THREE.Vector3();
   /** Server-owned bonus pool (powerup drops) — absorbs most of a hit
    *  before health; mirrored from playerHit/buff messages, never set
    *  locally. */
@@ -124,6 +133,8 @@ export class Player {
     this.lastDamageSource = '';
     this.protectedUntil = performance.now() + SPAWN_PROTECT_MS;
     this.beltCharges = BELT_MAX;
+    this._heldHurtT = 0;
+    this._beltAcc = 0;
     this.vel.set(0, 0, 0);
     // Re-arm the viewmodel to the active slot — a banked class swap can
     // recall a kit whose slot holds a different wid than the corpse was
@@ -371,6 +382,8 @@ export class Player {
   /** Belt/pack charge mirror — BELT_MAX on respawn, server owns the truth.
    *  Belt throw −1, pack deploy −2, nugget +1 (shared/weapons.ts). */
   beltCharges = BELT_MAX;
+  /** Headhunt held tokens — server-owned count, HUD reads it raw. */
+  heldTokens = 0;
   onMelee: ((e: FireEvent) => void) | null = null;
   onWeaponSwitch: ((index: number) => void) | null = null;
   /** Pack items — main wires these to the deployables manager. */
@@ -537,6 +550,16 @@ export class Player {
     // around your own camera in first person is noise, not information.
     const dbg = Boolean(urlParams.debug);
     this.model?.setVisible((this.thirdPerson || orbiting) && !this.isDead);
+    // Your own hoard crown — you can only see it in third person/orbit,
+    // but so can anyone nearby; same scene-rooted follow as remotes.
+    if (this.heldTokens > 0 && !this.isDead && (this.thirdPerson || orbiting)) {
+      this.crown ??= new HeldCrown(this.scene);
+      this.crown.set(this.heldTokens);
+      this._crownFeet.copy(this.renderPos);
+      this._crownFeet.y -= CLASS_STATS[this.appliedClass].eyeHeight; // renderPos is eye-space
+      this.crown.follow(this._crownFeet, classCapsule(this.appliedClass).height);
+      this.crown.update(dt);
+    } else if (this.crown) {this.crown.set(0);}
     this.model?.setWireframe(dbg);
     this.model?.setColliderVisible(true);
     this.visuals.updateFeetMarker(this.terrain, this.renderPos);
@@ -646,6 +669,22 @@ export class Player {
       if (!this._regenBaseT) {this._regenBaseT = now;}
       const rate = this.mods.regen + this.mods.regenRamp * Math.max(0, (now - this._regenBaseT) / 1000 - REGEN_DELAY_S);
       this.health = Math.min(this.maxHealth, this.health + rate * dt);
+    }
+    // Headhunt hoard-drip — HELD_BUFF rates from heldTokens, muted 8s
+    // after any hit (hp drops stamp _heldHurtT; a same-frame heal can't
+    // hide damage because the drop is measured on _prevHealth). Offline
+    // is the authority for all three channels; online only the belt is
+    // predicted — hp/armor arrive on the yourHealth echo, which the
+    // server emits while any channel is live.
+    if (this.health < this._prevHealth) {this._heldHurtT = performance.now();}
+    const hb = heldBuffRates(this.heldTokens, performance.now() - this._heldHurtT);
+    if (hb.belt + hb.hp + hb.armor > 0 && !this.isDead) {
+      if (!(this.serverOwnsHealth?.() ?? false)) {
+        this.health = Math.min(this.maxHealth, this.health + hb.hp * dt);
+        this.armor = Math.min(POWERUP.maxArmor, this.armor + hb.armor * dt);
+      }
+      this._beltAcc += hb.belt * dt;
+      if (this._beltAcc >= 1 && this.beltCharges < BELT_MAX) {this.beltCharges += 1; this._beltAcc -= 1;}
     }
     // Every ingest gate protects the wire paths — this is the local
     // write-side catch: a NaN pool can't heal through Math.min and

@@ -6,7 +6,7 @@ import type { RoomFlags } from './RoomFlags.ts';
 import type { RoomDeployables } from './RoomDeployables.ts';
 import {type Heightfield, hmHeight} from '../../shared/heightfield.ts';
 import { bank, winner, CTF_PTS, CTF_DMG_PER_PTS, CTF_FLAG_ZONE_R, type ModeSpec, type TeamScores, type TeamId } from '../../shared/teams.ts';
-import { POWERUP, rollCreatureDrop, type PowerupKind } from '../../shared/pickups.ts';
+import { POWERUP, rollCreatureDrop, decomposeTokens, type PowerupKind } from '../../shared/pickups.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
 import { logger } from './logger.ts';
 import { healPool } from './healPool.ts';
@@ -80,7 +80,9 @@ export class RoomScore {
         const gx2 = pos.x + dx + (this.h.rng() - 0.5) * 2;
         const gz2 = pos.z + dz + (this.h.rng() - 0.5) * 2;
         const gy2 = (this.h.field ? hmHeight(this.h.field, gx2, gz2) : pos.y) + 0.5;
-        this.h.pickups?.spawn({ x: gx2, y: gy2, z: gz2 });
+        // Headhunt hunts tokens — creature drops feed the hold economy
+        // the same way gems feed the bank economy elsewhere.
+        this.h.pickups?.spawn({ x: gx2, y: gy2, z: gz2 }, this.h.mode === 'headhunt' ? 'token' : 'gem');
         this.h.influence.splat({ x: gx2, y: gy2, z: gz2 }, 'opportunity', 0.5);
       }
       return;
@@ -134,6 +136,21 @@ export class RoomScore {
         // deny by touching it first.
         this.h.pickups?.spawn(corpse.position, 'tag');
         this.h.influence.splat(corpse.position, 'opportunity', 0.5);
+      } else if (this.h.mode === 'headhunt') {
+        // Every held token comes back out plus one corpse bounty —
+        // base-3 coins, so a 10-hoard scatters 9+1+1 (blue + two
+        // whites), not eleven singles. Killing a hoarder swings the
+        // live scoreboard in one burst — the mode's whole point.
+        const coins = decomposeTokens(corpse.heldTokens + 1);
+        this.setHeld(corpse, 0);
+        for (const val of coins) {
+          this.h.pickups?.spawn({
+            x: corpse.position.x + (this.h.rng() - 0.5) * 3,
+            y: corpse.position.y,
+            z: corpse.position.z + (this.h.rng() - 0.5) * 3,
+          }, 'token', 0, val);
+        }
+        this.h.influence.splat(corpse.position, 'opportunity', 0.5);
       } else {
         for (let i = 0; i < 3; i += 1) {
           this.h.pickups?.spawn({
@@ -179,6 +196,43 @@ export class RoomScore {
     const pts = Math.floor(acc / CTF_DMG_PER_PTS);
     this.dmgPool.set(shooterId, acc - pts * CTF_DMG_PER_PTS);
     if (pts > 0) {this.awardPersonal(shooterId, pts * CTF_PTS.dmg);}
+  }
+
+  /** Headhunt: the only writer for heldTokens — the count change and
+   *  the score resync travel together so a silent reset (respawn wipe,
+   *  match boundary, team swap) still flushes truth to the wire. */
+  setHeld(p: PlayerState, n: number): void {
+    p.heldTokens = n;
+    this.syncHeld();
+  }
+
+  /** Last broadcast count per player — the diff that decides which
+   *  playerHeld edges go out. */
+  private heldEchoed = new Map<string, number>();
+
+  /** Recompute the live team scores from held tokens (score = held,
+   *  never banked) and broadcast playerHeld for anyone whose count
+   *  changed since the last echo. No-op outside headhunt. */
+  syncHeld(): void {
+    if (this.h.mode !== 'headhunt') {return;}
+    let a = 0;
+    let b = 0;
+    for (const p of this.h.players.getAllPlayers().values()) {
+      if (this.heldEchoed.get(p.id) !== p.heldTokens) {
+        this.heldEchoed.set(p.id, p.heldTokens);
+        this.h.broadcast({ type: 'playerHeld', playerId: p.id, n: p.heldTokens } as ServerMessage);
+      }
+      if (p.team === 'alpha') {a += p.heldTokens;}
+      else if (p.team === 'bravo') {b += p.heldTokens;}
+    }
+    const s = this.h.scores;
+    if (s.alpha !== a || s.bravo !== b) {
+      s.alpha = a;
+      s.bravo = b;
+      this.h.broadcast({ type: 'teamScore', scores: { alpha: a, bravo: b }, winAt: this.h.modeSpec!.winAt } as ServerMessage);
+      const w = winner(s, this.h.modeSpec!.winAt);
+      if (w) {this.h.endMatch(w);}
+    }
   }
 
   /** Team point from a server-observed objective (flag cap, gem touch). */
@@ -231,6 +285,8 @@ export class RoomScore {
    *  had one. */
   dropPlayer(playerId: string): void {
     this.dmgPool.delete(playerId); // unbanked chip dies with the seat
+    this.heldEchoed.delete(playerId); // their tokens leave the live sum too
+    this.syncHeld();
     if (this.ffaScores.delete(playerId)) {
       this.h.broadcast({ type: 'ffaScore', scores: Object.fromEntries(this.ffaScores), winAt: this.h.modeSpec!.winAt });
     }

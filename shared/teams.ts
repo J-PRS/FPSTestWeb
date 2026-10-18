@@ -55,7 +55,7 @@ export const CTF_DMG_PER_PTS = 100;
 export const CTF_FLAG_ZONE_R = 15;
 
 // ---- Game modes ----
-export type ModeId = 'nuggets' | 'ctf' | 'dm' | 'tdm' | 'rabbit' | 'duel' | 'flagrun' | 'conquest';
+export type ModeId = 'nuggets' | 'ctf' | 'dm' | 'tdm' | 'rabbit' | 'duel' | 'flagrun' | 'conquest' | 'headhunt';
 
 export interface ModeSpec {
   /** HUD label + feed wording. */
@@ -95,6 +95,10 @@ export const MODES: Record<ModeId, ModeSpec> = {
   // winAt ceiling is unreachable by points so the horn resolves on nodes
   // held; a dead enemy core ends it early via endMatch.
   conquest: { label: 'CONQUEST', teams: true, ffa: false, flags: false, gems: false, winAt: 999, timeLimitS: 1200, ptsPlayerKill: 0, ptsCreatureKill: 0 },
+  // Headhunt: tokens are held, never banked — the team score is the live
+  // sum of tokens carried, so it moves on every grab AND every carrier
+  // death. Nothing to reach, so the horn resolves on whoever holds more.
+  headhunt: { label: 'HEADHUNT', teams: true, ffa: false, flags: false, gems: false, winAt: 100, timeLimitS: 900, ptsPlayerKill: 0, ptsCreatureKill: 0 },
 };
 
 /** Flag carry rules — shared client/server. */

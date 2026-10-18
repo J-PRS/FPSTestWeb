@@ -335,7 +335,7 @@ function wirePlayerStatusHooks(): void {
     if (player.isDead) {return;}
     player.lastDamageSource = 'pecked to death by a buzzard';
     player.applyKnockback(pos, 18 * player.mods.knockbackTaken);
-    networkManager?.sendEnvironmentDamage(45);
+    networkManager?.sendEnvironmentDamage(45, 'bird:flock');
     hud?.showDamage(pos, 45);
     sfx.playerHurt();
   };
@@ -428,7 +428,7 @@ function makeEntities(): ReturnType<typeof createEntities> {
     updateBallsPlayback: (dt): void => demoLifecycle.updateBallsPlayback(dt),
     // Team mode sweeps gems toward whoever's nearest — set once bots spawn.
     nuggetCollectors: (): { id: string; pos: THREE.Vector3; alive: boolean; pickupScale: number; }[] => teamBots?.collectors() ?? [],
-    onNuggetCollect: (id): void | undefined => teamBots?.collect(id),
+    onNuggetCollect: (id, kind, val): void | undefined => teamBots?.collect(id, kind, val),
     lazyCombat: () => combat,
     deployEnemyBots: (): { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean; }[] => teamBots?.enemyBotsForLocal() ?? [],
     deployBotFoes: (team): { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean; }[] => teamBots?.enemyBotsForTeam(team) ?? [],
@@ -474,7 +474,7 @@ function setupOfflineMode(mode: string, mapSpec?: MapSpec): void {
       targets: entities.targets,
     },
     {
-      dropNuggets: (pos, n, vel): void => entities.spawnNuggetsAt(pos, n, vel),
+      dropNuggets: (pos, n, vel, kind, val): void => entities.spawnNuggetsAt(pos, n, vel, kind, val),
       localPlayerKilled: (killerName): void => killLocal(`fragged by ${killerName}`),
       remoteKillFeed: (text): void => { fragMessages.show(text); hud.logEvent(text); },
       fragBanner: (text): void => { fragMessages.showKill(text); hud.logEvent(text); },

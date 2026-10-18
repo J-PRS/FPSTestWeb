@@ -292,7 +292,7 @@ function removeWaterSurface(scene: THREE.Scene): void {
   uwOn = false;
   if (uwEl) { uwEl.style.opacity = '0'; }
   uwShown = false;
-  document.body.classList.remove('underwater');
+  document.body?.classList?.remove('underwater');
 }
 
 /** Create, update, or remove the sea surface for `water` (undefined = dry). */

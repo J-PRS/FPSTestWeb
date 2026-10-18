@@ -39,7 +39,7 @@ function withInterfaces(member: string): string {
   let text = member;
   for (const m of member.matchAll(/(\w+)\[\]/g)) {
     const body = INTERFACES.get(m[1]!);
-    if (body) text += `\n${body}`;
+    if (body) {text += `\n${body}`;}
   }
   return text;
 }
@@ -56,7 +56,7 @@ describe('world model <-> protocol conformance', () => {
   for (const kind of Object.values(WORLD_MODEL)) {
     for (const [verbKey, listKey] of VERB_LISTS) {
       const fields = kind[listKey];
-      if (!fields || !kind.verbs[verbKey]) continue;
+      if (!fields || !kind.verbs[verbKey]) {continue;}
       const verb = kind.verbs[verbKey]!;
       it(`${kind.kind}.${verb} exists in the ServerMessage union with every declared field`, () => {
         const line = unionLine(verb);
@@ -138,12 +138,12 @@ describe('world model <-> protocol conformance', () => {
     // A declared verb nothing emits is worse than none — it reads as a
     // wire surface that doesn't exist. Pin declarations to union members.
     const sStart = PROTOCOL.indexOf('export type ServerMessage');
-    const union = PROTOCOL.slice(sStart);
+    const union = new Set(PROTOCOL.slice(sStart));
     for (const kind of Object.values(WORLD_MODEL)) {
       const verbs = [kind.verbs.spawn, kind.verbs.update, kind.verbs.gone, kind.verbs.roster, ...Object.keys(kind.events ?? {})];
       for (const v of verbs) {
-        if (!v) continue;
-        expect(union.includes(`type: '${v}'`), `${kind.kind} declares '${v}' — no ServerMessage member carries it`).toBe(true);
+        if (!v) {continue;}
+        expect(union.has(`type: '${v}'`), `${kind.kind} declares '${v}' — no ServerMessage member carries it`).toBe(true);
       }
     }
   });
@@ -169,7 +169,7 @@ describe('world model <-> protocol conformance', () => {
     // Player is exempt — it hashes through computeStateHash's own
     // channel-aware quantizer, not replicaHash.
     for (const kind of Object.values(WORLD_MODEL)) {
-      if (kind.kind === 'player') continue;
+      if (kind.kind === 'player') {continue;}
       for (const f of kind.fields ?? []) {
         expect(f.channel === 'edge', `${kind.kind}.fields '${f.name}' is ${f.channel}-channel but rides the hash`).toBe(true);
       }
@@ -219,7 +219,7 @@ describe('world model <-> protocol conformance', () => {
     expect(new Set(declaredFieldNames(WORLD_MODEL.player!, 'spawnFields', 'updateFields', 'rosterFields')))
       .toEqual(new Set([
         'internalId', 'name', 'position', 'rotation', 'velocity', 'isDead',
-        'health', 'ping', 'ski', 'jet', 'status', 'team', 'transport', 'armorClass', 'sheep',
+        'health', 'ping', 'ski', 'jet', 'status', 'team', 'transport', 'armorClass', 'sheep', 'held',
       ]));
   });
 

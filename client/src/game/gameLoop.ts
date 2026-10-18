@@ -535,6 +535,7 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   // throws/deploys. (nuggetsCollected only counts pickups, so the HUD
   // read 0 at spawn even though the belt economy starts at BELT_MAX.)
   hud.setNuggets(player.beltCharges);
+  hud.setHeld(deps.world.mode === 'headhunt' ? player.heldTokens : null);
   // The run clock only ticks offline — show it only then, else it's a
   // frozen 00:00 under the FPS counter in every match.
   hud.setTimerVisible(!(demoManager?.isPlaying ?? false) && !networkManager.isConnected() && !CLASSIC_MODE);

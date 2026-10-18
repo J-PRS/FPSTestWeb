@@ -34,17 +34,25 @@ function noteWeapon(id: string, weaponType: number | undefined): void {
 }
 
 const _bP = new THREE.Vector3(); // lightning bounce-march scratch
+const _lgStart = new THREE.Vector3();
 
 // Lightning terrain bounce, observer side: ground stop → arc to the
 // nearest remote player within LG_BOUNCE_RANGE of the contact (any
 // angle), else the observed bolt terminates at the contact like the
 // shooter's does. Cosmetic — the server's pick is the truth.
-function paintLgBeam(deps: NetCtx['deps'], origin: THREE.Vector3, dir: THREE.Vector3): void {
+// Beam start is the shooter's rendered muzzle when it's sane (the wire
+// origin is the server eye position; a beam issuing from the chest reads
+// detached in third person). The contact march stays on the aim line —
+// only the drawn start moves.
+function paintLgBeam(deps: NetCtx['deps'], ownerId: string, origin: THREE.Vector3, dir: THREE.Vector3): void {
+  const shooter = deps.world.remotePlayers.get(ownerId);
+  const start = shooter?.model?.muzzleWorld(_lgStart)
+    && _lgStart.distanceToSquared(origin) < 4 ? _lgStart : origin;
   const terr = deps.lazyTerrain();
   for (let d = 1.5; d <= LG_RANGE; d += 1.5) {
     _bP.copy(origin).addScaledVector(dir, d);
     if (_bP.y < terr.getHeight(_bP.x, _bP.z)) {
-      deps.lazyEffects().spawnBeam(origin, _bP, 0x8F_DC_FF);
+      deps.lazyEffects().spawnBeam(start, _bP, 0x8F_DC_FF);
       let bestD2 = LG_BOUNCE_RANGE * LG_BOUNCE_RANGE;
       let hit: THREE.Vector3 | null = null;
       for (const rp of deps.world.remotePlayers.values()) {
@@ -56,7 +64,7 @@ function paintLgBeam(deps: NetCtx['deps'], origin: THREE.Vector3, dir: THREE.Vec
       return;
     }
   }
-  deps.lazyEffects().spawnBeam(origin, origin.clone().addScaledVector(dir, LG_RANGE), 0x8F_DC_FF);
+  deps.lazyEffects().spawnBeam(start, origin.clone().addScaledVector(dir, LG_RANGE), 0x8F_DC_FF);
 }
 
 export function wireProjectiles(ctx: NetCtx): void {
@@ -84,7 +92,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     if (weaponType === WeaponType.Melee) {
       meleeFlash(origin, dir);
     } else if (weaponType === WeaponType.Lightning) {
-      paintLgBeam(deps, origin, dir);
+      paintLgBeam(deps, ownerId, origin, dir);
     } else {
       return false;
     }

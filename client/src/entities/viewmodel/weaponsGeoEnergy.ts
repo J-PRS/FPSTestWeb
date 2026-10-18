@@ -336,9 +336,6 @@ return rail;
 export function mkLightningGun(): THREE.Group {
 const lg = new THREE.Group();
 const lgHotMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xCF_EF_FF).multiplyScalar(EMIT_GAIN) });
-// Prong tips — a gentle hot tick (≈1.4 lum, barely over the bloom knee)
-// so the electrodes read charged without a second star in your face.
-const lgTipMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x66_C8_FF).multiplyScalar(2) });
 
 // Insulated body — slimmer than before so the crown reads wider.
 lg.add(mkTube(0.1, 0.12, 0.4, 0.06, bodyMat));
@@ -375,9 +372,10 @@ for (let i = 0; i < 3; i += 1) {
   // lean composes ON TOP of that or the rod snaps back upright.
   rod.rotation.x = Math.PI / 2 - TILT;
   fork.add(rod);
-  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 6), lgTipMat);
+  // Metal tip ball — the electrode cap, not a charge node. The only
+  // electric glow is the emitter core between the prongs.
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 6), brassMat);
   tip.position.set(0, RT, ZT);
-  tip.layers.enable(BLOOM_LAYER);
   fork.add(tip);
   lg.add(fork);
 }

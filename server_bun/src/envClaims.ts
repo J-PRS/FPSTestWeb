@@ -65,7 +65,10 @@ export function handleEnvironmentDamage(h: EnvHost, playerId: string, msg: Extra
     // is a killfeed/scoreboard forge, not a bug report. 'bot:*' tags come
     // from the victim's own host sim, so they skip the range gate (the
     // server can't position-check a client-side attacker anyway).
-    if (attacker && !attacker.startsWith('bot:')) {
+    // 'bot:*' is host-simmed sources; 'bird:' is client-side ambient
+    // wildlife — the server has no position model for either, so both
+    // skip the range gate (damage stays capped at the untagged 40/80).
+    if (attacker && !attacker.startsWith('bot:') && !attacker.startsWith('bird:')) {
       const src = h.playerManager.getPlayer(attacker);
       const near = src && !src.isDead &&
         Math.hypot(src.position.x - player.position.x, src.position.z - player.position.z) < 60;

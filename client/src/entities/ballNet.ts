@@ -55,6 +55,12 @@ export interface NetBag {
    *  heal, so counters that measure predictor correctness only run on
    *  later corrections. */
   segsSeen?: number;
+  /** Set when the last renderOffset fold has an explained cause:
+   *  stamp-lag rewind in applySeg (cursor legitimately ahead of the
+   *  stamp — pd ≈ speed×lag) or a burst-drain catch-up in tickNet (gap
+   *  inside the cells-stepped speed budget). render-blend reads it to
+   *  skip the warn; every fold itself still applies. */
+  foldExplained?: boolean;
 }
 
 export function newNetBag(): NetBag {
@@ -114,6 +120,10 @@ export function tickNet(st: NetStatics, bag: NetBag, host: NetHost, dt: number):
   // starvation impossible, and a 250ms stall frame still pays down over
   // the next frames instead of leaping.
   let cellsLeft = bag.netAcc >= 0.5 ? Math.max(2, Math.ceil(dt / 0.05)) : 2;
+  // Cells consumed this frame — the step gate below budgets ONE tick of
+  // travel, but a burst drain legitimately moves speed×0.05 per cell, so
+  // the budget scales by what was actually paid down.
+  let cellsStepped = 0;
   // The committed target rides tp snapshots: enrage pull needs it, and an
   // inert ball's stall-breaker launches at it — predicting it client-side
   // mirrors the authority instead of waiting two seconds for the event.
@@ -122,6 +132,7 @@ export function tickNet(st: NetStatics, bag: NetBag, host: NetHost, dt: number):
   if (field) {
     while (cellsLeft > 0 && bag.netAcc >= 0.05 && bag.simT + 0.05 <= simNow) {
       cellsLeft -= 1;
+      cellsStepped += 1;
       bag.netAcc -= 0.05;
       bag.simT += 0.05;
       stepBall(s, 0.05, field, tgt, false, { colliders: st.colliders(), colliderIndex: st.colliderIndex() ?? undefined });
@@ -144,6 +155,7 @@ export function tickNet(st: NetStatics, bag: NetBag, host: NetHost, dt: number):
     let burst = Math.max(4, Math.ceil(dt / 0.05) * 2);
     while (burst > 0 && bag.netAcc >= 0.05 && bag.simT + 0.05 <= leadCap) {
       burst -= 1;
+      cellsStepped += 1;
       bag.netAcc -= 0.05;
       bag.simT += 0.05;
       stepBall(s, 0.05, field, tgt, false, { colliders: st.colliders(), colliderIndex: st.colliderIndex() ?? undefined });
@@ -160,14 +172,18 @@ export function tickNet(st: NetStatics, bag: NetBag, host: NetHost, dt: number):
     // Speed-scaled floor: a ball past ~100 m/s legitimately moves >5m
     // between 20Hz rebuilds — counting that as a step was ~90% noise.
     // Only fire when the leap outruns what the tick budget explains.
-    const spdBudget = Math.hypot(s.vx, s.vy, s.vz) * 0.05 + 5;
+    const spdBudget = Math.hypot(s.vx, s.vy, s.vz) * 0.05 * Math.max(1, cellsStepped) + 5;
     if (gap2 > 25) {
+      // Burst-drain folds (gap within the cells-stepped speed budget)
+      // are pacing catch-up, not divergence — same class render-blend
+      // is allowed to skip.
+      bag.foldExplained = gap2 <= spdBudget * spdBudget;
       // Speed-scaled floor: a ball past ~100 m/s legitimately moves >5m
       // between 20Hz rebuilds — counting that as a step was ~90% noise.
       // Only fire when the leap outruns what the tick budget explains.
-      // segsSeen<=1 folds are the join/roster heal — a 400m first snap is
-      // the seed converging, not a step the predictor took.
-      if (gap2 > spdBudget * spdBudget && (bag.segsSeen ?? 0) > 1) {
+      // segsSeen<=3 folds are the join/roster heal — the seed plus its
+      // first stamped corrections are convergence, not predictor steps.
+      if (gap2 > spdBudget * spdBudget && (bag.segsSeen ?? 0) > 3) {
         glitch('ball-step', { gapM: Math.round(Math.sqrt(gap2)), acc: Math.round(bag.netAcc * 1000) });
       }
       // The step is honest truth — but it leaps the rendered ball past
@@ -247,6 +263,11 @@ export function applySeg(st: NetStatics, bag: NetBag, host: NetHost, seg: NetSeg
   // distance from truth plus the replay span the stamp covers — the
   // delta the wire can't hide.
   const pd = Math.hypot(s.x - seg.px, s.y - seg.py, s.z - seg.pz);
+  // Stamp-lag classification: how far of pd is explained by the cursor
+  // having stepped past the stamp (flight at stamp speed over the gap),
+  // vs real replay divergence. render-blend only warns on the latter.
+  bag.foldExplained = simT !== undefined && bag.simT > simT
+    && pd <= Math.hypot(s.vx, s.vy, s.vz) * (bag.simT - simT) * 1.5 + 3;
   // hard segments (teleport/spawn) are deliberate discontinuities — a
   // 100m+ snap is the feature, not predictor drift. Span gate: a stamp
   // covering seconds of stale anchor is a roster/join heal catching up
@@ -256,8 +277,16 @@ export function applySeg(st: NetStatics, bag: NetBag, host: NetHost, seg: NetSeg
   bag.segsSeen = (bag.segsSeen ?? 0) + 1;
   // legT0 === -1 = never seeded: a first-segment snap is the roster heal,
   // not predictor drift — there is no prediction to diverge from yet.
-  if (pd > 20 && !seg.hard && spanMs <= 4000 && bag.legT0 !== -1) {
-    glitch('seg-div', { m: Math.round(pd), spanMs: simT !== undefined && bag.simT < simT ? Math.round((simT - bag.simT) * 1000) : -1, enr: seg.enraged ? 1 : 0 });
+  // segsSeen > 3 extends that grace past the FIRST heartbeats: the seed
+  // leg plus its first ~2 stamped corrections are still join convergence
+  // (the predictor ran ~1s from a stale seed — 20-30m is the heal, not
+  // drift). Steady-state heartbeat divergence survives the gate.
+  // spanMs < 0 = the stamp is BEHIND the local sim cursor — pd then
+  // measures speed×(simT−t) of pure flight lag between two different
+  // instants (a 150 m/s ball 150ms ahead reads 22m), not divergence.
+  // Only a stamp newer than the cursor can show replay error.
+  if (pd > 20 && !seg.hard && spanMs >= 0 && spanMs <= 4000 && bag.legT0 !== -1 && (bag.segsSeen ?? 0) > 3) {
+    glitch('seg-div', { m: Math.round(pd), spanMs: Math.round(spanMs), enr: seg.enraged ? 1 : 0 });
   }
   s.x = seg.px; s.y = seg.py; s.z = seg.pz;
   s.vx = seg.vx; s.vy = seg.vy; s.vz = seg.vz;

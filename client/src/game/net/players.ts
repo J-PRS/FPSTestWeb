@@ -121,6 +121,12 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
     // RemotePlayer will be created in the main loop when networkManager.getPlayers() includes this player
   };
 
+  // Headhunt: the local count never lives in the remote roster — the
+  // roster half was already patched by the dispatcher.
+  networkManager.onPlayerHeld = (playerId: string, n: number): void => {
+    if (playerId === nm().getLocalPlayerId()) {deps.lazyPlayer().heldTokens = n;}
+  };
+
   networkManager.onPlayerLeft = (playerId: string): void => {
     if (deps.world.remotePlayers.remove(playerId)) {
       logger.info(`Remote player removed (playerLeft): ${playerId}`);
@@ -208,7 +214,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
   // Server-healed hp (regen perk, mend channel, regen powerup) — arrives
   // at ~2Hz while a channel is live; adopt it wholesale, the server owns
   // these sources so its value can only ever be right.
-  networkManager.onYourHealth = (health): void => {
+  networkManager.onYourHealth = (health, armor): void => {
     if (deps.world.playbackMode) {return;}
     const player = deps.lazyPlayer();
     // A NaN echo would silently poison HUD + regen math — the
@@ -222,6 +228,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
       logger.warn(`yourHealth dropped hp ${player.health} -> ${health}`);
     }
     if (!player.isDead) {player.health = health;}
+    if (armor !== undefined && Number.isFinite(armor)) {player.armor = armor;}
   };
 
   // Own LG charge echo — the carrier can't see the CHARGED aura, so the
@@ -242,6 +249,15 @@ function wirePlayerCombat(ctx: NetCtx): void {
     // double the shove. Consume the stamp and drop the message.
     const stamps = deps.world.selfBlastStamps;
     const now = performance.now();
+    // Settle overdue stamps here too — blastForce only sweeps when a NEW
+    // self shove lands, so without this an unechoed stamp sat for minutes
+    // and reported its kb-echo on the next blast, not on its own expiry.
+    for (let i = stamps.length - 1; i >= 0; i -= 1) {
+      if (now - stamps[i]!.t > 700) {
+        parityMiss('kb-echo', { x: Math.round(stamps[i]!.x), y: Math.round(stamps[i]!.y), z: Math.round(stamps[i]!.z), by: stamps[i]!.by, f: stamps[i]!.f, ageMs: Math.round(now - stamps[i]!.t) });
+        stamps.splice(i, 1);
+      }
+    }
     // Consume window = the stamp's own settle horizon (700ms in
     // blastForce) — a 400ms+ echo is still THIS blast, and a stale
     // window double-shoves then reports a false kb-echo on expiry.

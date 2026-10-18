@@ -92,6 +92,7 @@ export class PlayerModel {
   get gunBaseX(): number { return this.gunCtl.baseX; }
   get gunKickZ(): number { return this.gunCtl.kickZ; }
   get gunBaseQuat(): THREE.Quaternion | null { return this.gunCtl.baseQuat; }
+  get gunAimPin(): boolean { return this.gunCtl.aimPin; }
   lastRoll = 0;
   private handBone: THREE.Bone | null = null;
   private mountBone: THREE.Bone | null = null;
@@ -144,7 +145,9 @@ export class PlayerModel {
     // slerp only helps UAL-retargeted clips whose stride roll waves the
     // muzzle (see PoseControl.wantSpineLock).
     const shootClip = CLASS_BODY_SPEC[this.variant]?.anims?.['shoot'];
-    this.pose.wantSpineLock = !shootClip || shootClip.startsWith('UAL_');
+    // Mannequin never plays a shoot clip — its aimPin prop is the shot
+    // feedback, and the bind-pose torso slerp only yanks the body off-aim.
+    this.pose.wantSpineLock = this.variant !== 'mannequin' && (!shootClip || shootClip.startsWith('UAL_'));
     // The gun controller owns the mesh; a baked-geo swap invalidates the
     // wireframe capture, so it reaches back through this hook.
     this.gunCtl.onGeoSwap = (): void => { if (this.mats.wireframeOn) {this.mats.captureWireframe(this.model);} };
@@ -189,7 +192,7 @@ export class PlayerModel {
             (this as { variant: PlayerModelVariant }).variant = this.variant === 'polyart' ? 'knight' : 'mannequin';
             this.pose = new PoseControl(this.variant);
             const fbShoot = CLASS_BODY_SPEC[this.variant]?.anims?.['shoot'];
-            this.pose.wantSpineLock = !fbShoot || fbShoot.startsWith('UAL_');
+            this.pose.wantSpineLock = this.variant !== 'mannequin' && (!fbShoot || fbShoot.startsWith('UAL_'));
             // oxlint-disable-next-line promise/no-nesting -- executor forwards the fallback rig's load outcome
             this.load().then(resolve, reject).catch((): void => undefined);
             return;
@@ -226,6 +229,7 @@ export class PlayerModel {
 
     // Enable shadow casting + grab aim/attachment bones
     this.model.traverse((child): void => this.prepareChild(child));
+    this.shareDrivenSkeleton(gltf.animations);
     this.mergeSkinnedParts();
     this.computeDistalBones();
     // Model may finish loading while a far-LOD swap is already armed —
@@ -308,6 +312,7 @@ export class PlayerModel {
   }
 
   private skinnedMeshes: THREE.SkinnedMesh[] = [];
+  private readonly _bbMin = new THREE.Vector3();
   /** merged-mesh i → original part indices — remapLod merges the lod1
    *  geo list into the same buckets so the swap stays aligned. */
   private lodGeoBuckets: number[][] | null = null;
@@ -344,12 +349,41 @@ export class PlayerModel {
 
   setBonesFrozen(frozen: boolean): void {
     this.distal.setBonesFrozen(frozen);
-    // Per-bone flags still leave every node walked each frame — freezing
-    // the rig root drops the whole subtree out of updateMatrixWorld.
-    // Stale matrices are invisible while offscreen; unfreeze recomposes.
-    if (this.model) {
-      this.model.matrixWorldAutoUpdate = !frozen;
-      if (!frozen) { this.model.updateMatrixWorld(true); }
+    // Do NOT touch this.model.matrixWorldAutoUpdate: freezing the root
+    // strand also freezes position tracking (setPosition writes
+    // model.position, but matrixWorld never recomposes — the mesh keeps
+    // rendering where it froze, and its stale bounds keep it
+    // frustum-culled even after the player runs back onscreen). The
+    // mixer skip upstream already removes the anim cost.
+  }
+
+  /** class_heavy-style GLBs ship each body part bound to its OWN copy of
+   *  the same armature (5 skins × 57 identically-named joints). The
+   *  mixer's PropertyBinding resolves duplicate node names to the first
+   *  DFS match, so only one armature animates — the other parts render
+   *  frozen bind-pose copies stacked on the driven body (the "magenta
+   *  blob" + model-offset sink). Joint order is identical across the
+   *  copies, so rebind every part's Skeleton to the driven armature's
+   *  bone NODES while keeping each part's own inverse bind matrices. */
+  private shareDrivenSkeleton(clips: THREE.AnimationClip[]): void {
+    if (!this.model || this.skinnedMeshes.length < 2) {return;}
+    // A track name's root node resolves to the first DFS match — find
+    // that node, then the skeleton that owns it is the driven armature.
+    const trackNode = clips.flatMap((c): string[] => c.tracks.map((t): string => t.name.split('.')[0]!)).find((n): boolean => Boolean(n));
+    let drivenBone: THREE.Object3D | undefined;
+    if (trackNode) {
+      this.model.traverse((c): void => { if (!drivenBone && c.name === trackNode) {drivenBone = c;} });
+    }
+    const donor = drivenBone
+      ? this.skinnedMeshes.find((sm): boolean => sm.skeleton.bones.includes(drivenBone as THREE.Bone))
+      : undefined;
+    const {bones} = (donor ?? this.skinnedMeshes[0]!).skeleton;
+    for (const sm of this.skinnedMeshes) {
+      if (sm.skeleton.bones === bones) {continue;}
+      // Different rig (names or count differ) — not a duplicate copy.
+      if (sm.skeleton.bones.length !== bones.length
+        || sm.skeleton.bones.some((b, i): boolean => b.name !== bones[i]!.name)) {continue;}
+      sm.bind(new THREE.Skeleton(bones, sm.skeleton.boneInverses), sm.bindMatrix);
     }
   }
 
@@ -528,6 +562,10 @@ export class PlayerModel {
     this.pose.wantHoldPose = (armedHold || !CLASS_BODY_SPEC[this.variant]?.anims) && Boolean(handBone);
     this.pose.holdShoots = armedHold;
     this.pose.holdIdle = Boolean(RIG_MANIFEST[this.variant]?.idleHold) && Boolean(handBone);
+    // Aim-pin rigs hold the same gripped torso through ground loco —
+    // the aim layer already owns the masked quats, this pins what the
+    // loco clip still sways.
+    this.pose.lockLocoTorso = Boolean(RIG_MANIFEST[this.variant]?.mount?.aimPin);
     this.gunCtl.attach({
       handBone, handBoneL: this.handBoneL,
       mount: RIG_MANIFEST[this.variant]?.mount,
@@ -563,7 +601,7 @@ export class PlayerModel {
 
   update(dt: number): void {
     this.anim.tick(dt);
-    this.gunCtl.follow(dt, this.model, this.modelScale, this.handBoneL);
+    this.gunCtl.follow(dt, this.model, this.modelScale, this.handBoneL, this.pose.aimPitch);
     this.fx.tick(dt);
     this.auditStretch(dt);
   }
@@ -583,21 +621,52 @@ export class PlayerModel {
     if (!this.model || !this.model.visible || this.skinnedMeshes.length === 0) {return;}
     this.model.updateMatrixWorld(true);
     let maxSq = 0, bi = -1, bj = -1;
-    const [mesh0] = this.skinnedMeshes;
+    let maxMesh: THREE.SkinnedMesh | undefined;
+    let minBoneY = Infinity;
     for (const sm of this.skinnedMeshes) {
+      // Per-skeleton spread, not pooled: duplicate-armature rigs (polyart
+      // ships 5) park their unused skeletons at bind pose far from the
+      // driven one — cross-skeleton distance reads as stretch without a
+      // single vert moving.
+      // Sink/rise measures the POSED VERTEX bounds, not bones — rigs
+      // park utility bones (weapon/headgear anchors) meters off the body
+      // at bind pose; verts are what markers have to register against.
+      sm.computeBoundingBox();
+      const bb = sm.boundingBox;
+      if (bb) {
+        this._bbMin.copy(bb.min).applyMatrix4(sm.matrixWorld);
+        if (this._bbMin.y < minBoneY) {minBoneY = this._bbMin.y;}
+      }
       const {bones} = sm.skeleton;
+      let meshMax = 0, mi = -1, mj = -1;
       for (let i = 0; i < bones.length; i += 1) {
         const a = bones[i].matrixWorld.elements;
         for (let j = i + 1; j < bones.length; j += 1) {
           const b = bones[j].matrixWorld.elements;
           const dx = a[12] - b[12], dy = a[13] - b[13], dz = a[14] - b[14];
           const d = dx * dx + dy * dy + dz * dz;
-          if (d > maxSq) { maxSq = d; bi = i; bj = j; }
+          if (d > meshMax) { meshMax = d; mi = i; mj = j; }
         }
+      }
+      if (meshMax > maxSq) { maxSq = meshMax; bi = mi; bj = mj; maxMesh = sm; }
+    }
+    // Sink/rise canary — HUD markers aim at the logical capsule (feet +
+    // head room), so a clip that drags the skeleton off the collider
+    // reads as "marker at his feet" (mesh floated up) or "marker over
+    // nothing" (mesh sank). Bones sit inside the mesh surface, so flag
+    // only past a margin animation bob can't reach (~0.6m).
+    if (this.model.parent) {
+      // World-space compare — previews nest models under transformed
+      // proxies, so the parent-local position.y isn't the world's feet.
+      const feetY = this._bbMin.set(0, -this.feetOffsetY, 0).applyMatrix4(this.model.matrixWorld).y;
+      const off = minBoneY - feetY;
+      if (Math.abs(off) > 0.6) {
+        glitch('model-offset', { variant: this.variant, clip: this.anim.currentClipName ?? '?',
+          state: this.anim.currentState, rise: Math.round(off * 10) / 10 });
       }
     }
     if (maxSq > 64) {
-      const bn = mesh0 && bi >= 0 ? `${mesh0.skeleton.bones[bi]?.name}↔${mesh0.skeleton.bones[bj]?.name}` : '?';
+      const bn = maxMesh && bi >= 0 ? `${maxMesh.skeleton.bones[bi]?.name}↔${maxMesh.skeleton.bones[bj]?.name}` : '?';
       glitch('model-stretch', {
         variant: this.variant,
         clip: this.anim.currentClipName ?? '?',

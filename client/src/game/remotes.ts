@@ -28,6 +28,7 @@ const _frustum = new THREE.Frustum();
 const _projScreen = new THREE.Matrix4();
 const _sphere = new THREE.Sphere();
 const _flagAnchor = new THREE.Vector3();
+const _markPos = new THREE.Vector3();
 
 export interface RemotesDeps {
   lazyNetworkManager: () => NetworkManager;
@@ -151,7 +152,13 @@ function tickRemoteCosmetics(deps: RemotesDeps, playerId: string, remotePlayer: 
     // Teammates read green, everything else stays enemy red — FFA and
     // teamless modes leave `team` undefined so nothing turns friendly.
     const friendly = Boolean(playerState.team) && playerState.team === deps.world.localTeam;
-    hud.updatePlayerIndicator(playerId, remotePlayer.position, deps.lazyCamera(), { friendly, sheep: playerState.sheep, bot: isBotId(playerId), cls: remotePlayer.armorClass, hp: playerState.health });
+    // Anchor at the RENDERED eye — the slope/lift pass can raise the
+    // mesh ~2.5m over the logical feet; marking raw position sinks the
+    // chevron into the body exactly when the lift is live.
+    _markPos.copy(remotePlayer.position); _markPos.y += remotePlayer.renderLift;
+    hud.updatePlayerIndicator(playerId, _markPos, deps.lazyCamera(), { friendly, sheep: playerState.sheep, bot: isBotId(playerId), cls: remotePlayer.armorClass, hp: playerState.health, held: playerState.held });
+    // The number stays on the indicator; the crown renders the pile itself.
+    remotePlayer.setHeld(playerState.held ?? 0);
   }
 }
 
@@ -517,7 +524,8 @@ export function createRemotes(deps: RemotesDeps) {
         // RemotePlayers have none and stay enemy red.
         const friendly = (rp as { team?: string }).team === deps.world.localTeam
           && (rp as { team?: string }).team !== undefined;
-        hud.updatePlayerIndicator(id, rp.position, cam, { friendly, sheep: (rp as { sheepShown?: number; sheep?: number }).sheepShown ?? (rp as { sheep?: number }).sheep, bot: isBotId(id), cls: rp.armorClass, hp: (rp as { botHp?: number }).botHp });
+        _markPos.copy(rp.position); _markPos.y += rp.renderLift;
+        hud.updatePlayerIndicator(id, _markPos, cam, { friendly, sheep: (rp as { sheepShown?: number; sheep?: number }).sheepShown ?? (rp as { sheep?: number }).sheep, bot: isBotId(id), cls: rp.armorClass, hp: (rp as { botHp?: number }).botHp });
       }
       aswAccrue(id, rp.isDead, gb.grounded ?? true, gb.wireSki ?? false, dt);
     }

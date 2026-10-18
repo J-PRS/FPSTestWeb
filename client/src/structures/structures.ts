@@ -177,7 +177,13 @@ export function mkKataStand(teamGlow = 0x59_F2_FF): THREE.Group {
   );
   band.rotation.x = -Math.PI / 2;
   g.add(band);
-  g.userData.hulls = [{ pos: { x: 0, y: -4.4, z: 0 }, size: { x: 6.4, y: 15.2, z: 6.4 } } satisfies HullBox];
+  // Deck box + necked root piling below — mirrors KIT_HULLS.katastand:
+  // the mesh's buried footing is wide, but collision necks down so it
+  // can't swallow a neighboring compound's hulls.
+  g.userData.hulls = [
+    { pos: { x: 0, y: 1.95, z: 0 }, size: { x: 6.4, y: 2.5, z: 6.4 } },
+    { pos: { x: 0, y: -6.5, z: 0 }, size: { x: 4, y: 13, z: 4 } },
+  ] satisfies HullBox[];
   return g;
 }
 
@@ -391,9 +397,12 @@ export function mkGenDome(r = 5, teamGlow = 0x59_F2_FF): THREE.Group {
   // quadratic and reads the closed-form cap height, so no box
   // approximation walls off the air over the slope.
   const b = 1.8;
+  // Plinth pair only to grade + a necked buried root — mirrors
+  // domeHulls(): fat underground boxes would swallow neighbors' hulls.
   g.userData.hulls = [
-    { pos: { x: 0, y: b / 2 - 6, z: 0 }, size: { x: r * 1.94, y: b + 12, z: r * 1.94 } },
-    { pos: { x: 0, y: b / 2 - 6, z: 0 }, size: { x: r * 1.94, y: b + 12, z: r * 1.94 }, rotY: Math.PI / 4 },
+    { pos: { x: 0, y: (b + 0.7) / 2, z: 0 }, size: { x: r * 1.85, y: b - 0.7, z: r * 1.85 } },
+    { pos: { x: 0, y: (b + 0.7) / 2, z: 0 }, size: { x: r * 1.85, y: b - 0.7, z: r * 1.85 }, rotY: Math.PI / 4 },
+    { pos: { x: 0, y: -6, z: 0 }, size: { x: r * 1.2, y: 10, z: r * 1.2 } },
     { pos: { x: 0, y: b + r / 2, z: 0 }, size: { x: r * 2, y: r, z: r * 2 }, dome: r },
   ] satisfies HullBox[];
   return g;

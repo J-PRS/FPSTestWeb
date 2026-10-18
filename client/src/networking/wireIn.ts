@@ -208,10 +208,11 @@ this.handlerThrows += 1;
       }
     },
     teamUpdate: (data): void => { this.h.patchRemotePlayer(data.playerId, { team: data.team }); },
+    playerHeld: (data): void => { this.h.patchRemotePlayer(data.playerId, { held: data.n }); this.h.onPlayerHeld?.(data.playerId, data.n); },
     playerRespawn: (data): void => this.handlePlayerRespawn(data),
     playerHit: (data): void => this.handlePlayerHit(data),
     buff: (data): void | undefined => this.h.onBuff?.(data),
-    yourHealth: (data): void | undefined => this.h.onYourHealth?.(data.health),
+    yourHealth: (data): void | undefined => this.h.onYourHealth?.(data.health, data.armor),
     yourCharge: (data): void | undefined => this.h.onYourCharge?.(data.charge),
     playerKill: (data): void => this.handlePlayerKill(data),
     knockback: (data): void | undefined => this.h.onKnockback?.(data.position, data.force, data.pull),
@@ -247,7 +248,7 @@ this.handlerThrows += 1;
     // WT/RTC path of the 1008 identity reject — the close code is lost
     // on those tiers, so the server sends this before closing.
     sessionRejected: (data): void => this.h.rejectSession(data.reason),
-    pickupSpawn: (data): void | undefined => this.h.onPickupSpawn?.(data.id, data.pos, data.kind),
+    pickupSpawn: (data): void | undefined => this.h.onPickupSpawn?.(data.id, data.pos, data.kind, data.val),
     pickupGone: (data): void | undefined => this.h.onPickupGone?.(data.id, data.by ?? null),
     teamScore: (data): void | undefined => this.h.onTeamScore?.(data.scores, data.winAt),
     ffaScore: (data): void | undefined => this.h.onFfaScore?.(data.scores, data.winAt),
