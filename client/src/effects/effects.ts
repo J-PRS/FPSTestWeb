@@ -6,6 +6,7 @@ import { impactBurst, blastBurst } from './vfx.js';
 import * as du from './effectDust.js';
 import type { Terrain } from '../world/terrain.js';
 import { registerDiag, markProbe } from '../core/fxDiag.js';
+import { waterSplashAt } from './waterSplash.js';
 
 // All live managers (normally one per scene) feed the Alt+Q fx section —
 // buckets/particles/beams were the last unaccounted FX resources.
@@ -234,6 +235,7 @@ export class EffectsManager {
   spawnImpact(pos: THREE.Vector3, vel: THREE.Vector3): void {
     const back = vel.lengthSq() > 0 ? _v.copy(vel).normalize().negate() : _v.set(0, 1, 0);
     impactBurst(pos, vel);
+    waterSplashAt(pos, 0.35, this.terrain ?? undefined); // slug at the waterline splashes instead of only sparking
     // Tiny flash at the exact hit point — quad faces along the shot direction
     _c.setHex(0xFF_EE_99);
     _v2.copy(pos).addScaledVector(back, 0.05);

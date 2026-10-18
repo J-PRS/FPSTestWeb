@@ -578,7 +578,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   // Skip the whole shadow-map raster when the scene opted out — the
   // second full-scene pass is the dominant fill cost on weak GPUs.
   renderer.shadowMap.enabled = urlParams.get('shadows') !== 'off' && settings.get('fps-shadows');
-  renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   // Skip the per-link infoLog query — lazy material variants compile
   // mid-match (new elites, tracers) and a live profile caught the
   // getProgramInfoLog validation stack at ~1.5% of the frame. Compile
@@ -593,6 +593,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   renderer.domElement.style.left = '50%';
   renderer.domElement.style.top = '50%';
   renderer.domElement.style.transform = 'translate(-50%, -50%)';
+  renderer.domElement.id = 'gl'; // the underwater sway rule targets it
   document.body.append(renderer.domElement);
 
   const cc = makeComposer(renderer, scene, camera, modes);

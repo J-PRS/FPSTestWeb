@@ -5,6 +5,7 @@ import { TerrainRing } from './TerrainRing.js';
 import { blastBurst, type BlastSpec } from './vfx.js';
 import type { ExplosionSparks } from './explosionSparks.js';
 import { BlastVariants, type BurstLayer, type VariantHost } from './blastVariants.js';
+import { waterSplashAt } from './waterSplash.js';
 import { markProbe } from '../core/fxDiag.js';
 
 const layerOpacity = (kind: string): number => {
@@ -59,15 +60,19 @@ export class ExplosionLayers implements VariantHost {
    *  blast as the fallback. Caller finalizes the spark batch after. */
   spawn(vfx: string | undefined, pos: THREE.Vector3, mult: number,
         directHit: boolean, timeScale: number, terrain?: Terrain): void {
-    if (this.variants.spawn(vfx, pos, mult, directHit, timeScale, terrain)) {return;}
-
-    this.spawnFlash(pos, mult);
-    this.spawnSpikes(pos, mult);
-    this.spawnBaseLayers(pos, mult, directHit, vfx === 'concussion');
-    this.spawnShockDome(pos, mult);   // every blast, not just direct hits
-    this.spawnDebrisSparks(pos, mult); // ground impacts get sparks too
-    if (directHit) {this.variants.directHitLayers(pos, timeScale);}
-    this.spawnGroundRing(pos, mult, terrain);
+    if (!this.variants.spawn(vfx, pos, mult, directHit, timeScale, terrain)) {
+      this.spawnFlash(pos, mult);
+      this.spawnSpikes(pos, mult);
+      this.spawnBaseLayers(pos, mult, directHit, vfx === 'concussion');
+      this.spawnShockDome(pos, mult);   // every blast, not just direct hits
+      this.spawnDebrisSparks(pos, mult); // ground impacts get sparks too
+      if (directHit) {this.variants.directHitLayers(pos, timeScale);}
+      this.spawnGroundRing(pos, mult, terrain);
+    }
+    // Any blast at the waterline throws a column — additive to the blast's
+    // own recipe (a rocket at sea still booms AND splashes). 'splash'
+    // blasts ARE water already — layering a sea column on a hose is spam.
+    if (vfx !== 'splash') {waterSplashAt(pos, mult, terrain);}
   }
 
   // Layer 0: Instant flash — one giant white-hot sprite, gone in ~90ms.

@@ -652,6 +652,56 @@ body:has(#hud.cm-open) #healthbar-container {
   -webkit-backdrop-filter: blur(0px) brightness(1);
 }
 
+/* Underwater grade — camera below the sea level. The terrain shader owns
+ * its own fog uniforms so scene.fog can't sell the volume; a DOM grade
+ * does: teal tint + desat/soft-blur backdrop (murk), vignette (visibility
+ * loss), light swaying from above, drifting motes (particulates).
+ * JS drives opacity per-frame by depth — a splash entry flashes teal,
+ * a real dive goes full murk. */
+#water-grade {
+  position: fixed; inset: 0; pointer-events: none; z-index: 5;
+  opacity: 0;
+  backdrop-filter: blur(1.5px) saturate(0.7) brightness(0.82) hue-rotate(-8deg);
+  -webkit-backdrop-filter: blur(1.5px) saturate(0.7) brightness(0.82) hue-rotate(-8deg);
+  background:
+    radial-gradient(ellipse at 50% 38%, transparent 46%, rgba(2, 14, 22, 0.55) 100%),
+    linear-gradient(180deg, rgba(20, 70, 90, 0.42), rgba(4, 26, 40, 0.62));
+}
+#water-grade .uw-top {
+  position: absolute; inset: -4% 0 0 0;
+  background: linear-gradient(180deg, rgba(170, 225, 240, 0.16), transparent 42%);
+  animation: uwTopSway 5.5s ease-in-out infinite alternate;
+}
+@keyframes uwTopSway {
+  from { opacity: 0.65; transform: translateX(-1.6%); }
+  to   { opacity: 1;    transform: translateX(1.6%); }
+}
+#water-grade .uw-motes {
+  position: absolute; inset: -25%;
+  background-image:
+    radial-gradient(rgba(210, 240, 250, 0.55) 0 1px, transparent 1.6px),
+    radial-gradient(rgba(210, 240, 250, 0.4) 0 0.7px, transparent 1.1px),
+    radial-gradient(rgba(210, 240, 250, 0.3) 0 1.8px, transparent 2.4px);
+  background-size: 130px 130px, 80px 80px, 210px 210px;
+  background-position: 0 0, 37px 53px, 89px 21px;
+  opacity: 0.10;
+  animation: uwMotes 14s linear infinite;
+}
+@keyframes uwMotes {
+  to { transform: translate3d(56px, -130px, 0); }
+}
+/* Underwater refraction sway — the world drifts a few px on a slow loop.
+ * Composited transform = free; the 2% overscan hides the edges. The
+ * keyframes re-supply the -50%,-50% centering the canvas's inline
+ * transform normally provides. */
+body.underwater #gl {
+  animation: uwSway 8s ease-in-out infinite alternate;
+}
+@keyframes uwSway {
+  from { transform: translate(-50%, -50%) scale(1.02) translateX(-4px); }
+  to   { transform: translate(-50%, -50%) scale(1.02) translateX(4px) translateY(-3px); }
+}
+
 /* Status chrome — one chip + one edge vignette per effect, tinted per kind */
 .status-vignette { position: fixed; inset: 0; pointer-events: none; z-index: 4; }
 .status-vignette.cloak {

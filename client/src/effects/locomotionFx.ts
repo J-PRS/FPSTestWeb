@@ -1,4 +1,5 @@
 import type * as THREE from 'three';
+import { waterCrossingFx } from './waterSplash.js';
 
 // One locomotion-FX pass for every actor type. The local player, network
 // remotes and offline bots each resolve their own "carving / burning"
@@ -34,4 +35,5 @@ export function emitLocomotionFx(
 ): void {
   if (jet) {sink.spawnJetpack(pos);}
   if (isCarvingSki(vel, grounded, ski)) {sink.spawnSkiDust(pos, vel);}
+  waterCrossingFx(pos, vel.y); // no-op on dry maps
 }

@@ -35,6 +35,7 @@ import type { createScene } from '../world/scene.js';
 import { fogHorizon, syncFxFog } from '../world/directionalFog.js';
 import { updateCubeSky, getInteriorsEpoch } from './net/mapAssets.js';
 import { isSessionVeiled, dropSessionVeil, isSessionVeilReady } from './net/world.js';
+import { tickUnderwaterGrade } from '../world/waterSurface.js';
 import { refreshColliderGizmoVisibility } from '../world/mapStructures.js';
 import type { createRenderer } from '../core/renderer.js';
 import type { Terrain } from '../world/terrain.js';
@@ -392,6 +393,7 @@ function fxTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cre
   // old cap (seen: 1201 systems → 10-24ms vfx frames).
   const v0 = performance.now();
   updateVfx(fxDt, deps.camera.position);
+  tickUnderwaterGrade(deps.camera.position.y); // no-op on dry maps
   fxJobSample('vfx', performance.now() - v0);
   // ?nanscan=1 — cheap watchdog for the "giant black triangle" class of
   // bug: a non-finite/insane vertex in ANY dynamic buffer rasterizes as
@@ -552,7 +554,7 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   deps.ambientBirds.positions(_birdPosBuf);
   fillMapBlips(deps, networkManager);
   hud.updateMinimap(entities.targets, entities.nuggets, player.pos, player.yaw, _birdPosBuf, _mapBlips, deps.world.nodeMarkers.values());
-  if (hud.commandMapOpen) {hud.updateCommandMap(player.pos, player.yaw, _mapBlips, deps.world.flagMarkers, deps.world.nodeMarkers);}
+  if (hud.commandMapOpen) {hud.updateCommandMap(player.pos, player.yaw, _mapBlips, deps.world.flagMarkers, deps.world.nodeMarkers, deps.world.spawnPools);}
 
   // During demo playback the vm mirrors the frame's recorded weaponType —
   // hiding it would strip the shooter POV from cool-shot clips.
