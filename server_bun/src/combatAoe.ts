@@ -149,7 +149,7 @@ export class AoeClaims {
         lagMs: player.isBot ? 0 : renderLagOf(player),
         lagMap: player.isBot ? undefined : player.clientStats?.renderLag,
         radius: stats.aoeRadius, baseDamage: dmg,
-        impulse: stats.knockbackForce, pull: false,
+        impulse: stats.knockbackForce, pull: stats.forceMode === 'pull',
         label: 'LG beam hit', weapon: msg.weaponType,
       }, victim.id, victim, false, dmg);
     }

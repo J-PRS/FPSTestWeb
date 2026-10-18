@@ -113,6 +113,9 @@ export function stepContact(r: ContactHost, proj: LiveProj, stats: ReturnType<ty
             r.detonate(proj, hit); return true;
           }
           bounceOffField(p, r.field, stats.bodyRadius, stats.bounceRestitution, stats.bounceFriction);
+          // Dirt contact starts a short cook-off when the weapon says so —
+          // min-clamp keeps the first bounce's deadline on later skips.
+          if (stats.fuseAfterBounce !== undefined) {proj.ttl = Math.min(proj.ttl, p.age + stats.fuseAfterBounce);}
           proj.terrainAt = 0; // still hugging the ground — keep sweeping
           return false;
         }

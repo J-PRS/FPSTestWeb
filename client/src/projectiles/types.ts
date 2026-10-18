@@ -72,6 +72,7 @@ export interface ProjectileConfig {
   bounceRestitution?: number; // velocity kept along the terrain normal per bounce
   bounceFriction?: number; // tangential velocity kept per bounce
   maxBounces?: number; // die on the Nth terrain hit (flak shards); undefined = bounce until fuse
+  fuseAfterBounce?: number; // first terrain bounce clamps the fuse to now+this many seconds (shared WeaponStats.fuseAfterBounce)
   armTime?: number; // T2 mortar arming delay: contacts before this age BOUNCE, after it they detonate
   bodyArmTime?: number; // bodies pop on contact at/after this age (defaults to armTime); 0 = GL: pops bodies at any age while still bouncing off dirt
   sticks?: boolean; // sticky launcher: on contact the bomb freezes in place and waits out its fuse; a detonation cooks off sibling sticks in radius

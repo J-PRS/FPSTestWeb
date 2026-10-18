@@ -22,6 +22,8 @@ interface KindConfig {
   vel: { x: number; y: number; z: number };
   velSpread: number;   // per-particle random velocity on top of base drift
   wobble: number;      // sine wobble amplitude (m/s)
+  gust?: number;       // whole-field wind waves — a slow sine swept onto
+                       // every live mote's sideways drift (blizzard squalls)
   blink: boolean;      // ember/firefly flicker — color attribute goes black
   spawnY: 'shell' | 'ground' | 'sky'; // respawn height band
   colors(): THREE.Color;
@@ -65,12 +67,13 @@ const KINDS: Record<AmbientKind, KindConfig> = {
       return _c.setRGB(g, g, g * 0.95);
     },
   },
-  // Snow — pale flakes drifting out of a still sky. Slower + larger than
-  // ash so a blizzard reads as weather, not volcanic debris.
+  // Snow — pale flakes gusting out of a grey sky. Denser + larger than
+  // ash with a whole-field wind wave so a blizzard reads as weather:
+  // squall lines sweep through, not just lazy individual drift.
   snow: {
-    count: 260, size: 0.19, opacity: 0.5,
-    vel: { x: 0.55, y: -0.95, z: 0.35 }, velSpread: 0.4,
-    wobble: 1.4, blink: false, spawnY: 'sky',
+    count: 380, size: 0.22, opacity: 0.55,
+    vel: { x: 0.8, y: -1.1, z: 0.45 }, velSpread: 0.5,
+    wobble: 1.4, gust: 2.2, blink: false, spawnY: 'sky',
     colors: (): THREE.Color => {
       const g = 0.86 + Math.random() * 0.14;
       return _c.setRGB(g, g, Math.min(1, g + 0.03));
@@ -194,6 +197,9 @@ export class AmbientParticles {
 
     let colorDirty = false;
     const colors = this.colorAttr.array as Float32Array;
+    // Slow wind wave — all live motes surge together, a visible squall
+    // line rolling through the field instead of uniform drift.
+    const gust = cfg.gust ? Math.sin(this.time * 0.35) * cfg.gust : 0;
 
     for (let i = 0; i < n; i += 1) {
       const ix = i * 3;
@@ -209,9 +215,9 @@ export class AmbientParticles {
 
       const phase = this.phases[i]!;
       const spd = this.speeds[i]!;
-      p[ix]! += (this.vels[ix]! + Math.sin(this.time * spd + phase) * cfg.wobble) * dt;
+      p[ix]! += (this.vels[ix]! + gust + Math.sin(this.time * spd + phase) * cfg.wobble) * dt;
       p[ix + 1]! += (this.vels[ix + 1]! + Math.cos(this.time * spd * 0.7 + phase * 2) * cfg.wobble * 0.5) * dt;
-      p[ix + 2]! += (this.vels[ix + 2]! + Math.sin(this.time * spd * 0.5 + phase * 3) * cfg.wobble) * dt;
+      p[ix + 2]! += (this.vels[ix + 2]! + gust * 0.4 + Math.sin(this.time * spd * 0.5 + phase * 3) * cfg.wobble) * dt;
 
       // Ember/firefly blink — slow sine gate; black adds nothing under
       // additive blending so the mote just vanishes and rekindles.

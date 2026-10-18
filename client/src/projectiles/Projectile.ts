@@ -459,6 +459,13 @@ export class Projectile {
     return ba === undefined || this.age >= ba;
   }
 
+  /** First dirt contact starts a short cook-off: clamp this shell's fuse
+   *  to now+sec. Min-clamped so later skips don't extend the deadline;
+   *  mirrors the server's projContact ttl clamp. */
+  clampFuse(sec: number): void {
+    this.ttl = Math.min(this.fuseTtl() ?? Infinity, this.fuseAge() + sec);
+  }
+
   /** Fuse clock — for sticky ordnance the fuse starts at ATTACH, not
    *  spawn: a lobbed bomb midair is inert (no fuse burn, no armed-light
    *  ramp). -1 = not armed yet; everything else just reads `age`. */

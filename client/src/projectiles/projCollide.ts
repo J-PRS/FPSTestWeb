@@ -51,6 +51,7 @@ export interface CollideHost extends SweepHost {
   hitAt(x: number, y: number, z: number, t: number): void;
   stickAt(p: THREE.Vector3, ball?: Targetable, playerId?: string,
           remotePlayers?: Map<string, THREE.Vector3>): void;
+  clampFuse(sec: number): void;
   explode(): void;
 }
 
@@ -163,6 +164,7 @@ export class ProjCollide {
       h.pos.copy(h.hitPoint).addScaledVector(_tNormal, depenetrate);
       h.prevPos.copy(h.pos);
       if (h.config.bounceSfx) {sfx.at(h.pos, h.config.bounceSfx, 0.5, 1.4, h.vel);}
+      if (h.config.fuseAfterBounce !== undefined) {h.clampFuse(h.config.fuseAfterBounce);}
       return true;
     }
     h.vel.addScaledVector(_tNormal, -(1 + (h.config.bounceRestitution ?? 0.5)) * vn);
@@ -177,6 +179,7 @@ export class ProjCollide {
       const gain = Math.min(1, -vn / 40);
       sfx.at(h.pos, `ricochet${1 + Math.floor(Math.random() * 3)}`, gain, 1, h.vel);
     }
+    if (h.config.fuseAfterBounce !== undefined) {h.clampFuse(h.config.fuseAfterBounce);}
     return true;
   }
 

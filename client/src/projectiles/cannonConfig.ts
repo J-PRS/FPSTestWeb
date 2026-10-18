@@ -57,4 +57,5 @@ export const CANNON_CONFIG: ProjectileConfig = {
   bounceSfx: 'hg_clang', // iron ball thunk on every skip
   bounceRestitution: WEAPONS[14].bounceRestitution,
   bounceFriction: WEAPONS[14].bounceFriction,
+  fuseAfterBounce: WEAPONS[14].fuseAfterBounce,
 };
