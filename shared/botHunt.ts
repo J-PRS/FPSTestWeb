@@ -175,7 +175,17 @@ export function scanVisible(ctx: BrainCtx, pos: BotVec, range: number, beastRang
       // Bounty read: a hoarder's effective range shrinks 0.8%/token,
       // floored at 10% — a 100-token vault reads 8x closer from 200m
       // without letting value override the brawl at the muzzle.
-      const effD = d * Math.max(0.1, 1 - (e.held ?? 0) * 0.008);
+      let effD = d * Math.max(0.1, 1 - (e.held ?? 0) * 0.008);
+      // No-figit (PUG guide: both flags home → enemy offense is
+      // ignorable). Route roles still pressing the stand price a
+      // mid-field passerby 3x farther — the spot is worth more than
+      // the duel. Two exemptions keep it honest: the man at brawl
+      // range is a reflex, and hostiles shadowing the objective ARE
+      // the stand-clearing work.
+      if (ctx.flagsHome && ctx.objective && (!ctx.posted || (ctx.sweat ?? 0) > 0) && d > 25) {
+        const dx = e.pos.x - ctx.objective.x, dz = e.pos.z - ctx.objective.z;
+        if (dx * dx + dz * dz > 90 * 90) {effD *= 3;}
+      }
       if (effD < playerD) { playerD = effD; player = e; }
     }
   }
@@ -229,7 +239,7 @@ function ghostPos(st: HuntState, ctx: BrainCtx, now: number): BotVec {
 function nearestSpot(ctx: BrainCtx, pos: BotVec): BotEnemy | null {
   let best: BotEnemy | null = null, bd = PURSUE_M;
   for (const e of ctx.spots ?? []) {
-    if (!e.alive) {continue;}
+    if (!e.alive || e.id === ctx.id) {continue;}
     const d = dist3(pos, e.pos);
     if (d < bd) { bd = d; best = e; }
   }
@@ -242,7 +252,7 @@ function nearestSpot(ctx: BrainCtx, pos: BotVec): BotEnemy | null {
  *  beacon range (80m) or any clear eye line. */
 function thiefBeacon(ctx: BrainCtx, pos: BotVec): BotEnemy | null {
   const t = ctx.thief;
-  if (!t || !t.alive) {return null;}
+  if (!t || !t.alive || t.id === ctx.id) {return null;}
   if (dist3(pos, t.pos) >= 80 && !losClear(ctx, pos, t.pos)) {return null;}
   return t;
 }
@@ -337,6 +347,7 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
     ? Object.assign({}, st.hunt, {pos: ghostPos(st, ctx, now),vel: Object.assign({}, st.leadVel)})
     : null;
   st.hunt = next ?? ghost;
+
 st.huntTick += 1;
   // New contact starts the reaction clock — a human doesn't shoot the
   // instant a target enters the eye line. Stamped per id so losing the

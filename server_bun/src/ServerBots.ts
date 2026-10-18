@@ -87,6 +87,7 @@ export class ServerBots {
     this.arsenal = new BotArsenal(room, this.loadouts, (id): string | null => this.lastHuntId(id), (id): BotVec | null => this.brains.get(id)?.currentHuntSeen ?? null, (id): BotSkill | undefined => this.brains.get(id)?.skill);
     this.roster = new BotRoster(room, this.brains, this.loadouts, this.thinkPhase, (id): void => this.untrack(id), ServerBots.THINK_DIV);
     this.sense = new ServerBotSenses(room, field, this.loadouts, this.roster.roleInfo, this.foeNear);
+    this.sense.routing.sweatOf = (id): number => this.brains.get(id)?.sweatLevel ?? 0;
     this.mpc = new BotMpc(room.moveSim, field);
   }
 
@@ -624,6 +625,14 @@ hurtCount += 1;
         const parties = this.sense.partiesOf(p);
         const goal = this.sense.flagGoal(p, brain.dutyLevel, parties);
         prof[0]! += performance.now() - tm; tm = performance.now();
+        // The sweatlord's reset key: an instant self-frag through the
+        // same funnel any suicide takes (applyDamage + killFeed's
+        // "fragged themselves"), not a splash war of attrition. The
+        // corpse path owns the rest of this life.
+        if (goal?.kout) {
+          this.room.messages.combat.serverHit(id, id, 1e9, 'K-out', { hb: 'bot.kout' });
+          continue;
+        }
         const ctx = this.sense.build(id, p, goal, now, brain.skill, parties, brain.builder);
         prof[1]! += performance.now() - tm; tm = performance.now();
         // MPC arm: the committed flag-run is the option's job — both

@@ -312,6 +312,9 @@ export class GameBot extends RemotePlayer {
 
   get dutyLevel(): number { return this.brain.dutyLevel; }
 
+  /** Tryhard scalar — the flag role table reads it for comp-pub behavior. */
+  get sweatLevel(): number { return this.brain.sweatLevel; }
+
   /** MoveSim grounded flag — propel only launches from a stand. */
 
   get grounded(): boolean { return this.moveState.onGround; }
@@ -477,6 +480,15 @@ export class GameBot extends RemotePlayer {
 
     thief?: { id: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean } | null;
 
+    /** Both CTF flags on stands — route roles discount mid-field duels. */
+
+    flagsHome?: boolean;
+
+    /** Sweatlord reset: the objective layer wants this bot to press K —
+     *  the manager executes it, the brain never sees it. */
+
+    kout?: boolean;
+
     /** Economy modes prefer creature targets (nuggets farming). */
 
     huntCreatures?: boolean;
@@ -547,7 +559,7 @@ export class GameBot extends RemotePlayer {
 
         return v;
 
-      },solids: Projectile.solidColliders,solidIndex: Projectile.solidIndex,others: ctx.others,allies: ctx.allies,engageRange: ctx.engageRange,sounds: ctx.sounds,threats: ctx.threats,infiltrating: ctx.infiltrating,running: ctx.running,runner: ctx.runner,wave: ctx.wave,marshal: ctx.marshal,posted: ctx.posted,thief: ctx.thief ?? null,huntCreatures: ctx.huntCreatures,repair: ctx.repair ?? null,notice: ctx.notice ?? null,confidence: ctx.confidence,now: performance.now(),energy: this.energy,healthFrac: this.botHp / this.botMaxHp,held: this.heldTokens}, botWeaponHooks(
+      },solids: Projectile.solidColliders,solidIndex: Projectile.solidIndex,others: ctx.others,allies: ctx.allies,engageRange: ctx.engageRange,sounds: ctx.sounds,threats: ctx.threats,infiltrating: ctx.infiltrating,running: ctx.running,runner: ctx.runner,wave: ctx.wave,marshal: ctx.marshal,posted: ctx.posted,thief: ctx.thief ?? null,flagsHome: ctx.flagsHome,huntCreatures: ctx.huntCreatures,repair: ctx.repair ?? null,notice: ctx.notice ?? null,confidence: ctx.confidence,now: performance.now(),energy: this.energy,healthFrac: this.botHp / this.botMaxHp,held: this.heldTokens}, botWeaponHooks(
 
         (d): WeaponType => pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d, (t): number => aimSkillFor(this.brain.skill, t, 0), this.brain.skill.courage) as WeaponType,
 

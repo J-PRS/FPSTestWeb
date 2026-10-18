@@ -142,10 +142,30 @@ export class BotMpc {
     // a stale one: the live shadow sits ~14m+ off the expected track
     // when the world disagrees. A timer would re-solve mid-flight and
     // pay a solve for a plan that was already working.
-    const ex = run ? run.plan.exp[stepI(run)] : undefined;
-    const diverged = run && run.i >= 3
-      ? (ex ? Math.hypot(sh.pos.x - ex.x, sh.pos.z - ex.z) > DIVERGE_M : true)
-      : false;
+    // Divergence = lateral distance to the plan's track, not distance
+    // to the expected point: a disc hit mid-flight leaves the runner
+    // behind pace but still on line, where the yaw acts still steer
+    // correctly. Off-LINE means the world disagreed — re-solve. (The
+    // old point check re-solved every combat knock: ~30% of solves.)
+    const pts = run ? run.plan.exp : null;
+    let track = Infinity;
+    if (run && run.i >= 3 && pts && pts.length > 1) {
+      // XZ distance to the nearest track SEGMENT (points sit ~15-20m
+      // apart at ski speed — nearest-point alone would read ~9m off
+      // for an on-line runner and false-trigger the solve).
+      const from = Math.max(0, stepI(run) - 2);
+      for (let i = from; i < pts.length - 1; i += 1) {
+        const a = pts[i]!, b = pts[i + 1]!;
+        const abx = b.x - a.x, abz = b.z - a.z;
+        const len2 = abx * abx + abz * abz || 1;
+        let t = ((sh.pos.x - a.x) * abx + (sh.pos.z - a.z) * abz) / len2;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+        const dx = sh.pos.x - (a.x + abx * t), dz = sh.pos.z - (a.z + abz * t);
+        const d = dx * dx + dz * dz;
+        if (d < track) {track = d;}
+      }
+    }
+    const diverged = run && run.i >= 3 && track > DIVERGE_M * DIVERGE_M;
     const retargeted = run && Math.hypot(run.tgt.x - tgt.x, run.tgt.z - tgt.z) > 30;
     const need = !run || stepI(run) >= run.plan.act.length || Boolean(diverged) || Boolean(retargeted);
     const pend = this.pending.get(id);
@@ -178,6 +198,7 @@ export class BotMpc {
           e0: econ.energy, ec, tgt: { x: tgt.x, y: tgt.y, z: tgt.z },
           beamW: this.beam(deep ? DEEP_BEAM : TRANSIT_BEAM, deep),
           horizon: deep ? DEEP_HORIZON : TRANSIT_HORIZON,
+          deep,
         };
         const seq = ++this.seq;
         const wk = this.ensureWorker();

@@ -411,7 +411,12 @@ bn += 1;
         foes = foes.filter((e): boolean => e.id === c || bottom.has(e.id));
       }
     }
-    const shot = bot.think(acc, this.ctxFor(bot, foes, others, terrain));
+    const ctx = this.ctxFor(bot, foes, others, terrain);
+    // The sweatlord's reset key: instant self-frag through the local
+    // damage funnel (attackerId === self reads as a suicide), same as
+    // the server's serverHit path — not a splash war of attrition.
+    if (ctx.kout) {this.hit(bot.playerId, 1e9, bot.position, bot.playerId); return;}
+    const shot = bot.think(acc, ctx);
     // Standing down between rounds is correct play — metering it would
     // charge every bot a guaranteed ~150 idle points per match end.
     if (this.over) {return;}
@@ -509,7 +514,7 @@ bn += 1;
    *  a client-side mirror here. */
   private ctxFor(bot: GameBot, enemies: Parameters<GameBot['think']>[1]['enemies'], others: THREE.Vector3[], terrain: Terrain): Parameters<GameBot['think']>[1] {
     const info = (this.ctf?.objectiveInfoFor(bot) ?? this.flagrun?.objectiveInfoFor(bot) ?? this.conquest?.objectiveInfoFor(bot)) as
-      { pos: THREE.Vector3; infiltrating?: boolean; running?: boolean;
+      { pos: THREE.Vector3; infiltrating?: boolean; running?: boolean; flagsHome?: boolean; posted?: number; kout?: boolean;
         thief?: { id: string; pos: THREE.Vector3; vel: THREE.Vector3 } | null } | null;
     let ctx = this.ctxCache.get(bot.playerId);
     if (!ctx) {
@@ -537,8 +542,10 @@ bn += 1;
     ctx.runner = rabbitGoal !== null;
     ctx.wave = false;
     ctx.marshal = false;
-    ctx.posted = undefined;
+    ctx.posted = info?.posted ?? undefined;
     ctx.thief = info?.thief ? { id: info.thief.id, pos: info.thief.pos, vel: info.thief.vel, alive: true } : null;
+    ctx.flagsHome = info?.flagsHome ?? false;
+    ctx.kout = info?.kout ?? false;
     this.fillSenses(ctx, bot, others);
     return ctx;
   }

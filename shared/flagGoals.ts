@@ -9,12 +9,14 @@
  */
 
 import { botRand } from './botRand.ts';
+import { dhypot } from './dmath.ts';
 import { BOT_TUNING } from './botTuning.ts';
 
 export type BotRole =
   | 'capper'      // flag route is the job — press/escort
   | 'offense'     // light offense — clear the stand for the capper
   | 'ldefense'    // light defense — sits home, chases the thief
+  | 'sniper'      // the capper-killer — overwatch perch on the approach
   | 'hof'         // heavy on flag — planted, never pursues
   | 'defense'     // generic home-side defender
   | 'technician'  // deploy kit at home (server-side role — needs deploys)
@@ -45,10 +47,22 @@ export interface FlagSituation {
    *  floods ahead of it: attackers clear defenders, shellers lob.
    *  Carries the stand pos so a push can be joined from anywhere. */
   push?: { x: number; y: number; z: number } | null;
+  /** Called E-grab: the enemy carrier is closing on OUR stand and a
+   *  kill isn't guaranteed — grabbing THEIR flag is the counterplay
+   *  that removes the cap condition outright. Carries the enemy stand
+   *  pos; raised by the host while the threat is inside the deny ring,
+   *  so any attacker in reach turns for it (the solo llama-deny roll
+   *  below stays as the uncalled fallback). */
+  deny?: { x: number; y: number; z: number } | null;
   /** The deciding bot's own position — populated when a goal needs
    *  "can I get there first" rather than pure priority (the llama
    *  deny-grab). */
   me?: { x: number; z: number } | null;
+  /** The deciding bot's tryhard scalar — comp-pub behaviors (route
+   *  leading the thief instead of following the wake) unlock for the
+   *  rare sweatlord without making the whole lobby play like a drill
+   *  team. */
+  sweat?: number;
 }
 
 /** Role-priority table, core before luxury — the row unlocks when the
@@ -59,6 +73,10 @@ export const ROLE_PRIORITY: { role: BotRole; want: number; minSquad: number }[] 
   { role: 'capper', want: 1, minSquad: 3 },
   { role: 'ldefense', want: 1, minSquad: 4 },
   { role: 'hof', want: 1, minSquad: 5 },
+  // Sniper before the deploy/bombard luxuries — a railgun covering the
+  // approach is the third leg of real defense (HOF + LD + sniper),
+  // and it's the role a pub crowd feels most: flags stop being free.
+  { role: 'sniper', want: 1, minSquad: 6 },
   { role: 'technician', want: 1, minSquad: 6 },
   { role: 'bombardier', want: 1, minSquad: 6 },
   // Medic before infiltrator at the same unlock — a healer lifts every
@@ -75,7 +93,7 @@ export const ROLE_PRIORITY: { role: BotRole; want: number; minSquad: number }[] 
 /** Roles a wire-side bot can actually play — no deploy kit and no
  *  cloak intent on that runtime, so technician/infiltrator stay
  *  server-side. */
-export const WIRE_ROLES: BotRole[] = ['capper', 'ldefense', 'hof', 'defense', 'offense', 'bombardier'];
+export const WIRE_ROLES: BotRole[] = ['capper', 'ldefense', 'sniper', 'hof', 'defense', 'offense', 'bombardier'];
 
 /** Strict-tier roles — the only slots that re-fit a donor's body.
  *  HoF is literally "heavy on flag" and the technician carries the
@@ -86,7 +104,7 @@ export const WIRE_ROLES: BotRole[] = ['capper', 'ldefense', 'hof', 'defense', 'o
  *  offline lobby applies the same re-fit the server roster does —
  *  a medium skin on a heavy sim is how the class lie starts. */
 export const STRICT_CLASS: Partial<Record<BotRole, 'light' | 'medium' | 'heavy'>> = {
-  capper: 'light', infiltrator: 'light',
+  capper: 'light', infiltrator: 'light', sniper: 'light',
   hof: 'heavy', technician: 'heavy',
 };
 
@@ -104,9 +122,9 @@ export function misfitClass(strict: 'light' | 'medium' | 'heavy', rand: () => nu
  *  runners (capper/infiltrator) pull light, and the planted specialists
  *  (hof/technician) pull heavy hard — HoF IS "heavy on flag". */
 export const CLASS_FITNESS: Record<string, Record<BotRole, number>> = {
-  light:   { capper: 3,   infiltrator: 3,   ldefense: 2,   offense: 1.5, defense: 1,   technician: 0.4, hof: 0.2, bombardier: 0.3, medic: 1.5 },
-  medium:  { offense: 3,  defense: 2.5,     ldefense: 2,   capper: 1.2,  hof: 1,       infiltrator: 1,  technician: 1,  bombardier: 1.5, medic: 2.5 },
-  heavy:   { hof: 3,      technician: 2.5,  defense: 2,    offense: 2,   ldefense: 1,  capper: 0.4,     infiltrator: 0.4, bombardier: 3,   medic: 1 },
+  light:   { capper: 3,   infiltrator: 3,   ldefense: 2,   offense: 1.5, defense: 1,   technician: 0.4, hof: 0.2, bombardier: 0.3, medic: 1.5, sniper: 3 },
+  medium:  { offense: 3,  defense: 2.5,     ldefense: 2,   capper: 1.2,  hof: 1,       infiltrator: 1,  technician: 1,  bombardier: 1.5, medic: 2.5, sniper: 1 },
+  heavy:   { hof: 3,      technician: 2.5,  defense: 2,    offense: 2,   ldefense: 1,  capper: 0.4,     infiltrator: 0.4, bombardier: 3,   medic: 1,   sniper: 0.3 },
 };
 const fit = (cls: string | undefined, role: BotRole): number =>
   (cls ? CLASS_FITNESS[cls]?.[role] : undefined) ?? 1.5;
@@ -169,6 +187,9 @@ export function roleSide(id: string): number {
  *  beats shadowing a carrier who legally can't cap yet. Then escort,
  *  then press the enemy stand to clear it for the capper. */
 function offenseGoal(s: FlagSituation): { x: number; y: number; z: number; } {
+  // A called deny outranks the thief chase — when the carrier is at our
+  // lip, the only guaranteed cap-denial is taking theirs off the stand.
+  if (s.deny) {return s.deny;}
   // The llama deny: grabbing THEIR flag removes the cap condition
   // outright while chasing a fast carrier the last stretch is a lost
   // footrace. Urgency is a field, not a cutoff — odds of the deny play
@@ -178,8 +199,8 @@ function offenseGoal(s: FlagSituation): { x: number; y: number; z: number; } {
   // still chases (he'd never reach the stand in time anyway — the
   // chase is the only play that can still score contact).
   if (s.thief && s.enemyStand && s.me) {
-    const thiefToStand = Math.hypot(s.thief.x - s.enemyStand.x, s.thief.z - s.enemyStand.z);
-    const meToFlag = Math.hypot(s.me.x - s.enemyStand.x, s.me.z - s.enemyStand.z);
+    const thiefToStand = dhypot(s.thief.x - s.enemyStand.x, s.thief.z - s.enemyStand.z);
+    const meToFlag = dhypot(s.me.x - s.enemyStand.x, s.me.z - s.enemyStand.z);
     const capRisk = 1 - Math.min(1, thiefToStand / 300);
     const reach = 1 - Math.min(1, meToFlag / Math.max(60, thiefToStand * 1.5));
     if (botRand() < capRisk * capRisk * reach * reach) {return s.enemyStand;}
@@ -206,7 +227,7 @@ function medicGoal(s: FlagSituation): { x: number; y: number; z: number; } {
   if (s.dropped) {return s.dropped;}
   if (s.enemyStand) {
     const dx = s.home.x - s.enemyStand.x, dz = s.home.z - s.enemyStand.z;
-    const d = Math.hypot(dx, dz);
+    const d = dhypot(dx, dz);
     if (d > 1) {
       const back = Math.min(40, d * 0.2);
       return { x: s.enemyStand.x + (dx / d) * back, y: s.enemyStand.y, z: s.enemyStand.z + (dz / d) * back };
@@ -221,6 +242,7 @@ function medicGoal(s: FlagSituation): { x: number; y: number; z: number; } {
 /** Infiltrator: slips in to wreck gear / grab — the stand press holds
  *  even when nobody's home so the cloak keeps covering the breach. */
 function infiltratorGoal(s: FlagSituation): { x: number; y: number; z: number; } {
+  if (s.deny) {return s.deny;}
   if (s.escort) {return s.escort;}
   // The push call outranks a routine stand press — the breach is timed
   // to the capper's arrival, not whenever the saboteur wandered up.
@@ -241,7 +263,7 @@ function infiltratorGoal(s: FlagSituation): { x: number; y: number; z: number; }
 function bombardierGoal(s: FlagSituation): { x: number; y: number; z: number; } {
   if (s.enemyStand) {
     const dx = s.home.x - s.enemyStand.x, dz = s.home.z - s.enemyStand.z;
-    const d = Math.hypot(dx, dz);
+    const d = dhypot(dx, dz);
     if (d > 1) {
       const standoff = Math.min(90, d * 0.35);
       return {
@@ -276,19 +298,55 @@ function capperGoal(s: FlagSituation): { x: number; y: number; z: number; } {
  *  early escort beats a late body-block: the carrier's most fragile
  *  leg is the approach, where chasers converge. */
 function defenseGoal(s: FlagSituation, role: string, side: number): { x: number; y: number; z: number; } {
-  if (s.thief) {return s.thief;}
+  if (s.thief) {
+    // The sweatlord's intercept: lead the carrier's run instead of
+    // following the wake — the thief slot carries velocity exactly so
+    // a chaser can cut the corner. Everyone else chases the beacon,
+    // which is honest pub play too.
+    if ((s.sweat ?? 0) > 0 && s.thief.vx !== undefined) {
+      const d = s.me ? dhypot(s.thief.x - s.me.x, s.thief.z - s.me.z) : 100;
+      const lead = Math.min(2.5, Math.max(0.4, d * 0.02));
+      return { x: s.thief.x + s.thief.vx * lead, y: s.thief.y, z: s.thief.z + (s.thief.vz ?? 0) * lead };
+    }
+    return s.thief;
+  }
   if (s.dropped) {return s.dropped;}
-  if (s.escort && Math.hypot(s.escort.x - s.home.x, s.escort.z - s.home.z) < 260) {return s.escort;}
+  if (s.escort && dhypot(s.escort.x - s.home.x, s.escort.z - s.home.z) < 260) {return s.escort;}
   // Idle: don't stack bodies on the pole — the era's real defense is
   // coverage, not a clump. LD screens the incoming lane toward the
   // enemy stand, generic defense takes a flank (side mirrors per bot),
   // technician stays on the pole for the weld/deploy work.
   if (s.enemyStand) {
     const dx = s.enemyStand.x - s.home.x, dz = s.enemyStand.z - s.home.z;
-    const d = Math.hypot(dx, dz) || 1;
+    const d = dhypot(dx, dz) || 1;
     const ux = dx / d, uz = dz / d;
     if (role === 'ldefense') {return { x: s.home.x + ux * 38, y: s.home.y, z: s.home.z + uz * 38 };}
     if (role === 'defense') {return { x: s.home.x - uz * side * 24 + ux * 10, y: s.home.y, z: s.home.z + ux * side * 24 + uz * 10 };}
+  }
+  return s.home;
+}
+
+
+
+/** Sniper: the capper-killer — thief first (a marked carrier IS the
+ *  job), then a dropped flag's return lane, then covering our own
+ *  carrier's run. Idle = an overwatch perch ~75m down the enemy's
+ *  approach lane, offset off-axis so a second defender doesn't stack
+ *  the same sightline. The perch is home-side — the guide's sniper
+ *  never leaves the half it defends. */
+function sniperGoal(s: FlagSituation, side: number): { x: number; y: number; z: number; } {
+  if (s.thief) {return s.thief;}
+  if (s.dropped) {return s.dropped;}
+  if (s.escort) {return s.escort;}
+  if (s.enemyStand) {
+    const dx = s.enemyStand.x - s.home.x, dz = s.enemyStand.z - s.home.z;
+    const d = dhypot(dx, dz) || 1;
+    const reach = Math.min(75, d * 0.3);
+    return {
+      x: s.home.x + (dx / d) * reach - (dz / d) * side * 18,
+      y: s.home.y,
+      z: s.home.z + (dz / d) * reach + (dx / d) * side * 18,
+    };
   }
   return s.home;
 }
@@ -302,10 +360,10 @@ function defenseGoal(s: FlagSituation, role: string, side: number): { x: number;
  *  before it hits the flag. */
 function hofGoal(s: FlagSituation, commit: number): { x: number; y: number; z: number; } {
   const T = BOT_TUNING.hof;
-  if (s.dropped && Math.hypot(s.dropped.x - s.home.x, s.dropped.z - s.home.z) < T.dropR) {return s.dropped;}
+  if (s.dropped && dhypot(s.dropped.x - s.home.x, s.dropped.z - s.home.z) < T.dropR) {return s.dropped;}
   if (s.threat) {
     const dx = s.threat.x - s.home.x, dz = s.threat.z - s.home.z;
-    const d = Math.hypot(dx, dz);
+    const d = dhypot(dx, dz);
     if (d > 1 && d < T.threatR) {
       // The HoF body-block: slide onto the capper's run line so his
       // speed meets a heavy's hitbox before it meets the flag. A slack
@@ -319,6 +377,32 @@ function hofGoal(s: FlagSituation, commit: number): { x: number; y: number; z: n
 }
 
 
+
+/** K-out — the sweatlord's fast-travel key. The human K bind is a
+ *  teleport: press it when the goal near YOUR base outvalues anything
+ *  you'd reach on skis from where you're stranded. Two real cases:
+ *  the thief's inbound on our flag while I'm deep in enemy field
+ *  (respawn = instant stand defense — the guide's E-grab companion),
+ *  or a spent push left me 400m out with flags home (respawn IS the
+ *  re-time with the next wave). Only far from home — near the base
+ *  the jog is cheaper than the corpse, and a bot still under spawn
+ *  protection is already home so the case can't arise. The host
+ *  executes it instantly like the K bind, not by splash attrition. */
+export function wantKOut(role: string, s: FlagSituation): boolean {
+  if ((s.sweat ?? 0) <= 0 || !s.me) {return false;}
+  const span = s.enemyStand ? dhypot(s.enemyStand.x - s.home.x, s.enemyStand.z - s.home.z) : 0;
+  const stranded = dhypot(s.me.x - s.home.x, s.me.z - s.home.z) > Math.max(150, span * 0.6);
+  if (!stranded) {return false;}
+  // Thief inbound — a stranded defender's post is where the play is
+  // going, so the corpse is the fastest ride to stand defense. An
+  // attacker's deny job is the OTHER stand (the counter-grab) — they
+  // ski, not K.
+  if (s.deny) {return role !== 'capper' && role !== 'offense' && role !== 'infiltrator' && role !== 'medic';}
+  // Live flag work out here still beats the teleport; otherwise the
+  // goal near base wins for every role — a stranded defender's post
+  // is home, a stranded attacker's wave forms there.
+  return !(s.thief || s.dropped || s.push || s.escort);
+}
 
 export function roleObjective(role: string, s: FlagSituation, commit = 1, side = 1): { x: number; y: number; z: number } {
   // Mutual-carry lock: both flags are out, so nobody can cap and the match
@@ -334,6 +418,8 @@ export function roleObjective(role: string, s: FlagSituation, commit = 1, side =
     case 'hof': { return hofGoal(s, commit);
     }
     case 'ldefense': case 'technician': case 'defense': { return defenseGoal(s, role, side);}
+    case 'sniper': { return sniperGoal(s, side);
+    }
     case 'capper': { return capperGoal(s);
     }
     case 'bombardier': { return bombardierGoal(s);

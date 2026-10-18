@@ -9,7 +9,7 @@ import { botRand } from '../../shared/botRand.ts';
 import { TerrainFlow } from '../../shared/botGraph.ts';
 import type { Vec3 } from './types.ts';
 import type { BotEnemy } from '../../shared/botBrain.ts';
-import { roleObjective, roleSide, type BotRole, type FlagSituation } from '../../shared/flagGoals.ts';
+import { roleObjective, roleSide, wantKOut, type BotRole, type FlagSituation } from '../../shared/flagGoals.ts';
 import { classCapsule } from '../../shared/botClasses.ts';
 import { segSolidHit } from '../../shared/solidWorld.ts';
 import { FLAG_STAND_LIFT } from '../../shared/mapSpec.ts';
@@ -257,7 +257,7 @@ export class BotRouting {
    *  enemy flag reachable → go grab it. Defenders invert it: their flag
    *  recovery/intercept outranks pressing the enemy stand. */
   // oxlint-disable-next-line max-lines-per-function, complexity -- the CTF goal decision body; its branches are tuned as one surface
-  flagGoal(p: { id: string; team?: string; position: Vec3 }, duty = 1, parties?: ReturnType<ServerParties['of']>): { pos: BotVec; flagPos?: BotVec | null; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; marshal?: boolean; posted?: number } | null {
+  flagGoal(p: { id: string; team?: string; position: Vec3 }, duty = 1, parties?: ReturnType<ServerParties['of']>): { pos: BotVec; flagPos?: BotVec | null; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; marshal?: boolean; posted?: number; kout?: boolean } | null {
     const {flags} = this.room;
     if (!flags) {return null;}
     // Rabbit: no teams, one neutral flag. Hunters converge on the flag
@@ -324,17 +324,26 @@ export class BotRouting {
     // goal is only the mount target; fly-throughs aimed at the lift
     // ride ~3m high and graze past outside the 6m grab window.
     const enemyFlagY = enemy.pos.y;
+    const thief = this.thiefOf(me);
     const sit: FlagSituation = {
+      sweat: this.sweatOf(p.id),
       home: own.home,
       // Own flag's carrier — chase the thief, not the base; velocity
       // rides along so the pick can lead the run, not the wake.
-      thief: ((t): (BotVec & { vx: number; vz: number; }) | null => t ? Object.assign({}, t.pos, {vx: t.vel.x, vz: t.vel.z}) : null)(this.thiefOf(me)),
+      thief: thief ? Object.assign({}, thief.pos, {vx: thief.vel.x, vz: thief.vel.z}) : null,
       // Own flag dropped — anyone close enough touches it home.
       dropped: own.state === 'dropped' ? own.pos : null,
       enemyStand,
       escort: this.escortSpot(enemy.carrier, me),
       threat: this.standThreat(own.home, me),
       push: this.pushFor(me),
+      // Called E-grab: the thief is inside the deny ring and their flag
+      // is still home — taking it off the stand removes the cap
+      // condition outright, which no chase can guarantee. Raised while
+      // the threat is in the ring; the role table decides who turns.
+      deny: thief && enemy.state === 'home'
+        && Math.hypot(thief.pos.x - own.home.x, thief.pos.z - own.home.z) < 150
+        ? enemyStand : null,
       me: p.position,
     };
     // The commander names responders for contested jobs before the role
@@ -361,6 +370,10 @@ export class BotRouting {
     }
     cmd.update(simNow(), sit, members, siege);
     const task = cmd.taskFor(p.id);
+    // K-out reads the world state BEFORE the staffing block masks
+    // slots — a named task always means there's still a job, and a
+    // masked thief is still a flag in play.
+    const kout = !task && wantKOut(this.roles.get(p.id) ?? 'offense', sit);
     if (!task) {
       if (cmd.staffed(p.id, 'chase')) {sit.thief = null;}
       if (cmd.staffed(p.id, 'return')) {sit.dropped = null;}
@@ -930,12 +943,16 @@ export class BotRouting {
     // stand is how the anchor ends up wandering midfield. The leash
     // widens once our flag is already gone: no stand to guard means
     // the defender roams the counter-attack.
-    const anchored = role === 'hof' || role === 'ldefense' || role === 'defense' || role === 'technician';
+    const anchored = role === 'hof' || role === 'ldefense' || role === 'defense' || role === 'technician' || role === 'sniper';
     let posted = 0;
-    if (anchored && Math.hypot(pick.x - own.home.x, pick.z - own.home.z) < 15) {
-      const base = own.state === 'carried'
-        ? (role === 'hof' ? BOT_TUNING.hof.postCarried : 200)
-        : (role === 'hof' ? BOT_TUNING.hof.postHome : 90);
+    // The sniper's anchor is his perch, not the stand — 75m down the
+    // approach lane would fail the home-distance check, so his leash
+    // is keyed on the role, sized to overwatch range.
+    if (anchored && (role === 'sniper' || Math.hypot(pick.x - own.home.x, pick.z - own.home.z) < 15)) {
+      const base = role === 'sniper' ? 140
+        : own.state === 'carried'
+          ? (role === 'hof' ? BOT_TUNING.hof.postCarried : 200)
+          : (role === 'hof' ? BOT_TUNING.hof.postHome : 90);
       posted = base * (1.35 - 0.5 * duty);
     }
     return { pos: goalPos, flagPos: enemyStand, infiltrating: enemyStand !== null && pick !== null &&
@@ -971,7 +988,7 @@ export class BotRouting {
       // Push-only: the member mass-orbits ~110m out until the flood is
       // actually converging. Escorts share wave's committed feet but
       // must never hold off a moving carrier — that's just losing him.
-      marshal: task?.kind === 'push', posted };
+      marshal: task?.kind === 'push', posted, kout };
   }
 
   /** A teammate carrying the enemy flag is the escort point — the
@@ -993,6 +1010,11 @@ export class BotRouting {
     }
     return best;
   }
+
+  /** The deciding bot's tryhard scalar — ServerBots wires this to the
+   *  brain's sweatLevel so the shared goal table can unlock comp-pub
+   *  behaviors per bot, not per lobby. */
+  sweatOf: (id: string) => number = () => 0;
 
   /** Who's carrying OUR flag — pos+vel are beacon info (the wire streams
    *  the carrier anyway), so returning them to the brain is not a wallhack.

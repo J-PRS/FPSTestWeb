@@ -52,6 +52,33 @@ describe('scanVisible', () => {
     const b = foe(50, 0, 'p:b');
     expect(scanVisible(flat({ enemies: [b, a] }), P, 100, 100).player?.id).toBe('p:a');
   });
+
+  it('flags home: mid-field figits lose to stand-shadow hostiles', () => {
+    // Offense pressing the enemy stand at (160,0): a passerby at 40m is
+    // nearer in raw meters but reads 3x — the stand-side hostile wins.
+    const figit = foe(40, 0, 'p:figit');
+    const defender = foe(95, 0, 'p:def'); // 65m off the objective — in its ring
+    const ctx = flat({ enemies: [figit, defender], flagsHome: true,
+      objective: { x: 160, y: 0, z: 0 } });
+    expect(scanVisible(ctx, P, 100, 100).player?.id).toBe('p:def');
+    // Same scene with a flag moving (or a posted defender) — figit wins again.
+    ctx.flagsHome = false;
+    expect(scanVisible(ctx, P, 100, 100).player?.id).toBe('p:figit');
+    ctx.flagsHome = true; ctx.posted = 60;
+    expect(scanVisible(ctx, P, 100, 100).player?.id).toBe('p:figit');
+    // …unless the defender is a sweatlord — comp-pub discipline extends
+    // the no-figit read to posted roles too.
+    ctx.sweat = 0.9;
+    expect(scanVisible(ctx, P, 100, 100).player?.id).toBe('p:def');
+  });
+
+  it('no-figit keeps the brawl reflex — 20m is a reflex, not a duel', () => {
+    const face = foe(20, 0, 'p:face');
+    const defender = foe(95, 0, 'p:def');
+    const ctx = flat({ enemies: [face, defender], flagsHome: true,
+      objective: { x: 160, y: 0, z: 0 } });
+    expect(scanVisible(ctx, P, 100, 100).player?.id).toBe('p:face');
+  });
 });
 
 describe('pickHunt', () => {

@@ -20,6 +20,9 @@ export interface MpcJob {
    *  plans don't walk through water the sim would float them out of. */
   waterLevel?: number;
   e0: number; ec: MpcEcon; tgt: BotVec; beamW: number; horizon: number;
+  /** Deep run-in dive — fires once per run and buys the fast grabs, so
+   *  it always gets the full horizon (no stagnation exit). */
+  deep?: boolean;
 }
 
 interface Node {
@@ -82,6 +85,7 @@ export function runSearch(surface: MoveSurface, field: Heightfield, job: MpcJob)
   let frontier = [0];
   const seen = new Set([key(arena[0]!.snap.st, job.e0)]);
   let bestIdx = -1;
+  let lastBest = -Infinity, stall = 0;
   const steps = Math.round(job.horizon / MPC_STEP_S);
   const B = job.tgt, {ec} = job;
   for (let sIdx = 0; sIdx < steps; sIdx++) {
@@ -137,6 +141,15 @@ export function runSearch(surface: MoveSurface, field: Heightfield, job: MpcJob)
       if (p > bs) {bs = p; bi = ix;}
     }
     bestIdx = bi;
+    // Stagnation exit (transit only): three layers without a better
+    // layer-best means the beam is grinding a flat stretch — the found
+    // line won't improve, so stop paying layers for it. proj plateaus
+    // legitimately across flats, so two was too tight; and the deep
+    // run-in dive never truncates — its horizon IS the grab speed.
+    if (!job.deep) {
+      if (bi >= 0 && bs <= lastBest) {stall += 1; if (stall >= 3) {break;}}
+      else if (bi >= 0) {stall = 0; lastBest = bs;}
+    }
   }
   return bestIdx < 0 ? { act: [], exp: [], hit: false } : unwind(arena, bestIdx, false);
 }

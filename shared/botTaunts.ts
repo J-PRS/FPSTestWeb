@@ -798,6 +798,13 @@ const AIR_LINES = [
 /** The carrier is running with hostiles close — the "cover me" call.
  *  When it comes out as VDM/VNE the room's radio wiring turns the chord
  *  into an actual escort pin on the speaker. */
+/** The rare tryhard announcing a committed run — PUG voice, not pub
+ *  chatter ("going in 10" is the whole personality). */
+const CAPCALL_LINES = [
+  'going in 10', 'hitting stand in 10', 'cap inbound — clear the stand',
+  'on route, watch for my grab', 'push NOW', 'timing the run — go go go',
+];
+
 const CALLFOR_LINES = [
   'cover me',
   'escort home',
@@ -1015,7 +1022,7 @@ export type ChatterKind =
   | 'tilt' | 'fist' | 'gg' | 'salty' | 'mention'
   | 'revenge' | 'streakend' | 'quiet' | 'witness' | 'props'
   | 'hello' | 'thanks' | 'sorry' | 'wholesome' | 'mald'
-  | 'question' | 'lag' | 'bye' | 'ack' | 'bully' | 'air' | 'callfor';
+  | 'question' | 'lag' | 'bye' | 'ack' | 'bully' | 'air' | 'callfor' | 'capcall';
 
 const CHATTER_POOLS: Record<ChatterKind, string[]> = {
   contact: CONTACT_LINES,
@@ -1057,6 +1064,7 @@ const CHATTER_POOLS: Record<ChatterKind, string[]> = {
   air: AIR_LINES,
   callfor: CALLFOR_LINES,
   bully: BULLY_LINES,
+  capcall: CAPCALL_LINES,
 };
 
 /** Canon VGS alternates — some kinds have a real quick-chat chord, and

@@ -310,6 +310,12 @@ export class BotRoster {
             if (far !== lo.far || near !== lo.near) {this.loadouts.set(donor, Object.assign({}, lo, {far,near}));}
           }
         }
+        // The sniper IS the railgun — a mortar/rack kit on the perch
+        // can't do the one job the role exists for.
+        if (want === 'sniper') {
+          const lo = this.loadouts.get(donor);
+          if (lo && lo.far !== WeaponType.Railgun) {this.loadouts.set(donor, Object.assign({}, lo, {far: WeaponType.Railgun}));}
+        }
         // Role kit edits (LD's beam, capper's disc) can change the body's
         // legal tier — an LD donor grafted Lightning must run light or
         // the class gate makes its own guns contraband. Strict roles

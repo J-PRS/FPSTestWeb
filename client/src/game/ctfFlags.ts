@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import type { Terrain } from '../world/terrain.js';
 import { TEAM_COLORS, TEAM_LABEL, FLAG_HOME_R, FLAG_RESET_S, CTF_PTS, bank, type TeamId, type TeamScores } from '../../../shared/teams.js';
 import type { GameBot } from './bots/botBrain.js';
-import { roleObjective, roleSide, ROLE_PRIORITY, STRICT_CLASS, misfitClass, type BotRole } from '../../../shared/flagGoals.js';
+import { roleObjective, roleSide, wantKOut, ROLE_PRIORITY, STRICT_CLASS, misfitClass, type BotRole, type FlagSituation } from '../../../shared/flagGoals.js';
 import * as sfx from '../core/sfx.js';
 import { mkFlagStand, FLAG_STAND_TOP } from '../structures/structures.js';
 import { wornMetalMat } from '../entities/procMetal.js';
@@ -215,7 +215,7 @@ export class CtfFlags {
   // the cloak intent rides GameBot.applyStatus like anywhere else.
   // Without roles every bot read the same objective and the whole squad
   // ran the same flag route — nobody held the stand.
-  private roles = new Map<string, 'capper' | 'ldefense' | 'hof' | 'offense' | 'defense' | 'infiltrator'>();
+  private roles = new Map<string, BotRole>();
 
   /** Jersey swap — a rekeyed capper keeps its slot; without this the
    *  next cycle reads it as unassigned and re-rolls a generic role. */
@@ -228,7 +228,7 @@ export class CtfFlags {
   // Offline bots DO carry the cloak intent (GameBot.applyStatus →
   // STATUS.CLOAK → setCloakHidden), so the infiltrator lane is playable
   // locally too — technician alone stays server-only (no deploy kit).
-  private static readonly SUPPORTED = new Set(['capper', 'ldefense', 'hof', 'infiltrator']);
+  private static readonly SUPPORTED = new Set(['capper', 'ldefense', 'sniper', 'hof', 'infiltrator']);
 
   private rebalanceRoles(now: number): void {
     if (now < this.roleT) { return; }
@@ -277,7 +277,7 @@ export class CtfFlags {
     while (have < want) {
       const donor = donors.shift();
       if (!donor) { break; }
-      this.roles.set(donor, role as 'capper' | 'ldefense' | 'hof' | 'infiltrator');
+      this.roles.set(donor, role);
       const strict = STRICT_CLASS[role];
       // Rare misfit body on purpose — heavy capper / light HoF comedy.
       if (strict) { this.ctx.bots.find((b): boolean => b.playerId === donor)?.setBotClass(misfitClass(strict, Math.random)); }
@@ -297,7 +297,7 @@ export class CtfFlags {
    *  When the role's pick IS the thief, the carrier rides along as a
    *  beacon-marked enemy so the brain engages him, not just the spot. */
   objectiveInfoFor(bot: GameBot): { pos: THREE.Vector3; infiltrating: boolean;
-      running?: boolean;
+      running?: boolean; flagsHome?: boolean; posted?: number; kout?: boolean;
       thief?: { id: string; pos: THREE.Vector3; vel: THREE.Vector3 } } | null {
     const enemyTeam: TeamId = bot.team === 'alpha' ? 'bravo' : 'alpha';
     const enemy = this.flags.get(enemyTeam);
@@ -313,20 +313,34 @@ export class CtfFlags {
     const enemyStand = enemy.state === 'carried'
       ? null
       : new THREE.Vector3(enemy.pos.x, enemy.pos.y + FLAG_STAND_LIFT, enemy.pos.z);
-    const pick = roleObjective(role, {
+    const sit: FlagSituation = {
+      sweat: bot.sweatLevel,
       home: own.home,
       thief,
       dropped: own.state === 'dropped' ? own.pos : null,
       enemyStand,
       escort: escortPos,
+      // Called E-grab — same deny ring the server raises.
+      deny: thief && enemy.state === 'home'
+        && Math.hypot(thief.x - own.home.x, thief.z - own.home.z) < 150
+        ? enemyStand : null,
       threat: this.standThreat(own.home, bot.team as string),
       me: { x: bot.position.x, z: bot.position.z },
-    }, bot.dutyLevel, roleSide(bot.playerId));
+    };
+    const pick = roleObjective(role, sit, bot.dutyLevel, roleSide(bot.playerId));
     // Cloak intent is the infiltrator's alone — the drain is
     // speed-scaled, so a sprinting capper would arrive tank-dry.
     const infiltrating = enemyStand !== null && pick === enemyStand && role === 'infiltrator';
     return {
       pos: new THREE.Vector3(pick.x, pick.y, pick.z), infiltrating,
+      flagsHome: own.state === 'home' && enemy.state === 'home',
+      // The sniper's anchor is his perch (75m out, not the stand) — the
+      // leash rides the goal, same as the server's posted radius.
+      posted: role === 'sniper' ? 140 : undefined,
+      // The sweatlord's reset key — the manager turns this into an
+      // instant self-frag through the local damage funnel, not a
+      // splash war of attrition.
+      kout: wantKOut(role, sit),
       // Only roles whose goal IS the thief get the beacon — a capper
       // escorting doesn't break off to chase.
       thief: CtfFlags.thiefBeacon(thief, pick, own),

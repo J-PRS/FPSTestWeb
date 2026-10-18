@@ -192,6 +192,16 @@ export class ServerBotSenses {
     return this.routing.debugTasks(team);
   }
 
+  /** Both flags seated on their stands — the no-figit phase marker.
+   *  True only in flag rooms; absent flags (other modes) read false so
+   *  nobody's acquisition ever gets discounted there. */
+  private flagsHome(): boolean {
+    const {flags} = this.room;
+    if (!flags) {return false;}
+    const a = flags.flags.get('alpha'), b = flags.flags.get('bravo');
+    return a?.state === 'home' && b?.state === 'home';
+  }
+
   /** The team's active push target for non-goal consumers (the stand
    *  bombardment volley in ServerBots reads it directly). */
   pushTarget(me: string | undefined): BotVec | null {
@@ -206,7 +216,7 @@ export class ServerBotSenses {
    *  beside the route/command memory it spends. A pluggable mode module
    *  answers first: its objectiveFor owns the goal channel outright when
    *  the mode carries one (conquest's lattice, future mode objectives). */
-  flagGoal(p: { id: string; team?: string; position: Vec3 }, duty = 1, parties?: ReturnType<ServerParties['of']>): { pos: BotVec; flagPos?: BotVec | null; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; marshal?: boolean; posted?: number } | null {
+  flagGoal(p: { id: string; team?: string; position: Vec3 }, duty = 1, parties?: ReturnType<ServerParties['of']>): { pos: BotVec; flagPos?: BotVec | null; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; marshal?: boolean; posted?: number; kout?: boolean } | null {
     const modeGoal = this.room.modeModule?.objectiveFor?.(p);
     if (modeGoal) {return Object.assign({ infiltrating: false }, modeGoal);}
     return this.routing.flagGoal(p, duty, parties);
@@ -240,7 +250,7 @@ export class ServerBotSenses {
         }
         if (sharedEnv.thinkProf) {sharedEnv.thinkProf.set('sense:groundY', (sharedEnv.thinkProf.get('sense:groundY') ?? 0) + sharedEnv.wallPerf!() - t0);}
         return y;
-      },route: this.routing.routeOf(p),others: parties.others,allies: parties.allies,engageRange: this.loadouts.get(id)?.far === WeaponType.Mortar ? 95 : undefined,thief: this.routing.thiefOf(p.team ?? '')}, botWeaponHooks(
+      },route: this.routing.routeOf(p),others: parties.others,allies: parties.allies,engageRange: this.loadouts.get(id)?.far === WeaponType.Mortar ? 95 : undefined,thief: this.routing.thiefOf(p.team ?? ''),flagsHome: this.flagsHome()}, botWeaponHooks(
         (d): WeaponType => pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage) as WeaponType,
         this.loadouts.get(id) ?? BOT_LOADOUTS[0]!,
       ), (skill ? {

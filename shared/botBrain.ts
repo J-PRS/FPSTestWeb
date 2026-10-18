@@ -114,6 +114,17 @@ export interface BrainCtx {
    *  info (the flag broadcasts the carrier — Tribes' command circuit),
    *  so engaging the thief is legal without LOS. */
   thief?: BotEnemy | null;
+  /** CTF quiet phase — both flags on their stands. Route roles read
+   *  it as "enemy offense is ignorable": mid-field passerby get
+   *  discounted in acquisition (spot, don't figit) while stand press
+   *  and brawl-range reflexes stay untouched. Flag state is broadcast
+   *  wire info, so the read is legal everywhere. */
+  flagsHome?: boolean;
+  /** The tryhard scalar — brain-owned, injected into ctx at think
+   *  time (hosts never set it). 0 for most bots; ~12% roll a sweaty
+   *  comp-pub personality that extends figit discipline to posted
+   *  roles and announces its cap timing. */
+  sweat?: number;
   /** Squad spot-report: enemies a teammate had eyes on recently —
    *  stale-decayed snapshots, same legality as the thief beacon. Lets
    *  a bot commit to a contact it never personally saw, the way a
@@ -295,6 +306,7 @@ export class BotBrain {
     const h02 = ((Math.sin(spawn.x * 39.3468 + spawn.z * 11.1357 + spawn.y * 83.1554) * 24_634.6345) % 1 + 1) % 1;
     const h03 = ((Math.sin(spawn.x * 73.1562 + spawn.z * 52.2354 + spawn.y * 9.1512) * 58_342.2154) % 1 + 1) % 1;
     const h04 = ((Math.sin(spawn.x * 27.6197 + spawn.z * 57.5831 + spawn.y * 19.9176) * 31_415.9265) % 1 + 1) % 1;
+    const h05 = ((Math.sin(spawn.x * 51.4237 + spawn.z * 93.1157 + spawn.y * 11.1313) * 58_342.2154) % 1 + 1) % 1;
     this.thinkT = h01 * T.brain.thinkS;
     this.beltT = 4 + h02 * 4;
     this.deployT = 8 + h02 * 25;
@@ -302,6 +314,7 @@ export class BotBrain {
     this.wanderlust = T.brain.wanderBase + h01 * T.brain.wanderRand;
     this.duty = T.brain.dutyBase + h03 * T.brain.dutyRand;
     this.social = h04;
+    this.sweat = h05 >= 0.88 ? h05 : 0;
     this.orbitA = h02 * Math.PI * 2;
     this.orbitDir = h01 < 0.5 ? 1 : -1;
     this.orbitFlipT = 1 + h03 * 1.5;
@@ -430,6 +443,11 @@ export class BotBrain {
    *  a 1-social bot rattled by a losing match drifts toward teammates
    *  long before it's cornered. */
   private readonly social: number = 0.5;
+  /** Tryhard scalar — 0 for ~88% of bots; the rare sweatlord plays
+   *  comp-pub: posted roles still don't figit, and a runner announces
+   *  its cap timing instead of just going. Charm is the rarity — a
+   *  uniform squad of callers would read as scripted, not sweaty. */
+  private readonly sweat: number = 0;
   /** Held-position strafe orbit — angle advances each pickDest step.
    *  Direction reverses on a jitter (a real duelist breaks the readable
    *  circle) and the radius breathes per flip, so the hold never reads
@@ -448,6 +466,8 @@ export class BotBrain {
   /** A teammate's VGS command stuck a pin: where the call points and
    *  until when. Heard fresh → offered to pick() as long as it's warm. */
   private radioGoal: (BotVec & { until: number }) | null = null;
+  /** Rising-edge latch for the sweatlord's cap call. */
+  private pushLatch = false;
   beatMove = false;
   /** Last think resolved to stand-and-shoot — a legal hold, not a stall.
    *  Hosts read this to keep stall/mobility watchdogs honest. */
@@ -526,6 +546,13 @@ export class BotBrain {
    *  it. Guidelines not laws — nobody sits at exactly 1.0. */
   get dutyLevel(): number {
     return this.duty;
+  }
+
+  /** The tryhard read — hosts feed it into FlagSituation so the goal
+   *  table can give sweaty bots comp-pub behaviors (route-leading the
+   *  thief, posting a leash a loose defender wouldn't hold). */
+  get sweatLevel(): number {
+    return this.sweat;
   }
 
   /** Getting shot makes the bot recoil — call from the damage funnel. */
@@ -678,6 +705,9 @@ export class BotBrain {
     if (ctx.notice?.goal) {this.radioGoal = Object.assign({}, ctx.notice.goal, {until: now + 25_000});}
     if (this.radioGoal && (now > this.radioGoal.until || distSqXZ(this.radioGoal, pos) < 25 * 25)) {this.radioGoal = null;}
     ctx.radio = this.radioGoal;
+    // Brain-owned trait injected into ctx — pickHunt's ectx clone then
+    // carries it to scanVisible without another parameter thread.
+    ctx.sweat = this.sweat;
 
     // --- pick a hunt target / refresh the goal (slow cadence) ---
     this.thinkT -= dt;
@@ -686,7 +716,12 @@ export class BotBrain {
       pickHunt(this.h, ctx, pos, now, { hero, fearing }, (c, p): void => this.goals.pick(c, p));
     }
     pm('hunt', tp);
-    let say = this.pickSay(ctx, hurtEdge, hero, wasHunt);
+    // The sweatlord's callout — a committed runner whose push just went
+    // live announces the run ("going in") instead of silently flooding.
+    // Rising edge only, and it doesn't outrank wound/fear lines.
+    const capCall = this.sweat > 0 && ctx.runner && ctx.pushLive && !this.pushLatch;
+    this.pushLatch = Boolean(ctx.pushLive);
+    let say = this.pickSay(ctx, hurtEdge, hero, wasHunt) ?? (capCall ? { kind: 'capcall' } as const : undefined);
     this.goalS.wanderT -= dt;
     // detourT decays here, with the other timers — decrementing it inside
     // the dest block below would let the setting call's dt eat the window.
