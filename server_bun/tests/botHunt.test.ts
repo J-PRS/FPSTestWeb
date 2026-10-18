@@ -36,6 +36,22 @@ describe('scanVisible', () => {
     expect(r.beast?.id).toBe('b:7');
     expect(r.player?.id).toBe('p:1');
   });
+
+  it('a hoarder out-pulls a nearer empty pocket — the bounty read', () => {
+    const fat = foe(76, 0, 'p:fat'); (fat as BotEnemy).held = 30;
+    const lean = foe(40, 0, 'p:lean'); // nearer, but empty pockets
+    // effD: fat reads 76*(1-.24)=57.8 vs lean's 40 → lean still wins
+    expect(scanVisible(flat({ enemies: [fat, lean] }), P, 100, 100).player?.id).toBe('p:lean');
+    // Push the hoarder — at 60+ held the cap doubles his pull
+    (fat as BotEnemy).held = 80;
+    expect(scanVisible(flat({ enemies: [fat, lean] }), P, 100, 100).player?.id).toBe('p:fat');
+  });
+
+  it('same-distance foes: the heavier pocket wins the pick', () => {
+    const a = foe(50, 0, 'p:a'); (a as BotEnemy).held = 25;
+    const b = foe(50, 0, 'p:b');
+    expect(scanVisible(flat({ enemies: [b, a] }), P, 100, 100).player?.id).toBe('p:a');
+  });
 });
 
 describe('pickHunt', () => {

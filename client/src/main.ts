@@ -485,7 +485,13 @@ function setupOfflineMode(mode: string, mapSpec?: MapSpec): void {
         for (const n of entities.nuggets) {
           if (n.collected || n.dead) {continue;}
           const d = n.pos.distanceToSquared(pos);
-          if (d < bd) { bd = d; best = n; }
+          if (d >= bd) {continue;}
+          // Headhunt: value out-pulls proximity — a purple spill shrinks
+          // its effective distance up to 70%, so fat coins draw the
+          // lobby while 1-coins stay opportunism. Plain nuggets (val 1)
+          // price out essentially unchanged.
+          const eff = d * (1 - Math.min(n.val, 27) / 27 * 0.7);
+          if (eff < bd) { bd = eff; best = n; }
         }
         return best;
       },

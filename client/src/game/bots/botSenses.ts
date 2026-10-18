@@ -21,7 +21,7 @@ export interface SenseHost {
   readonly bots: GameBot[];
   /** 'local' + bot:names → team key. */
   readonly teamOf: Map<string, string>;
-  player(): { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloaked: boolean; lastFireAt: number; appliedClass?: string; health: number; maxHealth: number };
+  player(): { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloaked: boolean; lastFireAt: number; appliedClass?: string; health: number; maxHealth: number; heldTokens: number };
   world(): { remotePlayers: Map<string, { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloakHidden: boolean; ghostT: number; armorClass?: string; botHp?: number; botMaxHp?: number }>;
              explosions: { pos: THREE.Vector3; age: number }[];
              projectiles: { pos: THREE.Vector3; vel: THREE.Vector3 }[] };
@@ -33,7 +33,7 @@ export interface SenseHost {
 }
 
 export type FoeEntry = { id: string; pos: THREE.Vector3; alive: boolean };
-export type EnemyEntry = { id: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean; aimY?: number; hpFrac?: number };
+export type EnemyEntry = { id: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean; aimY?: number; hpFrac?: number; held?: number };
 type BotEntry = { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean };
 
 // Scratch BrainCtx for losClear — fields it doesn't read stay unset.
@@ -149,6 +149,7 @@ export class BotSenses {
       e.id = 'local'; e.pos = player.pos; e.vel = player.vel; e.alive = !player.isDead && (!player.isCloaked || shootRevealed(player.lastFireAt, performance.now()));
       e.aimY = classCapsule(player.appliedClass).centerOff;
       e.hpFrac = player.maxHealth > 0 ? player.health / player.maxHealth : undefined;
+      e.held = player.heldTokens;
       _enemies.push(e);
     }
     for (const [id, rp] of this.host.world().remotePlayers) {
@@ -165,20 +166,26 @@ export class BotSenses {
       // left on the target; wire remotes carry no tank and stay
       // undefined (server marks them the same way).
       e.hpFrac = rp.botHp === undefined ? undefined : rp.botHp / (rp.botMaxHp ?? 1);
+      // Bounty read — offline remotes are GameBots carrying their pile.
+      e.held = (rp as GameBot).heldTokens || undefined;
       _enemies.push(e);
     }
-    // Every live scored creature enters — the server parties feed the
-    // whole bodies roster unfiltered, so a far beast competes with a
-    // near one for the same pick instead of nearest-only winning by
-    // list position. Scoreless decor stays out (server's roster is
-    // pops-declared creatures only).
+    this.pushCreatureEnemies();
+    return _enemies;
+  }
+
+  /** Every live scored creature enters — the server parties feed the
+   *  whole bodies roster unfiltered, so a far beast competes with a
+   *  near one for the same pick instead of nearest-only winning by
+   *  list position. Scoreless decor stays out (server's roster is
+   *  pops-declared creatures only). */
+  private pushCreatureEnemies(): void {
     for (const t of this.host.targets) {
       if (t.dead || t.scoreless) {continue;}
       const e = nextBot() as EnemyEntry & { playerId?: string };
       e.id = `creature:${t.id}`; e.pos = t.pos; e.vel = t.vel; e.alive = true; e.aimY = 0;
       _enemies.push(e);
     }
-    return _enemies;
   }
 
   // Sheep-meter cache: the ignore watchdog doesn't need per-frame LOS

@@ -61,6 +61,9 @@ export interface BotEnemy {
   /** Health as a 0..1 fraction — the finisher read: a wounded runner
    *  is worth an easy chip weapon instead of another heroic lob. */
   hpFrac?: number;
+  /** Headhunt tokens this enemy carries — the bounty read: acquisition
+   *  prices hoards closer than their raw distance. */
+  held?: number;
 }
 
 export interface BrainCtx {
@@ -151,6 +154,9 @@ export interface BrainCtx {
   energy?: number;
   /** Own health as a 0..1 fraction — mend decision input. */
   healthFrac?: number;
+  /** Own held tokens (headhunt) — the hoard-protection read: carriers
+   *  break contact earlier so the regen drip can top them back up. */
+  held?: number;
   /** Positions of projectiles closing on the bot (host pre-filters to
    *  inbound shells) — the dodge sense. Omit where no projectile sim
    *  exists (offline bots, legacy path). */
@@ -631,7 +637,12 @@ export class BotBrain {
    *  a desperate last stand. Latch resets once healed so the next wound
    *  gets a fresh roll. */
   private mood(ctx: BrainCtx, dt: number): { hurtEdge: boolean; hero: boolean; fearing: boolean } {
-    const hurt = (ctx.healthFrac ?? 1) < T.brain.fearHp;
+    // A hoarder breaks contact earlier — every held token is value the
+    // corpse spills, and the headhunt regen drip refills a disengaged
+    // carrier anyway. +0.005/held, capped at +0.50: empty pockets still
+    // fight to 15% but a 100-token vault bails below ~65%.
+    const fearAt = T.brain.fearHp + Math.min(ctx.held ?? 0, 100) * 0.005;
+    const hurt = (ctx.healthFrac ?? 1) < fearAt;
     const hurtEdge = hurt && !this.hurtLatch;
     // A nemesis rattles the hero roll — the man who's already killed
     // this bot twice doesn't inspire a last stand, he ends it.

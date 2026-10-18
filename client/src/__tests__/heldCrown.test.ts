@@ -2,16 +2,25 @@ import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import { HeldCrown } from '../entities/heldCrown.js';
 import { decomposeTokens, tokenTier } from '../../../shared/pickups.js';
+import { EMIT_GAIN } from '../core/config.js';
+
+// Beam shafts take the lerp-only tier color (no EMIT_GAIN — that's what
+// kept them off the lightsaber look); the core/glow ride the boosted emit.
+const emitHex = (tierColor: number): number =>
+  new THREE.Color(tierColor).lerp(new THREE.Color(0xFF_FF_FF), 0.33).multiplyScalar(EMIT_GAIN).getHex();
+const shaftHex = (tierColor: number): number =>
+  new THREE.Color(tierColor).lerp(new THREE.Color(0xFF_FF_FF), 0.33).getHex();
 
 // HeldCrown turns a held number into the orbiting denomination pile +
 // beam: coin count must match decomposeTokens, beam takes the TOP tier's
 // color, and rebuilds only happen on value change — the same set() called
 // per frame must be a no-op.
-const coinCount = (c: HeldCrown): number => c.group.children.length - 1; // minus the beam
+const coinCount = (c: HeldCrown): number => c.group.children.filter((o): boolean => o instanceof THREE.Group).length;
+// Coins are Groups; beams are Meshes riding the same group.
+const beams = (c: HeldCrown): THREE.Mesh[] => c.group.children.filter((o): o is THREE.Mesh => o instanceof THREE.Mesh);
 
-function beamColor(c: HeldCrown): number {
-  const beam = c.group.children[0] as THREE.Mesh;
-  return (beam.material as THREE.MeshBasicMaterial).color.getHex();
+function beamColors(c: HeldCrown): number[] {
+  return beams(c).map((b): number => (b.material as THREE.MeshBasicMaterial).color.getHex());
 }
 
 describe('HeldCrown', () => {
@@ -33,20 +42,29 @@ describe('HeldCrown', () => {
     expect(coinCount(c)).toBe(4);
   });
 
-  it('beam takes the top denomination color', () => {
+  it('every coin gets its own tier-colored beacon', () => {
     const scene = new THREE.Scene();
     const c = new HeldCrown(scene);
-    c.set(30); // contains a 27 → purple beam
-    expect(beamColor(c)).toBe(tokenTier(27).color);
-    c.set(10); // top is 9 → blue beam
-    expect(beamColor(c)).toBe(tokenTier(9).color);
+    c.set(30); // 27 + 3 → one purple shaft + one green shaft
+    expect(beams(c).length).toBe(2);
+    expect(beamColors(c)).toEqual([shaftHex(tokenTier(27).color), shaftHex(tokenTier(3).color)]);
+  });
+
+  it('two purples count as two purples — total value, not top tier', () => {
+    const scene = new THREE.Scene();
+    const c = new HeldCrown(scene);
+    c.set(54); // 27 + 27 → two purple coins, not one
+    expect(coinCount(c)).toBe(2);
+    const coins = c.group.children.filter((o): boolean => o instanceof THREE.Group) as THREE.Group[];
+    expect(coins.every((m) => m.scale.x === tokenTier(27).scale)).toBe(true);
+    expect(beamColors(c)).toEqual([shaftHex(tokenTier(27).color), shaftHex(tokenTier(27).color)]);
   });
 
   it('coin scale follows the denomination tier', () => {
     const scene = new THREE.Scene();
     const c = new HeldCrown(scene);
     c.set(40); // vals order: 27, 9, 3, 1
-    const coins = c.group.children.slice(1) as THREE.Group[];
+    const coins = c.group.children.filter((o): boolean => o instanceof THREE.Group) as THREE.Group[];
     expect(coins[0]!.scale.x).toBeCloseTo(tokenTier(27).scale);
     expect(coins[3]!.scale.x).toBeCloseTo(tokenTier(1).scale);
   });

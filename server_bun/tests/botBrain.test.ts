@@ -60,6 +60,17 @@ describe('botBrain', () => {
     expect(b.think(0.35, c).say?.kind).not.toBe('fear');
   });
 
+  it('a heavy hoard raises the fear threshold — carriers bail earlier', () => {
+    botRng(() => 0.9);
+    const b = new BotBrain(origin);
+    // 0.30 health is far above the 0.15 base floor — an empty pocket
+    // keeps fighting, a 40-token carrier is already breaking contact.
+    const empty = ctx({ healthFrac: 0.3 });
+    expect(b.think(0.35, empty).say?.kind).not.toBe('fear');
+    const hoarder = ctx({ healthFrac: 0.3, held: 40 });
+    expect(b.think(0.35, hoarder).say?.kind).toBe('fear');
+  });
+
   it('a successful hero roll says hero and suppresses fear', () => {
     botRng(() => 0.2); // 0.2 < heroChance → hero
     const b = new BotBrain(origin);

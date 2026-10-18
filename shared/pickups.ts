@@ -35,7 +35,7 @@ export const TOKEN_DENOMS = [
  *  singles) to the largest denom they cover, never invents a tier. */
 export function tokenTier(val: number): (typeof TOKEN_DENOMS)[number] {
   for (const d of TOKEN_DENOMS) {if (val >= d.val) {return d;}}
-  return TOKEN_DENOMS[TOKEN_DENOMS.length - 1];
+  return TOKEN_DENOMS[TOKEN_DENOMS.length - 1]!;
 }
 
 /** Greedy base-3 split — always exact (the 1-coin is the unit) and

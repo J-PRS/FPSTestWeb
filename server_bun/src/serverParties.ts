@@ -38,7 +38,7 @@ export class ServerParties {
    *  on the stand matters wherever the thinker stands), so this list
    *  is NOT domain-limited. */
   roster: { id: string; pos: Vec3; team?: string }[] = [];
-  pickups: { id: number; pos: Vec3; kind: PickupKind }[] = [];
+  pickups: { id: number; pos: Vec3; kind: PickupKind; val: number }[] = [];
   /** ally/body channels stay global like roster — every consumer
    *  (rally fold, retreat fold) picks the nearest live point and
    *  excludes self by the d>4 minimum, so the shared list is
@@ -58,7 +58,7 @@ export class ServerParties {
     for (const q of this.room.players.getAllPlayers().values()) {
       this.players.push({ id: q.id, pos: q.position, vel: q.velocity, team: q.team, dead: q.isDead, cloaked: Boolean(q.status & STATUS.CLOAK) && !shootRevealed(q.lastFireSim, this.seq), aimY: classCapsule(q.armorClass).centerOff,
         en: { id: q.id, pos: q.position, vel: q.velocity, alive: true, aimY: classCapsule(q.armorClass).centerOff,
-              hpFrac: q.maxHealth > 0 ? q.health / q.maxHealth : undefined } });
+              hpFrac: q.maxHealth > 0 ? q.health / q.maxHealth : undefined, held: q.heldTokens } });
       if (!q.isDead) {
         this.roster.push({ id: q.id, pos: q.position, team: q.team });
         this.othersAll.push(q.position);

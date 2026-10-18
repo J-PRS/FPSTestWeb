@@ -215,7 +215,7 @@ export class ServerBotSenses {
   /** The sensorium for one think tick — see file header for what's legal
    *  on each channel. */
   // oxlint-disable-next-line complexity, max-params -- the ctx assembler; one field list, one call
-  build(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; health: number; maxHealth: number; kills?: number; deaths?: number }, goal: { pos: BotVec; flagPos?: BotVec | null; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; marshal?: boolean; posted?: number } | null, now: number, skill?: BotSkill, sharedParties?: ReturnType<ServerBotSenses['partiesOf']>, builder?: boolean): BrainCtx {
+  build(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; health: number; maxHealth: number; kills?: number; deaths?: number; heldTokens?: number }, goal: { pos: BotVec; flagPos?: BotVec | null; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; marshal?: boolean; posted?: number } | null, now: number, skill?: BotSkill, sharedParties?: ReturnType<ServerBotSenses['partiesOf']>, builder?: boolean): BrainCtx {
     // Competence-biased draw: the weapon pick and the aim error read
     // the same matrix, so a phenom both reaches for its gun and lands it.
     const bias = skill ? (t: number): number => aimSkillFor(skill, t, 0) : undefined;
@@ -246,7 +246,7 @@ export class ServerBotSenses {
       ), (skill ? {
         aimSkill: (d: number, targetSpeed: number): number =>
           aimSkillFor(skill, pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d, bias, skill?.courage), targetSpeed),
-      } : {}), {solids: this.room.ballSim.colliders,solidIndex: this.room.ballSim.colliderIndex,energy: this.room.moveSim.energyOf(id) ?? undefined,moveSkill: skill?.movement,healthFrac: p.maxHealth > 0 ? p.health / p.maxHealth : 1,confidence: this.confidenceOf(p),threats: bp ? ((): Vec3[] => { const t = sharedEnv.wallPerf!(); const v = this.room.projectiles.incomingNear(p.position, 12); bp('sense:threats', t); return v; })() : this.room.projectiles.incomingNear(p.position, 12),sounds: bp ? ((): Vec3[] => { const t = sharedEnv.wallPerf!(); const v = this.room.noisesNear(p.position, 50); bp('sense:sounds', t); return v; })() : this.room.noisesNear(p.position, 50),imapQuietDir: (v: BotVec): { x: number; z: number; } =>
+      } : {}), {solids: this.room.ballSim.colliders,solidIndex: this.room.ballSim.colliderIndex,energy: this.room.moveSim.energyOf(id) ?? undefined,moveSkill: skill?.movement,healthFrac: p.maxHealth > 0 ? p.health / p.maxHealth : 1,held: p.heldTokens,confidence: this.confidenceOf(p),threats: bp ? ((): Vec3[] => { const t = sharedEnv.wallPerf!(); const v = this.room.projectiles.incomingNear(p.position, 12); bp('sense:threats', t); return v; })() : this.room.projectiles.incomingNear(p.position, 12),sounds: bp ? ((): Vec3[] => { const t = sharedEnv.wallPerf!(); const v = this.room.noisesNear(p.position, 50); bp('sense:sounds', t); return v; })() : this.room.noisesNear(p.position, 50),imapQuietDir: (v: BotVec): { x: number; z: number; } =>
         this.room.influence.quietestDir(v, this.room.influence.dangerLayer(p.team ?? 'alpha')),imapHottest: (v: BotVec): { x: number; z: number; v: number; } | null => this.room.influence.hottestNear(v, 'opportunity'),imapDanger: (v: BotVec): number =>
         this.room.influence.value(v, this.room.influence.dangerLayer(p.team ?? 'alpha')),notice: this.notices.for(id, p.team, now),repair: builder === false ? null : this.repairJob(p), now});
     // Squad spot-report: reports land via reportSpots() AFTER the bot's
@@ -292,7 +292,13 @@ export class ServerBotSenses {
     let best: BotVec | null = null, bestD = Infinity;
     for (const g of snaps) {
       const d = dist3(p.position, g.pos);
-      if (d >= bestD || !worthIt(d)) {continue;}
+      if (!worthIt(d)) {continue;}
+      // A fat coin out-pulls a near white — value shrinks effective
+      // distance up to 70%, so a purple spill draws the lobby while a
+      // lone 1-coin stays opportunism. Non-token kinds carry val≈0-1
+      // and price out unchanged.
+      const effD = d * (1 - Math.min(g.val, 27) / 27 * 0.7);
+      if (effD >= bestD) {continue;}
       const hurt = p.maxHealth > 0 && p.health / p.maxHealth < 0.4;
       if (hurt) {
         let camped = false;
@@ -302,7 +308,7 @@ export class ServerBotSenses {
         }
         if (camped && d > 12) {continue;} // close enough to sneeze on it anyway
       }
-      bestD = d; best = g.pos;
+      bestD = effD; best = g.pos;
     }
     return best;
   }

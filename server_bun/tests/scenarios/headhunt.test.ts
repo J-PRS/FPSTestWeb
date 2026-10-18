@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import { mkRoom, watch, pin, step, replica } from './harness.ts';
-import type { ServerMessage } from '../../src/protocol.ts';
+import type { ServerMessage } from '../../../shared/protocol.ts';
 import { simNow, simMs } from '../../src/simClock.ts';
 import { wallNow } from '../../src/wallClock.ts';
 

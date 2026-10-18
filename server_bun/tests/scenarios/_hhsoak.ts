@@ -107,7 +107,7 @@ while (rounds.length < ROUNDS && simS < CAP_S) {
     killsBase = 0; // scoreboard wipes at matchStart — next round counts fresh
     rounds.push(cur);
     const s = room.scores;
-    const held = room.scoring.matchPlayers().filter((p) => p.heldTokens > 0).map((p) => `${p.id}=${p.heldTokens}`).join(' ');
+    const held = [...room.players.getAllPlayers().values()].filter((p) => p.heldTokens > 0).map((p) => `${p.id}=${p.heldTokens}`).join(' ');
     console.log(`round ${rounds.length}: winner=${cur.winner} score=${s.alpha}-${s.bravo} kills=${k} tokens spawned=${cur.spawned} collected=${cur.collected} decayed=${cur.decayed} peakHeld=${cur.peakHeld}(${cur.peakHolder}) leadSwaps=${cur.leadSwaps}`);
     console.log(`  pockets: ${held || 'none'}`);
     cur = { spawned: 0, collected: 0, decayed: 0, kills0: 0, peakHeld: 0, peakHolder: '', leadSwaps: 0, lastLeader: '', winner: '?', simS: 0 };

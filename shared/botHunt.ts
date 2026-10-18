@@ -165,11 +165,19 @@ export function scanVisible(ctx: BrainCtx, pos: BotVec, range: number, beastRang
     // Cheapest gate first: an out-of-range enemy never earns the LOS
     // march — it was paying a ~dist/6-probe walk for a guaranteed discard.
     if (d >= (e.id.startsWith('b:') ? beastRange : range)) {continue;}
-    if (!losClear(ctx, pos, e.pos)) {continue;}
+    // Hoard beacon: a purple-tier carrier (27+) can't hide behind a
+    // ridge — the crown marks him the way the flag thief's beacon does.
+    if (!losClear(ctx, pos, e.pos) && (e.held ?? 0) < 27) {continue;}
     seenAll?.push(e);
     if (e.id.startsWith('b:')) {
       if (d < beastD) { beastD = d; beast = e; }
-    } else if (d < playerD) { playerD = d; player = e; }
+    } else {
+      // Bounty read: a hoarder's effective range shrinks 0.8%/token,
+      // floored at 10% — a 100-token vault reads 8x closer from 200m
+      // without letting value override the brawl at the muzzle.
+      const effD = d * Math.max(0.1, 1 - (e.held ?? 0) * 0.008);
+      if (effD < playerD) { playerD = effD; player = e; }
+    }
   }
   return { player, beast, playerD, beastD };
 }
