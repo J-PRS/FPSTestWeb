@@ -43,7 +43,7 @@ export class RoomDemo {
   private nextProjId = 1;
   /** Last sampled pos per seat — >TELEPORT_M between ticks stamps the
    *  Teleport flag so audits don't call respawns wire corruption. */
-  private lastPos = new Map<string, { x: number; y: number; z: number }>();
+  private lastPos = new Map<string, { x: number; y: number; z: number; t: number }>();
   /** Respawn distances are unbounded (cross-map base hops); 10m at 20Hz
    *  is ~200m/s — past every legal flight envelope. */
   private static TELEPORT_M = 10;
@@ -146,13 +146,22 @@ export class RoomDemo {
       if (!s) {continue;}
       const dead = this.room.players.getPlayer(pid)?.isDead ?? false;
       const prev = this.lastPos.get(pid);
+      const dtp = prev ? this.t - prev.t : 0;
       const jumped = prev !== undefined
         && Math.hypot(s.pos.x - prev.x, s.pos.y - prev.y, s.pos.z - prev.z) > RoomDemo.TELEPORT_M;
-      this.lastPos.set(pid, { x: s.pos.x, y: s.pos.y, z: s.pos.z });
+      this.lastPos.set(pid, { x: s.pos.x, y: s.pos.y, z: s.pos.z, t: this.t });
+      // Recorded vel is REALIZED displacement — what the body did, which
+      // is what clients see. The sim's internal vel is intent (a bot
+      // pinned on a wall holds 44m/s while moving 2m/s); writing intent
+      // would have playback show a parked body skating. Teleport frames
+      // keep sim vel — the resync's outgoing state is the truth there.
+      const dtv = dtp > 0 && !jumped ? dtp : 0;
       this.remoteFrames.push({
         timestamp: this.t, rosterIdx: idx,
         posX: s.pos.x, posY: s.pos.y, posZ: s.pos.z,
-        velX: s.vel.x, velY: s.vel.y, velZ: s.vel.z,
+        velX: dtv ? (s.pos.x - prev!.x) / dtv : s.vel.x,
+        velY: dtv ? (s.pos.y - prev!.y) / dtv : s.vel.y,
+        velZ: dtv ? (s.pos.z - prev!.z) / dtv : s.vel.z,
         yaw: s.yaw, pitch: 0,
         flags: (dead ? RemoteFrameFlags.Dead : RemoteFrameFlags.None)
           | (jumped ? RemoteFrameFlags.Teleport : 0),

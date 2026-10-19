@@ -13,7 +13,16 @@
 import type { Vec3Like } from '../../shared/movement.ts';
 import type { MoveInput } from '../../shared/movement.ts';
 import type { RoomMoveSim } from './RoomMoveSim.ts';
-import { appendFileSync } from 'node:fs';
+
+// File append resolves lazily via dynamic import — this module reaches
+// the browser bundle via the P2P host's RoomMoveSim import, where
+// node:fs is a stub whose property access throws. NOTE: globalThis.require
+// is undefined under Bun ESM, so require-style probes never resolve.
+type FsAppend = (p: string, s: string) => void;
+let fsAppend: FsAppend | undefined;
+const fsReady: Promise<void> = import('node:fs').then((m): void => {
+  if (typeof m.appendFileSync === 'function') {fsAppend = m.appendFileSync;}
+}).catch((): void => { /* browser bundle — no fs, journal stays memory-only */ });
 
 export const JOURNAL_HASH_EVERY = 50;
 
@@ -38,17 +47,33 @@ export class SimJournal {
    *  seed written by the Room when it attaches the journal. */
   header: { map?: string; seed?: number } = {};
   private file?: string;
+  /** Events that landed before node:fs resolved — flushed once fsReady.
+   *  Bounded: a browser host never sets file, so this only ever holds
+   *  the import-resolution window (a few ticks), but cap regardless. */
+  private pending: string[] = [];
+  private static PENDING_MAX = 4096;
 
   /** NDJSON file target — env-gated at the Room (FPS_JOURNAL). Appends
    *  per event; the rate is forensic-tool scale, not hot-path scale. */
   attachFile(path: string): void {
     this.file = path;
-    appendFileSync(path, `${JSON.stringify({ header: this.header })}\n`);
+    this.write(`${JSON.stringify({ header: this.header })}\n`);
+    void fsReady.then((): void => {
+      if (!fsAppend || !this.file) {this.pending = []; return;}
+      for (const s of this.pending) {fsAppend(this.file, s);}
+      this.pending = [];
+    });
+  }
+
+  private write(s: string): void {
+    if (!this.file) {return;}
+    if (fsAppend) {fsAppend(this.file, s);}
+    else if (this.pending.length < SimJournal.PENDING_MAX) {this.pending.push(s);}
   }
 
   push(ev: JournalEv): void {
     this.events.push(ev);
-    if (this.file) {appendFileSync(this.file, `${JSON.stringify(ev)}\n`);}
+    this.write(`${JSON.stringify(ev)}\n`);
   }
 
   toNDJSON(): string {

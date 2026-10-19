@@ -342,6 +342,16 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     frame.weaponType = p.weaponType;
 
     this.frameBuffer.add(frame);
+    // Ring-write invariant: the frame we just stored must be the newest
+    // AND adjacent to the prior write. A splice here means slotForNext
+    // returned a live slot — the exact corruption the audit caught in
+    // live_botfight.demo (f#3969 sitting mid-sequence). Names the fault
+    // at write time instead of leaving it for post-hoc file analysis.
+    const newest = this.frameBuffer.peekNewest();
+    if (newest !== frame || (this.frameBuffer.Count > 1 && newest.timestamp < this.frameBuffer.getUnsafe(this.frameBuffer.Count - 2).timestamp)) {
+      console.warn(`[demo] frame ring splice: wrote f#${  frame.frameNumber  } t=${  frame.timestamp.toFixed(3)
+         } newest=${  newest === frame  } count=${  this.frameBuffer.Count}`);
+    }
     this.frameNumber = (this.frameNumber + 1) % 65_536;
 
     this.housekeep(now);
