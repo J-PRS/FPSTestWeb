@@ -9,7 +9,7 @@ import { MoveSim } from '../../shared/movement.js';
 import { isDevHost } from './core/params.js';
 import { terrainFrag } from './world/terrainShaders.js';
 import { hillshadeImage } from './world/hillshade.js';
-import { synthField, erode, talusPass, streamPower, drainage, DEFAULTS, type GenParams, type Drainage } from './maplab/gen.js';
+import { synthField, erode, talusPass, streamPower, drainage, faultPass, glacierPass, smoothPass, flatsPass, DEFAULTS, type GenParams, type Drainage } from './maplab/gen.js';
 
 if (!isDevHost()) {
   document.body.innerHTML =
@@ -130,6 +130,7 @@ const _q = new THREE.Quaternion();
 const _bc = new THREE.Color();
 function dropBalls(): void {
   balls = [];
+  skiLine = ''; skiT = 0; // the score recomputes on the fresh field
   const surf = hmSurface(field);
   for (let i = 0; i < BALL_N; i += 1) {
     const x = (Math.random() - 0.5) * WS * 0.96, z = (Math.random() - 0.5) * WS * 0.96;
@@ -246,10 +247,14 @@ function refresh(): void {
   const t0 = performance.now();
   const h = synthField(state);
   if (!state.showRaw) {
+    faultPass(h, state.size, state);        // geometry: scarp before water reacts
+    if (state.smoothIters > 0) { smoothPass(h, state.size, state.smoothIters); }
     streamPower(h, state.size, state);      // macro: coherent valley network
     if (state.droplets > 0) { erode(h, state.size, state); } // micro: gullies
+    glacierPass(h, state.size, state);      // U-troughs on the drainage spine
     if (state.talus > 0) { talusPass(h, state.size, state); }
   }
+  flatsPass(h, state.size, state);          // base pads level last — not erosion
   // Flow map for the overlay — computed on the DISPLAYED field so the
   // channels you see are the ones the surface actually drains.
   drain = state.flowOverlay ? drainage(h, state.size) : null;
@@ -332,29 +337,54 @@ function paintHeightmap(): void {
 }
 
 const statusEl = document.querySelector<HTMLDivElement>('#status')!;
+// Ski-ball aggregate — mean/p90 speed + the fast share, reported in the
+// status once the probe has run ~4s. The only metric that captures route
+// connectivity (dead-end bowls trap balls even at good slope).
+let skiLine = '';
+let skiT = 0;
+function skiScore(dt: number): void {
+  skiT += dt;
+  if (skiT < 4 || balls.length === 0) {return;}
+  const vs = balls.map((b) => Math.hypot(b.state.vel.x, b.state.vel.y, b.state.vel.z)).sort((a, b) => a - b);
+  const mean = vs.reduce((a, b) => a + b, 0) / vs.length;
+  const p90 = vs[Math.floor(vs.length * 0.9)]!;
+  const fast = vs.filter((v) => v >= 45).length / vs.length;
+  skiLine = `ski μ${mean.toFixed(0)} p90 ${p90.toFixed(0)} · ${(fast * 100).toFixed(0)}% fast`;
+  skiT = 3.5; // update ~2×/s after warm-up
+}
 function paintStats(genMs: number): void {
-  // Field stats in world units — relief + roughness + ski-ability, the
-  // three numbers that decide if a synth is actually playable.
-  let mn = Infinity, mx = -Infinity, sum = 0, sum2 = 0, steep = 0, n = 0;
+  // Field stats in world units — the signature terrainstats.js measures
+  // on shipped maps: relief + sd + mean slope + steep share, tagged with
+  // the Tribes band the field lands in (roller/dramatic/mixed).
+  let mn = Infinity, mx = -Infinity, sum = 0, sum2 = 0, slopeSum = 0, steep = 0, n = 0;
   for (let z = 0; z < field.size; z += 8) {
     for (let x = 0; x < field.size; x += 8) {
       const wx = (x / field.size - 0.5) * WS, wz = (z / field.size - 0.5) * WS;
       const h = hmHeight(field, wx, wz);
       hmNormal(field, wx, wz, _n);
-      const s = 1 - _n.y;
+      const deg = Math.atan(Math.hypot(_n.x, _n.z) / _n.y) * 180 / Math.PI;
       if (h < mn) { mn = h; } if (h > mx) { mx = h; }
-      sum += h; sum2 += h * h; if (s > 0.32) { steep += 1; }
+      sum += h; sum2 += h * h;
+      slopeSum += deg; if (deg > 45) { steep += 1; }
       n += 1;
     }
   }
   const mean = sum / n;
   const sd = Math.sqrt(Math.max(0, sum2 / n - mean * mean));
+  const meanDeg = slopeSum / n;
+  const steepPct = steep / n * 100;
+  // Shipped bands (terrainstats.js, 10 fields): rollers ≈ sd 19-35,
+  // steep ≤7%; dramatic ≈ sd 30-47, steep ≥18%. Anything else is mixed.
+  const style = steepPct >= 18 ? 'dramatic' : (steepPct <= 8 && sd <= 38 ? 'roller' : 'mixed');
   statusEl.innerHTML =
     `${state.map ? `map ${state.map} · ${field.size}²` : `seed ${state.seed} · ${field.size}²`} · ${genMs.toFixed(0)}ms
 ` +
     `relief ${(mx - mn).toFixed(0)}m · sd ${sd.toFixed(1)}m
 ` +
-    `unski-able ${(steep / n * 100).toFixed(1)}%`;
+    `slope ${meanDeg.toFixed(1)}° · steep ${steepPct.toFixed(1)}% · ${style}
+${ 
+    skiLine ? `${skiLine}
+` : ''}`;
 }
 
 // --- rail UI ---
@@ -366,15 +396,21 @@ const SLIDERS: SliderDef[] = [
   ['freq', 'base freq', 0.4, 3, 0.05],
   ['detail', 'detail', 0, 2, 0.05],
   ['warp', 'warp', 0, 2, 0.05],
+  ['curl', 'curl warp', 0, 1, 0.05],
   ['ridge', 'ridged', 0, 1, 0.05],
   ['elong', 'elongate', 1, 8, 0.25],
-  ['tilt', 'tilt', 0, 1, 0.05, 'shape'],
+  ['smoothIters', 'creep', 0, 40, 2],
+  ['fault', 'fault', -0.4, 0.4, 0.02, 'shape'],
+  ['faultAngle', 'fault angle', 0, 180, 5],
+  ['tilt', 'tilt', 0, 1, 0.05],
   ['bowlR', 'bowl r', 0, 600, 10],
   ['bowlDepth', 'bowl depth', 0, 1, 0.05],
   ['plateauR', 'mesa r', 0, 600, 10],
   ['plateauLift', 'mesa lift', 0, 1, 0.05],
   ['seaR', 'sea r', 0, 750, 10],
   ['seaDepth', 'sea depth', 0, 1, 0.05],
+  ['flats', 'base pads', 0, 6, 1],
+  ['padR', 'pad radius', 10, 80, 5],
   ['stream', 'stream power', 0, 2, 0.05, 'erosion'],
   ['streamIters', 'stream iters', 0, 10, 1],
   ['droplets', 'droplets k', 0, 400, 5],
@@ -383,6 +419,7 @@ const SLIDERS: SliderDef[] = [
   ['depositRate', 'deposit', 0, 1, 0.05],
   ['capacity', 'capacity', 0, 10, 0.25],
   ['evap', 'evaporation', 0, 0.1, 0.005],
+  ['glacier', 'glacier', 0, 1, 0.05],
   ['talus', 'talus iters', 0, 60, 2],
   ['talusAngle', 'talus angle', 0.005, 0.1, 0.005],
   ['vscale', 'u8 gain', 0.2, 1, 0.05, 'output'],
@@ -404,8 +441,13 @@ async function loadMapList(): Promise<void> {
   try {
     const rows = await (await fetch('/maps', { cache: 'no-cache' })).json() as { name: string; hidden?: boolean; t2?: boolean }[];
     const filtered = rows.filter((r): boolean => !r.hidden);
-    mapNames = filtered.sort((a, b) => (a.t2 === b.t2 ? a.name.localeCompare(b.name) : (a.t2 ? 1 : -1))).map((r) => r.name);
-    mapT2 = mapNames.map((n) => filtered.find((r) => r.name === n)?.t2 === true);
+    const grouped = filtered.toSorted((a, b): number => {
+      const ta = a.t2 ? 1 : 0, tb = b.t2 ? 1 : 0;
+      if (ta !== tb) {return ta - tb;}
+      return a.name.localeCompare(b.name);
+    });
+    mapNames = grouped.map((r) => r.name);
+    mapT2 = grouped.map((r) => r.t2 === true);
     paintRail();
   } catch {
     flash('maps list unavailable — custom only');
@@ -442,6 +484,23 @@ function playButton(): HTMLButtonElement {
     paintRail();
   });
   return b;
+}
+
+// Noise archetype select — fBm / billow / swiss / jordan per-octave
+// shaping (gen.ts `shape`). Same row pattern as the tilt-axis select.
+function noiseRow(): HTMLDivElement {
+  const row = document.createElement('div');
+  row.className = 'row';
+  const lab = document.createElement('label'); lab.textContent = 'noise';
+  const sel = document.createElement('select');
+  for (const [v, label] of [[0, 'fBm'], [1, 'billow'], [2, 'swiss'], [3, 'jordan']] as [number, string][]) {
+    const o = document.createElement('option'); o.value = String(v); o.textContent = label;
+    if (state.noiseType === v) {o.selected = true;}
+    sel.append(o);
+  }
+  sel.addEventListener('change', (): void => { state.noiseType = Number(sel.value); save(); schedule(); });
+  row.append(lab, sel);
+  return row;
 }
 
 function stepMap(dir: number): void {
@@ -490,6 +549,8 @@ function paintRail(): void {
     rail.append(row);
   }
   rail.append(presetRow());
+  rail.append(styleRow());
+  rail.append(noiseRow());
   rail.append(tiltRow());
 
   // Probe-only control (not a GenParams key) — must NOT call schedule(),
@@ -627,6 +688,39 @@ function presetRow(): HTMLDivElement {
   return row;
 }
 
+// Style bundles — param sets tuned against the shipped maps' measured
+// stats (terrainstats.js). One pick → the field lands in the genre band;
+// sliders stay free to diverge after.
+function styleRow(): HTMLDivElement {
+  const BUNDLES: Record<string, Partial<GenParams & { heightScale: number; preset: number }>> = {
+    roller: { freq: 0.8, detail: 0.7, warp: 0.6, ridge: 0, curl: 0.4, elong: 1, smoothIters: 6, droplets: 25, stream: 0.6, talus: 8, heightScale: 1, preset: 2 },
+    dramatic: { freq: 1, detail: 1.2, warp: 0.8, ridge: 0.5, curl: 0.5, stream: 1.5, streamIters: 4, droplets: 40, fault: 0.2, faultAngle: 115, talus: 14, heightScale: 1.9, preset: 5 },
+    dunes: { freq: 0.7, detail: 0.4, warp: 0.3, ridge: 0, elong: 5, smoothIters: 10, droplets: 0, stream: 0, heightScale: 1, preset: 1 },
+    bowl: { freq: 0.6, detail: 0.8, warp: 0.5, ridge: 0.4, seaR: 520, seaDepth: 0.55, plateauR: 240, plateauLift: 0.5, stream: 0.8, heightScale: 1.6, preset: 4 },
+    coast: { freq: 0.8, detail: 0.9, warp: 0.6, ridge: 0.2, seaR: 420, seaDepth: 0.5, plateauR: 180, plateauLift: 0.4, stream: 0.7, droplets: 30, heightScale: 1.2, preset: 6 },
+  };
+  const row = document.createElement('div');
+  row.className = 'row';
+  const lab = document.createElement('label'); lab.textContent = 'style';
+  const sel = document.createElement('select');
+  const none = document.createElement('option');
+  none.value = ''; none.textContent = 'apply a style…';
+  sel.append(none);
+  for (const k of Object.keys(BUNDLES)) {
+    const o = document.createElement('option'); o.value = k; o.textContent = k;
+    sel.append(o);
+  }
+  sel.addEventListener('change', (): void => {
+    const b = BUNDLES[sel.value];
+    if (!b) {return;}
+    state.map = '';           // styles are synth-side, drop any loaded map
+    Object.assign(state, b);
+    save(); refresh(); paintRail();
+  });
+  row.append(lab, sel);
+  return row;
+}
+
 function tiltRow(): HTMLDivElement {
   const row = document.createElement('div');
   row.className = 'row';
@@ -683,7 +777,7 @@ renderer.setAnimationLoop((): void => {
   fpsFrames += 1; fpsT += dt;
   if (fpsT >= 0.5) { fpsEl.textContent = `${Math.round(fpsFrames / fpsT)} fps`; fpsFrames = 0; fpsT = 0; }
   if (player) {tickPlay(dt);} else {orbit.update();}
-  if (balls.length > 0) {tickBalls(dt);}
+  if (balls.length > 0) {tickBalls(dt); skiScore(dt);}
   renderer.render(scene, camera);
 });
 (window as any).__maplab = { state, refresh, field: () => field };

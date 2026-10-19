@@ -8,10 +8,22 @@ export interface GenParams {
   seed: number;
   freq: number;        // octave ladder scale (1 = genmap's 4,9,20,44)
   detail: number;      // high-octave amplitude scale
+  noiseType: number;   // 0=fBm, 1=billow, 2=swiss, 3=jordan
   warp: number;
+  curl: number;        // 0 = offset warp, 1 = curl-of-potential (no fold-back)
   ridge: number;       // 0 = fBm, 1 = ridged multifractal
   elong: number;       // dune ridges along z
   tilt: number; tiltAxis: 'x' | 'z';
+  // Seeded fault scarp: the field offsets across a line through center.
+  fault: number;       // signed offset share (-1..1 of the field's range)
+  faultAngle: number;  // degrees
+  // Glacial-lite: polish parabolic U-troughs along the D8 spine — the
+  // ski-line generator. 0 = off.
+  glacier: number;
+  smoothIters: number; // diffusion creep — laplacian softening passes
+  // Base pads — genmap's --flats: N seeded spots level to their own
+  // center inside padR meters, AFTER all carving, so stands sit flat.
+  flats: number; padR: number;
   bowlR: number; bowlDepth: number;      // center-anchored crater (m)
   plateauR: number; plateauLift: number;
   seaR: number; seaDepth: number;
@@ -27,8 +39,11 @@ export interface GenParams {
 }
 
 export const DEFAULTS: GenParams = {
-  size: 257, seed: 7, freq: 1, detail: 1, warp: 0.6, ridge: 0, elong: 1,
+  size: 257, seed: 7, freq: 1, detail: 1,
+  noiseType: 0, warp: 0.6, curl: 0, ridge: 0, elong: 1,
   tilt: 0, tiltAxis: 'x',
+  fault: 0, faultAngle: 30, glacier: 0, smoothIters: 0,
+  flats: 0, padR: 40,
   bowlR: 0, bowlDepth: 0.4, plateauR: 0, plateauLift: 0.5, seaR: 0, seaDepth: 0.5,
   vscale: 1,
   droplets: 0, inertia: 0.3, erodeRate: 0.35, depositRate: 0.3,
@@ -71,9 +86,20 @@ export function synthField(p: GenParams): Float32Array {
   const N = p.size;
   const OCT = [4, 9, 20, 44, 88].map((c) => Math.max(1, Math.round(c * p.freq)));
   const AMP = [1, 0.62, 0.38, 0.22, 0.12].map((a, i) => a * (i === 0 ? 1 : p.detail));
+  // Noise archetypes — same octave ladder, different per-octave shaping.
+  // billow: |n| rounded hills (no creases). swiss: ridge-amplified detail.
+  // jordan: squared creases — sharp spine ridges.
+  const shape = (n: number): number => {
+    switch (p.noiseType) {
+      case 1: { return Math.abs(n * 2 - 1); }                    // billow
+      case 2: { const r = 1 - Math.abs(n * 2 - 1); return n + r * r * 0.5; } // swiss
+      case 3: { const r = 1 - Math.abs(n * 2 - 1); return r * r * r; }       // jordan
+      default: { return n; }                                    // fBm
+    }
+  };
   const fbmAt = (u: number, v: number): number => {
     let h = 0;
-    for (let i = 0; i < OCT.length; i += 1) { h += noise(u * p.elong, v, OCT[i]!, i, p.seed) * AMP[i]!; }
+    for (let i = 0; i < OCT.length; i += 1) { h += shape(noise(u * p.elong, v, OCT[i]!, i, p.seed)) * AMP[i]!; }
     return h;
   };
   const ridgedAt = (u: number, v: number): number => {
@@ -93,8 +119,18 @@ export function synthField(p: GenParams): Float32Array {
       const u = x / N, v = z / N;
       let wu = u, wv = v;
       if (p.warp > 0) {
-        wu = u + p.warp * (noise(u + 1.7, v + 9.2, 4, 11, p.seed) - 0.5) * 0.25;
-        wv = v + p.warp * (noise(u + 8.3, v + 2.8, 4, 12, p.seed) - 0.5) * 0.25;
+        // Offset warp (genmap's) blended toward curl-of-potential warp —
+        // the curl field is divergence-free, so features bend instead of
+        // folding back over themselves.
+        const e = 0.02;
+        const pot = (a: number, b: number): number => noise(a + 1.7, b + 9.2, 4, 11, p.seed);
+        const cx = (pot(u, v + e) - pot(u, v - e)) / (2 * e);
+        const cz = -((pot(u + e, v) - pot(u - e, v)) / (2 * e));
+        const cl = Math.hypot(cx, cz) || 1;
+        const offX = (noise(u + 1.7, v + 9.2, 4, 11, p.seed) - 0.5);
+        const offZ = (noise(u + 8.3, v + 2.8, 4, 12, p.seed) - 0.5);
+        wu = u + p.warp * ((1 - p.curl) * offX * 0.25 + p.curl * (cx / cl) * 0.18);
+        wv = v + p.warp * ((1 - p.curl) * offZ * 0.25 + p.curl * (cz / cl) * 0.18);
       }
       let hh = p.ridge > 0 ? fbmAt(wu, wv) * (1 - p.ridge) + ridgedAt(wu, wv) * p.ridge : fbmAt(wu, wv);
       if (p.tilt !== 0) { hh += p.tilt * (1 - Math.cos(2 * Math.PI * (p.tiltAxis === 'z' ? v : u))) * 0.5; }
@@ -310,15 +346,112 @@ export function talusPass(h: Float32Array, N: number, p: GenParams): void {
   }
 }
 
+/** Seeded fault scarp — the field offsets across a line through the
+ *  tile center at faultAngle. A noise wiggle on the boundary keeps it
+ *  from reading as a machined seam; the offset is a fraction of the
+ *  field's 0..1 range. */
+export function faultPass(h: Float32Array, N: number, p: GenParams): void {
+  if (p.fault === 0) { return; }
+  const a = p.faultAngle * Math.PI / 180;
+  const nx = Math.cos(a), nz = Math.sin(a);
+  const wig = (t: number): number => (Math.sin(t * 9.7 + p.seed * 1.3) + Math.sin(t * 4.1 + p.seed * 2.9)) * 0.03;
+  for (let z = 0; z < N; z += 1) {
+    for (let x = 0; x < N; x += 1) {
+      const u = x / N - 0.5, v = z / N - 0.5;
+      const d = u * nx + v * nz + wig(u * -nz + v * nx); // signed dist to the fault line
+      const t = Math.min(1, Math.abs(d) / 0.02);         // 0.02-tile shear zone
+      const s = t * t * (3 - 2 * t);
+      h[z * N + x] = h[z * N + x]! + (d > 0 ? 1 : -1) * p.fault * 0.5 * s;
+    }
+  }
+}
+
+/** Glacial-lite U-troughs — the cheap-but-true version: the D8 spine's
+ *  high-accumulation cells get polished toward the lowest local height
+ *  over a width that grows with flow — wide flat floored channels
+ *  (the U-valley read) without an ice sim. */
+export function glacierPass(h: Float32Array, N: number, p: GenParams): void {
+  if (p.glacier <= 0) { return; }
+  const { acc } = drainage(h, N);
+  let accMax = 1;
+  for (const a of acc) { if (a > accMax) { accMax = a; } }
+  const src = h.slice();
+  for (let z = 0; z < N; z += 1) {
+    for (let x = 0; x < N; x += 1) {
+      const i = z * N + x;
+      const t = (acc[i]! / accMax) ** 0.3;
+      if (t < 0.08) { continue; }
+      const w = Math.round(2 + t * 7); // trunk channels polish widest
+      let lo = Infinity;
+      for (let dz = -w; dz <= w; dz += 1) {
+        for (let dx = -w; dx <= w; dx += 1) {
+          const v = src[(((z + dz) % N + N) % N) * N + (((x + dx) % N + N) % N)]!;
+          if (v < lo) { lo = v; }
+        }
+      }
+      h[i] = src[i]! + (lo - src[i]!) * p.glacier * t;
+    }
+  }
+}
+
+/** Diffusion creep — a laplacian softening pass. The gentle sibling of
+ *  talus (which only slides the steep cells): rounds ridge crests and
+ *  kills the noise carpet without removing relief. */
+export function smoothPass(h: Float32Array, N: number, iters: number): void {
+  for (let it = 0; it < iters; it += 1) {
+    const src = h.slice();
+    for (let z = 0; z < N; z += 1) {
+      for (let x = 0; x < N; x += 1) {
+        const i = z * N + x;
+        const l = src[z * N + ((x - 1 + N) % N)]!, r = src[z * N + ((x + 1) % N)]!;
+        const u = src[((z - 1 + N) % N) * N + x]!, d = src[((z + 1) % N) * N + x]!;
+        h[i] = src[i]! + (l + r + u + d - src[i]! * 4) * 0.12;
+      }
+    }
+  }
+}
+
+/** Base pads — seeded spots levelled to their own centre inside padR
+ *  meters (genmap's --flats, but positions roll off the seed). Runs
+ *  dead last: a pad survives erosion and carves so a stand always has
+ *  flat ground to sit on. */
+export function flatsPass(h: Float32Array, N: number, p: GenParams): void {
+  if (p.flats <= 0) { return; }
+  const rand = mulberry(p.seed * 9_171_613);
+  const cells = p.padR / (WORLD / N);
+  for (let i = 0; i < p.flats; i += 1) {
+    const cx = Math.floor(rand() * N), cz = Math.floor(rand() * N);
+    const target = h[cz * N + cx]!;
+    for (let z = 0; z < N; z += 1) {
+      for (let x = 0; x < N; x += 1) {
+        // Toroidal distance so a pad near the edge wraps cleanly.
+        const dx = Math.min(Math.abs(x - cx), N - Math.abs(x - cx));
+        const dz = Math.min(Math.abs(z - cz), N - Math.abs(z - cz));
+        const d = Math.hypot(dx, dz);
+        if (d > cells) { continue; }
+        const t = 1 - d / cells;
+        const w = t * t * (3 - 2 * t);
+        const idx = z * N + x;
+        h[idx] = h[idx]! * (1 - w) + target * w;
+      }
+    }
+  }
+}
+
 /** Full pipeline → the .bin byte layout (u32 w,h + u8 field).
- *  Order: stream-power carves the macro drainage network, droplets add
- *  micro gullies, talus aprons the cliffs — big structure first. */
+ *  Order: fault displaces the geometry → smooth creeps → stream-power
+ *  carves the macro drainage network → droplets gully → glacier polishes
+ *  the trunk troughs → talus aprons the cliffs → pads level dead last. */
 export function bake(p: GenParams): Uint8Array {
   const N = p.size;
   const h = synthField(p);
+  faultPass(h, N, p);
+  if (p.smoothIters > 0) { smoothPass(h, N, p.smoothIters); }
   streamPower(h, N, p);
   if (p.droplets > 0) { erode(h, N, p); }
+  glacierPass(h, N, p);
   if (p.talus > 0) { talusPass(h, N, p); }
+  flatsPass(h, N, p);
   const bytes = new Uint8Array(8 + N * N);
   for (let i = 0; i < N * N; i += 1) { bytes[8 + i] = Math.round(Math.min(1, Math.max(0, h[i]! * p.vscale)) * 255); }
   const dv = new DataView(bytes.buffer);
