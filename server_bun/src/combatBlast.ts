@@ -368,6 +368,7 @@ export class BlastRunner {
   /** Server-owned blast — the room's projectile/deployable sims decided
    *  where this pops, so the shooter-distance sanity check doesn't apply. */
   serverBlast(ownerId: string, position: Vec3, weaponType: number, excludeTargetId?: string | null, shotId?: string, attribWeaponType?: number, power?: number): void {
+    if (weaponType === WeaponType.Sticky) { console.log('STICKY BLAST:', ownerId, 'pos=', position.x.toFixed(1), position.y.toFixed(1), position.z.toFixed(1), 'attrib=', attribWeaponType); }
     const base = getWeaponStats(weaponType);
     if (!base || base.aoeRadius <= 0) {return;}
     // Power-scaled variants (Slam dive-speed blast) keep the identity

@@ -16,6 +16,7 @@
  */
 
 import { type Heightfield, hmHeight } from './heightfield.js';
+import { dcos, dhypot, dsin } from './dmath.ts';
 import type { SimVec, StructureCollider } from './ballSim.js';
 import { segSolidHit } from './solidWorld.js';
 import { crand, type CrawlerEvent, type SimCrawler } from './creatureCore.js';
@@ -178,10 +179,10 @@ function totemPickBlink(c: SimTotem, field: Heightfield, tx: number, tz: number)
   for (let i = 0; i < 16; i += 1) {
     const a = (i / 16) * Math.PI * 2 + crand(c) * 0.4;
     const r = 15 + crand(c) * c.sp.PEAK_RADIUS;
-    const x = c.x + Math.cos(a) * r;
-    const z = c.z + Math.sin(a) * r;
+    const x = c.x + dcos(a) * r;
+    const z = c.z + dsin(a) * r;
     const h = hmHeight(field, x, z);
-    const pd = Math.hypot(tx - x, tz - z);
+    const pd = dhypot(tx - x, tz - z);
     if (pd > c.sp.RANGE * 0.9) {continue;}
     if (h > bestH) { bestH = h; c.blinkX = x; c.blinkY = h; c.blinkZ = z; found = true; }
   }
@@ -190,8 +191,8 @@ function totemPickBlink(c: SimTotem, field: Heightfield, tx: number, tz: number)
     // No worthwhile perch — flank the target instead.
     const a = crand(c) * Math.PI * 2;
     const r = 30 + crand(c) * 20;
-    c.blinkX = tx + Math.cos(a) * r;
-    c.blinkZ = tz + Math.sin(a) * r;
+    c.blinkX = tx + dcos(a) * r;
+    c.blinkZ = tz + dsin(a) * r;
     c.blinkY = hmHeight(field, c.blinkX, c.blinkZ);
   }
 }

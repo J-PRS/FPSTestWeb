@@ -13,6 +13,7 @@ import { wallNow } from './wallClock.ts';
  * signalling vocabulary can evolve client-side without a server bump.
  */
 export class RtcRelay {
+  private static readonly MAX_ROOMS = 512;
   private rooms = new Map<string, Set<ServerWebSocket<WebSocketData>>>();
   /** Rooms the host opened to strangers — listed until a second member
    *  lands or the host leaves. */
@@ -30,7 +31,15 @@ export class RtcRelay {
   onOpen(ws: ServerWebSocket<WebSocketData>): void {
     const room = ws.data.room ?? '';
     let members = this.rooms.get(room);
-    if (!members) { members = new Set(); this.rooms.set(room, members); }
+    if (!members) {
+      // Room codes are client-chosen — cap the table or a flood of
+      // distinct names mints unbounded 2-slot rooms.
+      if (this.rooms.size >= RtcRelay.MAX_ROOMS) {
+        ws.close(1013, 'relay full');
+        return;
+      }
+      members = new Set(); this.rooms.set(room, members);
+    }
     if (members.size >= 2) {
       ws.close(1008, 'room full');
       return;

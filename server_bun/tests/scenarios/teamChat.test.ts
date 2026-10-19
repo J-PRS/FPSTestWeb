@@ -7,7 +7,7 @@ function wsSpy(room: Room, pid: string): ServerMessage[] {
   const got: ServerMessage[] = [];
   room.connections.register(pid, {
     readyState: 1,
-    send: (d: string | ArrayBuffer | Uint8Array) => { got.push(JSON.parse(d as string) as ServerMessage); return 0; },
+    send: (d: string | ArrayBuffer | Uint8Array) => { got.push(JSON.parse(d as string) as ServerMessage); return 1; },
   } as never);
   return got;
 }

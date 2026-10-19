@@ -20,7 +20,7 @@ export interface GameTransport {
   readonly ownsPing?: boolean;
   /** Worker-side probes (clean wire RTT, postMessage delivery lag,
    *  receive-edge liveness stamp, coalesced tick count). */
-  readonly probe?: { rttMs: number; lagMs: number; coalesced: number; lastRxAt: number };
+  readonly probe?: { rttMs: number; lagMs: number; coalesced: number; lastRxAt: number; drainMsMax?: number };
 }
 
 export type TransportFactory = (config: ConnectionConfig) => GameTransport;

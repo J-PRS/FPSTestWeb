@@ -1,4 +1,5 @@
 import { structureColliders, type StructureCollider } from './ballSim.ts';
+import { dhypot } from './dmath.ts';
 import { MOVEMENT_CONFIG, type MoveState as MS } from './movement.ts';
 import type { StructureSpec } from './mapSpec.ts';
 
@@ -85,7 +86,7 @@ export function segSolidHit(
   passTeam?: string,
 ): { x: number; y: number; z: number; t: number } | null {
   const dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
-  const segLen = Math.hypot(dx, dz);
+  const segLen = dhypot(dx, dz);
   let cands: readonly StructureCollider[] = cols;
   if (index) {
     _segCands.length = 0;
@@ -97,7 +98,7 @@ export function segSolidHit(
     if (passTeam && c.passTeam === passTeam) {continue;}
     const ox = from.x - c.cx, oz = from.z - c.cz;
     // Broadphase — skip boxes the segment can't approach.
-    const rr = Math.max(c.hx, c.hz) + Math.hypot(dx, dz) + 1;
+    const rr = Math.max(c.hx, c.hz) + dhypot(dx, dz) + 1;
     if (ox * ox + oz * oz > rr * rr && (dx * ox + dz * oz) >= 0) {continue;}
     if (c.dome) {
       // Ray vs hemisphere — quadratic around the base center; a root
@@ -304,7 +305,7 @@ export function blastOccluded(
   let sx = blastPos.x, sy = blastPos.y, sz = blastPos.z;
   for (let hop = 0; hop < 3; hop += 1) {
     const dx = to.x - sx, dy = to.y - sy, dz = to.z - sz;
-    const d = Math.hypot(dx, dy, dz);
+    const d = dhypot(dx, dy, dz);
     if (d < 0.5) {return false;}
     const hit = segSolidHit({ x: sx, y: sy, z: sz }, to, cols, index, passTeam);
     if (!hit) {return false;}

@@ -21,6 +21,7 @@
  */
 
 import { type Heightfield, hmHeight, hmChord } from './heightfield.js';
+import { datan2, dcos, dsin } from './dmath.ts';
 import type { SimVec, StructureCollider } from './ballSim.js';
 import { segSolidHit } from './solidWorld.js';
 import { SPECIES, speciesFamily, type SpeciesRow } from './species.js';
@@ -161,12 +162,12 @@ function hopLaunch(c: SimCrawler, dt: number, target: SimVec | null, distSq: num
     c.vx = ((target.x - c.x) / d) * c.sp.HOP_SPEED;
     c.vz = ((target.z - c.z) / d) * c.sp.HOP_SPEED;
     c.vy = c.sp.HOP_UP;
-    c.yaw = Math.atan2(c.vx, c.vz);
+    c.yaw = datan2(c.vx, c.vz);
   } else {
     c.state = 'wander';
     if (crand(c) < 0.4) {c.wanderYaw += (crand(c) - 0.5) * 2;}
-    c.vx = Math.sin(c.wanderYaw) * c.sp.HOP_SPEED * 0.35;
-    c.vz = Math.cos(c.wanderYaw) * c.sp.HOP_SPEED * 0.35;
+    c.vx = dsin(c.wanderYaw) * c.sp.HOP_SPEED * 0.35;
+    c.vz = dcos(c.wanderYaw) * c.sp.HOP_SPEED * 0.35;
     c.vy = c.sp.HOP_UP * 0.8;
     c.yaw = c.wanderYaw;
   }

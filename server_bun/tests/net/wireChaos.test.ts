@@ -23,13 +23,13 @@ describe('netcode chaos: wire layer', () => {
   it('reclaim replays exactly the missed seqs, in order', () => {
     const cm = new ConnectionManager();
     // Frames fly while nobody's connected — a dead socket's whole world.
-    for (let i = 0; i < 20; i++) cm.broadcast({ type: 'chat', playerId: 'x', text: `m${i}` } as ServerMessage);
+    for (let i = 0; i < 20; i++) {cm.broadcast({ type: 'chat', playerId: 'x', text: `m${i}` } as ServerMessage);}
     const ws = new FakeWs('a');
     cm.register('a', asWs(ws));
     const replayed = cm.replayTo('a', asWs(ws), 10);
     expect(replayed).toBe(10);
     const seqs = ws.sentRaw.map(evOf);
-    for (let i = 0; i < seqs.length; i++) expect(seqs[i]).toBe(11 + i);
+    for (let i = 0; i < seqs.length; i++) {expect(seqs[i]).toBe(11 + i);}
     expect(cm.reclaimGap).toBe(0);
   });
 
@@ -75,7 +75,7 @@ describe('netcode chaos: wire layer', () => {
     // them instead of breaking.
     const MAX = ConnectionManager.JOURNAL_MAX, CHUNK = ConnectionManager.JOURNAL_EVICT_CHUNK;
     const dropped = CHUNK + 1;
-    for (let i = 0; i < MAX + CHUNK + 1; i++) cm.broadcast({ type: 'chat', playerId: 'x', text: `${i}` } as ServerMessage);
+    for (let i = 0; i < MAX + CHUNK + 1; i++) {cm.broadcast({ type: 'chat', playerId: 'x', text: `${i}` } as ServerMessage);}
     expect(wrapped).toBe(dropped);
     expect(cm.journalDropped).toBe(dropped);
 
@@ -93,13 +93,16 @@ describe('netcode chaos: wire layer', () => {
   it('tick frames shed at backlog while reliable lane still queues', () => {
     const cm = new ConnectionManager();
     const ws = new FakeWs('a');
-    ws.buffered = 300 * 1024; // past MAX_TICK_BACKLOG
     cm.register('a', asWs(ws));
+    // Open the intro gate first — a fresh join holds ticks, not sheds.
+    cm.sendBinaryToPlayer('a', new Uint8Array(8));
+    ws.buffered = 300 * 1024; // past MAX_TICK_BACKLOG
     expect(cm.sendBinaryToPlayer('a', new Uint8Array(8))).toBe('backlogged');
-    expect(ws.sentRaw.length).toBe(0); // tick frame never queued
+    expect(ws.sentRaw.length).toBe(1); // the gate-open frame only
     // Reliable JSON still flows — it counts toward the drown drain.
+    // (sentRaw=2: the gate-open tick frame + this chat frame.)
     cm.sendToPlayer('a', { type: 'chat', playerId: 'x', text: 'hi' } as ServerMessage);
-    expect(ws.sentRaw.length).toBe(1);
+    expect(ws.sentRaw.length).toBe(2);
   });
 
   it('drowned socket gets marked, skipped, then closed after the window', () => {
@@ -140,8 +143,10 @@ describe('netcode chaos: wire layer', () => {
     expect(ws.sentRaw.length).toBe(1);
     expect(ws.data.slowSince).toBeTypeOf('number');
 
-    // Tick frames shed above the cap AND feed the same clock.
-    expect(cm.sendBinaryToPlayer('a', new Uint8Array(8))).toBe('backlogged');
+    // Tick frames shed above the cap AND feed the same clock. The gate
+    // is still armed (outbox never drained) — held is honest too, so
+    // accept either non-sent verdict as "shed at backlog".
+    expect(cm.sendBinaryToPlayer('a', new Uint8Array(8))).not.toBe('sent');
     expect(ws.sentRaw.length).toBe(1);
 
     // Aged mark — the next binary send closes the socket as drowned.

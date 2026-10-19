@@ -149,14 +149,18 @@ export class BallCombat {
       logger.warn('creatureHit dropped: no claimer', { playerId });
       return { killed: false, reason: 'noclaimer' };
     }
-    // Loose plausibility: claimer within engagement envelope of the ball
-    const dx = claimer.position.x - b.x;
-    const dy = claimer.position.y - b.y;
-    const dz = claimer.position.z - b.z;
-    const d2 = dx * dx + dy * dy + dz * dz;
-    if (d2 > 600 * 600) {
+    // Loose plausibility: claimer within engagement envelope of the ball.
+    // A claim in flight when the enrage leash teleported the ball is
+    // honestly stale — judge it against the pre-teleport site too.
+    const far = (x: number, y: number, z: number): boolean => {
+      const dx = claimer.position.x - x;
+      const dy = claimer.position.y - y;
+      const dz = claimer.position.z - z;
+      return dx * dx + dy * dy + dz * dz > 600 * 600;
+    };
+    if (far(b.x, b.y, b.z) && (!b.pset || far(b.px, b.py, b.pz))) {
       logger.warn('creatureHit dropped: out of range', {
-        playerId, id, dist: Math.round(Math.sqrt(d2)),
+        playerId, id, dist: Math.round(Math.hypot(claimer.position.x - b.x, claimer.position.y - b.y, claimer.position.z - b.z)),
         claimerPos: { x: Math.round(claimer.position.x), y: Math.round(claimer.position.y), z: Math.round(claimer.position.z) },
         ballPos: { x: Math.round(b.x), y: Math.round(b.y), z: Math.round(b.z) },
         claimerDead: claimer.isDead,

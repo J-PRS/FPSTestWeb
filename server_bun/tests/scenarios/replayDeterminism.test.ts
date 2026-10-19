@@ -15,15 +15,28 @@ import type { MapSpec } from '../../../shared/mapSpec.ts';
 import type { Heightfield } from '../../../shared/heightfield.ts';
 
 function hashOf(room: Room): string {
-  return computeStateHash([...room.players.getAllPlayers()].map(([id, p]) => [id, {
+  // Players ride computeStateHash's quantizer; everything else is plain
+  // scalar sim objects — a sorted JSON dump folds balls/crawlers/flags
+  // (incl. per-entity rng state) into the same per-tick fingerprint.
+  const players = computeStateHash([...room.players.getAllPlayers()].map(([id, p]) => [id, {
     x: p.position.x, y: p.position.y, z: p.position.z,
     health: p.health, isDead: p.isDead,
   }] as [string, { x: number; y: number; z: number; health: number; isDead: boolean }]));
+  const rest = JSON.stringify([
+    [...(room.ballSim?.balls.values() ?? [])].sort((a, b) => a.id - b.id),
+    [...(room.creatureSim?.crawlers.values() ?? [])].sort((a, b) => a.id - b.id),
+    [...(room.flags?.flags.values() ?? [])].sort((a, b) => (a.team < b.team ? -1 : 1)),
+  ]);
+  let h = 0x81_1C_9D_C5;
+  for (const s of players + rest) {
+    h ^= s.charCodeAt(0); h = Math.imul(h, 0x01_00_01_93) >>> 0;
+  }
+  return `${h.toString(16)  }|${  players}`;
 }
 
 const mkStream = (seed: number): (() => number) => {
   let s = seed >>> 0 || 1;
-  return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 0x100000000; };
+  return () => { s = (s * 1_664_525 + 1_013_904_223) >>> 0; return s / 0x1_00_00_00_00; };
 };
 
 /** Lockstep two rooms N ticks: each room's sims run under its own seeded
@@ -42,11 +55,11 @@ function lockstep(a: Room, b: Room, ticks: number, dt = 0.05): { divergedAt: num
     for (const room of [a, b]) {
       botRng(streams.get(room)!);
       tauntRng(tstreams.get(room)!);
-      try { for (const s of room.sims) s.tick(dt); } finally { botRngRelease(); tauntRng(Math.random); }
+      try { for (const s of room.sims) {s.tick(dt);} } finally { botRngRelease(); tauntRng(Math.random); }
     }
     simNowAdvance(dt * 1000);
     hashA = hashOf(a); hashB = hashOf(b);
-    if (divergedAt < 0 && hashA !== hashB) divergedAt = i;
+    if (divergedAt < 0 && hashA !== hashB) {divergedAt = i;}
   }
   return { divergedAt, hashA, hashB };
 }
@@ -88,10 +101,10 @@ test('replay determinism > a different stream diverges (sanity: the check actual
     for (const room of [a, b]) {
       botRng(streams.get(room)!);
       tauntRng(tstreams.get(room)!);
-      try { for (const s of room.sims) s.tick(0.05); } finally { botRngRelease(); tauntRng(Math.random); }
+      try { for (const s of room.sims) {s.tick(0.05);} } finally { botRngRelease(); tauntRng(Math.random); }
     }
     simNowAdvance(50);
-    if (divergedAt < 0 && hashOf(a) !== hashOf(b)) divergedAt = i;
+    if (divergedAt < 0 && hashOf(a) !== hashOf(b)) {divergedAt = i;}
   }
   expect(divergedAt).toBeGreaterThanOrEqual(0);
 });

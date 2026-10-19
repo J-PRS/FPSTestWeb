@@ -76,6 +76,10 @@ export class RemoteInterp {
    *  clientStats so lag-comp validates at the ghost the shooter saw,
    *  not a fixed 200ms constant that understates jittered links. */
   get interpDelay(): number { return this.net.interpDelay; }
+  /** Buffer starved → extrapolation cap hit: each underrun is a visible
+   *  freeze/dead-reckon episode. extCapMs is total severity. */
+  get underruns(): number { return this.net.underruns; }
+  get extCapMs(): number { return this.net.extCapMsTotal; }
 
   /** One server position update arrived — push the snapshot, refresh
    *  velocity estimates, and (when the DR window allows) blend back.

@@ -59,6 +59,10 @@ export class MoveClaims {
     if (!player || player.isDead) {return;}
 
     const now = wallNow();
+    // Liveness stamps on ANY well-formed report — a seq-regressed or
+    // plausibility-rejected client is still connected; gating lastSeen
+    // inside the judge gates idle-reaps an actively-talking player.
+    player.lastSeen = now;
     if (!this.plausible(playerId, player, msg, now)) {return;}
 
     // Held input rides the volatile frame — the superseding-stream

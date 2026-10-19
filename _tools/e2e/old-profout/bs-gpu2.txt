@@ -1,0 +1,558 @@
+[console.error] WebSocket connection to 'ws://localhost:5400/?token=IG8CBX0OYc31' failed: Error during WebSocket handshake: Unexpected response code: 400
+[http 503] http://127.0.0.1:8477/challenge
+[console.error] Failed to load resource: the server responded with a status of 503 (Service Unavailable)
+[console.error] Failed to establish a connection to https://127.0.0.1:9920/: net::ERR_QUIC_PROTOCOL_ERROR.QUIC_TLS_CERTIFICATE_UNKNOWN (TLS handshake failure (ENCRYPTION_HANDSHAKE) 46: certificate unknown. SSLErrorStack:[..\..\third_party\boringssl\src\ssl\handshake.cc:320] error:1000007d:SSL routines:OPENSSL_internal:CERTIFICATE_VERIFY_FAILED).
+[console.warn] [.WebGL-0x5bd401062e00] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+[console.warn] [.WebGL-0x5bd401062e00] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+[console.warn] [.WebGL-0x5bd401062e00] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+[console.warn] [.WebGL-0x5bd401062e00] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+[console.warn] 2026-10-17T13:59:14.776+02:00 [PlayerModel] [WARN] Animation not found: Jump (variant mannequin) 
+[console.error] 2026-10-17T13:59:16.337+02:00  [ERROR] [console.error] [GLITCH:seg-div] {"m":20,"spanMs":900,"enr":0} 
+[console.error] 2026-10-17T13:59:16.340+02:00  [ERROR] [console.error] [GLITCH:render-blend] {"netId":5,"offM":24,"skewMs":-2} 
+[console.error] 2026-10-17T13:59:16.469+02:00  [ERROR] [console.error] [GLITCH:seg-div] {"m":27,"spanMs":900,"enr":0} 
+[console.error] 2026-10-17T13:59:17.083+02:00  [ERROR] [console.error] [GLITCH:seg-div] {"m":27,"spanMs":900,"enr":0} 
+init 38620ms, connected 39452ms — watching 15s
+[console.error] 2026-10-17T13:59:26.717+02:00  [ERROR] [console.error] [GLITCH:remote-buried] {"id":"BOT-DUNE-04","depth":1.7,"lift":2.5,"fieldD":6} 
+{
+ "gpu": {
+  "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 Ti (0x00002482) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+  "vendor": "Google Inc. (NVIDIA)",
+  "khr": true
+ },
+ "programs": 42,
+ "progList": [
+  {
+   "name": "",
+   "ck": 243
+  },
+  {
+   "name": "",
+   "ck": 237
+  },
+  {
+   "name": "",
+   "ck": 720
+  },
+  {
+   "name": "",
+   "ck": 237
+  },
+  {
+   "name": "",
+   "ck": 237
+  },
+  {
+   "name": "",
+   "ck": 235
+  },
+  {
+   "name": "",
+   "ck": 241
+  },
+  {
+   "name": "",
+   "ck": 241
+  },
+  {
+   "name": "",
+   "ck": 241
+  },
+  {
+   "name": "",
+   "ck": 241
+  },
+  {
+   "name": "",
+   "ck": 244
+  },
+  {
+   "name": "",
+   "ck": 244
+  },
+  {
+   "name": "",
+   "ck": 236
+  },
+  {
+   "name": "",
+   "ck": 239
+  },
+  {
+   "name": "",
+   "ck": 6253
+  },
+  {
+   "name": "",
+   "ck": 251
+  },
+  {
+   "name": "",
+   "ck": 248
+  },
+  {
+   "name": "",
+   "ck": 246
+  },
+  {
+   "name": "",
+   "ck": 244
+  },
+  {
+   "name": "",
+   "ck": 244
+  },
+  {
+   "name": "",
+   "ck": 241
+  },
+  {
+   "name": "",
+   "ck": 241
+  },
+  {
+   "name": "",
+   "ck": 241
+  },
+  {
+   "name": "",
+   "ck": 241
+  },
+  {
+   "name": "",
+   "ck": 237
+  },
+  {
+   "name": "",
+   "ck": 287
+  },
+  {
+   "name": "",
+   "ck": 240
+  },
+  {
+   "name": "",
+   "ck": 244
+  },
+  {
+   "name": "",
+   "ck": 244
+  },
+  {
+   "name": "",
+   "ck": 287
+  },
+  {
+   "name": "",
+   "ck": 257
+  },
+  {
+   "name": "",
+   "ck": 255
+  },
+  {
+   "name": "",
+   "ck": 258
+  },
+  {
+   "name": "",
+   "ck": 234
+  },
+  {
+   "name": "",
+   "ck": 6248
+  },
+  {
+   "name": "",
+   "ck": 246
+  },
+  {
+   "name": "",
+   "ck": 258
+  },
+  {
+   "name": "",
+   "ck": 825
+  },
+  {
+   "name": "",
+   "ck": 246
+  },
+  {
+   "name": "",
+   "ck": 248
+  },
+  {
+   "name": "",
+   "ck": 241
+  },
+  {
+   "name": "",
+   "ck": 241
+  }
+ ],
+ "mats": [
+  [
+   "ShaderMaterial||1|nofog||||obc|",
+   8
+  ],
+  [
+   "PointsMaterial|T|2||map|vc||obc|",
+   4
+  ],
+  [
+   "MeshBasicMaterial||1|||||obc|",
+   30
+  ],
+  [
+   "ShaderMaterial|T|1|nofog||||obc|",
+   5
+  ],
+  [
+   "ShaderMaterial|T|2|nofog||||obc|",
+   3
+  ],
+  [
+   "MeshBasicMaterial|T|1||map|||obc|",
+   9
+  ],
+  [
+   "MeshBasicMaterial|T|1|||||obc|",
+   8
+  ],
+  [
+   "LineBasicMaterial||1|||||obc|",
+   1
+  ],
+  [
+   "MeshStandardMaterial||1|||||obc|",
+   10
+  ],
+  [
+   "MeshLambertMaterial||1|||vc||obc|",
+   35
+  ],
+  [
+   "SpriteMaterial|T|2||map|||obc|",
+   1
+  ],
+  [
+   "MeshBasicMaterial|T|2|nofog||vc||obc|",
+   2
+  ],
+  [
+   "MeshLambertMaterial||1|||||obc|",
+   6
+  ],
+  [
+   "MeshBasicMaterial|T|2|nofog|map|||obc|",
+   1
+  ],
+  [
+   "LineBasicMaterial|T|2|nofog||vc||obc|",
+   1
+  ],
+  [
+   "MeshBasicMaterial|T|2||map|||obc|",
+   2
+  ]
+ ],
+ "hot": [
+  {
+   "fn": "WebGLUniforms @:44585",
+   "samples": 1236
+  },
+  {
+   "fn": "convertBufferAttribute @:14218",
+   "samples": 73
+  },
+  {
+   "fn": "computeBoundingSphere @:14018",
+   "samples": 40
+  },
+  {
+   "fn": "projectObject @:51125",
+   "samples": 23
+  },
+  {
+   "fn": "_raycastFirst$1 @:2693",
+   "samples": 13
+  },
+  {
+   "fn": "searchNodeSubtree @:36261",
+   "samples": 12
+  },
+  {
+   "fn": "setProgram @:51366",
+   "samples": 10
+  },
+  {
+   "fn": "getParameters @:45281",
+   "samples": 9
+  },
+  {
+   "fn": "sampleHeightmap @:142",
+   "samples": 8
+  },
+  {
+   "fn": "normalizeNormals @:14203",
+   "samples": 7
+  },
+  {
+   "fn": "bakeWearTexture @:470",
+   "samples": 7
+  },
+  {
+   "fn": "updateMatrixWorld @:9863",
+   "samples": 7
+  },
+  {
+   "fn": "compose @:8389",
+   "samples": 6
+  },
+  {
+   "fn": "getProgram @:51269",
+   "samples": 6
+  },
+  {
+   "fn": "getZ @:12866",
+   "samples": 5
+  },
+  {
+   "fn": "updateSpecies @:239",
+   "samples": 5
+  },
+  {
+   "fn": "renderObject @:46502",
+   "samples": 5
+  },
+  {
+   "fn": "loadHeightfieldBin @:115",
+   "samples": 4
+  },
+  {
+   "fn": "getY @:12843",
+   "samples": 4
+  },
+  {
+   "fn": "computeBoundingSphere @:17141",
+   "samples": 4
+  }
+ ],
+ "marks": [
+  [
+   "initStart",
+   528
+  ],
+  [
+   "networkConnectStart",
+   530
+  ],
+  [
+   "heightmapLoaded",
+   547
+  ],
+  [
+   "terrainCreated",
+   591
+  ],
+  [
+   "effectsCreated",
+   593
+  ],
+  [
+   "playerCtor",
+   595
+  ],
+  [
+   "viewmodel",
+   618
+  ],
+  [
+   "entities",
+   619
+  ],
+  [
+   "playerCreated",
+   620
+  ],
+  [
+   "networkInit",
+   620
+  ],
+  [
+   "hudCreated",
+   624
+  ],
+  [
+   "initComplete",
+   651
+  ],
+  [
+   "savedMapApplied",
+   661
+  ],
+  [
+   "playerModelLoaded",
+   36749
+  ],
+  [
+   "networkConnected",
+   36750
+  ]
+ ],
+ "tasks": [
+  {
+   "dur": 35661,
+   "t": 543,
+   "type": "long-anim-frame",
+   "src": "heightmap.ts?t=1792237826699:undefined,demoSeed.ts:undefined,gameLoop.ts?t=1792237888811:undefined"
+  },
+  {
+   "dur": 35540,
+   "t": 663,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 543,
+   "t": 37154,
+   "type": "long-anim-frame",
+   "src": "WorkerTransport.ts:undefined,:undefined,gameLoop.ts?t=1792237888811:undefined"
+  },
+  {
+   "dur": 444,
+   "t": 39994,
+   "type": "long-anim-frame",
+   "src": ":undefined"
+  },
+  {
+   "dur": 442,
+   "t": 36658,
+   "type": "long-anim-frame",
+   "src": "three.module-Dhi4sXJn.js?v=533bc364:undefined,:undefined,gameLoop.ts?t=1792237888811:undefined"
+  },
+  {
+   "dur": 438,
+   "t": 39994,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 407,
+   "t": 39578,
+   "type": "long-anim-frame",
+   "src": ":undefined"
+  },
+  {
+   "dur": 399,
+   "t": 39580,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 388,
+   "t": 37309,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 365,
+   "t": 37828,
+   "type": "long-anim-frame",
+   "src": ":undefined,gameLoop.ts?t=1792237888811:undefined"
+  },
+  {
+   "dur": 295,
+   "t": 37828,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 265,
+   "t": 36204,
+   "type": "long-anim-frame",
+   "src": ":undefined,gameLoop.ts?t=1792237888811:undefined"
+  },
+  {
+   "dur": 254,
+   "t": 36206,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 228,
+   "t": 39153,
+   "type": "long-anim-frame",
+   "src": ":undefined,gameLoop.ts?t=1792237888811:undefined"
+  },
+  {
+   "dur": 219,
+   "t": 39154,
+   "type": "window",
+   "src": "unknown"
+  }
+ ],
+ "rafWorst": [
+  {
+   "gap": 35798,
+   "at": 36462
+  },
+  {
+   "gap": 452,
+   "at": 37762
+  },
+  {
+   "gap": 446,
+   "at": 40434
+  },
+  {
+   "gap": 409,
+   "at": 39980
+  },
+  {
+   "gap": 343,
+   "at": 38125
+  },
+  {
+   "gap": 302,
+   "at": 36956
+  },
+  {
+   "gap": 226,
+   "at": 39374
+  },
+  {
+   "gap": 196,
+   "at": 39571
+  },
+  {
+   "gap": 192,
+   "at": 37148
+  },
+  {
+   "gap": 169,
+   "at": 38776
+  },
+  {
+   "gap": 163,
+   "at": 38607
+  },
+  {
+   "gap": 162,
+   "at": 37310
+  },
+  {
+   "gap": 138,
+   "at": 46926
+  },
+  {
+   "gap": 137,
+   "at": 39043
+  },
+  {
+   "gap": 123,
+   "at": 36585
+  }
+ ],
+ "totalTaskMs": 80858
+}

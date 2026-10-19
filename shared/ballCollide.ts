@@ -6,6 +6,7 @@
  * on its own.
  */
 import type { StructureSpec } from './mapSpec.js';
+import { dcos, dsin } from './dmath.ts';
 import { KIT_HULLS } from './structKits.js';
 import type { SimBall } from './ballSim.js';
 
@@ -34,7 +35,7 @@ export function structureColliders(list: readonly StructureSpec[] | undefined): 
   if (!list?.length) {return [];}
   const out: StructureCollider[] = [];
   for (const s of list) {
-    const cos = Math.cos(s.rotY ?? 0), sin = Math.sin(s.rotY ?? 0);
+    const cos = dcos(s.rotY ?? 0), sin = dsin(s.rotY ?? 0);
     if (s.kind === 'kit') {
       // Kit pieces collide as their authored hull set (local-space boxes,
       // folded by the piece's own rotY then the spec's) — the visual and
@@ -49,7 +50,7 @@ export function structureColliders(list: readonly StructureSpec[] | undefined): 
           cy: s.pos.y + h.pos.y * k,
           cz: s.pos.z - (h.pos.x * k) * sin + (h.pos.z * k) * cos,
           hx: h.size.x / 2 * k, hy: h.size.y / 2 * k, hz: h.size.z / 2 * k,
-          cos: Math.cos(r + (h.rotY ?? 0)), sin: Math.sin(r + (h.rotY ?? 0)),
+          cos: dcos(r + (h.rotY ?? 0)), sin: dsin(r + (h.rotY ?? 0)),
           dome: h.dome ? h.dome * k : undefined,
         });
       }

@@ -51,6 +51,10 @@ export class GameServer {
   private readonly factory: RoomFactory;
   private readonly switcher: RoomSwitcher;
 
+  /** Verbs a spectator may drive — read-only otherwise. tickNack is safe:
+   *  nackFor scopes its reseed to the spec's own intro window. */
+  private static readonly SPEC_VERBS = new Set(['ping', 'pong', 'clientStats', 'snapshotRequest', 'resync', 'tickNack']);
+
   // Ops counters — cheap ints, read by /metrics. msgsIn counts everything
   // that passed validation; tick lag measures setInterval drift (the
   // server-clock skew that makes client replays overshoot).
@@ -61,7 +65,7 @@ export class GameServer {
     // this deployment is paying for.
     tierWs: 0, tierWt: 0, tierRtc: 0, tierOther: 0,
     tickLagMsMax: 0, tickLagMsSum: 0, tickLagSamples: 0,
-    lastTickAt: 0,
+    lastTickAt: 0, ticksDropped: 0,
   };
 
   constructor() {
@@ -220,6 +224,15 @@ export class GameServer {
       return;
     }
     const text = message;
+    // Pre-join CPU guard: an unseated socket's only legitimate frame is
+    // the (small) join handshake — unlimited 1MB JSON parses are free DoS.
+    if (!ws.data.playerId) {
+      ws.data.preJoin = (ws.data.preJoin ?? 0) + 1;
+      if (message.length > 64 * 1024 || ws.data.preJoin > 16) {
+        ws.close(1008, 'pre-join flood');
+        return;
+      }
+    }
     let raw!: unknown; // oxlint-disable-line init-declarations -- assigned in try/catch below
     try {
       raw = JSON.parse(text);
@@ -229,8 +242,15 @@ export class GameServer {
     }
 
     const existingPlayerId = ws.data.playerId;
-    if (existingPlayerId && this.specRooms.has(existingPlayerId)) {return;} // spectators are read-only
-    const room = existingPlayerId ? this.roomOfPlayer(existingPlayerId) : undefined;
+    let room = existingPlayerId ? this.roomOfPlayer(existingPlayerId) : undefined;
+    if (existingPlayerId && !room) {
+      // Spectators are read-only EXCEPT the verbs that serve them too:
+      // ping/pong (their RTT probe), clientStats, snapshotRequest/resync
+      // (a gapped spec otherwise desyncs permanently), tickNack (scoped
+      // to their own intro window by nackFor, not room-wide).
+      room = this.specRooms.get(existingPlayerId);
+      if (!room || !GameServer.SPEC_VERBS.has((raw as { type?: string }).type ?? '')) {return;}
+    }
 
     // A bad message must only cost its own sender — anything downstream
     // that throws (handler bug, malformed fields the shape checks missed)
@@ -333,7 +353,12 @@ export class GameServer {
     const spec = this.maps.reloadSpec(this.maps.mapNameOf(name) ?? name);
     if (!spec) {return 'no-spec';}
     room.mapSrc = this.maps.mapNameOf(name) ?? name;
+    // A .bin re-baked under the same filename isn't a 'terrainChanged'
+    // key diff — evict the cached field and force re-attach or the
+    // reload silently keeps the old heightmap.
+    if (spec.terrain) {this.factory.invalidateField(spec.terrain);}
     room.applySpec(spec);
+    if (spec.terrain) {this.factory.attachTerrain(room, spec);}
     logger.info('Room spec reloaded', { room: name });
     return 'ok';
   }

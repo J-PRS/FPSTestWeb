@@ -29,6 +29,7 @@ export class WebTransportGameTransport implements GameTransport {
   // Stream-2 (caps.binLane): u16-framed raw binary, HoL-isolated from the
   // JSON lane — opened only when the server advertises it on gameState.
   private binStream: WebTransportBidirectionalStream | null = null;
+  private binWriter: WritableStreamDefaultWriter<Uint8Array> | null = null;
   private rr: ReadableStreamDefaultReader<Uint8Array> | null = null;
   private dr: ReadableStreamDefaultReader<Uint8Array> | null = null;
   private preOpen: string[] = [];
@@ -114,6 +115,7 @@ export class WebTransportGameTransport implements GameTransport {
     let m: ServerMessage | { type: 'bin'; d: string };
     try { m = JSON.parse(line); } catch { return; /* malformed */ }
     if (m.type === 'gameState' && (m as { caps?: { binLane?: number } }).caps?.binLane && !this.binStream) {
+      this.wantBinLane = true;
       this.openBinLane();
     }
     if (m.type === 'bin' && typeof (m as { d?: string }).d === 'string') {
@@ -125,11 +127,19 @@ export class WebTransportGameTransport implements GameTransport {
 
   private async openBinLane(): Promise<void> {
     try {
-      const stream = await this.wt.createBidirectionalStream();
+      // createBidirectionalStream can hang pending under stream-limit
+      // backpressure — without a timeout the lane silently never opens
+      // and ticks stay on the ~33%-loss datagram lane forever.
+      const stream = await Promise.race([
+        this.wt.createBidirectionalStream(),
+        new Promise<never>((_res, rej): void => { setTimeout((): void => rej(new Error('binLane open timeout')), 2000); }),
+      ]);
       // A second stream could have been opened by a later gameState
       // (resync replays the caps) — keep the first, drop the extra.
       if (this.binStream) { stream.readable.cancel().catch((): void => { return; }); stream.writable.close().catch((): void => { return; }); return; }
       this.binStream = stream;
+      this.binWriter = stream.writable.getWriter();
+      logger.info('wt bin lane open');
       const rr = stream.readable.getReader();
       let carry = new Uint8Array(0);
       for (;;) {
@@ -147,9 +157,19 @@ export class WebTransportGameTransport implements GameTransport {
       }
     } catch { /* lane reset */ }
     // Bin lane dying degrades to base64 on stream 1 — never kills the
-    // session (same rule as the datagram lane).
+    // session (same rule as the datagram lane). But WITHOUT it the tick
+    // feed falls back to the datagram lane's measured ~33% seq loss, so
+    // a failed/dead lane is worth retrying while the session lives.
+    const wasUp = this.binStream !== null;
     this.binStream = null;
+    this.binWriter = null;
+    if (wasUp || this.wantBinLane) {
+      logger.warn('wt bin lane ended — reopening');
+      setTimeout((): void => { if (this.open && this.wantBinLane && !this.binStream) { this.openBinLane(); } }, 500);
+    }
   }
+
+  private wantBinLane = false;
 
   private async pumpDatagrams(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<void> {
     try {
@@ -170,13 +190,23 @@ export class WebTransportGameTransport implements GameTransport {
 
   send(data: string | Uint8Array): boolean {
     if (!this.open) {return false;}
-    // Seq'd binary frames (position reports) that fit a datagram take the
-    // unreliable lane — each is superseding state, so a drop costs the
-    // next frame's worth of staleness, never a stall. Oversized frames
-    // would be dropped WHOLESALE past the path MTU — they must stay on
-    // the reliable stream (enveloped).
-    if (data instanceof Uint8Array && data.byteLength <= WT_MAX_DATAGRAM) {
-      if (this.dgWriter) {
+    // Seq'd binary frames (position reports): prefer stream-2 when it's
+    // up — reliable AND HoL-isolated from the JSON lane, and the
+    // datagram lane measured ~33% loss on loopback (QUIC drops dgrams
+    // that exceed the congestion window; they are cc'd but never
+    // retransmitted). Datagrams remain the pre-binLane fallback —
+    // superseding state, so a drop costs one frame's staleness.
+    if (data instanceof Uint8Array) {
+      if (this.binWriter && data.byteLength <= 0xFF_FF) {
+        // One concatenated write — a shared u16 scratch can be
+        // overwritten before the earlier write() flushes (see WtServer).
+        const frame = new Uint8Array(2 + data.byteLength);
+        frame[0] = data.byteLength & 0xFF; frame[1] = data.byteLength >> 8;
+        frame.set(data, 2);
+        this.binWriter.write(frame).catch((): void => { return; });
+        return true;
+      }
+      if (this.dgWriter && data.byteLength <= WT_MAX_DATAGRAM) {
         this.dgWriter.write(data).catch((): void => { return; });
         return true;
       }
@@ -206,7 +236,8 @@ export class WebTransportGameTransport implements GameTransport {
    *  the lane died and reprobes. */
   disconnect(): void {
     this.open = false;
-    this.stream = null; this.rr = null; this.dr = null; this.binStream = null;
+    this.wantBinLane = false;
+    this.stream = null; this.rr = null; this.dr = null; this.binStream = null; this.binWriter = null;
     this.wt?.close();
   }
 }

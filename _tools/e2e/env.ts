@@ -111,14 +111,18 @@ async function spawnGameServer(procs: Subprocess[], from: number): Promise<numbe
 export async function upStack(opts: { clientPort?: number; serverPort?: number } = {}): Promise<Stack> {
   const procs: Subprocess[] = [];
   serverLogBufs.length = 0;
-  const down = () => {
+  const down = async () => {
     for (const p of procs) {
       try {
-        // cpu-prof only flushes on a graceful exit — SIGTERM first, hard
-        // kill after a beat. On Windows bun may still not flush; then run
-        // the profiled server standalone instead.
-        if (process.env.E2E_CPU_PROF) {p.kill('SIGTERM'); setTimeout(() => { try { p.kill(); } catch { /* dead */ } }, 1500);}
-        else {p.kill();}
+        // cpu-prof only flushes on a graceful exit, and Windows kill() is
+        // TerminateProcess (no SIGTERM reaches bun) — the server exposes
+        // /dev/shutdown for exactly this door; hit it and give the child
+        // its flush window before falling back to a hard kill.
+        if (process.env.E2E_CPU_PROF) {
+          try { await fetch(`http://localhost:${serverPort}/dev/shutdown`); } catch { /* dead */ }
+          for (let i = 0; i < 30 && p.exitCode === null; i++) {await sleep(200);}
+        }
+        p.kill();
       } catch { /* already dead */ }
     }
   };

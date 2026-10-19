@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'bun:test';
-import { makeRoutes } from '../src/serverRoutes.ts';
+import { rmSync } from 'node:fs';
+import { makeRoutes, adminRoute } from '../src/serverRoutes.ts';
 import type { HttpCtx } from '../src/serverRoutes.ts';
 import { CONFIG } from '../src/config.ts';
 import type { Room } from '../src/Room.ts';
@@ -79,5 +80,31 @@ describe('route guards', () => {
   it('ops routes stay open in dev when the token is unset', async () => {
     const routes = makeRoutes(ctx('9.9.9.4'));
     expect((await routes['/metrics']!(url('/metrics'), req('/metrics'))).status).toBe(200);
+  });
+
+  it('admin API is closed without a token and 401s on a wrong one', async () => {
+    const post = (auth?: string) => adminRoute(ctx('9.9.9.5'),
+      req('/admin/rooms', auth ? { authorization: `Bearer ${auth}` } : undefined),
+      url('/admin/rooms'));
+    expect((await post('tok')).status).toBe(403); // token unset = disabled
+    (CONFIG as unknown as { adminToken: string }).adminToken = 'tok';
+    expect((await post()).status).toBe(401);
+    expect((await post('wrong')).status).toBe(401);
+    expect((await post('tok')).status).toBe(200);
+  });
+
+  it('/admin/heapdump writes a JSC snapshot and stays token-gated', async () => {
+    const heapReq = () => adminRoute(ctx('127.0.0.1'),
+      new Request('http://srv/admin/heapdump', { method: 'POST', headers: { authorization: 'Bearer tok' } }),
+      url('/admin/heapdump'));
+    (CONFIG as unknown as { adminToken: string }).adminToken = 'tok';
+    const res = await heapReq();
+    expect(res.status).toBe(200);
+    const body = await res.json() as { ok: boolean; file: string };
+    expect(body.file).toMatch(/^_heapdumps\/heap-\d+\.heapsnapshot$/);
+    rmSync(body.file);
+    // GET is POST-only on admin actions.
+    const get = await adminRoute(ctx(), req('/admin/heapdump', { authorization: 'Bearer tok' }), url('/admin/heapdump'));
+    expect(get.status).toBe(405);
   });
 });

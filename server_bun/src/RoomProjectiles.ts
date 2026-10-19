@@ -53,6 +53,8 @@ export interface LiveProj {
    *  glued to; undefined = frozen at its landing point. The fuse is
    *  the only trigger left. */
   stuck?: { playerId?: string; off: Vec3 };
+  /** Debug: whether this sticky was cooked by a sibling detonation. */
+  cooked?: boolean;
   /** Terrain hits taken — maxBounces ends the shell on the Nth. */
   bounces?: number;
   /** Owner's team at spawn — team-filtered solids (shield gates) let the
@@ -346,10 +348,11 @@ export class RoomProjectiles {
     // contact by ~a transit of flight; exploding AT the wire point keeps
     // every predicted blast centered where the authority put it.
     this.room.broadcast(verbPayload(WORLD_MODEL.projectile!, 'gone', 'projectileId', proj.id, { position: at }) as ServerMessage);
-    // Skillshot ramp: sim shells carry their real flight age — a bot's
+    // Skillshot ramp: sim shells carry their real flight age - a bot's
     // 2s disc lead pays the same multiplier a player's claim would. Wake
     // contacts still pay flat directDamage; only body hits earn it.
     const rampAge = bodyDirect ? proj.p.age : undefined;
+
     if (directHitId) {this.room.messages.botAttack(proj.ownerId, directHitId, proj.weaponType, rampAge, proj.pull);}
     // A shell that lands on a creature deals its direct line, then the
     // blast splashes the rest of the swarm — same outcome a player-caused
@@ -410,11 +413,14 @@ export class RoomProjectiles {
     // maxLifetime, and cooking to the base fuse would leave those stuck.
     if (proj.weaponType === WeaponType.Sticky) {
       const r2 = proj.stats.aoeRadius * proj.stats.aoeRadius;
+      let cooked = 0;
       for (const sib of this.projs.values()) {
         if (sib.weaponType !== WeaponType.Sticky) {continue;}
         const dx = sib.p.pos.x - at.x, dy = sib.p.pos.y - at.y, dz = sib.p.pos.z - at.z;
         if (dx * dx + dy * dy + dz * dz <= r2) {
           sib.p.age = Math.max(sib.p.age, sib.ttl);
+          sib.cooked = true;
+          cooked++;
         }
       }
     }

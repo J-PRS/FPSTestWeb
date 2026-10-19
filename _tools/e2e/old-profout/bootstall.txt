@@ -1,0 +1,243 @@
+[console.error] WebSocket connection to 'ws://localhost:5400/?token=IG8CBX0OYc31' failed: Error during WebSocket handshake: Unexpected response code: 400
+[http 503] http://127.0.0.1:8477/challenge
+[console.error] Failed to load resource: the server responded with a status of 503 (Service Unavailable)
+[console.warn] 2026-10-17T13:36:06.504+02:00  [WARN] [console.warn] THREE.WebGLRenderer: KHR_parallel_shader_compile extension not supported. 
+[console.error] Failed to establish a connection to https://127.0.0.1:9920/: net::ERR_QUIC_PROTOCOL_ERROR.QUIC_TLS_CERTIFICATE_UNKNOWN (TLS handshake failure (ENCRYPTION_HANDSHAKE) 46: certificate unknown. SSLErrorStack:[..\..\third_party\boringssl\src\ssl\handshake.cc:320] error:1000007d:SSL routines:OPENSSL_internal:CERTIFICATE_VERIFY_FAILED).
+[console.warn] 2026-10-17T13:36:10.783+02:00 [PlayerModel] [WARN] Animation not found: Jump (variant mannequin) 
+[console.error] 2026-10-17T13:36:12.597+02:00  [ERROR] [console.error] [GLITCH:seg-div] {"m":28,"spanMs":1050,"enr":0} 
+[console.error] 2026-10-17T13:36:12.599+02:00  [ERROR] [console.error] [GLITCH:seg-div] {"m":33,"spanMs":1150,"enr":0} 
+[console.error] 2026-10-17T13:36:12.858+02:00  [ERROR] [console.error] [GLITCH:ball-step] {"gapM":16,"acc":0} 
+[console.error] 2026-10-17T13:36:12.859+02:00  [ERROR] [console.error] [GLITCH:render-blend] {"netId":9,"offM":33,"skewMs":-234} 
+[console.error] 2026-10-17T13:36:12.859+02:00  [ERROR] [console.error] [GLITCH:render-blend] {"netId":7,"offM":25,"skewMs":-184} 
+[console.error] 2026-10-17T13:36:12.859+02:00  [ERROR] [console.error] [GLITCH:render-blend] {"netId":6,"offM":27,"skewMs":-184} 
+[console.error] 2026-10-17T13:36:12.992+02:00  [ERROR] [console.error] [GLITCH:seg-div] {"m":23,"spanMs":1000,"enr":0} 
+init 7327ms, connected 7637ms — watching 40s
+[console.warn] 2026-10-17T13:36:20.452+02:00 [Main] [WARN] [StateHash] DESYNC DETECTED tick=58 hash=803d1d20 vs fca8004f | [sim] Player BOT-MARA-03 position delta=(75.9,32.8,11.9) client=(-152.6,73.6,98.9) server=(-76.8,40.8,87.0); [sim] Player BOT-DUNE-04 position delta=(176.2,19.6,33.8) client=(110.5,84.0,51.3) server=(-65.7,64.4,85.2); [sim] Player BOT-PICO-05 position delta=(77.6,10.3,8.4) client=(-198.5,41.7,34.9) server=(-120.9,31.3,43.3) [object Object]
+[console.warn] 2026-10-17T13:36:20.455+02:00 [Main] [WARN] ball #7 segment rubberband 33.9m (age 500ms) — prediction diverged enr=0 tgt=1 leg=0.5 simT=8.3 now=8.3 py=19 ty=36 gy=32 [object Object]
+[console.warn] 2026-10-17T13:36:20.456+02:00 [Main] [WARN] ball #20 segment rubberband 16.5m (age 450ms) — prediction diverged enr=0 tgt=1 leg=0.5 simT=8.3 now=8.3 py=39 ty=49 gy=24 [object Object]
+[console.warn] 2026-10-17T13:36:20.457+02:00 [Main] [WARN] ball #21 segment rubberband 7.8m (age 450ms) — prediction diverged enr=0 tgt=1 leg=0.5 simT=8.3 now=8.3 py=91 ty=95 gy=22 [object Object]
+[console.error] 2026-10-17T13:36:22.154+02:00  [ERROR] [console.error] [GLITCH:trail-jumpcut] {"tag":"proj:plasma","gapM":410} 
+[console.error] 2026-10-17T13:36:22.155+02:00  [ERROR] [console.error] [GLITCH:trail-jumpcut] {"tag":"proj:plasma","gapM":410} 
+[console.warn] 2026-10-17T13:36:22.705+02:00  [WARN] LOW FPS sustained — perf dump [object Object]
+[console.warn] 2026-10-17T13:36:22.706+02:00  [WARN] auto-quality: cpu level 1 (sustained low fps) 
+[console.error] 2026-10-17T13:36:24.394+02:00  [ERROR] [console.error] [GLITCH:render-blend] {"netId":2,"offM":23,"skewMs":-52} 
+[console.error] 2026-10-17T13:36:27.561+02:00  [ERROR] [console.error] [GLITCH:parity-nugrest] {"dM":0.7} 
+[console.error] 2026-10-17T13:36:27.624+02:00  [ERROR] [console.error] [GLITCH:parity-nugrest] {"dM":0.8} 
+[console.error] 2026-10-17T13:36:27.625+02:00  [ERROR] [console.error] [GLITCH:parity-nugrest] {"dM":0.7} 
+[console.error] 2026-10-17T13:36:29.594+02:00  [ERROR] [console.error] [GLITCH:parity-kb-unpredicted] {"x":-204,"y":30,"z":69,"force":24.8,"pull":false} 
+[console.warn] 2026-10-17T13:36:32.597+02:00  [WARN] LOW FPS sustained — perf dump [object Object]
+[console.warn] 2026-10-17T13:36:32.598+02:00  [WARN] auto-quality: cpu level 2 (sustained low fps) 
+[console.error] 2026-10-17T13:36:36.009+02:00  [ERROR] [console.error] [GLITCH:parity-kb-echo] {"x":-204,"y":30,"z":69,"by":"BOT-DUNE-04","f":45,"ageMs":6351} 
+[console.warn] 2026-10-17T13:36:42.684+02:00  [WARN] LOW FPS sustained — perf dump [object Object]
+[console.warn] 2026-10-17T13:36:52.762+02:00  [WARN] LOW FPS sustained — perf dump [object Object]
+[console.error] 2026-10-17T13:36:53.154+02:00  [ERROR] [console.error] [GLITCH:render-blend] {"netId":5,"offM":30,"skewMs":-12} 
+{
+ "marks": [
+  [
+   "initStart",
+   574
+  ],
+  [
+   "networkConnectStart",
+   575
+  ],
+  [
+   "heightmapLoaded",
+   588
+  ],
+  [
+   "terrainCreated",
+   628
+  ],
+  [
+   "effectsCreated",
+   631
+  ],
+  [
+   "playerCtor",
+   632
+  ],
+  [
+   "viewmodel",
+   651
+  ],
+  [
+   "entities",
+   653
+  ],
+  [
+   "playerCreated",
+   653
+  ],
+  [
+   "networkInit",
+   653
+  ],
+  [
+   "hudCreated",
+   657
+  ],
+  [
+   "initComplete",
+   687
+  ],
+  [
+   "savedMapApplied",
+   695
+  ],
+  [
+   "playerModelLoaded",
+   4977
+  ],
+  [
+   "networkConnected",
+   4978
+  ]
+ ],
+ "tasks": [
+  {
+   "dur": 4261,
+   "t": 7906,
+   "type": "long-anim-frame"
+  },
+  {
+   "dur": 3202,
+   "t": 583,
+   "type": "long-anim-frame"
+  },
+  {
+   "dur": 3197,
+   "t": 8971,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 3088,
+   "t": 697,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 1830,
+   "t": 12809,
+   "type": "long-anim-frame"
+  },
+  {
+   "dur": 1517,
+   "t": 13123,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 1005,
+   "t": 4880,
+   "type": "long-anim-frame"
+  },
+  {
+   "dur": 855,
+   "t": 3968,
+   "type": "long-anim-frame"
+  },
+  {
+   "dur": 841,
+   "t": 7064,
+   "type": "long-anim-frame"
+  },
+  {
+   "dur": 736,
+   "t": 5927,
+   "type": "long-anim-frame"
+  },
+  {
+   "dur": 693,
+   "t": 5191,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 634,
+   "t": 6029,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 616,
+   "t": 12193,
+   "type": "long-anim-frame"
+  },
+  {
+   "dur": 601,
+   "t": 12193,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 593,
+   "t": 17566,
+   "type": "long-anim-frame"
+  }
+ ],
+ "rafWorst": [
+  {
+   "gap": 3267,
+   "at": 3965
+  },
+  {
+   "gap": 3207,
+   "at": 12180
+  },
+  {
+   "gap": 1529,
+   "at": 14653
+  },
+  {
+   "gap": 1078,
+   "at": 8972
+  },
+  {
+   "gap": 854,
+   "at": 4820
+  },
+  {
+   "gap": 850,
+   "at": 7895
+  },
+  {
+   "gap": 730,
+   "at": 5922
+  },
+  {
+   "gap": 709,
+   "at": 6738
+  },
+  {
+   "gap": 616,
+   "at": 12796
+  },
+  {
+   "gap": 595,
+   "at": 18163
+  },
+  {
+   "gap": 453,
+   "at": 17377
+  },
+  {
+   "gap": 437,
+   "at": 15413
+  },
+  {
+   "gap": 328,
+   "at": 13124
+  },
+  {
+   "gap": 315,
+   "at": 5192
+  },
+  {
+   "gap": 307,
+   "at": 7045
+  }
+ ],
+ "totalTaskMs": 62176
+}

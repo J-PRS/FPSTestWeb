@@ -1,0 +1,16 @@
+[console.error] WebSocket connection to 'ws://localhost:5400/?token=IG8CBX0OYc31' failed: Error during WebSocket handshake: Unexpected response code: 400
+[http 503] http://127.0.0.1:8477/challenge
+[console.error] Failed to load resource: the server responded with a status of 503 (Service Unavailable)
+41 |                 break;
+42 |         }
+43 |         this.#args = args;
+44 |         this.#world.taskManager.add(this);
+45 |         if (options.timeout) {
+46 |             this.#timeoutError = new TimeoutError(`Waiting failed: ${options.timeout}ms exceeded`);
+                                          ^
+TimeoutError: Waiting failed: 90000ms exceeded
+      at WaitTask (C:\TEMP\_WEB\FPSWebTest\_tools\node_modules\puppeteer-core\lib\puppeteer\common\WaitTask.js:46:38)
+      at waitForFunction (C:\TEMP\_WEB\FPSWebTest\_tools\node_modules\puppeteer-core\lib\puppeteer\api\Realm.js:49:30)
+      at waitForFunction (C:\TEMP\_WEB\FPSWebTest\_tools\node_modules\puppeteer-core\lib\puppeteer\api\Frame.js:585:43)
+
+Bun v1.3.14 (Windows x64)

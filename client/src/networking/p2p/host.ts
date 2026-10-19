@@ -201,24 +201,36 @@ export class P2PHost {
     }
   }
 
-  /** Wire a guest's DataChannel in as a link — same treatment as the
-   *  host's own loopback after this point. */
-  attachDataChannel(dc: RTCDataChannel): void {
-    dc.binaryType = 'arraybuffer';
+  /** Wire a guest's DataChannel pair in as a link — same treatment as the
+   *  host's own loopback after this point. 'game' (unordered, bounded
+   *  retransmit) carries volatile binary; 'ctrl' (reliable+ordered)
+   *  carries JSON — same split the dedicated RTC lanes use, since an
+   *  ordered channel head-of-line blocks position frames on every loss. */
+  attachDataChannels(chans: { game: RTCDataChannel; ctrl: RTCDataChannel }): void {
     const link: P2PLink = {
       send: (data): void => {
-        if (dc.readyState !== 'open') {return;}
+        const want = typeof data === 'string' ? chans.ctrl : chans.game;
+        const alt = typeof data === 'string' ? chans.game : chans.ctrl;
+        const dc = want.readyState === 'open' ? want : alt.readyState === 'open' ? alt : null;
+        if (!dc) {return;}
         if (typeof data === 'string') {dc.send(data);}
         else {dc.send(new Uint8Array(data));}
       },
-      close: (): void => { try { dc.close(); } catch { /* gone */ } },
+      close: (): void => {
+        for (const dc of [chans.game, chans.ctrl]) {try { dc.close(); } catch { /* gone */ }}
+      },
     };
-    dc.addEventListener('message', (ev): void => {
-      const {data} = ev;
-      this.onData(link, data instanceof ArrayBuffer ? new Uint8Array(data) : data as string);
-    });
-    dc.addEventListener('close', (): void => this.onClose(link));
-    logger.info('Guest DataChannel attached');
+    for (const dc of [chans.game, chans.ctrl]) {
+      dc.binaryType = 'arraybuffer';
+      dc.addEventListener('message', (ev): void => {
+        const {data} = ev;
+        this.onData(link, data instanceof ArrayBuffer ? new Uint8Array(data) : data as string);
+      });
+      // A lane dying kills the session — onClose no-ops on a gone link,
+      // so firing it from both lanes is safe.
+      dc.addEventListener('close', (): void => this.onClose(link));
+    }
+    logger.info('Guest DataChannels attached');
   }
 
   /** A peer's outbound message (JSON string or binary position frame). */
@@ -374,6 +386,10 @@ export class P2PHost {
     }
     if (this.byPlayer.size < 2) {return;}
     const players = this.playerManager.getAllPlayers();
+    // tickSeq advances once per TICK, not per recipient — incrementing
+    // inside the loop gave every client a gapped stream (0,2,4,...) that
+    // read as ~50% loss and spammed tickNack all session.
+    const frameSeq = (this.tickSeq += 1) - 1;
     for (const [recipientId] of players) {
       const link = this.byPlayer.get(recipientId);
       if (!link) {continue;}
@@ -406,7 +422,7 @@ export class P2PHost {
       if (records.length === 0) {continue;}
       // inputAck=0: the P2P host tracks no per-player input seqs — clients
       // ignore 0 (never prune on it).
-      try { link.send(encodeTickFrame(this.playerManager.getLastSeq(recipientId), ((this.tickSeq += 1) - 1), 0, records)); } catch { /* dead pipe */ }
+      try { link.send(encodeTickFrame(this.playerManager.getLastSeq(recipientId), frameSeq, 0, records)); } catch { /* dead pipe */ }
     }
   }
 

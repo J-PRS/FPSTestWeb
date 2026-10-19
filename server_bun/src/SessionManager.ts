@@ -55,6 +55,9 @@ export class SessionManager {
   private joinWindows = new Map<string, { count: number; start: number }>();
   private static readonly MAX_JOIN_WINDOWS = 1024;
   private static readonly RECONNECT_PROTECT_MS = 2500;
+  /** Free reconnect shields per seat — honest flappers rarely reclaim
+   *  more than twice in a seat's life; exploiters flap every 2.5s. */
+  private static readonly MAX_RECLAIM_SHIELDS = 3;
   private static readonly JOIN_LIMIT = 5;
   private static readonly JOIN_WINDOW_MS = 60_000;
 
@@ -121,6 +124,15 @@ export class SessionManager {
     // old seat now (one-seat-per-id is load-bearing — the lifecycle fuzz
     // enforces it) and fall through to a normal join in the new room.
     if (reclaimRoom && reclaimRoom.name !== roomName) {
+      // Token gate BEFORE seat destruction: the join claims a different
+      // room, so reclaim()'s own auth path never runs — without this a
+      // bare playerId retires any live/grace seat on any room (grief-kick).
+      // The client's stored token is the same id-keyed HMAC the seat holds.
+      if (token !== reclaimRoom.sessionTokens.get(playerId)) {
+        logger.warn('Different-room join rejected: bad token', { playerId, from: reclaimRoom.name, to: roomName });
+        SessionManager.rejectIdentity(ws, 'Invalid session token');
+        return;
+      }
       this.d.removePlayerCompletely(reclaimRoom, playerId, 'different-room join');
       logger.info('Different-room join retired grace seat', { playerId, from: reclaimRoom.name, to: roomName });
     } else if (reclaimRoom) {
@@ -253,11 +265,17 @@ export class SessionManager {
     if (oldSock && oldSock !== ws) {
       try { oldSock.close(1000, 'replaced by reconnect'); } catch { /* gone */ }
     }
-    room.introSeq = room.tickSeq; // reclaimer's decode baseline reset too
+    room.markIntro(playerId); // reclaimer's decode baseline reset — fulls go to them only
     // Reconnect shield: the client warms its pipeline behind the session
     // veil before dropping the player in — the restored body must not be
     // killable during that window (visible mechanic, not hidden-gfx).
-    existingPlayer.protectedUntil = simMs(simNow() + SessionManager.RECONNECT_PROTECT_MS);
+    // Capped per seat: a deliberate flap would otherwise chain free
+    // invulnerability windows mid-fight.
+    const shields = (room.reclaimShields.get(playerId) ?? 0) + 1;
+    room.reclaimShields.set(playerId, shields);
+    if (shields <= SessionManager.MAX_RECLAIM_SHIELDS) {
+      existingPlayer.protectedUntil = simMs(simNow() + SessionManager.RECONNECT_PROTECT_MS);
+    }
     room.messages.handleHandshake(playerId, undefined, true);
     // Disconnect cancelled any pending respawn — if they come back dead,
     // re-arm it or the restored corpse stays dead forever
@@ -306,7 +324,7 @@ export class SessionManager {
     room.spectators.add(playerId);
     this.d.specRooms.set(playerId, room);
     room.connections.register(playerId, ws);
-    room.introSeq = room.tickSeq; // spectators decode from zero too
+    room.markIntro(playerId); // spectators decode from zero too
     room.messages.handleSpectatorHandshake(playerId);
 this.d.ops.joins += 1;
     logger.info('Spectator joined', { playerId, room: room.name });
@@ -388,7 +406,7 @@ this.d.ops.joins += 1;
     ws.data.gen = this.d.registry.seat(playerId, false, 'join');
     this.d.playerRoom.set(playerId, room);
     room.connections.register(playerId, ws);
-    room.introSeq = room.tickSeq; // see Room.introSeq — fulls for ~1s
+    room.markIntro(playerId); // per-joiner full window — see Room.introPlayers
     room.messages.handleHandshake(playerId, sessionToken);
 this.d.ops.joins += 1;
     switch (handshake.transport) {

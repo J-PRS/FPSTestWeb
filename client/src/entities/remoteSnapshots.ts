@@ -52,6 +52,12 @@ export class SnapshotBuffer {
    *  remote is freeze-framing on stale truth, so the caller should hand
    *  motion to dead reckoning rather than wait out the silence timer. */
   atExtCap = false;
+  /** Times the buffer ran dry — the user-visible starvation counter:
+   *  each one is a freeze/dead-reckon episode a soak can count. */
+  underruns = 0;
+  /** Wall-ms spent clamped at the cap — underrun severity, not just count. */
+  extCapMsTotal = 0;
+  private extCapStart = 0;
   /** True between a clear() and the first sample after it: the buffer
    *  holds only post-teleport truth, so the caller snaps to the sample
    *  directly — steering the old position across the gap would slide a
@@ -102,7 +108,7 @@ export class SnapshotBuffer {
     const prev = this.lastArrive;
     const gap = prev > 0 ? arriveMs - prev : 0;
     if (!inv('wire-pos-finite', Number.isFinite(pos.x + pos.y + pos.z + vel.x + vel.y + vel.z + rot.yaw + rot.pitch + t),
-      { t, x: pos.x, y: pos.y, z: pos.z })) {
+      () => ({ t, x: pos.x, y: pos.y, z: pos.z }))) {
       return gap;
     }
     this.lastArrive = arriveMs;
@@ -142,7 +148,7 @@ export class SnapshotBuffer {
     // reaches 300 m/s, and a corrupt tangent/extrapolation at that speed
     // is the stretched-mesh symptom. Count it, then cap to the bound.
     const spd2 = vel.x * vel.x + vel.y * vel.y + vel.z * vel.z;
-    const velSane = inv('wire-vel-sane', spd2 <= 300 * 300, { spd: Math.sqrt(spd2) });
+    const velSane = inv('wire-vel-sane', spd2 <= 300 * 300, () => ({ spd: Math.sqrt(spd2) }));
     const vScale = velSane ? 1 : 300 / Math.sqrt(spd2);
     const snap = this.pool.pop() ?? { t: 0, x: 0, y: 0, z: 0, yaw: 0, pitch: 0, vx: 0, vy: 0, vz: 0 };
     snap.t = t; snap.x = pos.x; snap.y = pos.y; snap.z = pos.z;
@@ -207,7 +213,10 @@ export class SnapshotBuffer {
       // freeze-framing 160ms before dead reckoning takes over reads as a
       // stutter, so the coast hands off to DR at the cap instead.
       const cap = Math.min(0.9, Math.max(SnapshotBuffer.MAX_EXTRAPOLATE, this.arrivalInterval / 1000));
-      this.atExtCap = (renderTime - newest.t) / 1000 >= cap;
+      const capped = (renderTime - newest.t) / 1000 >= cap;
+      if (capped && !this.atExtCap) { this.underruns += 1; this.extCapStart = Date.now(); }
+      else if (!capped && this.atExtCap) { this.extCapMsTotal += Date.now() - this.extCapStart; }
+      this.atExtCap = capped;
       const ext = Math.min(cap, (renderTime - newest.t) / 1000);
       outPos.set(newest.x + newest.vx * ext, newest.y + newest.vy * ext, newest.z + newest.vz * ext);
       // Rotation extrapolates too — a turning remote's head would otherwise

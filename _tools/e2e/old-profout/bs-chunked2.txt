@@ -1,0 +1,773 @@
+[console.error] WebSocket connection to 'ws://localhost:5400/?token=IG8CBX0OYc31' failed: Error during WebSocket handshake: Unexpected response code: 400
+[http 503] http://127.0.0.1:8477/challenge
+[console.error] Failed to load resource: the server responded with a status of 503 (Service Unavailable)
+[console.error] Failed to establish a connection to https://127.0.0.1:9920/: net::ERR_QUIC_PROTOCOL_ERROR.QUIC_TLS_CERTIFICATE_UNKNOWN (TLS handshake failure (ENCRYPTION_HANDSHAKE) 46: certificate unknown. SSLErrorStack:[..\..\third_party\boringssl\src\ssl\handshake.cc:320] error:1000007d:SSL routines:OPENSSL_internal:CERTIFICATE_VERIFY_FAILED).
+[console.warn] [.WebGL-0x3f4c010b5000] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+[console.warn] [.WebGL-0x3f4c010b5000] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+[console.warn] [.WebGL-0x3f4c010b5000] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+[console.warn] [.WebGL-0x3f4c010b5000] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+[console.warn] 2026-10-17T14:05:49.197+02:00 [PlayerModel] [WARN] Animation not found: Jump (variant mannequin) 
+[console.warn] 2026-10-17T14:05:49.555+02:00 [NetworkManager] [WARN] no server traffic in 74419ms — socket silent, reprobing [object Object]
+[console.warn] 2026-10-17T14:05:49.656+02:00 [NetworkManager] [WARN] send dropped x1 — no live lane [object Object]
+[console.error] Failed to establish a connection to https://127.0.0.1:9920/: net::ERR_QUIC_PROTOCOL_ERROR.QUIC_TLS_CERTIFICATE_UNKNOWN (TLS handshake failure (ENCRYPTION_HANDSHAKE) 46: certificate unknown. SSLErrorStack:[..\..\third_party\boringssl\src\ssl\handshake.cc:320] error:1000007d:SSL routines:OPENSSL_internal:CERTIFICATE_VERIFY_FAILED).
+[console.error] 2026-10-17T14:05:50.982+02:00  [ERROR] [console.error] [GLITCH:seg-div] {"m":40,"spanMs":1450,"enr":0} 
+[console.error] 2026-10-17T14:05:50.982+02:00  [ERROR] [console.error] [GLITCH:seg-div] {"m":35,"spanMs":1400,"enr":0} 
+[console.error] 2026-10-17T14:05:50.982+02:00  [ERROR] [console.error] [GLITCH:seg-div] {"m":33,"spanMs":1350,"enr":0} 
+[console.warn] 2026-10-17T14:05:50.982+02:00 [Wire] [WARN] Server correction at seq 0: pos=(0.0,46.6,0.0) 
+[console.error] 2026-10-17T14:05:51.232+02:00  [ERROR] [console.error] [GLITCH:render-blend] {"netId":5,"offM":24,"skewMs":-223} 
+[console.error] 2026-10-17T14:05:51.232+02:00  [ERROR] [console.error] [GLITCH:render-blend] {"netId":3,"offM":23,"skewMs":-224} 
+[console.error] 2026-10-17T14:05:51.232+02:00  [ERROR] [console.error] [GLITCH:render-blend] {"netId":2,"offM":27,"skewMs":-174} 
+[console.warn] 2026-10-17T14:05:51.648+02:00  [WARN] LOW FPS sustained — perf dump [object Object]
+[console.warn] 2026-10-17T14:05:51.649+02:00  [WARN] auto-quality: cpu level 1 (sustained low fps) 
+init 76554ms, connected 76867ms — watching 30s
+[console.error] 2026-10-17T14:05:53.643+02:00  [ERROR] [console.error] [GLITCH:parity-kb-unpredicted] {"x":0,"y":35,"z":3,"force":24.1,"pull":false} 
+[console.error] 2026-10-17T14:05:54.803+02:00  [ERROR] [console.error] [GLITCH:parity-kb-unpredicted] {"x":-2,"y":31,"z":0,"force":10.1,"pull":false} 
+[console.error] 2026-10-17T14:05:54.815+02:00  [ERROR] [console.error] [GLITCH:parity-kb-echo] {"x":0,"y":35,"z":3,"by":"BOT-OZONE-07","f":45,"ageMs":1167} 
+[console.error] 2026-10-17T14:05:55.846+02:00  [ERROR] [console.error] [GLITCH:remote-buried] {"id":"BOT-TALUS-08","depth":3.7,"lift":2.5,"fieldD":6.2} 
+[console.error] 2026-10-17T14:05:59.763+02:00  [ERROR] [console.error] [GLITCH:remote-buried] {"id":"BOT-TALUS-08","depth":1,"lift":2.5,"fieldD":3.5} 
+[console.error] 2026-10-17T14:06:04.771+02:00  [ERROR] [console.error] [GLITCH:parity-nugrest] {"dM":0.8} 
+[console.error] 2026-10-17T14:06:11.703+02:00  [ERROR] [console.error] [GLITCH:parity-nugrest] {"dM":1.4} 
+[console.error] 2026-10-17T14:06:14.109+02:00  [ERROR] [console.error] [GLITCH:parity-nugrest] {"dM":1.8} 
+{
+ "gpu": {
+  "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 Ti (0x00002482) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+  "vendor": "Google Inc. (NVIDIA)",
+  "khr": true
+ },
+ "programs": 91,
+ "progList": [
+  {
+   "name": "",
+   "ck": 248
+  },
+  {
+   "name": "",
+   "ck": 239
+  },
+  {
+   "name": "",
+   "ck": 725
+  },
+  {
+   "name": "",
+   "ck": 242
+  },
+  {
+   "name": "",
+   "ck": 242
+  },
+  {
+   "name": "",
+   "ck": 237
+  },
+  {
+   "name": "",
+   "ck": 243
+  },
+  {
+   "name": "",
+   "ck": 246
+  },
+  {
+   "name": "",
+   "ck": 243
+  },
+  {
+   "name": "",
+   "ck": 243
+  },
+  {
+   "name": "",
+   "ck": 249
+  },
+  {
+   "name": "",
+   "ck": 246
+  },
+  {
+   "name": "",
+   "ck": 238
+  },
+  {
+   "name": "",
+   "ck": 243
+  },
+  {
+   "name": "",
+   "ck": 720
+  },
+  {
+   "name": "",
+   "ck": 237
+  },
+  {
+   "name": "",
+   "ck": 237
+  },
+  {
+   "name": "",
+   "ck": 239
+  },
+  {
+   "name": "",
+   "ck": 237
+  },
+  {
+   "name": "",
+   "ck": 235
+  },
+  {
+   "name": "",
+   "ck": 241
+  },
+  {
+   "name": "",
+   "ck": 241
+  },
+  {
+   "name": "",
+   "ck": 236
+  },
+  {
+   "name": "",
+   "ck": 241
+  },
+  {
+   "name": "",
+   "ck": 244
+  },
+  {
+   "name": "",
+   "ck": 6253
+  },
+  {
+   "name": "",
+   "ck": 251
+  },
+  {
+   "name": "",
+   "ck": 248
+  },
+  {
+   "name": "",
+   "ck": 246
+  },
+  {
+   "name": "",
+   "ck": 244
+  },
+  {
+   "name": "",
+   "ck": 244
+  },
+  {
+   "name": "",
+   "ck": 244
+  },
+  {
+   "name": "",
+   "ck": 244
+  },
+  {
+   "name": "",
+   "ck": 241
+  },
+  {
+   "name": "",
+   "ck": 241
+  },
+  {
+   "name": "",
+   "ck": 237
+  },
+  {
+   "name": "",
+   "ck": 241
+  },
+  {
+   "name": "",
+   "ck": 241
+  },
+  {
+   "name": "",
+   "ck": 287
+  },
+  {
+   "name": "",
+   "ck": 241
+  },
+  {
+   "name": "",
+   "ck": 244
+  },
+  {
+   "name": "",
+   "ck": 240
+  },
+  {
+   "name": "",
+   "ck": 287
+  },
+  {
+   "name": "",
+   "ck": 246
+  },
+  {
+   "name": "",
+   "ck": 661
+  },
+  {
+   "name": "",
+   "ck": 260
+  },
+  {
+   "name": "",
+   "ck": 258
+  },
+  {
+   "name": "",
+   "ck": 244
+  },
+  {
+   "name": "",
+   "ck": 6248
+  },
+  {
+   "name": "",
+   "ck": 246
+  },
+  {
+   "name": "",
+   "ck": 234
+  },
+  {
+   "name": "",
+   "ck": 255
+  },
+  {
+   "name": "",
+   "ck": 248
+  },
+  {
+   "name": "",
+   "ck": 258
+  },
+  {
+   "name": "",
+   "ck": 661
+  },
+  {
+   "name": "",
+   "ck": 258
+  },
+  {
+   "name": "",
+   "ck": 289
+  },
+  {
+   "name": "",
+   "ck": 289
+  },
+  {
+   "name": "",
+   "ck": 263
+  },
+  {
+   "name": "",
+   "ck": 6253
+  },
+  {
+   "name": "",
+   "ck": 251
+  },
+  {
+   "name": "",
+   "ck": 236
+  },
+  {
+   "name": "",
+   "ck": 830
+  },
+  {
+   "name": "",
+   "ck": 251
+  },
+  {
+   "name": "",
+   "ck": 263
+  },
+  {
+   "name": "",
+   "ck": 239
+  },
+  {
+   "name": "",
+   "ck": 246
+  },
+  {
+   "name": "",
+   "ck": 243
+  },
+  {
+   "name": "",
+   "ck": 253
+  },
+  {
+   "name": "",
+   "ck": 251
+  },
+  {
+   "name": "",
+   "ck": 249
+  },
+  {
+   "name": "",
+   "ck": 246
+  },
+  {
+   "name": "",
+   "ck": 246
+  },
+  {
+   "name": "",
+   "ck": 243
+  },
+  {
+   "name": "",
+   "ck": 249
+  },
+  {
+   "name": "",
+   "ck": 246
+  },
+  {
+   "name": "",
+   "ck": 242
+  },
+  {
+   "name": "",
+   "ck": 251
+  },
+  {
+   "name": "",
+   "ck": 663
+  },
+  {
+   "name": "",
+   "ck": 253
+  },
+  {
+   "name": "",
+   "ck": 253
+  },
+  {
+   "name": "",
+   "ck": 260
+  },
+  {
+   "name": "",
+   "ck": 666
+  },
+  {
+   "name": "",
+   "ck": 248
+  },
+  {
+   "name": "",
+   "ck": 241
+  },
+  {
+   "name": "",
+   "ck": 241
+  },
+  {
+   "name": "",
+   "ck": 246
+  },
+  {
+   "name": "",
+   "ck": 243
+  },
+  {
+   "name": "",
+   "ck": 243
+  },
+  {
+   "name": "",
+   "ck": 263
+  },
+  {
+   "name": "",
+   "ck": 248
+  }
+ ],
+ "mats": [
+  [
+   "ShaderMaterial||1|nofog||||obc|",
+   8
+  ],
+  [
+   "PointsMaterial|T|2||map|vc||obc|",
+   4
+  ],
+  [
+   "MeshBasicMaterial||1|||||obc|",
+   41
+  ],
+  [
+   "ShaderMaterial|T|1|nofog||||obc|",
+   6
+  ],
+  [
+   "ShaderMaterial|T|2|nofog||||obc|",
+   3
+  ],
+  [
+   "MeshBasicMaterial|T|1||map|||obc|",
+   9
+  ],
+  [
+   "MeshBasicMaterial|T|1|||||obc|",
+   13
+  ],
+  [
+   "LineBasicMaterial||1|||||obc|",
+   1
+  ],
+  [
+   "MeshStandardMaterial||1|||||obc|",
+   11
+  ],
+  [
+   "MeshLambertMaterial||1|||vc||obc|",
+   35
+  ],
+  [
+   "SpriteMaterial|T|2||map|||obc|",
+   5
+  ],
+  [
+   "MeshBasicMaterial|T|2|nofog||vc||obc|",
+   2
+  ],
+  [
+   "MeshLambertMaterial||1|||||obc|",
+   10
+  ],
+  [
+   "MeshBasicMaterial|T|2|nofog|map|||obc|",
+   2
+  ],
+  [
+   "LineBasicMaterial|T|2|nofog||vc||obc|",
+   1
+  ],
+  [
+   "MeshBasicMaterial|T|2|||||obc|",
+   3
+  ],
+  [
+   "MeshBasicMaterial|T|2||map|||obc|",
+   3
+  ]
+ ],
+ "hot": [
+  {
+   "fn": "WebGLUniforms @:44585",
+   "samples": 2634
+  },
+  {
+   "fn": "projectObject @:51125",
+   "samples": 48
+  },
+  {
+   "fn": "computeBoundingSphere @:14018",
+   "samples": 28
+  },
+  {
+   "fn": "updateMatrixWorld @:9863",
+   "samples": 27
+  },
+  {
+   "fn": "getParameters @:45281",
+   "samples": 19
+  },
+  {
+   "fn": "renderObject @:46502",
+   "samples": 18
+  },
+  {
+   "fn": "multiplyMatrices @:8092",
+   "samples": 18
+  },
+  {
+   "fn": "_raycastFirst$1 @:2693",
+   "samples": 14
+  },
+  {
+   "fn": "compose @:8389",
+   "samples": 14
+  },
+  {
+   "fn": "searchNodeSubtree @:36261",
+   "samples": 13
+  },
+  {
+   "fn": "computeBoundingSphere @:17141",
+   "samples": 13
+  },
+  {
+   "fn": "sideFor @:663",
+   "samples": 12
+  },
+  {
+   "fn": "sampleHeightmap @:142",
+   "samples": 12
+  },
+  {
+   "fn": "(anon) @:50846",
+   "samples": 11
+  },
+  {
+   "fn": "updateBuffer @:41205",
+   "samples": 11
+  },
+  {
+   "fn": "push @:365",
+   "samples": 9
+  },
+  {
+   "fn": "evaluate @:29148",
+   "samples": 8
+  },
+  {
+   "fn": "setProgram @:51366",
+   "samples": 8
+  },
+  {
+   "fn": "rewriteSamples @:564",
+   "samples": 8
+  },
+  {
+   "fn": "drawTargets @:91",
+   "samples": 7
+  }
+ ],
+ "marks": [
+  [
+   "initStart",
+   602
+  ],
+  [
+   "networkConnectStart",
+   603
+  ],
+  [
+   "heightmapLoaded",
+   625
+  ],
+  [
+   "terrainCreated",
+   679
+  ],
+  [
+   "effectsCreated",
+   682
+  ],
+  [
+   "playerCtor",
+   685
+  ],
+  [
+   "viewmodel",
+   713
+  ],
+  [
+   "entities",
+   716
+  ],
+  [
+   "playerCreated",
+   717
+  ],
+  [
+   "networkInit",
+   717
+  ],
+  [
+   "hudCreated",
+   724
+  ],
+  [
+   "initComplete",
+   752
+  ],
+  [
+   "savedMapApplied",
+   752
+  ],
+  [
+   "playerModelLoaded",
+   74668
+  ],
+  [
+   "networkConnected",
+   74669
+  ]
+ ],
+ "tasks": [
+  {
+   "dur": 73623,
+   "t": 617,
+   "type": "long-anim-frame",
+   "src": "heightmap.ts?t=1792237826699:undefined,demoSeed.ts:undefined,renderer.ts?t=1792238504351:undefined"
+  },
+  {
+   "dur": 73484,
+   "t": 755,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 539,
+   "t": 75091,
+   "type": "long-anim-frame",
+   "src": "WorkerTransport.ts:undefined,gameLoop.ts?t=1792237888811:undefined"
+  },
+  {
+   "dur": 446,
+   "t": 74575,
+   "type": "long-anim-frame",
+   "src": "three.module-Dhi4sXJn.js?v=533bc364:undefined,:undefined,gameLoop.ts?t=1792237888811:undefined"
+  },
+  {
+   "dur": 439,
+   "t": 78116,
+   "type": "long-anim-frame",
+   "src": ":undefined"
+  },
+  {
+   "dur": 432,
+   "t": 78116,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 395,
+   "t": 77672,
+   "type": "long-anim-frame",
+   "src": ":undefined,gameLoop.ts?t=1792237888811:undefined"
+  },
+  {
+   "dur": 390,
+   "t": 75240,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 386,
+   "t": 77672,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 326,
+   "t": 75810,
+   "type": "long-anim-frame",
+   "src": "heightmap.ts?t=1792237826699:undefined,three.module-Dhi4sXJn.js?v=533bc364:undefined,:undefined"
+  },
+  {
+   "dur": 300,
+   "t": 75827,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 263,
+   "t": 74240,
+   "type": "long-anim-frame",
+   "src": ":undefined,gameLoop.ts?t=1792237888811:undefined"
+  },
+  {
+   "dur": 263,
+   "t": 76444,
+   "type": "long-anim-frame",
+   "src": "WorkerTransport.ts:undefined,:undefined,gameLoop.ts?t=1792237888811:undefined"
+  },
+  {
+   "dur": 252,
+   "t": 74241,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 213,
+   "t": 77262,
+   "type": "long-anim-frame",
+   "src": ":undefined,gameLoop.ts?t=1792237888811:undefined"
+  }
+ ],
+ "rafWorst": [
+  {
+   "gap": 73740,
+   "at": 74495
+  },
+  {
+   "gap": 489,
+   "at": 75730
+  },
+  {
+   "gap": 479,
+   "at": 78550
+  },
+  {
+   "gap": 392,
+   "at": 78059
+  },
+  {
+   "gap": 325,
+   "at": 76128
+  },
+  {
+   "gap": 301,
+   "at": 74872
+  },
+  {
+   "gap": 255,
+   "at": 76694
+  },
+  {
+   "gap": 214,
+   "at": 75085
+  },
+  {
+   "gap": 213,
+   "at": 77468
+  },
+  {
+   "gap": 179,
+   "at": 77656
+  },
+  {
+   "gap": 163,
+   "at": 76857
+  },
+  {
+   "gap": 155,
+   "at": 75241
+  },
+  {
+   "gap": 152,
+   "at": 249
+  },
+  {
+   "gap": 145,
+   "at": 80023
+  },
+  {
+   "gap": 139,
+   "at": 756
+  }
+ ],
+ "totalTaskMs": 157501
+}

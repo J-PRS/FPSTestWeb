@@ -21,7 +21,7 @@ describe('scenario: held jet rides the tick frame', () => {
     const pool: TickDecodePool = { slots: [] as WireTickPlayer[], byId: new Map(), resolveId: (w) => roster.get(w) };
     const metrics: FanoutMetrics = {
       recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0,
-      recordsSent: 0, recordsTierSkipped: 0, bytesSent: 0, tickFramesDropped: 0,
+      recordsSent: 0, recordsTierSkipped: 0, bytesSent: 0, tickFramesDropped: 0, tickFramesHeld: 0,
     };
     const fanout = new TickFanout(metrics, (r, pid, reason) => r.removePlayerCompletely(pid, reason, () => {}));
     room.sims.push({ name: 'fanout', tick: () => {
@@ -34,7 +34,7 @@ describe('scenario: held jet rides the tick frame', () => {
     room.connections.broadcast = (m: ServerMessage, exclude?: string) => {
       if (m.type === 'wireIds') {
         const w = m as { add?: Record<number, string> };
-        for (const [wid, id] of Object.entries(w.add ?? {})) roster.set(Number(wid), id);
+        for (const [wid, id] of Object.entries(w.add ?? {})) {roster.set(Number(wid), id);}
       }
       return prevBroadcast.call(room.connections, m, exclude);
     };
@@ -56,7 +56,7 @@ describe('scenario: held jet rides the tick frame', () => {
       const f = decodeTickFrame(data, pool);
       if (f) {
         for (let i = 0; i < f.count; i++) {
-          if (f.updates[i]!.playerId === p.id) lastJet = f.updates[i]!.jet;
+          if (f.updates[i]!.playerId === p.id) {lastJet = f.updates[i]!.jet;}
         }
       }
       return 'sent';

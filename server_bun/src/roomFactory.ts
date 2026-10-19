@@ -55,6 +55,15 @@ export class RoomFactory {
     return p;
   }
 
+  /** Drop a terrain file's cached field (all scale variants) — a
+   *  .bin edited under the same name otherwise survives reloadRoom,
+   *  since the cache keys on file@scale, not content. */
+  invalidateField(terrain: string): void {
+    for (const key of this.fields.keys()) {
+      if (key.startsWith(`${terrain}@`)) {this.fields.delete(key);}
+    }
+  }
+
   /** Attach a spec's terrain to every room sim that sweeps it — missing
    *  one means two systems disagree about where the ground is. */
   attachTerrain(room: Room, spec: MapSpec): void {
@@ -124,7 +133,11 @@ export class RoomFactory {
       }
       const { spec, src } = this.host.maps.specFor(name, mode, map, bots);
       this.host.maps.noteSource(name, src);
-      room = new Room(name, this.host.field(), mode, spec, CONFIG.moveAuthority);
+      // Mint + record the room seed — production rooms replay their draw
+      // stream; ambient entropy at mint is fine (it's recorded, not drawn
+      // inside the sim).
+      room = new Room(name, this.host.field(), mode, spec, CONFIG.moveAuthority,
+        (Math.random() * 0x1_00_00_00_00) >>> 0);
       room.unlisted = unlisted;
       // The ctor already seeded populations (fields default false) — the
       // gates apply post-ctor and on later applySpec reloads.

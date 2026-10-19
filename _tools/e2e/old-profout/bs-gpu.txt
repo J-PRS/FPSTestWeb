@@ -1,0 +1,229 @@
+[console.error] WebSocket connection to 'ws://localhost:5400/?token=IG8CBX0OYc31' failed: Error during WebSocket handshake: Unexpected response code: 400
+[http 503] http://127.0.0.1:8477/challenge
+[console.error] Failed to load resource: the server responded with a status of 503 (Service Unavailable)
+[console.error] Failed to establish a connection to https://127.0.0.1:9920/: net::ERR_QUIC_PROTOCOL_ERROR.QUIC_TLS_CERTIFICATE_UNKNOWN (TLS handshake failure (ENCRYPTION_HANDSHAKE) 46: certificate unknown. SSLErrorStack:[..\..\third_party\boringssl\src\ssl\handshake.cc:320] error:1000007d:SSL routines:OPENSSL_internal:CERTIFICATE_VERIFY_FAILED).
+[console.warn] [.WebGL-0x18c40017c400] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+[console.warn] [.WebGL-0x18c40017c400] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+[console.warn] [.WebGL-0x18c40017c400] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+[console.warn] [.WebGL-0x18c40017c400] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+init 27054ms, connected 27375ms — watching 25s
+{
+ "programs": 33,
+ "marks": [
+  [
+   "initStart",
+   473
+  ],
+  [
+   "networkConnectStart",
+   474
+  ],
+  [
+   "heightmapLoaded",
+   489
+  ],
+  [
+   "terrainCreated",
+   522
+  ],
+  [
+   "effectsCreated",
+   524
+  ],
+  [
+   "playerCtor",
+   526
+  ],
+  [
+   "viewmodel",
+   547
+  ],
+  [
+   "entities",
+   549
+  ],
+  [
+   "playerCreated",
+   549
+  ],
+  [
+   "networkInit",
+   550
+  ],
+  [
+   "hudCreated",
+   554
+  ],
+  [
+   "initComplete",
+   581
+  ],
+  [
+   "savedMapApplied",
+   590
+  ],
+  [
+   "playerModelLoaded",
+   25869
+  ],
+  [
+   "networkConnected",
+   25870
+  ]
+ ],
+ "tasks": [
+  {
+   "dur": 25192,
+   "t": 548,
+   "type": "long-anim-frame",
+   "src": "demoSeed.ts:undefined,:undefined,gameLoop.ts?t=1792237019008:undefined"
+  },
+  {
+   "dur": 24969,
+   "t": 770,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 352,
+   "t": 28351,
+   "type": "long-anim-frame",
+   "src": ":undefined"
+  },
+  {
+   "dur": 349,
+   "t": 28351,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 348,
+   "t": 25783,
+   "type": "long-anim-frame",
+   "src": "three.module-Dhi4sXJn.js?v=533bc364:undefined,:undefined,gameLoop.ts?t=1792237019008:undefined"
+  },
+  {
+   "dur": 334,
+   "t": 26176,
+   "type": "long-anim-frame",
+   "src": "WorkerTransport.ts:undefined,:undefined,gameLoop.ts?t=1792237019008:undefined"
+  },
+  {
+   "dur": 331,
+   "t": 28014,
+   "type": "long-anim-frame",
+   "src": ":undefined"
+  },
+  {
+   "dur": 327,
+   "t": 28015,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 312,
+   "t": 26573,
+   "type": "long-anim-frame",
+   "src": ":undefined"
+  },
+  {
+   "dur": 301,
+   "t": 26577,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 241,
+   "t": 26270,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 198,
+   "t": 27654,
+   "type": "long-anim-frame",
+   "src": ":undefined"
+  },
+  {
+   "dur": 193,
+   "t": 27654,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 175,
+   "t": 34,
+   "type": "long-anim-frame",
+   "src": ""
+  },
+  {
+   "dur": 172,
+   "t": 598,
+   "type": "window",
+   "src": "unknown"
+  }
+ ],
+ "rafWorst": [
+  {
+   "gap": 25008,
+   "at": 25779
+  },
+  {
+   "gap": 354,
+   "at": 28702
+  },
+  {
+   "gap": 332,
+   "at": 28343
+  },
+  {
+   "gap": 312,
+   "at": 26879
+  },
+  {
+   "gap": 297,
+   "at": 26567
+  },
+  {
+   "gap": 257,
+   "at": 26036
+  },
+  {
+   "gap": 224,
+   "at": 771
+  },
+  {
+   "gap": 199,
+   "at": 27848
+  },
+  {
+   "gap": 174,
+   "at": 208
+  },
+  {
+   "gap": 160,
+   "at": 28008
+  },
+  {
+   "gap": 158,
+   "at": 27264
+  },
+  {
+   "gap": 147,
+   "at": 27415
+  },
+  {
+   "gap": 135,
+   "at": 26171
+  },
+  {
+   "gap": 115,
+   "at": 27101
+  },
+  {
+   "gap": 110,
+   "at": 27528
+  }
+ ],
+ "totalTaskMs": 56854
+}

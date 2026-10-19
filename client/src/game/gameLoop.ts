@@ -824,19 +824,21 @@ st.veilFrames += 1;
     // Late-bound once: the ops uplink reads the perf EMA (JS frame cost +
     // real present rate) but perf doesn't exist until the loop starts.
     if (!networkManager.statsSource) {
-      networkManager.statsSource = (): { fps: number; jsMs: number; renderLagMs: number; renderLag: Record<string, number>; } => {
+      networkManager.statsSource = (): { fps: number; jsMs: number; renderLagMs: number; renderLag: Record<string, number>; starve: number; starveMs: number; } => {
         const s = perf.snapshot();
         // Per-victim render delay map — rewinding every victim by the
         // MAX delay validates ~500ms behind a fast ghost the shooter is
         // actually tracking at ~100ms: the classic "numbers, no damage".
         // renderLagMs stays as the fallback for old wires/creatures.
-        let renderLagMs = 0;
+        let renderLagMs = 0, starve = 0, starveMs = 0;
         const renderLag: Record<string, number> = {};
         deps.world.remotePlayers.forEach((rp, id): void => {
           renderLag[id] = rp.renderDelayMs;
           if (rp.renderDelayMs > renderLagMs) {renderLagMs = rp.renderDelayMs;}
+          starve += rp.interpUnderruns;
+          starveMs += rp.interpExtCapMs;
         });
-        return { fps: s.frame > 0 ? Math.round(1000 / s.frame) : 0, jsMs: s.frame, renderLagMs, renderLag };
+        return { fps: s.frame > 0 ? Math.round(1000 / s.frame) : 0, jsMs: s.frame, renderLagMs, renderLag, starve, starveMs };
       };
     }
     const demoPaused = simTick(deps, perf, frame, terrain);

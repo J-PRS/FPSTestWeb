@@ -41,6 +41,7 @@ import type { ServerMessage } from '../../shared/protocol.ts';
 import { WORLD_MODEL, verbPayload, eventPayload } from '../../shared/worldModel.ts';
 import { decomposeTokens } from '../../shared/pickups.ts';
 import { botRand, tauntRand } from '../../shared/botRand.ts';
+import { lcg32, type Lcg } from '../../shared/simRand.ts';
 import { MatchClock, type MatchHost } from './roomMatch.ts';
 import { EventBus } from './roomEvents.ts';
 import { MODE_MODULES, type ModeModule } from './modeModules.ts';
@@ -79,8 +80,15 @@ export class Room {
    *  Defaults to the injectable botRand stream: construction-time
    *  consumers (bot populate → spawn scatter) run before a harness can
    *  assign `room.rng`, so a plain Math.random default made every room
-   *  after the first diverge — spawn layout is part of the seed. */
+   *  after the first diverge — spawn layout is part of the seed.
+   *  Production rooms get a minted private stream instead (ctor `seed`
+   *  param) so a recorded match can replay its draw sequence. */
   rng: () => number = (): number => botRand();
+  /** Minted room seed + the private stream it drives — undefined on
+   *  harness rooms (they keep the injectable botRand default). The pair
+   *  is the replay/sync-report surface: {rngSeed, state, draws}. */
+  rngSeed?: number;
+  rngStream?: Lcg;
 
   /** Grace seats live on the registry session itself (timer included) —
    *  assigned post-ctor by the factory. `graceInRoom` replaces the old
@@ -106,15 +114,35 @@ export class Room {
   readonly v4Last = new Map<number, V4Last>();
   nextWireId = 1;
   readonly sessionTokens = new Map<string, string>();
+  /** Reconnect shields armed per seat — a deliberate flap chains 2.5s
+   *  invulnerability windows forever without a cap. */
+  readonly reclaimShields = new Map<string, number>();
   readonly lastSentPositions = new Map<string, { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; jet: number; status: number; sheep: number; t: number }>();
   tickSeq = 0;
-  /** Last tickSeq a client seated/reclaimed — tickRecords forces full
-   *  v4 records for a window after it so the new decode baseline lands
-   *  every wireId's fields at once instead of each player's first
-   *  staggered full up to 750ms out (join pop-in). */
+  /** Room-wide full-record window — stamped by tickNack reseeds (every
+   *  client's basis may be corrupt, so EVERYONE gets fulls for ~1s).
+   *  Per-joiner fulls ride `introPlayers` instead: a fresh seat no longer
+   *  poisons the delta stream for the whole room. */
   introSeq = -1_000_000;
+  /** Per-recipient intro window: pid → seat tickSeq. tickRecords sends
+   *  these recipients a per-socket FULL copy of each record (~1s window)
+   *  while everyone else stays on deltas — the joiner's decode baseline
+   *  lands without doubling the room's egress. Swept by age in
+   *  buildRecords. */
+  readonly introPlayers = new Map<string, number>();
   /** Wall-clock of the last accepted tickNack — room-wide cooldown above. */
   private lastNackAt = 0;
+
+  /** Stamp a fresh/reclaimed/spectator seat's per-recipient intro window.
+   *  Also clears lastSentPositions so every live player emits at least
+   *  one record inside the window — otherwise a suppressed/idle player
+   *  could sit out all 20 ticks and the recipient's first post-window
+   *  masked delta would decode against a zero basis. Costs ≤1 extra
+   *  record per player per stamp. */
+  markIntro(pid: string): void {
+    this.introPlayers.set(pid, this.tickSeq);
+    this.lastSentPositions.clear();
+  }
 
   /** Rolling health counters for the room heartbeat — every subsystem
    *  bumps tagged keys (shot claims, rejects, corrections, desyncs,
@@ -138,10 +166,10 @@ export class Room {
     this.healthTimer = 0;
     if (this.health.size === 0) {return;}
     logger.debug('Room health', Object.assign({room: this.name,humans: this.players.getHumanCount()}, Object.fromEntries(this.health)));
-    // Fold the window into since-boot totals. gapMax is a gauge (the
-    // worst single sample), not a counter — merge by max, not sum.
+    // Fold the window into since-boot totals. *Max keys are gauges (the
+    // worst single sample), not counters — merge by max, not sum.
     for (const [k, v] of this.health) {
-      this.healthTotal.set(k, k === 'gapMax'
+      this.healthTotal.set(k, k.endsWith('Max')
         ? Math.max(this.healthTotal.get(k) ?? 0, v)
         : (this.healthTotal.get(k) ?? 0) + v);
     }
@@ -331,7 +359,14 @@ export class Room {
    *  birth; mapCatalog's rotation + GameServer's reload keep it current. */
   mapSrc = '';
 
-  constructor(name: string, field: Heightfield | null, mode = '', spec?: MapSpec, moveAuthority = false) {
+  constructor(name: string, field: Heightfield | null, mode = '', spec?: MapSpec, moveAuthority = false, seed?: number) {
+    if (seed !== undefined) {
+      // A minted seed drives this room's draws — the spawn layout the
+      // ctor below scatters is then part of the replay record.
+      this.rngSeed = seed >>> 0;
+      this.rngStream = lcg32(this.rngSeed);
+      this.rng = this.rngStream;
+    }
     // Invariant violations land on the room health counters — /metrics
     // exposes them as inv:<name> totals next to the existing tallies.
     setInvariantSink((n, ctx): void => { this.healthBump(`inv:${n}`); logger.warn(`INVARIANT ${n}`, ctx ?? {}); });
@@ -396,6 +431,13 @@ export class Room {
     // A drowned socket is a client-side or path failure — count each
     // forced close so it shows in room health, not just the close log.
     this.connections.onDrowned = (): void => this.healthBump('drownedSock', 1);
+    this.connections.onReliableDropped = (): void => this.healthBump('reliableDrop', 1);
+    // Send-queue depth gauge (KB, worst sample this window) — the drown
+    // cap only tells us the socket died; this shows it drowning first.
+    this.connections.onBuffered = (_pid, bytes): void => {
+      const kb = Math.round(bytes / 1024);
+      if (kb > (this.health.get('bufMax') ?? 0)) {this.health.set('bufMax', kb);}
+    };
     this.moveSim.attachStructures(this.structs.eff());
     this.moveSim.setWaterLevel(this.spec.water?.level);
     // Shield soak burns the same tank the jet model owns — without this
@@ -842,6 +884,20 @@ export class Room {
       // nacked or not (records are shared; scoping per-socket isn't
       // possible without per-socket encodes). 500ms room cooldown so a
       // nack-storm can't hold the room on fulls permanently.
+      drainedForTicks: (pid): boolean => this.connections.drainedForTicks(pid),
+      // A spectator's gap is scoped to their own intro window — spec
+      // count is unbounded, so room-wide fulls per spec nack would be an
+      // amplifier. Player nacks still take nackFulls (their basis
+      // corruption is ambiguous, so everyone reseeds).
+      nackFor: (pid): boolean => {
+        if (!this.spectators.has(pid)) {return false;}
+        // Re-arm cap: a spec nack storm would otherwise hold introPending
+        // true forever — every record double-encodes rec.full at 20Hz
+        // permanently. An open window still paying out covers the nack.
+        if (this.tickSeq - (this.introPlayers.get(pid) ?? -100) < 20) {return true;}
+        this.markIntro(pid);
+        return true;
+      },
       nackFulls: (): void => {
         const now = wallNow();
         if (now - this.lastNackAt < 500) {return;}
@@ -1250,6 +1306,7 @@ excess -= 1;
     this.scoring.dropPlayer(playerId);
     this.messages.onPlayerRemoved(playerId);
     this.sessionTokens.delete(playerId);
+    this.reclaimShields.delete(playerId);
     // Removal-without-disconnect paths (kick, idle reap, bot retire)
     // never hit the onClose cleanup — the limiter's per-player buckets
     // would sit in this room's map for its life.

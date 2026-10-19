@@ -50,7 +50,10 @@ export class WebSocketConnection {
   // No 'pong': a queued pong's timestamp goes stale in the queue — the
   // echo arrives with seconds of phantom transit and poisons the server's
   // transit EMA; a missing RTT sample costs nothing by comparison.
-  private static readonly KEEP_ALWAYS = new Set(['join', 'chat', 'classUpdate', 'perkUpdate', 'switchRoom', 'respawn', 'snapshotRequest', 'resync']);
+  // No 'respawn'/'switchRoom'/'throwFlag' either — same rule NM's QUEUEABLE
+  // applies: a suicide or room-hop queued pre-flap and flushed into the
+  // next session is worse than losing the click. They fall under STALE_MS.
+  private static readonly KEEP_ALWAYS = new Set(['join', 'chat', 'classUpdate', 'perkUpdate', 'snapshotRequest', 'resync']);
   private static readonly STALE_MS = 3000;
   private hasLoggedConnectionError = false;
   // 'close' fires asynchronously — a deliberate disconnect() would

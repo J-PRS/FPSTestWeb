@@ -21,7 +21,7 @@ function fakeWs() {
 }
 type FakeWs = ReturnType<typeof fakeWs>;
 
-function mkSessions(room: ReturnType<typeof mkRoom>) {
+function mkSessions(room: ReturnType<typeof mkRoom>, deps: Record<string, unknown> = {}) {
   const rooms = new Map([[room.name, room]]);
   const playerRoom = new Map<string, typeof room>();
   const specRooms = new Map<string, typeof room>();
@@ -38,6 +38,7 @@ function mkSessions(room: ReturnType<typeof mkRoom>) {
       registry,
       departSpectator: () => false,
       removePlayerCompletely: () => undefined,
+      ...deps,
     }),
     playerRoom, ops, registry,
   };
@@ -165,5 +166,30 @@ describe('grace reconnect', () => {
     // The reclaim itself is what closed ws1 — its gen no longer matches.
     expect(ws1.closed[0]?.reason).toBe('replaced by reconnect');
     expect(room.connections.getConnection('p1') as unknown).toBe(ws2);
+  });
+
+  it('a different-room join needs the seat token — bare id cannot grief-kick', async () => {
+    // The different-room early-out used to removePlayerCompletely BEFORE
+    // any auth ran — one crafted join retired any live/grace seat on any
+    // room. The seat token is the same id-keyed HMAC the client stores.
+    const room = mkRoom({}, 'tdm');
+    const removed: string[] = [];
+    const { mgr } = mkSessions(room, {
+      removePlayerCompletely: (_r: unknown, id: string): void => { removed.push(id); },
+    });
+    join(mgr, fakeWs(), 'p1'); // live seat in room 't'
+
+    // Grief attempt: no token, different room → reject, seat untouched.
+    const attacker = fakeWs();
+    mgr.handle(attacker as never, { type: 'join', playerId: 'p1', room: 'other' });
+    await flush();
+    expect(attacker.closed[0]?.reason).toBe('Invalid session token');
+    expect(removed).toEqual([]);
+    expect(room.players.getPlayer('p1')).not.toBeUndefined();
+
+    // The real owner CAN move rooms — the seat retires legitimately.
+    const owner = fakeWs();
+    mgr.handle(owner as never, { type: 'join', playerId: 'p1', room: 'other', token: room.sessionTokens.get('p1') });
+    expect(removed).toEqual(['p1']);
   });
 });

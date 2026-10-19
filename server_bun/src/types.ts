@@ -33,6 +33,9 @@ export interface WebSocketData {
   /** Per-socket decode slot for binary position frames — decodePosition
    *  mutates it in place, consumers copy field-wise within the handler. */
   posScratch?: WirePosition;
+  /** Text frames seen before the join handshake completes — unseated
+   *  sockets get a hard frame/size budget (pre-join CPU flood). */
+  preJoin?: number;
 }
 
 export interface PlayerState {
@@ -71,9 +74,15 @@ export interface PlayerState {
   ping: number; // self-reported client RTT in ms
   /** Latest clientStats uplink — self-reported fps/jsMs + link quality.
    *  Stamped at receive so /metrics can drop stale reporters. */
-  clientStats?: { fps: number; jsMs: number; ping: number; loss: number; jitter: number; renderLagMs?: number; renderLag?: Record<string, number>; at: WallMs };
+  clientStats?: { fps: number; jsMs: number; ping: number; loss: number; jitter: number; renderLagMs?: number; renderLag?: Record<string, number>; gap?: number; starve?: number; starveMs?: number; drainMsMax?: number; at: WallMs };
   /** Netcode-v2 tier the join negotiated — surfaced to the scoreboard. */
   transport?: TransportKind;
+  /** Clock-drift probe window (ping handler): s0/a0 anchor the window in
+   *  client-stamp/server-arrival space, s/a the latest sample. A client
+   *  running its whole runtime fast stamps pings ~rate× quicker than they
+   *  can arrive — declared/arrival spacing diverges at ~1.2x for a
+   *  speedhack, ~1.0 honest (per-ping jitter averages out over ~20s). */
+  clockProbe?: { s0: number; a0: number; s: number; a: number; strikes: number };
   // Team-mode rooms (nuggets/ctf): assigned by the room at join — absent
   // in free-for-all modes. Owned by the server; clients never set it.
   team?: TeamId;

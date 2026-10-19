@@ -349,25 +349,35 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
   // pos: 12+6+4+2+1+1 — coincidentally both 26).
   const tail = 26;
   const slots = pool ? pool.slots : [];
+  // v4 records decode into their retained baseline objects in place —
+  // a frame that dies mid-way would leave half-applied state that later
+  // deltas inherit. Track touched wireIds so a failure can evict them:
+  // the corrupt frame degrades to a lost frame and heals on the next
+  // full (~750ms) instead of poisoning every delta until then.
+  const touched: number[] = [];
+  const fail = (): null => {
+    for (const id of touched) {pool?.byId?.delete(id);}
+    return null;
+  };
   let o = 15;
   for (let i = 0; i < count; i += 1) {
-    if (o >= u8.length) {return null;}
+    if (o >= u8.length) {return fail();}
     // oxlint-disable-next-line init-declarations -- assigned later
     let playerId!: string;
     let wireId = 0;
     if (v3) {
-      if (o + 29 > u8.length) {return null;}
+      if (o + 29 > u8.length) {return fail();}
       wireId = d.getUint16(o, true); o += 2;
       playerId = pool?.resolveId?.(wireId) ?? '';
     } else if (v4) {
       // Variable-length record: bounds-check each present group as it
       // decodes — a truncated frame must die, not read past the buffer.
-      if (o + 15 > u8.length) {return null;}
+      if (o + 15 > u8.length) {return fail();}
       wireId = d.getUint16(o, true); o += 2;
       playerId = pool?.resolveId?.(wireId) ?? '';
     } else {
       const idLen = u8[((o += 1) - 1)]!;
-      if (o + idLen + tail > u8.length) {return null;}
+      if (o + idLen + tail > u8.length) {return fail();}
       playerId = DEC.decode(u8.subarray(o, o + idLen)); o += idLen;
     }
     // v4 decodes into the per-wireId slot so masked groups inherit the
@@ -376,6 +386,7 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
     let u!: WireTickPlayer | undefined;
     let v4HadBase = false;
     if (v4) {
+      touched.push(wireId); // any mutation below reaches the baseline
       u = pool?.byId?.get(wireId);
       v4HadBase = u !== undefined;
       if (!u) {u = { playerId, position: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 }, health: 0, isDead: false } as WireTickPlayer;}
@@ -391,26 +402,26 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
     u.wireId = wireId;
     if (v4) {
       const mask = u8[((o += 1) - 1)]!;
-      if (o + 12 > u8.length) {return null;}
+      if (o + 12 > u8.length) {return fail();}
       u.position.x = d.getInt32(o, true) * POS_Q; o += 4;
       u.position.y = d.getInt32(o, true) * POS_Q; o += 4;
       u.position.z = d.getInt32(o, true) * POS_Q; o += 4;
       if (mask & V4_MASK_VEL) {
-        if (o + 6 > u8.length) {return null;}
+        if (o + 6 > u8.length) {return fail();}
         o = unpackVel(d, o, u.velocity);
       }
       if (mask & V4_MASK_ROT) {
-        if (o + 4 > u8.length) {return null;}
+        if (o + 4 > u8.length) {return fail();}
         o = unpackRot(d, o, u.rotation);
       }
       if (mask & V4_MASK_HP_PING) {
-        if (o + 3 > u8.length) {return null;}
+        if (o + 3 > u8.length) {return fail();}
         u.health = d.getUint16(o, true); o += 2;
         const pingRaw = u8[((o += 1) - 1)]!;
         u.ping = pingRaw > 0 ? pingRaw : undefined;
       }
       if (mask & V4_MASK_FLAGS_SHEEP) {
-        if (o + 2 > u8.length) {return null;}
+        if (o + 2 > u8.length) {return fail();}
         const flags = u8[((o += 1) - 1)]!;
         const sheep = u8[((o += 1) - 1)]!;
         u.isDead = (flags & 1) !== 0;
@@ -468,7 +479,12 @@ export class WireIdRoster {
   readonly pool: TickDecodePool = { slots: [], byId: new Map(), resolveId: (id): string | undefined => this.ids.get(id) };
   feed(m: { type?: string; add?: Record<number, string>; wireIds?: Record<number, string> }): void {
     if (m.type === 'wireIds' && m.add) {
-      for (const [id, pid] of Object.entries(m.add)) {this.ids.set(Number(id), pid);}
+      for (const [id, pid] of Object.entries(m.add)) {
+        const n = Number(id);
+        // Re-seat without remove still retires the prior baseline.
+        if (this.ids.has(n)) {this.pool.byId?.delete(n);}
+        this.ids.set(n, pid);
+      }
       // A retired id's decode baseline dies with it — a later reissue
       // must seat a fresh full record, never inherit the old owner's.
       for (const id of (m as { remove?: number[] }).remove ?? []) {this.pool.byId?.delete(Number(id));}
@@ -535,8 +551,8 @@ export function v4Last(): V4Last {
   return { ringPos: 0, slots: Array.from({ length: V4_BASIS_DEPTH }, snap) };
 }
 
-/** v4 record: wireId(2) + mask(1) + pos(6) + present groups.
- *  Full record = 24B (one more than v3), fully-masked = 9B. */
+/** v4 record: wireId(2) + mask(1) + pos(12, i32×3) + present groups.
+ *  Full record = 30B, minimum delta = 15B. */
 export function encodeTickPlayerV4(wireId: number, p: WireTickPlayer, into: TickEncodeScratch, last: V4Last, forceFull: boolean): Uint8Array {
   const { buf, u8, d } = into;
   // Quantize first — the mask compares wire values, so sub-LSB wiggle

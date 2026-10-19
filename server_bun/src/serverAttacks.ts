@@ -31,6 +31,7 @@ export function crawlerAttack(h: AttackHost, targetId: string, damage: number, s
   }
 
 export function botAttack(h: AttackHost, shooterId: string, targetId: string, weaponType: number, airtime?: number, shotId?: string): void {
+
     const shooter = h.playerManager.getPlayer(shooterId);
     if (!shooter || shooter.isDead) {return;}
     // Heal beam: same tick/cadence path as the damage beam, but the

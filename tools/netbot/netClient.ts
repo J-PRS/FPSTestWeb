@@ -129,7 +129,7 @@ export class NetClient {
   private structures?: readonly StructureSpec[];
   private attachStructures(list: readonly StructureSpec[]): void {
     this.structures = list;
-    if (this.surface) this.surface.solid = list.length ? SolidWorld.fromSpecs(list) : null;
+    if (this.surface) {this.surface.solid = list.length > 0 ? SolidWorld.fromSpecs(list) : null;}
   }
   private fieldPromise: Promise<void> | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
@@ -154,7 +154,7 @@ export class NetClient {
     const ws: AnySocket = transport === 'rtc'
       ? await this.dialRtc()
       : new WebSocket(this.url);
-    if (ws instanceof WebSocket) ws.binaryType = 'arraybuffer';
+    if (ws instanceof WebSocket) {ws.binaryType = 'arraybuffer';}
     this.ws = ws;
     this.joined = false;
     this.closed = false;
@@ -163,7 +163,7 @@ export class NetClient {
       // RTC fires per-channel open (game + ctrl) — arm the handshake once.
       let opened = false;
       ws.onopen = () => {
-        if (opened) return;
+        if (opened) {return;}
         opened = true;
         // Join retries until the first gameState lands — a swallowed or
         // throttled join would otherwise leave the bot a silent ghost,
@@ -172,7 +172,7 @@ export class NetClient {
         ws.send(joinMsg);
         let tries = 0;
         this.joinTimer = setInterval(() => {
-          if (this.joined || ++tries > 10) { if (this.joinTimer) clearInterval(this.joinTimer); return; }
+          if (this.joined || ++tries > 10) { if (this.joinTimer) {clearInterval(this.joinTimer);} return; }
           // The handshake bypasses the latency link — jittering the join
           // would let gameplay messages beat it, and the server rightly
           // closes any socket whose first word isn't 'join'.
@@ -184,20 +184,20 @@ export class NetClient {
         resolve();
       };
       ws.onmessage = (ev: { data: string | ArrayBuffer }) => {
-        if (typeof ev.data === 'string') this.onMessage(JSON.parse(ev.data) as ServerMessage);
-        else this.onBinary(new Uint8Array(ev.data as ArrayBuffer));
+        if (typeof ev.data === 'string') {this.onMessage(JSON.parse(ev.data) as ServerMessage);}
+        else {this.onBinary(new Uint8Array(ev.data as ArrayBuffer));}
       };
       ws.onclose = (ev: { code: number; reason: string }) => { this.closed = true; this.closeInfo = `${ev.code} ${ev.reason}`; };
       ws.onerror = () => reject(new Error(`netbot ${this.id} ${transport} error`));
       // RtcGameSocket.dial resolves only after a channel opened — the open
       // event fired before these handlers existed, so re-arm manually.
-      if (ws.readyState === 1) (ws.onopen as () => void)?.();
+      if (ws.readyState === 1) {(ws.onopen as () => void)?.();}
     });
   }
 
   private async dialRtc(): Promise<RtcGameSocket> {
-    const rtc = this.joinOpts.rtc;
-    if (!rtc) throw new Error('netbot rtc transport needs joinOpts.rtc.nd injected');
+    const {rtc} = this.joinOpts;
+    if (!rtc) {throw new Error('netbot rtc transport needs joinOpts.rtc.nd injected');}
     return RtcGameSocket.dial(this.url.replace(/\/ws$/, '/rtcs'), rtc.nd, rtc.iceServers ?? []);
   }
 
@@ -211,20 +211,20 @@ export class NetClient {
       if (terrain) {
         const base = this.url.replace(/^ws/, 'http').replace(/\/ws$/, '');
         const res = await fetch(`${base}/maps/${terrain}`);
-        if (res.ok) buf = new Uint8Array(await res.arrayBuffer());
+        if (res.ok) {buf = new Uint8Array(await res.arrayBuffer());}
       }
       if (!buf) {
         const bunFile = (globalThis as { Bun?: { file(p: string): { arrayBuffer(): Promise<ArrayBuffer> } } }).Bun?.file;
         const ab = await bunFile?.(fileURLToPath(new URL('../../server_bun/heightmap.bin', import.meta.url)))?.arrayBuffer().catch(() => null);
-        if (ab) buf = new Uint8Array(ab);
+        if (ab) {buf = new Uint8Array(ab);}
       }
-      if (!buf || buf.byteLength < 9) return;
+      if (!buf || buf.byteLength < 9) {return;}
       const field = hmParseBin(buf, heightScale);
       this.field = field;
       // Same FieldSurface the server shadow integrates on — terrain-only
       // sims diverge exactly where a wall one side can't see stands.
       this.surface = FieldSurface.fromField(field);
-      if (this.structures?.length) this.surface.solid = SolidWorld.fromSpecs(this.structures);
+      if (this.structures?.length) {this.surface.solid = SolidWorld.fromSpecs(this.structures);}
     } catch {
       // No terrain — the bot stays on flat-world kinematics.
     }
@@ -234,17 +234,17 @@ export class NetClient {
    *  take the full jitter (unordered transport), steady=true pins a fixed
    *  half-ping so a channel stays ordered. */
   send(msg: ClientMessage, steady = false): void {
-    if (msg.type === 'switchRoom') this.pendingRoom = true;
+    if (msg.type === 'switchRoom') {this.pendingRoom = true;}
     // Gameplay sends are gated on the join handshake landing — the server
     // closes any socket whose first word isn't 'join', so a jittered ping
     // or position arriving early would kill the connection outright.
-    if (!this.ws || !this.joined || (this.pendingRoom && msg.type !== 'switchRoom')) return;
+    if (!this.ws || !this.joined || (this.pendingRoom && msg.type !== 'switchRoom')) {return;}
     this.link.send(this.ws, JSON.stringify(msg), steady);
   }
 
   close(): void {
-    if (this.pingTimer) clearInterval(this.pingTimer);
-    if (this.joinTimer) clearInterval(this.joinTimer);
+    if (this.pingTimer) {clearInterval(this.pingTimer);}
+    if (this.joinTimer) {clearInterval(this.joinTimer);}
     this.link.close();
     this.ws?.close();
   }
@@ -254,12 +254,12 @@ export class NetClient {
   private readonly tickPool = { slots: [] as never[], byId: new Map(), resolveId: (id: number) => this.wireIds.get(id) };
 
   private onBinary(u8: Uint8Array): void {
-    if (!isWireFrame(u8)) return;
+    if (!isWireFrame(u8)) {return;}
     // Stale-check BEFORE decode — v4 decode mutates the byId baseline,
     // so a reordered frame must never reach the decoder (see wireIn).
-    if (u8.byteLength >= 15 && new DataView(u8.buffer, u8.byteOffset, u8.byteLength).getUint32(6, true) <= this.lastTickSeq) return;
+    if (u8.byteLength >= 15 && new DataView(u8.buffer, u8.byteOffset, u8.byteLength).getUint32(6, true) <= this.lastTickSeq) {return;}
     const tick = decodeTickFrame(u8, this.tickPool as never);
-    if (!tick) return;
+    if (!tick) {return;}
     this.lastTickSeq = tick.tickSeq;
     this.tel.ticks++;
     this.applyTick(tick.updates);
@@ -267,7 +267,7 @@ export class NetClient {
 
   private applyTick(updates: TickUpdatePlayer[]): void {
     for (const u of updates) {
-      if (!u.playerId || u.playerId === this.id) continue;
+      if (!u.playerId || u.playerId === this.id) {continue;}
       const e = this.roster.get(u.playerId) ?? { pos: { ...u.position }, vel: { x: 0, y: 0, z: 0 }, health: 100, isDead: false };
       e.pos = { ...u.position };
       e.vel = { ...u.velocity };
@@ -284,7 +284,7 @@ export class NetClient {
         this.joined = true;
         this.wireIds.clear();
         this.tickPool.byId.clear(); // v4 masked state must not cross room epochs
-        if (m.wireIds) for (const [id, pid] of Object.entries(m.wireIds)) this.wireIds.set(Number(id), pid);
+        if (m.wireIds) {for (const [id, pid] of Object.entries(m.wireIds)) {this.wireIds.set(Number(id), pid);}}
         this.pendingRoom = false;
         // Per-room seq spaces restart at 1 — the bug class this whole
         // harness exists to catch lived in forgetting this.
@@ -292,7 +292,7 @@ export class NetClient {
         this.lastTickSeq = -1;
         this.roster.clear();
         for (const p of m.players) {
-          if (p.id === this.id) continue;
+          if (p.id === this.id) {continue;}
           this.roster.set(p.id, { pos: { ...p.position }, vel: { ...p.velocity }, health: p.health, isDead: p.isDead, team: p.team, cls: p.armorClass });
         }
         if (m.localPlayerState) {
@@ -301,74 +301,92 @@ export class NetClient {
           this.self.isDead = m.localPlayerState.isDead;
         }
         this.deployables.clear();
-        for (const d of m.deployables ?? []) this.deployables.set(d.id, { owner: d.owner, kind: d.kind, pos: { ...d.pos }, hp: d.hp ?? 0 });
+        for (const d of m.deployables ?? []) {this.deployables.set(d.id, { owner: d.owner, kind: d.kind, pos: { ...d.pos }, hp: d.hp ?? 0 });}
         this.flags.clear();
-        for (const f of m.flags ?? []) this.flags.set(f.team, { pos: { ...f.pos }, state: f.state, carrier: f.carrier });
+        for (const f of m.flags ?? []) {this.flags.set(f.team, { pos: { ...f.pos }, state: f.state, carrier: f.carrier });}
         this.balls.clear();
         this.crawlers.clear();
-        if (!this.fieldPromise) this.fieldPromise = this.loadField(m.map?.terrain, m.map?.heightScale);
-        if (m.map?.structures) this.attachStructures(m.map.structures);
-        if (m.sessionToken) this.sessionToken = m.sessionToken;
+        if (!this.fieldPromise) {this.fieldPromise = this.loadField(m.map?.terrain, m.map?.heightScale);}
+        if (m.map?.structures) {this.attachStructures(m.map.structures);}
+        if (m.sessionToken) {this.sessionToken = m.sessionToken;}
         this.self.team = m.team;
         this.onGameState?.();
         break;
       }
       case 'mapUpdate': {
-        if (m.structures) this.attachStructures(m.structures);
-        if (m.terrain || m.heightScale) this.fieldPromise = this.loadField(m.terrain, m.heightScale);
+        if (m.structures) {this.attachStructures(m.structures);}
+        if (m.terrain || m.heightScale) {this.fieldPromise = this.loadField(m.terrain, m.heightScale);}
         break;
       }
-      case 'ballRoster':
-        for (const b of m.balls) this.balls.set(b.id, { pos: { ...b.position }, vel: { ...b.velocity }, health: 100, isDead: false });
+      case 'ballRoster': {
+        for (const b of m.balls) {this.balls.set(b.id, { pos: { ...b.position }, vel: { ...b.velocity }, health: 100, isDead: false });}
         break;
-      case 'ballSpawn': this.balls.set(m.id, { pos: { ...m.position }, vel: { ...m.velocity }, health: 100, isDead: false }); break;
+      }
+      case 'ballSpawn': { this.balls.set(m.id, { pos: { ...m.position }, vel: { ...m.velocity }, health: 100, isDead: false }); break;
+      }
       case 'ballSegment': { const b = this.balls.get(m.id); if (b) { b.pos = { ...m.position }; b.vel = { ...m.velocity }; } break; }
-      case 'ballDie': this.balls.delete(m.id); break;
-      case 'crawlRoster':
-        for (const c of m.crawlers) this.crawlers.set(c.id, { pos: { ...c.position }, vel: { ...c.velocity }, health: 100, isDead: false });
+      case 'ballDie': { this.balls.delete(m.id); break;
+      }
+      case 'crawlRoster': {
+        for (const c of m.crawlers) {this.crawlers.set(c.id, { pos: { ...c.position }, vel: { ...c.velocity }, health: 100, isDead: false });}
         break;
-      case 'crawlSpawn': this.crawlers.set(m.id, { pos: { ...m.position }, vel: { x: 0, y: 0, z: 0 }, health: 100, isDead: false }); break;
+      }
+      case 'crawlSpawn': { this.crawlers.set(m.id, { pos: { ...m.position }, vel: { x: 0, y: 0, z: 0 }, health: 100, isDead: false }); break;
+      }
       case 'crawlEvt': { const c = this.crawlers.get(m.id); if (c) { c.pos = { ...m.position }; c.vel = { ...m.velocity }; } break; }
-      case 'crawlDie': this.crawlers.delete(m.id); break;
-      case 'flagUpdate':
-        for (const f of m.flags) this.flags.set(f.team, { pos: { ...f.pos }, state: f.state, carrier: f.carrier });
+      case 'crawlDie': { this.crawlers.delete(m.id); break;
+      }
+      case 'flagUpdate': {
+        for (const f of m.flags) {this.flags.set(f.team, { pos: { ...f.pos }, state: f.state, carrier: f.carrier });}
         break;
-      case 'deploySpawn':
+      }
+      case 'deploySpawn': {
         this.deployables.set(m.id, { owner: m.owner, kind: m.kind, pos: { ...m.pos }, hp: 0 });
         break;
-      case 'deployGone': this.deployables.delete(m.id); break;
-      case 'deployHp': { const d = this.deployables.get(m.id); if (d) d.hp = m.hp; break; }
+      }
+      case 'deployGone': { this.deployables.delete(m.id); break;
+      }
+      case 'deployHp': { const d = this.deployables.get(m.id); if (d) {d.hp = m.hp;} break; }
       case 'playerJoined': {
         this.roster.set(m.playerId, { pos: { ...m.position }, vel: { x: 0, y: 0, z: 0 }, health: 100, isDead: false, team: m.team, cls: m.armorClass });
         break;
       }
-      case 'playerLeft': this.roster.delete(m.playerId); break;
+      case 'playerLeft': { this.roster.delete(m.playerId); break;
+      }
       case 'teamUpdate': {
         const e = this.roster.get(m.playerId);
-        if (e) e.team = m.team;
+        if (e) {e.team = m.team;}
         break;
       }
-      case 'tickUpdate': this.applyTick(m.updates); break;
-      case 'wireIds':
-        for (const [id, pid] of Object.entries(m.add)) this.wireIds.set(Number(id), pid);
+      case 'tickUpdate': { this.applyTick(m.updates); break;
+      }
+      case 'wireIds': {
+        for (const [id, pid] of Object.entries(m.add)) {
+          const wid = Number(id);
+          // Re-seat without remove: the departed owner's baseline must
+          // not feed the new owner's masked deltas (same fix as wireIn).
+          if (this.wireIds.has(wid)) {this.tickPool.byId.delete(wid);}
+          this.wireIds.set(wid, pid);
+        }
         for (const id of (m.remove ?? []) as number[]) {
           this.wireIds.delete(id);
           this.tickPool.byId.delete(id); // retired baseline dies with the id
         }
         break;
+      }
       case 'playerHit': {
         if (m.seq !== undefined) {
           if (m.seq <= this.lastHitSeq) { this.tel.dedupDrops++; break; }
           this.lastHitSeq = m.seq;
         }
         if (m.targetId === this.id) { this.tel.hitsTaken++; this.self.health = m.health; this.lastAttacker = { at: Date.now(), shooterId: m.shooterId }; }
-        if (m.shooterId === this.id) this.tel.hitsDealt++;
+        if (m.shooterId === this.id) {this.tel.hitsDealt++;}
         const e = this.roster.get(m.targetId);
-        if (e) e.health = m.health;
+        if (e) {e.health = m.health;}
         break;
       }
       case 'playerKill': {
-        if (m.shooterId === this.id) this.tel.kills++;
+        if (m.shooterId === this.id) {this.tel.kills++;}
         if (m.targetId === this.id) { this.tel.deaths++; this.self.isDead = true; this.self.health = 0; }
         const e = this.roster.get(m.targetId);
         if (e) { e.isDead = true; e.health = 0; }
@@ -386,11 +404,13 @@ export class NetClient {
           this.self.vel = { x: 0, y: 0, z: 0 };
         }
         const e = this.roster.get(m.playerId);
-        if (e) { e.isDead = false; e.health = 100; e.pos = { ...m.position }; if (m.armorClass) e.cls = m.armorClass; }
+        if (e) { e.isDead = false; e.health = 100; e.pos = { ...m.position }; if (m.armorClass) {e.cls = m.armorClass;} }
         break;
       }
-      case 'yourHealth': this.self.health = m.health; break;
-      case 'knockback': if (m.targetId === this.id) this.onKnockback?.(m.position, m.force, m.pull); break;
+      case 'yourHealth': { this.self.health = m.health; break;
+      }
+      case 'knockback': { if (m.targetId === this.id) {this.onKnockback?.(m.position, m.force, m.pull);} break;
+      }
       case 'correction': {
         this.tel.corrections++;
         this.self.pos = { ...m.position };
@@ -403,13 +423,16 @@ export class NetClient {
         this.onShotRejected?.(m);
         break;
       }
-      case 'claimDropped': this.onClaimDropped?.(m); break;
+      case 'claimDropped': { this.onClaimDropped?.(m); break;
+      }
       case 'projectileCreated': {
-        if (m.ownerId === this.id && m.shotId) this.projectiles.set(m.shotId, m.projectileId);
+        if (m.ownerId === this.id && m.shotId) {this.projectiles.set(m.shotId, m.projectileId);}
         break;
       }
-      case 'projectileDestroyed': this.projectiles.delete(m.shotId ?? ''); break;
-      case 'pong': this.pingMs = Date.now() - m.timestamp; break;
+      case 'projectileDestroyed': { this.projectiles.delete(m.shotId ?? ''); break;
+      }
+      case 'pong': { this.pingMs = Date.now() - m.timestamp; break;
+      }
       // Server-issued RTT probe — echo verbatim like the browser's
       // pingReceived; the timestamp is the server's clock, not ours.
       // stamp + rtt/2 also seeds the clock offset fireAt rides on —

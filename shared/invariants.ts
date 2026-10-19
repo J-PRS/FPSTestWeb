@@ -33,15 +33,16 @@ export function setInvariantSink(s: InvariantSink): void { sink = s; }
 export function setStrictInvariants(on: boolean): void { strict = on; }
 export function clearInvariantDedup(): void { fired.clear(); }
 
-export function inv(name: string, holds: boolean, ctx?: Record<string, unknown>): boolean {
+export function inv(name: string, holds: boolean, ctx?: Record<string, unknown> | (() => Record<string, unknown>)): boolean {
   if (holds) {return true;}
-  const detail = ctx ? ` ${JSON.stringify(ctx)}` : '';
+  const resolved = typeof ctx === 'function' ? ctx() : ctx;
+  const detail = resolved ? ` ${JSON.stringify(resolved)}` : '';
   if (strict) {throw new Error(`INVARIANT ${name}${detail}`);}
   const key = `${name}${detail}`;
   if (!fired.has(key)) {
     fired.add(key);
     if (fired.size > 500) {fired.clear();} // an unbounded keyset is its own leak
-    sink?.(name, ctx);
+    sink?.(name, resolved);
   }
   return false;
 }
@@ -50,6 +51,9 @@ export function inv(name: string, holds: boolean, ctx?: Record<string, unknown>)
  *  sides of a comparison disagreeing on the unit (sim eye vs class eye,
  *  field vs chord). Sites that compare against ground/eye must read the
  *  SAME accessor the mover used — this is that accessor's loud form. */
-export function invEq(name: string, a: number, b: number, eps: number, ctx?: Record<string, unknown>): boolean {
-  return inv(name, Math.abs(a - b) <= eps, Object.assign({}, {a: Number(a.toFixed(3)),b: Number(b.toFixed(3)),eps}, ctx));
+export function invEq(name: string, a: number, b: number, eps: number, ctx?: Record<string, unknown> | (() => Record<string, unknown>)): boolean {
+  return inv(name, Math.abs(a - b) <= eps, () => {
+    const extra = typeof ctx === 'function' ? ctx() : ctx;
+    return Object.assign({}, {a: Number(a.toFixed(3)),b: Number(b.toFixed(3)),eps}, extra);
+  });
 }

@@ -17,6 +17,11 @@ export class NetTelemetry {
   private lastTickAt = 0;
   private firstTickAt = 0;
   private tickWindow: { t: number; missed: number }[] = [];
+  // Seq-gap window — REAL loss: a frame whose tickSeq never arrived
+  // (server shed under backpressure, or a datagram genuinely dropped).
+  // Distinct from arrival gaps below: TCP can't lose a frame, so an
+  // arrival gap is coalescing/jitter — "late", never "gone".
+  private seqWindow: { t: number; missed: number }[] = [];
 
   constructor(private readonly expectedTickMs: number) {}
 
@@ -26,6 +31,14 @@ export class NetTelemetry {
     this.ping = Math.round(rtt);
     this.pingHistory.push({ t: now, rtt });
     while (this.pingHistory.length > PING_HISTORY_MAX || (this.pingHistory.length > 0 && now - this.pingHistory[0]!.t > TICK_WINDOW_MS)) {this.pingHistory.shift();}
+  }
+
+  /** A tickSeq hole — the frame never reached us. Called from the wire
+   *  decoder when an applied frame's seq jumps by >1. */
+  onSeqGap(now: number, skipped: number): void {
+    if (skipped <= 0) {return;}
+    this.seqWindow.push({ t: now, missed: skipped });
+    while (this.seqWindow.length > 0 && now - this.seqWindow[0]!.t > TICK_WINDOW_MS) {this.seqWindow.shift();}
   }
 
   // "Loss" over a reliable WS transport isn't packet loss — what players
@@ -42,9 +55,9 @@ export class NetTelemetry {
     if (this.firstTickAt === 0) {this.firstTickAt = now;}
   }
 
-  packetLoss(now: number): number {
-    if (this.lastTickAt === 0 || this.tickWindow.length === 0) {return 0;}
-    const missed = this.tickWindow.reduce((s, w): number => s + w.missed, 0);
+  private windowLoss(now: number, window: { t: number; missed: number }[]): number {
+    if (this.lastTickAt === 0 || window.length === 0) {return 0;}
+    const missed = window.reduce((s, w): number => s + w.missed, 0);
     // Denominator is ticks since the FIRST tick ever (capped at the
     // window), not since the first miss — a single early gap otherwise
     // divides by a tiny span and pins the display at 100% for minutes.
@@ -53,12 +66,25 @@ export class NetTelemetry {
     return Math.min(100, Math.round((missed / expected) * 100));
   }
 
+  /** True loss — seq holes. ~0 on WS; nonzero on WT datagrams or when
+   *  the server sheds frames under backpressure. */
+  packetLoss(now: number): number {
+    return this.windowLoss(now, this.seqWindow);
+  }
+
+  /** Arrival-cadence gaps — late/coalesced delivery. This is what used
+   *  to masquerade as "packet loss" on TCP loopback. */
+  deliveryGap(now: number): number {
+    return this.windowLoss(now, this.tickWindow);
+  }
+
   // A disconnect leaves lastTickAt stale — the reconnect gap would count
   // as missed ticks and pin the loss meter for the whole 5s window.
   reset(): void {
     this.lastTickAt = 0;
     this.firstTickAt = 0;
     this.tickWindow.length = 0;
+    this.seqWindow.length = 0;
     this.pingHistory.length = 0;
     this.ping = 0;
   }

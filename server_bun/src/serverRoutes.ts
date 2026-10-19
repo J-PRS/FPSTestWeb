@@ -158,8 +158,9 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Reques
 //   POST /admin/reload?room=X   re-read maps/X.json into the live room
 //   POST /admin/kick?player=X   boot a player
 //   POST /admin/end?room=X      force-end the match (leader wins)
+//   POST /admin/heapdump        write a JSC heapsnapshot to _heapdumps/
 //   GET  /admin/rooms           detailed live dump
-export function adminRoute(ctx: HttpCtx, req: Request, url: URL): Response {
+export function adminRoute(ctx: HttpCtx, req: Request, url: URL): Response | Promise<Response> {
   const want = CONFIG.adminToken;
   if (!want) {return corsResponse('admin disabled (FPS_ADMIN_TOKEN unset)', { status: 403 });}
   const got = req.headers.get('authorization')?.replace(/^bearer\s+/i, '');
@@ -170,7 +171,7 @@ export function adminRoute(ctx: HttpCtx, req: Request, url: URL): Response {
   }
   if (req.method !== 'POST') {return corsResponse('POST only', { status: 405 });}
 
-  const ADMIN_ACTIONS: Record<string, () => Response> = {
+  const ADMIN_ACTIONS: Record<string, () => Response | Promise<Response>> = {
     '/admin/reload': (): Response => {
       const r = ctx.gameServer.reloadRoom(url.searchParams.get('room') ?? '');
       return json({ ok: r === 'ok', result: r }, { status: r === 'ok' ? 200 : 404 });
@@ -182,6 +183,19 @@ export function adminRoute(ctx: HttpCtx, req: Request, url: URL): Response {
     '/admin/end': (): Response => {
       const r = ctx.gameServer.forceEndMatch(url.searchParams.get('room') ?? '');
       return json({ ok: r === 'ok', result: r }, { status: r === 'ok' ? 200 : 404 });
+    },
+    // Leak forensics — JSC-format heapsnapshot, opens in Safari Web
+    // Inspector's comparison view (two dumps ~30min apart → retained-type
+    // deltas name the leaking Map). Trigger Bun.gc() first so the diff
+    // counts live objects only.
+    '/admin/heapdump': async (): Promise<Response> => {
+      const b = globalThis.Bun;
+      if (!b) {return json({ ok: false, error: 'bun-only' }, { status: 501 });}
+      b.gc(true);
+      const snap = b.generateHeapSnapshot('jsc');
+      const file = `_heapdumps/heap-${Date.now()}.heapsnapshot`;
+      await b.write(file, JSON.stringify(snap));
+      return json({ ok: true, file });
     },
   };
   return ADMIN_ACTIONS[url.pathname]?.() ?? corsResponse('Unknown admin route', { status: 404 });

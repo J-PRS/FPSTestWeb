@@ -7,6 +7,7 @@
  */
 
 import { type Heightfield, hmHeight, hmChord } from './heightfield.js';
+import { datan2, dcos, dsin } from './dmath.ts';
 import { wrapAngleDelta } from './angles.ts';
 import type { SimVec, StructureCollider } from './ballSim.js';
 import { clipMotion, type CrawlerEvent, type SimCrawler } from './creatureCore.js';
@@ -78,11 +79,11 @@ function stepWeave(
   c: SimSlither, dt: number, target: SimVec | null, g: SlitherGeom,
 ): CrawlerEvent | null {
   if (c.stunTimer <= 0 && target && g.distSq < c.sp.AGGRO_D2) {
-    const wantYaw = Math.atan2(g.dx, g.dz);
-    const weave = Math.sin(c.animT * c.sp.WEAVE_HZ) * c.sp.WEAVE_AMP;
+    const wantYaw = datan2(g.dx, g.dz);
+    const weave = dsin(c.animT * c.sp.WEAVE_HZ) * c.sp.WEAVE_AMP;
     const wy = wantYaw + weave;
-    c.vx = Math.sin(wy) * c.sp.SPEED;
-    c.vz = Math.cos(wy) * c.sp.SPEED;
+    c.vx = dsin(wy) * c.sp.SPEED;
+    c.vz = dcos(wy) * c.sp.SPEED;
     if (g.hitSq < c.sp.STRIKE_D2 && c.strikeCd <= 0) {
       c.state = 'windup';
       c.windupTimer = c.sp.WINDUP_S;
@@ -130,7 +131,7 @@ function stepLeap(
   }
 
   if (c.vx * c.vx + c.vz * c.vz > 0.1) {
-    const want = Math.atan2(c.vx, c.vz);
+    const want = datan2(c.vx, c.vz);
     c.yaw += wrapAngleDelta(want - c.yaw) * Math.min(1, 6 * dt);
   }
   return null;
@@ -202,7 +203,7 @@ export function stepSlither(
   c.y = Math.max(hmHeight(field, c.x, c.z), hmChord(field, c.x, c.z)) + 0.5; // belly rides the drawn surface
 
   if (c.vx * c.vx + c.vz * c.vz > 0.1) {
-    const want = Math.atan2(c.vx, c.vz);
+    const want = datan2(c.vx, c.vz);
     c.yaw += wrapAngleDelta(want - c.yaw) * Math.min(1, 6 * dt);
   }
   return null;

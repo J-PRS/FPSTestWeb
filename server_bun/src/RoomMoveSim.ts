@@ -203,6 +203,9 @@ this.structEpoch += 1;
       jetDrain: mods.jetDrain, jetRegen: mods.jetRegen, energyRegen: mods.energyRegen,
       jetWanted: false, jetLockT: 0, skillDrainPerSec: 0, skillSuppressRegen: false, lastStatus: 0,
       lastInputSeq: 0, acc: 0, seqStates: new Map(), simTicks: 0, resyncSeq: -1, resyncAt: 0, pending: [],
+      // Per-shadow merge scratch — setInput copies declared fields, so a
+      // persistent Partial replaces the Object.assign churn per edge.
+      mergeIn: {}, jetIn: {},
       lastRepPos: null,
       gapStreak: 0, gapAt: 0, gapClosedAt: 0, gapRunMs: 0, deferStreak: 0, lastHintAt: 0, lastReportAt: 0, reportEma: 0,
       transitEma: 0, clientTransitEma: 0, serverTransitEma: 0, transitVar: 0, reportVar: 0,
@@ -322,11 +325,11 @@ this.structEpoch += 1;
     if (seq !== undefined && seq <= sh.lastInputSeq) {return false;}
     if (seq === undefined) {
       if (input.jetHeld !== undefined) {sh.jetWanted = input.jetHeld;}
-      sh.sim.setInput(Object.assign({}, input, {jetHeld: sh.jetWanted && sh.energy > 0}));
+      this.applyInput(sh, input, sh.jetWanted && sh.energy > 0);
     } else {
       sh.lastInputSeq = seq;
       if (input.jetHeld !== undefined) {sh.jetWanted = input.jetHeld;}
-      sh.sim.setInput(Object.assign({}, input, {jetHeld: sh.jetWanted && sh.energy > 0}));
+      this.applyInput(sh, input, sh.jetWanted && sh.energy > 0);
       // The anchor carries the input that runs FORWARD from this seq —
       // anchoredCompare replays anchor(k).inp over [k, k+1), so a
       // pre-apply snapshot would replay the input that just ended and
@@ -355,6 +358,18 @@ this.structEpoch += 1;
       (status & STATUS.MEND ? ENERGY.mendDrain : 0);
     sh.skillSuppressRegen = sh.skillDrainPerSec > 0;
     return true;
+  }
+
+  /** Merge an input edge + the server-modeled jet bit into the shadow's
+   *  persistent scratch and apply — every field is written each call so
+   *  an absent edge field reads undefined (setInput skips those) rather
+   *  than applying the previous edge's value. */
+  private applyInput(sh: Shadow, input: Partial<MoveInput>, jetHeld: boolean): void {
+    const m = sh.mergeIn;
+    m.forward = input.forward; m.right = input.right;
+    m.jumpPressed = input.jumpPressed; m.jumpHeld = input.jumpHeld;
+    m.skiHeld = input.skiHeld; m.jetHeld = jetHeld;
+    sh.sim.setInput(m);
   }
 
   /** Energy refunds the world grants — gem pickup half-tank refill. */
@@ -559,9 +574,10 @@ sh.gapStreak += 1;
       // Pool law: energy lives in [0, cap]. grant/regen both clamp —
       // an over-cap read here means a write path added without one.
       inv('energy-bounds', sh.energy <= ENERGY.max * sh.energyMax + 0.01,
-        { id: pid, e: Number(sh.energy.toFixed(1)), cap: Number((ENERGY.max * sh.energyMax).toFixed(1)) });
+        () => ({ id: pid, e: Number(sh.energy.toFixed(1)), cap: Number((ENERGY.max * sh.energyMax).toFixed(1)) }));
       if (sh.energy <= 0) {sh.jetLockT = ENERGY.jetLockout;}
-      sh.sim.setInput({ jetHeld: jetting });
+      sh.jetIn.jetHeld = jetting;
+      sh.sim.setInput(sh.jetIn);
       // Resting shadows skip the integrator: quiet input + ~zero
       // velocity + grounded means two sub-steps of terrain/solid/body
       // probes would land exactly where it started. Parked defenders
@@ -598,7 +614,7 @@ sh.gapStreak += 1;
           // hop/jet fires instead of collapsing into the final state.
           const slice = dt / edges.length;
           for (const e of edges) {
-            sh.sim.setInput(Object.assign({}, e.input, {jetHeld: jetting}));
+            this.applyInput(sh, e.input, jetting);
             sh.sim.update(slice);
             landing = Math.max(landing, sh.sim.landingImpact);
           }
@@ -618,8 +634,8 @@ sh.gapStreak += 1;
       // A NaN shadow is invisible on the wire AND keeps consuming
       // claims — the poison always enters through an ungated lane, so
       // name the field that broke, don't silence it.
-      inv('sim-pos', Number.isFinite(s.pos.x + s.pos.y + s.pos.z), { id: pid });
-      inv('sim-vel', Number.isFinite(s.vel.x + s.vel.y + s.vel.z), { id: pid });
+      inv('sim-pos', Number.isFinite(s.pos.x + s.pos.y + s.pos.z), () => ({ id: pid }));
+      inv('sim-vel', Number.isFinite(s.vel.x + s.vel.y + s.vel.z), () => ({ id: pid }));
     }
   }
 

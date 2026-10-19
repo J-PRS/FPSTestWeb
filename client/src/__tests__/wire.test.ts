@@ -428,6 +428,47 @@ describe('v4 delta-masked records', (): void => {
     expect(healed.updates[0]!.health).toBe(12);
   });
 
+  it('a truncated frame evicts the baselines it touched — degrades to a lost frame, heals on the next full', (): void => {
+    // Two-player frame truncated mid-second-record: before the fix the
+    // first record's partially-applied decode stayed in byId, so every
+    // later delta inherited poisoned state. Now a failed frame rolls the
+    // touched baselines out — deltas drop (no baseline) until the full.
+    const r = new WireIdRoster();
+    r.feed({ type: 'wireIds', add: { 7: 'player_seven', 9: 'player_nine' } });
+    const enc = tickEncodeScratch();
+    // One basis ring per record slot — same as production; sharing one
+    // across wireIds would force fulls by wireId mismatch.
+    const last7 = v4Last();
+    const last9 = v4Last();
+    const p7 = baseTickP();
+    const p9 = { ...baseTickP(), position: { x: 9, y: 9, z: 9 } };
+    // NOTE: scratch-encoded records share enc's buffer — copy each
+    // before the next encode or it gets overwritten.
+    const rec7 = encodeTickPlayerV4(7, p7, enc, last7, false).slice();
+    const rec9 = encodeTickPlayerV4(9, p9, enc, last9, false).slice();
+    decodeTickFrame(encodeTickFrame(0, 1, 0, [rec7, rec9], WIRE_TICK_V4), r.pool);
+    expect(r.pool.byId!.has(7)).toBe(true);
+    // Truncate inside the second record — both are 15B deltas now, so
+    // 15+15+10 lands mid-way through rec9's groups.
+    const torn = encodeTickFrame(0, 2, 0, [
+      encodeTickPlayerV4(7, p7, enc, last7, false).slice(),
+      encodeTickPlayerV4(9, p9, enc, last9, false).slice(),
+    ], WIRE_TICK_V4).slice(0, 15 + 15 + 10);
+    expect(decodeTickFrame(torn, r.pool)).toBeNull();
+    expect(r.pool.byId!.has(7)).toBe(false); // evicted — half-applied poison gone
+    expect(r.pool.byId!.has(9)).toBe(true);  // frame died before touching it — still valid
+    // A post-loss delta has nothing to inherit from → drops via the
+    // empty-id convention, exactly like a dropped frame.
+    p7.position.x = 3;
+    const delta = encodeTickPlayerV4(7, p7, enc, last7, false);
+    const d = decodeTickFrame(encodeTickFrame(0, 3, 0, [delta], WIRE_TICK_V4), r.pool)!;
+    expect(d.updates[0]!.playerId).toBe('');
+    // Forced full reseats the baseline.
+    const full = encodeTickPlayerV4(7, p7, enc, last7, true);
+    decodeTickFrame(encodeTickFrame(0, 4, 0, [full], WIRE_TICK_V4), r.pool);
+    expect(r.pool.byId!.has(7)).toBe(true);
+  });
+
   it('a masked delta with no decode baseline drops, then the full record seats it', (): void => {
     // Mid-join window: the roster knows wireId 7 but this receiver never
     // decoded a full record for it — inheriting masked groups would read

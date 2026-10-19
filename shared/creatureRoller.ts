@@ -6,6 +6,7 @@
  */
 
 import { type Heightfield, hmHeight } from './heightfield.js';
+import { datan2, dhypot } from './dmath.ts';
 import type { SimVec, StructureCollider } from './ballSim.js';
 import { clipMotion, type CrawlerEvent, type SimCrawler } from './creatureCore.js';
 import { SPECIES, speciesFamily, type SpeciesRow } from './species.js';
@@ -82,7 +83,7 @@ function rollSteer(c: SimRoller, dt: number, target: SimVec | null, dx: number, 
     c.vx += (dx / d) * k;
     c.vz += (dz / d) * k;
   }
-  const hSpeed = Math.hypot(c.vx, c.vz);
+  const hSpeed = dhypot(c.vx, c.vz);
   if (hSpeed > c.sp.TOPSPEED) {
     const s = c.sp.TOPSPEED / hSpeed;
     c.vx *= s; c.vz *= s;
@@ -108,7 +109,7 @@ export function stepRoller(
 
   rollSteer(c, dt, target, dx, dz, distSq);
 
-  const hSpeed = Math.hypot(c.vx, c.vz);
+  const hSpeed = dhypot(c.vx, c.vz);
   const prevY = c.y, px = c.x, pz = c.z;
   c.x += c.vx * dt;
   c.z += c.vz * dt;
@@ -122,7 +123,7 @@ export function stepRoller(
     c.vx += (dx / d) * g * dt;
     c.vz += (dz / d) * g * dt;
   }
-  if (hSpeed > 0.5) {c.yaw = Math.atan2(c.vx, c.vz);}
+  if (hSpeed > 0.5) {c.yaw = datan2(c.vx, c.vz);}
 
   return rollContact(c, target, authoritative);
 }

@@ -8,6 +8,7 @@
  */
 
 import { type Heightfield, hmHeight, hmChord } from './heightfield.js';
+import { datan2, dcos, dsin } from './dmath.ts';
 import type { SimVec, StructureCollider } from './ballSim.js';
 import { clipMotion, crand, type CrawlerEvent, type SimCrawler } from './creatureCore.js';
 import { SPECIES, speciesFamily, type SpeciesRow } from './species.js';
@@ -151,9 +152,9 @@ function stepOrbit(
     c.orbitPhase += (c.sp.ORBIT_SPEED / c.sp.ORBIT_R) * c.orbitDir * dt;
     const gy = hmHeight(field, anchor.x, anchor.z);
     flyToward(c,
-      anchor.x + Math.cos(c.orbitPhase) * c.sp.ORBIT_R,
+      anchor.x + dcos(c.orbitPhase) * c.sp.ORBIT_R,
       Math.max(anchor.y, Number.isFinite(gy) ? gy : anchor.y) + c.sp.ORBIT_ALT,
-      anchor.z + Math.sin(c.orbitPhase) * c.sp.ORBIT_R,
+      anchor.z + dsin(c.orbitPhase) * c.sp.ORBIT_R,
       c.sp.ORBIT_SPEED, dt);
   }
   if (target && c.tgtValid && c.diveCooldown <= 0) {
@@ -203,7 +204,7 @@ export function stepFlyer(
   // field under it — a gully's bridged chord is the real clip surface.
   const gy = Math.max(hmHeight(field, c.x, c.z), hmChord(field, c.x, c.z));
   if (c.y < gy + 0.8) {c.y = gy + 0.8;}
-  if (c.vx * c.vx + c.vz * c.vz > 1) {c.yaw = Math.atan2(c.vx, c.vz);}
+  if (c.vx * c.vx + c.vz * c.vz > 1) {c.yaw = datan2(c.vx, c.vz);}
   return null;
 }
 

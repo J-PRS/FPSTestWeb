@@ -78,6 +78,23 @@ describe('P2PHost', (): void => {
     expect(tick!.updates.some((p): boolean => p.playerId === 'A' && p.position.x === 1)).toBe(true);
   });
 
+  it('tickSeq advances once per tick per recipient — no gapped streams', (): void => {
+    // Regression: the seq used to increment inside the recipient loop,
+    // so each client got every-other seq (0,2,4,...) — a permanent ~50%
+    // apparent loss + tickNack spam on every P2P session.
+    const a = new FakeLink(); const b = new FakeLink();
+    join(host, a, 'A'); join(host, b, 'B');
+    host.onData(a, encodePosition({ x: 1, y: 60, z: 1 }, { yaw: 0, pitch: 0 }, { x: 0, y: 0, z: 0 }, 1, 0));
+    for (let t = 0; t < 4; t += 1) {vi.advanceTimersByTime(55);}
+    for (const link of [a, b]) {
+      const seqs = link.bin.filter(isWireFrame).map((f): number => decodeTickFrame(f)!.tickSeq);
+      expect(seqs.length).toBeGreaterThanOrEqual(3);
+      for (let i = 1; i < seqs.length; i += 1) {
+        expect(seqs[i]! - seqs[i - 1]!).toBe(1);
+      }
+    }
+  });
+
   it('binary before join is ignored, not fatal', (): void => {
     const a = new FakeLink();
     host.onData(a, encodePosition({ x: 0, y: 0, z: 0 }, { yaw: 0, pitch: 0 }, { x: 0, y: 0, z: 0 }, 0, 0));

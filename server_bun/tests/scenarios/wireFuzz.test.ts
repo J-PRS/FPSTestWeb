@@ -19,15 +19,36 @@ import {
 import { wallNow, wallMs } from '../../src/wallClock.ts';
 import type { PlayerState } from '../../src/types.ts';
 
+/** Swarm config: each seed also randomizes WHICH fault classes run and
+ *  at what rate — Groce et al. (ISSTA'12) showed randomized feature
+ *  subsets find ~42% more distinct bugs per run than everything-on
+ *  (fault classes suppress each other's bugs). Everything derives from
+ *  the seed, so a failure still replays byte-for-byte. */
+interface Swarm {
+  joins: boolean; leaves: boolean; silence: boolean;
+  lossBursts: boolean; reorders: boolean; introStamps: boolean;
+  mutRate: number; ops: number; reps: number;
+}
+function swarmFor(seed: number): Swarm {
+  const c = lcg(seed * 7 + 1);
+  const on = (p = 0.75): boolean => c() < p;
+  return {
+    joins: on(), leaves: on(), silence: on(0.7), lossBursts: on(),
+    reorders: on(), introStamps: on(0.6), mutRate: 0.5 + c(),
+    ops: 80 + Math.floor(c() * 80), reps: 2 + Math.floor(c() * 3),
+  };
+}
+
 describe('wire conformance fuzz', () => {
   it('replicas converge to room truth under seeded chaos', () => {
     // Seeds ≥2 run the same op engine with different streams — a fixed
     // corpus, not a nightly RNG: a failure replays byte-for-byte.
     const SEEDS = [11, 23, 37, 53, 71, 89, 101, 127];
     for (const seed of SEEDS) {
+      const swarm = swarmFor(seed);
       const rng = lcg(seed);
       const room = mkRoom({ bots: 0 }, '', seed);
-      const reps: FuzzReplica[] = [mkFuzzReplica('__fuzz_0__'), mkFuzzReplica('__fuzz_1__'), mkFuzzReplica('__fuzz_2__')];
+      const reps: FuzzReplica[] = Array.from({ length: swarm.reps }, (_, i) => mkFuzzReplica(`__fuzz_${i}__`));
       const lanes: Lane[] = reps.map(() => ({ msgs: [], frames: [] }));
       const teardown = mountFuzzFanout(room, reps, lanes);
 
@@ -48,12 +69,12 @@ describe('wire conformance fuzz', () => {
       // Two players so fanout has bodies from tick 1.
       addPlayer('a'); addPlayer('b'); joined = 2;
 
-      const OPS = 120;
+      const OPS = swarm.ops;
       for (let op = 0; op < OPS; op++) {
-        const roll = rng();
-        if (roll < 0.16 && joined < 14) {
+        const roll = rng() / swarm.mutRate;
+        if (roll < 0.16 && joined < 14 && swarm.joins) {
           addPlayer(`j${joined++}`);
-        } else if (roll < 0.28) {
+        } else if (roll < 0.28 && swarm.leaves) {
           const ids = alive();
           if (ids.length > 2) {
             const gone = ids[Math.floor(rng() * ids.length)]!;
@@ -79,7 +100,7 @@ describe('wire conformance fuzz', () => {
               if (p.isDead) { p.status = 0; p.skiing = 0; p.jetting = 0; }
             }
           }
-        } else if (roll < 0.72) {
+        } else if (roll < 0.72 && swarm.silence) {
           // Silence: push a player past the 5s heartbeat gate AND age
           // their lastSent — the fuzz runs in wall-milliseconds, so the
           // 2s heartbeat window would never lapse on its own and the
@@ -100,12 +121,17 @@ describe('wire conformance fuzz', () => {
               }
             }
           }
-        } else if (roll < 0.82) {
+        } else if (roll < 0.82 && swarm.lossBursts) {
           // Loss burst: drop the next 1-4 frames on a random replica —
           // the masked-delta staleness class.
           const lane = lanes[Math.floor(rng() * lanes.length)]!;
           for (let k = 0; k <= Math.floor(rng() * 4) && lane.frames.length > 0; k++) {lane.frames.shift();}
-        } else {
+        } else if (roll < 0.9 && swarm.introStamps) {
+          // Fresh-spec stamp: a replica re-enters its per-recipient intro
+          // window — exercises rec.full under chaos without a reconnect.
+          const rep = reps[Math.floor(rng() * reps.length)]!;
+          room.markIntro(rep.id);
+        } else if (swarm.reorders) {
           // Deep reorder: reverse a replica's queued frames — the
           // out-of-order baseline class.
           const lane = lanes[Math.floor(rng() * lanes.length)]!;
@@ -120,7 +146,11 @@ describe('wire conformance fuzz', () => {
 
       // Clean window: flush everything, then enough ticks for every
       // staggered full record (15-tick window) to land on every replica.
+      // The fuzz runs in wall-milliseconds, so the 250ms suppression
+      // heartbeat (production's heal path for a lost state-change record)
+      // never lapses on its own — age lastSent per tick to simulate it.
       for (let t = 0; t < 20; t++) {
+        for (const ls of room.lastSentPositions.values()) {ls.t -= 400;}
         step(room, 1);
         for (const [i, rep] of reps.entries()) {fuzzDrain(rep, lanes[i]!, rng);}
       }

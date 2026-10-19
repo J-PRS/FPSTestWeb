@@ -252,8 +252,9 @@ export class RtcServer {
     // Signaling is one-shot: clients close it right after the answer —
     // long BEFORE the datachannel opens. Never close the pc here: the
     // stale-peer timer reaps never-opened peers, dc.onClosed reaps the
-    // rest. peers.delete keeps the in-flight-offer cap honest.
-    this.peers.delete(ws);
+    // rest. The peers entry must outlive the signal socket — deleting it
+    // here frees a cap slot while the native PC persists, letting a
+    // client close-signal-and-reoffer past the 64-peer cap.
   }
 
   /** Cap how many un-answered offers can pile up — each holds a PC. */

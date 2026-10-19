@@ -63,17 +63,17 @@ async function connectP2PMode(ctx: ConnectCtx, p2p: string): Promise<void> {
     if (role === 'host') {
       const host = new P2PHost();
       host.setMap(ctx.bootMap ?? null);
-      const dc = connectP2P({ signalUrl: sig.toString() }); // resolves when guest's channel opens
+      const dc = connectP2P({ signalUrl: sig.toString() }); // resolves when guest's channel pair opens
       // Host plays immediately over loopback — no need to wait for a guest
       await networkManager.connect(serverUrl, (cfg) => new LoopbackTransport(host, cfg));
-      dc.then((chan): void => host.attachDataChannel(chan)).catch((error): void => logger.warn('P2P guest handshake failed', error));
+      dc.then((chans): void => host.attachDataChannels(chans)).catch((error): void => logger.warn('P2P guest handshake failed', error));
       logger.info(`P2P hosting room "${room}"${open ? ' (open lobby)' : ''} — share ?p2p=join:${room}`);
       fragMessages?.show(open
         ? `Open lobby "${room}" — anyone can quick-join`
         : `P2P room "${room}" — friend joins with ?p2p=join:${room}`);
     } else {
-      const dc = await connectP2P({ signalUrl: sig.toString() });
-      await networkManager.connect(serverUrl, (cfg) => new DataChannelTransport(dc, cfg));
+      const chans = await connectP2P({ signalUrl: sig.toString() });
+      await networkManager.connect(serverUrl, (cfg) => new DataChannelTransport(chans, cfg));
       logger.info(`P2P joined room "${room}"`);
     }
     profiler.markTime('networkConnected');

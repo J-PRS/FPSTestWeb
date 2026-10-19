@@ -10,6 +10,16 @@ import { wallNow } from './wallClock.ts';
  *  tick hot path is gated; reliable control/ball traffic still queues. */
 const MAX_TICK_BACKLOG = 256 * 1024;
 
+/** Join-burst hold: a freshly seated client's outbox carries gameState +
+ *  rosters + wireIds (often >256KB) while its main thread is still busy
+ *  loading the world — every tick frame queued behind that burst is
+ *  delivered stale or shed at the cap, and the seq gaps pollute loss
+ *  telemetry with a pattern that isn't loss. Until the outbox first
+ *  drains below this floor, tick frames are held (counted separately,
+ *  not as drops); the introSeq full window reseeds the basis either
+ *  way, so nothing the client could have decoded is lost. */
+const INTRO_DRAIN_FLOOR = 32 * 1024;
+
 /** Drowned-client drain: tick frames shed at 256KB, but reliable frames
  *  (joins, kills, chat, handshakes) queue into the transport buffer
  *  unconditionally — a reader that never drains parks megabytes of
@@ -51,6 +61,9 @@ const VOLATILE_TTL_MS = 3000;
 
 export class ConnectionManager {
   private connections: Map<string, ServerWebSocket<WebSocketData>> = new Map();
+  /** Pids whose post-join outbox has drained once — the tick intro gate
+   *  holds frames until the join burst clears, not just on first seat. */
+  private tickDrained: Set<string> = new Set();
 
   // Offset cursor (Socket.IO connection-state-recovery shape): every
   // reliable JSON frame carries a room-scoped `ev` seq, and the last N
@@ -82,6 +95,17 @@ export class ConnectionManager {
    *  callback so a pathological client shows up in the counters, not
    *  just the close log. */
   onDrowned?: (playerId: string) => void;
+  /** Reliable frames uWS refused outright (send()===0, past the 16MB
+   *  backpressureLimit). Rare under our own 4MB drown cap, but a real
+   *  silent-loss channel: the client stays connected while truth
+   *  evaporates. Counted like drowned sockets. */
+  reliableDropped = 0;
+  onReliableDropped?: (playerId: string) => void;
+
+  /** Raw buffered-amount sample per reliable send — the room folds it
+   *  into a bufMax gauge. Drown only fires past the cap; this surfaces
+   *  the approach (a socket drowning for seconds before it dies). */
+  onBuffered?: (playerId: string, bytes: number) => void;
 
   /** Reliable-lane sends all funnel through here on the way to a socket.
    *  A transient spike (reclaim replay burst) just starts the clock and
@@ -93,6 +117,7 @@ export class ConnectionManager {
     // Sockets without a data slot (test mocks) can't carry the mark —
     // buffered is also 0 there, so there's nothing to track anyway.
     if (!ws.data) {return 'ok';}
+    if (buffered > 0) {this.onBuffered?.(playerId, buffered);}
     if (buffered < DROWN_BYTES) {
       ws.data.slowSince = undefined;
       return 'ok';
@@ -107,6 +132,22 @@ export class ConnectionManager {
     this.onDrowned?.(playerId);
     try { ws.close(1011, 'slow client'); } catch { /* already closing */ }
     return 'drowned';
+  }
+
+  /** Reliable-lane send with status check. `send()` returns >0 sent,
+   *  -1 queued under backpressure, 0 DROPPED — and a dropped reliable
+   *  frame is the exact "pickup/damage silently missing" bug: the
+   *  socket stays open while events vanish, and the journal only
+   *  replays on reclaim. A drop means this socket can't be trusted:
+   *  close it so the client reclaims and replays honestly. */
+  private sendReliable(playerId: string, ws: ServerWebSocket<WebSocketData>, data: string | Uint8Array): void {
+    const status = ws.send(data);
+    if (status === 0) {
+      this.reliableDropped += 1;
+      this.onReliableDropped?.(playerId);
+      logger.warn('reliable frame dropped by transport — closing to force reclaim', { playerId });
+      try { ws.close(1011, 'reliable drop'); } catch { /* already closing */ }
+    }
   }
 
   private frame(msg: ServerMessage, only?: string, exclude?: string): string {
@@ -138,20 +179,46 @@ export class ConnectionManager {
       this.reclaimGap += missed;
       this.onReclaimGap?.(playerId, missed);
     }
-    for (const e of this.journal) {
-      if (e.seq <= fromSeq) {continue;}
-      if (e.volatile && now - e.at > VOLATILE_TTL_MS) {skippedStale += 1; continue; }
-      if (e.only !== undefined && e.only !== playerId) {continue;}
-      if (e.exclude === playerId) {continue;}
-      ws.send(e.data);
-n += 1;
-    }
-    if (n > 0 || skippedStale > 0) {logger.info('reclaim replay', { playerId, fromSeq, replayed: n, skippedStale });}
+    // Cork the burst: replay fires up to ~1024 sends back-to-back —
+    // batching them costs one flush instead of one syscall each.
+    // (Test mocks have no cork — flush unbatched there.)
+    const stale = (e: (typeof this.journal)[number]): boolean =>
+      e.volatile === true && now - e.at > VOLATILE_TTL_MS;
+    const eligible = (e: (typeof this.journal)[number]): boolean =>
+      e.seq > fromSeq && !stale(e) &&
+      (e.only === undefined || e.only === playerId) && e.exclude !== playerId;
+    const pump = (): void => {
+      for (const e of this.journal) {
+        if (e.seq <= fromSeq) {continue;}
+        if (stale(e)) {skippedStale += 1; continue;}
+        if (!eligible(e)) {continue;}
+        // Replay rides the same backpressure path as live sends — a
+        // drowning socket gets its clock started (or closed) instead of
+        // being re-flooded and silently dropping frames.
+        if (this.drownCheck(playerId, ws) !== 'ok') {
+          // The un-replayed tail was eligible for this recipient but never
+          // sent — count it as a reclaim gap or the client's seq watermark
+          // silently jumps past kills/chat it never saw.
+          for (const rest of this.journal) {
+            if (rest.seq < e.seq || !eligible(rest)) {continue;}
+            this.reclaimGap += 1; truncated += 1;
+          }
+          if (truncated > 0) {this.onReclaimGap?.(playerId, truncated);}
+          break;
+        }
+        this.sendReliable(playerId, ws, e.data);
+        n += 1;
+      }
+    };
+    let truncated = 0;
+    if (typeof ws.cork === 'function') { ws.cork(pump); } else { pump(); }
+    if (n > 0 || skippedStale > 0 || truncated > 0) {logger.info('reclaim replay', { playerId, fromSeq, replayed: n, skippedStale, truncated });}
     return n;
   }
 
   register(playerId: string, ws: ServerWebSocket<WebSocketData>): void {
     this.connections.set(playerId, ws);
+    this.tickDrained.delete(playerId); // joins re-arm the intro hold
     logger.info(`Connection registered`, { playerId, total: this.connections.size });
   }
 
@@ -159,6 +226,7 @@ n += 1;
     const ws = this.connections.get(playerId);
     if (ws) {
       this.connections.delete(playerId);
+      this.tickDrained.delete(playerId);
       logger.info(`Connection unregistered`, { playerId, total: this.connections.size });
     }
   }
@@ -169,21 +237,26 @@ n += 1;
     const data = this.frame(msg, playerId);
     const ws = this.connections.get(playerId);
     if (ws && ws.readyState === 1 && this.drownCheck(playerId, ws) === 'ok') {
-      ws.send(data);
+      this.sendReliable(playerId, ws, data);
     }
   }
 
-  /** Binary hot-path frames (tickUpdate) — no JSON.stringify. Rides the
-   *  reliable lane on every transport: measured WT datagram loss on
-   *  loopback was ~47%, which played as remote stutter + a bogus loss
-   *  reading, and the datagram lane buys nothing when it's dropping half
-   *  the frames anyway. Revisit if the QUIC lane proves reliable. */
-  /** Returns 'sent' | 'backlogged' | 'gone' — the caller only counts
-   *  'backlogged' as loss; a closing socket isn't a dropped frame. */
-  sendBinaryToPlayer(playerId: string, data: Uint8Array): 'sent' | 'backlogged' | 'gone' {
+  /** Binary hot-path frames (tickUpdate) — no JSON.stringify. On WS
+   *  this is the single TCP stream; on WT the adapter routes ticks to
+   *  stream-2 (reliable, HoL-isolated) once the binLane caps handshake
+   *  lands — measured ~33% seq loss on the QUIC datagram lane makes it
+   *  unfit as the primary state lane (see _docs/2026-10-18_NETCODE_DEEP_DIVE_3). */
+  /** Returns 'sent' | 'held' | 'backlogged' | 'gone' — 'held' is the
+   *  intro gate (counted separately, not a loss); 'backlogged' is a real
+   *  shed; a closing socket isn't a dropped frame. */
+  sendBinaryToPlayer(playerId: string, data: Uint8Array): 'sent' | 'held' | 'backlogged' | 'gone' {
     const ws = this.connections.get(playerId);
     if (!ws || ws.readyState !== 1) {return 'gone';}
     const buffered = (ws as unknown as { getBufferedAmount?(): number }).getBufferedAmount?.() ?? 0;
+    if (!this.tickDrained.has(playerId)) {
+      if (buffered > INTRO_DRAIN_FLOOR) {return 'held';}
+      this.tickDrained.add(playerId); // first clean sample — gate opens
+    }
     if (buffered > MAX_TICK_BACKLOG) {
       // Backlogged sockets ALSO feed the drown clock — the cap sheds
       // frames but a reader that never drains must still be closed, or
@@ -205,7 +278,7 @@ n += 1;
    *  reclaim's ballRoster reseeds ball truth, so the skip is honest. */
   broadcastBinaryReliable(data: Uint8Array): void {
     this.connections.forEach((ws, pid): void => {
-      if (ws.readyState === 1 && this.drownCheck(pid, ws) === 'ok') {ws.send(data);}
+      if (ws.readyState === 1 && this.drownCheck(pid, ws) === 'ok') {this.sendReliable(pid, ws, data);}
     });
   }
 
@@ -214,9 +287,15 @@ n += 1;
     this.connections.forEach((ws, pid): void => {
       if (excludePlayerId !== undefined && pid === excludePlayerId) {return;}
       if (ws.readyState === 1 && this.drownCheck(pid, ws) === 'ok') {
-        ws.send(data);
+        this.sendReliable(pid, ws, data);
       }
     });
+  }
+
+  /** Intro-gate probe — false while a fresh seat's outbox still holds
+   *  tick frames (its seq gaps are by design; its nacks are noise). */
+  drainedForTicks(playerId: string): boolean {
+    return this.tickDrained.has(playerId);
   }
 
   getConnection(playerId: string): ServerWebSocket<WebSocketData> | undefined {

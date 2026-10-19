@@ -17,6 +17,7 @@
 
 
 import { getWeaponStats } from './weapons.js';
+import { dhypot } from './dmath.ts';
 
 import { GRAVITY } from './movement.js';
 
@@ -214,7 +215,7 @@ export function aoeImpulseT1At(
 
   const dz = targetPos.z - blastPos.z;
 
-  return aoeImpulseT1(force, Math.hypot(dx, dy, dz), radius, 2 * cap.radius);
+  return aoeImpulseT1(force, dhypot(dx, dy, dz), radius, 2 * cap.radius);
 
 }
 
@@ -596,9 +597,9 @@ function checkFlightLegality(args: {
 
   // inherited shooter speed and a margin for the end-of-frame sample error.
 
-  const speed = Math.hypot(projectile.velocity.x, projectile.velocity.y, projectile.velocity.z)
+  const speed = dhypot(projectile.velocity.x, projectile.velocity.y, projectile.velocity.z)
 
-    + Math.hypot(shooterVel.x, shooterVel.y, shooterVel.z) * INHERITANCE_MARGIN;
+    + dhypot(shooterVel.x, shooterVel.y, shooterVel.z) * INHERITANCE_MARGIN;
 
   const maxReach = flightReach(stats, speed, airtime);
 

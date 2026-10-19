@@ -92,4 +92,32 @@ describe('WorkerTransport drain', (): void => {
     expect(config.onBinaryMessage).toHaveBeenCalledTimes(1); // older tick dropped
     expect(config.onMessage).toHaveBeenCalledWith({ type: 'chat' });
   });
+
+  it('time-slices a large burst at the 8ms budget and preserves order across turns', async (): Promise<void> => {
+    // A ~1024-event reclaim replay used to dispatch in one macrotask at
+    // exactly the rejoin moment. The drain now breaks past an 8ms budget
+    // (checked every 64 events) and continues on a new timer turn.
+    // Fake timers freeze performance.now, so this needs the real clock:
+    // the handler spins ~1ms/event to make the budget honestly expire.
+    vi.useRealTimers();
+    const spin = (ms: number): void => {
+      const t = performance.now();
+      while (performance.now() - t < ms) { /* busy */ }
+    };
+    const config = makeConfig();
+    const seen: number[] = [];
+    config.onMessage = vi.fn((j) => { spin(1); seen.push((j as unknown as { n: number }).n); });
+    const _t = new WorkerTransport(config);
+    for (let i = 0; i < 130; i++) {FakeWorker.last.emit({ kind: 'ev', j: { type: 'm', n: i }, at: 0 });}
+
+    await new Promise((r): number => setTimeout(r, 0) as unknown as number);
+    const first = (config.onMessage as ReturnType<typeof vi.fn>).mock.calls.length;
+    expect(first).toBeGreaterThanOrEqual(64);
+    expect(first).toBeLessThan(130);          // budget tripped — not one giant task
+    for (let i = 0; i < 10 && (config.onMessage as ReturnType<typeof vi.fn>).mock.calls.length < 130; i++) {
+      await new Promise((r): number => setTimeout(r, 0) as unknown as number);
+    }
+    expect(config.onMessage).toHaveBeenCalledTimes(130); // carry-over turns finished it
+    expect(seen).toEqual(Array.from({ length: 130 }, (_, i) => i)); // order preserved
+  });
 });

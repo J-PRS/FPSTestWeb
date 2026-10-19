@@ -8,6 +8,10 @@
  * Vectors are plain {x,y,z} — THREE Vector3 satisfies that structurally.
  */
 
+// Cross-engine replay: native trig/hypot differ by ULPs between JSC
+// (server) and V8 (client); dmath keeps prediction == shadow bitwise.
+import { dcos, dhypot, dsin } from './dmath.ts';
+
 export const MOVEMENT_CONFIG = {
   // Walk cap at speedScale 1 — T2's medium (12 m/s). Class scales hit
   // T2's spread: light ≈15, medium 12, heavy ≈7.
@@ -376,7 +380,7 @@ export class MoveSim {
       const s = this.state;
       const im = dt / this.mass;
       s.vel.y += MOVEMENT_CONFIG.jetForceUp * im;
-      const hv = Math.hypot(s.vel.x, s.vel.z);
+      const hv = dhypot(s.vel.x, s.vel.z);
       let tx = dir.x, tz = dir.z;
       if (hv >= MOVEMENT_CONFIG.jetMaxFwdAccel && hv > 0) {
         // Past the cap the velocity-aligned thrust component drops out
@@ -402,12 +406,12 @@ export class MoveSim {
   }
 
   private inputDirection(): Vec3Like {
-    const fwdX = Math.sin(this.state.yaw), fwdZ = Math.cos(this.state.yaw);
+    const fwdX = dsin(this.state.yaw), fwdZ = dcos(this.state.yaw);
     const rgtX = -fwdZ, rgtZ = fwdX;
     const mx = fwdX * this.input.forward + rgtX * this.input.right;
     const mz = fwdZ * this.input.forward + rgtZ * this.input.right;
     _in.x = mx; _in.y = 0; _in.z = mz;
-    const len = Math.hypot(mx, mz);
+    const len = dhypot(mx, mz);
     if (len > 0) { _in.x /= len; _in.z /= len; }
     return _in;
   }
@@ -416,7 +420,7 @@ export class MoveSim {
     const dir = this.inputDirection();
     const impulse = MOVEMENT_CONFIG.jumpSpeed;
     const surfaceY = this.lastJumpableNormal.y;
-    const dirLen = Math.hypot(dir.x, dir.z);
+    const dirLen = dhypot(dir.x, dir.z);
     const orientation = dirLen > 0
       ? (this.lastJumpableNormal.x * dir.x + this.lastJumpableNormal.z * dir.z)
       : 0;
@@ -442,7 +446,7 @@ export class MoveSim {
     // A held jet is airborne physics full stop: ground friction would
     // zero the thrust's small per-step velocity gain before it ever
     // accumulated to a launch (the ~0.9s standstill dead-zone).
-    const hSpeed = Math.hypot(s.vel.x, s.vel.z);
+    const hSpeed = dhypot(s.vel.x, s.vel.z);
     if (s.onGround && !this.wishJump && !this.input.jetHeld && !(this.input.skiHeld && hSpeed > MOVEMENT_CONFIG.maxVelocityGround)) {
       this.applyGround(dt, dir);
     }
@@ -451,9 +455,9 @@ export class MoveSim {
       const shift = { x: dir.x * MOVEMENT_CONFIG.airControl, y: 0, z: dir.z * MOVEMENT_CONFIG.airControl };
       const startY = s.vel.y;
       s.vel.y = 0;
-      const startMag = Math.max(Math.hypot(s.vel.x, s.vel.z), MOVEMENT_CONFIG.maxPassiveAirvel);
+      const startMag = Math.max(dhypot(s.vel.x, s.vel.z), MOVEMENT_CONFIG.maxPassiveAirvel);
       s.vel.x += shift.x; s.vel.z += shift.z;
-      const mag = Math.hypot(s.vel.x, s.vel.z);
+      const mag = dhypot(s.vel.x, s.vel.z);
       if (mag > startMag && mag > 0) { s.vel.x *= startMag / mag; s.vel.z *= startMag / mag; }
       s.vel.y = startY;
     }
@@ -485,7 +489,7 @@ export class MoveSim {
         if (sub > 0.15) {
           const acc = MOVEMENT_CONFIG.waterSwimAccel * sub * dt;
           s.vel.x += dir.x * acc; s.vel.z += dir.z * acc;
-          const hs = Math.hypot(s.vel.x, s.vel.z);
+          const hs = dhypot(s.vel.x, s.vel.z);
           if (hs > MOVEMENT_CONFIG.waterSwimSpeed) {
             const f = MOVEMENT_CONFIG.waterSwimSpeed / hs;
             s.vel.x *= f; s.vel.z *= f;
@@ -561,7 +565,7 @@ export class MoveSim {
   private applyGround(dt: number, dir: Vec3Like): void {
     const s = this.state;
     const n = this.surface.getNormal(s.pos.x, s.pos.z, _n);
-    const dirLen = Math.hypot(dir.x, dir.z);
+    const dirLen = dhypot(dir.x, dir.z);
     const maxGround = MOVEMENT_CONFIG.maxVelocityGround * this.speedScale;
     // T1 has no separate ground accel — the bounded traction force below
     // IS the motor. Skiers are exempt from traction, so a skier below
@@ -570,7 +574,7 @@ export class MoveSim {
       // Project input onto the slope surface.
       const dotN = dir.x * n.x + dir.z * n.z;
       let sx = dir.x - n.x * dotN, sz = dir.z - n.z * dotN;
-      const sl = Math.hypot(sx, sz);
+      const sl = dhypot(sx, sz);
       if (sl > 0.0001) {
         sx /= sl; sz /= sl;
         const acc = MOVEMENT_CONFIG.groundAccelerate * this.speedScale;
@@ -606,7 +610,7 @@ export class MoveSim {
       const wx = dir.x * maxGround, wz = dir.z * maxGround;
       const wdn = wx * n.x + wz * n.z;
       const dx = wx - n.x * wdn - tx, dy = -n.y * wdn - ty, dz = wz - n.z * wdn - tz;
-      const dLen = Math.hypot(dx, dy, dz);
+      const dLen = dhypot(dx, dy, dz);
       const force = MOVEMENT_CONFIG.groundTractionAccel * this.speedScale * dt;
       const k = dLen > force && dLen > 0 ? force / dLen : 1;
       s.vel.x += dx * k; s.vel.y += dy * k; s.vel.z += dz * k;
@@ -705,7 +709,7 @@ export class MoveSim {
       // real penetration: killing inward vel here (with the pos snap
       // gone) parachuted landings at ~0.5m/s inside the band and stalled
       // held-hop chains for seconds before the next contact.
-      if (velDotN <= MOVEMENT_CONFIG.groundLaunchVel && Math.hypot(tx0, tz0) <= stickSpeed
+      if (velDotN <= MOVEMENT_CONFIG.groundLaunchVel && dhypot(tx0, tz0) <= stickSpeed
         && !(takeoff && velDotN > 0)) {
         this.lastJumpableNormal.x = n.x; this.lastJumpableNormal.y = n.y; this.lastJumpableNormal.z = n.z;
         this.allowNextJump = true;

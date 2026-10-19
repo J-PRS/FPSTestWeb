@@ -19,6 +19,8 @@ export interface RunStat {
                         // arrived fast" from "arrived fast, missed touch"
   passDy: number;       // signed height-over-flag at that fastest pass:
                         // + = sailed over the pole, - = hit below it
+  passD: number;        // planar distance at that fastest pass — how far
+                        // off the 6m touch ring the fast line actually ran
   grabV: number;        // speed through the stand at the grab instant —
                         // THE capper stat: llama walk-in vs speed grab
   peakE: number;        // max mechanical E banked during the approach —
@@ -98,7 +100,7 @@ export function measureCap(
     }
   }
 
-  const stat: RunStat = { grabT: 0, carryT: 0, pathM: 0, avgSpeed: 0, avgE: 0, caps: 0, passV: 0, passDy: 0, grabV: 0, peakE: 0, approachE: 0 };
+  const stat: RunStat = { grabT: 0, carryT: 0, pathM: 0, avgSpeed: 0, avgE: 0, caps: 0, passV: 0, passDy: 0, passD: 0, grabV: 0, peakE: 0, approachE: 0 };
   const dt = 0.05;
   let simT = 0;
   // Wall-clock watchdog: a degenerate genome (or plain bad luck) can
@@ -152,7 +154,7 @@ export function measureCap(
       const fdy = Math.abs(capper.position.y - bravoFlag.pos.y);
       if (fd < 40 && fdy < 15) {
         const pv = Math.hypot(capper.velocity.x, capper.velocity.z);
-        if (pv > stat.passV) {stat.passV = pv; stat.passDy = capper.position.y - bravoFlag.pos.y;}
+        if (pv > stat.passV) {stat.passV = pv; stat.passDy = capper.position.y - bravoFlag.pos.y; stat.passD = fd;}
       }
     }
     if (!capper.isDead) {
@@ -250,7 +252,7 @@ export function measureCap(
     console.log(
       `capper run [${tag}]: grab@${stat.grabT.toFixed(1)}s carry=${stat.carryT.toFixed(1)}s ` +
       `path=${stat.pathM.toFixed(0)}m avgSpeed=${stat.avgSpeed.toFixed(1)}m/s ` +
-      `grabV=${stat.grabV.toFixed(1)}m/s passV=${stat.passV.toFixed(1)}@${stat.passDy.toFixed(0)} approachE=${stat.approachE.toFixed(0)} peakE=${stat.peakE.toFixed(0)} ` +
+      `grabV=${stat.grabV.toFixed(1)}m/s passV=${stat.passV.toFixed(1)}@dy${stat.passDy.toFixed(0)},d${stat.passD.toFixed(0)} approachE=${stat.approachE.toFixed(0)} peakE=${stat.peakE.toFixed(0)} ` +
       `avgE=${stat.avgE.toFixed(0)} caps=${stat.caps}`,
     );
     for (const d of drops) {

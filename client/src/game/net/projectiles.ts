@@ -71,6 +71,7 @@ export function wireProjectiles(ctx: NetCtx): void {
   const { deps, networkManager, nm } = ctx;
 
   const remoteProjectiles = new Map<string, Projectile>();
+  let remoteProjectilesFloodWarned = 0;
 
   // Melee swings carry a fake velocity (it's a swing marker, not a shell)
   // — painting the generic projectile would fly a rocket out of a fist.
@@ -188,6 +189,14 @@ export function wireProjectiles(ctx: NetCtx): void {
     const lead = Math.min(0.15, nm().getPing() / 2000);
     if (lead > 0) {
       remoteProjectile.advanceBy(lead);
+    }
+    // Cap live replicas — ids are server-trusted, and a flooding server
+    // could mint faster than fuses expire (unbounded replicas = unbounded
+    // scene/memory). 24 players can't field hundreds of shells at once.
+    if (remoteProjectiles.size >= 512) {
+      if (remoteProjectilesFloodWarned === 0) {deps.logger.warn('[Net] remote projectile cap hit — dropping further spawns');}
+      remoteProjectilesFloodWarned += 1;
+      return;
     }
     deps.world.projectiles.push(remoteProjectile);
     remoteProjectiles.set(projectileId, remoteProjectile);

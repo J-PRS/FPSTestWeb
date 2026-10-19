@@ -50,3 +50,22 @@ describe('computeStateHash', () => {
     expect(computeStateHash([])).not.toBe(h); // membership counts
   });
 });
+
+// Room seeds: production rooms carry a minted private stream so a
+// recorded match can replay its draw sequence; seedless rooms keep the
+// injectable botRand default (harness compat).
+describe('room rng seeding', () => {
+  test('same seed reproduces the same draw stream; seedless stays ambient', async () => {
+    const { Room } = await import('../src/Room.ts');
+    const a = new Room('a', null, '', undefined, false, 4242);
+    const b = new Room('b', null, '', undefined, false, 4242);
+    // Ctor-time consumers (spawn scatter) draw off the stream — compare
+    // the two seeded rooms to each other so that consumption is aligned.
+    expect(a.rngStream?.draws).toBe(b.rngStream?.draws);
+    for (let i = 0; i < 50; i += 1) { expect(a.rng()).toBe(b.rng()); }
+    // Unseeded room keeps the injectable default (botRand).
+    const c = new Room('c', null, '', undefined, false);
+    expect(c.rngSeed).toBeUndefined();
+    a.dispose(); b.dispose(); c.dispose();
+  });
+});

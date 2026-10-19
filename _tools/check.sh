@@ -38,6 +38,13 @@ echo "$CHANGED" | xargs -r -n 50 npx -y oxlint --fix
 (cd client && npx -y -p @typescript/native-preview tsgo --noEmit) \
   || (cd client && ./node_modules/.bin/tsc --noEmit)
 
+# bun test transpiles, it doesn't typecheck — a wrong import path or a
+# stub missing interface members runs green while breaking tsc. Server
+# tests have hit this hole twice; typecheck when server/shared changed.
+if echo "$CHANGED" | grep -qE '^(shared|server_bun)/'; then
+  (cd server_bun && bunx tsc --noEmit)
+fi
+
 CLIENT_FILES=$(echo "$CHANGED" | grep '^client/' | sed 's|^client/||' || true)
 if [ -n "$CLIENT_FILES" ]; then
   # related runs only tests covering the touched files; fall back to

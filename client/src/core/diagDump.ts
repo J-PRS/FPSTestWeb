@@ -174,7 +174,7 @@ export function diagLines(ctx: StateDebugContext, verbose = false): string[] {
   const wire = nm.getPlayers();
   const lines: string[] = [
     `localId: ${nm.getLocalPlayerId()}`,
-    `connected: ${nm.isConnected()} tier: ${nm.getTransportTier() ?? '-'} ping: ${nm.getPing()}ms srvPing: ${nm.serverPingMs == null ? '?' : `${Math.round(nm.serverPingMs)}ms`} loss: ${nm.getPacketLoss()}% jitter: ${nm.getJitter()}ms${nm.netProbe ? ` lag: ${Math.round(nm.netProbe.lagMs)}ms coal: ${nm.netProbe.coalesced}` : ''}`,
+    `connected: ${nm.isConnected()} tier: ${nm.getTransportTier() ?? '-'} ping: ${nm.getPing()}ms srvPing: ${nm.serverPingMs == null ? '?' : `${Math.round(nm.serverPingMs)}ms`} loss: ${nm.getPacketLoss()}% jitter: ${nm.getJitter()}ms${nm.netProbe ? ` lag: ${Math.round(nm.netProbe.lagMs)}ms coal: ${nm.netProbe.coalesced}${nm.netProbe.drainMsMax ? ` drainMax: ${Math.round(nm.netProbe.drainMsMax)}ms` : ''}` : ''}`,
     `net: up ${(nm.bandwidth().up / 1024).toFixed(1)}KB/s down ${(nm.bandwidth().down / 1024).toFixed(1)}KB/s${nm.handlerThrows ? ` throws:${nm.handlerThrows}` : ''}${heapLine()}`,
     `local: dead=${p.isDead} hp=${p.health} pos=${fmt(p.pos)} vel=${fmt(p.vel)} yaw=${p.yaw.toFixed(2)} pitch=${p.pitch.toFixed(2)} onGround=${p.onGround}`,
     `lastSentPos: ${fmt(ctx.getLastSentPos())}`,

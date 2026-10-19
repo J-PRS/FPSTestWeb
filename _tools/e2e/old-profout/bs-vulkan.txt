@@ -1,0 +1,43 @@
+[console.error] WebSocket connection to 'ws://localhost:5400/?token=IG8CBX0OYc31' failed: Error during WebSocket handshake: Unexpected response code: 400
+[http 503] http://127.0.0.1:8477/challenge
+[console.error] Failed to load resource: the server responded with a status of 503 (Service Unavailable)
+[console.warn] 2026-10-17T14:19:26.161+02:00  [WARN] [console.warn] THREE.WebGLRenderer: KHR_parallel_shader_compile extension not supported. 
+[console.error] Failed to establish a connection to https://127.0.0.1:9920/: net::ERR_CONNECTION_RESET.
+[console.warn] [.WebGL-0x4d640017b800] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+[console.warn] [.WebGL-0x4d640017b800] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+[console.warn] [.WebGL-0x4d640017b800] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+[console.warn] [.WebGL-0x4d640017b800] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+[console.error] 2026-10-17T14:19:30.583+02:00  [ERROR] [console.error] [GLITCH:seg-div] {"m":25,"spanMs":1150,"enr":0} 
+[console.error] 2026-10-17T14:19:30.584+02:00  [ERROR] [console.error] [GLITCH:seg-div] {"m":33,"spanMs":1250,"enr":0} 
+[console.error] 2026-10-17T14:19:30.585+02:00  [ERROR] [console.error] [GLITCH:seg-div] {"m":22,"spanMs":1000,"enr":0} 
+[console.error] 2026-10-17T14:19:30.597+02:00  [ERROR] [console.error] [GLITCH:parity-kb-unpredicted] {"x":-8,"y":49,"z":5,"force":4.5,"pull":false} 
+[console.error] 2026-10-17T14:19:30.742+02:00  [ERROR] [console.error] [GLITCH:render-blend] {"netId":35,"offM":23,"skewMs":-143} 
+[console.error] 2026-10-17T14:19:30.742+02:00  [ERROR] [console.error] [GLITCH:render-blend] {"netId":34,"offM":28,"skewMs":-143} 
+[console.error] 2026-10-17T14:19:30.743+02:00  [ERROR] [console.error] [GLITCH:render-blend] {"netId":33,"offM":30,"skewMs":-93} 
+[console.error] 2026-10-17T14:19:30.743+02:00  [ERROR] [console.error] [GLITCH:ball-step] {"gapM":24,"acc":0} 
+[console.error] 2026-10-17T14:19:30.743+02:00  [ERROR] [console.error] [GLITCH:ball-step] {"gapM":16,"acc":0} 
+[console.error] 2026-10-17T14:19:30.744+02:00  [ERROR] [console.error] [GLITCH:ball-step] {"gapM":14,"acc":0} 
+init 7553ms, connected 8244ms — watching 20s
+[console.error] 2026-10-17T14:19:41.576+02:00  [ERROR] [console.error] [GLITCH:parity-kb-unpredicted] {"x":-166,"y":21,"z":49,"force":19,"pull":false} 
+[console.error] 2026-10-17T14:19:46.104+02:00  [ERROR] [console.error] [GLITCH:remote-buried] {"id":"BOT-DUNE-04","depth":18.7,"lift":2.5,"fieldD":21.2} 
+[console.error] 2026-10-17T14:19:46.104+02:00  [ERROR] [console.error] [GLITCH:remote-buried] {"id":"BOT-OZONE-07","depth":1.2,"lift":2.5,"fieldD":6.4} 
+[console.error] 2026-10-17T14:19:48.716+02:00  [ERROR] [console.error] [GLITCH:parity-nugrest] {"dM":4.2} 
+[console.error] 2026-10-17T14:19:48.717+02:00  [ERROR] [console.error] [GLITCH:parity-nugrest] {"dM":11.4} 
+107 |     #id;
+108 |     #error = new ProtocolError();
+109 |     #deferred = Deferred.create();
+110 |     #timer;
+111 |     #label;
+112 |     constructor(id, label, timeout) {
+                      ^
+ProtocolError: Runtime.evaluate timed out. Increase the 'protocolTimeout' setting in launch/connect calls for a higher timeout if needed.
+      at Callback (C:\TEMP\_WEB\FPSWebTest\_tools\node_modules\puppeteer-core\lib\puppeteer\common\CallbackRegistry.js:112:17)
+      at create (C:\TEMP\_WEB\FPSWebTest\_tools\node_modules\puppeteer-core\lib\puppeteer\common\CallbackRegistry.js:47:36)
+      at send (C:\TEMP\_WEB\FPSWebTest\_tools\node_modules\puppeteer-core\lib\puppeteer\cdp\CdpSession.js:113:13)
+      at #evaluate (C:\TEMP\_WEB\FPSWebTest\_tools\node_modules\puppeteer-core\lib\puppeteer\cdp\ExecutionContext.js:352:18)
+      at evaluate (C:\TEMP\_WEB\FPSWebTest\_tools\node_modules\puppeteer-core\lib\puppeteer\cdp\ExecutionContext.js:425:26)
+      at evaluate (C:\TEMP\_WEB\FPSWebTest\_tools\node_modules\puppeteer-core\lib\puppeteer\cdp\IsolatedWorld.js:133:26)
+      at evaluate (C:\TEMP\_WEB\FPSWebTest\_tools\node_modules\puppeteer-core\lib\puppeteer\api\Frame.js:728:18)
+      at evaluate (C:\TEMP\_WEB\FPSWebTest\_tools\node_modules\puppeteer-core\lib\puppeteer\api\Page.js:832:43)
+
+Bun v1.3.14 (Windows x64)

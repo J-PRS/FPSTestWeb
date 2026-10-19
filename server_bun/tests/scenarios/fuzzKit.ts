@@ -46,7 +46,7 @@ export function mkFuzzReplica(id: string): FuzzReplica {
 export function fuzzDeliverMsg(rep: FuzzReplica, m: ServerMessage): void {
   if (m.type === 'wireIds') {
     const w = m as { add?: Record<number, string>; remove?: number[] };
-    for (const [wid, id] of Object.entries(w.add ?? {})) rep.roster.set(Number(wid), id);
+    for (const [wid, id] of Object.entries(w.add ?? {})) {rep.roster.set(Number(wid), id);}
     for (const wid of w.remove ?? []) {
       rep.roster.delete(wid);
       // The client's contract: a retired wireId's decode baseline dies
@@ -63,7 +63,7 @@ export function fuzzDeliverFrame(rep: FuzzReplica, frame: Uint8Array): void {
   if (!f) { rep.violations.push('decode:null'); return; }
   for (let i = 0; i < f.count; i++) {
     const u = f.updates[i]!;
-    if (!u.playerId) continue; // unresolved/dropped record — legal
+    if (!u.playerId) {continue;} // unresolved/dropped record — legal
     // A decoded update must resolve through the CURRENT roster binding
     // — a playerId that doesn't match wireId→playerId means a stale
     // baseline leaked into a reassigned id.
@@ -81,7 +81,7 @@ export function fuzzDeliverFrame(rep: FuzzReplica, frame: Uint8Array): void {
 /** Drain a lane: frames may jump ahead of queued msgs (cross-lane
  *  reorder is the production reality) or drop/reorder within frames. */
 export function fuzzDrain(rep: FuzzReplica, lane: Lane, rng: () => number): void {
-  while (lane.msgs.length || lane.frames.length) {
+  while (lane.msgs.length > 0 || lane.frames.length > 0) {
     const takeFrame = lane.frames.length > 0 && (lane.msgs.length === 0 || rng() < 0.3);
     if (takeFrame) {
       const i = rng() < 0.15 && lane.frames.length > 1 ? Math.floor(rng() * lane.frames.length) : 0;
@@ -103,10 +103,10 @@ export function mountFuzzFanout(
   onRemove?: (room: Room, playerId: string, reason: string) => void,
 ): () => void {
   const repIds = reps.map((r) => r.id);
-  for (const id of repIds) room.spectators.add(id);
+  for (const id of repIds) {room.spectators.add(id);}
   const metrics: FanoutMetrics = {
     recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0,
-    recordsSent: 0, recordsTierSkipped: 0, bytesSent: 0, tickFramesDropped: 0,
+    recordsSent: 0, recordsTierSkipped: 0, bytesSent: 0, tickFramesDropped: 0, tickFramesHeld: 0,
   };
   const fanout = new TickFanout(metrics,
     onRemove ?? ((r, pid, reason) => r.removePlayerCompletely(pid, reason, () => {})));
@@ -120,12 +120,12 @@ export function mountFuzzFanout(
   const prevBroadcast = room.connections.broadcast;
   const prevSendBin = room.connections.sendBinaryToPlayer;
   room.connections.broadcast = (m: ServerMessage, exclude?: string) => {
-    for (const lane of lanes) lane.msgs.push(m);
+    for (const lane of lanes) {lane.msgs.push(m);}
     return prevBroadcast.call(room.connections, m, exclude);
   };
   room.connections.sendBinaryToPlayer = (pid: string, data: Uint8Array) => {
     const i = repIds.indexOf(pid);
-    if (i < 0) return prevSendBin.call(room.connections, pid, data);
+    if (i === -1) {return prevSendBin.call(room.connections, pid, data);}
     // Slice: the frame arena recycles the buffer next encode — a queued
     // view would alias the NEXT player's frame (a real transport copies
     // at send).
@@ -134,8 +134,8 @@ export function mountFuzzFanout(
   };
   return () => {
     const i = room.sims.indexOf(fanoutSim);
-    if (i >= 0) room.sims.splice(i, 1);
-    for (const id of repIds) room.spectators.delete(id);
+    if (i !== -1) {room.sims.splice(i, 1);}
+    for (const id of repIds) {room.spectators.delete(id);}
     room.connections.broadcast = prevBroadcast;
     room.connections.sendBinaryToPlayer = prevSendBin;
   };
@@ -158,13 +158,13 @@ export function assertFuzzConverged(room: Room, reps: FuzzReplica[], ctx: string
       if (Math.floor(Math.round(h.health) / 4) !== Math.floor(Math.round(tp.health) / 4)) {
         rep.violations.push(`${ctx}: health ${id} held=${h.health} room=${tp.health}`);
       }
-      if (h.isDead !== tp.isDead) rep.violations.push(`${ctx}: isDead ${id} held=${h.isDead} room=${tp.isDead}`);
+      if (h.isDead !== tp.isDead) {rep.violations.push(`${ctx}: isDead ${id} held=${h.isDead} room=${tp.isDead}`);}
     }
     // Rostered players the replica never saw are legal ONLY if their
     // record was suppressed/lost this whole run — after the clean
     // window every live wireId owner must be held.
     for (const [wid, id] of rep.roster) {
-      if (t.has(id) && !rep.held.has(id)) rep.violations.push(`${ctx}: missing ${id} (wireId ${wid})`);
+      if (t.has(id) && !rep.held.has(id)) {rep.violations.push(`${ctx}: missing ${id} (wireId ${wid})`);}
     }
   }
 }

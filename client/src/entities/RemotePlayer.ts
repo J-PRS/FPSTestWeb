@@ -77,6 +77,8 @@ export class RemotePlayer {
   get isSimulating(): boolean { return this.interp.simulating; }
   /** Adaptive render delay this remote rides — lag-comp honesty input. */
   get renderDelayMs(): number { return this.interp.interpDelay; }
+  get interpUnderruns(): number { return this.interp.underruns; }
+  get interpExtCapMs(): number { return this.interp.extCapMs; }
   /** Local authority (GameBot): position is written directly each frame,
    *  so the snapshot interp / dead-reckoning path would fight it — tick
    *  short-circuits to model+gizmo upkeep only. */

@@ -67,4 +67,8 @@ export interface TickRecord {
   data: Uint8Array;
   pos: { x: number; y: number; z: number };
   force: boolean;
+  /** Per-recipient full copy — encoded only while room.introPlayers has
+   *  pending joiners; sent to those recipients instead of `data` (their
+   *  decode baseline for this wireId is still zero). */
+  full?: Uint8Array;
 }

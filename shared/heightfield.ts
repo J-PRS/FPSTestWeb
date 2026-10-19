@@ -12,6 +12,8 @@
  * replay must land on the same vertex or bounces diverge.
  */
 
+import { dhypot } from './dmath.ts';
+
 export const HM_WORLD_SCALE = 1500; // meters per heightmap wrap — MUST match client config TERRAIN_WORLD_SCALE
 export const HM_HEIGHT_SCALE = 125; // MUST match TERRAIN_HEIGHT_SCALE
 export const HM_DIVISOR = 255;      // MUST match TERRAIN_HEIGHTMAP_DIVISOR
@@ -154,7 +156,7 @@ export function hmSettleWalkable(f: Heightfield, pos: { x: number; y: number; z:
     const gxm = hmHeight(f, pos.x - 4, pos.z), gxp = hmHeight(f, pos.x + 4, pos.z);
     const gzm = hmHeight(f, pos.x, pos.z - 4), gzp = hmHeight(f, pos.x, pos.z + 4);
     const sx = (gxp - gxm) / 8, sz = (gzp - gzm) / 8;
-    const slope = Math.hypot(sx, sz);
+    const slope = dhypot(sx, sz);
     if (slope < 0.8) {break;} // walkable grade
     const d = slope || 1;
     pos.x -= (sx / d) * 6; pos.z -= (sz / d) * 6;

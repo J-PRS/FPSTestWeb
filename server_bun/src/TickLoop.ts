@@ -26,6 +26,7 @@ export interface TickOps {
   tickLagMsSum: number;
   tickLagSamples: number;
   lastTickAt: number;
+  ticksDropped?: number;
 }
 
 /** The broadcast engine: 20Hz room tick (records + interest tiers +
@@ -39,14 +40,14 @@ const emitLane = <T extends { id: number }>(kind: WorldKindDecl, roster: T[]): {
     : undefined;
 
 export class TickLoop {
-  private tickTimer: ReturnType<typeof setInterval> | null = null;
+  private tickTimer: ReturnType<typeof setTimeout> | null = null;
   private hashTimer: ReturnType<typeof setInterval> | null = null;
   private lastStatusLine = '';
   private statusRepeatCount = 0;
 
   // Tick-bandwidth metrics — aggregated per log window so we can see what
   // interest tiers + suppression are actually saving.
-  private metrics = { ticks: 0, recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0, recordsSent: 0, recordsTierSkipped: 0, bytesSent: 0, tickFramesDropped: 0, tickErrors: 0, windowStart: 0 };
+  private metrics = { ticks: 0, recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0, recordsSent: 0, recordsTierSkipped: 0, bytesSent: 0, tickFramesDropped: 0, tickFramesHeld: 0, tickErrors: 0, windowStart: 0, tickMsSum: 0, tickMsMax: 0, tickSamples: 0 };
   /** Which phase threw when a room tick dies — the catch sites one level
    *  up can't see inside tickRoom otherwise. */
   private errPhase = '?';
@@ -71,7 +72,7 @@ export class TickLoop {
   }
   /** Last completed 10s rollup — surfaced on /metrics, null until a
    *  window closes (needs a connected player to accumulate). */
-  private lastBw: { kbpsDownTotal: number; recordsPerSec: number; suppressedPerSec: number; tierSkippedPerSec: number; tickFramesDroppedPerSec: number; tickErrors: number; phaseMs: Record<string, number> } | null = null;
+  private lastBw: { kbpsDownTotal: number; recordsPerSec: number; suppressedPerSec: number; tierSkippedPerSec: number; tickFramesDroppedPerSec: number; tickFramesHeldPerSec: number; tickErrors: number; phaseMs: Record<string, number>; tickMs?: { avg: number; max: number } } | null = null;
   bandwidthWindow() { return this.lastBw; }
   /** Rooms stopped for repeated tick failures — /metrics surfaces this
    *  so a dead room is visible on the status page, not just in logs. */
@@ -110,9 +111,15 @@ export class TickLoop {
 
   private startTickBroadcast(): void {
     const tickMs = 1000 / CONFIG.tickRate;
-    this.tickTimer = setInterval((): void => {
+    // Deadline-compensated setTimeout, not setInterval: the interval
+    // rearms relative to callback END, so phase error accumulates (and on
+    // Windows the 15.6ms timer tick quantized us to ~28/39ms slots — the
+    // jitter lands in every client's arrival EMA → inflated interpDelay).
+    // Chasing a fixed wall-clock deadline removes both.
+    let next = wallNow() + tickMs;
+    const fire = (): void => {
       const now0 = wallNow();
-      // Tick lag: how late this interval fired vs the nominal cadence.
+      // Tick lag: how late this fire landed vs the deadline cadence.
       // Sustained lag = sim clock drifts behind wall time — the skew that
       // pushes client ball replays ahead of authority.
       if (this.ops.lastTickAt > 0) {
@@ -122,6 +129,17 @@ this.ops.tickLagSamples += 1;
         if (lag > this.ops.tickLagMsMax) {this.ops.tickLagMsMax = lag;}
       }
       this.ops.lastTickAt = now0;
+      next += tickMs;
+      let delay = next - wallNow();
+      if (delay < -tickMs) {
+        // Overran a whole tick — chasing the missed deadline would
+        // double-fire. Resync forward; the dropped slot is counted by
+        // the tickSeq gap the client already sees.
+        this.ops.ticksDropped = (this.ops.ticksDropped ?? 0) + Math.floor(-delay / tickMs);
+        next = wallNow() + tickMs;
+        delay = tickMs;
+      }
+      this.tickTimer = setTimeout(fire, Math.max(0, delay));
 
       for (const room of this.rooms.values()) {
         // A room that faulted but couldn't be drained (dispose threw
@@ -161,7 +179,8 @@ this.metrics.tickErrors += 1;
         // a frozen world with live players in it is worse than a kick.
         this.tickRoomGuarded(room, now0);
       }
-    }, tickMs);
+    };
+    this.tickTimer = setTimeout(fire, tickMs);
   }
 
   /** The per-room tick wrapped in containment — the interval body calls
@@ -240,7 +259,7 @@ this.metrics.tickErrors += 1;
 
   private stopTickBroadcast(): void {
     if (this.tickTimer) {
-      clearInterval(this.tickTimer);
+      clearTimeout(this.tickTimer);
       this.tickTimer = null;
     }
   }
@@ -255,7 +274,8 @@ this.metrics.tickErrors += 1;
   private tickRoom(room: Room, players: Players, now0: number): void {
     // Phase 0: drain the command buffer — all client input lands before
     // any sim runs, in wire-arrival order.
-    this.lastPhaseAt = wallNow();
+    const tickT0 = wallNow();
+    this.lastPhaseAt = tickT0;
     this.errPhase = 'cmd';
     room.drainCommands();
     this.mark('cmd');
@@ -317,6 +337,12 @@ this.metrics.ticks += 1;
     this.mark('fanout');
 
     this.errPhase = '?';
+    // Whole-tick wall cost — the execution-side complement of tickLag
+    // (schedule-side). Rising avg = systemic load; spikes = GC/bursts.
+    const tickMs = wallNow() - tickT0;
+    this.metrics.tickMsSum += tickMs;
+    this.metrics.tickSamples += 1;
+    if (tickMs > this.metrics.tickMsMax) {this.metrics.tickMsMax = tickMs;}
     this.rollupMetrics(now0, players.size);
   }
 
@@ -338,13 +364,17 @@ this.metrics.ticks += 1;
         suppressedPerSec: Number((m.recordsSuppressed / secs).toFixed(0)),
         tierSkippedPerSec: Number((m.recordsTierSkipped / secs).toFixed(0)),
         tickFramesDroppedPerSec: Number((m.tickFramesDropped / secs).toFixed(0)),
+        tickFramesHeldPerSec: Number((m.tickFramesHeld / secs).toFixed(0)),
         tickErrors: m.tickErrors,
         phaseMs,
+        tickMs: m.tickSamples ? { avg: Number((m.tickMsSum / m.tickSamples).toFixed(2)), max: Number(m.tickMsMax.toFixed(2)) } : undefined,
       };
+      m.tickMsSum = 0; m.tickMsMax = 0; m.tickSamples = 0;
       logger.debug('Tick bandwidth', Object.assign({}, this.lastBw, {players: playerCount}));
       m.tickErrors = 0; m.recordsIdleReaped = m.tickErrors; m.recordsSuppressed = m.recordsIdleReaped; m.recordsBuilt = m.recordsSuppressed; m.ticks = m.recordsBuilt;
         m.tickFramesDropped = m.tickErrors;
-        m.bytesSent = m.tickFramesDropped;
+        m.tickFramesHeld = m.tickFramesDropped;
+        m.bytesSent = m.tickFramesHeld;
         m.recordsTierSkipped = m.bytesSent;
         m.recordsSent = m.recordsTierSkipped;
       m.windowStart = now0;

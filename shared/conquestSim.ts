@@ -20,6 +20,7 @@
  *  - Scoreboard = nodes held.
  */
 import { CONQUEST, conquestActionable, conquestCells, conquestCores, conquestN, type ConquestNode } from './conquest.ts';
+import { dhypot } from './dmath.ts';
 import { aoeDamage } from './combat.ts';
 import type { TeamId } from './teams.ts';
 import type { StructureSpec } from './mapSpec.ts';
@@ -240,7 +241,7 @@ export class ConquestSim {
       // No soft occupancy penalty and no per-id jitter — the cap is the
       // spread mechanism. Same-position bots score identically, mass on
       // the best node until it's staffed, then overflow to the next.
-      s -= Math.hypot(n.pos.x - p.position.x, n.pos.z - p.position.z) * 0.02;
+      s -= dhypot(n.pos.x - p.position.x, n.pos.z - p.position.z) * 0.02;
       if (s > bestS) { bestS = s; best = n; }
     }
     return best;
@@ -335,7 +336,7 @@ export class ConquestSim {
     const team = this.host.teamOf(shooterId);
     if (team !== 'alpha' && team !== 'bravo') {return;}
     for (const n of this.nodes) {
-      const dist = Math.hypot(n.pos.x - pos.x, n.pos.y - pos.y, n.pos.z - pos.z);
+      const dist = dhypot(n.pos.x - pos.x, n.pos.y - pos.y, n.pos.z - pos.z);
       if (dist >= radius || !conquestActionable(this.nodes, n, team, this.n)) {continue;}
       if (n.owner === team || n.buildBy === team) {continue;}
       const dmg = aoeDamage(damage, dist, radius, scales);

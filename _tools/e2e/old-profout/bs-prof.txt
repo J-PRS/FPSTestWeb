@@ -1,0 +1,319 @@
+[console.error] WebSocket connection to 'ws://localhost:5400/?token=IG8CBX0OYc31' failed: Error during WebSocket handshake: Unexpected response code: 400
+[http 503] http://127.0.0.1:8477/challenge
+[console.error] Failed to load resource: the server responded with a status of 503 (Service Unavailable)
+[console.error] Failed to establish a connection to https://127.0.0.1:9920/: net::ERR_QUIC_PROTOCOL_ERROR.QUIC_TLS_CERTIFICATE_UNKNOWN (TLS handshake failure (ENCRYPTION_HANDSHAKE) 46: certificate unknown. SSLErrorStack:[..\..\third_party\boringssl\src\ssl\handshake.cc:320] error:1000007d:SSL routines:OPENSSL_internal:CERTIFICATE_VERIFY_FAILED).
+[console.warn] [.WebGL-0x416c010cb400] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+[console.warn] [.WebGL-0x416c010cb400] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+[console.warn] [.WebGL-0x416c010cb400] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+[console.warn] [.WebGL-0x416c010cb400] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+init 29630ms, connected 30155ms — watching 35s
+[console.error] 2026-10-17T13:46:07.457+02:00  [ERROR] [console.error] [GLITCH:seg-div] {"m":21,"spanMs":650,"enr":0} 
+[console.error] 2026-10-17T13:46:07.458+02:00  [ERROR] [console.error] [GLITCH:render-blend] {"netId":15,"offM":25,"skewMs":-1} 
+[console.error] 2026-10-17T13:46:15.909+02:00  [ERROR] [console.error] [GLITCH:remote-buried] {"id":"BOT-DUNE-04","depth":14.7,"lift":2.5,"fieldD":17.2} 
+[console.error] 2026-10-17T13:46:17.832+02:00  [ERROR] [console.error] [GLITCH:parity-kb-unpredicted] {"x":-204,"y":29,"z":49,"force":25.8,"pull":false} 
+[console.error] 2026-10-17T13:46:18.360+02:00  [ERROR] [console.error] [GLITCH:remote-buried] {"id":"BOT-DUNE-04","depth":19.5,"lift":2.5,"fieldD":22} 
+[console.error] 2026-10-17T13:46:19.236+02:00  [ERROR] [console.error] [GLITCH:parity-nugrest] {"dM":0.8} 
+[console.error] 2026-10-17T13:46:19.236+02:00  [ERROR] [console.error] [GLITCH:parity-nugrest] {"dM":1.2} 
+[console.error] 2026-10-17T13:46:41.749+02:00  [ERROR] [console.error] [GLITCH:parity-nugrest] {"dM":0.6} 
+{
+ "programs": 51,
+ "hot": [
+  {
+   "fn": "WebGLUniforms @:44585",
+   "samples": 974
+  },
+  {
+   "fn": "projectObject @:51125",
+   "samples": 48
+  },
+  {
+   "fn": "_raycastFirst$1 @:2693",
+   "samples": 27
+  },
+  {
+   "fn": "sampleHeightmap @:142",
+   "samples": 20
+  },
+  {
+   "fn": "computeBoundingSphere @:14018",
+   "samples": 16
+  },
+  {
+   "fn": "traverse @:9803",
+   "samples": 14
+  },
+  {
+   "fn": "updateMatrixWorld @:9863",
+   "samples": 13
+  },
+  {
+   "fn": "searchNodeSubtree @:36261",
+   "samples": 12
+  },
+  {
+   "fn": "getParameters @:45281",
+   "samples": 11
+  },
+  {
+   "fn": "renderObject @:46502",
+   "samples": 10
+  },
+  {
+   "fn": "normalizeNormals @:14203",
+   "samples": 8
+  },
+  {
+   "fn": "updateBuffer @:41205",
+   "samples": 8
+  },
+  {
+   "fn": "(anon) @:50846",
+   "samples": 8
+  },
+  {
+   "fn": "setProgram @:51366",
+   "samples": 8
+  },
+  {
+   "fn": "getProgram @:51269",
+   "samples": 8
+  },
+  {
+   "fn": "needsUpdate @:42081",
+   "samples": 8
+  },
+  {
+   "fn": "computeBoundingSphere @:17141",
+   "samples": 7
+  },
+  {
+   "fn": "updateSpecies @:239",
+   "samples": 7
+  },
+  {
+   "fn": "updateWorldMatrix @:9881",
+   "samples": 6
+  },
+  {
+   "fn": "loop @:779",
+   "samples": 6
+  }
+ ],
+ "marks": [
+  [
+   "initStart",
+   517
+  ],
+  [
+   "networkConnectStart",
+   519
+  ],
+  [
+   "heightmapLoaded",
+   539
+  ],
+  [
+   "terrainCreated",
+   599
+  ],
+  [
+   "effectsCreated",
+   601
+  ],
+  [
+   "playerCtor",
+   604
+  ],
+  [
+   "viewmodel",
+   630
+  ],
+  [
+   "entities",
+   632
+  ],
+  [
+   "playerCreated",
+   633
+  ],
+  [
+   "networkInit",
+   633
+  ],
+  [
+   "hudCreated",
+   641
+  ],
+  [
+   "initComplete",
+   659
+  ],
+  [
+   "savedMapApplied",
+   671
+  ],
+  [
+   "playerModelLoaded",
+   28751
+  ],
+  [
+   "networkConnected",
+   28752
+  ]
+ ],
+ "tasks": [
+  {
+   "dur": 28001,
+   "t": 630,
+   "type": "long-anim-frame",
+   "src": "demoSeed.ts:undefined,:undefined,gameLoop.ts?t=1792237019008:undefined"
+  },
+  {
+   "dur": 27778,
+   "t": 853,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 320,
+   "t": 29002,
+   "type": "long-anim-frame",
+   "src": "WorkerTransport.ts:undefined,:undefined,gameLoop.ts?t=1792237019008:undefined"
+  },
+  {
+   "dur": 293,
+   "t": 28673,
+   "type": "long-anim-frame",
+   "src": "three.module-Dhi4sXJn.js?v=533bc364:undefined,:undefined,gameLoop.ts?t=1792237019008:undefined"
+  },
+  {
+   "dur": 278,
+   "t": 30679,
+   "type": "long-anim-frame",
+   "src": ":undefined"
+  },
+  {
+   "dur": 271,
+   "t": 30681,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 263,
+   "t": 30416,
+   "type": "long-anim-frame",
+   "src": ":undefined,gameLoop.ts?t=1792237019008:undefined"
+  },
+  {
+   "dur": 237,
+   "t": 30416,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 195,
+   "t": 29376,
+   "type": "long-anim-frame",
+   "src": ":undefined"
+  },
+  {
+   "dur": 188,
+   "t": 29376,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 184,
+   "t": 29138,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 175,
+   "t": 677,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 132,
+   "t": 30156,
+   "type": "long-anim-frame",
+   "src": ":undefined"
+  },
+  {
+   "dur": 130,
+   "t": 28753,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 128,
+   "t": 30156,
+   "type": "window",
+   "src": "unknown"
+  }
+ ],
+ "rafWorst": [
+  {
+   "gap": 27815,
+   "at": 28669
+  },
+  {
+   "gap": 299,
+   "at": 30952
+  },
+  {
+   "gap": 252,
+   "at": 30654
+  },
+  {
+   "gap": 224,
+   "at": 854
+  },
+  {
+   "gap": 223,
+   "at": 29361
+  },
+  {
+   "gap": 215,
+   "at": 28884
+  },
+  {
+   "gap": 195,
+   "at": 29565
+  },
+  {
+   "gap": 140,
+   "at": 29138
+  },
+  {
+   "gap": 133,
+   "at": 30285
+  },
+  {
+   "gap": 124,
+   "at": 193
+  },
+  {
+   "gap": 114,
+   "at": 28998
+  },
+  {
+   "gap": 109,
+   "at": 30397
+  },
+  {
+   "gap": 105,
+   "at": 30098
+  },
+  {
+   "gap": 104,
+   "at": 29828
+  },
+  {
+   "gap": 103,
+   "at": 521
+  }
+ ],
+ "totalTaskMs": 61624
+}

@@ -68,6 +68,12 @@ export interface Shadow {
   /** inputMove ordering — change-only events on unordered transports
    *  (RTC/WT datagrams) can land out of order; regressions are dropped. */
   lastInputSeq: number;
+  /** Persistent merge scratch for setInput calls — every field is
+   *  rewritten per edge so an absent field reads undefined (skipped by
+   *  setInput) instead of applying the previous edge's stale value. */
+  mergeIn: Partial<MoveInput>;
+  /** Single-field scratch for the per-tick jet-gate setInput. */
+  jetIn: Partial<MoveInput>;
   /** Sim state per consumed input seq, stamped with the sim tick it was
    *  captured at. A report stamped seq N behind the shadow's consumed seq
    *  must compare against the journal entry at N replayed to now — the

@@ -114,6 +114,13 @@ export interface RoomInfo {
    *  full-record window so its masked-field baselines reseed in ~1s
    *  instead of waiting out the 750ms stagger. Room-cooldowned. */
   nackFulls?: () => void;
+  /** Per-recipient nack answer for spectators: returns true when the
+   *  id is a spectator (their gap is scoped to their own intro window),
+   *  false/absent for players (room-wide nackFulls applies). */
+  nackFor?: (playerId: string) => boolean;
+  /** tickNack gate — false while the client's join burst still holds
+   *  its tick frames (seq gaps there are by design, not loss). */
+  drainedForTicks?: (playerId: string) => boolean;
   /** Deploy claim sink — Room.deployables.handleDeploy. The return is
    *  the claim verdict the claimant sees in its claimAck. */
   onDeploy?: (playerId: string, kind: string, pos: Vec3) => ClaimVerdict;

@@ -15,6 +15,7 @@ import { confirmDamageEcho, sweepDamageEchoes } from '../game/parity.js';
 import { InputStream } from './inputStream.js';
 import { WireIn } from './wireIn.js';
 import { WORLD_MODEL, declaredFieldNames, checkIntent } from '../../../shared/worldModel.js';
+import { armLoafDiag } from './loafDiag.js';
 import type { SpawnPoint,StructureSpec,InteriorSpec,WeatherSpec,AtmosphereSpec,WaterSpec } from '../../../shared/mapSpec.js';
 
 const logger = new ChildLogger('NetworkManager');
@@ -167,8 +168,9 @@ export class NetworkManager {
 
   // --- Client-side prediction: sequence tracking + state history ---
   private sequenceCounter = 0;
-  private stateHistory: Map<number, { position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; rotation: { yaw: number; pitch: number } }> = new Map();
-  private readonly STATE_HISTORY_MAX = 120; // ~6s at 20Hz
+  // (The old stateHistory map was deleted: written and pruned on ack but
+  // never read — reconciliation replays the input journal, not stored
+  // snapshots.)
   /** Inbound dispatch — owns the handler table, wire-id roster, tick
    *  decode pool, and per-room seq watermarks (see wireIn.ts). */
   private readonly wireIn = new WireIn(this);
@@ -193,6 +195,7 @@ export class NetworkManager {
   private readonly PING_INTERVAL = 2000; // Send ping every 2 seconds
 
   constructor() {
+    armLoafDiag();
     // Player ID + token persist in localStorage — a claimed identity
     // survives F5, browser restarts, and (with FPS_SECRET) server restarts.
     const stored = settings.get('fps-player-id');
@@ -227,11 +230,13 @@ export class NetworkManager {
   private static readonly STALL_MS = 4000;
   private lastUrl: string | null = null;
   private lastFactory: TransportFactory | undefined;
+  private lastResolveUrl: (() => Promise<string | null>) | undefined;
 
   connect(url: string, makeTransport?: TransportFactory, resolveUrl?: () => Promise<string | null>): Promise<void> {
     this.onlineExpected = true;
     this.lastUrl = url;
     this.lastFactory = makeTransport;
+    this.lastResolveUrl = resolveUrl;
     this.lastRxAt = Date.now();
     this.stallTimer ??= setInterval((): void => this.checkStall(), 1000);
     return new Promise((resolve, reject): void => {
@@ -289,6 +294,7 @@ export class NetworkManager {
             logger.info('Disconnected', { code, reason });
             this.connected = false;
             this.wireIn.resetForReconnect(); // a reconnect starts fresh seq spaces
+            this.inputs.reset(); // journaled inputs + change-only edge state die with the lane
             // Claims sent on the dead lane are void — the server replays
             // in-flight hits, not lost ones; stamped claims classify as
             // transport-lost, not unconfirmed.
@@ -350,7 +356,19 @@ export class NetworkManager {
     // the "silent" window is throttling, not a dead socket. A real death
     // still trips wt.closed/the pumps, and the visibility resync covers
     // whatever's left on regain.
-    if (document.hidden) {return;}
+    if (document.hidden) {
+      // The position pump carries our liveness ping and stops with rAF,
+      // so a hidden tab reads as 60s of silence and gets idle-reaped.
+      // Timers still fire (≥1Hz throttled) — keep the app-level ping
+      // alive from here instead. If intensive throttling suspends timers
+      // entirely the silence is real and the reap is right.
+      const now = Date.now();
+      if (this.isConnected() && !this.ws?.ownsPing && now - this.lastPingSendTime >= this.PING_INTERVAL) {
+        this.lastPingSendTime = now;
+        this.send({ type: 'ping', timestamp: now });
+      }
+      return;
+    }
     // Worker transports stamp liveness at the receive edge — a main-loop
     // stall delays DRAIN, not arrival, and must not read as socket silence.
     const lastRx = Math.max(this.lastRxAt, this.ws?.probe?.lastRxAt ?? 0);
@@ -363,7 +381,7 @@ export class NetworkManager {
     this.ws?.disconnect();
     this.ws = null;
     this.connected = false;
-    this.connect(url, this.lastFactory).catch((): void => { /* probe errors are already logged */ });
+    this.connect(url, this.lastFactory, this.lastResolveUrl).catch((): void => { /* probe errors are already logged */ });
   }
 
   /** Online session whose socket is down right now (reconnect loop
@@ -388,8 +406,10 @@ export class NetworkManager {
    *  stale-claim bug, not a recovery. Bounded like Colyseus
    *  maxEnqueuedMessages so a dead lane can't queue forever. */
   private static readonly QUEUEABLE = new Set([
-    'chat', 'deploy', 'classUpdate', 'perkUpdate', 'respawn', 'throwFlag',
-    'switchRoom', 'resync', 'snapshotRequest',
+    // respawn/throwFlag/switchRoom are deliberately NOT here — a queued
+    // suicide or room-hop firing seconds later on the next connect is
+    // worse than losing the intent.
+    'chat', 'deploy', 'classUpdate', 'perkUpdate', 'resync', 'snapshotRequest',
   ]);
   private pendingCmds: ClientMessage[] = [];
   private static readonly MAX_PENDING_CMDS = 16;
@@ -418,8 +438,9 @@ export class NetworkManager {
    *  a full-record window instead of waiting out the ~750ms staggered
    *  full cadence. Throttled: a torn link nacks every frame otherwise. */
   private lastNackAt = 0;
-  public onTickGap(_skipped: number): void {
+  public onTickGap(skipped: number): void {
     const now = Date.now();
+    this.telemetry.onSeqGap(now, skipped);
     if (now - this.lastNackAt < 250) {return;}
     this.lastNackAt = now;
     this.send({ type: 'tickNack' });
@@ -470,8 +491,7 @@ this.sendDrops += 1;
 
   bandwidth(): { up: number; down: number } {
     const now = performance.now();
-    this.ledger.sweep(now, { pingMs: this.telemetry.ping, tier: this.ws?.tier });
-    sweepDamageEchoes(now);
+    this.sweepLedgers(now);
     if (this.bwT === 0) { this.bwT = now; return { up: 0, down: 0 }; }
     const dt = (now - this.bwT) / 1000;
     if (dt >= 0.5) {
@@ -482,6 +502,16 @@ this.sendDrops += 1;
       this.bwLastRx = this.rxBytes;
     }
     return { up: this.bwUp, down: this.bwDown };
+  }
+
+  /** Expire stale claim/damage-echo ledger entries. The HUD's bandwidth
+   *  call used to be the only driver — hidden HUD meant no sweeps, so
+   *  "unconfirmed" desync telemetry was inert in normal play. sendPosition
+   *  now drives it at ~1Hz instead. */
+  private lastLedgerSweep = 0;
+  private sweepLedgers(now: number): void {
+    this.ledger.sweep(now, { pingMs: this.telemetry.ping, tier: this.ws?.tier });
+    sweepDamageEchoes(now);
   }
 
   /** Ring of recent health-affecting events — read by the desync dump so a
@@ -545,8 +575,9 @@ this.sendDrops += 1;
     this.inputs.inputsAfter(inputAck);
   }
 
-  ackPositionSeq(seq: number): void {
-    this.pruneStateHistory(seq);
+  ackPositionSeq(_seq: number): void {
+    // No-op: position history was dead bookkeeping (see note at field
+    // site). Kept as the wire seam — wireIn calls it on every ack frame.
   }
 
   confirmClaimHit(targetId: string, shotId?: string): void {
@@ -681,14 +712,16 @@ this.sendDrops += 1;
     this.lastSentState.px = position.x; this.lastSentState.py = position.y; this.lastSentState.pz = position.z;
     this.lastSentState.yaw = rotation.yaw; this.lastSentState.pitch = rotation.pitch;
 
-    // Assign sequence number and store in state history for reconciliation
+    const nowMs = performance.now();
+    if (nowMs - this.lastLedgerSweep >= 1000) {
+      this.lastLedgerSweep = nowMs;
+      this.sweepLedgers(nowMs);
+    }
+
+    // Sequence number rides the wire so the server can order reports
+    // (and echoes it back in corrections).
     this.sequenceCounter += 1;
     const seq = this.sequenceCounter;
-    this.stateHistory.set(seq, { position: Object.assign({}, position), velocity: Object.assign({}, velocity), rotation: Object.assign({}, rotation) });
-    if (this.stateHistory.size > this.STATE_HISTORY_MAX) {
-      const oldest = this.stateHistory.keys().next().value;
-      if (oldest !== undefined) {this.stateHistory.delete(oldest);}
-    }
 
     // Binary frame: 30B instead of ~140B JSON. Server decodes on the wire
     // hot path; the message still passes through the same validation.
@@ -713,16 +746,20 @@ this.sendDrops += 1;
         fps: s.fps, jsMs: s.jsMs,
         ping: this.telemetry.ping,
         loss: this.telemetry.packetLoss(now),
+        gap: this.telemetry.deliveryGap(now),
         jitter: this.telemetry.jitter(),
         renderLagMs: s.renderLagMs,
         renderLag: s.renderLag,
+        starve: s.starve,
+        starveMs: s.starveMs,
+        drainMsMax: this.ws?.probe?.drainMsMax,
       });
     }
   }
 
   /** GameLoop feeds live perf numbers — the uplink above can't read
    *  the perf HUD itself without an import cycle the other direction. */
-  statsSource: (() => { fps: number; jsMs: number; renderLagMs?: number; renderLag?: Record<string, number> }) | null = null;
+  statsSource: (() => { fps: number; jsMs: number; renderLagMs?: number; renderLag?: Record<string, number>; starve?: number; starveMs?: number }) | null = null;
   private lastStatsSendTime = 0;
   private static readonly STATS_INTERVAL = 10_000;
 
@@ -792,6 +829,7 @@ this.sendDrops += 1;
   }): void {
     if (this.authoritySims()) { return; } // dedicated sims outcomes — the claim would only earn a refused ack
     if (performance.now() < this.resyncQuietUntil) { noteMutedClaim(); return; } // same resync-gap mute as sendShot
+    if (!this.isConnected()) {return;} // dead lane — a stamp here mints a phantom ledger entry
     // Victim-named claims (beam tics, direct-hit blasts) ride the same
     // confirm ledger shots use — keyed per victim so a held beam is one
     // slot, not a map entry per tic. Splash claims with no named target
@@ -805,7 +843,7 @@ this.sendDrops += 1;
   /** Slam landing intent — the server derives blast power from its own
    *  velocity shadow; only the landing spot crosses the wire. */
   sendSlam(position: { x: number; y: number; z: number }): void {
-    if (!this.connected) {return;}
+    if (!this.isConnected()) {return;}
     this.send({ type: 'slam', position, claimSeq: this.ledger.stamp('slam') });
   }
 
@@ -834,21 +872,21 @@ this.sendDrops += 1;
   /** Deployable plant claim — sent when the pod lands and seats, so the
    *  position is the settled one the server will enforce caps/TTL on. */
   sendDeploy(kind: DeployKind, position: { x: number; y: number; z: number }): void {
-    if (!this.connected) {return;}
+    if (!this.isConnected()) {return;}
     this.send({ type: 'deploy', kind, position, claimSeq: this.ledger.stamp('deploy') });
   }
 
   /** Repair claim — only the target id crosses the wire; the server
    *  re-derives range, LOS, team, heal amount, and pacing itself. */
   sendRepair(targetId: number): void {
-    if (!this.connected || this.authoritySims()) { return; }
+    if (!this.isConnected() || this.authoritySims()) { return; }
     this.send({ type: 'repair', targetId, claimSeq: this.ledger.stamp('repair') });
   }
 
   /** Instant-skill ante mirror — skills.ts already spent the energy
    *  locally; the server applies the same drain to its shadow tank. */
   sendSkillUse(): void {
-    if (!this.connected) {return;}
+    if (!this.isConnected()) {return;}
     this.send({ type: 'skillUse', claimSeq: this.ledger.stamp('skillUse') });
   }
 
@@ -894,6 +932,7 @@ this.sendDrops += 1;
     // Every self-reported damage claim logs — this channel carries blast
     // self-splash, creature bites, and bot melee, so the buffer answers
     // "did the client even claim it?" before any server-side question.
+    if (!this.isConnected()) {return;} // lane dead — don't mint a phantom stamp
     logger.info(`envDamage claim: ${Math.round(amount * 10) / 10}`, { attacker });
     this.send({ type: 'environmentDamage', amount, attacker, claimSeq: this.ledger.stamp('environmentDamage') });
   }
@@ -901,6 +940,7 @@ this.sendDrops += 1;
   /** Client-claimed heal (nugget pickup) — keeps server health the truth. */
   sendHeal(amount: number): void {
     if (!this.connected) { this.localAuthority?.heal(amount); return; }
+    if (!this.isConnected()) {return;}
     this.send({ type: 'heal', amount, claimSeq: this.ledger.stamp('heal') });
   }
 
@@ -908,13 +948,13 @@ this.sendDrops += 1;
    *  impulse the shot imparted — server clamps magnitude and rebroadcasts
    *  the new segment so every client sees the same shove. */
   sendCrawlerHit(id: number, damage: number, kx?: number, ky?: number, kz?: number): void {
-    if (this.authoritySims()) { return; }
+    if (this.authoritySims() || !this.isConnected()) { return; }
     this.send({ type: 'crawlerHit', id, damage, kx, ky, kz, claimSeq: this.ledger.stamp('crawlerHit', true) });
   }
 
   private creatureHitLogN = 0;
   sendCreatureHit(id: number, damage: number, kx?: number, ky?: number, kz?: number): void {
-    if (this.authoritySims()) { return; }
+    if (this.authoritySims() || !this.isConnected()) { return; }
     // Sampled claim log (1-in-16): chaingun-rate creature fire would flood
     // the buffer; a periodic line still proves claims are flowing and
     // carries the damage values being asserted.
@@ -1008,7 +1048,7 @@ this.sendDrops += 1;
 
   /** Worker-transport probes (clean wire RTT, postMessage delivery lag,
    *  coalesced tick count) — null on non-worker transports. */
-  get netProbe(): { rttMs: number; lagMs: number; coalesced: number } | null {
+  get netProbe(): { rttMs: number; lagMs: number; coalesced: number; drainMsMax?: number } | null {
     return this.ws?.probe ?? null;
   }
 
@@ -1026,12 +1066,4 @@ this.sendDrops += 1;
     return this.ws?.tier;
   }
 
-  private pruneStateHistory(ackSeq: number): void {
-    // Map iterates in insertion order and seqs increase monotonically —
-    // stop at the first unacked entry instead of scanning the whole map.
-    for (const seq of this.stateHistory.keys()) {
-      if (seq > ackSeq) {break;}
-      this.stateHistory.delete(seq);
-    }
-  }
 }

@@ -5,6 +5,7 @@
 // ground). Keep in step with the builders — each piece's hull table is
 // the contract between its authored spec and its rendered mesh.
 import type { Vec3like } from './mapSpec.js';
+import { dcos, dsin } from './dmath.ts';
 
 export interface KitHull {
   pos: Vec3like; size: Vec3like; rotY?: number;
@@ -19,7 +20,7 @@ export interface KitHull {
 function fold(entries: readonly (readonly [KitHull[], number, number] | readonly [KitHull[], number, number, number])[]): KitHull[] {
   const out: KitHull[] = [];
   for (const [hulls, x, z, rotY = 0] of entries) {
-    const c = Math.cos(rotY), s = Math.sin(rotY);
+    const c = dcos(rotY), s = dsin(rotY);
     for (const h of hulls) {
       out.push({
         pos: { x: h.pos.x * c + h.pos.z * s + x, y: h.pos.y, z: -h.pos.x * s + h.pos.z * c + z },
@@ -235,7 +236,7 @@ export function seatKits(
     } else {
       reach = Math.max(s.size?.x ?? 0, s.size?.z ?? 0) / 2;
     }
-    const cos = Math.cos(s.rotY ?? 0), sin = Math.sin(s.rotY ?? 0);
+    const cos = dcos(s.rotY ?? 0), sin = dsin(s.rotY ?? 0);
     // Enterables with their own deck (genhouse's slab tops at +1m) seat
     // HIGH instead: base on the max sample so the floor clears terrain
     // everywhere inside — walking into a building onto dirt is the bug.

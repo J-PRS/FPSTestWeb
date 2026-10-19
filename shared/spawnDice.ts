@@ -19,6 +19,7 @@
  */
 
 import { botRand } from './botRand.ts';
+import { dcos, dsin } from './dmath.ts';
 import { lcg32 } from './simRand.ts';
 
 export const SPAWN_SEED_XOR = 0xC0_FF_EE;
@@ -51,7 +52,7 @@ export function drawBallSpawn(rand: () => number, variant: 0 | 1 | 2 | 3, colorC
   const k = 1 / VARIANT_SCALE[variant];
   const tri = (): number => (rand() + rand() - 1) * 32;
   const vel = { x: tri() * k, y: (32 + rand() * 32) * k, z: tri() * k };
-  return { colorIdx, offX: Math.cos(ang) * ring, offZ: Math.sin(ang) * ring, vel };
+  return { colorIdx, offX: dcos(ang) * ring, offZ: dsin(ang) * ring, vel };
 }
 
 /** Elite-split child scatter — drawn AFTER the child ctor's full draw
@@ -59,7 +60,7 @@ export function drawBallSpawn(rand: () => number, variant: 0 | 1 | 2 | 3, colorC
 export function drawSplitVel(rand: () => number): SpawnVec {
   const a = rand() * Math.PI * 2;
   const up = 9 + rand() * 6;
-  return { x: Math.cos(a) * 14, y: up, z: Math.sin(a) * 14 };
+  return { x: dcos(a) * 14, y: up, z: dsin(a) * 14 };
 }
 
 /** Ambient variant pick — non-classic pools only. */

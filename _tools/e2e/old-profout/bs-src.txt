@@ -1,0 +1,749 @@
+[console.error] WebSocket connection to 'ws://localhost:5400/?token=IG8CBX0OYc31' failed: Error during WebSocket handshake: Unexpected response code: 400
+[http 503] http://127.0.0.1:8477/challenge
+[console.error] Failed to load resource: the server responded with a status of 503 (Service Unavailable)
+[console.error] Failed to establish a connection to https://127.0.0.1:9920/: net::ERR_QUIC_PROTOCOL_ERROR.QUIC_TLS_CERTIFICATE_UNKNOWN (TLS handshake failure (ENCRYPTION_HANDSHAKE) 46: certificate unknown. SSLErrorStack:[..\..\third_party\boringssl\src\ssl\handshake.cc:320] error:1000007d:SSL routines:OPENSSL_internal:CERTIFICATE_VERIFY_FAILED).
+[console.warn] [.WebGL-0x36d40017d000] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+[console.warn] [.WebGL-0x36d40017d000] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+[console.warn] [.WebGL-0x36d40017d000] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+[console.warn] [.WebGL-0x36d40017d000] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+[console.warn] 2026-10-17T14:08:32.259+02:00 [PlayerModel] [WARN] Animation not found: Jump (variant mannequin) 
+[console.error] 2026-10-17T14:08:33.727+02:00  [ERROR] [console.error] [GLITCH:seg-div] {"m":25,"spanMs":1000,"enr":0} 
+[console.error] 2026-10-17T14:08:34.234+02:00  [ERROR] [console.error] [GLITCH:seg-div] {"m":26,"spanMs":1050,"enr":0} 
+[console.error] 2026-10-17T14:08:34.235+02:00  [ERROR] [console.error] [GLITCH:seg-div] {"m":25,"spanMs":900,"enr":0} 
+[console.error] 2026-10-17T14:08:34.238+02:00  [ERROR] [console.error] [GLITCH:render-blend] {"netId":7,"offM":25,"skewMs":-53} 
+[console.error] 2026-10-17T14:08:34.238+02:00  [ERROR] [console.error] [GLITCH:render-blend] {"netId":5,"offM":21,"skewMs":-3} 
+[console.error] 2026-10-17T14:08:34.238+02:00  [ERROR] [console.error] [GLITCH:render-blend] {"netId":4,"offM":21,"skewMs":-3} 
+init 47645ms, connected 48344ms — watching 20s
+[console.error] 2026-10-17T14:08:41.537+02:00  [ERROR] [console.error] [GLITCH:parity-nugrest] {"dM":0.5} 
+[console.error] 2026-10-17T14:08:41.538+02:00  [ERROR] [console.error] [GLITCH:parity-nugrest] {"dM":0.7} 
+[console.error] 2026-10-17T14:08:42.511+02:00  [ERROR] [console.error] [GLITCH:remote-buried] {"id":"BOT-DUNE-04","depth":18.4,"lift":2.5,"fieldD":20.9} 
+[console.error] 2026-10-17T14:08:45.377+02:00  [ERROR] [console.error] [GLITCH:remote-buried] {"id":"BOT-SLATE-02","depth":16.8,"lift":2.5,"fieldD":19.3} 
+[console.error] 2026-10-17T14:08:47.586+02:00  [ERROR] [console.error] [GLITCH:parity-nugrest] {"dM":1.8} 
+[console.error] 2026-10-17T14:08:52.044+02:00  [ERROR] [console.error] [GLITCH:remote-buried] {"id":"BOT-RANCHO-06","depth":1.8,"lift":2.5,"fieldD":4.4} 
+[console.error] 2026-10-17T14:08:53.401+02:00  [ERROR] [console.error] [GLITCH:parity-kb-unpredicted] {"x":-147,"y":19,"z":25,"force":14.2,"pull":false} 
+{
+ "gpu": {
+  "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 Ti (0x00002482) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+  "vendor": "Google Inc. (NVIDIA)",
+  "khr": true
+ },
+ "programs": 49,
+ "progList": [
+  {
+   "name": "",
+   "vs": 1754,
+   "fs": 11958,
+   "vh": -1448685333,
+   "fh": -1983891584
+  },
+  {
+   "name": "",
+   "vs": 7793,
+   "fs": 12092,
+   "vh": 1636465359,
+   "fh": 1292971481
+  },
+  {
+   "name": "",
+   "vs": 17974,
+   "fs": 16829,
+   "vh": 1041472703,
+   "fh": 1520262207
+  },
+  {
+   "name": "",
+   "vs": 6168,
+   "fs": 6028,
+   "vh": 1631470823,
+   "fh": -80204016
+  },
+  {
+   "name": "",
+   "vs": 6168,
+   "fs": 72372,
+   "vh": 1631470823,
+   "fh": -224066125
+  },
+  {
+   "name": "",
+   "vs": 6168,
+   "fs": 72357,
+   "vh": 1631470823,
+   "fh": 766249880
+  },
+  {
+   "name": "",
+   "vs": 3617,
+   "fs": 6779,
+   "vh": 26172079,
+   "fh": -355264497
+  },
+  {
+   "name": "",
+   "vs": 17652,
+   "fs": 16828,
+   "vh": -689844524,
+   "fh": 2069650145
+  },
+  {
+   "name": "",
+   "vs": 17633,
+   "fs": 16809,
+   "vh": 297536508,
+   "fh": 921102046
+  },
+  {
+   "name": "",
+   "vs": 1752,
+   "fs": 6818,
+   "vh": -112084434,
+   "fh": 1005186552
+  },
+  {
+   "name": "",
+   "vs": 17618,
+   "fs": 16812,
+   "vh": 1181686824,
+   "fh": -2076430017
+  },
+  {
+   "name": "",
+   "vs": 17599,
+   "fs": 16793,
+   "vh": 1026330522,
+   "fh": -134575341
+  },
+  {
+   "name": "",
+   "vs": 1809,
+   "fs": 5838,
+   "vh": -2132242425,
+   "fh": -564235272
+  },
+  {
+   "name": "",
+   "vs": 17580,
+   "fs": 16808,
+   "vh": 962078869,
+   "fh": 1681541227
+  },
+  {
+   "name": "",
+   "vs": 20015,
+   "fs": 50825,
+   "vh": -509145213,
+   "fh": -1470670050
+  },
+  {
+   "name": "",
+   "vs": 17534,
+   "fs": 16743,
+   "vh": -1651483902,
+   "fh": -2027212758
+  },
+  {
+   "name": "",
+   "vs": 19127,
+   "fs": 77269,
+   "vh": -1138340250,
+   "fh": 1366052057
+  },
+  {
+   "name": "",
+   "vs": 19912,
+   "fs": 46149,
+   "vh": 935544586,
+   "fh": 91261342
+  },
+  {
+   "name": "",
+   "vs": 17622,
+   "fs": 16808,
+   "vh": -510044168,
+   "fh": 1681541227
+  },
+  {
+   "name": "",
+   "vs": 19148,
+   "fs": 77269,
+   "vh": 1246657216,
+   "fh": 1366052057
+  },
+  {
+   "name": "",
+   "vs": 17659,
+   "fs": 16812,
+   "vh": 1440534143,
+   "fh": -2076430017
+  },
+  {
+   "name": "",
+   "vs": 17640,
+   "fs": 16793,
+   "vh": -1342036943,
+   "fh": -134575341
+  },
+  {
+   "name": "",
+   "vs": 17670,
+   "fs": 16830,
+   "vh": 301748533,
+   "fh": 1491266515
+  },
+  {
+   "name": "",
+   "vs": 17651,
+   "fs": 16811,
+   "vh": -909447333,
+   "fh": 2140469566
+  },
+  {
+   "name": "",
+   "vs": 17641,
+   "fs": 16812,
+   "vh": 1359675371,
+   "fh": -2076430017
+  },
+  {
+   "name": "",
+   "vs": 17622,
+   "fs": 16793,
+   "vh": -510044168,
+   "fh": -134575341
+  },
+  {
+   "name": "",
+   "vs": 17601,
+   "fs": 16814,
+   "vh": 682844212,
+   "fh": -1363126944
+  },
+  {
+   "name": "",
+   "vs": 17582,
+   "fs": 16795,
+   "vh": 591930716,
+   "fh": 1672836381
+  },
+  {
+   "name": "",
+   "vs": 2118,
+   "fs": 5777,
+   "vh": 812446586,
+   "fh": 865838680
+  },
+  {
+   "name": "",
+   "vs": 12409,
+   "fs": 13514,
+   "vh": 637696843,
+   "fh": -930942453
+  },
+  {
+   "name": "",
+   "vs": 17582,
+   "fs": 16795,
+   "vh": 829670425,
+   "fh": 1672836381
+  },
+  {
+   "name": "",
+   "vs": 12628,
+   "fs": 13514,
+   "vh": -92272258,
+   "fh": -930942453
+  },
+  {
+   "name": "",
+   "vs": 14628,
+   "fs": 12343,
+   "vh": -1061321363,
+   "fh": -270129861
+  },
+  {
+   "name": "",
+   "vs": 10223,
+   "fs": 13202,
+   "vh": 2111072730,
+   "fh": -1183194785
+  },
+  {
+   "name": "",
+   "vs": 19182,
+   "fs": 77285,
+   "vh": 1794471526,
+   "fh": 1656269493
+  },
+  {
+   "name": "",
+   "vs": 6322,
+   "fs": 8416,
+   "vh": -1956507608,
+   "fh": -1906280663
+  },
+  {
+   "name": "",
+   "vs": 20288,
+   "fs": 50981,
+   "vh": -148175894,
+   "fh": -292829243
+  },
+  {
+   "name": "",
+   "vs": 17599,
+   "fs": 16808,
+   "vh": 1026330522,
+   "fh": 1681541227
+  },
+  {
+   "name": "",
+   "vs": 17733,
+   "fs": 16878,
+   "vh": 1534815025,
+   "fh": 1776977984
+  },
+  {
+   "name": "",
+   "vs": 17714,
+   "fs": 16859,
+   "vh": -1879917646,
+   "fh": -1719933638
+  },
+  {
+   "name": "",
+   "vs": 19179,
+   "fs": 77287,
+   "vh": 687655815,
+   "fh": -1990182353
+  },
+  {
+   "name": "",
+   "vs": 17651,
+   "fs": 16826,
+   "vh": -909447333,
+   "fh": -646583486
+  },
+  {
+   "name": "",
+   "vs": 17583,
+   "fs": 16777,
+   "vh": 1259408432,
+   "fh": -1460539045
+  },
+  {
+   "name": "",
+   "vs": 19860,
+   "fs": 46131,
+   "vh": 439660853,
+   "fh": -801689732
+  },
+  {
+   "name": "",
+   "vs": 19316,
+   "fs": 78370,
+   "vh": 660738710,
+   "fh": -687555995
+  },
+  {
+   "name": "",
+   "vs": 17620,
+   "fs": 16829,
+   "vh": 708275902,
+   "fh": 1520262207
+  },
+  {
+   "name": "",
+   "vs": 19932,
+   "fs": 46169,
+   "vh": 902159173,
+   "fh": -1748478496
+  },
+  {
+   "name": "",
+   "vs": 17704,
+   "fs": 16846,
+   "vh": 1646566233,
+   "fh": -1148717793
+  },
+  {
+   "name": "",
+   "vs": 17685,
+   "fs": 16827,
+   "vh": 873276234,
+   "fh": 840365465
+  }
+ ],
+ "mats": [
+  [
+   "ShaderMaterial||1|nofog||||obc|",
+   8
+  ],
+  [
+   "PointsMaterial|T|2||map|vc||obc|",
+   4
+  ],
+  [
+   "MeshBasicMaterial||1|||||obc|",
+   39
+  ],
+  [
+   "ShaderMaterial|T|1|nofog||||obc|",
+   5
+  ],
+  [
+   "ShaderMaterial|T|2|nofog||||obc|",
+   3
+  ],
+  [
+   "MeshBasicMaterial|T|1||map|||obc|",
+   9
+  ],
+  [
+   "MeshBasicMaterial|T|1|||||obc|",
+   13
+  ],
+  [
+   "LineBasicMaterial||1|||||obc|",
+   1
+  ],
+  [
+   "MeshStandardMaterial||1|||||obc|",
+   11
+  ],
+  [
+   "MeshLambertMaterial||1|||vc||obc|",
+   43
+  ],
+  [
+   "SpriteMaterial|T|2||map|||obc|",
+   10
+  ],
+  [
+   "MeshBasicMaterial|T|2|nofog||vc||obc|",
+   2
+  ],
+  [
+   "MeshLambertMaterial||1|||||obc|",
+   7
+  ],
+  [
+   "MeshBasicMaterial|T|2|nofog|map|||obc|",
+   2
+  ],
+  [
+   "LineBasicMaterial|T|2|nofog||vc||obc|",
+   1
+  ],
+  [
+   "MeshBasicMaterial|T|2|||||obc|",
+   1
+  ],
+  [
+   "MeshBasicMaterial|T|2||map|||obc|",
+   2
+  ],
+  [
+   "MeshStandardMaterial||1||map|||obc|",
+   5
+  ]
+ ],
+ "hot": [
+  {
+   "fn": "WebGLUniforms @:44585",
+   "samples": 1534
+  },
+  {
+   "fn": "projectObject @:51125",
+   "samples": 71
+  },
+  {
+   "fn": "convertBufferAttribute @:14218",
+   "samples": 60
+  },
+  {
+   "fn": "computeBoundingSphere @:14018",
+   "samples": 28
+  },
+  {
+   "fn": "updateMatrixWorld @:9863",
+   "samples": 17
+  },
+  {
+   "fn": "bakeWear @:733",
+   "samples": 16
+  },
+  {
+   "fn": "_raycastFirst$1 @:2693",
+   "samples": 14
+  },
+  {
+   "fn": "searchNodeSubtree @:36261",
+   "samples": 12
+  },
+  {
+   "fn": "bakeWearTexture @:470",
+   "samples": 11
+  },
+  {
+   "fn": "sampleHeightmap @:142",
+   "samples": 10
+  },
+  {
+   "fn": "renderObject @:46502",
+   "samples": 9
+  },
+  {
+   "fn": "normalizeNormals @:14203",
+   "samples": 8
+  },
+  {
+   "fn": "setProgram @:51366",
+   "samples": 8
+  },
+  {
+   "fn": "updateBuffer @:41205",
+   "samples": 8
+  },
+  {
+   "fn": "refreshUniformsCommon @:49164",
+   "samples": 8
+  },
+  {
+   "fn": "getParameters @:45281",
+   "samples": 8
+  },
+  {
+   "fn": "bakeMesh @:803",
+   "samples": 7
+  },
+  {
+   "fn": "(anon) @:50846",
+   "samples": 7
+  },
+  {
+   "fn": "compose @:8389",
+   "samples": 6
+  },
+  {
+   "fn": "findKey @:2963",
+   "samples": 6
+  }
+ ],
+ "marks": [
+  [
+   "initStart",
+   611
+  ],
+  [
+   "networkConnectStart",
+   613
+  ],
+  [
+   "heightmapLoaded",
+   631
+  ],
+  [
+   "terrainCreated",
+   679
+  ],
+  [
+   "effectsCreated",
+   682
+  ],
+  [
+   "playerCtor",
+   684
+  ],
+  [
+   "viewmodel",
+   705
+  ],
+  [
+   "entities",
+   706
+  ],
+  [
+   "playerCreated",
+   707
+  ],
+  [
+   "networkInit",
+   707
+  ],
+  [
+   "hudCreated",
+   711
+  ],
+  [
+   "initComplete",
+   740
+  ],
+  [
+   "savedMapApplied",
+   752
+  ],
+  [
+   "playerModelLoaded",
+   45477
+  ],
+  [
+   "networkConnected",
+   45478
+  ]
+ ],
+ "tasks": [
+  {
+   "dur": 44311,
+   "t": 627,
+   "type": "long-anim-frame",
+   "src": "heightmap.ts?t=1792238836495:undefined,gameLoop.ts?t=1792238836495:undefined"
+  },
+  {
+   "dur": 44180,
+   "t": 757,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 717,
+   "t": 45896,
+   "type": "long-anim-frame",
+   "src": "WorkerTransport.ts:undefined,gameLoop.ts?t=1792238836495:undefined"
+  },
+  {
+   "dur": 573,
+   "t": 46040,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 474,
+   "t": 49401,
+   "type": "long-anim-frame",
+   "src": ":undefined,gameLoop.ts?t=1792238836495:undefined"
+  },
+  {
+   "dur": 463,
+   "t": 49401,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 446,
+   "t": 45388,
+   "type": "long-anim-frame",
+   "src": "three.module-Dhi4sXJn.js?v=533bc364:undefined,:undefined,gameLoop.ts?t=1792238836495:undefined"
+  },
+  {
+   "dur": 422,
+   "t": 48970,
+   "type": "long-anim-frame",
+   "src": ":undefined"
+  },
+  {
+   "dur": 417,
+   "t": 48970,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 387,
+   "t": 46936,
+   "type": "long-anim-frame",
+   "src": "WorkerTransport.ts:undefined,:undefined,gameLoop.ts?t=1792238836495:undefined"
+  },
+  {
+   "dur": 325,
+   "t": 46944,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 268,
+   "t": 44938,
+   "type": "long-anim-frame",
+   "src": ":undefined,gameLoop.ts?t=1792238836495:undefined"
+  },
+  {
+   "dur": 258,
+   "t": 44939,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 239,
+   "t": 46614,
+   "type": "long-anim-frame",
+   "src": ":undefined,gameLoop.ts?t=1792238836495:undefined"
+  },
+  {
+   "dur": 235,
+   "t": 48531,
+   "type": "long-anim-frame",
+   "src": ":undefined,gameLoop.ts?t=1792238836495:undefined"
+  }
+ ],
+ "rafWorst": [
+  {
+   "gap": 44442,
+   "at": 45199
+  },
+  {
+   "gap": 675,
+   "at": 46716
+  },
+  {
+   "gap": 471,
+   "at": 49865
+  },
+  {
+   "gap": 427,
+   "at": 49388
+  },
+  {
+   "gap": 347,
+   "at": 47271
+  },
+  {
+   "gap": 331,
+   "at": 48755
+  },
+  {
+   "gap": 304,
+   "at": 45688
+  },
+  {
+   "gap": 283,
+   "at": 50170
+  },
+  {
+   "gap": 208,
+   "at": 46924
+  },
+  {
+   "gap": 202,
+   "at": 45890
+  },
+  {
+   "gap": 193,
+   "at": 48948
+  },
+  {
+   "gap": 175,
+   "at": 47774
+  },
+  {
+   "gap": 170,
+   "at": 47944
+  },
+  {
+   "gap": 151,
+   "at": 46041
+  },
+  {
+   "gap": 136,
+   "at": 50306
+  }
+ ],
+ "totalTaskMs": 99584
+}

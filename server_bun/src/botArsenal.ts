@@ -67,6 +67,10 @@ export class BotArsenal implements BeamHost {
   /** Last shot time per bot — the weapon-rate gate that keeps a fast
    *  brain cadence from out-shooting the drawn weapon's legal rate. */
   private lastShot = new Map<string, number>();
+  /** Cumulative self-damage budget per bot - decrements on splash fire,
+   *  regenerates over time. Prevents gradual self-destruction from
+   *  repeated self-splash hits that individually pass the per-shot gate. */
+  private selfDamageBudget = new Map<string, number>();
   /** Held trigger per bot: brains decide press/release cadence and aim
    *  direction — a human holds M1 and tracks, the gun streams at its own
    *  legal rate between thinks. `aim` rides the target's movement so the
@@ -141,6 +145,10 @@ s[kind] += 1; this.propels.set(id, s);
    *  chaingun hoses, a 0.45s disc still pops once per pull. */
   step(dt: number): void {
     this.clock += dt * 1000;
+    // Regenerate self-damage budget: +10 HP/sim-second, capped at 100.
+    for (const [id, b] of this.selfDamageBudget) {
+      this.selfDamageBudget.set(id, Math.min(100, b + dt * 1000 * 0.01));
+    }
     for (const [id, tr] of this.trigger) {
       if (tr.until <= this.clock) { this.trigger.delete(id); continue; }
       const p = this.room.players.getPlayer(id);
@@ -331,7 +339,48 @@ s[kind] += 1; this.propels.set(id, s);
     const az = aim.z - muzzle.z;
     const alen = (ax * ax + ay * ay + az * az) ** 0.5 || 1;
     const dir = { x: ax / alen, y: ay / alen, z: az / alen };
-    if (this.selfBlastBlocked(muzzle, dir, wt, p.velocity, p.id, this.room.players.getPlayer(p.id)?.team ?? undefined)) {return;}
+    // Human imperfection: occasionally skip self-splash checks entirely,
+    // simulating "fuck it" moments or not paying attention. No absolutes.
+    const imperfect = botRand() < 0.05;
+    if (!(imperfect && (getWeaponStats(wt)?.aoeRadius ?? 0) > 0) && this.selfBlastBlocked(muzzle, dir, wt, p.velocity, p.id, this.room.players.getPlayer(p.id)?.team ?? undefined)) {
+      return;
+    }
+    // Self-splash HP gate: don't fire splash weapons if the bot can't
+    // survive its own blast at the target's distance. Use the actual
+    // splash damage at that range, not the flat SELF_SPLASH_MAX.
+    // Heroic exception: if the shot will kill the target, fire anyway
+    // (the bot accepts the self-damage for the kill). No rigid rules.
+    const statsW2 = getWeaponStats(wt);
+
+    if (statsW2 && statsW2.aoeRadius > 0) {
+      const me = this.room.players.getAllPlayers().get(p.id);
+      const hp = me?.health ?? 100;
+      const selfSplash = aoeDamageAt(Math.max(0.5, dist), wt);
+      const willKill = target.health <= statsW2.directDamage;
+      // Cumulative self-damage budget: if the bot has taken too much
+      // self-damage recently, hold fire unless the shot will kill the
+      // target (heroic) or the situation is urgent (carrier chase —
+      // a shot at a flag carrier buys cap denial, not a duel).
+      const urgent = [...(this.room.flags?.flags.values() ?? [])].some((f): boolean => f.carrier === targetId);
+      const budget = this.selfDamageBudget.get(p.id) ?? 100;
+      const perk = perkMods(me?.perk);
+
+      if (selfSplash > 0 && !willKill && !urgent) {
+        const courage = this.skillOfCb?.(p.id)?.courage ?? 0.5;
+        // Courage scales the veto: brave bots (0.9) fire unless HP is below
+        // half the self-splash; timid ones (0.3) hold at 2x. No rigid rule.
+        const threshold = selfSplash * perk.selfDamage * (2 - courage);
+        // Humans sometimes don't pay attention or say "fuck it" - a small
+        // chance the bot skips the self-splash check entirely, simulating
+        // imperfect decision-making. No absolutes.
+        if (!imperfect && hp <= threshold + 5 && botRand() > 0.1) { return; }
+        if (budget < selfSplash * perk.selfDamage * 0.5 && botRand() > 0.05) { return; }
+      }
+      // Decrement budget on fire (regenerates in step())
+      if (selfSplash > 0) {
+        this.selfDamageBudget.set(p.id, budget - selfSplash * perk.selfDamage);
+      }
+    }
     if (!this.room.projectiles.spawn(p.id, wt, muzzle, dir, p.velocity)) {
       fireSpeedless(this, p.id, muzzle, dir, wt);
     }
@@ -368,7 +417,33 @@ s[kind] += 1; this.propels.set(id, s);
     const dir = { x: dx / dist + j(), y: dy / dist + j(), z: dz / dist + j() };
     const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
     dir.x /= l; dir.y /= l; dir.z /= l;
-    if (this.selfBlastBlocked(muzzle, dir, wt, p.velocity, p.id, this.room.players.getPlayer(p.id)?.team ?? undefined)) {return;}
+    // Human imperfection: occasionally skip self-splash checks entirely,
+    // simulating "fuck it" moments or not paying attention. No absolutes.
+    const imperfect = botRand() < 0.05;
+    if (!(imperfect && (getWeaponStats(wt)?.aoeRadius ?? 0) > 0) && this.selfBlastBlocked(muzzle, dir, wt, p.velocity, p.id, this.room.players.getPlayer(p.id)?.team ?? undefined)) {
+      return;
+    }
+    // Self-splash HP gate — a point shot has no target, so no willKill
+    // or urgent exception applies: just survive the blast and keep
+    // inside the self-damage budget.
+    const statsW2 = getWeaponStats(wt);
+
+    if (statsW2 && statsW2.aoeRadius > 0) {
+      const me = this.room.players.getAllPlayers().get(p.id);
+      const hp = me?.health ?? 100;
+      const selfSplash = aoeDamageAt(Math.max(0.5, dist), wt);
+      const budget = this.selfDamageBudget.get(p.id) ?? 100;
+      const perk = perkMods(me?.perk);
+
+      if (selfSplash > 0) {
+        if (hp <= selfSplash * perk.selfDamage * 1.5 + 5) { return; } // can't survive 1.5 hits
+        if (budget < selfSplash * perk.selfDamage * 1) { return; } // budget exhausted
+      }
+      // Decrement budget on fire (regenerates in step())
+      if (selfSplash > 0) {
+        this.selfDamageBudget.set(p.id, budget - selfSplash * perk.selfDamage);
+      }
+    }
     if (!this.room.projectiles.spawn(p.id, wt, muzzle, dir, p.velocity)) {
       fireSpeedless(this, p.id, muzzle, dir, wt);
     }
@@ -501,7 +576,9 @@ s[kind] += 1; this.propels.set(id, s);
     const s = this.skillOfCb(p.id);
     const nerve = s?.courage ?? 0.5;
     const hp = this.room.players.getAllPlayers().get(p.id)?.health ?? 100;
-    if (hp <= SELF_SPLASH_MAX * (1.5 - nerve)) {return;}
+    const beltWt = this.loadouts.get(p.id)?.belt ?? WeaponType.Grenade;
+    const beltSplash = getWeaponStats(beltWt)?.aoeDamage ?? SELF_SPLASH_MAX;
+    if (hp <= beltSplash * (1.5 - nerve)) {return;}
     const seen = this.huntSeenCb(p.id);
     if (seen) {this.lobAt(p, seen);}
   }
@@ -619,9 +696,13 @@ s[kind] += 1; this.propels.set(id, s);
         urgent = sep || pulling;
       }
       // Even a lost chase doesn't buy a funeral: the feet blast costs
-      // up to SELF_SPLASH_MAX (halved by lightfoot) — under that plus a
-      // hair, the "launch" is just a suicide with extra steps.
-      if (!urgent || hp <= SELF_SPLASH_MAX * perkMods(me?.perk).selfDamage + 5) {return;}
+      // the weapon's actual splash damage (halved by lightfoot) - under
+      // that plus a hair, the "launch" is just a suicide with extra steps.
+      // Scale the threshold by the weapon's aoeDamage, not a flat constant,
+      // so high-splash weapons (Mortar 80, Bombard 140) veto at realistic
+      // HP instead of the generic 30-hp floor.
+      const splashDmg = getWeaponStats((this.loadouts.get(id) ?? BOT_LOADOUTS[0]!).near)?.aoeDamage ?? SELF_SPLASH_MAX;
+      if (!urgent || hp <= splashDmg * perkMods(me?.perk).selfDamage + 5) {return;}
     }
     const dx = goal.pos.x - p.position.x, dz = goal.pos.z - p.position.z;
     const dist = Math.hypot(dx, dz);

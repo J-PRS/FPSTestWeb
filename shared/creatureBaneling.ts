@@ -7,6 +7,7 @@
  */
 
 import { type Heightfield, hmHeight, hmChord } from './heightfield.js';
+import { datan2, dhypot } from './dmath.ts';
 import type { SimVec, StructureCollider } from './ballSim.js';
 import { clipMotion, type CrawlerEvent, type SimCrawler } from './creatureCore.js';
 import { SPECIES, speciesFamily, type SpeciesRow } from './species.js';
@@ -95,7 +96,7 @@ export function stepBaneling(
     }
   }
 
-  const hSpeed = Math.hypot(c.vx, c.vz);
+  const hSpeed = dhypot(c.vx, c.vz);
   if (hSpeed > c.sp.TOPSPEED) {
     const s = c.sp.TOPSPEED / hSpeed;
     c.vx *= s; c.vz *= s;
@@ -106,7 +107,7 @@ export function stepBaneling(
   c.z += c.vz * dt;
   clipMotion(c, bpx, c.y, bpz, cols);
   c.y = Math.max(hmHeight(field, c.x, c.z), hmChord(field, c.x, c.z)) + 0.7; // small sac, low ride
-  if (hSpeed > 0.5) {c.yaw = Math.atan2(c.vx, c.vz);}
+  if (hSpeed > 0.5) {c.yaw = datan2(c.vx, c.vz);}
 
   if (target) {
     const d3 = (target.x - c.x) ** 2 + (target.y - c.y) ** 2 + (target.z - c.z) ** 2;

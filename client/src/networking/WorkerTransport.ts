@@ -57,7 +57,7 @@ export class WorkerTransport implements GameTransport {
   /** Worker owns the ping cadence — NetworkManager must not double-send. */
   readonly ownsPing = true;
   /** Clean wire RTT (worker's clock) + worker→main delivery lag. */
-  readonly netProbe = { rttMs: 0, lagMs: 0, lastRxAt: 0 };
+  readonly netProbe = { rttMs: 0, lagMs: 0, lagMsMax: 0, maxPending: 0, lastRxAt: 0, drainMsMax: 0 };
 
   private worker: Worker;
   private open = false;
@@ -132,12 +132,14 @@ export class WorkerTransport implements GameTransport {
     }
     if (ev.kind === 'ev') {
       this.netProbe.lagMs = Date.now() - ev.at;
+      if (this.netProbe.lagMs > this.netProbe.lagMsMax) {this.netProbe.lagMsMax = this.netProbe.lagMs;}
       // Liveness is a RECEIVE property — stamp it at the edge, not at
       // drain time, or a render stall reads as a dead socket to the
       // silence watchdog and tears down a healthy session.
       this.netProbe.lastRxAt = Date.now();
     }
     this.pending.push(ev);
+    if (this.pending.length > this.netProbe.maxPending) {this.netProbe.maxPending = this.pending.length;}
     // Draining on the NEXT macrotask lets every already-queued message
     // land in the same batch — free stall coalescing, ~0 added latency
     // when the loop is healthy.
@@ -153,7 +155,16 @@ export class WorkerTransport implements GameTransport {
     this.pending = [];
     const evs = coalesceTickFrames(pending);
     this.coalesced += pending.length - evs.length;
-    for (const ev of evs) {
+    // Time-slice the dispatch: a reclaim replay delivers ~1024 events in
+    // one burst — one unbounded macrotask hitched the frame at exactly
+    // the rejoin moment. 8ms per turn, leftovers ride the next tick of
+    // the same ordering.
+    const drainStart = performance.now();
+    const deadline = drainStart + 8;
+    let i = 0;
+    for (; i < evs.length; i++) {
+      if (i > 0 && (i & 63) === 0 && performance.now() > deadline) {break;}
+      const ev = evs[i]!;
       try {
         switch (ev.kind) {
           case 'up': { this.open = true; this.innerTier = ev.tier; this.config.onConnect?.(); break;
@@ -170,13 +181,22 @@ export class WorkerTransport implements GameTransport {
         logger.error(`drain dispatch threw on ${ev.kind}`, error instanceof Error ? error.message : String(error));
       }
     }
+    // drainMsMax answers "is the worker boundary worth batching": if it
+    // stays low under reclaim bursts, per-message posts are already
+    // cheap enough that batching would be complexity for nothing.
+    const drainMs = performance.now() - drainStart;
+    if (drainMs > this.netProbe.drainMsMax) {this.netProbe.drainMsMax = drainMs;}
+    if (i < evs.length) {
+      this.pending.unshift(...evs.slice(i));
+      this.drainTimer ??= setTimeout((): void => { this.drainTimer = null; this.drain(); }, 0);
+    }
   }
 
   /** Alt+Q: how many stale tick frames the drain dropped this session. */
   get coalescedTicks(): number { return this.coalesced; }
 
   /** rtt/lag read for the dump — null on non-worker transports. */
-  get probe(): { rttMs: number; lagMs: number; coalesced: number; lastRxAt: number } {
-    return { rttMs: this.netProbe.rttMs, lagMs: this.netProbe.lagMs, coalesced: this.coalesced, lastRxAt: this.netProbe.lastRxAt };
+  get probe(): { rttMs: number; lagMs: number; lagMsMax: number; maxPending: number; coalesced: number; lastRxAt: number; drainMsMax: number } {
+    return { rttMs: this.netProbe.rttMs, lagMs: this.netProbe.lagMs, lagMsMax: this.netProbe.lagMsMax, maxPending: this.netProbe.maxPending, coalesced: this.coalesced, lastRxAt: this.netProbe.lastRxAt, drainMsMax: this.netProbe.drainMsMax };
   }
 }

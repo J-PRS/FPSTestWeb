@@ -1,3 +1,4 @@
+import { monitorEventLoopDelay, type IntervalHistogram } from 'perf_hooks';
 import { CONFIG } from './config.js';
 import type { GameServer } from './GameServer.js';
 import { wallNow } from './wallClock.ts';
@@ -5,6 +6,17 @@ import { wallNow } from './wallClock.ts';
 // Ops/metrics surface — totalPlayers, the server-browser card, the
 // /health row and the /metrics snapshot. GameServer is the host; these
 // take it flat (same pattern as the client *Host splits).
+
+// monitorEventLoopDelay — enabled lazily on first scrape (perf_hooks
+// needs a live loop on Bun). Exported in ms.
+let _eld: IntervalHistogram | null = null;
+function eventLoopHist(): IntervalHistogram {
+  if (!_eld) {
+    _eld = monitorEventLoopDelay({ resolution: 20 });
+    _eld.enable();
+  }
+  return _eld;
+}
 
 export function totalPlayers(g: GameServer): number {
   let n = 0;
@@ -43,6 +55,17 @@ export function getHealthStatus(g: GameServer) {
 export function getMetrics(g: GameServer) {
     const o = g.ops;
     const now = wallNow();
+    // Event-loop stall histogram — catches what tickLag can't: ANY long
+    // task on the loop (GC, a fat message handler, sync fs). Reset per
+    // scrape so each window is fresh; lazy-init since perf_hooks needs
+    // a live loop. Values arrive in ns, exported in ms.
+    const eld = eventLoopHist();
+    const eldStats = {
+      p50: Number((eld.percentile(50) / 1e6).toFixed(2)),
+      p99: Number((eld.percentile(99) / 1e6).toFixed(2)),
+      max: Number((eld.max / 1e6).toFixed(2)),
+    };
+    eld.reset();
     const uptimeS = Math.floor((now - o.startedAt) / 1000);
     const rooms = [...g.rooms.values()].map(r => {
       // ClientStats uplink rollup — fresh reporters only (30s covers a
@@ -104,6 +127,17 @@ n += 1; fpsSum += s.fps; fpsMin = Math.min(fpsMin, s.fps);
         avg: o.tickLagSamples ? Number((o.tickLagMsSum / o.tickLagSamples).toFixed(2)) : 0,
         max: o.tickLagMsMax,
       },
+      // Deadline overruns the compensated timer skipped — nonzero means
+      // the loop stalled hard enough to lose whole ticks (GC pause,
+      // syscall storm) rather than merely running late.
+      ticksDropped: o.ticksDropped ?? 0,
+      eventLoopDelayMs: eldStats,
+      // Heap census — heapUsed flat while rss ratchets = allocator cache
+      // retention (Bun's libpas holds freed backing stores), not a leak.
+      memory: ((): Record<string, number> => {
+        const m = process.memoryUsage();
+        return { rssMb: Math.round(m.rss / 1_048_576), heapUsedMb: Math.round(m.heapUsed / 1_048_576), heapTotalMb: Math.round(m.heapTotal / 1_048_576) };
+      })(),
     };
   }
 

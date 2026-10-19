@@ -51,4 +51,18 @@ describe('simRand', () => {
     const replayed = lcg32(9);
     expect(simRand()).toBe(replayed());
   });
+
+  it('save/restore resumes mid-stream and draw count tracks consumption', () => {
+    // The sync-report pair — {state, draws} fingerprints "a consumer
+    // drew a random the other run didn't" (the classic desync signature).
+    const r = lcg32(77);
+    const lead = [r(), r(), r()];
+    expect(r.draws).toBe(3);
+    const mark = r.save();
+    const rest = [r(), r()];
+    r.restore(mark);
+    expect(r.draws).toBe(3); // restore rewinds the count too
+    expect([r(), r()]).toEqual(rest);
+    expect(lead[0]).not.toBe(rest[0]);
+  });
 });

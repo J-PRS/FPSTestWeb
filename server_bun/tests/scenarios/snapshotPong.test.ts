@@ -1,4 +1,4 @@
-import { wallMs } from '../../src/wallClock.ts';
+import { wallMs, setWallNow } from '../../src/wallClock.ts';
 import { describe, it, expect } from 'bun:test';
 import { mkRoom, firstPlayer, twoPlayers } from './harness.ts';
 import type { ServerMessage } from '../../../shared/protocol.ts';
@@ -18,10 +18,29 @@ describe('scenario: ping/snapshot', () => {
     const p = firstPlayer(room);
     const sent = wsSpy(room, p.id);
     p.lastSeen = wallMs(0);
-    room.messages.handleMessage(p.id, { type: 'ping', timestamp: 123456 });
+    room.messages.handleMessage(p.id, { type: 'ping', timestamp: 123_456 });
     const pong = sent.find((m) => m.type === 'pong') as { timestamp: number } | undefined;
-    expect(pong?.timestamp).toBe(123456);
+    expect(pong?.timestamp).toBe(123_456);
     expect(p.lastSeen).toBeGreaterThan(0); // ping is a liveness signal too
+  });
+
+  it('clock probe: dilated ping stamps bank a drift strike; honest clocks stay clean', () => {
+    const room = mkRoom({ bots: 1 });
+    const p = firstPlayer(room);
+    wsSpy(room, p.id);
+    let now = 0;
+    setWallNow((): number => now);
+    try {
+      // Honest: stamps track arrival 1:1 across two full windows — no strike.
+      for (let i = 0; i <= 20; i += 1) { now = i * 2000; room.messages.handleMessage(p.id, { type: 'ping', timestamp: now }); }
+      expect(room.health.get('clockDrift')).toBeUndefined();
+      expect(p.clockProbe!.strikes).toBe(0);
+      // Dilated: stamps advance 1.3x faster than real time — speedhack read.
+      let stamp = 50_000;
+      for (let i = 1; i <= 11; i += 1) { now = 40_000 + i * 2000; stamp += 2600; room.messages.handleMessage(p.id, { type: 'ping', timestamp: stamp }); }
+      expect(room.health.get('clockDrift')).toBeGreaterThanOrEqual(1);
+      expect(p.clockProbe!.strikes).toBeGreaterThanOrEqual(1);
+    } finally { setWallNow(); }
   });
 
   it('snapshotRequest replies with the full roster state to the requester only', () => {

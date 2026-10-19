@@ -15,7 +15,15 @@ const RTC_CONFIG: RTCConfiguration = {
 
 interface SignalMsg { t: string; sdp?: string; ice?: RTCIceCandidateInit; host?: boolean }
 
-export function connectP2P(opts: { signalUrl: string; timeoutMs?: number }): Promise<RTCDataChannel> {
+/** The two lanes, same split the dedicated-RTC path uses (tiers.ts):
+ *  'game' unordered/bounded-retransmit carries volatile seq'd binary
+ *  (position frames, tick frames — a retransmitted stale tick is worse
+ *  than a dropped one); 'ctrl' reliable+ordered carries JSON. A single
+ *  ordered channel head-of-line blocks every position update behind a
+ *  lost packet's retransmit. */
+export interface P2PChannels { game: RTCDataChannel; ctrl: RTCDataChannel; pc: RTCPeerConnection | null }
+
+export function connectP2P(opts: { signalUrl: string; timeoutMs?: number }): Promise<P2PChannels> {
   return new Promise((resolve, reject): void => {
     const timeout = setTimeout((): void => reject(new Error('P2P signalling timed out')), opts.timeoutMs ?? 15_000);
     const fail = (e: Error): void => { clearTimeout(timeout); ws.close(); reject(e); };
@@ -35,8 +43,13 @@ export function connectP2P(opts: { signalUrl: string; timeoutMs?: number }): Pro
       return p;
     };
 
+    const chans: Partial<P2PChannels> = {};
     const armChannel = (dc: RTCDataChannel): void => {
-      dc.addEventListener('open', (): void => { clearTimeout(timeout); ws.close(); resolve(dc); });
+      dc.addEventListener('open', (): void => {
+        if (dc.label === 'ctrl') {chans.ctrl = dc;}
+        else {chans.game = dc;} // 'game' or unlabeled → fast lane
+        if (chans.game && chans.ctrl) {clearTimeout(timeout); ws.close(); resolve({ game: chans.game, ctrl: chans.ctrl, pc });}
+      });
     };
 
     ws.addEventListener('error', (): void => fail(new Error('signalling socket failed')));
@@ -63,8 +76,8 @@ export function connectP2P(opts: { signalUrl: string; timeoutMs?: number }): Pro
           case 'peer': {
             // Second member arrived — host makes the offer
             pc = newPc();
-            const dc = pc.createDataChannel('game', { ordered: true });
-            armChannel(dc);
+            armChannel(pc.createDataChannel('game', { ordered: false, maxRetransmits: 2 }));
+            armChannel(pc.createDataChannel('ctrl')); // reliable+ordered
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
             send({ t: 'offer', sdp: offer.sdp });

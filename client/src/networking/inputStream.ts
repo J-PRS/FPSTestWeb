@@ -89,4 +89,17 @@ export class InputStream {
   dropJournal(): void {
     this.inputJournal.length = 0;
   }
+
+  /** Reconnect epoch boundary: the journaled seqs and the change-only
+   *  send state belong to the dead lane's room — kept, they'd replay
+   *  wrong-room inputs into the next correction and suppress the first
+   *  real inputMove edge. inputSeq stays monotonic (the new room orders
+   *  on it; higher is valid, lower would drop). */
+  reset(): void {
+    this.lastSentInput = '';
+    this.lastInputState = null;
+    this.lastSentEdge = null;
+    this.lastInputRotation = { yaw: 0, pitch: 0 };
+    this.inputJournal.length = 0;
+  }
 }

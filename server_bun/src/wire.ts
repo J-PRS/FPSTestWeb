@@ -96,7 +96,19 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     validate: (obj) => obj.type === 'tickNack'
       ? { success: true, data: { type: 'tickNack' } as Extract<ClientMessage, { type: 'tickNack' }> }
       : { success: false, error: 'tickNack malformed' },
-    handle: (h): void | undefined => h.roomInfo.nackFulls?.(),
+    handle: (h, id): void | undefined => {
+      // A nack from a still-gated client is noise, not loss: its gaps
+      // come from the intro hold by design, its decode basis reseeds on
+      // the intro fulls, and stamping introSeq here would grow the very
+      // join burst the gate is waiting on.
+      if (h.roomInfo.drainedForTicks?.(id) === false) {return;}
+      // A spectator's gap is theirs alone — scope the reseed to their own
+      // intro window instead of forcing room-wide fulls (spec count is
+      // unbounded relative to players, so a nacking spec fleet would be a
+      // full-record amplifier).
+      if (h.roomInfo.nackFor?.(id) === true) {return;}
+      return h.roomInfo.nackFulls?.();
+    },
   },
 
   position: {
@@ -558,13 +570,17 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
           if (isFiniteNumber(v)) {renderLag[k] = v;}
         }
       }
-      return { success: true, data: { type: 'clientStats', fps: fields.fps as number, jsMs: fields.jsMs as number, ping: fields.ping as number, loss: fields.loss as number, jitter: fields.jitter as number, renderLagMs, renderLag } };
+      const gap = isFiniteNumber(obj.gap) ? (obj.gap as number) : undefined;
+      const starve = isFiniteNumber(obj.starve) ? (obj.starve as number) : undefined;
+      const starveMs = isFiniteNumber(obj.starveMs) ? (obj.starveMs as number) : undefined;
+      const drainMsMax = isFiniteNumber(obj.drainMsMax) ? (obj.drainMsMax as number) : undefined;
+      return { success: true, data: { type: 'clientStats', fps: fields.fps as number, jsMs: fields.jsMs as number, ping: fields.ping as number, loss: fields.loss as number, jitter: fields.jitter as number, renderLagMs, renderLag, gap, starve, starveMs, drainMsMax } };
     },
     handle: (h, id, m): void => {
       const p = h.playerManager.getPlayer(id);
       if (!p) {return;}
       p.lastSeen = wallNow();
-      p.clientStats = { fps: m.fps, jsMs: m.jsMs, ping: m.ping, loss: m.loss, jitter: m.jitter, renderLagMs: m.renderLagMs, renderLag: m.renderLag, at: wallNow() };
+      p.clientStats = { fps: m.fps, jsMs: m.jsMs, ping: m.ping, loss: m.loss, jitter: m.jitter, renderLagMs: m.renderLagMs, renderLag: m.renderLag, gap: m.gap, starve: m.starve, starveMs: m.starveMs, drainMsMax: m.drainMsMax, at: wallNow() };
     },
   },
 
@@ -578,8 +594,22 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     handle: (h, id, m): void => {
       const p = h.playerManager.getPlayer(id);
       if (!p) {return;}
-      p.lastSeen = wallNow(); // ping is a liveness signal too —
+      const now = wallNow();
+      p.lastSeen = now; // ping is a liveness signal too —
       // without it a non-moving client could still go "stale"
+      // Clock-drift probe: a client whose whole runtime runs fast
+      // (time-dilation speedhack) stamps pings at ~rate× real time —
+      // declared stamp spacing vs arrival spacing diverges. 20s window
+      // before a verdict; per-ping jitter averages out. Strikes count
+      // on the heartbeat only — flag-for-review, never auto-kick.
+      const cp = p.clockProbe ??= { s0: m.timestamp, a0: now, s: m.timestamp, a: now, strikes: 0 };
+      cp.s = m.timestamp; cp.a = now;
+      const span = cp.a - cp.a0;
+      if (span >= 20_000) {
+        const rate = (cp.s - cp.s0) / span;
+        if (rate > 1.15) { cp.strikes += 1; h.hb('clockDrift'); h.hb(`clockDrift.${id}`); }
+        cp.s0 = cp.s; cp.a0 = cp.a;
+      }
       h.sendToPlayer(id, { type: 'pong', timestamp: m.timestamp });
     },
   },

@@ -103,6 +103,9 @@ function restoreLocalPlayer(ctx: NetCtx, localPlayerState: LocalPlayerState): vo
       pos: new THREE.Vector3(p.x, p.y, p.z),
       vel: new THREE.Vector3(anchorVel.x, anchorVel.y, anchorVel.z),
       yaw: player.yaw, pitch: player.pitch,
+      // localPlayerState doesn't carry grounded — seeded true, but only
+      // the first replayed update() consults it before raycasting real
+      // contact, so a mid-air restore costs at most one step of friction.
       onGround: true,
     });
     const now = performance.now();

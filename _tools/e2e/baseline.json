@@ -1,13 +1,13 @@
 {
   "bots": 8,
-  "frames": 195,
-  "fps": 9.7,
-  "medianMs": 100,
-  "p95Ms": 116.7,
-  "p99Ms": 550,
-  "over25": 192,
-  "over50": 191,
-  "longestMs": 650,
-  "jsBusyFrac": 0.119,
-  "memMb": 53
+  "frames": 274,
+  "fps": 11.9,
+  "medianMs": 66.66,
+  "p95Ms": 100,
+  "p99Ms": 283.32,
+  "over25": 270,
+  "over50": 199,
+  "longestMs": 3313.6,
+  "jsBusyFrac": 0.249,
+  "memMb": 66
 }

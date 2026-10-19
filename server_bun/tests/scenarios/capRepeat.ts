@@ -159,6 +159,7 @@ export function measureRepeat(
     caps: n,
     passV: 0,
     passDy: 0,
+    passD: 0,
     grabV: mean(l => l.grabV),
     peakE: mean(l => l.peakE),
     approachE: mean(l => l.approachE),

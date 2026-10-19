@@ -108,9 +108,12 @@ export class WireIn {
     return true;
   }
 
-  message(data: ServerMessage): void {
+  message(data: ServerMessage, bytes?: number): void {
     if (this.gate(data)) {return;}
-    this.h.noteRx(JSON.stringify(data).length); // rx approximation — JSON events are sparse
+    // Rx is an approximation anyway — re-stringifying every event just to
+    // size it cost a full second pass over reclaim replays (a 1024-frame
+    // burst arrived as one giant main-thread task).
+    this.h.noteRx(bytes ?? 256);
     // Offset cursor: every reliable frame carries a room-scoped `ev`.
     // Replays only ever carry seq > our watermark, so tracking the max
     // doubles as the dup guard if a transport ever re-delivers.
@@ -185,7 +188,12 @@ this.handlerThrows += 1;
     // A real loss (the <= drop above already ate reorders): masked fields
     // in the gap are stale until each wireId's staggered full lands —
     // ask for a full-record window instead of waiting out the ~750ms.
-    if (tick.tickSeq - this.lastTickSeq > 1) {this.h.onTickGap?.(tick.tickSeq - this.lastTickSeq - 1);}
+    // Only count a gap on an ESTABLISHED stream (lastTickSeq >= 0): the
+    // first frame after join/reset starts mid-room-seq, which is not a
+    // loss — it used to count thousands of phantom misses into seqWindow
+    // (100% packetLoss for the session's first 5s) and nack a burst the
+    // roster-intro fulls already cover.
+    if (this.lastTickSeq >= 0 && tick.tickSeq - this.lastTickSeq > 1) {this.h.onTickGap?.(tick.tickSeq - this.lastTickSeq - 1);}
     this.lastTickSeq = tick.tickSeq;
     // Same containment as the JSON path — a throwing tick handler at 20Hz
     // would otherwise hit onError and reconnect the socket every frame.
@@ -199,7 +207,13 @@ this.handlerThrows += 1;
     playerJoined: (data): void => this.handlePlayerJoined(data),
     playerLeft: (data): void => this.handlePlayerLeft(data),
     wireIds: (data): void => {
-      for (const [id, pid] of Object.entries(data.add)) {this.wireIds.set(Number(id), pid);}
+      for (const [idS, pid] of Object.entries(data.add)) {
+        const id = Number(idS);
+        // A re-seat without a matching remove must still drop the prior
+        // owner's decode baseline — deltas can't decode against it.
+        if (this.wireIds.has(id)) {this.tickPool.byId?.delete(id);}
+        this.wireIds.set(id, pid);
+      }
       for (const id of data.remove ?? []) {
         this.wireIds.delete(id);
         // A reissued id must seat a fresh baseline — never inherit the
@@ -331,6 +345,12 @@ dropCensus.total += 1;
           url.searchParams.set('pv', String(Date.now())); // cache-buster vs CDN staleness
           window.location.href = url.toString();
         } catch { /* storage/nav both optional — warn already logged */ }
+      } else if (typeof location !== 'undefined') {
+        // Budget spent — a live socket with remotes frozen forever reads as
+        // "game is broken", not "stale build". Close it so the normal
+        // disconnect UI can name the failure. (Harnesses without a location
+        // keep the warn + return.)
+        this.h.disconnect();
       }
       return;
     }
@@ -369,9 +389,9 @@ dropCensus.total += 1;
     const serverMs = data.tickSeq === undefined ? now : data.tickSeq * SERVER_TICK_MS;
     // Pooled decode hands back its whole slots array + a live count —
     // entries past it are stale from earlier, larger frames.
-    const n = data.count ?? data.updates.length;
+    const n = Math.min(data.count ?? data.updates.length, data.updates.length);
     for (let i = 0; i < n; i += 1) {
-      const u = data.updates[i]!;
+      const u = data.updates[i]!; // n is clamped to updates.length above
       // v3 record ahead of its roster — can't build a body without an
       // identity, so it drops; the next record for that id resolves.
       if (!u.playerId) {continue;}
@@ -379,11 +399,24 @@ dropCensus.total += 1;
     }
   }
 
+  // Scratch patch reused per record — one fresh object per remote per
+  // 20Hz tick was the last steady-state alloc on this path. Every
+  // declared field is overwritten each call (absent → undefined), and
+  // upsert's `??` merge treats undefined as "keep stored", so a stale
+  // key can never leak a previous row's value.
+  private readonly tickPatch: Record<string, unknown> = {};
+
   private applyTickPlayerUpdate(u: TickUpdatePlayer, serverMs: number): void {
     // Defense-in-depth: server already excludes self from tickUpdate,
     // but skip local player here too in case of any server-side regression
     if (u.playerId === this.h.getLocalPlayerId()) {return;}
-    this.h.upsertRemotePlayer(u.playerId, Object.assign({}, (rowPatch(WORLD_MODEL.player.updateFields!, u as unknown as Record<string, unknown>) as Partial<RemotePlayerState>), {internalId: u.internalId || undefined}));
+    const patch = this.tickPatch as Partial<RemotePlayerState>;
+    for (const f of WORLD_MODEL.player.updateFields!) {
+      const v = (u as unknown as Record<string, unknown>)[f.name];
+      (patch as Record<string, unknown>)[f.name] = (v === undefined || v === null || v === '') ? undefined : v;
+    }
+    patch.internalId = u.internalId || undefined;
+    this.h.upsertRemotePlayer(u.playerId, patch);
     this.h.onPlayerUpdate?.(u.playerId, u.position, u.rotation, serverMs, u.velocity);
   }
 
@@ -411,7 +444,7 @@ dropCensus.total += 1;
   private handlePlayerRespawn(data: Extract<ServerMessage, { type: 'playerRespawn' }>): void {
     // Update REMOTE player in storage (local player respawn handled by callback)
     if (data.position) {
-      this.h.upsertRemotePlayer(data.playerId, Object.assign({}, (rowPatch(WORLD_MODEL.player.events!.playerRespawn!, data as unknown as Record<string, unknown>) as Partial<RemotePlayerState>), {velocity: { x: 0, y: 0, z: 0 },isDead: false,health: 100}));
+      this.h.upsertRemotePlayer(data.playerId, Object.assign({}, (rowPatch(WORLD_MODEL.player.events!.playerRespawn!, data as unknown as Record<string, unknown>) as Partial<RemotePlayerState>), {velocity: { x: 0, y: 0, z: 0 },isDead: false,health: data.health ?? 100}));
     }
     this.h.onPlayerRespawn?.(data.playerId, data.position, data.rotation, data.armorClass);
   }
@@ -455,7 +488,12 @@ dedupCensus.hitSeqDrops += 1;
   /** Routed through the NetworkManager seam so tests can wrap/count it. */
   handleCorrection(data: Extract<ServerMessage, { type: 'correction' }>): void {
     // Server rejected our position — snap to last valid state
-    logger.warn(`Server correction at seq ${data.seq}: pos=(${data.position.x.toFixed(1)},${data.position.y.toFixed(1)},${data.position.z.toFixed(1)})`);
+    const p = data.position;
+    if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y) || !Number.isFinite(p.z)) {
+      logger.warn(`Server correction at seq ${data.seq} with malformed position — dropped`);
+      return;
+    }
+    logger.warn(`Server correction at seq ${data.seq}: pos=(${p.x.toFixed(1)},${p.y.toFixed(1)},${p.z.toFixed(1)})`);
     this.h.ackPositionSeq(data.seq);
     this.h.onCorrection?.(data.seq, data.position, data.velocity, data.rotation, data.inputSeq, data.grounded);
   }

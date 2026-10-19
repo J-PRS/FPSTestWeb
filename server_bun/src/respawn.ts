@@ -86,6 +86,9 @@ export class RespawnManager {
       position: result.position,
       rotation: result.rotation,
       armorClass: result.armorClass,
+      // Remotes rebuild class health off the event — a hardcoded 100 would
+      // leave heavy/light classes misbarred until the next tick record.
+      health: player.health,
     }) as ServerMessage);
   }
 

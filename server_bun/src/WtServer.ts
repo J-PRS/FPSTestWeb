@@ -59,7 +59,6 @@ export class WtSocketAdapter {
    *  oversized tick frame can't stall an event behind it. Set when the
    *  client's second bidi stream arrives (caps.binLane handshake). */
   private binWriter: WritableStreamDefaultWriter<Uint8Array> | null = null;
-  private binScratch = new ArrayBuffer(2);
   private encoder = new TextEncoder();
   private decoder = new TextDecoder();
 
@@ -185,15 +184,17 @@ export class WtSocketAdapter {
 
   send(msg: string | Uint8Array): number {
     if (!this.open) {return 0;}
-    // Volatile seq'd tick frames → datagram lane when they fit the MTU.
-    // An oversized tick stays reliable: datagrams over the path MTU are
-    // dropped ENTIRELY, so "best effort" there is actually "never".
-    // This lane must not wait on the reliable writer — the streams are
-    // independent and the tick fanout starts before the bidi attaches.
-    if (typeof msg !== 'string' &&
-        msg.length >= 2 && msg[0] === 0x54 &&
-        (msg[1] === WIRE_TICK || msg[1] === WIRE_TICK_V3 || msg[1] === WIRE_TICK_V4) &&
-        msg.byteLength <= WT_MAX_DATAGRAM) {
+    // Volatile seq'd tick frames → stream-2 when it's up: reliable AND
+    // HoL-isolated from the JSON lane. The datagram lane measured ~33%
+    // seq loss on loopback (QUIC drops dgrams exceeding the congestion
+    // window — cc'd but never retransmitted), too lossy for the primary
+    // state lane; datagrams remain only as the pre-binLane fallback.
+    // Other binary (ballSeg etc.) must STAY on stream 1: its relative
+    // order against JSON spawn/roster events is load-bearing (a segment
+    // beating its ballSpawn left stale regimes — the BALL DESYNC churn).
+    const isTick = typeof msg !== 'string' && msg.length >= 2 && msg[0] === 0x54 &&
+      (msg[1] === WIRE_TICK || msg[1] === WIRE_TICK_V3 || msg[1] === WIRE_TICK_V4);
+    if (isTick && !this.binWriter && msg.byteLength <= WT_MAX_DATAGRAM) {
       this.session.sendDatagram(msg).catch((): void => { return; });
       return msg.byteLength;
     }
@@ -201,18 +202,19 @@ export class WtSocketAdapter {
     // u16-framed, no base64 tax, and HoL-isolated so a 1300B tick can't
     // stall an event behind it. Tick frames were already unordered vs
     // events on the datagram lane, so the second stream changes nothing
-    // about ordering. Other binary (ballSeg etc.) must STAY on stream 1:
-    // its relative order against JSON spawn/roster events is load-bearing
-    // (a segment beating its ballSpawn left stale regimes — the BALL
-    // DESYNC churn on enraged/targetId).
+    // about ordering.
     if (typeof msg !== 'string' && this.binWriter &&
         msg.length >= 2 && msg[0] === 0x54 &&
         (msg[1] === WIRE_TICK || msg[1] === WIRE_TICK_V3 || msg[1] === WIRE_TICK_V4) &&
         msg.byteLength <= 0xFF_FF) {
-      const v = new DataView(this.binScratch);
-      v.setUint16(0, msg.byteLength);
-      this.binWriter.write(new Uint8Array(this.binScratch)).catch((): void => { return; });
-      this.binWriter.write(msg).catch((): void => { return; });
+      // One concatenated write: a shared u16 scratch can be overwritten
+      // by the next frame before an earlier write() flushes — a torn
+      // length prefix wedges the peer's carry-parser forever (soak:
+      // tick decode died permanently, 100% seq loss).
+      const frame = new Uint8Array(2 + msg.byteLength);
+      frame[0] = msg.byteLength & 0xFF; frame[1] = msg.byteLength >> 8;
+      frame.set(msg, 2);
+      this.binWriter.write(frame).catch((): void => { return; });
       return msg.byteLength;
     }
     if (!this.writer) {return 0;}

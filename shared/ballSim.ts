@@ -15,6 +15,7 @@
  */
 
 import { type Heightfield, hmHeight, hmNormal } from './heightfield.js';
+import { dcos, dhypot, dsin } from './dmath.ts';
 import { botRand } from './botRand.js';
 import { collideStructures, BALL_BOUNCE, type StructureCollider } from './ballCollide.js';
 import { GRAVITY } from './movement.js';
@@ -116,6 +117,9 @@ export interface SimBall {
   ggy: number;   // last sampled ground height under the ball
   gx: number;    // position at that sample — drift trigger
   gz: number;
+  /** Pre-teleport position — a creatureHit claim in flight when the leash
+   *  fired is honestly stale, so the range check accepts either site. */
+  px: number; py: number; pz: number; pset: boolean;
 }
 
 const _n: SimVec = { x: 0, y: 0, z: 0 };
@@ -133,6 +137,7 @@ export function makeSimBall(id: number, variant: BallVariant, colorIdx: number, 
     dead: false, targetId: null,
     tx: 0, ty: 0, tz: 0, tgtValid: false,
     gt: 0, ggy: -Infinity, gx: x, gz: z,
+    px: x, py: y, pz: z, pset: false,
   };
 }
 
@@ -157,7 +162,7 @@ function launchAt(b: SimBall, target: SimVec, upFrac: number): void {
   const pdx = target.x - b.x;
   const pdz = target.z - b.z;
   const pd = (pdx * pdx + pdz * pdz) ** 0.5 || 0.001;
-  const speed = Math.min(BALL_MAX_SPEED, Math.max(Math.hypot(b.vx, b.vy, b.vz), BALL_ENRAGE_DASH_SPEED * 0.5));
+  const speed = Math.min(BALL_MAX_SPEED, Math.max(dhypot(b.vx, b.vy, b.vz), BALL_ENRAGE_DASH_SPEED * 0.5));
   const h = (1 - upFrac * upFrac) ** 0.5;
   b.vx = (pdx / pd) * speed * h;
   b.vz = (pdz / pd) * speed * h;
@@ -191,7 +196,7 @@ function groundContact(b: SimBall, _dt: number, field: Heightfield, target: SimV
 
   // Post-dash landing OR an overspeed impact: reflect at 50% elasticity so
   // the segment ends with a thud, not a full-energy ricochet into orbit.
-  const impactSpeed = Math.hypot(b.vx, b.vy, b.vz);
+  const impactSpeed = dhypot(b.vx, b.vy, b.vz);
   if (impactSpeed < BALL_REST_SPEED) {
     // Settle: park on the surface with zero velocity. The stall breaker
     // owns the wake-up — it launches every BALL_STALL_TIME regardless.
@@ -280,7 +285,7 @@ export function stepBall(
   // Stall breaker — RNG-free, so predictors run it too and land the same
   // spring the server commits to. Fires BEFORE the bounce check so a ball
   // resting on the ground (the common stall) launches immediately.
-  const sp = Math.hypot(b.vx, b.vy, b.vz);
+  const sp = dhypot(b.vx, b.vy, b.vz);
   b.slowTimer = sp < BALL_MIN_SPEED ? b.slowTimer + dt : 0;
   if (b.slowTimer >= BALL_STALL_TIME && target) {
     b.slowTimer = 0;
@@ -297,21 +302,22 @@ export function stepBall(
 
 function teleportNearTarget(b: SimBall, field: Heightfield, target: SimVec, rand: () => number): SegmentKind {
   b.gt = 0;
+  b.px = b.x; b.py = b.y; b.pz = b.z; b.pset = true;
   const ang = rand() * Math.PI * 2;
   const dist = BALL_TELE_MIN + rand() * (BALL_TELE_MAX - BALL_TELE_MIN);
-  b.x = target.x + Math.cos(ang) * dist;
-  b.z = target.z + Math.sin(ang) * dist;
+  b.x = target.x + dcos(ang) * dist;
+  b.z = target.z + dsin(ang) * dist;
   b.y = hmHeight(field, b.x, b.z) + b.radius + BALL_TELE_MARGIN;
   // Preserve speed, redirect mostly UP with random horizontal tilt — same
   // policy as ballRage.teleportNearPlayer. A flat skimmer re-arriving flat
   // just keeps skimming; the leash exists to put it back in the air.
-  const speed = Math.max(Math.hypot(b.vx, b.vy, b.vz) || 1, 14);
+  const speed = Math.max(dhypot(b.vx, b.vy, b.vz) || 1, 14);
   const upFrac = 0.75 + rand() * 0.2;
   const a2 = rand() * Math.PI * 2;
   const hsp = speed * (1 - upFrac * upFrac) ** 0.5;
-  b.vx = Math.cos(a2) * hsp;
+  b.vx = dcos(a2) * hsp;
   b.vy = speed * upFrac;
-  b.vz = Math.sin(a2) * hsp;
+  b.vz = dsin(a2) * hsp;
   return 'teleport';
 }
 
@@ -322,7 +328,7 @@ function dashAt(b: SimBall, target: SimVec): void {
   const pdx = target.x - b.x;
   const pdz = target.z - b.z;
   const pd = (pdx * pdx + pdz * pdz) ** 0.5 || 0.001;
-  const hSpeed = Math.max(Math.hypot(b.vx, b.vz), BALL_ENRAGE_DASH_SPEED * 0.5);
+  const hSpeed = Math.max(dhypot(b.vx, b.vz), BALL_ENRAGE_DASH_SPEED * 0.5);
   const t = Math.max(0.15, pd / hSpeed);
   const vy = (target.y - b.y + 0.5 * Math.abs(BALL_GRAVITY) * t * t) / t;
   b.vx = (pdx / pd) * hSpeed;
@@ -341,7 +347,7 @@ export function applySimDamage(b: SimBall, damage: number, impX: number, impY: n
   b.vx += impX;
   b.vy += impY;
   b.vz += impZ;
-  const s = Math.hypot(b.vx, b.vy, b.vz);
+  const s = dhypot(b.vx, b.vy, b.vz);
   if (s > BALL_MAX_SPEED) {
     const k = BALL_MAX_SPEED / s;
     b.vx *= k; b.vy *= k; b.vz *= k;

@@ -1,0 +1,782 @@
+[console.error] WebSocket connection to 'ws://localhost:5400/?token=IG8CBX0OYc31' failed: Error during WebSocket handshake: Unexpected response code: 400
+[http 503] http://127.0.0.1:8477/challenge
+[console.error] Failed to load resource: the server responded with a status of 503 (Service Unavailable)
+[console.error] Failed to establish a connection to https://127.0.0.1:9920/: net::ERR_QUIC_PROTOCOL_ERROR.QUIC_TLS_CERTIFICATE_UNKNOWN (TLS handshake failure (ENCRYPTION_HANDSHAKE) 46: certificate unknown. SSLErrorStack:[..\..\third_party\boringssl\src\ssl\handshake.cc:320] error:1000007d:SSL routines:OPENSSL_internal:CERTIFICATE_VERIFY_FAILED).
+[console.warn] [.WebGL-0x4f1c0018e800] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+[console.warn] [.WebGL-0x4f1c0018e800] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+[console.warn] [.WebGL-0x4f1c0018e800] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+[console.warn] [.WebGL-0x4f1c0018e800] GL_INVALID_OPERATION: glDrawElements: Mismatch between texture format and sampler type (signed/unsigned/float/shadow).
+[console.warn] 2026-10-17T16:36:10.308+02:00 [PlayerModel] [WARN] Animation not found: Jump (variant mannequin) 
+[console.error] 2026-10-17T16:36:12.256+02:00  [ERROR] [console.error] [GLITCH:seg-div] {"m":23,"spanMs":900,"enr":0} 
+[console.error] 2026-10-17T16:36:12.257+02:00  [ERROR] [console.error] [GLITCH:seg-div] {"m":21,"spanMs":600,"enr":0} 
+[console.error] 2026-10-17T16:36:12.263+02:00  [ERROR] [console.error] [GLITCH:render-blend] {"netId":6,"offM":24,"skewMs":-4} 
+[console.error] 2026-10-17T16:36:12.420+02:00  [ERROR] [console.error] [GLITCH:seg-div] {"m":22,"spanMs":850,"enr":0} 
+[console.error] 2026-10-17T16:36:12.663+02:00  [ERROR] [console.error] [GLITCH:render-blend] {"netId":5,"offM":21,"skewMs":-4} 
+[console.error] 2026-10-17T16:36:12.663+02:00  [ERROR] [console.error] [GLITCH:render-blend] {"netId":4,"offM":21,"skewMs":-4} 
+init 71801ms, connected 72363ms — watching 15s
+[console.error] 2026-10-17T16:36:27.646+02:00  [ERROR] [console.error] [GLITCH:parity-nugrest] {"dM":1.8} 
+[console.error] 2026-10-17T16:36:27.646+02:00  [ERROR] [console.error] [GLITCH:parity-nugrest] {"dM":1.6} 
+[console.error] 2026-10-17T16:36:27.646+02:00  [ERROR] [console.error] [GLITCH:parity-nugrest] {"dM":1.6} 
+{
+ "gpu": {
+  "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 Ti (0x00002482) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+  "vendor": "Google Inc. (NVIDIA)",
+  "khr": true
+ },
+ "programs": 48,
+ "progList": [
+  {
+   "name": "",
+   "vs": 1754,
+   "fs": 11958,
+   "vh": -1448685333,
+   "fh": -1983891584,
+   "ck": "0,1,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388608,136193,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 7793,
+   "fs": 12092,
+   "vh": 1636465359,
+   "fh": 1292971481,
+   "ck": "points,highp,srgb,false,,uv,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,,,true,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,1024,1027,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 17974,
+   "fs": 16829,
+   "vh": 1041472703,
+   "fh": 1520262207,
+   "ck": "basic,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388609,134147,srgb,(sh) => {\n\t\t\tsh.vertexShader = sh.vertexShader.replace(\"#include <common>\", `#include <common>\n          attribute float wingSide;\n          attribute float aFlap;`).replace(\"#include <begin_vertex>\", `#include <begin_vertex>\n          {\n            float wa = aFlap * wingSide;\n            float ws = sin(wa), wc = cos(wa);\n            transformed.xy = vec2(transformed.x * wc - transformed.y * ws,\n                                  transformed.x * ws + transformed.y * wc);\n          }`);\n\t\t}"
+  },
+  {
+   "name": "",
+   "vs": 6168,
+   "fs": 6028,
+   "vh": 1631470823,
+   "fh": -80204016,
+   "ck": "2,3,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,0,132097,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 6168,
+   "fs": 72942,
+   "vh": 1631470823,
+   "fh": 856251253,
+   "ck": "2,4,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,0,132097,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 6168,
+   "fs": 72927,
+   "vh": 1631470823,
+   "fh": -1337190803,
+   "ck": "2,4,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,0,1025,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 3617,
+   "fs": 6779,
+   "vh": 26172079,
+   "fh": -355264497,
+   "ck": "5,6,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388609,1025,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 17652,
+   "fs": 16828,
+   "vh": -689844524,
+   "fh": 2069650145,
+   "ck": "basic,highp,srgb,false,,uv,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388608,5123,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 17633,
+   "fs": 16809,
+   "vh": 297536508,
+   "fh": 921102046,
+   "ck": "basic,highp,srgb,false,,uv,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388608,1027,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 1752,
+   "fs": 6818,
+   "vh": -112084434,
+   "fh": 1005186552,
+   "ck": "7,8,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388608,1025,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 17618,
+   "fs": 16812,
+   "vh": 1181686824,
+   "fh": -2076430017,
+   "ck": "basic,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388608,5123,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 17599,
+   "fs": 16793,
+   "vh": 1026330522,
+   "fh": -134575341,
+   "ck": "basic,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388608,1027,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 1809,
+   "fs": 5838,
+   "vh": -2132242425,
+   "fh": -564235272,
+   "ck": "9,10,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,0,1025,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 17580,
+   "fs": 16808,
+   "vh": 962078869,
+   "fh": 1681541227,
+   "ck": "basic,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,0,132099,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 20015,
+   "fs": 50825,
+   "vh": -509145213,
+   "fh": -1470670050,
+   "ck": "lambert,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,false,false,0,,1,0,0,0,0,0,0,0,0,0,0,1,4,0,0,0,8389632,131074,srgb,(sh) => {\n\t\tif (WEARVIZ) {\n\t\t\tsh.defines = Object.assign({}, sh.defines, { WEARVIZ: 1 });\n\t\t}\n\t\tsh.uniforms.uWearMap = { value: mat.userData.__wearTex ?? blankWearTex() };\n\t\tsh.uniforms.uGrimeMap = { value: mat.userData.__grimeTex ?? whiteTex() };\n\t\t// Materials can dose the effect up — gunmetal swarm species need a\n\t\t// heavier hand than viewmodel weapons or the bake reads flat.\n\t\tsh.uniforms.uWearInt = { value: mat.userData.__wearInt ?? 1 };\n\t\tsh.vertexShader = sh.vertexShader.replace(\"#include <common>\", `#include <common>\nvarying vec2 vUvW;\nvarying vec3 vWpos;\nattribute float wear; varying float vWear;\nattribute float grime; varying float vGrime;\nattribute float awear; varying float vAw;\nattribute vec3 abary; varying vec3 vBary;\nattribute vec3 aedge; varying vec3 vAedge;\nattribute vec3 aalt; varying vec3 vAlt;`).replace(\"#include <fog_vertex>\", `#include <fog_vertex>\nvWpos = position; vWear = wear; vBary = abary; vAedge = aedge; vAlt = aalt; vGrime = grime; vAw = awear;\nvUvW = uv;`);\n\t\tsh.fragmentShader = sh.fragmentShader.replace(\"#include <common>\", `#include <common>\nuniform sampler2D uWearMap;\nuniform sampler2D uGrimeMap;\nuniform float uWearInt;\nvarying vec2 vUvW;\nvarying vec3 vWpos;\nvarying float vWear;\nvarying float vGrime;\nvarying float vAw;\nvarying vec3 vBary;\nvarying vec3 vAedge;\nvarying vec3 vAlt;\nfloat whash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }\nfloat wnoise(vec3 p) {\n  vec3 i = floor(p), f = fract(p);\n  f = f * f * (3.0 - 2.0 * f);\n  return mix(\n    mix(mix(whash(i), whash(i + vec3(1,0,0)), f.x), mix(whash(i + vec3(0,1,0)), whash(i + vec3(1,1,0)), f.x), f.y),\n    mix(mix(whash(i + vec3(0,0,1)), whash(i + vec3(1,0,1)), f.x), mix(whash(i + vec3(0,1,1)), whash(i + vec3(1,1,1)), f.x), f.y),\n    f.z);\n}\nfloat wfbm(vec3 p) { return 0.5 * wnoise(p) + 0.25 * wnoise(p * 2.17) + 0.125 * wnoise(p * 4.31); }`).replace(\"#include <color_fragment>\", `#include <color_fragment>\n{\n  // Large-scale mottled variation — reads as paint/finish, not speckle.\n  float g = wfbm(vWpos * 35.0);\n  diffuseColor.rgb *= mix(1.0, 0.92 + 0.14 * g, uWearInt);\n\n  // Edge wear: the DOMINANT term is the baked barycentric line — each\n  // corner's weight → 0 only at triangle edges flagged sharp (>~50°\n  // dihedral) at bake time, and smoothstep on the screen-space width\n  // draws a ~2px line that hugs the real edge on ANY topology. The old\n  // fwidth(vNormal) fallback is GONE: it measured screen-space normal\n  // sweep, so smooth-shaded surfaces (tube walls, octagonal slabs) lit\n  // up wherever normals interpolated fast — phantom wear on flat faces.\n  // The crisp wear LINE comes from the baked UV atlas — the edge\n  // segments were rasterized per-triangle at bake time, so coplanar\n  // and T-junction neighbors paint their own half and no triangulation\n  // seam can cut it. The vertex-level accent stays: hot corner verts\n  // read as chipped paint, but the 0.6 floor keeps smooth-normal\n  // divergence on curved walls (≈0.5 baked) from painting whole faces.\n  // World-space width: bary weight × the corner's baked altitude is the\n  // distance-to-edge in METERS — the line is a fixed ~9mm wear band that\n  // scales with zoom like the metal, not a constant-pixel overlay.\n  vec3 ew = (vBary + (1.0 - vAedge) * 4.0) * vAlt;\n  float eDist = min(ew.x, min(ew.y, ew.z));\n  float eline = 1.0 - smoothstep(0.002, 0.009, eDist);\n  float edge = max(eline, max(texture2D(uWearMap, vUvW).r * 0.5, smoothstep(0.6, 0.95, vWear) * 0.4));\n\n  // Patchy mask so wear clumps in zones like real abrasion, gated to\n  // well-lit (unoccluded) faces — crevices don't wear bright. The floor is\n  // 0.5 (not 0.35): stacked under exposure × 0.7 mix, a low floor crushed\n  // real edges below the visibility threshold — \"no edge wear\".\n  float patches = 0.5 + 0.5 * smoothstep(0.55, 0.8, wnoise(vWpos * 90.0));\n  #ifdef USE_COLOR\n    // AO owns the mask — occluded crevices get NO bright wear. The band\n    // is anchored at the bake's MIN_LIGHT floor (0.25): a fixed 0.45\n    // cutoff was above most of this weapon's actual AO, so exposure\n    // went ~0 everywhere and nothing wore.\n    float exposure = smoothstep(0.28, 0.75, vColor.g);\n  #else\n    // Baked-GLB path: AO lives in the texture, no vertex colors — edge\n    // wear stays unmasked by exposure (concave hits are rare here).\n    float exposure = 1.0;\n  #endif\n    // awear: per-weapon boost attr (unbaked/absent → 0 → ×1 unchanged).\n    float wear = min(1.0, edge * patches * exposure * (1.0 + vAw) * uWearInt);\n\n    // Worn metal: desaturate and brighten edges; slight micro-scratch noise.\n    float scratch = wnoise(vWpos * 700.0) * 0.12;\n    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.88, 0.86, 0.84), wear * 0.95);\n    diffuseColor.rgb *= 1.0 - wear * scratch;\n\n    // Baked grime map (the bakery's full-material branch): a mostly-white\n    // mask whose dark response is broad dirt — multiplies the albedo where\n    // a weapon has the file, blank everywhere else.\n    float grimeB = texture2D(uGrimeMap, vUvW).r;\n    diffuseColor.rgb *= mix(1.0, grimeB, 0.45);\n\n    // Concave grime — the signed-curvature complement of edge wear:\n    // baked per-vertex on valley edges, darkened + dirtied with the same\n    // patchy clumping so seams read as collected crud, not a uniform\n    // shade ramp.\n    float dirt = vGrime * (0.6 + 0.4 * wnoise(vWpos * 110.0 + 31.7)) * uWearInt;\n    diffuseColor.rgb *= 1.0 - dirt * 0.38;\n  #ifdef WEARVIZ\n    // R=final wear, G=baked AO (the exposure gate input), B=edge flag.\n    // AO replaced grime here — when wear reads wrong, the AO values are\n    // almost always the thing that needs eyeballing.\n    #ifdef USE_COLOR\n      diffuseColor.rgb = vec3(wear, vColor.g, edge);\n    #else\n      diffuseColor.rgb = vec3(wear, 0.0, edge);\n    #endif\n  #endif\n\n  #ifdef USE_COLOR\n    // Extra cavity depth beyond vertex AO — cheap contrast ramp on the bake.\n    diffuseColor.rgb *= 0.6 + 0.4 * smoothstep(0.2, 0.75, vColor.g);\n  #endif\n}`);\n\t\tmat.needsUpdate = true;\n\t}"
+  },
+  {
+   "name": "",
+   "vs": 17534,
+   "fs": 16743,
+   "vh": -1651483902,
+   "fh": -2027212758,
+   "ck": "basic,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,false,false,0,,1,0,0,0,0,0,0,0,0,0,0,1,4,0,0,0,8388608,131074,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 14628,
+   "fs": 12343,
+   "vh": -1061321363,
+   "fh": -270129861,
+   "ck": "depth,highp,srgb-linear,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,,false,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,0,0,0,3200,8388608,144416,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 19127,
+   "fs": 77269,
+   "vh": -1138340250,
+   "fh": 1366052057,
+   "ck": "physical,STANDARD,,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388608,132099,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 19912,
+   "fs": 46149,
+   "vh": 935544586,
+   "fh": 91261342,
+   "ck": "lambert,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388611,132099,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 17622,
+   "fs": 16808,
+   "vh": -510044168,
+   "fh": 1681541227,
+   "ck": "basic,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388609,132099,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 19148,
+   "fs": 77269,
+   "vh": 1246657216,
+   "fh": 1366052057,
+   "ck": "physical,STANDARD,,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388608,132131,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 10223,
+   "fs": 13202,
+   "vh": 2111072730,
+   "fh": -1183194785,
+   "ck": "sprite,highp,srgb,false,,uv,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,,,true,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,0,1027,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 17659,
+   "fs": 16812,
+   "vh": 1440534143,
+   "fh": -2076430017,
+   "ck": "basic,highp,srgb,false,,uv,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388609,5121,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 17640,
+   "fs": 16793,
+   "vh": -1342036943,
+   "fh": -134575341,
+   "ck": "basic,highp,srgb,false,,uv,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388609,1025,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 17641,
+   "fs": 16812,
+   "vh": 1359675371,
+   "fh": -2076430017,
+   "ck": "basic,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388609,5123,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 17622,
+   "fs": 16793,
+   "vh": -510044168,
+   "fh": -134575341,
+   "ck": "basic,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388609,1027,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 17601,
+   "fs": 16814,
+   "vh": 682844212,
+   "fh": -1363126944,
+   "ck": "basic,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,1024,5121,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 17582,
+   "fs": 16795,
+   "vh": 591930716,
+   "fh": 1672836381,
+   "ck": "basic,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,1024,1025,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 17670,
+   "fs": 16830,
+   "vh": 301748533,
+   "fh": 1491266515,
+   "ck": "basic,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388611,5123,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 17651,
+   "fs": 16811,
+   "vh": -909447333,
+   "fh": 2140469566,
+   "ck": "basic,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388611,1027,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 2118,
+   "fs": 5777,
+   "vh": 812446586,
+   "fh": 865838680,
+   "ck": "11,12,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,0,1025,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 12409,
+   "fs": 13514,
+   "vh": 637696843,
+   "fh": -930942453,
+   "ck": "13,14,USE_UV,,USE_MAP,,MAP_UV,uv,USE_COLOR_ALPHA,,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388608,1025,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 17582,
+   "fs": 16795,
+   "vh": 829670425,
+   "fh": 1672836381,
+   "ck": "basic,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,1024,1025,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 12628,
+   "fs": 13514,
+   "vh": -92272258,
+   "fh": -930942453,
+   "ck": "15,14,USE_UV,,USE_MAP,,MAP_UV,uv,USE_COLOR_ALPHA,,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388608,1025,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 17733,
+   "fs": 16878,
+   "vh": 1534815025,
+   "fh": 1776977984,
+   "ck": "basic,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388611,5123,srgb,(sh) => {\n\t\t\tsh.vertexShader = sh.vertexShader.replace(\"#include <common>\", \"#include <common>\\nattribute float aAlpha;\\nvarying float vAlpha;\").replace(\"#include <begin_vertex>\", \"#include <begin_vertex>\\nvAlpha = aAlpha;\");\n\t\t\tsh.fragmentShader = sh.fragmentShader.replace(\"#include <common>\", \"#include <common>\\nvarying float vAlpha;\").replace(\"#include <color_fragment>\", \"#include <color_fragment>\\ndiffuseColor.a *= vAlpha;\");\n\t\t}"
+  },
+  {
+   "name": "",
+   "vs": 17714,
+   "fs": 16859,
+   "vh": -1879917646,
+   "fh": -1719933638,
+   "ck": "basic,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388611,1027,srgb,(sh) => {\n\t\t\tsh.vertexShader = sh.vertexShader.replace(\"#include <common>\", \"#include <common>\\nattribute float aAlpha;\\nvarying float vAlpha;\").replace(\"#include <begin_vertex>\", \"#include <begin_vertex>\\nvAlpha = aAlpha;\");\n\t\t\tsh.fragmentShader = sh.fragmentShader.replace(\"#include <common>\", \"#include <common>\\nvarying float vAlpha;\").replace(\"#include <color_fragment>\", \"#include <color_fragment>\\ndiffuseColor.a *= vAlpha;\");\n\t\t}"
+  },
+  {
+   "name": "",
+   "vs": 6322,
+   "fs": 8416,
+   "vh": -1956507608,
+   "fh": -1906280663,
+   "ck": "16,17,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388608,3105,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 20288,
+   "fs": 50981,
+   "vh": -148175894,
+   "fh": -292829243,
+   "ck": "lambert,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8389632,132099,srgb,(sh) => {\n\t\tif (WEARVIZ) {\n\t\t\tsh.defines = Object.assign({}, sh.defines, { WEARVIZ: 1 });\n\t\t}\n\t\tsh.uniforms.uWearMap = { value: mat.userData.__wearTex ?? blankWearTex() };\n\t\tsh.uniforms.uGrimeMap = { value: mat.userData.__grimeTex ?? whiteTex() };\n\t\t// Materials can dose the effect up — gunmetal swarm species need a\n\t\t// heavier hand than viewmodel weapons or the bake reads flat.\n\t\tsh.uniforms.uWearInt = { value: mat.userData.__wearInt ?? 1 };\n\t\tsh.vertexShader = sh.vertexShader.replace(\"#include <common>\", `#include <common>\nvarying vec2 vUvW;\nvarying vec3 vWpos;\nattribute float wear; varying float vWear;\nattribute float grime; varying float vGrime;\nattribute float awear; varying float vAw;\nattribute vec3 abary; varying vec3 vBary;\nattribute vec3 aedge; varying vec3 vAedge;\nattribute vec3 aalt; varying vec3 vAlt;`).replace(\"#include <fog_vertex>\", `#include <fog_vertex>\nvWpos = position; vWear = wear; vBary = abary; vAedge = aedge; vAlt = aalt; vGrime = grime; vAw = awear;\nvUvW = uv;`);\n\t\tsh.fragmentShader = sh.fragmentShader.replace(\"#include <common>\", `#include <common>\nuniform sampler2D uWearMap;\nuniform sampler2D uGrimeMap;\nuniform float uWearInt;\nvarying vec2 vUvW;\nvarying vec3 vWpos;\nvarying float vWear;\nvarying float vGrime;\nvarying float vAw;\nvarying vec3 vBary;\nvarying vec3 vAedge;\nvarying vec3 vAlt;\nfloat whash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }\nfloat wnoise(vec3 p) {\n  vec3 i = floor(p), f = fract(p);\n  f = f * f * (3.0 - 2.0 * f);\n  return mix(\n    mix(mix(whash(i), whash(i + vec3(1,0,0)), f.x), mix(whash(i + vec3(0,1,0)), whash(i + vec3(1,1,0)), f.x), f.y),\n    mix(mix(whash(i + vec3(0,0,1)), whash(i + vec3(1,0,1)), f.x), mix(whash(i + vec3(0,1,1)), whash(i + vec3(1,1,1)), f.x), f.y),\n    f.z);\n}\nfloat wfbm(vec3 p) { return 0.5 * wnoise(p) + 0.25 * wnoise(p * 2.17) + 0.125 * wnoise(p * 4.31); }`).replace(\"#include <color_fragment>\", `#include <color_fragment>\n{\n  // Large-scale mottled variation — reads as paint/finish, not speckle.\n  float g = wfbm(vWpos * 35.0);\n  diffuseColor.rgb *= mix(1.0, 0.92 + 0.14 * g, uWearInt);\n\n  // Edge wear: the DOMINANT term is the baked barycentric line — each\n  // corner's weight → 0 only at triangle edges flagged sharp (>~50°\n  // dihedral) at bake time, and smoothstep on the screen-space width\n  // draws a ~2px line that hugs the real edge on ANY topology. The old\n  // fwidth(vNormal) fallback is GONE: it measured screen-space normal\n  // sweep, so smooth-shaded surfaces (tube walls, octagonal slabs) lit\n  // up wherever normals interpolated fast — phantom wear on flat faces.\n  // The crisp wear LINE comes from the baked UV atlas — the edge\n  // segments were rasterized per-triangle at bake time, so coplanar\n  // and T-junction neighbors paint their own half and no triangulation\n  // seam can cut it. The vertex-level accent stays: hot corner verts\n  // read as chipped paint, but the 0.6 floor keeps smooth-normal\n  // divergence on curved walls (≈0.5 baked) from painting whole faces.\n  // World-space width: bary weight × the corner's baked altitude is the\n  // distance-to-edge in METERS — the line is a fixed ~9mm wear band that\n  // scales with zoom like the metal, not a constant-pixel overlay.\n  vec3 ew = (vBary + (1.0 - vAedge) * 4.0) * vAlt;\n  float eDist = min(ew.x, min(ew.y, ew.z));\n  float eline = 1.0 - smoothstep(0.002, 0.009, eDist);\n  float edge = max(eline, max(texture2D(uWearMap, vUvW).r * 0.5, smoothstep(0.6, 0.95, vWear) * 0.4));\n\n  // Patchy mask so wear clumps in zones like real abrasion, gated to\n  // well-lit (unoccluded) faces — crevices don't wear bright. The floor is\n  // 0.5 (not 0.35): stacked under exposure × 0.7 mix, a low floor crushed\n  // real edges below the visibility threshold — \"no edge wear\".\n  float patches = 0.5 + 0.5 * smoothstep(0.55, 0.8, wnoise(vWpos * 90.0));\n  #ifdef USE_COLOR\n    // AO owns the mask — occluded crevices get NO bright wear. The band\n    // is anchored at the bake's MIN_LIGHT floor (0.25): a fixed 0.45\n    // cutoff was above most of this weapon's actual AO, so exposure\n    // went ~0 everywhere and nothing wore.\n    float exposure = smoothstep(0.28, 0.75, vColor.g);\n  #else\n    // Baked-GLB path: AO lives in the texture, no vertex colors — edge\n    // wear stays unmasked by exposure (concave hits are rare here).\n    float exposure = 1.0;\n  #endif\n    // awear: per-weapon boost attr (unbaked/absent → 0 → ×1 unchanged).\n    float wear = min(1.0, edge * patches * exposure * (1.0 + vAw) * uWearInt);\n\n    // Worn metal: desaturate and brighten edges; slight micro-scratch noise.\n    float scratch = wnoise(vWpos * 700.0) * 0.12;\n    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.88, 0.86, 0.84), wear * 0.95);\n    diffuseColor.rgb *= 1.0 - wear * scratch;\n\n    // Baked grime map (the bakery's full-material branch): a mostly-white\n    // mask whose dark response is broad dirt — multiplies the albedo where\n    // a weapon has the file, blank everywhere else.\n    float grimeB = texture2D(uGrimeMap, vUvW).r;\n    diffuseColor.rgb *= mix(1.0, grimeB, 0.45);\n\n    // Concave grime — the signed-curvature complement of edge wear:\n    // baked per-vertex on valley edges, darkened + dirtied with the same\n    // patchy clumping so seams read as collected crud, not a uniform\n    // shade ramp.\n    float dirt = vGrime * (0.6 + 0.4 * wnoise(vWpos * 110.0 + 31.7)) * uWearInt;\n    diffuseColor.rgb *= 1.0 - dirt * 0.38;\n  #ifdef WEARVIZ\n    // R=final wear, G=baked AO (the exposure gate input), B=edge flag.\n    // AO replaced grime here — when wear reads wrong, the AO values are\n    // almost always the thing that needs eyeballing.\n    #ifdef USE_COLOR\n      diffuseColor.rgb = vec3(wear, vColor.g, edge);\n    #else\n      diffuseColor.rgb = vec3(wear, 0.0, edge);\n    #endif\n  #endif\n\n  #ifdef USE_COLOR\n    // Extra cavity depth beyond vertex AO — cheap contrast ramp on the bake.\n    diffuseColor.rgb *= 0.6 + 0.4 * smoothstep(0.2, 0.75, vColor.g);\n  #endif\n}`);\n\t\tmat.needsUpdate = true;\n\t}"
+  },
+  {
+   "name": "",
+   "vs": 17599,
+   "fs": 16808,
+   "vh": 1026330522,
+   "fh": 1681541227,
+   "ck": "basic,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388608,132099,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 19860,
+   "fs": 46131,
+   "vh": 439660853,
+   "fh": -801689732,
+   "ck": "lambert,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388608,132099,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 19182,
+   "fs": 77285,
+   "vh": 1794471526,
+   "fh": 1656269493,
+   "ck": "physical,STANDARD,,highp,srgb,false,,uv,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388608,132131,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 19316,
+   "fs": 78370,
+   "vh": 660738710,
+   "fh": -687555995,
+   "ck": "physical,STANDARD,,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388608,132099,srgb,(shader, renderer) => {\n\t\tprev?.(shader, renderer);\n\t\tshader.uniforms.uTbHmap = heightU.heightMap;\n\t\tshader.uniforms.uTbWorldScale = heightU.hmWorldScale;\n\t\tshader.uniforms.uTbHScale = heightU.hScale;\n\t\tshader.uniforms.uTbSand = { value: SAND };\n\t\tshader.vertexShader = shader.vertexShader.replace(\"void main() {\", \"varying vec3 vTbW;\\nvoid main() {\").replace(\"#include <fog_vertex>\", `#include <fog_vertex>\\n${VERT_TAIL}`);\n\t\tshader.fragmentShader = shader.fragmentShader.replace(\"void main() {\", `${FRAG_HEAD}\\nvoid main() {`).replace(\"#include <normal_fragment_begin>\", FRAG_BODY);\n\t}"
+  },
+  {
+   "name": "",
+   "vs": 17620,
+   "fs": 16829,
+   "vh": 708275902,
+   "fh": 1520262207,
+   "ck": "basic,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388608,134147,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 19932,
+   "fs": 46169,
+   "vh": 902159173,
+   "fh": -1748478496,
+   "ck": "lambert,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388611,132103,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 17704,
+   "fs": 16846,
+   "vh": 1646566233,
+   "fh": -1148717793,
+   "ck": "basic,highp,srgb,false,,uv,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388611,5123,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 17685,
+   "fs": 16827,
+   "vh": 873276234,
+   "fh": 840365465,
+   "ck": "basic,highp,srgb,false,,uv,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388611,1027,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 19883,
+   "fs": 46131,
+   "vh": -638192066,
+   "fh": -801689732,
+   "ck": "lambert,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388609,132099,srgb,onBeforeCompile() {}"
+  },
+  {
+   "name": "",
+   "vs": 17651,
+   "fs": 16826,
+   "vh": -909447333,
+   "fh": -646583486,
+   "ck": "basic,highp,srgb,false,,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,0,,false,0,,1,0,0,0,1,0,1,0,0,0,0,1,4,0,0,0,8388611,132099,srgb,onBeforeCompile() {}"
+  }
+ ],
+ "mats": [
+  [
+   "ShaderMaterial||1|nofog||||obc|",
+   8
+  ],
+  [
+   "PointsMaterial|T|2||map|vc||obc|",
+   4
+  ],
+  [
+   "MeshBasicMaterial||1|||||obc|",
+   36
+  ],
+  [
+   "ShaderMaterial|T|1|nofog||||obc|",
+   5
+  ],
+  [
+   "ShaderMaterial|T|2|nofog||||obc|",
+   3
+  ],
+  [
+   "MeshBasicMaterial|T|1||map|||obc|",
+   9
+  ],
+  [
+   "MeshBasicMaterial|T|1|||||obc|",
+   10
+  ],
+  [
+   "LineBasicMaterial||1|||||obc|",
+   1
+  ],
+  [
+   "MeshStandardMaterial||1|||||obc|",
+   10
+  ],
+  [
+   "MeshLambertMaterial||1|||vc||obc|",
+   35
+  ],
+  [
+   "SpriteMaterial|T|2||map|||obc|",
+   5
+  ],
+  [
+   "MeshBasicMaterial|T|2|nofog||vc||obc|",
+   2
+  ],
+  [
+   "MeshLambertMaterial||1|||||obc|",
+   11
+  ],
+  [
+   "MeshBasicMaterial|T|2|nofog|map|||obc|",
+   2
+  ],
+  [
+   "LineBasicMaterial|T|2|nofog||vc||obc|",
+   1
+  ],
+  [
+   "MeshBasicMaterial|T|2|||||obc|",
+   3
+  ],
+  [
+   "MeshBasicMaterial|T|2||map|||obc|",
+   2
+  ]
+ ],
+ "hot": [
+  {
+   "fn": "WebGLUniforms @:44585",
+   "samples": 2302
+  },
+  {
+   "fn": "computeBoundingSphere @:14018",
+   "samples": 43
+  },
+  {
+   "fn": "projectObject @:51125",
+   "samples": 28
+  },
+  {
+   "fn": "updateMatrixWorld @:9863",
+   "samples": 18
+  },
+  {
+   "fn": "normalizeNormals @:14203",
+   "samples": 12
+  },
+  {
+   "fn": "searchNodeSubtree @:36261",
+   "samples": 12
+  },
+  {
+   "fn": "sampleHeightmap @:142",
+   "samples": 12
+  },
+  {
+   "fn": "renderObject @:46502",
+   "samples": 12
+  },
+  {
+   "fn": "bakeWearTexture @:470",
+   "samples": 10
+  },
+  {
+   "fn": "updateBuffer @:41205",
+   "samples": 9
+  },
+  {
+   "fn": "_raycastFirst$1 @:2693",
+   "samples": 6
+  },
+  {
+   "fn": "(anon) @:50846",
+   "samples": 6
+  },
+  {
+   "fn": "getParameters @:45281",
+   "samples": 6
+  },
+  {
+   "fn": "update @:62",
+   "samples": 6
+  },
+  {
+   "fn": "getZ @:12866",
+   "samples": 5
+  },
+  {
+   "fn": "convertBufferAttribute @:14218",
+   "samples": 5
+  },
+  {
+   "fn": "computeBoundingSphere @:17141",
+   "samples": 5
+  },
+  {
+   "fn": "findKey @:2963",
+   "samples": 5
+  },
+  {
+   "fn": "bakeMesh @:803",
+   "samples": 5
+  },
+  {
+   "fn": "setMaterial @:46951",
+   "samples": 5
+  }
+ ],
+ "marks": [
+  [
+   "initStart",
+   717
+  ],
+  [
+   "networkConnectStart",
+   720
+  ],
+  [
+   "heightmapLoaded",
+   742
+  ],
+  [
+   "terrainCreated",
+   796
+  ],
+  [
+   "effectsCreated",
+   799
+  ],
+  [
+   "playerCtor",
+   801
+  ],
+  [
+   "viewmodel",
+   831
+  ],
+  [
+   "entities",
+   834
+  ],
+  [
+   "playerCreated",
+   834
+  ],
+  [
+   "networkInit",
+   835
+  ],
+  [
+   "hudCreated",
+   841
+  ],
+  [
+   "initComplete",
+   872
+  ],
+  [
+   "savedMapApplied",
+   881
+  ],
+  [
+   "playerModelLoaded",
+   69624
+  ],
+  [
+   "networkConnected",
+   69631
+  ]
+ ],
+ "tasks": [
+  {
+   "dur": 68288,
+   "t": 738,
+   "type": "long-anim-frame",
+   "src": "heightmap.ts?t=1792246488371:undefined,demoSeed.ts:undefined,gameLoop.ts?t=1792246578597:undefined"
+  },
+  {
+   "dur": 68142,
+   "t": 883,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 740,
+   "t": 70071,
+   "type": "long-anim-frame",
+   "src": "WorkerTransport.ts:undefined,gameLoop.ts?t=1792246578597:undefined"
+  },
+  {
+   "dur": 588,
+   "t": 70223,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 489,
+   "t": 73816,
+   "type": "long-anim-frame",
+   "src": ":undefined,gameLoop.ts?t=1792246578597:undefined"
+  },
+  {
+   "dur": 478,
+   "t": 73816,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 432,
+   "t": 73170,
+   "type": "long-anim-frame",
+   "src": ":undefined,gameLoop.ts?t=1792246578597:undefined"
+  },
+  {
+   "dur": 422,
+   "t": 73170,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 420,
+   "t": 71018,
+   "type": "long-anim-frame",
+   "src": "heightmap.ts?t=1792246488371:undefined,three.module-Dhi4sXJn.js?v=533bc364:undefined,:undefined"
+  },
+  {
+   "dur": 380,
+   "t": 69630,
+   "type": "long-anim-frame",
+   "src": ":undefined,gameLoop.ts?t=1792246578597:undefined"
+  },
+  {
+   "dur": 318,
+   "t": 71038,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 282,
+   "t": 69026,
+   "type": "long-anim-frame",
+   "src": ":undefined,gameLoop.ts?t=1792246578597:undefined"
+  },
+  {
+   "dur": 268,
+   "t": 69028,
+   "type": "window",
+   "src": "unknown"
+  },
+  {
+   "dur": 258,
+   "t": 72615,
+   "type": "long-anim-frame",
+   "src": ":undefined,gameLoop.ts?t=1792246578597:undefined"
+  },
+  {
+   "dur": 242,
+   "t": 72616,
+   "type": "window",
+   "src": "unknown"
+  }
+ ],
+ "rafWorst": [
+  {
+   "gap": 68414,
+   "at": 69298
+  },
+  {
+   "gap": 689,
+   "at": 70912
+  },
+  {
+   "gap": 689,
+   "at": 74295
+  },
+  {
+   "gap": 506,
+   "at": 73594
+  },
+  {
+   "gap": 355,
+   "at": 71357
+  },
+  {
+   "gap": 253,
+   "at": 72859
+  },
+  {
+   "gap": 223,
+   "at": 69847
+  },
+  {
+   "gap": 217,
+   "at": 70065
+  },
+  {
+   "gap": 214,
+   "at": 73073
+  },
+  {
+   "gap": 196,
+   "at": 71910
+  },
+  {
+   "gap": 189,
+   "at": 72162
+  },
+  {
+   "gap": 159,
+   "at": 70223
+  },
+  {
+   "gap": 147,
+   "at": 885
+  },
+  {
+   "gap": 140,
+   "at": 724
+  },
+  {
+   "gap": 140,
+   "at": 69438
+  }
+ ],
+ "totalTaskMs": 147799
+}
