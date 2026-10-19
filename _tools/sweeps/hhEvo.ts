@@ -17,12 +17,17 @@
  * Results append JSONL to _tools/sweeps/out/hhevo.jsonl — reruns resume
  * the pool from the file's last `pool` line when it exists.
  */
+// Harnesses step() in a tight loop — the MPC worker never pumps, so
+// every solve pays ~100-300ms synchronously inside the tick. Off by
+// default here; set FPS_MPC_OFF=0 to measure planner-on outcomes.
+process.env.FPS_MPC_OFF ??= '1';
 import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { hmParseBin, hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { WeaponType } from '../../shared/weapons.ts';
 import { kitConsistent, WILDCARD_SLOTS, type BotLoadout } from '../../shared/botLoadouts.ts';
-import type { BotTier, BotSkillMix } from '../../shared/botSkill.ts';
+import type { BotTier, BotSkillMix, BotSkill } from '../../shared/botSkill.ts';
+import { rollSkill } from '../../shared/botSkill.ts';
 import { PERK_ORDER, type PerkId } from '../../shared/perks.ts';
 import { mkRoom, step, pin } from '../../server_bun/tests/scenarios/harness.ts';
 import { simNow, simNowAdvance, simNowReset } from '../../server_bun/src/simClock.ts';
@@ -52,6 +57,12 @@ const WORKERS = Math.max(1, Number(arg('workers', 1)));
 // granularity. 0 = off. Validate θ against pair-replay history:
 // headhunt margins can swing ~±50 on a late hoard scatter.
 const RACE = Number(arg('race', 0));
+// --tie θ / --tiebreak N: the budget inverse of racing. A pairing whose
+// worst-map margin lands inside ±θ is a coin flip at this sample size —
+// spend N extra matches PER MAP on it. Budget flows from blowouts to
+// contested pairings, which is where the fitness information lives.
+const TIE = Number(arg('tie', MINS * 3)); // ~3-token/min swing scale
+const TIEBREAK = Number(arg('tiebreak', 1));
 
 // ---- gene space -----------------------------------------------------------
 const TIERS: BotTier[] = ['easy', 'medium', 'hard', 'impossible'];
@@ -169,6 +180,10 @@ const mapCtx = (name: string): MapCtx => {
 // fitness margin is the WORST map — a genome that only works on one
 // arena can't fake general strength (map-matrix admission).
 const MAPS = arg('maps', arg('map', 'flat')).split(',').map(mapCtx);
+// --mode: dm/ctf/headhunt/nuggets/conquest — fitness is always
+// room.scores margin so the mode's own objective stays the target.
+// Duel = --mode dm --per 1.
+const MODE = arg('mode', 'headhunt');
 
 /** Behavior descriptors — the QD axes. agg=kills/min, mob=mean planar
  *  speed, air=airborne fraction, life=median lifespan, heldEnd=final
@@ -188,23 +203,30 @@ function runMatch(ga: Genome, gb: Genome, seed: number, ctx: MapCtx = MAPS[0]!):
   const profT = PROF ? performance.now() : 0;
   const room = mkRoom({
     ...ctx.specTerrain,
-    mode: 'headhunt',
+    mode: MODE,
     bots: PER * 2,
     botFill: PER * 2,
     botSkill: { alpha: skillMix(ga), bravo: skillMix(gb) },
     arena: { x: 0, z: 0, radius: ARENA },
-  }, 'headhunt', seed, false, ctx.field);
+  }, MODE, seed, false, ctx.field);
   room.spec.botFill = 0;
   (room as { endMatch: (w: string) => void }).endMatch = () => {};
 
   const ctl = room.bots as unknown as {
     loadouts: Map<string, BotLoadout>;
+    brains: Map<string, { skill: BotSkill }>;
     roster: { alts: Map<string, Partial<Record<string, WeaponType[]>>>; refitClass(id: string): void };
   };
   const bots = [...room.players.getAllPlayers().values()].filter((p) => p.isBot);
+  // FFA modes (rabbit/duel/flagrun/dm): bots are teamless, so sides are
+  // a harness fiction — index split — and botSkill.{alpha,bravo} never
+  // reaches tierFor(p.team). Kits are per-bot anyway; the skill matrix
+  // gets re-rolled per genome directly on the brain.
+  const ffa = !!room.modeSpec?.ffa;
   const sides: Record<'alpha' | 'bravo', { id: string }[]> = { alpha: [], bravo: [] };
-  for (const p of bots) {
-    const team = p.team === 'bravo' ? 'bravo' : 'alpha';
+  for (const [bi, p] of bots.entries()) {
+    const team = ffa ? (bi < bots.length / 2 ? 'alpha' : 'bravo') : (p.team === 'bravo' ? 'bravo' : 'alpha');
+    if (ffa) {Object.assign(ctl.brains.get(p.id)!.skill, rollSkill(p.position, skillMix(team === 'alpha' ? ga : gb)));}
     const kit = kitOf(team === 'alpha' ? ga : gb);
     ctl.loadouts.set(p.id, kit);
     ctl.roster.refitClass(p.id);
@@ -258,7 +280,7 @@ function runMatch(ga: Genome, gb: Genome, seed: number, ctx: MapCtx = MAPS[0]!):
     room.messages.respawnTick(simNow());
     if (PROF) {const n = performance.now(); prof.respawn += n - tp; tp = n;}
     for (const p of allP) {
-      const t = p.team === 'bravo' ? 'bravo' : 'alpha';
+      const t = sideOf.get(p.id)?.team ?? 'alpha'; // FFA bots are teamless
       if (p.isDead) {
         wasDead.add(p.id);
         const born = lifeStart.get(p.id);
@@ -285,13 +307,13 @@ function runMatch(ga: Genome, gb: Genome, seed: number, ctx: MapCtx = MAPS[0]!):
     console.log(`   prof ms: setup=${prof.setup.toFixed(0)} step=${prof.step.toFixed(0)} respawn=${prof.respawn.toFixed(0)} pLoop=${prof.pLoop.toFixed(0)} score=${prof.score.toFixed(0)} sim=${(ticks * dt).toFixed(0)}s`);}
   const players = room.scoring.matchPlayers();
   const team = (t: 'alpha' | 'bravo') => {
-    const rows = players.filter((p) => (p.team ?? 'alpha') === t);
+    const rows = players.filter((p) => (sideOf.get(p.id)?.team ?? p.team ?? 'alpha') === t);
     return { k: rows.reduce((n, r) => n + r.kills, 0), d: rows.reduce((n, r) => n + r.deaths, 0) };
   };
   const ta = team('alpha'), tb = team('bravo');
   const medLife = (xs: number[]): number => (xs.length ? [...xs].sort((x, y) => x - y)[Math.floor(xs.length / 2)]! : 0);
   const heldOf = (t: 'alpha' | 'bravo'): number =>
-    allP.filter((p) => (p.team ?? 'alpha') === t).reduce((n, p) => n + (p.heldTokens ?? 0), 0);
+    allP.filter((p) => (sideOf.get(p.id)?.team ?? 'alpha') === t).reduce((n, p) => n + (p.heldTokens ?? 0), 0);
   const simMin = (ticks * dt) / 60;
   const descOf = (t: 'alpha' | 'bravo', k: number): Desc => ({
     agg: k / Math.max(0.1, simMin),
@@ -300,8 +322,18 @@ function runMatch(ga: Genome, gb: Genome, seed: number, ctx: MapCtx = MAPS[0]!):
     life: medLife(lives[t]),
     heldEnd: heldOf(t),
   });
+  // FFA modes (dm/duel/rabbit/flagrun) bank per-player pts in ffaScores
+  // — kills AND rabbit hold-seconds land there; sum by our assigned
+  // sides. Team modes keep room.scores.
+  const ffaScore = (t: 'alpha' | 'bravo'): number => {
+    const fs = (room.scoring as { ffaScores?: Map<string, number> }).ffaScores;
+    let s = 0;
+    for (const b of sides[t]) {s += fs?.get(b.id) ?? 0;}
+    return s;
+  };
   const r: MatchResult = {
-    aScore: room.scores.alpha ?? 0, bScore: room.scores.bravo ?? 0,
+    aScore: ffa ? ffaScore('alpha') : room.scores.alpha ?? 0,
+    bScore: ffa ? ffaScore('bravo') : room.scores.bravo ?? 0,
     aK: ta.k, aD: ta.d, bK: tb.k, bD: tb.d,
     tokens: heldOf('alpha') + heldOf('bravo'), simS: ticks * dt,
     aGrabs: grabs.alpha, bGrabs: grabs.bravo,
@@ -372,7 +404,7 @@ const runTasks = async (tasks: PairTask[]): Promise<Map<number, MatchResult>> =>
     const rf = `${tf}.res`;
     resFiles.push(rf);
     procs.push(Bun.spawn([process.execPath, import.meta.filename!, '--eval', tf, '--results', rf, '--race', String(RACE),
-      '--mins', String(MINS), '--per', String(PER), '--arena', String(ARENA)],
+      '--mins', String(MINS), '--per', String(PER), '--arena', String(ARENA), '--mode', MODE],
       { stdout: 'ignore', stderr: 'inherit', cwd: process.cwd() }).exited);
   }
   await Promise.all(procs);
@@ -425,7 +457,7 @@ function nashMix(payoff: number[][], iters = 500): number[] {
   return rowCount.map((c) => c / tot);
 }
 
-console.log(`hhEvo: headhunt evolution — pop=${POP} gens=${GENS} ${MINS}min×${MATCHES} per pairing, ${PER}v${PER} arena r=${ARENA} maps=${MAPS.map((m) => m.name).join('+')} seed=${SEED}\n`);
+console.log(`hhEvo: ${MODE} evolution — pop=${POP} gens=${GENS} ${MINS}min×${MATCHES} per pairing, ${PER}v${PER} arena r=${ARENA} maps=${MAPS.map((m) => m.name).join('+')} seed=${SEED}\n`);
 
 let pool: Genome[] = SEED_POOL.filter((g) => {
   if (!legal(g)) {console.log(`  dropping illegal seed kit ${gname(g)}`); return false;}
@@ -489,47 +521,82 @@ for (let gen = 0; gen < GENS && !wallStop; gen += 1) {
     }
   }
   if ((performance.now() - t0) / 1000 > WALL_S) {console.log(`wall cap — stopping before gen ${gen}`); wallStop = true; break;}
-  const genRes = await runTasks(genTasks);
-  let racedOut = 0;
+  // Per-group accumulators live across dispatch rounds (base matches +
+  // any tiebreakers) — stats fold per task, margins only finalize once
+  // no more matches are queued for that pairing.
+  const grpWins = new Map<number, number>();
+  const grpPlayed = new Map<number, number>();
+  const grpMap = new Map<number, Map<number, number>>();
+  const grpSeen = new Set<number>();
+  let racedOut = 0, tiebroke = 0;
+  const fold = (tasks: PairTask[], res: Map<number, MatchResult>): void => {
+    for (const t of tasks) {
+      const r = res.get(t.id);
+      if (!r) {racedOut++; continue;}
+      const g = t.grp;
+      const i = t.meta!.i as number, j = t.meta!.j as number, mi = t.meta!.mi as number;
+      const ga = pool[i]!, gb = pool[j]!;
+      const my = t.flip ? r.bScore : r.aScore, their = t.flip ? r.aScore : r.bScore;
+      const myK = t.flip ? r.bK : r.aK, myD = t.flip ? r.bD : r.aD;
+      const thK = t.flip ? r.aK : r.bK, thD = t.flip ? r.aD : r.bD;
+      const pm = grpMap.get(g) ?? new Map<number, number>();
+      pm.set(mi, (pm.get(mi) ?? 0) + my - their); grpMap.set(g, pm);
+      grpWins.set(g, (grpWins.get(g) ?? 0) + (my > their ? 1 : 0));
+      grpPlayed.set(g, (grpPlayed.get(g) ?? 0) + 1);
+      const ra = stats.get(ga)!, rb = stats.get(gb)!;
+      ra.kd += myK / Math.max(1, myD); rb.kd += thK / Math.max(1, thD);
+      ra.games++; rb.games++;
+      ra.desc.push(t.flip ? r.bDesc : r.aDesc); rb.desc.push(t.flip ? r.aDesc : r.bDesc);
+      if (!grpSeen.has(g)) {
+        grpSeen.add(g);
+        console.log(`  g${gen} ${gname(ga)}\n     vs ${gname(gb)}: ${r.aScore}-${r.bScore} (kd ${r.aK}/${r.aD} vs ${r.bK}/${r.bD}, held ${r.tokens})`);
+      }
+    }
+  };
+  fold(genTasks, await runTasks(genTasks));
+  // Tiebreak rounds: pairings whose worst-map margin is still a coin
+  // flip get TIEBREAK extra matches per map until they're decided or
+  // the extra budget's spent.
+  for (let tb = 0; tb < TIEBREAK; tb += 1) {
+    const extra: PairTask[] = [];
+    for (let i = 0, g = 0; i < pool.length; i += 1) {
+      for (let j = i + 1; j < pool.length; j += 1, g += 1) {
+        const pm = grpMap.get(g);
+        if (!pm || !pm.size) {continue;}
+        const marginA = Math.min(...pm.values());
+        if (Math.abs(marginA) > TIE) {continue;}
+        for (const [mi, ctx] of MAPS.entries()) {
+          extra.push({ id: tid++, grp: g, ga: pool[i]!, gb: pool[j]!,
+            flip: (tb + mi) % 2 === 1, // vary sides across rounds/maps
+            seed: SEED * 1000 + gen * 100 + i * 10 + j + (MATCHES + tb + mi * 101) * 5000 + 9000000,
+            map: ctx.name, meta: { i, j, mi } });
+        }
+        tiebroke++;
+      }
+    }
+    if (!extra.length) {break;}
+    fold(extra, await runTasks(extra));
+  }
+  // Margins finalize: worst-map per pairing → fitness/payoff/exploitability.
   for (let i = 0, g = 0; i < pool.length; i += 1) {
     for (let j = i + 1; j < pool.length; j += 1, g += 1) {
       const ga = pool[i]!, gb = pool[j]!;
-      let winsA = 0, played = 0;
-      const mapMargins: number[] = [];
-      const perMap = new Map<number, number>();
-      for (const t of genTasks) {
-        if (t.grp !== g) {continue;}
-        const r = genRes.get(t.id);
-        if (!r) {racedOut++; continue;}
-        const mi = (t.meta!.mi as number);
-        const my = t.flip ? r.bScore : r.aScore, their = t.flip ? r.aScore : r.bScore;
-        const myK = t.flip ? r.bK : r.aK, myD = t.flip ? r.bD : r.aD;
-        const thK = t.flip ? r.aK : r.bK, thD = t.flip ? r.aD : r.bD;
-        perMap.set(mi, (perMap.get(mi) ?? 0) + my - their);
-        winsA += my > their ? 1 : 0;
-        played++;
-        const ra = stats.get(ga)!, rb = stats.get(gb)!;
-        ra.kd += myK / Math.max(1, myD); rb.kd += thK / Math.max(1, thD);
-        ra.games++; rb.games++;
-        ra.desc.push(t.flip ? r.bDesc : r.aDesc); rb.desc.push(t.flip ? r.aDesc : r.bDesc);
-        if (played === 1) {
-          console.log(`  g${gen} ${gname(ga)}\n     vs ${gname(gb)}: ${r.aScore}-${r.bScore} (kd ${r.aK}/${r.aD} vs ${r.bK}/${r.bD}, held ${r.tokens})`);
-        }
-      }
-      for (const [, v] of [...perMap].sort((a, b) => a[0] - b[0])) {mapMargins.push(v);}
-      // Worst-map margin IS the fitness — a genome that only works on
-      // one arena can't fake general strength.
+      const played = grpPlayed.get(g) ?? 0;
+      const mapMargins = [...(grpMap.get(g) ?? new Map())].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
+      if (!mapMargins.length) {continue;}
       const marginA = Math.min(...mapMargins);
       stats.get(ga)!.margin += marginA; stats.get(gb)!.margin -= marginA;
       payoff[i]![j]! += marginA; payoff[j]![i]! -= marginA;
       stats.get(ga)!.worst = Math.min(stats.get(ga)!.worst, marginA);
       stats.get(gb)!.worst = Math.min(stats.get(gb)!.worst, -marginA);
+      const winsA = grpWins.get(g) ?? 0;
       stats.get(ga)!.w += winsA; stats.get(ga)!.l += played - winsA;
       stats.get(gb)!.w += played - winsA; stats.get(gb)!.l += winsA;
       if (MAPS.length > 1 || played < MATCHES * MAPS.length) {console.log(`     map margins: ${mapMargins.map((m, k) => `${MAPS[k]!.name}:${m > 0 ? '+' : ''}${m}`).join(' ')} → worst ${marginA > 0 ? '+' : ''}${marginA}${played < MATCHES * MAPS.length ? ' (raced)' : ''}`);}
     }
   }
   if (racedOut) {console.log(`  racing: ${racedOut} matches skipped`);}
+  if (tiebroke) {console.log(`  tiebreak: ${tiebroke} close pairing(s) ×${TIEBREAK} extra`);}
   if ((performance.now() - t0) / 1000 > WALL_S) {console.log(`wall cap — board partial, stopping`); wallStop = true;}
   const board = pool.map((g) => stats.get(g)!).sort((x, y) => y.margin - x.margin);
   console.log(`\n── gen ${gen} board ──`);
@@ -603,6 +670,23 @@ for (let gen = 0; gen < GENS && !wallStop; gen += 1) {
     if (!seen.has(gname(m)) || pool.length >= POP) {
       seen.add(gname(m)); pool.push(m); stats.set(m, mkRow(m));
     }
+  }
+  // Stagnation breaker: when the pool's kit diversity collapses (few
+  // distinct near/mid/far shells), mutation alone is local search —
+  // inject fully-random legal immigrants in place of the tail.
+  const shells = new Set(pool.map((g) => `${g.near}.${g.mid}.${g.far}`));
+  if (shells.size <= Math.max(2, Math.floor(pool.length / 3))) {
+    let added = 0;
+    while (added < 2 && added + 1 < pool.length) {
+      const r: Genome = {};
+      for (const k of GENE_KEYS) {r[k] = Math.floor(rand() * DIMS[k]!.length);}
+      if (!legal(r) || seen.has(gname(r))) {continue;}
+      const drop = pool.length - 1 - added;
+      seen.delete(gname(pool[drop]!)); stats.delete(pool[drop]!);
+      pool[drop] = r; seen.add(gname(r)); stats.set(r, mkRow(r));
+      added++;
+    }
+    if (added) {console.log(`  stagnation — ${shells.size} shells in pool, injected ${added} immigrant(s)`);}
   }
   // Winners keep accumulated stats — reigning champions defend the crown.
   console.log('');

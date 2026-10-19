@@ -641,7 +641,16 @@ hurtCount += 1;
         // the same speed-out-of-danger the approach did (matchSim:
         // every ~20 m/s carry died inside 10s at the stand ring).
         if ((ctx.runner || ctx.running) && ctx.objective && this.field) {
-          this.mpcArm.set(id, ctx.running ? ctx.objective : (ctx.flagPos ?? ctx.objective));
+          const tgt = ctx.running ? ctx.objective : (ctx.flagPos ?? ctx.objective);
+          // MPC pays a beam search per retarget — a CARRIED flag moves
+          // faster than solves land (rabbit: 23% of solves were retarget
+          // churn, plans discarded on arrival). Arm only on static goals:
+          // stand routes, or a flag sitting dropped/unspawned.
+          const f = ctx.flagPos
+            ? [...(this.room.flags?.flags.values() ?? [])].find((fl) => Math.hypot(fl.pos.x - ctx.flagPos!.x, fl.pos.z - ctx.flagPos!.z) < 5)
+            : undefined;
+          if (f?.carrier) {this.mpcArm.delete(id); this.mpc.release(id);}
+          else {this.mpcArm.set(id, tgt);}
         } else {
           this.mpcArm.delete(id);
           this.mpc.release(id);
