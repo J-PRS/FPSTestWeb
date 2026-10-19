@@ -32,8 +32,8 @@ function run(opts: { hop: boolean; jetMode: 'none' | 'held' | 'tap'; tapDelay?: 
   for (let i = 0; i < steps; i++) {
     const st = m.simState('p')!;
     const ground = st.pos.y <= 2.05; // eye offset on flat — contact band
-    if (wasGround && !ground) airT = 0; // takeoff edge
-    if (!ground) airT += DT;
+    if (wasGround && !ground) {airT = 0;} // takeoff edge
+    if (!ground) {airT += DT;}
     wasGround = ground;
     const airborne = !ground;
     const jet = opts.jetMode === 'held'
@@ -78,7 +78,7 @@ function runMoves(moveSkill: number | undefined): MovesResult {
       now: i * DT * 1000,
     };
     const hint = moves.hints(DT, ctx, st.pos, objective) ?? { ski: false, jet: false, jump: false };
-    if (moves.jetWhy === 'tail') tailTicks++;
+    if (moves.jetWhy === 'tail') {tailTicks++;}
     m.setInput('p', {
       forward: 1, right: 0,
       jumpHeld: hint.jump, jumpPressed: false,
@@ -110,10 +110,13 @@ describe('hop→jet timing', () => {
     console.log(`botMoves unskilled spd=${plain.speed.toFixed(1)} enSpent=${plain.enSpent.toFixed(0)} tailTicks=${plain.tailTicks}`);
     expect(skilled.tailTicks).toBeGreaterThan(0);
     expect(plain.tailTicks).toBe(0);
-    // The sweep's promise: the descent tap roughly doubles transit pace
-    // (tank regen covers either style over 20s, so speed is the tell —
-    // the scripted sweep above carries the per-meter energy math).
-    expect(skilled.speed).toBeGreaterThan(plain.speed * 1.5);
+    // Post-cruise-burn (182bd8e9) the PLAIN runner transits at ~42m/s too
+    // — the grounded cruise fires for any runner, so the tap no longer
+    // doubles pace: the floor moved up under it. The remaining contract
+    // is the tap still fires on skilled transit and holds parity at the
+    // shared ceiling (its real value: airborne acceleration the grounded
+    // burn can't reach). The scripted sweep above carries e/m.
+    expect(skilled.speed).toBeGreaterThan(plain.speed * 0.9);
   });
 
   test('prints the sweep table', () => {

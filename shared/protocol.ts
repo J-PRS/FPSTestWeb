@@ -333,6 +333,10 @@ export type ServerMessage =
   // Server-owned mine tripped — clients paint the blast FX; damage itself
   // arrives through playerHit/knockback like everything else.
   | { type: 'mineBoom'; id: number; owner: string; pos: Vec3 }
+  // Hard landing measured on the movement shadow — the owner already
+  // played their predicted thud/dust; this is for everyone else in
+  // earshot (remote bodies get no landing edges otherwise).
+  | { type: 'landed'; playerId: string; pos: Vec3; impact: number }
   | { type: 'pickupGone'; id: number; by: string | null }
   // Server-owned heals (regen perk, mend channel, regen powerup) mutate
   // health silently every tick — self is excluded from tickUpdate, so

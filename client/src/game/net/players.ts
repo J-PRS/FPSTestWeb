@@ -39,6 +39,16 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
     deps.lazyEffects().spawnJetpack(pos);
   };
 
+  networkManager.onLanded = (playerId: string, position: { x: number; y: number; z: number }, impact: number): void => {
+    // The owner predicted their own thud/dust off the local sim —
+    // echoing the wire copy back at them would double the hit.
+    if (playerId === nm().getLocalPlayerId()) {return;}
+    if (!finiteVec(position) || !Number.isFinite(impact)) {return;}
+    const pos = new THREE.Vector3(position.x, position.y, position.z);
+    sfx.at(pos, 'slam_thud', Math.min(1.2, Math.max(0.4, impact / 60)));
+    deps.lazyEffects().spawnSlamDust(pos, impact);
+  };
+
   networkManager.onPlayerUpdate = (playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, serverMs: number, velocity?: { x: number; y: number; z: number }): void => {
     // Safety: never process local player as a remote player
     if (playerId === nm().getLocalPlayerId()) {return;}

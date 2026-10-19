@@ -424,6 +424,9 @@ export class Room {
       // T1 charges the full fractional hit — but anything under a
       // tenth of the bar is absorbed whole (a stubbed toe isn't a
       // wound; the client still sells dust + thud for the impact).
+      // Everyone in earshot hears the slam — the owner's local sim
+      // already dressed it; this echo is for remote observers only.
+      this.connections.broadcast({ type: 'landed', playerId: pid, pos: p.position, impact });
       let dmg = (impact - MOVEMENT_CONFIG.fallDamageMinSpeed) * MOVEMENT_CONFIG.fallDamageScale * p.maxHealth;
       // Featherfall: the soak burns the shadow's modeled tank (same pool
       // the jet econ owns) before the hit exists — a covered landing

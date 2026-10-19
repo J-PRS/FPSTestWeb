@@ -24,7 +24,11 @@ describe('netbot — real clients over real sockets', () => {
       () => t().reduce((a, x) => a + x.hitsDealt, 0) > 0,
       () => t().reduce((a, x) => a + x.shots + x.hitsDealt + x.kills + x.deaths + x.gameStates, 0),
       30_000,
-      { extendMs: 5000, hardCapMs: 60_000 },
+      // hardCap 90s: the full-suite run saw the first engagement outlive
+      // 60s on a loaded box (parallel files + a busy desktop starve the
+      // netbot threads). Still bounded — a wedged link dies on the outer
+      // timeout, not here.
+      { extendMs: 5000, hardCapMs: 90_000 },
     );
     await sleep(400); // let in-flight claims land
 
@@ -66,5 +70,5 @@ describe('netbot — real clients over real sockets', () => {
         expect(Math.hypot(a.pos.x - b.pos.x, a.pos.y - b.pos.y, a.pos.z - b.pos.z)).toBeLessThan(8);
       }
     }
-  }, 70_000);
+  }, 120_000);
 });

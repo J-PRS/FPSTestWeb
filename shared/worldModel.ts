@@ -407,6 +407,13 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
         { name: 'position', wire: 'vec3', channel: 'sim' },
         { name: 'velocity', wire: 'vec3', channel: 'sim' },
       ],
+      // Server-measured hard landing — remote slam dressing for
+      // observers (the owner's local sim already played theirs).
+      landed: [
+        { name: 'playerId', wire: 'str', channel: 'edge' },
+        { name: 'pos', wire: 'vec3', channel: 'sim' },
+        { name: 'impact', wire: 'num', channel: 'sim' },
+      ],
     },
     // tickUpdate record — id rides 'playerId'; the binary tick frame
     // packs the same fields.

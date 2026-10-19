@@ -281,6 +281,7 @@ this.handlerThrows += 1;
     sentryShot: (data): void | undefined => this.h.onSentryShot?.(data.id, data.owner, data.x, data.y, data.z),
     mortarShot: (data): void | undefined => this.h.onMortarShot?.(data.id, data.owner, data.vx, data.vy, data.vz),
     mineBoom: (data): void | undefined => this.h.onMineBoom?.(data.id, data.pos),
+    landed: (data): void | undefined => this.h.onLanded?.(data.playerId, data.pos, data.impact),
     deployHp: (data): void | undefined => this.h.onDeployHp?.(data.id, data.hp, data.armor, data.src),
     // Server refused a hit claim — worth surfacing: a healthy client
     // should basically never see this, so it's a desync tell.

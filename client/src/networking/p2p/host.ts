@@ -27,7 +27,8 @@ import type { ServerMessage } from '../../../../shared/protocol.js';
 import { ChildLogger } from '../../core/Logger.js';
 import { RoomProjectiles } from '../../../../server_bun/src/RoomProjectiles.js';
 import { RoomMoveSim } from '../../../../server_bun/src/RoomMoveSim.js';
-import { ENERGY } from '../../../../shared/movement.js';
+import { ENERGY, MOVEMENT_CONFIG } from '../../../../shared/movement.js';
+import { perkMods } from '../../../../shared/perks.js';
 import { beamSweepRay } from '../../../../server_bun/src/beamSweep.js';
 import { healPerTick } from '../../../../server_bun/src/tickHelpers.js';
 import { healPool } from '../../../../server_bun/src/healPool.js';
@@ -179,6 +180,20 @@ export class P2PHost {
   constructor() {
     this.projectiles = new RoomProjectiles(this, null);
     this.playerManager.energyBurn = (pid, n): boolean => this.moveShadows.drainEnergy(pid, n);
+    // Same shadow-measured T1 fall damage as dedicated — the guest's
+    // 'landed' echo dresses the slam for observers either way.
+    this.moveShadows.onLanding = (pid, impact): void => {
+      const p = this.playerManager.getPlayer(pid);
+      if (!p || p.isDead) {return;}
+      this.broadcast({ type: 'landed', playerId: pid, pos: p.position, impact });
+      let dmg = (impact - MOVEMENT_CONFIG.fallDamageMinSpeed) * MOVEMENT_CONFIG.fallDamageScale * p.maxHealth;
+      const soak = perkMods(p.perk).fallSoak;
+      if (soak > 0) {
+        const covered = Math.min(dmg, (this.moveShadows.energyOf(pid) ?? 0) * soak);
+        if (covered > 0) {this.moveShadows.drainEnergy(pid, covered / soak); dmg -= covered;}
+      }
+      if (dmg >= p.maxHealth * MOVEMENT_CONFIG.fallDamageAbsorbFrac) {this.messageHandler.fallDamage(pid, dmg);}
+    };
     this.messageHandler = new MessageHandler(
       this.playerManager,
       this.rateLimiter,
