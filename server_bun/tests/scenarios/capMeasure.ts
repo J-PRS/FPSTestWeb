@@ -14,6 +14,11 @@ export interface RunStat {
   avgSpeed: number;     // pathM / carryT — the capper's honest route pace
   avgE: number;         // mean mechanical energy ½v²+g·hAGL while carrying
   caps: number;
+  passV: number;        // fastest pass through the stand cylinder (d<40m,
+                        // |dy|<15) before the grab — separates "never
+                        // arrived fast" from "arrived fast, missed touch"
+  passDy: number;       // signed height-over-flag at that fastest pass:
+                        // + = sailed over the pole, - = hit below it
   grabV: number;        // speed through the stand at the grab instant —
                         // THE capper stat: llama walk-in vs speed grab
   peakE: number;        // max mechanical E banked during the approach —
@@ -93,7 +98,7 @@ export function measureCap(
     }
   }
 
-  const stat: RunStat = { grabT: 0, carryT: 0, pathM: 0, avgSpeed: 0, avgE: 0, caps: 0, grabV: 0, peakE: 0, approachE: 0 };
+  const stat: RunStat = { grabT: 0, carryT: 0, pathM: 0, avgSpeed: 0, avgE: 0, caps: 0, passV: 0, passDy: 0, grabV: 0, peakE: 0, approachE: 0 };
   const dt = 0.05;
   let simT = 0;
   // Wall-clock watchdog: a degenerate genome (or plain bad luck) can
@@ -129,6 +134,7 @@ export function measureCap(
   // here: banked altitude still reads in the total.
   let ePrev = 0, dropAcc = 0, dropT0 = 0;
   const drops: { t: number; dE: number; v: number; agl: number; dy: number; slope: number; air: boolean; jet: string }[] = [];
+  const trace: string[] = [];
   // Long budget — deaths reset the run and a second attempt is honest
   // capper behavior (nobody caps first try on a defended stand).
   for (let i = 0; i < simBudgetS * 20 && stat.caps === 0; i++) {
@@ -140,6 +146,14 @@ export function measureCap(
       if (simT - lastAliveT > 5) {break;}
     } else {
       lastAliveT = simT;
+    }
+    if (!capper.isDead && !carrying) {
+      const fd = Math.hypot(capper.position.x - bravoFlag.pos.x, capper.position.z - bravoFlag.pos.z);
+      const fdy = Math.abs(capper.position.y - bravoFlag.pos.y);
+      if (fd < 40 && fdy < 15) {
+        const pv = Math.hypot(capper.velocity.x, capper.velocity.z);
+        if (pv > stat.passV) {stat.passV = pv; stat.passDy = capper.position.y - bravoFlag.pos.y;}
+      }
     }
     if (!capper.isDead) {
       const e = mechE();
@@ -161,11 +175,22 @@ export function measureCap(
       }
       ePrev = se;
     }
+    if (verbose && !carrying && i % 20 === 0) {
+      const jd = ctl.brains.get(capper.id)?.jetDebug;
+      trace.push(
+        `    t=${simT.toFixed(0)}s d=${Math.hypot(capper.position.x - bravoFlag.pos.x, capper.position.z - bravoFlag.pos.z).toFixed(0)} ` +
+        `y=${capper.position.y.toFixed(0)} dy=${(capper.position.y - bravoFlag.pos.y).toFixed(0)} ` +
+        `v=${Math.hypot(capper.velocity.x, capper.velocity.z).toFixed(0)} vy=${capper.velocity.y.toFixed(0)} ` +
+        `en=${(room.moveSim.energyOf(capper.id) ?? -1).toFixed(0)} jet=${jd?.why ?? '?'}/${jd?.out ? '1' : '0'}`,
+      );
+      if (trace.length > 24) {trace.shift();}
+    }
     if (!carrying && bravoFlag.carrier === capper.id) {
       carrying = true;
       stat.grabT = simT;
       stat.grabV = Math.hypot(capper.velocity.x, capper.velocity.z);
       lastPos = { ...capper.position };
+      if (verbose) { for (const r of trace) {console.log(r);} trace.length = 0; }
     }
     if (carrying) {
       if (lastPos) {stat.pathM += Math.hypot(
@@ -200,7 +225,7 @@ export function measureCap(
         break;
       }
     }
-    if (verbose && i % 40 === 0 && simT < 45) {
+    if (verbose && i % 40 === 0 && (simT < 45 || carrying)) {
       const jd = ctl.brains.get(capper.id)?.jetDebug;
       console.log(
         `    t=${simT.toFixed(0)}s y=${capper.position.y.toFixed(0)} ` +
@@ -225,7 +250,7 @@ export function measureCap(
     console.log(
       `capper run [${tag}]: grab@${stat.grabT.toFixed(1)}s carry=${stat.carryT.toFixed(1)}s ` +
       `path=${stat.pathM.toFixed(0)}m avgSpeed=${stat.avgSpeed.toFixed(1)}m/s ` +
-      `grabV=${stat.grabV.toFixed(1)}m/s approachE=${stat.approachE.toFixed(0)} peakE=${stat.peakE.toFixed(0)} ` +
+      `grabV=${stat.grabV.toFixed(1)}m/s passV=${stat.passV.toFixed(1)}@${stat.passDy.toFixed(0)} approachE=${stat.approachE.toFixed(0)} peakE=${stat.peakE.toFixed(0)} ` +
       `avgE=${stat.avgE.toFixed(0)} caps=${stat.caps}`,
     );
     for (const d of drops) {

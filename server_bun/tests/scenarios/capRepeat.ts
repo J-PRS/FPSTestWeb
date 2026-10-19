@@ -157,6 +157,8 @@ export function measureRepeat(
     avgSpeed: mean(l => l.pace),
     avgE: 0,
     caps: n,
+    passV: 0,
+    passDy: 0,
     grabV: mean(l => l.grabV),
     peakE: mean(l => l.peakE),
     approachE: mean(l => l.approachE),

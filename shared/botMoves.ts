@@ -392,7 +392,13 @@ export class BotMoves {
       // too, so gluing the runner costs no speed and opens the 2.2s
       // heel-blast cadence (the flat-stand path to ~40m/s entry speed).
       jump: (uphill && speed < T.moves.jumpUphillSpeed && !airborne)
-        || (!ctx.posted && !airborne && speed > T.moves.hopSpeed && rise > -T.moves.hopDescRise && !this.travelDescent(ctx, pos, speed) && !this.arcThreadsFlag(ctx, pos, speed, od) && !(ctx.runner === true && od < T.moves.strikeGd && Math.abs(rise) < T.moves.stepRise) && (od > T.moves.hopGdFar ? rise <= T.moves.hopRiseFar : od > hopRing)),
+        || (!ctx.posted && !airborne && speed > T.moves.hopSpeed && rise > -T.moves.hopDescRise && !this.travelDescent(ctx, pos, speed) && !this.arcThreadsFlag(ctx, pos, speed, od) && !(ctx.runner === true && od < T.moves.strikeGd && Math.abs(rise) < T.moves.stepRise)
+          // Runners below cruise speed stay glued on near-flat ground:
+          // ski contact is frictionless so a flat hop buys nothing, and
+          // it pops the bot airborne where no grounded cruise burn can
+          // fire — the hop chain itself is what pinned transit ~25m/s.
+          && !((ctx.runner === true || ctx.wave === true) && speed < T.moves.cruiseSpeed && Math.abs(rise) < T.moves.hopRiseLo)
+          && (od > T.moves.hopGdFar ? rise <= T.moves.hopRiseFar : od > hopRing)),
     };
   }
 
@@ -424,7 +430,12 @@ export class BotMoves {
     const tHit = od / speed;
     if (tHit > 3) {return false;}
     const yAt = pos.y + (v.y ?? 0) * tHit + 0.5 * GRAVITY * tHit * tHit;
-    return Math.abs(yAt - ctx.objective.y) <= 6;
+    // Veto whenever the un-hopped arc already reaches the flag window
+    // from below OR sails over it — a hop only adds altitude, which is
+    // exactly what killed the dunes fast passes (40m/s arrival, hop
+    // added vy≈13, sailed 15m over the pole into a slow orbit). Only
+    // an arc landing clearly under the flag might hop up into it.
+    return yAt > ctx.objective.y - 6;
   }
 
   /** Dead-reckon the no-thrust ballistic arc: march vel + gravity and
@@ -589,7 +600,15 @@ export class BotMoves {
     // that drains to the reserve floor leaves the mid-route climbs
     // (which are not discretionary) with nothing.
     const boostTank = ctx.energy === undefined || ctx.energy > T.moves.boostEnergyMin;
-    const boost = !turning && !bank && speed < T.moves.boostSpeedMax && (ctx.objective ? od > T.moves.boostGdMin : gd > T.moves.boostGdMin) && boostTank && rise <= T.moves.boostRise && !airborne;
+    // Cruise burn (runners/wave, grounded only): the anti-sheep boost
+    // stops at 12m/s, which left transit capped at hop-chain pace —
+    // passV telemetry shows the capper never even passes the stand over
+    // ~30m/s on any map. Ski contact is frictionless so the forward jet
+    // converts straight into speed; airborne sustained jets were the
+    // ballooning failure (grabV 50→13) — this only fires with dirt
+    // under the skis, where thrust can't trade for altitude.
+    const cruiseCap = (ctx.runner === true || ctx.wave === true) ? T.moves.cruiseSpeed : T.moves.boostSpeedMax;
+    const boost = !turning && !bank && speed < cruiseCap && (ctx.objective ? od > T.moves.boostGdMin : gd > T.moves.boostGdMin) && boostTank && rise <= T.moves.boostRise && !airborne;
     // Transit burn REVERTED: airborne sustained jets balloon the hop
     // arcs (altitude, not speed — grabV 50→13, dunes 50→93s). Grounded-
     // only was dead code: the hop chain leaves no grounded flat ticks.
@@ -655,6 +674,12 @@ export class BotMoves {
     // runner buys more arrival speed spending the tank on lift now than
     // arriving topped-up on a slow line.
     if (bank && !skyBank && why !== 'climb' && why !== 'prey') {return false;}
+    // Strike-window discipline: inside the dive the tank exists for the
+    // run-in forward burn. `tap`/`hop`/`destHigh` kept skimming the
+    // regen mid-approach so the burn opened on ~10E (≈0.7s of thrust —
+    // grabV stuck at 25-35). Only a real climb still spends — an
+    // elevated flag face is the one thing forward thrust can't buy.
+    if (strike && why !== 'runIn' && why !== 'climb' && why !== 'prey' && why !== 'skyBank') {return false;}
     // The `mountE` start floor is load-bearing even inside the strike
     // window: letting the leg drain to `strikeTapMin` (2) was measured
     // WORSE on every axis (5 seeds × 3 maps: grabV 22.4→15.0, oasis

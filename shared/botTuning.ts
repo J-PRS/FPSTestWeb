@@ -30,6 +30,8 @@ export const BOT_TUNING = {
     bankOdMin: 150,      // m — banking needs runway to convert back to speed; inside this the burn is run-in instead
     comfyEnergy: 35,     // energy floor for discretionary burns
     boostSpeedMax: 12,   // m/s — anti-sheep boost only when slower
+    cruiseSpeed: 45,     // m/s — grounded cruise burn cap for runners/wave (jets can't push
+                         // past jetMaxFwdAccel=50 anyway; grounded-only so it can't balloon)
     boostGdMin: 15,      // m — boost only with ground to cover
     boostEnergyMin: 34,  // energy — boost spends only above this (climb reserve)
     boostRise: 1.5,      // m — boost only on flat/downhill ahead
