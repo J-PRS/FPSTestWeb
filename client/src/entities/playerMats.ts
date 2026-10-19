@@ -92,6 +92,60 @@ export class PlayerMats {
     for (const m of this.wireMats || []) {(m as THREE.MeshBasicMaterial).wireframe = on;}
   }
 
+  private baseCols = new Map<THREE.Material, THREE.Color>();
+  private tint: THREE.Color | null = null;
+
+  /** Team paint — lerps the 'armor' material's captured base color
+   *  toward a muted team hue; 'dark' frame and 'accent' glow stay
+   *  authored so plates read as painted armor over the same chassis.
+   *  Rigs without an 'armor' material tint everything (legacy bodies).
+   *  Full-saturation lerp reads as plastic, so the hue is muted first. */
+  setTint(hex: number | null): void {
+    this.tint = hex === null ? null : new THREE.Color(hex).lerp(new THREE.Color(0x20_20_24), 0.2);
+    const mats = [...this.clones.values()];
+    const targets = mats.some((m): boolean => m.name === 'armor')
+      ? mats.filter((m): boolean => m.name === 'armor')
+      : mats;
+    for (const m of targets) {
+      const sm = m as THREE.MeshStandardMaterial;
+      if (!sm.isMeshStandardMaterial) {continue;}
+      let base = this.baseCols.get(m);
+      if (!base) { base = sm.color.clone(); this.baseCols.set(m, base); }
+      sm.color.copy(base);
+      if (this.tint) {sm.color.lerp(this.tint, 0.7);}
+    }
+  }
+
+  /** Fresnel rim — emissive edge glow injected into the cloned body
+   *  materials (rim lives on the surface, not a separate shell — a
+   *  softer read than the hull outline). Uniform-driven so on/off
+   *  costs nothing after the one-time program patch. */
+  /** Non-body materials that want the same rim (the hand prop's own
+   *  material lives outside the clone set). */
+  readonly extraRim: THREE.Material[] = [];
+
+  setRim(hex: number | null): void {
+    const col = hex === null ? 0 : hex;
+    for (const m of [...this.clones.values(), ...this.extraRim]) {
+      const sm = m as THREE.MeshStandardMaterial;
+      if (!sm.isMeshStandardMaterial) {continue;}
+      let u = sm.userData.rimU as { value: THREE.Color } | undefined;
+      if (!u) {
+        u = { value: new THREE.Color(0) };
+        sm.userData.rimU = u;
+        const U = u;
+        sm.onBeforeCompile = (sh): void => {
+          sh.uniforms.uRim = U;
+          sh.fragmentShader = `uniform vec3 uRim;\n${sh.fragmentShader}`.replace(
+            '#include <emissivemap_fragment>',
+            '#include <emissivemap_fragment>\n totalEmissiveRadiance += uRim * pow(1.0 - saturate(dot(normalize(normal), normalize(vViewPosition))), 3.0);');
+        };
+        sm.needsUpdate = true;
+      }
+      u.value.setHex(col);
+    }
+  }
+
   /** Per-model material clones — frees their GPU program refs; shared
    *  geometry/textures belong to the cached gltf and stay alive. */
   dispose(): void {

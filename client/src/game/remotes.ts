@@ -191,6 +191,10 @@ function applyTeamTint(deps: RemotesDeps, lastTintOf: Map<string, string>,
   // constructor's default green.
   const friendly = Boolean(theirTeam) && theirTeam === deps.world.localTeam;
   remotePlayer.setColliderColor(friendly ? 0x00_FF_00 : ENEMY_RED);
+  // Body marks — enemies carry the scarlet hull+rim (through-wall read);
+  // allies get the quieter squad-green rim only. Bodies stay neutral.
+  remotePlayer.model.setOutline(friendly ? null : 0xF0_4A_4A);
+  remotePlayer.model.setRim(friendly ? 0x44_CC_55 : 0xF0_4A_4A);
   if (!theirTeam || theirTeam === lastTintOf.get(playerId)) {return;}
   lastTintOf.set(playerId, theirTeam);
   remotePlayer.setGizmoColor(theirTeam === deps.world.localTeam ? TEAM_COLORS[theirTeam] : ENEMY_RED);

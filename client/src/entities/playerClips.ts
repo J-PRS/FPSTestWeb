@@ -166,6 +166,11 @@ export interface RigManifest {
   /** Native clips also register under their UAL_ alias (mannequin's set
    *  IS the UAL library). */
   ualAlias?: boolean;
+  /** Strip AIM_BONE_MASK/torso quat tracks from loco clips at register so
+   *  the masked Pistol_Aim_* layer owns the upper body — for rigs whose
+   *  clips flail the arms during locomotion (native mannequin clips get
+   *  this via `mann`; this flag is the same treatment for other rigs). */
+  aimMask?: boolean;
   /** Anim-source ids (playerUal SPECS) this rig's retarget bake draws
    *  from — empty for native-only rigs. */
   sources: string[];
@@ -203,6 +208,38 @@ export const RIG_MANIFEST: Record<string, RigManifest> = {
   'polyart':      { url: '/assets/models/class_heavy.glb',  yaw: 0, fitH: 2.76, anims: POLYART_ANIMS, gunLocal: [0.38, 1.7, -0.55], sources: [],
                     walkDirs: { B: 'WalkBack_Shoot_ar', L: 'WalkLeft_Shoot_ar', R: 'WalkRight_Shoot_ar' },
                     mount: { palms: true, palmFwd: 0.35, palmYaw: -0.25, palmUp: 0.05, size: 1.3 } },
+  // Procedural Keel-style brute (_tools/models/build_brute.py) — ships
+  // zero clips, rides the full retarget pack. Bones use the
+  // RobotExpressive names so the default maps apply unmodified.
+  'brute':        { url: '/assets/models/class_brute.glb', yaw: 0, fitH: 2.8, sources: [],
+                    aimMask: true,
+                    gunLocal: [0.55, 0.7, -0.15],
+                    mount: { world: true, aimPin: true, size: 0.95, aimSeat: [-0.06, 0.1, 0.12] },
+                    anims: { idle: 'Idle_A', walk: 'Walk', run: 'Sprint',
+                             jump: 'Jump_2', ski: 'Jump_air', jet: 'Pistol_Aim_Neutral',
+                             shoot: 'Pistol_Shoot', throw: 'Throw Object',
+                             hit: 'Hit_Chest', death: 'Death_A' },
+                    walkDirs: { L: 'Strafe_left', R: 'Strafe_right', B: 'Walk_Backwards' } },
+  // Same M2M skeleton + clip set as brute — brawler is the medium tier,
+  // scout the light. Only silhouette and fit height differ.
+  'brawler':      { url: '/assets/models/class_brawler.glb', yaw: 0, fitH: 2.3, sources: [],
+                    aimMask: true,
+                    gunLocal: [0.55, 0.7, -0.15],
+                    mount: { world: true, aimPin: true, size: 0.95, aimSeat: [-0.06, 0.1, 0.12] },
+                    anims: { idle: 'Idle_A', walk: 'Walk', run: 'Sprint',
+                             jump: 'Jump_2', ski: 'Jump_air', jet: 'Pistol_Aim_Neutral',
+                             shoot: 'Pistol_Shoot', throw: 'Throw Object',
+                             hit: 'Hit_Chest', death: 'Death_A' },
+                    walkDirs: { L: 'Strafe_left', R: 'Strafe_right', B: 'Walk_Backwards' } },
+  'scout':        { url: '/assets/models/class_scout.glb', yaw: 0, fitH: 1.9, sources: [],
+                    aimMask: true,
+                    gunLocal: [0.55, 0.7, -0.15],
+                    mount: { world: true, aimPin: true, size: 0.95, aimSeat: [-0.06, 0.1, 0.12] },
+                    anims: { idle: 'Idle_A', walk: 'Walk', run: 'Sprint',
+                             jump: 'Jump_2', ski: 'Jump_air', jet: 'Pistol_Aim_Neutral',
+                             shoot: 'Pistol_Shoot', throw: 'Throw Object',
+                             hit: 'Hit_Chest', death: 'Death_A' },
+                    walkDirs: { L: 'Strafe_left', R: 'Strafe_right', B: 'Walk_Backwards' } },
 };
 
 // armorClass → dedicated body GLB, derived from the manifest — table
@@ -226,7 +263,8 @@ export const CLASS_BODY_SPEC: Record<string, {
 // armorClass from the wire → class-body variant. A mid-match re-fit swaps
 // the whole GLB (RemotePlayer.setClass).
 export const CLASS_BODY_VARIANT: Record<string, string> = {
-  light: 'mannequin', medium: 'mannequin', heavy: 'polyart',
+  // M2M procedural trio — revert to mannequin/mannequin/polyart to undo.
+  light: 'scout', medium: 'brawler', heavy: 'brute',
 };
 
 // Classes whose mannequin body gets the INVERSE material swap
@@ -281,7 +319,10 @@ export const ONESHOT_CLIPS = new Set(['No', 'Punch', 'UAL_Pistol_Shoot', 'UAL_Hi
   'Hit', 'Damage1', 'Damage2', 'Damage3', 'Reload',
   'Fire_1Pistol', 'Fire_2Pistol', 'Fire_SniperRifle',
   'Shoot_SingleShot_AR', 'Shoot_BurstShot_AR', 'Shoot_AutoShot_AR',
-  'UAL_OverhandThrow', 'UAL_Hit_Knockback']);
+  'UAL_OverhandThrow', 'UAL_Hit_Knockback',
+  // Mesh2Motion native names (brute) — same full-body ownership rule.
+  'Two-hand Blast', 'Pistol_Shoot', 'Throw Object', 'OverhandThrow',
+  'Hit_Chest', 'Hit_Knockback', 'Death_A', 'Death_D']);
 
 // Per-variant clip overrides — states whose ANIM_NAMES pair can't resolve
 // on that rig. cybersoldier ski: mannequin's clip set has no Slide_Loop

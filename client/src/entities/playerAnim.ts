@@ -126,7 +126,7 @@ else if (t.name.endsWith('.scale')) {cap = 1e3;}
     if (mann || knight || CLASS_BODY_SPEC[this.host.variant]) {
       stripHipXZ(clip, rootMotion);
       clampHipY(clip, 0.25, rootMotion);
-      if (mann && isLayeredClip(clip.name)) {
+      if ((mann || RIG_MANIFEST[this.host.variant]?.aimMask) && isLayeredClip(clip.name)) {
         clip.tracks = clip.tracks.filter((t): boolean => {
           const bn = normBone(t.name.slice(0, t.name.indexOf('.')));
           // Arm tracks always yield; torso quat tracks too (aim layer

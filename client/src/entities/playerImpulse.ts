@@ -59,8 +59,12 @@ export function fireWeapons(p: Player): void {
     // Belt item (C key) — the equipped throw; hold to repeat. The throw
     // lock gates too: a stretched throw (satchel ≈ 1.9s) outlasts the 1s
     // belt cadence, and pacing on beltTimer alone let a second throw start
-    // inside the first's wind-up.
-    if (p.input.beltHeld && beltThrowReady(p.beltTimer, p.throwLockT)) {
+    // inside the first's wind-up. Charges gate the wind-up too — onBelt
+    // re-checks before release, but a dry press still played the full
+    // swing + lock. Satchel is the only multi-charge item
+    // (beltThrowCost, shared/weapons).
+    const beltCost = p.beltItem === 'satchel' ? 2 : 1;
+    if (p.input.beltHeld && p.beltCharges >= beltCost && beltThrowReady(p.beltTimer, p.throwLockT)) {
       p.beltTimer = DISC_RATE;
       p.throwLockT = THROW_TOTAL * (BELT_THROW_TIME[p.beltItem] ?? 1);
       p.shootAnimTimer = 0.3; // lob raise — same snap as a shot

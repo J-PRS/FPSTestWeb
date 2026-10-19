@@ -57,7 +57,7 @@ const lap = (label: string): void => {
 };
 lap('module imports');
 
-interface LabState { wt: number; inspect: boolean; yaw: number; pitch: number; cam?: number[]; tgt?: number[]; fov?: number; z?: boolean; cat?: string; pick?: string }
+interface LabState { wt: number; inspect: boolean; yaw: number; pitch: number; cam?: number[]; tgt?: number[]; fov?: number; z?: boolean; cat?: string; pick?: string; heldWt?: number; heldTeam?: string; heldMark?: string; heldSide?: string }
 // Persisted so noreload-mode F5s come back to the same gun+angle — the
 // window park only survives HMR accepts.
 const saved = ((): LabState | undefined => {
@@ -76,7 +76,7 @@ function flushSave(): void {
   const persist: LabState = {
     wt: state.wt, inspect: state.inspect, yaw: state.yaw, pitch: state.pitch,
     cam: state.cam, tgt: state.tgt, fov: state.fov, z: state.z,
-    cat: state.cat, pick: state.pick,
+    cat: state.cat, pick: state.pick, heldWt: state.heldWt, heldTeam: state.heldTeam, heldMark: state.heldMark, heldSide: state.heldSide,
   };
   localStorage.setItem('gunlab', JSON.stringify(persist));
 }
@@ -814,8 +814,90 @@ const DIR_BTNS: [label: string, v: [number, number]][] = [
   ['L', [0, -1]], ['·', [0, 0]], ['R', [0, 1]],
   ['BL', [-0.7, -0.7]], ['B', [-1, 0]], ['BR', [-0.7, 0.7]],
 ];
-interface AnimHook { set: (s: AnimationState) => void; dir?: (f: number, s: number) => void }
+interface AnimHook { set: (s: AnimationState) => void; dir?: (f: number, s: number) => void; weapon?: (wt: number) => void; team?: (t: string) => void; mark?: (t: string) => void; side?: (t: string) => void; gib?: (speed?: number) => void }
 let animSel: AnimationState | '' = '';
+
+// Held-weapon picker — same builders the viewmodel rail uses (+ the
+// chaingun's ballistic builder) so hand props match real silhouettes.
+// heldWt persists across F5 — the lineup rebuilds every reload, so
+// re-applying the saved pick is the only way it stays armed.
+function mkWeaponSel(hook: AnimHook): HTMLSelectElement {
+  const wsel = document.createElement('select');
+  wsel.className = 'wsel';
+  const wts = [...MODEL_BUILDERS.keys(), WeaponType.Chaingun].toSorted((a, b): number => a - b);
+  for (const wt of wts) {
+    const o = document.createElement('option');
+    o.value = String(wt);
+    o.textContent = WeaponType[wt] ?? String(wt);
+    wsel.append(o);
+  }
+  if (state.heldWt != null && wts.includes(state.heldWt)) {wsel.value = String(state.heldWt);}
+  hook.weapon!(Number(wsel.value));
+  wsel.addEventListener('change', (): void => {
+    state.heldWt = Number(wsel.value);
+    saveState();
+    hook.weapon!(state.heldWt);
+  });
+  return wsel;
+}
+
+// Team paint preview — neutral/red/blue, persisted like heldWt.
+function mkTeamSel(hook: AnimHook): HTMLSelectElement {
+  const tsel = document.createElement('select');
+  tsel.className = 'wsel';
+  for (const t of ['neutral', 'red', 'blue']) {
+    const o = document.createElement('option');
+    o.value = t; o.textContent = t;
+    tsel.append(o);
+  }
+  if (state.heldTeam) {tsel.value = state.heldTeam;}
+  hook.team!(tsel.value);
+  tsel.addEventListener('change', (): void => {
+    state.heldTeam = tsel.value;
+    saveState();
+    hook.team!(tsel.value);
+  });
+  return tsel;
+}
+
+// Enemy-mark overlay — outline hull / fresnel rim / both; independent of
+// the team tint so they combine freely.
+function mkMarkSel(hook: AnimHook): HTMLSelectElement {
+  const msel = document.createElement('select');
+  msel.className = 'wsel';
+  for (const t of ['none', 'outline', 'rim', 'out+rim']) {
+    const o = document.createElement('option');
+    o.value = t; o.textContent = t;
+    msel.append(o);
+  }
+  if (state.heldMark) {msel.value = state.heldMark;}
+  hook.mark!(msel.value);
+  msel.addEventListener('change', (): void => {
+    state.heldMark = msel.value;
+    saveState();
+    hook.mark!(msel.value);
+  });
+  return msel;
+}
+
+// Mark color side — enemy scarlet / ally green / neutral white.
+function mkSideSel(hook: AnimHook): HTMLSelectElement {
+  const ssel = document.createElement('select');
+  ssel.className = 'wsel';
+  for (const t of ['enemy', 'ally', 'neutral']) {
+    const o = document.createElement('option');
+    o.value = t; o.textContent = t;
+    ssel.append(o);
+  }
+  if (state.heldSide) {ssel.value = state.heldSide;}
+  hook.side!(ssel.value);
+  ssel.addEventListener('change', (): void => {
+    state.heldSide = ssel.value;
+    saveState();
+    hook.side!(ssel.value);
+  });
+  return ssel;
+}
 
 function paintAnimRail(): void {
   animRail.innerHTML = '';
@@ -828,6 +910,18 @@ function paintAnimRail(): void {
     if (s === animSel) {b.classList.add('active');}
     b.addEventListener('click', (): void => { animSel = s; hook.set(s); paintAnimRail(); });
     animRail.append(b);
+  }
+  if (hook.weapon) {animRail.append(mkWeaponSel(hook));}
+  if (hook.team) {animRail.append(mkTeamSel(hook));}
+  if (hook.mark) {animRail.append(mkMarkSel(hook));}
+  if (hook.side) {animRail.append(mkSideSel(hook));}
+  if (hook.gib) {
+    for (const [label, s] of [['pulverize', 1], ['pulverize 0.1x', 0.1]] as const) {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.addEventListener('click', (): void => hook.gib!(s));
+      animRail.append(b);
+    }
   }
   if (!hook.dir) {return;}
   const drow = document.createElement('div');

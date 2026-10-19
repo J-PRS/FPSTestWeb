@@ -28,6 +28,7 @@ import { mkFlagPlate } from '../game/flagRun.js';
 import { mkFlagMesh } from '../game/ctfFlags.js';
 import { TEAM_COLORS } from '../../../shared/teams.js';
 import { PlayerModel, type PlayerModelVariant } from '../entities/PlayerModel.js';
+import { PlayerDebris } from '../effects/debris.js';
 import { CLASS_BODY_MAT_REV, CLASS_BODY_VARIANT, type AnimationState } from '../entities/playerClips.js';
 import { CLASS_MODEL_SCALE, classCapsule, type ArmorClass } from '../../../shared/botClasses.js';
 
@@ -318,47 +319,184 @@ function mkTextSprite(text: string, y: number): THREE.Sprite {
   s.position.y = y;
   return s;
 }
-export const CLASSES: [label: string, build: () => THREE.Group][] = [
-  ['classes', (): THREE.Group<THREE.Object3DEventMap> => {
+/** One lineup entry: body variant, world x, floating label text+height,
+ *  capsule tier (collider wire) and scale tier. */
+type LineupEntry = [variant: PlayerModelVariant, x: number, label: string, labelY: number, capsule: ArmorClass, matRev: boolean, scale?: number, yaw?: number];
+function mkLineup(entries: LineupEntry[], boundsX = 0, boundsW = 0, focusX = 0): () => THREE.Group {
+  return (): THREE.Group<THREE.Object3DEventMap> => {
     const proxy = new THREE.Group();
     const models: PlayerModel[] = [];
-    for (const [cls, x, ly] of CLASS_LINEUP) {
-      const pm = new PlayerModel(LAB_SCENE, CLASS_BODY_VARIANT[cls] as PlayerModelVariant, CLASS_BODY_MAT_REV.has(cls));
+    // Gib preview — the real PlayerDebris pulverize (posed body parts +
+    // impulse burst) then the body respawns ~1.6s later.
+    const debris: { d: PlayerDebris; t: number; s: number }[] = [];
+    const flashes: { m: THREE.Mesh; l: THREE.PointLight; t: number; s: number }[] = [];
+    const downAt = new Map<PlayerModel, { t: number; s: number }>();
+    let elapsed = 0;
+    // Last picked team tint/outline — reapplied per body as GLBs resolve
+    // (setOutline's hull clone needs the skinned meshes loaded first).
+    let teamSel = 'neutral';
+    let markSel = 'none';
+    let sideSel = 'enemy';
+    const TEAM_HEX: Record<string, number> = { red: 0xC0_30_30, blue: 0x30_60_C0 };
+    // Mark palette — enemy: Overwatch scarlet (TF2 brick 0xB8_38_3B if
+    // too loud). ally: squad green (OW's light-blue ally ~0x66_A3_FF is
+    // the other classic). neutral: plain white mark.
+    const SIDE_HEX: Record<string, number> = { enemy: 0xF0_4A_4A, ally: 0x44_CC_55, neutral: 0xDD_DD_DD };
+    const applyTeam = (m: PlayerModel): void => {
+      m.setTeamTint(TEAM_HEX[teamSel] ?? null);
+      const mark = markSel === 'outline' || markSel === 'out+rim' ? SIDE_HEX[sideSel]! : null;
+      const rim = markSel === 'rim' || markSel === 'out+rim' ? SIDE_HEX[sideSel]! : null;
+      m.setOutline(mark);
+      m.setRim(rim);
+    };
+    for (const [variant, x, label, ly, capsule, matRev, scale, yaw] of entries) {
+      const pm = new PlayerModel(LAB_SCENE, variant, matRev);
       // The gizmo defaults to the generic capsule — without the class
       // sizes the collider wireframe would lie about light/heavy.
-      pm.setColliderCapsule(classCapsule(cls));
+      pm.setColliderCapsule(classCapsule(capsule));
       pm.load().then((): void => {
         if ((pm as unknown as { _disposed?: boolean })._disposed) {return;}
-        pm.setScale(CLASS_MODEL_SCALE[cls]); // real tier silhouette, not raw rig height
+        if (scale) {pm.setScale(scale);} // real tier silhouette, not raw rig height
         pm.setPosition(x, 0, 0);
-        pm.setRotation(0, 0); // setRotation adds the rig's authored yaw — 0 is the rig's forward
+        // 0 = the rig's authored forward; legacy GLBs face -Z while the
+        // inspect camera sits at +Z, so those entries pass yaw:Math.PI.
+        pm.setRotation(yaw ?? 0, 0);
+        // Barrel-direction arrow (posedump's ?gunArrow=1, always on in the
+        // lineup) — mounted guns have drifted 180° before without it.
+        const g = (pm as unknown as { gunCtl: { group?: THREE.Group } }).gunCtl.group;
+        if (g) {
+          const am = new THREE.MeshBasicMaterial({ color: 0xFF_22_22 });
+          g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.9).rotateX(Math.PI / 2).translate(0, 0, 0.95), am));
+          g.add(new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.28).rotateX(Math.PI / 2).translate(0, 0, 1.55), am));
+        }
+        applyTeam(pm);
       return; }).catch((): void => undefined);
       models.push(pm);
-      const label = mkTextSprite(cls, ly);
-      label.position.x = x;
-      proxy.add(label);
+      const sprite = mkTextSprite(label, ly);
+      sprite.position.x = x;
+      proxy.add(sprite);
     }
     proxy.add(creatureLayer); // PlayerModel.scene = LAB_SCENE = creatureLayer
-    // Invisible bounds for inspect's Box3 fit — the lineup is wide, not tall.
-    const bounds = new THREE.Mesh(new THREE.BoxGeometry(6.4, 3.4, 1.4), new THREE.MeshBasicMaterial());
+    // Invisible bounds for inspect's Box3 fit — the GLB resolves async,
+    // so without a synchronous volume the fit lands on the label sprite
+    // and parks the camera inside the body. Wide box for lineups, a
+    // body-sized column for solos.
+    const spanH = Math.max(...entries.map((e): number => e[3])) + 0.6;
+    const bounds = new THREE.Mesh(
+      new THREE.BoxGeometry(boundsW > 0 ? boundsW : 2.6, spanH, boundsW > 0 ? 1.4 : 2.6),
+      new THREE.MeshBasicMaterial());
     bounds.visible = false;
-    bounds.position.set(0.25, 1.7, 0);
+    bounds.position.set(boundsW > 0 ? boundsX : 0, spanH / 2, 0);
     proxy.add(bounds);
-    proxy.userData.liveFocus = (): THREE.Vector3 => new THREE.Vector3(0.25, 1.4, 0);
-    // Anim rail hook — gunlab's right panel drives all three bodies in
+    proxy.userData.liveFocus = (): THREE.Vector3 => new THREE.Vector3(focusX, 1.4, 0);
+    // Anim rail hook — gunlab's right panel drives all bodies in
     // lockstep so a state flaw (ski tuck, strafe stride) shows at once.
     proxy.userData.anims = {
       set: (s: AnimationState): void => { for (const m of models) {m.forceAnimationState(s);} },
       dir: (f: number, side: number): void => { for (const m of models) {m.setLocomotionVector(f, side);} },
-      cur: (): "jump" | "ski" | "idle" | "walk" | "run" | "death" | "hit" | "shoot" | "jet" | "throw" => models[0]?.animationState,
+      cur: (): AnimationState => models[0]?.animationState,
+      // Weapon picker — swaps each body's hand prop to the real weapon
+      // silhouette so scale reads against the lineup.
+      weapon: (wt: number): void => { for (const m of models) {m.setWeapon(wt);} },
+      // Team paint preview — neutral restores; red/blue tint the bodies.
+      team: (t: string): void => { teamSel = t; for (const m of models) {applyTeam(m);} },
+      // Enemy-mark overlay — outline hull / fresnel rim / both, combined
+      // with whatever tint is picked.
+      mark: (t: string): void => { markSel = t; for (const m of models) {applyTeam(m);} },
+      // Mark color side — enemy/ally/neutral.
+      side: (t: string): void => { sideSel = t; for (const m of models) {applyTeam(m);} },
+      // The real kill effect — posed body parts + debris burst + impulse,
+      // same path gibVictim takes on the wire.
+      gib: (speed = 1): void => {
+        for (const m of models) {
+          let parts: { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] | undefined;
+          try { parts = m.deathParts() ?? undefined; } catch { /* generic chunks */ }
+          // Shards parent under creatureLayer (re-parented into the
+          // active proxy for inspect) while part.pos bakes are world —
+          // convert BOTH into layer space or the layer's transform
+          // double-applies and the burst lands offset from the body.
+          const w = (m as unknown as { model?: THREE.Group }).model
+            ?.getWorldPosition(new THREE.Vector3()) ?? new THREE.Vector3();
+          const c = LAB_SCENE.worldToLocal(w.clone());
+          const cx = c.x, cy = c.y + 1, cz = c.z;
+          if (parts) {
+            for (const p of parts) {LAB_SCENE.worldToLocal(p.pos);}
+          }
+          // Blast from below + ahead like a disc landing at the feet —
+          // the upward geyser is what reads "pulverized", a flat push
+          // just scatters gravel. Team-vivid color sells "that was a
+          // body", neutral grey reads as concrete rubble.
+          debris.push({ d: new PlayerDebris(LAB_SCENE, LAB_TERRAIN,
+            { x: cx, y: cy, z: cz }, new THREE.Color(0x55_AA_FF),
+            { parts, impulseDir: new THREE.Vector3(0, 1, -0.3).normalize().multiplyScalar(0.15) }), t: elapsed, s: speed });
+          // Cheap stand-in for the game's explosion flash — expanding
+          // additive shell + light, dies in ~0.35s.
+          const flash = new THREE.Mesh(
+            new THREE.IcosahedronGeometry(0.4, 1),
+            new THREE.MeshBasicMaterial({ color: 0xFF_CC_66, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+          flash.position.set(cx, cy, cz);
+          const light = new THREE.PointLight(0xFF_AA_44, 60, 12);
+          light.position.set(cx, cy + 0.5, cz);
+          LAB_SCENE.add(flash, light);
+          flashes.push({ m: flash, l: light, t: elapsed, s: speed });
+          m.setVisible(false);
+          downAt.set(m, { t: elapsed, s: speed });
+        }
+      },
     };
     // Wire toggle rides along: gunlab calls this on every ▧ wire flip so
     // the class hit capsules show exactly while the tri overlay does.
     proxy.userData.colliderWire = (on: boolean): void => {
       for (const m of models) {m.setColliderVisible(on, true);}
     };
-    proxy.userData.disposeCreature = (): void => { for (const m of models) {m.dispose();} previewLive.tick = null; };
-    previewLive.tick = (dt): void => { for (const m of models) {m.update(dt);} };
+    proxy.userData.disposeCreature = (): void => { for (const d of debris) {d.d.dispose();} for (const f of flashes) {f.m.geometry.dispose(); (f.m.material as THREE.Material).dispose();} for (const m of models) {m.dispose();} previewLive.tick = null; };
+    previewLive.tick = (dt): void => {
+      elapsed += dt;
+      for (const m of models) {m.update(dt);}
+      for (let i = debris.length - 1; i >= 0; i -= 1) {
+        const e = debris[i]!;
+        e.d.update(dt * e.s);
+        if (elapsed - e.t > 8 / e.s) {e.d.dispose(); debris.splice(i, 1);}
+      }
+      for (let i = flashes.length - 1; i >= 0; i -= 1) {
+        const f = flashes[i]!;
+        const k = (elapsed - f.t) / (0.35 / f.s);
+        if (k >= 1) {
+          LAB_SCENE.remove(f.m, f.l);
+          f.m.geometry.dispose(); (f.m.material as THREE.Material).dispose();
+          flashes.splice(i, 1);
+        } else {
+          f.m.scale.setScalar(1 + k * 5);
+          (f.m.material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - k);
+          f.l.intensity = 60 * (1 - k);
+        }
+      }
+      for (const [m, d] of downAt) {
+        if (elapsed - d.t > 1.6 / d.s) {m.setVisible(true); m.forceAnimationState('idle'); downAt.delete(m);}
+      }
+    };
     return proxy;
-  }],
+  };
+}
+const SOLO_X = 0;
+const BRUTE_ENTRY: LineupEntry = ['brute' as PlayerModelVariant, 4.4, 'brute', 3, 'heavy', false];
+const BRAWLER_ENTRY: LineupEntry = ['brawler' as PlayerModelVariant, 6.4, 'brawler', 2.4, 'medium', false];
+const SCOUT_ENTRY: LineupEntry = ['scout' as PlayerModelVariant, 8.2, 'scout', 2, 'light', false];
+export const CLASSES: [label: string, build: () => THREE.Group][] = [
+  ['classes', mkLineup(CLASS_LINEUP.map(([cls, x, ly]): LineupEntry => [CLASS_BODY_VARIANT[cls] as PlayerModelVariant, x, cls, ly, cls, CLASS_BODY_MAT_REV.has(cls), CLASS_MODEL_SCALE[cls]]), 1.25, 9.6, 1.25)],
+  ['light',  mkLineup([[CLASS_BODY_VARIANT.light as PlayerModelVariant, SOLO_X, 'light', 2.1, 'light', CLASS_BODY_MAT_REV.has('light'), CLASS_MODEL_SCALE.light]])],
+  ['medium', mkLineup([[CLASS_BODY_VARIANT.medium as PlayerModelVariant, SOLO_X, 'medium', 2.5, 'medium', CLASS_BODY_MAT_REV.has('medium'), CLASS_MODEL_SCALE.medium]])],
+  ['heavy',  mkLineup([[CLASS_BODY_VARIANT.heavy as PlayerModelVariant, SOLO_X, 'heavy', 3.2, 'heavy', CLASS_BODY_MAT_REV.has('heavy'), CLASS_MODEL_SCALE.heavy]])],
+  ['brute',  mkLineup([[BRUTE_ENTRY[0], SOLO_X, 'brute', 3, 'heavy', false]])],
+  ['brawler', mkLineup([[BRAWLER_ENTRY[0], SOLO_X, 'brawler', 2.4, 'medium', false]])],
+  ['scout',  mkLineup([[SCOUT_ENTRY[0], SOLO_X, 'scout', 2, 'light', false]])],
+  // Legacy class bodies — pre-swap rigs kept for side-by-side compare.
+  // The old GLBs face -Z, the M2M rigs +Z — the π yaw keeps fronts to camera.
+  ['legacy', mkLineup([
+    ['mannequin' as PlayerModelVariant, -1.9, 'light(mann)', 2.1, 'light', true, undefined, Math.PI],
+    ['mannequin' as PlayerModelVariant, 0, 'medium(mann)', 2.5, 'medium', false, undefined, Math.PI],
+    ['polyart' as PlayerModelVariant, 2.4, 'heavy(poly)', 3.2, 'heavy', false, undefined, Math.PI],
+  ], 0.3, 9.6, 0.3)],
+  ['mann',  mkLineup([['mannequin' as PlayerModelVariant, SOLO_X, 'mannequin', 2.5, 'medium', false, undefined, Math.PI]])],
+  ['polyart', mkLineup([['polyart' as PlayerModelVariant, SOLO_X, 'polyart', 3.2, 'heavy', false, undefined, Math.PI]])],
 ];

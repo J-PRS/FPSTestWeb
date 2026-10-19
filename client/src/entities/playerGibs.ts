@@ -8,8 +8,9 @@
  * vertex bakes per kill (a few ms, once).
  */
 import * as THREE from 'three';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 
-export interface GibPart { mesh: THREE.SkinnedMesh; indices: number[] }
+export interface GibPart { mesh: THREE.SkinnedMesh; indices: number[]; rigid?: number }
 
 export function buildGibParts(model: THREE.Group): GibPart[] | null {
   const out: GibPart[] = [];
@@ -23,6 +24,19 @@ export function buildGibParts(model: THREE.Group): GibPart[] | null {
     if (!pos || !sIdx || !sWt) {return;}
     const {index} = geo;
     const triCount = Math.floor((index ? index.count : pos.count) / 3);
+    // A mesh whose skinIndex only ever references ONE bone is rigid —
+    // class models are built as separate plates on single bones, so the
+    // whole plate flies as one chunk (matrix bake, no per-vert loop).
+    const bonesUsed = new Set<number>();
+    for (let v = 0; v < sIdx.count && bonesUsed.size < 2; v += 1) {
+      for (let k = 0; k < 4; k += 1) {
+        if (sWt.getComponent(v, k) > 0) {bonesUsed.add(sIdx.getComponent(v, k));}
+      }
+    }
+    if (bonesUsed.size === 1) {
+      out.push({ mesh: sk, indices: [], rigid: [...bonesUsed][0] });
+      return;
+    }
     const domBone = (v: number): number => {
       let bi = 0, bw = -1;
       for (let k = 0; k < 4; k += 1) {
@@ -53,8 +67,24 @@ export function buildGibParts(model: THREE.Group): GibPart[] | null {
 export function bakeDeathParts(model: THREE.Group, parts: GibPart[]): { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] {
   model.updateMatrixWorld(true);
   const v = new THREE.Vector3();
+  const R = new THREE.Matrix4();
   const out: { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] = [];
   for (const p of parts) {
+    if (p.rigid !== undefined) {
+      // Rigid plate: R = meshWorld × bindInv × boneWorld × boneInv × bind.
+      const bone = p.mesh.skeleton.bones[p.rigid]!;
+      R.copy(p.mesh.bindMatrix)
+        .premultiply(p.mesh.skeleton.boneInverses[p.rigid]!)
+        .premultiply(bone.matrixWorld)
+        .premultiply(p.mesh.bindMatrixInverse)
+        .premultiply(p.mesh.matrixWorld);
+      const g = p.mesh.geometry.clone().applyMatrix4(R);
+      g.computeBoundingSphere();
+      const c = g.boundingSphere!.center.clone();
+      g.translate(-c.x, -c.y, -c.z);
+      out.push({ geo: g, pos: c });
+      continue;
+    }
     const pos = p.mesh.geometry.getAttribute('position');
     const verts = new Float32Array(p.indices.length * 3);
     for (let i = 0; i < p.indices.length; i += 1) {
@@ -66,8 +96,11 @@ export function bakeDeathParts(model: THREE.Group, parts: GibPart[]): { geo: THR
       v.applyMatrix4(p.mesh.matrixWorld);
       verts[i * 3] = v.x; verts[i * 3 + 1] = v.y; verts[i * 3 + 2] = v.z;
     }
-    const g = new THREE.BufferGeometry();
+    // Raw tri-soup bake (no index) duplicates every shared corner —
+    // weld before normals so chunks aren't ~3× their real vert count.
+    let g: THREE.BufferGeometry = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+    g = mergeVertices(g);
     g.computeVertexNormals();
     g.computeBoundingSphere();
     const c = g.boundingSphere!.center.clone();

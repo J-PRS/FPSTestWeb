@@ -249,7 +249,9 @@ export class PlayerGun {
     else if (this.aimPin) {
       // Orientation = model forward tilted by aim pitch — the hand
       // quat is poisoned by the aim layer on these rigs, so only the
-      // seat position (above) follows the bone.
+      // seat position (above) follows the bone. +Z group axis already
+      // lands model-forward here (no π flip — that made the barrel
+      // face backward in the lineup).
       this.baseQuat!.setFromAxisAngle(_gunDir.set(1, 0, 0), -pitch);
     } else {
       mb.getWorldQuaternion(_gunQ);

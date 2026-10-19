@@ -76,7 +76,8 @@ export function computeRootMotionNodes(model: THREE.Object3D): Set<string> {
 // oneshots (shoot/hit/death own the arms) and the Pistol_Aim_* sources.
 export function isLayeredClip(name: string): boolean {
   return !name.includes('Aim') && !name.startsWith('Death') &&
-    !name.startsWith('Hit_') && name !== 'Pistol_Shoot';
+    !name.startsWith('Hit_') && name !== 'Pistol_Shoot' &&
+    name !== 'Two-hand Blast' && name !== 'Throw Object' && name !== 'OverhandThrow';
 }
 
 // Arms only — spine/neck/head stay with the locomotion clip so the torso
@@ -92,6 +93,8 @@ export const AIM_BONE_MASK = new Set([
   'shoulderl', 'shoulderr', 'upperarml', 'upperarmr',
   'lowerarml', 'lowerarmr', 'palm1l', 'palm1r', 'palm2l', 'palm2r', 'palm3l', 'palm3r',
   'handl', 'handr',
+  // Mesh2Motion UE-style chain (brute): clavicle_l → claviclel etc.
+  'claviclel', 'clavicler',
 ]);
 
 // Torso norms that may join the aim mask on rigs whose aim clips carry
@@ -101,6 +104,8 @@ export const AIM_TORSO_BONES = new Set([
   'abdomen', 'torso', 'torso1', 'neck', 'head',
   'defspine001', 'defspine002', 'defspine003', 'defneck', 'defhead',
   'spine', 'chest', 'rigspine2', 'rigspine3', 'rigneck', 'righead',
+  // Mesh2Motion UE-style torso (brute): spine_01..03 / neck_01 norms.
+  'spine01', 'spine02', 'spine03', 'neck01',
 ]);
 
 // Torso chain whose locomotion sway gets halved — spine roll is what

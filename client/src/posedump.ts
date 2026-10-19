@@ -192,6 +192,18 @@ if (pvariant) {
 
     window.__pm = pm;
 
+    // ?gunArrow=1 — fat debug arrow on the gun's +Z barrel axis so shots
+    // reveal which way the prop actually points.
+    if (q.get('gunArrow')) {
+      const g = (pm as unknown as { gunCtl: { group?: THREE.Group } }).gunCtl.group;
+      if (g) {
+        const am = new THREE.MeshBasicMaterial({ color: 0xFF_22_22 });
+        const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.9).rotateX(Math.PI / 2).translate(0, 0, 0.95), am);
+        const head = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.28).rotateX(Math.PI / 2).translate(0, 0, 1.55), am);
+        g.add(shaft, head);
+      }
+    }
+
     // Step the mixer a fixed phase so loops settle mid-cycle.
 
     for (let i = 0; i < 30; i += 1) {pm.update(1 / 60 * wantT * 4);}

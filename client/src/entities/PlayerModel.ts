@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mkGltfLoader, loadGltfCached } from '../gltfLoad';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import { PLAYER_RADIUS, CAPSULE_CYLINDER_HEIGHT, CAPSULE_CENTER_Y } from '../core/config.js';
 import { urlParams } from '../core/params.js';
@@ -30,7 +30,7 @@ const logger = new ChildLogger('PlayerModel');
 
 export type { AnimationState } from './playerClips.js';
 
-export type PlayerModelVariant = 'robot' | 'mannequin' | 'knight' | 'scifisoldier' | 'cybersoldier' | 'vexa' | 'polyart';
+export type PlayerModelVariant = 'robot' | 'mannequin' | 'knight' | 'scifisoldier' | 'cybersoldier' | 'vexa' | 'polyart' | 'brute' | 'brawler' | 'scout';
 
 export class PlayerModel {
   private scene: THREE.Scene;
@@ -150,7 +150,10 @@ export class PlayerModel {
     this.pose.wantSpineLock = this.variant !== 'mannequin' && (!shootClip || shootClip.startsWith('UAL_'));
     // The gun controller owns the mesh; a baked-geo swap invalidates the
     // wireframe capture, so it reaches back through this hook.
-    this.gunCtl.onGeoSwap = (): void => { if (this.mats.wireframeOn) {this.mats.captureWireframe(this.model);} };
+    this.gunCtl.onGeoSwap = (): void => {
+      if (this.mats.wireframeOn) {this.mats.captureWireframe(this.model);}
+      this.rebuildGunHulls(); // swapped prop geo invalidates its outline clones
+    };
   }
 
   async load(): Promise<void> {
@@ -274,7 +277,7 @@ export class PlayerModel {
     // the torso mask too: its locomotion clips yield spine/head quats at
     // bake (same mask), so the aim pose owns the torso outright — no
     // residual stride roll swinging the muzzle.
-    this.pose.buildAimLayer(this.anim.mixer!, this.anim.animations, mann);
+    this.pose.buildAimLayer(this.anim.mixer!, this.anim.animations, mann || Boolean(RIG_MANIFEST[this.variant]?.aimMask));
 
     logger.debug('Loaded animations:', Array.from(this.anim.animations.keys()));
 
@@ -816,6 +819,140 @@ export class PlayerModel {
   /** Debug (?debug / menu DEBUG): render the body as wireframe so it can
    *  be eyeballed against the collider capsule. */
   setWireframe(on: boolean): void { this.mats.setWireframe(on, this.model); }
+  /** Team tint — hex lerps every body material toward the hue, null
+   *  restores the authored palette. */
+  setTeamTint(hex: number | null): void { this.mats.setTint(hex); }
+  /** Fresnel rim experiment — emissive edge glow on the body mats; the
+   *  hand prop's shared material is cloned per model so it rims too
+   *  without leaking onto every other model's gun. */
+  setRim(hex: number | null): void {
+    const gm = this.gunCtl.mesh;
+    if (gm && (gm.material as THREE.MeshStandardMaterial).isMeshStandardMaterial && !gm.userData.rimCloned) {
+      gm.material = (gm.material as THREE.Material).clone();
+      gm.userData.rimCloned = true;
+      this.mats.extraRim.push(gm.material);
+    }
+    this.mats.setRim(hex);
+  }
+
+  // Inverted-hull outline: per SkinnedMesh a clone sharing the SAME
+  // skeleton (animates for free, no geometry copy) with a flat BackSide
+  // material whose vertex shader puffs verts along normals — every
+  // plate expands on its own axes, which is the hull a hard-surface
+  // model needs (uniform scale would drift the parts apart).
+  private hullMat: THREE.MeshBasicMaterial | null = null;
+  private readonly hulls: THREE.SkinnedMesh[] = [];
+  private readonly gunHulls: THREE.Mesh[] = [];
+
+  private rebuildGunHulls(): void {
+    for (const h of this.gunHulls) {h.parent?.remove(h);}
+    this.gunHulls.length = 0;
+    if (!this.hullMat || this.hulls.length === 0) {return;}
+    const g = this.gunCtl.group;
+    if (!g) {return;}
+    const src: THREE.Mesh[] = [];
+    g.traverse((o): void => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh && !(m as THREE.SkinnedMesh).isSkinnedMesh) {src.push(m);}
+    });
+    for (const m of src) {
+      // Prop geos can ship without normals — that renders them flat black
+      // AND NaNs the hull's normal-extrude (invisible). computeVertexNormals
+      // fixes both; safe on the shared geo.
+      if (!m.geometry.attributes.normal) {m.geometry.computeVertexNormals();}
+      // Inverted hull cracks at hard edges when coincident verts carry
+      // SPLIT normals (each face copy extrudes its own way). Weld a
+      // hull-only copy BY POSITION ONLY (uv/face-normal splits would
+      // veto the merge) so the extrude directions are smooth.
+      // Body meshes skip this — they're already smooth-shaded and their
+      // normals get skinned (a welded clone wouldn't animate).
+      let hgeo = m.geometry;
+      if (!m.geometry.index) {
+        const posOnly = new THREE.BufferGeometry();
+        posOnly.setAttribute('position', m.geometry.attributes.position);
+        hgeo = mergeVertices(posOnly);
+        hgeo.computeVertexNormals();
+      }
+      const h = new THREE.Mesh(hgeo, this.hullMat);
+      h.position.copy(m.position); h.quaternion.copy(m.quaternion); h.scale.copy(m.scale);
+      h.renderOrder = 2; h.frustumCulled = false;
+      (m.parent ?? g).add(h);
+      this.gunHulls.push(h);
+    }
+    for (const h of this.gunHulls) {h.visible = this.hulls[0]?.visible ?? false;}
+  }
+
+  /** Enemy outline — hex shows a normal-extruded silhouette drawn
+   *  through occluders (depthTest off = wallhack read), null hides. */
+  setOutline(hex: number | null): void {
+    if (hex !== null && this.hulls.length === 0 && this.model) {
+      if (!this.hullMat) {
+        // Normal depth test: the inflated shell occludes behind the body
+        // so only the silhouette rim survives — and the rim hides behind
+        // walls with the body, matching the OW enemy rule (through-wall
+        // is an ally privilege; wallhack-red enemies would be broken).
+        this.hullMat = new THREE.MeshBasicMaterial({ side: THREE.BackSide, depthWrite: false, toneMapped: false });
+        this.hullMat.onBeforeCompile = (sh): void => {
+          // uHull stays tiny — only enough to un-z-fight the backfaces;
+          // it rides model scale so a small rig's ring vanishes if it
+          // does the visible work. uHullPx is NDC — same pixel rim on
+          // every body at every distance.
+          sh.uniforms.uHull = { value: 0.006 };
+          // Rim width ∝ √distance — constant-px reads fat when bodies
+          // shrink at range, world-constant vanishes; sqrt splits it.
+          // 0.019 → ~2.5px at 10m, ~1px at 60m, ~0.5px past 120m.
+          sh.uniforms.uHullPx = { value: 0.019 };
+          sh.vertexShader = `uniform float uHull;\nuniform float uHullPx;\n${sh.vertexShader}`.replace(
+            '#include <project_vertex>',
+            `// FLIP_SIDED is defined for BackSide materials and negates
+// transformedNormal — un-negate or the clip push shrinks the shell
+// INTO the body instead of ringing it.
+#if defined(USE_SKINNING) || defined(USE_ENVMAP)
+vec3 hullObjN = objectNormal; vec3 hullViewN = -transformedNormal;
+#else
+vec3 hullObjN = normal; vec3 hullViewN = normalize(normalMatrix * normal);
+#endif
+transformed += normalize(hullObjN) * uHull;
+#include <project_vertex>
+// World-space nudge alone is subpixel past ~20m — expand again in clip
+// space along the VIEW-space normal for a constant ~2px rim at range.
+vec4 hullN = projectionMatrix * vec4(hullViewN, 0.0);
+gl_Position.xy += normalize(hullN.xy + vec2(1e-6)) * uHullPx * sqrt(max(gl_Position.w, 0.25));`);
+        };
+      }
+      // Clone nodes, not geometry: each hull shares the source's
+      // geometry + skeleton, only the material differs.
+      for (const sk of this.skinnedMeshes) {
+        // Same split-normal crack as the gun: plate hard edges carry
+        // divergent per-face normals, so the clip push shreds the ring.
+        // Weld a hull-only copy carrying the SKIN attributes (position
+        // alone won't merge uv/normal splits) — verts with different
+        // bone weights stay split, which is correct for animation.
+        let hgeo: THREE.BufferGeometry = sk.geometry;
+        const pos = sk.geometry.attributes.position;
+        if (pos && sk.geometry.attributes.skinIndex) {
+          const skin = new THREE.BufferGeometry();
+          skin.setAttribute('position', pos);
+          skin.setAttribute('skinIndex', sk.geometry.attributes.skinIndex);
+          skin.setAttribute('skinWeight', sk.geometry.attributes.skinWeight);
+          const w = mergeVertices(skin);
+          if (w.index) {w.computeVertexNormals(); hgeo = w;}
+        }
+        const h = new THREE.SkinnedMesh(hgeo, this.hullMat);
+        h.bind(sk.skeleton, sk.bindMatrix);
+        // Non-identity source node transforms would offset the hull.
+        h.position.copy(sk.position); h.quaternion.copy(sk.quaternion); h.scale.copy(sk.scale);
+        h.renderOrder = 2;
+        h.frustumCulled = false;
+        (sk.parent ?? this.model).add(h);
+        this.hulls.push(h);
+      }
+      this.rebuildGunHulls(); // the held prop is part of the silhouette
+    }
+    if (this.hullMat && hex !== null) {this.hullMat.color.setHex(hex);}
+    for (const h of this.hulls) {h.visible = hex !== null;}
+    for (const h of this.gunHulls) {h.visible = hex !== null;}
+  }
 
   setColliderVisible(visible: boolean, force = false): void {
     this.collider.setVisible(visible, force);

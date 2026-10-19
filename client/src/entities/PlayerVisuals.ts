@@ -195,10 +195,11 @@ export class PlayerVisuals {
    *  the Pistol_Shoot clip only flickers the arms off-aim, so it never
    *  owns the state. */
   private pickAnimState(model: PlayerModel, airborne: boolean, jetting: boolean, shootT: number, speed: number, skiing?: boolean, throwT = 0): AnimationState {
-    if (airborne) {return jetting ? 'jet' : 'jump';}
-    // A belt/deploy swing outranks the armed pose the same way a shot
-    // does — the arm is committed to the throw, not the aim.
+    // A belt/deploy swing outranks EVERYTHING — airborne most of all:
+    // in-flight tosses are the common case, and jet/jump + the aim layer
+    // used to swallow the swing entirely.
     if (throwT > 0) {return 'throw';}
+    if (airborne) {return jetting ? 'jet' : 'jump';}
     if (shootT > 0 && model.variant !== 'mannequin') {return 'shoot';}
     return pickLocomotionAnim(model['currentState'] as AnimationState, speed, skiing);
   }
