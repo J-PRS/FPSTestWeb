@@ -230,6 +230,13 @@ export class NetworkManager {
   // of nothing while "connected" forces a teardown + re-probe.
   private lastRxAt = 0;
   private stallTimer: ReturnType<typeof setInterval> | null = null;
+  /** Outer-reconnect backoff — a transport-level connect failure (dead
+   *  worker spawn, dead endpoint) must not hot-loop a 1Hz retry. */
+  private retryAt = 0;
+  private retryStreak = 0;
+  /** Set when isConnected() first reads false — the 10s arm before the
+   *  outer respawn so an inner lane's own reconnect always wins. */
+  private deadSince: number | null = null;
   private static readonly STALL_MS = 4000;
   private lastUrl: string | null = null;
   private lastFactory: TransportFactory | undefined;
@@ -284,6 +291,7 @@ export class NetworkManager {
             // silence window and reaped a healthy reseat seconds after
             // its onConnect.
             this.lastRxAt = Date.now();
+            this.retryStreak = 0;
             this.hasLoggedConnectionError = false;
             logger.info(`Connected as ${this.localPlayerId}`);
             this.lastDownReason = null;
@@ -360,6 +368,29 @@ export class NetworkManager {
   }
 
   private checkStall(): void {
+    // Outer reconnect driver: when the transport-level connect() fails
+    // outright — crashed/blocked worker spawn, a dead endpoint — nothing
+    // else retries (the inner lanes' own loops never started). Without
+    // this, one watchdog tick converts a transient failure into a
+    // permanently dead session (observed: offline emulation killed the
+    // worker module fetch, connect rejected, 30s+ dead). The 10s arm
+    // keeps it BEHIND the inner lane's own reconnect loop (~3-4s per
+    // attempt): a live transport re-seating itself must never race a
+    // fresh outer connect (the parallel-join flood).
+    if (!this.isConnected() && this.onlineExpected && this.lastUrl) {
+      this.deadSince ??= Date.now();
+      const now = Date.now();
+      if (now - this.deadSince >= 10_000 && now >= this.retryAt) {
+        this.retryAt = now + Math.min(1000 * 2 ** this.retryStreak, 15_000);
+        this.retryStreak += 1;
+        logger.info(`outer reconnect (transport dead ${Math.round((now - this.deadSince) / 1000)}s) — attempt ${this.retryStreak}`);
+        const url = this.lastUrl;
+        this.ws = null;
+        this.connect(url, this.lastFactory, this.lastResolveUrl).catch((): void => { /* the stall loop owns retries */ });
+      }
+      return;
+    }
+    this.deadSince = null;
     if (!this.isConnected() || !this.lastUrl) {return;}
     // Hidden tabs throttle this interval AND starve the network pump —
     // the "silent" window is throttling, not a dead socket. A real death
