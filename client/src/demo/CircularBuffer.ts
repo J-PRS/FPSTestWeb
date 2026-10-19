@@ -60,6 +60,12 @@ this.count += 1;
     this.head = 0;
     this.tail = 0;
     this.count = 0;
+    // Wipe the backing array — extractAll returns frame objects BY
+    // REFERENCE, and a still-recording consumer's next slotForNext/rawAt
+    // would otherwise hand an extracted object back and rewrite its
+    // fields in the already-serialized array (the mid-file timestamp
+    // splice seen in live captures: newest stamp at an old index).
+    this.buffer = Array.from({ length: this.capacity });
   }
 
   extractRange(startIndex: number, length: number): T[] {

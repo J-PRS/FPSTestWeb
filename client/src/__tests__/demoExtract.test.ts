@@ -100,6 +100,28 @@ describe('buildDemoFile', (): void => {
   });
 });
 
+describe('extract decoupling', (): void => {
+  // Regression: extractAll returns frame objects BY REFERENCE while
+  // clear() left them in the backing array — a still-recording recorder's
+  // next slotForNext/rawAt handed an extracted object back and rewrote
+  // its fields, splicing the newest timestamp into an old file position
+  // (seen live: index0 = t_newest, and the mid-sequence f#3969 splice).
+  it('a still-recording writer cannot mutate an already-extracted array', (): void => {
+    const buf = new CircularBuffer<DemoFrame>(8);
+    for (let i = 0; i < 6; i += 1) {buf.add(frame(i, i));}
+    const r = host([], 0);
+    r.frameBuffer = buf;
+    const file = buildDemoFile(r, 'x');
+    expect(file.frames.length).toBe(6);
+    // The recorder keeps writing: slotForNext must not hand back a live
+    // extracted object — rawAt returns undefined post-clear → fresh alloc.
+    expect(buf.rawAt(buf.slotForNext())).toBeUndefined();
+    buf.add(frame(99, 99));
+    expect(file.frames[0]!.timestamp).toBe(0);
+    expect(file.frames.map((f): number => f.timestamp)).toEqual([0, 1, 2, 3, 4, 5]);
+  });
+});
+
 describe('extractClip snapshots', (): void => {
   it('renormalizes marks with the streams and drops out-of-window marks', (): void => {
     const r = host([0, 1, 2, 3, 4, 5]);
