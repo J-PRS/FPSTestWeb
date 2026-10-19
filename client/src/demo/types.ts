@@ -26,6 +26,11 @@ export const RemoteFrameFlags = {
 
   Ski: 1 << 1,
 
+  /** The server re-seated this body between samples (respawn/reclaim
+   *  resync) — the implied-speed jump is authoritative teleport, not
+   *  wire corruption. Audit/playback must not flag it. */
+  Teleport: 1 << 2,
+
 } as const;
 
 

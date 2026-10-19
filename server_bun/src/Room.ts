@@ -58,6 +58,7 @@ import { simNow } from './simClock.ts';
 import { wallNow, wallMs, type WallMs } from './wallClock.ts';
 import type { SessionRegistry } from './sessionRegistry.ts';
 import { SimJournal } from './simJournal.ts';
+import { RoomDemo } from './roomDemo.ts';
 
 export class Room {
   readonly name: string;
@@ -241,6 +242,8 @@ export class Room {
   readonly bots: ServerBots;
   /** CTF flag authority — only when the mode has flags AND the map has bases. */
   flags: RoomFlags | null = null;
+  /** Server-side demo capture — set when FPS_DEMO names a dir at ctor. */
+  demo?: RoomDemo;
   /** The pluggable mode's module (MODE_MODULES registry) — owns its sims,
    *  wire feed, bot objective and spawn pools behind one seam. */
   modeModule: ModeModule | null = null;
@@ -396,6 +399,12 @@ export class Room {
       j.attachFile(journalPath);
       this.moveSim.journal = j;
     }
+    // FPS_DEMO=<dir> — the server-side demo capture. Records the
+    // authoritative wire stream (broadcast tap) + shadow samples into a
+    // v7 DemoFile; flushes <dir>/<room>-<wallms>.demo on dispose.
+    // Ground truth for desync forensics — no loss, no interp.
+    const demoDir = process.env.FPS_DEMO;
+    if (demoDir) {this.demo = new RoomDemo(this);}
     // Player-vs-player contact: every shadow resolves against the live
     // roster (corpses don't block), so a defender's body is real cover.
     this.moveSim.bodySource = (): ({ id: string; } & BodyCapsule)[] => {
@@ -1287,6 +1296,14 @@ excess -= 1;
     this.ballSim.stop();
     this.creatureSim.stop();
     this.messages.dispose();
+    if (this.demo && process.env.FPS_DEMO) {
+      try {
+        const path = this.demo.flush(process.env.FPS_DEMO);
+        logger.info('server demo written', { room: this.name, path });
+      } catch (error) {
+        logger.warn('server demo flush failed', { room: this.name, err: String(error) });
+      }
+    }
   }
 
   /** Full teardown — every store moves together or a slot/token leaks. */

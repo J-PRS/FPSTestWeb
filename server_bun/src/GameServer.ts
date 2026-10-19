@@ -387,6 +387,16 @@ export class GameServer {
     return room.forceEndMatch() ? 'ok' : 'no-mode';
   }
 
+  /** Flush a room's authoritative demo capture to disk (live — no
+   *  teardown). Needs FPS_DEMO so the room has a recorder attached. */
+  dumpDemo(roomName: string): 'ok' | 'no-room' | 'no-demo' | { file: string } {
+    const room = this.rooms.get(roomName);
+    if (!room) {return 'no-room';}
+    const dir = process.env.FPS_DEMO;
+    if (!room.demo || !dir) {return 'no-demo';}
+    return { file: room.demo.flush(dir, '-live') };
+  }
+
   /** Server-browser card: what a master list / LAN browser displays per
    *  host. Cheap to poll — one row per room, no per-player data. */
   getServerInfo() { return opsGetServerInfo(this); }
@@ -475,6 +485,16 @@ seated += 1;
     // both the banner and their logs rather than 'server restarting'.
     for (const room of this.rooms.values()) {room.connections.closeAll(1001, 'server restarting');}
     for (const room of this.specRooms.values()) {room.connections.closeAll(1001, 'server restarting');}
+    // Flush authoritative demos BEFORE the process dies — a graceful
+    // shutdown is the last chance to land the room's capture.
+    const demoDir = process.env.FPS_DEMO;
+    if (demoDir) {
+      for (const room of this.rooms.values()) {
+        if (!room.demo) {continue;}
+        try { logger.info('server demo written', { room: room.name, path: room.demo.flush(demoDir, '-shutdown') }); }
+        catch (error) { logger.warn('server demo flush failed', { room: room.name, err: String(error) }); }
+      }
+    }
     if (this.bunServer) {
       this.bunServer.stop(true);
       logger.info('Server stopped');

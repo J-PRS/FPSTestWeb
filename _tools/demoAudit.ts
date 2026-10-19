@@ -78,6 +78,9 @@ for (const [idx, fs] of byIdx) {
     const a = fs[i - 1]!, b = fs[i]!;
     const dt = b.timestamp - a.timestamp;
     if (dt <= 0) continue;
+    // Teleport bit = the recorder stamped this frame as a re-seat
+    // (respawn/reclaim) — a jump IS the honest signal, skip the check.
+    if (b.flags & 4) continue; // RemoteFrameFlags.Teleport
     const d = Math.hypot(b.posX - a.posX, b.posY - a.posY, b.posZ - a.posZ);
     const v = d / dt;
     if (v > SPEED_CAP && ++speedViol <= 5) {
@@ -156,6 +159,9 @@ for (const e of demo.targetEvents) {
     bad('structural', `target ${e.targetId} type ${targetTypeName(e.targetType)} non-finite @t=${e.timestamp.toFixed(1)}`);
   }
   if (e.health < 0 || e.health > 100000) { bad('structural', `target ${e.targetId} health ${e.health} out of sane range @t=${e.timestamp.toFixed(1)}`); }
+  // KILL-lane entries are markers (victimIdx + weapon), not bodies —
+  // they never Spawn, so the orphan rule doesn't apply.
+  if (e.targetType === TARGETTYPE_KILL) {continue;}
   const key = `${e.targetType}:${e.targetId}`;
   if (e.eventType === TargetEventType.Spawned) { spawned.add(key); continue; }
   if (e.eventType === TargetEventType.Destroyed && !spawned.has(key) && e.timestamp > 1.0) {

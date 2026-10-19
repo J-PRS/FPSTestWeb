@@ -184,6 +184,13 @@ export function adminRoute(ctx: HttpCtx, req: Request, url: URL): Response | Pro
       const r = ctx.gameServer.forceEndMatch(url.searchParams.get('room') ?? '');
       return json({ ok: r === 'ok', result: r }, { status: r === 'ok' ? 200 : 404 });
     },
+    // Live authoritative capture — the server's own demo of a room,
+    // flushed mid-match without teardown. Needs FPS_DEMO at boot.
+    '/admin/demodump': (): Response => {
+      const r = ctx.gameServer.dumpDemo(url.searchParams.get('room') ?? '');
+      return json(typeof r === 'string' ? { ok: false, result: r } : { ok: true, ...r },
+        { status: r === 'ok' || typeof r === 'object' ? 200 : 404 });
+    },
     // Leak forensics — JSC-format heapsnapshot, opens in Safari Web
     // Inspector's comparison view (two dumps ~30min apart → retained-type
     // deltas name the leaking Map). Trigger Bun.gc() first so the diff
