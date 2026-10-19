@@ -45,7 +45,11 @@ function muteable(config: ConnectionConfig): { config: ConnectionConfig; arm(): 
 }
 
 async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null> {
-  if (typeof RTCPeerConnection === 'undefined') {return null;}
+  // RTC can't run in the net worker — Chrome only exposes
+  // RTCPeerConnection on Window. Browsers always land on ws/wt; the rtc
+  // path is for non-worker contexts (netbots, tests, future main-thread
+  // transports). Not an error — just not a real candidate here.
+  if (typeof RTCPeerConnection === 'undefined') { logger.info('rtc tier skipped — no RTCPeerConnection in this context'); return null; }
   let pc: RTCPeerConnection | undefined = undefined;
   let signalRef: WebSocket | undefined = undefined;
   try {
@@ -109,7 +113,8 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
     // session dead directly instead of hoping channel 'close' events fire.
     // oxlint-disable-next-line no-use-before-define -- class declared below; only instantiated at call time
     return new ServerRtcTransport(dc, config, conn, ctrl);
-  } catch {
+  } catch (e) {
+    logger.warn('rtc probe failed', { err: e instanceof Error ? e.message : String(e) });
     // Failed probe — the ICE/DTLS machinery keeps running without this.
     try { pc?.close(); } catch { /* gone */ }
     // The signal ws leaks otherwise: closing while CONNECTING trips
@@ -153,16 +158,21 @@ export async function connectGameTransport(config: ConnectionConfig, opts?: Tier
   // Hard cap per probe — a dead/slow tier (non-QUIC origin, empty ICE
   // config, filterbox) must not starve the ws floor. Measured: a
   // trycloudflare-origin connect spent ~30s probing before the known-good
-  // lane ever opened. A late-resolving probe is orphaned with a muted
+  // lane ever opened. RTC gets a wider window: with real STUN configured
+  // the gather+answer round legitimately takes ~5-8s, and it's the tier
+  // we actually want. A late-resolving probe is orphaned with a muted
   // config: dispose it or it sits as a zombie lane holding a seat.
   let capExpired = false;
-  const capped = (p: Promise<GameTransport | null>): Promise<GameTransport | null> => {
-    const guarded = p.then((t): GameTransport | null => { if (capExpired) { t?.disconnect(); return null; } return t; });
-    return Promise.race([guarded, new Promise<null>((res): void => { setTimeout((): void => res(null), 4000); })]);
+  const capped = (p: Promise<GameTransport | null>, ms: number, name: string): Promise<GameTransport | null> => {
+    const guarded = p.then(
+      (t): GameTransport | null => { if (capExpired) { t?.disconnect(); return null; } return t; },
+      (e: unknown): null => { logger.warn(`${name} probe threw`, { err: e instanceof Error ? e.message : String(e) }); return null; },
+    );
+    return Promise.race([guarded, new Promise<null>((res): void => { setTimeout((): void => res(null), ms); })]);
   };
   const [wt, rtc] = await Promise.all([
-    probeWt ? capped(tryWebTransport(wtC.config).catch((): null => null)) : null,
-    probeRtc ? capped(tryWebRTC(rtcC.config).catch((): null => null)) : null,
+    probeWt ? capped(tryWebTransport(wtC.config), 4000, 'wt') : null,
+    probeRtc ? capped(tryWebRTC(rtcC.config), 8000, 'rtc') : null,
   ]);
   capExpired = true;
   // Only an actual probe refreshes the miss window — a skipped probe must
