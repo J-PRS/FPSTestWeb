@@ -138,12 +138,12 @@ describe('world model <-> protocol conformance', () => {
     // A declared verb nothing emits is worse than none — it reads as a
     // wire surface that doesn't exist. Pin declarations to union members.
     const sStart = PROTOCOL.indexOf('export type ServerMessage');
-    const union = new Set(PROTOCOL.slice(sStart));
+    const union = PROTOCOL.slice(sStart);
     for (const kind of Object.values(WORLD_MODEL)) {
       const verbs = [kind.verbs.spawn, kind.verbs.update, kind.verbs.gone, kind.verbs.roster, ...Object.keys(kind.events ?? {})];
       for (const v of verbs) {
         if (!v) {continue;}
-        expect(union.has(`type: '${v}'`), `${kind.kind} declares '${v}' — no ServerMessage member carries it`).toBe(true);
+        expect(union.includes(`type: '${v}'`), `${kind.kind} declares '${v}' — no ServerMessage member carries it`).toBe(true);
       }
     }
   });
