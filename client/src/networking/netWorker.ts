@@ -47,6 +47,19 @@ type Down =
 
 const post = (m: Up): void => w.postMessage(m);
 
+// Capture the REAL error the opaque outer ErrorEvent hides — uncaught
+// exceptions and rejections inside the worker report back as text over
+// the nlog relay (the browser's own 'error' event on Worker() is often
+// blank for module workers).
+(self as unknown as { addEventListener(t: string, cb: (e: unknown) => void): void }).addEventListener('error', (e: unknown): void => {
+  const ev = e as { message?: string; filename?: string; lineno?: number; error?: { stack?: string } };
+  post({ kind: 'nlog', level: 'error', name: 'NetW', msg: `self-error: ${ev.message} @ ${ev.filename}:${ev.lineno} ${ev.error?.stack ?? ''}` });
+});
+(self as unknown as { addEventListener(t: string, cb: (e: unknown) => void): void }).addEventListener('unhandledrejection', (e: unknown): void => {
+  const r = (e as { reason?: unknown }).reason;
+  post({ kind: 'nlog', level: 'error', name: 'NetW', msg: `rejection: ${r instanceof Error ? (r.stack ?? r.message) : String(r)}` });
+});
+
 // Transport logs surface in the page's Alt+Q buffer, not just the
 // worker's devtools console — relay them as protocol messages. The ctx
 // rides structured clone: DOM Events (WebTransportError et al.) can't
@@ -145,6 +158,16 @@ function makeConfig(url: string, hasResolver: boolean): ConnectionConfig {
   };
 }
 
+function disconnectAll(): void {
+  connected = false;
+  inner?.disconnect();
+  inner = null;
+  // In-flight resolves can never be answered now — fail them fast
+  // instead of parking the next transport's reconnect on the timeout.
+  for (const res of resolveWaiters.values()) {res(null);}
+  resolveWaiters.clear();
+}
+
 w.addEventListener('message', (e: MessageEvent<Down>): void => {
   const m = e.data;
   switch (m.kind) {
@@ -182,13 +205,7 @@ w.addEventListener('message', (e: MessageEvent<Down>): void => {
       break;
     }
     case 'disconnect': {
-      connected = false;
-      inner?.disconnect();
-      inner = null;
-      // In-flight resolves can never be answered now — fail them fast
-      // instead of parking the next transport's reconnect on the timeout.
-      for (const res of resolveWaiters.values()) {res(null);}
-      resolveWaiters.clear();
+      disconnectAll();
       break;
     }
     case 'resolved': {

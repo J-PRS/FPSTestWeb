@@ -13,7 +13,7 @@ import type { NdModule } from '../../../tools/netbot/rtcSocket.ts';
 // scenario suite drives GameServer in-process and structurally cannot
 // produce reorders or lifecycle gaps. LatencyLink supplies the jitter that
 // makes claims race their spawn registrations.
-export function bootServer() {
+export function bootServer(): { gs: GameServer; server: ReturnType<typeof Bun.serve<WebSocketData>>; url: string } {
   const gs = new GameServer();
   const rtc = new RtcServer(gs);
   const server = Bun.serve<WebSocketData>({
@@ -46,7 +46,7 @@ export function bootServer() {
   return { gs, server, url: `ws://127.0.0.1:${server.port}/ws` };
 }
 
-export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+export const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /** Poll `cond` every 250ms until true or the deadline passes — returns
  *  the outcome so the caller's expect() still fails the same way. Fixed
@@ -100,7 +100,16 @@ export type SpawnOpts = { hopEveryMs?: number; transports?: ('ws' | 'rtc')[]; ro
 /** Per-test harness: one server + a bot roster, auto-torn-down by
  *  afterEach. Split files so ptest shards these wall-paced tests
  *  across processes instead of serializing them in one describe. */
-export function mkNetbots() {
+export function mkNetbots(): {
+  spawn: (n: number, link: LatencyOpts | LatencyOpts[], opts?: SpawnOpts) => Promise<void>;
+  bots: { nc: NetClient; bot: NetBot }[];
+  rejectsOf: () => string;
+  totalRejects: () => number;
+  sleep: typeof sleep;
+  until: typeof until;
+  untilProgress: typeof untilProgress;
+  env: () => ReturnType<typeof bootServer> | null;
+} {
   let env: ReturnType<typeof bootServer> | null = null;
   const bots: { nc: NetClient; bot: NetBot }[] = [];
 
@@ -112,14 +121,18 @@ export function mkNetbots() {
   });
 
   const spawn = async (n: number, link: LatencyOpts | LatencyOpts[], opts: SpawnOpts = {}) => {
-    env = bootServer();
+    // NETBOT_URL override: drive the same scenarios at a REAL remote
+    // server (tunnel soaks — LatencyLink still wraps the socket, so a
+    // harsh-WAN profile stacks synthetic jitter on the true WAN path).
+    const url = process.env.NETBOT_URL;
+    if (!url) {env = bootServer();}
     for (let i = 0; i < n; i++) {
       const transport = opts.transports?.[i % opts.transports.length] ?? 'ws';
       // Kit and tier declared up front like a real loadout pick — the
       // squad-role weighting reads armorClass off roster entries.
       const lo = BOT_LOADOUTS[i % BOT_LOADOUTS.length]!;
       const li = Array.isArray(link) ? link[i % link.length]! : link;
-      const nc = new NetClient(env.url, `nb_${i}`, new LatencyLink(li), { transport, rtc: nd ? { nd } : undefined, room: opts.room, mode: opts.mode, bots: opts.bots, armorClass: botClassForLoadout(lo) });
+      const nc = new NetClient(url ?? env!.url, `nb_${i}`, new LatencyLink(li), { transport, rtc: nd ? { nd } : undefined, room: opts.room, mode: opts.mode, bots: opts.bots, armorClass: botClassForLoadout(lo) });
       const bot = new NetBot(nc, { ...opts, loadout: lo });
       bots.push({ nc, bot });
       // Staggered connects — a burst of simultaneous socket opens made
