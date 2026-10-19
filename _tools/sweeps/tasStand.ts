@@ -122,16 +122,67 @@ function runLeg(A: { x: number; y: number; z: number }, B: { x: number; y: numbe
   return { t: -1, grabV: -1, arena, bestIdx, bestDist, flyV, flyDy };
 }
 
-for (const [a, b] of [['alpha', 'bravo'], ['bravo', 'alpha']] as const) {
-  const A = STANDS[a], B = STANDS[b];
-  console.log(`searching ${a}->${b} (${Math.hypot(B.x - A.x, B.z - A.z).toFixed(0)}m)...`);
-  const r = runLeg(A, B);
-  if (r.grabV < 0) { console.log(`  NO GRAB in ${MAXT}s (closest ${r.bestDist?.toFixed(0)}m; fastest flyby ${r.flyV?.toFixed(1)} m/s at dy=${r.flyDy?.toFixed(1)})`); continue; }
+const report = (label: string, r: ReturnType<typeof runLeg>) => {
+  if (r.grabV < 0) { console.log(`  ${label}: NO GRAB in ${MAXT}s (closest ${r.bestDist?.toFixed(0)}m; fastest flyby ${r.flyV?.toFixed(1)} m/s at dy=${r.flyDy?.toFixed(1)})`); return; }
   const path = [] as Node['sample'][];
   for (let cur = r.arena.length - 1; cur >= 0; cur = r.arena[cur]!.parent) { path.unshift(r.arena[cur]!.sample); }
   const vAvg = path.reduce((s, p) => s + p.v, 0) / path.length;
   const vMax = Math.max(...path.map(p => p.v));
   const jetPct = (path.filter(p => p.j).length / path.length) * 100;
   const skiPct = (path.filter(p => p.g).length / path.length) * 100;
-  console.log(`  ${a}->${b}: grab at t=${r.t.toFixed(1)}s grabV=${r.grabV.toFixed(1)} m/s  vAvg=${vAvg.toFixed(1)} vMax=${vMax.toFixed(1)} ski%=${skiPct.toFixed(0)} jet%=${jetPct.toFixed(0)}`);
+  console.log(`  ${label}: grab at t=${r.t.toFixed(1)}s grabV=${r.grabV.toFixed(1)} m/s  vAvg=${vAvg.toFixed(1)} vMax=${vMax.toFixed(1)} ski%=${skiPct.toFixed(0)} jet%=${jetPct.toFixed(0)}`);
+};
+
+// --straight: no search at all — one rollout per bearing: spawn on the
+// --dist ring, hold forward+ski(+jets) straight at the flag. Answers
+// "what's possible without turning" in milliseconds. TAS_JETS=0 = pure
+// gravity ski.
+const STRAIGHT = process.argv.includes('--straight');
+if (STRAIGHT) {
+  const B = STANDS[arg('stand', 'bravo') as 'alpha' | 'bravo'];
+  const D = Number(arg('dist', '250'));
+  const N = Number(arg('sweep', '12')) || 12;
+  for (let i = 0; i < N; i++) {
+    const th = (i / N) * Math.PI * 2;
+    const Ax = B.x + Math.sin(th) * D, Az = B.z + Math.cos(th) * D;
+    const A = at(Ax, Az);
+    const yaw = Math.atan2(B.x - Ax, B.z - Az);
+    const sim = new MoveSim(surface, { pos: { x: A.x, y: A.y + 1.8, z: A.z }, vel: { x: 0, y: 0, z: 0 }, yaw, pitch: 0, onGround: true });
+    let e = EMAX, grabV = -1, vMax = 0, flyV = 0, flyDy = 0, bestD = 1e9;
+    for (let s = 0; s < MAXT * 60; s++) {
+      const jet = JETS && e > ELOCK;
+      sim.setInput({ forward: 1, right: 0, jumpPressed: false, jumpHeld: false, skiHeld: true, jetHeld: jet });
+      sim.update(1 / 60);
+      e = Math.min(EMAX, e + (jet ? -DRAIN : REGEN) / 60);
+      const p = sim.state.pos, v = Math.hypot(sim.state.vel.x, sim.state.vel.z);
+      vMax = Math.max(vMax, v);
+      const d = Math.hypot(B.x - p.x, B.z - p.z);
+      bestD = Math.min(bestD, d);
+      if (d <= 12 && v > flyV) { flyV = v; flyDy = p.y - B.y; }
+      if (d <= 6 && Math.abs(p.y - B.y) <= 6) { grabV = v; break; }
+      if (d > D + 400) {break;} // blew past everything — done
+    }
+    const deg = (th * 180 / Math.PI).toFixed(0);
+    if (grabV >= 0) {console.log(`  ${deg}°  start+${(A.y - B.y).toFixed(0)}m: GRAB at ${(sim.state ? 0 : 0)}v=${grabV.toFixed(1)} m/s (vMax=${vMax.toFixed(1)})`);}
+    else {console.log(`  ${deg}°  start+${(A.y - B.y).toFixed(0)}m: miss (closest ${bestD.toFixed(0)}m, flyby ${flyV.toFixed(1)} m/s @dy=${flyDy.toFixed(0)}, vMax=${vMax.toFixed(1)})`);}
+  }
+} else {
+const SWEEP = Number(arg('sweep', '0'));
+if (SWEEP > 0) {
+  const B = STANDS[arg('stand', 'bravo') as 'alpha' | 'bravo'];
+  const D = Number(arg('dist', '250'));
+  for (let i = 0; i < SWEEP; i++) {
+    const th = (i / SWEEP) * Math.PI * 2;
+    const Ax = B.x + Math.sin(th) * D, Az = B.z + Math.cos(th) * D;
+    const A = at(Ax, Az);
+    console.log(`bearing ${(th * 180 / Math.PI).toFixed(0)}° from (${Ax.toFixed(0)},${Az.toFixed(0)}) start h=${A.y.toFixed(0)} → stand h=${B.y.toFixed(0)} (Δ=${(A.y - B.y).toFixed(0)}m):`);
+    report(`${(th * 180 / Math.PI).toFixed(0)}°`, runLeg(A, B));
+  }
+} else {
+  for (const [a, b] of [['alpha', 'bravo'], ['bravo', 'alpha']] as const) {
+    const A = STANDS[a], B = STANDS[b];
+    console.log(`searching ${a}->${b} (${Math.hypot(B.x - A.x, B.z - A.z).toFixed(0)}m)...`);
+    report(`${a}->${b}`, runLeg(A, B));
+  }
+}
 }

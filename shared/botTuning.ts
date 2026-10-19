@@ -25,7 +25,9 @@ export const BOT_TUNING = {
     parkSpeedSplit: 6,   // m/s — fast/slow ring switch
     skiVetoRise: 2.7,    // m — steep-climb grade that releases ski
     skiVetoSpeed: 10,    // m/s — below this on a steep grade, don't ski (energy sweep: 7→10 flips capper from slow grabV=10.2 to fast grabV=17.6; cliff is exactly 10)
-    ceilingAgl: 35,      // m AGL — held burn above this is ballooning (evolved: bank altitude early, it pays later)
+    ceilingAgl: 35,      // m AGL — held burn above this is ballooning, unless fast: a runner at bankSpeed+ trades zero forward thrust for pure altitude (jets can't push past jetMaxFwdAccel=50 anyway — the TAS bank is the climb)
+    bankSpeed: 45,       // m/s — fast enough that jetting up spends nothing horizontal; altitude banks for the next descent
+    bankOdMin: 150,      // m — banking needs runway to convert back to speed; inside this the burn is run-in instead
     comfyEnergy: 35,     // energy floor for discretionary burns
     boostSpeedMax: 12,   // m/s — anti-sheep boost only when slower
     boostGdMin: 15,      // m — boost only with ground to cover
@@ -49,8 +51,8 @@ export const BOT_TUNING = {
                          // the strike leg opened at E≈2-13 and the run-in died on the mountE floor.
     strikeTapMin: 2,     // energy — tap floor inside the strike window (commit everything)
     runInRise: 4,        // m — run-in only when objective near-level
-    runInSpeed: 36,      // m/s — run-in stops boosting past this (grab passes read ~34m/s peak = half a real capper's 55-80m/s entry)
-    tailTapSpeed: 45,    // m/s — descent tap caps here (standalone sweep: hop+tail-tap plateaus ~43, held burn ~66 at ~10x the energy per meter)
+    runInSpeed: 52,      // m/s — run-in stops boosting past this; jet forward accel dies at 50 anyway (jetMaxFwdAccel), so the cap only cheapens the burn off the last meters
+    tailTapSpeed: 80,    // m/s — descent tap caps here for runners. Past jetMaxFwdAccel the up-share still stretches the arc for the NEXT descent — that's how 80-100 runs chain; plateau reasoning was about forward accel only
     tailTapSkill: 1.1,   // skill.movement floor — JP's trick is timing: skilled bots ride the hop descent, low-skill ones pay the flat burn
     pursuitR: 90,        // m — REVERTED carrier-shield experiment's ring, kept for reference
     shieldReserve: 36,   // energy — REVERTED: pressured carriers banking for SHIELD slowed them into the kill (med hold 8.1->5.0s, caps flat)

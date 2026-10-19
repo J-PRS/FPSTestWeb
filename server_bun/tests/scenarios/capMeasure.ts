@@ -154,7 +154,7 @@ export function measureCap(
           const spd = Math.hypot(capper.velocity.x, capper.velocity.z);
           const nvx = spd > 0.5 ? capper.velocity.x / spd : 0, nvz = spd > 0.5 ? capper.velocity.z / spd : 0;
           const slope = hmHeight(fld, capper.position.x + nvx * 8, capper.position.z + nvz * 8) - hmHeight(fld, capper.position.x, capper.position.z);
-          drops.push({ t: dropT0 || simT, dE: dropAcc, v: spd, agl, dy: capper.position.y - flagY, slope, air: agl > 2, jet: ctl.brains.get(capper.id)?.jetDebug.why ?? '?' });
+          drops.push({ t: dropT0 || simT, dE: dropAcc, v: spd, agl, dy: capper.position.y - flagY, slope, air: agl > 2, jet: ctl.brains.get(capper.id)?.jetDebug.why ?? '?', en: room.moveSim.energyOf(capper.id) } as never);
           if (drops.length > 12) {drops.shift();}
         }
         dropAcc = 0; dropT0 = 0;
@@ -230,7 +230,7 @@ export function measureCap(
     );
     for (const d of drops) {
       console.log(
-        `    bleed t=${d.t.toFixed(0)}s -${d.dE.toFixed(0)}E v=${d.v.toFixed(0)} agl=${d.agl.toFixed(0)} ` +
+        `    bleed t=${d.t.toFixed(0)}s -${d.dE.toFixed(0)}E v=${d.v.toFixed(0)} agl=${d.agl.toFixed(0)} en=${(d as { en?: number }).en ?? '?'} ` +
         `slope8m=${d.slope.toFixed(1)} dy=${d.dy.toFixed(0)} ${d.air ? 'AIR' : 'GND'} jet=${d.jet}`,
       );
     }

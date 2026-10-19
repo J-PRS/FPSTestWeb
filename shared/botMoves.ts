@@ -306,8 +306,18 @@ export class BotMoves {
     // dy 8-20, orbits forever). Same window, same cut for both.
     const fod = ctx.flagPos ? Math.hypot(pos.x - ctx.flagPos.x, pos.z - ctx.flagPos.z) : od;
     const inGlide = ctx.runner && dyAbove > 6 && fod < Math.max(T.moves.grabOrbitGd * 1.5, dyAbove * T.lines.diveGlideK);
-    if (inGlide) {this.jetHold = 0;}
-    const jet = !diveRun && (((this.jetHold > 0 || (this.host.escapeJetT() > 0 && !inGlide)) && tanked) || (tail && !inGlide));
+    // Carrier landing commit: the home-stand touch is a ±6m vertical
+    // window, and a carrier arriving overhead-high has no mechanism that
+    // sheds altitude — the orbit brake is carrier-exempt (it once parked
+    // him on the doorstep) and inGlide arms too late (dy*4 ≈ 130m) for a
+    // 40m/s approach. Soak: carrier climbed to y=272 off escape/hop
+    // burns, then blew 30m OVER a y=60 flag for 100+s. Overhead +
+    // closing = every jet tick is a flyby — cut the burn early and let
+    // the fall land him on the deck.
+    const landDive = ctx.running === true && ctx.objective !== null && ctx.objective !== undefined
+      && dyAbove > 8 && od < Math.max(140, dyAbove * T.lines.diveGlideK * 1.5);
+    if (inGlide || landDive) {this.jetHold = 0;}
+    const jet = !diveRun && !landDive && (((this.jetHold > 0 || (this.host.escapeJetT() > 0 && !inGlide)) && tanked) || (tail && !inGlide));
     this.jetOut = jet;
     return {
       // Tribes default: ski is held whenever the bot has somewhere to
@@ -511,10 +521,28 @@ export class BotMoves {
     // no altitude burn — only an arc smacking a rising face earns one.
     const destHigh = destDeficit > T.moves.destHighRise + Math.min(30, gd * 0.08)
       && !this.arcClearsCrest(ctx, pos);
+    // Carve suppressor (hoisted for the ceiling check below): thrusting
+    // into a turn brakes — jet facing runs at the steerer yaw, and
+    // mid-turn that yaw opposes momentum.
+    const vx = ctx.vel?.x ?? 0, vz = ctx.vel?.z ?? 0;
+    const vSpd = Math.hypot(vx, vz);
+    const tx = dest.x - pos.x, tz = dest.z - pos.z;
+    const tl = Math.hypot(tx, tz) || 1;
+    const turning = vSpd > 20 && (vx * tx + vz * tz) / (vSpd * tl) < -0.5;
+    // Sky-bank: the TAS-found trick — past jetMaxFwdAccel a held jet adds
+    // ZERO forward thrust but full +35 up, so a fast airborne runner
+    // burning while it glides spends nothing horizontal and banks the
+    // altitude as potential — the next descent converts it all back.
+    // Needs real runway to convert (od), real speed to bank (vSpd), and
+    // air under the arc (airborne). Jets up at low speed is ballooning.
+    const skyBank = (ctx.runner === true || ctx.wave === true) && s.airborne &&
+      !turning && vSpd >= T.moves.bankSpeed && od > T.moves.bankOdMin;
     // Hard ceiling: past ~30m AGL a held burn is ballooning, not skiing —
     // featherjets turned a shallow hop chain into a 250m balloon ride.
     // High prey still earns altitude; everything else glides back down.
-    if (!targetHigh && pos.y - ctx.groundY(pos.x, pos.z) > T.moves.ceilingAgl) {return false;}
+    // A sky-banking runner is exempt by construction — the altitude IS
+    // the purchase, not a byproduct of feathering.
+    if (!targetHigh && !skyBank && pos.y - ctx.groundY(pos.x, pos.z) > T.moves.ceilingAgl) {return false;}
     // Discretionary spending asks for a healthier tank — boosting to
     // speed is nice-to-have, climbing out of a hole is not.
     const comfy = ctx.energy === undefined || ctx.energy > T.moves.comfyEnergy;
@@ -527,11 +555,6 @@ export class BotMoves {
     // human carves (holds ski, turns, no thrust); the bot should too.
     // When fast with the destination behind, discretionary speed burns
     // stay off and the ski turn does the work.
-    const vx = ctx.vel?.x ?? 0, vz = ctx.vel?.z ?? 0;
-    const vSpd = Math.hypot(vx, vz);
-    const tx = dest.x - pos.x, tz = dest.z - pos.z;
-    const tl = Math.hypot(tx, tz) || 1;
-    const turning = vSpd > 20 && (vx * tx + vz * tz) / (vSpd * tl) < -0.5;
     // The anti-sheep move: a bot at walking pace with ground to cover
     // jets to build momentum — but only flat-or-downhill from the
     // deck. Burn while facing uphill buys altitude, not speed (the
@@ -595,6 +618,7 @@ export class BotMoves {
     else if (targetHigh) {why = 'prey';}
     else if (destHigh) {why = 'destHigh';}
     else if (hop) {why = 'hop';}
+    else if (skyBank) {why = 'skyBank';}
     else if (runIn) {why = 'runIn';}
     else if (tap) {why = 'tap';}
     else if (boost) {why = 'boost';}
@@ -605,7 +629,10 @@ export class BotMoves {
     // regen, so the strike leg opened at E≈2-13 and the run-in died on
     // the mountE floor 15m short (katabatic 9002: grabV 9.3). Refilling
     // costs ~2.4s of hops; it buys the entire run-in window.
-    if (bank && why !== 'climb' && why !== 'prey') {return false;}
+    // skyBank exempt: at 45+ m/s the burn IS altitude banking — a fast
+    // runner buys more arrival speed spending the tank on lift now than
+    // arriving topped-up on a slow line.
+    if (bank && !skyBank && why !== 'climb' && why !== 'prey') {return false;}
     // The `mountE` start floor is load-bearing even inside the strike
     // window: letting the leg drain to `strikeTapMin` (2) was measured
     // WORSE on every axis (5 seeds × 3 maps: grabV 22.4→15.0, oasis
