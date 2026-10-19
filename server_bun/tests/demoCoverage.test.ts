@@ -62,6 +62,7 @@ const EXEMPT: Record<string, string> = {
   playerShot: 'hitscan cosmetic relay — no actor persists',
   playerHit: 'hit feedback — remote frames carry the damage result',
   jump: 'remote anim relay — remote frames already carry pos/flags',
+  landed: 'remote anim/FX relay — slam thud + dust, remote frames carry the landing',
   jetpack: 'remote anim relay',
   knockback: 'impulse echo — remote frames carry the result',
   projRide: 'cosmetic pairing relay — destroy events carry the contact pos',

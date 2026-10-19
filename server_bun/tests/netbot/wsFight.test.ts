@@ -1,11 +1,15 @@
 import { describe, it, expect } from 'bun:test';
-import { mkNetbots } from './helpers.ts';
+import { mkNetbots, nd } from './helpers.ts';
 
 describe('netbot — real clients over real sockets', () => {
   const { spawn, bots, sleep, untilProgress } = mkNetbots();
 
   it('bots fight over real WS with jittered claims — every legit claim resolves', async () => {
-    await spawn(4, { pingMs: 20, jitterMs: 150, lossRate: 0 }); // heavy jitter: claims race spawns constantly
+    // Half the roster on the rtc lane when the native lib loads — a
+    // jittered ws bot trading claims with an rtc bot is the real mix a
+    // production room sees (browsers are ws-only today; LAN/P2P can still
+    // land rtc). No nd → everyone ws, same as before.
+    await spawn(4, { pingMs: 20, jitterMs: 150, lossRate: 0 }, { transports: nd ? ['ws', 'rtc'] : undefined }); // heavy jitter: claims race spawns constantly
     const t = () => bots.map((b) => b.nc.tel);
     // Humanized bots close slower — wait on engagement, not a fixed
     // window, then drain the in-flight claims before asserting.

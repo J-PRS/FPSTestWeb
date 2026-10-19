@@ -185,7 +185,14 @@ export class GameServer {
     // handshake would otherwise sit forever (QUIC/RTC peers don't die on
     // their own quickly). 15s is generous — real clients join in ms.
     setTimeout((): void => {
-      if (!ws.data.playerId && ws.readyState === 1) {ws.close(1000, 'join timeout');}
+      if (!ws.data.playerId && ws.readyState === 1) {
+        // Name the socket's age — a ~ms close means the join raced off
+        // generation (client-side churn), a real 15s close means the join
+        // never arrived. The tunnel session proved these are indistinguishable
+        // in the log otherwise.
+        logger.info('join timeout close', { ageMs: Date.now() - ws.data.connectedAt });
+        ws.close(1000, 'join timeout');
+      }
     }, CONFIG.joinTimeoutMs).unref?.();
   }
 

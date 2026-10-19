@@ -1,14 +1,16 @@
 import { describe, it, expect } from 'bun:test';
-import { mkNetbots } from './helpers.ts';
+import { mkNetbots, nd } from './helpers.ts';
 
 describe('netbot — real clients over real sockets', () => {
   const { spawn, bots, sleep, until, rejectsOf } = mkNetbots();
 
   it('a harsh WAN (100ms + 300 jitter + 5% loss) still resolves every claim it sees', async () => {
-    await spawn(4, { pingMs: 100, jitterMs: 300, lossRate: 0.05 });
+    // Tier mix when nd loads: rtc bots ride unordered datagrams under the
+    // same synthetic WAN — exactly the lane where reorder+loss is native.
+    await spawn(4, { pingMs: 100, jitterMs: 300, lossRate: 0.05 }, { transports: nd ? ['ws', 'rtc'] : undefined });
     // Wait on claim flow, not a landed hit — under this WAN a whole window
     // can whiff legitimately (see the dealt note below).
-    await until(() => bots.reduce((a, b) => a + b.nc.tel.fireIntents, 0) > 0, 25000);
+    await until(() => bots.reduce((a, b) => a + b.nc.tel.fireIntents, 0) > 0, 25_000);
     await sleep(600); // drain the deep in-flight window
 
     const dealt = bots.reduce((a, b) => a + b.nc.tel.hitsDealt, 0);
@@ -24,9 +26,9 @@ describe('netbot — real clients over real sockets', () => {
     // under 300ms jitter a whole window can whiff legitimately. Report it
     // rather than assert it; the claim-resolution invariant lives in the
     // rejects check below (and hop/claim-flow coverage in the tests above).
-    if (!dealt) console.warn('  harsh WAN: zero hits dealt — whiffed window, not a wire fault');
-    else expect(dealt).toBeGreaterThan(0);
-    if (rejects) console.log(`  rejects: ${rejectsOf()}`);
+    if (dealt) {expect(dealt).toBeGreaterThan(0);}
+    else {console.warn('  harsh WAN: zero hits dealt — whiffed window, not a wire fault');}
+    if (rejects) {console.log(`  rejects: ${rejectsOf()}`);}
     expect(rejects).toBe(0);
-  }, 30000);
+  }, 30_000);
 });
