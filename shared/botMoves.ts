@@ -119,7 +119,14 @@ export class BotMoves {
     // `!ctx.running`: a carrier's objective is his OWN stand — lapping it
     // is not a grab orbit, and braking him 20-30m short of home dropped
     // flags on the doorstep (oasis s1: 90s parked at odHome 20-32).
-    if (ctx.runner && !ctx.running && !ctx.posted && ctx.objective && od < T.moves.grabWatchGd) {
+    // Exception: a carrier stuck BELOW an elevated home stand is in the
+    // same vertical orbit a runner gets on a tall enemy stand — crests
+    // the rim, slides off, circles. The lap detector is the brake he
+    // needs; a clean fly-through still never trips it. His lap radius is
+    // wider than a grab orbit's (peaks: 40-90m under the stand), so the
+    // ring widens for the below-flag case.
+    const watchGd = ctx.running && dyAbove < -6 ? T.moves.grabWatchGd * 3 : T.moves.grabWatchGd;
+    if (ctx.runner && (!ctx.running || dyAbove < -6) && !ctx.posted && ctx.objective && od < watchGd) {
       if (od < this.odBest) {this.odBest = od;}
       // Each grabOrbitS window must close grabOrbitMinGain toward the
       // pole — an orbit that dips a little nearer each lap keeps making
@@ -169,7 +176,7 @@ export class BotMoves {
     // detector every lap (odRef/odT/crawl all reset), so the watch
     // re-armed fresh on each dip back in and never accumulated the
     // stall it exists to catch.
-    } else if (od > T.moves.grabWatchGd * 1.5) { this.odBest = Infinity; this.odWindowBest = Infinity; this.odT = 0; this.crawl = false; this.brakeNow = false; }
+    } else if (od > watchGd * 1.5) { this.odBest = Infinity; this.odWindowBest = Infinity; this.odT = 0; this.crawl = false; this.brakeNow = false; }
     // Only brake when the step actually heads at the pole — a mortar
     // sidestep is perpendicular and must keep its legs. Two rings:
     // fast arrivals brake wide to kill the overshoot-orbit; already
@@ -211,6 +218,15 @@ export class BotMoves {
     if (this.jetWhy === 'tap' || this.jetWhy === 'tail') {
       tapFloor = strikeTap ? T.moves.strikeTapMin : T.moves.tapEnergyMin;
     }
+    // Sputter-lock veto: a runner orbiting BELOW an elevated flag on a
+    // dry tank burns each regen trickle the moment it clears the lockout
+    // — 8E sputters that never mount the face (peaks: 120s lapping the
+    // stand at en 2-17). Inside the ring and below the pole the floor
+    // jumps to a real mount budget, so the tank refills to one
+    // committed climb instead of spending forever on fizzle-burns.
+    if (ctx.runner === true && dyAbove < -6 && odTap < T.moves.destHighNear * 1.5) {
+      tapFloor = Math.max(tapFloor, T.moves.breathHold);
+    }
     // REVERTED: pressured carriers banking shieldReserve — same-seed
     // soak caps flat (13) but med hold fell 8.1->5.0s: slowing under
     // pursuit lets the chaser close sooner; speed IS the carrier's
@@ -226,7 +242,13 @@ export class BotMoves {
     // lip has no other way back onto its post — the stall gates above
     // already keep a freely-moving post planted (soak: four pinned
     // anchors ringed around the henge dais, all posted, all rise~3.6m).
-    if (!airborne && rise > T.moves.stepRise && speed < T.moves.jumpUphillSpeed) {
+    // Mount-commit: a runner/carrier below an elevated flag whose tank
+    // holds a real burn stops orbiting at speed (the stall-gate hop only
+    // arms near-stationary — a moving orbiter never mounts, peaks carry
+    // leg: 150s circling 15-25m under the stand) and burns the face now.
+    const mountCommit = (ctx.runner === true || ctx.running === true) && dyAbove < -6 &&
+      odTap < T.moves.destHighNear * 1.5 && ctx.energy !== undefined && ctx.energy >= T.moves.breathHold;
+    if (!airborne && rise > T.moves.stepRise && (speed < T.moves.jumpUphillSpeed || mountCommit)) {
       this.jetWhy = 'hop';
       // A lip above jump apex but below breathRise has no perch — with a
       // dry tank the hop kept firing anyway and the bot rim-orbited the
