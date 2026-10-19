@@ -4,7 +4,7 @@ import {
   encodePosition, decodePosition,
   encodeTickPlayer, encodeTickPlayerV3, encodeTickPlayerV4, encodeTickFrame, decodeTickFrame,
   isWireFrame, WIRE_POSITION, WIRE_TICK_V3, WIRE_TICK_V4, WireIdRoster,
-  tickEncodeScratch, v4Last,encodeBallSegment,decodeBallSegment
+  tickEncodeScratch, v4Last,encodeBallSegment,decodeBallSegment,sparseV4Record
 } from '../../../shared/wire';
 
 const encPos = (pos: { x: number; y: number; z: number }): Uint8Array<ArrayBufferLike> =>
@@ -493,5 +493,39 @@ describe('v4 delta-masked records', (): void => {
     const after = decodeTickFrame(encodeTickFrame(0, 4, 0, [encodeTickPlayerV4(7, p, enc, last, false)], WIRE_TICK_V4), r.pool)!;
     expect(after.updates[0]!.health).toBe(100);
     expect(after.updates[0]!.position.x).toBeCloseTo(4);
+  });
+
+  it('sparse far-tier record strips vel/rot — retained values survive, vitals still flow', (): void => {
+    const r = new WireIdRoster();
+    r.feed({ type: 'wireIds', add: { 7: 'player_seven' } });
+    const enc = tickEncodeScratch();
+    const sparseEnc = tickEncodeScratch();
+    const last = v4Last();
+    const p = baseTickP();
+    // Seat the baseline with a full, then change EVERY group — the sparse
+    // transform must keep hp/flags while vel/rot emit retained.
+    decodeTickFrame(encodeTickFrame(0, 1, 0, [encodeTickPlayerV4(7, p, enc, last, false)], WIRE_TICK_V4), r.pool);
+    p.position.x = 8; p.velocity.x = 99; p.rotation.yaw = 2.5; p.health = 55; p.sheep = 80;
+    const delta = encodeTickPlayerV4(7, p, enc, last, false);
+    expect(delta.length).toBe(30); // every group dirty
+    const sparse = sparseV4Record(delta, sparseEnc);
+    expect(sparse.length).toBe(15 + 3 + 2); // id+mask+pos + hpPing + flagsSheep
+    const d = decodeTickFrame(encodeTickFrame(0, 2, 0, [sparse.slice()], WIRE_TICK_V4), r.pool)!;
+    const u = d.updates[0]!;
+    expect(u.position.x).toBeCloseTo(8);       // pos flows
+    expect(u.health).toBe(55);                  // vitals flow
+    expect(u.sheep).toBe(80);                   // flags/sheep flow
+    expect(u.velocity.x).toBeCloseTo(10);       // retained, not 99
+    expect(u.rotation.yaw).toBeCloseTo(0.5);    // retained, not 2.5
+    // The K-deep basis still carries hp+flags for the resend window —
+    // sparse keeps those (they're the vitals); only vel/rot stay out.
+    const carry = sparseV4Record(encodeTickPlayerV4(7, p, enc, last, false), sparseEnc);
+    expect(carry.length).toBe(15 + 3 + 2);
+    // After the resend window drains (encode past the ring), the floor is
+    // the bare 15B pos record.
+    encodeTickPlayerV4(7, p, enc, last, false);
+    encodeTickPlayerV4(7, p, enc, last, false);
+    const bare = sparseV4Record(encodeTickPlayerV4(7, p, enc, last, false), sparseEnc);
+    expect(bare.length).toBe(15);
   });
 });

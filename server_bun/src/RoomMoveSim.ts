@@ -10,6 +10,8 @@ import { FieldSurface, MoveJudge, TRANSIT_EMA_CAP_MS, type Shadow } from './move
 import type { StructureSpec } from '../../shared/mapSpec.ts';
 import { wallNow } from './wallClock.ts';
 import { evictEldest } from './evictEldest.ts';
+import type { SimJournal} from './simJournal.ts';
+import { JOURNAL_HASH_EVERY, type JournalEv, type JournalEvNoT } from './simJournal.ts';
 
 /**
  * Server-side movement shadow — every player gets a MoveSim fed by their
@@ -69,6 +71,31 @@ export class RoomMoveSim {
    *  records each tick (corpses excluded upstream); each shadow gets a
    *  self-less view so its own sim does the pushing. */
   bodySource?: () => Iterable<{ id: string } & BodyCapsule>;
+  /** Forensic recorder — every sim-affecting call lands with the tick
+   *  index it applied on (simJournal.ts). Env-gated at the Room;
+   *  undefined = zero-cost (one check per call site). */
+  journal?: SimJournal;
+  /** Completed-tick count — journal events stamp "after N ticks". */
+  private journalT = 0;
+  private jev(ev: JournalEvNoT): void {
+    this.journal?.push(Object.assign({ t: this.journalT }, ev) as JournalEv);
+  }
+  /** Sorted FNV over shadow sim state — the hash markers replayJournal
+   *  compares. Covers the fields that decide trajectories; wall-clock
+   *  judge bookkeeping (gap streaks, EMAs) is deliberately out — it
+   *  doesn't feed positions. */
+  journalHash(): number {
+    let h = 0x81_1C_9D_C5;
+    const mix = (n: number): void => { h ^= n; h = Math.imul(h, 0x01_00_01_93) >>> 0; };
+    for (const [pid, sh] of [...this.shadows].sort(([a], [b]) => (a < b ? -1 : 1))) {
+      mix(pid.length); for (let i = 0; i < pid.length; i += 1) {mix(pid.charCodeAt(i));}
+      const s = sh.sim.state;
+      mix(Math.round(s.pos.x * 100)); mix(Math.round(s.pos.y * 100)); mix(Math.round(s.pos.z * 100));
+      mix(Math.round(s.vel.x * 100)); mix(Math.round(s.vel.y * 100)); mix(Math.round(s.vel.z * 100));
+      mix(Math.round(s.yaw * 1000)); mix(s.onGround ? 1 : 0); mix(Math.round(sh.energy));
+    }
+    return h;
+  }
 
   constructor(field: Heightfield | null, authoritative = false) {
     this.wantsAuthority = authoritative;
@@ -180,6 +207,7 @@ this.structEpoch += 1;
   /** Call on join/spawn — seeds the sim at the reported spot. `team`
    *  feeds team-gated colliders (gate shields pass allies). */
   track(playerId: string, pos: Vec3Like, yaw: number, perk?: string, team?: string, bot?: boolean, armorClass?: string): void {
+    this.jev({ kind: 'track', pid: playerId, pos: { x: pos.x, y: pos.y, z: pos.z }, yaw, perk, team, bot, armorClass });
     if (!this.surface) {
       this.pendingTrack.set(playerId, { pos: { x: pos.x, y: pos.y, z: pos.z }, yaw, perk, team, bot, armorClass });
       return;
@@ -222,7 +250,10 @@ this.structEpoch += 1;
     }
   }
 
-  untrack(playerId: string): void { this.shadows.delete(playerId); this.pendingTrack.delete(playerId); }
+  untrack(playerId: string): void {
+    this.jev({ kind: 'untrack', pid: playerId });
+    this.shadows.delete(playerId); this.pendingTrack.delete(playerId);
+  }
 
   /** The shadow's own eye height — the measure of "buried" must match
    *  the sim's floor convention (pos.y IS the eye point). Reading the
@@ -289,6 +320,7 @@ this.structEpoch += 1;
    *  it, so a hot-reload onto a dry map can't leave the old sea behind.
    *  Applied to live shadows and every later track(). */
   setWaterLevel(level?: number): void {
+    this.jev({ kind: 'water', level });
     this.waterLevel = level;
     for (const sh of this.shadows.values()) {sh.sim.waterLevel = level;}
   }
@@ -323,6 +355,7 @@ this.structEpoch += 1;
     const sh = this.shadows.get(playerId);
     if (!sh) {return true;} // no field → no sim → nothing to order
     if (seq !== undefined && seq <= sh.lastInputSeq) {return false;}
+    this.jev({ kind: 'input', pid: playerId, input: { ...input }, status, seq });
     if (seq === undefined) {
       if (input.jetHeld !== undefined) {sh.jetWanted = input.jetHeld;}
       this.applyInput(sh, input, sh.jetWanted && sh.energy > 0);
@@ -375,7 +408,10 @@ this.structEpoch += 1;
   /** Energy refunds the world grants — gem pickup half-tank refill. */
   grantEnergy(playerId: string, amount: number): void {
     const sh = this.shadows.get(playerId);
-    if (sh && Number.isFinite(amount)) {sh.energy = Math.min(ENERGY.max * sh.energyMax, sh.energy + amount);}
+    if (sh && Number.isFinite(amount)) {
+      this.jev({ kind: 'energy', pid: playerId, amount, drain: false });
+      sh.energy = Math.min(ENERGY.max * sh.energyMax, sh.energy + amount);
+    }
   }
 
   /** Energy burns outside the input stream — shield damage soak. */
@@ -384,6 +420,7 @@ this.structEpoch += 1;
     // NaN amount: Math.max(0, NaN) = NaN — one poison write kills
     // jets/skills for the session and never self-heals.
     if (!sh || !Number.isFinite(amount)) {return false;}
+    this.jev({ kind: 'energy', pid: playerId, amount, drain: true });
     sh.energy = Math.max(0, sh.energy - amount);
     return true;
   }
@@ -400,6 +437,7 @@ this.structEpoch += 1;
     // sim-vel names a poisoned shadow but doesn't fix it — a NaN dv
     // writes straight into the sim's velocity, so the funnel drops it.
     if (!sh || !Number.isFinite(dv.x + dv.y + dv.z)) {return;}
+    this.jev({ kind: 'impulse', pid: playerId, dv: { x: dv.x, y: dv.y, z: dv.z } });
     sh.sim.impulse(dv);
     sh.lastImpulseAt = wallNow();
   }
@@ -429,6 +467,7 @@ this.structEpoch += 1;
   reconcile(playerId: string, pos: Vec3Like, yaw: number, vel?: Vec3Like, reportInputSeq?: number, rttMs?: number): (MoveState & { inputSeq: number }) | null {
     const sh = this.shadows.get(playerId);
     if (!sh) {return null;}
+    this.jev({ kind: 'reconcile', pid: playerId, pos: { x: pos.x, y: pos.y, z: pos.z }, yaw, vel: vel && { x: vel.x, y: vel.y, z: vel.z }, seq: reportInputSeq, rtt: rttMs });
     // The report's own RTT estimate feeds the broadcast lead — the
     // uplink half is how stale the shadow's input stream is. It's
     // client-reported, so it's a lower bound on trust: server-measured
@@ -472,7 +511,7 @@ sh.gapStreak += 1;
    *  (server bots): facing is host truth, not a claim. */
   faceYaw(playerId: string, yaw: number): void {
     const sh = this.shadows.get(playerId);
-    if (sh) {sh.sim.state.yaw = yaw;}
+    if (sh) {this.jev({ kind: 'face', pid: playerId, yaw }); sh.sim.state.yaw = yaw;}
   }
 
   /** Declared discontinuity (teleport/respawn) — resync without counting. */
@@ -481,6 +520,7 @@ sh.gapStreak += 1;
     // Claim lanes gate upstream, but a NaN spawn/reseat from any caller
     // still seeds a poisoned shadow — sim-pos can only count it after.
     if (!sh || !Number.isFinite(pos.x + pos.y + pos.z + yaw)) {return;}
+    this.jev({ kind: 'resync', pid: playerId, pos: { x: pos.x, y: pos.y, z: pos.z }, yaw, fullEnergy });
     const s = sh.sim.state;
     sh.sim.setState({
       pos: { x: pos.x, y: pos.y, z: pos.z },
@@ -636,6 +676,10 @@ sh.gapStreak += 1;
       // name the field that broke, don't silence it.
       inv('sim-pos', Number.isFinite(s.pos.x + s.pos.y + s.pos.z), () => ({ id: pid }));
       inv('sim-vel', Number.isFinite(s.vel.x + s.vel.y + s.vel.z), () => ({ id: pid }));
+    }
+    this.journalT += 1;
+    if (this.journal && this.journalT % JOURNAL_HASH_EVERY === 0) {
+      this.journal.push({ t: this.journalT, kind: 'hash', h: this.journalHash() });
     }
   }
 

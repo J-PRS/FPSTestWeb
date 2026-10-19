@@ -69,6 +69,13 @@ export interface TickRecord {
   force: boolean;
   /** Per-recipient full copy — encoded only while room.introPlayers has
    *  pending joiners; sent to those recipients instead of `data` (their
-   *  decode baseline for this wireId is still zero). */
+   *   decode baseline for this wireId is still zero). */
   full?: Uint8Array;
+  /** Far-tier sparse copy — VEL|ROT stripped; >600m recipients
+   *  dead-reckon the retained values instead (never on force sends —
+   *  knockback extrapolation needs them). */
+  sparse?: Uint8Array;
+  /** sparse validity key — rec.data re-encodes every tick, so a cached
+   *  sparse is only good for the tick it was cut on. */
+  sparseTick?: number;
 }

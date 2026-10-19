@@ -57,6 +57,7 @@ import type { ServerWebSocket } from 'bun';
 import { simNow } from './simClock.ts';
 import { wallNow, wallMs, type WallMs } from './wallClock.ts';
 import type { SessionRegistry } from './sessionRegistry.ts';
+import { SimJournal } from './simJournal.ts';
 
 export class Room {
   readonly name: string;
@@ -385,6 +386,16 @@ export class Room {
       this.handlerInfo(name),
     );
     this.moveSim = new RoomMoveSim(field, this.moveAuthority);
+    // FPS_JOURNAL=<path.ndjson> records every sim-affecting moveSim call
+    // + periodic state hashes — the forensic file a desync leaves behind
+    // (replayJournal drives a fresh sim with the same stream).
+    const journalPath = process.env.FPS_JOURNAL;
+    if (journalPath) {
+      const j = new SimJournal();
+      j.header = { map: this.spec?.name ?? name, seed: this.rngSeed };
+      j.attachFile(journalPath);
+      this.moveSim.journal = j;
+    }
     // Player-vs-player contact: every shadow resolves against the live
     // roster (corpses don't block), so a defender's body is real cover.
     this.moveSim.bodySource = (): ({ id: string; } & BodyCapsule)[] => {

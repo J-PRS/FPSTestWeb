@@ -6,7 +6,7 @@
  * "what leaves the room this tick".
  */
 import type { Room } from './Room.ts';
-import { encodeTickPlayerV4, encodeTickFrame, WIRE_TICK_V4, tickEncodeScratch, tickFrameScratch, v4Last, type TickEncodeScratch } from '../../shared/wire.ts';
+import { encodeTickPlayerV4, encodeTickFrame, WIRE_TICK_V4, tickEncodeScratch, tickFrameScratch, v4Last, sparseV4Record, type TickEncodeScratch } from '../../shared/wire.ts';
 import { STATUS } from '../../shared/status.ts';
 import { lgChargeAt } from '../../shared/combat.ts';
 import { heldBuffRates, POWERUP } from '../../shared/pickups.ts';
@@ -21,7 +21,7 @@ import { simNow } from './simClock.ts';
 import { wallNow , wallMs} from './wallClock.ts';
 
 type Players = ReturnType<Room['players']['getAllPlayers']>;
-type PooledRecord = TickRecord & { enc: TickEncodeScratch; enc2?: TickEncodeScratch };
+type PooledRecord = TickRecord & { enc: TickEncodeScratch; enc2?: TickEncodeScratch; encSparse?: TickEncodeScratch; sparseTick?: number };
 
 /** A retired wireId is reissued only after this much dead time — any
  *  plausible cross-lane reorder window (reliable roster edge vs binary
@@ -388,8 +388,22 @@ else if (dSq < 360_000) {tier = 3;} // 150m / 400m / 600m
         }
         tiers.set(r.playerId, tier);
         // force = hit/knockback window: real positions must reach every
-        // observer at full rate while they extrapolate the knockback
-        if (intro || r.force || seq % tier === 0) {others.push(intro && r.full !== undefined ? r.full : r.data);}
+        // observer at full rate while they extrapolate the knockback —
+        // sparse never substitutes there (vel IS the payload).
+        if (intro || r.force || seq % tier === 0) {
+          // Far tier (>600m, 2.5Hz): pos+vitals only — the speck
+          // dead-reckons its retained vel/rot and the staggered fulls
+          // reseat it every ~750ms. ~40% off the dominant egress class.
+          if (tier === 8 && !r.force && !intro) {
+            if (r.sparseTick !== seq) {
+              const pr = r as PooledRecord; // pooled slots carry the scratch
+              pr.encSparse ??= tickEncodeScratch();
+              r.sparse = sparseV4Record(r.data, pr.encSparse);
+              r.sparseTick = seq;
+            }
+            others.push(r.sparse!);
+          } else {others.push(intro && r.full !== undefined ? r.full : r.data);}
+        }
         else {this.metrics.recordsTierSkipped += 1;}
       }
       // Always send — even an empty frame. The client's loss telemetry

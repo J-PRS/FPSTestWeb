@@ -597,6 +597,25 @@ export function encodeTickPlayerV4(wireId: number, p: WireTickPlayer, into: Tick
   return new Uint8Array(buf, 0, o);
 }
 
+/** Far-tier sparse variant: strip VEL|ROT groups from an encoded v4
+ *  record. Masked-out groups emit the receiver's retained slot values,
+ *  so a >600m speck keeps dead-reckoning its last-seen velocity instead
+ *  of paying 10B/record for a refresh it can't resolve on screen anyway
+ *  (15-20B vs 25-30B). Never substitute on force sends — knockback
+ *  extrapolation needs the vel. Writes into `into` like the encoders. */
+export function sparseV4Record(rec: Uint8Array, into: TickEncodeScratch): Uint8Array {
+  const mask = rec[2]! & ~(V4_MASK_VEL | V4_MASK_ROT);
+  const { u8: out } = into;
+  out[0] = rec[0]!; out[1] = rec[1]!; out[2] = mask;
+  out.set(rec.subarray(3, 15), 3); // wireId u16 + mask + pos i32×3
+  let i = 15, o = 15;
+  if (rec[2]! & V4_MASK_VEL) {i += 6;}
+  if (rec[2]! & V4_MASK_ROT) {i += 4;}
+  if (rec[2]! & V4_MASK_HP_PING) {out.set(rec.subarray(i, i + 3), o); o += 3; i += 3;}
+  if (rec[2]! & V4_MASK_FLAGS_SHEEP) {out.set(rec.subarray(i, i + 2), o); o += 2;}
+  return out.subarray(0, o);
+}
+
 // ---- S→C ballSegment (highest-rate event: every bounce/heartbeat) ----
 
 const SEG_KINDS = ['bounce', 'lunge', 'enrage', 'stall', 'teleport', 'spawn', 'knockback', 'hit', 'segment'] as const;
