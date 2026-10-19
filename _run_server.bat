@@ -10,5 +10,9 @@ for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8000.*LISTENING"') do taskk
 
 echo Starting server...
 set "PATH=%BUN_BIN%;%PATH%"
+REM Demo capture lands in demos_out\server — the authoritative half of
+REM the dual-demo desync oracle (client .demo + this = wire-truth diff).
+set "FPS_DEMO=%PROJECT_DIR%\demos_out\server"
+set "FPS_ADMIN_TOKEN=devdemo"
 cd /d "%SERVER_DIR%"
 bun run dev

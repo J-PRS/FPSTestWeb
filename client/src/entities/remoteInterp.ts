@@ -298,11 +298,28 @@ export class RemoteInterp {
     // so a jittered link steers the ghost rather than warping it.
     const gap = Math.hypot(sampledPos.x - p.x, sampledPos.y - p.y, sampledPos.z - p.z);
     const stepBudget = Math.max(0.5, this.h.velocity.length() * dt * 3 + 0.25);
-    // Every gap steers — no upper bound: a big drift that outlived its
-    // converge window used to fall through to the raw copy and snap by
-    // the whole remainder. Genuine teleports never reach here (onUpdate's
-    // plausibility gate and reseat/reset clear the buffer first), so the
-    // converge is always rejoining a continuous path.
+    // Seam budget caps the steer: small gaps are jitter seams — converge
+    // steers them. A gap past ~40m is NOT a seam: it means the ghost
+    // state is garbage (starved DR + stale vel launch), and a
+    // physically-capped chase can NEVER close it against a 60m/s remote —
+    // the converge timer expires mid-run, interp re-arms it, and the
+    // replica treadmills hundreds of meters behind truth for seconds.
+    // Snap to the sampled path instead: a sudden jump is exactly what a
+    // lost replica is, and it's one frame of honesty vs seconds of ghost.
+    if (this.lastUpdateTime > 0 && !freshSeed && gap > 40) {
+      p.copy(sampledPos);
+      this.h.velocity.copy(this.h.serverVelocity);
+      if (this.h.terrain) {
+        const gY = Math.max(this.h.terrain.getHeight(p.x, p.z), this.h.terrain.getRenderedHeight(p.x, p.z));
+        const {eye} = classCapsule(this.h.armorClass);
+        if (p.y < gY + eye) {p.y = gY + eye;}
+      }
+      this.h.rotation.yaw = sampledRot.yaw;
+      this.h.rotation.pitch = sampledRot.pitch;
+      this.h.rotation.roll = 0;
+      this.h.previousPosition.copy(p);
+      return;
+    }
     if (this.lastUpdateTime > 0 && !freshSeed && gap > stepBudget) {
       this._simulating = true;
       this.convergeTimer = Math.max(this.convergeTimer, 0.35);
