@@ -15,6 +15,7 @@ const host = (): DemoRecorder => ({
   nextProjectileId: 1,
   projectileEventPool: [] as ProjectileEvent[],
   projectileEvents: [] as ProjectileEvent[],
+  liveProjIds: new Set<number>(),
 }) as unknown as DemoRecorder;
 
 describe('projectile event spool', (): void => {
@@ -78,5 +79,18 @@ describe('projectile event spool', (): void => {
     recordBounce(b, recordFired(b, V, V, 1), V, V, V);
     expect(b.projectileEvents[0]).toBe(dead); // pooled object reused
     expect(b.projectileEvents[0]!.eventType).toBe(ProjectileEventType.Fired);
+  });
+
+  it('terminal edges retire the id from liveProjIds', (): void => {
+    const b = host();
+    const id = recordFired(b, V, V, 1);
+    expect(b.liveProjIds.has(id)).toBe(true);
+    recordBounce(b, id, V, V, V); // non-terminal — stays live
+    expect(b.liveProjIds.has(id)).toBe(true);
+    recordHit(b, id, V, 1, 1, 0);
+    expect(b.liveProjIds.has(id)).toBe(false);
+    const id2 = recordFired(b, V, V, 1);
+    recordDestroyed(b, id2, V);
+    expect(b.liveProjIds.has(id2)).toBe(false);
   });
 });

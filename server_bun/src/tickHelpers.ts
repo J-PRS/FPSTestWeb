@@ -78,4 +78,7 @@ export interface TickRecord {
   /** sparse validity key — rec.data re-encodes every tick, so a cached
    *  sparse is only good for the tick it was cut on. */
   sparseTick?: number;
+  /** Precomputed |vel| — fanout bumps fast movers off the sparse far
+   *  tier so their DR seed and interp tangents stay honest. */
+  spd?: number;
 }

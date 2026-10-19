@@ -31,13 +31,15 @@ const cliByIdx = byIdx(A);
 const nameA = (i: number): string => A.roster[i]?.name ?? `?${i}`;
 const srvIdxByName = new Map(B.roster.map((r, i) => [r.name, i]));
 
-/** Server pos for seat `idx` at server-time `t` (nearest sample). */
+/** Server pos for seat `idx` at server-time `t` — nearest sample within
+ *  1.5s, else undefined (outside the captured window is not a match). */
 const srvAt = (idx: number, t: number): RemoteFrame | undefined => {
   const fs = srvByIdx.get(idx);
   if (!fs || fs.length === 0) {return undefined;}
   let lo = 0, hi = fs.length - 1;
   while (lo < hi) {const mid = (lo + hi) >> 1; if (fs[mid]!.timestamp < t) {lo = mid + 1;} else {hi = mid;}}
-  return fs[lo];
+  const f = fs[lo]!;
+  return Math.abs(f.timestamp - t) <= 1.5 ? f : undefined;
 };
 const d3 = (a: { posX: number; posY: number; posZ: number }, b: { posX: number; posY: number; posZ: number }): number =>
   Math.hypot(a.posX - b.posX, a.posY - b.posY, a.posZ - b.posZ);
@@ -56,10 +58,15 @@ for (const [idx, fs] of cliByIdx) {
   const all = fs.filter((f): boolean => !(f.flags & 5));
   if (all.length < 40) {continue;}
   let bestMed = Infinity;
-  for (let off = 0; off <= B.header.duration - A.header.duration; off += 0.5) {
+  // The server capture needn't cover the client's whole window (a
+  // re-minted room starts fresh) — sweep the full range in both
+  // directions and let the window filters keep t+off in-bounds.
+  for (let off = -A.header.duration * 0.5; off <= B.header.duration; off += 0.5) {
     const ds: number[] = [];
     for (let i = 0; i < all.length; i += 10) {
-      const s = srvAt(sIdx, all[i]!.timestamp + off);
+      const t = all[i]!.timestamp + off;
+      if (t < 0) {continue;}
+      const s = srvAt(sIdx, t);
       if (s && !(s.flags & 4)) {ds.push(d3(all[i]!, s));}
     }
     const m = med(ds);

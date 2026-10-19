@@ -58,6 +58,10 @@ export function recordFired(b: DemoRecorder, position: Vec3, velocity: Vec3, wea
     e.targetType = 0; e.hasPeakPosition = false;
     e.peakPosX = 0; e.peakPosY = 0; e.peakPosZ = 0;
     b.projectileEvents.push(e);
+    // Long-lived shells outlive the rolling event window — track live ids
+    // so the prune keeps their Fired edge (a Destroyed that outlives its
+    // Fired audits as a phantom blast).
+    b.liveProjIds.add(id);
     return id;
   }
 
@@ -90,6 +94,7 @@ export function recordHit(b: DemoRecorder, projectileId: number, position: Vec3,
     e.targetId = targetId; e.targetType = targetType; e.hasPeakPosition = false;
     e.peakPosX = 0; e.peakPosY = 0; e.peakPosZ = 0;
     b.projectileEvents.push(e);
+    b.liveProjIds.delete(projectileId);
   }
 
 export function recordDestroyed(b: DemoRecorder, projectileId: number, position: Vec3): void {
@@ -104,6 +109,7 @@ export function recordDestroyed(b: DemoRecorder, projectileId: number, position:
     e.targetId = 0; e.targetType = 0; e.hasPeakPosition = false;
     e.peakPosX = 0; e.peakPosY = 0; e.peakPosZ = 0;
     b.projectileEvents.push(e);
+    b.liveProjIds.delete(projectileId);
   }
 
 export function recordRemoteFired(b: DemoRecorder, serverId: string, position: Vec3, velocity: Vec3, weaponType: number, ownerId?: string): void {

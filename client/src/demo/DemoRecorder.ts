@@ -3,7 +3,7 @@
 
 import { CircularBuffer } from './CircularBuffer.js';
 import {
-  type DemoFrame, type ProjectileEvent, type TargetEvent, type RemoteFrame, type DemoHeightmap,RemoteFrameFlags,
+  type DemoFrame, type ProjectileEvent, ProjectileEventType, type TargetEvent, type RemoteFrame, type DemoHeightmap,RemoteFrameFlags,
   createFrame,
   type DemoFile,type DemoRosterEntry} from './types.js';
 
@@ -42,6 +42,28 @@ function pruneEventsBefore<T extends { timestamp: number }>(events: T[], cutoff:
   // Retired events go back on the freelist — recording is always-on now,
   // so a churn-free spool keeps GC out of the steady frame.
   for (const e of events.splice(0, lo)) {pool.push(e);}
+}
+
+/** Projectile prune — same rolling-window drop EXCEPT a Fired whose shell
+ *  is still live survives: a mortar/bolt can outfly the buffer window, and
+ *  its terminal edge (Hit/Destroyed) then audits as a phantom blast. */
+function pruneProjEvents(events: ProjectileEvent[], cutoff: number, pool: ProjectileEvent[], live: Set<number>): void {
+  if (events.length === 0 || events[0]!.timestamp >= cutoff) {return;}
+  let lo = 0, hi = events.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (events[mid]!.timestamp < cutoff) {lo = mid + 1;}
+    else {hi = mid;}
+  }
+  let keep = 0;
+  for (let i = 0; i < lo; i += 1) {
+    const e = events[i]!;
+    if (e.eventType === ProjectileEventType.Fired && live.has(e.projectileId)) {events[keep] = e; keep += 1;}
+    else {pool.push(e);}
+  }
+  // Survivors compacted to [0, keep); slide the post-cutoff tail left.
+  events.copyWithin(keep, lo);
+  events.length -= lo - keep;
 }
 
 // Minimal shape the recorder needs from a live remote player —
@@ -84,6 +106,10 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
    *  as string ids over the wire and need the same dedupe table so their
    *  Destroyed edge finds the Fired record. */
   remoteProjIdByServerId = new Map<string, number>();
+  /** Minted demo ids of shells still in flight — the rolling event prune
+   *  keeps their Fired edge so a long-lived shell's terminal edge never
+   *  audits as an orphan (live capture showed ~12 phantom Destroyeds). */
+  liveProjIds = new Set<number>();
   /** Server creature netId -> recorded targetType (64 + species idx).
    *  Die/evt edges arrive without a species name, so spawn/roster rows
    *  seed the table and it dies with the creature. */
@@ -194,6 +220,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     this.rosterIdxById.clear();
     this.roster = [];
     this.remoteProjIdByServerId.clear();
+    this.liveProjIds.clear();
     this.creatureTtByNetId.clear();
     this.deployInfoByNetId.clear();
     this.pickupInfoByNetId.clear();
@@ -238,7 +265,14 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
         this.rosterIdxById.set(s.id, idx);
         this.roster.push({ name: s.id });
       }
-      const flags = (s.dead ? RemoteFrameFlags.Dead : 0) | (s.ski ? RemoteFrameFlags.Ski : 0);
+      let flags = (s.dead ? RemoteFrameFlags.Dead : 0) | (s.ski ? RemoteFrameFlags.Ski : 0);
+      // Respawn/reclaim jumps read as impossible speed in audit — mark
+      // them like the server recorder does (>10m between samples = a
+      // seat re-root, not motion).
+      const prev = this.lastRemoteByIdx.get(idx);
+      if (prev && Math.hypot(s.posX - prev.posX, s.posY - prev.posY, s.posZ - prev.posZ) > 10) {
+        flags |= RemoteFrameFlags.Teleport;
+      }
       // Same dead-reckon skip as the local frame: an identical sample
       // reproduces exactly under playback's timestamp lerp.
       if (this.deadReckon && this.remoteUnchanged(idx, s, flags)) {continue;}
@@ -369,7 +403,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
       this.snapshots.push(now);
     }
     const cutoff = this.elapsedTime - this.bufferSeconds;
-    pruneEventsBefore(this.projectileEvents, cutoff, this.projectileEventPool);
+    pruneProjEvents(this.projectileEvents, cutoff, this.projectileEventPool, this.liveProjIds);
     pruneEventsBefore(this.targetEvents, cutoff, this.targetEventPool);
     pruneEventsBefore(this.remoteFrames, cutoff, this.remoteFramePool);
     // Marks older than the ring are unseekable — the tail they anchor is gone.

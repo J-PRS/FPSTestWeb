@@ -186,10 +186,16 @@ export class RemoteInterp {
     // cadence earns the takeover.
     const starveMs = Math.max(200, this.net.arrivalInterval * 1.5);
     if ((timeSinceUpdate > drThreshold || (this.net.atExtCap && timeSinceUpdate > starveMs)) && !this._simulating && !localDriven) {
-      // Seed from the wire velocity — differentiating snapshot positions
-      // folds arrival noise into the launch vector (a jittered pair
-      // reports phantom speed the real sim never had).
-      if (this.h.serverVelocity.lengthSq() > 0) {
+      // Seed preference: the pos-delta estimate already lives in
+      // simulatedVelocity (recomputed per update, jitter-free server-t
+      // deltas) — realized motion, including collision reality. Wire vel
+      // goes STALE on far seats (sparse records strip VEL/ROT entirely —
+      // a 60m/s remote dead-reckons on minutes-old heading — the ghost
+      // treadmill the dual-diff exposed). Wire vel only wins inside a
+      // predicted-knockback window (its pos-delta is deliberately skipped)
+      // or when no delta estimate exists at all.
+      if (this.h.serverVelocity.lengthSq() > 0 &&
+          (this.predictionTimer > 0 || this.lastServerPosition.lengthSq() === 0)) {
         this.simulatedVelocity.copy(this.h.serverVelocity);
       }
       this._simulating = true;

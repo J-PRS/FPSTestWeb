@@ -21,7 +21,7 @@ import { simNow } from './simClock.ts';
 import { wallNow , wallMs} from './wallClock.ts';
 
 type Players = ReturnType<Room['players']['getAllPlayers']>;
-type PooledRecord = TickRecord & { enc: TickEncodeScratch; enc2?: TickEncodeScratch; encSparse?: TickEncodeScratch; sparseTick?: number };
+type PooledRecord = TickRecord & { enc: TickEncodeScratch; enc2?: TickEncodeScratch; encSparse?: TickEncodeScratch; sparseTick?: number; spd?: number };
 
 /** A retired wireId is reissued only after this much dead time — any
  *  plausible cross-lane reorder window (reliable roster edge vs binary
@@ -194,6 +194,7 @@ this.metrics.recordsSuppressed += 1;
       }
       rec.playerId = playerId;
       rec.pos = p.position;
+      rec.spd = Math.hypot(p.velocity.x, p.velocity.y, p.velocity.z);
       // The delta basis is per-wireId and shared across recipients, but
       // fanout skips records per-recipient by distance tier — a field the
       // far client never received stays stale in its decode pool FOREVER
@@ -387,6 +388,14 @@ else if (dSq < 360_000) {tier = 3;} // 150m / 400m / 600m
           if (dSq < bound * 1.15) {tier = mem;}
         }
         tiers.set(r.playerId, tier);
+        // Speed bump (ephemeral — sits AFTER hysteresis so a slowed bot
+        // falls back to its distance tier immediately): a >30m/s mover
+        // dead-reckons badly between sparse far-tier records — 2.5Hz is
+        // 400ms × 60m/s = 24m/gap, and sparse strips VEL so the receiver's
+        // DR seeds a stale heading. The dual-diff showed these replicas
+        // ghosting 100-450m. Fast movers never drop below tier 3: full
+        // records at ~6.7Hz keep vel fresh.
+        if ((r.spd ?? 0) > 30 && tier > 3) {tier = 3;}
         // force = hit/knockback window: real positions must reach every
         // observer at full rate while they extrapolate the knockback —
         // sparse never substitutes there (vel IS the payload).
