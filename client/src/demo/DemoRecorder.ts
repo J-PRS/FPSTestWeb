@@ -267,10 +267,10 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
       }
       let flags = (s.dead ? RemoteFrameFlags.Dead : 0) | (s.ski ? RemoteFrameFlags.Ski : 0);
       // Respawn/reclaim jumps read as impossible speed in audit — mark
-      // them like the server recorder does (>10m between samples = a
-      // seat re-root, not motion).
+      // them like the server recorder does (>8m between samples = a
+      // seat re-root, not motion; 160m/s is the audit flight envelope).
       const prev = this.lastRemoteByIdx.get(idx);
-      if (prev && Math.hypot(s.posX - prev.posX, s.posY - prev.posY, s.posZ - prev.posZ) > 10) {
+      if (prev && Math.hypot(s.posX - prev.posX, s.posY - prev.posY, s.posZ - prev.posZ) > 8) {
         flags |= RemoteFrameFlags.Teleport;
       }
       // Same dead-reckon skip as the local frame: an identical sample
@@ -324,6 +324,13 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
       last.weaponType === p.weaponType;
   }
 
+  private markWall(now: number): void {
+    this.lastWallMarkT = now;
+    this.wallMarks.push({ wall: performance.now(), t: now });
+    const cutoff = now - this.bufferSeconds;
+    while (this.wallMarks.length > 0 && this.wallMarks[0].t < cutoff) {this.wallMarks.shift();}
+  }
+
   // Called every game frame. Only records at tick interval.
   // dt is seconds since last game frame.
   update(dt: number): void {
@@ -336,12 +343,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     // drifts from real time under throttling. A raw (wall, elapsed) mark
     // per tick lets clip windows map to the video ring's wall stamps
     // exactly instead of guessing from `now - duration`.
-    if (now - this.lastWallMarkT >= 0.2) {
-      this.lastWallMarkT = now;
-      this.wallMarks.push({ wall: performance.now(), t: now });
-      const cutoff = now - this.bufferSeconds;
-      while (this.wallMarks.length > 0 && this.wallMarks[0].t < cutoff) {this.wallMarks.shift();}
-    }
+    if (now - this.lastWallMarkT >= 0.2) {this.markWall(now);}
 
     // Only record at tick rate
     if (now - this.lastTickTime < this.tickInterval) {return;}

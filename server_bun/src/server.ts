@@ -90,6 +90,23 @@ function killPortHolders(port: number): boolean {
   return pids.length > 0;
 }
 
+/** UDP sibling of killPortHolders — the WT QUIC listener can't be probed
+ *  like /metrics, so the same bun.exe-only guard stands in: a bun holding
+ *  OUR wt port while another process owns the game port is an orphan. */
+function killUdpPortHolders(port: number): boolean {
+  const out = Bun.spawnSync(['netstat', '-ano', '-p', 'udp']).stdout.toString();
+  const pids = [...out.matchAll(/^\s*UDP\s+\S+:(\d+)\s+\S+\s+(\d+)\s*$/gm)]
+    .filter((m): boolean => Number(m[1]) === port).map((m): string => m[2]!);
+  for (const pid of pids) {
+    const img = Bun.spawnSync(['tasklist', '/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH']).stdout.toString();
+    if (!/bun\.exe/i.test(img)) { logger.error(`udp:${port} held by non-bun pid ${pid} — refusing to kill`); return false; }
+    Bun.spawnSync(['taskkill', '/F', '/PID', pid]);
+    logger.warn(`stale bun (pid ${pid}) killed — it held udp:${port}`);
+  }
+  if (pids.length > 0) {Bun.sleepSync(250);}
+  return pids.length > 0;
+}
+
 function reclaimStaleBun(port: number): Promise<boolean> {
   // A live supervised server (dev-watch respawns children instantly) is
   // not "stale" — killing it is whack-a-mole we'd lose. Stale means the
@@ -253,11 +270,12 @@ if (CONFIG.wtPort > 0) {
     // DER hash is what serverCertificateHashes expects — PEM is just the
     // base64 wrapper, so decode via X509Certificate to get the raw bytes.
     wtCertHash = createHash('sha256').update(new X509Certificate(certPem).raw).digest('base64');
-    wtServer.start({
-      port: CONFIG.wtPort,
-      certPem,
-      keyPem: rf(keyPath, 'utf8'),
-    });
+    const wtOpts = { port: CONFIG.wtPort, certPem, keyPem: rf(keyPath, 'utf8') };
+    // AddrInUse = an orphaned child squatting the QUIC port (the TCP
+    // squatter-killer can't see UDP). Reclaim from bun.exe holders, retry once.
+    if (!(await wtServer.start(wtOpts)) && killUdpPortHolders(CONFIG.wtPort)) {
+      await wtServer.start(wtOpts);
+    }
     }
   } catch (error) {
     logger.warn('WebTransport disabled — cert/key unreadable', { error: (error as Error).message });

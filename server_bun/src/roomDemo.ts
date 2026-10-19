@@ -44,9 +44,9 @@ export class RoomDemo {
   /** Last sampled pos per seat — >TELEPORT_M between ticks stamps the
    *  Teleport flag so audits don't call respawns wire corruption. */
   private lastPos = new Map<string, { x: number; y: number; z: number; t: number }>();
-  /** Respawn distances are unbounded (cross-map base hops); 10m at 20Hz
-   *  is ~200m/s — past every legal flight envelope. */
-  private static TELEPORT_M = 10;
+  /** Respawn distances are unbounded (cross-map base hops); 8m at 20Hz
+   *  is ~160m/s — the audit's own SPEED_CAP flight envelope. */
+  private static TELEPORT_M = 8;
   /** Last flag state code per flag id — flagUpdate is a roster frame;
    *  demos want edges. */
   private flagLast = new Map<number, number>();
@@ -311,7 +311,10 @@ export class RoomDemo {
    *  down — the live-match flush (admin/demodump, periodic forensic
    *  snapshots). Returns the written path. */
   flush(dir: string, tag = ''): string {
-    mkdirSync(dir, { recursive: true });
+    // Bun/Windows: recursive mkdir with '..' segments throws EEXIST on an
+    // existing dir — that's the goal state anyway.
+    try { mkdirSync(dir, { recursive: true }); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {throw error;} }
     const file = join(dir, `${this.room.name.replace(/[^A-Za-z0-9_-]/g, '_')}${tag}-${Date.now()}.demo`);
     writeFileSync(file, Buffer.from(serializeDemo(this.buildFile(`server capture room=${this.room.name}`))));
     return file;

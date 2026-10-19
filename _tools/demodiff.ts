@@ -47,64 +47,59 @@ const d3 = (a: { posX: number; posY: number; posZ: number }, b: { posX: number; 
 // ---- clock alignment -----------------------------------------------------
 // The client's elapsedTime accumulates WALL-CLAMPED dt — under throttle
 // (headless runs) it drifts vs the server's fixed sim clock, so no single
-// offset aligns the pair. Solve the offset piecewise: per 4s window of a
-// moving shared seat, sweep for the offset minimizing median posΔ, then
-// least-squares a line off(t)=a+b·t over the window solutions.
+// offset aligns the pair. Solve the offset piecewise — but a per-SEAT
+// sweep aliases on periodic patrols (a bot re-running a circuit matches
+// whichever lap is nearest, yielding nonsense points). The true offset
+// must align EVERY seat at once: per 4s window, score each candidate
+// offset by the SUM of per-seat median posΔ — one lane's alias lap can't
+// repeat across seven different trajectories.
 const med = (a: number[]): number => {const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)] ?? 0;};
-let anchorIdx = -1, anchorSIdx = -1, anchorMed = Infinity;
+// Shared seats with enough live frames to vote.
+const lanes: { cli: RemoteFrame[]; sIdx: number }[] = [];
 for (const [idx, fs] of cliByIdx) {
   const sIdx = srvIdxByName.get(nameA(idx));
-  if (sIdx === undefined || fs.length < 50) {continue;}
-  const all = fs.filter((f): boolean => !(f.flags & 5));
-  if (all.length < 40) {continue;}
-  let bestMed = Infinity;
-  // The server capture needn't cover the client's whole window (a
-  // re-minted room starts fresh) — sweep the full range in both
-  // directions and let the window filters keep t+off in-bounds.
-  for (let off = -A.header.duration * 0.5; off <= B.header.duration; off += 0.5) {
-    const ds: number[] = [];
-    for (let i = 0; i < all.length; i += 10) {
-      const t = all[i]!.timestamp + off;
-      if (t < 0) {continue;}
-      const s = srvAt(sIdx, t);
-      if (s && !(s.flags & 4)) {ds.push(d3(all[i]!, s));}
-    }
-    const m = med(ds);
-    if (m < bestMed) {bestMed = m;}
-  }
-  if (bestMed < anchorMed) {anchorMed = bestMed; anchorIdx = idx; anchorSIdx = sIdx;}
+  const live = fs.filter((f): boolean => !(f.flags & 5));
+  if (sIdx !== undefined && live.length >= 40) {lanes.push({ cli: live, sIdx });}
 }
-if (anchorIdx < 0) {console.error('no shared moving seat to align on'); process.exit(1);}
-// Piecewise offsets on the anchor seat → drift line.
-const anchorFs = (cliByIdx.get(anchorIdx) ?? []).filter((f): boolean => !(f.flags & 5));
-const tMin = anchorFs[0]?.timestamp ?? 0, tMax = anchorFs[anchorFs.length - 1]?.timestamp ?? 0;
+if (lanes.length === 0) {console.error('no shared moving seat to align on'); process.exit(1);}
+const tMin = Math.min(...lanes.map((l): number => l.cli[0]!.timestamp));
+const tMax = Math.max(...lanes.map((l): number => l.cli[l.cli.length - 1]!.timestamp));
 const points: { t: number; o: number }[] = [];
 for (let w = tMin; w + 4 <= tMax; w += 4) {
-  const ws = anchorFs.filter((f): boolean => f.timestamp >= w && f.timestamp < w + 4);
-  if (ws.length < 8) {continue;}
-  let bestO = 0, bestM = Infinity;
+  let bestO = 0, bestScore = Infinity;
   for (let o = 0; o <= B.header.duration; o += 0.25) {
-    const ds = ws.map((f): number => {const s = srvAt(anchorSIdx, f.timestamp + o); return s && !(s.flags & 4) ? d3(f, s) : NaN;}).filter((d): boolean => !Number.isNaN(d));
-    const m = med(ds);
-    if (m < bestM) {bestM = m; bestO = o;}
+    let score = 0, votes = 0;
+    for (const l of lanes) {
+      const ds: number[] = [];
+      for (const f of l.cli) {
+        if (f.timestamp < w || f.timestamp >= w + 4) {continue;}
+        const s = srvAt(l.sIdx, f.timestamp + o);
+        if (s && !(s.flags & 4)) {ds.push(d3(f, s));}
+      }
+      if (ds.length >= 5) {score += med(ds); votes++;}
+    }
+    if (votes > 0 && score / votes < bestScore) {bestScore = score / votes; bestO = o;}
   }
-  if (bestM < 20) {points.push({ t: w + 2, o: bestO });} // a window that never resolved = noise, not drift
+  // A window that never resolved = noise, not drift — don't fit to it.
+  if (bestScore < 20) {points.push({ t: w + 2, o: bestO });}
 }
-let A0 = 0, B0 = 0;
-if (points.length >= 2) {
-  const n = points.length;
-  const sx = points.reduce((s, p) => s + p.t, 0), sy = points.reduce((s, p) => s + p.o, 0);
-  const sxx = points.reduce((s, p) => s + p.t * p.t, 0), sxy = points.reduce((s, p) => s + p.t * p.o, 0);
-  const d = n * sxx - sx * sx;
-  if (Math.abs(d) > 1e-9) {B0 = (n * sxy - sx * sy) / d; A0 = (sy - B0 * sx) / n;}
-}
-const offAt = (t: number): number => A0 + B0 * t;
-console.log(`clock fit on ${nameA(anchorIdx)}: offset(t)=${A0.toFixed(1)}+${B0.toFixed(3)}·t over ${points.length} windows (client-rate ${B0.toFixed(2)}x server)`);
+if (points.length === 0) {console.error('clock fit found no resolvable window — captures may not overlap'); process.exit(1);}
+const offAt = (t: number): number => {
+  // Linear interp over the window points — within a 4s window the drift
+  // alone moves ~3s of server time, so nearest-neighbor smears edges.
+  if (t <= points[0]!.t) {return points[0]!.o;}
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!, b = points[i]!;
+    if (t <= b.t) {return a.o + (b.o - a.o) * (t - a.t) / (b.t - a.t);}
+  }
+  return points.at(-1)!.o;
+};
+const B0 = points.length >= 2 ? (points.at(-1)!.o - points[0]!.o) / (points.at(-1)!.t - points[0]!.t) : 1;
+console.log(`clock fit: ${lanes.length} lanes, ${points.length} windows, offset ${points[0]!.o.toFixed(1)}→${points.at(-1)!.o.toFixed(1)} (drift rate ${B0.toFixed(2)}x)`);
 
 // ---- per-seat remote diff -------------------------------------------------
-// Every client remote frame vs server truth — but each seat gets its own
-// piecewise alignment (a shared drift line under-fits: throttle is
-// bursty, and seats with dead stretches anchor poorly on one rate).
+// Every client remote frame vs server truth at its fitted offset — the
+// drift is a client-clock property so one consensus line serves all lanes.
 type Stat = { n: number; sum: number; max: number; over1: number; over5: number; ds: number[] };
 const stats = new Map<number, Stat>();
 let overN = 0;
@@ -112,33 +107,9 @@ for (const [idx, fs] of cliByIdx) {
   const sIdx = srvIdxByName.get(nameA(idx));
   if (sIdx === undefined) {continue;}
   const live = fs.filter((f): boolean => !(f.flags & 5));
-  // This seat's own window offsets — the drift is a client-clock property
-  // so every lane shares it, but per-seat fitting also absorbs a lane
-  // that started mid-window.
-  const lo = live[0]?.timestamp ?? 0, hi = live[live.length - 1]?.timestamp ?? 0;
-  const pts: { t: number; o: number }[] = [];
-  for (let w = lo; w + 4 <= hi; w += 4) {
-    const ws = live.filter((f): boolean => f.timestamp >= w && f.timestamp < w + 4);
-    if (ws.length < 8) {continue;}
-    let bestO = 0, bestM = Infinity;
-    for (let o = 0; o <= B.header.duration; o += 0.25) {
-      const ds = ws.map((f): number => {const s = srvAt(sIdx, f.timestamp + o); return s && !(s.flags & 4) ? d3(f, s) : NaN;}).filter((d): boolean => !Number.isNaN(d));
-      const m = med(ds);
-      if (m < bestM) {bestM = m; bestO = o;}
-    }
-    if (bestM < 25) {pts.push({ t: w + 2, o: bestO });}
-  }
-  // Offsets by nearest fit point (drift is smooth; linear interp beats
-  // least-squares on noisy windows).
-  const off = (t: number): number => {
-    if (pts.length === 0) {return A0 + B0 * t;}
-    let p = pts[0]!;
-    for (const q of pts) {if (Math.abs(q.t - t) < Math.abs(p.t - t)) {p = q;}}
-    return p.o;
-  };
   const st: Stat = { n: 0, sum: 0, max: 0, over1: 0, over5: 0, ds: [] };
   for (const f of live) {
-    const s = srvAt(sIdx, f.timestamp + off(f.timestamp));
+    const s = srvAt(sIdx, f.timestamp + offAt(f.timestamp));
     if (!s || s.flags & 4) {continue;}
     const d = d3(f, s);
     st.n += 1; st.sum += d; st.max = Math.max(st.max, d); st.ds.push(d);
