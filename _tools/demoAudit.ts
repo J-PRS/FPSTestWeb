@@ -112,16 +112,19 @@ for (const [idx, fs] of byIdx) {
 // ---- kinematic: recorded velocity vs measured displacement --------------
 let velMismatch = 0;
 for (const [idx, fs] of byIdx) {
-  for (let i = 1; i < fs.length; i++) {
-    const a = fs[i - 1]!, b = fs[i]!;
-    const dt = b.timestamp - a.timestamp;
+  for (let i = 1; i < fs.length - 1; i++) {
+    const a = fs[i - 1]!, b = fs[i]!, c = fs[i + 1]!;
+    const dt = c.timestamp - a.timestamp;
     if (dt <= 0.05) continue;
-    const implied = Math.hypot(b.posX - a.posX, b.posY - a.posY, b.posZ - a.posZ) / dt;
+    // Two-frame window: a hard landing stops a body inside ONE sample —
+    // a single-frame check flags every impact as a stall; a real parked
+    // replica persists across two.
+    const implied = Math.hypot(c.posX - a.posX, c.posY - a.posY, c.posZ - a.posZ) / dt;
     const stated = Math.hypot(a.velX, a.velY, a.velZ);
     // Large stated velocity with near-zero displacement = replica parked
     // while truth moved (or vice versa). Allow dead frames (dead players
-    // stop — flags checked elsewhere).
-    if (stated > 30 && implied < stated * 0.15 && !(a.flags & 1) && ++velMismatch <= 5) {
+    // stop — flags checked elsewhere) and teleports (vel is resync truth).
+    if (stated > 30 && implied < stated * 0.15 && !(a.flags & 1) && !(a.flags & 4) && ++velMismatch <= 5) {
       bad('kinematic', `roster ${idx} states vel ${stated.toFixed(0)}m/s but moved ${implied.toFixed(0)}m/s @t=${b.timestamp.toFixed(1)} (replica stalled behind truth)`);
     }
   }

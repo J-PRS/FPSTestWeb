@@ -237,11 +237,18 @@ export class RoomDemo {
       }
       case 'ballSpawn': case 'ballDie': {
         const pos = v(m.position); const vel = v(m.velocity);
+        // ballDie's 'gone' decl carries id+pos+by — no variant. Remember
+        // it at spawn or every death orphans against its own Spawned
+        // (same lane-drift class as deployGone/pickupGone).
+        const spawned = msg.type === 'ballSpawn';
+        const id = m.id as number;
+        const type = spawned ? ((m.variant as number) ?? 0) : (this.kindTypes.get(id) ?? 0);
+        if (spawned) {this.kindTypes.set(id, type);}
         this.targetEvents.push({
-          eventType: msg.type === 'ballSpawn' ? TargetEventType.Spawned : TargetEventType.Destroyed,
+          eventType: spawned ? TargetEventType.Spawned : TargetEventType.Destroyed,
           timestamp: this.now, posX: pos.x, posY: pos.y, posZ: pos.z,
           velX: vel.x, velY: vel.y, velZ: vel.z,
-          targetId: m.id as number, targetType: (m.variant as number) ?? 0,
+          targetId: id, targetType: type,
           health: 0, hasPeakPosition: false, peakPosX: 0, peakPosY: 0, peakPosZ: 0,
         });
         break;
