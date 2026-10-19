@@ -200,6 +200,13 @@ export default defineConfig(({ mode }) => ({
       // (new Profiler) for livesoak CPU breakdowns. Browsers that
       // don't implement it ignore the policy entirely.
       'Document-Policy': 'js-profiling',
+      // crossOriginIsolated: unlocks unthrottled performance.now()
+      // precision (timing attacks gate it) plus SharedArrayBuffer for
+      // any future SAB net/sim ring. Safe here — all assets are
+      // same-origin; nothing external needs CORP. Prod static host
+      // needs the same pair before an SAB ship.
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
     },
     hmr: {
       // Conditionally use WSS/443 only when accessing through cloudflared tunnel

@@ -29,21 +29,21 @@ import { resolveRoomTerrain, makeTerrainLoader, surfaceFor } from './netTerrain.
 // ---- args ---------------------------------------------------------------
 const arg = (k: string, d: string): string => {
   const i = process.argv.indexOf(`--${k}`);
-  return i >= 0 && process.argv[i + 1] ? process.argv[i + 1]! : d;
+  return i !== -1 && process.argv[i + 1] ? process.argv[i + 1]! : d;
 };
 // Accepts ws/wss URLs, pasted https tunnel URLs, or bare tunnel hosts —
 // the friend test uses `wss://<host>.trycloudflare.com/ws`.
 const normUrl = (u: string): string => {
-  if (!u.includes('://')) u = `wss://${u.includes('.') ? u : u + '.trycloudflare.com'}`;
+  if (!u.includes('://')) {u = `wss://${u.includes('.') ? u : u + '.trycloudflare.com'}`;}
   u = u.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:');
-  if (!u.slice(u.indexOf('://') + 3).includes('/')) u += '/ws';
+  if (!u.slice(u.indexOf('://') + 3).includes('/')) {u += '/ws';}
   return u;
 };
 const URL_ = normUrl(arg('url', 'ws://localhost:8000/ws'));
-const N = parseInt(arg('bots', '8'), 10);
+const N = Number.parseInt(arg('bots', '8'), 10);
 const ROOM = arg('room', 'default');
 const MODE = arg('mode', 'dm');
-const POS_HZ = parseInt(arg('posHz', '25'), 10);
+const POS_HZ = Number.parseInt(arg('posHz', '25'), 10);
 const FIRE = arg('fire', '1') !== '0';
 // Transport negotiation mirrors the browser client: best = RTC datachannel
 // first (unreliable lane kills head-of-line stutter), WS as the floor.
@@ -74,7 +74,7 @@ class WireBot {
   roster = new Map<string, Roster>();
   /** v3 roster: u16 -> playerId — gameState snapshot + 'wireIds' deltas. */
   private readonly wireIds = new Map<number, string>();
-  private readonly tickPool = { slots: [] as never[], resolveId: (id: number) => this.wireIds.get(id) };
+  private readonly tickPool = { slots: [] as never[], byId: new Map<number, never>(), resolveId: (id: number) => this.wireIds.get(id) };
   seq = 0; inputSeq = 0; pingMs = 10;
   waypoint = { x: rand(-120, 120), z: rand(-120, 120) };
   jetUntil = 0; input = { forward: 1, right: 0, jump: 0, ski: 1, jet: 0, status: 0 };
@@ -112,7 +112,7 @@ class WireBot {
    *  reads as multi-meter false divergence. */
   private pushInput(): void {
     const key = JSON.stringify(this.input);
-    if (key === this.lastSentInput) return;
+    if (key === this.lastSentInput) {return;}
     this.lastSentInput = key;
     const s = this.sim?.state;
     this.send({
@@ -130,7 +130,7 @@ class WireBot {
   private pendingClass: ArmorClass | null = null; // classUpdate applies at respawn
   private applyClass(cls: ArmorClass): void {
     this.armorClass = cls;
-    if (this.sim) this.sim.speedScale = CLASS_STATS[cls].speedScale;
+    if (this.sim) {this.sim.speedScale = CLASS_STATS[cls].speedScale;}
   }
   // Warp state is per-bot — each socket sees its own (possibly interest-
   // filtered) stream, so comparing across sockets invents teleports.
@@ -153,20 +153,20 @@ class WireBot {
     const key = `${kind}${id}`;
     const prev = this.lastSeg.get(key);
     this.lastSeg.set(key, { t, x, y, z, sp, judge });
-    if (!prev || !judge || !prev.judge) return;
+    if (!prev || !judge || !prev.judge) {return;}
     const dt = t - prev.t;
-    if (dt <= 0) return; // stale or replayed segment
+    if (dt <= 0) {return;} // stale or replayed segment
     // Interest-scoped delivery drops segments — a >0.5s gap can hide a
     // legit relocation (hit/knockback between bounces), so only judge
     // tight sample pairs where a jump is provably discontinuous.
-    if (dt > 0.5) return;
+    if (dt > 0.5) {return;}
     const jump = Math.hypot(x - prev.x, y - prev.y, z - prev.z);
     const expected = Math.max(4, prev.sp * dt * 2 + 2); // slack for unseen accel
     if (jump > expected) {
       if (kind === 'ball') { stats.ballWarps++; stats.ballMaxJump = Math.max(stats.ballMaxJump, jump); }
       else { stats.crawlWarps++; stats.crawlMaxJump = Math.max(stats.crawlMaxJump, jump); }
     }
-    if (this.lastSeg.size > 400) this.lastSeg.clear();
+    if (this.lastSeg.size > 400) {this.lastSeg.clear();}
   }
 
   constructor(private i: number) {
@@ -190,7 +190,7 @@ class WireBot {
       ws.onerror = () => stats.errors++;
       ws.onclose = (e) => { stats.closes++; console.log(`[netBot] ${this.id} closed ${e.code} ${e.reason}`); this.stop(); };
       this.link = {
-        send: (d) => { if (ws.readyState === 1) ws.send(d); },
+        send: (d) => { if (ws.readyState === 1) {ws.send(d);} },
         close: () => ws.close(),
         open: () => ws.readyState === 1,
       };
@@ -208,12 +208,12 @@ class WireBot {
   }
 
   send(m: object): void {
-    if (!this.link?.open()) return;
+    if (!this.link?.open()) {return;}
     this.link.send(typeof m === 'string' ? m : JSON.stringify(m));
     stats.sent++;
   }
   sendBin(u8: Uint8Array): void {
-    if (!this.link?.open()) return;
+    if (!this.link?.open()) {return;}
     this.link.send(u8);
     stats.sent++;
   }
@@ -226,7 +226,7 @@ class WireBot {
         // Tick-seq gaps = dropped frames → remote players stutter/warp.
         if (f.tickSeq > this.lastTickSeq + 1 && this.lastTickSeq >= 0) {
           stats.tickGaps += f.tickSeq - this.lastTickSeq - 1;
-          if (stats.gapSamples.length < 20) stats.gapSamples.push(`${this.lastTickSeq}->${f.tickSeq}`);
+          if (stats.gapSamples.length < 20) {stats.gapSamples.push(`${this.lastTickSeq}->${f.tickSeq}`);}
         }
         this.lastTickSeq = Math.max(this.lastTickSeq, f.tickSeq);
         const now = performance.now();
@@ -243,11 +243,11 @@ class WireBot {
           Math.hypot(seg.velocity.x, seg.velocity.y, seg.velocity.z), seg.t, seg.kind);
         this.balls.set(seg.id, seg.position);
         this.lastCreatureEvtAt = performance.now();
-        if (this.balls.size > 300) this.balls.clear();
+        if (this.balls.size > 300) {this.balls.clear();}
       }
       // Pooled slots: updates[] outlives the frame — past `count` is
       // stale tail from earlier, larger frames.
-      if (f) for (let ui = 0; ui < f.count; ui++) {
+      if (f) {for (let ui = 0; ui < f.count; ui++) {
         const u = f.updates[ui]!;
         if (!u.playerId || u.playerId === this.id) continue;
         // Merge — overwriting drops team/dead fields that only the
@@ -256,15 +256,22 @@ class WireBot {
         const r = this.roster.get(u.playerId) ?? { pos: u.position, vel: u.velocity };
         r.pos = u.position; r.vel = u.velocity; r.dead = u.isDead;
         this.roster.set(u.playerId, r);
-      }
+      }}
       return;
     }
     const m = JSON.parse(data);
     switch (m.type) {
-      case 'wireIds':
-        for (const [id, pid] of Object.entries(m.add as Record<string, string>)) this.wireIds.set(Number(id), pid);
-        for (const id of (m.remove ?? []) as number[]) this.wireIds.delete(id);
+      case 'wireIds': {
+        for (const [id, pid] of Object.entries(m.add as Record<string, string>)) {
+          const wid = Number(id);
+          // Re-seat without remove — the departed owner's baseline must
+          // not feed the new owner's masked deltas.
+          if (this.wireIds.has(wid)) {this.tickPool.byId.delete(wid);}
+          this.wireIds.set(wid, pid);
+        }
+        for (const id of (m.remove ?? []) as number[]) {this.wireIds.delete(id); this.tickPool.byId.delete(id);}
         break;
+      }
       case 'gameState': {
         // A re-seat (switchRoom hop) replaces the whole room: old-room
         // roster ids read as 'unknown target' on claims, entity anchors
@@ -272,7 +279,8 @@ class WireBot {
         // as 'blast with no known projectile' here. Reset all of it.
         this.roster.clear();
         this.wireIds.clear();
-        if (m.wireIds) for (const [id, pid] of Object.entries(m.wireIds as Record<string, string>)) this.wireIds.set(Number(id), pid);
+        this.tickPool.byId.clear();
+        if (m.wireIds) {for (const [id, pid] of Object.entries(m.wireIds as Record<string, string>)) this.wireIds.set(Number(id), pid);}
         this.lastSeg.clear();
         this.balls.clear();
         this.crawls.clear();
@@ -293,9 +301,9 @@ class WireBot {
         for (const p of m.players ?? []) {
           // gameState roster uses `id` (not `playerId` like tick records).
           const pid = p.id ?? p.playerId;
-          if (pid !== this.id) this.roster.set(pid, { pos: p.position, vel: p.velocity ?? { x: 0, y: 0, z: 0 }, team: p.team });
+          if (pid !== this.id) {this.roster.set(pid, { pos: p.position, vel: p.velocity ?? { x: 0, y: 0, z: 0 }, team: p.team });}
         }
-        for (const pk of m.pickups ?? []) this.pickups.set(pk.id, pk.pos);
+        for (const pk of m.pickups ?? []) {this.pickups.set(pk.id, pk.pos);}
         const me = m.localPlayerState?.position ?? m.players?.find((p: { id?: string; playerId?: string }) => (p.id ?? p.playerId) === this.id)?.position
           ?? { x: rand(-20, 20), y: 40, z: rand(-20, 20) };
         void loadTerrain(m.map?.terrain ?? 'heightmap.bin').then((f) => {
@@ -315,12 +323,14 @@ class WireBot {
         });
         break;
       }
-      case 'playerJoined': this.roster.set(m.playerId, { pos: m.position, vel: { x: 0, y: 0, z: 0 }, team: m.team }); break;
-      case 'teamUpdate':
+      case 'playerJoined': { this.roster.set(m.playerId, { pos: m.position, vel: { x: 0, y: 0, z: 0 }, team: m.team }); break;
+      }
+      case 'teamUpdate': {
         if (m.playerId === this.id) this.team = m.team;
         else { const r = this.roster.get(m.playerId); if (r) r.team = m.team; }
         break;
-      case 'projectileCreated':
+      }
+      case 'projectileCreated': {
         // Server-assigned id — destroy claims must name this one.
         if (m.ownerId === this.id) {
           this.ownShots.push({ id: m.projectileId, until: performance.now() + 2500, usedShot: false, usedAoe: false });
@@ -331,13 +341,17 @@ class WireBot {
           if (ci >= 0) this.pendingClaims.splice(ci, 1)[0]!.pid = m.projectileId;
         }
         break;
-      case 'playerLeft': this.roster.delete(m.playerId); break;
-      case 'pong': this.pingMs = Math.max(1, Date.now() - m.timestamp); break;
-      case 'shotRejected':
+      }
+      case 'playerLeft': { this.roster.delete(m.playerId); break;
+      }
+      case 'pong': { this.pingMs = Math.max(1, Date.now() - m.timestamp); break;
+      }
+      case 'shotRejected': {
         stats.rejected++;
         if (stats.rejected <= 10) console.log(`[netBot] ${this.id} shotRejected: ${m.reason}`);
         break;
-      case 'crawlEvt':
+      }
+      case 'crawlEvt': {
         stats.crawlEvts++;
         this.segJump('crawl', m.id, m.position.x, m.position.y, m.position.z,
           Math.hypot(m.velocity?.x ?? 0, m.velocity?.y ?? 0, m.velocity?.z ?? 0), m.t, m.kind);
@@ -345,11 +359,16 @@ class WireBot {
         this.lastCreatureEvtAt = performance.now();
         if (this.crawls.size > 300) this.crawls.clear();
         break;
-      case 'pickupSpawn': this.pickups.set(m.id, m.pos); break;
-      case 'pickupGone': this.pickups.delete(m.id); if (m.by === this.id) stats.gems++; break;
-      case 'ballDie': this.balls.delete(m.id); this.lastSeg.delete(`ball${m.id}`); break;
-      case 'crawlDie': this.crawls.delete(m.id); this.lastSeg.delete(`crawl${m.id}`); break;
-      case 'correction':
+      }
+      case 'pickupSpawn': { this.pickups.set(m.id, m.pos); break;
+      }
+      case 'pickupGone': { this.pickups.delete(m.id); if (m.by === this.id) stats.gems++; break;
+      }
+      case 'ballDie': { this.balls.delete(m.id); this.lastSeg.delete(`ball${m.id}`); break;
+      }
+      case 'crawlDie': { this.crawls.delete(m.id); this.lastSeg.delete(`crawl${m.id}`); break;
+      }
+      case 'correction': {
         // A real client rewinds to the server's truth — do the same.
         if (this.sim) {
           const s = this.sim.state;
@@ -359,7 +378,8 @@ class WireBot {
         }
         stats.corrections++;
         break;
-      case 'playerKill':
+      }
+      case 'playerKill': {
         // Death arrives as a kill broadcast — the corpse goes quiet.
         if (m.targetId === this.id) this.dead = true;
         else if (m.targetId) {
@@ -367,7 +387,8 @@ class WireBot {
           if (r) r.dead = true;
         }
         break;
-      case 'knockback':
+      }
+      case 'knockback': {
         // The server's shadow received this impulse too — a client that
         // doesn't apply it reports an unshoved trajectory and reads as a
         // teleport-scale divergence until the judge kicks it.
@@ -381,10 +402,12 @@ class WireBot {
           }
         }
         break;
-      case 'yourHealth':
+      }
+      case 'yourHealth': {
         if (m.health <= 0) this.dead = true;
         break;
-      case 'teleport':
+      }
+      case 'teleport': {
         // A remote's declared warp — update the aim roster immediately
         // instead of shooting the pre-warp ghost until the next tick.
         if (m.playerId && m.playerId !== this.id) {
@@ -392,7 +415,8 @@ class WireBot {
           if (r) { r.pos.x = m.position.x; r.pos.y = m.position.y; r.pos.z = m.position.z; }
         }
         break;
-      case 'playerRespawn':
+      }
+      case 'playerRespawn': {
         // Our own respawn — a real client snaps to the spawn point.
         // Without this the local sim keeps reporting from the corpse
         // spot and the judge reads 100m+ of "teleport" divergence.
@@ -411,6 +435,7 @@ class WireBot {
           if (r) { r.pos.x = m.position.x; r.pos.y = m.position.y; r.pos.z = m.position.z; r.dead = false; }
         }
         break;
+      }
     }
   }
 
@@ -422,11 +447,11 @@ class WireBot {
     const posMs = 1000 / POS_HZ;
     // Position stream — the binary lane real clients use.
     this.timers.push(setInterval(() => {
-      if (!this.sim) return;
+      if (!this.sim) {return;}
       // Dead players stop streaming — the server drops their reports
       // anyway, and a corpse walking is exactly the anomaly the judge
       // exists to catch. The respawn broadcast reseats us.
-      if (this.dead) return;
+      if (this.dead) {return;}
       this.step(posMs / 1000);
       const s = this.sim.state;
       this.sendBin(encodePosition(s.pos, { yaw: s.yaw, pitch: s.pitch }, s.vel, ++this.seq, this.pingMs, this.inputSeq));
@@ -441,51 +466,51 @@ class WireBot {
       this.sentPingAt = Date.now();
       this.send({ type: 'ping', timestamp: this.sentPingAt });
     }, 2000));
-    if (FIRE) this.timers.push(setInterval(() => this.fire(), rand(900, 2200)));
+    if (FIRE) {this.timers.push(setInterval(() => this.fire(), rand(900, 2200)));}
     // The rest of the client vocabulary, at a human-plausible cadence:
     // deployables, chat, teleports, heals, loadout edits, creature claims,
     // projectile destroys. snapshotRequest once — that's what a real client
     // asks for right after joining a live room.
     this.send({ type: 'snapshotRequest' });
     this.timers.push(setInterval(() => this.misc(), 500));
-    this.nextDeploy = performance.now() + rand(8000, 20000);
-    this.nextChat = performance.now() + rand(15000, 45000);
-    this.nextTeleport = performance.now() + rand(30000, 80000);
-    this.nextHeal = performance.now() + rand(20000, 60000);
-    this.nextLoadout = performance.now() + rand(45000, 120000);
-    this.nextEnvDmg = performance.now() + rand(30000, 90000);
+    this.nextDeploy = performance.now() + rand(8000, 20_000);
+    this.nextChat = performance.now() + rand(15_000, 45_000);
+    this.nextTeleport = performance.now() + rand(30_000, 80_000);
+    this.nextHeal = performance.now() + rand(20_000, 60_000);
+    this.nextLoadout = performance.now() + rand(45_000, 120_000);
+    this.nextEnvDmg = performance.now() + rand(30_000, 90_000);
     // First hop lands early enough for a soak to see it — after that
     // the 2-4min cadence applies.
-    this.nextSwitch = performance.now() + rand(20000, 80000);
+    this.nextSwitch = performance.now() + rand(20_000, 80_000);
   }
 
   /** Everything else a legal client says, rolled at plausible rates. */
   private misc(): void {
     const s = this.sim?.state;
-    if (!s || this.dead) return;
+    if (!s || this.dead) {return;}
     const now = performance.now();
 
     // Own-projectile cleanup — clients destroy their live shells on
     // impact/expiry; ours live ~1.5s of airtime.
-    while (this.ownShots.length && this.ownShots[0]!.until <= now) {
-      const id = this.ownShots.shift()!.id;
+    while (this.ownShots.length > 0 && this.ownShots[0]!.until <= now) {
+      const {id} = this.ownShots.shift()!;
       this.send({ type: 'projectileDestroy', projectileId: id });
     }
 
     if (now >= this.nextDeploy) {
-      this.nextDeploy = now + rand(15000, 40000);
+      this.nextDeploy = now + rand(15_000, 40_000);
       const kinds = ['turret', 'mine', 'station', 'drone'] as const;
       this.send({ type: 'deploy', kind: kinds[Math.floor(rand(0, 4))], position: { x: s.pos.x, y: s.pos.y, z: s.pos.z } });
     }
     if (now >= this.nextChat) {
-      this.nextChat = now + rand(20000, 60000);
+      this.nextChat = now + rand(20_000, 60_000);
       const lines = ['wp', 'incoming!', 'disc jump incoming', 'need a pickup', 'flag runner left', 'lag check'];
       // Half the chatter goes team-scoped — exercises the fanout filter.
       this.send({ type: 'chat', text: lines[Math.floor(rand(0, lines.length))], team: rand(0, 1) < 0.5 });
     }
     if (now >= this.nextTeleport) {
       // Warp-blink cadence — the server caps teleports at ~1/s anyway.
-      this.nextTeleport = now + rand(25000, 70000);
+      this.nextTeleport = now + rand(25_000, 70_000);
       const tx = s.pos.x + rand(-30, 30), tz = s.pos.z + rand(-30, 30);
       s.pos.x = tx; s.pos.z = tz; s.pos.y = this.myGy(tx, tz) + 1;
       s.vel.x *= 0.5; s.vel.y = 0; s.vel.z *= 0.5;
@@ -493,11 +518,11 @@ class WireBot {
       this.fireHoldUntil = performance.now() + 600;
     }
     if (now >= this.nextHeal) {
-      this.nextHeal = now + rand(25000, 70000);
+      this.nextHeal = now + rand(25_000, 70_000);
       this.send({ type: 'heal', amount: Math.round(rand(5, 25)) });
     }
     if (now >= this.nextLoadout) {
-      this.nextLoadout = now + rand(60000, 150000);
+      this.nextLoadout = now + rand(60_000, 150_000);
       this.pendingClass = CLASSES[Math.floor(rand(0, 3))]!;
       this.send({ type: 'classUpdate', armorClass: this.pendingClass });
       this.send({ type: 'perkUpdate', perk: PERKS[Math.floor(rand(0, PERKS.length))] });
@@ -508,24 +533,24 @@ class WireBot {
       // actually on them.
       // Tracked positions go stale between events — the server measures
       // against live sims, so keep slack below its plausibility gate.
-      this.nextEnvDmg = now + rand(40000, 120000);
+      this.nextEnvDmg = now + rand(40_000, 120_000);
       if (now - this.lastCreatureEvtAt <= 600) {
         let near = false;
         for (const p of this.crawls.values()) {
           const d = (p.x - s.pos.x) ** 2 + (p.y - s.pos.y) ** 2 + (p.z - s.pos.z) ** 2;
           if (d < 10 * 10) { near = true; break; }
         }
-        if (!near) for (const p of this.balls.values()) {
+        if (!near) {for (const p of this.balls.values()) {
           const d = (p.x - s.pos.x) ** 2 + (p.y - s.pos.y) ** 2 + (p.z - s.pos.z) ** 2;
           if (d < 10 * 10) { near = true; break; }
-        }
-        if (near) this.send({ type: 'environmentDamage', amount: Math.round(rand(5, 15)) });
+        }}
+        if (near) {this.send({ type: 'environmentDamage', amount: Math.round(rand(5, 15)) });}
       }
     }
     if (now >= this.nextSwitch) {
       // Room-hop stress path — full teardown + rejoin, rare like a real hop.
       // Alternate target: hopping into ROOM itself is a server-side no-op.
-      this.nextSwitch = now + rand(120000, 240000);
+      this.nextSwitch = now + rand(120_000, 240_000);
       this.hopAlt = !this.hopAlt;
       this.send({ type: 'switchRoom', room: this.hopAlt ? `${ROOM}-alt` : ROOM, mode: MODE });
     }
@@ -554,25 +579,25 @@ class WireBot {
         const d = (p.x - s.pos.x) ** 2 + (p.z - s.pos.z) ** 2;
         if (d < bd) { bd = d; bp = p; }
       }
-      if (bp) this.waypoint = { x: bp.x, z: bp.z };
+      if (bp) {this.waypoint = { x: bp.x, z: bp.z };}
     }
     const dx = this.waypoint.x - s.pos.x, dz = this.waypoint.z - s.pos.z;
-    if (dx * dx + dz * dz < 25) this.waypoint = { x: rand(-140, 140), z: rand(-140, 140) };
+    if (dx * dx + dz * dz < 25) {this.waypoint = { x: rand(-140, 140), z: rand(-140, 140) };}
     s.yaw = Math.atan2(dx, dz);
     // Uphill climbs get a jet burst — same thing a human does. Fuel is
     // real: thrust drains 15/s, idle recharges 8/s, empty tank = no jets
     // (the server's shadow enforces the identical model).
-    if (this.jetUntil < performance.now() && this.energy > 20 && Math.random() < 0.004) this.jetUntil = performance.now() + rand(400, 1200);
+    if (this.jetUntil < performance.now() && this.energy > 20 && Math.random() < 0.004) {this.jetUntil = performance.now() + rand(400, 1200);}
     const jetting = performance.now() < this.jetUntil && this.energy > 0;
-    if (jetting) this.energy = Math.max(0, this.energy - ENERGY.jetDrain * dt);
-    else this.energy = Math.min(ENERGY.max, this.energy + ENERGY.jetCharge * dt);
+    if (jetting) {this.energy = Math.max(0, this.energy - ENERGY.jetDrain * dt);}
+    else {this.energy = Math.min(ENERGY.max, this.energy + ENERGY.jetCharge * dt);}
     this.input.jet = jetting ? 1 : 0;
     this.input.jump = Math.random() < 0.008 ? 1 : 0;
     this.pushInput();
     // Rising-edge event reports — real clients announce jump/jet starts
     // so remotes see the launch, not just the position drift.
-    if (this.input.jump === 1 && !this.wasJump) this.send({ type: 'jump', position: { ...s.pos } });
-    if (jetting && !this.wasJet) this.send({ type: 'jetpack', position: { ...s.pos } });
+    if (this.input.jump === 1 && !this.wasJump) {this.send({ type: 'jump', position: { ...s.pos } });}
+    if (jetting && !this.wasJet) {this.send({ type: 'jetpack', position: { ...s.pos } });}
     this.wasJump = this.input.jump === 1; this.wasJet = jetting;
     this.sim!.setInput({
       forward: 1, right: 0,
@@ -591,23 +616,23 @@ class WireBot {
     // Terrain penetration probe: a fast descent can tunnel below the
     // field — reports from under the map read as clipping cheats.
     const depth = this.myGy(s.pos.x, s.pos.z) - s.pos.y;
-    if (depth > 2) stats.belowGround++;
+    if (depth > 2) {stats.belowGround++;}
   }
 
   private fire(): void {
-    if (!this.sim || this.roster.size === 0 || this.dead) return;
-    if (performance.now() < this.fireHoldUntil) return;
+    if (!this.sim || this.roster.size === 0 || this.dead) {return;}
+    if (performance.now() < this.fireHoldUntil) {return;}
     const s = this.sim.state;
     // Nearest wire target — aim claims must name a live peer id, and
     // never a teammate (friendly fire is rejected outright).
     let best: string | null = null, bd = 1e9;
     for (const [id, r] of this.roster) {
-      if (this.team && r.team === this.team) continue;
-      if (r.dead) continue;
+      if (this.team && r.team === this.team) {continue;}
+      if (r.dead) {continue;}
       const d = (r.pos.x - s.pos.x) ** 2 + (r.pos.y - s.pos.y) ** 2 + (r.pos.z - s.pos.z) ** 2;
       if (d < bd) { bd = d; best = id; }
     }
-    if (!best || bd > 100 * 100) return;
+    if (!best || bd > 100 * 100) {return;}
     stats.shots++;
     const t = this.roster.get(best)!;
     const dist = Math.max(Math.sqrt(bd), 1);
@@ -644,12 +669,12 @@ class WireBot {
     // every later claim names a shell that isn't its own.
     const unpend = () => {
       const i = this.pendingClaims.indexOf(mine);
-      if (i >= 0) this.pendingClaims.splice(i, 1);
+      if (i !== -1) {this.pendingClaims.splice(i, 1);}
     };
     let waited = 0;
-    const gen = this.gen;
+    const {gen} = this;
     const claim = () => {
-      if (gen !== this.gen) return; // armed in a room we already left
+      if (gen !== this.gen) {return;} // armed in a room we already left
       // The echo can lag the airtime deadline on unordered lanes — a
       // bare claim would resolve the NEWEST matching shell and paint
       // our airtime onto its fresh age. Hold briefly for the id.
@@ -659,8 +684,8 @@ class WireBot {
       // A bare claim would invoke the latest-of-type fallback, which
       // tombstones EVERY matching live shell — stealing other pending
       // claims' projectiles.
-      if (!mine.pid) return;
-      const pid = mine.pid;
+      if (!mine.pid) {return;}
+      const {pid} = mine;
       if (weaponType === 2) {
         // A real client only claims what it hit — if the target drifted
         // since we fired, that shell just missed; claim nothing. A dead
@@ -669,13 +694,13 @@ class WireBot {
         // No roster entry = the target hopped or left mid-flight — a real
         // client lost its bead too; claiming at the stale spot reads as
         // an impossible reach.
-        if (!cur || cur.dead) return;
+        if (!cur || cur.dead) {return;}
         // Team balance flips land between fire and claim — re-check or
         // the hit lands as friendly fire.
-        if (this.team && cur.team === this.team) return;
+        if (this.team && cur.team === this.team) {return;}
         // Drift check must be 3D — a target falling 100m+ shares x/z but
         // the claimed hit reads as an impossible reach server-side.
-        if ((cur.pos.x - t.pos.x) ** 2 + (cur.pos.y - t.pos.y) ** 2 + (cur.pos.z - t.pos.z) ** 2 > 36) return;
+        if ((cur.pos.x - t.pos.x) ** 2 + (cur.pos.y - t.pos.y) ** 2 + (cur.pos.z - t.pos.z) ** 2 > 36) {return;}
         this.send({ type: 'shotFired', weaponType });
         this.send({ type: 'shot', targetId: best, weaponType, position: { ...cur.pos }, airtime, projectileId: pid });
       } else {
@@ -694,17 +719,17 @@ class WireBot {
     setTimeout(claim, airtime * 1000);
   }
 
-  private stop(): void { for (const t of this.timers) clearInterval(t); }
+  private stop(): void { for (const t of this.timers) {clearInterval(t);} }
 }
 
 const bots: WireBot[] = [];
-for (let i = 0; i < N; i++) bots.push(new WireBot(i));
+for (let i = 0; i < N; i++) {bots.push(new WireBot(i));}
 
 setInterval(() => {
   const s = stats;
   const pings = bots.map((b) => b.pingMs).filter((p) => p > 0).sort((a, b) => a - b);
-  const ping = pings.length
+  const ping = pings.length > 0
     ? ` ping=${pings[0]}/${pings[Math.floor(pings.length / 2)]}/${pings[pings.length - 1]}ms`
     : '';
-  console.log(`[netBot] ${bots.length} bots (${s.rtc} rtc) | joins=${s.joins} sent=${s.sent} recv=${s.recv} shots=${s.shots} rej=${s.rejected} gems=${s.gems} corr=${s.corrections} belowGnd=${s.belowGround} err=${s.errors} closes=${s.closes} tickGaps=${s.tickGaps} maxTickGap=${Math.round(s.tickJit)}ms ball=${s.ballSegs}/${s.ballWarps}w max${s.ballMaxJump.toFixed(0)}m crawl=${s.crawlEvts}/${s.crawlWarps}w max${s.crawlMaxJump.toFixed(0)}m${ping}${s.gapSamples.length ? ` gaps[${s.gapSamples.join(' ')}]` : ''}`);
+  console.log(`[netBot] ${bots.length} bots (${s.rtc} rtc) | joins=${s.joins} sent=${s.sent} recv=${s.recv} shots=${s.shots} rej=${s.rejected} gems=${s.gems} corr=${s.corrections} belowGnd=${s.belowGround} err=${s.errors} closes=${s.closes} tickGaps=${s.tickGaps} maxTickGap=${Math.round(s.tickJit)}ms ball=${s.ballSegs}/${s.ballWarps}w max${s.ballMaxJump.toFixed(0)}m crawl=${s.crawlEvts}/${s.crawlWarps}w max${s.crawlMaxJump.toFixed(0)}m${ping}${s.gapSamples.length > 0 ? ` gaps[${s.gapSamples.join(' ')}]` : ''}`);
 }, 5000);
