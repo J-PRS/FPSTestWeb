@@ -278,6 +278,12 @@ export class NetworkManager {
             });
             this.connected = true;
             this.connectedAtMs = performance.now();
+            // A fresh socket counts as alive until proven silent — the
+            // inner transport's own reconnect doesn't re-stamp this, so
+            // without it the stall watchdog inherited the DEAD lane's
+            // silence window and reaped a healthy reseat seconds after
+            // its onConnect.
+            this.lastRxAt = Date.now();
             this.hasLoggedConnectionError = false;
             logger.info(`Connected as ${this.localPlayerId}`);
             this.lastDownReason = null;

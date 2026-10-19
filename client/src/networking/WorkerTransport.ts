@@ -27,8 +27,12 @@ type Ev =
   | { kind: 'up'; tier: string | undefined }
   | { kind: 'down'; code?: number; reason?: string }
   | { kind: 'err'; msg: string }
-  | { kind: 'ev'; j: ServerMessage; at: number }
-  | { kind: 'ev'; b: Uint8Array; at: number }
+  | { kind: 'ev'; j?: ServerMessage; b?: Uint8Array; at: number }
+  // Batched worker→main posts — the worker packs every event ready at
+  // turn end into one postMessage (post cost is per-call; measured
+  // drainMsMax=41ms for 338 one-at-a-time posts). Items flatten into
+  // the same pending queue; per-item `at` keeps lag honest.
+  | { kind: 'evs'; items: { j?: ServerMessage; b?: Uint8Array; at: number }[] }
   | { kind: 'rtt'; rtt: number }
   | { kind: 'resolve'; seq: number }
   | { kind: 'nlog'; level: NetLogLevel; name: string; msg: string; ctx?: unknown };
@@ -41,14 +45,14 @@ export function coalesceTickFrames(evs: Ev[]): Ev[] {
   let maxSeq = -1;
   for (let i = 0; i < evs.length; i += 1) {
     const e = evs[i]!;
-    if (e.kind === 'ev' && 'b' in e && e.b.length >= 10 && e.b[0] === MAGIC && TICK_KINDS.has(e.b[1]!)) {
+    if (e.kind === 'ev' && e.b !== undefined && e.b.length >= 10 && e.b[0] === MAGIC && TICK_KINDS.has(e.b[1]!)) {
       const seq = new DataView(e.b.buffer, e.b.byteOffset).getUint32(6, true);
       if (seq > maxSeq) { maxSeq = seq; lastTick = i; }
     }
   }
   if (lastTick < 0) {return evs;}
   return evs.filter((e, i): boolean => {
-    if (e.kind !== 'ev' || !('b' in e) || i === lastTick) {return true;}
+    if (e.kind !== 'ev' || e.b === undefined || i === lastTick) {return true;}
     return !(e.b.length >= 10 && e.b[0] === MAGIC && TICK_KINDS.has(e.b[1]!));
   });
 }
@@ -111,6 +115,12 @@ export class WorkerTransport implements GameTransport {
   }
 
   private enqueue(ev: Ev): void {
+    if (ev.kind === 'evs') {
+      // Flatten the batch — each item runs the same stamp/push path as a
+      // lone post; the queue then coalesces stale tick frames as usual.
+      for (const item of ev.items) {this.enqueue({ kind: 'ev', j: item.j, b: item.b, at: item.at });}
+      return;
+    }
     if (ev.kind === 'nlog') {
       // Transport logs run in the worker — relay into the real buffer so
       // Alt+Q still sees tier/reconnect lines.
@@ -173,7 +183,7 @@ export class WorkerTransport implements GameTransport {
           }
           case 'err': { this.config.onError?.(new Error(ev.msg)); break;
           }
-          case 'ev': { if ('j' in ev) {this.config.onMessage?.(ev.j);} else {this.config.onBinaryMessage?.(ev.b);} break;
+          case 'ev': { if (ev.j !== undefined) {this.config.onMessage?.(ev.j);} else if (ev.b !== undefined) {this.config.onBinaryMessage?.(ev.b);} break;
           }
                   default: { break; }
 }

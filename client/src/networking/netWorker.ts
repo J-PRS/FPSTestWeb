@@ -31,8 +31,8 @@ type Up =
   | { kind: 'up'; tier: string | undefined }
   | { kind: 'down'; code?: number; reason?: string }
   | { kind: 'err'; msg: string }
-  | { kind: 'ev'; j: ServerMessage; at: number }
-  | { kind: 'ev'; b: Uint8Array; at: number }
+  | { kind: 'ev'; j?: ServerMessage; b?: Uint8Array; at: number }
+  | { kind: 'evs'; items: { j?: ServerMessage; b?: Uint8Array; at: number }[] }
   | { kind: 'rtt'; rtt: number }
   | { kind: 'resolve'; seq: number }
   | { kind: 'nlog'; level: NetLogLevel; name: string; msg: string; ctx?: unknown };
@@ -103,6 +103,28 @@ setInterval((): void => {
 let resolveSeq = 0;
 const resolveWaiters = new Map<number, (url: string | null) => void>();
 
+// --- Event batching: N inbound frames -> ONE postMessage -------------------
+// postMessage cost is per-call, not per-byte — a reconnect/reclaim backlog
+// delivered 338 evs and stalled main 41ms draining them one post each
+// (drainMsMax). Batching every ready event into a single post collapses the
+// IPC cost; a 0ms flush lands at the end of the current worker turn, so a
+// trickle adds ~0 latency while a burst rides one post.
+type EvItem = { j?: ServerMessage; b?: Uint8Array; at: number };
+const evBatch: EvItem[] = [];
+let evFlushQueued = false;
+function postEv(item: EvItem): void {
+  evBatch.push(item);
+  if (!evFlushQueued) { evFlushQueued = true; setTimeout(flushEvs, 0); }
+}
+function flushEvs(): void {
+  evFlushQueued = false;
+  const items = evBatch.splice(0);
+  if (items.length === 0) {return;}
+  const xfer: Transferable[] = [];
+  for (const it of items) {if (it.b) {xfer.push(it.b.buffer as ArrayBuffer);}}
+  w.postMessage({ kind: 'evs', items }, xfer);
+}
+
 function makeConfig(url: string, hasResolver: boolean): ConnectionConfig {
   return {
     url,
@@ -144,7 +166,7 @@ function makeConfig(url: string, hasResolver: boolean): ConnectionConfig {
           return;
         }
       }
-      post({ kind: 'ev', j: m, at: Date.now() });
+      postEv({ j: m, at: Date.now() });
     },
     onBinaryMessage: (b): void => {
       // Transfer, don't clone — tick frames arrive at 20Hz and run tens
@@ -153,7 +175,7 @@ function makeConfig(url: string, hasResolver: boolean): ConnectionConfig {
       // view falls back to a slice so we don't detach a pooled parent.
       const buf = b.byteOffset === 0 && b.byteLength === b.buffer.byteLength
         ? b.buffer : b.slice().buffer;
-      w.postMessage({ kind: 'ev', b: new Uint8Array(buf), at: Date.now() }, [buf]);
+      postEv({ b: new Uint8Array(buf), at: Date.now() });
     },
   };
 }
