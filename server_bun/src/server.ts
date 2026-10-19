@@ -82,6 +82,9 @@ function killPortHolders(port: number): boolean {
     .filter((m): boolean => Number(m[1]) === port).map((m): string => m[2]!);
   for (const pid of pids) {
     const img = Bun.spawnSync(['tasklist', '/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH']).stdout.toString();
+    // Same race as the UDP variant: dead-between-netstat-and-tasklist
+    // reads empty — skip it, don't refuse.
+    if (!img.trim()) {continue;}
     if (!/bun\.exe/i.test(img)) { logger.error(`:${port} held by non-bun pid ${pid} — refusing to kill`); return false; }
     Bun.spawnSync(['taskkill', '/F', '/PID', pid]);
     logger.warn(`stale bun (pid ${pid}) killed — it held :${port}`);
@@ -99,6 +102,9 @@ function killUdpPortHolders(port: number): boolean {
     .filter((m): boolean => Number(m[1]) === port).map((m): string => m[2]!);
   for (const pid of pids) {
     const img = Bun.spawnSync(['tasklist', '/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH']).stdout.toString();
+    // Race: a pid that died between netstat and tasklist returns empty —
+    // nothing to kill, but it's no reason to refuse the reclaim either.
+    if (!img.trim()) {continue;}
     if (!/bun\.exe/i.test(img)) { logger.error(`udp:${port} held by non-bun pid ${pid} — refusing to kill`); return false; }
     Bun.spawnSync(['taskkill', '/F', '/PID', pid]);
     logger.warn(`stale bun (pid ${pid}) killed — it held udp:${port}`);
@@ -217,21 +223,21 @@ const serve = (): ReturnType<typeof Bun.serve<WebSocketData>> => Bun.serve<WebSo
 // The reclaim probe is async but no-async-await is repo law — the bind
 // runs as a flat promise chain and `server` stays a late-bound handle
 // every consumer (requestIP, setBunServer) only reaches after bind.
+// Bounded retry: a supervised predecessor mid-drain still answers
+// /metrics (reclaim refuses, correctly) but its socket frees ~1s out —
+// dying on the first EADDRINUSE is what spiraled the respawn loop.
 let server: ReturnType<typeof serve> | null = null;
-let bindErr: Error | null = null;
-Promise.resolve()
-  .then((): ReturnType<typeof serve> => serve())
-  .catch((error: unknown): Promise<boolean> => {
-    const busy = (error as { code?: string }).code === 'EADDRINUSE' || /in use|EADDRINUSE/i.test(String(error));
-    if (!busy) {throw error;}
-    bindErr = error instanceof Error ? error : new Error(String(error));
-    return reclaimStaleBun(CONFIG.port);
-  })
-  .then((v): ReturnType<typeof serve> => {
-    if (typeof v !== 'boolean') {return v;}
-    if (!v) {throw bindErr;}
-    return serve();
-  })
+const tryServe = (attempt: number): Promise<ReturnType<typeof serve>> =>
+  Promise.resolve()
+    .then((): ReturnType<typeof serve> => serve())
+    .catch((error: unknown): Promise<ReturnType<typeof serve>> => {
+      const busy = (error as { code?: string }).code === 'EADDRINUSE' || /in use|EADDRINUSE/i.test(String(error));
+      if (!busy || attempt >= 4) {throw error;}
+      return reclaimStaleBun(CONFIG.port).then((ok): Promise<ReturnType<typeof serve>> =>
+        ok ? tryServe(attempt + 1)
+          : Bun.sleep(600).then((): Promise<ReturnType<typeof serve>> => tryServe(attempt + 1)));
+    });
+tryServe(0)
   .then((s): null => { server = s; gameServer.setBunServer(s); return null; })
   .catch((error): never => { throw error; }); // unhandled rejection = the module-level throw it replaces
 

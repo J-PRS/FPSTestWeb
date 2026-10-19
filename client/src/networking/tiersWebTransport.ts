@@ -253,6 +253,13 @@ export async function tryWebTransport(config: ConnectionConfig): Promise<GameTra
     // stalled the whole re-probe and the session never recovered.
     const info = await (await fetch(`${httpBase}/wthash`, { signal: AbortSignal.timeout(4000) })).json();
     if (!info?.enabled || !info.port || !info.sha256) {return null;}
+    // WT needs a direct UDP path to host:port. Through any forward proxy
+    // (quick tunnel, CDN) HTTPS rides :443 but the QUIC port is never
+    // forwarded — probing it burns the 3s timeout AND churns the WS lane
+    // on every reconnect. A 443 origin advertising a different wt port
+    // means the only reachable wt is one sharing 443.
+    const basePort = new URL(httpBase).port || '443';
+    if (basePort === '443' && String(info.port) !== '443') {return null;}
     // Chrome resolves `localhost` to ::1 but the QUIC listener is IPv4 —
     // normalized here (the pvptest adapter does the same) or loopback WT
     // dies with ERR_CONNECTION_RESET before the handshake starts.
