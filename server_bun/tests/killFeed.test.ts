@@ -5,15 +5,17 @@ import { botRngRelease, tauntRng } from '../../shared/botRand.ts';
 import { resetTauntCooldowns, setTauntClock } from '../../shared/botTaunts.ts';
 import type { PlayerManager } from '../src/PlayerManager.ts';
 import type { PlayerState, ServerMessage } from '../src/types.ts';
+import { WeaponType } from '../../shared/weapons.ts';
 
-const player = (id: string, streak = 0): PlayerState =>
-  ({ id, streak }) as PlayerState;
+const player = (id: string, streak = 0, extra: Partial<PlayerState> = {}): PlayerState =>
+  ({ id, streak, ...extra }) as PlayerState;
 
 const rig = (opts: { roster?: PlayerState[]; killTotal?: number; delay?: number } = {}) => {
   const roster = new Map<string, PlayerState>((opts.roster ?? []).map((p) => [p.id, p]));
   const sent: ServerMessage[] = [];
   const pm = {
     getPlayer: (id: string) => roster.get(id),
+    getAllPlayers: () => roster,
     killTotal: () => opts.killTotal ?? 0,
   } as unknown as PlayerManager;
   const feed = new KillFeed(pm, (m) => sent.push(m), () => opts.delay ?? 0);
@@ -38,18 +40,18 @@ describe('KillFeed.announce', () => {
     expect(notices(sent).map((n) => n.text)).toContain('A draws first blood');
   });
 
-  it('spree tiers announce at 3/5/8/12', () => {
+  it('spree tiers announce on the UT ladder (5/10/15/20/25/30)', () => {
     const { feed, sent, roster } = rig({ roster: [player('A'), player('B')] });
-    roster.get('A')!.streak = 4;
+    roster.get('A')!.streak = 9;
     feed.announce('A', 'B');
-    expect(notices(sent).map((n) => n.text)).toContain('A is on a rampage (5)');
+    expect(notices(sent).map((n) => n.text)).toContain('A is on a rampage (10)');
   });
 
-  it('godlike continues past 12 on multiples of 4', () => {
+  it('wicked sick continues past 30 on multiples of 5', () => {
     const { feed, sent, roster } = rig({ roster: [player('A'), player('B')] });
-    roster.get('A')!.streak = 15;
+    roster.get('A')!.streak = 34;
     feed.announce('A', 'B');
-    expect(notices(sent).map((n) => n.text)).toContain('A is godlike (16)');
+    expect(notices(sent).map((n) => n.text)).toContain('A is wicked sick (35)');
   });
 
   it('a victim streak ≥3 gets the ended callout and resets', () => {
@@ -64,6 +66,54 @@ describe('KillFeed.announce', () => {
     feed.announce('A', 'A');
     expect(notices(sent).map((n) => n.text)).toEqual(['A fragged themselves']);
     expect(roster.get('A')!.streak).toBe(0);
+  });
+
+  it('rapid frags chain into multi-kill notices', () => {
+    const { feed, sent, roster } = rig({ roster: [player('A'), player('B'), player('C'), player('D')] });
+    feed.announce('A', 'B', undefined, undefined, undefined, undefined, 1000);
+    feed.announce('A', 'C', undefined, undefined, undefined, undefined, 3000);
+    feed.announce('A', 'D', undefined, undefined, undefined, undefined, 4000);
+    expect(notices(sent).map((n) => n.text)).toContain('A double kill (2)');
+    expect(notices(sent).map((n) => n.text)).toContain('A triple kill (3)');
+    expect(roster.get('A')!.streak).toBe(3); // multi is a notice — streak still counts per life
+  });
+
+  it('the multi chain resets outside the window', () => {
+    const { feed, sent } = rig({ roster: [player('A'), player('B'), player('C')] });
+    feed.announce('A', 'B', undefined, undefined, undefined, undefined, 1000);
+    feed.announce('A', 'C', undefined, undefined, undefined, undefined, 1000 + 6001);
+    expect(notices(sent).some((n) => /kill \d/.test(n.text ?? ''))).toBe(false);
+  });
+
+  it('a nearby teammate comments on a brag kill', () => {
+    tauntRng(() => 0); // every roll lands — chatter, spectate pick, kind gate
+    const near = { x: 0, y: 0, z: 0 };
+    const { feed, sent } = rig({
+      roster: [
+        player('A', 0, { team: 'alpha', position: near }),
+        player('B', 0, { team: 'bravo', position: { x: 5, y: 0, z: 0 } }),
+        player('BOT-ally', 0, { team: 'alpha', position: { x: 10, y: 0, z: 10 } }),
+        player('BOT-far', 0, { team: 'alpha', position: { x: 500, y: 0, z: 0 } }),
+      ],
+    });
+    // air>=0.5 + explosive shell = the Tribes skill kill
+    feed.announce('A', 'B', WeaponType.Disc, undefined, 1, undefined, 1000);
+    const cheers = sent.filter((m) => m.type === 'chat' && m.playerId === 'BOT-ally');
+    expect(cheers.length).toBe(1);
+    expect(sent.filter((m) => m.type === 'chat' && m.playerId === 'BOT-far').length).toBe(0);
+  });
+
+  it('a routine frag draws no audience', () => {
+    tauntRng(() => 0);
+    const { feed, sent } = rig({
+      roster: [
+        player('A', 0, { team: 'alpha', position: { x: 0, y: 0, z: 0 } }),
+        player('B', 0, { team: 'bravo', position: { x: 5, y: 0, z: 0 } }),
+        player('BOT-ally', 0, { team: 'alpha', position: { x: 10, y: 0, z: 10 } }),
+      ],
+    });
+    feed.announce('A', 'B');
+    expect(sent.filter((m) => m.type === 'chat' && m.playerId === 'BOT-ally').length).toBe(0);
   });
 
   it('environment kills stay silent — no credit, no notice', () => {
@@ -88,7 +138,7 @@ describe('KillFeed.announce', () => {
   });
 
   it('disposed feeds drain queued taunts', () => {
-    const { feed, sent } = rig({ roster: [player('BOT-1'), player('B')], delay: 99999 });
+    const { feed, sent } = rig({ roster: [player('BOT-1'), player('B')], delay: 99_999 });
     feed.announce('BOT-1', 'B');
     feed.dispose();
     // pending cleared — nothing fires later (can't observe a cleared
