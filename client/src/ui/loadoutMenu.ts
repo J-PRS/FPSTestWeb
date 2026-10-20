@@ -25,6 +25,7 @@ const BELT_LABELS: Record<BeltItem, string> = {
   conc: 'Concussion Grenade',
   remoterailgun: 'Remote Railgun', armornade: 'Armor Grenade',
   proxy: 'Proxy Grenade', satchel: 'Satchel Charge (2)', heal: 'Heal Grenade',
+  hook: 'Hook',
 };
 
 // Chip width is measured, not hardcoded — canvas-measure the widest
@@ -140,8 +141,9 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
     [{ v: 'pistol', label: 'Pistol' },
      { v: 'revolver', label: 'Revolver' },
      { v: 'shotgun', label: 'Shotgun' },
-     { v: 'repair', label: 'Repair Tool' }],
-    (v): void => deps.lazyPlayer().setSidearm(v as 'pistol' | 'revolver' | 'shotgun' | 'repair'),
+     { v: 'repair', label: 'Repair Tool' },
+     { v: 'lance', label: 'Shocklance' }],
+    (v): void => deps.lazyPlayer().setSidearm(v as 'pistol' | 'revolver' | 'shotgun' | 'repair' | 'lance'),
   );
   sidearm.cell.append(ui.sidearmDrop.el);
 

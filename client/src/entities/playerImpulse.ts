@@ -100,13 +100,15 @@ export function applyKnockback(p: Player, from: THREE.Vector3, force: number): v
     p.syncMovement();
   }
 
-export function applyPull(p: Player, to: THREE.Vector3, force: number): void {
+export function applyPull(p: Player, to: THREE.Vector3, force: number, yank = false): void {
     const f = force / CLASS_STATS[p.appliedClass].mass;
     if (!Number.isFinite(f) || !finiteVec(to)) { inv('impulse-finite', false, { force, to }); return; }
     logger.info('impulse: pull', { force: Number(f.toFixed(1)), to: { x: Number(to.x.toFixed(1)), y: Number(to.y.toFixed(1)), z: Number(to.z.toFixed(1)) }, velY: Number(p.vel.y.toFixed(1)) });
     const dir = to.clone().sub(p.pos).normalize();
     p.vel.addScaledVector(dir, f);
-    p.vel.y += f * 0.3;
+    // Disc-suck pulls pop +0.3 up off the horizontal; a rope dart flies
+    // AT the anchor — its y already lives inside dir, pop would overshoot.
+    if (!yank) {p.vel.y += f * 0.3;}
     p.onGround = false;
     p.syncMovement();
   }

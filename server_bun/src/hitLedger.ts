@@ -53,10 +53,6 @@ export class HitLedger {
     if (result.killed) {c.hb('kill');}
     c.deps.emit?.({ type: 'hit', targetId, shooterId, damage });
     const src = opts.weapon === undefined ? opts.label : `w${opts.weapon}`;
-    if (opts.weapon === 18) {
-      const target = c.playerManager.getPlayer(targetId);
-      console.log('STICKY HIT:', 'shooter=', shooterId, 'target=', targetId, 'dmg=', damage, 'targetHP_before=', (target ? target.health + damage : '?'), 'killed=', result.killed, 'label=', opts.label, 'dist=', opts.extra?.dist);
-    }
     this.noteHit(c, shooterId, targetId, src, damage, result.killed, { dist: opts.extra?.dist as number | undefined, pos: opts.extra?.pos as { x: number; y: number; z: number } | undefined, shotId: opts.shotId });
     if (!result.killed) {
       // Surviving victim pops min(banked, damage) of their LG charge —
@@ -173,7 +169,7 @@ export class HitLedger {
     const shooterStreak = shooterId === 'environment' ? undefined
       : (c.playerManager.getPlayer(shooterId)?.streak ?? 0) + 1;
     c.broadcast(eventPayload(WORLD_MODEL.player!, 'playerKill', 'targetId', targetId, { shooterId, weapon: opts.weapon, streak: shooterStreak, air: opts.air, steal }) as ServerMessage);
-    c.killFeed.announce(shooterId, targetId, opts.weapon, opts.label, opts.air, endedStreak);
+    c.killFeed.announce(shooterId, targetId, opts.weapon, opts.label, opts.air, endedStreak, simNow());
     c.deps.emit?.({ type: 'kill', targetId, shooterId });
     c.respawner.schedule(targetId);
   }

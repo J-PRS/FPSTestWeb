@@ -4,7 +4,7 @@ import { POWERUP } from '../../shared/pickups.ts';
 
 import { logger } from './logger.ts';
 import { classCanFire } from '../../shared/botClasses.ts';
-import { serverSimmed, BELT_THROW_WEAPONS, beltThrowCost, WeaponType, getWeaponStats, REPAIR_RANGE, WEAPON_FIRE_INTERVAL_S } from '../../shared/weapons.ts';
+import { serverSimmed, BELT_THROW_WEAPONS, beltThrowCost, WeaponType, getWeaponStats, REPAIR_RANGE, WEAPON_FIRE_INTERVAL_S, LANCE_RANGE, LANCE_CADENCE_S } from '../../shared/weapons.ts';
 import { finiteVec } from '../../shared/wire.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
 import { ColliderIndex } from '../../shared/solidWorld.ts';
@@ -383,6 +383,23 @@ w.n += 1;
         { x: mpos.x, y: mpos.y + 1.6, z: mpos.z },
         { x: dir.x / l, y: dir.y / l, z: dir.z / l }, LG_RANGE));
     }
+    // Beam intent (Shocklance): one zap per pull-out cycle — the intent
+    // IS the shot; the honest ray resolves the contact and pays the flat
+    // lance damage. No ramp/bank economy — that's the LG's business.
+    if (msg.weaponType === WeaponType.Shocklance && dir && this.deps.beamSweep) {
+      const lastL = this.lastLance.get(playerId) ?? 0;
+      // The gate sits 150ms UNDER the client's cadence (the old pair was
+      // 1.0s client / 850ms server) — arrival jitter must never refuse a
+      // shot the honest trigger just released.
+      if (now - lastL < LANCE_CADENCE_S * 1000 - 150) { this.hb('drop.lanceCadence'); return; }
+      this.lastLance.set(playerId, now);
+      player.protectedUntil = simMs(0);
+      const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
+      const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
+      this.lancePay(playerId, player, this.deps.beamSweep(playerId,
+        { x: mpos.x, y: mpos.y + 1.6, z: mpos.z },
+        { x: dir.x / l, y: dir.y / l, z: dir.z / l }, LANCE_RANGE));
+    }
     // Beam intent (Repair): same shape — the tick is the intent and the
     // server names the weld target off the honest ray, so the per-tick
     // `repair` claim isn't needed. Falls through to the cosmetic relay.
@@ -481,7 +498,7 @@ win.violations += 1;
     if (d2 > 60 * 60) { this.hb('drop.slamFar'); this.reject(playerId, 'Slam', `landing ${Math.sqrt(d2).toFixed(0)}m from shadow`, undefined, WeaponType.Slam); return `landing ${Math.sqrt(d2).toFixed(0)}m from shadow`; }
     const speed = Math.hypot(player.velocity.x, player.velocity.y, player.velocity.z);
     const power = Math.min(Math.max((speed - 30) / 50, 0.2), 1.8);
-    this.blast.serverBlast(playerId, msg.position, WeaponType.Slam, null, undefined, undefined, power);
+    this.blast.serverBlast(playerId, msg.position, WeaponType.Slam, null, { power });
     this.hb('slam.server');
     return true;
   }
@@ -499,8 +516,14 @@ win.violations += 1;
 
   /** Server-owned blast — the room's projectile/deployable sims decided
    *  where this pops, so the shooter-distance sanity check doesn't apply. */
-  serverBlast(ownerId: string, position: Vec3, weaponType: number, excludeTargetId?: string | null, shotId?: string, attribWeaponType?: number): void {
-    this.blast.serverBlast(ownerId, position, weaponType, excludeTargetId, shotId, attribWeaponType);
+  serverBlast(ownerId: string, position: Vec3, weaponType: number, excludeTargetId?: string | null, opts?: { shotId?: string; attribWeaponType?: number; power?: number; air?: number }): void {
+    this.blast.serverBlast(ownerId, position, weaponType, excludeTargetId, opts);
+  }
+
+  /** Rope-dart contact — the projectile sim resolved the hook's connect
+   *  point; blast owns the impulse. */
+  grapple(ownerId: string, anchor: Vec3, victimId: string | null): void {
+    this.blast.grapple(ownerId, anchor, victimId);
   }
 
   // Client-reported environmental damage (crawler pounces, etc.) — self-only,
@@ -589,6 +612,23 @@ win.violations += 1;
     if (c.crawlerId !== undefined) {this.creatureTick(playerId, 'crawl', c.crawlerId, c.contact, s);}
     if (c.chainBallId !== undefined && c.chainContact) {this.creatureTick(playerId, 'ball', c.chainBallId, c.chainContact, LG_CHAIN_DMG_SCALE * s);}
     if (c.chainCrawlerId !== undefined && c.chainContact) {this.creatureTick(playerId, 'crawl', c.chainCrawlerId, c.chainContact, LG_CHAIN_DMG_SCALE * s);}
+  }
+
+  /** Shocklance — flat zap on the swept contact: player pays
+   *  directDamage (perk-scaled), creatures take the same number through
+   *  the standard hit deps. No ramp — the cadence gate IS the economy. */
+  private lastLance = new Map<string, number>();
+
+  private lancePay(playerId: string, player: PlayerState, c: BeamContact | null): void {
+    if (!c) {return;}
+    const stats = getWeaponStats(WeaponType.Shocklance);
+    const dmg = stats.directDamage * perkMods(player.perk).directDamage * (c.dmgScale ?? 1);
+    if (c.playerId) {
+      this.serverHit(playerId, c.playerId, dmg, 'Shocklance', { hb: 'beam.lance', weapon: WeaponType.Shocklance });
+      return;
+    }
+    if (c.ballId !== undefined) {this.deps.ballHit?.(playerId, c.ballId, dmg);}
+    if (c.crawlerId !== undefined) {this.deps.crawlerHit?.(playerId, c.crawlerId, dmg);}
   }
 
   private creatureTick(playerId: string, kind: 'ball' | 'crawl', id: number, at: Vec3, scale: number): void {
