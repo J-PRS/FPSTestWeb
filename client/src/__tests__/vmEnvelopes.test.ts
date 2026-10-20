@@ -21,6 +21,7 @@ const mkHost = (built: number[]): EnvHost => {
     flashMesh: new THREE.Group(),
     flashMesh2: new THREE.Group(),
     fistGroup: new THREE.Group(),
+    hammerGroup: new THREE.Group(),
     shieldShells: [],
     shellColor: 0,
     setShield: (): void => { return; },

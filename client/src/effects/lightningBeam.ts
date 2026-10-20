@@ -77,6 +77,11 @@ export class LightningBeam {
   /** 1 while the tip is on a damageable thing — drives the arc sub-beam
    *  and the core swell, the "this is HURTING them" read. */
   private contact = 0;
+  /** Per-instance violence knobs — a one-shot discharge (shocklance) wants
+   *  fat wild strands and a longer burn; the LG keeps the defaults. */
+  girth = 1;
+  jagMul = 1;
+  fadeTime = FADE_TIME;
 
   constructor(scene: THREE.Scene, tint?: { glow: number; core: number; chain: number; hit: number; sparkTop: number }) {
     buildBeam(this, scene, tint);
@@ -168,7 +173,7 @@ export class LightningBeam {
 
   update(dt: number): void {
     if (this.fade <= 0) { this.group.visible = false; this.chainLive = false; return; }
-    this.fade = Math.max(0, this.fade - dt / FADE_TIME);
+    this.fade = Math.max(0, this.fade - dt / this.fadeTime);
     const f = this.fade;
     const c = this.charge;
     const k = this.contact;
@@ -244,7 +249,7 @@ export class LightningBeam {
     // Degenerate (point-blank) beam: any basis works, just don't NaN
     if (len < 0.05) { _side.set(1, 0, 0); _up.set(0, 1, 0); }
     else {perpBasis(_dir, _side, _up);}
-    const jagAmp = JAG * Math.min(1, len / 30);
+    const jagAmp = JAG * this.jagMul * Math.min(1, len / 30);
     const pointAt = (t: number, p: THREE.Vector3): THREE.Vector3 => {
       if (useBend && t > bendT) {return p.copy(this.bend).addScaledVector(legB, (t - bendT) / (1 - bendT));}
       if (useBend) {return p.copy(this.from).addScaledVector(_segDir.copy(this.bend).sub(this.from), t / bendT);}
@@ -257,8 +262,8 @@ export class LightningBeam {
         .addScaledVector(_side, this.jagSide[i]! * amp)
         .addScaledVector(_up, this.jagUp[i]! * amp);
     }
-    this.writeRibbon(this.core, CORE_W * (1 + c * 1.6 + k * 0.8));
-    this.writeRibbon(this.glow, GLOW_W * (1 + c * 1.4));
+    this.writeRibbon(this.core, CORE_W * this.girth * (1 + c * 1.6 + k * 0.8));
+    this.writeRibbon(this.glow, GLOW_W * this.girth * (1 + c * 1.4));
     // Damage arc: same shaft, nearly double the jag — it reads as the
     // bolt tearing INTO the contact, not just reaching it
     if (k > 0) {

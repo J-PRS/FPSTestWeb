@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { WeaponType } from '../../../../shared/weapons.js';
 import { getMuzzleFlashTexture } from '../../effects/glowTexture.js';
-import { mkPlasmaCannon, mkPlasmaGun, mkSprinkler, mkRailgun, mkLightningGun } from './weaponsGeoEnergy.js';
+import { mkPlasmaCannon, mkPlasmaGun, mkSprinkler, mkRailgun, mkLightningGun, mkShocklance } from './weaponsGeoEnergy.js';
 import { mkPistol, mkRevolver, mkRepair } from './weaponsGeoSidearm.js';
 import { mkBolt, mkDisc, mkChaingun, mkMortar, mkGrenadeLauncher, mkSticky, mkFlak, mkShotgun, mkCannon, mkRpg, mkMrv, mkBombard } from './weaponsGeoBallistic.js';
+import { darkMat } from './weaponKit.js';
 
 // Procedural weapon geometry — every viewmodel gun built from primitives.
 // Extracted from ViewModel's constructor; returns the built maps so the
@@ -36,6 +37,7 @@ export const MODEL_BUILDERS: [number, () => THREE.Group][] = [
   [WeaponType.Repair, mkRepair],
   [WeaponType.MRVLauncher, mkMrv],
   [WeaponType.Bombard, mkBombard],
+  [WeaponType.Shocklance, mkShocklance],
 ];
 
 export function buildWeaponMeshes(parent: THREE.Group, muzzleZ: Record<number, number>): WeaponMeshes {
@@ -69,6 +71,7 @@ export function buildWeaponMeshes(parent: THREE.Group, muzzleZ: Record<number, n
 
 export interface HandFlash {
   fistGroup: THREE.Group;
+  hammerGroup: THREE.Group;
   flashMat: THREE.MeshBasicMaterial;
   flashMesh: THREE.Mesh;
   flashMesh2: THREE.Mesh;
@@ -77,6 +80,31 @@ export interface HandFlash {
 // Fist flight path (group-local space): off-screen bottom-left → jab center
 export const FIST_OFF = new THREE.Vector3(-0.42, -0.34, -0.5);
 export const FIST_JAB = new THREE.Vector3(-0.02, -0.14, -0.62);
+// Rest pose — the punch env sweeps rotation.z through the chop and must
+// know where to land back.
+export const FIST_ROT = new THREE.Euler(0.15, 0.25, -0.1);
+
+// Warhammer swing path (viewmodel-group space). The HANDLE leads: the
+// grip sweeps right→left across the frame and the head DRAGS behind it
+// (overlapping action), then whips into the contact a beat later. That
+// lag is what makes a rigid prop read as a swing instead of a slide —
+// the head arrives at the crosshair last, and it is arriving fast.
+//
+// The entry is handle-first: the grip sits close to the camera in the
+// lower right with the head still off-frame, so the swing comes in from
+// the right the way a hand sweeps across the view.
+//
+// Euler is (pitch, yaw, roll) with the head on the local -Z: pitch
+// positive lifts the head (it hangs above the grip), yaw negative puts
+// it right of the hand.
+export const HAMMER_ENTER = new THREE.Vector3(0.05, 0.00, -0.01);
+export const HAMMER_COCK = new THREE.Vector3(0.01, 0.02, 0.03);
+export const HAMMER_CONTACT = new THREE.Vector3(-0.15, 0.10, -0.07);
+export const HAMMER_EXIT = new THREE.Vector3(-0.33, -0.02, -0.05);
+export const HAMMER_ROT_ENTER = new THREE.Euler(0.62, -0.75, 0.20);
+export const HAMMER_ROT_COCK = new THREE.Euler(0.81, -0.38, 0.10);
+export const HAMMER_ROT_CONTACT = new THREE.Euler(0.22, 0.32, -0.25);
+export const HAMMER_ROT_EXIT = new THREE.Euler(-0.41, 0.85, -0.55);
 
 export function buildHandAndFlash(parent: THREE.Group): HandFlash {
 // Muzzle flash — single billboard quad at the bore, additive, ~70ms.
@@ -117,8 +145,57 @@ wrist.rotation.x = Math.PI / 2;
 wrist.position.set(0, -0.02, 0.11);
 fistGroup.add(wrist);
 fistGroup.position.copy(FIST_OFF);
-fistGroup.rotation.set(0.15, 0.25, -0.1);
+fistGroup.rotation.copy(FIST_ROT);
 fistGroup.visible = false;
 parent.add(fistGroup);
-  return { fistGroup, flashMat, flashMesh, flashMesh2 };
+
+// Warhammer — the melee swing prop. Sized for the SCREEN, not for a
+// real workshop: at true scale (8cm head, 14mm haft) it read as a
+// stick flying around the view, so the head is chunky and the haft
+// short — the head leads the swing, the haft trails it. The group
+// origin is the GRIP: the swing env flies it through the staged
+// HAMMER_* poses and it owns the frame (the gun is holstered).
+const woodMat = new THREE.MeshLambertMaterial({ color: 0x5A_3C_24 });
+const steelMat = new THREE.MeshLambertMaterial({ color: 0xC8_D0_D8, emissive: 0x2A_2E_33 });
+const hammerGroup = new THREE.Group();
+// Haft — 38cm of oak, tapering toward the head. Deliberately short: the
+// head is the thing the eye tracks, and a long lever throws it out of
+// frame at the top of the swing.
+const haft = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.034, 0.38, 8), woodMat);
+haft.rotation.x = Math.PI / 2;
+haft.position.z = -0.16;
+hammerGroup.add(haft);
+// Leather grip wrap — reads as the hand end of the haft.
+const wrap = new THREE.Mesh(new THREE.CylinderGeometry(0.037, 0.037, 0.12, 8), knuckleMat);
+wrap.rotation.x = Math.PI / 2;
+wrap.position.z = -0.03;
+hammerGroup.add(wrap);
+// Steel langet running from the haft up into the head.
+const langet = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.035, 0.16), steelMat);
+langet.position.z = -0.32;
+hammerGroup.add(langet);
+// The head — the whole point of the prop. 26cm across, ~15% of the
+// frame width at the cock.
+const head = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.2, 0.3), steelMat);
+head.position.z = -0.44;
+hammerGroup.add(head);
+// Striking face — darker, slightly proud of the head.
+const face = new THREE.Mesh(new THREE.BoxGeometry(0.275, 0.215, 0.04), darkMat);
+face.position.z = -0.605;
+hammerGroup.add(face);
+// Rear peen + top spike — the warhammer silhouette.
+const peen = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.14, 0.12), darkMat);
+peen.position.z = -0.25;
+hammerGroup.add(peen);
+const spike = new THREE.Mesh(new THREE.ConeGeometry(0.042, 0.16, 6), steelMat);
+spike.position.set(0, 0.16, -0.44);
+hammerGroup.add(spike);
+const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.032, 8, 6), steelMat);
+pommel.position.z = 0.05;
+hammerGroup.add(pommel);
+hammerGroup.position.copy(HAMMER_ENTER);
+hammerGroup.rotation.copy(HAMMER_ROT_ENTER);
+hammerGroup.visible = false;
+parent.add(hammerGroup);
+  return { fistGroup, hammerGroup, flashMat, flashMesh, flashMesh2 };
 }
