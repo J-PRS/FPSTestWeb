@@ -289,12 +289,16 @@ function meleeSwingFx(deps: CombatDeps, e: FireArgs, fxPos: THREE.Vector3, groun
   const stats = getWeaponStats(WeaponType.Melee);
   const landed = hitAt.length > 0;
   deps.lazyViewModel()?.swing(landed); // landed = connect dwell — the hammer stops on them
-  // The slash arc — the actual "swing" read. One smear along the chop
-  // (the hammer smacks sideways), pinned to the camera so it can't lag
-  // behind at speed.
-  swingArcView(deps.lazyScene(), deps.lazyCamera());
-  // The whoosh belongs to the strike, not to the press.
-  window.setTimeout((): void => { sfx.shoot(WeaponType.Melee); }, SWING_STRIKE_T * 1000);
+  // The whoosh and the slash arc belong to the STRIKE, not to the press:
+  // the smear appearing a frame after the keypress read as a white flash
+  // that landed before the hammer did.
+  window.setTimeout((): void => {
+    sfx.shoot(WeaponType.Melee);
+    // The slash arc — the actual "swing" read. One smear along the chop
+    // (the hammer smacks sideways), pinned to the camera so it can't lag
+    // behind at speed. It peaks with the contact and fades after it.
+    swingArcView(deps.lazyScene(), deps.lazyCamera());
+  }, SWING_STRIKE_T * 1000);
   window.setTimeout((): void => {
     const at = landed ? hitAt[0]! : (groundHit ?? fxPos);
     deps.world.explosions.push(new Explosion(

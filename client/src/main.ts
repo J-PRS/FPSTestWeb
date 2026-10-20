@@ -1160,6 +1160,9 @@ init().then(async (): Promise<void> => {
   // In-game log mirror — subscribes to Logger once so every later line
   // (and the Alt+Q/backquote/DEBUG-toggle reveals) has a live feed.
   initLogPanel();
+  // Same feed drives the conn-banner complaint slot — every WARN+ line
+  // (ghost shells, dead lanes, parity misses) flashes live mid-match.
+  Logger.setComplaintListener((line): void => { hud.complaint(line); });
   installOverlapAudit();
   // Revealing the log panel reshuffles the corner stack — audit the
   // layout once the reveal frame lands.

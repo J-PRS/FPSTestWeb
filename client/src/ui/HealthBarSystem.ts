@@ -22,9 +22,11 @@ interface HealthBar {
   life: number;
   maxHealth: number;
   currentHealth: number;
+  currentArmor: number;
   el: HTMLDivElement;
   bgEl: HTMLDivElement;
   healthEl: HTMLDivElement;
+  armorEl: HTMLDivElement;
   whiteEl: HTMLDivElement;
 }
 
@@ -46,10 +48,12 @@ export interface RepairTarget {
 export class HealthBarSystem {
   private bars: Map<string, HealthBar> = new Map();
   private ballBars: Map<Targetable, HealthBar> = new Map();
-  // Last authoritative health per player — persists beyond bar lifetime so
+  // Last authoritative health per player - persists beyond bar lifetime so
   // damage predictions accumulate across hits spaced wider than BAR_LIFETIME
   private knownHealth: Map<string, number> = new Map();
-  // Per-player max from the wire armorClass — a heavy bar drawn against a
+  // Last authoritative armor per player - shown as yellow segment on the bar
+  private knownArmor: Map<string, number> = new Map();
+  // Per-player max from the wire armorClass - a heavy bar drawn against a
   // flat 100 reads full until the target is under half health.
   private knownMax: Map<string, number> = new Map();
   private container: HTMLDivElement;
@@ -98,6 +102,12 @@ export class HealthBarSystem {
         border-radius: 1px;
         display: none;
       }
+      .enemy-hpbar .armor.player-armor {
+        top: 0; height: 100%;
+        background: rgba(255, 200, 50, 0.9);
+        border-radius: 1px;
+        display: none;
+      }
     `;
     document.head.append(style);
 
@@ -106,8 +116,8 @@ export class HealthBarSystem {
     document.body.append(this.container);
   }
 
-  spawn(playerId: string, damage: number, health: number): void {
-    this.upsertBar(playerId, damage, health);
+  spawn(playerId: string, damage: number, health: number, armor?: number): void {
+    this.upsertBar(playerId, damage, health, armor);
   }
 
   // Repair-weld bars — keyed by the item itself; health/armor read LIVE
@@ -139,14 +149,17 @@ export class HealthBarSystem {
         bar: {
           damage: 0, flashTimer: 0, delayTimer: 0, life: 0,
           maxHealth: item.v.maxHealth, currentHealth: item.v.health,
+          currentArmor: item.v.armor ?? 0,
           el, bgEl: el.querySelector('.bg')!, healthEl: el.querySelector('.health')!,
+          armorEl,
           whiteEl: el.querySelector('.white')!,
         },
         armorEl,
       };
       this.repairBars.set(item, r);
     }
-    r.bar.life = linger;
+    const rr = this.repairBars.get(item)!;
+    rr.bar.life = linger;
   }
 
   private removeRepair(item: RepairTarget): void {
@@ -170,22 +183,27 @@ export class HealthBarSystem {
     this.upsertBar(playerId, damage, health);
   }
 
-  private upsertBar(playerId: string, damage: number, health: number): void {
+  private upsertBar(playerId: string, damage: number, health: number, armor?: number): void {
     this.knownHealth.set(playerId, health);
+    if (armor !== undefined) {this.knownArmor.set(playerId, armor);}
     const bar = this.bars.get(playerId);
     if (bar) {
-      this.resetBar(bar, damage, health);
+      this.resetBar(bar, damage, health, armor);
       return;
     }
-    this.bars.set(playerId, this.createHealthBar(damage, health, this.knownMax.get(playerId) ?? MAX_HEALTH, playerId));
+    this.bars.set(playerId, this.createHealthBar(damage, health, this.knownMax.get(playerId) ?? MAX_HEALTH, playerId, undefined, armor));
   }
 
-  update(dt: number, players: Map<string, { position: { x: number; y: number; z: number }; isDead: boolean; health?: number; team?: string }>, remotePlayers?: Map<string, { position: THREE.Vector3; isDead: boolean }>, _balls?: Ball[], localTeam?: string): void {
-    // Sync authoritative health from the server-fed player map (20Hz
-    // tickUpdate + playerHit) — keeps predictions anchored even while bars
-    // are dormant, and self-heals on respawn (health back to max).
+  update(dt: number, players: Map<string, { position: { x: number; y: number; z: number }; isDead: boolean; health?: number; armor?: number; team?: string }>, remotePlayers?: Map<string, { position: THREE.Vector3; isDead: boolean }>, _balls?: Ball[], localTeam?: string): void {
+    // Sync authoritative health + armor from the server-fed player map
     for (const [playerId, state] of players) {
-      if (state.health !== undefined) {this.knownHealth.set(playerId, state.health);}
+      if (state.health !== undefined) {
+        const prev = this.knownHealth.get(playerId) ?? 0;
+        this.knownHealth.set(playerId, state.health);
+        // Reset armor on respawn (health jumped back to max)
+        if (state.health > prev + 20) {this.knownArmor.set(playerId, 0);}
+      }
+      if (state.armor !== undefined) {this.knownArmor.set(playerId, state.armor);}
     }
 
     const cameraPos = _cameraPos;
@@ -219,7 +237,7 @@ export class HealthBarSystem {
     }
   }
 
-  private updatePlayerBars(dt: number, players: Map<string, { position: { x: number; y: number; z: number }; isDead: boolean; health?: number; team?: string }>, remotePlayers: Map<string, { position: THREE.Vector3; isDead: boolean }> | undefined, cameraPos: THREE.Vector3, cameraDir: THREE.Vector3, localTeam?: string): void {
+  private updatePlayerBars(dt: number, players: Map<string, { position: { x: number; y: number; z: number }; isDead: boolean; health?: number; armor?: number; team?: string }>, remotePlayers: Map<string, { position: THREE.Vector3; isDead: boolean }> | undefined, cameraPos: THREE.Vector3, cameraDir: THREE.Vector3, localTeam?: string): void {
     for (const [playerId, bar] of this.bars) {
       const playerState = players.get(playerId);
       const rp = remotePlayers?.get(playerId);
@@ -236,7 +254,12 @@ export class HealthBarSystem {
       // Wire class decides the pool — class bonuses stay invisible until
       // the roster carries it, which still beats a flat 100 for heavies.
       bar.maxHealth = this.maxFor(playerId, (rp as { armorClass?: string } | undefined)?.armorClass);
-      // pos is EYE height — a small margin above it is already over the head.
+      // Sync health + armor from authoritative state
+      const kh = this.knownHealth.get(playerId);
+      if (kh !== undefined) {bar.currentHealth = kh;}
+      const ka = this.knownArmor.get(playerId);
+      if (ka !== undefined) {bar.currentArmor = ka;}
+      // pos is EYE height - a small margin above it is already over the head.
       // renderLift rides along: the slope lift raises the mesh, not the
       // logical position, so anchoring raw eye sinks the bar mid-body.
       const targetPos = _targetPos.set(pos.x, pos.y + ((rp as { renderLift?: number } | undefined)?.renderLift ?? 0) + 0.5, pos.z);
@@ -323,9 +346,17 @@ export class HealthBarSystem {
     health: number,
     maxHealth: number,
     playerId?: string,
-    ball?: Targetable
+    ball?: Targetable,
+    armor?: number
   ): HealthBar {
     const el = this.createBarEl();
+    // Add armor element (yellow segment) if not already present
+    let armorEl = el.querySelector('.armor') as HTMLDivElement | null;
+    if (!armorEl) {
+      armorEl = document.createElement('div');
+      armorEl.className = 'armor player-armor';
+      el.append(armorEl);
+    }
     return {
       playerId,
       ball,
@@ -335,14 +366,16 @@ export class HealthBarSystem {
       life: BAR_LIFETIME,
       maxHealth,
       currentHealth: health,
+      currentArmor: armor ?? 0,
       el,
       bgEl: el.querySelector('.bg')!,
       healthEl: el.querySelector('.health')!,
+      armorEl,
       whiteEl: el.querySelector('.white')!,
     };
   }
 
-  private resetBar(bar: HealthBar, damage: number, health: number): void {
+  private resetBar(bar: HealthBar, damage: number, health: number, armor?: number): void {
     if (bar.delayTimer > 0) {
       bar.damage += damage;
     } else {
@@ -352,6 +385,7 @@ export class HealthBarSystem {
     bar.delayTimer = DELAY_DURATION;
     bar.life = BAR_LIFETIME;
     bar.currentHealth = health;
+    if (armor !== undefined) {bar.currentArmor = armor;}
     bar.el.style.display = 'block';
   }
 
@@ -375,10 +409,20 @@ export class HealthBarSystem {
       bar.flashTimer -= dt;
     }
 
-    const healthRatio = Math.max(0, Math.min(1, bar.currentHealth / bar.maxHealth));
+    const armor = bar.currentArmor ?? 0;
+    const total = bar.currentHealth + armor;
+    const totalRatio = Math.max(0, Math.min(1, total / bar.maxHealth));
+    const healthRatio = Math.max(0, Math.min(totalRatio, bar.currentHealth / bar.maxHealth));
+    const armorRatio = Math.max(0, totalRatio - healthRatio);
     const damageRatio = Math.min(1 - healthRatio, bar.damage / bar.maxHealth);
 
     bar.healthEl.style.width = `${BAR_WIDTH * healthRatio}px`;
+    if (bar.armorEl) {
+      bar.armorEl.style.display = armor > 0.5 ? 'block' : 'none';
+      bar.armorEl.style.left = `${BAR_WIDTH * healthRatio}px`;
+      bar.armorEl.style.width = `${BAR_WIDTH * armorRatio}px`;
+      bar.armorEl.style.background = 'rgba(255, 200, 50, 0.9)';
+    }
 
     if ((bar.flashTimer > 0 || bar.delayTimer > 0) && damageRatio > 0) {
       // oxlint-disable-next-line init-declarations -- assigned later

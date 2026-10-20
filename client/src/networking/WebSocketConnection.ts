@@ -46,7 +46,12 @@ export class WebSocketConnection {
   // else — claims and one-shot intents like deploy/shot/skillUse — is only
   // worth sending inside STALE_MS; older than that it references a sim
   // moment that no longer exists and the server would reject it anyway.
-  private static readonly KEEP_NEWEST = new Set(['inputMove', 'position', 'teleport', 'jump', 'jetpack', 'shotFired']);
+  // No 'shotFired': it's NOT a replaceable state update — each queued
+  // fire is a distinct shell the server must either spawn or reject.
+  // KEEP_NEWEST evicted earlier fires when a newer one queued behind a
+  // dead lane: the ghost-shell class (predicted hit, server never saw
+  // the intent). It rides the default STALE_MS window like aoeShot.
+  private static readonly KEEP_NEWEST = new Set(['inputMove', 'position', 'teleport', 'jump', 'jetpack']);
   // No 'pong': a queued pong's timestamp goes stale in the queue — the
   // echo arrives with seconds of phantom transit and poisons the server's
   // transit EMA; a missing RTT sample costs nothing by comparison.

@@ -187,7 +187,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
 
     // Non-lethal hits don't trigger death animation
     logger.info(`Remote player ${targetId} hit for ${damage} damage by ${shooterId} (health: ${health})`);
-    deps.lazyHealthBarSystem().spawn(targetId, damage, health);
+    deps.lazyHealthBarSystem().spawn(targetId, damage, health, armor);
     deps.world.remotePlayers.get(targetId)?.flinch();
     // Server-confirmed hit on a remote: flash the marker even when client
     // prediction didn't (e.g. lag-comp rewound the victim into the shot).

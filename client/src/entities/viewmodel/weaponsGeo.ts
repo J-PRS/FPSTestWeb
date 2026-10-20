@@ -84,27 +84,29 @@ export const FIST_JAB = new THREE.Vector3(-0.02, -0.14, -0.62);
 // know where to land back.
 export const FIST_ROT = new THREE.Euler(0.15, 0.25, -0.1);
 
-// Warhammer swing path (viewmodel-group space). The HANDLE leads: the
-// grip sweeps right→left across the frame and the head DRAGS behind it
-// (overlapping action), then whips into the contact a beat later. That
-// lag is what makes a rigid prop read as a swing instead of a slide —
-// the head arrives at the crosshair last, and it is arriving fast.
+// Warhammer swing path (viewmodel-group space). The HANDLE leads, the way
+// a sabre cut does: the hilt sweeps right→left across the frame and the
+// head is DRAGGED behind it (overlapping action — the base of the chain
+// moves, the far end lags), then whips through last. That lag is what
+// makes a rigid prop read as a swing instead of a slide.
 //
 // The entry is handle-first: the grip sits close to the camera in the
 // lower right with the head still off-frame, so the swing comes in from
-// the right the way a hand sweeps across the view.
+// the right the way a hand sweeps across the view. The head enters from
+// the right edge a beat later and is dragged down-left into the
+// crosshair, where the whip lands it.
 //
 // Euler is (pitch, yaw, roll) with the head on the local -Z: pitch
 // positive lifts the head (it hangs above the grip), yaw negative puts
 // it right of the hand.
-export const HAMMER_ENTER = new THREE.Vector3(0.05, 0.00, -0.01);
-export const HAMMER_COCK = new THREE.Vector3(0.01, 0.02, 0.03);
-export const HAMMER_CONTACT = new THREE.Vector3(-0.15, 0.10, -0.07);
-export const HAMMER_EXIT = new THREE.Vector3(-0.33, -0.02, -0.05);
-export const HAMMER_ROT_ENTER = new THREE.Euler(0.62, -0.75, 0.20);
-export const HAMMER_ROT_COCK = new THREE.Euler(0.81, -0.38, 0.10);
-export const HAMMER_ROT_CONTACT = new THREE.Euler(0.22, 0.32, -0.25);
-export const HAMMER_ROT_EXIT = new THREE.Euler(-0.41, 0.85, -0.55);
+export const HAMMER_ENTER = new THREE.Vector3(-0.01, 0.18, 0.15);
+export const HAMMER_COCK = new THREE.Vector3(-0.03, 0.16, 0.15);
+export const HAMMER_CONTACT = new THREE.Vector3(-0.37, 0.18, 0.13);
+export const HAMMER_EXIT = new THREE.Vector3(-0.51, 0.06, 0.13);
+export const HAMMER_ROT_ENTER = new THREE.Euler(0.53, -0.8, 0.15);
+export const HAMMER_ROT_COCK = new THREE.Euler(0.81, -0.55, 0.1);
+export const HAMMER_ROT_CONTACT = new THREE.Euler(0.21, -0.18, -0.35);
+export const HAMMER_ROT_EXIT = new THREE.Euler(-0.25, 0.43, -0.55);
 
 export function buildHandAndFlash(parent: THREE.Group): HandFlash {
 // Muzzle flash — single billboard quad at the bore, additive, ~70ms.
@@ -158,12 +160,14 @@ parent.add(fistGroup);
 const woodMat = new THREE.MeshLambertMaterial({ color: 0x5A_3C_24 });
 const steelMat = new THREE.MeshLambertMaterial({ color: 0xC8_D0_D8, emissive: 0x2A_2E_33 });
 const hammerGroup = new THREE.Group();
-// Haft — 38cm of oak, tapering toward the head. Deliberately short: the
-// head is the thing the eye tracks, and a long lever throws it out of
-// frame at the top of the swing.
-const haft = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.034, 0.38, 8), woodMat);
+// Haft — 62cm of oak, tapering toward the head. Long on purpose: the
+// swing reads like a sabre cut, where the SHAFT is what sweeps across
+// the frame and the head is dragged along behind it. A stubby haft
+// makes the head the only thing the eye can follow, which is the
+// opposite of the read we want.
+const haft = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.034, 0.62, 8), woodMat);
 haft.rotation.x = Math.PI / 2;
-haft.position.z = -0.16;
+haft.position.z = -0.28;
 hammerGroup.add(haft);
 // Leather grip wrap — reads as the hand end of the haft.
 const wrap = new THREE.Mesh(new THREE.CylinderGeometry(0.037, 0.037, 0.12, 8), knuckleMat);
@@ -171,24 +175,24 @@ wrap.rotation.x = Math.PI / 2;
 wrap.position.z = -0.03;
 hammerGroup.add(wrap);
 // Steel langet running from the haft up into the head.
-const langet = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.035, 0.16), steelMat);
-langet.position.z = -0.32;
+const langet = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.035, 0.2), steelMat);
+langet.position.z = -0.5;
 hammerGroup.add(langet);
 // The head — the whole point of the prop. 26cm across, ~15% of the
-// frame width at the cock.
+// frame width at the contact.
 const head = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.2, 0.3), steelMat);
-head.position.z = -0.44;
+head.position.z = -0.72;
 hammerGroup.add(head);
 // Striking face — darker, slightly proud of the head.
 const face = new THREE.Mesh(new THREE.BoxGeometry(0.275, 0.215, 0.04), darkMat);
-face.position.z = -0.605;
+face.position.z = -0.885;
 hammerGroup.add(face);
 // Rear peen + top spike — the warhammer silhouette.
 const peen = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.14, 0.12), darkMat);
-peen.position.z = -0.25;
+peen.position.z = -0.55;
 hammerGroup.add(peen);
 const spike = new THREE.Mesh(new THREE.ConeGeometry(0.042, 0.16, 6), steelMat);
-spike.position.set(0, 0.16, -0.44);
+spike.position.set(0, 0.16, -0.72);
 hammerGroup.add(spike);
 const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.032, 8, 6), steelMat);
 pommel.position.z = 0.05;
