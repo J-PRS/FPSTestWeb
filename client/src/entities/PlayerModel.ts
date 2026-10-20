@@ -663,7 +663,10 @@ export class PlayerModel {
       // proxies, so the parent-local position.y isn't the world's feet.
       const feetY = this._bbMin.set(0, -this.feetOffsetY, 0).applyMatrix4(this.model.matrixWorld).y;
       const off = minBoneY - feetY;
-      if (Math.abs(off) > 0.6) {
+      // The 'hit' state IS designed displacement — Hit_Chest rocks the
+      // rig ~0.7-0.8m back off the capsule; that rise is the react, not
+      // a float bug. Every other state's margin stands.
+      if (this.anim.currentState !== 'hit' && Math.abs(off) > 0.6) {
         glitch('model-offset', { variant: this.variant, clip: this.anim.currentClipName ?? '?',
           state: this.anim.currentState, rise: Math.round(off * 10) / 10 });
       }
