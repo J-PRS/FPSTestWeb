@@ -151,7 +151,11 @@ export class RemoteAnim {
     const wFeet = w.y - classCapsule(h.armorClass).eye;
     const depth = w.lengthSq() === 0 ? 0
       : h.terrain!.getRenderedHeight(w.x, w.z) - wFeet; // (0,0,0) = no wire yet
-    if (depth > 0.4 && !h.isSimulating) {
+    // wireMs > 2s: the sample is measuring a dead lane, not server truth
+    // — a buried streak can't build on stale positions. The warn still
+    // reports wireMs so a fresh-wire burial stays distinguishable.
+    const wireFresh = Date.now() - h.lastUpdateTime < 2000;
+    if (depth > 0.4 && !h.isSimulating && wireFresh) {
       this._buriedStreak += 1;
       // Streak 8 (~2.4s): the server unbury rescues every 0.5s, but a
       // tier-skipped remote's wire can still be holding pre-rescue

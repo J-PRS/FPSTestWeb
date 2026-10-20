@@ -143,7 +143,7 @@ this.reconnectAttempts += 1;
             ? (this.config.reconnectInterval ?? 1000) * 4
             : this.config.reconnectInterval;
           if (uptime < WebSocketConnection.MIN_UPTIME_MS) {
-            logger.warn(`session died at ${Math.round(uptime)}ms uptime — backoff ${delay}ms (flap damper)`);
+            logger.warn(`session died at ${Math.round(uptime)}ms uptime (${event.code}) — backoff ${delay}ms (flap damper)`);
           } else {
             logger.info(`Reconnection attempt ${this.reconnectAttempts} in ${delay}ms`);
           }
