@@ -289,6 +289,7 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
     ],
     spawnFields: [
       { name: 'pos', wire: 'vec3', channel: 'sim' },
+      { name: 'vel', wire: 'vec3', channel: 'sim', absent: null },
       { name: 'kind', wire: 'str', channel: 'edge' },
       // Token denomination (1/3/9/27); 1 for every other kind.
       { name: 'val', wire: 'num', channel: 'edge', absent: 1 },
@@ -299,6 +300,7 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
     // gameState pickups[] row — `kind` rides optional on the snapshot.
     rosterFields: [
       { name: 'pos', wire: 'vec3', channel: 'sim' },
+      { name: 'vel', wire: 'vec3', channel: 'sim', absent: null },
       { name: 'kind', wire: 'str', channel: 'edge', absent: null },
       { name: 'val', wire: 'num', channel: 'edge', absent: 1 },
     ],
@@ -395,6 +397,7 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
         { name: 'position', wire: 'vec3', channel: 'sim' },
         { name: 'force', wire: 'num', channel: 'sim' },
         { name: 'pull', wire: 'bool', channel: 'edge', absent: null },
+        { name: 'yank', wire: 'bool', channel: 'edge', absent: null },
       ],
       playerRespawn: [
         { name: 'internalId', wire: 'str', channel: 'edge' },

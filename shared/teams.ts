@@ -103,5 +103,15 @@ export const MODES: Record<ModeId, ModeSpec> = {
 
 /** Flag carry rules — shared client/server. */
 export const FLAG_PICKUP_R = 6;     // touch distance to grab/return a flag — generous enough for a 40m/s ski-pass graze
+/** Speed-scaled touch bonus (m): a fast swept pass has no lateral
+ *  correction left — skiing is frictionless and air control is
+ *  magnitude-preserving, so by the ring the trajectory is committed.
+ *  The bonus only pays for speed: walk-in grabs keep the honest base
+ *  ring; a 50m/s graze earns ~+6m of planar tolerance (cap +8). Add to
+ *  the perk-scaled radius at every touch check — all grab paths must
+ *  agree. */
+export function flagTouchBonus(speedH: number): number {
+  return Math.min(8, Math.max(0, (speedH - 25) * 0.25));
+}
 export const FLAG_HOME_R = 8;       // capture ring around own base
 export const FLAG_RESET_S = 20;     // dropped flag returns home after this
