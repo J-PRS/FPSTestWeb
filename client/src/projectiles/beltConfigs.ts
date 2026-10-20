@@ -52,3 +52,23 @@ export const IMPACT_CONFIG: ProjectileConfig = beltBall(21, 0x2A_4A_4D, 0x44_FF_
   damageColor: '#66ffee',
   glowColor: 0x44_FF_EE,
 });
+
+// Hook: the rope dart — a javelin head on a continuous thrower→dart rod
+// (Projectile.setRope draws it per frame). Contact is a reel, never a
+// blast: a body yanks the victim to you, dirt yanks you to it. A whiff is
+// a snapped line — no reel, no payload.
+export const HOOK_CONFIG: ProjectileConfig = Object.assign({}, beltBall(37, 0x6A_5A_3A, 0xFF_CC_66, {
+  displayName: 'Hook',
+  damageColor: '#ffcc88',
+}), {
+  meshType: 'javelin',
+  noExplosion: true,
+  hook: true,
+  // No trail of its own — a dart WITH a rope is the read; smoke/ribbons
+  // behind it sell "rocket", not "tethered line". ribbonTrail must be
+  // an explicit false: the visual layer defaults ribbons ON.
+  ribbonTrail: false,
+  trailParticlesPerUnit: 0,
+  trailOpacity: 0,
+  glowShell: false,
+});

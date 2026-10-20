@@ -11,7 +11,7 @@
  */
 import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
-import { FLAG_PICKUP_R, FLAG_HOME_R, FLAG_RESET_S, type TeamId,CTF_PTS } from '../../shared/teams.ts';
+import { FLAG_PICKUP_R, FLAG_HOME_R, FLAG_RESET_S, flagTouchBonus, type TeamId,CTF_PTS } from '../../shared/teams.ts';
 import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
 import { perkMods } from '../../shared/perks.ts';
@@ -559,7 +559,8 @@ export class RoomFlags {
       const cx = a.x + abx * t, cy = a.y + aby * t, cz = a.z + abz * t;
       if (Math.abs(cy - f.pos.y) > 6) {continue;}
       const d = Math.hypot(cx - f.pos.x, cz - f.pos.z);
-      const ring = (this.rabbit ? RABBIT_PICKUP_R : FLAG_PICKUP_R) * perkMods(p.perk).pickupRadius;
+      const ring = (this.rabbit ? RABBIT_PICKUP_R : FLAG_PICKUP_R) * perkMods(p.perk).pickupRadius
+        + flagTouchBonus(Math.hypot(p.velocity.x, p.velocity.z));
       if (d <= ring && (!best || d < best.d)) {best = { id: p.id, team: p.team, d };}
     }
     return best;

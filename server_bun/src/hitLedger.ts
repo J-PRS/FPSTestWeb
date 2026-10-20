@@ -47,16 +47,12 @@ export class HitLedger {
   private duelStart = new Map<string, number>();
   private hitSeq = 0; // per-room monotonic — reconnect replays carry stale seqs
 
-  applyHit(c: LedgerHost, shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number; endedStreak?: number }, opts: { label: string; extra?: Record<string, unknown>; weapon?: number; shotId?: string; air?: number }): void {
+  applyHit(c: LedgerHost, shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number; endedStreak?: number }, opts: { label: string; extra?: Record<string, unknown>; weapon?: number; shotId?: string; air?: number; gd?: number }): void {
     c.hb('hit');
     c.hb('dmg', Math.round(damage));
     if (result.killed) {c.hb('kill');}
     c.deps.emit?.({ type: 'hit', targetId, shooterId, damage });
     const src = opts.weapon === undefined ? opts.label : `w${opts.weapon}`;
-    if (opts.weapon === 18) {
-      const target = c.playerManager.getPlayer(targetId);
-      console.log('STICKY HIT:', 'shooter=', shooterId, 'target=', targetId, 'dmg=', damage, 'targetHP_before=', (target ? target.health + damage : '?'), 'killed=', result.killed, 'label=', opts.label, 'dist=', opts.extra?.dist);
-    }
     this.noteHit(c, shooterId, targetId, src, damage, result.killed, { dist: opts.extra?.dist as number | undefined, pos: opts.extra?.pos as { x: number; y: number; z: number } | undefined, shotId: opts.shotId });
     if (!result.killed) {
       // Surviving victim pops min(banked, damage) of their LG charge —
@@ -72,7 +68,7 @@ export class HitLedger {
         }
       }
       logger.debug(opts.label, Object.assign({}, {shooter: shooterId,target: targetId,damage,targetHealth: result.newHealth}, opts.extra));
-      c.broadcast(eventPayload(WORLD_MODEL.player!, 'playerHit', 'targetId', targetId, { shooterId, damage, health: result.newHealth, armor: result.newArmor, seq: (this.hitSeq += 1), shotId: opts.shotId }) as ServerMessage);
+      c.broadcast(eventPayload(WORLD_MODEL.player!, 'playerHit', 'targetId', targetId, { shooterId, damage, health: result.newHealth, armor: result.newArmor, seq: (this.hitSeq += 1), shotId: opts.shotId, gd: opts.gd }) as ServerMessage);
       return;
     }
     const corpse = c.playerManager.getPlayer(targetId);
@@ -173,7 +169,7 @@ export class HitLedger {
     const shooterStreak = shooterId === 'environment' ? undefined
       : (c.playerManager.getPlayer(shooterId)?.streak ?? 0) + 1;
     c.broadcast(eventPayload(WORLD_MODEL.player!, 'playerKill', 'targetId', targetId, { shooterId, weapon: opts.weapon, streak: shooterStreak, air: opts.air, steal }) as ServerMessage);
-    c.killFeed.announce(shooterId, targetId, opts.weapon, opts.label, opts.air, endedStreak);
+    c.killFeed.announce(shooterId, targetId, opts.weapon, opts.label, opts.air, endedStreak, simNow());
     c.deps.emit?.({ type: 'kill', targetId, shooterId });
     c.respawner.schedule(targetId);
   }

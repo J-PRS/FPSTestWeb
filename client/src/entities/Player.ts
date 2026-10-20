@@ -29,6 +29,7 @@ import { ENERGY, MOVEMENT_CONFIG } from '../../../shared/movement.js';
 import { PlayerVisuals } from './PlayerVisuals.js';
 import { urlParams } from '../core/params.js';
 import { ChildLogger } from '../core/Logger.js';
+import { markProbe } from '../core/fxDiag.js';
 
 const logger = new ChildLogger('Player');
 
@@ -44,7 +45,7 @@ export const SKILL_ORDER: SkillId[] = ['bounce', 'blink', 'dash', 'slam', 'warp'
 // Belt loadout slot — one throwable on the belt key; fire.ts maps each id
 // to its projectile config. Order is the loadout-menu order.
 // 'remoterailgun' = capacitor slug that discharges a hitscan rail mid-flight.
-export const BELT_ITEMS = ['disc', 'grenade', 'cluster', 'javelin', 'sticky', 'impact', 'conc', 'remoterailgun', 'armornade', 'proxy', 'satchel', 'heal'] as const;
+export const BELT_ITEMS = ['disc', 'grenade', 'cluster', 'javelin', 'sticky', 'impact', 'conc', 'remoterailgun', 'armornade', 'proxy', 'satchel', 'heal', 'hook'] as const;
 
 /** Per-item throw-anim stretch — the satchel plant is a deliberate
  *  two-beat reach, not a flick; multiplies THROW_RELEASE/THROW_TOTAL. */
@@ -85,7 +86,7 @@ export class Player {
   armor = 0;
   /** Timed powerup expiries (server epoch ms — same clock offset the
    *  buff message `until` arrives on; we just compare against Date.now). */
-  buffUntil = { regen: 0, dd: 0 };
+  buffUntil = { regen: 0, dd: 0, shield: 0 };
   /** Spawn shield (performance.now deadline) — prediction suppresses the
    *  enemy-blast shove/damage the server refuses during the window; the
    *  remaining time rides localPlayerState.protectedMs on join. */
@@ -130,6 +131,7 @@ export class Player {
     this.jetLockT = 0;
     this.buffUntil.regen = 0;
     this.buffUntil.dd = 0;
+    this.buffUntil.shield = 0;
     this.lastDamageSource = '';
     this.protectedUntil = performance.now() + SPAWN_PROTECT_MS;
     this.beltCharges = BELT_MAX;
@@ -266,9 +268,9 @@ export class Player {
   static readonly lockedForClass = PlayerLoadout.lockedForClass;
   static readonly LOADOUT_SLOTS = PlayerLoadout.LOADOUT_SLOTS;
   static readonly SIDEARM_WIDS = PlayerLoadout.SIDEARM_WIDS;
-  sidearm: 'pistol' | 'revolver' | 'shotgun' | 'repair' =
-    (settings.get('fps-sidearm') as 'pistol' | 'revolver' | 'shotgun' | 'repair') in Player.SIDEARM_WIDS
-      ? settings.get('fps-sidearm') as 'pistol' | 'revolver' | 'shotgun' | 'repair' : 'pistol';
+  sidearm: 'pistol' | 'revolver' | 'shotgun' | 'repair' | 'lance' =
+    (settings.get('fps-sidearm') as 'pistol' | 'revolver' | 'shotgun' | 'repair' | 'lance') in Player.SIDEARM_WIDS
+      ? settings.get('fps-sidearm') as 'pistol' | 'revolver' | 'shotgun' | 'repair' | 'lance' : 'pistol';
   // Pack: one deployable on the deploy key — ESC menu picks.
   packItem: DeployKind =
     (PACK_KINDS as readonly string[]).includes(settings.get('fps-pack'))
@@ -285,7 +287,7 @@ export class Player {
    *  is pending, the live kit otherwise. Never use for fire logic. */
   get menuKit(): readonly number[] { return this.armory.menuKit(); }
   setBeltItem(item: BeltItem): void { this.armory.setBeltItem(item); }
-  setSidearm(s: 'pistol' | 'revolver' | 'shotgun' | 'repair'): void { this.armory.setSidearm(s); }
+  setSidearm(s: 'pistol' | 'revolver' | 'shotgun' | 'repair' | 'lance'): void { this.armory.setSidearm(s); }
   setPackItem(p: DeployKind): void { this.armory.setPackItem(p); }
   get sidearmWid(): number { return this.armory.sidearmWid; }
   // wid → WeaponType lives on the def: weaponDef(wid).weaponType.
@@ -384,7 +386,13 @@ export class Player {
   beltCharges = BELT_MAX;
   /** Headhunt held tokens — server-owned count, HUD reads it raw. */
   heldTokens = 0;
+  /** True when the held-token drip is live (≥3 tokens, 8s since last hit). */
+  get heldBuffActive(): boolean {
+    const hb = heldBuffRates(this.heldTokens, performance.now() - this._heldHurtT);
+    return hb.hp > 0 || hb.armor > 0 || hb.belt > 0;
+  }
   onMelee: ((e: FireEvent) => void) | null = null;
+
   onWeaponSwitch: ((index: number) => void) | null = null;
   /** Pack items — main wires these to the deployables manager. */
   onDeploy: (() => void) | null = null;
@@ -435,6 +443,9 @@ export class Player {
     if (this.model) {
       await this.model.load();
       this.model.setScale(CLASS_MODEL_SCALE[this.appliedClass]);
+      // Aim-probe tag — if the FP body ever renders on the crosshair the
+      // dump names it instead of an anonymous brute mesh.
+      if (this.model.object3D) {markProbe(this.model.object3D, { kind: 'fxMesh', label: 'body:local' });}
       // Hide model for first-person view
       this.model.setVisible(false);
       // A cloak running before the GLB arrived never got its ghost —
@@ -746,7 +757,7 @@ export class Player {
   grantJetBoost(): void { imp.grantJetBoost(this); }
   heal(fraction: number): void { imp.heal(this, fraction); }
   applyKnockback(from: THREE.Vector3, force: number): void { imp.applyKnockback(this, from, force); }
-  applyPull(to: THREE.Vector3, force: number): void { imp.applyPull(this, to, force); }
+  applyPull(to: THREE.Vector3, force: number, yank = false): void { imp.applyPull(this, to, force, yank); }
 
   getSpeed(): number {
     return Math.hypot(this.vel.x, this.vel.z);

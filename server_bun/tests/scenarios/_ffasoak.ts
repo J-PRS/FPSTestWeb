@@ -8,18 +8,20 @@
 //   bun tests/scenarios/_ffasoak.ts 2 Railgun Mortar  # subset, 2 seeds
 import { mkRoom, step, pin } from './harness.ts';
 import { WeaponType } from '../../../shared/weapons.ts';
-import { pickBotWeapon, type BotLoadout } from '../../../shared/botLoadouts.ts';
+import { pickBotWeapon, WILDCARD_SLOTS, type BotLoadout } from '../../../shared/botLoadouts.ts';
 import { weaponStats } from '../../src/weaponStats.ts';
 import type { HitLedger } from '../../src/hitLedger.ts';
 import { hmParseBin, hmScaled } from '../../../shared/heightfield.ts';
 import { readFileSync } from 'node:fs';
 
-const TARGET = 50;      // kills to win the FFA
-let CAP_S = 2400;       // sim-seconds; argv[1] overrides
-const BOTS = 10;
 const FFASOAK_ARENA = Number(process.env.FFASOAK_ARENA) || 300;
 const FFASOAK_MAP = process.env.FFASOAK_MAP || '';
 const FFASOAK_UNPINNED = Boolean(process.env.FFASOAK_UNPINNED);
+const FFASOAK_CHAOS = Boolean(process.env.FFASOAK_CHAOS);
+const FFASOAK_TDM = Boolean(process.env.FFASOAK_TDM);
+const BOTS = FFASOAK_TDM ? 16 : 10;
+const TARGET = FFASOAK_TDM ? 100 : 50;      // kills to win
+let CAP_S = 2400;       // sim-seconds; argv[1] overrides
 
 const ALL: WeaponType[] = [
   WeaponType.Chaingun, WeaponType.PlasmaGun, WeaponType.Shotgun, WeaponType.Disc,
@@ -55,7 +57,8 @@ function run(weapons: WeaponType[], seed: number): {
     const spec = JSON.parse(readFileSync(`C:/TEMP/_WEB/FPSWebTest/maps/${FFASOAK_MAP}.json`, 'utf8'));
     field = hmScaled(hmParseBin(buf, spec.heightScale ?? 1), spec.heightScale ?? 1);
   }
-  const room = mkRoom({ mode: 'dm', bots: BOTS, botSkill: 'impossible', arena: { x: 0, z: 0, radius: FFASOAK_ARENA } }, 'dm', seed, false, field ?? undefined);
+  const mode = FFASOAK_TDM ? 'tdm' : 'dm';
+  const room = mkRoom({ mode, bots: BOTS, botSkill: 'impossible', arena: { x: 0, z: 0, radius: FFASOAK_ARENA } }, mode, seed, false, field ?? undefined);
 
   const bots = [...room.players.getAllPlayers().values()].filter((p) => p.isBot);
   const ctl = room.bots as unknown as {
@@ -66,10 +69,36 @@ function run(weapons: WeaponType[], seed: number): {
     (ctl as unknown as { arsenal: { pickWeapon(l: BotLoadout, dxz: number, d: number): number } })
       .arsenal.pickWeapon = (l: BotLoadout, dxz: number, d: number) => pickBotWeapon(l, dxz, d);
   }
+  // FFASOAK_PURE: the locked weapon does ALL the work — no melee knife
+  // picks, no belt lobs, no sidearm finishers muddying attribution.
+  // Melee is pickBotWeapon's sub-3m override; belt throws are gated by
+  // beltCharges, so a dry pool refuses every lob (and respawns restock
+  // it — the respawn loop zeroes it again). Side finishers are moot:
+  // every slot already holds the test weapon.
+  const PURE = Boolean(process.env.FFASOAK_PURE);
+  if (PURE) {
+    const ars = ctl as unknown as { arsenal: { pickWeapon(l: BotLoadout, dxz: number, d: number, id?: string): number } };
+    const origPick = ars.arsenal.pickWeapon.bind(ars.arsenal);
+    ars.arsenal.pickWeapon = (l, dxz, d, id) => {
+      const w = origPick(l, dxz, d, id);
+      return w === WeaponType.Melee ? l.near : w;
+    };
+  }
+  // In chaos mode, each bot starts with a random weapon and changes after every kill.
+  const currentWeapon = new Map<string, WeaponType>();
+  const prevKills = new Map<string, number>();
+  // Chaos draws come from the FULL pool (module `pool`), not the dealt
+  // deck — `weapons` here is the 10-bot slice, so drawing from it meant
+  // 9 of 19 weapons could never appear in a seed. Seeded LCG so a seed
+  // number reproduces the draw sequence.
+  let cs = (seed * 747_796_405 + 2_891_336_453) >>> 0 || 1;
+  const crand = (): number => ((cs = (cs * 1_664_525 + 1_013_904_223) >>> 0) / 4_294_967_296);
   for (let i = 0; i < bots.length; i++) {
-    const w = weapons[i]!;
-    ctl.loadouts.set(bots[i]!.id, { perk: 'none', near: w, mid: w, far: w, belt: WeaponType.Grenade, side: WeaponType.Pistol });
+    const w = FFASOAK_CHAOS ? pool[Math.floor(crand() * pool.length)]! : weapons[i]!;
+    ctl.loadouts.set(bots[i]!.id, { perk: 'none', near: w, mid: w, far: w,
+      belt: PURE ? w : WeaponType.Grenade, side: PURE ? w : WeaponType.Pistol });
     ctl.roster.refitClass(bots[i]!.id);
+    if (PURE) {(bots[i]! as { beltCharges: number }).beltCharges = 0;}
     if (!process.env.FFASOAK_CLASSES) {
       bots[i]!.armorClass = 'medium';
       ctl.roster.applyClass(bots[i]!, 'medium');
@@ -78,6 +107,8 @@ function run(weapons: WeaponType[], seed: number): {
       const a = (i / bots.length) * Math.PI * 2;
       pin(room, bots[i]!.id, { x: Math.cos(a) * (FFASOAK_ARENA * 0.6), y: 65, z: Math.sin(a) * (FFASOAK_ARENA * 0.6) });
     }
+    currentWeapon.set(bots[i]!.id, w);
+    prevKills.set(bots[i]!.id, 0);
   }
   (room as { endMatch: (w: string) => void }).endMatch = () => {};
 
@@ -89,6 +120,11 @@ function run(weapons: WeaponType[], seed: number): {
 
   const {hitLedger} = (room.messages.combat as unknown as { hitLedger: HitLedger });
   const origApplyHit = hitLedger.applyHit.bind(hitLedger);
+
+  // Chaos mode tracking
+  const chaosAgg = new Map<number, { kills: number; deaths: number }>();
+  const countedDeaths = new Set<string>();
+  for (const w of weapons) { chaosAgg.set(w, { kills: 0, deaths: 0 }); }
   hitLedger.applyHit = (c, shooterId, targetId, damage, result, opts) => {
     const src = opts.weapon;
     if (src !== undefined && wStats.has(src)) {
@@ -115,6 +151,7 @@ function run(weapons: WeaponType[], seed: number): {
         if (deadSince.get(p.id)! >= 3) {
           deadSince.delete(p.id);
           room.players.respawnPlayer(p.id);
+          if (PURE) {(p as { beltCharges: number }).beltCharges = 0;}
           if (!FFASOAK_UNPINNED) {
             const a = (ring++ / bots.length) * Math.PI * 2;
             pin(room, p.id, { x: Math.cos(a) * (FFASOAK_ARENA * 0.6), y: 65, z: Math.sin(a) * (FFASOAK_ARENA * 0.6) });
@@ -122,7 +159,47 @@ function run(weapons: WeaponType[], seed: number): {
         }
       } else {deadSince.delete(p.id);}
     }
-    for (const p of room.scoring.matchPlayers()) {if (p.kills >= TARGET) {winnerT = simS;}}
+    // Chaos mode: track kills per weapon and change weapon after every kill.
+    if (FFASOAK_CHAOS) {
+      for (const p of bots) {
+        const pk = p.kills;
+        const prev = prevKills.get(p.id) ?? 0;
+        if (pk > prev) {
+          // Record kills for current weapon
+          const w = currentWeapon.get(p.id);
+          if (w !== undefined) {
+            const a = chaosAgg.get(w) ?? { kills: 0, deaths: 0 };
+            a.kills += pk - prev;
+            chaosAgg.set(w, a);
+          }
+          // Change weapon
+          const newW = pool[Math.floor(crand() * pool.length)]!;
+          currentWeapon.set(p.id, newW);
+          const ctl = room.bots as unknown as { loadouts: Map<string, BotLoadout>; roster: { refitClass(id: string): void } };
+          ctl.loadouts.set(p.id, { perk: 'none', near: newW, mid: newW, far: newW,
+            belt: PURE ? newW : WeaponType.Grenade, side: PURE ? newW : WeaponType.Pistol });
+          ctl.roster.refitClass(p.id);
+          prevKills.set(p.id, pk);
+        }
+        // Track death (once per death)
+        if (p.isDead && !countedDeaths.has(p.id)) {
+          countedDeaths.add(p.id);
+          const w = currentWeapon.get(p.id);
+          if (w !== undefined) {
+            const a = chaosAgg.get(w) ?? { kills: 0, deaths: 0 };
+            a.deaths++;
+            chaosAgg.set(w, a);
+          }
+        }
+        if (!p.isDead) { countedDeaths.delete(p.id); }
+      }
+    }
+    if (FFASOAK_TDM) {
+      const counts = (room as any).players?.teamCounts?.() ?? { alpha: 0, bravo: 0 };
+      if (counts.alpha >= TARGET || counts.bravo >= TARGET) { winnerT = simS; }
+    } else {
+      for (const p of room.scoring.matchPlayers()) {if (p.kills >= TARGET) {winnerT = simS;}}
+    }
   }
   const wallS = (Date.now() - wall0) / 1000;
 
@@ -133,6 +210,17 @@ function run(weapons: WeaponType[], seed: number): {
     .filter((p) => wOf.has(p.id))
     .map((p) => ({ w: WeaponType[wOf.get(p.id)!]!, kills: p.kills, deaths: p.deaths }))
     .sort((a, b) => b.kills - a.kills);
+
+  // Chaos mode: print per-weapon kill/death tally
+  if (FFASOAK_CHAOS) {
+    console.log('\n--- Chaos Mode: Per-Weapon Tally ---');
+    console.log('weapon           | kills | deaths | K/D');
+    for (const [w, stats] of [...chaosAgg.entries()].sort((a, b) => b[1].kills - a[1].kills)) {
+      const name = (WeaponType[w] ?? String(w)).padEnd(16);
+      const kd = stats.deaths > 0 ? (stats.kills / stats.deaths).toFixed(2) : (stats.kills > 0 ? 'inf' : '0');
+      console.log(`${name} | ${String(stats.kills).padStart(5)} | ${String(stats.deaths).padStart(6)} | ${kd.padStart(5)}`);
+    }
+  }
 
   // Print weaponStats snapshot (authoritative damage/kills per weapon)
   const snap = weaponStats.snapshot().byMode['dm'] ?? {};
@@ -154,9 +242,15 @@ if (argv[1] !== undefined && Number.isFinite(Number(argv[1]))) {
   CAP_S = Number(argv[1]);
   argv.splice(1, 1);
 }
+// Chaos draws from the whole wildcard arsenal — every weapon a bot can
+// roll in any slot (~28). Non-chaos mode keeps the curated 19 (the
+// belt/side entries skew a dealt-lockout ladder, but they ARE part of
+// the real kill mix chaos is measuring).
 const pool = argv.slice(1).length > 0
   ? argv.slice(1).map((w) => WeaponType[w as keyof typeof WeaponType]).filter((w) => w !== undefined)
-  : ALL;
+  : (FFASOAK_CHAOS
+    ? [...new Set([...WILDCARD_SLOTS.near, ...WILDCARD_SLOTS.mid, ...WILDCARD_SLOTS.far, ...WILDCARD_SLOTS.belt, ...WILDCARD_SLOTS.side])]
+    : ALL);
 
 console.log(`ffasoak: ${seeds} seeds, ${BOTS} bots, dm to ${TARGET} kills, ${pool.length}-weapon pool dealt per round (impossible skill)\n`);
 const agg = new Map<string, { kills: number[]; deaths: number[]; wins: number }>();

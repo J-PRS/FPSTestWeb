@@ -36,6 +36,7 @@ const BOLT_CHAIN_PASSES = 3;       // bounded worklist — a chain can't run awa
 // Read live per blast — the menu toggle applies without a reload.
 const aoeDebug = (): boolean => urlParams.debug;
 
+const _ropeAnchor = new THREE.Vector3();
 // Remote player positions for projectile collision — rebuilt per frame into
 // the same Map (zeroed allocations in the hot loop)
 const _remotePlayerPositions = new Map<string, THREE.Vector3>();
@@ -88,7 +89,7 @@ export function processProjectileExplosion(c: CombatCtx, a: ExplosionArgs): void
   deps.explosionTracker.addExplosion(pos, force, a.shooterId || deps.lazyNetworkManager().getLocalPlayerId());
 
   if (a.claimLegal !== false) {
-    c.applyExplosionForce({ pos, radius, force, forceMode, forceMultiplier: a.forceMultiplier, aoeDamage, directHitTargetId: a.directHitTargetId ?? null, weaponType: a.weaponType, shooterId: a.shooterId, air: a.air });
+    c.applyExplosionForce({ pos, radius, force, forceMode, forceMultiplier: a.forceMultiplier, aoeDamage, directHitTargetId: a.directHitTargetId ?? null, weaponType: a.weaponType, shooterId: a.shooterId, air: a.air, shotId: a.shotId });
   }
 
   // Armor grenade: predict the plating the server grants so the HUD armor
@@ -227,6 +228,25 @@ function retireProjectile(deps: CombatCtx['deps'], p: Projectile, i: number): vo
 }
 
 
+// Rope dart: the thrower→dart line draws every live frame, then stays up
+// through the reel — the moving end sliding along the taut rope IS the
+// pull animation (terrain anchor fixed / victim tracked on body hits).
+// Dead thrower (dropped from the positions map) = a snapped line. Chest
+// anchor, not eye — an eye-mounted rope starts inside the shooter's own
+// camera and reads as "not attached to anything".
+function tickHookRope(deps: CombatCtx['deps'], p: Projectile, remotePositions: Map<string, THREE.Vector3>): void {
+  const from = p.shooterId ? remotePositions.get(p.shooterId) : deps.lazyPlayer().pos;
+  if (!from || !p.ropeActive) { p.hideRope(); return; }
+  // Body connect: the rope end rides the victim — they're the thing
+  // being reeled.
+  if (p.ropeTo && p.hitPlayerId) {
+    const vpos = p.hitPlayerId === 'local' ? deps.lazyPlayer().pos
+      : remotePositions.get(p.hitPlayerId);
+    if (vpos) {p.ropeTo.copy(vpos);}
+  }
+  _ropeAnchor.copy(from); _ropeAnchor.y -= 0.7; p.setRope(_ropeAnchor);
+}
+
 function catchRiders(list: Projectile[]): void {
   const r2 = RIDE_CATCH_R * RIDE_CATCH_R;
   for (const q of list) {
@@ -278,6 +298,8 @@ export function updateProjectiles(c: CombatCtx, dt: number): void {
   for (let i = deps.world.projectiles.length - 1; i >= 0; i -= 1) {
     const p = deps.world.projectiles[i];
     p.update(dt, deps.lazyTerrain(), deps.targets, remotePlayerPositions, obstacles, remotePlayerClasses);
+
+    if (p.config.hook) {tickHookRope(deps, p, remotePlayerPositions);}
 
     collectBoltIntercept(c, p);
 

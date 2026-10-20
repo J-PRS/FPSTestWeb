@@ -140,6 +140,7 @@ export interface PlayerState {
   armor: number;
   regenUntil: SimMs;
   ddUntil: SimMs;
+  shieldUntil: SimMs;
   /** Last time this player took a hit (sim clock) — the regenerator
    *  perk's ramp counts unhurt seconds from here and resets on damage. */
   lastDamageAt: SimMs;

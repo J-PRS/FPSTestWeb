@@ -58,6 +58,7 @@ const jobs: Array<[string, number, () => void]> = [
   ['shoot_plasma', 1, (): void => sfx.shoot(WeaponType.PlasmaCannon)],
   ['shoot_railgun', 1, (): void => sfx.shoot(WeaponType.Railgun)],
   ['shoot_melee', 1, (): void => sfx.shoot(WeaponType.Melee)],
+  ['shoot_lance', 1, (): void => sfx.shoot(WeaponType.Shocklance)],
   ['jump', 0.8, (): void => sfx.jump()],
   ['land_soft', 0.8, (): void => sfx.land(8)],
   ['land_hard', 0.8, (): void => sfx.land(35)],

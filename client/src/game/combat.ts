@@ -17,6 +17,7 @@ import type { WeaponDef } from '../weapons.js';
 import type { FireEvent } from '../entities/Player.js';
 import { createBlastForce } from './blastForce.js';
 import { createLightning } from './combat/lightning.js';
+import { createShocklance } from './combat/shocklance.js';
 import { createRepair } from './combat/repair.js';
 import { hitTargetLocal, onTargetDestroyed } from './combat/impact.js';
 import { processProjectileExplosion, slam, updateProjectiles } from './combat/projectiles.js';
@@ -88,6 +89,9 @@ export interface ExplosionArgs {
   weaponType?: number;
   /** Shell's flight time — offline kill-feed `[1.3s]` tag. */
   air?: number;
+  /** Detonating shell's nonce — lets blastForce stamp splash predictions
+   *  against the shell-fate ledger like direct hits already do. */
+  shotId?: string | null;
   /** Shared-validator pre-flight of this blast's aoeShot claim — false
    *  means the server will reject it, so nothing the claim pays for
    *  (remote damage/knockback, self splash, plating) may be predicted. */
@@ -139,6 +143,14 @@ export function createCombat(deps: CombatDeps) {
   });
   const { lightning, updateBeamVisual } = lg;
 
+  // Shocklance — melee-key pull-out zap (combat/shocklance.ts). Same
+  // honest ray + beam fade, one shot per cycle, plasma palette.
+  const lance = createShocklance(deps, {
+    processExplosion: (a): void => processProjectileExplosion(c, a),
+    onTargetDestroyed: (t, impulse, wt): void => onTargetDestroyed(c, t, impulse, wt),
+    applyForceToRemotes,
+  });
+
   // Repair tool — the technician's hold-out beam (combat/repair.ts).
   // Shares the LG's beam machinery, tinted weld-green.
   const rep = createRepair(deps);
@@ -148,7 +160,7 @@ export function createCombat(deps: CombatDeps) {
     applyExplosionForce,
     predictLocalShove,
     applyForceToPrey,
-    lg: { tickBeam: (dt: number): void => { lg.tickBeam(dt); rep.tickBeam(dt); } },
+    lg: { tickBeam: (dt: number): void => { lg.tickBeam(dt); rep.tickBeam(dt); lance.tickBeam(dt); } },
     // Chaingun ramp state: targetId → last hit time + chain count.
     chainRamp: new Map(),
   };
@@ -170,6 +182,7 @@ export function createCombat(deps: CombatDeps) {
       }
       if (def.kind === 'beam') {
         if (def.weaponType === WeaponType.Repair) {rep.repair(e);}
+        else if (def.weaponType === WeaponType.Shocklance) {lance.lance(e);}
         else {lightning(e);}
       }
       else {fire.fireWeapon(def, e);}

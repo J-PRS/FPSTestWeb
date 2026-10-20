@@ -420,7 +420,7 @@ export function createEntities(deps: EntitiesDeps) {
 
     for (let i = 0; i < count; i += 1) {
       const tier = kind === 'token' ? tokenTier(val) : null;
-      const n = new Nugget(scene, pos, inheritVel,
+      const n = new Nugget(scene, pos, inheritVel.clone().multiplyScalar(0.5),
         tier?.color ?? PICKUP_ACCENT[kind], pickupParts(kind), tier?.scale ?? 1);
       n.kind = kind; n.val = val;
       nuggets.push(n);

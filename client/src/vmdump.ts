@@ -10,7 +10,8 @@ if (!isDevHost()) {
 }
 
 const q = new URLSearchParams(window.location.search);
-const w = Number.parseInt(q.get('w') ?? '0');
+const wParam = q.get('w') ?? '0';
+const w = Number.parseInt(wParam);
 const ao = q.get('ao') !== 'off';
 
 const renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -85,7 +86,15 @@ if (!ao) {
     if (mat.vertexColors !== undefined) { mat.vertexColors = false; mat.needsUpdate = true; }
   });
 }
-vm.switchWeapon(w);
+if (wParam === 'fist') {
+  // Melee prop inspection — pose the fist+hammer mid-jab instead of a
+  // weapon: the punch envelope owns this group, we park it at strike.
+  const { FIST_JAB } = await import('./entities/viewmodel/weaponsGeo.js');
+  vm.fistGroup.visible = true;
+  vm.fistGroup.position.copy(FIST_JAB);
+} else {
+  vm.switchWeapon(w);
+}
 // Skip past the switch dip so the weapon sits at rest for the shot.
 const zeroVel = new THREE.Vector3();
 for (let i = 0; i < 60; i += 1) {vm.update(1 / 60, 0, 0, zeroVel, camera);}

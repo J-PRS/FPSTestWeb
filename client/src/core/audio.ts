@@ -102,6 +102,16 @@ export class AudioEngine {
       // verbatim; bare names fetch <name>.ogg. Bank key = file stem.
       'g_loud-powerful-ballista-crossbow-shot_2_5865d',
       'g_powerful-deep-scifi-weapon-shot-game-sound_1_2fa9a',
+      // WARLORD announcer pack (VoiceBosch, CC-BY-SA 4.0) — the booth
+      // voice: multi-kills ('annihilation' covers quad+), spree tiers,
+      // first blood, precision kills.
+      'announce_double.wav', 'announce_triple.wav', 'announce_annihilation.wav',
+      'announce_rampage.wav', 'announce_dominating.wav', 'announce_unstoppable.wav',
+      'announce_firstblood.wav', 'announce_precision.wav', 'announce_eradication.wav',
+      'announce_killshot.wav',
+      // Shocklance zap — Laser Construction Kit, "Short bursts" folder.
+      // Original filename kept so the source batch stays greppable.
+      'UL_Short_burst_118.wav',
     ];
     return Promise.all(names.map((n): Promise<Map<string, AudioBuffer> | undefined> => fetch(`/sfx/${n.includes('.') ? n : `${n}.ogg`}`)
       .then((res): Promise<ArrayBuffer> | undefined => res.ok ? res.arrayBuffer() : undefined)

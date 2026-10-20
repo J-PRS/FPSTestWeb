@@ -8,7 +8,7 @@ import type { PickupKind } from '../../../../shared/pickups.js';
 import { BELT_MAX } from '../../../../shared/weapons.js';
 import { pickupBurst, PICKUP_ACCENT, pickupParts } from '../../entities/PickupModel.js';
 import { Nugget } from '../../entities/Nugget.js';
-import { tokenTier } from '../../../../shared/pickups.js';
+import { tokenTier, POWERUP } from '../../../../shared/pickups.js';
 import * as THREE from 'three';
 import * as sfxPlayer from '../../core/sfx/player.js';
 
@@ -27,7 +27,7 @@ export function wirePickups(ctx: NetCtx): void {
   // Shared view for the §4.7 pickup fidelity hash — stateDebug reads the
   // same map; kind is all it needs (id is the key).
   deps.world.netPickups = pickupMeshes as Map<number, { kind: PickupKind }>;
-  const addPickup = (id: number, pos: { x: number; y: number; z: number }, kind: PickupKind = 'gem', val = 1): void => {
+  const addPickup = (id: number, pos: { x: number; y: number; z: number }, kind: PickupKind = 'gem', val = 1, vel?: { x: number; y: number; z: number }): void => {
     if (!Number.isFinite(pos.x + pos.y + pos.z)) {deps.logger.warn(`pickup #${id} dropped: non-finite position`); return;}
     deps.lazyDemoManager?.()?.recordPickupSpawned(id, kind, pos);
     const live = pickupMeshes.get(id);
@@ -50,7 +50,7 @@ export function wirePickups(ctx: NetCtx): void {
     const nugget = new Nugget(
       deps.lazyScene(),
       new THREE.Vector3(pos.x, pos.y, pos.z),
-      _zeroVel,
+      vel ? new THREE.Vector3(vel.x, vel.y, vel.z) : _zeroVel,
       tier?.color ?? PICKUP_ACCENT[kind],
       pickupParts(kind),
       tier?.scale ?? 1,
@@ -74,9 +74,9 @@ export function wirePickups(ctx: NetCtx): void {
     });
   };
 
-  networkManager.onPickupSpawn = (id, pos, kind, val): void => {
+  networkManager.onPickupSpawn = (id, pos, kind, val, vel): void => {
     if (deps.world.playbackMode) {return;} // live match gems don't belong in the replay
-    addPickup(id, pos, kind ?? 'gem', val ?? 1);
+    addPickup(id, pos, kind ?? 'gem', val ?? 1, vel);
   };
   networkManager.onPickupGone = (id, by): void => {
     if (deps.world.playbackMode) {return;}
@@ -107,10 +107,21 @@ export function wirePickups(ctx: NetCtx): void {
         chat.add(null, 'nugget banked +1');
       } else if (e?.kind === 'token') {
         // Held score — the playerHeld echo owns the count; the grab still
-        // pays the gem's feel-good rewards.
+        // pays the gem's feel-good rewards, plus a tiered flat bonus so a
+        // pickup has immediate utility (green +40% hp, blue +40% armor,
+        // purple +5 belt + 5s 90%-block shield) on top of the sustained
+        // hoard drip.
         sfxPlayer.powerup('gem');
         const p = deps.lazyPlayer();
-        p.heal(0.2);
+        if (e.val >= 3) {p.heal(0.4);}
+        if (e.val >= 9) {p.armor = Math.min(POWERUP.maxArmor, p.armor + POWERUP.maxArmor * 0.4);}
+        if (e.val >= 27) {
+          p.beltCharges = Math.min(BELT_MAX, p.beltCharges + 5);
+          p.buffUntil.shield = performance.now() + 5000;
+        } else {
+          p.beltCharges = Math.min(BELT_MAX, p.beltCharges + 1);
+        }
+        if (e.val < 3) {p.heal(0.2);}
         p.grantJetBoost();
         chat.add(null, `token held +${e.val}`);
       } else if (e) {
@@ -130,8 +141,9 @@ export function wirePickups(ctx: NetCtx): void {
     if (msg.until !== undefined) {
       if (msg.kind === 'regen') {p.buffUntil.regen = msg.until;}
       if (msg.kind === 'dd') {p.buffUntil.dd = msg.until;}
+      if (msg.kind === 'shield') {p.buffUntil.shield = msg.until;}
     }
-    const label = { heal: 'HEAL +50', armor: 'ARMOR +100', regen: 'REGENERATION', dd: 'DOUBLE DAMAGE' }[msg.kind];
-    chat.add(null, label);
+    const label = { heal: 'HEAL +50', armor: 'ARMOR +100', regen: 'REGENERATION', dd: 'DOUBLE DAMAGE', shield: 'SHIELD 5s' }[msg.kind];
+    if (label) {chat.add(null, label);}
   };
 }

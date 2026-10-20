@@ -109,23 +109,25 @@ for (const [idx, fs] of byIdx) {
   }
 }
 
-// ---- kinematic: recorded velocity vs measured displacement --------------
+// ---- kinematic: recorded velocity vs its own displacement ---------------
+// RemoteFrames carry REALIZED vel (pos delta across the trailing sample),
+// so stated(a) must equal the displacement that produced it. A mismatch
+// means the recorder wrote vel from the wrong source/dt — physics bursts
+// (spawn pops, slams) are self-consistent in this window and stay clean.
 let velMismatch = 0;
 for (const [idx, fs] of byIdx) {
-  for (let i = 1; i < fs.length - 1; i++) {
-    const a = fs[i - 1]!, b = fs[i]!, c = fs[i + 1]!;
-    const dt = c.timestamp - a.timestamp;
-    if (dt <= 0.05) continue;
-    // Two-frame window: a hard landing stops a body inside ONE sample —
-    // a single-frame check flags every impact as a stall; a real parked
-    // replica persists across two.
-    const implied = Math.hypot(c.posX - a.posX, c.posY - a.posY, c.posZ - a.posZ) / dt;
+  for (let i = 1; i < fs.length; i++) {
+    const p = fs[i - 1]!, a = fs[i]!;
+    const dt = a.timestamp - p.timestamp;
+    if (dt <= 0.02) continue;
     const stated = Math.hypot(a.velX, a.velY, a.velZ);
-    // Large stated velocity with near-zero displacement = replica parked
-    // while truth moved (or vice versa). Allow dead frames (dead players
-    // stop — flags checked elsewhere) and teleports (vel is resync truth).
-    if (stated > 30 && implied < stated * 0.15 && !(a.flags & 1) && !(a.flags & 4) && ++velMismatch <= 5) {
-      bad('kinematic', `roster ${idx} states vel ${stated.toFixed(0)}m/s but moved ${implied.toFixed(0)}m/s @t=${b.timestamp.toFixed(1)} (replica stalled behind truth)`);
+    if (stated <= 30) continue;
+    // Skip dead frames and the two frames around a teleport — teleports
+    // record sim vel deliberately, and a pos snap contaminates the delta.
+    if ((a.flags | p.flags) & 5) continue;
+    const implied = Math.hypot(a.posX - p.posX, a.posY - p.posY, a.posZ - p.posZ) / dt;
+    if (Math.abs(implied - stated) > stated * 0.3 && ++velMismatch <= 5) {
+      bad('kinematic', `roster ${idx} states vel ${stated.toFixed(0)}m/s but trailed ${implied.toFixed(0)}m/s @t=${a.timestamp.toFixed(1)} (vel not from real displacement)`);
     }
   }
 }

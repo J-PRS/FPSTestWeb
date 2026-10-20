@@ -76,6 +76,10 @@ export class RoomFactory {
     const wscale = spec.tileSize;
     const def = (): Promise<Heightfield | null> => Promise.resolve(this.host.field()).then((f): Heightfield | null => f && hmScaled(f, scale, wscale));
     const target = spec.terrain ? this.loadField(spec.terrain, scale, wscale) : def();
+    // Seat deferral reads this: a joiner arriving mid-swap would pick a
+    // spawn against groundAt()=0 (no field) — an authored anchor y under
+    // the real surface. Joins wait out the load (ms) instead.
+    room.terrainReady = target;
     target.then((f): void => {
       if (!f || this.host.rooms.get(roomName) !== room) {return;}
       room.field = f;
@@ -85,12 +89,16 @@ export class RoomFactory {
       // Flag homes were snapped in the ctor against whatever field the
       // host had then (often null) — re-snap now that the real one is in.
       room.refreshFlagHomes();
+      // Join seats picked pre-field kept authored anchor y — buried.
+      // Lift them now; the alternative is every first-joiner paying a
+      // 40m+ correction snap on a terrain map.
+      room.unburySeats();
       logger.info('Room terrain attached', { room: roomName, terrain: spec.terrain ?? 'default' });
     return; }).catch((error): void => {
       // Room stays up on the null field rather than crashing the boot —
       // without this log a bad terrain file reads as invisible terrain.
       logger.warn('Room terrain load failed — running without heightfield', { room: roomName, error });
-    });
+    }).finally((): void => { if (room.terrainReady === target) {room.terrainReady = null;} });
   }
 
   /** Resolve-or-create a room. Joins may name any room; 'default' is the

@@ -1,5 +1,5 @@
 import { settings } from '../core/settings.js';
-import { SLOT_COUNT, weaponDef } from '../weapons.js';
+import { SLOT_COUNT, weaponDef, LANCE_WID } from '../weapons.js';
 import { SIDEARM_DRAW_TIME } from './ViewModel.js';
 import type { MovementController } from './movement.js';
 import type { PlayerInput } from './player/input.js';
@@ -29,7 +29,7 @@ export interface LoadoutHost {
   loadout: number[];
   weaponIndex: number;
   beltItem: BeltItem;
-  sidearm: 'pistol' | 'revolver' | 'shotgun' | 'repair';
+  sidearm: 'pistol' | 'revolver' | 'shotgun' | 'repair' | 'lance';
   packItem: DeployKind;
   fireTimer: number;
   model: PlayerModel | null;
@@ -54,8 +54,9 @@ export class PlayerLoadout {
     light: 'fps-loadout-light', medium: 'fps-loadout-medium', heavy: 'fps-loadout-heavy',
   } as const;
   // wid is slot-space (SLOT_DEFS index): pistol 12, revolver 13, shotgun 9,
-  // repair 17. (sticky launcher sits at wid 14 — primary, not a hold-out.)
-  static readonly SIDEARM_WIDS = { pistol: 12, revolver: 13, shotgun: 9, repair: 17 } as const;
+  // repair 17, lance 20. (sticky launcher sits at wid 14 — primary, not a
+  // hold-out; bombard 19.)
+  static readonly SIDEARM_WIDS = { pistol: 12, revolver: 13, shotgun: 9, repair: 17, lance: LANCE_WID } as const;
 
   // Hold-out secondaries: while the bind is held the weapon swaps in and
   // auto-fires at its own cadence; release snaps back to the loadout slot.
@@ -249,7 +250,7 @@ export class PlayerLoadout {
     this.h.beltItem = item;
     settings.set('fps-belt', item);
   }
-  setSidearm(s: 'pistol' | 'revolver' | 'shotgun' | 'repair'): void {
+  setSidearm(s: 'pistol' | 'revolver' | 'shotgun' | 'repair' | 'lance'): void {
     this.h.sidearm = s;
     settings.set('fps-sidearm', s);
   }

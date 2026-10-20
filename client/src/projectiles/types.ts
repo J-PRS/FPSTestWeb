@@ -113,5 +113,9 @@ export interface ProjectileConfig {
    *  for N seconds, then shrinks away — a javelin quivering in the dirt.
    *  Combat resolution is unchanged (impact still reports immediately). */
   embeds?: number;
+  /** Rope dart (Hook): contact is a reel, not a blast — body hits yank
+   *  the victim toward the shooter, anything else yanks the shooter
+   *  toward the anchor. Impact resolves the pull + rope FX itself. */
+  hook?: boolean;
 }
 

@@ -22,6 +22,12 @@ import type { StructureCollider } from '../../../shared/ballSim.js';
 import { ProjCollide } from './projCollide.js';
 import { ProjStuck } from './projStuck.js';
 const _rayDir = new THREE.Vector3();
+// Rope dart: shared geo/mat + scratch — one taut rod per live dart, so a
+// per-dart allocation would be churn for a 5-vert cylinder.
+const _ropeGeo = new THREE.CylinderGeometry(0.05, 0.05, 1, 5, 1, true);
+const _ropeMat = new THREE.MeshBasicMaterial({ color: 0x1A_14_0C });
+const _ropeV = new THREE.Vector3();
+const _ropeUp = new THREE.Vector3(0, 1, 0);
 
 /** Backstop fuse — see the age check in updateAlive. */
 const ABSOLUTE_TTL_S = 10;
@@ -199,7 +205,7 @@ export class Projectile {
     if (!ml) {return undefined;}
     const j = this.config.ttlJitter ?? 0;
     if (!j) { this.ttl = ml; return ml; }
-    const seed = this.serverProjectileId ? idSeed(this.serverProjectileId) : (Math.random() * 4_294_967_296) >>> 0;
+    const seed = this.serverProjectileId ? idSeed(this.serverProjectileId) : Math.trunc(Math.random() * 4_294_967_296);
     this.ttl = jitteredTtl({ maxLifetime: ml, ttlJitter: j }, seed);
     return this.ttl;
   }
@@ -225,6 +231,9 @@ export class Projectile {
 
   // Particle trail — quarks-batched.
   private trail: QuarksTrail;
+  // Rope dart: a unit cylinder stretched thrower→dart every frame —
+  // taut by construction; sag would be a lie.
+  private ropeMesh: THREE.Mesh | null = null;
   private projectileRemoved = false;
   private disposed = false;
   private ribbons: (RibbonTrail | RailSpiral)[] = [];
@@ -301,13 +310,9 @@ export class Projectile {
     else if (this.exploded && !this.projectileRemoved) {this.removeProjectileMesh();}
     for (const r of this.ribbons) {r.update(dt);}
     this.trail.update(dt);
+    this.tickRope(dt);
 
-    // Embedded shells outlive their trails — the planted corpse IS the
-    // effect, so death waits on the mesh removal too.
-    if (this.exploded && this.trail.empty && this.ribbons.every((r): boolean => r.done)
-        && (!this.glue.embedded || this.projectileRemoved)) {
-      this.dead = true;
-    }
+    if (this.settled()) {this.dead = true;}
   }
 
   // Teleport the projectile forward along its velocity without physics steps —
@@ -411,7 +416,7 @@ export class Projectile {
     // Remote (server-authoritative/demo) replicas skip all collision —
     // terrain-only behavior lives in tickRemote.
     if (this.isRemote) {
-      if (this.tickRemote(terrain)) {return;}
+      if (this.tickRemote(terrain, remotePlayers, playerClasses)) {return;}
     } else if (this.checkCollisions(terrain, balls, remotePlayers, obstacles, playerClasses)) {
       return; // exploded inside checkCollisions
     }
@@ -432,9 +437,9 @@ export class Projectile {
     if (!this.exploded) {this.explode();}
   }
 
-  // Remote replicas skip all collision — terrain-only behavior lives
-  // in tickRemote (server owns damage on every hit).
-  private tickRemote(terrain: Terrain): boolean { return tickRemote(this, terrain); }
+  // Remote replicas skip claim collisions — terrain + the cosmetic body
+  // pop live in tickRemote (server owns damage on every hit).
+  private tickRemote(terrain: Terrain, remotePlayers?: Map<string, THREE.Vector3>, playerClasses?: Map<string, string>): boolean { return tickRemote(this, terrain, remotePlayers, playerClasses); }
 
   // Runs all swept collision checks; returns true if the projectile hit
   // something and exploded (records hit target + accuracy data).
@@ -546,9 +551,58 @@ export class Projectile {
     };
   }
 
+  /** Rope dart's far end after connect — the terrain anchor point, or
+   *  the reeled victim's live position (the caller repoints it per frame
+   *  on body hits). null = in flight, rope end is `rendered`. */
+  ropeTo: THREE.Vector3 | null = null;
+  /** Remaining reel window — the rope stays drawn through the pull. */
+  ropeT = 0;
+  /** True while the rope should draw: live flight OR inside the reel. */
+  get ropeActive(): boolean { return !this.exploded || this.ropeT > 0; }
+
+  /** Rope dart: caller passes the thrower's CURRENT chest pos each frame
+   *  (local player for own darts, replica pos for remote throws). The
+   *  line is drawn taut — slack in flight would read as a disconnect. */
+  setRope(from: THREE.Vector3): void {
+    if (!this.ropeMesh) {
+      this.ropeMesh = new THREE.Mesh(_ropeGeo, _ropeMat);
+      this.scene.add(this.ropeMesh);
+    }
+    _ropeV.subVectors(this.ropeTo ?? this.rendered, from);
+    const len = _ropeV.length();
+    if (len < 0.01) { this.ropeMesh.visible = false; return; }
+    this.ropeMesh.visible = true;
+    this.ropeMesh.position.copy(from).addScaledVector(_ropeV, 0.5);
+    this.ropeMesh.quaternion.setFromUnitVectors(_ropeUp, _ropeV.normalize());
+    this.ropeMesh.scale.set(1, len, 1);
+  }
+
+  hideRope(): void { if (this.ropeMesh) {this.ropeMesh.visible = false;} }
+
+  /** Embedded shells outlive their trails — the planted corpse IS the
+   *  effect, so death waits on the mesh removal too. A hooked rope holds
+   *  the shell alive through its reel window the same way. */
+  private settled(): boolean {
+    return this.exploded && this.trail.empty && this.ribbons.every((r): boolean => r.done)
+      && this.ropeT <= 0 && (!this.glue.embedded || this.projectileRemoved);
+  }
+
+  /** Reel window countdown — the rope outlives the dart by design. */
+  private tickRope(dt: number): void {
+    if (this.ropeT <= 0) {return;}
+    this.ropeT -= dt;
+    if (this.ropeT <= 0) { this.ropeTo = null; this.hideRope(); }
+  }
+
   explode(): void {
     if (this.exploded) {return;}
     this.exploded = true;
+    // A real connect keeps the rope up through the reel — the moving end
+    // sliding along the line IS the pull animation. Whiffs snap dead.
+    if (this.config.hook && (this.hitPlayerId || this.hitPointValid)) {
+      this.ropeTo = (this.hitPlayerId ? this.pos : this.hitPoint).clone();
+      this.ropeT = 0.55;
+    } else {this.hideRope();}
     const hook = this.onExploded;
     this.onExploded = null;
     hook?.();
@@ -561,6 +615,7 @@ export class Projectile {
 
   dispose(): void {
     if (this.disposed) {return;}
+    if (this.ropeMesh) { this.scene.remove(this.ropeMesh); this.ropeMesh = null; }
     this.removeProjectileMesh();
     this.driver.release();
     for (const r of this.ribbons) {r.dispose();}

@@ -6,9 +6,10 @@
 // cap/label for the loadout menu and HUD. Per-kind behavior (throw visual,
 // plant entity class, SFX) still lives with the entity — visuals can't be
 // shared (three.js isn't importable here).
-import { WEAPONS, WeaponType } from './weaponTable.ts';
+import { WeaponType } from './weaponTable.ts';
+import { WEAPONS } from './weaponRows.ts';
 
-export type DeployKind = 'turret' | 'mortar' | 'cgturret' | 'mine' | 'station' | 'drone' | 'shield' | 'nugget' | 'beacon'
+export type DeployKind = 'turret' | 'mortar' | 'cgturret' | 'mine' | 'station' | 'drone' | 'shield' | 'nugget' | 'beacon' | 'watersphere' | 'tether'
   // Authored-only base assets — cap 0 means a player can never plant one;
   // they exist only via the map spec `deploys` block.
   | 'generator' | 'sensor' | 'baseturret';
@@ -57,6 +58,15 @@ export interface DeployItemDef {
   hoverUp?: number;
   /** Dome radius (shield). */
   shieldRadius?: number;
+  /** Water-dome radius (watersphere) — the pocket of water's footprint on
+   *  the ground. The dome's TOP is a hemisphere over this radius, so the
+   *  water is deepest at the centre. */
+  waterRadius?: number;
+  /** Tether snare radius (tether) — enemies crossing it on the way OUT
+   *  get their outward speed bled by the speed curve in movement.ts. */
+  tetherRadius?: number;
+  /** Jet energy an enemy loses on breaking free of a tether, at full hold. */
+  tetherZap?: number;
   /** Heal fraction of maxHealth per second (station). */
   healRate?: number;
   /** Bolt speed m/s (baseturret — real leadable projectile, not hitscan). */
@@ -66,25 +76,35 @@ export interface DeployItemDef {
 }
 
 export const DEPLOY_ITEMS: Record<DeployKind, DeployItemDef> = {
-  turret:  { label: 'Sentry',  cap: 2, hp: 60,  ttlS: 180, cost: 2, range: 42, fireInterval: 1.25, damage: 14, armS: 0.45, bodyR: 0.9, bodyH: 1.7 },
+  turret:  { label: 'Turret - Missile',  cap: 2, hp: 60,  ttlS: 180, cost: 2, range: 42, fireInterval: 1.25, damage: 14, armS: 0.45, bodyR: 0.9, bodyH: 1.7 },
   // Mortar turret — lobs REAL mortar shells (weapon row 4): arming fuse,
   // thud-bounce, the same 18m splash. Dead zone below minRange by design:
   // artillery can't depress to knife range. Shell damage/radius/knockback
   // come straight from WEAPONS[Mortar] so the two can never drift.
-  mortar:  { label: 'Mortar',  cap: 1, hp: 90,  ttlS: 240, cost: 3, range: 95, minRange: 20, fireInterval: 4, armS: 1.2, projSpeed: WEAPONS[WeaponType.Mortar]!.speed, damage: WEAPONS[WeaponType.Mortar]!.aoeDamage, blastRadius: WEAPONS[WeaponType.Mortar]!.aoeRadius, knockback: WEAPONS[WeaponType.Mortar]!.knockbackForce, bodyR: 1.1, bodyH: 1.5 },
+  mortar:  { label: 'Turret - Mortar', cap: 1, hp: 90,  ttlS: 240, cost: 3, range: 95, minRange: 20, fireInterval: 4, armS: 1.2, projSpeed: WEAPONS[WeaponType.Mortar]!.speed, damage: WEAPONS[WeaponType.Mortar]!.aoeDamage, blastRadius: WEAPONS[WeaponType.Mortar]!.aoeRadius, knockback: WEAPONS[WeaponType.Mortar]!.knockbackForce, bodyR: 1.1, bodyH: 1.5 },
   // Chaingun turret — suppression emplacement: sprays real CG bolts
   // (weapon row 3) at high cadence over a shorter, LOS-gated envelope.
   // Server pays damage as coarse pulses on the turretShot wire (~3 bolts
   // per pulse); the client paints/fires real 250 m/s bolts either way.
-  cgturret: { label: 'Chaingun', cap: 2, hp: 50,  ttlS: 150, cost: 2, range: 36, fireInterval: 0.6, damage: WEAPONS[WeaponType.Chaingun]!.directDamage * 3, armS: 0.8, bodyR: 0.8, bodyH: 1.5 },
+  cgturret: { label: 'Turret - Chaingun', cap: 2, hp: 50,  ttlS: 150, cost: 2, range: 36, fireInterval: 0.6, damage: WEAPONS[WeaponType.Chaingun]!.directDamage * 3, armS: 0.8, bodyR: 0.8, bodyH: 1.5 },
   mine:    { label: 'Mine',    cap: 6, hp: 20,  ttlS: 120, cost: 2, armS: 1, triggerDist: 3.2, blastRadius: 6, blastDamage: 22, knockback: 12, bodyR: 0.5, bodyH: 0.35 },
-  station: { label: 'Pad',     cap: 1, hp: 80,  ttlS: 240, cost: 2, range: 9, fireInterval: 0.5, healRate: 0.09, bodyR: 1.4, bodyH: 1.1 },
+  station: { label: 'Healing Pad', cap: 1, hp: 80,  ttlS: 240, cost: 2, range: 9, fireInterval: 0.5, healRate: 0.09, bodyR: 1.4, bodyH: 1.1 },
   drone:   { label: 'Drone',   cap: 2, hp: 40,  ttlS: 90,  cost: 2, range: 35, fireInterval: 1.6, damage: 9, hoverUp: 2.5, bodyR: 0.7, bodyH: 0.6 },
   // Barrier: the dome is an energy FIELD — it stops shells, not bodies.
   // The bodyR/bodyH here is just the emitter post it unfolds from.
   shield:  { label: 'Barrier', cap: 1, hp: 120, ttlS: 120, cost: 2, shieldRadius: 6, bodyR: 0.7, bodyH: 1 },
   nugget:  { label: 'Nugget',  cap: 8, hp: 1,   ttlS: 0,   cost: 2, bodyR: 0.4, bodyH: 0.4 },
-  beacon:  { label: 'Beacon',  cap: 1, hp: 10,  ttlS: 300, cost: 2, bodyR: 0.6, bodyH: 2.4 },
+  // Water sphere: a pocket of sea dropped on the ground. It slows every
+  // ENEMY wading through it (the sea's drag law + a speed cap) while the
+  // planter and their team walk through dry. It has no damage — it is a
+  // control tool, not a bomb. Short ttl: it is a roadblock, not a base.
+  watersphere: { label: 'Water Sphere', cap: 2, hp: 30, ttlS: 45, cost: 2, armS: 0.6, waterRadius: 7, bodyR: 0.6, bodyH: 0.9 },
+  beacon:  { label: 'Targeting Beacon', cap: 1, hp: 10,  ttlS: 300, cost: 2, bodyR: 0.6, bodyH: 2.4 },
+  // Tether: a snare of black tendrils on the ground. Enemies walk into it
+  // freely; on the way OUT their outward speed is bled by the speed curve
+  // (a full stop below 20 m/s, nothing above 80), and breaking free zaps
+  // their jet energy in proportion to how hard it held them.
+  tether:  { label: 'Tether', cap: 2, hp: 30, ttlS: 150, cost: 2, tetherRadius: 6, tetherZap: 24, bodyR: 0.6, bodyH: 0.5 },
   // Base assets are fat targets — a generator is the raid's main prize,
   // so it soaks far more splash than a field plant. Authored ttl is
   // ignored: base gear runs on the respawn clock, not the decay clock.
@@ -100,5 +120,5 @@ export const DEPLOY_ITEMS: Record<DeployKind, DeployItemDef> = {
 // chases its owner (a static hull would punt the owner it shadows) and
 // the nugget never becomes an item. Everything else you can't walk
 // through; the barrier's dome stays walk-through by design above.
-const NOSOLID = new Set<DeployKind>(['drone', 'nugget']);
+const NOSOLID = new Set<DeployKind>(['drone', 'nugget', 'watersphere', 'tether']);
 export function deploySolid(kind: DeployKind): boolean { return !NOSOLID.has(kind); }

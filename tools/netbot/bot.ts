@@ -12,7 +12,7 @@ import { CLASS_STATS } from '../../shared/botClasses.ts';
 
 import { BOT_LOADOUTS, botClassForLoadout, pickBotWeapon, type BotLoadout } from '../../shared/botLoadouts.ts';
 import { aimSkillFor } from '../../shared/botSkill.ts';
-import { WEAPONS } from '../../shared/weaponTable.ts';
+import { WEAPONS } from '../../shared/weaponRows.ts';
 import { WEAPON_FIRE_INTERVAL_S } from '../../shared/weapons.ts';
 import { HEAVY_ONLY_WEAPONS } from '../../shared/botClasses.ts';
 import type { WeaponType } from '../../shared/weaponTable.ts';

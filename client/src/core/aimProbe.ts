@@ -56,9 +56,25 @@ export function aimProbe(scene: THREE.Scene, camera: THREE.Camera): string[] {
   // frozen thing made by an untagged system still names itself (that's
   // the signal to give it a markProbe).
   return _ray.intersectObjects(scene.children, true)
-    .filter((h): boolean => h.object.visible && !h.object.userData.dbg)
-    .slice(0, MAX_HITS)
-    .map((h): string => `${h.distance.toFixed(0)}m untagged ${describeRaw(h.object)}`);
+    .filter((h): boolean => {
+      // `visible` is per-node: a mesh under a hidden ancestor still
+      // raycasts but isn't on screen — walking the chain is what the
+      // camera actually sees.
+      for (let p: THREE.Object3D | null = h.object; p; p = p.parent) {
+        if (!p.visible) {return false;}
+      }
+      return true;
+    })
+    .map((h): string => {
+      // A tagged ancestor names the owner even when the hit mesh itself
+      // is raw GLB geometry (player bodies tag the model root).
+      for (let p: THREE.Object3D | null = h.object; p; p = p.parent) {
+        const d = p.userData.dbg as DbgTag | undefined;
+        if (d) {return `${h.distance.toFixed(0)}m ${describePooled(d, h)}`;}
+      }
+      return `${h.distance.toFixed(0)}m untagged ${describeRaw(h.object)}`;
+    })
+    .slice(0, MAX_HITS);
 }
 
 // SwarmSlotOwner carries no name — best-effort identity from whatever

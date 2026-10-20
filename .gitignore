@@ -4,6 +4,13 @@ dist/
 build/
 *.log
 
+*.md3
+*.obj
+*.mtl
+*.skin
+*.err
+*.rar
+
 *.png
 *.mp4
 
@@ -24,6 +31,9 @@ client/.stryker-tmp/
 
 # Extracted Tribes 2 assets — local playtest only, do not redistribute
 maps/t2/
+# Extracted Tribes 1 assets — same rule (albedo.webp / sky cube / terrain.bin
+# are ripped from the T1 install); the maps/<name>_t1.json specs stay tracked
+maps/t1/
 _tools/dif2glb_in/
 
 # Unity Asset Store bodies — licensed, not owned; stay out of git

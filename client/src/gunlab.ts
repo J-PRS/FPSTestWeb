@@ -410,6 +410,11 @@ const statusEl = document.querySelector('#status')!;
 
 // --- viewmodel lifecycle (rebuilt on bake-asset change / HMR) ---
 let vm = new ViewModel(camera);
+// Probes need the live viewmodel to drive envelopes (a swing, a punch, a
+// reload) from outside the page — the rail buttons are the manual path, but
+// a scripted capture wants to step the same instance.
+const exposeVm = (): void => {Object.assign((window as any).__gunlab ??= {}, { vm, renderer, camera });};
+exposeVm();
 vm.switchWeapon(state.wt);
 for (let i = 0; i < 60; i += 1) {vm.update(1 / 60, 0, 0, zeroVel, camera);} // settle past switch dip
 lap('viewmodel init');
@@ -583,6 +588,7 @@ function rebuild(): void {
   disposeVm(vm);
   archiveGroup = null; archiveLabel = ''; // died with the old vm group
   vm = new ViewModel(camera);
+  exposeVm();
   vm.switchWeapon(state.wt);
   for (let i = 0; i < 60; i += 1) {vm.update(1 / 60, 0, 0, zeroVel, camera);}
   // A creature/pickup/archive pick died with the old group — respawn it.
@@ -1056,6 +1062,7 @@ function paintTools(): void {
   row([
     ['▸ kick', (): void => vm.kick(1)],
     ['▸ punch', (): void => vm.punch(false)],
+    ['▸ swing', (): void => vm.swing(false)],
     ['▸ throw', (): void => vm.startThrow()],
   ]);
   rail.append(tools);

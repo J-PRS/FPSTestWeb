@@ -16,7 +16,7 @@ type Schema = {
   'fps-loadout-medium': string;
   'fps-loadout-heavy': string;
   'fps-belt': string;         // BeltItem id — see Player.BELT_ITEMS
-  'fps-sidearm': string;      // 'pistol' | 'revolver' | 'shotgun' | 'repair'
+  'fps-sidearm': string;      // 'pistol' | 'revolver' | 'shotgun' | 'repair' | 'lance'
   'fps-pack': string;         // DeployKind — 'turret' | 'mine' | 'station' | 'drone' | 'shield'
   'fps-skill': string;        // SkillId
   'fps-perk': string;         // PerkId

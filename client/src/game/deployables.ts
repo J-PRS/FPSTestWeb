@@ -22,6 +22,8 @@ import { DeployStation } from '../entities/DeployStation.js';
 import { DeployDrone } from '../entities/DeployDrone.js';
 import { DeployShield } from '../entities/DeployShield.js';
 import { DeployBeacon } from '../entities/DeployBeacon.js';
+import { DeployTether } from '../entities/DeployTether.js';
+import { DeployWatersphere } from '../entities/DeployWatersphere.js';
 import { Projectile, type SweepObstacle } from '../projectiles/Projectile.js';
 import { Explosion } from '../effects/explosion.js';
 import { DeployRockets } from './deployRockets.js';
@@ -48,6 +50,13 @@ export type { DeployKind } from '../../../shared/deployables.js';
 
 // Derived from the shared belt registry — caps/labels can no longer diverge
 // from the server authority (drone max 1 vs 2 did once).
+const LASH_PAIRS = 8; // max simultaneously snared bodies painted
+// One tentacle = two fat tapered segments with a writhing mid-bend.
+// Thick at the knot (0.34r), thin at the victim — reads as a lashing
+// arm, not a hair-thin line.
+const _lashGeo = new THREE.CylinderGeometry(0.10, 0.34, 1, 7);
+_lashGeo.translate(0, 0.5, 0);
+const _lashMat = new THREE.MeshLambertMaterial({ color: 0x14_0E_18 });
 export const DEPLOY_DEFS: { kind: DeployKind; label: string; max: number }[] =
   DEPLOY_KINDS.map((kind): { kind: DeployKind; label: string; max: number; } => ({ kind, label: DEPLOY_ITEMS[kind].label.toUpperCase(), max: DEPLOY_MAX[kind] }));
 
@@ -81,6 +90,8 @@ interface Pod {
   shield?: DeployShield;
   nugget?: THREE.Mesh; // pure visual — lands as a pickup, not an item
   beacon?: DeployBeacon;
+  tether?: DeployTether;
+  watersphere?: DeployWatersphere;
   pos: THREE.Vector3;
   vel: THREE.Vector3;
   ttl: number;
@@ -266,6 +277,8 @@ export class Deployables {
       this.deps.scene.add(pod.nugget);
     }
     else if (kind === 'beacon') {pod.beacon = new DeployBeacon(this.deps.scene, terrain, pos);}
+    else if (kind === 'tether') {pod.tether = new DeployTether(this.deps.scene, terrain, pos);}
+    else if (kind === 'watersphere') {pod.watersphere = new DeployWatersphere(this.deps.scene, terrain, pos);}
     // Server-tracked life: the planted mine lives its wire ttl, not the
     // overlord field's 45s — the server still explodes it either way.
     else {pod.mine = new Mine(this.deps.scene, terrain, pos, false, DEPLOY_ITEMS.mine.ttlS);}
@@ -282,7 +295,7 @@ export class Deployables {
 
     // The unfolding kits share one tumble — assemble mid-air, spin, track
     // the pod's fall. Mine/nugget pods differ below.
-    const flying = pod.turret ?? pod.mortar ?? pod.cgturret ?? pod.station ?? pod.drone ?? pod.shield ?? pod.beacon;
+    const flying = pod.turret ?? pod.mortar ?? pod.cgturret ?? pod.station ?? pod.drone ?? pod.shield ?? pod.beacon ?? pod.tether ?? pod.watersphere;
     if (flying) {
       flying.tickUnfold(dt); // assembly completes in the air
       flying.group.rotation.y += dt * 4; // slow tumble reads mass
@@ -334,11 +347,11 @@ export class Deployables {
     // Every bolted-down kit shares the seat: snap to the pod spot, tilt to
     // the face normal, adopt into items. Drone skips the tilt — it lifts
     // off the touchdown spot on its own lift.
-    const seated = pod.turret ?? pod.mortar ?? pod.cgturret ?? pod.station ?? pod.drone ?? pod.shield ?? pod.beacon;
+    const seated = pod.turret ?? pod.mortar ?? pod.cgturret ?? pod.station ?? pod.drone ?? pod.shield ?? pod.beacon ?? pod.tether ?? pod.watersphere;
     if (seated) {
       seated.pos.copy(pod.pos);
       seated.group.position.copy(pod.pos);
-      if (!pod.drone) {seated.group.quaternion.setFromUnitVectors(_UP, n);}
+      if (!pod.drone && !pod.watersphere) {seated.group.quaternion.setFromUnitVectors(_UP, n);}
       seated.group.scale.setScalar(1); // snap any unfolding tail to done
       seated.unfoldDone();
       if (pod.turret) { this.adopter.adoptTurret(pod.turret, undefined); pod.turret = undefined; }
@@ -348,6 +361,8 @@ export class Deployables {
       else if (pod.drone) { this.adopter.adoptDrone(pod.drone, undefined); pod.drone = undefined; }
       else if (pod.shield) { this.adopter.adoptShield(pod.shield, undefined); pod.shield = undefined; }
       else if (pod.beacon) { this.adopter.adoptBeacon(pod.beacon, undefined); pod.beacon = undefined; }
+      else if (pod.tether) { this.adopter.adoptTether(pod.tether, undefined); pod.tether = undefined; }
+      else if (pod.watersphere) { this.adopter.adoptWatersphere(pod.watersphere, undefined); pod.watersphere = undefined; }
       // ownership moved — fizzle cleanup must not dispose it
     } else if (pod.mine) {
       pod.mine.pos.copy(pod.pos);
@@ -418,6 +433,14 @@ export class Deployables {
       const b = new DeployBeacon(this.deps.scene, terrain, at);
       b.unfoldDone();
       this.adopter.adoptBeacon(b, owner);
+    } else if (kind === 'tether') {
+      const t = new DeployTether(this.deps.scene, terrain, at);
+      t.unfoldDone();
+      this.adopter.adoptTether(t, owner);
+    } else if (kind === 'watersphere') {
+      const w = new DeployWatersphere(this.deps.scene, terrain, at);
+      w.unfoldDone();
+      this.adopter.adoptWatersphere(w, owner);
     } else {
       const m = new Mine(this.deps.scene, terrain, at, false, DEPLOY_ITEMS.mine.ttlS);
       m.seatOn(terrain);
@@ -726,20 +749,22 @@ export class Deployables {
    *  owns item hp and this is dead code; solo the same funnel damages the
    *  map's base assets. Direct inside bodyR pays `damage`, outside pays
    *  the `splash` falloff; sticky pays 2x like the server. */
-  blastRemotes(pos: THREE.Vector3, damage: number, splash: number, radius: number, scales?: readonly number[], weapon?: number): void {
+  blastRemotes(pos: THREE.Vector3, damage: number, splash: number, radius: number, scales?: readonly number[], weapon?: number, shooterId?: string | null): void {
     if (this.deps.lazyNetworkManager().isConnected()) {return;}
     const mult = weapon === WeaponType.Sticky ? 2 : 1;
     const aoe = splash || damage;
     // Both lists — `items` holds locally-adopted plants (mine and the
-    // bots'); the server's applyBlast sweeps its whole roster, and its
-    // splash is NOT team-checked: your own blast can level your own stand.
+    // bots'); the server's applyBlast sweeps its whole roster. Own gear
+    // never eats own splash — shooter null/undefined is the local player,
+    // whose items carry owner === undefined.
     for (const i of [...this.items, ...this.remotes.values()]) {
       if (i.dead || i.downed) {continue;}
       const dist = i.pos.distanceTo(pos);
       if (dist > radius) {continue;}
       // Friendly fire: a teammate's deployable never takes splash from our
-      // blast. Self-owned gear (owner undefined) stays vulnerable to our
-      // own splash, matching player self-splash (rocket jumps).
+      // blast, and the owner's own blast exempts their own gear (null
+      // shooter = the local player's plants, all owner-undefined).
+      if ((shooterId ?? null) === (i.owner ?? null)) {continue;}
       const { localTeam } = this.deps.world;
       if (i.team !== undefined && localTeam !== undefined && i.team === localTeam && i.owner !== undefined) {continue;}
       const dmg = (dist <= DEPLOY_ITEMS[i.kind].bodyR
@@ -801,6 +826,9 @@ export class Deployables {
 
   update(dt: number): void {
     for (const i of this.items) {if (!i.dead) {i.update(dt);}}
+    this.deps.lazyPlayer()?.movement.setTether(this.tetherFor());
+    this.deps.lazyPlayer()?.movement.setWaterDome(this.waterDomeFor());
+    this.updateLash(dt);
 
     for (let i = this.pods.length - 1; i >= 0; i -= 1) {
       const pod = this.pods[i]!;
@@ -813,6 +841,8 @@ export class Deployables {
         pod.drone?.dispose(this.deps.scene);
         pod.shield?.dispose(this.deps.scene);
         pod.beacon?.dispose(this.deps.scene);
+        pod.tether?.dispose(this.deps.scene);
+        pod.watersphere?.dispose(this.deps.scene);
         pod.mine?.dispose();
         if (pod.nugget) {this.disposeNuggetPod(pod.nugget);}
         this.pods.splice(i, 1);
@@ -833,6 +863,122 @@ export class Deployables {
     // Same live array for the shell sweep — a planted generator stops a
     // disc on contact instead of letting it phase through to the wall.
     if (Projectile.dynColliders !== this.solidCols) {Projectile.dynColliders = this.solidCols;}
+  }
+
+  // --- Tether lash ------------------------------------------------------
+  // Black tendrils from each tether to every enemy caught in its ring. The
+  // snare is judged by the sim and the server; this only paints it, from
+  // the same ring test the local prediction uses.
+  private readonly lashPool: THREE.Mesh[] = []; // 2 segments per pair
+  private lashN = 0;
+  private lashT = 0;
+  private readonly _lashA = new THREE.Vector3();
+  private readonly _lashB = new THREE.Vector3();
+  private readonly _lashM = new THREE.Vector3();
+  private readonly _lashC = new THREE.Vector3();
+
+  /** Stretch one segment mesh from a to b (geo spans +Y 0..1). */
+  private lashSeg(a: THREE.Vector3, b: THREE.Vector3, k: number): void {
+    if (this.lashN >= LASH_PAIRS * 2) {return;}
+    let m = this.lashPool[this.lashN];
+    if (!m) {
+      m = new THREE.Mesh(_lashGeo, _lashMat);
+      m.frustumCulled = false;
+      this.deps.scene.add(m);
+      this.lashPool.push(m);
+    }
+    this.lashN += 1;
+    m.visible = true;
+    m.position.copy(a);
+    this._lashM.subVectors(b, a);
+    const len = this._lashM.length();
+    m.scale.set(1, len, 1);
+    // +Y onto the a→b direction.
+    m.quaternion.setFromUnitVectors(_UP, this._lashM.normalize());
+    m.rotateY(k * 2.1); // twist phase varies the taper seam
+  }
+
+  private lashPair(tx: number, ty: number, tz: number, ex: number, ey: number, ez: number): void {
+    this._lashA.set(tx, ty + 0.15, tz);
+    // Waist height — above the head reads as the nameplate, not a grab.
+    this._lashB.set(ex, ey + 0.6, ez);
+    // Mid control point: lifted and side-slung, waving — the bend is what
+    // reads as a lash instead of a rope.
+    const w = Math.sin(this.lashT * 7 + ex * 1.3);
+    const w2 = Math.cos(this.lashT * 5.3 + ez * 1.7);
+    const mid = this._lashC.lerpVectors(this._lashA, this._lashB, 0.5);
+    mid.y += 0.6 + w * 0.35;
+    mid.x += w2 * 0.5;
+    mid.z += w * 0.5;
+    this.lashSeg(this._lashA, mid, ex);
+    this.lashSeg(mid, this._lashB, ez);
+  }
+
+  private updateLash(dt: number): void {
+    this.lashT += dt;
+    this.lashN = 0;
+    const r2 = DEPLOY_ITEMS.tether.tetherRadius! ** 2;
+    const nm = this.deps.lazyNetworkManager();
+    const me = nm.getLocalPlayerId();
+    const { localTeam } = this.deps.world;
+    const lp = this.deps.lazyPlayer();
+    for (const list of [this.items, this.remotes.values()]) {
+      for (const i of list) {
+        if (i.kind !== 'tether' || i.dead) {continue;}
+        if (i.owner !== undefined && i.owner !== me && (!i.team || i.team !== localTeam)) {
+          const dx = lp.pos.x - i.pos.x, dz = lp.pos.z - i.pos.z;
+          if (dx * dx + dz * dz < r2) {this.lashPair(i.pos.x, i.pos.y, i.pos.z, lp.pos.x, lp.pos.y, lp.pos.z);}
+        }
+        for (const [pid, rp] of nm.getPlayers()) {
+          if (pid === me || pid === i.owner || rp.isDead || (i.team !== undefined && rp.team === i.team)) {continue;}
+          const dx = rp.position.x - i.pos.x, dz = rp.position.z - i.pos.z;
+          if (dx * dx + dz * dz < r2) {this.lashPair(i.pos.x, i.pos.y, i.pos.z, rp.position.x, rp.position.y, rp.position.z);}
+        }
+      }
+    }
+    for (let i = this.lashN; i < this.lashPool.length; i += 1) {
+      this.lashPool[i]!.visible = false;
+    }
+  }
+
+  /** The tether snare the local body stands in — the same rule as the
+   *  server's tickTethers (enemy-side, outside the owner) so the local
+   *  replay bleeds the same outward speed. Local plants carry owner
+   *  undefined; those are ours, never a snare on ourselves. */
+  private tetherFor(): { x: number; y: number; z: number; r: number } | undefined {
+    const p = this.deps.lazyPlayer();
+    if (!p) {return undefined;}
+    const me = this.deps.lazyNetworkManager().getLocalPlayerId();
+    const { localTeam } = this.deps.world;
+    const r = DEPLOY_ITEMS.tether.tetherRadius!;
+    for (const list of [this.items, this.remotes.values()]) {
+      for (const i of list) {
+        if (i.kind !== 'tether' || i.dead || i.owner === undefined || i.owner === me) {continue;}
+        if (i.team !== undefined && i.team === localTeam) {continue;}
+        const dx = p.pos.x - i.pos.x, dz = p.pos.z - i.pos.z;
+        if (dx * dx + dz * dz < r * r) {return { x: i.pos.x, y: i.pos.y, z: i.pos.z, r };}
+      }
+    }
+    return undefined;
+  }
+
+  /** The watersphere pocket the local body wades in — the same rule as
+   *  the server's tickWatersphere: only a HOSTILE team's dome drags you
+   *  (teamless domes are friendly to everyone, matching tickWatersphere). */
+  private waterDomeFor(): { x: number; y: number; z: number; r: number } | undefined {
+    const p = this.deps.lazyPlayer();
+    if (!p) {return undefined;}
+    const { localTeam } = this.deps.world;
+    const r = DEPLOY_ITEMS.watersphere.waterRadius!;
+    for (const list of [this.items, this.remotes.values()]) {
+      for (const i of list) {
+        if (i.kind !== 'watersphere' || i.dead) {continue;}
+        if (i.team === undefined || i.team === localTeam) {continue;}
+        const dx = p.pos.x - i.pos.x, dz = p.pos.z - i.pos.z;
+        if (dx * dx + dz * dz < r * r) {return { x: i.pos.x, y: i.pos.y, z: i.pos.z, r };}
+      }
+    }
+    return undefined;
   }
 
   // --- Targeting beacon aim reticle -----------------------------------------

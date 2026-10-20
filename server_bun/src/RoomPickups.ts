@@ -17,6 +17,7 @@ import { hmHeight, hmChord, hmSettleWalkable } from '../../shared/heightfield.ts
 import { NUG_TUMBLE, type PickupKind } from '../../shared/pickups.ts';
 import { GRAVITY } from '../../shared/movement.ts';
 import { inv } from '../../shared/invariants.ts';
+import { simNow } from './simClock.ts';
 
 const PICKUP_R = 2.2;   // planar grab radius, same feel as flag pickup
 const TOKEN_R = 3.8;    // headhunt tokens reach further — scooping a
@@ -26,7 +27,7 @@ const MAX_PICKUPS = 64;  // cap so a ball-farm can't flood the room
 const NUG_FRICTION = NUG_TUMBLE.friction;
 
 export class RoomPickups {
-  private pickups = new Map<number, { id: number; pos: Vec3; ttl: number; kind: PickupKind; val: number; vel: Vec3; armT: number; tacc: number }>();
+  private pickups = new Map<number, { id: number; pos: Vec3; ttl: number; kind: PickupKind; val: number; vel: Vec3; armT: number; tacc: number; lockTeam?: string; lockUntil?: number }>();
   private nextId = 1;
   /** Last-tick positions for the sweep — a capper crosses the grab ring
    *  between two 20Hz frames at speed; same swept-capsule rule flags use,
@@ -40,7 +41,10 @@ export class RoomPickups {
   /** armS: collect grace — a pack-thrown nugget mints one of these at the
    *  thrower's feet-ish range; the beat keeps the toss from bank-to-self
    *  on the same frame it lands. */
-  spawn(pos: Vec3, kind: PickupKind = 'gem', armS = 0, val = 1): void {
+  /** lockTeam+lockS: the named team can't collect this drop for that
+   *  many sim-seconds — headhunt's corpse-scatter rule experiment
+   *  (FPS_HH_REGRAB_LOCK_S), breaks the die-at-home-regrab loop. */
+  spawn(pos: Vec3, kind: PickupKind = 'gem', armS = 0, val = 1, lockTeam?: string, lockS = 0, vel?: Vec3): void {
     if (this.pickups.size >= MAX_PICKUPS) {
       // A saturated pool refusing the objective's income is invisible
       // without this — "kills stopped dropping nuggets" vs "pool full"
@@ -49,7 +53,8 @@ export class RoomPickups {
       return;
     }
     const id = ((this.nextId += 1) - 1);
-    const p = { id, pos: Object.assign({}, pos), ttl: PICKUP_TTL_S, kind, val, vel: { x: 0, y: 0, z: 0 }, armT: armS, tacc: 0 };
+    const p = { id, pos: Object.assign({}, pos), ttl: PICKUP_TTL_S, kind, val, vel: vel ? Object.assign({}, vel) : { x: 0, y: 0, z: 0 }, armT: armS, tacc: 0,
+      ...(lockTeam ? { lockTeam, lockUntil: simNow() / 1000 + lockS } : {}) };
     this.settleReachable(p);
     // Drops spawn at the victim's eye height — hmSettleWalkable only
     // grounds pos.y when it slides, so a flat-ground death leaves the
@@ -63,7 +68,7 @@ export class RoomPickups {
     this.pickups.set(id, p);
     logger.debug('Pickup spawned', { room: this.room.name, kind, id });
     weaponStats.recordPickup(this.room.mode, kind, 'spawned');
-    this.room.broadcast(spawnPayload(WORLD_MODEL.pickup!, id, 'id', { pos: Object.assign({}, p.pos), kind, val }) as ServerMessage);
+    this.room.broadcast(spawnPayload(WORLD_MODEL.pickup!, id, 'id', { pos: Object.assign({}, p.pos), kind, val, vel: Object.assign({}, p.vel) }) as ServerMessage);
   }
 
   /** Match reset — clear the field and tell clients to drop the gems. */
@@ -162,7 +167,7 @@ export class RoomPickups {
             inv('pickup-below-ground', !Number.isFinite(dg) || p.pos.y >= dg - 0.5,
               { id: p.id, y: Number(p.pos.y.toFixed(1)) });
             // Resting spot is the new truth — one edge resyncs every client.
-            this.room.broadcast(spawnPayload(WORLD_MODEL.pickup!, p.id, 'id', { pos: Object.assign({}, p.pos), kind: p.kind, val: p.val }) as ServerMessage);
+            this.room.broadcast(spawnPayload(WORLD_MODEL.pickup!, p.id, 'id', { pos: Object.assign({}, p.pos), kind: p.kind, val: p.val, vel: Object.assign({}, p.vel) }) as ServerMessage);
           }
         }
       }
@@ -174,6 +179,7 @@ export class RoomPickups {
       if (p.armT > 0) { p.armT -= dt; continue; } // still flying — no grabs
       for (const pl of players.values()) {
         if (pl.isDead) {continue;}
+        if (p.lockUntil && pl.team === p.lockTeam && simNow() / 1000 < p.lockUntil) {continue;}
         // Score pickups (gems/tags/tokens) only exist in team modes;
         // powerups are grab-able by anyone alive in any mode.
         if ((p.kind === 'gem' || p.kind === 'tag' || p.kind === 'token') && !pl.team) {continue;}

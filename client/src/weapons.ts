@@ -11,7 +11,7 @@
 // To add a weapon: shared/weapons.ts stats + ProjectileConfig + geo/sfx
 // entries, then ONE def here. Nothing else aligns positionally.
 
-import { WeaponType } from '../../shared/weapons.js';
+import { WeaponType, LANCE_CADENCE_S } from '../../shared/weapons.js';
 import type { ProjectileConfig } from './projectiles/types.js';
 import { BOLT_CONFIG } from './projectiles/boltConfig.js';
 import { DISC_CONFIG } from './projectiles/discConfig.js';
@@ -24,6 +24,7 @@ import { PLASMAGUN_CONFIG } from './projectiles/plasmagunConfig.js';
 import { SPRINKLER_CONFIG } from './projectiles/sprinklerConfig.js';
 import { RAILGUN_CONFIG } from './projectiles/railgunConfig.js';
 import { LIGHTNING_CONFIG } from './projectiles/lightningConfig.js';
+import { SHOCKLANCE_CONFIG } from './projectiles/shocklanceConfig.js';
 import { SHOTGUN_CONFIG } from './projectiles/shotgunConfig.js';
 import { CANNON_CONFIG } from './projectiles/cannonConfig.js';
 import { BOMBARD_CONFIG } from './projectiles/bombardConfig.js';
@@ -71,7 +72,7 @@ function def(weaponType: WeaponType, rate: number, config: ProjectileConfig,
              kick: number, opts: { auto?: boolean; pellets?: { count: number; spread: number }; spread?: number; sidearm?: boolean } = {}): WeaponDef {
   let kind: WeaponDef['kind'] = 'projectile';
   if (opts.pellets) {kind = 'fan';}
-  else if (weaponType === WeaponType.Lightning || weaponType === WeaponType.Repair) {kind = 'beam';}
+  else if (weaponType === WeaponType.Lightning || weaponType === WeaponType.Repair || weaponType === WeaponType.Shocklance) {kind = 'beam';}
   return {
     weaponType, rate, config, kick,
     kind,
@@ -106,7 +107,13 @@ export const SLOT_DEFS: readonly WeaponDef[] = [
   def(WeaponType.Repair, REPAIR_RATE, REPAIR_CONFIG, 0, { auto: true, sidearm: true }),
   def(WeaponType.MRVLauncher, MRV_RATE, MRV_CONFIG, 2.2),
   def(WeaponType.Bombard, BOMBARD_RATE, BOMBARD_CONFIG, 2.4),
+  // Shocklance — the hold-out power lance: 18m zap on a 2s refire
+  // (LANCE_CADENCE_S — the same number the server's lance gate reads).
+  def(WeaponType.Shocklance, LANCE_CADENCE_S, SHOCKLANCE_CONFIG, 0.4, { sidearm: true }),
 ];
+
+/** wid of the shocklance def — the 'lance' sidearm pick binds this. */
+export const LANCE_WID = SLOT_DEFS.findIndex((d): boolean => d.weaponType === WeaponType.Shocklance);
 
 export const SLOT_COUNT = SLOT_DEFS.length;
 

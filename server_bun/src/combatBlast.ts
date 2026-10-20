@@ -67,7 +67,7 @@ export interface BlastHost {
   reject(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number): void;
   applyHit(shooterId: string, targetId: string, damage: number,
            result: { killed: boolean; newHealth: number; newArmor: number },
-           opts: { label: string; extra?: Record<string, unknown>; weapon?: number; shotId?: string; air?: number }): void;
+           opts: { label: string; extra?: Record<string, unknown>; weapon?: number; shotId?: string; air?: number; gd?: number }): void;
   ddMult(shooter: PlayerState): number;
 }
 
@@ -253,6 +253,20 @@ export class BlastRunner {
     // at t≈0 is stepped past rather than counted.
     if (this.h.solids.length > 0 && this.blastBlocked(ctx.pos, tpos)) {return;}
 
+    // Ghost-forensics: the gap between the rewind ghost this hit was
+    // credited on and the victim's live wire truth — a large delta is
+    // the "hit landed where nobody stood" feel, worth naming in the log
+    // AND on the shooter's wire (playerHit.gd → HUD complaint feed).
+    let gd: number | undefined;
+    if (targetId !== ctx.shooterId) {
+      const gdx = tpos.x - target.position.x, gdy = tpos.y - target.position.y, gdz = tpos.z - target.position.z;
+      const g = Math.sqrt(gdx * gdx + gdy * gdy + gdz * gdz);
+      if (g > 1.5) {
+        gd = Number(g.toFixed(1));
+        logger.info('ghost hit', { shooter: ctx.shooterId, victim: targetId, deltaM: gd, wt: ctx.weapon });
+      }
+    }
+
     // Spawn-shielded victim: damage already returns early inside
     // applyDamage, but the shove landed anyway — an "invulnerable" target
     // that still launches reads as a phantom push with zero feedback.
@@ -269,7 +283,7 @@ export class BlastRunner {
     // hit claim, but the blast displacement is still owed (wire notify +
     // shadow impulse + forceSend, same as a splash shove).
     if (impulseOnly) {
-      if (!protectedTarget) {this.shove(targetId, target, { x: tdx, y: tdy, z: tdz }, impulseMag, ctx.pos, ctx.pull);}
+      if (!protectedTarget) {this.shove(targetId, target, { x: tdx, y: tdy, z: tdz }, impulseMag, { pos: ctx.pos, pull: ctx.pull });}
       return;
     }
 
@@ -281,7 +295,7 @@ export class BlastRunner {
     // Humans self-predict their own displacement — server only shoves
     // the self-target when it's a bot (server velocity truth).
     if ((!shoveOnly || target.isBot) && !protectedTarget) {
-      this.shove(targetId, target, { x: tdx, y: tdy, z: tdz }, impulseMag, ctx.pos, ctx.pull);
+      this.shove(targetId, target, { x: tdx, y: tdy, z: tdz }, impulseMag, { pos: ctx.pos, pull: ctx.pull });
     }
     if (shoveOnly && ctx.weapon === WeaponType.Melee) {return;}
     // A swing is not a feet-blast — the punch point sits inside its own
@@ -312,7 +326,7 @@ export class BlastRunner {
     // never deals damage to them in team rooms.
     if (this.h.friendly(ctx.shooterId, targetId)) {return;}
     const result = this.h.playerManager.applyDamage(targetId, damage);
-    this.h.applyHit(ctx.shooterId, targetId, damage, result, { label: `Player ${ctx.label} hit`, extra: { dist: Number(dist.toFixed(2)) }, weapon: ctx.weapon, shotId: ctx.shotId, air: ctx.air });
+    this.h.applyHit(ctx.shooterId, targetId, damage, result, { label: `Player ${ctx.label} hit`, extra: { dist: Number(dist.toFixed(2)) }, weapon: ctx.weapon, shotId: ctx.shotId, air: ctx.air, gd });
     // Concussion payload: the conc's whole job is stripping the flag —
     // a carrier clipped by the blast fumbles it like in T2, and the
     // victim's jet tank takes a bite so the escape is hobbled too.
@@ -326,7 +340,8 @@ export class BlastRunner {
    *  forceSend flag that makes the next position update authoritative.
    *  `offset` is target-from-blast; `pull` reverses direction and
    *  flattens the up-vector (disc suck). */
-  private shove(targetId: string, target: PlayerState, offset: Vec3, impulseMag: number, pos: Vec3, pull: boolean): void {
+  private shove(targetId: string, target: PlayerState, offset: Vec3, impulseMag: number, opts: { pos: Vec3; pull?: boolean; aim?: Vec3 }): void {
+    const { pos, pull = false, aim } = opts;
     const dist = Math.hypot(offset.x, offset.y, offset.z);
     // NaN comparisons pass below (dist<=0 on NaN is false) — a poisoned
     // impulse or offset would write NaN velocity the shadow never shakes.
@@ -336,17 +351,54 @@ export class BlastRunner {
     // applyKnockback divides by its class, so both ends land the same dv.
     const m = classMass(target.armorClass);
     const eff = impulseMag / m;
-    const dv: Vec3 = pull
-      ? { x: -(offset.x / dist) * eff, y: 0.3 * eff, z: -(offset.z / dist) * eff }
-      : { x: (offset.x / dist) * eff, y: 0.5 * eff, z: (offset.z / dist) * eff };
+    // aim: a unit vector — the rope dart flies AT its anchor, so the dv
+    // keeps the vertical component and skips the up-pop entirely.
+    const dv: Vec3 = aim
+      ? { x: aim.x * eff, y: aim.y * eff, z: aim.z * eff }
+      : pull
+        ? { x: -(offset.x / dist) * eff, y: 0.3 * eff, z: -(offset.z / dist) * eff }
+        : { x: (offset.x / dist) * eff, y: 0.5 * eff, z: (offset.z / dist) * eff };
     target.velocity.x += dv.x;
     target.velocity.y += dv.y;
     target.velocity.z += dv.z;
     this.h.deps.emit?.({ type: 'impulse', playerId: targetId, dv });
     target.forceSendUntil = wallMs(wallNow() + FORCE_SEND_MS);
     this.h.sendToPlayer(targetId, eventPayload(WORLD_MODEL.player!, 'knockback', 'targetId', targetId, {
-      position: pos, force: impulseMag, pull: pull || undefined,
+      position: pos, force: impulseMag, pull: pull || undefined, yank: aim ? true : undefined,
     }) as ServerMessage);
+  }
+
+  /** Rope dart contact — the Hook's whole payload. A body hit reels the
+   *  victim toward the shooter; anything else reels the shooter toward
+   *  the anchor. One impulse through the blast shove so velocity writes,
+   *  the wire knockback, and forceSend all ride the proven path. */
+  grapple(ownerId: string, anchor: Vec3, victimId: string | null): void {
+    const stats = getWeaponStats(WeaponType.Hook);
+    const owner = this.h.playerManager.getPlayer(ownerId);
+    if (!owner || owner.isDead) {return;}
+    if (victimId === null || victimId === ownerId) {
+      // Terrain anchor: reel the owner in — aim AT the contact, vertical
+      // included (a high wall is a legal grapple), no sucker-pop.
+      const off = { x: owner.position.x - anchor.x, y: owner.position.y - anchor.y, z: owner.position.z - anchor.z };
+      const d = Math.hypot(off.x, off.y, off.z) || 1;
+      this.shove(ownerId, owner, off,
+        stats.knockbackForce * perkMods(owner.perk).knockbackTaken,
+        { pos: anchor, pull: true, aim: { x: -off.x / d, y: -off.y / d, z: -off.z / d } });
+      return;
+    }
+    const victim = this.h.playerManager.getPlayer(victimId);
+    if (!victim || victim.isDead) {return;}
+    // Spawn-shielded enemies don't get yanked — same gate as blast shove;
+    // friendlies are fair game (reeling your carrier home is an assist).
+    if (simNow() < victim.protectedUntil && !this.h.friendly(ownerId, victimId)) {return;}
+    // Reel the victim toward the shooter — the rope aims at the
+    // thrower's body, so a skier overhead drags the victim up.
+    const off = { x: victim.position.x - owner.position.x, y: victim.position.y - owner.position.y, z: victim.position.z - owner.position.z };
+    const d = Math.hypot(off.x, off.y, off.z) || 1;
+    this.shove(victimId, victim, off,
+      stats.knockbackForce * perkMods(victim.perk).knockbackTaken,
+      { pos: owner.position, pull: true, aim: { x: -off.x / d, y: -off.y / d, z: -off.z / d } });
+    this.h.hb('hook.yank');
   }
 
   /** The charge pop itself — a Lightning-stat blast scaled by the amount
@@ -367,15 +419,15 @@ export class BlastRunner {
 
   /** Server-owned blast — the room's projectile/deployable sims decided
    *  where this pops, so the shooter-distance sanity check doesn't apply. */
-  serverBlast(ownerId: string, position: Vec3, weaponType: number, excludeTargetId?: string | null, shotId?: string, attribWeaponType?: number, power?: number): void {
-    if (weaponType === WeaponType.Sticky) { console.log('STICKY BLAST:', ownerId, 'pos=', position.x.toFixed(1), position.y.toFixed(1), position.z.toFixed(1), 'attrib=', attribWeaponType); }
+  serverBlast(ownerId: string, position: Vec3, weaponType: number, excludeTargetId?: string | null, opts: { shotId?: string; attribWeaponType?: number; power?: number; air?: number } = {}): void {
+    const { shotId, attribWeaponType, power, air } = opts;
     const base = getWeaponStats(weaponType);
     if (!base || base.aoeRadius <= 0) {return;}
     // Power-scaled variants (Slam dive-speed blast) keep the identity
     // fields and multiply the payload envelope — same formula the client
     // predicts with.
     const stats = power === undefined ? base : ((((((Object.assign({}, base, {aoeDamage: base.aoeDamage * power,aoeRadius: base.aoeRadius * power,knockbackForce: base.knockbackForce * power})))))));
-    this.processAOE(ownerId, position, excludeTargetId, stats, { weapon: attribWeaponType ?? weaponType, trusted: true, shotId });
+    this.processAOE(ownerId, position, excludeTargetId, stats, { weapon: attribWeaponType ?? weaponType, trusted: true, shotId, air });
     // Live nuggets are fair game too — a shell near a gem can punt it.
     // Both loose objects' knocks live inside processAOE above.
   }
@@ -405,7 +457,7 @@ export class BlastRunner {
       // Falloff + shove from shared formulas — client predicts the same hit.
       const damage = targetId === ownerId ? 0 : aoeDamage(baseDamage, dist, radius);
       const impulseMag = aoeImpulseT1At(knockback, pos, target.position, radius, target.armorClass) * KNOCKBACK_SCALE * perkMods(target.perk).knockbackTaken;
-      if (!protectedTarget) {this.shove(targetId, target, { x: dx, y: dy, z: dz }, impulseMag, pos, false);}
+      if (!protectedTarget) {this.shove(targetId, target, { x: dx, y: dy, z: dz }, impulseMag, { pos });}
       // Owner eats the blast too — mines don't pick friends.
       if (!this.h.friendly(ownerId, targetId) && damage > 0) {
         const result = this.h.playerManager.applyDamage(targetId, damage);

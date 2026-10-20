@@ -26,7 +26,7 @@ import { InputFlags, JetpackFlags, TargetEventType, type DemoFrame } from '../cl
 import { makeSimBall, stepBall, BALL_BASE_RADIUS, BALL_VARIANT_SCALE, type SimBall } from '../shared/ballSim.ts';
 import { lcg32 } from '../shared/simRand.ts';
 import { drawBallSpawn, drawSplitVel, drawVariant, SPAWN_SEED_XOR } from '../shared/spawnDice.ts';
-import { WEAPONS } from '../shared/weaponTable.ts';
+import { WEAPONS } from '../shared/weaponRows.ts';
 import { GRAVITY } from '../shared/movement.ts';
 import { ProjectileEventType } from '../client/src/demo/types.ts';
 

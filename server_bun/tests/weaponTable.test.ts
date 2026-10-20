@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
-import { WeaponType, WEAPONS } from '../../shared/weaponTable.ts';
+import { WeaponType } from '../../shared/weaponTable.ts';
+import { WEAPONS } from '../../shared/weaponRows.ts';
 import { WEAPON_FIRE_INTERVAL_S, getWeaponStats } from '../../shared/weapons.ts';
 
 const IDS = Object.keys(WEAPONS).map(Number);

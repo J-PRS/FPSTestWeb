@@ -125,8 +125,15 @@ export class BotMoves {
     // needs; a clean fly-through still never trips it. His lap radius is
     // wider than a grab orbit's (peaks: 40-90m under the stand), so the
     // ring widens for the below-flag case.
-    const watchGd = ctx.running && dyAbove < -6 ? T.moves.grabWatchGd * 3 : T.moves.grabWatchGd;
-    if (ctx.runner && (!ctx.running || dyAbove < -6) && !ctx.posted && ctx.objective && od < watchGd) {
+    // Carrier exception bounds: below the flag enough to prove he's in
+    // the vertical orbit (-6), but not so far below that the stand face
+    // is a cliff — past ~-25 the crawler can never mount it anyway and
+    // beelining the wall is worse than letting the routed leg walk the
+    // long way up (peaks carry: parked 30m under home burning 40E into
+    // a 33m face, en 40→5, slide, repeat).
+    const belowFlag = dyAbove < -6 && dyAbove > -25;
+    const watchGd = ctx.running && belowFlag ? T.moves.grabWatchGd * 3 : T.moves.grabWatchGd;
+    if (ctx.runner && (!ctx.running || belowFlag) && !ctx.posted && ctx.objective && od < watchGd) {
       if (od < this.odBest) {this.odBest = od;}
       // Each grabOrbitS window must close grabOrbitMinGain toward the
       // pole — an orbit that dips a little nearer each lap keeps making
@@ -164,8 +171,15 @@ export class BotMoves {
       if (this.crawl) {
         // Same mount-wait as the hop branch: the crawl's raw jet flag
         // has no tank floor, so a dry crawler sputters against the lip
-        // forever — park and bank a real tap first.
-        if (rise > T.moves.stepJetRise && ctx.energy !== undefined && ctx.energy < T.moves.mountE) {
+        // forever — park and bank a real tap first. The floor scales
+        // with the gap: a 2m dais lip mounts on mountE, a CARRIER's flag
+        // 20m+ overhead needs a breathHold burn or the crawl fizzles on
+        // the face forever (peaks carrier: 60s parked 30m under home). A
+        // runner stays on mountE — the deep-orbit sputter veto can't
+        // bank 38 while the approach leg keeps spending (peaks grabber:
+        // en oscillated 2-32 for 240s, mountCommit never fired).
+        const mountFloor = dyAbove < -20 && ctx.running ? T.moves.breathHold : T.moves.mountE;
+        if (rise > T.moves.stepJetRise && ctx.energy !== undefined && ctx.energy < mountFloor) {
           this.mountWait = true;
           return { ski: false, jet: false, jump: false, park: true };
         }
@@ -254,7 +268,7 @@ export class BotMoves {
       // dry tank the hop kept firing anyway and the bot rim-orbited the
       // dais forever (soak: HALO/MARA pinned at the henge stand). Hold
       // the shove while the tank refills to the hop's floor, then mount.
-      if (rise > T.moves.stepJetRise && ctx.energy !== undefined && ctx.energy < T.moves.mountE) {
+      if (rise > T.moves.stepJetRise && ctx.energy !== undefined && ctx.energy < (dyAbove < -20 && ctx.running ? T.moves.breathHold : T.moves.mountE)) {
         this.mountWait = true;
         return { ski: false, jet: false, jump: false, park: true };
       }

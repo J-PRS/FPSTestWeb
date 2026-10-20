@@ -358,6 +358,20 @@ export class HUD {
     this.connFlashTxt = text;
     this.connFlashCls = 'warn';
   }
+  /** Live complaint feed — Logger WARN+ lines (ghost shells, dead lanes,
+   *  GLITCH parity misses) surface in the conn-banner for a beat instead
+   *  of only sitting in the console/log buffer. The down-state paint
+   *  wins while the socket is actually out, so a complaint can't mask a
+   *  real disconnect; the latest complaint wins the slot until it expires. */
+  complaint(line: string): void {
+    if (this.connDownAt) {return;}
+    // logLine is `${ts} [tag] [LEVEL] msg` — drop the timestamp, cap the
+    // banner at one readable line.
+    const txt = line.replace(/^\S+ /, '').slice(0, 110);
+    this.connFlashUntil = performance.now() + 4000;
+    this.connFlashTxt = txt;
+    this.connFlashCls = 'warn';
+  }
   setConnDown(down: boolean, reason?: string | null): void {
     const now = performance.now();
     if (down) {

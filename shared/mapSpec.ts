@@ -165,6 +165,11 @@ export interface MapSpec {
    *  clients for the barrier render; server uses it for out-of-bounds
    *  checks (future: damage/skid-push on contact). */
   arena?: { x: number; z: number; radius: number };
+  /** Kill zone — world Y below which a body dies ("fell out of the
+   *  arena"). The heightfield is always there, so a terrainless arena
+   *  needs this: drop below the deck and the sim ends you. Absent = no
+   *  kill zone and every other map plays exactly as before. */
+  killY?: number;
   /** Ambient species population overrides — { crawler: 0 } silences a
    *  species, { overlord: 4 } makes a boss map. Keys are species names
    *  ('crawler','seeker','rakk','strifer','gnat',...); absent = defaults.
@@ -388,6 +393,16 @@ function parseArena(raw: unknown): MapSpec['arena'] {
   if (!Number.isFinite(a.x) || !Number.isFinite(a.z) || !Number.isFinite(a.radius)) {return undefined;}
   const radius = Math.max(10, Math.min(750, a.radius as number));
   return { x: a.x as number, z: a.z as number, radius };
+}
+
+/** Kill zone height — a finite world Y in metres. Absent = no zone. */
+function parseKillY(raw: unknown): number | undefined {
+  if (raw === undefined) {return undefined;}
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+    specWarn('killY: non-numeric value dropped');
+    return undefined;
+  }
+  return Math.max(-2000, Math.min(2000, raw));
 }
 
 
@@ -661,6 +676,7 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     deploys: parseDeploys((src as { deploys?: unknown }).deploys),
     interiors: parseInteriors((src as { interiors?: unknown }).interiors),
     arena: parseArena((src as { arena?: unknown }).arena),
+    killY: parseKillY((src as { killY?: unknown }).killY),
     ambient: parseAmbient((src as { ambient?: unknown }).ambient),
     creatures: parseAmbient((src as { creatures?: unknown }).creatures),
   };

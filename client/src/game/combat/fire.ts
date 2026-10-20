@@ -8,13 +8,13 @@ import {
   GRENADE_CONFIG, BELT_DISC_CONFIG, BELT_STICKY_CONFIG,
   CLUSTER_CONFIG, JAVELIN_CONFIG, IMPACT_CONFIG, REMOTE_RAILGUN_CONFIG,
   ARMORNADE_CONFIG, PROXY_CONFIG, SATCHEL_CONFIG, HEALNADE_CONFIG,
-  CONC_CONFIG,
+  CONC_CONFIG, HOOK_CONFIG,
 } from '../../projectiles/index.js';
 import { simRand } from '../../../../shared/simRand.js';
 import type { WeaponDef } from '../../weapons.js';
 import { BELT_THROW_TIME, type BeltItem } from '../../entities/Player.js';
 import type { ProjectileConfig } from '../../projectiles/types.js';
-import { THROW_RELEASE } from '../../entities/ViewModel.js';
+import { THROW_RELEASE, SWING_CONTACT_T, SWING_STRIKE_T } from '../../entities/ViewModel.js';
 import { poissonDisc } from '../../utils/poissonSpread.js';
 import { spawnDrift } from '../../debug/netProbe.js';
 import {
@@ -22,7 +22,7 @@ import {
 } from '../../core/config.js';
 import { ScorchDecal } from '../../effects/scorch.js';
 import { fxPuff } from '../../effects/vfx.js';
-import { swingSwipeView } from '../../effects/swingTrails.js';
+import { swingArcView } from '../../effects/swingTrails.js';
 import { getWeaponStats, WeaponType, beltThrowCost, serverSimmed } from '../../../../shared/weapons.js';
 import type { CombatDeps, FireArgs } from '../combat.js';
 import type { BlastArgs } from '../blastForce.js';
@@ -169,6 +169,7 @@ const BELT_THROWS: Record<BeltItem, ProjectileConfig> = {
   proxy: PROXY_CONFIG,
   satchel: SATCHEL_CONFIG,
   heal: HEALNADE_CONFIG,
+  hook: HOOK_CONFIG,
 };
 
 function onBelt(deps: CombatDeps, _e: FireArgs, item: BeltItem): void {
@@ -273,39 +274,70 @@ function meleeGroundContact(playerPos: THREE.Vector3, dir: THREE.Vector3, terrai
   return null;
 }
 
-// Swing presentation: fist puff at the resolved contact point, a fist-mark
-// scorch + dirt spray + thud on terrain hits, and a speed-line whoosh that
-// sells the arc without an arm animation (same trick as the blink surge).
-// All visuals — the damage/force side stays in melee() below.
-function meleeSwingFx(deps: CombatDeps, e: FireArgs, fxPos: THREE.Vector3, groundHit: THREE.Vector3 | null, landed: boolean): void {
+// Swing presentation: the swipe that sells the arc, the punch puff at
+// the resolved contact point, a scorch + dirt spray + thud on terrain
+// hits, and the camera kick. All visuals — the damage/force side stays
+// in melee() below.
+//
+// The FX are TIMED TO THE ANIMATION, not to the keypress: the whoosh
+// goes with the strike and the impact lands on the contact frame ~130ms
+// later. Feedback that arrives before the hammer does reads as lag
+// rather than weight, and the hit number popping a beat after the press
+// is what sells the connect.
+function meleeSwingFx(deps: CombatDeps, e: FireArgs, fxPos: THREE.Vector3, groundHit: THREE.Vector3 | null, hitAt: THREE.Vector3[]): void {
   const player = deps.lazyPlayer();
   const stats = getWeaponStats(WeaponType.Melee);
-  deps.lazyViewModel()?.punch(landed); // landed = apex hold — the hit-pose dwell
-  deps.world.explosions.push(new Explosion(
-    deps.lazyScene(), fxPos, true, 0, deps.lazyTerrain(),
-    (stats.aoeRadius * 0.7) / EXPLOSION_VFX_RADIUS, 0xAA_DD_FF, 'punch',
-  ));
-  screenShake.blast(fxPos, stats.aoeRadius, player.pos);
-  if (groundHit) {
-    if (deps.world.scorches.length >= SCORCH_MAX) {deps.world.scorches.shift()!.dispose();}
-    deps.world.scorches.push(new ScorchDecal(deps.lazyScene(), deps.lazyTerrain(), groundHit, 1.4));
-    // Dirt spray kicked up off the fist — brown, gravity-bound, short.
-    fxPuff(groundHit, {
-      count: 14, pos: [0.4, 0.1, 0.4],
-      velMin: [-3.5, 2.5, -3.5], velMax: [3.5, 8, 3.5],
-      lifeMin: 0.25, lifeMax: 0.7, sizeScale: 1.6,
-      colA: [0.32, 0.26, 0.18], colB: [0.5, 0.42, 0.3],
-    });
-    sfx.at(groundHit, 'slam_thud', 0.9);
-    screenShake.add(0.28);
-  }
-  deps.lazySpeedLines?.().surge(player.pos, fxPos, 0xAA_DD_FF, 8);
-  // The slash arc — the actual "swing" read. Hit or whiff, every punch
-  // sweeps an X of billboarded streaks across the view (~0.16s); without
-  // it a mid-air swing was just a faint puff. Pinned to the camera so it
-  // doesn't lag behind at speed; the camera kicks along with it.
-  swingSwipeView(deps.lazyScene(), deps.lazyCamera());
-  screenShake.swingKick(1, landed);
+  const landed = hitAt.length > 0;
+  deps.lazyViewModel()?.swing(landed); // landed = connect dwell — the hammer stops on them
+  // The whoosh and the slash arc belong to the STRIKE, not to the press:
+  // the smear appearing a frame after the keypress read as a white flash
+  // that landed before the hammer did.
+  window.setTimeout((): void => {
+    sfx.shoot(WeaponType.Melee);
+    // The slash arc — the actual "swing" read. One smear along the chop
+    // (the hammer smacks sideways), pinned to the camera so it can't lag
+    // behind at speed. It peaks with the contact and fades after it.
+    swingArcView(deps.lazyScene(), deps.lazyCamera());
+  }, SWING_STRIKE_T * 1000);
+  window.setTimeout((): void => {
+    const at = landed ? hitAt[0]! : (groundHit ?? fxPos);
+    deps.world.explosions.push(new Explosion(
+      deps.lazyScene(), at, true, 0, deps.lazyTerrain(),
+      (stats.aoeRadius * 0.7) / EXPLOSION_VFX_RADIUS, 0xAA_DD_FF, 'punch',
+    ));
+    screenShake.blast(at, stats.aoeRadius, player.pos);
+    if (landed) {
+      // The number pops WITH the hit, not with the press.
+      for (const h of hitAt) {deps.lazyDamageNumbers().spawn(h, MELEE_DAMAGE, '#aaddff', deps.lazyCamera());}
+      deps.lazyHud().showHitMarker();
+      // The crack that sells it — positional impact on a confirmed hit.
+      sfx.at(at, 'impact', 1);
+      sfx.hitMarker(true);
+      // Contact sparks + a shake bump — feedback that says HOW HARD.
+      fxPuff(at, {
+        count: 10, pos: [0.3, 0.3, 0.3],
+        velMin: [-5, 1, -5], velMax: [5, 6, 5],
+        lifeMin: 0.12, lifeMax: 0.35, sizeScale: 1,
+        colA: [0.6, 0.85, 1], colB: [0.3, 0.5, 0.9], additive: true,
+      });
+      screenShake.add(0.22);
+    }
+    if (groundHit) {
+      if (deps.world.scorches.length >= SCORCH_MAX) {deps.world.scorches.shift()!.dispose();}
+      deps.world.scorches.push(new ScorchDecal(deps.lazyScene(), deps.lazyTerrain(), groundHit, 1.4));
+      // Dirt spray kicked up off the fist — brown, gravity-bound, short.
+      fxPuff(groundHit, {
+        count: 14, pos: [0.4, 0.1, 0.4],
+        velMin: [-3.5, 2.5, -3.5], velMax: [3.5, 8, 3.5],
+        lifeMin: 0.25, lifeMax: 0.7, sizeScale: 1.6,
+        colA: [0.32, 0.26, 0.18], colB: [0.5, 0.42, 0.3],
+      });
+      sfx.at(groundHit, 'slam_thud', 0.9);
+      screenShake.add(0.28);
+    }
+    deps.lazySpeedLines?.().surge(player.pos, at, 0xAA_DD_FF, 8);
+    screenShake.swingKick(1, landed);
+  }, SWING_CONTACT_T * 1000);
 }
 
 // Melee sweep — the arc check happens around a point pushed forward
@@ -313,7 +345,6 @@ function meleeSwingFx(deps: CombatDeps, e: FireArgs, fxPos: THREE.Vector3, groun
 function melee(deps: CombatDeps, hooks: FireHooks, e: FireArgs): void {
   const player = deps.lazyPlayer();
   const stats = getWeaponStats(WeaponType.Melee);
-  sfx.shoot(WeaponType.Melee);
   player.lastFireAt = performance.now(); // decloak-on-fire — see spawnProjectile
   _meleeHitPos.copy(player.pos).addScaledVector(e.dir, MELEE_RANGE * 0.7);
 
@@ -323,7 +354,11 @@ function melee(deps: CombatDeps, hooks: FireHooks, e: FireArgs): void {
   // (server derives pos/dir) — claiming the contact too would double-pay.
   const serverPaid = deps.lazyNetworkManager()?.authoritySims() === true;
 
-  let connected: THREE.Vector3 | null = null;
+  // Hit positions are banked; the FEEDBACK fires on the animation's
+  // contact frame (see meleeSwingFx). The damage itself resolves now —
+  // the server adjudicates the swing intent, and a late damage apply
+  // would desync the predicted health.
+  const hitAt: THREE.Vector3[] = [];
   for (const t of deps.targets) {
     if (t.dead) {continue;}
     _meleeToT.copy(t.pos).sub(player.pos);
@@ -332,31 +367,14 @@ function melee(deps: CombatDeps, hooks: FireHooks, e: FireArgs): void {
     _meleeToT.divideScalar(dist || 1);
     if (_meleeToT.dot(e.dir) < MELEE_ARC_DOT) {continue;}
     t.applyKnockback(player.pos, stats.knockbackForce, true); // directed shove — server recomputes the same impulse in meleeSweep
-    deps.lazyDamageNumbers().spawn(t.pos, MELEE_DAMAGE, '#aaddff', deps.lazyCamera());
+    hitAt.push(t.pos.clone());
     deps.reportTargetDamage?.(t, MELEE_DAMAGE);
     if (t.takeDamage(MELEE_DAMAGE, { serverPaid })) {hooks.onTargetDestroyed(t, t.vel, WeaponType.Melee);}
     else if (!t.hideHealthBar) {deps.lazyHealthBarSystem().spawnBall(t, MELEE_DAMAGE, t.health);}
-    deps.lazyHud().showHitMarker();
-    connected ??= t.pos;
-  }
-  // The crack that sells it — positional impact only when the punch lands
-  if (connected) {
-    sfx.at(connected, 'impact', 1);
-    sfx.hitMarker(true);
-    // Contact sparks + a shake bump — feedback that says HOW HARD, fired
-    // only on a confirmed hit so whiffs stay soft.
-    fxPuff(connected, {
-      count: 10, pos: [0.3, 0.3, 0.3],
-      velMin: [-5, 1, -5], velMax: [5, 6, 5],
-      lifeMin: 0.12, lifeMax: 0.35, sizeScale: 1,
-      colA: [0.6, 0.85, 1], colB: [0.3, 0.5, 0.9], additive: true,
-    });
-    screenShake.add(0.22);
   }
 
-  // Swing FX after hit detection — `landed` picks the connect variant
-  // (apex dwell + deeper camera kick) same frame the input resolved.
-  meleeSwingFx(deps, e, groundHit ?? _meleeHitPos, groundHit, connected !== null);
+  // Swing FX — the swing itself plus the contact-frame feedback.
+  meleeSwingFx(deps, e, groundHit ?? _meleeHitPos, groundHit, hitAt);
 
   // The swing intent rides shotFired — the server derives the arc point
   // itself (no position claim) and relays the fire for observers.

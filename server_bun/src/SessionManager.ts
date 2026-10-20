@@ -210,22 +210,31 @@ export class SessionManager {
     ws.data.playerId = playerId;
     room.sessionTokens.set(playerId, idToken);
     this.d.registry.begin(playerId, room.name);
-    this.seat(ws, room, playerId, handshake, idToken, name);
-    // First joiner defined this room's sim gates AND its mode/bot roster —
-    // (after seat(): the socket needs its connection registration first)
-    // a hosted 'ctf 8 bots' request landing in a pre-existing room would
-    // otherwise silently drop into someone else's match.
-    const modeDiff = roomMode && room.mode !== roomMode ? `mode '${room.mode}'` : '';
-    const botDiff = joinBots !== undefined && room.bots.count !== joinBots ? `${room.bots.count} bots` : '';
-    if (room.noBalls !== noBalls || room.noCreatures !== noCreatures || modeDiff || botDiff) {
-      const diffs = [
-        modeDiff,
-        botDiff,
-        room.noBalls === noBalls ? '' : `balls ${room.noBalls ? 'OFF' : 'ON'}`,
-        room.noCreatures === noCreatures ? '' : `critters ${room.noCreatures ? 'OFF' : 'ON'}`,
-      ].filter(Boolean).join(', ');
-      room.sendToPlayer(playerId, { type: 'serverWarn', text: `room '${room.name}' already existed — your settings overridden (${diffs})` });
-    }
+    const finishJoin = (): void => {
+      this.seat(ws, room, playerId, handshake, idToken, name);
+      // First joiner defined this room's sim gates AND its mode/bot roster —
+      // (after seat(): the socket needs its connection registration first)
+      // a hosted 'ctf 8 bots' request landing in a pre-existing room would
+      // otherwise silently drop into someone else's match.
+      const modeDiff = roomMode && room.mode !== roomMode ? `mode '${room.mode}'` : '';
+      const botDiff = joinBots !== undefined && room.bots.count !== joinBots ? `${room.bots.count} bots` : '';
+      if (room.noBalls !== noBalls || room.noCreatures !== noCreatures || modeDiff || botDiff) {
+        const diffs = [
+          modeDiff,
+          botDiff,
+          room.noBalls === noBalls ? '' : `balls ${room.noBalls ? 'OFF' : 'ON'}`,
+          room.noCreatures === noCreatures ? '' : `critters ${room.noCreatures ? 'OFF' : 'ON'}`,
+        ].filter(Boolean).join(', ');
+        room.sendToPlayer(playerId, { type: 'serverWarn', text: `room '${room.name}' already existed — your settings overridden (${diffs})` });
+      }
+    };
+    // The spawn pick needs the room's real field — minted rooms load it
+    // async. Seating on groundAt()=0 produces an authored anchor y under
+    // the real surface: the buried-seat snap every first joiner paid.
+    // The load is ms; defer rather than lift after the fact. A socket
+    // that died in the gap doesn't seat — registering it leaves a ghost.
+    if (room.terrainReady) {void room.terrainReady.then((): void => { if (ws.readyState === 1) {finishJoin();} });}
+    else {finishJoin();}
   }
 
   /** Grace-period reclaim: the seat is still reserved — cancel the removal

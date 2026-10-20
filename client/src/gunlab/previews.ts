@@ -16,6 +16,8 @@ import { DeployShield } from '../entities/DeployShield.js';
 import { DeployStation } from '../entities/DeployStation.js';
 import { DeployBeacon } from '../entities/DeployBeacon.js';
 import { DeployDrone } from '../entities/DeployDrone.js';
+import { DeployTether } from '../entities/DeployTether.js';
+import { DeployWatersphere } from '../entities/DeployWatersphere.js';
 import { SWARM_SPECS } from '../game/species/registry.js';
 import type { Terrain } from '../world/terrain.js';
 import { PICKUP_ACCENT, pickupParts } from '../entities/PickupModel.js';
@@ -293,6 +295,10 @@ export const ITEMS: [label: string, build: () => THREE.Group][] = [
       return { group: d.group, update: (dt): void => d.update(dt), dispose: (s): void => d.dispose(s) }; })],
   ['drone',   (): THREE.Group<THREE.Object3DEventMap> => itemProxy(() => { const d = new DeployDrone(LAB_SCENE, LAB_TERRAIN, _zero);
       return { group: d.group, update: (dt, p) => d.update(dt, p, 0, []), dispose: (s): void => d.dispose(s) }; })],
+  ['tether',  (): THREE.Group<THREE.Object3DEventMap> => itemProxy(() => { const d = new DeployTether(LAB_SCENE, LAB_TERRAIN, _zero);
+      d.unfoldDone(); return { group: d.group, update: (dt): void => d.update(dt), dispose: (s): void => d.dispose(s) }; })],
+  ['watersphere', (): THREE.Group<THREE.Object3DEventMap> => itemProxy(() => { const d = new DeployWatersphere(LAB_SCENE, LAB_TERRAIN, _zero);
+      d.unfoldDone(); return { group: d.group, update: (dt): void => d.update(dt), dispose: (s): void => d.dispose(s) }; })],
 ];
 
 // Class lineup — all three armor classes at once (only three exist, a

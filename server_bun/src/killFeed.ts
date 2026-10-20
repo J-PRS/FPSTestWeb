@@ -15,9 +15,20 @@ import { evictEldest } from './evictEldest.ts';
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
 
+/** UT canon ladder — same thresholds the client's STREAK_NAMES banner
+ *  uses so the feed, banner, and booth read one language. */
 const SPREE_TIERS: [number, string][] = [
-  [3, 'killing spree'], [5, 'rampage'], [8, 'dominating'], [12, 'unstoppable'],
+  [5, 'killing spree'], [10, 'rampage'], [15, 'dominating'],
+  [20, 'unstoppable'], [25, 'godlike'], [30, 'wicked sick'],
 ];
+/** ann key per spree tier — the client maps these to booth clips.
+ *  'killing_spree'/'wicked_sick' have no WARLORD line → TTS fallback. */
+const SPREE_ANN: Record<number, string> = {
+  5: 'killing_spree', 10: 'rampage', 15: 'dominating',
+  20: 'unstoppable', 25: 'godlike', 30: 'wicked_sick',
+};
+const MULTI_WINDOW_MS = 6000;
+const MULTI_NAMES: [number, string][] = [[2, 'double kill'], [3, 'triple kill'], [4, 'quad kill']];
 
 export class KillFeed {
   /** Typing-beat delay supplier — tests stub CombatHandler.tauntDelayMs
@@ -31,6 +42,10 @@ export class KillFeed {
   /** Consecutive deaths per bot — three unanswered deaths is the tilt
    *  threshold; cleared when the bot lands a kill of their own. */
   private deathStreak = new Map<string, number>();
+  /** shooterId → {last frag stamp, chain length} — frags inside
+   *  MULTI_WINDOW_MS chain into double/triple/quad calls. Sim-time, so
+   *  the chain survives pauses and can't be farmed against a lag spike. */
+  private lastFrag = new Map<string, { t: number; n: number }>();
 
   constructor(
     private playerManager: PlayerManager,
@@ -51,12 +66,13 @@ export class KillFeed {
   forget(playerId: string): void {
     this.lastKiller.delete(playerId);
     this.deathStreak.delete(playerId);
+    this.lastFrag.delete(playerId);
     for (const [victim, killer] of this.lastKiller) {
       if (killer === playerId) {this.lastKiller.delete(victim);}
     }
   }
 
-  announce(shooterId: string, targetId: string, weapon?: number, label?: string, air?: number, endedStreak?: number): void {
+  announce(shooterId: string, targetId: string, weapon?: number, label?: string, air?: number, endedStreak?: number, now = 0): void {
     const victim = this.playerManager.getPlayer(targetId);
     // endedStreak is the streak captured at the kill — applyDamage has
     // already zeroed victim.streak by the time we run.
@@ -82,7 +98,15 @@ shooter.streak += 1;
     // per player who ever died.
     if (this.lastKiller.size > 256) {evictEldest(this.lastKiller);}
 
-    this.notices(shooterId, targetId, shooter.streak, ended);
+    // Rapid-fire chain — the Quake multi-kill axis, orthogonal to the
+    // per-life spree streak. Only the notice is new; 'air'/'streakend'
+    // keep owning the shooter's own line.
+    const prev = this.lastFrag.get(shooterId);
+    const multi = prev && now - prev.t < MULTI_WINDOW_MS ? prev.n + 1 : 1;
+    this.lastFrag.set(shooterId, { t: now, n: multi });
+    if (this.lastFrag.size > 256) {evictEldest(this.lastFrag);}
+
+    this.notices(shooterId, targetId, shooter.streak, ended, multi);
 
     // Bots mouth off on the real chat wire — same 'chat' shape players
     // send, so it lands in the feed indistinguishable from a human line.
@@ -99,6 +123,33 @@ shooter.streak += 1;
         this.botSay(shooterId, t?.text ?? null, true, t?.vgs);
       }
     }
+    this.spectate(shooter, shooterId, targetId, weapon, air, shooter.streak, ended, multi);
+  }
+
+  /** A noteworthy frag got an audience: same-team bots near the kill
+   *  credit the shooter ('props' reads as teammate praise, not just the
+   *  victim's), their side groans rarely. Only fires on the brag kills —
+   *  skill shots, streak-enders, spree tiers — routine frags stay quiet
+   *  so the beat reads as noticing, not a commentary track. */
+  private spectate(shooter: { team?: string }, shooterId: string, targetId: string, weapon: number | undefined, air: number | undefined, streak: number, ended: number, multi: number): void {
+    const skill = this.skillKill(weapon, air);
+    if (!skill && ended < 3 && streak < 3 && multi < 2) {return;}
+    const victim = this.playerManager.getPlayer(targetId);
+    if (!victim?.position) {return;}
+    const NEAR = 80;
+    const allies: string[] = [], foes: string[] = [];
+    for (const [id, p] of this.playerManager.getAllPlayers()) {
+      if (!id.startsWith('BOT-') || id === shooterId || id === targetId || p.isDead || !p.position) {continue;}
+      const dx = p.position.x - victim.position.x, dz = p.position.z - victim.position.z;
+      if (dx * dx + dz * dz > NEAR * NEAR) {continue;}
+      (p.team === shooter.team ? allies : foes).push(id);
+    }
+    const pick = (ids: string[]): string => ids[Math.trunc(tauntRand() * ids.length)]!;
+    if (allies.length > 0 && tauntRand() < 0.45) {
+      this.say(pick(allies), skill ? 'props' : 'cheer', shooterId);
+      return;
+    }
+    if (foes.length > 0 && tauntRand() < 0.25) {this.say(pick(foes), 'groan', shooterId);}
   }
 
   /** The dead bot's half of announce: dying is +1 on the tilt counter
@@ -127,19 +178,23 @@ shooter.streak += 1;
   /** Match notices for a scored frag: first blood once, the spree tier
    *  (with the bot crowing about it), godlike increments past the table,
    *  and the streak-ending callout. */
-  private notices(shooterId: string, targetId: string, streak: number, ended: number): void {
+  private notices(shooterId: string, targetId: string, streak: number, ended: number, multi: number): void {
     if (this.playerManager.killTotal() === 1) {
-      this.broadcast({ type: 'matchNotice', text: `${shooterId} draws first blood` });
+      this.broadcast({ type: 'matchNotice', text: `${shooterId} draws first blood`, actor: shooterId, ann: 'firstblood' });
+    }
+    if (multi >= 2) {
+      const name = MULTI_NAMES.find(([n]): boolean => n === multi)?.[1] ?? 'multi kill';
+      this.broadcast({ type: 'matchNotice', text: `${shooterId} ${name} (${multi})`, multi, actor: shooterId, ann: 'multi' });
     }
     const tier = SPREE_TIERS.find(([n]): boolean => n === streak);
     if (tier) {
-      this.broadcast({ type: 'matchNotice', text: `${shooterId} is on a ${tier[1]} (${tier[0]})` });
+      this.broadcast({ type: 'matchNotice', text: `${shooterId} is on a ${tier[1]} (${tier[0]})`, actor: shooterId, ann: SPREE_ANN[streak] });
       if (shooterId.startsWith('BOT-')) {
         const t = spreeTaunt(shooterId);
         this.botSay(shooterId, t?.text ?? null, true, t?.vgs);
       }
-    } else if (streak > 12 && streak % 4 === 0) {
-      this.broadcast({ type: 'matchNotice', text: `${shooterId} is godlike (${streak})` });
+    } else if (streak > 30 && streak % 5 === 0) {
+      this.broadcast({ type: 'matchNotice', text: `${shooterId} is wicked sick (${streak})`, actor: shooterId, ann: 'wicked_sick' });
     }
     if (ended >= 3) {
       this.broadcast({ type: 'matchNotice', text: `${shooterId} ended ${targetId}'s ${ended}-kill streak` });

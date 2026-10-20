@@ -397,3 +397,85 @@ lg.add(corona);
 lg.visible = false;
 return lg;
 }
+
+// Shocklance — the power spear. A hafted emitter-lance: wrapped charge
+// coils up the grip, a socket collar, two VERTICAL electrodes swept 45°
+// forward off the hub (up and down — they read as the source of the
+// zap), and a real spearblade down the middle with a glow fuller.
+export function mkShocklance(): THREE.Group {
+const ln = new THREE.Group();
+const lnHotMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xB0_80_FF).multiplyScalar(EMIT_GAIN) });
+const lnAmberMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xFF_C0_50).multiplyScalar(EMIT_GAIN) });
+
+// Haft — slimmer than a gun body, it reads as a spear shaft, not a bore.
+ln.add(mkTube(0.045, 0.055, 0.55, 0.1, bodyMat));
+// Charge coils — brass wraps stacked along the grip half: the "stored
+// energy" tell shared with the LG's tesla stack.
+for (let i = 0; i < 5; i += 1) {
+  ln.add(mkTube(0.058, 0.058, 0.012, -0.02 + i * 0.055, brassMat));
+}
+// Charge slits — two hot grooves along the haft, violet.
+for (const s of [-1, 1]) {
+  const slit = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.014, 0.26), lnHotMat);
+  slit.position.set(s * 0.053, 0, 0.12);
+  ln.add(slit);
+}
+// Socket collar where the shaft meets the head — the flare a spear's
+// blade seats into.
+ln.add(mkTube(0.048, 0.034, 0.05, -0.3, brassMat));
+
+// Emitter rods — the two electrodes that source the zap. Held like the
+// pull-out reads it: VERTICAL — one rod up, one down, each swept ~45°
+// off the bore so the head is a vertical forked emitter, amber cap
+// nodes hot at the tips the bolt issues from.
+for (const s of [-1, 1]) {
+  const wing = new THREE.Group();
+  wing.rotation.x = -s * Math.PI / 4;   // tip arcs forward toward the bore
+  wing.position.z = -0.31;
+  const ins = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.036, 0.05, 8), darkMat);
+  ins.position.y = s * 0.05;            // cylinder's own axis IS Y
+  wing.add(ins);
+  const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.017, 0.17, 8), brassMat);
+  if (s < 0) {rod.rotation.z = Math.PI;} // taper: fat root → thin tip out
+  rod.position.y = s * 0.14;
+  wing.add(rod);
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 6), lnAmberMat);
+  tip.position.y = s * 0.235;
+  tip.layers.enable(BLOOM_LAYER);
+  wing.add(tip);
+  ln.add(wing);
+}
+
+// Central spearblade — a flattened diamond section lofted to a true
+// point: the actual metal tip between the two rods — a vertical fork,
+// blade flanked by electrodes.
+const blade = profOct(0.014, 0.056, 0.004);
+ln.add(mkLoft([
+  { z: -0.31, ring: blade },
+  { z: -0.46, ring: scaleRing(blade, 0.72) },
+  { z: -0.58, point: [0, 0] },
+], bodyMat));
+// Fuller glow slit up the blade's midrib — the charge lives in the
+// metal too, not only in the emitter ball.
+const fuller = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.011, 0.2), lnHotMat);
+fuller.position.set(0, 0, -0.41);
+ln.add(fuller);
+
+// Emitter node — the plasma charge at the hub where blade meets guard:
+// violet core + corona (the LG's ball recipe, recolored to the lance
+// palette).
+const EMITTER_Z = -0.34;
+const core = new THREE.Mesh(new THREE.SphereGeometry(0.024, 10, 8), lnHotMat);
+core.position.z = EMITTER_Z;
+core.layers.enable(BLOOM_LAYER);
+ln.add(core);
+const corona = new THREE.Mesh(
+  new THREE.SphereGeometry(0.05, 12, 10),
+  new THREE.MeshBasicMaterial({ color: new THREE.Color(0x8A_50_FF).multiplyScalar(EMIT_GAIN), transparent: true, opacity: 0.26, depthWrite: false, blending: THREE.AdditiveBlending, fog: false })
+);
+corona.position.z = EMITTER_Z;
+corona.layers.enable(BLOOM_LAYER);
+ln.add(corona);
+ln.visible = false;
+return ln;
+}

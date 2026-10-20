@@ -134,7 +134,7 @@ export class RoomScore {
       if (this.h.mode === 'tdm') {
         // Kill-confirmed: ANY team grabs the tag for the point —
         // deny by touching it first.
-        this.h.pickups?.spawn(corpse.position, 'tag');
+        this.h.pickups?.spawn(corpse.position, 'tag', 0, 1, undefined, 0, { x: corpse.velocity.x * 0.5, y: corpse.velocity.y * 0.5, z: corpse.velocity.z * 0.5 });
         this.h.influence.splat(corpse.position, 'opportunity', 0.5);
       } else if (this.h.mode === 'headhunt') {
         // Every held token comes back out plus one corpse bounty —
@@ -143,12 +143,16 @@ export class RoomScore {
         // live scoreboard in one burst — the mode's whole point.
         const coins = decomposeTokens(corpse.heldTokens + 1);
         this.setHeld(corpse, 0);
+        // FPS_HH_REGRAB_LOCK_S (experiment): the victim's own team can't
+        // regrab its scatter for N sim-seconds — breaks the
+        // die-at-home-recycle loop the hhEvo ladder exposed. 0 = off.
+        const lockS = Number(process.env.FPS_HH_REGRAB_LOCK_S ?? 0);
         for (const val of coins) {
           this.h.pickups?.spawn({
             x: corpse.position.x + (this.h.rng() - 0.5) * 3,
             y: corpse.position.y,
             z: corpse.position.z + (this.h.rng() - 0.5) * 3,
-          }, 'token', 0, val);
+          }, 'token', 0, val, lockS > 0 ? corpse.team : undefined, lockS, { x: corpse.velocity.x * 0.5, y: corpse.velocity.y * 0.5, z: corpse.velocity.z * 0.5 });
         }
         this.h.influence.splat(corpse.position, 'opportunity', 0.5);
       } else {
@@ -157,7 +161,7 @@ export class RoomScore {
             x: corpse.position.x + (this.h.rng() - 0.5) * 3,
             y: corpse.position.y,
             z: corpse.position.z + (this.h.rng() - 0.5) * 3,
-          });
+          }, 'gem', 0, 1, undefined, 0, { x: corpse.velocity.x * 0.5, y: corpse.velocity.y * 0.5, z: corpse.velocity.z * 0.5 });
         }
       }
     }

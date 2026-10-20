@@ -79,15 +79,28 @@ function traceStroke(r: RibbonTrail, camPos: THREE.Vector3, camDir: THREE.Vector
 interface CamSwipe { r: RibbonTrail; cam: THREE.Camera; tilt: number; t: number }
 const camSwipes: CamSwipe[] = [];
 
-export function swingSwipeView(scene: THREE.Scene, cam: THREE.Camera, color = 0x9F_D8_FF): void {
-  cam.getWorldPosition(_camP);
-  cam.getWorldDirection(_aim);
-  for (const tilt of [SWIPE_TILT, -SWIPE_TILT]) {
-    const r = RibbonTrail.acquire(scene, { color, width: 0.3, life: SWIPE_LIFE, billboard: true, tag: 'swipe' });
-    traceStroke(r, _camP, _aim, tilt);
-    r.update(0, cam.position);
-    camSwipes.push({ r, cam, tilt, t: SWIPE_LIFE });
-  }
+export function swingSwipeView(scene: THREE.Scene, cam: THREE.Camera, color = 0x9F_D8_FF): void {
+  cam.getWorldPosition(_camP);
+  cam.getWorldDirection(_aim);
+  for (const tilt of [SWIPE_TILT, -SWIPE_TILT]) {
+    const r = RibbonTrail.acquire(scene, { color, width: 0.3, life: SWIPE_LIFE, billboard: true, tag: 'swipe' });
+    traceStroke(r, _camP, _aim, tilt);
+    r.update(0, cam.position);
+    camSwipes.push({ r, cam, tilt, t: SWIPE_LIFE });
+  }
+}
+
+// ── Single-arc trail for the warhammer ──────────────────────────────
+// The hammer smacks sideways — ONE smear along the chop, not the X of
+// a sword slash. The stroke leans up-right → down-left so the trail
+// reads with the swing's direction instead of fighting it.
+export function swingArcView(scene: THREE.Scene, cam: THREE.Camera, color = 0x9F_D8_FF, tilt = SWIPE_TILT): void {
+  cam.getWorldPosition(_camP);
+  cam.getWorldDirection(_aim);
+  const r = RibbonTrail.acquire(scene, { color, width: 0.42, life: SWIPE_LIFE, billboard: true, tag: 'swipe' });
+  traceStroke(r, _camP, _aim, tilt);
+  r.update(0, cam.position);
+  camSwipes.push({ r, cam, tilt, t: SWIPE_LIFE });
 }
 
 /** Scene-teardown drain — these lists are module-global, so a scene

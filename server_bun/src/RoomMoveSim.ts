@@ -10,8 +10,8 @@ import { FieldSurface, MoveJudge, TRANSIT_EMA_CAP_MS, type Shadow } from './move
 import type { StructureSpec } from '../../shared/mapSpec.ts';
 import { wallNow } from './wallClock.ts';
 import { evictEldest } from './evictEldest.ts';
-import type { SimJournal} from './simJournal.ts';
-import { JOURNAL_HASH_EVERY, type JournalEv, type JournalEvNoT } from './simJournal.ts';
+import { type SimJournal,JOURNAL_HASH_EVERY,type JournalEv,type JournalEvNoT} from './simJournal.ts';
+
 
 /**
  * Server-side movement shadow — every player gets a MoveSim fed by their
@@ -43,6 +43,8 @@ export class RoomMoveSim {
   /** Map water level (spec.water.level) — undefined on a dry map. Copied
    *  into every shadow sim so its replay matches the client's prediction. */
   private waterLevel?: number;
+  /** Kill zone height (world Y). Undefined = no zone. */
+  private killY?: number;
   // Judge mode tolerates prediction noise; authority mode is truth — the
   // client needs tight, frequent acks or its prediction drifts for real.
   // Judge tolerance sits above the systematic offset a different-rate
@@ -67,6 +69,9 @@ export class RoomMoveSim {
   /** Worst landing -v·n (m/s) this tick past the T1 damage threshold —
    *  Room routes it through the damage funnel. */
   onLanding?: (playerId: string, impact: number) => void;
+  /** Body dropped below the map's kill zone — the Room turns it into an
+   *  environment kill (the "fell out of the arena" death). */
+  onKillZone?: (playerId: string) => void;
   /** Live player capsules for body-vs-body contact — the Room supplies
    *  records each tick (corpses excluded upstream); each shadow gets a
    *  self-less view so its own sim does the pushing. */
@@ -133,6 +138,7 @@ export class RoomMoveSim {
       sh.sim.mass = old.mass; sh.sim.eyeHeight = old.eyeHeight;
       sh.sim.bodyRadius = old.bodyRadius;
       sh.sim.waterLevel = old.waterLevel;
+      sh.sim.tether = old.tether;
       Object.assign(sh.sim.input, old.input);
       const pos = reportedPos?.(pid);
       if (pos && Number.isFinite(pos.x + pos.y + pos.z)) {
@@ -309,6 +315,29 @@ this.structEpoch += 1;
     if (sh) {sh.sim.speedScale = scale;}
   }
 
+  /** Water dome (the watersphere pack) — the pocket of water a body is
+   *  wading through. Undefined clears it, so a sphere that expires or a
+   *  body that leaves it is dry again. */
+  setWaterDome(playerId: string, dome: { x: number; y: number; z: number; r: number } | undefined): void {
+    const sh = this.shadows.get(playerId);
+    if (sh) {sh.sim.waterDome = dome;}
+  }
+
+  /** Every shadowed body id — the watersphere clears its domes on death. */
+  shadowIds(): string[] {
+    return [...this.shadows.keys()];
+  }
+
+  /** Tether snare the body is inside (enemy side) — undefined clears it. */
+  setTether(playerId: string, tether: { x: number; y: number; z: number; r: number } | undefined): void {
+    const sh = this.shadows.get(playerId);
+    if (sh) {sh.sim.tether = tether;}
+  }
+
+  tetherSlowOf(playerId: string): number {
+    return this.shadows.get(playerId)?.sim.tetherSlowNow ?? 0;
+  }
+
   /** Armor-class body — mass divides jet thrust/impulses, eyeHeight sets
    *  the grounded stand height. Must mirror the client's prediction. */
   setBody(playerId: string, mass: number, eyeHeight: number, bodyRadius: number): void {
@@ -323,6 +352,14 @@ this.structEpoch += 1;
     this.jev({ kind: 'water', level });
     this.waterLevel = level;
     for (const sh of this.shadows.values()) {sh.sim.waterLevel = level;}
+  }
+
+  /** Kill zone — world Y below which a shadow is out of the arena. The
+   *  heightfield is always present, so on a terrainless map this is what
+   *  ends a fall. Absent = no zone (every other map unchanged). */
+  setKillY(level?: number): void {
+    this.jev({ kind: 'killY', level });
+    this.killY = level;
   }
 
   /** Command-queue ingress — inputMove does NOT apply on arrival. Edges
@@ -666,6 +703,10 @@ sh.gapStreak += 1;
         // pays (impact - 25) * 0.005 of the bar — the funnel lives one
         // layer up so respawn/killfeed ride the same path as any death.
         if (landing > MOVEMENT_CONFIG.fallDamageMinSpeed) {this.onLanding?.(pid, landing);}
+        // Kill zone: the deck ran out and the void starts. Checked on the
+        // shadow, not on a claim — the client can't argue its way out of
+        // falling off the map.
+        if (this.killY !== undefined && s.pos.y < this.killY) {this.onKillZone?.(pid);}
       }
       sh.acc += dt;
       const steps = Math.floor(sh.acc / MoveSim.STEP);

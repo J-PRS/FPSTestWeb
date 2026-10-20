@@ -781,18 +781,17 @@ const BULLY_LINES = [
  *  pool answers it, then a quiet shooter may close the beat with
  *  'thanks'. Tribes air-discs were THE brag kill — this is the whoohoo. */
 const AIR_LINES = [
-  'DID YOU SEE THAT {t}',
   'whoohoo',
-  'MIDAIR {t}',
-  'that one was for you {t}',
+  'did you see that {t}',
+  'midair {t}',
   'air mail',
-  'special delivery {t}',
-  'read you like a book {t}',
   'clip it',
-  'somebody record that',
+  'read {t} like a book',
   'the hang time on that',
   'ski faster next time {t}',
-  'orbital strike {t}',
+  'from downtown',
+  'send that one back {t}',
+  'lobbed it in {t}',
 ];
 
 /** The carrier is running with hostiles close — the "cover me" call.
@@ -1111,6 +1110,16 @@ const VGS_FOR: Partial<Record<ChatterKind, string[]>> = {
   bully:      ['VGS', 'VGQ'],
 };
 const VGS_CHANCE = 0.4;
+/** Per-kind overrides — quick-chord IS the comms mode in Tribes, so
+ *  kinds with canon chords that ARE the line (kill hype, props, gg)
+ *  speak VGS most of the time; situational kinds keep the text-heavy
+ *  default so the feed doesn't read as radio spam. */
+const VGS_CHANCE_FOR: Partial<Record<ChatterKind, number>> = {
+  air: 0.75,
+  props: 0.65,
+  thanks: 0.65,
+  gg: 0.65,
+};
 
 /** Situation line for a brain/host event — same cooldown+chance gate as
  *  kill/death chatter. `other` fills {t}/{v} when the line names a foe.
@@ -1158,7 +1167,7 @@ function fillLine(line: string, other?: string, f?: { d?: string; h?: string }):
 export function chatter(kind: ChatterKind, botId: string, other?: string, fill?: { d?: string; h?: string }): { text: string; vgs?: string; team?: boolean } | null {
   return maybe(botId, () => {
     const vgs = VGS_FOR[kind];
-    if (vgs && tauntRand() < VGS_CHANCE) {
+    if (vgs && tauntRand() < (VGS_CHANCE_FOR[kind] ?? VGS_CHANCE)) {
       const chord = pick(vgs);
       return { text: vgsText(chord), vgs: chord, team: vgsTeam(chord) };
     }

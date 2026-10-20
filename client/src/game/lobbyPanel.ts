@@ -339,17 +339,35 @@ function mapPicker(h: LobbyPanelHost): { select: HTMLSelectElement; thumb: HTMLI
 
  *  refills (refreshMaps lands post-open). */
 
-function modeToggleRow(sel: HTMLSelectElement): HTMLDivElement {
+function modeToggleRow(sel: HTMLSelectElement, secondRow?: ReadonlySet<string>): HTMLDivElement {
 
-  const row = document.createElement('div');
+  const wrap = document.createElement('div');
 
-  row.className = 'lb-quick';
+  const mkRow = (): HTMLDivElement => {
 
-  row.style.cssText = 'flex-wrap:wrap;margin-bottom:2px;';
+    const r = document.createElement('div');
+
+    r.className = 'lb-quick';
+
+    r.style.cssText = 'flex-wrap:wrap;margin-bottom:2px;';
+
+    return r;
+
+  };
+
+  const row = mkRow();
+
+  wrap.append(row);
+
+  const row2 = secondRow ? mkRow() : null;
+
+  if (row2) {wrap.append(row2);}
 
   const rebuild = (): void => {
 
     row.textContent = '';
+
+    if (row2) {row2.textContent = '';}
 
     for (const o of sel.options) {
 
@@ -367,7 +385,7 @@ function modeToggleRow(sel: HTMLSelectElement): HTMLDivElement {
 
       });
 
-      row.append(b);
+      (secondRow?.has(o.value) ? row2 : row)!.append(b);
 
     }
 
@@ -379,9 +397,13 @@ function modeToggleRow(sel: HTMLSelectElement): HTMLDivElement {
 
   const sync = (): void => {
 
-    for (const x of row.children) {
+    for (const r of [row, row2]) {
 
-      (x as HTMLElement).classList.toggle('active', (x as HTMLElement).dataset.v === sel.value);
+      for (const x of r?.children ?? []) {
+
+        (x as HTMLElement).classList.toggle('active', (x as HTMLElement).dataset.v === sel.value);
+
+      }
 
     }
 
@@ -393,7 +415,7 @@ function modeToggleRow(sel: HTMLSelectElement): HTMLDivElement {
 
   rebuild();
 
-  return row;
+  return wrap;
 
 }
 
@@ -1101,7 +1123,8 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     soloModeRow.append(soloModeSel);
 
-    const soloModeBtns = modeToggleRow(soloModeSel);
+    // Solo modes ride a second row — bot-mode picks stay a team-mode ramp.
+    const soloModeBtns = modeToggleRow(soloModeSel, new Set(['', 'flagrun', 'classic']));
 
     const soloFamRow = famToggles();
 

@@ -36,6 +36,7 @@ export type JournalEv =
   | { t: number; kind: 'energy'; pid: string; amount: number; drain: boolean }
   | { t: number; kind: 'face'; pid: string; yaw: number }
   | { t: number; kind: 'water'; level?: number }
+  | { t: number; kind: 'killY'; level?: number }
   | { t: number; kind: 'hash'; h: number };
 
 /** Omit doesn't distribute member-wise over a union — this does. */

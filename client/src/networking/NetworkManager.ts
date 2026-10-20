@@ -99,7 +99,7 @@ export class NetworkManager {
   /** Headhunt held-count edge — roster patch already landed; this is the
    *  local-player + HUD notification half (locals aren't in the map). */
   public onPlayerHeld: ((playerId: string, n: number) => void) | null = null;
-  public onKnockback: ((position: { x: number; y: number; z: number }, force: number, pull?: boolean) => void) | null = null;
+  public onKnockback: ((position: { x: number; y: number; z: number }, force: number, pull?: boolean, yank?: boolean) => void) | null = null;
   public onChat: ((playerId: string, text: string, team: boolean, vgs: string | undefined, muted: boolean) => void) | null = null;
   public onPlayerUpdate: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, timestamp: number, velocity?: { x: number; y: number; z: number }) => void) | null = null;
   public onGameState: ((players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; mapName?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: PickupKind; val?: number }[]; flags?: { team: TeamId; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; team?: string }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; spawns?: SpawnPoint[]; teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] }; terrainTex?: string; terrainPreset?: number; sky?: string; weather?: WeatherSpec; atmosphere?: AtmosphereSpec } }) => void) | null = null;
@@ -112,12 +112,12 @@ export class NetworkManager {
   public onFlagUpdate: ((flags: { team: TeamId; pos: { x: number; y: number; z: number }; home?: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]) => void) | null = null;
   /** Conquest lattice roster — owner/build/hp/core per node, whole grid. */
   public onNodeUpdate: ((nodes: { id: number; gx: number; gz: number; pos: { x: number; y: number; z: number }; owner: 'alpha' | 'bravo' | 'neutral'; hp: number; maxHp: number; build: number; core: boolean }[]) => void) | null = null;
-  public onMatchNotice: ((text: string) => void) | null = null;
+  public onMatchNotice: ((text: string, meta?: { multi?: number; actor?: string; ann?: string }) => void) | null = null;
   /** Server anti-cheat flag — renders as a banner, not a disconnect. */
   public onServerWarn: ((text: string) => void) | null = null;
-  public onPickupSpawn: ((id: number, pos: { x: number; y: number; z: number }, kind?: PickupKind, val?: number) => void) | null = null;
+  public onPickupSpawn: ((id: number, pos: { x: number; y: number; z: number }, kind?: PickupKind, val?: number, vel?: { x: number; y: number; z: number }) => void) | null = null;
   /** Powerup applied to US — server-owned buffs (armor/heal/timed). */
-  public onBuff: ((msg: { kind: 'heal' | 'armor' | 'regen' | 'dd'; armor?: number; health?: number; until?: number }) => void) | null = null;
+  public onBuff: ((msg: { kind: 'heal' | 'armor' | 'regen' | 'dd' | 'shield'; armor?: number; health?: number; until?: number }) => void) | null = null;
   /** Server-owned heal echo (regen/mend/powerup tick in the sim) — keeps
    *  local hp converged between discrete hit events. */
   public onYourHealth: ((health: number, armor?: number) => void) | null = null;

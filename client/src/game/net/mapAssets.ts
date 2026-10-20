@@ -131,6 +131,11 @@ let terrainActive: string | null = null;
 
 let terrainWanted: string | null = null;
 
+/** A swap is pending or in flight — the resident field is NOT the one
+ *  the next seat was chosen against. Sims that collide (local player,
+ *  balls) must hold or they'll fall to boot-ground mid-window. */
+export function isTerrainSwapPending(): boolean { return terrainWanted !== null && terrainWanted !== terrainActive; }
+
 /** Heightfield currently resident — null = the boot PNG. Tracked apart
 
  *  from terrainActive so a boot-primed saved map skips the refetch +

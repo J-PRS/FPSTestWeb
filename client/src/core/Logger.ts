@@ -175,6 +175,7 @@ lastFoldCount += 1;
     if (level >= LogLevel.WARN) {queueForShip(logLine);}
 
     lineListener?.(logLine, level);
+    if (level >= LogLevel.WARN) {complaintListener?.(logLine, level);}
     trimBuffer();
   }
 
@@ -185,6 +186,14 @@ lastFoldCount += 1;
   let lineListener: LineListener | null = null;
   export function setLineListener(fn: LineListener | null): void {
     lineListener = fn;
+  }
+
+  /** WARN+ complaint feed for the HUD's conn-banner slot — every warn,
+   *  error, and console-tap line surfaces live so a ghost-shell or
+   *  dead-lane drop is visible mid-match without opening the console. */
+  let complaintListener: LineListener | null = null;
+  export function setComplaintListener(fn: LineListener | null): void {
+    complaintListener = fn;
   }
 
   /** Register a diagnostics dump — prepended to Alt+Q/export output so bug

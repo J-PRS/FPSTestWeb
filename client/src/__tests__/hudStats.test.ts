@@ -21,7 +21,7 @@ function makePlayer(health: number): Player {
     health, maxHealth: 100, isDead: false, armor: 0, energy: 60,
     pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0,
     kills: 0, onGround: true, loadout: [0], weaponIndex: 0,
-    buffUntil: { regen: 0, dd: 0 },
+    buffUntil: { regen: 0, dd: 0, shield: 0 },
     getSpeed: (): number => 0,
   } as unknown as Player;
 }
