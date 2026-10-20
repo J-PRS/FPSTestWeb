@@ -10,7 +10,7 @@ import { ChildLogger } from '../core/Logger.js';
 import { glitch } from '../core/fxDiag.js';
 import { buildGibParts, bakeDeathParts, type GibPart } from './playerGibs.js';
 
-import { CLASS_BODY_SPEC, RIG_MANIFEST,
+import { CLASS_BODY_SPEC, RIG_MANIFEST, ONESHOT_CLIPS,
   normBone, type AnimationState } from './playerClips.js';
 import { computeRootMotionNodes } from './playerClipSurgery.js';
 import { ModelFx } from './modelFx.js';
@@ -663,10 +663,11 @@ export class PlayerModel {
       // proxies, so the parent-local position.y isn't the world's feet.
       const feetY = this._bbMin.set(0, -this.feetOffsetY, 0).applyMatrix4(this.model.matrixWorld).y;
       const off = minBoneY - feetY;
-      // The 'hit' state IS designed displacement — Hit_Chest rocks the
-      // rig ~0.7-0.8m back off the capsule; that rise is the react, not
-      // a float bug. Every other state's margin stands.
-      if (this.anim.currentState !== 'hit' && Math.abs(off) > 0.6) {
+      // Oneshot clips ARE designed displacement — Hit_Chest rocks the rig
+      // ~0.8m back, Death slides the corpse, Pistol_Shoot's draw drops the
+      // scout ~1.6m. That motion is the clip, not a float bug — gate on
+      // clip membership, not state (a 'shoot' state's clip is a oneshot).
+      if (!ONESHOT_CLIPS.has(this.anim.currentClipName ?? '') && Math.abs(off) > 0.6) {
         glitch('model-offset', { variant: this.variant, clip: this.anim.currentClipName ?? '?',
           state: this.anim.currentState, rise: Math.round(off * 10) / 10 });
       }
