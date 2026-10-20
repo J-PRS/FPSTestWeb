@@ -72,8 +72,27 @@ describe('scenario: deployables take real damage', () => {
     room.projectiles.spawn('sieger', WeaponType.Grenade,
       { x: gen.pos.x + 20, y: gen.pos.y + 2, z: gen.pos.z },
       { x: -1, y: 0.05, z: 0 }, { x: 0, y: 0, z: 0 });
-    for (let i = 0; i < 120 && w.count('projectileDestroyed') === 0; i++) step(room, 1);
+    for (let i = 0; i < 120 && w.count('projectileDestroyed') === 0; i++) {step(room, 1);}
     expect(gen.hp).toBeLessThan(DEPLOY_ITEMS.generator.hp);
+  });
+
+  it("the owner's own blast never hurts their gear — only the enemy shells it", () => {
+    const room = mkRoom({}, 'tdm');
+    room.players.addPlayer('engi', 'alpha', 'none', 'medium');
+    room.players.addPlayer('buddy', 'alpha', 'none', 'medium');
+    room.players.addPlayer('raider', 'bravo', 'none', 'medium');
+    const engi = room.players.getPlayer('engi')!;
+    pin(room, 'engi', { x: 20, y: 0, z: 0 });
+    engi.beltCharges = 10;
+    expect(room.deployables.handleDeploy('engi', 'turret', { x: 30, y: 0, z: 0 })).toBe(true);
+    const t = items(room, 'turret')[0]!;
+    const at = { x: t.pos.x + 2, y: t.pos.y, z: t.pos.z };
+    room.deployables.applyBlast(at, 40, 8, 'engi');  // own mortar: exempt
+    expect(t.hp).toBe(DEPLOY_ITEMS.turret.hp);
+    room.deployables.applyBlast(at, 40, 8, 'buddy'); // teammate: exempt
+    expect(t.hp).toBe(DEPLOY_ITEMS.turret.hp);
+    room.deployables.applyBlast(at, 40, 8, 'raider'); // enemy: pays
+    expect(t.hp).toBeLessThan(DEPLOY_ITEMS.turret.hp);
   });
 
   it('a downed generator darkens its team turret — power is the kill reward', () => {

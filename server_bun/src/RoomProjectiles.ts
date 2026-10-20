@@ -195,7 +195,7 @@ export class RoomProjectiles {
     // Fan basis: right = dir × up0, up = right × dir — deterministic
     // Vogel-spiral coverage (no rng: every pellet's offset is fixed by
     // index, so sim replicas fan identically).
-    let rx = -dir.z, ry = 0, rz = dir.x;
+    let rx = -dir.z, rz = dir.x; const ry = 0;
     const rl = Math.hypot(rx, rz);
     if (rl < 1e-8) { rx = 1; rz = 0; } else { rx /= rl; rz /= rl; }
     const ux = ry * dir.z - rz * dir.y, uy = rz * dir.x - rx * dir.z, uz = rx * dir.y - ry * dir.x;
@@ -368,7 +368,16 @@ export class RoomProjectiles {
       weaponStats.record(this.room.mode, `w${proj.weaponType}:prey`, dmg, killed, proj.ownerId.startsWith('BOT-'));
     }
     this.room.pushNoise(at); // a blast is louder than the muzzle that launched it
-    this.room.messages.serverBlast(proj.ownerId, at, proj.weaponType, directHitId ?? null, proj.pull);
+    // Rope dart: contact IS the payload — a body connect yanks the victim,
+    // anything else yanks the owner. Fuse expiry is a snapped line, not a
+    // reel — a mid-air pop dragging the shooter reads as a bug.
+    if (proj.weaponType === WeaponType.Hook) {
+      if (directHitId != null || proj.p.age < proj.ttl) {
+        this.room.messages.grapple(proj.ownerId, at, directHitId ?? null);
+      }
+      return;
+    }
+    this.room.messages.serverBlast(proj.ownerId, at, proj.weaponType, directHitId ?? null, { shotId: proj.pull, air: proj.p.age });
     // Cluster carriers (MRV, ClusterBomb): the claim path scatters bomblet
     // blasts around the burst point — sim shells must pay the same way or
     // bot-fired cluster weapons ship only the weak carrier pop.
@@ -392,7 +401,7 @@ export class RoomProjectiles {
         };
         // Credit the carrier — bomblet stats drive the envelope, but
         // the launcher's weapon row is where the rain's damage belongs.
-        this.room.messages.serverBlast(proj.ownerId, bAt, bomblet, null, proj.id, proj.weaponType);
+        this.room.messages.serverBlast(proj.ownerId, bAt, bomblet, null, { shotId: proj.id, attribWeaponType: proj.weaponType });
         // serverBlast sweeps players only — the rain must pay creatures
         // and balls the same way the carrier's own pop does below.
         if (bStats.aoeRadius > 0) {

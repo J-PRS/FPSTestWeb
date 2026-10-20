@@ -39,7 +39,7 @@ import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
 import { WORLD_MODEL, verbPayload, eventPayload } from '../../shared/worldModel.ts';
-import { decomposeTokens } from '../../shared/pickups.ts';
+import { decomposeTokens, POWERUP } from '../../shared/pickups.ts';
 import { botRand, tauntRand } from '../../shared/botRand.ts';
 import { lcg32, type Lcg } from '../../shared/simRand.ts';
 import { MatchClock, type MatchHost } from './roomMatch.ts';
@@ -54,7 +54,7 @@ import { healPool } from './healPool.ts';
 import { FORCE_SEND_MS } from './combatBlast.ts';
 import type { ServerWebSocket } from 'bun';
 
-import { simNow } from './simClock.ts';
+import { simNow, simMs } from './simClock.ts';
 import { wallNow, wallMs, type WallMs } from './wallClock.ts';
 import type { SessionRegistry } from './sessionRegistry.ts';
 import { SimJournal } from './simJournal.ts';
@@ -195,8 +195,23 @@ export class Room {
     this.unburyAcc += dt;
     if (this.unburyAcc < 0.5) {return;}
     this.unburyAcc = 0;
+    this.unburySweep();
+  }
+
+  /** The room's real field landed (attachTerrain) — seats picked before
+   *  it resolved kept authored anchor y (groundAt read 0/stale), leaving
+   *  bodies meters under the surface the client will draw. One sweep,
+   *  including seats that never reported: a server-picked spawn under
+   *  the real terrain is our bug to lift, not a claim to honor. */
+  unburySeats(): void {
+    if (!this.field) {return;}
+    this.unburySweep(true);
+  }
+
+  private unburySweep(includeUnreported = false): void {
+    if (!this.field) {return;}
     for (const p of this.players.getAllPlayers().values()) {
-      if (p.isDead || (!p.isBot && !p.hasReceivedPosition)) {continue;}
+      if (p.isDead || (!p.isBot && !p.hasReceivedPosition && !includeUnreported)) {continue;}
       // Measure with the shadow's own eye when one exists — the class
       // capsule and the sim body disagree whenever a refit left the sim
       // at the default eye, and the record's view was the stale one.
@@ -357,6 +372,11 @@ export class Room {
   /** Room's current heightfield — GameServer updates it on terrain
    *  attach/rotation so gameplay code can resolve ground height. */
   field: Heightfield | null = null;
+
+  /** Non-null while attachTerrain's load is in flight — joins defer
+   *  seating to it rather than pick a spawn against the missing field
+   *  (authored anchor y under the real surface = the buried-seat snap). */
+  terrainReady: Promise<Heightfield | null> | null = null;
 
   /** maps/<X>.json filename this room's spec came from — the scoreboard's
    *  map title when the spec has no authored `name`. Factory sets it at
@@ -704,13 +724,33 @@ export class Room {
         return;
       }
       if (kind === 'token') {
-        // Headhunt: the gem's feel-good rewards (heal, jet refill, belt
-        // income) but no bank — the token goes in your pocket and your
-        // team's live score grows by your holding it.
-        healPool(p, Math.min(25, Math.round(20 * perkMods(p.perk).healBoost)));
+        // Headhunt: the gem's feel-good rewards (jet refill, belt income)
+        // but no bank — the token goes in your pocket and your team's live
+        // score grows by your holding it. Tiered flat bonus on pickup so
+        // grabbing a token has immediate utility (green +40% hp, blue +40%
+        // armor, purple +5 belt + 5s 90%-block shield) — on top of the
+        // sustained hoard drip that still rewards a disengaged carrier.
         p.forceSendUntil = wallMs(wallNow() + FORCE_SEND_MS);
         this.moveSim.grantEnergy(pid, ENERGY.max * 0.5 * perkMods(p.perk).energyMax);
-        p.beltCharges = Math.min(BELT_MAX, p.beltCharges + 1);
+        if (val >= 27) {
+          p.beltCharges = Math.min(BELT_MAX, p.beltCharges + 5);
+          p.shieldUntil = simMs(simNow() + 5000);
+          this.connections.sendToPlayer(pid, { type: 'buff', kind: 'shield', until: p.shieldUntil } as ServerMessage);
+        } else {
+          p.beltCharges = Math.min(BELT_MAX, p.beltCharges + 1);
+        }
+        if (val >= 3) {
+          p.health = Math.min(p.maxHealth, p.health + p.maxHealth * 0.4);
+        }
+        if (val >= 9) {
+          p.armor = Math.min(POWERUP.maxArmor, p.armor + POWERUP.maxArmor * 0.4);
+        }
+        // White (1) token: small feel-good heal (legacy base).
+        if (val < 3) {
+          healPool(p, Math.min(25, Math.round(20 * perkMods(p.perk).healBoost)));
+        }
+        p.healthEchoAt = wallMs(0); // force an immediate yourHealth echo
+        this.connections.sendToPlayer(pid, { type: 'yourHealth', health: p.health, armor: p.armor } as ServerMessage);
         this.scoring.setHeld(p, p.heldTokens + val);
         this.scoring.awardPersonal(pid, val);
         return;
@@ -1229,22 +1269,8 @@ export class Room {
     const terrainChanged = spec.terrain !== this.spec.terrain || spec.heightScale !== this.spec.heightScale || spec.tileSize !== this.spec.tileSize;
     if (spec.tileSize !== this.spec.tileSize) {this.influence.resize(spec.tileSize ?? HM_WORLD_SCALE);}
     this.spec = spec;
-    if (spec.spawns) {this.players.spawnPoints = spec.spawns;}
-    this.players.teamSpawns = spec.teamSpawns ?? null;
-    // Mode module re-stamps AFTER the spec-side pools land — a module
-    // that owns spawning (conquest's node rings) must win over authored
-    // spheres or a rotation would silently revert to flat-map seating.
-    this.modeModule?.onSpec?.(spec);
-    this.structs.attach(); // merged authored + stand hulls; refreshFlagHomes re-runs it post-snap
-    // Bases can move with a new spec — re-snap homes (no update push: the
-    // mapUpdate below carries the post-snap list). If the terrain is
-    // also rotating the attach below corrects them once it lands.
-    this.refreshFlagHomes(false);
-    if (this.noBalls) {this.ballSim.population = { base: 0, perPlayer: 0, max: 0 };}
-    else if (spec.balls) {this.ballSim.population = spec.balls;}
-    if (spec.ballMix) {this.ballSim.ballMix = spec.ballMix;}
-    this.creatureSim.pops = this.noCreatures ? {} : (spec.creatures ?? {});
-    this.creatureSim.colliders = this.ballSim.colliders;
+    this.applySpecSeating(spec);
+    this.applySpecPops(spec);
     // The echo carries the merged list too — joiners get stand hulls in
     // their gameState structures, and combat occlusion sees the dais.
     this.messages.setMap(Object.assign({}, spec, { structures: this.structs.eff() }));
@@ -1275,6 +1301,30 @@ export class Room {
     // the ground is for the entire match.
     if (terrainChanged) {this.onTerrain?.(spec);}
     this.retuneBots(spec.bots ?? 0);
+  }
+
+  /** Spawn pools + seating: mode module re-stamps AFTER the spec-side
+   *  pools land — a module that owns spawning (conquest's node rings)
+   *  must win over authored spheres or a rotation would silently revert
+   *  to flat-map seating. */
+  private applySpecSeating(spec: MapSpec): void {
+    if (spec.spawns) {this.players.spawnPoints = spec.spawns;}
+    this.players.teamSpawns = spec.teamSpawns ?? null;
+    this.modeModule?.onSpec?.(spec);
+    this.structs.attach(); // merged authored + stand hulls; refreshFlagHomes re-runs it post-snap
+    // Bases can move with a new spec — re-snap homes (no update push: the
+    // mapUpdate broadcast carries the post-snap list). If the terrain is
+    // also rotating the attach below corrects them once it lands.
+    this.refreshFlagHomes(false);
+  }
+
+  /** Ball/creature population pools for the swapped spec. */
+  private applySpecPops(spec: MapSpec): void {
+    if (this.noBalls) {this.ballSim.population = { base: 0, perPlayer: 0, max: 0 };}
+    else if (spec.balls) {this.ballSim.population = spec.balls;}
+    if (spec.ballMix) {this.ballSim.ballMix = spec.ballMix;}
+    this.creatureSim.pops = this.noCreatures ? {} : (spec.creatures ?? {});
+    this.creatureSim.colliders = this.ballSim.colliders;
   }
 
   /** Top up / retire bots toward a spec's bot count (admin reload). */

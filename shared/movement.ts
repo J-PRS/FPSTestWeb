@@ -88,7 +88,32 @@ export const MOVEMENT_CONFIG = {
   waterSinkSpeed: 5,     // terminal sink (m/s) — no free dive to the bed
   waterSwimAccel: 260,   // horizontal wish push while submerged (m/s²)
   waterSwimSpeed: 6,     // horizontal speed cap in water (m/s)
+  // Water dome (the watersphere pack): a POCKET of sea dropped on the
+  // ground. Same drag law as the sea, but no buoyancy (it is a puddle,
+  // not a sea — nothing floats up out of it) and no fall-damage waiver.
+  // The cap is the slow: a body wading through tops out at the cap
+  // instead of its class speed, so a skier blasting past loses the run.
+  waterDomeDrag: 3.2,    // per-second linear damping at full submersion
+  waterDomeSpeed: 8,     // horizontal speed cap inside the dome (m/s)
+  // Tether snare (the tether pack): outward speed bled per second by how
+  // fast you're going — a full stop under tetherStopSpeed, 20% at
+  // tetherMidSpeed, nothing at tetherFreeSpeed. Fast skiers blow through.
+  tetherStopSpeed: 20,
+  tetherMidSpeed: 60,
+  tetherMidSlow: 0.2,
+  tetherFreeSpeed: 80,
 } as const;
+
+/** Fraction of horizontal speed a tether bleeds per second at speed v
+ *  (1 = full stop). Piecewise linear through the three MOVEMENT_CONFIG
+ *  anchors; zero at and above tetherFreeSpeed. */
+export function tetherSlow(v: number): number {
+  const c = MOVEMENT_CONFIG;
+  if (v <= c.tetherStopSpeed) {return 1;}
+  if (v <= c.tetherMidSpeed) {return 1 - (1 - c.tetherMidSlow) * (v - c.tetherStopSpeed) / (c.tetherMidSpeed - c.tetherStopSpeed);}
+  if (v >= c.tetherFreeSpeed) {return 0;}
+  return c.tetherMidSlow * (c.tetherFreeSpeed - v) / (c.tetherFreeSpeed - c.tetherMidSpeed);
+}
 
 /** Jet/skill energy economy — the authoritative copy for the server
  *  shadow; client skills.ts holds the same numbers for local HUD. */
@@ -225,6 +250,19 @@ export class MoveSim {
    *  runs a sim (server shadow, client prediction, bots, judge probe)
    *  copies the level in so the replay stays identical. */
   waterLevel?: number;
+  /** A local pocket of water — the watersphere pack plants a dome of sea
+   *  on the ground. Its top is a hemisphere over (x,y,z), so the water
+   *  surface at horizontal distance d is y + sqrt(r²-d²). Bodies inside
+   *  wade: the sea's drag law, no buoyancy, no fall-damage waiver.
+   *  Undefined = no dome. Hosts that run a sim copy it in so the replay
+   *  stays identical — same law as waterLevel. */
+  waterDome?: { x: number; y: number; z: number; r: number };
+  /** The tether snare this body is standing in (enemy-side only — the host
+   *  clears it otherwise). Same copy-in law as waterDome. */
+  tether?: { x: number; y: number; z: number; r: number };
+  /** Slow fraction the tether applied on the last step — the host reads it
+   *  to size the detach zap; transient, never on the wire. */
+  tetherSlowNow = 0;
   /** 0..1 submersion (feet-below-surface / eyeHeight) at the last step —
    *  host/HUD readout, transient by design (never carried on the wire). */
   waterSubmersion = 0;
@@ -339,6 +377,7 @@ export class MoveSim {
     // and the sim freezes until a snapshot/setState reseed.
     if (!Number.isFinite(dt)) {return;}
     this.landingImpact = 0;
+    this.tetherSlowNow = 0;
     this.acc += Math.min(dt, MoveSim.MAX_DT);
     while (this.acc >= MoveSim.STEP) {
       this.acc -= MoveSim.STEP;
@@ -499,6 +538,48 @@ export class MoveSim {
         if (sub > 0.5) { s.onGround = false; this.bandDist = Infinity; }
       } else {
         this.waterSubmersion = 0;
+      }
+    }
+    // Water dome (the watersphere pack) — a pocket of sea standing on the
+    // ground. The dome's top is a hemisphere over its centre, so the
+    // water surface at horizontal distance d is y + sqrt(r²-d²): a body
+    // at the centre stands fully under it, a body at the rim is dry.
+    // Drag + a horizontal cap is the whole effect — no buoyancy (nothing
+    // floats out of a puddle) and no fall-damage waiver (a puddle is not
+    // a safe landing). The cap is what slows a skier: inside the dome a
+    // body tops out at the cap instead of its class speed.
+    if (this.waterDome !== undefined) {
+      const dm = this.waterDome;
+      const ddx = s.pos.x - dm.x, ddz = s.pos.z - dm.z;
+      const d2 = ddx * ddx + ddz * ddz;
+      if (d2 < dm.r * dm.r) {
+        const surf = dm.y + Math.sqrt(dm.r * dm.r - d2);
+        const depth = surf - (s.pos.y - this.eyeHeight);
+        if (depth > 0) {
+          const sub = Math.min(depth / this.eyeHeight, 1);
+          const k = Math.max(0, 1 - MOVEMENT_CONFIG.waterDomeDrag * sub * dt);
+          s.vel.x *= k; s.vel.z *= k;
+          const hs = dhypot(s.vel.x, s.vel.z);
+          const cap = MOVEMENT_CONFIG.waterDomeSpeed * sub;
+          if (hs > cap && hs > 0) {
+            const f = cap / hs;
+            s.vel.x *= f; s.vel.z *= f;
+          }
+        }
+      }
+    }
+    // Tether snare: only OUTWARD motion inside the ring is bled — walking
+    // in is free, the drag lands when you try to leave. Full stop uses a
+    // hard zero so a crawl can't creep past the ring on drag rounding.
+    if (this.tether !== undefined) {
+      const tt = this.tether;
+      const tdx = s.pos.x - tt.x, tdz = s.pos.z - tt.z;
+      const hs = dhypot(s.vel.x, s.vel.z);
+      if (tdx * tdx + tdz * tdz < tt.r * tt.r && hs > 0 && tdx * s.vel.x + tdz * s.vel.z > 0) {
+        const f = tetherSlow(hs);
+        this.tetherSlowNow = Math.max(this.tetherSlowNow, f);
+        const k = f >= 1 ? 0 : 1 - f * dt;
+        s.vel.x *= k; s.vel.z *= k;
       }
     }
     // T1 ground glue: while grounded AT CONTACT distance, cancel

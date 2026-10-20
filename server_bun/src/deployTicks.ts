@@ -105,6 +105,29 @@ export function tickStation(r: RoomDeployables, d: Deployed, dt: number): void {
     }
   }
 
+  /** Water sphere: a pocket of sea on the ground. Every ENEMY wading
+   *  through it gets the water dome on their move shadow, which slows
+   *  them (the sea's drag law + a speed cap). The planter and their team
+   *  walk through dry — the counterplay is to walk around it or shell
+   *  it, not to out-sprint it. */
+  export function tickWatersphere(r: RoomDeployables, d: Deployed, _dt: number): void {
+    const def = DEPLOY_ITEMS.watersphere;
+    const radius = def.waterRadius ?? 7;
+    const dTeam = r.teamOf(d);
+    for (const [pid, p] of r.room.players.getAllPlayers()) {
+      if (p.isDead) {continue;}
+      const dx = p.position.x - d.pos.x, dz = p.position.z - d.pos.z;
+      const inside = dx * dx + dz * dz < radius * radius;
+      // Same team (or no teams) walks dry.
+      const friendly = !dTeam || p.team === dTeam;
+      if (inside && !friendly) {
+        r.room.moveSim.setWaterDome(pid, { x: d.pos.x, y: d.pos.y, z: d.pos.z, r: radius });
+      } else {
+        r.room.moveSim.setWaterDome(pid, undefined);
+      }
+    }
+  }
+
   /** Server-side sentry fire: nearest hostile player in the envelope gets
    *  a bolt every TURRET_FIRE_INTERVAL. Damage rides the shared funnel so
    *  kill credit, spawn protection and respawn all behave — the client

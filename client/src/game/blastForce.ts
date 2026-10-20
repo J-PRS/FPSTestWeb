@@ -296,7 +296,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     {
       const wStats = a.weaponType === undefined ? undefined : getWeaponStats(a.weaponType);
       const direct = wStats ? (wStats.directDamage || wStats.aoeDamage) : aoeDamage;
-      deps.lazyDeployables?.()?.blastRemotes(pos, direct, aoeDamage, radius, scales, a.weaponType);
+      deps.lazyDeployables?.()?.blastRemotes(pos, direct, aoeDamage, radius, scales, a.weaponType, a.shooterId);
     }
     // Solo conquest nodes eat the same blast stream the Room's lattice
     // listens to — presence-raze's ranged sibling, link-gated inside.

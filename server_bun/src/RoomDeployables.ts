@@ -13,7 +13,7 @@ import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
 import { aoeDamage } from '../../shared/combat.ts';
 import { REPAIR_RANGE, REPAIR_HEAL_PER_TICK, REPAIR_MIN_TICK_S, REPAIR_ARMOR_MULT, WeaponType } from '../../shared/weapons.ts';
-import { tickCg, tickDrone, tickMine, tickMortar, tickSensor, tickSentry, tickStation, tickTurret, losClear } from './deployTicks.ts';
+import { tickCg, tickDrone, tickMine, tickMortar, tickSensor, tickSentry, tickStation, tickTurret, tickWatersphere, losClear } from './deployTicks.ts';
 
 import { DEPLOY_KINDS, DEPLOY_MAX, DEPLOY_HP, type DeployKind } from '../../shared/deployables.ts';
 import { DEPLOY_ITEMS, deploySolid } from '../../shared/deployItems.ts';
@@ -424,19 +424,25 @@ export class RoomDeployables {
   }
 
   remove(id: number): void {
+    const gone = this.items.get(id);
     if (!this.items.delete(id)) {return;}
     // Dead ids must drop their rate-limit keys — otherwise every planted
     // and destroyed item leaves a permanent entry in lastRepair.
     for (const k of this.lastRepair.keys()) {
       if (k.endsWith(`:${id}`)) {this.lastRepair.delete(k);}
     }
+    // A dying water sphere must leave nobody wading — the domes are
+    // sticky state on the move shadows, not a query.
+    if (gone?.kind === 'watersphere') {
+      for (const pid of this.room.moveSim.shadowIds()) {this.room.moveSim.setWaterDome(pid, undefined);}
+    }
     this.room.broadcast(verbPayload(WORLD_MODEL.deploy!, 'gone', 'id', id, {}) as ServerMessage);
     this.refreshSolids();
   }
 
   /** AOE blast sweep — every deployable inside the radius eats scaled
-   *  splash (same falloff curve as players). Own gear is not exempt:
-   *  a careless mortar wrecks your own turret too. */
+   *  splash (same falloff curve as players). Own gear is exempt: your
+   *  own blast can't raze your own stand. */
   applyBlast(center: Vec3, damage: number, radius: number, shooterId: string, scales?: readonly number[], weapon?: number, splash?: number): void {
     if (this.items.size === 0) {return;}
     // Sticky launcher is the breaching tool — 2x to structures/base
@@ -447,16 +453,17 @@ export class RoomDeployables {
       const dx = d.pos.x - center.x, dy = d.pos.y - center.y, dz = d.pos.z - center.z;
       const dist = (dx * dx + dy * dy + dz * dz) ** 0.5;
       if (dist > radius) {continue;}
-      if (dist > radius) {continue;}
-      // Friendly fire: a teammate's blast never damages our gear. Self-
-      // splash (own gear, own blast) stays legal - same rule as player
-      // self-splash (rocket jumps). Base assets resolve the shooter's
-      // team from the virtual base:<team> owner id.
+      // Friendly fire: no teammate's blast damages our gear — and your
+      // OWN blast exempts your OWN gear too (a mortaring engie shouldn't
+      // raze his stand; player self-splash staying legal is a body rule,
+      // not a gear rule). Base assets resolve the shooter's team from
+      // the virtual base:<team> owner id.
+      if (shooterId === d.owner) {continue;}
       const deployTeam = this.teamOf(d);
       const shooterTeam = shooterId.startsWith('base:')
         ? shooterId.slice(5)
         : this.room.players.getPlayer(shooterId)?.team;
-      if (deployTeam !== undefined && shooterTeam !== undefined && deployTeam === shooterTeam && shooterId !== d.owner) {
+      if (deployTeam !== undefined && shooterTeam !== undefined && deployTeam === shooterTeam) {
         continue;
       }
       // Contact hit — the blast center landed inside the item's body
@@ -473,7 +480,41 @@ export class RoomDeployables {
     }
   }
 
+  /** Tether snare — one pass over every player rather than per tether, so a
+   *  tether that expires or is recycled can't leave a stale snare on a shadow
+   *  (the early-out below would skip that cleanup). `held` tracks the hold a
+   *  body built up inside a ring; breaking out of it zaps jet energy. */
+  private readonly held = new Map<string, number>();
+  private tickTethers(): void {
+    const def = DEPLOY_ITEMS.tether;
+    for (const pid of this.held.keys()) {if (!this.room.players.getPlayer(pid)) {this.held.delete(pid);}}
+    for (const [pid, p] of this.room.players.getAllPlayers()) {
+      let snare: Deployed | undefined;
+      const at = this.room.moveSim.simPos(pid);
+      if (!p.isDead && at) {
+        for (const t of this.items.values()) {
+          if (t.kind !== 'tether' || pid === t.owner) {continue;}
+          const dTeam = this.teamOf(t);
+          if (dTeam !== undefined && p.team === dTeam) {continue;}
+          const dx = at.x - t.pos.x, dz = at.z - t.pos.z;
+          if (dx * dx + dz * dz < def.tetherRadius! * def.tetherRadius!) {snare = t; break;}
+        }
+      }
+      // Read the slow the last step applied BEFORE the snare check: the step
+      // that carries a body out of the ring is the one that bled it.
+      const slow = this.room.moveSim.tetherSlowOf(pid);
+      if (slow > 0) {this.held.set(pid, Math.max(this.held.get(pid) ?? 0, slow));}
+      this.room.moveSim.setTether(pid, snare && { x: snare.pos.x, y: snare.pos.y, z: snare.pos.z, r: def.tetherRadius! });
+      if (!snare && this.held.has(pid)) {
+        const hold = this.held.get(pid)!;
+        this.held.delete(pid);
+        if (!p.isDead && hold > 0) {this.room.moveSim.drainEnergy(pid, def.tetherZap! * hold);}
+      }
+    }
+  }
+
   tick(dt: number): void {
+    this.tickTethers();
     if (this.items.size === 0) {return;}
     for (const d of this.items.values()) {
       if (d.base) {
@@ -496,6 +537,7 @@ export class RoomDeployables {
       else if (d.kind === 'baseturret') {tickSentry(this, d, dt);}
       else if (d.kind === 'mortar') {tickMortar(this, d, dt);}
       else if (d.kind === 'cgturret') {tickCg(this, d, dt);}
+      else if (d.kind === 'watersphere') {tickWatersphere(this, d, dt);}
     }
     // Sentry bolts in flight — the blast lands where the bolt does, so a
     // sidestepping capper genuinely outruns it (non-homing by design).

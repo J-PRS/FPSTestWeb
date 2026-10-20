@@ -81,6 +81,9 @@ export class MovementController {
   /** Sea-surface height — the map's water.level. Must mirror the server
    *  shadow or a swim reads as a divergence. Absent clears it. */
   setWaterLevel(level?: number): void { this.sim.waterLevel = level; }
+  /** Tether snare the body stands in — the frame sets it from the live
+   *  deployable roster, mirroring the server's per-tick copy. */
+  setTether(tether?: { x: number; y: number; z: number; r: number }): void { this.sim.tether = tether; }
   /** Other players' capsules for contact resolve — the frame fills this
    *  from the remote roster (server shadows resolve the same bodies). */
   get bodies(): BodyCapsule[] { return this.sim.bodies; }

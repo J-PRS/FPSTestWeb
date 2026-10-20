@@ -10,6 +10,7 @@ import { DeployMortar } from '../entities/DeployMortar.js';
 import { DeployCg } from '../entities/DeployCg.js';
 import { DeployShield } from '../entities/DeployShield.js';
 import { DeployBeacon } from '../entities/DeployBeacon.js';
+import { DeployTether } from '../entities/DeployTether.js';
 import { Explosion } from '../effects/explosion.js';
 import { LightningBeam } from '../effects/lightningBeam.js';
 import { screenShake } from '../effects/screenShake.js';
@@ -147,6 +148,17 @@ export class RemoteDeployables {
       };
     } else if (kind === 'beacon') {
       item = this.beaconItem(id, owner, at, hp, armor);
+    } else if (kind === 'tether') {
+      const t = new DeployTether(this.deps.scene, this.deps.lazyTerrain(), at);
+      t.unfoldDone();
+      if (hp !== undefined) { t.health = hp; t.armor = armor ?? 0; }
+      item = {
+        kind, candId: `rdep:${id}`, pos: t.pos, dead: false,
+        hurt: (): void => { return; },
+        update: (dt): void => t.update(dt),
+        dispose: (): void => t.dispose(this.deps.scene),
+        v: t, owner,
+      };
     } else if (kind === 'generator' || kind === 'sensor' || kind === 'baseturret') {
       item = this.baseAssetItem(kind, at, hp, armor, team);
       item.owner = owner;

@@ -10,8 +10,8 @@ import { FieldSurface, MoveJudge, TRANSIT_EMA_CAP_MS, type Shadow } from './move
 import type { StructureSpec } from '../../shared/mapSpec.ts';
 import { wallNow } from './wallClock.ts';
 import { evictEldest } from './evictEldest.ts';
-import type { SimJournal} from './simJournal.ts';
-import { JOURNAL_HASH_EVERY, type JournalEv, type JournalEvNoT } from './simJournal.ts';
+import { type SimJournal,JOURNAL_HASH_EVERY,type JournalEv,type JournalEvNoT} from './simJournal.ts';
+
 
 /**
  * Server-side movement shadow — every player gets a MoveSim fed by their
@@ -133,6 +133,7 @@ export class RoomMoveSim {
       sh.sim.mass = old.mass; sh.sim.eyeHeight = old.eyeHeight;
       sh.sim.bodyRadius = old.bodyRadius;
       sh.sim.waterLevel = old.waterLevel;
+      sh.sim.tether = old.tether;
       Object.assign(sh.sim.input, old.input);
       const pos = reportedPos?.(pid);
       if (pos && Number.isFinite(pos.x + pos.y + pos.z)) {
@@ -307,6 +308,29 @@ this.structEpoch += 1;
   setSpeedScale(playerId: string, scale: number): void {
     const sh = this.shadows.get(playerId);
     if (sh) {sh.sim.speedScale = scale;}
+  }
+
+  /** Water dome (the watersphere pack) — the pocket of water a body is
+   *  wading through. Undefined clears it, so a sphere that expires or a
+   *  body that leaves it is dry again. */
+  setWaterDome(playerId: string, dome: { x: number; y: number; z: number; r: number } | undefined): void {
+    const sh = this.shadows.get(playerId);
+    if (sh) {sh.sim.waterDome = dome;}
+  }
+
+  /** Every shadowed body id — the watersphere clears its domes on death. */
+  shadowIds(): string[] {
+    return [...this.shadows.keys()];
+  }
+
+  /** Tether snare the body is inside (enemy side) — undefined clears it. */
+  setTether(playerId: string, tether: { x: number; y: number; z: number; r: number } | undefined): void {
+    const sh = this.shadows.get(playerId);
+    if (sh) {sh.sim.tether = tether;}
+  }
+
+  tetherSlowOf(playerId: string): number {
+    return this.shadows.get(playerId)?.sim.tetherSlowNow ?? 0;
   }
 
   /** Armor-class body — mass divides jet thrust/impulses, eyeHeight sets
