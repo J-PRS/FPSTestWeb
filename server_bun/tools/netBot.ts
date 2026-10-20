@@ -22,6 +22,7 @@ import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { encodePosition, decodeTickFrame, decodeBallSegment } from '../../shared/wire.ts';
 import { PERK_ORDER } from '../../shared/perks.ts';
 import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
+import { WEAPONS, WeaponType } from '../../shared/weaponTable.ts';
 import type { Vec3 } from '../../shared/protocol.ts';
 import { connectRtc, type Link } from './netLink.ts';
 import { resolveRoomTerrain, makeTerrainLoader, surfaceFor } from './netTerrain.ts';
@@ -636,15 +637,14 @@ class WireBot {
     stats.shots++;
     const t = this.roster.get(best)!;
     const dist = Math.max(Math.sqrt(bd), 1);
-    // Disc (wt 1): speed 80, gravity:false — the linear-flight assumption
-    // the claim math below relies on is exactly true (the old 2:0 mix
-    // hardcoded 60/90 against real speeds 40/120 AND gravity arcs —
-    // claims could never have matched a server shell). direct picks the
-    // body-hit claim path, else the blast-landing path — both stay
-    // exercised 50/50.
+    // Disc: the one launcher shell with gravity:false — the linear-flight
+    // claim math below is exactly true for it (the old 2:0 mix also
+    // hardcoded speeds against the table's real 40/120 — claims could
+    // never have matched a server shell). direct picks the body-hit
+    // claim path, else the blast-landing path — both stay exercised.
     const direct = Math.random() < 0.5;
-    const weaponType = 1;
-    const speed = 80;
+    const weaponType = WeaponType.Disc;
+    const speed = WEAPONS[weaponType].speed;
     const dir = { x: (t.pos.x - s.pos.x) / dist, y: (t.pos.y - s.pos.y) / dist, z: (t.pos.z - s.pos.z) / dist };
     // A claim only resolves against a shell the ledger watched launch —
     // the spawn report goes first, the server-assigned id arrives on the
@@ -658,7 +658,15 @@ class WireBot {
       dir,
       pos: { x: s.pos.x, y: s.pos.y + 1.6, z: s.pos.z },
     });
-    const airtime = dist / speed;
+    // Muzzle velocity = dir*speed + 50% shooter velocity — the SAME
+    // inheritance the server applies (RoomProjectiles.spawn). The pid
+    // binding below matches the echo's velocity, so the claim must
+    // record the inherited velocity or a moving bot's shells never bind.
+    const vx = dir.x * speed + 0.5 * s.vel.x;
+    const vy = dir.y * speed + 0.5 * s.vel.y;
+    const vz = dir.z * speed + 0.5 * s.vel.z;
+    const flightSpeed = Math.hypot(vx, vy, vz) || 1;
+    const airtime = dist / flightSpeed;
     const firedAt = performance.now();
     // The claim must outlive its own airtime — the server rejects a
     // detonation whose claimed flight time exceeds the shell's age. And
@@ -668,7 +676,7 @@ class WireBot {
     // Expiry = airtime + echo slack — a spawn rejected server-side never
     // echoes, and its stale entry must not bind a LATER spawn's echo.
     const mine: { pid?: string; wt: number; vx: number; vy: number; vz: number; exp: number } = {
-      wt: weaponType, vx: dir.x * speed, vy: dir.y * speed, vz: dir.z * speed,
+      wt: weaponType, vx, vy, vz,
       exp: firedAt + airtime * 1000 + 400,
     };
     this.pendingClaims.push(mine);
@@ -717,9 +725,9 @@ class WireBot {
         // The blast claim must sit where the shell actually flew — the
         // reach check recomputes the trajectory, so aiming at where the
         // target moved reads as an impossible detonation.
-        const ex = s.pos.x + dir.x * speed * airtime;
-        const ez = s.pos.z + dir.z * speed * airtime;
-        const ey = Math.max(this.myGy(ex, ez), s.pos.y + dir.y * speed * airtime);
+        const ex = s.pos.x + vx * airtime;
+        const ez = s.pos.z + vz * airtime;
+        const ey = Math.max(this.myGy(ex, ez), s.pos.y + vy * airtime);
         this.send({ type: 'aoeShot', position: { x: ex, y: ey, z: ez }, weaponType, airtime, projectileId: pid });
       }
     };
