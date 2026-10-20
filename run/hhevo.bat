@@ -16,8 +16,11 @@ rem                 (biases toward aggression), 5+ = honest fitness.
 rem   --per N       bots per team, default 6.
 rem   --matches N   matches per pairing per map (sides alternate), dflt 2.
 rem   --maps a,b    map matrix — worst-map margin is fitness, dflt flat.
-rem                 Bat default: flat,rimrock. 'katabatic' was the
-rem                 earlier second arena. --map a works as shorthand.
+rem                 'all' = every maps/*.json with a resolvable non-t2
+rem                 bin (~29). --map a works as shorthand.
+rem   --mapsel M    'matrix' (dflt, every pairing on every map) or
+rem                 'random' — each match draws a seeded map index.
+rem                 Random + all = map-generalization runs.
 rem   --seed N      master seed, default 1. Per-match seeds derive from
 rem                 it — identical results at any --workers count.
 rem   --wall N      wall-clock cap in seconds, default 1800. Aborts
@@ -32,11 +35,16 @@ rem                 screening-tier evidence only, keep 0 for conclusions.
 rem   --tie N       pairings with worst-map margin within +-N get extra
 rem                 matches. Default = 3*mins (coin-flip scale).
 rem   --tiebreak N  extra matches per map per tiebreak round, dflt 1.
-rem   --mode M      dm/ctf/headhunt/nuggets/conquest (dflt headhunt).
-rem                 Fitness = room.scores margin; dm/duel use kill
-rem                 margin (scores stay 0 there). Duel = --mode dm
-rem                 --per 1. CTF bot goals via flagGoals; conquest via
-rem                 its mode module; nuggets via pickup scan.
+rem   --mode M      dm/ctf/headhunt/nuggets/conquest/rabbit (dflt
+rem                 headhunt) or 'chaos' — each match draws a seeded
+rem                 mode; fitness is each mode's own score. Duel =
+rem                 --mode dm --per 1. CTF/conquest need maps whose
+rem                 spec provides stands/zones or they degrade to dm.
+rem   --qd            MAP-Elites archive: (agg,mob,air) cells each keep
+rem                 their best genome across gens — monoculture can't
+rem                 evict specialists. Adds per-gen 'archive' records +
+rem                 a final 'roster' (tier hard/med/easy personalities)
+rem                 and a 'freq' gene-occupancy record (balance signal).
 rem   --arena N     flat-arena radius, default 300.
 rem   --genomes F   seed pool from a JSON genome-array file.
 rem   --pairs spec  replay mode, no evolution: 'gnameA,gnameB;gnameC,gnameD'

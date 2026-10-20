@@ -21,7 +21,7 @@
 // every solve pays ~100-300ms synchronously inside the tick. Off by
 // default here; set FPS_MPC_OFF=0 to measure planner-on outcomes.
 process.env.FPS_MPC_OFF ??= '1';
-import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync, rmSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { hmParseBin, hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { WeaponType } from '../../shared/weapons.ts';
@@ -179,11 +179,30 @@ const mapCtx = (name: string): MapCtx => {
 // --maps flat,katabatic: every pairing runs MATCHES games PER MAP and its
 // fitness margin is the WORST map — a genome that only works on one
 // arena can't fake general strength (map-matrix admission).
-const MAPS = arg('maps', arg('map', 'flat')).split(',').map(mapCtx);
+// --maps a,b,c | 'all' — expands to every maps/*.json. --mapsel random
+// draws one map per match (seeded, parent-side so sharding can't reorder
+// the stream); default 'matrix' runs every pairing on every map.
+const MAPSEL = arg('mapsel', 'matrix');
+let mapNames = arg('maps', arg('map', 'flat')).split(',');
+if (mapNames.length === 1 && mapNames[0] === 'all') {
+  mapNames = readdirSync(resolve(import.meta.dir, '../../maps'))
+    .filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5))
+    .filter((name) => {
+      const spec = JSON.parse(readFileSync(resolve(import.meta.dir, `../../maps/${name}.json`), 'utf8')) as { terrain?: string };
+      const bin = spec.terrain ?? `${name}.bin`;
+      return !bin.startsWith('t2') && existsSync(resolve(import.meta.dir, `../../maps/${bin}`));
+    }).sort();
+  console.log(`maps=all → ${mapNames.length} playable: ${mapNames.join(' ')}\n`);
+}
+const MAPS = mapNames.map(mapCtx);
 // --mode: dm/ctf/headhunt/nuggets/conquest — fitness is always
 // room.scores margin so the mode's own objective stays the target.
 // Duel = --mode dm --per 1.
 const MODE = arg('mode', 'headhunt');
+// --mode chaos: each match draws a random mode (seeded, parent-side like
+// mapsel=random). Fitness is each mode's own score — a chaos pool is
+// selected for cross-mode generality.
+const MODES = MODE === 'chaos' ? ['headhunt', 'dm', 'ctf', 'conquest', 'nuggets', 'rabbit'] : [MODE];
 
 /** Behavior descriptors — the QD axes. agg=kills/min, mob=mean planar
  *  speed, air=airborne fraction, life=median lifespan, heldEnd=final
@@ -193,7 +212,7 @@ interface Desc { agg: number; mob: number; air: number; life: number; heldEnd: n
 interface MatchResult { aScore: number; bScore: number; aK: number; aD: number; bK: number; bD: number; tokens: number; simS: number; aDesc: Desc; bDesc: Desc; aGrabs: number; bGrabs: number }
 
 /** One headhunt game: ga plays alpha, gb plays bravo. Score = held tokens. */
-function runMatch(ga: Genome, gb: Genome, seed: number, ctx: MapCtx = MAPS[0]!): MatchResult {
+function runMatch(ga: Genome, gb: Genome, seed: number, ctx: MapCtx = MAPS[0]!, mode: string = MODE): MatchResult {
   // Fresh sim clock per match — respawn/protection timers read simNow
   // absolutely, so without this a match's outcome depends on how much
   // sim-time ran before it (serial order ≠ shard order ≠ --pairs replay).
@@ -203,12 +222,12 @@ function runMatch(ga: Genome, gb: Genome, seed: number, ctx: MapCtx = MAPS[0]!):
   const profT = PROF ? performance.now() : 0;
   const room = mkRoom({
     ...ctx.specTerrain,
-    mode: MODE,
+    mode,
     bots: PER * 2,
     botFill: PER * 2,
     botSkill: { alpha: skillMix(ga), bravo: skillMix(gb) },
     arena: { x: 0, z: 0, radius: ARENA },
-  }, MODE, seed, false, ctx.field);
+  }, mode, seed, false, ctx.field);
   room.spec.botFill = 0;
   (room as { endMatch: (w: string) => void }).endMatch = () => {};
 
@@ -344,7 +363,7 @@ function runMatch(ga: Genome, gb: Genome, seed: number, ctx: MapCtx = MAPS[0]!):
 }
 
 // ---- match dispatch: serial, or sharded across --eval worker processes ------
-interface PairTask { id: number; grp: number; ga: Genome; gb: Genome; flip: boolean; seed: number; map: string;
+interface PairTask { id: number; grp: number; ga: Genome; gb: Genome; flip: boolean; seed: number; map: string; mode?: string;
   meta?: Record<string, unknown> }
 interface PairResult { id: number; aScore: number; bScore: number; aK: number; aD: number; bK: number; bD: number; aDesc: Desc; bDesc: Desc; raced: boolean }
 
@@ -362,7 +381,7 @@ const evalTasks = (tasks: PairTask[]): Map<number, MatchResult> => {
   for (const t of tasks) {
     if (t.grp !== grp) {grp = t.grp; acc = 0; stopped = false;}
     if (stopped) {continue;}
-    const r = runMatch(t.ga, t.gb, t.seed, ctxFor(t.map));
+    const r = runMatch(t.ga, t.gb, t.seed, ctxFor(t.map), t.mode);
     out.set(t.id, r);
     acc += t.flip ? r.bScore - r.aScore : r.aScore - r.bScore;
     if (RACE > 0 && Math.abs(acc) > RACE) {stopped = true;}
@@ -376,7 +395,7 @@ if (EVAL_FILE) {
   const RES = arg('results', EVAL_FILE + '.res');
   const tasks = (readFileSync(EVAL_FILE, 'utf8').trim().split('\n')
     .map((l) => JSON.parse(l) as { id: number; grp: number; ga: string; gb: string; flip: boolean; seed: number; map: string })
-    .map((t) => ({ ...t, ga: parseGname(t.ga)!, gb: parseGname(t.gb)! })));
+    .map((t) => ({ ...t, ga: parseGname(t.ga)!, gb: parseGname(t.gb)! })) as PairTask[]);
   const res = evalTasks(tasks);
   writeFileSync(RES, [...res].map(([id, r]) => JSON.stringify({ id, r })).join('\n') + '\n');
   process.exit(0);
@@ -492,8 +511,23 @@ if (PAIRS) {
   process.exit(0);
 }
 
+// --qd: MAP-Elites archive over the behavior descriptors. Each (agg, mob,
+// air) cell keeps its best genome across gens, so a monoculture can't
+// evict the specialists that hold other cells. Buckets are coarse on
+// purpose — the chaos pool spans agg 0.2-2, mob 14-21, air 2-20%.
+const QD = process.argv.includes('--qd');
+const archive = new Map<string, Row>();
+const cellOf = (d: Desc): string =>
+  `${Math.min(3, Math.floor(d.agg / 0.5))}.${Math.min(4, Math.max(0, Math.floor((d.mob - 14) / 2)))}.${Math.min(3, Math.floor(d.air / 0.08))}`;
 const stats = new Map<Genome, Row>();
 const mkRow = (g: Genome): Row => ({ g, name: gname(g), w: 0, l: 0, margin: 0, kd: 0, games: 0, worst: 0, desc: [] });
+const descMean = (r: Row): Desc | null => {
+  if (!r.desc.length) {return null;}
+  const s = r.desc.reduce((a, d) => ({ agg: a.agg + d.agg, mob: a.mob + d.mob, air: a.air + d.air, life: a.life + d.life, heldEnd: a.heldEnd + d.heldEnd }),
+    { agg: 0, mob: 0, air: 0, life: 0, heldEnd: 0 });
+  const n = r.desc.length;
+  return { agg: s.agg / n, mob: s.mob / n, air: s.air / n, life: s.life / n, heldEnd: s.heldEnd / n };
+};
 for (const g of pool) {stats.set(g, mkRow(g));}
 // Payoff matrix across the CURRENT pool, rebuilt per gen (genome objects
 // change between gens — index identity via pool position).
@@ -510,12 +544,14 @@ for (let gen = 0; gen < GENS && !wallStop; gen += 1) {
   let tid = 0, grp = 0;
   for (let i = 0; i < pool.length; i += 1) {
     for (let j = i + 1; j < pool.length; j += 1) {
-      for (const [mi, ctx] of MAPS.entries()) {
-        for (let m = 0; m < MATCHES; m += 1) {
-          genTasks.push({ id: tid++, grp, ga: pool[i]!, gb: pool[j]!, flip: m % 2 === 1,
-            seed: SEED * 1000 + gen * 100 + i * 10 + j + (m + mi * 101) * 5000, map: ctx.name,
-            meta: { i, j, mi } });
-        }
+      // mapsel=random: each match draws a fresh map index; matrix: all maps.
+      const mis = MAPSEL === 'random'
+        ? Array.from({ length: MATCHES }, () => Math.floor(rand() * MAPS.length))
+        : MAPS.map((_, mi) => mi).flatMap((mi) => Array.from({ length: MATCHES }, () => mi));
+      for (const [k, mi] of mis.entries()) {
+        genTasks.push({ id: tid++, grp, ga: pool[i]!, gb: pool[j]!, flip: k % 2 === 1,
+          seed: SEED * 1000 + gen * 100 + i * 10 + j + (k + mi * 101) * 5000, map: MAPS[mi]!.name,
+          mode: pick(MODES), meta: { i, j, mi } });
       }
       grp += 1;
     }
@@ -527,6 +563,7 @@ for (let gen = 0; gen < GENS && !wallStop; gen += 1) {
   const grpWins = new Map<number, number>();
   const grpPlayed = new Map<number, number>();
   const grpMap = new Map<number, Map<number, number>>();
+  const grpMode = new Map<number, Map<string, number>>();
   const grpSeen = new Set<number>();
   let racedOut = 0, tiebroke = 0;
   const fold = (tasks: PairTask[], res: Map<number, MatchResult>): void => {
@@ -541,6 +578,8 @@ for (let gen = 0; gen < GENS && !wallStop; gen += 1) {
       const thK = t.flip ? r.aK : r.bK, thD = t.flip ? r.aD : r.bD;
       const pm = grpMap.get(g) ?? new Map<number, number>();
       pm.set(mi, (pm.get(mi) ?? 0) + my - their); grpMap.set(g, pm);
+      const gm = grpMode.get(g) ?? new Map<string, number>();
+      gm.set(t.mode ?? MODE, (gm.get(t.mode ?? MODE) ?? 0) + my - their); grpMode.set(g, gm);
       grpWins.set(g, (grpWins.get(g) ?? 0) + (my > their ? 1 : 0));
       grpPlayed.set(g, (grpPlayed.get(g) ?? 0) + 1);
       const ra = stats.get(ga)!, rb = stats.get(gb)!;
@@ -565,11 +604,12 @@ for (let gen = 0; gen < GENS && !wallStop; gen += 1) {
         if (!pm || !pm.size) {continue;}
         const marginA = Math.min(...pm.values());
         if (Math.abs(marginA) > TIE) {continue;}
-        for (const [mi, ctx] of MAPS.entries()) {
+        const tbMis = MAPSEL === 'random' ? [Math.floor(rand() * MAPS.length)] : MAPS.map((_, mi) => mi);
+        for (const mi of tbMis) {
           extra.push({ id: tid++, grp: g, ga: pool[i]!, gb: pool[j]!,
             flip: (tb + mi) % 2 === 1, // vary sides across rounds/maps
             seed: SEED * 1000 + gen * 100 + i * 10 + j + (MATCHES + tb + mi * 101) * 5000 + 9000000,
-            map: ctx.name, meta: { i, j, mi } });
+            map: MAPS[mi]!.name, mode: pick(MODES), meta: { i, j, mi } });
         }
         tiebroke++;
       }
@@ -582,7 +622,8 @@ for (let gen = 0; gen < GENS && !wallStop; gen += 1) {
     for (let j = i + 1; j < pool.length; j += 1, g += 1) {
       const ga = pool[i]!, gb = pool[j]!;
       const played = grpPlayed.get(g) ?? 0;
-      const mapMargins = [...(grpMap.get(g) ?? new Map())].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
+      const mapPairs = [...(grpMap.get(g) ?? new Map<number, number>())].sort((a, b) => a[0] - b[0]);
+      const mapMargins = mapPairs.map(([, v]) => v);
       if (!mapMargins.length) {continue;}
       const marginA = Math.min(...mapMargins);
       stats.get(ga)!.margin += marginA; stats.get(gb)!.margin -= marginA;
@@ -592,7 +633,9 @@ for (let gen = 0; gen < GENS && !wallStop; gen += 1) {
       const winsA = grpWins.get(g) ?? 0;
       stats.get(ga)!.w += winsA; stats.get(ga)!.l += played - winsA;
       stats.get(gb)!.w += played - winsA; stats.get(gb)!.l += winsA;
-      if (MAPS.length > 1 || played < MATCHES * MAPS.length) {console.log(`     map margins: ${mapMargins.map((m, k) => `${MAPS[k]!.name}:${m > 0 ? '+' : ''}${m}`).join(' ')} → worst ${marginA > 0 ? '+' : ''}${marginA}${played < MATCHES * MAPS.length ? ' (raced)' : ''}`);}
+      if (MAPS.length > 1 || played < MATCHES * MAPS.length) {console.log(`     map margins: ${mapPairs.map(([mi, m]) => `${MAPS[mi]!.name}:${m > 0 ? '+' : ''}${m}`).join(' ')} → worst ${marginA > 0 ? '+' : ''}${marginA}${played < MATCHES * MAPS.length ? ' (raced)' : ''}`);}
+      const modePairs = [...(grpMode.get(g) ?? new Map<string, number>())];
+      if (MODES.length > 1 && modePairs.length > 1) {console.log(`       mode margins: ${modePairs.map(([m, v]) => `${m}:${v > 0 ? '+' : ''}${v}`).join(' ')}`);}
     }
   }
   if (racedOut) {console.log(`  racing: ${racedOut} matches skipped`);}
@@ -600,13 +643,6 @@ for (let gen = 0; gen < GENS && !wallStop; gen += 1) {
   if ((performance.now() - t0) / 1000 > WALL_S) {console.log(`wall cap — board partial, stopping`); wallStop = true;}
   const board = pool.map((g) => stats.get(g)!).sort((x, y) => y.margin - x.margin);
   console.log(`\n── gen ${gen} board ──`);
-  const descMean = (r: Row): Desc | null => {
-    if (!r.desc.length) {return null;}
-    const s = r.desc.reduce((a, d) => ({ agg: a.agg + d.agg, mob: a.mob + d.mob, air: a.air + d.air, life: a.life + d.life, heldEnd: a.heldEnd + d.heldEnd }),
-      { agg: 0, mob: 0, air: 0, life: 0, heldEnd: 0 });
-    const n = r.desc.length;
-    return { agg: s.agg / n, mob: s.mob / n, air: s.air / n, life: s.life / n, heldEnd: s.heldEnd / n };
-  };
   for (const r of board) {
     const d = descMean(r);
     const style = d ? ` agg${d.agg.toFixed(1)} mob${d.mob.toFixed(0)} air${(d.air * 100).toFixed(0)}% life${d.life.toFixed(0)}s` : '';
@@ -631,12 +667,13 @@ for (let gen = 0; gen < GENS && !wallStop; gen += 1) {
     const others = pool.filter((g) => g !== champ);
     const cand = mutate(others.length ? pick(others) : pick(pool));
     candOf.push(cand);
-    for (const [mi, ctx] of MAPS.entries()) {
-      for (let k = 0; k < MATCHES; k += 1) {
-        eTasks.push({ id: 1e6 + e * 100 + mi * MATCHES + k, grp: 1e6 + e,
-          ga: k % 2 ? champ : cand, gb: k % 2 ? cand : champ, flip: k % 2 === 1,
-          seed: SEED * 77 + gen * 31 + e * 7 + k + mi * 997, map: ctx.name, meta: { k } });
-      }
+    const eMis = MAPSEL === 'random'
+      ? Array.from({ length: MATCHES }, () => Math.floor(rand() * MAPS.length))
+      : MAPS.map((_, mi) => mi).flatMap((mi) => Array.from({ length: MATCHES }, () => mi));
+    for (const [k, mi] of eMis.entries()) {
+      eTasks.push({ id: 1e6 + e * 100 + mi * MATCHES + k, grp: 1e6 + e,
+        ga: k % 2 ? champ : cand, gb: k % 2 ? cand : champ, flip: k % 2 === 1,
+        seed: SEED * 77 + gen * 31 + e * 7 + k + mi * 997, map: MAPS[mi]!.name, mode: pick(MODES), meta: { k } });
     }
   }
   {
@@ -658,7 +695,21 @@ for (let gen = 0; gen < GENS && !wallStop; gen += 1) {
   // Selection: top half survives; exploiters get seats first, losers
   // re-roll as mutants of survivors.
   const keep = Math.max(1, Math.floor(pool.length / 2));
-  const winners = board.slice(0, keep).map((r) => r.g);
+  let winners = board.slice(0, keep).map((r) => r.g);
+  if (QD) {
+    for (const r of board) {
+      const d = descMean(r);
+      if (!d) {continue;}
+      const k = cellOf(d);
+      const cur = archive.get(k);
+      if (!cur || r.margin > cur.margin) {archive.set(k, r);}
+    }
+    const elites = new Map<string, Row>();
+    for (const r of [...archive.values()].sort((x, y) => y.margin - x.margin)) {if (!elites.has(r.name)) {elites.set(r.name, r);}}
+    winners = [...elites.values()].slice(0, Math.max(1, POP - 2)).map((r) => r.g);
+    console.log(`  qd: ${archive.size} cells, ${winners.length} elites kept`);
+    appendFileSync(OUT, `${JSON.stringify({ gen, archive: [...archive.entries()].map(([cell, r]) => ({ cell, g: gname(r.g), margin: r.margin, desc: descMean(r) })) })}\n`);
+  }
   pool = [...winners];
   const seen = new Set(pool.map(gname));
   for (const ex of exploiters) {
@@ -692,5 +743,30 @@ for (let gen = 0; gen < GENS && !wallStop; gen += 1) {
   console.log('');
 }
 appendFileSync(OUT, `${JSON.stringify({ pool, done: true })}\n`);
+// The deliverable: the populated archive as a roster of named bot
+// personalities — cell, genome string (parseGname-loadable), margin, the
+// style descriptors that define the personality, and a difficulty tier
+// cut by margin thirds (hard/med/easy — same data, different cut).
+if (QD && archive.size) {
+  const rows = [...archive.entries()].sort((a, b) => b[1].margin - a[1].margin);
+  const tier = (i: number): string => (i < rows.length / 3 ? 'hard' : i < (2 * rows.length) / 3 ? 'med' : 'easy');
+  appendFileSync(OUT, `${JSON.stringify({ roster: rows.map(([cell, r], i) => ({ cell, tier: tier(i), g: gname(r.g), margin: r.margin, desc: descMean(r) })) })}\n`);
+  console.log(`roster: ${archive.size} personalities in ${OUT}`);
+}
+// Balance-regression signal: gene occupancy across the final pool —
+// a perk/weapon that dominates every run regardless of mode is a
+// balance bug report, not a meta finding.
+{
+  const freq: Record<string, Record<string, number>> = {};
+  for (const k of GENE_KEYS) {
+    if (k in { aim: 1, move: 1, react: 1, jitter: 1, temper: 1 }) {continue;} // numeric tiers, not identities
+    for (const g of pool) {
+      const raw = DIMS[k]![g[k]!];
+      const v = String(typeof raw === 'number' ? WeaponType[raw] : raw ?? g[k]);
+      (freq[k] ??= {})[v] = (freq[k]![v] ?? 0) + 1;
+    }
+  }
+  appendFileSync(OUT, `${JSON.stringify({ freq })}\n`);
+}
 console.log(`done in ${((performance.now() - t0) / 1000).toFixed(0)}s — pool + boards appended to ${OUT}`);
 process.exit(0);
