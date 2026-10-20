@@ -14,11 +14,14 @@ import { writeFileSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 
 const PORT = process.env.DUAL_PORT ?? '8477';
+// DUAL_SERVER overrides where the CLIENT points (WAN/tailnet testing —
+// the demo flush + /dev/shutdown still hit PORT over loopback).
+const SERVER = process.env.DUAL_SERVER ?? `localhost:${PORT}`;
 const ROOM = `ddiff_${Date.now().toString(36)}`;
 const SECONDS = Number(process.env.DUAL_SECONDS ?? 45);
 
-console.log(`room ${ROOM} on :${PORT} — ${SECONDS}s capture`);
-const c = await launchClient(`http://localhost:5400/s/${ROOM}?server=localhost:${PORT}&mode=ctf&bots=8`);
+console.log(`room ${ROOM} — client on ${SERVER}, flush on :${PORT} — ${SECONDS}s capture`);
+const c = await launchClient(`http://localhost:5400/s/${ROOM}?server=${SERVER}&mode=ctf&bots=8`);
 await c.waitFor(`window.__test && window.__test.demoManager && window.__test.networkManager.isConnected()`, 45000);
 await new Promise((r) => setTimeout(r, SECONDS * 1000));
 const b64 = await c.page.evaluate(`(async () => {
