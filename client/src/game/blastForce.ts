@@ -192,9 +192,16 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     // explode positions diverge from the server's blast center past 3m.
     // recentKb carries the wire's APPLIED impulse — compare against the
     // same falloff-scaled impulse we would apply, not the raw blast force.
-    const dup = rkb.findIndex((s): boolean => now - s.t < 700 &&
-      Math.hypot(s.x - pos.x, s.y - pos.y, s.z - pos.z) < 8 &&
-      (s.f === undefined || Math.abs(s.f - impulse) < 0.5));
+    const dupCands: number[] = [];
+    for (let k = 0; k < rkb.length; k += 1) {
+      const s = rkb[k]!;
+      if (now - s.t < 700 && Math.hypot(s.x - pos.x, s.y - pos.y, s.z - pos.z) < 8) {dupCands.push(k);}
+    }
+    // Same identity rule as the stamp consume: center+time wins; the
+    // wire's applied impulse vs our predicted falloff only disambiguates
+    // multiple same-spot echoes — a hard veto double-shoves.
+    const dup = dupCands.length === 0 ? -1
+      : dupCands.reduce((a, b): number => Math.abs((rkb[a]!.f ?? impulse) - impulse) <= Math.abs((rkb[b]!.f ?? impulse) - impulse) ? a : b);
     if (dup !== -1) {rkb.splice(dup, 1); return true;}
     if (forceMode === 'push') {player.applyKnockback(pos, impulse);}
     else {player.applyPull(pos, impulse);}

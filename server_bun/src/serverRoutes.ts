@@ -74,7 +74,9 @@ function wtInfo(ctx: HttpCtx): { enabled: true; port: number; sha256: string } |
  *  build a fresh Room + bot populate (empties dispose per tick, so the
  *  churn repeats every request). Mirrors the 5/min handshake budget. */
 const joinIps = new Map<string, { count: number; start: number }>();
-const JOIN_IP_LIMIT = 5;
+// 20/min — same household/NAT reasoning as SessionManager.JOIN_LIMIT:
+// a LAN party shares one public IP; 5/min rejected their first burst.
+const JOIN_IP_LIMIT = 20;
 const JOIN_IP_WINDOW_MS = 60_000;
 function joinThrottleAllow(ip: string): boolean {
   if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') {return true;}
@@ -347,7 +349,7 @@ export async function mapBinRoute(url: URL): Promise<Response> {
   const file = url.pathname.slice('/maps/'.length);
   // T2 ports carry rights-restricted assets — a public-beta deploy never
   // serves them, even when the catalog flag leaked a name through.
-  if (CONFIG.publicBeta && file.startsWith('t2/')) {
+  if (CONFIG.publicBeta && (file.startsWith('t2/') || file.startsWith('t1/'))) {
     return corsResponse('Not found', { status: 404 });
   }
   // maps/-relative asset path: word-char segments, ≤3 dirs deep, bin/

@@ -275,13 +275,15 @@ if (CONFIG.wtPort > 0) {
     const certPem = rf(certPath, 'utf8');
     // DER hash is what serverCertificateHashes expects — PEM is just the
     // base64 wrapper, so decode via X509Certificate to get the raw bytes.
-    wtCertHash = createHash('sha256').update(new X509Certificate(certPem).raw).digest('base64');
     const wtOpts = { port: CONFIG.wtPort, certPem, keyPem: rf(keyPath, 'utf8') };
     // AddrInUse = an orphaned child squatting the QUIC port (the TCP
     // squatter-killer can't see UDP). Reclaim from bun.exe holders, retry once.
-    if (!(await wtServer.start(wtOpts)) && killUdpPortHolders(CONFIG.wtPort)) {
-      await wtServer.start(wtOpts);
-    }
+    let wtOk = await wtServer.start(wtOpts);
+    if (!wtOk && killUdpPortHolders(CONFIG.wtPort)) {wtOk = await wtServer.start(wtOpts);}
+    // Advertise only a live bind — a failed start leaving the hash set
+    // makes /wthash point clients at a dead UDP port (the flap-era
+    // ERR_CONNECTION_RESET churn that looked like a transport bug).
+    if (wtOk) {wtCertHash = createHash('sha256').update(new X509Certificate(certPem).raw).digest('base64');}
     }
   } catch (error) {
     logger.warn('WebTransport disabled — cert/key unreadable', { error: (error as Error).message });

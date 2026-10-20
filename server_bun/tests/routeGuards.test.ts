@@ -38,11 +38,11 @@ afterEach(() => {
 });
 
 describe('route guards', () => {
-  it('/join throttles one IP to 5 mints per minute', async () => {
+  it('/join throttles one IP to 20 mints per minute', async () => {
     const routes = makeRoutes(ctx('9.9.9.1'));
     const join = routes['/join']!;
     let last!: Response;
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 20; i++) {
       last = await join(url('/join?mode=ctf&map=ok'), req('/join'));
       expect(last.status).toBe(200);
     }

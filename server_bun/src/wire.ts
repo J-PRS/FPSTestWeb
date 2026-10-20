@@ -79,7 +79,10 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
   // naming a different playerId can't re-seat a live socket, so it dies
   // here instead of warn-spamming every drained retry.
   join: {
-    limit: { maxCount: 4, windowMs: 10_000 },
+    // Retry headroom matters: a flapping client resends join while its
+    // gameState never lands — dropping retry #5 starves the very heal
+    // it's asking for (the WAN-flap "connected but never seated" stall).
+    limit: { maxCount: 10, windowMs: 10_000 },
     validate: (obj) => typeof obj.playerId === 'string'
       ? { success: true, data: (Object.assign({}, obj, {type: 'join' as const,playerId: obj.playerId})) as Extract<ClientMessage, { type: 'join' }> }
       : { success: false, error: 'join missing playerId' },

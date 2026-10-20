@@ -120,7 +120,7 @@ describe('hitscan AOE claims (lightning beam)', () => {
     });
     const tick = () => { const before = target.health; claim(); return before - target.health; };
     const t1 = tick();
-    for (let i = 0; i < 3; i++) tick(); // ticks 2-4 hold the same band
+    for (let i = 0; i < 3; i++) {tick();} // ticks 2-4 hold the same band
     const t5 = tick();
     expect(t1).toBeGreaterThan(0);
     expect(t5).toBeGreaterThan(0);
@@ -230,11 +230,11 @@ describe('spree announcements', () => {
     expect(notices().filter((t) => t.includes('first blood')).length).toBe(1);
   });
 
-  it('three unanswered kills announce a killing spree', () => {
+  it('five unanswered kills announce a killing spree', () => {
     const { players, kill, notices } = killHarness();
     players.addPlayer('a');
     players.addPlayer('b');
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 5; i++) {
       players.getPlayer('b')!.isDead = false;
       kill('a', 'b');
     }

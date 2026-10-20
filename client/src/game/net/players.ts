@@ -251,7 +251,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
   };
 
   // Server tells us to apply knockback/pull to our local player
-  networkManager.onKnockback = (position: { x: number; y: number; z: number }, force: number, pull?: boolean): void => {
+  networkManager.onKnockback = (position: { x: number; y: number; z: number }, force: number, pull?: boolean, yank?: boolean): void => {
     if (deps.world.playbackMode) {return;} // replay owns the camera's body
     inv('wire-knockback-finite', finiteVec(position) && Number.isFinite(force), { position, force });
     if (!finiteVec(position) || !Number.isFinite(force)) {return;}
@@ -271,14 +271,32 @@ function wirePlayerCombat(ctx: NetCtx): void {
     // Consume window = the stamp's own settle horizon (700ms in
     // blastForce) — a 400ms+ echo is still THIS blast, and a stale
     // window double-shoves then reports a false kb-echo on expiry.
-    // 8m center window + force match: the replica's explode position
-    // diverges from the server's blast center under drain lag (a 3m
-    // match missed real echoes → double-shove + false kb-echo miss);
-    // force disambiguates two blasts inside the same 700ms window.
-    const i = stamps.findIndex((s): boolean => now - s.t < 700 &&
-      Math.hypot(s.x - position.x, s.y - position.y, s.z - position.z) < 8 &&
-      (s.f === undefined || Math.abs(s.f - force) < 0.5));
-    if (i !== -1) { stamps.splice(i, 1); return; }
+    // Identity = center+time; force only DISAMBIGUATES candidates. The
+    // wire force is the server's rewind-epoch applied impulse — under
+    // latency the boundary-falloff prediction differs legitimately, and
+    // a hard <0.5 veto orphans the match (double-shove + a false
+    // kb-echo expiry + the echo re-warned as kb-unpredicted).
+    const cands: number[] = [];
+    for (let k = 0; k < stamps.length; k += 1) {
+      const s = stamps[k]!;
+      if (now - s.t < 700 && Math.hypot(s.x - position.x, s.y - position.y, s.z - position.z) < 8) {cands.push(k);}
+    }
+    const i = cands.length === 0 ? -1
+      : cands.reduce((a, b): number => Math.abs((stamps[a]!.f ?? force) - force) <= Math.abs((stamps[b]!.f ?? force) - force) ? a : b);
+    if (i !== -1) {
+      // Same blast, already predicted — but the wire carries the server's
+      // applied impulse, which wins. Residual-only: a positive delta tops
+      // up the prediction; an overshoot is left to the shadow correction
+      // (impulses can't be un-applied through this path).
+      const delta = force - (stamps[i]!.f ?? force);
+      stamps.splice(i, 1);
+      if (delta > 0.5) {
+        const dpos = new THREE.Vector3(position.x, position.y, position.z);
+        const player = deps.lazyPlayer();
+        if (pull) {player.applyPull(dpos, delta, yank);} else {player.applyKnockback(dpos, delta);}
+      }
+      return;
+    }
     const from = new THREE.Vector3(position.x, position.y, position.z);
     // A blast we RENDERED but never predicted a shove from — client-side
     // envelope/occlusion disagreed with the server's rewind, or the boom
@@ -290,17 +308,23 @@ function wirePlayerCombat(ctx: NetCtx): void {
       // A triggered mine's blast has no projectile replica and its
       // deployDown races the echo — a live mine nearby IS the blast.
       || deps.entities().deployables.mineNear(from, 12);
-    if (!seen) {
-      // Server shoved us from a blast we never rendered — envelope/occlusion
-      // or rewind disagreed with the server. Loud parity counter — except
-      // in the join window: echoes landing before our prediction window
-      // existed can't be "unpredicted", they're join-race leftovers.
-      if (networkManager.msSinceConnect() > 2000) {
-        parityMiss('kb-unpredicted', { x: Math.round(position.x), y: Math.round(position.y), z: Math.round(position.z), force: Math.round(force * 10) / 10, pull: Boolean(pull) });
-      }
+    // A rope-dart yank IS an unpredicted shove by design (the reeled
+    // victim never predicted a blast) — no phantom boom, no ledger entry.
+    if (!seen && !yank) {
+      // Blast edge may simply trail the knockback under jitter — hold the
+      // shove; addExplosion redeems it. Only an expiry warns.
+      deps.explosionTracker.shoveArrived(position.x, position.y, position.z, force, Boolean(pull));
       logger.info(`Knockback applied without prediction stamp`, { pos: position, force, pull });
       // Radius isn't on the wire; force is the only size signal we get.
       deps.lazyEffects().spawnExplosion(from, Math.max(1.5, Math.min(5, force / 8)), 12);
+    }
+    // Sweeps happen on each knockback — a shove whose blast never landed
+    // in grace is the real invisible-force anomaly. Join-race leftovers
+    // (echoes older than our prediction window) can't be "unpredicted".
+    for (const s of deps.explosionTracker.expiredShoves(Date.now())) {
+      if (networkManager.msSinceConnect() > 2000) {
+        parityMiss('kb-unpredicted', { x: Math.round(s.x), y: Math.round(s.y), z: Math.round(s.z), force: Math.round(s.force * 10) / 10, pull: s.pull });
+      }
     }
     // Record the raw application: the echo can beat its blast's replica
     // explode (handlers run on arrival, the predicted blast waits for
@@ -311,7 +335,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
     if (rkb.length > 8) {rkb.shift();}
     const player = deps.lazyPlayer();
     if (pull) {
-      player.applyPull(from, force);
+      player.applyPull(from, force, yank);
     } else {
       player.applyKnockback(from, force);
     }

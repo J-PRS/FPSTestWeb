@@ -58,7 +58,11 @@ export class SessionManager {
   /** Free reconnect shields per seat — honest flappers rarely reclaim
    *  more than twice in a seat's life; exploiters flap every 2.5s. */
   private static readonly MAX_RECLAIM_SHIELDS = 3;
-  private static readonly JOIN_LIMIT = 5;
+  // 5/min rejected a whole household: every player behind one NAT/CGNAT
+  // shares the bucket — a six-seat LAN or a tailnet's clients trip it on
+  // their FIRST connect burst (or any flap storm minting fresh ids).
+  // 20/min still stops the script-flood class this exists for.
+  private static readonly JOIN_LIMIT = 20;
   private static readonly JOIN_WINDOW_MS = 60_000;
 
   constructor(private readonly d: SessionDeps) {}

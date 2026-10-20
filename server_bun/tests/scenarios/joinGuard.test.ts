@@ -47,19 +47,20 @@ const join = (mgr: SessionManager, ws: FakeWs, playerId: string, token?: string)
 const flush = () => new Promise((r) => setTimeout(r, 40));
 
 describe('join guards', () => {
-  it('throttles a join flood from one IP after 5/min', () => {
+  it('throttles a join flood from one IP after the burst budget', () => {
     const room = mkRoom({}, 'tdm');
     const { mgr } = mkSessions(room);
-    for (let i = 0; i < 5; i++) join(mgr, fakeWs(), `flood${i}`);
-    const sixth = fakeWs();
-    join(mgr, sixth, 'flood6');
-    expect(sixth.closed[0]?.reason).toBe('Join rate limited');
+    // 20/min — a NAT'd household of players is legit; a script isn't.
+    for (let i = 0; i < 20; i++) {join(mgr, fakeWs(), `flood${i}`);}
+    const over = fakeWs();
+    join(mgr, over, 'floodOver');
+    expect(over.closed[0]?.reason).toBe('Join rate limited');
   });
 
   it('exempts loopback from the throttle (dev fleets)', () => {
     const room = mkRoom({}, 'tdm');
     const { mgr } = mkSessions(room);
-    for (let i = 0; i < 8; i++) join(mgr, fakeWs('127.0.0.1'), `local${i}`);
+    for (let i = 0; i < 8; i++) {join(mgr, fakeWs('127.0.0.1'), `local${i}`);}
     expect(room.playerCount()).toBe(8);
   });
 
@@ -81,17 +82,17 @@ describe('join guards', () => {
     const { mgr, reg } = mkSessions(room);
     // Every reject path must return BEFORE registry.begin — a record
     // without a seat leaks a gen entry that never gets reaped.
-    const throttled = fakeWs();
-    for (let i = 0; i < 5; i++) join(mgr, fakeWs(), `f${i}`);
-    join(mgr, throttled, 'f6');
     join(mgr, fakeWs(), 'victim'); // claim an id for the thief probe
+    const throttled = fakeWs();
+    for (let i = 0; i < 20; i++) {join(mgr, fakeWs(), `f${i}`);}
+    join(mgr, throttled, 'fOver');
     room.players.removePlayer('victim');
     const thief = fakeWs('10.2.2.2');
     join(mgr, thief, 'victim');
     const bad = fakeWs('10.3.3.3');
     mgr.handle(bad as never, { type: 'notjoin' });
     await flush();
-    expect(reg.state('f6')).toBeUndefined();
+    expect(reg.state('fOver')).toBeUndefined();
     // begin() on a live id would overwrite to 'connecting' + fresh gen —
     // the denied thief must never reach it; victim's seat stays 'active'.
     expect(reg.state('victim')).toBe('active');
