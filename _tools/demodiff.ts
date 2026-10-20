@@ -67,7 +67,11 @@ const tMax = Math.max(...lanes.map((l): number => l.cli[l.cli.length - 1]!.times
 const points: { t: number; o: number }[] = [];
 for (let w = tMin; w + 4 <= tMax; w += 4) {
   let bestO = 0, bestScore = Infinity;
-  for (let o = 0; o <= B.header.duration; o += 0.25) {
+  // o may go negative: the client's wire-clock stamps remote frames at
+  // server-uptime (room-shared), while the server demo's this.t counts
+  // from room mint — a client in a room minted seconds into server life
+  // leads the demo clock by that margin. Sweep both directions.
+  for (let o = -B.header.duration; o <= B.header.duration; o += 0.25) {
     let score = 0, votes = 0;
     for (const l of lanes) {
       const ds: number[] = [];
