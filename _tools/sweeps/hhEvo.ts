@@ -208,7 +208,7 @@ const MODES = MODE === 'chaos' ? ['headhunt', 'dm', 'ctf', 'conquest', 'nuggets'
  *  speed, air=airborne fraction, life=median lifespan, heldEnd=final
  *  pocket. Selection doesn't use them yet; they're the grid the
  *  MAP-Elites pass will key on. */
-interface Desc { agg: number; mob: number; air: number; life: number; heldEnd: number }
+interface Desc { agg: number; mob: number; air: number; life: number; heldEnd: number; hype: number }
 interface MatchResult { aScore: number; bScore: number; aK: number; aD: number; bK: number; bD: number; tokens: number; simS: number; aDesc: Desc; bDesc: Desc; aGrabs: number; bGrabs: number }
 
 /** One headhunt game: ga plays alpha, gb plays bravo. Score = held tokens. */
@@ -288,6 +288,7 @@ function runMatch(ga: Genome, gb: Genome, seed: number, ctx: MapCtx = MAPS[0]!, 
   const lastHeld = new Map<string, number>();
   const grabs = { alpha: 0, bravo: 0 };
   let ticks = 0;
+  const traj: number[] = [];
   // Roster is fixed post-setup — one array, not a Map-values copy per
   // batch (was ~6% of a match in wall reads + allocation churn).
   const allP = [...room.players.getAllPlayers().values()];
@@ -320,6 +321,15 @@ function runMatch(ga: Genome, gb: Genome, seed: number, ctx: MapCtx = MAPS[0]!, 
       lastHeld.set(p.id, p.heldTokens ?? 0);
     }
     spd.n++; air.n++;
+    // Score-trajectory sample for the hype descriptor — reads the same
+    // ledgers the post-match scoring does (scores / ffaScores by mode).
+    if (ticks % (BATCH * 4) === 0) {
+      const fs = (room.scoring as { ffaScores?: Map<string, number> }).ffaScores;
+      const sOf = (t: 'alpha' | 'bravo'): number => ffa
+        ? sides[t].reduce((n, b) => n + (fs?.get(b.id) ?? 0), 0)
+        : (t === 'alpha' ? room.scores.alpha : room.scores.bravo);
+      traj.push(sOf('alpha') - sOf('bravo'));
+    }
     if (PROF) {const n = performance.now(); prof.pLoop += n - tp; tp = n;}
   }
   if (PROF) {prof.setup = tp - profT - prof.step - prof.respawn - prof.pLoop; prof.score = performance.now() - tp;
@@ -334,12 +344,24 @@ function runMatch(ga: Genome, gb: Genome, seed: number, ctx: MapCtx = MAPS[0]!, 
   const heldOf = (t: 'alpha' | 'bravo'): number =>
     allP.filter((p) => (sideOf.get(p.id)?.team ?? 'alpha') === t).reduce((n, p) => n + (p.heldTokens ?? 0), 0);
   const simMin = (ticks * dt) / 60;
+  // Hype: lead changes + comeback depth. A match that ends close after
+  // swinging wide is watchable; a wire-to-wire blowout isn't. Symmetric —
+  // both sides share the match's trajectory.
+  const sgn = (v: number): number => (v > 0 ? 1 : v < 0 ? -1 : 0);
+  let leadChanges = 0, peak = 0;
+  for (let i = 1; i < traj.length; i += 1) {
+    if (sgn(traj[i]!) !== 0 && sgn(traj[i]!) !== sgn(traj[i - 1]!)) {leadChanges += 1;}
+    peak = Math.max(peak, Math.abs(traj[i]!));
+  }
+  const end = Math.abs(traj[traj.length - 1] ?? 0);
+  const hype = leadChanges + (peak > 0 ? (peak - Math.min(peak, end)) / peak : 0);
   const descOf = (t: 'alpha' | 'bravo', k: number): Desc => ({
     agg: k / Math.max(0.1, simMin),
     mob: spd[t] / Math.max(1, spd.n * PER),
     air: air[t] / Math.max(1, air.n * PER),
     life: medLife(lives[t]),
     heldEnd: heldOf(t),
+    hype,
   });
   // FFA modes (dm/duel/rabbit/flagrun) bank per-player pts in ffaScores
   // — kills AND rabbit hold-seconds land there; sum by our assigned
@@ -523,10 +545,10 @@ const stats = new Map<Genome, Row>();
 const mkRow = (g: Genome): Row => ({ g, name: gname(g), w: 0, l: 0, margin: 0, kd: 0, games: 0, worst: 0, desc: [] });
 const descMean = (r: Row): Desc | null => {
   if (!r.desc.length) {return null;}
-  const s = r.desc.reduce((a, d) => ({ agg: a.agg + d.agg, mob: a.mob + d.mob, air: a.air + d.air, life: a.life + d.life, heldEnd: a.heldEnd + d.heldEnd }),
-    { agg: 0, mob: 0, air: 0, life: 0, heldEnd: 0 });
+  const s = r.desc.reduce((a, d) => ({ agg: a.agg + d.agg, mob: a.mob + d.mob, air: a.air + d.air, life: a.life + d.life, heldEnd: a.heldEnd + d.heldEnd, hype: a.hype + d.hype }),
+    { agg: 0, mob: 0, air: 0, life: 0, heldEnd: 0, hype: 0 });
   const n = r.desc.length;
-  return { agg: s.agg / n, mob: s.mob / n, air: s.air / n, life: s.life / n, heldEnd: s.heldEnd / n };
+  return { agg: s.agg / n, mob: s.mob / n, air: s.air / n, life: s.life / n, heldEnd: s.heldEnd / n, hype: s.hype / n };
 };
 for (const g of pool) {stats.set(g, mkRow(g));}
 // Payoff matrix across the CURRENT pool, rebuilt per gen (genome objects
@@ -645,7 +667,7 @@ for (let gen = 0; gen < GENS && !wallStop; gen += 1) {
   console.log(`\n── gen ${gen} board ──`);
   for (const r of board) {
     const d = descMean(r);
-    const style = d ? ` agg${d.agg.toFixed(1)} mob${d.mob.toFixed(0)} air${(d.air * 100).toFixed(0)}% life${d.life.toFixed(0)}s` : '';
+    const style = d ? ` agg${d.agg.toFixed(1)} mob${d.mob.toFixed(0)} air${(d.air * 100).toFixed(0)}% life${d.life.toFixed(0)}s hype${d.hype.toFixed(1)}` : '';
     console.log(`  ${String(r.w).padStart(2)}-${String(r.l).padStart(2)} margin=${String(r.margin).padStart(4)} worst=${String(r.worst).padStart(4)} kd=${(r.kd / Math.max(1, r.games)).toFixed(2)} ${r.name}${style}`);
   }
   // Meta-Nash over the payoff matrix: >60% on one genome = dominant
