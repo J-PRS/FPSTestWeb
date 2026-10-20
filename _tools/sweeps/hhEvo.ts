@@ -533,14 +533,15 @@ if (PAIRS) {
   process.exit(0);
 }
 
-// --qd: MAP-Elites archive over the behavior descriptors. Each (agg, mob,
-// air) cell keeps its best genome across gens, so a monoculture can't
-// evict the specialists that hold other cells. Buckets are coarse on
-// purpose — the chaos pool spans agg 0.2-2, mob 14-21, air 2-20%.
+// --qd: MAP-Elites archive over the behavior descriptors. Each
+// (agg, mob, air, hype) cell keeps its best genome across gens, so a
+// monoculture can't evict the specialists that hold other cells —
+// including the ones that produce interesting games. Buckets are coarse
+// on purpose — the chaos pool spans agg 0.2-2, mob 14-21, air 2-20%.
 const QD = process.argv.includes('--qd');
 const archive = new Map<string, Row>();
 const cellOf = (d: Desc): string =>
-  `${Math.min(3, Math.floor(d.agg / 0.5))}.${Math.min(4, Math.max(0, Math.floor((d.mob - 14) / 2)))}.${Math.min(3, Math.floor(d.air / 0.08))}`;
+  `${Math.min(3, Math.floor(d.agg / 0.5))}.${Math.min(4, Math.max(0, Math.floor((d.mob - 14) / 2)))}.${Math.min(3, Math.floor(d.air / 0.08))}.${Math.min(2, Math.floor(d.hype))}`;
 const stats = new Map<Genome, Row>();
 const mkRow = (g: Genome): Row => ({ g, name: gname(g), w: 0, l: 0, margin: 0, kd: 0, games: 0, worst: 0, desc: [] });
 const descMean = (r: Row): Desc | null => {
