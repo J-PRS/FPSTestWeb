@@ -107,9 +107,15 @@ export function tickBallTrails(b: Ball, dt: number, viewPos: THREE.Vector3): voi
         // burst-drain catch-up (gap inside the cells-stepped budget) —
         // designed folding, not integrator divergence. Fold still
         // happens; the warn doesn't.
+        // skewMs ≤ 0: the cursor was BEHIND net truth — the stamp pulled
+        // the sim forward (convergence heal, same class foldExplained's
+        // rewind covers). Only a positive-skew unexplained fold — cursor
+        // ahead AND divergent — is the integrator-mismatch anomaly.
         if ((b.netS.segsSeen ?? 0) > 3 && !b.netS.foldExplained) {
           const skew = b.netS.lastSimNow >= 0 ? Math.round((b.netS.simT - b.netS.lastSimNow) * 1000) : 0;
-          glitch('render-blend', { netId: b.netId ?? -1, offM: Math.round(Math.sqrt(offSq)), skewMs: skew });
+          if (skew > 0) {
+            glitch('render-blend', { netId: b.netId ?? -1, offM: Math.round(Math.sqrt(offSq)), skewMs: skew });
+          }
         }
         // Retire, not clear — the old tails FADE OUT where they were.
         b.retireRibbons();
