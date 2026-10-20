@@ -636,19 +636,27 @@ class WireBot {
     stats.shots++;
     const t = this.roster.get(best)!;
     const dist = Math.max(Math.sqrt(bd), 1);
-    const weaponType = Math.random() < 0.5 ? 2 : 0;
-    const speed = weaponType === 2 ? 60 : 90;
+    // Disc (wt 1): speed 80, gravity:false — the linear-flight assumption
+    // the claim math below relies on is exactly true (the old 2:0 mix
+    // hardcoded 60/90 against real speeds 40/120 AND gravity arcs —
+    // claims could never have matched a server shell). direct picks the
+    // body-hit claim path, else the blast-landing path — both stay
+    // exercised 50/50.
+    const direct = Math.random() < 0.5;
+    const weaponType = 1;
+    const speed = 80;
     const dir = { x: (t.pos.x - s.pos.x) / dist, y: (t.pos.y - s.pos.y) / dist, z: (t.pos.z - s.pos.z) / dist };
     // A claim only resolves against a shell the ledger watched launch —
     // the spawn report goes first, the server-assigned id arrives on the
     // projectileCreated echo (claims may omit the id → latest-of-type).
     this.send({
-      type: 'shot', targetId: null, weaponType,
-      position: { x: s.pos.x, y: s.pos.y + 1.6, z: s.pos.z },
-      velocity: { x: dir.x * speed, y: dir.y * speed, z: dir.z * speed },
-      // The fire window's escape hatch reads this on the CLIENT clock —
-      // wire compression otherwise pairs two legal spawns into one window.
-      timestamp: Date.now(),
+      // shotFired is the fire intent for server-simmed weapons — the
+      // server spawns the authoritative shell off dir+weapon-speed and
+      // echoes shotId on projectileCreated (the 'shot' type never
+      // existed on the wire — every spawn + claim silently rejected).
+      type: 'shotFired', weaponType,
+      dir,
+      pos: { x: s.pos.x, y: s.pos.y + 1.6, z: s.pos.z },
     });
     const airtime = dist / speed;
     const firedAt = performance.now();
@@ -686,7 +694,7 @@ class WireBot {
       // claims' projectiles.
       if (!mine.pid) {return;}
       const {pid} = mine;
-      if (weaponType === 2) {
+      if (direct) {
         // A real client only claims what it hit — if the target drifted
         // since we fired, that shell just missed; claim nothing. A dead
         // target is an untouchable corpse — also claim nothing.
@@ -702,7 +710,9 @@ class WireBot {
         // the claimed hit reads as an impossible reach server-side.
         if ((cur.pos.x - t.pos.x) ** 2 + (cur.pos.y - t.pos.y) ** 2 + (cur.pos.z - t.pos.z) ** 2 > 36) {return;}
         this.send({ type: 'shotFired', weaponType });
-        this.send({ type: 'shot', targetId: best, weaponType, position: { ...cur.pos }, airtime, projectileId: pid });
+        // Direct-hit claim: the client's own shape — excludeTargetId
+        // names the direct victim so the AOE ring doesn't double-pay.
+        this.send({ type: 'aoeShot', position: { ...cur.pos }, weaponType, excludeTargetId: best, airtime, projectileId: pid, directHit: true });
       } else {
         // The blast claim must sit where the shell actually flew — the
         // reach check recomputes the trajectory, so aiming at where the
