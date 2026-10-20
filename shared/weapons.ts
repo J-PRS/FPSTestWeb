@@ -9,7 +9,8 @@
  * weaponType is the stable wire ID (binary frames carry it as u8).
  */
 
-import { WeaponType, type WeaponStats, WEAPONS } from './weaponTable.js';
+import { WeaponType, type WeaponStats } from './weaponTable.js';
+import { WEAPONS } from './weaponRows.js';
 export const AOE_VFX_SCALE = 0.8;
 
 /** Melee cone half-angle (cos) — ~57°. The client swings this cone for
@@ -52,7 +53,8 @@ export function scaledDirectDamage(weaponType: number, airtime?: number): number
   return w.directDamage * Math.min(AIRTIME_DMG_CAP, 1 + airtime);
 }
 
-export { WeaponType, WEAPONS, idSeed, jitteredTtl, RIDE_CATCH_R } from './weaponTable.js';
+export { WeaponType, idSeed, jitteredTtl, RIDE_CATCH_R } from './weaponTable.js';
+export { WEAPONS } from './weaponRows.js';
 export type { WeaponStats } from './weaponTable.js';
 
 /** Claimless-combat rollout: intents (shotFired) for these weaponTypes
@@ -74,7 +76,7 @@ export const SERVER_SIMMED_WEAPONS = new Set<number>([
   WeaponType.Chaingun, WeaponType.Railgun, WeaponType.Cannon, WeaponType.RocketLauncher,
   WeaponType.Pistol, WeaponType.Revolver, WeaponType.Sprinkler,
   WeaponType.ProxyGrenade, WeaponType.SatchelCharge, WeaponType.Bombard,
-  WeaponType.BeltSticky,
+  WeaponType.BeltSticky, WeaponType.Hook,
 ]);
 export function serverSimmed(weaponType: number | undefined): boolean {
   return weaponType !== undefined && SERVER_SIMMED_WEAPONS.has(weaponType);
@@ -101,6 +103,15 @@ export const HEALBEAM_ENERGY = 6;         // jet energy per heal tick — a full
 export const HEALNADE_HEAL = 60;          // flat heal on allies caught in the nade blast
 export const CONC_JET_DRAIN = 40;         // jet energy the concussion blast saps — the escape debuff, not just the fumble
 
+// Shocklance — the honest ray's reach for the pull-out zap. Shared: the
+// client draws the bolt to the same stop the server's beamSweep pays at.
+export const LANCE_RANGE = 18;
+// Shocklance cadence — seconds between zaps. ONE number, read by the
+// client trigger (the weapon def's rate), the legal-cadence table below
+// (bots, the server's spawn-claim window) and the server's own lance
+// gate, so a lance can't drift into a 2s client against a 1.85s server.
+export const LANCE_CADENCE_S = 2;
+
 // Belt economy — one charge pool feeds every belt throw AND every pack
 // deploy: the nuggets you pick up ARE the ordnance you carry.
 export const BELT_MAX = 5;        // spawn stock AND the pickup cap
@@ -116,6 +127,7 @@ export const BELT_THROW_WEAPONS = new Set<number>([
   WeaponType.Javelin, WeaponType.ImpactGrenade, WeaponType.RemoteRailgun,
   WeaponType.ArmorGrenade, WeaponType.HealGrenade,
   WeaponType.ProxyGrenade, WeaponType.SatchelCharge, WeaponType.Concussion,
+  WeaponType.Hook,
 ]);
 
 /** Nuggets charged per belt toss — heavy ordnance costs more than a
@@ -163,6 +175,7 @@ export const WEAPON_FIRE_INTERVAL_S: Partial<Record<WeaponType, number>> = {
   [WeaponType.Sprinkler]: 0.1,
   [WeaponType.HealBeam]: 0.1, // heal ticks like the repair beam — cadence IS the heal rate
   [WeaponType.Melee]: 0.5,
+  [WeaponType.Shocklance]: LANCE_CADENCE_S, // one zap per pull-out cycle — the cycle IS the cadence
   [WeaponType.MRVLauncher]: 2.4, // slower than the mortar — one trigger = a whole volley
   [WeaponType.Bombard]: 1.6, // slower than the cannon — 160dmg can't ride a 0.55s cadence
   // Belt throws: THROW_TOTAL (0.7 release + 0.3 raise) gates the human
@@ -171,7 +184,7 @@ export const WEAPON_FIRE_INTERVAL_S: Partial<Record<WeaponType, number>> = {
   [WeaponType.Grenade]: 1, [WeaponType.DiscPull]: 1, [WeaponType.ClusterBomb]: 1,
   [WeaponType.Javelin]: 1, [WeaponType.ImpactGrenade]: 1, [WeaponType.RemoteRailgun]: 1,
   [WeaponType.ArmorGrenade]: 1, [WeaponType.HealGrenade]: 1, [WeaponType.ProxyGrenade]: 1,
-  [WeaponType.Concussion]: 1, [WeaponType.BeltSticky]: 1,
+  [WeaponType.Concussion]: 1, [WeaponType.BeltSticky]: 1, [WeaponType.Hook]: 1,
   [WeaponType.SatchelCharge]: 1.9, // deliberate two-beat plant (BELT_THROW_TIME.satchel)
 };
 

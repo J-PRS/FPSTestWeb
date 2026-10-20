@@ -29,7 +29,7 @@ import { makeSimBall, stepBall, type SimBall } from '../../shared/ballSim.ts';
 import { hmapToField, hmapFingerprint } from '../../client/src/demo/demoHmap.ts';
 import { hmParseBin, hmSurface, type Heightfield } from '../../shared/heightfield.ts';
 import { MoveSim, GRAVITY } from '../../shared/movement.ts';
-import { WEAPONS } from '../../shared/weaponTable.ts';
+import { WEAPONS } from '../../shared/weaponRows.ts';
 import {
   InputFlags, JetpackFlags, TargetEventType, ProjectileEventType,
   type DemoFile, type DemoFrame,
