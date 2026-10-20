@@ -61,6 +61,10 @@ export interface NetBag {
    *  inside the cells-stepped speed budget). render-blend reads it to
    *  skip the warn; every fold itself still applies. */
   foldExplained?: boolean;
+  /** Wall clock of the last applySeg — a fold this frame is that
+   *  segment's own correction; a jump with no fresh authority is the
+   *  anomaly ball-step exists for. */
+  lastSegWallMs?: number;
 }
 
 export function newNetBag(): NetBag {
@@ -181,9 +185,12 @@ export function tickNet(st: NetStatics, bag: NetBag, host: NetHost, dt: number):
       // Speed-scaled floor: a ball past ~100 m/s legitimately moves >5m
       // between 20Hz rebuilds — counting that as a step was ~90% noise.
       // Only fire when the leap outruns what the tick budget explains.
-      // segsSeen<=3 folds are the join/roster heal — the seed plus its
-      // first stamped corrections are convergence, not predictor steps.
-      if (gap2 > spdBudget * spdBudget && (bag.segsSeen ?? 0) > 3) {
+      // A fold within ~300ms wall of a segment IS that segment's own
+      // correction (join/roster heal or seg-div's divergence — both
+      // owned there); a jump with no fresh authority behind it is the
+      // anomaly this warn exists for.
+      const segAgeMs = performance.now() - (bag.lastSegWallMs ?? -1e9);
+      if (gap2 > spdBudget * spdBudget && (bag.segsSeen ?? 0) > 3 && segAgeMs > 300) {
         glitch('ball-step', { gapM: Math.round(Math.sqrt(gap2)), acc: Math.round(bag.netAcc * 1000) });
       }
       // The step is honest truth — but it leaps the rendered ball past
@@ -275,6 +282,7 @@ export function applySeg(st: NetStatics, bag: NetBag, host: NetHost, seg: NetSeg
   // predictor); real divergence shows on heartbeat-scale spans.
   const spanMs = simT !== undefined && bag.simT < simT ? (simT - bag.simT) * 1000 : -1;
   bag.segsSeen = (bag.segsSeen ?? 0) + 1;
+  bag.lastSegWallMs = performance.now();
   // legT0 === -1 = never seeded: a first-segment snap is the roster heal,
   // not predictor drift — there is no prediction to diverge from yet.
   // segsSeen > 3 extends that grace past the FIRST heartbeats: the seed

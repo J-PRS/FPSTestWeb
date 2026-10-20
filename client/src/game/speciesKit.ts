@@ -158,7 +158,9 @@ class SpeciesKitImpl {
       // stationary replica 10-20m behind truth reads as a reach lie, and
       // the whiff then DROPPED the damage claim entirely — server-valid
       // hits landing as damage-from-nowhere echoes instead).
-      const netDriven = attacker !== undefined && (attacker as { sim?: unknown }).sim;
+      // netDriven flag, not .sim — locals run the same shared sim type
+      // (constructor seeds it), so .sim would mark every attacker wired.
+      const netDriven = attacker !== undefined && (attacker as { netDriven?: boolean }).netDriven === true;
       const d = fromPos.distanceTo(p.pos);
       if (d > reach && !netDriven) {
         // Ski-speed whiffs are earned dodges, not bugs — the strike fired on
@@ -266,6 +268,11 @@ fold.count += 1;
 
   updateSpecies = <T extends Targetable & { dispose(): void }>(s: Species<T>, dt: number): void  => {
     s.t += dt;
+    // authoritySims() rooms own their creature population on the wire
+    // — a local ambient spawn is invisible to the server and its bites
+    // claim unverifiable envDamage (envdmg.far). P2P hosts keep local
+    // species: their rooms carry no creature sim.
+    const wireOwned = this.deps.lazyNetworkManager()?.authoritySims() ?? false;
     if (s.t >= s.interval) {
       s.t = 0;
       // Ambient spawning is owned by this one path — director spawns are
@@ -275,11 +282,15 @@ fold.count += 1;
       // owns population so the total budget isn't double-spent.
       // ?nocreatures — the lobby sim-gate, applied to the local ambient
       // population (offline rooms have no server mint to carry it).
-      if (!this.RANDOM_SPAWNS && !this.deps.lazyDemoManager()?.isPlaying && !(urlParams.noCreatures && !s.decor)) {s.spawn();}
+      if (!wireOwned && !this.RANDOM_SPAWNS && !this.deps.lazyDemoManager()?.isPlaying && !(urlParams.noCreatures && !s.decor)) {s.spawn();}
     }
     const playerPos = this.deps.lazyPlayer().pos;
     for (let i = s.list.length - 1; i >= 0; i -= 1) {
       const e = s.list[i]!;
+      // Wire-owned room: a !netDriven entry is a pre-connect local the
+      // server never minted — cull it like netKill does for balls.
+      // Decor species stay (ambient dressing, no interactive claims).
+      if (wireOwned && !s.decor && !(e as { netDriven?: boolean }).netDriven) {e.dead = true;}
       const tickDt = this.lodTick(e, e.pos.distanceToSquared(playerPos), dt);
       if (tickDt > 0) {s.tick(e, tickDt);}
       this.tickGnaw(e, tickDt);

@@ -276,8 +276,12 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
             : 'cooked by your own blast'; // suicide reads as suicide, not "a crawler"
           // Own blast: server applies the self-splash now — claiming it
           // too would double-charge. Keep the local flash; yourHealth
-          // echo corrects the bar. Enemy blasts still report for credit.
-          if (enemyBlast) {deps.lazyNetworkManager()?.sendEnvironmentDamage(selfDmg, a.shooterId ?? undefined);}
+          // echo corrects the bar. Enemy blasts: the same is true on
+          // authoritySims() rooms — splashOne already applyDamage'd us —
+          // so the claim only rides P2P (a host has no blast sweep).
+          if (enemyBlast && deps.lazyNetworkManager?.()?.authoritySims?.() !== true) {
+            deps.lazyNetworkManager?.()?.sendEnvironmentDamage(selfDmg, a.shooterId ?? undefined);
+          }
           deps.lazyHud().showDamage(null, selfDmg);
         }
       }
