@@ -104,6 +104,10 @@ const bidFor = (kind: CommandKind, m: CommandMember, at: BotVec): number => {
 };
 
 export class TeamCommand {
+  /** Doctrine scale on WANT staffing — 1 = release behavior. The evo
+   *  harness's 'pack' gene drives this: lean squads hold defense while
+   *  floods put most of the team on contested jobs. */
+  wantMul = 1;
   private tasks = new Map<string, CommandTask>();
   private contested = new Set<string>();
   private reassignT = 0;
@@ -158,9 +162,9 @@ export class TeamCommand {
       if (!at) {return;}
       const have = [...this.tasks.values()].filter((t): boolean => t.kind === kind).length;
       const want = kind === 'push'
-        ? WANT.push + Math.min(3, Math.floor(median(free.map((m): number =>
+        ? Math.round(WANT.push * this.wantMul) + Math.min(3, Math.floor(median(free.map((m): number =>
             Math.hypot(m.pos.x - at.x, m.pos.z - at.z))) / PUSH_FAR_M))
-        : WANT[kind];
+        : Math.round(WANT[kind] * this.wantMul);
       const pool = free
         .filter((m): boolean => !this.tasks.has(m.id))
         .map((m): { m: CommandMember; bid: number; } => ({ m, bid: bidFor(kind, m, at) }))

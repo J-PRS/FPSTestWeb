@@ -83,7 +83,12 @@ type GDims = Record<string, readonly unknown[]>;
 const DIMS: GDims = {
   aim: TIERS, move: TIERS, react: TIERS, jitter: TIERS, temper: TIERS,
   near: NEAR, mid: MID, far: FAR, belt: BELT, side: SIDE, perk: PERKS,
+  pack: TIERS, // doctrine: squad staffing depth, indexes PACK_MUL
 };
+/** pack tier → TeamCommand.wantMul — lean squads hold back, floods staff
+ *  every contested job. Decision gene: changes WHAT the team attempts,
+ *  not how well individuals aim. */
+const PACK_MUL = [0.5, 1, 2, 4] as const;
 type Genome = Record<string, number>;
 const GENE_KEYS = Object.keys(DIMS);
 
@@ -100,7 +105,7 @@ const kitOf = (g: Genome): BotLoadout => ({
  *  re-roll, not crash. */
 const legal = (g: Genome): boolean => kitConsistent(kitOf(g));
 const gname = (g: Genome): string =>
-  `${TIERS[g.aim!][0]}${TIERS[g.move!][0]}${TIERS[g.react!][0]}${TIERS[g.jitter!][0]}${TIERS[g.temper!][0]}:` +
+  `${TIERS[g.aim!][0]}${TIERS[g.move!][0]}${TIERS[g.react!][0]}${TIERS[g.jitter!][0]}${TIERS[g.temper!][0]}${TIERS[g.pack ?? 1]![0]}:` +
   `${WeaponType[NEAR[g.near!]!]}+${WeaponType[MID[g.mid!]!]}+${WeaponType[FAR[g.far!]!]}+${WeaponType[BELT[g.belt!]!]}+${WeaponType[SIDE[g.side!]!]}/${PERKS[g.perk!]}`;
 
 const idx = (list: readonly unknown[], v: unknown): number => Math.max(0, list.indexOf(v));
@@ -109,7 +114,7 @@ const idx = (list: readonly unknown[], v: unknown): number => Math.max(0, list.i
  *  verbatim ("immhh:Shotgun+Disc+Mortar+Grenade/regenerator"). */
 const parseGname = (s: string): Genome | null => {
   const [axes, kit] = s.split(':');
-  if (!axes || !kit || axes.length !== 5) {return null;}
+  if (!axes || !kit || (axes.length !== 5 && axes.length !== 6)) {return null;} // 5 = pre-pack gnames
   const tierOf = (c: string): number => ({ e: 0, m: 1, h: 2, i: 3 } as Record<string, number>)[c] ?? -1;
   const t = [...axes].map(tierOf);
   if (t.some((x) => x < 0)) {return null;}
@@ -120,13 +125,14 @@ const parseGname = (s: string): Genome | null => {
     list.findIndex((w) => WeaponType[w] === name);
   const g: Genome = { aim: t[0], move: t[1], react: t[2], jitter: t[3], temper: t[4],
     near: slotOf(NEAR, wn[0]!), mid: slotOf(MID, wn[1]!), far: slotOf(FAR, wn[2]!),
-    belt: slotOf(BELT, wn[3]!), side: wn[4] ? slotOf(SIDE, wn[4]) : 0, perk: idx(PERKS, perk) };
+    belt: slotOf(BELT, wn[3]!), side: wn[4] ? slotOf(SIDE, wn[4]) : 0, perk: idx(PERKS, perk),
+    pack: t[5] ?? 1 };
   return legal(g) ? g : null;
 };
 
 // ---- seed pool: hand-authored diversity, not random mush -------------------
 const seedGenome = (over: Partial<Record<keyof typeof DIMS, unknown>>): Genome => {
-  const base = { aim: 'medium', move: 'medium', react: 'medium', jitter: 'medium', temper: 'medium',
+  const base = { aim: 'medium', move: 'medium', react: 'medium', jitter: 'medium', temper: 'medium', pack: 'medium',
     near: W.Shotgun, mid: W.Chaingun, far: W.Mortar, belt: W.Grenade, side: W.Pistol, perk: 'none', ...over } as Record<string, unknown>;
   const g: Genome = {};
   for (const k of GENE_KEYS) {g[k] = idx(DIMS[k]!, base[k]);}
@@ -156,7 +162,7 @@ const mutate = (g: Genome): Genome => {
     for (let i = 0; i < hits; i += 1) {
       const k = pick(GENE_KEYS);
       const n = DIMS[k]!.length;
-      m[k] = k in { aim: 1, move: 1, react: 1, jitter: 1, temper: 1 }
+      m[k] = k in { aim: 1, move: 1, react: 1, jitter: 1, temper: 1, pack: 1 }
         ? Math.max(0, Math.min(n - 1, m[k]! + (rand() < 0.5 ? -1 : 1)))
         : Math.floor(rand() * n);
     }
@@ -254,6 +260,13 @@ function runMatch(ga: Genome, gb: Genome, seed: number, ctx: MapCtx = MAPS[0]!, 
     p.perk = kit.perk;
     sides[team].push({ id: p.id });
   }
+
+  // pack gene → team doctrine: scales TeamCommand staffing (WANT).
+  // Teamless FFA bots never reach a commander, so it only bites in
+  // objective modes — a real limitation, not a bug.
+  const routing = (room.bots as unknown as { sense: { routing: { command(t: 'alpha' | 'bravo'): { wantMul: number } } } }).sense.routing;
+  routing.command('alpha').wantMul = PACK_MUL[ga.pack ?? 1]!;
+  routing.command('bravo').wantMul = PACK_MUL[gb.pack ?? 1]!;
 
   // wide seating — each (re)spawn lands 60-200m from the enemy centroid,
   // the contact pressure teamSoak proved out; deterministic stream.
