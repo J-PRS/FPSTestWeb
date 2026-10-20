@@ -795,6 +795,44 @@ export function spawnVisualOnly(c: CombatCtx, p: Projectile): void {
 
 // Projectile exploded: spawn effect, apply AOE, score hits, notify server/demo
 
+/** Rope-dart connect — the Hook's whole payload. The dart's ribbon trail
+ *  IS the rope; nothing extra paints. The IMPULSE is authority-split:
+ *  terrain/ball anchors reel the owner toward the contact (local predict
+ *  + wire echo deduped by the stamp), a body connect yanks the victim
+ *  toward the shooter (local dead-reckon on remotes — the server wire is
+ *  law), and a hook landing on ME pulls me toward the attacker. A whiff —
+ *  no body, no contact point — is a snapped line: nothing happens. */
+function hookConnect(c: CombatCtx, p: Projectile): void {
+  const {deps} = c;
+  if (!p.hitPlayerId && !p.hitPointValid) {return;}
+  const stats = getWeaponStats(WeaponType.Hook);
+  const anchor = p.hitPointValid ? p.hitPoint : p.pos;
+  const player = deps.lazyPlayer();
+  const mine = !p.shooterId;
+  const shooterPos = mine ? player.pos : deps.world.remotePlayers.get(p.shooterId ?? '')?.position;
+  if (p.isRemote) {return;} // wire knockback carries the reel for non-mine shells
+  if (p.hitPlayerId && p.hitPlayerId !== 'local') {
+    // My dart (or an offline bot's) connected with a body — reel them in.
+    const victim = deps.world.remotePlayers.get(p.hitPlayerId);
+    if (victim && shooterPos) {victim.applyPredictedKnockback(shooterPos, stats.knockbackForce, true);}
+    return;
+  }
+  if (p.hitPlayerId === 'local') {
+    // A bot's dart caught me offline — I get reeled toward the thrower.
+    const atk = deps.world.remotePlayers.get(p.shooterId ?? '');
+    player.applyPull(atk?.position ?? anchor, stats.knockbackForce * player.mods.knockbackTaken, true);
+    return;
+  }
+  if (mine) {
+    // Terrain/structure/creature anchor — reel myself toward the contact.
+    // Stamp the prediction so the server's knockback echo dedupes instead
+    // of double-yanking (same contract predictLocalShove keeps).
+    const mag = stats.knockbackForce * player.mods.knockbackTaken;
+    player.applyPull(anchor, mag, true);
+    deps.world.selfBlastStamps.push({ x: anchor.x, y: anchor.y, z: anchor.z, t: performance.now(), by: 'local', f: mag });
+  }
+}
+
 export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
 
   const {deps} = c;
@@ -808,6 +846,8 @@ export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
   if (p.isRemote) {
 
     spawnVisualOnly(c, p);
+    // Hook replicas: observers see the rope snap; impulses arrive on the wire.
+    if (p.config.hook) {hookConnect(c, p);}
 
     // Bomblets are visual-only anyway — remote viewers still need the
 
@@ -857,9 +897,11 @@ export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
 
 
 
-  if (p.hitBall) {handleBallHit(c, p, p.hitBall);}
+  if (p.hitBall && !p.config.hook) {handleBallHit(c, p, p.hitBall);}
 
-  if (p.hitPlayerId) {handlePlayerHit(c, p, p.hitPlayerId);}
+  if (p.config.hook) {hookConnect(c, p);}
+
+  else if (p.hitPlayerId) {handlePlayerHit(c, p, p.hitPlayerId);}
 
 
 
@@ -1049,7 +1091,7 @@ export function onTargetDestroyed(c: CombatCtx, ball: Targetable, impulse?: THRE
 
     for (let n = 0; n < Math.round(ball.scale); n += 1) {
 
-      const ng = new Nugget(deps.lazyScene(), ball.pos, ball.vel,
+      const ng = new Nugget(deps.lazyScene(), ball.pos, ball.vel.clone().multiplyScalar(0.5),
         tier?.color ?? PICKUP_ACCENT.gem, token ? pickupParts('token') : null, tier?.scale ?? 1);
       if (token) {ng.kind = 'token';}
 

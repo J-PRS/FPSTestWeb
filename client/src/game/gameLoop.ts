@@ -33,7 +33,7 @@ import type { HUD } from '../ui/hud.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { createScene } from '../world/scene.js';
 import { fogHorizon, syncFxFog } from '../world/directionalFog.js';
-import { updateCubeSky, getInteriorsEpoch } from './net/mapAssets.js';
+import { updateCubeSky, getInteriorsEpoch, isTerrainSwapPending } from './net/mapAssets.js';
 import { isSessionVeiled, dropSessionVeil, isSessionVeilReady } from './net/world.js';
 import { tickUnderwaterGrade } from '../world/waterSurface.js';
 import { refreshColliderGizmoVisibility } from '../world/mapStructures.js';
@@ -347,7 +347,12 @@ bodyN += 1;
   // Gate shields read team off the sim state — keep it synced to the
   // wire team (rebalances/teamUpdate can flip it mid-match).
   player.movement.getState().team = deps.world.localTeam;
-  player.update(dt);
+  // A terrain swap mid-window seats the player on the room's field while
+  // the resident heightmap is still the boot one — simulating here falls
+  // the body toward boot-ground and earns a 40m+ correction snap when the
+  // server disagrees. The hold covers the whole pending window, not just
+  // the swap body's execution — the seat lands before the swap starts.
+  if (!isTerrainSwapPending()) {player.update(dt);}
   if (_posPrimed) {
     const jump = player.pos.distanceTo(_posPrev);
     if (jump > JUMP_FRAME_M && performance.now() - _posJumpLastAt > 1000) {
@@ -738,6 +743,83 @@ function fpsCapAllows(st: LoopState, rawElapsed: number): boolean {
   return true;
 }
 
+function aimDebugAfterVeil(deps: GameLoopDeps): void {
+  const ray = new THREE.Raycaster();
+  let n = 0;
+  const snap = (): void => {
+    ray.setFromCamera(new THREE.Vector2(0, 0), deps.camera);
+    const vmScene = deps.vmScene();
+    const vmRay = new THREE.Raycaster();
+    vmRay.setFromCamera(new THREE.Vector2(0, 0), deps.vmCamera());
+    const vmHits = vmRay.intersectObjects(vmScene.children, true)
+      .filter((h): boolean => {
+        for (let p: THREE.Object3D | null = h.object; p; p = p.parent) {if (!p.visible) {return false;}}
+        return true;
+      })
+      .slice(0, 4)
+      .map((h): string => `vm ${h.distance.toFixed(2)}m ${h.object.type}${h.object.name ? `(${h.object.name})` : ''}`);
+    const hits = ray.intersectObjects(deps.sceneSetup.scene.children, true)
+      .filter((h): boolean => {
+        for (let p: THREE.Object3D | null = h.object; p; p = p.parent) {if (!p.visible) {return false;}}
+        return true;
+      })
+      .slice(0, 4)
+      .map((h): string => {
+        let chain = '';
+        let depth = 0;
+        for (let p: THREE.Object3D | null = h.object; p && depth < 4; p = p.parent) {chain += `${p.type}${p.name ? `(${p.name})` : ''}<`; depth += 1;}
+        const m = (h.object as THREE.Mesh).material as THREE.Material | undefined;
+        return `${h.distance.toFixed(1)}m ${chain} mat=${m?.type ?? '?'} col=${(m as THREE.MeshBasicMaterial)?.color?.getHexString?.() ?? '?'}`;
+      });
+    // Some blobs slip the ray (frustumCulled clones, skinned bounds,
+    // non-mesh drawables) — census any visible object whose bounding
+    // sphere contains the camera, plus whatever DOM sits at dead center.
+    const cam = deps.camera.getWorldPosition(new THREE.Vector3());
+    const containing: string[] = [];
+    const bs = new THREE.Sphere();
+    deps.sceneSetup.scene.traverse((o): void => {
+      const g = (o as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;
+      if (!g) {return;}
+      for (let p: THREE.Object3D | null = o; p; p = p.parent) {if (!p.visible) {return;}}
+      if (!g.boundingSphere) {g.computeBoundingSphere();}
+      const s = g.boundingSphere;
+      if (!s) {return;}
+      bs.copy(s).applyMatrix4(o.matrixWorld);
+      if (bs.distanceToPoint(cam) <= 0) {
+        let chain = '';
+        let d = 0;
+        for (let p: THREE.Object3D | null = o; p && d < 4; p = p.parent) {chain += `${p.type}${p.name ? `(${p.name})` : ''}<`; d += 1;}
+        const m = (o as THREE.Mesh).material as THREE.Material | undefined;
+        containing.push(`${chain} r=${bs.radius.toFixed(1)} mat=${m?.type ?? '?'} col=${(m as THREE.MeshBasicMaterial)?.color?.getHexString?.() ?? '?'}`);
+      }
+    });
+    const dom = document.elementsFromPoint(innerWidth / 2, innerHeight / 2)
+      .map((e): string => `${e.tagName.toLowerCase()}${e.id ? `#${e.id}` : ''}${(e as HTMLElement).className ? `.${String((e as HTMLElement).className).split(' ')[0]}` : ''}`)
+      .slice(0, 6);
+    Logger.info(`[veil-drop aim f${n}]`, { hits, vmHits, containing, dom });
+    n += 1;
+    if (n < 12) {requestAnimationFrame(snap);}
+  };
+  requestAnimationFrame(snap);
+}
+
+function tickVeil(deps: GameLoopDeps, st: LoopState, rawElapsed: number): void {
+  // The per-frame hide in Player.update is skipped while veiled, so the
+  // boot body would render around a camera still at its pre-restore spot.
+  deps.lazyPlayer().model?.setVisible(false);
+  deps.rendererSetup.renderer.render(deps.sceneSetup.scene, deps.camera);
+  st.veilFrames += 1;
+  if (rawElapsed < 0.026) {st.veilStable += 1;} else {st.veilStable = 0;}
+  if (isSessionVeilReady() && !deps.lazyPlayer().isDead && (st.veilStable >= 45 || st.veilFrames >= 180)) {
+    st.veilStable = 0;
+    st.veilFrames = 0;
+    dropSessionVeil();
+    // The veil-drop blob (black poly covering the camera) defies static
+    // analysis — log what the center ray hits on the first live frames.
+    aimDebugAfterVeil(deps);
+  }
+}
+
 export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(): Promise<void>; } {
   let lastTime = 0;
   let renderElapsed = 0;
@@ -797,14 +879,7 @@ export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(
     // its own renders separately; here we meter real frames.
     st.bootWarmup.tick(rawElapsed);
     if (isSessionVeiled()) {
-      deps.rendererSetup.renderer.render(deps.sceneSetup.scene, deps.camera);
-st.veilFrames += 1;
-      if (rawElapsed < 0.026) {st.veilStable += 1; } else { st.veilStable = 0; }
-      if (isSessionVeilReady() && (st.veilStable >= 45 || st.veilFrames >= 180)) {
-        st.veilStable = 0;
-        st.veilFrames = 0;
-        dropSessionVeil();
-      }
+      tickVeil(deps, st, rawElapsed);
       return;
     }
     perf.begin(deps.rendererSetup.renderer);

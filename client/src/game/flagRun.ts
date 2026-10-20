@@ -14,7 +14,7 @@ import * as THREE from 'three';
 import { profOct, mkLoft, mkAnnulus } from '../entities/viewmodel/weaponKit';
 import { deckMat, darkMat } from '../structures/structKit';
 import { mkFlagMesh } from './ctfFlags.js';
-import { TEAM_COLORS, TEAM_LABEL, FLAG_PICKUP_R, FLAG_HOME_R, FLAG_RESET_S,
+import { TEAM_COLORS, TEAM_LABEL, FLAG_PICKUP_R, FLAG_HOME_R, FLAG_RESET_S, flagTouchBonus,
   bank, type TeamId, type TeamScores } from '../../../shared/teams.js';
 import type { StructureSpec } from '../../../shared/mapSpec.js';
 import type { Terrain } from '../world/terrain.js';
@@ -434,7 +434,8 @@ this.eN += 1;
         const dz = pp.z + (tp.z - pp.z) * t - f.pos.z;
         // Server touch rule: |dy|<=6 vertical + planar radius — the deck
         // puts the flag ~3m over your feet, a 3D sphere would miss.
-        const pickupR = FLAG_PICKUP_R * (id === 'local' ? (player.mods.pickupRadius ?? 1) : 1);
+        const pickupR = FLAG_PICKUP_R * (id === 'local' ? (player.mods.pickupRadius ?? 1) : 1)
+          + flagTouchBonus(this.lastTouchV.get(id) ?? 0);
         if (Math.abs(dy) > 6 || dx * dx + dz * dz > pickupR * pickupR) {continue;}
         f.state = 'carried'; f.carrier = id;
         f.airborneBy = null; f.flyVel.set(0, 0, 0);

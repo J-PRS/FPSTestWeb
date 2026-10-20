@@ -86,7 +86,8 @@ function traceTargetHit(deps: CombatDeps, hitT: number, traceT: { t: number }, o
 // Shared ray: eye + current camera forward → terrain march + nearest
 // sphere hit. Both the damage tick AND the per-frame visual refresh run
 // this — a stale tip between ticks is what detached the bolt on strafes.
-export function lgTrace(deps: CombatDeps, cam: THREE.Camera, traceT: { t: number }): {
+export function lgTrace(deps: CombatDeps, cam: THREE.Camera, traceT: { t: number },
+                        range = LG_RANGE, bounce = true): {
   hitT: number;
   hitTarget: (typeof deps.targets)[number] | null;
   hitPlayerId: string | null;
@@ -100,9 +101,9 @@ export function lgTrace(deps: CombatDeps, cam: THREE.Camera, traceT: { t: number
   // Terrain: march the ray in 1.5m steps until it goes under the heightmap,
   // then bisect the last step — the coarse march alone can leave the tip
   // buried ~1.5m inside a slope.
-  let hitT = LG_RANGE;
-  let fieldT = LG_RANGE; // terrain stop distance — a FIELD hit can bounce
-  for (let d = 1.5; d <= LG_RANGE; d += 1.5) {
+  let hitT = range;
+  let fieldT = range; // terrain stop distance — a FIELD hit can bounce
+  for (let d = 1.5; d <= range; d += 1.5) {
     _lgP.copy(_lgO).addScaledVector(_lgD, d);
     if (_lgP.y < deps.lazyTerrain().getHeight(_lgP.x, _lgP.z)) {
       let lo = d - 1.5, hi = d;
@@ -143,7 +144,7 @@ export function lgTrace(deps: CombatDeps, cam: THREE.Camera, traceT: { t: number
   // Terrain bounce: ground stopped the bolt (not a wall/hull, not an
   // entity) — skip off the slope once, ≤LG_BOUNCE_RANGE, half damage.
   // Mirrors the server's beamSweepRay leg-for-leg.
-  if (!hitTarget && !hitPlayerId && fieldT < LG_RANGE && hitT === fieldT) {
+  if (bounce && !hitTarget && !hitPlayerId && fieldT < range && hitT === fieldT) {
     const bounced = bounceLeg(deps);
     if (bounced) {return bounced;}
   }

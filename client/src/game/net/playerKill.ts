@@ -6,6 +6,7 @@
  */
 import * as THREE from 'three';
 import * as sfx from '../../core/sfx.js';
+import { speakAnnounce } from '../../core/tts.js';
 import { PlayerDebris } from '../../effects/debris.js';
 import { lifestealBurst } from '../../effects/vfx.js';
 import { TEAM_COLORS, type TeamId } from '../../../../shared/teams.js';
@@ -82,9 +83,23 @@ function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlaye
 
 
 
-/** A kill landed somewhere: feed row for everyone, death overlay when it's
- *  you, frag headline + streak when it's yours, ragdoll for the victim. */
 const _stealPos = new THREE.Vector3();
+
+/** Victim is us: flag dead, HUD down, overlay up, pick the epitaph. */
+function ownDeath(ctx: NetCtx, shooterId: string, targetId: string, roster: Map<string, { name?: string }>): void {
+  const { deps } = ctx;
+  deps.logger.info(`Local player killed by ${shooterId}`);
+  const player = deps.lazyPlayer();
+  player.isDead = true;
+  player.health = 0;
+  deps.lazyHud().hide();
+  deps.lazyHud().setDeathOverlay(true);
+  deps.world.killStreak = 0;
+  const deathMsg = shooterId === 'environment' ? `YOU DIED\n${player.lastDamageSource || 'claimed by the wasteland'}`
+    : shooterId === targetId ? 'YOU DIED\nfragged yourself'
+      : `YOU DIED\nfragged by ${displayName(shooterId, roster)}`;
+  deps.fragMessages.show(deathMsg);
+}
 
 export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, weapon?: number, air?: number, steal?: boolean): void {
   const { deps, nm } = ctx;
@@ -105,21 +120,7 @@ export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, w
   deps.lazyHud().feedKill(shooterId, targetId, shooterId === localId, targetId === localId,
     { shooter: roster.get(shooterId)?.team, target: roster.get(targetId)?.team, weapon, air,
       sName: displayName(shooterId, roster), tName: displayName(targetId, roster) });
-  if (targetId === localId) {
-    logger.info(`Local player killed by ${shooterId}`);
-    const player = deps.lazyPlayer();
-    player.isDead = true;
-    player.health = 0;
-    deps.lazyHud().hide();
-    deps.lazyHud().setDeathOverlay(true);
-    deps.world.killStreak = 0;
-    let deathMsg;
-    if (shooterId === 'environment') {deathMsg = `YOU DIED\n${player.lastDamageSource || 'claimed by the wasteland'}`;}
-    else if (shooterId === targetId) {deathMsg = 'YOU DIED\nfragged yourself';}
-    else {deathMsg = `YOU DIED\nfragged by ${displayName(shooterId, roster)}`;}
-    deps.fragMessages.show(deathMsg);
-    return;
-  }
+  if (targetId === localId) {ownDeath(ctx, shooterId, targetId, roster); return;}
 
   // Streak counts run-kills since your last death (reset above) and
   // match boundaries (match.ts) — a new match never continues the count.
@@ -130,6 +131,9 @@ export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, w
     const name = displayName(targetId, roster);
     deps.fragMessages.showKill(streakName ? `FRAGGED ${name}!\n${streakName}` : `FRAGGED ${name}!`);
     sfx.killConfirm();
+    // The rainbow lob — a frag that rode real airtime earns the booth's
+    // 'precision kill' (threshold above the casual-hop band).
+    if ((air ?? 0) >= 1.5) {speakAnnounce('PRECISION KILL', 'announce_precision');}
   }
 
   // Mark dead immediately so the main loop stops simulating them

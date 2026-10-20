@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 import type { Terrain } from '../world/terrain.js';
-import { TEAM_COLORS, TEAM_LABEL, FLAG_HOME_R, FLAG_RESET_S, CTF_PTS, bank, type TeamId, type TeamScores } from '../../../shared/teams.js';
+import { TEAM_COLORS, TEAM_LABEL, FLAG_HOME_R, FLAG_RESET_S, CTF_PTS, bank, flagTouchBonus, type TeamId, type TeamScores } from '../../../shared/teams.js';
 import type { GameBot } from './bots/botBrain.js';
 import { roleObjective, roleSide, wantKOut, ROLE_PRIORITY, STRICT_CLASS, misfitClass, type BotRole, type FlagSituation } from '../../../shared/flagGoals.js';
 import * as sfx from '../core/sfx.js';
@@ -465,7 +465,7 @@ export class CtfFlags {
         CtfFlags.seatFlag(f);
         continue;
       }
-      this.tickTouch(team, f);
+      this.tickTouch(team, f, dt);
       CtfFlags.seatFlag(f);
     }
   }
@@ -538,12 +538,14 @@ export class CtfFlags {
     return dx * dx + dy * dy + dz * dz;
   }
 
-  private tickTouch(team: TeamId, f: Flag): void {
+  private tickTouch(team: TeamId, f: Flag, dt: number): void {
     const { ctx } = this;
     for (const [id, tp, pp] of ctx.touchers()) {
       if (id === f.airborneBy && !CtfFlags.throwerMayGrab(f, tp)) { continue; } // thrower can't take back his own toss
       const tTeam = ctx.teamOf(id);
-      if (CtfFlags.sweepDist2(f, tp, pp) > this.ctx.pickupRadiusOf(id) ** 2) { continue; }
+      const speedH = dt > 0 ? Math.hypot(tp.x - pp.x, tp.z - pp.z) / dt : 0;
+      const reach = ctx.pickupRadiusOf(id) + flagTouchBonus(speedH);
+      if (CtfFlags.sweepDist2(f, tp, pp) > reach ** 2) { continue; }
       if (f.state === 'dropped' && tTeam === team) {
         f.state = 'home'; f.pos.copy(f.home); // returned on touch
         f.flyVel.set(0, 0, 0); f.airborneBy = null;

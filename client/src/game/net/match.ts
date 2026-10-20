@@ -3,7 +3,43 @@
 
 import type { NetCtx } from './ctx.js';
 import * as sfx from '../../core/sfx.js';
+import { speakAnnounce } from '../../core/tts.js';
 import { MODES, type ModeId } from '../../../../shared/teams.js';
+
+/** Multi-kill names by chain — the booth reads these, not the feed's
+ *  lowercase 'double kill (2)'. Clip = the WARLORD pack sample; quad+
+ *  rides 'annihilation' (the pack has no quad line). */
+const MULTI_BANNER: Record<number, string> = { 2: 'DOUBLE KILL', 3: 'TRIPLE KILL', 4: 'QUAD KILL' };
+const multiClip = (n: number): string => {
+  if (n === 2) {return 'announce_double';}
+  if (n === 3) {return 'announce_triple';}
+  return 'announce_annihilation';
+};
+/** ann key → banner + WARLORD clip.
+ *
+ *  Canonical UT ladder (also the client's STREAK_NAMES and the
+ *  server's SPREE_TIERS — all three must agree):
+ *    5 Killing Spree · 10 Rampage · 15 Dominating · 20 Unstoppable
+ *    25 Godlike · 30 Wicked Sick (re-announces every +5 past 30)
+ *
+ *  WARLORD coverage gaps → our substitutions:
+ *    killing spree → killshot     (pack has no 'killing spree' line)
+ *    wicked sick   → annihilation (no 'wicked sick'; also the quad+
+ *                                  multi-kill clip — both are
+ *                                  lobby-destruction moments)
+ *    godlike       → eradication
+ *    multi 2/3/4+  → double / triple / annihilation (no 'quad kill'
+ *                    line in the pack)
+ *  Missing a clip entirely → speakAnnounce falls back to system TTS. */
+const ANNOUNCE: Record<string, { banner: string; clip?: string }> = {
+  firstblood: { banner: 'FIRST BLOOD', clip: 'announce_firstblood' },
+  killing_spree: { banner: 'KILLING SPREE', clip: 'announce_killshot' },
+  rampage: { banner: 'RAMPAGE', clip: 'announce_rampage' },
+  dominating: { banner: 'DOMINATING', clip: 'announce_dominating' },
+  unstoppable: { banner: 'UNSTOPPABLE', clip: 'announce_unstoppable' },
+  godlike: { banner: 'GODLIKE', clip: 'announce_eradication' },
+  wicked_sick: { banner: 'WICKED SICK', clip: 'announce_annihilation' },
+};
 
 export function wireMatchEvents(ctx: NetCtx): void {
   const { deps, networkManager, chat, nm } = ctx;
@@ -108,7 +144,22 @@ else if (scores.alpha > scores.bravo) {lead = 'alpha';}
     chat.add(null, `match start — ${mode || 'arena'}`);
     sfx.matchHorn('start');
   };
-  networkManager.onMatchNotice = (text): HTMLDivElement => chat.add(null, text);
+  networkManager.onMatchNotice = (text, meta): HTMLDivElement => {
+    // Announced kills get the UT booth treatment: the clip plays for the
+    // whole room, but the center slab is only for YOUR chain — someone
+    // else's spree is a readout, not a banner in your face.
+    const mine = meta?.actor === nm().getLocalPlayerId();
+    if (mine && (meta?.multi ?? 0) >= 2) {
+      const banner = MULTI_BANNER[meta!.multi!] ?? `${meta!.multi}x MULTI KILL`;
+      deps.fragMessages.show(banner);
+      speakAnnounce(banner, multiClip(meta!.multi!));
+    } else if (meta?.ann && ANNOUNCE[meta.ann]) {
+      const a = ANNOUNCE[meta.ann]!;
+      speakAnnounce(a.banner, a.clip);
+      if (mine) {deps.fragMessages.showKill(a.banner);}
+    }
+    return chat.add(null, text);
+  };
   networkManager.onServerWarn = (text): void => {
     deps.lazyHud().serverWarn(text);
     chat.add(null, text);

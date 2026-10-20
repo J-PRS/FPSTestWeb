@@ -43,6 +43,8 @@ export interface MapRow {
   bots: number;
   /** Tribes 2 port — badged in the picker so ports read as ports. */
   t2?: boolean;
+  /** Tribes 1 port — same ported family, own badge. */
+  t1?: boolean;
 }
 
 export interface LobbyDeps {
@@ -141,8 +143,13 @@ export class Lobby {
       // Solo modes: the same legal set plus the no-map rulesets —
       // '' is free roam (no TeamBots), flagrun/classic host no spec.
       // Trailing position: it's a real pick, not a "no filter" default.
-      this.fillModeSel(this.soloSels.mode, modes, 'FREE ROAM', false);
-      for (const [extra, label] of [['flagrun', 'FLAG RUN'], ['classic', 'BALLS']] as const) {
+      // Extras own their values — a spec that also declares 'flagrun'
+      // would mint a duplicate option, so keep them out of the catalog
+      // pass and let the labeled extra be the single entry.
+      const extras = [['flagrun', 'FLAG RUN'], ['classic', 'BALLS']] as const;
+      const extraVals = new Set(extras.map(([v]): string => v));
+      this.fillModeSel(this.soloSels.mode, modes.filter((m): boolean => !extraVals.has(m)), 'FREE ROAM', false);
+      for (const [extra, label] of extras) {
         const o = document.createElement('option');
         // 'classic' boots the original bounce-and-shoot sandbox — BALLS
         // names what you actually do; "classic" is only its dev codename.
@@ -220,8 +227,8 @@ export class Lobby {
     const catalogModes = new Set(this.maps.flatMap(modesOf));
     const procedural = Boolean(mode) && !catalogModes.has(mode);
     const rows = this.maps.filter((m): boolean =>
-      this.mapFam[m.t2 ? 't2' : 'custom'] &&
-      (!procedural || !m.t2) &&
+      this.mapFam[(m.t2 || m.t1) ? 't2' : 'custom'] &&
+      (!procedural || !(m.t2 || m.t1)) &&
       (!mode || procedural ||
         (m.modes.length > 0 ? m.modes : [m.mode]).includes(mode)));
     if (rows.length === 0) {
@@ -238,7 +245,7 @@ export class Lobby {
       // No ruleset tag on the name — maps are mode-agnostic geometry; a
       // bare name with ANY picked still boots the map's default mode via
       // dataset.mode, the mode row owns the override.
-      o.textContent = `${m.t2 ? '[T2] ' : ''}${m.name.toUpperCase()}`;
+      o.textContent = `${m.t2 ? '[T2] ' : m.t1 ? '[T1] ' : ''}${m.name.toUpperCase()}`;
       mapSelect.append(o);
     }
     if ([...mapSelect.options].some((o): boolean => o.value === keep)) {mapSelect.value = keep;}

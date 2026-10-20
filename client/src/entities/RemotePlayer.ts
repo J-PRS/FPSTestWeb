@@ -15,6 +15,7 @@ import { RemoteAnim } from './remoteAnim.js';
 import { HeldCrown } from './heldCrown.js';
 import { hideRemote, showRemote, setStaleVis, setCloakVis, setCloakGhost, shootReveal, tickGhostF } from './remoteVis.js';
 import { getShadows } from './swarms.js';
+import { markProbe } from '../core/fxDiag.js';
 
 const logger = new ChildLogger('RemotePlayer');
 
@@ -125,6 +126,9 @@ export class RemotePlayer {
    *  reasserted onto the fresh model. */
   private finishModelLoad(): void {
       this._loaded = true;
+      // Aim-probe tag — a body on the crosshair names its owner instead
+      // of "untagged SkinnedMesh(helm)".
+      if (this._model.object3D) {markProbe(this._model.object3D, { kind: 'fxMesh', label: `body:${this.playerId}` });}
       this.applyClassScale();
       this.model.setPosition(this.position.x, this.position.y - this.eyeOff, this.position.z);
       this._model.setRotation(this.rotation.yaw, this.rotation.pitch);

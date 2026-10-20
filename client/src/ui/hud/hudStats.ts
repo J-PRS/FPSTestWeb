@@ -161,13 +161,17 @@ export class HudStats {
   // Timed buffs — chips with seconds left; rebuilt only on change.
   private tickBuffs(player: Player): void {
     const now = Date.now();
-    const buffsKey = `${player.buffUntil.regen > now ? Math.ceil((player.buffUntil.regen - now) / 1000) : 0}|${player.buffUntil.dd > now ? Math.ceil((player.buffUntil.dd - now) / 1000) : 0}`;
+    const hoardActive = player.heldBuffActive;
+    const shieldLeft = player.buffUntil.shield > now ? Math.ceil((player.buffUntil.shield - now) / 1000) : 0;
+    const buffsKey = `${player.buffUntil.regen > now ? Math.ceil((player.buffUntil.regen - now) / 1000) : 0}|${player.buffUntil.dd > now ? Math.ceil((player.buffUntil.dd - now) / 1000) : 0}|${hoardActive ? 1 : 0}|${shieldLeft}`;
     if (buffsKey === this.lastBuffsKey) {return;}
     this.lastBuffsKey = buffsKey;
     const chips: string[] = [];
     const [rs, ds] = buffsKey.split('|').map(Number);
     if (rs > 0) {chips.push(`<span class="buff regen">REGEN ${rs}s</span>`);}
     if (ds > 0) {chips.push(`<span class="buff dd">2×DMG ${ds}s</span>`);}
+    if (hoardActive) {chips.push(`<span class="buff hoard">HOARD</span>`);}
+    if (shieldLeft > 0) {chips.push(`<span class="buff shield">SHIELD ${shieldLeft}s</span>`);}
     this.h.buffsRow.innerHTML = chips.join('');
   }
 

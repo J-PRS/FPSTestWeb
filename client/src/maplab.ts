@@ -439,15 +439,15 @@ let mapNames: string[] = [];
 let mapT2: boolean[] = [];
 async function loadMapList(): Promise<void> {
   try {
-    const rows = await (await fetch('/maps', { cache: 'no-cache' })).json() as { name: string; hidden?: boolean; t2?: boolean }[];
+    const rows = await (await fetch('/maps', { cache: 'no-cache' })).json() as { name: string; hidden?: boolean; t2?: boolean; t1?: boolean }[];
     const filtered = rows.filter((r): boolean => !r.hidden);
     const grouped = filtered.toSorted((a, b): number => {
-      const ta = a.t2 ? 1 : 0, tb = b.t2 ? 1 : 0;
+      const ta = (a.t2 || a.t1) ? 1 : 0, tb = (b.t2 || b.t1) ? 1 : 0;
       if (ta !== tb) {return ta - tb;}
       return a.name.localeCompare(b.name);
     });
     mapNames = grouped.map((r) => r.name);
-    mapT2 = grouped.map((r) => r.t2 === true);
+    mapT2 = grouped.map((r) => (r.t2 || r.t1) === true);
     paintRail();
   } catch {
     flash('maps list unavailable — custom only');

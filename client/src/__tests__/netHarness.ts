@@ -31,7 +31,7 @@ export function makeDeps() {
     vel: new THREE.Vector3(),
     yaw: 0, pitch: 0, onGround: true,
     health: 100, armor: 0, isDead: false, isShielded: false,
-    buffUntil: { regen: 0, dd: 0 },
+    buffUntil: { regen: 0, dd: 0, shield: 0 },
     absorbShieldDamage(): void { return; }, applyPull(): void { return; }, applyKnockback(): void { return; },
     heal: vi.fn((): void => { return; }), grantJetBoost: vi.fn((): void => { return; }), syncMovement(): void { return; }, markTeleport(): void { return; },
     // Correction render-ease seam — a spy so tests can see the ease fired

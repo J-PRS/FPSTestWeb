@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import * as sfx from '../../core/sfx.js';
 import { Projectile } from '../../projectiles/Projectile.js';
 import { BOLT_CONFIG, getProjectileConfig } from '../../projectiles/index.js';
-import { WeaponType, getWeaponStats } from '../../../../shared/weapons.js';
+import { WeaponType, getWeaponStats, LANCE_RANGE } from '../../../../shared/weapons.js';
 import { Explosion } from '../../effects/explosion.js';
 import { swingSwipe } from '../../effects/swingTrails.js';
 import { MELEE_RANGE, EXPLOSION_VFX_RADIUS, LG_RANGE, LG_BOUNCE_RANGE } from '../../core/config.js';
@@ -67,6 +67,39 @@ function paintLgBeam(deps: NetCtx['deps'], ownerId: string, origin: THREE.Vector
   deps.lazyEffects().spawnBeam(start, origin.clone().addScaledVector(dir, LG_RANGE), 0x8F_DC_FF);
 }
 
+// Shocklance zap, observer side: three colored rods fanning the honest
+// stop (terrain march like the shooter's own trace) + the layered arc
+// burst only when it lands — same "air shots stay invisible" rule.
+const LANCE_STRAND_COLORS = [0xA0_50_FF, 0x40_70_FF, 0xFF_C0_50] as const;
+const _lanceUp = new THREE.Vector3();
+const _lanceSide = new THREE.Vector3();
+const _lanceTip = new THREE.Vector3();
+function paintLanceBolt(deps: NetCtx['deps'], origin: THREE.Vector3, dir: THREE.Vector3): void {
+  const terr = deps.lazyTerrain();
+  let d = LANCE_RANGE;
+  for (let m = 1.5; m <= LANCE_RANGE; m += 1.5) {
+    _bP.copy(origin).addScaledVector(dir, m);
+    if (_bP.y < terr.getHeight(_bP.x, _bP.z)) { d = m; break; }
+  }
+  _bP.copy(origin).addScaledVector(dir, d);
+  // Fan the strand tips around the contact — same storm read as the
+  // shooter's triple-beam, at rod-Flash cost.
+  _lanceUp.set(0, 1, 0);
+  if (Math.abs(dir.y) > 0.7) {_lanceUp.set(1, 0, 0);}
+  _lanceSide.crossVectors(dir, _lanceUp).normalize();
+  _lanceUp.crossVectors(_lanceSide, dir).normalize();
+  for (let i = 0; i < LANCE_STRAND_COLORS.length; i += 1) {
+    const fan = i - 1; // -1, 0, +1
+    _lanceTip.copy(_bP).addScaledVector(_lanceSide, fan * 0.4).addScaledVector(_lanceUp, fan * 0.18);
+    deps.lazyEffects().spawnBeam(origin, _lanceTip, LANCE_STRAND_COLORS[i]!);
+  }
+  if (d < LANCE_RANGE) {
+    deps.world.explosions.push(new Explosion(
+      deps.lazyScene(), _bP, true, 0, terr, 5.5 / EXPLOSION_VFX_RADIUS, 0xB0_60_FF, 'arc',
+    ));
+  }
+}
+
 export function wireProjectiles(ctx: NetCtx): void {
   const { deps, networkManager, nm } = ctx;
 
@@ -94,6 +127,8 @@ export function wireProjectiles(ctx: NetCtx): void {
       meleeFlash(origin, dir);
     } else if (weaponType === WeaponType.Lightning) {
       paintLgBeam(deps, ownerId, origin, dir);
+    } else if (weaponType === WeaponType.Shocklance) {
+      paintLanceBolt(deps, origin, dir);
     } else {
       return false;
     }

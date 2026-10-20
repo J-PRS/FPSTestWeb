@@ -183,6 +183,12 @@ export class AtmosphericSky {
   private timeOfDay = 0.5; // 0-1, 0.5 = noon
   private sunAzimuth = 0; // degrees off +X — sun heading
   private sunRadiance = 22; // uniform sunIntensity at local noon
+  // Spec multiplier carried separately — sunIntensity is recomputed as
+  // sunRadiance*elevation*sunSpecMult, NOT multiplied into the live
+  // uniform (setAtmosphere runs on every gameState/reconnect/room hop,
+  // and *= compounded once per apply: the sky climbed brighter each
+  // rejoin until bloom washed it out).
+  private sunSpecMult = 1;
 
   constructor(scene: THREE.Scene, params: AtmosphericSkyParams = {}) {
     const geometry = new THREE.SphereGeometry(4000, 64, 32);
@@ -249,12 +255,12 @@ export class AtmosphericSky {
     if (params.mieDirectionalG !== undefined) {u.mieDirectionalG!.value = params.mieDirectionalG;}
     if (params.rayleighDirectional !== undefined) {u.rayleighDirectional!.value = params.rayleighDirectional;}
     if (params.starIntensity !== undefined) {u.starIntensity!.value = params.starIntensity;}
-    if (params.timeOfDay !== undefined || params.sunAzimuth !== undefined) {
-      // Elevation first — it rewrites sunIntensity. A map may also pass a
-      // sunIntensity multiplier, applied on top just below.
+    if (params.sunIntensity !== undefined) {this.sunSpecMult = params.sunIntensity;}
+    if (params.timeOfDay !== undefined || params.sunAzimuth !== undefined || params.sunIntensity !== undefined) {
+      // Elevation first — it rewrites sunIntensity. The spec's
+      // sunIntensity is a multiplier folded into the same recompute.
       this.setTimeOfDay(params.timeOfDay ?? this.timeOfDay, params.sunAzimuth ?? this.sunAzimuth);
     }
-    if (params.sunIntensity !== undefined) {u.sunIntensity!.value *= params.sunIntensity;}
   }
 
   /** Restore the boot sky — a map with no `atmosphere` runs this so a room
@@ -268,6 +274,7 @@ export class AtmosphericSky {
     u.mieDirectionalG!.value = b.mieDirG;
     u.rayleighDirectional!.value = b.rayleighDir;
     u.starIntensity!.value = b.star;
+    this.sunSpecMult = 1;
     this.setTimeOfDay(0.38); // restores sunIntensity (base sun at 0.38) too
   }
 
@@ -292,8 +299,8 @@ export class AtmosphericSky {
     // dim moon keeps the sky from going fully black.
     const sunHeight = Math.max(0, Math.sin(angle));
     this.material.uniforms.sunIntensity.value = sunHeight > 0
-      ? this.sunRadiance * sunHeight
-      : this.sunRadiance * 0.09; // Moon intensity
+      ? this.sunRadiance * sunHeight * this.sunSpecMult
+      : this.sunRadiance * 0.09 * this.sunSpecMult; // Moon intensity
   }
 
   getSunPosition(): THREE.Vector3 {

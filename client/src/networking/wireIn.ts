@@ -229,7 +229,7 @@ this.handlerThrows += 1;
     yourHealth: (data): void | undefined => this.h.onYourHealth?.(data.health, data.armor),
     yourCharge: (data): void | undefined => this.h.onYourCharge?.(data.charge),
     playerKill: (data): void => this.handlePlayerKill(data),
-    knockback: (data): void | undefined => this.h.onKnockback?.(data.position, data.force, data.pull),
+    knockback: (data): void | undefined => this.h.onKnockback?.(data.position, data.force, data.pull, data.yank),
     jump: (data): void | undefined => this.h.onPlayerJump?.(data.playerId, data.position),
     jetpack: (data): void | undefined => this.h.onPlayerJetpack?.(data.playerId, data.position),
     projectileCreated: (data): void | undefined => this.h.onProjectileCreated?.(data.projectileId, data.ownerId, data.position, data.velocity, data.weaponType, data.shotId, data.pellet),
@@ -257,12 +257,12 @@ this.handlerThrows += 1;
     chat: (data): void | undefined => this.h.onChat?.(data.playerId, data.text, data.team === true, typeof data.vgs === 'string' ? data.vgs : undefined, data.muted === true),
     flagUpdate: (data): void | undefined => this.h.onFlagUpdate?.(data.flags),
     nodeUpdate: (data): void | undefined => this.h.onNodeUpdate?.(data.nodes),
-    matchNotice: (data): void | undefined => this.h.onMatchNotice?.(data.text),
+    matchNotice: (data): void | undefined => this.h.onMatchNotice?.(data.text, data),
     serverWarn: (data): void | undefined => this.h.onServerWarn?.(data.text),
     // WT/RTC path of the 1008 identity reject — the close code is lost
     // on those tiers, so the server sends this before closing.
     sessionRejected: (data): void => this.h.rejectSession(data.reason),
-    pickupSpawn: (data): void | undefined => this.h.onPickupSpawn?.(data.id, data.pos, data.kind, data.val),
+    pickupSpawn: (data): void | undefined => this.h.onPickupSpawn?.(data.id, data.pos, data.kind, data.val, data.vel),
     pickupGone: (data): void | undefined => this.h.onPickupGone?.(data.id, data.by ?? null),
     teamScore: (data): void | undefined => this.h.onTeamScore?.(data.scores, data.winAt),
     ffaScore: (data): void | undefined => this.h.onFfaScore?.(data.scores, data.winAt),

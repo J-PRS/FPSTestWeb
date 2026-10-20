@@ -17,7 +17,7 @@ import type { TeamId } from '../../../../shared/teams.js';
 import { finiteVec } from '../../../../shared/wire.js';
 import { saveLastRoomMap } from './lastRoom.js';
 import { dropVolatileWorldFx } from './resync.js';
-import { applyTerrain, applyInteriors, applyMapFog, applyWeather, applyAtmosphere, applyWater, type MapSnapshot } from './mapAssets.js';
+import { applyTerrain, applyInteriors, applyMapFog, applyWeather, applyAtmosphere, applyWater, firstTerrain, type MapSnapshot } from './mapAssets.js';
 import type { PickupKind } from '../../../../shared/pickups.js';
 // Boot/terrain machinery lives in mapAssets.js — re-exported so main.ts
 // and lastRoom.ts keep a single import site.
@@ -300,7 +300,14 @@ export function wireWorld(ctx: NetCtx): void {
     if (localPlayerState) {restoreLocalPlayer(ctx, localPlayerState);}
     // Real state landed — the loop drops the veil once frames stabilize
     // (warmup window; the 8s timer remains the connect-fail escape).
-    sessionVeilReady = true;
+    // The seat sits on the ROOM's field, not the boot heightmap — until
+    // the terrain swap completes the local sim would fall toward
+    // boot-ground and eat a 40m+ correction snap. The veil holds through
+    // the swap so the first simulated frame runs on the right field.
+    void firstTerrain.then((): void => { sessionVeilReady = true; });
+    // The 8s connect-fail escape only guards the wait for gameState; once
+    // it lands the veil holds until the local player actually spawns.
+    if (sessionVeilTimer) { clearTimeout(sessionVeilTimer); sessionVeilTimer = null; }
   };
 }
 
@@ -323,6 +330,18 @@ function installSpawnGizmos(ctx: NetCtx): void {
   const prev = deps.world.onTerrainApplied;
   deps.world.onTerrainApplied = (file): void => {
     prev?.(file);
+    // Bots re-seat via teamBots.reseatAll — the LOCAL player needs the
+    // same mercy: a joiner seats against the boot heightmap, and if the
+    // room's real field is higher their sim falls to boot-ground before
+    // the first report (the 47m join snap + teleport-above-ground
+    // invariants the server then counts). Lift to the new floor — the
+    // server's seat correction owns the fine position either way.
+    const p = deps.lazyPlayer();
+    const g = groundAt(p.pos.x, p.pos.z);
+    if (Number.isFinite(g) && p.pos.y < g - 0.5) {
+      p.pos.y = g + 0.5;
+      if (p.vel.y < 0) {p.vel.y = 0;} // the boot-field fall's momentum dies here
+    }
     buildSpawnGizmos(deps.world.spawnPools, deps.lazyScene(), groundAt);
   };
 }
