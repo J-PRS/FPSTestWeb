@@ -108,10 +108,18 @@ export function spawnPlaybackBeam(world: PlaybackWorld, from: THREE.Vector3, to:
 export { fastForward };
 
 // Reconstruct projectile from recorded position + velocity, using weaponType
-function spawnPlaybackProjectile(world: PlaybackWorld, ev: ProjectileEvent): Projectile {
+function spawnPlaybackProjectile(world: PlaybackWorld, ev: ProjectileEvent): Projectile | null {
   const origin = new THREE.Vector3(ev.posX, ev.posY, ev.posZ);
   const velocity = new THREE.Vector3(ev.velX, ev.velY, ev.velZ);
   const cfg = getProjectileConfig(ev.weaponType) ?? BOLT_CONFIG;
+  // Bodiless kinds (hitscan beams — speed 0) can't fly a trajectory:
+  // paint the beam the live wire path draws and skip the frozen mesh
+  // replica that would hover to the backstop (the proj-fuseless class).
+  if (cfg.speed <= 0) {
+    const len = velocity.lengthSq() > 0 ? velocity.clone().normalize() : new THREE.Vector3(0, 0, 1);
+    spawnPlaybackBeam(world, origin, origin.clone().addScaledVector(len, 60), cfg.glowColor);
+    return null;
+  }
   const r = new Projectile(world.scene, origin, new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 0), cfg);
   r.isRemote = true;
   r.spawnedThisFrame = false;
@@ -145,6 +153,9 @@ function reconstructSeekProjectile(world: PlaybackWorld, ev: ProjectileEvent, de
 
   if (ev.eventType === ProjectileEventType.Fired) {
     const r = spawnPlaybackProjectile(world, ev);
+    // Bodiless kinds return null (the beam was painted already) — there
+    // is no trajectory to fast-forward.
+    if (!r) {return;}
     fastForward(seekTime - ev.timestamp, (): boolean => !r.dead && !r.exploded, (s): void => r.update(s, terrain));
     return;
   }

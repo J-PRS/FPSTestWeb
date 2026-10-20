@@ -48,6 +48,10 @@ export const LIGHTNING_CONFIG: ProjectileConfig = {
   meshRampInDuration: 0,
   meshStartScale: 1,
   terrainOffset: 0,
+  // Replica safety: any path that instantiates this anyway (a replay
+  // reconstruction, a wire spawn that slipped the cosmetic gate) gets a
+  // fuse instead of a 10s hovering ghost bolt — the fuseless warn.
+  maxLifetime: 0.3,
   needsServerTracking: false, // no projectile id — claims go through aoeShot
   noExplosion: true,
 };
