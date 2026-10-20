@@ -89,7 +89,7 @@ export function processProjectileExplosion(c: CombatCtx, a: ExplosionArgs): void
   deps.explosionTracker.addExplosion(pos, force, a.shooterId || deps.lazyNetworkManager().getLocalPlayerId());
 
   if (a.claimLegal !== false) {
-    c.applyExplosionForce({ pos, radius, force, forceMode, forceMultiplier: a.forceMultiplier, aoeDamage, directHitTargetId: a.directHitTargetId ?? null, weaponType: a.weaponType, shooterId: a.shooterId, air: a.air });
+    c.applyExplosionForce({ pos, radius, force, forceMode, forceMultiplier: a.forceMultiplier, aoeDamage, directHitTargetId: a.directHitTargetId ?? null, weaponType: a.weaponType, shooterId: a.shooterId, air: a.air, shotId: a.shotId });
   }
 
   // Armor grenade: predict the plating the server grants so the HUD armor

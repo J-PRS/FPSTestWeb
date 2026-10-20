@@ -416,7 +416,7 @@ export class Projectile {
     // Remote (server-authoritative/demo) replicas skip all collision —
     // terrain-only behavior lives in tickRemote.
     if (this.isRemote) {
-      if (this.tickRemote(terrain)) {return;}
+      if (this.tickRemote(terrain, remotePlayers, playerClasses)) {return;}
     } else if (this.checkCollisions(terrain, balls, remotePlayers, obstacles, playerClasses)) {
       return; // exploded inside checkCollisions
     }
@@ -437,9 +437,9 @@ export class Projectile {
     if (!this.exploded) {this.explode();}
   }
 
-  // Remote replicas skip all collision — terrain-only behavior lives
-  // in tickRemote (server owns damage on every hit).
-  private tickRemote(terrain: Terrain): boolean { return tickRemote(this, terrain); }
+  // Remote replicas skip claim collisions — terrain + the cosmetic body
+  // pop live in tickRemote (server owns damage on every hit).
+  private tickRemote(terrain: Terrain, remotePlayers?: Map<string, THREE.Vector3>, playerClasses?: Map<string, string>): boolean { return tickRemote(this, terrain, remotePlayers, playerClasses); }
 
   // Runs all swept collision checks; returns true if the projectile hit
   // something and exploded (records hit target + accuracy data).

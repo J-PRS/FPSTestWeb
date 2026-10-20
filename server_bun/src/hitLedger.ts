@@ -47,7 +47,7 @@ export class HitLedger {
   private duelStart = new Map<string, number>();
   private hitSeq = 0; // per-room monotonic — reconnect replays carry stale seqs
 
-  applyHit(c: LedgerHost, shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number; endedStreak?: number }, opts: { label: string; extra?: Record<string, unknown>; weapon?: number; shotId?: string; air?: number }): void {
+  applyHit(c: LedgerHost, shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number; endedStreak?: number }, opts: { label: string; extra?: Record<string, unknown>; weapon?: number; shotId?: string; air?: number; gd?: number }): void {
     c.hb('hit');
     c.hb('dmg', Math.round(damage));
     if (result.killed) {c.hb('kill');}
@@ -68,7 +68,7 @@ export class HitLedger {
         }
       }
       logger.debug(opts.label, Object.assign({}, {shooter: shooterId,target: targetId,damage,targetHealth: result.newHealth}, opts.extra));
-      c.broadcast(eventPayload(WORLD_MODEL.player!, 'playerHit', 'targetId', targetId, { shooterId, damage, health: result.newHealth, armor: result.newArmor, seq: (this.hitSeq += 1), shotId: opts.shotId }) as ServerMessage);
+      c.broadcast(eventPayload(WORLD_MODEL.player!, 'playerHit', 'targetId', targetId, { shooterId, damage, health: result.newHealth, armor: result.newArmor, seq: (this.hitSeq += 1), shotId: opts.shotId, gd: opts.gd }) as ServerMessage);
       return;
     }
     const corpse = c.playerManager.getPlayer(targetId);

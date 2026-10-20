@@ -8,6 +8,9 @@
 // rests, self-shove echoes).
 
 import { glitch } from '../core/fxDiag.js';
+import { ChildLogger } from '../core/Logger.js';
+
+const logger = new ChildLogger('Parity');
 
 const MAX_ROWS = 24;
 const rows: { kind: string; detail: string; ageMs: number }[] = [];
@@ -19,7 +22,12 @@ total += 1;
   counts.set(kind, (counts.get(kind) ?? 0) + 1);
   rows.push({ kind, detail: JSON.stringify(detail), ageMs: Math.round(performance.now()) });
   if (rows.length > MAX_ROWS) {rows.splice(0, rows.length - MAX_ROWS);}
-  glitch(`parity-${kind}`, detail);
+  // glitch() rate-limits the console line (3/kind then 1-in-100) — a parity
+  // miss is rare and exactly what the complaint feed exists for, so emit a
+  // WARN of our own whenever the limiter swallowed the GLITCH line.
+  if (!glitch(`parity-${kind}`, detail)) {
+    logger.warn(`[GLITCH:parity-${kind}]`, detail);
+  }
 }
 
 // Damage-echo expectations — in authority-sim rooms a predicted hit is

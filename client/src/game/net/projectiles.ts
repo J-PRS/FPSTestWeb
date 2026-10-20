@@ -187,6 +187,10 @@ export function wireProjectiles(ctx: NetCtx): void {
     const remoteProjectile = new Projectile(deps.lazyScene(), origin, dir, new THREE.Vector3(0, 0, 0), cfg);
     remoteProjectile.vel.copy(vel); // override with exact server velocity
     remoteProjectile.isRemote = true;
+    // Cosmetic body-pop needs the local body too — same lazy reads the
+    // own-shell path uses (null while dead = no sweep target).
+    remoteProjectile.sweepLocal = (): THREE.Vector3 | null => { const pl = deps.lazyPlayer(); return pl.isDead ? null : pl.pos; };
+    remoteProjectile.localClass = (): string | undefined => deps.lazyPlayer().appliedClass;
     // The shooter's rendered remote can sit a leash-width off the server's
     // spawn point — seed the render offset from the model we see so the
     // shell leaves that muzzle and blends onto the true trajectory instead

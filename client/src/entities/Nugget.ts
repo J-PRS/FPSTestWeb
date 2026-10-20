@@ -86,6 +86,11 @@ function poolsFor(scene: THREE.Scene, geo: THREE.BufferGeometry, accentGeo: THRE
 export class Nugget {
   pos: THREE.Vector3;
   vel: THREE.Vector3;
+  /** Display-only position: for serverOwned nuggets the sim pos only
+   *  advances in 50ms parity cells, so painting it raw staircases at
+   *  ~20Hz while falling. renderPos adds the leftover sub-cell fraction
+   *  (vel × tumbleAcc) — visuals smooth, physics stays on the grid. */
+  private readonly renderPos = new THREE.Vector3();
   collected = false; // pickup radius reached
   collectNotified = false; // set by caller once pickup effects/score are applied
   dead = false;      // fully finished — safe to remove + dispose
@@ -129,6 +134,7 @@ export class Nugget {
     // Emit slightly desaturated so bloom reads hot without clipping to white
     this.emitColor = this.baseColor.clone().lerp(new THREE.Color(0xFF_FF_FF), 0.33);
     this.pos = pos.clone();
+    this.renderPos.copy(this.pos);
     this.vel = inheritVel.clone();
     // Small random spread so multi-nugget drops scatter naturally
     this.vel.x += (Math.random() - 0.5) * 4;
@@ -187,6 +193,7 @@ export class Nugget {
     if (!this.serverOwned && this.age > LIFETIME) {this.collected = true;} // fade out if ignored
 
     if (this.collected) {
+      this.renderPos.copy(this.pos);
       this.updateCollectFade(dt);
       this.trailFx.fade(dt);
       return;
@@ -208,6 +215,10 @@ export class Nugget {
     // serverTumble integrates internally (server ordering) — the shared
     // pos+vel*dt line would double-step it.
     if (!this.serverOwned) {this.pos.addScaledVector(this.vel, dt);}
+    this.renderPos.copy(this.pos);
+    if (this.serverOwned && !this.settled) {
+      this.renderPos.addScaledVector(this.vel, this.tumbleAcc);
+    }
     this.updateVisuals(dt);
     this.emitTrail(dt);
     this.trailFx.fade(dt);
@@ -226,7 +237,7 @@ export class Nugget {
   private writeInstance(): void {
     if (this.slot < 0) {return;}
     _q.setFromEuler(_e.set(this.spinX, this.spinY, 0));
-    const m = _m.compose(this.pos, _q, _s.setScalar(this.visScale * this.sizeMul));
+    const m = _m.compose(this.renderPos, _q, _s.setScalar(this.visScale * this.sizeMul));
     this.pools.body.mesh.setMatrixAt(this.slot, m);
     this.pools.body.mesh.instanceMatrix.needsUpdate = true;
     this.pools.body.mesh.setColorAt(this.slot, this.pulseColor.copy(this.emitColor).multiplyScalar(EMIT_GAIN));
@@ -377,9 +388,9 @@ export class Nugget {
     if (this.settled) {
       const pulse = 1 + Math.sin(this.age * 5) * 0.12;
       this.pulseColor.copy(this.emitColor).multiplyScalar(pulse);
-      const y = this.pos.y + Math.sin(this.age * 2.5) * 0.06;
+      const y = this.renderPos.y + Math.sin(this.age * 2.5) * 0.06;
       _q.setFromEuler(_e.set(this.spinX, this.spinY, 0));
-      const m = _m.compose(_target.set(this.pos.x, y, this.pos.z), _q, _s.setScalar(this.visScale * this.sizeMul));
+      const m = _m.compose(_target.set(this.renderPos.x, y, this.renderPos.z), _q, _s.setScalar(this.visScale * this.sizeMul));
       if (this.slot >= 0) {
         this.pools.body.mesh.setMatrixAt(this.slot, m);
         this.pools.body.mesh.instanceMatrix.needsUpdate = true;
@@ -392,16 +403,16 @@ export class Nugget {
           this.pools.accent.mesh.instanceColor!.needsUpdate = true;
         }
       }
-      this.glow.position.set(this.pos.x, y, this.pos.z);
+      this.glow.position.set(this.renderPos.x, y, this.renderPos.z);
       this.glowMat.opacity = 0.7 + Math.sin(this.age * 5) * 0.15;
-      if (this.beam) {this.beam.position.set(this.pos.x, y + 8, this.pos.z);}
+      if (this.beam) {this.beam.position.set(this.renderPos.x, y + 8, this.renderPos.z);}
       return;
     }
     this.writeInstance();
     // Halo stays welded to the nugget — the polygonOffset bias handles the
     // terrain-graze clip, so no visual lift needed.
-    this.glow.position.copy(this.pos);
-    if (this.beam) {this.beam.position.set(this.pos.x, this.pos.y + 8, this.pos.z);}
+    this.glow.position.copy(this.renderPos);
+    if (this.beam) {this.beam.position.set(this.renderPos.x, this.renderPos.y + 8, this.renderPos.z);}
   }
 
   private emitTrail(dt: number): void {
@@ -413,7 +424,7 @@ export class Nugget {
     this.trailTimer += dt;
     while (this.trailTimer >= TRAIL_INTERVAL) {
       this.trailTimer -= TRAIL_INTERVAL;
-      this.trailFx.burst(1, this.pos, 0.4, this.baseColor);
+      this.trailFx.burst(1, this.renderPos, 0.4, this.baseColor);
     }
   }
 

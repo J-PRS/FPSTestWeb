@@ -568,18 +568,25 @@ export class MoveSim {
         }
       }
     }
-    // Tether snare: only OUTWARD motion inside the ring is bled — walking
-    // in is free, the drag lands when you try to leave. Full stop uses a
-    // hard zero so a crawl can't creep past the ring on drag rounding.
+    // Tether snare: only the OUTWARD radial component inside the ring is
+    // bled — walking in and strafing along the ring are free, the drag
+    // lands when you try to leave. Full stop bleeds the whole radial push
+    // so a crawl can't creep past the rim on drag rounding.
     if (this.tether !== undefined) {
       const tt = this.tether;
       const tdx = s.pos.x - tt.x, tdz = s.pos.z - tt.z;
+      const rr = tdx * tdx + tdz * tdz;
       const hs = dhypot(s.vel.x, s.vel.z);
-      if (tdx * tdx + tdz * tdz < tt.r * tt.r && hs > 0 && tdx * s.vel.x + tdz * s.vel.z > 0) {
+      const rad = tdx * s.vel.x + tdz * s.vel.z;
+      if (rr < tt.r * tt.r && rr > 0 && rad > 0) {
         const f = tetherSlow(hs);
         this.tetherSlowNow = Math.max(this.tetherSlowNow, f);
-        const k = f >= 1 ? 0 : 1 - f * dt;
-        s.vel.x *= k; s.vel.z *= k;
+        // vRad = vel·r̂ — the outward share, cut by the slow fraction.
+        // Tangential motion is untouched: you circle the snare freely.
+        const inv = 1 / Math.sqrt(rr);
+        const vRad = rad * inv;
+        const bleed = f >= 1 ? vRad : vRad * f * dt;
+        s.vel.x -= tdx * inv * bleed; s.vel.z -= tdz * inv * bleed;
       }
     }
     // T1 ground glue: while grounded AT CONTACT distance, cancel

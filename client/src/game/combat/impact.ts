@@ -744,6 +744,8 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
 
     air: p.hitAge > 0 ? p.hitAge : p.age, // same fallback the AOE claim uses
 
+    shotId: p.shotId,
+
   });
 
 }

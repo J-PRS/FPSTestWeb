@@ -485,9 +485,16 @@ export class RoomDeployables {
    *  (the early-out below would skip that cleanup). `held` tracks the hold a
    *  body built up inside a ring; breaking out of it zaps jet energy. */
   private readonly held = new Map<string, number>();
+  /** Currently snared body → the tether holding it — lets bot combat
+   *  answer "what do I shoot to get free" instead of polling items. */
+  private readonly snaredBy = new Map<string, Deployed>();
+  /** The tether holding this player, if any — read by bot combat so a
+   *  caught bot can blast its way out instead of waiting out the drag. */
+  snareOf(pid: string): Deployed | undefined { return this.snaredBy.get(pid); }
   private tickTethers(): void {
     const def = DEPLOY_ITEMS.tether;
     for (const pid of this.held.keys()) {if (!this.room.players.getPlayer(pid)) {this.held.delete(pid);}}
+    for (const pid of this.snaredBy.keys()) {if (!this.room.players.getPlayer(pid)) {this.snaredBy.delete(pid);}}
     for (const [pid, p] of this.room.players.getAllPlayers()) {
       let snare: Deployed | undefined;
       const at = this.room.moveSim.simPos(pid);
@@ -500,6 +507,7 @@ export class RoomDeployables {
           if (dx * dx + dz * dz < def.tetherRadius! * def.tetherRadius!) {snare = t; break;}
         }
       }
+      if (snare) {this.snaredBy.set(pid, snare);} else {this.snaredBy.delete(pid);}
       // Read the slow the last step applied BEFORE the snare check: the step
       // that carries a body out of the ring is the one that bled it.
       const slow = this.room.moveSim.tetherSlowOf(pid);

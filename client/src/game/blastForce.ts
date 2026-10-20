@@ -12,7 +12,7 @@ import { blastOccluded } from '../../../shared/solidWorld.js';
 import type { CombatDeps } from './combat.js';
 import type { Targetable } from '../entities/balls.js';
 import * as sfx from '../core/sfx.js';
-import { parityMiss } from './parity.js';
+import { parityMiss, expectDamageEcho } from './parity.js';
 import { targetDemoId } from '../demo/types.js';
 
 export interface BlastForceHooks {
@@ -53,6 +53,9 @@ export interface BlastArgs {
   shooterId?: string;
   /** Shell's flight time at detonation — offline kill-feed `[1.3s]` tag. */
   air?: number;
+  /** The detonating shell's nonce — stamps splash predictions so a server
+   *  whiff reads as a ghost the same way a direct hit does. */
+  shotId?: string | null;
 }
 
 export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
@@ -152,6 +155,15 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       }
       if (deps.botHit?.(playerId, aoeDmg, pos, shooterId, a.weaponType, a.air)) {continue;} // local authority resolved it
       deps.lazyHealthBarSystem().predictDamage(playerId, aoeDmg);
+      // My blast predicted splash the server may whiff — stamp it like the
+      // direct-hit path does or a silent splash miss reads as clean damage.
+      // The server skips friendly damage in team rooms, so a stamped
+      // teammate would be a false ghost — only stamp plausible victims.
+      const victimTeam = deps.lazyNetworkManager()?.getPlayers?.().get(playerId)?.team;
+      const friendly = victimTeam !== undefined && victimTeam === deps.world.localTeam;
+      if (!a.shooterId && !friendly && deps.lazyNetworkManager()?.authoritySims?.()) {
+        expectDamageEcho(playerId, aoeDmg, weaponType, a.shotId, { x: pos.x, y: pos.y, z: pos.z });
+      }
     }
   }
 

@@ -12,6 +12,7 @@ import type { DeployDrone } from '../entities/DeployDrone.js';
 import type { DeployShield } from '../entities/DeployShield.js';
 import type { DeployBeacon } from '../entities/DeployBeacon.js';
 import type { DeployTether } from '../entities/DeployTether.js';
+import type { DeployWatersphere } from '../entities/DeployWatersphere.js';
 import type { DeployMortar } from '../entities/DeployMortar.js';
 import type { DeployCg } from '../entities/DeployCg.js';
 import { Projectile } from '../projectiles/Projectile.js';
@@ -271,6 +272,23 @@ export class DeployAdopter {
     };
     const {hurt} = item;
     item.hurt = (dmg): void => { hurt(dmg); if (t.dead) {this.host.killItem(item);} };
+    this.items.push(item);
+  }
+
+  /** Watersphere — the item only owns the dome visual; the wade-drag is
+   *  judged by the shared sim and the server, not by this record. */
+  adoptWatersphere(w: DeployWatersphere, owner?: DeployOwner): void {
+    const item: Item = {
+      kind: 'watersphere', candId: w.candId, pos: w.pos, dead: false,
+      hurt: (dmg): void => w.takeDamage(dmg),
+      v: w,
+      update: (dt): void => w.update(dt),
+      dispose: (): void => w.dispose(this.deps.scene),
+      owner: owner?.id,
+      team: owner?.team,
+    };
+    const {hurt} = item;
+    item.hurt = (dmg): void => { hurt(dmg); if (w.dead) {this.host.killItem(item);} };
     this.items.push(item);
   }
 

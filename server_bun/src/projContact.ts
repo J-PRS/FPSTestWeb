@@ -7,6 +7,7 @@ import { segSolidHit } from '../../shared/solidWorld.ts';
 import type { RoomProjectiles, LiveProj } from './RoomProjectiles.ts';
 import { rewindPos, shooterTransitMs } from './claimLedger.ts';
 import { renderLagOf, renderLagOfTarget } from './rewind.ts';
+import { logger } from './logger.ts';
 
 type ContactHost = RoomProjectiles;
 
@@ -84,6 +85,10 @@ function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getW
       const pc = { x: tp.x, y: tp.y + classCapsule(target.armorClass).centerOff, z: tp.z };
       const pd = segPointDist(from, p.pos, pc);
       if (pd <= capsuleReach(target, reach)) {
+        // Ghost-forensics: how far behind live truth the credited ghost
+        // sat — a large delta is the "hit landed where nobody stood" feel.
+        const gd = Math.hypot(tp.x - target.position.x, tp.y - target.position.y, tp.z - target.position.z);
+        if (gd > 1.5) {logger.info('ghost hit', { shooter: proj.ownerId, victim: pid, deltaM: Number(gd.toFixed(1)), backMs: back, wt: proj.weaponType });}
         // Wake contact counts as a hit but earns no airtime ramp — the
         // skillshot bonus is body-contact only, like the claim path.
         if (stats.stick) { r.attach(proj, Object.assign({}, p.pos), pid); return true; }

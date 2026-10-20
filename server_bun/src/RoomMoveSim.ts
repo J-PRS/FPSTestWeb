@@ -43,6 +43,8 @@ export class RoomMoveSim {
   /** Map water level (spec.water.level) — undefined on a dry map. Copied
    *  into every shadow sim so its replay matches the client's prediction. */
   private waterLevel?: number;
+  /** Kill zone height (world Y). Undefined = no zone. */
+  private killY?: number;
   // Judge mode tolerates prediction noise; authority mode is truth — the
   // client needs tight, frequent acks or its prediction drifts for real.
   // Judge tolerance sits above the systematic offset a different-rate
@@ -67,6 +69,9 @@ export class RoomMoveSim {
   /** Worst landing -v·n (m/s) this tick past the T1 damage threshold —
    *  Room routes it through the damage funnel. */
   onLanding?: (playerId: string, impact: number) => void;
+  /** Body dropped below the map's kill zone — the Room turns it into an
+   *  environment kill (the "fell out of the arena" death). */
+  onKillZone?: (playerId: string) => void;
   /** Live player capsules for body-vs-body contact — the Room supplies
    *  records each tick (corpses excluded upstream); each shadow gets a
    *  self-less view so its own sim does the pushing. */
@@ -347,6 +352,14 @@ this.structEpoch += 1;
     this.jev({ kind: 'water', level });
     this.waterLevel = level;
     for (const sh of this.shadows.values()) {sh.sim.waterLevel = level;}
+  }
+
+  /** Kill zone — world Y below which a shadow is out of the arena. The
+   *  heightfield is always present, so on a terrainless map this is what
+   *  ends a fall. Absent = no zone (every other map unchanged). */
+  setKillY(level?: number): void {
+    this.jev({ kind: 'killY', level });
+    this.killY = level;
   }
 
   /** Command-queue ingress — inputMove does NOT apply on arrival. Edges
@@ -690,6 +703,10 @@ sh.gapStreak += 1;
         // pays (impact - 25) * 0.005 of the bar — the funnel lives one
         // layer up so respawn/killfeed ride the same path as any death.
         if (landing > MOVEMENT_CONFIG.fallDamageMinSpeed) {this.onLanding?.(pid, landing);}
+        // Kill zone: the deck ran out and the void starts. Checked on the
+        // shadow, not on a claim — the client can't argue its way out of
+        // falling off the map.
+        if (this.killY !== undefined && s.pos.y < this.killY) {this.onKillZone?.(pid);}
       }
       sh.acc += dt;
       const steps = Math.floor(sh.acc / MoveSim.STEP);

@@ -355,7 +355,10 @@ export class ServerBots {
     // vault where no nugget economy exists.
     const besieger = this.sense.taskGoalFor(id)?.kind === 'siege';
     const ready = (this.gearLobT.get(id) ?? 0) <= now;
-    const gear = ready ? this.sense.hostileGear(p, goal?.pos ?? null, saboteur || besieger) : null;
+    // Snared by a tether — the knot holding the bot is THE target,
+    // regardless of objective: a caught bot blasts its way out.
+    const snare = ready ? this.room.deployables.snareOf(id) : undefined;
+    const gear = ready ? (snare?.pos ?? this.sense.hostileGear(p, goal?.pos ?? null, saboteur || besieger)) : null;
     // Wrecking gear IS the infiltrator's job — high value for it,
     // opportunistic chip damage for everyone else.
     if (gear && this.spendOk(id, BELT_THROW_COST, saboteur || besieger, nuggetNear)) {

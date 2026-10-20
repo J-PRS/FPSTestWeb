@@ -51,14 +51,19 @@ export interface DbgTag {
  *  counted for the diag dump AND logged loudly (rate-limited so a
  *  per-frame offender can't flood the shipped log). */
 const glitchCounts: Record<string, number> = {};
-export function glitch(kind: string, detail: Record<string, unknown> = {}): void {
+/** Returns true when the occurrence was emitted — callers whose event is
+ *  rare-but-important (parity misses) can warn through their own channel
+ *  when the rate limiter swallowed the console line. */
+export function glitch(kind: string, detail: Record<string, unknown> = {}): boolean {
   glitchCounts[kind] = (glitchCounts[kind] ?? 0) + 1;
   const n = glitchCounts[kind];
   if (n <= 3 || n % 100 === 0) {
     // Lazy import would devolve the module graph — Logger is core like us.
     // oxlint-disable-next-line no-console
     console.error(`[GLITCH:${kind}]`, JSON.stringify(detail));
+    return true;
   }
+  return false;
 }
 export function glitchCountsDump(): Record<string, number> { return Object.assign({}, glitchCounts); }
 

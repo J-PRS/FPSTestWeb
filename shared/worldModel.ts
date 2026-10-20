@@ -375,6 +375,10 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
         { name: 'armor', wire: 'num', channel: 'sim', absent: null },
         { name: 'seq', wire: 'num', channel: 'echo', absent: null },
         { name: 'shotId', wire: 'str', channel: 'echo', absent: null },
+        // Ghost delta (m): how far the rewind ghost the hit credited on
+        // sat off the victim's live truth — only sent when >1.5m so the
+        // shooter sees the cheap-hit discrepancy live.
+        { name: 'gd', wire: 'num', channel: 'echo', absent: null },
       ],
       playerKill: [
         { name: 'shooterId', wire: 'str', channel: 'edge' },

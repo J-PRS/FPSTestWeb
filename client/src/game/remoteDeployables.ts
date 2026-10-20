@@ -11,6 +11,7 @@ import { DeployCg } from '../entities/DeployCg.js';
 import { DeployShield } from '../entities/DeployShield.js';
 import { DeployBeacon } from '../entities/DeployBeacon.js';
 import { DeployTether } from '../entities/DeployTether.js';
+import { DeployWatersphere } from '../entities/DeployWatersphere.js';
 import { Explosion } from '../effects/explosion.js';
 import { LightningBeam } from '../effects/lightningBeam.js';
 import { screenShake } from '../effects/screenShake.js';
@@ -158,6 +159,17 @@ export class RemoteDeployables {
         update: (dt): void => t.update(dt),
         dispose: (): void => t.dispose(this.deps.scene),
         v: t, owner,
+      };
+    } else if (kind === 'watersphere') {
+      const w = new DeployWatersphere(this.deps.scene, this.deps.lazyTerrain(), at);
+      w.unfoldDone();
+      if (hp !== undefined) { w.health = hp; w.armor = armor ?? 0; }
+      item = {
+        kind, candId: `rdep:${id}`, pos: w.pos, dead: false,
+        hurt: (): void => { return; },
+        update: (dt): void => w.update(dt),
+        dispose: (): void => w.dispose(this.deps.scene),
+        v: w, owner,
       };
     } else if (kind === 'generator' || kind === 'sensor' || kind === 'baseturret') {
       item = this.baseAssetItem(kind, at, hp, armor, team);

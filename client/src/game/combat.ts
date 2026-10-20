@@ -89,6 +89,9 @@ export interface ExplosionArgs {
   weaponType?: number;
   /** Shell's flight time — offline kill-feed `[1.3s]` tag. */
   air?: number;
+  /** Detonating shell's nonce — lets blastForce stamp splash predictions
+   *  against the shell-fate ledger like direct hits already do. */
+  shotId?: string | null;
   /** Shared-validator pre-flight of this blast's aoeShot claim — false
    *  means the server will reject it, so nothing the claim pays for
    *  (remote damage/knockback, self splash, plating) may be predicted. */

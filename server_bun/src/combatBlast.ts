@@ -67,7 +67,7 @@ export interface BlastHost {
   reject(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number): void;
   applyHit(shooterId: string, targetId: string, damage: number,
            result: { killed: boolean; newHealth: number; newArmor: number },
-           opts: { label: string; extra?: Record<string, unknown>; weapon?: number; shotId?: string; air?: number }): void;
+           opts: { label: string; extra?: Record<string, unknown>; weapon?: number; shotId?: string; air?: number; gd?: number }): void;
   ddMult(shooter: PlayerState): number;
 }
 
@@ -253,6 +253,20 @@ export class BlastRunner {
     // at t≈0 is stepped past rather than counted.
     if (this.h.solids.length > 0 && this.blastBlocked(ctx.pos, tpos)) {return;}
 
+    // Ghost-forensics: the gap between the rewind ghost this hit was
+    // credited on and the victim's live wire truth — a large delta is
+    // the "hit landed where nobody stood" feel, worth naming in the log
+    // AND on the shooter's wire (playerHit.gd → HUD complaint feed).
+    let gd: number | undefined;
+    if (targetId !== ctx.shooterId) {
+      const gdx = tpos.x - target.position.x, gdy = tpos.y - target.position.y, gdz = tpos.z - target.position.z;
+      const g = Math.sqrt(gdx * gdx + gdy * gdy + gdz * gdz);
+      if (g > 1.5) {
+        gd = Number(g.toFixed(1));
+        logger.info('ghost hit', { shooter: ctx.shooterId, victim: targetId, deltaM: gd, wt: ctx.weapon });
+      }
+    }
+
     // Spawn-shielded victim: damage already returns early inside
     // applyDamage, but the shove landed anyway — an "invulnerable" target
     // that still launches reads as a phantom push with zero feedback.
@@ -312,7 +326,7 @@ export class BlastRunner {
     // never deals damage to them in team rooms.
     if (this.h.friendly(ctx.shooterId, targetId)) {return;}
     const result = this.h.playerManager.applyDamage(targetId, damage);
-    this.h.applyHit(ctx.shooterId, targetId, damage, result, { label: `Player ${ctx.label} hit`, extra: { dist: Number(dist.toFixed(2)) }, weapon: ctx.weapon, shotId: ctx.shotId, air: ctx.air });
+    this.h.applyHit(ctx.shooterId, targetId, damage, result, { label: `Player ${ctx.label} hit`, extra: { dist: Number(dist.toFixed(2)) }, weapon: ctx.weapon, shotId: ctx.shotId, air: ctx.air, gd });
     // Concussion payload: the conc's whole job is stripping the flag —
     // a carrier clipped by the blast fumbles it like in T2, and the
     // victim's jet tank takes a bite so the escape is hobbled too.

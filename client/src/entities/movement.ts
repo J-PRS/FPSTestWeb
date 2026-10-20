@@ -84,6 +84,9 @@ export class MovementController {
   /** Tether snare the body stands in — the frame sets it from the live
    *  deployable roster, mirroring the server's per-tick copy. */
   setTether(tether?: { x: number; y: number; z: number; r: number }): void { this.sim.tether = tether; }
+  /** Watersphere pocket the body wades in — mirrors the server's
+   *  per-tick setWaterDome so prediction bleeds the same sea drag. */
+  setWaterDome(dome?: { x: number; y: number; z: number; r: number }): void { this.sim.waterDome = dome; }
   /** Other players' capsules for contact resolve — the frame fills this
    *  from the remote roster (server shadows resolve the same bodies). */
   get bodies(): BodyCapsule[] { return this.sim.bodies; }

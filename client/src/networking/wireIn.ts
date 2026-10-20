@@ -451,6 +451,12 @@ dropCensus.total += 1;
   }
 
   private handlePlayerHit(data: Extract<ServerMessage, { type: 'playerHit' }>): void {
+    // Ghost-delta surface: the server credited this hit on a rewind ghost
+    // >1.5m off the victim's live truth — the "hit where nobody stood"
+    // feel, named on the shooter's HUD via the complaint feed.
+    if (data.gd != null && data.shooterId === this.h.getLocalPlayerId()) {
+      logger.warn(`ghost hit on ${data.targetId} — credited ${data.gd}m behind the live body`, { gd: data.gd });
+    }
     if (data.shooterId === this.h.getLocalPlayerId()) {this.h.confirmClaimHit(data.targetId);}
     if (data.seq !== undefined) {
       if (data.seq <= this.lastHitSeq) {
