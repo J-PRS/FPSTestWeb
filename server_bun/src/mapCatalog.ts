@@ -16,9 +16,10 @@ export class MapCatalog {
   /** Which maps/<X>.json spawned each room — lets quick-join group by
    *  map rather than room name. */
   private roomMapName = new Map<string, string>();
-  /** Maps carrying the `_t2` provenance marker — the lobby badges them
-   *  so players can tell a T2 port from a native arena. */
+  /** Maps carrying the `_t2`/`_t1` provenance marker — the lobby badges
+   *  them so players can tell a port from a native arena. */
   private t2Flags = new Set<string>();
+  private t1Flags = new Set<string>();
 
   mapNameOf(room: string): string | undefined { return this.roomMapName.get(room); }
   /** Room → map name, never cleared on room dispose — a switchRoom
@@ -82,8 +83,10 @@ export class MapCatalog {
     const path = `${MAPS_DIR}/${name}.json`;
     const parsed = parseMapSpecJson(readFileSync(path, 'utf8'));
     const isT2 = (parsed as { _t2?: unknown })._t2 !== undefined;
-    if (isT2 && CONFIG.publicBeta) {throw new Error('t2 spec excluded by FPS_PUBLIC_BETA');}
+    const isT1 = (parsed as { _t1?: unknown })._t1 !== undefined;
+    if ((isT2 || isT1) && CONFIG.publicBeta) {throw new Error('ported spec excluded by FPS_PUBLIC_BETA');}
     if (isT2) {this.t2Flags.add(name);}
+    if (isT1) {this.t1Flags.add(name);}
     const spec = resolveMapSpec(parsed);
     // Fail loud on coerced/dropped fields — a typo in the JSON shouldn't
     // silently play as a different map than the author wrote.
@@ -193,6 +196,7 @@ export class MapCatalog {
             modes: specModes(spec),
             bots: spec?.bots ?? spec?.botFill ?? 0,
             t2: this.t2Flags.has(f.slice(0, -5)),
+            t1: this.t1Flags.has(f.slice(0, -5)),
             hidden: spec?.hidden === true,
           };
         })

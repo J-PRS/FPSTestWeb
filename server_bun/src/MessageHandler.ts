@@ -387,8 +387,13 @@ export class MessageHandler {
 
   /** Server-simulated projectile blast (bot rockets etc.) — combat's
    *  trusted AOE path; the sim placed the pop, no cheat check needed. */
-  serverBlast(ownerId: string, pos: Vec3, weaponType: number, excludeTargetId: string | null, shotId?: string, attribWeaponType?: number): void {
-    this.combat.serverBlast(ownerId, pos, weaponType, excludeTargetId, shotId, attribWeaponType);
+  serverBlast(ownerId: string, pos: Vec3, weaponType: number, excludeTargetId: string | null, opts?: { shotId?: string; attribWeaponType?: number; power?: number; air?: number }): void {
+    this.combat.serverBlast(ownerId, pos, weaponType, excludeTargetId, opts);
+  }
+
+  /** Rope-dart contact — room projectile sim resolved a Hook connect. */
+  grapple(ownerId: string, anchor: Vec3, victimId: string | null): void {
+    this.combat.grapple(ownerId, anchor, victimId);
   }
 
   /** Server-simulated direct hit — the room's projectile sim resolved the

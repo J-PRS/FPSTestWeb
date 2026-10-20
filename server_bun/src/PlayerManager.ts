@@ -122,6 +122,7 @@ export class PlayerManager {
       armor: 0,
       regenUntil: simMs(0),
       ddUntil: simMs(0),
+      shieldUntil: simMs(0),
       lastDamageAt: simMs(simNow()), // spawn counts as the ramp's t=0
       charge: 0,
       chargeT: 0,
@@ -281,6 +282,7 @@ export class PlayerManager {
     // Perk damage resist — the join-declared table owns the modifier,
     // the server applies it so the number can't be client-inflated.
     let incoming = damage * (1 - effectiveResist(perkMods(target.perk), target.health, target.maxHealth));
+    if (simNow() < target.shieldUntil) { incoming = incoming * 0.1; }
     // Armor pool: absorbs armorAbsorb of the hit while it lasts, overflow
     // leaks to health (100hp/100armor taking 100 → 80hp/20armor).
     if (target.armor > 0) {
@@ -311,7 +313,7 @@ target.deaths += 1;
       target.pendingRespawn = true;
       target.armor = 0;
       target.regenUntil = simMs(0);
-      target.ddUntil = simMs(0);
+      target.ddUntil = simMs(0); target.shieldUntil = simMs(0);
       // NOTE: `charge` survives the kill — applyHit pops the corpse's bank.
       return { killed: true, newHealth: 0, newArmor: 0, endedStreak };
     }
