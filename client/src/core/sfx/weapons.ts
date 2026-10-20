@@ -164,6 +164,20 @@ const SHOT_LAYERS: Partial<Record<number, [name: string, gain: number, rate?: nu
     ['dash2', 0.45, 1],
     ['hg_tick', 0.45, 1.7, 2200, 0.08],
   ],
+  // Hook: rope-dart cast — a sharp whoosh for the throw, then the line
+  // unreeling as a quick high tick-zip. No launcher machinery: it leaves
+  // the hand, not a barrel.
+  [WeaponType.Hook]: [
+    ['dash2', 0.85, 1.5],
+    ['hg_tick', 0.4, 2.2, 3000, 0.05, 0.04],
+  ],
+  // Shocklance: the Laser Construction Kit's short burst — a bright
+  // plasma zap with a hard transient and a fast-decaying tail. Cut at
+  // 0.62s (the tail is already at -26dB there, so the fade is inaudible)
+  // to keep the ring from smearing over the next zap at the 2s cadence.
+  [WeaponType.Shocklance]: [
+    ['UL_Short_burst_118', 0.8, 1, undefined, 0.62],
+  ],
   // Chaingun @ ~11/s: voice is the authentic T2 fire crack (bright
   // high-band snap — 60% of its energy sits >2kHz, vs the old sample's
   // mid-heavy body that stacked into sputter). Punch lives in ONE
@@ -253,6 +267,17 @@ const SYNTH_SHOTS: Record<number, (g: GainNode) => void> = {
   [WeaponType.Sprinkler]:  synthSprinkler,
   [WeaponType.Railgun]:   (g): void => { osc('sawtooth', 2600, 200, 0.22, 0.25, g); noise(0.15, 0.2, g, 'highpass', 4000, 6000); },
   [WeaponType.Lightning]: synthLightning,
+  // Shocklance: FALLBACK only (the bank may not have decoded the sample
+  // yet) — one fat discharge: bright noise snap + a falling saw zap
+  // + a chest thump + a sizzle tail so the bolt lingers audibly after
+  // the flash (sells the cycle's one-shot, not a beam tick).
+  [WeaponType.Shocklance]: (g): void => {
+    const j = 1 + (Math.random() - 0.5) * 0.3;
+    noise(0.09, 0.5, g, 'highpass', 2800 * j, 5200 * j, 1.6);
+    osc('sawtooth', 2400 * j, 500, 0.14, 0.22, g);
+    osc('sine', 200 * j, 70, 0.16, 0.3, g);
+    noise(0.14, 0.25, g, 'bandpass', 4200, 2600, 1.4);
+  },
   [WeaponType.Melee]:     (g): void => { noise(0.15, 0.45, g, 'bandpass', 300, 2200, 1.4); osc('sine', 110, 45, 0.14, 0.5, g); },
   // MRV volley thump — mortar body + a bright spit tail that hints at
   // the burst payload about to scatter.
@@ -260,4 +285,7 @@ const SYNTH_SHOTS: Record<number, (g: GainNode) => void> = {
   // Javelin synth fallback — same idea as the layered version: release
   // snap + rising air-tear whoosh + body thump.
   [WeaponType.Javelin]:   (g): void => { noise(0.22, 0.5, g, 'bandpass', 900, 3800, 1.6); osc('sawtooth', 240, 900, 0.16, 0.3, g); osc('sine', 150, 60, 0.18, 0.35, g); },
+  // Hook synth fallback — air-whoosh + a brighter zip tail (the line
+  // running out), light body under it.
+  [WeaponType.Hook]:      (g): void => { noise(0.16, 0.4, g, 'bandpass', 1400, 4200, 1.8); osc('sine', 200, 90, 0.1, 0.25, g); },
 };
