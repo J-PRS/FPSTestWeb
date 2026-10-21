@@ -1,4 +1,5 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { parse as parseToml } from 'smol-toml';
 import { CONFIG } from './config.ts';
 import { type MapSpec, resolveMapSpec, specModes, parseMapSpecJson } from '../../shared/mapSpec.ts';
 import { logger } from './logger.ts';
@@ -80,8 +81,18 @@ export class MapCatalog {
   }
 
   private readSpec(name: string): MapSpec {
-    const path = `${MAPS_DIR}/${name}.json`;
-    const parsed = parseMapSpecJson(readFileSync(path, 'utf8'));
+    // Spec files: <name>.toml (human-editable, comments allowed) wins over
+    // <name>.json when both exist — a silent split-brain spec is the one
+    // failure mode worth a warn.
+    const tomlPath = `${MAPS_DIR}/${name}.toml`;
+    const jsonPath = `${MAPS_DIR}/${name}.json`;
+    const hasToml = existsSync(tomlPath);
+    const hasJson = existsSync(jsonPath);
+    if (hasToml && hasJson) {logger.warn('Ambiguous map spec — .toml wins', { room: name });}
+    const path = hasToml ? tomlPath : jsonPath;
+    const parsed = hasToml
+      ? parseMapSpecJson(JSON.stringify(parseToml(readFileSync(path, 'utf8'))))
+      : parseMapSpecJson(readFileSync(path, 'utf8'));
     const isT2 = (parsed as { _t2?: unknown })._t2 !== undefined;
     const isT1 = (parsed as { _t1?: unknown })._t1 !== undefined;
     if ((isT2 || isT1) && CONFIG.publicBeta) {throw new Error('ported spec excluded by FPS_PUBLIC_BETA');}
@@ -187,16 +198,20 @@ export class MapCatalog {
   private buildList(): { name: string; mode: string; modes: string[]; bots: number; t2: boolean }[] {
     try {
       return readdirSync(MAPS_DIR)
-        .filter((f): boolean => f.endsWith('.json') && f !== 'rotation.json') // rotation.json is a playlist, not a map
-        .map((f) => {
-          const spec = this.loadMapSpec(f.slice(0, -5));
+        .filter((f): boolean => (f.endsWith('.json') || f.endsWith('.toml')) && f !== 'rotation.json') // rotation.json is a playlist, not a map
+        // A map present in both formats must list once — readSpec's
+        // .toml-wins rule decides which body it runs.
+        .map((f): string => f.replace(/\.(json|toml)$/, ''))
+        .filter((n, i, all): boolean => all.indexOf(n) === i)
+        .map((name) => {
+          const spec = this.loadMapSpec(name);
           return {
-            name: f.slice(0, -5),
+            name,
             mode: spec?.mode ?? '',
             modes: specModes(spec),
             bots: spec?.bots ?? spec?.botFill ?? 0,
-            t2: this.t2Flags.has(f.slice(0, -5)),
-            t1: this.t1Flags.has(f.slice(0, -5)),
+            t2: this.t2Flags.has(name),
+            t1: this.t1Flags.has(name),
             hidden: spec?.hidden === true,
           };
         })

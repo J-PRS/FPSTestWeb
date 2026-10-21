@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@webtransport-bun/webtransport": "^0.3.0",
-    "node-datachannel": "^0.33.4"
+    "node-datachannel": "^0.33.4",
+    "smol-toml": "^1.9.1"
   }
 }

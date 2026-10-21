@@ -6,6 +6,7 @@
  * answers". Handlers take live refs via HttpCtx so nothing here caches
  * server state.
  */
+import { parse as parseToml } from 'smol-toml';
 import { CONFIG } from './config.ts';
 import { windowAllow } from './windowLimit.ts';
 import type { GameServer } from './GameServer.ts';
@@ -135,7 +136,8 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Reques
       // flags the follow-up join carries (creation-time only).
       const noCreatures = url.searchParams.get('nocreatures') === '1';
       const noBalls = url.searchParams.get('noballs') === '1';
-      const room = ctx.gameServer.quickRoom(mode, map, bots, noCreatures, noBalls);
+      const preferHumans = url.searchParams.get('humans') === '1';
+      const room = ctx.gameServer.quickRoom(mode, map, bots, noCreatures, noBalls, preferHumans);
       if (!room) {return corsResponse('Server full', { status: 503 });}
       return json({ room: room.name, mode: room.mode });
     },
@@ -357,8 +359,20 @@ export async function mapBinRoute(url: URL): Promise<Response> {
   if (!/^(?:[\w-]{1,64}\/){0,3}[\w-]{1,64}\.(?:bin|png|jpe?g|webp|glb|json)$/.test(file)) {
     return corsResponse('Not found', { status: 404 });
   }
-  const f = Bun.file(`${import.meta.dir}/../../maps/${file}`);
-  if (!(await f.exists())) {return corsResponse('Not found', { status: 404 });}
+  let f = Bun.file(`${import.meta.dir}/../../maps/${file}`);
+  if (!(await f.exists())) {
+    // TOML-authored spec requested as .json — solo boot, thumbs and
+    // maplab only speak JSON; translate on the fly so the toml stays
+    // the single source of truth.
+    if (file.endsWith('.json')) {
+      const toml = Bun.file(`${import.meta.dir}/../../maps/${file.slice(0, -5)}.toml`);
+      if (await toml.exists()) {
+        const body = JSON.stringify(parseToml(await toml.text()));
+        return corsResponse(body, { headers: { 'Content-Type': 'application/json' } });
+      }
+    }
+    return corsResponse('Not found', { status: 404 });
+  }
   let ct = 'application/octet-stream';
   if (file.endsWith('.png')) {ct = 'image/png';}
   else if (file.endsWith('.webp')) {ct = 'image/webp';}

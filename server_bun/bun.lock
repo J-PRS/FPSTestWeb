@@ -7,6 +7,7 @@
       "dependencies": {
         "@webtransport-bun/webtransport": "^0.3.0",
         "node-datachannel": "^0.33.4",
+        "smol-toml": "^1.9.1",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -43,6 +44,8 @@
     "detect-libc": ["detect-libc@2.1.2", "", {}, "sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ=="],
 
     "node-datachannel": ["node-datachannel@0.33.4", "", { "dependencies": { "detect-libc": "^2.0.4" }, "optionalDependencies": { "@node-datachannel/android-arm64": "0.33.4", "@node-datachannel/darwin-arm64": "0.33.4", "@node-datachannel/darwin-x64": "0.33.4", "@node-datachannel/linux-arm64-gnu": "0.33.4", "@node-datachannel/linux-arm64-musl": "0.33.4", "@node-datachannel/linux-x64-gnu": "0.33.4", "@node-datachannel/linux-x64-musl": "0.33.4", "@node-datachannel/win32-arm64-msvc": "0.33.4", "@node-datachannel/win32-x64-msvc": "0.33.4" } }, "sha512-qiUrdh8vY9XhglEnx91HK0N2JEAAu8qTZl0fcR3yQd0fFrdO39NwDeJD/KpG+WKUb9/o4p2UwnP+/HftA/xMbQ=="],
+
+    "smol-toml": ["smol-toml@1.9.1", "", {}, "sha512-j7WyPdf0CJoutMzMoPLF/bVXHtKZIT9Rb4eGeEbWw8X2t5oirjPgpL+OpaENZrILYaXqYwnVH+qgUwVbl+pUJQ=="],
 
     "undici-types": ["undici-types@8.3.0", "", {}, "sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ=="],
   }

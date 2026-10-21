@@ -1,0 +1,156 @@
+mode = "ctf"
+bots = 8
+botFill = 10
+terrain = "crossfire.bin"
+tileSize = 1000
+_creatures_notes = "Light neutral wildlife: midfield totems guard the plateau approaches, snakes lurk the flag lanes, rakks circle the pillars. Thin enough that flag runs stay primary â€” creatures are hazards, not the match."
+hidden = true
+creatures = { totem = 2, snake = 2, rakk = 2 }
+spawns = [
+  { x = -95, y = 0, z = -95 },
+  { x = -75, y = 0, z = -95 },
+  { x = -95, y = 0, z = -75 },
+  { x = 95, y = 0, z = 95 },
+  { x = 75, y = 0, z = 95 },
+  { x = 95, y = 0, z = 75 },
+]
+
+
+[bases]
+alpha = { x = -85, y = 0, z = -85 }
+bravo = { x = 85, y = 0, z = 85 }
+
+[[structures]]
+kind = "wall"
+rotY = 0.785
+team = "alpha"
+pos = { x = -100, y = 0, z = -70 }
+size = { x = 1.2, y = 6, z = 22 }
+
+[[structures]]
+kind = "wall"
+rotY = 0.785
+team = "alpha"
+pos = { x = -70, y = 0, z = -100 }
+size = { x = 1.2, y = 6, z = 22 }
+
+[[structures]]
+kind = "box"
+team = "alpha"
+pos = { x = -85, y = 0, z = -70 }
+size = { x = 6, y = 4, z = 6 }
+
+[[structures]]
+kind = "box"
+team = "alpha"
+pos = { x = -70, y = 0, z = -85 }
+size = { x = 6, y = 4, z = 6 }
+
+[[structures]]
+kind = "pillar"
+team = "alpha"
+pos = { x = -100, y = 0, z = -100 }
+size = { x = 4, y = 10, z = 4 }
+
+
+# --- bravo ---
+[[structures]]
+kind = "wall"
+rotY = 0.785
+team = "bravo"
+pos = { x = 100, y = 0, z = 70 }
+size = { x = 1.2, y = 6, z = 22 }
+
+[[structures]]
+kind = "wall"
+rotY = 0.785
+team = "bravo"
+pos = { x = 70, y = 0, z = 100 }
+size = { x = 1.2, y = 6, z = 22 }
+
+[[structures]]
+kind = "box"
+team = "bravo"
+pos = { x = 85, y = 0, z = 70 }
+size = { x = 6, y = 4, z = 6 }
+
+[[structures]]
+kind = "box"
+team = "bravo"
+pos = { x = 70, y = 0, z = 85 }
+size = { x = 6, y = 4, z = 6 }
+
+[[structures]]
+kind = "pillar"
+team = "bravo"
+pos = { x = 100, y = 0, z = 100 }
+size = { x = 4, y = 10, z = 4 }
+
+
+# --- neutral ---
+[[structures]]
+kind = "pillar"
+pos = { x = -6, y = 0, z = -6 }
+size = { x = 5, y = 16, z = 5 }
+
+[[structures]]
+kind = "pillar"
+pos = { x = 6, y = 0, z = -6 }
+size = { x = 5, y = 16, z = 5 }
+
+[[structures]]
+kind = "pillar"
+pos = { x = -6, y = 0, z = 6 }
+size = { x = 5, y = 16, z = 5 }
+
+[[structures]]
+kind = "pillar"
+pos = { x = 6, y = 0, z = 6 }
+size = { x = 5, y = 16, z = 5 }
+
+[[structures]]
+kind = "wall"
+pos = { x = 0, y = 15, z = 0 }
+size = { x = 20, y = 1.2, z = 20 }
+
+[[structures]]
+kind = "ramp"
+rotY = 0.785
+pos = { x = -16, y = 0, z = -16 }
+size = { x = 8, y = 15, z = 8 }
+
+[[structures]]
+kind = "ramp"
+rotY = 0.785
+pos = { x = 16, y = 0, z = 16 }
+size = { x = 8, y = 15, z = 8 }
+
+[[structures]]
+kind = "box"
+pos = { x = -40, y = 0, z = 0 }
+size = { x = 7, y = 3, z = 7 }
+
+[[structures]]
+kind = "box"
+pos = { x = 40, y = 0, z = 0 }
+size = { x = 7, y = 3, z = 7 }
+
+[[structures]]
+kind = "box"
+pos = { x = 0, y = 0, z = -40 }
+size = { x = 7, y = 3, z = 7 }
+
+[[structures]]
+kind = "box"
+pos = { x = 0, y = 0, z = 40 }
+size = { x = 7, y = 3, z = 7 }
+
+[[structures]]
+kind = "pillar"
+pos = { x = -55, y = 0, z = 55 }
+size = { x = 3, y = 9, z = 3 }
+
+[[structures]]
+kind = "pillar"
+pos = { x = 55, y = 0, z = -55 }
+size = { x = 3, y = 9, z = 3 }

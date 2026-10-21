@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { parse as parseToml } from 'smol-toml';
 import { resolveMapSpec, parseMapSpecJson } from '../../shared/mapSpec.ts';
 import { findStructureOverlaps } from '../../shared/ballCollide.ts';
 import { KIT_HULLS, seatKits } from '../../shared/structKits.ts';
@@ -12,24 +13,32 @@ import { hmParseBin, hmHeight } from '../../shared/heightfield.ts';
 // take and the parser dropped or clamped. This fails on the first
 // silently-defaulted edit instead of surfacing it as a weird spawn.
 const MAPS = join(import.meta.dir, '..', '..', 'maps');
-const files = readdirSync(MAPS).filter(f => f.endsWith('.json'));
+const files = readdirSync(MAPS).filter(f => f.endsWith('.json') || f.endsWith('.toml'));
 
-describe('maps/*.json — shipped specs resolve clean', () => {
+/** maps/<name>.json|toml → the parsed spec blob resolveMapSpec eats. */
+function readSpecFile(f: string): unknown {
+  const text = readFileSync(join(MAPS, f), 'utf8');
+  return f.endsWith('.toml')
+    ? JSON.parse(JSON.stringify(parseToml(text)))
+    : parseMapSpecJson(text);
+}
+
+describe('maps/*.{json,toml} — shipped specs resolve clean', () => {
   it('has map files', () => {
     expect(files.length).toBeGreaterThan(10);
   });
 
-  it('every spec parses valid JSON', () => {
+  it('every spec parses', () => {
     for (const f of files) {
-      expect(() => parseMapSpecJson(readFileSync(join(MAPS, f), 'utf8')), f).not.toThrow();
+      expect(() => readSpecFile(f), f).not.toThrow();
     }
   });
 
   it('every spec resolves with zero coercion warnings', () => {
     const warned: string[] = [];
     for (const f of files) {
-      const spec = resolveMapSpec(parseMapSpecJson(readFileSync(join(MAPS, f), 'utf8')));
-      for (const w of spec.warnings ?? []) warned.push(`${f}: ${w}`);
+      const spec = resolveMapSpec(readSpecFile(f));
+      for (const w of spec.warnings ?? []) {warned.push(`${f}: ${w}`);}
     }
     expect(warned).toEqual([]);
   });
@@ -37,7 +46,7 @@ describe('maps/*.json — shipped specs resolve clean', () => {
   it('every declared terrain file exists under maps/', () => {
     const missing: string[] = [];
     for (const f of files) {
-      const spec = resolveMapSpec(parseMapSpecJson(readFileSync(join(MAPS, f), 'utf8')));
+      const spec = resolveMapSpec(readSpecFile(f));
       if (spec.terrain && !existsSync(join(MAPS, spec.terrain))) {
         missing.push(`${f}: ${spec.terrain}`);
       }
@@ -52,10 +61,15 @@ describe('maps/*.json — shipped specs resolve clean', () => {
   it('no map has kit pieces interpenetrating', () => {
     const bad: string[] = [];
     for (const f of files) {
-      const spec = resolveMapSpec(parseMapSpecJson(readFileSync(join(MAPS, f), 'utf8')));
+      const spec = resolveMapSpec(readSpecFile(f));
       for (const o of findStructureOverlaps(spec.structures)) {
         const a = spec.structures![o.a]!, b = spec.structures![o.b]!;
-        if (a.kind !== 'kit' || b.kind !== 'kit') continue;
+        if (a.kind !== 'kit' || b.kind !== 'kit') {continue;}
+        // Deck panels and piers are the arena's floor/support grid — a
+        // building on the deck and a column under a stand legitimately
+        // share volume with them.
+        if (a.piece === 'arenapanel' || b.piece === 'arenapanel' ||
+            a.piece === 'arenapier' || b.piece === 'arenapier') {continue;}
         bad.push(`${f}: ${a.piece}@(${a.pos.x.toFixed(0)},${a.pos.z.toFixed(0)}) × ${b.piece}@(${b.pos.x.toFixed(0)},${b.pos.z.toFixed(0)}) ${o.x.toFixed(1)}x${o.y.toFixed(1)}x${o.z.toFixed(1)}`);
       }
     }
@@ -69,21 +83,21 @@ describe('maps/*.json — shipped specs resolve clean', () => {
   it('no kit piece floats above terrain', () => {
     const bad: string[] = [];
     for (const f of files) {
-      const spec = resolveMapSpec(parseMapSpecJson(readFileSync(join(MAPS, f), 'utf8')));
-      if (!spec.terrain || !spec.structures) continue;
-      const field = hmParseBin(new Uint8Array(readFileSync(join(MAPS, spec.terrain))), spec.heightScale ?? 1);
+      const spec = resolveMapSpec(readSpecFile(f));
+      if (!spec.terrain || !spec.structures) {continue;}
+      const field = hmParseBin(new Uint8Array(readFileSync(join(MAPS, spec.terrain))), spec.heightScale ?? 1, spec.tileSize);
       const structs = spec.structures.map(s => ({ ...s, pos: { ...s.pos } }));
       seatKits(structs, (x, z) => hmHeight(field, x, z));
       for (const s of structs) {
-        if (s.kind !== 'kit') continue;
+        if (s.kind !== 'kit') {continue;}
         const hulls = KIT_HULLS[s.piece ?? ''];
-        if (!hulls) continue;
+        if (!hulls) {continue;}
         const k = s.scale ?? 1;
         const cos = Math.cos(s.rotY ?? 0), sin = Math.sin(s.rotY ?? 0);
         let worst = 0, wx = 0, wz = 0;
         for (const h of hulls) {
           const bottomLocal = h.pos.y - h.size.y / 2;
-          if (bottomLocal > 0.6) continue; // roofs/decks are elevated by design
+          if (bottomLocal > 0.6) {continue;} // roofs/decks are elevated by design
           const lx = h.pos.x * k, lz = h.pos.z * k;
           const hx = s.pos.x + lx * cos + lz * sin;
           const hz = s.pos.z - lx * sin + lz * cos;
