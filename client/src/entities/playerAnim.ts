@@ -56,6 +56,16 @@ export class PlayerAnim {
    *  callers skip the reverse-playback/strafe-lean fallbacks then. */
   dirClipActive = false;
   currentClipName: string | null = null;
+  /** Clip handoff moment — fades.ts ramps for ~0.2s, but the freed
+   *  binding's restore-to-bind can still pose bones on the frame after.
+   *  The model-offset canary reads posed bounds, so a mid-handoff sample
+   *  (corpse pose bleeding into idle) flags as a sink that isn't real. */
+  private clipSetAt = 0;
+  /** True while a crossfade is live or a clip swap is still settling —
+   *  anything that measures posed geometry should skip this window. */
+  get transitioning(): boolean {
+    return this.fades.size > 0 || performance.now() - this.clipSetAt < 400;
+  }
   playingUAL = false;
 
   constructor(private host: PlayerAnimHost) {}
@@ -282,6 +292,7 @@ else if (t.name.endsWith('.scale')) {cap = 1e3;}
     // guard's lifeline: forceAnimationState re-entering a stopped action
     // must actually restart it or the model stays T-posed forever.
     if (action === this.currentAction && action.isRunning() && !ONESHOT_CLIPS.has(name) && startPhase <= 0) {
+      this.clipSetAt = performance.now();
       this.currentClipName = name;
       this.playingUAL = name.startsWith('UAL_');
       return;
@@ -335,6 +346,7 @@ else if (t.name.endsWith('.scale')) {cap = 1e3;}
 
     action.play();
     this.currentAction = action;
+    this.clipSetAt = performance.now();
     this.currentClipName = name;
     this.playingUAL = name.startsWith('UAL_');
   }

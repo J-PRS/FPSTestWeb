@@ -54,7 +54,7 @@ const LASH_PAIRS = 8; // max simultaneously snared bodies painted
 // One tentacle = two fat tapered segments with a writhing mid-bend.
 // Thick at the knot (0.34r), thin at the victim — reads as a lashing
 // arm, not a hair-thin line.
-const _lashGeo = new THREE.CylinderGeometry(0.10, 0.34, 1, 7);
+const _lashGeo = new THREE.CylinderGeometry(0.1, 0.34, 1, 7);
 _lashGeo.translate(0, 0.5, 0);
 const _lashMat = new THREE.MeshLambertMaterial({ color: 0x14_0E_18 });
 export const DEPLOY_DEFS: { kind: DeployKind; label: string; max: number }[] =
@@ -149,7 +149,15 @@ export interface DeployOwner {
   addEnergy(n: number): void;
 }
 
-type Foe = { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean; playerId?: string };
+type Foe = { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean; playerId?: string;
+  /** Bot's move controller — the watersphere dome + tether stamp on it. */
+  move?: {
+    setWaterDome(d?: { x: number; y: number; z: number; r: number }): void;
+    setTether(t?: { x: number; y: number; z: number; r: number }): void;
+    readonly tetherSlowNow: number;
+  };
+  /** Jet-tank access — the tether's break-free zap. */
+  drain?: (n: number) => void };
 
 export interface DeployDeps extends GameContext {
   scene: THREE.Scene;    // scene exists before deployables is constructed
@@ -828,6 +836,8 @@ export class Deployables {
     for (const i of this.items) {if (!i.dead) {i.update(dt);}}
     this.deps.lazyPlayer()?.movement.setTether(this.tetherFor());
     this.deps.lazyPlayer()?.movement.setWaterDome(this.waterDomeFor());
+    this.tickBotDomes();
+    this.tickBotSnares();
     this.updateLash(dt);
 
     for (let i = this.pods.length - 1; i >= 0; i -= 1) {
@@ -979,6 +989,75 @@ export class Deployables {
       }
     }
     return undefined;
+  }
+
+  /** Offline half of RoomDeployables.tickWatersphere — solo is the local
+   *  sim's own authority, so hostile waterspheres stamp the drag dome on
+   *  enemy bot bodies here (server shadows never see offline bots). */
+  private readonly domeBots = new Map<string, { setWaterDome(d?: { x: number; y: number; z: number; r: number }): void }>();
+  private tickBotDomes(): void {
+    const foes = this.deps.botFoes;
+    if (!foes) {
+      for (const [, mv] of this.domeBots) {mv.setWaterDome(undefined);}
+      this.domeBots.clear();
+      return;
+    }
+    const want = this.botDomesWanted(foes, DEPLOY_ITEMS.watersphere.waterRadius!);
+    for (const [id, mv] of this.domeBots) {
+      if (!want.has(id)) {mv.setWaterDome(undefined); this.domeBots.delete(id);}
+    }
+    for (const [id, w] of want) {
+      w.mv.setWaterDome(w);
+      this.domeBots.set(id, w.mv);
+    }
+  }
+
+  private botDomesWanted(foes: (team: string) => Foe[], r: number):
+      Map<string, { x: number; y: number; z: number; r: number; mv: { setWaterDome(d?: { x: number; y: number; z: number; r: number }): void } }> {
+    const want = new Map<string, { x: number; y: number; z: number; r: number; mv: { setWaterDome(d?: { x: number; y: number; z: number; r: number }): void } }>();
+    for (const i of this.items) {
+      if (i.kind !== 'watersphere' || i.dead) {continue;}
+      for (const f of foes(i.team ?? '')) {
+        if (!f.alive || !f.move || !f.playerId || f.playerId === 'local') {continue;}
+        const dx = f.pos.x - i.pos.x, dz = f.pos.z - i.pos.z;
+        if (dx * dx + dz * dz < r * r) {want.set(f.playerId, { x: i.pos.x, y: i.pos.y, z: i.pos.z, r, mv: f.move });}
+      }
+    }
+    return want;
+  }
+
+  /** Offline mirror of RoomDeployables.tickTethers — snare enemies inside
+   *  a tether ring, bleed their outward run, zap their jet tank on the
+   *  break-free (slow accumulated while held × tetherZap). */
+  private readonly snareBots = new Map<string, { mv: NonNullable<Foe['move']>; drain: NonNullable<Foe['drain']>; hold: number }>();
+  private tickBotSnares(): void {
+    const foes = this.deps.botFoes;
+    if (!foes) {
+      for (const [, s] of this.snareBots) {s.mv.setTether(undefined);}
+      this.snareBots.clear();
+      return;
+    }
+    const def = DEPLOY_ITEMS.tether;
+    const inside = new Set<string>();
+    for (const t of this.items) {
+      if (t.kind !== 'tether' || t.dead) {continue;}
+      for (const f of foes(t.team ?? '')) {
+        if (!f.alive || !f.move || !f.playerId || f.playerId === 'local') {continue;}
+        const dx = f.pos.x - t.pos.x, dz = f.pos.z - t.pos.z;
+        if (dx * dx + dz * dz >= def.tetherRadius! * def.tetherRadius!) {continue;}
+        inside.add(f.playerId);
+        const s = this.snareBots.get(f.playerId)
+          ?? this.snareBots.set(f.playerId, { mv: f.move, drain: f.drain ?? ((): void => {}), hold: 0 }).get(f.playerId)!;
+        s.mv.setTether({ x: t.pos.x, y: t.pos.y, z: t.pos.z, r: def.tetherRadius! });
+        s.hold = Math.max(s.hold, s.mv.tetherSlowNow);
+      }
+    }
+    for (const [id, s] of this.snareBots) {
+      if (inside.has(id)) {continue;}
+      s.mv.setTether(undefined);
+      this.snareBots.delete(id);
+      if (s.hold > 0) {s.drain(def.tetherZap! * s.hold);}
+    }
   }
 
   // --- Targeting beacon aim reticle -----------------------------------------

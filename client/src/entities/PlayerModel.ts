@@ -667,7 +667,10 @@ export class PlayerModel {
       // ~0.8m back, Death slides the corpse, Pistol_Shoot's draw drops the
       // scout ~1.6m. That motion is the clip, not a float bug — gate on
       // clip membership, not state (a 'shoot' state's clip is a oneshot).
-      if (!ONESHOT_CLIPS.has(this.anim.currentClipName ?? '') && Math.abs(off) > 0.6) {
+      // Crossfades get the same pass: the outgoing clip still holds weight
+      // while the incoming name is already current (death→idle sweeps the
+      // corpse pose under the feet for a few frames = phantom -1m sink).
+      if (!this.anim.transitioning && !ONESHOT_CLIPS.has(this.anim.currentClipName ?? '') && Math.abs(off) > 0.6) {
         glitch('model-offset', { variant: this.variant, clip: this.anim.currentClipName ?? '?',
           state: this.anim.currentState, rise: Math.round(off * 10) / 10 });
       }

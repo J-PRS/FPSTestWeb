@@ -73,7 +73,7 @@ export interface EntitiesDeps extends GameContext {
 
   /** Hostiles of a given team — a bot-owned turret/mine scans these. */
 
-  deployBotFoes?: (team: string) => { playerId?: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[];
+  deployBotFoes?: (team: string) => import('./bots/botSenses.js').BotEntry[];
 
   deployDamageBot?: (playerId: string, dmg: number, fromPos: THREE.Vector3) => boolean;
 

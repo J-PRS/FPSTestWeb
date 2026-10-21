@@ -84,6 +84,9 @@ export class MovementController {
   /** Tether snare the body stands in — the frame sets it from the live
    *  deployable roster, mirroring the server's per-tick copy. */
   setTether(tether?: { x: number; y: number; z: number; r: number }): void { this.sim.tether = tether; }
+  /** How hard the tether held this body on its last step — the offline
+   *  mirror of RoomMoveSim.tetherSlowOf (drives the break-free zap). */
+  get tetherSlowNow(): number { return this.sim.tetherSlowNow; }
   /** Watersphere pocket the body wades in — mirrors the server's
    *  per-tick setWaterDome so prediction bleeds the same sea drag. */
   setWaterDome(dome?: { x: number; y: number; z: number; r: number }): void { this.sim.waterDome = dome; }

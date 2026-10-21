@@ -15,7 +15,7 @@ import { CtfBridge } from './botCtf.js';
 import { RabbitBridge } from './botRabbit.js';
 import { FlagRunBridge } from '../flagRun.js';
 import * as sfx from '../../core/sfx.js';
-import { BotSenses } from './botSenses.js';
+import { BotSenses, type BotEntry } from './botSenses.js';
 import { BotFire } from './botFire.js';
 import { respawnBotF, hitF, hurtLocal, botKilledF, botSay, botSayDrain } from './botKill.js';
 import { chatter, chatKindFor, vgsCommandFor, radioAimFor, type ChatterKind } from '../../../../shared/botTaunts.js';
@@ -759,7 +759,7 @@ bn += 1;
 
   /** Players hostile to a GIVEN team — bot-owned turrets/mines scan
    *  these: enemy bots AND the local player on the other side. */
-  enemyBotsForTeam(team: string): { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[] {
+  enemyBotsForTeam(team: string): BotEntry[] {
     return this.senses.enemyBotsForTeam(team);
   }
 

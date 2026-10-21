@@ -34,7 +34,16 @@ export interface SenseHost {
 
 export type FoeEntry = { id: string; pos: THREE.Vector3; alive: boolean };
 export type EnemyEntry = { id: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean; aimY?: number; hpFrac?: number; held?: number };
-type BotEntry = { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean };
+export type BotEntry = { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean;
+  /** The bot's shared-move controller — the watersphere/tether scans need
+   *  it to stamp the drag on real bot bodies (pos alone can't slow them). */
+  move?: {
+    setWaterDome(d?: { x: number; y: number; z: number; r: number }): void;
+    setTether(t?: { x: number; y: number; z: number; r: number }): void;
+    readonly tetherSlowNow: number;
+  };
+  /** Jet-energy access — breaking a tether zaps the tank. */
+  drain?: (n: number) => void };
 
 // Scratch BrainCtx for losClear — fields it doesn't read stay unset.
 const _losCtx: BrainCtx = { pos: { x: 0, y: 0, z: 0 }, enemies: [], groundY: (): number => 0, now: 0 };
@@ -76,7 +85,7 @@ export class BotSenses {
     for (const b of this.host.bots) {
       if (b.isDead || b.team === myTeam) {continue;}
       const e = this.nextFoe(((n += 1) - 1));
-      e.playerId = b.playerId; e.pos = b.pos; e.vel = b.vel; e.alive = true;
+      e.playerId = b.playerId; e.pos = b.pos; e.vel = b.vel; e.alive = true; e.move = b.movement; e.drain = (amt): void => b.addEnergy(-amt);
     }
     this._foeOut.length = n;
     return this._foeOut;
@@ -96,7 +105,7 @@ export class BotSenses {
     for (const b of this.host.bots) {
       if (b.team === team) {continue;}
       const e = this.nextFoe(((n += 1) - 1));
-      e.playerId = b.playerId; e.pos = b.pos; e.vel = b.vel;
+      e.playerId = b.playerId; e.pos = b.pos; e.vel = b.vel; e.move = b.movement; e.drain = (amt): void => b.addEnergy(-amt);
       e.alive = !b.isDead && (!b.isCloakHidden || b.ghostT > 0);
     }
     this._foeOut.length = n;

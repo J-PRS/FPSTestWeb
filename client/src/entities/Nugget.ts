@@ -88,9 +88,12 @@ export class Nugget {
   vel: THREE.Vector3;
   /** Display-only position: for serverOwned nuggets the sim pos only
    *  advances in 50ms parity cells, so painting it raw staircases at
-   *  ~20Hz while falling. renderPos adds the leftover sub-cell fraction
-   *  (vel × tumbleAcc) — visuals smooth, physics stays on the grid. */
+   *  ~20Hz while falling. renderPos lerps between the last two grid
+   *  states by the leftover accumulator fraction — the standard
+   *  fixed-timestep render interpolation (bounded: no overshoot through
+   *  terrain the way an extrapolation could clip mid-cell clamps). */
   private readonly renderPos = new THREE.Vector3();
+  private readonly prevPos = new THREE.Vector3();
   collected = false; // pickup radius reached
   collectNotified = false; // set by caller once pickup effects/score are applied
   dead = false;      // fully finished — safe to remove + dispose
@@ -135,6 +138,7 @@ export class Nugget {
     this.emitColor = this.baseColor.clone().lerp(new THREE.Color(0xFF_FF_FF), 0.33);
     this.pos = pos.clone();
     this.renderPos.copy(this.pos);
+    this.prevPos.copy(this.pos);
     this.vel = inheritVel.clone();
     // Small random spread so multi-nugget drops scatter naturally
     this.vel.x += (Math.random() - 0.5) * 4;
@@ -217,7 +221,7 @@ export class Nugget {
     if (!this.serverOwned) {this.pos.addScaledVector(this.vel, dt);}
     this.renderPos.copy(this.pos);
     if (this.serverOwned && !this.settled) {
-      this.renderPos.addScaledVector(this.vel, this.tumbleAcc);
+      this.renderPos.lerpVectors(this.prevPos, this.pos, Math.min(1, this.tumbleAcc / 0.05));
     }
     this.updateVisuals(dt);
     this.emitTrail(dt);
@@ -328,6 +332,7 @@ export class Nugget {
       this.tumbleAcc -= 0.05;
       const step = 0.05;
       const bleed = Math.max(0, 1 - NUG_TUMBLE.friction * step);
+      this.prevPos.copy(this.pos);
       this.pos.addScaledVector(this.vel, step);
       this.vel.y += GRAVITY * step;
       // Same chord the server's tumble uses — getHeight is the fixed 5m
