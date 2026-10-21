@@ -42,9 +42,10 @@ export class NetBot {
   private holdFireUntil = 0;
   private rand: () => number;
 
-  constructor(private nc: NetClient, opts: { hopEveryMs?: number; dropEveryMs?: number; seed?: () => number; loadout?: BotLoadout; capper?: boolean } = {}) {
+  constructor(private nc: NetClient, opts: { hopEveryMs?: number; dropEveryMs?: number; seed?: () => number; loadout?: BotLoadout; capper?: boolean; skier?: boolean } = {}) {
     if (opts.loadout) {this.loadout = opts.loadout;}
     this.forceCapper = Boolean(opts.capper);
+    this.forceSkier = Boolean(opts.skier);
     this.brain = new BotBrain({ x: 0, y: 60, z: 0 });
     this.rand = opts.seed ?? Math.random;
     // Blast shoves hit the server shadow via applyImpulse — the local
@@ -174,6 +175,11 @@ export class NetBot {
   /** Harness pin: guarantees a runner exists for flag-lane coverage
    *  where squad fill might never assign one. */
   private forceCapper = false;
+  /** Skier probe bot: fixed heading, full forward + jet, no strafe or
+   *  think-steering — a straight-line fast mover to prove remote
+   *  interpolation is smooth when the input stream isn't jerky. */
+  private forceSkier = false;
+  private skiDest: { x: number; y: number; z: number } | null = null;
 
   private squadRole(): BotRole {
     if (this.forceCapper) {return 'capper';}
@@ -301,6 +307,17 @@ export class NetBot {
           && !(d < 45 && out.dest.y < nc.self.pos.y + 4)),
       jump: Boolean(out.move?.jump),
     };
+    if (this.forceSkier) {
+      // Long straight fast legs: pick a far anchor, ski to it, pick
+      // another on arrival — minimal turns, full throttle.
+      if (!this.skiDest || Math.hypot(this.skiDest.x - nc.self.pos.x, this.skiDest.z - nc.self.pos.z) < 30) {
+        const a = this.rand() * Math.PI * 2;
+        this.skiDest = { x: nc.self.pos.x + Math.cos(a) * 400, y: nc.self.pos.y, z: nc.self.pos.z + Math.sin(a) * 400 };
+        this.targetYaw = Math.atan2(this.skiDest.x - nc.self.pos.x, this.skiDest.z - nc.self.pos.z);
+      }
+      this.wantMove = { yaw: this.wantMove.yaw, forward: 1, right: 0, jet: true, jump: false };
+      return;
+    }
     if (!nc.surface) {
       if (d > 0.5) {
         const step = Math.min(CRUISE * THINK_S, d);

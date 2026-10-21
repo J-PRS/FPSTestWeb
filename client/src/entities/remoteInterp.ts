@@ -67,6 +67,12 @@ export class RemoteInterp {
   constructor(private h: InterpHost) {}
 
   get simulating(): boolean { return this._simulating; }
+  /** The sim's own velocity — identical to h.velocity during sim, but
+   *  readable even if another system overwrites the host field. */
+  get simVelocity(): THREE.Vector3 { return this.simulatedVelocity; }
+  /** Converge window active — distinguishes steering episodes from raw
+   *  dead reckoning in diagnostics. */
+  get converging(): boolean { return this.convergeTimer > 0; }
   get lastUpdate(): number { return this.lastUpdateTime; }
   /** Last raw server position — wire truth, untouched by blend/DR.
    *  Diagnostics that mean "the server sank this body" must read this,
@@ -98,7 +104,11 @@ export class RemoteInterp {
     // the DR→converge→interp hand-off seam. Inside the prediction window
     // the server hasn't reflected the knockback yet — free-run continues.
     if (this._simulating && this.convergeTimer <= 0 && this.predictionTimer <= 0) {
-      this.convergeTimer = 0.45;
+      const drift = Math.hypot(
+        targetPosition.x - this.h.position.x,
+        targetPosition.y - this.h.position.y,
+        targetPosition.z - this.h.position.z);
+      this.convergeTimer = this.convergeBudget(drift);
       logger.debug(`RESUMED updates, converging to server position`, { playerId: this.h.playerId });
     }
 
@@ -335,9 +345,15 @@ export class RemoteInterp {
       this.h.previousPosition.copy(p);
       return;
     }
+    // Seam rejoin: the steering sim chases the gap, its window sized to
+    // the physics (convergeBudget) — a flat 0.35s expired mid-chase on
+    // fast remotes and interp re-armed it every frame, so the body lived
+    // in permanent converge churn. Position-space damping was tried and
+    // rejected: any per-frame cap slow enough to be invisible can't
+    // catch a 40m/s target at all.
     if (this.lastUpdateTime > 0 && !freshSeed && gap > stepBudget) {
       this._simulating = true;
-      this.convergeTimer = Math.max(this.convergeTimer, 0.35);
+      this.convergeTimer = Math.max(this.convergeTimer, this.convergeBudget(gap));
       this.convergeStep(dt);
       return;
     }
@@ -365,6 +381,18 @@ export class RemoteInterp {
       this.h.velocity.y = (p.y - this.h.previousPosition.y) / dt;
       this.h.velocity.z = (p.z - this.h.previousPosition.z) / dt;
     }
+  }
+
+  /** How long a converge needs to actually close `gap`: ACCEL_CAP-bound
+   *  ramp to the chase velocity plus the steering horizon. A flat 0.35s
+   *  expires mid-chase on a fast remote — interp re-arms converge on the
+   *  next frame and the body lives in perpetual micro-steer churn
+   *  (visible wobble, never settled). ~1.4s ceiling keeps a lost replica
+   *  honest — bigger failures take the >40m snap path. */
+  private convergeBudget(gap: number): number {
+    const horizon = Math.min(0.6, Math.max(0.18, gap * 0.04));
+    const chaseVel = gap / horizon + this.h.serverVelocity.length();
+    return Math.min(1.4, chaseVel / 80 + horizon);
   }
 
   /** Steering convergence — the fake-input answer to a drifted remote:

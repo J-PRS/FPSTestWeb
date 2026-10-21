@@ -29,6 +29,7 @@ const c = await launchClient(stack.clientUrl(`&room=${ROOM}&mode=ffa&net=wt`));
 // room's contention; the headed client still probes wt on loopback.
 const BOT_URL = process.env.BOT_URL ?? `ws://127.0.0.1:${stack.serverPort}/ws`;
 const WAN = BOT_URL.startsWith('wss://');
+const SKIERS = Number(process.env.BOT_SKIERS ?? '1');
 const tag = Date.now().toString(36);
 const netbots: { nc: NetClient; bot: NetBot }[] = [];
 for (let i = 0; i < NBOTS; i++) {
@@ -36,7 +37,10 @@ for (let i = 0; i < NBOTS; i++) {
   const nc = new NetClient(BOT_URL, `wtmix${tag}_${i}`,
     new LatencyLink({ pingMs: WAN ? 0 : 40 + i * 15, jitterMs: WAN ? 0 : 30, lossRate: WAN ? 0 : 0.005 }),
     { room: ROOM, mode: 'ffa', armorClass: botClassForLoadout(lo) });
-  netbots.push({ nc, bot: new NetBot(nc, { loadout: lo }) });
+  // BOT_SKIERS=N (default 1): the first N bots run straight-line ski
+  // legs — the smooth-motion probe. Straight-line movement is the case
+  // interpolation must nail; if ITS rendered path jerks, that's artifact.
+  netbots.push({ nc, bot: new NetBot(nc, { loadout: lo, skier: i < SKIERS }) });
 }
 for (const b of netbots) { await b.nc.connect(); await new Promise((r) => setTimeout(r, 80)); }
 for (const b of netbots) b.bot.start();
@@ -56,7 +60,7 @@ try {
   // position; a step >2.5× that remote's median step counts as a visible
   // pop. Chop = pops/second, not missing snapshots.
   await c.test(`(() => {
-    const j = window.__jerk = { prev: new Map(), steps: new Map() };
+    const j = window.__jerk = { prev: new Map(), prevWire: new Map(), steps: new Map() };
     j.timer = setInterval(() => {
       const now = Date.now();
       j.frames = (j.frames ?? 0) + 1;
@@ -74,6 +78,12 @@ try {
           if (s) { s.modelMax = Math.max(s.modelMax ?? 0, md); }
         }
         const pr = j.prev.get(id);
+        const wp = rp.wirePosition;
+        const pw = j.prevWire.get(id);
+        let wireStep = -1;
+        if (pw && wp) {
+          wireStep = Math.hypot(wp.x - pw.x, wp.y - pw.y, wp.z - pw.z);
+        }
         if (pr) {
           const d = Math.hypot(p.x - pr.x, p.y - pr.y, p.z - pr.z);
           const dt = now - pr.t;
@@ -87,18 +97,23 @@ try {
             // During dead reckoning the sim velocity is truth — the last
             // wire velocity is stale and would undercount real speed.
             const v = rp.isSimulating ? rp.velocity : (rp.serverVelocity ?? rp.velocity);
+            const sv = rp.interpSimVel;
             const exp = v ? Math.hypot(v.x, v.y, v.z) * (dt / 1000) : 0;
             const jerk = d - exp;
             if (jerk > 1.2) { s.jerk.push(jerk); }
             if (jerk > 1.2 && s.popCtx.length < 8) {
               s.popCtx.push({ d: +d.toFixed(2), exp: +exp.toFixed(2), dt,
-                dy: +(p.y - pr.y).toFixed(2),
-                sim: !!rp.isSimulating, cap: !!rp.interpAtCap,
+                dy: +(p.y - pr.y).toFixed(2), wire: +wireStep.toFixed(2),
+                werr: wp ? +Math.hypot(p.x - wp.x, p.y - wp.y, p.z - wp.z).toFixed(2) : -1,
+                svl: sv ? +Math.hypot(sv.x, sv.y, sv.z).toFixed(1) : -1,
+                sim: !!rp.isSimulating, cvg: !!rp.interpConverging,
+                cap: !!rp.interpAtCap,
                 und: rp.interpUnderruns, delay: Math.round(rp.renderDelayMs) });
             }
           }
         }
         j.prev.set(id, { x: p.x, y: p.y, z: p.z, t: now });
+        if (wp) {j.prevWire.set(id, { x: wp.x, y: wp.y, z: wp.z });}
       }
     }, 50);
     return true;

@@ -81,6 +81,8 @@ export class RemotePlayer {
   get interpUnderruns(): number { return this.interp.underruns; }
   get interpExtCapMs(): number { return this.interp.extCapMs; }
   get interpAtCap(): boolean { return this.interp.atCap; }
+  get interpSimVel(): THREE.Vector3 { return this.interp.simVelocity; }
+  get interpConverging(): boolean { return this.interp.converging; }
   /** Local authority (GameBot): position is written directly each frame,
    *  so the snapshot interp / dead-reckoning path would fight it — tick
    *  short-circuits to model+gizmo upkeep only. */
