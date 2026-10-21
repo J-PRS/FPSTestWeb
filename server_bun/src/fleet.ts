@@ -36,6 +36,7 @@ interface LobbyRow {
   mode?: string;
   map?: string;
   players?: number;
+  humans?: number;
   maxPlayers?: number;
 }
 
@@ -134,19 +135,29 @@ Bun.serve({
       dir.sweep(now);
       // Quick-join shape (the worker's /join answers this standalone):
       // pick the emptiest matching room fleet-wide, else mint a name.
-      if (url.searchParams.has('mode') || url.searchParams.has('map')) {
+      // humans=1 (the client's /quickjoin) flips the pick to the busiest
+      // room with humans in it — a live match, not the emptiest seat.
+      const preferHumans = url.searchParams.get('humans') === '1';
+      if (url.searchParams.has('mode') || url.searchParams.has('map') || preferHumans) {
         const mode = url.searchParams.get('mode') ?? '';
         const map = url.searchParams.get('map') ?? '';
         if (!/^[a-z0-9_-]{0,16}$/.test(mode) || !/^[a-z0-9_-]{0,32}$/.test(map)) {
           return corsResponse('Bad mode/map', { status: 400 });
         }
         let best: LobbyRow | undefined = undefined;
+        let bestHumans = -1;
         for (const [id, rows] of lobbyRows) {
           if (!dir.workers.get(id)?.up) {continue;}
           for (const r of rows) {
             if (map && r.map !== map) {continue;}
             if (mode && r.mode !== mode) {continue;}
             if ((r.players ?? 0) >= (r.maxPlayers ?? CONFIG.maxPlayers)) {continue;}
+            if (preferHumans) {
+              const h = r.humans ?? 0;
+              if (h === 0) {continue;}
+              if (h > bestHumans) {best = r; bestHumans = h;}
+              continue;
+            }
             if (!best || (r.players ?? 0) < (best.players ?? 0)) {best = r;}
           }
         }

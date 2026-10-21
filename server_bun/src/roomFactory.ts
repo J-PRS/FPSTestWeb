@@ -212,8 +212,9 @@ export class RoomFactory {
    *  gates must ride the mint too — joining the freshly picked name
    *  with noBalls afterwards is a no-op (first joiner defines), so a
    *  bare quickRoom would silently ignore the host's toggles. */
-  quickRoom(mode: string, map = '', bots?: number, noCreatures = false, noBalls = false): Room | null {
+  quickRoom(mode: string, map = '', bots?: number, noCreatures = false, noBalls = false, preferHumans = false): Room | null {
     let best: Room | undefined = undefined;
+    let bestHumans = -1;
     for (const room of this.host.rooms.values()) {
       // Map and mode are independent filters — a peaks-ctf room must not
       // absorb a peaks-dm quick-join just because the map matches.
@@ -225,8 +226,18 @@ export class RoomFactory {
       if (room.noBalls !== noBalls || room.noCreatures !== noCreatures) {continue;}
       if (room.playerCount() >= CONFIG.maxPlayers) {continue;}
       if (room.unlisted) {continue;}
+      // humans=1 — /quickjoin wants a live match: the busiest room with
+      // humans in it, falling back to the plain emptiest pick when every
+      // room is bots-only.
+      if (preferHumans) {
+        const h = room.players.getHumanCount();
+        if (h === 0) {continue;}
+        if (h > bestHumans) {best = room; bestHumans = h;}
+        continue;
+      }
       if (!best || room.playerCount() < best.playerCount()) {best = room;}
     }
+    if (preferHumans && bestHumans < 0) {return this.quickRoom(mode, map, bots, noCreatures, noBalls);}
     if (best) {return best;}
     const base = map || mode || 'arena';
     let n = 1;

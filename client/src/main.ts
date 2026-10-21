@@ -320,6 +320,13 @@ function wireNetworkLocal(): void {
   };
   networkManager.joinPerk = () => player.perk;
   networkManager.joinClass = (): "light" | "medium" | "heavy" => player.armorClass;
+  // Kill zone — the body dropped below the map's floor. Predicted locally
+  // so the death lands on the crossing frame; the server's shadow owns
+  // the actual kill and the respawn.
+  player.onKillZone = (): void => {
+    if (player.isDead) {return;}
+    killLocal('fell out of the arena');
+  };
 }
 
 
@@ -431,7 +438,7 @@ function makeEntities(): ReturnType<typeof createEntities> {
     onNuggetCollect: (id, kind, val): void | undefined => teamBots?.collect(id, kind, val),
     lazyCombat: () => combat,
     deployEnemyBots: (): { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean; }[] => teamBots?.enemyBotsForLocal() ?? [],
-    deployBotFoes: (team): { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean; }[] => teamBots?.enemyBotsForTeam(team) ?? [],
+    deployBotFoes: (team) => teamBots?.enemyBotsForTeam(team) ?? [],
     deployDamageBot: (id, dmg, from): boolean => teamBots?.hit(id, dmg, from, 'local') ?? false,
     // Offline base grid — a shelled generator drops its team's gate
     // panes (colliders + visuals), revive puts them back.
@@ -740,6 +747,22 @@ async function init(): Promise<void> {
   watchDeployVersion();
   networkManager = new NetworkManager();
   networkManager.armWireQueue();
+  // /quickjoin — ask the matchmaker for a seat before anything reads
+  // urlParams; the picked room lands as the canonical /s/<room> path, so
+  // the whole boot below just sees an ordinary online join. Failure
+  // leaves the path alone → normal menu boot.
+  if (window.location.pathname === '/quickjoin') {
+    try {
+      const { httpUrl } = await serverEndpoints;
+      const q = new URLSearchParams(window.location.search);
+      q.set('humans', '1');
+      const res = await fetch(`${httpUrl}/join?${q}`, { cache: 'no-cache' });
+      if (res.ok) {
+        const { room } = (await res.json()) as { room: string };
+        if (room) {history.replaceState(null, '', `/s/${encodeURIComponent(room)}${window.location.search}`);}
+      }
+    } catch { /* offline or matchmaker down — menu boot owns it */ }
+  }
   // Boot resume: a bare '/' load with a remembered room rejoins it — the
   // canonical /s/<room> path is written BEFORE anything reads urlParams,
   // so every downstream consumer (early wire, join payload, lobby) sees
@@ -868,7 +891,11 @@ async function init(): Promise<void> {
     Promise.race([firstTerrain, new Promise((r): NodeJS.Timeout => setTimeout(r, 8000))])
       // Hold the roster kick-off until frames stabilize — spawning a full
       // bot match mid-compile-hitch seeds bad sim from frame one.
-      .then(async (): Promise<void> => { await gameLoop?.whenStable(); if (!teamBots && !networkManager.isConnected() && mode) {setupOfflineMode(mode, soloSpec?.spec);} return; }).catch((): void => undefined);
+      // A ?room/?p2p link must NEVER spawn the local roster — isConnected()
+      // is transiently false through every transport reprobe, and a stall
+      // coinciding with this gate would seed offline bots into a live
+      // online room that no gameState ever retires again.
+      .then(async (): Promise<void> => { await gameLoop?.whenStable(); if (!teamBots && !networkManager.isConnected() && mode && !urlParams.room && !urlParams.p2p) {setupOfflineMode(mode, soloSpec?.spec);} return; }).catch((): void => undefined);
   }
 
   // ?yaw/?pitch/?dummy headless-screenshot hooks — see game/debugHooks.ts.
@@ -1149,11 +1176,19 @@ init().then(async (): Promise<void> => {
       player, scene, entities, world, terrain, viewModel,
       networkManager, demoManager, rendererSetup, demoLifecycle,
       chatSink: (await import('./game/chat.js')).chatSink,
+      parity: (await import('./game/parity.js')).parityProbes,
     };
     // .rec captures (gauntlet --record / pvptest record.ts) replay through
     // the live dispatch as gameplay: __playRec('/hunt.rec', 1.5)
     window.__playRec = async (src, speed): Promise<() => void> =>
       (await import('./dev/recPlayer.js')).playRec(networkManager, src, speed);
+    // ?autopilot — the shared BotBrain steers the local player through the
+    // real input fields, so a soak window plays itself. Same inputs a
+    // human holds — prediction + wire intents are unchanged.
+    if (urlParams.has('autopilot')) {
+      const { startBotPilot } = await import('./dev/botPilot.js');
+      window.__botpilot = { stop: startBotPilot({ player, networkManager, world, terrain, entities }) };
+    }
   };
   // Debug wiring (window.__test, __playRec, stateDebug) — dev hosts only.
   if (isDevHost() && (import.meta.env.DEV || urlParams.debug)) {await wireDebugTools();}

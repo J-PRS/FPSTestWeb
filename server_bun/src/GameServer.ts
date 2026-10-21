@@ -163,8 +163,8 @@ export class GameServer {
     return this.journal.stats();
   }
 
-  quickRoom(mode: string, map = '', bots?: number, noCreatures = false, noBalls = false): Room | null {
-    return this.factory.quickRoom(mode, map, bots, noCreatures, noBalls);
+  quickRoom(mode: string, map = '', bots?: number, noCreatures = false, noBalls = false, preferHumans = false): Room | null {
+    return this.factory.quickRoom(mode, map, bots, noCreatures, noBalls, preferHumans);
   }
 
   /** Route guard: does maps/<name>.json resolve? The catalog negative-
@@ -334,6 +334,7 @@ export class GameServer {
       mode: r.mode || undefined,
       map: this.maps.mapNameOf(r.name),
       players: r.playerCount(),
+      humans: r.players.getHumanCount(),
       maxPlayers: CONFIG.maxPlayers,
       spectators: r.spectators.size > 0 ? r.spectators.size : undefined,
       // Live match state so the lobby row shows more than occupancy.
