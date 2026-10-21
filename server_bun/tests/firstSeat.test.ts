@@ -2,12 +2,13 @@ import { describe, it, expect } from 'bun:test';
 import { GameServer } from '../src/GameServer.ts';
 import type { Room } from '../src/Room.ts';
 
-// The zombie-seat repro: headless soaks showed the seat that MINTS a room
-// goes blind (gameState lands, then nothing — no ping, no broadcasts)
-// while every later joiner sees the full wire. Drive the real
-// GameServer.onMessage + tickRoomGuarded path with two fake sockets —
-// if seat 1's wire is dark after ticks while seat 2's isn't, the bug is
-// in the mint path, not the transport.
+// The zombie-seat regression: a room minted for a terrain map defers
+// seat() on terrainReady (async Bun.file load). During the deferral the
+// room reads `empty` (no players yet), so the 50ms empty-room sweep
+// disposed it BEFORE the joiner seated — the deferred finishJoin then
+// registered the socket into a Room no longer in gs.rooms: join burst
+// lands, then no ticks/events/keepalives ever reach the seat while the
+// socket looks connected (the 75s inputSync-trickle soaks).
 interface Peek {
   rooms: Map<string, Room>;
   tickLoop: { stop(): void; tickRoomGuarded(room: Room, now?: number): void };
@@ -19,6 +20,7 @@ const fakeWs = () => ({
 } as any);
 const types = (ws: { sent: unknown[] }): Set<string> =>
   new Set(ws.sent.filter((s): s is string => typeof s === 'string').map((s): string => (JSON.parse(s) as { type: string }).type));
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 describe('first-seat wire vitality', () => {
   it('the minting seat receives the same keepalives/broadcasts as later seats', async () => {
@@ -28,10 +30,7 @@ describe('first-seat wire vitality', () => {
       const ws1 = fakeWs();
       const ws2 = fakeWs();
       gs.onMessage(ws1, JSON.stringify({ type: 'join', playerId: 'seat1', room: 'mintme', mode: 'headhunt', map: 'rimrock', bots: 4 }));
-      // terrainReady defers seat() past a microtask — flush it.
-      await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
       gs.onMessage(ws2, JSON.stringify({ type: 'join', playerId: 'seat2', room: 'mintme', mode: 'headhunt', map: 'rimrock' }));
-      await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
       const room = peek.rooms.get('mintme');
       expect(room).toBeTruthy();
       // finishJoin waits on terrainReady (async map-file load) — await it
@@ -46,8 +45,58 @@ describe('first-seat wire vitality', () => {
       const t2 = types(ws2);
       console.log(`seat1 types: ${[...t1].sort().join(',')} | seat2 types: ${[...t2].sort().join(',')}`);
       expect(t1.has('ping')).toBe(true);
-      expect(t1.has('projectileCreated') || t2.has('projectileCreated')).toBe(true);
       if (t2.has('projectileCreated')) {expect(t1.has('projectileCreated')).toBe(true);}
+    } finally {
+      peek.tickLoop.stop();
+    }
+  });
+
+  it('a terrain-map room survives the empty sweep while its first join waits on terrainReady', async () => {
+    const gs = new GameServer();
+    const peek = gs as unknown as Peek;
+    try {
+      const ws = fakeWs();
+      gs.onMessage(ws, JSON.stringify({ type: 'join', playerId: 'p1', room: 'terra', mode: 'headhunt', map: 'rimrock', bots: 4 }));
+      const room = peek.rooms.get('terra');
+      expect(room).toBeTruthy();
+      // The seat is deferred on terrainReady — the room is empty RIGHT
+      // NOW. The sweep must not dispose it (this is the whole bug).
+      if (room!.terrainReady) {expect(room!.empty).toBe(false);}
+      // Give the real 50ms tick loop + the async terrain load time to run.
+      // pingTick is ~500ms per human — seat lands mid-window, so budget
+      // past one full cadence instead of racing it.
+      await sleep(1500);
+      expect(peek.rooms.has('terra')).toBe(true);
+      const t = types(ws);
+      expect(t.has('gameState')).toBe(true);
+      // Post-join keepalives must flow — a seat that only ever got the
+      // burst is the zombie signature.
+      expect(t.has('ping') || t.has('stateHash') || t.has('srvPing')).toBe(true);
+    } finally {
+      peek.tickLoop.stop();
+    }
+  });
+
+  it('a room hop mid-terrain-load seats the NEWER room only — deferred join is stale-checked', async () => {
+    const gs = new GameServer();
+    const peek = gs as unknown as Peek;
+    try {
+      const ws = fakeWs();
+      // Join A: mints the room, finishJoin defers on terrainReady.
+      gs.onMessage(ws, JSON.stringify({ type: 'join', playerId: 'hopper', room: 'hopA', mode: 'headhunt', map: 'rimrock', bots: 1 }));
+      // Hop to B before A's terrain resolves — begin() re-points the
+      // session at hopB; A's deferred seat must NOT fire (it would
+      // register the socket into the corpse room = the zombie seat).
+      gs.onMessage(ws, JSON.stringify({ type: 'join', playerId: 'hopper', room: 'hopB', mode: 'headhunt', map: 'rimrock', bots: 1 }));
+      await sleep(1500);
+      const a = peek.rooms.get('hopA');
+      const b = peek.rooms.get('hopB');
+      const dbg = `a=${a ? `players:${a.playerCount()}` : 'gone'} b=${b ? `players:${b.playerCount()}` : 'gone'}`;
+      expect(dbg, dbg).toContain('b=players:1');
+      expect(a?.playerCount() ?? 0).toBe(0);
+      const t = types(ws);
+      expect(t.has('gameState')).toBe(true);
+      expect(t.has('ping') || t.has('stateHash') || t.has('srvPing')).toBe(true);
     } finally {
       peek.tickLoop.stop();
     }

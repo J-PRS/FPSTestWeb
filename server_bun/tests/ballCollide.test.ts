@@ -59,7 +59,7 @@ describe('collideStructures — push-out + elastic reflect', () => {
     const b = ball(0, REST_Y - 0.1, 0, 8, 0, 0);
     expect(collideStructures(b, cols)).toBe(true);
     expect(b.y).toBeCloseTo(REST_Y, 9);
-    expect(b.vx).toBe(8); // dot >= 0 → no reflection
+    expect(b.vx).toBe(8); // dot >= 0 → no reflection, tangential untouched (balls are perfectly bouncy)
   });
 
   it('a center inside the box exits along the least-penetration axis', () => {

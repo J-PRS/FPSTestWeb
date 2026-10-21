@@ -13,7 +13,11 @@ export function wireDeployables(ctx: NetCtx): void {
 
   networkManager.onDeploySpawn = (id, owner, kind, pos, team): void => {
     deps.lazyDemoManager?.()?.recordDeploySpawned(id, kind, pos);
-    if (owner === localId()) { mgr().ackLocal(id); return; } // pod path already rendered it
+    // Own plant: the pod path already rendered it — ackLocal stamps the
+    // serverId. When no live pod exists (a dead-lane intent replayed
+    // post-reclaim, or a claim sent without the pod path) fall back to
+    // a remote replica or the item is a ghost the server thinks we see.
+    if (owner === localId() && mgr().ackLocal(id)) {return;}
     mgr().remoteSpawn(id, { owner, kind, pos, team });
     // The pod lands at release — swing the owner's model so the deploy
     // reads as a throw, not a teleporting object.
@@ -84,8 +88,11 @@ export function reconcileDeployables(ctx: NetCtx, roster: { id: number; owner: s
       // trick the creature roster lane uses.
       ctx.deps.lazyDemoManager?.()?.recordDeploySpawned(d.id, d.kind, d.pos);
       // Our own plants already exist as local items keyed by serverId —
-      // the roster only carries their hp, not a second visual.
+      // the roster only carries their hp, not a second visual. When the
+      // local plant is MISSING (replayed intent never had a pod) the
+      // roster's copy must spawn a replica or the item is invisible.
       if (d.owner === localId) {
+        if (!mgr.remoteReplicas().has(d.id)) {mgr.remoteSpawn(d.id, { owner: d.owner, kind: d.kind, pos: d.pos, hp: d.hp, armor: d.armor, team: d.team });}
         if (d.hp !== undefined) {mgr.applyDeployHp(d.id, d.hp, d.armor ?? 0);}
         return undefined;
       }

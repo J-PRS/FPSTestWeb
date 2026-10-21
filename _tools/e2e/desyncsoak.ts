@@ -40,6 +40,18 @@ try {
 
   check(desync.length === 0, `no DESYNC warns (${desync.length} in ${SECS}s)`);
   for (const line of desync.slice(0, 10)) console.log(`    ${line}`);
+
+  // A dead seat passes "no DESYNC warns" vacuously — the wire went silent
+  // so nothing could ever disagree (seen live: WT reset + ws refused for
+  // 30+s inside a "PASS"). Assert the lane was actually alive at the end:
+  // connected, tick seq advancing, keepalives landing.
+  const end = await client.test<{ conn: boolean; seq: number; ping: number }>(
+    `((w) => ({ conn: t.networkManager.isConnected(), seq: w.lastTickSeq,
+        ping: t.parity.msgSeen.ping ?? 0 }))(t.networkManager['wireIn'])`);
+  check(end.conn, 'still connected at soak end');
+  check(end.seq > 0, `tick stream live (seq=${end.seq})`);
+  check(end.ping >= Math.max(5, Math.floor(SECS / 10) - 4),
+    `keepalives landed (ping=${end.ping} over ${SECS}s)`);
 } finally {
   await closeClient(client);
   stack.down();

@@ -192,8 +192,11 @@ export class SessionManager {
 
     // Claimed identity: a taken name needs its HMAC token, or the claimer
     // and the claimant get rejected — no stealing by knowing the id.
+    // Same-socket re-join for the same id is self-proving (the transport
+    // endpoint was already validated) — a room hop issued before the first
+    // gameState lands has no token yet and must not eat a reject.
     const idToken = this.identityToken(playerId);
-    if (!this.claimIdentity(playerId, token, idToken)) {
+    if (ws.data.playerId !== playerId && !this.claimIdentity(playerId, token, idToken)) {
       SessionManager.rejectIdentity(ws, 'Player ID claimed');
       return;
     }
@@ -209,7 +212,11 @@ export class SessionManager {
 
     ws.data.playerId = playerId;
     room.sessionTokens.set(playerId, idToken);
-    this.d.registry.begin(playerId, room.name);
+    // A hop before the first seat is a retarget, not a re-begin — no
+    // lifecycle edge crossed, no anomaly counters to move.
+    if (!this.d.registry.retarget(playerId, room.name)) {
+      this.d.registry.begin(playerId, room.name);
+    }
     const finishJoin = (): void => {
       this.seat(ws, room, playerId, handshake, idToken, name);
       // First joiner defined this room's sim gates AND its mode/bot roster —
@@ -233,7 +240,12 @@ export class SessionManager {
     // the real surface: the buried-seat snap every first joiner paid.
     // The load is ms; defer rather than lift after the fact. A socket
     // that died in the gap doesn't seat — registering it leaves a ghost.
-    if (room.terrainReady) {void room.terrainReady.then((): void => { if (ws.readyState === 1) {finishJoin();} });}
+    // Same for a SUPERSEDED join: a room hop mid-load re-begins the
+    // session under the new room; seating this socket into the old room
+    // here would register it against the corpse — the zombie-seat race.
+    if (room.terrainReady) {void room.terrainReady.then((): void => {
+      if (ws.readyState === 1 && this.d.registry.roomOf(playerId) === room.name) {finishJoin();}
+    });}
     else {finishJoin();}
   }
 

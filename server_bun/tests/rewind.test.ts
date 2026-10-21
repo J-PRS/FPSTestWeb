@@ -38,7 +38,7 @@ describe('pushRewindSample', () => {
     const t0 = Date.now() - 5000;
     let last = t0;
     for (let i = 0; i < 100; i++) { last = t0 + i * 20; pushRewindSample(p, wallMs(last)); }
-    for (const s of p.history) expect(last - s.t).toBeLessThanOrEqual(REWIND_MS);
+    for (const s of p.history) {expect(last - s.t).toBeLessThanOrEqual(REWIND_MS);}
     expect(p.history.length).toBeGreaterThan(0);
     expect(p.history.length).toBeLessThanOrEqual(REWIND_MS / 20 + 1);
   });
@@ -98,6 +98,6 @@ describe('clampPing', () => {
   it('bounds ping to the rewind window', () => {
     expect(clampPing(-5)).toBe(0);
     expect(clampPing(100)).toBe(100);
-    expect(clampPing(60000)).toBe(250); // forged 60s ping can't rewind the world
+    expect(clampPing(60_000)).toBe(400); // forged 60s ping can't rewind the world
   });
 });

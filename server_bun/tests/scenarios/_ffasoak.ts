@@ -87,6 +87,7 @@ function run(weapons: WeaponType[], seed: number): {
   // In chaos mode, each bot starts with a random weapon and changes after every kill.
   const currentWeapon = new Map<string, WeaponType>();
   const prevKills = new Map<string, number>();
+  const lifeKillsBase = new Map<string, number>(); // p.kills at this life's start
   // Chaos draws come from the FULL pool (module `pool`), not the dealt
   // deck — `weapons` here is the 10-bot slice, so drawing from it meant
   // 9 of 19 weapons could never appear in a seed. Seeded LCG so a seed
@@ -114,17 +115,21 @@ function run(weapons: WeaponType[], seed: number): {
 
   const wOf = new Map(bots.map((b, i) => [b.id, weapons[i]!]));
 
-  // Per-weapon tracking via applyHit hook (captures all damage with weapon attribution)
+  // Per-weapon tracking via applyHit hook (captures all damage with weapon attribution).
+  // Under chaos every weapon in the pool is a possible damage source —
+  // keying on the dealt deck drops ~16 of 26 weapons' stats.
   const wStats: Map<number, { directHits: number; splashHits: number; directDmg: number; splashDmg: number; kills: number }> = new Map();
-  for (const w of weapons) { wStats.set(w, { directHits: 0, splashHits: 0, directDmg: 0, splashDmg: 0, kills: 0 }); }
+  for (const w of FFASOAK_CHAOS ? pool : weapons) { wStats.set(w, { directHits: 0, splashHits: 0, directDmg: 0, splashDmg: 0, kills: 0 }); }
 
   const {hitLedger} = (room.messages.combat as unknown as { hitLedger: HitLedger });
   const origApplyHit = hitLedger.applyHit.bind(hitLedger);
 
-  // Chaos mode tracking
+  // Chaos mode tracking — the only honest per-weapon tally in chaos: rows
+  // below label bots by `weapons[i]` (the dealt card), but chaos bots
+  // actually hold a random draw that rotates on every kill.
   const chaosAgg = new Map<number, { kills: number; deaths: number }>();
   const countedDeaths = new Set<string>();
-  for (const w of weapons) { chaosAgg.set(w, { kills: 0, deaths: 0 }); }
+  for (const w of pool) { chaosAgg.set(w, { kills: 0, deaths: 0 }); }
   hitLedger.applyHit = (c, shooterId, targetId, damage, result, opts) => {
     const src = opts.weapon;
     if (src !== undefined && wStats.has(src)) {
@@ -159,29 +164,24 @@ function run(weapons: WeaponType[], seed: number): {
         }
       } else {deadSince.delete(p.id);}
     }
-    // Chaos mode: track kills per weapon and change weapon after every kill.
+    // Chaos mode: kills/deaths credit the held weapon; the weapon only
+    // rotates ON DEATH, and only if the life earned at least one kill —
+    // a bot that dies empty-handed keeps the gun (it has to earn its
+    // way out). Per-life tenure normalizes exposure: K/D reads
+    // kills-per-life vs deaths-per-life, no fast-kill swap-out bias.
     if (FFASOAK_CHAOS) {
       for (const p of bots) {
         const pk = p.kills;
         const prev = prevKills.get(p.id) ?? 0;
         if (pk > prev) {
-          // Record kills for current weapon
           const w = currentWeapon.get(p.id);
           if (w !== undefined) {
             const a = chaosAgg.get(w) ?? { kills: 0, deaths: 0 };
             a.kills += pk - prev;
             chaosAgg.set(w, a);
           }
-          // Change weapon
-          const newW = pool[Math.floor(crand() * pool.length)]!;
-          currentWeapon.set(p.id, newW);
-          const ctl = room.bots as unknown as { loadouts: Map<string, BotLoadout>; roster: { refitClass(id: string): void } };
-          ctl.loadouts.set(p.id, { perk: 'none', near: newW, mid: newW, far: newW,
-            belt: PURE ? newW : WeaponType.Grenade, side: PURE ? newW : WeaponType.Pistol });
-          ctl.roster.refitClass(p.id);
           prevKills.set(p.id, pk);
         }
-        // Track death (once per death)
         if (p.isDead && !countedDeaths.has(p.id)) {
           countedDeaths.add(p.id);
           const w = currentWeapon.get(p.id);
@@ -190,8 +190,20 @@ function run(weapons: WeaponType[], seed: number): {
             a.deaths++;
             chaosAgg.set(w, a);
           }
+          if (pk > (lifeKillsBase.get(p.id) ?? 0)) {
+            const newW = pool[Math.floor(crand() * pool.length)]!;
+            currentWeapon.set(p.id, newW);
+            const ctl = room.bots as unknown as { loadouts: Map<string, BotLoadout>; roster: { refitClass(id: string): void } };
+            ctl.loadouts.set(p.id, { perk: 'none', near: newW, mid: newW, far: newW,
+              belt: PURE ? newW : WeaponType.Grenade, side: PURE ? newW : WeaponType.Pistol });
+            ctl.roster.refitClass(p.id);
+          }
         }
-        if (!p.isDead) { countedDeaths.delete(p.id); }
+        if (!p.isDead) {
+          // Base resets on the first alive tick after a death — setting it
+          // every alive tick would keep it equal to p.kills forever.
+          if (countedDeaths.delete(p.id)) {lifeKillsBase.set(p.id, p.kills);}
+        }
       }
     }
     if (FFASOAK_TDM) {
@@ -206,10 +218,17 @@ function run(weapons: WeaponType[], seed: number): {
   // Restore original method
   hitLedger.applyHit = origApplyHit;
 
-  const rows = room.scoring.matchPlayers()
-    .filter((p) => wOf.has(p.id))
-    .map((p) => ({ w: WeaponType[wOf.get(p.id)!]!, kills: p.kills, deaths: p.deaths }))
-    .sort((a, b) => b.kills - a.kills);
+  // Chaos: wOf labels bots by the dealt card, not the weapon they were
+  // holding — the leaderboard MUST come from chaosAgg (rotates on kill).
+  const rows = FFASOAK_CHAOS
+    ? [...chaosAgg.entries()]
+      .filter(([, s]) => s.kills > 0 || s.deaths > 0)
+      .map(([w, s]) => ({ w: WeaponType[w]!, kills: s.kills, deaths: s.deaths }))
+      .sort((a, b) => b.kills - a.kills)
+    : room.scoring.matchPlayers()
+      .filter((p) => wOf.has(p.id))
+      .map((p) => ({ w: WeaponType[wOf.get(p.id)!]!, kills: p.kills, deaths: p.deaths }))
+      .sort((a, b) => b.kills - a.kills);
 
   // Chaos mode: print per-weapon kill/death tally
   if (FFASOAK_CHAOS) {

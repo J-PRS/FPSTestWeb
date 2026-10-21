@@ -488,9 +488,11 @@ export class Deployables {
   // visuals grew past the ~900-line file ceiling); these are thin routes.
   private readonly remotes: RemoteDeployables;
 
-  /** deploySpawn echo for a plant we already rendered locally. */
-  ackLocal(id: number): void {
-    this.remotes.ackLocal(id, this.items);
+  /** deploySpawn echo for a plant we already rendered locally — false
+   *  when no live pod exists (replayed intent), caller falls back to a
+   *  remote replica so the item isn't a ghost. */
+  ackLocal(id: number): boolean {
+    return this.remotes.ackLocal(id, this.items);
   }
 
   remoteSpawn(id: number, spec: { owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; hp?: number; armor?: number; team?: string }): void {

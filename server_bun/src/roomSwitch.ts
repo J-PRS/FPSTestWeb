@@ -27,7 +27,7 @@ export interface SwitchHost {
   /** The session record rides the hop — a switch is a seat transfer,
    *  not a new connection. Without begin+seat the hopped player has no
    *  session: gen checks fail open and a later close is ignored. */
-  registry: { begin(playerId: string, room: string): void; seat(playerId: string, spectator: boolean, reason: string): number };
+  registry: { begin(playerId: string, room: string): void; seat(playerId: string, spectator: boolean, reason: string): number; roomOf(playerId: string): string | undefined; retarget(playerId: string, room: string): boolean };
 }
 
 export class RoomSwitcher {
@@ -42,6 +42,21 @@ export class RoomSwitcher {
   switchRoom(ws: ServerWebSocket<WebSocketData>, playerId: string, raw: unknown): void {
     if (this.throttled(playerId)) {return;}
 
+    // Hop FROM a still-connecting seat (first join deferred on
+    // terrainReady): no roster entry to tear down — re-point the session
+    // so the stale deferred seat dies on the roomOf check, then seat the
+    // target when its field lands.
+    if (!this.host.roomOfPlayer(playerId)) {
+      const msg = raw as { room?: string; map?: string; mode?: string; bots?: number; unlisted?: boolean; noCreatures?: boolean; noBalls?: boolean };
+      const to = this.host.roomFor(word(msg.room) ?? 'default', word(msg.mode) ?? '', word(msg.map) ?? '',
+        typeof msg.bots === 'number' && Number.isFinite(msg.bots) ? Math.max(0, Math.min(24, Math.floor(msg.bots))) : undefined,
+        msg.unlisted === true, msg.noCreatures === true, msg.noBalls === true);
+      if (!to || this.roomFull(to)) {return;}
+      this.seatOnReady(to, ws, playerId, 'none', 'medium', undefined, undefined);
+      logger.info('Pre-seat hop retargeted', { playerId, to: to.name });
+      return;
+    }
+
     const target = this.switchTarget(playerId, raw as { room?: string; map?: string; mode?: string; bots?: number; unlisted?: boolean; noCreatures?: boolean; noBalls?: boolean });
     if (!target) {return;}
     const { from, to, prev } = target;
@@ -52,7 +67,7 @@ export class RoomSwitcher {
     from.messages.onPlayerDisconnected(playerId);
     this.host.removePlayerCompletely(from, playerId, 'roomSwitch');
 
-    this.seatPlayer(to, ws, playerId, prev?.perk ?? 'none', prev?.armorClass ?? 'medium', prev?.transport, prev?.name);
+    this.seatOnReady(to, ws, playerId, prev?.perk ?? 'none', prev?.armorClass ?? 'medium', prev?.transport, prev?.name);
     // Same gate check the join path sends — a host hopping into a
     // pre-existing room with different sim toggles must hear it.
     const req = raw as { noBalls?: boolean; noCreatures?: boolean };
@@ -131,7 +146,6 @@ export class RoomSwitcher {
     // re-open it in the new room or the seat is session-less (stale gen
     // on the socket makes its later close a no-op → zombie player that
     // only idle-reap ever collects).
-    this.host.registry.begin(playerId, room.name);
     ws.data.gen = this.host.registry.seat(playerId, false, 'roomSwitch');
     this.host.playerRoom.set(playerId, room);
     room.connections.register(playerId, ws);
@@ -139,6 +153,23 @@ export class RoomSwitcher {
     // The shadow is created inside handleHandshake — arm its drain
     // window after it exists.
     room.moveSim.markReseated(playerId);
+  }
+
+  /** Seat once the room's field exists — minted terrain rooms load
+   *  async and seating before the field lands is the buried-spawn class
+   *  (same gate as SessionManager's join deferral). Intent is set first:
+   *  a second hop mid-wait, or a stale deferred join in another room,
+   *  dies on the roomOf check instead of winning a registration race. */
+  private seatOnReady(room: Room, ws: ServerWebSocket<WebSocketData>, playerId: string, perk: string, armorClass: string, transport?: TransportKind, name?: string): void {
+    if (!this.host.registry.retarget(playerId, room.name)) {
+      this.host.registry.begin(playerId, room.name);
+    }
+    const fire = (): void => this.seatPlayer(room, ws, playerId, perk, armorClass, transport, name);
+    if (room.terrainReady) {
+      void room.terrainReady.then((): void => {
+        if (ws.readyState === 1 && this.host.registry.roomOf(playerId) === room.name) {fire();}
+      });
+    } else {fire();}
   }
 
   private throttled(playerId: string): boolean {

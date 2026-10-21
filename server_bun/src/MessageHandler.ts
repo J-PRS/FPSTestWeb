@@ -285,9 +285,21 @@ export class MessageHandler {
   claimAck(id: string, kind: string, seq: number | undefined, verdict: ClaimVerdict): void {
     if (seq === undefined) {return;}
     const ok = verdict === true;
+    // Record under the in-flight dispatch key so a resent claim replay
+    // gets the ORIGINAL verdict without re-applying the effect.
+    if (this.pendingClaimKey) {this.claimVerdicts.set(this.pendingClaimKey, { ok, reason: ok ? undefined : String(verdict) });}
     if (!ok) {this.hb(`claimrej.${kind}`);}
     this.sendToPlayer(id, Object.assign({kind,seq,ok}, (ok ? {} : { reason: verdict }), {type: 'claimAck' as const}));
   }
+
+  /** (playerId:type:claimSeq) → verdict — makes every stamped claim
+   *  idempotent under replay: a socket that died mid-flight gets its
+   *  intent resent post-reclaim, and the replay must not double-apply
+   *  (double belt charge, double plant, double slam damage). Bounded —
+   *  claimSeq is monotonic per player, so oldest-first eviction keeps
+   *  the replay window covered. */
+  private claimVerdicts = new Map<string, { ok: boolean; reason?: string }>();
+  private pendingClaimKey: string | undefined;
   hbMax(key: string, v: number): void {
     const h = this.roomInfo.health;
     if (h && v > (h.get(key) ?? 0)) {h.set(key, Math.round(v * 10) / 10);}
@@ -396,7 +408,7 @@ export class MessageHandler {
 
   /** Server-simulated projectile blast (bot rockets etc.) — combat's
    *  trusted AOE path; the sim placed the pop, no cheat check needed. */
-  serverBlast(ownerId: string, pos: Vec3, weaponType: number, excludeTargetId: string | null, opts?: { shotId?: string; attribWeaponType?: number; power?: number; air?: number }): void {
+  serverBlast(ownerId: string, pos: Vec3, weaponType: number, excludeTargetId: string | null, opts?: { shotId?: string; attribWeaponType?: number; power?: number; air?: number; radiusScale?: number }): void {
     this.combat.serverBlast(ownerId, pos, weaponType, excludeTargetId, opts);
   }
 
@@ -664,7 +676,27 @@ export class MessageHandler {
       logger.warn(`Unhandled message type`, { playerId, type: (msg as { type: string }).type });
       return;
     }
-    handler(this, playerId, msg);
+    // Stamped-claim idempotency: the post-reclaim replay resends the same
+    // message verbatim — same claimSeq — so a second arrival replays the
+    // recorded verdict instead of re-applying the effect.
+    const cs = (msg as { claimSeq?: number }).claimSeq;
+    if (cs !== undefined) {
+      const key = `${playerId}:${msg.type}:${cs}`;
+      const seen = this.claimVerdicts.get(key);
+      if (seen) {
+        this.sendToPlayer(playerId, Object.assign({ kind: msg.type, seq: cs, ok: seen.ok }, (seen.ok ? {} : { reason: seen.reason }), { type: 'claimAck' as const }));
+        return;
+      }
+      this.pendingClaimKey = key;
+    }
+    try { handler(this, playerId, msg); }
+    finally { this.pendingClaimKey = undefined; }
+    // Bound the map — a player legitimately replays only the last ~3s of
+    // stamps; 4k entries is far past every player's window.
+    if (this.claimVerdicts.size > 4096) {
+      const it = this.claimVerdicts.keys();
+      for (let i = 0; i < 1024; i += 1) { this.claimVerdicts.delete(it.next().value!); }
+    }
   }
 
   // MoveClaims host surface — the room's optional moveSim hooks arrive

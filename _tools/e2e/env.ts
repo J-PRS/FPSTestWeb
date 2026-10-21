@@ -61,7 +61,9 @@ async function spawnGameServer(procs: Subprocess[], from: number): Promise<numbe
     const prof = process.env.E2E_CPU_PROF ? ['--cpu-prof', '--cpu-prof-md', '--cpu-prof-dir', `${REPO}_tools/e2e/profout`] : [];
     const proc = spawn([process.execPath, ...prof, 'src/server.ts'], {
       cwd: `${REPO}server_bun`,
-      env: { ...process.env, FPS_PORT: String(port) },
+      // Admin ops (dropsock/kick/demodump) need a token — default one so
+      // harnesses don't silently 403 when the runner forgot to export it.
+      env: { ...process.env, FPS_PORT: String(port), FPS_ADMIN_TOKEN: process.env.FPS_ADMIN_TOKEN ?? 'testadmin' },
       stdout: 'pipe', stderr: 'pipe',
     });
     procs.push(proc);
@@ -161,7 +163,9 @@ export async function upStack(opts: { clientPort?: number; serverPort?: number }
     // IPv4 probes hit the spawned server — a split-brain that hid real
     // bugs for hours.
     clientUrl: (extra = '') => `http://localhost:${clientPort}/?server=127.0.0.1:${serverPort}${extra}`,
-    serverMetrics: async () => (await fetch(`http://localhost:${serverPort}/metrics`)).json() as Promise<Record<string, unknown>>,
+    // /metrics is ops-gated — the same token the stack default-armed.
+    serverMetrics: async () => (await fetch(`http://localhost:${serverPort}/metrics`,
+      { headers: { authorization: `Bearer ${process.env.FPS_ADMIN_TOKEN ?? 'testadmin'}` } })).json() as Promise<Record<string, unknown>>,
     serverLog: () => serverLogBufs.map(b => b.log).join('\n'),
     down,
   };

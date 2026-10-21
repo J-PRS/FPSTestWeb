@@ -294,13 +294,17 @@ export class BlastRunner {
     // shared/combat.ts — same formula the client predicts with; beam ticks
     // pass a flat figure (the ramp already IS the falloff)
     const damage = directDmg ?? aoeDamage(ctx.baseDamage, dist, ctx.radius, ctx.scales);
-    if (damage <= 0) {return;}
 
     // Humans self-predict their own displacement — server only shoves
-    // the self-target when it's a bot (server velocity truth).
+    // the self-target when it's a bot (server velocity truth). The shove
+    // runs BEFORE the damage gate: the T1 impulse envelope reaches
+    // ~minbox past the damage rim, so a zero-damage annulus still owes
+    // the wire echo — skipping it strands the client's predicted stamp
+    // (the kb-echo warn).
     if ((!shoveOnly || target.isBot) && !protectedTarget) {
       this.shove(targetId, target, { x: tdx, y: tdy, z: tdz }, impulseMag, { pos: ctx.pos, pull: ctx.pull });
     }
+    if (damage <= 0) {return;}
     if (shoveOnly && ctx.weapon === WeaponType.Melee) {return;}
     // A swing is not a feet-blast — the punch point sits inside its own
     // envelope by design, so the self-splash tax charged every punch.
@@ -423,10 +427,14 @@ export class BlastRunner {
 
   /** Server-owned blast — the room's projectile/deployable sims decided
    *  where this pops, so the shooter-distance sanity check doesn't apply. */
-  serverBlast(ownerId: string, position: Vec3, weaponType: number, excludeTargetId?: string | null, opts: { shotId?: string; attribWeaponType?: number; power?: number; air?: number } = {}): void {
-    const { shotId, attribWeaponType, power, air } = opts;
-    const base = getWeaponStats(weaponType);
+  serverBlast(ownerId: string, position: Vec3, weaponType: number, excludeTargetId?: string | null, opts: { shotId?: string; attribWeaponType?: number; power?: number; air?: number; radiusScale?: number } = {}): void {
+    const { shotId, attribWeaponType, power, air, radiusScale } = opts;
+    let base = getWeaponStats(weaponType);
     if (!base || base.aoeRadius <= 0) {return;}
+    // Direct-hit blast bloom (shared/weapons.ts): the client predicts the
+    // grown envelope for shove + damage + prey/pickup knock — the server
+    // must apply the same radius or every annulus entity diverges.
+    if (radiusScale !== undefined && radiusScale !== 1) {base = { ...base, aoeRadius: base.aoeRadius * radiusScale };}
     // Power-scaled variants (Slam dive-speed blast) keep the identity
     // fields and multiply the payload envelope — same formula the client
     // predicts with.

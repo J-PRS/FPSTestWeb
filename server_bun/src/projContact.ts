@@ -84,7 +84,7 @@ function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getW
       const center = capsuleCenter(target);
       const dx = center.x - midX, dy = center.y - midY, dz = center.z - midZ;
       if (dx * dx + dy * dy + dz * dz > margin * margin) {continue;}
-      const tp = rewindPos(target, back * 0.7);
+      const tp = rewindPos(target, back); // ghostBack already applies the 0.7 shooter-advantage scale
       const pc = { x: tp.x, y: tp.y + classCapsule(target.armorClass).centerOff, z: tp.z };
       const pd = segPointDist(from, p.pos, pc);
       if (pd <= capsuleReach(target, reach)) {
@@ -213,7 +213,7 @@ export function dischargeRay(r: ContactHost, proj: LiveProj, range: number): voi
     const margin = reach + range / 2 + 0.6;
     for (const [pid, target] of r.room.players.getAllPlayers()) {
       if (pid === proj.ownerId || target.isDead) {continue;}
-      const tp = rewindPos(target, ghostBack(r, owner, proj.ownerId, pid) * 0.7);
+      const tp = rewindPos(target, ghostBack(r, owner, proj.ownerId, pid));
       const center = { x: tp.x, y: tp.y + classCapsule(target.armorClass).centerOff, z: tp.z };
       const dx = center.x - midX, dy = center.y - midY, dz = center.z - midZ;
       if (dx * dx + dy * dy + dz * dz > margin * margin) {continue;}

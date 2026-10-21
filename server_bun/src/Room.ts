@@ -233,7 +233,7 @@ export class Room {
       // its eye ~0.5 under the floor in the snap window). Buried means
       // the EYE itself is below the surface.
       if (p.isBot) {inv('bot-below-ground', !Number.isFinite(terrain) || p.position.y >= terrain - 0.5,
-        { id: p.id, y: Number(p.position.y.toFixed(1)), eye, terrain: Number.isFinite(terrain) ? Number(terrain.toFixed(1)) : 'n/a', dbg: this.moveSim.unburyDebug(p.id) });}
+        { id: p.id, xz: `${p.position.x.toFixed(1)},${p.position.z.toFixed(1)}`, y: Number(p.position.y.toFixed(1)), eye, terrain: Number.isFinite(terrain) ? Number(terrain.toFixed(1)) : 'n/a', dbg: this.moveSim.unburyDebug(p.id) });}
       if (!Number.isFinite(terrain) || p.position.y >= terrain - 0.5) {continue;}
       // First rescues carry the autopsy at debug level — the 'unbury'
       // health counter and the bot-scoped inv above are the loud signal;
@@ -321,6 +321,24 @@ export class Room {
   readonly commands: { playerId: string; msg: ClientMessage; at: WallMs }[] = [];
   drainCommands(): void {
     if (this.commands.length === 0) {return;}
+    // Sub-tick ordering (the CS2 answer to "I fired first but lost"):
+    // claims carrying fireAt adjudicate in click-instant order, not
+    // packet-arrival order — two shooters inside one 50ms tick resolve
+    // by who actually fired first, not whose packet won the wire race.
+    // fireAt is the shooter's own server-clock stamp, so clamp it to the
+    // physically possible window (arrival − 2× measured uplink transit,
+    // minus margin): a skewed/forged stamp degrades to arrival order
+    // rather than buying free rewind priority. Unstamped commands keep
+    // their arrival slot (sort is stable).
+    if (this.commands.length > 1) {
+      const key = (c: { playerId: string; msg: ClientMessage; at: WallMs }): number => {
+        const f = (c.msg as { fireAt?: number }).fireAt;
+        if (typeof f !== 'number' || !Number.isFinite(f)) {return c.at;}
+        const transit = this.moveSim.transitOf(c.playerId);
+        return Math.max(Math.min(f, c.at), c.at - (transit * 2 + 100));
+      };
+      this.commands.sort((a, b): number => key(a) - key(b));
+    }
     for (const c of this.commands) {
       // Contain per command: a throwing handler must not kill the rest
       // of the drain (and the tick that hosts it) — the client's binary
@@ -1246,10 +1264,15 @@ export class Room {
   }
 
   /** Nothing left to serve: no humans, no grace-period ghosts. Bots don't
-   *  keep a match alive — they exist to serve the humans in it. */
+   *  keep a match alive — they exist to serve the humans in it.
+   *  A pending terrainReady means a join is deferred on the map load —
+   *  the seat hasn't registered yet, so the room reads "empty" and the
+   *  sweep would dispose it mid-join, seating the joiner into a dead
+   *  Room that's gone from gs.rooms (the zombie-seat soak bug: join
+   *  burst lands, then no ticks/events/keepalives ever). */
   get empty(): boolean {
     return this.players.getHumanCount() === 0 && (this.sessions?.graceInRoom(this.name) ?? 0) === 0
-      && this.spectators.size === 0;
+      && this.spectators.size === 0 && this.terrainReady == null;
   }
 
   /** Balance pick: smallest team gets the newcomer. FFA modes return
@@ -1282,6 +1305,11 @@ export class Room {
     this.spec = spec;
     this.applySpecSeating(spec);
     this.applySpecPops(spec);
+    // Players must follow the swap too: applySpecPops sets ballSim.killY,
+    // but the move sim's plane is what ends a fall. Without this a room
+    // swapped into the sky arenas has players dropping through to the plain
+    // (and a room swapped out keeps killing on the old map's plane).
+    this.moveSim.setKillY(spec.killY);
     // The echo carries the merged list too — joiners get stand hulls in
     // their gameState structures, and combat occlusion sees the dais.
     this.messages.setMap(Object.assign({}, spec, { structures: this.structs.eff() }));

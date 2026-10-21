@@ -142,8 +142,20 @@ export class RoomMoveSim {
       Object.assign(sh.sim.input, old.input);
       const pos = reportedPos?.(pid);
       if (pos && Number.isFinite(pos.x + pos.y + pos.z)) {
+        // The record carries the OLD field's height at that xz — under a
+        // fresh map's surface it reads as a 30-45m burial. The 0.5s
+        // unbury sweep used to catch the instant and fire a warn per bot
+        // on every room mint; lift the reseat so the warn only ever means
+        // a real burial.
+        const g = (sh.bot && this.botSurface ? this.botSurface : this.surface)
+          ?.getHeight(pos.x, pos.z);
+        const y = g !== undefined && Number.isFinite(g) ? Math.max(pos.y, g + sh.sim.eyeHeight) : pos.y;
+        // pos IS the player's live record object (reportedPos hands the
+        // ref) — lifting it here also fixes the record's stale pre-attach
+        // height, not just the shadow's.
+        pos.y = y;
         sh.sim.setState({
-          pos: { x: pos.x, y: pos.y, z: pos.z }, vel: Object.assign({}, old.state.vel),
+          pos: { x: pos.x, y, z: pos.z }, vel: Object.assign({}, old.state.vel),
           yaw: old.state.yaw, pitch: old.state.pitch, onGround: old.state.onGround,
         });
       }
@@ -279,8 +291,18 @@ this.structEpoch += 1;
     const x = pos?.x ?? 0, z = pos?.z ?? 0;
     const f = this.surface?.getHeight(x, z).toFixed(1) ?? '?';
     const c = this.botSurface?.getHeight(x, z).toFixed(1) ?? '?';
-    return `shadow=${sh ? `bot=${sh.bot} y=${pos!.y.toFixed(1)} onG=${sh.sim.state.onGround}` : 'none'} fieldG=${f} chordG=${c}`;
+    // Burial autopsy beyond position: is the sim stepping (simTicks acc),
+    // what did the LAST swept debug tick see, and does the sim's own
+    // surface agree with the room's samplers at that spot.
+    const simG = (sh?.sim as { surface?: { getHeight(x: number, z: number): number } } | undefined)
+      ?.surface?.getHeight(x, z);
+    const prev = this.unburyTicks.get(playerId);
+    if (sh) {this.unburyTicks.set(playerId, sh.simTicks);}
+    return `shadow=${sh ? `bot=${sh.bot} y=${pos!.y.toFixed(1)} onG=${sh.sim.state.onGround} tickDelta=${prev === undefined ? '?' : sh.simTicks - prev} surfG=${simG === undefined ? '?' : simG.toFixed(1)} vel=${sh.sim.state.vel.x.toFixed(1)},${sh.sim.state.vel.y.toFixed(1)},${sh.sim.state.vel.z.toFixed(1)}` : 'none'} xz=${x.toFixed(1)},${z.toFixed(1)} fieldG=${f} chordG=${c}`;
   }
+  /** unburyDebug's prior simTicks — the tickDelta line that separates a
+   *  sim that stopped stepping while buried from one re-seeded per tick. */
+  private readonly unburyTicks = new Map<string, number>();
 
   /** Mid-match team swap (rebalance) — the shadow's gate-shield access
    *  flips with the jersey, not at the next respawn. */
@@ -703,11 +725,13 @@ sh.gapStreak += 1;
         // pays (impact - 25) * 0.005 of the bar — the funnel lives one
         // layer up so respawn/killfeed ride the same path as any death.
         if (landing > MOVEMENT_CONFIG.fallDamageMinSpeed) {this.onLanding?.(pid, landing);}
-        // Kill zone: the deck ran out and the void starts. Checked on the
-        // shadow, not on a claim — the client can't argue its way out of
-        // falling off the map.
-        if (this.killY !== undefined && s.pos.y < this.killY) {this.onKillZone?.(pid);}
       }
+      // Kill zone: the deck ran out and the void starts. Checked on the
+      // shadow, not on a claim — the client can't argue its way out of
+      // falling off the map. Outside the resting gate on purpose: a body
+      // parked on a surface below the plane (the plain under a sky arena)
+      // is still out of the arena, and gating it made such a body immortal.
+      if (this.killY !== undefined && s.pos.y < this.killY) {this.onKillZone?.(pid);}
       sh.acc += dt;
       const steps = Math.floor(sh.acc / MoveSim.STEP);
       sh.acc -= steps * MoveSim.STEP;

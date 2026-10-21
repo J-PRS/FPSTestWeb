@@ -140,6 +140,11 @@ export class CombatHandler {
   private lastFireNotify = new Map<string, number>();
   /** 1s sliding window of server-simmed fire intents — the flood gate. */
   private simmedFireTimes = new Map<string, number[]>();
+  /** Post-reclaim intent replays: shotId → wall time the pull spawned.
+   *  A resend inside the window is a no-op (the first verdict already
+   *  flew); outside it the intent is simply new. */
+  private seenShots = new Map<string, Map<string, number>>();
+  private static readonly SHOT_DEDUPE_MS = 3000;
   /** Cadence gate (registerMiss uses it): per `${playerId}:${weaponType}`
    *  burst window — start time + claims seen inside it. The client fire
    *  timer is feel; this is the law. A window holds up to `burst` spawn
@@ -337,6 +342,14 @@ w.n += 1;
     const now = wallNow();
     if (typeof msg.fireAt === 'number' && Number.isFinite(msg.fireAt)) {this.deps.uplinkNote?.(playerId, msg.fireAt);}
     const dir = msg.dir && finiteVec(msg.dir) ? msg.dir : undefined;
+    // Reclaim replays resend recent fire intents — a pull already spawned
+    // under this nonce is a no-op, not a second shell. Dropping silently
+    // (not rejecting) is correct: the first intent's verdict already flew.
+    if (msg.shotId) {
+      const seen = this.seenShots.get(playerId);
+      const seenAt = seen?.get(msg.shotId);
+      if (seenAt !== undefined && now - seenAt < CombatHandler.SHOT_DEDUPE_MS) {return;}
+    }
     const fireProjectile = dir && serverSimmed(msg.weaponType) ? this.deps.fireProjectile : undefined;
     // Class lock applies to every fire intent — beams and melee skip the
     // projectile branch but must not dodge it.
@@ -470,6 +483,13 @@ win.violations += 1;
         { x: dir!.x / l, y: dir!.y / l, z: dir!.z / l },
         player.velocity, msg.shotId);
       if (id) {
+        if (msg.shotId) {
+          let seen = this.seenShots.get(playerId);
+          if (!seen) {seen = new Map(); this.seenShots.set(playerId, seen);}
+          for (const [k, t] of seen) {if (now - t >= CombatHandler.SHOT_DEDUPE_MS) {seen.delete(k);}}
+          seen.set(msg.shotId, now);
+          if (seen.size > 64) {seen.delete(seen.keys().next().value!);}
+        }
         this.hb('shot.serverSim');
         if (msg.weaponType !== undefined) {weaponStats.recordShot(this.deps.mode ?? '', `w${msg.weaponType}`);}
         return;
@@ -516,7 +536,7 @@ win.violations += 1;
 
   /** Server-owned blast — the room's projectile/deployable sims decided
    *  where this pops, so the shooter-distance sanity check doesn't apply. */
-  serverBlast(ownerId: string, position: Vec3, weaponType: number, excludeTargetId?: string | null, opts?: { shotId?: string; attribWeaponType?: number; power?: number; air?: number }): void {
+  serverBlast(ownerId: string, position: Vec3, weaponType: number, excludeTargetId?: string | null, opts?: { shotId?: string; attribWeaponType?: number; power?: number; air?: number; radiusScale?: number }): void {
     this.blast.serverBlast(ownerId, position, weaponType, excludeTargetId, opts);
   }
 

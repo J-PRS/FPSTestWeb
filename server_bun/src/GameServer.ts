@@ -9,7 +9,7 @@ import type { WebSocketData } from './types.ts';
 import { logger } from './logger.ts';
 import { fileURLToPath } from 'node:url';
 import type { Heightfield } from '../../shared/heightfield.ts';
-import { isWireFrame, decodePosition } from '../../shared/wire.ts';
+import { isWireFrame, decodePosition, decodeInputMove, decodeWireJson, WIRE_INPUTMOVE, WIRE_JSON } from '../../shared/wire.ts';
 import { TickLoop } from './TickLoop.ts';
 import { evictEldest } from './evictEldest.ts';
 import { SessionManager } from './SessionManager.ts';
@@ -205,9 +205,33 @@ export class GameServer {
         const existingId = ws.data.playerId;
         const room = existingId ? this.roomOfPlayer(existingId) : undefined;
         if (!existingId || !room) {return;} // binary before join — ignore
+        // JSON-over-binary: combat claims ride the position lane for
+        // transit, then decode back into the ordinary text path — same
+        // parse, same validation, same dispatch.
+        if (u8[1] === WIRE_JSON) {
+          const text = decodeWireJson(u8);
+          if (text === null) {this.invalidWarn(existingId, 'Malformed binary-JSON frame'); return;}
+          this.onJsonText(ws, text);
+          return;
+        }
         // Per-socket decode slot: ~30Hz × n frames' worth of object churn
         // becomes zero-alloc. Every consumer copies field-wise inside the
         // handler — nothing may retain `pos` past this call.
+        // The binary input path: inputMove edges ride the same lane as
+        // position reports — the change-only journal lands ~50ms fresher
+        // than the JSON stream it duplicates (edge timing = replay fidelity).
+        if (u8[1] === WIRE_INPUTMOVE) {
+          const im = decodeInputMove(u8);
+          if (im) {
+            try {
+              this.handleGameMessage(room, existingId, im);
+            } catch (error) {
+              logger.error('Message handler failed', { playerId: existingId, type: 'inputMove(binary)', err: error instanceof Error ? error.stack ?? error.message : String(error) });
+              try { ws.close(1011, 'server error'); } catch { /* socket already dying */ }
+            }
+          }
+          return;
+        }
         const pos = decodePosition(u8, ws.data.posScratch ??= {
           type: 'position',
           position: { x: 0, y: 0, z: 0 },
@@ -230,7 +254,12 @@ export class GameServer {
       this.invalidWarn(ws.data.playerId, 'Unknown binary frame rejected');
       return;
     }
-    const text = message;
+    this.onJsonText(ws, message);
+  }
+
+  /** The text/JSON path — WS strings and WIRE_JSON frames share it. */
+  private onJsonText(ws: ServerWebSocket<WebSocketData>, text: string): void {
+    const message = text;
     // Pre-join CPU guard: an unseated socket's only legitimate frame is
     // the (small) join handshake — unlimited 1MB JSON parses are free DoS.
     if (!ws.data.playerId) {
@@ -256,6 +285,15 @@ export class GameServer {
       // (a gapped spec otherwise desyncs permanently), tickNack (scoped
       // to their own intro window by nackFor, not room-wide).
       room = this.specRooms.get(existingPlayerId);
+      // A still-connecting seat (join deferred on terrainReady) has no
+      // room yet — join/switchRoom from it are re-intents, not noise.
+      // Swallowing them here locks the client to whatever room the stale
+      // deferred seat lands in (the hop-during-load hole).
+      if (!room && this.registry.state(existingPlayerId) === 'connecting') {
+        const t = (raw as { type?: string }).type;
+        if (t === 'join') {this.handleHandshake(ws, raw); return;}
+        if (t === 'switchRoom') {this.switcher.switchRoom(ws, existingPlayerId, raw); return;}
+      }
       if (!room || !GameServer.SPEC_VERBS.has((raw as { type?: string }).type ?? '')) {return;}
     }
 
@@ -378,6 +416,19 @@ export class GameServer {
     room.socketOf(playerId)?.close(1000, 'kicked');
     this.removePlayerCompletely(room, playerId, 'adminKick');
     logger.info('Player kicked', { playerId });
+    return true;
+  }
+
+  /** Socket-only kill — the seat record survives so grace + the
+   *  reconnect/reclaim path fire (vs kickPlayer's full removal). The
+   *  test-op for "real socket dropped mid-match". */
+  dropSocket(playerId: string): boolean {
+    const room = this.roomOfPlayer(playerId);
+    if (!room) {return false;}
+    const ws = room.socketOf(playerId);
+    if (!ws) {return false;}
+    try { ws.close(4321, 'dropsock'); } catch { return false; }
+    logger.info('Socket dropped (seat kept for reclaim)', { playerId });
     return true;
   }
 

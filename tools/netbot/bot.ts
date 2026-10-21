@@ -8,13 +8,12 @@
 
 import { BotBrain, type BotEnemy, type BrainCtx } from '../../shared/botBrain.ts';
 import { MoveSim, ENERGY } from '../../shared/movement.ts';
-import { CLASS_STATS } from '../../shared/botClasses.ts';
+import { CLASS_STATS,HEAVY_ONLY_WEAPONS } from '../../shared/botClasses.ts';
 
 import { BOT_LOADOUTS, botClassForLoadout, pickBotWeapon, type BotLoadout } from '../../shared/botLoadouts.ts';
 import { aimSkillFor } from '../../shared/botSkill.ts';
 import { WEAPONS } from '../../shared/weaponRows.ts';
 import { WEAPON_FIRE_INTERVAL_S } from '../../shared/weapons.ts';
-import { HEAVY_ONLY_WEAPONS } from '../../shared/botClasses.ts';
 import type { WeaponType } from '../../shared/weaponTable.ts';
 import type { ClientMessage, Vec3 } from '../../shared/protocol.ts';
 import { assignRole, roleObjective, WIRE_ROLES, type BotRole, type FlagSituation } from '../../shared/flagGoals.ts';
@@ -44,8 +43,8 @@ export class NetBot {
   private rand: () => number;
 
   constructor(private nc: NetClient, opts: { hopEveryMs?: number; dropEveryMs?: number; seed?: () => number; loadout?: BotLoadout; capper?: boolean } = {}) {
-    if (opts.loadout) this.loadout = opts.loadout;
-    this.forceCapper = !!opts.capper;
+    if (opts.loadout) {this.loadout = opts.loadout;}
+    this.forceCapper = Boolean(opts.capper);
     this.brain = new BotBrain({ x: 0, y: 60, z: 0 });
     this.rand = opts.seed ?? Math.random;
     // Blast shoves hit the server shadow via applyImpulse — the local
@@ -85,15 +84,15 @@ export class NetBot {
 
   stop(): void {
     for (const t of [this.thinkTimer, this.posTimer, this.hopTimer, this.dropTimer]) {
-      if (t) clearInterval(t);
+      if (t) {clearInterval(t);}
     }
   }
 
   private enemies(): BotEnemy[] {
     const out: BotEnemy[] = [];
     for (const [id, e] of this.nc.roster) {
-      if (e.isDead) continue;
-      if (this.nc.self.team && e.team === this.nc.self.team) continue;
+      if (e.isDead) {continue;}
+      if (this.nc.self.team && e.team === this.nc.self.team) {continue;}
       out.push({ id, pos: { x: e.pos.x, y: e.pos.y, z: e.pos.z }, vel: { x: e.vel.x, y: e.vel.y, z: e.vel.z }, alive: true });
     }
     // Creatures join the foe list like the server sense does — hunting
@@ -104,11 +103,11 @@ export class NetBot {
     // forever-unreachable target.
     const me = this.nc.self.pos;
     for (const [bid, b] of this.nc.balls) {
-      if ((b.pos.x - me.x) ** 2 + (b.pos.y - me.y) ** 2 + (b.pos.z - me.z) ** 2 > 200 * 200) continue;
+      if ((b.pos.x - me.x) ** 2 + (b.pos.y - me.y) ** 2 + (b.pos.z - me.z) ** 2 > 200 * 200) {continue;}
       out.push({ id: `b:${bid}`, pos: { x: b.pos.x, y: b.pos.y, z: b.pos.z }, vel: { x: b.vel.x, y: b.vel.y, z: b.vel.z }, alive: true });
     }
     for (const [cid, c] of this.nc.crawlers) {
-      if ((c.pos.x - me.x) ** 2 + (c.pos.y - me.y) ** 2 + (c.pos.z - me.z) ** 2 > 200 * 200) continue;
+      if ((c.pos.x - me.x) ** 2 + (c.pos.y - me.y) ** 2 + (c.pos.z - me.z) ** 2 > 200 * 200) {continue;}
       out.push({ id: `c:${cid}`, pos: { x: c.pos.x, y: c.pos.y, z: c.pos.z }, vel: { x: c.vel.x, y: c.vel.y, z: c.vel.z }, alive: true });
     }
     return out;
@@ -118,8 +117,8 @@ export class NetBot {
    *  their own wire-fed maps keyed `b:<id>` / `c:<id>` like the server
    *  sense names them. */
   private targetEntry(targetId: string): RemoteEntry | null {
-    if (targetId.startsWith('b:')) return this.nc.balls.get(+targetId.slice(2)) ?? null;
-    if (targetId.startsWith('c:')) return this.nc.crawlers.get(+targetId.slice(2)) ?? null;
+    if (targetId.startsWith('b:')) {return this.nc.balls.get(Number(targetId.slice(2))) ?? null;}
+    if (targetId.startsWith('c:')) {return this.nc.crawlers.get(Number(targetId.slice(2))) ?? null;}
     return this.nc.roster.get(targetId) ?? null;
   }
 
@@ -128,13 +127,13 @@ export class NetBot {
    *  Netbots default to offense/capper (the roles that need no deploy or
    *  cloak intent). */
   private flagObjective(): Vec3 | null {
-    const nc = this.nc;
+    const {nc} = this;
     const myTeam = nc.self.team;
-    if (!myTeam || nc.flags.size === 0) return null;
+    if (!myTeam || nc.flags.size === 0) {return null;}
     const foeTeam = myTeam === 'alpha' ? 'bravo' : 'alpha';
     const mine = nc.flags.get(myTeam);
     const theirs = nc.flags.get(foeTeam);
-    if (!mine || !theirs) return null;
+    if (!mine || !theirs) {return null;}
     const s: FlagSituation = {
       home: mine.pos,
       thief: mine.state === 'carried' && mine.carrier ? this.rosterPos(mine.carrier) : null,
@@ -156,7 +155,7 @@ export class NetBot {
   private standThreat(home: Vec3, myTeam: string): Vec3 | null {
     let best: Vec3 | null = null, bestD = 45;
     for (const e of this.nc.roster.values()) {
-      if (e.team === myTeam || e.isDead) continue;
+      if (e.team === myTeam || e.isDead) {continue;}
       const d = Math.hypot(e.pos.x - home.x, e.pos.z - home.z);
       if (d < bestD) { bestD = d; best = e.pos; }
     }
@@ -177,24 +176,24 @@ export class NetBot {
   private forceCapper = false;
 
   private squadRole(): BotRole {
-    if (this.forceCapper) return 'capper';
+    if (this.forceCapper) {return 'capper';}
     this.roleT -= 0.3; // think cadence — close enough for a soft window
-    if (this.roleT > 0) return this.role;
+    if (this.roleT > 0) {return this.role;}
     const mates = [this.nc.id];
     for (const [id, e] of this.nc.roster) {
-      if (e.team === this.nc.self.team) mates.push(id);
+      if (e.team === this.nc.self.team) {mates.push(id);}
     }
     // Kit-weighted squad fill — every peer sees the same armorClass in
     // roster entries, so argmax lands on the same bodies on all sides.
     const next = assignRole(this.nc.id, mates, WIRE_ROLES, (id) =>
       id === this.nc.id ? this.cls : this.nc.roster.get(id)?.cls);
-    if (next !== this.role) this.roleT = 8;
+    if (next !== this.role) {this.roleT = 8;}
     this.role = next;
     return this.role;
   }
 
   private ctx(): BrainCtx {
-    const nc = this.nc;
+    const {nc} = this;
     return {
       pos: { x: nc.self.pos.x, y: nc.self.pos.y, z: nc.self.pos.z },
       vel: { x: nc.self.vel.x, y: nc.self.vel.y, z: nc.self.vel.z },
@@ -215,13 +214,13 @@ export class NetBot {
    *  reject it as a doctored-client claim. Fall back to the sidearm. */
   private legalWeapon(dist: number): number {
     const w = pickBotWeapon(this.loadout, dist, dist, (t) => aimSkillFor(this.brain.skill, t, 0));
-    if (!HEAVY_ONLY_WEAPONS.has(w) && (WEAPONS[w]?.speed ?? 0) > 0) return w;
+    if (!HEAVY_ONLY_WEAPONS.has(w) && (WEAPONS[w]?.speed ?? 0) > 0) {return w;}
     // Beam/throw picks have no projectile claim shape — a bot that draws
     // Lightning would hold it and never claim. Fall to the nearest
     // claimable slot (splash mid > near > far > side) so the draw still
     // produces wire traffic.
     for (const alt of [this.loadout.mid, this.loadout.near, this.loadout.far, this.loadout.side]) {
-      if (!HEAVY_ONLY_WEAPONS.has(alt) && (WEAPONS[alt]?.speed ?? 0) > 0) return alt;
+      if (!HEAVY_ONLY_WEAPONS.has(alt) && (WEAPONS[alt]?.speed ?? 0) > 0) {return alt;}
     }
     return this.loadout.side;
   }
@@ -230,7 +229,7 @@ export class NetBot {
   private lastPainAt = 0;
 
   private think(): void {
-    const nc = this.nc;
+    const {nc} = this;
     if (nc.self.isDead) {
       return;
     }
@@ -253,7 +252,7 @@ export class NetBot {
         // body at cruise altitude 10-20m over the flag where the 6m
         // touch cap can't reach. Cappers walk the approach.
         const d0 = Math.hypot(nc.self.pos.x - fo.x, nc.self.pos.z - fo.z);
-        if (out.move && d0 < 25) out.move.jet = false;
+        if (out.move && d0 < 25) {out.move.jet = false;}
       }
     }
 
@@ -269,7 +268,7 @@ export class NetBot {
         const d = Math.hypot(e.pos.x - nc.self.pos.x, e.pos.y - nc.self.pos.y, e.pos.z - nc.self.pos.z);
         if (d < nd) { nd = d; nearest = e; }
       }
-      if (nearest && nd > 30) out.dest = { ...nearest.pos };
+      if (nearest && nd > 30) {out.dest = { ...nearest.pos };}
     }
 
     // Locomotion intent → the MoveSim turns it into real physics in
@@ -278,7 +277,7 @@ export class NetBot {
     const dx = out.dest.x - nc.self.pos.x;
     const dz = out.dest.z - nc.self.pos.z;
     const d = Math.hypot(dx, dz);
-    if (d > 0.5) this.targetYaw = Math.atan2(dx, dz);
+    if (d > 0.5) {this.targetYaw = Math.atan2(dx, dz);}
     this.strafePhase += THINK_S * (1.5 + this.brain.skill.movement);
     this.wantMove = {
       yaw: this.wantMove.yaw, // eased in sendPos
@@ -298,9 +297,9 @@ export class NetBot {
         // cruise altitude over the flag where the 6m touch cap can't
         // reach — the grab needs feet near deck level.
         ? false
-        : ((!!out.move?.jet || d > 60 || out.dest.y > nc.self.pos.y + 4)
+        : ((Boolean(out.move?.jet) || d > 60 || out.dest.y > nc.self.pos.y + 4)
           && !(d < 45 && out.dest.y < nc.self.pos.y + 4)),
-      jump: !!out.move?.jump,
+      jump: Boolean(out.move?.jump),
     };
     if (!nc.surface) {
       if (d > 0.5) {
@@ -313,8 +312,8 @@ export class NetBot {
         nc.self.vel = { x: 0, y: 0, z: 0 };
       }
     }
-    if (out.move?.jump) nc.send({ type: 'jump', position: { ...nc.self.pos } });
-    if (out.move?.jet) nc.send({ type: 'jetpack', position: { ...nc.self.pos } });
+    if (out.move?.jump) {nc.send({ type: 'jump', position: { ...nc.self.pos } });}
+    if (out.move?.jet) {nc.send({ type: 'jetpack', position: { ...nc.self.pos } });}
 
     if (out.fire) { nc.tel.fireIntents++; this.fire(out.fire.targetId, out.fire.aim); }
   }
@@ -322,29 +321,29 @@ export class NetBot {
   /** Spawn claim → the shell exists server-side; impact claims go out at
    *  flight time. Mirrors fire.ts sendShot + impact.ts claims. */
   private fire(targetId: string, aim: { x: number; y: number; z: number }): void {
-    const nc = this.nc;
+    const {nc} = this;
     const blocked = (why: string) => {
       nc.tel.fireBlocked.set(why, (nc.tel.fireBlocked.get(why) ?? 0) + 1);
     };
     const target = this.targetEntry(targetId);
-    if (!target || target.isDead) return blocked('dead');
+    if (!target || target.isDead) {return blocked('dead');}
     const dist = Math.hypot(target.pos.x - nc.self.pos.x, target.pos.y - nc.self.pos.y, target.pos.z - nc.self.pos.z);
     // Long shots are unclaimable on jitter — a shell in the air >0.5s
     // leaves the target too much room to dodge past the legal radius
     // by the time the hit claim lands. Real fights close first anyway.
-    if (dist > 45) return blocked('dist');
+    if (dist > 45) {return blocked('dist');}
     // No wounded-target gate: a real player keeps firing at sub-50hp
     // enemies — it's the most human shot there is. A claim that lands
     // after the target dies hits the same server reject any player's
     // late volley would.
     const weaponType = this.legalWeapon(dist);
     const w = WEAPONS[weaponType];
-    if (!w || w.speed <= 0) return blocked('speed0'); // hitscan kinds — skip for now, beams need their own claim shape
+    if (!w || w.speed <= 0) {return blocked('speed0');} // hitscan kinds — skip for now, beams need their own claim shape
     // The server enforces WEAPON_FIRE_INTERVAL_S per spawn claim — fire
     // slower than it and every spawn claim reads as spam.
     const interval = (WEAPON_FIRE_INTERVAL_S[weaponType as WeaponType] ?? 0.1) * 1000;
-    if (Date.now() - this.lastFireAt < interval) return blocked('interval');
-    if (Date.now() < this.holdFireUntil) return blocked('holdfire');
+    if (Date.now() - this.lastFireAt < interval) {return blocked('interval');}
+    if (Date.now() < this.holdFireUntil) {return blocked('holdfire');}
     this.lastFireAt = Date.now();
 
     const dir = {
@@ -384,8 +383,8 @@ export class NetBot {
    *  server's shadow replays the identical class on the identical field,
    *  so divergence shrinks to packet loss, not a fake-kinematics gap. */
   private ensureSim(): MoveSim | null {
-    const nc = this.nc;
-    if (!nc.surface) return null;
+    const {nc} = this;
+    if (!nc.surface) {return null;}
     if (!this.sim) {
       this.sim = new MoveSim(nc.surface, {
         pos: { ...nc.self.pos }, vel: { ...nc.self.vel },
@@ -411,11 +410,11 @@ export class NetBot {
     const oy = this.nc.self.pos.y - from.y;
     const oz = this.nc.self.pos.z - from.z;
     const d = Math.hypot(ox, oy, oz);
-    if (d <= 0) return;
+    if (d <= 0) {return;}
     const s = pull ? -1 : 1;
     const dv = { x: s * (ox / d) * eff, y: (pull ? 0.3 : 0.5) * eff, z: s * (oz / d) * eff };
     this.nc.self.vel.x += dv.x; this.nc.self.vel.y += dv.y; this.nc.self.vel.z += dv.z;
-    const sim = this.sim;
+    const {sim} = this;
     if (sim) {
       sim.state.vel.x += dv.x; sim.state.vel.y += dv.y; sim.state.vel.z += dv.z;
       sim.state.onGround = false; // blast ungrounds — friction would eat the shove
@@ -428,7 +427,7 @@ export class NetBot {
   private wasDead = false;
 
   private sendPos(): void {
-    const nc = this.nc;
+    const {nc} = this;
     if (nc.self.isDead) { this.wasDead = true; return; }
     const sim = this.ensureSim();
     if (sim) {
@@ -454,10 +453,10 @@ export class NetBot {
       sim.setInput({ forward: this.wantMove.forward, right: this.wantMove.right, jumpHeld: this.wantMove.jump, skiHeld: true, jetHeld: this.jetting });
       // Body contact: the server shadow resolves every live roster body,
       // so the local mirror sees the same shoves or it reads divergence.
-      const bodies = sim.bodies;
+      const {bodies} = sim;
       bodies.length = 0;
       for (const [id, r] of nc.roster) {
-        if (r.isDead) continue;
+        if (r.isDead) {continue;}
         const st = CLASS_STATS[r.cls as keyof typeof CLASS_STATS] ?? CLASS_STATS.medium;
         bodies.push({ id, x: r.pos.x, y: r.pos.y, z: r.pos.z, h: st.eyeHeight, mass: st.mass, r: st.radius, vx: r.vel.x, vz: r.vel.z });
       }
@@ -474,6 +473,10 @@ export class NetBot {
     }, true);
     // Movement stays ordered (steady) — jitter lives on the claim channel,
     // matching how the real client keeps movement seq-gated.
-    nc.send({ type: 'position', position: { ...nc.self.pos }, rotation: { yaw, pitch: 0 }, velocity: { ...nc.self.vel }, inputSeq: this.inSeq }, true);
+    // Real clients ride their ping in every position frame — omitting it
+    // leaves the roster row ping-less, which the remote-liveness gate
+    // reads as a dead socket: the render entity goes staleHidden and its
+    // position freezes at spawn while the wire records keep flowing.
+    nc.send({ type: 'position', position: { ...nc.self.pos }, rotation: { yaw, pitch: 0 }, velocity: { ...nc.self.vel }, inputSeq: this.inSeq, ping: nc.pingMs }, true);
   }
 }

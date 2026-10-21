@@ -58,6 +58,10 @@ const VOLATILE_TYPES = new Set([
 // journaling it spends roster-sized replay bytes for nothing.
 const NO_JOURNAL_TYPES = new Set(['yourHealth', 'yourCharge', 'stateHash', 'ping', 'pong', 'srvPing', 'gameState']);
 const VOLATILE_TTL_MS = 3000;
+/** FPS_WIRESPY=1 — emit-time wire forensics (which pids a keepalive/
+ *  broadcast actually targets). Hoisted once: env reads on a per-frame
+ *  hot path cost a map lookup every send. */
+const WIRESPY = Boolean(process.env.FPS_WIRESPY);
 
 export class ConnectionManager {
   private connections: Map<string, ServerWebSocket<WebSocketData>> = new Map();
@@ -236,6 +240,9 @@ export class ConnectionManager {
     // exactly what reclaim replay must find later.
     const data = this.frame(msg, playerId);
     const ws = this.connections.get(playerId);
+    if (WIRESPY && (msg as { type?: string }).type === 'ping') {
+      logger.warn('wirespy pingTick', { playerId, wsFound: Boolean(ws), rs: ws?.readyState });
+    }
     if (ws && ws.readyState === 1 && this.drownCheck(playerId, ws) === 'ok') {
       this.sendReliable(playerId, ws, data);
     }
@@ -284,6 +291,9 @@ export class ConnectionManager {
 
   broadcast(msg: ServerMessage, excludePlayerId?: string): void {
     const data = this.frame(msg, undefined, excludePlayerId);
+    if (WIRESPY && (msg as { type?: string }).type === 'projectileCreated') {
+      logger.warn('wirespy broadcast', { type: 'projectileCreated', conns: [...this.connections.keys()] });
+    }
     this.connections.forEach((ws, pid): void => {
       if (excludePlayerId !== undefined && pid === excludePlayerId) {return;}
       if (ws.readyState === 1 && this.drownCheck(pid, ws) === 'ok') {

@@ -24,7 +24,7 @@ import { ColliderIndex } from '../../shared/solidWorld.ts';
 import { structureColliders, type StructureCollider } from '../../shared/ballSim.ts';
 import type { StructureSpec } from '../../shared/mapSpec.ts';
 import { HM_DIVISOR, HM_HEIGHT_SCALE, hmHeight, type Heightfield } from '../../shared/heightfield.ts';
-import { getWeaponStats, WeaponType, idSeed, jitteredTtl, scaledDirectDamage, RIDE_CATCH_R, canHostRide } from '../../shared/weapons.ts';
+import { getWeaponStats, WeaponType, idSeed, jitteredTtl, scaledDirectDamage, directHitAoeBonus, RIDE_CATCH_R, canHostRide } from '../../shared/weapons.ts';
 import { GRAVITY } from '../../shared/movement.ts';
 import type { Vec3, ServerMessage } from './types.ts';
 import { WORLD_MODEL, spawnPayload, verbPayload, eventPayload } from '../../shared/worldModel.ts';
@@ -377,7 +377,12 @@ export class RoomProjectiles {
       }
       return;
     }
-    this.room.messages.serverBlast(proj.ownerId, at, proj.weaponType, directHitId ?? null, { shotId: proj.pull, air: proj.p.age });
+    // Direct-body hits bloom the blast radius 1.5× (Bolt/Disc contract,
+    // shared/weapons.ts) — replicas predict the grown envelope for
+    // splash/shove/knock, so the server must pay it or every entity in
+    // the annulus reads as a prediction miss (kb-echo + nugrest snaps).
+    const radiusScale = bodyDirect ? directHitAoeBonus(proj.weaponType) : 1;
+    this.room.messages.serverBlast(proj.ownerId, at, proj.weaponType, directHitId ?? null, { shotId: proj.pull, air: proj.p.age, radiusScale });
     // Cluster carriers (MRV, ClusterBomb): the claim path scatters bomblet
     // blasts around the burst point — sim shells must pay the same way or
     // bot-fired cluster weapons ship only the weak carrier pop.
@@ -411,8 +416,9 @@ export class RoomProjectiles {
       }
     }
     if (proj.stats.aoeRadius > 0) {
-      this.room.ballSim?.splashDamage(proj.ownerId, at, proj.stats.aoeRadius, proj.stats.aoeDamage, ballId);
-      this.room.creatureSim?.splashDamage(proj.ownerId, at, proj.stats.aoeRadius, proj.stats.aoeDamage, crawlerId);
+      const br = proj.stats.aoeRadius * radiusScale;
+      this.room.ballSim?.splashDamage(proj.ownerId, at, br, proj.stats.aoeDamage, ballId);
+      this.room.creatureSim?.splashDamage(proj.ownerId, at, br, proj.stats.aoeDamage, crawlerId);
     }
 
     // Sticky chain: a blast cooks every sibling bomb in its radius — the

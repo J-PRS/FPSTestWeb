@@ -32,9 +32,9 @@ const CHAIN = process.argv.slice(2).length ? process.argv.slice(2) : DEFAULT_CHA
 /** Particle pool sizes in client/src/effects/ambientParticles.ts — the
  *  position-attribute count is the only way to tell the four layers apart
  *  from outside (AmbientWeather owns them, the Points objects don't). */
-const COUNTS: Record<number, string> = { 220: 'dust', 60: 'embers', 120: 'ash', 260: 'snow' };
+const COUNTS: Record<number, string> = { 220: 'dust', 60: 'embers', 120: 'ash', 380: 'snow' };
 /** kind → pool size, for turning a spec intensity into a draw range. */
-const POOL: Record<string, number> = { dust: 220, embers: 60, ash: 120, snow: 260 };
+const POOL: Record<string, number> = { dust: 220, embers: 60, ash: 120, snow: 380 };
 
 interface Spec { terrainPreset?: number; weather?: Record<string, number>; atmosphere?: Record<string, number> }
 const readSpec = (name: string): Spec => {
@@ -58,7 +58,12 @@ function expectFor(name: string, baseSun: number): {
     if (POOL[k] !== undefined) {draw[k] = Math.round(POOL[k] * Math.min(1, v));}
   }
   const a = s.atmosphere ?? {};
-  const sky = { ...BOOT_SKY, sunIntensity: baseSun * (a.sunIntensity ?? 1) };
+  // sunIntensity is radiance × elevation × specMult — model timeOfDay or
+  // a dusk spec reads as a dimming bug. baseSun is the boot read at t=0.38.
+  const baseElev = Math.max(0, Math.sin((0.38 - 0.25) * Math.PI * 2));
+  const elev = Math.max(0, Math.sin(((a.timeOfDay ?? 0.38) - 0.25) * Math.PI * 2));
+  const elevScale = elev > 0 ? elev / baseElev : 0.09 / baseElev;
+  const sky = { ...BOOT_SKY, sunIntensity: baseSun * elevScale * (a.sunIntensity ?? 1) };
   if (a.rayleigh !== undefined) {sky.rayleigh = a.rayleigh;}
   if (a.mie !== undefined) {sky.mieCoefficient = 21e-6 * a.mie;}
   if (a.starIntensity !== undefined) {sky.starIntensity = a.starIntensity;}
@@ -84,11 +89,13 @@ function hopExpr(room: string): string {
     await new Promise((r) => setTimeout(r, 2500));
     const sky = t.scene.getObjectByName('__sky');
     const su = sky && sky.userData.sky ? sky.material.uniforms : null;
+    // Uniform reads must be soft — a baked skybox tags __sky too but its
+    // material has no rayleigh/mie/star slots (procedural-only uniforms).
     const skyOut = su ? {
-      rayleigh: su.rayleigh.value,
-      mieCoefficient: su.mieCoefficient.value,
-      starIntensity: su.starIntensity.value,
-      sunIntensity: su.sunIntensity.value,
+      rayleigh: su.rayleigh?.value,
+      mieCoefficient: su.mieCoefficient?.value,
+      starIntensity: su.starIntensity?.value,
+      sunIntensity: su.sunIntensity?.value,
     } : null;
     const ambient = [];
     t.scene.traverse((o) => {
@@ -98,7 +105,9 @@ function hopExpr(room: string): string {
           opacity: o.material.opacity, visible: o.visible });
       }
     });
-    const preset = t.terrain && t.terrain.levels ? t.terrain.levels[0].material.uniforms.terrainPreset.value : null;
+    // The palette is a #define (TERRAIN_PRESET) + terrain.preset — not a
+    // uniform. levels[0].uniforms only carries height/scale channels.
+    const preset = t.terrain && typeof t.terrain.preset === 'number' ? t.terrain.preset : null;
     return { map: t.world.mapName, preset, sky: skyOut, ambient };
   })()`;
 }

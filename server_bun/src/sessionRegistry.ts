@@ -196,6 +196,23 @@ this.anomalies.reclaimNonLive += 1;
     return this.sessions.get(playerId)?.state;
   }
 
+  /** Re-aim a still-connecting session at a different room — a mid-load
+   *  room hop before the first seat. Not a lifecycle edge (no begin/seat
+   *  transition happened yet), so it moves no anomaly counters. */
+  retarget(playerId: string, room: string): boolean {
+    const s = this.sessions.get(playerId);
+    if (!s || s.state !== 'connecting') {return false;}
+    s.room = room;
+    return true;
+  }
+
+  /** The room the session's latest begin targeted — deferred joins check
+   *  this at fire time so a terrain-load deferral can't seat a socket into
+   *  a room a newer join already superseded (hop-during-load race). */
+  roomOf(playerId: string): string | undefined {
+    return this.sessions.get(playerId)?.room;
+  }
+
   /** Census for /metrics — sessions by state. */
   census(): Record<SessionState, number> {
     const c: Record<SessionState, number> = { connecting: 0, active: 0, spectating: 0, grace: 0, reaped: 0 };

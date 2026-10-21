@@ -19,7 +19,9 @@ describe('netbot — real clients over real sockets', () => {
     let best = Infinity;
     let start = Infinity;
     let carried = 0;
-    for (let i = 0; i < 110 && carried === 0; i++) {
+    // 85×500ms = 42.5s of routing window — enough for the 100m closing
+    // gate while the whole test stays inside the 60s soak cap.
+    for (let i = 0; i < 85 && carried === 0; i++) {
       await sleep(500);
       for (const b of bots) {
         for (const [team, f] of b.nc.flags) {

@@ -74,11 +74,15 @@ export class RemoteDeployables {
   ids(): ReadonlySet<number> { return new Set(this.remote.keys()); }
   get size(): number { return this.remote.size; }
 
-  /** deploySpawn echo for a plant we already rendered locally. */
-  ackLocal(id: number, items: Item[]): void {
+  /** deploySpawn echo for a plant we already rendered locally — returns
+   *  false when no live local item exists (replayed intent, pod cleared):
+   *  the caller must remoteSpawn instead or the item is a ghost. */
+  ackLocal(id: number, items: Item[]): boolean {
     const live = items.filter((i): boolean => !i.dead);
     const newest = live[live.length - 1];
-    if (newest) { newest.serverId = id; this.byId.set(id, newest); }
+    if (!newest) {return false;}
+    newest.serverId = id; this.byId.set(id, newest);
+    return true;
   }
 
   dropById(id: number): void { this.byId.delete(id); }

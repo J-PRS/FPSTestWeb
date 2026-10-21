@@ -74,7 +74,10 @@ export class WtSocketAdapter {
     // Every lane here rejects with E_SESSION_CLOSED when the peer drops —
     // an unhandled rejection in the native addon's stream callbacks kills
     // the whole bun process, so each one is caught at its boundary.
-    session.closed.then((): void => this.die('session.closed')).catch((error): void => this.die(`session.closed err: ${error instanceof Error ? error.message : error}`));
+    session.closed.then((info): void => {
+      logger.warn('wt session.closed resolved', { code: info?.closeCode, reason: info?.reason });
+      this.die(`session.closed code=${info?.closeCode ?? '?'} ${info?.reason ?? ''}`);
+    }).catch((error): void => this.die(`session.closed err: ${error instanceof Error ? error.message : error}`));
   }
 
   private asSocket(): ServerWebSocket<WebSocketData> {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { mkRoom, step, pin, watch } from './harness.ts';
+import { mkRoom, step, pin, freeze, watch } from './harness.ts';
 import { WeaponType } from '../../../shared/weapons.ts';
 import { BOT_LOADOUTS } from '../../../shared/botLoadouts.ts';
 import type { Vec3 } from '../../src/types.ts';
@@ -10,7 +10,7 @@ type Sim = { spawnBall(v: number, near?: Vec3, pos?: Vec3): { id: number };
   balls: Map<number, { health: number; tgtValid?: boolean; tx?: number; ty?: number; tz?: number; targetId?: string | null }> };
 function spawnAt(room: ReturnType<typeof mkRoom>, pos: Vec3, parkFar = false): number {
   const sim = room.ballSim as unknown as Sim;
-  const id = sim.spawnBall(0, undefined, pos).id;
+  const {id} = sim.spawnBall(0, undefined, pos);
   // BallSim now steps in scenarios — a free ball retargets the pinned
   // bot and suicides on contact, and a ball committed to its own spot
   // pops on arrival. Commit it somewhere out of the way so the test
@@ -44,7 +44,7 @@ describe('scenario: bot shells hit creatures like player shots', () => {
     const id = room.projectiles.spawn(b.id, WeaponType.BoltLauncher,
       { x: 0, y: 31.4, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
     expect(id).toBeTruthy();
-    for (let i = 0; i < 60; i++) step(room, 1);
+    for (let i = 0; i < 60; i++) {step(room, 1);}
     // Direct-hit beast takes the directDamage line; its neighbor only the blast.
     expect(ballHp(room, aim)).toBeLessThan(hpAim);
     expect(ballHp(room, splash)).toBeLessThan(hpSplash);
@@ -53,12 +53,21 @@ describe('scenario: bot shells hit creatures like player shots', () => {
   it('a whiffed shell damages nothing — geometry, not dice', () => {
     const room = mkRoom({ bots: 1 }, 'tdm');
     const b = bot(room);
-    pin(room, b.id, { x: 0, y: 31, z: 0 });
+    // freeze, not pin: a live brain hunts the ball with its own arsenal
+    // and "whiffed shell" stops measuring the shell. The frozen body
+    // still owns the spawned shell; the think/fire pipeline stays off.
+    freeze(room, b.id, { x: 0, y: 31, z: 0 });
     const aim = spawnAt(room, { x: 20, y: 31, z: 30 }, true); // 30m off-axis, parked far
+    // Inert — tgtValid false means no chase/launch path feeds it. A
+    // 400m parkFar journey is a real drive (elastic balls complete it
+    // and despawn off-map); the whiff test needs a ball that stays put.
+    const sim0 = room.ballSim as unknown as Sim;
+    const wb = sim0.balls.get(aim);
+    if (wb) {wb.tgtValid = false;}
     const hp0 = ballHp(room, aim);
     room.projectiles.spawn(b.id, WeaponType.BoltLauncher,
       { x: 0, y: 31.4, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
-    for (let i = 0; i < 60; i++) step(room, 1);
+    for (let i = 0; i < 60; i++) {step(room, 1);}
     expect(ballHp(room, aim)).toBe(hp0);
   });
 
@@ -114,7 +123,7 @@ describe('scenario: bot shells hit creatures like player shots', () => {
       loadouts: Map<string, (typeof BOT_LOADOUTS)[number]>;
     };
     bots.loadouts.set(b.id, BOT_LOADOUTS[7]!); // artillery
-    for (let i = 0; i < 3; i++) bots.arsenal.fireAt(b, 'victim', { x: 50, y: 32, z: 0 });
+    for (let i = 0; i < 3; i++) {bots.arsenal.fireAt(b, 'victim', { x: 50, y: 32, z: 0 });}
     expect(w.count('projectileCreated')).toBe(1); // one shell per 2.0s, not three per tick
     bots.arsenal.testAdvance(2100);
     bots.arsenal.fireAt(b, 'victim', { x: 50, y: 32, z: 0 });

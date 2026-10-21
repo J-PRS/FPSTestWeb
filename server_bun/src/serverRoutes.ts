@@ -161,6 +161,7 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Reques
 // Admin API — bearer-token guarded (FPS_ADMIN_TOKEN). Unset = closed.
 //   POST /admin/reload?room=X   re-read maps/X.json into the live room
 //   POST /admin/kick?player=X   boot a player
+//   POST /admin/dropsock?player=X  kill the socket, keep the seat (reclaim test)
 //   POST /admin/end?room=X      force-end the match (leader wins)
 //   POST /admin/heapdump        write a JSC heapsnapshot to _heapdumps/
 //   GET  /admin/rooms           detailed live dump
@@ -182,6 +183,13 @@ export function adminRoute(ctx: HttpCtx, req: Request, url: URL): Response | Pro
     },
     '/admin/kick': (): Response => {
       const ok = ctx.gameServer.kickPlayer(url.searchParams.get('player') ?? '');
+      return json({ ok }, { status: ok ? 200 : 404 });
+    },
+    // Socket drop WITHOUT seat removal — kicks the wire, keeps the
+    // player record so grace/reclaim replay runs. The real-socket
+    // reconnect test needs this; kick would delete the seat.
+    '/admin/dropsock': (): Response => {
+      const ok = ctx.gameServer.dropSocket(url.searchParams.get('player') ?? '');
       return json({ ok }, { status: ok ? 200 : 404 });
     },
     '/admin/end': (): Response => {
@@ -359,7 +367,7 @@ export async function mapBinRoute(url: URL): Promise<Response> {
   if (!/^(?:[\w-]{1,64}\/){0,3}[\w-]{1,64}\.(?:bin|png|jpe?g|webp|glb|json)$/.test(file)) {
     return corsResponse('Not found', { status: 404 });
   }
-  let f = Bun.file(`${import.meta.dir}/../../maps/${file}`);
+  const f = Bun.file(`${import.meta.dir}/../../maps/${file}`);
   if (!(await f.exists())) {
     // TOML-authored spec requested as .json — solo boot, thumbs and
     // maplab only speak JSON; translate on the fly so the toml stays
