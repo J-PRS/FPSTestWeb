@@ -39,6 +39,9 @@ _tools/dif2glb_in/
 # Unity Asset Store bodies — licensed, not owned; stay out of git
 client/public/assets/models/class_*.glb
 
+# Announcer clips — ripped for playtest only, licensed; never tracked
+client/public/sfx/announce_*.wav
+
 # Session probe scripts + generated captures — scratch, not for git
 .devin_*
 client/.devin_*
@@ -103,3 +106,11 @@ soak*.txt
 server_bun/suite_*.txt
 _tools/e2e/profout/
 _tools/e2e/_boot*.ts
+
+# e2e soak/chaos dumps + regenerable terrain binaries — scratch output.
+# NOTE: bins/txts already tracked stay tracked; this only hides new ones.
+_tools/e2e/*.txt
+maps/*.bin
+
+# Soak/session captures — generated output, not source
+*.out

@@ -35,3 +35,4 @@ git filter-repo deletes worktree files stripped from HEAD — copy tracked paths
 - 2026-10-18 - Chrome serverCertificateHashes rejects certs that are: expired, >14-day validity, RSA keys, or CA:TRUE. Dev WT cert must be EC P-256 + CA:FALSE + <=13 days; server.ts auto-regens the checked-in pair at <48h to expiry via openssl.
 - attacker.sim is NOT netDriven - local species run the same shared sim type; authority flags must read .netDriven (fixed in speciesKit hurtPlayer) 
 \"- cmd 'set X=val &' leaves a trailing space in the value (adminToken='devin ' -> 401 for 'devin'); PowerShell '\$env:X = 'y'' is the reliable spawn-env path on this box\"  
+- don't gate desync-heal sends on isConnected - snapshotRequest is QUEUEABLE, dead-lane sends queue+flush on reconnect; gating broke 10 heal tests where no transport exists 

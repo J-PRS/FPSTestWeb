@@ -62,3 +62,4 @@ history in place.
 - per-IP join guards must assume whole households share an address (CGNAT/LAN/tailnet) — 20/min floor for fresh joins; token reclaims already bypass
 - /wthash must reflect the bound socket, not cert presence — a dead WT bind advertised enabled:true and cost a flap storm
 - authoritySims() vs isConnected(): dedicated rooms gate ambient spawns + env claims on authoritySims (P2P hosts keep local species + claim channels); isConnected alone would break P2P.
+- bigSoak@64 deterministically fails on bot-0 tick liveness (0-1.25/s mid-window) on this box; 48 passes clean (0 rejects/corrections) - capacity cliff in outbox drain under load, verify on idle CI before chasing code 
