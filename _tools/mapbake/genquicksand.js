@@ -42,41 +42,35 @@ for (let z = 0; z < N; z += 1) {
     // Domain warp for organic shape.
     const wobble = 1 + 0.25 * (fbm(u * 4 + 1.7, v * 4 + 9.2) - 0.5) + 0.12 * (fbm(u * 8 + 8.3, v * 8 + 2.8) - 0.5);
 
-    // Bowl profile: low center (fray), steep inner wall (ski run), flat rim
-    // (barrier), and gentle rising outer terrain (so you can't ski out).
+    // Bowl profile: deeper bowl (0.04 center, 0.42 rim) with steeper inner wall.
     const rd = d * wobble;
     const rimR = 200;
-    const rimHeight = 0.34;
+    const rimHeight = 0.42;
+    const innerR = 70;
     let bowl;
-    if (rd < rimR) {
-      const t = rd / rimR;
-      bowl = 0.10 + (rimHeight - 0.10) * (t * t * (3 - 2 * t));
-      // Bowl-floor relief — ±7m of ridged dusting read as a pancake at
-      // 125m heightScale. Real dunes: domain-warped swells (~110m), sharp
-      // ridged crags (~70m) and small chop, masked to the interior —
-      // fades in past the katastand clearing and out at the wall, so the
-      // rim silhouette is untouched.
-      const inner = (1 - t) * smoothstep(18, 55, rd);
-      const wu = u + 0.15 * (fbm(u * 3 + 5.5, v * 3 + 4.1) - 0.5);
-      const wv = v + 0.15 * (fbm(u * 3 + 9.4, v * 3 + 6.6) - 0.5);
-      const mound = fbm(wu * 7 + 3.1, wv * 7 + 8.8) - 0.5;
-      const crag = ridged(wu * 11 + 4.7, wv * 11 + 7.9) / 1.6 - 0.5;
-      const chop = fbm(wu * 18 + 6.2, wv * 18 + 2.9) - 0.5;
-      bowl += inner * (0.20 * mound + 0.06 * crag + 0.035 * chop);
-      // Drainage gullies carved into the inner wall face — angular
-      // channels warped by fbm so they wiggle, shallow enough to ski.
-      const wall = smoothstep(0.55, 0.8, t) * (1 - smoothstep(0.92, 1.0, t));
-      const ang = Math.atan2(wrapSigned(wz), wrapSigned(wx));
-      const gully = Math.abs(Math.sin(ang * 7 + 3 * fbm(u * 4 + 2.2, v * 4 + 7.7)));
-      bowl -= wall * (1 - gully) * 0.05;
+    if (rd < innerR) {
+      const t = rd / innerR;
+      bowl = 0.04 + (rimHeight - 0.10) * (t * t * (3 - 2 * t)) + 0.10 * (1 - t * t);
+      // Bigger dunes for cover: domain-warped swells, sharp ridged crags,
+      // small chop - masked to interior, fades in past clearing, out at wall.
+      const inner = (1 - t) * smoothstep(6, 35, rd);
+      const wu = u + 0.20 * (fbm(u * 3 + 5.5, v * 3 + 4.1) - 0.5);
+      const wv = v + 0.20 * (fbm(u * 3 + 9.4, v * 3 + 6.6) - 0.5);
+      const mound = fbm(wu * 6 + 3.1, wv * 6 + 8.8) - 0.5;
+      const crag = ridged(wu * 10 + 4.7, wv * 10 + 7.9) / 1.6 - 0.5;
+      const chop = fbm(wu * 16 + 6.2, wv * 16 + 2.9) - 0.5;
+      bowl += inner * (0.22 * mound + 0.07 * crag + 0.04 * chop);
+    } else if (rd < rimR) {
+      const t = (rd - innerR) / (rimR - innerR);
+      bowl = 0.34 + (rimHeight - 0.34) * (t * t * (3 - 2 * t));
     } else {
       const t = Math.min(1, (rd - rimR) / 160);
-      bowl = rimHeight + 0.50 * (t * t * (3 - 2 * t));
+      bowl = rimHeight + 0.30 * (t * t * (3 - 2 * t));
     }
 
     // Ridged texture for organic rock.
     const rid = ridged(u * 3 + 2.3, v * 3 + 0.9) / 2.2;
-    let hh = bowl + 0.03 * rid + 0.015 * fbm(u * 5 + 0.7, v * 5 + 1.1);
+    let hh = bowl + 0.05 * rid + 0.02 * fbm(u * 5 + 0.7, v * 5 + 1.1);
 
     h[z * N + x] = Math.min(1, Math.max(0, hh));
   }

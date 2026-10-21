@@ -378,6 +378,12 @@ export class Player {
    *  health (offline); MP's shadow pays it server-side and the wire
    *  carries the bar, so predicting it here would double-charge. */
   onFallDamage: ((impact: number, vImp: number) => void) | null = null;
+  /** Kill zone — world Y below which the body is out of the arena. The
+   *  server measures this on its shadow and kills authoritatively; the
+   *  local prediction just makes the death land on the same frame. */
+  killY: number | null = null;
+  /** Fired when the predicted body drops below the map's kill zone. */
+  onKillZone: (() => void) | null = null;
   onBelt: ((e: FireEvent, item: BeltItem) => void) | null = null;
   /** Instant-skill ante mirror → NetworkManager.sendSkillUse. */
   onSkillUse: (() => void) | null = null;
@@ -642,6 +648,11 @@ export class Player {
     this.pos.copy(moveState.pos);
     this.vel.copy(moveState.vel);
     this.onGround = moveState.onGround;
+
+    // Kill zone — the deck ran out. Predicted locally so the death lands
+    // on the frame the body crossed it; the server's shadow measures the
+    // same fall and owns the actual kill.
+    if (this.killY !== null && this.pos.y < this.killY) {this.onKillZone?.();}
   }
 
   // Jetpack thrust is inside the shared sim (fed via jetHeld into

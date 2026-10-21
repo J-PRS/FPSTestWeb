@@ -59,6 +59,8 @@ export interface RoomInfo {
   structures?: StructureSpec[];
   /** Arena dome from the map spec — center {x,z} + radius. */
   arena?: { x: number; z: number; radius: number };
+  /** Kill zone height (world Y) — echoed for the client's own prediction. */
+  killY?: number;
   /** World-state replay frames the room's registered sims emit —
    *  roster snapshots a joiner/resync replays (Room.sims worldState). */
   simsWorldState?: () => ServerMessage[];
@@ -340,15 +342,22 @@ export class MessageHandler {
     this.combat.serverHit('environment', targetId, damage, 'fell to death', { hb: 'dmg.fall' });
   }
 
+  /** Kill zone — the shadow measured the body below the map's floor.
+   *  Server-authoritative like the fall path: the client has no say. */
+  killZone(targetId: string, damage: number): void {
+    this.combat.serverHit('environment', targetId, damage, 'fell out of the arena', { hb: 'dmg.killzone' });
+  }
+
   /** Admin hot-reload — re-point the map echo fields so the next gameState
    *  (joiners/spectators) carries the new layout. In-room clients get the
    *  matching `mapUpdate` broadcast from Room.applySpec. */
-  setMap(m: Pick<RoomInfo, 'bases' | 'structures' | 'arena' | 'ambient' | 'terrain' | 'heightScale' | 'tileSize' | 'fog' | 'water' | 'terrainTex' | 'terrainPreset' | 'sky' | 'weather' | 'atmosphere' | 'interiors'>): void {
+  setMap(m: Pick<RoomInfo, 'bases' | 'structures' | 'arena' | 'killY' | 'ambient' | 'terrain' | 'heightScale' | 'tileSize' | 'fog' | 'water' | 'terrainTex' | 'terrainPreset' | 'sky' | 'weather' | 'atmosphere' | 'interiors'>): void {
     // Explicit field writes (not Object.assign): a spec that omits a
     // field must clear it, not leave the previous map's value behind.
     this.roomInfo.bases = m.bases;
     this.roomInfo.structures = m.structures;
     this.roomInfo.arena = m.arena;
+    this.roomInfo.killY = m.killY;
     this.roomInfo.ambient = m.ambient;
     this.roomInfo.terrain = m.terrain;
     this.roomInfo.heightScale = m.heightScale;
@@ -451,7 +460,7 @@ export class MessageHandler {
       scores: this.roomInfo.scores ? (Object.assign({}, this.roomInfo.scores)) : undefined,
       ffaScores: this.roomInfo.ffaScores?.(),
       map: this.roomInfo.bases || this.roomInfo.structures || this.roomInfo.arena || this.roomInfo.terrain || this.roomInfo.heightScale || this.roomInfo.tileSize || this.roomInfo.fog || this.roomInfo.water || this.roomInfo.weather || this.roomInfo.atmosphere || this.roomInfo.spawns?.() || this.roomInfo.teamSpawns?.()
-        ? (() => { const m = { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena, ambient: this.roomInfo.ambient, terrain: this.roomInfo.terrain, heightScale: this.roomInfo.heightScale, tileSize: this.roomInfo.tileSize, fog: this.roomInfo.fog, water: this.roomInfo.water, spawns: this.roomInfo.spawns?.() ?? undefined, teamSpawns: this.roomInfo.teamSpawns?.() ?? undefined, terrainTex: this.roomInfo.terrainTex, terrainPreset: this.roomInfo.terrainPreset, sky: this.roomInfo.sky, weather: this.roomInfo.weather, atmosphere: this.roomInfo.atmosphere, interiors: this.roomInfo.interiors };
+        ? (() => { const m = { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena, killY: this.roomInfo.killY, ambient: this.roomInfo.ambient, terrain: this.roomInfo.terrain, heightScale: this.roomInfo.heightScale, tileSize: this.roomInfo.tileSize, fog: this.roomInfo.fog, water: this.roomInfo.water, spawns: this.roomInfo.spawns?.() ?? undefined, teamSpawns: this.roomInfo.teamSpawns?.() ?? undefined, terrainTex: this.roomInfo.terrainTex, terrainPreset: this.roomInfo.terrainPreset, sky: this.roomInfo.sky, weather: this.roomInfo.weather, atmosphere: this.roomInfo.atmosphere, interiors: this.roomInfo.interiors };
           logger.debug(`roomEcho map keys: ${Object.keys(m).join(',')} interiors=${m.interiors?.length}`); return m; })()
         : undefined,
       flags: this.roomInfo.flags?.(),

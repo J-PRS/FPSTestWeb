@@ -56,6 +56,9 @@ export interface SpawnHost {
   broadcast: (msg: ServerMessage) => void;
   players: PlayerManager;
   nextId: number;
+  /** Highest structure top under (x,z) — a map whose floor is decks
+   *  (the sky arenas) has no terrain worth spawning on. */
+  structureTopAt?(x: number, z: number): number | undefined;
   readonly balls: Map<number, SimBall>;
   readonly retargetAcc: Map<number, number>;
   readonly resyncAcc: Map<number, number>;
@@ -85,13 +88,28 @@ export function spawnBall(h: SpawnHost, variant: BallVariant, near?: SimVec, pos
   } else {
     const cx = near ? near.x : 0;
     const cz = near ? near.z : 0;
-    const ang = h.rng() * Math.PI * 2;
-    const dist = 60 + h.rng() * 60;
-    x = cx + Math.cos(ang) * dist;
-    z = cz + Math.sin(ang) * dist;
+    // A map whose play space is STRUCTURES (the sky arenas) has its floor
+    // on the decks, not on the plain far below — a ball dropped 90m under
+    // the arena is a ball nobody can reach. Keep picking until the point
+    // sits over a deck (a map with no structures falls straight through
+    // to the plain, as before).
+    const deckAt = h.structureTopAt?.bind(h);
+    for (let tries = 0; tries < 8; tries += 1) {
+      const ang = h.rng() * Math.PI * 2;
+      const dist = 60 + h.rng() * 60;
+      x = cx + Math.cos(ang) * dist;
+      z = cz + Math.sin(ang) * dist;
+      if (!deckAt) {break;}
+      const deck = deckAt(x, z);
+      if (deck !== undefined && Number.isFinite(deck)) {break;}
+    }
   }
   const ground = hmHeight(field, x, z);
-  const y = posOverride ? posOverride.y : (Number.isFinite(ground) ? ground : 0) + 40 + h.rng() * 40;
+  // The floor is whichever surface is under the ball — the terrain plain or
+  // the deck above it.
+  const deck = h.structureTopAt?.(x, z);
+  const floor = deck !== undefined && Number.isFinite(deck) ? Math.max(ground, deck) : ground;
+  const y = posOverride ? posOverride.y : (Number.isFinite(floor) ? floor : 0) + 40 + h.rng() * 40;
   const ang = h.rng() * Math.PI * 2;
   const spd = h.rng() * 20;
   const b = makeSimBall(

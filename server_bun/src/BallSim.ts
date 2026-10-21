@@ -26,7 +26,7 @@ import {
   type SimBall, type SimVec, type BallVariant, type SegmentKind,
   stepBall, type StructureCollider,
 } from '../../shared/ballSim.ts';
-import { ColliderIndex } from '../../shared/solidWorld.ts';
+import { ColliderIndex, SolidWorld } from '../../shared/solidWorld.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { ServerMessage, Vec3, HitVerdict } from './types.ts';
 import { encodeBallSegment, SIM_TICK_DT } from '../../shared/wire.ts';
@@ -53,6 +53,8 @@ export class BallSim {
   readonly balls = new Map<number, SimBall>();
   nextId = 1;
   private pendingRespawns = 0;
+  /** Map kill plane: a ball that falls below it is removed (see fellOut). */
+  killY = -Infinity;
   readonly retargetAcc = new Map<number, number>();
   readonly resyncAcc = new Map<number, number>();
   broadcast: (msg: ServerMessage) => void;
@@ -74,10 +76,18 @@ export class BallSim {
    *  balls ricochet off walls/pillars. Empty on structureless maps. */
   private _colliders: readonly StructureCollider[] = [];
   colliderIndex: ColliderIndex | null = null;
+  /** Solid world over the same colliders - the deck a ball lands on. */
+  private solid: SolidWorld | null = null;
   get colliders(): readonly StructureCollider[] { return this._colliders; }
   set colliders(list: readonly StructureCollider[]) {
     this._colliders = list;
     this.colliderIndex = list.length > 0 ? new ColliderIndex(list) : null;
+    this.solid = list.length > 0 ? new SolidWorld(list) : null;
+  }
+  /** Highest structure top under (x,z) - the sky arenas' decks. */
+  structureTopAt(x: number, z: number): number | undefined {
+    const t = this.solid?.topAt(x, z);
+    return t === undefined || !Number.isFinite(t) ? undefined : t;
   }
 
   constructor(players: PlayerManager, broadcast: (msg: ServerMessage) => void,
@@ -244,6 +254,17 @@ export class BallSim {
    *  team-mode nugget drops) — carries the corpse position. */
   onKilled: ((by: string, pos: Vec3, variant: number) => void) | null = null;
 
+  /** Below the map's kill plane a ball is gone for good: no splitter, no
+   *  kill credit. The population drip refills the arena on a deck. */
+  private fellOut(b: SimBall): void {
+    b.dead = true;
+    this.balls.delete(b.id);
+    this.retargetAcc.delete(b.id);
+    this.resyncAcc.delete(b.id);
+    this.segRegime.delete(b.id);
+    this.broadcast(verbPayload(WORLD_MODEL.ball!, 'gone', 'id', b.id, { position: { x: b.x, y: b.y, z: b.z } }) as ServerMessage);
+  }
+
   private kill(b: SimBall, by?: string): void {
     b.dead = true;
     this.balls.delete(b.id);
@@ -311,6 +332,7 @@ export class BallSim {
 
     for (const b of this.balls.values()) {
       if (b.dead) {continue;}
+      if (b.y < this.killY) {this.fellOut(b); continue;}
 
       // Periodic retarget — committed-target rules, fodder = nearest alive.
       // Retarget broadcasts even without a velocity change: it doubles as a

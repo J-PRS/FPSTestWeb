@@ -6,7 +6,7 @@ import { TEAM_COLORS } from '../../../shared/teams.js';
 import {
   mkBastion, mkBaseTower, mkWallRun, mkWallGate, mkGenDome, mkLandingPad,
   mkCommsMast, mkKataStand, mkBunker, mkFlagTower, mkPillar, mkObelisk,
-  mkArch, mkShard, mkGatehouse, mkGenHouse,
+  mkArch, mkShard, mkGatehouse, mkGenHouse, mkArenaPanel, mkArenaPier,
 } from '../structures/structures.js';
 import { ramp, hullMat, trimMat, deckMat, darkMat } from '../structures/structKit.js';
 import { applyTerrainBlend } from '../structures/terrainBlend.js';
@@ -28,6 +28,8 @@ export const KIT_BUILDERS: Record<string, (glow: number) => THREE.Group> = {
   wallgate:  (g): THREE.Group<THREE.Object3DEventMap> => mkWallGate(18, 4.2, 6, g),
   gendome:   (g): THREE.Group<THREE.Object3DEventMap> => mkGenDome(5, g),
   landpad:   (g): THREE.Group<THREE.Object3DEventMap> => mkLandingPad(4.5, g),
+  arenapanel:(g): THREE.Group<THREE.Object3DEventMap> => mkArenaPanel(12, g),
+  arenapier: (g): THREE.Group<THREE.Object3DEventMap> => mkArenaPier(18, g),
   commast:   (g): THREE.Group<THREE.Object3DEventMap> => mkCommsMast(10, g),
   katastand: (g): THREE.Group<THREE.Object3DEventMap> => mkKataStand(g),
   bunker:    (g): THREE.Group<THREE.Object3DEventMap> => mkBunker(12, 10, 4.2, g),

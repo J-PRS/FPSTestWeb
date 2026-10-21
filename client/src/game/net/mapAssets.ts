@@ -47,7 +47,7 @@ const _q = new THREE.Quaternion();
 
 
 
-export type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; water?: WaterSpec; spawns?: SpawnPoint[]; teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] }; terrainTex?: string; terrainPreset?: number; sky?: string; weather?: WeatherSpec; atmosphere?: AtmosphereSpec; interiors?: InteriorSpec[] };
+export type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; killY?: number; ambient?: Record<string, number>; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; water?: WaterSpec; spawns?: SpawnPoint[]; teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] }; terrainTex?: string; terrainPreset?: number; sky?: string; weather?: WeatherSpec; atmosphere?: AtmosphereSpec; interiors?: InteriorSpec[] };
 
 
 
@@ -103,10 +103,17 @@ export function applyWater(ctx: NetCtx, water?: WaterSpec): void {
   ctx.deps.lazyTerrain().setWaterLevel(water?.level, water?.color);
 }
 
+/** Kill zone — the map's floor. The local player predicts the death on
+ *  the frame the body crosses it; the server's shadow measures the same
+ *  fall and owns the kill. Absent = no zone (the field clears, so a
+ *  hot-reload onto a normal map can't strand a stale kill height). */
+export function applyKillZone(ctx: NetCtx, killY?: number): void {
+  ctx.deps.lazyPlayer().killY = killY ?? null;
+}
+
 /** Per-map procedural-sky tuning — reaches the AtmosphericSky instance
  *  through the scene (it tags its mesh `__sky`; a baked skybox hides that
- *  mesh, making the override a no-op). No atmosphere → reset to boot sky. */
-export function applyAtmosphere(ctx: NetCtx, atmosphere?: AtmosphereSpec): void {
+ *  mesh, making the override a no-op). No atmosphere → reset to boot sky. */export function applyAtmosphere(ctx: NetCtx, atmosphere?: AtmosphereSpec): void {
   const sky = ctx.deps.lazyScene().getObjectByName('__sky')?.userData.sky as
     { setAtmosphere(p: AtmosphereSpec): void; resetAtmosphere(): void; getSunDirection(): THREE.Vector3 } | undefined;
   if (!sky) {return;}

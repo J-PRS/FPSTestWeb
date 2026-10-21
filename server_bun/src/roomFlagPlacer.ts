@@ -92,6 +92,12 @@ export class FlagPlacer {
     let {x} = v, {z} = v;
     for (let i = 0; i < 10; i += 1) {
       const top = this.standTop(x, z);
+      // A STRUCTURE-backed home is the map's own doing - leave it alone.
+      // The sky arenas' flags stand on decks; reading that as a terrain
+      // mesa walked the flag off the arena and parked it under the
+      // kill zone.
+      const ground = this.host.field ? hmHeight(this.host.field, x, z) : 0;
+      if (top > ground + 0.5) {break;}
       // Reachable when SOME side offers a jet-able approach (~18m over
       // 60m); a big flat mesa reads correctly this way — local flatness
       // doesn't fake accessibility, the far ring does.

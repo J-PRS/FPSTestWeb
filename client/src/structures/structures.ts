@@ -419,6 +419,57 @@ export function mkLandingPad(r = 4.5, teamGlow = 0x59_F2_FF): THREE.Group {
   return g;
 }
 
+/** Deck panel — a square walkway tile for the sky arenas: a battered
+ *  skirt carrying a plate, and a lit rim on two edges. The rim is the
+ *  read; grate ribs were cut because they changed nothing in silhouette. 12m square, 2.2m thick; the top is the walking surface.
+ *  Authored for the Air Arena, but it is a generic tile — any map that
+ *  wants a floating catwalk grid can lay it. */
+export function mkArenaPanel(s = 12, teamGlow = 0x59_F2_FF): THREE.Group {
+  const g = new THREE.Group();
+  // Buried skirt so a panel never floats off its support.
+  g.add(skirt(profOct(s * 0.94, s * 0.94, s * 0.05), 1.3, 1.12, hullMat, 2));
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(s * 0.92, 0.45, s * 0.92), deckMat);
+  plate.position.y = 1.55;
+  plate.castShadow = true;
+  plate.receiveShadow = true;
+  g.add(plate);
+  // Lit rim on the two north edges — the Ascend glow line.
+  for (const sgn of [-1, 1]) {
+    const strip = glowStrip(s * 0.88, 0.16, 0.12, new THREE.MeshBasicMaterial({ color: teamGlow }));
+    strip.position.set(0, 1.88, sgn * (s * 0.46));
+    g.add(strip);
+  }
+  g.userData.hulls = [{ pos: { x: 0, y: 1.1, z: 0 }, size: { x: s, y: 2.2, z: s } } satisfies HullBox];
+  return g;
+}
+
+/** Sky pier — the tapered column that carries a deck over nothing.
+ *  18m of shaft, 4.2m at the foot, 2.8m at the head; scaled up for the
+ *  long drops (the uniform kit scale stretches it cleanly). */
+export function mkArenaPier(h = 18, teamGlow = 0x59_F2_FF): THREE.Group {
+  const g = new THREE.Group();
+  g.add(skirt(profOct(5.2, 5.2, 0.4), 1.8, 1.3, hullMat, 2.5));
+  const shaft = mkLoft(topDown(
+    { z: h,       ring: profOct(2.8, 2.8, 0.25) },
+    { z: h * 0.5, ring: profOct(3.3, 3.3, 0.25) },
+    { z: 0,       ring: profOct(4.2, 4.2, 0.35) },
+  ), hullMat);
+  shaft.rotation.x = -Math.PI / 2;
+  shaft.position.y = 1.8;
+  shaft.castShadow = true;
+  g.add(shaft);
+  // One lit collar near the head — a waypoint read from the deck above.
+  const collar = mkAnnulus(
+    profOct(3.05, 3.05, 0.2),
+    profOct(2.8, 2.8, 0.2),
+    1.8 + h - 2.2, 1.8 + h - 1.85, new THREE.MeshBasicMaterial({ color: teamGlow }),
+  );
+  collar.rotation.x = -Math.PI / 2;
+  g.add(collar);
+  g.userData.hulls = [{ pos: { x: 0, y: (1.8 + h) / 2, z: 0 }, size: { x: 4.2, y: 1.8 + h, z: 4.2 } } satisfies HullBox];
+  return g;
+}
+
 // ---------------------------------------------------------------------------
 // Midfield scatter — landmarks and ski-cover, not base parts. Each is one
 // strong silhouette on a buried skirt; all take a `hue` accent or none.

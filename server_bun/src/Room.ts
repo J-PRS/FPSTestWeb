@@ -467,6 +467,14 @@ export class Room {
       }
       if (dmg >= p.maxHealth * MOVEMENT_CONFIG.fallDamageAbsorbFrac) {this.messages.fallDamage(pid, dmg);}
     };
+    // Kill zone — the shadow measured the body below the map's floor, so
+    // there's nothing to validate: it goes straight into the environment
+    // funnel and the player respawns like any other death.
+    this.moveSim.onKillZone = (pid): void => {
+      const p = this.players.getPlayer(pid);
+      if (!p || p.isDead) {return;}
+      this.messages.killZone(pid, p.maxHealth);
+    };
     // Reclaim desync accounting — journal wraps and reclaim gaps are the
     // only ways a reconnected client silently loses event history.
     this.connections.onJournalWrap = (n): void => this.healthBump('journalWrap', n);
@@ -483,6 +491,7 @@ export class Room {
     };
     this.moveSim.attachStructures(this.structs.eff());
     this.moveSim.setWaterLevel(this.spec.water?.level);
+    this.moveSim.setKillY(this.spec.killY);
     // Shield soak burns the same tank the jet model owns — without this
     // a shielded player under fire runs the sim tank ahead of the real one.
     this.players.energyBurn = (pid, n): boolean => this.moveSim.drainEnergy(pid, n);
@@ -499,6 +508,7 @@ export class Room {
     );
     if (this.noBalls) {this.ballSim.population = { base: 0, perPlayer: 0, max: 0 };}
     else if (this.spec.balls) {this.ballSim.population = this.spec.balls;}
+    this.ballSim.killY = this.spec.killY ?? -Infinity;
     this.ballSim.onKilled = (by, pos, variant): void => this.scoring.nonPlayerKill(by, pos, variant);
     this.ballSim.colliders = structureColliders(this.structs.eff());
     if (this.spec.ballMix) {this.ballSim.ballMix = this.spec.ballMix;}
@@ -919,6 +929,7 @@ export class Room {
       bases: this.spec.bases,
       structures: this.structs.eff(),
       arena: this.spec.arena,
+      killY: this.spec.killY,
       ambient: this.spec.ambient,
       // Authored spec title wins; the maps/<X>.json source filename is the
       // fallback — set post-ctor by the factory, refreshed by rotation.
@@ -1281,6 +1292,7 @@ export class Room {
       bases: spec.bases,
       structures: this.structs.eff(),
       arena: spec.arena ?? null,
+      killY: spec.killY,
       ambient: spec.ambient,
       spawns: this.players.spawnPoints ?? undefined,
       teamSpawns: this.players.teamSpawns ?? undefined,
@@ -1323,6 +1335,7 @@ export class Room {
     if (this.noBalls) {this.ballSim.population = { base: 0, perPlayer: 0, max: 0 };}
     else if (spec.balls) {this.ballSim.population = spec.balls;}
     if (spec.ballMix) {this.ballSim.ballMix = spec.ballMix;}
+    this.ballSim.killY = spec.killY ?? -Infinity;
     this.creatureSim.pops = this.noCreatures ? {} : (spec.creatures ?? {});
     this.creatureSim.colliders = this.ballSim.colliders;
   }
@@ -1447,3 +1460,4 @@ counts[small] += 1;
     this.scoring.syncHeld();
   }
 }
+

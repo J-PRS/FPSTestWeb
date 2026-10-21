@@ -118,6 +118,11 @@ export const KIT_HULLS: Record<string, KitHull[]> = {
   lowwall:   LOWWALL_7,
   gendome:   domeHulls(5),
   landpad:   [box(0, 0.9, 0, 9.45, 1.8, 9.45)],
+  // Sky-arena tiles — the Air Arena's walkway grid. arenapanel is a 12m
+  // grated deck tile (top at 2.2), arenapier the column under it (18m
+  // of shaft, scaled up for the long drops).
+  arenapanel:[box(0, 1.1, 0, 12, 2.2, 12)],
+  arenapier: [box(0, 9.9, 0, 4.2, 19.8, 4.2)],
   commast:   [box(0, 5.7, 0, 2.2, 11.4, 2.2)],
   ramp:      [box(0, 1.25, 6, 5, 2.5, 12)],
   wallgate:  fold([

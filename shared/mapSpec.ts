@@ -355,7 +355,9 @@ function parseStructures(raw: unknown): StructureSpec[] | undefined {
     // Scale only exists for kit pieces; a bogus value drops the entry —
     // a silently-coerced wall scale would desync render from collision.
     const sc = (s as Record<string, unknown>).scale;
-    if (sc !== undefined && (!Number.isFinite(Number(sc)) || Number(sc) < 0.25 || Number(sc) > 4)) {dropped += 1; continue; }
+    // Sky-arena piers stretch past 4× for the long drops — the cap is a
+    // typo guard, not a proportion rule.
+    if (sc !== undefined && (!Number.isFinite(Number(sc)) || Number(sc) < 0.25 || Number(sc) > 8)) {dropped += 1; continue; }
     const o = s as Record<string, unknown>;
     const sv = (o.size as Vec3like | undefined) ?? { x: 1, y: 1, z: 1 };
     const pv = o.pos as Vec3like;
