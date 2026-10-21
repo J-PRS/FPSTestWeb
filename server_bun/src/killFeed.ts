@@ -60,7 +60,20 @@ export class KillFeed {
     private sendToPlayer?: SendToPlayerFn,
   ) {}
 
-  /** Player fully removed — drop their streak/grudge entries. Both maps
+  /** Resolve a player id to their display name (chosen nick or bot
+   *  callsign) so taunts and notices address humans by name. */
+  private displayName(id: string): string {
+    const p = this.playerManager.getPlayer(id);
+    if (p?.name) {return p.name;}
+    // Bot ids carry the callsign after the first dash.
+    if (id.startsWith('BOT-')) {
+      const parts = id.split('-');
+      if (parts.length >= 2) {return parts[1]!;}
+    }
+    return id;
+  }
+
+  /** Player fully removed - drop their streak/grudge entries. Both maps
    *  are keyed by live player ids; a churned roster would otherwise bank
    *  one entry per player who ever passed through the room. */
   forget(playerId: string): void {
@@ -84,7 +97,8 @@ export class KillFeed {
     // Self-splash reads as a death, not a frag — no streak credit, no
     // taunt, just the suicide notice.
     if (shooterId === targetId) {
-      this.broadcast({ type: 'matchNotice', text: label === 'Respawn' ? `${targetId} respawned` : `${targetId} fragged themselves` });
+      const name = this.displayName(targetId);
+      this.broadcast({ type: 'matchNotice', text: label === 'Respawn' ? `${name} respawned` : `${name} fragged themselves` });
       this.witness(targetId);
       return;
     }
@@ -114,12 +128,13 @@ shooter.streak += 1;
     // kill line — it reads as noticing, not noise.
     if (shooterId.startsWith('BOT-')) {
       this.deathStreak.delete(shooterId);
-      if (revenge) {this.say(shooterId, 'revenge', targetId);}
-      else if (weapon === WeaponType.Melee) {this.say(shooterId, 'fist', targetId);}
-      else if (ended >= 3) {this.say(shooterId, 'streakend', targetId);}
-      else if (this.skillKill(weapon, air)) {this.say(shooterId, 'air', targetId);}
+      const targetName = this.displayName(targetId);
+      if (revenge) {this.say(shooterId, 'revenge', targetName);}
+      else if (weapon === WeaponType.Melee) {this.say(shooterId, 'fist', targetName);}
+      else if (ended >= 3) {this.say(shooterId, 'streakend', targetName);}
+      else if (this.skillKill(weapon, air)) {this.say(shooterId, 'air', targetName);}
       else {
-        const t = killTaunt(shooterId, targetId);
+        const t = killTaunt(shooterId, targetName);
         this.botSay(shooterId, t?.text ?? null, true, t?.vgs);
       }
     }
@@ -159,18 +174,19 @@ shooter.streak += 1;
     const streak = (this.deathStreak.get(targetId) ?? 0) + 1;
     this.deathStreak.set(targetId, streak);
     if (this.deathStreak.size > 256) {evictEldest(this.deathStreak);}
-    if (bulliedBy(targetId, shooterId)) {this.say(targetId, 'bully', shooterId);}
-    else if (streak >= 3) {this.say(targetId, 'tilt', shooterId);}
+    const shooterName = this.displayName(shooterId);
+    if (bulliedBy(targetId, shooterId)) {this.say(targetId, 'bully', shooterName);}
+    else if (streak >= 3) {this.say(targetId, 'tilt', shooterName);}
     else if (this.hardShot(targetId, shooterId, weapon, air)) {
       // The props beat's second half: a victim who gave credit sometimes
       // hears the shooter close it with 'thanks' — the full Tribes
       // banter exchange (air hype → nice shot → thanks).
-      if (this.say(targetId, 'props', shooterId)) {this.thanksBeat(shooterId, targetId);}
+      if (this.say(targetId, 'props', shooterName)) {this.thanksBeat(shooterId, targetId);}
     }
     else {
       const t = shooterId === 'environment'
         ? envDeathTaunt(targetId)
-        : deathTaunt(targetId, shooterId);
+        : deathTaunt(targetId, shooterName);
       this.botSay(targetId, t?.text ?? null, true, t?.vgs);
     }
   }
@@ -179,25 +195,28 @@ shooter.streak += 1;
    *  (with the bot crowing about it), godlike increments past the table,
    *  and the streak-ending callout. */
   private notices(shooterId: string, targetId: string, streak: number, ended: number, multi: number): void {
+    const shooterName = this.displayName(shooterId);
     if (this.playerManager.killTotal() === 1) {
-      this.broadcast({ type: 'matchNotice', text: `${shooterId} draws first blood`, actor: shooterId, ann: 'firstblood' });
+      this.broadcast({ type: 'matchNotice', text: `${shooterName} draws first blood`, actor: shooterId, ann: 'firstblood' });
     }
     if (multi >= 2) {
       const name = MULTI_NAMES.find(([n]): boolean => n === multi)?.[1] ?? 'multi kill';
-      this.broadcast({ type: 'matchNotice', text: `${shooterId} ${name} (${multi})`, multi, actor: shooterId, ann: 'multi' });
+      this.broadcast({ type: 'matchNotice', text: `${shooterName} ${name} (${multi})`, multi, actor: shooterId, ann: 'multi' });
     }
     const tier = SPREE_TIERS.find(([n]): boolean => n === streak);
     if (tier) {
-      this.broadcast({ type: 'matchNotice', text: `${shooterId} is on a ${tier[1]} (${tier[0]})`, actor: shooterId, ann: SPREE_ANN[streak] });
+      this.broadcast({ type: 'matchNotice', text: `${shooterName} is on a ${tier[1]} (${tier[0]})`, actor: shooterId, ann: SPREE_ANN[streak] });
       if (shooterId.startsWith('BOT-')) {
         const t = spreeTaunt(shooterId);
         this.botSay(shooterId, t?.text ?? null, true, t?.vgs);
       }
     } else if (streak > 30 && streak % 5 === 0) {
-      this.broadcast({ type: 'matchNotice', text: `${shooterId} is wicked sick (${streak})`, actor: shooterId, ann: 'wicked_sick' });
+      this.broadcast({ type: 'matchNotice', text: `${shooterName} is wicked sick (${streak})`, actor: shooterId, ann: 'wicked_sick' });
     }
     if (ended >= 3) {
-      this.broadcast({ type: 'matchNotice', text: `${shooterId} ended ${targetId}'s ${ended}-kill streak` });
+      const shooterName = this.displayName(shooterId);
+      const targetName = this.displayName(targetId);
+      this.broadcast({ type: 'matchNotice', text: `${shooterName} ended ${targetName}'s ${ended}-kill streak`, actor: shooterId });
     }
   }
 
@@ -208,7 +227,8 @@ shooter.streak += 1;
     if (!id.startsWith('BOT-')) {return false;}
     // Replies don't invite replies — a bark→answer beat is the whole
     // trick; letting 'reply' chain would ping-pong the room forever.
-    const c = chatter(kind, id, other, fill);
+    const otherName = other ? this.displayName(other) : other;
+    const c = chatter(kind, id, otherName, fill);
     this.botSay(id, c?.text ?? null, kind !== 'reply', c?.vgs, c?.team);
     return c != null;
   }

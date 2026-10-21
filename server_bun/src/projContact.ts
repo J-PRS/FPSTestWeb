@@ -21,7 +21,10 @@ function ghostBack(r: ContactHost, owner: { ping: number; isBot?: boolean; clien
   // Bots read live positions — no render pipeline, no ghost to chase.
   if (owner?.isBot) {return 0;}
   const targetTransit = r.room.moveSim?.transitOf?.(targetId) ?? 0;
-  return Math.max(0, shooterTransitMs(r.room.moveSim?.transitOf?.bind(r.room.moveSim), ownerId, owner?.ping ?? 0) + renderLagOfTarget(owner, targetId) - targetTransit);
+  const back = Math.max(0, shooterTransitMs(r.room.moveSim?.transitOf?.bind(r.room.moveSim), ownerId, owner?.ping ?? 0) + renderLagOfTarget(owner, targetId) - targetTransit);
+  // Shooter advantage: rewind only 70% so the server accepts hits
+  // closer to the shooter's rendered view (WYSIWYG).
+  return back * 0.7;
 }
 
 /** The body sweep tests distance to the capsule's axis MIDPOINT, so the
@@ -81,7 +84,7 @@ function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getW
       const center = capsuleCenter(target);
       const dx = center.x - midX, dy = center.y - midY, dz = center.z - midZ;
       if (dx * dx + dy * dy + dz * dz > margin * margin) {continue;}
-      const tp = rewindPos(target, back);
+      const tp = rewindPos(target, back * 0.7);
       const pc = { x: tp.x, y: tp.y + classCapsule(target.armorClass).centerOff, z: tp.z };
       const pd = segPointDist(from, p.pos, pc);
       if (pd <= capsuleReach(target, reach)) {
@@ -210,7 +213,7 @@ export function dischargeRay(r: ContactHost, proj: LiveProj, range: number): voi
     const margin = reach + range / 2 + 0.6;
     for (const [pid, target] of r.room.players.getAllPlayers()) {
       if (pid === proj.ownerId || target.isDead) {continue;}
-      const tp = rewindPos(target, ghostBack(r, owner, proj.ownerId, pid));
+      const tp = rewindPos(target, ghostBack(r, owner, proj.ownerId, pid) * 0.7);
       const center = { x: tp.x, y: tp.y + classCapsule(target.armorClass).centerOff, z: tp.z };
       const dx = center.x - midX, dy = center.y - midY, dz = center.z - midZ;
       if (dx * dx + dy * dy + dz * dz > margin * margin) {continue;}

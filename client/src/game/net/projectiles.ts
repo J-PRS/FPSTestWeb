@@ -9,7 +9,7 @@ import { WeaponType, getWeaponStats, LANCE_RANGE } from '../../../../shared/weap
 import { Explosion } from '../../effects/explosion.js';
 import { swingSwipe } from '../../effects/swingTrails.js';
 import { MELEE_RANGE, EXPLOSION_VFX_RADIUS, LG_RANGE, LG_BOUNCE_RANGE } from '../../core/config.js';
-import { noteShellFate } from '../parity.js';
+import { noteShellFate, parityProbes } from '../parity.js';
 import type { NetCtx } from './ctx.js';
 const snapToContact = (p: Projectile, at?: { x: number; y: number; z: number }): void => {
   if (!at || !Number.isFinite(at.x + at.y + at.z)) {return;}
@@ -280,6 +280,7 @@ export function wireProjectiles(ctx: NetCtx): void {
   // shove lands twice). Snap to the wire point before exploding.
 
   networkManager.onProjectileDestroyed = (projectileId: string, shotId?: string, position?: { x: number; y: number; z: number }): void => {
+    parityProbes.destroysSeen += 1;
     if (deps.world.playbackMode) {return;}
     // Kill remote projectile (explode so trail particles fade out naturally).
     // Delete the map entry now — the visual fade lives on world.projectiles,

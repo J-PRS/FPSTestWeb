@@ -351,7 +351,7 @@ w.n += 1;
       const meleeStats = getWeaponStats(WeaponType.Melee);
       const reach = meleeStats ? meleeStats.aoeRadius * 0.7 : 2.2;
       const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
-      const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
+      const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping) * 0.7);
       // The creature half of the swing pays here too — same derived
       // origin, same dir — so the client's predicted contact never
       // needs a creatureHit claim.
@@ -377,7 +377,7 @@ w.n += 1;
       recent.push(now);
       this.simmedFireTimes.set(playerId, recent);
       player.protectedUntil = simMs(0);
-      const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
+      const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping) * 0.7);
       const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
       this.beamPay(playerId, player, this.deps.beamSweep(playerId,
         { x: mpos.x, y: mpos.y + 1.6, z: mpos.z },
@@ -394,7 +394,7 @@ w.n += 1;
       if (now - lastL < LANCE_CADENCE_S * 1000 - 150) { this.hb('drop.lanceCadence'); return; }
       this.lastLance.set(playerId, now);
       player.protectedUntil = simMs(0);
-      const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
+      const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping) * 0.7);
       const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
       this.lancePay(playerId, player, this.deps.beamSweep(playerId,
         { x: mpos.x, y: mpos.y + 1.6, z: mpos.z },
@@ -408,7 +408,7 @@ w.n += 1;
       if (recent.length >= 30) { this.hb('drop.beamFlood'); return; }
       recent.push(now);
       this.simmedFireTimes.set(playerId, recent);
-      const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
+      const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping) * 0.7);
       const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
       const id = this.deps.repairTarget(playerId,
         { x: mpos.x, y: mpos.y + 1.6, z: mpos.z },
@@ -447,7 +447,7 @@ win.violations += 1;
       this.lastFireNotify.set(playerId, now);
     }
     this.deps.emit?.({ type: 'fire', playerId });
-    const at = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
+    const at = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping) * 0.7);
     // Claimless pilot: a server-simmed intent spawns an authoritative
     // shell — the intent IS the whole claim; contact/blast outcomes
     // arrive as broadcasts, never as client claims. projectileCreated

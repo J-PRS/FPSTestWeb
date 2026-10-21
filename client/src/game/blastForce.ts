@@ -161,7 +161,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       // teammate would be a false ghost — only stamp plausible victims.
       const victimTeam = deps.lazyNetworkManager()?.getPlayers?.().get(playerId)?.team;
       const friendly = victimTeam !== undefined && victimTeam === deps.world.localTeam;
-      if (!a.shooterId && !friendly && deps.lazyNetworkManager()?.authoritySims?.()) {
+      if (!a.shooterId && !friendly && aoeDmg >= 1 && deps.lazyNetworkManager()?.authoritySims?.()) {
         expectDamageEcho(playerId, aoeDmg, weaponType, a.shotId, { x: pos.x, y: pos.y, z: pos.z });
       }
     }

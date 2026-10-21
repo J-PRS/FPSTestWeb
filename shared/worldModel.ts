@@ -330,6 +330,9 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
     // only dedupes its knockback echo when the centers match.
     goneFields: [
       { name: 'position', wire: 'vec3', channel: 'edge', absent: null },
+      // Echo of the client's intent nonce — the parity ledger keys the
+      // shell's fate by it (srvAt verdict). Absent on bot shells.
+      { name: 'shotId', wire: 'str', channel: 'echo', absent: null },
     ],
     // Belt-sticky combo: `projectileId` is the RIDER glued dead-center
     // onto `host` — replicas parent to the host's path the same tick.

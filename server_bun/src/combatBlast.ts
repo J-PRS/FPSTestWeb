@@ -225,7 +225,11 @@ export class BlastRunner {
     if (bot) {return { x: target.position.x, y: target.position.y, z: target.position.z };}
     const targetTransit = this.h.deps.transitOf?.(targetId) ?? 0;
     const back = shooterTransitMs(this.h.deps.transitOf, shooterId, ping) + lag - targetTransit;
-    return rewindPos(target, Math.max(0, back));
+    // Shooter advantage: rewind only 70% of the transit distance so the
+    // server accepts hits closer to the shooter's rendered view (WYSIWYG).
+    // The remaining 30% slack favors the shooter without removing the
+    // lag-comp envelope entirely.
+    return rewindPos(target, Math.max(0, back * 0.7));
   }
 
   /** One target inside (or outside) a blast envelope: lag-comp position,

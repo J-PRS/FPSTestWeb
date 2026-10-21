@@ -347,7 +347,7 @@ export class RoomProjectiles {
     // `at` rides the edge: a replica's replay drifts past the real
     // contact by ~a transit of flight; exploding AT the wire point keeps
     // every predicted blast centered where the authority put it.
-    this.room.broadcast(verbPayload(WORLD_MODEL.projectile!, 'gone', 'projectileId', proj.id, { position: at }) as ServerMessage);
+    this.room.broadcast(verbPayload(WORLD_MODEL.projectile!, 'gone', 'projectileId', proj.id, { position: at, shotId: proj.pull }) as ServerMessage);
     // Skillshot ramp: sim shells carry their real flight age - a bot's
     // 2s disc lead pays the same multiplier a player's claim would. Wake
     // contacts still pay flat directDamage; only body hits earn it.
@@ -498,7 +498,7 @@ export class RoomProjectiles {
     for (const [id, proj] of this.projs) {
       if (proj.ownerId === ownerId) {
         this.projs.delete(id);
-        this.room.broadcast(verbPayload(WORLD_MODEL.projectile!, 'gone', 'projectileId', id, { position: proj.p.pos }) as ServerMessage);
+        this.room.broadcast(verbPayload(WORLD_MODEL.projectile!, 'gone', 'projectileId', id, { position: proj.p.pos, shotId: proj.pull }) as ServerMessage);
       }
     }
   }

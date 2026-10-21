@@ -108,7 +108,7 @@ export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: V
       const cap = classCapsule(t.armorClass);
       const targetTransit = world.transitOf?.(pid) ?? 0;
       const back = Math.max(0, shooterTransit + renderLagOfTarget(shooter, pid) - targetTransit);
-      const tp = rewindPos(t, back);
+      const tp = rewindPos(t, back * 0.7);
       const c = { x: tp.x, y: tp.y + cap.centerOff, z: tp.z };
       if (segPointDist(a, b, c) > cap.radius + 0.2 + cap.half) {continue;}
       const tt = segPointT(a, b, c);
@@ -149,7 +149,7 @@ export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: V
       const cap = classCapsule(t.armorClass);
       const targetTransit = world.transitOf?.(pid) ?? 0;
       const back = Math.max(0, shooterTransit + renderLagOfTarget(shooter, pid) - targetTransit);
-      const tp = rewindPos(t, back);
+      const tp = rewindPos(t, back * 0.7);
       const c = { x: tp.x, y: tp.y + cap.centerOff, z: tp.z };
       // Distance to the capsule AXIS — a standing enemy counts even
       // when the contact is at their feet.
