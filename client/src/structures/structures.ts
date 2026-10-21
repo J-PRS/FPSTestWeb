@@ -426,17 +426,19 @@ export function mkLandingPad(r = 4.5, teamGlow = 0x59_F2_FF): THREE.Group {
  *  wants a floating catwalk grid can lay it. */
 export function mkArenaPanel(s = 12, teamGlow = 0x59_F2_FF): THREE.Group {
   const g = new THREE.Group();
-  // Buried skirt so a panel never floats off its support.
-  g.add(skirt(profOct(s * 0.94, s * 0.94, s * 0.05), 1.3, 1.12, hullMat, 2));
+  // Buried skirt so a panel never floats off its support. The skirt and
+  // plate together top out at 2.2 — the hull's top, so the visual walking
+  // surface IS the collision surface.
+  g.add(skirt(profOct(s * 0.94, s * 0.94, s * 0.05), 1.75, 1.12, hullMat, 2));
   const plate = new THREE.Mesh(new THREE.BoxGeometry(s * 0.92, 0.45, s * 0.92), deckMat);
-  plate.position.y = 1.55;
+  plate.position.y = 1.975;
   plate.castShadow = true;
   plate.receiveShadow = true;
   g.add(plate);
   // Lit rim on the two north edges — the Ascend glow line.
   for (const sgn of [-1, 1]) {
     const strip = glowStrip(s * 0.88, 0.16, 0.12, new THREE.MeshBasicMaterial({ color: teamGlow }));
-    strip.position.set(0, 1.88, sgn * (s * 0.46));
+    strip.position.set(0, 2.12, sgn * (s * 0.46));
     g.add(strip);
   }
   g.userData.hulls = [{ pos: { x: 0, y: 1.1, z: 0 }, size: { x: s, y: 2.2, z: s } } satisfies HullBox];
@@ -466,7 +468,16 @@ export function mkArenaPier(h = 18, teamGlow = 0x59_F2_FF): THREE.Group {
   );
   collar.rotation.x = -Math.PI / 2;
   g.add(collar);
-  g.userData.hulls = [{ pos: { x: 0, y: (1.8 + h) / 2, z: 0 }, size: { x: 4.2, y: 1.8 + h, z: 4.2 } } satisfies HullBox];
+  // Two boxes mirroring KIT_HULLS.arenapier's taper: 4.2m at the foot,
+  // 2.9m at the head. The mesh's shaft runs footY..headY (the skirt below
+  // is wider still, but it is buried).
+  const footY = 1.8;
+  const midY = footY + h * 0.5;
+  const headY = footY + h;
+  g.userData.hulls = [
+    { pos: { x: 0, y: midY / 2, z: 0 }, size: { x: 4.2, y: midY, z: 4.2 } },
+    { pos: { x: 0, y: (midY + headY) / 2, z: 0 }, size: { x: 2.9, y: headY - midY, z: 2.9 } },
+  ] satisfies HullBox[];
   return g;
 }
 

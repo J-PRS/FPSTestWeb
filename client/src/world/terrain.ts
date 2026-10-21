@@ -323,7 +323,7 @@ n += 1; sum += d; sumAbs += Math.abs(d);
   }
 
   /** Procedural palette (spec.terrainPreset: 0=mixed, 1=desert, 2=grassland,
-   *  3=snow, 4=volcanic, 5=badlands, 6=coast, 7=desert hard-sun) — swaps the
+   *  3=snow, 4=volcanic, 5=badlands, 6=coast, 7=desert hard-sun, 8=canyon) — swaps the
    *  TERRAIN_PRESET
    *  define and rebuilds the program; a preset-pinned program is small,
    *  so the recompile is fast and happens once per map apply. */

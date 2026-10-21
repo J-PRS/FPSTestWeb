@@ -122,7 +122,10 @@ export const KIT_HULLS: Record<string, KitHull[]> = {
   // grated deck tile (top at 2.2), arenapier the column under it (18m
   // of shaft, scaled up for the long drops).
   arenapanel:[box(0, 1.1, 0, 12, 2.2, 12)],
-  arenapier: [box(0, 9.9, 0, 4.2, 19.8, 4.2)],
+  // Two boxes approximating the pier loft's taper (4.2m at the foot, 2.8m at
+  // the head) — one 4.2 box put collision 0.7m proud of the visible head, so
+  // a body flying past the shaft's neck hit invisible geometry.
+  arenapier: [box(0, 5.4, 0, 4.2, 10.8, 4.2), box(0, 15.3, 0, 2.9, 9, 2.9)],
   commast:   [box(0, 5.7, 0, 2.2, 11.4, 2.2)],
   ramp:      [box(0, 1.25, 6, 5, 2.5, 12)],
   wallgate:  fold([
@@ -204,6 +207,9 @@ export const KIT_PIECES = Object.keys(KIT_HULLS);
 export const KIT_STAND_TOP: Record<string, number> = {
   katastand: 3.2,
   flagtower: 5.1,
+  // Sky-arena deck tile — a flag authored on a panel homes on its deck
+  // rather than being read as a terrain mesa and walked downhill.
+  arenapanel: 2.2,
 };
 
 /** Spec y is advisory for kit pieces — same rule flag homes already

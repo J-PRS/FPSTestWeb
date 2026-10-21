@@ -94,14 +94,24 @@ export function spawnBall(h: SpawnHost, variant: BallVariant, near?: SimVec, pos
     // sits over a deck (a map with no structures falls straight through
     // to the plain, as before).
     const deckAt = h.structureTopAt?.bind(h);
+    let found = false;
     for (let tries = 0; tries < 8; tries += 1) {
       const ang = h.rng() * Math.PI * 2;
       const dist = 60 + h.rng() * 60;
       x = cx + Math.cos(ang) * dist;
       z = cz + Math.sin(ang) * dist;
-      if (!deckAt) {break;}
+      if (!deckAt) {found = true; break;}
       const deck = deckAt(x, z);
-      if (deck !== undefined && Number.isFinite(deck)) {break;}
+      if (deck !== undefined && Number.isFinite(deck)) {found = true; break;}
+    }
+    // A 60-120m ring around a player is mostly VOID on the sky arenas (they
+    // are ~108m across), so all eight picks usually miss and x,z would keep
+    // the last rejected point — the ball would spawn over the abyss, fall
+    // through killY and be deleted again. Drop onto the player's own footing
+    // instead: it is a deck by definition, and reachable.
+    if (deckAt && !found && Number.isFinite(deckAt(cx, cz))) {
+      x = cx + (h.rng() - 0.5) * 4;
+      z = cz + (h.rng() - 0.5) * 4;
     }
   }
   const ground = hmHeight(field, x, z);
@@ -109,9 +119,16 @@ export function spawnBall(h: SpawnHost, variant: BallVariant, near?: SimVec, pos
   // the deck above it.
   const deck = h.structureTopAt?.(x, z);
   const floor = deck !== undefined && Number.isFinite(deck) ? Math.max(ground, deck) : ground;
-  const y = posOverride ? posOverride.y : (Number.isFinite(floor) ? floor : 0) + 40 + h.rng() * 40;
+  // A gentle drop on the sky arenas: a 40-80m fall lands hard, bounces high
+  // and drifts off the walkway before it settles.
+  const drop = h.structureTopAt ? 12 + h.rng() * 12 : 40 + h.rng() * 40;
+  const y = posOverride ? posOverride.y : (Number.isFinite(floor) ? floor : 0) + drop;
   const ang = h.rng() * Math.PI * 2;
-  const spd = h.rng() * 20;
+  // A map whose floor is decks (the sky arenas) has walkways only 12-24m
+  // wide: a ball thrown sideways covers that before it lands and sails off
+  // the edge, and the stall breaker then re-launches it off the deck. Drop
+  // it straight down so it lands and stays in play.
+  const spd = h.structureTopAt ? 0 : h.rng() * 20;
   const b = makeSimBall(
     // Wrap below the demo format's lane base: demo targetIds are u16 and
     // 0x4000+ belongs to the deployable/creature/flag/pickup namespaces —

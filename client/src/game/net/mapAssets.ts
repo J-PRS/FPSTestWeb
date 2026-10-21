@@ -113,11 +113,16 @@ export function applyKillZone(ctx: NetCtx, killY?: number): void {
 
 /** Per-map procedural-sky tuning — reaches the AtmosphericSky instance
  *  through the scene (it tags its mesh `__sky`; a baked skybox hides that
- *  mesh, making the override a no-op). No atmosphere → reset to boot sky. */export function applyAtmosphere(ctx: NetCtx, atmosphere?: AtmosphereSpec): void {
+ *  mesh, making the override a no-op). No atmosphere → reset to boot sky. */
+export function applyAtmosphere(ctx: NetCtx, atmosphere?: AtmosphereSpec): void {
   const sky = ctx.deps.lazyScene().getObjectByName('__sky')?.userData.sky as
     { setAtmosphere(p: AtmosphereSpec): void; resetAtmosphere(): void; getSunDirection(): THREE.Vector3 } | undefined;
   if (!sky) {return;}
-  if (atmosphere) {sky.setAtmosphere(atmosphere);} else {sky.resetAtmosphere();}
+  // Spec fields layer on the BOOT look, not on whatever the previous map
+  // left — without the reset, hopping rimrock-after-caldera inherits
+  // caldera's starIntensity:0 (the hop-inheritance bug weather.ts pins).
+  sky.resetAtmosphere();
+  if (atmosphere) {sky.setAtmosphere(atmosphere);}
   // The terrain bakes its own sun direction, so a sky that re-elevated the
   // sun (timeOfDay) has to re-aim it here or shading disagrees with the dome.
   try {ctx.deps.lazyTerrain().setSunDirection(sky.getSunDirection());}

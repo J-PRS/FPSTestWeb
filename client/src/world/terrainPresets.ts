@@ -7,7 +7,7 @@
 // varyings, derived `height`/`slope`, uv sets, noise helpers, `shadowMask`.
 // Every branch returns.
 export const TERRAIN_PRESET_GLSL = /* glsl */`
-#elif TERRAIN_PRESET >= 3 && TERRAIN_PRESET <= 6
+#elif TERRAIN_PRESET >= 3 && TERRAIN_PRESET <= 8
     // Close-range surface detail. The mesh LOD is 5m and the palette features
     // run 7-31m, so without a sub-metre DETAIL LAYER the ground reads as giant
     // patches and the player feels like an ant. detailFbm() (see the shader
@@ -330,6 +330,92 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       vec3 viewDirC = normalize(vCameraPos - vWorldPos);
       float glint = pow(max(dot(reflect(-sunDir, vNormal), viewDirC), 0.0), 24.0);
       col += glint * (1.0 - smoothstep(0.05, 0.10, height)) * vec3(0.22, 0.26, 0.26);
+      col += scorchEmberGlow(vWorldPos.xz);
+      col += fieldGlow(vWorldPos);
+      vec3 fogDelta = vWorldPos - vCameraPos;
+      float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
+      float fogFactor = terrainFogFactor(fogDist);
+      float edgeA = 1.0 - smoothstep(edgeHalf * 0.55, edgeHalf * 0.96, fogDist) * step(0.5, edgeHalf);
+      float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, fogDist) * smoothstep(0.3, 0.8, height);
+      float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
+      fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
+      col = mix(col, fogColor, fogFactor);
+      gl_FragColor = vec4(bloomGuard(ungradeColor(col)), edgeA);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+      return;
+    }
+
+    // --- canyon preset: stratified mesas. SLOPE is the rock gate, HEIGHT
+    // picks flat-top grass vs floor sand: green table tops, bare rock
+    // walls, sand in the basins — the strata read is topographic, not
+    // painted bands (Strata map). ---
+#elif TERRAIN_PRESET == 8
+    {
+      vec2 q = vec2(fbm(uv), fbm(uv + vec2(5.2, 1.3)));
+      vec2 r = vec2(fbm(uv + 2.0 * q + vec2(1.7, 9.2)), fbm(uv + 2.0 * q + vec2(8.3, 2.8)));
+      float macro  = fbm(uv + 0.8 * q);
+      float medium = fbm(uvMed + vec2(3.1, 7.4) + 0.35 * q);
+      float detFade = 1.0 - smoothstep(350.0, 900.0, length(vWorldPos - vCameraPos));
+      float micro = 0.0, triRock = 0.0, triDetail = 0.0, grain = 0.0, triGrain = 0.0;
+      if (detFade > 0.0) {
+        micro = noise(uvFin + q * 2.0) * 0.5 + noise(uvFin * 2.8 + r * 3.5 + 1.7) * 0.5;
+        triRock = triplanarNoise(vWorldPos, 0.22);
+        triDetail = triplanarNoise(vWorldPos, 0.85);
+      }
+      if (grainFade > 0.0) {
+        grain = detailFbm(vWorldPos.xz + (q - 0.5) * 6.0, camDist, 2.0);
+        triGrain = triplanarNoise(vWorldPos, 3.4);
+      }
+      float cell = worley(uvMed * 1.4 + r * 0.6);
+      float ridged = 1.0 - abs(2.0 * fbm(uvMed * 1.9 + r) - 1.0); ridged *= ridged;
+      float patchMask = smoothstep(0.25, 0.75, fbm(vWorldPos.xz * 0.006));
+      float detail = (macro*0.40 + medium*0.30 + micro*0.15 + triDetail*0.10) * (0.5 + 0.9 * patchMask);
+
+      // The three strata. Walls grab first (steep is rock regardless of
+      // height); flat ground then splits by height into top grass /
+      // basin sand. Band edges are warped by macro+medium noise so the
+      // grassline and the talus apron read eroded, not level-set.
+      vec3 cGrassD = vec3(0.17, 0.38, 0.08);
+      vec3 cGrassT = vec3(0.44, 0.60, 0.16);
+      vec3 cStraw  = vec3(0.60, 0.52, 0.20);
+      vec3 cRockW  = vec3(0.44, 0.30, 0.20);   // warm canyon stone
+      vec3 cRockC  = vec3(0.36, 0.33, 0.28);   // cooler shade rock
+      vec3 cSandD  = vec3(0.55, 0.46, 0.32);
+      vec3 cSandL  = vec3(0.79, 0.70, 0.52);
+
+      float warpedH = height + (macro - 0.5) * 0.10 + (medium - 0.5) * 0.05;
+      float flat2   = 1.0 - smoothstep(0.20, 0.48, slope);
+      float onTop   = smoothstep(0.46, 0.62, warpedH);   // mesa-table height
+      float onFloor = 1.0 - smoothstep(0.18, 0.38, warpedH); // basin height
+
+      vec3 grass = mix(cGrassD, cGrassT, smoothstep(0.20, 0.75, medium));
+      grass = mix(grass, cStraw, cell * 0.25);
+      // Wind drift: pale streaks across the flats.
+      float drift = noise(vWorldPos.xz * 0.055 + q * 0.8) * 0.5 + noise(vWorldPos.xz * 0.13 + r * 0.5) * 0.5;
+      vec3 sand = mix(cSandD, cSandL, drift);
+      vec3 rock = mix(cRockW, cRockC, cell) * (0.9 + 0.25 * triRock);
+      // Strata seam lines across the walls — thin pale/dark ledger bands.
+      float seam = smoothstep(0.82, 0.95, abs(sin(warpedH * 44.0 + medium * 4.0)));
+      rock = mix(rock, cSandL * 0.9, seam * 0.35);
+
+      vec3 col = sand;
+      // Mid-flats (talus benches between floor and top) grade sand→grass.
+      col = mix(col, mix(sand, grass, 0.55), flat2 * smoothstep(0.32, 0.58, warpedH) * (1.0 - onTop));
+      col = mix(col, grass, flat2 * onTop);
+      col = mix(col, rock, 1.0 - flat2);
+      // Scree: sandy apron where a wall's toe meets the floor.
+      col = mix(col, sand, flat2 * onFloor * smoothstep(0.15, 0.40, slope) * 0.4);
+      col *= mix(1.07, 0.84, smoothstep(0.0, 0.45, slope));
+      col *= 0.90 + 0.20 * detail;
+      col *= 1.0 + (grain - 0.5) * 0.45 * grainFade + (triGrain - 0.5) * 0.2 * grainFade;
+      col *= 1.0 - scorchMask(vWorldPos.xz);
+      { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
+      float diff = max(dot(vNormal, sunDir), 0.0);
+      float shadow = diff * diff;
+      float rim = pow(1.0 - max(dot(vNormal, vec3(0,1,0)), 0.0), 2.5) * 0.15;
+      vec3 lit = ambientColor + sunColor * shadow * shadowMask + vec3(rim);
+      col *= lit;
       col += scorchEmberGlow(vWorldPos.xz);
       col += fieldGlow(vWorldPos);
       vec3 fogDelta = vWorldPos - vCameraPos;
