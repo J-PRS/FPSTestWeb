@@ -3,7 +3,7 @@ import { encodePosition } from '../../../shared/wire.js';
 import type { ClientMessage, ServerMessage, GameStatePlayer, LocalPlayerState, SnapshotPlayer, TransportKind } from '../../../shared/protocol.js';
 import type { PickupKind } from '../../../shared/pickups.js';
 import type { DeployKind } from '../../../shared/deployables.js';
-import { TieredTransport } from './tiers.js';
+import { TieredTransport, benchTier } from './tiers.js';
 import { WorkerTransport } from './WorkerTransport.js';
 import type { GameTransport, TransportFactory } from './transport.js';
 import { NetTelemetry } from './netTelemetry.js';
@@ -75,7 +75,7 @@ export class NetworkManager {
    *  skip join-race echoes (events that happened before prediction
    *  existed can't be "unpredicted"). */
   private connectedAtMs = 0;
-  msSinceConnect(): number { return performance.now() - this.connectedAtMs; }
+  msSinceConnect(): number { return Date.now() - this.connectedAtMs; }
   /** Loadout perk, announced at join so the server can enforce resist/heal. */
   joinPerk: (() => string) | null = null;
   joinClass: (() => string) | null = null;
@@ -126,7 +126,7 @@ export class NetworkManager {
   public onFfaScore: ((scores: Record<string, number>, winAt: number) => void) | null = null;
   public onFfaMatchEnd: ((winner: string, scores: Record<string, number>) => void) | null = null;
   /** Admin hot-reload — structures/arena changed mid-match; rebuild them. */
-  public onMapUpdate: ((map: { mapName?: string; silent?: boolean; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; water?: WaterSpec; spawns?: SpawnPoint[]; teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] }; terrainTex?: string; terrainPreset?: number; sky?: string; weather?: WeatherSpec; atmosphere?: AtmosphereSpec; interiors?: InteriorSpec[] }) => void) | null = null;
+  public onMapUpdate: ((map: { mapName?: string; silent?: boolean; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; killY?: number; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; water?: WaterSpec; spawns?: SpawnPoint[]; teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] }; terrainTex?: string; terrainPreset?: number; sky?: string; weather?: WeatherSpec; atmosphere?: AtmosphereSpec; interiors?: InteriorSpec[] }) => void) | null = null;
   // Server-owned deployables — rendered as dumb visuals client-side;
   // the sim (firing/damage) stays authoritative on the server.
   public onDeploySpawn: ((id: number, owner: string, kind: DeployKind, pos: { x: number; y: number; z: number }, team?: TeamId) => void) | null = null;
@@ -187,6 +187,8 @@ export class NetworkManager {
    *  messages on unbound hooks. markWireReady flushes in order. */
   armWireQueue(): void { this.wireIn.armEarlyQueue(); }
   markWireReady(): void { this.wireIn.markReady(); }
+  /** Reset the JSON-lane reconnect counter when the lane recovers. */
+  resetJsonLaneCounter(): void { this.jsonLaneReconnects = 0; }
   /** Server position correction — the dispatch lives in wireIn but is
    *  routed through here so tests can wrap/count it. */
   handleCorrection(data: Parameters<WireIn['handleCorrection']>[0]): void {
@@ -237,7 +239,12 @@ export class NetworkManager {
   /** Set when isConnected() first reads false — the 10s arm before the
    *  outer respawn so an inner lane's own reconnect always wins. */
   private deadSince: number | null = null;
+  private jsonLaneReconnects = 0;
   private static readonly STALL_MS = 4000;
+  /** JSON events (ping/stateHash/hits/spawns) land several times a second
+   *  in any live room — 10s of silence while ticks flow is a dead lane,
+   *  never a quiet match. */
+  private static readonly JSON_STALL_MS = 10_000;
   private lastUrl: string | null = null;
   private lastFactory: TransportFactory | undefined;
   private lastResolveUrl: (() => Promise<string | null>) | undefined;
@@ -284,7 +291,7 @@ export class NetworkManager {
               transport: this.ws?.tier,
             });
             this.connected = true;
-            this.connectedAtMs = performance.now();
+            this.connectedAtMs = Date.now();
             // A fresh socket counts as alive until proven silent — the
             // inner transport's own reconnect doesn't re-stamp this, so
             // without it the stall watchdog inherited the DEAD lane's
@@ -385,6 +392,11 @@ export class NetworkManager {
         this.retryStreak += 1;
         logger.info(`outer reconnect (transport dead ${Math.round((now - this.deadSince) / 1000)}s) — attempt ${this.retryStreak}`);
         const url = this.lastUrl;
+        // Kill the old transport before replacing it — an abandoned lane
+        // keeps auto-reconnecting with these callbacks still bound: its
+        // joins fight the live session for the seat and its close events
+        // tear down roster/ledger state (the join-timeout flap loop).
+        this.ws?.disconnect();
         this.ws = null;
         this.connect(url, this.lastFactory, this.lastResolveUrl).catch((): void => { /* the stall loop owns retries */ });
       }
@@ -412,9 +424,42 @@ export class NetworkManager {
     // Worker transports stamp liveness at the receive edge — a main-loop
     // stall delays DRAIN, not arrival, and must not read as socket silence.
     const lastRx = Math.max(this.lastRxAt, this.ws?.probe?.lastRxAt ?? 0);
-    const silent = Date.now() - lastRx;
-    if (lastRx === 0 || silent < NetworkManager.STALL_MS) {return;}
-    logger.warn(`no server traffic in ${Math.round(silent)}ms — socket silent, reprobing`, { tier: this.ws?.tier });
+    const now2 = Date.now();
+    const silent = now2 - lastRx;
+    // Zombie-seat death: inbound reduced to a trickle of inputSync - the
+    // server's starvation signal, not proof of life. A seat that only
+    // ever sees inputSync is blind (no ticks, events, or keepalives) and
+    // its shotFired intents died too - yet it kept the plain-silence
+    // watchdog quiet. lastLiveRxAt excludes inputSync precisely so this
+    // symptom trips instead of masking the dead lane.
+    // Two cases: (a) lastLiveRxAt > 0 but stale > JSON_STALL_MS (lane
+    // went dark after initially working), (b) lastLiveRxAt === 0 but
+    // ticks are flowing (JSON lane never opened after join - the
+    // reconnect/reseat edge). Both force a clean full reconnect.
+    const liveSilent = this.wireIn.lastLiveRxAt > 0 ? now2 - this.wireIn.lastLiveRxAt : 0;
+    const ticksFlowing = (now2 - Math.max(this.lastRxAt, this.ws?.probe?.lastRxAt ?? 0)) < NetworkManager.STALL_MS;
+    const laneNeverOpened = this.wireIn.lastLiveRxAt === 0 && ticksFlowing && this.connectedAtMs > 0 && (now2 - this.connectedAtMs) > NetworkManager.JSON_STALL_MS;
+    const laneDead = liveSilent > NetworkManager.JSON_STALL_MS || laneNeverOpened;
+    if (!laneDead && (lastRx === 0 || silent < NetworkManager.STALL_MS)) {return;}
+    logger.warn(laneDead
+      ? `inbound lane dead ${Math.round(liveSilent)}ms - only inputSync trickles, reprobing`
+      : `no server traffic in ${Math.round(silent)}ms - socket silent, reprobing`, { tier: this.ws?.tier });
+    // Escalation: if the JSON lane has been dark through multiple
+    // reconnects, force a full page reload - the transport is stuck in
+    // a state no reconnect can fix.
+    if (laneDead) {
+      // A zombie WT session never fires onDisconnect — the QUIC teardown
+      // lands server-side (E_SESSION_CLOSED) while the client session
+      // still reads open, so the tier flap breaker can't see it. Bench
+      // the tier or every forced re-probe re-picks the same dying lane.
+      if (this.ws?.tier === 'wt' || this.ws?.tier === 'rtc') {benchTier(this.ws.tier);}
+      this.jsonLaneReconnects += 1;
+      if (this.jsonLaneReconnects >= 3) {
+        logger.error('JSON lane still dark after 3 reconnects - forcing full reload');
+        window.location.reload();
+        return;
+      }
+    }
     const url = this.lastUrl;
     // TieredTransport is one-shot after disconnect() (closed flag), so
     // go through connect() which builds a fresh transport and re-probes.

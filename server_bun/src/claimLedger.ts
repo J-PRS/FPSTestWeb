@@ -3,7 +3,7 @@ import { wallNow } from './wallClock.ts';
 
 // Lag compensation: clamp self-reported ping to a sane rewind window —
 // unclamped, a forged 60s "ping" could rewind targets anywhere.
-const MAX_REWIND_MS = 250;
+const MAX_REWIND_MS = 400;
 
 export function clampPing(ping: number): number {
   // NaN ping: Math.max(NaN,0)=NaN — rewindPos then walks history with a

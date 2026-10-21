@@ -74,7 +74,7 @@ export class ConnectionManager {
   // gameState+ballRoster already reseeds ball truth.
   private outSeq = 0;
   private journal: { seq: number; data: string; only?: string; exclude?: string; volatile?: boolean; at: number }[] = [];
-  static readonly JOURNAL_MAX = 1024;
+  static readonly JOURNAL_MAX = 2048;
   /** splice(0,1) per push at saturation memmoves the whole journal every
    *  frame — evict in chunks so the copy amortizes. Cap is a steady-state
    *  target, not a hard bound; replay ordering and oldest-seq lookup are

@@ -38,14 +38,15 @@ export function makeDeps() {
     // (and so a missing wiring throws instead of being swallowed).
     noteRenderSnap(jump: THREE.Vector3): void { calls.renderSnap.push(jump.length()); },
     movement: {
-      setState(): void { return; }, setInput(): void { return; }, update(): void { return; }, setStructures(): void { return; },
+      setState(): void { return; }, setInput(): void { return; }, update(): void { return; }, setStructures(): void { return; },
+      setWaterLevel(): void { return; }, setWaterDome(): void { return; },
       getState: (): { pos: THREE.Vector3; vel: THREE.Vector3; onGround: boolean; } => ({ pos: new THREE.Vector3(), vel: new THREE.Vector3(), onGround: true }),
     },
   };
   const deps: NetDeps = {
     lazyNetworkManager: (): NetworkManager => nm,
     lazyScene: (): THREE.Scene<THREE.Object3DEventMap> => scene,
-    lazyTerrain: (): never => ({ getHeight: (): number => 0, reloadHeightmap(): void { return; } }) as never,
+    lazyTerrain: (): never => ({ getHeight: (): number => 0, reloadHeightmap(): void { return; }, setWaterLevel(): void { return; } }) as never,
     lazyWeather: (): never => ({ setWeather(): void { return; } }) as never,
     lazyPlayer: (): never => player as never,
     lazyEffects: (): never => ({ spawnJumpDust(): void { return; }, spawnJetpack(): void { return; }, spawnSkiDust(): void { return; }, spawnBeam(): void { return; } }) as never,

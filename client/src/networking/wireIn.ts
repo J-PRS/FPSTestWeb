@@ -19,6 +19,7 @@ import { WeaponType } from '../../../shared/weapons.js';
 import { WORLD_MODEL, verbForType, checkPacket, rowPatch } from '../../../shared/worldModel.js';
 import type { RemotePlayerState,NetworkManager } from './NetworkManager.js';
 import { claim as netProbeClaim } from '../debug/netProbe.js';
+import { parityProbes } from '../game/parity.js';
 import { rejectCensus, dedupCensus, dropCensus } from './claimLedger.js';
 
 import { urlParams } from '../core/params.js';
@@ -91,6 +92,20 @@ export class WireIn {
   private ready = true; // boot arms the queue only for the early-connect window
   private earlyDrops = 0;
 
+  /** Wall-clock stamps per lane — reliable JSON events and binary ticks
+   *  ride separately drainable pipes (WT stream-0 vs datagram/stream-2).
+   *  A seat can lose one without the other; the stall watchdog reads
+   *  these to catch a seat that gets ticks but no events (dead JSON
+   *  lane → hits/kills/spawns silently gone). */
+  lastJsonRxAt = 0;
+  lastBinRxAt = 0;
+  /** Any inbound EXCEPT inputSync — which is the server's starvation
+   *  signal, not proof of life: a zombie seat that only gets inputSync
+   *  trickles is dead (soak: 75s of inputSync with zero ticks/events —
+   *  it kept resetting the liveness clock so the plain watchdog never
+   *  fired). */
+  lastLiveRxAt = 0;
+
   armEarlyQueue(): void { this.ready = false; }
 
   markReady(): void {
@@ -110,6 +125,12 @@ export class WireIn {
 
   message(data: ServerMessage, bytes?: number): void {
     if (this.gate(data)) {return;}
+    // inputSync doesn't count as lane health — the server sends it when
+    // OUR uplink looks starved, so it's literally the symptom marker of
+    // the split-lane failure (a dead reliable lane saw only inputSync for
+    // 75s in soak). Everything else — pings, hashes, events — stamps.
+    if (data.type !== 'inputSync') {this.lastJsonRxAt = Date.now(); this.lastLiveRxAt = Date.now(); this.h.resetJsonLaneCounter();}
+    parityProbes.msgSeen[data.type] = (parityProbes.msgSeen[data.type] ?? 0) + 1;
     // Rx is an approximation anyway — re-stringifying every event just to
     // size it cost a full second pass over reclaim replays (a 1024-frame
     // burst arrived as one giant main-thread task).
@@ -156,6 +177,8 @@ this.handlerThrows += 1;
 
   binary(data: Uint8Array): void {
     if (this.gate(data)) {return;}
+    this.lastBinRxAt = Date.now();
+    this.lastLiveRxAt = Date.now();
     this.h.noteRx(data.length);
     if (!isWireFrame(data)) {
       logger.debug(`Received non-wire binary message: ${data.length} bytes`);

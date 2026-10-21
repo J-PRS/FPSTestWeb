@@ -29,6 +29,8 @@ export interface TestHandle {
    *  probes must read it, not world.remotePlayers, to compare replay vs live. */
   demoLifecycle: ReturnType<typeof createDemoLifecycle>;
   chatSink: typeof chatSink;
+  /** parity.ts counters — fates/echoes census for soak verdicts. */
+  parity: { fatesSeen: number; echoesStamped: number; echoesConfirmed: number; destroysSeen: number; msgSeen: Record<string, number> };
 }
 
 declare global {
@@ -55,6 +57,8 @@ declare global {
     __pm?: unknown;
     /** .rec wire-capture replay through the live pipeline (dev only). */
     __playRec?: (src: string | File, speed?: number) => Promise<() => void>;
+    /** ?autopilot — shared BotBrain driving the local player's inputs. */
+    __botpilot?: { stop: () => void };
     __clips?: string[];
     __ready?: boolean;
     __glb?: unknown;

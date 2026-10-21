@@ -9,6 +9,7 @@
 
 import { glitch } from '../core/fxDiag.js';
 import { ChildLogger } from '../core/Logger.js';
+import { WEAPONS } from '../../../shared/weapons.js';
 
 const logger = new ChildLogger('Parity');
 
@@ -25,8 +26,12 @@ total += 1;
   // glitch() rate-limits the console line (3/kind then 1-in-100) — a parity
   // miss is rare and exactly what the complaint feed exists for, so emit a
   // WARN of our own whenever the limiter swallowed the GLITCH line.
+  const payload = JSON.stringify(detail);
   if (!glitch(`parity-${kind}`, detail)) {
-    logger.warn(`[GLITCH:parity-${kind}]`, detail);
+    logger.warn(`[GLITCH:parity-${kind}] ${payload}`);
+  } else {
+    // Also log full JSON for the bot pilot soak capture
+    console.error(`[GLITCH:parity-${kind}] ${payload}`);
   }
 }
 
@@ -47,19 +52,35 @@ const dmgEchoes: DmgEcho[] = [];
 const shellFates = new Map<string, { at: { x: number; y: number; z: number }; t: number }>();
 
 export function expectDamageEcho(victim: string, dmg: number, wt?: number, shotId?: string | null, at?: { x: number; y: number; z: number }): void {
+  parityProbes.echoesStamped += 1;
   dmgEchoes.push({ victim, dmg, wt, shotId, at, t: performance.now() });
   if (dmgEchoes.length > 32) {dmgEchoes.shift();}
 }
 
 export function confirmDamageEcho(victim: string): void {
   const i = dmgEchoes.findIndex((e): boolean => e.victim === victim);
-  if (i !== -1) {dmgEchoes.splice(i, 1);}
+  if (i !== -1) {parityProbes.echoesConfirmed += 1; dmgEchoes.splice(i, 1);}
 }
+
+// ShotIds whose echo expired before a fate landed — a fate arriving into
+// this set means 'none' was a timing false-positive (fuse still burning),
+// not a truly dead intent.
+const expiredShots = new Map<string, number>();
+
+// Soak-visible counters — the pilot harness reads these to tell
+// "intent never ran" from "destroy never arrived" without a packet dump.
+export const parityProbes: {
+  fatesSeen: number; echoesStamped: number; echoesConfirmed: number;
+  destroysSeen: number; msgSeen: Record<string, number>;
+} = { fatesSeen: 0, echoesStamped: 0, echoesConfirmed: 0, destroysSeen: 0, msgSeen: {} };
 
 export function noteShellFate(shotId: string, at: { x: number; y: number; z: number }): void {
   // Wire blast point — NaN turns every divergence diff against it into
   // NaN meters, which renders as a bogus "far" ghost in the dump.
   if (!Number.isFinite(at.x + at.y + at.z)) {return;}
+  const late = expiredShots.get(shotId);
+  if (late !== undefined) {parityMiss('fate-late', { shot: shotId, ageMs: Math.round(performance.now() - late) });}
+  parityProbes.fatesSeen += 1;
   shellFates.set(shotId, { at, t: performance.now() });
   if (shellFates.size > 64) {
     // Sweep stale entries lazily — fates older than the confirm window
@@ -72,9 +93,16 @@ export function noteShellFate(shotId: string, at: { x: number; y: number; z: num
 export function sweepDamageEchoes(now: number): void {
   for (let i = dmgEchoes.length - 1; i >= 0; i -= 1) {
     const e = dmgEchoes[i]!;
-    if (now - e.t > 900) {
+    // The verdict can't land before the server shell had time to run:
+    // a predicted contact stamps NOW, but the server copy flies the same
+    // fuse — a mortar's fate lands seconds after the predicted blast.
+    // Budget = confirm window + weapon TTL (capped so complaints still
+    // arrive promptly); weapons without a table row keep 900ms.
+    const ttlMs = e.wt === undefined ? 0 : (WEAPONS[e.wt]?.maxLifetime ?? 0) * 1000;
+    const deadline = e.t + 900 + Math.min(ttlMs, 4100);
+    if (now > deadline) {
       const fate = e.shotId ? shellFates.get(e.shotId) : undefined;
-      const detail: Record<string, unknown> = Object.assign({}, {victim: e.victim,dmg: e.dmg}, (e.wt === undefined ? {} : { wt: e.wt }));
+      const detail: Record<string, unknown> = Object.assign({}, {victim: e.victim,dmg: e.dmg}, (e.wt === undefined ? {} : { wt: e.wt }), { shot: e.shotId ?? '?' });
       if (fate && e.at) {
         detail.srvAt = `${fate.at.x.toFixed(0)},${fate.at.y.toFixed(0)},${fate.at.z.toFixed(0)}`;
         detail.offM = Number(Math.hypot(fate.at.x - e.at.x, fate.at.y - e.at.y, fate.at.z - e.at.z).toFixed(1));
@@ -84,6 +112,10 @@ export function sweepDamageEchoes(now: number): void {
         detail.srvAt = 'none'; // server shell never detonated — intent died before it ran
       }
       parityMiss('dmg-echo', detail);
+      if (e.shotId) {
+        expiredShots.set(e.shotId, now);
+        if (expiredShots.size > 64) {for (const [k, t0] of expiredShots) {if (now - t0 > 15_000) {expiredShots.delete(k);}}}
+      }
       dmgEchoes.splice(i, 1);
     }
   }

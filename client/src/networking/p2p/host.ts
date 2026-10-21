@@ -129,6 +129,7 @@ export class P2PHost {
   setMap(map: {
     structures?: StructureSpec[];
     arena?: { x: number; z: number; radius: number } | null;
+    killY?: number;
     ambient?: Record<string, number>;
     terrain?: string;
     heightScale?: number;
@@ -148,6 +149,8 @@ export class P2PHost {
     if (!map) {return;}
     this.roomInfo.structures = map.structures;
     this.roomInfo.arena = map.arena ?? undefined;
+    this.roomInfo.killY = map.killY;
+    this.moveShadows.setKillY(map.killY);
     this.roomInfo.ambient = map.ambient;
     this.roomInfo.terrain = map.terrain;
     this.roomInfo.heightScale = map.heightScale;
@@ -193,6 +196,12 @@ export class P2PHost {
         if (covered > 0) {this.moveShadows.drainEnergy(pid, covered / soak); dmg -= covered;}
       }
       if (dmg >= p.maxHealth * MOVEMENT_CONFIG.fallDamageAbsorbFrac) {this.messageHandler.fallDamage(pid, dmg);}
+    };
+    // Kill zone — the shadow measured the body below the map's floor.
+    this.moveShadows.onKillZone = (pid): void => {
+      const p = this.playerManager.getPlayer(pid);
+      if (!p || p.isDead) {return;}
+      this.messageHandler.killZone(pid, p.maxHealth);
     };
     this.messageHandler = new MessageHandler(
       this.playerManager,

@@ -190,6 +190,17 @@ export async function connectGameTransport(config: ConnectionConfig, opts?: Tier
 // QUIC cap ("Too many pending WebTransport sessions") and the transport starts
 const missUntil = { wt: 0, rtc: 0 };
 
+/** Session-level bench — the flap breaker only sees onDisconnect, but a
+ *  lane can die WITHOUT it: the zombie WT sessions the soak hits die
+ *  server-side (E_SESSION_CLOSED on the reliable pump) while the client's
+ *  session object still reports open, so the disconnect path never runs.
+ *  The NM stall watchdog detects that shape (inbound = inputSync only)
+ *  and calls this so the forced re-probe lands on WS, not back on the
+ *  same dead tier. */
+export function benchTier(tier: 'wt' | 'rtc', ms?: number): void {
+  missUntil[tier] = Date.now() + (ms ?? MISS_CACHE_MS);
+}
+
 /**
  * WebRTC tier — client side. Opens a signaling WebSocket to the server's
  * rtc endpoint, exchanges SDP/ICE, then runs two lanes: 'game' (unordered,
