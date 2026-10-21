@@ -483,6 +483,9 @@ export const WEAPONS: Record<number, WeaponStats> = {
     knockbackForce: 35,
     forceMode: 'push',
     speed: 40,    // slower lob — a readable cap-to-discharge window
+    inherit: 0,   // no velocity inheritance: the rail discharges down the
+                  // slug's velocity line, so inherited speed would aim the
+                  // hitscan somewhere the thrower never pointed
     gravity: false, // flat flight: the ray tracks the throw line
     bodyRadius: 0.3,
     hitMin: 0,

@@ -84,9 +84,9 @@ function run(weapons: WeaponType[], seed: number): {
       return w === WeaponType.Melee ? l.near : w;
     };
   }
-  // In chaos mode, each bot starts with a random weapon and changes after every kill.
+  // In chaos mode, each bot holds a random draw; it only re-rolls on death
+  // after earning a kill that life.
   const currentWeapon = new Map<string, WeaponType>();
-  const prevKills = new Map<string, number>();
   const lifeKillsBase = new Map<string, number>(); // p.kills at this life's start
   // Chaos draws come from the FULL pool (module `pool`), not the dealt
   // deck — `weapons` here is the 10-bot slice, so drawing from it meant
@@ -109,7 +109,6 @@ function run(weapons: WeaponType[], seed: number): {
       pin(room, bots[i]!.id, { x: Math.cos(a) * (FFASOAK_ARENA * 0.6), y: 65, z: Math.sin(a) * (FFASOAK_ARENA * 0.6) });
     }
     currentWeapon.set(bots[i]!.id, w);
-    prevKills.set(bots[i]!.id, 0);
   }
   (room as { endMatch: (w: string) => void }).endMatch = () => {};
 
@@ -124,30 +123,45 @@ function run(weapons: WeaponType[], seed: number): {
   const {hitLedger} = (room.messages.combat as unknown as { hitLedger: HitLedger });
   const origApplyHit = hitLedger.applyHit.bind(hitLedger);
 
-  // Chaos mode tracking — the only honest per-weapon tally in chaos: rows
-  // below label bots by `weapons[i]` (the dealt card), but chaos bots
-  // actually hold a random draw that rotates on every kill.
-  const chaosAgg = new Map<number, { kills: number; deaths: number }>();
+  // Chaos mode tracking — kills are source-attributed in wStats; this
+  // only counts deaths-by-held-weapon (the exposure denominator).
+  const chaosDeaths = new Map<number, number>();
   const countedDeaths = new Set<string>();
-  for (const w of pool) { chaosAgg.set(w, { kills: 0, deaths: 0 }); }
+  for (const w of pool) { chaosDeaths.set(w, 0); }
+  // Kill dedupe: a burst volley marks result.killed on EVERY pellet of
+  // the killing hit — one death = one counted kill per target per tick.
+  const killTicks = new Set<string>();
+  const selfKills = new Map<number, number>(); // weapon → owner-eating kills
   hitLedger.applyHit = (c, shooterId, targetId, damage, result, opts) => {
-    const src = opts.weapon;
+    // Spawn-only submunitions bill to the parent weapon — a ClusterBomb's
+    // bomblets ARE the cluster bomb's damage, not a separate source.
+    let src = opts.weapon;
+    if (src === WeaponType.MRVBomblet) {src = WeaponType.MRVLauncher;}
+    else if (src === WeaponType.ClusterBomblet) {src = WeaponType.ClusterBomb;}
     if (src !== undefined && wStats.has(src)) {
       const stats = wStats.get(src)!;
       const isSplash = opts.label?.includes('AOE') || opts.label?.includes('self-blast') || opts.label?.includes('Blast') || opts.label?.includes('hit') && opts.label?.includes('AOE');
       if (isSplash) { stats.splashHits++; stats.splashDmg += damage; }
       else { stats.directHits++; stats.directDmg += damage; }
-      if (result.killed) { stats.kills++; }
+      if (result.killed && !killTicks.has(`${targetId}:${tickN}`)) {
+        killTicks.add(`${targetId}:${tickN}`);
+        // A self-blast kill is the gun eating its owner — it already
+        // counts as a death-while-held, so crediting it as a kill too
+        // would pay the weapon twice for one corpse. Tracked, not scored.
+        if (shooterId === targetId) {selfKills.set(src, (selfKills.get(src) ?? 0) + 1);}
+        else {stats.kills++;}
+      }
     }
     return origApplyHit(c, shooterId, targetId, damage, result, opts);
   };
 
-  let winnerT = -1, simS = 0;
+  let winnerT = -1, simS = 0, tickN = 0;
   const wall0 = Date.now();
   const maxTicks = (CAP_S / 0.05) | 0;
   const deadSince = new Map<string, number>();
   let ring = 0;
   for (let i = 0; i < maxTicks && winnerT < 0; i++) {
+    tickN = i;
     step(room, 1);
     simS = (i + 1) * 0.05;
     for (const p of bots) {
@@ -164,32 +178,19 @@ function run(weapons: WeaponType[], seed: number): {
         }
       } else {deadSince.delete(p.id);}
     }
-    // Chaos mode: kills/deaths credit the held weapon; the weapon only
-    // rotates ON DEATH, and only if the life earned at least one kill —
-    // a bot that dies empty-handed keeps the gun (it has to earn its
-    // way out). Per-life tenure normalizes exposure: K/D reads
-    // kills-per-life vs deaths-per-life, no fast-kill swap-out bias.
+    // Chaos mode: kills credit the damage SOURCE (wStats, via the
+    // applyHit wrapper) — posthumous and leftover-projectile kills count
+    // for the gun that dealt them, not whatever the bot holds now.
+    // Deaths credit the held weapon (exposure). K/D reads "what the gun
+    // did vs lives spent holding it". Rotation stays death-only, gated
+    // on the life earning a kill.
     if (FFASOAK_CHAOS) {
       for (const p of bots) {
         const pk = p.kills;
-        const prev = prevKills.get(p.id) ?? 0;
-        if (pk > prev) {
-          const w = currentWeapon.get(p.id);
-          if (w !== undefined) {
-            const a = chaosAgg.get(w) ?? { kills: 0, deaths: 0 };
-            a.kills += pk - prev;
-            chaosAgg.set(w, a);
-          }
-          prevKills.set(p.id, pk);
-        }
         if (p.isDead && !countedDeaths.has(p.id)) {
           countedDeaths.add(p.id);
           const w = currentWeapon.get(p.id);
-          if (w !== undefined) {
-            const a = chaosAgg.get(w) ?? { kills: 0, deaths: 0 };
-            a.deaths++;
-            chaosAgg.set(w, a);
-          }
+          if (w !== undefined) {chaosDeaths.set(w, (chaosDeaths.get(w) ?? 0) + 1);}
           if (pk > (lifeKillsBase.get(p.id) ?? 0)) {
             const newW = pool[Math.floor(crand() * pool.length)]!;
             currentWeapon.set(p.id, newW);
@@ -218,26 +219,28 @@ function run(weapons: WeaponType[], seed: number): {
   // Restore original method
   hitLedger.applyHit = origApplyHit;
 
-  // Chaos: wOf labels bots by the dealt card, not the weapon they were
-  // holding — the leaderboard MUST come from chaosAgg (rotates on kill).
+  // Chaos: kills are source-attributed (wStats — deduped, credits the
+  // weapon that dealt the kill); deaths are held-weapon exposure
+  // (chaosDeaths). wOf's dealt-card labels would be wrong either way.
   const rows = FFASOAK_CHAOS
-    ? [...chaosAgg.entries()]
-      .filter(([, s]) => s.kills > 0 || s.deaths > 0)
-      .map(([w, s]) => ({ w: WeaponType[w]!, kills: s.kills, deaths: s.deaths }))
+    ? [...chaosDeaths.entries()]
+      .map(([w, deaths]) => ({ w: WeaponType[w]!, kills: wStats.get(w)?.kills ?? 0, deaths }))
+      .filter((s) => s.kills > 0 || s.deaths > 0)
       .sort((a, b) => b.kills - a.kills)
     : room.scoring.matchPlayers()
       .filter((p) => wOf.has(p.id))
       .map((p) => ({ w: WeaponType[wOf.get(p.id)!]!, kills: p.kills, deaths: p.deaths }))
       .sort((a, b) => b.kills - a.kills);
 
-  // Chaos mode: print per-weapon kill/death tally
+  // Chaos mode: per-weapon tally — kills by damage source, deaths held
   if (FFASOAK_CHAOS) {
-    console.log('\n--- Chaos Mode: Per-Weapon Tally ---');
-    console.log('weapon           | kills | deaths | K/D');
-    for (const [w, stats] of [...chaosAgg.entries()].sort((a, b) => b[1].kills - a[1].kills)) {
+    console.log('\n--- Chaos Mode: Per-Weapon Tally (kills by source, deaths held) ---');
+    console.log('weapon           | kills | deaths | K/D | selfK');
+    for (const [w, deaths] of [...chaosDeaths.entries()].sort((a, b) => (wStats.get(b[0])?.kills ?? 0) - (wStats.get(a[0])?.kills ?? 0))) {
+      const kills = wStats.get(w)?.kills ?? 0;
       const name = (WeaponType[w] ?? String(w)).padEnd(16);
-      const kd = stats.deaths > 0 ? (stats.kills / stats.deaths).toFixed(2) : (stats.kills > 0 ? 'inf' : '0');
-      console.log(`${name} | ${String(stats.kills).padStart(5)} | ${String(stats.deaths).padStart(6)} | ${kd.padStart(5)}`);
+      const kd = deaths > 0 ? (kills / deaths).toFixed(2) : (kills > 0 ? 'inf' : '0');
+      console.log(`${name} | ${String(kills).padStart(5)} | ${String(deaths).padStart(6)} | ${kd.padStart(5)} | ${selfKills.get(w) ?? 0}`);
     }
   }
 

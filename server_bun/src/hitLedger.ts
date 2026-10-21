@@ -87,7 +87,8 @@ export class HitLedger {
     const sp = c.playerManager.getPlayer(shooterId)?.position;
     const tp = c.playerManager.getPlayer(targetId)?.position;
     const gap = sp && tp ? Math.hypot(tp.x - sp.x, tp.z - sp.z) : impactDist;
-    weaponStats.record(modeTag, src, damage, killed, shooterId.startsWith('BOT-'), gap, impact.shotId);
+    const killVictim = killed ? c.playerManager.getPlayer(targetId) : undefined;
+    weaponStats.record(modeTag, src, damage, killed, shooterId.startsWith('BOT-'), gap, impact.shotId, killed ? `${targetId}|${killVictim?.deaths ?? 0}` : undefined);
     const duelKey = `${shooterId}|${targetId}`;
     if (!killed) {
       this.duelStart.set(duelKey, this.duelStart.get(duelKey) ?? simNow());
@@ -96,7 +97,7 @@ export class HitLedger {
       if (v) {c.deps.influence?.splat(v.position, c.deps.influence.dangerLayer(v.team ?? 'alpha'), 0.3);}
       return;
     }
-    const victim = c.playerManager.getPlayer(targetId);
+    const victim = killVictim;
     if (victim) {
       weaponStats.recordDeath(modeTag, victim.position);
       // Deaths are the loudest scent the map gets — the victim's team

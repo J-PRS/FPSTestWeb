@@ -133,7 +133,7 @@ export class WeaponStats {
 
   /** Feed one credited hit. `source` is `w<weaponType>` or a label for
    *  non-weapon damage ('Turret hit', 'Mine hit', 'environment'). */
-  record(mode: string, source: string, damage: number, killed: boolean, botShooter: boolean, dist?: number, shotId?: string): void {
+  record(mode: string, source: string, damage: number, killed: boolean, botShooter: boolean, dist?: number, shotId?: string, killKey?: string): void {
     if (damage <= 0 || !this.modeOk(mode)) {return;}
     const r = this.row(mode, source);
 r.hits += 1;
@@ -152,15 +152,25 @@ r.hits += 1;
       }
     }
     r.damage += damage;
-    if (killed) {r.kills += 1;}
+    // One death = one kill: every pellet of a lethal burst volley reports
+    // killed, so kills dedupe on the victim's life key (targetId|deaths).
+    let countedKill = false;
+    if (killed) {
+      const dk = `${mode}|${source}|k|${killKey ?? shotId ?? ''}`;
+      if (!this.seen.has(dk)) {
+        this.seen.add(dk);
+        countedKill = true;
+        r.kills += 1;
+      }
+    }
     if (dist !== undefined && Number.isFinite(dist)) {
       const b = distBand(dist);
       const bd = (r.band ??= {})[b] ??= { h: 0, d: 0, k: 0 };
-      bd.h += 1; bd.d += damage; if (killed) {bd.k += 1;}
+      bd.h += 1; bd.d += damage; if (countedKill) {bd.k += 1;}
     }
     if (botShooter) {
       r.botDamage += damage;
-      if (killed) {r.botKills += 1;}
+      if (countedKill) {r.botKills += 1;}
     }
     this.dirty = true;
   }

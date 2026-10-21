@@ -219,10 +219,11 @@ export class RoomProjectiles {
     const owner = this.room.players.getPlayer(ownerId);
     if (!owner) {return null;}
     const id = `sp-${((this.nextId += 1) - 1)}`;
+    const inh = stats.inherit ?? 0.5;
     const vel: Vec3 = {
-      x: dir.x * stats.speed + ownerVel.x * 0.5,
-      y: dir.y * stats.speed + ownerVel.y * 0.5,
-      z: dir.z * stats.speed + ownerVel.z * 0.5,
+      x: dir.x * stats.speed + ownerVel.x * inh,
+      y: dir.y * stats.speed + ownerVel.y * inh,
+      z: dir.z * stats.speed + ownerVel.z * inh,
     };
     const g = stats.gravity ? GRAVITY : 0;
     // Schedule the first age at which this arc could reach the terrain

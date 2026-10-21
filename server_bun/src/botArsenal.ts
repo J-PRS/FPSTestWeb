@@ -82,7 +82,7 @@ export class BotArsenal implements BeamHost {
      *  Ornstein-Uhlenbeck wander whose magnitude scales with how far
      *  off the pull's aim was. Humans hover near target, not on it. */
     lag: Vec3 | null; err: Vec3; track: boolean | undefined; sig: number;
-    tv: Vec3 | null; diff: number;
+    tv: Vec3 | null; diff: number; wt: number | undefined;
   }>();
   /** Sim clock — the rate gate compares in sim-ms, not wall time, so
    *  scenario tests and slow-tick servers measure the same cadence. */
@@ -195,9 +195,23 @@ s[kind] += 1; this.propels.set(id, s);
         e.y += -2.5 * e.y * dt + amp * (n2 * 0.7 + ay * dot * 0.8);
         e.z += -2.5 * e.z * dt + amp * (n3 * 0.7 + az * dot * 0.8);
         const tp = tr.lag ?? tr.aim;
-        tr.aim.x = tp.x + e.x;
-        tr.aim.y = tp.y + 1.2 + e.y; // capsule midpoint off the feet pos
-        tr.aim.z = tp.z + e.z;
+        // Stream projectiles (sprinkler hose, chaingun) track like beams
+        // but the aim point still owes flight-time lead + gravity drop —
+        // the pursuit lag alone lands every bolt behind the runner.
+        let leadX = 0, leadY = 0, leadZ = 0;
+        if (tr.wt !== undefined) {
+          const st = getWeaponStats(tr.wt);
+          const p0 = this.room.players.getPlayer(id);
+          if (st && st.speed > 0 && p0) {
+            const flightT = Math.hypot(tp.x - p0.position.x, tp.y - p0.position.y, tp.z - p0.position.z) / st.speed;
+            const v = tr.tv;
+            leadX = (v?.x ?? 0) * flightT; leadZ = (v?.z ?? 0) * flightT;
+            leadY = st.gravity ? 0.5 * GRAVITY * flightT * flightT : 0;
+          }
+        }
+        tr.aim.x = tp.x + e.x + leadX;
+        tr.aim.y = tp.y + 1.2 + e.y + leadY; // capsule midpoint off the feet pos
+        tr.aim.z = tp.z + e.z + leadZ;
       } else {
         if (live && tr.lastPos) {
           tr.aim.x += live.x - tr.lastPos.x;
@@ -231,6 +245,7 @@ s[kind] += 1; this.propels.set(id, s);
       lag: null as Vec3 | null, err: { x: 0, y: 0, z: 0 },
       track: undefined as boolean | undefined, sig: 1,
       tv: null as Vec3 | null, diff: 0.5,
+      wt: undefined as number | undefined,
     };
     this.trigger.set(p.id, tr);
     this.discharge(p, tr);
@@ -254,7 +269,7 @@ s[kind] += 1; this.propels.set(id, s);
     this.clock += ms;
   }
 
-  private discharge(p: BotBody, tr: { targetId: string; aim: Vec3; track: boolean | undefined; sig: number; err: Vec3 }): void {
+  private discharge(p: BotBody, tr: { targetId: string; aim: Vec3; track: boolean | undefined; sig: number; err: Vec3; wt: number | undefined }): void {
     const { targetId, aim } = tr;
     if (targetId.startsWith('b:')) {
       beamAtBall(this, p, Number(targetId.slice(2)), aim, BOT_LOADOUTS[0]!);
@@ -310,6 +325,28 @@ s[kind] += 1; this.propels.set(id, s);
     // target. ~40% of discharges take it; the rest stay on the primary,
     // because going all easy-hit is the dishonorable version.
     if (target.maxHealth > 0 && target.health / target.maxHealth < 0.25 && botRand() < 0.4) {wt = lo.side;}
+    // Armor grenade coats everyone in the blast — firing it at an enemy
+    // is arming him. Team plating goes through the belt path; a duel
+    // never wants this shot.
+    if (wt === WeaponType.ArmorGrenade) {return;}
+    // Fuse weapons detonate wherever the shell is at fuse — aim the POP
+    // point, not the target. Solve the launch dir that puts the fuse-end
+    // position on the target's led position; outside the reachable shell
+    // (|u|≠1) the volley is confetti and the trigger stays held.
+    let fuseSolved = false;
+    const stF = getWeaponStats(wt);
+    if (stF && stF.aoeRadius > 0 && stF.maxLifetime != null && stF.maxLifetime <= 2 && stF.speed > 0) {
+      const f = stF.maxLifetime, inh = stF.inherit ?? 0.5;
+      const tv = target.velocity;
+      const qx = target.position.x + tv.x * f - muzzle.x - p.velocity.x * inh * f;
+      const qy = target.position.y + 1.2 + tv.y * f - muzzle.y - p.velocity.y * inh * f + 0.5 * GRAVITY * f * f;
+      const qz = target.position.z + tv.z * f - muzzle.z - p.velocity.z * inh * f;
+      const sf = stF.speed * f;
+      const ul = Math.hypot(qx, qy, qz) / sf;
+      if (ul < 0.85 || ul > 1.05) {return;}
+      aim.x = muzzle.x + qx / sf; aim.y = muzzle.y + qy / sf; aim.z = muzzle.z + qz / sf;
+      fuseSolved = true;
+    }
     if (tr.track === undefined) {this.markTrack(tr, wt, aim);}
     if (!this.rateOk(p.id, wt)) {return;}
     weaponStats.recordShot(this.room.mode, `w${wt}`, dist);
@@ -325,8 +362,11 @@ s[kind] += 1; this.propels.set(id, s);
     }
     // Ordnance aim = max expected damage over direct vs ground shots —
     // see ordnanceAimY. The blast, not the body, decides where to aim.
+    // Radius ≥4 covers plasma-cannon-class slow splash too: a 90m/s bolt
+    // can't airshot a skier, but its pop eats whoever stands under it.
+    // Fuse-solved shots skip it — the pop point is already the aim.
     const statsW = getWeaponStats(wt);
-    if (statsW.aoeRadius >= 8) {
+    if (!fuseSolved && statsW.aoeRadius >= 4) {
       const gY = this.room.field
         ? Math.max(hmHeight(this.room.field, aim.x, aim.z), hmChord(this.room.field, aim.x, aim.z), this.room.moveSim.structureTop(aim.x, aim.z))
         : aim.y - 1.5;
@@ -390,8 +430,13 @@ s[kind] += 1; this.propels.set(id, s);
    *  speed-0 = beam (pursuit + OU wander), else projectile (delta-ride).
    *  sig scales the wander with the pull's initial miss — a bot that
    *  pulled 5m off target drifts wider than one that pulled 1m. */
-  private markTrack(tr: { targetId: string; track: boolean | undefined; sig: number; err: Vec3; aim: Vec3 }, wt: number, aim: Vec3): void {
-    tr.track = getWeaponStats(wt).speed === 0;
+  private markTrack(tr: { targetId: string; track: boolean | undefined; sig: number; err: Vec3; aim: Vec3; wt: number | undefined }, wt: number, aim: Vec3): void {
+    tr.wt = wt;
+    // Beams track (speed-0). Stream projectiles track too — a hose that
+    // re-leads every bolt is how a human fires it; delta-ride only serves
+    // slow one-shot pulls whose aim was reasoned once.
+    const stats = getWeaponStats(wt);
+    tr.track = stats.speed === 0 || (stats.speed > 0 && (WEAPON_FIRE_INTERVAL_S[wt as WeaponType] ?? 1) <= 0.3);
     if (!tr.track) {return;}
     const live = this.targetPos(tr.targetId);
     const miss = live ? Math.hypot(aim.x - live.x, aim.y - live.y - 1.2, aim.z - live.z) : 1;
@@ -463,9 +508,10 @@ s[kind] += 1; this.propels.set(id, s);
     // half the shooter's velocity, so a bot skiing downhill bends every
     // shot below the checked line and clips lips the ray clears (soak
     // autopsy: all self-frag blasts <2m over ground @~6m from muzzle).
-    const vx = dir.x * stats.speed + ownerVel.x * 0.5;
-    let vy = dir.y * stats.speed + ownerVel.y * 0.5;
-    const vz = dir.z * stats.speed + ownerVel.z * 0.5;
+    const inh = stats.inherit ?? 0.5;
+    const vx = dir.x * stats.speed + ownerVel.x * inh;
+    let vy = dir.y * stats.speed + ownerVel.y * inh;
+    const vz = dir.z * stats.speed + ownerVel.z * inh;
     const g = stats.gravity ? GRAVITY : 0;
     let px = muzzle.x, py = muzzle.y, pz = muzzle.z;
     let travelled = 0;

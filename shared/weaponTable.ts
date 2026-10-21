@@ -58,8 +58,12 @@ export interface WeaponStats {
   knockbackForce: number;
   /** 'pull' = implosion toward center (disc) */
   forceMode: 'push' | 'pull';
-  /** Muzzle speed (m/s) — before 50% player-velocity inheritance */
+  /** Muzzle speed (m/s) — before player-velocity inheritance */
   speed: number;
+  /** Fraction of shooter velocity the shell inherits (default 0.5).
+   *  0 = the flight line is pure aim — for weapons whose path IS the
+   *  payload (a mid-flight ray discharges down the velocity line). */
+  inherit?: number;
   /** Whether world gravity (-28 m/s²) bends the trajectory — boolean by
    *  design: physics is physics, per-weapon fudge factors read as fake. */
   gravity: boolean;

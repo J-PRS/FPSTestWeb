@@ -5,6 +5,9 @@ export interface ProjectileConfig {
   displayName: string;
   weaponType: number; // numeric ID for demo protocol (0=rocket, 1=disc)
   speed: number;
+  /** Shooter-velocity inheritance fraction (default 0.5). 0 = the flight
+   *  line is pure aim — must mirror WEAPONS[].inherit on the shared row. */
+  inherit?: number;
   gravity: boolean; // world gravity bends the arc — never a custom value
   explosionRadius: number;
   force: number;

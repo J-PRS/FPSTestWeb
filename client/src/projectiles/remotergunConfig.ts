@@ -17,6 +17,8 @@ export const REMOTE_RAILGUN_CONFIG: ProjectileConfig = {
   displayName: 'Remote Railgun',
   weaponType: 24,
   speed: W.speed,
+  inherit: W.inherit, // 0 — the rail fires down the slug's velocity line;
+                      // inherited aim would fire it somewhere unaimed
   gravity: W.gravity,
   explosionRadius: W.aoeRadius * AOE_VFX_SCALE,
   force: W.knockbackForce,

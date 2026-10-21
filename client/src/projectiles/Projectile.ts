@@ -249,8 +249,9 @@ export class Projectile {
     this.prevPos = origin.clone();
     this.shotOrigin = origin.clone();
     this.rendered.copy(origin);
-    // 50% player velocity inheritance (Tribes Ascend style)
-    this.vel = dir.clone().normalize().multiplyScalar(config.speed).addScaledVector(playerVel, 0.5);
+    // Player-velocity inheritance (Tribes Ascend style) — per-weapon via
+    // config.inherit (0 on RemoteRailgun: the rail fires down this line)
+    this.vel = dir.clone().normalize().multiplyScalar(config.speed).addScaledVector(playerVel, config.inherit ?? 0.5);
     this.launchVel = this.vel.clone();
     this.spawnedAtMs = performance.now();
 
