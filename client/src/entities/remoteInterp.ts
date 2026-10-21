@@ -60,6 +60,10 @@ export class RemoteInterp {
    *  onto it (the "simulate the fake input" approach: the correction is
    *  an in-world maneuver, never a warp). Seconds remaining; 0 = off. */
   private convergeTimer = 0;
+  /** Last converge's sampled target — consecutive samples give the path's
+   *  true speed even when the wire strips VEL from sparse records. */
+  private prevSample = new THREE.Vector3();
+  private prevSampleAt = 0;
   /** Last raw server position — velocity estimation must not read the
    *  extrapolated path or it feeds its own error forward. */
   private lastServerPosition = new THREE.Vector3();
@@ -103,6 +107,7 @@ export class RemoteInterp {
     // the steer share simulatedVelocity, so staying in one mode removes
     // the DR→converge→interp hand-off seam. Inside the prediction window
     // the server hasn't reflected the knockback yet — free-run continues.
+    const wasConverging = this.convergeTimer > 0;
     if (this._simulating && this.convergeTimer <= 0 && this.predictionTimer <= 0) {
       const drift = Math.hypot(
         targetPosition.x - this.h.position.x,
@@ -162,18 +167,12 @@ export class RemoteInterp {
     // Estimate velocity from consecutive server positions (not the
     // extrapolated position). serverMs deltas are jitter-free server
     // ticks — dividing by arrival gaps was feeding transport noise
-    // into the DR launch vector. Skipped during the prediction window.
+    // into the DR launch vector. Skipped during the prediction window,
+    // and while converge owns the body — clumped WAN arrivals produce
+    // near-zero pos deltas that would stomp the steered velocity to
+    // ~1.4m/s, leaving ghosts trailing the path for seconds.
     if (!teleported && this.predictionTimer <= 0) {
-      if (this.lastServerPosition.lengthSq() > 0) {
-        const serverDt = (stamp - prevUpdateMs) / 1000;
-        if (serverDt > 0) {
-          this.simulatedVelocity.set(
-            (targetPosition.x - this.lastServerPosition.x) / serverDt,
-            (targetPosition.y - this.lastServerPosition.y) / serverDt,
-            (targetPosition.z - this.lastServerPosition.z) / serverDt
-          );
-        }
-      }
+      this.reseedSimVelocity(stamp - prevUpdateMs, targetPosition, wasConverging);
       this.lastServerPosition.set(targetPosition.x, targetPosition.y, targetPosition.z);
     }
   }
@@ -318,7 +317,21 @@ export class RemoteInterp {
     // backward by ~v·ext. Route that discontinuity through the steering
     // converge instead — same physically-capped rejoin DR exits use —
     // so a jittered link steers the ghost rather than warping it.
-    const gap = Math.hypot(sampledPos.x - p.x, sampledPos.y - p.y, sampledPos.z - p.z);
+    const gx = sampledPos.x - p.x, gy = sampledPos.y - p.y, gz = sampledPos.z - p.z;
+    const gap = Math.hypot(gx, gy, gz);
+    // Seams split by direction: an offset ALONG the remote's velocity is
+    // invisible — it only advances/lags the ghost on its own line.
+    // Perpendicular offset is the pop (sideways warp). At 40m/s every
+    // pushed snapshot re-bends the path by ~1-2m longitudinally; gating
+    // converge on the perpendicular component is what lets straight-line
+    // skiers ride pure interpolation instead of steering every packet.
+    const sv = this.h.serverVelocity;
+    const svLen = Math.hypot(sv.x, sv.y, sv.z);
+    let perp = gap;
+    if (svLen > 1 && gap > 0.01) {
+      const along = (gx * sv.x + gy * sv.y + gz * sv.z) / svLen;
+      perp = Math.sqrt(Math.max(0, gap * gap - along * along));
+    }
     // Cap at ~1m: scaling the copy-threshold with full speed lets a
     // 44m/s remote snap 2.4m in one frame — a budget that big isn't a
     // seam anymore, it's a pop. Larger gaps steer through converge.
@@ -345,21 +358,26 @@ export class RemoteInterp {
       this.h.previousPosition.copy(p);
       return;
     }
-    // Seam rejoin: the steering sim chases the gap, its window sized to
-    // the physics (convergeBudget) — a flat 0.35s expired mid-chase on
-    // fast remotes and interp re-armed it every frame, so the body lived
-    // in permanent converge churn. Position-space damping was tried and
-    // rejected: any per-frame cap slow enough to be invisible can't
-    // catch a 40m/s target at all.
+    // Seam rejoin. Perpendicular drift (sideways warp) is the visible
+    // pop — it goes through the accel-capped steering sim with a window
+    // sized to the physics (convergeBudget; a flat 0.35s expired
+    // mid-chase and re-armed every frame — permanent churn). Purely
+    // longitudinal gaps — the common jitter-coast seam — absorb a slice
+    // per frame instead: the ghost eases back onto its own timeline, no
+    // mode switch, nothing to see.
     if (this.lastUpdateTime > 0 && !freshSeed && gap > stepBudget) {
-      this._simulating = true;
-      this.convergeTimer = Math.max(this.convergeTimer, this.convergeBudget(gap));
-      this.convergeStep(dt);
-      return;
+      if (perp > stepBudget) {
+        this._simulating = true;
+        this.convergeTimer = Math.max(this.convergeTimer, this.convergeBudget(gap));
+        this.convergeStep(dt);
+        return;
+      }
+      const k = Math.min(1, 12 * dt);
+      p.x += gx * k; p.y += gy * k; p.z += gz * k;
+    } else {
+      // Directly place on the interpolated path — smooth by construction
+      p.copy(sampledPos);
     }
-
-    // Directly place on the interpolated path — smooth by construction
-    p.copy(sampledPos);
     // Rendered-terrain floor: the wire eye clamps to the SMOOTH field
     // server-side, but the rendered level-0 chord sits above it in
     // gullies — a grounded remote placed raw sinks under the visible
@@ -395,6 +413,19 @@ export class RemoteInterp {
     return Math.min(1.4, chaseVel / 80 + horizon);
   }
 
+  /** Velocity estimate from consecutive wire positions — while converge
+   *  owns the body its steering keeps the velocity: clumped WAN arrivals
+   *  produce near-zero pos deltas that would stomp it to ~1.4m/s and
+   *  leave ghosts trailing the path for seconds. */
+  private reseedSimVelocity(spanMs: number, targetPosition: { x: number; y: number; z: number }, wasConverging: boolean): void {
+    if (spanMs <= 0 || wasConverging || this.lastServerPosition.lengthSq() === 0) {return;}
+    this.simulatedVelocity.set(
+      (targetPosition.x - this.lastServerPosition.x) / (spanMs / 1000),
+      (targetPosition.y - this.lastServerPosition.y) / (spanMs / 1000),
+      (targetPosition.z - this.lastServerPosition.z) / (spanMs / 1000)
+    );
+  }
+
   /** Steering convergence — the fake-input answer to a drifted remote:
    *  instead of blending positions, a critically-damped controller picks
    *  the acceleration that closes the gap to the buffered path within a
@@ -414,9 +445,23 @@ export class RemoteInterp {
     // desired velocity = target's own velocity + closing term — chasing
     // only the static gap gives dv = dist/horizon, which stalls at
     // ~27m on a 44m/s remote (the steer literally cannot catch it).
-    const dvx = (target.x - p.x) / horizon + this.h.serverVelocity.x;
-    const dvy = (target.y - p.y) / horizon + this.h.serverVelocity.y;
-    const dvz = (target.z - p.z) / horizon + this.h.serverVelocity.z;
+    // Sparse far-seat records strip VEL, so serverVelocity can read ~0 —
+    // the chase baseline then collapses to dist/horizon ≈ walking speed
+    // and the ghost trails the path forever. The delta between this
+    // converge's sample and the last gives the path's true speed.
+    const pvDt = Date.now() - this.prevSampleAt;
+    const pvx = pvDt > 0 ? (target.x - this.prevSample.x) / (pvDt / 1000) : 0;
+    const pvy = pvDt > 0 ? (target.y - this.prevSample.y) / (pvDt / 1000) : 0;
+    const pvz = pvDt > 0 ? (target.z - this.prevSample.z) / (pvDt / 1000) : 0;
+    this.prevSample.copy(target);
+    this.prevSampleAt = Date.now();
+    const wireVel = this.h.serverVelocity.lengthSq() > 1;
+    const baseX = wireVel ? this.h.serverVelocity.x : pvx;
+    const baseY = wireVel ? this.h.serverVelocity.y : pvy;
+    const baseZ = wireVel ? this.h.serverVelocity.z : pvz;
+    const dvx = (target.x - p.x) / horizon + baseX;
+    const dvy = (target.y - p.y) / horizon + baseY;
+    const dvz = (target.z - p.z) / horizon + baseZ;
     // accel = (desiredVel - vel)/dt, critically damped, capped to what a
     // jet-burning player could produce (~jetForceDir + gravity-class)
     const ACCEL_CAP = 80;
