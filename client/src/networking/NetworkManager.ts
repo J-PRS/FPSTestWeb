@@ -1,5 +1,5 @@
 import { ChildLogger } from '../core/Logger.js';
-import { encodePosition } from '../../../shared/wire.js';
+import { encodePosition, encodeInputMove, encodeWireJson } from '../../../shared/wire.js';
 import type { ClientMessage, ServerMessage, GameStatePlayer, LocalPlayerState, SnapshotPlayer, TransportKind } from '../../../shared/protocol.js';
 import type { PickupKind } from '../../../shared/pickups.js';
 import type { DeployKind } from '../../../shared/deployables.js';
@@ -510,6 +510,7 @@ export class NetworkManager {
       this.noteDrop(msg.type);
       return;
     }
+    if (NetworkManager.FAST_LANE.has(msg.type)) {this.sendFast(msg); return;}
     // Symmetric send-side check: the server checkIntent-warns a drifted
     // intent AFTER it crossed the wire — running the same check here
     // catches the omit at the call site instead.
@@ -531,6 +532,11 @@ export class NetworkManager {
     this.send({ type: 'tickNack' });
   }
 
+  /** wireIn hook: a counted-miss seq arrived late — cancel the loss. */
+  public onSeqReorder(count: number): void {
+    this.telemetry.onSeqReorder(Date.now(), count);
+  }
+
   private noteDrop(type: string): void {
     // Contract scream: a transport that flips connected()→false without
     // first firing onDisconnect leaves the tier manager blind (the WT
@@ -546,6 +552,39 @@ this.sendDrops += 1;
     if (this.sendDrops === 1 || (this.sendDrops & 31) === 0) {
       logger.warn(`send dropped x${this.sendDrops} — no live lane`, { lastType: type });
     }
+  }
+
+  /** inputMove goes binary on the same lane as position reports — the
+   *  edge journal lands ~50ms fresher than the JSON stream (edge timing
+   *  is replay fidelity for the server shadow). */
+  private sendInputMsg(m: ClientMessage): void {
+    if (m.type === 'inputMove' && m.input) {
+      this.sendBinary(encodeInputMove(m.seq ?? 0, m.input, m.prev));
+      return;
+    }
+    this.send(m);
+  }
+
+  /** Claim/intent types that gain real latency by riding the binary
+   *  lane (stream-2/datagram on WT) instead of the JSON stream — the
+   *  position lane's transit, ~50ms earlier arrival. They stay inside
+   *  the same ordered lane as each other, so intra-lane order is
+   *  preserved; control/chat/room-hops keep the JSON stream. */
+  private static readonly FAST_LANE = new Set([
+    'shotFired', 'aoeShot', 'projectileDestroy', 'deploy', 'skillUse',
+    'repair', 'creatureHit', 'crawlerHit', 'environmentDamage', 'heal',
+    'throwFlag', 'jump', 'jetpack', 'teleport', 'skillFire',
+  ]);
+
+  /** A claim that wants the fast lane: JSON-over-binary on the same
+   *  lane as position reports — the WIRE_JSON frame decodes into the
+   *  ordinary text path server-side. */
+  private sendFast(msg: ClientMessage): void {
+    if (!this.ws?.connected()) { this.noteDrop(msg.type); return; }
+    checkIntent(msg.type, msg as unknown as Record<string, unknown>);
+    const s = JSON.stringify(msg);
+    this.txBytes += s.length + 2;
+    this.sendBinary(encodeWireJson(s));
   }
 
   /** Outbound binary frame — pre-encoded by shared/wire.ts. On RTC this
@@ -595,9 +634,31 @@ this.sendDrops += 1;
    *  now drives it at ~1Hz instead. */
   private lastLedgerSweep = 0;
   private sweepLedgers(now: number): void {
-    this.ledger.sweep(now, { pingMs: this.telemetry.ping, tier: this.ws?.tier });
+    // Resend rides send() so FAST_LANE kinds re-take the datagram lane;
+    // the verbatim claimSeq makes the server's verdict replay the retry.
+    this.ledger.sweep(now, { pingMs: this.telemetry.ping, tier: this.ws?.tier,
+      resend: (m): void => { if (this.isConnected()) { this.send(m as ClientMessage); } } });
     sweepDamageEchoes(now);
+    // shotFired carries no claimSeq — its dedupe is shotId — so the claim
+    // ledger can't resend it. A datagram-dropped fire intent leaves the
+    // predicted shell unborn (parity 'srvAt:none') with only reconnect
+    // replay to recover it; one in-session resend past ~2×RTT closes that
+    // hole. Server seenShots makes the retry free when the original landed.
+    if (this.isConnected()) {
+      const resendMs = Math.min(Math.max((this.telemetry.ping || 60) * 2, 150), 450);
+      for (const e of this.claimIntents) {
+        if (e.resent || now - e.t < resendMs || now - e.t >= NetworkManager.FIRE_REPLAY_MS) {continue;}
+        if ((e.msg as { shotId?: string }).shotId === undefined) {continue;}
+        e.resent = true;
+        this.intentResends += 1;
+        this.send(e.msg);
+      }
+    }
   }
+
+  /** Probe counter — soaks count in-session fire-intent resends (distinct
+   *  from intentReplays, which only fires on reclaim). */
+  intentResends = 0;
 
   /** Ring of recent health-affecting events — read by the desync dump so a
    *  hash mismatch says WHICH event diverged, not just that one did. */
@@ -653,7 +714,7 @@ this.sendDrops += 1;
   }
 
   resendInputs(lastSeq: number): void {
-    this.inputs.resend(lastSeq, (m): void => this.send(m), this.isConnected());
+    this.inputs.resend(lastSeq, (m): void => this.sendInputMsg(m), this.isConnected());
   }
 
   ackInputs(inputAck: number): void {
@@ -860,7 +921,7 @@ this.sendDrops += 1;
     // journal keeps the entry regardless, so skipping the fast path
     // loses nothing (inputSync re-requests on the server's word).
     if (!this.isConnected()) {return;}
-    this.inputs.sendMove(input, rotation, (m): void => this.send(m));
+    this.inputs.sendMove(input, rotation, (m): void => this.sendInputMsg(m));
   }
 
   /** Journal entries with seq > `after` — what the server hadn't consumed
@@ -929,7 +990,11 @@ this.sendDrops += 1;
    *  velocity shadow; only the landing spot crosses the wire. */
   sendSlam(position: { x: number; y: number; z: number }): void {
     if (!this.isConnected()) {return;}
-    this.send({ type: 'slam', position, claimSeq: this.ledger.stamp('slam') });
+    const msg = Object.assign({}, { type: 'slam' as const, position }) as ClientMessage & { claimSeq?: number };
+    msg.claimSeq = this.ledger.stamp('slam', false, msg);
+    this.send(msg);
+    this.claimIntents.push({ msg, t: performance.now(), room: this.netRoom });
+    if (this.claimIntents.length > 16) {this.claimIntents.shift();}
   }
 
   sendJump(position: { x: number; y: number; z: number }): void {
@@ -946,8 +1011,48 @@ this.sendDrops += 1;
    *  spawn hint + echo binding; the server derives truth itself. */
   sendShotFired(a: { weaponType?: number; dir?: { x: number; y: number; z: number }; pos?: { x: number; y: number; z: number }; shotId?: string }): void {
     if (!this.connected) {return;}
-    this.send(Object.assign({}, {type: 'shotFired' as const}, a, {fireAt: this.serverNowMs()}));
+    const msg = Object.assign({}, {type: 'shotFired' as const}, a, {fireAt: this.serverNowMs()});
+    this.send(msg);
+    // Journal for the post-reclaim replay: a socket that dies while the
+    // intent is in flight leaves a predicted shell the server never
+    // spawned — local hit prediction with no adjudication. ~3s window,
+    // server dedupes by shotId, room-scoped so a hop can't replay a
+    // stale shell into the wrong room.
+    this.claimIntents.push({ msg, t: performance.now(), room: this.netRoom });
+    if (this.claimIntents.length > 16) {this.claimIntents.shift();}
   }
+
+  /** Recent predicted intents eligible for post-reclaim replay
+   *  (shotFired/deploy/slam — the claims the client already acted on
+   *  locally). Bounded — a dead lane never earns an unbounded intent
+   *  backlog either. Replays are safe because the server dedupes by
+   *  shotId (shots) or (type,claimSeq) (stamped claims). */
+  private claimIntents: { msg: ClientMessage; t: number; room?: string; resent?: boolean }[] = [];
+  /** Room the last gameState seated us in — journal entries fire under it. */
+  private netRoom: string | undefined;
+  /** Replay window must cover the real reclaim path: socket-death
+   *  detection + grace + rejoin roundtrip routinely runs past 3s —
+   *  a window shorter than the reclaim never actually replays. */
+  private static readonly FIRE_REPLAY_MS = 10_000;
+
+  /** Called by wireIn's gameState handler — the seat is (re)established.
+   *  Resends fire intents the dead lane may have lost; entries from a
+   *  different room (a hop) or older than the window are dropped. */
+  replayFireIntents(room?: string): void {
+    this.netRoom = room;
+    const entries = this.claimIntents;
+    this.claimIntents = [];
+    const now = performance.now();
+    for (const e of entries) {
+      if (e.room !== room || now - e.t >= NetworkManager.FIRE_REPLAY_MS) {continue;}
+      this.intentReplays += 1;
+      this.send(e.msg);
+    }
+  }
+
+  /** Probe counter — soaks assert the reclaim replay actually fired
+   *  (a pass reading only shell fates can't tell replay from luck). */
+  intentReplays = 0;
 
   sendProjectileDestroy(projectileId: string, shotId?: string): void {
     if (this.authoritySims()) { return; }
@@ -958,21 +1063,29 @@ this.sendDrops += 1;
    *  position is the settled one the server will enforce caps/TTL on. */
   sendDeploy(kind: DeployKind, position: { x: number; y: number; z: number }): void {
     if (!this.isConnected()) {return;}
-    this.send({ type: 'deploy', kind, position, claimSeq: this.ledger.stamp('deploy') });
+    const msg = Object.assign({}, { type: 'deploy' as const, kind, position }) as ClientMessage & { claimSeq?: number };
+    msg.claimSeq = this.ledger.stamp('deploy', false, msg);
+    this.send(msg);
+    this.claimIntents.push({ msg, t: performance.now(), room: this.netRoom });
+    if (this.claimIntents.length > 16) {this.claimIntents.shift();}
   }
 
   /** Repair claim — only the target id crosses the wire; the server
    *  re-derives range, LOS, team, heal amount, and pacing itself. */
   sendRepair(targetId: number): void {
     if (!this.isConnected() || this.authoritySims()) { return; }
-    this.send({ type: 'repair', targetId, claimSeq: this.ledger.stamp('repair') });
+    const msg = { type: 'repair' as const, targetId, claimSeq: undefined as number | undefined };
+    msg.claimSeq = this.ledger.stamp('repair', false, msg);
+    this.send(msg);
   }
 
   /** Instant-skill ante mirror — skills.ts already spent the energy
    *  locally; the server applies the same drain to its shadow tank. */
   sendSkillUse(): void {
     if (!this.isConnected()) {return;}
-    this.send({ type: 'skillUse', claimSeq: this.ledger.stamp('skillUse') });
+    const msg = { type: 'skillUse' as const, claimSeq: undefined as number | undefined };
+    msg.claimSeq = this.ledger.stamp('skillUse', false, msg);
+    this.send(msg);
   }
 
   /** Loadout class pick mid-match — the server banks it for the next
@@ -1019,14 +1132,18 @@ this.sendDrops += 1;
     // "did the client even claim it?" before any server-side question.
     if (!this.isConnected()) {return;} // lane dead — don't mint a phantom stamp
     logger.info(`envDamage claim: ${Math.round(amount * 10) / 10}`, { attacker });
-    this.send({ type: 'environmentDamage', amount, attacker, claimSeq: this.ledger.stamp('environmentDamage') });
+    const msg = { type: 'environmentDamage' as const, amount, attacker, claimSeq: undefined as number | undefined };
+    msg.claimSeq = this.ledger.stamp('environmentDamage', false, msg);
+    this.send(msg);
   }
 
   /** Client-claimed heal (nugget pickup) — keeps server health the truth. */
   sendHeal(amount: number): void {
     if (!this.connected) { this.localAuthority?.heal(amount); return; }
     if (!this.isConnected()) {return;}
-    this.send({ type: 'heal', amount, claimSeq: this.ledger.stamp('heal') });
+    const msg = { type: 'heal' as const, amount, claimSeq: undefined as number | undefined };
+    msg.claimSeq = this.ledger.stamp('heal', false, msg);
+    this.send(msg);
   }
 
   /** Hit claim on a server-owned creature (netDriven ball). kx/ky/kz is the
@@ -1034,7 +1151,9 @@ this.sendDrops += 1;
    *  the new segment so every client sees the same shove. */
   sendCrawlerHit(id: number, damage: number, kx?: number, ky?: number, kz?: number): void {
     if (this.authoritySims() || !this.isConnected()) { return; }
-    this.send({ type: 'crawlerHit', id, damage, kx, ky, kz, claimSeq: this.ledger.stamp('crawlerHit', true) });
+    const msg = { type: 'crawlerHit' as const, id, damage, kx, ky, kz, claimSeq: undefined as number | undefined };
+    msg.claimSeq = this.ledger.stamp('crawlerHit', true, msg);
+    this.send(msg);
   }
 
   private creatureHitLogN = 0;
@@ -1046,7 +1165,9 @@ this.sendDrops += 1;
     if ((((this.creatureHitLogN += 1) - 1) & 15) === 0) {
       logger.info(`creatureHit claim x${this.creatureHitLogN}`, { id, damage });
     }
-    this.send({ type: 'creatureHit', id, damage, kx, ky, kz, claimSeq: this.ledger.stamp('creatureHit', true) });
+    const msg = { type: 'creatureHit' as const, id, damage, kx, ky, kz, claimSeq: undefined as number | undefined };
+    msg.claimSeq = this.ledger.stamp('creatureHit', true, msg);
+    this.send(msg);
   }
 
   sendSnapshotRequest(): void {
@@ -1130,6 +1251,21 @@ this.sendDrops += 1;
    *  client ping rides, minus our own event-loop stall. null until the
    *  first echo lands (or on transports without the probe). */
   serverPingMs: number | null = null;
+
+  /** Transit-symmetry probe (netcode-gap item): srvPing measures the
+   *  reliable-lane RTT while `ping` measures the datagram lane — a
+   *  persistent gap is the lane asymmetry, not noise, and it widens the
+   *  server's rewind window by that much. EMA + an outlier count land in
+   *  the Alt+Q dump so the 7ms/61ms reading answers "is it systematic". */
+  srvAsymMs = 0;
+  srvAsymN = 0;
+  noteSrvPing(rtt: number | null): void {
+    this.serverPingMs = rtt;
+    if (rtt === null || rtt <= 0 || this.telemetry.ping <= 0) {return;}
+    const asym = (rtt - this.telemetry.ping) / 2;
+    this.srvAsymMs = this.srvAsymMs === 0 ? asym : this.srvAsymMs * 0.9 + asym * 0.1;
+    if (asym > 25) {this.srvAsymN += 1;}
+  }
 
   /** Worker-transport probes (clean wire RTT, postMessage delivery lag,
    *  coalesced tick count) — null on non-worker transports. */

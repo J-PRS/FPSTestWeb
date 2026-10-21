@@ -90,14 +90,22 @@ function paintLanceBolt(deps: NetCtx['deps'], origin: THREE.Vector3, dir: THREE.
   _lanceUp.crossVectors(_lanceSide, dir).normalize();
   for (let i = 0; i < LANCE_STRAND_COLORS.length; i += 1) {
     const fan = i - 1; // -1, 0, +1
-    _lanceTip.copy(_bP).addScaledVector(_lanceSide, fan * 0.4).addScaledVector(_lanceUp, fan * 0.18);
+    // On a whiff each strand bleeds out at a different depth (0.62/0.78/
+    // 0.94 of the stop) — ragged along the SAME tight line: the stagger
+    // sells dissipation without the fan reading as a scattergun.
+    const reach = d < LANCE_RANGE ? d : d * (0.62 + i * 0.16);
+    _lanceTip.copy(origin).addScaledVector(dir, reach)
+      .addScaledVector(_lanceSide, fan * 0.4)
+      .addScaledVector(_lanceUp, fan * 0.18);
     deps.lazyEffects().spawnBeam(origin, _lanceTip, LANCE_STRAND_COLORS[i]!);
   }
-  if (d < LANCE_RANGE) {
-    deps.world.explosions.push(new Explosion(
-      deps.lazyScene(), _bP, true, 0, terr, 5.5 / EXPLOSION_VFX_RADIUS, 0xB0_60_FF, 'arc',
-    ));
-  }
+  deps.world.explosions.push(new Explosion(
+    // Landed: center on the true contact. Whiff: pop at the farthest
+    // strand's end — the charge's last reach before it crackles out.
+    deps.lazyScene(), d < LANCE_RANGE ? _bP : _lanceTip, true, 0, terr,
+    (d < LANCE_RANGE ? 5.5 : 2.4) / EXPLOSION_VFX_RADIUS,
+    d < LANCE_RANGE ? 0xB0_60_FF : 0x90_50_FF, 'arc',
+  ));
 }
 
 export function wireProjectiles(ctx: NetCtx): void {

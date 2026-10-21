@@ -95,17 +95,40 @@ export function createShocklance(deps: CombatDeps, hooks: LightningHooks): { lan
     }
 
     // Strand tips fan around the contact — the storm converges on the
-    // hitpoint, not a laser-straight line.
+    // hitpoint, not a laser-straight line. On an air miss the bolts
+    // instead die RAGGED — each strand bleeds out at a different depth
+    // on the same tight line — and the farthest tip pops a small arc
+    // burst: the charge dissipating into air, not stopping dead on an
+    // invisible plane at 18m.
     cam.updateMatrixWorld();
     _r.setFromMatrixColumn(cam.matrixWorld, 0);
     _u.setFromMatrixColumn(cam.matrixWorld, 1);
     for (let i = 0; i < strs.length; i += 1) {
       const s = STRANDS[i]!;
-      _tip.copy(_lgHit).addScaledVector(_r, s.tipR).addScaledVector(_u, s.tipU);
+      if (landed) {
+        _tip.copy(_lgHit).addScaledVector(_r, s.tipR).addScaledVector(_u, s.tipU);
+      } else {
+        _tip.copy(_lanceMuzzle).addScaledVector(cam.getWorldDirection(_lgD), hitT * (0.62 + i * 0.16))
+          .addScaledVector(_r, s.tipR * 0.6).addScaledVector(_u, s.tipU * 0.6);
+      }
       strs[i]!.fire(_lanceMuzzle, _tip, cam.position, landed, biting, null);
     }
     deps.lazyViewModel()?.thrust(); // the jab — bolt rides the stab apex
-    if (landed) {hitBurst();}
+    if (landed) {
+      hitBurst();
+    } else {
+      // Dissipation pop — the charge crackles out at the farthest reach.
+      deps.world.explosions.push(new Explosion(
+        deps.lazyScene(), _tip, true, 0, deps.lazyTerrain(),
+        2.4 / EXPLOSION_VFX_RADIUS, 0x90_50_FF, 'arc',
+      ));
+      fxPuff(_tip, {
+        count: 10, pos: [0.3, 0.3, 0.3],
+        velMin: [-5, -2, -5], velMax: [5, 5, 5],
+        lifeMin: 0.1, lifeMax: 0.3, sizeScale: 0.9,
+        colA: [0.5, 0.3, 1], colB: [1, 0.8, 0.4], additive: true,
+      });
+    }
 
     const serverPaid = deps.lazyNetworkManager()?.authoritySims() === true;
     if (hitTarget) {

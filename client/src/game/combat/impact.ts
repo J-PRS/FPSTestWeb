@@ -335,7 +335,8 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
 
   if (deps.lazyNetworkManager()?.authoritySims()) {
 
-    expectDamageEcho(playerId, directDamage, p.config.weaponType, p.shotId, { x: p.pos.x, y: p.pos.y, z: p.pos.z });
+    expectDamageEcho(playerId, directDamage, p.config.weaponType, p.shotId, { x: p.pos.x, y: p.pos.y, z: p.pos.z },
+      targetPlayer ? { x: targetPlayer.wirePosition.x, y: targetPlayer.wirePosition.y, z: targetPlayer.wirePosition.z } : undefined);
 
   }
 

@@ -43,8 +43,8 @@ export interface NetSnapshot {
 
 export class SnapshotBuffer {
   static readonly BASE_INTERP_DELAY = 100;
-  static readonly MAX_INTERP_DELAY = 800;
-  static readonly MAX_EXTRAPOLATE = 0.25; // s past the newest snapshot
+  static readonly MAX_INTERP_DELAY = 400;
+  static readonly MAX_EXTRAPOLATE = 0.4; // s past the newest snapshot
 
   private snapshots: NetSnapshot[] = [];
   private pool: NetSnapshot[] = [];
@@ -77,7 +77,7 @@ export class SnapshotBuffer {
    *  on arrival spikes) walk the remote BACKWARD along its own path: the
    *  visible rubberband. Those get pinned as bounded extrapolation and
    *  resync when pushes raise the desired time again. */
-  private static readonly MAX_RENDER_REWIND = 40;
+  private static readonly MAX_RENDER_REWIND = 80;
   private lastRenderTime = -Infinity;
   private lastSampleWall = 0;
   /** The delay inflates instantly (a late packet must fit inside the

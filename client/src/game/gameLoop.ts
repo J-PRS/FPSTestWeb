@@ -50,6 +50,7 @@ import { createPerfHud } from '../core/perfHud.js';
 import { createFrameBudget } from '../core/frameBudget.js';
 import { gpuBegin, gpuEnd, gpuMs } from '../core/gpuTimer.js';
 import { lastWeaponByPlayer } from './net/projectiles.js';
+import { parityMiss } from './parity.js';
 import { fpsWatchdog, resetAutoQuality, fxJobSample, fxJobStats } from './loopPerf.js';
 import { createRenderScan } from './renderScan.js';
 import { settings } from '../core/settings.js';
@@ -344,6 +345,21 @@ bodyN += 1;
   }
   _contactBodies.length = bodyN;
   player.movement.bodies = _contactBodies;
+  // kb-echo stamp expiry is time-owned, not event-owned: blastForce and
+  // the knockback handler only sweep inside their own events, so a
+  // rejected predicted shove sat unexpired until the next blast — and
+  // misreported its rejection age (up to ~20s) when it finally landed.
+  const kbStamps = deps.world.selfBlastStamps;
+  if (kbStamps.length > 0) {
+    const now = performance.now();
+    for (let i = kbStamps.length - 1; i >= 0; i -= 1) {
+      const s = kbStamps[i]!;
+      if (now - s.t > 700) {
+        parityMiss('kb-echo', { x: Math.round(s.x), y: Math.round(s.y), z: Math.round(s.z), by: s.by, f: s.f, ageMs: Math.round(now - s.t) });
+        kbStamps.splice(i, 1);
+      }
+    }
+  }
   // Gate shields read team off the sim state — keep it synced to the
   // wire team (rebalances/teamUpdate can flip it mid-match).
   player.movement.getState().team = deps.world.localTeam;

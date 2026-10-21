@@ -9,14 +9,22 @@
 
 import { glitch } from '../core/fxDiag.js';
 import { ChildLogger } from '../core/Logger.js';
-import { WEAPONS } from '../../../shared/weapons.js';
+import { WEAPONS, serverSimmed } from '../../../shared/weapons.js';
 
 const logger = new ChildLogger('Parity');
 
 const MAX_ROWS = 24;
 const rows: { kind: string; detail: string; ageMs: number }[] = [];
 const counts = new Map<string, number>();
+const stamps = new Map<string, number>();
 let total = 0;
+
+/** The denominator half of the ledger: stamp once per prediction a kind
+ *  can miss on, and the dump prints misses/stamps — a mispredict RATE,
+ *  not a raw count. A climbing rate is the regression signal. */
+export function parityStamp(kind: string): void {
+  stamps.set(kind, (stamps.get(kind) ?? 0) + 1);
+}
 
 export function parityMiss(kind: string, detail: Record<string, unknown>): void {
 total += 1;
@@ -27,11 +35,11 @@ total += 1;
   // miss is rare and exactly what the complaint feed exists for, so emit a
   // WARN of our own whenever the limiter swallowed the GLITCH line.
   const payload = JSON.stringify(detail);
-  if (!glitch(`parity-${kind}`, detail)) {
-    logger.warn(`[GLITCH:parity-${kind}] ${payload}`);
-  } else {
+  if (glitch(`parity-${kind}`, detail)) {
     // Also log full JSON for the bot pilot soak capture
     console.error(`[GLITCH:parity-${kind}] ${payload}`);
+  } else {
+    logger.warn(`[GLITCH:parity-${kind}] ${payload}`);
   }
 }
 
@@ -41,7 +49,7 @@ total += 1;
 // "my hit landed but did no damage". Stamp each predicted remote hit;
 // a playerHit/kill naming the same victim confirms it, ~RTT of silence
 // counts it as a ghost hit.
-type DmgEcho = { victim: string; dmg: number; wt?: number; shotId?: string | null; at?: { x: number; y: number; z: number }; t: number };
+type DmgEcho = { victim: string; dmg: number; wt?: number; shotId?: string | null; at?: { x: number; y: number; z: number }; vWire?: { x: number; y: number; z: number }; t: number };
 const dmgEchoes: DmgEcho[] = [];
 // Where each of MY shells actually detonated server-side (projectileDestroyed
 // wire point), keyed by shotId — the fate half of the ghost-hit question.
@@ -51,9 +59,10 @@ const dmgEchoes: DmgEcho[] = [];
 // never arrived.
 const shellFates = new Map<string, { at: { x: number; y: number; z: number }; t: number }>();
 
-export function expectDamageEcho(victim: string, dmg: number, wt?: number, shotId?: string | null, at?: { x: number; y: number; z: number }): void {
+export function expectDamageEcho(victim: string, dmg: number, wt?: number, shotId?: string | null, at?: { x: number; y: number; z: number }, vWire?: { x: number; y: number; z: number }): void {
   parityProbes.echoesStamped += 1;
-  dmgEchoes.push({ victim, dmg, wt, shotId, at, t: performance.now() });
+  parityStamp('dmg-echo');
+  dmgEchoes.push({ victim, dmg, wt, shotId, at, vWire, t: performance.now() });
   if (dmgEchoes.length > 32) {dmgEchoes.shift();}
 }
 
@@ -101,8 +110,25 @@ export function sweepDamageEchoes(now: number): void {
     const ttlMs = e.wt === undefined ? 0 : (WEAPONS[e.wt]?.maxLifetime ?? 0) * 1000;
     const deadline = e.t + 900 + Math.min(ttlMs, 4100);
     if (now > deadline) {
+      // Bodyless + carrier-spawned weapons (MRVBomblet, melee, beams)
+      // have no shotId-bound shell fate — the client intent is never
+      // reborn server-side, so a 'none' verdict can't distinguish a lost
+      // intent from "no fate contract exists". Skip those: noise was
+      // drowning the real verdicts (wt:29 srvAt:none in every soak).
+      if (e.wt !== undefined && !serverSimmed(e.wt)) {dmgEchoes.splice(i, 1); continue;}
       const fate = e.shotId ? shellFates.get(e.shotId) : undefined;
       const detail: Record<string, unknown> = Object.assign({}, {victim: e.victim,dmg: e.dmg}, (e.wt === undefined ? {} : { wt: e.wt }), { shot: e.shotId ?? '?' });
+      if (e.at) {detail.at = `${e.at.x.toFixed(0)},${e.at.y.toFixed(0)},${e.at.z.toFixed(0)}`;}
+      // Aim staleness: the wire pos of the victim at stamp time vs the
+      // point the hit painted — if the victim wasn't actually there, the
+      // server legitimately missed no matter where the shell went.
+      if (e.vWire && e.at) {
+        detail.vWire = `${e.vWire.x.toFixed(0)},${e.vWire.y.toFixed(0)},${e.vWire.z.toFixed(0)}`;
+        detail.aimOff = Number(Math.hypot(e.at.x - e.vWire.x, e.at.y - e.vWire.y, e.at.z - e.vWire.z).toFixed(1));
+      }
+      // Trajectory divergence: the server's detonate point vs the
+      // predicted contact — if the shell itself flew differently, the
+      // spawn claim/coalescing changed its arc.
       if (fate && e.at) {
         detail.srvAt = `${fate.at.x.toFixed(0)},${fate.at.y.toFixed(0)},${fate.at.z.toFixed(0)}`;
         detail.offM = Number(Math.hypot(fate.at.x - e.at.x, fate.at.y - e.at.y, fate.at.z - e.at.z).toFixed(1));
@@ -125,7 +151,10 @@ export function sweepDamageEchoes(now: number): void {
  *  newest-first so a paste shows WHICH predictions died. */
 export function parityLines(): string[] {
   const lines: string[] = [];
-  const byKind = [...counts.entries()].map(([k, n]): string => `${k}=${n}`).join(' ');
+  const byKind = [...counts.entries()].map(([k, n]): string => {
+    const s = stamps.get(k);
+    return s ? `${k}=${n}/${s}(${(n / s * 100).toFixed(1)}%)` : `${k}=${n}`;
+  }).join(' ');
   lines.push(`parity: misses=${total}${byKind ? ` ${byKind}` : ''}`);
   for (const r of rows.slice(-8).toReversed()) {
     lines.push(`  parity-${r.kind}: ${r.detail}`);

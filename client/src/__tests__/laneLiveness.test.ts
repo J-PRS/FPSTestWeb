@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { type ServerMessage, PROTOCOL_VERSION } from '../../../shared/protocol.js';
-import { makeDeps, feed } from './netHarness.js';
+import { encodeTickFrame } from '../../../shared/wire.js';
+import { makeDeps, feed, feedBin } from './netHarness.js';
 vi.mock('../core/sfx.js', () => ({ at: (): void => { return; }, shotAt: (): void => { return; }, init: (): void => { return; }, hitMarker: (): void => { return; }, playerHurt: (): void => { return; }, shieldHit: (): void => { return; }, killConfirm: (): void => { return; }, flagCue: (): void => { return; }, matchHorn: (): void => { return; } }));
 vi.mock('../entities/PlayerModel.js', (): { PlayerModel: () => { load: () => Promise<void>; }; } => ({
   PlayerModel: function (): { load: () => Promise<void>; } {
@@ -50,5 +51,23 @@ describe('lane liveness — inputSync is not proof of life', (): void => {
     vi.setSystemTime(61_000);
     // lastLiveRxAt is still the join stamp — 60s of lane silence visible.
     expect(61_000 - wireIn(h.nm).lastLiveRxAt).toBe(60_000);
+  });
+
+  it('a late-arriving seq cancels its miss — reorder is not loss', (): void => {
+    // WT datagrams reorder constantly; the seqwatch soak read 88% "loss"
+    // on a wire where every tick landed. The stale-drop must cancel the
+    // counted gap when the skipped frame arrives a ms late.
+    vi.setSystemTime(1000);
+    feed(h.nm, { type: 'gameState', players: [], protocolVersion: PROTOCOL_VERSION, room: 'r' } as ServerMessage);
+    const loss = (): number => (h.nm as unknown as { getPacketLoss(): number }).getPacketLoss();
+    feedBin(h.nm, encodeTickFrame(0, 1, 0, []));
+    vi.setSystemTime(1100);
+    feedBin(h.nm, encodeTickFrame(0, 3, 0, [])); // seq 2 skipped → counted as missed
+    expect(loss()).toBeGreaterThan(0);
+    feedBin(h.nm, encodeTickFrame(0, 2, 0, [])); // seq 2 arrives late — reorder
+    expect(loss()).toBe(0);
+    // And a frame that truly never arrives still counts.
+    feedBin(h.nm, encodeTickFrame(0, 5, 0, [])); // seq 4 skipped for real
+    expect(loss()).toBeGreaterThan(0);
   });
 });

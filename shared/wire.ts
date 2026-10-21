@@ -20,6 +20,8 @@ const snap = (): V4Snap => ({ wireId: -1, velX: 0, velY: 0, velZ: 0, yaw: 0, pit
 const MAGIC = 0x54; // 'T'
 
 export const WIRE_POSITION = 0x01;
+export const WIRE_INPUTMOVE = 0x08;
+export const WIRE_JSON = 0x09; // raw JSON bytes riding the binary lane
 export const WIRE_TICK = 0x04; // v2: positions are i16-quantized (POS_Q)
 export const WIRE_TICK_V1 = 0x02; // legacy f32 positions — decode-only,
 // v3: record identity is a room-scoped u16 instead of an id string
@@ -193,6 +195,90 @@ export function decodePosition(u8: Uint8Array, into?: WirePosition): WirePositio
   msg.seq = seq;
   msg.ping = ping;
   return msg;
+}
+
+// ---- C→S inputMove (binary) ----
+// The edge-timed input journal's fast lane: same semantic as the JSON
+// inputMove (edge + prev redundancy), minus the rotation the server
+// never reads (yaw comes from position reports). Layout:
+//   seq u32 | fwd i8 | right i8 | flags u8 | status u8 | hasPrev u8
+//   [pseq u32 | pfwd i8 | pright i8 | pflags u8 | pstatus u8]
+export interface WireInputMove {
+  type: 'inputMove';
+  seq?: number;
+  input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number };
+  rotation: { yaw: number; pitch: number };
+  prev?: { seq?: number; input: NonNullable<WireInputMove['input']>; rotation: { yaw: number; pitch: number } };
+}
+
+export interface InputEdge { seq?: number; input: NonNullable<WireInputMove['input']>; rotation: { yaw: number; pitch: number } }
+
+function writeInputEdge(d: DataView, o: number, e: InputEdge): number {
+  d.setUint32(o, (e.seq ?? 0) >>> 0, true);
+  d.setInt8(o + 4, Math.round(e.input.forward));
+  d.setInt8(o + 5, Math.round(e.input.right));
+  d.setUint8(o + 6, (e.input.jump ? 1 : 0) | (e.input.ski ? 2 : 0) | (e.input.jet ? 4 : 0));
+  d.setUint8(o + 7, (e.input.status ?? 0) & 0xFF);
+  return o + 8;
+}
+
+export function encodeInputMove(seq: number, input: NonNullable<WireInputMove['input']>, prev?: InputEdge): Uint8Array {
+  const buf = new ArrayBuffer(prev ? 19 : 11);
+  const d = new DataView(buf);
+  d.setUint8(0, MAGIC);
+  d.setUint8(1, WIRE_INPUTMOVE);
+  const end = writeInputEdge(d, 2, { seq, input, rotation: { yaw: 0, pitch: 0 } });
+  if (prev) {
+    d.setUint8(end, 1);
+    writeInputEdge(d, end + 1, prev);
+  } else {
+    d.setUint8(end, 0);
+  }
+  return new Uint8Array(buf);
+}
+
+function readInputEdge(d: DataView, o: number): InputEdge | null {
+  if (d.byteLength < o + 8) {return null;}
+  const seq = d.getUint32(o, true);
+  const forward = d.getInt8(o + 4), right = d.getInt8(o + 5);
+  const flags = d.getUint8(o + 6);
+  const status = d.getUint8(o + 7);
+  return { seq, rotation: { yaw: 0, pitch: 0 },
+    input: { forward, right, jump: (flags & 1) ? 1 : 0, ski: (flags & 2) ? 1 : 0, jet: (flags & 4) ? 1 : 0, status } };
+}
+
+export function decodeInputMove(u8: Uint8Array): WireInputMove | null {
+  if (u8.length < 11 || u8[0] !== MAGIC || u8[1] !== WIRE_INPUTMOVE) {return null;}
+  const d = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  const cur = readInputEdge(d, 2);
+  if (!cur || !Number.isFinite(cur.input.forward + cur.input.right)) {return null;}
+  const msg: WireInputMove = { type: 'inputMove', seq: cur.seq, input: cur.input, rotation: { yaw: 0, pitch: 0 } };
+  if (u8.length >= 19 && d.getUint8(10) === 1) {
+    const prev = readInputEdge(d, 11);
+    if (prev) {msg.prev = prev;}
+  }
+  return msg;
+}
+
+// ---- C→S JSON-over-binary ----
+// Any ClientMessage can ride the fast binary lane as framed JSON: combat
+// claims (shotFired/aoeShot/deploy/…) get the position lane's transit
+// instead of the JSON stream's — same validation, same ordering within
+// the lane, ~50ms earlier arrival on WT. Decode returns the JSON text;
+// the caller runs the normal parse+validate path on it.
+export function encodeWireJson(text: string): Uint8Array {
+  const bytes = new TextEncoder().encode(text);
+  const out = new Uint8Array(2 + bytes.length);
+  out[0] = MAGIC;
+  out[1] = WIRE_JSON;
+  out.set(bytes, 2);
+  return out;
+}
+
+export function decodeWireJson(u8: Uint8Array): string | null {
+  if (u8.length < 3 || u8[0] !== MAGIC || u8[1] !== WIRE_JSON) {return null;}
+  try { return new TextDecoder().decode(u8.subarray(2)); }
+  catch { return null; }
 }
 
 // ---- S→C tickUpdate ----

@@ -6,7 +6,7 @@ import { getGlowTexture } from '../effects/glowTexture.js';
 import { BallTrailDots } from '../effects/ballTrails.js';
 import { metalMat } from './procMetal.js';
 import { makePartPool, takeSlot, releaseSlot, type PartPool } from './deployPool.js';
-import { parityMiss } from '../game/parity.js';
+import { parityMiss, parityStamp } from '../game/parity.js';
 import { NUG_TUMBLE, type PickupKind } from '../../../shared/pickups.js';
 
 // Tighter falloff than the shared glow: hot core, fast edge fade — the
@@ -354,6 +354,7 @@ export class Nugget {
    *  not a teleport: only snap when the local tumble diverged for real. */
   serverRest(p: { x: number; y: number; z: number }): void {
     if (this.collected || this.dead || !Number.isFinite(p.x + p.y + p.z)) {return;}
+    parityStamp('nugrest');
     const dx = this.pos.x - p.x, dy = this.pos.y - p.y, dz = this.pos.z - p.z;
     const dSq = dx * dx + dy * dy + dz * dz;
     if (dSq < 0.5 * 0.5) {return;}

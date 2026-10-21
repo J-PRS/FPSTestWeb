@@ -12,7 +12,7 @@ import { blastOccluded } from '../../../shared/solidWorld.js';
 import type { CombatDeps } from './combat.js';
 import type { Targetable } from '../entities/balls.js';
 import * as sfx from '../core/sfx.js';
-import { parityMiss, expectDamageEcho } from './parity.js';
+import { parityMiss, parityStamp, expectDamageEcho } from './parity.js';
 import { targetDemoId } from '../demo/types.js';
 
 export interface BlastForceHooks {
@@ -162,7 +162,8 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       const victimTeam = deps.lazyNetworkManager()?.getPlayers?.().get(playerId)?.team;
       const friendly = victimTeam !== undefined && victimTeam === deps.world.localTeam;
       if (!a.shooterId && !friendly && aoeDmg >= 1 && deps.lazyNetworkManager()?.authoritySims?.()) {
-        expectDamageEcho(playerId, aoeDmg, weaponType, a.shotId, { x: pos.x, y: pos.y, z: pos.z });
+        expectDamageEcho(playerId, aoeDmg, weaponType, a.shotId, { x: pos.x, y: pos.y, z: pos.z },
+          { x: rp.wirePosition.x, y: rp.wirePosition.y, z: rp.wirePosition.z });
       }
     }
   }
@@ -225,6 +226,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     // stranded the stamp (kb-echo) and let the echo double-shove.
     const stamps = deps.world.selfBlastStamps;
     stamps.push({ x: pos.x, y: pos.y, z: pos.z, t: now, by: shooterId, f: Math.round(impulse * 10) / 10 });
+    parityStamp('kb-echo');
     // Settle older stamps: a predicted self-shove the server never echoed
     // back (~700ms past the 400ms consume window) was rejected server-side —
     // loud parity miss, not a silent expiry.

@@ -729,7 +729,12 @@ export class Player {
     // out silently forever. Recover the pose from yaw/pitch once.
     if (!Number.isFinite(q.x + q.y + q.z + q.w)) {
       logger.warn('Camera quaternion NaN — rebuilt from yaw/pitch', { yaw: this.yaw, pitch: this.pitch });
-      this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
+      // Rebuild from finite-ized yaw/pitch — a resync/poisoned state can
+      // leave either NaN, and rebuilding with NaN would re-poison the quat
+      // every frame forever.
+      const y = Number.isFinite(this.yaw) ? this.yaw : 0;
+      const p = Number.isFinite(this.pitch) ? this.pitch : 0;
+      this.camera.rotation.set(p, y, 0, 'YXZ');
       this._camQuatValid = false;
       return;
     }
@@ -762,7 +767,16 @@ export class Player {
   // it owns integration and its snapshot would overwrite our values
   // next update otherwise.
   syncMovement(): void {
-    this.movement.setState({ pos: this.pos, vel: this.vel, yaw: this.yaw, pitch: this.pitch, onGround: this.onGround });
+    // setState rejects the WHOLE push on any non-finite field — a wire or
+    // resync path that NaN'd yaw/pitch would veto pos/vel forever (silent
+    // rubber-band to the last accepted state). Sanitize the pair instead;
+    // the camera watchdog already warns on the poisoned pose.
+    this.movement.setState({
+      pos: this.pos, vel: this.vel,
+      yaw: Number.isFinite(this.yaw) ? this.yaw : 0,
+      pitch: Number.isFinite(this.pitch) ? this.pitch : 0,
+      onGround: this.onGround,
+    });
   }
 
   grantJetBoost(): void { imp.grantJetBoost(this); }

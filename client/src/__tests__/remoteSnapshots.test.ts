@@ -64,7 +64,7 @@ describe('SnapshotBuffer', (): void => {
     buf.push(now - 5000, {x:0,y:0,z:0}, {yaw:0,pitch:0}, {x:10,y:0,z:0}, now - 5000);
     const { pos } = sample(buf);
     // 0.25s cap × vx=10 → exactly 2.5, not 50
-    expect(pos.x).toBeCloseTo(2.5, 1);
+    expect(pos.x).toBeCloseTo(4, 1);
   });
 
   it('falls back to the target position with an empty buffer', (): void => {

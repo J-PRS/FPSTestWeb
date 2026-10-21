@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { WireTickPlayer } from '../../../shared/wire.js';
 import {
-  encodePosition, decodePosition,
+  encodePosition, decodePosition, encodeInputMove, decodeInputMove,
   encodeTickPlayer, encodeTickPlayerV3, encodeTickPlayerV4, encodeTickFrame, decodeTickFrame,
   isWireFrame, WIRE_POSITION, WIRE_TICK_V3, WIRE_TICK_V4, WireIdRoster,
   tickEncodeScratch, v4Last,encodeBallSegment,decodeBallSegment,sparseV4Record
@@ -72,6 +72,30 @@ describe('position frame round-trip', (): void => {
     const d = decodePosition(legacy)!;
     expect(d.seq).toBe(7);
     expect(d.inputSeq).toBeUndefined();
+  });
+});
+
+describe('inputMove binary round-trip', (): void => {
+  const input = { forward: -1, right: 1, jump: 1, ski: 0, jet: 1, status: 0b101 };
+
+  it('decodes the current edge with all bits', (): void => {
+    const d = decodeInputMove(encodeInputMove(77, input))!;
+    expect(d.type).toBe('inputMove');
+    expect(d.seq).toBe(77);
+    expect(d.input).toEqual(input);
+    expect(d.prev).toBeUndefined();
+  });
+
+  it('carries prev when present, omits it when absent', (): void => {
+    const prev = { seq: 76, input: { forward: 0, right: 0, jump: 0, ski: 1, jet: 0, status: 0 }, rotation: { yaw: 0, pitch: 0 } };
+    const d = decodeInputMove(encodeInputMove(77, input, prev))!;
+    expect(d.prev!.seq).toBe(76);
+    expect(d.prev!.input.ski).toBe(1);
+  });
+
+  it('rejects non-wire and truncated frames', (): void => {
+    expect(decodeInputMove(new Uint8Array([0x00, 0x08]))).toBeNull();
+    expect(decodeInputMove(encodeInputMove(1, input).slice(0, 5))).toBeNull();
   });
 });
 

@@ -26,6 +26,11 @@ export const claimCensus = {
   rejected: 0,
   unconfirmed: 0,
   lost: 0,
+  /** Resends fired for claims whose ack outran ~2×RTT — the datagram
+   *  lane CAN drop a claim outright; the ack-driven retry is the edge
+   *  recovery reclaim can't cover mid-session (server replays the
+   *  recorded verdict on claimSeq, so a resend is free). */
+  resent: 0,
   byReason: new Map<string, number>(),
   last: '',
 };
@@ -52,6 +57,7 @@ registerDiag('net', () => ({
     rejected: claimCensus.rejected,
     unconfirmed: claimCensus.unconfirmed,
     lost: claimCensus.lost,
+    resent: claimCensus.resent,
     byReason: Object.fromEntries(claimCensus.byReason),
     last: claimCensus.last,
   },
@@ -80,8 +86,13 @@ export class ClaimLedger {
   private static readonly HIT_CONFIRM_MS = 1500;
 
   /** Non-shot claims (deploy/heal/repair/env/skill/creature hits) —
-   *  seq-stamped on send, classified by claimAck or by expiry. */
-  private pendingClaims = new Map<number, { kind: string; t: number }>();
+   *  seq-stamped on send, classified by claimAck or by expiry. `msg` is
+   *  the verbatim payload for the ack-driven resend: FAST_LANE claims
+   *  ride datagrams and CAN drop mid-session, where the only prior
+   *  recovery was a dead-lane reclaim replay — too late to un-ghost a
+   *  predicted plant. sentAt/tries bound the retry; the server's
+   *  (type,claimSeq) verdict map makes every resend idempotent. */
+  private pendingClaims = new Map<number, { kind: string; t: number; msg?: object; sentAt: number; tries: number }>();
   private claimSeq = 0;
   private creatureClaimN = 0;
 
@@ -89,11 +100,12 @@ export class ClaimLedger {
    *  chaingun rates) ack 1-in-4 — verdict traffic stays bounded, a
    *  rejected pattern still surfaces. Returns undefined when unsampled
    *  → legacy fire-and-forget, no ack expected. */
-  stamp(kind: string, sparse = false): number | undefined {
+  stamp(kind: string, sparse = false, msg?: object): number | undefined {
     if (sparse && (((this.creatureClaimN += 1) - 1) & 3) !== 0) {return undefined;}
     this.claimSeq += 1;
     const seq = this.claimSeq;
-    this.pendingClaims.set(seq, { kind, t: performance.now() });
+    const t = performance.now();
+    this.pendingClaims.set(seq, { kind, t, msg, sentAt: t, tries: 0 });
     if (this.pendingClaims.size > 256) {
       // Acks aren't arriving at all — every waiting entry died with its
       // lane or its server; classify and reset rather than grow.
@@ -130,9 +142,14 @@ claimCensus.rejected += 1;
     logger.warn(`claim rejected: ${key}`);
   }
 
-  sweep(now: number, ctx: { pingMs: number; tier: TransportKind | string | undefined }): void {
+  sweep(now: number, ctx: { pingMs: number; tier: TransportKind | string | undefined; resend?: (msg: object) => void }): void {
     if (now - this.lastPendingSweep < 250) {return;}
     this.lastPendingSweep = now;
+    // Ack-driven resend (the edge-ack half the datagram lane lacks): an
+    // ack older than ~2×RTT probably never saw its claim — resend the
+    // verbatim msg so the seq rides again; server's verdict replay keeps
+    // it exactly-once. Max 2 tries, then the normal unconfirmed path.
+    if (ctx.resend) {this.resendDue(now, Math.min(Math.max((ctx.pingMs || 60) * 2, 150), 450), ctx.resend);}
     // Per-claim warns here were a flood under sustained ack loss — every
     // waiting entry expired with its own interpolated line. The census
     // keeps per-kind counts; the log gets one line per sweep pass.
@@ -163,6 +180,15 @@ rejectCensus.total += 1;
         weapon: h.weaponType === undefined ? undefined : WeaponType[h.weaponType] ?? h.weaponType,
         ageMs: Math.round(now - h.t), pingMs: ctx.pingMs, tier: ctx.tier,
       });
+    }
+  }
+
+  private resendDue(now: number, resendMs: number, resend: (msg: object) => void): void {
+    for (const c of this.pendingClaims.values()) {
+      if (c.msg === undefined || c.tries >= 2 || now - c.sentAt < resendMs) {continue;}
+      c.tries += 1; c.sentAt = now;
+      claimCensus.resent += 1;
+      resend(c.msg);
     }
   }
 

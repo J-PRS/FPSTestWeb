@@ -35,6 +35,13 @@ export class WireIn {
   private readonly tickPool: TickDecodePool = { slots: [], byId: new Map(), resolveId: (id): string | undefined => this.wireIds.get(id) };
 
   private lastTickSeq = -1; // highest server tickSeq applied — stale frames drop
+  /** Seqs counted as missed that a late (reordered) arrival can cancel —
+   *  unordered lanes reorder constantly; without this every reorder reads
+   *  as packet loss in the HUD + telemetry. */
+  private readonly pendingMissed = new Set<number>();
+  /** Misses canceled by a late arrival — nonzero = the tick lane is
+   *  unordered (datagrams), ~0 = stream-2's ordered pump is carrying it. */
+  reorderCancels = 0;
   /** ?dropticks=N test hook — see the tick-path comment below. */
   private static dropEvery = Number(urlParams.get('dropticks') ?? 0) || 0;
   private static dropCounter = 0;
@@ -74,6 +81,7 @@ export class WireIn {
   resetForReconnect(): void {
     this.lastTickSeq = -1;
     this.lastHitSeq = 0;
+    this.pendingMissed.clear();
   }
 
   /** Wire-feed seam — one message through the live dispatch path, so
@@ -202,7 +210,16 @@ this.handlerThrows += 1;
     // Stale-drop BEFORE decode: v4 decode mutates the byId baseline — an
     // out-of-order datagram frame would smuggle its stale fields into the
     // retained slots even when dropped here. tickSeq sits at bytes 6-9.
-    if (data.byteLength >= 15 && new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(6, true) <= this.lastTickSeq) {return;}
+    if (data.byteLength >= 15) {
+      const seq = new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(6, true);
+      if (seq <= this.lastTickSeq) {
+        // A "lost" seq arriving late is a reorder, not loss — cancel the
+        // miss we counted (unordered lanes reorder constantly; 88% fake
+        // loss on a perfect wire in the seqwatch soak).
+        if (this.pendingMissed.delete(seq)) {this.reorderCancels += 1; this.h.onSeqReorder?.(1);}
+        return;
+      }
+    }
     // ?dropticks=N — drop every Nth tick frame before decode to exercise
     // the tickNack recovery loop (localhost can't produce real loss).
     if (WireIn.dropEvery > 0 && (WireIn.dropCounter += 1) >= WireIn.dropEvery) { WireIn.dropCounter = 0; return; }
@@ -216,7 +233,14 @@ this.handlerThrows += 1;
     // loss — it used to count thousands of phantom misses into seqWindow
     // (100% packetLoss for the session's first 5s) and nack a burst the
     // roster-intro fulls already cover.
-    if (this.lastTickSeq >= 0 && tick.tickSeq - this.lastTickSeq > 1) {this.h.onTickGap?.(tick.tickSeq - this.lastTickSeq - 1);}
+    if (this.lastTickSeq >= 0 && tick.tickSeq - this.lastTickSeq > 1) {
+      const gap = tick.tickSeq - this.lastTickSeq - 1;
+      this.h.onTickGap?.(gap);
+      // Remember the seqs counted as missed — a late arrival (unordered
+      // datagram lane) cancels its own miss instead of reporting loss.
+      for (let s = this.lastTickSeq + 1; s < tick.tickSeq; s += 1) {this.pendingMissed.add(s);}
+      if (this.pendingMissed.size > 256) {this.pendingMissed.clear();}
+    }
     this.lastTickSeq = tick.tickSeq;
     // Same containment as the JSON path — a throwing tick handler at 20Hz
     // would otherwise hit onError and reconnect the socket every frame.
@@ -276,7 +300,7 @@ this.handlerThrows += 1;
     // measures round-trip itself instead of trusting our reported ping.
     ping: (data): void => this.h.pingReceived(data.timestamp),
     pong: (data): void => this.h.pongReceived(data.timestamp),
-    srvPing: (data): void => { this.h.serverPingMs = typeof data.rtt === 'number' ? data.rtt : null; },
+    srvPing: (data): void => { this.h.noteSrvPing?.(typeof data.rtt === 'number' ? data.rtt : null); },
     chat: (data): void | undefined => this.h.onChat?.(data.playerId, data.text, data.team === true, typeof data.vgs === 'string' ? data.vgs : undefined, data.muted === true),
     flagUpdate: (data): void | undefined => this.h.onFlagUpdate?.(data.flags),
     nodeUpdate: (data): void | undefined => this.h.onNodeUpdate?.(data.nodes),
@@ -351,6 +375,7 @@ dropCensus.total += 1;
     // reconnect would otherwise freeze every remote for the session.
     this.lastHitSeq = 0;
     this.lastTickSeq = -1;
+    this.pendingMissed.clear();
     this.h.dropClaims(false);
     this.h.clearResyncQuiet(); // truth landed — position claims are judged fresh
     const serverProto = data.protocolVersion ?? 0;
@@ -389,6 +414,9 @@ dropCensus.total += 1;
     this.tickPool.byId?.clear();
     if (data.wireIds) {for (const [id, pid] of Object.entries(data.wireIds)) {this.wireIds.set(Number(id), pid);}}
     this.h.remoteReset(data.players);
+    // Seat is (re)established — replay fire intents a dead lane may have
+    // lost. Server dedupes by shotId, so a shot that DID land is a no-op.
+    this.h.replayFireIntents(data.room);
     logger.debug(`raw gameState map: ${data.map ? JSON.stringify(data.map).slice(0, 300) : 'none'}`);
     this.h.onGameState?.(data.players || [], data.localPlayerState, { room: data.room, mode: data.mode, mapName: data.mapName, team: data.team, scores: data.scores, ffaScores: data.ffaScores, pickups: data.pickups, flags: data.flags, matchEndsAt: data.matchEndsAt, respawnMs: data.respawnMs, deployables: data.deployables, map: data.map });
   }

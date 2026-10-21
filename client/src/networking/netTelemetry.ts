@@ -41,6 +41,19 @@ export class NetTelemetry {
     while (this.seqWindow.length > 0 && now - this.seqWindow[0]!.t > TICK_WINDOW_MS) {this.seqWindow.shift();}
   }
 
+  /** A seq counted missed that arrived late anyway — unordered lanes
+   *  reorder constantly; canceling keeps packetLoss honest. */
+  onSeqReorder(now: number, count: number): void {
+    let left = count;
+    for (let i = this.seqWindow.length - 1; i >= 0 && left > 0; i -= 1) {
+      const w = this.seqWindow[i]!;
+      const take = Math.min(w.missed, left);
+      w.missed -= take;
+      left -= take;
+      if (w.missed === 0) {this.seqWindow.splice(i, 1);}
+    }
+  }
+
   // "Loss" over a reliable WS transport isn't packet loss — what players
   // feel is delivery gaps. Track the tick stream: a frame arriving
   // >1 expected-interval late counts the skipped slots as missed.
