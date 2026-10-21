@@ -14,7 +14,7 @@ import { BOT_LOADOUTS, botClassForLoadout } from '../../shared/botLoadouts.ts';
 
 function arg<T>(name: string, def: T, parse: (s: string) => T): T {
   const i = process.argv.indexOf(name);
-  return i >= 0 && process.argv[i + 1] ? parse(process.argv[i + 1]) : def;
+  return i !== -1 && process.argv[i + 1] ? parse(process.argv[i + 1]) : def;
 }
 const num = (s: string) => Number(s);
 
@@ -29,8 +29,20 @@ const DROP_EVERY = arg('--drop-every', 0, num);
 const ROOM = arg('--room', '', String);
 const MODE = arg('--mode', '', String);
 const STAGGER = arg('--stagger', 50, num);
+// --net ws|rtc|mixed — mixed assigns transports round-robin-randomly so a
+// public-match split of socket types contends in one room. RTC needs
+// node-datachannel (same import the test helpers use); if it can't load,
+// rtc picks degrade to ws.
+const NET = arg('--net', 'ws', String);
+const nd = (NET === 'ws')
+  ? null
+  : await import('node-datachannel').then((m) => ((m as { default?: unknown }).default ?? m) as never).catch(() => null);
+if (NET !== 'ws' && !nd) {console.log('node-datachannel unavailable — rtc picks run ws');}
+const pickNet = (): 'ws' | 'rtc' =>
+  NET === 'mixed' ? (nd && Math.random() < 0.5 ? 'rtc' : 'ws')
+    : NET === 'rtc' && nd ? 'rtc' : 'ws';
 
-console.log(`netbot soak: ${BOTS} bots → ${URL_} for ${SECONDS}s (ping=${PING}ms jitter=${JITTER}ms loss=${LOSS}${ROOM ? ` room=${ROOM}/${MODE}` : ''})`);
+console.log(`netbot soak: ${BOTS} bots → ${URL_} for ${SECONDS}s (ping=${PING}ms jitter=${JITTER}ms loss=${LOSS} net=${NET}${ROOM ? ` room=${ROOM}/${MODE}` : ''})`);
 
 // Unique ids per run — the server pins each playerId to an HMAC identity
 // token permanently (anti-impersonation), so reusing netbot_N across runs
@@ -40,8 +52,10 @@ const RUN_TAG = Date.now().toString(36);
 const bots: { nc: NetClient; bot: NetBot }[] = [];
 for (let i = 0; i < BOTS; i++) {
   const lo = BOT_LOADOUTS[i % BOT_LOADOUTS.length]!;
-  const nc = new NetClient(URL_, `nb${RUN_TAG}_${i}`, new LatencyLink({ pingMs: PING, jitterMs: JITTER, lossRate: LOSS }), { ...(ROOM ? { room: ROOM, mode: MODE } : {}), armorClass: botClassForLoadout(lo) });
+  const transport = pickNet();
+  const nc = new NetClient(URL_, `nb${RUN_TAG}_${i}`, new LatencyLink({ pingMs: PING, jitterMs: JITTER, lossRate: LOSS }), { transport, ...(transport === 'rtc' && nd ? { rtc: { nd } } : {}), ...(ROOM ? { room: ROOM, mode: MODE } : {}), armorClass: botClassForLoadout(lo) });
   const bot = new NetBot(nc, { hopEveryMs: HOP_EVERY > 0 ? HOP_EVERY : undefined, dropEveryMs: DROP_EVERY > 0 ? DROP_EVERY : undefined, loadout: lo });
+  console.log(`  ${nc.id} → ${transport}`);
   bots.push({ nc, bot });
 }
 
@@ -50,10 +64,10 @@ for (let i = 0; i < BOTS; i++) {
 // no gameState ever). The bun test staggers for the same reason.
 for (const b of bots) {
   await b.nc.connect();
-  if (STAGGER > 0) await new Promise((r) => setTimeout(r, STAGGER));
+  if (STAGGER > 0) {await new Promise((r) => setTimeout(r, STAGGER));}
 }
 console.log('all bots joined');
-for (const b of bots) b.bot.start();
+for (const b of bots) {b.bot.start();}
 
 await new Promise((r) => setTimeout(r, SECONDS * 1000));
 
@@ -71,7 +85,7 @@ for (const { nc } of bots) {
     `k/d=${t.kills}/${t.deaths} rejects=[${rejects}] corr=${t.corrections} dedup=${t.dedupDrops} ` +
     `hops=${t.hops} gs=${t.gameStates} rtt=${nc.pingMs}ms${nc.closed ? ` CLOSED[${nc.closeInfo}]` : ''}`);
   const totalRejects = [...t.rejects.values()].reduce((a, b) => a + b, 0);
-  if (totalRejects > 0) fails++;
+  if (totalRejects > 0) {fails++;}
 }
 const totShots = bots.reduce((a, b) => a + b.nc.tel.shots, 0);
 const totDealt = bots.reduce((a, b) => a + b.nc.tel.hitsDealt, 0);

@@ -71,11 +71,14 @@ server resend just the lost edges during a degraded-but-alive session (the
 WT-lane partial-loss case). We have `ackSeq` on tick frames — the plumbing
 exists for positions; edges don't ride it yet.
 
-### Gap 4 — WT mid-life teardown (transport bug, open)
-`session.closed` resolves with empty reason at ~72-105s in headless soaks —
-QUIC-layer close under headless Chrome. Recovery works (degrade→fallback) but
-it's a real-world WAN reliability risk until reproduced headed. Characterized,
-parked, logged.
+### Gap 4 — WT mid-life teardown (closed — headless artifact)
+`session.closed` resolved with empty reason at ~72-105s in headless soaks —
+QUIC-layer close under headless Chrome. **Headed repro (2026-10-22):** three
+consecutive 150s+ headed-Chrome soaks at `net=wt` with real WAN netbots in the
+room (cloudflared quick tunnel, ~45-55ms RTT) — `tier=wt` held end-to-end every
+run, zero reconnects, zero intent replays. The empty-reason teardown does not
+reproduce outside headless CPU-throttled Chrome. Closed as a test-harness
+artifact; the degrade→fallback recovery stays as the roam/UDP-block story.
 
 ### Gap 5 — Prediction coverage for remote-side shove
 We predict the *local* player's blast shove and stamp it; remote players get
@@ -351,9 +354,9 @@ Two specifics from the Ford talk beyond the model:
    `seenShots`/`claimVerdicts` give exactly-once. Plus **ack-driven
    resend** (claimLedger): unacked stamped claims resend verbatim up to
    2× at ~2×RTT — the in-session edge recovery reclaim couldn't cover.
-4. **Tick-rate trial at 30Hz** — `FPS_TICK_HZ` knob exists; all 467
-   scenario tests pass at 30Hz. Still owed: a real 64-socket soak to
-   measure stall rate vs the 20Hz baseline before flipping default.
+4. ~~**Tick-rate trial at 30Hz**~~ — LANDED: `FPS_TICK_HZ=30` netbot soak
+   green (64-client bigSoak ~28-31Hz delivered, 0 rejects); 30Hz is proven
+   viable. Default stays 20Hz — flipping is a deployment decision.
 5. ~~**Edge acks**~~ — mostly LANDED via item 3's resend; JSON-stream
    edges still ride the ordered reliable lane (loss there = lane death =
    reclaim), so per-recipient edge seqs are only needed if edges ever
@@ -364,8 +367,21 @@ Two specifics from the Ford talk beyond the model:
    ambient), the impulse wire-field only improves telemetry.
 8. ~~**Mispredict-rate rollup**~~ — LANDED: `parityStamp`/`parityMiss`
    print misses/stamps as rates per kind in the Alt+Q dump.
-9. **WT headed repro** (Gap 4/D3) — scope check before QUIC work.
+9. ~~**WT headed repro**~~ (Gap 4) — DONE: headed+WAN soak ×3, no teardown.
 10. **P2P claim fence** — if P2P ships as primary.
+
+## Landed since this doc — WAN soak results (2026-10-22)
+
+- **cloudflared quick-tunnel soak**: 8 netbots over real `wss://` WAN
+  (~45-55ms RTT), 479 shots / 105 hits / 8 kills / 0 rejects / 0 corrections.
+- **Headed mixed soak** (`_tools/e2e/_wtsoak.ts`): headed Chrome on `net=wt`
+  + 6 WAN netbots in one room; per-remote interp counters polled live.
+- **interpDelay oscillation fix** (remoteSnapshots): the delay target now
+  rides a slow EMA and BOTH inflate/deflate slew — WAN jitter had been
+  breathing the render window ±100ms, rendering as remote lurch despite a
+  full snapshot buffer. Speed cap still clamps the output.
+- **soak `--net ws|rtc|mixed`**: random per-bot transport assignment
+  (rtc needs node-datachannel; degrades to ws with a warning).
 
 ## What we are deliberately NOT doing
 

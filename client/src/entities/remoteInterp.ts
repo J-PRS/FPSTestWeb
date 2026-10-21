@@ -80,6 +80,7 @@ export class RemoteInterp {
    *  freeze/dead-reckon episode. extCapMs is total severity. */
   get underruns(): number { return this.net.underruns; }
   get extCapMs(): number { return this.net.extCapMsTotal; }
+  get atCap(): boolean { return this.net.atExtCap; }
 
   /** One server position update arrived — push the snapshot, refresh
    *  velocity estimates, and (when the DR window allows) blend back.
@@ -211,6 +212,11 @@ export class RemoteInterp {
       } else {
         this.simStep(dt);
       }
+      // The sim's velocity IS the remote's velocity while it owns the
+      // body — interp() maintains h.velocity itself, so without this the
+      // field reads ~0/stale through every DR episode and consumers
+      // (anim speed, probes, jerk metrics) judge a moving body frozen.
+      this.h.velocity.copy(this.simulatedVelocity);
     } else if (!localDriven) {
       this.interp(dt);
     }
@@ -303,7 +309,10 @@ export class RemoteInterp {
     // converge instead — same physically-capped rejoin DR exits use —
     // so a jittered link steers the ghost rather than warping it.
     const gap = Math.hypot(sampledPos.x - p.x, sampledPos.y - p.y, sampledPos.z - p.z);
-    const stepBudget = Math.max(0.5, this.h.velocity.length() * dt * 3 + 0.25);
+    // Cap at ~1m: scaling the copy-threshold with full speed lets a
+    // 44m/s remote snap 2.4m in one frame — a budget that big isn't a
+    // seam anymore, it's a pop. Larger gaps steer through converge.
+    const stepBudget = Math.min(1, Math.max(0.5, this.h.velocity.length() * dt * 3 + 0.25));
     // Seam budget caps the steer: small gaps are jitter seams — converge
     // steers them. A gap past ~40m is NOT a seam: it means the ghost
     // state is garbage (starved DR + stale vel launch), and a

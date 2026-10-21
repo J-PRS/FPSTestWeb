@@ -86,6 +86,8 @@ export class SnapshotBuffer {
    *  remote warps BACKWARD along its own path: the visible rubberband.
    *  Slewed deflation turns the same adaptation into a glide. */
   interpDelay = SnapshotBuffer.BASE_INTERP_DELAY;
+  /** Damped version of the computed delay need — see push(). */
+  private delayTarget = SnapshotBuffer.BASE_INTERP_DELAY;
   /** EMA of the observed arrival interval — send suppression stretches it
    *  well past the nominal 20Hz without being jitter. */
   arrivalInterval = 50;
@@ -136,12 +138,26 @@ export class SnapshotBuffer {
       const delayCap = spd > 5
         ? Math.min(SnapshotBuffer.MAX_INTERP_DELAY, 4000 / spd)
         : SnapshotBuffer.MAX_INTERP_DELAY;
-      const target = Math.min(
+      const raw = Math.min(
         delayCap,
         SnapshotBuffer.BASE_INTERP_DELAY + this.arrivalInterval + this.arrivalJitter * 2,
       );
-      // ~200ms/s deflate at push cadence — see the slew comment above.
-      this.interpDelay = target > this.interpDelay ? target : Math.max(target, this.interpDelay - 10);
+      // The TARGET also needs damping — a jittered WAN arrival swings
+      // raw ±100ms between pushes, and even a slewed chase renders that
+      // breathing as remote lurch. Slow EMA means a sustained shift still
+      // converges (~1-2s) while packet-to-packet noise stops steering
+      // the render window entirely.
+      this.delayTarget += (raw - this.delayTarget) * 0.08;
+      // The cap is a hard error bound (delay×speed = rendered meters) —
+      // it clamps the OUTPUT too, since the EMA lags a speed change.
+      const target = Math.min(this.delayTarget, delayCap);
+      // Slew BOTH ways: instant inflation made every jittered WAN
+      // arrival ratchet the delay up, and each jump rewound/damped
+      // renderTime — remotes lurched on straight paths despite a full
+      // buffer. Up-slew ~8ms/push (~160ms/s at 20Hz) converges on a real
+      // degradation in ~1s while single late packets ride extrapolation
+      // instead. Deflate stays ~200ms/s.
+      this.interpDelay += Math.max(-10, Math.min(8, target - this.interpDelay));
     }
 
     // Finite-but-absurd is the other half of the wire class: no mover
@@ -176,20 +192,38 @@ export class SnapshotBuffer {
     // elapsed — bounded extrapolation — instead of shifting the window.
     const now = Date.now();
     const desired = this.latestT + (now - this.latestArrive) - this.interpDelay;
-    // Both directions bounded: pin on big rewinds (backward warp), glide
-    // forward at ~wall rate (the pin's own release otherwise snaps the
-    // remote ahead as desired reasserts).
+    // The render clock slews, it never steps: each push re-anchors
+    // desired by that packet's arrival jitter, so a raw copy warps the
+    // remote by jitter×speed EVERY arrival (2-3m pops at ski speed on a
+    // WAN). Clamp the chase to a fraction of frame time — a 50ms early/
+    // late packet absorbs over ~10 frames as an imperceptible speed
+    // change. Big rewinds still pin (a backward walk is worse than a
+    // freeze), and real teleports re-seat via clear(), never through
+    // sample.
     // oxlint-disable-next-line init-declarations -- assigned later
     let renderTime!: number;
     if (this.lastRenderTime === -Infinity) {
       renderTime = desired;
     } else {
-      const pin = desired < this.lastRenderTime - SnapshotBuffer.MAX_RENDER_REWIND;
-      // Absolute step cap matters at low fps: a wall-scaled cap alone lets a
-      // 750ms frame glide +860ms in one step — every remote snapping forward
-      // together. Real teleports re-seat via clear(), never through sample.
-      const cap = this.lastRenderTime + Math.min((now - this.lastSampleWall) * 1.15, 100);
-      renderTime = Math.min(pin ? this.lastRenderTime : desired, cap);
+      const dtMs = Math.max(1, now - this.lastSampleWall);
+      const err = desired - this.lastRenderTime;
+      if (err > 200) {
+        // Post-gap resync, not jitter: DR owns the body while the wire
+        // was silent, so the clock can just jump — slewing seconds at
+        // 1.35x leaves renderTime behind the buffer's retention and the
+        // sample pins to the oldest snapshot (a visible warp anyway).
+        renderTime = desired;
+      } else {
+        // Backward applies in full down to the rewind pin: a small
+        // rewind is the remote retracing its own path — slewing it
+        // leaves renderTime trailing desired and drifts the sample
+        // across pair boundaries, which pops harder than the rewind.
+        const fwd = Math.min(dtMs * 1.35, 100);
+        const back = err < -SnapshotBuffer.MAX_RENDER_REWIND
+          ? 0 // pin: absorb the rewind as future forward growth
+          : err;
+        renderTime = this.lastRenderTime + Math.max(back, Math.min(fwd, err));
+      }
     }
     this.lastSampleWall = now;
     this.lastRenderTime = renderTime;
@@ -266,8 +300,12 @@ export class SnapshotBuffer {
       const hz = h00 * s0.z + h10 * s0.vz * spanSec + h01 * s1.z + h11 * s1.vz * spanSec;
       const ox = hx - lx, oy = hy - ly, oz = hz - lz;
       const dist = Math.hypot(ddx, ddy, ddz);
-      // Overshoot tolerance: fraction of segment length (min 0.5m absolute)
-      if (ox * ox + oy * oy + oz * oz < (0.5 * dist + 0.5) * (0.5 * dist + 0.5)) {
+      // Overshoot tolerance: a loose bound here lets the curve bulge far
+      // off-chord — the ghost then sprints along the bulge faster than
+      // the wire velocity (a 1.5m chord excursion at 30m/s reads as a
+      // visible surge, and feeds the converge-steer seam on segment
+      // boundaries). Keep it tight: curves may bend, never balloon.
+      if (ox * ox + oy * oy + oz * oz < (0.25 * dist + 0.35) * (0.25 * dist + 0.35)) {
         outPos.set(hx, hy, hz);
         useHermite = true;
       }
@@ -292,6 +330,8 @@ export class SnapshotBuffer {
     this.lastArrive = 0;
     this.lastRenderTime = -Infinity;
     this.lastSampleWall = 0;
+    this.interpDelay = SnapshotBuffer.BASE_INTERP_DELAY;
+    this.delayTarget = SnapshotBuffer.BASE_INTERP_DELAY;
     this.atExtCap = false;
     this.freshSeed = true;
   }

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import * as THREE from 'three';
 import { SnapshotBuffer } from '../entities/remoteSnapshots.js';
 
@@ -134,16 +134,54 @@ describe('SnapshotBuffer', (): void => {
     // Same 250ms arrival stream for both: only the wire velocity differs.
     // delay×speed is rendered error — an 80m/s remote at ~350ms sits ~28m
     // behind truth; the cap must trade cushion for freshness (≤50ms here).
-    // interpDelay slews down 10ms/push — the stream needs enough pushes
-    // for the cap to converge, same as real play.
-    for (let i = 9; i >= 0; i -= 1) {
+    // interpDelay slews both ways (~10ms down, ~8ms up per push) — the
+    // stream needs enough pushes for either direction to converge.
+    for (let i = 29; i >= 0; i -= 1) {
       const t = now - i * 250;
-      fast.push(t, {x:(9-i)*20,y:0,z:0}, {yaw:0,pitch:0}, {x:80,y:0,z:0}, t);
-      walk.push(t, {x:(9-i)*1,y:0,z:0}, {yaw:0,pitch:0}, {x:3,y:0,z:0}, t);
+      fast.push(t, {x:(29-i)*20,y:0,z:0}, {yaw:0,pitch:0}, {x:80,y:0,z:0}, t);
+      walk.push(t, {x:(29-i)*1,y:0,z:0}, {yaw:0,pitch:0}, {x:3,y:0,z:0}, t);
     }
     expect(fast.interpDelay).toBeLessThanOrEqual(4000 / 80 + 1);
     // Walkers keep the jitter cushion — delay still covers the interval.
     expect(walk.interpDelay).toBeGreaterThan(250);
+  });
+
+  it('absorbs arrival jitter as a slew — the render clock never warps', (): void => {
+    // WAN packet jitter lands as ±50ms re-anchors on desired. At 30m/s a
+    // raw copy is a 1.5m position step per late packet — the visible pop
+    // the soak's jerk probe counts. The render clock must chase at a
+    // bounded fraction of frame time instead.
+    vi.useFakeTimers();
+    try {
+      let clock = 1_000_000;
+      vi.spyOn(Date, 'now').mockImplementation(() => clock);
+      const buf = new SnapshotBuffer();
+      // 50ms server cadence, 30m/s, ~50ms one-way — a healthy stream.
+      for (let i = 0; i < 6; i += 1) {
+        const t = clock - 250 + i * 50;
+        buf.push(t, { x: i * 1.5, y: 0, z: 0 }, { yaw: 0, pitch: 0 }, { x: 30, y: 0, z: 0 }, t + 50);
+      }
+      buf.interpDelay = 100;
+      // Sample 16ms frames; a 60ms-late packet lands mid-sequence.
+      let prev = sample(buf).pos.x;
+      let maxStep = 0;
+      for (let f = 0; f < 20; f += 1) {
+        clock += 16;
+        if (f === 5) {
+          const t = clock - 60;
+          buf.push(t, { x: (t - (1_000_000 - 250)) * 0.03, y: 0, z: 0 },
+            { yaw: 0, pitch: 0 }, { x: 30, y: 0, z: 0 }, clock);
+        }
+        const {x} = sample(buf).pos;
+        maxStep = Math.max(maxStep, Math.abs(x - prev));
+        prev = x;
+      }
+      // 30m/s × 16ms = 0.48m of real travel; a jittered push must add at
+      // most a gentle slew, never a multi-meter step.
+      expect(maxStep).toBeLessThan(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps the yaw lerp on the shortest arc across ±PI', (): void => {
