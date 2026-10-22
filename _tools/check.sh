@@ -36,6 +36,11 @@ if [ "$N" -gt 100 ]; then
   exit 1
 fi
 
+# Root cleanliness gate — the root's entry set is tracked in index_root.txt;
+# a new/removed root entry fails until accepted (--update) or moved.
+# Cheap and instant; runs on every invocation (full/fast/fastest).
+node utils/_rootcheck.mjs
+
 # Lint first — the fixer may rewrite files, so it runs before tests.
 # (The fixer leaves edits UNSTAGED; staging is the caller's business.)
 echo "$CHANGED" | xargs -r -n 50 npx -y oxlint --fix
