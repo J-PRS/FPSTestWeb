@@ -5,6 +5,7 @@ import { classCapsule, classMass } from '../../../shared/botClasses.js';
 import type { Terrain } from '../world/terrain.js';
 import { ChildLogger } from '../core/Logger.js';
 import { SnapshotBuffer } from './remoteSnapshots.js';
+import { monitorOn, violation } from '../core/liveMonitor.js';
 
 const logger = new ChildLogger('RemotePlayer');
 
@@ -48,6 +49,8 @@ export class RemoteInterp {
   private targetRotation = { yaw: 0, pitch: 0 };
   private ping = 0; // connection ping in ms — the knockback window sizes off it
   private lastUpdateTime = 0;   // CLIENT wall ms of the last update — liveness/DR only
+  private silencePeakMs = 0;    // duration of the gap that just ended — keeps the leash DR earned
+  private silencePeakAt = 0;
   private lastServerUpdateMs = 0; // SERVER ms of the last update (tickSeq×50, or wall when no server clock)
   private _simulating = false;  // dead reckoning is running
   private simulatedVelocity = new THREE.Vector3();
@@ -67,6 +70,18 @@ export class RemoteInterp {
   /** Last raw server position — velocity estimation must not read the
    *  extrapolated path or it feeds its own error forward. */
   private lastServerPosition = new THREE.Vector3();
+  /** Throttle for the render-drift monitor — a steering episode would
+   *  otherwise log every frame. */
+  private driftLogAt = 0;
+  /** Reachable-envelope monitor: last drawn position + arming flag. A
+   *  legit re-seat clears the flag instead of reporting its own jump. */
+  private prevDraw = new THREE.Vector3();
+  private prevDrawValid = false;
+  private reachLogAt = 0;
+  private wireGapLogAt = 0;
+  /** Past this, no input combination explains one frame's displacement —
+   *  terminalVelocity is 100 and impulses don't stack that high. */
+  private static readonly REACH_CAP = 150;
 
   constructor(private h: InterpHost) {}
 
@@ -86,6 +101,9 @@ export class RemoteInterp {
    *  clientStats so lag-comp validates at the ghost the shooter saw,
    *  not a fixed 200ms constant that understates jittered links. */
   get interpDelay(): number { return this.net.interpDelay; }
+  /** Actual staleness of the last drawn sample (delay minus extrapolation
+   *  overshoot) — the shooter's literal view epoch for lag-comp reports. */
+  get viewLagMs(): number { return this.net.viewLagMs; }
   /** Buffer starved → extrapolation cap hit: each underrun is a visible
    *  freeze/dead-reckon episode. extCapMs is total severity. */
   get underruns(): number { return this.net.underruns; }
@@ -98,7 +116,12 @@ export class RemoteInterp {
    *  callers without a server clock omit it and arrival time is used. */
   onUpdate(targetPosition: { x: number; y: number; z: number }, targetRotation: { yaw: number; pitch: number }, ping: number, serverVelocity?: { x: number; y: number; z: number }, serverMs?: number): void {
     const prevUpdateMs = this.lastServerUpdateMs;
-    this.lastUpdateTime = Date.now();
+    const nowMs = Date.now();
+    if (this.lastUpdateTime > 0) {
+      this.silencePeakMs = nowMs - this.lastUpdateTime;
+      this.silencePeakAt = nowMs;
+    }
+    this.lastUpdateTime = nowMs;
     const stamp = serverMs ?? this.lastUpdateTime;
     this.lastServerUpdateMs = stamp;
 
@@ -226,8 +249,14 @@ export class RemoteInterp {
       // field reads ~0/stale through every DR episode and consumers
       // (anim speed, probes, jerk metrics) judge a moving body frozen.
       this.h.velocity.copy(this.simulatedVelocity);
+      this.watchReach(dt);
+      this.watchWireGap();
+      this.clampWireGap(dt);
     } else if (!localDriven) {
       this.interp(dt);
+      this.watchReach(dt);
+      this.watchWireGap();
+      this.clampWireGap(dt);
     }
     // localDriven: position/rotation were already written by the owner —
     // interpolating would stomp them with a delayed snapshot sample.
@@ -241,6 +270,7 @@ export class RemoteInterp {
     this.lastUpdateTime = Date.now();
     this._simulating = false;
     this.convergeTimer = 0;
+    this.prevDrawValid = false; // legit re-seat — not impossible motion
   }
 
   /** Respawn reset — the sim can't carry a corpse's state forward. The
@@ -255,6 +285,7 @@ export class RemoteInterp {
     this.lastServerPosition.copy(pos);
     this.lastServerUpdateMs = Date.now();
     this.lastUpdateTime = Date.now();
+    this.prevDrawValid = false; // legit re-seat — not impossible motion
   }
 
   /** Predicted knockback: run the victim through dead reckoning for ~1
@@ -264,7 +295,7 @@ export class RemoteInterp {
    *  0.3 pull). Snapshots are cleared so interpolation can't resample
    *  the pre-hit path after the window — that stale-buffer resample was
    *  the old snap-back bug. */
-  predict(fromPos: THREE.Vector3, impulseMag: number, pull = false): void {
+  predict(fromPos: THREE.Vector3, impulseMag: number, pull = false, dirFrom?: THREE.Vector3): void {
     // NaN seed → NaN simulatedVelocity + a cleared interp buffer: the
     // remote ghosts into nowhere until the next wire row re-roots it.
     if (!Number.isFinite(fromPos.x + fromPos.y + fromPos.z + impulseMag)) {return;}
@@ -274,7 +305,10 @@ export class RemoteInterp {
     // launched remotes tens of meters past any real record. The arriving
     // wire truth carries the extra blasts; this prediction is cosmetic.
     if (this.predictionTimer > 0) {return;}
-    const p = this.h.position;
+    // Direction off the same position the envelope was evaluated at —
+    // callers pass the ghost epoch pos; the rendered body can sit meters
+    // away on a fast mover, skewing the launch angle.
+    const p = dirFrom ?? this.h.position;
     const dx = p.x - fromPos.x;
     const dy = p.y - fromPos.y;
     const dz = p.z - fromPos.z;
@@ -297,6 +331,126 @@ export class RemoteInterp {
   private sample(outPos: THREE.Vector3, outYawPitch: { yaw: number; pitch: number }): void {
     this.net.sample(outPos, outYawPitch,
       this.targetPosition, this.targetRotation.yaw, this.targetRotation.pitch);
+  }
+
+  /** Read-only monitor: drawn pose vs the buffer's own sample — the drift
+   *  the eye reads. Throttled, and kept out of interp() so its complexity stays put. */
+  private watchGap(gap: number, perp: number, svLen: number, freshSeed: boolean): void {
+    if (!monitorOn() || this.lastUpdateTime <= 0 || freshSeed || gap <= 1.5) {return;}
+    const now = performance.now();
+    if (now - this.driftLogAt <= 500) {return;}
+    this.driftLogAt = now;
+    violation('render-drift', { id: this.h.playerId, gap: Number(gap.toFixed(2)), perp: Number(perp.toFixed(2)), serverSpeed: Number(svLen.toFixed(1)), delayMs: Math.round(this.net.interpDelay), underruns: this.net.underruns });
+  }
+
+  private watchSnap(gap: number): void {
+    if (!monitorOn()) {return;}
+    violation('snap', { id: this.h.playerId, gap: Number(gap.toFixed(2)), speed: Number(this.h.velocity.length().toFixed(1)) });
+  }
+
+  /** Reachable-envelope check — monitor-only. The drawn body's per-frame
+   *  displacement must be something legal inputs could produce in dt:
+   *  a sling through a Hermite overshoot or a warp-back reads as
+   *  hundreds of m/s for one frame (terminal fall is 100, stacked
+   *  impulses don't reach 150). Reports the mode that drew it so a
+   *  converge-churn vs interp-overshoot vs DR-runaway split is visible. */
+  private watchReach(dt: number): void {
+    const p = this.h.position;
+    if (!monitorOn() || dt <= 0) {return;}
+    if (!this.prevDrawValid) {
+      this.prevDraw.copy(p);
+      this.prevDrawValid = true;
+      return;
+    }
+    const dist = Math.hypot(p.x - this.prevDraw.x, p.y - this.prevDraw.y, p.z - this.prevDraw.z);
+    this.prevDraw.copy(p);
+    const speed = dist / dt;
+    if (speed <= RemoteInterp.REACH_CAP) {return;}
+    const now = performance.now();
+    if (now - this.reachLogAt <= 500) {return;}
+    this.reachLogAt = now;
+    let mode = 'interp';
+    if (this._simulating) {mode = this.convergeTimer > 0 ? 'converge' : 'sim';}
+    violation('impossible-motion', {
+      id: this.h.playerId,
+      speed: Number(speed.toFixed(0)),
+      dist: Number(dist.toFixed(2)),
+      mode,
+      delayMs: Math.round(this.net.interpDelay),
+      underruns: this.net.underruns,
+    });
+  }
+
+  /** Render-vs-wire leash — the gap between the drawn body and the last
+   *  raw server position (the cyan debug ghost). The leash is deliberate:
+   *  render delay honestly puts the body ~speed·delay behind the wire, so
+   *  the cap is speed·delay + slack, not a fixed distance. Past it the
+   *  render is drawing somewhere the wire never was — the "slung, then
+   *  warped back" signature, and a WYSIWYG hole: shots verified against
+   *  the wire can't hit what the client drew out there. */
+  private watchWireGap(): void {
+    if (!monitorOn() || this.lastServerPosition.lengthSq() === 0) {return;}
+    const p = this.h.position;
+    const w = this.lastServerPosition;
+    const gap = Math.hypot(p.x - w.x, p.y - w.y, p.z - w.z);
+    const cap = this.wireGapCap();
+    if (gap <= cap) {return;}
+    const now = performance.now();
+    if (now - this.wireGapLogAt <= 500) {return;}
+    this.wireGapLogAt = now;
+    let mode = 'interp';
+    if (this._simulating) {mode = this.convergeTimer > 0 ? 'converge' : 'sim';}
+    violation('wire-gap', {
+      id: this.h.playerId,
+      gap: Number(gap.toFixed(2)),
+      cap: Number(cap.toFixed(1)),
+      mode,
+      delayMs: Math.round(this.net.interpDelay),
+      underruns: this.net.underruns,
+    });
+  }
+
+  /** Honest leash radius around the last wire position: how far real
+   *  motion could be from the newest record — speed over (render delay
+   *  + silence since that record) with slack. Silence is in the budget
+   *  because DR legitimately keeps moving while the wire freezes; the
+   *  sim's own 40m XZ drift cap stops a silent wire's runaway instead. */
+  private wireGapCap(): number {
+    const speed = Math.max(this.h.serverVelocity.length(), this.h.velocity.length());
+    const now = Date.now();
+    // Silence resets the instant a post-gap packet lands, but the DR
+    // drift it earned doesn't — clamping against the shrunken cap on the
+    // first frame after silence teleports the body. The peak decays
+    // linearly, so the leash shrinks over the same window converge
+    // steers back in.
+    const silence = Math.max(
+      now - this.lastUpdateTime,
+      Math.max(0, this.silencePeakMs - (now - this.silencePeakAt)));
+    const horizonSec = (this.net.interpDelay + silence) / 1000;
+    return Math.max(8, speed * horizonSec * 1.5 + 3);
+  }
+
+  /** Hard enforcement of the leash — rendering farther than wireGapCap
+   *  is drawing somewhere the server never put the body, which is
+   *  fiction AND a WYSIWYG hole (shots verify against the wire). Pull
+   *  the body back onto the boundary sphere — rate-limited to reachable
+   *  speed: an instant pull on a frame where the wire jumped IS the
+   *  sling-then-warp this clamp exists to prevent. */
+  private clampWireGap(dt: number): void {
+    const w = this.lastServerPosition;
+    if (w.lengthSq() === 0) {return;}
+    const p = this.h.position;
+    const dx = p.x - w.x, dy = p.y - w.y, dz = p.z - w.z;
+    const gap = Math.hypot(dx, dy, dz);
+    const cap = this.wireGapCap();
+    if (gap <= cap) {return;}
+    // Cap the pull speed at REACH_CAP: a teleport/respawn writes ~600m/s
+    // into h.velocity for a frame, and letting the pull inherit it turns
+    // the leash into the teleport it's meant to prevent.
+    const speed = Math.min(RemoteInterp.REACH_CAP,
+      Math.max(this.h.serverVelocity.length(), this.h.velocity.length()));
+    const pull = Math.min(gap - cap, speed * dt) / gap;
+    p.x -= dx * pull; p.y -= dy * pull; p.z -= dz * pull;
   }
 
   // Interpolate between buffered server snapshots (skipped during
@@ -332,6 +486,7 @@ export class RemoteInterp {
       const along = (gx * sv.x + gy * sv.y + gz * sv.z) / svLen;
       perp = Math.sqrt(Math.max(0, gap * gap - along * along));
     }
+    this.watchGap(gap, perp, svLen, freshSeed);
     // Cap at ~1m: scaling the copy-threshold with full speed lets a
     // 44m/s remote snap 2.4m in one frame — a budget that big isn't a
     // seam anymore, it's a pop. Larger gaps steer through converge.
@@ -345,13 +500,10 @@ export class RemoteInterp {
     // Snap to the sampled path instead: a sudden jump is exactly what a
     // lost replica is, and it's one frame of honesty vs seconds of ghost.
     if (this.lastUpdateTime > 0 && !freshSeed && gap > 40) {
+      this.watchSnap(gap);
       p.copy(sampledPos);
       this.h.velocity.copy(this.h.serverVelocity);
-      if (this.h.terrain) {
-        const gY = Math.max(this.h.terrain.getHeight(p.x, p.z), this.h.terrain.getRenderedHeight(p.x, p.z));
-        const {eye} = classCapsule(this.h.armorClass);
-        if (p.y < gY + eye) {p.y = gY + eye;}
-      }
+      this.floorToGround(p);
       this.h.rotation.yaw = sampledRot.yaw;
       this.h.rotation.pitch = sampledRot.pitch;
       this.h.rotation.roll = 0;
@@ -382,11 +534,7 @@ export class RemoteInterp {
     // server-side, but the rendered level-0 chord sits above it in
     // gullies — a grounded remote placed raw sinks under the visible
     // ground (invisible bots). Same floor simStep applies.
-    if (this.h.terrain) {
-      const gY = Math.max(this.h.terrain.getHeight(p.x, p.z), this.h.terrain.getRenderedHeight(p.x, p.z));
-      const {eye} = classCapsule(this.h.armorClass);
-      if (p.y < gY + eye) {p.y = gY + eye;}
-    }
+    this.floorToGround(p);
 
     // Rotation comes straight from the sampled interpolation (already smoothed)
     this.h.rotation.yaw = sampledRot.yaw;
@@ -407,6 +555,23 @@ export class RemoteInterp {
    *  next frame and the body lives in perpetual micro-steer churn
    *  (visible wobble, never settled). ~1.4s ceiling keeps a lost replica
    *  honest — bigger failures take the >40m snap path. */
+  /** Drawn ground height at (x,z): the rendered clipmap chord can sit
+   *  above the smooth collider field in gullies, so visible burial keys
+   *  off the max of both — every render path floors the same way. */
+  private groundY(x: number, z: number): number {
+    const t = this.h.terrain!;
+    return Math.max(t.getHeight(x, z), t.getRenderedHeight(x, z));
+  }
+
+  /** Clamp the rendered position's eye above the drawn surface — a body
+   *  under it reads as buried even when the wire sits legitimately below
+   *  the smooth field. Visual only; no velocity side-effects. */
+  private floorToGround(p: THREE.Vector3): void {
+    if (!this.h.terrain) {return;}
+    const floor = this.groundY(p.x, p.z) + classCapsule(this.h.armorClass).eye;
+    if (p.y < floor) {p.y = floor;}
+  }
+
   private convergeBudget(gap: number): number {
     const horizon = Math.min(0.6, Math.max(0.18, gap * 0.04));
     const chaseVel = gap / horizon + this.h.serverVelocity.length();
@@ -489,12 +654,8 @@ export class RemoteInterp {
     // unfloored: surfacing it there hovers it 5-12m off truth.
     const w = this.lastServerPosition;
     if (this.h.terrain && w.lengthSq() > 0) {
-      const {eye} = classCapsule(this.h.armorClass);
-      const wireBuried = this.h.terrain.getRenderedHeight(w.x, w.z) - (w.y - eye) > 0.5;
-      if (!wireBuried) {
-        const gY = Math.max(this.h.terrain.getHeight(p.x, p.z), this.h.terrain.getRenderedHeight(p.x, p.z));
-        if (p.y < gY + eye) {p.y = gY + eye;}
-      }
+      const wireBuried = this.h.terrain.getRenderedHeight(w.x, w.z) - (w.y - classCapsule(this.h.armorClass).eye) > 0.5;
+      if (!wireBuried) {this.floorToGround(p);}
     }
     this.h.rotation.yaw = rot.yaw;
     this.h.rotation.pitch = rot.pitch;
@@ -547,7 +708,7 @@ export class RemoteInterp {
       // Feet clamp to the VISIBLE surface — the smooth heightfield can
       // dip below the rendered level-0 chord in gullies, sinking bodies
       // meters under what the player sees as ground.
-      const groundY = Math.max(this.h.terrain.getHeight(p.x, p.z), this.h.terrain.getRenderedHeight(p.x, p.z));
+      const groundY = this.groundY(p.x, p.z);
       const {eye} = classCapsule(this.h.armorClass);
       if (p.y < groundY + eye) { // keep EYE at eye height above feet
         p.y = groundY + eye;

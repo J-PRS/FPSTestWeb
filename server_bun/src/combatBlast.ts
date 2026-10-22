@@ -250,12 +250,11 @@ export class BlastRunner {
     // so there is no ghost to rewind toward.
     if (bot) {return { x: target.position.x, y: target.position.y, z: target.position.z };}
     const targetTransit = this.h.deps.transitOf?.(targetId) ?? 0;
+    // Full rewind to the shooter's reported view epoch — the client's
+    // renderLag map now carries actual sample staleness (extrapolation-
+    // aware), so this is the literal rendered ghost, not an estimate.
     const back = shooterTransitMs(this.h.deps.transitOf, shooterId, ping) + lag - targetTransit;
-    // Shooter advantage: rewind only 70% of the transit distance so the
-    // server accepts hits closer to the shooter's rendered view (WYSIWYG).
-    // The remaining 30% slack favors the shooter without removing the
-    // lag-comp envelope entirely.
-    return rewindPos(target, Math.max(0, back * 0.7));
+    return rewindPos(target, Math.max(0, back));
   }
 
   /** One target inside (or outside) a blast envelope: lag-comp position,

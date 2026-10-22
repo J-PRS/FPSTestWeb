@@ -107,7 +107,7 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
     const rtt = deps.lazyNetworkManager().serverPingMs ?? deps.lazyNetworkManager().getPing();
     const m = mirroredSpawn(deps.world.localPosHistory, rtt);
     if (m) {
-      _mirroredOrigin.set(m.x, m.y + 1.6, m.z);
+      _mirroredOrigin.set(m.x, m.y, m.z);
       spawnAt = _mirroredOrigin;
     }
   }

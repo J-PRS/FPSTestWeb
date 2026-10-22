@@ -133,7 +133,8 @@ describe('SnapshotBuffer', (): void => {
     const now = Date.now();
     // Same 250ms arrival stream for both: only the wire velocity differs.
     // delay×speed is rendered error — an 80m/s remote at ~350ms sits ~28m
-    // behind truth; the cap must trade cushion for freshness (≤50ms here).
+    // behind truth; the old cap traded cushion for freshness (≤50ms here),
+    // which parked the render past the newest snapshot — constant lead.
     // interpDelay slews both ways (~10ms down, ~8ms up per push) — the
     // stream needs enough pushes for either direction to converge.
     for (let i = 29; i >= 0; i -= 1) {
@@ -141,7 +142,12 @@ describe('SnapshotBuffer', (): void => {
       fast.push(t, {x:(29-i)*20,y:0,z:0}, {yaw:0,pitch:0}, {x:80,y:0,z:0}, t);
       walk.push(t, {x:(29-i)*1,y:0,z:0}, {yaw:0,pitch:0}, {x:3,y:0,z:0}, t);
     }
-    expect(fast.interpDelay).toBeLessThanOrEqual(4000 / 80 + 1);
+    // A delay below the cadence parks renderTime PERMANENTLY past the
+    // newest snapshot — the body renders ahead of wire truth on
+    // extrapolated velocity (WYSIWYG inversion). The cadence floor wins
+    // over the speed cap: even an 80m/s remote on a suppressed stream
+    // must lag honestly instead of leading fictionally.
+    expect(fast.interpDelay).toBeGreaterThanOrEqual(250);
     // Walkers keep the jitter cushion — delay still covers the interval.
     expect(walk.interpDelay).toBeGreaterThan(250);
   });

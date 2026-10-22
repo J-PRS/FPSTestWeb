@@ -9,6 +9,7 @@
 // small host methods below are the whole back-channel.
 
 import { ChildLogger } from '../core/Logger.js';
+import { checkHit } from '../core/liveMonitor.js';
 import {
   isWireFrame, decodeTickFrame, decodeBallSegment,
   WIRE_BALLSEG, SERVER_TICK_MS,
@@ -283,7 +284,7 @@ this.handlerThrows += 1;
     knockback: (data): void | undefined => this.h.onKnockback?.(data.position, data.force, data.pull, data.yank),
     jump: (data): void | undefined => this.h.onPlayerJump?.(data.playerId, data.position),
     jetpack: (data): void | undefined => this.h.onPlayerJetpack?.(data.playerId, data.position),
-    projectileCreated: (data): void | undefined => this.h.onProjectileCreated?.(data.projectileId, data.ownerId, data.position, data.velocity, data.weaponType, data.shotId, data.pellet, data.age),
+    projectileCreated: (data): void | undefined => this.h.onProjectileCreated?.(data.projectileId, data.ownerId, data.position, data.velocity, data.weaponType, data.shotId, data.pellet, data.age, data.t),
     playerShot: (data): void | undefined => this.h.onPlayerShot?.(data.id, data.weaponType, data.pos, data.dir),
     projectileDestroyed: (data): void | undefined => this.h.onProjectileDestroyed?.(data.projectileId, data.shotId, data.position ?? undefined, data.age ?? undefined),
     snapshot: (data): void | undefined => this.h.onSnapshot?.(data.players || [], data.timestamp || Date.now()),
@@ -526,6 +527,7 @@ dedupCensus.hitSeqDrops += 1;
       }
       this.lastHitSeq = data.seq;
     }
+    checkHit(data.shotId, data.targetId, data.seq, data.damage);
     recHit(data.shooterId, data.targetId, data.damage, wasPredicted);
     // Update REMOTE player health in storage (local player health handled
     // by callback). A processed hit also proves the server holds the target

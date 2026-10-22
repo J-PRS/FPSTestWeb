@@ -24,6 +24,7 @@ const _projected = new THREE.Vector3();
  *  stat) only draw under it. The everyday badge over a head is HP. */
 let debugOverlays = false;
 export function setDebugOverlays(v: boolean): void { debugOverlays = v; }
+export function debugOverlaysOn(): boolean { return debugOverlays; }
 
 export class PlayerIndicators {
   private readonly container: HTMLElement;

@@ -137,22 +137,23 @@ const mkRemote = (x: number) => ({
 
 describe('applyForceToRemotes', (): void => {
 
-  it('remote inside radius gets predicted knockback + health-bar damage', (): void => {
+  it('remote inside radius gets health-bar damage, no predicted knockback', (): void => {
     const r = mkRig();
     const rp = mkRemote(5);
     r.remotes.set('p1', rp);
     r.blast.applyExplosionForce(args());
-    expect(rp.applyPredictedKnockback).toHaveBeenCalled();
+    // Remote kb prediction disabled — wire carries the real shove.
+    expect(rp.applyPredictedKnockback).not.toHaveBeenCalled();
     expect(r.hbs.predictDamage).toHaveBeenCalledWith('p1', 20); // 40 * 0.5
     expect(r.hud.showHitMarker).toHaveBeenCalled();
   });
 
-  it('a direct-hit target gets knockback but no splash preview', (): void => {
+  it('a direct-hit target gets no splash preview', (): void => {
     const r = mkRig();
     const rp = mkRemote(5);
     r.remotes.set('p1', rp);
     r.blast.applyExplosionForce(args({ directHitTargetId: 'p1' }));
-    expect(rp.applyPredictedKnockback).toHaveBeenCalled();
+    expect(rp.applyPredictedKnockback).not.toHaveBeenCalled();
     expect(r.hbs.predictDamage).not.toHaveBeenCalled();
     expect(r.hud.showHitMarker).not.toHaveBeenCalled();
   });

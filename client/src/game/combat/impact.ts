@@ -812,12 +812,10 @@ function hookConnect(c: CombatCtx, p: Projectile): void {
   const anchor = p.hitPointValid ? p.hitPoint : p.pos;
   const player = deps.lazyPlayer();
   const mine = !p.shooterId;
-  const shooterPos = mine ? player.pos : deps.world.remotePlayers.get(p.shooterId ?? '')?.position;
   if (p.isRemote) {return;} // wire knockback carries the reel for non-mine shells
   if (p.hitPlayerId && p.hitPlayerId !== 'local') {
-    // My dart (or an offline bot's) connected with a body — reel them in.
-    const victim = deps.world.remotePlayers.get(p.hitPlayerId);
-    if (victim && shooterPos) {victim.applyPredictedKnockback(shooterPos, stats.knockbackForce, true);}
+    // My dart connected with a remote body — the wire carries the real
+    // reel; a wrong predicted launch reads as sling-then-warp.
     return;
   }
   if (p.hitPlayerId === 'local') {

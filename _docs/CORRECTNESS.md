@@ -807,6 +807,40 @@ violation instead of a symptom hunt.
 - `swarm.ts` (in-flight) fails tsc: `fogU` missing on
   `InstancedBlobShadows` — JP's file.
 
+## Remote-render leash — findings (2026-10-22, live + headless wire)
+
+What the wire-gap/impossible-motion instrumentation + the `` ` `` triple
+ghost (cyan=wire, yellow=adjudication epoch, body=rendered) actually
+proved across two live bot-match dumps and one 30s headless client run:
+
+- The "slung to orbit then warped back" class was client-side predicted
+  knockback (`RemoteInterp.predict`) launching the body somewhere the
+  wire never went. Predicted remote knockback is now DISABLED
+  (`blastForce.applyForceToRemotes`, `impact.hookConnect`); the shove
+  arrives via `forceSendUntil` records inside ~4 ticks (scenario test:
+  `blastShove > a shoved remote reaches the observer wire`).
+- The wire-gap clamp itself produced a 13m single-frame teleport when a
+  post-silence record moved `lastServerPosition` while DR drifted —
+  enforcement now rate-limits the pull to reachable speed, and a decayed
+  `silencePeakMs` keeps the leash DR honestly earned instead of
+  collapsing on the first reconnect packet.
+- A teleport/respawn writes ~600m/s into `h.velocity` for a frame; the
+  pull rate inherits it → cap the pull speed at `REACH_CAP` (150) or the
+  leash becomes the warp it prevents. This was the `speed:616`
+  impossible-motion event seen live.
+- `interpDelay` speed-cap (`4000/speed`) forced permanent extrapolation
+  on suppressed streams — bodies rendered ~50-300ms AHEAD of wire.
+  Fixed by the arrival-cadence floor; honest lag beats forward fiction
+  now that the server rewinds to the reported `viewLag`.
+- `bots.quiet` skips the shadow→`p.position` write-back in the bot drive
+  block — a quiet bot's wire position freezes while its sim shadow
+  flies. Test-staging trap, not a production path (brains are never
+  quiet live).
+- Residuals worth knowing: post-shove `converge` still pokes ~1m past
+  the leash cap before the rate-limited pull reclaims it; `dup-hit`
+  bursts (same shotId, seq runs) and `parity-dmg-echo` spam ride the
+  monitor ring.
+
 ## When adding a system
 
 - List the truths it must hold at its boundaries (position vs terrain,

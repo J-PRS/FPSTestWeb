@@ -193,7 +193,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     }
   };
 
-  networkManager.onProjectileCreated = (projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number, shotId?: string, pellet?: number, srvAge?: number): void => {
+  networkManager.onProjectileCreated = (projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number, shotId?: string, pellet?: number, srvAge?: number, srvT?: number): void => {
     if (deps.world.playbackMode) {return;} // live shots don't belong in the replay
     noteWeapon(ownerId, weaponType);
     // For own projectiles: link the server id to the local shell by nonce.
@@ -262,17 +262,20 @@ export function wireProjectiles(ctx: NetCtx): void {
     }
     remoteProjectile.spawnedThisFrame = false; // remote projectiles don't need first-frame skip
     const shooterVel = deps.world.remotePlayers.get(ownerId)?.vel;
-    // Epoch: the wire now carries the shell's server age at broadcast —
-    // intent-lag is exact (srvAge), the echo's own transit is the only
-    // estimated term (half-RTT, capped). A dead-on-arrival echo (queued
-    // past its fuse) spawns nothing — the 'gone' lands or died with it.
+    // Epoch: srvAge + (serverNow − srvT) is exact when both stamps ride
+    // the echo — intent lag AND echo transit measured, nothing guessed.
+    // Old peers/unsynced clock fall back to srvAge + half-RTT estimate.
+    const serverNow = nm().serverNowMs?.();
+    const exactAge = srvAge !== undefined && srvT !== undefined && serverNow !== undefined
+      ? srvAge + Math.max(0, (serverNow - srvT) / 1000)
+      : undefined;
     const ttl = remoteProjectile.fuseTtl?.() ?? 0;
-    if (srvAge !== undefined && ttl > 0 && srvAge >= ttl) {
+    if (exactAge !== undefined && ttl > 0 && exactAge >= ttl) {
       remoteProjectile.dispose();
       parityProbes.deadOnArrival += 1;
       return;
     }
-    const lead = (srvAge ?? 0) + Math.min(0.15, (nm().serverPingMs ?? nm().getPing()) / 2000);
+    const lead = exactAge ?? (srvAge ?? 0) + Math.min(0.15, (nm().serverPingMs ?? nm().getPing()) / 2000);
     if (lead > 0) {
       remoteProjectile.advanceBy(lead);
     }

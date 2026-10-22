@@ -14,18 +14,16 @@ describe('scenario: disc at e2e staging', () => {
     freeze(room, target!.id, { x: 95, y: 43.9, z: 80 });
     freeze(room, shooter!.id, { x: 80, y: 44.1, z: 80 });
     const hp = target!.health;
-    // dir leads from the REAL muzzle (record_eye + 1.6 — the over-shoulder
-    // convention) at the capsule chest (eye − 0.9). Aiming eye→eye sails
-    // ~2.5m over the capsule top: the same whiff damagereplay first read.
-    const d = { x: 95 - 80, y: (43.9 - 0.9) - (44.1 + 1.6), z: 80 - 80 };
+    // Muzzle is the eye (Quake rule); dir aims at the capsule chest (eye − 0.9).
+    const d = { x: 95 - 80, y: (43.9 - 0.9) - 44.1, z: 80 - 80 };
     const n = Math.hypot(d.x, d.y, d.z);
     const id = room.projectiles.spawn(shooter!.id, WeaponType.Disc,
-      { x: 80, y: 44.1 + 1.6, z: 80 }, { x: d.x / n, y: d.y / n, z: d.z / n }, { x: 0, y: 0, z: 0 });
+      { x: 80, y: 44.1, z: 80 }, { x: d.x / n, y: d.y / n, z: d.z / n }, { x: 0, y: 0, z: 0 });
     expect(id).not.toBeNull();
     for (let i = 0; i < 200; i++) {
       pin(room, target!.id, { x: 95, y: 43.9, z: 80 });
       step(room, 1);
-      if (w.count('playerHit') + w.count('playerKill') > 0) break;
+      if (w.count('playerHit') + w.count('playerKill') > 0) {break;}
     }
     expect(w.count('playerHit') + w.count('playerKill')).toBeGreaterThan(0);
     expect(target!.health).toBeLessThan(hp);

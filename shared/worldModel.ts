@@ -329,6 +329,11 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       // advance by this exactly (arrival-lag guesses mis-age the arc);
       // srvAge >= ttl means the shell died before it was seen — skip.
       { name: 'age', wire: 'num', channel: 'echo', absent: null },
+      // Server wall-ms at broadcast — the client keeps a clock-offset
+      // estimate (serverNowMs), so replica age = age + (serverNow − t)
+      // is exact: intent lag + echo transit both measured, nothing
+      // estimated. The age>sa traj-epoch class collapses to wire truth.
+      { name: 't', wire: 'num', channel: 'echo', absent: null },
     ],
     // The contact point: replicas explode where the AUTHORITY detonated
     // the shell, not wherever their replay drifted to — a stamped blast

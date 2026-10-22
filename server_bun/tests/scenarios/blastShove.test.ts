@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { mkRoom, step, freeze, twoPlayers } from './harness.ts';
+import { mkRoom, step, freeze, pin, twoPlayers, replica } from './harness.ts';
 import { WeaponType } from '../../../shared/weapons.ts';
 import type { ServerMessage } from '../../../shared/protocol.ts';
 
@@ -57,5 +57,35 @@ describe('scenario: blast knockback', () => {
     step(room, 6);
     const mid = room.moveSim.simPos(p.id)!;
     expect(Math.hypot(mid.x - before.x, mid.y - before.y, mid.z - before.z)).toBeGreaterThan(0.5);
+  });
+
+  // Observers (not the victim) learn the shove ONLY through the position
+  // stream — knockback messages are private to the victim's channel.
+  // shove() sets forceSendUntil so a suppressed remote still rides the
+  // full-rate records for 900ms; the replica replica eats the same
+  // binary frames a client would and must show the launch within ticks.
+  it('a shoved remote reaches the observer wire within ticks, not seconds', () => {
+    const room = mkRoom({ bots: 2 }, 'dm');
+    const [shooter, p] = twoPlayers(room);
+    freeze(room, shooter.id, { x: -40, y: 31, z: 0 });
+    // pin, NOT freeze: a quiet bot skips the drive block entirely, so its
+    // shadow flies but p.position (the wire field) never gets the
+    // write-back — staging the failure, not measuring it.
+    pin(room, p.id, { x: 5, y: 32, z: 0 });
+    const obs = replica(room);
+    try {
+      step(room, 2); // settle the replica roster/records before the blast
+      const before = { ...(obs.players.get(p.id) ?? { x: 5, y: 32, z: 0 }) };
+      room.messages.serverBlast(shooter.id, { x: 0, y: 31, z: 0 }, WeaponType.BoltLauncher, null);
+      // ~4 ticks of fanout (~200ms sim) — the prediction window a client
+      // used to bridge. If the launch isn't on the wire by now, observers
+      // see the drift-late replay the disable-remote-prediction change
+      // left behind.
+      step(room, 4);
+      const mid = obs.players.get(p.id)!;
+      expect(Math.hypot(mid.x - before.x, mid.y - before.y, mid.z - before.z)).toBeGreaterThan(0.5);
+    } finally {
+      obs.detach();
+    }
   });
 });

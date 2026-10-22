@@ -16,6 +16,7 @@ import { HeldCrown } from './heldCrown.js';
 import { hideRemote, showRemote, setStaleVis, setCloakVis, setCloakGhost, shootReveal, tickGhostF } from './remoteVis.js';
 import { getShadows } from './swarms.js';
 import { markProbe } from '../core/fxDiag.js';
+import { debugOverlaysOn } from '../ui/hud/indicators.js';
 
 const logger = new ChildLogger('RemotePlayer');
 
@@ -78,15 +79,18 @@ export class RemotePlayer {
   get isSimulating(): boolean { return this.interp.simulating; }
   /** Adaptive render delay this remote rides — lag-comp honesty input. */
   get renderDelayMs(): number { return this.interp.interpDelay; }
+  /** Actual staleness of the last drawn sample — the epoch the server's
+   *  lag-comp rewinds to when validating shots against this remote. */
+  get viewLagMs(): number { return this.interp.viewLagMs; }
   /** The position the server's lag-comp adjudicates this remote at:
-   *  wire pos projected to (wireAge − 0.7·renderDelay) — the ghostBack
-   *  epoch, not the rendered body (~150ms interp-stale) nor wire-fresh.
-   *  Envelope math (blast/shock beams, shell sweeps) must read this —
-   *  rendered pos ghosts hits on fast movers. */
+   *  wire pos projected to (wireAge − viewLag) — the epoch on the
+   *  shooter's screen when the wire record landed, not the rendered
+   *  body nor wire-fresh. Envelope math (blast/shock beams, shell
+   *  sweeps) must read this — rendered pos ghosts hits on fast movers. */
   ghostPosition(out: THREE.Vector3): THREE.Vector3 {
     if (this.lastUpdateTime <= 0) {return out.copy(this.position);}
     const age = Math.min((Date.now() - this.lastUpdateTime) / 1000, 1);
-    return out.copy(this.wirePosition).addScaledVector(this.vel, age - Math.min(0.7 * this.renderDelayMs / 1000, age));
+    return out.copy(this.wirePosition).addScaledVector(this.vel, age - Math.min(this.interp.viewLagMs / 1000, age));
   }
   get interpUnderruns(): number { return this.interp.underruns; }
   get interpExtCapMs(): number { return this.interp.extCapMs; }
@@ -281,9 +285,62 @@ export class RemotePlayer {
     this.crown.set(this.crownHeld);
   }
 
+  /** Debug (?debug / menu DEBUG): wireframe capsules at the last wire
+   *  position (cyan) and at the lag-comp adjudicated ghost (yellow) —
+   *  the leash gap between what you see and what the server validates,
+   *  rendered in world space. depthTest off so a buried wire reads
+   *  through the terrain it's buried under. */
+  private dbgGhosts: { wire: THREE.Mesh; adj: THREE.Mesh } | null = null;
+  private _dbgVec = new THREE.Vector3();
+  private dbgGhostClass: string | undefined;
+  private tickDbgGhosts(): void {
+    const want = debugOverlaysOn() && !this.localDriven && !this._isDead && this.lastUpdateTime > 0;
+    if (!want) {
+      if (this.dbgGhosts) { this.dbgGhosts.wire.visible = false; this.dbgGhosts.adj.visible = false; }
+      return;
+    }
+    if (!this.dbgGhosts || this.dbgGhostClass !== this.armorClass) {
+      this.disposeDbgGhosts();
+      this.dbgGhostClass = this.armorClass;
+      const mk = (hex: number): THREE.Mesh => {
+        const cap = classCapsule(this.armorClass);
+        const m = new THREE.Mesh(
+          new THREE.CapsuleGeometry(cap.radius, cap.half * 2, 4, 8),
+          new THREE.MeshBasicMaterial({ color: hex, wireframe: true, transparent: true, opacity: 0.55, depthTest: false }));
+        m.renderOrder = 999;
+        this.scene.add(m);
+        return m;
+      };
+      this.dbgGhosts = { wire: mk(0x00_FF_FF), adj: mk(0xFF_EE_00) };
+      // The adj ghost nests inside wire when the epochs coincide — a
+      // stationary bot would otherwise hide cyan entirely (same
+      // renderOrder, both depthTest:false → last draw wins).
+      this.dbgGhosts.adj.scale.setScalar(0.92);
+    }
+    const cap = classCapsule(this.armorClass);
+    const g = this.dbgGhosts!;
+    const w = this.wirePosition;
+    g.wire.visible = w.lengthSq() > 0;
+    g.wire.position.set(w.x, w.y + cap.centerOff, w.z);
+    this.ghostPosition(this._dbgVec);
+    g.adj.visible = w.lengthSq() > 0;
+    g.adj.position.set(this._dbgVec.x, this._dbgVec.y + cap.centerOff, this._dbgVec.z);
+  }
+
+  private disposeDbgGhosts(): void {
+    if (!this.dbgGhosts) {return;}
+    for (const m of [this.dbgGhosts.wire, this.dbgGhosts.adj]) {
+      this.scene.remove(m);
+      m.geometry.dispose();
+      (m.material as THREE.Material).dispose();
+    }
+    this.dbgGhosts = null;
+  }
+
   private _blobPos = new THREE.Vector3();
   private tickAlive(dt: number): void {
     this.interp.step(dt, this.localDriven);
+    this.tickDbgGhosts();
 
     this.updateAliveModel(dt);
 
@@ -479,10 +536,10 @@ export class RemotePlayer {
   revealT = 0; // shot-age window — stays live even before/without a cloak, so a late-rising cloak still owes its remainder
   tickGhost(dt: number): void { tickGhostF(this, dt); } // anim drive calls it post-locomotion
 
-  applyPredictedKnockback(fromPos: THREE.Vector3, impulseMag: number, pull = false): void {
+  applyPredictedKnockback(fromPos: THREE.Vector3, impulseMag: number, pull = false, dirFrom?: THREE.Vector3): void {
     // Mass gates the shove — the server divides its dv by class mass, so
     // the predicted window must or a heavy's arc overshoots and snaps back.
-    this.interp.predict(fromPos, impulseMag / classMass(this.armorClass), pull);
+    this.interp.predict(fromPos, impulseMag / classMass(this.armorClass), pull, dirFrom);
   }
 
   // simulatePhysics() remains for genuine packet-loss dead reckoning.
@@ -498,6 +555,7 @@ export class RemotePlayer {
     this.crown?.dispose();
     this.crown = null;
     this._model.dispose();
+    this.disposeDbgGhosts();
     if (this.gizmo) {
       this.gizmo.dispose();
       this.gizmo = null;

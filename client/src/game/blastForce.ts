@@ -159,7 +159,12 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       const impulse = Math.min(aoeImpulseT1At(force, pos, vpos, radius, rp.armorClass) * KNOCKBACK_SCALE, BLAST_IMPULSE_MAX);
       if (impulse <= 0) {continue;}
       if (occluded(pos, vpos)) {continue;}
-      rp.applyPredictedKnockback(pos, impulse, forceMode === 'pull');
+      // Remote knockback prediction disabled: a wrong guess slung the
+      // body to a position the wire never produced (sling-then-warp).
+      // Wire position updates carry the real shove ~1 tick out; damage
+      // prediction below is unaffected. Re-enable via
+      // rp.applyPredictedKnockback(pos, impulse, forceMode === 'pull', vpos)
+      // once predicted-vs-wire parity is validated live.
       if (playerId === directHitTargetId) {continue;}
       // Hitmarker is personal feedback — a bot's blast (shooterId set)
       // clipping a remote isn't my frag to celebrate.
@@ -243,7 +248,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     // Horizon extends while the wire starves — a stalled echo isn't a
     // refusal (a 1.4s inbound gap delays every echo past a flat 700ms).
     const kbNm = deps.lazyNetworkManager?.();
-    const horizon = kbEchoHorizon(kbNm?.serverPingMs ?? kbNm?.getPing() ?? 0, kbNm?.msSinceLiveRx?.() ?? 0);
+    const horizon = kbEchoHorizon(kbNm?.serverPingMs ?? kbNm?.getPing?.() ?? 0, kbNm?.msSinceLiveRx?.() ?? 0);
     const dupCands: number[] = [];
     for (let k = 0; k < rkb.length; k += 1) {
       const s = rkb[k]!;

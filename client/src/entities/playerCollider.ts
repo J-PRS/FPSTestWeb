@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 import { PLAYER_RADIUS, CAPSULE_CYLINDER_HEIGHT, CAPSULE_CENTER_Y } from '../core/config.js';
 import { urlParams } from '../core/params.js';
+import { debugOverlaysOn } from '../ui/hud/indicators.js';
 import { ChildLogger } from '../core/Logger.js';
 
 const logger = new ChildLogger('PlayerModel');
@@ -50,7 +51,7 @@ export class PlayerCollider {
     this.gizmo.renderOrder = 999; // Render last (on top)
     // Hitbox visualization is a debug overlay — same flag as the
     // AOE blast wireframes (menu DEBUG toggle / ?debug).
-    this.gizmo.visible = this.shown && (urlParams.debug || this.force);
+    this.gizmo.visible = this.shown && (urlParams.debug || this.force || debugOverlaysOn());
     model.add(this.gizmo); // Add as child of model so it moves with it
     logger.debug('COLLIDER GIZMO ADDED to model', { children: model.parent?.children.length });
   }
@@ -75,14 +76,14 @@ export class PlayerCollider {
     this.mat?.color.setHex(hex);
     // This runs every frame per remote — piggyback the debug-visibility
     // refresh so the menu DEBUG toggle applies without a reload.
-    if (this.gizmo) {this.gizmo.visible = this.shown && (urlParams.debug || this.force);}
+    if (this.gizmo) {this.gizmo.visible = this.shown && (urlParams.debug || this.force || debugOverlaysOn());}
   }
 
   setVisible(visible: boolean, force = false): void {
     this.shown = visible;
     this.force = force;
     if (this.gizmo) {
-      this.gizmo.visible = visible && (force || urlParams.debug);
+      this.gizmo.visible = visible && (force || urlParams.debug || debugOverlaysOn());
     }
   }
 
@@ -93,7 +94,7 @@ export class PlayerCollider {
   reattach(model: THREE.Group): void {
     if (this.gizmo && !model.children.includes(this.gizmo)) {
       model.add(this.gizmo);
-      this.gizmo.visible = this.shown && (urlParams.debug || this.force);
+      this.gizmo.visible = this.shown && (urlParams.debug || this.force || debugOverlaysOn());
       logger.debug('COLLIDER GIZMO RE-ADDED to model');
     }
   }

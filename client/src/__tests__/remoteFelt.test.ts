@@ -44,7 +44,7 @@ const CRUISE = R * W; // ~44 m/s
 interface Packet { emitT: number; arriveT: number; s: ReturnType<typeof truth>; }
 const q0 = (errs: number[], p: number): string => errs[Math.min(errs.length - 1, Math.floor(errs.length * p))]!.toFixed(2);
 
-function runLink(opts: { transit: number; jitter: number; loss: number; secs: number; silentFrom?: number; silentTo?: number; seed?: number; tickMs?: number }): { p50: number; p95: number; p99: number; max: number; snaps: number; snapMax: number; } {
+function runLink(opts: { transit: number; jitter: number; loss: number; secs: number; silentFrom?: number; silentTo?: number; seed?: number; tickMs?: number }): { p50: number; p95: number; p99: number; max: number; snaps: number; snapMax: number; snapNotes: string[]; } {
   let rng = opts.seed ?? 12_345;
   const rand = (): number => (rng = (rng * 1_103_515_245 + 12_345) & 0x7F_FF_FF_FF) / 0x7F_FF_FF_FF;
 
@@ -61,6 +61,7 @@ function runLink(opts: { transit: number; jitter: number; loss: number; secs: nu
 
   const errs: number[] = [];
   const snaps: number[] = [];
+  const snapNotes: string[] = [];
   const prev = new THREE.Vector3().copy(h.position);
 
   const totalFrames = Math.floor(opts.secs * 1000 / FRAME_MS);
@@ -94,13 +95,18 @@ function runLink(opts: { transit: number; jitter: number; loss: number; secs: nu
     // past speed×frame + slack is a teleport the eye sees.
     const jump = h.position.distanceTo(prev);
     const budget = Math.max(1.5, CRUISE * (FRAME_MS / 1000)) + 0.75;
-    if (jump > budget) {snaps.push(jump);}
+    if (jump > budget) {
+      snaps.push(jump);
+      const it = interp as unknown as Record<string, unknown>;
+      const sv = it.simulatedVelocity as THREE.Vector3 | undefined;
+      snapNotes.push(`f=${f} now=${now.toFixed(0)} jump=${jump.toFixed(2)} sim=${String(it._simulating)} cvg=${(it.convergeTimer as number).toFixed(2)} fresh=${String(it.net && (it.net as { freshSeed: boolean }).freshSeed)} sv=${sv ? sv.length().toFixed(1) : '?'}`);
+    }
     prev.copy(h.position);
   }
   errs.sort((a, b): number => a - b);
   console.log(`[felt] p50=${q0(errs, 0.5)} p95=${q0(errs, 0.95)} p99=${q0(errs, 0.99)} max=${errs[errs.length - 1]!.toFixed(2)} snaps=${snaps.length}`);
   const q = (p: number): number => errs[Math.min(errs.length - 1, Math.floor(errs.length * p))]!;
-  return { p50: q(0.5), p95: q(0.95), p99: q(0.99), max: errs[errs.length - 1]!, snaps: snaps.length, snapMax: snaps.length > 0 ? Math.max(...snaps) : 0 };
+  return { p50: q(0.5), p95: q(0.95), p99: q(0.99), max: errs[errs.length - 1]!, snaps: snaps.length, snapMax: snaps.length > 0 ? Math.max(...snaps) : 0, snapNotes };
 }
 
 describe('felt-state canary (rendered remote vs truth)', (): void => {
@@ -134,10 +140,11 @@ describe('felt-state canary (rendered remote vs truth)', (): void => {
     // must not step at the send rate.
     const r = runLink({ transit: 40, jitter: 25, loss: 0, secs: 15, tickMs: 250, seed: 99 });
     assert.equal(r.snaps, 0, JSON.stringify(r));
-    // ~44 m/s × ~300ms effective lag ≈ 13m — the delay cap bounds it,
+    // ~44 m/s × ~450ms effective lag ≈ 20m — the cadence floor covers
+    // the 250ms arrival interval (honest lag over ahead-of-wire fiction),
     // the alternation between buffer and DR must not double it.
-    expect(r.p95).toBeLessThan(16);
-    expect(r.max).toBeLessThan(22);
+    expect(r.p95).toBeLessThan(22);
+    expect(r.max).toBeLessThan(30);
   });
 
   it('bursty uplink (15% loss at 50ms ticks → clumped arrivals): no steps, stays converged', (): void => {
@@ -146,7 +153,7 @@ describe('felt-state canary (rendered remote vs truth)', (): void => {
     // suppressed case, arrived at by the wire instead of by tiering.
     const r = runLink({ transit: 40, jitter: 30, loss: 0.15, secs: 15, tickMs: 50, seed: 314 });
     assert.equal(r.snaps, 0, JSON.stringify(r));
-    expect(r.p95).toBeLessThan(12);
+    expect(r.p95).toBeLessThan(15);
     expect(r.max).toBeLessThan(20);
   });
 

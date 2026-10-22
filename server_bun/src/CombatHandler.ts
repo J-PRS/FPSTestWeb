@@ -364,7 +364,7 @@ w.n += 1;
       const meleeStats = getWeaponStats(WeaponType.Melee);
       const reach = meleeStats ? meleeStats.aoeRadius * 0.7 : 2.2;
       const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
-      const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping) * 0.7);
+      const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
       // The creature half of the swing pays here too — same derived
       // origin, same dir — so the client's predicted contact never
       // needs a creatureHit claim.
@@ -376,7 +376,7 @@ w.n += 1;
       });
       this.broadcast({
         type: 'playerShot', id: playerId, weaponType: msg.weaponType,
-        pos: { x: mpos.x, y: mpos.y + 1.6, z: mpos.z }, dir: msg.dir,
+        pos: { x: mpos.x, y: mpos.y, z: mpos.z }, dir: msg.dir,
       }, playerId);
       return;
     }
@@ -390,10 +390,10 @@ w.n += 1;
       recent.push(now);
       this.simmedFireTimes.set(playerId, recent);
       player.protectedUntil = simMs(0);
-      const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping) * 0.7);
+      const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
       const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
       this.beamPay(playerId, player, this.deps.beamSweep(playerId,
-        { x: mpos.x, y: mpos.y + 1.6, z: mpos.z },
+        { x: mpos.x, y: mpos.y, z: mpos.z },
         { x: dir.x / l, y: dir.y / l, z: dir.z / l }, LG_RANGE));
     }
     // Beam intent (Shocklance): one zap per pull-out cycle — the intent
@@ -407,10 +407,10 @@ w.n += 1;
       if (now - lastL < LANCE_CADENCE_S * 1000 - 150) { this.hb('drop.lanceCadence'); return; }
       this.lastLance.set(playerId, now);
       player.protectedUntil = simMs(0);
-      const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping) * 0.7);
+      const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
       const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
       this.lancePay(playerId, player, this.deps.beamSweep(playerId,
-        { x: mpos.x, y: mpos.y + 1.6, z: mpos.z },
+        { x: mpos.x, y: mpos.y, z: mpos.z },
         { x: dir.x / l, y: dir.y / l, z: dir.z / l }, LANCE_RANGE));
     }
     // Beam intent (Repair): same shape — the tick is the intent and the
@@ -421,10 +421,10 @@ w.n += 1;
       if (recent.length >= 30) { this.hb('drop.beamFlood'); return; }
       recent.push(now);
       this.simmedFireTimes.set(playerId, recent);
-      const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping) * 0.7);
+      const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
       const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
       const id = this.deps.repairTarget(playerId,
-        { x: mpos.x, y: mpos.y + 1.6, z: mpos.z },
+        { x: mpos.x, y: mpos.y, z: mpos.z },
         { x: dir.x / l, y: dir.y / l, z: dir.z / l }, REPAIR_RANGE);
       if (id !== null) {this.deps.repair?.(playerId, id);}
     }
@@ -460,7 +460,7 @@ win.violations += 1;
       this.lastFireNotify.set(playerId, now);
     }
     this.deps.emit?.({ type: 'fire', playerId });
-    const at = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping) * 0.7);
+    const at = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
     // Claimless pilot: a server-simmed intent spawns an authoritative
     // shell — the intent IS the whole claim; contact/blast outcomes
     // arrive as broadcasts, never as client claims. projectileCreated
@@ -487,7 +487,7 @@ win.violations += 1;
       const lagS = typeof msg.fireAt === 'number'
         ? Math.min(Math.max((wallNow() - msg.fireAt) / 1000, 0), 5) : 0;
       const id = fireProjectile(playerId, msg.weaponType!,
-        { x: at.x, y: at.y + 1.6, z: at.z },
+        { x: at.x, y: at.y, z: at.z },
         { x: dir!.x / l, y: dir!.y / l, z: dir!.z / l },
         player.velocity, msg.shotId, lagS);
       if (id) {
@@ -502,13 +502,16 @@ win.violations += 1;
         if (msg.weaponType !== undefined) {weaponStats.recordShot(this.deps.mode ?? '', `w${msg.weaponType}`);}
         return;
       }
-      // spawn() declined (hitscan stats, missing owner) — a silent
-      // no-spawn leaves a predicted shell waiting forever.
-      this.reject(playerId, 'Shot', 'spawn refused', undefined, msg.weaponType, msg.shotId);
+      // spawn() declined — a silent no-spawn leaves a predicted shell
+      // waiting forever. Hitscan-class (speed<=0) never owns a shell:
+      // its damage settled in the beam intent above, and the reject
+      // would misreport a refused shot, so it falls through to relay.
+      const hs = msg.weaponType === undefined ? undefined : getWeaponStats(msg.weaponType);
+      if (hs === undefined || hs.speed > 0) {this.reject(playerId, 'Shot', 'spawn refused', undefined, msg.weaponType, msg.shotId);}
     }
     this.broadcast({
       type: 'playerShot', id: playerId, weaponType: msg.weaponType,
-      pos: { x: at.x, y: at.y + 1.6, z: at.z }, dir: msg.dir,
+      pos: { x: at.x, y: at.y, z: at.z }, dir: msg.dir,
     }, playerId);
   }
 

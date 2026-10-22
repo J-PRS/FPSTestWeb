@@ -23,11 +23,11 @@ describe('scenario: direct-hit blast bloom', () => {
     const annulusHp = annulus!.health;
     const gemVel0 = Math.hypot(gem.vel.x, gem.vel.z);
 
-    // Same dead-center aim as discRepro: muzzle eye+1.6 → chest eye-0.9.
-    const d = { x: 15, y: (43.9 - 0.9) - (44.1 + 1.6), z: 0 };
+    // Same dead-center aim as discRepro: muzzle = eye → chest eye-0.9.
+    const d = { x: 15, y: (43.9 - 0.9) - 44.1, z: 0 };
     const n = Math.hypot(d.x, d.y, d.z);
     const id = room.projectiles.spawn(shooter!.id, WeaponType.Disc,
-      { x: 80, y: 44.1 + 1.6, z: 80 }, { x: d.x / n, y: d.y / n, z: d.z / n }, { x: 0, y: 0, z: 0 });
+      { x: 80, y: 44.1, z: 80 }, { x: d.x / n, y: d.y / n, z: d.z / n }, { x: 0, y: 0, z: 0 });
     expect(id).not.toBeNull();
     for (let i = 0; i < 200 && w.count('playerHit') === 0; i++) {
       pin(room, target!.id, { x: 95, y: 43.9, z: 80 });

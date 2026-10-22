@@ -113,7 +113,7 @@ export class AoeClaims {
     // Per-branch counters: hb('aoe') alone can't split "claims arriving
     // but failing a gate" from "claims never arriving" in the health map.
     this.h.hb('aoe.beam');
-    const eye = { x: player.position.x, y: player.position.y + 1.6, z: player.position.z };
+    const eye = { x: player.position.x, y: player.position.y, z: player.position.z };
     const dist = AoeClaims.distTo(eye, msg.position);
     if (dist > 70) { // LG_RANGE 55 + lag slack
       this.h.hb('aoe.beam.tip');

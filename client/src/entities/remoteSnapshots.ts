@@ -86,6 +86,17 @@ export class SnapshotBuffer {
    *  remote warps BACKWARD along its own path: the visible rubberband.
    *  Slewed deflation turns the same adaptation into a glide. */
   interpDelay = SnapshotBuffer.BASE_INTERP_DELAY;
+  /** Actual staleness of the last drawn sample — interpDelay minus any
+   *  extrapolation overshoot (renderTime past the newest snapshot), so
+   *  it can sit near zero while the setting reads ~200ms. This is the
+   *  number lag-comp must rewind by: it is the shooter's literal view,
+   *  not the buffer's intent. Clamped ≥0 — a view fresher than the wire
+   *  has no rewindable epoch. */
+  get viewLagMs(): number {
+    if (this.lastRenderTime === -Infinity || this.latestT === 0) {return this.interpDelay;}
+    const lag = this.latestT + (this.lastSampleWall - this.latestArrive) - this.lastRenderTime;
+    return Math.max(0, lag);
+  }
   /** Damped version of the computed delay need — see push(). */
   private delayTarget = SnapshotBuffer.BASE_INTERP_DELAY;
   /** EMA of the observed arrival interval — send suppression stretches it
@@ -134,9 +145,15 @@ export class SnapshotBuffer {
       // Speed-scaled cap: delay × speed is rendered position error —
       // a 40m/s remote at 600ms sits 24m behind truth. Faster remotes
       // get less delay (more extrapolation), walkers keep the cushion.
+      // BUT the floor is cadence coverage: a delay below the arrival
+      // interval parks renderTime PERMANENTLY past the newest snapshot —
+      // the body then renders ahead of wire truth on extrapolated
+      // velocity every frame (WYSIWYG inversion: aiming at positions
+      // the server never produced). Honest lag beats forward fiction.
       const spd = Math.hypot(vel.x, vel.y, vel.z);
+      const cadenceFloor = this.arrivalInterval + this.arrivalJitter * 2 + 60;
       const delayCap = spd > 5
-        ? Math.min(SnapshotBuffer.MAX_INTERP_DELAY, 4000 / spd)
+        ? Math.min(SnapshotBuffer.MAX_INTERP_DELAY, Math.max(cadenceFloor, 4000 / spd))
         : SnapshotBuffer.MAX_INTERP_DELAY;
       const raw = Math.min(
         delayCap,
