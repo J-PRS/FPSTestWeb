@@ -60,6 +60,12 @@ export class BotMoves {
    *  keeps the walk key but forbids ski/jet so a downhill stand can't
    *  re-spin the orbit the brake just killed. */
   private crawl = false;
+  /** Tactical ski-release timer — brief friction tap before a steep hill
+   *  at high speed, so the bot bleeds a little speed and slides over
+   *  instead of slamming into the face. Tribes energy management:
+   *  decel only when it costs less than the impact. (User insight:
+   *  "decel is only used if you are about to overshoot a hill.") */
+  private skiReleaseT = 0;
   holdFor(): number { return this.jetHold; }
 
   // oxlint-disable-next-line complexity -- a decision table the sweep history tunes as one surface
@@ -101,6 +107,16 @@ export class BotMoves {
     }
     const speed = ctx.vel ? Math.hypot(ctx.vel.x, ctx.vel.z) : 0;
     const airborne = pos.y - g0 > 2;
+    // Tactical ski-release (Tribes energy management): a carrier going
+    // fast toward a steep rise releases ski briefly (friction tap) to
+    // bleed a little speed and slide over the hill instead of slamming
+    // into the face and losing more. Decel is a last resort, not a
+    // general strategy — only arms when speed is high AND the grade is
+    // steep, and only for ~0.15s before re-engaging ski.
+    if (ctx.running && !airborne && rise > T.moves.skiVetoRise && speed > 25) {
+      this.skiReleaseT = Math.max(this.skiReleaseT, 0.15);
+    }
+    this.skiReleaseT = Math.max(0, this.skiReleaseT - dt);
     // Altitude above the objective — hops and burns are cut while a
     // runner is overhead inside its glide window, because every one
     // balloons it past the touch ring (flagprobe: capper orbited dy
@@ -369,7 +385,7 @@ export class BotMoves {
       // ridge it can't jet over slides back down and re-climbs forever
       // (soak: capper Sisyphus-orbit cycling y45→81→45 for a match).
       // Humans let go of ski on a steep grade and walk-hop-jet it.
-      ski: !ctx.posted && !(rise > T.moves.skiVetoRise && speed < T.moves.skiVetoSpeed && !airborne),
+      ski: !ctx.posted && !(rise > T.moves.skiVetoRise && speed < T.moves.skiVetoSpeed && !airborne) && !(ctx.running && this.skiReleaseT > 0),
       jet,
       // Uphill + near-stationary = hop it; autohop chains the rest.
       // The momentum hop is the second case: held space while skiing
