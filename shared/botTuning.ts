@@ -23,12 +23,6 @@ export const BOT_TUNING = {
     parkRingFast: 12,    // m — brake ring cap at speed
     parkRingSlow: 2,     // m — brake ring cap when slow
     parkSpeedSplit: 6,   // m/s — fast/slow ring switch
-    // Arrival (carrier home approach): Reynolds arrival — decelerate into
-    // the target instead of overshooting + orbiting. A carrier never
-    // park-brakes on the ring (Edit 1); instead he brakes early to bleed
-    // speed, then crawls the last meters.
-    arrivalGd: 30,       // m — carrier starts decelerating inside this of home
-    arrivalSpeed: 8,     // m/s — carrier brakes while faster than this near home
     skiVetoRise: 2.7,    // m — steep-climb grade that releases ski
     skiVetoSpeed: 10,    // m/s — below this on a steep grade, don't ski (energy sweep: 7→10 flips capper from slow grabV=10.2 to fast grabV=17.6; cliff is exactly 10)
     ceilingAgl: 35,      // m AGL — held burn above this is ballooning, unless fast: a runner at bankSpeed+ trades zero forward thrust for pure altitude (jets can't push past jetMaxFwdAccel=50 anyway — the TAS bank is the climb)

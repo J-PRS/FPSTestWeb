@@ -146,8 +146,10 @@ abandoning.
 
 - [x] Research complete (Reynolds arrival/offset-pursuit/path-following, Tribes flag mechanics, correction log)
 - [x] Root cause located (park block carrier-blind, breath block carrier-blind, drop-handler guard leak)
-- [x] Instrument `botMoves.hints` (count carrier vs. non-carrier park entries) — deferred; defect confirmed by soak autopsy (oasis s1: 90s parked at odHome 20-32)
-- [x] Apply Edits 1–3 + tuning constants (arrivalGd, arrivalSpeed)
-- [x] Locate and apply Edit 4 (drop-handler guard clear: tickCarried capture + carrier-death paths)
-- [ ] Run 3-seed measurement, compare to baseline
+- [x] Edit 1 applied: park block now `ctx.posted && !ctx.running` (carriers can't park-brake short of home)
+- [x] Edit 4 applied: RoomFlags clears `airborneBy` + `throwFrom` on carrier death and capture (guard leak fix)
+- [~] Edit 2 (arrival deceleration): **deferred** — first version (park at 30m) caused peaks regression (carry 70.9→0, caps 1→0). Second version (crawl arm at 30m) also regressed (carrier stopped at 125m, never reached home). Reynolds arrival needs a *gradual* deceleration, not an instant mode switch. Revisit with a speed-cap or proportional brake, not a full park/crawl flip.
+- [~] Edit 3 (breath/perch for carriers): **reverted** — allowing carriers to perch made them sitting ducks (perch parks to refill tank, bots kill them). Original `!ctx.runner` exclusion was correct for carriers too.
+- [ ] Run 3-seed measurement on Edit 1 alone, compare to baseline
+- [ ] Re-attempt arrival deceleration with gradual approach (not full mode switch)
 - [ ] Update this doc with results
