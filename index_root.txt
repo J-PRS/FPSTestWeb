@@ -57,6 +57,7 @@ reference
 run
 run_all.bat
 run_all.ps1
+run_all_noreload.bat
 screenshots
 screenshots_legacy
 screenshots_web
