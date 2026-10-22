@@ -48,7 +48,7 @@ export function buildInputCtx(p: Player): PlayerInputHandlers {
   return {
     isSpectating: (): boolean => p.status.spectating,
     isDead: (): boolean => p.isDead,
-    isDeadSpectating: (): boolean => p.deadSpectateIdx >= 0,
+    isDeadSpectating: (): boolean => p.deadSpectateIdx >= 0 || (p.spectateAnchor !== undefined && performance.now() < p.spectateAnchorUntil),
     deadSpectateCycle: (): void => p.deadSpectateCycle(),
     toggleSpectator: (): void => p.toggleSpectator(),
     melee: (): void => p.tryMelee(),

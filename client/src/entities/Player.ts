@@ -262,6 +262,10 @@ export class Player {
   beltItem: BeltItem = (BELT_ITEMS as readonly string[]).includes(settings.get('fps-belt'))
     ? settings.get('fps-belt') as BeltItem : 'disc';
   // Sidearm: one hold-out weapon — the sidearm key pulls it while held.
+  /** Dead-spectate / kill-cam boom — wider than the inspect cam so the killer reads in frame. */
+  static readonly SPECTATE_DIST = 7;
+  static readonly KILLCAM_HOLD_MS = 900;  // dwell on the corpse
+  static readonly KILLCAM_BLEND_MS = 650; // glide corpse → killer (smoothstep)
   static readonly HEAVY_ONLY = PlayerLoadout.HEAVY_ONLY;
   static readonly MEDIUM_ONLY = PlayerLoadout.MEDIUM_ONLY;
   static readonly LIGHT_ONLY = PlayerLoadout.LIGHT_ONLY;
@@ -332,6 +336,10 @@ export class Player {
    *  anchor — a dead player parked on an enemy is a ghosting channel. */
   spectateAnchor: { pos: THREE.Vector3; isDead: boolean } | undefined;
   spectateAnchorUntil = 0;
+  /** Kill-cam entry pose — the boom pivots on the corpse spot for a beat,
+   *  then blends to the killer so the death isn't a camera teleport. */
+  readonly spectateAnchorFrom = new THREE.Vector3();
+  spectateAnchorStart = 0;
   private anchorOrbitSeeded = false;
 
   /** L while dead — arms after the suicide press so the FIRST dead frame
@@ -520,11 +528,24 @@ export class Player {
           this.orbit.yaw = this.yaw; this.orbit.pitch = 0.25;
           this.anchorOrbitSeeded = true;
         }
-        this.deadSpectateAnchor.copy(anchor.pos);
+        // Hold on the corpse, then glide to the killer (Battlefield/CoD
+        // killcam pacing: dwell → blend → track) — a hard teleport reads
+        // as a glitch, not a "who got me" reveal.
+        const elapsed = performance.now() - this.spectateAnchorStart;
+        if (elapsed < Player.KILLCAM_HOLD_MS) {
+          this.deadSpectateAnchor.copy(this.spectateAnchorFrom);
+        } else {
+          const t = Math.min(1, (elapsed - Player.KILLCAM_HOLD_MS) / Player.KILLCAM_BLEND_MS);
+          // smootherstep — zero velocity AND curvature at the ends, so the
+          // sweep leaves the corpse and settles on the killer without the
+          // smoothstep's mid-end snap.
+          const s = t * t * t * (t * (t * 6 - 15) + 10);
+          this.deadSpectateAnchor.lerpVectors(this.spectateAnchorFrom, anchor.pos, s);
+        }
         this.visuals.updateCamera(this.camera, this.terrain, {
           pos: this.deadSpectateAnchor, yaw: 0, pitch: 0,
           thirdPerson: true,
-          orbit: this.orbit,
+          orbit: this.orbit, dist: Player.SPECTATE_DIST,
         });
         return;
       }
@@ -541,7 +562,7 @@ export class Player {
         this.visuals.updateCamera(this.camera, this.terrain, {
           pos: this.deadSpectateAnchor, yaw: 0, pitch: 0,
           thirdPerson: true,
-          orbit: this.orbit,
+          orbit: this.orbit, dist: Player.SPECTATE_DIST,
         });
         return;
       }

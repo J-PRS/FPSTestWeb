@@ -90,7 +90,7 @@ export class PlayerVisuals {
   // Update camera to final position — never let it go below the terrain
   // surface, or steep slopes put the eye inside the mesh and you see the
   // interior of the mountain.
-  updateCamera(camera: THREE.PerspectiveCamera, terrain: Terrain, cam: { pos: THREE.Vector3; yaw: number; pitch: number; thirdPerson?: boolean; orbit?: { yaw: number; pitch: number } }): void {
+  updateCamera(camera: THREE.PerspectiveCamera, terrain: Terrain, cam: { pos: THREE.Vector3; yaw: number; pitch: number; thirdPerson?: boolean; orbit?: { yaw: number; pitch: number }; dist?: number }): void {
     pvCam.updateCamera(this, camera, terrain, Object.assign({}, {thirdPerson: false}, cam));
   }
 

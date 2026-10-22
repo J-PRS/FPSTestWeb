@@ -107,6 +107,8 @@ function ownDeath(ctx: NetCtx, shooterId: string, targetId: string, roster: Map<
     if (killer && !killer.isDead) {
       player.spectateAnchor = killer;
       player.spectateAnchorUntil = performance.now() + 4000;
+      player.spectateAnchorFrom.copy(player.pos);
+      player.spectateAnchorStart = performance.now();
     }
   }
 }

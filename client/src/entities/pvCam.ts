@@ -8,20 +8,21 @@ const _obTarget = new THREE.Vector3(); // observer drift target — scratch
 // T1/T2 observer free-fly rig — plus the feet gizmo that shares their
 // terrain reads.
 
-export function updateCamera(v: PlayerVisuals, camera: THREE.PerspectiveCamera, terrain: Terrain, cam: { pos: THREE.Vector3; yaw: number; pitch: number; thirdPerson: boolean; orbit?: { yaw: number; pitch: number } }): void {
-  const { pos, yaw, pitch, thirdPerson, orbit } = cam;
+export function updateCamera(v: PlayerVisuals, camera: THREE.PerspectiveCamera, terrain: Terrain, cam: { pos: THREE.Vector3; yaw: number; pitch: number; thirdPerson: boolean; orbit?: { yaw: number; pitch: number }; dist?: number }): void {
+  const { pos, yaw, pitch, thirdPerson, orbit, dist } = cam;
     if (orbit) {
       // Middle-mouse inspect cam: boom rides the ORBIT angles (detached from
       // aim yaw/pitch) and frames the body, so spinning the view never moves
       // the crosshair. Camera sits on the far side of `pos` from the orbit
       // direction — drag left to walk the view around him.
+      const back = dist ?? PlayerVisuals.TP_BACK;
       const ax = Math.cos(orbit.pitch) * Math.sin(orbit.yaw);
       const ay = Math.sin(orbit.pitch);
       const az = Math.cos(orbit.pitch) * Math.cos(orbit.yaw);
       camera.position.set(
-        pos.x - ax * PlayerVisuals.TP_BACK,
-        pos.y - ay * PlayerVisuals.TP_BACK + PlayerVisuals.TP_UP,
-        pos.z - az * PlayerVisuals.TP_BACK,
+        pos.x - ax * back,
+        pos.y - ay * back + PlayerVisuals.TP_UP,
+        pos.z - az * back,
       );
       const groundAtCam = terrain.getHeight(camera.position.x, camera.position.z);
       if (camera.position.y < groundAtCam + 0.25) {
