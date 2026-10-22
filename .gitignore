@@ -114,3 +114,8 @@ maps/*.bin
 
 # Soak/session captures — generated output, not source
 *.out
+
+# Stray build/preview outputs (generated, not source)
+client/build_out.txt
+client/preview_out.txt
+_recent_demos.txt
