@@ -11,6 +11,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Root cleanliness
+        run: node utils/_rootcheck.mjs
+
       - uses: oven-sh/setup-bun@v2
 
       - name: Server tests
@@ -28,7 +31,10 @@ jobs:
           npx vitest run
           npx oxlint src
 
-      # Headless real-browser suite. perf is excluded — software GL makes
+      - name: Circular dependency ratchet
+        run: node _tools/check-cycles.mjs
+
+      # Headless real-browser suite. perf is excluded - software GL makes
       # absolute frame times a machine-load meter, not a regression signal.
       - name: E2E (headless Chrome)
         working-directory: _tools

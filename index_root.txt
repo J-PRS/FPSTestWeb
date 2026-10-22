@@ -6,6 +6,8 @@
 .dockerignore
 .env.example
 .git
+.gitattributes
+.githooks
 .github
 .gitignore
 .oxlintrc.audit.json

@@ -1,0 +1,20 @@
+# Auto-detect text files and normalize to LF in the repo.
+* text=auto
+
+# Windows launchers keep CRLF (cmd.exe).
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary assets - never normalize.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.glb binary
+*.bin binary
+*.wav binary
+*.ogg binary
+*.mp3 binary
+*.blend binary
+*.ico binary
+*.pdf binary
