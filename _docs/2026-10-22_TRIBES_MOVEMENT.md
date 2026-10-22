@@ -214,6 +214,9 @@ fast passes (40 m/s arrival, hop added vy≈13, sailed 15m over the pole).
   bad hit). If decel < impact, release ski briefly, then re-engage.
 - **Never** use deceleration as a general strategy (arrival, parking, etc.).
 - Speed is life — don't bleed it unless the math says it's cheaper.
+- **Implemented as Edit 5** (tactical ski-release): 0.15s friction tap when a
+  carrier is going >25 m/s toward a steep rise (>2.7m). Re-engages ski after
+  the tap. No regression (capRun 3/3 pass, capStat identical to baseline).
 
 ### 4.4 When to hop
 - **Mounting lips** (rise > stepRise, near-stationary or mountCommit).
@@ -247,6 +250,11 @@ fast passes (40 m/s arrival, hop added vy≈13, sailed 15m over the pole).
 - At the apex of a jump (vy ≈ 0, airborne), look ahead to the next peak.
 - If the next peak is at a shallow angle (barely reachable), jet to extend.
 - If the angle is steep (easily reachable), don't jet — gravity will carry you.
+- **Implemented as Edit 6** (`apexNeedsJet` method): dead-reckons the no-thrust
+  arc forward. If it hits ground before reaching a downslope (rising ahead),
+  jet to extend the trajectory over the rise and land on the downslope.
+  `wantJet` returns true with `jetWhy = 'apex'` when `airborne && apex &&
+  energy > tapEnergyMin && apexNeedsJet()`. No regression (capRun 3/3 pass).
 - This is the "sky-bank" concept: past 50 m/s, jet up (altitude banking)
   with no horizontal cost, then convert on the next descent.
 
@@ -379,12 +387,30 @@ The bot tries to replicate human routing:
    The user corrected me: decel is a tactical ski-release, not a general
    strategy. Speed is life.
 
-2. **Tuning is at a plateau** — every threshold change lands in noise on
+2. **Vertical fall → slope conversion** — vertical fall is great IF you hit a
+   slope at the right angle to convert vertical velocity into horizontal speed.
+   A flat landing wastes all that energy. The bot must aim its fall to hit the
+   right slope. (User insight.)
+
+3. **Uphill = jet, downhill = ski** — going up, jet to minimize speed loss
+   (thrust against gravity). Going down, ski (harness gravity, don't jet, let
+   the slope pump you). The jet is up-dominant (35 m/s² up, 10 m/s²
+   horizontal) — it fights gravity primarily.
+
+4. **Apex jetting** — at the apex, if you see you need help to hit the next
+   peak at a shallow angle, jet to extend. Or to steer (lateral air-strafe).
+   Implemented as Edit 6 (`apexNeedsJet` method). Proactive jetting, not just
+   reactive climbing.
+
+5. **Tuning is at a plateau** — every threshold change lands in noise on
    disjoint seed sets. The gains come from structural changes (bank veto,
    passCommit, crest routing), not knob-turning.
 
-3. **Single-seed results are lies** — basin luck dominates. Always validate
+6. **Single-seed results are lies** — basin luck dominates. Always validate
    on 3+ disjoint seed sets.
+
+7. **`ctx.running` is not a role flag** — it's true only while carrying.
+   `ctx.runner` is the role flag. Conflating them is the bug.
 
 4. **`ctx.running` is not a role flag** — it's true only while carrying.
    `ctx.runner` is the role flag. Conflating them is the bug.
@@ -432,3 +458,12 @@ bun test tests/scenarios/capRun.test.ts
 
 4. **Full 6-map × 3-seed measurement** to establish a proper post-fix
    baseline and compare to the 0.82-0.85 / 20-22 m/s baseline.
+
+5. **Terrain-aware aiming** — aim the fall to hit slopes at the right angle
+   (user insight: vertical fall → slope conversion). The passThrough and
+   altitudePull are crude proxies; the bot should read the terrain and aim
+   at the slope that converts vertical velocity to horizontal speed.
+
+6. **Apex jetting tuning** — currently fires when vy ≈ 0 and the no-thrust
+   arc hits a rising face. Could be tuned to fire more aggressively at
+   shallow angles. Needs measurement on more seeds.
