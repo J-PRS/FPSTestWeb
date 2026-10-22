@@ -1,3 +1,4 @@
+2026-10-22 - fix(dev-watch): 3s boot cooldown + 2s port-release wait + retry on TIME_WAIT. Prevents respawn loop during active editing.
 2026-10-22 - chore(root): move .devin_chrome_tmp (53MB), .devin-diff (572MB), .devin-tools (167MB) Chrome/Devin scratch to _scratch/. Root 56 -> 54 entries.
 2026-10-22 - feat(weapons): streamline client configs - makeProjectileConfig auto-maps WeaponStats core fields; concConfig + empConfig migrated as proof of concept. New weapons need ~10 lines of cosmetics instead of 70.
 2026-10-22 - feat(dev): run_all_noreload.bat - server + noreload client (stale-files badge, manual F5). Same robust process-killing as run_all.bat.
