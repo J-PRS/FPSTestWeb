@@ -122,3 +122,11 @@ _recent_demos.txt
 
 # Local asset backups (not referenced by code)
 _assets/
+
+# _tools scratch outputs (loose one-off archaeology per _tools/README.md)
+_tools/*.log
+_tools/*.png
+_tools/*.blend
+_tools/*.patch
+_tools/*_out.txt
+_tools/_*.ts
