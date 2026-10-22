@@ -11,6 +11,7 @@ import { Explosion } from '../../effects/explosion.js';
 import { swingSwipe } from '../../effects/swingTrails.js';
 import { MELEE_RANGE, EXPLOSION_VFX_RADIUS, LG_RANGE, LG_BOUNCE_RANGE } from '../../core/config.js';
 import { noteShellFate, noteTrajDiv, parityProbes, parityMiss } from '../parity.js';
+import { mirroredSpawn } from '../combat/fire.js';
 import type { NetCtx } from './ctx.js';
 const snapToContact = (p: Projectile, at?: { x: number; y: number; z: number }): number => {
   if (!at || !Number.isFinite(at.x + at.y + at.z)) {return -1;}
@@ -38,6 +39,7 @@ function noteWeapon(id: string, weaponType: number | undefined): void {
 
 const _bP = new THREE.Vector3(); // lightning bounce-march scratch
 const _lgStart = new THREE.Vector3();
+const _sweepGhost = new THREE.Vector3(); // remote-shell local-victim rewind pos
 
 // Lightning terrain bounce, observer side: ground stop → arc to the
 // nearest remote player within LG_BOUNCE_RANGE of the contact (any
@@ -212,7 +214,19 @@ export function wireProjectiles(ctx: NetCtx): void {
     remoteProjectile.isRemote = true;
     // Cosmetic body-pop needs the local body too — same lazy reads the
     // own-shell path uses (null while dead = no sweep target).
-    remoteProjectile.sweepLocal = (): THREE.Vector3 | null => { const pl = deps.lazyPlayer(); return pl.isDead ? null : pl.pos; };
+    // Local-body pop judges us at the rewind epoch the server's bodySweep
+    // does — ghostBack ≈ 0.7·(shooter transit + render lag) — not the
+    // live body, or a shell pops on us ~a transit early and the wire
+    // 'gone' lands a full speed·transit ahead (self:0 traj-outlier).
+    remoteProjectile.sweepLocal = (): THREE.Vector3 | null => {
+      const pl = deps.lazyPlayer();
+      if (pl.isDead) {return null;}
+      const rtt = nm().serverPingMs ?? nm().getPing();
+      const m = mirroredSpawn(deps.world.localPosHistory, rtt);
+      if (!m) {return pl.pos;}
+      _sweepGhost.set(m.x, m.y, m.z);
+      return _sweepGhost;
+    };
     remoteProjectile.localClass = (): string | undefined => deps.lazyPlayer().appliedClass;
     // The shooter's rendered remote can sit a leash-width off the server's
     // spawn point — seed the render offset from the model we see so the
@@ -248,7 +262,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     const shooterVel = deps.world.remotePlayers.get(ownerId)?.vel;
     // Fast-forward by half-RTT: the server relays the spawn ~half a round-trip
     // late, so without this the projectile lags behind the shooter's real one
-    const lead = Math.min(0.15, nm().getPing() / 2000);
+    const lead = Math.min(0.15, (nm().serverPingMs ?? nm().getPing()) / 2000);
     if (lead > 0) {
       remoteProjectile.advanceBy(lead);
     }
@@ -338,8 +352,8 @@ export function wireProjectiles(ctx: NetCtx): void {
       // Read pos BEFORE the snap moves it.
       let preSnap = -1;
       if (position && Number.isFinite(position.x + position.y + position.z)) {
-        const epoch = srvAge !== undefined ? srvAge - localProjectile.age
-          : -(nm().serverPingMs ?? nm().getPing()) / 2000;
+        const epoch = srvAge === undefined ? -(nm().serverPingMs ?? nm().getPing()) / 2000
+          : srvAge - localProjectile.age;
         if (Math.abs(epoch) > 0.75) {
           parityMiss('traj-epoch', { wt: localProjectile.config.weaponType, self: localProjectile.exploded ? 1 : 0,
             age: Number(localProjectile.age.toFixed(2)), sa: srvAge === undefined ? '?' : Number(srvAge.toFixed(2)),

@@ -12,7 +12,7 @@ import { blastOccluded } from '../../../shared/solidWorld.js';
 import type { CombatDeps } from './combat.js';
 import type { Targetable } from '../entities/balls.js';
 import * as sfx from '../core/sfx.js';
-import { parityMiss, parityStamp, expectDamageEcho } from './parity.js';
+import { parityMiss, parityStamp, expectDamageEcho, kbEchoHorizon } from './parity.js';
 import { ballGhostPos } from '../projectiles/sweep.js';
 import { targetDemoId } from '../demo/types.js';
 
@@ -242,7 +242,8 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     // same falloff-scaled impulse we would apply, not the raw blast force.
     // Horizon extends while the wire starves — a stalled echo isn't a
     // refusal (a 1.4s inbound gap delays every echo past a flat 700ms).
-    const horizon = 700 + Math.min(Math.max(0, (deps.lazyNetworkManager?.()?.msSinceLiveRx?.() ?? 0) - 100), 2000);
+    const kbNm = deps.lazyNetworkManager?.();
+    const horizon = kbEchoHorizon(kbNm?.serverPingMs ?? kbNm?.getPing() ?? 0, kbNm?.msSinceLiveRx?.() ?? 0);
     const dupCands: number[] = [];
     for (let k = 0; k < rkb.length; k += 1) {
       const s = rkb[k]!;

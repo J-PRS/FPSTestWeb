@@ -26,6 +26,16 @@ export function parityStamp(kind: string): void {
   stamps.set(kind, (stamps.get(kind) ?? 0) + 1);
 }
 
+/** Shared kb-echo settle horizon: a remote-blast echo rides
+ *  shooter-transit + our-transit, so the consume/expiry window must
+ *  cover ~2·RTT + adjudication, not a flat 700 — at ~350ms RTT the echo
+ *  lands ~900ms out and a 700ms expiry reports a false kb-echo.
+ *  msSinceLiveRx stretches the window through wire silence so a stall
+ *  delays (not refuses) the echo. */
+export function kbEchoHorizon(rttMs: number, msSinceLiveRx: number): number {
+  return Math.max(700, rttMs * 2 + 300) + Math.min(Math.max(0, msSinceLiveRx - 100), 2000);
+}
+
 export function parityMiss(kind: string, detail: Record<string, unknown>): void {
 total += 1;
   counts.set(kind, (counts.get(kind) ?? 0) + 1);

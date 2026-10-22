@@ -13,7 +13,7 @@ import { PlayerLoadout } from '../../entities/playerLoadout.js';
 import { onPlayerKill } from './playerKill.js';
 import { noteLocalSnap } from '../gameLoop.js';
 import { initNetProbe, bindStats, attachScene, corr as probeCorr, corrGhost } from '../../debug/netProbe.js';
-import { parityMiss } from '../parity.js';
+import { parityMiss, kbEchoHorizon } from '../parity.js';
 import { recCorrection } from '../../core/telemetry.js';
 import { lastWeaponByPlayer } from './projectiles.js';
 import type { NetCtx } from './ctx.js';
@@ -267,7 +267,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
     // stamp younger than (horizon + current silence) can't have been
     // refused yet — expiring it mid-stall strands the late echo into a
     // raw apply (double-shove) AND logs a false kb-echo.
-    const kbHorizon = 700 + Math.min(Math.max(0, networkManager.msSinceLiveRx() - 100), 2000);
+    const kbHorizon = kbEchoHorizon(networkManager.serverPingMs ?? networkManager.getPing(), networkManager.msSinceLiveRx());
     for (let i = stamps.length - 1; i >= 0; i -= 1) {
       if (now - stamps[i]!.t > kbHorizon) {
         // Self-authored stamps are confirmation-free (the server skips

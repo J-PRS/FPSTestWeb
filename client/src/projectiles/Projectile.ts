@@ -396,11 +396,18 @@ export class Projectile {
       if (this.glue.tickStuck()) {return;}
     }
 
-    // Remote (server-authoritative/demo) replicas skip all collision —
-    // terrain-only behavior lives in tickRemote, and their per-frame
-    // stepping is fine: the wire's gone edge owns their death anyway.
+    // Remote (server-authoritative/demo) replicas skip predicted
+    // collision (tickRemote instead) — but they still step on the 50ms
+    // grid: frame-sized sub-segments resolve bounces/contacts at a
+    // different phase than the authority's tick, which was the remote
+    // half of the trajDiv tail (self:0 outliers).
     if (this.isRemote) {
-      this.stepFrame(dt, terrain, undefined, remotePlayers, obstacles, playerClasses);
+      this.cellAcc = Math.min(this.cellAcc + dt, 0.6);
+      while (this.cellAcc >= 0.05) {
+        this.cellAcc -= 0.05;
+        if (this.stepFrame(0.05, terrain, undefined, remotePlayers, obstacles, playerClasses)) {return;}
+      }
+      this.computeRendered();
       return;
     }
 

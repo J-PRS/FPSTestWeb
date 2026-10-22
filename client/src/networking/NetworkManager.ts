@@ -1266,7 +1266,11 @@ this.sendDrops += 1;
   }
 
   getPing(): number {
-    return this.telemetry.ping;
+    // Worker transports measure rtt off-main (probe.rttMs) and consume
+    // their own pongs — telemetry.ping can read 0 while a session is
+    // otherwise fine; prefer the populated probe over a zero.
+    const probe = this.ws?.probe?.rttMs;
+    return this.telemetry.ping > 0 ? this.telemetry.ping : (probe ?? this.telemetry.ping);
   }
 
   /** Server-measured RTT echoed back on each pong — the same wire the
