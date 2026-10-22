@@ -345,6 +345,8 @@ export class RoomFlags {
       f.state = 'dropped';
       f.carrier = null;
       f.dropT = FLAG_RESET_S;
+      f.airborneBy = null;   // drop = fresh life; stale guard must not follow
+      f.throwFrom = null;
       this.loose(f, carrier?.velocity);
       this.room.influence.splat(f.pos, 'opportunity', 1.2);
       this.dirty = true;
@@ -379,6 +381,8 @@ export class RoomFlags {
       f.pos = Object.assign({}, f.home);
       f.carrier = null;
       f.carriedAt = 0;
+      f.airborneBy = null;   // home is a fresh life (correction: ex-thrower guard must not follow the flag home)
+      f.throwFrom = null;
       this.room.influence.splat(f.home, 'opportunity', 1.2);
       this.room.scoring.awardPersonal(carrier.id, CTF_PTS.cap);
       this.dirty = true;

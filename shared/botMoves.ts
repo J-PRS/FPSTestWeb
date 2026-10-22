@@ -191,6 +191,14 @@ export class BotMoves {
     // re-armed fresh on each dip back in and never accumulated the
     // stall it exists to catch.
     } else if (od > watchGd * 1.5) { this.odBest = Infinity; this.odWindowBest = Infinity; this.odT = 0; this.crawl = false; this.brakeNow = false; }
+    // Reynolds arrival for carriers: a carrier beelining home at speed
+    // overshoots the pole and orbits (park<->jump churn, odHome 12-25).
+    // Decelerate inside arrivalGd so he lands ON the pole instead of
+    // buzzing past it. Must come before the posted-anchor park block,
+    // which is carrier-blind and would brake him 20-30m short.
+    if (ctx.running && ctx.objective && od < T.moves.arrivalGd && spd0 > T.moves.arrivalSpeed) {
+      return { ski: false, jet: false, jump: false, park: true };
+    }
     // Only brake when the step actually heads at the pole — a mortar
     // sidestep is perpendicular and must keep its legs. Two rings:
     // fast arrivals brake wide to kill the overshoot-orbit; already
@@ -198,7 +206,7 @@ export class BotMoves {
     // wide ring parked him at 5-13m and flag% never passed the ring.
     const toward = ctx.objective && ((dest.x - pos.x) * (ctx.objective.x - pos.x) + (dest.z - pos.z) * (ctx.objective.z - pos.z)) > 0;
     const ring = spd0 > T.moves.parkSpeedSplit ? Math.min((ctx.posted ?? 0) + 1, T.moves.parkRingFast) : Math.min((ctx.posted ?? 0) + 1, T.moves.parkRingSlow);
-    if (ctx.posted && spd0 > 1.5 && toward && od < ring + (spd0 * spd0) / 60) {
+    if (ctx.posted && !ctx.running && spd0 > 1.5 && toward && od < ring + (spd0 * spd0) / 60) {
       return { ski: false, jet: false, jump: false, park: true };
     }
     // Jet when the way ahead climbs faster than running covers — or the
@@ -217,7 +225,7 @@ export class BotMoves {
     // Wave members skipping the breath tried and reverted: same-seed
     // soak 9g/2c->8g/1c with hold collapsing — a perched member banks a
     // full tank and arrives strong; a burning one arrives dry and dies.
-    if (!ctx.posted && !ctx.runner && ctx.energy !== undefined && !airborne && rise > T.moves.breathRise) {
+    if (!ctx.posted && !(ctx.runner && !ctx.running) && ctx.energy !== undefined && !airborne && rise > T.moves.breathRise) {
       if (this.breath) {this.breath = ctx.energy < T.moves.breathHold;}
       else {this.breath = ctx.energy < T.moves.breathArm;}
       if (this.breath) { this.jetHold = 0; this.jetOut = false; return { ski: false, jet: false, jump: false, park: true }; }
