@@ -12,6 +12,7 @@
 .vscode
 AGENTS.md
 ARCHITECTURE.md
+CLAUDE.md
 Dockerfile
 NOTES.md
 README.md
