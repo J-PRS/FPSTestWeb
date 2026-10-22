@@ -93,3 +93,19 @@ not part of the game.
   session notes superseded by the living docs and changelog.
 - `NOTES.md` and `TASKS.md` are loose scratchpads; prefer ROADMAP.md +
   `_docs/2026-10-15_CAPPER_STRIKE.md` for current state.
+
+## Stale / superseded (review before relying)
+
+- `docs/SESSION_2026-10-01.md`, `docs/SESSION_2026-10-10.md` — **archived** to
+  `_docs/OLD/` (session notes superseded by ROADMAP + changelog +
+  `_docs/2026-10-15_CAPPER_STRIKE.md`).
+- `docs/BOT_AI_REFERENCE.md`, `docs/BOT_SOTA_PLAN.md` (2026-10-02) —
+  point-in-time bot plans.
+- `concepts/` — design philosophy, mostly 2026-09-27 baseline; treat
+  specifics as stale until re-verified.
+- `client/reports/` — 8 design reports (Oct 16), point-in-time.
+- `_docs/` dated research reports (`2026-06-*`, `2026-09-*`,
+  `2026-10-0[1-9]`) are historical; prefer the `2026-10-1[5-9]` and
+  `2026-10-2[0-2]` entries plus the living docs above.
+- `_docs/GAMES/`, `_docs/OLD/`, `_docs/reference/`, `_docs/ROBUSTIFY/`,
+  `_docs/UPHEAVAL/` — archived batches; read only for historical context.
