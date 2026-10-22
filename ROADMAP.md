@@ -7,7 +7,7 @@ when research supports them. Commit per settled topic, changelog.txt one line ea
 never push.
 
 Read this file first each session. Update it as things land and as better ideas
-surface. Detailed research lives in `_reports/`; this file is the current truth.
+surface. Detailed research lives in `_docs/reports/`; this file is the current truth.
 
 ## North-star architecture
 
