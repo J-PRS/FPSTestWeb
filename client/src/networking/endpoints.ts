@@ -59,12 +59,21 @@ export async function resolveServerEndpoints(): Promise<ServerEndpoints> {
   }
   if (!host) {return (fleet ? await resolveFleet(local.httpUrl) : null) ?? local;}
 
-  // LAN/plain hosts — localhost, private IPs, anything with an explicit
-  // port — can't ride the tunnel's wss/https rewrite; hitting them with
-  // wss just fails the handshake silently (botwatch hit this on :8460).
-  if (/^(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1)/.test(host) || host.includes(':')) {
+  // LAN/plain hosts — localhost, private IPs — can't ride the tunnel's
+  // wss/https rewrite; hitting them with wss just fails the handshake
+  // silently (botwatch hit this on :8460). Judge the HOSTNAME, not the
+  // port: a public FQDN with an explicit port (tailscale funnel :10000)
+  // is still TLS — ws:// on it just gets the handshake reset.
+  if (/^(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1)/.test(host)
+      || (host.includes(':') && !host.includes('.'))) {
     const h = host.replace(/^https?:\/\//, '');
     const ep = { wsUrl: `ws://${h}/ws`, httpUrl: `http://${h}` };
+    return (fleet ? await resolveFleet(ep.httpUrl) : null) ?? ep;
+  }
+  // Public host:port — TLS regardless of port (tailscale funnel etc.).
+  if (host.includes(':')) {
+    const h = host.replace(/^https?:\/\//, '');
+    const ep = { wsUrl: `wss://${h}/ws`, httpUrl: `https://${h}` };
     return (fleet ? await resolveFleet(ep.httpUrl) : null) ?? ep;
   }
   // Bare name like ?server=foo-bar-baz → assume a trycloudflare quick tunnel
