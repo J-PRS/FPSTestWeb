@@ -35,7 +35,7 @@ import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { createScene } from '../world/scene.js';
 import { fogHorizon, syncFxFog } from '../world/directionalFog.js';
 import { updateCubeSky, getInteriorsEpoch, isTerrainSwapPending } from './net/mapAssets.js';
-import { isSessionVeiled, dropSessionVeil, isSessionVeilReady } from './net/world.js';
+import { isSessionVeiled, dropSessionVeil, isSessionVeilReady, isSessionSeated } from './net/world.js';
 import { tickUnderwaterGrade } from '../world/waterSurface.js';
 import { refreshColliderGizmoVisibility } from '../world/mapStructures.js';
 import type { createRenderer } from '../core/renderer.js';
@@ -51,7 +51,7 @@ import { createPerfHud } from '../core/perfHud.js';
 import { createFrameBudget } from '../core/frameBudget.js';
 import { gpuBegin, gpuEnd, gpuMs } from '../core/gpuTimer.js';
 import { lastWeaponByPlayer } from './net/projectiles.js';
-import { parityMiss } from './parity.js';
+import { parityMiss, kbEchoHorizon } from './parity.js';
 import { fpsWatchdog, resetAutoQuality, fxJobSample, fxJobStats } from './loopPerf.js';
 import { createRenderScan } from './renderScan.js';
 import { settings } from '../core/settings.js';
@@ -173,6 +173,9 @@ export interface LoopState {
   shadowAcc: number;
   /** FPS-cap render skip accumulator — see loop. */
   renderAcc: number;
+  /** Auto-quality's runtime render cap at the deepest CPU tier — an
+   *  explicit fps-cap always wins; null = no auto cap. */
+  autoCap: number | null;
   /** Cached interior meshes for the per-frame shadow-caster distance
    *  gate — populated once the __t2interiors group exists, and re-
    *  censused whenever applyInteriors swaps it (map change disposes
@@ -358,7 +361,8 @@ bodyN += 1;
     // Starvation-tolerant: an inbound silence delays every echo — a stamp
     // younger than horizon+silence can't have been refused yet (the same
     // horizon the knockback handler + blastForce sweeps share).
-    const kbHorizon = 700 + Math.min(Math.max(0, deps.lazyNetworkManager().msSinceLiveRx() - 100), 2000);
+    const kbnm = deps.lazyNetworkManager();
+    const kbHorizon = kbEchoHorizon(kbnm.serverPingMs ?? kbnm.getPing(), kbnm.msSinceLiveRx());
     for (let i = kbStamps.length - 1; i >= 0; i -= 1) {
       const s = kbStamps[i]!;
       if (now - s.t > kbHorizon) {
@@ -762,7 +766,7 @@ const _prewarmPos = new THREE.Vector3(0, -500, 0);
 // FPS cap: skip only the render call — sim/input stay full-rate.
 // Carry leftover time so the cap hits its target rate, not stutters.
 function fpsCapAllows(st: LoopState, rawElapsed: number): boolean {
-  const cap = settings.get('fps-cap');
+  const cap = settings.get('fps-cap') || st.autoCap || 0;
   if (cap <= 0) {return true;}
   st.renderAcc += rawElapsed;
   if (st.renderAcc < 1 / cap) {return false;}
@@ -830,14 +834,48 @@ function aimDebugAfterVeil(deps: GameLoopDeps): void {
   requestAnimationFrame(snap);
 }
 
+let veilStillFrames = 0;
+const veilPrevPos = new THREE.Vector3();
+
 function tickVeil(deps: GameLoopDeps, st: LoopState, rawElapsed: number): void {
   // The per-frame hide in Player.update is skipped while veiled, so the
   // boot body would render around a camera still at its pre-restore spot.
-  deps.lazyPlayer().model?.setVisible(false);
+  const pl = deps.lazyPlayer();
+  pl.model?.setVisible(false);
+  // Camera writes live in the normal update, which is skipped while veiled —
+  // place the camera on the body now so the last veiled frame matches the
+  // first live one (a camera left at the origin is what the veil-drop shows).
+  deps.camera.position.copy(pl.pos); // pos.y is already the eye — adding the eye height here lifted the veil camera ~1.6m off the live one
+  deps.camera.rotation.set(pl.pitch, pl.yaw, 0, 'YXZ');
+  // Shader programs for the body appear on first VISIBLE draw — compile them
+  // here, under the veil, or the first live frame stalls on the GPU driver.
+  if (st.veilFrames === 0) {
+    pl.model?.setVisible(true);
+    deps.rendererSetup.renderer.compile(deps.sceneSetup.scene, deps.camera);
+    pl.model?.setVisible(false);
+  }
   deps.rendererSetup.renderer.render(deps.sceneSetup.scene, deps.camera);
   st.veilFrames += 1;
   if (rawElapsed < 0.026) {st.veilStable += 1;} else {st.veilStable = 0;}
-  if (isSessionVeilReady() && !deps.lazyPlayer().isDead && (st.veilStable >= 45 || st.veilFrames >= 180)) {
+  // Seated = a wire position actually landed (respawn or gameState
+  // restore). Without it the veil could drop while pos is still the
+  // boot default — the first live frames then render under terrain
+  // wherever the origin sits (and the first claims read as a dive).
+  // The 10s frame cap is the escape for a seat that never arrives.
+  // The body must stand on the DRAWN ground, not just the collider: the
+  // camera follows the body, so a feet point under the visible chord is
+  // exactly the under-terrain first frame. Camera updates are skipped
+  // while veiled, so the body is the signal to wait on.
+  const p = deps.lazyPlayer().pos;
+  if (st.veilFrames === 0) {veilStillFrames = 0;}
+  veilStillFrames = p.distanceToSquared(veilPrevPos) < 0.0025 ? veilStillFrames + 1 : 0;
+  veilPrevPos.copy(p);
+  const grounded = p.y >= deps.lazyTerrain().getRenderedHeight(p.x, p.z) - 0.1;
+  // A seat that is still settling (gameState / reconcile writes after the
+  // respawn) would otherwise lift the veil on the old spot and snap to the
+  // real one — hold until the body has stopped moving for ~1s.
+  const placed = (isSessionSeated() && grounded && veilStillFrames >= 60) || st.veilFrames >= 600;
+  if (isSessionVeilReady() && placed && !deps.lazyPlayer().isDead && (st.veilStable >= 45 || st.veilFrames >= 180)) {
     st.veilStable = 0;
     st.veilFrames = 0;
     dropSessionVeil();
@@ -850,7 +888,7 @@ function tickVeil(deps: GameLoopDeps, st: LoopState, rawElapsed: number): void {
 export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(): Promise<void>; } {
   let lastTime = 0;
   let renderElapsed = 0;
-  const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, gpuLevel: 0, cpuLevel: 0, cpuBound: false, headroomAccum: 0, autoPixel: false, fxCursor: 0, fxJobs: [], shadowAcc: 0, renderAcc: 0, warmN: 0, warmed: false, veilStable: 0, veilFrames: 0, bootWarmup: new BootWarmup() };
+  const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, gpuLevel: 0, cpuLevel: 0, cpuBound: false, headroomAccum: 0, autoPixel: false, fxCursor: 0, fxJobs: [], shadowAcc: 0, renderAcc: 0, autoCap: null, warmN: 0, warmed: false, veilStable: 0, veilFrames: 0, bootWarmup: new BootWarmup() };
 
   // stats.js perf panels — FPS/MS/MB in a row along the bottom-right,
   // toggled with ` (backquote). stats.js only renders one panel per
@@ -935,8 +973,10 @@ export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(
         let renderLagMs = 0, starve = 0, starveMs = 0;
         const renderLag: Record<string, number> = {};
         deps.world.remotePlayers.forEach((rp, id): void => {
-          renderLag[id] = rp.renderDelayMs;
-          if (rp.renderDelayMs > renderLagMs) {renderLagMs = rp.renderDelayMs;}
+          // viewLag (actual sample staleness incl. extrapolation), not
+          // the delay setting — the server rewinds to THIS epoch.
+          renderLag[id] = rp.viewLagMs;
+          if (rp.viewLagMs > renderLagMs) {renderLagMs = rp.viewLagMs;}
           starve += rp.interpUnderruns;
           starveMs += rp.interpExtCapMs;
         });

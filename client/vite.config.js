@@ -177,6 +177,9 @@ export default defineConfig(({ mode }) => ({
     outDir: 'dist',
     target: 'es2022',
     chunkSizeWarningLimit: 600,
+    // Skip the gzip-pass over 2.85MB of output — the size report is the
+    // only consumer and pure build time.
+    reportCompressedSize: false,
     // Disable rolldown for better CommonJS compatibility
     rollupOptions: {
       output: {
@@ -190,6 +193,16 @@ export default defineConfig(({ mode }) => ({
     },
   },
   worker: { format: 'es' },
+  experimental: {
+    // Vite 8.1 bundled dev mode — rolldown serves bundled modules in dev
+    // (lazy bundling, ESM output, instant HMR) instead of the ~250-request
+    // per-module ESM waterfall. Boot/F5 on dev goes from ~8s of waterfall
+    // to ~1s. DISABLED: the "Bundling in progress" overlay hangs on this
+    // repo's plugin set (gun-sheet, map-relief, shot-saver) and never
+    // reloads. Re-enable once Vite fixes the hang. Normal ESM dev mode
+    // (250-request waterfall) works fine.
+    bundledDev: false,
+  },
   server: {
     port: 5400,
     host: '0.0.0.0',

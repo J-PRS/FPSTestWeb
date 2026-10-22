@@ -638,6 +638,11 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   // Half-rate shadow updates: the pass re-rasterizes every caster each
   // frame (~46% of the frame measured); one frame of lag is invisible.
   let shadowTick = 0; renderer.shadowMap.autoUpdate = false;
+  // Allocate sun.shadow.map in the FIRST render — lit materials (terrain,
+  // instanced species) draw with sampler2DShadow bound to the 1x1 empty
+  // texture until a raster exists, erroring per draw; seeding needsUpdate
+  // before the first frame means the binding is real from draw one.
+  if (renderer.shadowMap.enabled) {renderer.shadowMap.needsUpdate = true;}
   // Lit materials that compile before the lazy shadow-map allocation
   // exists keep directionalShadowMap bound to unit 0 — every one of
   // their draws then logs GL_INVALID_OPERATION (texture/sampler type
@@ -655,7 +660,11 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     { pmode: pmodeEff, fsOverlay: (): (() => void) | null => fsOverlay, scenePass,
       shadowTick: (): void => {
         if ((((shadowTick += 1) - 1) & 1) === 0) {renderer.shadowMap.needsUpdate = true;}
-        if (renderer.shadowMap.enabled && shadowTick > 4 && (litShadowTick += 1) % 120 === 1) {
+        // The sweep heals even with shadows OFF: a material compiled
+        // while the sampler2DShadow was bound keeps erroring per draw,
+        // and needsUpdate recompiles it against the now-shadowless
+        // light set — dropping the dead binding outright.
+        if (shadowTick > 4 && (litShadowTick += 1) % 120 === 1) {
           scene.traverse((o): void => {
             const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
             if (!m) {return;}

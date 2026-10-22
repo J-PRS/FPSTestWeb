@@ -256,6 +256,11 @@ function autoScaleCpu(deps: GameLoopDeps, st: LoopState, dir: number): void {
     else {rendererSetup.setPixel(base.p, base.m, false);}
     st.autoPixel = next === 2;
   }
+  // Deepest tier also caps renders at 30 — GPU fill + composer time halve
+  // while sim/input stay full-rate. Runtime-only (persist=false like the
+  // pixel step); an explicit fps-cap always wins inside fpsCapAllows.
+  st.autoCap = next === 2 ? 30 : null;
+  if (next !== 2) {st.renderAcc = 0;}
   st.cpuLevel = next;
   Logger[dir < 0 ? 'warn' : 'info'](`auto-quality: cpu level ${next} (${dir < 0 ? 'sustained low fps' : 'headroom'})`);
 }
@@ -308,6 +313,8 @@ export function resetAutoQuality(deps: GameLoopDeps, st: LoopState): void {
   deps.sceneSetup.volumetricClouds?.setEnabled(true);
   shedPostPasses(deps.rendererSetup, false);
   setVfxQualityScale(1);
+  st.autoCap = null;
+  st.renderAcc = 0;
   st.gpuLevel = 0;
   st.cpuLevel = 0;
 }
