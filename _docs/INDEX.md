@@ -48,7 +48,7 @@ first-shot-only, bloom composite is raw, filter-repo eats worktree.
 
 ## Workflows
 
-`workflows/beta-launch.md`, `workflows/robustify-round.md`.
+`_docs/workflows/beta-launch.md`, `_docs/workflows/robustify-round.md`.
 
 ## Client design reports
 
