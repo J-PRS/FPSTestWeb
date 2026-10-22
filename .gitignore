@@ -140,3 +140,8 @@ _tools/_*.ts
 
 # Dev stack logs (generated)
 logs/
+
+# Scratch dirs (writer one-offs)
+_tools/mesh2motion-app/
+_tools/models/
+_tools/scratch/
