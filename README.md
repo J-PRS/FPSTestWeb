@@ -26,6 +26,7 @@ cd client && ./node_modules/.bin/tsc --noEmit    # client typecheck
 cd client && ./node_modules/.bin/vitest run      # client tests
 cd client && npx -y oxlint src                   # lint
 bash _tools/check.sh                             # DEFINITION OF DONE
+.\devup.bat                                      # Windows: reap stale >6h, launch :8000 + :5400
 ```
 
 ## Ports

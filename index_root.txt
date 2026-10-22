@@ -50,6 +50,7 @@ concepts
 demo
 demos_out
 demos_rich
+devup.bat
 docs
 index_root.txt
 logs

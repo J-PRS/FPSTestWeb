@@ -16,6 +16,8 @@ cd client && npx -y oxlint src                   # lint
 bash _tools/check.sh --fastest                    # quick compile+lint probe (~30-60s); NOT the gate
 # rootcheck (utils/_rootcheck.mjs) now also runs inside check.sh and gates
 # on index_root.txt — a new/removed root entry fails until accepted or moved.
+# Windows clean stack: .\devup.bat = reap stale dev procs (_tools/reap.mjs)
+# + free :5400/:8000 + launch both. run_all.bat = same without the reaper.
 E2E_GPU=1 bun _tools/e2e/all.ts                  # headless E2E — ALWAYS run with real GPU
 # browser.ts GL backends: default SwiftShader is SLOW — GLB loads take
 # 60-90s+, sim time crawls, and timing assertions flake. Never run

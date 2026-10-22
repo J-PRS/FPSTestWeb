@@ -7,7 +7,9 @@ never wire into builds.
 
 ## Canonical (changes here change shipped artifacts)
 
-- `e2e/` — headless puppeteer E2E + perf harness (`all.ts` suite driver,
+- `reap.mjs` - stale dev-process reaper (dry-run by default; `--kill` 6h,
+  `--auto` 24h; never touches LSP/MCP). Called by root `devup.bat`.
+- `e2e/` - headless puppeteer E2E + perf harness (`all.ts` suite driver,
   `baseline.json` perf reference). The `bun _tools/e2e/all.ts` gate.
 - `animbake/` — offline clip bake -> `shared/ANIM_TABLE` (bake.ts + run.mjs).
 - `mapbake/` — map spec -> heightfield/field generation (genfield.js,
