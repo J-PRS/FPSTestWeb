@@ -169,9 +169,11 @@ export class MapCatalog {
       if (name === undefined) {continue;}
       const spec = this.loadMapSpec(name);
       // A spec declares its legal modes; a mode-less one is a bare arena
-      // that inherits whatever the room already runs.
+      // that inherits whatever the room already runs. Hidden maps are
+      // test grounds — the rotation must not drop players into one just
+      // because rotation.json still lists it.
       const legal = specModes(spec);
-      if (!spec || (room.mode && legal.length > 0 && !legal.includes(room.mode))) {continue;}
+      if (!spec || spec.hidden === true || (room.mode && legal.length > 0 && !legal.includes(room.mode))) {continue;}
       this.rotationIdx %= list.length;
       this.roomMapName.set(room.name, name);
       room.mapSrc = name; // keep the scoreboard's map title honest too
