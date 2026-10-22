@@ -38,13 +38,16 @@ The project produces a lot of documentation. This file is the map.
 `concepts/` — 14 files: `movement.md`, `skiing.md`, `bots.md`, `netcode.md`,
 `demo-system.md`, `enemies.md`, `feel-vfx.md`, `footprint-conforming.md`,
 `projectile-inheritance.md`, `proxy-hitbox.md`, `skills.md`,
-`terrain-gen.md`, `turretter.md`, `ballistic-solver.md`. Mostly 2026-09-27
-baseline; `terrain-gen.md` updated 2026-10-16.
+`terrain-gen.md`, `turretter.md`, `ballistic-solver.md`, `killcam.md`.
+Mostly 2026-09-27 baseline; `terrain-gen.md` updated 2026-10-16,
+`killcam.md` added 2026-10-22.
 
 ## Traps (gotchas — read before touching the area)
 
-`_docs/traps/` — 5 files: bloom black frames, T2 map porting, updateRanges
-first-shot-only, bloom composite is raw, filter-repo eats worktree.
+`_docs/traps/` — 6 files: bloom black frames, T2 map porting, updateRanges
+first-shot-only, bloom composite is raw, filter-repo eats worktree,
+hip-yaw local-vs-world (rotated armature parents break local-quat facing
+measures).
 
 ## Workflows
 

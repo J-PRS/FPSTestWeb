@@ -36,3 +36,4 @@ git filter-repo deletes worktree files stripped from HEAD — copy tracked paths
 - attacker.sim is NOT netDriven - local species run the same shared sim type; authority flags must read .netDriven (fixed in speciesKit hurtPlayer) 
 \"- cmd 'set X=val &' leaves a trailing space in the value (adminToken='devin ' -> 401 for 'devin'); PowerShell '\$env:X = 'y'' is the reliable spawn-env path on this box\"  
 - don't gate desync-heal sends on isConnected - snapshotRequest is QUEUEABLE, dead-lane sends queue+flush on reconnect; gating broke 10 heal tests where no transport exists 
+- 2026-10-22 - never equalize per-clip hip yaw from the bone LOCAL quat when an ancestor is rotated (M2M root bakes Blender -90 X): local deltas != world deltas, fixes land wrong. Measure world-Y twist of parentQ*key, correct in the frame you apply. See _docs/traps/2026-10-22_hip-yaw-local-vs-world.md

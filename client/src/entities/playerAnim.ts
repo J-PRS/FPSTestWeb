@@ -163,7 +163,6 @@ else if (t.name.endsWith('.scale')) {cap = 1e3;}
   alignHipYaw(): void {
     const {model} = this.host;
     if (!model) {return;}
-    const fwd = new THREE.Vector3();
     const q = new THREE.Quaternion();
     // Track names may carry loader dedup suffixes (Hips_1) and rigs can
     // contain more than one 'Hips' node, so resolve each quaternion
@@ -181,12 +180,25 @@ else if (t.name.endsWith('.scale')) {cap = 1e3;}
       }
       return best ?? any;
     };
-    const yawOf = (tr: THREE.KeyframeTrack): number => {
+    // Yaw must be measured in WORLD space: hips whose parent carries a
+    // non-Y rotation (M2M rigs — 'root' bakes Blender's -90° X flip) report
+    // a local-quat yaw that diverges nonlinearly from the rendered facing,
+    // so corrections land at the wrong magnitude. The world-Y twist of
+    // parentQ*key moves 1:1 with the RotY premultiply applied below.
+    const wq = new THREE.Quaternion();
+    const worldYawOf = (tr: THREE.KeyframeTrack, node: THREE.Object3D): number | null => {
+      if (!node.parent) {return null;}
+      const parentQ = new THREE.Quaternion().setFromRotationMatrix(
+        new THREE.Matrix4().copy(model.matrixWorld).invert().multiply(node.parent.matrixWorld));
       const v = tr.values;
       q.set(v[0], v[1], v[2], v[3]);
-      fwd.set(0, 0, 1).applyQuaternion(q);
-      return Math.atan2(fwd.x, fwd.z);
+      wq.copy(parentQ).multiply(q);
+      let y = 2 * Math.atan2(wq.y, wq.w);
+      while (y > Math.PI) {y -= 2 * Math.PI;}
+      while (y < -Math.PI) {y += 2 * Math.PI;}
+      return y;
     };
+    model.updateMatrixWorld(true);
     const canonical = ((): number | null => {
       // A rig's own authored clips set the convention — a retarget pack
       // can outnumber them (29 baked vs 16 native on class_heavy) and
@@ -198,8 +210,8 @@ else if (t.name.endsWith('.scale')) {cap = 1e3;}
         for (const [name, a] of this.animations) {
           if (!names(name)) {continue;}
           const hit = hipTrackOf(a.getClip());
-          if (!hit) {continue;}
-          const y = yawOf(hit.tr);
+          const y = hit ? worldYawOf(hit.tr, hit.node) : null;
+          if (y === null || y === undefined) {continue;}
           const k = Math.round(y / (Math.PI / 18));
           const b = buckets.get(k) ?? { sum: 0, n: 0 };
           b.sum += y;b.n += 1;
@@ -218,13 +230,14 @@ else if (t.name.endsWith('.scale')) {cap = 1e3;}
     // from local-track yaw — the armature parent carries its own offset —
     // so every hip track just gets premultiplied by the fix, no measure.
     const fixRad = RIG_MANIFEST[this.host.variant]?.clipYawFix ?? 0;
-    model.updateMatrixWorld(true);
     const fixed: string[] = [];
     for (const [, a] of this.animations) {
       const clip = a.getClip();
       const hit = hipTrackOf(clip);
       if (!hit?.node.parent) {continue;}
-      let delta = fixRad === 0 ? yawOf(hit.tr) - canonical : -fixRad;
+      const measured = worldYawOf(hit.tr, hit.node);
+      let delta = fixRad === 0 ? (measured ?? 0) - canonical : -fixRad;
+      if (fixRad === 0 && measured === null) {continue;}
       while (delta > Math.PI) {delta -= 2 * Math.PI;}
       while (delta < -Math.PI) {delta += 2 * Math.PI;}
       if (Math.abs(delta) < 0.5) {continue;}
