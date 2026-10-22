@@ -28,6 +28,7 @@ cd client && npx -y oxlint src                   # lint
 bash _tools/check.sh                             # DEFINITION OF DONE
 .\devup.bat                                      # Windows: reap stale >6h, launch :8000 + :5400
 node _tools/devup.mjs                            # cross-platform equivalent (Ctrl+C tears down both)
+node _tools/install-hooks.mjs                    # one-time after clone: enable tracked .githooks/
 ```
 
 ## Ports

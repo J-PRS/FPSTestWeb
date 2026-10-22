@@ -103,6 +103,12 @@ elif echo "$CHANGED" | grep -qE '^client/src/(world|effects|structures|projectil
     xargs -I{} echo "check: READ THE SHOT — {} — render code changed; green tests do not see the screen"
 fi
 
+# Circular-dependency ratchet: madge counts cycles in client+server; fail
+# if either exceeds _tools/cycle-baseline.json (prevents NEW cycles).
+if [ "$FASTEST" -eq 0 ]; then
+  node _tools/check-cycles.mjs || { echo "check: circular-dependency ratchet failed"; exit 1; }
+fi
+
 if [ "$FASTEST" -eq 1 ]; then
   echo "check: --fastest DONE (compile+lint only — NOT the definition of done; run full check.sh before handing back)"
 else

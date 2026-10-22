@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Pre-push: fast gate (lint + typecheck). Full gate is `bash _tools/check.sh`.
+# Bypass with `git push --no-verify` when needed.
+set -e
+exec bash _tools/check.sh --fastest

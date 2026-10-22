@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "prepare": "node _tools/install-hooks.mjs"
+  },
   "dependencies": {
     "playwright-core": "^1.63.0"
   }

@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# Staged-files gate: lint+fix what you're committing, <5s. The heavy
+# suite is the agent's _tools/check.sh job, not this hook's.
+
+# Size floor: tiny commits are commit-spam. Merges exempt; a real
+# one-liner fix bypasses via --no-verify.
+if ! git rev-parse -q --verify MERGE_HEAD >/dev/null; then
+  N=$(git diff --cached --numstat | awk '{a+=$1; d+=$2} END {print a+d+0}')
+  if [ "$N" -lt 50 ]; then
+    echo "pre-commit: $N changed lines (< 50) — batch it into a bigger commit," >&2
+    echo "  or 'git commit --no-verify' if it really is a one-line fix." >&2
+    exit 1
+  fi
+fi
+
+# Determinism sentinel: shared/ sim code must not gain wall-clock or
+# unseeded-random reads (added lines only — existing sites stay grandfathered).
+if git diff --cached -U0 -- shared/ | grep '^+' | grep -qE 'Date\.now|Math\.random|new Date\(|crypto\.getRandomValues'; then
+  echo "pre-commit: shared/ diff adds Date.now/Math.random/new Date — sim code" >&2
+  echo "  must stay deterministic (seeded rng or tick-derived time)." >&2
+  exit 1
+fi
+
+# Test-integrity guard: the classic agent escape is deleting the failing
+# test. Block deleted test files and net expect() removal; a deliberate
+# prune uses --no-verify.
+if git diff --cached --name-only --diff-filter=D | grep -qE '(\.test\.|__tests__/)'; then
+  echo "pre-commit: staged diff deletes test file(s):" >&2
+  git diff --cached --name-only --diff-filter=D | grep -E '(\.test\.|__tests__/)' | sed 's/^/  /' >&2
+  echo "  --no-verify if the deletion is really intended." >&2
+  exit 1
+fi
+EXPECT_DELTA=$(git diff --cached -U0 | grep -c '^-.*expect(' ) 
+EXPECT_ADD=$(git diff --cached -U0 | grep -c '^+.*expect(')
+if [ "$EXPECT_DELTA" -gt "$EXPECT_ADD" ]; then
+  echo "pre-commit: diff removes $((EXPECT_DELTA - EXPECT_ADD)) expect() assertions" >&2
+  echo "  net — weakening tests to pass is a block. --no-verify if intentional." >&2
+  exit 1
+fi
+
+# Secrets: added lines only, cheap patterns that never belong in git.
+if git diff --cached -U0 | grep '^+' | grep -qE 'AKIA[0-9A-Z]{16}|BEGIN [A-Z ]*PRIVATE KEY|api[_-]?key["'"'"' ]*[:=]'; then
+  echo "pre-commit: staged diff looks like it contains a secret/key." >&2
+  exit 1
+fi
+
+# Big-blob gate: newly added files >100KB bloat history forever —
+# maps/ + heightmaps are intentional binary data dirs, everything else
+# must justify itself via --no-verify.
+BIG=$(git diff --cached --name-only --diff-filter=A | grep -vE '^(maps/|client/assets/heightmaps/)' | while read -r f; do
+  sz=$(git cat-file -s ":$f" 2>/dev/null || echo 0)
+  [ "$sz" -gt 102400 ] && echo "  $f ($((sz / 1024))KB)"
+done)
+if [ -n "$BIG" ]; then
+  echo "pre-commit: staged NEW files >100KB — these stay in history forever:" >&2
+  echo "$BIG" >&2
+  echo "  commit them anyway with --no-verify, or gitignore them if they're scratch." >&2
+  exit 1
+fi
+
+# Protected-path notice (non-blocking): sim + wire files are the
+# authority core — flag so a human knows to actually look.
+PROT=$(git diff --cached --name-only | grep -E '^(shared/|.*wire\.ts|.*hitLedger)' || true)
+if [ -n "$PROT" ]; then
+  echo "pre-commit: protected paths touched — eyeball these:" >&2
+  echo "$PROT" | sed 's/^/  /' >&2
+fi
+
+# packageManager pin guard: bun runs sometimes stamp a spurious
+# `packageManager: pnpm@...` field into package.json - never commit it.
+if git diff --cached -U0 -- package.json 2>/dev/null | grep '^+' | grep -q '\"packageManager\"'; then
+  echo "pre-commit: package.json gains a packageManager pin - revert with 'git checkout -- package.json'" >&2
+  exit 1
+fi
+
+# Lockfile sync: if package.json changed, its lockfile must be staged too.
+for pj in package.json client/package.json; do
+  if git diff --cached --name-only | grep -qx "$pj"; then
+    lock="${pj%package.json}package-lock.json"
+    if ! git diff --cached --name-only | grep -qx "$lock"; then
+      echo "pre-commit: $pj changed but $lock not staged - run install and stage it" >&2
+      exit 1
+    fi
+  fi
+done
+
+# Hardcoded personal paths: added lines must not contain machine-specific
+# absolute paths (C:\\Users, C:\\TEMP, /home/<user>).
+if git diff --cached -U0 | grep '^+' | grep -qE 'C:\\\\(Users|TEMP|Windows)|/home/[a-zA-Z]'; then
+  echo "pre-commit: staged diff adds a machine-specific absolute path" >&2
+  exit 1
+fi
+
+# Scratch/build-artifact guard: don't commit generated junk.
+if git diff --cached --name-only --diff-filter=ACM | grep -qE '\\.(log|out)$|^logs/|^_tools/.*\\.(png|blend|patch)$'; then
+  echo "pre-commit: staged file looks like generated scratch/build output" >&2
+  git diff --cached --name-only --diff-filter=ACM | grep -E '\\.(log|out)$|^logs/|^_tools/.*\\.(png|blend|patch)$' | sed 's/^/  /' >&2
+  exit 1
+fi
+
+# Sim determinism: shared/ must not gain additional wall-clock / unseeded
+# random reads (extends the existing Date.now/Math.random/new Date guard).
+if git diff --cached -U0 -- shared/ | grep '^+' | grep -qE 'performance\\.now|crypto\\.getRandomValues|Math\\.random'; then
+  echo "pre-commit: shared/ diff adds performance.now/crypto/Math.random - sim code must stay deterministic" >&2
+  exit 1
+fi
+
+# No console.log/debugger in shared sim code (added lines only).
+if git diff --cached -U0 -- shared/ | grep '^+' | grep -qE 'console\\.(log|debug|warn)|debugger'; then
+  echo "pre-commit: shared/ diff adds console/debugger - keep sim code clean" >&2
+  exit 1
+fi
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx)$' || true)
+[ -z "$STAGED" ] && exit 0
+echo "$STAGED" | xargs -n 50 npx -y oxlint --fix || exit 1
+# The fixer rewrites files — restage so the commit carries the fix.
+echo "$STAGED" | xargs -r git add

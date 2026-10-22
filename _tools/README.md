@@ -11,8 +11,10 @@ never wire into builds.
   `--auto` 24h; never touches LSP/MCP). Called by root `devup.bat`.
 - `devup.mjs` - cross-platform clean dev stack (reap + free ports + launch
   server/client + readiness + Ctrl+C teardown). `devup.bat` delegates here.
-- `wait-for.mjs` - poll a URL until HTTP 200 (CLI + importable). Used by
-  devup.mjs and (optionally) E2E upStack.
+- `check-cycles.mjs` - circular-dependency ratchet (madge counts vs
+  `_tools/cycle-baseline.json`; fails only on NEW cycles).
+- `install-hooks.mjs` - points git at tracked `.githooks/` (run once after
+  clone, or via `npm run prepare`).
 - `e2e/` - headless puppeteer E2E + perf harness (`all.ts` suite driver,
   `baseline.json` perf reference). The `bun _tools/e2e/all.ts` gate.
 - `animbake/` — offline clip bake -> `shared/ANIM_TABLE` (bake.ts + run.mjs).
