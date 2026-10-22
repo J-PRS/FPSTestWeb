@@ -184,11 +184,11 @@ export class RoomProjectiles {
    *  Burst weapons (flak/shotgun) fire the whole pellet fan — a pull
    *  registers `burst` shells fanned by golden-angle cone offsets, same
    *  coverage the client spawnFan produces. */
-  spawn(ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string): string | null {
+  spawn(ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string, lagS = 0): string | null {
     const stats = getWeaponStats(weaponType);
     const burst = stats?.burst ?? 1;
     const spread = stats?.pelletSpread ?? 0;
-    if (burst <= 1 || spread <= 0) {return this.spawnOne(ownerId, weaponType, origin, dir, ownerVel, shotId);}
+    if (burst <= 1 || spread <= 0) {return this.spawnOne(ownerId, weaponType, origin, dir, ownerVel, shotId, undefined, lagS);}
     // One pull = one nonce for every pellet — unclaimed (bot) fans get a
     // minted pull id so the ledger can dedupe connects per trigger pull.
     const pullId = shotId ?? `pf-${(this.nextId += 1)}`;
@@ -207,13 +207,13 @@ export class RoomProjectiles {
       const ox = Math.cos(a) * r, oy = Math.sin(a) * r;
       const dx = dir.x + rx * ox + ux * oy, dy = dir.y + ry * ox + uy * oy, dz = dir.z + rz * ox + uz * oy;
       const l = Math.hypot(dx, dy, dz) || 1;
-      const id = this.spawnOne(ownerId, weaponType, origin, { x: dx / l, y: dy / l, z: dz / l }, ownerVel, pullId, i);
+      const id = this.spawnOne(ownerId, weaponType, origin, { x: dx / l, y: dy / l, z: dz / l }, ownerVel, pullId, i, lagS);
       if (first === null) {first = id;}
     }
     return first;
   }
 
-  private spawnOne(ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string, pellet?: number): string | null {
+  private spawnOne(ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string, pellet?: number, lagS = 0): string | null {
     const stats = getWeaponStats(weaponType);
     if (!stats || stats.speed <= 0) {return null;} // hitscan-class — no body
     const owner = this.room.players.getPlayer(ownerId);
@@ -230,7 +230,7 @@ export class RoomProjectiles {
     // ceiling; spawned inside it → sweep every tick as before.
     const terrainAt = this.field ? timeToCeiling(origin.y, vel.y, g, this.fieldMax + stats.bodyRadius) : 0;
     this.projs.set(id, {
-      id, ownerId, weaponType, stats, p: { pos: Object.assign({}, origin), vel, age: 0 }, terrainAt,
+      id, ownerId, weaponType, stats, p: { pos: Object.assign({}, origin), vel, age: lagS }, terrainAt,
       pull: shotId ?? id,
       ownerTeam: owner.team,
       ttl: jitteredTtl(stats, idSeed(id)) ?? HARD_TTL_S,

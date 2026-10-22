@@ -196,7 +196,7 @@ export interface RoomInfo {
   /** Fire-intent → authoritative shell spawn (RoomProjectiles). Returns
    *  the LiveProj id or null when the weapon has no body. Only
    *  server-simmed weapons route here. */
-  fireProjectile?: (ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string) => string | null;
+  fireProjectile?: (ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string, lagS?: number) => string | null;
   /** Beam-intent resolution — the honest ray a Lightning tick strikes
    *  (terrain/wall/player/creature, earliest wins). Room.beamSweep. */
   beamSweep?: (shooterId: string, muzzle: Vec3, dir: Vec3, range: number) => BeamContact | null;

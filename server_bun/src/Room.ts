@@ -999,7 +999,7 @@ export class Room {
         this.lastNackAt = now;
         this.introSeq = this.tickSeq;
       },
-      fireProjectile: (pid, wt, origin, dir, vel, shotId): string | null => this.projectiles.spawn(pid, wt, origin, dir, vel, shotId),
+      fireProjectile: (pid, wt, origin, dir, vel, shotId, lagS): string | null => this.projectiles.spawn(pid, wt, origin, dir, vel, shotId, lagS),
       beamSweep: (pid, muzzle, dir, range): BeamContact | null => this.beamSweep(pid, muzzle, dir, range),
       ballHit: (pid, id, dmg) => this.ballSim.handleHit(pid, id, dmg),
       crawlerHit: (pid, id, dmg) => this.creatureSim.handleHit(pid, id, dmg),

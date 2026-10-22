@@ -102,7 +102,7 @@ export interface CombatDeps {
   rng?: () => number;
   /** Fire-intent → authoritative shell spawn (RoomProjectiles). Only
    *  SERVER_SIMMED_WEAPONS route here; returns the LiveProj id. */
-  fireProjectile?: (ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string) => string | null;
+  fireProjectile?: (ownerId: string, weaponType: number, origin: Vec3, dir: Vec3, ownerVel: Vec3, shotId?: string, lagS?: number) => string | null;
   /** Beam-intent resolution — the honest ray against terrain, walls,
    *  players, and creatures; earliest contact wins. Absent = beam
    *  intents stay cosmetic relays only. */
@@ -478,10 +478,18 @@ win.violations += 1;
       }
       player.protectedUntil = simMs(0); // firing breaks your own spawn shield
       const l = Math.hypot(dir!.x, dir!.y, dir!.z) || 1;
+      // Back-date the shell's age by the claim's measured uplink lag —
+      // the replica's clock already runs (wallNow − fireAt), so the
+      // authoritative shell ages in lockstep: fuses die at the same
+      // epoch instead of the wire 'gone' arriving seconds late
+      // (the traj-epoch class on starved uplinks). Clamped against a
+      // forged fireAt the same way drainCommands clamps ordering.
+      const lagS = typeof msg.fireAt === 'number'
+        ? Math.min(Math.max((wallNow() - msg.fireAt) / 1000, 0), 5) : 0;
       const id = fireProjectile(playerId, msg.weaponType!,
         { x: at.x, y: at.y + 1.6, z: at.z },
         { x: dir!.x / l, y: dir!.y / l, z: dir!.z / l },
-        player.velocity, msg.shotId);
+        player.velocity, msg.shotId, lagS);
       if (id) {
         if (msg.shotId) {
           let seen = this.seenShots.get(playerId);
