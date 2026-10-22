@@ -93,9 +93,13 @@ export const parityProbes: {
 // detonation point when the gone edge lands is the trajectory-divergence
 // census: the tail (p95) is the honest number a ghost-hit rate lives on.
 const trajDivs: number[] = [];
-export function noteTrajDiv(d: number): void {
+// Outlier context — a 100m+ replica-vs-fate gap classifies differently
+// if the replica already self-detonated (its own contact vs the wire's)
+// than one still mid-flight at fate arrival (early server kill).
+export function noteTrajDiv(d: number, wt?: number, selfPopped?: boolean): void {
   trajDivs.push(d);
   if (trajDivs.length > 64) {trajDivs.shift();}
+  if (d > 60) {glitch('traj-outlier', { m: Math.round(d), wt, self: selfPopped ? 1 : 0 });}
 }
 export function trajDivStats(): { n: number; p50: number; p95: number; max: number; over8: number } {
   const s = trajDivs.toSorted((a, b) => a - b);

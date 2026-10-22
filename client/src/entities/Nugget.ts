@@ -322,7 +322,12 @@ export class Nugget {
    *  clamped ≤1s); per-frame stepping multiplies bleed/clamp N× more and
    *  settles ~0.5-1m off the server's rest (the nugrest spam). */
   private tumbleAcc = 0;
+  /** Recent frozen-tab burst: a >0.3s frame dt means the client didn't
+   *  run tumble cells the server ran in real time — rests WILL diverge
+   *  by design, so the nugrest anomaly shouldn't count them. */
+  private throttleBurst = false;
   private serverTumble(dt: number, terrain: Terrain): void {
+    if (dt > 0.3) {this.throttleBurst = true;}
     this.tumbleAcc += dt;
     if (this.settled) {this.tumbleAcc = 0; return;}
     // Fixed 50ms cells — the server steps the same grid (RoomPickups),
@@ -363,7 +368,11 @@ export class Nugget {
     // landing mid-tumble under latency/loss (WAN runs produced ≤6.1m —
     // the headless-throttled client is the wide end). A mirror-math bug
     // diverges past that — only that class is the anomaly.
-    if (dSq > 7 * 7) {parityMiss('nugrest', { dM: Math.round((dSq) ** 0.5 * 10) / 10 });}
+    // Throttle class: a frozen tab steps no tumble cells while the
+    // server's real-time tumble ran to rest — the leftover backlog is
+    // the signature (the snap itself is the designed correction).
+    if (dSq > 7 * 7 && !this.throttleBurst) {parityMiss('nugrest', { dM: Math.round((dSq) ** 0.5 * 10) / 10 });}
+    this.throttleBurst = false;
     this.pos.set(p.x, p.y, p.z);
     this.vel.set(0, 0, 0);
     this.settled = true;

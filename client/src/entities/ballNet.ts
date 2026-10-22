@@ -302,7 +302,10 @@ export function applySeg(st: NetStatics, bag: NetBag, host: NetHost, seg: NetSeg
   // measuring predicted-impulse-vs-server-impulse — different impulse
   // origins by design, the snap self-heals. Not replay drift.
   const predImpulse = bag.lastPredImpulseMs !== undefined && performance.now() - bag.lastPredImpulseMs < 800;
-  if (pd > 20 && !seg.hard && spanMs >= 0 && spanMs <= 4000 && bag.legT0 !== -1 && (bag.segsSeen ?? 0) > 3 && !predImpulse) {
+  // segsSeen>10 (~1s of traffic) — the first ~10 segments are still join
+  // convergence: the replay cursor lands mid-flight from a roster spawn
+  // and measured 'divergence' is the cursor catching up, not drift.
+  if (pd > 20 && !seg.hard && spanMs >= 0 && spanMs <= 4000 && bag.legT0 !== -1 && (bag.segsSeen ?? 0) > 10 && !predImpulse) {
     glitch('seg-div', { m: Math.round(pd), spanMs: Math.round(spanMs), enr: seg.enraged ? 1 : 0 });
   }
   s.x = seg.px; s.y = seg.py; s.z = seg.pz;

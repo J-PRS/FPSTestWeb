@@ -317,8 +317,9 @@ export function wireProjectiles(ctx: NetCtx): void {
     if (localProjectile) {
       const preSnap = snapToContact(localProjectile, position);
       // offM as a population — replica-vs-fate distance for every owned
-      // shell, not just the ones that painted a ghost hit.
-      if (preSnap >= 0) {noteTrajDiv(preSnap);}
+      // shell, not just the ones that painted a ghost hit. Outliers tag
+      // weapon + whether the replica already popped on its own contact.
+      if (preSnap >= 0) {noteTrajDiv(preSnap, localProjectile.config.weaponType, localProjectile.exploded);}
       localProjectile.explode();
       registry.byId.delete(projectileId);
       if (localProjectile.shotId) {registry.byShotId.delete(localProjectile.shotId);}

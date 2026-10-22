@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 
-import { sweepTerrain, sweepPlayer, sweepObstacle, type SweepHost } from '../projectiles/sweep';
+import { sweepTerrain, sweepPlayer, sweepObstacle, sweepBall, type SweepHost } from '../projectiles/sweep';
+import type { Targetable } from '../entities/balls.js';
 import type { Terrain } from '../world/terrain.js';
 import { PLAYER_RADIUS, CAPSULE_CENTER_Y, EYE_OFFSET } from '../core/config';
 import type { ProjectileConfig } from '../projectiles/types';
@@ -73,6 +74,32 @@ describe('sweepPlayer', (): void => {
     h.prevPos.copy(h.pos); h.pos.set(...to);
     expect(sweepPlayer(h, eye, 'p1')).toBe(true);
     expect(h.directHit).toBe(false);
+  });
+});
+
+describe('sweepBall ghost pos', (): void => {
+  const ball = (x: number, y: number, z: number): Targetable => ({
+    id: 1, variant: 0, dead: false, health: 10, radius: 0.5, color: new THREE.Color(), scale: 1,
+    pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(30, 0, 0),
+    takeDamage: (): boolean => false, applyKnockback: (): void => {}, applyPull: (): void => {},
+  } as Targetable);
+
+  it('evaluates the ghost-rewound pos, not the live pos', (): void => {
+    // Ball sits at (10,0,0) live but its ghost (150ms rewind of a 30m/s
+    // mover) is at (5.5,0,0) — a shell through x≈5.5 hits the ghost.
+    const b = ball(10, 0, 0);
+    const h = host({ from: [4, 0, 0], to: [7, 0, 0] });
+    expect(sweepBall(h, b)).toBe(false); // live pos is out of reach
+    const ghost = new THREE.Vector3(5.5, 0, 0);
+    expect(sweepBall(h, b, ghost)).toBe(true);
+  });
+
+  it('a live-pos hit can become a ghost-pos miss', (): void => {
+    const b = ball(5.5, 0, 0);
+    const h = host({ from: [4, 0, 0], to: [7, 0, 0] });
+    expect(sweepBall(h, b)).toBe(true);
+    const ghost = new THREE.Vector3(10, 0, 0);
+    expect(sweepBall(h, b, ghost)).toBe(false);
   });
 });
 

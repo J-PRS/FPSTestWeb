@@ -111,28 +111,39 @@ function segmentSphereReject(p: SweepHost, cx: number, cy: number, cz: number, r
 //  capsuleTop (Totem) — vertical, feet to feet+height
 //  capsuleEnd (Overlord) — centered, pos ± heading-aligned half-extent
 const _delta = new THREE.Vector3();
-function targetDelta(ball: Targetable, sx: number, sy: number, sz: number): THREE.Vector3 {
+function targetDelta(ball: Targetable, pos: THREE.Vector3, sx: number, sy: number, sz: number): THREE.Vector3 {
   const o = _delta;
   if (ball.capsuleEnd) {
     const e = ball.capsuleEnd;
     const eLen2 = e.lengthSq() || 1;
     const proj = Math.max(-1, Math.min(1,
-      ((sx - ball.pos.x) * e.x + (sy - ball.pos.y) * e.y + (sz - ball.pos.z) * e.z) / eLen2));
-    return o.set(sx - (ball.pos.x + e.x * proj), sy - (ball.pos.y + e.y * proj), sz - (ball.pos.z + e.z * proj));
+      ((sx - pos.x) * e.x + (sy - pos.y) * e.y + (sz - pos.z) * e.z) / eLen2));
+    return o.set(sx - (pos.x + e.x * proj), sy - (pos.y + e.y * proj), sz - (pos.z + e.z * proj));
   }
-  const capTop = ball.capsuleTop ? ball.pos.y + ball.capsuleTop : ball.pos.y;
-  const cy = Math.max(ball.pos.y, Math.min(capTop, sy));
-  return o.set(sx - ball.pos.x, sy - cy, sz - ball.pos.z);
+  const capTop = ball.capsuleTop ? pos.y + ball.capsuleTop : pos.y;
+  const cy = Math.max(pos.y, Math.min(capTop, sy));
+  return o.set(sx - pos.x, sy - cy, sz - pos.z);
 }
 
-// Swept sphere vs ball — checks core (direct) then expanding (wake) hitbox
-export function sweepBall(p: SweepHost, ball: Targetable): boolean {
+/** Ghost-epoch sweep positions for net-driven targets (balls/crawlers):
+ *  the server's creatureSweep rewinds by shooterTransit + renderLag —
+ *  sweeping replay-live pos reads ~0.15s fresher than the epoch the
+ *  authority judges. Set per-frame from the combat tick; absent in
+ *  offline sims where targets are locally authoritative. */
+export const ballGhostPos = new Map<Targetable, THREE.Vector3>();
+
+// Swept sphere vs ball — checks core (direct) then expanding (wake) hitbox.
+// `pos` overrides the evaluated position when set: netDriven targets are
+// swept at the server's ghost-rewound epoch (server creatureSweep rewinds
+// by shooterTransit + renderLag), not the replay-live pos the render uses.
+export function sweepBall(p: SweepHost, ball: Targetable, pos?: THREE.Vector3): boolean {
   const STEP = 0.1; // smaller step for precise core hit detection
+  const bpos = pos ?? ball.pos;
   const tr = ball.hitRadius ?? ball.radius; // render ≠ hitbox on tapered bodies (totem)
   // Capsule targets extend past pos (capsuleTop up, capsuleEnd along the
   // heading) — the reject must cover the farthest reach point or it lies.
   const capsuleExt = Math.max(ball.capsuleTop ?? 0, ball.capsuleEnd ? ball.capsuleEnd.length() : 0);
-  if (segmentSphereReject(p, ball.pos.x, ball.pos.y, ball.pos.z, tr + p.hitRadius + capsuleExt + 0.5)) {return false;}
+  if (segmentSphereReject(p, bpos.x, bpos.y, bpos.z, tr + p.hitRadius + capsuleExt + 0.5)) {return false;}
   const dx = p.pos.x - p.prevPos.x;
   const dy = p.pos.y - p.prevPos.y;
   const dz = p.pos.z - p.prevPos.z;
@@ -148,7 +159,7 @@ export function sweepBall(p: SweepHost, ball: Targetable): boolean {
     const sx = p.prevPos.x + dx * t;
     const sy = p.prevPos.y + dy * t;
     const sz = p.prevPos.z + dz * t;
-    const e = targetDelta(ball, sx, sy, sz);
+    const e = targetDelta(ball, bpos, sx, sy, sz);
     const d2 = e.x * e.x + e.y * e.y + e.z * e.z;
     const d = (d2) ** 0.5;
     if (d < minDist) {minDist = d;}

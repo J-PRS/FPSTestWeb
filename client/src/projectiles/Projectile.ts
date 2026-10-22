@@ -20,6 +20,7 @@ import { tickRemote } from './projRemote.js';
 import type { ColliderIndex } from '../../../shared/solidWorld.js';
 import type { StructureCollider } from '../../../shared/ballSim.js';
 import { ProjCollide } from './projCollide.js';
+import { ballGhostPos } from './sweep.js';
 import { ProjStuck } from './projStuck.js';
 const _rayDir = new THREE.Vector3();
 // Rope dart: shared geo/mat + scratch — one taut rod per live dart, so a
@@ -445,7 +446,7 @@ export class Projectile {
   // Runs all swept collision checks; returns true if the projectile hit
   // something and exploded (records hit target + accuracy data).
   private checkCollisions(terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>, obstacles?: SweepObstacle[], playerClasses?: Map<string, string>): boolean {
-    return this.collide.checkCollisions(terrain, balls, remotePlayers, obstacles, playerClasses);
+    return this.collide.checkCollisions(terrain, balls, remotePlayers, obstacles, playerClasses, ballGhostPos);
   }
 
   /** Plant the bomb at a contact point — the glue family owns the state. */

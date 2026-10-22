@@ -187,7 +187,11 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     // ~uplink-transit ago — not at the live render pos. Evaluating the
     // envelope at the rewound pos is what the authority will see, so rim
     // hits stop flipping on the live-vs-shadow gap (the kb-echo class).
-    const lagSec = Math.min(0.35, Math.max(0, (deps.lazyNetworkManager?.()?.getPing?.() ?? 0) / 2000 + 0.05));
+    // serverPingMs (reliable lane) is the truer uplink proxy than the
+    // datagram ping; +75ms covers the input-processing interval + tick
+    // quantization the shadow sits behind even at LAN ping.
+    const nmPing = deps.lazyNetworkManager?.()?.serverPingMs ?? deps.lazyNetworkManager?.()?.getPing?.() ?? 0;
+    const lagSec = Math.min(0.35, Math.max(0, nmPing / 2000 + 0.075));
     const evalPos = lagSec > 0 && player.vel ? (_rewound ??= player.pos.clone()).copy(player.pos).addScaledVector(player.vel, -lagSec) : player.pos;
     const dpx = evalPos.distanceTo(pos);
     // Knockback reach = damage reach: the blast ends at aoeRadius, same
@@ -198,7 +202,13 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     // Self blasts still predict (the server applies those); a friendly's
     // blast suppression is harmless — its wire knockback lands anyway.
     const shielded = shooterId !== undefined && shooterId !== 'local' && performance.now() < player.protectedUntil;
-    if (shielded || dpx - t1Minbox(player.appliedClass) >= radius || occluded(pos, evalPos)) {return false;}
+    const margin = radius - (dpx - t1Minbox(player.appliedClass));
+    // Rim abstain: within ~1.5m of the envelope edge the evalPos-vs-
+    // shadow quantization (~±30-50ms·vel) genuinely can't call it —
+    // predicting here is the kb-echo class (false shove, silent snap) or
+    // the kb-unpredicted class (missed real shove). Abstain and let the
+    // wire's verdict land ~one transit later — honest, never wrong.
+    if (shielded || margin < 0 || margin < 1.5 || occluded(pos, evalPos)) {return false;}
     const now = performance.now();
     const impulse = Math.min(
       aoeImpulseT1At(force, pos, evalPos, radius, player.appliedClass) * KNOCKBACK_SCALE * player.mods.knockbackTaken,

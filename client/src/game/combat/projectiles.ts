@@ -6,6 +6,8 @@
  */
 import * as THREE from 'three';
 import type { Projectile } from '../../projectiles/Projectile.js';
+import type { Targetable } from '../../entities/balls.js';
+import { ballGhostPos } from '../../projectiles/sweep.js';
 import { getProjectileConfig } from '../../projectiles/index.js';
 import { setRibbonCamera, RibbonTrail } from '../../effects/RibbonTrail.js';
 import { sweepSmear } from '../../effects/trailBatch.js';
@@ -274,6 +276,7 @@ export function updateProjectiles(c: CombatCtx, dt: number): void {
   const remotePlayerClasses = _remotePlayerClasses;
   remotePlayerClasses.clear();
   const now = Date.now();
+  let maxRenderDelayMs = 0;
   deps.world.remotePlayers.forEach((rp, playerId): void => {
     if (rp.isDead) {return;}
     // Server adjudicates this shell against the victim's wire-fresh pos —
@@ -294,7 +297,22 @@ export function updateProjectiles(c: CombatCtx, dt: number): void {
       remotePlayerPositions.set(playerId, rp.position);
     }
     if (rp.armorClass) {remotePlayerClasses.set(playerId, rp.armorClass);}
+    if (rp.renderDelayMs > maxRenderDelayMs) {maxRenderDelayMs = rp.renderDelayMs;}
   });
+
+  // Creature ghosts: server creatureSweep rewinds ball/crawler positions
+  // by shooterTransit + renderLag (full lag — no 0.7 player advantage), so
+  // the authority judges them ~0.1-0.2s behind where the replay-live
+  // replica sits. Net-driven targets only — offline balls are local sims.
+  const creatureLag = Math.min(0.5, (deps.lazyNetworkManager?.()?.getPing?.() ?? 0) / 2000 + maxRenderDelayMs / 1000);
+  for (const k of ballGhostPos.keys()) {if (!deps.targets.includes(k) || k.dead) {ballGhostPos.delete(k);}}
+  if (creatureLag > 0) {
+    for (const ball of deps.targets) {
+      if (!ball.netDriven || ball.dead) {continue;}
+      (ballGhostPos.get(ball) ?? ballGhostPos.set(ball, new THREE.Vector3()).get(ball)!)
+        .copy(ball.pos).addScaledVector(ball.vel, -creatureLag);
+    }
+  } else {ballGhostPos.clear();}
 
   // Live turret shells + shield domes — collected once per frame, swept
   // inside each projectile's own collision pass (no tunneling).

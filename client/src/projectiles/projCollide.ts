@@ -60,7 +60,7 @@ export class ProjCollide {
 
   // Runs all swept collision checks; returns true if the projectile hit
   // something and exploded (records hit target + accuracy data).
-  checkCollisions(terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>, obstacles?: SweepObstacle[], playerClasses?: Map<string, string>): boolean {
+  checkCollisions(terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>, obstacles?: SweepObstacle[], playerClasses?: Map<string, string>, ballSweepPos?: Map<Targetable, THREE.Vector3>): boolean {
     const {h} = this;
     if (sweepTerrain(h, terrain)) {
       // arming fuse (T2 mortar): bounces only apply BEFORE the shell is armed
@@ -105,7 +105,7 @@ export class ProjCollide {
     // off dirt.) Bolts and shield domes still intercept: shooting it
     // down is counterplay, and a dome shouldn't let a dud inside.
     if (!h.bodiesLive) {return this.checkObstacles(obstacles);}
-    return this.checkObstacles(obstacles) || this.checkBalls(balls) || this.checkPlayers(remotePlayers, playerClasses);
+    return this.checkObstacles(obstacles) || this.checkBalls(balls, ballSweepPos) || this.checkPlayers(remotePlayers, playerClasses);
   }
 
   private checkObstacles(obstacles?: SweepObstacle[]): boolean {
@@ -143,7 +143,11 @@ export class ProjCollide {
       return false; // out of bounces — treat as impact
     }
     const e = 0.5;
-    const {x} = h.hitPoint, {z} = h.hitPoint;
+    // Sample the normal at the SEGMENT-END pos (where the server's
+    // bounceOffField reads hmNormal(p.pos)), not at the mid-segment
+    // contact — on curved ground these normals differ, and a bounced
+    // arc diverges from authority every skip after it.
+    const {x} = h.pos, {z} = h.pos;
     _tNormal.set(
       -(terrain.getHeight(x + e, z) - terrain.getHeight(x - e, z)) / (2 * e),
       1,
@@ -151,17 +155,17 @@ export class ProjCollide {
     ).normalize();
 
     const vn = h.vel.dot(_tNormal);
-    // hitPoint is already the center AT the collision plane (radius above
-    // the surface for bouncers) — depenetration just needs a small normal
-    // clearance so the next sweep doesn't instantly retrigger on slopes.
-    const depenetrate = h.config.terrainOffset + 0.05;
+    // Server depenetration (bounceOffField): keep the segment-end x/z,
+    // snap y to field+radius — a hitPoint+normal-offset reposition made
+    // every post-bounce arc start from a different point than authority.
+    const depenetrate = h.config.bodyRadius + 0.05;
     // Grazing/resting contact: armed shells detonate; unarmed (mortar
     // pre-arm) shells bleed off the normal component and slide until the
     // fuse arms them — the T2 mortar bounces off dirt before it can pop.
     if (vn >= -2) {
       if (h.armed) {return false;}
       h.vel.addScaledVector(_tNormal, -vn);
-      h.pos.copy(h.hitPoint).addScaledVector(_tNormal, depenetrate);
+      h.pos.y = terrain.getHeight(h.pos.x, h.pos.z) + depenetrate;
       h.prevPos.copy(h.pos);
       if (h.config.bounceSfx) {sfx.at(h.pos, h.config.bounceSfx, 0.5, 1.4, h.vel);}
       if (h.config.fuseAfterBounce !== undefined) {h.clampFuse(h.config.fuseAfterBounce);}
@@ -172,7 +176,7 @@ export class ProjCollide {
     h.vel.x *= fr;
     h.vel.z *= fr;
     // Sit just above the surface so the next sweep doesn't immediately retrigger
-    h.pos.copy(h.hitPoint).addScaledVector(_tNormal, depenetrate);
+    h.pos.y = terrain.getHeight(h.pos.x, h.pos.z) + depenetrate;
     h.prevPos.copy(h.pos);
     if (h.config.bounceSfx) {
       // Harder hits ping louder; weak grazes stay quiet — sells mass.
@@ -183,12 +187,12 @@ export class ProjCollide {
     return true;
   }
 
-  private checkBalls(balls?: Targetable[]): boolean {
+  private checkBalls(balls?: Targetable[], ballSweepPos?: Map<Targetable, THREE.Vector3>): boolean {
     const {h} = this;
     if (!balls) {return false;}
     for (const ball of balls) {
       if (ball.dead) {continue;}
-      if (sweepBall(h, ball)) {
+      if (sweepBall(h, ball, ballSweepPos?.get(ball))) {
         this.recordHit(h.minHitDist - ball.radius);
         h.hitBall = ball;
         if (h.config.sticks) {
