@@ -13,6 +13,7 @@ cd server_bun && bun test tests/scenarios/       # gameplay scenario tests
 cd client && ./node_modules/.bin/tsc --noEmit    # client typecheck
 cd client && ./node_modules/.bin/vitest run      # client tests
 cd client && npx -y oxlint src                   # lint
+bash _tools/check.sh --fastest                    # quick compile+lint probe (~30-60s); NOT the gate
 E2E_GPU=1 bun _tools/e2e/all.ts                  # headless E2E — ALWAYS run with real GPU
 # browser.ts GL backends: default SwiftShader is SLOW — GLB loads take
 # 60-90s+, sim time crawls, and timing assertions flake. Never run

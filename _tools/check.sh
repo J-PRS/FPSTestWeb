@@ -10,8 +10,14 @@ command -v bun >/dev/null || export PATH="$HOME/.bun/bin:$PATH"
 # --fast: everything below except the netbot shard — real-socket tests are
 # wall-clock bound and are ~85% of runtime. For bot/shared work the
 # scenario+unit shard carries the signal anyway.
+# --fastest: compile + lint only — no tests, no screenshot. Use for a
+# quick "did I break the build" probe; NOT the definition of done.
 FAST=0
-[ "${1:-}" = "--fast" ] && FAST=1
+FASTEST=0
+for _a in "${@:-}"; do
+  [ "$_a" = "--fast" ] && FAST=1
+  [ "$_a" = "--fastest" ] && FASTEST=1
+done
 
 CHANGED=$(git diff --name-only HEAD -- '*.ts' '*.tsx' | sort -u)
 if [ -z "$CHANGED" ]; then
@@ -46,14 +52,18 @@ if echo "$CHANGED" | grep -qE '^(shared|server_bun)/'; then
 fi
 
 CLIENT_FILES=$(echo "$CHANGED" | grep '^client/' | sed 's|^client/||' || true)
-if [ -n "$CLIENT_FILES" ]; then
+if [ "$FASTEST" -eq 1 ]; then
+  echo "check: --fastest — skipping client vitest (compile+lint only)"
+elif [ -n "$CLIENT_FILES" ]; then
   # related runs only tests covering the touched files; fall back to
   # the full suite when nothing relates (new files, dead ends).
   (cd client && echo "$CLIENT_FILES" | xargs ./node_modules/.bin/vitest related --run) \
     || (cd client && ./node_modules/.bin/vitest run)
 fi
 
-if echo "$CHANGED" | grep -qE '^(shared|server_bun)/'; then
+if [ "$FASTEST" -eq 1 ]; then
+  echo "check: --fastest — skipping all server tests (compile+lint only)"
+elif echo "$CHANGED" | grep -qE '^(shared|server_bun)/'; then
   # Two parallel shards — the netbot tests are ~85% of wall time (real
   # sockets, wall-clock bound); everything else is seconds. ~207s → ~125s.
   if [ "$FAST" -eq 1 ]; then
@@ -72,9 +82,15 @@ fi
 
 # Visual checkpoint: scene-visible code can't be verified by typecheck —
 # boots the stack, frames a shot, and you MUST read the PNG it prints.
-if echo "$CHANGED" | grep -qE '^client/src/(world|effects|structures|projectiles|shaders|entities)/'; then
+if [ "$FASTEST" -eq 1 ]; then
+  echo "check: --fastest — skipping visual screenshot (run full check.sh to capture)"
+elif echo "$CHANGED" | grep -qE '^client/src/(world|effects|structures|projectiles|shaders|entities)/'; then
   bun _tools/e2e/mapshot.ts && ls -t _tools/e2e/shots/*.png | head -1 | \
     xargs -I{} echo "check: READ THE SHOT — {} — render code changed; green tests do not see the screen"
 fi
 
-echo "check: DONE"
+if [ "$FASTEST" -eq 1 ]; then
+  echo "check: --fastest DONE (compile+lint only — NOT the definition of done; run full check.sh before handing back)"
+else
+  echo "check: DONE"
+fi
