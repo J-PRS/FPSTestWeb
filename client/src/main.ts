@@ -13,7 +13,7 @@ import {
 import { Logger, ChildLogger } from './core/Logger.js';
 import { settings } from './core/settings.js';
 import { urlParams, isDevHost } from './core/params.js';
-import { telemetry, telemetryDump } from './core/telemetry.js';
+import { armTelemetry } from './core/telemetry.js';
 import { feedMode } from './feed/feedMode.js';
 import { simRngSeed, lcg32 } from '../../shared/simRand.js';
 import { spawnRngSeed } from '../../shared/spawnDice.js';
@@ -29,6 +29,8 @@ import { DemoManager } from './demo/index.js';
 import { playerProviders } from './demo/playerProviders.js';
 
 import { Player } from './entities/Player.js';
+import { RIG_MANIFEST, CLASS_BODY_VARIANT } from './entities/playerClips.js';
+import type { PlayerModelVariant } from './entities/PlayerModel.js';
 import type { ViewModel } from './entities/ViewModel.js';
 
 import { DamageNumberManager } from './effects/damageNumbers.js';
@@ -813,6 +815,23 @@ async function init(): Promise<void> {
         } catch (error) { logger.error('Failed to connect to server', error); }
       return; })
     : null;
+  // The veil covers EVERY online boot, not just token restores — a
+  // fresh join renders frames from the unspawned player position during
+  // connect→gameState→spawnAssign, and that gap reads as a flash under
+  // the terrain. Drop path is identical (gameState + terrain + stable
+  // frames; 8s escape on connect failure).
+  if (onlineBoot && urlParams.mode !== 'classic') {
+    armSessionVeil(settings.get('fps-session-token') ? 'RECONNECTING' : 'JOINING');
+  }
+  // Warm the class-body GLB into the HTTP cache — the loader's fetch at
+  // playerCtor then hits cache instead of a cold fetch starting ~1.5s
+  // into init. Saved class pick wins, else the medium default. Remotes
+  // may differ but share the manifest's small set.
+  {
+    const bootClass = settings.get('fps-class') || 'medium';
+    const bootUrl = RIG_MANIFEST[(CLASS_BODY_VARIANT[bootClass] ?? 'vexa') as PlayerModelVariant]?.url;
+    if (bootUrl) {void fetch(bootUrl).catch((): void => undefined);}
+  }
   // Probe the saved last-room BEFORE the boot heightmap: when it pings
   // live, its terrain loads as the boot field and the default map is
   // never resident — no default-field flash on F5.
@@ -1157,58 +1176,12 @@ init().then(async (): Promise<void> => {
 
   // Desync debugging (snapshot/hash comparison + window debug functions) —
   // dev-only or ?debug, dynamically imported so it stays out of the prod
-  // bundle. Runs at boot when the flag is set, and again if the menu DEBUG
-  // toggle flips on mid-session (fps:set event) — no reload needed.
-  let debugWired = false;
-  const wireDebugTools = async (): Promise<void> => {
-    if (debugWired) {return;}
-    debugWired = true;
-    if (networkManager) {
-      const { wireStateDebug } = await import('./core/stateDebug.js');
-      wireStateDebug({
-        networkManager,
-        getPlayer: (): Player => player,
-        remotePlayers: world.remotePlayers,
-        projectiles: world.projectiles,
-        getLastSentPos: remotes.getLastSentPos,
-        world,
-        teamBots: (): TeamBots | null => teamBots,
-        getScene: (): THREE.Scene<THREE.Object3DEventMap> => scene,
-        getCamera: (): THREE.PerspectiveCamera => player.camera,
-        netCreatures: () => [
-          ...entities.crawlers, ...entities.scarabs, ...entities.rakks, ...entities.rollers,
-          ...entities.gnats, ...entities.snakes, ...entities.banelings, ...entities.totems,
-        ],
-        netDeployables: () => entities.deployables.netEntries(),
-        logger,
-      });
-    }
-    // Headless/probe hook — the puppeteer scripts in headless-test drive off
-    // this (spawn PlayerModels, read player.pos, aim the camera).
-    window.__test = {
-      player, scene, entities, world, terrain, viewModel,
-      networkManager, demoManager, rendererSetup, demoLifecycle,
-      chatSink: (await import('./game/chat.js')).chatSink,
-      parity: (await import('./game/parity.js')).parityProbes,
-    };
-    // .rec captures (gauntlet --record / pvptest record.ts) replay through
-    // the live dispatch as gameplay: __playRec('/hunt.rec', 1.5)
-    window.__playRec = async (src, speed): Promise<() => void> =>
-      (await import('./dev/recPlayer.js')).playRec(networkManager, src, speed);
-    // ?telemetry=deep — flight-recorder rings (wire in/out, corrections,
-    // remote drift, hit audit). Off by default; MCP/soak pulls
-    // __telemetry.dump() for the full session journal.
-    telemetry.enabled = urlParams.get('telemetry') === 'deep';
-    telemetry.t0 = performance.now();
-    window.__telemetry = { enabled: telemetry.enabled, dump: telemetryDump };
-    // ?autopilot — the shared BotBrain steers the local player through the
-    // real input fields, so a soak window plays itself. Same inputs a
-    // human holds — prediction + wire intents are unchanged.
-    if (urlParams.has('autopilot')) {
-      const { startBotPilot } = await import('./dev/botPilot.js');
-      window.__botpilot = { stop: startBotPilot({ player, networkManager, world, terrain, entities }) };
-    }
-  };
+  // bundle (and out of main.ts — the file is size-pinned). Runs at boot
+  // when the flag is set, and again if the menu DEBUG toggle flips on
+  // mid-session (fps:set event) — no reload needed.
+  const wireDebugTools = (): Promise<void> => import('./dev/devTools.js').then(m =>
+    m.wireDebugTools({ networkManager, player, world, entities, terrain, viewModel, demoManager,
+      rendererSetup, demoLifecycle, scene, remotes, teamBots, logger }));
   // Debug wiring (window.__test, __playRec, stateDebug) — dev hosts only.
   if (isDevHost() && (import.meta.env.DEV || urlParams.debug)) {await wireDebugTools();}
   // In-game log mirror — subscribes to Logger once so every later line

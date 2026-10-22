@@ -57,6 +57,15 @@ export function telemetryDump(): Record<string, unknown> {
   };
 }
 
+/** ?telemetry=deep arms the recorder + installs window.__telemetry —
+ *  kept out of main.ts (size-pinned): call sites gate on
+ *  telemetry.enabled directly. */
+export function armTelemetry(): void {
+  telemetry.enabled = new URLSearchParams(window.location.search).get('telemetry') === 'deep';
+  telemetry.t0 = performance.now();
+  window.__telemetry = { enabled: telemetry.enabled, dump: telemetryDump };
+}
+
 // Alt+Q / __trailDump tail — rings bounded in the section, the full
 // journal is __telemetry.dump() only.
 import { registerDiag } from './fxDiag.js';
