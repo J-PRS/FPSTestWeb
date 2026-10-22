@@ -469,7 +469,7 @@ solve when a check can possibly matter, skip provably-dead ticks; plus
 - Drones server-side (2026-10-01): escort shadow anchors to owner +2.5m,
   35m scan, 1.6s plink for 9 via turretAttack; dies with its owner.
   Deployables arc complete: all four kinds server-owned end-to-end.
-- Bots as legal players (2026-10-01, per _docs/2026.10.01-bots-as-players.md):
+- Bots as legal players (2026-10-01, per _docs/2026-10-01_BOTS_AS_PLAYERS.md):
   Phase 1 done — brains emit move hints (ski/jet/jump from slope probe,
   speed, airborne) not destinations; ServerBots drives RoomMoveSim shadows
   (faceYaw + ordered setInput + commit stepped state). Bots ski/jet for

@@ -130,7 +130,7 @@
 ## Next Tasks
 - ~~**Replay through real netHandlers**~~ — DONE: `netReplay.test.ts` feeds committed `.rec` captures through `handleMessage`/`handleBinaryMessage` via a DOM-stubbed harness (`netHarness.ts`).
 - ~~**WT tier in tests**~~ — DONE: `FPS_WT_PORT=19443` test server + `fleet.ts --tier=wt` ran 2/2 QUIC joins, 732 tick frames, kills through the claim funnel, 0 shot rejects.
-- **Ops items needing JP's domain+VPS:** TURN server, CA cert for WebTransport — see `_docs/2026-09-28_deploy-netcode-v2.md`
+- **Ops items needing JP's domain+VPS:** TURN server, CA cert for WebTransport — see `_docs/2026-09-28_DEPLOY_NETCODE_V2.md`
 - ~~**Post-processing fog pass**~~ — DONE differently: `world/directionalFog.ts` tints `scene.fog.color` + sky horizon + terrain fog by camera-vs-sun facing (sunward warm, away cool). Chosen over a depth-buffer post-pass because it works in every pixel-mode including the hard/medium/floyd paths that bypass the composer. Per-fragment sun direction would need patching every material's fog chunk — revisit if the flat-camera tint reads wrong in game.
 - **w4 mortar palette** — authored albedo near-black; normalization lifts but it stays darkest. JP's call.
 - ~~**Remote fire events for anim**~~ — DONE: `playerShot` relays hitscan/melee trigger-pulls with weaponType; observers get positional audio, recoil anim, weapon-tinted muzzle flash, LG beam flash.

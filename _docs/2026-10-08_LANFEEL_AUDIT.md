@@ -1,6 +1,6 @@
 # LAN-Feel Audit — network sweep against the manifesto
 
-Date: 2026-10-01. Yardstick: `_docs/LANFEEL.md`.
+Date: 2026-10-01. Yardstick: `_docs/2026-10-08_LANFEEL.md`.
 
 ## Verdicts per tenet
 

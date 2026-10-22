@@ -518,7 +518,7 @@ classic soak 1h/30 still CLEAN after the speed floor.
 2026-10-01 - Remote rotation extrapolates through buffer gaps: yaw/pitch continue at the last pair's turn rate (clamped, 350ms cap) instead of freezing mid-swipe while the body extrapolates
 2026-10-01 - Held input rides every volatile position frame (+3B): a superseding datagram-style input stream on the unordered lane — a dropped packet costs zero, gated by position seq + inputSeq so stale frames can't resurrect released keys
 2026-10-01 - Remote rejoin convergence steers, not slides: when dead-reckoning hands back to the buffered path, a capped-accel controller converges onto it (fake-input correction — an in-world maneuver) instead of the old geometric blend
-2026-10-01 - LANFEEL.md gains a state-of-the-art techniques section: the published netcode playbook (GGPO redundancy, Valve rewind/extrapolation, adaptive interp, teleport thresholds, shooter advantage) mapped to where each lives here
+2026-10-01 - 2026-10-08_LANFEEL.md gains a state-of-the-art techniques section: the published netcode playbook (GGPO redundancy, Valve rewind/extrapolation, adaptive interp, teleport thresholds, shooter advantage) mapped to where each lives here
 2026-10-01 - In-packet input redundancy: every inputMove carries the previous edge — a single lost packet heals instantly instead of via the watchdog RTT (GGPO-style "copy of the last packet")
 2026-10-01 - Lag-comp rewinds to the true rendered ghost: shooter one-way transit + render delay - target transit, not full-RTT terms (~150ms tighter at 150ms — hits no longer validate behind the model)
 2026-10-01 - Render-lag reports go stale after ~3 uplink windows; rewind buffer deepened 400->1200ms to reach the ping+lag envelope
@@ -771,7 +771,7 @@ classic soak 1h/30 still CLEAN after the speed floor.
 2026-10-08 - robustify §2.84: RTC adapter bufferedAmount now reports worst of game/ctrl lanes — stalled tick lane no longer evades the drown drain
 2026-10-08 - robustify §2.83: distSq drift — botGoals/botHunt shadowed the shared botVec helpers; hunt 2D copy renamed distSqXZ
 2026-10-08 - robustify §2.82: OLD/ rotated-log archive cap (16) + _rootcheck.mjs root-clutter gate wired into npm run check
-2026-10-08 - beta: clean deploy — FPS_PUBLIC_BETA drops _t2 maps/assets, _clean_deploy.bat strips class_* rigs (knight/mannequin fallback), Dockerfile + DEPLOY_BETA.md
+2026-10-08 - beta: clean deploy — FPS_PUBLIC_BETA drops _t2 maps/assets, _clean_deploy.bat strips class_* rigs (knight/mannequin fallback), Dockerfile + 2026-10-07_DEPLOY_BETA.md
 2026-10-08 - beta: player names (fps-name → join wire → scoreboard/chat/feed), private rooms (unlisted flag + HOST toggle), chat /mute
 2026-10-08 - beta: dev surfaces gated on https (isDevHost), ops dashboards behind FPS_ADMIN_TOKEN, CORS env, demo-upload throttle, first-run card + mobile gate
 2026-10-08 - pre-beta audit: legal assets, dev-surface leaks, missing features ranked (_docs/2026-10-08_BETA_AUDIT.md)

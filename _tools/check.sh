@@ -41,6 +41,13 @@ fi
 # Cheap and instant; runs on every invocation (full/fast/fastest).
 node utils/_rootcheck.mjs
 
+# _docs filename convention (YYYY-MM-DD_UPPER_SNAKE.md; KEEP list in the
+# tool covers living trackers). Cheap; fails on off-spec names.
+node _tools/docnames.mjs --check || {
+  echo "check: _docs filenames off-spec — run 'node _tools/docnames.mjs --fix' or name it correctly."
+  exit 1
+}
+
 # Changelog convention: code changes should ship a changelog.txt entry
 # (prepend 'YYYY-MM-DD - <summary>'). Warn only — not a hard gate, since
 # the agent batches many iterations before the final commit.

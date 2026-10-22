@@ -101,7 +101,7 @@ reconciliation — the pattern every modern shooter uses.
 **Altimor's netXT** (T1 retrofit): synced clock off server tick embeds,
 48ms timeNudge, ghosts run the real `updateMove`, position-only lag-comp
 rewind (250ms cap), subtick trigger pulls, prediction-keyed projectile
-adoption. See `2026.09.26-T1.md`.
+adoption. See `2026-09-26_T1.md`.
 
 ## 6. Pricing — the part people get wrong
 

@@ -7,7 +7,7 @@ history in place.
 
 - 2026-10-17 — new gamemodes go in MODE_MODULES (server_bun/src/modeModules.ts), never `mode ===` branches in Room/senses: module owns sims/wire/objectiveFor/spawn-pools; Room consults at 5 seams only. Conquest nodes CANNOT be severed (user rule): link chain gates what you can act on next, ownership is permanent until razed. Node respawns ride teamSpawns (synced per capture), score = node count synced through teamScore funnel.
 
-- 2026-10-17 — offline/net unification pattern: entity ctor mints the shared sim (makeSimX), bindNet overwrites it; local leg = commitTarget('local') + updateLocalSim, net leg = updateNetSim. Damage via applyXDamage, knockback writes s.v* not entity vel. Pickup doc: _docs/UNIFY_OFFLINE_NET.md. Offline-only species (seeker/strifer/grub/tumbleweed/nugget) have no SPECIES row — wire-enabling them is a feature decision, not unification.
+- 2026-10-17 — offline/net unification pattern: entity ctor mints the shared sim (makeSimX), bindNet overwrites it; local leg = commitTarget('local') + updateLocalSim, net leg = updateNetSim. Damage via applyXDamage, knockback writes s.v* not entity vel. Pickup doc: _docs/2026-10-17_UNIFY_OFFLINE_NET.md. Offline-only species (seeker/strifer/grub/tumbleweed/nugget) have no SPECIES row — wire-enabling them is a feature decision, not unification.
 
 - 2026-10-17 — fall damage = T1 verbatim (25 m/s floor, 0.005/m on -v·n, floodyberry p3) not T2's softer 45/0.004 — user call. MoveSim.landingImpact records, callers pay; unclaimable by design (server shadow computes it). Landing-cost awareness is now a bot requirement: capRun/katabatic went red because the route brain never had to price arrivals.
 

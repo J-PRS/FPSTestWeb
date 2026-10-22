@@ -1,7 +1,7 @@
 # UDP vs TCP + WebTransport landscape (2026-09-26)
 
 Research pass on whether transport is worth revisiting. Companion to
-`2026.09.26-transports-deep-dive.md` — this one is about *what's actually
+`2026-09-26_TRANSPORTS_DEEP_DIVE.md` — this one is about *what's actually
 shippable today*.
 
 ## What the successful web shooters use

@@ -45,7 +45,7 @@ guaranteed), **Ghost** (most-recent-state partial updates + scoping),
 **Move** (client inputs → server control object), Datablock, String.
 Clients interpolate ghosts and predict their control object; the server
 replays moves and sends back which move was last applied. Altimor's
-netXT retrofit (see `2026.09.26-T1.md`) adds clock sync, subtick, and
+netXT retrofit (see `2026-09-26_T1.md`) adds clock sync, subtick, and
 lag-comp rewind on top of this skeleton.
 
 **Tribes: Ascend** — UE3, same ghost/moves model over Unreal's replication;
@@ -101,7 +101,7 @@ attack first: serialize the shared envelope once per tick, splice only
 ackSeq per recipient. Bun already handles the rest.
 
 **Fun — the T1 physics dig applies here, not in netcode.** From
-`2026.09.26-T1-Altimor.md`: authentic skiing is `verticalDot × friction`
+`2026-09-26_T1_ALTIMOR.md`: authentic skiing is `verticalDot × friction`
 traction + momentum-preserving collisions, slope-jump impulse off
 `jumpSurfaceNormal`, lateral-jet taper near `maxJetForwardVelocity`.
 Those are movement-code ports in `movement.ts` — the feel wins that make

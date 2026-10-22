@@ -1,7 +1,7 @@
 # Market Analysis: The "Krunkerized + Megabonked Tribes" Thesis
 
 **Date:** 2026-09-27
-**Scope:** Market research validating (or killing) the project's core pitch — a browser-native, movement-feel-first, PvE-accessible descendant of Tribes. Sources: Steam review/sales data, industry press, the repo's own codebase review (`2026-09-27_architecture-review.md`).
+**Scope:** Market research validating (or killing) the project's core pitch — a browser-native, movement-feel-first, PvE-accessible descendant of Tribes. Sources: Steam review/sales data, industry press, the repo's own codebase review (`2026-09-27_ARCHITECTURE_REVIEW.md`).
 
 ---
 
@@ -55,7 +55,7 @@
 | Distribution friction | Every install-based Tribeslike | Browser client, URL-join, Chromebook-viable bandwidth (~few KB/s creature budget) |
 | Marketing cost | Everyone | Movement-comedy clips (ski-chained ball bounces), creature personality |
 
-## Where the Prototype Stands (from `2026-09-27_architecture-review.md`)
+## Where the Prototype Stands (from `2026-09-27_ARCHITECTURE_REVIEW.md`)
 
 Already true in code:
 

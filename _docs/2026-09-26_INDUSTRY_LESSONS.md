@@ -1,7 +1,7 @@
 # Industry Lessons for a Web FPS Stack
 
 **Date:** 2026-09-26
-**Scope:** What shipped web games and the current ecosystem teach us about our stack choices (Three.js client, Bun server, WebSocket transport, client-authoritative netcode). Companion to `2026.09.26-BACKENDS.md`.
+**Scope:** What shipped web games and the current ecosystem teach us about our stack choices (Three.js client, Bun server, WebSocket transport, client-authoritative netcode). Companion to `2026-09-26_BACKENDS.md`.
 
 ---
 
@@ -117,4 +117,4 @@ Browsers give three options:
 - Elura (Rust, WebTransport + lag-comp primitives): https://github.com/Arion-Dsh/elura
 - Nakama authoritative backend: https://heroiclabs.com/nakama/
 - Steam Three.js examples: Savanna Sam dev post https://discourse.threejs.org/t/3d-action-browser-game-made-with-three-js-savanna-sam/81902 ; Task Unit https://threejsresources.com/tool/task-unit ; Starshot Genesis https://store.steampowered.com/app/4425750/Starshot_Genesis/
-- Related internal docs: `2026-06-11_NETWORKING.md`, `2026-06-21_CLIENT_AUTHORITATIVE_NETWORKING.md`, `GAMES/narrow-one-infrastructure-report.md`, `2026.09.26-BACKENDS.md`
+- Related internal docs: `2026-06-11_NETWORKING.md`, `2026-06-21_CLIENT_AUTHORITATIVE_NETWORKING.md`, `GAMES/narrow-one-infrastructure-report.md`, `2026-09-26_BACKENDS.md`

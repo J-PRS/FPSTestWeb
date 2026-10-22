@@ -1,7 +1,7 @@
 # Bot AI — Deep Dive: "How is that a bot?" tricks
 
 Second research pass, focused on *believability that blows players' minds*
-rather than raw competence. BOTAI-ENHANCEMENT.md covers combat/duel depth;
+rather than raw competence. 2026-10-10_BOTAI_ENHANCEMENT.md covers combat/duel depth;
 this doc is about the moment a player goes "wait, bots don't do that."
 
 All findings mapped to our stack: shared deterministic brains

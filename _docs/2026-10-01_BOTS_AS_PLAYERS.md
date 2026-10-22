@@ -205,7 +205,7 @@ players do.
 - Live check: bot markers on minimap/indicators, bots skiing downhill,
   jetting up ridges, real rocket arcs in flight.
 
-Wrote the handoff spec: 2026.10.01-bots-as-players.md
+Wrote the handoff spec: 2026-10-01_BOTS_AS_PLAYERS.md
 
 The core architecture decision in it, since it's the thing the next agent must not get wrong:
 

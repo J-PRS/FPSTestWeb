@@ -11,7 +11,7 @@ decisions.
 ## Current state
 
 - Deploy path exists: `FPS_PUBLIC_BETA=1`, `_clean_deploy.bat`,
-  `Dockerfile`, `_docs/DEPLOY_BETA.md`.
+  `Dockerfile`, `_docs/2026-10-07_DEPLOY_BETA.md`.
 - Hosting decided: Hetzner CX43 EU (~€10/mo) — see
   `_docs/2026-10-01_HOSTING_COSTS.md`. Vertical scaling first; room
   sharding past ~2-3k CCU.

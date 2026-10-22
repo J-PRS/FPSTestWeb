@@ -15,7 +15,7 @@ Everything is local to this repo: git log, test suites, `_docs/`,
   `cd server_bun && ~/.bun/bin/bun test`, `bun x tsc --noEmit`.
 - **Beta launch** — taking the game public on a real domain behind
   Cloudflare; deploy path exists (`FPS_PUBLIC_BETA=1`,
-  `_clean_deploy.bat`, `Dockerfile`, `_docs/DEPLOY_BETA.md`).
+  `_clean_deploy.bat`, `Dockerfile`, `_docs/2026-10-07_DEPLOY_BETA.md`).
 - **Room** — one named game instance in the lobby; multi-room by design,
   empty rooms hibernate.
 - **Claims** — every client→server interaction is a claim the authority

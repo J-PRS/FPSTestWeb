@@ -14,7 +14,7 @@ The project produces a lot of documentation. This file is the map.
 | `changelog.txt` | Prepended `YYYY-MM-DD - <summary>` per settled topic |
 | `_docs/TASKS.md` | Project development context |
 | `_docs/NOTES.md` | JP's world notes |
-| `_docs/TEST_PLAN_bots.md` / `_docs/TEST_PLAN_demo.md` | Test plans |
+| `_docs/2026-09-28_TEST_PLAN_BOTS.md` / `_docs/2026-09-28_TEST_PLAN_DEMO.md` | Test plans |
 | `_docs/2026-10-15_CAPPER_STRIKE.md` | **Living capper reference** — scoreboard, mechanics, physics budget, landmines, measured history |
 | `_docs/2026-10-22_CARRIER_GATE.md` | Capper carrier-gate fix — park block, airborneBy leak, tactical ski-release, arrival deceleration abandoned (wrong tool) |
 | `_docs/2026-10-22_TRIBES_MOVEMENT.md` | **Full Tribes movement report** — physics, energy management, terrain reading, jet system, tactical decisions, bot AI application, landmines |
@@ -29,6 +29,7 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-10-22_GRIND_LEADERBOARD.md` | Grind leaderboard design |
 | `_docs/2026-10-22_SPECTATE_RELAY.md` | Spectator relay / OBS-server reference |
 | `_docs/2026-10-22_REPLAY_DEMO_SYSTEMS.md` | Replay/demo systems across shipped games — Tribes .rec, TrueView, MVD, input replay; two-truth problem |
+| `_docs/2026-10-22_DEMO_SOTA_COMPARISON.md` | SOTA replay systems (Dota2, SC2 takeover, Trackmania anticheat, QTV) vs .demo — capability matrix + pilots |
 
 ## Agent memory (append-only, one line each)
 
