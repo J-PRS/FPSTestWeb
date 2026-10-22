@@ -21,6 +21,7 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-10-16_CAPPER_REACTIVE_LIMITS.md` | Capper reactive ceiling + TAS floor |
 | `_docs/2026-10-16_TEAMSOAK_WARP.md` | Themed team matchups + warp collapse |
 | `_docs/2026-10-17_TERRAIN_COMPILE_STALL.md` | The 40s browser hang |
+| `_docs/2026-10-22_FRONTEND_AUDIT.md` | Vanilla DOM layer vs published best practice — near-optimal; residual gaps |
 | `_docs/2026-10-18_ADDING_MODES_AND_PICKUPS.md` | Blast surface for new modes/pickups |
 | `_docs/2026-10-18_CTF_BOT_BRAIN_PUG_AUDIT.md` | CTF bot brain vs PUG guide audit |
 | `_docs/2026-10-18_NETCODE_OVERHAUL.md` | Netcode overhaul (2026-10-18) |
