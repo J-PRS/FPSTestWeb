@@ -77,6 +77,10 @@ export class NetworkManager {
    *  existed can't be "unpredicted"). */
   private connectedAtMs = 0;
   msSinceConnect(): number { return Date.now() - this.connectedAtMs; }
+  /** ms since the last non-inputSync inbound — wire starvation clock.
+   *  Stamps/expiry horizons that outlive a silent wire must not expire
+   *  mid-stall: the echo was delayed, not refused. */
+  msSinceLiveRx(): number { return this.wireIn.lastLiveRxAt > 0 ? Date.now() - this.wireIn.lastLiveRxAt : Infinity; }
   /** Loadout perk, announced at join so the server can enforce resist/heal. */
   joinPerk: (() => string) | null = null;
   joinClass: (() => string) | null = null;
@@ -642,7 +646,7 @@ this.sendDrops += 1;
     // the verbatim claimSeq makes the server's verdict replay the retry.
     this.ledger.sweep(now, { pingMs: this.telemetry.ping, tier: this.ws?.tier,
       resend: (m): void => { if (this.isConnected()) { this.send(m as ClientMessage); } } });
-    sweepDamageEchoes(now);
+    sweepDamageEchoes(now, Math.min(Math.max(0, this.msSinceLiveRx() - 100), 2000));
     // shotFired carries no claimSeq — its dedupe is shotId — so the claim
     // ledger can't resend it. A datagram-dropped fire intent leaves the
     // predicted shell unborn (parity 'srvAt:none') with only reconnect

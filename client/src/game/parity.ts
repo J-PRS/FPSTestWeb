@@ -96,10 +96,10 @@ const trajDivs: number[] = [];
 // Outlier context — a 100m+ replica-vs-fate gap classifies differently
 // if the replica already self-detonated (its own contact vs the wire's)
 // than one still mid-flight at fate arrival (early server kill).
-export function noteTrajDiv(d: number, wt?: number, selfPopped?: boolean): void {
+export function noteTrajDiv(d: number, wt?: number, selfPopped?: boolean, age?: number): void {
   trajDivs.push(d);
   if (trajDivs.length > 64) {trajDivs.shift();}
-  if (d > 60) {parityMiss('traj-outlier', { m: Math.round(d), wt, self: selfPopped ? 1 : 0 });}
+  if (d > 60) {parityMiss('traj-outlier', { m: Math.round(d), wt, self: selfPopped ? 1 : 0, age: age === undefined ? '?' : Number(age.toFixed(2)) });}
 }
 export function trajDivStats(): { n: number; p50: number; p95: number; max: number; over8: number } {
   const s = trajDivs.toSorted((a, b) => a - b);
@@ -123,7 +123,7 @@ export function noteShellFate(shotId: string, at: { x: number; y: number; z: num
   }
 }
 
-export function sweepDamageEchoes(now: number): void {
+export function sweepDamageEchoes(now: number, stallMs = 0): void {
   for (let i = dmgEchoes.length - 1; i >= 0; i -= 1) {
     const e = dmgEchoes[i]!;
     // The verdict can't land before the server shell had time to run:
@@ -131,8 +131,10 @@ export function sweepDamageEchoes(now: number): void {
     // fuse — a mortar's fate lands seconds after the predicted blast.
     // Budget = confirm window + weapon TTL (capped so complaints still
     // arrive promptly); weapons without a table row keep 900ms.
+    // stallMs = inbound silence — a starved wire delays every verdict;
+    // expiring mid-stall counts a delayed hit as a ghost.
     const ttlMs = e.wt === undefined ? 0 : (WEAPONS[e.wt]?.maxLifetime ?? 0) * 1000;
-    const deadline = e.t + 900 + Math.min(ttlMs, 4100);
+    const deadline = e.t + 900 + Math.min(ttlMs, 4100) + stallMs;
     if (now > deadline) {
       // Bodyless + carrier-spawned weapons (MRVBomblet, melee, beams)
       // have no shotId-bound shell fate — the client intent is never

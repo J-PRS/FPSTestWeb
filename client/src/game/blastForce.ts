@@ -226,10 +226,13 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     // (~25m tail), so 8m missed real echoes and re-applied their shoves.
     // recentKb carries the wire's APPLIED impulse — compare against the
     // same falloff-scaled impulse we would apply, not the raw blast force.
+    // Horizon extends while the wire starves — a stalled echo isn't a
+    // refusal (a 1.4s inbound gap delays every echo past a flat 700ms).
+    const horizon = 700 + Math.min(Math.max(0, (deps.lazyNetworkManager?.()?.msSinceLiveRx?.() ?? 0) - 100), 2000);
     const dupCands: number[] = [];
     for (let k = 0; k < rkb.length; k += 1) {
       const s = rkb[k]!;
-      if (now - s.t < 700 && Math.hypot(s.x - pos.x, s.y - pos.y, s.z - pos.z) < 18) {dupCands.push(k);}
+      if (now - s.t < horizon && Math.hypot(s.x - pos.x, s.y - pos.y, s.z - pos.z) < 18) {dupCands.push(k);}
     }
     // Same identity rule as the stamp consume: center+time wins; the
     // wire's applied impulse vs our predicted falloff only disambiguates
@@ -249,10 +252,10 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     stamps.push({ x: pos.x, y: pos.y, z: pos.z, t: now, by: shooterId, f: Math.round(impulse * 10) / 10 });
     parityStamp('kb-echo');
     // Settle older stamps: a predicted self-shove the server never echoed
-    // back (~700ms past the 400ms consume window) was rejected server-side —
+    // back (~700ms past the consume window) was rejected server-side —
     // loud parity miss, not a silent expiry.
     for (let i = stamps.length - 1; i >= 0; i -= 1) {
-      if (now - stamps[i]!.t > 700) {
+      if (now - stamps[i]!.t > horizon) {
         parityMiss('kb-echo', { x: Math.round(stamps[i]!.x), y: Math.round(stamps[i]!.y), z: Math.round(stamps[i]!.z), by: stamps[i]!.by, f: stamps[i]!.f, ageMs: Math.round(now - stamps[i]!.t) });
         stamps.splice(i, 1);
       }

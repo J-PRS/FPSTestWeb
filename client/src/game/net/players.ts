@@ -263,8 +263,13 @@ function wirePlayerCombat(ctx: NetCtx): void {
     // Settle overdue stamps here too — blastForce only sweeps when a NEW
     // self shove lands, so without this an unechoed stamp sat for minutes
     // and reported its kb-echo on the next blast, not on its own expiry.
+    // Starvation-tolerant expiry: a wire stall delays every echo, so a
+    // stamp younger than (horizon + current silence) can't have been
+    // refused yet — expiring it mid-stall strands the late echo into a
+    // raw apply (double-shove) AND logs a false kb-echo.
+    const kbHorizon = 700 + Math.min(Math.max(0, networkManager.msSinceLiveRx() - 100), 2000);
     for (let i = stamps.length - 1; i >= 0; i -= 1) {
-      if (now - stamps[i]!.t > 700) {
+      if (now - stamps[i]!.t > kbHorizon) {
         parityMiss('kb-echo', { x: Math.round(stamps[i]!.x), y: Math.round(stamps[i]!.y), z: Math.round(stamps[i]!.z), by: stamps[i]!.by, f: stamps[i]!.f, ageMs: Math.round(now - stamps[i]!.t) });
         stamps.splice(i, 1);
       }
@@ -285,7 +290,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
     const cands: number[] = [];
     for (let k = 0; k < stamps.length; k += 1) {
       const s = stamps[k]!;
-      if (now - s.t < 700 && Math.hypot(s.x - position.x, s.y - position.y, s.z - position.z) < 18) {cands.push(k);}
+      if (now - s.t < kbHorizon && Math.hypot(s.x - position.x, s.y - position.y, s.z - position.z) < 18) {cands.push(k);}
     }
     const i = cands.length === 0 ? -1
       : cands.reduce((a, b): number => Math.abs((stamps[a]!.f ?? force) - force) <= Math.abs((stamps[b]!.f ?? force) - force) ? a : b);

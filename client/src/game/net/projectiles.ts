@@ -150,7 +150,7 @@ export function wireProjectiles(ctx: NetCtx): void {
   // Bind a server id echo to the local shell that spawned it — the spawn
   // claim's shotId nonce comes back verbatim, so the link is exact (no
   // FIFO, no position inference, immune to rejected/dropped claims).
-  const linkOwnProjectile = (projectileId: string, shotId?: string, pellet?: number): void => {
+  const linkOwnProjectile = (projectileId: string, shotId: string | undefined, pellet: number | undefined, position?: { x: number; y: number; z: number }, velocity?: { x: number; y: number; z: number }): void => {
     const registry = deps.world.projectileRegistry;
     let localProjectile;
     if (shotId) {
@@ -169,6 +169,17 @@ export function wireProjectiles(ctx: NetCtx): void {
     }
     localProjectile.serverProjectileId = projectileId;
     registry.byId.set(projectileId, localProjectile);
+    // Re-anchor onto the authority's arc: the server spawned at its
+    // rewind-origin with shadow-vel inherit, so the claim's live spawn
+    // state diverges by ~a transit of motion — compounding to 100m+
+    // over a flat flyer's fuse (the traj-outlier class). The echo's
+    // pos/vel IS the server's spawn state; project it forward by the
+    // server shell's age (~replica age minus claim transit).
+    if (position && velocity
+        && Number.isFinite(position.x + position.y + position.z + velocity.x + velocity.y + velocity.z)) {
+      localProjectile.reanchorTo(position, velocity,
+        Math.max(0, localProjectile.age - (nm().serverPingMs ?? nm().getPing()) / 2000));
+    }
     // Burst pellet binding is one-shot — the slot frees once linked.
     if (localProjectile.fanSlot) {
       registry.byFanSlot.delete(localProjectile.fanSlot);
@@ -181,7 +192,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     noteWeapon(ownerId, weaponType);
     // For own projectiles: link the server id to the local shell by nonce.
     if (ownerId === nm().getLocalPlayerId()) {
-      linkOwnProjectile(projectileId, shotId, pellet);
+      linkOwnProjectile(projectileId, shotId, pellet, position, velocity);
       return;
     }
 
@@ -319,7 +330,7 @@ export function wireProjectiles(ctx: NetCtx): void {
       // offM as a population — replica-vs-fate distance for every owned
       // shell, not just the ones that painted a ghost hit. Outliers tag
       // weapon + whether the replica already popped on its own contact.
-      if (preSnap >= 0) {noteTrajDiv(preSnap, localProjectile.config.weaponType, localProjectile.exploded);}
+      if (preSnap >= 0) {noteTrajDiv(preSnap, localProjectile.config.weaponType, localProjectile.exploded, localProjectile.age);}
       localProjectile.explode();
       registry.byId.delete(projectileId);
       if (localProjectile.shotId) {registry.byShotId.delete(localProjectile.shotId);}

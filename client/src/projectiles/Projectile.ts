@@ -99,7 +99,16 @@ export class Projectile {
   isRemote = false; // true for server-authoritative/demo projectiles
   hitBall: Targetable | null = null; // balls AND crawlers — any shootable target
   hitPlayerId: string | null = null;
-  serverProjectileId: string | null = null; // remote player hit tracking
+  // remote player hit tracking. Assigning a real id reseeds the fuse
+  // cache — a jittered ttl computed pre-bind used a random seed, not the
+  // server's idSeed(id), and a stale random fuse can pop a replica a
+  // full jitter-window off its authority.
+  private _serverProjectileId: string | null = null;
+  get serverProjectileId(): string | null {return this._serverProjectileId;}
+  set serverProjectileId(v: string | null) {
+    if (v !== this._serverProjectileId) {this.ttl = undefined;}
+    this._serverProjectileId = v;
+  }
   /** Client-minted nonce sent with the spawn claim and echoed on every
    *  claim naming this shell — binds claims before/independent of the
    *  serverProjectileId round-trip. */
@@ -406,6 +415,25 @@ export class Projectile {
 
   /** Remainder of the current 50ms cell — rendered pos = pos + vel*rem. */
   private cellAcc = 0;
+
+  /** Wire-echo re-anchor: the server spawned this shell at its rewind
+   *  origin with shadow-velocity inherit — the claim's live pos/vel
+   *  differ by ~a transit of motion (and drift further on flat flyers).
+   *  Take the authority's spawn state projected forward by this shell's
+   *  own age — spawn clocks agree within a transit — and fold the
+   *  positional splice into renderOffset so the mesh doesn't pop. */
+  reanchorTo(pos: { x: number; y: number; z: number }, vel: { x: number; y: number; z: number }, srvAge: number): void {
+    Projectile._reanchorOld.copy(this.rendered);
+    this.pos.set(pos.x, pos.y, pos.z).addScaledVector(Projectile._reanchorV.set(vel.x, vel.y, vel.z), srvAge);
+    if (this.config.gravity) {this.pos.y += 0.5 * GRAVITY * srvAge * srvAge;}
+    this.prevPos.copy(this.pos);
+    this.vel.copy(Projectile._reanchorV);
+    this.computeRendered();
+    this.renderOffset.add(Projectile._reanchorOld).sub(this.rendered);
+    this.computeRendered();
+  }
+  private static readonly _reanchorOld = new THREE.Vector3();
+  private static readonly _reanchorV = new THREE.Vector3();
 
   private computeRendered(): void {
     this.rendered.copy(this.pos).addScaledVector(this.vel, this.cellAcc);
