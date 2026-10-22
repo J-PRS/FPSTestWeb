@@ -48,6 +48,37 @@ the published architectures it competes with.
 > `session.closed` cause inside the native addon (bounded by the
 > backpressure raise + dead-writer fix; root is below our layer), and
 > `check.sh`/Git-Bash not yet run on this box.
+>
+> Residual fixes (2026-10-22, third pass — remote render truth):
+>
+> - **Remote knockback prediction REMOVED** — supersedes line ~132 below
+>   ("remote players get predicted knockback on observed blasts"). A wrong
+>   estimate launched bodies where the wire never went (sling-then-warp);
+>   blast + DiscPull client prediction on remote victims is off, wire
+>   shoves arrive in ~4 ticks via `forceSend` (`blastShove` observer-wire
+>   scenario test). Local player's own shove prediction is unchanged.
+> - **Lag comp is now FULL view-epoch rewind** — supersedes the `0.7
+>   shooter's advantage` factor (lines ~77, ~218). Client reports actual
+>   sample staleness (`interp.viewLagMs`, extrapolation-aware); server
+>   rewinds to that literal epoch in `combatBlast`/`beamSweep`/
+>   `projContact`/`CombatHandler`. `fireAt`/`combatAoe`/fire mirrored
+>   origins dropped the +1.6 eye offset — muzzle IS the eye.
+> - **`clampWireGap` was generating the warp it guarded against**: on
+>   reconnect it teleported the body inside the leash; now rate-limits
+>   the pull to reachable speed capped at `REACH_CAP` (a real-wire run
+>   caught a 616 m/s teleport-seeded converge velocity). `silencePeakMs`
+>   preserves the earned silence budget across reconnect.
+> - **`projectileCreated` echoes carry server wall-ms `t`** — replica
+>   epoch = `age + (serverNow − t)`, echo transit measured not guessed.
+> - **liveMonitor.ts** — opt-in invariant recorder (wire-gap,
+>   render-drift, impossible-motion, dup-hit, parity echoes) readable via
+>   `__monitor.dump()`. First real-wire 30s run: 184 shove events
+>   (12–27 m/s) all delivered, zero sling events; residual = converge-mode
+>   ~1–2 m cap pokes + respawn teleports.
+>
+> Still open from this pass: converge slightly exceeding `wireGapCap`
+> (~1–2 m pokes), one residual `impossible-motion` class, `dup-hit`/
+> `dmg-echo srvAt:none` spam (likely ledger noise, not motion).
 
 
 
