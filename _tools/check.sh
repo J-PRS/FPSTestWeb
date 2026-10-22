@@ -41,6 +41,15 @@ fi
 # Cheap and instant; runs on every invocation (full/fast/fastest).
 node utils/_rootcheck.mjs
 
+# Changelog convention: code changes should ship a changelog.txt entry
+# (prepend 'YYYY-MM-DD - <summary>'). Warn only — not a hard gate, since
+# the agent batches many iterations before the final commit.
+if ! git diff --name-only HEAD | grep -qx 'changelog.txt'; then
+  if git diff --name-only HEAD -- 'shared/' 'server_bun/src/' 'client/src/' 'maps/' | grep -q .; then
+    echo "check: WARNING - code changed but changelog.txt not updated (prepend 'YYYY-MM-DD - <summary>')"
+  fi
+fi
+
 # Lint first — the fixer may rewrite files, so it runs before tests.
 # (The fixer leaves edits UNSTAGED; staging is the caller's business.)
 echo "$CHANGED" | xargs -r -n 50 npx -y oxlint --fix
