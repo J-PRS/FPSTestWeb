@@ -119,3 +119,6 @@ maps/*.bin
 client/build_out.txt
 client/preview_out.txt
 _recent_demos.txt
+
+# Local asset backups (not referenced by code)
+_assets/
