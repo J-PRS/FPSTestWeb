@@ -25,6 +25,7 @@ import { fxPuff } from '../../effects/vfx.js';
 import { swingArcView } from '../../effects/swingTrails.js';
 import { getWeaponStats, WeaponType, beltThrowCost, serverSimmed } from '../../../../shared/weapons.js';
 import type { CombatDeps, FireArgs } from '../combat.js';
+import type { WorldState } from '../worldState.js';
 import type { BlastArgs } from '../blastForce.js';
 import type { Targetable } from '../../entities/balls.js';
 
@@ -59,6 +60,27 @@ const MUZZLE_LEAD = 1;
 // remote replicas render.
 const SHOULDER_DROP = 0.35;
 const _spawnOrigin = new THREE.Vector3();
+const _mirroredVel = new THREE.Vector3();
+
+/** Latest sample at-or-before (now - backMs); older than the whole ring
+ *  clamps to the oldest entry. */
+function histAt(hist: WorldState['localPosHistory'], backMs: number): WorldState['localPosHistory'][number] | undefined {
+  if (hist.length === 0) {return undefined;}
+  const tAt = performance.now() - backMs;
+  let s = hist[0]!;
+  for (const h of hist) {if (h.t <= tAt) {s = h;}}
+  return s;
+}
+
+/** The authority's spawn state for a server-simmed shot, mirrored off the
+ *  local history: origin = pos 0.7·(rtt/2) ago (its rewindPos), inherit
+ *  = vel (rtt/2) ago (the shadow's freshest sample). */
+export function mirroredSpawn(hist: WorldState['localPosHistory'], rtt: number): WorldState['localPosHistory'][number] | undefined {
+  if (!(rtt > 0) || hist.length === 0) {return undefined;}
+  const o = histAt(hist, rtt * 0.35);
+  const v = histAt(hist, rtt * 0.5);
+  return o && v ? { t: o.t, x: o.x, y: o.y, z: o.z, vx: v.vx, vy: v.vy, vz: v.vz } : undefined;
+}
 
 function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs, quiet = false): Projectile | undefined {
   if (deps.inputTracking.isTabHidden()) {return undefined;}
@@ -70,8 +92,25 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   deps.lazyPlayer().lastFireAt = performance.now();
   _spawnOrigin.copy(e.origin).addScaledVector(e.dir, MUZZLE_LEAD);
   if (deps.lazyPlayer().thirdPerson) {_spawnOrigin.y -= SHOULDER_DROP;}
-  // INSTANT SHOOTING: Spawn projectile locally immediately for LAN-like feel
-  const p = new Projectile(deps.lazyScene(), _spawnOrigin, e.dir, e.playerVel, config);
+  // INSTANT SHOOTING: Spawn projectile locally immediately for LAN-like feel.
+  // Server-mirrored spawn (server-simmed weapons only): the authority
+  // spawns this shell at rewindPos(0.7·transit) + 1.6 eye-height with
+  // shadow-vel inherit — the shadow's pos ≈ our pos 0.7·(rtt/2) ago, its
+  // vel ≈ ours (rtt/2) ago. Mirroring those epochs means the predicted
+  // shell flies the server's arc even when the create echo can't beat
+  // the fuse (the bind:-1 traj-outlier class on WAN). Offline/no-history
+  // keeps the live muzzle spawn.
+  let spawnVel = e.playerVel;
+  if (serverSimmed(config.weaponType)) {
+    const rtt = deps.lazyNetworkManager().serverPingMs ?? deps.lazyNetworkManager().getPing();
+    const m = mirroredSpawn(deps.world.localPosHistory, rtt);
+    if (m) {
+      _spawnOrigin.set(m.x, m.y + 1.6, m.z);
+      spawnVel = _mirroredVel.set(m.vx, m.vy, m.vz);
+    }
+  }
+  const p = new Projectile(deps.lazyScene(), _spawnOrigin, e.dir, spawnVel, config);
+  p.mirrored = spawnVel !== e.playerVel;
   deps.world.projectiles.push(p);
 
   // Every spawn below claims a wire identity — the nonce is what binds
@@ -87,7 +126,7 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   // Record projectile fired event for demo
   const demoManager = deps.lazyDemoManager();
   if (demoManager?.isRecording) {
-    const velocity = e.dir.clone().normalize().multiplyScalar(config.speed).addScaledVector(e.playerVel, 0.5);
+    const velocity = e.dir.clone().normalize().multiplyScalar(config.speed).addScaledVector(spawnVel, 0.5);
     p.demoProjectileId = demoManager.recordProjectileFired(
       { x: _spawnOrigin.x, y: _spawnOrigin.y, z: _spawnOrigin.z },
       { x: velocity.x, y: velocity.y, z: velocity.z },
@@ -112,7 +151,7 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   // Projectile sim runs — omitting playerVel*0.5 makes the server's
   // arcBlockedAt replay a slower, undeflected arc that clips walls the
   // real shell cleared ("flight blocked" rejects on honest hits).
-  const velocity = e.dir.clone().normalize().multiplyScalar(config.speed).addScaledVector(e.playerVel, 0.5);
+  const velocity = e.dir.clone().normalize().multiplyScalar(config.speed).addScaledVector(spawnVel, 0.5);
   // NetProbe: claimed-vs-flown drift — must stay ~0 or the server's
   // arc replay diverges (the 'flight blocked' phantom-reject class).
   spawnDrift(velocity.distanceTo(p.vel));

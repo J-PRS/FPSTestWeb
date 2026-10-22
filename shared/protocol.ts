@@ -249,7 +249,10 @@ export type ServerMessage =
   | { type: 'projectileDestroyed'; projectileId: string; shotId?: string;
       /** Server-true contact point — replicas snap here before exploding
        *  so the predicted blast center IS the authority's. */
-      position?: Vec3 }
+      position?: Vec3;
+      /** Server shell's age at detonation — lets the parity ledger
+       *  compare same-epoch positions instead of a ping estimate. */
+      age?: number }
   | { type: 'snapshot'; players: SnapshotPlayer[]; timestamp: number }
   | { type: 'stateHash'; hash: string; tick: number; playerCount: number; timestamp: number;
       /** §4.7 replica lanes keyed by kind name — `hash` the client

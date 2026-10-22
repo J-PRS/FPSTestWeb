@@ -6,10 +6,11 @@ import * as sfx from '../../core/sfx.js';
 import { Projectile } from '../../projectiles/Projectile.js';
 import { BOLT_CONFIG, getProjectileConfig } from '../../projectiles/index.js';
 import { WeaponType, getWeaponStats, LANCE_RANGE } from '../../../../shared/weapons.js';
+import { GRAVITY } from '../../../../shared/movement.js';
 import { Explosion } from '../../effects/explosion.js';
 import { swingSwipe } from '../../effects/swingTrails.js';
 import { MELEE_RANGE, EXPLOSION_VFX_RADIUS, LG_RANGE, LG_BOUNCE_RANGE } from '../../core/config.js';
-import { noteShellFate, noteTrajDiv, parityProbes } from '../parity.js';
+import { noteShellFate, noteTrajDiv, parityProbes, parityMiss } from '../parity.js';
 import type { NetCtx } from './ctx.js';
 const snapToContact = (p: Projectile, at?: { x: number; y: number; z: number }): number => {
   if (!at || !Number.isFinite(at.x + at.y + at.z)) {return -1;}
@@ -301,7 +302,7 @@ export function wireProjectiles(ctx: NetCtx): void {
   // real one (every blast stamp then misses its knockback echo and the
   // shove lands twice). Snap to the wire point before exploding.
 
-  networkManager.onProjectileDestroyed = (projectileId: string, shotId?: string, position?: { x: number; y: number; z: number }): void => {
+  networkManager.onProjectileDestroyed = (projectileId: string, shotId?: string, position?: { x: number; y: number; z: number }, srvAge?: number): void => {
     parityProbes.destroysSeen += 1;
     if (deps.world.playbackMode) {return;}
     // Kill remote projectile (explode so trail particles fade out naturally).
@@ -327,11 +328,37 @@ export function wireProjectiles(ctx: NetCtx): void {
     const localProjectile = registry.byId.get(projectileId)
       ?? (shotId ? registry.byShotId.get(shotId) : undefined);
     if (localProjectile) {
-      const preSnap = snapToContact(localProjectile, position);
+      // Same-epoch comparison: the wire gone's `age` is the server shell's
+      // fuse-time; the replica's clock only differs by transit+starvation.
+      // Project the replica's ballistic state to srvAge (closed form —
+      // Δ can be negative when the uplink starved and the server shell
+      // out-lived our copy). Epochs too far apart are an epoch-mismatch
+      // class (bounces/fuse-jitter make projection meaningless), counted
+      // separately so it can't masquerade as arc divergence.
+      // Read pos BEFORE the snap moves it.
+      let preSnap = -1;
+      if (position && Number.isFinite(position.x + position.y + position.z)) {
+        const epoch = srvAge !== undefined ? srvAge - localProjectile.age
+          : -(nm().serverPingMs ?? nm().getPing()) / 2000;
+        if (Math.abs(epoch) > 0.75) {
+          parityMiss('traj-epoch', { wt: localProjectile.config.weaponType, self: localProjectile.exploded ? 1 : 0,
+            age: Number(localProjectile.age.toFixed(2)), sa: srvAge === undefined ? '?' : Number(srvAge.toFixed(2)),
+            bind: Number(localProjectile.boundAtAge.toFixed(2)), mir: localProjectile.mirrored ? 1 : 0 });
+        } else {
+          const { vel } = localProjectile;
+          preSnap = Math.hypot(
+            localProjectile.pos.x + vel.x * epoch - position.x,
+            localProjectile.pos.y + vel.y * epoch + (localProjectile.config.gravity ? 0.5 * GRAVITY * epoch * epoch : 0) - position.y,
+            localProjectile.pos.z + vel.z * epoch - position.z);
+        }
+        snapToContact(localProjectile, position);
+      } else {
+        preSnap = snapToContact(localProjectile, position);
+      }
       // offM as a population — replica-vs-fate distance for every owned
       // shell, not just the ones that painted a ghost hit. Outliers tag
       // weapon + whether the replica already popped on its own contact.
-      if (preSnap >= 0) {noteTrajDiv(preSnap, localProjectile.config.weaponType, localProjectile.exploded, localProjectile.age, localProjectile.boundAtAge);}
+      if (preSnap >= 0) {noteTrajDiv(preSnap, localProjectile.config.weaponType, localProjectile.exploded, localProjectile.age, localProjectile.boundAtAge, srvAge, localProjectile.mirrored);}
       localProjectile.explode();
       registry.byId.delete(projectileId);
       if (localProjectile.shotId) {registry.byShotId.delete(localProjectile.shotId);}

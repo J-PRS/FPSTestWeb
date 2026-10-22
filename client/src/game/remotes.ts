@@ -464,6 +464,9 @@ export function createRemotes(deps: RemotesDeps) {
     lastSentPos.x = player.pos.x;
     lastSentPos.y = player.pos.y;
     lastSentPos.z = player.pos.z;
+    const hist = deps.world.localPosHistory;
+    hist.push({ t: performance.now(), x: player.pos.x, y: player.pos.y, z: player.pos.z, vx: player.vel.x, vy: player.vel.y, vz: player.vel.z });
+    if (hist.length > 180) {hist.shift();}
     // Declared teleport (warp/respawn): precede the position stream so
     // the server anchors its plausibility check at the NEW spot
     if (player.pendingTeleport) {

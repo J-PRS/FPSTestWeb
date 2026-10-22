@@ -333,6 +333,10 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       // Echo of the client's intent nonce — the parity ledger keys the
       // shell's fate by it (srvAt verdict). Absent on bot shells.
       { name: 'shotId', wire: 'str', channel: 'echo', absent: null },
+      // The server shell's age at detonation — a still-flying replica is
+      // `arrivalAge − srvAge` ahead of the fate, so trajDiv can compare
+      // same-epoch positions instead of subtracting a ping estimate.
+      { name: 'age', wire: 'num', channel: 'echo', absent: null },
     ],
     // Belt-sticky combo: `projectileId` is the RIDER glued dead-center
     // onto `host` — replicas parent to the host's path the same tick.

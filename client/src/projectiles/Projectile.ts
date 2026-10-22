@@ -108,6 +108,9 @@ export class Projectile {
    *  echo was late/lost; traj-outlier rows read this: an unbound
    *  replica flies its own spawn arc, no re-anchor ever ran). */
   boundAtAge = -1;
+  /** Spawned on the server's rewind-epoch mirror (fire.ts) — the trajDiv
+   *  audit tags whether a divergent shell had the mirror state. */
+  mirrored = false;
   get serverProjectileId(): string | null {return this._serverProjectileId;}
   set serverProjectileId(v: string | null) {
     if (v !== this._serverProjectileId) {this.ttl = undefined;}

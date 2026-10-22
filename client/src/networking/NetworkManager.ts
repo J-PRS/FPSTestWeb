@@ -96,7 +96,7 @@ export class NetworkManager {
    *  (rejected predicted self-splash leaves client health divergent). */
   public onShotRejected: ((reason: string, targetId: string | undefined, weaponType: number | undefined, health: number | undefined) => void) | null = null;
   public onPlayerShot: ((id: string, weaponType: number | undefined, pos: { x: number; y: number; z: number } | undefined, dir: { x: number; y: number; z: number } | undefined) => void) | null = null;
-  public onProjectileDestroyed: ((projectileId: string, shotId?: string, position?: { x: number; y: number; z: number }) => void) | null = null;
+  public onProjectileDestroyed: ((projectileId: string, shotId?: string, position?: { x: number; y: number; z: number }, age?: number) => void) | null = null;
   /** Belt-sticky combo — rider server id glued dead-center onto host id. */
   public onProjRide: ((riderId: string, hostId: string) => void) | null = null;
   public onPlayerJoined: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;

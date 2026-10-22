@@ -84,6 +84,11 @@ export interface WorldState {
    *  new heightmap instead of standing at the old field's altitude. */
   onTerrainApplied?: (file: string | null) => void;
   selfBlastStamps: { x: number; y: number; z: number; t: number; by?: string; self?: boolean; f?: number }[];
+  /** Local pos/vel ring (~3s @60Hz) sampled by remotes.networkTick —
+   *  the server's spawn rewind reads its shadow at 0.7·transit, so a
+   *  predicted shell that mirrors the same history epoch flies the
+   *  server's arc even when the create echo outlives the fuse. */
+  localPosHistory: { t: number; x: number; y: number; z: number; vx: number; vy: number; vz: number }[];
   /** The same dedup run backwards: a knockback echo that arrived BEFORE
    *  its blast's replica exploded applies raw — recorded here so the
    *  delayed predicted shove at the same center doesn't double it. */
@@ -141,6 +146,7 @@ export function createWorldState(): WorldState {
     netPickups: new Map(),
     playbackMode: false,
     selfBlastStamps: [],
+    localPosHistory: [],
     recentKb: [],
     selfCharge: 0,
   };
