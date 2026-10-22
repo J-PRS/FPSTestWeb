@@ -67,17 +67,7 @@ export type { WeaponStats } from './weaponTable.js';
 // ray-burst discharge, heal/armor payloads, burst fans (pellet-index
 // echoes). Excluded: the body-less kinds — Melee, Lightning, Repair,
 // HealBeam, Slam, and the carrier-spawned bomblets.
-export const SERVER_SIMMED_WEAPONS = new Set<number>([
-  WeaponType.BoltLauncher, WeaponType.Disc, WeaponType.PlasmaGun, WeaponType.PlasmaCannon,
-  WeaponType.Grenade, WeaponType.GrenadeLauncher, WeaponType.Mortar, WeaponType.Sticky,
-  WeaponType.DiscPull, WeaponType.Javelin, WeaponType.ImpactGrenade, WeaponType.Concussion,
-  WeaponType.ClusterBomb, WeaponType.MRVLauncher, WeaponType.RemoteRailgun,
-  WeaponType.ArmorGrenade, WeaponType.HealGrenade, WeaponType.Flak, WeaponType.Shotgun,
-  WeaponType.Chaingun, WeaponType.Railgun, WeaponType.Cannon, WeaponType.RocketLauncher,
-  WeaponType.Pistol, WeaponType.Revolver, WeaponType.Sprinkler,
-  WeaponType.ProxyGrenade, WeaponType.SatchelCharge, WeaponType.Bombard,
-  WeaponType.BeltSticky, WeaponType.Hook, WeaponType.EMP,
-]);
+export const SERVER_SIMMED_WEAPONS = new Set<number>(Object.keys(WEAPONS).map(Number));
 export function serverSimmed(weaponType: number | undefined): boolean {
   return weaponType !== undefined && SERVER_SIMMED_WEAPONS.has(weaponType);
 }
@@ -122,6 +112,10 @@ export const BELT_THROW_COST = 1; // per belt toss
 // one pays BELT_THROW_COST. BeltSticky is its own type so a toss CAN be
 // told from a launcher shot — the old shared type made throws unchargeable.
 export const BELT_THROW_WEAPONS = new Set<number>([
+  ...Object.entries(WEAPONS)
+    .filter(([, w]) => w.beltThrow === true)
+    .map(([wt]) => Number(wt)),
+  // Fallback for weapons without beltThrow field yet (legacy)
   WeaponType.BeltSticky,
   WeaponType.Grenade, WeaponType.DiscPull, WeaponType.ClusterBomb,
   WeaponType.Javelin, WeaponType.ImpactGrenade, WeaponType.RemoteRailgun,
@@ -155,6 +149,14 @@ export function getWeaponStats(weaponType: number | undefined): WeaponStats {
  *  numbers the client trigger enforces. Server bots gate on this so a
  *  drawn weapon can't out-cadence a human with the same gun (a mortar
  *  brain at 0.45s cadence would otherwise out-shoot a player's 2.0s). */
+// Belt throws: THROW_TOTAL (0.7 release + 0.3 raise) gates the human
+// toss — 1.0s mirrors it so a bot that somehow draws a belt weapon in a
+// combat slot obeys the same ceremony instead of defaulting to 0.1s.
+// Auto-generated from WEAPONS where fireInterval is set; fallback for legacy.
+const _autoFireIntervals: Record<number, number> = {};
+for (const [wt, w] of Object.entries(WEAPONS)) {
+  if (w.fireInterval !== undefined) { _autoFireIntervals[Number(wt)] = w.fireInterval; }
+}
 export const WEAPON_FIRE_INTERVAL_S: Partial<Record<WeaponType, number>> = {
   [WeaponType.BoltLauncher]: 1,
   [WeaponType.Disc]: 1,
@@ -187,6 +189,7 @@ export const WEAPON_FIRE_INTERVAL_S: Partial<Record<WeaponType, number>> = {
   [WeaponType.Concussion]: 1, [WeaponType.BeltSticky]: 1, [WeaponType.Hook]: 1,
   [WeaponType.SatchelCharge]: 1.9, // deliberate two-beat plant (BELT_THROW_TIME.satchel)
   [WeaponType.EMP]: 1, // belt throw: EMP grenade — 2s fuse, timer detonation
+  ..._autoFireIntervals,
 };
 
 /** Belt-sticky ride: which shells may HOST a caught bomb. Only deliberate

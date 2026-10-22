@@ -124,6 +124,13 @@ export interface WeaponStats {
   bounceRestitution?: number; // normal velocity kept per bounce
   bounceFriction?: number;    // tangential velocity kept per bounce
   maxBounces?: number;        // die on the Nth terrain hit (flak shards); unset = bounce until fuse
+  /** Streamlining fields — optional metadata that auto-generates derived sets:
+   *  - beltThrow: true → auto-added to BELT_THROW_WEAPONS
+   *  - fireInterval: number → auto-populated in WEAPON_FIRE_INTERVAL_S
+   *  - serverSimmed: defaults to true (all weapons are server-simmed)
+   */
+  beltThrow?: boolean;
+  fireInterval?: number;
   /** First terrain bounce clamps the remaining fuse to this many seconds
    *  — a skip becomes a short cook-off instead of free ricochet time. */
   fuseAfterBounce?: number;

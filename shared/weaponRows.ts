@@ -472,6 +472,8 @@ export const WEAPONS: Record<number, WeaponStats> = {
     terrainBounce: true,
     bounceRestitution: 0.5,
     bounceFriction: 0.7,
+    beltThrow: true,
+    fireInterval: 1,
   },
   [WeaponType.RemoteRailgun]: {
     // Belt capacitor slug: 0.4s of readable lob, then a railgun-class beam
@@ -754,5 +756,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     terrainBounce: true,
     bounceRestitution: 0.5,
     bounceFriction: 0.7,
+    beltThrow: true,
+    fireInterval: 1,
   },
 };
