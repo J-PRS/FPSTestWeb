@@ -1,36 +1,17 @@
 import * as THREE from 'three';
 
-import {
-  KNOCKBACK_MULTIPLIER,
-} from '../core/config.js';
-import { WEAPONS, AOE_VFX_SCALE } from '../../../shared/weapons.js';
-
-import type { ProjectileConfig } from './types.js';
+import { makeProjectileConfig } from './makeConfig.js';
 
 // Concussion grenade: pale stun-shell read — cold white-blue, a dense
 // sparkle trail. Fuse bomb like the frag grenade: armTime == fuse so it
 // never arms — bodies phase through, dirt only bounces it, and the 1.5s
 // timer pops the flag-strip envelope. Visual sibling of the frag but
 // icy instead of ember — players should tell them apart mid-flight.
-const { 34: S } = WEAPONS; // WeaponType.Concussion
-
-export const CONC_CONFIG: ProjectileConfig = {
+export const CONC_CONFIG = makeProjectileConfig(34, {
   name: 'concussion',
   displayName: 'Concussion Grenade',
-  weaponType: 34,
-  speed: S.speed,
-  gravity: S.gravity,
-  explosionRadius: S.aoeRadius * AOE_VFX_SCALE,
-  force: S.knockbackForce,
-  forceMode: 'push',
-  bodyRadius: S.bodyRadius,
-  hitMin: S.hitMin,
-  hitMax: S.hitMax,
-  hitGrow: S.hitGrow,
-  forceMultiplier: KNOCKBACK_MULTIPLIER,
-  aoeDamage: S.aoeDamage,
-  aoeRadius: S.aoeRadius,
   damageColor: '#aaeeff',
+  vfx: 'concussion',
   trailColors: [
     new THREE.Color(0.8, 0.95, 1),
     new THREE.Color(0.55, 0.8, 1),
@@ -50,7 +31,7 @@ export const CONC_CONFIG: ProjectileConfig = {
   trailScaleMin: 0.5,
   trailScaleMax: 1.4,
   trailRampIn: 0.05,
-  meshColor: 0x39_43_4E, // cold gunmetal shell — frost glow, not ember heat
+  meshColor: 0x39_43_4E,
   meshType: 'ball',
   glowShell: true,
   glowColor: 0x88_DD_FF,
@@ -59,14 +40,7 @@ export const CONC_CONFIG: ProjectileConfig = {
   meshRampIn: true,
   meshRampInDuration: 0.05,
   meshStartScale: 0.2,
-  terrainOffset: S.hitMin,
   needsServerTracking: true,
-  maxLifetime: S.maxLifetime,
-  // armTime == fuse ⇒ never arms — bodies phase through, terrain bounces.
-  armTime: S.armTime,
-  bounces: S.terrainBounce === true,
   bounceSfx: 'hg_clang',
-  bounceRestitution: S.bounceRestitution,
-  bounceFriction: S.bounceFriction,
   trailMeshType: 'sphere',
-};
+});
