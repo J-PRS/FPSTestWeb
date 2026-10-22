@@ -12,7 +12,7 @@ import { watch } from 'fs';
 import { execFileSync } from 'node:child_process';
 
 const DIRS = ['src', '../shared'];
-const DEBOUNCE_MS = 150;
+const DEBOUNCE_MS = 1000; // was 150 — active editing (especially with a concurrent writer) fired restarts every save; 1s collapses them
 
 let child: Subprocess | null = null;
 let restarting = false;
@@ -50,11 +50,21 @@ try {
 }
 
 let bootAt = 0;
+let lastBootAt = 0;
 let bindFails = 0;
 let conflictBusy = false;
 
 function boot(): void {
-  bootAt = Date.now();
+  // Cooldown: don't spawn a new child within 3s of the last boot.
+  // Prevents rapid respawn loops when the port is busy (TIME_WAIT)
+  // or the watcher fires repeatedly during active editing.
+  const now = Date.now();
+  if (now - lastBootAt < 3000) {
+    setTimeout(boot, 3000 - (now - lastBootAt));
+    return;
+  }
+  lastBootAt = now;
+  bootAt = now;
   child = spawn({
     cmd: ['bun', 'src/server.ts'],
     stdout: 'inherit', stderr: 'inherit', stdin: 'inherit',
@@ -69,7 +79,7 @@ function boot(): void {
     if (restarting || child!.exitCode === null) return;
     if (Date.now() - bootAt < 3000) {
       bindFails++;
-      if (bindFails >= 2) { void portConflict(); return; }
+      if (bindFails >= 2) { void portConflict(); return; } // don't respawn — wait for portConflict to resolve
     } else bindFails = 0;
     console.log('[dev-watch] server exited — respawning');
     boot();
@@ -111,8 +121,31 @@ async function portConflict(): Promise<void> {
   try {
     const owner = portOwner();
     if (!owner) {
-      console.log(`[dev-watch] :${PORT} busy but no LISTENING owner found — is something else on it?`);
-      bindFails = 0;
+      console.log(`[dev-watch] :${PORT} busy but no LISTENING owner — waiting 2s for release...`);
+      await new Promise((r) => setTimeout(r, 2000));
+      const owner2 = portOwner();
+      if (!owner2) {
+        console.log(`[dev-watch] :${PORT} still busy (TIME_WAIT?) — save a file or rerun to retry`);
+        bindFails = 0;
+        return;
+      }
+      // fall through to kill logic below with owner2
+      console.log(`[dev-watch] :${PORT} is held by ${owner2.name} (pid ${owner2.pid}) — the server can't bind.`);
+      const a = await ask(`[dev-watch] kill ${owner2.name}? [y/N] `);
+      if (a === 'y') {
+        try {
+          execFileSync('taskkill', ['/F', '/PID', String(owner2.pid)]);
+          console.log(`[dev-watch] ${owner2.name} killed — waiting for port release...`);
+          await new Promise((r) => setTimeout(r, 2000));
+          bindFails = 0;
+          boot();
+        } catch (e) {
+          console.log(`[dev-watch] kill failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      } else {
+        bindFails = 0;
+        console.log('[dev-watch] leaving it alone — save a file or rerun to retry');
+      }
       return;
     }
     console.log(`[dev-watch] :${PORT} is held by ${owner.name} (pid ${owner.pid}) — the server can't bind.`);
@@ -120,7 +153,8 @@ async function portConflict(): Promise<void> {
     if (a === 'y') {
       try {
         execFileSync('taskkill', ['/F', '/PID', String(owner.pid)]);
-        console.log(`[dev-watch] ${owner.name} killed — booting`);
+        console.log(`[dev-watch] ${owner.name} killed — waiting for port release...`);
+        await new Promise((r) => setTimeout(r, 2000));
         bindFails = 0;
         boot();
       } catch (e) {
