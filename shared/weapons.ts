@@ -76,7 +76,7 @@ export const SERVER_SIMMED_WEAPONS = new Set<number>([
   WeaponType.Chaingun, WeaponType.Railgun, WeaponType.Cannon, WeaponType.RocketLauncher,
   WeaponType.Pistol, WeaponType.Revolver, WeaponType.Sprinkler,
   WeaponType.ProxyGrenade, WeaponType.SatchelCharge, WeaponType.Bombard,
-  WeaponType.BeltSticky, WeaponType.Hook,
+  WeaponType.BeltSticky, WeaponType.Hook, WeaponType.EMP,
 ]);
 export function serverSimmed(weaponType: number | undefined): boolean {
   return weaponType !== undefined && SERVER_SIMMED_WEAPONS.has(weaponType);
@@ -127,7 +127,7 @@ export const BELT_THROW_WEAPONS = new Set<number>([
   WeaponType.Javelin, WeaponType.ImpactGrenade, WeaponType.RemoteRailgun,
   WeaponType.ArmorGrenade, WeaponType.HealGrenade,
   WeaponType.ProxyGrenade, WeaponType.SatchelCharge, WeaponType.Concussion,
-  WeaponType.Hook,
+  WeaponType.Hook, WeaponType.EMP,
 ]);
 
 /** Nuggets charged per belt toss — heavy ordnance costs more than a
@@ -186,6 +186,7 @@ export const WEAPON_FIRE_INTERVAL_S: Partial<Record<WeaponType, number>> = {
   [WeaponType.ArmorGrenade]: 1, [WeaponType.HealGrenade]: 1, [WeaponType.ProxyGrenade]: 1,
   [WeaponType.Concussion]: 1, [WeaponType.BeltSticky]: 1, [WeaponType.Hook]: 1,
   [WeaponType.SatchelCharge]: 1.9, // deliberate two-beat plant (BELT_THROW_TIME.satchel)
+  [WeaponType.EMP]: 1, // belt throw: EMP grenade — 2s fuse, timer detonation
 };
 
 /** Belt-sticky ride: which shells may HOST a caught bomb. Only deliberate

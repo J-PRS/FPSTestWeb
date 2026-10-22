@@ -8,7 +8,7 @@ import {
   GRENADE_CONFIG, BELT_DISC_CONFIG, BELT_STICKY_CONFIG,
   CLUSTER_CONFIG, JAVELIN_CONFIG, IMPACT_CONFIG, REMOTE_RAILGUN_CONFIG,
   ARMORNADE_CONFIG, PROXY_CONFIG, SATCHEL_CONFIG, HEALNADE_CONFIG,
-  CONC_CONFIG, HOOK_CONFIG,
+  CONC_CONFIG, HOOK_CONFIG, EMP_CONFIG,
 } from '../../projectiles/index.js';
 import { simRand } from '../../../../shared/simRand.js';
 import type { WeaponDef } from '../../weapons.js';
@@ -218,6 +218,7 @@ const BELT_THROWS: Record<BeltItem, ProjectileConfig> = {
   satchel: SATCHEL_CONFIG,
   heal: HEALNADE_CONFIG,
   hook: HOOK_CONFIG,
+  emp: EMP_CONFIG,
 };
 
 function onBelt(deps: CombatDeps, _e: FireArgs, item: BeltItem): void {

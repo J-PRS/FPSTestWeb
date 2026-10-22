@@ -25,7 +25,7 @@ const BELT_LABELS: Record<BeltItem, string> = {
   conc: 'Concussion Grenade',
   remoterailgun: 'Remote Railgun', armornade: 'Armor Grenade',
   proxy: 'Proxy Grenade', satchel: 'Satchel Charge (2)', heal: 'Heal Grenade',
-  hook: 'Hook',
+  hook: 'Hook', emp: 'EMP Grenade',
 };
 
 // Chip width is measured, not hardcoded — canvas-measure the widest

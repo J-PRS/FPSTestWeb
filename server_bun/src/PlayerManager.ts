@@ -123,6 +123,7 @@ export class PlayerManager {
       regenUntil: simMs(0),
       ddUntil: simMs(0),
       shieldUntil: simMs(0),
+      empUntil: simMs(0),
       lastDamageAt: simMs(simNow()), // spawn counts as the ramp's t=0
       charge: 0,
       chargeT: 0,
@@ -274,7 +275,7 @@ export class PlayerManager {
     // Energy shield: while the flag is up the hit routes to the player's
     // energy tank, not their health — the client drains dmg/10 energy and
     // drops the flag when the pool bottoms out (inputMove carries it).
-    if (target.status & STATUS.SHIELD) {
+    if (target.status & STATUS.SHIELD && !(simNow() < target.empUntil)) {
       this.energyBurn?.(targetId, damage / ENERGY.shieldDmgPerEnergy);
       return { killed: false, newHealth: target.health, newArmor: target.armor, endedStreak: 0 };
     }
@@ -313,7 +314,7 @@ target.deaths += 1;
       target.pendingRespawn = true;
       target.armor = 0;
       target.regenUntil = simMs(0);
-      target.ddUntil = simMs(0); target.shieldUntil = simMs(0);
+      target.ddUntil = simMs(0); target.shieldUntil = simMs(0); target.empUntil = simMs(0);
       // NOTE: `charge` survives the kill — applyHit pops the corpse's bank.
       return { killed: true, newHealth: 0, newArmor: 0, endedStreak };
     }

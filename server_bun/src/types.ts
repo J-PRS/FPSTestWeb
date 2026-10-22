@@ -141,6 +141,10 @@ export interface PlayerState {
   regenUntil: SimMs;
   ddUntil: SimMs;
   shieldUntil: SimMs;
+  /** EMP disable: while simNow() < empUntil, jet is disabled and shield
+   *  is stripped (server ignores the SHIELD bit in inputMove). Drained
+   *  energy regens at the normal rate; the disable is the duration. */
+  empUntil: SimMs;
   /** Last time this player took a hit (sim clock) — the regenerator
    *  perk's ramp counts unhurt seconds from here and resets on damage. */
   lastDamageAt: SimMs;

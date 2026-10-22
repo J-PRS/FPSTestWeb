@@ -734,4 +734,25 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 0.45, // ~50m of rope — past that the line snaps mid-flight
     hook: true,
   },
+  [WeaponType.EMP]: {
+    // EMP grenade: belt throw fuse bomb — 0 damage, drains all jet energy
+    // and strips shield for targets in the blast radius. Timer detonation
+    // (not proxy/hit) to avoid being OP. Terrain bounces like a frag.
+    directDamage: 0,
+    aoeDamage: 0,
+    aoeRadius: 12,
+    knockbackForce: 0,
+    forceMode: 'push',
+    speed: 35,
+    gravity: true,
+    bodyRadius: 0.25,
+    hitMin: 0,
+    hitMax: 0.25,
+    hitGrow: 2,
+    maxLifetime: 2, // 2s fuse — timer detonation
+    armTime: 2, // never arms — same never-pops-on-contact contract as Grenade
+    terrainBounce: true,
+    bounceRestitution: 0.5,
+    bounceFriction: 0.7,
+  },
 };

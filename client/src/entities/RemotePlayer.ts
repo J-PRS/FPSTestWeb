@@ -432,7 +432,7 @@ export class RemotePlayer {
   private static readonly THROW_TYPES = new Set([
     WeaponType.DiscPull, WeaponType.Grenade, WeaponType.ClusterBomb,
     WeaponType.Javelin, WeaponType.ImpactGrenade, WeaponType.RemoteRailgun,
-    WeaponType.ArmorGrenade, WeaponType.Concussion,
+    WeaponType.ArmorGrenade, WeaponType.Concussion, WeaponType.EMP,
   ]);
 
   // Remote fired a weapon — kick the gun's procedural recoil

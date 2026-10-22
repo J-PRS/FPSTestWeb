@@ -45,7 +45,7 @@ export const SKILL_ORDER: SkillId[] = ['bounce', 'blink', 'dash', 'slam', 'warp'
 // Belt loadout slot — one throwable on the belt key; fire.ts maps each id
 // to its projectile config. Order is the loadout-menu order.
 // 'remoterailgun' = capacitor slug that discharges a hitscan rail mid-flight.
-export const BELT_ITEMS = ['disc', 'grenade', 'cluster', 'javelin', 'sticky', 'impact', 'conc', 'remoterailgun', 'armornade', 'proxy', 'satchel', 'heal', 'hook'] as const;
+export const BELT_ITEMS = ['disc', 'grenade', 'cluster', 'javelin', 'sticky', 'impact', 'conc', 'remoterailgun', 'armornade', 'proxy', 'satchel', 'heal', 'hook', 'emp'] as const;
 
 /** Per-item throw-anim stretch — the satchel plant is a deliberate
  *  two-beat reach, not a flick; multiplies THROW_RELEASE/THROW_TOTAL. */

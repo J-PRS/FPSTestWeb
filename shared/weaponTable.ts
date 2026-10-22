@@ -42,6 +42,7 @@ export enum WeaponType {
   BeltSticky = 36,       // belt throw: hand-lobbed glue bomb — same payload as the launcher, but slow enough to be CAUGHT: a same-owner shell picks it up mid-flight and it rides dead-center to the target (Painkiller combo)
   Hook = 37,             // belt throw: rope dart — terrain/world contact reels the OWNER toward the anchor; a body hit reels the VICTIM toward the shooter. One impulse, no damage, no blast.
   Shocklance = 38,       // melee-key pull-out zap: one-shot hitscan bolt, lance reach. No backstab/energy economy yet.
+  EMP = 39,              // belt throw: EMP grenade — fuse bomb, 0 damage, drains all jet energy + strips shield in blast radius. Timer detonation (not proxy/hit) to avoid being OP.
 }
 
 export interface WeaponStats {

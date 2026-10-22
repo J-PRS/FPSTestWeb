@@ -6,14 +6,15 @@ import { healPool } from './healPool.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { classMass } from '../../shared/botClasses.ts';
 import { aoeDamage, aoeImpulseT1At, t1Minbox, KNOCKBACK_SCALE, BLAST_IMPULSE_MAX, LG_POP_DMG_CAP, LG_POP_RADIUS_MIN, LG_POP_RADIUS_MAX, SELF_SPLASH_MAX } from '../../shared/combat.ts';
+import { STATUS } from '../../shared/status.ts';
 import { POWERUP } from '../../shared/pickups.ts';
 import {type ColliderIndex, blastOccluded} from '../../shared/solidWorld.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
 import { rewindPos, shooterTransitMs } from './claimLedger.ts';
 import { renderLagOf } from './rewind.ts';
+import { simNow, simMs } from './simClock.ts';
+import { wallNow, wallMs } from './wallClock.ts';
 import { logger } from './logger.ts';
-import { wallNow , wallMs} from './wallClock.ts';
-import { simNow } from './simClock.ts';
 import type { RoomEventSink } from './roomEvents.ts';
 
 // How long a hit/knocked-back player stays on the unsuppressed full-rate
@@ -136,6 +137,10 @@ export class BlastRunner {
     // Heal burst — allies caught get the strong heal; enemies got their
     // sting through the normal splash sweep above.
     if (weapon === WeaponType.HealGrenade) {this.healAll(playerId, position, radius, ctx);}
+    // EMP burst — drains all jet energy and strips shield from every
+    // target caught. Timer detonation (not proxy/hit) so it can't be
+    // spammed; the energy drain is the punishment, not damage.
+    if (weapon === WeaponType.EMP) {this.empAll(playerId, position, radius, ctx);}
   }
 
   /** Cheat prevention: bound the blast to plausible projectile range —
@@ -212,8 +217,29 @@ export class BlastRunner {
     }
   }
 
+  /** EMP burst: drains all jet energy and strips shield from every
+   *  enemy caught. No damage — pure utility. Same lag-comp + occlusion
+   *  rules as healAll. Friendly fire: affects enemies only (self-EMP
+   *  would be punishing). */
+  private empAll(playerId: string, position: Vec3, radius: number, ctx: BlastCtx): void {
+    for (const [targetId, target] of this.h.playerManager.getAllPlayers()) {
+      if (target.isDead || targetId === playerId || this.h.friendly(playerId, targetId)) {continue;}
+      const tpos = this.rewindTarget(target, targetId, ctx.shooterId, ctx.ping, ctx.bot, ctx.lagMs, ctx.lagMap);
+      const d = Math.hypot(tpos.x - position.x, tpos.y - position.y, tpos.z - position.z);
+      if (d > radius) {continue;}
+      if (this.h.solids.length > 0 && this.blastBlocked(position, tpos)) {continue;}
+      // Drain all jet energy — the victim can't jet until regen (8/s).
+      this.h.deps.drainEnergy?.(targetId, 999);
+      // Strip shield + set EMP disable window (5s).
+      target.status = target.status & ~STATUS.SHIELD;
+      target.empUntil = simMs(simNow() + 5000);
+      target.forceSendUntil = wallMs(wallNow() + FORCE_SEND_MS);
+      this.h.hb('emp.blast');
+      logger.info('EMP blast', { shooter: playerId, target: targetId, dist: Number(d.toFixed(2)) });
+    }
+  }
+
   /** Rewind a victim to where it sat on the SHOOTER's screen. The
-   *  rendered ghost = broadcast(sim(t − shooterTransit − interpDelay)
    *  + vel·lead) and rewind history rides the target's uplink, so the
    *  terms cancel to shooterTransit + interpDelay − targetTransit:
    *  one-way hops only — a full-RTT term validates ~RTT/2 behind the
