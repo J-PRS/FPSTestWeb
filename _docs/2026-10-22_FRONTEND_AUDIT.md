@@ -65,6 +65,52 @@ deliberate.
    Marginal gain at current node counts (~hundreds); worth a line if
    the DOM ever sprawls.
 
+## Footgun sweep (second pass)
+
+Dug for leaks, listener orphans, timer-vs-teardown races, layout
+writes in hot paths, and unbounded growth. The discipline mostly
+holds — findings are minor:
+
+1. **Ghost health bar writes layout every frame while draining**
+   (`hudStats.tickVitals`): `left`+`width` updates at 60Hz for ~1s
+   after each hit. It's one absolutely-positioned div so the cost is a
+   local layout, not a page reflow — but `transform: scaleX()` would
+   make it compositor-free like the indicators already are. Same for
+   the energy/armor bars, though those only write on change.
+
+2. **Comment lies in `shieldDamage`**: "damage() resets it" — `damage()`
+   never touches `boxShadow`; only the 300ms `shieldVignetteReset`
+   timeout does. A real hit landing inside that window briefly shows
+   the cyan shield shadow on red damage. Cosmetic, but the invariant
+   the comment claims doesn't exist.
+
+3. **Fixed-size canvases ignore `devicePixelRatio`** — `minimap`
+   (160×160) and `commandmap` draw at CSS-px backing store; on dpr≥2
+   displays they upscale soft. `canvas.width = SIZE * dpr` +
+   `ctx.scale(dpr, dpr)` is the standard fix; ~4 lines each.
+
+4. **`CoolShotsPanel.renderCoolShots` rebuilds 20 rows + listeners every
+   1s while open** (`innerHTML=''` + `createElement` + `addEventListener`
+   per row). Bounded and menu-only, but it re-parses layout per refresh
+   and the comment already apologizes for the context-menu interplay.
+   A row pool keyed by shot id would kill the churn.
+
+5. **Listener hygiene is clean where it counts** — `CoolShotsPanel`'s
+   document-level dismiss/keydown listeners are added on open and
+   removed on close (paired, capture-phase consistent). Menu/document
+   listeners that persist are singletons in an SPA — correct.
+   `PlayerIndicators.remove/clear` is reached from remote-leave,
+   bot-death, disconnect, and flag-despawn paths — no orphan divs.
+
+6. **Bounded everywhere** — kill feed caps at 6, shot feed 5, log
+   panel 150, indicators keyed by playerId. `paintFlagChip` writes
+   `textContent` twice per call (LOOSE then conditional) — harmless
+   nit, not worth a branch.
+
+7. **`esc()` in FragMessages covers `&`/`<` only** — correct for
+   element-content interpolation (quotes can't break out of text
+   context). Just don't reuse it inside attributes later.
+
 ## Would a framework beat this?
 
 Measured against the same literature: no. Mojang's own conclusion was
