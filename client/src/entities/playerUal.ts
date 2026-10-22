@@ -449,7 +449,17 @@ export function loadBakedUALClips(variant: string): Promise<Map<string, THREE.An
   let p = bakedFileByVariant.get(variant);
   if (!p) {
     p = mkGltfLoader().loadAsync(`/assets/anims/${variant}.glb`)
-      .then((gltf): Map<string, THREE.AnimationClip> | null => gltf.animations.length > 0 ? new Map(gltf.animations.map((c): [string, THREE.AnimationClip] => [c.name, c])) : null)
+      .then((gltf): Map<string, THREE.AnimationClip> | null => {
+        if (gltf.animations.length === 0) {return null;}
+        const m = new Map(gltf.animations.map((c): [string, THREE.AnimationClip] => [c.name, c]));
+        // The marker clip is empty — meshopt repacks strip it on the way
+        // to dist. The bake also stamps the flag on the armature root's
+        // extras so packed packs still report holdBaked.
+        if (!m.has('__holdbake1')) {
+          gltf.scene.traverse((o): void => { if (o.userData?.holdbake1) {m.set('__holdbake1', new THREE.AnimationClip('__holdbake1', 0.01, []));} });
+        }
+        return m;
+      })
       .catch((): null => null);
     bakedFileByVariant.set(variant, p);
   }

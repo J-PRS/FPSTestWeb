@@ -148,6 +148,9 @@ for (const [variant, glb] of Object.entries(RIGS)) {
     while (top.parent && top.parent !== scene) top = top.parent;
     const clone = top.clone(true);
     clone.position.set(0, 0, 0); clone.quaternion.identity(); clone.scale.set(1, 1, 1);
+    // The holdbake marker clip is empty — meshopt repacks strip it. The
+    // armature root extras carry the same flag so -ke packs keep it.
+    if (baked.has('__holdbake1')) {clone.userData = { holdbake1: 1 };}
     // Clip tracks only need named joint nodes — meshes inside the cloned
     // armature (Vexa parents hers under it) would ship megabytes of
     // geometry nobody loads.

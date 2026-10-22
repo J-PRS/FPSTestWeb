@@ -233,6 +233,7 @@ export class PlayerModel {
     // Enable shadow casting + grab aim/attachment bones
     this.model.traverse((child): void => this.prepareChild(child));
     this.shareDrivenSkeleton(gltf.animations);
+    this.unifySkeletons();
     this.mergeSkinnedParts();
     this.computeDistalBones();
     // Model may finish loading while a far-LOD swap is already armed —
@@ -396,6 +397,26 @@ export class PlayerModel {
    *  one SkinnedMesh per bucket; anything that doesn't match stays
    *  unmerged rather than risk a visual diff. Same verts, same skin —
    *  fewer submissions. */
+  /** Class GLBs ship each primitive with its own skin — N identical bone
+   *  sets per body means N skeleton.update passes per render frame and
+   *  parts can never merge (skeleton is a bucket key). When every part's
+   *  joint array is the same names in the same order, one Skeleton serves
+   *  them all — bind matrices are per-mesh and preserved. Runs before
+   *  mergeSkinnedParts so same-material parts can now collapse. */
+  private unifySkeletons(): void {
+    const parts = this.skinnedMeshes;
+    if (parts.length < 2) {return;}
+    const primary = parts[0]!.skeleton;
+    if (!primary) {return;}
+    const jointKey = primary.bones.map((b): string => b.name).join('|');
+    for (const sm of parts.slice(1)) {
+      if (!sm.skeleton || sm.skeleton === primary) {continue;}
+      if (sm.skeleton.bones.map((b): string => b.name).join('|') === jointKey) {
+        sm.bind(primary, sm.bindMatrix);
+      }
+    }
+  }
+
   private mergeSkinnedParts(): void {
     const parts = this.skinnedMeshes;
     if (parts.length < 2) {return;}
