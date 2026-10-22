@@ -1,6 +1,6 @@
 # Capper Carrier-Gate Fix
 
-**Status:** partial — Edit 1 + Edit 4 shipped; arrival deceleration abandoned (wrong tool)
+**Status:** partial — Edit 1 + Edit 4 + Edit 5 shipped; arrival deceleration abandoned (wrong tool)
 **Owner:** capper strike (bot AI)
 **Living doc — update as fixes land.** Companion to `_docs/2026-10-15_CAPPER_STRIKE.md`.
 
@@ -18,33 +18,40 @@ The leak is elsewhere: the **park decision itself** does not distinguish a
 carrier from a non-carrying runner, so a carrier can satisfy the park gate
 and brake 20–30 m short of home.
 
-## Research basis (revised 2026-10-22)
+## Research basis (revised 2026-10-22, v3)
 
 - **Craig Reynolds, "Steering Behaviors For Autonomous Characters" (GDC 1999):**
   - *Seek* drives through the target at full speed → "moth buzzing around a light bulb"
     overshoot/orbit. **This is the park↔jump churn.**
   - *Arrival* (ramp velocity to zero inside stopping radius) is the WRONG
-    tool here — it kills speed and makes the carrier a sitting duck. The first
-    attempt (park at 30m) regressed peaks carry 70.9→0s. **Deceleration is
-    not the fix.**
+    tool for carriers near home — it kills speed and makes the carrier a
+    sitting duck. Tried twice, both regressed peaks carry 70.9→0s.
   - *Offset pursuit:* steer toward a point offset from a moving target at a
-    given radius — "fly-by" not collision. **Application:** the grab-orbit
-    already does this for runners (orbit at pickup radius, not dive-through).
-    The carrier exception (belowFlag widening) handles the vertical orbit case.
+    given radius — "fly-by" not collision. **Application:** grab-orbit at
+    pickup radius. Already done for runners; carrier exception for vertical
+    orbit.
   - *Path following / flow fields:* follow a predetermined path spine, stay
-    within radius. **Application:** terrain-trap bounce (~30s at 110-220m) —
-    carrier should follow a route home, not free-form seek.
+    within radius. **Application:** terrain-trap bounce (~30s at 110-220m).
 
 - **Tribes is about speed and trajectory, not deceleration.** A capper's
   speed IS the game — you don't slow down to land on the pole, you aim your
   trajectory to hit the touch ring at speed (like a strafing run). The 50 m/s
   grab target requires maintaining speed through the stand, not bleeding it.
-  Deceleration should be used **very sparingly** — only when an overshoot is
-  unavoidable (e.g., a wall face that can't be mounted at speed).
+  Deceleration should be used **very sparingly**.
+
+- **Deceleration is a tactical tool (user insight).** The only valid use:
+  you are about to overshoot a hill and lose *more* speed on impact than if
+  you slightly decelerated and slid over smoothly. Compare the cost of a
+  brief ski-release (friction tap, ~0.1-0.3s) against the cost of slamming
+  into the face (impact loss, ~5-15 m/s). If decel costs less, release ski
+  briefly; otherwise keep skiing. This is energy management, not arrival.
+  The existing `skiVetoRise` handles the slow case; a high-speed ski veto
+  (release ski when fast + steep rise) is the inverse, but needs careful
+  tuning (skiVetoSpeed was tuned 7→10 and flipped grabV 10.2→17.6).
 
 - **Tribes wiki (flag mechanics):** a dropped flag can be picked up by a
-  teammate to finish the capture (instant return on pickup). So a drop near
-  home is recoverable if someone grabs it. The carrier must re-grab if alone.
+  teammate to finish the capture. So a drop near home is recoverable if
+  someone grabs it. The carrier must re-grab if alone.
 
 - **Correction log (2026-10-15):** "Never infer a flag's semantics from the
   goal builder's source — instrument it and count." `ctx.running` is true on
@@ -74,7 +81,7 @@ if (ctx.posted && spd0 > 1.5 && toward && od < ring + (spd0 * spd0) / 60) {
 if (ctx.posted && !ctx.running && spd0 > 1.5 && toward && od < ring + (spd0 * spd0) / 60) {
 ```
 
-### Edit 2 — Arrival deceleration: DEFERRED (wrong tool)
+### Edit 2 — Arrival deceleration: ABANDONED (wrong tool)
 Reynolds arrival (ramp velocity to zero) was attempted twice:
 1. Park at 30m → regressed peaks carry 70.9→0s (carrier stopped, became
    a sitting duck, bots killed him, flag dropped).
@@ -88,10 +95,10 @@ the park-short defect is NOT to decelerate — it's to **not park at all**
 the overshoot case for runners; carriers should use offset pursuit (orbit
 at pickup radius) and path-following (route home), not deceleration.
 
-If a carrier overshoots the pole at speed, the fix is better *aiming*
-(offset pursuit around the stand) and *routing* (path-following home), not
-braking. Deceleration is a last resort for wall faces that can't be mounted
-at speed (and even then, the mountCommit block handles it via breathHold).
+Deceleration is only valid as a **tactical ski-release** before a steep hill
+impact (Edit 5). If a carrier overshoots the pole at speed, the fix is
+better *aiming* (offset pursuit around the stand) and *routing*
+(path-following home), not braking.
 
 ### Edit 3 — Breath/perch block: NO CHANGE (reverted)
 Original `!ctx.runner` exclusion is correct. Carriers (runners by role)
@@ -101,6 +108,22 @@ must not perch — parking to refill tank makes them a sitting duck.
 Clear `airborneBy` + `throwFrom` on carrier death (drop) and capture
 (home return). Prevents the ex-thrower guard from leaking across a flag
 return and blocking re-grab.
+
+### Edit 5 — Tactical ski-release (SHIPPED, botMoves.ts)
+Brief friction tap before steep hills at high speed, carriers only:
+```ts
+// State: private skiReleaseT = 0;
+// Arm: if (ctx.running && !airborne && rise > skiVetoRise && speed > 25) {
+//        this.skiReleaseT = Math.max(this.skiReleaseT, 0.15);
+//      }
+//      this.skiReleaseT = Math.max(0, this.skiReleaseT - dt);
+// Veto: ski: !ctx.posted && !(rise > skiVetoRise && speed < skiVetoSpeed && !airborne)
+//            && !(ctx.running && this.skiReleaseT > 0),
+```
+0.15s friction tap when a carrier is going >25 m/s toward a steep rise
+(>2.7m). Re-engages ski after the tap. No regression (capRun 3/3 pass,
+capStat identical to baseline). Tribes energy management: decel only when
+it costs less than the impact.
 
 ## What actually fixes the park-short defect
 
@@ -128,6 +151,8 @@ just runs home at speed, and the grab-orbit brake handles any overshoot.
 - `crawlHopGd`: crawl hop distance
 - `breathRise` / `breathArm` / `breathHold`: tank thresholds
 - `mountE`: mount energy floor
+- `skiVetoRise`: 2.7 (m) — steep-climb grade that releases ski (low-speed)
+- `skiVetoSpeed`: 10 (m/s) — below this on a steep grade, don't ski
 
 ## Landmines
 
@@ -146,18 +171,21 @@ just runs home at speed, and the grab-orbit brake handles any overshoot.
 - Sim determinism: no `Date.now`/`Math.random`/`new Date` in shared/. Use
   seeded RNG or tick-derived time.
 - `resultSigner` determinism: injectable stamps (already fixed).
+- Deceleration is a tactical tool, not a general strategy. Only use it when
+  the cost of deceleration < the cost of impact. In Tribes, speed is life.
 
 ## Status
 
-- [x] Research complete (Reynolds arrival/offset-pursuit/path-following, Tribes flag mechanics, correction log)
+- [x] Research complete (Reynolds, Tribes flag mechanics, correction log, Tribes physics)
 - [x] Root cause located (park block carrier-blind)
 - [x] Edit 1 shipped: park block `ctx.posted && !ctx.running`
 - [x] Edit 4 shipped: RoomFlags airborneBy/throwFrom clear on drop + capture
+- [x] Edit 5 shipped: tactical ski-release (brief friction tap before steep hills, carriers only)
 - [~] Edit 2 (arrival deceleration): **abandoned — wrong tool.** Tribes is
   about speed and trajectory. Deceleration kills defense and makes carriers
-  sitting ducks. The real fix is Edit 1 (don't park) + better aiming/routing.
+  sitting ducks. Tactical ski-release (Edit 5) is the correct, sparing use.
 - [x] Edit 3: reverted (original `!ctx.runner` was correct)
-- [ ] Run 3-seed measurement on Edit 1 + Edit 4, compare to baseline
+- [ ] Run 3-seed measurement on Edit 1 + Edit 4 + Edit 5, compare to baseline
 - [ ] If terrain-trap bounce persists, apply path-following (flow field /
-  precomputed route home) — NOT deceleration
+  precomputed route home) — NOT full deceleration
 - [ ] Update this doc with results
