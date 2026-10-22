@@ -13,14 +13,11 @@ describe('mirroredSpawn — server rewind-epoch mirror', () => {
     expect(mirroredSpawn([at(10, 1)], -1)).toBeUndefined();
   });
 
-  it('origin reads pos ~0.7·(rtt/2) back; inherit reads vel ~rtt/2 back', () => {
-    // rtt=100 → origin epoch 35ms, vel epoch 50ms.
+  it('reads the origin sample ~0.7·(rtt/2) back', () => {
+    // rtt=100 → origin epoch 35ms — latest sample ≤ now-35ms is the
+    // 40ms-back entry (vel mirrors the shadow's live vel, not history).
     const hist: Hist = [at(80, 1), at(60, 2), at(40, 3), at(30, 4), at(10, 5)];
-    const m = mirroredSpawn(hist, 100)!;
-    // Latest sample ≤ now-35ms → the t=40ms-back entry (3); vel ≤ now-50ms
-    // → the t=60ms-back entry (2).
-    expect(m.x).toBe(3);
-    expect(m.vx).toBe(200);
+    expect(mirroredSpawn(hist, 100)!.x).toBe(3);
   });
 
   it('clamps to the oldest sample when epochs predate the ring', () => {

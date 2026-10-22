@@ -60,7 +60,7 @@ const MUZZLE_LEAD = 1;
 // remote replicas render.
 const SHOULDER_DROP = 0.35;
 const _spawnOrigin = new THREE.Vector3();
-const _mirroredVel = new THREE.Vector3();
+const _mirroredOrigin = new THREE.Vector3();
 
 /** Latest sample at-or-before (now - backMs); older than the whole ring
  *  clamps to the oldest entry. */
@@ -76,10 +76,12 @@ function histAt(hist: WorldState['localPosHistory'], backMs: number): WorldState
  *  local history: origin = pos 0.7·(rtt/2) ago (its rewindPos), inherit
  *  = vel (rtt/2) ago (the shadow's freshest sample). */
 export function mirroredSpawn(hist: WorldState['localPosHistory'], rtt: number): WorldState['localPosHistory'][number] | undefined {
-  if (!(rtt > 0) || hist.length === 0) {return undefined;}
-  const o = histAt(hist, rtt * 0.35);
-  const v = histAt(hist, rtt * 0.5);
-  return o && v ? { t: o.t, x: o.x, y: o.y, z: o.z, vx: v.vx, vy: v.vy, vz: v.vz } : undefined;
+  if (!(rtt > 0)) {return undefined;}
+  // Origin: the server rewinds its shadow 0.7·(transit/2) = 0.35·RTT.
+  // Velocity: the server takes the shadow's CURRENT vel — the freshest
+  // pos-report, i.e. what we're doing at claim-send ≈ live vel — so the
+  // caller keeps e.playerVel and only the origin mirrors back.
+  return histAt(hist, rtt * 0.35);
 }
 
 function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs, quiet = false): Projectile | undefined {
@@ -100,17 +102,24 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   // shell flies the server's arc even when the create echo can't beat
   // the fuse (the bind:-1 traj-outlier class on WAN). Offline/no-history
   // keeps the live muzzle spawn.
-  let spawnVel = e.playerVel;
+  let spawnAt = _spawnOrigin;
   if (serverSimmed(config.weaponType)) {
     const rtt = deps.lazyNetworkManager().serverPingMs ?? deps.lazyNetworkManager().getPing();
     const m = mirroredSpawn(deps.world.localPosHistory, rtt);
     if (m) {
-      _spawnOrigin.set(m.x, m.y + 1.6, m.z);
-      spawnVel = _mirroredVel.set(m.vx, m.vy, m.vz);
+      _mirroredOrigin.set(m.x, m.y + 1.6, m.z);
+      spawnAt = _mirroredOrigin;
     }
   }
-  const p = new Projectile(deps.lazyScene(), _spawnOrigin, e.dir, spawnVel, config);
-  p.mirrored = spawnVel !== e.playerVel;
+  const p = new Projectile(deps.lazyScene(), spawnAt, e.dir, e.playerVel, config);
+  p.mirrored = spawnAt !== _spawnOrigin;
+  if (p.mirrored) {
+    // The sim arc starts at the server's rewind epoch, but the shell
+    // should still LOOK like it leaves the muzzle — blend the visual
+    // offset out over ~150ms instead of a pop at spawn point.
+    p.renderOffset.copy(_spawnOrigin).sub(p.pos);
+    p.rendered.copy(_spawnOrigin);
+  }
   deps.world.projectiles.push(p);
 
   // Every spawn below claims a wire identity — the nonce is what binds
@@ -126,7 +135,7 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   // Record projectile fired event for demo
   const demoManager = deps.lazyDemoManager();
   if (demoManager?.isRecording) {
-    const velocity = e.dir.clone().normalize().multiplyScalar(config.speed).addScaledVector(spawnVel, 0.5);
+    const velocity = e.dir.clone().normalize().multiplyScalar(config.speed).addScaledVector(e.playerVel, 0.5);
     p.demoProjectileId = demoManager.recordProjectileFired(
       { x: _spawnOrigin.x, y: _spawnOrigin.y, z: _spawnOrigin.z },
       { x: velocity.x, y: velocity.y, z: velocity.z },
@@ -151,7 +160,7 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   // Projectile sim runs — omitting playerVel*0.5 makes the server's
   // arcBlockedAt replay a slower, undeflected arc that clips walls the
   // real shell cleared ("flight blocked" rejects on honest hits).
-  const velocity = e.dir.clone().normalize().multiplyScalar(config.speed).addScaledVector(spawnVel, 0.5);
+  const velocity = e.dir.clone().normalize().multiplyScalar(config.speed).addScaledVector(e.playerVel, 0.5);
   // NetProbe: claimed-vs-flown drift — must stay ~0 or the server's
   // arc replay diverges (the 'flight blocked' phantom-reject class).
   spawnDrift(velocity.distanceTo(p.vel));
