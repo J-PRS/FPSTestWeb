@@ -426,7 +426,7 @@ clipGen += 1;
   // updates target its hidden transport bar, not the feed.
   const tick = (): void => {
     const dur = dm.player.duration;
-    progressFill.style.width = dur > 0 ? `${(dm.player.currentTimeValue / dur) * 100}%` : '0%';
+    progressFill.style.transform = `scaleX(${dur > 0 ? Math.min(1, dm.player.currentTimeValue / dur) : 0})`;
     btnPause.textContent = dm.mode === 'playing' ? '❚❚' : '▶';
     requestAnimationFrame(tick);
   };

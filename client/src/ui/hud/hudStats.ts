@@ -77,7 +77,7 @@ export class HudStats {
     const energyPct = Math.round((nrg / 60) * 100);
     if (energyPct !== this.lastEnergyPct) {
       this.lastEnergyPct = energyPct;
-      h.energyBar.style.width = `${energyPct}%`;
+      h.energyBar.style.transform = `scaleX(${energyPct / 100})`;
     }
 
     // Three readouts, all magnitude: |v| total, XZ horizontal, |vy|.
@@ -129,33 +129,37 @@ export class HudStats {
     if (resetHealth) {
       this.lastHealthPct = healthPct;
       this.ghostPct = healthPct;
-      h.healthBar.style.width = `${healthPct}%`;
-      h.ghostBar.style.width = '0%';
-      h.ghostBar.style.left = `${healthPct}%`;
+      h.healthBar.style.transform = `scaleX(${healthPct / 100})`;
+      h.ghostBar.style.transform = 'scaleX(0)';
     }
     if (!resetHealth && healthPct !== this.lastHealthPct) {
       this.lastHealthPct = healthPct;
-      h.healthBar.style.width = `${healthPct}%`;
+      h.healthBar.style.transform = `scaleX(${healthPct / 100})`;
       // Damage → ghost holds the old width and drains down; heal → snap
       if (healthPct < this.ghostPct) {
-        h.ghostBar.style.left = `${healthPct}%`;
-        h.ghostBar.style.width = `${this.ghostPct - healthPct}%`;
+        this.paintGhost(healthPct);
       } else {
         this.ghostPct = healthPct;
-        h.ghostBar.style.width = '0%';
+        h.ghostBar.style.transform = 'scaleX(0)';
       }
     }
     if (this.ghostPct > healthPct) {
       this.ghostPct = Math.max(healthPct, this.ghostPct - 40 * dt);
-      h.ghostBar.style.left = `${healthPct}%`;
-      h.ghostBar.style.width = `${this.ghostPct - healthPct}%`;
+      this.paintGhost(healthPct);
     }
     const armor = Math.round(player.armor);
     if (armor !== this.lastArmor) {
       this.lastArmor = armor;
       this.setText(h.armor, 'armor', String(armor));
-      h.armorBar.style.width = `${armor}%`;
+      h.armorBar.style.transform = `scaleX(${armor / 100})`;
     }
+  }
+
+  // Ghost sliver: translate to the new health edge, scale the delta —
+  // transform-only, no layout while it drains.
+  private paintGhost(healthPct: number): void {
+    this.h.ghostBar.style.transform =
+      `translateX(${healthPct}%) scaleX(${(this.ghostPct - healthPct) / 100})`;
   }
 
   // Timed buffs — chips with seconds left; rebuilt only on change.
@@ -231,6 +235,10 @@ this.fpsFrames += 1;
     // but cap below readability loss.
     this.dmgT = Math.min(1, this.dmgT + 0.18 + damage * 0.012);
     h.dmgVignette.style.opacity = String(Math.min(0.85, this.dmgT));
+    // A real hit during a shield glow takes the red shadow back now —
+    // the shieldVignetteReset timeout alone would leave cyan until it fires.
+    clearTimeout(this.shieldVignetteReset);
+    h.dmgVignette.style.boxShadow = '';
 
     if (fromPos) {this.pointAt(fromPos);}
   }
@@ -243,7 +251,7 @@ this.fpsFrames += 1;
     h.dmgVignette.style.opacity = String(Math.min(0.6, this.dmgT));
     h.dmgVignette.style.boxShadow =
       'inset 0 0 18vmax rgba(90,200,255,0.55), inset 0 0 5vmax rgba(140,220,255,0.4)';
-    // Restore the red shadow for the next real hit — damage() resets it.
+    // Red restores on timeout or on the next real hit, whichever lands first.
     clearTimeout(this.shieldVignetteReset);
     this.shieldVignetteReset = window.setTimeout((): void => {
       h.dmgVignette.style.boxShadow = '';

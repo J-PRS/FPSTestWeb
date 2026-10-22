@@ -37,11 +37,15 @@ export class Minimap {
     this.cross = settings.get('fps-minimap') === 1;
 
     this.canvas = document.createElement('canvas');
-    this.canvas.height = SIZE;
+    // Backing store at device pixels — CSS size stays SIZE, draw space
+    // stays [0,SIZE] via the ctx scale; without this hidpi upscales soft.
+    const dpr = Math.min(window.devicePixelRatio, 2);
+    this.canvas.height = SIZE * dpr;
     this.canvas.width = this.canvas.height;
     this.applyMode();
     parent.append(this.canvas);
     this.ctx = this.canvas.getContext('2d')!;
+    this.ctx.scale(dpr, dpr);
 
     // Settings-panel toggle — applies live, no reload
     const btn = document.querySelector('#minimap-toggle');

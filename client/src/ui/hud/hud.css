@@ -106,7 +106,9 @@
 }
 #hud-bc .bar-fill {
   height: 100%; width: 100%;
-  transition: width 0.08s;
+  transform-origin: left;
+  transform: scaleX(1);
+  transition: transform 0.08s;
 }
 #health-bar { background: linear-gradient(90deg, #e33, #f77); box-shadow: 0 0 6px rgba(255,80,80,0.5); }
 #energy-bar { background: linear-gradient(90deg, #0af, #7df); box-shadow: 0 0 6px rgba(80,180,255,0.5); }
@@ -116,7 +118,8 @@
 #hud-bc .bar-wrap.hp { position: relative; height: 10px; }
 #hud-bc .armor-fill {
   position: absolute; left: 0; top: 0;
-  height: 3px; width: 0;
+  height: 3px; width: 100%;
+  transform: scaleX(0);
   box-shadow: none;
 }
 #buffs { display: flex; gap: 8px; justify-content: center; margin-top: 5px; min-height: 14px; }
@@ -302,7 +305,9 @@ body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) 
 }
 /* Ghost bar — the lost HP drains as a pale segment behind the fill */
 #hud-bc .bar-ghost {
-  position: absolute; height: 100%;
+  position: absolute; height: 100%; left: 0; width: 100%;
+  transform-origin: left;
+  transform: scaleX(0);
   background: rgba(255,120,100,0.65);
   transition: none;
 }

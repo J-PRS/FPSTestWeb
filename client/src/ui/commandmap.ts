@@ -50,7 +50,10 @@ export class CommandMap {
 
   constructor(parent: HTMLElement) {
     this.canvas = document.createElement('canvas');
-    this.canvas.height = RES;
+    // Backing store at device pixels; draw space stays [0,RES] via the
+    // ctx scale (markers/text crisp on hidpi, terrain bake stays 512).
+    const dpr = Math.min(window.devicePixelRatio, 2);
+    this.canvas.height = RES * dpr;
     this.canvas.width = this.canvas.height;
     this.canvas.style.cssText = `position: absolute; top: 50%; left: 50%;
       width: min(${DRAW}px, 82vmin); height: min(${DRAW}px, 82vmin);
@@ -59,6 +62,7 @@ export class CommandMap {
       background: rgba(6,10,14,0.92);`;
     parent.append(this.canvas);
     this.ctx = this.canvas.getContext('2d')!;
+    this.ctx.scale(dpr, dpr);
   }
 
   get isOpen(): boolean { return this.open; }

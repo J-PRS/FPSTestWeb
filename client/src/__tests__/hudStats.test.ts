@@ -31,9 +31,8 @@ describe('HUD health ghost', (): void => {
     const host = makeHost();
     const stats = new HudStats(host);
     stats.tick(0, makePlayer(60));
-    expect(host.healthBar.style.width).toBe('60%');
-    expect(host.ghostBar.style.left).toBe('60%');
-    expect(host.ghostBar.style.width).toBe('0%');
+    expect(host.healthBar.style.transform).toBe('scaleX(0.6)');
+    expect(host.ghostBar.style.transform).toBe('scaleX(0)');
   });
 
   it('still trails real damage after the first sample', (): void => {
@@ -43,11 +42,10 @@ describe('HUD health ghost', (): void => {
     stats.tick(0, player);
     player.health = 40;
     stats.tick(0, player);
-    expect(host.healthBar.style.width).toBe('40%');
-    expect(host.ghostBar.style.left).toBe('40%');
-    expect(host.ghostBar.style.width).toBe('20%');
+    expect(host.healthBar.style.transform).toBe('scaleX(0.4)');
+    expect(host.ghostBar.style.transform).toBe('translateX(40%) scaleX(0.2)');
     stats.tick(0.25, player);
-    expect(host.ghostBar.style.width).toBe('10%');
+    expect(host.ghostBar.style.transform).toBe('translateX(40%) scaleX(0.1)');
   });
 
   it('snaps to partial health on revival', (): void => {
@@ -61,9 +59,8 @@ describe('HUD health ghost', (): void => {
     player.health = 40;
     player.isDead = false;
     stats.tick(0, player);
-    expect(host.healthBar.style.width).toBe('40%');
-    expect(host.ghostBar.style.left).toBe('40%');
-    expect(host.ghostBar.style.width).toBe('0%');
+    expect(host.healthBar.style.transform).toBe('scaleX(0.4)');
+    expect(host.ghostBar.style.transform).toBe('scaleX(0)');
   });
 
   it('snaps the ghost on healing rather than leaving a damage trail', (): void => {
@@ -73,7 +70,7 @@ describe('HUD health ghost', (): void => {
     stats.tick(0, player);
     player.health = 80;
     stats.tick(0, player);
-    expect(host.healthBar.style.width).toBe('80%');
-    expect(host.ghostBar.style.width).toBe('0%');
+    expect(host.healthBar.style.transform).toBe('scaleX(0.8)');
+    expect(host.ghostBar.style.transform).toBe('scaleX(0)');
   });
 });
