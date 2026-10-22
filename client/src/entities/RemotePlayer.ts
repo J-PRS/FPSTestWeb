@@ -78,6 +78,16 @@ export class RemotePlayer {
   get isSimulating(): boolean { return this.interp.simulating; }
   /** Adaptive render delay this remote rides — lag-comp honesty input. */
   get renderDelayMs(): number { return this.interp.interpDelay; }
+  /** The position the server's lag-comp adjudicates this remote at:
+   *  wire pos projected to (wireAge − 0.7·renderDelay) — the ghostBack
+   *  epoch, not the rendered body (~150ms interp-stale) nor wire-fresh.
+   *  Envelope math (blast/shock beams, shell sweeps) must read this —
+   *  rendered pos ghosts hits on fast movers. */
+  ghostPosition(out: THREE.Vector3): THREE.Vector3 {
+    if (this.lastUpdateTime <= 0) {return out.copy(this.position);}
+    const age = Math.min((Date.now() - this.lastUpdateTime) / 1000, 1);
+    return out.copy(this.wirePosition).addScaledVector(this.vel, age - Math.min(0.7 * this.renderDelayMs / 1000, age));
+  }
   get interpUnderruns(): number { return this.interp.underruns; }
   get interpExtCapMs(): number { return this.interp.extCapMs; }
   get interpAtCap(): boolean { return this.interp.atCap; }

@@ -6,7 +6,6 @@
  */
 import * as THREE from 'three';
 import type { Projectile } from '../../projectiles/Projectile.js';
-import type { Targetable } from '../../entities/balls.js';
 import { ballGhostPos } from '../../projectiles/sweep.js';
 import { getProjectileConfig } from '../../projectiles/index.js';
 import { setRibbonCamera, RibbonTrail } from '../../effects/RibbonTrail.js';
@@ -275,7 +274,6 @@ export function updateProjectiles(c: CombatCtx, dt: number): void {
   remotePlayerPositions.clear();
   const remotePlayerClasses = _remotePlayerClasses;
   remotePlayerClasses.clear();
-  const now = Date.now();
   let maxRenderDelayMs = 0;
   deps.world.remotePlayers.forEach((rp, playerId): void => {
     if (rp.isDead) {return;}
@@ -284,18 +282,8 @@ export function updateProjectiles(c: CombatCtx, dt: number): void {
     // fast movers (the replica pops on the stale visual, server shell
     // sails past the real body = dmg-echo's offM class). Project wire
     // pos forward by wire age — the same epoch the authority sees.
-    if (rp.lastUpdateTime > 0) {
-      const age = Math.min((now - rp.lastUpdateTime) / 1000, 1);
-      // The server's ghost rewind judges the victim ~0.7·renderDelay
-      // behind live (ghostBack = 0.7·(transit + renderLag)) — wire-fresh
-      // overshoots it whole, rendered trails it by the other 30%.
-      const ghostLag = Math.min(0.7 * rp.renderDelayMs / 1000, age);
-      remotePlayerPositions.set(playerId,
-        (_projVecs.get(playerId) ?? _projVecs.set(playerId, new THREE.Vector3()).get(playerId)!)
-          .copy(rp.wirePosition).addScaledVector(rp.vel, age - ghostLag));
-    } else {
-      remotePlayerPositions.set(playerId, rp.position);
-    }
+    remotePlayerPositions.set(playerId,
+      rp.ghostPosition?.(_projVecs.get(playerId) ?? _projVecs.set(playerId, new THREE.Vector3()).get(playerId)!) ?? rp.position);
     if (rp.armorClass) {remotePlayerClasses.set(playerId, rp.armorClass);}
     if (rp.renderDelayMs > maxRenderDelayMs) {maxRenderDelayMs = rp.renderDelayMs;}
   });

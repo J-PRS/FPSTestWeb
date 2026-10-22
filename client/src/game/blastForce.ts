@@ -13,6 +13,7 @@ import type { CombatDeps } from './combat.js';
 import type { Targetable } from '../entities/balls.js';
 import * as sfx from '../core/sfx.js';
 import { parityMiss, parityStamp, expectDamageEcho } from './parity.js';
+import { ballGhostPos } from '../projectiles/sweep.js';
 import { targetDemoId } from '../demo/types.js';
 
 export interface BlastForceHooks {
@@ -36,6 +37,7 @@ const occluded = (pos: THREE.Vector3, target: THREE.Vector3): boolean =>
 // Rewound-eval scratch — lazily cloned off the player so THREE stays a
 // type-only import here (per-blast, not per-frame — allocation is fine).
 let _rewound: THREE.Vector3 | null = null;
+let _ghost: THREE.Vector3 | null = null;
 
 // Splash damage-number color follows the weapon — getProjectileConfig
 // looks up by wire weaponType (the array order isn't the enum).
@@ -95,7 +97,12 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     const scales = weaponType === undefined ? undefined : getWeaponStats(weaponType).aoeScales;
     for (const ball of deps.targets) {
       if (ball.dead) {continue;}
-      const db = ball.pos.distanceTo(pos);
+      // Net-driven creatures sit at the server's rewound epoch too —
+      // creatureSweep rewinds transit+renderLag (ballGhostPos is filled
+      // per tick in the combat pass). Live pos is the replay, not the
+      // judgment.
+      const bpos = ballGhostPos.get(ball) ?? ball.pos;
+      const db = bpos.distanceTo(pos);
       const br = ball.hitRadius ?? ball.radius;
       // One envelope for every blast effect — the creature's own body
       // radius still counts (a surface graze is contact, like players).
@@ -104,7 +111,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       // envelope — so los:false mirrors authority for knock prediction.
       // Boundary matches the server's `d > envelope` skip: a graze at
       // exactly radius+body still eats the shove there.
-      if (db > threshold || (los && occluded(pos, ball.pos))) {continue;}
+      if (db > threshold || (los && occluded(pos, bpos))) {continue;}
       applyTo(ball, a.force * a.forceMultiplier);
       // Splash actually hurts enemies — falloff-scaled like players, with
       // the same damage number + health bar feedback as direct hits
@@ -138,13 +145,20 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     const scales = weaponType === undefined ? undefined : getWeaponStats(weaponType).aoeScales;
     for (const [playerId, rp] of deps.world.remotePlayers) {
       if (rp.isDead) {continue;}
+      // Envelope math at the GHOST epoch — the server judges the victim
+      // at wirePosition rewound ~0.7·renderDelay (ghostBack), not at the
+      // rendered body (~150ms interp-stale). Evaluating the envelope at
+      // rendered pos was the orphan/dmg-echo driver: predicted inside on
+      // the stale visual while the wire truth was outside, or vice versa.
+      _ghost ??= rp.position.clone();
+      const vpos = rp.ghostPosition?.(_ghost) ?? rp.position;
       // Match server damage exactly: 1 - dist/radius inside radius, 0 outside —
       // knockback uses the same envelope (aoeImpulseT1), so nothing predicts
       // damage or shove the server never applies.
-      const dist = rp.position.distanceTo(pos);
-      const impulse = Math.min(aoeImpulseT1At(force, pos, rp.position, radius, rp.armorClass) * KNOCKBACK_SCALE, BLAST_IMPULSE_MAX);
+      const dist = vpos.distanceTo(pos);
+      const impulse = Math.min(aoeImpulseT1At(force, pos, vpos, radius, rp.armorClass) * KNOCKBACK_SCALE, BLAST_IMPULSE_MAX);
       if (impulse <= 0) {continue;}
-      if (occluded(pos, rp.position)) {continue;}
+      if (occluded(pos, vpos)) {continue;}
       rp.applyPredictedKnockback(pos, impulse, forceMode === 'pull');
       if (playerId === directHitTargetId) {continue;}
       // Hitmarker is personal feedback — a bot's blast (shooterId set)
@@ -167,7 +181,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       const friendly = victimTeam !== undefined && victimTeam === deps.world.localTeam;
       if (!a.shooterId && !friendly && aoeDmg >= 1 && deps.lazyNetworkManager()?.authoritySims?.()) {
         expectDamageEcho(playerId, aoeDmg, weaponType, a.shotId, { x: pos.x, y: pos.y, z: pos.z },
-          { x: rp.wirePosition.x, y: rp.wirePosition.y, z: rp.wirePosition.z });
+          { x: vpos.x, y: vpos.y, z: vpos.z });
       }
     }
   }
