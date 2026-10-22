@@ -203,7 +203,14 @@ export class WebTransportGameTransport implements GameTransport {
         const frame = new Uint8Array(2 + data.byteLength);
         frame[0] = data.byteLength & 0xFF; frame[1] = data.byteLength >> 8;
         frame.set(data, 2);
-        this.binWriter.write(frame).catch((): void => { return; });
+        // Dead writer → drop it and reopen so uplink frames reroute to
+        // the datagram/base64 fallback instead of vanishing into the
+        // stream (same silent-starvation class as the server side).
+        this.binWriter.write(frame).catch((): void => {
+          this.binWriter = null;
+          this.binStream = null;
+          if (this.open && this.wantBinLane) {setTimeout((): void => { if (this.open && this.wantBinLane && !this.binStream) {this.openBinLane();} }, 300);}
+        });
         return true;
       }
       if (this.dgWriter && data.byteLength <= WT_MAX_DATAGRAM) {

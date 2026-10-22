@@ -34,6 +34,11 @@ type WtModule = {
     host?: string;
     port: number;
     tls: { certPem: string | Uint8Array; keyPem: string | Uint8Array; allowSelfSigned?: boolean };
+    limits?: {
+      idleTimeoutMs?: number;
+      backpressureTimeoutMs?: number;
+      [k: string]: number | undefined;
+    };
     onSession(session: WtSession): void;
   }): { address: { host: string; port: number }; close(): Promise<void> };
 };
@@ -100,7 +105,7 @@ export class WtSocketAdapter {
       const { value: stream, done: streamDone } = await reader.read();
       if (streamDone || !stream) {return;}
       if (((idx += 1) - 1) === 0) {this.pumpText(stream).catch((error): void => this.die(`reliable pump: ${error instanceof Error ? error.message : error}`));}
-      else {this.pumpBin(stream).catch((): void => { return; });}
+      else {this.pumpBin(stream).catch((error): void => { logger.warn('wt bin pump died', { e: String(error) }); this.binWriter = null; });}
     }
   }
 
@@ -217,7 +222,10 @@ export class WtSocketAdapter {
       const frame = new Uint8Array(2 + msg.byteLength);
       frame[0] = msg.byteLength & 0xFF; frame[1] = msg.byteLength >> 8;
       frame.set(msg, 2);
-      this.binWriter.write(frame).catch((): void => { return; });
+      // A rejecting write = dead stream — drop the writer so the next
+      // frame reroutes to the datagram/JSON fallback instead of silently
+      // eating every tick (the 26s inbound-starvation the dual diff caught).
+      this.binWriter.write(frame).catch((): void => { this.binWriter = null; });
       return msg.byteLength;
     }
     if (!this.writer) {return 0;}
@@ -271,6 +279,13 @@ export class WtServer {
       this.server = mod.createServer({
         port: opts.port,
         tls: { certPem: opts.certPem, keyPem: opts.keyPem, allowSelfSigned: true },
+        // The addon's 5s backpressure / 60s idle defaults kill live game
+        // sessions with an empty-reason teardown — a slow-draining client
+        // (tab throttled, box contended) eats a QUIC-level close before
+        // our own lane watchdogs can name the death and degrade cleanly.
+        // Our app-level idle reap (120s) and liveness probes own those
+        // decisions; the QUIC layer just shouldn't pre-empt them.
+        limits: { idleTimeoutMs: 180_000, backpressureTimeoutMs: 30_000 },
         onSession: (session): void => this.onSession(session),
       });
       // The native addon throws E_SESSION_CLOSED inside its stream-start

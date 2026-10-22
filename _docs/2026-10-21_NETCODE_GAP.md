@@ -3,6 +3,54 @@
 2026-10-21. Honest inventory of what the wire layer does today, measured against
 the published architectures it competes with.
 
+> **2026-10-22 status update** — landed since this report:
+>
+> - **Binary `inputMove` on the fast lane** (WIRE_INPUTMOVE): edges+status now
+>   ride the ~7ms binary lane instead of the ~60ms JSON lane; 11-19B vs ~140B.
+> - **`WIRE_JSON` fast lane for combat claims**: all claim/intent types can
+>   ride the binary lane through the same validation path (~50ms earlier
+>   arrival at the server vs the JSON lane).
+> - **Sub-tick claim ordering** (the Gap-1 fix): `drainCommands` sorts by
+>   clamped `fireAt` — forged deep-past stamps clamp to `arrival−(2×transit+100)`;
+>   `cmdOrder.test.ts` pins it.
+> - **Dead-writer starvation fixed (the dual-demo catch)**: `WtServer.pumpBin`
+>   could exit (throw or lane death) leaving `binWriter` non-null → every tick
+>   wrote into a dead stream while the JSON lane still trickled keepalives —
+>   the "inbound lane dead 26605ms, only inputSync trickles" window measured
+>   live as worst-seat mean 181m / p95 347m replica divergence. `write()`
+>   rejections now drop the writer (both ends) so the next frame reroutes to
+>   the datagram/JSON fallback; client `tiersWebTransport` mirrors it.
+>   **Post-fix dualDiff: PASS — worst mean 5.7m, p95 19.7m** (7 seats).
+> - **Parity rate rollup**: kb-echo / nugrest / dmg-echo now show
+>   misses-per-stamp percentages in Alt+Q, not raw counts.
+> - **Direct-hit blast bloom parity**: server now applies
+>   `directHitAoeBonus` (×1.5 radius on body hits) — was the systematic
+>   annulus mismatch behind most `parity-kb-echo`/`nugrest` noise
+>   (`blastBloom.test.ts`).
+> - Report corrections: the `TickLoop` lead, the deadline-aware scheduler,
+>   and `seg-div` were all *already correct/already shipped* — misreads fixed
+>   inline below.
+>
+> Residual fixes (2026-10-22, second pass): `seg-div` now suppresses
+> predicted-impulse windows (`lastPredImpulseMs` on the net bag) — the
+> residual was predicted-vs-server impulse disagreement, not replay drift.
+> `remote-buried` gates on `fieldD < -0.4` (wire under the sim's own
+> field) — rendered-chord comparisons fired on every gully rest. `kb-echo`
+> rim class reduced at the source: `predictLocalShove` evaluates at the
+> rewound self pos (ping/2+50ms) — the position the server shadow actually
+> sees — instead of the live pos. `WtServer` raises the addon's
+> `backpressureTimeoutMs` (5s→30s) and `idleTimeoutMs` (60s→180s) — the
+> QUIC-level empty-reason teardown on slow-draining clients was the
+> plausible `session.closed` root; our own watchdogs own real death now.
+>
+> Remaining open: the seg-div replay-drift tail (1 event/45s at boot on
+> the last soak — likely join-window), the deeper QUIC-level
+> `session.closed` cause inside the native addon (bounded by the
+> backpressure raise + dead-writer fix; root is below our layer), and
+> `check.sh`/Git-Bash not yet run on this box.
+
+
+
 ## The bar, as actually published
 
 | Reference | Sim cadence | Model | Key tricks |
