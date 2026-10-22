@@ -6,9 +6,18 @@ set "SERVER_DIR=%PROJECT_DIR%\server_bun"
 set "CLIENT_DIR=%PROJECT_DIR%\client"
 set "BUN_BIN=%USERPROFILE%\.bun\bin"
 
-echo Killing old processes on ports 5400 and 8000...
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":5400.*LISTENING"') do taskkill /F /PID %%a >nul 2>&1
+echo Reaping stale dev processes...
+node "%PROJECT_DIR%\_tools\reap.mjs" --kill
+
+echo Killing old server processes...
 for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8000.*LISTENING"') do taskkill /F /PID %%a >nul 2>&1
+powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='bun.exe'\" | Where-Object { \$_.CommandLine -match 'dev-watch\.ts' -and \$_.CommandLine -match 'FPSWebTest' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1
+powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='bun.exe'\" | Where-Object { \$_.CommandLine -match 'src[\\\\/]server\.ts' -and \$_.CommandLine -match 'FPSWebTest' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1
+
+echo Killing old client processes...
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":5400.*LISTENING"') do taskkill /F /PID %%a >nul 2>&1
+
+timeout /t 2 /nobreak >nul
 
 echo Starting server and client...
 
