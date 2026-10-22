@@ -230,7 +230,17 @@ export class BotLines {
         // traverse can walk, it's a basin. Stop scoring terrain — beeline
         // the goal and let the moves layer jet-hop whatever's in the way
         // (humans grind the climb when carving stops paying).
-        wp = { x: pos.x + (dest.x - pos.x) / gd * reach, y: pos.y, z: pos.z + (dest.z - pos.z) / gd * reach };
+        // Carrier exception: a mid-carry basin trap (katabatic 9002:
+        // ~30s bouncing 110-220m) should try the flow-field route one
+        // more time before beelining — the corridor may have a pass the
+        // local fan missed. Beeline only if the route has nothing.
+        if (ctx.running && ctx.route) {
+          const r2 = ctx.route(pos.x, pos.z, dest.x, dest.z, aheadFor(ctx));
+          if (r2) { wp = r2; }
+          else { wp = { x: pos.x + (dest.x - pos.x) / gd * reach, y: pos.y, z: pos.z + (dest.z - pos.z) / gd * reach }; }
+        } else {
+          wp = { x: pos.x + (dest.x - pos.x) / gd * reach, y: pos.y, z: pos.z + (dest.z - pos.z) / gd * reach };
+        }
       } else if (!wp) {
         // Contour traverse: when the goal sits across an unclimbable
         // face, the way out is sideways — walk perpendicular to the
