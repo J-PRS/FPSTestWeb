@@ -130,3 +130,13 @@ _tools/*.blend
 _tools/*.patch
 _tools/*_out.txt
 _tools/_*.ts
+
+
+
+# Environment / secrets (never commit)
+.env
+.env.*
+!.env.example
+
+# Dev stack logs (generated)
+logs/

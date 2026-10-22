@@ -9,6 +9,10 @@ never wire into builds.
 
 - `reap.mjs` - stale dev-process reaper (dry-run by default; `--kill` 6h,
   `--auto` 24h; never touches LSP/MCP). Called by root `devup.bat`.
+- `devup.mjs` - cross-platform clean dev stack (reap + free ports + launch
+  server/client + readiness + Ctrl+C teardown). `devup.bat` delegates here.
+- `wait-for.mjs` - poll a URL until HTTP 200 (CLI + importable). Used by
+  devup.mjs and (optionally) E2E upStack.
 - `e2e/` - headless puppeteer E2E + perf harness (`all.ts` suite driver,
   `baseline.json` perf reference). The `bun _tools/e2e/all.ts` gate.
 - `animbake/` — offline clip bake -> `shared/ANIM_TABLE` (bake.ts + run.mjs).
