@@ -479,11 +479,23 @@ export class RemoteInterp {
     p.y += this.simulatedVelocity.y * dt;
     p.z += this.simulatedVelocity.z * dt;
 
-    // No terrain floor here — the wire is the truth. Clamping converge to
-    // the rendered chord while the server holds the body below it (a real
-    // under-field dip, rescued server-side by unbury) traps the replica at
-    // the surface for the whole dip: remotes hovered 5-12m off their wire
-    // positions, unreadable as aim targets.
+    // Conditional terrain floor: when the wire feet ride at/above the
+    // drawn surface, a ghost under it is a chord-shortcut artifact — the
+    // sampled path bends through a ridge the wire went over, and chasing
+    // it drags the body visibly under terrain (the "pulled under" soak
+    // reports — burial measured ~97% chord-shortcut vs ~3% wire dips).
+    // A genuinely under-field wire (the case this path was left
+    // unfloored for — unbury rescues it server-side) keeps the ghost
+    // unfloored: surfacing it there hovers it 5-12m off truth.
+    const w = this.lastServerPosition;
+    if (this.h.terrain && w.lengthSq() > 0) {
+      const {eye} = classCapsule(this.h.armorClass);
+      const wireBuried = this.h.terrain.getRenderedHeight(w.x, w.z) - (w.y - eye) > 0.5;
+      if (!wireBuried) {
+        const gY = Math.max(this.h.terrain.getHeight(p.x, p.z), this.h.terrain.getRenderedHeight(p.x, p.z));
+        if (p.y < gY + eye) {p.y = gY + eye;}
+      }
+    }
     this.h.rotation.yaw = rot.yaw;
     this.h.rotation.pitch = rot.pitch;
     this.convergeTimer = Math.max(0, this.convergeTimer - dt);

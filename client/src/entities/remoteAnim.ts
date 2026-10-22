@@ -155,7 +155,13 @@ export class RemoteAnim {
     // — a buried streak can't build on stale positions. The warn still
     // reports wireMs so a fresh-wire burial stays distinguishable.
     const wireFresh = Date.now() - h.lastUpdateTime < 2000;
-    if (depth > 0.4 && !h.isSimulating && wireFresh) {
+    // Gate on the FIELD comparison too: a wire resting at field level in
+    // a gully reads 'buried' against the drawn chord (which sits ~1-2m
+    // above field there), and a wire mid-arc over a dip is legitimately
+    // under the rendered surface. Wire feet >0.4 under the sim's own
+    // ground field is the real server-sunk signature.
+    const fieldD = w.lengthSq() === 0 ? 0 : h.terrain!.getHeight(w.x, w.z) - wFeet;
+    if (depth > 0.4 && fieldD < -0.4 && !h.isSimulating && wireFresh) {
       this._buriedStreak += 1;
       // Streak 8 (~2.4s): the server unbury rescues every 0.5s, but a
       // tier-skipped remote's wire can still be holding pre-rescue

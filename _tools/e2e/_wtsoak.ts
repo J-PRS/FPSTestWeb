@@ -77,9 +77,29 @@ try {
           let s = j.steps.get(id);
           if (s) { s.modelMax = Math.max(s.modelMax ?? 0, md); }
         }
+        let s0 = j.steps.get(id);
+        if (!s0) {s0 = { d: [], jerk: [], popCtx: [] }; j.steps.set(id, s0);}
+        // Buried counter: rendered feet under the DRAWN terrain — the
+        // "under terrain rubberbanding" complaint, counted per sample.
         const pr = j.prev.get(id);
         const wp = rp.wirePosition;
         const pw = j.prevWire.get(id);
+        if (rp.terrain) {
+          const g = rp.terrain.getRenderedHeight(p.x, p.z);
+          const bury = g - (p.y - (rp.eyeOff ?? 0));
+          if (bury > 1) {
+            s0.buried = (s0.buried ?? 0) + 1;
+            s0.buryMax = Math.max(s0.buryMax ?? 0, +bury.toFixed(1));
+            // Split: wire ALSO under the drawn surface (genuine burial /
+            // under-field dip) vs wire above while render is under
+            // (interp chord shortcut — a fixable renderer artifact).
+            if (wp) {
+              const wb = rp.terrain.getRenderedHeight(wp.x, wp.z) - (wp.y - (rp.eyeOff ?? 0));
+              if (wb > 0.5) {s0.buriedWire = (s0.buriedWire ?? 0) + 1;}
+              else {s0.buriedChord = (s0.buriedChord ?? 0) + 1;}
+            }
+          }
+        }
         let wireStep = -1;
         if (pw && wp) {
           wireStep = Math.hypot(wp.x - pw.x, wp.y - pw.y, wp.z - pw.z);
@@ -158,6 +178,8 @@ try {
       out[id] = { n: s.d.length, med: +med.toFixed(2), max: +Math.max(...s.d, 0).toFixed(2),
         pops: s.d.filter((v) => v > Math.max(med * 2.5, 0.6)).length,
         jerks: s.jerk?.length ?? 0,
+        buried: s.buried ?? 0, buryMax: s.buryMax ?? 0,
+        bWire: s.buriedWire ?? 0, bChord: s.buriedChord ?? 0,
         modelMax: +(s.modelMax ?? 0).toFixed(2),
         ctx: s.popCtx ?? [] };
     }
@@ -174,7 +196,7 @@ try {
         console.log(`  sampler health: ticks=${r.frames} p50gap=${r.p50}ms p95gap=${r.p95}ms`);
         continue;
       }
-      console.log(`  ${id.slice(-6)}: n=${r.n} medStep=${r.med}m maxStep=${r.max}m pops=${r.pops} jerks=${r.jerks} modelDiv=${r.modelMax}m` +
+      console.log(`  ${id.slice(-6)}: n=${r.n} medStep=${r.med}m maxStep=${r.max}m pops=${r.pops} jerks=${r.jerks} buried=${r.buried}[w:${r.bWire}/c:${r.bChord}] buryMax=${r.buryMax}m modelDiv=${r.modelMax}m` +
         (r.ctx?.length ? ` ctx=${JSON.stringify(r.ctx)}` : ''));
     }
   }
