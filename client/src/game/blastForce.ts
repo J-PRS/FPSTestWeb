@@ -221,14 +221,15 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     // Same 700ms horizon as the stamp lifecycle — under drain-burst lag
     // the replica's explode can trail the echo's wire arrival past 400ms,
     // and a stale window double-shoves + strands a false kb-echo stamp.
-    // Same 8m + force match as the stamp consume in players.ts — replica
-    // explode positions diverge from the server's blast center past 3m.
+    // Same 18m + force match as the stamp consume in players.ts — replica
+    // blast centers diverge from the server's detonation by trajDiv's p95
+    // (~25m tail), so 8m missed real echoes and re-applied their shoves.
     // recentKb carries the wire's APPLIED impulse — compare against the
     // same falloff-scaled impulse we would apply, not the raw blast force.
     const dupCands: number[] = [];
     for (let k = 0; k < rkb.length; k += 1) {
       const s = rkb[k]!;
-      if (now - s.t < 700 && Math.hypot(s.x - pos.x, s.y - pos.y, s.z - pos.z) < 8) {dupCands.push(k);}
+      if (now - s.t < 700 && Math.hypot(s.x - pos.x, s.y - pos.y, s.z - pos.z) < 18) {dupCands.push(k);}
     }
     // Same identity rule as the stamp consume: center+time wins; the
     // wire's applied impulse vs our predicted falloff only disambiguates

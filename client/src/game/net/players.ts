@@ -277,10 +277,15 @@ function wirePlayerCombat(ctx: NetCtx): void {
     // latency the boundary-falloff prediction differs legitimately, and
     // a hard <0.5 veto orphans the match (double-shove + a false
     // kb-echo expiry + the echo re-warned as kb-unpredicted).
+    // Center window widened 8→18m: the stamped center is the replica's
+    // painted blast point — with trajDiv p95 ~25m the wire's detonation
+    // center can sit well outside it. A miss here double-shoves (predicted
+    // impulse + full wire impulse) AND orphans the stamp into a false
+    // kb-echo. Force disambiguates two same-window blasts.
     const cands: number[] = [];
     for (let k = 0; k < stamps.length; k += 1) {
       const s = stamps[k]!;
-      if (now - s.t < 700 && Math.hypot(s.x - position.x, s.y - position.y, s.z - position.z) < 8) {cands.push(k);}
+      if (now - s.t < 700 && Math.hypot(s.x - position.x, s.y - position.y, s.z - position.z) < 18) {cands.push(k);}
     }
     const i = cands.length === 0 ? -1
       : cands.reduce((a, b): number => Math.abs((stamps[a]!.f ?? force) - force) <= Math.abs((stamps[b]!.f ?? force) - force) ? a : b);

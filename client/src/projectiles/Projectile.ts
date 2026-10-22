@@ -304,7 +304,11 @@ export class Projectile {
 
     if (!this.exploded) {this.updateAlive(dt, terrain, balls, remotePlayers, obstacles, playerClasses);}
 
-    this.rendered.copy(this.pos).add(this.renderOffset);
+    // Cell-stepped shells render the sub-cell remainder ballistically
+    // (ballNet's rem pattern) — pos sits on the last 50ms grid boundary;
+    // the fraction between it and the next step draws the arc, not a
+    // 20Hz staircase. cellAcc stays 0 for replicas — same formula.
+    this.computeRendered();
 
     this.tickRayBurst();
 
@@ -366,10 +370,55 @@ export class Projectile {
       this.updateMesh();
       return;
     }
+    this.tickArmedFx();
+
+    // Stuck bomb: planted on a surface, ticking down to fuse. Age is the
+    // fuse clock (fuseAge = age − armAge) — it advances wall-clock here,
+    // the cell grid only owns physics+collision while the shell flies.
+    if (this.stuck) {
+      this.age += dt; this.lastDt = dt;
+      if (this.glue.tickStuck()) {return;}
+    }
+
+    // Remote (server-authoritative/demo) replicas skip all collision —
+    // terrain-only behavior lives in tickRemote, and their per-frame
+    // stepping is fine: the wire's gone edge owns their death anyway.
+    if (this.isRemote) {
+      this.stepFrame(dt, terrain, undefined, remotePlayers, obstacles, playerClasses);
+      return;
+    }
+
+    // Predicted shells step physics+collision on the SERVER's fixed 50ms
+    // cell grid — frame-sized sub-segments were the trajDiv tail: every
+    // bounce/contacts resolved at a different phase point than the tick
+    // grid the authority sweeps. The sub-cell remainder renders
+    // ballistically (the ballNet rem pattern) so motion stays smooth.
+    this.cellAcc = Math.min(this.cellAcc + dt, 0.6);
+    while (this.cellAcc >= 0.05) {
+      this.cellAcc -= 0.05;
+      if (this.stepFrame(0.05, terrain, balls, remotePlayers, obstacles, playerClasses)) {return;}
+    }
+    this.computeRendered();
+    this.updateMesh();
+    // Trail emission is driver-owned: updateVfx samples this.pos once the
+    // frame settles and decides emit-vs-jump for every layer.
+  }
+
+  /** Remainder of the current 50ms cell — rendered pos = pos + vel*rem. */
+  private cellAcc = 0;
+
+  private computeRendered(): void {
+    this.rendered.copy(this.pos).addScaledVector(this.vel, this.cellAcc);
+    if (this.cellAcc > 0 && this.config.gravity) {this.rendered.y += 0.5 * GRAVITY * this.cellAcc * this.cellAcc;}
+    this.rendered.add(this.renderOffset);
+  }
+
+  /** One sim step (one server cell for predicted shells, one frame for
+   *  replicas): integrate, fuse, discharge, sweep. True on explode/dead. */
+  private stepFrame(dt: number, terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>, obstacles?: SweepObstacle[], playerClasses?: Map<string, string>): boolean {
     this.prevPos.copy(this.pos);
     this.lastDt = dt;
     this.age += dt;
-    this.tickArmedFx();
 
     // Absolute backstop: fuseless configs (bolt/disc/chaingun fly-until-
     // contact) or a remote replica whose destroy edge never arrived used
@@ -378,26 +427,35 @@ export class Projectile {
     // by 10s (a 250m/s chaingun slug covers ~2.5km).
     if (this.age >= ABSOLUTE_TTL_S) {
       this.explode();
-      return;
+      return true;
     }
 
-    // Stuck bomb: planted on a surface, ticking down to fuse.
-    if (this.stuck && this.glue.tickStuck()) {return;}
-    // hitPoint is per-frame: a stale value from a previous bounce would
+    // hitPoint is per-step: a stale value from a previous bounce would
     // teleport the explosion back to the last terrain contact (the
     // "explosion in the wrong spot" bug on fuse/ball/player kills)
     this.hitPointValid = false;
     if (this.config.gravity) {this.vel.y += GRAVITY * dt;}
     this.pos.addScaledVector(this.vel, dt);
+    if (this.fuseExpired()) {return true;}
 
-    // Fuse: auto-explode once the ARMED fuse burns out. Sticky ordnance
-    // is inert in flight (fuseAge -1) — a bomb that never attaches gets
-    // a failsafe triple-fuse so it can't drift forever.
+    this.tickRayDischarge();
+
+    if (this.isRemote) {
+      return this.tickRemote(terrain, remotePlayers, playerClasses);
+    }
+    return this.checkCollisions(terrain, balls, remotePlayers, obstacles, playerClasses);
+  }
+
+  /** Fuse burn + overdue/fuseless diagnostics — true when the cell ends
+   *  the shell. Sticky ordnance is inert in flight (fuseAge -1) — a bomb
+   *  that never attaches gets a failsafe triple-fuse so it can't drift
+   *  forever. */
+  private fuseExpired(): boolean {
     const ttl = this.fuseTtl();
     const fa = this.fuseAge();
     if (ttl && ((fa >= 0 && fa >= ttl) || (fa < 0 && this.age >= ttl * 3))) {
       this.explode();
-      return;
+      return true;
     }
     // A live shell this far past its fuse means the pop path itself failed
     // (stale ttl, armed gate, stuck early-return) — name it in the dump.
@@ -412,20 +470,7 @@ export class Projectile {
       this.overdueFlagged = true;
       glitch('proj-fuseless', { cfg: this.config.name, age: Number(this.age.toFixed(2)), remote: this.isRemote, wt: this.config.weaponType });
     }
-
-    this.tickRayDischarge();
-
-    // Remote (server-authoritative/demo) replicas skip all collision —
-    // terrain-only behavior lives in tickRemote.
-    if (this.isRemote) {
-      if (this.tickRemote(terrain, remotePlayers, playerClasses)) {return;}
-    } else if (this.checkCollisions(terrain, balls, remotePlayers, obstacles, playerClasses)) {
-      return; // exploded inside checkCollisions
-    }
-
-    this.updateMesh();
-    // Trail emission is driver-owned: updateVfx samples this.pos once the
-    // frame settles and decides emit-vs-jump for every layer.
+    return false;
   }
 
   // Discharge aftermath: beam visual fires once with the resolved
@@ -527,7 +572,7 @@ export class Projectile {
 
 
   updateMesh(): void {
-    Projectile._renderPos.copy(this.pos).add(this.renderOffset);
+    Projectile._renderPos.copy(this.rendered);
     updateProjectileMesh(this.mesh, this.glowMesh, Projectile._renderPos, this.vel,
       this.config, this.age, this.hitRadius,
       { x: this.tumbleX, y: this.tumbleY, z: this.tumbleZ }, this.lastDt, this.fuseAge());

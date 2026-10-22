@@ -99,7 +99,7 @@ const trajDivs: number[] = [];
 export function noteTrajDiv(d: number, wt?: number, selfPopped?: boolean): void {
   trajDivs.push(d);
   if (trajDivs.length > 64) {trajDivs.shift();}
-  if (d > 60) {glitch('traj-outlier', { m: Math.round(d), wt, self: selfPopped ? 1 : 0 });}
+  if (d > 60) {parityMiss('traj-outlier', { m: Math.round(d), wt, self: selfPopped ? 1 : 0 });}
 }
 export function trajDivStats(): { n: number; p50: number; p95: number; max: number; over8: number } {
   const s = trajDivs.toSorted((a, b) => a - b);
@@ -193,5 +193,8 @@ export function parityLines(): string[] {
 registerDiag('parity', () => ({
   misses: total,
   byKind: Object.fromEntries([...counts.entries()].map(([k, n]) => [k, `${n}/${stamps.get(k) ?? 0}`])),
+  // Detail rows — the census hides WHICH prediction died; the ring keeps
+  // the last 24 so a headless pull names the outliers (traj/dmg/kb).
+  rows: rows.slice(-12).map((r) => `${r.kind} ${r.detail}`),
   trajDiv: trajDivStats(),
 }));
