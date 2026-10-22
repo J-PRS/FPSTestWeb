@@ -17,11 +17,12 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const ALLOW = new Set([
   // versioned project files
   'AGENTS.md', 'ROADMAP.md', 'TASKS.md', 'TEST_PLAN_bots.md', 'TEST_PLAN_demo.md',
-  'NOTES.md', 'GLOSSARY.md',
+  'NOTES.md', 'GLOSSARY.md', 'ARCHITECTURE.md', 'README.md',
   'changelog.txt', 'Dockerfile', 'stryker.vitest.config.ts', '_rootcheck.mjs',
   // project dirs
-  '.agents', '.devin', '.git', '.github',
-  '_DEMO', '_docs', '_ref', '_reference', '_reports', '_scratch', '_tmp', '_tools', '_zzz',
+  '.agents', '.devin', '.devin-diff', '.devin-tools', '.devin_chrome_tmp',
+  '.git', '.github', '.vscode',
+  '_assets', '_DEMO', '_docs', '_ref', '_reference', '_reports', '_scratch', '_tmp', '_tools', '_zzz',
   'ZZZ_ROOT', 'TEMP_WEBual', 'build', 'client', 'concepts', 'demo', 'demos_flag',
   'demos_rich', 'demos_out', 'combo_clips', 'docs', 'logs', 'maps', 'node_modules',
   'reference', 'screenshots', 'screenshots_legacy', 'screenshots_web',
