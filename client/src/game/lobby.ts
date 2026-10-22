@@ -352,6 +352,13 @@ export class Lobby {
     }
   }
 
+  private static metaSpan(txt: string, cls = ''): HTMLSpanElement {
+    const s = document.createElement('span');
+    if (cls) {s.className = cls;}
+    s.textContent = txt;
+    return s;
+  }
+
   private addRow(r: RoomRow): void {
     const row = document.createElement('button');
     row.className = 'lb-room';
@@ -369,24 +376,33 @@ export class Lobby {
       this.toggleFav(r.name);
     });
     const name = document.createElement('span');
+    name.className = 'lb-name';
     name.textContent = r.name;
     name.style.flex = '1';
     const meta = document.createElement('span');
     meta.className = 'meta';
-    let scoreTxt = '';
-    if (r.scores) {scoreTxt = `  ${r.scores.alpha}:${r.scores.bravo}`;}
-    else if (r.ffaLeader) {scoreTxt = `  ${r.ffaLeader[0]} ${r.ffaLeader[1]}pts`;}
-    const clock = r.timeLeftMs ? ` ${Math.ceil(r.timeLeftMs / 60_000)}m` : '';
-    // Same dedupe as the header — a room named after its mode doesn't
-    // need "ctf" three times in one line.
+    this.rowMeta(meta, r);
+    // Mode rides a tinted chip before the name — the one categorical
+    // fact on the row, so it doesn't drown in the numeric meta.
     const room = r.name.toUpperCase();
-    const modeTxt = r.mode && !room.includes(r.mode.toUpperCase()) ? `${r.mode} ` : '';
-    const mapTxt = r.map && r.map.toUpperCase() !== r.mode?.toUpperCase()
-      && !room.includes(r.map.toUpperCase()) ? `${r.map} ` : '';
-    meta.textContent = `${modeTxt}${mapTxt}${r.players}/${r.maxPlayers}${scoreTxt}${r.winAt ? ` →${r.winAt}` : ''}${clock}`;
-    row.append(star, name, meta);
+    const modeChip = r.mode && !room.includes(r.mode.toUpperCase())
+      ? Lobby.metaSpan(r.mode.toUpperCase(), 'lb-mode') : null;
+    row.append(star, ...(modeChip ? [modeChip] : []), name, meta);
     row.addEventListener('click', (): void => this.join(r.name));
     this.rows.append(row);
+  }
+
+  /** Right-side stats — spaced tabular spans: map · players · score ·
+   *  target · clock. Each token earns its place or it isn't emitted. */
+  private rowMeta(meta: HTMLElement, r: RoomRow): void {
+    const mk = Lobby.metaSpan;
+    const room = r.name.toUpperCase();
+    if (r.map && r.map.toUpperCase() !== r.mode?.toUpperCase() && !room.includes(r.map.toUpperCase())) {meta.append(mk(r.map));}
+    meta.append(mk(`${r.players}/${r.maxPlayers}`));
+    if (r.scores) {meta.append(mk(`${r.scores.alpha} – ${r.scores.bravo}`, 'lb-score'));}
+    else if (r.ffaLeader) {meta.append(mk(`${r.ffaLeader[0]} ${r.ffaLeader[1]}pts`, 'lb-score'));}
+    if (r.winAt) {meta.append(mk(`→${r.winAt}`));}
+    if (r.timeLeftMs) {meta.append(mk(`${Math.ceil(r.timeLeftMs / 60_000)}m`));}
   }
 
   join(name: string, map?: string, bots?: number, mode?: string, unlisted?: boolean, noCreatures?: boolean, noBalls?: boolean): void {

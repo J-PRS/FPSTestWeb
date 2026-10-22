@@ -311,6 +311,10 @@ body.menu-open #frag-msg { display: none !important; }
 /* The play hub is a centered window now — it covers the same screen
    region as the loadout sheet, so the sheet steps aside while it's up. */
 body.lobby-open #loadout-bar { display: none; }
+/* Lobby open: mute the paused-menu chrome behind the hub — the ghosted
+   "CLICK TO RESUME" bleeding through read as a broken screen, not a menu. */
+body.lobby-open #overlay { background: rgba(4,7,12,0.72); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+body.lobby-open #overlay-center { display: none; }
 #loadout-bar .lo-group { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
 #loadout-bar .lo-head {
   font-size: 0.74rem; letter-spacing: 0.2em; font-weight: 700;
@@ -553,17 +557,33 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .lb-room.current { border-left-color: #6fcf8f; opacity: 0.9; }
 .lb-room.full { opacity: 0.45; }
 .lb-room:disabled { cursor: default; }
-.lb-room .meta { float: right; color: rgba(58,167,255,0.85); }
+.lb-room .lb-name { font-weight: 600; color: #eef4fb; }
+/* Mode chip — the one categorical fact on the row gets a badge; the rest
+   of the meta stays dim tabular numbers so it scans as columns. */
+.lb-room .lb-mode {
+  font-size: 0.56rem; font-weight: 700; letter-spacing: 0.1em;
+  color: #7db8ff; background: rgba(58,167,255,0.12);
+  border: 1px solid rgba(58,167,255,0.28); border-radius: 3px;
+  padding: 2px 5px; margin-right: 6px; white-space: nowrap;
+}
+.lb-room .meta { color: rgba(160,190,215,0.7); font-variant-numeric: tabular-nums; }
+.lb-room .meta .lb-score { color: rgba(58,167,255,0.95); font-weight: 600; }
 .lb-fav { color: #ffd76f; margin-right: 8px; cursor: pointer; }
-.lb-tabs { display: flex; gap: 4px; margin-bottom: 10px; }
-.lb-tabs .lb-btn { flex: 1; padding: 5px 0; text-align: center; font-size: 0.62rem; opacity: 0.6; }
-.lb-tabs .lb-btn.active { opacity: 1; background: rgba(58,167,255,0.18); color: #fff; border-color: #3aa7ff; }
+/* Tab bar reads as one segmented control, not four identical buttons —
+   inactive segments are borderless text, active gets the fill. */
+.lb-tabs { display: flex; gap: 2px; margin-bottom: 12px;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px; padding: 3px; }
+.lb-tabs .lb-btn { flex: 1; padding: 6px 0; text-align: center; font-size: 0.62rem;
+  opacity: 0.65; border: none; background: transparent; border-radius: 5px; }
+.lb-tabs .lb-btn:hover { background: rgba(58,167,255,0.12); }
+.lb-tabs .lb-btn.active { opacity: 1; background: rgba(58,167,255,0.28); color: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.4); }
 .lb-maplist .lb-btn.active { background: rgba(58,167,255,0.18); color: #fff; border-color: #3aa7ff; }
 /* More rows below the scroll cap — the scrollbar is hidden, so the
    bottom fade is the only "keep scrolling" affordance. */
 .lb-maplist.lb-more { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent); }
-.lb-room { display: flex; align-items: center; gap: 2px; }
-.lb-room .meta { margin-left: auto; float: none; }
+.lb-room { display: flex; align-items: center; gap: 6px; }
+.lb-room .meta { margin-left: auto; float: none; display: flex; gap: 10px; }
 
 /* ---- Clip feed (/clips) - TikTok-style fullscreen replay chrome ---- */
 #clipfeed { position: fixed; inset: 0; z-index: 90; pointer-events: none;

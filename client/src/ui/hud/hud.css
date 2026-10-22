@@ -588,6 +588,16 @@ body:has(#hud.cm-open) #healthbar-container {
   font-size: 0; height: 11px; padding: 0;
   background: linear-gradient(rgba(255,255,255,0.1), rgba(255,255,255,0.1)) no-repeat center/100% 1px;
 }
+/* Team aggregate strip — "17 – 7" centered under the title, team-
+ *  colored numerals, no labels. Hidden by setTeamScores for modes
+ *  without team scores. */
+#sb-teams {
+  display: none; text-align: center; font: 700 20px/1.2 monospace;
+  letter-spacing: 0.12em; text-shadow: 0 0 8px #000; margin: -2px 0 6px;
+}
+#sb-teams .a { color: #7db8ff; }
+#sb-teams .b { color: #ff9a6a; }
+#sb-teams .sep { color: #8899aa; margin: 0 8px; font-weight: 400; }
 #scoreboard tr.sb-team.alpha td { background-image: linear-gradient(rgba(85,170,255,0.35), rgba(85,170,255,0.35)); }
 #scoreboard tr.sb-team.bravo td { background-image: linear-gradient(rgba(255,136,85,0.35), rgba(255,136,85,0.35)); }
 /* Name cell tinted by team — readable at a glance even flat-sorted. */

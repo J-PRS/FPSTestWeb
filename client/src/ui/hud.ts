@@ -282,6 +282,7 @@ export class HUD {
   get scoreboardVisible(): boolean { return this.sb.isVisible; }
 
   setScoreboardRows(rows: SbRow[]): void { this.sb.setRows(rows); }
+  setScoreboardTeamScores(s: { alpha: number; bravo: number } | null): void { this.sb.setTeamScores(s); }
 
   /** Intermission footer on the board — "NEXT MATCH IN N". */
   setScoreboardCountdown(secLeft: number | null): void { this.sb.setCountdown(secLeft); }

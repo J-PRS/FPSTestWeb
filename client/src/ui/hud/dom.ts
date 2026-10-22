@@ -96,6 +96,7 @@ export function createHudDom(): HudDom {
       <div id="conn-banner"></div>
       <div id="scoreboard">
         <div id="sb-title"></div>
+        <div id="sb-teams"><span class="a" id="sb-ts-a">0</span><span class="sep">–</span><span class="b" id="sb-ts-b">0</span></div>
         <table><thead><tr><th>#</th><th>PLAYER</th><th>CLASS</th><th>FRAGS</th><th>DEATHS</th><th>PTS</th><th>NET</th><th>PING</th><th>SHEEP</th><th>ALIVE</th><th title="air / ski / walk — % of current life">A/S/W</th></tr></thead><tbody id="sb-rows"></tbody></table>
         <div id="sb-countdown"></div>
       </div>
