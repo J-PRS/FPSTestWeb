@@ -1,3 +1,4 @@
+2026-10-22 - refactor(root): consolidation pass 2 - move _DEMO, _reports, run, workflows, screenshots_web, reference, run_all.ps1 into subfolders (213 renames). Root 68 -> 57 entries. Generated output (demos_out) re-added to manifest.
 2026-10-22 - feat(weapons): streamline client configs - makeProjectileConfig auto-maps WeaponStats core fields; concConfig + empConfig migrated as proof of concept. New weapons need ~10 lines of cosmetics instead of 70.
 2026-10-22 - feat(dev): run_all_noreload.bat - server + noreload client (stale-files badge, manual F5). Same robust process-killing as run_all.bat.
 2026-10-22 - fix(map): lagoon sea sink deepened - 12.8% deep water (byte 0), 84.3% land full relief; was invisible shallow shelf (0% below waterline). genlagoon.js ISLAND_R 420 + deep ocean floor (WATER-12).
