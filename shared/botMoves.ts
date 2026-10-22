@@ -449,6 +449,47 @@ export class BotMoves {
     return drop > T.moves.hopDescRise * 2;
   }
 
+  /** Apex jet: at the top of a jump, if the no-thrust arc won't reach the
+   *  next peak (shallow angle, barely reachable), jet to extend the
+   *  trajectory. Tribes: "jet just enough to reach the next hill" — a
+   *  brief burn at the apex extends range so you land on the downslope
+   *  and keep the descent pump. Also handles steering (lateral aim) by
+   *  extending the arc when the destination is off-axis. */
+  private apexNeedsJet(ctx: BrainCtx, pos: BotVec): boolean {
+    const v = ctx.vel;
+    if (!v || !ctx.runner) {return false;}
+    const vy = v.y ?? 0;
+    // Apex = vertical velocity near zero (top of arc).
+    if (vy > 2 || vy < -8) {return false;} // not at apex (rising or falling fast)
+    const hSpeed = Math.hypot(v.x, v.z);
+    if (hSpeed < 5) {return false;} // too slow to matter
+    // Dead-reckon the no-thrust arc forward. If it hits ground before
+    // reaching a downslope, we need jet to extend.
+    const nx = v.x / hSpeed, nz = v.z / hSpeed;
+    const dtS = 0.12, G = GRAVITY;
+    let {x} = pos, {y} = pos, {z} = pos, vy_ = vy;
+    let needsJet = false;
+    for (let s = 0; s < 30; s += 1) {
+      x += v.x * dtS; z += v.z * dtS;
+      y += vy_ * dtS; vy_ += G * dtS;
+      const g = ctx.groundY(x, z);
+      const clearance = y - g;
+      if (clearance <= 1.5) {
+        // Touchdown. Check if the ground ahead is a descent (we can ski)
+        // or a rise (we'd lose speed on impact).
+        const ahead = ctx.groundY(x + nx * 6, z + nz * 6);
+        if (ahead > g + 0.5) {
+          // Rising ahead — slamming into a face. Need jet to extend arc
+          // over the rise and land on the downslope.
+          needsJet = true;
+        }
+        return needsJet;
+      }
+    }
+    // Still airborne at 3.6s — arc is fine, no jet needed.
+    return false;
+  }
+
   /** True when the no-thrust arc reaches the objective's planar ring at
    *  a grabbable height (±6m matches the pickup's vertical cap) — a hop
    *  here is altitude the grab can't spend, so hold the arc. Runner
@@ -710,6 +751,18 @@ export class BotMoves {
     // grabV stuck at 25-35). Only a real climb still spends — an
     // elevated flag face is the one thing forward thrust can't buy.
     if (strike && why !== 'runIn' && why !== 'climb' && why !== 'prey' && why !== 'skyBank') {return false;}
+    // Apex jet (Tribes: "jet just enough to reach the next hill"): at the
+    // top of a jump, if the no-thrust arc won't reach the next peak (shallow
+    // angle, barely reachable), jet to extend the trajectory. Also handles
+    // steering (lateral aim) by extending the arc when the destination is
+    // off-axis. This is proactive jetting — looking ahead, not just
+    // reacting to climbs.
+    if (airborne && (ctx.vel?.y ?? 0) >= -2 && (ctx.vel?.y ?? 0) <= 2 &&
+        ctx.energy !== undefined && ctx.energy > T.moves.tapEnergyMin &&
+        this.apexNeedsJet(ctx, pos)) {
+      this.jetWhy = 'apex';
+      return true;
+    }
     // The `mountE` start floor is load-bearing even inside the strike
     // window: letting the leg drain to `strikeTapMin` (2) was measured
     // WORSE on every axis (5 seeds × 3 maps: grabV 22.4→15.0, oasis
