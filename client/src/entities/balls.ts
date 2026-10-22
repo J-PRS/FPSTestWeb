@@ -462,6 +462,7 @@ export class Ball {
       // yanking 20-50m (the render-blend/follow-jump storm).
       const s = this.netS.sim;
       if (s) { s.vx += dir.x * force; s.vy += dir.y * force; s.vz += dir.z * force; s.gt = 0; }
+      this.netS.lastPredImpulseMs = performance.now(); // seg-div suppresses the designed divergence
       if (claim) { this._netImp.addScaledVector(dir, force); }
       return;
     }
@@ -477,6 +478,7 @@ export class Ball {
     if (this.netDriven) {
       const s = this.netS.sim;
       if (s) { s.vx += dir.x * force; s.vy += dir.y * force; s.vz += dir.z * force; s.gt = 0; }
+      this.netS.lastPredImpulseMs = performance.now();
       if (claim) { this._netImp.addScaledVector(dir, force); }
       return;
     }

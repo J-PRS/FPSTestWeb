@@ -33,6 +33,10 @@ const solids = () => Projectile.solidColliders;
 const occluded = (pos: THREE.Vector3, target: THREE.Vector3): boolean =>
   solids().length > 0 && blastOccluded(pos, target, solids());
 
+// Rewound-eval scratch — lazily cloned off the player so THREE stays a
+// type-only import here (per-blast, not per-frame — allocation is fine).
+let _rewound: THREE.Vector3 | null = null;
+
 // Splash damage-number color follows the weapon — getProjectileConfig
 // looks up by wire weaponType (the array order isn't the enum).
 function splashColor(weaponType?: number): string {
@@ -179,7 +183,13 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     // its envelope math said I was out' from a shove that truly came
     // from nowhere — only the second deserves the anomaly log.
     deps.explosionTracker.addExplosion(pos, force, shooterId ?? 'remote');
-    const dpx = player.pos.distanceTo(pos);
+    // The server judges this blast at its movement SHADOW — our position
+    // ~uplink-transit ago — not at the live render pos. Evaluating the
+    // envelope at the rewound pos is what the authority will see, so rim
+    // hits stop flipping on the live-vs-shadow gap (the kb-echo class).
+    const lagSec = Math.min(0.35, Math.max(0, (deps.lazyNetworkManager?.()?.getPing?.() ?? 0) / 2000 + 0.05));
+    const evalPos = lagSec > 0 && player.vel ? (_rewound ??= player.pos.clone()).copy(player.pos).addScaledVector(player.vel, -lagSec) : player.pos;
+    const dpx = evalPos.distanceTo(pos);
     // Knockback reach = damage reach: the blast ends at aoeRadius, same
     // bound the server applies and the ?debug gizmo draws.
     // Spawn shield: the server refuses enemy-blast shove/damage during
@@ -188,10 +198,10 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     // Self blasts still predict (the server applies those); a friendly's
     // blast suppression is harmless — its wire knockback lands anyway.
     const shielded = shooterId !== undefined && shooterId !== 'local' && performance.now() < player.protectedUntil;
-    if (shielded || dpx - t1Minbox(player.appliedClass) >= radius || occluded(pos, player.pos)) {return false;}
+    if (shielded || dpx - t1Minbox(player.appliedClass) >= radius || occluded(pos, evalPos)) {return false;}
     const now = performance.now();
     const impulse = Math.min(
-      aoeImpulseT1At(force, pos, player.pos, radius, player.appliedClass) * KNOCKBACK_SCALE * player.mods.knockbackTaken,
+      aoeImpulseT1At(force, pos, evalPos, radius, player.appliedClass) * KNOCKBACK_SCALE * player.mods.knockbackTaken,
       BLAST_IMPULSE_MAX);
     // Dedup, reverse direction: the knockback echo can beat its blast's
     // replica explode (handlers run on arrival, the predicted shove waits

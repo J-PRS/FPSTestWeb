@@ -65,6 +65,11 @@ export interface NetBag {
    *  segment's own correction; a jump with no fresh authority is the
    *  anomaly ball-step exists for. */
   lastSegWallMs?: number;
+  /** Wall clock of the last predicted knockback/pull impulse — a segment
+   *  arriving inside this window measures predicted-shove-vs-server-shove
+   *  disagreement (different impulse origin, by design), not replay drift.
+   *  seg-div suppresses those so the counter only counts replay error. */
+  lastPredImpulseMs?: number;
 }
 
 export function newNetBag(): NetBag {
@@ -293,7 +298,11 @@ export function applySeg(st: NetStatics, bag: NetBag, host: NetHost, seg: NetSeg
   // measures speed×(simT−t) of pure flight lag between two different
   // instants (a 150 m/s ball 150ms ahead reads 22m), not divergence.
   // Only a stamp newer than the cursor can show replay error.
-  if (pd > 20 && !seg.hard && spanMs >= 0 && spanMs <= 4000 && bag.legT0 !== -1 && (bag.segsSeen ?? 0) > 3) {
+  // A segment landing within ~1 segment-latency of a predicted shove is
+  // measuring predicted-impulse-vs-server-impulse — different impulse
+  // origins by design, the snap self-heals. Not replay drift.
+  const predImpulse = bag.lastPredImpulseMs !== undefined && performance.now() - bag.lastPredImpulseMs < 800;
+  if (pd > 20 && !seg.hard && spanMs >= 0 && spanMs <= 4000 && bag.legT0 !== -1 && (bag.segsSeen ?? 0) > 3 && !predImpulse) {
     glitch('seg-div', { m: Math.round(pd), spanMs: Math.round(spanMs), enr: seg.enraged ? 1 : 0 });
   }
   s.x = seg.px; s.y = seg.py; s.z = seg.pz;

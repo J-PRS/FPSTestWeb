@@ -40,6 +40,9 @@ const _ropeAnchor = new THREE.Vector3();
 // Remote player positions for projectile collision — rebuilt per frame into
 // the same Map (zeroed allocations in the hot loop)
 const _remotePlayerPositions = new Map<string, THREE.Vector3>();
+// Reusable vectors keyed by playerId — remotePlayerPositions is rebuilt
+// every frame, so pooled vec refs keep the hot path alloc-free.
+const _projVecs = new Map<string, THREE.Vector3>();
 // Parallel armor-class map — the sweep needs each body's capsule size.
 const _remotePlayerClasses = new Map<string, string>();
 
@@ -270,11 +273,27 @@ export function updateProjectiles(c: CombatCtx, dt: number): void {
   remotePlayerPositions.clear();
   const remotePlayerClasses = _remotePlayerClasses;
   remotePlayerClasses.clear();
+  const now = Date.now();
   deps.world.remotePlayers.forEach((rp, playerId): void => {
-    if (!rp.isDead) {
+    if (rp.isDead) {return;}
+    // Server adjudicates this shell against the victim's wire-fresh pos —
+    // sweeping the rendered body (~150ms interp-stale) ghosts hits on
+    // fast movers (the replica pops on the stale visual, server shell
+    // sails past the real body = dmg-echo's offM class). Project wire
+    // pos forward by wire age — the same epoch the authority sees.
+    if (rp.lastUpdateTime > 0) {
+      const age = Math.min((now - rp.lastUpdateTime) / 1000, 1);
+      // The server's ghost rewind judges the victim ~0.7·renderDelay
+      // behind live (ghostBack = 0.7·(transit + renderLag)) — wire-fresh
+      // overshoots it whole, rendered trails it by the other 30%.
+      const ghostLag = Math.min(0.7 * rp.renderDelayMs / 1000, age);
+      remotePlayerPositions.set(playerId,
+        (_projVecs.get(playerId) ?? _projVecs.set(playerId, new THREE.Vector3()).get(playerId)!)
+          .copy(rp.wirePosition).addScaledVector(rp.vel, age - ghostLag));
+    } else {
       remotePlayerPositions.set(playerId, rp.position);
-      if (rp.armorClass) {remotePlayerClasses.set(playerId, rp.armorClass);}
     }
+    if (rp.armorClass) {remotePlayerClasses.set(playerId, rp.armorClass);}
   });
 
   // Live turret shells + shield domes — collected once per frame, swept
