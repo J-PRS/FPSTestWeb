@@ -57,7 +57,8 @@ Ports: game client (Vite) **:5400**, game server (Bun) **:8000**.
 - `client/src/` — render, prediction, HUD/menus, netHandlers, instanced species.
 - `maps/` spec JSONs · `_tools/` soaks + headless capture · `ROADMAP.md`
   is the living manifesto (read first, keep current) · `changelog.txt`
-  prepend `YYYY-MM-DD - <summary>` ASCII.
+  prepend `YYYY-MM-DD - <summary>` ASCII · `_docs/INDEX.md` is the catalog
+  of all 140+ docs (living vs. archived) — read it before hunting in `_docs/`.
 - Filename prefixes are the clusters (flat dirs by design):
   `bot*` bot brains · `Room*`/`room*` match sim · `combat*`/`envClaims`/
   `hitLedger`/`killFeed` damage funnel · `moveClaims`/`moveJudge`/`rewind`/
