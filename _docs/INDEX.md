@@ -35,12 +35,14 @@ The project produces a lot of documentation. This file is the map.
 
 ## Concepts (design philosophy — mostly stable)
 
-`concepts/` — 14 files: `movement.md`, `skiing.md`, `bots.md`, `netcode.md`,
+`concepts/` — 16 files: `movement.md`, `skiing.md`, `bots.md`, `netcode.md`,
 `demo-system.md`, `enemies.md`, `feel-vfx.md`, `footprint-conforming.md`,
 `projectile-inheritance.md`, `proxy-hitbox.md`, `skills.md`,
-`terrain-gen.md`, `turretter.md`, `ballistic-solver.md`, `killcam.md`.
-Mostly 2026-09-27 baseline; `terrain-gen.md` updated 2026-10-16,
-`killcam.md` added 2026-10-22.
+`terrain-gen.md`, `turretter.md`, `ballistic-solver.md`, `killcam.md`,
+`remote-render-truth.md`, `anim-rig-conventions.md`.
+Mostly 2026-09-27 baseline; `terrain-gen.md` updated 2026-10-16;
+`killcam.md`, `remote-render-truth.md`, `anim-rig-conventions.md` added
+2026-10-22.
 
 ## Traps (gotchas — read before touching the area)
 
