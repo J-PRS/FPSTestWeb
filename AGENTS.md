@@ -50,16 +50,12 @@ Ports: game client (Vite) **:5400**, game server (Bun) **:8000**.
 
 ## Layout
 
-- `shared/` — sims + protocol used by BOTH ends (deterministic: no
-  `Date.now()`/IO/unseeded random in sim code).
-- `server_bun/src/` — authority: Room, CombatHandler adjudication,
-  CreatureSim/BallSim, ServerBots, RoomMoveSim. `shared/worldModel.ts`
-  declares every entity kind's wire shape — new fields go there.
-- `client/src/` — render, prediction, HUD/menus, netHandlers, instanced species.
-- `maps/` spec JSONs · `_tools/` soaks + headless capture · `ROADMAP.md`
-  is the living manifesto (read first, keep current) · `changelog.txt`
-  prepend `YYYY-MM-DD - <summary>` ASCII · `_docs/INDEX.md` is the catalog
-  of all 140+ docs (living vs. archived) — read it before hunting in `_docs/`.
+- `shared/` — sims + protocol (deterministic). `server_bun/src/` — authority.
+  `client/src/` — render, prediction, HUD. `maps/` — spec JSONs.
+  `_tools/` — soaks + headless capture. `ROADMAP.md` is the living
+  manifesto (read first). `changelog.txt` prepend `YYYY-MM-DD - <summary>`.
+  `_docs/INDEX.md` is the catalog of all 140+ docs — read it before
+  hunting in `_docs/`. Full layer map: `ARCHITECTURE.md`.
 - Filename prefixes are the clusters (flat dirs by design):
   `bot*` bot brains · `Room*`/`room*` match sim · `combat*`/`envClaims`/
   `hitLedger`/`killFeed` damage funnel · `moveClaims`/`moveJudge`/`rewind`/
