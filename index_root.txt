@@ -39,6 +39,7 @@ _zzz
 changelog.txt
 client
 concepts
+demos_out
 devup.bat
 index_root.txt
 logs
