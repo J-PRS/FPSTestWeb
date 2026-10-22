@@ -104,6 +104,10 @@ export class Projectile {
   // server's idSeed(id), and a stale random fuse can pop a replica a
   // full jitter-window off its authority.
   private _serverProjectileId: string | null = null;
+  /** Replica age when the create echo bound — -1 if never bound (the
+   *  echo was late/lost; traj-outlier rows read this: an unbound
+   *  replica flies its own spawn arc, no re-anchor ever ran). */
+  boundAtAge = -1;
   get serverProjectileId(): string | null {return this._serverProjectileId;}
   set serverProjectileId(v: string | null) {
     if (v !== this._serverProjectileId) {this.ttl = undefined;}

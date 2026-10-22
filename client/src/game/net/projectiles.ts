@@ -168,6 +168,7 @@ export function wireProjectiles(ctx: NetCtx): void {
       return;
     }
     localProjectile.serverProjectileId = projectileId;
+    localProjectile.boundAtAge = localProjectile.age;
     registry.byId.set(projectileId, localProjectile);
     // Re-anchor onto the authority's arc: the server spawned at its
     // rewind-origin with shadow-vel inherit, so the claim's live spawn
@@ -330,7 +331,7 @@ export function wireProjectiles(ctx: NetCtx): void {
       // offM as a population — replica-vs-fate distance for every owned
       // shell, not just the ones that painted a ghost hit. Outliers tag
       // weapon + whether the replica already popped on its own contact.
-      if (preSnap >= 0) {noteTrajDiv(preSnap, localProjectile.config.weaponType, localProjectile.exploded, localProjectile.age);}
+      if (preSnap >= 0) {noteTrajDiv(preSnap, localProjectile.config.weaponType, localProjectile.exploded, localProjectile.age, localProjectile.boundAtAge);}
       localProjectile.explode();
       registry.byId.delete(projectileId);
       if (localProjectile.shotId) {registry.byShotId.delete(localProjectile.shotId);}

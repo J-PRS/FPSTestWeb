@@ -355,10 +355,18 @@ bodyN += 1;
   const kbStamps = deps.world.selfBlastStamps;
   if (kbStamps.length > 0) {
     const now = performance.now();
+    // Starvation-tolerant: an inbound silence delays every echo — a stamp
+    // younger than horizon+silence can't have been refused yet (the same
+    // horizon the knockback handler + blastForce sweeps share).
+    const kbHorizon = 700 + Math.min(Math.max(0, deps.lazyNetworkManager().msSinceLiveRx() - 100), 2000);
     for (let i = kbStamps.length - 1; i >= 0; i -= 1) {
       const s = kbStamps[i]!;
-      if (now - s.t > 700) {
-        parityMiss('kb-echo', { x: Math.round(s.x), y: Math.round(s.y), z: Math.round(s.z), by: s.by, f: s.f, ageMs: Math.round(now - s.t) });
+      if (now - s.t > kbHorizon) {
+        // Self-authored stamps are confirmation-free by design (server
+        // skips the self-shove echo for humans) — silent expiry.
+        if (!s.self) {
+          parityMiss('kb-echo', { x: Math.round(s.x), y: Math.round(s.y), z: Math.round(s.z), by: s.by, f: s.f, ageMs: Math.round(now - s.t) });
+        }
         kbStamps.splice(i, 1);
       }
     }

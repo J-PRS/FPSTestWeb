@@ -83,7 +83,7 @@ export interface WorldState {
   /** Fired after a terrain swap completes — local bots re-seat onto the
    *  new heightmap instead of standing at the old field's altitude. */
   onTerrainApplied?: (file: string | null) => void;
-  selfBlastStamps: { x: number; y: number; z: number; t: number; by?: string; f?: number }[];
+  selfBlastStamps: { x: number; y: number; z: number; t: number; by?: string; self?: boolean; f?: number }[];
   /** The same dedup run backwards: a knockback echo that arrived BEFORE
    *  its blast's replica exploded applies raw — recorded here so the
    *  delayed predicted shove at the same center doesn't double it. */

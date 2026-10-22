@@ -270,7 +270,12 @@ function wirePlayerCombat(ctx: NetCtx): void {
     const kbHorizon = 700 + Math.min(Math.max(0, networkManager.msSinceLiveRx() - 100), 2000);
     for (let i = stamps.length - 1; i >= 0; i -= 1) {
       if (now - stamps[i]!.t > kbHorizon) {
-        parityMiss('kb-echo', { x: Math.round(stamps[i]!.x), y: Math.round(stamps[i]!.y), z: Math.round(stamps[i]!.z), by: stamps[i]!.by, f: stamps[i]!.f, ageMs: Math.round(now - stamps[i]!.t) });
+        // Self-authored stamps are confirmation-free (the server skips
+        // its self-shove for humans) — silent expiry; only remote-blast
+        // predictions audit an echo that should have existed.
+        if (!stamps[i]!.self) {
+          parityMiss('kb-echo', { x: Math.round(stamps[i]!.x), y: Math.round(stamps[i]!.y), z: Math.round(stamps[i]!.z), by: stamps[i]!.by, f: stamps[i]!.f, ageMs: Math.round(now - stamps[i]!.t) });
+        }
         stamps.splice(i, 1);
       }
     }
@@ -292,8 +297,17 @@ function wirePlayerCombat(ctx: NetCtx): void {
       const s = stamps[k]!;
       if (now - s.t < kbHorizon && Math.hypot(s.x - position.x, s.y - position.y, s.z - position.z) < 18) {cands.push(k);}
     }
-    const i = cands.length === 0 ? -1
+    let i = cands.length === 0 ? -1
       : cands.reduce((a, b): number => Math.abs((stamps[a]!.f ?? force) - force) <= Math.abs((stamps[b]!.f ?? force) - force) ? a : b);
+    // Unambiguous fallback: exactly ONE pending stamp in the horizon —
+    // the wire echo has to be its pair regardless of how far the replica's
+    // painted center diverged (>18m in the trajDiv tail). Not consuming
+    // here is the physical double-shove + a false kb-echo expiry; with
+    // 2+ pending the attribution genuinely can't be called, so hold.
+    if (i === -1) {
+      const pending = stamps.filter((s): boolean => now - s.t < kbHorizon);
+      if (pending.length === 1) {i = stamps.indexOf(pending[0]!);}
+    }
     if (i !== -1) {
       // Same blast, already predicted — but the wire carries the server's
       // applied impulse, which wins. Residual-only: a positive delta tops

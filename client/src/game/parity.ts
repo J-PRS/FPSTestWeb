@@ -96,10 +96,10 @@ const trajDivs: number[] = [];
 // Outlier context — a 100m+ replica-vs-fate gap classifies differently
 // if the replica already self-detonated (its own contact vs the wire's)
 // than one still mid-flight at fate arrival (early server kill).
-export function noteTrajDiv(d: number, wt?: number, selfPopped?: boolean, age?: number): void {
+export function noteTrajDiv(d: number, wt?: number, selfPopped?: boolean, age?: number, boundAt?: number): void {
   trajDivs.push(d);
   if (trajDivs.length > 64) {trajDivs.shift();}
-  if (d > 60) {parityMiss('traj-outlier', { m: Math.round(d), wt, self: selfPopped ? 1 : 0, age: age === undefined ? '?' : Number(age.toFixed(2)) });}
+  if (d > 60) {parityMiss('traj-outlier', { m: Math.round(d), wt, self: selfPopped ? 1 : 0, age: age === undefined ? '?' : Number(age.toFixed(2)), bind: boundAt === undefined ? '?' : Number(boundAt.toFixed(2)) });}
 }
 export function trajDivStats(): { n: number; p50: number; p95: number; max: number; over8: number } {
   const s = trajDivs.toSorted((a, b) => a - b);
