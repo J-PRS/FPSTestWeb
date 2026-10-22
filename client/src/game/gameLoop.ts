@@ -18,6 +18,7 @@ import { screenShake } from '../effects/screenShake.js';
 import { Explosion } from '../effects/explosion.js';
 import { updateVfx } from '../effects/vfx.js';
 import { collectDiag } from '../core/fxDiag.js';
+import { telemetry, recDrift } from '../core/telemetry.js';
 // oxlint-disable-next-line import/no-unassigned-import
 // oxlint-disable-next-line import/no-unassigned-import
 import '../core/visAudit.js'; // side-effect: registers the Alt+Q visAudit section
@@ -86,6 +87,8 @@ const _birdPosBuf: THREE.Vector3[] = []; // scratch — minimap debug blips
 const _selfShadowOwner = { swarmSlot: -1, shadowSlot: -1 }; // self blob — shared instanced pool slot
 const _selfShadowPos = new THREE.Vector3();
 const _mapBlips: MinimapPlayer[] = []; // scratch — minimap player/bot blips
+const _driftVec = new THREE.Vector3(); // scratch — drift sampler's projected wire pos
+let lastDriftMs = 0;
 
 // ?mode=classic — solo bounce-and-shoot: balls only, no rage, no roster
 const CLASSIC_MODE = urlParams.isClassic;
@@ -936,6 +939,19 @@ export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(
     if (!demoPaused) {fxTick(deps, st, budget, fxDt);}
     perf.mark('fx');
     deps.remotes().updateScoreboard();
+
+    // Deep-telemetry drift census (~4Hz): rendered pos vs the remote's
+    // wire-projected truth — the replica-fidelity population netsoak's
+    // DESYNC line only samples per hash tick.
+    if (telemetry.enabled && Date.now() - lastDriftMs > 250) {
+      lastDriftMs = Date.now();
+      deps.world.remotePlayers.forEach((rp, id): void => {
+        if (rp.isDead || rp.lastUpdateTime <= 0) {return;}
+        const age = Math.min((Date.now() - rp.lastUpdateTime) / 1000, 1);
+        _driftVec.copy(rp.wirePosition).addScaledVector(rp.vel, age);
+        recDrift(id, _driftVec.distanceTo(rp.position), age * 1000);
+      });
+    }
 
     // ?dummy debug remote — pin it in front of the camera and tick it
     const dummy = deps.world.remotePlayers.get('dummy');

@@ -59,6 +59,8 @@ declare global {
     __playRec?: (src: string | File, speed?: number) => Promise<() => void>;
     /** ?autopilot — shared BotBrain driving the local player's inputs. */
     __botpilot?: { stop: () => void };
+    /** ?telemetry=deep — the flight recorder's journal dump. */
+    __telemetry?: { enabled: boolean; dump: () => Record<string, unknown> };
     __clips?: string[];
     __ready?: boolean;
     __glb?: unknown;

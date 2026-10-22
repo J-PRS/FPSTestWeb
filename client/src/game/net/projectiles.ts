@@ -9,16 +9,18 @@ import { WeaponType, getWeaponStats, LANCE_RANGE } from '../../../../shared/weap
 import { Explosion } from '../../effects/explosion.js';
 import { swingSwipe } from '../../effects/swingTrails.js';
 import { MELEE_RANGE, EXPLOSION_VFX_RADIUS, LG_RANGE, LG_BOUNCE_RANGE } from '../../core/config.js';
-import { noteShellFate, parityProbes } from '../parity.js';
+import { noteShellFate, noteTrajDiv, parityProbes } from '../parity.js';
 import type { NetCtx } from './ctx.js';
-const snapToContact = (p: Projectile, at?: { x: number; y: number; z: number }): void => {
-  if (!at || !Number.isFinite(at.x + at.y + at.z)) {return;}
+const snapToContact = (p: Projectile, at?: { x: number; y: number; z: number }): number => {
+  if (!at || !Number.isFinite(at.x + at.y + at.z)) {return -1;}
+  const preSnap = Math.hypot(p.pos.x - at.x, p.pos.y - at.y, p.pos.z - at.z);
   p.pos.set(at.x, at.y, at.z);
   p.prevPos.copy(p.pos);
   p.hitPoint.copy(p.pos);
   p.hitPointValid = true; // the blast renders HERE, not a stale sweep point
   p.renderOffset.set(0, 0, 0);
   p.rendered.copy(p.pos);
+  return preSnap;
 };
 
 
@@ -313,7 +315,10 @@ export function wireProjectiles(ctx: NetCtx): void {
     const localProjectile = registry.byId.get(projectileId)
       ?? (shotId ? registry.byShotId.get(shotId) : undefined);
     if (localProjectile) {
-      snapToContact(localProjectile, position);
+      const preSnap = snapToContact(localProjectile, position);
+      // offM as a population — replica-vs-fate distance for every owned
+      // shell, not just the ones that painted a ghost hit.
+      if (preSnap >= 0) {noteTrajDiv(preSnap);}
       localProjectile.explode();
       registry.byId.delete(projectileId);
       if (localProjectile.shotId) {registry.byShotId.delete(localProjectile.shotId);}

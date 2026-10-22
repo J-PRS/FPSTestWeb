@@ -7,7 +7,7 @@
 // predictions that have no claim behind them (blast knocks, pickup
 // rests, self-shove echoes).
 
-import { glitch } from '../core/fxDiag.js';
+import { glitch, registerDiag } from '../core/fxDiag.js';
 import { ChildLogger } from '../core/Logger.js';
 import { WEAPONS, serverSimmed } from '../../../shared/weapons.js';
 
@@ -71,6 +71,11 @@ export function confirmDamageEcho(victim: string): void {
   if (i !== -1) {parityProbes.echoesConfirmed += 1; dmgEchoes.splice(i, 1);}
 }
 
+/** Telemetry audit: did a prediction stamp precede this wire hit? */
+export function hasPendingEcho(victim: string): boolean {
+  return dmgEchoes.some((e): boolean => e.victim === victim);
+}
+
 // ShotIds whose echo expired before a fate landed — a fate arriving into
 // this set means 'none' was a timing false-positive (fuse still burning),
 // not a truly dead intent.
@@ -82,6 +87,21 @@ export const parityProbes: {
   fatesSeen: number; echoesStamped: number; echoesConfirmed: number;
   destroysSeen: number; msgSeen: Record<string, number>;
 } = { fatesSeen: 0, echoesStamped: 0, echoesConfirmed: 0, destroysSeen: 0, msgSeen: {} };
+
+// My shells' replica-vs-fate distances — offM as a population, not just
+// the misses' detail. A replica standing N meters from the server's
+// detonation point when the gone edge lands is the trajectory-divergence
+// census: the tail (p95) is the honest number a ghost-hit rate lives on.
+const trajDivs: number[] = [];
+export function noteTrajDiv(d: number): void {
+  trajDivs.push(d);
+  if (trajDivs.length > 64) {trajDivs.shift();}
+}
+export function trajDivStats(): { n: number; p50: number; p95: number; max: number; over8: number } {
+  const s = [...trajDivs].sort((a, b) => a - b);
+  const q = (f: number): number => s.length > 0 ? Number(s[Math.min(s.length - 1, Math.floor(s.length * f))]!.toFixed(1)) : 0;
+  return { n: s.length, p50: q(0.5), p95: q(0.95), max: Number((s[s.length - 1] ?? 0).toFixed(1)), over8: s.filter((d) => d > 8).length };
+}
 
 export function noteShellFate(shotId: string, at: { x: number; y: number; z: number }): void {
   // Wire blast point — NaN turns every divergence diff against it into
@@ -156,8 +176,18 @@ export function parityLines(): string[] {
     return s ? `${k}=${n}/${s}(${(n / s * 100).toFixed(1)}%)` : `${k}=${n}`;
   }).join(' ');
   lines.push(`parity: misses=${total}${byKind ? ` ${byKind}` : ''}`);
+  const td = trajDivStats();
+  if (td.n > 0) {lines.push(`  shell-traj: n=${td.n} p50=${td.p50}m p95=${td.p95}m max=${td.max}m >8m=${td.over8}`);}
   for (const r of rows.slice(-8).toReversed()) {
     lines.push(`  parity-${r.kind}: ${r.detail}`);
   }
   return lines;
 }
+
+// Headless/soak path — __trailDump() merges every registerDiag section,
+// so the parity census + trajectory audit land in collectDiag output too.
+registerDiag('parity', () => ({
+  misses: total,
+  byKind: Object.fromEntries([...counts.entries()].map(([k, n]) => [k, `${n}/${stamps.get(k) ?? 0}`])),
+  trajDiv: trajDivStats(),
+}));

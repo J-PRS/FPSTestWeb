@@ -19,7 +19,9 @@ import { WeaponType } from '../../../shared/weapons.js';
 import { WORLD_MODEL, verbForType, checkPacket, rowPatch } from '../../../shared/worldModel.js';
 import type { RemotePlayerState,NetworkManager } from './NetworkManager.js';
 import { claim as netProbeClaim } from '../debug/netProbe.js';
-import { parityProbes } from '../game/parity.js';
+import { parityProbes,hasPendingEcho } from '../game/parity.js';
+import { recWireIn, recHit } from '../core/telemetry.js';
+
 import { rejectCensus, dedupCensus, dropCensus } from './claimLedger.js';
 
 import { urlParams } from '../core/params.js';
@@ -139,6 +141,7 @@ export class WireIn {
     // 75s in soak). Everything else — pings, hashes, events — stamps.
     if (data.type !== 'inputSync') {this.lastJsonRxAt = Date.now(); this.lastLiveRxAt = Date.now(); this.h.resetJsonLaneCounter();}
     parityProbes.msgSeen[data.type] = (parityProbes.msgSeen[data.type] ?? 0) + 1;
+    recWireIn(data.type, bytes);
     // Rx is an approximation anyway — re-stringifying every event just to
     // size it cost a full second pass over reclaim replays (a 1024-frame
     // burst arrived as one giant main-thread task).
@@ -192,6 +195,7 @@ this.handlerThrows += 1;
       logger.debug(`Received non-wire binary message: ${data.length} bytes`);
       return;
     }
+    recWireIn(`bin:${data[1] ?? -1}`, data.length);
     // Binary ball segments decode straight into the JSON message's shape —
     // netBallSegment sees one type regardless of transport.
     if (data[1] === WIRE_BALLSEG) {
@@ -508,6 +512,11 @@ dropCensus.total += 1;
     if (data.gd != null && data.shooterId === this.h.getLocalPlayerId()) {
       logger.warn(`ghost hit on ${data.targetId} — credited ${data.gd}m behind the live body`, { gd: data.gd });
     }
+    // Telemetry audit: did a prediction stamp precede this wire hit?
+    // The confirm below consumes it, so the pending state must be read
+    // first — a 'predicted:false' row names the reverse class (server
+    // damage the client never predicted).
+    const wasPredicted = hasPendingEcho(data.targetId);
     if (data.shooterId === this.h.getLocalPlayerId()) {this.h.confirmClaimHit(data.targetId);}
     if (data.seq !== undefined) {
       if (data.seq <= this.lastHitSeq) {
@@ -517,6 +526,7 @@ dedupCensus.hitSeqDrops += 1;
       }
       this.lastHitSeq = data.seq;
     }
+    recHit(data.shooterId, data.targetId, data.damage, wasPredicted);
     // Update REMOTE player health in storage (local player health handled
     // by callback). A processed hit also proves the server holds the target
     // alive — it never lands a hit on a dead player — so a record still
@@ -535,7 +545,9 @@ dedupCensus.hitSeqDrops += 1;
   private handlePlayerKill(data: Extract<ServerMessage, { type: 'playerKill' }>): void {
     // A kill IS the confirm — the fatal blow arrives as playerKill, not
     // playerHit, so the pending ledger would warn phantom otherwise.
+    const killWasPredicted = hasPendingEcho(data.targetId);
     if (data.shooterId === this.h.getLocalPlayerId()) {this.h.confirmClaimHit(data.targetId);}
+    recHit(data.shooterId, data.targetId, -1, killWasPredicted);
     // Update REMOTE player state (local player death handled by callback).
     // Same phantom-row guard as hits — a kill for a departed target must
     // not mint a stub corpse.

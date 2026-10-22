@@ -14,6 +14,7 @@ import { onPlayerKill } from './playerKill.js';
 import { noteLocalSnap } from '../gameLoop.js';
 import { initNetProbe, bindStats, attachScene, corr as probeCorr, corrGhost } from '../../debug/netProbe.js';
 import { parityMiss } from '../parity.js';
+import { recCorrection } from '../../core/telemetry.js';
 import { lastWeaponByPlayer } from './projectiles.js';
 import type { NetCtx } from './ctx.js';
 
@@ -379,6 +380,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
     // gapMs = the round-trip the correction rode: the still-held input
     // must replay across it or steady-key corrections hard-snap.
     const journal = inputSeq === undefined ? [] : nm().inputsAfter(inputSeq, nm().getPing());
+    recCorrection(err, nm().getPing(), journal.length, journal.length === 0);
     if (journal.length === 0) {
       probeCorr(err, _seq, 0, Math.hypot(player.vel.x, player.vel.y, player.vel.z), true);
       player.pos.set(position.x, position.y, position.z);

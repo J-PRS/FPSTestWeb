@@ -13,6 +13,7 @@ import {
 import { Logger, ChildLogger } from './core/Logger.js';
 import { settings } from './core/settings.js';
 import { urlParams, isDevHost } from './core/params.js';
+import { telemetry, telemetryDump } from './core/telemetry.js';
 import { feedMode } from './feed/feedMode.js';
 import { simRngSeed, lcg32 } from '../../shared/simRand.js';
 import { spawnRngSeed } from '../../shared/spawnDice.js';
@@ -763,6 +764,18 @@ async function init(): Promise<void> {
       }
     } catch { /* offline or matchmaker down — menu boot owns it */ }
   }
+  // Invite completeness: a room joined via the lobby's saved fps-server
+  // pick carries no ?server= in the URL — sharing /s/<room> would land
+  // friends on THEIR default host, where the room doesn't exist. Mirror
+  // the saved host into the search so the address bar is always the full
+  // invite. An explicit ?server= link already carries it and wins; an
+  // empty setting is the default host (a public deploy's server.json
+  // resolves identically for the recipient — nothing to carry).
+  if (!urlParams.get('server') && settings.get('fps-server').trim()) {
+    const q = new URLSearchParams(window.location.search);
+    q.set('server', settings.get('fps-server').trim());
+    history.replaceState(null, '', `${window.location.pathname}?${q}`);
+  }
   // Boot resume: a bare '/' load with a remembered room rejoins it — the
   // canonical /s/<room> path is written BEFORE anything reads urlParams,
   // so every downstream consumer (early wire, join payload, lobby) sees
@@ -1182,6 +1195,12 @@ init().then(async (): Promise<void> => {
     // the live dispatch as gameplay: __playRec('/hunt.rec', 1.5)
     window.__playRec = async (src, speed): Promise<() => void> =>
       (await import('./dev/recPlayer.js')).playRec(networkManager, src, speed);
+    // ?telemetry=deep — flight-recorder rings (wire in/out, corrections,
+    // remote drift, hit audit). Off by default; MCP/soak pulls
+    // __telemetry.dump() for the full session journal.
+    telemetry.enabled = urlParams.get('telemetry') === 'deep';
+    telemetry.t0 = performance.now();
+    window.__telemetry = { enabled: telemetry.enabled, dump: telemetryDump };
     // ?autopilot — the shared BotBrain steers the local player through the
     // real input fields, so a soak window plays itself. Same inputs a
     // human holds — prediction + wire intents are unchanged.

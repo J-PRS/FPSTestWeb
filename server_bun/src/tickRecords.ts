@@ -28,6 +28,9 @@ type PooledRecord = TickRecord & { enc: TickEncodeScratch; enc2?: TickEncodeScra
  *  frames) is sub-second; 60s is paranoia, not measurement. */
 const WIRE_ID_QUIET_MS = 60_000;
 
+/** Dev-only frame-loss repro — see the drop site in fanoutRecords. */
+const DROP_PCT = Number(process.env.FPS_DROP_PCT ?? 0) || 0;
+
 /** Mint a u16 record id: prefer a retired id that's been quiet long
  *  enough, else extend the counter. The naive `nextWireId++` walked into
  *  the u16 wrap at 65536 total mints — setUint16 mods silently and the
@@ -434,6 +437,11 @@ else if (dSq < 360_000) {tier = 3;} // 150m / 400m / 600m
       // Dropped frames surface as tickSeq gaps client-side — count them
       // here so a consumer that can't drain reads as rising loss, not
       // as an unexplained stutter nobody can attribute.
+      // Dev-only WAN-loss repro (FPS_DROP_PCT): dropping whole frames is
+      // exactly what cadence loss looks like to a receiver — interp
+      // starves, DR episodes run long, tickSeq gaps surface as loss.
+      // Not sim code, so Math.random is fine; soaks set it on the spawn.
+      if (DROP_PCT > 0 && Math.random() * 100 < DROP_PCT) {continue;}
       const st = room.connections.sendBinaryToPlayer(recipientId, frame);
       if (st === 'backlogged') {this.metrics.tickFramesDropped += 1;}
       else if (st === 'held') {this.metrics.tickFramesHeld += 1;}

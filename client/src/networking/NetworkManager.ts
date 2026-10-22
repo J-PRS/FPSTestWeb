@@ -16,6 +16,7 @@ import { InputStream } from './inputStream.js';
 import { WireIn } from './wireIn.js';
 import { WORLD_MODEL, declaredFieldNames, checkIntent } from '../../../shared/worldModel.js';
 import { armLoafDiag } from './loafDiag.js';
+import { recWireOut, telemetry } from '../core/telemetry.js';
 import type { SpawnPoint,StructureSpec,InteriorSpec,WeatherSpec,AtmosphereSpec,WaterSpec } from '../../../shared/mapSpec.js';
 
 const logger = new ChildLogger('NetworkManager');
@@ -517,6 +518,7 @@ export class NetworkManager {
     checkIntent(msg.type, msg as unknown as Record<string, unknown>);
     const s = JSON.stringify(msg);
     this.txBytes += s.length;
+    recWireOut(msg.type);
     if (this.ws.send(s) === false) {this.noteDrop(msg.type);}
   }
 
@@ -584,6 +586,7 @@ this.sendDrops += 1;
     checkIntent(msg.type, msg as unknown as Record<string, unknown>);
     const s = JSON.stringify(msg);
     this.txBytes += s.length + 2;
+    recWireOut(`j:${msg.type}`);
     this.sendBinary(encodeWireJson(s));
   }
 
@@ -596,6 +599,7 @@ this.sendDrops += 1;
   private sendBinary(data: Uint8Array): void {
     if (!this.ws?.connected()) { this.noteDrop('bin'); return; }
     this.txBytes += data.length;
+    recWireOut(`bin:${data[0] ?? -1}`);
     this.ws.send(data);
   }
 
