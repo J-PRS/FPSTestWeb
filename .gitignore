@@ -150,3 +150,6 @@ _tools/scratch/
 .devin*
 demos_rich/
 
+
+# Scratch archaeology (never commit)
+_scratch/
