@@ -145,3 +145,8 @@ logs/
 _tools/mesh2motion-app/
 _tools/models/
 _tools/scratch/
+
+# Devin agent scratch
+.devin*
+demos_rich/
+

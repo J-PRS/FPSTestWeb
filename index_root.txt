@@ -17,12 +17,8 @@ AGENTS.md
 ARCHITECTURE.md
 CLAUDE.md
 Dockerfile
-NOTES.md
 README.md
 ROADMAP.md
-TASKS.md
-TEST_PLAN_bots.md
-TEST_PLAN_demo.md
 ZZZ_ROOT
 _DEMO
 __RUN.bat
@@ -31,7 +27,6 @@ _clean_deploy.bat
 _docs
 _netbots.bat
 _oxlint.bat
-_ref
 _reference
 _reports
 _rootcheck.bat
@@ -42,7 +37,6 @@ _run_server.bat
 _run_tunnel.bat
 _scratch
 _surge_deploy.bat
-_tmp
 _tools
 _zzz
 build
@@ -50,11 +44,9 @@ changelog.txt
 client
 combo_clips
 concepts
-demo
 demos_out
 demos_rich
 devup.bat
-docs
 index_root.txt
 logs
 maps
@@ -71,9 +63,6 @@ screenshots_web
 server_bun
 shared
 stryker.vitest.config.ts
-terrain_gen
 tools
-traps
 utils
 workflows
-zzz

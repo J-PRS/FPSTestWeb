@@ -12,9 +12,9 @@ The project produces a lot of documentation. This file is the map.
 | `server_bun/AGENTS.md` | Server-specific agent guide |
 | `ROADMAP.md` | Living manifesto — read first, keep current |
 | `changelog.txt` | Prepended `YYYY-MM-DD - <summary>` per settled topic |
-| `TASKS.md` | Project development context |
-| `NOTES.md` | JP's world notes |
-| `TEST_PLAN_bots.md` / `TEST_PLAN_demo.md` | Test plans |
+| `_docs/TASKS.md` | Project development context |
+| `_docs/NOTES.md` | JP's world notes |
+| `_docs/TEST_PLAN_bots.md` / `_docs/TEST_PLAN_demo.md` | Test plans |
 | `_docs/2026-10-15_CAPPER_STRIKE.md` | **Living capper reference** — scoreboard, mechanics, physics budget, landmines, measured history |
 | `_docs/2026-10-16_CAPPER_REACTIVE_LIMITS.md` | Capper reactive ceiling + TAS floor |
 | `_docs/2026-10-16_TEAMSOAK_WARP.md` | Themed team matchups + warp collapse |
@@ -41,7 +41,7 @@ baseline; `terrain-gen.md` updated 2026-10-16.
 
 ## Traps (gotchas — read before touching the area)
 
-`traps/` — 5 files: bloom black frames, T2 map porting, updateRanges
+`_docs/traps/` — 5 files: bloom black frames, T2 map porting, updateRanges
 first-shot-only, bloom composite is raw, filter-repo eats worktree.
 
 ## Workflows
@@ -91,7 +91,7 @@ not part of the game.
 - `concepts/` and `client/reports/` have no "current vs superseded" markers.
 - `docs/SESSION_2026-10-01.md` and `SESSION_2026-10-10.md` are stale
   session notes superseded by the living docs and changelog.
-- `NOTES.md` and `TASKS.md` are loose scratchpads; prefer ROADMAP.md +
+- `_docs/NOTES.md` and `_docs/TASKS.md` are loose scratchpads; prefer ROADMAP.md +
   `_docs/2026-10-15_CAPPER_STRIKE.md` for current state.
 
 ## Stale / superseded (review before relying)
