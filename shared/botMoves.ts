@@ -458,6 +458,12 @@ export class BotMoves {
   private apexNeedsJet(ctx: BrainCtx, pos: BotVec): boolean {
     const v = ctx.vel;
     if (!v || !ctx.runner) {return false;}
+    // Don't jet at the apex when close to the objective — near the flag
+    // you want to DESCEND into it, not jet up and sail over.
+    if (ctx.objective) {
+      const od = Math.hypot(ctx.objective.x - pos.x, ctx.objective.z - pos.z);
+      if (od < 40) {return false;}
+    }
     const vy = v.y ?? 0;
     // Apex = vertical velocity near zero (top of arc).
     if (vy > 2 || vy < -8) {return false;} // not at apex (rising or falling fast)
