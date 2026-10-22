@@ -33,7 +33,10 @@ export function parityStamp(kind: string): void {
  *  msSinceLiveRx stretches the window through wire silence so a stall
  *  delays (not refuses) the echo. */
 export function kbEchoHorizon(rttMs: number, msSinceLiveRx: number): number {
-  return Math.max(700, rttMs * 2 + 300) + Math.min(Math.max(0, msSinceLiveRx - 100), 2000);
+  // Floor 1000 not 700: when every RTT probe reads 0 (ws tier, worker
+  // owns the probe, srvPing not landed yet) the echo round-trip is still
+  // real — a flat 700ms falsely expired WAN echoes at ~714ms (tsDuel10).
+  return Math.max(1000, rttMs * 2 + 300) + Math.min(Math.max(0, msSinceLiveRx - 100), 2000);
 }
 
 export function parityMiss(kind: string, detail: Record<string, unknown>): void {
@@ -95,8 +98,8 @@ const expiredShots = new Map<string, number>();
 // "intent never ran" from "destroy never arrived" without a packet dump.
 export const parityProbes: {
   fatesSeen: number; echoesStamped: number; echoesConfirmed: number;
-  destroysSeen: number; msgSeen: Record<string, number>;
-} = { fatesSeen: 0, echoesStamped: 0, echoesConfirmed: 0, destroysSeen: 0, msgSeen: {} };
+  destroysSeen: number; deadOnArrival: number; msgSeen: Record<string, number>;
+} = { fatesSeen: 0, echoesStamped: 0, echoesConfirmed: 0, destroysSeen: 0, deadOnArrival: 0, msgSeen: {} };
 
 // My shells' replica-vs-fate distances — offM as a population, not just
 // the misses' detail. A replica standing N meters from the server's
@@ -204,6 +207,7 @@ export function parityLines(): string[] {
 // so the parity census + trajectory audit land in collectDiag output too.
 registerDiag('parity', () => ({
   misses: total,
+  parity: parityProbes,
   byKind: Object.fromEntries([...counts.entries()].map(([k, n]) => [k, `${n}/${stamps.get(k) ?? 0}`])),
   // Detail rows — the census hides WHICH prediction died; the ring keeps
   // the last 24 so a headless pull names the outliers (traj/dmg/kb).

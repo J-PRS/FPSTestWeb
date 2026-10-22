@@ -324,6 +324,11 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       // shells have none, so omission is legal.
       { name: 'shotId', wire: 'str', channel: 'echo', absent: null },
       { name: 'pellet', wire: 'num', channel: 'echo', absent: null },
+      // The server shell's age AT SPAWN ECHO — nonzero when the intent
+      // back-dated (lagS) or the echo rode a queue. Remote replicas
+      // advance by this exactly (arrival-lag guesses mis-age the arc);
+      // srvAge >= ttl means the shell died before it was seen — skip.
+      { name: 'age', wire: 'num', channel: 'echo', absent: null },
     ],
     // The contact point: replicas explode where the AUTHORITY detonated
     // the shell, not wherever their replay drifted to — a stamped blast

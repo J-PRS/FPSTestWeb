@@ -153,7 +153,7 @@ export function wireProjectiles(ctx: NetCtx): void {
   // Bind a server id echo to the local shell that spawned it — the spawn
   // claim's shotId nonce comes back verbatim, so the link is exact (no
   // FIFO, no position inference, immune to rejected/dropped claims).
-  const linkOwnProjectile = (projectileId: string, shotId: string | undefined, pellet: number | undefined, position?: { x: number; y: number; z: number }, velocity?: { x: number; y: number; z: number }): void => {
+  const linkOwnProjectile = (projectileId: string, shotId: string | undefined, pellet: number | undefined, position?: { x: number; y: number; z: number }, velocity?: { x: number; y: number; z: number }, srvAge?: number): void => {
     const registry = deps.world.projectileRegistry;
     let localProjectile;
     if (shotId) {
@@ -181,8 +181,10 @@ export function wireProjectiles(ctx: NetCtx): void {
     // server shell's age (~replica age minus claim transit).
     if (position && velocity
         && Number.isFinite(position.x + position.y + position.z + velocity.x + velocity.y + velocity.z)) {
+      // Exact server age on the echo beats the ping estimate — the wire
+      // now carries it; fall back to the transit estimate on old peers.
       localProjectile.reanchorTo(position, velocity,
-        Math.max(0, localProjectile.age - (nm().serverPingMs ?? nm().getPing()) / 2000));
+        srvAge ?? Math.max(0, localProjectile.age - (nm().serverPingMs ?? nm().getPing()) / 2000));
     }
     // Burst pellet binding is one-shot — the slot frees once linked.
     if (localProjectile.fanSlot) {
@@ -191,12 +193,12 @@ export function wireProjectiles(ctx: NetCtx): void {
     }
   };
 
-  networkManager.onProjectileCreated = (projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number, shotId?: string, pellet?: number): void => {
+  networkManager.onProjectileCreated = (projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number, shotId?: string, pellet?: number, srvAge?: number): void => {
     if (deps.world.playbackMode) {return;} // live shots don't belong in the replay
     noteWeapon(ownerId, weaponType);
     // For own projectiles: link the server id to the local shell by nonce.
     if (ownerId === nm().getLocalPlayerId()) {
-      linkOwnProjectile(projectileId, shotId, pellet, position, velocity);
+      linkOwnProjectile(projectileId, shotId, pellet, position, velocity, srvAge);
       return;
     }
 
@@ -260,9 +262,17 @@ export function wireProjectiles(ctx: NetCtx): void {
     }
     remoteProjectile.spawnedThisFrame = false; // remote projectiles don't need first-frame skip
     const shooterVel = deps.world.remotePlayers.get(ownerId)?.vel;
-    // Fast-forward by half-RTT: the server relays the spawn ~half a round-trip
-    // late, so without this the projectile lags behind the shooter's real one
-    const lead = Math.min(0.15, (nm().serverPingMs ?? nm().getPing()) / 2000);
+    // Epoch: the wire now carries the shell's server age at broadcast —
+    // intent-lag is exact (srvAge), the echo's own transit is the only
+    // estimated term (half-RTT, capped). A dead-on-arrival echo (queued
+    // past its fuse) spawns nothing — the 'gone' lands or died with it.
+    const ttl = remoteProjectile.fuseTtl?.() ?? 0;
+    if (srvAge !== undefined && ttl > 0 && srvAge >= ttl) {
+      remoteProjectile.dispose();
+      parityProbes.deadOnArrival += 1;
+      return;
+    }
+    const lead = (srvAge ?? 0) + Math.min(0.15, (nm().serverPingMs ?? nm().getPing()) / 2000);
     if (lead > 0) {
       remoteProjectile.advanceBy(lead);
     }

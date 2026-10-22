@@ -238,7 +238,7 @@ export class RoomProjectiles {
     // shotId/pellet are the intent's nonce — the shooter's predicted
     // shell binds its server identity off this echo (linkOwnProjectile).
     this.room.broadcast(spawnPayload(WORLD_MODEL.projectile!, id, 'projectileId', {
-      ownerId, position: Object.assign({}, origin), velocity: vel, weaponType, shotId, pellet,
+      ownerId, position: Object.assign({}, origin), velocity: vel, weaponType, shotId, pellet, age: lagS || undefined,
     }) as ServerMessage);
     return id;
   }
