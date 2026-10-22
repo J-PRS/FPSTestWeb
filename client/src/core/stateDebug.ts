@@ -232,9 +232,9 @@ function hashableEntry(
 
   rp: RemotePlayer | undefined,
 
-  playerData: { position?: { x: number; y: number; z: number }; health?: number; isDead?: boolean } | undefined,
+  playerData: { position?: { x: number; y: number; z: number }; health?: number; isDead?: boolean; posAt?: number } | undefined,
 
-): { x: number; y: number; z: number; health: number; isDead: boolean } | null {
+): { x: number; y: number; z: number; health: number; isDead: boolean; posAt?: number } | null {
 
   const p = playerData?.position ?? rp?.position;
 
@@ -247,6 +247,8 @@ function hashableEntry(
     health: playerData?.health ?? 100,
 
     isDead: playerData?.isDead ?? rp?.isDead ?? false,
+
+    posAt: playerData?.posAt,
 
   };
 
@@ -406,7 +408,7 @@ function diffPlayerFields(
 
   id: string,
 
-  cp: { x: number; y: number; z: number; health: number; isDead: boolean },
+  cp: { x: number; y: number; z: number; health: number; isDead: boolean; posAt?: number },
 
   sp: { position: { x: number; y: number; z: number }; health: number; isDead: boolean },
 
@@ -436,7 +438,9 @@ function diffPlayerFields(
 
     diffs.push(`[sim] Player ${id} position delta=(${dx.toFixed(1)},${dy.toFixed(1)},${dz.toFixed(1)}) client=${fmt(cp)} server=${fmt(sp.position)}`);
 
-    posDriftIds.push(id);
+    // Fresh-record desync counts toward the warn streak; a record stale
+    // >1.5s against a fresh snapshot is wire starvation, not divergence.
+    if (cp.posAt === undefined || Date.now() - cp.posAt < 1500) {posDriftIds.push(id);}
 
   }
 

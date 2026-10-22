@@ -58,6 +58,10 @@ export interface RemotePlayerState {
   armorClass?: string;
   /** Server-side sheep meter (bots only) — how pedestrian this bot is. */
   sheep?: number;
+  /** Wall-clock the position field last changed on the wire — the
+   *  stateHash [sim]-pos audit gates on it: a stale record vs a fresh
+   *  snapshot is wire starvation, not replica divergence. */
+  posAt?: number;
   /** Headhunt held-token count — arrives via gameState row + playerHeld
    *  edges; undefined outside headhunt (no badge drawn). */
   held?: number;
@@ -254,6 +258,11 @@ export class NetworkManager {
   private lastFactory: TransportFactory | undefined;
   private lastResolveUrl: (() => Promise<string | null>) | undefined;
 
+  /** Admission gate — invoked before EVERY dial (initial join + the
+   *  stall loop's retries). Deploy-check hook: a version bump at the
+   *  connect boundary reloads before this client gets admitted. */
+  public onPreConnect: (() => Promise<unknown> | unknown) | null = null;
+
   connect(url: string, makeTransport?: TransportFactory, resolveUrl?: () => Promise<string | null>): Promise<void> {
     this.onlineExpected = true;
     this.lastUrl = url;
@@ -261,7 +270,7 @@ export class NetworkManager {
     this.lastResolveUrl = resolveUrl;
     this.lastRxAt = Date.now();
     this.stallTimer ??= setInterval((): void => this.checkStall(), 1000);
-    return new Promise((resolve, reject): void => {
+    const dial = (): Promise<void> => new Promise((resolve, reject): void => {
       try {
         // Default: the whole transport stack runs on the net worker —
         // Blink starves ws dispatch under input/render load, so the wire
@@ -354,6 +363,11 @@ export class NetworkManager {
         reject(error);
       }
     });
+    // Sync path when no gate is wired — a gate hook defers the dial by
+    // a microtask, and the stall-loop tests assert transports exist
+    // synchronously.
+    const pre = this.onPreConnect;
+    return pre ? Promise.resolve(pre()).then(dial) : dial();
   }
 
   /** Server says our stored identity is no good — burn id+token so the
@@ -807,7 +821,7 @@ this.sendDrops += 1;
     }
     // NaN components from any edge (join/respawn/roster heal) would
     // poison the stored row forever — drop the whole vec, not the player.
-    if (patch.position && Number.isFinite(patch.position.x + patch.position.y + patch.position.z)) { next.position.x = patch.position.x; next.position.y = patch.position.y; next.position.z = patch.position.z; }
+    if (patch.position && Number.isFinite(patch.position.x + patch.position.y + patch.position.z)) { next.position.x = patch.position.x; next.position.y = patch.position.y; next.position.z = patch.position.z; next.posAt = Date.now(); }
     if (patch.rotation && Number.isFinite(patch.rotation.yaw + patch.rotation.pitch)) { next.rotation.yaw = patch.rotation.yaw; next.rotation.pitch = patch.rotation.pitch; }
     if (patch.velocity && Number.isFinite(patch.velocity.x + patch.velocity.y + patch.velocity.z)) { next.velocity.x = patch.velocity.x; next.velocity.y = patch.velocity.y; next.velocity.z = patch.velocity.z; }
     if (!existing) {this.players.set(playerId, next);}
