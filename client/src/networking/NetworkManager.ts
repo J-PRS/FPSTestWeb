@@ -16,7 +16,7 @@ import { InputStream } from './inputStream.js';
 import { WireIn } from './wireIn.js';
 import { WORLD_MODEL, declaredFieldNames, checkIntent } from '../../../shared/worldModel.js';
 import { armLoafDiag } from './loafDiag.js';
-import { recWireOut, telemetry } from '../core/telemetry.js';
+import { recWireOut } from '../core/telemetry.js';
 import type { SpawnPoint,StructureSpec,InteriorSpec,WeatherSpec,AtmosphereSpec,WaterSpec } from '../../../shared/mapSpec.js';
 
 const logger = new ChildLogger('NetworkManager');

@@ -98,7 +98,7 @@ export function noteTrajDiv(d: number): void {
   if (trajDivs.length > 64) {trajDivs.shift();}
 }
 export function trajDivStats(): { n: number; p50: number; p95: number; max: number; over8: number } {
-  const s = [...trajDivs].sort((a, b) => a - b);
+  const s = trajDivs.toSorted((a, b) => a - b);
   const q = (f: number): number => s.length > 0 ? Number(s[Math.min(s.length - 1, Math.floor(s.length * f))]!.toFixed(1)) : 0;
   return { n: s.length, p50: q(0.5), p95: q(0.95), max: Number((s[s.length - 1] ?? 0).toFixed(1)), over8: s.filter((d) => d > 8).length };
 }

@@ -99,6 +99,16 @@ function ownDeath(ctx: NetCtx, shooterId: string, targetId: string, roster: Map<
     : shooterId === targetId ? 'YOU DIED\nfragged yourself'
       : `YOU DIED\nfragged by ${displayName(shooterId, roster)}`;
   deps.fragMessages.show(deathMsg);
+  // Kill-cam: follow the killer's replica for ~4s — informational
+  // closure, not intel (you're dead; they know you're dead). A spectate
+  // press or the timeout drops to the normal teammate cycle / ghost.
+  if (shooterId !== 'environment' && shooterId !== targetId) {
+    const killer = deps.world.remotePlayers.get(shooterId);
+    if (killer && !killer.isDead) {
+      player.spectateAnchor = killer;
+      player.spectateAnchorUntil = performance.now() + 4000;
+    }
+  }
 }
 
 export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, weapon?: number, air?: number, steal?: boolean): void {

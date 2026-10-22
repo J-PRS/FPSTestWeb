@@ -120,7 +120,7 @@ export class CoolShotsPanel {
     this.closeMenu();
     const menu = document.createElement('div');
     menu.className = 'cool-shot-menu';
-    const act = (label: string, fn: () => void): void => {
+    const act = (label: string, fn: () => void): HTMLButtonElement => {
       const b = document.createElement('button');
       b.textContent = label;
       b.addEventListener('click', (e): void => {
@@ -129,6 +129,7 @@ export class CoolShotsPanel {
         fn();
       });
       menu.append(b);
+      return b;
     };
     act('Play', (): void => {
       this.demoManager.playCoolShotById(shot.id);
@@ -138,6 +139,25 @@ export class CoolShotsPanel {
     act('Download .demo', (): void => {
       this.demoManager.downloadCoolShotById(shot.id);
     });
+    // Server-hosted clips get a /clips/<file> deep link — the feed route
+    // lands on this exact clip (and unfurls via the server's OG shell).
+    // Local-only entries (no filename) can't be linked — nothing on the
+    // server points at them.
+    if (shot.filename) {
+      act('Copy share link', (): void => {
+        const url = `${location.origin}/clips/${shot.filename}`;
+        const toast = (text: string): void => {
+          const t = document.createElement('div');
+          t.textContent = text;
+          t.style.cssText = 'position:fixed;left:50%;bottom:12%;transform:translateX(-50%);'
+            + 'background:rgba(0,0,0,.75);color:#8f8;padding:.4em 1em;border-radius:4px;z-index:99;font-size:14px';
+          document.body.append(t);
+          setTimeout((): void => t.remove(), 1800);
+        };
+        navigator.clipboard.writeText(url).then((): void => { toast('Share link copied'); },
+          (): void => { prompt('Share link:', url); });
+      });
+    }
     if (shot.mp4Name) {
       act('Download MP4', (): void => {
         exportClip(shot.mp4Name!);

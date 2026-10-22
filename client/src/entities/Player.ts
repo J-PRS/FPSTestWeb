@@ -325,6 +325,14 @@ export class Player {
    *  the networked EYE position — the orbit boom pivots on center mass. */
   spectateTargets?: () => { pos: THREE.Vector3; alive: boolean }[];
   private readonly deadSpectateAnchor = new THREE.Vector3();
+  /** Kill-cam: anchored on the killer's replica for the first few seconds
+   *  of being dead — the "who got me" closure. Seeded by the kill wire,
+   *  cancelled by any spectate press or the timeout, then the normal
+   *  teammate cycle / ghost observer takes over. Never a permanent
+   *  anchor — a dead player parked on an enemy is a ghosting channel. */
+  spectateAnchor: { pos: THREE.Vector3; isDead: boolean } | undefined;
+  spectateAnchorUntil = 0;
+  private anchorOrbitSeeded = false;
 
   /** L while dead — arms after the suicide press so the FIRST dead frame
    *  opens on a teammate's orbit instead of free-fly. Cleared once it
@@ -351,6 +359,7 @@ export class Player {
 
   /** Right-click while dead: orbit the next living teammate. */
   deadSpectateCycle(): void {
+    this.spectateAnchor = undefined; // a press is a manual override — kill-cam releases
     const ts = this.spectateTargets?.() ?? [];
     const aliveIdx = ts.map((t, i): number => (t.alive ? i : -1)).filter((i): boolean => i >= 0);
     if (aliveIdx.length === 0) { this.deadSpectateIdx = -1; return; }
@@ -505,6 +514,22 @@ export class Player {
     this.wasObserving = observing;
     if (observing) {
       if (!this.isDead) { this.deadSpectateIdx = -1; }
+      const anchor = this.spectateAnchor;
+      if (anchor && performance.now() < this.spectateAnchorUntil && !anchor.isDead) {
+        if (!this.anchorOrbitSeeded) {
+          this.orbit.yaw = this.yaw; this.orbit.pitch = 0.25;
+          this.anchorOrbitSeeded = true;
+        }
+        this.deadSpectateAnchor.copy(anchor.pos);
+        this.visuals.updateCamera(this.camera, this.terrain, {
+          pos: this.deadSpectateAnchor, yaw: 0, pitch: 0,
+          thirdPerson: true,
+          orbit: this.orbit,
+        });
+        return;
+      }
+      this.spectateAnchor = undefined;
+      this.anchorOrbitSeeded = false;
       const spectateTarget = this.deadSpectateIdx >= 0
         ? this.spectateTargets?.()[this.deadSpectateIdx]
         : undefined;
@@ -529,6 +554,8 @@ export class Player {
       return;
     }
     this.deadSpectateIdx = -1; // alive again — a fresh death re-opens the cycle
+    this.spectateAnchor = undefined;
+    this.anchorOrbitSeeded = false;
     if (this.input.frozen) {
       // still update camera for demo playback
       this.visuals.updateFrozenCamera(this.camera, this.terrain, this.pos, this.yaw, this.pitch);
