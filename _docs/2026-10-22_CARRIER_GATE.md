@@ -109,21 +109,20 @@ Clear `airborneBy` + `throwFrom` on carrier death (drop) and capture
 (home return). Prevents the ex-thrower guard from leaking across a flag
 return and blocking re-grab.
 
-### Edit 5 — Tactical ski-release (SHIPPED, botMoves.ts)
-Brief friction tap before steep hills at high speed, carriers only:
+### Edit 6 — Apex jetting (SHIPPED, botMoves.ts)
+Jet at the apex when the no-thrust arc won't reach the next peak:
 ```ts
-// State: private skiReleaseT = 0;
-// Arm: if (ctx.running && !airborne && rise > skiVetoRise && speed > 25) {
-//        this.skiReleaseT = Math.max(this.skiReleaseT, 0.15);
-//      }
-//      this.skiReleaseT = Math.max(0, this.skiReleaseT - dt);
-// Veto: ski: !ctx.posted && !(rise > skiVetoRise && speed < skiVetoSpeed && !airborne)
-//            && !(ctx.running && this.skiReleaseT > 0),
+private apexNeedsJet(ctx, pos): boolean {
+  // At apex (vy ≈ 0), dead-reckon no-thrust arc. If it hits ground
+  // before reaching a downslope (rising ahead), jet to extend.
+}
+// In wantJet: if (airborne && apex && energy > tapEnergyMin && apexNeedsJet) {
+//   this.jetWhy = 'apex'; return true;
+// }
 ```
-0.15s friction tap when a carrier is going >25 m/s toward a steep rise
-(>2.7m). Re-engages ski after the tap. No regression (capRun 3/3 pass,
-capStat identical to baseline). Tribes energy management: decel only when
-it costs less than the impact.
+Tribes: "jet just enough to reach the next hill, and always land on a
+downward slope." Proactive jetting at the apex, not just reactive climbing.
+No regression (capRun 3/3 pass, capStat identical to baseline).
 
 ## What actually fixes the park-short defect
 
@@ -181,11 +180,12 @@ just runs home at speed, and the grab-orbit brake handles any overshoot.
 - [x] Edit 1 shipped: park block `ctx.posted && !ctx.running`
 - [x] Edit 4 shipped: RoomFlags airborneBy/throwFrom clear on drop + capture
 - [x] Edit 5 shipped: tactical ski-release (brief friction tap before steep hills, carriers only)
+- [x] Edit 6 shipped: apex jetting (jet at apex when no-thrust arc won't reach next peak)
 - [~] Edit 2 (arrival deceleration): **abandoned — wrong tool.** Tribes is
   about speed and trajectory. Deceleration kills defense and makes carriers
   sitting ducks. Tactical ski-release (Edit 5) is the correct, sparing use.
 - [x] Edit 3: reverted (original `!ctx.runner` was correct)
-- [ ] Run 3-seed measurement on Edit 1 + Edit 4 + Edit 5, compare to baseline
+- [ ] Run 3-seed measurement on Edit 1 + Edit 4 + Edit 5 + Edit 6, compare to baseline
 - [ ] If terrain-trap bounce persists, apply path-following (flow field /
   precomputed route home) — NOT full deceleration
 - [ ] Update this doc with results
