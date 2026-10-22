@@ -13,13 +13,12 @@ import {
 import { Logger, ChildLogger } from './core/Logger.js';
 import { settings } from './core/settings.js';
 import { urlParams, isDevHost } from './core/params.js';
-import { armTelemetry } from './core/telemetry.js';
 import { feedMode } from './feed/feedMode.js';
 import { simRngSeed, lcg32 } from '../../shared/simRand.js';
 import { spawnRngSeed } from '../../shared/spawnDice.js';
 import { botRng } from '../../shared/botRand.js';
 import { setRunSeed, mintSeed, getChallenge, fetchChallenge } from './demo/demoSeed.js';
-import { watchDeployVersion } from './core/deployWatch.js';
+import { watchDeployVersion, checkDeployNow } from './core/deployWatch.js';
 import { noteStale, staleCount } from './core/staleFiles.js';
 import { createRenderer, GAME_ASPECT } from './core/renderer.js';
 import * as sfx from './core/sfx.js';
@@ -747,8 +746,17 @@ async function init(): Promise<void> {
   // Invariant violations land in the glitch census — a named truth
   // breaking shows in the alt+q dump, never crashes the match.
   setInvariantSink(glitch);
-  watchDeployVersion();
+  // Defer a deploy reload to the only real break: the intermission —
+  // match clock expired, scoreboard up, next match not started.
+  // Menu/death are still live play. Grace cap inside bounds the wait.
+  watchDeployVersion({ whenIdle: (): boolean =>
+    world.matchEndsAt !== null && world.matchEndsAt <= Date.now() });
   networkManager = new NetworkManager();
+  // Deploy admission gate — every join/reconnect (initial dial, stall
+  // retries) first checks version.txt; a new build reloads BEFORE this
+  // client is admitted, so stale tabs migrate at their natural join
+  // moment instead of being rejected mid-protocol by a drifted wire.
+  networkManager.onPreConnect = checkDeployNow;
   networkManager.armWireQueue();
   // /quickjoin — ask the matchmaker for a seat before anything reads
   // urlParams; the picked room lands as the canonical /s/<room> path, so
@@ -1145,8 +1153,48 @@ if (hot) {
         'background:rgba(0,0,0,0.35);padding:3px 7px;border-radius:4px;';
       document.body.append(badge);
     }
-    badge.textContent = `⟳ ${stale} file${stale === 1 ? '' : 's'} changed — Ctrl+R`;
+    badge.textContent = `⟳ ${stale} file${stale === 1 ? '' : 's'} changed`;
   });
+
+  // dev-watch restart countdown: the watcher exposes the armed restart on
+  // the seat-handoff port (server http port + 1) — its save debounce +
+  // drain is otherwise invisible until the socket dies mid-fight.
+  {
+    let rbadge: HTMLDivElement | null = null;
+    let restartAt = 0;
+    const paint = (): void => {
+      const left = restartAt - Date.now();
+      if (left <= -15_000) {restartAt = 0;} // countdown passed and we're still alive — drop it
+      if (!restartAt) {if (rbadge) {rbadge.style.display = 'none';} return;}
+      if (!rbadge) {
+        rbadge = document.createElement('div');
+        rbadge.style.cssText =
+          'position:fixed;bottom:26px;right:10px;z-index:9999;pointer-events:none;' +
+          'font:11px/1.4 monospace;color:#ff6b6b;opacity:0.9;text-shadow:0 1px 2px #000;' +
+          'background:rgba(0,0,0,0.35);padding:3px 7px;border-radius:4px;';
+        document.body.append(rbadge);
+      }
+      rbadge.style.display = '';
+      rbadge.textContent = left > 0 ? `⟳ server restart in ${(left / 1000).toFixed(1)}s` : '⟳ server restarting…';
+    };
+    setInterval(paint, 200);
+    const pollRestart = async (url: string): Promise<void> => {
+      try {
+        const r = await fetch(url, { cache: 'no-store' });
+        restartAt = r.ok ? Number((await r.json() as { restartAt?: number }).restartAt ?? 0) : 0;
+      } catch { restartAt = 0; } // bare `bun src/server.ts` — no watcher to announce
+    };
+    const armRestartPoll = async (): Promise<void> => {
+      const ep = await serverEndpoints;
+      const u = new URL(ep.httpUrl);
+      if (u.protocol !== 'http:' || !u.port) {return;} // dev-watch only exists on the http dev server
+      u.port = String(Number(u.port) + 1);
+      const url = `${u.origin}/restart`;
+      await pollRestart(url).catch((): undefined => undefined);
+      setInterval((): void => { pollRestart(url).catch((): undefined => undefined); }, 500); // pending window is ~3s — coarse polling would miss it
+    };
+    armRestartPoll().catch((): undefined => undefined);
+  }
 }
 
 // Auto-start: init immediately, overlay stays hidden until ESC is pressed

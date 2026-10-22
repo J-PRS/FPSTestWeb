@@ -401,7 +401,7 @@ export class Room {
    *  birth; mapCatalog's rotation + GameServer's reload keep it current. */
   mapSrc = '';
 
-  constructor(name: string, field: Heightfield | null, mode = '', spec?: MapSpec, moveAuthority = false, seed?: number) {
+  constructor(name: string, field: Heightfield | null, mode = '', spec?: MapSpec, moveAuthority = false, seed?: number, deferBots = false) {
     if (seed !== undefined) {
       // A minted seed drives this room's draws — the spawn layout the
       // ctor below scatters is then part of the replay record.
@@ -626,8 +626,14 @@ export class Room {
     // their respawns.
     this.modeModule = this.makeModeModule();
     // Bots populate before humans join so team balancing puts humans on
-    // the emptier side.
-    if (this.spec.bots) {this.bots.populate(this.spec.bots);}
+    // the emptier side. Factory rooms defer the seat to the terrain
+    // attach — the pick lifts authored anchors via groundAt, which reads
+    // 0 pre-field: populating here seats every bot at anchor y under the
+    // real surface (announces go out buried, unbury warps them up after).
+    if (this.spec.bots) {
+      if (deferBots) {this.pendingBots = this.spec.bots;}
+      else {this.bots.populate(this.spec.bots);}
+    }
     this.wireModeFeatures();
     this.deployables = new RoomDeployables(this);
     // Deployables are solid — the move shadows push bodies out of gear.
@@ -1367,6 +1373,16 @@ export class Room {
     this.creatureSim.pops = this.noCreatures ? {} : (spec.creatures ?? {});
     this.creatureSim.colliders = this.ballSim.colliders;
   }
+
+  /** Bot seats deferred at ctor (factory rooms wait out the async
+   *  terrain load so the pick lifts against the real field) — populate
+   *  once the attach lands. No-op when nothing was deferred. */
+  populateDeferredBots(): void {
+    const n = Math.max(0, this.pendingBots - this.bots.count);
+    this.pendingBots = 0;
+    if (n > 0) {this.bots.populate(n);}
+  }
+  private pendingBots = 0;
 
   /** Top up / retire bots toward a spec's bot count (admin reload). */
   private retuneBots(want: number): void {

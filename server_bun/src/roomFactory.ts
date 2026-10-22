@@ -98,7 +98,13 @@ export class RoomFactory {
       // Room stays up on the null field rather than crashing the boot —
       // without this log a bad terrain file reads as invisible terrain.
       logger.warn('Room terrain load failed — running without heightfield', { room: roomName, error });
-    }).finally((): void => { if (room.terrainReady === target) {room.terrainReady = null;} });
+    }).finally((): void => {
+      // Deferred bot seats — populated here (still ahead of deferred
+      // human joins, which hook the same promise later) or on a failed
+      // load, where groundAt=0 reproduces the old authored-anchor seat.
+      room.populateDeferredBots();
+      if (room.terrainReady === target) {room.terrainReady = null;}
+    });
   }
 
   /** Resolve-or-create a room. Joins may name any room; 'default' is the
@@ -144,8 +150,12 @@ export class RoomFactory {
       // Mint + record the room seed — production rooms replay their draw
       // stream; ambient entropy at mint is fine (it's recorded, not drawn
       // inside the sim).
+      // deferBots: a spec that needs an async terrain attach seats its
+      // bots pre-field — their spawn pick lifts via groundAt, which reads
+      // 0 until the field lands (buried announces + unbury warps).
+      const needsAttach = Boolean(spec?.terrain || spec?.heightScale || spec?.tileSize);
       room = new Room(name, this.host.field(), mode, spec, CONFIG.moveAuthority,
-        (Math.random() * 0x1_00_00_00_00) >>> 0);
+        (Math.random() * 0x1_00_00_00_00) >>> 0, needsAttach);
       room.unlisted = unlisted;
       // The ctor already seeded populations (fields default false) — the
       // gates apply post-ctor and on later applySpec reloads.
@@ -174,7 +184,7 @@ export class RoomFactory {
       };
       room.onRotate = (): MapSpec | null => this.host.maps.nextRotationSpec(r);
       room.onTerrain = (s): void => this.attachTerrain(r, s);
-      if (spec?.terrain || spec?.heightScale || spec?.tileSize) {this.attachTerrain(room, spec);}
+      if (needsAttach && spec) {this.attachTerrain(room, spec);}
       this.host.rooms.set(name, room);
       logger.info('Room created', { room: name, mode: room.mode });
     } else if (room.noBalls !== noBalls || room.noCreatures !== noCreatures) {

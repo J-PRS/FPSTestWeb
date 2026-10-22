@@ -16,6 +16,7 @@ import { initNetProbe, bindStats, attachScene, corr as probeCorr, corrGhost } fr
 import { parityMiss, kbEchoHorizon } from '../parity.js';
 import { recCorrection } from '../../core/telemetry.js';
 import { lastWeaponByPlayer } from './projectiles.js';
+import { markLocalSeated } from './world.js';
 import type { NetCtx } from './ctx.js';
 
 /** Updates, respawns, join/leave, movement events — the presence wire. */
@@ -89,6 +90,7 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
         return;
       }
       player.pos.set(position.x, position.y, position.z);
+      markLocalSeated();
       noteLocalSnap();
       deps.setLastSentPos({ x: position.x, y: position.y, z: position.z });
       if (Number.isFinite(rotation.yaw + rotation.pitch)) {

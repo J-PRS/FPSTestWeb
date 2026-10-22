@@ -1,3 +1,5 @@
+// oxlint-disable no-console,no-void -- CLI script: console is the output
+// channel, void marks intentional fire-and-forget promises.
 /**
  * Dev runner: `bun dev-watch.ts` — bun's own --watch only follows imports
  * under its entry dir, so shared/ changes never restart the server even
@@ -12,7 +14,7 @@ import { watch } from 'fs';
 import { execFileSync } from 'node:child_process';
 
 const DIRS = ['src', '../shared'];
-const DEBOUNCE_MS = 1000; // was 150 — active editing (especially with a concurrent writer) fired restarts every save; 1s collapses them
+const DEBOUNCE_MS = 30_000; // was 150, then 1000 — active editing fired restarts every save; 30s batches a whole edit session into one restart
 
 let child: Subprocess | null = null;
 let restarting = false;
@@ -27,13 +29,21 @@ const STATE_URL = `http://127.0.0.1:${STATE_PORT}/state`;
 // were with no disk writes. The blob dies with the watcher, which is
 // also exactly when you want a clean slate.
 let savedState: unknown = null;
+// Armed restart deadline — the client polls /restart so its dev HUD can
+// count down "server restart in Ns" during debounce+drain instead of the
+// socket dying as a surprise. 0 = nothing pending.
+let restartAt = 0;
 try {
   Bun.serve({
     port: STATE_PORT,
     hostname: '127.0.0.1',
     async fetch(req) {
       const url = new URL(req.url);
-      if (url.pathname !== '/state') return new Response('not found', { status: 404 });
+      // Cross-origin: the dev client lives on vite :5400, this on :PORT+1.
+      if (url.pathname === '/restart') {
+        return Response.json({ restartAt }, { headers: { 'Access-Control-Allow-Origin': '*' } });
+      }
+      if (url.pathname !== '/state') {return new Response('not found', { status: 404 });}
       if (req.method === 'PUT') {
         savedState = await req.json().catch(() => null);
         return new Response(null, { status: 204 });
@@ -65,10 +75,11 @@ function boot(): void {
   }
   lastBootAt = now;
   bootAt = now;
+  restartAt = 0; // the restart this countdown armed just spawned
   child = spawn({
     cmd: ['bun', 'src/server.ts'],
     stdout: 'inherit', stderr: 'inherit', stdin: 'inherit',
-    env: { ...process.env, FPS_STATE_URL: STATE_URL },
+    env: Object.assign({}, process.env, { FPS_STATE_URL: STATE_URL }),
   });
   // Crash or /dev/shutdown outside a restart(): dev means "server is up",
   // so a dead child respawns. restart() itself serializes its own boot.
@@ -76,13 +87,14 @@ function boot(): void {
   // the port is squatted, not a crash: name the squatter and ask, don't
   // spin a respawn loop spewing the same bind error forever.
   void child.exited.then(() => {
-    if (restarting || child!.exitCode === null) return;
+    if (restarting || child!.exitCode === null) {return;}
     if (Date.now() - bootAt < 3000) {
-      bindFails++;
+      bindFails += 1;
       if (bindFails >= 2) { void portConflict(); return; } // don't respawn — wait for portConflict to resolve
-    } else bindFails = 0;
+    } else {bindFails = 0;}
     console.log('[dev-watch] server exited — respawning');
     boot();
+    return undefined;
   });
 }
 
@@ -94,7 +106,7 @@ function portOwner(): { pid: number; name: string } | null {
       const parts = line.trim().split(/\s+/);
       if (parts.length >= 5 && parts[3] === 'LISTENING' && (parts[1]!.endsWith(`:${PORT}`))) {
         const pid = Number(parts[4]);
-        if (!pid) return null;
+        if (!pid) {return null;}
         try {
           const tl = execFileSync('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], { encoding: 'utf8' });
           const name = tl.split('"')[1] ?? `pid ${pid}`;
@@ -116,7 +128,7 @@ function ask(q: string): Promise<string> {
 }
 
 async function portConflict(): Promise<void> {
-  if (conflictBusy) return;
+  if (conflictBusy) {return;}
   conflictBusy = true;
   try {
     const owner = portOwner();
@@ -139,8 +151,8 @@ async function portConflict(): Promise<void> {
           await new Promise((r) => setTimeout(r, 2000));
           bindFails = 0;
           boot();
-        } catch (e) {
-          console.log(`[dev-watch] kill failed: ${e instanceof Error ? e.message : String(e)}`);
+        } catch (error) {
+          console.log(`[dev-watch] kill failed: ${error instanceof Error ? error.message : String(error)}`);
         }
       } else {
         bindFails = 0;
@@ -157,8 +169,8 @@ async function portConflict(): Promise<void> {
         await new Promise((r) => setTimeout(r, 2000));
         bindFails = 0;
         boot();
-      } catch (e) {
-        console.log(`[dev-watch] kill failed: ${e instanceof Error ? e.message : String(e)}`);
+      } catch (error) {
+        console.log(`[dev-watch] kill failed: ${error instanceof Error ? error.message : String(error)}`);
       }
     } else {
       bindFails = 0;
@@ -178,7 +190,7 @@ async function drain(): Promise<void> {
       fetch(`http://127.0.0.1:${PORT}/dev/shutdown`),
       new Promise((r) => setTimeout(r, 1000)),
     ]);
-    if (child) await Promise.race([child.exited, new Promise((r) => setTimeout(r, 800))]);
+    if (child) {await Promise.race([child.exited, new Promise((r) => setTimeout(r, 800))]);}
   } catch { /* server not answering — kill() is the fallback anyway */ }
 }
 
@@ -187,7 +199,7 @@ async function restart(): Promise<void> {
   restarting = true;
   console.log('[dev-watch] restart — shared/ or src/ changed');
   await drain();
-  if (child && child.exitCode === null) child.kill();
+  if (child && child.exitCode === null) {child.kill();}
   await child?.exited;
   boot();
   restarting = false;
@@ -197,9 +209,11 @@ async function restart(): Promise<void> {
 for (const dir of DIRS) {
   let timer: ReturnType<typeof setTimeout> | null = null;
   watch(dir, { recursive: true }, (_ev, file) => {
-    if (!file || !file.endsWith('.ts')) return;
-    if (timer) clearTimeout(timer);
+    if (!file || !file.endsWith('.ts')) {return;}
+    if (timer) {clearTimeout(timer);}
     timer = setTimeout(() => void restart(), DEBOUNCE_MS);
+    // Debounce + drain (~1.8s) until the sockets actually close.
+    restartAt = Date.now() + DEBOUNCE_MS + 1800;
   });
 }
 

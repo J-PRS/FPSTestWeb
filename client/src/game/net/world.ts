@@ -39,11 +39,13 @@ export function dropSessionVeil(): void {
   sessionVeil?.remove();
   sessionVeil = null;
   sessionVeilReady = false;
+  sessionSeated = false;
 }
 
 
 
 export function armSessionVeil(label = 'RECONNECTING'): void {
+  sessionSeated = false; // a re-arm must wait for THIS session's seat
   if (sessionVeil) {return;}
   const el = document.createElement('div');
   el.id = 'session-veil';
@@ -65,6 +67,14 @@ export function armSessionVeil(label = 'RECONNECTING'): void {
 // first interactive frame).
 let sessionVeilReady = false;
 export function isSessionVeilReady(): boolean { return sessionVeilReady; }
+
+/** A wire seat landed — respawn or gameState restore wrote pos. The veil
+ *  must not drop on the boot default `(0, startH+10, 0)`: origin can sit
+ *  under a hill, so the first live frames would render under terrain
+ *  (and stream claims that read as a kill-zone dive). */
+let sessionSeated = false;
+export function isSessionSeated(): boolean { return sessionSeated; }
+export function markLocalSeated(): void { sessionSeated = true; }
 
 /** While veiled there IS no session — the game loop freezes rather than
  *  simulating a boot world the incoming gameState discards anyway. */
@@ -151,6 +161,7 @@ function restoreLocalPlayer(ctx: NetCtx, localPlayerState: LocalPlayerState): vo
   } else {
     deps.lazyHud().show();
   }
+  markLocalSeated();
 
   deps.logger.debug(`Player state restored from gameState - pos(${localPlayerState.position.x.toFixed(1)},${localPlayerState.position.y.toFixed(1)},${localPlayerState.position.z.toFixed(1)}) vel(${localPlayerState.velocity?.x.toFixed(1) || 0},${localPlayerState.velocity?.y.toFixed(1) || 0},${localPlayerState.velocity?.z.toFixed(1) || 0}) health:${localPlayerState.health} dead:${localPlayerState.isDead}`);
 }
