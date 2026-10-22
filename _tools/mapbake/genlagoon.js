@@ -33,7 +33,9 @@ const FULL = 255 * M_PER_BYTE;             // field's full vertical range, meter
 const WATER = Number(opt.water ?? 2);       // sea level in world meters (very low)
 
 // Layout: one medium island centered on the tile.
-const ISLAND_R = 420;   // island footprint radius (meters)
+const ISLAND_R = 800;   // island footprint radius (meters) — sized so
+                        // ~13% of the tile is deep water (byte 0) and
+                        // ~84% is land (full 0-255 relief span).
 const PEAK = 120;       // central peak height (meters)
 const RIDGE = 1.6;      // ridged spine weight
 
@@ -75,14 +77,16 @@ for (let z = 0; z < N; z += 1) {
     const dc = (dist / ISLAND_R) * warp;
 
     if (dc > 1.25) {
-      // Ocean floor: shallow shelf, not deep.
-      h[z * N + x] = WATER - 1 + 0.5 * fbm(u * 4, v * 4);
+      // Ocean floor: deep sink so water is clearly below the waterline
+      // (byte ~0) and covers ~15-25% of the tile. Land keeps its full
+      // 0-255 relief span (see Math.max clamp below).
+      h[z * N + x] = WATER - 12 + 4 * fbm(u * 4, v * 4);
       continue;
     }
 
     const coast = 1 - smoothstep(0.75, 1.0, dc);
     if (coast <= 0) {
-      h[z * N + x] = WATER - 1 + 0.5 * fbm(u * 4, v * 4);
+      h[z * N + x] = WATER - 12 + 4 * fbm(u * 4, v * 4);
       continue;
     }
 

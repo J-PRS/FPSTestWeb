@@ -166,5 +166,5 @@
       0.25
     ]
   },
-  "_notes": "Lagoon = four-island archipelago (terrainPreset 6, coast). Shallow shelf joins the islands, deep central lagoon and open ocean beyond. Water.level 12m must match the generator's --water so terrain, sims and the surface plane agree. Authored with _tools/mapbake/genlagoon.js (engine-world frame)."
+  "_notes": "Lagoon = single medium island (terrainPreset 6, coast). Deep ocean (~13% of tile, byte 0) surrounds a large island (84% land, full 0-255 relief). Water.level 2m matches the generator's --water. Authored with _tools/mapbake/genlagoon.js (engine-world frame). Sea sink deepened 2026-10-22 so water renders instead of invisible shallow shelf (see _docs/2026-10-15_CAPPER_STRIKE.md landmine note)."
 }
