@@ -28,6 +28,7 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-10-21_NETCODE_GAP.md` | Netcode gap analysis vs production shooters |
 | `_docs/2026-10-22_GRIND_LEADERBOARD.md` | Grind leaderboard design |
 | `_docs/2026-10-22_SPECTATE_RELAY.md` | Spectator relay / OBS-server reference |
+| `_docs/2026-10-22_REPLAY_DEMO_SYSTEMS.md` | Replay/demo systems across shipped games — Tribes .rec, TrueView, MVD, input replay; two-truth problem |
 
 ## Agent memory (append-only, one line each)
 
