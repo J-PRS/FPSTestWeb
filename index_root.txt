@@ -4,6 +4,7 @@
 .devin-tools
 .devin_chrome_tmp
 .dockerignore
+.env.example
 .git
 .github
 .gitignore
