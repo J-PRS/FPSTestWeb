@@ -16,6 +16,8 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/NOTES.md` | JP's world notes |
 | `_docs/TEST_PLAN_bots.md` / `_docs/TEST_PLAN_demo.md` | Test plans |
 | `_docs/2026-10-15_CAPPER_STRIKE.md` | **Living capper reference** — scoreboard, mechanics, physics budget, landmines, measured history |
+| `_docs/2026-10-22_CARRIER_GATE.md` | Capper carrier-gate fix — park block, airborneBy leak, tactical ski-release, arrival deceleration abandoned (wrong tool) |
+| `_docs/2026-10-22_TRIBES_MOVEMENT.md` | **Full Tribes movement report** — physics, energy management, terrain reading, jet system, tactical decisions, bot AI application, landmines |
 | `_docs/2026-10-16_CAPPER_REACTIVE_LIMITS.md` | Capper reactive ceiling + TAS floor |
 | `_docs/2026-10-16_TEAMSOAK_WARP.md` | Themed team matchups + warp collapse |
 | `_docs/2026-10-17_TERRAIN_COMPILE_STALL.md` | The 40s browser hang |
