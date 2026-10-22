@@ -1,8 +1,5 @@
 .agents
 .devin
-.devin-diff
-.devin-tools
-.devin_chrome_tmp
 .dockerignore
 .env.example
 .git
