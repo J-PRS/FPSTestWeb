@@ -8,6 +8,10 @@
   <link rel="icon" type="image/png" href="/assets/icons/icon_star.png" sizes="512x512" />
   <!-- Linked, not JS-imported: stylesheet-in-JS waits on module eval →
        unstyled HTML flashes on refresh (FOUC). -->
+  <!-- The boot heightmap fetch otherwise starts after the module parses —
+       overlap it with game.js download+eval. as=fetch + crossorigin
+       (anonymous) matches the loadHeightfieldBin() request. -->
+  <link rel="preload" as="fetch" crossorigin href="/assets/heightmaps/heightmap.bin">
   <link rel="stylesheet" href="/src/ui/chrome.css" />
   <link rel="stylesheet" href="/src/ui/hud/hud.css" />
   <link rel="stylesheet" href="/src/lab/lab.css" />

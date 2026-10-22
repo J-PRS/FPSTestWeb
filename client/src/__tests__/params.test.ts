@@ -1,10 +1,10 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { urlParams, readJoinSpec, writeJoinSpec } from '../core/params.js';
+import { urlParams, readJoinSpec, writeJoinSpec, invalidateUrlParams } from '../core/params.js';
 import { settings } from '../core/settings.js';
 
 const loc = window as unknown as { location: { search: string; pathname: string } };
-const setSearch = (s: string): void => { loc.location.search = s; };
-const setPath = (p: string): void => { loc.location.pathname = p; };
+const setSearch = (s: string): void => { loc.location.search = s; invalidateUrlParams(); };
+const setPath = (p: string): void => { loc.location.pathname = p; invalidateUrlParams(); };
 
 beforeEach((): void => {
   setSearch('');

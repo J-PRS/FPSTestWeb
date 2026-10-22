@@ -43,7 +43,7 @@ export function dropSessionVeil(): void {
 
 
 
-export function armSessionVeil(): void {
+export function armSessionVeil(label = 'RECONNECTING'): void {
   if (sessionVeil) {return;}
   const el = document.createElement('div');
   el.id = 'session-veil';
@@ -52,9 +52,9 @@ export function armSessionVeil(): void {
   // A label implies a wait — only show it if the veil outlives ~1s,
   // which means the restore hit a genuinely slow path.
   sessionVeilLabelTimer = setTimeout((): void => {
-    const label = document.createElement('span');
-    label.textContent = 'RECONNECTING'; // player's frame, not the protocol's — F5 with a stored token IS a rejoin
-    sessionVeil?.append(label);
+    const el2 = document.createElement('span');
+    el2.textContent = label; // player's frame, not the protocol's — F5 with a stored token IS a rejoin
+    sessionVeil?.append(el2);
   }, 1000);
   // Connect may fail outright — never leave a black curtain up.
   sessionVeilTimer = setTimeout(dropSessionVeil, 8000);

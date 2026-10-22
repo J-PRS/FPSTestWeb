@@ -24,22 +24,36 @@ export const isDevHost = (): boolean =>
 // serve the PREVIOUS room to every later call site. Some debug readers
 // DO run per-frame per-remote (collider gizmo tint), so the parse is
 // keyed on the raw string — compare is ~free, reparse only on change.
-let lastSearch = '';
-let lastPath = '';
 let liveParams = new URLSearchParams();
 let liveRoom = '';
+// The DOM reads themselves were the remaining cost — location.search
+// allocates a fresh string per access and this runs per-frame from
+// dozens of sites. The URL only moves through history.pushState/
+// replaceState/popstate — hook them and skip the read entirely.
+let liveDirty = true;
+if (typeof window !== 'undefined' && typeof history !== 'undefined') {
+  const dirty = (): void => { liveDirty = true; };
+  window.addEventListener('popstate', dirty);
+  for (const m of ['pushState', 'replaceState'] as const) {
+    const orig = history[m];
+    history[m] = function (this: History, ...args: Parameters<History['pushState']>): ReturnType<History['pushState']> {
+      dirty();
+      return orig.apply(this, args);
+    };
+  }
+}
+/** Test seam — stubs mutate location.search/pathname directly, bypassing
+ *  the history API. Call after such a write to invalidate the cache. */
+export function invalidateUrlParams(): void { liveDirty = true; }
 const live = (): URLSearchParams => {
   // Node/bun test hosts have no location — URL params read empty, every
   // getter falls through to its settings/default leg.
-  const s = typeof window === 'undefined' ? '' : window.location.search;
-  const p = typeof window === 'undefined' ? '' : window.location.pathname;
-  if (s !== lastSearch || p !== lastPath) {
-    lastSearch = s;
-    lastPath = p;
-    liveParams = new URLSearchParams(s);
+  if (liveDirty && typeof window !== 'undefined') {
+    liveDirty = false;
+    liveParams = new URLSearchParams(window.location.search);
     // Canonical share link is the PATH: /s/<room>. ?room= stays readable
     // for old links; nothing writes it anymore.
-    const m = /^\/s\/([^/?#]+)/.exec(p);
+    const m = /^\/s\/([^/?#]+)/.exec(window.location.pathname);
     liveRoom = m ? decodeURIComponent(m[1]) : '';
   }
   return liveParams;

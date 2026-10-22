@@ -119,6 +119,13 @@
     "fileSize": 313598
   },
   {
+    "filename": "clip_2026-10-22T07-52-11_4.7s.demo",
+    "projectileLifetime": 4.735708236694336,
+    "timestamp": 1792655531751,
+    "description": "Best shot (4.74s air, 14.7s clip)",
+    "fileSize": 153452
+  },
+  {
     "filename": "clip_2026-10-04T11-48-44_4.7s.demo",
     "projectileLifetime": 4.721818923950195,
     "timestamp": 1791114524364,
@@ -250,6 +257,13 @@
     "timestamp": 1791062279761,
     "description": "Cool shot (4.06s air, 14.1s clip)",
     "fileSize": 250867
+  },
+  {
+    "filename": "clip_2026-10-22T09-09-52_4.0s.demo",
+    "projectileLifetime": 4.029545307159424,
+    "timestamp": 1792660192151,
+    "description": "Best shot (4.03s air, 14.0s clip)",
+    "fileSize": 146251
   },
   {
     "filename": "clip_2026-10-06T16-38-06_4.0s.demo",
@@ -390,6 +404,13 @@
     "timestamp": 1790802225153,
     "description": "Combo x4 (best 3.42s air, 17.5s clip)",
     "fileSize": 263507
+  },
+  {
+    "filename": "clip_2026-10-22T08-39-43_3.4s.demo",
+    "projectileLifetime": 3.4088234901428223,
+    "timestamp": 1792658383870,
+    "description": "Best shot (3.41s air, 13.4s clip)",
+    "fileSize": 140323
   },
   {
     "filename": "clip_2026-07-14T20-03-41_3.4s.demo",
@@ -677,26 +698,5 @@
     "timestamp": 1790413047482,
     "description": "Cool shot (2.72s air, 12.7s clip)",
     "fileSize": 57839
-  },
-  {
-    "filename": "clip_2026-10-01T16-20-49_2.7s.demo",
-    "projectileLifetime": 2.7167000770568848,
-    "timestamp": 1790871649456,
-    "description": "Combo x5 (best 2.72s air, 15.0s clip)",
-    "fileSize": 143608
-  },
-  {
-    "filename": "clip_2026-07-07T19-36-44_2.7s.demo",
-    "projectileLifetime": 2.7,
-    "timestamp": 1783453004714,
-    "description": "Cool shot (2.70s air, 12.7s clip)",
-    "fileSize": 46672
-  },
-  {
-    "filename": "clip_2026-09-26T12-08-56_2.7s.demo",
-    "projectileLifetime": 2.683300018310547,
-    "timestamp": 1790424536932,
-    "description": "Cool shot (2.68s air, 12.7s clip)",
-    "fileSize": 61049
   }
 ]
