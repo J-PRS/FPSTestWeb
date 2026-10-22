@@ -34,7 +34,7 @@ function listProcs() {
         const m = l.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/);
         if (!m) return null;
         return { pid: +m[1], ageH: +m[2] / 3600, cmd: m[3] };
-      }).filter((p) => p && /FPSWebTest/i.test(p.cmd) && !KEEP_PATTERNS.test(p.cmd));
+      }).filter((p) => p && (/FPSWebTest/i.test(p.cmd) || /dev-watch\.ts/i.test(p.cmd) || /src\/server\.ts/i.test(p.cmd)) && !KEEP_PATTERNS.test(p.cmd));
     } catch { return []; }
   }
   // Windows: write a tiny PowerShell script to a temp file to dodge the
@@ -55,7 +55,7 @@ function listProcs() {
   if (!Array.isArray(arr)) arr = [arr];
   const now = Date.now();
   const filtered = arr
-    .filter((p) => p && p.CommandLine && /FPSWebTest/i.test(p.CommandLine) && !KEEP_PATTERNS.test(p.CommandLine));
+    .filter((p) => p && p.CommandLine && (/FPSWebTest/i.test(p.CommandLine) || /dev-watch\.ts/i.test(p.CommandLine) || /src[\\/]server\.ts/i.test(p.CommandLine)) && !KEEP_PATTERNS.test(p.CommandLine));
   return filtered
     .map((p) => {
       const m = String(p.CreationDate).match(/\/Date\((\d+)\)\//);

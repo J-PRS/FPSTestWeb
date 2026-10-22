@@ -10,9 +10,9 @@ for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8000.*LISTENING"') do taskk
 REM Kill dev-watch parents (they are NOT on :8000 — they listen on :8001,
 REM so the port-kill above misses them; they'd respawn a child on the
 REM still-busy :8000 and spin a bind-fail loop).
-powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='bun.exe'\" | Where-Object { \$_.CommandLine -match 'dev-watch\.ts' -and \$_.CommandLine -match 'FPSWebTest' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1
+powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='bun.exe'\" | Where-Object { \$_.CommandLine -match 'dev-watch\.ts' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1
 REM Also reap any orphaned bun src/server.ts that survived.
-powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='bun.exe'\" | Where-Object { \$_.CommandLine -match 'src[\\\\/]server\.ts' -and \$_.CommandLine -match 'FPSWebTest' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1
+powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='bun.exe'\" | Where-Object { \$_.CommandLine -match 'src[\\\\/]server\.ts' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1
 
 REM Give the OS a moment to release the port (TIME_WAIT / handle cleanup).
 timeout /t 2 /nobreak >nul
