@@ -51,6 +51,9 @@ describe('netcode chaos: wire layer', () => {
     expect(bTypes).toEqual(['for-b', 'for-all', 'not-for-a']);
   });
 
+});
+
+describe('netcode chaos: frame aliasing + journal replay', () => {
   it('queued tick frames do not alias across recipients (frameArena contract)', () => {
     // Regression: encodeTickFrame once shared ONE arena — recipient A's
     // queued view was clobbered by recipient B's encode mid-collect, so
