@@ -77,3 +77,10 @@ rejections (aimOff>0 legit) stay named.
 | P1 | `age` on `projectileCreated` + exact-epoch remote replicas + dead-on-arrival skip | `traj-epoch` (remote), `self:0` outliers, ghost-shell replicas, worst `dmg-echo` |
 | P2 | audit ball/creature replica path for faithful-edge vs freeze artifact | `trail-jumpcut tag:ball`, ball rubber-bands |
 | P3 | re-run Tailscale duel, compare before/after | measure |
+  
+## Follow-up (tsDuel13-15, Tailscale funnel)  
+  
+- ghostPosition was min()-clamped - ghost==wire always (wg~0), envelope math ran one interp-delay ahead (the aimOff 6-9m dmg-echo/kb-echo class). Now unclamped AND reads `SnapshotBuffer.sampleAt(viewEpochT)` - the shooter's literal view epoch from real snapshot history (LiteEntitySystem snapshot-pair+blend, client-side). rg p50 now 0.04-0.10m (was ~6m).  
+- BALL lane persistent desync + 700m rubberbands = ONE bug: a room re-mint rewound ballSim.simTime ~17s, inside isStaleSeg's 30s 'rewind=new epoch' window - every new-epoch segment dropped stale forever  frozen replica + stale regime fields. Window now 2s (isStaleSeg + noteStamp); estSimNow rate floor 0.50.9. tsDuel15: zero ball warns.  
+- projectileCreated carries `t` (server wall-ms at broadcast): remote replicas read exact age = srvAge + (serverNow - srvT); dead-on-arrival skip on the exact epoch (counted in dumps).  
+- Remaining floor (physical, classified): fate-late verdicts through multi-second stalls; dmg/kb-echo with offM:0 = honest rim rejects; traj-epoch sa>age = gone-edge queue delay bounded by fuse.  
