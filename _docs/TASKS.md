@@ -129,7 +129,7 @@
 
 ## Next Tasks
 - **1v1 capacity** — see `_docs/2026-10-23_DUEL_CAPACITY.md`. Measured baseline: 32 duel rooms × 64 players = 36.6 % of a core (175 CCU/core) vs 2 × 32 = 24.1 % (266 CCU/core). Ordered:
-  - [ ] **L1 empty-world duel mode** — `registerSims()` (`Room.ts:838`) pushes balls/crawl/flags/pickups/deploy/influence unconditionally; `noBalls`/`noCreatures` only zero populations. Make it mode-driven; `encodeBallSegment` (4.8 % of samples) should vanish. Needs `netBot` to forward the join flags. Target ≥ 220 CCU/core.
+  - [x] **L1 empty-world duel mode** — DONE: ModeSpec `world:'empty'` on duel; `registerSims` skips balls/crawl/pickups/deploy/influence; deploy claims refuse `'nomode'`; profload gains `--mode`. Measured 32×2: 26.6% core, **240 CCU/core** (baseline 36.6%/175, target ≥220).
   - [ ] **L2 quiet-room tick** — heartbeat at ~4 Hz when fully suppressed, instead of an unconditional frame per tick (`TickLoop.ts:334`). Pin loss-metric + stateHash semantics in scenario tests first. Target ~286 CCU/core.
   - [ ] **L5 sample phase marks** — `mark()` is ~1.7 % of samples; gate behind env or every 10th tick.
   - [ ] **L6 frame arena** — `Uint8Array`/`DataView`/buffer ≈ 14 % of samples; reuse per-connection frame buffers until drain.

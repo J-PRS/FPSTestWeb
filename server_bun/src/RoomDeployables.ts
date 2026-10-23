@@ -137,6 +137,10 @@ export class RoomDeployables {
     if (!KINDS.has(kind as DeployKind)) {return 'badkind';}
     const k = kind as DeployKind;
     // cap-0 kinds are map-authored only — a client can't plant a generator.
+    // world:'empty' rooms skip the deploy sim — a planted item would
+    // broadcast a spawn then never tick/fire/decay: a dead prop lying to
+    // every observer. Refuse the claim honestly instead.
+    if (this.room.modeSpec?.world === 'empty') {return 'nomode';}
     if (DEPLOY_ITEMS[k].cap === 0) {return 'badkind';}
     if (!Number.isFinite(pos.x + pos.y + pos.z)) {return 'badpos';}
     // Pack gear costs belt charges — the same nugget pool the throws drink

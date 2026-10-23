@@ -192,6 +192,7 @@ try {
   // Load: one netBot proc unless --split; --roomspec R=N puts bots in
   // N numbered rooms INSIDE one proc (roombase/roomk) — no spawn burst.
   const roomSpec = arg('roomspec', '');
+  const mode = arg('mode', 'dm');
   const specArgs = arg('spec') ? ['--spec', arg('spec'), '--map', `../maps/${arg('spec')}.bin`] : [];
   const botArgs = roomSpec
     ? ((): string[] => {
@@ -203,7 +204,7 @@ try {
     : null;
   if (botArgs) {
     track(Bun.spawn(
-      [BUN, 'tools/netBot.ts', ...botArgs, '--mode', 'dm', '--net', 'ws', '--url', `ws://localhost:${PORT}/ws`],
+      [BUN, 'tools/netBot.ts', ...botArgs, '--mode', mode, '--net', 'ws', '--url', `ws://localhost:${PORT}/ws`],
       { cwd: 'server_bun', stdout: Bun.file(`_tools/devin_scratch/profload_rooms.log`), stderr: Bun.file(`_tools/devin_scratch/profload_rooms.log`), stdin: 'ignore' },
     ), 'netBot');
   } else {
@@ -211,7 +212,7 @@ try {
     for (const room of ROOMS) {
       const blog = Bun.file(`_tools/devin_scratch/profload_${room}.log`);
       track(Bun.spawn(
-        [BUN, 'tools/netBot.ts', '--bots', String(per), '--room', room, '--mode', 'dm', '--net', 'ws', '--url', `ws://localhost:${PORT}/ws`, ...specArgs],
+        [BUN, 'tools/netBot.ts', '--bots', String(per), '--room', room, '--mode', mode, '--net', 'ws', '--url', `ws://localhost:${PORT}/ws`, ...specArgs],
         { cwd: 'server_bun', stdout: blog, stderr: blog, stdin: 'ignore' },
       ), `netBot:${room}`);
     }

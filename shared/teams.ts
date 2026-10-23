@@ -77,6 +77,10 @@ export interface ModeSpec {
   /** DM scoring — a frag on a real player/bot vs a creature. */
   ptsPlayerKill: number;
   ptsCreatureKill: number;
+  /** 'empty' skips the ambient world sims (balls/crawl/pickups/deploy/
+   *  influence) — the duel room runs move+proj+health only. Absent =
+   *  the full simulated world. */
+  world?: 'empty';
 }
 
 export const MODES: Record<ModeId, ModeSpec> = {
@@ -87,7 +91,7 @@ export const MODES: Record<ModeId, ModeSpec> = {
   // Rabbit: FFA around ONE neutral flag — the carrier is the only legal
   // target, hold time pays a point a second, kills pay one each.
   rabbit:  { label: 'RABBIT', teams: false, ffa: true, flags: true, gems: false, winAt: 60, timeLimitS: 900, ptsPlayerKill: 1, ptsCreatureKill: 0 },
-  duel:    { label: 'DUEL', teams: false, ffa: true, flags: false, gems: false, winAt: 10, timeLimitS: 300, ptsPlayerKill: 1, ptsCreatureKill: 0 },
+  duel:    { label: 'DUEL', teams: false, ffa: true, flags: false, gems: false, winAt: 10, timeLimitS: 300, ptsPlayerKill: 1, ptsCreatureKill: 0, world: 'empty' },
   // Flag Run: solo cap circuit — a square of stands alternating teams,
   // two flags a side; bank any enemy flag at either friendly stand.
   flagrun: { label: 'FLAG RUN', teams: true, ffa: false, flags: true, gems: false, winAt: 10, timeLimitS: 1800, ptsPlayerKill: 0, ptsCreatureKill: 0 },

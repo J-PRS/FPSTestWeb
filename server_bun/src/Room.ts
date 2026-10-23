@@ -836,16 +836,23 @@ export class Room {
   // server-side systems (deployables, generators) register here instead
   // of editing the tick loop.
   private registerSims(): void {
+    // world:'empty' modes (duel) skip the ambient sims — a 2-seat room
+    // paying for wildlife it never renders is the 1v1 capacity penalty
+    // (_docs/2026-10-23_DUEL_CAPACITY L1). The OBJECTS still exist, so
+    // stateHash lanes emit empty rosters rather than undefined.
+    const ambient = this.modeSpec?.world !== 'empty';
     // World sims step first — bots and downstream systems see post-step
     // wildlife positions inside the same tick.
-    this.sims.push({ name: 'balls', tick: (dt): void => this.ballSim.step(dt), worldState: () => [{ type: 'ballRoster', balls: this.ballSim.roster() }] });
-    this.sims.push({ name: 'crawl', tick: (dt): void => this.creatureSim.step(dt), worldState: () => [{ type: 'crawlRoster', crawlers: this.creatureSim.roster() }] });
+    if (ambient) {
+      this.sims.push({ name: 'balls', tick: (dt): void => this.ballSim.step(dt), worldState: () => [{ type: 'ballRoster', balls: this.ballSim.roster() }] });
+      this.sims.push({ name: 'crawl', tick: (dt): void => this.creatureSim.step(dt), worldState: () => [{ type: 'crawlRoster', crawlers: this.creatureSim.roster() }] });
+    }
     this.sims.push({ name: 'bots', tick: (dt): void => this.bots.tick(dt) });
     if (this.flags) {this.sims.push({ name: 'flags', tick: (dt): void => this.tickFlags(dt), worldState: () => [{ type: 'flagUpdate', flags: this.flags!.snapshot() }] });}
     // The pluggable mode's own sims (conquest's lattice, anything future
     // modules register) — same tick + join-replay funnel as built-ins.
     for (const s of this.modeModule?.sims?.() ?? []) {this.sims.push(s);}
-    if (this.pickups) {this.sims.push({ name: 'pickups', tick: (dt): void => this.pickups!.tick(dt), worldState: (): ServerMessage[] => this.pickups!.snapshot().map((p) => ({ type: 'pickupSpawn', id: p.id, pos: p.pos, kind: p.kind }) as ServerMessage) });}
+    if (ambient && this.pickups) {this.sims.push({ name: 'pickups', tick: (dt): void => this.pickups!.tick(dt), worldState: (): ServerMessage[] => this.pickups!.snapshot().map((p) => ({ type: 'pickupSpawn', id: p.id, pos: p.pos, kind: p.kind }) as ServerMessage) });}
     this.sims.push({ name: 'unbury', tick: (dt): void => this.unburyTick(dt) });
     if (this.spec.arena) {
       const arena = new RoomArena(this, this.spec.arena);
@@ -854,7 +861,7 @@ export class Room {
     // Deployables join the worldState replay: only edges streamed before,
     // so a mid-game joiner saw a compound it never spawned — permanent
     // DEPLOY/flag/pickup hash desyncs until something happened to change.
-    this.sims.push({ name: 'deploy', tick: (dt): void => this.deployables.tick(dt), worldState: (): ServerMessage[] => this.deployables.snapshot().map((d) => ({ type: 'deploySpawn', id: d.id, owner: d.owner, kind: d.kind, pos: d.pos, team: d.team }) as ServerMessage) });
+    if (ambient) {this.sims.push({ name: 'deploy', tick: (dt): void => this.deployables.tick(dt), worldState: (): ServerMessage[] => this.deployables.snapshot().map((d) => ({ type: 'deploySpawn', id: d.id, owner: d.owner, kind: d.kind, pos: d.pos, team: d.team }) as ServerMessage) });}
     this.sims.push({ name: 'proj', tick: (dt): void => this.projectiles.tick(dt) });
     this.sims.push({ name: 'move', tick: (dt): void => this.moveSim.tick(dt) });
     this.sims.push({ name: 'health', tick: (dt): void => this.healthTick(dt) });
@@ -862,7 +869,7 @@ export class Room {
     // the move shadow's transit EMA has a channel the client can't
     // fabricate (it cross-checks the ping riding position frames).
     this.sims.push({ name: 'ping', tick: (): void => this.pingTick() });
-    this.sims.push({ name: 'influence', tick: (dt): void => this.influence.tick(dt) });
+    if (ambient) {this.sims.push({ name: 'influence', tick: (dt): void => this.influence.tick(dt) });}
     this.moveSim.health = this.health;
   }
 

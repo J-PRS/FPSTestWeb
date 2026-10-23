@@ -252,6 +252,17 @@ gap between 175 and ~570 is the price of that world, not of the players.
 
 ## 8. Experiment plan
 
+### Runs
+
+- **L1 landed + measured (this session):** `--bots 64 --roomspec duel=32
+  --mode duel --secs 40`, activity: full combat, **ambient sims OFF**
+  (world:'empty'). Result: **26.6 % of a core, 0.416 %/client, 240
+  CCU/core** — beats the ≥220 target. txByKind confirms zero ballbatch
+  frames and `sim:balls/crawl/pickups/deploy/influence` all absent from
+  phaseMs. `j:deploy` claims arrive (136) and are refused `'nomode'` —
+  a planted prop in an empty-world room would spawn and never tick, so
+  the claim is rejected honestly.
+
 Each step is one `profload` run (~90 s), matched against the 175 baseline.
 
 1. **Empty-world duel.** Add a `duel` mode (or pass `noBalls`+`noCreatures`
