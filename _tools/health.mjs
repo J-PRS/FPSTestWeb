@@ -50,8 +50,9 @@ L.push('');
 {
   // zombie census — advisory list only, never kills here
   const p = run('node', ['_tools/procs.mjs'], REPO, 60e3);
-  const killable = (p.out.match(/\n\s+pid=/g) ?? []).length;
-  const kept = (p.out.match(/\[kept\]/g) ?? []).length;
+  const procLines = p.out.split('\n');
+  const killable = procLines.filter((l) => /^\s+pid=/.test(l)).length;
+  const kept = procLines.filter((l) => /\[kept\]\s+pid=/.test(l)).length;
   L.push(`- **processes**: ${killable} repo-rooted killable, ${kept} kept (dev stack/infra) — \`npm run procs\` for detail`);
 
   // git dirtiness + freshness
