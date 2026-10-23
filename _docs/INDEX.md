@@ -23,6 +23,7 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-10-17_TERRAIN_COMPILE_STALL.md` | The 40s browser hang |
 | `_docs/2026-10-22_FRONTEND_AUDIT.md` | Vanilla DOM layer vs published best practice — near-optimal; residual gaps |
 | `_docs/2026-10-23_SERVER_HOTPATH_AUDIT.md` | **Server hot-path footgun audit** — projStep/link allocations, remaining dhypot3 swaps, per-tick grid rebuild, roster builders; ordered by payoff/risk |
+| `_docs/2026-10-23_DUEL_CAPACITY.md` | **1v1 capacity report** — measured: duel rooms cost 1.5× more per client than 32-seat rooms (175 vs 266 CCU/core); profile attribution, cost model, L1-L8 levers, industry patterns |
 | `_docs/2026-10-18_ADDING_MODES_AND_PICKUPS.md` | Blast surface for new modes/pickups |
 | `_docs/2026-10-18_CTF_BOT_BRAIN_PUG_AUDIT.md` | CTF bot brain vs PUG guide audit |
 | `_docs/2026-10-18_NETCODE_OVERHAUL.md` | Netcode overhaul (2026-10-18) |
