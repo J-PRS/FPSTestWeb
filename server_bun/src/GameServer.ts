@@ -590,7 +590,7 @@ seated += 1;
    *  decodePosition/decodeInputMove — the JSON validator would re-walk
    *  ~30Hz×players of known-good objects for nothing. */
   private handleGameMessageTrusted(room: Room, playerId: string, msg: ClientMessage): void {
-    this.dispatchMessage(room, playerId, msg);
+    this.dispatchMessage(room, playerId, msg, true);
   }
 
   private handleGameMessage(room: Room, playerId: string, raw: unknown): void {
@@ -603,7 +603,7 @@ this.ops.msgsRejected += 1;
     this.dispatchMessage(room, playerId, result.data);
   }
 
-  private dispatchMessage(room: Room, playerId: string, data: ClientMessage): void {
+  private dispatchMessage(room: Room, playerId: string, data: ClientMessage, trusted = false): void {
 this.ops.msgsIn += 1;
     // Backstop bound: legit traffic is ~20 reports + a few actions per
     // player per tick (~500 for a full room) — a flooding client would
@@ -627,7 +627,7 @@ this.ops.msgsRejected += 1;
     const fast = data.type;
     if (fast === 'ping' || fast === 'pong' || fast === 'clientStats' || fast === 'tickNack'
       || fast === 'position' || fast === 'inputMove' || fast === 'teleport') {
-      try { room.messages.handleMessage(playerId, data, wallNow()); }
+      try { room.messages.handleMessage(playerId, data, wallNow(), trusted); }
       catch (error) { logger.warn('Telemetry handler threw', { playerId, type: data.type, error }); }
       return;
     }

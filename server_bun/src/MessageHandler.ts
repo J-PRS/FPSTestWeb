@@ -627,7 +627,7 @@ export class MessageHandler {
   /** `at` = socket-arrival time — the command drain runs it against the
    *  rate limiter so a tick-lag backlog is windowed by when it came in,
    *  not by when the stalled tick caught up. */
-  handleMessage(playerId: string, msg: ClientMessage, at?: WallMs): void {
+  handleMessage(playerId: string, msg: ClientMessage, at?: WallMs, trusted = false): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player) {return;}
 
@@ -669,7 +669,9 @@ export class MessageHandler {
     // (inputMove in authority mode) starves the idle reaper mid-match.
     player.lastSeen = wallNow();
 
-    checkIntent(msg.type, msg as unknown as Record<string, unknown>);
+    // Binary-decoded frames were shape+range-checked at the byte
+    // boundary — re-walking their field table is pure noise.
+    if (!trusted) {checkIntent(msg.type, msg as unknown as Record<string, unknown>);}
     const handler = WIRE[msg.type]?.handle as ((h: MessageHandler, id: string, m: ClientMessage) => void) | undefined;
     if (!handler) {
       this.hb('unhandled');

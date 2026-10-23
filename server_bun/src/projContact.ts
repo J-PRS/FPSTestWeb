@@ -6,7 +6,7 @@ import { segFieldHit, segPointDist, segPointT, bounceOffField } from '../../shar
 import { segSolidHit } from '../../shared/solidWorld.ts';
 import type { RoomProjectiles, LiveProj } from './RoomProjectiles.ts';
 import { rewindPos, shooterTransitMs } from './claimLedger.ts';
-import { renderLagOf, renderLagOfTarget } from './rewind.ts';
+import { renderLagOf, renderLagOfTarget, REWIND_MS } from './rewind.ts';
 import { logger } from './logger.ts';
 
 type ContactHost = RoomProjectiles;
@@ -78,12 +78,14 @@ function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getW
     const halfLen = Math.hypot(p.pos.x - from.x, p.pos.y - from.y, p.pos.z - from.z) / 2;
     for (const [pid, target] of r.room.players.getAllPlayers()) {
       if (pid === proj.ownerId || target.isDead) {continue;}
-      const back = ghostBack(r, owner, proj.ownerId, pid);
       const speed = Math.hypot(target.velocity.x, target.velocity.y, target.velocity.z);
-      const margin = capsuleReach(target, reach) + halfLen + (speed + 25) * dt + speed * back / 1000;
+      // The reject only needs a bound on backMs — the rewind ceiling —
+      // so ghostBack's transit/renderLag lookups wait for survivors.
+      const margin = capsuleReach(target, reach) + halfLen + (speed + 25) * dt + speed * REWIND_MS / 1000;
       const center = capsuleCenter(target);
       const dx = center.x - midX, dy = center.y - midY, dz = center.z - midZ;
       if (dx * dx + dy * dy + dz * dz > margin * margin) {continue;}
+      const back = ghostBack(r, owner, proj.ownerId, pid);
       const tp = rewindPos(target, back);
       const pc = { x: tp.x, y: tp.y + classCapsule(target.armorClass).centerOff, z: tp.z };
       const pd = segPointDist(from, p.pos, pc);

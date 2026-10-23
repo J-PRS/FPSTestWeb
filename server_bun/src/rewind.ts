@@ -62,5 +62,13 @@ export function pushRewindSample(
   // every check against this window whiffs. Skip the sample instead.
   if (!Number.isFinite(p.position.x + p.position.y + p.position.z)) {return;}
   p.history.push({ t: now, x: p.position.x, y: p.position.y, z: p.position.z });
-  while (p.history.length > 0 && p.history[0]!.t < now - REWIND_MS) {p.history.shift();}
+  // Amortized trim — a per-push shift() is O(n) over ~50 entries ×
+  // ~25Hz per player. Stale head entries are safe to leave briefly:
+  // rewindPos scans from the newest and rewindNearest skips by stamp.
+  const h = p.history;
+  if (h.length > 80 || (h.length > 0 && h[0]!.t < now - REWIND_MS - 300)) {
+    let i = 0;
+    while (i < h.length && h[i]!.t < now - REWIND_MS) {i += 1;}
+    if (i > 0) {h.splice(0, i);}
+  }
 }

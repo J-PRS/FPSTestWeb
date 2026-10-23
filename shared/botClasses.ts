@@ -85,10 +85,18 @@ const HEADROOM = 0.2;
  *  half-height; `radius` is the class's own half-width — every hit test
  *  and the bodyblock resolve read it, so a narrower class is harder to
  *  hit AND harder to block. */
-export function classCapsule(cls?: string): { eye: number; height: number; centerOff: number; half: number; radius: number } {
-  const st = cls === 'light' || cls === 'medium' || cls === 'heavy' ? CLASS_STATS[cls] : CLASS_STATS.medium;
-  const height = st.eyeHeight + HEADROOM;
-  return { eye: st.eyeHeight, height, centerOff: height / 2 - st.eyeHeight, half: Math.max(0, (height - 2 * st.radius) / 2), radius: st.radius };
+const capsuleCache = new Map<string, Readonly<{ eye: number; height: number; centerOff: number; half: number; radius: number }>>();
+export function classCapsule(cls?: string): Readonly<{ eye: number; height: number; centerOff: number; half: number; radius: number }> {
+  const key = cls === 'light' || cls === 'medium' || cls === 'heavy' ? cls : 'medium';
+  let c = capsuleCache.get(key);
+  if (!c) {
+    const st = CLASS_STATS[key];
+    const height = st.eyeHeight + HEADROOM;
+    // Frozen — callers get the shared instance, so nobody may scribble.
+    c = Object.freeze({ eye: st.eyeHeight, height, centerOff: height / 2 - st.eyeHeight, half: Math.max(0, (height - 2 * st.radius) / 2), radius: st.radius });
+    capsuleCache.set(key, c);
+  }
+  return c;
 }
 
 /** Sim mass for impulse scaling — jets and blast shoves divide by it. */
