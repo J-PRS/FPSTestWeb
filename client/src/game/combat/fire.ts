@@ -61,11 +61,12 @@ const MUZZLE_LEAD = 1;
 // remote replicas render.
 const SHOULDER_DROP = 0.35;
 const _spawnOrigin = new THREE.Vector3();
-const _mirroredOrigin = new THREE.Vector3();
+
 
 /** Latest sample at-or-before (now - backMs); older than the whole ring
- *  clamps to the oldest entry. */
-function histAt(hist: WorldState['localPosHistory'], backMs: number): WorldState['localPosHistory'][number] | undefined {
+ *  clamps to the oldest entry. Exported for ghost-epoch reads that need
+ *  a caller-chosen back-off (remote-shell body sweeps). */
+export function histAt(hist: WorldState['localPosHistory'], backMs: number): WorldState['localPosHistory'][number] | undefined {
   if (hist.length === 0) {return undefined;}
   const tAt = performance.now() - backMs;
   let s = hist[0]!;
@@ -73,17 +74,7 @@ function histAt(hist: WorldState['localPosHistory'], backMs: number): WorldState
   return s;
 }
 
-/** The authority's spawn state for a server-simmed shot, mirrored off the
- *  local history: origin = pos 0.7·(rtt/2) ago (its rewindPos), inherit
- *  = vel (rtt/2) ago (the shadow's freshest sample). */
-export function mirroredSpawn(hist: WorldState['localPosHistory'], rtt: number): WorldState['localPosHistory'][number] | undefined {
-  if (!(rtt > 0)) {return undefined;}
-  // Origin: the server rewinds its shadow 0.7·(transit/2) = 0.35·RTT.
-  // Velocity: the server takes the shadow's CURRENT vel — the freshest
-  // pos-report, i.e. what we're doing at claim-send ≈ live vel — so the
-  // caller keeps e.playerVel and only the origin mirrors back.
-  return histAt(hist, rtt * 0.35);
-}
+
 
 function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs, quiet = false): Projectile | undefined {
   if (deps.inputTracking.isTabHidden()) {return undefined;}
@@ -95,32 +86,13 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   deps.lazyPlayer().lastFireAt = performance.now();
   _spawnOrigin.copy(e.origin).addScaledVector(e.dir, MUZZLE_LEAD);
   if (deps.lazyPlayer().thirdPerson) {_spawnOrigin.y -= SHOULDER_DROP;}
-  // INSTANT SHOOTING: Spawn projectile locally immediately for LAN-like feel.
-  // Server-mirrored spawn (server-simmed weapons only): the authority
-  // spawns this shell at rewindPos(0.7·transit) — pos.y IS the eye
-  // (Quake-style crosshair spawn, no offset) — with shadow-vel inherit.
-  // Mirroring that epoch means the predicted shell flies the server's
-  // arc even when the create echo can't beat the fuse (the bind:-1
-  // traj-outlier class on WAN). Offline/no-history keeps the live
-  // muzzle spawn.
-  let spawnAt = _spawnOrigin;
-  if (serverSimmed(config.weaponType)) {
-    const rtt = deps.lazyNetworkManager().serverPingMs ?? deps.lazyNetworkManager().getPing();
-    const m = mirroredSpawn(deps.world.localPosHistory, rtt);
-    if (m) {
-      _mirroredOrigin.set(m.x, m.y, m.z);
-      spawnAt = _mirroredOrigin;
-    }
-  }
-  const p = new Projectile(deps.lazyScene(), spawnAt, e.dir, e.playerVel, config);
-  p.mirrored = spawnAt !== _spawnOrigin;
-  if (p.mirrored) {
-    // The sim arc starts at the server's rewind epoch, but the shell
-    // should still LOOK like it leaves the muzzle — blend the visual
-    // offset out over ~150ms instead of a pop at spawn point.
-    p.renderOffset.copy(_spawnOrigin).sub(p.pos);
-    p.rendered.copy(_spawnOrigin);
-  }
+  // INSTANT SHOOTING: pure client spawn — the predicted shell leaves
+  // the live muzzle, always. (Rewind-mirroring the server's birth epoch
+  // made the spawn point ping-dependent — shells visibly spawned ~1m
+  // behind a fast skier and blended forward over ~150ms. The server
+  // still rewinds its own authoritative shell; any arc divergence is
+  // an echo-bind problem, not a feel problem — trajDiv watches it.)
+  const p = new Projectile(deps.lazyScene(), _spawnOrigin, e.dir, e.playerVel, config);
   deps.world.projectiles.push(p);
 
   // Every spawn below claims a wire identity — the nonce is what binds
@@ -427,11 +399,13 @@ function melee(deps: CombatDeps, hooks: FireHooks, e: FireArgs): void {
   meleeSwingFx(deps, e, groundHit ?? _meleeHitPos, groundHit, hitAt);
 
   // The swing intent rides shotFired — the server derives the arc point
-  // itself (no position claim) and relays the fire for observers.
+  // itself and relays the fire for observers. pos rides along so the
+  // sweep anchors at the claimed eye, not an estimated rewind.
   const networkManager = deps.lazyNetworkManager();
   if (networkManager?.isConnected()) {
     networkManager.sendShotFired({
       weaponType: WeaponType.Melee, dir: { x: e.dir.x, y: e.dir.y, z: e.dir.z },
+      pos: { x: e.origin.x, y: e.origin.y, z: e.origin.z },
     });
   }
   hooks.applyForceToRemotes({ pos: _meleeHitPos, radius: stats.aoeRadius, force: stats.knockbackForce, forceMode: 'push', aoeDamage: stats.aoeDamage, directHitTargetId: null, forceMultiplier: 1, weaponType: WeaponType.Melee });

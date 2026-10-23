@@ -9,7 +9,7 @@ import { finiteVec, encodeShotEv } from '../../shared/wire.ts';
 import { dhypot3 } from '../../shared/dmath.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
 import { ColliderIndex } from '../../shared/solidWorld.ts';
-import { rewindPos, shooterTransitMs } from './claimLedger.ts';
+import { rewindPos, rewindNearest } from './claimLedger.ts';
 import { KillFeed } from './killFeed.ts';
 import { RespawnManager } from './respawn.ts';
 import { ChargeBank } from './combatCharge.ts';
@@ -219,6 +219,30 @@ export class CombatHandler {
     if (this.deps.health) {this.deps.health.set(key, (this.deps.health.get(key) ?? 0) + n);}
   }
 
+  /** The claim's measured uplink age (ms) — sendShotFired stamps fireAt
+   *  on the client's server-clock estimate; absence = 0 (bot/legacy). */
+  private uplinkMsOf(msg: { fireAt?: number }): number {
+    return typeof msg.fireAt === 'number'
+      ? Math.min(Math.max(wallNow() - msg.fireAt, 0), 5000) : 0;
+  }
+
+  /** Claim-driven origin: the shooter's reported eye/muzzle point,
+   *  bounded to honest reach of its uplink window — a teleported claim
+   *  clamps to the nearest recorded body sample instead of being taken
+   *  verbatim. No transit estimate: pos is claim truth, the window is
+   *  measured uplink. */
+  private claimOrigin(player: PlayerState, uplinkMs: number, pos: Vec3 | undefined): Vec3 {
+    const at = rewindPos(player, uplinkMs);
+    if (pos && finiteVec(pos)) {
+      const bound = rewindNearest(player, uplinkMs + 150, 150, pos);
+      const gap = dhypot3(bound.x - pos.x, bound.y - pos.y, bound.z - pos.z);
+      // A real muzzle sits within ~muzzle-lead + a step of some recorded
+      // body sample in the window — a bigger gap is a teleported claim.
+      if (gap <= 3) {return { x: pos.x, y: pos.y, z: pos.z };}
+    }
+    return at;
+  }
+
   /** Claim refused: server-side warn plus a shotRejected to the shooter so
    *  their client can log WHY predicted damage never happened. */
   reject(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number, shotId?: string): void {
@@ -383,7 +407,7 @@ w.n += 1;
       const meleeStats = getWeaponStats(WeaponType.Melee);
       const reach = meleeStats ? meleeStats.aoeRadius * 0.7 : 2.2;
       const l = dhypot3(dir.x, dir.y, dir.z) || 1;
-      const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
+      const mpos = this.claimOrigin(player, this.uplinkMsOf(msg), msg.pos);
       // The creature half of the swing pays here too — same derived
       // origin, same dir — so the client's predicted contact never
       // needs a creatureHit claim.
@@ -415,7 +439,7 @@ w.n += 1;
       recent.push(now);
       this.beamFireTimes.set(playerId, recent);
       player.protectedUntil = simMs(0);
-      const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
+      const mpos = this.claimOrigin(player, this.uplinkMsOf(msg), msg.pos);
       const l = dhypot3(dir.x, dir.y, dir.z) || 1;
       this.beamPay(playerId, player, this.deps.beamSweep(playerId,
         { x: mpos.x, y: mpos.y, z: mpos.z },
@@ -432,7 +456,7 @@ w.n += 1;
       if (now - lastL < LANCE_CADENCE_S * 1000 - 150) { this.hb('drop.lanceCadence'); return; }
       this.lastLance.set(playerId, now);
       player.protectedUntil = simMs(0);
-      const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
+      const mpos = this.claimOrigin(player, this.uplinkMsOf(msg), msg.pos);
       const l = dhypot3(dir.x, dir.y, dir.z) || 1;
       this.lancePay(playerId, player, this.deps.beamSweep(playerId,
         { x: mpos.x, y: mpos.y, z: mpos.z },
@@ -446,7 +470,7 @@ w.n += 1;
       if (recent.length >= 30) { this.hb('drop.beamFlood'); return; }
       recent.push(now);
       this.beamFireTimes.set(playerId, recent);
-      const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
+      const mpos = this.claimOrigin(player, this.uplinkMsOf(msg), msg.pos);
       const l = dhypot3(dir.x, dir.y, dir.z) || 1;
       const id = this.deps.repairTarget(playerId,
         { x: mpos.x, y: mpos.y, z: mpos.z },
@@ -486,7 +510,11 @@ win.violations += 1;
       if (now - (this.lastFireNotify.get(playerId) ?? 0) < 50) {return;}
     }
     this.deps.emit?.({ type: 'fire', playerId });
-    const at = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
+    // Spawn epoch from the CLAIM, not a transit heuristic: the shooter
+    // reports the muzzle pos it drew from + a fireAt stamp; uplinkMs is
+    // the measured claim age (also the lagS lead below).
+    const uplinkMs = this.uplinkMsOf(msg);
+    const at = this.claimOrigin(player, uplinkMs, msg.pos);
     // Claimless pilot: a server-simmed intent spawns an authoritative
     // shell — the intent IS the whole claim; contact/blast outcomes
     // arrive as broadcasts, never as client claims. projectileCreated
@@ -504,14 +532,11 @@ win.violations += 1;
       }
       player.protectedUntil = simMs(0); // firing breaks your own spawn shield
       const l = dhypot3(dir!.x, dir!.y, dir!.z) || 1;
-      // Back-date the shell's age by the claim's measured uplink lag —
-      // the replica's clock already runs (wallNow − fireAt), so the
-      // authoritative shell ages in lockstep: fuses die at the same
-      // epoch instead of the wire 'gone' arriving seconds late
-      // (the traj-epoch class on starved uplinks). Clamped against a
-      // forged fireAt the same way drainCommands clamps ordering.
-      const lagS = typeof msg.fireAt === 'number'
-        ? Math.min(Math.max((wallNow() - msg.fireAt) / 1000, 0), 5) : 0;
+      // Back-date the shell's age by the measured uplink (same number
+      // that bound the origin) — the replica's clock already runs, so
+      // the authoritative shell ages in lockstep: fuses die at the same
+      // epoch instead of the wire 'gone' arriving seconds late.
+      const lagS = uplinkMs / 1000;
       const id = fireProjectile(playerId, msg.weaponType!,
         { x: at.x, y: at.y, z: at.z },
         { x: dir!.x / l, y: dir!.y / l, z: dir!.z / l },

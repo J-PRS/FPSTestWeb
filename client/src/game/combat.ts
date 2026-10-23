@@ -178,6 +178,9 @@ export function createCombat(deps: CombatDeps) {
       if (def.kind === 'fan' || def.kind === 'beam') {
         deps.lazyNetworkManager()?.sendShotFired({
           weaponType: def.weaponType, dir: { x: e.dir.x, y: e.dir.y, z: e.dir.z },
+          // The eye point the beam left from — the server uses the claim's
+          // own origin (bounded to honest reach) instead of estimating.
+          pos: { x: e.origin.x, y: e.origin.y, z: e.origin.z },
         });
       }
       if (def.kind === 'beam') {
