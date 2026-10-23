@@ -12,6 +12,7 @@ import type { HitVerdict } from './types.ts';
 
 import { segPointDist, segPointT } from '../../shared/projSim.ts';
 import { aoeDamage } from '../../shared/combat.ts';
+import { dhypot3 } from '../../shared/dmath.ts';
 import { logger } from './logger.ts';
 import { healPool } from './healPool.ts';
 
@@ -32,7 +33,7 @@ export class BallCombat {
     let best = Infinity;
     for (const b of this.host.balls().values()) {
       if (b.dead) {continue;}
-      const d = Math.hypot(x - b.x, y - b.y, z - b.z);
+      const d = dhypot3(x - b.x, y - b.y, z - b.z);
       if (d < best) {best = d;}
     }
     return best;
@@ -83,7 +84,7 @@ export class BallCombat {
   splashDamage(ownerId: string, pos: SimVec, radius: number, maxDamage: number, skipId?: number): void {
     for (const b of this.host.balls().values()) {
       if (b.dead || b.id === skipId) {continue;}
-      const d = Math.max(0, Math.hypot(b.x - pos.x, b.y - pos.y, b.z - pos.z) - b.radius);
+      const d = Math.max(0, dhypot3(b.x - pos.x, b.y - pos.y, b.z - pos.z) - b.radius);
       const dmg = aoeDamage(maxDamage, d, radius);
       if (dmg >= 1) {this.handleHit(ownerId, b.id, dmg);}
     }
@@ -98,7 +99,7 @@ export class BallCombat {
     for (const b of this.host.balls().values()) {
       if (b.dead) {continue;}
       const dx = b.x - pos.x, dy = b.y - pos.y, dz = b.z - pos.z;
-      const d = Math.hypot(dx, dy, dz);
+      const d = dhypot3(dx, dy, dz);
       if (d > reach + b.radius || d < 1e-6) {continue;}
       if ((dx / d) * dir.x + (dy / d) * dir.y + (dz / d) * dir.z < MELEE_ARC_DOT) {continue;}
       this.handleHit(ownerId, b.id, dmg, (dx / d) * force, (dy / d) * force, (dz / d) * force);
@@ -115,7 +116,7 @@ export class BallCombat {
     for (const b of this.host.balls().values()) {
       if (b.dead) {continue;}
       const dx = b.x - pos.x, dy = b.y - pos.y, dz = b.z - pos.z;
-      const d = Math.hypot(dx, dy, dz);
+      const d = dhypot3(dx, dy, dz);
       if (d > radius + b.radius || d < 1e-6) {continue;}
       b.vx += (dx / d) * force * s;
       b.vy += (dy / d) * force * s;
@@ -160,7 +161,7 @@ export class BallCombat {
     };
     if (far(b.x, b.y, b.z) && (!b.pset || far(b.px, b.py, b.pz))) {
       logger.warn('creatureHit dropped: out of range', {
-        playerId, id, dist: Math.round(Math.hypot(claimer.position.x - b.x, claimer.position.y - b.y, claimer.position.z - b.z)),
+        playerId, id, dist: Math.round(dhypot3(claimer.position.x - b.x, claimer.position.y - b.y, claimer.position.z - b.z)),
         claimerPos: { x: Math.round(claimer.position.x), y: Math.round(claimer.position.y), z: Math.round(claimer.position.z) },
         ballPos: { x: Math.round(b.x), y: Math.round(b.y), z: Math.round(b.z) },
         claimerDead: claimer.isDead,
@@ -178,7 +179,7 @@ export class BallCombat {
     // knock never rides claims ('knock' kind 'prey' event covers it), so a
     // claimed impulse can't double-shove. Cap keeps a forged claim honest.
     let ix = kx ?? 0, iy = ky ?? 0, iz = kz ?? 0;
-    const im = Math.hypot(ix, iy, iz);
+    const im = dhypot3(ix, iy, iz);
     if (im > 60) { const k = 60 / im; ix *= k; iy *= k; iz *= k; }
     if (applySimDamage(b, dmg, ix, iy, iz)) {
       this.host.kill(b, playerId);

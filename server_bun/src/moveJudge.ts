@@ -10,6 +10,7 @@ import { FieldSurface } from '../../shared/fieldSurface.ts';
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
 import { wallNow } from './wallClock.ts';
+import { dhypot2, dhypot3 } from '../../shared/dmath.ts';
 
 export { FieldSurface };
 
@@ -283,7 +284,7 @@ export class MoveJudge {
     // tolerance math (see REPORT_VEL_CAP).
     let velClamped = vel;
     if (vel) {
-      const m = Math.hypot(vel.x, vel.y, vel.z);
+      const m = dhypot3(vel.x, vel.y, vel.z);
       if (m > REPORT_VEL_CAP) {
         const k = REPORT_VEL_CAP / m;
         velClamped = { x: vel.x * k, y: vel.y * k, z: vel.z * k };
@@ -321,7 +322,7 @@ export class MoveJudge {
     // step-function teleport reads as teleport even while the shadow
     // sits elsewhere (drift and forge look identical as report-vs-
     // shadow distance; only the report stream itself separates them).
-    const repJump = sh.lastRepPos ? Math.hypot(pos.x - sh.lastRepPos.x, pos.y - sh.lastRepPos.y, pos.z - sh.lastRepPos.z) : 0;
+    const repJump = sh.lastRepPos ? dhypot3(pos.x - sh.lastRepPos.x, pos.y - sh.lastRepPos.y, pos.z - sh.lastRepPos.z) : 0;
     sh.lastRepPos = { x: pos.x, y: pos.y, z: pos.z };
     if (phase === 'parked-defer') { (sh.deferStreak += 1); return null; }
     if (reportInputSeq === undefined || reportInputSeq <= sh.lastInputSeq) {
@@ -329,8 +330,8 @@ export class MoveJudge {
     }
     const gapYoung = phase === 'gap-young';
     const dx0 = pos.x - s.pos.x, dy0 = pos.y - s.pos.y, dz0 = pos.z - s.pos.z;
-    let dist = Math.hypot(dx0, dy0, dz0);
-    const speed = Math.hypot(s.vel.x, s.vel.z);
+    let dist = dhypot3(dx0, dy0, dz0);
+    const speed = dhypot2(s.vel.x, s.vel.z);
     // A client throttled below ~4fps sims slower than wall time (MAX_DT
     // caps catch-up at 0.25s/frame), so its honest state trails the
     // full-rate shadow by speed×(1−rate) every second — growing until
@@ -338,7 +339,7 @@ export class MoveJudge {
     // under 4Hz the client still burns the whole clamp budget each
     // frame, so simRate ≈ fps × 0.25. Forgive up to that accumulated
     // deficit over the correction window; a teleport is still far past.
-    const speed3d = Math.hypot(s.vel.x, s.vel.y, s.vel.z);
+    const speed3d = dhypot3(s.vel.x, s.vel.y, s.vel.z);
     const simRate = sh.reportEma > 0 ? Math.min(1, 250 / sh.reportEma) : 1;
     const lagTol = speed3d * (1 - simRate) * (this.host.correctMs() / 1000 + 0.25);
     // The report is ~RTT/2 stale when judged — the shadow integrated to
@@ -358,7 +359,7 @@ export class MoveJudge {
     // check instead of replaying on every report).
     if (reportInputSeq !== undefined) {
       const cmp = this.anchoredCompare(sh, s, reportInputSeq, pos);
-      const d = Math.hypot(pos.x - cmp.pos.x, pos.y - cmp.pos.y, pos.z - cmp.pos.z);
+      const d = dhypot3(pos.x - cmp.pos.x, pos.y - cmp.pos.y, pos.z - cmp.pos.z);
       if (d < dist) {dist = d;}
       if (dist <= tol) {return null;}
     }

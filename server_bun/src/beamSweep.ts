@@ -12,6 +12,7 @@ import type { StructureCollider } from '../../shared/ballSim.ts';
 import { LG_CHAIN_RANGE, LG_BOUNCE_RANGE, lgBounceDmgScale } from '../../shared/combat.ts';
 import { classCapsule } from '../../shared/botClasses.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
+import { dhypot3 } from '../../shared/dmath.ts';
 import type { Vec3 } from './types.ts';
 import type { BeamContact } from './CombatHandler.ts';
 import type { PlayerManager } from './PlayerManager.ts';
@@ -174,7 +175,7 @@ export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: V
     if (pick) {
       pick.dmgScale = lgBounceDmgScale(Math.sqrt(Math.max(0, bestD2)));
       const cd = { x: pick.contact.x - bp.x, y: pick.contact.y - bp.y, z: pick.contact.z - bp.z };
-      const cl = Math.hypot(cd.x, cd.y, cd.z) || 1;
+      const cl = dhypot3(cd.x, cd.y, cd.z) || 1;
       const cdN = { x: cd.x / cl, y: cd.y / cl, z: cd.z / cl };
       return Object.assign(pick, beamChain(world, pick.contact, cdN, pick.ballId, pick.crawlerId));
     }

@@ -27,6 +27,7 @@ import {
   stepBall, type StructureCollider,
 } from '../../shared/ballSim.ts';
 import { ColliderIndex, SolidWorld } from '../../shared/solidWorld.ts';
+import { dhypot3 } from '../../shared/dmath.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { ServerMessage, Vec3, HitVerdict } from './types.ts';
 import { encodeBallSegment, encodeBallBatch, SIM_TICK_DT } from '../../shared/wire.ts';
@@ -387,7 +388,7 @@ export class BallSim {
         // as desync signal; labeling it 'bounce' drowned every resync
         // in edge noise.
         const rs = (this.resyncAcc.get(b.id) ?? 0) + TICK_DT;
-        const spd = Math.hypot(b.vx, b.vy, b.vz);
+        const spd = dhypot3(b.vx, b.vy, b.vz);
         const budget = b.enraged ? ENRAGED_DIVERGENCE_BUDGET_M : DIVERGENCE_BUDGET_M;
         const interval = Math.min(RESYNC_INTERVAL, budget / Math.max(spd, 1));
         if (rs >= interval) {this.segment(b, 'segment');}
