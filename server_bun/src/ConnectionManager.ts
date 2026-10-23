@@ -3,6 +3,7 @@ import type { WebSocketData, ServerMessage } from './types.ts';
 import { logger } from './logger.ts';
 import { wallNow } from './wallClock.ts';
 import { wireTx, BIN_KIND } from './wireMeter.ts';
+import { encodeBatch, encodeWireJson } from '../../shared/wire.ts';
 
 /** Tick frames are drop-safe (peers extrapolate), so a socket that can't
  *  drain must not queue them unboundedly — a stalled connection otherwise
@@ -77,6 +78,37 @@ export class ConnectionManager {
   private readonly pubbed = new Set<string>();
 
   setTopic(topic: string): void { this.topic = topic; }
+
+  /** Per-conn tick coalescing: between beginCollect/flushOutboxes every
+   *  outbound frame queues per recipient; the flush ships ONE ws.send
+   *  per conn carrying [in-tick events..., tick frame] as a WIRE_BATCH.
+   *  Outside the window sends stay immediate — no latency change for
+   *  async events (joins, reclaims, timers). The batch framing bytes
+   *  (~4B/subframe) aren't metered; per-frame kind detail is kept by
+   *  metering at queue time, not at the merged send. */
+  private collecting = false;
+  private readonly outbox = new Map<string, Uint8Array[]>();
+  beginCollect(): void { this.collecting = true; }
+  private push(pid: string, frame: Uint8Array): void {
+    let q = this.outbox.get(pid);
+    if (!q) {q = []; this.outbox.set(pid, q);}
+    q.push(frame);
+  }
+  flushOutboxes(): void {
+    this.collecting = false;
+    for (const [pid, q] of this.outbox) {
+      const ws = this.connections.get(pid);
+      if (ws && ws.readyState === 1 && this.drownCheck(pid, ws) === 'ok') {
+        const status = ws.send(q.length === 1 ? q[0]! : encodeBatch(q));
+        if (status === 0) {
+          this.reliableDropped += 1;
+          this.onReliableDropped?.(pid);
+          try { ws.close(1011, 'reliable drop'); } catch { /* already closing */ }
+        }
+      }
+    }
+    this.outbox.clear();
+  }
 
   private connections: Map<string, ServerWebSocket<WebSocketData>> = new Map();
   /** Pids whose post-join outbox has drained once — the tick intro gate
@@ -253,6 +285,7 @@ export class ConnectionManager {
       this.tickDrained.delete(playerId);
       this.pubbed.delete(playerId);
       this.drownSweepAt.delete(playerId);
+      this.outbox.delete(playerId);
       if (this.topic && typeof ws.unsubscribe === 'function') {ws.unsubscribe(this.topic);}
       logger.info(`Connection unregistered`, { playerId, total: this.connections.size });
     }
@@ -262,6 +295,11 @@ export class ConnectionManager {
     // Journal BEFORE delivery — a frame aimed at a dead/grace socket is
     // exactly what reclaim replay must find later.
     const f = this.frame(msg, playerId);
+    if (this.collecting) {
+      this.push(playerId, encodeWireJson(f.data));
+      wireTx(playerId, f.data.length, f.kind);
+      return;
+    }
     const ws = this.connections.get(playerId);
     if (WIRESPY && (msg as { type?: string }).type === 'ping') {
       logger.warn('wirespy pingTick', { playerId, wsFound: Boolean(ws), rs: ws?.readyState });
@@ -295,6 +333,7 @@ export class ConnectionManager {
       return 'backlogged';
     }
     wireTx(playerId, data.byteLength, BIN_KIND[data[1]!]!);
+    if (this.collecting) {this.push(playerId, data); return 'sent';}
     ws.send(data);
     return 'sent';
   }
@@ -321,6 +360,10 @@ export class ConnectionManager {
 
   broadcastBinaryReliable(data: Uint8Array): void {
     const kind = BIN_KIND[data[1]!]!;
+    if (this.collecting) {
+      for (const pid of this.connections.keys()) {this.push(pid, data); wireTx(pid, data.byteLength, kind);}
+      return;
+    }
     const pub = ConnectionManager.publishFn;
     if (pub && this.topic && this.pubbed.size > 0) {pub(this.topic, data);}
     this.connections.forEach((ws, pid): void => {
@@ -338,6 +381,15 @@ export class ConnectionManager {
 
   broadcast(msg: ServerMessage, excludePlayerId?: string): void {
     const f = this.frame(msg, undefined, excludePlayerId);
+    if (this.collecting) {
+      const bin = encodeWireJson(f.data);
+      for (const pid of this.connections.keys()) {
+        if (pid === excludePlayerId) {continue;}
+        this.push(pid, bin);
+        wireTx(pid, f.data.length, f.kind);
+      }
+      return;
+    }
     if (WIRESPY && (msg as { type?: string }).type === 'projectileCreated') {
       logger.warn('wirespy broadcast', { type: 'projectileCreated', conns: [...this.connections.keys()] });
     }

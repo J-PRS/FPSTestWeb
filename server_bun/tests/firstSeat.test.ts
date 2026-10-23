@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 import { GameServer } from '../src/GameServer.ts';
 import type { Room } from '../src/Room.ts';
+import { iterBatch, decodeWireJson } from '../../shared/wire.ts';
 
 // The zombie-seat regression: a room minted for a terrain map defers
 // seat() on terrainReady (async Bun.file load). During the deferral the
@@ -18,8 +19,20 @@ const fakeWs = () => ({
   send(m: string | Uint8Array) { this.sent.push(m); return typeof m === 'string' ? m.length : m.byteLength; }, close() {},
 // oxlint-disable-next-line no-explicit-any
 } as any);
-const types = (ws: { sent: unknown[] }): Set<string> =>
-  new Set(ws.sent.filter((s): s is string => typeof s === 'string').map((s): string => (JSON.parse(s) as { type: string }).type));
+// Decode what a real client sees: live traffic arrives as WIRE_BATCH
+// (tick-frame coalescing) whose reliable events ride WIRE_JSON subframes.
+const types = (ws: { sent: unknown[] }): Set<string> => {
+  const out = new Set<string>();
+  const feed = (s: unknown): void => {
+    if (typeof s === 'string') {out.add((JSON.parse(s) as { type: string }).type); return;}
+    const u8 = s as Uint8Array;
+    if (u8[0] !== 0x54) {return;}
+    if (u8[1] === 0x0D) {for (const sub of iterBatch(u8)) {feed(sub);} return;}
+    if (u8[1] === 0x09) {const t = decodeWireJson(u8); if (t) {feed(t);}}
+  };
+  for (const s of ws.sent) {feed(s);}
+  return out;
+};
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 describe('first-seat wire vitality', () => {

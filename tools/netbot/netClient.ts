@@ -5,7 +5,7 @@
 // bot.ts; this file is transport + state.
 
 import type { ClientMessage, ServerMessage, TickUpdatePlayer, Vec3 } from '../../shared/protocol.ts';
-import { decodeTickFrame, isWireFrame } from '../../shared/wire.ts';
+import { decodeTickFrame, decodeWireJson, isWireFrame, iterBatch, WIRE_BATCH, WIRE_JSON } from '../../shared/wire.ts';
 import { hmParseBin, type Heightfield } from '../../shared/heightfield.ts';
 import { FieldSurface } from '../../shared/fieldSurface.ts';
 import { SolidWorld } from '../../shared/solidWorld.ts';
@@ -255,6 +255,18 @@ export class NetClient {
 
   private onBinary(u8: Uint8Array): void {
     if (!isWireFrame(u8)) {return;}
+    // The server coalesces each socket's tick traffic into ONE send —
+    // demux subframes back through the ordinary handlers (in-tick
+    // reliable events arrive JSON-in-binary inside the batch).
+    if (u8[1] === WIRE_BATCH) {
+      for (const sub of iterBatch(u8)) {this.onBinary(sub);}
+      return;
+    }
+    if (u8[1] === WIRE_JSON) {
+      const text = decodeWireJson(u8);
+      if (text !== null) {this.onMessage(JSON.parse(text) as ServerMessage);}
+      return;
+    }
     // Stale-check BEFORE decode — v4 decode mutates the byId baseline,
     // so a reordered frame must never reach the decoder (see wireIn).
     if (u8.byteLength >= 15 && new DataView(u8.buffer, u8.byteOffset, u8.byteLength).getUint32(6, true) <= this.lastTickSeq) {return;}

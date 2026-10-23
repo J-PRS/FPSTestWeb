@@ -277,6 +277,10 @@ this.metrics.tickErrors += 1;
     const tickT0 = wallNow();
     this.lastPhaseAt = tickT0;
     this.errPhase = 'cmd';
+    // Everything this tick generates queues per-conn — one merged send
+    // per socket at flush instead of N (send-call count is the profile's
+    // biggest slice).
+    room.connections.beginCollect();
     room.drainCommands();
     this.mark('cmd');
 
@@ -334,6 +338,7 @@ this.metrics.ticks += 1;
     // pruning.
     this.errPhase = 'fanout';
     this.fanout.fanoutRecords(room, players, records);
+    room.connections.flushOutboxes();
     this.mark('fanout');
 
     this.errPhase = '?';

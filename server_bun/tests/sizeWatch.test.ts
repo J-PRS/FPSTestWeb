@@ -37,6 +37,9 @@ const GRANDFATHERED: Record<string, number> = {
   // Crossed via the arsenal rework (eafd1c11) — pinned at its breached
   // size; still alarms if it grows another 15%.
   'server_bun/src/botArsenal.ts': 916,
+  // Breached via the wire-batch addition (the codec file legitimately
+  // aggregates frame encoders) — pinned; still alarms at +15%.
+  'shared/wire.ts': 956,
 };
 
 function* walk(dir: string): Generator<string> {

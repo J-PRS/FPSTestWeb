@@ -114,8 +114,9 @@ try {
     await sleep(1200);
 
     const file = Bun.file(serverLog);
-    const srv = Bun.spawn(
-      [...(CPUPROF ? [BUN, '--cpu-prof'] : [BUN]), 'src/server.ts'],
+    const argv = [BUN, ...(CPUPROF ? ['--cpu-prof'] : []), ...(arg('preload', '') ? ['--preload', arg('preload')] : []), 'src/server.ts'];
+    log(`spawn: ${argv.join(' ')}`);
+    const srv = Bun.spawn(argv,
       {
         cwd: 'server_bun',
         env: { ...process.env, FPS_PORT: String(PORT), FPS_NO_WT: '1' },

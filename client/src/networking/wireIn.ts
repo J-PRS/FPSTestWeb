@@ -12,7 +12,8 @@ import { ChildLogger } from '../core/Logger.js';
 import { checkHit } from '../core/liveMonitor.js';
 import {
   isWireFrame, decodeTickFrame, decodeBallAny, decodeProjSpawn, decodeProjGone,
-  WIRE_BALLSEG, WIRE_BALLBATCH, WIRE_PROJSPAWN, WIRE_PROJGONE, SERVER_TICK_MS,
+  WIRE_BALLSEG, WIRE_BALLBATCH, WIRE_PROJSPAWN, WIRE_PROJGONE, WIRE_BATCH, WIRE_JSON,
+  decodeWireJson, iterBatch, SERVER_TICK_MS,
   type TickDecodePool,
 } from '../../../shared/wire.js';
 import {type ServerMessage, type TickUpdatePlayer, PROTOCOL_VERSION} from '../../../shared/protocol.js';
@@ -197,6 +198,23 @@ this.handlerThrows += 1;
       return;
     }
     recWireIn(`bin:${data[1] ?? -1}`, data.length);
+    // Per-conn tick coalescing: the server ships everything a socket earns
+    // in one tick as len-prefixed subframes — demux and run each through
+    // the normal dispatch (subframes are complete wire frames).
+    if (data[1] === WIRE_BATCH) {
+      for (const sub of iterBatch(data)) {this.binary(sub);}
+      return;
+    }
+    // Reliable events batched into the binary lane arrive JSON-in-binary —
+    // decode to text and run the ordinary message dispatch (same parse,
+    // same watermarks — ev sequencing is preserved by subframe order).
+    if (data[1] === WIRE_JSON) {
+      const text = decodeWireJson(data);
+      if (text === null) {return;}
+      try { this.message(JSON.parse(text)); }
+      catch (error) {this.handlerThrows += 1; logger.warn(`wire-json subframe failed: ${error instanceof Error ? error.message : String(error)}`);}
+      return;
+    }
     if (data[1] === WIRE_PROJSPAWN || data[1] === WIRE_PROJGONE) {
       if (data[1] === WIRE_PROJSPAWN) {
         const s = decodeProjSpawn(data);

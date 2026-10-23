@@ -19,7 +19,7 @@
  */
 import { MoveSim, ENERGY } from '../../shared/movement.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
-import { encodePosition, encodeInputMove, decodeTickFrame, decodeBallSegment } from '../../shared/wire.ts';
+import { encodePosition, encodeInputMove, decodeTickFrame, decodeBallSegment, decodeWireJson, iterBatch } from '../../shared/wire.ts';
 import { PERK_ORDER } from '../../shared/perks.ts';
 import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
 import { WeaponType } from '../../shared/weaponTable.ts';
@@ -224,44 +224,66 @@ class WireBot {
   onMessage(data: string | ArrayBuffer): void {
     stats.recv++;
     if (data instanceof ArrayBuffer) {
-      const f = decodeTickFrame(new Uint8Array(data), this.tickPool as never);
-      if (f) {
-        // Tick-seq gaps = dropped frames → remote players stutter/warp.
-        if (f.tickSeq > this.lastTickSeq + 1 && this.lastTickSeq >= 0) {
-          stats.tickGaps += f.tickSeq - this.lastTickSeq - 1;
-          if (stats.gapSamples.length < 20) {stats.gapSamples.push(`${this.lastTickSeq}->${f.tickSeq}`);}
-        }
-        this.lastTickSeq = Math.max(this.lastTickSeq, f.tickSeq);
-        const now = performance.now();
-        if (this.lastTickAt > 0) {
-          const gap = now - this.lastTickAt;
-          stats.tickJit = Math.max(stats.tickJit, gap);
-        }
-        this.lastTickAt = now;
+      const u8 = new Uint8Array(data);
+      // Server ships one merged send per conn per tick — demux first:
+      // len-prefixed subframes, each a complete wire frame (WIRE_JSON
+      // carries reliable events back through the text path).
+      if (u8[0] === 0x54 && u8[1] === 0x0D) {
+        for (const sub of iterBatch(u8)) {this.onBinarySubframe(sub);}
+        return;
       }
-      const seg = decodeBallSegment(new Uint8Array(data));
-      if (seg) {
-        stats.ballSegs++;
-        this.segJump('ball', seg.id, seg.position.x, seg.position.y, seg.position.z,
-          Math.hypot(seg.velocity.x, seg.velocity.y, seg.velocity.z), seg.t, seg.kind);
-        this.balls.set(seg.id, seg.position);
-        this.lastCreatureEvtAt = performance.now();
-        if (this.balls.size > 300) {this.balls.clear();}
-      }
-      // Pooled slots: updates[] outlives the frame — past `count` is
-      // stale tail from earlier, larger frames.
-      if (f) {for (let ui = 0; ui < f.count; ui++) {
-        const u = f.updates[ui]!;
-        if (!u.playerId || u.playerId === this.id) {continue;}
-        // Merge — overwriting drops team/dead fields that only the
-        // announce path carries, and would silently re-enable friendly
-        // fire + corpse-shooting every tick.
-        const r = this.roster.get(u.playerId) ?? { pos: u.position, vel: u.velocity };
-        r.pos = u.position; r.vel = u.velocity; r.dead = u.isDead;
-        this.roster.set(u.playerId, r);
-      }}
+      this.onBinarySubframe(u8);
       return;
     }
+    this.onJsonText(data);
+  }
+
+  /** One complete wire frame (whole datagram or a batch subframe). */
+  private onBinarySubframe(u8: Uint8Array): void {
+    if (u8[0] === 0x54 && u8[1] === 0x09) {
+      const text = decodeWireJson(u8);
+      if (text !== null) {this.onJsonText(text);}
+      return;
+    }
+    const f = decodeTickFrame(u8, this.tickPool as never);
+    if (f) {
+      // Tick-seq gaps = dropped frames → remote players stutter/warp.
+      if (f.tickSeq > this.lastTickSeq + 1 && this.lastTickSeq >= 0) {
+        stats.tickGaps += f.tickSeq - this.lastTickSeq - 1;
+        if (stats.gapSamples.length < 20) {stats.gapSamples.push(`${this.lastTickSeq}->${f.tickSeq}`);}
+      }
+      this.lastTickSeq = Math.max(this.lastTickSeq, f.tickSeq);
+      const now = performance.now();
+      if (this.lastTickAt > 0) {
+        const gap = now - this.lastTickAt;
+        stats.tickJit = Math.max(stats.tickJit, gap);
+      }
+      this.lastTickAt = now;
+    }
+    const seg = decodeBallSegment(u8);
+    if (seg) {
+      stats.ballSegs++;
+      this.segJump('ball', seg.id, seg.position.x, seg.position.y, seg.position.z,
+        Math.hypot(seg.velocity.x, seg.velocity.y, seg.velocity.z), seg.t, seg.kind);
+      this.balls.set(seg.id, seg.position);
+      this.lastCreatureEvtAt = performance.now();
+      if (this.balls.size > 300) {this.balls.clear();}
+    }
+    // Pooled slots: updates[] outlives the frame — past `count` is
+    // stale tail from earlier, larger frames.
+    if (f) {for (let ui = 0; ui < f.count; ui++) {
+      const u = f.updates[ui]!;
+      if (!u.playerId || u.playerId === this.id) {continue;}
+      // Merge — overwriting drops team/dead fields that only the
+      // announce path carries, and would silently re-enable friendly
+      // fire + corpse-shooting every tick.
+      const r = this.roster.get(u.playerId) ?? { pos: u.position, vel: u.velocity };
+      r.pos = u.position; r.vel = u.velocity; r.dead = u.isDead;
+      this.roster.set(u.playerId, r);
+    }}
+  }
+
+  private onJsonText(data: string): void {
     const m = JSON.parse(data);
     switch (m.type) {
       case 'wireIds': {
