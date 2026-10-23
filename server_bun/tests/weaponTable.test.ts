@@ -16,7 +16,7 @@ describe('WEAPONS table invariants', () => {
 
   it('no impossible stats — damage/radius/hitbox are non-negative', () => {
     for (const [id, w] of Object.entries(WEAPONS)) {
-      const name = `${WeaponType[+id] ?? id}`;
+      const name = `${WeaponType[Number(id)] ?? id}`;
       expect(w.directDamage, name).toBeGreaterThanOrEqual(0);
       expect(w.aoeDamage, name).toBeGreaterThanOrEqual(0);
       expect(w.aoeRadius, name).toBeGreaterThanOrEqual(0);
@@ -24,29 +24,32 @@ describe('WEAPONS table invariants', () => {
       expect(w.hitMin, name).toBeGreaterThanOrEqual(0);
       expect(w.hitMax, name).toBeGreaterThanOrEqual(w.hitMin);
       expect(w.knockbackForce, name).toBeGreaterThanOrEqual(0);
-      if (w.maxLifetime !== undefined) expect(w.maxLifetime, name).toBeGreaterThan(0);
+      if (w.maxLifetime !== undefined) {expect(w.maxLifetime, name).toBeGreaterThan(0);}
       if (w.cluster) { expect(w.cluster.count, name).toBeGreaterThan(0); expect(w.cluster.radius, name).toBeGreaterThan(0); }
     }
   });
 
   it('aoeRadius > 0 iff the weapon can splash — damage/radius agree', () => {
+    // Effect-only detonations use the radius for a non-damage payload —
+    // EMP drains jet energy/strips shield via empAll, never aoeDamage.
+    const EFFECT_ONLY = new Set<number>([WeaponType.EMP]);
     for (const [id, w] of Object.entries(WEAPONS)) {
-      const name = `${WeaponType[+id] ?? id}`;
-      if (w.aoeRadius > 0) expect(w.aoeDamage, name).toBeGreaterThan(0);
+      const name = `${WeaponType[Number(id)] ?? id}`;
+      if (w.aoeRadius > 0 && !EFFECT_ONLY.has(Number(id))) {expect(w.aoeDamage, name).toBeGreaterThan(0);}
     }
   });
 
   it('hitscan/melee entries still carry sane speed values', () => {
     // speed 0 is legal only for carrier-spawned children (never muzzle-fired).
     for (const [id, w] of Object.entries(WEAPONS)) {
-      expect(w.speed, `${WeaponType[+id] ?? id}`).toBeGreaterThanOrEqual(0);
+      expect(w.speed, `${WeaponType[Number(id)] ?? id}`).toBeGreaterThanOrEqual(0);
     }
   });
 
   it('every fire-interval entry points at a real weapon', () => {
     for (const id of Object.keys(WEAPON_FIRE_INTERVAL_S)) {
-      expect(WEAPONS[+id], `interval for ${id}`).toBeDefined();
-      expect(WEAPON_FIRE_INTERVAL_S[+id as unknown as WeaponType]!, `interval ${id}`).toBeGreaterThan(0);
+      expect(WEAPONS[Number(id)], `interval for ${id}`).toBeDefined();
+      expect(WEAPON_FIRE_INTERVAL_S[Number(id) as unknown as WeaponType]!, `interval ${id}`).toBeGreaterThan(0);
     }
   });
 

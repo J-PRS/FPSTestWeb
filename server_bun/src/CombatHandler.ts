@@ -151,6 +151,14 @@ export class CombatHandler {
   private lastFireNotify = new Map<string, number>();
   /** 1s sliding window of server-simmed fire intents — the flood gate. */
   private simmedFireTimes = new Map<string, number[]>();
+  /** Beam intents (LG/Repair) get their own window — they already pay in
+   *  the beam branch and never own a shell, so they must not also
+   *  consume the projectile-spawn flood/cadence budget below. */
+  private beamFireTimes = new Map<string, number[]>();
+  /** Weapons whose shotFired resolves in the beam branches — never
+   *  reach the projectile spawn gate (they'd double-count the window
+   *  and only spawn-refuse anyway). */
+  private static readonly BEAM_INTENT_WEAPONS = new Set<number>([WeaponType.Lightning, WeaponType.Shocklance, WeaponType.Repair]);
   /** Post-reclaim intent replays: shotId → wall time the pull spawned.
    *  A resend inside the window is a no-op (the first verdict already
    *  flew); outside it the intent is simply new. */
@@ -361,7 +369,7 @@ w.n += 1;
       const seenAt = seen?.get(msg.shotId);
       if (seenAt !== undefined && now - seenAt < CombatHandler.SHOT_DEDUPE_MS) {return;}
     }
-    const fireProjectile = dir && serverSimmed(msg.weaponType) ? this.deps.fireProjectile : undefined;
+    const fireProjectile = dir && serverSimmed(msg.weaponType) && !CombatHandler.BEAM_INTENT_WEAPONS.has(msg.weaponType!) ? this.deps.fireProjectile : undefined;
     // Class lock applies to every fire intent — beams and melee skip the
     // projectile branch but must not dodge it.
     if (msg.weaponType !== undefined && !classCanFire(player.armorClass, msg.weaponType)) {
@@ -386,12 +394,13 @@ w.n += 1;
         weaponType: WeaponType.Melee, excludeTargetId: null,
       });
       const meleeWid = this.deps.widOf?.(playerId);
+      const muzzle = { x: mpos.x, y: mpos.y + 1.6, z: mpos.z };
       if (meleeWid !== undefined && this.deps.wireCast) {
-        this.deps.wireCast(encodeShotEv(meleeWid, msg.weaponType, mpos, msg.dir), 'volatile', playerId);
+        this.deps.wireCast(encodeShotEv(meleeWid, msg.weaponType, muzzle, msg.dir), 'volatile', playerId);
       } else {
         this.broadcast({
           type: 'playerShot', id: playerId, weaponType: msg.weaponType,
-          pos: { x: mpos.x, y: mpos.y, z: mpos.z }, dir: msg.dir,
+          pos: muzzle, dir: msg.dir,
         }, playerId);
       }
       return;
@@ -401,15 +410,15 @@ w.n += 1;
     // here, so neither a creatureHit claim nor a per-tick aoeShot is
     // needed. Falls through to the cosmetic playerShot relay below.
     if (msg.weaponType === WeaponType.Lightning && dir && this.deps.beamSweep) {
-      const recent = (this.simmedFireTimes.get(playerId) ?? []).filter((t): boolean => now - t < 1000);
+      const recent = (this.beamFireTimes.get(playerId) ?? []).filter((t): boolean => now - t < 1000);
       if (recent.length >= 30) { this.hb('drop.beamFlood'); return; }
       recent.push(now);
-      this.simmedFireTimes.set(playerId, recent);
+      this.beamFireTimes.set(playerId, recent);
       player.protectedUntil = simMs(0);
       const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
       const l = dhypot3(dir.x, dir.y, dir.z) || 1;
       this.beamPay(playerId, player, this.deps.beamSweep(playerId,
-        { x: mpos.x, y: mpos.y, z: mpos.z },
+        { x: mpos.x, y: mpos.y + 1.6, z: mpos.z },
         { x: dir.x / l, y: dir.y / l, z: dir.z / l }, LG_RANGE));
     }
     // Beam intent (Shocklance): one zap per pull-out cycle — the intent
@@ -426,21 +435,21 @@ w.n += 1;
       const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
       const l = dhypot3(dir.x, dir.y, dir.z) || 1;
       this.lancePay(playerId, player, this.deps.beamSweep(playerId,
-        { x: mpos.x, y: mpos.y, z: mpos.z },
+        { x: mpos.x, y: mpos.y + 1.6, z: mpos.z },
         { x: dir.x / l, y: dir.y / l, z: dir.z / l }, LANCE_RANGE));
     }
     // Beam intent (Repair): same shape — the tick is the intent and the
     // server names the weld target off the honest ray, so the per-tick
     // `repair` claim isn't needed. Falls through to the cosmetic relay.
     if (msg.weaponType === WeaponType.Repair && dir && this.deps.repairTarget) {
-      const recent = (this.simmedFireTimes.get(playerId) ?? []).filter((t): boolean => now - t < 1000);
+      const recent = (this.beamFireTimes.get(playerId) ?? []).filter((t): boolean => now - t < 1000);
       if (recent.length >= 30) { this.hb('drop.beamFlood'); return; }
       recent.push(now);
-      this.simmedFireTimes.set(playerId, recent);
+      this.beamFireTimes.set(playerId, recent);
       const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
       const l = dhypot3(dir.x, dir.y, dir.z) || 1;
       const id = this.deps.repairTarget(playerId,
-        { x: mpos.x, y: mpos.y, z: mpos.z },
+        { x: mpos.x, y: mpos.y + 1.6, z: mpos.z },
         { x: dir.x / l, y: dir.y / l, z: dir.z / l }, REPAIR_RANGE);
       if (id !== null) {this.deps.repair?.(playerId, id);}
     }
@@ -504,7 +513,7 @@ win.violations += 1;
       const lagS = typeof msg.fireAt === 'number'
         ? Math.min(Math.max((wallNow() - msg.fireAt) / 1000, 0), 5) : 0;
       const id = fireProjectile(playerId, msg.weaponType!,
-        { x: at.x, y: at.y, z: at.z },
+        { x: at.x, y: at.y + 1.6, z: at.z },
         { x: dir!.x / l, y: dir!.y / l, z: dir!.z / l },
         player.velocity, msg.shotId, lagS);
       if (id) {

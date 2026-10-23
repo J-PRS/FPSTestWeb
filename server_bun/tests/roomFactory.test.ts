@@ -33,6 +33,7 @@ function stubRoom(name: string): Room {
     moveSim: { attachField: () => {} },
     projectiles: { attachField: () => {} },
     refreshFlagHomes: () => {},
+    populateDeferredBots: () => {},
   } as unknown as Room;
 }
 

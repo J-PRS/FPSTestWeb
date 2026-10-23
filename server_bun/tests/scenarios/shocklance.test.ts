@@ -9,10 +9,12 @@ const LANCE = WeaponType.Shocklance;
 type Room = ReturnType<typeof mkRoom>;
 type Player = ReturnType<typeof twoPlayers>[number];
 
-/** One zap — aim at the capsule's axis midpoint (position.y is the TOP,
- *  a flat ray sails over the head). */
+/** One zap — aim at the capsule's axis midpoint. The server's honest ray
+ *  leaves at pos+1.6 (eye), so the claim's aim is authored from there —
+ *  position.y itself is the capsule TOP and a flat ray from it sails
+ *  over the head. */
 function zap(room: Room, shooter: Player, victim: Player): void {
-  const eye = { x: shooter.position.x, y: shooter.position.y, z: shooter.position.z };
+  const eye = { x: shooter.position.x, y: shooter.position.y + 1.6, z: shooter.position.z };
   const dir = {
     x: victim.position.x - eye.x,
     y: (victim.position.y - 0.9) - eye.y,

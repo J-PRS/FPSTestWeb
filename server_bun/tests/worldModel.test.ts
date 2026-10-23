@@ -138,12 +138,12 @@ describe('world model <-> protocol conformance', () => {
     // A declared verb nothing emits is worse than none — it reads as a
     // wire surface that doesn't exist. Pin declarations to union members.
     const sStart = PROTOCOL.indexOf('export type ServerMessage');
-    const union = PROTOCOL.slice(sStart);
+    const union = new Set(PROTOCOL.slice(sStart));
     for (const kind of Object.values(WORLD_MODEL)) {
       const verbs = [kind.verbs.spawn, kind.verbs.update, kind.verbs.gone, kind.verbs.roster, ...Object.keys(kind.events ?? {})];
       for (const v of verbs) {
         if (!v) {continue;}
-        expect(union.includes(`type: '${v}'`), `${kind.kind} declares '${v}' — no ServerMessage member carries it`).toBe(true);
+        expect(union.has(`type: '${v}'`), `${kind.kind} declares '${v}' — no ServerMessage member carries it`).toBe(true);
       }
     }
   });
@@ -270,7 +270,9 @@ describe('world model <-> protocol conformance', () => {
       resolve(import.meta.dir, '../../client/src/networking/NetworkManager.ts'), 'utf8');
     const body = nm.match(/export interface RemotePlayerState \{([\s\S]*?)\n\}/)![1]!;
     const keys = new Set([...body.matchAll(/^  (\w+)\??:/gm)].map((m) => m[1]));
-    const declared = new Set(['id', ...declaredFieldNames(WORLD_MODEL.player!, 'spawnFields', 'updateFields', 'rosterFields')]);
+    // 'id' keys the replica; 'posAt' is client-local metadata (drift
+    // diagnostics stamp it locally — never off the wire, by design).
+    const declared = new Set(['id', 'posAt', ...declaredFieldNames(WORLD_MODEL.player!, 'spawnFields', 'updateFields', 'rosterFields')]);
     expect(keys).toEqual(declared);
   });
 });
