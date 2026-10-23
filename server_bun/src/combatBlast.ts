@@ -14,6 +14,7 @@ import { rewindPos, shooterTransitMs } from './claimLedger.ts';
 import { renderLagOf } from './rewind.ts';
 import { simNow, simMs } from './simClock.ts';
 import { wallNow, wallMs } from './wallClock.ts';
+import { encodeKnock } from '../../shared/wire.ts';
 import { logger } from './logger.ts';
 import type { RoomEventSink } from './roomEvents.ts';
 
@@ -59,6 +60,9 @@ export interface BlastHost {
     /** Target uplink-transit estimate (ms) — the same value the tick
      *  broadcast leads remote positions by. */
     transitOf?: (playerId: string) => number;
+    /** Room wireId lookup + single-recipient binary lane (knockback). */
+    widOf?: (playerId: string) => number | undefined;
+    wireTo?: (playerId: string, data: Uint8Array, journaled?: boolean | 'volatile') => void;
   };
   sendToPlayer: (playerId: string, msg: ServerMessage) => void;
   solids: readonly StructureCollider[];
@@ -396,9 +400,14 @@ export class BlastRunner {
     target.velocity.z += dv.z;
     this.h.deps.emit?.({ type: 'impulse', playerId: targetId, dv });
     target.forceSendUntil = wallMs(wallNow() + FORCE_SEND_MS);
-    this.h.sendToPlayer(targetId, eventPayload(WORLD_MODEL.player!, 'knockback', 'targetId', targetId, {
-      position: pos, force: impulseMag, pull: pull || undefined, yank: aim ? true : undefined,
-    }) as ServerMessage);
+    const kwid = this.h.deps.widOf?.(targetId);
+    if (kwid !== undefined && this.h.deps.wireTo) {
+      this.h.deps.wireTo(targetId, encodeKnock(kwid, pos, impulseMag, pull || undefined, aim ? true : undefined), 'volatile');
+    } else {
+      this.h.sendToPlayer(targetId, eventPayload(WORLD_MODEL.player!, 'knockback', 'targetId', targetId, {
+        position: pos, force: impulseMag, pull: pull || undefined, yank: aim ? true : undefined,
+      }) as ServerMessage);
+    }
   }
 
   /** Rope dart contact — the Hook's whole payload. A body hit reels the

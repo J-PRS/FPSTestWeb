@@ -9,6 +9,7 @@ import { WORLD_MODEL, eventPayload } from '../../shared/worldModel.ts';
 import type { ServerMessage } from './types.ts';
 import type { CombatHandler, CombatDeps } from './CombatHandler.ts';
 import { simNow } from './simClock.ts';
+import { encodeKill } from '../../shared/wire.ts';
 export const selfKillImpactDist: number[] = [];
 /** Blast point of each self-frag — lets the soak autopsy classify what
  *  the shell actually struck (lip, stray ball, teammate, open air). */
@@ -37,7 +38,7 @@ function probePush<T>(arr: T[], v: T): void {
 // the fields synced with the handler they slice.
 export type LedgerHost = Pick<CombatHandler,
   'broadcast' | 'chargeBank' | 'playerManager' | 'killFeed' | 'respawner' | 'hb' | 'deps'
-> & { deps: Pick<CombatDeps, 'emit' | 'influence' | 'mode' | 'preyNear' | 'wireHit'> };
+> & { deps: Pick<CombatDeps, 'emit' | 'influence' | 'mode' | 'preyNear' | 'wireHit' | 'widOf' | 'wireCast'> };
 
 // The hit funnel tail — every damage path converges here so shot/AOE/
 // environment can't drift: telemetry (weapon spread, death spot, TTK),
@@ -174,7 +175,16 @@ export class HitLedger {
     logger.info(`${opts.label} → kill`, Object.assign({}, {shooter: shooterId,target: targetId,damage}, opts.extra));
     const shooterStreak = shooterId === 'environment' ? undefined
       : (c.playerManager.getPlayer(shooterId)?.streak ?? 0) + 1;
-    c.broadcast(eventPayload(WORLD_MODEL.player!, 'playerKill', 'targetId', targetId, { shooterId, weapon: opts.weapon, streak: shooterStreak, air: opts.air, steal }) as ServerMessage);
+    // Binary lane when wireIds resolve — durable journal either way
+    // (kills are the event history a reclaim replays).
+    const killWids = c.deps.widOf;
+    const tw = killWids?.(targetId);
+    const sw = shooterId === 'environment' ? 0 : killWids?.(shooterId);
+    if (tw !== undefined && sw !== undefined && c.deps.wireCast) {
+      c.deps.wireCast(encodeKill({ shooterWid: sw, targetWid: tw, weapon: opts.weapon, streak: shooterStreak, air: opts.air, steal }), true);
+    } else {
+      c.broadcast(eventPayload(WORLD_MODEL.player!, 'playerKill', 'targetId', targetId, { shooterId, weapon: opts.weapon, streak: shooterStreak, air: opts.air, steal }) as ServerMessage);
+    }
     c.killFeed.announce(shooterId, targetId, opts.weapon, opts.label, opts.air, endedStreak, simNow());
     c.deps.emit?.({ type: 'kill', targetId, shooterId });
     c.respawner.schedule(targetId);

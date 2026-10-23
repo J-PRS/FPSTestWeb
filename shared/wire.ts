@@ -917,6 +917,132 @@ export function decodeHit(u8: Uint8Array): WireHit | null {
   return r;
 }
 
+// ---- S→C binary event relays (the wireId+pos family — same pattern as
+// WIRE_HIT, decoded through the normal message() dispatch) ----
+
+export const WIRE_E_JUMP = 0x14;
+export const WIRE_E_JET = 0x15;
+export const WIRE_E_LANDED = 0x16;
+export const WIRE_E_SHOT = 0x17;
+export const WIRE_E_KNOCK = 0x18;
+export const WIRE_KILL = 0x19;
+
+/** jump / jetpack relay (+ landed carries a f32 impact trailing the pos). */
+export function encodeWidPos(kind: number, wid: number, pos: WireVec3, extra?: number): Uint8Array {
+  const buf = new ArrayBuffer(extra === undefined ? 16 : 20);
+  const u8 = new Uint8Array(buf);
+  const d = new DataView(buf);
+  u8[0] = MAGIC; u8[1] = kind;
+  d.setUint16(2, wid, true);
+  d.setFloat32(4, pos.x, true); d.setFloat32(8, pos.y, true); d.setFloat32(12, pos.z, true);
+  if (extra !== undefined) {d.setFloat32(16, extra, true);}
+  return u8;
+}
+
+export function decodeWidPos(u8: Uint8Array, kind: number): { wid: number; pos: WireVec3; extra?: number } | null {
+  if (u8.length < 16 || u8[0] !== MAGIC || u8[1] !== kind) {return null;}
+  const d = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  const x = d.getFloat32(4, true), y = d.getFloat32(8, true), z = d.getFloat32(12, true);
+  if (!Number.isFinite(x + y + z)) {return null;}
+  const r: { wid: number; pos: WireVec3; extra?: number } = { wid: d.getUint16(2, true), pos: { x, y, z } };
+  if (u8.length >= 20) {
+    const extra = d.getFloat32(16, true);
+    if (Number.isFinite(extra)) {r.extra = extra;}
+  }
+  return r;
+}
+
+/** playerShot cosmetic relay — pos/dir presence flags mirror the JSON. */
+export function encodeShotEv(wid: number, weaponType: number | undefined, pos?: WireVec3, dir?: WireVec3): Uint8Array {
+  const buf = new ArrayBuffer(6 + (pos ? 12 : 0) + (dir ? 12 : 0));
+  const u8 = new Uint8Array(buf);
+  const d = new DataView(buf);
+  u8[0] = MAGIC; u8[1] = WIRE_E_SHOT;
+  d.setUint16(2, wid, true);
+  u8[4] = (weaponType ?? 0xFF) & 0xFF;
+  u8[5] = (pos ? 1 : 0) | (dir ? 2 : 0);
+  let o = 6;
+  if (pos) {d.setFloat32(o, pos.x, true); d.setFloat32(o + 4, pos.y, true); d.setFloat32(o + 8, pos.z, true); o += 12;}
+  if (dir) {d.setFloat32(o, dir.x, true); d.setFloat32(o + 4, dir.y, true); d.setFloat32(o + 8, dir.z, true); o += 12;}
+  return u8;
+}
+
+export function decodeShotEv(u8: Uint8Array): { wid: number; weaponType?: number; pos?: WireVec3; dir?: WireVec3 } | null {
+  if (u8.length < 6 || u8[0] !== MAGIC || u8[1] !== WIRE_E_SHOT) {return null;}
+  const d = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  const flags = u8[5]!;
+  const r: { wid: number; weaponType?: number; pos?: WireVec3; dir?: WireVec3 } = { wid: d.getUint16(2, true) };
+  if (u8[4] !== 0xFF) {r.weaponType = u8[4];}
+  let o = 6;
+  if (flags & 1) {
+    if (o + 12 > u8.length) {return null;}
+    const x = d.getFloat32(o, true), y = d.getFloat32(o + 4, true), z = d.getFloat32(o + 8, true);
+    if (!Number.isFinite(x + y + z)) {return null;}
+    r.pos = { x, y, z }; o += 12;
+  }
+  if (flags & 2) {
+    if (o + 12 > u8.length) {return null;}
+    const x = d.getFloat32(o, true), y = d.getFloat32(o + 4, true), z = d.getFloat32(o + 8, true);
+    if (!Number.isFinite(x + y + z)) {return null;}
+    r.dir = { x, y, z };
+  }
+  return r;
+}
+
+/** knockback — victim-only send: wid + pos + force + pull/yank flags. */
+export function encodeKnock(wid: number, pos: WireVec3, force: number, pull?: boolean, yank?: boolean): Uint8Array {
+  const buf = new ArrayBuffer(21);
+  const u8 = new Uint8Array(buf);
+  const d = new DataView(buf);
+  u8[0] = MAGIC; u8[1] = WIRE_E_KNOCK;
+  d.setUint16(2, wid, true);
+  d.setFloat32(4, pos.x, true); d.setFloat32(8, pos.y, true); d.setFloat32(12, pos.z, true);
+  d.setFloat32(16, force, true);
+  u8[20] = (pull ? 1 : 0) | (yank ? 2 : 0);
+  return u8;
+}
+
+export function decodeKnock(u8: Uint8Array): { wid: number; pos: WireVec3; force: number; pull?: boolean; yank?: boolean } | null {
+  if (u8.length < 21 || u8[0] !== MAGIC || u8[1] !== WIRE_E_KNOCK) {return null;}
+  const d = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  const x = d.getFloat32(4, true), y = d.getFloat32(8, true), z = d.getFloat32(12, true);
+  const force = d.getFloat32(16, true);
+  if (!Number.isFinite(x + y + z + force)) {return null;}
+  const flags = u8[20]!;
+  return { wid: d.getUint16(2, true), pos: { x, y, z }, force, ...(flags & 1 ? { pull: true } : {}), ...(flags & 2 ? { yank: true } : {}) };
+}
+
+/** playerKill — durable journal event: shooter/target wireIds + optional
+ *  weapon (0xFF = none), streak u16, air f32, steal bit. */
+export function encodeKill(k: { shooterWid: number; targetWid: number; weapon?: number; streak?: number; air?: number; steal?: boolean }): Uint8Array {
+  const buf = new ArrayBuffer(8 + (k.streak === undefined ? 0 : 2) + (k.air === undefined ? 0 : 4));
+  const u8 = new Uint8Array(buf);
+  const d = new DataView(buf);
+  u8[0] = MAGIC; u8[1] = WIRE_KILL;
+  d.setUint16(2, k.shooterWid, true); d.setUint16(4, k.targetWid, true);
+  u8[6] = (k.weapon ?? 0xFF) & 0xFF;
+  u8[7] = (k.streak === undefined ? 0 : 1) | (k.air === undefined ? 0 : 2) | (k.steal ? 4 : 0);
+  let o = 8;
+  if (k.streak !== undefined) {d.setUint16(o, k.streak, true); o += 2;}
+  if (k.air !== undefined) {d.setFloat32(o, k.air, true); o += 4;}
+  return u8;
+}
+
+export function decodeKill(u8: Uint8Array): { shooterWid: number; targetWid: number; weapon?: number; streak?: number; air?: number; steal?: boolean } | null {
+  if (u8.length < 8 || u8[0] !== MAGIC || u8[1] !== WIRE_KILL) {return null;}
+  const d = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  const flags = u8[7]!;
+  const r: { shooterWid: number; targetWid: number; weapon?: number; streak?: number; air?: number; steal?: boolean } = {
+    shooterWid: d.getUint16(2, true), targetWid: d.getUint16(4, true),
+  };
+  if (u8[6] !== 0xFF) {r.weapon = u8[6];}
+  let o = 8;
+  if (flags & 1) {if (o + 2 > u8.length) {return null;} r.streak = d.getUint16(o, true); o += 2;}
+  if (flags & 2) {if (o + 4 > u8.length) {return null;} const air = d.getFloat32(o, true); if (!Number.isFinite(air)) {return null;} r.air = air; o += 4;}
+  if (flags & 4) {r.steal = true;}
+  return r;
+}
+
 export interface WireProjSpawn {
   projId: number;          // numeric tail of 'sp-N'
   ownerWireId: number;     // room wireId — receiver resolves via its roster

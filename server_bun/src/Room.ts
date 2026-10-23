@@ -20,7 +20,7 @@ import { InfluenceMap } from './influenceMap.ts';
 import { hmHeight, hmChord, HM_WORLD_SCALE, type Heightfield } from '../../shared/heightfield.ts';
 import { beamSweepRay } from './beamSweep.ts';
 import type { BeamContact } from './CombatHandler.ts';
-import { NOISE_TTL_MS , type V4Last, encodeHit } from '../../shared/wire.ts';
+import { NOISE_TTL_MS , type V4Last, encodeHit, encodeWidPos, WIRE_E_LANDED } from '../../shared/wire.ts';
 import { RoomMoveSim } from './RoomMoveSim.ts';
 import { type MapSpec, resolveMapSpec } from '../../shared/mapSpec.ts';
 import { MODES, pickTeam, makeScores, type ModeId, type ModeSpec, type TeamScores, type TeamId } from '../../shared/teams.ts';
@@ -474,7 +474,9 @@ export class Room {
       // wound; the client still sells dust + thud for the impact).
       // Everyone in earshot hears the slam — the owner's local sim
       // already dressed it; this echo is for remote observers only.
-      this.connections.broadcast({ type: 'landed', playerId: pid, pos: p.position, impact });
+      const landWid = this.wireIds.get(pid);
+      if (landWid === undefined) {this.connections.broadcast({ type: 'landed', playerId: pid, pos: p.position, impact });}
+      else {this.connections.broadcastBinaryReliable(encodeWidPos(WIRE_E_LANDED, landWid, p.position, impact), 'volatile');}
       let dmg = (impact - MOVEMENT_CONFIG.fallDamageMinSpeed) * MOVEMENT_CONFIG.fallDamageScale * p.maxHealth;
       // Featherfall: the soak burns the shadow's modeled tank (same pool
       // the jet econ owns) before the hit exists — a covered landing
@@ -1047,9 +1049,14 @@ export class Room {
         if (targetWid === undefined) {return false;}
         const shooterWid = e.shooterId === 'environment' ? 0 : this.wireIds.get(e.shooterId);
         if (shooterWid === undefined) {return false;}
-        this.connections.broadcastBinaryReliable(encodeHit({ ...e, targetWid, shooterWid }), true); // combat events journal — a reclaim replays them
+        this.connections.broadcastBinaryReliable(encodeHit({ ...e, targetWid, shooterWid }), 'volatile'); // combat events journal — same 3s staleness window the JSON lane carried
         return true;
       },
+      // Generic S→C binary relay plumbing — the wireId+pos event family
+      // encodes at the emit site and rides the same batch/journal lanes.
+      widOf: (pid): number | undefined => this.wireIds.get(pid),
+      wireCast: (data, journaled, exclude): void => this.connections.broadcastBinaryReliable(data, journaled, exclude),
+      wireTo: (pid, data, journaled): void => this.connections.sendBinToPlayerReliable(pid, data, journaled),
       // The rabbit dep's presence IS the mode check — CombatHandler gates
       // all PvP damage on the carrier being one side of the pair.
       rabbitCarrier: this.mode === 'rabbit' ? (): string | null => this.flags?.carrierId() ?? null : undefined,

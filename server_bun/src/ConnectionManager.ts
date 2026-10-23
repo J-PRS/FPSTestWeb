@@ -375,17 +375,23 @@ export class ConnectionManager {
     this.drownCheck(pid, ws);
   }
 
-  broadcastBinaryReliable(data: Uint8Array, journaled = false): void {
+  broadcastBinaryReliable(data: Uint8Array, journaled: boolean | 'volatile' = false, exclude?: string): void {
     const kind = BIN_KIND[data[1]!]!;
-    if (journaled) {this.journalBinary(data);} // combat events replay on reclaim — same ev seq space as JSON
+    if (journaled) {this.journalBinary(data, undefined, exclude, journaled === 'volatile');} // combat events replay on reclaim — 'volatile' carries the same 3s staleness window the JSON version had
     if (this.collecting) {
-      for (const pid of this.connections.keys()) {this.push(pid, data); wireTx(pid, data.byteLength, kind);}
+      for (const pid of this.connections.keys()) {
+        if (pid === exclude) {continue;}
+        this.push(pid, data); wireTx(pid, data.byteLength, kind);
+      }
       return;
     }
+    // publish() can't exclude a socket — an excluded broadcast pays the
+    // per-conn path like the JSON version does.
     const pub = ConnectionManager.publishFn;
-    if (pub && this.topic && this.pubbed.size > 0) {pub(this.topic, data);}
+    if (exclude === undefined && pub && this.topic && this.pubbed.size > 0) {pub(this.topic, data);}
     this.connections.forEach((ws, pid): void => {
-      if (this.pubbed.has(pid)) {
+      if (pid === exclude) {return;}
+      if (exclude === undefined && this.pubbed.has(pid)) {
         // Published — keep the drown clock fed anyway: a dead reader on
         // the topic lane queues the same bytes without a per-conn drop
         // signal to catch it early.
@@ -395,6 +401,15 @@ export class ConnectionManager {
       }
       if (ws.readyState === 1 && this.drownCheck(pid, ws) === 'ok') {this.sendReliable(pid, ws, data, kind);}
     });
+  }
+
+  /** Single-recipient reliable binary (knockback etc) — journalled with
+   *  `only` so a reclaim replays it to the victim alone. */
+  sendBinToPlayerReliable(playerId: string, data: Uint8Array, journaled: boolean | 'volatile' = false): void {
+    if (journaled) {this.journalBinary(data, playerId, undefined, journaled === 'volatile');}
+    if (this.collecting) {this.push(playerId, data); wireTx(playerId, data.byteLength, BIN_KIND[data[1]!]!); return;}
+    const ws = this.connections.get(playerId);
+    if (ws && ws.readyState === 1 && this.drownCheck(playerId, ws) === 'ok') {this.sendReliable(playerId, ws, data, BIN_KIND[data[1]!]!);}
   }
 
   broadcast(msg: ServerMessage, excludePlayerId?: string): void {

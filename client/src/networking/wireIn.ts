@@ -13,7 +13,8 @@ import { checkHit } from '../core/liveMonitor.js';
 import {
   isWireFrame, decodeTickFrame, decodeBallAny, decodeProjSpawn, decodeProjGone,
   WIRE_BALLSEG, WIRE_BALLBATCH, WIRE_PROJSPAWN, WIRE_PROJGONE, WIRE_BATCH, WIRE_JSON, WIRE_HIT,
-  decodeWireJson, decodeHit, iterBatch, SERVER_TICK_MS,
+  WIRE_E_JUMP, WIRE_E_JET, WIRE_E_LANDED, WIRE_E_SHOT, WIRE_E_KNOCK, WIRE_KILL,
+  decodeWireJson, decodeHit, decodeWidPos, decodeShotEv, decodeKnock, decodeKill, iterBatch, SERVER_TICK_MS,
   type TickDecodePool,
 } from '../../../shared/wire.js';
 import {type ServerMessage, type TickUpdatePlayer, PROTOCOL_VERSION} from '../../../shared/protocol.js';
@@ -225,6 +226,48 @@ this.handlerThrows += 1;
       if (!targetId || !shooterId) {return;} // ids not minted yet — same as a tick record for an unknown wid
       try { this.message({ type: 'playerHit', shooterId, targetId, damage: h.damage, health: h.health, armor: h.armor, seq: h.seq, shotId: h.shotId, gd: h.gd }); }
       catch (error) {this.handlerThrows += 1; logger.warn(`wire-hit subframe failed: ${error instanceof Error ? error.message : String(error)}`);}
+      return;
+    }
+    // Presence relays — wireId + pos, run the JSON-path dispatch so the
+    // handlers see the identical message shape either lane.
+    if (data[1] === WIRE_E_JUMP || data[1] === WIRE_E_JET || data[1] === WIRE_E_LANDED) {
+      const w = decodeWidPos(data, data[1]!);
+      const playerId = w ? this.wireIds.get(w.wid) : undefined;
+      if (w && playerId) {
+        try {
+          if (data[1] === WIRE_E_LANDED) {this.message({ type: 'landed', playerId, pos: w.pos, impact: w.extra } as ServerMessage);}
+          else {this.message({ type: data[1] === WIRE_E_JUMP ? 'jump' : 'jetpack', playerId, position: w.pos });}
+        }
+        catch (error) {this.handlerThrows += 1; logger.warn(`wire-presence failed: ${error instanceof Error ? error.message : String(error)}`);}
+      }
+      return;
+    }
+    if (data[1] === WIRE_E_SHOT) {
+      const s = decodeShotEv(data);
+      const id = s ? this.wireIds.get(s.wid) : undefined;
+      if (s && id) {
+        try { this.message({ type: 'playerShot', id, weaponType: s.weaponType, pos: s.pos, dir: s.dir }); }
+        catch (error) {this.handlerThrows += 1; logger.warn(`wire-shotev failed: ${error instanceof Error ? error.message : String(error)}`);}
+      }
+      return;
+    }
+    if (data[1] === WIRE_E_KNOCK) {
+      const k = decodeKnock(data);
+      const targetId = k ? this.wireIds.get(k.wid) : undefined;
+      if (k && targetId) {
+        try { this.message({ type: 'knockback', targetId, position: k.pos, force: k.force, pull: k.pull, yank: k.yank }); }
+        catch (error) {this.handlerThrows += 1; logger.warn(`wire-knock failed: ${error instanceof Error ? error.message : String(error)}`);}
+      }
+      return;
+    }
+    if (data[1] === WIRE_KILL) {
+      const k = decodeKill(data);
+      const targetId = k ? this.wireIds.get(k.targetWid) : undefined;
+      const shooterId = k ? (k.shooterWid === 0 ? 'environment' : this.wireIds.get(k.shooterWid)) : undefined;
+      if (k && targetId && shooterId) {
+        try { this.message({ type: 'playerKill', shooterId, targetId, weapon: k.weapon, streak: k.streak, air: k.air, steal: k.steal }); }
+        catch (error) {this.handlerThrows += 1; logger.warn(`wire-kill failed: ${error instanceof Error ? error.message : String(error)}`);}
+      }
       return;
     }
     if (data[1] === WIRE_PROJSPAWN || data[1] === WIRE_PROJGONE) {

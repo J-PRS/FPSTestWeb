@@ -9,6 +9,7 @@ import { logger } from './logger.ts';
 import { PROTOCOL_VERSION } from '../../shared/protocol.ts';
 import { CONFIG } from './config.ts';
 import { WIRE } from './wire.ts';
+import { encodeWidPos, WIRE_E_JUMP, WIRE_E_JET } from '../../shared/wire.ts';
 import { MoveClaims } from './moveClaims.ts';
 import type { BallSim } from './BallSim.ts';
 import type { CreatureSim } from './CreatureSim.ts';
@@ -169,6 +170,12 @@ export interface RoomInfo {
   /** Binary playerHit lane — the room owns wireIds, returns false when an
    *  id can't resolve so the caller falls back to the JSON broadcast. */
   wireHit?: CombatDeps['wireHit'];
+  /** Room wireId lookup for S→C binary events (u16 on the wire). */
+  widOf?: (playerId: string) => number | undefined;
+  /** Broadcast one pre-encoded binary frame (broadcastBinaryReliable). */
+  wireCast?: (data: Uint8Array, journaled?: boolean | 'volatile', exclude?: string) => void;
+  /** Single-recipient reliable binary (knockback — victim-only). */
+  wireTo?: (playerId: string, data: Uint8Array, journaled?: boolean | 'volatile') => void;
   energyOf?: (playerId: string) => number | null;
   moveResync?: (playerId: string, pos: Vec3, yaw: number, fullEnergy?: boolean) => void;
   /** Bot chat lands as a 'botSpoke' event — Room relays it as a 'reply'
@@ -239,6 +246,9 @@ function combatDeps(roomInfo: RoomInfo | undefined): CombatDeps {
     transitOf: roomInfo?.transitOf,
     uplinkNote: roomInfo?.uplinkNote,
     wireHit: roomInfo?.wireHit,
+    widOf: roomInfo?.widOf,
+    wireCast: roomInfo?.wireCast,
+    wireTo: roomInfo?.wireTo,
   };
 }
 
@@ -723,6 +733,11 @@ export class MessageHandler {
   relayPresenceEvent(playerId: string, msg: Extract<ClientMessage, { type: 'jump' | 'jetpack' }>): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) {return;}
+    const wid = this.roomInfo.widOf?.(playerId);
+    if (wid !== undefined && this.roomInfo.wireCast) {
+      this.roomInfo.wireCast(encodeWidPos(msg.type === 'jump' ? WIRE_E_JUMP : WIRE_E_JET, wid, msg.position), 'volatile', playerId);
+      return;
+    }
     this.broadcast({ type: msg.type, playerId, position: msg.position }, playerId);
   }
 

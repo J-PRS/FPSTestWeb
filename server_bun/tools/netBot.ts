@@ -19,7 +19,7 @@
  */
 import { MoveSim, ENERGY } from '../../shared/movement.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
-import { encodePosition, encodeInputMove, decodeTickFrame, decodeBallSegment, decodeWireJson, iterBatch, encodePosClaim, encodeShot, decodeHit } from '../../shared/wire.ts';
+import { encodePosition, encodeInputMove, decodeTickFrame, decodeBallSegment, decodeWireJson, iterBatch, encodePosClaim, encodeShot, decodeHit, decodeWidPos, decodeShotEv, decodeKnock, decodeKill } from '../../shared/wire.ts';
 import { PERK_ORDER } from '../../shared/perks.ts';
 import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
 import { WeaponType } from '../../shared/weaponTable.ts';
@@ -253,6 +253,30 @@ class WireBot {
       const shooterId = h ? (h.shooterWid === 0 ? 'environment' : this.wireIds.get(h.shooterWid)) : undefined;
       if (h && targetId && shooterId) {
         this.onMessage({ type: 'playerHit', shooterId, targetId, damage: h.damage, health: h.health, armor: h.armor, seq: h.seq, shotId: h.shotId, gd: h.gd });
+      }
+      return;
+    }
+    // wireId+pos event family — demux into the same onMessage the JSON
+    // relay used (kind 0x14-0x18 share the decodeWidPos/etc codecs).
+    if (u8[0] === 0x54 && u8[1]! >= 0x14 && u8[1]! <= 0x19) {
+      const kind = u8[1]!;
+      if (kind === 0x14 || kind === 0x15 || kind === 0x16) {
+        const w = decodeWidPos(u8, kind);
+        const pid = w ? this.wireIds.get(w.wid) : undefined;
+        if (w && pid) {this.onMessage((kind === 0x16 ? { type: 'landed', playerId: pid, pos: w.pos, impact: w.extra } : { type: kind === 0x14 ? 'jump' : 'jetpack', playerId: pid, position: w.pos }) as never);}
+      } else if (kind === 0x17) {
+        const s = decodeShotEv(u8);
+        const pid = s ? this.wireIds.get(s.wid) : undefined;
+        if (s && pid) {this.onMessage({ type: 'playerShot', id: pid, weaponType: s.weaponType, pos: s.pos, dir: s.dir });}
+      } else if (kind === 0x18) {
+        const k = decodeKnock(u8);
+        const tid = k ? this.wireIds.get(k.wid) : undefined;
+        if (k && tid) {this.onMessage({ type: 'knockback', targetId: tid, position: k.pos, force: k.force, pull: k.pull, yank: k.yank });}
+      } else if (kind === 0x19) {
+        const k = decodeKill(u8);
+        const tid = k ? this.wireIds.get(k.targetWid) : undefined;
+        const sid = k ? (k.shooterWid === 0 ? 'environment' : this.wireIds.get(k.shooterWid)) : undefined;
+        if (k && tid && sid) {this.onMessage({ type: 'playerKill', shooterId: sid, targetId: tid, weapon: k.weapon, streak: k.streak, air: k.air, steal: k.steal });}
       }
       return;
     }

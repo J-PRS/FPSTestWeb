@@ -5,7 +5,7 @@ import { POWERUP } from '../../shared/pickups.ts';
 import { logger } from './logger.ts';
 import { classCanFire } from '../../shared/botClasses.ts';
 import { serverSimmed, BELT_THROW_WEAPONS, beltThrowCost, WeaponType, getWeaponStats, REPAIR_RANGE, WEAPON_FIRE_INTERVAL_S, LANCE_RANGE, LANCE_CADENCE_S } from '../../shared/weapons.ts';
-import { finiteVec } from '../../shared/wire.ts';
+import { finiteVec, encodeShotEv } from '../../shared/wire.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
 import { ColliderIndex } from '../../shared/solidWorld.ts';
 import { rewindPos, shooterTransitMs } from './claimLedger.ts';
@@ -126,6 +126,12 @@ export interface CombatDeps {
    *  Returns false when either id lacks a wireId — caller falls back to
    *  the JSON broadcast so test harnesses and env shooters still land. */
   wireHit?: (e: { shooterId: string; targetId: string; damage: number; health: number; armor?: number; seq?: number; shotId?: string; gd?: number }) => boolean;
+  /** Room wireId lookup for S→C binary relays (u16 on the wire). */
+  widOf?: (playerId: string) => number | undefined;
+  /** Broadcast one pre-encoded binary frame (broadcastBinaryReliable). */
+  wireCast?: (data: Uint8Array, journaled?: boolean | 'volatile', exclude?: string) => void;
+  /** Single-recipient reliable binary (knockback — victim-only). */
+  wireTo?: (playerId: string, data: Uint8Array, journaled?: boolean | 'volatile') => void;
 }
 
 /**
@@ -378,10 +384,15 @@ w.n += 1;
         position: { x: mpos.x + (dir.x / l) * reach, y: mpos.y + 1.2 + (dir.y / l) * reach, z: mpos.z + (dir.z / l) * reach },
         weaponType: WeaponType.Melee, excludeTargetId: null,
       });
-      this.broadcast({
-        type: 'playerShot', id: playerId, weaponType: msg.weaponType,
-        pos: { x: mpos.x, y: mpos.y, z: mpos.z }, dir: msg.dir,
-      }, playerId);
+      const meleeWid = this.deps.widOf?.(playerId);
+      if (meleeWid !== undefined && this.deps.wireCast) {
+        this.deps.wireCast(encodeShotEv(meleeWid, msg.weaponType, mpos, msg.dir), 'volatile', playerId);
+      } else {
+        this.broadcast({
+          type: 'playerShot', id: playerId, weaponType: msg.weaponType,
+          pos: { x: mpos.x, y: mpos.y, z: mpos.z }, dir: msg.dir,
+        }, playerId);
+      }
       return;
     }
     // Beam intent (Lightning): each tick IS the intent — the room's
@@ -513,10 +524,15 @@ win.violations += 1;
       const hs = msg.weaponType === undefined ? undefined : getWeaponStats(msg.weaponType);
       if (hs === undefined || hs.speed > 0) {this.reject(playerId, 'Shot', 'spawn refused', undefined, msg.weaponType, msg.shotId);}
     }
-    this.broadcast({
-      type: 'playerShot', id: playerId, weaponType: msg.weaponType,
-      pos: { x: at.x, y: at.y, z: at.z }, dir: msg.dir,
-    }, playerId);
+    const shotWid = this.deps.widOf?.(playerId);
+    if (shotWid !== undefined && this.deps.wireCast) {
+      this.deps.wireCast(encodeShotEv(shotWid, msg.weaponType, at, msg.dir), 'volatile', playerId);
+    } else {
+      this.broadcast({
+        type: 'playerShot', id: playerId, weaponType: msg.weaponType,
+        pos: { x: at.x, y: at.y, z: at.z }, dir: msg.dir,
+      }, playerId);
+    }
   }
 
   /** Slam landing intent — the client's dive speed is never trusted;
