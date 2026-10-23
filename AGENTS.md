@@ -26,6 +26,11 @@ node _tools/procs.mjs --kill [regex]  # kill them (whole trees) — check.sh
 # the 278h hung processes got here.
 node _tools/health.mjs [--if-stale 24]  # knip + jscpd → _tools/health/latest.md
 # (LL-readable, gitignored; the scheduled sweep refreshes it daily.)
+node _tools/shotwebp.mjs [--days N]     # shrink old shot PNGs → 80% webp in
+# place (sweep runs it; skips precision captures, referenced filenames, and
+# files <N days old). If a tool diffs a PNG, keep its name matching the
+# precision pattern (diff|alpha|heat|mask|height|normal|baseline|spec|depth)
+# or it will be compacted once it's a week old.
 # === GAME SERVER RESTARTS — READ BEFORE TOUCHING PROCESSES ===
 # NEVER taskkill server_bun. dev-watch.ts supervises it: a dead child
 # respawns within ~5s anyway, so kills race the supervisor and waste a
