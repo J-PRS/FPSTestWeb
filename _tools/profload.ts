@@ -13,7 +13,7 @@
  *  Env: FPS_PORT (default 8001) FPS_MAP (optional map override).
  */
 
-import { readdirSync } from 'node:fs';
+import { readdirSync, unlinkSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
 const arg = (k: string, d = ''): string => {
@@ -97,34 +97,46 @@ async function wireKinds(port: number): Promise<{ rx: Record<string, number> | n
   } catch { return null; }
 }
 
-/** Server CPU% of one core over `secs` wall — (CPU time delta)/wall. */
-async function cpuPct(pid: number, secs: number): Promise<number> {
+/** Server CPU% of one core over `secs` wall — (CPU time delta)/wall.
+ *  Aborts when the measured process dies mid-window: a dead server's
+ *  delta reads as a negative/garbage number, not a measurement. */
+async function cpuPct(pid: number, secs: number, srv?: ReturnType<typeof Bun.spawn>): Promise<number> {
   const cpuOf = (p: number): number => {
     const out = spawnSync('powershell', ['-NoProfile', '-Command', `(Get-Process -Id ${p}).CPU`]).stdout.toString().trim();
     return Number.parseFloat(out) || 0;
   };
   const a = cpuOf(pid);
-  await sleep(secs * 1000);
+  const deadline = secs * 1000;
+  const t0 = Date.now();
+  while (Date.now() - t0 < deadline) {
+    if (srv && srv.exitCode !== null) {throw new Error(`server exited ${srv.exitCode} mid-measurement — see ${serverLog}`);}
+    await sleep(250);
+  }
   const b = cpuOf(pid);
   return ((b - a) / secs) * 100;
 }
 
 const serverLog = `_tools/devin_scratch/profload_server.log`;
 
-/** `--sweep`: kill every lingering netBot bun process and exit — the
- *  zombie reaper for all the sessions that died without finally. */
+/** `--sweep`: kill every lingering netBot bun process AND every server
+ *  holding a port in the run range (8100-8199) — zombies from sessions
+ *  that died without finally. :8000 dev servers are out of range by
+ *  construction and never touched. */
 if (process.argv.includes('--sweep')) {
   const out = spawnSync('powershell', ['-NoProfile', '-Command',
     "Get-CimInstance Win32_Process -Filter \"name='bun.exe'\" | Where-Object { $_.CommandLine -match 'netBot' } | Select-Object -ExpandProperty ProcessId"],
   ).stdout.toString();
   const pids = [...new Set(out.match(/\d+/g) ?? [])].map(Number).filter(p => p !== process.pid);
   for (const pid of pids) {taskkill(pid);}
-  console.log(`[profload] swept ${pids.length} netBot processes`);
+  let portKills = 0;
+  for (let p = 8100; p < 8200; p++) {for (const pid of portHolders(p)) {taskkill(pid); portKills += 1;}}
+  console.log(`[profload] swept ${pids.length} netBot processes, ${portKills} stale 81xx servers`);
   process.exit(0);
 }
 
 let serverPid = 0;
 let measured = -1;
+let srv: ReturnType<typeof Bun.spawn> | null = null;
 try {
   if (!ATTACH) {
     // Preflight on a PINNED port only — holders are stale servers from
@@ -137,9 +149,12 @@ try {
       await sleep(1200);
     }
 
+    // Fresh log per attempt — Bun.file stdout appends/stales otherwise,
+    // and a crash reason buried under a previous server's bytes is
+    // indistinguishable from "died silently".
+    try { unlinkSync(serverLog); } catch { /* none yet */ }
     const file = Bun.file(serverLog);
     const argv = [BUN, ...(CPUPROF ? ['--cpu-prof'] : []), ...(arg('preload', '') ? ['--preload', arg('preload')] : []), 'src/server.ts'];
-    let srv: ReturnType<typeof Bun.spawn> | null = null;
     // Retry on successive ports — a holder that slips between the scan
     // and the bind (or a TIME_WAIT ghost netstat misses) is skipped, not fatal.
     for (let p = PORT || 8100; p < 8200; p++) {
@@ -208,7 +223,7 @@ try {
   const players = (m0 as { players?: number } | null)?.players ?? 0;
   if (players < Math.ceil(BOTS * 0.75)) {log(`WARNING players=${players} < expected ${BOTS} — bots died or never joined (see profload_*.log); measurement is suspect`);}
   log(`players=${players} — measuring ${SECS}s`);
-  measured = await cpuPct(serverPid, SECS);
+  measured = await cpuPct(serverPid, SECS, srv);
   const m1 = await metrics(PORT);
 
   const rx = await wireKinds(PORT);

@@ -54,6 +54,13 @@ export function renderLagOfTarget(
   return renderLagOf(p);
 }
 
+/** Sample-object freelist — pushRewindSample runs ~25Hz/player, so the
+ *  {t,x,y,z} alloc was ~2.5K objects/s at a full room. Trims recycle
+ *  into the pool; consumers read sample fields transiently, never
+ *  retain the object past the call, so reuse can't leak stale reads. */
+const samplePool: { t: WallMs; x: number; y: number; z: number }[] = [];
+const SAMPLE_POOL_MAX = 8192;
+
 export function pushRewindSample(
   p: { history: { t: WallMs; x: number; y: number; z: number }[]; position: { x: number; y: number; z: number } },
   now: WallMs,
@@ -61,11 +68,16 @@ export function pushRewindSample(
   // A non-finite position would rewind hit validation to a NaN ghost —
   // every check against this window whiffs. Skip the sample instead.
   if (!Number.isFinite(p.position.x + p.position.y + p.position.z)) {return;}
-  p.history.push({ t: now, x: p.position.x, y: p.position.y, z: p.position.z });
+  const s = samplePool.pop() ?? { t: 0 as WallMs, x: 0, y: 0, z: 0 };
+  s.t = now; s.x = p.position.x; s.y = p.position.y; s.z = p.position.z;
+  p.history.push(s);
   // Trim stale head entries with one scan + one splice — the old
   // per-push shift() loop was O(n²) over ~60 entries × ~25Hz/player.
   const h = p.history;
   let i = 0;
   while (i < h.length && h[i]!.t < now - REWIND_MS) {i += 1;}
-  if (i > 0) {h.splice(0, i);}
+  if (i > 0) {
+    for (let j = 0; j < i; j += 1) {if (samplePool.length < SAMPLE_POOL_MAX) {samplePool.push(h[j]!);}}
+    h.splice(0, i);
+  }
 }
