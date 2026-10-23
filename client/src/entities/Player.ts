@@ -448,6 +448,7 @@ export class Player {
     this.appliedPerk = this.perk;
     this.movement.setSpeedScale(CLASS_STATS[this.appliedClass].speedScale);
     this.movement.setBody(CLASS_STATS[this.appliedClass].mass, CLASS_STATS[this.appliedClass].eyeHeight, CLASS_STATS[this.appliedClass].radius);
+    this.movement.setJumpstart(this.mods.jumpstart);
     this.armory.unshoulderLocked();
 
     // Your third-person body wears the same class GLB remotes see on

@@ -10,7 +10,7 @@
  * name, never scattered).
  */
 
-export type PerkId = 'none' | 'featherjets' | 'plated' | 'lifesteal' | 'regenerator' | 'overcharge' | 'sharpshooter' | 'bombardier' | 'juggernaut' | 'scavenger' | 'lightfoot' | 'airtank' | 'reach' | 'featherfall';
+export type PerkId = 'none' | 'featherjets' | 'plated' | 'lifesteal' | 'regenerator' | 'overcharge' | 'sharpshooter' | 'bombardier' | 'juggernaut' | 'scavenger' | 'lightfoot' | 'airtank' | 'reach' | 'featherfall' | 'jumpstart';
 
 export interface PerkMods {
   /** Jet fuel burn multiplier (1 = normal, 0.7 = 30% thriftier). */
@@ -50,9 +50,13 @@ export interface PerkMods {
    *  Soak happens before the damage funnel: a covered landing never
    *  fires a hit at all. */
   fallSoak: number;
+  /** m/s launch granted on the ski-press edge, only while below the
+   *  class walk cap (0 = no Jumpstart). A get-moving burst — at pace
+   *  it does nothing, so it can't be milked for speed. */
+  jumpstart: number;
 }
 
-const ZERO: PerkMods = { jetDrain: 1, jetRegen: 1, damageResist: 0, maxHealth: 0, meleeHeal: 0, regen: 0, regenRamp: 0, energyRegen: 1, directDamage: 1, aoeRadius: 1, knockbackTaken: 1, healBoost: 1, selfDamage: 1, energyMax: 1, pickupRadius: 1, fallSoak: 0 };
+const ZERO: PerkMods = { jetDrain: 1, jetRegen: 1, damageResist: 0, maxHealth: 0, meleeHeal: 0, regen: 0, regenRamp: 0, energyRegen: 1, directDamage: 1, aoeRadius: 1, knockbackTaken: 1, healBoost: 1, selfDamage: 1, energyMax: 1, pickupRadius: 1, fallSoak: 0, jumpstart: 0 };
 
 /** Regenerator wind-up: the ramp only accrues after this many unhurt
  *  seconds — sustained combat denies the perk entirely instead of
@@ -74,9 +78,10 @@ export const PERKS: Record<PerkId, { name: string; blurb: string; mods: Partial<
   airtank:     { name: 'Airtank',     blurb: '+50% energy pool', mods: { energyMax: 1.5 } },
   reach:       { name: 'Reach',       blurb: 'Grab pickups and flags from 25% farther', mods: { pickupRadius: 1.25 } },
   featherfall: { name: 'Featherfall', blurb: 'Fall damage energy shield, 20 hp per energy point', mods: { fallSoak: 20 } },
+  jumpstart:   { name: 'Jumpstart',   blurb: 'Ski launch: pressing ski boosts +6 m/s, up to run speed +6', mods: { jumpstart: 6 } },
 };
 
-export const PERK_ORDER: PerkId[] = ['none', 'featherjets', 'plated', 'lifesteal', 'regenerator', 'overcharge', 'sharpshooter', 'bombardier', 'juggernaut', 'scavenger', 'lightfoot', 'airtank', 'reach', 'featherfall'];
+export const PERK_ORDER: PerkId[] = ['none', 'featherjets', 'plated', 'lifesteal', 'regenerator', 'overcharge', 'sharpshooter', 'bombardier', 'juggernaut', 'scavenger', 'lightfoot', 'airtank', 'reach', 'featherfall', 'jumpstart'];
 
 export function perkMods(id: string | undefined | null): PerkMods {
   const p = PERKS[(id ?? 'none') as PerkId];

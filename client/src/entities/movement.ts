@@ -70,6 +70,9 @@ export class MovementController {
   /** Armor-class ground speed — must match the server's shadow or every
    *  ground move reads as a divergence. */
   setSpeedScale(scale: number): void { this.sim.speedScale = scale; }
+  /** Jumpstart perk m/s — must match the server's shadow or a ski-press
+   *  launch reads as divergence. */
+  setJumpstart(boost: number): void { this.sim.jumpstart = boost; }
   /** Armor-class body: jet thrust divides by mass, and grounded/ceiling
    *  checks stand the body `eyeHeight` tall — must match the server's
    *  shadow or jets/headroom read as divergence. */

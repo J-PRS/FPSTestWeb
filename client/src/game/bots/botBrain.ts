@@ -149,6 +149,7 @@ export class GameBot extends RemotePlayer {
     this.loadout = lo;
 
     this.mods = perkMods(lo.perk);
+    this.movement?.setJumpstart?.(this.mods.jumpstart);
 
     this.perkHealthBonus = this.mods.maxHealth;
 

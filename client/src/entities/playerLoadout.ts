@@ -3,7 +3,7 @@ import { SLOT_COUNT, weaponDef, LANCE_WID } from '../weapons.js';
 import { SIDEARM_DRAW_TIME } from './ViewModel.js';
 import type { MovementController } from './movement.js';
 import type { PlayerInput } from './player/input.js';
-import type { PerkId } from '../../../shared/perks.js';
+import type { PerkId, PerkMods } from '../../../shared/perks.js';
 import { CLASS_STATS, CLASS_MODEL_SCALE, type ArmorClass } from '../../../shared/botClasses.js';
 import { PlayerModel, type PlayerModelVariant } from './PlayerModel.js';
 import { CLASS_BODY_MAT_REV, CLASS_BODY_VARIANT } from './playerClips.js';
@@ -24,6 +24,8 @@ const logger = new ChildLogger('PlayerLoadout');
 export interface LoadoutHost {
   perk: PerkId;
   appliedPerk: PerkId;
+  /** perkMods(appliedPerk) — the sim-read modifiers, banked per life. */
+  readonly mods: PerkMods;
   armorClass: ArmorClass;
   appliedClass: ArmorClass;
   loadout: number[];
@@ -130,6 +132,7 @@ export class PlayerLoadout {
     this.h.appliedClass = c;
     this.h.movement.setSpeedScale(CLASS_STATS[c].speedScale);
     this.h.movement.setBody(CLASS_STATS[c].mass, CLASS_STATS[c].eyeHeight, CLASS_STATS[c].radius);
+    this.h.movement.setJumpstart(this.h.mods.jumpstart);
     // Every tier has locked guns now — heavy ordnance, medium's mid punch,
     // and light-frame precision gear all unshoulder on the wrong chassis.
     this.unshoulderLocked();
@@ -195,7 +198,10 @@ export class PlayerLoadout {
   /** Respawn-time perk application — the picked perk banks here so its
    *  HP/energy/speed mods never flip mid-life under the server's nose. */
   applyPendingPerk(): void {
-    if (this.h.appliedPerk !== this.h.perk) {this.h.appliedPerk = this.h.perk;}
+    if (this.h.appliedPerk !== this.h.perk) {
+      this.h.appliedPerk = this.h.perk;
+      this.h.movement.setJumpstart(this.h.mods.jumpstart);
+    }
   }
 
   /** Kill-refund (railgun): ready instantly, but requires a fresh click —

@@ -257,7 +257,7 @@ this.structEpoch += 1;
       gapStreak: 0, gapAt: 0, gapClosedAt: 0, gapRunMs: 0, deferStreak: 0, lastHintAt: 0, lastReportAt: 0, reportEma: 0,
       transitEma: 0, clientTransitEma: 0, serverTransitEma: 0, transitVar: 0, reportVar: 0,
     });
-    {const sh = this.shadows.get(playerId); if (sh) {sh.sim.waterLevel = this.waterLevel;}}
+    {const sh = this.shadows.get(playerId); if (sh) {sh.sim.waterLevel = this.waterLevel; sh.sim.jumpstart = mods.jumpstart;}}
     // The sim body derives from the class at creation — the default eye
     // otherwise survives a pre-track setBody no-op (applyClass ran before
     // the shadow existed, the eyeOf-vs-class mismatch behind the unbury
@@ -330,6 +330,7 @@ this.structEpoch += 1;
     sh.jetDrain = mods.jetDrain;
     sh.jetRegen = mods.jetRegen;
     sh.energyRegen = mods.energyRegen;
+    sh.sim.jumpstart = mods.jumpstart;
   }
 
   /** Armor-class ground speed multiplier (server bots / future loadouts). */

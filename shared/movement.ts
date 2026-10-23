@@ -181,6 +181,9 @@ export interface SimSnapshot {
   /** Post-impulse airtime window — restored so replay keeps the same
    *  re-ground suppression on a blast-launched body. */
   impulseT: number;
+  /** Last step's skiHeld — the Jumpstart boost is edge-triggered; a
+   *  snapshot taken mid-press must not re-fire it on restore. */
+  wasSkiHeld?: boolean;
 }
 
 /** What the sim needs from the world: terrain height + surface normal.
@@ -256,6 +259,9 @@ export class MoveSim {
    *  Undefined = no dome. Hosts that run a sim copy it in so the replay
    *  stays identical — same law as waterLevel. */
   waterDome?: { x: number; y: number; z: number; r: number };
+  /** Jumpstart perk m/s — granted once on the ski-press edge, only while
+   *  below the class walk cap. Hosts set it from perkMods; 0 = no perk. */
+  jumpstart = 0;
   /** The tether snare this body is standing in (enemy-side only — the host
    *  clears it otherwise). Same copy-in law as waterDome. */
   tether?: { x: number; y: number; z: number; r: number };
@@ -286,6 +292,9 @@ export class MoveSim {
   /** Post-impulse airtime window — the ground glue can't re-ground a
    *  blast-launched body before the arc plays out (see impulse()). */
   private impulseT = 0;
+  /** Previous step's skiHeld — the Jumpstart boost fires on the press
+   *  EDGE, so replay must carry it like wishJump (see snapshot()). */
+  private wasSkiHeld = false;
   /** Worst -v·n (m/s) recorded at a contact kill during this update() —
    *  the T1 impact speed: callers past fallDamageMinSpeed pay
    *  (impact - min) * scale * maxHealth. Read after update(); transient
@@ -353,7 +362,7 @@ export class MoveSim {
       groundedBuffered: this.groundedBuffered, acc: this.acc,
       groundGraceT: this.groundGraceT,
       bandDist: this.bandDist,
-      impulseT: this.impulseT };
+      impulseT: this.impulseT, wasSkiHeld: this.wasSkiHeld };
   }
 
   restore(snap: SimSnapshot): void {
@@ -368,6 +377,9 @@ export class MoveSim {
     // contact flag: grounded = contact, airborne = outside the band.
     this.bandDist = snap.bandDist ?? (snap.st.onGround ? 0 : Infinity);
     this.impulseT = snap.impulseT ?? 0;
+    // Legacy snapshots predate the ski edge — assume the held state
+    // persisted so a restore mid-hold can't re-fire a Jumpstart boost.
+    this.wasSkiHeld = snap.wasSkiHeld ?? snap.input.skiHeld;
   }
 
   update(dt: number): void {
@@ -391,6 +403,29 @@ export class MoveSim {
 
     this.groundedBuffered = this.checkGrounded();
     this.impulseT = Math.max(0, this.impulseT - dt);
+
+    // Jumpstart perk: on the ski-press edge a body at/below its class
+    // walk cap gets a flat +jumpstart m/s launch — max payout is
+    // cap + jumpstart, and pressing at pace (> cap) buys nothing.
+    // Fires here in step() (not setInput) so the edge lands inside the
+    // fixed-step stream and client prediction and server shadow replay
+    // it identically.
+    const skiEdge = this.input.skiHeld && !this.wasSkiHeld;
+    this.wasSkiHeld = this.input.skiHeld;
+    if (skiEdge && this.jumpstart > 0) {
+      const s = this.state;
+      const hs = dhypot2(s.vel.x, s.vel.z);
+      if (hs <= MOVEMENT_CONFIG.maxVelocityGround * this.speedScale + 0.001) {
+        const dir = this.inputDirection();
+        const dl = dhypot2(dir.x, dir.z);
+        let ux: number, uz: number;
+        if (hs > 0.5) { ux = s.vel.x / hs; uz = s.vel.z / hs; }
+        else if (dl > 0) { ux = dir.x; uz = dir.z; }
+        else { ux = dsin(s.yaw); uz = dcos(s.yaw); }
+        s.vel.x += ux * this.jumpstart;
+        s.vel.z += uz * this.jumpstart;
+      }
+    }
 
     const anyGrounded = this.state.onGround || this.groundedBuffered;
     if (this.allowNextJump && anyGrounded && this.wishJump) {
@@ -477,14 +512,15 @@ export class MoveSim {
     const dir = this.inputDirection();
     const s = this.state;
 
-    // Ski preserves momentum but is not a motor: below walk speed a
-    // grounded skier still needs ground physics to push off — otherwise a
-    // stationary bot (or human holding ski at a standstill) never moves.
+    // Ski preserves momentum and nothing else — no motor, no push-off:
+    // a stationary skier stays stopped until they walk (release ski) or
+    // fire the Jumpstart edge. Below the (unscaled) speed gate they
+    // still need ground physics for the slope/band machinery.
     // A held jet is airborne physics full stop: ground friction would
     // zero the thrust's small per-step velocity gain before it ever
     // accumulated to a launch (the ~0.9s standstill dead-zone).
     const hSpeed = dhypot2(s.vel.x, s.vel.z);
-    if (s.onGround && !this.wishJump && !this.input.jetHeld && !(this.input.skiHeld && hSpeed > MOVEMENT_CONFIG.maxVelocityGround)) {
+    if (s.onGround && !this.wishJump && !this.input.jetHeld && !(this.input.skiHeld && hSpeed > MOVEMENT_CONFIG.maxVelocityGround * this.speedScale)) {
       this.applyGround(dt, dir);
     }
     if (!s.onGround) {
@@ -653,21 +689,15 @@ export class MoveSim {
     const n = this.surface.getNormal(s.pos.x, s.pos.z, _n);
     const dirLen = dhypot2(dir.x, dir.z);
     const maxGround = MOVEMENT_CONFIG.maxVelocityGround * this.speedScale;
-    // T1 has no separate ground accel — the bounded traction force below
-    // IS the motor. Skiers are exempt from traction, so a skier below
-    // walk speed still needs a push-off or he never gets moving.
-    if (this.input.skiHeld && dirLen > 0) {
-      // Project input onto the slope surface.
-      const dotN = dir.x * n.x + dir.z * n.z;
-      let sx = dir.x - n.x * dotN, sz = dir.z - n.z * dotN;
-      const sl = dhypot2(sx, sz);
-      if (sl > 0.0001) {
-        sx /= sl; sz /= sl;
-        const acc = MOVEMENT_CONFIG.groundAccelerate * this.speedScale;
-        s.vel.x += sx * acc * dt;
-        s.vel.z += sz * acc * dt;
-      }
-    }
+    // Ski is a friction toggle: no overspeed bleed, but legs still
+    // work — below the class walk cap a held direction gets the SAME
+    // bounded converge-to-wish force a walker does, so a stopped skier
+    // still pushes off (pure removal froze ski-held bots at rest: the
+    // capper stall). Above the cap ski adds and bleeds nothing.
+    // The old groundAccelerate branch instead pumped to the UNSCALED
+    // gate in one step — +8.9 to +12.2 m/s bought on flat, medium hit
+    // 23 m/s at a ski press (_docs/2026-10-23_SKI_FLAT_OVERSPEED.md).
+    const skiPushOff = this.input.skiHeld && dirLen > 0 && dhypot2(s.vel.x, s.vel.z) < maxGround;
 
     // Redirect velocity along the slope (kill the into-ground component).
     // Contact-distance only — a body grounded mid-band (glue range, not
@@ -688,7 +718,7 @@ export class MoveSim {
     // ski is literally "break contact with this force".
     // Contact-distance only: mid-band the force bleeds the FALL too —
     // a drop grounded inside glue range parachuted at crawl speed.
-    if (!this.input.skiHeld && this.bandDist <= 0.1) {
+    if ((!this.input.skiHeld || skiPushOff) && this.bandDist <= 0.1) {
       const vdn = s.vel.x * n.x + s.vel.y * n.y + s.vel.z * n.z;
       const keep = Math.max(vdn, 0);
       const tx = s.vel.x - n.x * keep, ty = s.vel.y - n.y * keep, tz = s.vel.z - n.z * keep;

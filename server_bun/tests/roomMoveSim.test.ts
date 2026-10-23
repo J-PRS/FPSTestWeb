@@ -232,15 +232,58 @@ describe('RoomMoveSim', () => {
     expect(m.setInput('p1', { forward: 0 })).toBe(true);
   });
 
-  test('a grounded skier at a standstill can still push off', () => {
-    // Regression: ski used to skip ground physics entirely, so a
-    // zero-speed skier holding forward never accelerated (frozen bots).
+  test('a stopped skier pushes off at walk speed — never past the cap', () => {
+    // Contract 2026-10-23: the ski push-off shares the walker's bounded
+    // converge-to-wish force below the class cap (legs still work), but
+    // buys nothing above it — the old uncapped accel pumped +8.9..12.2
+    // m/s in one flat step (medium hit 23). Pin both halves.
     const m = new RoomMoveSim(flat);
     m.track('p1', { x: 0, y: MOVEMENT_CONFIG.playerHeight, z: 0 }, 0);
     m.setInput('p1', { forward: 1, right: 0, jumpPressed: false, jumpHeld: false, skiHeld: true });
     for (let i = 0; i < 20; i++) {m.tick(0.05);}
     const pos = m.simPos('p1')!;
     expect(Math.abs(pos.x) + Math.abs(pos.z)).toBeGreaterThan(0.5);
+    const s = m.simState('p1')!;
+    expect(Math.hypot(s.vel.x, s.vel.z)).toBeLessThanOrEqual(MOVEMENT_CONFIG.maxVelocityGround + 0.01);
+  });
+
+  test('Jumpstart fires once on the ski edge, capped at walk cap + boost', () => {
+    const m = new RoomMoveSim(flat);
+    m.track('p1', { x: 0, y: MOVEMENT_CONFIG.playerHeight, z: 0 }, 0);
+    m.setPerk('p1', 'jumpstart');
+    m.setInput('p1', { forward: 1, right: 0, jumpHeld: false, skiHeld: true });
+    m.tick(0.05);
+    let s = m.simState('p1')!;
+    // The edge boost fired — walking alone reaches ~4 m/s in 3 steps.
+    expect(Math.hypot(s.vel.x, s.vel.z)).toBeGreaterThanOrEqual(5.9);
+    for (let i = 0; i < 20; i++) {m.tick(0.05);} // held — no re-fire; legs converge to cap, never past it
+    s = m.simState('p1')!;
+    expect(Math.hypot(s.vel.x, s.vel.z)).toBeLessThanOrEqual(MOVEMENT_CONFIG.maxVelocityGround + 0.01);
+    // Pressing AT the walk cap buys the +6 — that cap+6 is the max payout.
+    const m2 = new RoomMoveSim(flat);
+    m2.track('p2', { x: 0, y: MOVEMENT_CONFIG.playerHeight, z: 0 }, 0);
+    m2.setPerk('p2', 'jumpstart');
+    m2.setInput('p2', { forward: 1, right: 0, jumpHeld: false, skiHeld: false });
+    for (let i = 0; i < 60; i++) {m2.tick(0.05);}
+    const cap = Math.hypot(m2.simState('p2')!.vel.x, m2.simState('p2')!.vel.z);
+    m2.setInput('p2', { forward: 1, right: 0, jumpHeld: false, skiHeld: true });
+    m2.tick(0.05);
+    s = m2.simState('p2')!;
+    expect(Math.hypot(s.vel.x, s.vel.z)).toBeCloseTo(cap + 6, 0);
+    for (let i = 0; i < 20; i++) {m2.tick(0.05);} // held — coasts, never more
+    s = m2.simState('p2')!;
+    expect(Math.hypot(s.vel.x, s.vel.z)).toBeLessThanOrEqual(cap + 6 + 0.01);
+    // At real pace the perk is inert — can't be milked for speed.
+    const m3 = new RoomMoveSim(flat);
+    m3.track('p3', { x: 0, y: MOVEMENT_CONFIG.playerHeight, z: 0 }, 0);
+    m3.setPerk('p3', 'jumpstart');
+    m3.setInput('p3', { forward: 1, right: 0, jumpHeld: false, skiHeld: false });
+    const fast = m3.simState('p3')!;
+    fast.vel.x = 30;
+    m3.setInput('p3', { forward: 1, right: 0, jumpHeld: false, skiHeld: true });
+    for (let i = 0; i < 10; i++) {m3.tick(0.05);}
+    s = m3.simState('p3')!;
+    expect(Math.hypot(s.vel.x, s.vel.z)).toBeLessThanOrEqual(30.01);
   });
 
   test('a report ahead of the shadow by in-flight inputs compares against the probe', () => {
