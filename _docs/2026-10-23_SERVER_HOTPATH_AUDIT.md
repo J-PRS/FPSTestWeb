@@ -10,7 +10,10 @@ run. Ordering is by expected payoff per unit of risk, not by severity.
 
 ---
 
-## 1. `projStep` allocates a `Vec3` per projectile per tick  `[ ]`
+## 1. `projStep` allocates a `Vec3` per projectile per tick  `[x]`
+
+**Landed (f7e962bd):** `projStep(p, dt, g, into?)`; `RoomProjectiles`
+reuses `stepScratch` for from + detonate. All consumers synchronous.
 
 `shared/projSim.ts:22`
 
@@ -46,7 +49,12 @@ form by passing nothing.
 
 ---
 
-## 2. 55 remaining 3-arg `Math.hypot` calls  `[ ]`
+## 2. 55 remaining 3-arg `Math.hypot` calls  `[~]`
+
+**Partial (f7e962bd):** projContact + CombatHandler + combatBlast swept
+(16 sites — the hot projectile/fire/blast paths). Remaining warm/cold
+clusters: `botArsenal.ts` ~15, `CreatureSim.ts` ~4, `Room.ts` ~4,
+`claimLedger`/`combatAoe`/`botBeam` 1 each.
 
 `28136805` migrated the hottest five files (moveJudge, ballCombat, BallSim,
 beamSweep, RoomMoveSim) to `dhypot2`/`dhypot3`. Remaining clusters:
@@ -91,7 +99,11 @@ touching** — if JSON fallback traffic is negligible, leave it.
 
 ---
 
-## 4. Spatial grid rebuilt per tick in `RoomMoveSim`  `[ ]`
+## 4. Spatial grid rebuilt per tick in `RoomMoveSim`  `[x]`
+
+**Landed (f7e962bd):** persistent `gridCells` + `bodyScratch` — cells
+length-reset each tick; the per-query sort is kept verbatim (contact
+order parity). bodySource iterable reuses the scratch too.
 
 `server_bun/src/RoomMoveSim.ts:~620`
 
@@ -200,3 +212,17 @@ mirrors it and any drift desyncs the blast envelope.
 None of the above has a before/after profile yet. `bun _tools/profload.ts
 --bots 64 --secs 40` is the tool; run it before and after each landed item and
 record the phase deltas here (append a "Measured" subsection per item).
+
+## Measured
+
+- **#1/#2/#4 (f7e962bd)** — landed together with the evScratch ring
+  (f0ee644a) and rewind sample pool (b4fff89c); isolating each is below
+  run noise (~±3% between same-shape 96-socket runs). Combined arc on
+  identical load: 36.9% cpuprof'd / ~30-32% plain, 0 drops, 0 held.
+- **#3** — done cheaply instead of measuring: `frame()` stamps `ev` in
+  place (callers pass fresh literals; the `Object.assign` clone was the
+  whole cost). ~1-2K allocs/s removed.
+- **#5** — inspected: `Room.ts:1168` (`reshuffleBots`) is match-end only,
+  `RoomFlags.snapshot()` is edge-triggered — cold paths, left as-is.
+- **#6** — deferred: AOE-clone rate is ~blast-rate (~50/s), below the
+  run noise floor.

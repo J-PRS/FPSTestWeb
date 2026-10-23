@@ -207,7 +207,10 @@ export class ConnectionManager {
   private frame(msg: ServerMessage, only?: string, exclude?: string): { data: string; kind: string } {
     this.outSeq += 1;
     const seq = this.outSeq;
-    const data = JSON.stringify(Object.assign({}, (msg as object), {ev: seq}));
+    // Stamp in place — every call site passes a fresh literal, so the
+    // Object.assign({msg, ev}) clone was a throwaway per send (~1-2K/s).
+    (msg as { ev?: number }).ev = seq;
+    const data = JSON.stringify(msg);
     if (!NO_JOURNAL_TYPES.has((msg as { type: string }).type)) {
       const volatile_ = VOLATILE_TYPES.has((msg as { type: string }).type);
       this.journal.push({ seq, data, only, exclude, volatile: volatile_, at: wallNow() });
