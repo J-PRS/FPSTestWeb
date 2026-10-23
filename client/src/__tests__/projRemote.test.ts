@@ -58,11 +58,15 @@ describe('remote muzzle blend', (): void => {
     const dt = 1 / 60;
     for (let t = 0; t < 0.4; t += dt) {
       p.update(dt, flatTerrain);
-      // Sim truth is untouched by the visual offset throughout.
-      expect(p.rendered.distanceTo(p.pos)).toBeLessThanOrEqual(p.renderOffset.length() + 1e-6);
+      // Sim truth is untouched by the visual offset; rendered may lead
+      // pos by the sub-cell ballistic remainder (cellAcc · vel ≤ 50ms
+      // of flight) — the grid holds pos, the remainder draws the arc.
+      const cellLead = p.vel.length() * 0.05;
+      expect(p.rendered.distanceTo(p.pos)).toBeLessThanOrEqual(p.renderOffset.length() + cellLead + 1e-6);
     }
     // τ=0.05 exp decay: ~0.03% of the offset survives 400ms — invisible.
-    expect(p.rendered.distanceTo(p.pos)).toBeLessThan(0.001);
+    // rendered still leads pos by the live cell remainder — assert the
+    // blend (renderOffset), not the remainder, converged.
     expect(p.renderOffset.length()).toBeLessThan(1e-3);
     p.dispose();
   });

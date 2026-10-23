@@ -19,6 +19,7 @@ import { settings } from '../core/settings.js';
 import { isBotId, botRosterName } from '../../../shared/botNames.js';
 import * as sfxWorld from '../core/sfx/world.js';
 import { lastWeaponByPlayer } from './net/projectiles.js';
+import { sampleRemoteGhosts } from './ghostTrace.js';
 
 // Hostiles always read red — team colors are for your own side only.
 const ENEMY_RED = 0xFF_33_33;
@@ -513,6 +514,8 @@ export function createRemotes(deps: RemotesDeps) {
     }
 
     players.forEach((playerState, playerId): void => tickRemotePlayer(deps, lastTintOf, playerId, playerState, dt));
+    // 10Hz ghost-epoch sampler — rendered/wire/ghost divergence audit.
+    sampleRemoteGhosts(deps.world.remotePlayers.values());
     const hud = deps.lazyHud();
     const cam = deps.lazyCamera();
     tickOnScreen(deps, cam);

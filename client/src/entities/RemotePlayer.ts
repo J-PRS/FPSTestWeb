@@ -90,7 +90,13 @@ export class RemotePlayer {
   ghostPosition(out: THREE.Vector3): THREE.Vector3 {
     if (this.lastUpdateTime <= 0) {return out.copy(this.position);}
     const age = Math.min((Date.now() - this.lastUpdateTime) / 1000, 1);
-    return out.copy(this.wirePosition).addScaledVector(this.vel, age - Math.min(this.interp.viewLagMs / 1000, age));
+    // Unclamped: viewLag > wire age means the server's rewind epoch sits
+    // BEHIND the latest record — project back along the wire velocity to
+    // the shooter's view time. The old min() clamp folded this to
+    // ghost==wire, so envelope math ran one interp-delay ahead of where
+    // the authority judges (ghostTrace: wg≈0, rg≈rw — the dmg-echo
+    // aimOff class).
+    return out.copy(this.wirePosition).addScaledVector(this.vel, age - Math.max(0, this.interp.viewLagMs / 1000));
   }
   get interpUnderruns(): number { return this.interp.underruns; }
   get interpExtCapMs(): number { return this.interp.extCapMs; }
