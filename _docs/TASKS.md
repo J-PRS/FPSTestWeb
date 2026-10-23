@@ -131,7 +131,7 @@
 - **1v1 capacity** — see `_docs/2026-10-23_DUEL_CAPACITY.md`. Measured baseline: 32 duel rooms × 64 players = 36.6 % of a core (175 CCU/core) vs 2 × 32 = 24.1 % (266 CCU/core). Ordered:
   - [x] **L1 empty-world duel mode** — DONE: ModeSpec `world:'empty'` on duel; `registerSims` skips balls/crawl/pickups/deploy/influence; deploy claims refuse `'nomode'`; profload gains `--mode`. Measured 32×2: 26.6% core, **240 CCU/core** (baseline 36.6%/175, target ≥220).
   - [ ] **L2 quiet-room tick** — heartbeat at ~4 Hz when fully suppressed, instead of an unconditional frame per tick (`TickLoop.ts:334`). Pin loss-metric + stateHash semantics in scenario tests first. Target ~286 CCU/core.
-  - [ ] **L5 sample phase marks** — `mark()` is ~1.7 % of samples; gate behind env or every 10th tick.
+  - [x] **L5 sample phase marks** — DONE: every 10th room-tick (all-or-none). Measured 27.0%/237 CCU vs L1's 26.6%/240 — sub-noise, kept anyway (strictly less work).
   - [ ] **L6 frame arena** — `Uint8Array`/`DataView`/buffer ≈ 14 % of samples; reuse per-connection frame buffers until drain.
   - [ ] **L8 matchmaker placement** — stateless seat reservation so duel rooms are placed by headroom (Colyseus/Photon pattern), not name hash.
   - [ ] **Record every run** in the report with command + activity mix (a run without its ball/creature setting is not comparable).

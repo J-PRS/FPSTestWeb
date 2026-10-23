@@ -64,7 +64,14 @@ export class TickLoop {
    *  without a profiler attached. */
   private phases = new Map<string, number>();
   private lastPhaseAt = 0;
+  /** Phase marks run every Nth tick — a per-tick debug EMA was ~1.7% of
+   *  profile samples at 640 room-ticks/s. Whole ticks, not every-10th
+   *  mark: intra-tick deltas only make sense against THIS tick's t0. */
+  private phaseSampling = false;
+  private phaseTick = 0;
+  private static PHASE_SAMPLE_EVERY = 10;
   private mark(name: string): void {
+    if (!this.phaseSampling) {return;}
     const now = wallNow();
     const d = now - this.lastPhaseAt;
     this.lastPhaseAt = now;
@@ -275,6 +282,7 @@ this.metrics.tickErrors += 1;
     // Phase 0: drain the command buffer — all client input lands before
     // any sim runs, in wire-arrival order.
     const tickT0 = wallNow();
+    this.phaseSampling = (this.phaseTick += 1) % TickLoop.PHASE_SAMPLE_EVERY === 0;
     this.lastPhaseAt = tickT0;
     this.errPhase = 'cmd';
     // Everything this tick generates queues per-conn — one merged send

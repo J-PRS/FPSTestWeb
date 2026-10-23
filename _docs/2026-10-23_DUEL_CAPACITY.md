@@ -254,6 +254,13 @@ gap between 175 and ~570 is the price of that world, not of the players.
 
 ### Runs
 
+- **L5 landed + measured:** `--bots 64 --roomspec duel=32 --mode duel
+  --secs 40`. Phase marks now run every 10th room-tick (all-or-none so
+  intra-tick deltas stay honest). Result: 27.0 % core / 237 CCU/core vs
+  L1's 26.6 %/240 — within run noise; the ~1.7 % mark() share was a
+  cpuprof attribution and lands sub-noise unprofiled. Kept: strictly
+  less work, phaseMs still surfaces.
+
 - **L1 landed + measured (this session):** `--bots 64 --roomspec duel=32
   --mode duel --secs 40`, activity: full combat, **ambient sims OFF**
   (world:'empty'). Result: **26.6 % of a core, 0.416 %/client, 240
