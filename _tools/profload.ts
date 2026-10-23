@@ -20,7 +20,10 @@ const arg = (k: string, d = ''): string => {
   const i = process.argv.indexOf(`--${k}`);
   return i !== -1 ? process.argv[i + 1] ?? '1' : d;
 };
-const PORT = Number.parseInt(arg('port', '8001'), 10);
+// Port: explicit --port pins (preflight kills its holders). Default is a
+// free port scanned from 8100 — a run can NEVER race a pre-existing dev
+// server on :8000 or a leftover profload server on :8001.
+const PINNED = arg('port', '');
 const BOTS = Number.parseInt(arg('bots', '64'), 10);
 const ROOMS = arg('rooms', 'prof1,prof2').split(',');
 const SECS = Number.parseInt(arg('secs', '60'), 10);
@@ -47,14 +50,33 @@ function portHolders(port: number): number[] {
   return [...new Set([...out.matchAll(new RegExp(`:${port}\\s+\\S+\\s+LISTENING\\s+(\\d+)`, 'g'))].map(m => +m[1]!))];
 }
 
+// Run identity: the spawned server echoes this token on /health — a
+// stale listener answering the port can never pass as ours.
+const BOOT = `pl${process.pid.toString(36)}${Math.floor(Math.random() * 46656).toString(36)}`;
+// Port list: --port pins one; default scans 8100+ (netstat misses
+// half-bound/TIME_WAIT holders, so the spawn loop below also retries
+// the next port when the server exits before answering /health).
+let PORT = ATTACH ? Number.parseInt(arg('attach', '8001'), 10)
+  : PINNED ? Number.parseInt(PINNED, 10) : 0;
+
+/** Track a spawned child + log mid-run exits — a crashed bot/server
+ *  was previously invisible (players quietly drained to 0). */
+let DONE = false;
+function track(p: ReturnType<typeof Bun.spawn>, tag: string): void {
+  kids.push(p);
+  if (p.exited) {void p.exited.then((c): void => { if (!DONE) {log(`${tag} pid=${p.pid} exited code=${c} mid-run`);} });}
+}
+
 function taskkill(pid: number): void {
   spawnSync('taskkill', ['/F', '/PID', String(pid)]);
 }
 
-async function healthOk(port: number): Promise<boolean> {
+async function healthOk(port: number, boot?: string): Promise<boolean> {
   try {
     const r = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1500) });
-    return r.ok;
+    if (!r.ok) {return false;}
+    if (boot === undefined) {return true;}
+    return ((await r.json()) as { boot?: string | null }).boot === boot;
   } catch { return false; }
 }
 
@@ -105,35 +127,46 @@ let serverPid = 0;
 let measured = -1;
 try {
   if (!ATTACH) {
-    // Preflight: free the port — holders are stale servers from prior
-    // rounds (the only legitimate :PORT listeners we spawn are ours).
-    for (const pid of portHolders(PORT)) {
-      log(`killing stale :${PORT} holder pid=${pid}`);
-      taskkill(pid);
+    // Preflight on a PINNED port only — holders are stale servers from
+    // prior rounds. An auto-picked port is already free by construction.
+    if (PINNED) {
+      for (const pid of portHolders(PORT)) {
+        log(`killing stale :${PORT} holder pid=${pid}`);
+        taskkill(pid);
+      }
+      await sleep(1200);
     }
-    await sleep(1200);
 
     const file = Bun.file(serverLog);
     const argv = [BUN, ...(CPUPROF ? ['--cpu-prof'] : []), ...(arg('preload', '') ? ['--preload', arg('preload')] : []), 'src/server.ts'];
-    log(`spawn: ${argv.join(' ')}`);
-    const srv = Bun.spawn(argv,
-      {
-        cwd: 'server_bun',
-        env: { ...process.env, FPS_PORT: String(PORT), FPS_NO_WT: '1' },
-        stdout: file,
-        stderr: file,
-        stdin: 'ignore',
-      },
-    );
-    kids.push(srv);
-    serverPid = srv.pid;
-    log(`server pid=${serverPid} (cpuprof=${CPUPROF}) — waiting for /health`);
-    const t0 = Date.now();
-    while (!(await healthOk(PORT))) {
-      if (Date.now() - t0 > 20000) {throw new Error('server never came up — see ' + serverLog);}
-      if (srv.exitCode !== null) {throw new Error(`server exited ${srv.exitCode} — see ${serverLog}`);}
-      await sleep(500);
+    let srv: ReturnType<typeof Bun.spawn> | null = null;
+    // Retry on successive ports — a holder that slips between the scan
+    // and the bind (or a TIME_WAIT ghost netstat misses) is skipped, not fatal.
+    for (let p = PORT || 8100; p < 8200; p++) {
+      PORT = p;
+      srv = Bun.spawn(argv,
+        {
+          cwd: 'server_bun',
+          env: { ...process.env, FPS_PORT: String(PORT), FPS_NO_WT: '1', FPS_BOOT: BOOT },
+          stdout: file,
+          stderr: file,
+          stdin: 'ignore',
+        },
+      );
+      track(srv, 'server');
+      serverPid = srv.pid;
+      log(`server pid=${serverPid} (cpuprof=${CPUPROF}, port=${PORT}) — waiting for /health`);
+      const t0 = Date.now();
+      while (!(await healthOk(PORT, BOOT))) {
+        if (srv.exitCode !== null) {break;}
+        if (Date.now() - t0 > 20000) {throw new Error('server never came up — see ' + serverLog);}
+        await sleep(500);
+      }
+      if (await healthOk(PORT, BOOT)) {break;}
+      if (!PINNED) {log(`port ${PORT} failed (server exited ${srv.exitCode}) — trying next`); continue;}
+      throw new Error(`server exited ${srv.exitCode} — see ${serverLog}`);
     }
+    if (!(await healthOk(PORT, BOOT))) {throw new Error('no bindable port — see ' + serverLog);}
     log('server up');
   } else {
     serverPid = portHolders(PORT)[0] ?? 0;
@@ -154,18 +187,18 @@ try {
     })()
     : null;
   if (botArgs) {
-    kids.push(Bun.spawn(
+    track(Bun.spawn(
       [BUN, 'tools/netBot.ts', ...botArgs, '--mode', 'dm', '--net', 'ws', '--url', `ws://localhost:${PORT}/ws`],
       { cwd: 'server_bun', stdout: Bun.file(`_tools/devin_scratch/profload_rooms.log`), stderr: Bun.file(`_tools/devin_scratch/profload_rooms.log`), stdin: 'ignore' },
-    ));
+    ), 'netBot');
   } else {
     const per = Math.ceil(BOTS / ROOMS.length);
     for (const room of ROOMS) {
       const blog = Bun.file(`_tools/devin_scratch/profload_${room}.log`);
-      kids.push(Bun.spawn(
+      track(Bun.spawn(
         [BUN, 'tools/netBot.ts', '--bots', String(per), '--room', room, '--mode', 'dm', '--net', 'ws', '--url', `ws://localhost:${PORT}/ws`, ...specArgs],
         { cwd: 'server_bun', stdout: blog, stderr: blog, stdin: 'ignore' },
-      ));
+      ), `netBot:${room}`);
     }
   }
   log(`${BOTS} bots across ${ROOMS.length} rooms — settling ${SETTLE}s`);
@@ -173,6 +206,7 @@ try {
 
   const m0 = await metrics(PORT);
   const players = (m0 as { players?: number } | null)?.players ?? 0;
+  if (players < Math.ceil(BOTS * 0.75)) {log(`WARNING players=${players} < expected ${BOTS} — bots died or never joined (see profload_*.log); measurement is suspect`);}
   log(`players=${players} — measuring ${SECS}s`);
   measured = await cpuPct(serverPid, SECS);
   const m1 = await metrics(PORT);
@@ -200,6 +234,7 @@ try {
       log(`profile: server_bun/${profs[profs.length - 1]}`);
     } catch { /* shutdown raced the kill below — non-fatal */ }
   }
+  DONE = true;
   if (!KEEP) {killAll('done');}
   else {log(`--keep: leaving ${kids.length} children running`);}
 }

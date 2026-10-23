@@ -318,8 +318,8 @@ class WireBot {
     }}
   }
 
-  private onJsonText(data: string): void {
-    const m = JSON.parse(data);
+  private onJsonText(data: string | any): void {
+    const m = typeof data === 'string' ? JSON.parse(data) : data;
     switch (m.type) {
       case 'wireIds': {
         for (const [id, pid] of Object.entries(m.add as Record<string, string>)) {
