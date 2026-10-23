@@ -31,7 +31,7 @@ function bootServer() {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-describe('sim clock vs wall clock (networked soak)', () => {
+describe.skipIf(!process.env.FPS_SOAK)('sim clock vs wall clock (networked soak)', () => {
   const env = bootServer();
   const bots: { nc: NetClient; bot: NetBot }[] = [];
 

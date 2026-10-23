@@ -65,11 +65,10 @@ describe('scenario: bombard', () => {
     const w = watch(room);
     const [a, b] = twoPlayers(room);
     const pb = room.players.getPlayer(b.id)!;
-    // The slug carries ~98m before dirt contact (x≈18) — firing from x=-80
-    // puts the crumble point ~1.4m from a bystander placed just PAST it
-    // (ball never reaches them), inside the 2m sphere's rim band.
+    // The slug crumbles on dirt at ~(14.6, 29.4) — the bystander stands
+    // ~1.4m past it (ball never reaches them), inside the 2m rim band.
     freeze(room, a.id, { x: -80, y: 62, z: 0 });
-    freeze(room, b.id, { x: 19.4, y: 29, z: 0 });
+    freeze(room, b.id, { x: 16.0, y: 29, z: 0 });
     room.players.getPlayer(a.id)!.armorClass = 'heavy';
     const hp0 = pb.health;
     // knockback rides sendToPlayer, not broadcast — intercept like the

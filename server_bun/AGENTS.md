@@ -5,7 +5,9 @@ The authority. If a client's claim and the sim disagree, the sim wins.
 ## Commands
 
 ```bash
-bun test                    # gate: must stay green before commit
+bun test                    # gate: must stay green before commit (~50s)
+FPS_SOAK=1 bun test         # + netbot real-socket soaks, simClock 30s,
+                            # sessionFuzz, fastSoak (~3min)
 bun test tests/scenarios/   # staged gameplay interactions
 bunx tsc --noEmit
 bun src/server.ts           # run (FPS_PORT, FPS_MAP, FPS_SBOTS,

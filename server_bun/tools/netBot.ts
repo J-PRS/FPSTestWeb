@@ -712,7 +712,9 @@ class WireBot {
     // server spawns the authoritative shell off dir+weapon-speed and
     // echoes shotId on projectileCreated (the 'shot' type never
     // existed on the wire — every spawn + claim silently rejected).
-    this.sendBin(encodeShot({ weaponType, dir, pos: { x: s.pos.x, y: s.pos.y + 1.6, z: s.pos.z } }));
+    // pos IS the eye/crosshair — Quake-style, no +1.6 bump (the server
+    // spawns at the same eye pos; a bump here mismatches the origin).
+    this.sendBin(encodeShot({ weaponType, dir, pos: { x: s.pos.x, y: s.pos.y, z: s.pos.z } }));
     // Muzzle velocity = dir*speed + 50% shooter velocity — the SAME
     // inheritance the server applies (RoomProjectiles.spawn). The pid
     // binding below matches the echo's velocity, so the claim must

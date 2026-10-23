@@ -97,22 +97,18 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   if (deps.lazyPlayer().thirdPerson) {_spawnOrigin.y -= SHOULDER_DROP;}
   // INSTANT SHOOTING: Spawn projectile locally immediately for LAN-like feel.
   // Server-mirrored spawn (server-simmed weapons only): the authority
-  // spawns this shell at rewindPos(0.7·transit) + 1.6 eye-height with
-  // shadow-vel inherit — the shadow's pos ≈ our pos 0.7·(rtt/2) ago, its
-  // vel ≈ ours (rtt/2) ago. Mirroring those epochs means the predicted
-  // shell flies the server's arc even when the create echo can't beat
-  // the fuse (the bind:-1 traj-outlier class on WAN). Offline/no-history
-  // keeps the live muzzle spawn.
+  // spawns this shell at rewindPos(0.7·transit) — pos.y IS the eye
+  // (Quake-style crosshair spawn, no offset) — with shadow-vel inherit.
+  // Mirroring that epoch means the predicted shell flies the server's
+  // arc even when the create echo can't beat the fuse (the bind:-1
+  // traj-outlier class on WAN). Offline/no-history keeps the live
+  // muzzle spawn.
   let spawnAt = _spawnOrigin;
   if (serverSimmed(config.weaponType)) {
     const rtt = deps.lazyNetworkManager().serverPingMs ?? deps.lazyNetworkManager().getPing();
     const m = mirroredSpawn(deps.world.localPosHistory, rtt);
     if (m) {
-      // +1.6 mirrors the authority's muzzle bump above its shadow's eye
-      // pos (CombatHandler spawns at rewindPos.y+1.6) — without it the
-      // predicted arc births 1.6m under the server's, the flat-flyer
-      // spawn-arc divergence class.
-      _mirroredOrigin.set(m.x, m.y + 1.6, m.z);
+      _mirroredOrigin.set(m.x, m.y, m.z);
       spawnAt = _mirroredOrigin;
     }
   }

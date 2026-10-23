@@ -14,7 +14,7 @@ const N_BOTS = Number(process.env.FPS_SOAK_BOTS ?? 64);
 const WINDOWS = Number(process.env.FPS_SOAK_WINDOWS ?? 6);
 const JOIN_GATE_MS = Number(process.env.FPS_SOAK_JOIN_MS ?? 60_000);
 
-describe('netbot — stress soak', () => {
+describe.skipIf(!process.env.FPS_SOAK)('netbot — stress soak', () => {
   const { spawn, bots, sleep, until, env } = mkNetbots();
   /** Server-side outbox depth for a bot's conn — the discriminator at
    *  stall verdicts: >256KB means the server is lawfully sparse-shedding

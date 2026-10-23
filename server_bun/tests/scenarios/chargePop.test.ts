@@ -11,7 +11,7 @@ type Player = ReturnType<typeof twoPlayers>[number];
 /** One beam tick = one shotFired Lightning intent — the room's honest
  *  ray (beamSweep) names the contact and the charge economy pays it. */
 function beamTick(room: Room, shooter: Player, victim: Player): void {
-  const eye = { x: shooter.position.x, y: shooter.position.y + 1.6, z: shooter.position.z };
+  const eye = { x: shooter.position.x, y: shooter.position.y, z: shooter.position.z };
   const dir = {
     x: victim.position.x - eye.x,
     y: (victim.position.y - 0.9) - eye.y,
@@ -28,18 +28,18 @@ function beamTick(room: Room, shooter: Player, victim: Player): void {
 /** Fire a real intent — the server sims the shell toward the victim and
  *  owns the hit itself; the shooter only ever declares direction. */
 function shootAt(room: Room, shooter: Player, victim: Player, weapon: WeaponType): void {
-  // Aim at the capsule's axis midpoint: position.y is the capsule TOP
-  // (centerOff is negative), so chest-height guesses sail overhead.
+  // Aim at the capsule's axis midpoint: position.y is the eye, so
+  // position.y - 0.9 lands on chest height (centerOff is negative).
   const dir = {
     x: victim.position.x - shooter.position.x,
-    y: (victim.position.y - 0.9) - (shooter.position.y + 1.6),
+    y: (victim.position.y - 0.9) - (shooter.position.y),
     z: victim.position.z - shooter.position.z,
   };
   const len = Math.hypot(dir.x, dir.y, dir.z) || 1;
   room.messages.handleMessage(shooter.id, {
     type: 'shotFired', weaponType: weapon,
     dir: { x: dir.x / len, y: dir.y / len, z: dir.z / len },
-    pos: { x: shooter.position.x, y: shooter.position.y + 1.6, z: shooter.position.z },
+    pos: { x: shooter.position.x, y: shooter.position.y, z: shooter.position.z },
   } as never);
   // The shell needs flight time to reach the victim — step the sim.
   step(room, Math.ceil(len / (getWeaponStats(weapon).speed || 90) * 30) + 5);

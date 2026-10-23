@@ -84,7 +84,7 @@ const field = hmParseBin(new Uint8Array(readFileSync(
 // FPS_SOAK_MS=<ms> runs a longer warp from the CLI for profiling.
 const WALL_BUDGET_MS = Number(process.env.FPS_SOAK_MS ?? 10_000);
 
-describe('scenario: warp soak throughput', () => {
+describe.skipIf(!process.env.FPS_SOAK)('scenario: warp soak throughput', () => {
   afterAll(() => simNowReset());
 
   it('steps a full 16-bot room flat-out for the wall budget', () => {

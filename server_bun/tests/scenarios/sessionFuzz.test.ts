@@ -59,7 +59,7 @@ interface Peek {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-describe('session lifecycle conformance fuzz', () => {
+describe.skipIf(!process.env.FPS_SOAK)('session lifecycle conformance fuzz', () => {
   let gs: GameServer | undefined;
   afterEach(() => gs?.stop());
 

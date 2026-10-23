@@ -170,7 +170,7 @@ describe('shotFired relay', () => {
     expect(m.type).toBe('playerShot');
     expect(m.id).toBe('p1');
     expect(m.weaponType).toBe(3);
-    expect(m.pos).toEqual({ x: 5, y: 11.6, z: -3 }); // eye offset over the stamped feet pos
+    expect(m.pos).toEqual({ x: 5, y: 10, z: -3 }); // pos.y IS the eye — crosshair spawn, no bump
     expect(m.dir).toEqual({ x: 1, y: 0, z: 0 });
     expect(broadcasts[0]!.exclude).toBe('p1');
   });

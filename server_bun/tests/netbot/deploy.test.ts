@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 import { mkNetbots } from './helpers.ts';
 
-describe('netbot — real clients over real sockets', () => {
+describe.skipIf(!process.env.FPS_SOAK)('netbot — real clients over real sockets', () => {
   const { spawn, bots, sleep } = mkNetbots();
 
   it('a deploy claim lands on every observer — deploySpawn/deployables wire coverage', async () => {

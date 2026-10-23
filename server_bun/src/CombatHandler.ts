@@ -394,7 +394,7 @@ w.n += 1;
         weaponType: WeaponType.Melee, excludeTargetId: null,
       });
       const meleeWid = this.deps.widOf?.(playerId);
-      const muzzle = { x: mpos.x, y: mpos.y + 1.6, z: mpos.z };
+      const muzzle = { x: mpos.x, y: mpos.y, z: mpos.z };
       if (meleeWid !== undefined && this.deps.wireCast) {
         this.deps.wireCast(encodeShotEv(meleeWid, msg.weaponType, muzzle, msg.dir), 'volatile', playerId);
       } else {
@@ -418,7 +418,7 @@ w.n += 1;
       const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
       const l = dhypot3(dir.x, dir.y, dir.z) || 1;
       this.beamPay(playerId, player, this.deps.beamSweep(playerId,
-        { x: mpos.x, y: mpos.y + 1.6, z: mpos.z },
+        { x: mpos.x, y: mpos.y, z: mpos.z },
         { x: dir.x / l, y: dir.y / l, z: dir.z / l }, LG_RANGE));
     }
     // Beam intent (Shocklance): one zap per pull-out cycle — the intent
@@ -435,7 +435,7 @@ w.n += 1;
       const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
       const l = dhypot3(dir.x, dir.y, dir.z) || 1;
       this.lancePay(playerId, player, this.deps.beamSweep(playerId,
-        { x: mpos.x, y: mpos.y + 1.6, z: mpos.z },
+        { x: mpos.x, y: mpos.y, z: mpos.z },
         { x: dir.x / l, y: dir.y / l, z: dir.z / l }, LANCE_RANGE));
     }
     // Beam intent (Repair): same shape — the tick is the intent and the
@@ -449,7 +449,7 @@ w.n += 1;
       const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
       const l = dhypot3(dir.x, dir.y, dir.z) || 1;
       const id = this.deps.repairTarget(playerId,
-        { x: mpos.x, y: mpos.y + 1.6, z: mpos.z },
+        { x: mpos.x, y: mpos.y, z: mpos.z },
         { x: dir.x / l, y: dir.y / l, z: dir.z / l }, REPAIR_RANGE);
       if (id !== null) {this.deps.repair?.(playerId, id);}
     }
@@ -513,7 +513,7 @@ win.violations += 1;
       const lagS = typeof msg.fireAt === 'number'
         ? Math.min(Math.max((wallNow() - msg.fireAt) / 1000, 0), 5) : 0;
       const id = fireProjectile(playerId, msg.weaponType!,
-        { x: at.x, y: at.y + 1.6, z: at.z },
+        { x: at.x, y: at.y, z: at.z },
         { x: dir!.x / l, y: dir!.y / l, z: dir!.z / l },
         player.velocity, msg.shotId, lagS);
       if (id) {
@@ -540,15 +540,15 @@ win.violations += 1;
     // moved simmed weapons off the else-branch throttle).
     if (now - (this.lastFireNotify.get(playerId) ?? 0) < 50) {return;}
     this.lastFireNotify.set(playerId, now);
-    // Eye offset over the stamped feet pos — the original relay contract
-    // (fb7f2a94); the muzzle flash paints at eye level, not the ground.
+    // pos.y IS the eye (screen center) — the muzzle relays right off it,
+    // Quake-style, no bump (a +1.6 would double-offset over the crosshair).
     const shotWid = this.deps.widOf?.(playerId);
     if (shotWid !== undefined && this.deps.wireCast) {
-      this.deps.wireCast(encodeShotEv(shotWid, msg.weaponType, { x: at.x, y: at.y + 1.6, z: at.z }, msg.dir), 'volatile', playerId);
+      this.deps.wireCast(encodeShotEv(shotWid, msg.weaponType, { x: at.x, y: at.y, z: at.z }, msg.dir), 'volatile', playerId);
     } else {
       this.broadcast({
         type: 'playerShot', id: playerId, weaponType: msg.weaponType,
-        pos: { x: at.x, y: at.y + 1.6, z: at.z }, dir: msg.dir,
+        pos: { x: at.x, y: at.y, z: at.z }, dir: msg.dir,
       }, playerId);
     }
   }

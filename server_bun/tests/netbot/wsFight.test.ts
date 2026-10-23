@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 import { mkNetbots, nd } from './helpers.ts';
 
-describe('netbot — real clients over real sockets', () => {
+describe.skipIf(!process.env.FPS_SOAK)('netbot — real clients over real sockets', () => {
   const { spawn, bots, sleep, untilProgress, env } = mkNetbots();
 
   it('bots fight over real WS with jittered claims — every legit claim resolves', async () => {

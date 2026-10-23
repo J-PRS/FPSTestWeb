@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 import { mkNetbots } from './helpers.ts';
 
-describe('netbot — real clients over real sockets', () => {
+describe.skipIf(!process.env.FPS_SOAK)('netbot — real clients over real sockets', () => {
   const { spawn, bots, env, until } = mkNetbots();
 
   it('the server RTT probe lands: serverTransitEma feeds the shadow — the unforgeable channel is live end-to-end', async () => {

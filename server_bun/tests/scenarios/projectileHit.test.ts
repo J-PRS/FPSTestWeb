@@ -31,6 +31,25 @@ describe('scenario: direct projectile', () => {
     expect(target!.health).toBeLessThan(hp);
   });
 
+  it('the authoritative shell spawns at pos.y — the eye/crosshair, no muzzle bump', () => {
+    // PIN: pos.y IS the networked eye point (Quake-style crosshair spawn).
+    // A "+1.6 muzzle offset" here births the shell 1.6m ABOVE the reticle —
+    // replicas and authority diverge at spawn (the traj-outlier class) and
+    // point-blank shots arc over shoulder-high targets. Do not re-add it.
+    const room = mkRoom({ bots: 2 });
+    const w = watch(room);
+    const bots = [...room.players.getAllPlayers().values()].filter((p) => p.isBot);
+    const shooter = bots[0]!;
+    freeze(room, shooter.id, { x: 0, y: 32, z: 0 });
+    room.messages.handleMessage(shooter.id, {
+      type: 'shotFired', weaponType: WeaponType.Disc, dir: { x: 1, y: 0, z: 0 }, shotId: 'pin-eye',
+    } as never);
+    const created = w.msgs.filter((m) => m.type === 'projectileCreated');
+    expect(created.length).toBeGreaterThan(0);
+    const pos = (created[0]! as { position: { y: number } }).position;
+    expect(pos.y).toBe(shooter.position.y);
+  });
+
   it('spawn protection eats the hit instead of the player', () => {
     const room = mkRoom({ bots: 2 });
     const w = watch(room);
