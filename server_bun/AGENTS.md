@@ -42,4 +42,7 @@ bun src/server.ts           # run (FPS_PORT, FPS_MAP, FPS_SBOTS,
   health writes; `applyDamage` is silent, callers emit the wire events.
 - Sims step deterministically: no `Date.now()`/wall-clock decisions;
   tests drive `step(dt)`. Respawn timers are the known wall-clock edge.
-- `bun --watch` does NOT reload `../shared/` — restart for shared edits.
+- `bun --watch` does NOT reload `../shared/` — but `dev-watch.ts` (the
+  supervisor that actually runs the child) watches shared/ + src/ and
+  respawns after a 30s debounce; `curl http://127.0.0.1:8000/dev/shutdown`
+  forces it immediately. Don't taskkill — the supervisor respawns anyway.

@@ -18,6 +18,15 @@ bash _tools/check.sh --fastest                    # quick compile+lint probe (~3
 # on index_root.txt — a new/removed root entry fails until accepted or moved.
 # Windows clean stack: .\devup.bat = reap stale dev procs (_tools/reap.mjs)
 # + free :5400/:8000 + launch both. run_all.bat = same without the reaper.
+# === GAME SERVER RESTARTS — READ BEFORE TOUCHING PROCESSES ===
+# NEVER taskkill server_bun. dev-watch.ts supervises it: a dead child
+# respawns within ~5s anyway, so kills race the supervisor and waste a
+# cycle. To reload new code (incl. shared/, which --watch misses):
+#   curl http://127.0.0.1:8000/dev/shutdown
+# or just wait — file changes auto-restart after a 30s debounce.
+# Graceful close frames + seat handoff; players ride through.
+# The supervised child has FPS_ADMIN_TOKEN=devdemo — ops routes
+# (/metrics /status /wire /admin/*) take ?key=devdemo.
 E2E_GPU=1 bun _tools/e2e/all.ts                  # headless E2E — ALWAYS run with real GPU
 # browser.ts GL backends: default SwiftShader is SLOW — GLB loads take
 # 60-90s+, sim time crawls, and timing assertions flake. Never run
@@ -30,6 +39,12 @@ E2E_GPU=1 bun _tools/e2e/all.ts                  # headless E2E — ALWAYS run w
 # waitForFunction.
 bun _tools/e2e/perf.ts --compare _tools/e2e/baseline.json   # perf regression vs baseline
 bash _tools/check.sh                             # DEFINITION OF DONE — run before handing back
+bun _tools/profload.ts --bots 64 --secs 40       # server CPU under real-socket load: tracked
+                                                # children, port preflight, JSON report, no zombies.
+                                                # --cpuprof (graceful flush), --attach, --sweep
+                                                # (kill every stale netBot proc). NEVER hand-spawn
+                                                # netBot/server backgrounds — they outlive the
+                                                # measurement and contaminate the next one.
 bash _tools/review.sh                            # dump diff + verifier prompt for a fresh-context review agent
 # bun: export PATH="$HOME/.bun/bin:$PATH"   (Windows, Git Bash)
 # Windows: plain `bash` is WSL and its git counts every CRLF file as
