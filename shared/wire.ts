@@ -958,6 +958,14 @@ export function evScratch(len: number): { u8: Uint8Array; dv: DataView } {
   return { u8, dv: evDv };
 }
 
+/** True when `u8` is a view into the shared ring — any sink that RETAINS
+ *  the frame past the next evScratch() call must copy. Queued outbox
+ *  frames are the hazard: >128 distinct encodes before flush wraps the
+ *  ring and rewrites the queued bytes into a different event. */
+export function isEvScratch(u8: Uint8Array): boolean {
+  return u8.buffer === evBuf;
+}
+
 export const WIRE_E_JUMP = 0x14;
 export const WIRE_E_JET = 0x15;
 export const WIRE_E_LANDED = 0x16;

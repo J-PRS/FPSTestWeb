@@ -8,6 +8,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import { ConnectionManager } from '../../src/ConnectionManager.ts';
+import { evScratch, iterBatch } from '../../../shared/wire.ts';
 import { FakeWs } from './chaos.ts';
 import type { ServerWebSocket } from 'bun';
 import type { WebSocketData, ServerMessage } from '../../src/types.ts';
@@ -75,6 +76,33 @@ describe('netcode chaos: frame aliasing + journal replay', () => {
     const bFirst = wsB.sentRaw[0] as Uint8Array;
     expect(aFirst[0]).toBe(0xAA);
     expect(bFirst[0]).toBe(0xBB);
+  });
+
+  it('queued evScratch frames survive a ring wrap — bytes must not morph mid-window', () => {
+    // The 128-slot evScratch ring recycles — a collect window queuing
+    // >128 distinct event frames wraps and overwrites the queued views:
+    // a queued playerHit would flush as whatever the 129th encode wrote
+    // (the missing-damage class). push() must copy retained ring views.
+    const cm = new ConnectionManager();
+    const ws = new FakeWs('a');
+    cm.register('a', asWs(ws));
+    cm.beginCollect();
+    // 200 distinct small frames through evScratch — wraps the ring.
+    const originals: number[] = [];
+    for (let i = 0; i < 200; i++) {
+      const { u8 } = evScratch(8);
+      u8[0] = i & 0xFF;
+      cm.sendBinaryToPlayer('a', u8.subarray(0, 8));
+      originals.push(i & 0xFF);
+    }
+    cm.flushOutboxes();
+    // Every queued frame flushed in one batch — decode the subframes and
+    // verify each still carries its OWN tag byte, not a wrapped sibling's.
+    const sent = ws.sentRaw[0] as Uint8Array;
+    const seen: number[] = [];
+    for (const sub of iterBatch(sent)) {seen.push(sub[0] ?? -1);}
+    expect(seen.length).toBe(200);
+    expect(seen).toEqual(originals);
   });
 
   it('journaled binary events replay verbatim, interleaved in seq order with JSON', () => {

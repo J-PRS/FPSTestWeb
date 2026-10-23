@@ -3,7 +3,7 @@ import type { WebSocketData, ServerMessage } from './types.ts';
 import { logger } from './logger.ts';
 import { wallNow } from './wallClock.ts';
 import { wireTx, BIN_KIND } from './wireMeter.ts';
-import { encodeBatch, encodeWireJson, tickFrameScratch, type TickFrameScratch } from '../../shared/wire.ts';
+import { encodeBatch, encodeWireJson, tickFrameScratch, isEvScratch, type TickFrameScratch } from '../../shared/wire.ts';
 
 /** Tick frames are drop-safe (peers extrapolate), so a socket that can't
  *  drain must not queue them unboundedly — a stalled connection otherwise
@@ -113,6 +113,12 @@ export class ConnectionManager {
   }
   beginCollect(): void { this.collecting = true; }
   private push(pid: string, frame: Uint8Array): void {
+    // evScratch views are only valid until the ring wraps (128 encodes)
+    // — a queued frame would otherwise flush as a DIFFERENT event
+    // (a playerHit arriving as a knock: the missing-damage class).
+    // Copy only what needs retention; immediate ws.send consumes the
+    // scratch synchronously and stays alloc-free.
+    if (isEvScratch(frame)) {frame = frame.slice();}
     let q = this.outbox.get(pid);
     if (!q) {q = []; this.outbox.set(pid, q);}
     q.push(frame);
