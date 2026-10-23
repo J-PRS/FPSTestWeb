@@ -47,6 +47,12 @@ class Logger {
     return LEVEL_PRIORITY[level] >= LEVEL_PRIORITY[this.level];
   }
 
+  /** Cheap public probe so hot paths can skip building args the level
+   *  would discard — logger.debug(msg, obj) still evaluates `obj`. */
+  enabled(level: LogLevel): boolean {
+    return this.shouldLog(level);
+  }
+
   private format(level: LogLevel, msg: string, data?: unknown): string {
     const elapsed = ((performance.now() - this.startTime) / 1000).toFixed(3);
     const prefix = `[${elapsed.padStart(8, ' ')}s] [${level.toUpperCase().padEnd(5, ' ')}]`;

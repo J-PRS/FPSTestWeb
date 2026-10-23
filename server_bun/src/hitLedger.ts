@@ -68,7 +68,7 @@ export class HitLedger {
           if (acc > 0) {c.chargeBank.discharge(shooterId, v, Math.min(acc, damage));}
         }
       }
-      logger.debug(opts.label, Object.assign({}, {shooter: shooterId,target: targetId,damage,targetHealth: result.newHealth}, opts.extra));
+      if (logger.enabled('debug')) {logger.debug(opts.label, Object.assign({}, {shooter: shooterId,target: targetId,damage,targetHealth: result.newHealth}, opts.extra));}
       const hitMsg = { shooterId, targetId, damage, health: result.newHealth, armor: result.newArmor, seq: (this.hitSeq += 1), shotId: opts.shotId, gd: opts.gd };
       // Binary lane when wireIds resolve (players, 'environment' → wid 0);
       // JSON broadcast stays the fallback for harnesses and unminted ids.
@@ -172,7 +172,7 @@ export class HitLedger {
       const mh = shooter ? perkMods(shooter.perk).meleeHeal : 0;
       if (shooter && mh > 0 && !shooter.isDead) {healPool(shooter, shooter.maxHealth * mh); steal = true;}
     }
-    logger.info(`${opts.label} → kill`, Object.assign({}, {shooter: shooterId,target: targetId,damage}, opts.extra));
+    if (logger.enabled('info')) {logger.info(`${opts.label} → kill`, Object.assign({}, {shooter: shooterId,target: targetId,damage}, opts.extra));}
     const shooterStreak = shooterId === 'environment' ? undefined
       : (c.playerManager.getPlayer(shooterId)?.streak ?? 0) + 1;
     // Binary lane when wireIds resolve — durable journal either way

@@ -51,6 +51,45 @@ describe('netcode chaos: wire layer', () => {
     expect(bTypes).toEqual(['for-b', 'for-all', 'not-for-a']);
   });
 
+  it('journaled binary events replay verbatim, interleaved in seq order with JSON', () => {
+    // playerHit/playerKill ride broadcastBinaryReliable now — the damage
+    // stream a reclaim must replay. If binary frames skipped the journal
+    // or reordered against JSON, a reconnecting client silently loses
+    // hits — the "missing damage" failure class.
+    const cm = new ConnectionManager();
+    const hit = new Uint8Array([0x13, 0xAA, 1, 2, 3]);      // WIRE_HIT kind byte
+    const kill = new Uint8Array([0x19, 0xBB, 4, 5, 6]);
+    for (let i = 0; i < 5; i++) {cm.broadcast({ type: 'chat', playerId: 'x', text: `j${i}` } as ServerMessage);}
+    cm.broadcastBinaryReliable(hit, true);                  // journaled
+    for (let i = 0; i < 5; i++) {cm.broadcast({ type: 'chat', playerId: 'x', text: `k${i}` } as ServerMessage);}
+    cm.broadcastBinaryReliable(kill, 'volatile');
+    cm.broadcastBinaryReliable(new Uint8Array([0x14, 0xCC])); // unjournaled — never replays
+
+    const ws = new FakeWs('a');
+    cm.register('a', asWs(ws));
+    // Replay from seq 5 — should see the hit (6), k0..k4 (7-11), kill (12).
+    const n = cm.replayTo('a', asWs(ws), 5);
+    expect(n).toBe(7);
+    expect(ws.sentRaw[0]).toBeInstanceOf(Uint8Array);
+    expect(Array.from(ws.sentRaw[0] as Uint8Array)).toEqual([0x13, 0xAA, 1, 2, 3]);
+    expect(ws.sentRaw[6]).toBeInstanceOf(Uint8Array);
+    expect(Array.from(ws.sentRaw[6] as Uint8Array)).toEqual([0x19, 0xBB, 4, 5, 6]);
+    // The JSON middle is strings, order preserved around the binary frames.
+    expect(JSON.parse(ws.sentRaw[1] as string).text).toBe('k0');
+  });
+
+  it('volatile binary honors only/exclude addressing on replay', () => {
+    const cm = new ConnectionManager();
+    const knock = new Uint8Array([0x18, 1, 2, 3]);
+    cm.sendBinToPlayerReliable('a', knock, 'volatile');     // only=a
+    cm.broadcastBinaryReliable(new Uint8Array([0x17, 9]), 'volatile', 'a'); // exclude=a
+    const ws = new FakeWs('a');
+    cm.register('a', asWs(ws));
+    const n = cm.replayTo('a', asWs(ws), 0);
+    expect(n).toBe(1);
+    expect(Array.from(ws.sentRaw[0] as Uint8Array)).toEqual([0x18, 1, 2, 3]);
+  });
+
   it('volatile cues replay while fresh — durable facts always replay', () => {
     const cm = new ConnectionManager();
     cm.broadcast({ type: 'playerShot', id: 'shot-1' } as ServerMessage); // volatile
