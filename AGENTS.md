@@ -20,7 +20,10 @@ bash _tools/check.sh --fastest                    # quick compile+lint probe (~3
 # + free :5400/:8000 + launch both. run_all.bat = same without the reaper.
 node _tools/procs.mjs            # list every repo-rooted process (zombie check)
 node _tools/procs.mjs --kill [regex]  # kill them (whole trees) — check.sh
-# already kills a previous check.sh run this way at startup.
+# already kills a previous check.sh run this way at startup; pre-commit
+# sweeps silently; _tools/sweep.bat + install-sweep.bat = 2h Scheduled Task.
+# Long/background commands always get a timeout — fire-and-forget is how
+# the 278h hung processes got here.
 # === GAME SERVER RESTARTS — READ BEFORE TOUCHING PROCESSES ===
 # NEVER taskkill server_bun. dev-watch.ts supervises it: a dead child
 # respawns within ~5s anyway, so kills race the supervisor and waste a
