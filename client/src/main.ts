@@ -1019,6 +1019,8 @@ async function init(): Promise<void> {
   // connectPhase (online paths gate on the session veil instead).
   if (classicMode || (!urlParams.room && !urlParams.p2p)) {player.freezeInput();}
   gameLoop.start();
+  // Offline clip renderer drives real render passes off the rAF cadence.
+  if (demoManager) {demoManager.renderNow = (dt: number): void => gameLoop.renderFrame(dt);}
 
   const connP = connectPhase(netCtx, bootSaved?.map ?? null, classicMode, mode);
 

@@ -321,7 +321,9 @@ function tickEntities(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>
   deps.world.soloConquest?.tick(dt);
   perf.mark('bots');
   if (!demoPlaying) {deps.combat()?.updateProjectiles(dt);}
-  deps.demoLifecycle().updatePlaybackProjectiles(dt);
+  // Offline clip render steps this with demo-dt per output frame —
+  // a wall-dt tick here would make shells fly at render speed.
+  if (!deps.lazyDemoManager()?.offlineRender) {deps.demoLifecycle().updatePlaybackProjectiles(dt);}
   perf.mark('proj');
 }
 
@@ -885,7 +887,7 @@ function tickVeil(deps: GameLoopDeps, st: LoopState, rawElapsed: number): void {
   }
 }
 
-export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(): Promise<void>; } {
+export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(): Promise<void>; renderFrame(dt: number): void; } {
   let lastTime = 0;
   let renderElapsed = 0;
   const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, gpuLevel: 0, cpuLevel: 0, cpuBound: false, headroomAccum: 0, autoPixel: false, fxCursor: 0, fxJobs: [], shadowAcc: 0, renderAcc: 0, autoCap: null, warmN: 0, warmed: false, veilStable: 0, veilFrames: 0, bootWarmup: new BootWarmup() };
@@ -1114,5 +1116,8 @@ export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(
     whenStable(): Promise<void> {
       return st.bootWarmup.whenStable();
     },
+    /** One synchronous render pass, callable off the rAF cadence — the
+     *  offline clip renderer drives it per output frame. */
+    renderFrame,
   };
 }

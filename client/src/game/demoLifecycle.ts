@@ -376,6 +376,10 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
     }
   };
 
+  // Offline clip render advances playback projectiles/beams by step-dt,
+  // not the wall dt the game loop hands updatePlaybackProjectiles.
+  demoManager.onPlaybackTick = (dt: number): void => { updatePlaybackProjectiles(d, dt); };
+
   // Recording source: every remote player the world knows about. Bot
   // entries ('bot:'-prefixed) ride along too — they're in the same map.
   // The sample buffer + objects are reused between calls — the recorder

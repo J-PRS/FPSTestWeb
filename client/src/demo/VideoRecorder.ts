@@ -366,8 +366,14 @@ export class VideoRecorder {
    *  frame while recording staged (from the render loop, so the WebGL
    *  buffer is still live). contain-fit + black bars, same letterbox math
    *  a player expects from a 16:9 export of a non-16:9 window. */
+  // Held during offline clip render — stepped frames go to renderClip's
+  // own encoder, not the realtime ring.
+  suspended = false;
+
+  get canvasEl(): HTMLCanvasElement | null { return this.canvas; }
+
   pump(): void {
-    if (!this.canvas) {return;}
+    if (!this.canvas || this.suspended) {return;}
     const src = this.canvas;
     if (this.staged && this.stageCtx) {
       const scale = Math.min(STAGE_W / src.width, STAGE_H / src.height);

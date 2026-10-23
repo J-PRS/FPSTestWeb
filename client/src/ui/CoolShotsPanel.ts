@@ -168,6 +168,11 @@ export class CoolShotsPanel {
       this.overlay.style.display = 'none';
       this.requestLock();
     });
+    act('Render MP4 (fast)', (): void => {
+      this.demoManager.exportCoolShotMp4Rendered(shot.id).catch((): void => undefined);
+      this.overlay.style.display = 'none';
+      this.requestLock();
+    });
     this.overlay.append(menu);
     // Clamp into the viewport — anchored top-left of the cursor, flips up/
     // left when it would overflow an edge.

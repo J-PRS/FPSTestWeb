@@ -16,6 +16,7 @@ import { feedMode } from '../feed/feedMode.js';
 import * as demoIO from './demoIO.js';
 import { getHeightfield } from '../world/heightmap.js';
 import { buildDemoUI, wirePlayerCallbacks } from './demoWire.js';
+import { renderClip } from './renderClip.js';
 
 export type { CoolShotEntry } from './coolShots.js';
 
@@ -91,6 +92,19 @@ export class DemoManager implements demoIO.DemoIOHost {
   onPlaybackStop?: () => void;
   onPlaybackSeek?: () => void;
   onPlaybackStart?: () => void;
+
+  /** Off-rAF render hook (gameLoop.renderFrame) — the offline clip
+   *  renderer calls it once per authored output frame. */
+  renderNow?: (dt: number) => void;
+
+  /** True while renderClip owns the demo clock — gates every wall-dt
+   *  path that would otherwise double-advance playback state (replica
+   *  ticks in update(), projectile/beam integration in the game loop). */
+  offlineRender = false;
+  /** Stepped playback-world tick (projectiles + beams) — demoLifecycle
+   *  assigns updatePlaybackProjectiles so the render loop advances them
+   *  at demo rate instead of wall rate. */
+  onPlaybackTick?: (dt: number) => void;
 
   constructor() {
     this.recorder = new DemoRecorder();
@@ -257,6 +271,72 @@ export class DemoManager implements demoIO.DemoIOHost {
     this.videoExportArmedAt = Date.now();
     this.pendingExportShotId = id;
     this.coolShotMgr.playById(id);
+  }
+
+  /** Cool-shot context-menu "RENDER MP4": offline stepped render — scrubs
+   *  the demo at fixed 1/60 steps and encodes authored-timestamp frames,
+   *  so the mp4 is frame-perfect at any machine speed and usually done
+   *  faster than the clip's wall duration. The realtime capture path
+   *  (EXPORT MP4) stays for comparison. shortcut: video-only — playback
+   *  SFX still fires live during the render but doesn't land in the
+   *  file; upgrade path is an OfflineAudioContext pass. */
+  async exportCoolShotMp4Rendered(id: string): Promise<void> {
+    if (!this.renderNow) { this.ui.setStatus('render unavailable'); return; }
+    if (this.offlineRender) { this.ui.setStatus('render already running'); return; }
+    const shot = this.coolShotMgr.list.find((s): boolean => s.id === id);
+    if (!shot) { this.ui.setStatus('clip missing'); return; }
+    if (!this.video.hasCanvas) {
+      const [canvas] = [...document.querySelectorAll('canvas')].toSorted((a, b): number => b.width * b.height - a.width * a.height);
+      if (canvas) {this.video.setCanvas(canvas);}
+    }
+    const canvas = this.video.canvasEl;
+    if (!canvas) { this.ui.setStatus('no canvas'); return; }
+    const data = await this.coolShotMgr.resolveClipData(shot);
+    if (!data) { this.ui.setStatus('clip missing'); return; }
+
+    // Parked playback: mode 'playing' arms playbackMode/onPlaybackState so
+    // scrubs drive the scene, but player stays paused so the live loop's
+    // player.update() doesn't double-advance the clock.
+    if (this.mode === 'recording') {this.stopRecording();}
+    this.player.setLoop(false);
+    this.player.load(data);
+    this.mode = 'playing';
+    this.ui.setPlaying(true);
+    this.onPlaybackStart?.();
+    this.player.pause();
+
+    this.ui.setStatus('rendering mp4…');
+    this.video.suspended = true;
+    this.offlineRender = true;
+    const renderFrame = this.renderNow;
+    const blob = await renderClip({
+      player: this.player,
+      canvas,
+      renderFrame,
+      snapRemotes: (dt): void => { this.onRemotePlayback?.(this.player.getRemoteStates(), dt); },
+      tickFx: (dt): void => { this.onPlaybackTick?.(dt); },
+      armSeek: (): void => { this.onPlaybackSeek?.(); },
+      // ESC/stopPlayback flips mode to 'idle' — bail rather than write
+      // an mp4 of an empty scene.
+      abort: (): boolean => this.mode !== 'playing',
+      start: 0,
+      end: data.header.duration,
+      fps: 60,
+    }).finally((): void => { this.video.suspended = false; this.offlineRender = false; });
+
+    // Park at the end like a finished realtime playback — ESC/stop from
+    // here walks the normal cleanup path. If the user already stopped,
+    // mode is 'idle' — leave it.
+    if (this.mode === 'playing') {this.mode = 'paused';}
+    this.ui.setPlaying(false);
+    if (!blob) { this.ui.setStatus('render failed'); return; }
+    const name = `kribes_render_${demoIO.timestampStr()}.mp4`;
+    const ok = await clipSink.saveClip(name, blob);
+    if (ok) {
+      shot.mp4Name = name;
+      clipSink.exportClip(name);
+    }
+    this.ui.setStatus(ok ? 'mp4 rendered' : 'video failed');
   }
 
   get isRecording(): boolean { return this.mode === 'recording'; }
@@ -427,7 +507,9 @@ export class DemoManager implements demoIO.DemoIOHost {
       this.coolShotMgr.tick();
     } else if (this.mode === 'playing') {
       this.player.update(dt);
-      this.onRemotePlayback?.(this.player.getRemoteStates(), dt);
+      // Offline render drives replica pose+anim from the stepper —
+      // a wall-dt feed here would run anims at render speed, not demo rate.
+      if (!this.offlineRender) {this.onRemotePlayback?.(this.player.getRemoteStates(), dt);}
       // onTimeUpdate callback handles ui.setTime during playback
     } else if (this.mode === 'paused') {
       // Keep UI in sync (e.g. after seek while paused)
