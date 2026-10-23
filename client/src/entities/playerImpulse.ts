@@ -44,6 +44,10 @@ export function beltThrowReady(beltTimer: number, throwLockT: number): boolean {
 
   // Weapon triggers: selected weapon (LMB) plus C/F belt throws.
 export function fireWeapons(p: Player): void {
+    // Dead men don't fire — there was no gate here (belt releases already
+    // guard isDead), so holding the trigger through a death spammed
+    // shotFired intents the server rejects as 'Shot: shooter dead'.
+    if (p.isDead) { p.input.firePending = false; return; }
     let wid = p.armory.secondaryWid ?? p.loadout[p.weaponIndex];
     wid = unshoulderOnPull(p, wid);
     const def = weaponDef(wid);

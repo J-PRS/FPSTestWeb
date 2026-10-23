@@ -102,7 +102,12 @@ export class SnapshotBuffer {
   /** EMA of the observed arrival interval — send suppression stretches it
    *  well past the nominal 20Hz without being jitter. */
   arrivalInterval = 50;
-  private arrivalJitter = 0;
+  /** Recent raw arrival gaps (unsorted ring ≤32) + reusable sorted copy.
+   *  The p90 of real gaps is the jitter cushion the delay needs to cover —
+   *  an EMA of |gap−interval| breathes ±100ms on WAN noise and lags tier
+   *  changes, so a stable stream pays for jitter it no longer has. */
+  private arrivalGaps: number[] = [];
+  private gapsSorted: number[] = [];
 
   /** Push a server update; returns the arrival gap in ms (0 = first sample).
    *  `t` is the snapshot's SERVER time; `arriveMs` the client wall time it
@@ -136,28 +141,29 @@ export class SnapshotBuffer {
       // sits past the buffer and the remote mini-warps).
       const rate = gap > this.arrivalInterval * 2 ? 0.6 : 0.15;
       this.arrivalInterval += (gap - this.arrivalInterval) * rate;
-      this.arrivalJitter += (Math.abs(gap - this.arrivalInterval) - this.arrivalJitter) * 0.1;
-      // The delay must cover a full arrival interval, not just jitter:
-      // interest-tier suppression streams at 500ms spacing, and a 300ms
-      // cap leaves renderTime permanently past the newest snapshot —
-      // far remotes then freeze on the extrapolation clamp and step at
-      // the send rate instead of interpolating.
-      // Speed-scaled cap: delay × speed is rendered position error —
-      // a 40m/s remote at 600ms sits 24m behind truth. Faster remotes
-      // get less delay (more extrapolation), walkers keep the cushion.
+      this.arrivalGaps.push(gap);
+      if (this.arrivalGaps.length > 32) {this.arrivalGaps.shift();}
+      this.gapsSorted.length = 0;
+      this.gapsSorted.push(...this.arrivalGaps);
+      this.gapsSorted.sort((a, b) => a - b);
+      const p90gap = this.gapsSorted[Math.floor((this.gapsSorted.length - 1) * 0.9)]!;
+      // The delay must cover a worst-ish arrival interval, not a noise
+      // estimate: the p90 gap IS the coverage need — one late packet in
+      // ten may briefly extrapolate, the other nine render on truth.
       // BUT the floor is cadence coverage: a delay below the arrival
       // interval parks renderTime PERMANENTLY past the newest snapshot —
       // the body then renders ahead of wire truth on extrapolated
       // velocity every frame (WYSIWYG inversion: aiming at positions
       // the server never produced). Honest lag beats forward fiction.
+      // Speed-scaled cap as before: delay × speed = rendered meters.
       const spd = Math.hypot(vel.x, vel.y, vel.z);
-      const cadenceFloor = this.arrivalInterval + this.arrivalJitter * 2 + 60;
+      const cadenceFloor = Math.max(this.arrivalInterval, p90gap) + 40;
       const delayCap = spd > 5
         ? Math.min(SnapshotBuffer.MAX_INTERP_DELAY, Math.max(cadenceFloor, 4000 / spd))
         : SnapshotBuffer.MAX_INTERP_DELAY;
       const raw = Math.min(
         delayCap,
-        SnapshotBuffer.BASE_INTERP_DELAY + this.arrivalInterval + this.arrivalJitter * 2,
+        Math.max(cadenceFloor, SnapshotBuffer.BASE_INTERP_DELAY + p90gap),
       );
       // The TARGET also needs damping — a jittered WAN arrival swings
       // raw ±100ms between pushes, and even a slewed chase renders that
@@ -347,7 +353,9 @@ export class SnapshotBuffer {
    *  changes the buffer already saw). */
   sampleAt(t: number, outPos: THREE.Vector3): boolean {
     const snaps = this.snapshots;
-    if (snaps.length === 0) {return false;}
+    // NaN epoch (pre-first-sample viewEpochT) would silently interpolate
+    // at the a=NaN boundary and emit a garbage position — refuse it.
+    if (!Number.isFinite(t) || snaps.length === 0) {return false;}
     const newest = snaps[snaps.length - 1]!;
     if (t >= newest.t) {
       const ext = Math.min(SnapshotBuffer.MAX_EXTRAPOLATE, (t - newest.t) / 1000);

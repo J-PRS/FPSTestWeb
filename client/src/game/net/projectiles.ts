@@ -11,7 +11,7 @@ import { Explosion } from '../../effects/explosion.js';
 import { swingSwipe } from '../../effects/swingTrails.js';
 import { MELEE_RANGE, EXPLOSION_VFX_RADIUS, LG_RANGE, LG_BOUNCE_RANGE } from '../../core/config.js';
 import { noteShellFate, noteTrajDiv, parityProbes, parityMiss } from '../parity.js';
-import { mirroredSpawn } from '../combat/fire.js';
+import { histAt } from '../combat/fire.js';
 import type { NetCtx } from './ctx.js';
 const snapToContact = (p: Projectile, at?: { x: number; y: number; z: number }): number => {
   if (!at || !Number.isFinite(at.x + at.y + at.z)) {return -1;}
@@ -223,8 +223,16 @@ export function wireProjectiles(ctx: NetCtx): void {
     remoteProjectile.sweepLocal = (): THREE.Vector3 | null => {
       const pl = deps.lazyPlayer();
       if (pl.isDead) {return null;}
-      const rtt = nm().serverPingMs ?? nm().getPing();
-      const m = mirroredSpawn(deps.world.localPosHistory, rtt);
+      // Server-side ghost-back for OUR body is shooterUplink +
+      // shooterViewLagOfUs − ourUplink — under symmetric links the
+      // transit terms cancel and the remainder is the shooter's view
+      // lag, which we measure locally as viewLagMs on that remote.
+      // Fallback = our own one-way uplink (ping/2), not the old
+      // 0.35·rtt estimate that sat between the epochs of nothing.
+      const rp = deps.world.remotePlayers.get(ownerId);
+      const backMs = rp && rp.viewLagMs > 0 ? rp.viewLagMs
+        : (nm().serverPingMs ?? nm().getPing() ?? 0) / 2;
+      const m = histAt(deps.world.localPosHistory, backMs);
       if (!m) {return pl.pos;}
       _sweepGhost.set(m.x, m.y, m.z);
       return _sweepGhost;

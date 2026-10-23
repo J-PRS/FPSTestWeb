@@ -92,6 +92,9 @@ export class RemotePlayer {
     // The shooter's view epoch IS a server-time in the snapshot buffer —
     // sample the real history (turns, landings, bounces) instead of
     // projecting wire+vel, which missed direction changes by 15-25m.
+    // Dead reckoning owns the body — the drawn position IS the view, and
+    // the buffer's frozen epoch would sample a pre-sim ghost instead.
+    if (this.interp.simulating) {return out.copy(this.position);}
     const epoch = this.interp.viewEpochT;
     if (Number.isFinite(epoch) && this.interp.sampleGhostAt(epoch, out)) {return out;}
     // No rendered frame yet (pre-buffer boot) — project the wire record.

@@ -102,8 +102,29 @@ export class RemoteInterp {
    *  not a fixed 200ms constant that understates jittered links. */
   get interpDelay(): number { return this.net.interpDelay; }
   /** Actual staleness of the last drawn sample (delay minus extrapolation
-   *  overshoot) — the shooter's literal view epoch for lag-comp reports. */
-  get viewLagMs(): number { return this.net.viewLagMs; }
+   *  overshoot) — the shooter's literal view epoch for lag-comp reports.
+   *  While simulating, the buffer's sample clock is frozen and its
+   *  viewLagMs degrades to 0 — but converge drags the drawn body METERS
+   *  behind the wire head, so a 0-rewind validates a spot nobody saw.
+   *  There is no epoch to rewind to (the sim path never existed server-
+   *  side), so report the rewindable quantity: the behind-drift
+   *  converted to time. A leading free-run has no past truth → 0. */
+  get viewLagMs(): number {
+    if (!this._simulating) {return this.net.viewLagMs;}
+    const w = this.lastServerPosition;
+    if (w.lengthSq() === 0) {return 0;}
+    const dx = w.x - this.h.position.x, dy = w.y - this.h.position.y, dz = w.z - this.h.position.z;
+    const drift = Math.hypot(dx, dy, dz);
+    if (drift < 0.5) {return 0;}
+    const v = this.h.serverVelocity.lengthSq() > 1 ? this.h.serverVelocity : this.simulatedVelocity;
+    const spd = v.length();
+    if (spd < 1) {return 0;}
+    // Only a clearly-AHEAD drift has no rewindable epoch (the wire never
+    // reached it). Behind OR off-path drift → report drift/speed: the
+    // rewind lands nearer the drawn body than the wire head did.
+    const ahead = ((this.h.position.x - w.x) * v.x + (this.h.position.y - w.y) * v.y + (this.h.position.z - w.z) * v.z) / spd > 0.6 * drift;
+    return ahead ? 0 : Math.min(1500, (drift / spd) * 1000);
+  }
   /** Server-time epoch of the last drawn frame — the shooter's literal
    *  view instant the lag-comp ghost samples at. */
   get viewEpochT(): number { return this.net.viewEpochT; }
@@ -237,7 +258,9 @@ export class RemoteInterp {
         this.simulatedVelocity.copy(this.h.serverVelocity);
       }
       this._simulating = true;
-      logger.debug(`STARTING dead reckoning`, { playerId: this.h.playerId, silentMs: timeSinceUpdate });
+      // underruns/atCap ride along so a soak can tell real starvation
+      // (buffer dry → sim earned) from a wall-clock-only entry.
+      logger.debug(`STARTING dead reckoning`, { playerId: this.h.playerId, silentMs: timeSinceUpdate, underruns: this.net.underruns, atCap: this.net.atExtCap });
     }
 
     if (this._simulating) {

@@ -74,9 +74,21 @@ const shellFates = new Map<string, { at: { x: number; y: number; z: number }; t:
 
 export function expectDamageEcho(victim: string, dmg: number, wt?: number, shotId?: string | null, at?: { x: number; y: number; z: number }, vWire?: { x: number; y: number; z: number }): void {
   parityProbes.echoesStamped += 1;
-  parityStamp('dmg-echo');
-  dmgEchoes.push({ victim, dmg, wt, shotId, at, vWire, t: performance.now() });
-  if (dmgEchoes.length > 32) {dmgEchoes.shift();}
+  // A multi-part blast stamps once per sub-shell on the same victim — a
+  // ClusterBomb fans into ~5 bomblets (wt:22, no shotId) that each splash
+  // the same player. That's ONE predicted outcome: if the queue held five
+  // entries, one wire hit confirmed a single splice and the other four
+  // expired as false ghost-misses. Merge same victim+wt+shotId stamps.
+  const shotKey = shotId ?? null;
+  const prev = dmgEchoes.find((e): boolean => e.victim === victim && e.wt === wt && (e.shotId ?? null) === shotKey);
+  if (prev) {
+    prev.dmg += dmg;
+    prev.t = performance.now(); // verdict window rides the last stamp
+  } else {
+    parityStamp('dmg-echo');
+    dmgEchoes.push({ victim, dmg, wt, shotId, at, vWire, t: performance.now() });
+    if (dmgEchoes.length > 32) {dmgEchoes.shift();}
+  }
 }
 
 export function confirmDamageEcho(victim: string): void {

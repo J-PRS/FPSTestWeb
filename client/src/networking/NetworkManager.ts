@@ -290,6 +290,9 @@ export class NetworkManager {
               // Offset cursor — a reclaim carries the last reliable ev we
               // saw so the server replays only the missed frames.
               resumeSeq: this.sessionToken ? this.wireIn.evWatermark : undefined,
+              // We own a session veil — hold the body off-spawn until the
+              // veil-drop sends 'ready' (or the 8s force timer).
+              spawnHold: true,
               room: urlParams.room ?? undefined,
               // Creation hints: explicit ?mode wins, then the persisted
               // join-spec — NOT fps-mode, which is the solo tab's pick
@@ -655,7 +658,17 @@ this.sendDrops += 1;
   bandwidth(): { up: number; down: number } {
     const now = performance.now();
     this.sweepLedgers(now);
-    if (this.bwT === 0) { this.bwT = now; return { up: 0, down: 0 }; }
+    if (this.bwT === 0) {
+      // First read ever. The per-frame poll lives in the perf HUD's counts
+      // callback, which early-returns while that panel is hidden — so the
+      // Alt+Q dump is usually the first caller and was showing 0.0/0.0 on
+      // a live link. Report the session average instead.
+      this.bwT = now;
+      this.bwLastTx = this.txBytes;
+      this.bwLastRx = this.rxBytes;
+      const dt0 = Math.max(0.5, (Date.now() - (this.connectedAtMs || Date.now())) / 1000);
+      return { up: this.txBytes / dt0, down: this.rxBytes / dt0 };
+    }
     const dt = (now - this.bwT) / 1000;
     if (dt >= 0.5) {
       this.bwUp = this.bwUp * 0.5 + ((this.txBytes - this.bwLastTx) / dt) * 0.5;
@@ -1211,6 +1224,12 @@ this.sendDrops += 1;
 
   sendSnapshotRequest(): void {
     this.send({ type: 'snapshotRequest' });
+  }
+
+  /** Spawn gate: the server holds the body off-world until this lands —
+   *  fires at session-veil drop (stable frames or the 8s force timer). */
+  sendReady(): void {
+    this.send({ type: 'ready' });
   }
 
   /** Alt-tab catch-up: ask the server to replay the full world state
