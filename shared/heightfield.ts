@@ -65,17 +65,16 @@ function hmField(f: Heightfield, wx: number, wz: number): number {
  *  (ws/5)² f64s per field ≈ 720KB at the 1500m default — f64 is
  *  load-bearing: f32 corners drift heights ~4µm, which deterministic
  *  sims amplify into visible route differences over minutes. */
-const chordTaps = new WeakMap<Heightfield, { span: number; cache: Float64Array }>();
+const chordTaps = new WeakMap<Heightfield, { span: number; cache: Float64Array } | null>();
 
 function chordCache(f: Heightfield): { span: number; cache: Float64Array } | null {
-  let e = chordTaps.get(f);
+  let e: { span: number; cache: Float64Array } | null | undefined = chordTaps.get(f);
   if (e === undefined) {
     const ws = f.worldScale ?? HM_WORLD_SCALE;
     // The chord lattice only tiles the wrap when ws is a multiple of the
     // step — a 2048m map drifts 2m per wrap, so it must keep live taps.
     const span = ws / CPU_STEP;
-    if (!Number.isInteger(span)) {e = null;}
-    else {
+    if (Number.isInteger(span)) {
       const cache = new Float64Array(span * span);
       for (let j = 0; j < span; j++) {
         for (let i = 0; i < span; i++) {
@@ -84,6 +83,7 @@ function chordCache(f: Heightfield): { span: number; cache: Float64Array } | nul
       }
       e = { span, cache };
     }
+    else {e = null;}
     chordTaps.set(f, e);
   }
   return e;
@@ -95,7 +95,7 @@ export function hmChord(f: Heightfield, wx: number, wz: number): number {
   const cc = chordCache(f);
   let h00: number, h10: number, h01: number, h11: number;
   if (cc) {
-    const span = cc.span, cache = cc.cache;
+    const {span} = cc, {cache} = cc;
     const xi0 = (((x0 / s) % span) + span) % span, zi0 = (((z0 / s) % span) + span) % span;
     const xi1 = (xi0 + 1) % span, zi1 = (zi0 + 1) % span;
     const b0 = zi0 * span, b1 = zi1 * span;
