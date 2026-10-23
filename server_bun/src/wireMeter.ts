@@ -16,6 +16,10 @@ function slot(pid: string): ConnBytes {
   return s;
 }
 
+/** Precomputed `bin:N` metering tags — a template literal per send was
+ *  ~25K string allocs/s of pure bookkeeping churn. */
+export const BIN_KIND: readonly string[] = Array.from({ length: 256 }, (_, i) => `bin:${i}`);
+
 export function wireRx(pid: string | undefined, bytes: number, kind?: string): void {
   total.rxB += bytes; total.rxF += 1;
   const s = slot(pid ?? '');

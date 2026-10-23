@@ -19,7 +19,7 @@ import { MatchJournal } from './matchJournal.ts';
 import { RoomSwitcher } from './roomSwitch.ts';
 import { SessionRegistry } from './sessionRegistry.ts';
 import { wallNow } from './wallClock.ts';
-import { wireRx } from './wireMeter.ts';
+import { wireRx, BIN_KIND } from './wireMeter.ts';
 import { ConnectionManager } from './ConnectionManager.ts';
 import type { TeamId } from '../../shared/teams.ts';
 import type { ClientMessage } from '../../shared/protocol.ts';
@@ -200,12 +200,18 @@ export class GameServer {
   }
 
   onMessage(ws: ServerWebSocket<WebSocketData>, message: string | ArrayBuffer | Uint8Array): void {
+    // Wrap first: the binary metering tag needs byte 1 — a DataView +
+    // string per frame was ~50K throwaway allocs/s at load.
+    const u8 = typeof message === 'string'
+      ? undefined
+      : message instanceof ArrayBuffer
+        ? new Uint8Array(message)
+        : new Uint8Array(message.buffer, message.byteOffset, message.byteLength);
     wireRx(ws.data.playerId, typeof message === 'string' ? Buffer.byteLength(message) : message.byteLength,
-      typeof message === 'string' ? `j:${/^.{0,30}?"type":"?([a-zA-Z]+)/.exec(message)?.[1] ?? '?'}` : `bin:${message instanceof ArrayBuffer ? new DataView(message).getUint8(1) : message[1]}`);
+      u8 === undefined ? `j:${/^.{0,30}?"type":"?([a-zA-Z]+)/.exec(message as string)?.[1] ?? '?'}` : BIN_KIND[u8[1]!]!);
     // Binary hot path: [0x54] magic frames skip JSON entirely.
     // Currently only `position` (28B, replaces a ~140B JSON message at 20Hz).
-    if (typeof message !== 'string') {
-      const u8 = message instanceof ArrayBuffer ? new Uint8Array(message) : new Uint8Array((message as Uint8Array).buffer, (message as Uint8Array).byteOffset, (message as Uint8Array).byteLength);
+    if (u8 !== undefined) {
       if (isWireFrame(u8)) {
         const existingId = ws.data.playerId;
         const room = existingId ? this.roomOfPlayer(existingId) : undefined;
@@ -259,7 +265,7 @@ export class GameServer {
       this.invalidWarn(ws.data.playerId, 'Unknown binary frame rejected');
       return;
     }
-    this.onJsonText(ws, message);
+    this.onJsonText(ws, message as string);
   }
 
   /** The text/JSON path — WS strings and WIRE_JSON frames share it. */

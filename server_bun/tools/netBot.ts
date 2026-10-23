@@ -36,7 +36,7 @@ const arg = (k: string, d: string): string => {
 // Accepts ws/wss URLs, pasted https tunnel URLs, or bare tunnel hosts —
 // the friend test uses `wss://<host>.trycloudflare.com/ws`.
 const normUrl = (u: string): string => {
-  if (!u.includes('://')) {u = `wss://${u.includes('.') ? u : u + '.trycloudflare.com'}`;}
+  if (!u.includes('://')) {u = `wss://${u.includes('.') ? u : `${u  }.trycloudflare.com`}`;}
   u = u.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:');
   if (!u.slice(u.indexOf('://') + 3).includes('/')) {u += '/ws';}
   return u;
@@ -44,6 +44,11 @@ const normUrl = (u: string): string => {
 const URL_ = normUrl(arg('url', 'ws://localhost:8000/ws'));
 const N = Number.parseInt(arg('bots', '8'), 10);
 const ROOM = arg('room', 'default');
+// --roomspec base=K: bot i joins `${base}-${(i % K) + 1}` — many small
+// rooms from one process (per-proc spawn limits otherwise cap room count).
+const ROOM_BASE = arg('roombase', '');
+const ROOM_K = Number.parseInt(arg('roomk', '0'), 10);
+const roomOf = (i: number): string => (ROOM_K > 0 && ROOM_BASE ? `${ROOM_BASE}-${(i % ROOM_K) + 1}` : ROOM);
 const MODE = arg('mode', 'dm');
 const POS_HZ = Number.parseInt(arg('posHz', '25'), 10);
 const FIRE = arg('fire', '1') !== '0';
@@ -198,9 +203,10 @@ class WireBot {
 
   private onLinkOpen(): void {
     this.send({
-      type: 'join', playerId: this.id, room: ROOM, mode: MODE,
+      type: 'join', playerId: this.id, room: roomOf(this.i), mode: MODE,
       transport: this.tier,
       perk: PERKS[this.i % PERKS.length], armorClass: this.armorClass,
+      ...(arg('spec', '') ? { map: arg('spec', '') } : {}),
     });
   }
 
@@ -246,7 +252,7 @@ class WireBot {
       // stale tail from earlier, larger frames.
       if (f) {for (let ui = 0; ui < f.count; ui++) {
         const u = f.updates[ui]!;
-        if (!u.playerId || u.playerId === this.id) continue;
+        if (!u.playerId || u.playerId === this.id) {continue;}
         // Merge — overwriting drops team/dead fields that only the
         // announce path carries, and would silently re-enable friendly
         // fire + corpse-shooting every tick.
@@ -277,7 +283,7 @@ class WireBot {
         this.roster.clear();
         this.wireIds.clear();
         this.tickPool.byId.clear();
-        if (m.wireIds) {for (const [id, pid] of Object.entries(m.wireIds as Record<string, string>)) this.wireIds.set(Number(id), pid);}
+        if (m.wireIds) {for (const [id, pid] of Object.entries(m.wireIds as Record<string, string>)) {this.wireIds.set(Number(id), pid);}}
         this.lastSeg.clear();
         this.balls.clear();
         this.crawls.clear();
@@ -323,8 +329,8 @@ class WireBot {
       case 'playerJoined': { this.roster.set(m.playerId, { pos: m.position, vel: { x: 0, y: 0, z: 0 }, team: m.team }); break;
       }
       case 'teamUpdate': {
-        if (m.playerId === this.id) this.team = m.team;
-        else { const r = this.roster.get(m.playerId); if (r) r.team = m.team; }
+        if (m.playerId === this.id) {this.team = m.team;}
+        else { const r = this.roster.get(m.playerId); if (r) {r.team = m.team;} }
         break;
       }
       case 'projectileCreated': {
@@ -335,7 +341,7 @@ class WireBot {
             c.exp > performance.now() &&
             c.wt === (m.weaponType ?? -1) &&
             Math.hypot(c.vx - m.velocity.x, c.vy - m.velocity.y, c.vz - m.velocity.z) < 1);
-          if (ci >= 0) this.pendingClaims.splice(ci, 1)[0]!.pid = m.projectileId;
+          if (ci !== -1) {this.pendingClaims.splice(ci, 1)[0]!.pid = m.projectileId;}
         }
         break;
       }
@@ -345,7 +351,7 @@ class WireBot {
       }
       case 'shotRejected': {
         stats.rejected++;
-        if (stats.rejected <= 10) console.log(`[netBot] ${this.id} shotRejected: ${m.reason}`);
+        if (stats.rejected <= 10) {console.log(`[netBot] ${this.id} shotRejected: ${m.reason}`);}
         break;
       }
       case 'crawlEvt': {
@@ -354,12 +360,12 @@ class WireBot {
           Math.hypot(m.velocity?.x ?? 0, m.velocity?.y ?? 0, m.velocity?.z ?? 0), m.t, m.kind);
         this.crawls.set(m.id, m.position);
         this.lastCreatureEvtAt = performance.now();
-        if (this.crawls.size > 300) this.crawls.clear();
+        if (this.crawls.size > 300) {this.crawls.clear();}
         break;
       }
       case 'pickupSpawn': { this.pickups.set(m.id, m.pos); break;
       }
-      case 'pickupGone': { this.pickups.delete(m.id); if (m.by === this.id) stats.gems++; break;
+      case 'pickupGone': { this.pickups.delete(m.id); if (m.by === this.id) {stats.gems++;} break;
       }
       case 'ballDie': { this.balls.delete(m.id); this.lastSeg.delete(`ball${m.id}`); break;
       }
@@ -371,17 +377,17 @@ class WireBot {
           const s = this.sim.state;
           s.pos.x = m.position.x; s.pos.y = m.position.y; s.pos.z = m.position.z;
           s.vel.x = m.velocity.x; s.vel.y = m.velocity.y; s.vel.z = m.velocity.z;
-          if (m.grounded !== undefined) s.onGround = m.grounded;
+          if (m.grounded !== undefined) {s.onGround = m.grounded;}
         }
         stats.corrections++;
         break;
       }
       case 'playerKill': {
         // Death arrives as a kill broadcast — the corpse goes quiet.
-        if (m.targetId === this.id) this.dead = true;
+        if (m.targetId === this.id) {this.dead = true;}
         else if (m.targetId) {
           const r = this.roster.get(m.targetId);
-          if (r) r.dead = true;
+          if (r) {r.dead = true;}
         }
         break;
       }
@@ -401,7 +407,7 @@ class WireBot {
         break;
       }
       case 'yourHealth': {
-        if (m.health <= 0) this.dead = true;
+        if (m.health <= 0) {this.dead = true;}
         break;
       }
       case 'teleport': {
@@ -640,7 +646,7 @@ class WireBot {
     // claim path, else the blast-landing path — both stay exercised.
     const direct = Math.random() < 0.5;
     const weaponType = WeaponType.Disc;
-    const speed = WEAPONS[weaponType].speed;
+    const {speed} = WEAPONS[weaponType];
     const dir = { x: (t.pos.x - s.pos.x) / dist, y: (t.pos.y - s.pos.y) / dist, z: (t.pos.z - s.pos.z) / dist };
     // A claim only resolves against a shell the ledger watched launch —
     // the spawn report goes first, the server-assigned id arrives on the

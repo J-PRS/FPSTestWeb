@@ -2,7 +2,7 @@ import type { ServerWebSocket } from 'bun';
 import type { WebSocketData, ServerMessage } from './types.ts';
 import { logger } from './logger.ts';
 import { wallNow } from './wallClock.ts';
-import { wireTx } from './wireMeter.ts';
+import { wireTx, BIN_KIND } from './wireMeter.ts';
 
 /** Tick frames are drop-safe (peers extrapolate), so a socket that can't
  *  drain must not queue them unboundedly — a stalled connection otherwise
@@ -158,9 +158,9 @@ export class ConnectionManager {
    *  socket stays open while events vanish, and the journal only
    *  replays on reclaim. A drop means this socket can't be trusted:
    *  close it so the client reclaims and replays honestly. */
-  private sendReliable(playerId: string, ws: ServerWebSocket<WebSocketData>, data: string | Uint8Array): void {
+  private sendReliable(playerId: string, ws: ServerWebSocket<WebSocketData>, data: string | Uint8Array, kind?: string): void {
     wireTx(playerId, typeof data === 'string' ? Buffer.byteLength(data) : data.byteLength,
-      typeof data === 'string' ? `j:${/^.{0,30}?"type":"?([a-zA-Z]+)/.exec(data)?.[1] ?? '?'}` : `bin:${data[1]}`);
+      kind ?? (typeof data === 'string' ? `j:${/^.{0,30}?"type":"?([a-zA-Z]+)/.exec(data)?.[1] ?? '?'}` : BIN_KIND[data[1]!]!));
     const status = ws.send(data);
     if (status === 0) {
       this.reliableDropped += 1;
@@ -170,7 +170,7 @@ export class ConnectionManager {
     }
   }
 
-  private frame(msg: ServerMessage, only?: string, exclude?: string): string {
+  private frame(msg: ServerMessage, only?: string, exclude?: string): { data: string; kind: string } {
     this.outSeq += 1;
     const seq = this.outSeq;
     const data = JSON.stringify(Object.assign({}, (msg as object), {ev: seq}));
@@ -184,7 +184,7 @@ export class ConnectionManager {
         this.onJournalWrap?.(n);
       }
     }
-    return data;
+    return { data, kind: `j:${(msg as { type: string }).type}` };
   }
 
   /** Reclaim replay — frames addressed to everyone or to this player that
@@ -261,13 +261,13 @@ export class ConnectionManager {
   sendToPlayer(playerId: string, msg: ServerMessage): void {
     // Journal BEFORE delivery — a frame aimed at a dead/grace socket is
     // exactly what reclaim replay must find later.
-    const data = this.frame(msg, playerId);
+    const f = this.frame(msg, playerId);
     const ws = this.connections.get(playerId);
     if (WIRESPY && (msg as { type?: string }).type === 'ping') {
       logger.warn('wirespy pingTick', { playerId, wsFound: Boolean(ws), rs: ws?.readyState });
     }
     if (ws && ws.readyState === 1 && this.drownCheck(playerId, ws) === 'ok') {
-      this.sendReliable(playerId, ws, data);
+      this.sendReliable(playerId, ws, f.data, f.kind);
     }
   }
 
@@ -294,7 +294,7 @@ export class ConnectionManager {
       this.drownCheck(playerId, ws);
       return 'backlogged';
     }
-    wireTx(playerId, data.byteLength, `bin:${data[1]}`);
+    wireTx(playerId, data.byteLength, BIN_KIND[data[1]!]!);
     ws.send(data);
     return 'sent';
   }
@@ -320,6 +320,7 @@ export class ConnectionManager {
   }
 
   broadcastBinaryReliable(data: Uint8Array): void {
+    const kind = BIN_KIND[data[1]!]!;
     const pub = ConnectionManager.publishFn;
     if (pub && this.topic && this.pubbed.size > 0) {pub(this.topic, data);}
     this.connections.forEach((ws, pid): void => {
@@ -327,36 +328,36 @@ export class ConnectionManager {
         // Published — keep the drown clock fed anyway: a dead reader on
         // the topic lane queues the same bytes without a per-conn drop
         // signal to catch it early.
-        wireTx(pid, data.byteLength, `bin:${data[1]}`);
+        wireTx(pid, data.byteLength, kind);
         this.drownSweep(pid, ws);
         return;
       }
-      if (ws.readyState === 1 && this.drownCheck(pid, ws) === 'ok') {this.sendReliable(pid, ws, data);}
+      if (ws.readyState === 1 && this.drownCheck(pid, ws) === 'ok') {this.sendReliable(pid, ws, data, kind);}
     });
   }
 
   broadcast(msg: ServerMessage, excludePlayerId?: string): void {
-    const data = this.frame(msg, undefined, excludePlayerId);
+    const f = this.frame(msg, undefined, excludePlayerId);
     if (WIRESPY && (msg as { type?: string }).type === 'projectileCreated') {
       logger.warn('wirespy broadcast', { type: 'projectileCreated', conns: [...this.connections.keys()] });
     }
     const pub = ConnectionManager.publishFn;
     if (pub && this.topic && excludePlayerId === undefined && this.pubbed.size > 0) {
-      pub(this.topic, data);
+      pub(this.topic, f.data);
       this.connections.forEach((ws, pid): void => {
         if (this.pubbed.has(pid)) {
-          wireTx(pid, data.length, `j:${/^.{0,30}?"type":"?([a-zA-Z]+)/.exec(data)?.[1] ?? '?'}`);
+          wireTx(pid, f.data.length, f.kind);
           this.drownSweep(pid, ws);
           return;
         }
-        if (ws.readyState === 1 && this.drownCheck(pid, ws) === 'ok') {this.sendReliable(pid, ws, data);}
+        if (ws.readyState === 1 && this.drownCheck(pid, ws) === 'ok') {this.sendReliable(pid, ws, f.data, f.kind);}
       });
       return;
     }
     this.connections.forEach((ws, pid): void => {
       if (excludePlayerId !== undefined && pid === excludePlayerId) {return;}
       if (ws.readyState === 1 && this.drownCheck(pid, ws) === 'ok') {
-        this.sendReliable(pid, ws, data);
+        this.sendReliable(pid, ws, f.data, f.kind);
       }
     });
   }

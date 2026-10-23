@@ -267,7 +267,7 @@ export function decodeInputMove(u8: Uint8Array): WireInputMove | null {
 // the lane, ~50ms earlier arrival on WT. Decode returns the JSON text;
 // the caller runs the normal parse+validate path on it.
 export function encodeWireJson(text: string): Uint8Array {
-  const bytes = new TextEncoder().encode(text);
+  const bytes = ENC.encode(text);
   const out = new Uint8Array(2 + bytes.length);
   out[0] = MAGIC;
   out[1] = WIRE_JSON;
@@ -277,7 +277,7 @@ export function encodeWireJson(text: string): Uint8Array {
 
 export function decodeWireJson(u8: Uint8Array): string | null {
   if (u8.length < 3 || u8[0] !== MAGIC || u8[1] !== WIRE_JSON) {return null;}
-  try { return new TextDecoder().decode(u8.subarray(2)); }
+  try { return DEC.decode(u8.subarray(2)); }
   catch { return null; }
 }
 
@@ -791,8 +791,8 @@ export function encodeProjSpawn(s: WireProjSpawn): Uint8Array {
   d.setUint8(o++, MAGIC); d.setUint8(o++, WIRE_PROJSPAWN);
   d.setUint32(o, s.projId >>> 0, true); o += 4;
   d.setUint16(o, s.ownerWireId, true); o += 2;
-  d.setUint8(o++, s.weaponType & 0xff);
-  d.setUint8(o++, s.pellet === undefined ? 0xff : s.pellet & 0xff);
+  d.setUint8(o++, s.weaponType & 0xFF);
+  d.setUint8(o++, s.pellet === undefined ? 0xFF : s.pellet & 0xFF);
   d.setFloat32(o, s.age, true); o += 4;
   d.setFloat64(o, s.t, true); o += 8;
   d.setFloat32(o, s.position.x, true); d.setFloat32(o + 4, s.position.y, true); d.setFloat32(o + 8, s.position.z, true); o += 12;
@@ -819,7 +819,7 @@ export function decodeProjSpawn(u8: Uint8Array): WireProjSpawn | null {
     if (o + n > u8.length) {return null;}
     shotId = DEC.decode(u8.subarray(o, o + n));
   }
-  return { projId, ownerWireId, weaponType, pellet: pelletB === 0xff ? undefined : pelletB, age, t, position, velocity, shotId };
+  return { projId, ownerWireId, weaponType, pellet: pelletB === 0xFF ? undefined : pelletB, age, t, position, velocity, shotId };
 }
 
 export interface WireProjGone {

@@ -140,14 +140,32 @@ try {
     log(`attached to :${PORT} server pid=${serverPid}`);
   }
 
-  // Load: N bots spread across rooms, one netBot proc per room.
-  const per = Math.ceil(BOTS / ROOMS.length);
-  for (const room of ROOMS) {
-    const blog = Bun.file(`_tools/devin_scratch/profload_${room}.log`);
+  // Load: one netBot proc unless --split; --roomspec R=N puts bots in
+  // N numbered rooms INSIDE one proc (roombase/roomk) — no spawn burst.
+  const roomSpec = arg('roomspec', '');
+  const specArgs = arg('spec') ? ['--spec', arg('spec'), '--map', `../maps/${arg('spec')}.bin`] : [];
+  const botArgs = roomSpec
+    ? ((): string[] => {
+      const [base, n] = roomSpec.split('=');
+      ROOMS.length = 0;
+      ROOMS.push(`${base}-1..${n}`);
+      return ['--bots', String(BOTS), '--roombase', base!, '--roomk', n!, ...specArgs];
+    })()
+    : null;
+  if (botArgs) {
     kids.push(Bun.spawn(
-      [BUN, 'tools/netBot.ts', '--bots', String(per), '--room', room, '--mode', 'dm', '--net', 'ws', '--url', `ws://localhost:${PORT}/ws`],
-      { cwd: 'server_bun', stdout: blog, stderr: blog, stdin: 'ignore' },
+      [BUN, 'tools/netBot.ts', ...botArgs, '--mode', 'dm', '--net', 'ws', '--url', `ws://localhost:${PORT}/ws`],
+      { cwd: 'server_bun', stdout: Bun.file(`_tools/devin_scratch/profload_rooms.log`), stderr: Bun.file(`_tools/devin_scratch/profload_rooms.log`), stdin: 'ignore' },
     ));
+  } else {
+    const per = Math.ceil(BOTS / ROOMS.length);
+    for (const room of ROOMS) {
+      const blog = Bun.file(`_tools/devin_scratch/profload_${room}.log`);
+      kids.push(Bun.spawn(
+        [BUN, 'tools/netBot.ts', '--bots', String(per), '--room', room, '--mode', 'dm', '--net', 'ws', '--url', `ws://localhost:${PORT}/ws`, ...specArgs],
+        { cwd: 'server_bun', stdout: blog, stderr: blog, stdin: 'ignore' },
+      ));
+    }
   }
   log(`${BOTS} bots across ${ROOMS.length} rooms — settling ${SETTLE}s`);
   await sleep(SETTLE * 1000);
