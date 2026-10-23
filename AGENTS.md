@@ -24,8 +24,10 @@ node _tools/procs.mjs --kill [regex]  # kill them (whole trees) — check.sh
 # sweeps silently; _tools/sweep.bat + install-sweep.bat = 2h Scheduled Task.
 # Long/background commands always get a timeout — fire-and-forget is how
 # the 278h hung processes got here.
-node _tools/health.mjs [--if-stale 24]  # knip + jscpd → _tools/health/latest.md
-# (LL-readable, gitignored; the scheduled sweep refreshes it daily.)
+node _tools/health.mjs [--if-stale 24] [--fast]
+# repo health → _tools/health/latest.md (LL-readable, gitignored; sweep
+# refreshes daily). Census: procs/git/branches/markers/disk + cycles vs
+# baseline + knip + jscpd. --fast = census only, skips the minute-plus audits.
 node _tools/shotwebp.mjs [--days N]     # shrink old shot PNGs → 80% webp in
 # place (sweep runs it; skips precision captures, referenced filenames, and
 # files <N days old). If a tool diffs a PNG, keep its name matching the
