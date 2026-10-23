@@ -2,6 +2,7 @@ import { monitorEventLoopDelay, type IntervalHistogram } from 'perf_hooks';
 import { CONFIG } from './config.js';
 import type { GameServer } from './GameServer.js';
 import { wallNow } from './wallClock.ts';
+import { SERVER_VERSION } from './version.ts';
 
 // Ops/metrics surface — totalPlayers, the server-browser card, the
 // /health row and the /metrics snapshot. GameServer is the host; these
@@ -29,6 +30,7 @@ export function getServerInfo(g: GameServer) {
     const uptimeS = Math.floor((wallNow() - g.ops.startedAt) / 1000);
     return {
       name: CONFIG.serverName,
+      version: SERVER_VERSION,
       region: CONFIG.serverRegion || undefined,
       tickRate: CONFIG.tickRate,
       maxPlayers: CONFIG.maxPlayers,
@@ -47,7 +49,7 @@ export function getHealthStatus(g: GameServer) {
     // loop is losing a real slice of the 50ms budget, not normal jitter.
     const lagBad = g.ops.tickLagSamples > 100 && g.ops.tickLagMsSum / g.ops.tickLagSamples > 20;
     const degraded = quarantined.length > 0 || lagBad;
-    return Object.assign({}, {status: degraded ? 'degraded' : 'running',players: totalPlayers(g),maxPlayers: CONFIG.maxPlayers,tickRate: CONFIG.tickRate,boot: process.env.FPS_BOOT ?? null}, (quarantined.length > 0 ? { quarantined } : {}), (lagBad ? { tickLagMsAvg: Number((g.ops.tickLagMsSum / g.ops.tickLagSamples).toFixed(1)) } : {}));
+    return Object.assign({}, {status: degraded ? 'degraded' : 'running',version: SERVER_VERSION,players: totalPlayers(g),maxPlayers: CONFIG.maxPlayers,tickRate: CONFIG.tickRate,boot: process.env.FPS_BOOT ?? null}, (quarantined.length > 0 ? { quarantined } : {}), (lagBad ? { tickLagMsAvg: Number((g.ops.tickLagMsSum / g.ops.tickLagSamples).toFixed(1)) } : {}));
   }
 
   /** Ops snapshot for /metrics — counts since boot plus tick-lag stats,

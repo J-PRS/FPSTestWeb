@@ -1,0 +1,56 @@
+name: Version bump
+
+# Every push to master advances the patch segment once (0.1.0 -> 0.1.1 ...),
+# so the manifest version counts landed pushes without anyone remembering to
+# bump it. The bot commit carries [skip ci]: it changes three version lines,
+# and re-running the full suite (or this workflow) on it would only burn time.
+# Pin a release by hand with `node _tools/bumpVersion.mjs --to X.Y.Z`.
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: version-bump
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Bump patch
+        run: node _tools/bumpVersion.mjs
+
+      - name: Commit and push
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "no version change"
+            exit 0
+          fi
+          V=$(node -p "require('./server_bun/package.json').version")
+          git config user.name "version-bot"
+          git config user.email "version-bot@users.noreply.github.com"
+          git add server_bun/package.json client/package.json client/package-lock.json
+          git commit -m "chore(version): $V [skip ci]"
+          # A push can land while this job runs; rebase onto it and retry
+          # rather than leaving master on the old version.
+          for i in 1 2 3 4; do
+            if git push origin HEAD:master; then exit 0; fi
+            git pull --rebase origin master
+            sleep $((i * 3))
+          done
+          echo "push failed after retries" >&2
+          exit 1
