@@ -19,6 +19,7 @@ import { MatchJournal } from './matchJournal.ts';
 import { RoomSwitcher } from './roomSwitch.ts';
 import { SessionRegistry } from './sessionRegistry.ts';
 import { wallNow } from './wallClock.ts';
+import { wireRx } from './wireMeter.ts';
 import type { TeamId } from '../../shared/teams.ts';
 
 interface RestoreSeat {
@@ -197,6 +198,7 @@ export class GameServer {
   }
 
   onMessage(ws: ServerWebSocket<WebSocketData>, message: string | ArrayBuffer | Uint8Array): void {
+    wireRx(ws.data.playerId, typeof message === 'string' ? Buffer.byteLength(message) : message.byteLength);
     // Binary hot path: [0x54] magic frames skip JSON entirely.
     // Currently only `position` (28B, replaces a ~140B JSON message at 20Hz).
     if (typeof message !== 'string') {

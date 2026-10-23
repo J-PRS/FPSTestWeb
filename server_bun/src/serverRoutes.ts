@@ -17,6 +17,7 @@ import { WEAPONSTATS_PAGE } from './weaponstatsPage.ts';
 import { STATUS_PAGE } from './statusPage.ts';
 import { logger } from './logger.ts';
 import { wallNow } from './wallClock.ts';
+import { wireMeterSnapshot } from './wireMeter.ts';
 
 export interface HttpCtx {
   gameServer: GameServer;
@@ -92,6 +93,9 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Reques
     '/health': (): Response => json(ctx.gameServer.getHealthStatus()),
     // Ops metrics — uptime, players, balls, tick-lag stats. Ops-gated.
     '/metrics': (url, req): Response => opsAllowed(req, url) ? json(ctx.gameServer.getMetrics()) : opsClosed(),
+    // Cumulative wire bytes per connection + total — diff two reads for
+    // a rate. Ops-gated like metrics.
+    '/wire': (url, req): Response => opsAllowed(req, url) ? json(wireMeterSnapshot()) : opsClosed(),
     // Server-browser card — identity + occupancy for master lists / LAN.
     '/serverinfo': (): Response => json(ctx.gameServer.getServerInfo()),
     // Lobby browse — live matches with occupancy.

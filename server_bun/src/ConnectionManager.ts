@@ -2,6 +2,7 @@ import type { ServerWebSocket } from 'bun';
 import type { WebSocketData, ServerMessage } from './types.ts';
 import { logger } from './logger.ts';
 import { wallNow } from './wallClock.ts';
+import { wireTx } from './wireMeter.ts';
 
 /** Tick frames are drop-safe (peers extrapolate), so a socket that can't
  *  drain must not queue them unboundedly — a stalled connection otherwise
@@ -145,6 +146,7 @@ export class ConnectionManager {
    *  replays on reclaim. A drop means this socket can't be trusted:
    *  close it so the client reclaims and replays honestly. */
   private sendReliable(playerId: string, ws: ServerWebSocket<WebSocketData>, data: string | Uint8Array): void {
+    wireTx(playerId, typeof data === 'string' ? Buffer.byteLength(data) : data.byteLength);
     const status = ws.send(data);
     if (status === 0) {
       this.reliableDropped += 1;
@@ -271,6 +273,7 @@ export class ConnectionManager {
       this.drownCheck(playerId, ws);
       return 'backlogged';
     }
+    wireTx(playerId, data.byteLength);
     ws.send(data);
     return 'sent';
   }
