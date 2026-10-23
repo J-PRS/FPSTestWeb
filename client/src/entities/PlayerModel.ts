@@ -30,7 +30,7 @@ const logger = new ChildLogger('PlayerModel');
 
 export type { AnimationState } from './playerClips.js';
 
-export type PlayerModelVariant = 'robot' | 'mannequin' | 'knight' | 'scifisoldier' | 'cybersoldier' | 'vexa' | 'polyart' | 'brute' | 'brawler' | 'scout';
+export type PlayerModelVariant = 'robot' | 'mannequin' | 'knight' | 'scifisoldier' | 'cybersoldier' | 'vexa' | 'polyart' | 'brute' | 'juggernaut' | 'brawler' | 'scout';
 
 export class PlayerModel {
   private scene: THREE.Scene;

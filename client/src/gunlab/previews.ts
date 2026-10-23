@@ -494,6 +494,7 @@ export const CLASSES: [label: string, build: () => THREE.Group][] = [
   ['medium', mkLineup([[CLASS_BODY_VARIANT.medium as PlayerModelVariant, SOLO_X, 'medium', 2.5, 'medium', CLASS_BODY_MAT_REV.has('medium'), CLASS_MODEL_SCALE.medium]])],
   ['heavy',  mkLineup([[CLASS_BODY_VARIANT.heavy as PlayerModelVariant, SOLO_X, 'heavy', 3.2, 'heavy', CLASS_BODY_MAT_REV.has('heavy'), CLASS_MODEL_SCALE.heavy]])],
   ['brute',  mkLineup([[BRUTE_ENTRY[0], SOLO_X, 'brute', 3, 'heavy', false]])],
+  ['juggernaut', mkLineup([['juggernaut' as PlayerModelVariant, SOLO_X, 'juggernaut', 3, 'heavy', false]])],
   ['brawler', mkLineup([[BRAWLER_ENTRY[0], SOLO_X, 'brawler', 2.4, 'medium', false]])],
   ['scout',  mkLineup([[SCOUT_ENTRY[0], SOLO_X, 'scout', 2, 'light', false]])],
   // Legacy class bodies — pre-swap rigs kept for side-by-side compare.

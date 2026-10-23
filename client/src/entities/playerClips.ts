@@ -220,6 +220,17 @@ export const RIG_MANIFEST: Record<string, RigManifest> = {
                              shoot: 'Pistol_Shoot', throw: 'Throw Object',
                              hit: 'Hit_Chest', death: 'Death_A' },
                     walkDirs: { L: 'Strafe_left', R: 'Strafe_right', B: 'Walk_Backwards' } },
+  // Preview-only for now (gunlab): no class maps here yet. Primitive plates
+  // from _tools/models/build_juggernaut.mjs over brute's skeleton and clips.
+  'juggernaut':   { url: '/assets/models/class_juggernaut.glb', yaw: 0, fitH: 2.8, sources: [],
+                    aimMask: true,
+                    gunLocal: [0.55, 0.7, -0.15],
+                    mount: { world: true, aimPin: true, size: 0.95, aimSeat: [-0.06, 0.1, 0.12] },
+                    anims: { idle: 'Idle_A', walk: 'Walk', run: 'Sprint',
+                             jump: 'Jump_2', ski: 'Jump_air', jet: 'Pistol_Aim_Neutral',
+                             shoot: 'Pistol_Shoot', throw: 'Throw Object',
+                             hit: 'Hit_Chest', death: 'Death_A' },
+                    walkDirs: { L: 'Strafe_left', R: 'Strafe_right', B: 'Walk_Backwards' } },
   // Same M2M skeleton + clip set as brute — brawler is the medium tier,
   // scout the light. Only silhouette and fit height differ.
   'brawler':      { url: '/assets/models/class_brawler.glb', yaw: 0, fitH: 2.3, sources: [],
