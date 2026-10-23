@@ -144,6 +144,24 @@ describe('netcode chaos: wire layer', () => {
     expect(ws.sentRaw.length).toBe(2);
   });
 
+  it('backlogged socket degrades to sparse keepalive — every 4th tick still rides', () => {
+    // Degrade-never-cull: a congested-but-draining link must keep SOME
+    // world state flowing (~5Hz) or its remotes freeze solid for the
+    // whole drown window — the bigSoak stall signature. The shed count
+    // stays honest: 3 of 4 still return 'backlogged'.
+    const cm = new ConnectionManager();
+    const ws = new FakeWs('a');
+    cm.register('a', asWs(ws));
+    cm.sendBinaryToPlayer('a', new Uint8Array(8)); // gate-open
+    ws.buffered = 300 * 1024;
+    ws.sentRaw.length = 0;
+    const verdicts: string[] = [];
+    for (let i = 0; i < 24; i++) {verdicts.push(cm.sendBinaryToPlayer('a', new Uint8Array(8)));}
+    expect(verdicts.filter((v) => v === 'backlogged').length).toBe(18);
+    expect(verdicts.filter((v) => v === 'sparse').length).toBe(6);
+    expect(ws.sentRaw.length).toBe(6);
+  });
+
   it('drowned socket gets marked, skipped, then closed after the window', () => {
     const cm = new ConnectionManager();
     let drowned = '';

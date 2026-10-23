@@ -78,9 +78,28 @@ describe('netbot — stress soak', () => {
       await sleep(8000);
       const after = t().map((x) => x.ticks);
       for (let i = 0; i < bots.length; i++) {
+        const b = bots[i]!;
+        const wasClosed = b.nc.closed;
+        if (wasClosed) {
+          // A socket that can't drain for SLOW_FOR_MS is closed as drowned —
+          // the designed terminal, and the production recovery is reclaim.
+          // Rejoining under the same seat is what the browser does; a bot
+          // that can't rejoin (or rejoins to a dead stream) is the actual
+          // failure, not the close itself.
+          try { await b.nc.connect(); } catch { /* stays closed — counted below */ }
+          // Dead for part of the window — liveness is asserted by the
+          // recovery itself and the end-of-soak not-still-closed check.
+          continue;
+        }
         const rate = (after[i]! - before[i]!) / 8; // ticks per second this window
         expect(rate, `bot ${i} tick stream stalled in window ${w} (link=${JSON.stringify(LINKS[i % LINKS.length])})`).toBeGreaterThan(2);
       }
+    }
+    // After the windows every client must be alive — reclaimed-or-never-
+    // dropped. A bot still closed after its rejoin attempts means the
+    // reclaim path failed under load, the real bug this soaks for.
+    for (const b of bots) {
+      expect(b.nc.closed, `bot ${b.nc.id} never recovered (close=${b.nc.closeInfo})`).toBe(false);
     }
 
     const t1 = t();
@@ -93,7 +112,7 @@ describe('netbot — stress soak', () => {
     let deadShots = 0;
     let rejects = 0;
     for (const x of t1) {for (const [reason, n] of x.rejects) {
-      if (reason.includes('shooter dead')) deadShots += n; else rejects += n;
+      if (reason.includes('shooter dead')) {deadShots += n;} else {rejects += n;}
     }}
     const corr = t1.map((x) => x.corrections).sort((a, b) => a - b);
     const pick = (q: number) => corr[Math.min(corr.length - 1, Math.floor(corr.length * q))];

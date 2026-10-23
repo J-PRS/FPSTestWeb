@@ -11,6 +11,12 @@ import { encodeBatch, encodeWireJson } from '../../shared/wire.ts';
  *  backlog the frame is dropped before it hits the send queue. Only the
  *  tick hot path is gated; reliable control/ball traffic still queues. */
 const MAX_TICK_BACKLOG = 256 * 1024;
+/** Sparse keepalive on backlogged sockets — every 4th tick rides through
+ *  (~5Hz at 20Hz) instead of all-or-nothing silence. A congested-but-
+ *  draining link keeps remotes alive at degrade cadence (interest
+ *  philosophy: degrade, never cull); a truly dead reader still feeds the
+ *  drown clock and closes on the same schedule. */
+const SHED_KEEPALIVE = 4;
 
 /** Join-burst hold: a freshly seated client's outbox carries gameState +
  *  rosters + wireIds (often >256KB) while its main thread is still busy
@@ -307,6 +313,7 @@ export class ConnectionManager {
       this.tickDrained.delete(playerId);
       this.pubbed.delete(playerId);
       this.drownSweepAt.delete(playerId);
+      this.shedPhase.delete(playerId);
       this.outbox.delete(playerId);
       if (this.topic && typeof ws.unsubscribe === 'function') {ws.unsubscribe(this.topic);}
       logger.info(`Connection unregistered`, { playerId, total: this.connections.size });
@@ -336,28 +343,45 @@ export class ConnectionManager {
    *  stream-2 (reliable, HoL-isolated) once the binLane caps handshake
    *  lands — measured ~33% seq loss on the QUIC datagram lane makes it
    *  unfit as the primary state lane (see _docs/2026-10-18_NETCODE_DEEP_DIVE_3). */
-  /** Returns 'sent' | 'held' | 'backlogged' | 'gone' — 'held' is the
-   *  intro gate (counted separately, not a loss); 'backlogged' is a real
-   *  shed; a closing socket isn't a dropped frame. */
-  sendBinaryToPlayer(playerId: string, data: Uint8Array): 'sent' | 'held' | 'backlogged' | 'gone' {
+  /** Returns 'sent' | 'held' | 'backlogged' | 'sparse' | 'gone' — 'held'
+   *  is the intro gate (counted separately, not a loss); 'backlogged' is
+   *  a real shed; 'sparse' is the 1-in-SHED_KEEPALIVE keepalive that still
+   *  rode through on a backlogged socket (sent, but the socket is
+   *  degraded); a closing socket isn't a dropped frame. */
+  sendBinaryToPlayer(playerId: string, data: Uint8Array): 'sent' | 'held' | 'backlogged' | 'sparse' | 'gone' {
     const ws = this.connections.get(playerId);
     if (!ws || ws.readyState !== 1) {return 'gone';}
     const buffered = (ws as unknown as { getBufferedAmount?(): number }).getBufferedAmount?.() ?? 0;
     if (!this.tickDrained.has(playerId)) {
-      if (buffered > INTRO_DRAIN_FLOOR) {return 'held';}
+      if (buffered > INTRO_DRAIN_FLOOR) {
+        // A held socket PAST the backlog cap isn't a fresh join catching
+        // up — it never drains at all. Pinning it at 'held' starves the
+        // client of every tick AND never starts the drown clock (the
+        // bigSoak alive-but-stalled signature): degrade it like a backlog.
+        if (buffered > MAX_TICK_BACKLOG) {return this.sparseOrShed(playerId, ws, data);}
+        return 'held';
+      }
       this.tickDrained.add(playerId); // first clean sample — gate opens
     }
-    if (buffered > MAX_TICK_BACKLOG) {
-      // Backlogged sockets ALSO feed the drown clock — the cap sheds
-      // frames but a reader that never drains must still be closed, or
-      // a tick-only client lingers forever below DROWN_BYTES.
-      this.drownCheck(playerId, ws);
-      return 'backlogged';
-    }
+    if (buffered > MAX_TICK_BACKLOG) {return this.sparseOrShed(playerId, ws, data);}
     wireTx(playerId, data.byteLength, BIN_KIND[data[1]!]!);
     if (this.collecting) {this.push(playerId, data); return 'sent';}
     ws.send(data);
     return 'sent';
+  }
+
+  /** Over-cap lane: SHED_KEEPALIVE-1 of N frames shed, the Nth rides
+   *  through at degrade cadence. Backlogged sockets ALSO feed the drown
+   *  clock — the cap sheds frames but a reader that never drains must
+   *  still be closed, or a tick-only client lingers below DROWN_BYTES. */
+  private sparseOrShed(playerId: string, ws: ServerWebSocket<WebSocketData>, data: Uint8Array): 'backlogged' | 'sparse' {
+    this.drownCheck(playerId, ws);
+    const n = (this.shedPhase.get(playerId) ?? 0) + 1;
+    if (n < SHED_KEEPALIVE) {this.shedPhase.set(playerId, n); return 'backlogged';}
+    this.shedPhase.set(playerId, 0);
+    wireTx(playerId, data.byteLength, BIN_KIND[data[1]!]!);
+    if (this.collecting) {this.push(playerId, data);} else {ws.send(data);}
+    return 'sparse';
   }
 
   /** Correctness-critical binary (ball segments) — always the reliable
@@ -372,6 +396,9 @@ export class ConnectionManager {
    *  a buffered sample — once per DROWN_SWEEP_MS per conn, not per frame
    *  (a native getBufferedAmount per broadcast×conn was a hot remnant). */
   private drownSweepAt = new Map<string, number>();
+  /** Per-conn shed phase — counts backlogged ticks so every SHED_KEEPALIVE-th
+   *  still rides through (sparse keepalive); reset on unregister. */
+  private shedPhase = new Map<string, number>();
   private static DROWN_SWEEP_MS = 250;
   private drownSweep(pid: string, ws: ServerWebSocket<WebSocketData>): void {
     const now = wallNow();
