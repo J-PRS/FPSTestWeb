@@ -32,6 +32,10 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-10-22_SPECTATE_RELAY.md` | Spectator relay / OBS-server reference |
 | `_docs/2026-10-22_REPLAY_DEMO_SYSTEMS.md` | Replay/demo systems across shipped games — Tribes .rec, TrueView, MVD, input replay; two-truth problem |
 | `_docs/2026-10-22_DEMO_SOTA_COMPARISON.md` | SOTA replay systems (Dota2, SC2 takeover, Trackmania anticheat, QTV) vs .demo — capability matrix + pilots |
+| `_docs/2026-10-23_OFFLINE_DESKTOP_RENDERER.md` | **Desktop demo→MP4 renderer design** — headless-Chrome CLI tier (mostly built), ffmpeg-pipe upgrade, Electron tier; packaging plan + gotchas |
+| `_docs/2026-10-23_SKI_FLAT_OVERSPEED.md` | Ski flat-ground overspeed audit — measured per-class, uncapped accel + unscaled gate root cause, fix sketch |
+| `_docs/2026-10-23_LOCAL_SHELL_SPAWN.md` | Local projectile spawn epochs — rewind-mirror tried & reverted (ping-dependent spawn feel); server-claims-muzzle is the correct fix if trajDiv regresses |
+| `_docs/2026-10-23_REMOTE_THREE_TRUTHS.md` | Remote pos/ghost/wire-head trio — measured relationships, sim viewLagMs defect + p90 jitter estimator fixes; `_posdump.ts` probe |
 
 ## Agent memory (append-only, one line each)
 

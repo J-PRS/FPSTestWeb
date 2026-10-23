@@ -8,6 +8,8 @@ import { metalMat } from './procMetal.js';
 import { makePartPool, takeSlot, releaseSlot, type PartPool } from './deployPool.js';
 import { parityMiss, parityStamp } from '../game/parity.js';
 import { NUG_TUMBLE, type PickupKind } from '../../../shared/pickups.js';
+import { getHeightfield } from '../world/heightmap.js';
+import { hmSettleWalkable } from '../../../shared/heightfield.js';
 
 // Tighter falloff than the shared glow: hot core, fast edge fade — the
 // halo marks the item at range without washing a big blob over it.
@@ -41,7 +43,8 @@ export const BEAM_ALPHA = ((): THREE.Texture => {
   g.fillStyle = grad;
   g.fillRect(0, 0, 1, 64);
   const t = new THREE.CanvasTexture(cv);
-  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+  t.wrapS = THREE.ClampToEdgeWrapping;
+  t.wrapT = THREE.ClampToEdgeWrapping;
   return t;
 })();
 const BEAM_MAT = new THREE.MeshBasicMaterial({
@@ -350,6 +353,11 @@ export class Nugget {
         this.vel.set(0, 0, 0);
         this.settled = true;
         this.tumbleAcc = 0;
+        // Mirror RoomPickups.settleReachable: the server slides rests off
+        // unclimbable grades before broadcasting — skipping it here left
+        // the wire rest ~10-16m downhill of the predicted one (nugrest).
+        const f = getHeightfield();
+        if (f) {hmSettleWalkable(f, this.pos);}
         break;
       }
     }
