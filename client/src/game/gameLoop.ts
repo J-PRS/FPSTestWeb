@@ -196,6 +196,12 @@ export interface LoopState {
    *  so first-draw compiles/uploads happen off the player's clock. */
   veilStable: number;
   veilFrames: number;
+  /** Live-under-veil: the full loop runs behind the overlay once the
+   *  seat is placed; the drop counts stable REAL frames. */
+  veilLive: boolean;
+  veilLiveFrames: number;
+  /** We froze input for the veil (unfreeze only what we froze). */
+  veilFroze: boolean;
   /** Boot warmup — same stability signal as the veil, but for the
    *  un-veiled start: offline modes gate their spawn/roster kick-off on
    *  whenStable() so the game doesn't begin mid-hitch. */
@@ -839,7 +845,7 @@ function aimDebugAfterVeil(deps: GameLoopDeps): void {
 let veilStillFrames = 0;
 const veilPrevPos = new THREE.Vector3();
 
-function tickVeil(deps: GameLoopDeps, st: LoopState, rawElapsed: number): void {
+function tickVeil(deps: GameLoopDeps, st: LoopState, rawElapsed: number, draw: (dt: number) => void): boolean {
   // The per-frame hide in Player.update is skipped while veiled, so the
   // boot body would render around a camera still at its pre-restore spot.
   const pl = deps.lazyPlayer();
@@ -856,7 +862,13 @@ function tickVeil(deps: GameLoopDeps, st: LoopState, rawElapsed: number): void {
     deps.rendererSetup.renderer.compile(deps.sceneSetup.scene, deps.camera);
     pl.model?.setVisible(false);
   }
-  deps.rendererSetup.renderer.render(deps.sceneSetup.scene, deps.camera);
+  // Draw the REAL frame path — composer, viewmodel pass, post pipeline,
+  // shadow gating. A bare renderer.render warms only the base scene and
+  // reads "stable" while the first live renderFrame stalls seconds
+  // compiling programs the veil never drew — that stall IS the still
+  // frame the veil was hiding. Veil-drop continuity follows for free:
+  // the last veiled frame is pixel-identical to the first live one.
+  draw(rawElapsed);
   st.veilFrames += 1;
   if (rawElapsed < 0.026) {st.veilStable += 1;} else {st.veilStable = 0;}
   // Seated = a wire position actually landed (respawn or gameState
@@ -877,20 +889,18 @@ function tickVeil(deps: GameLoopDeps, st: LoopState, rawElapsed: number): void {
   // respawn) would otherwise lift the veil on the old spot and snap to the
   // real one — hold until the body has stopped moving for ~1s.
   const placed = (isSessionSeated() && grounded && veilStillFrames >= 60) || st.veilFrames >= 600;
-  if (isSessionVeilReady() && placed && !deps.lazyPlayer().isDead && (st.veilStable >= 45 || st.veilFrames >= 180)) {
-    st.veilStable = 0;
-    st.veilFrames = 0;
-    dropSessionVeil();
-    // The veil-drop blob (black poly covering the camera) defies static
-    // analysis — log what the center ray hits on the first live frames.
-    aimDebugAfterVeil(deps);
-  }
+  // Ready to go live UNDER the veil — the caller runs the full loop from
+  // here and only drops once REAL frames hold <26ms. Measuring stability
+  // on veiled frames was the bug: a veiled frame skips the whole sim, so
+  // the drop landed exactly as the expensive loop started — the "still
+  // frame for ~3s" was deferred shader compiles + first sim ticks.
+  return isSessionVeilReady() && placed && !deps.lazyPlayer().isDead;
 }
 
 export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(): Promise<void>; renderFrame(dt: number): void; } {
   let lastTime = 0;
   let renderElapsed = 0;
-  const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, gpuLevel: 0, cpuLevel: 0, cpuBound: false, headroomAccum: 0, autoPixel: false, fxCursor: 0, fxJobs: [], shadowAcc: 0, renderAcc: 0, autoCap: null, warmN: 0, warmed: false, veilStable: 0, veilFrames: 0, bootWarmup: new BootWarmup() };
+  const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, gpuLevel: 0, cpuLevel: 0, cpuBound: false, headroomAccum: 0, autoPixel: false, fxCursor: 0, fxJobs: [], shadowAcc: 0, renderAcc: 0, autoCap: null, warmN: 0, warmed: false, veilStable: 0, veilFrames: 0, veilLive: false, veilLiveFrames: 0, veilFroze: false, bootWarmup: new BootWarmup() };
 
   // stats.js perf panels — FPS/MS/MB in a row along the bottom-right,
   // toggled with ` (backquote). stats.js only renders one panel per
@@ -946,8 +956,20 @@ export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(
     // its own renders separately; here we meter real frames.
     st.bootWarmup.tick(rawElapsed);
     if (isSessionVeiled()) {
-      tickVeil(deps, st, rawElapsed);
-      return;
+      if (!st.veilLive) {
+        st.veilLive = tickVeil(deps, st, rawElapsed, renderFrame);
+        if (!st.veilLive) {return;}
+        // Going live under the veil: input stays frozen (a stray click
+        // shouldn't fire while a RECONNECTING screen is up) until the
+        // drop. veilStable counts REAL frames now.
+        if (!deps.lazyPlayer().inputFrozen) {deps.lazyPlayer().freezeInput(); st.veilFroze = true;}
+        st.veilStable = 0; st.veilLiveFrames = 0;
+      }
+    } else {
+      // The 8s force-drop timer can clear the veil outside our drop —
+      // release any input freeze we own either way.
+      if (st.veilFroze) {deps.lazyPlayer().unfreezeInput(); st.veilFroze = false;}
+      st.veilLive = false;
     }
     perf.begin(deps.rendererSetup.renderer);
 
@@ -1028,6 +1050,21 @@ export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(
       return `tgt ${deps.entities.targets.length} rem ${deps.world.remotePlayers.size}\n` +
         `net ↑${fmtBps(bw.up)} ↓${fmtBps(bw.down)}`;
     });
+    // Live-under-veil: the whole loop ran behind the overlay this frame —
+    // count stability on the REAL workload and drop only once frames
+    // hold <26ms. The old gate measured veiled-render-only frames (no
+    // simTick/fxTick), so the veil lifted exactly as the expensive loop
+    // began — that was the ~3s still frame. 480-frame cap ≈ 8s safety.
+    if (isSessionVeiled()) {
+      st.veilLiveFrames += 1;
+      if (rawElapsed < 0.026) {st.veilStable += 1;} else {st.veilStable = 0;}
+      if (st.veilStable >= 45 || st.veilLiveFrames >= 480) {
+        st.veilStable = 0; st.veilLiveFrames = 0; st.veilLive = false;
+        dropSessionVeil();
+        if (st.veilFroze) {deps.lazyPlayer().unfreezeInput(); st.veilFroze = false;}
+        aimDebugAfterVeil(deps);
+      }
+    }
   }
 
   function renderFrame(dt: number): void {
