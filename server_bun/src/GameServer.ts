@@ -22,6 +22,7 @@ import { wallNow } from './wallClock.ts';
 import { wireRx } from './wireMeter.ts';
 import { ConnectionManager } from './ConnectionManager.ts';
 import type { TeamId } from '../../shared/teams.ts';
+import type { ClientMessage } from '../../shared/protocol.ts';
 
 interface RestoreSeat {
   id: string; name?: string; team?: TeamId; perk?: string; armorClass?: string;
@@ -228,7 +229,7 @@ export class GameServer {
           const im = decodeInputMove(u8);
           if (im) {
             try {
-              this.handleGameMessage(room, existingId, im);
+              this.handleGameMessageTrusted(room, existingId, im);
             } catch (error) {
               logger.error('Message handler failed', { playerId: existingId, type: 'inputMove(binary)', err: error instanceof Error ? error.stack ?? error.message : String(error) });
               try { ws.close(1011, 'server error'); } catch { /* socket already dying */ }
@@ -247,7 +248,7 @@ export class GameServer {
           // Same containment as the JSON lane — a throwing handler drops
           // this socket, not the process.
           try {
-            this.handleGameMessage(room, existingId, pos);
+            this.handleGameMessageTrusted(room, existingId, pos);
           } catch (error) {
             logger.error('Message handler failed', { playerId: existingId, type: 'position(binary)', err: error instanceof Error ? error.stack ?? error.message : String(error) });
             try { ws.close(1011, 'server error'); } catch { /* socket already dying */ }
@@ -585,6 +586,13 @@ seated += 1;
     }
   }
 
+  /** Binary-decoded frames arrive pre-shaped and range-checked inside
+   *  decodePosition/decodeInputMove — the JSON validator would re-walk
+   *  ~30Hz×players of known-good objects for nothing. */
+  private handleGameMessageTrusted(room: Room, playerId: string, msg: ClientMessage): void {
+    this.dispatchMessage(room, playerId, msg);
+  }
+
   private handleGameMessage(room: Room, playerId: string, raw: unknown): void {
     const result = validateMessage(raw);
     if (!result.success) {
@@ -592,7 +600,10 @@ this.ops.msgsRejected += 1;
       this.invalidWarn(playerId, 'Invalid message rejected', { room: room.name, error: result.error });
       return;
     }
+    this.dispatchMessage(room, playerId, result.data);
+  }
 
+  private dispatchMessage(room: Room, playerId: string, data: ClientMessage): void {
 this.ops.msgsIn += 1;
     // Backstop bound: legit traffic is ~20 reports + a few actions per
     // player per tick (~500 for a full room) — a flooding client would
@@ -613,18 +624,18 @@ this.ops.msgsRejected += 1;
     // delaying p.position/p.lastSeen/corrections for the tick fanout.
     // Combat claims stay parked: they adjudicate against sim state and
     // must see this window's earlier commands in wire order.
-    const fast = result.data.type;
+    const fast = data.type;
     if (fast === 'ping' || fast === 'pong' || fast === 'clientStats' || fast === 'tickNack'
       || fast === 'position' || fast === 'inputMove' || fast === 'teleport') {
-      try { room.messages.handleMessage(playerId, result.data, wallNow()); }
-      catch (error) { logger.warn('Telemetry handler threw', { playerId, type: result.data.type, error }); }
+      try { room.messages.handleMessage(playerId, data, wallNow()); }
+      catch (error) { logger.warn('Telemetry handler threw', { playerId, type: data.type, error }); }
       return;
     }
     // Command buffer: effects land at phase 0 of the next room tick, in
     // arrival order — sims never see a mid-frame mutation order. The
     // arrival stamp feeds the rate limiter: a stalled tick draining a
     // backlog must not count every queued report inside one window.
-    room.commands.push({ playerId, msg: result.data, at: wallNow() });
+    room.commands.push({ playerId, msg: data, at: wallNow() });
   }
 
   // Full teardown shared by grace expiry and idle reap — the five stores

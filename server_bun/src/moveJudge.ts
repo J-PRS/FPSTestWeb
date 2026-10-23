@@ -330,16 +330,6 @@ export class MoveJudge {
     const gapYoung = phase === 'gap-young';
     const dx0 = pos.x - s.pos.x, dy0 = pos.y - s.pos.y, dz0 = pos.z - s.pos.z;
     let dist = Math.hypot(dx0, dy0, dz0);
-    if (reportInputSeq !== undefined) {
-      // The journal replay is an approximation — it can't reproduce
-      // server-applied impulses (knockback, energy grants) inside the
-      // window. Judging the worst of both comparisons flags honest hits;
-      // the judge takes the better of the two — a cheat still reads far
-      // from every reference.
-      const cmp = this.anchoredCompare(sh, s, reportInputSeq, pos);
-      const d = Math.hypot(pos.x - cmp.pos.x, pos.y - cmp.pos.y, pos.z - cmp.pos.z);
-      if (d < dist) {dist = d;}
-    }
     const speed = Math.hypot(s.vel.x, s.vel.z);
     // A client throttled below ~4fps sims slower than wall time (MAX_DT
     // caps catch-up at 0.25s/frame), so its honest state trails the
@@ -361,6 +351,17 @@ export class MoveJudge {
     const transitTol = speed3d * Math.min(Math.max(rttMs ?? 0, 0), RTT_TOL_CAP_MS) / 2000;
     const tol = this.host.divergenceM() * (1 + speed / SPEED_TOL_REF) + lagTol + transitTol;
     if (dist <= tol) {return null;}
+    // Divergent against the live shadow — but the journal replay may
+    // still line it up at the report's own epoch (the compare is the
+    // benefit-of-the-doubt pass; it only lowers dist, so it can't change
+    // an already-converged verdict — hence it waits behind the cheap
+    // check instead of replaying on every report).
+    if (reportInputSeq !== undefined) {
+      const cmp = this.anchoredCompare(sh, s, reportInputSeq, pos);
+      const d = Math.hypot(pos.x - cmp.pos.x, pos.y - cmp.pos.y, pos.z - cmp.pos.z);
+      if (d < dist) {dist = d;}
+      if (dist <= tol) {return null;}
+    }
 
     // Young-gap reports get corrected like any over-tolerance drift but
     // bank nothing — the producing input may still be in flight, and a

@@ -19,7 +19,7 @@
  */
 import { MoveSim, ENERGY } from '../../shared/movement.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
-import { encodePosition, decodeTickFrame, decodeBallSegment } from '../../shared/wire.ts';
+import { encodePosition, encodeInputMove, decodeTickFrame, decodeBallSegment } from '../../shared/wire.ts';
 import { PERK_ORDER } from '../../shared/perks.ts';
 import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
 import { WeaponType } from '../../shared/weaponTable.ts';
@@ -116,12 +116,7 @@ class WireBot {
     const key = JSON.stringify(this.input);
     if (key === this.lastSentInput) {return;}
     this.lastSentInput = key;
-    const s = this.sim?.state;
-    this.send({
-      type: 'inputMove', seq: ++this.inputSeq,
-      input: { ...this.input },
-      rotation: { yaw: s?.yaw ?? 0, pitch: 0 },
-    });
+    this.sendBin(encodeInputMove(++this.inputSeq, { ...this.input }));
   }
   dead = false; // yourHealth<=0 until playerRespawn — dead clients go quiet
   team?: 'alpha' | 'bravo'; // own team — friendly targets are unshootable
