@@ -1,4 +1,5 @@
 import { MoveSim, ENERGY, MOVEMENT_CONFIG, cloakDrainPerSec, type BodyCapsule, type MoveInput, type MoveState, type Vec3Like } from '../../shared/movement.ts';
+import { dhypot2 } from '../../shared/dmath.ts';
 import { STATUS } from '../../shared/status.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
@@ -414,7 +415,7 @@ this.structEpoch += 1;
     const sh = this.shadows.get(playerId);
     if (!sh) {return true;} // no field → no sim → nothing to order
     if (seq !== undefined && seq <= sh.lastInputSeq) {return false;}
-    this.jev({ kind: 'input', pid: playerId, input: { ...input }, status, seq });
+    if (this.journal) {this.jev({ kind: 'input', pid: playerId, input: { ...input }, status, seq });}
     if (seq === undefined) {
       if (input.jetHeld !== undefined) {sh.jetWanted = input.jetHeld;}
       this.applyInput(sh, input, sh.jetWanted && sh.energy > 0);
@@ -443,7 +444,7 @@ this.structEpoch += 1;
     if (rising & STATUS.MEND) {sh.energy = Math.max(0, sh.energy - ENERGY.mendCost);}
     sh.lastStatus = status;
 
-    const hSpeed = Math.hypot(sh.sim.state.vel.x, sh.sim.state.vel.z);
+    const hSpeed = dhypot2(sh.sim.state.vel.x, sh.sim.state.vel.z);
     sh.skillDrainPerSec =
       (status & STATUS.CLOAK ? cloakDrainPerSec(hSpeed) : 0) +
       (status & STATUS.SHIELD ? ENERGY.shieldDrain : 0) +
@@ -526,7 +527,7 @@ this.structEpoch += 1;
   reconcile(playerId: string, pos: Vec3Like, yaw: number, vel?: Vec3Like, reportInputSeq?: number, rttMs?: number): (MoveState & { inputSeq: number }) | null {
     const sh = this.shadows.get(playerId);
     if (!sh) {return null;}
-    this.jev({ kind: 'reconcile', pid: playerId, pos: { x: pos.x, y: pos.y, z: pos.z }, yaw, vel: vel && { x: vel.x, y: vel.y, z: vel.z }, seq: reportInputSeq, rtt: rttMs });
+    if (this.journal) {this.jev({ kind: 'reconcile', pid: playerId, pos: { x: pos.x, y: pos.y, z: pos.z }, yaw, vel: vel && { x: vel.x, y: vel.y, z: vel.z }, seq: reportInputSeq, rtt: rttMs });}
     // The report's own RTT estimate feeds the broadcast lead — the
     // uplink half is how stale the shadow's input stream is. It's
     // client-reported, so it's a lower bound on trust: server-measured

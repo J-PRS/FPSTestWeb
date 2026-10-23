@@ -9,7 +9,7 @@ import type { WebSocketData } from './types.ts';
 import { logger } from './logger.ts';
 import { fileURLToPath } from 'node:url';
 import type { Heightfield } from '../../shared/heightfield.ts';
-import { isWireFrame, decodePosition, decodeInputMove, decodeWireJson, WIRE_INPUTMOVE, WIRE_JSON } from '../../shared/wire.ts';
+import { isWireFrame, decodePosition, decodeInputMove, decodeWireJson, decodePosClaim, decodeShot, WIRE_INPUTMOVE, WIRE_JSON, WIRE_JUMP, WIRE_JETPACK, WIRE_SHOT } from '../../shared/wire.ts';
 import { TickLoop } from './TickLoop.ts';
 import { evictEldest } from './evictEldest.ts';
 import { SessionManager } from './SessionManager.ts';
@@ -231,6 +231,32 @@ export class GameServer {
         // The binary input path: inputMove edges ride the same lane as
         // position reports — the change-only journal lands ~50ms fresher
         // than the JSON stream it duplicates (edge timing = replay fidelity).
+        // Binary claims — the decoders' bounded reads + finite checks
+        // ARE the validation, same trusted dispatch as position frames.
+        if (u8[1] === WIRE_JUMP || u8[1] === WIRE_JETPACK) {
+          const c = decodePosClaim(u8, u8[1]!);
+          if (c) {
+            try {
+              this.handleGameMessageTrusted(room, existingId, { type: u8[1] === WIRE_JUMP ? 'jump' : 'jetpack', position: c.position });
+            } catch (error) {
+              logger.error('Message handler failed', { playerId: existingId, type: 'posClaim(binary)', err: error instanceof Error ? error.stack ?? error.message : String(error) });
+              try { ws.close(1011, 'server error'); } catch { /* socket already dying */ }
+            }
+          }
+          return;
+        }
+        if (u8[1] === WIRE_SHOT) {
+          const s = decodeShot(u8);
+          if (s) {
+            try {
+              this.handleGameMessageTrusted(room, existingId, { type: 'shotFired', weaponType: s.weaponType, pos: s.pos, dir: s.dir, shotId: s.shotId, fireAt: s.fireAt });
+            } catch (error) {
+              logger.error('Message handler failed', { playerId: existingId, type: 'shotFired(binary)', err: error instanceof Error ? error.stack ?? error.message : String(error) });
+              try { ws.close(1011, 'server error'); } catch { /* socket already dying */ }
+            }
+          }
+          return;
+        }
         if (u8[1] === WIRE_INPUTMOVE) {
           const im = decodeInputMove(u8);
           if (im) {

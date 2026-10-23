@@ -19,7 +19,7 @@
  */
 import { MoveSim, ENERGY } from '../../shared/movement.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
-import { encodePosition, encodeInputMove, decodeTickFrame, decodeBallSegment, decodeWireJson, iterBatch } from '../../shared/wire.ts';
+import { encodePosition, encodeInputMove, decodeTickFrame, decodeBallSegment, decodeWireJson, iterBatch, encodePosClaim, encodeShot } from '../../shared/wire.ts';
 import { PERK_ORDER } from '../../shared/perks.ts';
 import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
 import { WeaponType } from '../../shared/weaponTable.ts';
@@ -621,8 +621,8 @@ class WireBot {
     this.pushInput();
     // Rising-edge event reports — real clients announce jump/jet starts
     // so remotes see the launch, not just the position drift.
-    if (this.input.jump === 1 && !this.wasJump) {this.send({ type: 'jump', position: { ...s.pos } });}
-    if (jetting && !this.wasJet) {this.send({ type: 'jetpack', position: { ...s.pos } });}
+    if (this.input.jump === 1 && !this.wasJump) {this.sendBin(encodePosClaim(0x0E, { x: s.pos.x, y: s.pos.y, z: s.pos.z }));}
+    if (jetting && !this.wasJet) {this.sendBin(encodePosClaim(0x0F, { x: s.pos.x, y: s.pos.y, z: s.pos.z }));}
     this.wasJump = this.input.jump === 1; this.wasJet = jetting;
     this.sim!.setInput({
       forward: 1, right: 0,
@@ -673,15 +673,11 @@ class WireBot {
     // A claim only resolves against a shell the ledger watched launch —
     // the spawn report goes first, the server-assigned id arrives on the
     // projectileCreated echo (claims may omit the id → latest-of-type).
-    this.send({
-      // shotFired is the fire intent for server-simmed weapons — the
-      // server spawns the authoritative shell off dir+weapon-speed and
-      // echoes shotId on projectileCreated (the 'shot' type never
-      // existed on the wire — every spawn + claim silently rejected).
-      type: 'shotFired', weaponType,
-      dir,
-      pos: { x: s.pos.x, y: s.pos.y + 1.6, z: s.pos.z },
-    });
+    // shotFired is the fire intent for server-simmed weapons — the
+    // server spawns the authoritative shell off dir+weapon-speed and
+    // echoes shotId on projectileCreated (the 'shot' type never
+    // existed on the wire — every spawn + claim silently rejected).
+    this.sendBin(encodeShot({ weaponType, dir, pos: { x: s.pos.x, y: s.pos.y + 1.6, z: s.pos.z } }));
     // Muzzle velocity = dir*speed + 50% shooter velocity — the SAME
     // inheritance the server applies (RoomProjectiles.spawn). The pid
     // binding below matches the echo's velocity, so the claim must
@@ -741,7 +737,7 @@ class WireBot {
         // Drift check must be 3D — a target falling 100m+ shares x/z but
         // the claimed hit reads as an impossible reach server-side.
         if ((cur.pos.x - t.pos.x) ** 2 + (cur.pos.y - t.pos.y) ** 2 + (cur.pos.z - t.pos.z) ** 2 > 36) {return;}
-        this.send({ type: 'shotFired', weaponType });
+        this.sendBin(encodeShot({ weaponType }));
         // Direct-hit claim: the client's own shape — excludeTargetId
         // names the direct victim so the AOE ring doesn't double-pay.
         this.send({ type: 'aoeShot', position: { ...cur.pos }, weaponType, excludeTargetId: best, airtime, projectileId: pid, directHit: true });

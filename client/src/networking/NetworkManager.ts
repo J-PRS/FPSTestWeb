@@ -1,5 +1,5 @@
 import { ChildLogger } from '../core/Logger.js';
-import { encodePosition, encodeInputMove, encodeWireJson } from '../../../shared/wire.js';
+import { encodePosition, encodeInputMove, encodeWireJson, encodePosClaim, encodeShot, WIRE_JUMP, WIRE_JETPACK } from '../../../shared/wire.js';
 import type { ClientMessage, ServerMessage, GameStatePlayer, LocalPlayerState, SnapshotPlayer, TransportKind } from '../../../shared/protocol.js';
 import type { PickupKind } from '../../../shared/pickups.js';
 import type { DeployKind } from '../../../shared/deployables.js';
@@ -602,6 +602,23 @@ this.sendDrops += 1;
   private sendFast(msg: ClientMessage): void {
     if (!this.ws?.connected()) { this.noteDrop(msg.type); return; }
     checkIntent(msg.type, msg as unknown as Record<string, unknown>);
+    // Native binary claims skip the JSON text entirely — bounded-read
+    // decoders server-side double as validation, so this lane lands in
+    // the same trusted dispatch as position frames.
+    if (msg.type === 'shotFired') {
+      this.txBytes += 45;
+      recWireOut('bin:16');
+      // Field ABSENCE is semantic (a bare intent's missing dir must not
+      // spawn) — pass through untouched, flags carry presence.
+      this.sendBinary(encodeShot({ weaponType: msg.weaponType ?? 0, pos: msg.pos, dir: msg.dir, shotId: msg.shotId, fireAt: msg.fireAt }));
+      return;
+    }
+    if (msg.type === 'jump' || msg.type === 'jetpack') {
+      this.txBytes += 14;
+      recWireOut(msg.type === 'jump' ? 'bin:14' : 'bin:15');
+      this.sendBinary(encodePosClaim(msg.type === 'jump' ? WIRE_JUMP : WIRE_JETPACK, msg.position));
+      return;
+    }
     const s = JSON.stringify(msg);
     this.txBytes += s.length + 2;
     recWireOut(`j:${msg.type}`);

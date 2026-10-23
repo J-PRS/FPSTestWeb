@@ -799,6 +799,83 @@ export function* iterBatch(u8: Uint8Array): Generator<Uint8Array> {
   }
 }
 
+// ---- C→S binary claims (skip the JSON text lane entirely — the
+// decode IS the validation: bounded reads + finite checks at the byte
+// boundary, then the trusted dispatch path like position/inputMove) ----
+
+export const WIRE_JUMP = 0x0E;
+export const WIRE_JETPACK = 0x0F;
+export const WIRE_SHOT = 0x10;
+
+/** jump / jetpack: `{ type, position }` — 14B vs ~85B JSON. */
+export function encodePosClaim(kind: number, pos: WireVec3): Uint8Array {
+  const buf = new ArrayBuffer(14);
+  const u8 = new Uint8Array(buf);
+  const d = new DataView(buf);
+  u8[0] = MAGIC; u8[1] = kind;
+  d.setFloat32(2, pos.x, true); d.setFloat32(6, pos.y, true); d.setFloat32(10, pos.z, true);
+  return u8;
+}
+
+export function decodePosClaim(u8: Uint8Array, kind: number): { position: WireVec3 } | null {
+  if (u8.length < 14 || u8[0] !== MAGIC || u8[1] !== kind) {return null;}
+  const d = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  const x = d.getFloat32(2, true), y = d.getFloat32(6, true), z = d.getFloat32(10, true);
+  if (!Number.isFinite(x + y + z)) {return null;}
+  return { position: { x, y, z } };
+}
+
+/** shotFired: weaponType u8 + presence flags + optional pos/dir/shotId
+ *  + fireAt f64. Field PRESENCE is semantic (a bare intent's absent dir
+ *  must not spawn a shell) — flags mirror the JSON message exactly.
+ *  ~12-45B vs ~190B JSON. */
+export function encodeShot(s: { weaponType: number; pos?: WireVec3; dir?: WireVec3; shotId?: string; fireAt?: number }): Uint8Array {
+  const sid = s.shotId ? ENC.encode(s.shotId) : null;
+  const buf = new ArrayBuffer(12 + (s.pos ? 12 : 0) + (s.dir ? 12 : 0) + (sid ? 1 + sid.length : 0));
+  const u8 = new Uint8Array(buf);
+  const d = new DataView(buf);
+  u8[0] = MAGIC; u8[1] = WIRE_SHOT;
+  u8[2] = s.weaponType & 0xFF;
+  u8[3] = (s.pos ? 1 : 0) | (s.dir ? 2 : 0) | (sid ? 4 : 0);
+  let o = 4;
+  if (s.pos) {d.setFloat32(o, s.pos.x, true); d.setFloat32(o + 4, s.pos.y, true); d.setFloat32(o + 8, s.pos.z, true); o += 12;}
+  if (s.dir) {d.setFloat32(o, s.dir.x, true); d.setFloat32(o + 4, s.dir.y, true); d.setFloat32(o + 8, s.dir.z, true); o += 12;}
+  if (sid) {u8[o] = sid.length; u8.set(sid, o + 1); o += 1 + sid.length;}
+  d.setFloat64(o, s.fireAt ?? 0, true);
+  return u8;
+}
+
+export function decodeShot(u8: Uint8Array): { weaponType: number; pos?: WireVec3; dir?: WireVec3; shotId?: string; fireAt?: number } | null {
+  if (u8.length < 12 || u8[0] !== MAGIC || u8[1] !== WIRE_SHOT) {return null;}
+  const d = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  const flags = u8[3]!;
+  let o = 4;
+  const r: { weaponType: number; pos?: WireVec3; dir?: WireVec3; shotId?: string; fireAt?: number } = { weaponType: u8[2]! };
+  if (flags & 1) {
+    if (o + 12 > u8.length) {return null;}
+    const x = d.getFloat32(o, true), y = d.getFloat32(o + 4, true), z = d.getFloat32(o + 8, true);
+    if (!Number.isFinite(x + y + z)) {return null;}
+    r.pos = { x, y, z }; o += 12;
+  }
+  if (flags & 2) {
+    if (o + 12 > u8.length) {return null;}
+    const x = d.getFloat32(o, true), y = d.getFloat32(o + 4, true), z = d.getFloat32(o + 8, true);
+    if (!Number.isFinite(x + y + z)) {return null;}
+    r.dir = { x, y, z }; o += 12;
+  }
+  if (flags & 4) {
+    if (o + 1 > u8.length) {return null;}
+    const n = u8[o]!;
+    if (o + 1 + n > u8.length) {return null;}
+    r.shotId = DEC.decode(u8.subarray(o + 1, o + 1 + n)); o += 1 + n;
+  }
+  if (o + 8 > u8.length) {return null;}
+  const fireAt = d.getFloat64(o, true);
+  if (!Number.isFinite(fireAt)) {return null;}
+  r.fireAt = fireAt;
+  return r;
+}
+
 export interface WireProjSpawn {
   projId: number;          // numeric tail of 'sp-N'
   ownerWireId: number;     // room wireId — receiver resolves via its roster
