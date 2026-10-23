@@ -112,7 +112,14 @@ if git diff --cached -U0 -- shared/ | grep '^+' | grep -qE 'console\\.(log|debug
 fi
 
 STAGED=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx)$' || true)
-[ -z "$STAGED" ] && exit 0
-echo "$STAGED" | xargs -n 50 npx -y oxlint --fix || exit 1
-# The fixer rewrites files — restage so the commit carries the fix.
-echo "$STAGED" | xargs -r git add
+if [ -n "$STAGED" ]; then
+  echo "$STAGED" | xargs -n 50 npx -y oxlint --fix || exit 1
+  # The fixer rewrites files - restage so the commit carries the fix.
+  echo "$STAGED" | xargs -r git add
+fi
+
+# Per-commit version: every commit that clears the guards advances the patch
+# segment (0.1.3 -> 0.1.4). Last step, so a commit an earlier guard rejects
+# never leaves a bump staged. --no-verify skips it along with the guards.
+node _tools/bumpVersion.mjs >/dev/null || exit 1
+git add server_bun/package.json client/package.json client/package-lock.json
