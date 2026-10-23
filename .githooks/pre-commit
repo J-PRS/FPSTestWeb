@@ -118,6 +118,11 @@ if [ -n "$STAGED" ]; then
   echo "$STAGED" | xargs -r git add
 fi
 
+# Zombie sweep: stale repo-rooted procs (hung runs, orphaned spawns) die
+# quietly on every commit — the box stays sound without CI plumbing.
+# Dev stack (:5400/:8000) + this chain are protected; never blocks.
+node _tools/procs.mjs --kill >/dev/null 2>&1 || true
+
 # Per-commit version: every commit that clears the guards advances the patch
 # segment (0.1.3 -> 0.1.4). Last step, so a commit an earlier guard rejects
 # never leaves a bump staged. --no-verify skips it along with the guards.

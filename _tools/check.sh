@@ -7,6 +7,11 @@ cd "$(dirname "$0")/.."
 # bun isn't on PATH in fresh agent shells (Windows Git Bash).
 command -v bun >/dev/null || export PATH="$HOME/.bun/bin:$PATH"
 
+# Only one check runs at a time — a previous instance is killed, tree
+# and all (its bun-test/vite/mapshot children die with it). The live
+# run is protected by procs.mjs's caller-chain walk.
+node _tools/procs.mjs --kill 'check\.sh'
+
 # --fast: everything below except the netbot shard — real-socket tests are
 # wall-clock bound and are ~85% of runtime. For bot/shared work the
 # scenario+unit shard carries the signal anyway.
