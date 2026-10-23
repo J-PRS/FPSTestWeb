@@ -330,7 +330,13 @@ export class MoveJudge {
     }
     const gapYoung = phase === 'gap-young';
     const dx0 = pos.x - s.pos.x, dy0 = pos.y - s.pos.y, dz0 = pos.z - s.pos.z;
-    let dist = dhypot3(dx0, dy0, dz0);
+    const distSq = dx0 * dx0 + dy0 * dy0 + dz0 * dz0;
+    // Fast path: avoid the sqrt for the common case (report close to
+    // shadow). If the squared distance is within tol², skip the tol
+    // calculation entirely — the report is within tolerance.
+    // tol is computed below; use a conservative 1m² threshold here.
+    if (distSq <= 1.0) {return null;}
+    let dist = Math.sqrt(distSq);
     const speed = dhypot2(s.vel.x, s.vel.z);
     // A client throttled below ~4fps sims slower than wall time (MAX_DT
     // caps catch-up at 0.25s/frame), so its honest state trails the
