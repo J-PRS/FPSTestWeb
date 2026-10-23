@@ -20,6 +20,7 @@ import { RoomSwitcher } from './roomSwitch.ts';
 import { SessionRegistry } from './sessionRegistry.ts';
 import { wallNow } from './wallClock.ts';
 import { wireRx } from './wireMeter.ts';
+import { ConnectionManager } from './ConnectionManager.ts';
 import type { TeamId } from '../../shared/teams.ts';
 
 interface RestoreSeat {
@@ -463,6 +464,11 @@ export class GameServer {
 
   setBunServer(server: Server<WebSocketData>): void {
     this.bunServer = server;
+    // uWS topic fanout: reliable broadcast frames publish once to every
+    // subscribed ws instead of a send-per-conn loop (send was ~25% of
+    // CPU at 64 sockets). Per-conn paths (ticks, sendToPlayer, excludes)
+    // stay direct.
+    ConnectionManager.publishFn = (topic: string, data: string | Uint8Array): void => { server.publish(topic, data as string | Uint8Array<ArrayBuffer>); };
   }
 
   /** Dev-restart seat snapshot — humans only, bots re-mint from spec.bots.

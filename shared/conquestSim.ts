@@ -20,7 +20,7 @@
  *  - Scoreboard = nodes held.
  */
 import { CONQUEST, conquestActionable, conquestCells, conquestCores, conquestN, type ConquestNode } from './conquest.ts';
-import { dhypot } from './dmath.ts';
+import { dhypot2, dhypot3 } from './dmath.ts';
 import { aoeDamage } from './combat.ts';
 import type { TeamId } from './teams.ts';
 import type { StructureSpec } from './mapSpec.ts';
@@ -110,8 +110,7 @@ export class ConquestSim {
         owner: core ?? 'neutral',
         hp: core ? CONQUEST.CORE_HP : CONQUEST.NODE_HP,
         buildT: 0, buildBy: null, razeT: 0,
-        core: core !== null,
-      });
+        core: core !== null });
     }
     this.syncSpawns();
     this.syncScores();
@@ -121,8 +120,7 @@ export class ConquestSim {
       kind: 'kit' as const,
       piece: n.core ? 'gendome' : 'katastand',
       pos: n.pos,
-      size: { x: 1, y: 1, z: 1 },
-    }));
+      size: { x: 1, y: 1, z: 1 } }));
     this.assignments.clear();
     this.dirty = true;
   }
@@ -164,8 +162,7 @@ export class ConquestSim {
     return this.nodes.map((n) => rosterRow(WORLD_MODEL.node!, 'id', n.id, {
       gx: n.gx, gz: n.gz, pos: Object.assign({}, n.pos), owner: n.owner,
       hp: Math.round(n.hp), maxHp: n.core ? CONQUEST.CORE_HP : CONQUEST.NODE_HP,
-      build: Math.min(1, n.buildT / CONQUEST.BUILD_S), buildBy: n.buildBy, core: n.core,
-    }));
+      build: Math.min(1, n.buildT / CONQUEST.BUILD_S), buildBy: n.buildBy, core: n.core }));
   }
 
   /** Emit if changed — hosts decide what 'emit' means (wire vs direct
@@ -241,7 +238,7 @@ export class ConquestSim {
       // No soft occupancy penalty and no per-id jitter — the cap is the
       // spread mechanism. Same-position bots score identically, mass on
       // the best node until it's staffed, then overflow to the next.
-      s -= dhypot(n.pos.x - p.position.x, n.pos.z - p.position.z) * 0.02;
+      s -= dhypot2(n.pos.x - p.position.x, n.pos.z - p.position.z) * 0.02;
       if (s > bestS) { bestS = s; best = n; }
     }
     return best;
@@ -336,7 +333,7 @@ export class ConquestSim {
     const team = this.host.teamOf(shooterId);
     if (team !== 'alpha' && team !== 'bravo') {return;}
     for (const n of this.nodes) {
-      const dist = dhypot(n.pos.x - pos.x, n.pos.y - pos.y, n.pos.z - pos.z);
+      const dist = dhypot3(n.pos.x - pos.x, n.pos.y - pos.y, n.pos.z - pos.z);
       if (dist >= radius || !conquestActionable(this.nodes, n, team, this.n)) {continue;}
       if (n.owner === team || n.buildBy === team) {continue;}
       const dmg = aoeDamage(damage, dist, radius, scales);

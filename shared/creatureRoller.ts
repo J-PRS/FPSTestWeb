@@ -6,7 +6,7 @@
  */
 
 import { type Heightfield, hmHeight } from './heightfield.js';
-import { datan2, dhypot } from './dmath.ts';
+import { datan2, dhypot2 } from './dmath.ts';
 import type { SimVec, StructureCollider } from './ballSim.js';
 import { clipMotion, type CrawlerEvent, type SimCrawler } from './creatureCore.js';
 import { SPECIES, speciesFamily, type SpeciesRow } from './species.js';
@@ -18,8 +18,7 @@ export const ROLLER_SIM = {
   HIT_R: 2.4,          // contact-bite reach around its center
   BITE_CD: 0.6,        // invuln window so one touch can't multi-tick
   DOWNHILL_K: 0.04,    // gravity assist rolling downhill
-  STUN_S: 0.5,
-} as const;
+  STUN_S: 0.5 } as const;
 
 // Roller rows live in the unified SPECIES registry; derived view.
 export const ROLLER_SPECIES: Record<string, SpeciesRow> = Object.fromEntries(
@@ -55,8 +54,7 @@ export function makeSimRoller(
     wanderYaw: (seed % 628) / 100, health, maxHealth: health,
     uber, dead: false, rng: seed >>> 0 || 1,
     targetId: null, tx: 0, ty: 0, tz: 0, tgtValid: false, pendingBite: false,
-    hitCd: 0,
-  };
+    hitCd: 0 };
 }
 
 /** Rolling contact — the body IS the weapon, no separate swing. */
@@ -83,7 +81,7 @@ function rollSteer(c: SimRoller, dt: number, target: SimVec | null, dx: number, 
     c.vx += (dx / d) * k;
     c.vz += (dz / d) * k;
   }
-  const hSpeed = dhypot(c.vx, c.vz);
+  const hSpeed = dhypot2(c.vx, c.vz);
   if (hSpeed > c.sp.TOPSPEED) {
     const s = c.sp.TOPSPEED / hSpeed;
     c.vx *= s; c.vz *= s;
@@ -109,7 +107,7 @@ export function stepRoller(
 
   rollSteer(c, dt, target, dx, dz, distSq);
 
-  const hSpeed = dhypot(c.vx, c.vz);
+  const hSpeed = dhypot2(c.vx, c.vz);
   const prevY = c.y, px = c.x, pz = c.z;
   c.x += c.vx * dt;
   c.z += c.vz * dt;

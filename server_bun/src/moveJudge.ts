@@ -573,12 +573,13 @@ sh.divergences += 1;
     // anywhere in the window; jitter just picks a different tick. (±2
     // forgave a real post-reseed divergence in the soak.)
     let best: MoveState | null = null;
-    let bestD = Infinity;
+    let bestD2 = Infinity;
     this.replayWindow(sh, probe, anchor, segs, (tick): void => {
       if (tick < targetTick - 1) {return;}
       const st = probe.state;
-      const d = Math.hypot(reportPos.x - st.pos.x, reportPos.y - st.pos.y, reportPos.z - st.pos.z);
-      if (d < bestD) { bestD = d; best = Object.assign({}, st, {pos: Object.assign({}, st.pos),vel: Object.assign({}, st.vel)}); }
+      const dx = reportPos.x - st.pos.x, dy = reportPos.y - st.pos.y, dz = reportPos.z - st.pos.z;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 < bestD2) { bestD2 = d2; best = Object.assign({}, st, {pos: Object.assign({}, st.pos),vel: Object.assign({}, st.vel)}); }
     });
     return best ?? probe.state;
   }

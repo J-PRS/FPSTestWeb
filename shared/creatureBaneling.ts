@@ -7,7 +7,7 @@
  */
 
 import { type Heightfield, hmHeight, hmChord } from './heightfield.js';
-import { datan2, dhypot } from './dmath.ts';
+import { datan2, dhypot2 } from './dmath.ts';
 import type { SimVec, StructureCollider } from './ballSim.js';
 import { clipMotion, type CrawlerEvent, type SimCrawler } from './creatureCore.js';
 import { SPECIES, speciesFamily, type SpeciesRow } from './species.js';
@@ -59,8 +59,7 @@ export function makeSimBaneling(
     wanderYaw: (seed % 628) / 100, health, maxHealth: health,
     uber, dead: false, rng: seed >>> 0 || 1,
     targetId: null, tx: 0, ty: 0, tz: 0, tgtValid: false, pendingBite: false,
-    age: 0, blastRadius: uber ? (row.blast ?? 0) * 1.7 : (row.blast ?? 0),
-  };
+    age: 0, blastRadius: uber ? (row.blast ?? 0) * 1.7 : (row.blast ?? 0) };
 }
 
 export function stepBaneling(
@@ -96,7 +95,7 @@ export function stepBaneling(
     }
   }
 
-  const hSpeed = dhypot(c.vx, c.vz);
+  const hSpeed = dhypot2(c.vx, c.vz);
   if (hSpeed > c.sp.TOPSPEED) {
     const s = c.sp.TOPSPEED / hSpeed;
     c.vx *= s; c.vz *= s;

@@ -16,7 +16,7 @@
  */
 
 import { type Heightfield, hmHeight } from './heightfield.js';
-import { dcos, dhypot, dsin } from './dmath.ts';
+import { dcos, dhypot2, dsin } from './dmath.ts';
 import type { SimVec, StructureCollider } from './ballSim.js';
 import { segSolidHit } from './solidWorld.js';
 import { crand, type CrawlerEvent, type SimCrawler } from './creatureCore.js';
@@ -44,8 +44,7 @@ export const TOTEM_SIM = {
 const TOTEM_UBER = {
   REFIRE: 4.5,
   CHARGE: 1,
-  HIT_R2: 1.5 * 1.5,
-} as const;
+  HIT_R2: 1.5 * 1.5 } as const;
 
 // Totem rows live in the unified SPECIES registry; derived view.
 export const TOTEM_SPECIES: Record<string, SpeciesRow> = Object.fromEntries(
@@ -100,8 +99,7 @@ export function makeSimTotem(
     hitR2: uber ? TOTEM_UBER.HIT_R2 : TOTEM_SIM.HIT_R2,
     radius: uber ? 1.8 : 1, // UBER_TOTEM_RADIUS / TOTEM_RADIUS — config twins
     lockDirX: 0, lockDirY: 0, lockDirZ: 0, lockDist: 0,
-    blinkX: x, blinkY: y, blinkZ: z,
-  };
+    blinkX: x, blinkY: y, blinkZ: z };
 }
 
 /** Terrain + structure LOS along the eye→target line — same 10-sample
@@ -182,7 +180,7 @@ function totemPickBlink(c: SimTotem, field: Heightfield, tx: number, tz: number)
     const x = c.x + dcos(a) * r;
     const z = c.z + dsin(a) * r;
     const h = hmHeight(field, x, z);
-    const pd = dhypot(tx - x, tz - z);
+    const pd = dhypot2(tx - x, tz - z);
     if (pd > c.sp.RANGE * 0.9) {continue;}
     if (h > bestH) { bestH = h; c.blinkX = x; c.blinkY = h; c.blinkZ = z; found = true; }
   }

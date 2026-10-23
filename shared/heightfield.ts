@@ -12,7 +12,7 @@
  * replay must land on the same vertex or bounces diverge.
  */
 
-import { dhypot } from './dmath.ts';
+import { dhypot2 } from './dmath.ts';
 
 export const HM_WORLD_SCALE = 1500; // meters per heightmap wrap — MUST match client config TERRAIN_WORLD_SCALE
 export const HM_HEIGHT_SCALE = 125; // MUST match TERRAIN_HEIGHT_SCALE
@@ -143,8 +143,7 @@ export function hmNormal(f: Heightfield, wx: number, wz: number, out: { x: numbe
 export function hmSurface(f: Heightfield): { getHeight(x: number, z: number): number; getNormal(x: number, z: number, out: { x: number; y: number; z: number }): { x: number; y: number; z: number } } {
   return {
     getHeight: (x, z): number => hmHeight(f, x, z),
-    getNormal: (x, z, out): { x: number; y: number; z: number; } => { hmNormal(f, x, z, out); return out; },
-  };
+    getNormal: (x, z, out): { x: number; y: number; z: number; } => { hmNormal(f, x, z, out); return out; } };
 }
 
 /** A dropped object's rest spot must be reachable: a tumble that ends on
@@ -156,7 +155,7 @@ export function hmSettleWalkable(f: Heightfield, pos: { x: number; y: number; z:
     const gxm = hmHeight(f, pos.x - 4, pos.z), gxp = hmHeight(f, pos.x + 4, pos.z);
     const gzm = hmHeight(f, pos.x, pos.z - 4), gzp = hmHeight(f, pos.x, pos.z + 4);
     const sx = (gxp - gxm) / 8, sz = (gzp - gzm) / 8;
-    const slope = dhypot(sx, sz);
+    const slope = dhypot2(sx, sz);
     if (slope < 0.8) {break;} // walkable grade
     const d = slope || 1;
     pos.x -= (sx / d) * 6; pos.z -= (sz / d) * 6;

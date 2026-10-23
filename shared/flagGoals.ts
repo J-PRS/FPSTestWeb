@@ -9,7 +9,7 @@
  */
 
 import { botRand } from './botRand.ts';
-import { dhypot } from './dmath.ts';
+import { dhypot2 } from './dmath.ts';
 import { BOT_TUNING } from './botTuning.ts';
 
 export type BotRole =
@@ -105,8 +105,7 @@ export const WIRE_ROLES: BotRole[] = ['capper', 'ldefense', 'sniper', 'hof', 'de
  *  a medium skin on a heavy sim is how the class lie starts. */
 export const STRICT_CLASS: Partial<Record<BotRole, 'light' | 'medium' | 'heavy'>> = {
   capper: 'light', infiltrator: 'light', sniper: 'light',
-  hof: 'heavy', technician: 'heavy',
-};
+  hof: 'heavy', technician: 'heavy' };
 
 /** ~7% of strict re-fits pick a WRONG body on purpose — a heavy capper
  *  or light HoF reads as human comedy, not a roster bug. Rare enough the
@@ -124,8 +123,7 @@ export function misfitClass(strict: 'light' | 'medium' | 'heavy', rand: () => nu
 export const CLASS_FITNESS: Record<string, Record<BotRole, number>> = {
   light:   { capper: 3,   infiltrator: 3,   ldefense: 2,   offense: 1.5, defense: 1,   technician: 0.4, hof: 0.2, bombardier: 0.3, medic: 1.5, sniper: 3 },
   medium:  { offense: 3,  defense: 2.5,     ldefense: 2,   capper: 1.2,  hof: 1,       infiltrator: 1,  technician: 1,  bombardier: 1.5, medic: 2.5, sniper: 1 },
-  heavy:   { hof: 3,      technician: 2.5,  defense: 2,    offense: 2,   ldefense: 1,  capper: 0.4,     infiltrator: 0.4, bombardier: 3,   medic: 1,   sniper: 0.3 },
-};
+  heavy:   { hof: 3,      technician: 2.5,  defense: 2,    offense: 2,   ldefense: 1,  capper: 0.4,     infiltrator: 0.4, bombardier: 3,   medic: 1,   sniper: 0.3 } };
 const fit = (cls: string | undefined, role: BotRole): number =>
   (cls ? CLASS_FITNESS[cls]?.[role] : undefined) ?? 1.5;
 
@@ -199,8 +197,8 @@ function offenseGoal(s: FlagSituation): { x: number; y: number; z: number; } {
   // still chases (he'd never reach the stand in time anyway — the
   // chase is the only play that can still score contact).
   if (s.thief && s.enemyStand && s.me) {
-    const thiefToStand = dhypot(s.thief.x - s.enemyStand.x, s.thief.z - s.enemyStand.z);
-    const meToFlag = dhypot(s.me.x - s.enemyStand.x, s.me.z - s.enemyStand.z);
+    const thiefToStand = dhypot2(s.thief.x - s.enemyStand.x, s.thief.z - s.enemyStand.z);
+    const meToFlag = dhypot2(s.me.x - s.enemyStand.x, s.me.z - s.enemyStand.z);
     const capRisk = 1 - Math.min(1, thiefToStand / 300);
     const reach = 1 - Math.min(1, meToFlag / Math.max(60, thiefToStand * 1.5));
     if (botRand() < capRisk * capRisk * reach * reach) {return s.enemyStand;}
@@ -227,7 +225,7 @@ function medicGoal(s: FlagSituation): { x: number; y: number; z: number; } {
   if (s.dropped) {return s.dropped;}
   if (s.enemyStand) {
     const dx = s.home.x - s.enemyStand.x, dz = s.home.z - s.enemyStand.z;
-    const d = dhypot(dx, dz);
+    const d = dhypot2(dx, dz);
     if (d > 1) {
       const back = Math.min(40, d * 0.2);
       return { x: s.enemyStand.x + (dx / d) * back, y: s.enemyStand.y, z: s.enemyStand.z + (dz / d) * back };
@@ -263,14 +261,13 @@ function infiltratorGoal(s: FlagSituation): { x: number; y: number; z: number; }
 function bombardierGoal(s: FlagSituation): { x: number; y: number; z: number; } {
   if (s.enemyStand) {
     const dx = s.home.x - s.enemyStand.x, dz = s.home.z - s.enemyStand.z;
-    const d = dhypot(dx, dz);
+    const d = dhypot2(dx, dz);
     if (d > 1) {
       const standoff = Math.min(90, d * 0.35);
       return {
         x: s.enemyStand.x + (dx / d) * standoff,
         y: s.enemyStand.y,
-        z: s.enemyStand.z + (dz / d) * standoff,
-      };
+        z: s.enemyStand.z + (dz / d) * standoff };
     }
     return s.enemyStand;
   }
@@ -304,21 +301,21 @@ function defenseGoal(s: FlagSituation, role: string, side: number): { x: number;
     // a chaser can cut the corner. Everyone else chases the beacon,
     // which is honest pub play too.
     if ((s.sweat ?? 0) > 0 && s.thief.vx !== undefined) {
-      const d = s.me ? dhypot(s.thief.x - s.me.x, s.thief.z - s.me.z) : 100;
+      const d = s.me ? dhypot2(s.thief.x - s.me.x, s.thief.z - s.me.z) : 100;
       const lead = Math.min(2.5, Math.max(0.4, d * 0.02));
       return { x: s.thief.x + s.thief.vx * lead, y: s.thief.y, z: s.thief.z + (s.thief.vz ?? 0) * lead };
     }
     return s.thief;
   }
   if (s.dropped) {return s.dropped;}
-  if (s.escort && dhypot(s.escort.x - s.home.x, s.escort.z - s.home.z) < 260) {return s.escort;}
+  if (s.escort && dhypot2(s.escort.x - s.home.x, s.escort.z - s.home.z) < 260) {return s.escort;}
   // Idle: don't stack bodies on the pole — the era's real defense is
   // coverage, not a clump. LD screens the incoming lane toward the
   // enemy stand, generic defense takes a flank (side mirrors per bot),
   // technician stays on the pole for the weld/deploy work.
   if (s.enemyStand) {
     const dx = s.enemyStand.x - s.home.x, dz = s.enemyStand.z - s.home.z;
-    const d = dhypot(dx, dz) || 1;
+    const d = dhypot2(dx, dz) || 1;
     const ux = dx / d, uz = dz / d;
     if (role === 'ldefense') {return { x: s.home.x + ux * 38, y: s.home.y, z: s.home.z + uz * 38 };}
     if (role === 'defense') {return { x: s.home.x - uz * side * 24 + ux * 10, y: s.home.y, z: s.home.z + ux * side * 24 + uz * 10 };}
@@ -340,13 +337,12 @@ function sniperGoal(s: FlagSituation, side: number): { x: number; y: number; z: 
   if (s.escort) {return s.escort;}
   if (s.enemyStand) {
     const dx = s.enemyStand.x - s.home.x, dz = s.enemyStand.z - s.home.z;
-    const d = dhypot(dx, dz) || 1;
+    const d = dhypot2(dx, dz) || 1;
     const reach = Math.min(75, d * 0.3);
     return {
       x: s.home.x + (dx / d) * reach - (dz / d) * side * 18,
       y: s.home.y,
-      z: s.home.z + (dz / d) * reach + (dx / d) * side * 18,
-    };
+      z: s.home.z + (dz / d) * reach + (dx / d) * side * 18 };
   }
   return s.home;
 }
@@ -360,10 +356,10 @@ function sniperGoal(s: FlagSituation, side: number): { x: number; y: number; z: 
  *  before it hits the flag. */
 function hofGoal(s: FlagSituation, commit: number): { x: number; y: number; z: number; } {
   const T = BOT_TUNING.hof;
-  if (s.dropped && dhypot(s.dropped.x - s.home.x, s.dropped.z - s.home.z) < T.dropR) {return s.dropped;}
+  if (s.dropped && dhypot2(s.dropped.x - s.home.x, s.dropped.z - s.home.z) < T.dropR) {return s.dropped;}
   if (s.threat) {
     const dx = s.threat.x - s.home.x, dz = s.threat.z - s.home.z;
-    const d = dhypot(dx, dz);
+    const d = dhypot2(dx, dz);
     if (d > 1 && d < T.threatR) {
       // The HoF body-block: slide onto the capper's run line so his
       // speed meets a heavy's hitbox before it meets the flag. A slack
@@ -390,8 +386,8 @@ function hofGoal(s: FlagSituation, commit: number): { x: number; y: number; z: n
  *  executes it instantly like the K bind, not by splash attrition. */
 export function wantKOut(role: string, s: FlagSituation): boolean {
   if ((s.sweat ?? 0) <= 0 || !s.me) {return false;}
-  const span = s.enemyStand ? dhypot(s.enemyStand.x - s.home.x, s.enemyStand.z - s.home.z) : 0;
-  const stranded = dhypot(s.me.x - s.home.x, s.me.z - s.home.z) > Math.max(150, span * 0.6);
+  const span = s.enemyStand ? dhypot2(s.enemyStand.x - s.home.x, s.enemyStand.z - s.home.z) : 0;
+  const stranded = dhypot2(s.me.x - s.home.x, s.me.z - s.home.z) > Math.max(150, span * 0.6);
   if (!stranded) {return false;}
   // Thief inbound — a stranded defender's post is where the play is
   // going, so the corpse is the fastest ride to stand defense. An

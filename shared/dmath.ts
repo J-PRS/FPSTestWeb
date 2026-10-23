@@ -150,3 +150,6 @@ export function dhypot(...v: number[]): number {
   for (const x of v) {s += x * x;}
   return Math.sqrt(s);
 }
+/** Fixed-arity — no args-array alloc; the ...v form is for cold callers. */
+export function dhypot2(x: number, z: number): number { return Math.sqrt(x * x + z * z); }
+export function dhypot3(x: number, y: number, z: number): number { return Math.sqrt(x * x + y * y + z * z); }

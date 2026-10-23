@@ -413,6 +413,7 @@ export class Room {
     // exposes them as inv:<name> totals next to the existing tallies.
     setInvariantSink((n, ctx): void => { this.healthBump(`inv:${n}`); logger.warn(`INVARIANT ${n}`, ctx ?? {}); });
     this.name = name;
+    this.connections.setTopic(`room:${name}`);
     this.field = field;
     this.moveAuthority = moveAuthority && Boolean(field);
     this.spec = spec ?? resolveMapSpec(null);

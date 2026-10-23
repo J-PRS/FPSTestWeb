@@ -65,6 +65,19 @@ const VOLATILE_TTL_MS = 3000;
 const WIRESPY = Boolean(process.env.FPS_WIRESPY);
 
 export class ConnectionManager {
+  /** uWS native fanout: identical payloads (reliable broadcasts, ball
+   *  batches, proj edges) build the frame once and publish to every
+   *  subscribed socket — ~88% of send calls on a combat room collapse
+   *  into one `server.publish` per frame. Set once in server.ts after
+   *  Bun.serve; absent in tests → the per-conn path stands. */
+  static publishFn: ((topic: string, data: string | Uint8Array) => void) | undefined;
+  private topic?: string;
+  /** Pids whose socket took a subscribe (real uWS ws) — adapters (wt/rtc
+   *  lanes) never join the topic and keep per-conn sends. */
+  private readonly pubbed = new Set<string>();
+
+  setTopic(topic: string): void { this.topic = topic; }
+
   private connections: Map<string, ServerWebSocket<WebSocketData>> = new Map();
   /** Pids whose post-join outbox has drained once — the tick intro gate
    *  holds frames until the join burst clears, not just on first seat. */
@@ -226,6 +239,10 @@ export class ConnectionManager {
   register(playerId: string, ws: ServerWebSocket<WebSocketData>): void {
     this.connections.set(playerId, ws);
     this.tickDrained.delete(playerId); // joins re-arm the intro hold
+    if (this.topic && ConnectionManager.publishFn && typeof ws.subscribe === 'function') {
+      ws.subscribe(this.topic);
+      this.pubbed.add(playerId);
+    }
     logger.info(`Connection registered`, { playerId, total: this.connections.size });
   }
 
@@ -234,6 +251,8 @@ export class ConnectionManager {
     if (ws) {
       this.connections.delete(playerId);
       this.tickDrained.delete(playerId);
+      this.pubbed.delete(playerId);
+      if (this.topic && typeof ws.unsubscribe === 'function') {ws.unsubscribe(this.topic);}
       logger.info(`Connection unregistered`, { playerId, total: this.connections.size });
     }
   }
@@ -288,7 +307,17 @@ export class ConnectionManager {
    *  binary-only client would never even start the drain clock. The
    *  reclaim's ballRoster reseeds ball truth, so the skip is honest. */
   broadcastBinaryReliable(data: Uint8Array): void {
+    const pub = ConnectionManager.publishFn;
+    if (pub && this.topic && this.pubbed.size > 0) {pub(this.topic, data);}
     this.connections.forEach((ws, pid): void => {
+      if (this.pubbed.has(pid)) {
+        // Published — keep the drown clock fed anyway: a dead reader on
+        // the topic lane queues the same bytes without a per-conn drop
+        // signal to catch it early.
+        wireTx(pid, data.byteLength, `bin:${data[1]}`);
+        this.drownCheck(pid, ws);
+        return;
+      }
       if (ws.readyState === 1 && this.drownCheck(pid, ws) === 'ok') {this.sendReliable(pid, ws, data);}
     });
   }
@@ -297,6 +326,19 @@ export class ConnectionManager {
     const data = this.frame(msg, undefined, excludePlayerId);
     if (WIRESPY && (msg as { type?: string }).type === 'projectileCreated') {
       logger.warn('wirespy broadcast', { type: 'projectileCreated', conns: [...this.connections.keys()] });
+    }
+    const pub = ConnectionManager.publishFn;
+    if (pub && this.topic && excludePlayerId === undefined && this.pubbed.size > 0) {
+      pub(this.topic, data);
+      this.connections.forEach((ws, pid): void => {
+        if (this.pubbed.has(pid)) {
+          wireTx(pid, data.length, `j:${/^.{0,30}?"type":"?([a-zA-Z]+)/.exec(data)?.[1] ?? '?'}`);
+          this.drownCheck(pid, ws);
+          return;
+        }
+        if (ws.readyState === 1 && this.drownCheck(pid, ws) === 'ok') {this.sendReliable(pid, ws, data);}
+      });
+      return;
     }
     this.connections.forEach((ws, pid): void => {
       if (excludePlayerId !== undefined && pid === excludePlayerId) {return;}
