@@ -17,6 +17,11 @@ const MAX_TICK_BACKLOG = 256 * 1024;
  *  philosophy: degrade, never cull); a truly dead reader still feeds the
  *  drown clock and closes on the same schedule. */
 const SHED_KEEPALIVE = 4;
+/** Intro-gate grace: ~3s at 20Hz. A join burst legitimately takes
+ *  seconds to drain on a slow link — 'held' is honest while it does.
+ *  Past the grace it's a socket that never drains: degrade to the
+ *  sparse lane rather than starving the client silently forever. */
+const HELD_GRACE_TICKS = 60;
 
 /** Join-burst hold: a freshly seated client's outbox carries gameState +
  *  rosters + wireIds (often >256KB) while its main thread is still busy
@@ -299,6 +304,7 @@ export class ConnectionManager {
   register(playerId: string, ws: ServerWebSocket<WebSocketData>): void {
     this.connections.set(playerId, ws);
     this.tickDrained.delete(playerId); // joins re-arm the intro hold
+    this.heldPhase.delete(playerId);   // ...and its grace count
     if (this.topic && ConnectionManager.publishFn && typeof ws.subscribe === 'function') {
       ws.subscribe(this.topic);
       this.pubbed.add(playerId);
@@ -314,6 +320,7 @@ export class ConnectionManager {
       this.pubbed.delete(playerId);
       this.drownSweepAt.delete(playerId);
       this.shedPhase.delete(playerId);
+      this.heldPhase.delete(playerId);
       this.outbox.delete(playerId);
       if (this.topic && typeof ws.unsubscribe === 'function') {ws.unsubscribe(this.topic);}
       logger.info(`Connection unregistered`, { playerId, total: this.connections.size });
@@ -354,13 +361,16 @@ export class ConnectionManager {
     const buffered = (ws as unknown as { getBufferedAmount?(): number }).getBufferedAmount?.() ?? 0;
     if (!this.tickDrained.has(playerId)) {
       if (buffered > INTRO_DRAIN_FLOOR) {
-        // A held socket PAST the backlog cap isn't a fresh join catching
-        // up — it never drains at all. Pinning it at 'held' starves the
-        // client of every tick AND never starts the drown clock (the
-        // bigSoak alive-but-stalled signature): degrade it like a backlog.
-        if (buffered > MAX_TICK_BACKLOG) {return this.sparseOrShed(playerId, ws, data);}
+        const h = (this.heldPhase.get(playerId) ?? 0) + 1;
+        this.heldPhase.set(playerId, h);
+        // Held PAST the grace isn't a fresh join catching up — it never
+        // drains at all. Pinning it at 'held' starves the client of every
+        // tick AND never starts the drown clock (the bigSoak alive-but-
+        // stalled signature): degrade it to the sparse lane like a backlog.
+        if (h > HELD_GRACE_TICKS) {return this.sparseOrShed(playerId, ws, data);}
         return 'held';
       }
+      this.heldPhase.delete(playerId);
       this.tickDrained.add(playerId); // first clean sample — gate opens
     }
     if (buffered > MAX_TICK_BACKLOG) {return this.sparseOrShed(playerId, ws, data);}
@@ -399,6 +409,9 @@ export class ConnectionManager {
   /** Per-conn shed phase — counts backlogged ticks so every SHED_KEEPALIVE-th
    *  still rides through (sparse keepalive); reset on unregister. */
   private shedPhase = new Map<string, number>();
+  /** Per-conn held-gate streak — the intro burst's grace is counted in
+   *  calls (~ticks), not wall time; a conn that drains resets to zero. */
+  private heldPhase = new Map<string, number>();
   private static DROWN_SWEEP_MS = 250;
   private drownSweep(pid: string, ws: ServerWebSocket<WebSocketData>): void {
     const now = wallNow();
