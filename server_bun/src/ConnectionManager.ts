@@ -252,6 +252,7 @@ export class ConnectionManager {
       this.connections.delete(playerId);
       this.tickDrained.delete(playerId);
       this.pubbed.delete(playerId);
+      this.drownSweepAt.delete(playerId);
       if (this.topic && typeof ws.unsubscribe === 'function') {ws.unsubscribe(this.topic);}
       logger.info(`Connection unregistered`, { playerId, total: this.connections.size });
     }
@@ -306,6 +307,18 @@ export class ConnectionManager {
    *  segments forever and — since ticks ride the capped lane — a
    *  binary-only client would never even start the drain clock. The
    *  reclaim's ballRoster reseeds ball truth, so the skip is honest. */
+  /** Pubbed sockets skip per-conn sends, but the drown clock still needs
+   *  a buffered sample — once per DROWN_SWEEP_MS per conn, not per frame
+   *  (a native getBufferedAmount per broadcast×conn was a hot remnant). */
+  private drownSweepAt = new Map<string, number>();
+  private static DROWN_SWEEP_MS = 250;
+  private drownSweep(pid: string, ws: ServerWebSocket<WebSocketData>): void {
+    const now = wallNow();
+    if (now - (this.drownSweepAt.get(pid) ?? 0) < ConnectionManager.DROWN_SWEEP_MS) {return;}
+    this.drownSweepAt.set(pid, now);
+    this.drownCheck(pid, ws);
+  }
+
   broadcastBinaryReliable(data: Uint8Array): void {
     const pub = ConnectionManager.publishFn;
     if (pub && this.topic && this.pubbed.size > 0) {pub(this.topic, data);}
@@ -315,7 +328,7 @@ export class ConnectionManager {
         // the topic lane queues the same bytes without a per-conn drop
         // signal to catch it early.
         wireTx(pid, data.byteLength, `bin:${data[1]}`);
-        this.drownCheck(pid, ws);
+        this.drownSweep(pid, ws);
         return;
       }
       if (ws.readyState === 1 && this.drownCheck(pid, ws) === 'ok') {this.sendReliable(pid, ws, data);}
@@ -333,7 +346,7 @@ export class ConnectionManager {
       this.connections.forEach((ws, pid): void => {
         if (this.pubbed.has(pid)) {
           wireTx(pid, data.length, `j:${/^.{0,30}?"type":"?([a-zA-Z]+)/.exec(data)?.[1] ?? '?'}`);
-          this.drownCheck(pid, ws);
+          this.drownSweep(pid, ws);
           return;
         }
         if (ws.readyState === 1 && this.drownCheck(pid, ws) === 'ok') {this.sendReliable(pid, ws, data);}
