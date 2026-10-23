@@ -1233,7 +1233,7 @@ init().then(async (): Promise<void> => {
   // mid-session (fps:set event) — no reload needed.
   const wireDebugTools = (): Promise<void> => import('./dev/devTools.js').then(m =>
     m.wireDebugTools({ networkManager, player, world, entities, terrain, viewModel, demoManager,
-      rendererSetup, demoLifecycle, scene, remotes, teamBots, logger }));
+      rendererSetup, demoLifecycle, scene, remotes, teamBots, logger, hud }));
   // Debug wiring (window.__test, __playRec, stateDebug) — dev hosts only.
   if (isDevHost() && (import.meta.env.DEV || urlParams.debug)) {await wireDebugTools();}
   // In-game log mirror — subscribes to Logger once so every later line

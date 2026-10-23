@@ -35,6 +35,7 @@ export class HUD {
   private minimap: Minimap;
   private cmdmap: CommandMap;
   dmgVignette: HTMLDivElement  // public — HudStats family paints it;
+  dmgEdge: HTMLDivElement  // public — HudStats family paints it;
   dmgDir: HTMLDivElement  // public — HudStats family paints it;
   dmgDirArc: HTMLDivElement  // public — HudStats family paints it;
   ghostBar: HTMLDivElement  // public — HudStats family paints it;
@@ -74,6 +75,7 @@ export class HUD {
     this.crosshair = d.crosshair;
     this.hitMarker = d.hitMarker;
     this.dmgVignette = d.dmgVignette;
+    this.dmgEdge = d.dmgEdge;
     this.dmgDir = d.dmgDir;
     this.dmgDirArc = d.dmgDirArc;
     this.ghostBar = d.ghostBar;

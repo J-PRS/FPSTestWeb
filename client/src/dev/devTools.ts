@@ -14,6 +14,7 @@ import type { createDemoLifecycle } from '../game/demoLifecycle.js';
 import type { DemoManager } from '../demo/index.js';
 import type { Terrain } from '../world/terrain.js';
 import type { ViewModel } from '../entities/ViewModel.js';
+import type { HUD } from '../ui/hud.js';
 import { armTelemetry } from '../core/telemetry.js';
 import { urlParams } from '../core/params.js';
 
@@ -31,6 +32,7 @@ export interface DevToolsCtx {
   remotes: ReturnType<typeof createRemotes>;
   teamBots: TeamBots | null;
   logger: ChildLogger;
+  hud: HUD;
 }
 
 let wired = false;
@@ -61,7 +63,7 @@ export async function wireDebugTools(c: DevToolsCtx): Promise<void> {
   window.__test = {
     player: c.player, scene: c.scene, entities: c.entities, world: c.world,
     terrain: c.terrain, viewModel: c.viewModel,
-    networkManager: c.networkManager, demoManager: c.demoManager,
+    networkManager: c.networkManager, demoManager: c.demoManager, hud: c.hud,
     rendererSetup: c.rendererSetup, demoLifecycle: c.demoLifecycle,
     chatSink: (await import('../game/chat.js')).chatSink,
     parity: (await import('../game/parity.js')).parityProbes,

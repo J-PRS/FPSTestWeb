@@ -290,6 +290,29 @@ body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) 
     transparent 52%, transparent 68%,
     rgba(220,40,30,0.55) 100%);
 }
+/* Directional edge flash — full-screen layer rotated to the source
+   bearing; the red mass hugs the screen edge nearest the attacker
+   (Halo/CoD convention: peripheral, big, off the reticle). The .grit
+   layer runs the same gradient through the bloom lens-dirt texture so
+   the edge breaks up like smudged glass instead of a clean wedge. */
+#dmg-edge {
+  position: absolute; inset: 0; opacity: 0; pointer-events: none;
+}
+#dmg-edge .wedge, #dmg-edge .grit {
+  position: absolute; inset: -15%; /* bleed — corners stay covered when rotated */
+}
+#dmg-edge .wedge {
+  background: radial-gradient(ellipse 80% 45% at 50% -10%,
+    rgba(255,45,30,0.75) 0%, rgba(220,30,20,0.28) 40%, transparent 65%);
+}
+#dmg-edge .grit {
+  background: radial-gradient(ellipse 80% 45% at 50% -10%,
+    rgba(255,110,80,0.9) 0%, transparent 55%);
+  -webkit-mask-image: url('/assets/LensDirt/LensDirt03_1k.webp');
+  mask-image: url('/assets/LensDirt/LensDirt03_1k.webp');
+  -webkit-mask-size: cover;
+  mask-size: cover;
+}
 /* Directional arc — a thick arc segment rotated to the source bearing */
 #dmg-dir {
   position: absolute; top: 50%; left: 50%;

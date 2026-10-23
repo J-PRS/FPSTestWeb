@@ -30,6 +30,7 @@ export interface StatsHost {
   healthBar: HTMLDivElement;
   energyBar: HTMLDivElement;
   dmgVignette: HTMLDivElement;
+  dmgEdge: HTMLDivElement;
   dmgDir: HTMLDivElement;
   dmgDirArc: HTMLDivElement;
 }
@@ -48,6 +49,7 @@ export class HudStats {
   private hitTimer = 0;
   private dmgT = 0;            // vignette decay
   private dmgDirT = 0;         // arc fade
+  private dmgEdgePeak = 0.5;   // edge-flash ceiling for the current hit
   private shieldVignetteReset = 0;
   private fpsAccum = 0;
   private fpsFrames = 0;
@@ -188,6 +190,7 @@ export class HudStats {
     if (this.dmgDirT > 0) {
       this.dmgDirT = Math.max(0, this.dmgDirT - dt * 1.1);
       this.h.dmgDir.style.opacity = String(this.dmgDirT);
+      this.h.dmgEdge.style.opacity = String(this.dmgDirT * this.dmgEdgePeak);
     }
   }
 
@@ -240,7 +243,7 @@ this.fpsFrames += 1;
     clearTimeout(this.shieldVignetteReset);
     h.dmgVignette.style.boxShadow = '';
 
-    if (fromPos) {this.pointAt(fromPos);}
+    if (fromPos) {this.pointAt(fromPos, Math.min(0.85, 0.25 + damage * 0.015));}
   }
 
   /** Shielded hit — same directional language as damage() but cyan and
@@ -256,12 +259,13 @@ this.fpsFrames += 1;
     this.shieldVignetteReset = window.setTimeout((): void => {
       h.dmgVignette.style.boxShadow = '';
     }, 300);
-    if (fromPos) {this.pointAt(fromPos);}
+    if (fromPos) {this.pointAt(fromPos, 0.35);}
   }
 
   /** Bearing: world angle of (source - player) relative to facing.
-   *  forward = (sin yaw, cos yaw) on XZ; arc's 0° is screen-top. */
-  private pointAt(fromPos: THREE.Vector3): void {
+   *  forward = (sin yaw, cos yaw) on XZ; arc's 0° is screen-top. Same
+   *  bearing rotates the edge flash so its red mass hugs that side. */
+  private pointAt(fromPos: THREE.Vector3, edge = 0.5): void {
     const dx = fromPos.x - this.lastPlayerPos.x;
     const dz = fromPos.z - this.lastPlayerPos.z;
     let rel = Math.atan2(dx, dz) - this.lastPlayerYaw;
@@ -269,7 +273,10 @@ this.fpsFrames += 1;
     while (rel > Math.PI) {rel -= Math.PI * 2;}
     while (rel < -Math.PI) {rel += Math.PI * 2;}
     this.h.dmgDirArc.style.transform = `rotate(${-rel}rad)`;
+    this.h.dmgEdge.style.transform = `rotate(${-rel}rad)`;
     this.dmgDirT = 1;
+    this.dmgEdgePeak = edge;
     this.h.dmgDir.style.opacity = '1';
+    this.h.dmgEdge.style.opacity = String(edge);
   }
 }

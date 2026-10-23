@@ -347,7 +347,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
           if (enemyBlast && deps.lazyNetworkManager?.()?.authoritySims?.() !== true) {
             deps.lazyNetworkManager?.()?.sendEnvironmentDamage(selfDmg, a.shooterId ?? undefined);
           }
-          deps.lazyHud().showDamage(null, selfDmg);
+          deps.lazyHud().showDamage(a.pos, selfDmg);
         }
       }
     }

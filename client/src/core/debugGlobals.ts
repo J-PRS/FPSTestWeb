@@ -14,6 +14,7 @@ import type { WorldState } from '../game/worldState.js';
 import type { chatSink } from '../game/chat.js';
 import type { ViewModel } from '../entities/ViewModel.js';
 import type { createDemoLifecycle } from '../game/demoLifecycle.js';
+import type { HUD } from '../ui/hud.js';
 
 export interface TestHandle {
   player: Player;
@@ -29,6 +30,7 @@ export interface TestHandle {
    *  probes must read it, not world.remotePlayers, to compare replay vs live. */
   demoLifecycle: ReturnType<typeof createDemoLifecycle>;
   chatSink: typeof chatSink;
+  hud: HUD;
   /** parity.ts counters — fates/echoes census for soak verdicts. */
   parity: { fatesSeen: number; echoesStamped: number; echoesConfirmed: number; destroysSeen: number; msgSeen: Record<string, number> };
 }
