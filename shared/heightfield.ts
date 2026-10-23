@@ -59,11 +59,52 @@ function hmField(f: Heightfield, wx: number, wz: number): number {
   return (h / HM_DIVISOR) * HM_HEIGHT_SCALE * (f.heightScale ?? 1);
 }
 
+/** Chord corner cache: the 4 taps of every chord read are STATIC field
+ *  values at fixed lattice points — hoisting them out of the hot loop
+ *  drops ~4 modulo+floor bilinear taps per call down to 4 array reads.
+ *  (ws/5)² f64s per field ≈ 720KB at the 1500m default — f64 is
+ *  load-bearing: f32 corners drift heights ~4µm, which deterministic
+ *  sims amplify into visible route differences over minutes. */
+const chordTaps = new WeakMap<Heightfield, { span: number; cache: Float64Array }>();
+
+function chordCache(f: Heightfield): { span: number; cache: Float64Array } | null {
+  let e = chordTaps.get(f);
+  if (e === undefined) {
+    const ws = f.worldScale ?? HM_WORLD_SCALE;
+    // The chord lattice only tiles the wrap when ws is a multiple of the
+    // step — a 2048m map drifts 2m per wrap, so it must keep live taps.
+    const span = ws / CPU_STEP;
+    if (!Number.isInteger(span)) {e = null;}
+    else {
+      const cache = new Float64Array(span * span);
+      for (let j = 0; j < span; j++) {
+        for (let i = 0; i < span; i++) {
+          cache[j * span + i] = hmField(f, i * CPU_STEP, j * CPU_STEP);
+        }
+      }
+      e = { span, cache };
+    }
+    chordTaps.set(f, e);
+  }
+  return e;
+}
+
 export function hmChord(f: Heightfield, wx: number, wz: number): number {
   const s = CPU_STEP;
   const x0 = Math.floor(wx / s) * s, z0 = Math.floor(wz / s) * s;
-  const h00 = hmField(f, x0, z0), h10 = hmField(f, x0 + s, z0);
-  const h01 = hmField(f, x0, z0 + s), h11 = hmField(f, x0 + s, z0 + s);
+  const cc = chordCache(f);
+  let h00: number, h10: number, h01: number, h11: number;
+  if (cc) {
+    const span = cc.span, cache = cc.cache;
+    const xi0 = (((x0 / s) % span) + span) % span, zi0 = (((z0 / s) % span) + span) % span;
+    const xi1 = (xi0 + 1) % span, zi1 = (zi0 + 1) % span;
+    const b0 = zi0 * span, b1 = zi1 * span;
+    h00 = cache[b0 + xi0]!; h10 = cache[b0 + xi1]!;
+    h01 = cache[b1 + xi0]!; h11 = cache[b1 + xi1]!;
+  } else {
+    h00 = hmField(f, x0, z0); h10 = hmField(f, x0 + s, z0);
+    h01 = hmField(f, x0, z0 + s); h11 = hmField(f, x0 + s, z0 + s);
+  }
   const tx = (wx - x0) / s, tz = (wz - z0) / s;
   return tx + tz <= 1
     ? h00 + (h10 - h00) * tx + (h01 - h00) * tz
