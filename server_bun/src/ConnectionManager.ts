@@ -227,7 +227,9 @@ export class ConnectionManager {
    *  matches live order. */
   private journalBinary(data: Uint8Array, only?: string, exclude?: string, volatile_ = false): void {
     this.outSeq += 1;
-    this.journal.push({ seq: this.outSeq, data, only, exclude, volatile: volatile_, at: wallNow() });
+    // slice() — emit-time frames live in the shared evScratch ring and
+    // recycle after ~128 encodes; the journal retains until replay.
+    this.journal.push({ seq: this.outSeq, data: data.slice(), only, exclude, volatile: volatile_, at: wallNow() });
     if (this.journal.length > ConnectionManager.JOURNAL_MAX + ConnectionManager.JOURNAL_EVICT_CHUNK) {
       const n = this.journal.length - ConnectionManager.JOURNAL_MAX;
       this.journal.splice(0, n);

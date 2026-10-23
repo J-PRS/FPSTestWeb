@@ -885,19 +885,19 @@ export interface WireHit { targetWid: number; shooterWid: number; damage: number
 
 export function encodeHit(h: WireHit): Uint8Array {
   const sid = h.shotId ? ENC.encode(h.shotId) : null;
-  const buf = new ArrayBuffer(15 + (h.armor === undefined ? 0 : 4) + (h.seq === undefined ? 0 : 4) + (sid ? 1 + sid.length : 0) + (h.gd === undefined ? 0 : 4));
-  const u8 = new Uint8Array(buf);
-  const d = new DataView(buf);
+  const len = 15 + (h.armor === undefined ? 0 : 4) + (h.seq === undefined ? 0 : 4) + (sid ? 1 + sid.length : 0) + (h.gd === undefined ? 0 : 4);
+  const { u8, dv } = evScratch(len);
+  const b = u8.byteOffset;
   u8[0] = MAGIC; u8[1] = WIRE_HIT;
-  d.setUint16(2, h.targetWid, true); d.setUint16(4, h.shooterWid, true);
-  d.setFloat32(6, h.damage, true); d.setFloat32(10, h.health, true);
+  dv.setUint16(b + 2, h.targetWid, true); dv.setUint16(b + 4, h.shooterWid, true);
+  dv.setFloat32(b + 6, h.damage, true); dv.setFloat32(b + 10, h.health, true);
   u8[14] = (h.armor === undefined ? 0 : 1) | (h.seq === undefined ? 0 : 2) | (sid ? 4 : 0) | (h.gd === undefined ? 0 : 8);
   let o = 15;
-  if (h.armor !== undefined) {d.setFloat32(o, h.armor, true); o += 4;}
-  if (h.seq !== undefined) {d.setUint32(o, h.seq >>> 0, true); o += 4;}
+  if (h.armor !== undefined) {dv.setFloat32(b + o, h.armor, true); o += 4;}
+  if (h.seq !== undefined) {dv.setUint32(b + o, h.seq >>> 0, true); o += 4;}
   if (sid) {u8[o] = sid.length; u8.set(sid, o + 1); o += 1 + sid.length;}
-  if (h.gd !== undefined) {d.setFloat32(o, h.gd, true);}
-  return u8;
+  if (h.gd !== undefined) {dv.setFloat32(b + o, h.gd, true);}
+  return u8.subarray(0, len);
 }
 
 export function decodeHit(u8: Uint8Array): WireHit | null {
@@ -920,6 +920,32 @@ export function decodeHit(u8: Uint8Array): WireHit | null {
 // ---- S→C binary event relays (the wireId+pos family — same pattern as
 // WIRE_HIT, decoded through the normal message() dispatch) ----
 
+/** Outbound event-frame ring: encoders write through a shared DataView
+ *  into the next slot, return a sized subarray view. A frame stays valid
+ *  until EV_SLOTS further encodes (~10+ ticks of headroom at real event
+ *  rates) — the collect path consumes at tick-end flush, immediate sends
+ *  at ws.send(). Anything retained longer (the reclaim journal, segment
+ *  queues) MUST copy — that's one slice() per journaled event instead
+ *  of a buffer+view+DataView alloc per encode. len > EV_SLOT falls back
+ *  to a normal alloc, so callers never branch. */
+const EV_SLOTS = 128;
+const EV_SLOT = 256;
+const evBuf = new ArrayBuffer(EV_SLOTS * EV_SLOT);
+const evDv = new DataView(evBuf);
+const evViews: Uint8Array[] = [];
+for (let i = 0; i < EV_SLOTS; i++) {evViews.push(new Uint8Array(evBuf, i * EV_SLOT, EV_SLOT));}
+let evAt = 0;
+
+export function evScratch(len: number): { u8: Uint8Array; dv: DataView } {
+  if (len > EV_SLOT) {
+    const buf = new ArrayBuffer(len);
+    return { u8: new Uint8Array(buf), dv: new DataView(buf) };
+  }
+  const u8 = evViews[evAt]!;
+  evAt = (evAt + 1) % EV_SLOTS;
+  return { u8, dv: evDv };
+}
+
 export const WIRE_E_JUMP = 0x14;
 export const WIRE_E_JET = 0x15;
 export const WIRE_E_LANDED = 0x16;
@@ -929,14 +955,14 @@ export const WIRE_KILL = 0x19;
 
 /** jump / jetpack relay (+ landed carries a f32 impact trailing the pos). */
 export function encodeWidPos(kind: number, wid: number, pos: WireVec3, extra?: number): Uint8Array {
-  const buf = new ArrayBuffer(extra === undefined ? 16 : 20);
-  const u8 = new Uint8Array(buf);
-  const d = new DataView(buf);
+  const len = extra === undefined ? 16 : 20;
+  const { u8, dv } = evScratch(len);
+  const b = u8.byteOffset;
   u8[0] = MAGIC; u8[1] = kind;
-  d.setUint16(2, wid, true);
-  d.setFloat32(4, pos.x, true); d.setFloat32(8, pos.y, true); d.setFloat32(12, pos.z, true);
-  if (extra !== undefined) {d.setFloat32(16, extra, true);}
-  return u8;
+  dv.setUint16(b + 2, wid, true);
+  dv.setFloat32(b + 4, pos.x, true); dv.setFloat32(b + 8, pos.y, true); dv.setFloat32(b + 12, pos.z, true);
+  if (extra !== undefined) {dv.setFloat32(b + 16, extra, true);}
+  return u8.subarray(0, len);
 }
 
 export function decodeWidPos(u8: Uint8Array, kind: number): { wid: number; pos: WireVec3; extra?: number } | null {
@@ -954,17 +980,17 @@ export function decodeWidPos(u8: Uint8Array, kind: number): { wid: number; pos: 
 
 /** playerShot cosmetic relay — pos/dir presence flags mirror the JSON. */
 export function encodeShotEv(wid: number, weaponType: number | undefined, pos?: WireVec3, dir?: WireVec3): Uint8Array {
-  const buf = new ArrayBuffer(6 + (pos ? 12 : 0) + (dir ? 12 : 0));
-  const u8 = new Uint8Array(buf);
-  const d = new DataView(buf);
+  const len = 6 + (pos ? 12 : 0) + (dir ? 12 : 0);
+  const { u8, dv } = evScratch(len);
+  const b = u8.byteOffset;
   u8[0] = MAGIC; u8[1] = WIRE_E_SHOT;
-  d.setUint16(2, wid, true);
+  dv.setUint16(b + 2, wid, true);
   u8[4] = (weaponType ?? 0xFF) & 0xFF;
   u8[5] = (pos ? 1 : 0) | (dir ? 2 : 0);
   let o = 6;
-  if (pos) {d.setFloat32(o, pos.x, true); d.setFloat32(o + 4, pos.y, true); d.setFloat32(o + 8, pos.z, true); o += 12;}
-  if (dir) {d.setFloat32(o, dir.x, true); d.setFloat32(o + 4, dir.y, true); d.setFloat32(o + 8, dir.z, true); o += 12;}
-  return u8;
+  if (pos) {dv.setFloat32(b + o, pos.x, true); dv.setFloat32(b + o + 4, pos.y, true); dv.setFloat32(b + o + 8, pos.z, true); o += 12;}
+  if (dir) {dv.setFloat32(b + o, dir.x, true); dv.setFloat32(b + o + 4, dir.y, true); dv.setFloat32(b + o + 8, dir.z, true); o += 12;}
+  return u8.subarray(0, len);
 }
 
 export function decodeShotEv(u8: Uint8Array): { wid: number; weaponType?: number; pos?: WireVec3; dir?: WireVec3 } | null {
@@ -991,15 +1017,14 @@ export function decodeShotEv(u8: Uint8Array): { wid: number; weaponType?: number
 
 /** knockback — victim-only send: wid + pos + force + pull/yank flags. */
 export function encodeKnock(wid: number, pos: WireVec3, force: number, pull?: boolean, yank?: boolean): Uint8Array {
-  const buf = new ArrayBuffer(21);
-  const u8 = new Uint8Array(buf);
-  const d = new DataView(buf);
+  const { u8, dv } = evScratch(21);
+  const b = u8.byteOffset;
   u8[0] = MAGIC; u8[1] = WIRE_E_KNOCK;
-  d.setUint16(2, wid, true);
-  d.setFloat32(4, pos.x, true); d.setFloat32(8, pos.y, true); d.setFloat32(12, pos.z, true);
-  d.setFloat32(16, force, true);
+  dv.setUint16(b + 2, wid, true);
+  dv.setFloat32(b + 4, pos.x, true); dv.setFloat32(b + 8, pos.y, true); dv.setFloat32(b + 12, pos.z, true);
+  dv.setFloat32(b + 16, force, true);
   u8[20] = (pull ? 1 : 0) | (yank ? 2 : 0);
-  return u8;
+  return u8.subarray(0, 21);
 }
 
 export function decodeKnock(u8: Uint8Array): { wid: number; pos: WireVec3; force: number; pull?: boolean; yank?: boolean } | null {
@@ -1015,17 +1040,17 @@ export function decodeKnock(u8: Uint8Array): { wid: number; pos: WireVec3; force
 /** playerKill — durable journal event: shooter/target wireIds + optional
  *  weapon (0xFF = none), streak u16, air f32, steal bit. */
 export function encodeKill(k: { shooterWid: number; targetWid: number; weapon?: number; streak?: number; air?: number; steal?: boolean }): Uint8Array {
-  const buf = new ArrayBuffer(8 + (k.streak === undefined ? 0 : 2) + (k.air === undefined ? 0 : 4));
-  const u8 = new Uint8Array(buf);
-  const d = new DataView(buf);
+  const len = 8 + (k.streak === undefined ? 0 : 2) + (k.air === undefined ? 0 : 4);
+  const { u8, dv } = evScratch(len);
+  const b = u8.byteOffset;
   u8[0] = MAGIC; u8[1] = WIRE_KILL;
-  d.setUint16(2, k.shooterWid, true); d.setUint16(4, k.targetWid, true);
+  dv.setUint16(b + 2, k.shooterWid, true); dv.setUint16(b + 4, k.targetWid, true);
   u8[6] = (k.weapon ?? 0xFF) & 0xFF;
   u8[7] = (k.streak === undefined ? 0 : 1) | (k.air === undefined ? 0 : 2) | (k.steal ? 4 : 0);
   let o = 8;
-  if (k.streak !== undefined) {d.setUint16(o, k.streak, true); o += 2;}
-  if (k.air !== undefined) {d.setFloat32(o, k.air, true); o += 4;}
-  return u8;
+  if (k.streak !== undefined) {dv.setUint16(b + o, k.streak, true); o += 2;}
+  if (k.air !== undefined) {dv.setFloat32(b + o, k.air, true); o += 4;}
+  return u8.subarray(0, len);
 }
 
 export function decodeKill(u8: Uint8Array): { shooterWid: number; targetWid: number; weapon?: number; streak?: number; air?: number; steal?: boolean } | null {
@@ -1057,20 +1082,21 @@ export interface WireProjSpawn {
 
 export function encodeProjSpawn(s: WireProjSpawn): Uint8Array {
   const sid = s.shotId === undefined ? null : ENC.encode(s.shotId);
-  const buf = new ArrayBuffer(46 + (sid ? 1 + sid.length : 0));
-  const u8 = new Uint8Array(buf); const d = new DataView(buf);
+  const len = 46 + (sid ? 1 + sid.length : 0);
+  const { u8, dv } = evScratch(len);
+  const b = u8.byteOffset;
   let o = 0;
-  d.setUint8(o++, MAGIC); d.setUint8(o++, WIRE_PROJSPAWN);
-  d.setUint32(o, s.projId >>> 0, true); o += 4;
-  d.setUint16(o, s.ownerWireId, true); o += 2;
-  d.setUint8(o++, s.weaponType & 0xFF);
-  d.setUint8(o++, s.pellet === undefined ? 0xFF : s.pellet & 0xFF);
-  d.setFloat32(o, s.age, true); o += 4;
-  d.setFloat64(o, s.t, true); o += 8;
-  d.setFloat32(o, s.position.x, true); d.setFloat32(o + 4, s.position.y, true); d.setFloat32(o + 8, s.position.z, true); o += 12;
-  d.setFloat32(o, s.velocity.x, true); d.setFloat32(o + 4, s.velocity.y, true); d.setFloat32(o + 8, s.velocity.z, true); o += 12;
-  if (sid) { d.setUint8(o++, sid.length); u8.set(sid, o); }
-  return new Uint8Array(buf, 0, o + (sid ? sid.length : 0));
+  u8[o++] = MAGIC; u8[o++] = WIRE_PROJSPAWN;
+  dv.setUint32(b + o, s.projId >>> 0, true); o += 4;
+  dv.setUint16(b + o, s.ownerWireId, true); o += 2;
+  u8[o++] = s.weaponType & 0xFF;
+  u8[o++] = s.pellet === undefined ? 0xFF : s.pellet & 0xFF;
+  dv.setFloat32(b + o, s.age, true); o += 4;
+  dv.setFloat64(b + o, s.t, true); o += 8;
+  dv.setFloat32(b + o, s.position.x, true); dv.setFloat32(b + o + 4, s.position.y, true); dv.setFloat32(b + o + 8, s.position.z, true); o += 12;
+  dv.setFloat32(b + o, s.velocity.x, true); dv.setFloat32(b + o + 4, s.velocity.y, true); dv.setFloat32(b + o + 8, s.velocity.z, true); o += 12;
+  if (sid) { u8[o++] = sid.length; u8.set(sid, o); }
+  return u8.subarray(0, len);
 }
 
 export function decodeProjSpawn(u8: Uint8Array): WireProjSpawn | null {
@@ -1103,15 +1129,16 @@ export interface WireProjGone {
 
 export function encodeProjGone(g: WireProjGone): Uint8Array {
   const sid = g.shotId === undefined ? null : ENC.encode(g.shotId);
-  const buf = new ArrayBuffer(22 + (sid ? 1 + sid.length : 0));
-  const u8 = new Uint8Array(buf); const d = new DataView(buf);
+  const len = 22 + (sid ? 1 + sid.length : 0);
+  const { u8, dv } = evScratch(len);
+  const b = u8.byteOffset;
   let o = 0;
-  d.setUint8(o++, MAGIC); d.setUint8(o++, WIRE_PROJGONE);
-  d.setUint32(o, g.projId >>> 0, true); o += 4;
-  d.setFloat32(o, g.age, true); o += 4;
-  d.setFloat32(o, g.position.x, true); d.setFloat32(o + 4, g.position.y, true); d.setFloat32(o + 8, g.position.z, true); o += 12;
-  if (sid) { d.setUint8(o++, sid.length); u8.set(sid, o); }
-  return new Uint8Array(buf, 0, o + (sid ? sid.length : 0));
+  u8[o++] = MAGIC; u8[o++] = WIRE_PROJGONE;
+  dv.setUint32(b + o, g.projId >>> 0, true); o += 4;
+  dv.setFloat32(b + o, g.age, true); o += 4;
+  dv.setFloat32(b + o, g.position.x, true); dv.setFloat32(b + o + 4, g.position.y, true); dv.setFloat32(b + o + 8, g.position.z, true); o += 12;
+  if (sid) { u8[o++] = sid.length; u8.set(sid, o); }
+  return u8.subarray(0, len);
 }
 
 export function decodeProjGone(u8: Uint8Array): WireProjGone | null {
