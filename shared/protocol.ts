@@ -57,7 +57,13 @@ export type ClientMessage =
       /** Offset cursor: last reliable `ev` seq the client processed — a
        *  reclaim presents it so the server replays only the missed frames
        *  (Socket.IO connection-state-recovery shape). */
-      resumeSeq?: number }
+      resumeSeq?: number;
+      /** Opt-in spawn hold: the seat's body stays out of the world until
+       *  'ready' — browser clients declare it (their session veil covers
+       *  the warmup); bots/probes omit it and spawn at seat like always.
+       *  Stickiness: the flag lives on the player record so a reclaim
+       *  re-holds the body the same way. */
+      spawnHold?: boolean }
   // input rides every volatile frame as held state — a superseding
   // stream where loss costs nothing (the next frame carries the same
   // state). On unordered lanes the position seq gates staleness.
@@ -150,6 +156,11 @@ export type ClientMessage =
   // dir (teammate hand-off or ditching it away from a collapsing defense).
   | { type: 'throwFlag' }
   | { type: 'snapshotRequest' }
+  // Spawn gate: the seat's body stays out of the world until the client
+  // reports ready (session veil dropped = rendering stable). Join and
+  // reclaim both hold; the server's READY_HOLD_MS timeout covers a
+  // client that dies mid-veil.
+  | { type: 'ready' }
   // Catch-up resync — ask for a fresh world-state replay (gameState +
   // rosters) without a room hop or reconnect, e.g. after an alt-tab
   // backlog. Server answers with the same payload as a (re)join.

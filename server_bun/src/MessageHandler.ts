@@ -121,6 +121,9 @@ export interface RoomInfo {
    *  id is a spectator (their gap is scoped to their own intro window),
    *  false/absent for players (room-wide nackFulls applies). */
   nackFor?: (playerId: string) => boolean;
+  /** 'ready' sink — a held-off-spawn seat's client finished warming
+   *  (session veil dropped); releases the body into the world. */
+  readySpawn?: (playerId: string) => void;
   /** tickNack gate — false while the client's join burst still holds
    *  its tick frames (seq gaps there are by design, not loss). */
   drainedForTicks?: (playerId: string) => boolean;
@@ -542,7 +545,7 @@ export class MessageHandler {
     const now = wallNow();
     if (this.rosterCache && now - this.rosterCache.at < 100) {return this.rosterCache.data;}
     const data = [...this.playerManager.getAllPlayers().values()]
-      .filter((p): boolean => p.isBot || p.hasReceivedPosition)
+      .filter((p): boolean => (p.isBot || p.hasReceivedPosition) && !p.awaitingReady)
       .map((p): GameStatePlayer => this.playerManager.toGameStatePlayer(p));
     this.rosterCache = { at: now, data };
     return data;
@@ -605,7 +608,9 @@ export class MessageHandler {
   /** Broadcast the playerJoined announce once — gates on the flag so a
    *  player reports for a while, then a second path can't re-announce. */
   announceIfInWorld(player: PlayerState): void {
-    if (player.joinAnnounced) {return;}
+    // Held-off-spawn seats must not announce — their position reports
+    // during the veil warmup would otherwise mint the remote mesh early.
+    if (player.joinAnnounced || player.awaitingReady) {return;}
     player.joinAnnounced = true;
     this.announceJoin(player);
   }

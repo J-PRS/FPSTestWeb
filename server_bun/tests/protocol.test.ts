@@ -12,7 +12,7 @@ import { WIRE } from '../src/wire.ts';
 const ALL_CLIENT_TYPES = [
   'aoeShot', 'chat', 'classUpdate', 'clientStats', 'crawlerHit', 'creatureHit',
   'deploy', 'environmentDamage', 'heal', 'inputMove', 'jetpack', 'join', 'jump',
-  'perkUpdate', 'ping', 'pong', 'position', 'projectileDestroy', 'repair', 'respawn',
+  'perkUpdate', 'ping', 'pong', 'position', 'projectileDestroy', 'ready', 'repair', 'respawn',
   'resync', 'shotFired', 'skillUse', 'slam', 'snapshotRequest', 'switchRoom',
   'teleport', 'throwFlag', 'tickNack',
 ] as const satisfies readonly ClientMessage['type'][];
@@ -35,7 +35,7 @@ describe('protocol wire contract', () => {
     // dispatch, so it carries no handle (see wire.ts head). join's
     // handler only heals the seated-socket retry (resends worldstate).
     for (const t of ALL_CLIENT_TYPES) {
-      if (t === 'switchRoom') continue;
+      if (t === 'switchRoom') {continue;}
       expect(typeof WIRE[t]!.handle, `${t} validates but has no room handler`).toBe('function');
     }
     expect(WIRE.switchRoom!.handle).toBeUndefined();

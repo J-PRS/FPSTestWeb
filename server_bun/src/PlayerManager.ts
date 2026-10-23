@@ -157,6 +157,40 @@ export class PlayerManager {
     if (p) {p.protectedUntil = simMs(0);}
   }
 
+  /** A client that never sends 'ready' can't hold its seat off-spawn
+   *  forever — the cap matches the veil's own 8s force-drop timer. */
+  static readonly READY_HOLD_MS = 10_000;
+
+  /** Hold the seat's body out of the world until the client reports
+   *  ready (session veil dropped). isDead=true makes every physical
+   *  funnel — applyDamage, projContact, blast shove, beams, turret
+   *  targeting — skip the body for free; awaitingReady itself gates
+   *  the visible channels (records, join announce, join rosters). A
+   *  second call keeps the ORIGINAL snapshot — a double-reclaim must
+   *  not fold the forced isDead into the saved state. */
+  holdSpawn(playerId: string): void {
+    const p = this.players.get(playerId);
+    if (!p || p.awaitingReady) {return;}
+    p.awaitingReady = { at: wallNow(), dead: p.isDead, hp: p.health };
+    p.isDead = true;
+  }
+
+  /** Release a held body back into the world: restore the snapshotted
+   *  state and re-arm a spawn shield off the RELEASE (the client is
+   *  only vulnerable from the moment it can actually see/act). Returns
+   *  the saved entry so callers can re-arm respawn for dead seats;
+   *  undefined when the seat wasn't held — 'ready' is a no-op then. */
+  releaseSpawn(playerId: string): { dead: boolean } | undefined {
+    const p = this.players.get(playerId);
+    const ar = p?.awaitingReady;
+    if (!p || !ar) {return undefined;}
+    p.awaitingReady = undefined;
+    p.isDead = ar.dead;
+    p.health = ar.hp;
+    if (!ar.dead) {p.protectedUntil = simMs(simNow() + SPAWN_PROTECT_MS);}
+    return { dead: ar.dead };
+  }
+
   getPlayer(playerId: string): PlayerState | undefined {
     return this.players.get(playerId);
   }
@@ -324,7 +358,10 @@ target.deaths += 1;
 
   respawnPlayer(playerId: string): { position: Vec3; rotation: Rotation; armorClass: string } | null {
     const player = this.players.get(playerId);
-    if (!player) {return null;}
+    // A held seat must not be revived by its own respawn timer (a dead
+    // reclaimer re-arms one on reconnect) — releaseSpawn restores the
+    // true dead state and the 'ready' handler re-arms the timer.
+    if (!player || player.awaitingReady) {return null;}
 
     // Banked classUpdate — the tier swap takes effect at the new life so
     // the sim scale and HP pool change at a declared discontinuity, never

@@ -17,7 +17,7 @@ import type { ClientMessage } from '../../shared/protocol.ts';
 const ALL_CLIENT_TYPES = [
   'aoeShot', 'chat', 'classUpdate', 'clientStats', 'crawlerHit', 'creatureHit',
   'deploy', 'environmentDamage', 'heal', 'inputMove', 'jetpack', 'join', 'jump',
-  'perkUpdate', 'ping', 'pong', 'position', 'projectileDestroy', 'repair', 'respawn',
+  'perkUpdate', 'ping', 'pong', 'position', 'projectileDestroy', 'ready', 'repair', 'respawn',
   'resync', 'shotFired', 'skillUse', 'slam', 'snapshotRequest', 'switchRoom',
   'teleport', 'throwFlag', 'tickNack',
 ] as const satisfies readonly ClientMessage['type'][];
@@ -33,16 +33,24 @@ const FIELD_SENTINEL: Record<string, unknown> = {
 };
 
 function sentinel(f: IntentFieldDecl): unknown {
-  if (f.name in FIELD_SENTINEL) return FIELD_SENTINEL[f.name];
+  if (f.name in FIELD_SENTINEL) {return FIELD_SENTINEL[f.name];}
   switch (f.wire) {
-    case 'num': return 7;
-    case 'str': return 'sentinel';
-    case 'bool': return true;
-    case 'arr': return [1];
-    case 'obj': return { sentinel: 1 };
-    case 'vec3': return { x: 1, y: 2, z: 3 };
-    case 'rot': return { yaw: 1, pitch: 0 };
-    default: return 'sentinel';
+    case 'num': { return 7;
+    }
+    case 'str': { return 'sentinel';
+    }
+    case 'bool': { return true;
+    }
+    case 'arr': { return [1];
+    }
+    case 'obj': { return { sentinel: 1 };
+    }
+    case 'vec3': { return { x: 1, y: 2, z: 3 };
+    }
+    case 'rot': { return { yaw: 1, pitch: 0 };
+    }
+    default: { return 'sentinel';
+    }
   }
 }
 
@@ -62,11 +70,11 @@ describe('intent consumer conformance', () => {
     const stripped: string[] = [];
     for (const t of ALL_CLIENT_TYPES) {
       const decls = CLIENT_INTENTS[t] ?? [];
-      if (decls.length === 0) continue;
+      if (decls.length === 0) {continue;}
       const entry = WIRE[t as ClientMessage['type']];
-      if (!entry) continue; // join/switchRoom never reach room dispatch
+      if (!entry) {continue;} // join/switchRoom never reach room dispatch
       const msg: Record<string, unknown> = { type: t };
-      for (const f of decls) msg[f.name] = sentinel(f);
+      for (const f of decls) {msg[f.name] = sentinel(f);}
       const res = entry.validate(msg as never);
       if (!res.success) {
         stripped.push(`${t} (rejected: ${'error' in res ? res.error : '?'})`);
@@ -74,7 +82,7 @@ describe('intent consumer conformance', () => {
       }
       const data = res.data as Record<string, unknown>;
       for (const f of decls) {
-        if (!(f.name in data)) stripped.push(`${t}.${f.name}`);
+        if (!(f.name in data)) {stripped.push(`${t}.${f.name}`);}
       }
     }
     expect(stripped).toEqual([]);

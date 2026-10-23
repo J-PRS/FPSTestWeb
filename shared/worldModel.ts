@@ -747,6 +747,7 @@ export const CLIENT_INTENTS: Record<string, IntentFieldDecl[]> = {
   skillUse: [{ name: 'claimSeq', wire: 'num', absent: null }],
   slam: [{ name: 'position', wire: 'vec3' }, { name: 'claimSeq', wire: 'num', absent: null }],
   respawn: [{ name: 'hold', wire: 'bool', absent: null }],
+  ready: [],
   throwFlag: [],
   tickNack: [],
   snapshotRequest: [],

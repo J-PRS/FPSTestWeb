@@ -141,6 +141,16 @@ export class Room {
    *  could sit out all 20 ticks and the recipient's first post-window
    *  masked delta would decode against a zero basis. Costs ≤1 extra
    *  record per player per stamp. */
+  /** A held-off-spawn seat reported ready — materialize the body: the
+   *  player record existed since seat() but isDead held it out of every
+   *  physical funnel and awaitingReady out of every visible channel.
+   *  Dead seats re-arm their respawn timer (onPlayerReconnected armed
+   *  one that the awaitingReady guard inside respawnPlayer consumed). */
+  releaseReady(playerId: string): void {
+    const released = this.players.releaseSpawn(playerId);
+    if (released?.dead) {this.messages.combat.ensureRespawn(playerId);}
+  }
+
   markIntro(pid: string): void {
     this.introPlayers.set(pid, this.tickSeq);
     this.lastSentPositions.clear();
@@ -1015,6 +1025,7 @@ export class Room {
         this.lastNackAt = now;
         this.introSeq = this.tickSeq;
       },
+      readySpawn: (pid): void => this.releaseReady(pid),
       fireProjectile: (pid, wt, origin, dir, vel, shotId, lagS): string | null => this.projectiles.spawn(pid, wt, origin, dir, vel, shotId, lagS),
       beamSweep: (pid, muzzle, dir, range): BeamContact | null => this.beamSweep(pid, muzzle, dir, range),
       ballHit: (pid, id, dmg) => this.ballSim.handleHit(pid, id, dmg),

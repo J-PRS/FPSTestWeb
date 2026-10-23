@@ -364,6 +364,9 @@ class WireBot {
           if (pid !== this.id) {this.roster.set(pid, { pos: p.position, vel: p.velocity ?? { x: 0, y: 0, z: 0 }, team: p.team });}
         }
         for (const pk of m.pickups ?? []) {this.pickups.set(pk.id, pk.pos);}
+        // Seats hold off-spawn until 'ready' — a netbot has no veil to
+        // warm behind, so gameState landing IS its readiness.
+        this.send({ type: 'ready' });
         const me = m.localPlayerState?.position ?? m.players?.find((p: { id?: string; playerId?: string }) => (p.id ?? p.playerId) === this.id)?.position
           ?? { x: rand(-20, 20), y: 40, z: rand(-20, 20) };
         void loadTerrain(m.map?.terrain ?? 'heightmap.bin').then((f) => {

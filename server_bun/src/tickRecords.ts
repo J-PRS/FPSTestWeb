@@ -13,6 +13,7 @@ import { heldBuffRates, POWERUP } from '../../shared/pickups.ts';
 import { BELT_MAX } from '../../shared/weapons.ts';
 import { logger } from './logger.ts';
 import type { PlayerState } from './types.ts';
+import { PlayerManager } from './PlayerManager.ts';
 import { healPerTick, recordSuppressed, type TickRecord } from './tickHelpers.ts';
 import { CONFIG } from './config.ts';
 import { healPool } from './healPool.ts';
@@ -268,6 +269,12 @@ this.metrics.recordsBuilt += 1;
    *  order ever heartbeat. */
   private skipRecord(room: Room, playerId: string, p: PlayerState, now: number): boolean {
     if (room.sessions?.state(playerId) === 'grace') {return true;}
+    // Held-off-spawn seat: invisible until its 'ready' lands; the hold
+    // times out here so a client that died mid-veil can't ghost forever.
+    if (p.awaitingReady) {
+      if (now - p.awaitingReady.at > PlayerManager.READY_HOLD_MS) {room.releaseReady(playerId);}
+      return true;
+    }
     const silenceMs = now - p.lastSeen;
     // Idle reap FIRST: a menu-sitter's dead socket must still be collected
     // — checking hasReceivedPosition before this left unreported ghosts

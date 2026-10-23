@@ -371,6 +371,8 @@ export class NetClient {
         if (m.map?.structures) {this.attachStructures(m.map.structures);}
         if (m.sessionToken) {this.sessionToken = m.sessionToken;}
         this.self.team = m.team;
+        // Seats hold off-spawn until 'ready' — no veil in a netbot.
+        this.send({ type: 'ready' });
         this.onGameState?.();
         break;
       }

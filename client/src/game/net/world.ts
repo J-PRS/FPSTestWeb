@@ -32,6 +32,10 @@ const _reseatPos = new THREE.Vector3();
 let sessionVeil: HTMLDivElement | null = null;
 let sessionVeilTimer: ReturnType<typeof setTimeout> | null = null;
 let sessionVeilLabelTimer: ReturnType<typeof setTimeout> | null = null;
+// 'ready' sender — armed alongside the veil; the server holds the body
+// off-spawn until this fires (whatever the drop path: stable frames or
+// the 8s force-drop timer below).
+let sessionVeilDropCb: (() => void) | null = null;
 
 export function dropSessionVeil(): void {
   if (sessionVeilTimer) { clearTimeout(sessionVeilTimer); sessionVeilTimer = null; }
@@ -40,12 +44,16 @@ export function dropSessionVeil(): void {
   sessionVeil = null;
   sessionVeilReady = false;
   sessionSeated = false;
+  const cb = sessionVeilDropCb;
+  sessionVeilDropCb = null;
+  cb?.();
 }
 
 
 
-export function armSessionVeil(label = 'RECONNECTING'): void {
+export function armSessionVeil(label = 'RECONNECTING', onDrop?: () => void): void {
   sessionSeated = false; // a re-arm must wait for THIS session's seat
+  if (onDrop) {sessionVeilDropCb = onDrop;}
   if (sessionVeil) {return;}
   const el = document.createElement('div');
   el.id = 'session-veil';
@@ -162,6 +170,10 @@ function restoreLocalPlayer(ctx: NetCtx, localPlayerState: LocalPlayerState): vo
     deps.lazyHud().show();
   }
   markLocalSeated();
+  // A veil-less seat (menu-join / room-switch mid-session) has no drop
+  // to fire it — release the spawn-hold now; the server no-ops 'ready'
+  // on a seat that isn't held. Veiled seats release via the drop cb.
+  if (!isSessionVeiled()) {nm().sendReady();}
 
   deps.logger.debug(`Player state restored from gameState - pos(${localPlayerState.position.x.toFixed(1)},${localPlayerState.position.y.toFixed(1)},${localPlayerState.position.z.toFixed(1)}) vel(${localPlayerState.velocity?.x.toFixed(1) || 0},${localPlayerState.velocity?.y.toFixed(1) || 0},${localPlayerState.velocity?.z.toFixed(1) || 0}) health:${localPlayerState.health} dead:${localPlayerState.isDead}`);
 }

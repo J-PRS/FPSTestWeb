@@ -613,7 +613,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
     await earlyConnP;
   } else {
     if (!classicMode && !soloMode && settings.get('fps-session-token')) {
-      if (await pingServer((await serverEndpoints).httpUrl)) {armSessionVeil();}
+      if (await pingServer((await serverEndpoints).httpUrl)) {armSessionVeil('RECONNECTING', (): void => networkManager.sendReady());}
       profiler.markTime('veilProbed');
     }
     const ep = await serverEndpoints;
@@ -810,7 +810,7 @@ async function init(): Promise<void> {
   if (onlineBoot && urlParams.mode !== 'classic' && settings.get('fps-session-token')) {
     serverEndpoints
       .then((ep): Promise<boolean> => pingServer(ep.httpUrl))
-      .then((live): void => { if (live) {armSessionVeil(); profiler.markTime('veilProbed');} return; })
+      .then((live): void => { if (live) {armSessionVeil('RECONNECTING', (): void => networkManager.sendReady()); profiler.markTime('veilProbed');} return; })
       .catch((): void => { /* dead-host probe — the offline world owns first frames */ });
   }
   earlyConnP = earlyWire
@@ -829,7 +829,9 @@ async function init(): Promise<void> {
   // the terrain. Drop path is identical (gameState + terrain + stable
   // frames; 8s escape on connect failure).
   if (onlineBoot && urlParams.mode !== 'classic') {
-    armSessionVeil(settings.get('fps-session-token') ? 'RECONNECTING' : 'JOINING');
+    // The server holds the body off-spawn until 'ready' — the veil-drop
+    // callback IS the release (stable frames or the 8s force timer).
+    armSessionVeil(settings.get('fps-session-token') ? 'RECONNECTING' : 'JOINING', (): void => networkManager.sendReady());
   }
   // Warm the class-body GLB into the HTTP cache — the loader's fetch at
   // playerCtor then hits cache instead of a cold fetch starting ~1.5s

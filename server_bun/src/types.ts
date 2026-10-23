@@ -122,6 +122,16 @@ export interface PlayerState {
   // no-ops on this player. Set on join/respawn; firing clears it —
   // shooting from inside your own shield is the standard trade.
   protectedUntil: SimMs;
+  /** Seat held off-spawn: the client is still behind its session veil,
+   *  warming — the body must not exist until it says 'ready'. While set,
+   *  isDead is forced true (every damage/collision funnel already skips
+   *  the dead), records/announce/roster suppress on the flag itself.
+   *  `dead`/`hp` snapshot the real state for release; `at` bounds the
+   *  hold — a client that never sends ready auto-releases. */
+  awaitingReady?: { at: WallMs; dead: boolean; hp: number };
+  /** Join-declared spawn hold — reclaim re-arms the hold only for seats
+   *  that asked at join (browser veil clients; bots/probes never set it). */
+  spawnHold?: boolean;
   // Heal credit: team-mode rooms only accept heal claims backed by a
   // server-observed gem touch (+25 per gem). Without it the self-heal
   // claim (clamped 25/call) is a free-invincibility lever.

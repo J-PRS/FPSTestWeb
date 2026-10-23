@@ -305,6 +305,10 @@ export class SessionManager {
     // Disconnect cancelled any pending respawn — if they come back dead,
     // re-arm it or the restored corpse stays dead forever
     room.messages.onPlayerReconnected(playerId);
+    // Same spawn-hold as a fresh join — only for seats that asked at
+    // join (the flag lives on the player record). Dead seats re-arm
+    // their respawn on releaseReady.
+    if (existingPlayer.spawnHold) {room.players.holdSpawn(playerId);}
 
     logger.info('Player reconnected within grace period, state restored', { playerId, room: room.name, health: existingPlayer.health, pos: existingPlayer.position });
     return true;
@@ -425,6 +429,7 @@ this.d.ops.joins += 1;
     const joinedPlayer = room.players.addPlayer(playerId, room.nextTeam(), isPerkId(handshake.perk) ? handshake.perk : 'none',
       typeof handshake.armorClass === 'string' ? handshake.armorClass : 'medium');
     joinedPlayer.name = name;
+    joinedPlayer.spawnHold = handshake.spawnHold === true;
     if (handshake.transport === 'wt' || handshake.transport === 'rtc' || handshake.transport === 'ws') {
       joinedPlayer.transport = handshake.transport;
     }
@@ -433,6 +438,12 @@ this.d.ops.joins += 1;
     room.connections.register(playerId, ws);
     room.markIntro(playerId); // per-joiner full window — see Room.introPlayers
     room.messages.handleHandshake(playerId, sessionToken);
+    // Opt-in spawn hold: veil-equipped clients declare spawnHold and
+    // their body stays out of the world until 'ready' — a body that
+    // exists before the player can see is a free frag. The hand goes
+    // after the handshake so gameState still ships the true (alive)
+    // localPlayerState the veil warms on.
+    if (joinedPlayer.spawnHold) {room.players.holdSpawn(playerId);}
 this.d.ops.joins += 1;
     switch (handshake.transport) {
       case 'ws': {this.d.ops.tierWs += 1; break;

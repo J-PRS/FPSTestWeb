@@ -587,6 +587,13 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     },
   },
 
+  ready: {
+    // Stateless release — the seat's own awaitingReady flag is the gate,
+    // so a forged/extra 'ready' is a no-op, not a lever.
+    validate: () => ({ success: true, data: { type: 'ready' } }),
+    handle: (h, id): void => { h.roomInfo.readySpawn?.(id); },
+  },
+
   ping: {
     validate: (obj) => {
       if (!isFiniteNumber(obj.timestamp)) {

@@ -16,7 +16,7 @@ import { initNetProbe, bindStats, attachScene, corr as probeCorr, corrGhost } fr
 import { parityMiss, kbEchoHorizon } from '../parity.js';
 import { recCorrection } from '../../core/telemetry.js';
 import { lastWeaponByPlayer } from './projectiles.js';
-import { markLocalSeated } from './world.js';
+import { markLocalSeated, isSessionVeiled } from './world.js';
 import type { NetCtx } from './ctx.js';
 
 /** Updates, respawns, join/leave, movement events — the presence wire. */
@@ -91,6 +91,7 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
       }
       player.pos.set(position.x, position.y, position.z);
       markLocalSeated();
+      if (!isSessionVeiled()) {nm().sendReady();} // veil-less seats release the spawn-hold immediately; held-or-not, 'ready' no-ops
       noteLocalSnap();
       deps.setLastSentPos({ x: position.x, y: position.y, z: position.z });
       if (Number.isFinite(rotation.yaw + rotation.pitch)) {
