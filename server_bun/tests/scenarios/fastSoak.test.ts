@@ -23,7 +23,7 @@ const TRAIL_PATH = process.env.FPS_TRAIL;
 // FPS_SHEEP_LOG overrides where they go; deleting it restores console warns.
 process.env.FPS_SHEEP_LOG ??= TRAIL_PATH
   ? `${dirname(TRAIL_PATH)  }/soak.log`
-  : `${import.meta.dir}/../../../run/soak.log`;
+  : `${import.meta.dir}/../../run/soak.log`;
 
 /** Lossless RGB PNG — zlib from node, no image deps. */
 function pngWrite(path: string, w: number, h: number, px: Uint8Array): void {
