@@ -27,10 +27,10 @@ describe('makeBallClock — sim-clock estimate', (): void => {
   it('EMAs the sim→wall rate down when stamps arrive slower than wall time', (): void => {
     const c = makeBallClock((): number => 0);
     wall(100); c.noteStamp(10);
-    wall(101); c.noteStamp(10.4); // ds=0.4 in dw=1.0 → r=0.4 clamped 0.5
+    wall(101); c.noteStamp(10.4); // ds=0.4 in dw=1.0 → r=0.4 clamped to the 0.9 floor
     wall(101.5);
-    // rate = 1 + (0.5-1)*0.2 = 0.9 → est = 10.4 + 0.5*0.9
-    expect(c.estSimNow()).toBeCloseTo(10.85, 9);
+    // rate = 1 + (0.9-1)*0.2 = 0.98 → est = 10.4 + 0.5*0.98
+    expect(c.estSimNow()).toBeCloseTo(10.89, 9);
   });
 
   it('ignores out-of-order stamps — the clock never rewinds', (): void => {
@@ -41,20 +41,20 @@ describe('makeBallClock — sim-clock estimate', (): void => {
     expect(c.estSimNow()).toBeCloseTo(10 + 1.5, 9);
   });
 
-  it('re-anchors on epoch rewind — a stamp >30s below the max is a new timeline', (): void => {
+  it('re-anchors on epoch rewind — a stamp >2s below the max is a new timeline', (): void => {
     const c = makeBallClock((): number => 0);
     wall(100); c.noteStamp(400); // old epoch — server sim clock later rewound
     wall(100.5);
     expect(c.estSimNow()).toBeCloseTo(400.5, 9);
-    c.noteStamp(97); // new epoch — 303s below max, can't be in-epoch
+    c.noteStamp(397); // 3s below max — past the reorder window, new epoch
     wall(101);
-    // Anchored on the new epoch: ~97.5, not 401 — the gate engages again.
-    expect(c.estSimNow()).toBeLessThan(110);
-    expect(c.estSimNow()).toBeGreaterThan(97);
+    // Anchored on the new epoch: ~397.5, not 401 — the gate engages again.
+    expect(c.estSimNow()).toBeLessThan(400);
+    expect(c.estSimNow()).toBeGreaterThan(397);
     // In-epoch noise still can't rewind: small-below stamps are ignored.
-    c.noteStamp(96);
+    c.noteStamp(396); // 1s below the 397 anchor — inside the window
     wall(101.5);
-    expect(c.estSimNow()).toBeGreaterThan(97);
+    expect(c.estSimNow()).toBeGreaterThan(397);
   });
 
   it('ballEventAge clamps to [0, 0.6] and measures stamp-to-arrival age', (): void => {

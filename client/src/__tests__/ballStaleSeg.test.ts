@@ -45,6 +45,17 @@ describe('isStaleSeg — wire-order boundary', (): void => {
     const bag = newNetBag();
     expect(isStaleSeg(bag, 0.01)).toBe(false);
   });
+
+  it('a stamp seconds older is a rewound timeline, not stale — accept it', (): void => {
+    // Room re-mint/server bounce rewinds simTime by any amount — the old
+    // 30s window dropped a 17s-rewound epoch forever (frozen replicas,
+    // 700m rubberbands). Cross-lane reorder never spans seconds.
+    const bag = newNetBag();
+    bag.legT0 = 45.5;
+    expect(isStaleSeg(bag, 43.9)).toBe(true);  // 1.6s — inside the reorder window
+    expect(isStaleSeg(bag, 43)).toBe(false);   // 2.5s — rewound timeline
+    expect(isStaleSeg(bag, 28)).toBe(false);   // 17.5s — rewound timeline
+  });
 });
 
 // No heightfield — the lead-step branch stays off, so these tests isolate

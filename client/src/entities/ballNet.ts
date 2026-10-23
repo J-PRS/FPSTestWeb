@@ -231,7 +231,12 @@ export function tickNet(st: NetStatics, bag: NetBag, host: NetHost, dt: number):
  *  to the old epoch. Accept those as fresh truth or every heal and
  *  segment drops forever (the persistent ball-lane desync a server
  *  bounce produced). */
-const TIMELINE_RESET_S = 30;
+// In-epoch cross-lane reorder is bounded (~one drain, well under a
+// second). A stamp seconds older than the leg anchor can only be a
+// REWOUND sim timeline (room re-mint, ballSim restart) — a 17s rewind
+// sat inside the old 30s window and every new-epoch segment dropped
+// "stale" forever: frozen replica, 700m rubberbands, regime desync.
+const TIMELINE_RESET_S = 2;
 
 export function isStaleSeg(bag: NetBag, t: number | undefined): boolean {
   // Strictly older only: stamps have 50ms granularity, so two segments in

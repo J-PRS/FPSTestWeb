@@ -70,7 +70,7 @@ export function makeBallClock(getPing: () => number): {
   // Same epoch-rewind contract isStaleSeg enforces per ball: emit order is
   // stamp order on the wire, so a stamp this far below the newest is a new
   // sim timeline (server bounce, room re-mint), never an in-epoch packet.
-  const STAMP_REWIND_S = 30;
+  const STAMP_REWIND_S = 2; // mirrors ballNet TIMELINE_RESET_S — any rewind past one drain is a new epoch
   function noteStamp(t: number): void {
     const now = performance.now() / 1000;
     // Without this the max-tracking below ignores every new-epoch stamp
@@ -86,7 +86,11 @@ export function makeBallClock(getPing: () => number): {
       if (clock.t >= 0) {
         const ds = t - clock.t, dw = now - clock.at;
         if (ds > 0 && dw > 0.2) {
-          const r = Math.min(1.2, Math.max(0.5, ds / dw));
+          // 0.9 floor: the wire clock steps at real-time by construction —
+          // an EMA dragged to 0.5 by arrival bursts leaves estSimNow
+          // sagging seconds behind live stamps (the 17s-under ball
+          // rubberband/desync class).
+          const r = Math.min(1.1, Math.max(0.9, ds / dw));
           clock.rate += (r - clock.rate) * 0.2; // EMA
         }
       }
