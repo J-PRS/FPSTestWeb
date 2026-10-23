@@ -20,7 +20,7 @@ import { InfluenceMap } from './influenceMap.ts';
 import { hmHeight, hmChord, HM_WORLD_SCALE, type Heightfield } from '../../shared/heightfield.ts';
 import { beamSweepRay } from './beamSweep.ts';
 import type { BeamContact } from './CombatHandler.ts';
-import { NOISE_TTL_MS , type V4Last } from '../../shared/wire.ts';
+import { NOISE_TTL_MS , type V4Last, encodeHit } from '../../shared/wire.ts';
 import { RoomMoveSim } from './RoomMoveSim.ts';
 import { type MapSpec, resolveMapSpec } from '../../shared/mapSpec.ts';
 import { MODES, pickTeam, makeScores, type ModeId, type ModeSpec, type TeamScores, type TeamId } from '../../shared/teams.ts';
@@ -1038,6 +1038,17 @@ export class Room {
         // ping/pong channel instead of poisoning the EMA.
         const uplink = wallNow() - fireAt;
         if (uplink >= 0 && uplink <= 2000) {this.moveSim.feedUplink(pid, uplink);}
+      },
+      // playerHit on the binary lane: one encodeHit per event rides the
+      // same batch as the tick frame — ~20B vs ~160B JSON, the client's
+      // own wireIds map resolves ids back. 'environment' encodes wid 0.
+      wireHit: (e): boolean => {
+        const targetWid = this.wireIds.get(e.targetId);
+        if (targetWid === undefined) {return false;}
+        const shooterWid = e.shooterId === 'environment' ? 0 : this.wireIds.get(e.shooterId);
+        if (shooterWid === undefined) {return false;}
+        this.connections.broadcastBinaryReliable(encodeHit({ ...e, targetWid, shooterWid }), true); // combat events journal — a reclaim replays them
+        return true;
       },
       // The rabbit dep's presence IS the mode check — CombatHandler gates
       // all PvP damage on the carrier being one side of the pair.

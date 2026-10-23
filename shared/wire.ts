@@ -876,6 +876,47 @@ export function decodeShot(u8: Uint8Array): { weaponType: number; pos?: WireVec3
   return r;
 }
 
+/** S→C playerHit — the hot combat event (~160B JSON → ~20B). Ids are
+ *  room wireIds (u16); shooterWid 0 = 'environment'. Presence flags
+ *  cover armor/shotId/gd — the same optional fields the JSON carries. */
+export const WIRE_HIT = 0x13;
+
+export interface WireHit { targetWid: number; shooterWid: number; damage: number; health: number; armor?: number; seq?: number; shotId?: string; gd?: number }
+
+export function encodeHit(h: WireHit): Uint8Array {
+  const sid = h.shotId ? ENC.encode(h.shotId) : null;
+  const buf = new ArrayBuffer(15 + (h.armor === undefined ? 0 : 4) + (h.seq === undefined ? 0 : 4) + (sid ? 1 + sid.length : 0) + (h.gd === undefined ? 0 : 4));
+  const u8 = new Uint8Array(buf);
+  const d = new DataView(buf);
+  u8[0] = MAGIC; u8[1] = WIRE_HIT;
+  d.setUint16(2, h.targetWid, true); d.setUint16(4, h.shooterWid, true);
+  d.setFloat32(6, h.damage, true); d.setFloat32(10, h.health, true);
+  u8[14] = (h.armor === undefined ? 0 : 1) | (h.seq === undefined ? 0 : 2) | (sid ? 4 : 0) | (h.gd === undefined ? 0 : 8);
+  let o = 15;
+  if (h.armor !== undefined) {d.setFloat32(o, h.armor, true); o += 4;}
+  if (h.seq !== undefined) {d.setUint32(o, h.seq >>> 0, true); o += 4;}
+  if (sid) {u8[o] = sid.length; u8.set(sid, o + 1); o += 1 + sid.length;}
+  if (h.gd !== undefined) {d.setFloat32(o, h.gd, true);}
+  return u8;
+}
+
+export function decodeHit(u8: Uint8Array): WireHit | null {
+  if (u8.length < 15 || u8[0] !== MAGIC || u8[1] !== WIRE_HIT) {return null;}
+  const d = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  const flags = u8[14]!;
+  const r: WireHit = {
+    targetWid: d.getUint16(2, true), shooterWid: d.getUint16(4, true),
+    damage: d.getFloat32(6, true), health: d.getFloat32(10, true),
+  };
+  if (!Number.isFinite(r.damage + r.health)) {return null;}
+  let o = 15;
+  if (flags & 1) {if (o + 4 > u8.length) {return null;} r.armor = d.getFloat32(o, true); o += 4;}
+  if (flags & 2) {if (o + 4 > u8.length) {return null;} r.seq = d.getUint32(o, true); o += 4;}
+  if (flags & 4) {if (o + 1 > u8.length) {return null;} const n = u8[o]!; if (o + 1 + n > u8.length) {return null;} r.shotId = DEC.decode(u8.subarray(o + 1, o + 1 + n)); o += 1 + n;}
+  if (flags & 8) {if (o + 4 > u8.length) {return null;} r.gd = d.getFloat32(o, true); o += 4;}
+  return r;
+}
+
 export interface WireProjSpawn {
   projId: number;          // numeric tail of 'sp-N'
   ownerWireId: number;     // room wireId — receiver resolves via its roster

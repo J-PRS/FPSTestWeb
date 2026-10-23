@@ -122,6 +122,10 @@ export interface CombatDeps {
   /** Claim-declared trigger instant (server-clock estimate) — feeds the
    *  measured-uplink channel the transit EMA approximates. */
   uplinkNote?: (playerId: string, fireAt: number) => void;
+  /** Binary playerHit lane (wireIds resolve → encodeHit once per event).
+   *  Returns false when either id lacks a wireId — caller falls back to
+   *  the JSON broadcast so test harnesses and env shooters still land. */
+  wireHit?: (e: { shooterId: string; targetId: string; damage: number; health: number; armor?: number; seq?: number; shotId?: string; gd?: number }) => boolean;
 }
 
 /**

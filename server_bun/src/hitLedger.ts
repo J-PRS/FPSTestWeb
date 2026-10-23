@@ -36,8 +36,8 @@ function probePush<T>(arr: T[], v: T): void {
 // through the broadcast/kill/respawn funnels, nothing else. Pick<> keeps
 // the fields synced with the handler they slice.
 export type LedgerHost = Pick<CombatHandler,
-  'broadcast' | 'chargeBank' | 'playerManager' | 'killFeed' | 'respawner' | 'hb'
-> & { deps: Pick<CombatDeps, 'emit' | 'influence' | 'mode' | 'preyNear'> };
+  'broadcast' | 'chargeBank' | 'playerManager' | 'killFeed' | 'respawner' | 'hb' | 'deps'
+> & { deps: Pick<CombatDeps, 'emit' | 'influence' | 'mode' | 'preyNear' | 'wireHit'> };
 
 // The hit funnel tail — every damage path converges here so shot/AOE/
 // environment can't drift: telemetry (weapon spread, death spot, TTK),
@@ -68,7 +68,12 @@ export class HitLedger {
         }
       }
       logger.debug(opts.label, Object.assign({}, {shooter: shooterId,target: targetId,damage,targetHealth: result.newHealth}, opts.extra));
-      c.broadcast(eventPayload(WORLD_MODEL.player!, 'playerHit', 'targetId', targetId, { shooterId, damage, health: result.newHealth, armor: result.newArmor, seq: (this.hitSeq += 1), shotId: opts.shotId, gd: opts.gd }) as ServerMessage);
+      const hitMsg = { shooterId, targetId, damage, health: result.newHealth, armor: result.newArmor, seq: (this.hitSeq += 1), shotId: opts.shotId, gd: opts.gd };
+      // Binary lane when wireIds resolve (players, 'environment' → wid 0);
+      // JSON broadcast stays the fallback for harnesses and unminted ids.
+      if (c.deps.wireHit?.(hitMsg) !== true) {
+        c.broadcast(eventPayload(WORLD_MODEL.player!, 'playerHit', 'targetId', targetId, hitMsg) as ServerMessage);
+      }
       return;
     }
     const corpse = c.playerManager.getPlayer(targetId);

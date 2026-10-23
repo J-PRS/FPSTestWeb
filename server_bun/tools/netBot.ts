@@ -19,7 +19,7 @@
  */
 import { MoveSim, ENERGY } from '../../shared/movement.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
-import { encodePosition, encodeInputMove, decodeTickFrame, decodeBallSegment, decodeWireJson, iterBatch, encodePosClaim, encodeShot } from '../../shared/wire.ts';
+import { encodePosition, encodeInputMove, decodeTickFrame, decodeBallSegment, decodeWireJson, iterBatch, encodePosClaim, encodeShot, decodeHit } from '../../shared/wire.ts';
 import { PERK_ORDER } from '../../shared/perks.ts';
 import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
 import { WeaponType } from '../../shared/weaponTable.ts';
@@ -243,6 +243,17 @@ class WireBot {
     if (u8[0] === 0x54 && u8[1] === 0x09) {
       const text = decodeWireJson(u8);
       if (text !== null) {this.onJsonText(text);}
+      return;
+    }
+    // playerHit on the binary lane — resolve wireIds, run the same
+    // JSON-path handler the string event used (seq dedupe preserved).
+    if (u8[1] === 0x13) {
+      const h = decodeHit(u8);
+      const targetId = h ? this.wireIds.get(h.targetWid) : undefined;
+      const shooterId = h ? (h.shooterWid === 0 ? 'environment' : this.wireIds.get(h.shooterWid)) : undefined;
+      if (h && targetId && shooterId) {
+        this.onMessage({ type: 'playerHit', shooterId, targetId, damage: h.damage, health: h.health, armor: h.armor, seq: h.seq, shotId: h.shotId, gd: h.gd });
+      }
       return;
     }
     const f = decodeTickFrame(u8, this.tickPool as never);

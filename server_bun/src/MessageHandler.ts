@@ -166,6 +166,9 @@ export interface RoomInfo {
   /** Claim-declared trigger instant — the shooter's server-clock estimate;
    *  (arrival − fireAt) is that claim's measured uplink transit. */
   uplinkNote?: (playerId: string, fireAt: number) => void;
+  /** Binary playerHit lane — the room owns wireIds, returns false when an
+   *  id can't resolve so the caller falls back to the JSON broadcast. */
+  wireHit?: CombatDeps['wireHit'];
   energyOf?: (playerId: string) => number | null;
   moveResync?: (playerId: string, pos: Vec3, yaw: number, fullEnergy?: boolean) => void;
   /** Bot chat lands as a 'botSpoke' event — Room relays it as a 'reply'
@@ -235,6 +238,7 @@ function combatDeps(roomInfo: RoomInfo | undefined): CombatDeps {
     repair: roomInfo?.onRepair,
     transitOf: roomInfo?.transitOf,
     uplinkNote: roomInfo?.uplinkNote,
+    wireHit: roomInfo?.wireHit,
   };
 }
 

@@ -12,8 +12,8 @@ import { ChildLogger } from '../core/Logger.js';
 import { checkHit } from '../core/liveMonitor.js';
 import {
   isWireFrame, decodeTickFrame, decodeBallAny, decodeProjSpawn, decodeProjGone,
-  WIRE_BALLSEG, WIRE_BALLBATCH, WIRE_PROJSPAWN, WIRE_PROJGONE, WIRE_BATCH, WIRE_JSON,
-  decodeWireJson, iterBatch, SERVER_TICK_MS,
+  WIRE_BALLSEG, WIRE_BALLBATCH, WIRE_PROJSPAWN, WIRE_PROJGONE, WIRE_BATCH, WIRE_JSON, WIRE_HIT,
+  decodeWireJson, decodeHit, iterBatch, SERVER_TICK_MS,
   type TickDecodePool,
 } from '../../../shared/wire.js';
 import {type ServerMessage, type TickUpdatePlayer, PROTOCOL_VERSION} from '../../../shared/protocol.js';
@@ -213,6 +213,18 @@ this.handlerThrows += 1;
       if (text === null) {return;}
       try { this.message(JSON.parse(text)); }
       catch (error) {this.handlerThrows += 1; logger.warn(`wire-json subframe failed: ${error instanceof Error ? error.message : String(error)}`);}
+      return;
+    }
+    // playerHit on the binary lane — resolve wireIds then run the same
+    // message() dispatch the JSON event used (seq dedupe preserved).
+    if (data[1] === WIRE_HIT) {
+      const h = decodeHit(data);
+      if (!h) {return;}
+      const targetId = this.wireIds.get(h.targetWid);
+      const shooterId = h.shooterWid === 0 ? 'environment' : this.wireIds.get(h.shooterWid);
+      if (!targetId || !shooterId) {return;} // ids not minted yet — same as a tick record for an unknown wid
+      try { this.message({ type: 'playerHit', shooterId, targetId, damage: h.damage, health: h.health, armor: h.armor, seq: h.seq, shotId: h.shotId, gd: h.gd }); }
+      catch (error) {this.handlerThrows += 1; logger.warn(`wire-hit subframe failed: ${error instanceof Error ? error.message : String(error)}`);}
       return;
     }
     if (data[1] === WIRE_PROJSPAWN || data[1] === WIRE_PROJGONE) {

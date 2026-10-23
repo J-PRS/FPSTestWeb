@@ -66,12 +66,12 @@ async function metrics(port: number): Promise<Record<string, unknown> | null> {
   } catch { return null; }
 }
 
-async function wireKinds(port: number): Promise<Record<string, number> | null> {
+async function wireKinds(port: number): Promise<{ rx: Record<string, number> | null; tx: Record<string, number> | null } | null> {
   try {
     const r = await fetch(`http://127.0.0.1:${port}/wire`, { signal: AbortSignal.timeout(3000) });
     if (!r.ok) {return null;}
-    const j = await r.json() as { rxByKind?: Record<string, { bytes?: number }> };
-    return j.rxByKind ?? null;
+    const j = await r.json() as { rxByKind?: Record<string, { bytes?: number }>; txByKind?: Record<string, { bytes?: number }> };
+    return { rx: j.rxByKind ?? null, tx: j.txByKind ?? null };
   } catch { return null; }
 }
 
@@ -179,7 +179,7 @@ try {
 
   const rx = await wireKinds(PORT);
   const bw = (m1 as { bandwidth?: { tickMs?: { avg?: number; max?: number }; phaseMs?: Record<string, number>; tickFramesDroppedPerSec?: number; tickFramesHeldPerSec?: number } } | null)?.bandwidth;
-  if (rx) {log(`rxByKind: ${JSON.stringify(rx)}`);}
+  if (rx) {log(`rxByKind: ${JSON.stringify(rx.rx)}\ntxByKind: ${JSON.stringify(rx.tx)}`);}
   console.log(JSON.stringify({
     cpuPct: +measured.toFixed(1),
     players: (m1 as { players?: number } | null)?.players ?? players,

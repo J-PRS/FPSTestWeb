@@ -5,7 +5,7 @@
 // bot.ts; this file is transport + state.
 
 import type { ClientMessage, ServerMessage, TickUpdatePlayer, Vec3 } from '../../shared/protocol.ts';
-import { decodeTickFrame, decodeWireJson, isWireFrame, iterBatch, WIRE_BATCH, WIRE_JSON } from '../../shared/wire.ts';
+import { decodeTickFrame, decodeWireJson, isWireFrame, iterBatch, decodeHit, WIRE_BATCH, WIRE_JSON } from '../../shared/wire.ts';
 import { hmParseBin, type Heightfield } from '../../shared/heightfield.ts';
 import { FieldSurface } from '../../shared/fieldSurface.ts';
 import { SolidWorld } from '../../shared/solidWorld.ts';
@@ -265,6 +265,16 @@ export class NetClient {
     if (u8[1] === WIRE_JSON) {
       const text = decodeWireJson(u8);
       if (text !== null) {this.onMessage(JSON.parse(text) as ServerMessage);}
+      return;
+    }
+    // playerHit on the binary lane — same JSON-path handler (dedupe kept).
+    if (u8[1] === 0x13) {
+      const h = decodeHit(u8);
+      const targetId = h ? this.wireIds.get(h.targetWid) : undefined;
+      const shooterId = h ? (h.shooterWid === 0 ? 'environment' : this.wireIds.get(h.shooterWid)) : undefined;
+      if (h && targetId && shooterId) {
+        this.onMessage({ type: 'playerHit', shooterId, targetId, damage: h.damage, health: h.health, armor: h.armor, seq: h.seq, shotId: h.shotId, gd: h.gd });
+      }
       return;
     }
     // Stale-check BEFORE decode — v4 decode mutates the byId baseline,

@@ -123,7 +123,9 @@ export class ConnectionManager {
   // ball segments) skip the journal: ticks are drop-safe and the reclaim's
   // gameState+ballRoster already reseeds ball truth.
   private outSeq = 0;
-  private journal: { seq: number; data: string; only?: string; exclude?: string; volatile?: boolean; at: number }[] = [];
+  /** JSON frames AND opt-in binary events share the journal + one ev seq
+   *  space — replay preserves causal order regardless of lane. */
+  private journal: { seq: number; data: string | Uint8Array; only?: string; exclude?: string; volatile?: boolean; at: number }[] = [];
   static readonly JOURNAL_MAX = 2048;
   /** splice(0,1) per push at saturation memmoves the whole journal every
    *  frame — evict in chunks so the copy amortizes. Cap is a steady-state
@@ -217,6 +219,21 @@ export class ConnectionManager {
       }
     }
     return { data, kind: `j:${(msg as { type: string }).type}` };
+  }
+
+  /** Binary events opt INTO the journal at call time (playerHit etc —
+   *  they're the combat stream a reclaim must replay; ticks/ball segs
+   *  stay drop-safe and skip). Shares the ev seq space so replay order
+   *  matches live order. */
+  private journalBinary(data: Uint8Array, only?: string, exclude?: string, volatile_ = false): void {
+    this.outSeq += 1;
+    this.journal.push({ seq: this.outSeq, data, only, exclude, volatile: volatile_, at: wallNow() });
+    if (this.journal.length > ConnectionManager.JOURNAL_MAX + ConnectionManager.JOURNAL_EVICT_CHUNK) {
+      const n = this.journal.length - ConnectionManager.JOURNAL_MAX;
+      this.journal.splice(0, n);
+      this.journalDropped += n;
+      this.onJournalWrap?.(n);
+    }
   }
 
   /** Reclaim replay — frames addressed to everyone or to this player that
@@ -358,8 +375,9 @@ export class ConnectionManager {
     this.drownCheck(pid, ws);
   }
 
-  broadcastBinaryReliable(data: Uint8Array): void {
+  broadcastBinaryReliable(data: Uint8Array, journaled = false): void {
     const kind = BIN_KIND[data[1]!]!;
+    if (journaled) {this.journalBinary(data);} // combat events replay on reclaim — same ev seq space as JSON
     if (this.collecting) {
       for (const pid of this.connections.keys()) {this.push(pid, data); wireTx(pid, data.byteLength, kind);}
       return;
