@@ -25,3 +25,9 @@ export interface ProjectileRegistry {
 export function createProjectileRegistry(): ProjectileRegistry {
   return { byShotId: new Map(), byId: new Map(), byFanSlot: new Map(), seq: 0 };
 }
+
+/** Per-session nonce — `s${seq}` alone collides across clients: B's shell
+ *  s5 gone would bind to A's own s5 via the shotId fallback (the
+ *  traj-epoch bind:-1 9s-vs-1s false kills). Prefix every minted id. */
+export const SHOT_NONCE = `x${Math.random().toString(36).slice(2, 7)}`;
+export const nextShotId = (registry: { seq: number }): string => `s${SHOT_NONCE}${(registry.seq += 1)}`;

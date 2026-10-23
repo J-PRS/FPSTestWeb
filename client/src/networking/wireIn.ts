@@ -344,7 +344,7 @@ rejectCensus.total += 1;
       if (data.targetId || data.shotId) {this.h.confirmClaimHit(data.targetId ?? '', data.shotId);}
       const wName = data.weaponType === undefined ? undefined : String(WeaponType[data.weaponType] ?? data.weaponType);
       netProbeClaim('reject', data.reason, wName, data.targetId, this.h.getPing());
-      logger.error(`shot rejected — predicted damage never applied`, {
+      logger.error(`shot rejected — predicted damage never applied: ${data.reason}${data.targetId ? ` →${data.targetId}` : ''}`, {
         reason: data.reason,
         targetId: data.targetId,
         weapon: wName,
@@ -360,7 +360,7 @@ dropCensus.total += 1;
       dropCensus.last = `${data.reason}${data.targetId ? ` →${data.targetId}` : ''}`;
       if (data.targetId || data.shotId) {this.h.confirmClaimHit(data.targetId ?? '', data.shotId);}
       netProbeClaim('drop', data.reason, data.weaponType === undefined ? undefined : String(WeaponType[data.weaponType] ?? data.weaponType), data.targetId, this.h.getPing());
-      logger.warn(`claim dropped — predicted damage never applied`, {
+      logger.warn(`claim dropped — predicted damage never applied: ${data.reason}${data.targetId ? ` →${data.targetId}` : ''}`, {
         reason: data.reason, targetId: data.targetId,
         weapon: data.weaponType === undefined ? undefined : WeaponType[data.weaponType] ?? data.weaponType,
         pingMs: this.h.getPing(),
