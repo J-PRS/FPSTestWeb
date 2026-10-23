@@ -443,9 +443,12 @@ export class ConnectionManager {
     const kind = BIN_KIND[data[1]!]!;
     if (journaled) {this.journalBinary(data, undefined, exclude, journaled === 'volatile');} // combat events replay on reclaim — 'volatile' carries the same 3s staleness window the JSON version had
     if (this.collecting) {
+      // Ring views get one shared copy for the whole broadcast — push()
+      // would otherwise slice the same bytes once per recipient.
+      const owned = isEvScratch(data) ? data.slice() : data;
       for (const pid of this.connections.keys()) {
         if (pid === exclude) {continue;}
-        this.push(pid, data); wireTx(pid, data.byteLength, kind);
+        this.push(pid, owned); wireTx(pid, data.byteLength, kind);
       }
       return;
     }

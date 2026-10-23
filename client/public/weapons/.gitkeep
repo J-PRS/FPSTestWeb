@@ -1,0 +1,2 @@
+# Baked weapon GLBs/AO live here when the gunlab pipeline bakes them.
+# Probed optionally — absent files fall back to procedural models.
