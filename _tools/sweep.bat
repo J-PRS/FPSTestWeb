@@ -7,3 +7,5 @@ REM age-only policy can't tell a live dev stack from a zombie and
 REM killed the noreload vite at 27h once. devup keeps its own reaper.
 cd /d "%~dp0.."
 node _tools\procs.mjs --kill >> "%TEMP%\fps_sweep.log" 2>&1
+REM health report (knip + jscpd) — regenerates only if latest.md is >24h old.
+node _tools\health.mjs --if-stale 24 >> "%TEMP%\fps_sweep.log" 2>&1

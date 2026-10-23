@@ -2,7 +2,8 @@
   "scripts": {
     "prepare": "node _tools/install-hooks.mjs",
     "procs": "node _tools/procs.mjs",
-    "procs:kill": "node _tools/procs.mjs --kill"
+    "procs:kill": "node _tools/procs.mjs --kill",
+    "health": "node _tools/health.mjs"
   },
   "dependencies": {
     "playwright-core": "^1.63.0"

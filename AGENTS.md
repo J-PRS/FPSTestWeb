@@ -24,6 +24,8 @@ node _tools/procs.mjs --kill [regex]  # kill them (whole trees) — check.sh
 # sweeps silently; _tools/sweep.bat + install-sweep.bat = 2h Scheduled Task.
 # Long/background commands always get a timeout — fire-and-forget is how
 # the 278h hung processes got here.
+node _tools/health.mjs [--if-stale 24]  # knip + jscpd → _tools/health/latest.md
+# (LL-readable, gitignored; the scheduled sweep refreshes it daily.)
 # === GAME SERVER RESTARTS — READ BEFORE TOUCHING PROCESSES ===
 # NEVER taskkill server_bun. dev-watch.ts supervises it: a dead child
 # respawns within ~5s anyway, so kills race the supervisor and waste a
