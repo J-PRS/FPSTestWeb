@@ -108,7 +108,11 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
     const rtt = deps.lazyNetworkManager().serverPingMs ?? deps.lazyNetworkManager().getPing();
     const m = mirroredSpawn(deps.world.localPosHistory, rtt);
     if (m) {
-      _mirroredOrigin.set(m.x, m.y, m.z);
+      // +1.6 mirrors the authority's muzzle bump above its shadow's eye
+      // pos (CombatHandler spawns at rewindPos.y+1.6) — without it the
+      // predicted arc births 1.6m under the server's, the flat-flyer
+      // spawn-arc divergence class.
+      _mirroredOrigin.set(m.x, m.y + 1.6, m.z);
       spawnAt = _mirroredOrigin;
     }
   }
