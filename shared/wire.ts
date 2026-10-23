@@ -524,6 +524,18 @@ export function decodeTickFrame(u8: Uint8Array, pool?: TickDecodePool): { ackSeq
         u.playerId = '';
         continue;
       }
+      if (u.health === 0 && !u.isDead) {
+        // Impossible state — the encoder's wire-row-coherent invariant
+        // (isDead || health>0) means hp0+alive can ONLY be corruption:
+        // misaligned bytes, a recycled baseline, a torn frame. Left alone
+        // it persists FOREVER — hp is masked out of every delta until it
+        // changes, so a phantom-dead ghost survives until the next full.
+        // Drop the row AND the poisoned baseline: baseline-less deltas
+        // self-drop above, and the next periodic full reseeds cleanly.
+        pool?.byId?.delete(wireId);
+        u.playerId = '';
+        continue;
+      }
       pool?.byId?.set(wireId, u);
       continue;
     }

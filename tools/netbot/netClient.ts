@@ -83,6 +83,10 @@ export class NetClient {
    *  crawlEvt streams, same lifecycle as the browser's creature layer. */
   balls = new Map<number, RemoteEntry>();
   crawlers = new Map<number, RemoteEntry>();
+  /** Recent combat-event arrivals — the desync forensic: when a ghost
+   *  paints a phantom death, this ring says WHICH wire event wrote it. */
+  readonly evLog: string[] = [];
+  private logEv(s: string): void { if (this.evLog.length >= 32) {this.evLog.shift();} this.evLog.push(s); }
   /** Per-room hit seq watermark — same rule as the browser client: reset
    *  on every gameState so a room hop can't drop the new seq space. */
   private lastHitSeq = 0;
@@ -308,12 +312,23 @@ export class NetClient {
     if (!tick) {return;}
     this.lastTickSeq = tick.tickSeq;
     this.tel.ticks++;
-    this.applyTick(tick.updates);
+    this.applyTick(tick.updates, tick.count);
   }
 
-  private applyTick(updates: TickUpdatePlayer[]): void {
-    for (const u of updates) {
+  private applyTick(updates: TickUpdatePlayer[], count = updates.length): void {
+    // `updates` is the pooled slots array — bound by `count`: entries
+    // past it are STALE tail rows replaying their last decode every tick
+    // (the phantom-ghost path — a slot once holding a poisoned baseline
+    // keeps injecting it into the roster even when the player isn't in
+    // the frame).
+    for (let i = 0; i < count && i < updates.length; i++) {
+      const u = updates[i]!;
       if (!u.playerId || u.playerId === this.id) {continue;}
+      // Server invariant is dead-or-health>0 — a row claiming health 0
+      // on a LIVE player is a fabricated decode (masked baseline 0 or a
+      // wid aliased to a dying teammate). Log it: that's the phantom
+      // death the wsFight desync hunt is after.
+      if (u.health === 0 && !u.isDead) {this.logEv(`tick-phantom ${u.playerId} wid=${(u as { wireId?: number }).wireId} hp=0 alive`);}
       const e = this.roster.get(u.playerId) ?? { pos: { ...u.position }, vel: { x: 0, y: 0, z: 0 }, health: 100, isDead: false };
       e.pos = { ...u.position };
       e.vel = { ...u.velocity };
@@ -425,6 +440,7 @@ export class NetClient {
           if (m.seq <= this.lastHitSeq) { this.tel.dedupDrops++; break; }
           this.lastHitSeq = m.seq;
         }
+        this.logEv(`hit tgt=${m.targetId} by=${m.shooterId} dmg=${m.damage} hp=${m.health} seq=${m.seq ?? '-'}`);
         if (m.targetId === this.id) { this.tel.hitsTaken++; this.self.health = m.health; this.lastAttacker = { at: Date.now(), shooterId: m.shooterId }; }
         if (m.shooterId === this.id) {this.tel.hitsDealt++;}
         const e = this.roster.get(m.targetId);
@@ -432,6 +448,7 @@ export class NetClient {
         break;
       }
       case 'playerKill': {
+        this.logEv(`kill tgt=${m.targetId} by=${m.shooterId}`);
         if (m.shooterId === this.id) {this.tel.kills++;}
         if (m.targetId === this.id) { this.tel.deaths++; this.self.isDead = true; this.self.health = 0; }
         const e = this.roster.get(m.targetId);
@@ -439,6 +456,7 @@ export class NetClient {
         break;
       }
       case 'playerRespawn': {
+        this.logEv(`respawn ${m.playerId}`);
         if (m.playerId === this.id) {
           this.self.isDead = false;
           this.self.health = 100;

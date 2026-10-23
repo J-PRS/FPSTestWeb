@@ -2,7 +2,7 @@ import { describe, it, expect } from 'bun:test';
 import { mkNetbots, nd } from './helpers.ts';
 
 describe('netbot — real clients over real sockets', () => {
-  const { spawn, bots, sleep, untilProgress } = mkNetbots();
+  const { spawn, bots, sleep, untilProgress, env } = mkNetbots();
 
   it('bots fight over real WS with jittered claims — every legit claim resolves', async () => {
     // Half the roster on the rtc lane when the native lib loads — a
@@ -90,7 +90,15 @@ describe('netbot — real clients over real sockets', () => {
         // lying — self.health/deaths vs each ghost's view.
         const victim = bots.find((x) => x.nc.id === id);
         const v = victim ? `victim self.health=${victim.nc.self.health} deaths=${victim.nc.tel.deaths} dead=${victim.nc.self.isDead}` : 'victim not a netbot';
-        expect(b.health, `${id} health desynced: observer0=${a.health} observer=${b.health} ${v}`).toBe(a.health);
+        // The deciding vote is the server's record — this suite shares
+        // the process, so truth is a map lookup, not a guess. If server
+        // says alive=200 and an observer's ghost sits at 0, THAT observer
+        // dropped the update; if server says dead, the VICTIM missed its
+        // own death events — both are real loss, just aimed differently.
+        const srv = [...(env()?.gs.rooms.values() ?? [])].map((r) => r.players.getPlayer(id)).find(Boolean);
+        const s = srv ? `server health=${srv.health} dead=${srv.isDead}` : 'server: no record';
+        const evs = `obs0ev=[${bots[0]!.nc.evLog.filter((e) => e.includes(id)).join('; ')}]`;
+        expect(b.health, `${id} health desynced: observer0=${a.health} observer=${b.health} | ${v} | ${s} | ${evs}`).toBe(a.health);
       }
     }
   }, 120_000);
