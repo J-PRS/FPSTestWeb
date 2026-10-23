@@ -552,4 +552,55 @@ describe('v4 delta-masked records', (): void => {
     const bare = sparseV4Record(encodeTickPlayerV4(7, p, enc, last, false), sparseEnc);
     expect(bare.length).toBe(15);
   });
+
+  it('sparse matrix — every group combination round-trips; baseline-less sparse always drops', (): void => {
+    const r = mkRoster();
+    const enc = tickEncodeScratch();
+    const sparseEnc = tickEncodeScratch();
+    const last = v4Last();
+    const p = baseTickP();
+    // Baseline: full establishes every retained value.
+    decodeTickFrame(encodeTickFrame(0, 1, 0, [encodeTickPlayerV4(7, p, enc, last, false)], WIRE_TICK_V4), r.pool);
+
+    const decode = (rec: Uint8Array, seq: number) => decodeTickFrame(encodeTickFrame(0, seq, 0, [rec.slice()], WIRE_TICK_V4), r.pool)!.updates[0]!;
+
+    // vel-only delta → sparse is bare pos; retained vel AND hp survive.
+    p.velocity.x = 42;
+    const velOnly = sparseV4Record(encodeTickPlayerV4(7, p, enc, last, false), sparseEnc);
+    expect(velOnly.length).toBe(15);
+    let u = decode(velOnly, 2);
+    expect(u.velocity.x).toBeCloseTo(10);       // retained baseline, not 42, not 0
+    expect(u.health).toBe(100);                  // retained, not zeroed
+
+    // rot-only → bare pos too.
+    p.rotation.yaw = 2.0;
+    const rotOnly = sparseV4Record(encodeTickPlayerV4(7, p, enc, last, false), sparseEnc);
+    expect(rotOnly.length).toBe(15);
+    u = decode(rotOnly, 3);
+    expect(u.rotation.yaw).toBeCloseTo(0.5);
+
+    // hp-only delta survives the strip — vitals ride far tiers.
+    p.health = 30;
+    const hpOnly = sparseV4Record(encodeTickPlayerV4(7, p, enc, last, false), sparseEnc);
+    const hpBytes = hpOnly.slice();              // copy — the next sparse encode overwrites the view
+    expect(hpOnly.length).toBe(18);              // 15 + hpPing(3)
+    u = decode(hpOnly, 4);
+    expect(u.health).toBe(30);
+    expect(u.sheep).toBe(40);                    // flags retained
+
+    // flags delta — the K-deep basis still carries the just-changed hp in
+    // its resend window (self-healing), so HP_PING rides too: 15+3+2=20.
+    p.isDead = true;
+    const flagsOnly = sparseV4Record(encodeTickPlayerV4(7, p, enc, last, false), sparseEnc);
+    expect(flagsOnly.length).toBe(20);
+    u = decode(flagsOnly, 5);
+    expect(u.isDead).toBe(true);
+    expect(u.health).toBe(30);
+
+    // A baseline-less sparse decode is ALWAYS a drop — the strip guarantees
+    // mask != FULL, so a fresh pool must refuse it (no phantom zero rows).
+    const r2 = mkRoster();
+    const d2 = decodeTickFrame(encodeTickFrame(0, 9, 0, [hpBytes], WIRE_TICK_V4), r2.pool)!;
+    expect(d2.updates[0]!.playerId).toBe('');
+  });
 });
