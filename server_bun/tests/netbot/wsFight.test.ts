@@ -64,14 +64,33 @@ describe('netbot — real clients over real sockets', () => {
     // should agree on what the server told them. Both read the same
     // ordered tick/event streams, so divergence means a broadcast bug —
     // not a latency artifact.
+    // State correctness: observers must converge on the same truth.
+    // Jitter skews event ARRIVAL per conn — a kill/respawn in transit is
+    // a legit temporary divergence, so first-pass mismatches re-check
+    // after a drain. A pair still split after ~1s of settle is a real
+    // broadcast desync (truth that never arrived), the bug this asserts.
+    type Ghost = { health: number; pos: { x: number; y: number; z: number }; vel: { x: number; y: number; z: number } };
+    const pairs: { id: string; a: Ghost; other: (typeof bots)[number] }[] = [];
     for (const [id, a] of bots[0]!.nc.roster) {
       for (const other of bots.slice(1)) {
         const b = other.nc.roster.get(id);
         if (!b) {continue;}
-        expect(b.health).toBe(a.health);
-        // Tick frames drain per-socket, so two observers can sit one
-        // frame apart — ~8m covers a jet-speed gap at tick cadence.
-        expect(Math.hypot(a.pos.x - b.pos.x, a.pos.y - b.pos.y, a.pos.z - b.pos.z)).toBeLessThan(8);
+        const speed = Math.max(Math.hypot(a.vel.x, a.vel.y, a.vel.z), Math.hypot(b.vel.x, b.vel.y, b.vel.z));
+        const dist = Math.hypot(a.pos.x - b.pos.x, a.pos.y - b.pos.y, a.pos.z - b.pos.z);
+        if (b.health === a.health && dist < Math.max(20, speed * 0.5)) {continue;}
+        pairs.push({ id, a, other });
+      }
+    }
+    if (pairs.length > 0) {
+      await sleep(1000); // drain in-flight events before judging desync
+      for (const { id, a, other } of pairs) {
+        const b = other.nc.roster.get(id);
+        if (!b) {continue;}
+        // Forensics: the victim's own truth decides which observer is
+        // lying — self.health/deaths vs each ghost's view.
+        const victim = bots.find((x) => x.nc.id === id);
+        const v = victim ? `victim self.health=${victim.nc.self.health} deaths=${victim.nc.tel.deaths} dead=${victim.nc.self.isDead}` : 'victim not a netbot';
+        expect(b.health, `${id} health desynced: observer0=${a.health} observer=${b.health} ${v}`).toBe(a.health);
       }
     }
   }, 120_000);

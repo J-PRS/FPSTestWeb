@@ -609,8 +609,16 @@ sh.gapStreak += 1;
     sh.divergences = 0; // new trajectory — don't carry old accumulation
   }
 
+  /** Persistent broad-phase state — cell arrays stay alive across
+   *  ticks (the occupied set is bounded by body count), so a rebuild
+   *  is length resets + pushes, not a fresh Map and number[] churn.
+   *  The bodies list reuses bodyScratch for the same reason. */
+  private readonly gridCells = new Map<number, number[]>();
+  private readonly bodyScratch: ({ id: string } & BodyCapsule)[] = [];
+
   tick(dt: number): void {
-    const bodies = this.bodySource ? [...this.bodySource()] : null;
+    const bodies = this.bodySource ? this.bodyScratch : null;
+    if (bodies) {bodies.length = 0; for (const b of this.bodySource!()) {bodies.push(b);}}
     // One shared broad-phase per tick: without it every shadow scans the
     // whole roster in collideBodies — O(shadows × bodies) at scale. 4m
     // cells dwarf any contact radius, so the 3x3 ring around a pos
@@ -618,7 +626,8 @@ sh.gapStreak += 1;
     let bodiesNear: ((x: number, z: number) => BodyCapsule[]) | undefined = undefined;
     if (bodies && bodies.length > 0) {
       const CELL = 4, BIAS = 512;
-      const grid = new Map<number, number[]>();
+      const grid = this.gridCells;
+      for (const cell of grid.values()) {cell.length = 0;}
       for (let i = 0; i < bodies.length; i += 1) {
         const b = bodies[i]!;
         const k = ((Math.floor(b.x / CELL) + BIAS) << 16) | (Math.floor(b.z / CELL) + BIAS);

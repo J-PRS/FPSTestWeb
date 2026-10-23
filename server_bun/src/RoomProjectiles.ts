@@ -155,6 +155,9 @@ export class RoomProjectiles {
   solidIndex: ColliderIndex | null = null;
   private projs = new Map<string, LiveProj>();
   private nextId = 1;
+  /** Reused start-of-step position — feeds swept collision + detonate;
+   *  read synchronously each iteration, never retained. */
+  private readonly stepScratch: Vec3 = { x: 0, y: 0, z: 0 };
 
   constructor(room: ProjHost, field: Heightfield | null) {
     this.room = room;
@@ -305,8 +308,13 @@ export class RoomProjectiles {
           p.pos.z = t.position.z + proj.stuck.off.z;
         }
       }
-      const from = proj.stuck ? ((((((Object.assign({}, p.pos))))))) : projStep(p, dt, stats.gravity ? GRAVITY : 0);
-      if (p.age >= proj.ttl || p.pos.y < FLOOR_Y) { this.detonate(proj, Object.assign({}, p.pos)); continue; }
+      // stepScratch feeds swept collision + detonate — consumed
+      // synchronously each iteration (catchRiders/stepContact/detonate
+      // all read fields inline), so one reused Vec3 per room is enough.
+      const from = this.stepScratch;
+      if (proj.stuck) {from.x = p.pos.x; from.y = p.pos.y; from.z = p.pos.z;}
+      else {projStep(p, dt, stats.gravity ? GRAVITY : 0, from);}
+      if (p.age >= proj.ttl || p.pos.y < FLOOR_Y) { from.x = p.pos.x; from.y = p.pos.y; from.z = p.pos.z; this.detonate(proj, from); continue; }
       if (proj.stuck) {continue;} // frozen — only the fuse ends it now
 
       // Ray-burst discharge (remote railgun): crossing rayDelay turns the

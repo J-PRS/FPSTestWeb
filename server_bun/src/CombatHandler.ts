@@ -6,6 +6,7 @@ import { logger } from './logger.ts';
 import { classCanFire } from '../../shared/botClasses.ts';
 import { serverSimmed, BELT_THROW_WEAPONS, beltThrowCost, WeaponType, getWeaponStats, REPAIR_RANGE, WEAPON_FIRE_INTERVAL_S, LANCE_RANGE, LANCE_CADENCE_S } from '../../shared/weapons.ts';
 import { finiteVec, encodeShotEv } from '../../shared/wire.ts';
+import { dhypot3 } from '../../shared/dmath.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
 import { ColliderIndex } from '../../shared/solidWorld.ts';
 import { rewindPos, shooterTransitMs } from './claimLedger.ts';
@@ -373,7 +374,7 @@ w.n += 1;
     if (msg.weaponType === WeaponType.Melee && dir) {
       const meleeStats = getWeaponStats(WeaponType.Melee);
       const reach = meleeStats ? meleeStats.aoeRadius * 0.7 : 2.2;
-      const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
+      const l = dhypot3(dir.x, dir.y, dir.z) || 1;
       const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
       // The creature half of the swing pays here too — same derived
       // origin, same dir — so the client's predicted contact never
@@ -406,7 +407,7 @@ w.n += 1;
       this.simmedFireTimes.set(playerId, recent);
       player.protectedUntil = simMs(0);
       const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
-      const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
+      const l = dhypot3(dir.x, dir.y, dir.z) || 1;
       this.beamPay(playerId, player, this.deps.beamSweep(playerId,
         { x: mpos.x, y: mpos.y, z: mpos.z },
         { x: dir.x / l, y: dir.y / l, z: dir.z / l }, LG_RANGE));
@@ -423,7 +424,7 @@ w.n += 1;
       this.lastLance.set(playerId, now);
       player.protectedUntil = simMs(0);
       const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
-      const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
+      const l = dhypot3(dir.x, dir.y, dir.z) || 1;
       this.lancePay(playerId, player, this.deps.beamSweep(playerId,
         { x: mpos.x, y: mpos.y, z: mpos.z },
         { x: dir.x / l, y: dir.y / l, z: dir.z / l }, LANCE_RANGE));
@@ -437,7 +438,7 @@ w.n += 1;
       recent.push(now);
       this.simmedFireTimes.set(playerId, recent);
       const mpos = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
-      const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
+      const l = dhypot3(dir.x, dir.y, dir.z) || 1;
       const id = this.deps.repairTarget(playerId,
         { x: mpos.x, y: mpos.y, z: mpos.z },
         { x: dir.x / l, y: dir.y / l, z: dir.z / l }, REPAIR_RANGE);
@@ -471,8 +472,9 @@ win.violations += 1;
     } else {
       // Cosmetic relay only — throttled: a dropped relay costs a muzzle
       // flash, but a dropped intent would orphan a predicted shell.
+      // The stamp lands at the relay emit below so the intent
+      // fall-through shares ONE throttle per player.
       if (now - (this.lastFireNotify.get(playerId) ?? 0) < 50) {return;}
-      this.lastFireNotify.set(playerId, now);
     }
     this.deps.emit?.({ type: 'fire', playerId });
     const at = rewindPos(player, shooterTransitMs(this.deps.transitOf, playerId, player.ping));
@@ -492,7 +494,7 @@ win.violations += 1;
         player.beltCharges -= cost;
       }
       player.protectedUntil = simMs(0); // firing breaks your own spawn shield
-      const l = Math.hypot(dir!.x, dir!.y, dir!.z) || 1;
+      const l = dhypot3(dir!.x, dir!.y, dir!.z) || 1;
       // Back-date the shell's age by the claim's measured uplink lag —
       // the replica's clock already runs (wallNow − fireAt), so the
       // authoritative shell ages in lockstep: fuses die at the same
@@ -524,13 +526,20 @@ win.violations += 1;
       const hs = msg.weaponType === undefined ? undefined : getWeaponStats(msg.weaponType);
       if (hs === undefined || hs.speed > 0) {this.reject(playerId, 'Shot', 'spawn refused', undefined, msg.weaponType, msg.shotId);}
     }
+    // Same 50ms cosmetic gate for the intent fall-through: a refused
+    // spawn relaying every claim would spam the room (claimless combat
+    // moved simmed weapons off the else-branch throttle).
+    if (now - (this.lastFireNotify.get(playerId) ?? 0) < 50) {return;}
+    this.lastFireNotify.set(playerId, now);
+    // Eye offset over the stamped feet pos — the original relay contract
+    // (fb7f2a94); the muzzle flash paints at eye level, not the ground.
     const shotWid = this.deps.widOf?.(playerId);
     if (shotWid !== undefined && this.deps.wireCast) {
-      this.deps.wireCast(encodeShotEv(shotWid, msg.weaponType, at, msg.dir), 'volatile', playerId);
+      this.deps.wireCast(encodeShotEv(shotWid, msg.weaponType, { x: at.x, y: at.y + 1.6, z: at.z }, msg.dir), 'volatile', playerId);
     } else {
       this.broadcast({
         type: 'playerShot', id: playerId, weaponType: msg.weaponType,
-        pos: { x: at.x, y: at.y, z: at.z }, dir: msg.dir,
+        pos: { x: at.x, y: at.y + 1.6, z: at.z }, dir: msg.dir,
       }, playerId);
     }
   }
@@ -547,7 +556,7 @@ win.violations += 1;
     const dx = msg.position.x - player.position.x, dy = msg.position.y - player.position.y, dz = msg.position.z - player.position.z;
     const d2 = dx * dx + dy * dy + dz * dz;
     if (d2 > 60 * 60) { this.hb('drop.slamFar'); this.reject(playerId, 'Slam', `landing ${Math.sqrt(d2).toFixed(0)}m from shadow`, undefined, WeaponType.Slam); return `landing ${Math.sqrt(d2).toFixed(0)}m from shadow`; }
-    const speed = Math.hypot(player.velocity.x, player.velocity.y, player.velocity.z);
+    const speed = dhypot3(player.velocity.x, player.velocity.y, player.velocity.z);
     const power = Math.min(Math.max((speed - 30) / 50, 0.2), 1.8);
     this.blast.serverBlast(playerId, msg.position, WeaponType.Slam, null, { power });
     this.hb('slam.server');

@@ -15,6 +15,7 @@ import { renderLagOf } from './rewind.ts';
 import { simNow, simMs } from './simClock.ts';
 import { wallNow, wallMs } from './wallClock.ts';
 import { encodeKnock } from '../../shared/wire.ts';
+import { dhypot3 } from '../../shared/dmath.ts';
 import { logger } from './logger.ts';
 import type { RoomEventSink } from './roomEvents.ts';
 
@@ -188,7 +189,7 @@ export class BlastRunner {
     for (const [targetId, target] of this.h.playerManager.getAllPlayers()) {
       if (target.isDead) {continue;}
       const tpos = this.rewindTarget(target, targetId, ctx.shooterId, ctx.ping, ctx.bot, ctx.lagMs, ctx.lagMap);
-      const d = Math.hypot(tpos.x - position.x, tpos.y - position.y, tpos.z - position.z);
+      const d = dhypot3(tpos.x - position.x, tpos.y - position.y, tpos.z - position.z);
       if (d > radius) {continue;}
       if (this.h.solids.length > 0 && this.blastBlocked(position, tpos)) {continue;}
       target.armor = Math.min(POWERUP.maxArmor, target.armor + ARMORNADE_ARMOR);
@@ -209,7 +210,7 @@ export class BlastRunner {
     for (const [targetId, target] of this.h.playerManager.getAllPlayers()) {
       if (target.isDead || (targetId !== playerId && !this.h.friendly(playerId, targetId))) {continue;}
       const tpos = this.rewindTarget(target, targetId, ctx.shooterId, ctx.ping, ctx.bot, ctx.lagMs, ctx.lagMap);
-      const d = Math.hypot(tpos.x - position.x, tpos.y - position.y, tpos.z - position.z);
+      const d = dhypot3(tpos.x - position.x, tpos.y - position.y, tpos.z - position.z);
       if (d > radius) {continue;}
       if (this.h.solids.length > 0 && this.blastBlocked(position, tpos)) {continue;}
       // Center-of-blast heals full, the rim heals half — worth leading
@@ -229,7 +230,7 @@ export class BlastRunner {
     for (const [targetId, target] of this.h.playerManager.getAllPlayers()) {
       if (target.isDead || targetId === playerId || this.h.friendly(playerId, targetId)) {continue;}
       const tpos = this.rewindTarget(target, targetId, ctx.shooterId, ctx.ping, ctx.bot, ctx.lagMs, ctx.lagMap);
-      const d = Math.hypot(tpos.x - position.x, tpos.y - position.y, tpos.z - position.z);
+      const d = dhypot3(tpos.x - position.x, tpos.y - position.y, tpos.z - position.z);
       if (d > radius) {continue;}
       if (this.h.solids.length > 0 && this.blastBlocked(position, tpos)) {continue;}
       // Drain all jet energy — the victim can't jet until regen (8/s).
@@ -379,7 +380,7 @@ export class BlastRunner {
    *  flattens the up-vector (disc suck). */
   private shove(targetId: string, target: PlayerState, offset: Vec3, impulseMag: number, opts: { pos: Vec3; pull?: boolean; aim?: Vec3 }): void {
     const { pos, pull = false, aim } = opts;
-    const dist = Math.hypot(offset.x, offset.y, offset.z);
+    const dist = dhypot3(offset.x, offset.y, offset.z);
     // NaN comparisons pass below (dist<=0 on NaN is false) — a poisoned
     // impulse or offset would write NaN velocity the shadow never shakes.
     if (!(dist > 0) || !Number.isFinite(impulseMag)) {return;}
@@ -422,7 +423,7 @@ export class BlastRunner {
       // Terrain anchor: reel the owner in — aim AT the contact, vertical
       // included (a high wall is a legal grapple), no sucker-pop.
       const off = { x: owner.position.x - anchor.x, y: owner.position.y - anchor.y, z: owner.position.z - anchor.z };
-      const d = Math.hypot(off.x, off.y, off.z) || 1;
+      const d = dhypot3(off.x, off.y, off.z) || 1;
       this.shove(ownerId, owner, off,
         stats.knockbackForce * perkMods(owner.perk).knockbackTaken,
         { pos: anchor, pull: true, aim: { x: -off.x / d, y: -off.y / d, z: -off.z / d } });
@@ -436,7 +437,7 @@ export class BlastRunner {
     // Reel the victim toward the shooter — the rope aims at the
     // thrower's body, so a skier overhead drags the victim up.
     const off = { x: victim.position.x - owner.position.x, y: victim.position.y - owner.position.y, z: victim.position.z - owner.position.z };
-    const d = Math.hypot(off.x, off.y, off.z) || 1;
+    const d = dhypot3(off.x, off.y, off.z) || 1;
     this.shove(victimId, victim, off,
       stats.knockbackForce * perkMods(victim.perk).knockbackTaken,
       { pos: owner.position, pull: true, aim: { x: -off.x / d, y: -off.y / d, z: -off.z / d } });

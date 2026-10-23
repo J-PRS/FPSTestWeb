@@ -6,6 +6,7 @@ import { segFieldHit, segPointDist, segPointT, bounceOffField } from '../../shar
 import { segSolidHit } from '../../shared/solidWorld.ts';
 import type { RoomProjectiles, LiveProj } from './RoomProjectiles.ts';
 import { rewindPos, shooterTransitMs } from './claimLedger.ts';
+import { dhypot3 } from '../../shared/dmath.ts';
 import { renderLagOf, renderLagOfTarget, REWIND_MS } from './rewind.ts';
 import { logger } from './logger.ts';
 
@@ -75,10 +76,10 @@ function creatureSweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof 
 function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getWeaponStats>, from: Vec3, reach: number, dt: number, owner: { ping: number; isBot?: boolean; clientStats?: { renderLagMs?: number; renderLag?: Record<string, number>; at?: number } } | null | undefined): boolean {
     const {p} = proj;
     const midX = (from.x + p.pos.x) / 2, midY = (from.y + p.pos.y) / 2, midZ = (from.z + p.pos.z) / 2;
-    const halfLen = Math.hypot(p.pos.x - from.x, p.pos.y - from.y, p.pos.z - from.z) / 2;
+    const halfLen = dhypot3(p.pos.x - from.x, p.pos.y - from.y, p.pos.z - from.z) / 2;
     for (const [pid, target] of r.room.players.getAllPlayers()) {
       if (pid === proj.ownerId || target.isDead) {continue;}
-      const speed = Math.hypot(target.velocity.x, target.velocity.y, target.velocity.z);
+      const speed = dhypot3(target.velocity.x, target.velocity.y, target.velocity.z);
       // The reject only needs a bound on backMs — the rewind ceiling —
       // so ghostBack's transit/renderLag lookups wait for survivors.
       const margin = capsuleReach(target, reach) + halfLen + (speed + 25) * dt + speed * REWIND_MS / 1000;
@@ -92,7 +93,7 @@ function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getW
       if (pd <= capsuleReach(target, reach)) {
         // Ghost-forensics: how far behind live truth the credited ghost
         // sat — a large delta is the "hit landed where nobody stood" feel.
-        const gd = Math.hypot(tp.x - target.position.x, tp.y - target.position.y, tp.z - target.position.z);
+        const gd = dhypot3(tp.x - target.position.x, tp.y - target.position.y, tp.z - target.position.z);
         if (gd > 1.5) {logger.info('ghost hit', { shooter: proj.ownerId, victim: pid, deltaM: Number(gd.toFixed(1)), backMs: back, wt: proj.weaponType });}
         // Wake contact counts as a hit but earns no airtime ramp — the
         // skillshot bonus is body-contact only, like the claim path.
@@ -183,7 +184,7 @@ export function stepContact(r: ContactHost, proj: LiveProj, stats: ReturnType<ty
    *  players, so a beam that clips a ridge never splashes past it. */
 export function dischargeRay(r: ContactHost, proj: LiveProj, range: number): void {
     const {p} = proj;
-    const speed = Math.hypot(p.vel.x, p.vel.y, p.vel.z) || 1;
+    const speed = dhypot3(p.vel.x, p.vel.y, p.vel.z) || 1;
     const end: Vec3 = {
       x: p.pos.x + (p.vel.x / speed) * range,
       y: p.pos.y + (p.vel.y / speed) * range,
