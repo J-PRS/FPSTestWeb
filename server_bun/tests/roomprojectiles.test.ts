@@ -5,6 +5,7 @@ import { resolveMapSpec } from '../../shared/mapSpec.ts';
 import { WeaponType, getWeaponStats } from '../../shared/weapons.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { CLASS_STATS } from '../../shared/botClasses.ts';
+import { decodeProjGone } from '../../shared/wire.ts';
 
 const flat: Heightfield = { size: 4, data: new Uint8Array(16).fill(60), stride: 1 };
 const FLOOR = hmHeight(flat, 0, 0);
@@ -153,6 +154,12 @@ describe('RoomProjectiles', () => {
       orig(m as Parameters<typeof room.broadcast>[0]);
     }) as typeof room.broadcast;
     room.broadcast = tap;
+    // 'gone' edges ride the binary lane post-batching — count them too.
+    const prevBin = room.connections.broadcastBinaryReliable.bind(room.connections);
+    room.connections.broadcastBinaryReliable = (data: Uint8Array) => {
+      if (decodeProjGone(data)) {pops++;}
+      prevBin(data);
+    };
     // Bomb 1 sticks on landing and its 3s fuse pops it; bomb 2 lands
     // inside the first blast's radius, sticks, and its own fuse pops
     // shortly after — or the chain cooks it early. Either way both
@@ -175,6 +182,11 @@ describe('RoomProjectiles', () => {
       if (m.type === 'projectileDestroyed') { pops++; if (firstPopTick < 0) firstPopTick = tick; }
       orig(m as Parameters<typeof room.broadcast>[0]);
     }) as typeof room.broadcast;
+    const prevBin = room.connections.broadcastBinaryReliable.bind(room.connections);
+    room.connections.broadcastBinaryReliable = (data: Uint8Array) => {
+      if (decodeProjGone(data)) {pops++; if (firstPopTick < 0) firstPopTick = tick;}
+      prevBin(data);
+    };
     // Steep down-lob: hits dirt ~0.1s in — inside the 1s arming window, so
     // it must BOUNCE (still live past the landing tick), then die once
     // armed on its next dirt contact. The pre-fix server popped it on

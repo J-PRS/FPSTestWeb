@@ -11,8 +11,8 @@
 import { ChildLogger } from '../core/Logger.js';
 import { checkHit } from '../core/liveMonitor.js';
 import {
-  isWireFrame, decodeTickFrame, decodeBallSegment,
-  WIRE_BALLSEG, SERVER_TICK_MS,
+  isWireFrame, decodeTickFrame, decodeBallAny, decodeProjSpawn, decodeProjGone,
+  WIRE_BALLSEG, WIRE_BALLBATCH, WIRE_PROJSPAWN, WIRE_PROJGONE, SERVER_TICK_MS,
   type TickDecodePool,
 } from '../../../shared/wire.js';
 import {type ServerMessage, type TickUpdatePlayer, PROTOCOL_VERSION} from '../../../shared/protocol.js';
@@ -197,11 +197,28 @@ this.handlerThrows += 1;
       return;
     }
     recWireIn(`bin:${data[1] ?? -1}`, data.length);
+    if (data[1] === WIRE_PROJSPAWN || data[1] === WIRE_PROJGONE) {
+      if (data[1] === WIRE_PROJSPAWN) {
+        const s = decodeProjSpawn(data);
+        const ownerId = s ? this.wireIds.get(s.ownerWireId) : undefined;
+        if (s && ownerId) {
+          try { this.h.onProjectileCreated?.(`sp-${s.projId}`, ownerId, s.position, s.velocity, s.weaponType, s.shotId, s.pellet, s.age || undefined, s.t); }
+          catch (error) {this.handlerThrows += 1; logger.warn(`Handler threw for projSpawn: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);}
+        }
+      } else {
+        const g = decodeProjGone(data);
+        if (g) {
+          try { this.h.onProjectileDestroyed?.(`sp-${g.projId}`, g.shotId, g.position, g.age); }
+          catch (error) {this.handlerThrows += 1; logger.warn(`Handler threw for projGone: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);}
+        }
+      }
+      return;
+    }
     // Binary ball segments decode straight into the JSON message's shape —
     // netBallSegment sees one type regardless of transport.
-    if (data[1] === WIRE_BALLSEG) {
-      const seg = decodeBallSegment(data);
-      if (seg) {
+    if (data[1] === WIRE_BALLSEG || data[1] === WIRE_BALLBATCH) {
+      const segs = decodeBallAny(data);
+      for (const seg of segs) {
         // The frame decodes to flat scalars — the declared updateFields
         // own which ones cross into the JSON shape handlers see.
         const src = seg as unknown as Record<string, unknown>;

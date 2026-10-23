@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import { mkRoom } from './harness.ts';
-import { decodeBallSegment } from '../../../shared/wire.ts';
+import { decodeBallAny } from '../../../shared/wire.ts';
 
 // A due retarget spends the ball's whole tick — stepAll emits the
 // 'bounce' segment then `continue`s, taking NO stepBall step that tick.
@@ -16,8 +16,7 @@ describe('scenario: ball segment anchor equals post-tick state', () => {
     const segs: { id: number; kind: string; x: number; y: number; z: number }[] = [];
     const prev = room.connections.broadcastBinaryReliable.bind(room.connections);
     room.connections.broadcastBinaryReliable = (data: Uint8Array) => {
-      const s = decodeBallSegment(data);
-      if (s) segs.push({ id: s.id, kind: s.kind, x: s.position.x, y: s.position.y, z: s.position.z });
+      for (const s of decodeBallAny(data)) {segs.push({ id: s.id, kind: s.kind, x: s.position.x, y: s.position.y, z: s.position.z });}
       prev(data);
     };
     let sawBounce = false;

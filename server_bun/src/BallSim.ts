@@ -29,7 +29,7 @@ import {
 import { ColliderIndex, SolidWorld } from '../../shared/solidWorld.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { ServerMessage, Vec3, HitVerdict } from './types.ts';
-import { encodeBallSegment, SIM_TICK_DT } from '../../shared/wire.ts';
+import { encodeBallSegment, encodeBallBatch, SIM_TICK_DT } from '../../shared/wire.ts';
 import { WORLD_MODEL, verbPayload, rosterRow } from '../../shared/worldModel.ts';
 import { logger } from './logger.ts';
 import { type BallPopulation, DEFAULT_MAP_SPEC } from '../../shared/mapSpec.ts';
@@ -191,6 +191,14 @@ export class BallSim {
     return out;
   }
 
+  /** Step-local segment queue — ~10 segments/s per ball riding one ws
+   *  frame each was ~250 frames/s of egress chatter at a full room.
+   *  step() drains the queue into ONE broadcast frame per fire; combat
+   *  calls outside the step flush immediately (they're rate-bound by
+   *  nature — hits don't tick-loop). */
+  private pendingSegs: Uint8Array[] = [];
+  private inStep = false;
+
   private segment(b: SimBall, kind: SegmentKind): void {
     this.resyncAcc.set(b.id, 0);
     this.snapTarget(b); // segment boundary = aim refresh; clients get the same point
@@ -199,7 +207,7 @@ export class BallSim {
     // bounces + heartbeats); ~50B vs ~160B JSON, and no per-client
     // JSON.stringify. Reliable lane: a dropped stamp costs ~1.2s of blind
     // extrapolation — the rubberband storm seen at 100% datagram loss.
-    this.broadcastBinaryReliable(encodeBallSegment({
+    const data = encodeBallSegment({
       id: b.id, kind,
       position: { x: b.x, y: b.y, z: b.z },
       velocity: { x: b.vx, y: b.vy, z: b.vz },
@@ -209,7 +217,9 @@ export class BallSim {
       // off the server's (heartbeats would otherwise keep resetting them).
       et: b.enrageTimer, slowT: b.slowTimer, damp: b.dampNextBounce,
       t: this.simTime,
-    }));
+    });
+    if (this.inStep) {this.pendingSegs.push(data);}
+    else {this.broadcastBinaryReliable(data);}
   }
 
   /** Distance to the nearest live ball — env-damage plausibility wants to
@@ -321,9 +331,18 @@ export class BallSim {
       this.spawnBall(rollVariant(this.ballMix, this.rng), near);
     }
 
-    while (this.tickAcc >= TICK_DT) {
-      this.tickAcc -= TICK_DT;
-      this.stepAll(alive);
+    this.inStep = true;
+    try {
+      while (this.tickAcc >= TICK_DT) {
+        this.tickAcc -= TICK_DT;
+        this.stepAll(alive);
+      }
+    } finally {
+      this.inStep = false;
+      if (this.pendingSegs.length > 0) {
+        this.broadcastBinaryReliable(encodeBallBatch(this.pendingSegs));
+        this.pendingSegs.length = 0;
+      }
     }
   }
 

@@ -759,8 +759,121 @@ export function encodeBallSegment(s: WireBallSegment): Uint8Array {
 }
 
 export function decodeBallSegment(u8: Uint8Array): WireBallSegment | null {
-  if (u8.length < 44 || u8[0] !== MAGIC || u8[1] !== WIRE_BALLSEG) {return null;}
+  return decodeBallSegmentAt(u8, 0)?.seg ?? null;
+}
+
+/** Batch container: one frame per tick carries every ball segment —
+ *  ~250 tiny reliable frames/s at 25 balls become ≤20/s. */
+export const WIRE_BALLBATCH = 0x0A; // 0x04/0x05 are tick-family tags — lane routers treat them as tickUpdate
+
+// ---- S→C projectile edges (~45% of client down at 32 seats as JSON) ----
+// create: ~46B+shotId vs ~200B JSON; gone: ~18B+shotId vs ~120B JSON.
+export const WIRE_PROJSPAWN = 0x0B;
+export const WIRE_PROJGONE = 0x0C;
+
+export interface WireProjSpawn {
+  projId: number;          // numeric tail of 'sp-N'
+  ownerWireId: number;     // room wireId — receiver resolves via its roster
+  weaponType: number;
+  pellet: number | undefined;
+  age: number;             // server shell age (lagS) at emit
+  t: number;               // server wall ms — client computes transit via clockOffset
+  position: WireVec3;
+  velocity: WireVec3;
+  shotId: string | undefined; // owner's bind nonce — meaningless to others
+}
+
+export function encodeProjSpawn(s: WireProjSpawn): Uint8Array {
+  const sid = s.shotId === undefined ? null : ENC.encode(s.shotId);
+  const buf = new ArrayBuffer(46 + (sid ? 1 + sid.length : 0));
+  const u8 = new Uint8Array(buf); const d = new DataView(buf);
+  let o = 0;
+  d.setUint8(o++, MAGIC); d.setUint8(o++, WIRE_PROJSPAWN);
+  d.setUint32(o, s.projId >>> 0, true); o += 4;
+  d.setUint16(o, s.ownerWireId, true); o += 2;
+  d.setUint8(o++, s.weaponType & 0xff);
+  d.setUint8(o++, s.pellet === undefined ? 0xff : s.pellet & 0xff);
+  d.setFloat32(o, s.age, true); o += 4;
+  d.setFloat64(o, s.t, true); o += 8;
+  d.setFloat32(o, s.position.x, true); d.setFloat32(o + 4, s.position.y, true); d.setFloat32(o + 8, s.position.z, true); o += 12;
+  d.setFloat32(o, s.velocity.x, true); d.setFloat32(o + 4, s.velocity.y, true); d.setFloat32(o + 8, s.velocity.z, true); o += 12;
+  if (sid) { d.setUint8(o++, sid.length); u8.set(sid, o); }
+  return new Uint8Array(buf, 0, o + (sid ? sid.length : 0));
+}
+
+export function decodeProjSpawn(u8: Uint8Array): WireProjSpawn | null {
+  if (u8.length < 46 || u8[0] !== MAGIC || u8[1] !== WIRE_PROJSPAWN) {return null;}
   const d = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  let o = 2;
+  const projId = d.getUint32(o, true); o += 4;
+  const ownerWireId = d.getUint16(o, true); o += 2;
+  const weaponType = d.getUint8(o++);
+  const pelletB = d.getUint8(o++);
+  const age = d.getFloat32(o, true); o += 4;
+  const t = d.getFloat64(o, true); o += 8;
+  const position = { x: d.getFloat32(o, true), y: d.getFloat32(o + 4, true), z: d.getFloat32(o + 8, true) }; o += 12;
+  const velocity = { x: d.getFloat32(o, true), y: d.getFloat32(o + 4, true), z: d.getFloat32(o + 8, true) }; o += 12;
+  let shotId: string | undefined;
+  if (o < u8.length) {
+    const n = d.getUint8(o++);
+    if (o + n > u8.length) {return null;}
+    shotId = DEC.decode(u8.subarray(o, o + n));
+  }
+  return { projId, ownerWireId, weaponType, pellet: pelletB === 0xff ? undefined : pelletB, age, t, position, velocity, shotId };
+}
+
+export interface WireProjGone {
+  projId: number;
+  age: number;
+  position: WireVec3;
+  shotId: string | undefined;
+}
+
+export function encodeProjGone(g: WireProjGone): Uint8Array {
+  const sid = g.shotId === undefined ? null : ENC.encode(g.shotId);
+  const buf = new ArrayBuffer(22 + (sid ? 1 + sid.length : 0));
+  const u8 = new Uint8Array(buf); const d = new DataView(buf);
+  let o = 0;
+  d.setUint8(o++, MAGIC); d.setUint8(o++, WIRE_PROJGONE);
+  d.setUint32(o, g.projId >>> 0, true); o += 4;
+  d.setFloat32(o, g.age, true); o += 4;
+  d.setFloat32(o, g.position.x, true); d.setFloat32(o + 4, g.position.y, true); d.setFloat32(o + 8, g.position.z, true); o += 12;
+  if (sid) { d.setUint8(o++, sid.length); u8.set(sid, o); }
+  return new Uint8Array(buf, 0, o + (sid ? sid.length : 0));
+}
+
+export function decodeProjGone(u8: Uint8Array): WireProjGone | null {
+  if (u8.length < 22 || u8[0] !== MAGIC || u8[1] !== WIRE_PROJGONE) {return null;}
+  const d = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  let o = 2;
+  const projId = d.getUint32(o, true); o += 4;
+  const age = d.getFloat32(o, true); o += 4;
+  const position = { x: d.getFloat32(o, true), y: d.getFloat32(o + 4, true), z: d.getFloat32(o + 8, true) }; o += 12;
+  let shotId: string | undefined;
+  if (o < u8.length) {
+    const n = d.getUint8(o++);
+    if (o + n > u8.length) {return null;}
+    shotId = DEC.decode(u8.subarray(o, o + n));
+  }
+  return { projId, age, position, shotId };
+}
+
+
+export function encodeBallBatch(segs: Uint8Array[]): Uint8Array {
+  let n = 4; // magic + kind + count
+  for (const s of segs) {n += s.byteLength;}
+  const out = new Uint8Array(n);
+  const d = new DataView(out.buffer);
+  d.setUint8(0, MAGIC); d.setUint8(1, WIRE_BALLBATCH); d.setUint16(2, segs.length, true);
+  let o = 4;
+  for (const s of segs) { out.set(s, o); o += s.byteLength; }
+  return out;
+}
+
+/** Parse one batch member at `off`; consumed = seg's own wire length. */
+export function decodeBallSegmentAt(u8: Uint8Array, off: number): { seg: WireBallSegment; next: number } | null {
+  if (u8.length - off < 44 || u8[off] !== MAGIC || u8[off + 1] !== WIRE_BALLSEG) {return null;}
+  const d = new DataView(u8.buffer, u8.byteOffset + off, u8.byteLength - off);
   let o = 2;
   const id = d.getUint32(o, true); o += 4;
   const kind = SEG_KINDS[d.getUint8(((o += 1) - 1))] ?? 'bounce';
@@ -777,13 +890,39 @@ export function decodeBallSegment(u8: Uint8Array): WireBallSegment | null {
   let targetId: string | null = null;
   if (flags & 8) {
     const idLen = d.getUint8(((o += 1) - 1));
-    if (o + idLen > u8.length) {return null;}
-    targetId = DEC.decode(u8.subarray(o, o + idLen));
+    if (o + idLen > u8.byteLength - off) {return null;}
+    targetId = DEC.decode(u8.subarray(off + o, off + o + idLen));
+    o += idLen;
   }
   return {
-    id, kind, position, velocity,
-    enraged: (flags & 1) !== 0,
-    damp: (flags & 2) !== 0,
-    targetId, tp, et, slowT, t,
+    seg: {
+      id, kind, position, velocity,
+      enraged: (flags & 1) !== 0,
+      damp: (flags & 2) !== 0,
+      targetId, tp, et, slowT, t,
+    },
+    next: off + o,
   };
 }
+
+/** Batch frame → every member segment. Truncated members end the walk. */
+export function decodeBallBatch(u8: Uint8Array): WireBallSegment[] {
+  if (u8.length < 4 || u8[0] !== MAGIC || u8[1] !== WIRE_BALLBATCH) {return [];}
+  const count = new DataView(u8.buffer, u8.byteOffset, u8.byteLength).getUint16(2, true);
+  const out: WireBallSegment[] = [];
+  let o = 4;
+  for (let i = 0; i < count; i++) {
+    const r = decodeBallSegmentAt(u8, o);
+    if (!r) {break;}
+    out.push(r.seg); o = r.next;
+  }
+  return out;
+}
+
+/** Single-or-batch: every segment a ball-lane frame carries. */
+export function decodeBallAny(u8: Uint8Array): WireBallSegment[] {
+  if (u8[1] === WIRE_BALLBATCH) {return decodeBallBatch(u8);}
+  const s = decodeBallSegment(u8);
+  return s ? [s] : [];
+}
+

@@ -32,6 +32,7 @@ import type { PlayerManager } from './PlayerManager.ts';
 import type { MessageHandler } from './MessageHandler.ts';
 import { stepContact, dischargeRay } from './projContact.ts';
 import { weaponStats } from './weaponStats.ts';
+import { encodeProjSpawn, encodeProjGone } from '../../shared/wire.ts';
 
 export interface LiveProj {
   id: string;
@@ -110,6 +111,11 @@ export interface ProjHost {
   players: PlayerManager;
   messages: MessageHandler;
   broadcast(msg: unknown, exclude?: string): void;
+  /** Binary edge lane (dedicated). Absent on the P2P host — its edges
+   *  stay JSON, small rooms don't need the byte win. */
+  connections?: { broadcastBinaryReliable(data: Uint8Array): void };
+  /** playerId → wireId — needed to name the shooter on binary spawns. */
+  wireIds?: Map<string, number>;
   rng(): number;
   tickSeq: number;
   mode: string;
@@ -237,10 +243,38 @@ export class RoomProjectiles {
     });
     // shotId/pellet are the intent's nonce — the shooter's predicted
     // shell binds its server identity off this echo (linkOwnProjectile).
+    this.edgeSpawn(id, ownerId, origin, vel, weaponType, shotId, pellet, lagS);
+    return id;
+  }
+
+  /** Binary edge (~46B+shotId vs ~200B JSON) — the create/gone pair was
+   *  ~44% of client egress at a full room. Owner wireId is how receivers
+   *  resolve the shooter; an owner with no wireId yet (first-tick fire)
+   *  or a host without the binary lane falls back to JSON. */
+  private edgeSpawn(id: string, ownerId: string, origin: Vec3, vel: Vec3, weaponType: number, shotId: string | undefined, pellet: number | undefined, lagS: number): void {
+    const bin = this.room.connections;
+    const ownerWireId = this.room.wireIds?.get(ownerId);
+    if (bin && ownerWireId !== undefined) {
+      bin.broadcastBinaryReliable(encodeProjSpawn({
+        projId: Number(id.slice(3)), ownerWireId, weaponType, pellet,
+        age: lagS, t: Date.now(),
+        position: Object.assign({}, origin), velocity: vel, shotId,
+      }));
+      return;
+    }
     this.room.broadcast(spawnPayload(WORLD_MODEL.projectile!, id, 'projectileId', {
       ownerId, position: Object.assign({}, origin), velocity: vel, weaponType, shotId, pellet, age: lagS || undefined, t: Date.now(),
     }) as ServerMessage);
-    return id;
+  }
+
+  private edgeGone(proj: LiveProj, at: Vec3, age: number): void {
+    const bin = this.room.connections;
+    const n = proj.id.startsWith('sp-') ? Number(proj.id.slice(3)) : NaN;
+    if (bin && Number.isFinite(n)) {
+      bin.broadcastBinaryReliable(encodeProjGone({ projId: n, age, position: at, shotId: proj.pull }));
+      return;
+    }
+    this.room.broadcast(verbPayload(WORLD_MODEL.projectile!, 'gone', 'projectileId', proj.id, { position: at, shotId: proj.pull, age }) as ServerMessage);
   }
 
   tick(dt: number): void {
@@ -348,7 +382,7 @@ export class RoomProjectiles {
     // `at` rides the edge: a replica's replay drifts past the real
     // contact by ~a transit of flight; exploding AT the wire point keeps
     // every predicted blast centered where the authority put it.
-    this.room.broadcast(verbPayload(WORLD_MODEL.projectile!, 'gone', 'projectileId', proj.id, { position: at, shotId: proj.pull, age: proj.p.age }) as ServerMessage);
+    this.edgeGone(proj, at, proj.p.age);
     // Skillshot ramp: sim shells carry their real flight age - a bot's
     // 2s disc lead pays the same multiplier a player's claim would. Wake
     // contacts still pay flat directDamage; only body hits earn it.
@@ -505,7 +539,7 @@ export class RoomProjectiles {
     for (const [id, proj] of this.projs) {
       if (proj.ownerId === ownerId) {
         this.projs.delete(id);
-        this.room.broadcast(verbPayload(WORLD_MODEL.projectile!, 'gone', 'projectileId', id, { position: proj.p.pos, shotId: proj.pull }) as ServerMessage);
+        this.edgeGone(proj, proj.p.pos, proj.p.age);
       }
     }
   }

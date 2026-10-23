@@ -146,7 +146,8 @@ export class ConnectionManager {
    *  replays on reclaim. A drop means this socket can't be trusted:
    *  close it so the client reclaims and replays honestly. */
   private sendReliable(playerId: string, ws: ServerWebSocket<WebSocketData>, data: string | Uint8Array): void {
-    wireTx(playerId, typeof data === 'string' ? Buffer.byteLength(data) : data.byteLength);
+    wireTx(playerId, typeof data === 'string' ? Buffer.byteLength(data) : data.byteLength,
+      typeof data === 'string' ? `j:${/^.{0,30}?"type":"?([a-zA-Z]+)/.exec(data)?.[1] ?? '?'}` : `bin:${data[1]}`);
     const status = ws.send(data);
     if (status === 0) {
       this.reliableDropped += 1;
@@ -273,7 +274,7 @@ export class ConnectionManager {
       this.drownCheck(playerId, ws);
       return 'backlogged';
     }
-    wireTx(playerId, data.byteLength);
+    wireTx(playerId, data.byteLength, `bin:${data[1]}`);
     ws.send(data);
     return 'sent';
   }

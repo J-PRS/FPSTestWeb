@@ -14,7 +14,7 @@
 //     appliedSkips math both assume monotone stamps
 import { describe, it, expect } from 'bun:test';
 import { mkRoom, step } from './harness.ts';
-import { decodeBallSegment } from '../../../shared/wire.ts';
+import { decodeBallAny, decodeProjSpawn, decodeProjGone } from '../../../shared/wire.ts';
 import type { ServerMessage } from '../../src/types.ts';
 
 // id-bearing lifecycle verbs: [spawn, update/gone families keyed by id field]
@@ -73,8 +73,11 @@ describe('wire lifecycle ordering fuzz', () => {
     // ballSegment rides the binary lane — decode to the same stream.
     const prevBin = room.connections.broadcastBinaryReliable.bind(room.connections);
     room.connections.broadcastBinaryReliable = (data: Uint8Array) => {
-      const s = decodeBallSegment(data);
-      if (s) seen.push({ type: 'ballSegment', m: s as unknown as ServerMessage, op: OPS_SEEN });
+      for (const s of decodeBallAny(data)) {seen.push({ type: 'ballSegment', m: s as unknown as ServerMessage, op: OPS_SEEN });}
+      const ps = decodeProjSpawn(data);
+      if (ps) {seen.push({ type: 'projectileCreated', m: { type: 'projectileCreated', projectileId: `sp-${ps.projId}` } as unknown as ServerMessage, op: OPS_SEEN });}
+      const pg = decodeProjGone(data);
+      if (pg) {seen.push({ type: 'projectileDestroyed', m: { type: 'projectileDestroyed', projectileId: `sp-${pg.projId}` } as unknown as ServerMessage, op: OPS_SEEN });}
       prevBin(data);
     };
 

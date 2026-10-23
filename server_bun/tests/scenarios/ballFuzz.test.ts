@@ -21,7 +21,7 @@
 //     converges to the same truth — snapshot + stream is complete
 import { describe, it, expect } from 'bun:test';
 import { mkRoom, lcg, flat, step } from './harness.ts';
-import { decodeBallSegment, type WireBallSegment as BallSegment } from '../../../shared/wire.ts';
+import { decodeBallAny, type WireBallSegment as BallSegment } from '../../../shared/wire.ts';
 import { stepBall, makeSimBall, type SimBall } from '../../../shared/ballSim.ts';
 
 interface Replica {
@@ -83,8 +83,7 @@ describe('ball replay conformance fuzz', () => {
       const wire: BallSegment[] = [];
       const prevReliable = room.connections.broadcastBinaryReliable.bind(room.connections);
       room.connections.broadcastBinaryReliable = (data: Uint8Array) => {
-        const s = decodeBallSegment(data);
-        if (s) wire.push(s);
+        for (const s of decodeBallAny(data)) {wire.push(s);}
         prevReliable(data);
       };
 

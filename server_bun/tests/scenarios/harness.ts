@@ -10,7 +10,7 @@ import { resetTauntCooldowns } from '../../../shared/botTaunts.ts';
 import { simNowAdvance, simNowReset , simMs} from '../../src/simClock.ts';
 import { resolveMapSpec, type MapSpec } from '../../../shared/mapSpec.ts';
 import { computeStateHash } from '../../../shared/stateHash.ts';
-import { decodeTickFrame, type WireTickPlayer } from '../../../shared/wire.ts';
+import { decodeTickFrame, decodeProjSpawn, decodeProjGone, type WireTickPlayer } from '../../../shared/wire.ts';
 import { TickFanout, type FanoutMetrics } from '../../src/tickRecords.ts';
 import { wallNow } from '../../src/wallClock.ts';
 import type { Heightfield } from '../../../shared/heightfield.ts';
@@ -169,6 +169,20 @@ export function watch(room: Room, now?: () => number): { count: (type: string, k
   room.connections.broadcast = now
     ? (m: ServerMessage) => { msgs.push({ ...m, _s: now() } as unknown as ServerMessage); }
     : (m: ServerMessage) => { msgs.push(m); };
+  // Projectile edges ride the binary lane — surface them as the same
+  // message shape tests assert on.
+  const prevBin = room.connections.broadcastBinaryReliable.bind(room.connections);
+  room.connections.broadcastBinaryReliable = (data: Uint8Array) => {
+    const ps = decodeProjSpawn(data);
+    if (ps) {
+      msgs.push({ type: 'projectileCreated', projectileId: `sp-${ps.projId}`,
+        ownerId: [...room.wireIds].find(([, w]) => w === ps.ownerWireId)?.[0],
+        weaponType: ps.weaponType, shotId: ps.shotId, pellet: ps.pellet, age: ps.age, position: ps.position, velocity: ps.velocity } as unknown as ServerMessage);
+    }
+    const pg = decodeProjGone(data);
+    if (pg) {msgs.push({ type: 'projectileDestroyed', projectileId: `sp-${pg.projId}`, position: pg.position, shotId: pg.shotId } as unknown as ServerMessage);}
+    prevBin(data);
+  };
   return {
     msgs,
     count: (type, kind) =>

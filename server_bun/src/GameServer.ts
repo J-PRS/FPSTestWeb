@@ -198,7 +198,8 @@ export class GameServer {
   }
 
   onMessage(ws: ServerWebSocket<WebSocketData>, message: string | ArrayBuffer | Uint8Array): void {
-    wireRx(ws.data.playerId, typeof message === 'string' ? Buffer.byteLength(message) : message.byteLength);
+    wireRx(ws.data.playerId, typeof message === 'string' ? Buffer.byteLength(message) : message.byteLength,
+      typeof message === 'string' ? `j:${/^.{0,30}?"type":"?([a-zA-Z]+)/.exec(message)?.[1] ?? '?'}` : `bin:${message instanceof ArrayBuffer ? new DataView(message).getUint8(1) : message[1]}`);
     // Binary hot path: [0x54] magic frames skip JSON entirely.
     // Currently only `position` (28B, replaces a ~140B JSON message at 20Hz).
     if (typeof message !== 'string') {
