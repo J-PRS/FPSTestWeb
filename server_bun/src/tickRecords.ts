@@ -6,7 +6,7 @@
  * "what leaves the room this tick".
  */
 import type { Room } from './Room.ts';
-import { encodeTickPlayerV4, encodeTickFrame, WIRE_TICK_V4, tickEncodeScratch, tickFrameScratch, v4Last, sparseV4Record, type TickEncodeScratch } from '../../shared/wire.ts';
+import { encodeTickPlayerV4, encodeTickFrame, WIRE_TICK_V4, tickEncodeScratch, v4Last, sparseV4Record, type TickEncodeScratch } from '../../shared/wire.ts';
 import { STATUS } from '../../shared/status.ts';
 import { lgChargeAt } from '../../shared/combat.ts';
 import { heldBuffRates, POWERUP } from '../../shared/pickups.ts';
@@ -81,11 +81,6 @@ export class TickFanout {
   // allocations per room per tick were the last steady-state allocs in
   // the fanout path.
   private readonly scratchRecords: PooledRecord[] = [];
-  /** One arena for EVERY recipient's frame this tick — send() consumes
-   *  the bytes synchronously (uWS cork copy / QUIC datagram copy), so a
-   *  fresh ArrayBuffer per player per tick was pure steady-state churn.
-   *  The returned view is only valid until the next encode call. */
-  private readonly frameArena = tickFrameScratch();
   /** Per-recipient tier memory (recipient → target playerId → tier) —
    *  boundary orbits need hysteresis or the send cadence flaps 20↔10Hz
    *  tick-to-tick. Increases require 15% past the boundary; decreases
@@ -430,7 +425,9 @@ else if (dSq < 360_000) {tier = 3;} // 150m / 400m / 600m
         room.moveSim.inputSeqOf(recipientId),
         others,
         WIRE_TICK_V4,
-        this.frameArena,
+        // Per-conn arena — the queued view survives until flush; a shared
+        // one aliases every queued frame to the last-encoded.
+        room.connections.frameArenaFor(recipientId),
       );
       this.metrics.recordsSent += others.length;
       this.metrics.bytesSent += frame.byteLength;
@@ -471,7 +468,7 @@ else if (dSq < 360_000) {tier = 3;} // 150m / 400m / 600m
         }
         // Same ackSeq contract as player frames — a spectator who spawns
         // mid-session must not carry a synthetic seq into history pruning.
-        const frame = encodeTickFrame(room.players.getLastSeq(id), seq, room.moveSim.inputSeqOf(id), all, WIRE_TICK_V4, this.frameArena);
+        const frame = encodeTickFrame(room.players.getLastSeq(id), seq, room.moveSim.inputSeqOf(id), all, WIRE_TICK_V4, room.connections.frameArenaFor(id));
         this.metrics.bytesSent += frame.byteLength;
         room.connections.sendBinaryToPlayer(id, frame);
       }

@@ -132,7 +132,7 @@
   - [x] **L1 empty-world duel mode** — DONE: ModeSpec `world:'empty'` on duel; `registerSims` skips balls/crawl/pickups/deploy/influence; deploy claims refuse `'nomode'`; profload gains `--mode`. Measured 32×2: 26.6% core, **240 CCU/core** (baseline 36.6%/175, target ≥220).
   - [ ] **L2 quiet-room tick** — heartbeat at ~4 Hz when fully suppressed, instead of an unconditional frame per tick (`TickLoop.ts:334`). Pin loss-metric + stateHash semantics in scenario tests first. Target ~286 CCU/core.
   - [x] **L5 sample phase marks** — DONE: every 10th room-tick (all-or-none). Measured 27.0%/237 CCU vs L1's 26.6%/240 — sub-noise, kept anyway (strictly less work).
-  - [ ] **L6 frame arena** — `Uint8Array`/`DataView`/buffer ≈ 14 % of samples; reuse per-connection frame buffers until drain.
+  - [x] **L6 frame arena** — DONE (correctness fix): shared frameArena views were retained in outboxes until flush — every queued frame aliased the last-encoded one. Per-conn arenas via `frameArenaFor`. Measured **259 CCU/core**.
   - [ ] **L8 matchmaker placement** — stateless seat reservation so duel rooms are placed by headroom (Colyseus/Photon pattern), not name hash.
   - [ ] **Record every run** in the report with command + activity mix (a run without its ball/creature setting is not comparable).
 - **Server hot-path footgun audit** — see `_docs/2026-10-23_SERVER_HOTPATH_AUDIT.md`. Suggested order:

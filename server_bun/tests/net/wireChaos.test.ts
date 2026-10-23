@@ -51,6 +51,29 @@ describe('netcode chaos: wire layer', () => {
     expect(bTypes).toEqual(['for-b', 'for-all', 'not-for-a']);
   });
 
+  it('queued tick frames do not alias across recipients (frameArena contract)', () => {
+    // Regression: encodeTickFrame once shared ONE arena — recipient A's
+    // queued view was clobbered by recipient B's encode mid-collect, so
+    // every conn's batch carried the last-encoded frame. Per-conn arenas
+    // must keep each queued view intact until flush.
+    const cm = new ConnectionManager();
+    const wsA = new FakeWs('a'), wsB = new FakeWs('b');
+    cm.register('a', asWs(wsA)); cm.register('b', asWs(wsB));
+    cm.beginCollect();
+    const arenaA = cm.frameArenaFor('a');
+    const arenaB = cm.frameArenaFor('b');
+    expect(arenaA).not.toBe(arenaB);
+    const frameA = new Uint8Array(arenaA.buf, 0, 8).fill(0xAA);
+    const frameB = new Uint8Array(arenaB.buf, 0, 8).fill(0xBB);
+    cm.sendBinaryToPlayer('a', frameA);
+    cm.sendBinaryToPlayer('b', frameB);
+    cm.flushOutboxes();
+    const aFirst = wsA.sentRaw[0] as Uint8Array;
+    const bFirst = wsB.sentRaw[0] as Uint8Array;
+    expect(aFirst[0]).toBe(0xAA);
+    expect(bFirst[0]).toBe(0xBB);
+  });
+
   it('journaled binary events replay verbatim, interleaved in seq order with JSON', () => {
     // playerHit/playerKill ride broadcastBinaryReliable now — the damage
     // stream a reclaim must replay. If binary frames skipped the journal

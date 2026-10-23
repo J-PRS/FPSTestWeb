@@ -3,7 +3,7 @@ import type { WebSocketData, ServerMessage } from './types.ts';
 import { logger } from './logger.ts';
 import { wallNow } from './wallClock.ts';
 import { wireTx, BIN_KIND } from './wireMeter.ts';
-import { encodeBatch, encodeWireJson } from '../../shared/wire.ts';
+import { encodeBatch, encodeWireJson, tickFrameScratch, type TickFrameScratch } from '../../shared/wire.ts';
 
 /** Tick frames are drop-safe (peers extrapolate), so a socket that can't
  *  drain must not queue them unboundedly — a stalled connection otherwise
@@ -99,6 +99,18 @@ export class ConnectionManager {
    *  metering at queue time, not at the merged send. */
   private collecting = false;
   private readonly outbox = new Map<string, Uint8Array[]>();
+  /** Per-conn tick-frame arena — the outbox RETAINS the encoded view
+   *  until flush, so every conn needs its own buffer: a shared arena
+   *  aliases every queued frame to the last-encoded one (the fanout
+   *  encodes recipient A, queues the view, then recipient B's encode
+   *  overwrites A's bytes mid-batch). One frame per conn per tick, so
+   *  a per-conn arena is exactly enough. */
+  private readonly frameArenas = new Map<string, TickFrameScratch>();
+  frameArenaFor(pid: string): TickFrameScratch {
+    let a = this.frameArenas.get(pid);
+    if (!a) {a = tickFrameScratch(); this.frameArenas.set(pid, a);}
+    return a;
+  }
   beginCollect(): void { this.collecting = true; }
   private push(pid: string, frame: Uint8Array): void {
     let q = this.outbox.get(pid);
@@ -322,6 +334,7 @@ export class ConnectionManager {
       this.shedPhase.delete(playerId);
       this.heldPhase.delete(playerId);
       this.outbox.delete(playerId);
+      this.frameArenas.delete(playerId);
       if (this.topic && typeof ws.unsubscribe === 'function') {ws.unsubscribe(this.topic);}
       logger.info(`Connection unregistered`, { playerId, total: this.connections.size });
     }

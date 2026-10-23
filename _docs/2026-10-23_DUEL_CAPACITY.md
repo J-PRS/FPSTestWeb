@@ -254,6 +254,12 @@ gap between 175 and ~570 is the price of that world, not of the players.
 
 ### Runs
 
+- **L6 landed + measured:** per-conn tick-frame arenas. Also a CORRECTNESS
+  fix — the shared frameArena's views are retained in the outbox until
+  flush, so every queued frame aliased the last-encoded one (wrong
+  ackSeq/inputAck, wrong record sets on divergent ticks). Measured:
+  24.7 % core / 0.386 %/client / **259 CCU/core**.
+
 - **L5 landed + measured:** `--bots 64 --roomspec duel=32 --mode duel
   --secs 40`. Phase marks now run every 10th room-tick (all-or-none so
   intra-tick deltas stay honest). Result: 27.0 % core / 237 CCU/core vs
