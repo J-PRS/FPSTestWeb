@@ -128,6 +128,13 @@
 - **Demo download:** Right-click on cool shot tiles in ESC menu downloads the `.demo` file (local or from server)
 
 ## Next Tasks
+- **Server hot-path footgun audit** — see `_docs/2026-10-23_SERVER_HOTPATH_AUDIT.md`. Suggested order:
+  - [ ] **#1 `projStep` scratch** — optional `into?: Vec3` in `shared/projSim.ts:22`; reuse one scratch per `RoomProjectiles`; also replaces the two `Object.assign({}, p.pos)` sites at `RoomProjectiles.ts:308-309`. Pure win, no behaviour change.
+  - [ ] **#2 dhypot3 sweep** — 55 remaining 3-arg `Math.hypot` calls; start with `projContact.ts` + `CombatHandler.ts` (projectile/fire volume), then `combatBlast.ts`, `botArsenal.ts`. Mechanical.
+  - [ ] **#4 spatial-grid reuse** — `RoomMoveSim.ts:~620` rebuilds `Map` + `number[]` per tick and sorts per query. Flat typed arrays / generation stamps; keep the sort (contact-order parity) and land with a scenario test.
+  - [ ] **#5 roster builders** — inspect `Room.ts:1168` first (per-tick?); `RoomFlags.snapshot()` allocates 3 objects per flag on every `flagUpdate` broadcast.
+  - [ ] **#3 / #6 measure first** — `ConnectionManager.ts:210` JSON envelope and `combatBlast.ts:475` power-scaled AOE stats are tidiness until `/wire` and AOE profiles say otherwise.
+  - [ ] **Measure every landed item** — `bun _tools/profload.ts --bots 64 --secs 40` before/after, append a "Measured" subsection per item in the audit doc.
 - ~~**Replay through real netHandlers**~~ — DONE: `netReplay.test.ts` feeds committed `.rec` captures through `handleMessage`/`handleBinaryMessage` via a DOM-stubbed harness (`netHarness.ts`).
 - ~~**WT tier in tests**~~ — DONE: `FPS_WT_PORT=19443` test server + `fleet.ts --tier=wt` ran 2/2 QUIC joins, 732 tick frames, kills through the claim funnel, 0 shot rejects.
 - **Ops items needing JP's domain+VPS:** TURN server, CA cert for WebTransport — see `_docs/2026-09-28_DEPLOY_NETCODE_V2.md`
