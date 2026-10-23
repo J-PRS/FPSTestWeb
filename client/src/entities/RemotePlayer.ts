@@ -82,20 +82,20 @@ export class RemotePlayer {
   /** Actual staleness of the last drawn sample — the epoch the server's
    *  lag-comp rewinds to when validating shots against this remote. */
   get viewLagMs(): number { return this.interp.viewLagMs; }
-  /** The position the server's lag-comp adjudicates this remote at:
-   *  wire pos projected to (wireAge − viewLag) — the epoch on the
-   *  shooter's screen when the wire record landed, not the rendered
-   *  body nor wire-fresh. Envelope math (blast/shock beams, shell
-   *  sweeps) must read this — rendered pos ghosts hits on fast movers. */
+  /** The position the server's lag-comp adjudicates this remote at: the
+   *  snapshot buffer sampled at the last drawn frame's server epoch —
+   *  literally where the shooter saw them. Envelope math (blast/shock
+   *  beams, shell sweeps) must read this — rendered pos ghosts hits on
+   *  fast movers, wire pos leads them. */
   ghostPosition(out: THREE.Vector3): THREE.Vector3 {
     if (this.lastUpdateTime <= 0) {return out.copy(this.position);}
+    // The shooter's view epoch IS a server-time in the snapshot buffer —
+    // sample the real history (turns, landings, bounces) instead of
+    // projecting wire+vel, which missed direction changes by 15-25m.
+    const epoch = this.interp.viewEpochT;
+    if (Number.isFinite(epoch) && this.interp.sampleGhostAt(epoch, out)) {return out;}
+    // No rendered frame yet (pre-buffer boot) — project the wire record.
     const age = Math.min((Date.now() - this.lastUpdateTime) / 1000, 1);
-    // Unclamped: viewLag > wire age means the server's rewind epoch sits
-    // BEHIND the latest record — project back along the wire velocity to
-    // the shooter's view time. The old min() clamp folded this to
-    // ghost==wire, so envelope math ran one interp-delay ahead of where
-    // the authority judges (ghostTrace: wg≈0, rg≈rw — the dmg-echo
-    // aimOff class).
     return out.copy(this.wirePosition).addScaledVector(this.vel, age - Math.max(0, this.interp.viewLagMs / 1000));
   }
   get interpUnderruns(): number { return this.interp.underruns; }

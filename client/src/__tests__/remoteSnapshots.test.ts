@@ -190,6 +190,28 @@ describe('SnapshotBuffer', (): void => {
     }
   });
 
+  it('sampleAt reads real history — a reversal beats linear projection', (): void => {
+    const buf = new SnapshotBuffer();
+    const now = Date.now();
+    // The path reverses: 0 → 10 → 5. Projecting newest-vel backward
+    // would put the ghost at 5 - (negative); the buffer answers 5.
+    buf.push(now - 200, {x:0,y:0,z:0}, {yaw:0,pitch:0}, {x:50,y:0,z:0});
+    buf.push(now - 100, {x:10,y:0,z:0}, {yaw:0,pitch:0}, {x:-50,y:0,z:0});
+    buf.push(now - 50, {x:5,y:0,z:0}, {yaw:0,pitch:0}, {x:-50,y:0,z:0});
+    const out = new THREE.Vector3();
+    // t halfway through the reversal leg: midpoint of 10→5 = 7.5.
+    expect(buf.sampleAt(now - 75, out)).toBe(true);
+    expect(out.x).toBeCloseTo(7.5, 1);
+    // Future of newest = bounded extrapolation along the newest vel.
+    expect(buf.sampleAt(now + 100, out)).toBe(true);
+    expect(out.x).toBeLessThan(5);
+    // Before the oldest snapshot pins to it.
+    expect(buf.sampleAt(now - 500, out)).toBe(true);
+    expect(out.x).toBe(0);
+    // Empty buffer declines — callers fall back to wire projection.
+    expect(new SnapshotBuffer().sampleAt(0, out)).toBe(false);
+  });
+
   it('keeps the yaw lerp on the shortest arc across ±PI', (): void => {
     const buf = new SnapshotBuffer();
     const now = Date.now();

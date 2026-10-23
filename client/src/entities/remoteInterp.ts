@@ -104,6 +104,11 @@ export class RemoteInterp {
   /** Actual staleness of the last drawn sample (delay minus extrapolation
    *  overshoot) — the shooter's literal view epoch for lag-comp reports. */
   get viewLagMs(): number { return this.net.viewLagMs; }
+  /** Server-time epoch of the last drawn frame — the shooter's literal
+   *  view instant the lag-comp ghost samples at. */
+  get viewEpochT(): number { return this.net.viewEpochT; }
+  /** Buffered truth at a server-time epoch — history, not projection. */
+  sampleGhostAt(t: number, out: THREE.Vector3): boolean { return this.net.sampleAt(t, out); }
   /** Buffer starved → extrapolation cap hit: each underrun is a visible
    *  freeze/dead-reckon episode. extCapMs is total severity. */
   get underruns(): number { return this.net.underruns; }

@@ -335,6 +335,43 @@ export class SnapshotBuffer {
     outRot.pitch = s0.pitch + (s1.pitch - s0.pitch) * a;
   }
 
+  /** Server-time epoch of the last drawn frame — the shooter's literal
+   *  view instant. NaN before the first sample. Lag-comp ghost reads
+   *  this to ask "where was the body when the shooter fired?" */
+  get viewEpochT(): number { return this.lastRenderTime === -Infinity ? Number.NaN : this.lastRenderTime; }
+
+  /** Epoch query — the buffered truth at server-time `t`, linear between
+   *  the straddling snapshots, bounded extrapolation off the newest.
+   *  Unlike sample(): no render clock, no slewing — a pure history read
+   *  for the lag-comp ghost (projecting wire+vel misses direction
+   *  changes the buffer already saw). */
+  sampleAt(t: number, outPos: THREE.Vector3): boolean {
+    const snaps = this.snapshots;
+    if (snaps.length === 0) {return false;}
+    const newest = snaps[snaps.length - 1]!;
+    if (t >= newest.t) {
+      const ext = Math.min(SnapshotBuffer.MAX_EXTRAPOLATE, (t - newest.t) / 1000);
+      outPos.set(newest.x + newest.vx * ext, newest.y + newest.vy * ext, newest.z + newest.vz * ext);
+      return true;
+    }
+    let i = snaps.length - 2;
+    while (i >= 0 && snaps[i]!.t > t) {i -= 1;}
+    if (i < 0) {
+      const s = snaps[0]!;
+      outPos.set(s.x, s.y, s.z);
+      return true;
+    }
+    const s0 = snaps[i]!;
+    const s1 = snaps[i + 1]!;
+    const a = s1.t > s0.t ? (t - s0.t) / (s1.t - s0.t) : 1;
+    outPos.set(
+      s0.x + (s1.x - s0.x) * a,
+      s0.y + (s1.y - s0.y) * a,
+      s0.z + (s1.z - s0.z) * a,
+    );
+    return true;
+  }
+
   /** Recycle the whole buffer (teleport/disconnect reset). The render-
    *  clock anchor goes too: server time is per-room (tickSeq×50), and a
    *  room hop/match restart rewinds it — a stale latestT would swallow
