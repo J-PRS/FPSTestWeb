@@ -62,7 +62,10 @@ export const CONFIG = {
   // from the old trajectory read as impossible speed/divergence.
   reportGraceMs: 500,
 
-  idleTimeoutSec: envNum('FPS_IDLE_TIMEOUT_S', 120),
+  // uWS's per-socket idle timer re-arms on every frame (~12K native
+  // re-arms/s at load) — our app-level reap (idleKickMs=60s, closes the
+  // ws itself) is stricter anyway, so the native timer is pure overhead.
+  idleTimeoutSec: envNum('FPS_IDLE_TIMEOUT_S', 0),
   maxPayloadLength: envNum('FPS_MAX_PAYLOAD', 1024 * 1024),
   hashBroadcastIntervalMs: envNum('FPS_HASH_INTERVAL_MS', 2000),
   // Reclaim window must exceed the full reconnect chain — close detect
