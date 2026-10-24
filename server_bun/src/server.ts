@@ -193,11 +193,17 @@ const serve = (): ReturnType<typeof Bun.serve<WebSocketData>> => Bun.serve<WebSo
     // shutdown() — players get their 'server restarting' close frames.
     if (url.pathname === '/dev/shutdown') {
       const ip = srv.requestIP(req)?.address;
-      if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') {
-        setImmediate((): Promise<void> => shutdown());
-        return corsResponse('shutting down', { status: 200 });
+      if (ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1') {
+        return corsResponse('loopback only', { status: 403 });
       }
-      return corsResponse('loopback only', { status: 403 });
+      // Tunnels (cloudflared/ngrok) forward remote traffic AS loopback —
+      // without the token, any tunnel visitor gets a free server restart.
+      // Unset token = closed to strangers, same rule as /admin/*.
+      if (CONFIG.adminToken && url.searchParams.get('key') !== CONFIG.adminToken) {
+        return corsResponse('unauthorized', { status: 401 });
+      }
+      setImmediate((): Promise<void> => shutdown());
+      return corsResponse('shutting down', { status: 200 });
     }
 
     const route = ROUTES[url.pathname];
@@ -293,13 +299,13 @@ if (CONFIG.wtPort > 0) {
 // Boot banner bypasses the log level — a server that prints nothing looks
 // dead. It's once-per-process, so it can never add to the chatter floor.
 // oxlint-disable-next-line no-console
-console.log(`FPS Bun Server started port=${CONFIG.port} tick=${CONFIG.tickRate} maxPlayers=${CONFIG.maxPlayers} respawnMs=${CONFIG.respawnDelayMs}`);
+console.log(`\x1b[32m\x1b[1mFPS Bun Server started port=${CONFIG.port} tick=${CONFIG.tickRate} maxPlayers=${CONFIG.maxPlayers} respawnMs=${CONFIG.respawnDelayMs}\x1b[0m`);
 // oxlint-disable-next-line no-console
-console.log(`WebSocket: ws://localhost:${CONFIG.port}/ws`);
+console.log(`\x1b[32mWebSocket: ws://localhost:${CONFIG.port}/ws`);
 // oxlint-disable-next-line no-console
 console.log(`Health:    http://localhost:${CONFIG.port}/health`);
 // oxlint-disable-next-line no-console
-console.log(`RTC relay: ws://localhost:${CONFIG.port}/rtc?room=CODE`);
+console.log(`RTC relay: ws://localhost:${CONFIG.port}/rtc?room=CODE\x1b[0m`);
 
 // Fleet worker heartbeat — under fleet.ts this process is one of N
 // children; the matchmaker tracks room homes + per-worker ccu off these

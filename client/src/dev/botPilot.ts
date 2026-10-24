@@ -130,6 +130,10 @@ export function startBotPilot(deps: PilotDeps): () => void {
   const iv = setInterval((): void => {
     const dt = TICK_MS / 1000;
     const p = player;
+    // Human override: pointer lock means a real person took the seat —
+    // the InputHandler owns every field we write, so hands entirely off.
+    // Unlock hands the keys back and the brain picks up where it left.
+    if (document.pointerLockElement) {return;}
     // Dead: hands off — the server respawn timer owns the return.
     if (p.isDead || !nm.isConnected()) {
       p.input.keys[fwdKey] = false; p.input.keys[skiKey] = false;

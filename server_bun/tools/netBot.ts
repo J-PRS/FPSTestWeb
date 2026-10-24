@@ -33,6 +33,7 @@ const arg = (k: string, d: string): string => {
   const i = process.argv.indexOf(`--${k}`);
   return i !== -1 && process.argv[i + 1] ? process.argv[i + 1]! : d;
 };
+const has = (k: string): boolean => process.argv.includes(`--${k}`);
 // Accepts ws/wss URLs, pasted https tunnel URLs, or bare tunnel hosts —
 // the friend test uses `wss://<host>.trycloudflare.com/ws`.
 const normUrl = (u: string): string => {
@@ -207,6 +208,11 @@ class WireBot {
       transport: this.tier,
       perk: PERKS[this.i % PERKS.length], armorClass: this.armorClass,
       ...(arg('spec', '') ? { map: arg('spec', '') } : {}),
+      // Sim gates must MATCH the room's joiner spec — a bare join parses
+      // to false and the room adopts the joiner's gates (balls/critters
+      // come back on mid-match). Opt-in args; omitted = leave alone.
+      ...(has('noballs') ? { noBalls: true } : {}),
+      ...(has('nocreatures') ? { noCreatures: true } : {}),
     });
   }
 
@@ -615,7 +621,10 @@ class WireBot {
       // Alternate target: hopping into ROOM itself is a server-side no-op.
       this.nextSwitch = now + rand(120_000, 240_000);
       this.hopAlt = !this.hopAlt;
-      this.send({ type: 'switchRoom', room: this.hopAlt ? `${ROOM}-alt` : ROOM, mode: MODE });
+      this.send({ type: 'switchRoom', room: this.hopAlt ? `${ROOM}-alt` : ROOM, mode: MODE,
+        // Same gate rule as join — a bare hop re-mints the room flagless.
+        ...(has('noballs') ? { noBalls: true } : {}),
+        ...(has('nocreatures') ? { noCreatures: true } : {}) });
     }
 
     // Creature claims — only when something's actually in reach, same

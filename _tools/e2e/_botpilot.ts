@@ -86,6 +86,22 @@ try {
   console.log(`RESULT ${clients.map((_, i) => `p${i}:drops=${drops[i]} moved=${moved[i]!.toFixed(0)}m`).join('  ')}`);
   console.log(`GLITCH counts:`);
   for (const [tag, n] of [...glitches].sort((a, b) => b[1] - a[1])) {console.log(`  ${tag}: ${n}`);}
+  // Verdict: render-integrity tags are zero-tolerance — ANY one means a
+  // remote warped, buried, or moved impossibly on a human's screen.
+  // Parity echoes (dmg/kb/nugrest) are telemetry, not render truth —
+  // they stay warnings until the srvAt audit is worth gating on.
+  const FATAL = new Set(['dbgghost-jump', 'wire-gap', 'impossible-motion', 'snap', 'render-drift', 'ball-step', 'adjghost-jump', 'modelghost-jump']);
+  const fatal = [...glitches].filter(([tag]) => FATAL.has(tag));
+  if (fatal.length > 0) {
+    console.log(`VERDICT FAIL — render-integrity violations: ${fatal.map(([t, n]) => `${t}×${n}`).join(', ')}`);
+    process.exitCode = 1;
+  }
+  // Mobility sanity: a pilot that never moved didn't test anything.
+  for (let i = 0; i < clients.length; i += 1) {
+    if (moved[i]! < 200) {console.log(`VERDICT FAIL — p${i} moved only ${moved[i]!.toFixed(0)}m (zombie soak)`); process.exitCode = 1;}
+    if (drops[i]! > 0 && !process.env.ALLOW_DROPS) {console.log(`VERDICT FAIL — p${i} dropped ${drops[i]}×`); process.exitCode = 1;}
+  }
+  if (!process.exitCode) {console.log('VERDICT PASS — no render-integrity violations, no drops');}
   const dmg = glitchLines.filter((l) => l.includes('dmg-echo'));
   // Payloads arrive JSON-escaped through the arg-capture path — match the
   // escaped and plain forms so a real 'none' verdict can't hide in quotes.

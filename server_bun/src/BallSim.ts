@@ -273,7 +273,7 @@ export class BallSim {
     this.retargetAcc.delete(b.id);
     this.resyncAcc.delete(b.id);
     this.segRegime.delete(b.id);
-    this.broadcast(verbPayload(WORLD_MODEL.ball!, 'gone', 'id', b.id, { position: { x: b.x, y: b.y, z: b.z } }) as ServerMessage);
+    this.broadcast(verbPayload(WORLD_MODEL.ball!, 'gone', 'id', b.id, { position: { x: b.x, y: b.y, z: b.z }, by: 'world' }) as ServerMessage);
   }
 
   private kill(b: SimBall, by?: string): void {
@@ -285,7 +285,7 @@ export class BallSim {
     this.resyncAcc.delete(b.id);
     this.segRegime.delete(b.id);
     const pos = { x: b.x, y: b.y, z: b.z };
-    this.broadcast(verbPayload(WORLD_MODEL.ball!, 'gone', 'id', b.id, { position: pos, by }) as ServerMessage);
+    this.broadcast(verbPayload(WORLD_MODEL.ball!, 'gone', 'id', b.id, { position: pos, by: by ?? 'world' }) as ServerMessage);
     if (by) {this.onKilled?.(by, pos, b.variant);}
     // Elite splitter: two child balls at the corpse
     if (b.variant === 3) {
@@ -308,7 +308,7 @@ export class BallSim {
       this.retargetAcc.delete(b.id);
       this.resyncAcc.delete(b.id);
       this.segRegime.delete(b.id);
-      this.broadcast(verbPayload(WORLD_MODEL.ball!, 'gone', 'id', b.id, { position: { x: b.x, y: b.y, z: b.z } }) as ServerMessage);
+      this.broadcast(verbPayload(WORLD_MODEL.ball!, 'gone', 'id', b.id, { position: { x: b.x, y: b.y, z: b.z }, by: 'world' }) as ServerMessage);
     }
   }
 
