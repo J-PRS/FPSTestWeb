@@ -41,6 +41,7 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-10-24_MINIMIZING_PER_ROOM_OVERHEAD.md` | Per-room overhead minimization for many small matches: multi-match rooms, sim gating, flattened tick path, hibernation, sharding; ordered by impact |
 | `_docs/2026-10-24_GUNMETAL_BODY_BAKE.md` | Weapon wear/grime bake on body rigs — the cm-scale hang, uObjScale fix, clone re-arm, and per-asset tuning knobs |
 | `_docs/2026-10-24_MECH_SILHOUETTE_TECHNIQUES.md` | Power-armor silhouette grammar for class-rig builders — construction philosophies, armor hierarchy, landmarks, and the variant row |
+| `_docs/2026-10-25_MEDIUM_LINEUP_PROPOSAL.md` | Medium-class lineup proposal — rig constraints (82-bone cm-scale skeleton, joint map), four archetypes, build plan. Proposal only |
 | `_docs/2026-10-24_CHARACTER_TECHNIQUES_DEEP.md` | Round 2 — PS1/Quake-era tricks + 2025 agentic-3D pipelines, mapped to which techniques our builders already use and what's worth adding |
 | `_docs/2026-10-24_PROFILING_HOTSPOTS.md` | 512-player soak CPU profile: phase + function hotspots; send/fanout/encoding dominate; prioritized optimization roadmap |
 
@@ -62,10 +63,11 @@ added 2026-10-22.
 
 ## Traps (gotchas — read before touching the area)
 
-`_docs/traps/` — 6 files: bloom black frames, T2 map porting, updateRanges
+`_docs/traps/` — 7 files: bloom black frames, T2 map porting, updateRanges
 first-shot-only, bloom composite is raw, filter-repo eats worktree,
 hip-yaw local-vs-world (rotated armature parents break local-quat facing
-measures).
+measures), remote-interp-chases-fiction (converge steering toward the
+extrapolated sample = model sprints ahead of wire truth during starves).
 
 ## Workflows
 
