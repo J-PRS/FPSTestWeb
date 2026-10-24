@@ -98,6 +98,55 @@ fanout + encoding is.
 - `fanoutRecords` + `buildRecords` + `encode*` = ~653 hits = **19 %**.
 - `RoomMoveSim.tick` + `bodiesNear` = ~646 hits = **19 %**.
 
+## How it was measured
+
+### 1. Load + profile
+
+```bash
+cd /c/TEMP/_WEB/FPSWebTest
+FPS_GLOBAL_MAX_PLAYERS=2048 bun _tools/profload.ts \
+  --bots 512 --roomspec prof=16 --cpuprof --settle 45 --secs 30
+```
+
+- `profload.ts` spawns one Bun server (port 8101) and 16 netBot processes
+  (32 bots each across rooms `prof-1..prof-16`).
+- `--cpuprof` passes `--cpu-prof` to the server; on exit Bun writes
+  `server_bun/CPU.<timestamp>.<pid>.cpuprofile` (V8/Chrome profile format).
+- Phase times come from `/metrics` (`bandwidth.phaseMs`, `tickMs`).
+- CPU % = (process CPU delta) / wall over the measurement window
+  (sampled via `Get-Process -Id <pid>`).
+
+### 2. Extract top functions from the `.cpuprofile`
+
+The profile is JSON with `nodes[]` (call frames) and `samples[]` (node ids
+at each sample). Top functions by sample count:
+
+```ts
+// one-off helper (not committed)
+const data = JSON.parse(readFileSync(profilePath, 'utf8'));
+const hits = new Map<number, number>();
+for (const s of data.samples) hits.set(s, (hits.get(s) || 0) + 1);
+const rows = data.nodes.map((n) => ({
+  name: n.callFrame?.functionName || '(anonymous)',
+  url:  n.callFrame?.url || '',
+  line: n.callFrame?.lineNumber,
+  hits: hits.get(n.id) || 0,
+}));
+rows.sort((a, b) => b.hits - a.hits);
+for (const r of rows.slice(0, 25)) {
+  if (r.hits) console.log(r.hits, r.name, r.url.split('/').pop() + ':' + r.line);
+}
+```
+
+### 3. Key source files
+
+- `_tools/profload.ts` — orchestrator (server + bots + metrics + CPU sample).
+- `server_bun/src/TickLoop.ts` — per-room tick, phase timing, fanout.
+- `server_bun/src/tickRecords.ts` — `buildRecords`, `fanoutRecords`.
+- `server_bun/src/wire.ts` — `encodeTickPlayerV4`, `encodeTickFrame`, `encodeBatch`.
+- `server_bun/src/RoomMoveSim.ts` — movement sim, `bodiesNear`.
+- `server_bun/src/ConnectionManager.ts` — `flushOutboxes`, `send`.
+
 ## Next steps
 
 1. Run `--cpuprof` on a 1v1-only mix to see if the profile changes
