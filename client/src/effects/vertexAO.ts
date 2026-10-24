@@ -78,6 +78,9 @@ interface EdgeCtx {
   aedge: Float32Array;
   /** Debug: gunlab draws these edges as a red overlay. */
   flagged: Set<string>;
+  /** Override dihedral threshold (1-cos) for smooth-faceted rigs — the
+   *  default 50° skips ellipsoid/cone plate seams entirely. */
+  sharpThreshold?: number;
   /** 0.1mm weld tolerance — see collectEdges. */
   pk(i: number): string;
 }
@@ -131,6 +134,7 @@ function collectEdges(pos: THREE.BufferAttribute, triCount: number): { faceN: Fl
 /** Flag edges whose incident faces meet past the sharp dihedral. */
 function flagSharpPairs(ctx: EdgeCtx): void {
   const { edges, faceN } = ctx;
+  const threshold = (ctx.sharpThreshold ?? SHARP_DIHEDRAL);
   for (const [key, list] of edges) {
     // Boundary edges (unmatched halves — T-junctions, triangulation
     // seams, cross-mesh contacts) are NOT auto-sharp: they sit ON flat
@@ -147,7 +151,7 @@ function flagSharpPairs(ctx: EdgeCtx): void {
     for (let i = 0; i < list.length; i += 1) {
       for (let j = i + 1; j < list.length; j += 1) {
         const x = list[i]!, y = list[j]!;
-        if (!(1 - faceDot(faceN, x.t, y.t) > SHARP_DIHEDRAL)) {continue;}
+        if (!(1 - faceDot(faceN, x.t, y.t) > threshold)) {continue;}
         // Flag EVERY ref on this edge, not just the sharp pair: duplicated
         // verts / T-junctions put a coplanar third tri on the same key —
         // unflagged, its side of the seam has no distance field and the
@@ -322,12 +326,12 @@ function bakeBaryAttrs(geo: THREE.BufferGeometry, pos: THREE.BufferAttribute, tr
  *  geometry edges — the thing vertex-level wear can't do on a 24-vert box.
  *  Non-sharp corners contribute a large constant instead so flat seams and
  *  coplanar triangulation never draw. */
-function bakeEdgeLines(geo: THREE.BufferGeometry): void {
+function bakeEdgeLines(geo: THREE.BufferGeometry, sharpThreshold?: number): void {
   const pos = geo.attributes.position as THREE.BufferAttribute;
   const {count} = pos;
   const triCount = count / 3; // caller guarantees non-indexed
   const { faceN, edges, pk } = collectEdges(pos, triCount);
-  const ctx: EdgeCtx = { pos, faceN, edges, aedge: new Float32Array(count * 3), flagged: new Set<string>(), pk };
+  const ctx: EdgeCtx = { pos, faceN, edges, aedge: new Float32Array(count * 3), flagged: new Set<string>(), sharpThreshold, pk };
   flagSharpPairs(ctx);
   propagateContinuations(ctx);
   healTJunctions(ctx);
@@ -402,8 +406,11 @@ function whiteTex(): THREE.Texture {
 
 /** Rasterize the flagged edge segments into a per-triangle UV atlas and
  *  write the matching `uv` attribute. Texture goes on userData.__wearTex;
- *  the weapon shader picks it up via material.userData.__wearTex. */
-function bakeWearTexture(geo: THREE.BufferGeometry): void {
+ *  the weapon shader picks it up via material.userData.__wearTex.
+ *  `us` = object-units→world scale: rigs authored at ×100 (FBX cm units,
+ *  armature scale 0.01) measure edges in the thousands of units and the
+ *  subdivision below explodes — scale wlen to world before counting. */
+function bakeWearTexture(geo: THREE.BufferGeometry, us = 1): void {
   // Baked GLBs carry a real unwrap shared with their ao.png + the
   // blend's exported edge bake — the atlas would clobber that uv.
   if (geo.userData.__keepUv) {return;}
@@ -474,8 +481,8 @@ function bakeWearTexture(geo: THREE.BufferGeometry): void {
   for (const r of refs) {
     const [ax, ay] = toUV(r.t, r.a);
     const [bx, by] = toUV(r.t, r.b);
-    const wlen = _wA.fromBufferAttribute(pos, r.a).distanceTo(_wB.fromBufferAttribute(pos, r.b));
-    const pieces = Math.max(2, Math.ceil(wlen / 0.004));
+    const wlen = _wA.fromBufferAttribute(pos, r.a).distanceTo(_wB.fromBufferAttribute(pos, r.b)) * us;
+    const pieces = Math.min(512, Math.max(2, Math.ceil(wlen / 0.004)));
     const lwCore = Math.max(1, WEAR_LINE * 2 * triScale[r.t]);
     for (let k = 0; k < pieces; k += 1) {
       const t0 = k / pieces, t1 = (k + 1) / pieces;
@@ -485,7 +492,7 @@ function bakeWearTexture(geo: THREE.BufferGeometry): void {
       const ox = _wA.x + (_wB.x - _wA.x) * (t0 + t1) / 2;
       const oy = _wA.y + (_wB.y - _wA.y) * (t0 + t1) / 2;
       const oz = _wA.z + (_wB.z - _wA.z) * (t0 + t1) / 2;
-      const n = wFbm3(ox * 90, oy * 90, oz * 90);
+      const n = wFbm3(ox * us * 90, oy * us * 90, oz * us * 90);
       const amp = 0.35 + 0.65 * sstep(0.35, 0.75, n); // mostly solid, noisy bite
       if (amp < 0.42) {continue;} // rare worn-through pinhole
       const x0 = ax + (bx - ax) * t0, y0 = ay + (by - ay) * t0;
@@ -512,7 +519,7 @@ function bakeWearTexture(geo: THREE.BufferGeometry): void {
 /** Backwards-compat shim: kept name so existing call sites stay — now
  *  rasterizes the wear atlas instead of attaching strip geometry. */
 export function attachEdgeWear(mesh: THREE.Mesh): void {
-  bakeWearTexture(mesh.geometry);
+  bakeWearTexture(mesh.geometry, (mesh.geometry.userData.__unitScale as number) ?? 1);
 }
 
 /** Max (1 - dot) between each vertex's normal and the normals of every
@@ -662,7 +669,7 @@ const HEMI_DIRS: [number, number, number][] = ((): [number, number, number][] =>
   }
   return dirs;
 })();
-function bakeMesh(mesh: THREE.Mesh, occluder: THREE.Mesh, rayDist: number, grime = false, wearBoost = 0): void {
+function bakeMesh(mesh: THREE.Mesh, occluder: THREE.Mesh, rayDist: number, grime = false, wearBoost = 0, sharpThreshold?: number): void {
   ensureNonIndexed(mesh); // before colors: attribute size must match
   const geo = mesh.geometry;
   const pos = geo.attributes.position as THREE.BufferAttribute;
@@ -720,7 +727,7 @@ function bakeMesh(mesh: THREE.Mesh, occluder: THREE.Mesh, rayDist: number, grime
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   bakeWear(geo, grime, wearBoost);
-  bakeEdgeLines(geo);
+  bakeEdgeLines(geo, sharpThreshold);
   attachEdgeWear(mesh);
 }
 
@@ -740,6 +747,10 @@ export function enhanceWeaponMaterial(mat: THREE.Material): void {
     // Materials can dose the effect up — gunmetal swarm species need a
     // heavier hand than viewmodel weapons or the bake reads flat.
     sh.uniforms.uWearInt = { value: (mat.userData.__wearInt as number) ?? 1 };
+    // Object-units→world scale — rigs authored ×100 (armature scale 0.01)
+    // would read all world-unit constants (edge band, noise freqs) 100×
+    // off. Weapons stay at 1.
+    sh.uniforms.uObjScale = { value: (mat.userData.__unitScale as number) ?? 1 };
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
 varying vec2 vUvW;
@@ -761,6 +772,7 @@ vUvW = uv;`);
 uniform sampler2D uWearMap;
 uniform sampler2D uGrimeMap;
 uniform float uWearInt;
+uniform float uObjScale;
 varying vec2 vUvW;
 varying vec3 vWpos;
 varying float vWear;
@@ -781,8 +793,9 @@ float wnoise(vec3 p) {
 float wfbm(vec3 p) { return 0.5 * wnoise(p) + 0.25 * wnoise(p * 2.17) + 0.125 * wnoise(p * 4.31); }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
 {
+  vec3 wp = vWpos * uObjScale; // world-scale position for all world-unit constants
   // Large-scale mottled variation — reads as paint/finish, not speckle.
-  float g = wfbm(vWpos * 35.0);
+  float g = wfbm(wp * 35.0);
   diffuseColor.rgb *= mix(1.0, 0.92 + 0.14 * g, uWearInt);
 
   // Edge wear: the DOMINANT term is the baked barycentric line — each
@@ -802,7 +815,7 @@ float wfbm(vec3 p) { return 0.5 * wnoise(p) + 0.25 * wnoise(p * 2.17) + 0.125 * 
   // distance-to-edge in METERS — the line is a fixed ~9mm wear band that
   // scales with zoom like the metal, not a constant-pixel overlay.
   vec3 ew = (vBary + (1.0 - vAedge) * 4.0) * vAlt;
-  float eDist = min(ew.x, min(ew.y, ew.z));
+  float eDist = min(ew.x, min(ew.y, ew.z)) * uObjScale;
   float eline = 1.0 - smoothstep(0.002, 0.009, eDist);
   float edge = max(eline, max(texture2D(uWearMap, vUvW).r * 0.5, smoothstep(0.6, 0.95, vWear) * 0.4));
 
@@ -810,7 +823,7 @@ float wfbm(vec3 p) { return 0.5 * wnoise(p) + 0.25 * wnoise(p * 2.17) + 0.125 * 
   // well-lit (unoccluded) faces — crevices don't wear bright. The floor is
   // 0.5 (not 0.35): stacked under exposure × 0.7 mix, a low floor crushed
   // real edges below the visibility threshold — "no edge wear".
-  float patches = 0.5 + 0.5 * smoothstep(0.55, 0.8, wnoise(vWpos * 90.0));
+  float patches = 0.5 + 0.5 * smoothstep(0.55, 0.8, wnoise(wp * 90.0));
   #ifdef USE_COLOR
     // AO owns the mask — occluded crevices get NO bright wear. The band
     // is anchored at the bake's MIN_LIGHT floor (0.25): a fixed 0.45
@@ -826,7 +839,7 @@ float wfbm(vec3 p) { return 0.5 * wnoise(p) + 0.25 * wnoise(p * 2.17) + 0.125 * 
     float wear = min(1.0, edge * patches * exposure * (1.0 + vAw) * uWearInt);
 
     // Worn metal: desaturate and brighten edges; slight micro-scratch noise.
-    float scratch = wnoise(vWpos * 700.0) * 0.12;
+    float scratch = wnoise(wp * 700.0) * 0.12;
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.88, 0.86, 0.84), wear * 0.95);
     diffuseColor.rgb *= 1.0 - wear * scratch;
 
@@ -840,7 +853,7 @@ float wfbm(vec3 p) { return 0.5 * wnoise(p) + 0.25 * wnoise(p * 2.17) + 0.125 * 
     // baked per-vertex on valley edges, darkened + dirtied with the same
     // patchy clumping so seams read as collected crud, not a uniform
     // shade ramp.
-    float dirt = vGrime * (0.6 + 0.4 * wnoise(vWpos * 110.0 + 31.7)) * uWearInt;
+    float dirt = vGrime * (0.6 + 0.4 * wnoise(wp * 110.0 + 31.7)) * uWearInt;
     diffuseColor.rgb *= 1.0 - dirt * 0.38;
   #ifdef WEARVIZ
     // R=final wear, G=baked AO (the exposure gate input), B=edge flag.
@@ -873,6 +886,7 @@ export function bakeWearOnly(group: THREE.Group, opts: { grime?: boolean; wearBo
     ensureNonIndexed(m);
     // Always rebake — GLBs can carry a STALE wear attribute round-tripped
     // through the dump pipeline (baked before the hard-edge pass existed).
+    m.geometry.userData.__unitScale = m.getWorldScale(_wN).x;
     bakeWear(m.geometry, opts.grime, opts.wearBoost);
     bakeEdgeLines(m.geometry);
     attachEdgeWear(m);
@@ -880,6 +894,7 @@ export function bakeWearOnly(group: THREE.Group, opts: { grime?: boolean; wearBo
     for (const mat of mats) {if (mat && mat.type !== 'MeshBasicMaterial') {
       mat.userData.__wearTex = m.geometry.userData.__wearTex ?? null;
       mat.userData.__grimeTex = m.geometry.userData.__grimeTex ?? null;
+      mat.userData.__unitScale = m.geometry.userData.__unitScale;
       enhanceWeaponMaterial(mat);
     }}
   });
@@ -920,7 +935,7 @@ function mergeGeometries(meshes: THREE.Mesh[]): THREE.BufferGeometry {
 
 /** Bake vertex AO into every mesh of a group. Call after the group's local
  *  transforms are final (add to a parent first or updateWorldMatrix). */
-export function bakeVertexAO(group: THREE.Group, opts: { grime?: boolean; wearBoost?: number } = {}): void {
+export function bakeVertexAO(group: THREE.Group, opts: { grime?: boolean; wearBoost?: number; edgeAngle?: number } = {}): void {
   group.updateWorldMatrix(true, true);
 
   // One merged occluder mesh so rays hit every part of the weapon.
@@ -931,11 +946,8 @@ export function bakeVertexAO(group: THREE.Group, opts: { grime?: boolean; wearBo
   group.traverse((o): void => { if ((o as THREE.Mesh).isMesh && !(o as THREE.InstancedMesh).isInstancedMesh) {meshes.push(o as THREE.Mesh);} });
   if (meshes.length === 0) {return;}
 
-  console.log('bake: merge', meshes.length, performance.now());
   const occluderGeo = mergeGeometries(meshes);
-  console.log('bake: bvh', performance.now());
   occluderGeo.boundsTree = new MeshBVH(occluderGeo);
-  console.log('bake: bvh done', performance.now());
   // DoubleSide is required: hemisphere rays point outward and mostly hit the
   // back faces of surrounding geometry — FrontSide culling would miss them all.
   const occluder = new THREE.Mesh(occluderGeo, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
@@ -954,14 +966,15 @@ export function bakeVertexAO(group: THREE.Group, opts: { grime?: boolean; wearBo
     if ((m.material as THREE.Material).type === 'MeshBasicMaterial') {continue;}
     if (baked.has(m.geometry)) {m.geometry = m.geometry.clone();}
     baked.add(m.geometry);
-    console.log('bake: mesh', m.name, (m.geometry.attributes.position as THREE.BufferAttribute).count, performance.now());
-    bakeMesh(m, occluder, rayDist, opts.grime, opts.wearBoost);
-    console.log('bake: mesh done', m.name, performance.now());
+    m.geometry.userData.__unitScale = m.getWorldScale(_wN).x;
+    bakeMesh(m, occluder, rayDist, opts.grime, opts.wearBoost,
+      opts.edgeAngle === undefined ? undefined : 1 - Math.cos(opts.edgeAngle * Math.PI / 180));
     const mat = m.material as THREE.Material & { vertexColors?: boolean };
     if (mat) {
       mat.vertexColors = true;
       mat.userData.__wearTex = m.geometry.userData.__wearTex ?? null;
       mat.userData.__grimeTex = m.geometry.userData.__grimeTex ?? null;
+      mat.userData.__unitScale = m.geometry.userData.__unitScale;
       mat.needsUpdate = true;
       enhanceWeaponMaterial(mat);
     }

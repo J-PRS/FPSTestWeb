@@ -46,6 +46,7 @@ export class PlayerMats {
         c.userData.__wearTex = m.userData.__wearTex;
         c.userData.__grimeTex = m.userData.__grimeTex;
         c.userData.__wearInt = m.userData.__wearInt;
+        c.userData.__unitScale = m.userData.__unitScale;
         enhanceWeaponMaterial(c);
       }
       this.clones.set(m, c);

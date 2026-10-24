@@ -190,12 +190,10 @@ export class PlayerModel {
               if (!mesh.isMesh) {return;}
               for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
                 const sm = m as THREE.MeshStandardMaterial;
-                if (sm.isMeshStandardMaterial) {sm.metalness = 0.1; sm.roughness = 0.72;}
+                if (sm.isMeshStandardMaterial) {sm.metalness = 0.1; sm.roughness = 0.72; sm.userData.__wearInt = 2.5;}
               }
             });
-            console.log('BAKE START', performance.now());
-            bakeVertexAO(gltf.scene as THREE.Group, { grime: true });
-            console.log('BAKE DONE', performance.now());
+            bakeVertexAO(gltf.scene as THREE.Group, { grime: true, wearBoost: 0.5, edgeAngle: 28 });
           }
           this.onModelLoaded({ scene: SkeletonUtils.clone(gltf.scene) as THREE.Group, animations: gltf.animations.map((c): THREE.AnimationClip => c.clone()) }, mann, knight);
           resolve();
