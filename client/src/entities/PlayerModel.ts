@@ -30,7 +30,7 @@ const logger = new ChildLogger('PlayerModel');
 
 export type { AnimationState } from './playerClips.js';
 
-export type PlayerModelVariant = 'robot' | 'mannequin' | 'knight' | 'scifisoldier' | 'cybersoldier' | 'vexa' | 'polyart' | 'brute' | 'juggernaut' | 'brawler' | 'scout';
+export type PlayerModelVariant = 'robot' | 'mannequin' | 'knight' | 'scifisoldier' | 'cybersoldier' | 'vexa' | 'polyart' | 'brute' | 'juggernaut' | 'juggernaut_og' | 'dreadnought' | 'brawler' | 'scout';
 
 export class PlayerModel {
   private scene: THREE.Scene;
@@ -281,6 +281,17 @@ export class PlayerModel {
     this.pose.buildAimLayer(this.anim.mixer!, this.anim.animations, mann || Boolean(RIG_MANIFEST[this.variant]?.aimMask));
 
     logger.debug('Loaded animations:', Array.from(this.anim.animations.keys()));
+
+    // Rest-pose snapshot — local TRS per bone while nothing has driven
+    // them yet. skeleton.pose() can't be trusted on rewritten skins
+    // (its boneInverses live in the donor's bind frame); this restores
+    // the authored T-pose in local space, frame-agnostic.
+    this._restPose = new Map();
+    this.model.traverse((c): void => {
+      if ((c as THREE.Bone).isBone) {
+        this._restPose!.set(c as THREE.Bone, { p: c.position.clone(), q: c.quaternion.clone(), s: c.scale.clone() });
+      }
+    });
 
     this.anim.markLoaded();
 
@@ -621,9 +632,35 @@ export class PlayerModel {
 
   setAnimationState(state: AnimationState): void { this.anim.setAnimationState(state); }
 
-  forceAnimationState(state: AnimationState, keepPhase = false): void { this.anim.forceAnimationState(state, keepPhase); }
+  forceAnimationState(state: AnimationState, keepPhase = false): void { this._bindHeld = false; this.anim.forceAnimationState(state, keepPhase); }
+
+  /** Snap every bone back to the authored rest pose — the rig's T-pose.
+   *  Held: update() keeps re-posing the skeleton until a clip runs again. */
+  private _bindHeld = false;
+  private _restPose: Map<THREE.Bone, { p: THREE.Vector3; q: THREE.Quaternion; s: THREE.Vector3 }> | null = null;
+  setBindPose(): void {
+    this._bindHeld = true;
+    this.anim.mixer?.stopAllAction();
+    if (this._restPose) {
+      for (const [b, r] of this._restPose) {
+        b.position.copy(r.p); b.quaternion.copy(r.q); b.scale.copy(r.s);
+      }
+      this.model?.updateMatrixWorld(true);
+    }
+  }
 
   update(dt: number): void {
+    if (this._bindHeld) {
+      if (this._restPose) {
+        for (const [b, r] of this._restPose) {
+          b.position.copy(r.p); b.quaternion.copy(r.q); b.scale.copy(r.s);
+        }
+        this.model?.updateMatrixWorld(true);
+      }
+      this.gunCtl.follow(dt, this.model, this.modelScale, this.handBoneL, this.pose.aimPitch);
+      this.fx.tick(dt);
+      return;
+    }
     this.anim.tick(dt);
     this.gunCtl.follow(dt, this.model, this.modelScale, this.handBoneL, this.pose.aimPitch);
     this.fx.tick(dt);

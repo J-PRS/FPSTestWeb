@@ -188,7 +188,7 @@ if (pvariant) {
 
       .setLocomotionVector(DIRV[wantDir][0], DIRV[wantDir][1]);}
 
-    pm.forceAnimationState(wantState as never);
+    if (wantState === 'bind') {pm.setBindPose();} else {pm.forceAnimationState(wantState as never);}
 
     window.__pm = pm;
 

@@ -820,8 +820,9 @@ const DIR_BTNS: [label: string, v: [number, number]][] = [
   ['L', [0, -1]], ['·', [0, 0]], ['R', [0, 1]],
   ['BL', [-0.7, -0.7]], ['B', [-1, 0]], ['BR', [-0.7, 0.7]],
 ];
-interface AnimHook { set: (s: AnimationState) => void; dir?: (f: number, s: number) => void; weapon?: (wt: number) => void; team?: (t: string) => void; mark?: (t: string) => void; side?: (t: string) => void; gib?: (speed?: number) => void }
+interface AnimHook { set: (s: AnimationState) => void; dir?: (f: number, s: number) => void; weapon?: (wt: number) => void; team?: (t: string) => void; mark?: (t: string) => void; side?: (t: string) => void; gib?: (speed?: number) => void; bind?: () => void }
 let animSel: AnimationState | '' = '';
+let bindHeld = false;
 
 // Held-weapon picker — same builders the viewmodel rail uses (+ the
 // chaingun's ballistic builder) so hand props match real silhouettes.
@@ -914,7 +915,15 @@ function paintAnimRail(): void {
     const b = document.createElement('button');
     b.textContent = s;
     if (s === animSel) {b.classList.add('active');}
-    b.addEventListener('click', (): void => { animSel = s; hook.set(s); paintAnimRail(); });
+    b.addEventListener('click', (): void => { animSel = s; bindHeld = false; hook.set(s); paintAnimRail(); });
+    animRail.append(b);
+  }
+  // Rest-pose button last — clears animSel, bones snap to the authored T.
+  if (hook.bind) {
+    const b = document.createElement('button');
+    b.textContent = 'tpose';
+    if (bindHeld) {b.classList.add('active');}
+    b.addEventListener('click', (): void => { animSel = ''; bindHeld = true; hook.bind!(); paintAnimRail(); });
     animRail.append(b);
   }
   if (hook.weapon) {animRail.append(mkWeaponSel(hook));}

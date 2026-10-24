@@ -401,6 +401,8 @@ function mkLineup(entries: LineupEntry[], boundsX = 0, boundsW = 0, focusX = 0):
       set: (s: AnimationState): void => { for (const m of models) {m.forceAnimationState(s);} },
       dir: (f: number, side: number): void => { for (const m of models) {m.setLocomotionVector(f, side);} },
       cur: (): AnimationState => models[0]?.animationState,
+      // Authored rest pose — the T-pose the builder/skeleton bind to.
+      bind: (): void => { for (const m of models) {m.setBindPose();} },
       // Weapon picker — swaps each body's hand prop to the real weapon
       // silhouette so scale reads against the lineup.
       weapon: (wt: number): void => { for (const m of models) {m.setWeapon(wt);} },
@@ -495,6 +497,14 @@ export const CLASSES: [label: string, build: () => THREE.Group][] = [
   ['heavy',  mkLineup([[CLASS_BODY_VARIANT.heavy as PlayerModelVariant, SOLO_X, 'heavy', 3.2, 'heavy', CLASS_BODY_MAT_REV.has('heavy'), CLASS_MODEL_SCALE.heavy]])],
   ['brute',  mkLineup([[BRUTE_ENTRY[0], SOLO_X, 'brute', 3, 'heavy', false]])],
   ['juggernaut', mkLineup([['juggernaut' as PlayerModelVariant, SOLO_X, 'juggernaut', 3, 'heavy', false]])],
+  ['jugg og', mkLineup([['juggernaut_og' as PlayerModelVariant, SOLO_X, 'jugg og', 3, 'heavy', false]])],
+  ['jugg vs og', mkLineup([
+    // ±1.8 — T-pose arms on these rigs reach ~±1.1 from centre; tighter
+    // spacing clips pauldron-to-pauldron when the bind button fires.
+    ['juggernaut' as PlayerModelVariant, -1.8, 'jugg', 3, 'heavy', false],
+    ['juggernaut_og' as PlayerModelVariant, 1.8, 'og', 3, 'heavy', false],
+  ])],
+  ['dreadnought', mkLineup([['dreadnought' as PlayerModelVariant, SOLO_X, 'dreadnought', 3, 'heavy', false]])],
   ['brawler', mkLineup([[BRAWLER_ENTRY[0], SOLO_X, 'brawler', 2.4, 'medium', false]])],
   ['scout',  mkLineup([[SCOUT_ENTRY[0], SOLO_X, 'scout', 2, 'light', false]])],
   // Legacy class bodies — pre-swap rigs kept for side-by-side compare.
