@@ -54,6 +54,24 @@ export class PlayerMats {
     return c;
   }
 
+  /** Re-arm baked-gunmetal shader on clones made BEFORE the async bake
+   *  landed — the clone exists, it just lacks the grunge hook and tex
+   *  refs, which now exist on the source material. */
+  rearm(child: THREE.Mesh): void {
+    const arm = (m: THREE.Material): void => {
+      const c = this.clones.get(m);
+      if (!c || !m.userData.__grunge || c.userData.__grunge) {return;}
+      delete c.userData.__grunge;
+      c.userData.__wearTex = m.userData.__wearTex;
+      c.userData.__grimeTex = m.userData.__grimeTex;
+      c.userData.__wearInt = m.userData.__wearInt;
+      c.userData.__unitScale = m.userData.__unitScale;
+      enhanceWeaponMaterial(c);
+      c.needsUpdate = true;
+    };
+    if (Array.isArray(child.material)) {child.material.forEach(arm);} else {arm(child.material);}
+  }
+
   /** Per-mesh load prep: mannequin re-skin (`mann` = the rig variant is
    *  mannequin; `mannRev` swaps its two material roles), per-instance
    *  clone, emissive capture for the damage flash. */

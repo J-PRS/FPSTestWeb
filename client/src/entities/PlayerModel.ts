@@ -28,6 +28,7 @@ const logger = new ChildLogger('PlayerModel');
 // Rig URLs whose cached template already carries the gunmetal bake —
 // the bake mutates shared geometry, so it must run exactly once per URL.
 const gunmetalBaked = new Set<string>();
+const gunmetalBake = new Map<string, Promise<void>>();
 
 // Locomotion clip surgery (stripHipXZ/dampenSway/DIR8) lives in
 // playerClipSurgery.ts — extracted so the layered-anim carve-up is
@@ -178,12 +179,14 @@ export class PlayerModel {
       loadGltfCached(loader, url).then(
         (gltf): void => {
           if (this._disposed) { resolve(); return; }
-          // Worn-gunmetal rigs: bake AO+wear+grime onto the CACHED template
-          // once — every SkeletonUtils clone shares the baked geometry. The
-          // shader half re-arms per material clone in playerMats (clone()
-          // drops onBeforeCompile). Matte recipe: kill the GLB's metalness
-          // so it reads as painted plate, not machined metal.
-          if (RIG_MANIFEST[this.variant]?.gunmetal && !gunmetalBaked.has(url)) {
+          // Worn-gunmetal rigs: matte recipe is cheap — flatten the
+          // template's metalness synchronously so the clone inherits it.
+          // The AO+wear+grime BAKE is expensive (~1s), so it runs on the
+          // next macrotask: the model shows immediately, the grunge lands
+          // a beat later via mats.rearm (clones share baked geometry, and
+          // rearm copies the shader hook + tex refs onto material clones).
+          const gunmetal = RIG_MANIFEST[this.variant]?.gunmetal;
+          if (gunmetal && !gunmetalBaked.has(url)) {
             gunmetalBaked.add(url);
             gltf.scene.traverse((o): void => {
               const mesh = o as THREE.Mesh;
@@ -193,10 +196,17 @@ export class PlayerModel {
                 if (sm.isMeshStandardMaterial) {sm.metalness = 0.1; sm.roughness = 0.72; sm.userData.__wearInt = 2.5;}
               }
             });
-            bakeVertexAO(gltf.scene as THREE.Group, { grime: true, wearBoost: 0.5, edgeAngle: 28 });
+            gunmetalBake.set(url, new Promise((res): void => {
+              setTimeout((): void => { bakeVertexAO(gltf.scene as THREE.Group, { grime: true, wearBoost: 0.5, edgeAngle: 28 }); res(); }, 0);
+            }));
           }
           this.onModelLoaded({ scene: SkeletonUtils.clone(gltf.scene) as THREE.Group, animations: gltf.animations.map((c): THREE.AnimationClip => c.clone()) }, mann, knight);
           resolve();
+          if (gunmetal) {
+            gunmetalBake.get(url)!.then((): void => {
+              if (!this._disposed) {this.model?.traverse((o): void => { if ((o as THREE.Mesh).isMesh) {this.mats.rearm(o as THREE.Mesh);}});}
+            });
+          }
         return; },
         (error): void => {
           // A dev-server restart (or any transient fetch failure) must not
