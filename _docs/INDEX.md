@@ -37,7 +37,7 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-10-23_LOCAL_SHELL_SPAWN.md` | Local projectile spawn epochs — rewind-mirror tried & reverted (ping-dependent spawn feel); server-claims-muzzle is the correct fix if trajDiv regresses |
 | `_docs/2026-10-23_REMOTE_THREE_TRUTHS.md` | Remote pos/ghost/wire-head trio — measured relationships, sim viewLagMs defect + p90 jitter estimator fixes; `_posdump.ts` probe |
 | `_docs/2026-10-23_HUMANOID_GENERATION.md` | Agentic humanoid generation survey — primitive-plate generators, Blender-agent loops, parametric bodies (MPFB/SMPL), Dust3D implicit graph, AI text-to-3D, auto-riggers (Pinocchio→Make-It-Animatable); ranked for our rig/style |
-
+| `_docs/2026-10-24_CCU_RESOURCE_BREAKDOWN.md` | Single-process CCU soak ladder (32→1024) + full resource breakdown: CPU, tick, memory, ingress/egress, event-loop delay; egress is the binding constraint |
 ## Agent memory (append-only, one line each)
 
 - `.agents/memory/corrections.md` — "got this wrong → rule"
