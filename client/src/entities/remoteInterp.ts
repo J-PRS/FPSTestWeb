@@ -54,9 +54,11 @@ export class RemoteInterp {
   private lastServerUpdateMs = 0; // SERVER ms of the last update (tickSeq×50, or wall when no server clock)
   private _simulating = false;  // dead reckoning is running
   private simulatedVelocity = new THREE.Vector3();
-  /** Forced local prediction window — bridges the server round-trip after
-   *  a predicted knockback so interpolation doesn't fight the launch. */
-  private predictionTimer = 0;
+  /** Cumulative converge seconds — the re-arm keeps a gap chase smooth,
+   *  but without a total ceiling a diverging target treadmills forever.
+   *  Past CONVERGE_MAX we snap to truth instead. */
+  private convergeTotal = 0;
+  private static readonly CONVERGE_MAX = 2.5;
   /** Physics-constrained rejoin window — instead of lerping the remote
    *  back onto the buffered path (a visible slide), a steering controller
    *  applies the acceleration a real player could produce to converge
@@ -101,6 +103,7 @@ export class RemoteInterp {
    *  clientStats so lag-comp validates at the ghost the shooter saw,
    *  not a fixed 200ms constant that understates jittered links. */
   get interpDelay(): number { return this.net.interpDelay; }
+  get arrivalInterval(): number { return this.net.arrivalInterval; }
   /** Actual staleness of the last drawn sample (delay minus extrapolation
    *  overshoot) — the shooter's literal view epoch for lag-comp reports.
    *  While simulating, the buffer's sample clock is frozen and its
@@ -157,7 +160,7 @@ export class RemoteInterp {
     // the DR→converge→interp hand-off seam. Inside the prediction window
     // the server hasn't reflected the knockback yet — free-run continues.
     const wasConverging = this.convergeTimer > 0;
-    if (this._simulating && this.convergeTimer <= 0 && this.predictionTimer <= 0) {
+    if (this._simulating && this.convergeTimer <= 0) {
       const drift = Math.hypot(
         targetPosition.x - this.h.position.x,
         targetPosition.y - this.h.position.y,
@@ -186,6 +189,11 @@ export class RemoteInterp {
       : 0;
     const teleported = jumpDist > Math.max(8, jumpSpanSec * 90 + 4);
     if (teleported) {
+      console.error(`[GLITCH:dbgwire-jump] ${JSON.stringify({
+        id: this.h.playerId,
+        dM: Number(jumpDist.toFixed(1)),
+        spanMs: Math.round(jumpSpanSec * 1000),
+      })}`);
       this.net.clear();
       this._simulating = false;
       this.convergeTimer = 0;
@@ -220,7 +228,7 @@ export class RemoteInterp {
     // and while converge owns the body — clumped WAN arrivals produce
     // near-zero pos deltas that would stomp the steered velocity to
     // ~1.4m/s, leaving ghosts trailing the path for seconds.
-    if (!teleported && this.predictionTimer <= 0) {
+    if (!teleported) {
       this.reseedSimVelocity(stamp - prevUpdateMs, targetPosition, wasConverging);
       this.lastServerPosition.set(targetPosition.x, targetPosition.y, targetPosition.z);
     }
@@ -243,8 +251,7 @@ export class RemoteInterp {
     // silence flap DR on/off every packet — DR free-runs, converge
     // steers back, repeat. Only a stream starving well past its own
     // cadence earns the takeover.
-    const starveMs = Math.max(200, this.net.arrivalInterval * 1.5);
-    if ((timeSinceUpdate > drThreshold || (this.net.atExtCap && timeSinceUpdate > starveMs)) && !this._simulating && !localDriven) {
+    if ((timeSinceUpdate > drThreshold || (this.net.atExtCap && timeSinceUpdate > this.net.starveMs)) && !this._simulating && !localDriven) {
       // Seed preference: the pos-delta estimate already lives in
       // simulatedVelocity (recomputed per update, jitter-free server-t
       // deltas) — realized motion, including collision reality. Wire vel
@@ -254,7 +261,7 @@ export class RemoteInterp {
       // predicted-knockback window (its pos-delta is deliberately skipped)
       // or when no delta estimate exists at all.
       if (this.h.serverVelocity.lengthSq() > 0 &&
-          (this.predictionTimer > 0 || this.lastServerPosition.lengthSq() === 0)) {
+          this.lastServerPosition.lengthSq() === 0) {
         this.simulatedVelocity.copy(this.h.serverVelocity);
       }
       this._simulating = true;
@@ -264,9 +271,6 @@ export class RemoteInterp {
     }
 
     if (this._simulating) {
-      if (this.predictionTimer > 0) {
-        this.predictionTimer = Math.max(0, this.predictionTimer - dt);
-      }
       if (this.convergeTimer > 0) {
         this.convergeStep(dt);
       } else {
@@ -307,7 +311,6 @@ export class RemoteInterp {
   reset(pos: THREE.Vector3): void {
     this._simulating = false;
     this.net.clear();
-    this.predictionTimer = 0;
     this.convergeTimer = 0;
     this.targetPosition.copy(pos);
     this.lastServerPosition.copy(pos);
@@ -327,12 +330,6 @@ export class RemoteInterp {
     // NaN seed → NaN simulatedVelocity + a cleared interp buffer: the
     // remote ghosts into nowhere until the next wire row re-roots it.
     if (!Number.isFinite(fromPos.x + fromPos.y + fromPos.z + impulseMag)) {return;}
-    // Inside an active window the seed already owns the flight — a second
-    // predicted blast re-seeding would STACK impulses (serverVelocity +
-    // impulse, again) and refresh the timer, so sustained mortar spam
-    // launched remotes tens of meters past any real record. The arriving
-    // wire truth carries the extra blasts; this prediction is cosmetic.
-    if (this.predictionTimer > 0) {return;}
     // Direction off the same position the envelope was evaluated at —
     // callers pass the ghost epoch pos; the rendered body can sit meters
     // away on a fast mover, skewing the launch angle.
@@ -346,11 +343,15 @@ export class RemoteInterp {
     this.simulatedVelocity.x += (dx / dist) * impulseMag * s;
     this.simulatedVelocity.y += (pull ? 0.3 : 0.5) * impulseMag;
     this.simulatedVelocity.z += (dz / dist) * impulseMag * s;
-    this.net.clear();
-    this._simulating = true;
-    this.convergeTimer = 0;
-    // Window: ping + one server tick + interp delay, clamped
-    this.predictionTimer = Math.min(0.6, Math.max(0.15, (this.ping + 200) / 1000));
+    // No buffer clear, no fabricated flight: a predicted arc is client-
+    // side fiction about ANOTHER player — the overshoot resample is the
+    // 40-70m model pop seen on mortar-heavy maps, and the cleared
+    // buffer poisons the rewind anchor the shooter's hit claims ride
+    // on. The wire record carrying the real knockback lands within one
+    // record interval; the seeded simulatedVelocity makes any DR that
+    // engages meanwhile coast on the post-hit velocity instead of the
+    // stale pre-hit one. The impulse reads through the blast FX, not
+    // through invented remote motion.
   }
 
   // Sample the snapshot buffer at renderTime = now - adaptive interp delay
@@ -527,7 +528,12 @@ export class RemoteInterp {
     // replica treadmills hundreds of meters behind truth for seconds.
     // Snap to the sampled path instead: a sudden jump is exactly what a
     // lost replica is, and it's one frame of honesty vs seconds of ghost.
-    if (this.lastUpdateTime > 0 && !freshSeed && gap > 40) {
+    // The >40m snap only applies when the sample is interpolated truth —
+    // a coasted sample (atExtCap) is extrapolated fiction, and snapping
+    // TO it teleports the body onto a path the server never sent. In the
+    // starved case fall through to the converge seam instead, which now
+    // chases latestPos() (the newest received record) regardless of size.
+    if (this.lastUpdateTime > 0 && !freshSeed && gap > 40 && !this.net.atExtCap) {
       this.watchSnap(gap);
       p.copy(sampledPos);
       this.h.velocity.copy(this.h.serverVelocity);
@@ -549,6 +555,7 @@ export class RemoteInterp {
       if (perp > stepBudget) {
         this._simulating = true;
         this.convergeTimer = Math.max(this.convergeTimer, this.convergeBudget(gap));
+        this.convergeTotal = 0; // fresh seam — new cumulative budget
         this.convergeStep(dt);
         return;
       }
@@ -630,6 +637,14 @@ export class RemoteInterp {
     const target = _extrapolated;
     const rot = _sampledRot;
     this.sample(target, rot);
+    // Starved past the buffer, sample() returns extrapolated coast —
+    // velocity frozen at the newest record, projected seconds ahead.
+    // Chasing that endpoint steers the body AWAY from truth (the
+    // "visual runs 20-70m ahead of the teal wireframe" symptom: renderΔ
+    // grew with every starved frame). Clamp the chase to the newest
+    // known position instead — the model blends back to wire truth and
+    // waits, which is all a remote can honestly do in a gap.
+    if (this.net.atExtCap) {this.net.latestPos(target);}
 
     // Horizon scales with the gap: a 12m rejoin gets ~0.5s of steering
     // (reads as the remote recovering its path), a 1m seam stays snappy.
@@ -689,10 +704,34 @@ export class RemoteInterp {
     this.h.rotation.pitch = rot.pitch;
     this.convergeTimer = Math.max(0, this.convergeTimer - dt);
     const close = p.distanceToSquared(target) < 0.04; // 0.2m
-    if (close || this.convergeTimer <= 0) {
+    if (close) {
       this.convergeTimer = 0;
       this._simulating = false;
       this.h.velocity.copy(this.simulatedVelocity);
+    } else if (this.convergeTimer <= 0) {
+      // Budget spent but the gap is still open — releasing to interp()
+      // writes the buffer sample instantly, which is the 40-70m
+      // model-snap seen when a fast remote outran the steer. Re-arm
+      // from the CURRENT gap and keep blending: a continued chase is
+      // smooth motion, the release was a teleport.
+      // Cumulative ceiling: without it a diverging/chasing target
+      // treadmills forever (rg 60-70m tail in soaks). Past CONVERGE_MAX
+      // the honest move is one snap to the newest record — the chase
+      // was never going to land.
+      this.convergeTotal += dt;
+      if (this.convergeTotal > RemoteInterp.CONVERGE_MAX) {
+        const truth = this.lastServerPosition;
+        if (truth.lengthSq() > 0) {
+          p.copy(truth);
+          this.h.velocity.copy(this.h.serverVelocity);
+          this.floorToGround(p);
+        }
+        this.convergeTotal = 0;
+        this.convergeTimer = 0;
+        this._simulating = false;
+        return;
+      }
+      this.convergeTimer = this.convergeBudget(dist);
     }
   }
 
@@ -723,13 +762,23 @@ export class RemoteInterp {
     p.z += this.simulatedVelocity.z * dt;
 
     // Drift cap: past ~40m of horizontal extrapolation the sim is a ghost,
-    // not a guess — freeze the XZ runaway (gravity still grounds them) or
-    // a silent wire renders bots hundreds of meters from any real record.
+    // not a guess — but freezing XZ pins the body mid-air and every push
+    // then snaps it a screen-width. Instead project out only the velocity
+    // component pushing FURTHER from wire — the drift stays on the cap
+    // ring, gravity/turning still run, and the next push's converge does
+    // the recovery (its accel cap already covers closing speed).
     const driftX = p.x - this.lastServerPosition.x;
     const driftZ = p.z - this.lastServerPosition.z;
-    if (this.lastServerPosition.lengthSq() > 0 && Math.hypot(driftX, driftZ) > 40) {
-      this.simulatedVelocity.x = 0;
-      this.simulatedVelocity.z = 0;
+    if (this.lastServerPosition.lengthSq() > 0) {
+      const drift = Math.hypot(driftX, driftZ);
+      if (drift > 40) {
+        const ux = -driftX / drift, uz = -driftZ / drift; // toward wire
+        const outVel = this.simulatedVelocity.x * ux + this.simulatedVelocity.z * uz;
+        if (outVel < 0) {
+          this.simulatedVelocity.x -= outVel * ux;
+          this.simulatedVelocity.z -= outVel * uz;
+        }
+      }
     }
 
     if (this.h.terrain) {

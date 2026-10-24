@@ -393,14 +393,19 @@ else if (dSq < 360_000) {tier = 3;} // 150m / 400m / 600m
           if (dSq < bound * 1.15) {tier = mem;}
         }
         tiers.set(r.playerId, tier);
-        // Speed bump (ephemeral — sits AFTER hysteresis so a slowed bot
-        // falls back to its distance tier immediately): a >30m/s mover
-        // dead-reckons badly between sparse far-tier records — 2.5Hz is
-        // 400ms × 60m/s = 24m/gap, and sparse strips VEL so the receiver's
-        // DR seeds a stale heading. The dual-diff showed these replicas
-        // ghosting 100-450m. Fast movers never drop below tier 3: full
-        // records at ~6.7Hz keep vel fresh.
-        if ((r.spd ?? 0) > 30 && tier > 3) {tier = 3;}
+        // Travel-budget tier (ephemeral — sits AFTER hysteresis so a
+        // slowed bot falls back to its distance tier immediately): no
+        // remote may cover >5m between records. At ~50ms/tick that's
+        // spd-dependent: 60m/s → every tick, 30m/s → tier 2, 20m/s →
+        // tier 4, <12m/s → distance tier wins. Measured against the
+        // record's own speed, not a guessed constant — the dual-diff
+        // showed 24m/gap ghosts on 2.5Hz far tiers, and the client
+        // can't render truth inside a gap that big by any technique.
+        const spd = r.spd ?? 0;
+        if (spd > 12) {
+          const speedTier = Math.max(1, Math.floor((5 / spd) / 0.05));
+          if (speedTier < tier) {tier = speedTier;}
+        }
         // force = hit/knockback window: real positions must reach every
         // observer at full rate while they extrapolate the knockback —
         // sparse never substitutes there (vel IS the payload).

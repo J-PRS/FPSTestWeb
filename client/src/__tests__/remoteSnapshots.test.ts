@@ -57,14 +57,14 @@ describe('SnapshotBuffer', (): void => {
     expect(pos.x).toBeLessThan(60);
   });
 
-  it('caps extrapolation at MAX_EXTRAPOLATE no matter how stale', (): void => {
+  it('coasts past MAX_EXTRAPOLATE on the newest velocity, bounded at 2s', (): void => {
     const buf = new SnapshotBuffer();
     const now = Date.now();
     // Stale feed: last packet arrived 5s ago (arriveMs), same server time.
     buf.push(now - 5000, {x:0,y:0,z:0}, {yaw:0,pitch:0}, {x:10,y:0,z:0}, now - 5000);
     const { pos } = sample(buf);
-    // 0.25s cap × vx=10 → exactly 2.5, not 50
-    expect(pos.x).toBeCloseTo(4, 1);
+    // Coast, not freeze: 2s bound × vx=10 → 20 (a freeze would give ~2.5).
+    expect(pos.x).toBeCloseTo(20, 0);
   });
 
   it('falls back to the target position with an empty buffer', (): void => {

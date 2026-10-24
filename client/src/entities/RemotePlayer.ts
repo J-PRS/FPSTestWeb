@@ -302,7 +302,7 @@ export class RemotePlayer {
   private dbgGhosts: { wire: THREE.Mesh; adj: THREE.Mesh } | null = null;
   private _dbgVec = new THREE.Vector3();
   private dbgGhostClass: string | undefined;
-  private tickDbgGhosts(): void {
+  private tickDbgGhosts(dt: number): void {
     const want = debugOverlaysOn() && !this.localDriven && !this._isDead && this.lastUpdateTime > 0;
     if (!want) {
       if (this.dbgGhosts) { this.dbgGhosts.wire.visible = false; this.dbgGhosts.adj.visible = false; }
@@ -334,6 +334,41 @@ export class RemotePlayer {
     this.ghostPosition(this._dbgVec);
     g.adj.visible = w.lengthSq() > 0;
     g.adj.position.set(this._dbgVec.x, this._dbgVec.y + cap.centerOff, this._dbgVec.z);
+    this.dbgWatch(w, this._dbgVec, dt);
+  }
+
+  /** Frame-jump registrar: a wireframe hopping farther than its speed
+   *  allows in one frame is an unexplained pop — the ghost source
+   *  flipped or a stale packet reseated the wire. Registers the event
+   *  with the interp state that produced it. */
+  private _dbgPrevWire = new THREE.Vector3();
+  private _dbgPrevAdj = new THREE.Vector3();
+  private _dbgPrevPos = new THREE.Vector3();
+  private _dbgPrevValid = false;
+  private dbgWatch(w: THREE.Vector3, adj: THREE.Vector3, dt: number): void {
+    if (this._dbgPrevValid) {
+      // Wire delta is PER-RECORD motion — the wire only moves when a
+      // record lands (~150-300ms apart), so its budget scales with the
+      // measured arrival cadence, not frame dt. A 40m/s remote stepping
+      // 3-10m per record is expected motion; the old per-frame budget
+      // tripped on every single arrival.
+      const wireBudget = Math.max(4, this.vel.length() * (this.interp.arrivalInterval / 1000) * 1.5 + 2);
+      const budget = Math.max(3, this.vel.length() * dt * 2.5 + 2);
+      const jw = w.distanceTo(this._dbgPrevWire);
+      const ja = adj.distanceTo(this._dbgPrevAdj);
+      const jp = this.position.distanceTo(this._dbgPrevPos);
+      if (jw > wireBudget || ja > budget || jp > budget) {
+        console.error(`[GLITCH:dbgghost-jump] ${JSON.stringify({
+          id: this.playerId, wire: Number(jw.toFixed(1)), adj: Number(ja.toFixed(1)), model: Number(jp.toFixed(1)),
+          sim: this.interp.simulating, conv: this.interpConverging,
+          lagMs: Math.round(this.viewLagMs), delayMs: Math.round(this.interp.interpDelay),
+          underruns: this.interpUnderruns, atCap: this.interpAtCap })}`);
+      }
+    }
+    this._dbgPrevValid = true;
+    this._dbgPrevWire.copy(w);
+    this._dbgPrevAdj.copy(adj);
+    this._dbgPrevPos.copy(this.position);
   }
 
   private disposeDbgGhosts(): void {
@@ -349,7 +384,7 @@ export class RemotePlayer {
   private _blobPos = new THREE.Vector3();
   private tickAlive(dt: number): void {
     this.interp.step(dt, this.localDriven);
-    this.tickDbgGhosts();
+    this.tickDbgGhosts(dt);
 
     this.updateAliveModel(dt);
 
@@ -496,7 +531,7 @@ export class RemotePlayer {
   // Sticky(18) is ambiguous (launcher AND belt share it) so it stays a
   // plain shot; a wrong dip is worse than a missing one.
   private static readonly THROW_TYPES = new Set([
-    WeaponType.DiscPull, WeaponType.Grenade, WeaponType.ClusterBomb,
+    WeaponType.Implodisc, WeaponType.Grenade, WeaponType.ClusterBomb,
     WeaponType.Javelin, WeaponType.ImpactGrenade, WeaponType.RemoteRailgun,
     WeaponType.ArmorGrenade, WeaponType.Concussion, WeaponType.EMP,
   ]);

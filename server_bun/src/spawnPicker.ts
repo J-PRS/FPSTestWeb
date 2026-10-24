@@ -130,6 +130,18 @@ else if (obj || bias > 0) {pullPos = ownBase;}
       out.z += Math.sin(a) * d;
       const g = groundAt?.(out.x, out.z);
       if (g !== undefined && Number.isFinite(g) && out.y < g) {out.y = g;}
+      // The client's render surface is the level-0 CHORD, not the smooth
+      // field — on rimrock's ridges the chord sits 8-13m above the smooth
+      // ground at the scattered point. A spawn legal server-side renders
+      // buried (the "dipping under terrain" bug). Probing neighbours
+      // catches the ridge the client draws, since a chord peak lives
+      // between samples, not at them. ~4 reads per spawn — cheap.
+      if (groundAt) {
+        for (const [ox, oz] of [[3, 0], [-3, 0], [0, 3], [0, -3]] as const) {
+          const ng = groundAt(out.x + ox!, out.z + oz!);
+          if (Number.isFinite(ng) && out.y < ng) {out.y = ng;}
+        }
+      }
     }
     // Postcondition: a spawn born under its surface is the buried-bot
     // seed — name it at the pick, not after the corpse renders sunk. A

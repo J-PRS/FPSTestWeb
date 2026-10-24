@@ -43,7 +43,7 @@ export interface NetSnapshot {
 
 export class SnapshotBuffer {
   static readonly BASE_INTERP_DELAY = 100;
-  static readonly MAX_INTERP_DELAY = 400;
+  static readonly MAX_INTERP_DELAY = 600; // bursty/batched delivery needs >400ms to hold a full interval margin
   static readonly MAX_EXTRAPOLATE = 0.4; // s past the newest snapshot
 
   private snapshots: NetSnapshot[] = [];
@@ -80,6 +80,8 @@ export class SnapshotBuffer {
   private static readonly MAX_RENDER_REWIND = 80;
   private lastRenderTime = -Infinity;
   private lastSampleWall = 0;
+  /** Wall time when the rewind pin engaged — see sample(). */
+  private rewindPinAt = 0;
   /** The delay inflates instantly (a late packet must fit inside the
    *  window) but deflates slowly — an arrival spike that relaxes a
    *  +300ms delay in one push rewinds renderTime by that much and the
@@ -108,6 +110,16 @@ export class SnapshotBuffer {
    *  changes, so a stable stream pays for jitter it no longer has. */
   private arrivalGaps: number[] = [];
   private gapsSorted: number[] = [];
+  /** The latest a packet has legitimately been: p90 observed gap + one
+   *  full cadence. Silence beyond this is proven starvation — wall-clock
+   *  guesses (jitter EMAs, nominal rates) flap DR during send gaps the
+   *  stream itself produces. */
+  get starveMs(): number {
+    const p90 = this.gapsSorted.length > 0
+      ? this.gapsSorted[Math.floor((this.gapsSorted.length - 1) * 0.9)]!
+      : 0;
+    return Math.max(250, p90 + this.arrivalInterval);
+  }
 
   /** Push a server update; returns the arrival gap in ms (0 = first sample).
    *  `t` is the snapshot's SERVER time; `arriveMs` the client wall time it
@@ -157,10 +169,23 @@ export class SnapshotBuffer {
       // the server never produced). Honest lag beats forward fiction.
       // Speed-scaled cap as before: delay × speed = rendered meters.
       const spd = Math.hypot(vel.x, vel.y, vel.z);
-      const cadenceFloor = Math.max(this.arrivalInterval, p90gap) + 40;
+      // Edge-vs-middle: delay = p90gap parks renderTime AT the newest
+      // snapshot's edge — one jittered arrival and it's past the buffer
+      // (the atCap flap driving the per-push adj storms). The margin is
+      // a FULL measured interval: coalesced/burst delivery (~300-400ms
+      // spacing) needs renderTime deep enough inside history that the
+      // inter-burst coast never reaches newest.t — half an interval was
+      // still crossing it on every cycle = the adj oscillation.
+      const cadenceFloor = Math.max(this.arrivalInterval, p90gap)
+        + Math.max(80, this.arrivalInterval);
+      // Ceiling is derived, not static: on a pathological stream whose
+      // proven starvation bound (starveMs) exceeds 600ms, a flat cap
+      // guarantees renderTime NEVER reaches the buffer — permanent
+      // atCap with no recovery. Let the floor meet the measured need.
+      const dynCap = Math.max(SnapshotBuffer.MAX_INTERP_DELAY, this.starveMs);
       const delayCap = spd > 5
-        ? Math.min(SnapshotBuffer.MAX_INTERP_DELAY, Math.max(cadenceFloor, 4000 / spd))
-        : SnapshotBuffer.MAX_INTERP_DELAY;
+        ? Math.min(dynCap, Math.max(cadenceFloor, 4000 / spd))
+        : dynCap;
       const raw = Math.min(
         delayCap,
         Math.max(cadenceFloor, SnapshotBuffer.BASE_INTERP_DELAY + p90gap),
@@ -170,17 +195,24 @@ export class SnapshotBuffer {
       // breathing as remote lurch. Slow EMA means a sustained shift still
       // converges (~1-2s) while packet-to-packet noise stops steering
       // the render window entirely.
-      this.delayTarget += (raw - this.delayTarget) * 0.08;
+      // EMA + slew both ride the PUSH count — on a suppressed 2Hz stream
+      // 0.08/push and 8ms/push take ~30s to converge to the cadence floor,
+      // during which renderTime sits past the buffer and the remote DRs
+      // permanently (the all-sim:true dump). Scale by the arrival gap so
+      // a sparse stream converges at the same wall-clock rate as a 20Hz
+      // one — jitter suppression still works because the RATE is fixed.
+      const rateScale = Math.max(1, gap / 50);
+      this.delayTarget += (raw - this.delayTarget) * Math.min(0.5, 0.08 * rateScale);
       // The cap is a hard error bound (delay×speed = rendered meters) —
       // it clamps the OUTPUT too, since the EMA lags a speed change.
       const target = Math.min(this.delayTarget, delayCap);
       // Slew BOTH ways: instant inflation made every jittered WAN
       // arrival ratchet the delay up, and each jump rewound/damped
       // renderTime — remotes lurched on straight paths despite a full
-      // buffer. Up-slew ~8ms/push (~160ms/s at 20Hz) converges on a real
-      // degradation in ~1s while single late packets ride extrapolation
-      // instead. Deflate stays ~200ms/s.
-      this.interpDelay += Math.max(-10, Math.min(8, target - this.interpDelay));
+      // buffer. ~160ms/s up converges on a real degradation in ~1s while
+      // single late packets ride extrapolation instead. Deflate ~200ms/s.
+      const slewUp = Math.min(8 * rateScale, target - this.interpDelay);
+      this.interpDelay += Math.max(-10, slewUp);
     }
 
     // Finite-but-absurd is the other half of the wire class: no mover
@@ -205,6 +237,16 @@ export class SnapshotBuffer {
       this.pool.push(this.snapshots.shift()!);
     }
     return gap;
+  }
+
+  /** The newest received-truth position — what a blend should chase when
+   *  the render clock runs past the buffer. Chasing sample() there chases
+   *  the coast (fabricated), so converge clamps to this instead. */
+  latestPos(outPos: THREE.Vector3): boolean {
+    const n = this.snapshots[this.snapshots.length - 1];
+    if (!n) {return false;}
+    outPos.set(n.x, n.y, n.z);
+    return true;
   }
 
   /** Sample the render position/rotation for right now. */
@@ -241,10 +283,21 @@ export class SnapshotBuffer {
         // rewind is the remote retracing its own path — slewing it
         // leaves renderTime trailing desired and drifts the sample
         // across pair boundaries, which pops harder than the rewind.
+        // The pin must EXPIRE: if desired keeps asking for a bigger
+        // rewind than 80ms for ~2 arrival intervals, the guess was
+        // wrong (a real server rewind) — holding renderTime forward
+        // then bricks the remote into permanent extrapolation. Truth
+        // beats smoothness; accept the rewind once it's persistent.
         const fwd = Math.min(dtMs * 1.35, 100);
-        const back = err < -SnapshotBuffer.MAX_RENDER_REWIND
-          ? 0 // pin: absorb the rewind as future forward growth
-          : err;
+        let back = err;
+        if (err < -SnapshotBuffer.MAX_RENDER_REWIND) {
+          if (this.rewindPinAt === 0) {this.rewindPinAt = now;}
+          back = now - this.rewindPinAt > this.arrivalInterval * 2
+            ? err // pin expired — real rewind, take it
+            : 0;  // pin: absorb the rewind as future forward growth
+        } else {
+          this.rewindPinAt = 0;
+        }
         renderTime = this.lastRenderTime + Math.max(back, Math.min(fwd, err));
       }
     }
@@ -274,7 +327,13 @@ export class SnapshotBuffer {
       if (capped && !this.atExtCap) { this.underruns += 1; this.extCapStart = Date.now(); }
       else if (!capped && this.atExtCap) { this.extCapMsTotal += Date.now() - this.extCapStart; }
       this.atExtCap = capped;
-      const ext = Math.min(cap, (renderTime - newest.t) / 1000);
+      // Past the cap: keep coasting on the newest velocity instead of
+      // freeze-framing. atExtCap still arms DR at the starve threshold —
+      // the freeze made every underrun a visible stall→DR→snap cycle,
+      // while a coast reads as honest prediction error. The 2s bound
+      // only matters if DR never fires (localDriven); a real stream's
+      // DR takeover replaces this path long before it.
+      const ext = Math.min(2, (renderTime - newest.t) / 1000);
       outPos.set(newest.x + newest.vx * ext, newest.y + newest.vy * ext, newest.z + newest.vz * ext);
       // Rotation extrapolates too — a turning remote's head would otherwise
       // freeze mid-swipe while the body keeps coasting. The rate comes from

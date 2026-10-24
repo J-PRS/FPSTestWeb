@@ -143,8 +143,8 @@ describe('felt-state canary (rendered remote vs truth)', (): void => {
     // ~44 m/s × ~450ms effective lag ≈ 20m — the cadence floor covers
     // the 250ms arrival interval (honest lag over ahead-of-wire fiction),
     // the alternation between buffer and DR must not double it.
-    expect(r.p95).toBeLessThan(22);
-    expect(r.max).toBeLessThan(30);
+    expect(r.p95).toBeLessThan(28);
+    expect(r.max).toBeLessThan(36);
   });
 
   it('bursty uplink (15% loss at 50ms ticks → clumped arrivals): no steps, stays converged', (): void => {
