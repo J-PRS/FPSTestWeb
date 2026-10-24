@@ -36,7 +36,7 @@ const gunmetalBake = new Map<string, Promise<void>>();
 
 export type { AnimationState } from './playerClips.js';
 
-export type PlayerModelVariant = 'robot' | 'mannequin' | 'knight' | 'scifisoldier' | 'cybersoldier' | 'vexa' | 'polyart' | 'brute' | 'juggernaut' | 'juggernaut_og' | 'juggernaut_brick' | 'juggernaut_wedge' | 'juggernaut_bld' | 'juggernaut_kit' | 'juggernaut_scp' | 'juggernaut_shell' | 'light_scp' | 'dreadnought' | 'brawler' | 'scout';
+export type PlayerModelVariant = 'robot' | 'mannequin' | 'knight' | 'scifisoldier' | 'cybersoldier' | 'vexa' | 'polyart' | 'brute' | 'juggernaut' | 'juggernaut_og' | 'juggernaut_brick' | 'juggernaut_wedge' | 'juggernaut_bld' | 'juggernaut_kit' | 'juggernaut_scp' | 'juggernaut_shell' | 'light_scp' | 'light_plate' | 'light_shell' | 'dreadnought' | 'brawler' | 'scout';
 
 export class PlayerModel {
   private scene: THREE.Scene;
