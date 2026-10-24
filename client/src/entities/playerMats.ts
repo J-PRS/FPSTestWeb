@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 import { metalMat } from './procMetal.js';
+import { enhanceWeaponMaterial } from '../effects/vertexAO.js';
 
 // Mannequin re-skin (cached shared recipes — each PlayerModel still
 // clones via ownMaterial so damage-flash stays per-instance).
@@ -35,7 +36,20 @@ export class PlayerMats {
   // flash can't tint the whole fleet.
   private ownMaterial(m: THREE.Material): THREE.Material {
     let c = this.clones.get(m);
-    if (!c) { c = m.clone(); this.clones.set(m, c); }
+    if (!c) {
+      c = m.clone();
+      // clone() drops onBeforeCompile and JSON-roundtrips userData (the
+      // wear/grime textures die in it) — re-arm the grunge shader from
+      // the SOURCE material's live refs on baked-gunmetal bodies.
+      if (m.userData.__grunge) {
+        delete c.userData.__grunge;
+        c.userData.__wearTex = m.userData.__wearTex;
+        c.userData.__grimeTex = m.userData.__grimeTex;
+        c.userData.__wearInt = m.userData.__wearInt;
+        enhanceWeaponMaterial(c);
+      }
+      this.clones.set(m, c);
+    }
     return c;
   }
 
@@ -134,7 +148,10 @@ export class PlayerMats {
         u = { value: new THREE.Color(0) };
         sm.userData.rimU = u;
         const U = u;
-        sm.onBeforeCompile = (sh): void => {
+        // Chain, not overwrite — a grunge bake may already own the hook.
+        const prev = sm.onBeforeCompile;
+        sm.onBeforeCompile = (sh, r): void => {
+          prev?.(sh, r);
           sh.uniforms.uRim = U;
           sh.fragmentShader = `uniform vec3 uRim;\n${sh.fragmentShader}`.replace(
             '#include <emissivemap_fragment>',

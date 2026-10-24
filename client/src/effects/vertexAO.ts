@@ -931,8 +931,11 @@ export function bakeVertexAO(group: THREE.Group, opts: { grime?: boolean; wearBo
   group.traverse((o): void => { if ((o as THREE.Mesh).isMesh && !(o as THREE.InstancedMesh).isInstancedMesh) {meshes.push(o as THREE.Mesh);} });
   if (meshes.length === 0) {return;}
 
+  console.log('bake: merge', meshes.length, performance.now());
   const occluderGeo = mergeGeometries(meshes);
+  console.log('bake: bvh', performance.now());
   occluderGeo.boundsTree = new MeshBVH(occluderGeo);
+  console.log('bake: bvh done', performance.now());
   // DoubleSide is required: hemisphere rays point outward and mostly hit the
   // back faces of surrounding geometry — FrontSide culling would miss them all.
   const occluder = new THREE.Mesh(occluderGeo, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
@@ -951,7 +954,9 @@ export function bakeVertexAO(group: THREE.Group, opts: { grime?: boolean; wearBo
     if ((m.material as THREE.Material).type === 'MeshBasicMaterial') {continue;}
     if (baked.has(m.geometry)) {m.geometry = m.geometry.clone();}
     baked.add(m.geometry);
+    console.log('bake: mesh', m.name, (m.geometry.attributes.position as THREE.BufferAttribute).count, performance.now());
     bakeMesh(m, occluder, rayDist, opts.grime, opts.wearBoost);
+    console.log('bake: mesh done', m.name, performance.now());
     const mat = m.material as THREE.Material & { vertexColors?: boolean };
     if (mat) {
       mat.vertexColors = true;

@@ -21,8 +21,13 @@ import { PlayerDistal } from './playerDistal.js';
 import { PlayerModelLod, smoothShade } from './playerModelLod.js';
 import { PlayerMats } from './playerMats.js';
 import { PoseControl } from './playerPose.js';
+import { bakeVertexAO } from '../effects/vertexAO.js';
 import { WeaponType } from '../../../shared/weapons.js';
 const logger = new ChildLogger('PlayerModel');
+
+// Rig URLs whose cached template already carries the gunmetal bake —
+// the bake mutates shared geometry, so it must run exactly once per URL.
+const gunmetalBaked = new Set<string>();
 
 // Locomotion clip surgery (stripHipXZ/dampenSway/DIR8) lives in
 // playerClipSurgery.ts — extracted so the layered-anim carve-up is
@@ -173,6 +178,25 @@ export class PlayerModel {
       loadGltfCached(loader, url).then(
         (gltf): void => {
           if (this._disposed) { resolve(); return; }
+          // Worn-gunmetal rigs: bake AO+wear+grime onto the CACHED template
+          // once — every SkeletonUtils clone shares the baked geometry. The
+          // shader half re-arms per material clone in playerMats (clone()
+          // drops onBeforeCompile). Matte recipe: kill the GLB's metalness
+          // so it reads as painted plate, not machined metal.
+          if (RIG_MANIFEST[this.variant]?.gunmetal && !gunmetalBaked.has(url)) {
+            gunmetalBaked.add(url);
+            gltf.scene.traverse((o): void => {
+              const mesh = o as THREE.Mesh;
+              if (!mesh.isMesh) {return;}
+              for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+                const sm = m as THREE.MeshStandardMaterial;
+                if (sm.isMeshStandardMaterial) {sm.metalness = 0.1; sm.roughness = 0.72;}
+              }
+            });
+            console.log('BAKE START', performance.now());
+            bakeVertexAO(gltf.scene as THREE.Group, { grime: true });
+            console.log('BAKE DONE', performance.now());
+          }
           this.onModelLoaded({ scene: SkeletonUtils.clone(gltf.scene) as THREE.Group, animations: gltf.animations.map((c): THREE.AnimationClip => c.clone()) }, mann, knight);
           resolve();
         return; },

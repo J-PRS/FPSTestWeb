@@ -174,6 +174,9 @@ export interface RigManifest {
   /** Anim-source ids (playerUal SPECS) this rig's retarget bake draws
    *  from — empty for native-only rigs. */
   sources: string[];
+  /** Bake the weapon AO+wear+grime pipeline onto the body at load —
+   *  worn gunmetal armor, matte (metalness flattened, no maps). */
+  gunmetal?: boolean;
 }
 export const RIG_MANIFEST: Record<string, RigManifest> = {
   robot:        { url: '/assets/models/RobotExpressive.glb', yaw: 0, fixedScale: 0.5,
@@ -223,7 +226,7 @@ export const RIG_MANIFEST: Record<string, RigManifest> = {
   // Preview-only for now (gunlab): no class maps here yet. Primitive plates
   // from _tools/models/build_juggernaut.mjs over brute's skeleton and clips.
   'juggernaut':   { url: '/assets/models/class_juggernaut.glb', yaw: 0, fitH: 2.8, sources: [],
-                    aimMask: true,
+                    aimMask: true, gunmetal: true,
                     gunLocal: [0.55, 0.7, -0.15],
                     mount: { world: true, aimPin: true, size: 0.95, aimSeat: [-0.06, 0.1, 0.12] },
                     anims: { idle: 'Idle_A', walk: 'Walk', run: 'Sprint',
