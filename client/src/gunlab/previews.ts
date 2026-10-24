@@ -498,7 +498,7 @@ export const CLASSES: [label: string, build: () => THREE.Group][] = [
   ['brute',  mkLineup([[BRUTE_ENTRY[0], SOLO_X, 'brute', 3, 'heavy', false]])],
   ['juggernaut', mkLineup([['juggernaut' as PlayerModelVariant, SOLO_X, 'juggernaut', 3, 'heavy', false]])],
   ['jugg og', mkLineup([['juggernaut_og' as PlayerModelVariant, SOLO_X, 'jugg og', 3, 'heavy', false]])],
-  ['jugg vs og', mkLineup([
+  ['Heavy Lineup', mkLineup([
     // Technique row: plates, SDF, brick, siege, blender, kitbash, sculpted.
     ['juggernaut' as PlayerModelVariant, -6.6, 'jugg', 3, 'heavy', false],
     ['juggernaut_og' as PlayerModelVariant, -4.4, 'og', 3, 'heavy', false],
@@ -509,6 +509,11 @@ export const CLASSES: [label: string, build: () => THREE.Group][] = [
     ['juggernaut_scp' as PlayerModelVariant, 6.6, 'scp', 3, 'heavy', false],
     ['juggernaut_shell' as PlayerModelVariant, 8.8, 'shell', 3, 'heavy', false],
   ], 1.1, 19, 1.1)],
+  ['Light Lineup', mkLineup([
+    ['scout' as PlayerModelVariant, -2.2, 'scout', 2, 'light', false, CLASS_MODEL_SCALE.scout],
+    ['brawler' as PlayerModelVariant, 0, 'brawler', 2.4, 'medium', false, CLASS_MODEL_SCALE.brawler],
+    ['light_scp' as PlayerModelVariant, 2.2, 'lt scp', 2.4, 'light', false],
+  ], 0, 6.5, 0)],
   ['dreadnought', mkLineup([['dreadnought' as PlayerModelVariant, SOLO_X, 'dreadnought', 3, 'heavy', false]])],
   ['brawler', mkLineup([[BRAWLER_ENTRY[0], SOLO_X, 'brawler', 2.4, 'medium', false]])],
   ['scout',  mkLineup([[SCOUT_ENTRY[0], SOLO_X, 'scout', 2, 'light', false]])],
