@@ -110,7 +110,7 @@ const expiredShots = new Map<string, number>();
 // "intent never ran" from "destroy never arrived" without a packet dump.
 export const parityProbes: {
   fatesSeen: number; echoesStamped: number; echoesConfirmed: number;
-  destroysSeen: number; deadOnArrival: number; msgSeen: Record<string, number>;
+  destroysSeen: number; deadOnArrival: number; trajUnbound?: number; msgSeen: Record<string, number>;
 } = { fatesSeen: 0, echoesStamped: 0, echoesConfirmed: 0, destroysSeen: 0, deadOnArrival: 0, msgSeen: {} };
 
 // My shells' replica-vs-fate distances — offM as a population, not just
@@ -122,9 +122,16 @@ const trajDivs: number[] = [];
 // if the replica already self-detonated (its own contact vs the wire's)
 // than one still mid-flight at fate arrival (early server kill).
 export function noteTrajDiv(d: number, wt?: number, selfPopped?: boolean, age?: number, boundAt?: number, srvAge?: number, mirrored?: boolean): void {
+  // Two populations, different meanings: an UNBOUND replica (the create
+  // echo never re-anchored it) flies its live-muzzle arc — offset from
+  // the server shell by shooter-speed × spawn-lag (~10-20m is normal,
+  // that's the divergence the re-anchor exists to erase). Mixing it into
+  // trajDivs makes the p50 read echo loss as arc divergence, so unbound
+  // samples get their own counter and only bound replicas feed the stat.
+  if (boundAt === undefined || boundAt < 0) {parityProbes.trajUnbound = (parityProbes.trajUnbound ?? 0) + 1; return;}
   trajDivs.push(d);
   if (trajDivs.length > 64) {trajDivs.shift();}
-  if (d > 60) {parityMiss('traj-outlier', { m: Math.round(d), wt, self: selfPopped ? 1 : 0, age: age === undefined ? '?' : Number(age.toFixed(2)), bind: boundAt === undefined ? '?' : Number(boundAt.toFixed(2)), sa: srvAge === undefined ? '?' : Number(srvAge.toFixed(2)), mir: mirrored ? 1 : 0 });}
+  if (d > 60) {parityMiss('traj-outlier', { m: Math.round(d), wt, self: selfPopped ? 1 : 0, age: age === undefined ? '?' : Number(age.toFixed(2)), bind: Number(boundAt.toFixed(2)), sa: srvAge === undefined ? '?' : Number(srvAge.toFixed(2)), mir: mirrored ? 1 : 0 });}
 }
 export function trajDivStats(): { n: number; p50: number; p95: number; max: number; over8: number } {
   const s = trajDivs.toSorted((a, b) => a - b);
@@ -208,7 +215,7 @@ export function parityLines(): string[] {
   }).join(' ');
   lines.push(`parity: misses=${total}${byKind ? ` ${byKind}` : ''}`);
   const td = trajDivStats();
-  if (td.n > 0) {lines.push(`  shell-traj: n=${td.n} p50=${td.p50}m p95=${td.p95}m max=${td.max}m >8m=${td.over8}`);}
+  if (td.n > 0 || parityProbes.trajUnbound) {lines.push(`  shell-traj: n=${td.n} p50=${td.p50}m p95=${td.p95}m max=${td.max}m >8m=${td.over8} unbound=${parityProbes.trajUnbound ?? 0}`);}
   for (const r of rows.slice(-8).toReversed()) {
     lines.push(`  parity-${r.kind}: ${r.detail}`);
   }

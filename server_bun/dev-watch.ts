@@ -14,7 +14,11 @@ import { watch } from 'fs';
 import { execFileSync } from 'node:child_process';
 
 const DIRS = ['src', '../shared'];
-const DEBOUNCE_MS = 30_000; // was 150, then 1000 — active editing fired restarts every save; 30s batches a whole edit session into one restart
+const DEBOUNCE_MS = 5000; // was 150, then 1000, then 30000 — 5s batches a quick edit burst into one restart while staying snappy for dev iteration
+
+const say = (s: string): void => { // oxlint-disable-next-line no-console
+  console.log(`[35m${s}[0m`);
+};
 
 let child: Subprocess | null = null;
 let restarting = false;
@@ -54,9 +58,9 @@ try {
       return new Response(null, { status: 405 });
     },
   });
-  console.log(`[dev-watch] seat handoff on :${STATE_PORT} (in-memory)`);
+  say(`[dev-watch] seat handoff on :${STATE_PORT} (in-memory)`);
 } catch {
-  console.log(`[dev-watch] seat handoff unavailable — :${STATE_PORT} busy, restarts re-spawn at base`);
+  say(`[dev-watch] seat handoff unavailable — :${STATE_PORT} busy, restarts re-spawn at base`);
 }
 
 let bootAt = 0;
@@ -92,7 +96,7 @@ function boot(): void {
       bindFails += 1;
       if (bindFails >= 2) { void portConflict(); return; } // don't respawn — wait for portConflict to resolve
     } else {bindFails = 0;}
-    console.log('[dev-watch] server exited — respawning');
+    say('[dev-watch] server exited — respawning');
     boot();
     return undefined;
   });
@@ -133,48 +137,48 @@ async function portConflict(): Promise<void> {
   try {
     const owner = portOwner();
     if (!owner) {
-      console.log(`[dev-watch] :${PORT} busy but no LISTENING owner — waiting 2s for release...`);
+      say(`[dev-watch] :${PORT} busy but no LISTENING owner — waiting 2s for release...`);
       await new Promise((r) => setTimeout(r, 2000));
       const owner2 = portOwner();
       if (!owner2) {
-        console.log(`[dev-watch] :${PORT} still busy (TIME_WAIT?) — save a file or rerun to retry`);
+        say(`[dev-watch] :${PORT} still busy (TIME_WAIT?) — save a file or rerun to retry`);
         bindFails = 0;
         return;
       }
       // fall through to kill logic below with owner2
-      console.log(`[dev-watch] :${PORT} is held by ${owner2.name} (pid ${owner2.pid}) — the server can't bind.`);
+      say(`[dev-watch] :${PORT} is held by ${owner2.name} (pid ${owner2.pid}) — the server can't bind.`);
       const a = await ask(`[dev-watch] kill ${owner2.name}? [y/N] `);
       if (a === 'y') {
         try {
           execFileSync('taskkill', ['/F', '/PID', String(owner2.pid)]);
-          console.log(`[dev-watch] ${owner2.name} killed — waiting for port release...`);
+          say(`[dev-watch] ${owner2.name} killed — waiting for port release...`);
           await new Promise((r) => setTimeout(r, 2000));
           bindFails = 0;
           boot();
         } catch (error) {
-          console.log(`[dev-watch] kill failed: ${error instanceof Error ? error.message : String(error)}`);
+          say(`[dev-watch] kill failed: ${error instanceof Error ? error.message : String(error)}`);
         }
       } else {
         bindFails = 0;
-        console.log('[dev-watch] leaving it alone — save a file or rerun to retry');
+        say('[dev-watch] leaving it alone — save a file or rerun to retry');
       }
       return;
     }
-    console.log(`[dev-watch] :${PORT} is held by ${owner.name} (pid ${owner.pid}) — the server can't bind.`);
+    say(`[dev-watch] :${PORT} is held by ${owner.name} (pid ${owner.pid}) — the server can't bind.`);
     const a = await ask(`[dev-watch] kill ${owner.name}? [y/N] `);
     if (a === 'y') {
       try {
         execFileSync('taskkill', ['/F', '/PID', String(owner.pid)]);
-        console.log(`[dev-watch] ${owner.name} killed — waiting for port release...`);
+        say(`[dev-watch] ${owner.name} killed — waiting for port release...`);
         await new Promise((r) => setTimeout(r, 2000));
         bindFails = 0;
         boot();
       } catch (error) {
-        console.log(`[dev-watch] kill failed: ${error instanceof Error ? error.message : String(error)}`);
+        say(`[dev-watch] kill failed: ${error instanceof Error ? error.message : String(error)}`);
       }
     } else {
       bindFails = 0;
-      console.log('[dev-watch] leaving it alone — save a file or rerun to retry');
+      say('[dev-watch] leaving it alone — save a file or rerun to retry');
     }
   } finally {
     conflictBusy = false;
@@ -187,7 +191,7 @@ async function portConflict(): Promise<void> {
 async function drain(): Promise<void> {
   try {
     await Promise.race([
-      fetch(`http://127.0.0.1:${PORT}/dev/shutdown`),
+      fetch(`http://127.0.0.1:${PORT}/dev/shutdown?key=${process.env.FPS_ADMIN_TOKEN ?? 'devdemo'}`),
       new Promise((r) => setTimeout(r, 1000)),
     ]);
     if (child) {await Promise.race([child.exited, new Promise((r) => setTimeout(r, 800))]);}
@@ -197,7 +201,7 @@ async function drain(): Promise<void> {
 async function restart(): Promise<void> {
   if (restarting) { pending = true; return; }
   restarting = true;
-  console.log('[dev-watch] restart — shared/ or src/ changed');
+  say('[dev-watch] restart — shared/ or src/ changed');
   await drain();
   if (child && child.exitCode === null) {child.kill();}
   await child?.exited;
@@ -218,4 +222,4 @@ for (const dir of DIRS) {
 }
 
 boot();
-console.log(`[dev-watch] watching ${DIRS.join(', ')} — editing shared/ restarts the server`);
+say(`[dev-watch] watching ${DIRS.join(', ')} — editing shared/ restarts the server`);

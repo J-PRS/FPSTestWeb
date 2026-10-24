@@ -7,6 +7,16 @@ const LEVEL_PRIORITY: Record<LogLevel, number> = {
   error: 3,
 };
 
+// Console-only color — the file sink must never see escape codes.
+const C = { reset: '\x1b[0m', dim: '\x1b[2m', bold: '\x1b[1m',
+  red: '\x1b[31m', green: '\x1b[32m', yellow: '\x1b[33m', cyan: '\x1b[36m' };
+const LEVEL_COLOR: Record<LogLevel, string> = {
+  debug: C.dim, info: C.cyan, warn: C.yellow, error: `${C.bold}${C.red}`,
+};
+export function tint(level: LogLevel, line: string): string {
+  return `${LEVEL_COLOR[level]}${line}${C.reset}`;
+}
+
 class Logger {
   private level: LogLevel;
   private readonly startTime: number;
@@ -75,12 +85,12 @@ class Logger {
 
   debug(msg: string, data?: unknown): void {
     // oxlint-disable-next-line no-console
-    if (this.shouldLog('debug')) {console.debug(this.format('debug', msg, data));}
+    if (this.shouldLog('debug')) {console.debug(tint('debug', this.format('debug', msg, data)));}
   }
 
   info(msg: string, data?: unknown): void {
     // oxlint-disable-next-line no-console
-    if (this.shouldLog('info')) {console.log(this.format('info', msg, data));}
+    if (this.shouldLog('info')) {console.log(tint('info', this.format('info', msg, data)));}
   }
 
   // A hot fault path (claim rejections, unconfirmed hits, send failures)
@@ -109,7 +119,7 @@ burst.n += 1;
     if (collapsed === null) {return;}
     const line = this.format('warn', collapsed, data);
     // oxlint-disable-next-line no-console
-    console.warn(line);
+    console.warn(tint('warn', line));
     this.toFile(line);
   }
 
@@ -119,7 +129,7 @@ burst.n += 1;
     if (collapsed === null) {return;}
     const line = this.format('error', collapsed, data);
     // oxlint-disable-next-line no-console
-    console.error(line);
+    console.error(tint('error', line));
     this.toFile(line);
   }
 }

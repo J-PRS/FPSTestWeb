@@ -160,6 +160,9 @@ export class RibbonTrail {
   /** push() calls that arrived after release — the owner outlived its
    *  ribbon (swept/mass-disposed). Counted, not silent. */
   static zombiePushes = 0;
+  /** Zombie pushes by owner tag — 599 generic counts told us the class,
+   *  not which owner outlived its ribbon. */
+  static zombieByTag = new Map<string, number>();
   /** follow re-pins refused as discontinuities — orphaned ribbons
    *  stretching to a recycled host pos. Trends 0; the smear canary. */
   static followJumps = 0;
@@ -356,7 +359,11 @@ RibbonTrail.reapedStale += 1;
     // dispose (resync mass-drop, stale-owner sweep) used to keep filling
     // the ring with slot=-1: the census row looked alive, the trail
     // rendered nothing, and nobody could tell which owner lost it.
-    if (!this.slotAlive()) {RibbonTrail.zombiePushes += 1; return; }
+    if (!this.slotAlive()) {
+      RibbonTrail.zombiePushes += 1;
+      RibbonTrail.zombieByTag.set(this.tag, (RibbonTrail.zombieByTag.get(this.tag) ?? 0) + 1);
+      return;
+    }
     if (this.stopped) {return;}
     // Reject NaN/Inf inputs at the door — one bad sample poisons px/py/pz
     // forever: every later sideFor/glueBoundary reuses it and the whole
@@ -649,6 +656,7 @@ registerDiag('ribbons', () => ({
   reapedStale: RibbonTrail.reapedStale,
   nanReject: { pushes: RibbonTrail.nanPushes, sides: RibbonTrail.nanSides },
   zombiePushes: RibbonTrail.zombiePushes,
+  zombieByTag: Object.fromEntries(RibbonTrail.zombieByTag),
   followJumps: RibbonTrail.followJumps,
   smearCuts,
 }));

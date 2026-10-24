@@ -558,10 +558,18 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   const playerSheep = deps.lazyPlayerSheep?.();
   if (playerSheep) {
     playerSheep.tick(dt, player, terrain, deps.world.remotePlayers, deps.world.localTeam);
-    hud.setSheep(playerSheep.shown);
-    hud.setEnergy(playerSheep.energy);
   }
-  hud.setGround(player.onGround, player.pos.y - terrain.getHeight(player.pos.x, player.pos.z));
+  // Under-crosshair probes (sheep / mechanical energy / ground distance)
+  // are dev readouts — debug toggle only, like the terrain wire.
+  if (urlParams.debug) {
+    if (playerSheep) {
+      hud.setSheep(playerSheep.shown);
+      hud.setEnergy(playerSheep.energy);
+    }
+    hud.setGround(player.onGround, player.pos.y - terrain.getHeight(player.pos.x, player.pos.z));
+  } else {
+    hud.setSheep(0); hud.setEnergy(undefined); hud.groundReadout.textContent = '';
+  }
   // Self blob — the first-person body never reaches the shadow pass, so
   // it joins the shared instanced blob pool remotes/creatures ride.
   const selfShadows = getShadows();

@@ -51,16 +51,34 @@ export interface DbgTag {
  *  counted for the diag dump AND logged loudly (rate-limited so a
  *  per-frame offender can't flood the shipped log). */
 const glitchCounts: Record<string, number> = {};
+/** Payload + timestamp of the last emitted line per kind — identical
+ *  registrations within a burst are the same event logged twice (dual
+ *  code paths, relay dupes); count them, log once with (xN). */
+const glitchLast: Record<string, { payload: string; n: number }> = {};
+/** Floats at 6dp turn every wire position into a 20-char token — 1dp is
+ *  all a glitch read needs (meters/ticks, not microns). */
+function compact(v: unknown): string {
+  return JSON.stringify(v, (_k, x: unknown): unknown =>
+    typeof x === 'number' && !Number.isInteger(x) ? Math.round(x * 10) / 10 : x);
+}
 /** Returns true when the occurrence was emitted — callers whose event is
  *  rare-but-important (parity misses) can warn through their own channel
  *  when the rate limiter swallowed the console line. */
 export function glitch(kind: string, detail: Record<string, unknown> = {}): boolean {
   glitchCounts[kind] = (glitchCounts[kind] ?? 0) + 1;
   const n = glitchCounts[kind];
+  const payload = compact(detail);
+  const last = glitchLast[kind];
+  if (last && last.payload === payload) {
+    last.n += 1; // identical payload — one line, count the dupes
+    return false;
+  }
+  const suppressed = last && last.n > 1 ? ` (x${last.n})` : '';
+  glitchLast[kind] = { payload, n: 1 };
   if (n <= 3 || n % 100 === 0) {
     // Lazy import would devolve the module graph — Logger is core like us.
     // oxlint-disable-next-line no-console
-    console.error(`[GLITCH:${kind}]`, JSON.stringify(detail));
+    console.error(`[GLITCH:${kind}]${suppressed}`, payload);
     return true;
   }
   return false;
