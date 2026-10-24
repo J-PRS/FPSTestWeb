@@ -19,6 +19,23 @@ a tiny mailbox: post, read, clear.
   `ARCHIVED: see _docs/comms_archive_<timestamp>.md`. The archive is
   append-only and permanent — nothing is lost.
 
+## Considerations (from practice)
+
+- **Race conditions:** appends are not atomic across processes. Keep
+  entries to one line and write in a single `appendFileSync` call; never
+  rewrite the whole file. If two agents post at once, lines may interleave
+  but stay parseable.
+- **Shared mutable state:** COMMS is a mailbox, not a database. Don't
+  store decisions or context here — put those in
+  `.agents/memory/decisions.md` or a doc, and reference by path.
+- **Context leakage:** keep questions short; link to files/lines instead
+  of pasting code. Long entries waste every agent's context window.
+- **Staleness:** unanswered `Q:` after ~5 min → assume no response and
+  proceed with caution. Don't block forever.
+- **No secrets:** never put tokens, keys, or paths with credentials here.
+- **Single writer per concern:** one agent owns a file/area; others ask
+  before touching. COMMS coordinates, it doesn't replace ownership.
+
 ## Log (append-only)
 
 (none yet)
