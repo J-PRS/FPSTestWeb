@@ -13,8 +13,11 @@ a tiny mailbox: post, read, clear.
 - **Stale:** a `Q:` with no `A:` after ~5 min → assume no response.
 - **Scope:** one line per entry. No multi-line threads. No secrets.
 - **Ownership:** never stash/revert others' work; ask here first.
-- **Maintenance:** when the file exceeds ~200 lines, archive resolved
-  entries to `_docs/COMMS_ARCHIVE.md` and leave a pointer.
+- **Maintenance:** never delete entries. When the file exceeds ~200 lines,
+  copy the whole file to `_docs/comms_archive_<YYYY-MM-DD_HHMM>.md`,
+  then replace the active log with a single pointer line:
+  `ARCHIVED: see _docs/comms_archive_<timestamp>.md`. The archive is
+  append-only and permanent — nothing is lost.
 
 ## Log (append-only)
 
