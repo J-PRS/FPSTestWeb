@@ -347,8 +347,12 @@ export class Nugget {
       // lattice (shared hmChord); getRenderedHeight is camera-dependent
       // LOD, so mirroring against it diverged rests by meters at range.
       const gy = terrain.getHeight(this.pos.x, this.pos.z) + NUG_TUMBLE.groundLift;
-      if (this.pos.y < gy) {this.pos.y = gy; this.vel.y = 0;}
-      this.vel.x *= bleed; this.vel.y *= bleed; this.vel.z *= bleed;
+      if (this.pos.y < gy) {
+        this.pos.y = gy;
+        // Mirror of RoomPickups: bounce on real contact, no vy airbrake.
+        this.vel.y = this.vel.y < -NUG_TUMBLE.settle ? -this.vel.y * NUG_TUMBLE.restitution : 0;
+      }
+      this.vel.x *= bleed; this.vel.z *= bleed;
       if (Math.abs(this.vel.x) < NUG_TUMBLE.settle && Math.abs(this.vel.y) < NUG_TUMBLE.settle && Math.abs(this.vel.z) < NUG_TUMBLE.settle) {
         this.vel.set(0, 0, 0);
         this.settled = true;

@@ -18,6 +18,7 @@ export const NUG_TUMBLE = {
   groundLift: 0.5,  // rest height above the heightfield
   settle: 0.5,      // per-axis speed below which the tumble ends
   upPop: 0.4,       // up-kick as a fraction of the blast impulse
+  restitution: 0.45, // vy bounce on terrain hits — a gem lands and hops, not sticks
 } as const;
 
 /** Headhunt denominations — base-3 coins so a hoard scatters a few

@@ -432,20 +432,21 @@ export class PlayerDebris extends Debris {
     scene: THREE.Scene, terrain: Terrain,
     pos: Vec3Like,
     color: THREE.Color = new THREE.Color(0x44_44_FF), // Default player blue
-    opts?: { impulseDir?: THREE.Vector3; inheritVel?: THREE.Vector3; parts?: { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] }
+    opts?: { impulseDir?: THREE.Vector3; inheritVel?: THREE.Vector3; parts?: { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[]; shardGeos?: THREE.BufferGeometry[]; count?: number; smoke?: boolean }
   ) {
     // shellRadius lifts this from "box of chunks" to "the body bursts":
     // shards start ON the capsule silhouette and fly along their own
     // normals, impulseDir carries the shot through them, inheritVel keeps
     // the dead skier's momentum — the same trio that sells ball deaths.
     super(scene, terrain, pos, color, {
-      count: PLAYER_CHUNK_COUNT,
+      count: opts?.count ?? PLAYER_CHUNK_COUNT,
       spreadX: 0.8, spreadY: 1, spreadZ: 0.8, // larger/taller spread for players
       shellRadius: PLAYER_RADIUS,
       impulseDir: opts?.impulseDir,
       inheritVel: opts?.inheritVel,
       parts: opts?.parts,
-      smoke: true, // exploded body parts trail smoke wisps
+      shardGeos: opts?.shardGeos,
+      smoke: opts?.smoke ?? true, // exploded body parts trail smoke wisps
     });
   }
 }

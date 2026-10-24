@@ -14,6 +14,18 @@ import * as sfxPlayer from '../../core/sfx/player.js';
 
 const _zeroVel = new THREE.Vector3();
 
+// Corpse-fling bookkeeping: kill visuals gib at the RENDERED position
+// (what the shooter saw), but server loot scatters at wire truth —
+// dropping the nugget in-place at the server pos pops it meters from
+// the corpse that just fell. Record recent rendered deaths so loot can
+// spawn AT the corpse the player saw and fling to its wire rest-spot —
+// the scatter reads as bursting out of the body instead of teleporting.
+const recentCorpses: { x: number; y: number; z: number; t: number }[] = [];
+export function noteCorpseFling(pos: { x: number; y: number; z: number }): void {
+  recentCorpses.push({ x: pos.x, y: pos.y, z: pos.z, t: performance.now() });
+  if (recentCorpses.length > 12) {recentCorpses.shift();}
+}
+
 export function wirePickups(ctx: NetCtx): void {
   const { deps, networkManager, chat, nm } = ctx;
 
@@ -47,10 +59,29 @@ export function wirePickups(ctx: NetCtx): void {
     // Token denominations carry their own tint/size — the tier IS the
     // value read (white 1 < green 3 < blue 9 < purple 27).
     const tier = kind === 'token' ? tokenTier(val) : null;
+    // Corpse-fling: a scatter pickup near a fresh rendered death spawns
+    // AT the corpse the player saw and launches toward the wire pos —
+    // serverRest converges it to truth when the tumble settles.
+    let spawnPos = pos;
+    let spawnVel = vel;
+    const now = performance.now();
+    for (let i = recentCorpses.length - 1; i >= 0; i -= 1) {
+      const c = recentCorpses[i]!;
+      if (now - c.t > 1500) {continue;}
+      const dx = pos.x - c.x, dy = pos.y - c.y, dz = pos.z - c.z;
+      const d = Math.hypot(dx, dy, dz);
+      if (d > 0.5 && d < 15) {
+        spawnPos = c;
+        const flingT = 0.45;
+        spawnVel = { x: dx / flingT, y: dy / flingT + 4, z: dz / flingT };
+      }
+      recentCorpses.splice(i, 1); // consumed — one corpse, one fling
+      break;
+    }
     const nugget = new Nugget(
       deps.lazyScene(),
-      new THREE.Vector3(pos.x, pos.y, pos.z),
-      vel ? new THREE.Vector3(vel.x, vel.y, vel.z) : _zeroVel,
+      new THREE.Vector3(spawnPos.x, spawnPos.y, spawnPos.z),
+      spawnVel ? new THREE.Vector3(spawnVel.x, spawnVel.y, spawnVel.z) : _zeroVel,
       tier?.color ?? PICKUP_ACCENT[kind],
       pickupParts(kind),
       tier?.scale ?? 1,

@@ -31,9 +31,14 @@ export class FragMessages {
     this.flash();
   }
 
+  /** The live kill headline — streak/multi banners STACK onto it
+   *  instead of stomping the FRAGGED line they fired alongside. */
+  private currentKill = '';
+
   /** Frag headline — mid-tier: a frag matters less than YOU DIED or a
    *  flag event, so it gets a compact line, not the 2.6rem red slab. */
   showKill(msg: string): void {
+    this.currentKill = msg;
     const [head, ...rest] = msg.split('\n');
     this.scoreDiv.innerHTML =
       `<div style="font-size:1.35rem;font-weight:700;color:#ffd9cc;letter-spacing:0.1em;text-shadow:0 0 10px rgba(255,120,80,0.4),1px 2px 3px #000">${esc(head ?? '')}</div>${ 
@@ -41,6 +46,15 @@ export class FragMessages {
         ? `<div style="font-size:0.9rem;font-weight:600;color:#e8d8cc;letter-spacing:0.14em;text-shadow:1px 1px 3px #000">${esc(rest.join(' · '))}</div>`
         : ''}`;
     this.flash();
+  }
+
+  /** Streak/multi banner riding a frag — UT convention: the RARE event
+   *  headlines (DOUBLE KILL gets the big slab), the routine frag reads
+   *  as the small subtitle under it. A bare banner (no live frag, e.g.
+   *  announce-only paths) renders on its own. */
+  stackKill(banner: string): void {
+    this.show(this.currentKill ? `${banner}\n${this.currentKill}` : banner);
+    this.currentKill = '';
   }
 
   // On-shot score tick ("84.2 · 41 · 0.35s · +8") — the OLD small style.
@@ -73,6 +87,7 @@ export class FragMessages {
     this.fadeTimer = setTimeout((): void => {
       this.scoreDiv.style.transition = `opacity ${FRAG_MESSAGE_FADE}ms ease`;
       this.scoreDiv.style.opacity = '0';
+      this.currentKill = '';
     }, FRAG_MESSAGE_DURATION);
   }
 }

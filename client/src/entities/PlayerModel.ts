@@ -124,10 +124,24 @@ export class PlayerModel {
   /** Posed body-part fragments at the corpse's current stance — recentered
    *  chunk geometries + their world centroids. Null until loaded / if the
    *  model has no skinned meshes (caller falls back to generic debris). */
+  /** Baked gib geos cached for the model's LIFE — re-baking per death is
+   *  ~20 fresh BufferGeometries + matrix writes (the kill-frame spike).
+   *  The pose delta between two deaths is imperceptible under a burst,
+   *  so the first bake is reused with offsets re-anchored to the corpse.
+   *  Callers must flag sharedGeo — the cache is never disposed. */
+  private gibBakeCache: { geo: THREE.BufferGeometry; off: THREE.Vector3 }[] | null = null;
+
   deathParts(): { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] | null {
     if (!this.gibParts && this.model) {this.gibParts = buildGibParts(this.model);}
     if (!this.gibParts || !this.model) {return null;}
-    return bakeDeathParts(this.model, this.gibParts);
+    if (!this.gibBakeCache) {
+      const baked = bakeDeathParts(this.model, this.gibParts);
+      if (!baked) {return null;}
+      const root = this.model.position;
+      this.gibBakeCache = baked.map((b) => ({ geo: b.geo, off: b.pos.clone().sub(root) }));
+    }
+    const root = this.model.position;
+    return this.gibBakeCache.map((b) => ({ geo: b.geo, pos: b.off.clone().add(root) }));
   }
 
   /** 'robot' = RobotExpressive + retargeted UAL clips (backburner path).
@@ -203,6 +217,8 @@ export class PlayerModel {
           this.onModelLoaded({ scene: SkeletonUtils.clone(gltf.scene) as THREE.Group, animations: gltf.animations.map((c): THREE.AnimationClip => c.clone()) }, mann, knight);
           resolve();
           if (gunmetal) {
+            // Every instance waits on the shared per-URL bake — not just the
+            // one that started it — or clones made mid-bake stay matte.
             gunmetalBake.get(url)!.then((): void => {
               if (!this._disposed) {this.model?.traverse((o): void => { if ((o as THREE.Mesh).isMesh) {this.mats.rearm(o as THREE.Mesh);}});}
             });

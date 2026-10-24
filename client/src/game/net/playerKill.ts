@@ -12,6 +12,7 @@ import { lifestealBurst } from '../../effects/vfx.js';
 import { TEAM_COLORS, type TeamId } from '../../../../shared/teams.js';
 import { displayName } from '../nameOf.js';
 import { noteKill } from '../../core/stateDebug.js';
+import { noteCorpseFling } from './pickups.js';
 import type { RemotePlayer } from '../../entities/RemotePlayer.js';
 import type { NetCtx } from './ctx.js';
 
@@ -21,6 +22,14 @@ const STREAK_NAMES: [number, string][] = [
   [30, 'WICKED SICK'], [25, 'GODLIKE'], [20, 'UNSTOPPABLE'], [15, 'DOMINATING'],
   [10, 'RAMPAGE'], [5, 'KILLING SPREE'],
 ];
+
+/** Full-gib budget: the mesh path (bakeDeathParts) is ~20 unique geos +
+ *  matrix writes — one kill costs ~7ms on a hot frame, and a dogpile of
+ *  chained kills stacks them into a visible hitch. Space the heavy path
+ *  to one per 250ms; kills inside the window fall back to the ragdoll
+ *  (which still plays regardless) + a light shard puff. */
+let lastFullGibAt = 0;
+const FULL_GIB_GAP_MS = 250;
 
 /** Victim fx: ragdoll with the blast's impulse, capsule-shard gibs in the
  *  team color, then hide the model and strip HUD markers. */
@@ -39,6 +48,10 @@ function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlaye
 
   // Play death animation (ragdoll physics with explosion impulse)
   remotePlayer.playDeath(explosionPos, explosionForce);
+  // Loot scatters at wire truth but this corpse fell at the RENDERED
+  // pos — pickups.ts flings its nuggets from here to the server rest
+  // spots so the drop reads as bursting out of the body you saw die.
+  noteCorpseFling(remotePlayer.position);
 
   // Shatter like the creatures do: shards burst off the capsule shell,
   // carry the blast direction through the body, and inherit whatever
@@ -64,8 +77,11 @@ function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlaye
   const cam = deps.lazyPlayer().pos;
   const gdx = remotePlayer.position.x - cam.x, gdy = centerY - cam.y, gdz = remotePlayer.position.z - cam.z;
   const nearEnough = gdx * gdx + gdy * gdy + gdz * gdz < 120 * 120;
+  const now = performance.now();
+  const fullGib = now - lastFullGibAt >= FULL_GIB_GAP_MS;
+  if (fullGib) {lastFullGibAt = now;}
   let parts: { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] | undefined = undefined;
-  if (nearEnough) {
+  if (nearEnough && fullGib) {
     try { parts = remotePlayer.model.deathParts() ?? undefined; }
     catch { /* fall through to generic shards */ }
   }
@@ -73,7 +89,7 @@ function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlaye
     deps.lazyScene(), deps.lazyTerrain(),
     { x: remotePlayer.position.x, y: centerY, z: remotePlayer.position.z },
     new THREE.Color(team ? TEAM_COLORS[team] : 0x88_99_AA),
-    { impulseDir, inheritVel: remotePlayer.vel, parts },
+    { impulseDir, inheritVel: remotePlayer.vel, parts, shardGeos: parts?.map((p) => p.geo), count: fullGib ? undefined : 6, smoke: fullGib },
   ));
 
   remotePlayer.hide();

@@ -151,12 +151,12 @@ else if (scores.alpha > scores.bravo) {lead = 'alpha';}
     const mine = meta?.actor === nm().getLocalPlayerId();
     if (mine && (meta?.multi ?? 0) >= 2) {
       const banner = MULTI_BANNER[meta!.multi!] ?? `${meta!.multi}x MULTI KILL`;
-      deps.fragMessages.show(banner);
+      deps.fragMessages.stackKill(banner);
       speakAnnounce(banner, multiClip(meta!.multi!));
     } else if (meta?.ann && ANNOUNCE[meta.ann]) {
       const a = ANNOUNCE[meta.ann]!;
       speakAnnounce(a.banner, a.clip);
-      if (mine) {deps.fragMessages.showKill(a.banner);}
+      if (mine) {deps.fragMessages.stackKill(a.banner);}
     }
     return chat.add(null, text);
   };

@@ -151,8 +151,14 @@ export class RoomPickups {
           // convex ground the flat triangles dip below the bilinear patch,
           // so a field-rested gem hangs visibly midair (JP's report).
           const gy = this.room.field ? Math.max(hmHeight(this.room.field, p.pos.x, p.pos.z), hmChord(this.room.field, p.pos.x, p.pos.z)) + NUG_TUMBLE.groundLift : p.pos.y;
-          if (p.pos.y < gy) { p.pos.y = gy; p.vel.y = 0; }
-          p.vel.x *= bleed; p.vel.z *= bleed; p.vel.y *= bleed;
+          if (p.pos.y < gy) {
+            p.pos.y = gy;
+            // Bounce, not stick: a falling gem hops (vy reflects), only a
+            // near-rest contact actually grounds it. Bleed stays off vy —
+            // a vertical airbrake is what made drops read floaty.
+            p.vel.y = p.vel.y < -NUG_TUMBLE.settle ? -p.vel.y * NUG_TUMBLE.restitution : 0;
+          }
+          p.vel.x *= bleed; p.vel.z *= bleed;
           if (Math.abs(p.vel.x) < NUG_TUMBLE.settle && Math.abs(p.vel.z) < NUG_TUMBLE.settle && Math.abs(p.vel.y) < NUG_TUMBLE.settle) {
             p.vel.z = 0;
             p.vel.y = p.vel.z;
