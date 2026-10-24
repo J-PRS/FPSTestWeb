@@ -39,18 +39,31 @@ type Ev =
 
 /** Drop every queued tick frame but the newest — a stall backlog replays
  *  history the server already superseded. Returns the filtered list,
- *  preserving order of everything else. */
-export function coalesceTickFrames(evs: Ev[]): Ev[] {
+ *  preserving order of everything else.
+ *
+ *  BUT: a tick frame isn't one position — it's every player's records
+ *  for that tick. Dropping a frame starves the interp buffer of the
+ *  intermediate snapshots it interpolates between, which reads as
+ *  rubber-banding on a healthy link. Only coalesce when the backlog is
+ *  deep enough that the oldest frame is stale anyway (>3 queued ticks
+ *  ≈ >150ms behind); 2-3 frame batches play through in order instead. */
+export function coalesceTickFrames(evs: Ev[], stalled: boolean): Ev[] {
   let lastTick = -1;
   let maxSeq = -1;
+  let tickCount = 0;
   for (let i = 0; i < evs.length; i += 1) {
     const e = evs[i]!;
     if (e.kind === 'ev' && e.b !== undefined && e.b.length >= 10 && e.b[0] === MAGIC && TICK_KINDS.has(e.b[1]!)) {
+      tickCount += 1;
       const seq = new DataView(e.b.buffer, e.b.byteOffset).getUint32(6, true);
       if (seq > maxSeq) { maxSeq = seq; lastTick = i; }
     }
   }
-  if (lastTick < 0) {return evs;}
+  // Only coalesce a REAL stall — backlog measured against the drain's own
+  // cadence, not a fixed depth. A busy-but-healthy burst (>3 frames from a
+  // coalesced server batch) plays through; dropping it starves the interp
+  // buffer and reads as rubber-banding — the fixed ">3" guessed wrong.
+  if (!stalled || lastTick < 0 || tickCount <= 3) {return evs;}
   return evs.filter((e, i): boolean => {
     if (e.kind !== 'ev' || e.b === undefined || i === lastTick) {return true;}
     return !(e.b.length >= 10 && e.b[0] === MAGIC && TICK_KINDS.has(e.b[1]!));
@@ -68,6 +81,8 @@ export class WorkerTransport implements GameTransport {
   private innerTier: string | undefined;
   private pending: Ev[] = [];
   private drainTimer: ReturnType<typeof setTimeout> | null = null;
+  private drainGapEma = 16;
+  private lastDrainAt = 0;
   private coalesced = 0;
 
   constructor(private readonly config: ConnectionConfig) {
@@ -163,7 +178,16 @@ export class WorkerTransport implements GameTransport {
     // out by reference first or clearing pending would drain `evs` too.
     const {pending} = this;
     this.pending = [];
-    const evs = coalesceTickFrames(pending);
+    // A stall is measured, not guessed: this drain ran >3x the observed
+    // drain cadence late (main-thread hitch, GC, tab jank). Normal batched
+    // delivery lands at-cadence and keeps every frame — the fixed ">3
+    // backlog" guess dropped healthy bursts and read as rubber-banding.
+    const drainAt = performance.now();
+    const drainGap = this.lastDrainAt > 0 ? drainAt - this.lastDrainAt : 16;
+    this.lastDrainAt = drainAt;
+    const stalled = drainGap > Math.max(100, this.drainGapEma * 3);
+    this.drainGapEma += (Math.min(drainGap, 1000) - this.drainGapEma) * 0.1;
+    const evs = coalesceTickFrames(pending, stalled);
     this.coalesced += pending.length - evs.length;
     // Time-slice the dispatch: a reclaim replay delivers ~1024 events in
     // one burst — one unbounded macrotask hitched the frame at exactly

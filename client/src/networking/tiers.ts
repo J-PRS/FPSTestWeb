@@ -113,8 +113,8 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
     // session dead directly instead of hoping channel 'close' events fire.
     // oxlint-disable-next-line no-use-before-define -- class declared below; only instantiated at call time
     return new ServerRtcTransport(dc, config, conn, ctrl);
-  } catch (e) {
-    logger.warn('rtc probe failed', { err: e instanceof Error ? e.message : String(e) });
+  } catch (error) {
+    logger.warn('rtc probe failed', { err: error instanceof Error ? error.message : String(error) });
     // Failed probe — the ICE/DTLS machinery keeps running without this.
     try { pc?.close(); } catch { /* gone */ }
     // The signal ws leaks otherwise: closing while CONNECTING trips
@@ -166,7 +166,7 @@ export async function connectGameTransport(config: ConnectionConfig, opts?: Tier
   const capped = (p: Promise<GameTransport | null>, ms: number, name: string): Promise<GameTransport | null> => {
     const guarded = p.then(
       (t): GameTransport | null => { if (capExpired) { t?.disconnect(); return null; } return t; },
-      (e: unknown): null => { logger.warn(`${name} probe threw`, { err: e instanceof Error ? e.message : String(e) }); return null; },
+      (error: unknown): null => { logger.warn(`${name} probe threw`, { err: error instanceof Error ? error.message : String(error) }); return null; },
     );
     return Promise.race([guarded, new Promise<null>((res): void => { setTimeout((): void => res(null), ms); })]);
   };
@@ -189,6 +189,16 @@ export async function connectGameTransport(config: ConnectionConfig, opts?: Tier
 // in Chrome (cap: 64 per profile). Retrying every reconnect tick exhausts
 // QUIC cap ("Too many pending WebTransport sessions") and the transport starts
 const missUntil = { wt: 0, rtc: 0 };
+// Per-tier bench streak: a repeated flap doubles the bench (cap 4 min),
+// a proven-healthy session halves it via rewardTier — a flat 30s both
+// under-deters a flapping tier and over-punishes a spurious one.
+const benchStreak = { wt: 0, rtc: 0 };
+
+/** Called when a tier carries live traffic past its warmup — decays the
+ *  bench streak so one spurious flap doesn't lock a good lane out. */
+export function rewardTier(tier: 'wt' | 'rtc'): void {
+  benchStreak[tier] = Math.max(0, benchStreak[tier] - 1);
+}
 
 /** Session-level bench — the flap breaker only sees onDisconnect, but a
  *  lane can die WITHOUT it: the zombie WT sessions the soak hits die
@@ -198,7 +208,9 @@ const missUntil = { wt: 0, rtc: 0 };
  *  and calls this so the forced re-probe lands on WS, not back on the
  *  same dead tier. */
 export function benchTier(tier: 'wt' | 'rtc', ms?: number): void {
-  missUntil[tier] = Date.now() + (ms ?? MISS_CACHE_MS);
+  const dur = ms ?? Math.min(MISS_CACHE_MS * 2 ** benchStreak[tier], 240_000);
+  benchStreak[tier] += 1;
+  missUntil[tier] = Date.now() + dur;
 }
 
 /**

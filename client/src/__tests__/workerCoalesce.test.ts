@@ -24,28 +24,35 @@ const b = (u8: Uint8Array): { kind: "ev"; b: Uint8Array<ArrayBufferLike>; at: nu
 
 describe('coalesceTickFrames', (): void => {
   it('keeps only the newest tick frame in a backlog', (): void => {
-    const evs = [b(tickFrame(10)), j('playerHit'), b(tickFrame(12)), b(tickFrame(11)), j('chat')];
-    const out = coalesceTickFrames(evs);
+    const evs = [b(tickFrame(10)), j('playerHit'), b(tickFrame(12)), b(tickFrame(11)), b(tickFrame(13)), j('chat')];
+    const out = coalesceTickFrames(evs, true);
     expect(out).toHaveLength(3);
     expect(out[0]).toEqual(j('playerHit'));
-    expect(new DataView((out[1] as { b: Uint8Array }).b.buffer).getUint32(6, true)).toBe(12);
+    expect(new DataView((out[1] as { b: Uint8Array }).b.buffer).getUint32(6, true)).toBe(13);
     expect(out[2]).toEqual(j('chat'));
   });
 
   it('passes through non-tick frames and order', (): void => {
     const evs = [b(segFrame()), b(segFrame()), j('gameState')];
-    expect(coalesceTickFrames(evs)).toHaveLength(3);
+    expect(coalesceTickFrames(evs, true)).toHaveLength(3);
   });
 
   it('single tick survives unchanged', (): void => {
     const evs = [b(tickFrame(7))];
-    expect(coalesceTickFrames(evs)).toHaveLength(1);
+    expect(coalesceTickFrames(evs, true)).toHaveLength(1);
   });
 
   it('keeps the last-positioned newest tick, not an earlier-seq one', (): void => {
-    const evs = [b(tickFrame(20)), b(tickFrame(15))];
-    const out = coalesceTickFrames(evs);
+    const evs = [b(tickFrame(20)), b(tickFrame(15)), b(tickFrame(18)), b(tickFrame(19))];
+    const out = coalesceTickFrames(evs, true);
     expect(out).toHaveLength(1);
     expect(new DataView((out[0] as { b: Uint8Array }).b.buffer).getUint32(6, true)).toBe(20);
+  });
+});
+
+describe('unstalled drain', (): void => {
+  it('keeps every tick frame — only a real stall coalesces', (): void => {
+    const evs = [b(tickFrame(10)), j('playerHit'), b(tickFrame(12)), b(tickFrame(11)), j('chat')];
+    expect(coalesceTickFrames(evs, false)).toHaveLength(5);
   });
 });

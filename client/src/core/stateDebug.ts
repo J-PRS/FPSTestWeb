@@ -1441,7 +1441,13 @@ hashMismatchCount += 1;
 
           if (sp.id === localId) {
 
-            if (!player.isDead && Number.isFinite(sp.health) && Math.abs(player.health - sp.health) > 0.5) {player.health = sp.health;}
+            // The hash snapshot is a tick-interval stale — applying it
+            // over an event-driven write (playerHit/yourHealth <1s ago)
+            // resurrects the older hp, then the next echo 'drops' it
+            // back and warns. Fresh events win; the heal only patches
+            // drift older than the snapshot window itself.
+            const hashHealthFresh = Date.now() - networkManager.lastHealthEventAt < 1000;
+            if (!player.isDead && !hashHealthFresh && Number.isFinite(sp.health) && Math.abs(player.health - sp.health) > 0.5) {player.health = sp.health;}
 
             continue;
 

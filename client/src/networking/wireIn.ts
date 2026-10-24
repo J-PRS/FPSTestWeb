@@ -368,7 +368,10 @@ this.handlerThrows += 1;
     playerRespawn: (data): void => this.handlePlayerRespawn(data),
     playerHit: (data): void => this.handlePlayerHit(data),
     buff: (data): void | undefined => this.h.onBuff?.(data),
-    yourHealth: (data): void | undefined => this.h.onYourHealth?.(data.health, data.armor),
+    yourHealth: (data): void => {
+      this.h.lastHealthEventAt = Date.now();
+      this.h.onYourHealth?.(data.health, data.armor);
+    },
     yourCharge: (data): void | undefined => this.h.onYourCharge?.(data.charge),
     playerKill: (data): void => this.handlePlayerKill(data),
     knockback: (data): void | undefined => this.h.onKnockback?.(data.position, data.force, data.pull, data.yank),
@@ -619,6 +622,7 @@ dedupCensus.hitSeqDrops += 1;
     }
     checkHit(data.shotId, data.targetId, data.seq, data.damage);
     recHit(data.shooterId, data.targetId, data.damage, wasPredicted);
+    if (data.targetId === this.h.getLocalPlayerId()) {this.h.lastHealthEventAt = Date.now();}
     // Update REMOTE player health in storage (local player health handled
     // by callback). A processed hit also proves the server holds the target
     // alive — it never lands a hit on a dead player — so a record still

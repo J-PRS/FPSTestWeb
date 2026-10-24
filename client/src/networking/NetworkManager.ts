@@ -3,7 +3,7 @@ import { encodePosition, encodeInputMove, encodeWireJson, encodePosClaim, encode
 import type { ClientMessage, ServerMessage, GameStatePlayer, LocalPlayerState, SnapshotPlayer, TransportKind } from '../../../shared/protocol.js';
 import type { PickupKind } from '../../../shared/pickups.js';
 import type { DeployKind } from '../../../shared/deployables.js';
-import { TieredTransport, benchTier } from './tiers.js';
+import { TieredTransport, benchTier, rewardTier } from './tiers.js';
 import { WorkerTransport } from './WorkerTransport.js';
 import type { GameTransport, TransportFactory } from './transport.js';
 import { NetTelemetry } from './netTelemetry.js';
@@ -80,6 +80,7 @@ export class NetworkManager {
    *  skip join-race echoes (events that happened before prediction
    *  existed can't be "unpredicted"). */
   private connectedAtMs = 0;
+  private tierRewarded = false;
   msSinceConnect(): number { return Date.now() - this.connectedAtMs; }
   /** ms since the last non-inputSync inbound — wire starvation clock.
    *  Stamps/expiry horizons that outlive a silent wire must not expire
@@ -130,6 +131,11 @@ export class NetworkManager {
   /** Server-owned heal echo (regen/mend/powerup tick in the sim) — keeps
    *  local hp converged between discrete hit events. */
   public onYourHealth: ((health: number, armor?: number) => void) | null = null;
+  /** Wall time of the last event-driven health write (playerHit or
+   *  yourHealth). The stateHash-diff heal defers to it — its snapshot is
+   *  a tick-interval stale and must not resurrect an older hp over a
+   *  fresher event (the 'hp drop' ping-pong that warns). */
+  public lastHealthEventAt = 0;
   public onYourCharge: ((charge: number) => void) | null = null;
   public onPickupGone: ((id: number, by: string | null) => void) | null = null;
   public onFfaScore: ((scores: Record<string, number>, winAt: number) => void) | null = null;
@@ -245,6 +251,8 @@ export class NetworkManager {
    *  worker spawn, dead endpoint) must not hot-loop a 1Hz retry. */
   private retryAt = 0;
   private retryStreak = 0;
+  private workerCrashStreak = 0;
+  private crashWarned = false;
   /** Set when isConnected() first reads false — the 10s arm before the
    *  outer respawn so an inner lane's own reconnect always wins. */
   private deadSince: number | null = null;
@@ -309,6 +317,7 @@ export class NetworkManager {
             });
             this.connected = true;
             this.connectedAtMs = Date.now();
+            this.tierRewarded = false;
             // A fresh socket counts as alive until proven silent — the
             // inner transport's own reconnect doesn't re-stamp this, so
             // without it the stall watchdog inherited the DEAD lane's
@@ -316,6 +325,8 @@ export class NetworkManager {
             // its onConnect.
             this.lastRxAt = Date.now();
             this.retryStreak = 0;
+            this.workerCrashStreak = 0;
+            this.crashWarned = false;
             this.hasLoggedConnectionError = false;
             logger.info(`Connected as ${this.localPlayerId}`);
             this.lastDownReason = null;
@@ -333,6 +344,10 @@ export class NetworkManager {
             // differently than a dead pipe — the banner names it.
             this.lastDownReason = code !== undefined && code >= 1000 && reason ? reason : null;
             logger.info('Disconnected', { code, reason });
+            // Module-load failures (dead vite serving the page) fire a
+            // blank worker 'error' before any worker code runs — every
+            // outer reconnect spawns another doomed worker forever.
+            this.workerCrashStreak = reason === 'net worker crashed' ? this.workerCrashStreak + 1 : 0;
             this.connected = false;
             this.wireIn.resetForReconnect(); // a reconnect starts fresh seq spaces
             this.inputs.reset(); // journaled inputs + change-only edge state die with the lane
@@ -407,6 +422,16 @@ export class NetworkManager {
     // attempt): a live transport re-seating itself must never race a
     // fresh outer connect (the parallel-join flood).
     if (!this.isConnected() && this.onlineExpected && this.lastUrl) {
+      // A worker that never reports 'up' means the page's backend is
+      // gone — no transport retry can fix an unfetchable module; stop
+      // spawning doomed workers and say so once.
+      if (this.workerCrashStreak >= 3) {
+        if (!this.crashWarned) {
+          this.crashWarned = true;
+          logger.error('net worker failed to spawn 3× — the page backend (vite) is unreachable; reload the tab to retry');
+        }
+        return;
+      }
       this.deadSince ??= Date.now();
       const now = Date.now();
       if (now - this.deadSince >= 10_000 && now >= this.retryAt) {
@@ -462,7 +487,17 @@ export class NetworkManager {
     const ticksFlowing = (now2 - Math.max(this.lastRxAt, this.ws?.probe?.lastRxAt ?? 0)) < NetworkManager.STALL_MS;
     const laneNeverOpened = this.wireIn.lastLiveRxAt === 0 && ticksFlowing && this.connectedAtMs > 0 && (now2 - this.connectedAtMs) > NetworkManager.JSON_STALL_MS;
     const laneDead = liveSilent > NetworkManager.JSON_STALL_MS || laneNeverOpened;
-    if (!laneDead && (lastRx === 0 || silent < NetworkManager.STALL_MS)) {return;}
+    if (!laneDead && (lastRx === 0 || silent < NetworkManager.STALL_MS)) {
+      // Healthy session proved itself past the warmup — decay the tier's
+      // bench streak once per connect so a later spurious flap doesn't
+      // inherit punishment for sessions that were fine.
+      const t = this.ws?.tier;
+      if (!this.tierRewarded && (t === 'wt' || t === 'rtc') && this.msSinceConnect() > 30_000) {
+        this.tierRewarded = true;
+        rewardTier(t);
+      }
+      return;
+    }
     logger.warn(laneDead
       ? `inbound lane dead ${Math.round(liveSilent)}ms - only inputSync trickles, reprobing`
       : `no server traffic in ${Math.round(silent)}ms - socket silent, reprobing`, { tier: this.ws?.tier });
