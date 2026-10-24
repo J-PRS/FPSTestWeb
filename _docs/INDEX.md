@@ -39,6 +39,7 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-10-23_HUMANOID_GENERATION.md` | Agentic humanoid generation survey — primitive-plate generators, Blender-agent loops, parametric bodies (MPFB/SMPL), Dust3D implicit graph, AI text-to-3D, auto-riggers (Pinocchio→Make-It-Animatable); ranked for our rig/style |
 | `_docs/2026-10-24_CCU_RESOURCE_BREAKDOWN.md` | Single-process CCU soak ladder (32→1024) + full resource breakdown: CPU, tick, memory, ingress/egress, event-loop delay; egress is the binding constraint |
 | `_docs/2026-10-24_MINIMIZING_PER_ROOM_OVERHEAD.md` | Per-room overhead minimization for many small matches: multi-match rooms, sim gating, flattened tick path, hibernation, sharding; ordered by impact |
+| `_docs/2026-10-24_GUNMETAL_BODY_BAKE.md` | Weapon wear/grime bake on body rigs — the cm-scale hang, uObjScale fix, clone re-arm, and per-asset tuning knobs |
 | `_docs/2026-10-24_PROFILING_HOTSPOTS.md` | 512-player soak CPU profile: phase + function hotspots; send/fanout/encoding dominate; prioritized optimization roadmap |
 
 ## Agent memory (append-only, one line each)
