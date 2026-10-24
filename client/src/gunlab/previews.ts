@@ -510,8 +510,8 @@ export const CLASSES: [label: string, build: () => THREE.Group][] = [
     ['juggernaut_shell' as PlayerModelVariant, 8.8, 'shell', 3, 'heavy', false],
   ], 1.1, 19, 1.1)],
   ['Light Lineup', mkLineup([
-    ['scout' as PlayerModelVariant, -2.2, 'scout', 2, 'light', false, CLASS_MODEL_SCALE.scout],
-    ['brawler' as PlayerModelVariant, 0, 'brawler', 2.4, 'medium', false, CLASS_MODEL_SCALE.brawler],
+    ['scout' as PlayerModelVariant, -2.2, 'scout', 2, 'light', false],
+    ['brawler' as PlayerModelVariant, 0, 'brawler', 2.4, 'medium', false],
     ['light_scp' as PlayerModelVariant, 2.2, 'lt scp', 2.4, 'light', false],
   ], 0, 6.5, 0)],
   ['dreadnought', mkLineup([['dreadnought' as PlayerModelVariant, SOLO_X, 'dreadnought', 3, 'heavy', false]])],
