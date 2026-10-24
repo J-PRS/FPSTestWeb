@@ -35,7 +35,7 @@ const gunmetalBaked = new Set<string>();
 
 export type { AnimationState } from './playerClips.js';
 
-export type PlayerModelVariant = 'robot' | 'mannequin' | 'knight' | 'scifisoldier' | 'cybersoldier' | 'vexa' | 'polyart' | 'brute' | 'juggernaut' | 'juggernaut_og' | 'juggernaut_brick' | 'juggernaut_wedge' | 'dreadnought' | 'brawler' | 'scout';
+export type PlayerModelVariant = 'robot' | 'mannequin' | 'knight' | 'scifisoldier' | 'cybersoldier' | 'vexa' | 'polyart' | 'brute' | 'juggernaut' | 'juggernaut_og' | 'juggernaut_brick' | 'juggernaut_wedge' | 'juggernaut_bld' | 'dreadnought' | 'brawler' | 'scout';
 
 export class PlayerModel {
   private scene: THREE.Scene;

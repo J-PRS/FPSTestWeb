@@ -499,11 +499,12 @@ export const CLASSES: [label: string, build: () => THREE.Group][] = [
   ['juggernaut', mkLineup([['juggernaut' as PlayerModelVariant, SOLO_X, 'juggernaut', 3, 'heavy', false]])],
   ['jugg og', mkLineup([['juggernaut_og' as PlayerModelVariant, SOLO_X, 'jugg og', 3, 'heavy', false]])],
   ['jugg vs og', mkLineup([
-    // Technique row: plates, SDF, all-box brick, all-cone wedge.
-    ['juggernaut' as PlayerModelVariant, -3.6, 'jugg', 3, 'heavy', false],
-    ['juggernaut_og' as PlayerModelVariant, -1.2, 'og', 3, 'heavy', false],
-    ['juggernaut_brick' as PlayerModelVariant, 1.2, 'brick', 3, 'heavy', false],
-    ['juggernaut_wedge' as PlayerModelVariant, 3.6, 'wedge', 3, 'heavy', false],
+    // Technique row: plates, SDF, brick, bell-wedge, blender-built.
+    ['juggernaut' as PlayerModelVariant, -4.4, 'jugg', 3, 'heavy', false],
+    ['juggernaut_og' as PlayerModelVariant, -2.2, 'og', 3, 'heavy', false],
+    ['juggernaut_brick' as PlayerModelVariant, 0, 'brick', 3, 'heavy', false],
+    ['juggernaut_wedge' as PlayerModelVariant, 2.2, 'wedge', 3, 'heavy', false],
+    ['juggernaut_bld' as PlayerModelVariant, 4.4, 'bld', 3, 'heavy', false],
   ], -0.6, 9.6, 0)],
   ['dreadnought', mkLineup([['dreadnought' as PlayerModelVariant, SOLO_X, 'dreadnought', 3, 'heavy', false]])],
   ['brawler', mkLineup([[BRAWLER_ENTRY[0], SOLO_X, 'brawler', 2.4, 'medium', false]])],
