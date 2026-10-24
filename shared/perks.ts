@@ -67,7 +67,7 @@ export const PERKS: Record<PerkId, { name: string; blurb: string; mods: Partial<
   none:        { name: 'No Perk',     blurb: '', mods: {} },
   featherjets: { name: 'Featherjets', blurb: 'Jets burn 20% less', mods: { jetDrain: 0.8 } },
   plated:      { name: 'Plated',      blurb: 'Take 25% less damage below 80% health', mods: { damageResist: 0.25 } },
-  lifesteal:   { name: 'Lifesteal',   blurb: 'Melee kills heal you to full', mods: { meleeHeal: 1 } },
+  lifesteal:   { name: 'Lifesteal',   blurb: 'Melee kills heal to full, shocklance kills half', mods: { meleeHeal: 1 } },
   regenerator: { name: 'Regenerator', blurb: 'Regenerate up to 4 hp/s — kicks in after 5s unhurt, then ramps', mods: { regenRamp: 0.4 } },
   overcharge:  { name: 'Overcharge',  blurb: 'Energy recharges 50% faster', mods: { energyRegen: 1.5 } },
   sharpshooter:{ name: 'Sharpshooter',blurb: '+20% direct hits, −40% blast radius', mods: { directDamage: 1.2, aoeRadius: 0.6 } },

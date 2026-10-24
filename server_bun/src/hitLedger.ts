@@ -163,14 +163,17 @@ export class HitLedger {
     // kills++/killTotal must agree or suicides pad the scoreboard and
     // can even fake "first blood".
     if (shooterId !== 'environment' && shooterId !== targetId) {c.playerManager.addKill(shooterId);}
-    // Lifesteal: a melee frag pays the kill back as health. Every hit
-    // still deals its listed damage — the survivability only lands on
-    // the kill edge, so hits-to-kill stays countable.
+    // Lifesteal: a melee frag pays the kill back as health (lance frags
+    // pay half — the zap is easier than the punch but still a closing
+    // weapon). Every hit still deals its listed damage — the
+    // survivability only lands on the kill edge, so hits-to-kill stays
+    // countable.
     let steal = false;
-    if (opts.weapon === WeaponType.Melee && shooterId !== 'environment' && shooterId !== targetId) {
+    const stealFrac = opts.weapon === WeaponType.Melee ? 1 : opts.weapon === WeaponType.Shocklance ? 0.5 : 0;
+    if (stealFrac > 0 && shooterId !== 'environment' && shooterId !== targetId) {
       const shooter = c.playerManager.getPlayer(shooterId);
       const mh = shooter ? perkMods(shooter.perk).meleeHeal : 0;
-      if (shooter && mh > 0 && !shooter.isDead) {healPool(shooter, shooter.maxHealth * mh); steal = true;}
+      if (shooter && mh > 0 && !shooter.isDead) {healPool(shooter, shooter.maxHealth * mh * stealFrac); steal = true;}
     }
     if (logger.enabled('info')) {logger.info(`${opts.label} → kill`, Object.assign({}, {shooter: shooterId,target: targetId,damage}, opts.extra));}
     const shooterStreak = shooterId === 'environment' ? undefined

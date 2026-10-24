@@ -132,19 +132,20 @@ export function botKilledF(b: TeamBots, killerId: string, bot: GameBot, weapon?:
     b.deps.world.deathCounts.set(bot.playerId, (b.deps.world.deathCounts.get(bot.playerId) ?? 0) + 1);
     b.creditKill(killerId, false, bot.position);
     // Lifesteal — the server's creditKill rule mirrored for local
-    // authority: a melee frag refills the killer's pool.
-    if (weapon === WeaponType.Melee) {
+    // authority: a melee frag refills the killer's pool, a lance frag half.
+    const stealFrac = weapon === WeaponType.Melee ? 1 : weapon === WeaponType.Shocklance ? 0.5 : 0;
+    if (stealFrac > 0) {
       if (killerId === 'local') {
         const p = b.deps.lazyPlayer();
         if (p.mods.meleeHeal > 0) {
-          p.health = Math.min(p.maxHealth, p.health + p.maxHealth * p.mods.meleeHeal);
+          p.health = Math.min(p.maxHealth, p.health + p.maxHealth * p.mods.meleeHeal * stealFrac);
           _stealPos.copy(p.pos); _stealPos.y -= 0.4; lifestealBurst(_stealPos);
         }
       } else {
         const kb = b.bots.find((x): boolean => x.playerId === killerId);
         const mh = kb?.perkMods.meleeHeal ?? 0;
         if (kb && mh > 0) {
-          kb.heal(kb.botMaxHp * mh);
+          kb.heal(kb.botMaxHp * mh * stealFrac);
           _stealPos.copy(kb.position); _stealPos.y -= 0.4; lifestealBurst(_stealPos);
         }
       }
