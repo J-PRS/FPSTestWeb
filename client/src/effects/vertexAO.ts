@@ -482,7 +482,10 @@ function bakeWearTexture(geo: THREE.BufferGeometry, us = 1): void {
     const [ax, ay] = toUV(r.t, r.a);
     const [bx, by] = toUV(r.t, r.b);
     const wlen = _wA.fromBufferAttribute(pos, r.a).distanceTo(_wB.fromBufferAttribute(pos, r.b)) * us;
-    const pieces = Math.min(512, Math.max(2, Math.ceil(wlen / 0.004)));
+    // Pieces exist only so the noise can fade segments — 64 is plenty of
+    // granularity; on scaled rigs (us<1) uncapped counts ran to 250k+
+    // real ctx.stroke calls and froze the tab.
+    const pieces = Math.min(64, Math.max(2, Math.ceil(wlen / 0.004)));
     const lwCore = Math.max(1, WEAR_LINE * 2 * triScale[r.t]);
     for (let k = 0; k < pieces; k += 1) {
       const t0 = k / pieces, t1 = (k + 1) / pieces;
