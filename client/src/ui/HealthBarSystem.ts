@@ -417,7 +417,11 @@ export class HealthBarSystem {
     const damageRatio = Math.min(1 - healthRatio, bar.damage / bar.maxHealth);
 
     bar.healthEl.style.width = `${BAR_WIDTH * healthRatio}px`;
-    if (bar.armorEl) {
+    if (bar.armorEl?.classList.contains('player-armor')) {
+      // In-bar segment: gold tail starting where health ends. Repair-bar
+      // slivers (class 'armor', under-bar cyan) own their geometry in the
+      // repair loop — writing left=healthRatio here AND width=armor/cap
+      // there made the sliver overshoot the bar's right edge.
       bar.armorEl.style.display = armor > 0.5 ? 'block' : 'none';
       bar.armorEl.style.left = `${BAR_WIDTH * healthRatio}px`;
       bar.armorEl.style.width = `${BAR_WIDTH * armorRatio}px`;

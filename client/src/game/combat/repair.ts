@@ -74,7 +74,10 @@ export function createRepair(deps: CombatDeps) {
     }
     st.lastFire = performance.now();
     const hit = repairTrace(deps, cam);
-    st.beamTo.copy(_o).addScaledVector(_d, hit.hitT);
+    // Cone-assist welds: the beam bends to the ITEM, not the ray point —
+    // tip stops short otherwise and the weld reads as a near-miss.
+    if (hit.item) {st.beamTo.set(hit.item.pos.x, hit.item.pos.y + 0.7, hit.item.pos.z);}
+    else {st.beamTo.copy(_o).addScaledVector(_d, hit.hitT);}
     if (hit.item) {
       // Predicted heal — the deployHp echo lands the same number; an
       // unreachable claim just snaps back on the next broadcast.
@@ -95,7 +98,8 @@ export function createRepair(deps: CombatDeps) {
     const cam = deps.lazyCamera();
     muzzle(cam);
     const hit = repairTrace(deps, cam);
-    st.beamTo.copy(_o).addScaledVector(_d, hit.hitT);
+    if (hit.item) {st.beamTo.set(hit.item.pos.x, hit.item.pos.y + 0.7, hit.item.pos.z);}
+    else {st.beamTo.copy(_o).addScaledVector(_d, hit.hitT);}
     st.beam.fire(_muzzle, st.beamTo, cam.position, hit.item !== null, hit.item !== null);
   }
 

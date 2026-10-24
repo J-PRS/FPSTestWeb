@@ -383,19 +383,30 @@ export class RoomDeployables {
   repairTarget(playerId: string, muzzle: Vec3, dir: Vec3, range: number): number | null {
     const p = this.room.players.getPlayer(playerId);
     if (!p || p.isDead) {return null;}
-    let best: number | null = null;
-    let bestT = range;
+    // Weld assist: the beam bends ~5° toward the weldable nearest the
+    // crosshair — a thin antenna on a sensor at 40m is a pixel-wide
+    // target under a flat 1.1m capsule. Direct capsule hits still win;
+    // cone candidates pick the smallest angular offset.
+    const CONE_SIN = 0.0872; // sin(5°) — ang off-axis the beam bends
+    let bestDirect: number | null = null;
+    let bestDirectT = range;
+    let bestCone: number | null = null;
+    let bestConeAng = Infinity;
     for (const d of this.items.values()) {
       const cx = d.pos.x - muzzle.x, cy = d.pos.y + 0.7 - muzzle.y, cz = d.pos.z - muzzle.z;
       const proj = cx * dir.x + cy * dir.y + cz * dir.z;
-      if (proj < 0 || proj > bestT) {continue;}
+      if (proj < 0 || proj > range) {continue;}
       const perp2 = (cx * cx + cy * cy + cz * cz) - proj * proj;
-      if (perp2 >= 1.1 * 1.1) {continue;}
       if (!this.weldable(p, d, playerId)) {continue;}
-      const entry = proj - (1.1 * 1.1 - perp2) ** 0.5;
-      if (entry < bestT) { bestT = Math.max(entry, 0); best = d.id; }
+      if (perp2 < 1.1 * 1.1) {
+        const entry = Math.max(proj - (1.1 * 1.1 - perp2) ** 0.5, 0);
+        if (entry < bestDirectT) { bestDirectT = entry; bestDirect = d.id; }
+        continue;
+      }
+      const ang = perp2 / (proj * proj); // sin²θ — cone test needs no sqrt
+      if (ang < bestConeAng && ang < CONE_SIN * CONE_SIN) { bestConeAng = ang; bestCone = d.id; }
     }
-    return best;
+    return bestDirect ?? bestCone;
   }
 
   /** Repair-tool beam tick on a friendly deployable: heal to base, then

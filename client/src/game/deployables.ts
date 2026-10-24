@@ -528,21 +528,33 @@ export class Deployables {
    *  repaired by a human at all (server accepted the claims; the ray
    *  just never found a target). */
   repairHit(origin: THREE.Vector3, dir: THREE.Vector3, range: number): { item: Item; t: number } | null {
-    let best: Item | null = null;
-    let bestT = range;
+    // Mirrors the server's repairTarget assist — ~5° cone so the beam
+    // visual lands on the same weldable the server picks. Direct
+    // capsule hits beat cone candidates.
+    const CONE_SIN = 0.0872;
+    let bestDirect: Item | null = null;
+    let bestDirectT = range;
+    let bestCone: Item | null = null;
+    let bestConeAng = Infinity;
+    let bestConeT = range;
     for (const list of [this.items, this.remotes.values()]) {for (const i of list) {
       if (i.dead) {continue;}
       _repTo.copy(i.pos).sub(origin);
       _repTo.y += 0.7; // body center — turret mast / pad crystal / drone hull
       const proj = _repTo.dot(dir);
-      if (proj < 0 || proj > bestT) {continue;}
+      if (proj < 0 || proj > range) {continue;}
       const perp2 = _repTo.lengthSq() - proj * proj;
       const r = 1.1;
-      if (perp2 >= r * r) {continue;}
-      const entry = proj - Math.sqrt(r * r - perp2);
-      if (entry < bestT) { bestT = Math.max(entry, 0); best = i; }
+      if (perp2 < r * r) {
+        const entry = Math.max(proj - Math.sqrt(r * r - perp2), 0);
+        if (entry < bestDirectT) { bestDirectT = entry; bestDirect = i; }
+        continue;
+      }
+      const ang = perp2 / (proj * proj);
+      if (ang < bestConeAng && ang < CONE_SIN * CONE_SIN) { bestConeAng = ang; bestConeT = proj; bestCone = i; }
     }}
-    return best ? { item: best, t: bestT } : null;
+    if (bestDirect) {return { item: bestDirect, t: bestDirectT };}
+    return bestCone ? { item: bestCone, t: bestConeT } : null;
   }
 
   /** Repair beam: heal to maxHealth, overflow banks as armor. The local

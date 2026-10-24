@@ -234,9 +234,11 @@ this.fpsFrames += 1;
    *  directional arc pointing at the source when we know where it is. */
   damage(fromPos: THREE.Vector3 | null, damage: number): void {
     const {h} = this;
-    // Vignette: 10dmg ≈ subtle, 40+ ≈ strong. Stacking hits push opacity up
-    // but cap below readability loss.
-    this.dmgT = Math.min(1, this.dmgT + 0.18 + damage * 0.012);
+    // Vignette: 10dmg ≈ subtle, 40+ ≈ strong. Pulse semantics — a hit
+    // raises the level to its own size, it doesn't accumulate: chip
+    // ticks +0.26 each at multi-hit/s otherwise saturate the edge ring
+    // permanently and graze fire reads identical to a direct mortar.
+    this.dmgT = Math.min(1, Math.max(this.dmgT, 0.22 + damage * 0.014));
     h.dmgVignette.style.opacity = String(Math.min(0.85, this.dmgT));
     // A real hit during a shield glow takes the red shadow back now —
     // the shieldVignetteReset timeout alone would leave cyan until it fires.
@@ -250,14 +252,20 @@ this.fpsFrames += 1;
    *  punchier: the bubble ate it, the energy bar is the real damage readout. */
   shieldDamage(fromPos: THREE.Vector3 | null, damage: number): void {
     const {h} = this;
-    this.dmgT = Math.min(1, this.dmgT + 0.12 + damage * 0.008);
+    this.dmgT = Math.min(1, Math.max(this.dmgT, 0.15 + damage * 0.008));
     h.dmgVignette.style.opacity = String(Math.min(0.6, this.dmgT));
+    // The soak is cyan THROUGH the vignette — the red background would
+    // otherwise show under the shadow for a muddy purple mix, and the
+    // 300ms restore put red back mid-fade. Swap the gradient too.
+    h.dmgVignette.style.background =
+      'radial-gradient(ellipse at center, transparent 52%, transparent 68%, rgba(90,190,255,0.5) 100%)';
     h.dmgVignette.style.boxShadow =
       'inset 0 0 18vmax rgba(90,200,255,0.55), inset 0 0 5vmax rgba(140,220,255,0.4)';
     // Red restores on timeout or on the next real hit, whichever lands first.
     clearTimeout(this.shieldVignetteReset);
     this.shieldVignetteReset = window.setTimeout((): void => {
       h.dmgVignette.style.boxShadow = '';
+      h.dmgVignette.style.background = '';
     }, 300);
     if (fromPos) {this.pointAt(fromPos, 0.35);}
   }
