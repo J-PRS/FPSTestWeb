@@ -130,6 +130,11 @@ Ports: game client (Vite) **:5400**, game server (Bun) **:8000**.
   profile, or test result MUST name the script, command, or source file
   that produced it (e.g. `_tools/profload.ts --cpuprof`, `bun test
   tests/netbot/`). Numbers without provenance are not allowed.
+- Do NOT stash, revert, or delete work you did not create. Other agents
+  may be working in the same tree — their uncommitted changes are not
+  yours to move. You may stash your own work when needed; stashing or
+  reverting anyone else's requires explicit user permission. If unsure
+  who owns a change, ask before touching it.
 - Scenario tests: one file per scenario under `tests/scenarios/` using
   `harness.ts`. Sim-time ≠ wall-clock — `pin()` clears spawn protection,
   drive sims via `step(dt)`.
