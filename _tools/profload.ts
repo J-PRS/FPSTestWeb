@@ -149,16 +149,16 @@ try {
       await sleep(1200);
     }
 
-    // Fresh log per attempt — Bun.file stdout appends/stales otherwise,
-    // and a crash reason buried under a previous server's bytes is
-    // indistinguishable from "died silently".
-    try { unlinkSync(serverLog); } catch { /* none yet */ }
-    const file = Bun.file(serverLog);
     const argv = [BUN, ...(CPUPROF ? ['--cpu-prof'] : []), ...(arg('preload', '') ? ['--preload', arg('preload')] : []), 'src/server.ts'];
     // Retry on successive ports — a holder that slips between the scan
     // and the bind (or a TIME_WAIT ghost netstat misses) is skipped, not fatal.
     for (let p = PORT || 8100; p < 8200; p++) {
       PORT = p;
+      // Per-port log — a shared file clobbers the failed attempt's exit
+      // reason (observed: 8100 died code=1, its log was never preserved).
+      const attemptLog = serverLog.replace(/\.log$/, `_${p}.log`);
+      try { unlinkSync(attemptLog); } catch { /* none yet */ }
+      const file = Bun.file(attemptLog);
       srv = Bun.spawn(argv,
         {
           cwd: 'server_bun',
@@ -174,14 +174,14 @@ try {
       const t0 = Date.now();
       while (!(await healthOk(PORT, BOOT))) {
         if (srv.exitCode !== null) {break;}
-        if (Date.now() - t0 > 20000) {throw new Error('server never came up — see ' + serverLog);}
+        if (Date.now() - t0 > 20000) {throw new Error('server never came up — see ' + attemptLog);}
         await sleep(500);
       }
       if (await healthOk(PORT, BOOT)) {break;}
       if (!PINNED) {log(`port ${PORT} failed (server exited ${srv.exitCode}) — trying next`); continue;}
-      throw new Error(`server exited ${srv.exitCode} — see ${serverLog}`);
+      throw new Error(`server exited ${srv.exitCode} — see ${attemptLog}`);
     }
-    if (!(await healthOk(PORT, BOOT))) {throw new Error('no bindable port — see ' + serverLog);}
+    if (!(await healthOk(PORT, BOOT))) {throw new Error('no bindable port — see _tools/devin_scratch/profload_server_*.log');}
     log('server up');
   } else {
     serverPid = portHolders(PORT)[0] ?? 0;

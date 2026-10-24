@@ -164,14 +164,16 @@ export default defineConfig(({ mode }) => ({
       return []; // swallow — no HMR, no full-reload
     },
   }] : [])],
+  // dedupe three: every dep must share the app's three module instance.
+  // Without it, an excluded/raw three.quarks can resolve a second three
+  // after a mid-session deps rebuild (noreload swallows the reload), its
+  // registerShaderChunks() patches the OTHER ShaderChunk, and every
+  // particle draw throws "Can not resolve #include <tile_pars_vertex>".
+  resolve: { dedupe: ['three'] },
   optimizeDeps: {
-    include: [], // colyseus.js is .old-retired + uninstalled; leaving it here 504s the server
-    // Prebundling three.quarks embeds a SECOND three copy inside the dep
-    // bundle; registerShaderChunks() then patches that copy's ShaderChunk
-    // while the game renders with the other — "Can not resolve #include
-    // <tile_pars_vertex>" on the first particle draw. Keep it unbundled so
-    // it shares the app's three instance.
-    exclude: ['three.quarks'],
+    // quarks inside optimizeDeps shares the dep graph's three chunk
+    // (same as postprocessing) — the dedupe above keeps it that way.
+    include: ['three.quarks', 'quarks.core'],
   },
   build: {
     outDir: 'dist',
