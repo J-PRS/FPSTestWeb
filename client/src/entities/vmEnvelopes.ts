@@ -237,22 +237,22 @@ export class VmEnvelopes {
     const total = SWING_LOAD + SWING_SWEEP + SWING_WHIP + hold + SWING_OUT;
     const t = this.swingT;
     const hg = this.h.hammerGroup;
-    // The gun steps aside for the whole swing. Re-fetched every tick so a
-    // weapon switch mid-swing can't leave the new gun on screen.
-    const gun = this.h.weapons.get(this.h.activeWeapon);
-    if (gun) {gun.visible = false;}
+    // The gun rides the swing scalar DOWN into a holster dip and back —
+    // same lower→action→raise the sidearm draw plays. It stays visible
+    // the whole time; the dip carries it offscreen so the hammer owns
+    // the frame, then it draws back up when the swing ends.
     if (t >= total) {
       this.swingT = -1;
       hg.visible = false;
       hg.position.copy(HAMMER_ENTER);
       hg.rotation.copy(HAMMER_ROT_ENTER);
-      const cur = this.h.weapons.get(this.h.activeWeapon);
-      if (cur) {cur.visible = true;}
       return 0;
     }
     if (t < SWING_LOAD) {
       // Load: the grip pulls back-right and the head cocks over the top.
-      // The handle is what the player sees coming in.
+      // The handle is what the player sees coming in. The dip scalar
+      // rises with the load — the gun lowers as the hammer cocks, not
+      // before.
       const u = t / SWING_LOAD;
       const e = u * u * (3 - 2 * u);
       hg.position.lerpVectors(HAMMER_ENTER, HAMMER_COCK, e);
@@ -261,7 +261,7 @@ export class VmEnvelopes {
         HAMMER_ROT_ENTER.y + (HAMMER_ROT_COCK.y - HAMMER_ROT_ENTER.y) * e,
         HAMMER_ROT_ENTER.z + (HAMMER_ROT_COCK.z - HAMMER_ROT_ENTER.z) * e,
       );
-      return 0;
+      return e;
     }
     if (t < SWING_LOAD + SWING_SWEEP) {
       // The handle leads: the grip accelerates across the frame while the

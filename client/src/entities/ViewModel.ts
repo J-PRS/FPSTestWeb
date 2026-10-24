@@ -50,8 +50,8 @@ const THRUST_ROT = -0.05; // slight nose-down drive — tip stays on the aim lin
 // The melee swing HOLSTERS the gun (the envelope hides it) instead of
 // dipping it — a group dip would drag the hammer with it, and the
 // hammer's poses are authored in group-rest space.
-const SWING_DIP_Y = 0;
-const SWING_DIP_ROT = 0;
+const SWING_DIP_Y = -0.34;  // sidearm-style holster dip while the hammer swings
+const SWING_DIP_ROT = -0.35; // muzzle tips down — same lower→raise read as a swap
 
 export class ViewModel {
   readonly group: THREE.Group;
@@ -64,7 +64,7 @@ export class ViewModel {
   // Muzzle Z per weapon (model space) so the flash sits AT the bore,
   // not at a fixed offset that floats ahead of stubby barrels.
   private static readonly MUZZLE_Z: Record<number, number> = {
-    [WeaponType.BoltLauncher]: -0.36, // flush bore face, just past the end plate [WeaponType.Disc]: -0.36, [WeaponType.DiscPull]: -0.36, // just past the face plate
+    [WeaponType.BoltLauncher]: -0.36, // flush bore face, just past the end plate [WeaponType.Disc]: -0.36, [WeaponType.Implodisc]: -0.36, // just past the face plate
     [WeaponType.Chaingun]: -0.8, // just past the cluster + clamp, incl. the group's +0.15 pullback [WeaponType.Mortar]: -0.28, [WeaponType.GrenadeLauncher]: -0.42,
     [WeaponType.Flak]: -0.28, [WeaponType.PlasmaCannon]: -0.35, [WeaponType.PlasmaGun]: -0.38, // group ×1.4 — collar tip moved to ≈-0.39 [WeaponType.Sprinkler]: -0.30,
     [WeaponType.Railgun]: -0.64, // clear of the prong cluster — at -0.57 the hex tips frame-swallow the flash
@@ -221,7 +221,7 @@ export class ViewModel {
   kick(strength = 1): void {
     kickF(this, strength);
     if (this.activeWeapon === WeaponType.Chaingun) {this.startBarrelKick();}
-    if (this.activeWeapon === WeaponType.Disc || this.activeWeapon === WeaponType.DiscPull) {
+    if (this.activeWeapon === WeaponType.Disc || this.activeWeapon === WeaponType.Implodisc) {
       // Spinfusor fake: the chambered disc IS the projectile — it's gone
       // the instant the shot breaks. The NEXT disc slides forward out of
       // the breech into the slit during the refire gap.
@@ -457,21 +457,21 @@ export class ViewModel {
 
     const target = this.tmpDir.set(
       REST_POS.x + moveX + bobX + fallX + this.kickX * this.kickAmount + punch * PUNCH_X,
-      REST_POS.y + moveY + bobY + fallY + kickY + dip * THROW_DIP_Y + switchDip * SWITCH_DIP_Y + punch * PUNCH_Y + thrust * THRUST_Y + swing * SWING_DIP_Y,
+      REST_POS.y + moveY + bobY + fallY + kickY + dip * THROW_DIP_Y + switchDip * SWITCH_DIP_Y + punch * PUNCH_Y + thrust * THRUST_Y,
       REST_POS.z + fallZ + kickZ + dip * THROW_DIP_Z + punch * PUNCH_Z + thrust * THRUST_Z
     );
     // Kick contribution isolated for inspect consumers: the recoil is
     // written into vm.group's transform, but gunlab's inspect anchor
     // parks the weapon OUTSIDE vm.group — copy the delta onto the anchor.
     this.kickDeltaPos.set(this.kickX * this.kickAmount + punch * PUNCH_X,
-      kickY + punch * PUNCH_Y + thrust * THRUST_Y + swing * SWING_DIP_Y, kickZ + punch * PUNCH_Z + thrust * THRUST_Z);
-    this.kickDeltaRotX = this.kickAmount * 0.7 * this.kickAmp + punch * PUNCH_ROT + thrust * THRUST_ROT + swing * SWING_DIP_ROT;
+      kickY + punch * PUNCH_Y + thrust * THRUST_Y, kickZ + punch * PUNCH_Z + thrust * THRUST_Z);
+    this.kickDeltaRotX = this.kickAmount * 0.7 * this.kickAmp + punch * PUNCH_ROT + thrust * THRUST_ROT;
     this.kickDeltaRotZ = punch * PUNCH_ROLL + this.kickRoll * this.kickAmount;
     // Snap fast to the kicked pose so the punch is actually visible
     this.group.position.lerp(target, Math.min(dt * 20, 1));
     // Muzzle rise is the readable half of a kick — pitch up hard
     // (×0.55, was 0.28 → ~10° at full strength, mortar/cannon more)
-    this.group.rotation.x = this.baseRotX + this.kickAmount * 0.7 * this.kickAmp + dip * THROW_DIP_ROT + switchDip * SWITCH_DIP_ROT + punch * PUNCH_ROT + thrust * THRUST_ROT + swing * SWING_DIP_ROT;
+    this.group.rotation.x = this.baseRotX + this.kickAmount * 0.7 * this.kickAmp + dip * THROW_DIP_ROT + switchDip * SWITCH_DIP_ROT + punch * PUNCH_ROT + thrust * THRUST_ROT;
     this.group.rotation.z = this.baseRotZ + totalDip * THROW_DIP_ROLL + punch * PUNCH_ROLL
       + this.kickRoll * this.kickAmount;
     // Post-write truth: lerped position and instant rotations resolve to
@@ -479,6 +479,17 @@ export class ViewModel {
     this.poseDeltaPos.copy(this.group.position).sub(REST_POS);
     this.poseDeltaRotX = this.group.rotation.x - this.baseRotX;
     this.poseDeltaRotZ = this.group.rotation.z - this.baseRotZ;
+
+    // Melee swing holster — the dip rides the WEAPON's own transform,
+    // not this.group: hammerGroup is a group child, so a group-level
+    // dip would drag the hammer's swipe off the crosshair with the gun.
+    const curWeapon = this.weapons.get(this.activeWeapon);
+    if (curWeapon) {
+      const base = curWeapon.userData as { baseY?: number; baseRotX?: number };
+      if (base.baseY === undefined) { base.baseY = curWeapon.position.y; base.baseRotX = curWeapon.rotation.x; }
+      curWeapon.position.y = base.baseY + swing * SWING_DIP_Y;
+      curWeapon.rotation.x = (base.baseRotX ?? 0) + swing * SWING_DIP_ROT;
+    }
 
     this.tickChainBarrels(dt);
     this.tickDiscAmmo(dt);

@@ -500,13 +500,14 @@ export const CLASSES: [label: string, build: () => THREE.Group][] = [
   ['jugg og', mkLineup([['juggernaut_og' as PlayerModelVariant, SOLO_X, 'jugg og', 3, 'heavy', false]])],
   ['Heavy Lineup', mkLineup([
     // bld + scp are benched — the Blender sculpts aren't lineup quality.
+    [CLASS_BODY_VARIANT.heavy as PlayerModelVariant, -7.7, 'heavy', 3.2, 'heavy', CLASS_BODY_MAT_REV.has('heavy'), CLASS_MODEL_SCALE.heavy],
     ['juggernaut' as PlayerModelVariant, -5.5, 'jugg', 3, 'heavy', false],
     ['juggernaut_og' as PlayerModelVariant, -3.3, 'og', 3, 'heavy', false],
     ['juggernaut_brick' as PlayerModelVariant, -1.1, 'brick', 3, 'heavy', false],
     ['juggernaut_wedge' as PlayerModelVariant, 1.1, 'wedge', 3, 'heavy', false],
     ['juggernaut_kit' as PlayerModelVariant, 3.3, 'kit', 3, 'heavy', false],
     ['juggernaut_shell' as PlayerModelVariant, 5.5, 'shell', 3, 'heavy', false],
-  ], 0, 14, 0)],
+  ], -1.1, 14, 0)],
   ['Light Lineup', mkLineup([
     ['scout' as PlayerModelVariant, -4.4, 'scout', 2, 'light', false],
     ['light_plate' as PlayerModelVariant, -2.2, 'plate', 2, 'light', false],
