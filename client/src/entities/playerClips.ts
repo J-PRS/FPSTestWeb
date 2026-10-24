@@ -234,6 +234,26 @@ export const RIG_MANIFEST: Record<string, RigManifest> = {
                              shoot: 'Pistol_Shoot', throw: 'Throw Object',
                              hit: 'Hit_Chest', death: 'Death_A' },
                     walkDirs: { L: 'Strafe_left', R: 'Strafe_right', B: 'Walk_Backwards' } },
+  // Technique A/B rigs — build_juggernaut_brick.mjs (boxes only) and
+  // build_juggernaut_wedge.mjs (cones only). Preview-only like jugg.
+  'juggernaut_brick': { url: '/assets/models/class_juggernaut_brick.glb', yaw: 0, fitH: 2.8, sources: [],
+                    aimMask: true,
+                    gunLocal: [0.55, 0.7, -0.15],
+                    mount: { world: true, aimPin: true, size: 0.95, aimSeat: [-0.06, 0.1, 0.12] },
+                    anims: { idle: 'Idle_A', walk: 'Walk', run: 'Sprint',
+                             jump: 'Jump_2', ski: 'Jump_air', jet: 'Pistol_Aim_Neutral',
+                             shoot: 'Pistol_Shoot', throw: 'Throw Object',
+                             hit: 'Hit_Chest', death: 'Death_A' },
+                    walkDirs: { L: 'Strafe_left', R: 'Strafe_right', B: 'Walk_Backwards' } },
+  'juggernaut_wedge': { url: '/assets/models/class_juggernaut_wedge.glb', yaw: 0, fitH: 2.8, sources: [],
+                    aimMask: true,
+                    gunLocal: [0.55, 0.7, -0.15],
+                    mount: { world: true, aimPin: true, size: 0.95, aimSeat: [-0.06, 0.1, 0.12] },
+                    anims: { idle: 'Idle_A', walk: 'Walk', run: 'Sprint',
+                             jump: 'Jump_2', ski: 'Jump_air', jet: 'Pistol_Aim_Neutral',
+                             shoot: 'Pistol_Shoot', throw: 'Throw Object',
+                             hit: 'Hit_Chest', death: 'Death_A' },
+                    walkDirs: { L: 'Strafe_left', R: 'Strafe_right', B: 'Walk_Backwards' } },
   // A/B compare rig — build_juggernaut_OG.mjs snapshot for gunlab
   // side-by-side against whatever the current juggernaut builder ships.
   'juggernaut_og': { url: '/assets/models/class_juggernaut_og.glb', yaw: 0, fitH: 2.8, sources: [],
