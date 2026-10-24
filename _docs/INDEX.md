@@ -44,6 +44,14 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-10-25_MEDIUM_LINEUP_PROPOSAL.md` | Medium-class lineup proposal — rig constraints (82-bone cm-scale skeleton, joint map), four archetypes, build plan. Proposal only |
 | `_docs/2026-10-24_CHARACTER_TECHNIQUES_DEEP.md` | Round 2 — PS1/Quake-era tricks + 2025 agentic-3D pipelines, mapped to which techniques our builders already use and what's worth adding |
 | `_docs/2026-10-24_PROFILING_HOTSPOTS.md` | 512-player soak CPU profile: phase + function hotspots; send/fanout/encoding dominate; prioritized optimization roadmap |
+| `_docs/2026-10-24_CLASS_WEAPON_LOCKS.md` | Class-lock design: the caliber ladder (light=precision, medium=mid ordnance, heavy=siege), per-weapon rationale/pros/cons, exact-class vs floor lock choice |
+| `_docs/2026-10-24_UNIVERSAL_WEAPONS.md` | Universal arsenal rundown — every non-class-locked weapon verified against weaponRows: signature trio, sidearm floor, belt-pool throws, placement rules + watch conditions |
+| `_docs/2026-10-24_SKILLS_DEPLOYABLES.md` | Q-skill slot (8 skills), perks, and belt-priced deployables rundown — shared energy/belt economies, per-item pros/cons, watch list (turtle loops, cloak+satchel, niche overlaps) |
+| `_docs/2026-10-24_DUEL_MODE_IDEAS.md` | Duel-mode design: held-token headhunt scoring tradeoffs + "Retribution" fuse (death-lights-a-comeback-fuse mechanic) |
+| `_docs/2026-10-24_NETCODE_HEURISTIC_AUDIT.md` | Netcode heuristic audit — every guess/estimate needs a way to unbrick itself if it guessed wrong; per-mechanism fail-safety review |
+| `_docs/2026-10-24_REMOTE_WARP_AUDIT.md` | Remote-player warp audit — where visible jumps originate (snapshot starvation, converge reseating) and the fix plan |
+| `_docs/2026-10-24_SPRINKLER_CLASS_GATING.md` | Sprinkler stays universal, not light-only — gating rationale + the mobility-hose watch condition |
+| `_docs/traps/2026-10-24_remote-interp-chases-fiction.md` | Trap: converge/DR steering chases the extrapolated (fictional) sample instead of server truth |
 
 ## Agent memory (append-only, one line each)
 
