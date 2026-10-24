@@ -16,9 +16,9 @@ import { mkChaingun } from './viewmodel/weaponsGeoBallistic.js';
 // bone/socket transform math keeps working unchanged.
 
 // Types with no builder (belt throws, melee, beams) fall back to the
-// caller's generic prop. DiscPull reuses the Disc model — same launcher.
+// caller's generic prop. Implodisc reuses the Disc model — same launcher.
 const ALIASES = new Map<number, number>([
-  [WeaponType.DiscPull, WeaponType.Disc],
+  [WeaponType.Implodisc, WeaponType.Disc],
 ]);
 
 const builders = new Map<number, () => THREE.Group>(MODEL_BUILDERS);

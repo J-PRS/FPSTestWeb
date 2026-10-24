@@ -273,7 +273,7 @@ export class BotRoster {
             this.loadouts.set(donor, Object.assign({}, lo, {far,mid}));
           }
           if (lo && this.brains.get(donor)?.skill.beltPull && getWeaponStats(lo.belt)?.forceMode !== 'pull') {
-            this.loadouts.set(donor, Object.assign({}, lo, {belt: WeaponType.DiscPull}));
+            this.loadouts.set(donor, Object.assign({}, lo, {belt: WeaponType.Implodisc}));
           }
           // Energy economy IS the capper's weapon — a 500m route's
           // sustained jet burns matter far more than any burst or

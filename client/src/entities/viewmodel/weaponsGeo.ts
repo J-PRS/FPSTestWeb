@@ -43,7 +43,7 @@ export const MODEL_BUILDERS: [number, () => THREE.Group][] = [
 export function buildWeaponMeshes(parent: THREE.Group, muzzleZ: Record<number, number>): WeaponMeshes {
   const weapons = new Map<number, THREE.Group>();
   const muzzleNodes = new Map<number, THREE.Object3D>();
-  // Chaingun needs its barrels group back; DiscPull reuses the Disc group —
+  // Chaingun needs its barrels group back; Implodisc reuses the Disc group —
   // neither can live in the plain builder table.
   const chain = mkChaingun();
   const models: [number, THREE.Group][] = MODEL_BUILDERS.map(([wt, mk]): [number, THREE.Group<THREE.Object3DEventMap>] => [wt, mk()]);
@@ -61,11 +61,11 @@ export function buildWeaponMeshes(parent: THREE.Group, muzzleZ: Record<number, n
     g.add(mz);
     muzzleNodes.set(wt, mz);
   }
-  weapons.set(WeaponType.DiscPull, weapons.get(WeaponType.Disc)!);
+  weapons.set(WeaponType.Implodisc, weapons.get(WeaponType.Disc)!);
   const pullMz = new THREE.Object3D();
-  pullMz.position.z = muzzleZ[WeaponType.DiscPull] ?? -0.35;
+  pullMz.position.z = muzzleZ[WeaponType.Implodisc] ?? -0.35;
   weapons.get(WeaponType.Disc)!.add(pullMz);
-  muzzleNodes.set(WeaponType.DiscPull, pullMz);
+  muzzleNodes.set(WeaponType.Implodisc, pullMz);
   return { weapons, muzzleNodes, chainBarrels: chain.barrels };
 }
 

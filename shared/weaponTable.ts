@@ -14,7 +14,7 @@ export enum WeaponType {
   Slam = 8, // skill ground-slam — not a projectile, but lands as an AOE
   Railgun = 9,
   Melee = 10, // E-key punch — not a projectile; aoe fields drive server validation
-  DiscPull = 11, // belt disc (C) — the implosion variant; launcher disc pushes
+  Implodisc = 11, // belt disc (C) — the implosion disc, pulls targets toward the blast
   Lightning = 12, // Quake LG: hitscan beam, ticks ~22/s; aoe fields validate the pin-blast
   Shotgun = 13, // pellet burst — tighter cone than flak, works to mid range
   Cannon = 14, // Serious Sam cannonball — fast, fat, skips off terrain, pops on contact
@@ -43,6 +43,7 @@ export enum WeaponType {
   Hook = 37,             // belt throw: rope dart — terrain/world contact reels the OWNER toward the anchor; a body hit reels the VICTIM toward the shooter. One impulse, no damage, no blast.
   Shocklance = 38,       // melee-key pull-out zap: one-shot hitscan bolt, lance reach. No backstab/energy economy yet.
   EMP = 39,              // belt throw: EMP grenade — fuse bomb, 0 damage, drains all jet energy + strips shield in blast radius. Timer detonation (not proxy/hit) to avoid being OP.
+  BeltDisc = 40,        // belt throw: the plain push belt disc — Implodisc carries the pull identity
 }
 
 export interface WeaponStats {

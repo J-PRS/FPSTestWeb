@@ -2,11 +2,11 @@ import * as THREE from 'three';
 import { WeaponType } from '../../../shared/weapons.js';
 import type { ViewModel } from './ViewModel.js';
 
-// Full spin: 3 barrels at 0.09s cadence, one barrel-index per ~3 shots
-// (1/9 rev per shot ≈ 7.8 rad/s). Matching 1-index-per-shot spun the
-// triad ~138°/frame at 60fps — just past its 120° symmetry, strobing as
-// "nearly a full rev per shot". Below the strobe band it reads as spin.
-const SPIN_MAX = (Math.PI * 2 / 9) / 0.09;
+// Full spin: 3 barrels at 0.09s cadence. Cosmetic only — spin doesn't
+// owe the firerate honesty: 2× the index-per-shot rate (~15.6 rad/s ≈
+// 15°/frame at 60fps) still sits far under the 120°-symmetry strobe
+// band, but reads as a properly spooled chaingun instead of a lazy rev.
+const SPIN_MAX = (Math.PI * 2 / 9) / 0.09 * 2;
 const _flashPark = new THREE.Vector3();
 const FLASH_LIFE = 0.07; // 1-2 frames feel; >0.15 reads as flamethrower
 
@@ -21,7 +21,7 @@ const FLASH_LIFE = 0.07; // 1-2 frames feel; >0.15 reads as flamethrower
 const RECOIL: Record<number, { recover: number; jitter: number; amp: number; back: number }> = {
     [WeaponType.BoltLauncher]:    { recover: 0.9, jitter: 0.03,  amp: 0.45, back: 0.5 },  // same throw as the disc launcher
     [WeaponType.Disc]:            { recover: 0.9, jitter: 0.03,  amp: 0.45, back: 0.5 },  // ~60% of the railgun's throw
-    [WeaponType.DiscPull]:        { recover: 0.9, jitter: 0.03,  amp: 0.45, back: 0.5 },
+    [WeaponType.Implodisc]:        { recover: 0.9, jitter: 0.03,  amp: 0.45, back: 0.5 },
     [WeaponType.Chaingun]:        { recover: 0.18, jitter: 0.02,  amp: 0.5,  back: 1 },  // tiny buzz
     [WeaponType.Mortar]:          { recover: 0.47, jitter: 0,  amp: 1,  back: 1 },  // slow heavy heave
     [WeaponType.GrenadeLauncher]: { recover: 0.3, jitter: 0.03,  amp: 0.9,  back: 1 },  // pump pop
@@ -49,7 +49,7 @@ const FLASH: Record<number, { color: number; scale: number; life: number; light:
     // nothing, light intensity 0).
     [WeaponType.BoltLauncher]:    { color: 0xFF_C8_66, scale: 0,    life: 0.5, light: 0 },
     [WeaponType.Disc]:            { color: 0x99_DD_FF, scale: 0.7,  life: 0.7, light: 1 },
-    [WeaponType.DiscPull]:        { color: 0x99_DD_FF, scale: 0.7,  life: 0.7, light: 1 },
+    [WeaponType.Implodisc]:        { color: 0x99_DD_FF, scale: 0.7,  life: 0.7, light: 1 },
     [WeaponType.Chaingun]:        { color: 0xFF_AA_44, scale: 0.9,  life: 0.8, light: 0.15 }, // faint lamp — sprite carries the flash
     [WeaponType.Mortar]:          { color: 0xFF_DD_99, scale: 1.6,  life: 1.5, light: 1 },  // big flash
     [WeaponType.GrenadeLauncher]: { color: 0xFF_C8_66, scale: 0.8,  life: 0.9, light: 1 },

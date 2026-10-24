@@ -146,7 +146,7 @@ export function weaponAxis(w: number): AimAxis | null {
       return 'track';
     }
     case WeaponType.Disc:
-    case WeaponType.DiscPull:
+    case WeaponType.Implodisc:
     case WeaponType.RocketLauncher:
     case WeaponType.Flak:
     case WeaponType.Cannon:

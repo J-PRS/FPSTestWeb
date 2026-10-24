@@ -9,7 +9,7 @@ function shootInto(g: GainNode, weaponType: number): void {
   // thump) + short metallic twang + punch transient, all cut before their
   // ring tails — verified punchy in the spectrogram (sharp attack, decayed
   // by ~0.4s, no sustained band). A thrown disc IS a disc launch.
-  if ((weaponType === WeaponType.Disc || weaponType === WeaponType.DiscPull) &&
+  if ((weaponType === WeaponType.Disc || weaponType === WeaponType.Implodisc) &&
       layer(g, [['shot_cannon', 1, 0.5, 600, 0.6], ['thud_big', 0.9, 0.7], ['slam_thud', 0.85, 0.7, 500, 0.25], ['punch', 0.5, 1.1, 2000, 0.2], ['hg_clang', 0.35, 1.8, undefined, 0.12]])) {return;}
   // Melee swing: whoosh (pitched-up dash) + fist crack + low thud body.
   // The connect 'impact' plays separately in combat on an actual hit.
@@ -251,7 +251,7 @@ function synthLightning(g: GainNode): void {
 const SYNTH_SHOTS: Record<number, (g: GainNode) => void> = {
   [WeaponType.BoltLauncher]:    (g): void => { osc('square', 900, 300, 0.12, 0.25, g); noise(0.12, 0.15, g, 'lowpass', 2000, 400); },
   [WeaponType.Disc]:      (g): void => { osc('sawtooth', 1400, 700, 0.18, 0.2, g); noise(0.1, 0.1, g, 'highpass', 3000, 4000); },
-  [WeaponType.DiscPull]:  (g): void => { osc('sawtooth', 1400, 700, 0.18, 0.2, g); noise(0.1, 0.1, g, 'highpass', 3000, 4000); },
+  [WeaponType.Implodisc]:  (g): void => { osc('sawtooth', 1400, 700, 0.18, 0.2, g); noise(0.1, 0.1, g, 'highpass', 3000, 4000); },
   [WeaponType.Chaingun]:  synthChaingun,
   [WeaponType.Mortar]:    (g): void => { osc('sine', 180, 60, 0.25, 0.5, g); noise(0.15, 0.2, g, 'lowpass', 900, 200); },
   [WeaponType.GrenadeLauncher]: (g): void => { osc('triangle', 500, 150, 0.15, 0.35, g); noise(0.1, 0.15, g, 'bandpass', 1200, 400); },

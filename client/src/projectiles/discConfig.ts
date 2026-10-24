@@ -74,4 +74,7 @@ export const DISC_CONFIG: ProjectileConfig = {
 
 // Belt disc (C) — the implosion variant. Same flight/damage, opposite force:
 // sucks targets toward the blast instead of scattering them.
-export const BELT_DISC_CONFIG: ProjectileConfig = Object.assign({}, DISC_CONFIG, {name: 'beltDisc',weaponType: WeaponType.DiscPull,force: WEAPONS[WeaponType.DiscPull].knockbackForce,forceMode: 'pull',forceMultiplier: PULL_MULTIPLIER,aoeDamage: WEAPONS[WeaponType.DiscPull].aoeDamage,aoeRadius: WEAPONS[WeaponType.DiscPull].aoeRadius});
+export const BELT_DISC_CONFIG: ProjectileConfig = Object.assign({}, DISC_CONFIG, {name: 'beltDisc',displayName: 'Implodisc',weaponType: WeaponType.Implodisc,force: WEAPONS[WeaponType.Implodisc].knockbackForce,forceMode: 'pull',forceMultiplier: PULL_MULTIPLIER,aoeDamage: WEAPONS[WeaponType.Implodisc].aoeDamage,aoeRadius: WEAPONS[WeaponType.Implodisc].aoeRadius});
+
+// BeltDisc — the plain push belt disc: same flight, knocks back.
+export const BELT_DISC_PUSH_CONFIG: ProjectileConfig = Object.assign({}, DISC_CONFIG, {name: 'beltDiscPush',displayName: 'Belt Disc',weaponType: WeaponType.BeltDisc,force: WEAPONS[WeaponType.BeltDisc].knockbackForce,forceMode: 'push',aoeDamage: WEAPONS[WeaponType.BeltDisc].aoeDamage,aoeRadius: WEAPONS[WeaponType.BeltDisc].aoeRadius});

@@ -34,7 +34,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitGrow: 2,
     maxLifetime: 12, // ~960m — long prayers stay live; fuse only bounds desynced replicas
   },
-  [WeaponType.DiscPull]: {
+  [WeaponType.Implodisc]: {
     // Belt disc (C): the implosion — pulls targets toward the blast.
     directDamage: 50,
     aoeDamage: 15,
@@ -46,6 +46,20 @@ export const WEAPONS: Record<number, WeaponStats> = {
     bodyRadius: 0.5,
     hitMin: 0,
     hitMax: 0.25, // belt rule: the throw is a physical shell, not a wake — the pull AOE is the payoff after contact
+    hitGrow: 2,
+  },
+  [WeaponType.BeltDisc]: {
+    // Belt disc: the plain push variant — same flight/damage, knocks back.
+    directDamage: 50,
+    aoeDamage: 15,
+    aoeRadius: 10,
+    knockbackForce: 25,
+    forceMode: 'push',
+    speed: 80,
+    gravity: false,
+    bodyRadius: 0.5,
+    hitMin: 0,
+    hitMax: 0.25,
     hitGrow: 2,
   },
   [WeaponType.Grenade]: {

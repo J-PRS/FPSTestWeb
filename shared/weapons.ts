@@ -42,7 +42,7 @@ export function directHitAoeBonus(weaponType: number): number {
  *  same formula on both ends can't drift. */
 export const AIRTIME_DMG_CAP = 4;
 const AIRTIME_SCALED = new Set<number>([
-  WeaponType.BoltLauncher, WeaponType.Disc, WeaponType.DiscPull, WeaponType.Javelin,
+  WeaponType.BoltLauncher, WeaponType.Disc, WeaponType.Implodisc, WeaponType.BeltDisc, WeaponType.Javelin,
 ]);
 export function scaledDirectDamage(weaponType: number, airtime?: number): number {
   const w = WEAPONS[weaponType];
@@ -117,11 +117,11 @@ export const BELT_THROW_WEAPONS = new Set<number>([
     .map(([wt]) => Number(wt)),
   // Fallback for weapons without beltThrow field yet (legacy)
   WeaponType.BeltSticky,
-  WeaponType.Grenade, WeaponType.DiscPull, WeaponType.ClusterBomb,
+  WeaponType.Grenade, WeaponType.Implodisc, WeaponType.ClusterBomb,
   WeaponType.Javelin, WeaponType.ImpactGrenade, WeaponType.RemoteRailgun,
   WeaponType.ArmorGrenade, WeaponType.HealGrenade,
   WeaponType.ProxyGrenade, WeaponType.SatchelCharge, WeaponType.Concussion,
-  WeaponType.Hook, WeaponType.EMP,
+  WeaponType.Hook, WeaponType.EMP, WeaponType.BeltDisc,
 ]);
 
 /** Nuggets charged per belt toss — heavy ordnance costs more than a
@@ -183,10 +183,10 @@ export const WEAPON_FIRE_INTERVAL_S: Partial<Record<WeaponType, number>> = {
   // Belt throws: THROW_TOTAL (0.7 release + 0.3 raise) gates the human
   // toss — 1.0s mirrors it so a bot that somehow draws a belt weapon in a
   // combat slot obeys the same ceremony instead of defaulting to 0.1s.
-  [WeaponType.Grenade]: 1, [WeaponType.DiscPull]: 1, [WeaponType.ClusterBomb]: 1,
+  [WeaponType.Grenade]: 1, [WeaponType.Implodisc]: 1, [WeaponType.ClusterBomb]: 1,
   [WeaponType.Javelin]: 1, [WeaponType.ImpactGrenade]: 1, [WeaponType.RemoteRailgun]: 1,
   [WeaponType.ArmorGrenade]: 1, [WeaponType.HealGrenade]: 1, [WeaponType.ProxyGrenade]: 1,
-  [WeaponType.Concussion]: 1, [WeaponType.BeltSticky]: 1, [WeaponType.Hook]: 1,
+  [WeaponType.Concussion]: 1, [WeaponType.BeltSticky]: 1, [WeaponType.Hook]: 1, [WeaponType.BeltDisc]: 1,
   [WeaponType.SatchelCharge]: 1.9, // deliberate two-beat plant (BELT_THROW_TIME.satchel)
   [WeaponType.EMP]: 1, // belt throw: EMP grenade — 2s fuse, timer detonation
   ..._autoFireIntervals,
