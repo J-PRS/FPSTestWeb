@@ -126,6 +126,10 @@ Ports: game client (Vite) **:5400**, game server (Bun) **:8000**.
   topic only. Pre-commit refuses commits under 50 changed lines — batch
   small fixes; a genuine one-liner uses `--no-verify` deliberately.
   Windows+Git Bash: `cmd //c "taskkill /F /PID <pid>"`.
+- Every report, doc, or changelog entry that cites a measurement,
+  profile, or test result MUST name the script, command, or source file
+  that produced it (e.g. `_tools/profload.ts --cpuprof`, `bun test
+  tests/netbot/`). Numbers without provenance are not allowed.
 - Scenario tests: one file per scenario under `tests/scenarios/` using
   `harness.ts`. Sim-time ≠ wall-clock — `pin()` clears spawn protection,
   drive sims via `step(dt)`.
