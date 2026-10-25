@@ -25,6 +25,7 @@ export interface RendererSetup {
   composer: EffectComposer;
   bloomPass: EffectPass;
   contrastPass: EffectPass;
+  dirtPass: EffectPass;
   render: (dt?: number) => void;
   needsComposer: () => boolean;
   /** FLOYD mode: extra draw onto the GL canvas between scene render and the
@@ -836,6 +837,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     composer,
     bloomPass: bloomMergePass,
     contrastPass,
+    dirtPass,
     render,
     needsComposer: needsComposerNow,
     setOverlayPass: (fn): void => { fsOverlay = fn; },

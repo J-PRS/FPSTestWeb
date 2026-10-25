@@ -273,6 +273,8 @@ function autoScaleCpu(deps: GameLoopDeps, st: LoopState, dir: number): void {
 function shedPostPasses(rendererSetup: GameLoopDeps['rendererSetup'], shed: boolean): void {
   if (rendererSetup.bloomPass) {rendererSetup.bloomPass.enabled = !shed && rendererSetup.isBloomEnabled();}
   if (rendererSetup.contrastPass) {rendererSetup.contrastPass.enabled = !shed && rendererSetup.isPostProcessingEnabled();}
+  // Dirt is decor over bloom — shed with it (invisible when bloom's off).
+  if (rendererSetup.dirtPass) {rendererSetup.dirtPass.enabled = !shed && rendererSetup.isBloomEnabled();}
 }
 
 
