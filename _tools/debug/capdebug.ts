@@ -14,7 +14,7 @@ const room = mkRoom({ mode: 'ctf', bots: 6, botFill: 6, bases }, 'ctf', 9001, fa
 const bots = [...room.players.getAllPlayers().values()].filter((p) => p.isBot);
 const capper = bots.find((p) => p.team === 'alpha')!;
 const ctl = room.bots as any;
-ctl.loadouts.set(capper.id, { ...BOT_LOADOUTS[0]!, belt: WeaponType.DiscPull });
+ctl.loadouts.set(capper.id, { ...BOT_LOADOUTS[0]!, belt: WeaponType.Implodisc });
 ctl.roster.refitClass(capper.id);
 ctl.roster.roles.set(capper.id, 'capper');
 capper.perk = 'featherjets';

@@ -1,0 +1,12 @@
+import { launchClient, closeClient } from './e2e/browser.ts';
+const c = await launchClient('http://localhost:5400/posedump.html?pmodel=juggernaut&state=idle&t=0.5', {});
+await c.page.waitForFunction('window.__ready === true', { timeout: 120000 });
+const r = await c.page.evaluate(`(() => { let n = 0;
+  window.__pm.model.traverse(o => { if (!o.isSkinnedMesh) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for (const m of mats) { m.defines = { WEARVIZ: 1 }; m.needsUpdate = true; n++; }});
+  return n; })()`);
+console.log('mats patched', r);
+await new Promise(r2 => setTimeout(r2, 2000));
+await c.page.screenshot({ path: '_tools/e2e/shots/jugg-redtest.png' });
+await closeClient(c);

@@ -20,7 +20,7 @@ const ctl = room.bots as unknown as {
   brains: Map<string, { jetDebug: { why: string; escapeT: number; out: boolean; hold: number } }>;
   debugDest(id: string): { x: number; y: number; z: number } | null;
 };
-ctl.loadouts.set(capper.id, { ...BOT_LOADOUTS[0]!, belt: WeaponType.DiscPull });
+ctl.loadouts.set(capper.id, { ...BOT_LOADOUTS[0]!, belt: WeaponType.Implodisc });
 ctl.roster.refitClass(capper.id);
 ctl.roster.roles.set(capper.id, 'capper');
 for (const p of bots) {

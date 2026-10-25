@@ -52,6 +52,7 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-10-24_REMOTE_WARP_AUDIT.md` | Remote-player warp audit — where visible jumps originate (snapshot starvation, converge reseating) and the fix plan |
 | `_docs/2026-10-24_SPRINKLER_CLASS_GATING.md` | Sprinkler stays universal, not light-only — gating rationale + the mobility-hose watch condition |
 | `_docs/traps/2026-10-24_remote-interp-chases-fiction.md` | Trap: converge/DR steering chases the extrapolated (fictional) sample instead of server truth |
+| `_docs/traps/2026-10-25_sweepStale-mass-reap-on-stall.md` | Trap: wall-clock staleness sweep mass-reaps live ribbons after a hidden-tab stall → zombie pushes + shared-slot trails |
 
 ## Agent memory (append-only, one line each)
 

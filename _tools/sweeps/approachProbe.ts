@@ -53,7 +53,7 @@ for (const name of MAPS) {
       brains: Map<string, { jetDebug: { why: string; out: boolean; hold: number; escapeT: number }; standoff: { x: number; z: number; radius: number; strength: number } | null }>;
       lastOut: Map<string, { dest: { x: number; y: number; z: number }; move?: { ski: boolean; jet: boolean; jump: boolean; park?: boolean } }>;
     };
-    ctl.loadouts.set(capper.id, { ...BOT_LOADOUTS[0]!, belt: WeaponType.DiscPull });
+    ctl.loadouts.set(capper.id, { ...BOT_LOADOUTS[0]!, belt: WeaponType.Implodisc });
     ctl.roster.refitClass(capper.id);
     ctl.roster.roles.set(capper.id, 'capper');
     capper.perk = 'featherjets';

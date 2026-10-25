@@ -11,7 +11,7 @@ const room = mkRoom({ mode: 'ctf', bots: 6, botFill: 6, bases }, 'ctf', 9001, fa
 const bots = [...room.players.getAllPlayers().values()].filter((p) => p.isBot);
 const capper = bots.find((p) => p.team === 'alpha')!;
 const ctl = room.bots as any;
-ctl.loadouts.set(capper.id, { ...BOT_LOADOUTS[0]!, belt: WeaponType.DiscPull });
+ctl.loadouts.set(capper.id, { ...BOT_LOADOUTS[0]!, belt: WeaponType.Implodisc });
 ctl.roster.refitClass(capper.id);
 ctl.roster.roles.set(capper.id, 'capper');
 capper.perk = 'featherjets';
@@ -22,7 +22,7 @@ let grabbed = -1;
 for (let i = 0; i < 480 * 20; i += 1) {
   step(room, 1, 0.05);
   const bf = room.flags!.flags.get('bravo')!;
-  if (i % 400 === 0) console.log("tick", i, "pos", capper.position.x.toFixed(0), capper.position.z.toFixed(0), "bstate", bf.state);
+  if (i % 400 === 0) {console.log("tick", i, "pos", capper.position.x.toFixed(0), capper.position.z.toFixed(0), "bstate", bf.state);}
   if (grabbed < 0 && bf.carrier === capper.id) { grabbed = i; console.log('GRAB at', (i*0.05).toFixed(1)); }
   if (grabbed >= 0 && i % 100 === 0) {
     const out = (room.bots as any).lastOut.get(capper.id);
