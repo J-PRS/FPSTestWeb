@@ -21,6 +21,7 @@ export interface SessionDeps {
   /** Spectator sockets aren't players — roomOfPlayer can't find them. */
   specRooms: Map<string, Room>;
   roomFor(name: string, mode?: string, map?: string, bots?: number, unlisted?: boolean, noCreatures?: boolean, noBalls?: boolean): Room | null;
+  quickRoom(mode: string, map?: string, bots?: number, noCreatures?: boolean, noBalls?: boolean, preferHumans?: boolean): Room | null;
   roomOfPlayer(playerId: string): Room | undefined;
   totalPlayers(): number;
   ops: { joins: number; tierWs: number; tierWt: number; tierRtc: number; tierOther: number };
@@ -165,7 +166,15 @@ export class SessionManager {
       return;
     }
 
-    const room = this.d.roomFor(roomName, roomMode, joinMap, joinBots, unlisted, noCreatures, noBalls);
+    // Bare link joins (/s|pub/<name>, no create params) must not mint
+    // rooms — a stale/shared name otherwise becomes an empty 'live'
+    // trap (the arena-1 class). Hosts create: their handshake carries
+    // map/mode/bots. Missing room + nothing to mint with = the
+    // matchmaker's busiest seat instead.
+    const creates = joinMap !== '' || roomMode !== '' || joinBots !== undefined || unlisted;
+    const room = !creates && !this.d.rooms.has(roomName)
+      ? this.d.quickRoom(roomMode, joinMap, joinBots, noCreatures, noBalls, true)
+      : this.d.roomFor(roomName, roomMode, joinMap, joinBots, unlisted, noCreatures, noBalls);
     if (!room) {
       ws.close(1013, 'Server full');
       return;

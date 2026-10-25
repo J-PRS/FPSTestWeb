@@ -113,6 +113,7 @@ export class GameServer {
       playerRoom: this.playerRoom,
       specRooms: this.specRooms,
       roomFor: (n, m, mp, b, u, nc, nb): Room | null => this.factory.roomFor(n, m, mp, b, u, nc, nb),
+      quickRoom: (m, mp, b, nc, nb, ph): Room | null => this.factory.quickRoom(m, mp ?? '', b, nc ?? false, nb ?? false, ph ?? false),
       roomOfPlayer: (id): Room | undefined => this.roomOfPlayer(id),
       totalPlayers: (): number => opsTotalPlayers(this),
       ops: this.ops,

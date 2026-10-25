@@ -32,6 +32,7 @@ function mkSessions(room: ReturnType<typeof mkRoom>, deps: Record<string, unknow
     mgr: new SessionManager({
       rooms, playerRoom, specRooms,
       roomFor: () => room,
+      quickRoom: () => room,
       roomOfPlayer: (id) => rooms.has(room.name) && room.players.getPlayer(id) ? room : undefined,
       totalPlayers: () => playerRoom.size,
       ops,
