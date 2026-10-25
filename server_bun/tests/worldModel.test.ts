@@ -143,10 +143,10 @@ describe('world model <-> protocol conformance', () => {
       const verbs = [kind.verbs.spawn, kind.verbs.update, kind.verbs.gone, kind.verbs.roster, ...Object.keys(kind.events ?? {})];
       for (const v of verbs) {
         if (!v) {continue;}
-        // oxlint-disable-next-line unicorn/prefer-set-has — the auto-fix
-        // rewrites includes→new Set(str).has: a CHAR set, not a member
-        // check. This exact revert has killed the tripwire ~10 times.
-        expect(union.includes(`type: '${v}'`), `${kind.kind} declares '${v}' — no ServerMessage member carries it`).toBe(true);
+        // indexOf, not includes: the prefer-set-has autofix rewrites
+        // includes→new Set(str).has — a CHAR-set check that always fails.
+        // This exact lint --fix revert has killed the tripwire ~10 times.
+        expect(union.indexOf(`type: '${v}'`) >= 0, `${kind.kind} declares '${v}' — no ServerMessage member carries it`).toBe(true);
       }
     }
   });
@@ -223,6 +223,7 @@ describe('world model <-> protocol conformance', () => {
       .toEqual(new Set([
         'internalId', 'name', 'position', 'rotation', 'velocity', 'isDead',
         'health', 'ping', 'ski', 'jet', 'status', 'team', 'transport', 'armorClass', 'sheep', 'held',
+        'weapon',
       ]));
   });
 
