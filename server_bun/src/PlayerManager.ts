@@ -38,6 +38,11 @@ export class PlayerManager {
    *  instead of the generic farthest-from-everyone ring. */
   teamBases: { alpha: Vec3; bravo: Vec3 } | null = null;
 
+  /** Match intermission (end→reset window): nobody takes damage — the
+   *  game keeps running around the pinned scoreboard, Overwatch-style.
+   *  MatchClock flips this through the MatchHost hook. */
+  invulnerable = false;
+
   /** Sink for energy burns the sim must mirror — shield soak in
    *  applyDamage burns the move shadow's modeled tank. Room wires it. */
   energyBurn?: (playerId: string, energy: number) => void;
@@ -265,6 +270,7 @@ export class PlayerManager {
       team: player.team,
       transport: player.transport,
       armorClass: player.armorClass,
+      weapon: player.weapon || undefined,
     }) as unknown as GameStatePlayer;
   }
 
@@ -314,7 +320,7 @@ export class PlayerManager {
     if (!target || target.isDead) {
       return { killed: false, newHealth: 0, newArmor: 0, endedStreak: 0 };
     }
-    if (simNow() < target.protectedUntil) {
+    if (this.invulnerable || simNow() < target.protectedUntil) {
       return { killed: false, newHealth: target.health, newArmor: target.armor, endedStreak: 0 };
     }
     // NaN damage would write NaN into health — health<=0 is never true

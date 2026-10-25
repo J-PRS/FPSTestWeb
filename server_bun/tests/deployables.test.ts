@@ -31,7 +31,8 @@ describe('RoomDeployables', () => {
 
   it('per-player cap recycles the oldest of a kind', () => {
     const room = new Room('t', null, '', SPEC);
-    addAt(room, 'p1', 0, 0);
+    const p = addAt(room, 'p1', 0, 0);
+    p.beltCharges = 99; // turrets cost 5 — the cap test isn't about the wallet
     for (let i = 0; i < 5; i++) {
       room.messages.handleMessage('p1', { type: 'deploy', kind: 'turret', position: { x: i + 1, y: 0, z: 0 } });
     }
@@ -91,7 +92,8 @@ describe('RoomDeployables', () => {
 
   it('AOE blast damages and destroys deployables; out-of-range untouched', () => {
     const room = new Room('t', null, '', SPEC);
-    addAt(room, 'p1', 0, 0);
+    const p = addAt(room, 'p1', 0, 0);
+    p.beltCharges = 99; // turret costs 5 — both plants need a deep belt
     room.messages.handleMessage('p1', { type: 'deploy', kind: 'turret', position: { x: 1, y: 0, z: 0 } });
     room.messages.handleMessage('p1', { type: 'deploy', kind: 'mine', position: { x: 30, y: 0, z: 0 } });
     // A 50-damage 8m blast centered on the turret: two hits > 60hp turret,

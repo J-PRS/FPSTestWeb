@@ -10,14 +10,14 @@ import type { ServerMessage } from '../../shared/protocol.ts';
 // reload uses — mode stays the room's, layout/terrain/bots swap.
 
 function endDmMatch(room: Room): void {
-  const combat = (room.messages as unknown as { combat: { botAttack(s: string, t: string, w: number): void } }).combat;
+  const {combat} = (room.messages as unknown as { combat: { botAttack(s: string, t: string, w: number): void } });
   room.players.addPlayer('shooter');
   const frags = Math.ceil(MODES.dm.winAt / MODES.dm.ptsPlayerKill);
   for (let i = 0; i < frags; i++) {
     const vid = `v${i}`;
     room.players.addPlayer(vid);
     room.players.breakShield(vid);
-    for (let j = 0; j < 20 && !room.players.getPlayer(vid)!.isDead; j++) combat.botAttack('shooter', vid, 1);
+    for (let j = 0; j < 20 && !room.players.getPlayer(vid)!.isDead; j++) {combat.botAttack('shooter', vid, 1);}
     room.players.getPlayer(vid)!.isDead = false;
   }
 }
@@ -31,7 +31,7 @@ describe('Map rotation', () => {
     room.onRotate = () => next;
     endDmMatch(room);
     expect(sent.some(m => m.type === 'ffaMatchEnd')).toBe(true);
-    room.checkMatchClock(simNow() + 10_001); // intermission → startNext rotates
+    room.checkMatchClock(simNow() + 15_001); // intermission → startNext rotates
     expect(sent.some(m => m.type === 'mapUpdate')).toBe(true);
     expect(room.spec.structures?.length).toBe(1);
   });
@@ -43,7 +43,7 @@ describe('Map rotation', () => {
     room.onRotate = () => null;
     endDmMatch(room);
     expect(sent.some(m => m.type === 'ffaMatchEnd')).toBe(true);
-    room.checkMatchClock(simNow() + 10_001); // intermission → startNext replays
+    room.checkMatchClock(simNow() + 15_001); // intermission → startNext replays
     expect(sent.some(m => m.type === 'mapUpdate')).toBe(false);
   });
 });

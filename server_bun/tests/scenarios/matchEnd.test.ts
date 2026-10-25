@@ -13,10 +13,10 @@ describe('scenario: match end reset funnel', () => {
     expect((end as { scores?: { alpha: number } }).scores!.alpha).toBe(WIN_NUGGETS);
     // The funnel must restart — a matchEnd with no matchStart strands
     // every client on a frozen board. The standings hold through the
-    // 10s intermission, then the board resets.
+    // 15s intermission, then the board resets.
     // The match clock rides TickLoop, not room.sims — jump sim time
     // past the intermission directly.
-    room.checkMatchClock(simNow() + 10_001);
+    room.checkMatchClock(simNow() + 15_001);
     expect(w.count('matchStart')).toBe(1);
     expect(room.scores.alpha).toBe(0);
     expect(room.scores.bravo).toBe(0);

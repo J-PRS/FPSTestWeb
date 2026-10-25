@@ -78,7 +78,7 @@ describe('match clock', () => {
     room.checkMatchClock(horn + 1);
     room.ffaScores.set('h1', 1);
     room.checkMatchClock(horn + 2);
-    room.checkMatchClock(horn + 2 + 10_001); // intermission → startNext re-arms
+    room.checkMatchClock(horn + 2 + 15_001); // intermission → startNext re-arms
     expect(warnedOf()).toBe(false);
   });
 

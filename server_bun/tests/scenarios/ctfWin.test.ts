@@ -35,7 +35,7 @@ describe('scenario: flag capture at winAt ends the match', () => {
     expect(w.count('matchStart')).toBe(0);
     // The match clock rides TickLoop, not room.sims — step() can't
     // reach it; jump the sim clock past the intermission directly.
-    room.checkMatchClock(simNow() + 10_001);
+    room.checkMatchClock(simNow() + 15_001);
     expect(room.scores.alpha).toBe(0);
     expect(w.count('matchStart')).toBe(1);
   });

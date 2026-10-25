@@ -101,6 +101,10 @@ export interface PlayerState {
   lastFireSim: SimMs;
   perk: string;      // join-declared passive (shared/perks.ts) — 'none' default
   armorClass: string; // join-declared armor tier (shared/botClasses.ts) — 'medium' default
+  /** Current weapon the server knows — set at loadout assignment (bots)
+   *  and every authoritative shell spawn. Rides the roster so remotes
+   *  draw a real gun, not the placeholder prop, before a shot edge. */
+  weapon?: number;
   /** Join-declared Q skill — skillUse claims naming another skill are
    *  refused; undeclared (old clients) skips the identity check. */
   skill?: string;

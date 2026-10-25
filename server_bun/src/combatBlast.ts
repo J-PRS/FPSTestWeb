@@ -57,6 +57,10 @@ export interface BlastHost {
     emit?: RoomEventSink;
     /** Jet-tank access — the concussion payload saps victim energy. */
     drainEnergy?: (playerId: string, amount: number) => void;
+    /** Dome occlusion — the shell's flight sweep dies at the field edge,
+     *  so the blast it pops into must respect the same boundary: a victim
+     *  inside an enemy dome can't be splashed through it. */
+    shieldBlocked?: (from: Vec3, to: Vec3, shooterId: string) => boolean;
     health?: Map<string, number>;
     /** Target uplink-transit estimate (ms) — the same value the tick
      *  broadcast leads remote positions by. */
@@ -286,6 +290,11 @@ export class BlastRunner {
     // sit INSIDE geometry (shell popped at the face), so a contact
     // at t≈0 is stepped past rather than counted.
     if (this.h.solids.length > 0 && this.blastBlocked(ctx.pos, tpos)) {return;}
+
+    // Dome occlusion — the shell that popped AT the field edge splashes
+    // into it anyway without this: a dome is a blast wall, not just a
+    // projectile wall. Victims inside an enemy dome take nothing.
+    if (this.h.deps.shieldBlocked?.(ctx.pos, tpos, ctx.shooterId)) {return;}
 
     // Ghost-forensics: the gap between the rewind ghost this hit was
     // credited on and the victim's live wire truth — a large delta is

@@ -259,7 +259,7 @@ describe('RoomMoveSim', () => {
     for (let i = 0; i < 20; i++) {m.tick(0.05);} // held — no re-fire; legs converge to cap, never past it
     s = m.simState('p1')!;
     expect(Math.hypot(s.vel.x, s.vel.z)).toBeLessThanOrEqual(MOVEMENT_CONFIG.maxVelocityGround + 0.01);
-    // Pressing AT the walk cap buys the +6 — that cap+6 is the max payout.
+    // Pressing AT the walk cap buys the +8 — that cap+8 is the max payout.
     const m2 = new RoomMoveSim(flat);
     m2.track('p2', { x: 0, y: MOVEMENT_CONFIG.playerHeight, z: 0 }, 0);
     m2.setPerk('p2', 'jumpstart');
@@ -269,10 +269,10 @@ describe('RoomMoveSim', () => {
     m2.setInput('p2', { forward: 1, right: 0, jumpHeld: false, skiHeld: true });
     m2.tick(0.05);
     s = m2.simState('p2')!;
-    expect(Math.hypot(s.vel.x, s.vel.z)).toBeCloseTo(cap + 6, 0);
+    expect(Math.hypot(s.vel.x, s.vel.z)).toBeCloseTo(cap + 8, 0);
     for (let i = 0; i < 20; i++) {m2.tick(0.05);} // held — coasts, never more
     s = m2.simState('p2')!;
-    expect(Math.hypot(s.vel.x, s.vel.z)).toBeLessThanOrEqual(cap + 6 + 0.01);
+    expect(Math.hypot(s.vel.x, s.vel.z)).toBeLessThanOrEqual(cap + 8 + 0.01);
     // At real pace the perk is inert — can't be milked for speed.
     const m3 = new RoomMoveSim(flat);
     m3.track('p3', { x: 0, y: MOVEMENT_CONFIG.playerHeight, z: 0 }, 0);

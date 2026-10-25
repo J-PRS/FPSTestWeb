@@ -227,6 +227,7 @@ export class RoomProjectiles {
     if (!stats || stats.speed <= 0) {return null;} // hitscan-class — no body
     const owner = this.room.players.getPlayer(ownerId);
     if (!owner) {return null;}
+    owner.weapon = weaponType; // roster gun reveal — a bot's silhouette reads before its first shot edge lands
     const id = `sp-${((this.nextId += 1) - 1)}`;
     const inh = stats.inherit ?? 0.5;
     const vel: Vec3 = {
@@ -272,7 +273,7 @@ export class RoomProjectiles {
 
   private edgeGone(proj: LiveProj, at: Vec3, age: number): void {
     const bin = this.room.connections;
-    const n = proj.id.startsWith('sp-') ? Number(proj.id.slice(3)) : NaN;
+    const n = proj.id.startsWith('sp-') ? Number(proj.id.slice(3)) : Number.NaN;
     if (bin && Number.isFinite(n)) {
       bin.broadcastBinaryReliable(encodeProjGone({ projId: n, age, position: at, shotId: proj.pull }));
       return;

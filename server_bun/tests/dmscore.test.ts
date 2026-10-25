@@ -21,9 +21,9 @@ describe('Room DM scoring', () => {
     room.players.addPlayer('victim');
     room.players.breakShield('victim'); // fresh spawns are protected — tests drive instant damage
     // Drive a kill through the shared combat funnel.
-    const combat = (room.messages as unknown as { combat: { botAttack(s: string, t: string, w: number): void } }).combat;
+    const {combat} = (room.messages as unknown as { combat: { botAttack(s: string, t: string, w: number): void } });
     // High damage guarantees the kill regardless of weapon stats.
-    for (let i = 0; i < 20 && !room.players.getPlayer('victim')!.isDead; i++) combat.botAttack('shooter', 'victim', 1);
+    for (let i = 0; i < 20 && !room.players.getPlayer('victim')!.isDead; i++) {combat.botAttack('shooter', 'victim', 1);}
 
     expect(sent.some((m) => m.type === 'playerKill' && m.shooterId === 'shooter')).toBe(true);
     const fs = sent.filter((m) => m.type === 'ffaScore');
@@ -35,7 +35,7 @@ describe('Room DM scoring', () => {
     const sent: ServerMessage[] = [];
     const room = dmRoom(sent);
     room.players.addPlayer('victim');
-    const combat = (room.messages as unknown as { combat: { handleEnvironmentDamage(p: string, m: { type: 'environmentDamage'; damage: number }): void } }).combat;
+    const {combat} = (room.messages as unknown as { combat: { handleEnvironmentDamage(p: string, m: { type: 'environmentDamage'; damage: number }): void } });
     combat.handleEnvironmentDamage('victim', { type: 'environmentDamage', damage: 500 });
     // Shielded or not, environment kills never score.
     expect(sent.some((m) => m.type === 'ffaScore')).toBe(false);
@@ -47,8 +47,8 @@ describe('Room DM scoring', () => {
     room.connections.broadcast = (m) => { sent.push(m as ServerMessage); return 0; };
     room.players.addPlayer('a'); room.players.addPlayer('b');
     room.players.breakShield('b');
-    const combat = (room.messages as unknown as { combat: { botAttack(s: string, t: string, w: number): void } }).combat;
-    for (let i = 0; i < 20 && !room.players.getPlayer('b')!.isDead; i++) combat.botAttack('a', 'b', 1);
+    const {combat} = (room.messages as unknown as { combat: { botAttack(s: string, t: string, w: number): void } });
+    for (let i = 0; i < 20 && !room.players.getPlayer('b')!.isDead; i++) {combat.botAttack('a', 'b', 1);}
     // CTF frags pay personal PTS via the ffaScore echo — the honor
     // column, never a win condition and never a teamScore.
     const fs = sent.filter((m) => m.type === 'ffaScore');
@@ -76,19 +76,19 @@ describe('Room DM scoring', () => {
     const sent: ServerMessage[] = [];
     const room = dmRoom(sent);
     room.players.addPlayer('shooter');
-    const combat = (room.messages as unknown as { combat: { botAttack(s: string, t: string, w: number): void } }).combat;
+    const {combat} = (room.messages as unknown as { combat: { botAttack(s: string, t: string, w: number): void } });
     const frags = Math.ceil(MODES.dm.winAt / MODES.dm.ptsPlayerKill);
     for (let i = 0; i < frags; i++) {
       const vid = `v${i}`;
       room.players.addPlayer(vid);
       room.players.breakShield(vid);
-      for (let j = 0; j < 20 && !room.players.getPlayer(vid)!.isDead; j++) combat.botAttack('shooter', vid, 1);
+      for (let j = 0; j < 20 && !room.players.getPlayer(vid)!.isDead; j++) {combat.botAttack('shooter', vid, 1);}
       room.players.getPlayer(vid)!.isDead = false; // stand back up — respawn timer is async
     }
     expect(sent.some((m) => m.type === 'ffaMatchEnd' && m.winner === 'shooter')).toBe(true);
     // Standings window: reset waits out the 10s intermission.
     expect(sent.some((m) => m.type === 'matchStart')).toBe(false);
-    room.checkMatchClock(simNow() + 10_001);
+    room.checkMatchClock(simNow() + 15_001);
     expect(room.ffaScores.size).toBe(0);
     expect(sent.some((m) => m.type === 'matchStart')).toBe(true);
   });

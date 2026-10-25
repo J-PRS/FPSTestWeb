@@ -67,9 +67,22 @@ describe('PlayerManager', () => {
     pm.breakShield('tank'); pm.breakShield('tough');
     // Underdog plate: full-health hits punch straight through…
     expect(pm.applyDamage('tank', 40).newHealth).toBe(85);
-    // …resist kicks in only below 80% max HP.
-    expect(pm.applyDamage('tank', 40).newHealth).toBe(55);  // 85 - 40*0.75
+    // …resist kicks in only below 20% max HP (125 → 25).
+    expect(pm.applyDamage('tank', 40).newHealth).toBe(45);
+    expect(pm.applyDamage('tank', 30).newHealth).toBe(15); // still above the line going in — full hit
+    expect(pm.applyDamage('tank', 10).newHealth).toBe(9);  // 15 - 10*0.6 — underdog plate active
     expect(pm.getPlayer('tough')!.health).toBe(125);        // 100 + 25 — perks don't touch the pool
+  });
+
+  it('invulnerable (intermission godmode) blocks every damage path', () => {
+    const pm = new PlayerManager();
+    pm.addPlayer('p1');
+    pm.breakShield('p1');
+    pm.invulnerable = true;
+    expect(pm.applyDamage('p1', 40).newHealth).toBe(125);
+    expect(pm.applyDamage('p1', 999).killed).toBe(false);
+    pm.invulnerable = false;
+    expect(pm.applyDamage('p1', 40).newHealth).toBe(85);
   });
 
   it('kills player when health reaches 0', () => {

@@ -87,6 +87,7 @@ export class BotRoster {
       const p = this.room.players.addPlayer(id, this.room.nextTeam(), loadout.perk, cls, true);
       this.loadouts.set(id, loadout);
       this.roles.set(id, 'offense');
+      p.weapon = loadout.near; // best guess until a real shell spawns — the roster carries it
       this.applyClass(p, cls);
       p.isBot = true;
       if (isSuper(id)) {p.health = 400;} // superbot tanks a beating
@@ -100,6 +101,7 @@ export class BotRoster {
         team: p.team,
         transport: p.transport,
         armorClass: cls,
+        weapon: p.weapon,
         health: p.health,
         isDead: p.isDead,
       }) as ServerMessage);

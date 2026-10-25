@@ -26,6 +26,9 @@ export interface MatchHost {
   onMatchEnd?: (record: MatchRecord & { token?: ResultToken }) => void;
   onEnded?: (winner: string) => void;  // the horn fired — bots get their 'gg' beat
   onStarted?(): void;                  // a match went live — bots get their gl-hf beat
+  /** Intermission edge: true when the standings window opens, false as
+   *  the next match resets — Room gates the damage funnel on it. */
+  setIntermission?(on: boolean): void;
 }
 
 /**
@@ -42,7 +45,7 @@ export class MatchClock {
   /** Intermission deadline — end broadcast fired, reset+matchStart
    *  waits here so clients can sit on the standings (T:A's podium beat). */
   private intermissionAt = 0;
-  private static readonly INTERMISSION_MS = 10_000;
+  private static readonly INTERMISSION_MS = 15_000;
 
   constructor(private host: MatchHost) {}
 
@@ -133,10 +136,11 @@ else {w = s.alpha > s.bravo ? 'alpha' : 'bravo';}
     // A second end during the standings window (admin force, late score
     // cap) must not re-fire the broadcast or restart the countdown.
     if (this.intermissionAt) {return;}
+    const {host} = this;
+    host.setIntermission?.(true); // godmode for the standings window — the world runs on, nobody can kill
     // Standings window is for the gg beat only — kills/contacts past the
     // horn shouldn't keep barking over the scoreboard.
     setMatchMuted(true);
-    const {host} = this;
     const spec = host.modeSpec!;
     const scores = (spec.teams ? Object.assign({}, host.scores) : Object.fromEntries(host.ffaScores)) as Record<string, number>;
     host.broadcast({ type: spec.teams ? 'matchEnd' : 'ffaMatchEnd', winner: w, scores } as ServerMessage);
@@ -170,6 +174,7 @@ else {w = s.alpha > s.bravo ? 'alpha' : 'bravo';}
     const {host} = this;
     const spec = host.modeSpec!;
     this.intermissionAt = 0;
+    host.setIntermission?.(false);
     setMatchMuted(false);
     host.scores.alpha = 0;
     host.scores.bravo = 0;
