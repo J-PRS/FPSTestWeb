@@ -52,7 +52,7 @@ import { createFrameBudget } from '../core/frameBudget.js';
 import { gpuBegin, gpuEnd, gpuMs } from '../core/gpuTimer.js';
 import { lastWeaponByPlayer } from './net/projectiles.js';
 import { parityMiss, kbEchoHorizon } from './parity.js';
-import { fpsWatchdog, resetAutoQuality, fxJobSample, fxJobStats } from './loopPerf.js';
+import { fpsWatchdog, resetAutoQuality, fxJobSample, fxJobStats, seedGpuTier } from './loopPerf.js';
 import { createRenderScan } from './renderScan.js';
 import { settings } from '../core/settings.js';
 import { WeaponType } from '../../../shared/weapons.js';
@@ -952,11 +952,15 @@ export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(
   const budget = createFrameBudget();
   wireDebugKeys(deps, perf, budget, statsPanels);
 
+  let gpuSeeded = false;
   function loop(time: number): void {
     requestAnimationFrame(loop);
     const rawElapsed = (time - lastTime) / 1000;
     const dt = Math.min(Number.isFinite(rawElapsed) ? Math.max(rawElapsed, 0) : 0, MAX_DELTA_TIME);
     if (Number.isFinite(time)) {lastTime = time;}
+    // One-shot: iGPU/software renderer strings start mid-ladder instead
+    // of grinding ~10s of <40fps per watchdog step to reach the floor.
+    if (!gpuSeeded) {gpuSeeded = true; seedGpuTier(deps, st);}
     fpsWatchdog(deps, st, budget, perf, rawElapsed, time);
     // Veiled = waiting on gameState — don't sim or take input, but DO
     // render: shader/pipeline warmup needs real draws or it fires on

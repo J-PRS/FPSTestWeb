@@ -294,6 +294,37 @@ function applyResTier(deps: GameLoopDeps, st: LoopState, next: number, base: { p
 
 let _gpuId: string | null = null;
 
+/** First-impression fix: the reactive ladder needs ~10s of <40fps per
+ *  step, so a weak GPU eats a bad minute before it finds its floor.
+ *  The renderer string already names the class — seed the level at
+ *  boot so a chromebook starts mid-ladder, not at the top.
+ *  Class read: llvmpipe/SwiftShader = software raster (deep tier);
+ *  Intel UHD/HD and 'Mesa Intel' = iGPU (mid); Apple M / NVIDIA / AMD
+ *  dGPU = 0. Unknown string stays 0 — better slow-then-recover than
+ *  start degraded on a misread name. */
+function gpuClassTier(id: string): number {
+  const s = id.toLowerCase();
+  if (/llvmpipe|swiftshader|software/.test(s)) {return 4;}
+  if (/intel.*(uhd|hd graphics|iris)/.test(s) || /mesa.*intel/.test(s)) {return 2;}
+  return 0;
+}
+
+/** Seed once, after the renderer exists — applies the same sheds the
+ *  ladder would have reached reactively, minus the res step (baseline
+ *  stays the user's; the watchdog owns scale steps from here). */
+export function seedGpuTier(deps: GameLoopDeps, st: LoopState): void {
+  const tier = gpuClassTier(gpuId(deps.rendererSetup.renderer));
+  if (tier <= 0 || !settings.get('fps-autoq')) {return;}
+  st.gpuLevel = tier;
+  const base = baselinePixel();
+  applyResTier(deps, st, tier, base, tierOf(base.p, base.m));
+  deps.sceneSetup.volumetricClouds?.setEnabled(tier < 3);
+  setForcedRemoteLod(tier >= 3 ? 1 : null);
+  shedPostPasses(deps.rendererSetup, tier >= 4);
+  setVfxQualityScale(tier >= 4 ? 0.45 : 0.7);
+  Logger.warn(`auto-quality: seeded gpu level ${tier} (${gpuId(deps.rendererSetup.renderer)})`);
+}
+
 /** Undo every ladder step — called when AUTO QUALITY flips off so the
  *  player isn't stranded on a degraded preset it chose for them. */
 export function resetAutoQuality(deps: GameLoopDeps, st: LoopState): void {
