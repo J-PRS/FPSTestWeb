@@ -410,6 +410,7 @@ bodyN += 1;
   // remote/bot indicator mid-screen for the life of a flap.
   // Remotes keep ticking while you're dead — the death cam still watches
   // the world, and the position send is also the server's liveness proof.
+  perf.mark('playerSim');
   if (!demoManager?.isPlaying) {
     deps.remotes().networkTick(dt);
   }
