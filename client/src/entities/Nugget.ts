@@ -4,6 +4,7 @@ import { GRAVITY, BLOOM_LAYER, EMIT_GAIN } from '../core/config.js';
 import type { Terrain } from '../world/terrain.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
 import { BallTrailDots } from '../effects/ballTrails.js';
+import { GlowBatch } from '../effects/glowBatch.js';
 import { metalMat } from './procMetal.js';
 import { makePartPool, takeSlot, releaseSlot, type PartPool } from './deployPool.js';
 import { parityMiss, parityStamp } from '../game/parity.js';
@@ -67,6 +68,17 @@ const _q = new THREE.Quaternion();
 const _s = new THREE.Vector3();
 const _beamPos = new THREE.Vector3();
 let _beamPool: PartPool | null = null;
+let _glowBatch: GlowBatch | null = null;
+/** Same trick as the beam pool — a Sprite + SpriteMaterial per gem was
+ *  a draw + material apiece; one instanced quad batch serves all live
+ *  halos. */
+function glowBatch(scene: THREE.Scene): GlowBatch {
+  if (!_glowBatch) {
+    _glowBatch = new GlowBatch(scene, getNuggetTex());
+    _glowBatch.mesh.layers.enable(BLOOM_LAYER);
+  }
+  return _glowBatch;
+}
 /** One shared beam pool — each nugget's shaft was a cloned Mesh +
  *  material (a draw + a material per gem). Same geometry, tint rides
  *  instanceColor; the collect fade lives in scale.y, not opacity. */
@@ -131,8 +143,7 @@ export class Nugget {
    *  hoard reads its value at a glance. */
   private sizeMul = 1;
   private pulseColor = new THREE.Color();
-  private glow: THREE.Sprite;
-  private glowMat: THREE.SpriteMaterial;
+  private glowSlot = -1;
   private beamSlot = -1;
   private trailFx: BallTrailDots;
   private trailTimer = 0;
@@ -169,27 +180,11 @@ export class Nugget {
     this.slot = takeSlot(this.pools.body);
     this.writeInstance();
 
-    // Billboarded glow halo — makes the nugget readable at distance
-    this.glowMat = new THREE.SpriteMaterial({
-      map: getNuggetTex(),
-      color: this.baseColor.clone().multiplyScalar(EMIT_GAIN),
-      transparent: true,
-      opacity: 0.85,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      // Depth bias toward the camera: the billboard's lower half grazing
-      // the terrain plane is a depth near-tie, so the bias wins it — but a
-      // ridge genuinely IN FRONT of the nugget is a gross depth gap and
-      // still occludes. Keeps depthTest for real occlusion, no float-lift.
-      polygonOffset: true,
-      polygonOffsetFactor: -4,
-      polygonOffsetUnits: -4,
-    });
-    this.glow = new THREE.Sprite(this.glowMat);
-    this.glow.scale.setScalar(2.2 * sizeMul);
-    this.glow.position.copy(this.pos);
-    this.glow.layers.enable(BLOOM_LAYER);
-    scene.add(this.glow);
+    // Billboarded glow halo rides the shared quad batch — a Sprite per
+    // gem was a draw + material each. Same texture, same depth bias
+    // (batch material carries the polygonOffset), alpha/color/size are
+    // per-instance writes in updateVisuals.
+    this.glowSlot = glowBatch(scene).take();
 
     if (parts?.beam) {
       this.beamSlot = takeSlot(beamPool(scene));
@@ -241,8 +236,7 @@ export class Nugget {
     this.collectFade += dt * 8;
     this.visScale = Math.max(0, 1 - this.collectFade);
     this.writeInstance();
-    this.glowMat.opacity = Math.max(0, 0.85 * (1 - this.collectFade));
-    this.glow.scale.setScalar(2.2 * this.sizeMul * this.visScale);
+    this.writeGlow(this.renderPos.y, Math.max(0, 0.85 * (1 - this.collectFade)));
     if (this.beamSlot >= 0) {this.writeBeam(this.renderPos.y);}
     if (this.collectFade >= 1 && this.trailFx.size === 0) {this.dead = true;}
   }
@@ -452,16 +446,24 @@ export class Nugget {
           this.pools.accent.mesh.instanceColor!.needsUpdate = true;
         }
       }
-      this.glow.position.set(this.renderPos.x, y, this.renderPos.z);
-      this.glowMat.opacity = 0.7 + Math.sin(this.age * 5) * 0.15;
+      this.writeGlow(y, 0.7 + Math.sin(this.age * 5) * 0.15);
       this.writeBeam(y);
       return;
     }
     this.writeInstance();
     // Halo stays welded to the nugget — the polygonOffset bias handles the
     // terrain-graze clip, so no visual lift needed.
-    this.glow.position.copy(this.renderPos);
+    this.writeGlow(this.renderPos.y, 0.85);
     this.writeBeam(this.renderPos.y);
+  }
+
+  private writeGlow(y: number, alpha: number): void {
+    if (this.glowSlot < 0) {return;}
+    const c = this.emitColor;
+    glowBatch(this.scene).write(this.glowSlot,
+      this.renderPos.x, y, this.renderPos.z,
+      2.2 * this.sizeMul * this.visScale, alpha,
+      c.r * EMIT_GAIN, c.g * EMIT_GAIN, c.b * EMIT_GAIN);
   }
 
   private writeBeam(baseY: number): void {
@@ -488,7 +490,8 @@ export class Nugget {
   }
 
   dispose(): void {
-    this.scene.remove(this.glow);
+    glowBatch(this.scene).release(this.glowSlot);
+    this.glowSlot = -1;
     releaseSlot(beamPool(this.scene), this.beamSlot);
     this.beamSlot = -1;
     if (this.slot >= 0) {
@@ -496,7 +499,6 @@ export class Nugget {
       if (this.pools.accent) {releaseSlot(this.pools.accent, this.slot);}
       this.slot = -1;
     }
-    this.glowMat.dispose();
     this.trailFx.dispose();
   }
 }
