@@ -198,6 +198,10 @@ export function adminRoute(ctx: HttpCtx, req: Request, url: URL): Response | Pro
       const ok = ctx.gameServer.dropSocket(url.searchParams.get('player') ?? '');
       return json({ ok }, { status: ok ? 200 : 404 });
     },
+    '/admin/close': (): Response => {
+      const r = ctx.gameServer.closeRoom(url.searchParams.get('room') ?? '');
+      return json({ ok: r === 'ok', result: r }, { status: r === 'ok' ? 200 : 404 });
+    },
     '/admin/end': (): Response => {
       const r = ctx.gameServer.forceEndMatch(url.searchParams.get('room') ?? '');
       return json({ ok: r === 'ok', result: r }, { status: r === 'ok' ? 200 : 404 });

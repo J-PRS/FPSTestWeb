@@ -457,6 +457,22 @@ export class GameServer {
     return true;
   }
 
+  /** Close a room outright: humans get kicked (they reconnect through
+   *  the matchmaker into a live room — bare rejoins can't re-mint),
+   *  bots die with the room. For draining twin rooms / zombie arenas. */
+  closeRoom(name: string): string {
+    const room = this.rooms.get(name);
+    if (!room) {return 'no room';}
+    for (const [id, p] of room.players.getAllPlayers()) {
+      if (!p.isBot) {room.socketOf(id)?.close(1000, 'room closed'); this.removePlayerCompletely(room, id, 'roomClosed');}
+    }
+    room.dispose();
+    this.rooms.delete(name);
+    this.tickLoop.forgetRoom(name);
+    logger.info('Room closed by admin', { room: name });
+    return 'ok';
+  }
+
   /** Socket-only kill — the seat record survives so grace + the
    *  reconnect/reclaim path fire (vs kickPlayer's full removal). The
    *  test-op for "real socket dropped mid-match". */
