@@ -92,7 +92,9 @@ export function processProjectileExplosion(c: CombatCtx, a: ExplosionArgs): void
   // Record explosion for death impulse calculation
   deps.explosionTracker.addExplosion(pos, force, a.shooterId || deps.lazyNetworkManager().getLocalPlayerId());
 
-  if (a.claimLegal !== false) {
+  // Hook shells pull ONLY through hookConnect (contact-gated) — running
+  // the generic pull here reels the thrower toward empty air on a whiff.
+  if (a.claimLegal !== false && a.weaponType !== WeaponType.Hook) {
     c.applyExplosionForce({ pos, radius, force, forceMode, forceMultiplier: a.forceMultiplier, aoeDamage, directHitTargetId: a.directHitTargetId ?? null, weaponType: a.weaponType, shooterId: a.shooterId, air: a.air, shotId: a.shotId });
   }
 
