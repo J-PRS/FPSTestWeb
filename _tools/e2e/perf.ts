@@ -45,7 +45,7 @@ interface PerfSample {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const stack = await upStack();
-const client = await launchClient(stack.clientUrl(`&room=e2eperf&bots=${BOTS}&mode=${arg('mode', 'nuggets')}&map=${arg('map', 'escalade')}&gpuperf=1${arg('extra', '')}`));
+const client = await launchClient(stack.clientUrl(`&room=e2eperf&bots=${BOTS}&mode=${arg('mode', 'nuggets')}&map=${arg('map', 'escalade')}&nocreatures=1&noballs=1&gpuperf=1${arg('extra', '')}`));
 
 try {
   await client.waitFor(`t.networkManager && t.networkManager.isConnected()`, 30000);
@@ -62,10 +62,27 @@ try {
   // Warm-up: spawn-in burst skews the first seconds.
   await sleep(3000);
   await client.page.evaluate(`window.__frames = []`);
+
+  // CDP Profiler flame (--cpu N seconds): real function-level self-time,
+  // the 'no guessing' answer to which JS function eats the frame.
+  const cpuSecs = +arg('cpu', '0');
+  let cdp: Awaited<ReturnType<typeof client.page.createCDPSession>> | null = null;
+  if (cpuSecs > 0) {
+    cdp = await client.page.createCDPSession();
+    await cdp.send('Profiler.enable');
+    await cdp.send('Profiler.setSamplingInterval', { interval: 100 });
+    await cdp.send('Profiler.start');
+  }
   const task0 = (await client.page.metrics()).TaskDuration ?? 0;
   const wall0 = Date.now();
   await sleep(SECS * 1000);
   const task1 = (await client.page.metrics()).TaskDuration ?? 0;
+
+  let cpuProfile: { profile?: { nodes?: { id: number; callFrame: { functionName: string; url: string; lineNumber: number }; hitCount?: number }[]; timeDeltas?: number[]; samples?: number[] } } | null = null;
+  if (cdp) {
+    await sleep(cpuSecs * 1000);
+    cpuProfile = await cdp.send('Profiler.stop') as typeof cpuProfile;
+  }
 
   const deltas = await client.test<number[]>(`window.__frames`);
   deltas.sort((a, b) => a - b);
@@ -124,7 +141,12 @@ try {
       if (!o.isMesh && !o.isSkinnedMesh && !o.isLine && !o.isPoints && !o.isSprite) {return;}
       let n = o;
       while (n && !n.name && n !== scene) {n = n.parent;}
-      const k = (o.name ? o.name : o.type) + '|' + ((n && n.name) || 'scene') + '|' + (o.geometry ? o.geometry.type : '-');
+      const chain = [];
+      let c = o;
+      while (c && chain.length < 3) {chain.push(c.name || c.type); c = c.parent;}
+      const mat = o.material;
+      const matKey = mat ? (mat.name || mat.type + '#' + String(mat.id)) : '-';
+      const k = (o.name ? o.name : o.type) + '|' + chain.join('<') + '|' + matKey;
       counts[k] = (counts[k] ?? 0) + 1;
     });
     return counts;
@@ -132,6 +154,24 @@ try {
   if (census) {
     const top = Object.entries(census).sort((a, b) => b[1] - a[1]).slice(0, 15);
     console.log(`  drawcensus ${top.map(([k, v]) => `${k}:${v}`).join(' ')}`);
+  }
+
+  if (cpuProfile?.profile?.nodes && cpuProfile.profile.samples && cpuProfile.profile.timeDeltas) {
+    const nodes = new Map(cpuProfile.profile.nodes.map((n) => [n.id, n]));
+    const selfMs = new Map<number, number>();
+    cpuProfile.profile.samples.forEach((id, i) => {
+      const dt = (cpuProfile.profile!.timeDeltas![i] ?? 0) / 1000; // µs → ms
+      selfMs.set(id, (selfMs.get(id) ?? 0) + dt);
+    });
+    const rows = [...selfMs.entries()]
+      .map(([id, ms]) => {
+        const f = nodes.get(id)?.callFrame;
+        return { name: f?.functionName || '(anon)', file: f ? `${f.url.split('/').pop()}:${f.lineNumber}` : '?', ms };
+      })
+      .sort((a, b) => b.ms - a.ms)
+      .slice(0, 20);
+    console.log(`  cpuflame (self ms over ${cpuSecs}s):`);
+    for (const r of rows) {console.log(`    ${r.ms.toFixed(1)}ms ${r.name} ${r.file}`);}
   }
 
   if (COMPARE && existsSync(COMPARE)) {
