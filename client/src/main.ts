@@ -828,7 +828,10 @@ async function init(): Promise<void> {
   // the resumed identity. Explicit leaves clear fps-last-room, so its
   // presence means "was in a match and never left". A solo pick
   // (fps-solo) suppresses the resume — the player chose offline.
-  if (!urlParams.room && !urlParams.p2p && !urlParams.solo && settings.get('fps-last-room')) {
+  // Bare '/' ONLY — a public-pool path (/quickplay|/quickjoin) whose
+  // matchmaker call didn't land must NOT resume a stale last-room
+  // (that hijack is exactly 'quickplay puts me in arena-1').
+  if (window.location.pathname === '/' && !urlParams.room && !urlParams.p2p && !urlParams.solo && settings.get('fps-last-room')) {
     const resume = settings.get('fps-last-room');
     history.replaceState(null, '', `/s/${encodeURIComponent(resume)}${window.location.search}`);
   }
