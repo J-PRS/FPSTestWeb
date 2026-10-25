@@ -48,7 +48,7 @@ describe('blast → loose-object parity', () => {
     room.pickups!.spawn({ x: 3, y: 10, z: 0 }, 'gem');
     const before = room.pickups!.snapshot()[0]!.pos;
     blast(room);
-    for (let i = 0; i < 5; i++) room.pickups!.tick(0.05);
+    for (let i = 0; i < 5; i++) {room.pickups!.tick(0.05);}
     const after = room.pickups!.snapshot()[0]!.pos;
     expect(Math.hypot(after.x - before.x, after.y - before.y, after.z - before.z)).toBeGreaterThan(0.05);
   });
@@ -72,7 +72,7 @@ describe('blast → loose-object parity', () => {
   it('a pull blast sucks a server-side ball toward center, not away', () => {
     const { room } = roomWithShooter();
     room.ballSim.balls.set(43, fakeBall(43, 5, 10, 0));
-    room.messages.serverBlast('p1', { ...blastAt }, WeaponType.DiscPull, null);
+    room.messages.serverBlast('p1', { ...blastAt }, WeaponType.Implodisc, null);
     const b = room.ballSim.balls.get(43)!;
     // Ball sits +x from center — a pull must drive it BACK toward 0, never
     // fling it further out (the old sign-less knock pushed instead).
@@ -84,7 +84,7 @@ describe('blast → loose-object parity', () => {
     room.pickups!.spawn({ x: 200, y: 10, z: 0 }, 'gem');
     const before = room.pickups!.snapshot()[0]!.pos;
     blast(room);
-    for (let i = 0; i < 5; i++) room.pickups!.tick(0.05);
+    for (let i = 0; i < 5; i++) {room.pickups!.tick(0.05);}
     expect(room.pickups!.snapshot()[0]!.pos).toEqual(before);
   });
 });

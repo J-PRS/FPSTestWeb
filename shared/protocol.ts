@@ -36,6 +36,9 @@ export type ClientMessage =
   // room: optional match room — server validates [\w-]{1,32}, absent =
   // 'default'. mode: only honored when the join creates the room.
   | { type: 'join'; playerId: string; token?: string; room?: string; mode?: string; perk?: string; armorClass?: string;
+      /** Equipped Q-slot skill — the server shadows its cooldown; a claim
+       *  naming a different skill is refused. */
+      skill?: string;
       /** Chosen display name — sanitized server-side, carried on
        *  gameState/playerJoined for scoreboard/chat/feed rendering. The
        *  id remains the identity; names are cosmetic and non-unique. */
@@ -144,7 +147,7 @@ export type ClientMessage =
   // One-shot skill activation (blink/dash/slam/warp/bounce): the client
   // already spent ENERGY.skillCost locally — this claim only mirrors the
   // ante into the server's shadow tank. Carries nothing else.
-  | { type: 'skillUse'; claimSeq?: number }
+  | { type: 'skillUse'; claimSeq?: number; skill?: string }
   // Deliberate respawn (the K bind): a self-kill claim that funnels
   // through the normal death path — kill feed, respawn timer, corpse
   // charge — rather than a teleport shortcut, so a pending class/perk

@@ -426,9 +426,13 @@ this.d.ops.joins += 1;
   /** The seat itself: player record, transport tag, indices, handshake
    *  reply, and the join/tier counters. */
   private seat(ws: ServerWebSocket<WebSocketData>, room: Room, playerId: string, handshake: Record<string, unknown>, sessionToken: string, name?: string): void {
-    const joinedPlayer = room.players.addPlayer(playerId, room.nextTeam(), isPerkId(handshake.perk) ? handshake.perk : 'none',
+    const joinedPlayer = room.players.addPlayer(playerId, room.nextHumanTeam(), isPerkId(handshake.perk) ? handshake.perk : 'none',
       typeof handshake.armorClass === 'string' ? handshake.armorClass : 'medium');
+    // The seat replaces a bot's: sides stay even and the total holds at
+    // botFill, with the weakest bot on the joined team retiring.
+    room.bots.retireWorst(joinedPlayer.team);
     joinedPlayer.name = name;
+    if (typeof handshake.skill === 'string' && handshake.skill.length <= 16) {joinedPlayer.skill = handshake.skill;}
     joinedPlayer.spawnHold = handshake.spawnHold === true;
     if (handshake.transport === 'wt' || handshake.transport === 'rtc' || handshake.transport === 'ws') {
       joinedPlayer.transport = handshake.transport;

@@ -46,7 +46,7 @@ function chase(trialWeapon: WeaponType, name: string): Trial {
     roster: { roles: Map<string, string>; refitClass(id: string): void };
   };
   // Runner: featherjets light + pull disc, capper job.
-  ctl.loadouts.set(capper.id, { ...BOT_LOADOUTS[0]!, belt: WeaponType.DiscPull });
+  ctl.loadouts.set(capper.id, { ...BOT_LOADOUTS[0]!, belt: WeaponType.Implodisc });
   ctl.roster.refitClass(capper.id);
   ctl.roster.roles.set(capper.id, 'capper');
   // Chaser: trial weapon in every fire slot so the pick can't dodge it;
@@ -72,27 +72,27 @@ function chase(trialWeapon: WeaponType, name: string): Trial {
         capper.position.z - chaser.position.z);
       t.minGap = Math.min(t.minGap, gap);
       gapSum += gap; gapN++;
-      if (bravoFlag.state === 'home') t.capT = simT;
+      if (bravoFlag.state === 'home') {t.capT = simT;}
     }
-    if (capper.isDead && bravoFlag.carrier !== capper.id) t.killT = simT;
+    if (capper.isDead && bravoFlag.carrier !== capper.id) {t.killT = simT;}
     // Late events land after the flag check — read the wire each tick.
     for (const m of w.msgs.splice(0)) {
       const mm = m as unknown as Record<string, unknown>;
-      if (mm.type === 'playerShot' && mm.id === chaser.id) t.shots++;
+      if (mm.type === 'playerShot' && mm.id === chaser.id) {t.shots++;}
       if (mm.type === 'playerHit' && mm.shooterId === chaser.id && mm.targetId === capper.id) {
         t.hits++; t.dealt += Number(mm.damage) || 0;
       }
     }
   }
   t.avgGap = gapN ? gapSum / gapN : 0;
-  if (t.minGap === Infinity) t.minGap = 0;
+  if (t.minGap === Infinity) {t.minGap = 0;}
   return t;
 }
 
 describe('scenario: chaser weapon trials', () => {
   it('one chaser vs one escaping capper — rank the pursuit weapons', () => {
     const rows: Trial[] = [];
-    for (const tr of TRIALS) rows.push(chase(tr.weapon, tr.name));
+    for (const tr of TRIALS) {rows.push(chase(tr.weapon, tr.name));}
     console.log('  chase trials (peaks 300m, light capper vs one ldefense):');
     console.log('  weapon      shots  hits  dealt  minGap  avgGap  killT   capT');
     for (const r of rows) {
@@ -105,5 +105,5 @@ describe('scenario: chaser weapon trials', () => {
     // The duel has to resolve one way or the other — a chase where the
     // capper neither dies nor caps means the pursuit goal never engaged.
     expect(rows.some((r) => r.killT > 0 || r.capT > 0)).toBe(true);
-  }, 300000);
+  }, 300_000);
 });

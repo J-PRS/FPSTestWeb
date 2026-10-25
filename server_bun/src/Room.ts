@@ -862,7 +862,7 @@ export class Room {
     // The pluggable mode's own sims (conquest's lattice, anything future
     // modules register) — same tick + join-replay funnel as built-ins.
     for (const s of this.modeModule?.sims?.() ?? []) {this.sims.push(s);}
-    if (ambient && this.pickups) {this.sims.push({ name: 'pickups', tick: (dt): void => this.pickups!.tick(dt), worldState: (): ServerMessage[] => this.pickups!.snapshot().map((p) => ({ type: 'pickupSpawn', id: p.id, pos: p.pos, kind: p.kind }) as ServerMessage) });}
+    if (ambient && this.pickups) {this.sims.push({ name: 'pickups', tick: (dt): void => this.pickups!.tick(dt), worldState: (): ServerMessage[] => this.pickups!.snapshot().map((p) => ({ type: 'pickupSpawn', id: p.id, pos: p.pos, kind: p.kind, vel: p.vel }) as ServerMessage) });}
     this.sims.push({ name: 'unbury', tick: (dt): void => this.unburyTick(dt) });
     if (this.spec.arena) {
       const arena = new RoomArena(this, this.spec.arena);
@@ -1083,7 +1083,20 @@ export class Room {
       drainEnergy: (pid, n): boolean => this.moveSim.drainEnergy(pid, n),
       // Instant-skill claim: the client already spent the energy locally —
       // mirror the same ante on the shadow or the tank drifts 50 apart.
-      onSkillUse: (pid): true | "gone" => this.moveSim.drainEnergy(pid, ENERGY.skillCost) ? true : 'gone',
+      onSkillUse: (pid, skill): true | "gone" => {
+        const p = this.players.getPlayer(pid);
+        if (!p) {return 'gone';}
+        // Identity check: a claim naming a skill the seat never declared
+        // is a forged press — declared skills are the only legal ones.
+        if (p.skill !== undefined && skill !== undefined && skill !== p.skill) {return 'gone';}
+        // Cooldown floor: client skills all sit at 1s; 850ms of slack
+        // eats jitter, a faster claim is a script.
+        const now = wallNow();
+        if (p.lastSkillUse !== undefined && now - p.lastSkillUse < 850) {return 'gone';}
+        if (!this.moveSim.drainEnergy(pid, ENERGY.skillCost)) {return 'gone';}
+        p.lastSkillUse = now;
+        return true;
+      },
       onThrowFlag: (pid): void | undefined => this.flags?.throwFor(pid),
       energyOf: (pid): number | null => this.moveSim.energyOf(pid),
       moveResync: (pid, pos, yaw, fullEnergy): void => {
@@ -1329,6 +1342,20 @@ export class Room {
       else if (p.team === 'bravo') {bravo += 1;}
     }
     return pickTeam({ alpha, bravo });
+  }
+
+  /** Human join pick: humans-vs-humans first — nobody wants to be the
+   *  second human stacked onto the side that already has one — then
+   *  total size. Bots keep nextTeam; they don't read the human column. */
+  nextHumanTeam(): TeamId | undefined {
+    if (!this.modeSpec?.teams) {return undefined;}
+    let aH = 0, bH = 0, aT = 0, bT = 0;
+    for (const p of this.players.getAllPlayers().values()) {
+      if (p.team === 'alpha') {aT += 1; if (!p.isBot) {aH += 1;}}
+      else if (p.team === 'bravo') {bT += 1; if (!p.isBot) {bH += 1;}}
+    }
+    if (aH !== bH) {return aH < bH ? 'alpha' : 'bravo';}
+    return pickTeam({ alpha: aT, bravo: bT });
   }
 
   /** Balance join for players added without a team (server bots populate

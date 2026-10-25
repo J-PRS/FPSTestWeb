@@ -382,6 +382,25 @@ excess -= 1;
     this.room.removePlayerCompletely(id, 'botFill', (m, o): void => logger.info(m, o));
   }
 
+  /** A human joined `team` — their seat replaces a bot's so the sides
+   *  stay even. Prefer a corpse (popping a live one mid-fight reads as
+   *  a vanish), else the lowest kills−deaths on that side. */
+  retireWorst(team: string | undefined): void {
+    if (!team) {return;}
+    let pick: string | null = null;
+    let pickDead = false;
+    let pickScore = Infinity;
+    for (const id of this.brains.keys()) {
+      const p = this.room.players.getPlayer(id);
+      if (!p || p.team !== team) {continue;}
+      const score = p.kills - p.deaths;
+      if (pick === null || (p.isDead && !pickDead) || (p.isDead === pickDead && score < pickScore)) {
+        pick = id; pickDead = p.isDead; pickScore = score;
+      }
+    }
+    if (pick !== null) {this.retire(pick);}
+  }
+
   /** Forget a removed bot's roster state — untrack stays in ServerBots
    *  (it drains every subsystem's map) and calls back into this. */
   forget(id: string): void {

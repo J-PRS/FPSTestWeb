@@ -105,6 +105,13 @@ export class ServerBots {
   roleOf(id: string): BotRole | undefined {
     return this.roster.roleInfo.get(id);
   }
+
+  /** A human seated onto `team` — their spot replaces that side's
+   *  weakest bot so the sides stay even (corpse preferred over a live
+   *  vanish, then lowest kills−deaths). */
+  retireWorst(team: string | undefined): void {
+    this.roster.retireWorst(team);
+  }
   /** A bot's named squad task, if the commander gave it one — spawn
    *  scoring pulls tasked members toward their job. */
   taskGoalFor(id: string) {

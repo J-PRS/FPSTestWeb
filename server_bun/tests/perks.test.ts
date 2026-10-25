@@ -46,20 +46,20 @@ describe('perks', () => {
     expect(perkMods('')).toEqual(zero);
     // A real perk fills its mods over the zero base.
     const p = perkMods('plated');
-    expect(p.damageResist).toBe(0.25);
+    expect(p.damageResist).toBe(0.4);
     expect(p.jetDrain).toBe(1); // untouched keys stay at the neutral 1
   });
 
   it('perkMods returns a fresh copy — mutating it cannot corrupt the table', () => {
     const a = perkMods('plated');
     a.damageResist = 99;
-    expect(perkMods('plated').damageResist).toBe(0.25);
+    expect(perkMods('plated').damageResist).toBe(0.4);
   });
 
-  it('plated resist only counts below 80% max health — the underdog plate', () => {
+  it('plated resist only counts below 20% max health — the underdog plate', () => {
     const mods = perkMods('plated');
-    expect(effectiveResist(mods, 79, 100)).toBe(0.25);
-    expect(effectiveResist(mods, 80, 100)).toBe(0); // at the line: healthy
+    expect(effectiveResist(mods, 19, 100)).toBe(0.4);
+    expect(effectiveResist(mods, 20, 100)).toBe(0); // at the line: healthy
     expect(effectiveResist(mods, 100, 100)).toBe(0);
     expect(effectiveResist(perkMods('none'), 10, 100)).toBe(0);
   });

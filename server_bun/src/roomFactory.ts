@@ -117,6 +117,9 @@ export class RoomFactory {
    *  its name just remints on the next join. Returns null only when
    *  every live room is occupied — the caller rejects the join. */
   roomFor(name: string, mode = '', map = '', bots?: number, unlisted = false, noCreatures = false, noBalls = false): Room | null {
+    // Server policy beats client requests: gates only tighten unless the operator opted in.
+    noCreatures = noCreatures || !CONFIG.allowCreatures;
+    noBalls = noBalls || !CONFIG.allowBalls;
     let room = this.host.rooms.get(name);
     // A bot-only room's mode is first-joiner residue, not someone's
     // match — a hosted 'ctf' landing in a stale 'nuggets' room would

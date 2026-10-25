@@ -135,6 +135,23 @@ export class PlayerManager {
     // Bots stamp p.isBot after this returns — the counter must key on
     // the join call's own answer, not the field's late arrival.
     const was = this.players.get(playerId);
+    if (was) {
+      // Re-seat (grace-expired reclaim, flap past the shield cap, fresh
+      // socket on a stale record): the old row's wallet rides along —
+      // an F5 must never tax your tokens or your belt stock.
+      player.heldTokens = was.heldTokens;
+      player.beltCharges = was.beltCharges;
+      player.kills = was.kills;
+      player.deaths = was.deaths;
+      player.streak = was.streak;
+      // Vitals too — a re-seat is not a respawn: keep the wounds (an F5
+      // can't be a free heal), capped at the fresh record's pool.
+      player.health = Math.min(was.health, maxHealth);
+      player.armor = was.armor;
+      player.charge = was.charge;
+      player.chargeT = was.chargeT;
+      player.isDead = was.isDead;
+    }
     if (was && !was.isBot) {this.humans -= 1;}
     if (!isBot) {this.humans += 1;}
     this.players.set(playerId, player);

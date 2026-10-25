@@ -47,6 +47,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMin: 0,
     hitMax: 0.25, // belt rule: the throw is a physical shell, not a wake — the pull AOE is the payoff after contact
     hitGrow: 2,
+    beltThrow: true,
   },
   [WeaponType.BeltDisc]: {
     // Belt disc: the plain push variant — same flight/damage, knocks back.
@@ -61,6 +62,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMin: 0,
     hitMax: 0.25,
     hitGrow: 2,
+    beltThrow: true,
   },
   [WeaponType.Grenade]: {
     directDamage: 50,

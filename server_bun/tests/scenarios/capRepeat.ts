@@ -57,7 +57,7 @@ export function measureRepeat(
     loadouts: Map<string, (typeof BOT_LOADOUTS)[number]>;
     roster: { roles: Map<string, string>; refitClass(id: string): void };
   };
-  ctl.loadouts.set(capper.id, { ...BOT_LOADOUTS[0]!, belt: WeaponType.DiscPull });
+  ctl.loadouts.set(capper.id, { ...BOT_LOADOUTS[0]!, belt: WeaponType.Implodisc });
   ctl.roster.refitClass(capper.id);
   ctl.roster.roles.set(capper.id, 'capper');
   capper.perk = 'featherjets';

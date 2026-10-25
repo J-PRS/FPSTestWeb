@@ -41,7 +41,7 @@ describe('scenario: blast knockback distance', () => {
     [WeaponType.Mortar, 'mortar', 22.9, 30, 3.9, 6],
     [WeaponType.ImpactGrenade, 'impact grenade', 22.9, 30, 3.9, 6],
     [WeaponType.ArmorGrenade, 'armor grenade', 13.6, 18, 2.2, 4],
-    [WeaponType.DiscPull, 'disc pull', 8.5, 12, 0.4, 1.5],
+    [WeaponType.Implodisc, 'implodisc', 8.5, 12, 0.4, 1.5],
   ];
 
   for (const [wt, name, , dCap, , hCap] of CASES) {
@@ -52,7 +52,7 @@ describe('scenario: blast knockback distance', () => {
       freeze(room, victim.id, { x: 0, y: 31, z: 0 });
 
       const f = blastFlight(room, shooter.id, victim.id, wt);
-      if (process.env.BLAST_LOG) console.log(`${name}: drift ${f.drift.toFixed(1)}m, height ${f.height.toFixed(1)}m`);
+      if (process.env.BLAST_LOG) {console.log(`${name}: drift ${f.drift.toFixed(1)}m, height ${f.height.toFixed(1)}m`);}
       expect(f.drift).toBeGreaterThan(0.3);  // the blast did displace them
       expect(f.drift).toBeLessThan(dCap);    // …but didn't launch them
       expect(f.height).toBeGreaterThan(0.2); // feet pops do loft them

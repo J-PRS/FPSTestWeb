@@ -137,7 +137,7 @@ export interface RoomInfo {
    *  subscribe to the bus instead of hanging a hook here. */
   influence?: InfluenceMap;
   /** Instant-skill claim sink — Room.moveSim.drainEnergy(ENERGY.skillCost). */
-  onSkillUse?: (playerId: string) => ClaimVerdict;
+  onSkillUse?: (playerId: string, skill?: string) => ClaimVerdict;
   /** Carried-flag throw claim — RoomFlags.throwFor. */
   onThrowFlag?: (playerId: string) => void;
   /** Shadow-move hooks — Room.moveSim. Position reports reconcile the

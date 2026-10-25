@@ -101,6 +101,12 @@ export interface PlayerState {
   lastFireSim: SimMs;
   perk: string;      // join-declared passive (shared/perks.ts) — 'none' default
   armorClass: string; // join-declared armor tier (shared/botClasses.ts) — 'medium' default
+  /** Join-declared Q skill — skillUse claims naming another skill are
+   *  refused; undeclared (old clients) skips the identity check. */
+  skill?: string;
+  /** Wall ms of the last accepted skillUse — per-skill cooldown is
+   *  client law, but the server's 850ms floor stops a free-firing claim. */
+  lastSkillUse?: number;
   /** Mid-match classUpdate pick — applied on the next respawn, never
    *  mid-life (an instant tier swap would be a free heal). */
   pendingClass?: ArmorClass;

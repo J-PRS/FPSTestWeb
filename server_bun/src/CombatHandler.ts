@@ -163,7 +163,7 @@ export class CombatHandler {
    *  A resend inside the window is a no-op (the first verdict already
    *  flew); outside it the intent is simply new. */
   private seenShots = new Map<string, Map<string, number>>();
-  private static readonly SHOT_DEDUPE_MS = 3000;
+  private static readonly SHOT_DEDUPE_MS = 10_000; // resync replays ride the whole journal — >5s hidden gaps are normal
   /** Cadence gate (registerMiss uses it): per `${playerId}:${weaponType}`
    *  burst window — start time + claims seen inside it. The client fire
    *  timer is feel; this is the law. A window holds up to `burst` spawn
@@ -247,6 +247,14 @@ export class CombatHandler {
    *  their client can log WHY predicted damage never happened. */
   reject(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number, shotId?: string): void {
     this.hb('rej');
+    // Record rejected shots too — a journal replay of a REFUSED pull
+    // must no-op, not re-arrive, heat the cadence window, and reject the
+    // next legal pump (the shotgun cascade: rejected→resent→rejected).
+    if (kind === 'Shot' && shotId) {
+      let seen = this.seenShots.get(playerId);
+      if (!seen) {seen = new Map(); this.seenShots.set(playerId, seen);}
+      if (!seen.has(shotId)) {seen.set(shotId, wallNow());}
+    }
     this.hb(`rej.${kind}`);
     // The verdict is expected traffic — a spray of out-of-reach claims
     // from one player is one signal, not N log lines (16-bot soak:

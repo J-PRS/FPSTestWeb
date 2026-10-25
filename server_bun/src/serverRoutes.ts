@@ -68,7 +68,7 @@ function iceServers(): unknown[] {
 function wtInfo(ctx: HttpCtx): { enabled: true; port: number; sha256: string } | null {
   const sha256 = ctx.wtCertHash();
   if (!sha256) {return null;}
-  return { enabled: true, port: CONFIG.wtPort, sha256 };
+  return { enabled: true, port: CONFIG.wtAdvertisePort, sha256 };
 }
 
 /** /join per-IP throttle — the WS handshake has one (SessionManager),
@@ -91,6 +91,8 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Reques
   return {
     '/': (): Response => json(ctx.gameServer.getHealthStatus()),
     '/health': (): Response => json(ctx.gameServer.getHealthStatus()),
+    // Bare round-trip target — no state, so the browser's timing is the ping.
+    '/ping': (): Response => json({ pong: true }),
     // Ops metrics — uptime, players, balls, tick-lag stats. Ops-gated.
     '/metrics': (url, req): Response => opsAllowed(req, url) ? json(ctx.gameServer.getMetrics()) : opsClosed(),
     // Cumulative wire bytes per connection + total — diff two reads for

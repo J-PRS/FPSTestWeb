@@ -66,19 +66,19 @@ export const REGEN_DELAY_S = 5;
 export const PERKS: Record<PerkId, { name: string; blurb: string; mods: Partial<PerkMods> }> = {
   none:        { name: 'No Perk',     blurb: '', mods: {} },
   featherjets: { name: 'Featherjets', blurb: 'Jets burn 20% less', mods: { jetDrain: 0.8 } },
-  plated:      { name: 'Plated',      blurb: 'Take 25% less damage below 80% health', mods: { damageResist: 0.25 } },
-  lifesteal:   { name: 'Lifesteal',   blurb: 'Melee kills heal to full, shocklance kills half', mods: { meleeHeal: 1 } },
+  plated:      { name: 'Plated',      blurb: 'Take 40% less damage below 20% health', mods: { damageResist: 0.4 } },
+  lifesteal:   { name: 'Lifesteal',   blurb: 'Melee kills heal to full, lance kills half', mods: { meleeHeal: 1 } },
   regenerator: { name: 'Regenerator', blurb: 'Regenerate up to 4 hp/s — kicks in after 5s unhurt, then ramps', mods: { regenRamp: 0.4 } },
   overcharge:  { name: 'Overcharge',  blurb: 'Energy recharges 50% faster', mods: { energyRegen: 1.5 } },
   sharpshooter:{ name: 'Sharpshooter',blurb: '+20% direct hits, −40% blast radius', mods: { directDamage: 1.2, aoeRadius: 0.6 } },
-  bombardier:  { name: 'Bombardier',  blurb: '+40% blast radius, −15% direct hits', mods: { directDamage: 0.85, aoeRadius: 1.4 } },
+  bombardier:  { name: 'Bombardier',  blurb: '+40% blast radius, −25% direct hits', mods: { directDamage: 0.75, aoeRadius: 1.4 } },
   juggernaut:  { name: 'Juggernaut',  blurb: 'Take 80% less knockback', mods: { knockbackTaken: 0.2 } },
   scavenger:   { name: 'Scavenger',   blurb: 'Pickups heal 50% more', mods: { healBoost: 1.5 } },
   lightfoot:   { name: 'Lightfoot',   blurb: 'Own blasts deal 50% less self-damage', mods: { selfDamage: 0.5 } },
   airtank:     { name: 'Airtank',     blurb: '+50% energy pool', mods: { energyMax: 1.5 } },
   reach:       { name: 'Reach',       blurb: 'Grab pickups and flags from 25% farther', mods: { pickupRadius: 1.25 } },
   featherfall: { name: 'Featherfall', blurb: 'Fall damage energy shield, 20 hp per energy point', mods: { fallSoak: 20 } },
-  jumpstart:   { name: 'Jumpstart',   blurb: 'Ski launch: pressing ski boosts +6 m/s, up to run speed +6', mods: { jumpstart: 6 } },
+  jumpstart:   { name: 'Jumpstart',   blurb: 'Ski launch: pressing ski boosts +8 m/s, up to run speed +8', mods: { jumpstart: 8 } },
 };
 
 export const PERK_ORDER: PerkId[] = ['none', 'featherjets', 'plated', 'lifesteal', 'regenerator', 'overcharge', 'sharpshooter', 'bombardier', 'juggernaut', 'scavenger', 'lightfoot', 'airtank', 'reach', 'featherfall', 'jumpstart'];
@@ -88,10 +88,10 @@ export function perkMods(id: string | undefined | null): PerkMods {
   return p ? Object.assign({}, ZERO, p.mods) : Object.assign({}, ZERO);
 }
 
-/** Plated is an underdog plate — resist only counts below 80% max HP,
- *  so a big hit on a healthy target punches straight through it. */
+/** Plated is an underdog plate — resist only counts below 20% max HP,
+ *  so it saves a nearly-dead carrier instead of soaking every mid-fight hit. */
 export function effectiveResist(mods: PerkMods, health: number, maxHealth: number): number {
-  return health < maxHealth * 0.8 ? mods.damageResist : 0;
+  return health < maxHealth * 0.2 ? mods.damageResist : 0;
 }
 
 export function isPerkId(s: unknown): s is PerkId {

@@ -43,15 +43,15 @@ export function measureLap(
   const room = mkRoom({ ...spec, mode: 'ctf', bots: 6, botFill: 6 }, 'ctf', opts.seed ?? 9001, false, fld);
   const bots = [...room.players.getAllPlayers().values()].filter((p) => p.isBot);
   const capper = bots.find((p) => p.team === 'alpha');
-  if (!capper) throw new Error('no alpha bot');
+  if (!capper) {throw new Error('no alpha bot');}
   const ctl = room.bots as unknown as {
     loadouts: Map<string, (typeof BOT_LOADOUTS)[number]>;
     roster: { roles: Map<string, string>; refitClass(id: string): void };
   };
-  ctl.loadouts.set(capper.id, { ...BOT_LOADOUTS[0]!, belt: WeaponType.DiscPull });
+  ctl.loadouts.set(capper.id, { ...BOT_LOADOUTS[0]!, belt: WeaponType.Implodisc });
   ctl.roster.refitClass(capper.id);
   ctl.roster.roles.set(capper.id, 'capper');
-  for (const p of bots) if (p !== capper) room.bots.quiet.add(p.id);
+  for (const p of bots) {if (p !== capper) room.bots.quiet.add(p.id);}
 
   // Square circuit centered on the map, legs `side` apart.
   const c = HM_WORLD_SCALE / 2;
@@ -81,19 +81,19 @@ export function measureLap(
     const pt = ring[i % 4]!;
     flag.pos.x = pt.x; flag.pos.y = pt.y; flag.pos.z = pt.z;
     flag.home.x = pt.x; flag.home.y = pt.y; flag.home.z = pt.z;
-    if (flag.state !== 'home') flag.state = 'home';
+    if (flag.state !== 'home') {flag.state = 'home';}
     flag.carrier = undefined as never;
   };
   place(0);
 
   for (let i = 0; i < simBudgetS * 20; i++) {
-    if (Date.now() - t0 > simBudgetS * 800) break;
+    if (Date.now() - t0 > simBudgetS * 800) {break;}
     step(room, 1, dt);
     simT += dt;
     room.messages.respawnTick(simNow());
-    if (flag.state === 'carried' && flag.carrier === capper.id) stat.grabs++;
-    if (lastPos) pathM += Math.hypot(
-      capper.position.x - lastPos.x, capper.position.y - lastPos.y, capper.position.z - lastPos.z);
+    if (flag.state === 'carried' && flag.carrier === capper.id) {stat.grabs++;}
+    if (lastPos) {pathM += Math.hypot(
+      capper.position.x - lastPos.x, capper.position.y - lastPos.y, capper.position.z - lastPos.z);}
     lastPos = { ...capper.position };
     eSum += mechE(); eSamples++;
 
@@ -106,8 +106,8 @@ export function measureLap(
       if (leg % 4 === 0) {
         const lapT = simT - lapStart;
         stat.laps++;
-        if (stat.bestLap === 0 || lapT < stat.bestLap) stat.bestLap = lapT;
-        if (opts.verbose) console.log(`  lap ${stat.laps}: ${lapT.toFixed(1)}s`);
+        if (stat.bestLap === 0 || lapT < stat.bestLap) {stat.bestLap = lapT;}
+        if (opts.verbose) {console.log(`  lap ${stat.laps}: ${lapT.toFixed(1)}s`);}
         lapStart = simT;
       }
       place(leg);

@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { GameServer } from '../src/GameServer.ts';
 import { CONFIG } from '../src/config.ts';
 
@@ -23,13 +23,17 @@ const gameStates = (ws: ReturnType<typeof fakeWs>) =>
 
 describe('switchRoom', () => {
   let gs: GameServer;
-  afterEach(() => gs.stop());
+  // Gate-adoption tests exercise balls, which the server disables by default.
+  const cfg = CONFIG as unknown as { allowBalls: boolean; allowCreatures: boolean };
+  const prevGates = { balls: cfg.allowBalls, creatures: cfg.allowCreatures };
+  beforeEach(() => { cfg.allowBalls = true; cfg.allowCreatures = true; });
+  afterEach(() => { cfg.allowBalls = prevGates.balls; cfg.allowCreatures = prevGates.creatures; gs.stop(); });
 
   it('moves the session to the target room and answers with a fresh gameState', () => {
     gs = new GameServer();
     const ws = fakeWs();
     gs.onMessage(ws, JSON.stringify({ type: 'join', playerId: 'p1', room: 'ctf-room' }));
-    const rooms = (gs as unknown as { rooms: Map<string, { players: { getPlayer(id: string): unknown } }> }).rooms;
+    const {rooms} = (gs as unknown as { rooms: Map<string, { players: { getPlayer(id: string): unknown } }> });
     expect(rooms.get('ctf-room')?.players.getPlayer('p1')).toBeTruthy();
     expect(gameStates(ws).at(-1)?.room).toBe('ctf-room');
 
@@ -45,7 +49,7 @@ describe('switchRoom', () => {
     gs = new GameServer();
     const ws = fakeWs();
     gs.onMessage(ws, JSON.stringify({ type: 'join', playerId: 'p1', room: 'a' }));
-    const rooms = (gs as unknown as { rooms: Map<string, { players: { getPlayer(id: string): { isDead: boolean } | undefined } }> }).rooms;
+    const {rooms} = (gs as unknown as { rooms: Map<string, { players: { getPlayer(id: string): { isDead: boolean } | undefined } }> });
     rooms.get('a')!.players.getPlayer('p1')!.isDead = true;
     gs.onMessage(ws, JSON.stringify({ type: 'switchRoom', room: 'b' }));
     expect(rooms.get('a')?.players.getPlayer('p1')).toBeTruthy();
@@ -70,7 +74,7 @@ describe('switchRoom', () => {
     // Second hop lands inside 1500ms — denied. Name-spam at message rate
     // must not mint/churn rooms via roomFor.
     gs.onMessage(ws, JSON.stringify({ type: 'switchRoom', room: 'c' }));
-    const rooms = (gs as unknown as { rooms: Map<string, { players: { getPlayer(id: string): unknown } }> }).rooms;
+    const {rooms} = (gs as unknown as { rooms: Map<string, { players: { getPlayer(id: string): unknown } }> });
     expect(rooms.get('b')?.players.getPlayer('p1')).toBeTruthy();
     expect(rooms.get('c')?.players.getPlayer('p1')).toBeUndefined();
 
@@ -93,7 +97,7 @@ describe('switchRoom', () => {
       gs.onMessage(ws, JSON.stringify({ type: 'join', playerId: 'p1', room: 'a' }));
       // budget: 1 player + 1 spectator = 2, at cap — the hop must deny.
       gs.onMessage(ws, JSON.stringify({ type: 'switchRoom', room: 'b' }));
-      const rooms = (gs as unknown as { rooms: Map<string, { players: { getPlayer(id: string): unknown } }> }).rooms;
+      const {rooms} = (gs as unknown as { rooms: Map<string, { players: { getPlayer(id: string): unknown } }> });
       expect(rooms.get('a')?.players.getPlayer('p1')).toBeTruthy();
       expect(rooms.get('b')?.players.getPlayer('p1')).toBeUndefined();
       expect(ws.sent.some((s: string) => s.includes('is full'))).toBe(true);
@@ -111,7 +115,7 @@ describe('switchRoom', () => {
     // Simulated socket death: the new room must accept a reclaim with the
     // same identity token it re-issued at hop time.
     (gs as unknown as { registry: { disconnect(id: string, reason: string, ms: number, cb: () => void): boolean } })
-      .registry.disconnect('p1', 'simulated socket death', 60000, () => {});
+      .registry.disconnect('p1', 'simulated socket death', 60_000, () => {});
     const ws2 = fakeWs();
     gs.onMessage(ws2, JSON.stringify({ type: 'join', playerId: 'p1', token: tok }));
     expect(ws2.data.playerId).toBe('p1');
@@ -122,11 +126,11 @@ describe('switchRoom', () => {
     gs = new GameServer();
     const ws = fakeWs();
     gs.onMessage(ws, JSON.stringify({ type: 'join', playerId: 'p1', room: 'r', bots: 2 }));
-    const rooms = (gs as unknown as { rooms: Map<string, {
+    const {rooms} = (gs as unknown as { rooms: Map<string, {
       noBalls: boolean;
       ballSim: { population: { base: number }; balls: Map<number, unknown> };
       players: { getHumanCount(): number };
-    }> }).rooms;
+    }> });
     const room = rooms.get('r')!;
     expect(room.noBalls).toBe(false);
 
@@ -146,10 +150,10 @@ describe('switchRoom', () => {
     gs = new GameServer();
     const ws = fakeWs();
     gs.onMessage(ws, JSON.stringify({ type: 'join', playerId: 'p1', room: 'r', mode: 'nuggets', bots: 2 }));
-    const rooms = (gs as unknown as { rooms: Map<string, {
+    const {rooms} = (gs as unknown as { rooms: Map<string, {
       mode: string;
       players: { getHumanCount(): number };
-    }> }).rooms;
+    }> });
     const stale = rooms.get('r')!;
     expect(stale.mode).toBe('nuggets');
 
@@ -168,7 +172,7 @@ describe('switchRoom', () => {
     gs = new GameServer();
     const ws = fakeWs();
     gs.onMessage(ws, JSON.stringify({ type: 'join', playerId: 'p1', room: 'r', mode: 'nuggets' }));
-    const rooms = (gs as unknown as { rooms: Map<string, { mode: string }> }).rooms;
+    const {rooms} = (gs as unknown as { rooms: Map<string, { mode: string }> });
 
     const ws2 = fakeWs();
     gs.onMessage(ws2, JSON.stringify({ type: 'join', playerId: 'p2', room: 'r', mode: 'ctf' }));
@@ -180,7 +184,7 @@ describe('switchRoom', () => {
     gs = new GameServer();
     const ws = fakeWs();
     gs.onMessage(ws, JSON.stringify({ type: 'join', playerId: 'p1', room: 'r' }));
-    const rooms = (gs as unknown as { rooms: Map<string, { noBalls: boolean }> }).rooms;
+    const {rooms} = (gs as unknown as { rooms: Map<string, { noBalls: boolean }> });
 
     const ws2 = fakeWs();
     gs.onMessage(ws2, JSON.stringify({ type: 'join', playerId: 'p2', room: 'r', noBalls: true }));

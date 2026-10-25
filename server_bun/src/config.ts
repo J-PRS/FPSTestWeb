@@ -24,6 +24,11 @@ function envStr(name: string, fallback: string): string {
 
 export const CONFIG = {
   port: envNum('FPS_PORT', 8000),
+  // Balls and creatures are offline/coop content. Off by default so the
+  // PvP server never spawns them; set FPS_ALLOW_BALLS=1 / FPS_ALLOW_CREATURES=1
+  // to allow clients to request them again.
+  allowBalls: envNum('FPS_ALLOW_BALLS', 0) === 1,
+  allowCreatures: envNum('FPS_ALLOW_CREATURES', 0) === 1,
   // Server loop cadence — drives the broadcast interval AND per-tick
   // heal divisors. Default 20Hz matches the hardcoded historical loop.
   tickRate: envNum('FPS_TICK_HZ', 20),
@@ -124,6 +129,9 @@ export const CONFIG = {
   // an alternate FPS_PORT must not collide on a fixed UDP port (seen: dev
   // server + test server both binding 9443 → EADDRINUSE at startup).
   wtPort: envNum('FPS_WT_PORT', envNum('FPS_PORT', 8000) + 1443),
+  // Port clients dial for WT. Differs from wtPort when a firewall forwards
+  // a public UDP port to the listener (443 → 9443 behind an HTTPS origin).
+  wtAdvertisePort: envNum('FPS_WT_ADVERTISE_PORT', envNum('FPS_WT_PORT', envNum('FPS_PORT', 8000) + 1443)),
   wtCertPath: envStr('FPS_WT_CERT', ''),
   wtKeyPath: envStr('FPS_WT_KEY', ''),
   // WebRTC tier: ICE servers (STUN/TURN) as JSON, e.g.

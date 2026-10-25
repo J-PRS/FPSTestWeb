@@ -253,7 +253,11 @@ shooter.streak += 1;
    *  qualify: spray kills aren't brag kills). Feeds the shooter's hype
    *  line AND tilts the victim's props roll. */
   private skillKill(weapon: number | undefined, air: number | undefined): boolean {
-    return (air ?? 0) >= 0.5 && weapon != null && (getWeaponStats(weapon)?.aoeRadius ?? 0) > 0;
+    // air = the shell's flight time, not the victim's — a point-blank
+    // kill on a midair victim isn't the shot being rewarded. ≥50 damage
+    // keeps pellet/chip weapons out while the travel requirement keeps
+    // hitscan and face-tap lobs out.
+    return (air ?? 0) >= 0.5 && weapon != null && (getWeaponStats(weapon)?.directDamage ?? 0) >= 50;
   }
 
   /** Did the victim die to a hard shot? Long range or midair both count

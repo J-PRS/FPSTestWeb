@@ -79,11 +79,11 @@ export class RoomPickups {
     this.pickups.clear();
   }
 
-  snapshot(): { id: number; pos: Vec3; kind: PickupKind; val: number }[] {
+  snapshot(): { id: number; pos: Vec3; kind: PickupKind; val: number; vel: Vec3 }[] {
     // rosterRow pins the row shape to the declared rosterFields — a
     // snapshot field that drifts from the declaration warns at build
     // time instead of diffing silently on the client.
-    return [...this.pickups.values()].map((p): { id: number; pos: Vec3; kind: PickupKind; val: number } => rosterRow(WORLD_MODEL.pickup!, 'id', p.id, { pos: Object.assign({}, p.pos), kind: p.kind, val: p.val }) as { id: number; pos: Vec3; kind: PickupKind; val: number });
+    return [...this.pickups.values()].map((p): { id: number; pos: Vec3; kind: PickupKind; val: number; vel: Vec3 } => rosterRow(WORLD_MODEL.pickup!, 'id', p.id, { pos: Object.assign({}, p.pos), kind: p.kind, val: p.val, vel: Object.assign({}, p.vel) }) as { id: number; pos: Vec3; kind: PickupKind; val: number; vel: Vec3 });
   }
 
   /** Nearest live pickup to a point — bots chase these. */

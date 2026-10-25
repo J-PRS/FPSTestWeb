@@ -83,7 +83,7 @@ export function measureCap(
   };
   // Chaser base + the roster's capper belt swap: the pull disc is
   // what a real capper carries for the forward-implosion launch.
-  ctl.loadouts.set(capper.id, { ...BOT_LOADOUTS[0]!, belt: WeaponType.DiscPull });
+  ctl.loadouts.set(capper.id, { ...BOT_LOADOUTS[0]!, belt: WeaponType.Implodisc });
   ctl.roster.refitClass(capper.id);
   ctl.roster.roles.set(capper.id, 'capper');
   // Same perk pin rebalanceTeam applies in a live roster — the direct

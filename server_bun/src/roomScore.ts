@@ -80,9 +80,10 @@ export class RoomScore {
         const gx2 = pos.x + dx + (this.h.rng() - 0.5) * 2;
         const gz2 = pos.z + dz + (this.h.rng() - 0.5) * 2;
         const gy2 = (this.h.field ? hmHeight(this.h.field, gx2, gz2) : pos.y) + 0.5;
-        // Headhunt hunts tokens — creature drops feed the hold economy
-        // the same way gems feed the bank economy elsewhere.
-        this.h.pickups?.spawn({ x: gx2, y: gy2, z: gz2 }, this.h.mode === 'headhunt' ? 'token' : 'gem');
+        // Launch from the corpse with real velocity so the server's tumble
+        // owns the arc — a ground-level zero-vel spawn made clients invent it.
+        const launch = { x: dx * 2 + (this.h.rng() - 0.5) * 3, y: 4 + this.h.rng() * 2, z: dz * 2 + (this.h.rng() - 0.5) * 3 };
+        this.h.pickups?.spawn({ x: pos.x, y: pos.y + 0.5, z: pos.z }, this.h.mode === 'headhunt' ? 'token' : 'gem', 0, 1, undefined, 0, launch);
         this.h.influence.splat({ x: gx2, y: gy2, z: gz2 }, 'opportunity', 0.5);
       }
       return;

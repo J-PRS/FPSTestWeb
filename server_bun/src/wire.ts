@@ -415,10 +415,11 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
     // Deliberate presses; the ante re-derivation keeps floods harmless
     // but each claim still echoes a claimAck, so bound the lane anyway.
     limit: { maxCount: 8, windowMs: 1000 },
-    validate: (obj): { success: true; data: { type: "skillUse"; claimSeq: number | undefined; }; } => {
-      return { success: true, data: { type: 'skillUse', claimSeq: optClaimSeq(obj.claimSeq) } };
+    validate: (obj): { success: true; data: { type: "skillUse"; claimSeq: number | undefined; skill: string | undefined; }; } => {
+      const skill = typeof obj.skill === 'string' && obj.skill.length <= 16 ? obj.skill : undefined;
+      return { success: true, data: { type: 'skillUse', claimSeq: optClaimSeq(obj.claimSeq), skill } };
     },
-    handle: (h, id, m): void => h.claimAck(id, 'skillUse', m.claimSeq, h.roomInfo.onSkillUse?.(id) ?? 'gone'),
+    handle: (h, id, m): void => h.claimAck(id, 'skillUse', m.claimSeq, h.roomInfo.onSkillUse?.(id, m.skill) ?? 'gone'),
   },
 
   snapshotRequest: {
