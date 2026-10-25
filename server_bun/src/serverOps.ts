@@ -49,7 +49,7 @@ export function getHealthStatus(g: GameServer) {
     // loop is losing a real slice of the 50ms budget, not normal jitter.
     const lagBad = g.ops.tickLagSamples > 100 && g.ops.tickLagMsSum / g.ops.tickLagSamples > 20;
     const degraded = quarantined.length > 0 || lagBad;
-    return Object.assign({}, {status: degraded ? 'degraded' : 'running',version: SERVER_VERSION,build: SERVER_BUILD,players: totalPlayers(g),maxPlayers: CONFIG.maxPlayers,tickRate: CONFIG.tickRate,boot: process.env.FPS_BOOT ?? null}, (quarantined.length > 0 ? { quarantined } : {}), (lagBad ? { tickLagMsAvg: Number((g.ops.tickLagMsSum / g.ops.tickLagSamples).toFixed(1)) } : {}));
+    return Object.assign({}, {status: g.draining ? 'draining' : (degraded ? 'degraded' : 'running'),version: SERVER_VERSION,build: SERVER_BUILD,players: totalPlayers(g),maxPlayers: CONFIG.maxPlayers,tickRate: CONFIG.tickRate,boot: process.env.FPS_BOOT ?? null}, (quarantined.length > 0 ? { quarantined } : {}), (lagBad ? { tickLagMsAvg: Number((g.ops.tickLagMsSum / g.ops.tickLagSamples).toFixed(1)) } : {}));
   }
 
   /** Ops snapshot for /metrics — counts since boot plus tick-lag stats,

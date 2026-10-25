@@ -116,6 +116,7 @@ export class GameServer {
       quickRoom: (m, mp, b, nc, nb, ph): Room | null => this.factory.quickRoom(m, mp ?? '', b, nc ?? false, nb ?? false, ph ?? false),
       roomOfPlayer: (id): Room | undefined => this.roomOfPlayer(id),
       totalPlayers: (): number => opsTotalPlayers(this),
+      draining: this.draining,
       ops: this.ops,
       registry: this.registry,
       departSpectator: (id, reason, closeCode): boolean => this.departSpectator(id, reason, closeCode),
@@ -166,6 +167,13 @@ export class GameServer {
   async getStats(): Promise<unknown[]> {
     return this.journal.stats();
   }
+
+  /** Drain-deploys: armed via /admin/drain — SessionManager refuses new
+   *  joins (reclaims still land), and the drain checker exits the process
+   *  once every human has left. */
+  draining = false;
+
+  totalPlayers(): number { return opsTotalPlayers(this); }
 
   quickRoom(mode: string, map = '', bots?: number, noCreatures = false, noBalls = false, preferHumans = false): Room | null {
     return this.factory.quickRoom(mode, map, bots, noCreatures, noBalls, preferHumans);

@@ -71,6 +71,15 @@ async function shutdown(): Promise<void> {
   }
 }
 
+// Drain-deploys: /admin/drain arms the flag; once every human seat is
+// empty the process exits so the new build takes over. 30s poll —
+// drain is never urgent (the deploy waits on it, players don't).
+setInterval((): void => {
+  if (gameServer.draining && gameServer.totalPlayers() === 0) {
+    void shutdown();
+  }
+}, 30_000).unref();
+
 
 
 // EADDRINUSE here is almost always a bun --watch orphan holding the port

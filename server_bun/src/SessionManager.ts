@@ -24,6 +24,9 @@ export interface SessionDeps {
   quickRoom(mode: string, map?: string, bots?: number, noCreatures?: boolean, noBalls?: boolean, preferHumans?: boolean): Room | null;
   roomOfPlayer(playerId: string): Room | undefined;
   totalPlayers(): number;
+  /** Drain-deploys: armed via /admin/drain — new joins refused (reclaims
+   *  still land, they're the grace path), process exits on empty. */
+  draining?: boolean;
   ops: { joins: number; tierWs: number; tierWt: number; tierRtc: number; tierOther: number };
   /** Session lifecycle state machine — owns who each playerId is; sockets
    *  carry the seat generation it stamps so stale callbacks die by gen. */
@@ -156,6 +159,10 @@ export class SessionManager {
       }
       return;
     }
+
+    // Drain-deploy: a new build is live — refuse new seats but let
+    // reclaims land (the grace path is how live players ride through).
+    if (this.d.draining) { ws.close(1013, 'Server draining'); return; }
 
     // Join flood guard: joins bypass the per-player RateLimiter (they ARE
     // the registration), so throttle by source IP — 5 joins/min is generous

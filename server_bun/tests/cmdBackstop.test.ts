@@ -15,6 +15,7 @@ function fakeWs() {
 
 interface Peek {
   playerRoom: Map<string, Room>;
+  rooms: Map<string, { terrainReady?: Promise<unknown> }>;
   ops: { msgsRejected: number };
 }
 

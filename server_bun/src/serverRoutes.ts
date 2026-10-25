@@ -99,10 +99,10 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Reques
     // Bare round-trip target — no state, so the browser's timing is the ping.
     '/ping': (): Response => json({ pong: true }),
     // Ops metrics — uptime, players, balls, tick-lag stats. Ops-gated.
-    '/metrics': (url, req): Response => opsAllowed(req, url, ctx.requestIP?.(req)?.address) ? json(ctx.gameServer.getMetrics()) : opsClosed(),
+    '/metrics': (url, req): Response => opsAllowed(req, url, req && ctx.requestIP?.(req)?.address) ? json(ctx.gameServer.getMetrics()) : opsClosed(),
     // Cumulative wire bytes per connection + total — diff two reads for
     // a rate. Ops-gated like metrics.
-    '/wire': (url, req): Response => opsAllowed(req, url, ctx.requestIP?.(req)?.address) ? json(wireMeterSnapshot()) : opsClosed(),
+    '/wire': (url, req): Response => opsAllowed(req, url, req && ctx.requestIP?.(req)?.address) ? json(wireMeterSnapshot()) : opsClosed(),
     // Server-browser card — identity + occupancy for master lists / LAN.
     '/serverinfo': (): Response => json(ctx.gameServer.getServerInfo()),
     // Lobby browse — live matches with occupancy.
@@ -113,14 +113,14 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Reques
     '/stats': async (): Promise<Response> => json(await ctx.gameServer.getStats()),
     // Balance telemetry — per-mode damage/hits/kills by weapon source,
     // bot-authored share split out (also journaled to weaponstats.jsonl).
-    '/weaponstats': (url, req): Response => opsAllowed(req, url, ctx.requestIP?.(req)?.address) ? json(weaponStats.snapshot()) : opsClosed(),
+    '/weaponstats': (url, req): Response => opsAllowed(req, url, req && ctx.requestIP?.(req)?.address) ? json(weaponStats.snapshot()) : opsClosed(),
     // Readable dashboard over the same ledger — tables, bars, funnel pcts.
-    '/weaponstats.html': (url, req): Response => opsAllowed(req, url, ctx.requestIP?.(req)?.address)
+    '/weaponstats.html': (url, req): Response => opsAllowed(req, url, req && ctx.requestIP?.(req)?.address)
       ? corsResponse(WEAPONSTATS_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
       : opsClosed(),
     // Live ops dashboard over /metrics + /health — degraded banner,
     // per-phase tick bars, per-room bot CPU + client tails.
-    '/status': (url, req): Response => opsAllowed(req, url, ctx.requestIP?.(req)?.address)
+    '/status': (url, req): Response => opsAllowed(req, url, req && ctx.requestIP?.(req)?.address)
       ? corsResponse(STATUS_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
       : opsClosed(),
     // Map list for the menu's match setup — name + mode + default bots.
@@ -128,7 +128,7 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Reques
     // Quick-join: /join?mode=ctf&map=raindance&bots=6 → emptiest live
     // match fitting the request (or a fresh room built from that spec).
     '/join': (url, req): Response => {
-      const ip = req ? ctx.requestIP?.(req)?.address : undefined;
+      const ip = req ? req && ctx.requestIP?.(req)?.address : undefined;
       if (ip && !joinThrottleAllow(ip)) {return corsResponse('Too many joins', { status: 429 });}
       const mode = url.searchParams.get('mode') ?? '';
       const map = url.searchParams.get('map') ?? '';
@@ -192,6 +192,13 @@ export function adminRoute(ctx: HttpCtx, req: Request, url: URL): Response | Pro
       const r = ctx.gameServer.reloadRoom(url.searchParams.get('room') ?? '');
       return json({ ok: r === 'ok', result: r }, { status: r === 'ok' ? 200 : 404 });
     },
+    // Drain-deploys: mark the server draining — SessionManager refuses
+    // new joins, /health flips to 'draining', the deploy checker exits
+    // the process once the last human leaves. Reclaims still land.
+    '/admin/drain': (): Response => {
+      ctx.gameServer.draining = true;
+      return json({ ok: true, draining: true });
+    },
     '/admin/kick': (): Response => {
       const ok = ctx.gameServer.kickPlayer(url.searchParams.get('player') ?? '');
       return json({ ok }, { status: ok ? 200 : 404 });
@@ -251,7 +258,7 @@ const DEMO_IP_WINDOW_MS = 60_000;
 export async function leaderboardRoute(ctx: HttpCtx, req: Request, url: URL): Promise<Response> {
   const lb = await import('./leaderboard.ts');
   if (url.pathname === '/leaderboard/submit' && req.method === 'POST') {
-    const ip = ctx.requestIP?.(req)?.address;
+    const ip = req && ctx.requestIP?.(req)?.address;
     if (ip && ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1' &&
         !windowAllow(demoIps, ip, wallNow(), DEMO_IP_WINDOW_MS, DEMO_IP_LIMIT, 1024)) {
       return json({ ok: false, error: 'Too many submissions' }, { status: 429 });
@@ -281,7 +288,7 @@ export async function leaderboardRoute(ctx: HttpCtx, req: Request, url: URL): Pr
 
 export async function demoRoute(ctx: HttpCtx, req: Request, url: URL): Promise<Response> {
   if (url.pathname === '/demos/upload' && req.method === 'POST') {
-    const ip = ctx.requestIP?.(req)?.address;
+    const ip = req && ctx.requestIP?.(req)?.address;
     if (ip && ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1' &&
         !windowAllow(demoIps, ip, wallNow(), DEMO_IP_WINDOW_MS, DEMO_IP_LIMIT, 1024)) {
       return json({ success: false, error: 'Too many uploads' }, { status: 429 });
