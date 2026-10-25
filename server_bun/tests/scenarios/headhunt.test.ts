@@ -123,9 +123,9 @@ describe('scenario: headhunt hoard-buff', () => {
     // A hit mutes every channel for HELD_BUFF.graceMs — hoard is not armor-in-combat.
     const hpAtHit = p.health;
     const armorAtHit = p.armor;
-    room.players.applyDamage('P1', 10); // armor absorbs 80% → ~2hp lands
+    room.players.applyDamage('P1', 10); // 30 tokens = −3 plating → 7 → armor 80% → ~1.4hp lands
     step(room, 40); // 2s inside the 8s grace — the drip must stay muted
-    expect(p.health).toBeLessThanOrEqual(hpAtHit - 1.5);
-    expect(p.armor).toBeLessThanOrEqual(armorAtHit - 7);
+    expect(p.health).toBeLessThanOrEqual(hpAtHit - 1);
+    expect(p.armor).toBeLessThanOrEqual(armorAtHit - 5); // plating pre-cuts the hit before armor absorbs
   });
 });
