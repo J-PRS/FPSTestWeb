@@ -1214,6 +1214,9 @@ export class Room {
           this.broadcast(eventPayload(WORLD_MODEL.player!, 'teamUpdate', 'playerId', p.id, { team: p.team! }) as ServerMessage);
         }
       },
+      respawnAll: (): void => {
+        for (const p of this.players.getAllPlayers().values()) {this.players.respawnPlayer(p.id);}
+      },
       rotate: (): MapSpec | null => this.onRotate?.() ?? null,
       applySpec: (s): void => this.applySpec(s),
       onMatchEnd: (r): void | undefined => this.onMatchEnd?.(r),

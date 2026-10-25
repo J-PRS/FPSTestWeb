@@ -155,7 +155,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     gravity: true,
     bodyRadius: 0.12,
     hitMin: 0,
-    hitMax: 2,
+    hitMax: 1,
     hitGrow: 0.5,
     maxLifetime: 2,
     ttlJitter: 0.1, // shards scatter their airbursts — a synchronized pop reads as a single blob

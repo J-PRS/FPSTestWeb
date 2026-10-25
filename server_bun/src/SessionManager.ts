@@ -428,9 +428,15 @@ this.d.ops.joins += 1;
   private seat(ws: ServerWebSocket<WebSocketData>, room: Room, playerId: string, handshake: Record<string, unknown>, sessionToken: string, name?: string): void {
     const joinedPlayer = room.players.addPlayer(playerId, room.nextHumanTeam(), isPerkId(handshake.perk) ? handshake.perk : 'none',
       typeof handshake.armorClass === 'string' ? handshake.armorClass : 'medium');
-    // The seat replaces a bot's: sides stay even and the total holds at
-    // botFill, with the weakest bot on the joined team retiring.
-    room.bots.retireWorst(joinedPlayer.team);
+    // The seat replaces a bot's ONLY when the join grew the big side —
+    // a human landing on the short side already balanced the room, and
+    // retiring there too would just un-swap it (the bug where every join
+    // kept sides uneven: odd rooms could never reach even).
+    const counts = room.players.teamCounts();
+    const other = joinedPlayer.team === 'alpha' ? 'bravo' : 'alpha';
+    if (joinedPlayer.team && counts[joinedPlayer.team] > counts[other]) {
+      room.bots.retireWorst(joinedPlayer.team);
+    }
     joinedPlayer.name = name;
     if (typeof handshake.skill === 'string' && handshake.skill.length <= 16) {joinedPlayer.skill = handshake.skill;}
     joinedPlayer.spawnHold = handshake.spawnHold === true;
