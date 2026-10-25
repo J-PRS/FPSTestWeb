@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mkGltfLoader, loadGltfCached } from '../gltfLoad';
+import { takeRig } from './rigPool.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -214,7 +215,10 @@ export class PlayerModel {
               setTimeout((): void => { bakeVertexAO(gltf.scene as THREE.Group, { grime: true, wearBoost: 0.5, edgeAngle: 28 }); res(); }, 0);
             }));
           }
-          this.onModelLoaded({ scene: SkeletonUtils.clone(gltf.scene) as THREE.Group, animations: gltf.animations.map((c): THREE.AnimationClip => c.clone()) }, mann, knight);
+          // Pool first — a warmed clone is free; a live SkeletonUtils.clone
+          // on this frame was the w:player join spike.
+          const scene = takeRig(this.variant, gltf.scene) ?? (SkeletonUtils.clone(gltf.scene) as THREE.Group);
+          this.onModelLoaded({ scene, animations: gltf.animations.map((c): THREE.AnimationClip => c.clone()) }, mann, knight);
           resolve();
           if (gunmetal) {
             // Every instance waits on the shared per-URL bake — not just the

@@ -63,6 +63,7 @@ import { nanScanTick, nanScanBindProbe } from '../core/nanScan.js';
 import { Logger } from '../core/Logger.js';
 import type { PlayerSheep } from './playerSheep.js';
 import { BootWarmup } from './bootWarmup.js';
+import { warmRig } from '../entities/rigPool.js';
 
 const _zeroVel = new THREE.Vector3(); // shared zero for demo playback
 // Frame-jump forensic: compare pos at the same point each frame so any
@@ -774,6 +775,9 @@ function maybeWarmShaders(deps: GameLoopDeps, st: LoopState): void {
   if (st.warmN <= 600 && (st.warmN % 30 !== 0 || !deps.sceneSetup.scene.getObjectByName('__t2interiors'))) {return;}
   st.warmed = true;
   deps.rendererSetup.warmup();
+  // Pre-clone each armor-class rig so a mid-match join grabs one off
+  // the shelf instead of paying SkeletonUtils.clone on the live frame.
+  for (const v of ['scout', 'brawler', 'brute'] as const) {warmRig(v, 2);}
   // One underground blast fills the burst-spec freelists, so the first
   // real explosion restarts pooled systems instead of paying cold
   // ParticleSystem builds mid-fight. 500m down it never renders.
