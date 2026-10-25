@@ -418,7 +418,11 @@ RibbonTrail.nanPushes += 1;
       const jx = pos.x + ox - this.px[this.head]!;
       const jy = pos.y + oy - this.py[this.head]!;
       const jz = pos.z + oz - this.pz[this.head]!;
-      const jump = jumpBudget(spd);
+      // Hard ceiling too: vel can be a corrective value during a resnap
+      // sweep (remote replica catch-up ~1400m/s) — speed-scaled budget
+      // then legitimately permits a 70-90m "step", painting the smear
+      // chord. Nothing legit crosses 60m between consecutive samples.
+      const jump = Math.min(jumpBudget(spd), 60);
       const spatialJump = jx * jx + jy * jy + jz * jz > jump * jump;
       if (spatialJump || performance.now() - this.lastPushMs > PUSH_GAP_MS) {
         // Spatial jump = a caller skipped teleport()/clear() — anomaly.

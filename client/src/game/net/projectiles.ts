@@ -356,6 +356,15 @@ export function wireProjectiles(ctx: NetCtx): void {
     if (remoteProjectile) {
       snapToContact(remoteProjectile, position);
       remoteProjectile.explode(); // onExploded records + unmaps
+      // Body-hit replica suppressed its predicted blast (ghostBodyPop) —
+      // the wire owns the real detonation, so paint it at the stamped
+      // contact point now.
+      if (remoteProjectile.ghostBodyPop && position) {
+        const p = remoteProjectile;
+        deps.world.explosions.push(new Explosion(
+          deps.lazyScene(), new THREE.Vector3(position.x, position.y, position.z), true, p.age, deps.lazyTerrain(),
+          p.explosionRadius / EXPLOSION_VFX_RADIUS, p.config.damageColor, p.config.vfx));
+      }
     }
     // Kill local projectile if server says it's gone — explode to let
     // trails fade. The shotId covers destroys for shells whose server-id
@@ -410,6 +419,14 @@ export function wireProjectiles(ctx: NetCtx): void {
         else {noteTrajDiv(preSnap, localProjectile.config.weaponType, localProjectile.exploded, localProjectile.age, localProjectile.boundAtAge, srvAge, localProjectile.mirrored);}
       }
       localProjectile.explode();
+      // Same ghostBodyPop repaint as the replica branch above — MY shell's
+      // predicted blast was suppressed for the wire's contact point too.
+      if (localProjectile.ghostBodyPop && position) {
+        const p = localProjectile;
+        deps.world.explosions.push(new Explosion(
+          deps.lazyScene(), new THREE.Vector3(position.x, position.y, position.z), true, p.age, deps.lazyTerrain(),
+          p.explosionRadius / EXPLOSION_VFX_RADIUS, p.config.damageColor, p.config.vfx));
+      }
       registry.byId.delete(projectileId);
       if (localProjectile.shotId) {registry.byShotId.delete(localProjectile.shotId);}
       if (localProjectile.fanSlot) {registry.byFanSlot.delete(localProjectile.fanSlot);}

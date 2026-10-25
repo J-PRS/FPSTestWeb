@@ -97,6 +97,10 @@ export async function launchClient(clientUrl: string, opts: LaunchOpts = {}): Pr
           // scheduler until they time out.
           '--disable-background-networking', '--disable-component-update',
           '--safebrowsing-disable-auto-update', '--disable-sync',
+          // E2E_UNCAP: vsync/frame-rate limit off — rAF runs as fast as
+          // the machine can push. Headroom probing, not production:
+          // fps numbers become uncapped real rates.
+          ...(process.env.E2E_UNCAP ? ['--disable-gpu-vsync', '--disable-frame-rate-limit'] : []),
           '--metrics-recording-only', '--disable-breakpad',
           // Lifts the post-Spectre fuzzing on WebGL2 timer queries —
           // ?gpuperf pass profiling reads exact GPU ms, not ~1ms steps.

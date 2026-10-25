@@ -82,7 +82,10 @@ body.menu-open #frag-msg { display: none !important; }
   padding: 24px 18px;
   cursor: default;
   overflow-y: auto;
+  display: flex; flex-direction: column;
 }
+#client-ver { position: fixed; bottom: 10px; right: 0; width: min(400px, 100vw);
+  text-align: center; opacity: 0.4; font: 10px monospace; pointer-events: none; }
 /* Keybind rows — click a chip to capture the next input */
 .keys-rows { display: flex; flex-direction: column; gap: 4px; }
 .keys-row {

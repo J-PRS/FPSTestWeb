@@ -103,7 +103,7 @@ function resolveModes(): RenderModes {
   const px = urlParams.get('pixelated');
   if (px !== null && px in PX_MODES) {[pscale, pmode] = LEGACY_PM[PX_MODES[px]!] ?? [1, 0];}
   const ps = urlParams.get('pscale');
-  if (ps !== null) {pscale = Math.min(4, Math.max(1, Number.parseInt(ps, 10) || 1));}
+  if (ps !== null) {pscale = Math.min(4, Math.max(0.5, Number.parseFloat(ps) || 1));}
   const pm = urlParams.get('pmode');
   if (pm !== null) {pmode = Math.min(3, Math.max(0, Number.parseInt(pm, 10) || 0));}
   const pp = urlParams.get('postpro');
@@ -216,12 +216,15 @@ export function overscanSize(): { w: number; h: number } {
 function applyPixelSize(renderer: THREE.WebGLRenderer,
     fsCanvas: HTMLCanvasElement, pscale: number, pmode: number): boolean {
   fsCanvas.style.display = pmode === 3 ? 'block' : 'none';
-  if (pscale <= 1 || (pmode !== 0 && pmode !== 3)) {return false;}
+  // pscale<1 = 2× supersample: render a bigger buffer, CSS downsamples it
+  // (bilinear is right here — this path exists for fill-rate profiling,
+  // not a crispness pick). Same math: w/0.5 = 2w.
+  if (pscale === 1 || (pmode !== 0 && pmode !== 3)) {return false;}
   const { w, h } = overscanSize();
   renderer.setPixelRatio(1);
   renderer.setSize(Math.floor(w / pscale),
     Math.floor(h / pscale), false);
-  renderer.domElement.style.imageRendering = 'pixelated';
+  renderer.domElement.style.imageRendering = pscale < 1 ? 'auto' : 'pixelated';
   renderer.domElement.style.width = `${w}px`;
   renderer.domElement.style.height = `${h}px`;
   return true;
@@ -709,7 +712,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   // user's chosen baseline; the ladder may degrade below it but never
   // rewrites it.
   function setPixel(scale: number, mode: number, persist = true): void {
-    pscale = Math.min(4, Math.max(1, scale));
+    pscale = Math.min(4, Math.max(0.5, scale)); // 0.5 = 2× supersample (dev probe)
     pmode = Math.min(3, Math.max(0, mode));
     if (persist) { settings.set('fps-pscale', pscale); settings.set('fps-pmode', pmode); }
     syncRenderToScreen();
@@ -798,6 +801,11 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
 
   // applyBufferSizes (not just updateRendererSize): pixel/composer
   // pass enables are only re-evaluated on that path.
+  // 0.5X (2× supersample — fill-rate profiling) is a dev-box control:
+  // localhost exposes the button, tunneled/prod users never see it.
+  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '[::1]') {
+    document.getElementById('pscale-half')?.style.removeProperty('display');
+  }
   markPscale = wireSegRow('pscale-row', (): number => pscale,
     (v): void => setPixel(v, pmode));
   markPmode = wireSegRow('pmode-row', (): number => pmode,

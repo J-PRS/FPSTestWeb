@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
-import { mkdirSync, writeFileSync, existsSync, readdirSync, rmSync } from 'node:fs';
+import { mkdirSync, writeFileSync, existsSync, readdirSync, rmSync, statSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
@@ -114,6 +115,47 @@ const mapRelief = {
 // into dist and shipped (~27MB dead weight). Strip .old from the OUTPUT
 // only: sources stay for the scheduled cleanup pass, dev server still
 // serves them if anything old needs checking live.
+// dist census — the wire cost is what we actually serve (entire dist dir),
+// so report file count + raw/gzip/brotli totals after every build.
+let distT0 = 0;
+const distSize = {
+  name: 'dist-size',
+  buildStart() { distT0 = performance.now(); },
+  closeBundle() {
+    const dist = fileURLToPath(new URL('dist', import.meta.url));
+    const rows = [];
+    const walk = (d) => {
+      for (const f of readdirSync(d, { withFileTypes: true })) {
+        const p = join(d, f.name);
+        if (f.isDirectory()) {walk(p);} else {rows.push(p);}
+      }
+    };
+    try { walk(dist); } catch { return; }
+    // Already-compressed formats pass the wire as-is — gzipping a .glb or
+    // .ogg gains ~0% and hosts/CDNs skip them. Count them raw; only
+    // text-ish payloads get real compression numbers.
+    const BINARY = /\.(?:glb|bin|ogg|mp3|wav|png|jpe?g|webp|ktx2|wasm|woff2?|zip|avif|mp4|webm|hdr|exr)$/i;
+    let raw = 0, bin = 0;
+    for (const p of rows) {
+      const n = statSync(p).size;
+      raw += n;
+      if (BINARY.test(p)) {bin += n;}
+    }
+    // Build stamp — /build.txt rides the same dist dir everywhere it's
+    // served (preview, tunnel, prod static), no CI needed. Hash of all
+    // file contents = "which exact build", timestamp = when.
+    const h = createHash('sha256');
+    for (const p of rows.sort()) { h.update(readFileSync(p)); }
+    writeFileSync(join(dist, 'build.txt'), `${h.digest('hex').slice(0, 8)} ${Math.floor(Date.now() / 1000)}`);
+    const mb = (n) => `${(n / 1024 / 1024).toFixed(2).padStart(6)} MB`;
+    const took = ((performance.now() - distT0) / 1000).toFixed(2);
+    console.log(`\n  dist census — ${rows.length} files, ${took}s build`);
+    console.log(`    binary assets (served as-is): ${mb(bin)}`);
+    console.log(`    text/code:                    ${mb(raw - bin)}`);
+    console.log(`    total:                        ${mb(raw)}`);
+  },
+};
+
 const stripOldAssets = {
   name: 'strip-old-assets',
   apply: 'build',
@@ -139,7 +181,57 @@ export default defineConfig(({ mode }) => ({
   // stale-notify plugin SWALLOWS every update and instead pushes a custom
   // event — the client counts changed files in a corner badge.
   // Manual Ctrl+R when you want the new code.
-  plugins: [shotSaver, gunSheet, stripOldAssets, mapRelief, ...(mode === 'noreload' ? [{
+  plugins: [shotSaver, gunSheet, stripOldAssets, mapRelief, distSize, {
+    name: 'stale-probe',
+    // vite preview: the built client can't hear a watcher, so serve
+    // 'how stale is this bundle' — mtime scan: any source file newer
+    // than dist's newest file means the bundle behind it is old.
+    // Catches edits between build and preview boot (fs.watch can't).
+    configurePreviewServer(server) {
+      const root = fileURLToPath(new URL('..', import.meta.url));
+      const buildStamp = (() => {
+        let newest = 0;
+        const walk = (d) => {
+          for (const f of readdirSync(d, { withFileTypes: true })) {
+            const p = join(d, f.name);
+            if (f.isDirectory()) {walk(p);} else {newest = Math.max(newest, statSync(p).mtimeMs);}
+          }
+        };
+        try { walk(join(root, 'client/dist')); } catch { /* no dist */ }
+        return newest;
+      })();
+      const staleFiles = (acc = []) => {
+        for (const dir of [join(root, 'client/src'), join(root, 'shared')]) {
+          const walk = (d) => {
+            for (const f of readdirSync(d, { withFileTypes: true })) {
+              const p = join(d, f.name);
+              if (f.isDirectory()) {walk(p);}
+              else if (statSync(p).mtimeMs > buildStamp) {acc.push(p.replace(root, '').replace(/\\/g, '/'));}
+            }
+          };
+          try { walk(dir); } catch { /* dir missing */ }
+        }
+        return acc;
+      };
+      let rebuilding = false;
+      server.middlewares.use('/dev/rebuild', (req, res) => {
+        if (req.method !== 'POST' || rebuilding) {res.statusCode = rebuilding ? 409 : 404; res.end(); return;}
+        rebuilding = true;
+        // Long response — build is ~1s, client reloads after it lands.
+        execFile('npm', ['run', 'build'], { cwd: join(root, 'client'), shell: true }, (err) => {
+          rebuilding = false;
+          res.statusCode = err ? 500 : 200;
+          res.end(String(err ?? 'ok'));
+        });
+      });
+      let cache = { at: 0, body: '{}' };
+      server.middlewares.use('/dev/stale', (_req, res) => {
+        if (Date.now() - cache.at > 2000) {const files = staleFiles(); cache = { at: Date.now(), body: JSON.stringify({ count: files.length, files, built: buildStamp }) };}
+        res.setHeader('content-type', 'application/json');
+        res.end(cache.body);
+      });
+    },
+  }, ...(mode === 'noreload' ? [{
     name: 'stale-notify',
     configureServer(server) {
       // Vite hard-codes a full-reload for ANY .html change (client env,
@@ -178,12 +270,21 @@ export default defineConfig(({ mode }) => ({
   build: {
     outDir: 'dist',
     target: 'es2022',
-    chunkSizeWarningLimit: 600,
+    // game.js is ~2.9MB by design (engine + all assets inlined in one
+    // bundle); the warning is noise until it GROWS — warn at 3.2MB.
+    chunkSizeWarningLimit: 3200,
     // Skip the gzip-pass over 2.85MB of output — the size report is the
     // only consumer and pure build time.
     reportCompressedSize: false,
     // Disable rolldown for better CommonJS compatibility
     rollupOptions: {
+      // server_bun modules legitimately ship in the client graph (shared
+      // sim/journal code) — node:* externalization is correct there,
+      // per-file warnings are noise. Any OTHER warning still prints.
+      onLog(level, log, dflt) {
+        if (log.code === 'MODULE_EXTERNALIZED' || String(log.message).includes('externalized for browser compatibility')) {return;}
+        dflt(level, log);
+      },
       output: {
         codeSplitting: false,
         entryFileNames: 'game.js',

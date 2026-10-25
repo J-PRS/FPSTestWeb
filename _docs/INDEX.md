@@ -48,6 +48,8 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-10-25_MOUSE_SENS.md` | cm/360 survey — Krunker 8.3 default, AAA defaults 10-21cm, pro medians 30-60cm; why we moved 1.0→0.8 (~12.5cm casual default) |
 | `_docs/2026-10-25_PREMIUM_TICKRATE.md` | Monetization concept — $10 sub sponsors a 64/128Hz room; per-player/presence models rejected (p2w, AFK-mule); Hetzner cost math €0-27/room; CPU is the real constraint |
 | `_docs/2026-10-25_PHANTOM_MOUSE_DELTA.md` | Chromium pointer-lock delta spikes — why magnitude clamps fail at high DPI, the layered fix (unadjustedMovement + neighbor isolation), edge cases |
+| `_docs/2026-10-25_WIREIN_QOS.md` | Frozen-bots join bug — early queue's shared 512 cap dropped must-deliver init edges; per-lane QoS fix (JSON never drops, binary capped) |
+| `_docs/2026-10-25_HMR_VS_BUILD.md` | Why build+preview beats HMR for a WebGL game — state can't swap, 0.6s rolldown builds, community consensus (Babylon/Parcel/Remix) |
 | `_docs/2026-10-24_CHARACTER_TECHNIQUES_DEEP.md` | Round 2 — PS1/Quake-era tricks + 2025 agentic-3D pipelines, mapped to which techniques our builders already use and what's worth adding |
 | `_docs/2026-10-24_PROFILING_HOTSPOTS.md` | 512-player soak CPU profile: phase + function hotspots; send/fanout/encoding dominate; prioritized optimization roadmap |
 | `_docs/2026-10-24_CLASS_WEAPON_LOCKS.md` | Class-lock design: the caliber ladder (light=precision, medium=mid ordnance, heavy=siege), per-weapon rationale/pros/cons, exact-class vs floor lock choice |

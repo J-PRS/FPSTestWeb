@@ -97,6 +97,18 @@ describe('RibbonTrail pooling + slots', (): void => {
     r.dispose();
   });
 
+  it('a corrective-vel resnap still cuts — the 60m ceiling ignores glitched speed', (): void => {
+    const r = RibbonTrail.acquire(scene, { color: 0xFF_00_00 });
+    r.push(pos(0), vel());
+    r.push(pos(1), vel());
+    // Resnap sweep: vel spikes to ~1400 m/s corrective — speed-scaled
+    // budget (~115m) used to permit the 75m chord. Hard 60m ceiling cuts.
+    r.push(pos(75), new THREE.Vector3(1400, 0, 0));
+    const internal = r as unknown as { count: number };
+    expect(internal.count).toBeLessThanOrEqual(1);
+    r.dispose();
+  });
+
   it('push after dispose counts a zombie and writes nothing', (): void => {
     const r = RibbonTrail.acquire(scene, { color: 0xFF_00_00 });
     r.dispose();

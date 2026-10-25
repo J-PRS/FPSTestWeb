@@ -92,3 +92,34 @@ fraction of the cost.
 - APNIC measured Apex "30–40 packets/sec" — that's packet flow, not
   sim rate (snapshot splitting inflates the count). Don't confuse the
   two when citing.
+
+## Local input lag IS the hidden tickrate tax (sapphyrus, r/GlobalOffensive)
+
+The reason 128 tick "feels" better isn't netcode — it's that your own
+inputs only *render* at tick boundaries:
+
+- CS2 sims at 64Hz and interpolates the local player's view between
+  ticks, so WASD/jump/recoil visually apply up to **15.6ms late** — the
+  full tick period, worst case. 128Hz halves that wait (7.8ms), which is
+  what players actually feel.
+- His proposed fix: subtick timestamps already carry "when in the tick"
+  — run LOCAL prediction per-frame instead of per-tick → ~0ms input lag
+  at unchanged bandwidth. (Valve later shipped a partial version:
+  predict one tick ahead, then interpolate.)
+- Side finding: aim-punch/recoil only updates per tick — a known
+  CS2 bug, not a tickrate property.
+
+**Our parallel:** `MoveSim.STEP = 1/60` fixed-step means our movement
+has the same ≤16.6ms local input delay as CS2's 64Hz. Mouse look is
+already per-frame (yaw applies in the mousemove handler, not the tick) —
+that's why aim feels right while movement has a tick-floor.
+
+**The knob if we ever want it:** step local movement on frame-dt instead
+of fixed 1/60 for the local player only — we own both sides of the
+prediction so there's no determinism contract to break. That's the free
+equivalent of what 128-tick sells. (And for the premium-room doc: this
+is the second thing high-tick secretly buys — local responsiveness, not
+just interp fidelity.)
+
+Source: reddit.com/r/GlobalOffensive/comments/16isn2a (sapphyrus, 3y) +
+thread confirmation that Valve shipped the predict-ahead variant.

@@ -125,13 +125,20 @@ export class WireIn {
     this.ready = true;
     const q = this.early;
     this.early = [];
-    if (this.earlyDrops > 0) {logger.warn(`wireIn dropped ${this.earlyDrops} early messages over the 512 cap`);}
+    if (this.earlyDrops > 0) {logger.warn(`wireIn dropped ${this.earlyDrops} early binary messages over the 512 cap`);}
     for (const m of q) {this.dispatch(m);}
   }
 
   private gate(data: ServerMessage | Uint8Array): boolean {
     if (this.ready) {return false;}
-    if (this.early.length < 512) {this.early.push(data);}
+    // Per-lane QoS, the GONet/yojimbo split: binary frames are
+    // latest-wins motion/tick traffic (high-frequency, safe to drop);
+    // JSON messages are must-deliver edges (roster, gameState, joins —
+    // bounded by entity count, not time). Capping JSON dropped the join
+    // roster → frozen bots for ~53s until resync; binary under cap is
+    // stale on arrival anyway.
+    if (!(data instanceof Uint8Array)) {this.early.push(data);}
+    else if (this.early.length < 512) {this.early.push(data);}
     else {this.earlyDrops += 1;}
     return true;
   }

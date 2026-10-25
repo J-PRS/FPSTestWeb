@@ -1,0 +1,13 @@
+{
+  "bots": 10,
+  "frames": 1172,
+  "fps": 58.6,
+  "medianMs": 16.67,
+  "p95Ms": 16.74,
+  "p99Ms": 33.35,
+  "over25": 24,
+  "over50": 2,
+  "longestMs": 66.7,
+  "jsBusyFrac": 0.65,
+  "memMb": 110
+}

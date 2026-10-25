@@ -1,5 +1,6 @@
 // oxlint-disable-next-line import/no-unassigned-import
 // oxlint-disable-next-line import/no-unassigned-import
+import pkg from '../package.json';
 import './core/polyfills.js'; // toSorted etc. — older engines
 import * as THREE from 'three';
 import { setInvariantSink } from '../../shared/invariants.js';
@@ -785,6 +786,11 @@ async function init(): Promise<void> {
   // Defer a deploy reload to the only real break: the intermission —
   // match clock expired, scoreboard up, next match not started.
   // Menu/death are still live play. Grace cap inside bounds the wait.
+  // Version footer — the same /version.txt the deploy watcher polls.
+  fetch('/version.txt', { cache: 'no-cache' })
+    .then((r) => r.ok ? r.text() : '')
+    .then((v) => { const el = document.getElementById('client-ver'); if (el) {const t = new Date(Number(v.trim()) * 1000); el.textContent = `v${pkg.version} · ${t.toLocaleDateString()} ${t.toLocaleTimeString()}`;} })
+    .catch((): void => { /* no version.txt on a bare dev serve — fine */ });
   watchDeployVersion({ whenIdle: (): boolean =>
     world.matchEndsAt !== null && world.matchEndsAt <= Date.now() });
   networkManager = new NetworkManager();
@@ -1184,22 +1190,64 @@ const { requestLock } = wireOverlayInput({
 // (createHotContext) only fires when the source spells it out; a
 // destructured `const {hot} = import.meta` leaves it undefined and the
 // listener silently never registers.
+let staleBadge: HTMLDivElement | null = null;
+const paintStaleBadge = (): void => {
+  const stale = staleCount();
+  if (!staleBadge) {
+    staleBadge = document.createElement('div');
+    staleBadge.id = 'stale-badge';
+    staleBadge.style.cssText =
+      'position:fixed;bottom:8px;right:10px;z-index:9999;pointer-events:none;' +
+      'font:11px/1.4 monospace;color:#ffb84d;opacity:0.85;text-shadow:0 1px 2px #000;' +
+      'background:rgba(0,0,0,0.35);padding:3px 7px;border-radius:4px;';
+    document.body.append(staleBadge);
+  }
+  staleBadge.textContent = `⟳ ${stale} file${stale === 1 ? '' : 's'} changed`;
+  staleBadge.style.display = stale ? '' : 'none'; // a 0 badge is noise
+};
+// Preview/prod badge: the vite 'stale-probe' plugin serves /dev/stale
+// (files newer than the dist build stamp) — localhost-only so the same
+// bundle on a tunneled https URL stays clean. Count is absolute vs
+// build, not cumulative — feed the delta into the accumulator.
+if (import.meta.env.PROD && (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '[::1]')) {
+  // Alt+R = rebuild + reload — the loop the preview badge makes visible.
+  let rebuildDiv: HTMLDivElement | null = null;
+  addEventListener('keydown', (e): void => {
+    if (!e.altKey || e.code !== 'KeyR' || e.repeat) {return;}
+    e.preventDefault();
+    if (!rebuildDiv) {
+      rebuildDiv = document.createElement('div');
+      rebuildDiv.style.cssText =
+        'position:fixed;top:40%;left:50%;transform:translate(-50%,-50%);z-index:99999;' +
+        'font:14px monospace;color:#ffb84d;background:rgba(0,0,0,0.75);padding:10px 16px;border-radius:6px;';
+      rebuildDiv.textContent = '⟳ rebuilding…';
+      document.body.append(rebuildDiv);
+    }
+    fetch('/dev/rebuild', { method: 'POST' })
+      .then((r) => { if (r.ok) {location.reload();} else {rebuildDiv!.textContent = `rebuild failed (${r.status})`;} })
+      .catch((): void => { rebuildDiv!.textContent = 'rebuild endpoint missing'; });
+  });
+  let lastCount = 0;
+  setInterval((): void => {
+    fetch('/dev/stale')
+      .then((r) => r.ok ? r.json() : null)
+      .then((d: { count: number; files?: string[]; built?: number } | null) => {
+        if (!d) {return;}
+        // Local preview shows build time — version.txt only stamps DEPLOYS.
+        if (d.built) {const el = document.getElementById('client-ver'); if (el) {el.textContent = `v${pkg.version} · built ${new Date(d.built).toLocaleTimeString()}`;}}
+        if (d.count === lastCount) {return;}
+        noteStale(d.files, d.count - lastCount);
+        lastCount = d.count;
+        paintStaleBadge();
+      })
+      .catch((): void => { /* endpoint absent on real prod — stay silent */ });
+  }, 4000);
+}
 const hot = import.meta.hot as { on(e: string, cb: (d: { count: number; files?: string[] }) => void): void } | undefined;
 if (hot) {
-  let badge: HTMLDivElement | null = null;
   hot.on('stale:changed', (d): void => {
     noteStale(d.files, d.count);
-    const stale = staleCount();
-    if (!badge) {
-      badge = document.createElement('div');
-      badge.id = 'stale-badge';
-      badge.style.cssText =
-        'position:fixed;bottom:8px;right:10px;z-index:9999;pointer-events:none;' +
-        'font:11px/1.4 monospace;color:#ffb84d;opacity:0.85;text-shadow:0 1px 2px #000;' +
-        'background:rgba(0,0,0,0.35);padding:3px 7px;border-radius:4px;';
-      document.body.append(badge);
-    }
-    badge.textContent = `⟳ ${stale} file${stale === 1 ? '' : 's'} changed`;
+    paintStaleBadge();
   });
 
   // dev-watch restart countdown: the watcher exposes the armed restart on

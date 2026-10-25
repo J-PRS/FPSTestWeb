@@ -94,6 +94,9 @@ export class Projectile {
   vel: THREE.Vector3;
   dead = false;
   exploded = false;
+  /** Body-hit blast deferred — local contact suppressed the fake blast;
+   *  the wire 'gone' handler paints the authority's real one instead. */
+  ghostBodyPop = false;
   hitBolt: SweepObstacle | null = null; // mid-air interception — combat turns this into a cookoff blast
   age = 0;
   spawnedThisFrame = true; // skip first update so projectile renders at spawn pos before moving

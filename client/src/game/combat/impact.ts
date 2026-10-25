@@ -908,6 +908,7 @@ export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
   // Terrain hits are provably identical both sides — predict them fully.
   const ghostBodyPop = p.hitPlayerId !== null && p.hitPlayerId !== 'local' && (p.serverProjectileId !== null || p.shotId !== null);
   if (!ghostBodyPop) {spawnImpactEffect(c, p);}
+  else {p.ghostBodyPop = true;} // flag it — the wire 'gone' owes us the real blast
 
   recordProjectileHit(c, p);
 
