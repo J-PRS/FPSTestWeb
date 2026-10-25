@@ -1031,7 +1031,7 @@ export class Room {
       ballHit: (pid, id, dmg) => this.ballSim.handleHit(pid, id, dmg),
       crawlerHit: (pid, id, dmg) => this.creatureSim.handleHit(pid, id, dmg),
       repairTarget: (pid, muz, dir, range): number | null => this.deployables.repairTarget(pid, muz, dir, range),
-      onDeploy: (pid, kind, pos): string | true => this.deployables.handleDeploy(pid, kind, pos),
+      onDeploy: (pid, kind, pos, vel): string | true => this.deployables.handleDeploy(pid, kind, pos, vel),
       onRepair: (pid, targetId): string | true => this.deployables.repair(pid, targetId),
       deployables: () => this.deployables.snapshot(),
       influence: this.influence,
@@ -1081,6 +1081,10 @@ export class Room {
       rabbitFlagLive: this.mode === 'rabbit' ? (): boolean => this.flags?.spawned() ?? false : undefined,
       rabbitBottom: this.mode === 'rabbit' ? (): Set<string> => this.scoring.bottomFeeders() : undefined,
       drainEnergy: (pid, n): boolean => this.moveSim.drainEnergy(pid, n),
+      // Blast occlusion through enemy domes — a shell detonating at the
+      // shield's edge can't splash victims inside it.
+      shieldBlocked: (from, to, shooterId): boolean =>
+        this.deployables.shieldedPoint(to, shooterId, from),
       // Instant-skill claim: the client already spent the energy locally —
       // mirror the same ante on the shadow or the tank drifts 50 apart.
       onSkillUse: (pid, skill): true | "gone" => {
@@ -1221,6 +1225,9 @@ export class Room {
       onEnded: (w): void => { this.bots.notice('gg', 'match'); this.bots.matchEnd(w); },
       // The opener half of the beat — gl-hf as the round goes live.
       onStarted: (): void => { this.bots.matchStart(); this.seedHeadhunt(); },
+      // Intermission godmode: the scoreboard is up but the game runs on
+      // — blasts still shove, nobody can deal damage (Overwatch-style).
+      setIntermission: (on): void => { self.players.invulnerable = on; },
     };
   }
 

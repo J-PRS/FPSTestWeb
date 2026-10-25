@@ -131,7 +131,7 @@ export class RoomDeployables {
   /** Client claims a plant. Validates kind, per-player cap, and that the
    *  drop point is near the planter — the deploy anim throws the pod a few
    *  meters, not across the map. */
-  handleDeploy(playerId: string, kind: string, pos: Vec3): ClaimVerdict {
+  handleDeploy(playerId: string, kind: string, pos: Vec3, vel?: Vec3): ClaimVerdict {
     const player = this.room.players.getPlayer(playerId);
     if (!player || player.isDead) {return 'gone';}
     if (!KINDS.has(kind as DeployKind)) {return 'badkind';}
@@ -157,7 +157,10 @@ export class RoomDeployables {
     // pod lands. Net sink of one charge (costs 2, pays 1 back), and the
     // grab is first-come — a fast enemy can steal the thrower's change.
     if (k === 'nugget') {
-      this.room.pickups?.spawn(Object.assign({}, p2), 'gem', NUGGET_ARM_S);
+      // Thrown pod: the claim now carries the lob velocity at release —
+      // the pickup sim owns the flight and settles to truth itself.
+      // The old landing-claim path (no vel) still mints in place.
+      this.room.pickups?.spawn(vel ? Object.assign({}, pos) : Object.assign({}, p2), 'gem', NUGGET_ARM_S, 1, undefined, 0, vel);
       return true;
     }
     const owned = [...this.items.values()].filter((d): boolean => d.owner === playerId && d.kind === k);
@@ -307,6 +310,32 @@ export class RoomDeployables {
       if (t !== null && t < bestT) {bestT = t;}
     }
     return bestT === Infinity ? null : bestT;
+  }
+
+  /** Is this point inside a powered ENEMY dome? Blasts use it as
+   *  occlusion: a shell detonating at the shield's edge splashes into
+   *  the dome without it — the victim inside must read immune. Same
+   *  owner/team exemptions as shieldBlock. */
+  shieldedPoint(pos: Vec3, shooterId: string, blastPos: Vec3): boolean {
+    const shooterTeam = this.room.players.getPlayer(shooterId)?.team;
+    const r2 = SHIELD_RADIUS * SHIELD_RADIUS;
+    for (const d of this.items.values()) {
+      if (d.kind !== 'shield' || d.owner === shooterId) {continue;}
+      if (!this.powered(d)) {continue;}
+      const domeTeam = this.room.players.getPlayer(d.owner)?.team;
+      if (domeTeam !== undefined && shooterTeam !== undefined && domeTeam === shooterTeam) {continue;}
+      const dx = pos.x - d.pos.x, dy = pos.y - d.pos.y, dz = pos.z - d.pos.z;
+      if (dx * dx + dy * dy + dz * dz > r2) {continue;} // victim outside this dome
+      // A blast already inside the dome still hurts its occupants —
+      // only fire from OUTSIDE is walled off. The entry-point detonation
+      // sits ON the boundary (dist == r), so "inside" needs real depth,
+      // not a boundary epsilon — 0.5m in is a grenade thrown in, not a
+      // shell popped at the wall.
+      const bx = blastPos.x - d.pos.x, by = blastPos.y - d.pos.y, bz = blastPos.z - d.pos.z;
+      if (bx * bx + by * by + bz * bz <= (SHIELD_RADIUS - 0.5) ** 2) {continue;}
+      return true;
+    }
+    return false;
   }
 
   /** A creature's bite lands on a deployable — same durability pool the
@@ -552,14 +581,19 @@ export class RoomDeployables {
         if (d.ttl <= 0) { this.remove(d.id); continue; }
       }
       if (!this.powered(d)) {continue;} // generator down — base goes dark
-      if (d.kind === 'turret') {tickTurret(this, d, dt);}
-      else if (d.kind === 'mine') {tickMine(this, d, dt);}
+      // Intermission godmode: weapons-grade deployables stand down too —
+      // a sentry can't kill anyway (applyDamage is gated) but it still
+      // paints tracers/knockback over the scoreboard. Station keeps
+      // healing, sensor keeps pinging, watersphere keeps sloshing.
+      const standDown = this.room.players.invulnerable;
+      if (d.kind === 'turret') {if (!standDown) {tickTurret(this, d, dt);}}
+      else if (d.kind === 'mine') {if (!standDown) {tickMine(this, d, dt);}}
       else if (d.kind === 'station') {tickStation(this, d, dt);}
-      else if (d.kind === 'drone') {tickDrone(this, d, dt);}
+      else if (d.kind === 'drone') {if (!standDown) {tickDrone(this, d, dt);}}
       else if (d.kind === 'sensor') {tickSensor(this, d, dt);}
-      else if (d.kind === 'baseturret') {tickSentry(this, d, dt);}
-      else if (d.kind === 'mortar') {tickMortar(this, d, dt);}
-      else if (d.kind === 'cgturret') {tickCg(this, d, dt);}
+      else if (d.kind === 'baseturret') {if (!standDown) {tickSentry(this, d, dt);}}
+      else if (d.kind === 'mortar') {if (!standDown) {tickMortar(this, d, dt);}}
+      else if (d.kind === 'cgturret') {if (!standDown) {tickCg(this, d, dt);}}
       else if (d.kind === 'watersphere') {tickWatersphere(this, d, dt);}
     }
     // Sentry bolts in flight — the blast lands where the bolt does, so a

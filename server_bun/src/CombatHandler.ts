@@ -74,6 +74,9 @@ export interface CombatDeps {
    *  server-side truth so a bot/client can't heal for free. */
   drainEnergy?: (playerId: string, amount: number) => void;
   energyOf?: (playerId: string) => number | null;
+  /** Dome occlusion for blast sweeps — the shell dies at the shield's
+   *  edge, so its splash must not reach anyone inside that dome. */
+  shieldBlocked?: (from: Vec3, to: Vec3, shooterId: string) => boolean;
   /** Server-driven respawn is a declared discontinuity — reseat the
    *  shadow at the spawn or the corpse→spawn jump reads as divergence. */
   moveResync?: (playerId: string, pos: Vec3, yaw: number, fullEnergy?: boolean) => void;
@@ -540,6 +543,15 @@ win.violations += 1;
       }
       player.protectedUntil = simMs(0); // firing breaks your own spawn shield
       const l = dhypot3(dir!.x, dir!.y, dir!.z) || 1;
+      // Velocity inherit: the predicted shell draws playerVel*0.5 — using
+      // the shadow velocity here diverges the echo by uplink-of-accel and
+      // shows as a mid-air reanchor jink. Adopt the claim's vel verbatim
+      // within an honest window (accel×lag can't legit exceed ~20m/s);
+      // a forged vel beyond that clamps to shadow — worst cheat is a
+      // half-weighted 20m/s nudge, not a free speedline.
+      const ownerVel = msg.vel && finiteVec(msg.vel)
+          && dhypot3(msg.vel.x - player.velocity.x, msg.vel.y - player.velocity.y, msg.vel.z - player.velocity.z) <= 20
+        ? msg.vel : player.velocity;
       // Back-date the shell's age by the measured uplink (same number
       // that bound the origin) — the replica's clock already runs, so
       // the authoritative shell ages in lockstep: fuses die at the same
@@ -548,7 +560,7 @@ win.violations += 1;
       const id = fireProjectile(playerId, msg.weaponType!,
         { x: at.x, y: at.y, z: at.z },
         { x: dir!.x / l, y: dir!.y / l, z: dir!.z / l },
-        player.velocity, msg.shotId, lagS);
+        ownerVel, msg.shotId, lagS);
       if (id) {
         if (msg.shotId) {
           let seen = this.seenShots.get(playerId);

@@ -205,6 +205,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       if (!wt.ok) {return { success: false, error: 'weaponType: unknown weapon' };}
       const pos = optVec(obj.pos);
       if (!pos.ok) {return { success: false, error: `pos: ${pos.error}` };}
+      const svel = optVec(obj.vel);
       return {
         success: true,
         data: {
@@ -212,6 +213,7 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
           weaponType: wt.v,
           dir: dir.ok ? dir.data : undefined,
           pos: pos.ok ? pos.data : undefined,
+          vel: svel.ok ? svel.data : undefined,
           shotId: optShotId(obj.shotId),
           fireAt: isFiniteNumber(obj.fireAt) ? obj.fireAt : undefined,
         },
@@ -392,9 +394,11 @@ export const WIRE: { [K in ClientMessage['type']]?: WireEntry<K> } = {
       }
       const dpos = validateVec3(obj.position);
       if (!dpos.success) {return { success: false, error: `position: ${dpos.error}` };}
-      return { success: true, data: { type: 'deploy', kind: kind as DeployKind, position: dpos.data, claimSeq: optClaimSeq(obj.claimSeq) } };
+      const dvel = obj.vel === undefined ? undefined : validateVec3(obj.vel);
+      if (dvel !== undefined && !dvel.success) {return { success: false, error: `vel: ${dvel.error}` };}
+      return { success: true, data: { type: 'deploy', kind: kind as DeployKind, position: dpos.data, vel: dvel?.data, claimSeq: optClaimSeq(obj.claimSeq) } };
     },
-    handle: (h, id, m): void => h.claimAck(id, 'deploy', m.claimSeq, h.roomInfo.onDeploy?.(id, m.kind, m.position) ?? 'gone'),
+    handle: (h, id, m): void => h.claimAck(id, 'deploy', m.claimSeq, h.roomInfo.onDeploy?.(id, m.kind, m.position, m.vel) ?? 'gone'),
   },
 
   repair: {

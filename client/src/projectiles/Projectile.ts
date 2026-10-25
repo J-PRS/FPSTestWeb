@@ -308,8 +308,16 @@ export class Projectile {
   update(dt: number, terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>, obstacles?: SweepObstacle[], playerClasses?: Map<string, string>): void {
     if (this.dead) {return;}
 
-    this.renderOffset.multiplyScalar(Math.exp(-dt / 0.05));
-    if (this.renderOffset.lengthSq() < 1e-8) {this.renderOffset.set(0, 0, 0);}
+    // Converge the splice at ≤10% of flight speed: lateral correction
+    // beyond that visibly bends the path (~6° deflection is perceptible);
+    // slower is invisible. tau = offset/rate self-scales — a big
+    // reanchor stretches the blend, a small one snaps in a frame or two.
+    const offsetLen = this.renderOffset.length();
+    if (offsetLen > 0) {
+      const tau = offsetLen / Math.max(this.vel.length() * 0.1, 1);
+      this.renderOffset.multiplyScalar(Math.exp(-dt / tau));
+      if (this.renderOffset.lengthSq() < 1e-8) {this.renderOffset.set(0, 0, 0);}
+    }
 
     // First frame: just render at spawn position, don't apply physics yet
     if (this.spawnedThisFrame) {

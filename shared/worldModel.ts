@@ -378,6 +378,7 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'team', wire: 'str', channel: 'edge', absent: null },
       { name: 'transport', wire: 'str', channel: 'edge', absent: null },
       { name: 'armorClass', wire: 'str', channel: 'edge' },
+      { name: 'weapon', wire: 'num', channel: 'edge', absent: null },
       { name: 'health', wire: 'num', channel: 'sim' },
       { name: 'isDead', wire: 'bool', channel: 'edge' },
     ],
@@ -502,6 +503,9 @@ export const WORLD_MODEL: Record<string, WorldKindDecl> = {
       { name: 'team', wire: 'str', channel: 'edge', absent: null },
       { name: 'transport', wire: 'str', channel: 'edge', absent: null },
       { name: 'armorClass', wire: 'str', channel: 'edge' },
+      // Server-known current weapon (bot loadout / last simmed spawn) —
+      // lets a remote draw a real gun before any shot edge reveals it.
+      { name: 'weapon', wire: 'num', channel: 'edge', absent: null },
     ],
   },
 };
@@ -731,7 +735,7 @@ export const CLIENT_INTENTS: Record<string, IntentFieldDecl[]> = {
   clientStats: [{ name: 'fps', wire: 'num' }, { name: 'jsMs', wire: 'num' }, { name: 'ping', wire: 'num' }, { name: 'loss', wire: 'num' }, { name: 'jitter', wire: 'num' }, { name: 'renderLagMs', wire: 'num', absent: null }, { name: 'renderLag', wire: 'obj', absent: null }, { name: 'gap', wire: 'num', absent: null }, { name: 'starve', wire: 'num', absent: null }, { name: 'starveMs', wire: 'num', absent: null }, { name: 'drainMsMax', wire: 'num', absent: null }],
   chat: [{ name: 'text', wire: 'str' }, { name: 'team', wire: 'bool', absent: null }, { name: 'vgs', wire: 'str', absent: null }],
   aoeShot: [{ name: 'position', wire: 'vec3' }, { name: 'weaponType', wire: 'num', absent: null }, { name: 'excludeTargetId', wire: 'str', absent: null }, { name: 'projectileId', wire: 'str', absent: null }, { name: 'airtime', wire: 'num', absent: null }, { name: 'power', wire: 'num', absent: null }, { name: 'directHit', wire: 'bool', absent: null }, { name: 'shotId', wire: 'str', absent: null }, { name: 'fireAt', wire: 'num', absent: null }],
-  shotFired: [{ name: 'weaponType', wire: 'num', absent: null }, { name: 'dir', wire: 'vec3', absent: null }, { name: 'pos', wire: 'vec3', absent: null }, { name: 'shotId', wire: 'str', absent: null }, { name: 'fireAt', wire: 'num', absent: null }],
+  shotFired: [{ name: 'weaponType', wire: 'num', absent: null }, { name: 'dir', wire: 'vec3', absent: null }, { name: 'pos', wire: 'vec3', absent: null }, { name: 'vel', wire: 'vec3', absent: null }, { name: 'shotId', wire: 'str', absent: null }, { name: 'fireAt', wire: 'num', absent: null }],
   jump: [{ name: 'position', wire: 'vec3' }],
   jetpack: [{ name: 'position', wire: 'vec3' }],
   inputMove: [{ name: 'input', wire: 'obj' }, { name: 'rotation', wire: 'rot' }, { name: 'seq', wire: 'num', absent: null }, { name: 'prev', wire: 'obj', absent: null }],
@@ -742,7 +746,7 @@ export const CLIENT_INTENTS: Record<string, IntentFieldDecl[]> = {
   // crawlerHit carries no knockback — the crawler channel is melee-PvE
   // and the validator drops kx/ky/kz on purpose (see wire.ts).
   crawlerHit: [{ name: 'id', wire: 'num' }, { name: 'damage', wire: 'num' }, { name: 'claimSeq', wire: 'num', absent: null }],
-  deploy: [{ name: 'kind', wire: 'str' }, { name: 'position', wire: 'vec3' }, { name: 'claimSeq', wire: 'num', absent: null }],
+  deploy: [{ name: 'kind', wire: 'str' }, { name: 'position', wire: 'vec3' }, { name: 'vel', wire: 'vec3', absent: null }, { name: 'claimSeq', wire: 'num', absent: null }],
   repair: [{ name: 'targetId', wire: 'num' }, { name: 'claimSeq', wire: 'num', absent: null }],
   skillUse: [{ name: 'claimSeq', wire: 'num', absent: null }],
   slam: [{ name: 'position', wire: 'vec3' }, { name: 'claimSeq', wire: 'num', absent: null }],

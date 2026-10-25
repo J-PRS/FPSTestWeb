@@ -104,7 +104,7 @@ export type ClientMessage =
   // (SERVER_SIMMED_WEAPONS) it's the fire INTENT instead: the server
   // spawns an authoritative shell, echoes shotId on projectileCreated,
   // and declares all outcomes — pos/shotId only help binding, never truth.
-  | { type: 'shotFired'; weaponType?: number; dir?: Vec3; pos?: Vec3; shotId?: string; fireAt?: number }
+  | { type: 'shotFired'; weaponType?: number; dir?: Vec3; pos?: Vec3; vel?: Vec3; shotId?: string; fireAt?: number }
   // tickNack: client lost a tick-frame burst — asks the room to run a
   // full-record window so masked-field baselines reseed in ~1s instead
   // of waiting out the staggered-full cadence. Payload-free: gap size is
@@ -140,7 +140,7 @@ export type ClientMessage =
   // Same claim, but on a melee-species crawler — separate channel because
   // the two id namespaces don't overlap (crawl ids live in CreatureSim).
   | { type: 'crawlerHit'; id: number; damage: number; kx?: number; ky?: number; kz?: number; claimSeq?: number }
-  | { type: 'deploy'; kind: DeployKind; position: Vec3; claimSeq?: number }
+  | { type: 'deploy'; kind: DeployKind; position: Vec3; vel?: Vec3; claimSeq?: number }
   // Repair-tool beam tick: the server re-derives range, LOS, team and the
   // heal amount itself — the claim carries only WHICH deployable.
   | { type: 'repair'; targetId: number; claimSeq?: number }
@@ -211,7 +211,10 @@ export type ServerMessage =
       /** Current vitals — an announce can't fabricate 100/alive for a
        *  wounded or dead grace rejoiner (hash checks would flag the gap
        *  until the first tick record). Optional for old peers. */
-      health?: number; isDead?: boolean }
+      health?: number; isDead?: boolean;
+      /** Server-known current weapon — remotes draw the real gun before
+       *  the first shot edge. Bot loadouts announce it at join. */
+      weapon?: number }
   | { type: 'playerLeft'; playerId: string }
   /** u16 wire-id roster for v3 tick frames — arrives on this reliable
    *  lane before any binary frame can reference the ids it adds. */
@@ -427,6 +430,9 @@ export interface GameStatePlayer {
   transport?: TransportKind;
   /** Armor tier — remote model renders bulkier (heavy) or slimmer (light). */
   armorClass?: string;
+  /** Server-known current weapon (bot loadout / last simmed shell) —
+   *  remotes draw a real gun, not the placeholder. */
+  weapon?: number;
 }
 
 export interface SnapshotPlayer {

@@ -129,7 +129,7 @@ export interface RoomInfo {
   drainedForTicks?: (playerId: string) => boolean;
   /** Deploy claim sink — Room.deployables.handleDeploy. The return is
    *  the claim verdict the claimant sees in its claimAck. */
-  onDeploy?: (playerId: string, kind: string, pos: Vec3) => ClaimVerdict;
+  onDeploy?: (playerId: string, kind: string, pos: Vec3, vel?: Vec3) => ClaimVerdict;
   /** Repair-beam claim sink — Room.deployables.repair. */
   onRepair?: (playerId: string, targetId: number) => ClaimVerdict;
   /** Blast aftermath (deployables, flag/pickup punts, wildlife splash,
@@ -161,6 +161,9 @@ export interface RoomInfo {
   rabbitBottom?: () => Set<string>;
   /** Jet-tank access for heal-beam ammo — energy is server truth. */
   drainEnergy?: (playerId: string, amount: number) => void;
+  /** Enemy-dome blast occlusion — blast at the shield edge can't splash
+   *  occupants inside. Wired from Room.deployables.shieldedPoint. */
+  shieldBlocked?: (from: Vec3, to: Vec3, shooterId: string) => boolean;
   /** Target uplink-transit estimate (ms) — blast lag-comp subtracts the
    *  broadcast lead so validation aims at the shooter's screen point. */
   transitOf?: (playerId: string) => number;
@@ -232,6 +235,7 @@ function combatDeps(roomInfo: RoomInfo | undefined): CombatDeps {
     rabbitFlagLive: roomInfo?.rabbitFlagLive,
     rabbitBottom: roomInfo?.rabbitBottom,
     drainEnergy: roomInfo?.drainEnergy,
+    shieldBlocked: roomInfo?.shieldBlocked,
     energyOf: roomInfo?.energyOf,
     moveResync: roomInfo?.moveResync,
 
@@ -624,6 +628,7 @@ export class MessageHandler {
       team: player.team,
       transport: player.transport,
       armorClass: player.armorClass,
+      weapon: player.weapon,
       health: player.health,
       isDead: player.isDead,
     }) as ServerMessage, player.id);

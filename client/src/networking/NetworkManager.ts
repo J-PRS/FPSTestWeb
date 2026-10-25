@@ -56,6 +56,8 @@ export interface RemotePlayerState {
   transport?: TransportKind;
   /** Armor tier from playerJoined/gameState — remote model scale cue. */
   armorClass?: string;
+  /** Server-known current weapon — draw the real gun before a shot edge. */
+  weapon?: number;
   /** Server-side sheep meter (bots only) — how pedestrian this bot is. */
   sheep?: number;
   /** Wall-clock the position field last changed on the wire — the
@@ -1098,7 +1100,7 @@ this.sendDrops += 1;
    *  so this tells the server to paint muzzle audio/visual on observers.
    *  For SERVER_SIMMED_WEAPONS it's the fire intent — pos/shotId help the
    *  spawn hint + echo binding; the server derives truth itself. */
-  sendShotFired(a: { weaponType?: number; dir?: { x: number; y: number; z: number }; pos?: { x: number; y: number; z: number }; shotId?: string }): void {
+  sendShotFired(a: { weaponType?: number; dir?: { x: number; y: number; z: number }; pos?: { x: number; y: number; z: number }; vel?: { x: number; y: number; z: number }; shotId?: string }): void {
     if (!this.connected) {return;}
     const msg = Object.assign({}, {type: 'shotFired' as const}, a, {fireAt: this.serverNowMs()});
     this.send(msg);
@@ -1150,9 +1152,9 @@ this.sendDrops += 1;
 
   /** Deployable plant claim — sent when the pod lands and seats, so the
    *  position is the settled one the server will enforce caps/TTL on. */
-  sendDeploy(kind: DeployKind, position: { x: number; y: number; z: number }): void {
+  sendDeploy(kind: DeployKind, position: { x: number; y: number; z: number }, vel?: { x: number; y: number; z: number }): void {
     if (!this.isConnected()) {return;}
-    const msg = Object.assign({}, { type: 'deploy' as const, kind, position }) as ClientMessage & { claimSeq?: number };
+    const msg = Object.assign({}, { type: 'deploy' as const, kind, position }, vel ? { vel } : {}) as ClientMessage & { claimSeq?: number };
     msg.claimSeq = this.ledger.stamp('deploy', false, msg);
     this.send(msg);
     this.claimIntents.push({ msg, t: performance.now(), room: this.netRoom });

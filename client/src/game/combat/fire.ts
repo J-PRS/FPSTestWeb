@@ -149,6 +149,10 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
         weaponType: config.weaponType,
         dir: { x: e.dir.x, y: e.dir.y, z: e.dir.z },
         pos: { x: _spawnOrigin.x, y: _spawnOrigin.y, z: _spawnOrigin.z },
+        // The claim carries our live velocity so the server spawns with
+        // the SAME inherited flight — the echo then matches prediction
+        // and reanchorTo converges to ~zero instead of a mid-air jink.
+        vel: { x: e.playerVel.x, y: e.playerVel.y, z: e.playerVel.z },
         shotId: p.shotId ?? undefined,
       });
     }
@@ -255,6 +259,7 @@ i += 1;
       weaponType: config.weaponType,
       dir: { x: e.dir.x, y: e.dir.y, z: e.dir.z },
       pos: { x: e.origin.x, y: e.origin.y, z: e.origin.z },
+      vel: { x: e.playerVel.x, y: e.playerVel.y, z: e.playerVel.z },
       shotId: pullId,
     });
   }

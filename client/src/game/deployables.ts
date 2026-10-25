@@ -263,6 +263,13 @@ export class Deployables {
       vel: dir.multiplyScalar(POD_SPEED * (kind === 'nugget' ? NUGGET_LOB : 1)).addScaledVector(p.vel, POD_INHERIT),
       ttl: POD_TTL, landed: false,
     };
+    // Thrown nuggets claim at RELEASE with the lob velocity — the server's
+    // pickup sim owns the flight and settles the gem to truth. Claiming at
+    // landing made a long lob read 'toofar' and the pod vanished (JP's
+    // disappearing-nugget report). Planted kinds still claim at seating.
+    if (kind === 'nugget' && this.deps.lazyNetworkManager().isConnected()) {
+      this.deps.lazyNetworkManager().sendDeploy('nugget', { x: pos.x, y: pos.y, z: pos.z }, { x: pod.vel.x, y: pod.vel.y, z: pod.vel.z });
+    }
     // The item is constructed at release — it flies folded and finishes
     // unfolding mid-air, so touchdown lands a full-size sentry/dome.
     if (kind === 'turret') {pod.turret = new DeployTurret(this.deps.scene, terrain, pos);}
@@ -397,8 +404,9 @@ export class Deployables {
     this.deps.lazyEffects().spawnMoveDust(pod.pos, this._zeroVel, 10, 0.6);
     sfx.land(impact);
     // Charge was spent at release (throwPod); this claim is the server's
-    // copy of the same spend, not a second one.
-    this.deps.lazyNetworkManager().sendDeploy(pod.kind, pod.pos);
+    // copy of the same spend, not a second one. The nugget already claimed
+    // at release — the server sims its flight; don't double-charge.
+    if (pod.kind !== 'nugget') {this.deps.lazyNetworkManager().sendDeploy(pod.kind, pod.pos);}
   }
 
   /** Bot-authored plant — the brain already chose the landing spot, so

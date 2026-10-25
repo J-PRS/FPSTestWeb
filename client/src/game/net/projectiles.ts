@@ -254,10 +254,6 @@ export function wireProjectiles(ctx: NetCtx): void {
     // Beyond ~10m the remote is mid-reseat anyway; a swooping shell reads
     // worse than the pop there.
     const rp = deps.world.remotePlayers.get(ownerId);
-    if (rp) {
-      remoteProjectile.renderOffset.copy(rp.position).sub(origin);
-      if (remoteProjectile.renderOffset.lengthSq() > 100) {remoteProjectile.renderOffset.set(0, 0, 0);}
-    }
     // Wire shells are NEVER "mine" — unset shooterId reads as local player
     // authorship in every feedback gate (hitmarker/numbers/self-splash
     // scale) and would even let a remote shell sendShot-claim its hits
@@ -293,6 +289,18 @@ export function wireProjectiles(ctx: NetCtx): void {
       return;
     }
     const lead = exactAge ?? (srvAge ?? 0) + Math.min(0.15, (nm().serverPingMs ?? nm().getPing()) / 2000);
+    // Render the replica leaving the shooter's rendered muzzle, not
+    // popping in `lead` meters downrange: the sim position stays
+    // wire-true (impact alignment), renderOffset walks the visual back
+    // to the muzzle and blends forward at ≤10% of shell speed. A
+    // past-cap splice just pops — same unbrick as before.
+    if (rp && lead > 0) {
+      remoteProjectile.renderOffset.copy(rp.position).sub(origin).addScaledVector(remoteProjectile.vel, -lead);
+      if (remoteProjectile.renderOffset.lengthSq() > 100) {remoteProjectile.renderOffset.set(0, 0, 0);}
+    } else if (rp) {
+      remoteProjectile.renderOffset.copy(rp.position).sub(origin);
+      if (remoteProjectile.renderOffset.lengthSq() > 100) {remoteProjectile.renderOffset.set(0, 0, 0);}
+    }
     if (lead > 0) {
       remoteProjectile.advanceBy(lead);
     }
