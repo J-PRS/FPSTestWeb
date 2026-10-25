@@ -38,10 +38,15 @@ const CORS_HEADERS: Record<string, string> = {
 // Ops surfaces (tick-lag meters, client tails, weapon telemetry) give a
 // stranger a live "when is the server weakest" readout — when the admin
 // token exists they require it; dev (token unset) stays open.
-function opsAllowed(req: Request | undefined, url: URL): boolean {
+// ?key= rides URLs — access logs, caches, Referer all see it. Remote
+// callers must send Authorization: Bearer; the query fallback stays for
+// loopback curl convenience only.
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+function opsAllowed(req: Request | undefined, url: URL, ip?: string): boolean {
   if (!CONFIG.adminToken) {return true;}
   const bearer = req?.headers.get('authorization')?.replace(/^bearer\s+/i, '');
-  return bearer === CONFIG.adminToken || url.searchParams.get('key') === CONFIG.adminToken;
+  if (bearer === CONFIG.adminToken) {return true;}
+  return url.searchParams.get('key') === CONFIG.adminToken && ip !== undefined && LOOPBACK.has(ip);
 }
 
 export function corsResponse(body: BodyInit | null, init?: ResponseInit): Response {
@@ -94,10 +99,10 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Reques
     // Bare round-trip target — no state, so the browser's timing is the ping.
     '/ping': (): Response => json({ pong: true }),
     // Ops metrics — uptime, players, balls, tick-lag stats. Ops-gated.
-    '/metrics': (url, req): Response => opsAllowed(req, url) ? json(ctx.gameServer.getMetrics()) : opsClosed(),
+    '/metrics': (url, req): Response => opsAllowed(req, url, ctx.requestIP?.(req)?.address) ? json(ctx.gameServer.getMetrics()) : opsClosed(),
     // Cumulative wire bytes per connection + total — diff two reads for
     // a rate. Ops-gated like metrics.
-    '/wire': (url, req): Response => opsAllowed(req, url) ? json(wireMeterSnapshot()) : opsClosed(),
+    '/wire': (url, req): Response => opsAllowed(req, url, ctx.requestIP?.(req)?.address) ? json(wireMeterSnapshot()) : opsClosed(),
     // Server-browser card — identity + occupancy for master lists / LAN.
     '/serverinfo': (): Response => json(ctx.gameServer.getServerInfo()),
     // Lobby browse — live matches with occupancy.
@@ -108,14 +113,14 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Reques
     '/stats': async (): Promise<Response> => json(await ctx.gameServer.getStats()),
     // Balance telemetry — per-mode damage/hits/kills by weapon source,
     // bot-authored share split out (also journaled to weaponstats.jsonl).
-    '/weaponstats': (url, req): Response => opsAllowed(req, url) ? json(weaponStats.snapshot()) : opsClosed(),
+    '/weaponstats': (url, req): Response => opsAllowed(req, url, ctx.requestIP?.(req)?.address) ? json(weaponStats.snapshot()) : opsClosed(),
     // Readable dashboard over the same ledger — tables, bars, funnel pcts.
-    '/weaponstats.html': (url, req): Response => opsAllowed(req, url)
+    '/weaponstats.html': (url, req): Response => opsAllowed(req, url, ctx.requestIP?.(req)?.address)
       ? corsResponse(WEAPONSTATS_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
       : opsClosed(),
     // Live ops dashboard over /metrics + /health — degraded banner,
     // per-phase tick bars, per-room bot CPU + client tails.
-    '/status': (url, req): Response => opsAllowed(req, url)
+    '/status': (url, req): Response => opsAllowed(req, url, ctx.requestIP?.(req)?.address)
       ? corsResponse(STATUS_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
       : opsClosed(),
     // Map list for the menu's match setup — name + mode + default bots.
