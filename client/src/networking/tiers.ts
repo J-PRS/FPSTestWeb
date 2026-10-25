@@ -384,6 +384,9 @@ export class TieredTransport implements GameTransport {
     // Inner transports see wrapped callbacks — a drop re-arms the probe
     // here, mirroring WebSocketConnection's own reconnect loop so a WT/RTC
     // session survives a blip instead of dying on first packet loss.
+    // A server session reject (stale token, id claimed) is an application
+    // answer, not a transport fault — the tier stays eligible.
+    let rejected = false;
     const innerConfig: ConnectionConfig = Object.assign({}, this.config, {onDisconnect: (code?: number, reason?: string): void => {
         // Stale generation — a losing probe's teardown or a superseded
         // attempt's timer. Forward nothing, schedule nothing.
@@ -394,7 +397,7 @@ export class TieredTransport implements GameTransport {
         // than not having it — mark the miss so the re-probe skips it and
         // the session lands on WS instead of connect/disconnect looping.
         const flapTier = this.inner?.tier;
-        if ((flapTier === 'rtc' || flapTier === 'wt') && Date.now() - this.connectedAt < 10_000) {
+        if ((flapTier === 'rtc' || flapTier === 'wt') && !rejected && Date.now() - this.connectedAt < 10_000) {
           missUntil[flapTier] = Date.now() + MISS_CACHE_MS;
           logger.warn(`${flapTier} session flapped — tier benched for 30s`, { code, reason });
         }
@@ -412,7 +415,7 @@ this.attempts += 1;
         this.attempts = 0;
         this.connectedAt = Date.now();
         this.config.onConnect?.();
-      },onMessage: (data: ServerMessage): void => { if (gen === this.gen) {this.config.onMessage?.(data);} },onBinaryMessage: (data: Uint8Array): void => { if (gen === this.gen) {this.config.onBinaryMessage?.(data);} }});
+      },onMessage: (data: ServerMessage): void => { if (data.type === 'sessionRejected') {rejected = true;} if (gen === this.gen) {this.config.onMessage?.(data);} },onBinaryMessage: (data: Uint8Array): void => { if (gen === this.gen) {this.config.onBinaryMessage?.(data);} }});
     connectGameTransport(innerConfig, this.opts).then((t): void => {
       if (this.closed || gen !== this.gen) { t.disconnect(); return; }
       this.inner = t;

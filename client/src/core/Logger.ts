@@ -4,7 +4,7 @@
  */
 
 import { settings } from './settings.js';
-import { urlParams } from './params.js';
+import { urlParams, isDevHost } from './params.js';
 
 export enum LogLevel {
   DEBUG = 0,
@@ -445,7 +445,7 @@ else if (m === 'error') {lvl = LogLevel.ERROR;}
     // F1 — same visuals-only debug flag the menu DEBUG toggle writes
     // (settings.fps-debug); every consumer reads urlParams.debug live,
     // so no reload. Browsers own F1 for help — preventDefault keeps it.
-    if (e.code === 'F1') {
+    if (e.code === 'F1' && isDevHost()) {
       e.preventDefault();
       const on = !settings.get('fps-debug');
       settings.set('fps-debug', on ? 1 : 0);

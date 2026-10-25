@@ -6,16 +6,11 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { hmParseBin, hmHeight, hmNormal, hmSurface, HM_HEIGHT_SCALE } from '../../shared/heightfield.js';
 import { MoveSim } from '../../shared/movement.js';
-import { isDevHost } from './core/params.js';
 import { terrainFrag } from './world/terrainShaders.js';
 import { hillshadeImage } from './world/hillshade.js';
 import { synthField, erode, talusPass, streamPower, drainage, faultPass, glacierPass, smoothPass, flatsPass, DEFAULTS, type GenParams, type Drainage } from './maplab/gen.js';
 
-if (!isDevHost()) {
-  document.body.innerHTML =
-    '<div style="color:#cde;font:14px monospace;padding:2em">maplab is a dev tool — not available on this build.</div>';
-  throw new Error('maplab: dev-only surface');
-}
+// Player-facing lab: served on prod too — no isDevHost gate on the entry.
 
 const state: GenParams & { heightScale: number; preset: number; showRaw: boolean; wire: boolean; slopeOverlay: boolean; flowOverlay: boolean; dropHeight: number; map: string } =
   Object.assign({}, DEFAULTS, { heightScale: 1, preset: 1, showRaw: false, wire: false, slopeOverlay: true, flowOverlay: true, dropHeight: 0, map: '' });

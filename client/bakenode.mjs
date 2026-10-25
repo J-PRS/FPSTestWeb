@@ -1,0 +1,18 @@
+const ctx2d = new Proxy({}, { get: (t, k) => (k === 'canvas' ? null : (...a) => undefined), set: () => true });
+const fakeCanvas = () => ({ width: 0, height: 0, getContext: () => ctx2d });
+globalThis.document = { createElement: (t) => t === 'canvas' ? fakeCanvas() : {}, createElementNS: () => ({}) };
+globalThis.self = globalThis;
+globalThis.window = globalThis;
+globalThis.location = { search: '' };
+const THREE = await import('three');
+const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
+const { MeshoptDecoder } = await import('three/examples/jsm/libs/meshopt_decoder.module.js');
+const fs = await import('node:fs');
+const buf = fs.readFileSync('public/assets/models/class_juggernaut.glb');
+const loader = new GLTFLoader();
+loader.setMeshoptDecoder(MeshoptDecoder);
+const gltf = await new Promise((res, rej) => loader.parse(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength), '', res, rej));
+const { bakeVertexAO } = await import('./src/effects/vertexAO.ts');
+const t0 = performance.now();
+bakeVertexAO(gltf.scene, { grime: true });
+console.log('bake ms', performance.now() - t0);

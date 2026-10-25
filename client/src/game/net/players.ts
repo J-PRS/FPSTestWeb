@@ -166,9 +166,20 @@ function wirePlayerCombat(ctx: NetCtx): void {
     if (targetId === nm().getLocalPlayerId()) {
       const player = deps.lazyPlayer();
       if (player.isDead) {
-        // A confirmed hit on a corpse means the wire thinks we died later
-        // than the sim did — worth surfacing, it moves kill credit too.
-        logger.warn(`playerHit on dead local player: ${damage} from ${shooterId}`);
+        if (player.deadConfirmedByWire) {
+          // A confirmed hit on a corpse means the wire thinks we died later
+          // than the sim did — worth surfacing, it moves kill credit too.
+          logger.warn(`playerHit on dead local player: ${damage} from ${shooterId}`);
+        } else {
+          // Predicted death, never wire-confirmed — the server says we're
+          // alive and this hit IS the proof. Un-die to its health so the
+          // seat un-bricks instead of desyncing isDead until a kill lands.
+          logger.warn(`playerHit on predicted-dead local — reviving to server hp ${health} (was dead to ${shooterId})`);
+          player.isDead = false;
+          player.health = health;
+          deps.lazyHud().show();
+          deps.lazyHud().setDeathOverlay(false);
+        }
       }
       if (armor !== undefined && Number.isFinite(armor)) {player.armor = armor;}
       // Shielded hits route to the energy tank (server kept health

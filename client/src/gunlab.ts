@@ -15,22 +15,14 @@ import { ARCHIVE_BUILDERS } from './entities/viewmodel/weaponsGeoArchive.js';
 import { bakeVertexAO, enhanceWeaponMaterial } from './effects/vertexAO.js';
 import { metalMat } from './entities/procMetal.js';
 import { WeaponType } from '../../shared/weaponTable.js';
-import { isDevHost } from './core/params.js';
 import { CREATURES, PICKUPS, ITEMS, CLASSES, STRUCTURES, previewLive, initPreviews } from './gunlab/previews.js';
 import type { AnimationState } from './entities/playerClips.js';
 import { zScan, holeScan, gapScan, volScan } from './gunlab/scans.js';
 
 const CAT_TABLES = { classes: CLASSES, creatures: CREATURES, items: ITEMS, pickups: PICKUPS, structures: STRUCTURES } as const;
 
-// Asset-iteration tool, not a player surface: on a prod host the page
-// renders a closed sign and the whole lab below is skipped. Static hosts
-// still serve the file — this is the same isDevHost gate the ESC-menu
-// button and wireDebugTools use, applied to the entry itself.
-if (!isDevHost()) {
-  document.body.innerHTML =
-    '<div style="color:#cde;font:14px monospace;padding:2em">gunlab is a dev tool — not available on this build.</div>';
-  throw new Error('gunlab: dev-only surface');
-}
+// Player-facing lab: served on prod too — the ESC-menu button opens it
+// on any host, so there is no isDevHost gate on the entry.
 
 // Load profiling: T0 lands after module-eval imports (three, manifold
 // wrapper) finish — that span shows as 'module imports' in the first lap.

@@ -124,6 +124,10 @@ export function createHudDom(): HudDom {
     const dmgVignette = el.querySelector('#dmg-vignette')! as HTMLDivElement;
     const dmgEdge = el.querySelector('#dmg-edge')! as HTMLDivElement;
     const dmgDir = el.querySelector('#dmg-dir')! as HTMLDivElement;
+    // Reparent edge effects to <body>: inside the HUD container a
+    // transformed/letterboxed parent anchors fixed/absolute elements to
+    // IT, not the viewport — that's the detached-mid-screen vignette.
+    document.body.append(dmgVignette, dmgEdge, dmgDir);
     const dmgDirArc = dmgDir.querySelector('.arc')! as HTMLDivElement;
     const ghostBar = el.querySelector('#health-ghost')! as HTMLDivElement;
     const playerList = el.querySelector('#player-list')! as HTMLDivElement;

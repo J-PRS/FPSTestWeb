@@ -107,6 +107,7 @@ function ownDeath(ctx: NetCtx, shooterId: string, targetId: string, roster: Map<
   deps.logger.info(`Local player killed by ${shooterId}`);
   const player = deps.lazyPlayer();
   player.isDead = true;
+  player.deadConfirmedByWire = true;
   player.health = 0;
   deps.lazyHud().hide();
   deps.lazyHud().setDeathOverlay(true);

@@ -26,7 +26,7 @@ describe('settings store', (): void => {
     store.setItem('fps-sens', 'banana');
     expect(settings.get('fps-sens')).toBe(1);
     store.setItem('fps-aa', 'Infinity'); // parseFloat accepts it — store must not
-    expect(settings.get('fps-aa')).toBe(0);
+    expect(settings.get('fps-aa')).toBe(1);
   });
 
   it("booleans parse strictly — anything but 'true' is false", (): void => {

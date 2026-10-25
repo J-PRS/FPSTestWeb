@@ -142,7 +142,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
      { v: 'revolver', label: 'Revolver' },
      { v: 'shotgun', label: 'Shotgun' },
      { v: 'repair', label: 'Repair Tool' },
-     { v: 'lance', label: 'Shocklance' }],
+     { v: 'lance', label: 'Lance' }],
     (v): void => deps.lazyPlayer().setSidearm(v as 'pistol' | 'revolver' | 'shotgun' | 'repair' | 'lance'),
   );
   sidearm.cell.append(ui.sidearmDrop.el);

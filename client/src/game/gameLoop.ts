@@ -705,7 +705,9 @@ function wireDebugKeys(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud
       Logger.info(rows.length > 0 ? `[botweapons] ${rows.join(' | ')}` : '[botweapons] no bot fire seen yet');
       return;
     }
-    if (e.code === 'Backquote') {
+    // Debug console — dev hosts only: on the https deploy the stats/log
+    // panels must be dead keys (Alt+Q still ships logs for bug reports).
+    if (e.code === 'Backquote' && isDevHost()) {
       e.preventDefault();
       const show = (statsPanels[0]!.dom as HTMLElement).style.display === 'none';
       for (const s of statsPanels) {

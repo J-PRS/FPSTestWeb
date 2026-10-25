@@ -7,6 +7,14 @@ import { settings } from '../core/settings.js';
 // hands each client its room's worker — connect straight to the worker so
 // nothing relays frames. ?fleet or server.json {"fleet": true} opts in;
 // any failure falls back to treating the host as a standalone server.
+/** Named servers — the /<alias>/<room> path resolves through this table
+ *  (populated from server.json "servers") so links read /jp/rimrock-1
+ *  instead of ?server=ws://…. Empty in-repo: real hosts are deploy
+ *  config, not source. */
+export const NAMED_SERVERS: Record<string, string> = {
+  pub: 'https://play.jprice.app',
+};
+
 export interface ServerEndpoints {
   wsUrl: string;
   httpUrl: string;
@@ -50,14 +58,29 @@ export async function resolveServerEndpoints(): Promise<ServerEndpoints> {
   // standing choice so nobody has to edit a URL to switch servers.
   let host = (urlParams.get('server')?.trim() || settings.get('fps-server').trim());
   let fleet = urlParams.has('fleet');
-  if (!host) {
+  if (!host || urlParams.serverPath) {
     try {
-      const cfg = await fetch('server.json', { cache: 'no-cache' }).then((r): Promise<{ server?: string; fleet?: boolean }> => r.json());
+      const cfg = await fetch('server.json', { cache: 'no-cache' }).then((r): Promise<{ server?: string; fleet?: boolean; servers?: Record<string, string> }> => r.json());
       host = cfg.server?.trim() ?? '';
       if (cfg.fleet) {fleet = true;}
+      if (cfg.servers) {Object.assign(NAMED_SERVERS, cfg.servers);}
     } catch { /* no server.json — stay local */ }
   }
+  if (urlParams.serverPath) {host = NAMED_SERVERS[urlParams.serverPath] ?? '';}
   if (!host) {return (fleet ? await resolveFleet(local.httpUrl) : null) ?? local;}
+
+  // Explicit ws(s) URL wins outright — devs targeting a plain-ws box on a
+  // public IP (no TLS cert for a bare IP) get the exact scheme they typed
+  // instead of the hostname heuristics guessing TLS.
+  if (/^wss?:\/\//i.test(host)) {
+    const u = new URL(host);
+    const base = u.port ? `${u.hostname}:${u.port}` : u.hostname;
+    const ep = {
+      wsUrl: `${u.protocol}//${base}${u.pathname === '/' ? '/ws' : u.pathname}`,
+      httpUrl: `${u.protocol === 'wss:' ? 'https' : 'http'}://${base}`,
+    };
+    return (fleet ? await resolveFleet(ep.httpUrl) : null) ?? ep;
+  }
 
   // LAN/plain hosts — localhost, private IPs — can't ride the tunnel's
   // wss/https rewrite; hitting them with wss just fails the handshake

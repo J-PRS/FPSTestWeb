@@ -449,16 +449,16 @@ for (const s of [-1, 1]) {
 // Central spearblade — a flattened diamond section lofted to a true
 // point: the actual metal tip between the two rods — a vertical fork,
 // blade flanked by electrodes.
-const blade = profOct(0.014, 0.056, 0.004);
+const blade = profOct(0.034, 0.09, 0.01);
 ln.add(mkLoft([
   { z: -0.31, ring: blade },
-  { z: -0.46, ring: scaleRing(blade, 0.72) },
-  { z: -0.58, point: [0, 0] },
+  { z: -0.6, ring: scaleRing(blade, 0.85) },
+  { z: -0.95, point: [0, 0] },
 ], bodyMat));
 // Fuller glow slit up the blade's midrib — the charge lives in the
 // metal too, not only in the emitter ball.
-const fuller = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.011, 0.2), lnHotMat);
-fuller.position.set(0, 0, -0.41);
+const fuller = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.016, 0.5), lnHotMat);
+fuller.position.set(0, 0, -0.56);
 ln.add(fuller);
 
 // Emitter node — the plasma charge at the hub where blade meets guard:

@@ -46,9 +46,7 @@ export const FLAK_CONFIG: ProjectileConfig = {
   glowShell: false,
   glowColor: 0xFF_AA_33,
   glowOpacity: 0,
-  meshRampIn: false,
-  meshRampInDuration: 0,
-  meshStartScale: 0.35,
+
   terrainOffset: 0.08,
   needsServerTracking: true,
   maxLifetime: WEAPONS[6].maxLifetime,

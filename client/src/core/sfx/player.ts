@@ -77,7 +77,8 @@ export function playerHurt(): void {
   if (!bus || !c) {return;}
   const g = c.createGain(); g.connect(bus);
   if (!play(g, 0.2, undefined, 1)) {return;}
-  // Neutral short snap — 'hurt' was a monster grunt, impact+punch too heavy
+  if (sample('hurt', g, 0.55)) {return;}
+  // Neutral short snap — impact+punch too heavy
   if (sample('impact', g, 0.45, 1.3, 2500, 0.15)) {return;}
   osc('sawtooth', 300, 120, 0.15, 0.25, g);
   noise(0.12, 0.2, g, 'lowpass', 600, 200);

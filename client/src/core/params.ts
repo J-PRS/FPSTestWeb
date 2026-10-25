@@ -26,6 +26,7 @@ export const isDevHost = (): boolean =>
 // keyed on the raw string — compare is ~free, reparse only on change.
 let liveParams = new URLSearchParams();
 let liveRoom = '';
+let liveServerPath = '';
 // The DOM reads themselves were the remaining cost — location.search
 // allocates a fresh string per access and this runs per-frame from
 // dozens of sites. The URL only moves through history.pushState/
@@ -53,8 +54,12 @@ const live = (): URLSearchParams => {
     liveParams = new URLSearchParams(window.location.search);
     // Canonical share link is the PATH: /s/<room>. ?room= stays readable
     // for old links; nothing writes it anymore.
-    const m = /^\/s\/([^/?#]+)/.exec(window.location.pathname);
-    liveRoom = m ? decodeURIComponent(m[1]) : '';
+    // /s/<room> = default server; /<alias>/<room> = a named server from
+    // endpoints.ts NAMED_SERVERS (/pub/rimrock-1 pins the public box).
+    // Only known aliases match — other routes can't collide.
+    const m = /^\/(s|pub|jp)\/([^/?#]+)/.exec(window.location.pathname);
+    liveRoom = m ? decodeURIComponent(m[2]) : '';
+    liveServerPath = m && m[1] !== 's' ? m[1] : '';
   }
   return liveParams;
 };
@@ -98,6 +103,8 @@ export const urlParams = {
   /** Room identity is the PATH — /s/NAME. The ?room= fallback keeps old
    *  shared links working. */
   get room(): string | null { live(); return liveRoom || liveParams.get('room'); },
+  /** Named server from the path — /<alias>/<room>. '' when on /s/. */
+  get serverPath(): string { live(); return liveServerPath; },
   /** SOLO session intent — the old ?solo marker, now a persisted setting;
    *  the param stays as a headless-harness override. */
   get solo(): boolean { return live().has('solo') || settings.get('fps-solo') === 1; },

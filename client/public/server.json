@@ -1,1 +1,1 @@
-{ "server": "" }
+{ "server": "https://play.jprice.app", "servers": { "jp": "ws://localhost:8000" } }

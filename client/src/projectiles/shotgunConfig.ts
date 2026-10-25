@@ -46,9 +46,7 @@ export const SHOTGUN_CONFIG: ProjectileConfig = {
   glowShell: false,
   glowColor: 0xFF_BB_55,
   glowOpacity: 0,
-  meshRampIn: false,
-  meshRampInDuration: 0,
-  meshStartScale: 0.8,
+
   terrainOffset: 0.05,
   needsServerTracking: true,
   maxLifetime: WEAPONS[13].maxLifetime,

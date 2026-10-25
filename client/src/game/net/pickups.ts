@@ -53,7 +53,10 @@ export function wirePickups(ctx: NetCtx): void {
       // A re-spawn for a live id is a blast-knock rest spot — the
       // server's truth lands where the tumble ended; converge the
       // replica there.
-      live.nugget.serverRest(pos);
+      // Launch/knock edges carry vel and restart the shared tumble; a settled
+      // token takes the server's rest; an in-flight replay is left alone.
+      if (vel && (vel.x || vel.y || vel.z)) {live.nugget.relaunch(pos, vel);}
+      else if (live.nugget.atRest) {live.nugget.serverRest(pos);}
       return;
     }
     // Token denominations carry their own tint/size — the tier IS the
@@ -70,7 +73,7 @@ export function wirePickups(ctx: NetCtx): void {
       if (now - c.t > 1500) {continue;}
       const dx = pos.x - c.x, dy = pos.y - c.y, dz = pos.z - c.z;
       const d = Math.hypot(dx, dy, dz);
-      if (d > 0.5 && d < 15) {
+      if (d > 0.5 && d < 15 && !vel) {
         spawnPos = c;
         const flingT = 0.45;
         spawnVel = { x: dx / flingT, y: dy / flingT + 4, z: dz / flingT };
@@ -87,6 +90,9 @@ export function wirePickups(ctx: NetCtx): void {
       tier?.scale ?? 1,
     );
     nugget.serverOwned = true;
+    // Server velocity is the truth — the constructor's random spread would
+    // make the local tumble diverge from the server's and snap at rest.
+    if (spawnVel) {nugget.vel.set(spawnVel.x, spawnVel.y, spawnVel.z);}
     deps.entities().nuggets.push(nugget);
     pickupMeshes.set(id, { nugget, kind, val });
   };

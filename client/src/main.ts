@@ -40,7 +40,7 @@ import { AmbientWeather } from './effects/ambientWeather.js';
 import { GroundMist } from './effects/groundMist.js';
 import { AmbientBirds } from './effects/birds.js';
 
-import { resolveServerEndpoints, fleetWorkerUrl } from './networking/endpoints.js';
+import { resolveServerEndpoints, fleetWorkerUrl, NAMED_SERVERS } from './networking/endpoints.js';
 import { NetworkManager } from './networking/NetworkManager.js';
 import { connectServer } from './networking/connectServer.js';
 
@@ -244,7 +244,8 @@ function wireNetworkLocal(): void {
   player.onNetworkJump = (pos): void => networkManager.sendJump(pos);
   player.onNetworkJetpack = (pos): void => networkManager.sendJetpack(pos);
   player.onNetworkInput = (input, rotation): void => networkManager.sendInputMove(input, rotation);
-  player.onSkillUse = (): void => networkManager.sendSkillUse();
+  player.onSkillUse = (): void => networkManager.sendSkillUse(player.skill);
+  networkManager.joinSkill = (): string => player.skill;
   player.onRespawn = (hold): void => networkManager.sendRespawn(hold === true);
   // G: online it's a wire claim the server resolves; offline the local
   // flag sims run the identical toss themselves (flagrun + CTF both).
@@ -603,6 +604,26 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   profiler.markTime('savedMapApplied');
   const serverUrl = (await serverEndpoints).wsUrl;
   logger.info(`[diag] serverUrl=${serverUrl} classic=${classicMode || soloMode}`);
+  // Pin a resolved remote server into the URL so refresh can't drop back
+  // to localhost. Named servers get the pretty /<alias>/<room> path;
+  // anything else falls back to ?server=. Local hosts stay unpinned —
+  // a shared link must never hardcode ws://127.0.0.1 for its opener.
+  {
+    const u = new URL(serverUrl);
+    const local = /^(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1)/.test(u.hostname);
+    if (!local && !urlParams.has('server') && !urlParams.serverPath) {
+      const alias = Object.entries(NAMED_SERVERS).find(([, v]): boolean => {
+        try { return new URL(v).host === u.host; } catch { return false; }
+      })?.[0];
+      if (alias && window.location.pathname.startsWith('/s/')) {
+        history.replaceState(null, '', `/${alias}${window.location.pathname.slice(2)}${window.location.search}`);
+      } else if (!alias) {
+        const q = new URLSearchParams(window.location.search);
+        q.set('server', `${u.protocol}//${u.host}`);
+        history.replaceState(null, '', `${window.location.pathname}?${q}`);
+      }
+    }
+  }
   // F5 with a stored session token = the server may hand back our old
   // body — but only a LIVE host earns the restore veil. Dead server
   // means the offline world owns the first frames outright; a "restoring"
@@ -1072,6 +1093,9 @@ let respawnLapsed = false;
 
 /** Offline revive — the mirror of the server's respawnPlayer path. */
 function reviveLocal(): void {
+  // Predicted-death un-brick can revive us before the killLocal timer
+  // fires — a teleport on a living player is worse than a missed revive.
+  if (!player.isDead) {return;}
   player.resetLifeState();
   // Conquest respawns on owned territory — the node-linked rule the
   // server's teamSpawns mint applies here too (cores always count).

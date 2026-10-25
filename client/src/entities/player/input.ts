@@ -226,11 +226,11 @@ export class PlayerInput {
 
     // above for the fly cam) respond — no weapons, skills, camera flips
 
+    if (matchCode('jump', e.code)) {this.jumpHeld = true;}
+
     if (h.isSpectating()) {return;}
 
     if (matchCode('sidearm', e.code)) {h.secondaryDown(h.sidearmWid());}
-
-    if (matchCode('jump', e.code)) {this.jumpHeld = true;}
 
     if (matchCode('belt', e.code)) {this.beltHeld = true;}
 

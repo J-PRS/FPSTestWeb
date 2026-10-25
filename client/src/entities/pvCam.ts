@@ -95,7 +95,7 @@ export function updateObserverCam(v: PlayerVisuals, dt: number, camera: THREE.Pe
     // `vel` doubles as the drift accumulator (the dead body's sim
     // velocity is dead weight anyway); it enters holding whatever the
     // corpse had, so a kill shove carries over and bleeds off.
-    const OBSERVER_SPEED = 12;
+    const OBSERVER_SPEED = 30;
     const fwd = new THREE.Vector3(
       Math.cos(pitch) * Math.sin(yaw),
       Math.sin(pitch),

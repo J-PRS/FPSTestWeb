@@ -206,6 +206,15 @@ export function wireProjectiles(ctx: NetCtx): void {
     // paints the whole sky. normalize() on a zero vector is NaN too.
     if (!Number.isFinite(position.x + position.y + position.z
         + velocity.x + velocity.y + velocity.z)) {return;}
+    // Cap BEFORE constructing — a rejected spawn that already built its
+    // Projectile leaks the TrailDriver, ribbons, quarks system and scene
+    // meshes: the driver keeps ticking forever, pushing into pooled slots
+    // (the 4M zombiePushes / 11k drivers flood after a hidden-tab pileup).
+    if (remoteProjectiles.size >= 512) {
+      if (remoteProjectilesFloodWarned === 0) {deps.logger.warn('[Net] remote projectile cap hit — dropping further spawns');}
+      remoteProjectilesFloodWarned += 1;
+      return;
+    }
     const vel = new THREE.Vector3(velocity.x, velocity.y, velocity.z);
     const origin = new THREE.Vector3(position.x, position.y, position.z);
     const dir = vel.lengthSq() > 0 ? vel.clone().normalize() : new THREE.Vector3(0, 0, 1);
@@ -286,14 +295,6 @@ export function wireProjectiles(ctx: NetCtx): void {
     const lead = exactAge ?? (srvAge ?? 0) + Math.min(0.15, (nm().serverPingMs ?? nm().getPing()) / 2000);
     if (lead > 0) {
       remoteProjectile.advanceBy(lead);
-    }
-    // Cap live replicas — ids are server-trusted, and a flooding server
-    // could mint faster than fuses expire (unbounded replicas = unbounded
-    // scene/memory). 24 players can't field hundreds of shells at once.
-    if (remoteProjectiles.size >= 512) {
-      if (remoteProjectilesFloodWarned === 0) {deps.logger.warn('[Net] remote projectile cap hit — dropping further spawns');}
-      remoteProjectilesFloodWarned += 1;
-      return;
     }
     deps.world.projectiles.push(remoteProjectile);
     remoteProjectiles.set(projectileId, remoteProjectile);

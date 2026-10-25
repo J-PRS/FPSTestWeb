@@ -673,7 +673,14 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
 
   if (claimable && claimLegal === false) {
 
-    deps.logger.info(`[Shot] aoe claim suppressed pre-flight: ${p.config.displayName} air=${airtime.toFixed(2)}s`);
+    // Client verdict says the server will reject — but pre-judging and
+    // staying silent is how "hit him, no damage" happens: the blast FX
+    // played while the authority never heard of it. Send the claim
+    // anyway — the server's own judge is the only verdict that counts,
+    // and a real reject echoes back for prediction cleanup. Predicted
+    // damage still stays off (applyExplosionForce gate below), so a
+    // rejection leaves no ghost numbers.
+    deps.logger.info(`[Shot] aoe claim pre-flight fail — sending anyway, server decides: ${p.config.displayName} air=${airtime.toFixed(2)}s`);
 
   }
 
@@ -683,7 +690,7 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
 
   // the same contact and declares it via broadcasts.
 
-  const sendAOE = !claimable || claimLegal === false || (serverSimmed(weaponType) && networkManager.authorityShells())
+  const sendAOE = !claimable || (serverSimmed(weaponType) && networkManager.authorityShells())
 
     ? (): void => { return; }
 

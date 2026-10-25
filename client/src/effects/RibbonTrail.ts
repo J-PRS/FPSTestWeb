@@ -238,10 +238,27 @@ export class RibbonTrail {
   static reapedStale = 0;
   static sweepStale(staleMs = 2000): void {
     const now = performance.now();
+    // Global-stall guard: a hidden tab/paused loop idles EVERY ribbon at
+    // once, and the ms stamp can't tell owner-dead from loop-dead. The
+    // freshest stamp can — if even it is stale, the frame loop stalled,
+    // not the owners. Re-baseline instead of reaping live trails into
+    // the pool: a mass re-issue while old owners still push is what made
+    // zombiePushes and shared-slot trails after every alt-tab resync.
+    // Real orphans stay at their pre-stall stamp and get reaped once
+    // fresh stamps exist again next sweep.
+    let freshest = 0;
+    for (const r of RibbonTrail.liveSet) {if (r.lastUpdateAt > freshest) {freshest = r.lastUpdateAt;}}
+    const globalStall = freshest > 0 && now - freshest > staleMs;
     for (const r of RibbonTrail.liveSet) {
+      if (globalStall) {r.lastUpdateAt = now; continue;}
       const idleMs = now - r.lastUpdateAt;
       if (idleMs <= staleMs) {continue;}
       if (!r.done) {
+        // An orphan whose owner died without stop() can never report
+        // done — `done` requires stopped, so a plain update() loop would
+        // drain it forever without finishing. Stop it first so the
+        // sweep can actually reap it.
+        if (!r.stopped) {r.stop();}
         r.update(Math.min(idleMs / 1000, 0.5));
         r.lastUpdateAt = 0;
         continue;

@@ -176,7 +176,7 @@ const SHOT_LAYERS: Partial<Record<number, [name: string, gain: number, rate?: nu
   // 0.62s (the tail is already at -26dB there, so the fade is inaudible)
   // to keep the ring from smearing over the next zap at the 2s cadence.
   [WeaponType.Shocklance]: [
-    ['UL_Short_burst_118', 0.8, 1, undefined, 0.62],
+    ['UL_Short_burst_32', 0.8, 1, undefined, 0.62],
   ],
   // Chaingun @ ~11/s: voice is the authentic T2 fire crack (bright
   // high-band snap — 60% of its energy sits >2kHz, vs the old sample's

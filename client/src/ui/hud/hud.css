@@ -287,7 +287,7 @@ body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) 
    68%→100% covered a third of the screen radius and read as a red halo
    around the reticle; keep the red in the last ~10% so it hugs glass. */
 #dmg-vignette {
-  position: absolute; inset: 0; opacity: 0;
+  position: fixed; inset: 0; opacity: 0; pointer-events: none;
   background: radial-gradient(ellipse at center,
     transparent 76%, rgba(220,40,30,0.22) 88%,
     rgba(220,40,30,0.5) 100%);
@@ -298,6 +298,7 @@ body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) 
    layer runs the same gradient through the bloom lens-dirt texture so
    the edge breaks up like smudged glass instead of a clean wedge. */
 #dmg-edge {
+  display: none; /* off for now — the full-screen vignette carries damage feedback */
   position: absolute; inset: 0; opacity: 0; pointer-events: none;
 }
 #dmg-edge .wedge, #dmg-edge .grit {
@@ -320,7 +321,7 @@ body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) 
   position: absolute; top: 50%; left: 50%;
   width: 110px; height: 110px;
   transform: translate(-50%, -50%);
-  opacity: 0;
+  opacity: 0; pointer-events: none;
 }
 #dmg-dir .arc {
   position: absolute; inset: 0; border-radius: 50%;
@@ -453,6 +454,9 @@ body:has(#log-panel.show) #stale-badge { bottom: calc(12px + var(--lp-h) + 8px) 
 .cm-open .player-indicator {
   opacity: 0;
 }
+/* End-of-match banner (#frag-msg) sits above the centered scoreboard
+   instead of overlapping its top rows — the board grows from center. */
+body:has(#hud.sb-open) #frag-msg { top: 12% !important; }
 /* Healthbars have the same problem one level up: #healthbar-container is
    appended to body AFTER #hud, so it paints over the board/map. */
 body:has(#hud.sb-open) #healthbar-container,

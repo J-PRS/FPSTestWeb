@@ -93,7 +93,7 @@ export class Player {
   protectedUntil = 0;
   /** Passive loadout pick — mods from shared/perks.ts; announced at join.
    *  This is the PICKED intent; `appliedPerk` is what the sim reads. */
-  perk: PerkId = (PERK_ORDER as string[]).includes(settings.get('fps-perk')) ? settings.get('fps-perk') as PerkId : 'none';
+  perk: PerkId = (PERK_ORDER as string[]).includes(settings.get('fps-perk')) ? settings.get('fps-perk') as PerkId : 'jumpstart';
   /** The perk actually in effect — diverges from `perk` between a
    *  mid-match pick and the respawn that banks it (same rule as class). */
   appliedPerk: PerkId = 'none';
@@ -121,6 +121,7 @@ export class Player {
    *  or lastDamageSource leaking into the next life already happened). */
   resetLifeState(): void {
     this.isDead = false;
+    this.deadConfirmedByWire = false;
     this.applyPendingPerk(); // banked perk lands first — maxHealth reads it
     this.applyPendingClass(); // banked tier swap lands on the new life
     this.health = this.maxHealth;
@@ -149,6 +150,10 @@ export class Player {
   /** Hit-score points (acc·dist·air) — the classic-mode top-center score. */
   score = 0;
   isDead = false;
+  /** The kill wire confirmed this death — set by ownDeath only. A
+   *  client-predicted death (bot damage → killLocal) leaves it false so
+   *  a later server hit can un-brick the seat instead of desyncing. */
+  deadConfirmedByWire = false;
   private wasObserving = false;
   /** Verb phrase for the death message ("devoured by a crawler") — set by
    *  every environment-damage path so the kill feed names the real killer. */
@@ -223,7 +228,7 @@ export class Player {
   input!: PlayerInput; // public — PlayerStatus clears pending fire/jet
   // Skills live on Q — the loadout picks which one is equipped.
   skill: SkillId = (SKILL_ORDER as string[]).includes(settings.get('fps-skill'))
-    ? settings.get('fps-skill') as SkillId : 'bounce';
+    ? settings.get('fps-skill') as SkillId : 'dash';
   skills!: PlayerSkills; // public — PlayerEmit calls postMove on it
   // Declared discontinuity: next position report goes out as a 'teleport'
   // message so the server reseats its plausibility anchor instead of
@@ -260,7 +265,7 @@ export class Player {
 
   // Belt: one throwable equipped, the belt key throws it. ESC menu picks.
   beltItem: BeltItem = (BELT_ITEMS as readonly string[]).includes(settings.get('fps-belt'))
-    ? settings.get('fps-belt') as BeltItem : 'disc';
+    ? settings.get('fps-belt') as BeltItem : 'hook';
   // Sidearm: one hold-out weapon — the sidearm key pulls it while held.
   /** Dead-spectate / kill-cam boom — wider than the inspect cam so the killer reads in frame. */
   static readonly SPECTATE_DIST = 7;
@@ -570,8 +575,8 @@ export class Player {
       const obInput = this.readMoveInput();
       // T1/T2 observer mode: free-look + fly till respawn
       this.visuals.updateObserverCam(dt, this.camera, this.terrain, this.pos, this.vel, this.yaw, this.pitch, {
-        forward: obInput.forward, right: obInput.right, jumpHeld: obInput.skiHeld,
-        shiftDown: Boolean(this.input.keys['ShiftLeft'] || this.input.keys['ShiftRight']),
+        forward: obInput.forward, right: obInput.right, jumpHeld: obInput.jumpHeld || this.input.jetPending,
+        shiftDown: obInput.skiHeld || Boolean(this.input.keys['ShiftLeft'] || this.input.keys['ShiftRight']),
       });
       return;
     }

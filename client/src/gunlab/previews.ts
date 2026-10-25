@@ -369,11 +369,20 @@ function mkLineup(entries: LineupEntry[], boundsX = 0, boundsW = 0, focusX = 0):
         pm.setRotation(yaw ?? 0, 0);
         // Barrel-direction arrow (posedump's ?gunArrow=1, always on in the
         // lineup) — mounted guns have drifted 180° before without it.
+        // Parented to the model root, NOT the gun group: the mount can
+        // hold the cached gun template, so meshes added there leak into
+        // every PlayerModel that shares it afterwards (arrows in-game).
         const g = (pm as unknown as { gunCtl: { group?: THREE.Group } }).gunCtl.group;
-        if (g) {
+        const root = pm.object3D;
+        if (g && root) {
           const am = new THREE.MeshBasicMaterial({ color: 0xFF_22_22 });
-          g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.9).rotateX(Math.PI / 2).translate(0, 0, 0.95), am));
-          g.add(new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.28).rotateX(Math.PI / 2).translate(0, 0, 1.55), am));
+          const arrow = new THREE.Group();
+          arrow.add(new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.9).rotateX(Math.PI / 2).translate(0, 0, 0.95), am));
+          arrow.add(new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.28).rotateX(Math.PI / 2).translate(0, 0, 1.55), am));
+          root.add(arrow);
+          g.updateWorldMatrix(true, false);
+          root.updateWorldMatrix(true, false);
+          arrow.applyMatrix4(root.matrixWorld.clone().invert().multiply(g.matrixWorld));
         }
         applyTeam(pm);
       return; }).catch((): void => undefined);

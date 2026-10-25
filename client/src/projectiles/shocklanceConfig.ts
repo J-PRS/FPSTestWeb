@@ -10,7 +10,7 @@ import type { ProjectileConfig } from './types.js';
 const S = WEAPONS[WeaponType.Shocklance];
 export const SHOCKLANCE_CONFIG: ProjectileConfig = {
   name: 'shocklance',
-  displayName: 'Shocklance',
+  displayName: 'Lance',
   weaponType: WeaponType.Shocklance,
   speed: 0,
   gravity: false,

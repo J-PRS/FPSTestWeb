@@ -390,6 +390,20 @@ export class Nugget {
     this.settled = true;
   }
 
+  /** Server launched (or knocked) this token: restart the shared tumble
+   *  from its pos and vel. Same integrator as the server, so no correction
+   *  is needed until it settles. */
+  relaunch(p: { x: number; y: number; z: number }, v: { x: number; y: number; z: number }): void {
+    if (this.collected || this.dead || !Number.isFinite(p.x + p.y + p.z + v.x + v.y + v.z)) {return;}
+    this.pos.set(p.x, p.y, p.z);
+    this.prevPos.copy(this.pos);
+    this.vel.set(v.x, v.y, v.z);
+    this.settled = false;
+    this.tumbleAcc = 0;
+  }
+
+  get atRest(): boolean { return this.settled; }
+
   /** Server said someone banked it — fade out where it lies; the wire
    *  burst + rewards are the caller's job. */
   serverCollect(): void {

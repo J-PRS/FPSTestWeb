@@ -94,8 +94,8 @@ function resolveModes(): RenderModes {
   if (!settings.has('fps-pscale')) {
     [pscale, pmode] = LEGACY_PM[settings.get('fps-pixelated')] ?? [1, 0];
   }
-  // All post-processing defaults OFF — the scene reads cleanest raw.
-  // Opt in via localStorage or ?postpro=on / ?bloom=on.
+  // Post-processing defaults ON (settings.ts). Override via the ESC menu,
+  // localStorage, or ?postpro=off / ?bloom=off.
   let postproEnabled = settings.get('fps-postpro');
   let bloomEnabled = settings.get('fps-bloom');
   // URL overrides for headless screenshots/testing

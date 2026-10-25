@@ -89,6 +89,7 @@ export class NetworkManager {
   /** Loadout perk, announced at join so the server can enforce resist/heal. */
   joinPerk: (() => string) | null = null;
   joinClass: (() => string) | null = null;
+  joinSkill: (() => string) | null = null;
   /** REMOTE players only — local player is never stored here */
   private players: Map<string, RemotePlayerState> = new Map();
   public onPlayerHit: ((shooterId: string, targetId: string, damage: number, health: number, armor?: number) => void) | null = null;
@@ -313,6 +314,7 @@ export class NetworkManager {
               noBalls: urlParams.noBalls || undefined,
               perk: this.joinPerk?.(),
               armorClass: this.joinClass?.(),
+              skill: this.joinSkill?.(),
               transport: this.ws?.tier,
             });
             this.connected = true;
@@ -1168,9 +1170,9 @@ this.sendDrops += 1;
 
   /** Instant-skill ante mirror — skills.ts already spent the energy
    *  locally; the server applies the same drain to its shadow tank. */
-  sendSkillUse(): void {
+  sendSkillUse(skill: string): void {
     if (!this.isConnected()) {return;}
-    const msg = { type: 'skillUse' as const, claimSeq: undefined as number | undefined };
+    const msg = { type: 'skillUse' as const, claimSeq: undefined as number | undefined, skill };
     msg.claimSeq = this.ledger.stamp('skillUse', false, msg);
     this.send(msg);
   }
