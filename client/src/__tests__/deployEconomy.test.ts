@@ -7,10 +7,10 @@ import { canThrowPack, packCost, recyclesSeated } from '../game/deployEconomy.js
 import { PACK_KINDS } from '../../../shared/deployables.js';
 
 describe('deploy belt economy', () => {
-  it('bills the shared per-kind cost (turret 2, mortar 3), not a flat 2', () => {
-    expect(packCost('turret')).toBe(2);
+  it('bills the shared per-kind cost (turret class 5 = full belt)', () => {
+    expect(packCost('turret')).toBe(5); // turret-class deployables are a full belt
     expect(packCost('mine')).toBe(2);
-    expect(packCost('mortar')).toBe(3);
+    expect(packCost('mortar')).toBe(5);
   });
 
   it('refuses a throw the belt cannot pay for', () => {

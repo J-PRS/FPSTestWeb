@@ -18,8 +18,6 @@ import { matchCode, type BindAction } from '../../core/keybinds.js';
 
 import { settings } from '../../core/settings.js';
 
-import { isDevHost } from '../../core/params.js';
-
 import { audio } from '../../core/audio.js';
 
 import { ChildLogger } from '../../core/Logger.js';
@@ -44,9 +42,11 @@ export interface PlayerInputHandlers {
 
   isDeadSpectating(): boolean;
 
-  /** Right-click while dead: enter teammate orbit / advance to the next one. */
+  /** Click while dead: enter teammate orbit / cycle targets — dir=1 next,
 
-  deadSpectateCycle(): void;
+   *  dir=-1 previous. Cycling off an end lands on ghost free-fly. */
+
+  deadSpectateCycle(dir?: 1 | -1): void;
 
   toggleSpectator(): void;
 
@@ -148,7 +148,9 @@ export class PlayerInput {
 
   private lockSettleUntil = 0; // phantom-delta blackout right after pointer lock
 
-  private phantomDrops = 0;   // dropped >250px deltas since last report
+  private phantomDrops = 0;   // dropped isolated-spike deltas since last report
+  private lastMoveX = 0;      // previous event delta — phantom spikes are
+  private lastMoveY = 0;      // isolated, real flicks have ramp-up neighbors
 
   private phantomLogAt = 0;   // report throttle — a sick mouse spams otherwise
 
@@ -330,9 +332,17 @@ export class PlayerInput {
 
         // fire a shot or burn fuel the first frame back alive.
 
-        if (e.button === 0) {h.respawn();}
+        if (e.button === 0) {
 
-        if (e.button === 2) {h.deadSpectateCycle(); e.preventDefault();}
+          // Orbiting a teammate: LMB steps back through the ring; free-fly
+
+          // ghost keeps LMB = respawn so a click still revives.
+
+          if (h.isDeadSpectating()) {h.deadSpectateCycle(-1);} else {h.respawn();}
+
+        }
+
+        if (e.button === 2) {h.deadSpectateCycle(1); e.preventDefault();}
 
         return;
 
@@ -422,14 +432,18 @@ export class PlayerInput {
 
       if (performance.now() < this.lockSettleUntil) {return;}
 
-      // Phantom deltas arrive as one huge event, not a fast burst — clamping
-      // still applied a ~92° snap (the spinout warns). A real violent flick is
-      // <100px/event at polling cadence; >250 is the Chromium bug, drop it.
+      // Phantom deltas arrive as one huge ISOLATED event bracketed by
+      // stillness; a real flick always ramps — the previous event is
+      // already large. unadjustedMovement kills most of the bug upstream;
+      // this catches what leaks through without ever eating a legit
+      // swipe at any DPI (magnitude thresholds can't tell 4m/s@1600dpi
+      // from the bug — neighbors can).
       const mx = e.movementX;
 
       const my = e.movementY;
 
-      if (Math.abs(mx) > 250 || Math.abs(my) > 250) {
+      if ((Math.abs(mx) > 500 || Math.abs(my) > 500) && Math.abs(this.lastMoveX) < 50 && Math.abs(this.lastMoveY) < 50) {
+        this.lastMoveX = mx; this.lastMoveY = my;
 
         this.phantomDrops += 1;
 
@@ -439,7 +453,9 @@ export class PlayerInput {
 
           this.phantomLogAt = now + 2000;
 
-          logger.info(`phantom delta dropped x${this.phantomDrops}`, { mx, my });
+          // WARN so dev hosts flash it in the conn-banner (complaint feed)
+          // — visible proof the clamp fired, for swipe testing.
+          logger.warn(`phantom delta dropped x${this.phantomDrops} (${mx},${my})`);
 
           this.phantomDrops = 0;
 
@@ -449,6 +465,7 @@ export class PlayerInput {
 
       }
 
+      this.lastMoveX = mx; this.lastMoveY = my;
       if (this.midHeld || h.isDeadSpectating()) {h.orbitLook(mx, my);} else {h.look(mx, my);}
 
     });
@@ -517,6 +534,18 @@ export class PlayerInput {
 
       sensInput.value = (this.sensitivity * 10).toString();
 
+      // Two synced fields: the raw sens number AND cm/360 — the universal
+      // FPS unit (players know "13cm", not "0.8"). Edit either; they stay
+      // locked. cm/360 @800DPI: 360 / (sens*0.002rad*deg*314.96c/cm).
+      const sensCm = document.querySelector('#sens-cm') as HTMLInputElement | null;
+      const DEG_PER_CM = 0.002 * (180 / Math.PI) * (800 / 2.54); // ~36.1°/cm per sens unit
+      const paintCm = (): void => {
+        if (sensCm && document.activeElement !== sensCm) {
+          sensCm.value = (360 / (this.sensitivity * DEG_PER_CM)).toFixed(1);
+        }
+      };
+      paintCm();
+
       // Click/focus selects the whole value so typing replaces it outright
 
       sensInput.addEventListener('focus', (): void => sensInput.select());
@@ -531,7 +560,21 @@ export class PlayerInput {
 
         settings.set('fps-sens', this.sensitivity);
 
+        paintCm();
+
       });
+
+      if (sensCm) {
+        sensCm.addEventListener('focus', (): void => sensCm.select());
+        sensCm.addEventListener('input', (): void => {
+          const cm = Number.parseFloat(sensCm.value);
+          if (!Number.isFinite(cm) || cm <= 0) {return;}
+          this.sensitivity = Math.max(0.05, Math.min(10, 360 / (cm * DEG_PER_CM)));
+          settings.set('fps-sens', this.sensitivity);
+          if (document.activeElement !== sensInput) {sensInput.value = (this.sensitivity * 10).toString();}
+        });
+        sensCm.addEventListener('keydown', (e): void => e.stopPropagation());
+      }
 
       // Don't let WASD-type keys inside the field reach game input
 
@@ -646,7 +689,8 @@ export class PlayerInput {
 
     // the buttons' own wiring still runs harmlessly if absent.
 
-    if (isDevHost()) {document.querySelector('#dev-tools')?.removeAttribute('hidden');}
+    // #dev-tools stays hidden for now (spawn-mode + DEBUG live behind
+    // other entry points) — restore the isDevHost reveal here to resurface.
 
 
 

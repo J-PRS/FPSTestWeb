@@ -106,7 +106,7 @@ else if (scores.alpha > scores.bravo) {lead = 'alpha';}
     else {endMsg = iWon ? 'VICTORY' : `${winner} WINS`;}
     deps.fragMessages.show(endMsg);
     sfx.matchHorn(iWon ? 'win' : 'end');
-    deps.lazyHud().setScoreboardCountdown?.(10);
+    deps.lazyHud().setScoreboardCountdown?.(15);
     pinScoreboard();
   };
   networkManager.onMatchEnd = (winner, scores): void => {
@@ -119,7 +119,7 @@ else if (scores.alpha > scores.bravo) {lead = 'alpha';}
     else {endMsg = iWon ? 'VICTORY' : `${winner.toUpperCase()} WINS`;}
     deps.fragMessages.show(endMsg);
     sfx.matchHorn(iWon ? 'win' : 'end');
-    deps.lazyHud().setScoreboardCountdown?.(10);
+    deps.lazyHud().setScoreboardCountdown?.(15);
     pinScoreboard();
   };
   // Signed result receipt → the in-progress recording. The demo's

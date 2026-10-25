@@ -209,6 +209,10 @@ body.menu-open #frag-msg { display: none !important; }
   text-align: right; outline: none;
   font-variant-numeric: tabular-nums;
 }
+#overlay .field-row .sens-pair { display: flex; gap: 6px; align-items: center; }
+#overlay .field-row .sens-pair input { width: 52px; }
+#overlay .field-row .sens-pair #sens-cm { width: 64px; }
+#overlay .field-row .sens-unit { font-size: 0.58rem; color: rgba(157,178,196,0.6); letter-spacing: 0.05em; white-space: nowrap; }
 #overlay .field-row .seg-row { display: flex; gap: 0px; }
 #overlay .field-row .seg-row button {
   padding: 4px 6px;
@@ -548,13 +552,13 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .lb-room {
   display: block; width: 100%; text-align: left;
   background: rgba(255,255,255,0.04); border: 1px solid transparent;
-  border-left: 2px solid rgba(255,255,255,0.1); border-radius: 4px;
+  border-radius: 4px;
   color: #dde8f2; font: inherit; padding: 6px 10px; cursor: pointer;
   font-size: 0.68rem; letter-spacing: 0.06em;
-  transition: background 0.12s, border-left-color 0.12s;
+  transition: background 0.12s;
 }
-.lb-room:hover { background: rgba(58,167,255,0.12); border-left-color: #3aa7ff; }
-.lb-room.current { border-left-color: #6fcf8f; opacity: 0.9; }
+.lb-room:hover { background: rgba(58,167,255,0.12); }
+.lb-room.current { background: rgba(111,207,143,0.14); opacity: 0.95; }
 .lb-room.full { opacity: 0.45; }
 .lb-room:disabled { cursor: default; }
 .lb-room .lb-name { font-weight: 600; color: #eef4fb; }

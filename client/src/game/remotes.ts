@@ -58,6 +58,9 @@ function makeRemoteHooks(deps: RemotesDeps) {
       if (state.isDead) {return undefined;}
       const rp = new RemotePlayer(deps.lazyScene(), id, state.position, deps.lazyTerrain(), state.armorClass);
       rp.setClass(state.armorClass);
+      // Roster-declared weapon — the real gun instead of the placeholder
+      // prop for remotes we haven't seen fire yet.
+      if (state.weapon !== undefined) {rp.model.setWeapon(state.weapon);}
       return rp;
     },
     // Bots are hosted in the room sim — they never ping, so the

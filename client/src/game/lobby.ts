@@ -298,8 +298,12 @@ export class Lobby {
     }
   }
 
+  /** Live room tiles, keyed by room name — refresh diffs in place so a
+   *  score/player-count tick updates the meta span instead of destroying
+   *  and re-creating every tile (the flicker the rebuild caused). */
+  private rowEls = new Map<string, { row: HTMLButtonElement; star: HTMLSpanElement; meta: HTMLSpanElement }>();
+
   private async refreshRooms(): Promise<void> {
-    this.rows.textContent = '';
     // oxlint-disable-next-line init-declarations -- assigned later
     let rooms!: RoomRow[];
     // RTT of the /rooms fetch itself = the server ping — green/amber/red.
@@ -312,16 +316,20 @@ export class Lobby {
       if (ms >= 120) {this.els.pingEl.style.color = '#f88';}
     } catch {
       this.els.pingEl.textContent = '';
+      this.rowEls.clear();
+      this.rows.textContent = '';
       const err = document.createElement('div');
       err.style.color = '#f88';
       err.textContent = 'server offline';
       this.rows.append(err);
       return;
     }
-    // Default lobby first — it's the immortal room — then favorites
-    // (browser-column convention), then alphabetical.
+    // The room you're IN tops the list (green tile replaces the old
+    // IN: banner row) — then default lobby, favorites, alphabetical.
     const favs = this.favSet();
-    const rank = (r: RoomRow): 0 | 1 | 2 => {
+    const curName = this.currentRoom();
+    const rank = (r: RoomRow): -1 | 0 | 1 | 2 => {
+      if (this.online() && r.name === curName) {return -1;}
       if (r.name === 'default') {return 0;}
       return favs.has(r.name) ? 1 : 2;
     };
@@ -343,7 +351,19 @@ export class Lobby {
     // room to leave, but the button doubles as "go to the lobby".
     this.leaveBtn.disabled = online && this.currentRoom() === 'default';
     this.leaveBtn.textContent = online ? 'LEAVE' : 'GO';
-    for (const r of rooms) {this.addRow(r);}
+    // Diff, don't rebuild: append() moves an existing row, so walking the
+    // sorted list both inserts new tiles and re-sorts without a repaint.
+    const seen = new Set<string>();
+    for (const r of rooms) {
+      seen.add(r.name);
+      let tile = this.rowEls.get(r.name);
+      if (!tile) { tile = this.makeRow(r); this.rowEls.set(r.name, tile); }
+      this.updateRow(tile, r);
+      this.rows.append(tile.row);
+    }
+    for (const [name, tile] of this.rowEls) {
+      if (!seen.has(name)) { tile.row.remove(); this.rowEls.delete(name); }
+    }
     if (rooms.length === 0) {
       const empty = document.createElement('div');
       empty.style.cssText = 'color:rgba(58,167,255,0.5);padding:6px 2px;';
@@ -359,18 +379,14 @@ export class Lobby {
     return s;
   }
 
-  private addRow(r: RoomRow): void {
+  /** Build a room tile once — static structure only (star/name/mode chip/
+   *  meta shell + listeners). updateRow owns every field that churns. */
+  private makeRow(r: RoomRow): { row: HTMLButtonElement; star: HTMLSpanElement; meta: HTMLSpanElement } {
     const row = document.createElement('button');
     row.className = 'lb-room';
-    const full = r.players >= r.maxPlayers;
-    const current = this.online() && r.name === this.currentRoom();
-    if (full || current) {row.disabled = true;}
-    if (current) {row.classList.add('current');}
-    if (full) {row.classList.add('full');}
     // Fav star — own click target so marking a room never joins it.
     const star = document.createElement('span');
     star.className = 'lb-fav';
-    star.textContent = this.isFav(r.name) ? '★' : '☆';
     star.addEventListener('click', (e): void => {
       e.stopPropagation();
       this.toggleFav(r.name);
@@ -381,7 +397,6 @@ export class Lobby {
     name.style.flex = '1';
     const meta = document.createElement('span');
     meta.className = 'meta';
-    this.rowMeta(meta, r);
     // Mode rides a tinted chip before the name — the one categorical
     // fact on the row, so it doesn't drown in the numeric meta.
     const room = r.name.toUpperCase();
@@ -389,7 +404,20 @@ export class Lobby {
       ? Lobby.metaSpan(r.mode.toUpperCase(), 'lb-mode') : null;
     row.append(star, ...(modeChip ? [modeChip] : []), name, meta);
     row.addEventListener('click', (): void => this.join(r.name));
-    this.rows.append(row);
+    return { row, star, meta };
+  }
+
+  /** Per-poll refresh of the churning bits — state classes, fav glyph,
+   *  and the meta token row (players/score/target/clock). */
+  private updateRow(tile: { row: HTMLButtonElement; star: HTMLSpanElement; meta: HTMLSpanElement }, r: RoomRow): void {
+    const full = r.players >= r.maxPlayers;
+    const current = this.online() && r.name === this.currentRoom();
+    tile.row.disabled = full || current;
+    tile.row.classList.toggle('current', current);
+    tile.row.classList.toggle('full', full);
+    tile.star.textContent = this.isFav(r.name) ? '★' : '☆';
+    tile.meta.textContent = '';
+    this.rowMeta(tile.meta, r);
   }
 
   /** Right-side stats — spaced tabular spans: map · players · score ·
@@ -397,7 +425,9 @@ export class Lobby {
   private rowMeta(meta: HTMLElement, r: RoomRow): void {
     const mk = Lobby.metaSpan;
     const room = r.name.toUpperCase();
-    if (r.map && r.map.toUpperCase() !== r.mode?.toUpperCase() && !room.includes(r.map.toUpperCase())) {meta.append(mk(r.map));}
+    // Map always shows — room names only HINT at it; nobody should have
+    // to guess whether "rimrock-1" is running rimrock or not.
+    if (r.map && r.map.toUpperCase() !== r.mode?.toUpperCase()) {meta.append(mk(r.map));}
     meta.append(mk(`${r.players}/${r.maxPlayers}`));
     if (r.scores) {meta.append(mk(`${r.scores.alpha} – ${r.scores.bravo}`, 'lb-score'));}
     else if (r.ffaLeader) {meta.append(mk(`${r.ffaLeader[0]} ${r.ffaLeader[1]}pts`, 'lb-score'));}

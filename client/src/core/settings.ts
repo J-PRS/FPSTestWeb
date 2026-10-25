@@ -15,6 +15,9 @@ type Schema = {
   'fps-loadout-light': string;  // remembered kit per armor tier — '' = never set
   'fps-loadout-medium': string;
   'fps-loadout-heavy': string;
+  'fps-gear-light': string;     // remembered belt/sidearm/pack/perk/skill per tier
+  'fps-gear-medium': string;
+  'fps-gear-heavy': string;
   'fps-belt': string;         // BeltItem id — see Player.BELT_ITEMS
   'fps-sidearm': string;      // 'pistol' | 'revolver' | 'shotgun' | 'repair' | 'lance'
   'fps-pack': string;         // DeployKind — 'turret' | 'mine' | 'station' | 'drone' | 'shield'
@@ -60,15 +63,18 @@ const DEFAULTS: Schema = {
   'fps-postpro': true,
   'fps-bloom': true,
   'fps-invert-y': false,
-  'fps-sens': 1,
+  'fps-sens': 0.8, // menu shows 8 → ~12.5cm/360 @800dpi — casual flick default; tuners drop it
   'fps-minimap': 0,
   'fps-loadout': '0,2,6,7',
   'fps-loadout-light': '',
   'fps-loadout-medium': '',
   'fps-loadout-heavy': '',
+  'fps-gear-light': '',
+  'fps-gear-medium': '',
+  'fps-gear-heavy': '',
   'fps-belt': 'hook',
   'fps-sidearm': 'pistol',
-  'fps-pack': 'turret',
+  'fps-pack': 'nugget',
   'fps-skill': 'dash',
   'fps-perk': 'jumpstart',
   'fps-class': 'medium',

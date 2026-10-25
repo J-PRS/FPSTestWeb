@@ -8,7 +8,7 @@ import { CLASS_STATS, CLASS_MODEL_SCALE, type ArmorClass } from '../../../shared
 import { PlayerModel, type PlayerModelVariant } from './PlayerModel.js';
 import { CLASS_BODY_MAT_REV, CLASS_BODY_VARIANT } from './playerClips.js';
 import type * as THREE from 'three';
-import type { BeltItem } from './Player.js';
+import type { BeltItem, SkillId } from './Player.js';
 import type { DeployKind } from '../../../shared/deployables.js';
 import { ChildLogger } from '../core/Logger.js';
 
@@ -33,6 +33,7 @@ export interface LoadoutHost {
   beltItem: BeltItem;
   sidearm: 'pistol' | 'revolver' | 'shotgun' | 'repair' | 'lance';
   packItem: DeployKind;
+  skill: SkillId;
   fireTimer: number;
   model: PlayerModel | null;
   scene: THREE.Scene;
@@ -55,6 +56,32 @@ export class PlayerLoadout {
   static readonly CLASS_KEY = {
     light: 'fps-loadout-light', medium: 'fps-loadout-medium', heavy: 'fps-loadout-heavy',
   } as const;
+  /** Gear picks ride the same per-tier memory as the weapon kit — belt,
+   *  sidearm, pack, perk, skill all swap with the chassis. */
+  static readonly GEAR_KEY = {
+    light: 'fps-gear-light', medium: 'fps-gear-medium', heavy: 'fps-gear-heavy',
+  } as const;
+
+  private gearBundle(): string {
+    const {h} = this;
+    return [h.beltItem, h.sidearm, h.packItem, h.perk, h.skill].join(',');
+  }
+
+  private saveGear(): void {
+    settings.set(PlayerLoadout.GEAR_KEY[this.h.armorClass], this.gearBundle());
+  }
+
+  private restoreGear(c: ArmorClass): void {
+    const saved = settings.get(PlayerLoadout.GEAR_KEY[c]);
+    if (!saved) {return;}
+    // Written by saveGear from the same setters — always legal ids.
+    const [belt, side, pack, perk, skill] = saved.split(',');
+    if (belt) {this.h.beltItem = belt as LoadoutHost['beltItem'];}
+    if (side) {this.h.sidearm = side as LoadoutHost['sidearm'];}
+    if (pack) {this.h.packItem = pack as LoadoutHost['packItem'];}
+    if (perk) {this.h.perk = perk as LoadoutHost['perk'];}
+    if (skill) {this.h.skill = skill as LoadoutHost['skill'];}
+  }
   // wid is slot-space (SLOT_DEFS index): pistol 12, revolver 13, shotgun 9,
   // repair 17, lance 20. (sticky launcher sits at wid 14 — primary, not a
   // hold-out; bombard 19.)
@@ -89,6 +116,7 @@ export class PlayerLoadout {
   setPerk(p: PerkId): void {
     this.h.perk = p;
     settings.set('fps-perk', p);
+    this.saveGear();
   }
 
   /** Menu pick — records the intent; the swap lands at respawn via
@@ -103,10 +131,12 @@ export class PlayerLoadout {
       // gun in your hand belongs to this life.
       const leaving = this.pendingLoadout ?? this.h.loadout;
       settings.set(PlayerLoadout.CLASS_KEY[this.h.armorClass], leaving.join(','));
+      this.saveGear();
       if (c === this.h.appliedClass) {
         this.pendingLoadout = null; // back to the tier you're wearing — live edits again
       } else {
         const saved = settings.get(PlayerLoadout.CLASS_KEY[c]);
+        this.restoreGear(c);
         // First visit to a tier carries the current kit as a starting
         // point — unshoulderLocked scrubs the illegal picks at respawn.
         this.pendingLoadout = saved ? PlayerLoadout.parseLoadout(saved) : [...this.h.loadout];
@@ -255,14 +285,17 @@ export class PlayerLoadout {
   setBeltItem(item: BeltItem): void {
     this.h.beltItem = item;
     settings.set('fps-belt', item);
+    this.saveGear();
   }
   setSidearm(s: 'pistol' | 'revolver' | 'shotgun' | 'repair' | 'lance'): void {
     this.h.sidearm = s;
     settings.set('fps-sidearm', s);
+    this.saveGear();
   }
   setPackItem(p: DeployKind): void {
     this.h.packItem = p;
     settings.set('fps-pack', p);
+    this.saveGear();
   }
 
   get sidearmWid(): number { return (PlayerLoadout.SIDEARM_WIDS as Record<string, number>)[this.h.sidearm]!; }

@@ -890,8 +890,12 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
 
     const quickLbl = label('QUICK JOIN');
+    // Hidden, not deleted: quick-join-by-mode is dead weight while we
+    // host a few always-on named rooms — resurface when rooms multiply.
+    quickLbl.style.display = 'none';
 
     const quick = document.createElement('div');
+    quick.style.display = 'none';
 
     quick.className = 'lb-quick';
 

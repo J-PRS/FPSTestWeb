@@ -370,14 +370,18 @@ export class Player {
     this.onRespawn?.(true);
   }
 
-  /** Right-click while dead: orbit the next living teammate. */
-  deadSpectateCycle(): void {
+  /** Click while dead: orbit the next living teammate (dir=1) or the
+   *  previous one (dir=-1). The ring includes the ghost slot — cycling
+   *  off either end drops back to free-fly, where LMB is respawn again. */
+  deadSpectateCycle(dir: 1 | -1 = 1): void {
     this.spectateAnchor = undefined; // a press is a manual override — kill-cam releases
     const ts = this.spectateTargets?.() ?? [];
     const aliveIdx = ts.map((t, i): number => (t.alive ? i : -1)).filter((i): boolean => i >= 0);
     if (aliveIdx.length === 0) { this.deadSpectateIdx = -1; return; }
-    const next = aliveIdx.find((i): boolean => i > this.deadSpectateIdx) ?? aliveIdx[0] ?? -1;
-    if (this.deadSpectateIdx < 0) { this.orbit.yaw = this.yaw; this.orbit.pitch = 0.25; }
+    const pos = aliveIdx.indexOf(this.deadSpectateIdx); // -1 = ghost free-fly
+    const posNext = pos === -1 ? (dir > 0 ? 0 : aliveIdx.length - 1) : pos + dir;
+    const next = posNext < 0 || posNext >= aliveIdx.length ? -1 : (aliveIdx[posNext] ?? -1);
+    if (this.deadSpectateIdx < 0 && next >= 0) { this.orbit.yaw = this.yaw; this.orbit.pitch = 0.25; }
     this.deadSpectateIdx = next;
   }
   private wasMidHeld = false;
@@ -428,6 +432,9 @@ export class Player {
    *  offline kill path when there's no wire). */
   onRespawn: ((hold?: boolean) => void) | null = null;
   onThrowFlag: (() => void) | null = null;
+  /** First dead frame — main wires the own-corpse gib burst here. Fires
+   *  on every death (wire, suicide, offline) via the observing edge. */
+  onLocalDeath: (() => void) | null = null;
   onNetworkJump: ((pos: { x: number; y: number; z: number }) => void) | null = null;
   onNetworkJetpack: ((pos: { x: number; y: number; z: number }) => void) | null = null;
   onNetworkInput: ((input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
@@ -524,6 +531,10 @@ export class Player {
       // the ghost drifts until the player happens to re-press them.
       // Clearing on entry means the cam only moves on a fresh press.
       this.input.clearAll();
+      // Death hides the own body — the alive-path setVisible below never
+      // runs once dead, so a third-person corpse would freeze mid-pose.
+      // main spawns the gib burst on this edge.
+      if (this.isDead) { this.model?.setVisible(false); this.onLocalDeath?.(); }
     }
     this.wasObserving = observing;
     if (observing) {
@@ -624,7 +635,7 @@ export class Player {
     // Your own hoard crown — you can only see it in third person/orbit,
     // but so can anyone nearby; same scene-rooted follow as remotes.
     if (this.heldTokens > 0 && !this.isDead && (this.thirdPerson || orbiting)) {
-      this.crown ??= new HeldCrown(this.scene);
+      if (!this.crown) { this.crown = new HeldCrown(this.scene); this.crown.setBeams(false); } // own hoard: coins yes, screen-eating shafts no
       this.crown.set(this.heldTokens);
       this._crownFeet.copy(this.renderPos);
       this._crownFeet.y -= CLASS_STATS[this.appliedClass].eyeHeight; // renderPos is eye-space

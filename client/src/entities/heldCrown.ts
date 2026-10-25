@@ -47,6 +47,14 @@ export class HeldCrown {
     this.group.position.set(feet.x, feet.y + topY + 0.45, feet.z);
   }
 
+  /** The beacon shafts are for OTHER eyes — the local player in third
+   *  person reads them as screen-filling pillars. Coins stay, beams off. */
+  setBeams(on: boolean): void {
+    this.showBeams = on;
+    for (const b of this.beams) {b.visible = on;}
+  }
+  private showBeams = true;
+
   /** Rebuild the ring when the held value changes. Every coin gets its
    *  own beam in its tier's color — a 54-held shows two purple shafts
    *  orbiting, while the indicator dot keeps the friend/foe read. */
@@ -94,6 +102,7 @@ export class HeldCrown {
       }));
       beam.scale.y = tier.scale; // taller shaft = fatter coin — the bounty reads at range
       beam.userData.h = COIN_BEAM_H * tier.scale;
+      beam.visible = this.showBeams;
       beam.layers.enable(BLOOM_LAYER);
       this.group.add(beam);
       this.beams.push(beam);

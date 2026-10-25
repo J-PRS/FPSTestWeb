@@ -57,12 +57,19 @@ export function wireOverlayInput(deps: OverlayInputDeps): { requestLock: () => v
     // AudioContext unlocks on user gesture — the click that enters pointer
     // lock is exactly that gesture.
     audio.unlock();
-    const p = rendererCanvas.requestPointerLock();
-    if (p && typeof (p as Promise<void>).catch === 'function') {
-      (p as Promise<void>).catch((): void => {
-        logger.info('Pointer lock on cooldown — browser requires a brief delay after exiting lock. Click again to re-enter.');
-      });
-    }
+    // Raw mouse input first — unadjustedMovement kills the OS accel curve
+    // so cm/360 means the same thing on every box (Chrome ≥88; FF/Safari
+    // ignore or reject the option). Falls back to the plain call.
+    const warnCooldown = (): void => {
+      logger.info('Pointer lock on cooldown — browser requires a brief delay after exiting lock. Click again to re-enter.');
+    };
+    const lock = (raw: boolean): void => {
+      let p: Promise<void> | undefined;
+      try { p = rendererCanvas.requestPointerLock(raw ? ({ unadjustedMovement: true } as Parameters<HTMLElement['requestPointerLock']>[0]) : undefined) as Promise<void> | undefined; }
+      catch { if (raw) {lock(false);} else {warnCooldown();} return; }
+      p?.catch?.((): void => { if (raw) {lock(false);} else {warnCooldown();} });
+    };
+    lock(true);
   }
 
   document.addEventListener('pointerlockchange', (): void => {

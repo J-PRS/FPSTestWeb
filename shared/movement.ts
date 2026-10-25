@@ -719,9 +719,16 @@ export class MoveSim {
     // Contact-distance only: mid-band the force bleeds the FALL too —
     // a drop grounded inside glue range parachuted at crawl speed.
     if ((!this.input.skiHeld || skiPushOff) && this.bandDist <= 0.1) {
-      const vdn = s.vel.x * n.x + s.vel.y * n.y + s.vel.z * n.z;
+      // Idle feet must hold against gravity's tangential drip: collide
+      // kills only the normal part of this step's GRAVITY*dt, so converge
+      // the velocity gravity is ABOUT to leave behind — otherwise one
+      // step's worth of slide residue escapes traction and integrates
+      // into a constant downhill creep. Input ticks keep the plain
+      // converge — a steering walker owns its slope pump.
+      const gravY = dirLen === 0 ? s.vel.y + GRAVITY * dt : s.vel.y;
+      const vdn = s.vel.x * n.x + gravY * n.y + s.vel.z * n.z;
       const keep = Math.max(vdn, 0);
-      const tx = s.vel.x - n.x * keep, ty = s.vel.y - n.y * keep, tz = s.vel.z - n.z * keep;
+      const tx = s.vel.x - n.x * keep, ty = gravY - n.y * keep, tz = s.vel.z - n.z * keep;
       // Wish velocity projected onto the face, capped at walk speed.
       const wx = dir.x * maxGround, wz = dir.z * maxGround;
       const wdn = wx * n.x + wz * n.z;

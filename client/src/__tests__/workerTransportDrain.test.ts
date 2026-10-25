@@ -83,13 +83,27 @@ describe('WorkerTransport drain', (): void => {
 
 
   it('still dispatches when ticks coalesce (the filtered-array path)', async (): Promise<void> => {
+    // Coalescing needs a REAL stall — drain gap > max(100, ema*3) — and
+    // >3 queued ticks. Fake timers don't fake performance.now here, so
+    // the stall is produced honestly: queue the batch, busy-block the
+    // main thread past the gap, then let the armed drain run.
+    vi.useRealTimers();
+    const spin = (ms: number): void => {
+      const t = performance.now();
+      while (performance.now() - t < ms) { /* busy */ }
+    };
     const config = makeConfig();
     const _t2 = new WorkerTransport(config);
+    FakeWorker.last.emit({ kind: 'ev', j: { type: 'chat' }, at: 0 });
+    await new Promise((r): number => setTimeout(r, 5) as unknown as number); // drain 1: stamps lastDrainAt
     FakeWorker.last.emit({ kind: 'ev', b: tick(1), at: 0 });
     FakeWorker.last.emit({ kind: 'ev', b: tick(2), at: 0 });
+    FakeWorker.last.emit({ kind: 'ev', b: tick(3), at: 0 });
+    FakeWorker.last.emit({ kind: 'ev', b: tick(4), at: 0 });
     FakeWorker.last.emit({ kind: 'ev', j: { type: 'chat' }, at: 0 });
-    flushDrain();
-    expect(config.onBinaryMessage).toHaveBeenCalledTimes(1); // older tick dropped
+    spin(150); // block the armed drain past the stall bound
+    await new Promise((r): number => setTimeout(r, 5) as unknown as number); // drain 2: stalled → coalesce
+    expect(config.onBinaryMessage).toHaveBeenCalledTimes(1); // older ticks dropped
     expect(config.onMessage).toHaveBeenCalledWith({ type: 'chat' });
   });
 

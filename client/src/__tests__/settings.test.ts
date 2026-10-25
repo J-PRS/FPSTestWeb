@@ -8,7 +8,7 @@ describe('settings store', (): void => {
   beforeEach((): void => store.clear());
 
   it('returns typed defaults when nothing is stored', (): void => {
-    expect(settings.get('fps-sens')).toBe(1);
+    expect(settings.get('fps-sens')).toBe(0.8);
     expect(settings.get('fps-shadows')).toBe(true);
     expect(settings.get('fps-loadout')).toBe('0,2,6,7');
   });
@@ -24,7 +24,7 @@ describe('settings store', (): void => {
 
   it('corrupted numbers fall back to the default, not NaN', (): void => {
     store.setItem('fps-sens', 'banana');
-    expect(settings.get('fps-sens')).toBe(1);
+    expect(settings.get('fps-sens')).toBe(0.8);
     store.setItem('fps-aa', 'Infinity'); // parseFloat accepts it — store must not
     expect(settings.get('fps-aa')).toBe(1);
   });
@@ -55,7 +55,7 @@ describe('settings store', (): void => {
     expect(settings.get('fps-sens')).toBe(4.2);   // shadow serves it
     expect(settings.has('fps-sens')).toBe(true);
     expect((): void => settings.remove('fps-sens')).not.toThrow();
-    expect(settings.get('fps-sens')).toBe(1);     // back to default
+    expect(settings.get('fps-sens')).toBe(0.8);     // back to default
     vi.unstubAllGlobals();
   });
 });

@@ -33,6 +33,7 @@ import type { PlayerModelVariant } from './entities/PlayerModel.js';
 import type { ViewModel } from './entities/ViewModel.js';
 
 import { DamageNumberManager } from './effects/damageNumbers.js';
+import { PlayerDebris } from './effects/debris.js';
 import { EffectsManager } from './effects/effects.js';
 import { initVfx } from './effects/vfx.js';
 import { SpeedLines } from './effects/speedLines.js';
@@ -64,7 +65,7 @@ import { TeamBots } from './game/bots/index.js';
 import type { GameBot } from './game/bots/botBrain.js';
 import { SoloConquest } from './game/soloConquest.js';
 import { HM_WORLD_SCALE } from '../../shared/heightfield.js';
-import { MODES , type ModeId } from '../../shared/teams.js';
+import { MODES , type ModeId, TEAM_COLORS } from '../../shared/teams.js';
 import { firstTerrain, probeBootMap, bootPrimeTerrain, bootApplySavedMap, armSessionVeil, type MapSnapshot } from './game/net/world.js';
 import { resolveMapSpec, parseMapSpecJson, type MapSpec } from '../../shared/mapSpec.js';
 import { seatKits } from '../../shared/structKits.js';
@@ -268,6 +269,20 @@ function wireNetworkLocal(): void {
       out.push({ pos: rp.pos, alive: !rp.isDead });
     }
     return out;
+  };
+  // Own-corpse gib — the same burst remote victims get. Fires on every
+  // death edge; in FP it's mostly hidden, but the kill-cam dwells on the
+  // spot and a chase-cam death needs it to not freeze mid-pose.
+  player.onLocalDeath = (): void => {
+    let parts;
+    try { parts = player.model?.deathParts() ?? undefined; }
+    catch { parts = undefined; }
+    world.playerDebrisList.push(new PlayerDebris(
+      scene, terrain,
+      { x: player.pos.x, y: player.pos.y - 0.6, z: player.pos.z },
+      new THREE.Color(world.localTeam ? TEAM_COLORS[world.localTeam] : 0x88_99_AA),
+      { inheritVel: player.vel, parts, shardGeos: parts?.map((p) => p.geo) },
+    ));
   };
   networkManager.localAuthority = {
     envDamage: (amount): void => {
@@ -1263,9 +1278,10 @@ init().then(async (): Promise<void> => {
   // In-game log mirror — subscribes to Logger once so every later line
   // (and the Alt+Q/backquote/DEBUG-toggle reveals) has a live feed.
   initLogPanel();
-  // Same feed drives the conn-banner complaint slot — every WARN+ line
-  // (ghost shells, dead lanes, parity misses) flashes live mid-match.
-  Logger.setComplaintListener((line): void => { hud.complaint(line); });
+  // Same feed drives the conn-banner complaint slot — dev hosts only:
+  // parity/ghost-shell jargon means nothing on the public deploy, where
+  // the banner should only ever read CONNECTED / CONNECTION LOST.
+  if (isDevHost()) {Logger.setComplaintListener((line): void => { hud.complaint(line); });}
   installOverlapAudit();
   // Revealing the log panel reshuffles the corner stack — audit the
   // layout once the reveal frame lands.
