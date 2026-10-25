@@ -65,6 +65,19 @@ const _m = new THREE.Matrix4();
 const _e = new THREE.Euler();
 const _q = new THREE.Quaternion();
 const _s = new THREE.Vector3();
+const _beamPos = new THREE.Vector3();
+let _beamPool: PartPool | null = null;
+/** One shared beam pool — each nugget's shaft was a cloned Mesh +
+ *  material (a draw + a material per gem). Same geometry, tint rides
+ *  instanceColor; the collect fade lives in scale.y, not opacity. */
+function beamPool(scene: THREE.Scene): PartPool {
+  if (!_beamPool) {
+    _beamPool = makePartPool(scene, BEAM_GEO, BEAM_MAT, POOL_CAP);
+    _beamPool.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(POOL_CAP * 3).fill(1), 3);
+    _beamPool.mesh.layers.enable(BLOOM_LAYER);
+  }
+  return _beamPool;
+}
 
 function poolsFor(scene: THREE.Scene, geo: THREE.BufferGeometry, accentGeo: THREE.BufferGeometry | null, bodyMat: () => THREE.Material): { body: PartPool; accent: PartPool | null } {
   let p = _pools.get(geo);
@@ -120,7 +133,7 @@ export class Nugget {
   private pulseColor = new THREE.Color();
   private glow: THREE.Sprite;
   private glowMat: THREE.SpriteMaterial;
-  private beam: THREE.Mesh | null = null;
+  private beamSlot = -1;
   private trailFx: BallTrailDots;
   private trailTimer = 0;
   private age = 0;
@@ -179,14 +192,7 @@ export class Nugget {
     scene.add(this.glow);
 
     if (parts?.beam) {
-      // Own material instance — the collect fade dims this shaft only.
-      this.beam = new THREE.Mesh(BEAM_GEO, BEAM_MAT.clone());
-      (this.beam.material as THREE.MeshBasicMaterial).color.copy(this.emitColor);
-      this.beam.scale.x = sizeMul;
-      this.beam.scale.z = sizeMul;
-      this.beam.position.copy(this.pos).y += 8;
-      this.beam.layers.enable(BLOOM_LAYER);
-      scene.add(this.beam);
+      this.beamSlot = takeSlot(beamPool(scene));
     }
 
     // Gold sparkle trail — one slot in the shared dot batch (was a
@@ -237,7 +243,7 @@ export class Nugget {
     this.writeInstance();
     this.glowMat.opacity = Math.max(0, 0.85 * (1 - this.collectFade));
     this.glow.scale.setScalar(2.2 * this.sizeMul * this.visScale);
-    if (this.beam) {this.beam.scale.y = this.visScale;}
+    if (this.beamSlot >= 0) {this.writeBeam(this.renderPos.y);}
     if (this.collectFade >= 1 && this.trailFx.size === 0) {this.dead = true;}
   }
 
@@ -448,14 +454,24 @@ export class Nugget {
       }
       this.glow.position.set(this.renderPos.x, y, this.renderPos.z);
       this.glowMat.opacity = 0.7 + Math.sin(this.age * 5) * 0.15;
-      if (this.beam) {this.beam.position.set(this.renderPos.x, y + 8, this.renderPos.z);}
+      this.writeBeam(y);
       return;
     }
     this.writeInstance();
     // Halo stays welded to the nugget — the polygonOffset bias handles the
     // terrain-graze clip, so no visual lift needed.
     this.glow.position.copy(this.renderPos);
-    if (this.beam) {this.beam.position.set(this.renderPos.x, this.renderPos.y + 8, this.renderPos.z);}
+    this.writeBeam(this.renderPos.y);
+  }
+
+  private writeBeam(baseY: number): void {
+    if (this.beamSlot < 0) {return;}
+    const pool = beamPool(this.scene);
+    _beamPos.set(this.renderPos.x, baseY + 8, this.renderPos.z);
+    pool.mesh.setMatrixAt(this.beamSlot, _m.compose(_beamPos, _q.identity(), _s.set(this.sizeMul, this.visScale, this.sizeMul)));
+    pool.mesh.instanceMatrix.needsUpdate = true;
+    pool.mesh.setColorAt(this.beamSlot, this.emitColor);
+    pool.mesh.instanceColor!.needsUpdate = true;
   }
 
   private emitTrail(dt: number): void {
@@ -473,11 +489,8 @@ export class Nugget {
 
   dispose(): void {
     this.scene.remove(this.glow);
-    if (this.beam) {
-      this.scene.remove(this.beam);
-      (this.beam.material as THREE.Material).dispose();
-      this.beam = null;
-    }
+    releaseSlot(beamPool(this.scene), this.beamSlot);
+    this.beamSlot = -1;
     if (this.slot >= 0) {
       releaseSlot(this.pools.body, this.slot);
       if (this.pools.accent) {releaseSlot(this.pools.accent, this.slot);}
