@@ -11,6 +11,7 @@ import type { EffectsManager } from '../effects/effects.js';
 import type { NetworkManager } from '../networking/NetworkManager.js';
 import { Lobby , type RoomRow, type MapRow } from './lobby.js';
 import { resolveServerEndpoints } from '../networking/endpoints.js';
+import { settings } from '../core/settings.js';
 import type { WorldState } from './worldState.js';
 import type { createEntities } from './entities.js';
 import type { FragMessages } from '../ui/FragMessages.js';
@@ -77,7 +78,11 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
     send: (text, team): void => { networkManager.sendChat(text, team); deps.hearLocalChat?.(text, team); },
     isConnected: (): boolean => networkManager.isConnected(),
     localName: (): string => networkManager.getLocalPlayerId(),
-    nameFor: (id): string => displayName(id, networkManager.getPlayers()),
+    // The roster is remote-only — the local id resolves through the
+    // chosen nick from settings instead (same name we sent on join).
+    nameFor: (id): string => id === networkManager.getLocalPlayerId()
+      ? (settings.get('fps-name').trim() || id)
+      : displayName(id, networkManager.getPlayers()),
     // /mute typed a display name — find the id it belongs to. Names are
     // non-unique, so an ambiguous hit just mutes the first match (the
     // id itself always works).

@@ -32,7 +32,7 @@ export class PlayerIndicators {
   // Cache last written values — position via transform (compositor-only,
   // no layout) and size only when the px value actually changes.
   private readonly lastSize = new Map<string, number>();
-  private readonly lastSheep = new Map<string, number>();
+  private readonly lastSheep = new Map<string, string>();
   private readonly lastPos = new Map<string, number>();
 
   // camera.getWorldPosition/Direction decomposes matrixWorld per call —
@@ -58,8 +58,8 @@ export class PlayerIndicators {
     camera.getWorldDirection(_cameraDir);
   }
 
-  update(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, opts: { isDead?: boolean; friendly?: boolean; variant?: string; sheep?: number; bot?: boolean; cls?: string; hp?: number; held?: number } = {}): void {
-    const { isDead = false, friendly = false, variant, sheep, bot, cls, hp, held } = opts;
+  update(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, opts: { isDead?: boolean; friendly?: boolean; variant?: string; sheep?: number; bot?: boolean; cls?: string; hp?: number; held?: number; name?: string } = {}): void {
+    const { isDead = false, friendly = false, variant, sheep, bot, cls, hp, held, name } = opts;
     let indicator = this.indicators.get(playerId);
     if (!indicator) {
       indicator = document.createElement('div');
@@ -75,7 +75,7 @@ export class PlayerIndicators {
     const clsKey = cls === 'light' || cls === 'heavy' ? cls : 'medium';
     for (const k of ['light', 'medium', 'heavy']) {indicator.classList.toggle(`cls-${k}`, !variant && clsKey === k);}
     if (variant) {for (const c of variant.split(' ')) {indicator.classList.add(c);}}
-    this.updateSheepBadge(playerId, indicator, sheep, hp, friendly);
+    this.updateSheepBadge(playerId, indicator, sheep, hp, friendly, bot ? undefined : name);
     this.updateHeldBadge(playerId, indicator, held, friendly);
 
     if (isDead) {
@@ -147,28 +147,30 @@ export class PlayerIndicators {
     }
   }
 
-  /** Head badge — HP by default; under the backquote debug overlay the
-   *  server's sheep meter takes the slot instead (that's where the
+  /** Head badge — human names win, bots keep the HP number (the cheap
+   *  who's-real read); under the backquote debug overlay the server's
+   *  sheep meter takes the slot instead (that's where the
    *  pedestrian-vs-skier read lives for triage). */
-  private updateSheepBadge(playerId: string, indicator: HTMLElement, sheep: number | undefined, hp: number | undefined, friendly: boolean): void {
+  private updateSheepBadge(playerId: string, indicator: HTMLElement, sheep: number | undefined, hp: number | undefined, friendly: boolean, name?: string): void {
     const sheepMode = debugOverlays && sheep !== undefined && sheep > 0;
-    let v = -1;
-    if (sheepMode) {v = Math.round(sheep!);}
-    else if (hp !== undefined) {v = Math.round(hp);}
-    // The mode + team are packed into the cache key — toggling debug or a
-    // team swap must rewrite the badge even when the number is unchanged.
-    const key = v < 0 ? -1 : v * 4 + (sheepMode ? 2 : 0) + (friendly ? 1 : 0);
+    let text: string | null = null;
+    if (sheepMode) {text = `${Math.round(sheep!)}`;}
+    else if (name) {text = name.length > 16 ? `${name.slice(0, 15)}…` : name;}
+    else if (hp !== undefined) {text = `${Math.round(hp)}`;}
+    // Text + team + mode ride the cache key — a rename, debug toggle or
+    // team swap must rewrite the badge even when the text is unchanged.
+    const key = text === null ? '' : `${text}|${sheepMode ? 's' : ''}|${friendly ? 'f' : 'e'}`;
     if (this.lastSheep.get(playerId) === key) {return;}
     this.lastSheep.set(playerId, key);
     let badge = indicator.firstElementChild as HTMLElement | null;
 
-    if (v >= 0) {
+    if (text !== null) {
       if (!badge) {
         badge = document.createElement('span');
         badge.className = 'sheep-badge';
         indicator.append(badge);
       }
-      badge.textContent = `${v}`;
+      badge.textContent = text;
       // Team-locked color: the health-gradient read as "which side is
       // that?" mid-fight — ally green / enemy red carries no HP info
       // but never lies about allegiance. (sheep debug keeps its band.)

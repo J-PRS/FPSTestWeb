@@ -57,7 +57,9 @@ export function createShocklance(deps: CombatDeps, hooks: LightningHooks): { lan
       lifeMin: 0.12, lifeMax: 0.4, sizeScale: 1.4,
       colA: [0.55, 0.35, 1], colB: [1, 0.85, 0.4], additive: true,
     });
-    sfx.at(_lgHit, 'impact', 1);
+    // Zap-flavored connect: the lance's own burst sample pitched down —
+    // the generic 'impact' thud read as a dull whack after the zap fire.
+    sfx.at(_lgHit, 'UL_Short_burst_6', 0.5, 0.7);
     screenShake.add(0.22);
   }
 

@@ -127,6 +127,10 @@ export const urlParams = {
   /** ?nocreatures=/?noballs= — creation-time sim gates forwarded on
    *  join/switchRoom: the hosted room skips the species populations. */
   get noCreatures(): boolean { return live().has('nocreatures') || settings.get('fps-nocreatures') === 1; },
+  /** ?creatures — opt BACK IN to species in the local population. Offline
+   *  default is balls-only (species sim was the frame hog); hosted-room
+   *  creature gates still read noCreatures above. */
+  get creatures(): boolean { return live().has('creatures') || settings.get('fps-creatures') === 1; },
   get noBalls(): boolean { return live().has('noballs') || settings.get('fps-noballs') === 1; },
   /** ?net=wt|rtc — probe that transport tier before falling back to
    *  WebSocket (netcode v2; the UDP tiers are stubbed until server halves

@@ -160,7 +160,9 @@ function tickRemoteCosmetics(deps: RemotesDeps, playerId: string, remotePlayer: 
     // mesh ~2.5m over the logical feet; marking raw position sinks the
     // chevron into the body exactly when the lift is live.
     _markPos.copy(remotePlayer.position); _markPos.y += remotePlayer.renderLift;
-    hud.updatePlayerIndicator(playerId, _markPos, deps.lazyCamera(), { friendly, sheep: playerState.sheep, bot: isBotId(playerId), cls: remotePlayer.armorClass, hp: playerState.health, held: playerState.held });
+    // Unnamed humans show their id minus the 'player_' prefix — still
+    // marks them as a real person vs a bot's HP number.
+    hud.updatePlayerIndicator(playerId, _markPos, deps.lazyCamera(), { friendly, sheep: playerState.sheep, bot: isBotId(playerId), cls: remotePlayer.armorClass, hp: playerState.health, held: playerState.held, name: playerState.name ?? playerId.replace(/^player_/, '') });
     // The number stays on the indicator; the crown renders the pile itself.
     remotePlayer.setHeld(playerState.held ?? 0);
   }

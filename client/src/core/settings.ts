@@ -34,6 +34,7 @@ type Schema = {
   'fps-lobby': number;        // 1 = host's p2p room is listed publicly (/rtc/lobbies)
   'fps-unlisted': number;     // 1 = hosted server rooms stay off /rooms + quick-join
   'fps-nocreatures': number;  // 1 = hosted rooms mint without melee species
+  'fps-creatures': number;    // 1 = opt back IN to species in offline pop (default balls-only)
   'fps-noballs': number;      // 1 = hosted rooms mint without the ball sim
   'fps-fav-rooms': string;    // JSON string[] — server-browser favorites column
   'fps-shadows': boolean;     // shadow map pass — off on potatoes (whole second scene raster per frame)
@@ -66,12 +67,13 @@ const DEFAULTS: Schema = {
   'fps-sens': 0.8, // menu shows 8 → ~12.5cm/360 @800dpi — casual flick default; tuners drop it
   'fps-minimap': 0,
   'fps-loadout': '0,2,6,7',
-  'fps-loadout-light': '',
-  'fps-loadout-medium': '',
-  'fps-loadout-heavy': '',
-  'fps-gear-light': '',
-  'fps-gear-medium': '',
-  'fps-gear-heavy': '',
+  'fps-loadout-light': '1,2,8,4',  // Disc / Chaingun / Lightning / GL
+  'fps-loadout-medium': '1,2,5,15', // Disc / Chaingun / Flak / PlasmaGun
+  'fps-loadout-heavy': '1,19,6,3', // Disc / Bombard / PlasmaCannon / Mortar
+  // gear bundle: belt,sidearm,pack,perk,skill — nugget pack + pistol for all
+  'fps-gear-light': 'hook,pistol,nugget,airtank,dash',
+  'fps-gear-medium': 'hook,pistol,nugget,regenerator,medkit',
+  'fps-gear-heavy': 'hook,pistol,nugget,juggernaut,shield',
   'fps-belt': 'hook',
   'fps-sidearm': 'pistol',
   'fps-pack': 'nugget',
@@ -88,6 +90,7 @@ const DEFAULTS: Schema = {
   'fps-lobby': 0,
   'fps-unlisted': 0,
   'fps-nocreatures': 0,
+  'fps-creatures': 0,
   'fps-noballs': 0,
   'fps-fav-rooms': '[]',
   'fps-shadows': true,

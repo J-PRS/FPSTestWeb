@@ -317,6 +317,10 @@ function updateBalls(dt: number): void {
 
   Ball.updateDyingRibbons(dt); // retired teleport tails fade out where they were
 
+  // ?debug: per-slice ball cost — the phase dump blamed balls at 15ms
+  // but every piece reads cheap; this names the hog without a profiler.
+  const prof = urlParams.debug ? { aggro: 0, upd: 0, dust: 0, snap0: performance.now(), snap: 0, n: 0 } : null;
+
   for (let i = balls.length - 1; i >= 0; i -= 1) {
 
     const b = balls[i]!;
@@ -331,15 +335,20 @@ function updateBalls(dt: number): void {
 
     let ballTarget;
 
+    const t0 = prof ? performance.now() : 0;
+
     if (b.netDriven) {ballTarget = f.netTargetPosFor(b);}
 
     else if (f.classicMode) {ballTarget = deps.lazyPlayer().pos;}
 
     else {ballTarget = f.aggroFor(b, b.pos, dt, PROFILES.fodder);}
 
+    const t1 = prof ? performance.now() : 0;
     b.update(dt, deps.lazyTerrain(), ballTarget);
+    const t2 = prof ? performance.now() : 0;
 
     f.kickDust(b, dt); // bounce frames puff — airborne frames don't
+    if (prof) {prof.aggro += t1 - t0; prof.upd += t2 - t1; prof.dust += performance.now() - t2; prof.n++;}
 
     // Only remove ball when trails have fully faded out
 
@@ -350,6 +359,8 @@ function updateBalls(dt: number): void {
 
 
   recordBallSnapshots(dt);
+  if (prof) {prof.snap = performance.now() - prof.snap0;
+    if (prof.upd + prof.aggro > 0.5) {deps.logger.info('ballprof', { n: prof.n, aggro: Number(prof.aggro.toFixed(2)), upd: Number(prof.upd.toFixed(2)), dust: Number(prof.dust.toFixed(2)), snap: Number(prof.snap.toFixed(2)) });}}
 
 }
 
@@ -522,7 +533,11 @@ export function createEntities(deps: EntitiesDeps) {
 
   // Wire-owned spawns (netBalls/netCrawlers) never route through here.
 
-  const gateC = <A extends unknown[]>(fn: (...a: A) => void): (...a: A) => void => noSpawn(urlParams.noCreatures, fn);
+  // Creatures are opt-IN now: species sim was ~1ms/creature/frame in the
+  // last perf dump, so the default local population is balls-only;
+  // ?creatures / fps-creatures brings the zoo back, nocreatures still
+  // force-off.
+  const gateC = <A extends unknown[]>(fn: (...a: A) => void): (...a: A) => void => noSpawn(urlParams.noCreatures || !urlParams.creatures, fn);
 
 
 

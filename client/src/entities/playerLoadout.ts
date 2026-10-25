@@ -106,7 +106,12 @@ export class PlayerLoadout {
    *  is banked, live otherwise. */
   menuKit(): readonly number[] { return this.pendingLoadout ?? this.h.loadout; }
 
-  constructor(private h: LoadoutHost) {}
+  constructor(private h: LoadoutHost) {
+    // Per-class gear memory wins at boot too — same rule as the loadout
+    // keys above. Without this a fresh session reads the SHARED fps-*
+    // defaults until the first class switch, so the tier kit never lands.
+    this.restoreGear(this.h.armorClass);
+  }
 
   static parseLoadout(raw: string): number[] {
     const ids = raw.split(',').map(Number).filter((n): boolean => Number.isInteger(n) && n >= 0 && n < SLOT_COUNT);
