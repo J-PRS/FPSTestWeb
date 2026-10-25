@@ -24,8 +24,7 @@ export interface RendererSetup {
   renderer: THREE.WebGLRenderer;
   composer: EffectComposer;
   bloomPass: EffectPass;
-  contrastPass: EffectPass;
-  dirtPass: EffectPass;
+  gradePass: EffectPass;
   render: (dt?: number) => void;
   needsComposer: () => boolean;
   /** FLOYD mode: extra draw onto the GL canvas between scene render and the
@@ -320,8 +319,7 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   // can emit a bad texel even with clean input (internal blur/upsample
   // arithmetic), and lens dirt + ACES then smear it into a black frame.
   // Cheap insurance — folds any bloom-side NaN back to a clean pixel.
-  const postBloomSanitize = new EffectPass(camera, new Effect('HdrSanitize2', SANITIZE_GLSL));
-  composer.addPass(postBloomSanitize);
+  const postBloomSanitize = new Effect('HdrSanitize2', SANITIZE_GLSL);
 
   // Lens dirt rides the bloom toggle — without bloom there's no halo for
   // the dirt to diffract, so a dirt-only frame would do nothing.
@@ -339,14 +337,14 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
       ['dirtIntensity', new THREE.Uniform(3)],
     ]),
   });
-  const dirtPass = new EffectPass(camera, dirtEffect);
-  composer.addPass(dirtPass);
-
-  const acesPass = new EffectPass(camera, acesGradeEffect);
-  composer.addPass(acesPass);
-
-  const contrastPass = new EffectPass(camera, new BrightnessContrastEffect({ contrast: 0.06 }));
-  composer.addPass(contrastPass);
+  // One fused grade pass — EffectPass compiles all its effects into a
+  // single fullscreen shader, so sanitize+dirt+aces+contrast cost ONE
+  // buffer roundtrip instead of four. Shed-at-deep-tier disables the
+  // whole pass, which was already the intent for dirt+contrast; losing
+  // aces there too is the same "raw output" story.
+  const gradePass = new EffectPass(camera, postBloomSanitize, dirtEffect, acesGradeEffect, new BrightnessContrastEffect({ contrast: 0.06 }));
+  gradePass.name = 'GradePass';
+  composer.addPass(gradePass);
 
   // Pixelated mode: scene renders at 1/PIXEL_SCALE into the composer buffer,
   // then this pass upscales to the full-res canvas with edge-aware blending.
@@ -394,8 +392,8 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   smaaPass.enabled = false;
 
   bloomMergePass.enabled = bloomEnabled;
-  dirtPass.enabled = bloomEnabled && !dirtOff;
-  contrastPass.enabled = postproEnabled;
+  gradePass.enabled = postproEnabled;
+  dirtEffect.uniforms.get('dirtIntensity')!.value = bloomEnabled && !dirtOff ? 3 : 0;
   upscalePass.enabled = pmode === 2; // dithered; upscalePass is Bayer-only now — smooth runs the xBR pass
   upscaleEffect.uniforms.get('mode')!.value = 2;
   xbrPass.enabled = false;
@@ -433,12 +431,11 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   // blit. The chain is static so labels can be hardcoded in order.
   const dumpPasses = (): string[] => ([
     ['scene', scenePass], ['sanitize', sanitizePass], ['bloom', bloomMergePass],
-    ['sanitize2', postBloomSanitize], ['dirt', dirtPass], ['aces', acesPass],
-    ['contrast', contrastPass], ['upscale', upscalePass], ['xbr', xbrPass],
+    ['grade', gradePass], ['upscale', upscalePass], ['xbr', xbrPass],
     ['fxaa', fxaaPass], ['smaa', smaaPass],
   ] as [string, Pass][]).map(([n, p]): string => `${n}${p.enabled ? '' : ':off'}${p.renderToScreen ? '>SCR' : ''}`);
 
-  return { composer, scenePass, bloomMergePass, postBloomSanitize, dirtPass, contrastPass, upscalePass, upscaleEffect, xbrPass, xbrEffect, syncRenderToScreen, applyAA, dumpPasses };
+  return { composer, scenePass, bloomMergePass, gradePass, dirtEffect, upscalePass, upscaleEffect, xbrPass, xbrEffect, syncRenderToScreen, applyAA, dumpPasses };
 }
 
 // Canvas sizing for every pixel/res path — hard modes render into a
@@ -627,7 +624,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   document.body.append(fsCanvas); // after gl: DOM order = the z-order
 
   const cc = makeComposer(renderer, scene, camera, modes);
-  const { composer, scenePass, bloomMergePass, dirtPass, contrastPass, upscalePass, upscaleEffect, xbrPass, xbrEffect, syncRenderToScreen, applyAA, dumpPasses } = cc;
+  const { composer, scenePass, bloomMergePass, gradePass, dirtEffect, upscalePass, upscaleEffect, xbrPass, xbrEffect, syncRenderToScreen, applyAA, dumpPasses } = cc;
 
   // composer.setSize() also resizes the canvas — set buffers first, then
   // restore whichever canvas sizing the pixel mode wants (it never shrinks).
@@ -772,7 +769,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     if (enabled && pmodeEff() === 3) {setPixel(pscale, 0, false);} // compat drop, not a user pick
     postproEnabled = enabled;
     settings.set('fps-postpro', postproEnabled);
-    contrastPass.enabled = postproEnabled;
+    gradePass.enabled = postproEnabled;
     syncRenderToScreen();
     postproToggleBtn.classList.toggle('on', postproEnabled);
   }
@@ -783,7 +780,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     bloomEnabled = enabled;
     settings.set('fps-bloom', bloomEnabled);
     bloomMergePass.enabled = bloomEnabled;
-    dirtPass.enabled = bloomEnabled && !modes.dirtOff;
+    dirtEffect.uniforms.get('dirtIntensity')!.value = enabled && !modes.dirtOff ? 3 : 0;
     syncRenderToScreen();
     bloomToggleBtn.classList.toggle('on', bloomEnabled);
   }
@@ -836,8 +833,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     renderer,
     composer,
     bloomPass: bloomMergePass,
-    contrastPass,
-    dirtPass,
+    gradePass,
     render,
     needsComposer: needsComposerNow,
     setOverlayPass: (fn): void => { fsOverlay = fn; },

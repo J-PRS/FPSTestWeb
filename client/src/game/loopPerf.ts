@@ -272,9 +272,10 @@ function autoScaleCpu(deps: GameLoopDeps, st: LoopState, dir: number): void {
 // the user's own toggles on recovery (pass flags only, settings kept).
 function shedPostPasses(rendererSetup: GameLoopDeps['rendererSetup'], shed: boolean): void {
   if (rendererSetup.bloomPass) {rendererSetup.bloomPass.enabled = !shed && rendererSetup.isBloomEnabled();}
-  if (rendererSetup.contrastPass) {rendererSetup.contrastPass.enabled = !shed && rendererSetup.isPostProcessingEnabled();}
-  // Dirt is decor over bloom — shed with it (invisible when bloom's off).
-  if (rendererSetup.dirtPass) {rendererSetup.dirtPass.enabled = !shed && rendererSetup.isBloomEnabled();}
+  // The grade pass is the fused sanitize+dirt+aces+contrast blit —
+  // shedding it at the deepest tier drops the whole grade chain
+  // (raw output), which was already the intent for dirt+contrast.
+  if (rendererSetup.gradePass) {rendererSetup.gradePass.enabled = !shed && rendererSetup.isPostProcessingEnabled();}
 }
 
 
