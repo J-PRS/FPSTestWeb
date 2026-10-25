@@ -344,8 +344,10 @@ export class Nugget {
       this.pos.addScaledVector(this.vel, step);
       this.vel.y += GRAVITY * step;
       // Same chord the server's tumble uses — getHeight is the fixed 5m
-      // lattice (shared hmChord); getRenderedHeight is camera-dependent
-      // LOD, so mirroring against it diverged rests by meters at range.
+      // lattice (shared hmChord; hmHeight is the same function in shared
+      // code, verified by nuggetTumble.test.ts). getRenderedHeight is
+      // camera-dependent LOD, so mirroring against it diverged rests by
+      // meters at range.
       const gy = terrain.getHeight(this.pos.x, this.pos.z) + NUG_TUMBLE.groundLift;
       if (this.pos.y < gy) {
         this.pos.y = gy;

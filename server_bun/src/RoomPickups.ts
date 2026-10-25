@@ -112,6 +112,10 @@ export class RoomPickups {
       p.vel.x += (dx / (d || 1)) * mag;
       p.vel.z += (dz / (d || 1)) * mag;
       p.vel.y += Math.abs(mag) * NUG_TUMBLE.upPop; // slight pop — tumble reads as a bounce, not a slide
+      // Re-anchor every client's mirror at the knock — without this edge
+      // a predicted tumble runs from a stale pos+vel for the whole fall,
+      // and the settle broadcast snaps it meters sideways (nugrest).
+      this.room.broadcast(spawnPayload(WORLD_MODEL.pickup!, p.id, 'id', { pos: Object.assign({}, p.pos), kind: p.kind, val: p.val, vel: Object.assign({}, p.vel) }) as ServerMessage);
     }
   }
 
