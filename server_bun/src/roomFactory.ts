@@ -267,6 +267,6 @@ export class RoomFactory {
     const base = specMode || mintMap || 'arena';
     let n = 1;
     while (this.host.rooms.has(`${base}-${n}`)) {n += 1;}
-    return this.roomFor(`${base}-${n}`, mode, mintMap, bots, false, noCreatures, noBalls);
+    return this.roomFor(`${base}-${n}`, specMode, mintMap, bots, false, noCreatures, noBalls);
   }
 }
