@@ -16,6 +16,10 @@ export function ghostifyMesh(v: ViewModel, mesh: THREE.Mesh): void {
     shell.position.copy(mesh.position);
     shell.quaternion.copy(mesh.quaternion);
     shell.scale.copy(mesh.scale);
+    // Animated weapon parts move their transforms AFTER shelling — the
+    // copy above freezes the pose. Keep the source; updateShieldShells
+    // re-syncs per frame (same trick as the shield clone pairs).
+    shell.userData.src = mesh;
     v.ghostShells.push(shell);
   }
 
@@ -96,15 +100,42 @@ export function setShield(v: ViewModel, on: boolean, color = 0x66_CC_FF): void {
     });
     shell.scale.setScalar(1.06);
     src.parent?.add(shell);
+    // Animated weapons (chaingun barrel spin, etc.) transform the
+    // ORIGINAL's children — the clone is a frozen snapshot. Pair each
+    // shell node with its source once (traverse order is identical on a
+    // clone(true)); updateShieldShells then just copies transforms — no
+    // per-frame traversal or allocation.
+    const srcKids: THREE.Object3D[] = []; src.traverse((o): void => {srcKids.push(o);});
+    const pairs: [THREE.Object3D, THREE.Object3D][] = [];
+    let i = 0;
+    shell.traverse((o): void => {if (i > 0) {pairs.push([o, srcKids[i]!]);} i++;});
+    shell.userData.pairs = pairs;
     v.shieldShells.push(shell);
   }
 /** Tick the field animation on the gun shells (called from update). */
 export function updateShieldShells(v: ViewModel, dt: number): void {
     for (const s of v.shieldShells) {
+      const pairs = s.userData.pairs as [THREE.Object3D, THREE.Object3D][] | undefined;
+      if (pairs) {
+        for (const [shellNode, srcNode] of pairs) {
+          shellNode.position.copy(srcNode.position);
+          shellNode.quaternion.copy(srcNode.quaternion);
+          shellNode.scale.copy(srcNode.scale);
+        }
+      }
       s.traverse((o): void => {
         const m = (o as THREE.Mesh).material as THREE.ShaderMaterial;
         if (m?.uniforms?.uTime) {m.uniforms.uTime.value += dt;}
       });
+    }
+    // Cloak depth-shells: one node each, follow its animated source.
+    for (const s of v.ghostShells) {
+      const src = s.userData.src as THREE.Object3D | undefined;
+      if (src) {
+        s.position.copy(src.position);
+        s.quaternion.copy(src.quaternion);
+        s.scale.copy(src.scale);
+      }
     }
   }
 

@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { GRAVITY } from '../core/config.js';
 import { glitch } from '../core/fxDiag.js';
 import { hitRadiusAt } from '../../../shared/combat.js';
-import { idSeed, jitteredTtl } from '../../../shared/weapons.js';
+import { idSeed, jitteredTtl, getWeaponStats } from '../../../shared/weapons.js';
 
 import type { Targetable } from '../entities/balls.js';
 
@@ -14,6 +14,7 @@ import { RibbonTrail } from '../effects/RibbonTrail.js';
 import { RailSpiral } from '../effects/railSpiral.js';
 
 import { QuarksTrail } from '../effects/vfx.js';
+import { urlParams } from '../core/params.js';
 import { TrailDriver } from '../effects/vfxRuntime.js';
 import { buildProjectileMeshes, updateProjectileMesh, releaseProjectileInstance, syncProjectileInstance } from '../effects/projectileVisuals.js';
 import { tickRemote } from './projRemote.js';
@@ -251,6 +252,11 @@ export class Projectile {
   // Rope dart: a unit cylinder stretched thrower→dart every frame —
   // taut by construction; sag would be a lie.
   private ropeMesh: THREE.Mesh | null = null;
+  // F1 debug: hitbox (config.radius, red) + wake proxy (hitRadius, orange —
+  // grows with age, rescaled every updateMesh). Scene-level, not mesh
+  // children — the shell mesh is instanced and can't carry them.
+  private dbgCore: THREE.Mesh | null = null;
+  private dbgWake: THREE.Mesh | null = null;
   private projectileRemoved = false;
   private disposed = false;
   private ribbons: (RibbonTrail | RailSpiral)[] = [];
@@ -626,6 +632,28 @@ export class Projectile {
     updateProjectileMesh(this.mesh, this.glowMesh, Projectile._renderPos, this.vel,
       this.config, this.age, this.hitRadius,
       { x: this.tumbleX, y: this.tumbleY, z: this.tumbleZ }, this.lastDt, this.fuseAge());
+    // F1 is a runtime toggle — create lazily (shells predating the key
+    // still show), hide when it's off, spawn nothing in normal play.
+    if (urlParams.debug) {
+      if (!this.dbgCore) {
+        const mk = (color: number): THREE.Mesh => {
+          const m = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshBasicMaterial({ color, wireframe: true }));
+          this.scene.add(m);
+          return m;
+        };
+        this.dbgCore = mk(0xFF_44_44);
+        this.dbgWake = mk(0xFF_AA_22);
+        this.dbgCore.scale.setScalar(getWeaponStats(this.config.weaponType).bodyRadius);
+      }
+      this.dbgCore.visible = true;
+      this.dbgCore.position.copy(Projectile._renderPos);
+      this.dbgWake!.visible = true;
+      this.dbgWake!.position.copy(Projectile._renderPos);
+      this.dbgWake!.scale.setScalar(this.hitRadius);
+    } else if (this.dbgCore) {
+      this.dbgCore.visible = false;
+      this.dbgWake!.visible = false;
+    }
   }
 
   private static readonly _renderPos = new THREE.Vector3();
@@ -636,6 +664,9 @@ export class Projectile {
     // mat/glowMat are cache-shared — never dispose
     if (this.glowMesh) {
       releaseProjectileInstance(this.glowMesh);
+    }
+    for (const m of [this.dbgCore, this.dbgWake]) {
+      if (m) {this.scene.remove(m); m.geometry.dispose(); (m.material as THREE.Material).dispose();}
     }
     this.projectileRemoved = true;
   }

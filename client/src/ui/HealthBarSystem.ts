@@ -262,7 +262,10 @@ export class HealthBarSystem {
       // pos is EYE height - a small margin above it is already over the head.
       // renderLift rides along: the slope lift raises the mesh, not the
       // logical position, so anchoring raw eye sinks the bar mid-body.
-      const targetPos = _targetPos.set(pos.x, pos.y + ((rp as { renderLift?: number } | undefined)?.renderLift ?? 0) + 0.5, pos.z);
+      // Stack ABOVE the +1.0 indicator marker — the wounded-popup bar at
+      // +0.5 collapsed onto the class silhouette at distance. Repair
+      // bars use +1.6 for the same reason; +1.8 clears the marker row.
+      const targetPos = _targetPos.set(pos.x, pos.y + ((rp as { renderLift?: number } | undefined)?.renderLift ?? 0) + 1.8, pos.z);
       this.updateBar(bar, dt, targetPos, cameraPos, cameraDir, (): void => this.removeBar(playerId));
     }
   }
