@@ -692,6 +692,10 @@ export class MessageHandler {
     // liveness can't live per-handler or a chatty-but-untracked type
     // (inputMove in authority mode) starves the idle reaper mid-match.
     player.lastSeen = wallNow();
+    // Arrival stamp for uplink math: fireAt↔arrival measures wire transit;
+    // measuring at handle time counts command-buffer queue wait too and
+    // makes lagS hot (traj-epoch outliers). c.at is enqueue-side wallNow.
+    (msg as { arrivedAt?: WallMs }).arrivedAt = at ?? wallNow();
 
     // Binary-decoded frames were shape+range-checked at the byte
     // boundary — re-walking their field table is pure noise.

@@ -224,9 +224,9 @@ export class CombatHandler {
 
   /** The claim's measured uplink age (ms) — sendShotFired stamps fireAt
    *  on the client's server-clock estimate; absence = 0 (bot/legacy). */
-  private uplinkMsOf(msg: { fireAt?: number }): number {
+  private uplinkMsOf(msg: { fireAt?: number; arrivedAt?: number }): number {
     return typeof msg.fireAt === 'number'
-      ? Math.min(Math.max(wallNow() - msg.fireAt, 0), 5000) : 0;
+      ? Math.min(Math.max((msg.arrivedAt ?? wallNow()) - msg.fireAt, 0), 5000) : 0;
   }
 
   /** Claim-driven origin: the shooter's reported eye/muzzle point,

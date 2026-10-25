@@ -219,9 +219,15 @@ function wirePlayerCombat(ctx: NetCtx): void {
   // Rejected claim: a predicted self-blast that never happened server-side
   // leaves our health low until the next real event. Adopt the server's
   // value so state-hash health checks stop screaming desync.
-  networkManager.onShotRejected = (reason, _targetId, weaponType, health): void => {
+  networkManager.onShotRejected = (reason, _targetId, weaponType, health, shotId): void => {
     if (deps.world.playbackMode) {return;}
     const player = deps.lazyPlayer();
+    // The server never spawned this shell — the predicted fake must die
+    // silently or it flies on and explodes solo (the ghost-shot class).
+    if (shotId) {
+      const shell = deps.world.projectileRegistry.byShotId.get(shotId);
+      if (shell && !shell.dead) {shell.dead = true;}
+    }
     // The authority says this pick is class-locked — a stale slot keeps
     // spam-rejecting every pull for the rest of the life. Unshoulder it
     // to the class fallback once and the next pull fires something legal.

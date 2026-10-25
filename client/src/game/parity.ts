@@ -110,7 +110,7 @@ const expiredShots = new Map<string, number>();
 // "intent never ran" from "destroy never arrived" without a packet dump.
 export const parityProbes: {
   fatesSeen: number; echoesStamped: number; echoesConfirmed: number;
-  destroysSeen: number; deadOnArrival: number; trajUnbound?: number; msgSeen: Record<string, number>;
+  destroysSeen: number; deadOnArrival: number; trajUnbound?: number; trajBounced?: number; msgSeen: Record<string, number>;
 } = { fatesSeen: 0, echoesStamped: 0, echoesConfirmed: 0, destroysSeen: 0, deadOnArrival: 0, msgSeen: {} };
 
 // My shells' replica-vs-fate distances — offM as a population, not just
@@ -215,7 +215,7 @@ export function parityLines(): string[] {
   }).join(' ');
   lines.push(`parity: misses=${total}${byKind ? ` ${byKind}` : ''}`);
   const td = trajDivStats();
-  if (td.n > 0 || parityProbes.trajUnbound) {lines.push(`  shell-traj: n=${td.n} p50=${td.p50}m p95=${td.p95}m max=${td.max}m >8m=${td.over8} unbound=${parityProbes.trajUnbound ?? 0}`);}
+  if (td.n > 0 || parityProbes.trajUnbound) {lines.push(`  shell-traj: n=${td.n} p50=${td.p50}m p95=${td.p95}m max=${td.max}m >8m=${td.over8} unbound=${parityProbes.trajUnbound ?? 0} bounced=${parityProbes.trajBounced ?? 0}`);}
   for (const r of rows.slice(-8).toReversed()) {
     lines.push(`  parity-${r.kind}: ${r.detail}`);
   }

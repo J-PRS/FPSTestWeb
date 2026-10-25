@@ -443,7 +443,7 @@ rejectCensus.total += 1;
         weapon: wName,
         pingMs: this.h.getPing(),
       });
-      this.h.onShotRejected?.(data.reason, data.targetId, data.weaponType, data.health);
+      this.h.onShotRejected?.(data.reason, data.targetId, data.weaponType, data.health, data.shotId);
     },
     // Honest-lag discard (dead shooter/target) — not a reject, but the
     // predicted hit still needs clearing or the ledger warns phantom.
@@ -458,7 +458,7 @@ dropCensus.total += 1;
         weapon: data.weaponType === undefined ? undefined : WeaponType[data.weaponType] ?? data.weaponType,
         pingMs: this.h.getPing(),
       });
-      this.h.onShotRejected?.(data.reason, data.targetId, data.weaponType, data.health);
+      this.h.onShotRejected?.(data.reason, data.targetId, data.weaponType, data.health, data.shotId);
     },
   };
 

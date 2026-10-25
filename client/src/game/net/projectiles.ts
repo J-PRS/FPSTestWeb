@@ -402,7 +402,13 @@ export function wireProjectiles(ctx: NetCtx): void {
       // offM as a population — replica-vs-fate distance for every owned
       // shell, not just the ones that painted a ghost hit. Outliers tag
       // weapon + whether the replica already popped on its own contact.
-      if (preSnap >= 0) {noteTrajDiv(preSnap, localProjectile.config.weaponType, localProjectile.exploded, localProjectile.age, localProjectile.boundAtAge, srvAge, localProjectile.mirrored);}
+      // Bounced replicas measured their own counter — post-bounce linear
+      // extrapolation can't recover the real path, so a legit ricochet
+      // reads as huge arc divergence and buries the spawn-divergence p50.
+      if (preSnap >= 0) {
+        if (localProjectile.bouncesTaken > 0) {parityProbes.trajBounced = (parityProbes.trajBounced ?? 0) + 1;}
+        else {noteTrajDiv(preSnap, localProjectile.config.weaponType, localProjectile.exploded, localProjectile.age, localProjectile.boundAtAge, srvAge, localProjectile.mirrored);}
+      }
       localProjectile.explode();
       registry.byId.delete(projectileId);
       if (localProjectile.shotId) {registry.byShotId.delete(localProjectile.shotId);}
