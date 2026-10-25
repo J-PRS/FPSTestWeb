@@ -261,7 +261,10 @@ export class RoomFactory {
     // lies (it's headhunt on caldera now). Mode empty → the map name is
     // the room's identity until a hosted mode claim lands.
     const mintMap = map || this.host.maps.defaultMap();
-    const base = mode || mintMap || 'arena';
+    // Mode unnamed = the SPEC's mode (bare /join sends no mode, but the
+    // minted spec knows its ruleset — rimrock's dm, never 'rimrock-N').
+    const specMode = mode || this.host.maps.specFor(`${mintMap}-x`, '', mintMap).spec?.mode || '';
+    const base = specMode || mintMap || 'arena';
     let n = 1;
     while (this.host.rooms.has(`${base}-${n}`)) {n += 1;}
     return this.roomFor(`${base}-${n}`, mode, mintMap, bots, false, noCreatures, noBalls);
