@@ -777,7 +777,9 @@ function maybeWarmShaders(deps: GameLoopDeps, st: LoopState): void {
   deps.rendererSetup.warmup();
   // Pre-clone each armor-class rig so a mid-match join grabs one off
   // the shelf instead of paying SkeletonUtils.clone on the live frame.
-  for (const v of ['scout', 'brawler', 'brute'] as const) {warmRig(v, 2);}
+  // Depth 4/variant — a 15-bot churn exhausts 2 before the macrotask
+  // refill lands, so joins past the second still clone on the frame.
+  for (const v of ['scout', 'brawler', 'brute'] as const) {warmRig(v, 4);}
   // One underground blast fills the burst-spec freelists, so the first
   // real explosion restarts pooled systems instead of paying cold
   // ParticleSystem builds mid-fight. 500m down it never renders.
