@@ -74,14 +74,14 @@ describe('departSpectator', () => {
     // a connection entry and a tick-fanout target, so the bound matters.
     const ws1 = fakeWs();
     gs.onOpen(ws1 as never);
-    gs.onMessage(ws1 as never, JSON.stringify({ type: 'join', playerId: 'w1', room: 'default', spectate: true }));
+    gs.onMessage(ws1 as never, JSON.stringify({ type: 'join', playerId: 'w1', room: 'default', spectate: true, mode: 'dm' }));
     const room = peek.rooms.get('default')!;
     for (let i = 2; i <= CONFIG.maxPlayers; i++) room.spectators.add(`w${i}`);
     expect(room.spectators.size).toBe(CONFIG.maxPlayers);
 
     const ws2 = fakeWs();
     gs.onOpen(ws2 as never);
-    gs.onMessage(ws2 as never, JSON.stringify({ type: 'join', playerId: 'over', room: 'default', spectate: true }));
+    gs.onMessage(ws2 as never, JSON.stringify({ type: 'join', playerId: 'over', room: 'default', spectate: true, mode: 'dm' }));
 
     expect(ws2.closed).toContain(1013);
     expect(room.spectators.has('over')).toBe(false);
@@ -97,7 +97,7 @@ describe('departSpectator', () => {
       (CONFIG as unknown as { globalMaxPlayers: number }).globalMaxPlayers = origGlobal;
     });
 
-    it('refuses a spectate join once players fill the global budget', () => {
+    it('refuses a spectate join once players fill the global budget', async () => {
       (CONFIG as unknown as { globalMaxPlayers: number }).globalMaxPlayers = 1;
       gs = new GameServer();
       (gs as unknown as { tickLoop: { stop(): void } }).tickLoop.stop();
@@ -105,11 +105,14 @@ describe('departSpectator', () => {
 
       const ws1 = fakeWs();
       gs.onOpen(ws1 as never);
-      gs.onMessage(ws1 as never, JSON.stringify({ type: 'join', playerId: 'p1', room: 'default' }));
+      gs.onMessage(ws1 as never, JSON.stringify({ type: 'join', playerId: 'p1', room: 'default', mode: 'dm' }));
+      // Seat defers on terrainReady — the spectate join must see p1
+      // counted or it reads under-budget.
+      await (peek.rooms.get('default') as { terrainReady?: Promise<unknown> } | undefined)?.terrainReady;
 
       const ws2 = fakeWs();
       gs.onOpen(ws2 as never);
-      gs.onMessage(ws2 as never, JSON.stringify({ type: 'join', playerId: 'w1', room: 'default', spectate: true }));
+      gs.onMessage(ws2 as never, JSON.stringify({ type: 'join', playerId: 'w1', room: 'default', spectate: true, mode: 'dm' }));
       expect(ws2.closed).toContain(1013);
       expect(peek.specRooms.has('w1')).toBe(false);
     });

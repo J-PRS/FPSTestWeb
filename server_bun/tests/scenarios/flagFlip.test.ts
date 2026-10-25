@@ -24,7 +24,7 @@ describe('scenario: a rebalanced flag carrier drops the flag', () => {
     room.tickFlags(0.05);
     expect(bravoFlag.carrier).toBe(carrier.id);
     // Trigger the rebalance funnel directly (private — invoked by removal).
-    (room as unknown as { rebalanceTeams: () => void }).rebalanceTeams();
+    (room as unknown as { balanceTeams: () => void }).balanceTeams();
     expect(carrier.team).toBe('bravo');
     expect(bravoFlag.state).toBe('dropped');
     expect(bravoFlag.carrier).toBeNull();

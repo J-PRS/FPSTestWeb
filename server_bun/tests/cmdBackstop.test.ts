@@ -26,14 +26,16 @@ describe('command buffer backstop', () => {
   let gs: GameServer;
   afterEach(() => gs.stop());
 
-  it('drops validated messages once the queue is full', () => {
+  it('drops validated messages once the queue is full', async () => {
     gs = new GameServer();
     (gs as unknown as { tickLoop: { stop(): void } }).tickLoop.stop();
     const peek = gs as unknown as Peek;
 
     const ws = fakeWs();
     gs.onOpen(ws as never);
-    gs.onMessage(ws as never, JSON.stringify({ type: 'join', playerId: 'p1', room: 'default' }));
+    gs.onMessage(ws as never, JSON.stringify({ type: 'join', playerId: 'p1', room: 'default', mode: 'dm' }));
+    // The seat defers on terrainReady — playerRoom fills only after it.
+    await (peek.rooms.get('default') as { terrainReady?: Promise<unknown> } | undefined)?.terrainReady;
     const room = peek.playerRoom.get('p1')!;
 
     // Park the buffer at the cap — a stalled tick's worst case.
@@ -46,14 +48,15 @@ describe('command buffer backstop', () => {
     expect(peek.ops.msgsRejected).toBe(rejectedBefore + 1);
   });
 
-  it('still accepts messages while under the cap', () => {
+  it('still accepts messages while under the cap', async () => {
     gs = new GameServer();
     (gs as unknown as { tickLoop: { stop(): void } }).tickLoop.stop();
     const peek = gs as unknown as Peek;
 
     const ws = fakeWs();
     gs.onOpen(ws as never);
-    gs.onMessage(ws as never, JSON.stringify({ type: 'join', playerId: 'p1', room: 'default' }));
+    gs.onMessage(ws as never, JSON.stringify({ type: 'join', playerId: 'p1', room: 'default', mode: 'dm' }));
+    await (peek.rooms.get('default') as { terrainReady?: Promise<unknown> } | undefined)?.terrainReady;
     const room = peek.playerRoom.get('p1')!;
     const before = room.commands.length;
 

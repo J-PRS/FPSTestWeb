@@ -17,7 +17,7 @@ const fakeWs = () => ({
 // and a bot-only 'default' would sim creatures/balls forever. A joining
 // human wakes it on the very next tick.
 describe('room hibernation', () => {
-  it('a room with no humans goes dormant; a joining human wakes it', () => {
+  it('a room with no humans goes dormant; a joining human wakes it', async () => {
     const gs = new GameServer();
     const peek = gs as unknown as Peek;
     try {
@@ -27,7 +27,10 @@ describe('room hibernation', () => {
       expect(room.ballSim.dormant).toBe(true);
 
       const ws = fakeWs();
-      gs.onMessage(ws, JSON.stringify({ type: 'join', playerId: 'p1', room: 'sleepy' }));
+      // mode mints 'sleepy' (a bare join would quickRoom elsewhere); the
+      // seat then defers on terrainReady before the human wakes the room.
+      gs.onMessage(ws, JSON.stringify({ type: 'join', playerId: 'p1', room: 'sleepy', mode: 'dm' }));
+      await room.terrainReady;
       peek.tickLoop.tickRoomGuarded(room);
       expect(room.creatureSim.dormant).toBe(false);
       expect(room.ballSim.dormant).toBe(false);
