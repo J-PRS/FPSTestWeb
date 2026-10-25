@@ -245,7 +245,10 @@ export class RoomFactory {
       if (preferHumans) {
         const h = room.players.getHumanCount();
         if (h === 0) {continue;}
-        if (h > bestHumans) {best = room; bestHumans = h;}
+        // Humans first, total players breaks ties — the fullest live
+        // room wins, so joins consolidate into ONE match instead of
+        // splitting into twin half-empty headhunt-N rooms.
+        if (h > bestHumans || (h === bestHumans && best && room.playerCount() > best.playerCount())) {best = room; bestHumans = h;}
         continue;
       }
       if (!best || room.playerCount() > best.playerCount()) {best = room;}
