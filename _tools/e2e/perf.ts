@@ -45,7 +45,7 @@ interface PerfSample {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const stack = await upStack();
-const client = await launchClient(stack.clientUrl(`&room=e2eperf&bots=${BOTS}&mode=nuggets&gpuperf=1`));
+const client = await launchClient(stack.clientUrl(`&room=e2eperf&bots=${BOTS}&mode=${arg('mode', 'nuggets')}&map=${arg('map', 'escalade')}&gpuperf=1${arg('extra', '')}`));
 
 try {
   await client.waitFor(`t.networkManager && t.networkManager.isConnected()`, 30000);
@@ -110,6 +110,28 @@ try {
     for (const r of gp) {
       console.log(`  gpu:pass ${r.pass} avg=${r.avgMs.toFixed(2)}ms max=${r.maxMs.toFixed(2)}ms n=${r.n}`);
     }
+  }
+
+  // Draw-call census: visible meshes grouped by class name + parent —
+  // 'which objects cost the 300 calls', grouped so instanced pools
+  // (one mesh, many slots) report correctly.
+  const census = await client.test<Record<string, number>>(`(() => {
+    const scene = t.scene;
+    if (!scene) {return null;}
+    const counts = {};
+    scene.traverse((o) => {
+      if (!o.visible) {return;}
+      if (!o.isMesh && !o.isSkinnedMesh && !o.isLine && !o.isPoints && !o.isSprite) {return;}
+      let n = o;
+      while (n && !n.name && n !== scene) {n = n.parent;}
+      const k = (o.name ? o.name : o.type) + '|' + ((n && n.name) || 'scene') + '|' + (o.geometry ? o.geometry.type : '-');
+      counts[k] = (counts[k] ?? 0) + 1;
+    });
+    return counts;
+  })()`).catch(() => null);
+  if (census) {
+    const top = Object.entries(census).sort((a, b) => b[1] - a[1]).slice(0, 15);
+    console.log(`  drawcensus ${top.map(([k, v]) => `${k}:${v}`).join(' ')}`);
   }
 
   if (COMPARE && existsSync(COMPARE)) {
