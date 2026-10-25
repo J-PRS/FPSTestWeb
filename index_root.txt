@@ -1,7 +1,9 @@
 .agents
 .devin
 .dockerignore
+.env
 .env.example
+.env.pork
 .git
 .gitattributes
 .githooks
@@ -37,6 +39,7 @@ changelog.txt
 client
 concepts
 demos_out
+deployment
 devup.bat
 index_root.txt
 logs

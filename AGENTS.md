@@ -1,5 +1,9 @@
 # KRIBES — Agent Guide
 
+> **KRIBES is a codename, not the ship name** — dev-conversation
+> shorthand only; the real title is TBD. Don't put it in
+> player-facing copy, packaging, or marketing language.
+
 Browser multiplayer FPS: **Tribes gameplay, Krunker performance and
 accessibility**. Skiing, jetpacks, spinfusor combat, base assets — in a
 browser tab, fast enough for any laptop. Three.js client, Bun server

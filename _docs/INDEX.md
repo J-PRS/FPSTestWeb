@@ -28,6 +28,7 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-10-18_CTF_BOT_BRAIN_PUG_AUDIT.md` | CTF bot brain vs PUG guide audit |
 | `_docs/2026-10-18_NETCODE_OVERHAUL.md` | Netcode overhaul (2026-10-18) |
 | `_docs/2026-10-21_NETCODE_GAP.md` | Netcode gap analysis vs production shooters |
+| `_docs/2026-10-25_PROJECTILE_PREDICTION_NETCODE.md` | Projectile prediction research + implementation — fake+real shell model, claim-carried spawn state (pos/dir/vel/fireAt), velocity-scaled reanchor blend, MaxPredictionPing gap |
 | `_docs/2026-10-22_GRIND_LEADERBOARD.md` | Grind leaderboard design |
 | `_docs/2026-10-22_SPECTATE_RELAY.md` | Spectator relay / OBS-server reference |
 | `_docs/2026-10-22_REPLAY_DEMO_SYSTEMS.md` | Replay/demo systems across shipped games — Tribes .rec, TrueView, MVD, input replay; two-truth problem |
@@ -42,6 +43,11 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-10-24_GUNMETAL_BODY_BAKE.md` | Weapon wear/grime bake on body rigs — the cm-scale hang, uObjScale fix, clone re-arm, and per-asset tuning knobs |
 | `_docs/2026-10-24_MECH_SILHOUETTE_TECHNIQUES.md` | Power-armor silhouette grammar for class-rig builders — construction philosophies, armor hierarchy, landmarks, and the variant row |
 | `_docs/2026-10-25_MEDIUM_LINEUP_PROPOSAL.md` | Medium-class lineup proposal — rig constraints (82-bone cm-scale skeleton, joint map), four archetypes, build plan. Proposal only |
+| `_docs/2026-10-25_IDLE_SLOPE_CREEP.md` | Idle-on-slope downhill creep — traction ran before gravity each step, one residue escaped; idle-only anticipate-gravity fix + non-regression surface |
+| `_docs/2026-10-25_TICKRATE_REFERENCE.md` | Measured server tickrates (CS 64, Apex 20 official, Fortnite 30, BF5 60), why powers of two, Battle(non)sense story, KRIBES 60sim/20broadcast positioning |
+| `_docs/2026-10-25_MOUSE_SENS.md` | cm/360 survey — Krunker 8.3 default, AAA defaults 10-21cm, pro medians 30-60cm; why we moved 1.0→0.8 (~12.5cm casual default) |
+| `_docs/2026-10-25_PREMIUM_TICKRATE.md` | Monetization concept — $10 sub sponsors a 64/128Hz room; per-player/presence models rejected (p2w, AFK-mule); Hetzner cost math €0-27/room; CPU is the real constraint |
+| `_docs/2026-10-25_PHANTOM_MOUSE_DELTA.md` | Chromium pointer-lock delta spikes — why magnitude clamps fail at high DPI, the layered fix (unadjustedMovement + neighbor isolation), edge cases |
 | `_docs/2026-10-24_CHARACTER_TECHNIQUES_DEEP.md` | Round 2 — PS1/Quake-era tricks + 2025 agentic-3D pipelines, mapped to which techniques our builders already use and what's worth adding |
 | `_docs/2026-10-24_PROFILING_HOTSPOTS.md` | 512-player soak CPU profile: phase + function hotspots; send/fanout/encoding dominate; prioritized optimization roadmap |
 | `_docs/2026-10-24_CLASS_WEAPON_LOCKS.md` | Class-lock design: the caliber ladder (light=precision, medium=mid ordnance, heavy=siege), per-weapon rationale/pros/cons, exact-class vs floor lock choice |
