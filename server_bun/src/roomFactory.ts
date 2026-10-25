@@ -248,13 +248,18 @@ export class RoomFactory {
         if (h > bestHumans) {best = room; bestHumans = h;}
         continue;
       }
-      if (!best || room.playerCount() < best.playerCount()) {best = room;}
+      if (!best || room.playerCount() > best.playerCount()) {best = room;}
     }
     if (preferHumans && bestHumans < 0) {return this.quickRoom(mode, map, bots, noCreatures, noBalls);}
     if (best) {return best;}
-    const base = map || mode || 'arena';
+    // Empty-server join still lands in a REAL match — pick the busiest
+    // room (liveliest, not emptiest); if none exists, mint on the
+    // default map so the joiner never gets a spec-less arena with
+    // maps/null terrain.
+    const mintMap = map || this.host.maps.defaultMap();
+    const base = mintMap || mode || 'arena';
     let n = 1;
     while (this.host.rooms.has(`${base}-${n}`)) {n += 1;}
-    return this.roomFor(`${base}-${n}`, mode, map, bots, false, noCreatures, noBalls);
+    return this.roomFor(`${base}-${n}`, mode, mintMap, bots, false, noCreatures, noBalls);
   }
 }

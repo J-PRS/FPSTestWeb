@@ -158,6 +158,11 @@ export class MapCatalog {
     return this.rotationList ?? [];
   }
 
+  /** Bare /join mints need a real spec — spec-less rooms serve maps/null
+   *  terrain ("some game that doesn't exist"). Rotation head wins, else
+   *  the canonical default. */
+  defaultMap(): string { return this.rotation()[0] ?? 'rimrock'; }
+
   /** Next map in the rotation whose mode matches the room's — a mode
    *  swap would need Room reconstruction (mode wiring is ctor-time), so
    *  foreign-mode specs are skipped rather than half-applied. */
