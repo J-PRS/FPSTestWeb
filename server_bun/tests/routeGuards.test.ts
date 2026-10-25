@@ -71,10 +71,13 @@ describe('route guards', () => {
     for (const p of ['/metrics', '/status', '/weaponstats']) {
       expect((await routes[p]!(url(p), req(p))).status).toBe(401);
     }
-    // Bearer or ?key= both open it.
+    // Bearer opens it from anywhere; ?key= only from loopback — remote
+    // query tokens leak through logs/caches/Referer.
     expect((await routes['/metrics']!(url('/metrics'), req('/metrics', { authorization: 'Bearer tok' }))).status).toBe(200);
-    expect((await routes['/metrics']!(url('/metrics?key=tok'), req('/metrics'))).status).toBe(200);
+    expect((await routes['/metrics']!(url('/metrics?key=tok'), req('/metrics'))).status).toBe(401);
     expect((await routes['/metrics']!(url('/metrics?key=wrong'), req('/metrics'))).status).toBe(401);
+    const local = makeRoutes(ctx('127.0.0.1'));
+    expect((await local['/metrics']!(url('/metrics?key=tok'), req('/metrics'))).status).toBe(200);
   });
 
   it('ops routes stay open in dev when the token is unset', async () => {
