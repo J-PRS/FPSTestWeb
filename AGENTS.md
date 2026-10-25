@@ -42,7 +42,7 @@ node _tools/shotwebp.mjs [--days N]     # shrink old shot PNGs → 80% webp in
 # respawns within ~5s anyway, so kills race the supervisor and waste a
 # cycle. To reload new code (incl. shared/, which --watch misses):
 #   curl http://127.0.0.1:8000/dev/shutdown
-# or just wait — file changes auto-restart after a 30s debounce.
+# or just wait — file changes auto-restart after a 5s debounce.
 # Graceful close frames + seat handoff; players ride through.
 # The supervised child has FPS_ADMIN_TOKEN=devdemo — ops routes
 # (/metrics /status /wire /admin/*) take ?key=devdemo.

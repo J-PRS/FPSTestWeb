@@ -12,4 +12,17 @@ function readVersion(): string {
   }
 }
 
+// Deploy-stamped build hash — _tools/deploy_server.sh writes build.txt
+// next to this dir with the source commit, so /health can report exactly
+// what the box runs (the box has no .git). Absent locally = dev build.
+function readBuild(): string | null {
+  try {
+    const s = readFileSync(new URL('../build.txt', import.meta.url), 'utf8').trim();
+    return s || null;
+  } catch {
+    return null;
+  }
+}
+
 export const SERVER_VERSION = readVersion();
+export const SERVER_BUILD = readBuild();
