@@ -66,7 +66,7 @@ Auth: JSON body `{"apikey": "...", "secretapikey": "..."}`, or the `X-API-Key` /
   play.jprice.app {
   	encode zstd gzip
 
-  	@api path /ws /rtc /rtc/* /health /ping /join /join/* /rooms /rooms/* /maps /maps/* /matches /metrics /serverinfo /stats /status /weaponstats /wire /wthash /rtcconfig /demos /demos/* /admin/* /dev/*
+  	@api path /ws /rtc /rtc/* /health /challenge /leaderboard /leaderboard/* /client-log /ping /join /join/* /rooms /rooms/* /maps /maps/* /matches /metrics /serverinfo /stats /status /weaponstats /wire /wthash /rtcconfig /demos /demos/* /admin/* /dev/*
   	handle @api {
   		reverse_proxy localhost:8000
   	}

@@ -50,6 +50,10 @@ the HTTPS name for anything shared.
 ## Redeploy
 
 The box runs whatever was synced. Laptop edits do nothing until copied and restarted.
+`bash _tools/deploy_server.sh` does the whole push: refuses on uncommitted
+server/shared changes, stamps `server_bun/build.txt` with the commit hash
+(`/health` reports it), syncs, restarts, verifies. Env: `FPS_DEPLOY_HOST`,
+`FPS_SSH_KEY`.
 
 1. Copy the changed files (keep the same relative paths), for example:
    ```

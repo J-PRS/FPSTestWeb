@@ -31,6 +31,7 @@ ssh -i "$KEY" "$HOST" "
   cp /tmp/kribes_build.txt server_bun/build.txt &&
   pgrep -f '^[^ ]*bin/bun src/server.ts' | xargs -r kill; sleep 2;
   cd ~/$RDIR/server_bun &&
+  set -a; [ -f ~/$RDIR/.env ] && . ~/$RDIR/.env; set +a;
   nohup ~/$BUN src/server.ts > ~/$RDIR/server.log 2>&1 &
   sleep 4;
   pgrep -fa '^[^ ]*bin/bun src/server.ts' | head -2;

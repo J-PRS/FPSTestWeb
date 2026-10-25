@@ -1,0 +1,583 @@
+# Mission names by install (es.exe, NOT deduped — per-path listing)
+
+## C:\Users\JPrice\Downloads\[Tribes 1]\Tribes 1.30\base  (196)
+
+  1_Welcome
+  2_Weapons
+  2Fast2FuriousLT
+  3_Vehicle
+  4_Commander_TargetLaser
+  5_CTF
+  6_Towers
+  7_Retrieval
+  8_Destroy
+  Acrophobia
+  ADishBestServedCold
+  Annihilator
+  antarcticspell
+  AntarcticSpellLT
+  AntHill
+  ArcticWolf
+  AvalancheMkII
+  Bastard_Forge
+  Bastard_Forge_Day
+  BastardForgeLT
+  Blastside
+  Blizzard
+  BloodBath
+  BloodBath_2
+  BloodRunsCold
+  BloodyVengeance
+  Borne
+  Broadside
+  Broadside2
+  BroadsideArena1
+  CanyonCrusade
+  CanyonCrusade_deluxe
+  CanyonCrusadeDeluxeLT
+  CapTheRagLT
+  CC-artimis
+  CC-majortom
+  Citadels
+  ClearHorizon
+  CloakOfDayLT
+  CloakOfNight
+  Control
+  CrissCross
+  CTF Arena
+  DangerousCrossing
+  DangerousCrossing2
+  DangerousCrossingLT
+  DarkAurora
+  DeadlyValley
+  Death_Row
+  DeathKnell
+  Desert_of_death
+  Desert_Of_Death2
+  desertnights
+  DesertOfDeathLT
+  DesertSiegeLT
+  Domino
+  DROPZONE
+  Duntooine
+  DusktoDawn
+  Emerald_Valley
+  EmeraldValleyLT
+  Esepta
+  EseptaLT
+  Fallen
+  Flags_of_Death
+  FleetCommand
+  FogOfWar
+  FogOfWarCTFLT
+  FourWayDance
+  FreeForAll
+  Frost_Giant
+  Full_Force
+  FutureBroadsideLT
+  GreenVillLT
+  HammerDown
+  Hexbreak
+  Hexbreaker
+  HiddenValleyLT
+  Hildebrand
+  HildebrandLT
+  Hoth
+  IceBlindLT
+  IceDagger
+  IceDaggerLT
+  IceRaidLT
+  IceRidge
+  IceRidge2
+  IceRidge_deluxe
+  IceRidgeLT
+  Influence
+  InfluenceLT
+  Integration
+  IntegrationLT
+  JaggedClaw
+  JaggedClawLT
+  King_of_the_Hill
+  KingUnderTheHill
+  Laser_Arena1_DM
+  Laser_Arena2_CTF
+  Laser_Arena3_Ctf
+  LaserTagDM
+  Lith
+  Lith_Cluster
+  LT_Purplehaze_Ctf
+  LuckySeven
+  Massive_Sides
+  MiddayMayhemLT
+  MidnightMayhem
+  MidnightMayhem_deluxe
+  MistyLinks
+  MistyLinksLT
+  MosEisly
+  MosEspa
+  Mudslide
+  NightSlide
+  NoMan'sLand
+  NoQuarter
+  NorthernLights
+  Obfuscation
+  OlympusMons
+  OneSmallStep
+  OpenSnowblindLT
+  OrionsBelt
+  OrionsBeltLT
+  OutRunLT
+  PeakPerformance
+  Peekaboo
+  PrisonBreak
+  QuickSand
+  Raindance
+  Raindance2
+  RaindanceLT
+  Reli
+  ReliLT
+  Reliquary
+  ReliquaryLT
+  RhaskicLT
+  Rollercoaster
+  Rollercoaster_2
+  RollercoasterLT
+  Runout
+  RunoutLT
+  RunwayLT
+  Saero
+  SaeroLT
+  SandStorm
+  Sarlaac_Pit
+  scarabrae
+  ScaraLT
+  SeekAndDestroy
+  SideWinder
+  Siege
+  Simoom
+  SimoomLT
+  Slipstream
+  SniperZone
+  Snowblind
+  Snowblind2
+  SNOWBLINDARENA
+  SnowblindLT
+  Spam_Chowder
+  Spartacus'sGauntlet
+  SpinCrossing
+  SpinCycle
+  SpinCycleLT
+  StarFall
+  StarFallLT
+  StoneDust
+  StoneDustLT
+  Stonehenge
+  StonehengeLT
+  StrungOut
+  Sulfurious
+  SulfuriousLT
+  SuperCross_2
+  Take Your Corner
+  Tale_Of_Two_Bases
+  TempleOfDoom
+  Tesseract
+  TesseractLT
+  TheLongWalk
+  TheRedSands
+  ToCloseForComfort
+  towers
+  Tri-moon
+  Tri-MoonLT
+  TripleThreat
+  TronLT
+  Turbulence
+  Underground
+  Underworld
+  UnderworldLT
+  Valhalla
+  Velocity
+  VelocityLT
+  Wasteland
+
+## C:\Users\JPrice\Downloads\[Tribes 1]\Tribes 1.30\StarWars\Missions\Duntooine.mis  (1)
+
+  Duntooine
+
+## C:\Users\JPrice\Downloads\[Tribes 1]\Tribes 1.30\StarWars\Missions\Hoth.mis  (1)
+
+  Hoth
+
+## C:\Users\JPrice\Downloads\[Tribes 1]\Tribes 1.30\StarWars\Missions\MosEisly.mis  (1)
+
+  MosEisly
+
+## C:\Users\JPrice\Downloads\[Tribes 1]\Tribes 1.30\StarWars\Missions\MosEspa.mis  (1)
+
+  MosEspa
+
+## C:\Users\JPrice\Downloads\[Tribes 1]\Tribes 1.30\StarWars\Missions\Sarlaac_Pit.mis  (1)
+
+  Sarlaac_Pit
+
+## D:\[ARCHIVE]\2024.01.05\Legions\game\legions\data  (55)
+
+  AlderannCatwalks
+  BladeRun
+  Boardwalk
+  Catwalk
+  Checkmate
+  Daybreak
+  Delirium
+  Diabolus
+  Domination
+  Elegiac
+  FallenEmpire
+  Fallout
+  FalloutPUG
+  Forgotten
+  ForgottenOld
+  Frostbyte
+  FrostbytePUG
+  Genesis
+  Gorge
+  Grassy
+  Luminess
+  Mirage
+  Monument
+  MoonJack
+  Moonshine
+  Nebula_Station
+  Nivosus
+  OTtN
+  Outcast
+  pipeChallenge
+  Qualm
+  Quarry
+  Ravine
+  Reactor
+  ReactorPUG
+  Ridgeline
+  rollercoaster
+  SandBox
+  Shoreline
+  Sleepwalker
+  Speedway
+  Stadium
+  StadiumGreen
+  StoneHaven
+  Stygian
+  TempleRun
+  The_Last_Castle
+  The_Pit
+  TheCore
+  TheCoreOld
+  Whiteout
+  WinterMelt
+  Yukon
+  ZenithCauldron
+  Zion
+
+## D:\[Games]\[Tribes 1]\Starsiege Tribes - Fire\balanced  (11)
+
+  Acrophobia
+  Annihilator
+  AvalancheMkII
+  CloakOfNight
+  Domino
+  Full_Force
+  Hexbreaker
+  NorthernLights
+  Obfuscation
+  Reliquary
+  Simoom
+
+## D:\[Games]\[Tribes 1]\Starsiege Tribes - Fire\base  (53)
+
+  1_Welcome
+  2_Weapons
+  3_Vehicle
+  4_Commander_TargetLaser
+  5_CTF
+  6_Towers
+  7_Retrieval
+  8_Destroy
+  ADishBestServedCold
+  AntHill
+  Blastside
+  BloodRunsCold
+  BloodyVengeance
+  Broadside
+  Caves
+  Citadels
+  Complex
+  CrissCross
+  DangerousCrossing
+  DeathKnell
+  Desert_Of_Death
+  Egyptian
+  Facility
+  Fallen
+  FogOfWar
+  FourWayDance
+  FreeForAll
+  Grid
+  HammerDown
+  IceRidge
+  KingUnderTheHill
+  Library
+  LuckySeven
+  Mudslide
+  NoMan'sLand
+  NoQuarter
+  PeakPerformance
+  Peekaboo
+  Raindance
+  Rollercoaster
+  SandStorm
+  Scarabrae
+  SeekAndDestroy
+  Siege
+  Snowblind
+  Stonehenge
+  StrungOut
+  Temple
+  TempleOfDoom
+  TheRedSands
+  towers
+  TripleThreat
+  Valhalla
+
+## D:\[Games]\[Tribes 1]\Starsiege Tribes - Fire\dox  (9)
+
+  ArcticWolf
+  CanyonCrusade_deluxe
+  DusktoDawn
+  FleetCommand
+  IceDagger
+  JaggedClaw
+  MidnightMayhem_deluxe
+  SideWinder
+  SpinCycle
+
+## D:\[Games]\[Tribes 1]\Starsiege Tribes - Fire\lt  (31)
+
+  BastardForgeLT
+  BroadsideLT
+  CanyonCrusadeDeluxeLT
+  CanyonCrusadeLT
+  CloakOfDayLT
+  DangerousCrossingLT
+  DesertOfDeathLT
+  EmeraldValleyLT
+  HildebrandLT
+  HillKingLT
+  IceDaggerLT
+  IceRidgeLT
+  JaggedClawLT
+  LotusLT
+  MiddayMayhemDeluxeLT
+  MiddayMayhemLT
+  MistyLinksLT
+  ObfuscationLT
+  RaindanceLT
+  ReliquaryLT
+  RhaskicLT
+  RollercoasterLT
+  RunoutLT
+  RunwayLT
+  SimoomLT
+  SnowblindLT
+  SpinCycleLT
+  StarFallLT
+  StonehengeLT
+  SulfuriousLT
+  TesseractLT
+
+## D:\[Games]\[Tribes 1]\Starsiege Tribes - Fire\opencall  (15)
+
+  CanyonCrusade
+  DarkAurora
+  Death_Row
+  Emerald_Valley
+  Massive_Sides
+  MidnightMayhem
+  NightSlide
+  OlympusMons
+  OneSmallStep
+  Slipstream
+  Spartacus'sGauntlet
+  Sulfurious
+  SuperCross_2
+  TheLongWalk
+  Turbulence
+
+## D:\[Games]\[Tribes 1]\Starsiege Tribes - Fire\opencall2  (8)
+
+  Bastard_Forge
+  Bastard_Forge_Day
+  Control
+  Hildebrand
+  Integration
+  Runout
+  StarFall
+  Tesseract
+
+## D:\[Games]\[Tribes 1]\Starsiege Tribes - Fire\opencall3  (8)
+
+  BasatinLT
+  DriForcLT
+  DX2011LT
+  MirageLT
+  MudvaniaLT
+  PalatineLT
+  TwinPeaksLT
+  VortexLT
+
+## D:\[Games]\[Tribes 1]\Tribes 2015\balanced  (11)
+
+  Acrophobia
+  Annihilator
+  AvalancheMkII
+  CloakOfNight
+  Domino
+  Full_Force
+  Hexbreaker
+  NorthernLights
+  Obfuscation
+  Reliquary
+  Simoom
+
+## D:\[Games]\[Tribes 1]\Tribes 2015\base  (46)
+
+  1_Welcome
+  2_Weapons
+  3_Vehicle
+  4_Commander_TargetLaser
+  5_CTF
+  6_Towers
+  7_Retrieval
+  8_Destroy
+  ADishBestServedCold
+  AntHill
+  Blastside
+  BloodRunsCold
+  BloodyVengeance
+  Broadside
+  Citadels
+  CrissCross
+  DangerousCrossing
+  DeathKnell
+  Desert_Of_Death
+  Fallen
+  FogOfWar
+  FourWayDance
+  FreeForAll
+  HammerDown
+  IceRidge
+  KingUnderTheHill
+  LuckySeven
+  Mudslide
+  NoMan'sLand
+  NoQuarter
+  PeakPerformance
+  Peekaboo
+  Raindance
+  Rollercoaster
+  SandStorm
+  Scarabrae
+  SeekAndDestroy
+  Siege
+  Snowblind
+  Stonehenge
+  StrungOut
+  TempleOfDoom
+  TheRedSands
+  towers
+  TripleThreat
+  Valhalla
+
+## D:\[Games]\[Tribes 1]\Tribes 2015\dox  (9)
+
+  ArcticWolf
+  CanyonCrusade_deluxe
+  DusktoDawn
+  FleetCommand
+  IceDagger
+  JaggedClaw
+  MidnightMayhem_deluxe
+  SideWinder
+  SpinCycle
+
+## D:\[Games]\[Tribes 1]\Tribes 2015\lt  (31)
+
+  BastardForgeLT
+  BroadsideLT
+  CanyonCrusadeDeluxeLT
+  CanyonCrusadeLT
+  CloakOfDayLT
+  DangerousCrossingLT
+  DesertOfDeathLT
+  EmeraldValleyLT
+  HildebrandLT
+  HillKingLT
+  IceDaggerLT
+  IceRidgeLT
+  JaggedClawLT
+  LotusLT
+  MiddayMayhemDeluxeLT
+  MiddayMayhemLT
+  MistyLinksLT
+  ObfuscationLT
+  RaindanceLT
+  ReliquaryLT
+  RhaskicLT
+  RollercoasterLT
+  RunoutLT
+  RunwayLT
+  SimoomLT
+  SnowblindLT
+  SpinCycleLT
+  StarFallLT
+  StonehengeLT
+  SulfuriousLT
+  TesseractLT
+
+## D:\[Games]\[Tribes 1]\Tribes 2015\opencall  (15)
+
+  CanyonCrusade
+  DarkAurora
+  Death_Row
+  Emerald_Valley
+  Massive_Sides
+  MidnightMayhem
+  NightSlide
+  OlympusMons
+  OneSmallStep
+  Slipstream
+  Spartacus'sGauntlet
+  Sulfurious
+  SuperCross_2
+  TheLongWalk
+  Turbulence
+
+## D:\[Games]\[Tribes 1]\Tribes 2015\opencall2  (8)
+
+  Bastard_Forge
+  Bastard_Forge_Day
+  Control
+  Hildebrand
+  Integration
+  Runout
+  StarFall
+  Tesseract
+
+## D:\[Games]\[Tribes 1]\Tribes 2015\opencall3  (8)
+
+  BasatinLT
+  DriForcLT
+  DX2011LT
+  MirageLT
+  MudvaniaLT
+  PalatineLT
+  TwinPeaksLT
+  VortexLT
