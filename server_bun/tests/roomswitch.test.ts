@@ -66,10 +66,12 @@ describe('switchRoom', () => {
     expect(ws.sent.some((s: string) => s.includes('matchNotice'))).toBe(true);
   });
 
-  it('is a no-op for the current room', () => {
+  it('is a no-op for the current room', async () => {
     gs = new GameServer();
     const ws = fakeWs();
-    gs.onMessage(ws, JSON.stringify({ type: 'join', playerId: 'p1' }));
+    gs.onMessage(ws, JSON.stringify({ type: 'join', playerId: 'p1', room: 'default', mode: 'dm' }));
+    const {rooms} = (gs as unknown as { rooms: Map<string, { terrainReady?: Promise<unknown> }> });
+    await awaitSeat(rooms, 'default');
     const before = gameStates(ws).length;
     gs.onMessage(ws, JSON.stringify({ type: 'switchRoom', room: 'default' }));
     expect(gameStates(ws).length).toBe(before);
