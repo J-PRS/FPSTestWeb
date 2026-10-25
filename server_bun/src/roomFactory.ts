@@ -256,8 +256,12 @@ export class RoomFactory {
     // room (liveliest, not emptiest); if none exists, mint on the
     // default map so the joiner never gets a spec-less arena with
     // maps/null terrain.
+    // Rooms are mode-named, not map-named: the rotation walks maps INSIDE
+    // a room, so 'headhunt-1' reads true after a map swap where 'rimrock-1'
+    // lies (it's headhunt on caldera now). Mode empty → the map name is
+    // the room's identity until a hosted mode claim lands.
     const mintMap = map || this.host.maps.defaultMap();
-    const base = mintMap || mode || 'arena';
+    const base = mode || mintMap || 'arena';
     let n = 1;
     while (this.host.rooms.has(`${base}-${n}`)) {n += 1;}
     return this.roomFor(`${base}-${n}`, mode, mintMap, bots, false, noCreatures, noBalls);
