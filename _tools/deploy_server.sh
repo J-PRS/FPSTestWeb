@@ -29,11 +29,11 @@ scp -i "$KEY" /tmp/kribes_sync.tgz /tmp/kribes_build.txt "$HOST:/tmp/"
 ssh -i "$KEY" "$HOST" "
   cd ~/$RDIR && tar -xzf /tmp/kribes_sync.tgz &&
   cp /tmp/kribes_build.txt server_bun/build.txt &&
-  pgrep -f 'bun src/server.ts' | xargs -r kill; sleep 2;
+  pgrep -f '^[^ ]*bin/bun src/server.ts' | xargs -r kill; sleep 2;
   cd ~/$RDIR/server_bun &&
   nohup ~/$BUN src/server.ts > ~/$RDIR/server.log 2>&1 &
   sleep 4;
-  pgrep -fa 'bun src/server.ts' | head -2;
-  grep -ci 'failed to start' ~/$RDIR/server.log"
+  pgrep -fa '^[^ ]*bin/bun src/server.ts' | head -2;
+  grep -ci 'failed to start' ~/$RDIR/server.log" </dev/null
 echo "deploy: verifying..."
 curl -s --max-time 8 "https://${FPS_DEPLOY_URL:-play.jprice.app}/health"
