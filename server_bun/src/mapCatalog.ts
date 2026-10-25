@@ -126,6 +126,10 @@ export class MapCatalog {
     }
     if (!spec && map) { spec = this.loadMapSpec(map); src = map; }
     if (!spec) { spec = this.loadMapSpec(mode); src = spec ? mode : ''; }
+    // Bare-name joins (/pub/arena-1, quickplay mints) still get a REAL
+    // map — a spec-less room serves maps/null terrain and traps every
+    // rejoiner in an unplayable arena. Rotation head, else rimrock.
+    if (!spec) { const d = this.defaultMap(); spec = this.loadMapSpec(d); src = spec ? d : ''; }
     // Mode and map are separate axes: a requested mode that the spec
     // can host swaps in over the spec's default; one it can't leaves the
     // map's own ruleset in charge (a dm map never sprouts flag stands).
