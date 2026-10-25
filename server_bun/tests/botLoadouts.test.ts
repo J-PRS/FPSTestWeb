@@ -32,13 +32,13 @@ describe('botLoadouts', () => {
   it('class resolution: ordnance > lock sets > perk > default medium', () => {
     expect(botClassForLoadout(lo({ far: WeaponType.Mortar }))).toBe('heavy');   // heavy-only far
     expect(botClassForLoadout(lo({ belt: WeaponType.MRVLauncher }))).toBe('heavy'); // heavy-only ordnance belt
-    expect(botClassForLoadout(lo({ perk: 'plated' }))).toBe('heavy');
+    expect(botClassForLoadout(lo({ perk: 'armored' }))).toBe('heavy');
     expect(botClassForLoadout(lo({ perk: 'featherjets' }))).toBe('light');
     // featherjets carrying medium-locked ordnance can't shoulder it on a
     // light frame — the class gate outranks the perk's silhouette.
     expect(botClassForLoadout(lo({ perk: 'featherjets', near: WeaponType.Flak }))).toBe('medium');
     // light-locked guns pick the body outright, over any ordnance
-    expect(botClassForLoadout(lo({ perk: 'plated', far: WeaponType.Railgun, belt: WeaponType.Javelin }))).toBe('light');
+    expect(botClassForLoadout(lo({ perk: 'armored', far: WeaponType.Railgun, belt: WeaponType.Javelin }))).toBe('light');
     expect(botClassForLoadout(lo())).toBe('medium');
   });
 

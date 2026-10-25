@@ -1545,7 +1545,7 @@ excess -= 1;
     this.lastSentPositions.delete(playerId);
     this.chatPace.delete(playerId);
     this.connections.broadcast(verbPayload(WORLD_MODEL.player!, 'gone', 'playerId', playerId, {}) as ServerMessage);
-    this.rebalanceTeams();
+    this.balanceTeams();
     log('Player removed', { room: this.name, playerId, reason, remaining: this.playerCount() });
   }
 
@@ -1553,7 +1553,7 @@ excess -= 1;
    *  side. Bots absorb the swing because flipping a human mid-match is
    *  hostile; a bot doesn't care which jersey it's wearing. No-op in
    *  non-team modes and when the delta is ≤1 (already balanced). */
-  private rebalanceTeams(): void {
+  balanceTeams(): void {
     if (!this.modeSpec?.teams) {return;}
     const counts = this.players.teamCounts();
     const [big, small] =
@@ -1561,9 +1561,15 @@ excess -= 1;
         ? (['alpha', 'bravo'] as const)
         : (['bravo', 'alpha'] as const);
     if (counts[big] - counts[small] < 2) {return;}
-    for (const p of this.players.getAllPlayers().values()) {
+    // Dead bots first — a corpse's team swap lands on its respawn, so the
+    // flip is invisible. Only the bottom quartile is eligible: the team's
+    // star mid-carry shouldn't vanish into the enemy jersey.
+    const bots = [...this.players.getAllPlayers().values()]
+      .filter((p): boolean => p.team === big && Boolean(p.isBot))
+      .sort((a, b): number => Number(b.isDead) - Number(a.isDead) || (a.kills - a.deaths) - (b.kills - b.deaths));
+    const pool = Math.max(1, Math.ceil(bots.length * 0.4));
+    for (const p of bots.slice(0, pool)) {
       if (counts[big] - counts[small] < 2) {break;}
-      if (p.team !== big || !p.isBot) {continue;}
       // A flipped carrier would hold the flag in 'carried' forever —
       // tickCarried requires carrier.team !== flag.team, and the bot's
       // new own-team can't grab or return it. Drop it at their feet.

@@ -26,7 +26,7 @@ describe('perks', () => {
         expect(v as number, `${id}.${k}`).toBeGreaterThanOrEqual(0);
         // Multipliers must stay inside a sane band — a 0 or 5x modifier
         // is a balance typo, not a perk.
-        if (k !== 'maxHealth' && k !== 'regen' && k !== 'regenRamp' && k !== 'damageResist' && k !== 'fallSoak' && k !== 'jumpstart') {
+        if (k !== 'maxHealth' && k !== 'regen' && k !== 'regenRamp' && k !== 'damageResist' && k !== 'fallSoak' && k !== 'jumpstart' && k !== 'platingPer' && k !== 'hpPlating') {
           expect(v as number, `${id}.${k}`).toBeLessThanOrEqual(3);
         }
         if (k === 'damageResist') {expect(v as number).toBeLessThan(1);}
@@ -36,28 +36,30 @@ describe('perks', () => {
 
   it('perkMods: unknown/absent ids fall back to the ZERO row, never null', () => {
     const zero = perkMods('none');
-    const ADDITIVE = new Set(['maxHealth', 'regen', 'regenRamp', 'damageResist', 'meleeHeal', 'fallSoak', 'jumpstart']);
+    // platingPer is a divisor (10), not a multiplier — its neutral row
+    // is neither 0 nor 1, so it gets its own case.
+    const ADDITIVE = new Set(['maxHealth', 'regen', 'regenRamp', 'damageResist', 'meleeHeal', 'fallSoak', 'jumpstart', 'hpPlating']);
     for (const k of MOD_KEYS) {
-      expect(zero[k]).toBe(ADDITIVE.has(k) ? 0 : 1);
+      expect(zero[k], k).toBe(k === 'platingPer' ? 10 : (ADDITIVE.has(k) ? 0 : 1));
     }
     expect(perkMods(undefined)).toEqual(zero);
     expect(perkMods(null)).toEqual(zero);
     expect(perkMods('goblin')).toEqual(zero);
     expect(perkMods('')).toEqual(zero);
     // A real perk fills its mods over the zero base.
-    const p = perkMods('plated');
+    const p = perkMods('armored');
     expect(p.damageResist).toBe(0.4);
     expect(p.jetDrain).toBe(1); // untouched keys stay at the neutral 1
   });
 
   it('perkMods returns a fresh copy — mutating it cannot corrupt the table', () => {
-    const a = perkMods('plated');
+    const a = perkMods('armored');
     a.damageResist = 99;
-    expect(perkMods('plated').damageResist).toBe(0.4);
+    expect(perkMods('armored').damageResist).toBe(0.4);
   });
 
   it('plated resist only counts below 20% max health — the underdog plate', () => {
-    const mods = perkMods('plated');
+    const mods = perkMods('armored');
     expect(effectiveResist(mods, 19, 100)).toBe(0.4);
     expect(effectiveResist(mods, 20, 100)).toBe(0); // at the line: healthy
     expect(effectiveResist(mods, 100, 100)).toBe(0);

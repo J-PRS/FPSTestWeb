@@ -62,7 +62,7 @@ describe('PlayerManager', () => {
 
   it('plated perk resists damage, lifesteal leaves the health cap alone', () => {
     const pm = new PlayerManager();
-    pm.addPlayer('tank', undefined, 'plated');
+    pm.addPlayer('tank', undefined, 'armored');
     pm.addPlayer('tough', undefined, 'lifesteal');
     pm.breakShield('tank'); pm.breakShield('tough');
     // Underdog plate: full-health hits punch straight through…

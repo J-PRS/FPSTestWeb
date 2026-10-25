@@ -26,7 +26,7 @@ const ALL_CLIENT_TYPES = [
 // where the validator constrains the domain.
 const FIELD_SENTINEL: Record<string, unknown> = {
   armorClass: 'medium',
-  perk: 'plated',
+  perk: 'armored',
   kind: 'turret',
   input: { forward: 0, right: 0, jump: 0, ski: 0, jet: 0 },
   room: 'felt-canary-room',

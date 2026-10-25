@@ -344,6 +344,7 @@ have += 1;
     const want = Math.max(0, Math.min(128, fill - humans));
     if (this.brains.size < want) {
       this.populate(want - this.brains.size);
+      this.room.balanceTeams(); // fill spawns can land lopsided
       return;
     }
     let excess = this.brains.size - want;
@@ -361,6 +362,7 @@ excess -= 1;
       this.retire(id);
 excess -= 1;
     }
+    this.room.balanceTeams(); // retirements can strip one side bare
   }
 
   /** Respawn-time kit drift: each rerollable slot keeps whichever

@@ -106,7 +106,7 @@ describe('ServerBots', () => {
 
   it('assigns each bot a loadout perk at spawn', () => {
     const room = new Room('t', flat, '', resolveMapSpec({ bots: 4, mode: 'dm' }));
-    const perks = ['featherjets', 'bombardier', 'plated', 'overcharge', 'lifesteal'];
+    const perks = ['featherjets', 'bombardier', 'armored', 'overcharge', 'lifesteal'];
     for (let i = 1; i <= 4; i++) {
       const p = room.players.getPlayer(`BOT-${BOT_NAMES[i - 1]}-0${i}`)!;
       expect(perks).toContain(p.perk);

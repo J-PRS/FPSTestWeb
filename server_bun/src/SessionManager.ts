@@ -446,6 +446,9 @@ this.d.ops.joins += 1;
     if (joinedPlayer.team && counts[joinedPlayer.team] > counts[other]) {
       room.bots.retireWorst(joinedPlayer.team);
     }
+    // Joins are a drift source too — a retiring bot or a counted seat can
+    // still leave a lopsided room; bots absorb the swap, humans stay put.
+    room.balanceTeams();
     joinedPlayer.name = name;
     if (typeof handshake.skill === 'string' && handshake.skill.length <= 16) {joinedPlayer.skill = handshake.skill;}
     joinedPlayer.spawnHold = handshake.spawnHold === true;

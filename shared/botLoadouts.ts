@@ -21,7 +21,7 @@ export const BOT_MELEE_M = 4.5;   // fist reach — brains press inside CLOSE_PR
 export const BOT_SIDEARM_M = 8; // knife range: the hold-out draw is faster than tracking a long gun
 
 /** Kit → armor tier. Ordnance decides first — a bot lugging a mortar or
- *  rocket rack IS a heavy regardless of perk; then plated anchors heavy
+ *  rocket rack IS a heavy regardless of perk; then armored anchors heavy
  *  and featherjets flies light. Everything else runs medium. Role
  *  weighting (CLASS_FITNESS) reads this — kit picks the body before the
  *  squad picks the job. */
@@ -34,7 +34,7 @@ export function botClassForLoadout(lo: BotLoadout): ArmorClass {
   // far/belt, but the bombard lives in mid and a hidden heavy pick would
   // shoulder it on a medium body that can't legally fire it.
   if (kit.some((w): boolean => HEAVY_ONLY_WEAPONS.has(w))) {return 'heavy';}
-  if (lo.perk === 'plated') {return 'heavy';}
+  if (lo.perk === 'armored') {return 'heavy';}
   // featherjets wants light, but a kit carrying medium-locked ordnance
   // (Flak/PlasmaGun) can't shoulder it on a light frame — the class gate
   // outranks the perk's silhouette.
@@ -47,10 +47,10 @@ export function botClassForLoadout(lo: BotLoadout): ArmorClass {
 export const BOT_LOADOUTS: BotLoadout[] = [
   { perk: 'featherjets', near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.Grenade,       side: WeaponType.Pistol   }, // chaser — light frame, so no medium-locked PlasmaGun
   { perk: 'bombardier',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.RemoteRailgun, side: WeaponType.Pistol   }, // siege
-  { perk: 'plated',      near: WeaponType.Chaingun, mid: WeaponType.PlasmaCannon, far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.Revolver }, // anchor — heavies can't shoulder medium-only Cannon either
+  { perk: 'armored',      near: WeaponType.Chaingun, mid: WeaponType.PlasmaCannon, far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.Revolver }, // anchor — heavies can't shoulder medium-only Cannon either
   { perk: 'overcharge',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.RemoteRailgun, side: WeaponType.Pistol   }, // skirmisher
   { perk: 'lifesteal',    near: WeaponType.Chaingun, mid: WeaponType.Sprinkler, far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.Pistol   }, // hose — area denial
-  { perk: 'plated',      near: WeaponType.Shotgun,  mid: WeaponType.Bombard,   far: WeaponType.BoltLauncher,       belt: WeaponType.Javelin,       side: WeaponType.Revolver }, // bruiser — big slugs (Railgun is light-frame gear, Cannon medium)
+  { perk: 'armored',      near: WeaponType.Shotgun,  mid: WeaponType.Bombard,   far: WeaponType.BoltLauncher,       belt: WeaponType.Javelin,       side: WeaponType.Revolver }, // bruiser — big slugs (Railgun is light-frame gear, Cannon medium)
   { perk: 'featherjets', near: WeaponType.Flak,     mid: WeaponType.GrenadeLauncher, far: WeaponType.BoltLauncher, belt: WeaponType.ImpactGrenade, side: WeaponType.Pistol }, // skirmisher — shove tools; Flak forces medium, so no heavy RL
   { perk: 'bombardier',  near: WeaponType.Chaingun, mid: WeaponType.PlasmaCannon, far: WeaponType.Mortar,     belt: WeaponType.ClusterBomb,   side: WeaponType.Pistol   }, // artillery
   { perk: 'overcharge',  near: WeaponType.Lightning, mid: WeaponType.Disc,     far: WeaponType.Railgun,       belt: WeaponType.Implodisc,      side: WeaponType.Pistol   }, // beam rider
@@ -105,7 +105,7 @@ export const WILDCARD_SLOTS: Record<LoadoutSlot, WeaponType[]> = {
   belt: [WeaponType.Grenade, WeaponType.RemoteRailgun, WeaponType.ImpactGrenade, WeaponType.ClusterBomb, WeaponType.Javelin, WeaponType.ArmorGrenade, WeaponType.Implodisc, WeaponType.MRVLauncher, WeaponType.Hook],
   side: [WeaponType.Pistol, WeaponType.Revolver],
 };
-const WILDCARD_PERKS: PerkId[] = ['lifesteal', 'overcharge', 'plated', 'bombardier', 'featherjets'];
+const WILDCARD_PERKS: PerkId[] = ['lifesteal', 'overcharge', 'armored', 'bombardier', 'featherjets'];
 
 /** Kit consistency gate: every slot must be fireable under the kit's
  *  own derived class — an MRV belt can land on a heavy kit, never on a
@@ -141,7 +141,7 @@ export function rollWildcard(rng: () => number): BotLoadout {
   // Class first, then only weapons that body can legally shoulder —
   // a light wildcard keeps light-locked guns, a heavy may draw MRV, and
   // no roll can mix tiers (Railgun + Mortar) no class would fire. Perk
-  // is gated last: plated on a light-locked kit would derail the body.
+  // is gated last: armored on a light-locked kit would derail the body.
   let cls: ArmorClass = 'heavy';
   if (rng() < 0.25) {cls = 'light';}
   else if (rng() < 0.67) {cls = 'medium';}

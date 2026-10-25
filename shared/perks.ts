@@ -10,7 +10,7 @@
  * name, never scattered).
  */
 
-export type PerkId = 'none' | 'featherjets' | 'plated' | 'lifesteal' | 'regenerator' | 'overcharge' | 'sharpshooter' | 'bombardier' | 'juggernaut' | 'scavenger' | 'lightfoot' | 'airtank' | 'reach' | 'featherfall' | 'jumpstart';
+export type PerkId = 'none' | 'featherjets' | 'plated' | 'armored' | 'lifesteal' | 'regenerator' | 'overcharge' | 'sharpshooter' | 'bombardier' | 'juggernaut' | 'scavenger' | 'lightfoot' | 'airtank' | 'reach' | 'featherfall' | 'jumpstart';
 
 export interface PerkMods {
   /** Jet fuel burn multiplier (1 = normal, 0.7 = 30% thriftier). */
@@ -54,9 +54,15 @@ export interface PerkMods {
    *  class walk cap (0 = no Jumpstart). A get-moving burst — at pace
    *  it does nothing, so it can't be milked for speed. */
   jumpstart: number;
+  /** Held-tokens-per-plating-point divisor (10 = base hoard plating).
+   *  Flat −1 per damage instance per point. */
+  platingPer: number;
+  /** Plated: +1 plating per N current hp, floored — heavies on a hoard
+   *  become walking fortresses (150hp = +3 plating before tokens). 0=off. */
+  hpPlating: number;
 }
 
-const ZERO: PerkMods = { jetDrain: 1, jetRegen: 1, damageResist: 0, maxHealth: 0, meleeHeal: 0, regen: 0, regenRamp: 0, energyRegen: 1, directDamage: 1, aoeRadius: 1, knockbackTaken: 1, healBoost: 1, selfDamage: 1, energyMax: 1, pickupRadius: 1, fallSoak: 0, jumpstart: 0 };
+const ZERO: PerkMods = { jetDrain: 1, jetRegen: 1, damageResist: 0, maxHealth: 0, meleeHeal: 0, regen: 0, regenRamp: 0, energyRegen: 1, directDamage: 1, aoeRadius: 1, knockbackTaken: 1, healBoost: 1, selfDamage: 1, energyMax: 1, pickupRadius: 1, fallSoak: 0, jumpstart: 0, platingPer: 10, hpPlating: 0 };
 
 /** Regenerator wind-up: the ramp only accrues after this many unhurt
  *  seconds — sustained combat denies the perk entirely instead of
@@ -66,7 +72,8 @@ export const REGEN_DELAY_S = 5;
 export const PERKS: Record<PerkId, { name: string; blurb: string; mods: Partial<PerkMods> }> = {
   none:        { name: 'No Perk',     blurb: '', mods: {} },
   featherjets: { name: 'Featherjets', blurb: 'Jets burn 20% less', mods: { jetDrain: 0.8 } },
-  plated:      { name: 'Plated',      blurb: 'Take 40% less damage below 20% health', mods: { damageResist: 0.4 } },
+  plated:      { name: 'Plated',      blurb: '+1 plating per 50 current health — fat carriers shrug chip hits', mods: { hpPlating: 50 } },
+  armored:     { name: 'Armored',     blurb: 'Take 40% less damage below 20% health', mods: { damageResist: 0.4 } },
   lifesteal:   { name: 'Lifesteal',   blurb: 'Melee kills heal to full, lance kills half', mods: { meleeHeal: 1 } },
   regenerator: { name: 'Regenerator', blurb: 'Regenerate up to 4 hp/s — kicks in after 5s unhurt, then ramps', mods: { regenRamp: 0.4 } },
   overcharge:  { name: 'Overcharge',  blurb: 'Energy recharges 50% faster', mods: { energyRegen: 1.5 } },
@@ -81,14 +88,14 @@ export const PERKS: Record<PerkId, { name: string; blurb: string; mods: Partial<
   jumpstart:   { name: 'Jumpstart',   blurb: 'Ski launch: pressing ski boosts +8 m/s, up to run speed +8', mods: { jumpstart: 8 } },
 };
 
-export const PERK_ORDER: PerkId[] = ['none', 'featherjets', 'plated', 'lifesteal', 'regenerator', 'overcharge', 'sharpshooter', 'bombardier', 'juggernaut', 'scavenger', 'lightfoot', 'airtank', 'reach', 'featherfall', 'jumpstart'];
+export const PERK_ORDER: PerkId[] = ['none', 'featherjets', 'plated', 'armored', 'lifesteal', 'regenerator', 'overcharge', 'sharpshooter', 'bombardier', 'juggernaut', 'scavenger', 'lightfoot', 'airtank', 'reach', 'featherfall', 'jumpstart'];
 
 export function perkMods(id: string | undefined | null): PerkMods {
   const p = PERKS[(id ?? 'none') as PerkId];
   return p ? Object.assign({}, ZERO, p.mods) : Object.assign({}, ZERO);
 }
 
-/** Plated is an underdog plate — resist only counts below 20% max HP,
+/** Armored is an underdog plate — resist only counts below 20% max HP,
  *  so it saves a nearly-dead carrier instead of soaking every mid-fight hit. */
 export function effectiveResist(mods: PerkMods, health: number, maxHealth: number): number {
   return health < maxHealth * 0.2 ? mods.damageResist : 0;
