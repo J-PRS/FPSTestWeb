@@ -114,6 +114,13 @@ MeshBasicMaterial transients ~50 at combat peak only.
       alloc (not hot), health bars (cheap divs), shader compile
       (rewarmT+compileAsync), bloom (already mip-blur)
 
+## Deploy / ops
+
+- [ ] **Drain deploys** — zero-disconnect releases via A/B builds:
+      new process on port+1, old rooms marked `draining` (no new joins),
+      exits when last match ends. Room lifecycle does the migration,
+      no serialization needed. Writeup: DEPLOYMENT/drain-deploys.md.
+
 ## Netcode carryover (from earlier rounds)
 
 - [ ] `kb-unpredicted` source breakdown (blast/grapple/disc) before any fix
