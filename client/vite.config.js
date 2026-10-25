@@ -205,6 +205,11 @@ export default defineConfig(({ mode }) => ({
     // (250-request waterfall) works fine.
     bundledDev: false,
   },
+  preview: {
+    // tailscale funnel (jp-oooff...ts.net:10000) fronts this — vite's host
+    // check 403s the tunnel origin without it
+    allowedHosts: ['.tailaba354.ts.net', 'jp-oooff.tailaba354.ts.net'],
+  },
   server: {
     port: 5400,
     host: '0.0.0.0',

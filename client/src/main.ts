@@ -798,7 +798,7 @@ async function init(): Promise<void> {
   // urlParams; the picked room lands as the canonical /s/<room> path, so
   // the whole boot below just sees an ordinary online join. Failure
   // leaves the path alone → normal menu boot.
-  if (window.location.pathname === '/quickjoin') {
+  if (/^\/(quickjoin|quickplay)\/?$/.test(window.location.pathname)) {
     try {
       const { httpUrl } = await serverEndpoints;
       const q = new URLSearchParams(window.location.search);

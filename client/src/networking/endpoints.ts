@@ -56,7 +56,11 @@ export async function resolveServerEndpoints(): Promise<ServerEndpoints> {
     };
   // ?server= wins (shareable link); the lobby's saved host is the
   // standing choice so nobody has to edit a URL to switch servers.
-  let host = (urlParams.get('server')?.trim() || settings.get('fps-server').trim());
+  // /quickplay|/quickjoin mean "the public pool" — a saved localhost
+  // pick would send friends to a server that only exists on the
+  // host's own machine, so those paths ignore the saved host.
+  const publicPool = /^\/(quickplay|quickjoin)\b/.test(window.location.pathname);
+  let host = (urlParams.get('server')?.trim() || (publicPool ? '' : settings.get('fps-server').trim()));
   let fleet = urlParams.has('fleet');
   if (!host || urlParams.serverPath) {
     try {
