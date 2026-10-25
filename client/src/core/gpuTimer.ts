@@ -32,7 +32,14 @@ function harvest(): void {
   }
 }
 
+let frameSuppressed = false;
+/** Per-pass profiling (?gpuperf) wraps composer passes in their own
+ *  queries — those would NEST inside the frame query, which is illegal.
+ *  Pass timers report total GPU ms anyway, so the frame timer yields. */
+export function gpuTimerSuppressFrame(): void { frameSuppressed = true; }
+
 export function gpuBegin(renderer: THREE.WebGLRenderer): void {
+  if (frameSuppressed) {return;}
   if (ext === undefined) {
     const ctx = renderer.getContext();
     gl = ctx instanceof WebGL2RenderingContext ? ctx : null;
@@ -50,6 +57,7 @@ export function gpuBegin(renderer: THREE.WebGLRenderer): void {
 }
 
 export function gpuEnd(): void {
+  if (frameSuppressed) {return;}
   if (!active || !ext || !gl) {return;}
   gl.endQuery(ext.TIME_ELAPSED_EXT);
   pending.push(active);

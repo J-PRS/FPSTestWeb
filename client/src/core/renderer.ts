@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { settings } from './settings.js';
 import { urlParams } from './params.js';
+import { gpuPassInit, gpuPassDrain, gpuPassReport, gpuPassWrap } from './gpuPassTimer.ts';
 import {
   type Pass,
   Effect,
@@ -371,6 +372,22 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   const fxaaPass = new EffectPass(camera, new FXAAEffect());
   const smaaPass = new EffectPass(camera, new SMAAEffect());
   composer.addPass(fxaaPass);
+
+  // ?gpuperf: wrap every composer pass in a GPU timer query so the
+  // harness reads per-pass GPU ms — the honest version of 'which pass
+  // costs what'. Inert otherwise (queries only issue under the flag).
+  if (urlParams.get('gpuperf') === '1' && gpuPassInit(renderer)) {
+    for (const pass of composer.passes) {
+      // EffectPass.name is just 'EffectPass' — the EFFECT inside names
+      // the work ('ACESGrade', 'LensDirt'). Multi-effect passes join.
+      const effects = (pass as { effects?: { name: string }[] }).effects;
+      const label = effects?.length
+        ? effects.map((e) => e.name).join('+')
+        : ((pass as { name?: string }).name ?? pass.constructor.name);
+      pass.render = gpuPassWrap(label, pass.render.bind(pass));
+    }
+    (window as unknown as Record<string, unknown>).__gpuPass = gpuPassReport;
+  }
   composer.addPass(smaaPass);
   fxaaPass.enabled = false;
   smaaPass.enabled = false;
@@ -506,6 +523,7 @@ function makeRender(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
     fs: ReturnType<typeof makeFloydEngine>, ctx: RenderCtx): (dt?: number) => void {
   const { pmode, fsOverlay, shadowTick, scenePass } = ctx;
   return (dt?: number): void => {
+    gpuPassDrain(); // per-frame: fold finished GPU queries into stats
     shadowTick();
     scenePass.vmDraw = fsOverlay(); // viewmodel rides the composer buffer in every chain mode
     if (pmode() === 3) {

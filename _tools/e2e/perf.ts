@@ -45,7 +45,7 @@ interface PerfSample {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const stack = await upStack();
-const client = await launchClient(stack.clientUrl(`&room=e2eperf&bots=${BOTS}&mode=nuggets`));
+const client = await launchClient(stack.clientUrl(`&room=e2eperf&bots=${BOTS}&mode=nuggets&gpuperf=1`));
 
 try {
   await client.waitFor(`t.networkManager && t.networkManager.isConnected()`, 30000);
@@ -99,6 +99,17 @@ try {
       .map(([k, v]) => `${k}=${v.toFixed(1)}`)
       .join(' ');
     console.log(`  phases frame=${(ph.frame ?? 0).toFixed(1)}ms | ${row}`);
+  }
+
+  // Per-pass GPU ms (?gpuperf=1) — real raster time per composer pass,
+  // unfuzzed under --enable-webgl-developer-extensions. This is the
+  // 'exactly which pass costs what' table, not a phase estimate.
+  const gp = await client.test<{ pass: string; avgMs: number; maxMs: number; n: number }[]>(
+    `window.__gpuPass ? window.__gpuPass() : null`).catch(() => null);
+  if (gp?.length) {
+    for (const r of gp) {
+      console.log(`  gpu:pass ${r.pass} avg=${r.avgMs.toFixed(2)}ms max=${r.maxMs.toFixed(2)}ms n=${r.n}`);
+    }
   }
 
   if (COMPARE && existsSync(COMPARE)) {

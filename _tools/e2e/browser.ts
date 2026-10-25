@@ -98,6 +98,9 @@ export async function launchClient(clientUrl: string, opts: LaunchOpts = {}): Pr
           '--disable-background-networking', '--disable-component-update',
           '--safebrowsing-disable-auto-update', '--disable-sync',
           '--metrics-recording-only', '--disable-breakpad',
+          // Lifts the post-Spectre fuzzing on WebGL2 timer queries —
+          // ?gpuperf pass profiling reads exact GPU ms, not ~1ms steps.
+          '--enable-webgl-developer-extensions',
         ]
       : [
           '--use-gl=angle', '--use-angle=swiftshader',
