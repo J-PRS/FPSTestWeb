@@ -23,5 +23,8 @@ REM Demo capture lands in demos_out\server - the authoritative half of
 REM the dual-demo desync oracle (client .demo + this = wire-truth diff).
 set "FPS_DEMO=%PROJECT_DIR%\demos_out\server"
 set "FPS_ADMIN_TOKEN=devdemo"
+REM Native-shell volatile lane: raw UDP for seq'd binary frames —
+REM gameState advertises udp:{token,port} once this is set.
+set "FPS_UDP_PORT=9898"
 cd /d "%SERVER_DIR%"
 bun run dev

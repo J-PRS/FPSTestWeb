@@ -1,5 +1,5 @@
 import { ChildLogger } from '../core/Logger.js';
-import { encodePosition, encodeInputMove, encodeWireJson, encodePosClaim, encodeShot, WIRE_JUMP, WIRE_JETPACK } from '../../../shared/wire.js';
+import { encodePosition, encodeInputMove, encodeWireJson, encodePosClaim, encodeShot, WIRE_JUMP, WIRE_JETPACK, WIRE_JSON } from '../../../shared/wire.js';
 import type { ClientMessage, ServerMessage, GameStatePlayer, LocalPlayerState, SnapshotPlayer, TransportKind } from '../../../shared/protocol.js';
 import type { PickupKind } from '../../../shared/pickups.js';
 import type { DeployKind } from '../../../shared/deployables.js';
@@ -677,8 +677,9 @@ this.sendDrops += 1;
    *  frames self-reject by seq, so disorder is free. WS/WT unchanged. */
   private sendBinary(data: Uint8Array): void {
     // Native-shell UDP lane: volatile frames ride the loopback shim →
-    // raw datagrams. The ws session stays for reliable traffic.
-    if (this.udpLane.send(data)) {
+    // raw datagrams. WIRE_JSON is reliable traffic in binary clothing —
+    // the server drops it on the datagram lane, so it must stay on ws.
+    if (data[1] !== WIRE_JSON && this.udpLane.send(data)) {
       this.txBytes += data.length;
       recWireOut(`bin:${data[0] ?? -1}`);
       return;
