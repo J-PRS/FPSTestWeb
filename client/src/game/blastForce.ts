@@ -277,7 +277,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     // Offline has no echo lane either — a bot-shooter blast stamped as
     // 'remote' can never be confirmed, so treat it self/silent or the
     // expiry reports a phantom kb-echo.
-    const echoless = shooterId === undefined || !(kbNm?.isConnected?.() ?? false);
+    const echoless = shooterId === undefined || shooterId === 'local' || !(kbNm?.isConnected?.() ?? false);
     stamps.push({ x: pos.x, y: pos.y, z: pos.z, t: now, by: shooterId, self: echoless, f: Math.round(impulse * 10) / 10 });
     parityStamp('kb-echo');
     // Settle older stamps: a predicted self-shove the server never echoed
