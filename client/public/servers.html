@@ -5,7 +5,7 @@
 :root{
   --bg:#060a10; --panel:#0c141d; --edge:#1a2633;
   --txt:#cdd9e5; --dim:#9db2c4; --bright:#dde8f2;
-  --acc:#3aa7ff; --ok:#6fcf8f; --warn:#ffb86b; --bad:#ff5a5a; --gold:#ffd76f;
+  --acc:#3aa7ff; --ok:#6fcf8f; --bad:#ff5a5a;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{
@@ -16,7 +16,7 @@ body{
     radial-gradient(1200px 500px at 70% -10%, rgba(58,167,255,.07), transparent 60%),
     radial-gradient(900px 400px at 10% 110%, rgba(58,167,255,.05), transparent 60%);
 }
-.wrap{max-width:720px;margin:0 auto;padding:26px 16px 40px}
+.wrap{max-width:620px;margin:0 auto;padding:26px 16px 40px}
 header{display:flex;align-items:baseline;gap:12px;border-bottom:1px solid var(--edge);padding-bottom:14px;margin-bottom:18px}
 h1{font:600 22px/1 system-ui;letter-spacing:.14em;text-transform:uppercase;color:var(--bright)}
 h1 b{color:var(--acc);font-weight:600}
@@ -27,12 +27,9 @@ h1 b{color:var(--acc);font-weight:600}
 .stat b i{font-style:normal;color:var(--acc)}
 .stat span{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
 table{width:100%;border-collapse:collapse;table-layout:fixed}
-/* Fixed columns keep score/clock text from reflowing the row every
-   refresh — a live score tick used to wobble every column. */
-th:nth-child(1){width:23%}th:nth-child(2){width:13%}th:nth-child(3){width:14%}
-th:nth-child(4){width:16%}th:nth-child(5){width:20%}th:nth-child(6){width:14%}
+th:nth-child(1){width:34%}th:nth-child(2){width:18%}th:nth-child(3){width:24%}th:nth-child(4){width:24%}
 tbody{min-height:64px}
-.rname,.mode,.map,.score,.meta{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rname,.mode,.map{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 thead th{
   font:600 10px ui-monospace,monospace;letter-spacing:.18em;text-transform:uppercase;
   color:var(--dim);text-align:left;padding:6px 10px;border-bottom:1px solid var(--edge);
@@ -41,8 +38,7 @@ tbody tr{border-bottom:1px solid var(--edge);transition:background .12s}
 tbody tr:hover{background:rgba(58,167,255,.06)}
 td{padding:11px 10px;vertical-align:middle}
 .rname{font-weight:600;color:var(--bright);font-size:15px}
-.rname .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ok);margin-right:8px;box-shadow:0 0 6px var(--ok);animation:p 2s infinite}
-@keyframes p{50%{opacity:.35}}
+
 .mode{
   font:600 10px ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase;
   color:var(--acc);background:rgba(58,167,255,.12);border:1px solid rgba(58,167,255,.35);
@@ -51,20 +47,11 @@ td{padding:11px 10px;vertical-align:middle}
 .mode.empty-mode{color:var(--dim);background:transparent;border-color:var(--edge)}
 .map{color:var(--dim);font-family:ui-monospace,monospace;font-size:12px}
 .occ{white-space:nowrap;font:600 14px ui-monospace,monospace;color:var(--bright)}
-.occ small{display:block;font-weight:400;font-size:10px;color:var(--dim);letter-spacing:.08em}
+.occ small,.occ .bots{display:inline-block;font-weight:400;font-size:10px;color:var(--dim);letter-spacing:.08em}
 .occ.full{color:var(--bad)}
-.score{font-family:ui-monospace,monospace;font-size:12px;color:var(--txt);white-space:nowrap}
-.score em{font-style:normal;color:var(--gold)}
-.meta{font-family:ui-monospace,monospace;font-size:11px;color:var(--dim);white-space:nowrap}
 .empty{padding:34px 10px;text-align:center;color:var(--dim);font-family:ui-monospace,monospace;font-size:12px}
 footer{margin-top:18px;display:flex;justify-content:space-between;font:11px ui-monospace,monospace;color:var(--dim)}
-#spin{display:inline-block;width:9px;height:9px;border:1.5px solid var(--edge);border-top-color:var(--acc);border-radius:50%;vertical-align:-1px;margin-right:6px}
-#spin.on{animation:r .8s linear infinite}
-@keyframes r{to{transform:rotate(360deg)}}
 @media (max-width:560px){
-  /* Phone: the map matters more than live scores for picking a room —
-     score + info drop, map stays. */
-  .score,.meta,.th-score,.th-meta{display:none}
   td{padding:9px 6px}
   h1{font-size:17px}
 }
@@ -77,22 +64,23 @@ footer{margin-top:18px;display:flex;justify-content:space-between;font:11px ui-m
   <div class="stat"><b><i id="nhum">–</i></b><span>playing</span></div>
 </div>
 <table><thead><tr>
-  <th>server</th><th>mode</th><th class="th-map">map</th><th>players</th><th class="th-score">score</th><th class="th-meta">info</th>
+  <th>server</th><th>mode</th><th>map</th><th>players</th>
 </tr></thead><tbody id="rows">
-<tr><td colspan="6" class="empty">connecting…</td></tr>
+<tr><td colspan="4" class="empty">connecting…</td></tr>
 </tbody></table>
-<footer><span><span id="spin"></span><span id="stamp">—</span></span><span id="ver">—</span></footer>
+<footer><span id="stamp">—</span><span id="ver">—</span></footer>
 </div>
 <script>
 const API='https://play.jprice.app';
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const mmss=ms=>{const s=Math.max(0,Math.round(ms/1000));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
-/* Last rendered room-table HTML — the 5s poll used to rewrite tbody
-   every tick, re-flowing the whole page even when nothing moved. Skip
-   the innerHTML write when the render is identical. */
+// Long mode names abbreviate in the badge; short ones stay verbatim.
+const MODE_SHORT={headhunt:'HH',conquest:'CONQ',infestation:'INF',deathball:'DB',rabbit:'RBT',teamrabbit:'TRBT'};
+const modeShort=m=>MODE_SHORT[m]||m;
+/* Last rendered room-table HTML — skip the innerHTML write when a poll
+   changes nothing (avoids a full re-flow every 5s). */
 let lastRowsHtml='';
 async function tick(){
- const spin=document.getElementById('spin');spin.className='on';
+ 
  try{
   const[rooms,h]=await Promise.all([
    (await fetch(API+'/rooms',{cache:'no-store'})).json(),
@@ -111,27 +99,19 @@ async function tick(){
    // red-full test still counts bodies: a 32/32 bot room refuses joins.
    const full=r.players>=r.maxPlayers;
    const bots=r.players-r.humans;
-   let score='';
-   if(r.scores)score='α '+r.scores.alpha+' <em>·</em> β '+r.scores.bravo;
-   else if(r.ffaLeader)score='<em>'+esc(r.ffaLeader[0])+'</em> '+r.ffaLeader[1]+'pts';
-   const info=[];
-   if(r.winAt)info.push('to '+r.winAt);
-   if(r.timeLeftMs)info.push(mmss(r.timeLeftMs));
    return '<tr>'+
-    '<td><span class="rname"><span class="dot"></span>'+esc(r.name)+'</span></td>'+
-    '<td><span class="mode'+(r.mode?'':' empty-mode')+'">'+esc(r.mode||'arena')+'</span></td>'+
+    '<td><span class="rname">'+esc(r.name)+'</span></td>'+
+    '<td><span class="mode'+(r.mode?'':' empty-mode')+'">'+esc(modeShort(r.mode||'arena'))+'</span></td>'+
     '<td class="map">'+esc(r.map||'—')+'</td>'+
-    '<td class="occ'+(full?' full':'')+'">'+r.humans+'/'+r.maxPlayers+
-      '<small>'+(bots?bots+' bot'+(bots===1?'':'s'):'open')+(r.spectators?' · '+r.spectators+' spec':'')+'</small></td>'+
-    '<td class="score">'+score+'</td>'+
-    '<td class="meta">'+info.join(' · ')+'</td></tr>';
-  }).join(''):'<tr><td colspan="6" class="empty">no live rooms — the first join mints one</td></tr>';
+    '<td class="occ'+(full?' full':'')+'">'+(bots?`<span class="bots">(${bots})</span> `:'')+r.humans+'/'+r.maxPlayers+
+      (r.spectators?`<small>${r.spectators} spec</small>`:'')+'</td></tr>';
+  }).join(''):'<tr><td colspan="4" class="empty">no live rooms — the first join mints one</td></tr>';
   if(html!==lastRowsHtml){document.getElementById('rows').innerHTML=html;lastRowsHtml=html;}
   document.getElementById('stamp').textContent='updated '+new Date().toLocaleTimeString();
   document.getElementById('ver').textContent='v'+(h.version||'?')+' · '+(h.build||'?')+' · '+(h.tickRate||'?')+'hz';
  }catch(e){
-  document.getElementById('rows').innerHTML='<tr><td colspan="6" class="empty">server unreachable</td></tr>';
- }finally{setTimeout(()=>spin.className='',300);}
+  document.getElementById('rows').innerHTML='<tr><td colspan="4" class="empty">server unreachable</td></tr>';
+ }finally{}
 }
 tick();setInterval(tick,5000);
 </script></body></html>
