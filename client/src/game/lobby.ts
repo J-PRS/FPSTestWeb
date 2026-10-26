@@ -82,7 +82,6 @@ export class Lobby {
   deps: LobbyDeps;
   private panel: HTMLDivElement;
   private rows: HTMLDivElement;
-  private here: HTMLDivElement;
   private mapSelect: HTMLSelectElement;
   private modeSelect: HTMLSelectElement;
   private botsInput: HTMLInputElement;
@@ -114,7 +113,6 @@ export class Lobby {
     const els = buildLobbyPanel(this);
     this.panel = els.panel;
     this.rows = els.rows;
-    this.here = els.here;
     this.mapSelect = els.mapSelect;
     this.modeSelect = els.modeSelect;
     this.botsInput = els.botsInput;
@@ -317,12 +315,8 @@ export class Lobby {
     try {
       rooms = await this.deps.listRooms();
       const ms = Math.round(performance.now() - t0);
-      this.els.pingEl.textContent = `${ms}ms`;
-      this.els.pingEl.style.color = ms < 60 ? '#6fcf8f' : '#ffd76f';
-      if (ms >= 120) {this.els.pingEl.style.color = '#f88';}
-      this.lastPing = this.els.pingEl.textContent;
+      this.lastPing = `${ms}ms`;
     } catch {
-      this.els.pingEl.textContent = '';
       this.rowEls.clear();
       this.rows.textContent = '';
       const err = document.createElement('div');
@@ -341,19 +335,7 @@ export class Lobby {
       return favs.has(r.name) ? 1 : 2;
     };
     rooms.sort((a, b): number => rank(a) - rank(b) || a.name.localeCompare(b.name));
-    const cur = rooms.find((r): boolean => r.name === this.currentRoom());
     const online = this.online();
-    // Dedupe: "ctf-1 · CTF · CTF" is three fields agreeing, not info —
-    // keep each token only when it adds something.
-    const hereExtras: string[] = [];
-    if (cur?.mode) {hereExtras.push(cur.mode.toUpperCase());}
-    if (cur?.map && cur.map.toUpperCase() !== cur.mode?.toUpperCase()
-      && !this.currentRoom().toUpperCase().includes(cur.map.toUpperCase())) {
-      hereExtras.push(cur.map.toUpperCase());
-    }
-    this.here.textContent = online
-      ? `IN: ${this.currentRoom().toUpperCase()}${hereExtras.length > 0 ? ` · ${hereExtras.join(' · ')}` : ''}`
-      : 'IN: OFFLINE';
     // Default lobby IS home — leaving it is a no-op; offline there's no
     // room to leave, but the button doubles as "go to the lobby".
     this.leaveBtn.disabled = online && this.currentRoom() === 'default';

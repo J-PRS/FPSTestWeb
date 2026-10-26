@@ -58,8 +58,6 @@ export interface LobbyPanelEls {
 
   panel: HTMLDivElement;
 
-  here: HTMLDivElement;
-
   rows: HTMLDivElement;
 
   mapSelect: HTMLSelectElement;
@@ -73,10 +71,6 @@ export interface LobbyPanelEls {
   /** Repoll the open-lobby list — Lobby calls it on open + poll tick. */
 
   refreshLobs(): void;
-
-  /** Server RTT readout in the JOIN header — Lobby writes it per poll. */
-
-  pingEl: HTMLSpanElement;
 
 }
 
@@ -615,41 +609,9 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     head.style.cssText = 'margin-top:0;flex:1;';
 
-    const refreshBtn = btn('↻');
-
-    refreshBtn.title = 'refresh list';
-
-    refreshBtn.style.cssText = 'font-size:0.7rem;padding:2px 8px;';
-
-    refreshBtn.addEventListener('click', (): void => { h.refresh(); refreshLobsFn(); });
-
-    // Server-level RTT — one ping covers every room row (they all live
-
-    // on the same host), so it lives in the header, not a column.
-
-    const pingEl = document.createElement('span');
-
-    pingEl.style.cssText = 'font-size:0.62rem;letter-spacing:0.06em;';
-
-    headRow.append(head, pingEl, refreshBtn);
-
-    const hereRow = document.createElement('div');
-
-    hereRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
-
-    const here = document.createElement('div');
-
-    here.className = 'lb-here';
-
-    here.style.flex = '1';
-
-    here.textContent = `IN: ${h.currentRoom().toUpperCase()}`;
-
     // LEAVE = hop back to the immortal default lobby room (in-place
-
-    // switchRoom when the socket is live, reload otherwise) — only
-
-    // meaningful while you're in a named match.
+    // switchRoom when the socket is live, reload otherwise). The current
+    // room shows as the highlighted tile in the list — no banner needed.
 
     const leaveBtn = btn('LEAVE');
 
@@ -657,7 +619,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     leaveBtn.addEventListener('click', (): void => h.join('default'));
 
-    hereRow.append(here, leaveBtn);
+    headRow.append(head, leaveBtn);
 
     const rows = document.createElement('div');
 
@@ -1087,7 +1049,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     joinExtra.append(connLbl, srvRow, label('CREATE / JOIN BY NAME'), newWrap);
 
-    joinPage.append(headRow, hereRow, rows, quickLbl, quick, joinExtra);
+    joinPage.append(headRow, rows, quickLbl, quick, joinExtra);
 
     // Same split as SOLO: scrollable map list left, preview + knobs right.
 
@@ -1248,7 +1210,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
   
 
-  return { panel, here, rows, mapSelect, modeSelect, botsInput, leaveBtn, refreshLobs, pingEl };
+  return { panel, rows, mapSelect, modeSelect, botsInput, leaveBtn, refreshLobs };
 
 }
 
