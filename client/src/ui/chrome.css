@@ -589,8 +589,23 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 /* More rows below the scroll cap — the scrollbar is hidden, so the
    bottom fade is the only "keep scrolling" affordance. */
 .lb-maplist.lb-more { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent); }
-.lb-room { display: flex; align-items: center; gap: 6px; }
-.lb-room .meta { margin-left: auto; float: none; display: flex; gap: 10px; }
+/* Room rows read as the servers.html column table: fav | SERVER | MODE |
+   MAP | PLAYERS | PING — grid so every column lines up across rows. */
+.lb-room, .lb-head {
+  display: grid; align-items: center;
+  grid-template-columns: 14px minmax(0,1fr) auto minmax(52px,auto) auto 52px;
+  gap: 10px;
+}
+.lb-head {
+  padding: 0 10px 4px;
+  font-size: 0.52rem; font-weight: 700; letter-spacing: 0.16em;
+  color: rgba(160,190,215,0.55);
+}
+.lb-room .meta { float: none; display: flex; gap: 10px; white-space: nowrap; }
+.lb-room .lb-map { color: rgba(160,190,215,0.7); font-size: 0.62rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-room .lb-ping { font-variant-numeric: tabular-nums; text-align: right;
+  color: rgba(160,190,215,0.7); font-size: 0.62rem; }
 
 /* ---- Clip feed (/clips) - TikTok-style fullscreen replay chrome ---- */
 #clipfeed { position: fixed; inset: 0; z-index: 90; pointer-events: none;
