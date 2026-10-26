@@ -91,6 +91,8 @@ export class ConnectionManager {
   /** Session-end hook — unbinds the udp lane so a stale token dies with
    *  the session. Set alongside udpSend. */
   static onUnreg: ((playerId: string) => void) | undefined;
+  /** Lane-alive probe for emit-time display ('ws+udp' scoreboard tier). */
+  static udpLive: ((playerId: string) => boolean) | undefined;
   private topic?: string;
   /** Pids whose socket took a subscribe (real uWS ws) — adapters (wt/rtc
    *  lanes) never join the topic and keep per-conn sends. */

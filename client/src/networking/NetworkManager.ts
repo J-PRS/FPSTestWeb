@@ -53,8 +53,9 @@ export interface RemotePlayerState {
   /** Status bitmask — STATUS_* bits (shared/status.ts). */
   status?: number;
   team?: TeamId;
-  /** Server-reported connect tier (join transport claim) — scoreboard NET. */
-  transport?: TransportKind;
+  /** Server-reported connect tier (join transport claim) — scoreboard NET.
+   *  'ws+udp' composite when that session's udp lane is live. */
+  transport?: string;
   /** Armor tier from playerJoined/gameState — remote model scale cue. */
   armorClass?: string;
   /** Server-known current weapon — draw the real gun before a shot edge. */

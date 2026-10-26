@@ -21,6 +21,7 @@ import type { DeployKind } from '../../shared/deployables.ts';
 import type { RoomEventSink } from './roomEvents.ts';
 import { WORLD_MODEL, spawnPayload, checkIntent } from '../../shared/worldModel.ts';
 import { wallNow, type WallMs } from './wallClock.ts';
+import { ConnectionManager } from './ConnectionManager.ts';
 import { simNow } from './simClock.ts';
 import type { AtmosphereSpec, SpawnPoint, StructureSpec, WaterSpec, WeatherSpec } from '../../shared/mapSpec.ts';
 
@@ -637,7 +638,9 @@ export class MessageHandler {
       position: player.position,
       rotation: player.rotation,
       team: player.team,
-      transport: player.transport,
+      // Emit-time composite — see toGameStatePlayer; the record stays
+      // pure, a live udp lane advertises itself as '<tier>+udp'.
+      transport: ConnectionManager.udpLive?.(player.id) ? `${player.transport ?? 'ws'}+udp` : player.transport,
       armorClass: player.armorClass,
       weapon: player.weapon,
       health: player.health,

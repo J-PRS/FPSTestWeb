@@ -173,6 +173,7 @@ export class GameServer {
       lane.sendTo(playerId, data);
       return true;
     };
+    ConnectionManager.udpLive = (playerId): boolean => lane.live(playerId);
     ConnectionManager.onUnreg = (playerId): void => {
       lane.unbind(playerId);
       this.udpScratch.delete(playerId);

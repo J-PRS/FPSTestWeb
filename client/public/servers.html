@@ -106,6 +106,9 @@ async function tick(){
   document.getElementById('nhum').textContent=rooms.reduce((a,r)=>a+(r.active??r.humans??0),0);
   const sorted=[...rooms].sort((a,b)=>((b.active??b.humans)-(a.active??a.humans))||(b.players-a.players));
   const html=sorted.length?sorted.map(r=>{
+   // Headline = humans/max — bots never inflate the seat count (an
+   // all-bot room used to read 12/32 with a small "0" footnote). The
+   // red-full test still counts bodies: a 32/32 bot room refuses joins.
    const full=r.players>=r.maxPlayers;
    const bots=r.players-r.humans;
    let score='';
@@ -118,8 +121,8 @@ async function tick(){
     '<td><span class="rname"><span class="dot"></span>'+esc(r.name)+'</span></td>'+
     '<td><span class="mode'+(r.mode?'':' empty-mode')+'">'+esc(r.mode||'arena')+'</span></td>'+
     '<td class="map">'+esc(r.map||'—')+'</td>'+
-    '<td class="occ'+(full?' full':'')+'">'+r.players+'/'+r.maxPlayers+
-      '<small>'+(r.active??r.humans)+(bots?' · '+bots+' bot'+(bots===1?'':'s'):'')+(r.spectators?' · '+r.spectators+' spec':'')+'</small></td>'+
+    '<td class="occ'+(full?' full':'')+'">'+r.humans+'/'+r.maxPlayers+
+      '<small>'+(bots?bots+' bot'+(bots===1?'':'s'):'open')+(r.spectators?' · '+r.spectators+' spec':'')+'</small></td>'+
     '<td class="score">'+score+'</td>'+
     '<td class="meta">'+info.join(' · ')+'</td></tr>';
   }).join(''):'<tr><td colspan="6" class="empty">no live rooms — the first join mints one</td></tr>';

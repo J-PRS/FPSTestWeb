@@ -14,6 +14,7 @@ import { SPAWN_PROTECT_MS } from '../../shared/constants.ts';
 import { simNow, simMs } from './simClock.ts';
 import { inv, invEq } from '../../shared/invariants.ts';
 import { wallNow, wallMs } from './wallClock.ts';
+import { ConnectionManager } from './ConnectionManager.ts';
 
 let internalIdCounter = 0;
 
@@ -280,7 +281,10 @@ export class PlayerManager {
       status: player.status,
       held: player.heldTokens || undefined,
       team: player.team,
-      transport: player.transport,
+      // Live udp volatile lane shows as '<tier>+udp' — transport stays
+      // pure on the record (caps/tier-counts key on it), the composite
+      // is emit-time only.
+      transport: ConnectionManager.udpLive?.(player.id) ? `${player.transport ?? 'ws'}+udp` : player.transport,
       armorClass: player.armorClass,
       weapon: player.weapon || undefined,
     }) as unknown as GameStatePlayer;
