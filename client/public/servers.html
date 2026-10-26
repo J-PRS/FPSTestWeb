@@ -1,0 +1,123 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FPS · server browser</title>
+<style>
+:root{
+  --bg:#060a10; --panel:#0c141d; --edge:#1a2633;
+  --txt:#cdd9e5; --dim:#9db2c4; --bright:#dde8f2;
+  --acc:#3aa7ff; --ok:#6fcf8f; --warn:#ffb86b; --bad:#ff5a5a; --gold:#ffd76f;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--bg);color:var(--txt);
+  font:14px/1.5 system-ui,sans-serif;
+  min-height:100vh;
+  background-image:
+    radial-gradient(1200px 500px at 70% -10%, rgba(58,167,255,.07), transparent 60%),
+    radial-gradient(900px 400px at 10% 110%, rgba(58,167,255,.05), transparent 60%);
+}
+.wrap{max-width:720px;margin:0 auto;padding:26px 16px 40px}
+header{display:flex;align-items:baseline;gap:12px;border-bottom:1px solid var(--edge);padding-bottom:14px;margin-bottom:18px}
+h1{font:600 22px/1 system-ui;letter-spacing:.14em;text-transform:uppercase;color:var(--bright)}
+h1 b{color:var(--acc);font-weight:600}
+.host{font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--dim);margin-left:auto;letter-spacing:.05em}
+.online{display:flex;gap:18px;margin-bottom:18px}
+.stat{flex:1;background:var(--panel);border:1px solid var(--edge);border-radius:8px;padding:10px 14px}
+.stat b{display:block;font:600 24px/1.1 ui-monospace,monospace;color:var(--bright)}
+.stat b i{font-style:normal;color:var(--acc)}
+.stat span{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+table{width:100%;border-collapse:collapse}
+thead th{
+  font:600 10px ui-monospace,monospace;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--dim);text-align:left;padding:6px 10px;border-bottom:1px solid var(--edge);
+}
+tbody tr{border-bottom:1px solid var(--edge);transition:background .12s}
+tbody tr:hover{background:rgba(58,167,255,.06)}
+td{padding:11px 10px;vertical-align:middle}
+.rname{font-weight:600;color:var(--bright);font-size:15px}
+.rname .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ok);margin-right:8px;box-shadow:0 0 6px var(--ok);animation:p 2s infinite}
+@keyframes p{50%{opacity:.35}}
+.mode{
+  font:600 10px ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--acc);background:rgba(58,167,255,.12);border:1px solid rgba(58,167,255,.35);
+  border-radius:3px;padding:2px 8px;white-space:nowrap;
+}
+.mode.empty-mode{color:var(--dim);background:transparent;border-color:var(--edge)}
+.map{color:var(--dim);font-family:ui-monospace,monospace;font-size:12px}
+.occ{white-space:nowrap;font:600 14px ui-monospace,monospace;color:var(--bright)}
+.occ small{display:block;font-weight:400;font-size:10px;color:var(--dim);letter-spacing:.08em}
+.occ .cbar{width:64px;height:3px;background:#1c2836;border-radius:2px;margin-top:4px;overflow:hidden}
+.occ .cbar i{display:block;height:100%;background:var(--ok)}
+.occ.full .cbar i{background:var(--bad)}
+.occ.full{color:var(--bad)}
+.score{font-family:ui-monospace,monospace;font-size:12px;color:var(--txt);white-space:nowrap}
+.score em{font-style:normal;color:var(--gold)}
+.meta{font-family:ui-monospace,monospace;font-size:11px;color:var(--dim);white-space:nowrap}
+.empty{padding:34px 10px;text-align:center;color:var(--dim);font-family:ui-monospace,monospace;font-size:12px}
+footer{margin-top:18px;display:flex;justify-content:space-between;font:11px ui-monospace,monospace;color:var(--dim)}
+#spin{display:inline-block;width:9px;height:9px;border:1.5px solid var(--edge);border-top-color:var(--acc);border-radius:50%;vertical-align:-1px;margin-right:6px}
+#spin.on{animation:r .8s linear infinite}
+@keyframes r{to{transform:rotate(360deg)}}
+@media (max-width:560px){
+  .map,.meta,.th-map,.th-meta{display:none}
+  td{padding:9px 6px}
+  h1{font-size:17px}
+}
+</style></head><body>
+<div class="wrap">
+<header><h1>SERVER <b>BROWSER</b></h1><span class="host" id="host">—</span></header>
+<div class="online">
+  <div class="stat"><b><i id="nplay">–</i></b><span>players online</span></div>
+  <div class="stat"><b><i id="nrooms">–</i></b><span>live rooms</span></div>
+  <div class="stat"><b><i id="nhum">–</i></b><span>humans</span></div>
+</div>
+<table><thead><tr>
+  <th>server</th><th>mode</th><th class="th-map">map</th><th>players</th><th>score</th><th class="th-meta">info</th>
+</tr></thead><tbody id="rows">
+<tr><td colspan="6" class="empty">connecting…</td></tr>
+</tbody></table>
+<footer><span><span id="spin"></span><span id="stamp">—</span></span><span id="ver">—</span></footer>
+</div>
+<script>
+const API='https://play.jprice.app';
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const mmss=ms=>{const s=Math.max(0,Math.round(ms/1000));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
+async function tick(){
+ const spin=document.getElementById('spin');spin.className='on';
+ try{
+  const[rooms,h]=await Promise.all([
+   (await fetch(API+'/rooms',{cache:'no-store'})).json(),
+   (await fetch(API+'/health',{cache:'no-store'})).json()]);
+  document.getElementById('host').textContent=location.protocol.startsWith('http')?API.replace(/^https?:\/\//,''):'';
+  document.getElementById('nplay').textContent=h.players;
+  document.getElementById('nrooms').textContent=rooms.length;
+  document.getElementById('nhum').textContent=rooms.reduce((a,r)=>a+(r.humans||0),0);
+  const sorted=[...rooms].sort((a,b)=>(b.humans-a.humans)||(b.players-a.players));
+  document.getElementById('rows').innerHTML=sorted.length?sorted.map(r=>{
+   const full=r.players>=r.maxPlayers;
+   const pct=Math.min(100,Math.round(r.players/r.maxPlayers*100));
+   const bots=r.players-r.humans;
+   let score='';
+   if(r.scores)score='α '+r.scores.alpha+' <em>·</em> β '+r.scores.bravo;
+   else if(r.ffaLeader)score='<em>'+esc(r.ffaLeader[0])+'</em> '+r.ffaLeader[1]+'pts';
+   const info=[];
+   if(r.winAt)info.push('to '+r.winAt);
+   if(r.timeLeftMs)info.push(mmss(r.timeLeftMs));
+   return '<tr>'+
+    '<td><span class="rname"><span class="dot"></span>'+esc(r.name)+'</span></td>'+
+    '<td><span class="mode'+(r.mode?'':' empty-mode')+'">'+esc(r.mode||'arena')+'</span></td>'+
+    '<td class="map">'+esc(r.map||'—')+'</td>'+
+    '<td class="occ'+(full?' full':'')+'">'+r.players+'/'+r.maxPlayers+
+      '<small>'+r.humans+'p'+(bots?'+'+bots+'b':'')+(r.spectators?' +'+r.spectators+'s':'')+'</small>'+
+      '<div class="cbar"><i style="width:'+pct+'%"></i></div></td>'+
+    '<td class="score">'+score+'</td>'+
+    '<td class="meta">'+info.join(' · ')+'</td></tr>';
+  }).join(''):'<tr><td colspan="6" class="empty">no live rooms — the first join mints one</td></tr>';
+  document.getElementById('stamp').textContent='updated '+new Date().toLocaleTimeString();
+  document.getElementById('ver').textContent='v'+(h.version||'?')+' · '+(h.build||'?')+' · '+(h.tickRate||'?')+'hz';
+ }catch(e){
+  document.getElementById('rows').innerHTML='<tr><td colspan="6" class="empty">server unreachable</td></tr>';
+ }finally{setTimeout(()=>spin.className='',300);}
+}
+tick();setInterval(tick,5000);
+</script></body></html>
