@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
-import { mkdirSync, writeFileSync, existsSync, readdirSync, rmSync, statSync, readFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, existsSync, readdirSync, rmSync, statSync, readFileSync, watch } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -189,7 +189,10 @@ export default defineConfig(({ mode }) => ({
     // Catches edits between build and preview boot (fs.watch can't).
     configurePreviewServer(server) {
       const root = fileURLToPath(new URL('..', import.meta.url));
-      const buildStamp = (() => {
+      // dist newest-mtime — recomputed per scan: a rebuild refreshes dist
+      // but a one-shot stamp left every newer src file reading 'stale'
+      // forever after /dev/rebuild or an external npm run build.
+      const buildStamp = () => {
         let newest = 0;
         const walk = (d) => {
           for (const f of readdirSync(d, { withFileTypes: true })) {
@@ -199,14 +202,15 @@ export default defineConfig(({ mode }) => ({
         };
         try { walk(join(root, 'client/dist')); } catch { /* no dist */ }
         return newest;
-      })();
+      };
       const staleFiles = (acc = []) => {
+        const stamp = buildStamp();
         for (const dir of [join(root, 'client/src'), join(root, 'shared')]) {
           const walk = (d) => {
             for (const f of readdirSync(d, { withFileTypes: true })) {
               const p = join(d, f.name);
               if (f.isDirectory()) {walk(p);}
-              else if (statSync(p).mtimeMs > buildStamp) {acc.push(p.replace(root, '').replace(/\\/g, '/'));}
+              else if (statSync(p).mtimeMs > stamp) {acc.push(p.replace(root, '').replace(/\\/g, '/'));}
             }
           };
           try { walk(dir); } catch { /* dir missing */ }
@@ -226,10 +230,32 @@ export default defineConfig(({ mode }) => ({
       });
       let cache = { at: 0, body: '{}' };
       server.middlewares.use('/dev/stale', (_req, res) => {
-        if (Date.now() - cache.at > 2000) {const files = staleFiles(); cache = { at: Date.now(), body: JSON.stringify({ count: files.length, files, built: buildStamp }) };}
+        if (Date.now() - cache.at > 2000) {const files = staleFiles(); cache = { at: Date.now(), body: JSON.stringify({ count: files.length, files, built: buildStamp()}) };}
         res.setHeader('content-type', 'application/json');
         res.end(cache.body);
       });
+      // Push variant: preview has no vite-ws channel, so changed-source
+      // events go out over SSE. fs.watch(recursive) is free on Windows;
+      // debounce edit storms into one rescan+push.
+      const sse = new Set();
+      server.middlewares.use('/dev/stale-events', (req, res) => {
+        res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
+        res.write(':ok\n\n');
+        sse.add(res);
+        req.on('close', () => sse.delete(res));
+      });
+      let t = null;
+      const poke = () => {
+        clearTimeout(t);
+        t = setTimeout(() => {
+          const files = staleFiles();
+          cache = { at: Date.now(), body: JSON.stringify({ count: files.length, files, built: buildStamp()}) };
+          for (const res of sse) {res.write(`data: ${cache.body}\n\n`);}
+        }, 250);
+      };
+      for (const dir of [join(root, 'client/src'), join(root, 'shared')]) {
+        try { watch(dir, { recursive: true }, poke); } catch { /* dir missing */ }
+      }
     },
   }, ...(mode === 'noreload' ? [{
     name: 'stale-notify',
