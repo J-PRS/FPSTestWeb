@@ -16,6 +16,7 @@ import type { RtcRelay } from './RtcRelay.ts';
 import { weaponStats } from './weaponStats.ts';
 import { WEAPONSTATS_PAGE } from './weaponstatsPage.ts';
 import { STATUS_PAGE } from './statusPage.ts';
+import { SERVERS_PAGE } from './serversPage.ts';
 import { logger } from './logger.ts';
 import { wallNow } from './wallClock.ts';
 import { wireMeterSnapshot } from './wireMeter.ts';
@@ -142,6 +143,9 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Reques
     '/status': (url, req): Response => opsAllowed(req, url, req && ctx.requestIP?.(req)?.address)
       ? corsResponse(STATUS_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
       : opsClosed(),
+    // Public server browser — phone-friendly cards over /rooms + /health
+    // (the anonymous payload: counts only, never names).
+    '/servers': (): Response => corsResponse(SERVERS_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }),
     // Map list for the menu's match setup — name + mode + default bots.
     '/maps': (): Response => json(ctx.gameServer.listMaps()),
     // Quick-join: /join?mode=ctf&map=raindance&bots=6 → emptiest live
