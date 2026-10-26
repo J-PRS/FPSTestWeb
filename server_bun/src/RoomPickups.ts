@@ -138,7 +138,9 @@ export class RoomPickups {
     }
     const players = this.room.players.getAllPlayers(); // live map — re-iterated, no roster copy per tick
     for (const p of this.pickups.values()) {
-      p.ttl -= dt;
+      // Headhunt tokens ARE the score — decaying them starves the win
+      // condition. Loot (gems/powerups) keeps the 60s decay.
+      if (p.kind !== 'token') {p.ttl -= dt;}
       if (p.vel.x !== 0 || p.vel.z !== 0 || p.vel.y !== 0) {
         // Fixed 50ms cells — the client mirror (Nugget.serverTumble)
         // steps the same grid, so friction bleed composes identically.
