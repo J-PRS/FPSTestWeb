@@ -29,6 +29,7 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-10-18_NETCODE_OVERHAUL.md` | Netcode overhaul (2026-10-18) |
 | `_docs/2026-10-21_NETCODE_GAP.md` | Netcode gap analysis vs production shooters |
 | `_docs/2026-10-26_TRANSPORT_TIERS.md` | **Transport ladder reference** — WS+WT; why RTC left the auto ladder, what still uses it (pinned/netbots, p2p hosting), Firefox caveat |
+| `_docs/2026-10-26_NATIVE_UDP_LANE.md` | **Native shell + raw-UDP lane** — Electrobun spike verified (ws→UDP relay), composite adopt-don't-race tier design, server UDP scope, prior art (NexQuake/Xepsa), LOC estimate |
 | `_docs/2026-10-25_PROJECTILE_PREDICTION_NETCODE.md` | Projectile prediction research + implementation — fake+real shell model, claim-carried spawn state (pos/dir/vel/fireAt), velocity-scaled reanchor blend, MaxPredictionPing gap |
 | `_docs/2026-10-22_GRIND_LEADERBOARD.md` | Grind leaderboard design |
 | `_docs/2026-10-22_SPECTATE_RELAY.md` | Spectator relay / OBS-server reference |
