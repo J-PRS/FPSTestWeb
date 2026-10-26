@@ -221,10 +221,15 @@ function setShadows(deps: GameLoopDeps, on: boolean): void {
   rendererSetup.renderer.shadowMap.enabled = on;
   sceneSetup.sun.castShadow = on;
   // Lit materials cache shadow uniforms — flag for recompile once.
-  sceneSetup.scene.traverse((o): void => {
-    const m = (o as THREE.Mesh).material;
-    if (m) {(Array.isArray(m) ? m : [m]).forEach((x): void => { x.needsUpdate = true; });}
-  });
+  // vmScene renders with its own lit set (the viewmodel pass) — leaving
+  // it out crashed the next vm render on a stale directionalShadow
+  // uniform layout (the 'shadowIntensity' TypeError).
+  for (const s of [sceneSetup.scene, deps.vmScene()]) {
+    s.traverse((o): void => {
+      const m = (o as THREE.Mesh).material;
+      if (m) {(Array.isArray(m) ? m : [m]).forEach((x): void => { x.needsUpdate = true; });}
+    });
+  }
   // Deliberately NOT settings.set: fps-shadows is the user's stored pick,
   // the ladder only owns the runtime flag (see wantShadows above).
 }

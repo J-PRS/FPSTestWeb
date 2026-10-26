@@ -274,7 +274,11 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     // skips the wire echo — "humans self-predict their displacement").
     // No echo will ever arrive: confirmation-free by protocol design,
     // so expiry is silent. Remote blasts (by=shooterId) still audit.
-    stamps.push({ x: pos.x, y: pos.y, z: pos.z, t: now, by: shooterId, self: shooterId === undefined, f: Math.round(impulse * 10) / 10 });
+    // Offline has no echo lane either — a bot-shooter blast stamped as
+    // 'remote' can never be confirmed, so treat it self/silent or the
+    // expiry reports a phantom kb-echo.
+    const echoless = shooterId === undefined || !(kbNm?.isConnected?.() ?? false);
+    stamps.push({ x: pos.x, y: pos.y, z: pos.z, t: now, by: shooterId, self: echoless, f: Math.round(impulse * 10) / 10 });
     parityStamp('kb-echo');
     // Settle older stamps: a predicted self-shove the server never echoed
     // back (~700ms past the consume window) was rejected server-side —
