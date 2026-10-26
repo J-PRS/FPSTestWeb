@@ -206,6 +206,30 @@ export class GameServer {
     return this.journal.stats();
   }
 
+  /** AFK demotion: humans who stop claiming (hidden tab, parked menu)
+   *  become spectators so their player seat frees for a joiner. On
+   *  return a normal join/reclaim re-seats them — they were only ever
+   *  watching. lastClaimAt is claims-only (pings don't count). */
+  afkSweep(): void {
+    const now = wallNow();
+    for (const room of this.rooms.values()) {
+      for (const [id, p] of room.players.getAllPlayers()) {
+        if (p.isBot || p.lastClaimAt === undefined) {continue;}
+        if (now - p.lastClaimAt < 90_000) {continue;}
+        const ws = room.socketOf(id);
+        this.removePlayerCompletely(room, id, 'afk demote');
+        if (ws) {
+          ws.data.gen = this.registry.seat(id, true, 'spectate');
+          room.spectators.add(id);
+          this.specRooms.set(id, room);
+          room.connections.register(id, ws);
+          room.markIntro(id);
+          room.messages.handleSpectatorHandshake(id);
+        }
+      }
+    }
+  }
+
   /** Drain-deploys: armed via /admin/drain — SessionManager refuses new
    *  joins (reclaims still land), and the drain checker exits the process
    *  once every human has left. */
