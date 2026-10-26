@@ -25,6 +25,8 @@ export interface RoomRow {
   map?: string;
   players: number;
   maxPlayers: number;
+  /** Seated humans (rest are bots) — the browser shows humans/max. */
+  humans?: number;
   /** Team-mode live score. */
   scores?: { alpha: number; bravo: number };
   /** FFA-mode live leader [id, pts]. */
@@ -301,7 +303,7 @@ export class Lobby {
   /** Live room tiles, keyed by room name — refresh diffs in place so a
    *  score/player-count tick updates the meta span instead of destroying
    *  and re-creating every tile (the flicker the rebuild caused). */
-  private rowEls = new Map<string, { row: HTMLButtonElement; star: HTMLSpanElement; mode: HTMLSpanElement; map: HTMLSpanElement; occ: HTMLSpanElement; ping: HTMLSpanElement }>();
+  private rowEls = new Map<string, { row: HTMLButtonElement; mode: HTMLSpanElement; map: HTMLSpanElement; occ: HTMLSpanElement; ping: HTMLSpanElement }>();
   /** Column header — minted once per poll batch, sits above the tiles. */
   private head: HTMLDivElement | null = null;
   /** Last /rooms RTT — the single-server ping every row shares. */
@@ -362,7 +364,7 @@ export class Lobby {
     if (!this.head) {
       this.head = document.createElement('div');
       this.head.className = 'lb-head';
-      for (const h of ['', 'SERVER', 'MODE', 'MAP', 'PLAYERS', 'PING']) {
+      for (const h of ['SERVER', 'MODE', 'MAP', 'PLAYERS', 'PING']) {
         const c = document.createElement('span');
         c.textContent = h;
         this.head.append(c);
@@ -397,16 +399,9 @@ export class Lobby {
   /** Build a room tile once — static structure only: star | server | mode
    *  | map | players | ping, the servers.html column set. updateRow owns
    *  every field that churns. */
-  private makeRow(r: RoomRow): { row: HTMLButtonElement; star: HTMLSpanElement; mode: HTMLSpanElement; map: HTMLSpanElement; occ: HTMLSpanElement; ping: HTMLSpanElement } {
+  private makeRow(r: RoomRow): { row: HTMLButtonElement; mode: HTMLSpanElement; map: HTMLSpanElement; occ: HTMLSpanElement; ping: HTMLSpanElement } {
     const row = document.createElement('button');
     row.className = 'lb-room';
-    // Fav star — own click target so marking a room never joins it.
-    const star = document.createElement('span');
-    star.className = 'lb-fav';
-    star.addEventListener('click', (e): void => {
-      e.stopPropagation();
-      this.toggleFav(r.name);
-    });
     const name = document.createElement('span');
     name.className = 'lb-name';
     name.textContent = r.name;
@@ -418,20 +413,19 @@ export class Lobby {
     occ.className = 'meta';
     const ping = document.createElement('span');
     ping.className = 'lb-ping';
-    row.append(star, name, mode, map, occ, ping);
+    row.append(name, mode, map, occ, ping);
     row.addEventListener('click', (): void => this.join(r.name));
-    return { row, star, mode, map, occ, ping };
+    return { row, mode, map, occ, ping };
   }
 
   /** Per-poll refresh of the churning bits — state classes, fav glyph,
    *  mode chip, map, occupancy (+score/target/clock), ping. */
-  private updateRow(tile: { row: HTMLButtonElement; star: HTMLSpanElement; mode: HTMLSpanElement; map: HTMLSpanElement; occ: HTMLSpanElement; ping: HTMLSpanElement }, r: RoomRow): void {
+  private updateRow(tile: { row: HTMLButtonElement; mode: HTMLSpanElement; map: HTMLSpanElement; occ: HTMLSpanElement; ping: HTMLSpanElement }, r: RoomRow): void {
     const full = r.players >= r.maxPlayers;
     const current = this.online() && r.name === this.currentRoom();
     tile.row.disabled = full || current;
     tile.row.classList.toggle('current', current);
     tile.row.classList.toggle('full', full);
-    tile.star.textContent = this.isFav(r.name) ? '★' : '☆';
     tile.mode.textContent = r.mode ? (Lobby.MODE_SHORT[r.mode] ?? r.mode.toUpperCase()) : '';
     tile.map.textContent = r.map ?? '—';
     tile.occ.textContent = '';
@@ -443,15 +437,13 @@ export class Lobby {
     headhunt: 'HH', conquest: 'CONQ', infestation: 'INF', deathball: 'DB', rabbit: 'RBT', teamrabbit: 'TRBT',
   };
 
-  /** Occupancy cell — humans/max, then the match-state tokens that earn
-   *  a place: score · target · clock. */
+  /** Occupancy cell — the servers.html read: (bots) humans/max. Match
+   *  internals (score/target/clock) live in the room, not the browser. */
   private rowMeta(meta: HTMLElement, r: RoomRow): void {
     const mk = Lobby.metaSpan;
-    meta.append(mk(`${r.players}/${r.maxPlayers}`));
-    if (r.scores) {meta.append(mk(`${r.scores.alpha} – ${r.scores.bravo}`, 'lb-score'));}
-    else if (r.ffaLeader) {meta.append(mk(`${r.ffaLeader[0]} ${r.ffaLeader[1]}pts`, 'lb-score'));}
-    if (r.winAt) {meta.append(mk(`→${r.winAt}`));}
-    if (r.timeLeftMs) {meta.append(mk(`${Math.ceil(r.timeLeftMs / 60_000)}m`));}
+    const bots = r.players - (r.humans ?? r.players);
+    if (bots > 0) {meta.append(mk(`(${bots})`, 'lb-bots'));}
+    meta.append(mk(`${r.humans ?? r.players}/${r.maxPlayers}`));
   }
 
   join(name: string, map?: string, bots?: number, mode?: string, unlisted?: boolean, noCreatures?: boolean, noBalls?: boolean): void {
