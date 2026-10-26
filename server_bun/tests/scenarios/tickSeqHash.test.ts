@@ -1,7 +1,7 @@
 import { wallMs } from '../../src/wallClock.ts';
 import { describe, expect, it } from 'bun:test';
 import { TickLoop } from '../../src/TickLoop.ts';
-import { mkRoom, freeze } from './harness.ts';
+import { mkRoom, freeze, seat } from './harness.ts';
 import type { ServerMessage } from '../../../shared/protocol.ts';
 import type { Room } from '../../src/Room.ts';
 
@@ -13,6 +13,7 @@ describe('scenario: state hash tags, never consumes, tickSeq', () => {
   it('tickSeq advances only by emitted frames across hash broadcasts', () => {
     const room = mkRoom({ bots: 1 });
     const [bot] = [...room.players.getAllPlayers().values()];
+    seat(room, bot!.id);
     freeze(room, bot!.id, { x: 0, y: 60, z: 0 });
     let frames = 0;
     room.connections.sendBinaryToPlayer = () => { frames++; return 'sent' as const; };

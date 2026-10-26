@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { mkRoom, pin, twoPlayers } from './harness.ts';
+import { mkRoom, pin, seat, twoPlayers } from './harness.ts';
 import { decodeTickFrame, type WireTickPlayer, type TickDecodePool } from '../../../shared/wire.ts';
 import { TickFanout, type FanoutMetrics } from '../../src/tickRecords.ts';
 import { ConnectionManager } from '../../src/ConnectionManager.ts';
@@ -14,6 +14,8 @@ describe('scenario: interest tier hysteresis', () => {
   it('a target orbiting 150m keeps tier-1 cadence; real departures still tier out', () => {
     const room = mkRoom({ bots: 2 });
     const [a, b] = twoPlayers(room);
+    seat(room, a.id);
+    seat(room, b.id);
     pin(room, a.id, { x: 0, y: 31, z: 0 });
     pin(room, b.id, { x: 140, y: 31, z: 0 });
 
@@ -76,10 +78,13 @@ describe('scenario: interest tier hysteresis', () => {
   it('per-recipient intro: a fresh seat gets every-tick fulls while the room stays on deltas', () => {
     const room = mkRoom({ bots: 2 });
     const [a, b] = twoPlayers(room);
+    seat(room, a.id);
+    seat(room, b.id);
     pin(room, a.id, { x: 0, y: 31, z: 0 });
     pin(room, b.id, { x: 700, y: 31, z: 0 }); // tier 8 for the room
     // The joiner — seated via introPlayers, not the room-wide introSeq.
     const c = room.players.addPlayer('JOINER', 'alpha', 'none', 'medium');
+    seat(room, c.id);
     pin(room, c.id, { x: 0, y: 31, z: 0 });
     room.markIntro(c.id);
     room.introSeq = room.tickSeq - 25; // prove the room window is closed

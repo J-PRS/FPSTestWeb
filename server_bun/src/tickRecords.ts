@@ -358,6 +358,12 @@ this.metrics.recordsIdleReaped += 1;
       // Grace-period entries have no socket — record filtering for them
       // is wasted work
       if (room.sessions?.state(recipientId) === 'grace') {continue;}
+      // Server bots are seats, not clients: no socket ever drains a frame.
+      // Encoding one per bot was pure waste and inflated bytesSent by the
+      // bot count (a 1-human/11-bot room read ~12x its real egress on the
+      // status page). Live humans and test-seated seats still pass.
+      const sock = room.socketOf(recipientId);
+      if (!sock || sock.readyState !== 1) {continue;}
       const rx = rp.position.x, ry = rp.position.y, rz = rp.position.z;
       let tiers = this.tierMem.get(recipientId);
       if (!tiers) {tiers = new Map(); this.tierMem.set(recipientId, tiers);}
@@ -441,8 +447,6 @@ else if (dSq < 360_000) {tier = 3;} // 150m / 400m / 600m
         // one aliases every queued frame to the last-encoded.
         room.connections.frameArenaFor(recipientId),
       );
-      this.metrics.recordsSent += others.length;
-      this.metrics.bytesSent += frame.byteLength;
       // Dropped frames surface as tickSeq gaps client-side — count them
       // here so a consumer that can't drain reads as rising loss, not
       // as an unexplained stutter nobody can attribute.
@@ -452,6 +456,13 @@ else if (dSq < 360_000) {tier = 3;} // 150m / 400m / 600m
       // Not sim code, so Math.random is fine; soaks set it on the spawn.
       if (DROP_PCT > 0 && Math.random() * 100 < DROP_PCT) {continue;}
       const st = room.connections.sendBinaryToPlayer(recipientId, frame);
+      // Count only frames that actually left. 'held' is the intro gate
+      // (reported separately, never sent), 'backlogged' is a shed, and a
+      // 'gone' recipient must not pad the egress metric.
+      if (st === 'sent' || st === 'sparse') {
+        this.metrics.recordsSent += others.length;
+        this.metrics.bytesSent += frame.byteLength;
+      }
       if (st === 'backlogged') {this.metrics.tickFramesDropped += 1;}
       else if (st === 'held') {this.metrics.tickFramesHeld += 1;}
     }

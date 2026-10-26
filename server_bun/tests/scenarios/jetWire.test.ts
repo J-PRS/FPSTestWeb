@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { mkRoom, pin, firstPlayer } from './harness.ts';
+import { mkRoom, pin, firstPlayer, seat } from './harness.ts';
 import { decodeTickFrame, type WireTickPlayer, type TickDecodePool } from '../../../shared/wire.ts';
 import { TickFanout, type FanoutMetrics } from '../../src/tickRecords.ts';
 import { wallNow } from '../../src/wallClock.ts';
@@ -12,6 +12,7 @@ describe('scenario: held jet rides the tick frame', () => {
   it('inputMove jet=1 reaches the decoded tick record; jet=0 clears it', () => {
     const room = mkRoom({ bots: 1 });
     const p = firstPlayer(room);
+    seat(room, p.id);
     pin(room, p.id, { x: 0, y: 31, z: 0 });
     room.moveSim.track(p.id, p.position, 0, p.perk);
 

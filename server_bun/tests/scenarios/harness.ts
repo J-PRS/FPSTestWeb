@@ -107,6 +107,18 @@ export function twoPlayers(room: Room): [PlayerState, PlayerState] {
   return [ps[0]!, ps[1]!];
 }
 
+/** Give a seat a live socket. Scenario tests model clients with bot seats
+ *  (no connection); the production fanout skips no-socket recipients, so
+ *  a test that expects frames must seat its observer first. */
+export function seat(room: Room, id: string): void {
+  room.connections.register(id, {
+    readyState: 1,
+    send: () => 1,
+    getBufferedAmount: () => 0,
+    data: {},
+  } as never);
+}
+
 /** Step the whole room N sim-ticks — ball/creature sims ride room.sims
  *  like in production, so this drives the exact same ordering. */
 export function step(room: Room, ticks: number, dt = 0.05, profile?: Map<string, number>): void {
