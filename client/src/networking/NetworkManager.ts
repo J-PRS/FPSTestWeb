@@ -179,7 +179,7 @@ export class NetworkManager {
   public onCrawlDie: ((data: Extract<ServerMessage, { type: 'crawlDie' }>) => void) | null = null;
   public onCrawlRoster: ((data: Extract<ServerMessage, { type: 'crawlRoster' }>) => void) | null = null;
   public onRemoteTeleport: ((playerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }) => void) | null = null;
-  private lastPositionSendTime = 0;
+  public lastPositionSendTime = 0;
   private readonly POSITION_SEND_INTERVAL = 50; // 20Hz — extrapolation covers the gap
   private readonly STILL_SEND_INTERVAL = 250; // 4Hz parked heartbeat — server sees identical truth
   private lastSentState?: { px: number; py: number; pz: number; yaw: number; pitch: number };

@@ -1448,6 +1448,24 @@ hashMismatchCount += 1;
             // drift older than the snapshot window itself.
             const hashHealthFresh = Date.now() - networkManager.lastHealthEventAt < 1000;
             if (!player.isDead && !hashHealthFresh && Number.isFinite(sp.health) && Math.abs(player.health - sp.health) > 0.5) {player.health = sp.health;}
+            // Position is correction-owned — corrections answer position
+            // claims, but a hidden/idle client sends none (still-throttle
+            // floor is 4Hz; >10s silent means the channel is dead and no
+            // correction can ever fire). A >30m delta with dead sends is
+            // unhealable any other way: snap like a late respawn edge.
+            // lastSentPos is the hashed value (player.pos mirrors it per
+            // tick) — reading it here diffs the same coordinate the
+            // mismatch was raised on.
+            const sentPos = ctx.getLastSentPos();
+            if (Number.isFinite(sp.position.x + sp.position.y + sp.position.z)) {
+              const dist = Math.hypot(sentPos.x - sp.position.x, sentPos.y - sp.position.y, sentPos.z - sp.position.z);
+              if (dist > 30 && Date.now() - networkManager.lastPositionSendTime > 10_000 && player.pos) {
+                player.pos.set(sp.position.x, sp.position.y, sp.position.z);
+                player.syncMovement();
+                player.markTeleport();
+                logger.warn('[StateHash] local pos snapped to server truth', { dist: Math.round(dist), at: sp.position });
+              }
+            }
 
             continue;
 

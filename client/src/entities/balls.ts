@@ -16,10 +16,17 @@ import { tickEnrage as tickRage, setEnraged as rageSet } from './ballRage.js';
 import { writeBallInstance, tickBallRenderPos, tickBallTrails, updateBallDead, SPAWN_POP_S } from './ballVisual.js';
 import { allocSlots, freeSlots, getShadows, type SwarmPart } from './swarms.js';
 import { registerDiag } from '../core/fxDiag.js';
+import { urlParams } from '../core/params.js';
 import { inv } from '../../../shared/invariants.js';
 import { drawBallSpawn, drawVariant, spawnRand } from '../../../shared/spawnDice.js';
 
 
+
+// ?ballprof — sub-phase timing inside update() to name the seg-correction
+// burst spender. Off-path cost is one branch; the timed path is a separate
+// method so the normal hot path keeps zero timing overhead.
+const BALL_PROF = urlParams.has('ballprof');
+const ballProf = { calls: 0, net: 0, render: 0, rage: 0, shadow: 0, inst: 0, trails: 0, max: 0, maxAt: '' };
 
 const BALL_GRAVITY   = GRAVITY;
 const _enrageTint = new THREE.Color(1, 0.12, 0.08);
@@ -328,11 +335,15 @@ export class Ball {
     Ball.live.add(this);
   }
 
+  /** KEEP-IN-SYNC: updateProf below duplicates this body with per-phase
+   *  lap() timers for ?ballprof — edit both or the profiler reports on
+   *  stale code. */
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
     if (this.dead) {
       updateBallDead(this, dt, Ball.viewPos);
       return;
     }
+    if (BALL_PROF) {this.updateProf(dt, terrain, playerPos); return;}
 
     if (this.spawnPopT > 0) {this.spawnPopT -= dt;}
     this.prevVelY = this.vel.y;
@@ -359,6 +370,60 @@ export class Ball {
     }
 
     tickBallTrails(this, dt, Ball.viewPos);
+  }
+
+  /** ?ballprof twin of update() — identical work, each phase timed and
+   *  folded into the module accumulator the 'balls' diag section dumps. */
+  private updateProf(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
+    const t0 = performance.now();
+    let t = t0;
+    const lap = (acc: 'net' | 'render' | 'rage' | 'shadow' | 'inst' | 'trails', parts: string[]): void => {
+      const n = performance.now();
+      const ms = n - t;
+      ballProf[acc] += ms;
+      if (ms > 0.5) {parts.push(`${acc}=${ms.toFixed(1)}`);}
+      t = n;
+    };
+    const parts: string[] = [];
+
+    if (this.spawnPopT > 0) {this.spawnPopT -= dt;}
+    this.prevVelY = this.vel.y;
+    if (this.netDriven && this.netS.sim && Ball.field) {
+      tickNet(Ball.NET_S, this.netS, this, dt);
+    } else {
+      this.tickLocal(dt, playerPos);
+    }
+    lap('net', parts);
+
+    tickBallRenderPos(this, dt);
+    lap('render', parts);
+
+    if (this.prevVelY > 0 && this.vel.y <= 0 && this.onPeak) {
+      this.onPeak(this.pos.clone(), this.vel.clone());
+    }
+
+    tickRage(this, dt, terrain, playerPos);
+    lap('rage', parts);
+
+    getShadows()?.set(this, this._rpos, this.radius, 0.3);
+    lap('shadow', parts);
+
+    writeBallInstance(this);
+    lap('inst', parts);
+
+    if (this.flashTimer > 0) {
+      this.flashTimer -= dt;
+      if (this.flashTimer <= 0) {this.emissive.setRGB(0, 0, 0);}
+    }
+
+    tickBallTrails(this, dt, Ball.viewPos);
+    lap('trails', parts);
+    ballProf.calls += 1;
+    const callMs = performance.now() - t0;
+    if (callMs > ballProf.max) {
+      ballProf.max = callMs;
+      ballProf.maxAt = `id${this.id} ${this.netDriven ? 'net' : 'loc'}${this.netS.sim?.enraged ? ' rage' : ''} ${parts.join(' ')}`;
+    }
   }
 
   /** Director hook — enrage storms light up every ball at once. Writes
@@ -547,8 +612,21 @@ export class Ball {
 // dots=0/count<2 is emitting-into-the-void; velSq≈0 everywhere is the
 // net-velocity starvation case.
 registerDiag('balls', () => ({
-  balls: {
-    viewPos: `${Ball.viewPos.x.toFixed(0)},${Ball.viewPos.y.toFixed(0)},${Ball.viewPos.z.toFixed(0)}`,
+  balls: Object.assign(
+    {
+      viewPos: `${Ball.viewPos.x.toFixed(0)},${Ball.viewPos.y.toFixed(0)},${Ball.viewPos.z.toFixed(0)}`,
+    },
+    BALL_PROF ? {
+      prof: {
+        calls: ballProf.calls,
+        avgMs: ballProf.calls ? Number(((ballProf.net + ballProf.render + ballProf.rage + ballProf.shadow + ballProf.inst + ballProf.trails) / ballProf.calls).toFixed(3)) : 0,
+        net: Number(ballProf.net.toFixed(1)), render: Number(ballProf.render.toFixed(1)),
+        rage: Number(ballProf.rage.toFixed(1)), shadow: Number(ballProf.shadow.toFixed(1)),
+        inst: Number(ballProf.inst.toFixed(1)), trails: Number(ballProf.trails.toFixed(1)),
+        max: Number(ballProf.max.toFixed(1)), maxAt: ballProf.maxAt,
+      },
+    } : {},
+    {
     rows: [...Ball.live].map(b => ({
       id: b.id, v: b.variant, net: b.netDriven || undefined, dead: b.dead || undefined,
       pos: `${b._rpos.x.toFixed(0)},${b._rpos.y.toFixed(0)},${b._rpos.z.toFixed(0)}`,
@@ -557,7 +635,8 @@ registerDiag('balls', () => ({
       dots: b.trails.dbg(),
       rib: b.ribbons.map(r => r.dbg()),
     })),
-  },
+    },
+  ),
 }));
 
 export type { NetSeg } from './ballNet.js';
