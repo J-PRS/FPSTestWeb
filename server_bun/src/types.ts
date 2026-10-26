@@ -55,6 +55,10 @@ export interface PlayerState {
   // resetStats like kills/deaths (per-match, not career).
   streak: number;
   lastSeen: WallMs;
+  /** Last position-claim receive — gameplay liveness only. Unlike
+   *  lastSeen (pings/stats keep it fresh), an AFK hidden tab that sends
+   *  only keepalives goes stale here — /rooms' `active` reads it. */
+  lastClaimAt?: WallMs;
   pendingRespawn: boolean;
   lastSeq: number;
   lastValidPosition: Vec3;

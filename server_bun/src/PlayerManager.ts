@@ -256,6 +256,18 @@ export class PlayerManager {
     return this.humans;
   }
 
+  /** Active humans — a human counted only if a position claim landed
+   *  inside `windowMs`. Pings/clientStats keep `lastSeen` fresh forever,
+   *  so an AFK hidden tab (claims dead, keepalives live) is a seat but
+   *  not a player — /rooms reports this as `active`. */
+  getActiveHumanCount(windowMs: number, now = wallNow()): number {
+    let n = 0;
+    for (const p of this.players.values()) {
+      if (!p.isBot && p.lastClaimAt !== undefined && now - p.lastClaimAt < windowMs) {n++;}
+    }
+    return n;
+  }
+
   toGameStatePlayer(player: PlayerState): GameStatePlayer {
     return rosterRow(WORLD_MODEL.player!, 'id', player.id, {
       name: player.name,

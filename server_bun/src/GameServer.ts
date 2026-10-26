@@ -435,6 +435,10 @@ export class GameServer {
       map: this.maps.mapNameOf(r.name),
       players: r.playerCount(),
       humans: r.players.getHumanCount(),
+      // Humans actually playing — a position claim within 90s. A parked
+      // hidden-tab client keeps its seat (humans) but isn't counted
+      // here, so a ghost doesn't read as "someone online".
+      active: r.players.getActiveHumanCount(90_000),
       names: withNames
         ? [...r.players.getAllPlayers().values()].map(p => ({ id: p.id, name: p.name }))
         : undefined,

@@ -91,8 +91,10 @@ async function tick(){
   document.getElementById('host').textContent=location.protocol.startsWith('http')?API.replace(/^https?:\/\//,''):'';
   document.getElementById('nplay').textContent=h.players;
   document.getElementById('nrooms').textContent=rooms.length;
-  document.getElementById('nhum').textContent=rooms.reduce((a,r)=>a+(r.humans||0),0);
-  const sorted=[...rooms].sort((a,b)=>(b.humans-a.humans)||(b.players-a.players));
+  // active = a position claim in the last 90s — a parked hidden-tab
+  // client keeps its seat but doesn't count as "someone online".
+  document.getElementById('nhum').textContent=rooms.reduce((a,r)=>a+(r.active??r.humans??0),0);
+  const sorted=[...rooms].sort((a,b)=>((b.active??b.humans)-(a.active??a.humans))||(b.players-a.players));
   document.getElementById('rows').innerHTML=sorted.length?sorted.map(r=>{
    const full=r.players>=r.maxPlayers;
    const pct=Math.min(100,Math.round(r.players/r.maxPlayers*100));
@@ -108,7 +110,7 @@ async function tick(){
     '<td><span class="mode'+(r.mode?'':' empty-mode')+'">'+esc(r.mode||'arena')+'</span></td>'+
     '<td class="map">'+esc(r.map||'—')+'</td>'+
     '<td class="occ'+(full?' full':'')+'">'+r.players+'/'+r.maxPlayers+
-      '<small>'+r.humans+'p'+(bots?'+'+bots+'b':'')+(r.spectators?' +'+r.spectators+'s':'')+'</small>'+
+      '<small>'+(r.active??r.humans)+'p'+(bots?'+'+bots+'b':'')+(r.spectators?' +'+r.spectators+'s':'')+'</small>'+
       '<div class="cbar"><i style="width:'+pct+'%"></i></div></td>'+
     '<td class="score">'+score+'</td>'+
     '<td class="meta">'+info.join(' · ')+'</td></tr>';
