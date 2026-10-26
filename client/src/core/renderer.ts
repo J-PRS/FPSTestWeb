@@ -862,9 +862,12 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     warmup: (): void => {
       if (compileInflight) {return;}
       compileInflight = true;
-      renderer.compileAsync(scene, camera)
-        .catch((): void => { /* late-added material */ })
-        .finally((): void => { compileInflight = false; });
+      try {
+        // Sync compile — compileAsync's KHR poll throws uncatchably in its
+        // own setTimeout when a material lands mid-compile (Fe.get(e) →
+        // undefined → 'isReady' crash). One serial pass has no async gap.
+        renderer.compile(scene, camera);
+      } finally {compileInflight = false;}
     },
     setPixel,
     setResScale,
