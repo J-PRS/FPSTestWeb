@@ -139,7 +139,15 @@ export class WireIn {
     // stale on arrival anyway.
     if (!(data instanceof Uint8Array)) {this.early.push(data);}
     else if (this.early.length < 512) {this.early.push(data);}
-    else {this.earlyDrops += 1;}
+    else {
+      // At cap the OLDEST binary is the stalest — evict it, not the new
+      // delta (old behavior buffered 512 stale ticks and dropped fresh
+      // state, so post-flush entities replayed a dead epoch). JSON edges
+      // never evict — they're must-deliver by design.
+      const idx = this.early.findIndex((m) => m instanceof Uint8Array);
+      if (idx !== -1) {this.early.splice(idx, 1); this.early.push(data);}
+      this.earlyDrops += 1;
+    }
     return true;
   }
 

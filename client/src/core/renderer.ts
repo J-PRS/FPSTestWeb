@@ -382,7 +382,7 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
     for (const pass of composer.passes) {
       // EffectPass.name is just 'EffectPass' — the EFFECT inside names
       // the work ('ACESGrade', 'LensDirt'). Multi-effect passes join.
-      const effects = (pass as { effects?: { name: string }[] }).effects;
+      const {effects} = (pass as { effects?: { name: string }[] });
       const label = effects?.length
         ? effects.map((e) => e.name).join('+')
         : ((pass as { name?: string }).name ?? pass.constructor.name);
@@ -837,6 +837,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     passes: dumpPasses(),
   });
 
+  let compileInflight = false; // warmup's reentry guard — see below
   return {
     renderer,
     composer,
@@ -850,10 +851,21 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     isBloomEnabled: (): boolean => bloomEnabled,
     setBloomEnabled,
     updateRendererSize,
+    // compileAsync reentry guard — see warmup below.
     // checkMaterialsReady throws inside three when a material added
     // mid-compile never receives a currentProgram — benign, but the
     // rejection was surfacing as a pageerror in probes.
-    warmup: (): void => { renderer.compileAsync(scene, camera).catch((): void => { /* late-added material */ }); },
+    // Serialize: three's KHR_parallel_shader_compile poll shares one
+    // internal set across calls — a second compileAsync while one is in
+    // flight iterates entries the first already evicted
+    // (Fe.get(e).currentProgram === undefined → isReady crash).
+    warmup: (): void => {
+      if (compileInflight) {return;}
+      compileInflight = true;
+      renderer.compileAsync(scene, camera)
+        .catch((): void => { /* late-added material */ })
+        .finally((): void => { compileInflight = false; });
+    },
     setPixel,
     setResScale,
     setPostProcessingEnabled,

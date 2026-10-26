@@ -786,11 +786,17 @@ async function init(): Promise<void> {
   // Defer a deploy reload to the only real break: the intermission —
   // match clock expired, scoreboard up, next match not started.
   // Menu/death are still live play. Grace cap inside bounds the wait.
-  // Version footer — the same /version.txt the deploy watcher polls.
-  fetch('/version.txt', { cache: 'no-cache' })
+  // Version footer — /build.txt (content hash + stamp, written by the
+  // dist-size plugin every build). version.txt is the deploy watcher’s
+  // stamp; build.txt is WHICH bundle this is.
+  fetch('/build.txt', { cache: 'no-cache' })
     .then((r) => r.ok ? r.text() : '')
-    .then((v) => { const el = document.getElementById('client-ver'); if (el) {const t = new Date(Number(v.trim()) * 1000); el.textContent = `v${pkg.version} · ${t.toLocaleDateString()} ${t.toLocaleTimeString()}`;} })
-    .catch((): void => { /* no version.txt on a bare dev serve — fine */ });
+    .then((v) => {
+      const el = document.getElementById('client-ver'); if (!el) {return;}
+      const [hash, stamp] = v.trim().split(/\s+/);
+      el.textContent = `v${pkg.version} · ${hash ?? 'dev'}${stamp ? ` · ${stamp}` : ''}`;
+    })
+    .catch((): void => { /* no build.txt on a bare dev serve — fine */ });
   watchDeployVersion({ whenIdle: (): boolean =>
     world.matchEndsAt !== null && world.matchEndsAt <= Date.now() });
   networkManager = new NetworkManager();
@@ -1232,10 +1238,7 @@ if (import.meta.env.PROD && (location.hostname === 'localhost' || location.hostn
     fetch('/dev/stale')
       .then((r) => r.ok ? r.json() : null)
       .then((d: { count: number; files?: string[]; built?: number } | null) => {
-        if (!d) {return;}
-        // Local preview shows build time — version.txt only stamps DEPLOYS.
-        if (d.built) {const el = document.getElementById('client-ver'); if (el) {el.textContent = `v${pkg.version} · built ${new Date(d.built).toLocaleTimeString()}`;}}
-        if (d.count === lastCount) {return;}
+        if (!d || d.count === lastCount) {return;}
         noteStale(d.files, d.count - lastCount);
         lastCount = d.count;
         paintStaleBadge();
