@@ -801,6 +801,12 @@ sh.gapStreak += 1;
     return this.shadows.get(playerId)?.transitEma ?? 0;
   }
 
+  /** Link jitter — EMA of |sample − transitEma|. Server-observed, so
+   *  lag-comp bounds can key off the real path instead of client claims. */
+  transitVarOf(playerId: string): number {
+    return this.shadows.get(playerId)?.transitVar ?? 0;
+  }
+
   /** Both raw channels — the effective estimate is min(client, server
    *  + slack); tests assert the server's own probe actually lands. */
   transitChannelsOf(playerId: string): { client: number; server: number } {

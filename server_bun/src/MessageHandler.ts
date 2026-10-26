@@ -168,6 +168,8 @@ export interface RoomInfo {
   /** Target uplink-transit estimate (ms) — blast lag-comp subtracts the
    *  broadcast lead so validation aims at the shooter's screen point. */
   transitOf?: (playerId: string) => number;
+  /** Link jitter EMA — bounds the shooter's claimed render lag. */
+  transitVarOf?: (playerId: string) => number;
   /** Server-measured RTT (ping/pong echo) — cross-checks the
    *  client-reported transit inside the move shadow. */
   transitNote?: (playerId: string, rttMs: number, stamp: number) => void;
@@ -252,6 +254,7 @@ function combatDeps(roomInfo: RoomInfo | undefined): CombatDeps {
     repairTarget: roomInfo?.repairTarget,
     repair: roomInfo?.onRepair,
     transitOf: roomInfo?.transitOf,
+    transitVarOf: roomInfo?.transitVarOf,
     uplinkNote: roomInfo?.uplinkNote,
     wireHit: roomInfo?.wireHit,
     widOf: roomInfo?.widOf,

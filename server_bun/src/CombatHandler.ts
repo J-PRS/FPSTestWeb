@@ -123,6 +123,8 @@ export interface CombatDeps {
    *  same lead the tick broadcast shows shooters, so a point-blank-
    *  looking pop validates against the position actually rendered. */
   transitOf?: (playerId: string) => number;
+  /** Link jitter EMA — bounds the shooter's claimed render lag. */
+  transitVarOf?: (playerId: string) => number;
   /** Claim-declared trigger instant (server-clock estimate) — feeds the
    *  measured-uplink channel the transit EMA approximates. */
   uplinkNote?: (playerId: string, fireAt: number) => void;

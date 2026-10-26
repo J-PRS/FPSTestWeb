@@ -25,16 +25,33 @@ export const RENDER_LAG_MS = 200;
  *  bad. The client reports its worst-case delay via clientStats; this
  *  clamps it to the buffer's own ceiling (SnapshotBuffer.MAX_INTERP_DELAY
  *  mirrored — a bigger claim can't rewind past the buffer anyway). */
-export function renderLagOf(p: { clientStats?: { renderLagMs?: number; at?: number } } | null | undefined): number {
+export function renderLagOf(p: { clientStats?: { renderLagMs?: number; at?: number } } | null | undefined, bound = 800): number {
   const st = p?.clientStats;
   // A report older than ~3 uplink windows describes a link state that
   // may no longer exist — fall back to the base constant rather than
   // let a stale (or dead-session) number steer validation forever.
-  if (!st || st.renderLagMs == null || (st.at !== undefined && wallNow() - st.at > 30_000)) {return RENDER_LAG_MS;}
+  if (!st || st.renderLagMs == null || (st.at !== undefined && wallNow() - st.at > 30_000)) {return Math.min(RENDER_LAG_MS, bound);}
   // Client-claimed: Math.max(NaN,0)=NaN — a poisoned claim returns NaN,
   // the rewind target goes NaN, and every hit validation whiffs silently.
-  if (!Number.isFinite(st.renderLagMs)) {return RENDER_LAG_MS;}
-  return Math.min(Math.max(st.renderLagMs, 0), 800);
+  if (!Number.isFinite(st.renderLagMs)) {return Math.min(RENDER_LAG_MS, bound);}
+  return Math.min(Math.max(st.renderLagMs, 0), bound);
+}
+
+/** Server-observed ceiling for a shooter's claimed render lag. The
+ *  claim is a hint, not evidence: a low-ping client claiming 800ms of
+ *  staleness buys rewind their link never justified (the classic
+ *  favor-the-cheater window). The bound is the base delay the interp
+ *  buffer always carries plus 2× measured uplink + 3× measured jitter —
+ *  uplink transit/variance proxies the downlink behavior on the same
+ *  path, and no honest claim can outgrow what the path actually does. */
+export function renderLagBoundOf(
+  transitOf: ((playerId: string) => number) | undefined,
+  transitVarOf: ((playerId: string) => number) | undefined,
+  playerId: string,
+): number {
+  const transit = transitOf?.(playerId) ?? 0;
+  const jit = transitVarOf?.(playerId) ?? 0;
+  return Math.min(RENDER_LAG_MS + 2 * transit + 3 * jit, 800);
 }
 
 /** Per-victim render delay: the shooter's ghost lag for THIS target.
@@ -45,13 +62,14 @@ export function renderLagOf(p: { clientStats?: { renderLagMs?: number; at?: numb
 export function renderLagOfTarget(
   p: { clientStats?: { renderLagMs?: number; renderLag?: Record<string, number>; at?: number } } | null | undefined,
   targetId: string,
+  bound = 800,
 ): number {
   const st = p?.clientStats;
   if (st?.renderLag && !(st.at !== undefined && wallNow() - st.at > 30_000)) {
     const v = st.renderLag[targetId];
-    if (v !== undefined && Number.isFinite(v)) {return Math.min(Math.max(v, 0), 800);}
+    if (v !== undefined && Number.isFinite(v)) {return Math.min(Math.max(v, 0), bound);}
   }
-  return renderLagOf(p);
+  return renderLagOf(p, bound);
 }
 
 /** Sample-object freelist — pushRewindSample runs ~25Hz/player, so the

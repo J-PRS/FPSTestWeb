@@ -17,7 +17,7 @@ import type { Vec3 } from './types.ts';
 import type { BeamContact } from './CombatHandler.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import { rewindPos, shooterTransitMs } from './claimLedger.ts';
-import { renderLagOf, renderLagOfTarget } from './rewind.ts';
+import { renderLagOf, renderLagOfTarget, renderLagBoundOf } from './rewind.ts';
 
 /** The sweep only reads positions/ids off the sims — structural slices
  *  keep Room's concrete sims and a P2P host's lighter set compatible. */
@@ -33,6 +33,8 @@ export interface BeamSweepWorld {
   /** Target uplink-transit estimate (ms) — the same lead the tick
    *  broadcast applies. Absent = no lead knowledge. */
   transitOf?: (playerId: string) => number;
+  /** Link jitter EMA — bounds the shooter's claimed render lag. */
+  transitVarOf?: (playerId: string) => number;
 }
 
 /** Chain-fork pick — the nearest OTHER live creature within range of
@@ -95,7 +97,10 @@ export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: V
   const shooter = world.players.getPlayer(shooterId);
   // Bots see server truth — no render pipeline, no ghost to chase.
   const shooterPing = shooter?.isBot ? 0 : (shooter?.ping ?? 0);
-  const shooterLag = shooter?.isBot ? 0 : renderLagOf(shooter);
+  // Server-observed cap on the shooter's claimed staleness — the claim
+  // can hint high on a clean link, it can't earn the rewind.
+  const shooterBound = renderLagBoundOf(world.transitOf, world.transitVarOf, shooterId);
+  const shooterLag = shooter?.isBot ? 0 : renderLagOf(shooter, shooterBound);
   const shooterTransit = shooter?.isBot ? 0 : shooterTransitMs(world.transitOf, shooterId, shooterPing);
   const creatureBack = shooterTransit + shooterLag;
 
@@ -110,7 +115,7 @@ export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: V
       const targetTransit = world.transitOf?.(pid) ?? 0;
       // Full rewind to the shooter's reported view epoch (viewLag is
       // extrapolation-aware client-side) — the literal rendered ghost.
-      const back = Math.max(0, shooterTransit + renderLagOfTarget(shooter, pid) - targetTransit);
+      const back = Math.max(0, shooterTransit + renderLagOfTarget(shooter, pid, shooterBound) - targetTransit);
       const tp = rewindPos(t, back);
       const c = { x: tp.x, y: tp.y + cap.centerOff, z: tp.z };
       if (segPointDist(a, b, c) > cap.radius + 0.2 + cap.half) {continue;}
@@ -151,7 +156,7 @@ export function beamSweepRay(world: BeamSweepWorld, shooterId: string, muzzle: V
       if (pid === shooterId || t.isDead) {continue;}
       const cap = classCapsule(t.armorClass);
       const targetTransit = world.transitOf?.(pid) ?? 0;
-      const back = Math.max(0, shooterTransit + renderLagOfTarget(shooter, pid) - targetTransit);
+      const back = Math.max(0, shooterTransit + renderLagOfTarget(shooter, pid, shooterBound) - targetTransit);
       const tp = rewindPos(t, back);
       const c = { x: tp.x, y: tp.y + cap.centerOff, z: tp.z };
       // Distance to the capsule AXIS — a standing enemy counts even

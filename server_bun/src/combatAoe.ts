@@ -146,8 +146,9 @@ export class AoeClaims {
       this.h.hb('aoe.beam.hit');
       this.h.blast.splashOne({
         shooterId: playerId, ping: player.ping, bot: Boolean(player.isBot), pos: msg.position,
-        lagMs: player.isBot ? 0 : renderLagOf(player),
+        lagMs: player.isBot ? 0 : renderLagOf(player, this.h.blast.lagBoundOf(playerId)),
         lagMap: player.isBot ? undefined : player.clientStats?.renderLag,
+        lagBound: this.h.blast.lagBoundOf(playerId),
         radius: stats.aoeRadius, baseDamage: dmg,
         impulse: stats.knockbackForce, pull: stats.forceMode === 'pull',
         label: 'LG beam hit', weapon: msg.weaponType,

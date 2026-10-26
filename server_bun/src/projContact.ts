@@ -7,7 +7,7 @@ import { segSolidHit } from '../../shared/solidWorld.ts';
 import type { RoomProjectiles, LiveProj } from './RoomProjectiles.ts';
 import { rewindPos, shooterTransitMs } from './claimLedger.ts';
 import { dhypot3 } from '../../shared/dmath.ts';
-import { renderLagOf, renderLagOfTarget, REWIND_MS } from './rewind.ts';
+import { renderLagOf, renderLagOfTarget, renderLagBoundOf, REWIND_MS } from './rewind.ts';
 import { logger } from './logger.ts';
 
 type ContactHost = RoomProjectiles;
@@ -24,8 +24,10 @@ function ghostBack(r: ContactHost, owner: { ping: number; isBot?: boolean; clien
   const targetTransit = r.room.moveSim?.transitOf?.(targetId) ?? 0;
   // Full rewind to the shooter's reported view epoch — the client now
   // reports its ACTUAL sample staleness (viewLag, extrapolation-aware),
-  // so this is the literal rendered ghost: hit what you see, hit.
-  return Math.max(0, shooterTransitMs(r.room.moveSim?.transitOf?.bind(r.room.moveSim), ownerId, owner?.ping ?? 0) + renderLagOfTarget(owner, targetId) - targetTransit);
+  // so this is the literal rendered ghost: hit what you see, hit. The
+  // claim is bounded by the path the server actually measures.
+  const bound = renderLagBoundOf(r.room.moveSim?.transitOf?.bind(r.room.moveSim), r.room.moveSim?.transitVarOf?.bind(r.room.moveSim), ownerId);
+  return Math.max(0, shooterTransitMs(r.room.moveSim?.transitOf?.bind(r.room.moveSim), ownerId, owner?.ping ?? 0) + renderLagOfTarget(owner, targetId, bound) - targetTransit);
 }
 
 /** The body sweep tests distance to the capsule's axis MIDPOINT, so the
@@ -47,7 +49,7 @@ function creatureSweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof 
     // Creature sims run server-side — no uplink in their history and
     // no broadcast lead, so their ghost sits exactly shooterTransit +
     // renderDelay back.
-    const backMs = owner?.isBot ? 0 : shooterTransitMs(r.room.moveSim?.transitOf?.bind(r.room.moveSim), proj.ownerId, owner?.ping ?? 0) + renderLagOf(owner);
+    const backMs = owner?.isBot ? 0 : shooterTransitMs(r.room.moveSim?.transitOf?.bind(r.room.moveSim), proj.ownerId, owner?.ping ?? 0) + renderLagOf(owner, renderLagBoundOf(r.room.moveSim?.transitOf?.bind(r.room.moveSim), r.room.moveSim?.transitVarOf?.bind(r.room.moveSim), proj.ownerId));
     const bc = r.room.ballSim?.sweepHit(from, p.pos, reach, backMs);
     // Species pops contest the same lane — earliest of ball/crawler
     // contact eats the shell, so a crawler body-blocks a shot meant

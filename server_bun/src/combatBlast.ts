@@ -11,7 +11,7 @@ import { POWERUP } from '../../shared/pickups.ts';
 import {type ColliderIndex, blastOccluded} from '../../shared/solidWorld.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
 import { rewindPos, shooterTransitMs } from './claimLedger.ts';
-import { renderLagOf } from './rewind.ts';
+import { renderLagOf, renderLagBoundOf } from './rewind.ts';
 import { simNow, simMs } from './simClock.ts';
 import { wallNow, wallMs } from './wallClock.ts';
 import { encodeKnock } from '../../shared/wire.ts';
@@ -34,6 +34,9 @@ interface BlastCtx {
    *  per target when present (a max-across-remotes rewind overshoots fast
    *  ghosts the shooter tracked at short delay). */
   lagMap?: Record<string, number>;
+  /** Server-observed ceiling on the shooter's claimed lag — the map and
+   *  lagMs are hints; this bound is what the path actually supports. */
+  lagBound: number;
   bot: boolean;
   pos: Vec3;
   radius: number;
@@ -65,6 +68,8 @@ export interface BlastHost {
     /** Target uplink-transit estimate (ms) — the same value the tick
      *  broadcast leads remote positions by. */
     transitOf?: (playerId: string) => number;
+    /** Link jitter EMA — bounds the shooter's claimed render lag. */
+    transitVarOf?: (playerId: string) => number;
     /** Room wireId lookup + single-recipient binary lane (knockback). */
     widOf?: (playerId: string) => number | undefined;
     wireTo?: (playerId: string, data: Uint8Array, journaled?: boolean | 'volatile') => void;
@@ -87,6 +92,13 @@ export interface BlastHost {
  *  Split from CombatHandler so the claim-validation half stays readable. */
 export class BlastRunner {
   constructor(private h: BlastHost) {}
+
+  /** Server-observed ceiling for a shooter's claimed render lag —
+   *  callers building a BlastCtx outside processAOE (beam ticks) get
+   *  the same bound instead of trusting the 800ms wire claim. */
+  lagBoundOf(playerId: string): number {
+    return renderLagBoundOf(this.h.deps.transitOf, this.h.deps.transitVarOf, playerId);
+  }
 
   processAOE(playerId: string, position: Vec3, excludeTargetId: string | null | undefined, stats: WeaponStats, opts: { weapon?: number; trusted?: boolean; shotId?: string; bound?: boolean; air?: number } = {}): void {
     const { weapon, trusted = false, shotId, bound = false, air } = opts;
@@ -111,8 +123,9 @@ export class BlastRunner {
     const radius = stats.aoeRadius * perkMods(player.perk).aoeRadius;
     const ctx: BlastCtx = {
       shooterId: playerId, ping: player.ping, bot: Boolean(player.isBot), pos: position,
-      lagMs: player.isBot ? 0 : renderLagOf(player),
+      lagMs: player.isBot ? 0 : renderLagOf(player, this.lagBoundOf(playerId)),
       lagMap: player.isBot ? undefined : player.clientStats?.renderLag,
+      lagBound: this.lagBoundOf(playerId),
       // Splash pays a banded fraction of the DIRECT hit — aoeDamage on
       // the stat block only survives as the base for damage-only specials
       // (melee arc, injected LG pop charge) that have no directDamage.
@@ -192,7 +205,7 @@ export class BlastRunner {
   private plateAll(playerId: string, position: Vec3, radius: number, ctx: BlastCtx): void {
     for (const [targetId, target] of this.h.playerManager.getAllPlayers()) {
       if (target.isDead) {continue;}
-      const tpos = this.rewindTarget(target, targetId, ctx.shooterId, ctx.ping, ctx.bot, ctx.lagMs, ctx.lagMap);
+      const tpos = this.rewindTarget(target, targetId, ctx.shooterId, ctx.ping, ctx.bot, ctx.lagMs, ctx.lagMap, ctx.lagBound);
       const d = dhypot3(tpos.x - position.x, tpos.y - position.y, tpos.z - position.z);
       if (d > radius) {continue;}
       if (this.h.solids.length > 0 && this.blastBlocked(position, tpos)) {continue;}
@@ -213,7 +226,7 @@ export class BlastRunner {
   private healAll(playerId: string, position: Vec3, radius: number, ctx: BlastCtx): void {
     for (const [targetId, target] of this.h.playerManager.getAllPlayers()) {
       if (target.isDead || (targetId !== playerId && !this.h.friendly(playerId, targetId))) {continue;}
-      const tpos = this.rewindTarget(target, targetId, ctx.shooterId, ctx.ping, ctx.bot, ctx.lagMs, ctx.lagMap);
+      const tpos = this.rewindTarget(target, targetId, ctx.shooterId, ctx.ping, ctx.bot, ctx.lagMs, ctx.lagMap, ctx.lagBound);
       const d = dhypot3(tpos.x - position.x, tpos.y - position.y, tpos.z - position.z);
       if (d > radius) {continue;}
       if (this.h.solids.length > 0 && this.blastBlocked(position, tpos)) {continue;}
@@ -233,7 +246,7 @@ export class BlastRunner {
   private empAll(playerId: string, position: Vec3, radius: number, ctx: BlastCtx): void {
     for (const [targetId, target] of this.h.playerManager.getAllPlayers()) {
       if (target.isDead || targetId === playerId || this.h.friendly(playerId, targetId)) {continue;}
-      const tpos = this.rewindTarget(target, targetId, ctx.shooterId, ctx.ping, ctx.bot, ctx.lagMs, ctx.lagMap);
+      const tpos = this.rewindTarget(target, targetId, ctx.shooterId, ctx.ping, ctx.bot, ctx.lagMs, ctx.lagMap, ctx.lagBound);
       const d = dhypot3(tpos.x - position.x, tpos.y - position.y, tpos.z - position.z);
       if (d > radius) {continue;}
       if (this.h.solids.length > 0 && this.blastBlocked(position, tpos)) {continue;}
@@ -253,8 +266,8 @@ export class BlastRunner {
    *  terms cancel to shooterTransit + interpDelay − targetTransit:
    *  one-way hops only — a full-RTT term validates ~RTT/2 behind the
    *  ghost (hits landing on a model the shooter already left behind). */
-  private rewindTarget(target: PlayerState, targetId: string, shooterId: string, ping: number, bot: boolean, lagMs: number, lagMap?: Record<string, number>): Vec3 {
-    const lag = lagMap?.[targetId] === undefined ? lagMs : Math.min(Math.max(lagMap[targetId]!, 0), 800);
+  private rewindTarget(target: PlayerState, targetId: string, shooterId: string, ping: number, bot: boolean, lagMs: number, lagMap?: Record<string, number>, lagBound = 800): Vec3 {
+    const lag = lagMap?.[targetId] === undefined ? lagMs : Math.min(Math.max(lagMap[targetId]!, 0), lagBound);
     // Bots read live positions — a bot shooter has no render pipeline,
     // so there is no ghost to rewind toward.
     if (bot) {return { x: target.position.x, y: target.position.y, z: target.position.z };}
@@ -276,7 +289,7 @@ export class BlastRunner {
     // ski drops it outside the envelope, and self-damage silently dies.
     const tpos = targetId === ctx.shooterId
       ? { x: target.position.x, y: target.position.y, z: target.position.z }
-      : this.rewindTarget(target, targetId, ctx.shooterId, ctx.ping, ctx.bot, ctx.lagMs, ctx.lagMap);
+      : this.rewindTarget(target, targetId, ctx.shooterId, ctx.ping, ctx.bot, ctx.lagMs, ctx.lagMap, ctx.lagBound);
     const tdx = tpos.x - ctx.pos.x;
     const tdy = tpos.y - ctx.pos.y;
     const tdz = tpos.z - ctx.pos.z;

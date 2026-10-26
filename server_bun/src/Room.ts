@@ -927,6 +927,7 @@ export class Room {
       dynSolids: this.deployables.solidCols,
       ballSim: this.ballSim, creatureSim: this.creatureSim,
       transitOf: (pid): number => this.moveSim.transitOf(pid),
+      transitVarOf: (pid): number => this.moveSim.transitVarOf(pid),
     }, shooterId, muzzle, dir, range);
   }
 
@@ -1044,6 +1045,7 @@ export class Room {
       moveReport: (pid, pos, yaw, vel, inputSeq, rttMs) => this.moveSim.reconcile(pid, pos, yaw, vel, inputSeq, rttMs),
       inputSeqOf: (pid): number => this.moveSim.inputSeqOf(pid),
       transitOf: (pid): number => this.moveSim.transitOf(pid),
+      transitVarOf: (pid): number => this.moveSim.transitVarOf(pid),
       transitNote: (pid, rtt, stamp): void => {
         if (this.lastPingStamp.get(pid) !== stamp) {return;}
         this.moveSim.feedTransit(pid, rtt);

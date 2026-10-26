@@ -1,6 +1,6 @@
 import { wallMs } from '../src/wallClock.ts';
 import { describe, it, expect } from 'bun:test';
-import { pushRewindSample, REWIND_MS } from '../src/rewind.ts';
+import { pushRewindSample, renderLagOf, renderLagOfTarget, renderLagBoundOf, RENDER_LAG_MS, REWIND_MS } from '../src/rewind.ts';
 import { clampPing, rewindPos } from '../src/claimLedger.ts';
 import { parseField } from '../tools/netTerrain.ts';
 import { hmHeight } from '../../shared/heightfield.ts';
@@ -99,5 +99,42 @@ describe('clampPing', () => {
     expect(clampPing(-5)).toBe(0);
     expect(clampPing(100)).toBe(100);
     expect(clampPing(60_000)).toBe(400); // forged 60s ping can't rewind the world
+  });
+});
+
+// Rewind-entitlement hardening: clientStats.renderLag is client-claimed,
+// so it's a hint — the ceiling is what the server measures on the path.
+describe('renderLag bound', () => {
+  const statsP = (renderLagMs: number, renderLag?: Record<string, number>) => ({
+    clientStats: { renderLagMs, renderLag, at: Date.now() },
+  }) as unknown as PlayerState;
+
+  it('clean link: a claimed 800ms gets bounded near the base delay', () => {
+    const bound = renderLagBoundOf(() => 10, () => 3, 'p1'); // ~235ms
+    expect(bound).toBeLessThan(260);
+    expect(bound).toBeGreaterThan(200);
+    // The exploit: claim 800 on a 10ms path — earns only the bound.
+    expect(renderLagOf(statsP(800), bound)).toBeLessThan(260);
+    expect(renderLagOfTarget(statsP(800, { t1: 800 }), 't1', bound)).toBeLessThan(260);
+  });
+
+  it('honest claims under the bound pass through', () => {
+    const bound = renderLagBoundOf(() => 10, () => 3, 'p1');
+    expect(renderLagOf(statsP(100), bound)).toBe(100);
+    expect(renderLagOfTarget(statsP(0, { t1: 150 }), 't1', bound)).toBe(150);
+  });
+
+  it('bad link: bound still opens to the buffer ceiling', () => {
+    // 400ms transit + 150ms jitter — a real bad-link client keeps the
+    // full window.
+    expect(renderLagBoundOf(() => 400, () => 150, 'p1')).toBe(800);
+    const bound = renderLagBoundOf(() => 300, () => 50, 'p1'); // 950→800? 200+600+150=950→800
+    expect(bound).toBe(800);
+  });
+
+  it('absent/stale stats degrade to the base delay, never above bound', () => {
+    const bound = renderLagBoundOf(() => 10, () => 3, 'p1');
+    expect(renderLagOf(statsP(undefined as unknown as number), bound)).toBe(RENDER_LAG_MS);
+    expect(renderLagOf({ clientStats: { renderLagMs: 800, at: Date.now() - 60_000 } } as unknown as PlayerState, bound)).toBe(RENDER_LAG_MS);
   });
 });

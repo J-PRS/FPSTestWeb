@@ -137,7 +137,7 @@ export interface ProjHost {
      *  phasing through a generator and popping on the wall behind it. */
     solidCols?: readonly StructureCollider[];
   };
-  moveSim?: { structureTop(x: number, z: number): number; transitOf?(playerId: string): number };
+  moveSim?: { structureTop(x: number, z: number): number; transitOf?(playerId: string): number; transitVarOf?(playerId: string): number };
 }
 
 export class RoomProjectiles {
