@@ -21,6 +21,8 @@ import { SessionRegistry } from './sessionRegistry.ts';
 import { wallNow } from './wallClock.ts';
 import { wireRx, BIN_KIND } from './wireMeter.ts';
 import { ConnectionManager } from './ConnectionManager.ts';
+import { MessageHandler } from './MessageHandler.ts';
+import type { UdpLane } from './UdpLane.ts';
 import type { TeamId } from '../../shared/teams.ts';
 import type { ClientMessage } from '../../shared/protocol.ts';
 
@@ -148,6 +150,34 @@ export class GameServer {
     for (const name of this.maps.standingRooms()) {this.factory.roomFor(name);}
   }
 
+  /** Native-shell volatile lane — one datagram socket, sessions bind by
+   *  token (issued in gameState). The ws session still owns the reliable
+   *  lane; only volatile binary (claims up, ticks down) rides UDP. */
+  /** Per-session decode scratch for udp-sourced frames — same zero-alloc
+   *  contract as ws.data.posScratch. */
+  private udpScratch = new Map<string, WebSocketData>();
+  attachUdpLane(lane: UdpLane): void {
+    lane.onFrame = (playerId, frame): void => {
+      let data = this.udpScratch.get(playerId);
+      if (!data) {data = { playerId, connectedAt: wallNow() }; this.udpScratch.set(playerId, data);}
+      this.handleBinaryFrame(playerId, frame, null, data, (): void => lane.unbind(playerId));
+    };
+    MessageHandler.udpBind = (playerId): { token: string; port: number } => ({
+      token: lane.issue(playerId),
+      port: lane.port,
+    });
+    ConnectionManager.udpSend = (playerId, data): boolean => {
+      if (!lane.bound(playerId)) {return false;}
+      lane.sendTo(playerId, data);
+      return true;
+    };
+    ConnectionManager.onUnreg = (playerId): void => {
+      lane.unbind(playerId);
+      this.udpScratch.delete(playerId);
+    };
+    logger.info('udp lane attached', { port: lane.port });
+  }
+
   // playerId → room index: the binary position path calls this at 20Hz per
   // player, so scanning this.rooms per frame doesn't scale. Kept in sync at
   // join/addPlayer and every removal (close/grace/kick/idle paths all funnel
@@ -228,12 +258,36 @@ export class GameServer {
     if (u8 !== undefined) {
       if (isWireFrame(u8)) {
         const existingId = ws.data.playerId;
+        this.handleBinaryFrame(existingId, u8, ws, ws.data, (): void => ws.close(1011, 'server error'));
+        return;
+      }
+      this.invalidWarn(ws.data.playerId, 'Unknown binary frame rejected');
+      return;
+    }
+    this.onJsonText(ws, message as string);
+  }
+
+  /** Binary frames from ANY lane (ws binary, udp datagrams) — the decode
+   *  is the validation, dispatch is the trusted path. `data` is the
+   *  per-source decode-slot holder (ws.data or the lane's scratch bag);
+   *  `onFatal` severs the source on a throwing handler. */
+  private handleBinaryFrame(
+    existingId: string | undefined,
+    u8: Uint8Array,
+    ws: ServerWebSocket<WebSocketData> | null,
+    data: WebSocketData,
+    onFatal: () => void,
+  ): void {
+    {
         const room = existingId ? this.roomOfPlayer(existingId) : undefined;
         if (!existingId || !room) {return;} // binary before join — ignore
         // JSON-over-binary: combat claims ride the position lane for
         // transit, then decode back into the ordinary text path — same
         // parse, same validation, same dispatch.
         if (u8[1] === WIRE_JSON) {
+          // Reliable traffic doesn't ride the volatile lane — a udp-bound
+          // datagram reaching here is a protocol violation, drop it.
+          if (!ws) {return;}
           const text = decodeWireJson(u8);
           if (text === null) {this.invalidWarn(existingId, 'Malformed binary-JSON frame'); return;}
           this.onJsonText(ws, text);
@@ -254,7 +308,7 @@ export class GameServer {
               this.handleGameMessageTrusted(room, existingId, { type: u8[1] === WIRE_JUMP ? 'jump' : 'jetpack', position: c.position });
             } catch (error) {
               logger.error('Message handler failed', { playerId: existingId, type: 'posClaim(binary)', err: error instanceof Error ? error.stack ?? error.message : String(error) });
-              try { ws.close(1011, 'server error'); } catch { /* socket already dying */ }
+              try { onFatal(); } catch { /* socket already dying */ }
             }
           }
           return;
@@ -266,7 +320,7 @@ export class GameServer {
               this.handleGameMessageTrusted(room, existingId, { type: 'shotFired', weaponType: s.weaponType, pos: s.pos, dir: s.dir, shotId: s.shotId, fireAt: s.fireAt });
             } catch (error) {
               logger.error('Message handler failed', { playerId: existingId, type: 'shotFired(binary)', err: error instanceof Error ? error.stack ?? error.message : String(error) });
-              try { ws.close(1011, 'server error'); } catch { /* socket already dying */ }
+              try { onFatal(); } catch { /* socket already dying */ }
             }
           }
           return;
@@ -278,12 +332,12 @@ export class GameServer {
               this.handleGameMessageTrusted(room, existingId, im);
             } catch (error) {
               logger.error('Message handler failed', { playerId: existingId, type: 'inputMove(binary)', err: error instanceof Error ? error.stack ?? error.message : String(error) });
-              try { ws.close(1011, 'server error'); } catch { /* socket already dying */ }
+              try { onFatal(); } catch { /* socket already dying */ }
             }
           }
           return;
         }
-        const pos = decodePosition(u8, ws.data.posScratch ??= {
+        const pos = decodePosition(u8, data.posScratch ??= {
           type: 'position',
           position: { x: 0, y: 0, z: 0 },
           rotation: { yaw: 0, pitch: 0 },
@@ -297,15 +351,11 @@ export class GameServer {
             this.handleGameMessageTrusted(room, existingId, pos);
           } catch (error) {
             logger.error('Message handler failed', { playerId: existingId, type: 'position(binary)', err: error instanceof Error ? error.stack ?? error.message : String(error) });
-            try { ws.close(1011, 'server error'); } catch { /* socket already dying */ }
+            try { onFatal(); } catch { /* socket already dying */ }
           }
         }
         return;
-      }
-      this.invalidWarn(ws.data.playerId, 'Unknown binary frame rejected');
-      return;
     }
-    this.onJsonText(ws, message as string);
   }
 
   /** The text/JSON path — WS strings and WIRE_JSON frames share it. */

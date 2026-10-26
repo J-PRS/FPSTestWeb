@@ -83,6 +83,14 @@ export class ConnectionManager {
    *  into one `server.publish` per frame. Set once in server.ts after
    *  Bun.serve; absent in tests → the per-conn path stands. */
   static publishFn: ((topic: string, data: string | Uint8Array) => void) | undefined;
+  /** UDP volatile lane (native-shell clients): returns true when the
+   *  tick frame rode out over the bound datagram lane — the ws path is
+   *  skipped entirely (control/reliable traffic never touches this).
+   *  Set once in server.ts when FPS_UDP_PORT is live. */
+  static udpSend: ((playerId: string, data: Uint8Array) => boolean) | undefined;
+  /** Session-end hook — unbinds the udp lane so a stale token dies with
+   *  the session. Set alongside udpSend. */
+  static onUnreg: ((playerId: string) => void) | undefined;
   private topic?: string;
   /** Pids whose socket took a subscribe (real uWS ws) — adapters (wt/rtc
    *  lanes) never join the topic and keep per-conn sends. */
@@ -343,6 +351,7 @@ export class ConnectionManager {
       this.frameArenas.delete(playerId);
       if (this.topic && typeof ws.unsubscribe === 'function') {ws.unsubscribe(this.topic);}
       wireClose(playerId); // drop the /wire conn entry — ghosts otherwise list forever
+      ConnectionManager.onUnreg?.(playerId);
       logger.info(`Connection unregistered`, { playerId, total: this.connections.size });
     }
   }
@@ -379,6 +388,10 @@ export class ConnectionManager {
     const ws = this.connections.get(playerId);
     if (!ws || ws.readyState !== 1) {return 'gone';}
     const buffered = (ws as unknown as { getBufferedAmount?(): number }).getBufferedAmount?.() ?? 0;
+    // UDP-bound session: volatile tick frames ride the datagram lane
+    // outright — before the outbox/collect path so they never queue
+    // behind the reliable batch.
+    if (ConnectionManager.udpSend?.(playerId, data) === true) {return 'sent';}
     if (!this.tickDrained.has(playerId)) {
       if (buffered > INTRO_DRAIN_FLOOR) {
         const h = (this.heldPhase.get(playerId) ?? 0) + 1;

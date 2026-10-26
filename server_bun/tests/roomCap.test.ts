@@ -97,7 +97,7 @@ describe('room cap', () => {
     expect(resp.timers.size).toBe(0);
   });
 
-  it('player departure purges the playerRoom index too', () => {
+  it('player departure purges the playerRoom index too', async () => {
     // playerRoom lives on GameServer, above the room-level funnel §2.91
     // pins — a missed delete leaves roomOfPlayer answering a ghost id
     // with a stale room for the server's life.
@@ -105,6 +105,9 @@ describe('room cap', () => {
     const ws = fakeWs();
     gs.onOpen(ws as never);
     gs.onMessage(ws as never, JSON.stringify({ type: 'join', playerId: 'p1', room: 'default' }));
+    // The seat defers on the joined room's map load — 'default' may
+    // resolve to a different mint (preferHumans), so await all rooms.
+    await Promise.all([...peek.rooms.values()].map((r) => r.terrainReady));
     const room = peek.playerRoom.get('p1')!;
     expect(room).toBeDefined();
 

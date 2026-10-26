@@ -18,6 +18,7 @@ import { WORLD_MODEL, declaredFieldNames, checkIntent } from '../../../shared/wo
 import { armLoafDiag } from './loafDiag.js';
 import { recWireOut } from '../core/telemetry.js';
 import type { SpawnPoint,StructureSpec,InteriorSpec,WeatherSpec,AtmosphereSpec,WaterSpec } from '../../../shared/mapSpec.js';
+import { UdpLane } from './udpLane.js';
 
 const logger = new ChildLogger('NetworkManager');
 
@@ -413,6 +414,7 @@ export class NetworkManager {
     this.ws?.disconnect();
     this.ws = null;
     this.connected = false;
+    this.udpLane.close();
   }
 
   private checkStall(): void {
@@ -674,6 +676,13 @@ this.sendDrops += 1;
    *  A rare real loss just widens the judge's time-gap tolerance; stale
    *  frames self-reject by seq, so disorder is free. WS/WT unchanged. */
   private sendBinary(data: Uint8Array): void {
+    // Native-shell UDP lane: volatile frames ride the loopback shim →
+    // raw datagrams. The ws session stays for reliable traffic.
+    if (this.udpLane.send(data)) {
+      this.txBytes += data.length;
+      recWireOut(`bin:${data[0] ?? -1}`);
+      return;
+    }
     if (!this.ws?.connected()) { this.noteDrop('bin'); return; }
     this.txBytes += data.length;
     recWireOut(`bin:${data[0] ?? -1}`);
@@ -692,6 +701,8 @@ this.sendDrops += 1;
   private bwUp = 0;
   private bwDown = 0;
   private ledger = new ClaimLedger();
+  /** Native-shell volatile lane — adopted when gameState carries udp. */
+  private readonly udpLane = new UdpLane();
   private inputs = new InputStream();
 
   bandwidth(): { up: number; down: number } {
@@ -1129,8 +1140,11 @@ this.sendDrops += 1;
   /** Called by wireIn's gameState handler — the seat is (re)established.
    *  Resends fire intents the dead lane may have lost; entries from a
    *  different room (a hop) or older than the window are dropped. */
-  replayFireIntents(room?: string): void {
+  replayFireIntents(room?: string, udp?: { token: string; port: number }): void {
     this.netRoom = room;
+    // A native-shell server offered the volatile lane — adopt it. ws
+    // stays the control lane; only volatile binary reroutes.
+    if (udp) {this.udpLane.adopt(udp, (b): void => this.wireIn.binary(b));}
     const entries = this.claimIntents;
     this.claimIntents = [];
     const now = performance.now();

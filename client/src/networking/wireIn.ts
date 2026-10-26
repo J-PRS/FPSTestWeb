@@ -529,7 +529,7 @@ dropCensus.total += 1;
     this.h.remoteReset(data.players);
     // Seat is (re)established — replay fire intents a dead lane may have
     // lost. Server dedupes by shotId, so a shot that DID land is a no-op.
-    this.h.replayFireIntents(data.room);
+    this.h.replayFireIntents(data.room, data.udp);
     logger.debug(`raw gameState map: ${data.map ? JSON.stringify(data.map).slice(0, 300) : 'none'}`);
     this.h.onGameState?.(data.players || [], data.localPlayerState, { room: data.room, mode: data.mode, mapName: data.mapName, team: data.team, scores: data.scores, ffaScores: data.ffaScores, pickups: data.pickups, flags: data.flags, matchEndsAt: data.matchEndsAt, respawnMs: data.respawnMs, deployables: data.deployables, map: data.map });
   }

@@ -21,6 +21,17 @@ const rtcRelay = new RtcRelay();
 const rtcServer = new RtcServer(gameServer);
 const wtServer = new WtServer(gameServer);
 
+// Native-shell volatile lane: raw UDP carrying seq'd binary frames
+// (claims up, ticks down) for clients that expose the loopback shim.
+// Off unless FPS_UDP_PORT is set — nothing else on the box needs it.
+const udpPort = Number(process.env.FPS_UDP_PORT ?? 0);
+if (udpPort > 0) {
+  const { UdpLane } = await import('./UdpLane.ts');
+  const lane = new UdpLane();
+  await lane.listen(udpPort);
+  gameServer.attachUdpLane(lane);
+}
+
 function wsUpgrade(srv: { upgrade(req: Request, opts: { data: WebSocketData }): boolean }, req: Request, data: WebSocketData): Response | undefined {
   if (srv.upgrade(req, { data })) {return undefined;}
   return new Response('Upgrade failed', { status: 400 });

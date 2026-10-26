@@ -14,12 +14,13 @@ function fakeWs() {
 }
 
 describe('nugget deploy through the wire', () => {
-  it('deploy nugget drains on tick, mints a gem, acks the claim', () => {
+  it('deploy nugget drains on tick, mints a gem, acks the claim', async () => {
     const gs = new GameServer();
     const ws = fakeWs();
     gs.onMessage(ws, JSON.stringify({ type: 'join', playerId: 'p1', room: 'nug-room', mode: 'headhunt', bots: 0 }));
-    const {rooms} = (gs as unknown as { rooms: Map<string, { pickups: { snapshot(): { kind: string }[] }; players: { getPlayer(id: string): { position: { x: number; y: number; z: number } } | undefined }; drainCommands(): void }> });
+    const {rooms} = (gs as unknown as { rooms: Map<string, { terrainReady?: Promise<unknown>; pickups: { snapshot(): { kind: string }[] }; players: { getPlayer(id: string): { position: { x: number; y: number; z: number } } | undefined }; drainCommands(): void }> });
     const room = rooms.get('nug-room')!;
+    await room.terrainReady; // the seat defers on the map load
     const me = room.players.getPlayer('p1')!;
 
     gs.onMessage(ws, JSON.stringify({ type: 'deploy', kind: 'nugget', position: { x: me.position.x + 2, y: me.position.y, z: me.position.z }, claimSeq: 1 }));

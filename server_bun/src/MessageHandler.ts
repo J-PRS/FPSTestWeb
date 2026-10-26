@@ -288,6 +288,13 @@ export class MessageHandler {
   private botBoltSeq = 0;
   private readonly RATE_WARN_COOLDOWN_MS = 5000;
 
+  /** UDP volatile lane: mint a session bind token for a joiner (native
+   *  clients read `udp:{token,port}` in gameState and point their loopback
+   *  shim at it). Static/global like ConnectionManager.publishFn —
+   *  server.ts sets it when FPS_UDP_PORT is live; absent = key omitted
+   *  from gameState (JSON.stringify drops undefined fields). */
+  static udpBind: ((playerId: string) => { token: string; port: number } | undefined) | undefined;
+
   roomInfo: RoomInfo = { room: 'default', mode: '' };
 
   /** Set from roomInfo.claimsAccepted at construction — wire.ts's claim
@@ -572,6 +579,10 @@ export class MessageHandler {
       // wt clients only: advertise the reliable-binary lane (stream 2).
       // Absent on ws/old builds so clients stay on the base64 envelope.
       caps: player.transport === 'wt' ? { binLane: 1 } : undefined,
+      // Native-shell volatile lane: the loopback shim binds datagrams to
+      // this session by token; volatile claims/ticks ride UDP, reliable
+      // stays on ws. Absent when the lane isn't live.
+      udp: MessageHandler.udpBind?.(playerId),
       // v3 record-id roster — everyone minted before this joiner needs
       // their mapping shipped inline (deltas only reach live sockets).
       wireIds: this.roomInfo.wireIds?.() ?? {},
