@@ -85,7 +85,6 @@ export class Lobby {
   private mapSelect: HTMLSelectElement;
   private modeSelect: HTMLSelectElement;
   private botsInput: HTMLInputElement;
-  private leaveBtn: HTMLButtonElement;
   private els: LobbyPanelEls;
   private maps: MapRow[] = [];
   private mapsFailed = false;
@@ -116,7 +115,6 @@ export class Lobby {
     this.mapSelect = els.mapSelect;
     this.modeSelect = els.modeSelect;
     this.botsInput = els.botsInput;
-    this.leaveBtn = els.leaveBtn;
     this.els = els;
   }
 
@@ -336,10 +334,6 @@ export class Lobby {
     };
     rooms.sort((a, b): number => rank(a) - rank(b) || a.name.localeCompare(b.name));
     const online = this.online();
-    // Default lobby IS home — leaving it is a no-op; offline there's no
-    // room to leave, but the button doubles as "go to the lobby".
-    this.leaveBtn.disabled = online && this.currentRoom() === 'default';
-    this.leaveBtn.textContent = online ? 'LEAVE' : 'GO';
     // Diff, don't rebuild: append() moves an existing row, so walking the
     // sorted list both inserts new tiles and re-sorts without a repaint.
     const seen = new Set<string>();

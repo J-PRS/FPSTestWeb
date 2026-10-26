@@ -66,8 +66,6 @@ export interface LobbyPanelEls {
 
   botsInput: HTMLInputElement;
 
-  leaveBtn: HTMLButtonElement;
-
   /** Repoll the open-lobby list — Lobby calls it on open + poll tick. */
 
   refreshLobs(): void;
@@ -609,17 +607,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     head.style.cssText = 'margin-top:0;flex:1;';
 
-    // LEAVE = hop back to the immortal default lobby room (in-place
-    // switchRoom when the socket is live, reload otherwise). The current
-    // room shows as the highlighted tile in the list — no banner needed.
-
-    const leaveBtn = btn('LEAVE');
-
-    leaveBtn.style.cssText = 'font-size:0.6rem;padding:2px 8px;';
-
-    leaveBtn.addEventListener('click', (): void => h.join('default'));
-
-    headRow.append(head, leaveBtn);
+    headRow.append(head);
 
     const rows = document.createElement('div');
 
@@ -1210,7 +1198,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
   
 
-  return { panel, rows, mapSelect, modeSelect, botsInput, leaveBtn, refreshLobs };
+  return { panel, rows, mapSelect, modeSelect, botsInput, refreshLobs };
 
 }
 
