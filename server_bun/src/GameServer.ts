@@ -432,7 +432,10 @@ export class GameServer {
     return [...this.rooms.values()].filter((r): boolean => !r.unlisted).map(r => ({
       name: r.name,
       mode: r.mode || undefined,
-      map: this.maps.mapNameOf(r.name),
+      // Terrain name is what "map" means to a browser — duel-1 and
+      // headhunt-1 both run rimrock.bin, their spec files just carry the
+      // rules. mapNameOf stays spec-source (reload/matchmaker key on it).
+      map: r.spec.terrain?.split('/').pop()?.replace(/\.bin$/, '') ?? this.maps.mapNameOf(r.name),
       players: r.playerCount(),
       humans: r.players.getHumanCount(),
       // Humans actually playing — a position claim within 90s. A parked
