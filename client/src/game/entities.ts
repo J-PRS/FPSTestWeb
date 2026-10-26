@@ -181,7 +181,7 @@ function spawnBall(): void {
 
   if (f.serverBalls()) {return;} // connected: the server owns ball spawning
 
-  if (urlParams.noBalls) {return;} // lobby sim-gate, applied to the local field too
+  if (urlParams.noBallsLocal) {return;} // explicit ?noballs only — the fps-noballs room-creation flag must not starve the local field
 
   if (f.atCap(balls, BALL_MAX)) {return;}
 
@@ -231,7 +231,7 @@ function spawnEliteBall(): void {
 
   if (f.serverBalls()) {return;}
 
-  if (urlParams.noBalls) {return;}
+  if (urlParams.noBallsLocal) {return;}
 
   spawnBallOfVariant(3);
 
@@ -251,7 +251,7 @@ function spawnSplitChildren(t: Targetable): void {
 
   if (f.serverBalls()) {return;}
 
-  if (urlParams.noBalls) {return;}
+  if (urlParams.noBallsLocal) {return;}
 
   const dm = deps.lazyDemoManager();
 
@@ -645,7 +645,7 @@ nuggetsCollected += 1;
 
     getNuggetsCollected: (): number => nuggetsCollected,
 
-    spawnBall: noSpawn(urlParams.noBalls, spawnBall),
+    spawnBall: noSpawn(urlParams.noBallsLocal, spawnBall),
 
     spawnCrawler: gateC(melee.spawnCrawler), spawnScarab: gateC(melee.spawnScarab), spawnGrub: gateC(melee.spawnGrub), spawnSnake: gateC(melee.spawnSnake),
 
@@ -657,7 +657,7 @@ nuggetsCollected += 1;
 
     spawnTotem: gateC(siege.spawnTotem), spawnUberTotem: gateC(siege.spawnUberTotem),
 
-    spawnEliteBall: noSpawn(urlParams.noBalls, spawnEliteBall), plantMine: gateC(siege.plantMine),
+    spawnEliteBall: noSpawn(urlParams.noBallsLocal, spawnEliteBall), plantMine: gateC(siege.plantMine),
 
     turretBolts: siege.turretBolts, consumeBolt: siege.consumeBolt, cookBoltsNear: siege.cookBoltsNear,
 

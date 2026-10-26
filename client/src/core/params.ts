@@ -132,6 +132,10 @@ export const urlParams = {
    *  creature gates still read noCreatures above. */
   get creatures(): boolean { return live().has('creatures') || settings.get('fps-creatures') === 1; },
   get noBalls(): boolean { return live().has('noballs') || settings.get('fps-noballs') === 1; },
+  /** Local ambient ball field only — honors an explicit ?noballs, but NOT
+   *  the persisted fps-noballs room-creation flag (pure-PvP hosted default
+   *  shouldn't strip the offline sandbox's main attraction). */
+  get noBallsLocal(): boolean { return live().has('noballs'); },
   /** ?net=wt|rtc — probe that transport tier before falling back to
    *  WebSocket (netcode v2; the UDP tiers are stubbed until server halves
    *  exist). Absent param = straight WS, today's behavior. */
