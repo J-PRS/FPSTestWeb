@@ -130,7 +130,10 @@ export function tickBallTrails(b: Ball, dt: number, viewPos: THREE.Vector3): voi
       // false-positive glitch.
       const off = Math.sqrt(offSq);
       const spd = Math.max(1e-4, Math.sqrt(b.vel.lengthSq()));
-      if (off > 0.5 && off * (1 - Math.exp(-10 * dt)) > jumpBudget(spd)) {b.retireRibbons();}
+      // Total pending correction vs one-sample budget — the per-frame slide
+      // slice stays under a speed-scaled budget at high fps, letting the
+      // follow-weld stretch the strip across the whole blend (sky streak).
+      if (off > 0.5 && off > jumpBudget(spd)) {b.retireRibbons();}
       b._blendCut = false;
     }
     b.trails.fade(dt);
