@@ -154,8 +154,9 @@ this.ops.tickLagSamples += 1;
         // than retrying a doomed path every tick.
         if (this.tickQuarantined.has(room.name)) {continue;}
         // Empty named rooms are teardown: the sim timer + entry would leak
-        // per room name otherwise. 'default' is immortal.
-        if (room.empty && room.name !== 'default') {
+        // per room name otherwise. 'default' is immortal; spec-standing
+        // lobbies (duel-1) hibernate instead of disposing.
+        if (room.empty && room.name !== 'default' && !room.standing) {
           // Outside tickRoomGuarded's containment — a throwing dispose()
           // would otherwise escape into the interval body uncaught and
           // kill the process for every room.

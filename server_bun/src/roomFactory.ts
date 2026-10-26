@@ -125,7 +125,7 @@ export class RoomFactory {
     // match — a hosted 'ctf' landing in a stale 'nuggets' room would
     // otherwise be absorbed with only a warn toast. No humans and no
     // spectators means nothing is lost: remint under the asked mode.
-    if (room && mode && room.mode !== mode &&
+    if (room && mode && room.mode !== mode && !room.standing &&
         room.players.getHumanCount() === 0 && room.spectators.size === 0) {
       room.dispose();
       this.host.rooms.delete(name);
@@ -237,7 +237,7 @@ export class RoomFactory {
       // balled room for a no-balls joiner silently ignores the toggle
       // (first joiner defines, so a wrong-gated room can never be fixed).
       if (room.noBalls !== noBalls || room.noCreatures !== noCreatures) {continue;}
-      if (room.playerCount() >= CONFIG.maxPlayers) {continue;}
+      if (room.playerCount() >= room.maxPlayers) {continue;}
       if (room.unlisted) {continue;}
       // humans=1 — /quickjoin wants a live match: the busiest room with
       // humans in it, falling back to the plain emptiest pick when every

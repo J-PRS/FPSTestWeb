@@ -101,6 +101,12 @@ export interface MapSpec {
    *  spawning/retiring bots as humans come and go. Distinct from `bots`
    *  (a fixed spawn count) — fill reacts to joins and quits. */
   botFill?: number;
+  /** Per-room seat cap — overrides the server-wide maxPlayers for rooms
+   *  minted on this spec (a 1v1 duel is 2). Absent = global budget. */
+  maxPlayers?: number;
+  /** Standing lobby: the room mints at boot and never disposes for
+   *  emptiness — always joinable, hibernates while nobody's in it. */
+  standing?: boolean;
   /** Difficulty band for spawned bots — one tier for the whole lobby, or
    *  {alpha,bravo} to handicap sides differently. Per-bot variance rolls
    *  around the band, so a team's bots aren't clones. */
@@ -660,6 +666,8 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     bases: parseBases((src as { bases?: unknown }).bases),
     bots: clampInt((src as { bots?: unknown }).bots, 0, 16, 0, 'bots') || undefined,
     botFill: clampInt((src as { botFill?: unknown }).botFill, 0, 24, 0, 'botFill') || undefined,
+    maxPlayers: clampInt((src as { maxPlayers?: unknown }).maxPlayers, 1, 64, 0, 'maxPlayers') || undefined,
+    standing: (src as { standing?: unknown }).standing === true ? true : undefined,
     botSkill: parseBotSkill((src as { botSkill?: unknown }).botSkill),
     ballMix: parseBallMix((src as { ballMix?: unknown }).ballMix),
     // filename-only — the value is resolved under maps/ server-side, so

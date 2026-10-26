@@ -1341,6 +1341,15 @@ export class Room {
       && this.spectators.size === 0 && this.terrainReady == null;
   }
 
+  /** Seat cap: spec override (a 1v1 duel is 2) or the process-wide budget.
+   *  Read off spec so a rotation applySpec re-caps without a field copy. */
+  get maxPlayers(): number { return this.spec.maxPlayers ?? CONFIG.maxPlayers; }
+
+  /** Standing lobby — minted at boot, exempt from the empty-room sweep.
+   *  Hibernates while empty; spec-tracked so a rotation drops the flag
+   *  with the spec that carried it. */
+  get standing(): boolean { return this.spec.standing === true; }
+
   /** Balance pick: smallest team gets the newcomer. FFA modes return
    *  undefined. Split from assignTeam so GameServer can pass the pick to
    *  addPlayer — the join spawn itself is then already team-aware. */

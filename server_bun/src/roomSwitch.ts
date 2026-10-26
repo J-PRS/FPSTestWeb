@@ -190,7 +190,7 @@ export class RoomSwitcher {
     // The global budget counts every fanout target — spectators draw the
     // same tick stream as players, so players + watchers together are
     // what the budget actually bounds.
-    return room.playerCount() >= CONFIG.maxPlayers ||
+    return room.playerCount() >= room.maxPlayers ||
       (CONFIG.globalMaxPlayers > 0 &&
         this.host.totalPlayers() + this.host.specRooms.size >= CONFIG.globalMaxPlayers);
   }

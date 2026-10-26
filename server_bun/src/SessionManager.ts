@@ -199,7 +199,7 @@ export class SessionManager {
     // rooms share one core, so total bodies is the number that matters
     // for latency, not per-room occupancy. Spectators draw the same tick
     // stream as players, so they count against the budget too.
-    if (room.playerCount() >= CONFIG.maxPlayers ||
+    if (room.playerCount() >= room.maxPlayers ||
         (CONFIG.globalMaxPlayers > 0 &&
           this.d.totalPlayers() + this.d.specRooms.size >= CONFIG.globalMaxPlayers)) {
       ws.close(1013, 'Server full');

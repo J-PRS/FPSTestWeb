@@ -206,6 +206,19 @@ export class MapCatalog {
     return rows;
   }
 
+  /** Standing-room seeds — specs flagged `standing:true` get a permanent
+   *  `<name>-1` room at boot (duel lobbies, persistent queues). Hidden
+   *  specs count: they're the private-lobby class this exists for. */
+  standingRooms(): string[] {
+    try {
+      return readdirSync(MAPS_DIR)
+        .filter((f): boolean => f.endsWith('.json'))
+        .map((f): string => f.replace(/\.json$/, ''))
+        .filter((n): boolean => this.loadMapSpec(n)?.standing === true)
+        .map((n): string => `${n}-1`);
+    } catch { return []; }
+  }
+
   private buildList(): { name: string; mode: string; modes: string[]; bots: number; t2: boolean }[] {
     try {
       return readdirSync(MAPS_DIR)

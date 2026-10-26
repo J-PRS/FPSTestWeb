@@ -141,6 +141,11 @@ export class GameServer {
       sessions: this.sessions,
       registry: this.registry,
     });
+    // Standing lobbies: specs flagged standing:true get a permanent
+    // <name>-1 room now — hibernating empty (near-zero cost), always
+    // joinable and always listed in /rooms (a 1v1 duel-1 with nobody in
+    // it is still an open table, not a dead room).
+    for (const name of this.maps.standingRooms()) {this.factory.roomFor(name);}
   }
 
   // playerId → room index: the binary position path calls this at 20Hz per
@@ -433,7 +438,7 @@ export class GameServer {
       names: withNames
         ? [...r.players.getAllPlayers().values()].map(p => ({ id: p.id, name: p.name }))
         : undefined,
-      maxPlayers: CONFIG.maxPlayers,
+      maxPlayers: r.maxPlayers,
       spectators: r.spectators.size > 0 ? r.spectators.size : undefined,
       // Live match state so the lobby row shows more than occupancy.
       scores: r.modeSpec?.teams ? (Object.assign({}, r.scores)) : undefined,
