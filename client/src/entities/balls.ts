@@ -26,7 +26,7 @@ import { drawBallSpawn, drawVariant, spawnRand } from '../../../shared/spawnDice
 // burst spender. Off-path cost is one branch; the timed path is a separate
 // method so the normal hot path keeps zero timing overhead.
 const BALL_PROF = urlParams.has('ballprof');
-const ballProf = { calls: 0, net: 0, render: 0, rage: 0, shadow: 0, inst: 0, trails: 0, max: 0, maxAt: '' };
+const ballProf = { calls: 0, net: 0, render: 0, rage: 0, shadow: 0, inst: 0, trails: 0, sim: 0, dress: 0, max: 0, maxAt: '' };
 
 const BALL_GRAVITY   = GRAVITY;
 const _enrageTint = new THREE.Color(1, 0.12, 0.08);
@@ -446,8 +446,10 @@ export class Ball {
       return;
     }
     // The committed target is the live player — offline has no link lag.
+    const _pt = BALL_PROF ? performance.now() : 0;
     const ev = stepBall(s, dt, field, playerPos, true,
       { colliders: Ball.colliders, colliderIndex: Ball.colliderIndex ?? undefined });
+    if (BALL_PROF) {ballProf.sim += performance.now() - _pt;}
     this.pos.set(s.x, s.y, s.z);
     this.vel.set(s.vx, s.vy, s.vz);
     this.enraged = s.enraged;
@@ -456,7 +458,9 @@ export class Ball {
     this.dampNextBounce = s.dampNextBounce;
     this.health = s.health;
     if (s.dead) {this.dead = true;}
+    const _pd = BALL_PROF ? performance.now() : 0;
     this.dressSegment(ev);
+    if (BALL_PROF) {ballProf.dress += performance.now() - _pd;}
   }
 
   /** Event → dressing. onBounce is the demo keyframe — every velocity
@@ -623,6 +627,7 @@ registerDiag('balls', () => ({
         net: Number(ballProf.net.toFixed(1)), render: Number(ballProf.render.toFixed(1)),
         rage: Number(ballProf.rage.toFixed(1)), shadow: Number(ballProf.shadow.toFixed(1)),
         inst: Number(ballProf.inst.toFixed(1)), trails: Number(ballProf.trails.toFixed(1)),
+        sim: Number(ballProf.sim.toFixed(1)), dress: Number(ballProf.dress.toFixed(1)),
         max: Number(ballProf.max.toFixed(1)), maxAt: ballProf.maxAt,
       },
     } : {},

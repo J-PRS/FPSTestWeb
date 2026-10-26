@@ -93,6 +93,7 @@ export function setHeightScale(mult: number): void {
   if (mult === hmScale) {return;}
   hmScale = mult;
   _hvc.clear(); // visual cache holds scaled world heights — stale otherwise
+  invalidateField();
 }
 
 export function getHeightScale(): number {
@@ -103,6 +104,7 @@ export function setWorldScale(meters: number): void {
   if (meters === hmWorldScale) {return;}
   hmWorldScale = meters;
   _hvc.clear();
+  invalidateField();
 }
 
 export function getWorldScale(): number {
@@ -137,6 +139,7 @@ export async function loadHeightfieldBin(url: string): Promise<void> {
   hmData = rgba;
   hmSize = w;
   buildMaxGrid();
+  invalidateField();
 }
 
 function hmSample(x: number, z: number): number {
@@ -211,9 +214,18 @@ export function getHeightmapData(): { data: Uint8ClampedArray; size: number } | 
 /** The heightmap in the shared format — server-owned creatures (ballSim)
  *  replay flight against the identical field, so prediction lands on the
  *  same vertices as the server's sim. */
+let _fieldObj: Heightfield | null = null;
 export function getHeightfield(): Heightfield | null {
-  return hmData ? { size: hmSize, data: hmData, stride: 4, heightScale: hmScale, worldScale: hmWorldScale } : null;
+  // Cached wrapper — heightfield.chordTaps keys its chord-tap cache on the
+  // field OBJECT; minting a fresh wrapper here invalidated the cache every
+  // call and rebuilt the span² tap array inside every stepBall (~9ms×N).
+  if (!hmData) { _fieldObj = null; return null; }
+  if (!_fieldObj) {_fieldObj = { size: hmSize, data: hmData, stride: 4, heightScale: hmScale, worldScale: hmWorldScale };}
+  return _fieldObj;
 }
+/** Any module-state mutation must rebuild the cached field wrapper or
+ *  stale size/scale leaks into physics sampling. */
+function invalidateField(): void { _fieldObj = null; }
 
 // Full module state, restorable — demo playback swaps in the clip's
 // embedded terrain, then hands the live map back on stop.
@@ -229,6 +241,7 @@ export function restoreHeightmap(snap: HeightmapSnapshot): void {
   hmData = snap.data; hmSize = snap.size; hmScale = snap.scale; hmWorldScale = snap.worldScale;
   buildMaxGrid();
   _hvc.clear();
+  invalidateField();
 }
 
 
@@ -250,6 +263,7 @@ export function injectHeightmapBytes(
   hmData = rgba; hmSize = size; hmScale = heightScale; hmWorldScale = worldScale;
   buildMaxGrid();
   _hvc.clear();
+  invalidateField();
   return (): void => restoreHeightmap(prev);
 }
 
