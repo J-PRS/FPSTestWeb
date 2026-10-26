@@ -66,9 +66,10 @@ export class Chat {
     root.id = 'chat';
     // max-width is capped at 50vw-170px: the bottom-center vitals block is
     // 300px wide, so on narrow windows an uncapped feed would nick it.
-    // z 39: below the HUD panels (40) and menu overlay (100) — chat is
-    // ambient text, never paints over menus/panels.
-    root.style.cssText = 'position:fixed;left:12px;bottom:var(--z-bl-1);z-index:39;font:13px/1.4 monospace;color:#fff;pointer-events:none;max-width:min(420px, calc(50vw - 170px));';
+    // z 8: above the world render, below EVERY UI chrome — the menu
+    // overlay sits at 10, HUD panels at 40. Ambient text never paints
+    // over menus or panels.
+    root.style.cssText = 'position:fixed;left:12px;bottom:var(--z-bl-1);z-index:8;font:13px/1.4 monospace;color:#fff;pointer-events:none;max-width:min(420px, calc(50vw - 170px));';
 
     this.feed = document.createElement('div');
     root.append(this.feed);
