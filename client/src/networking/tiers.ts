@@ -148,39 +148,28 @@ export async function connectGameTransport(config: ConnectionConfig, opts?: Tier
   if (want !== 'auto') {return pinnedTier(want, config);}
   const now = Date.now();
   const probeWt = now >= missUntil.wt;
-  const probeRtc = now >= missUntil.rtc;
-  // Each candidate gets a muted wrapper — the tier probe disconnects the
-  // losers, and without this a loser's teardown would fire onDisconnect/
-  // onMessage as if the WINNING session dropped (or worse, deliver its
-  // frames twice). Callbacks go live only for the transport that wins.
+  // RTC is out of the auto ladder — the deploy offers WS+WT, and without
+  // server-side ICE the probe's 2.5s gather + PeerConnection never wins
+  // anyway (?net=rtc still works for tests/netbots over netLink).
   const wtC = muteable(config);
-  const rtcC = muteable(config);
-  // Hard cap per probe — a dead/slow tier (non-QUIC origin, empty ICE
-  // config, filterbox) must not starve the ws floor. Measured: a
-  // trycloudflare-origin connect spent ~30s probing before the known-good
-  // lane ever opened. RTC gets a wider window: with real STUN configured
-  // the gather+answer round legitimately takes ~5-8s, and it's the tier
-  // we actually want. A late-resolving probe is orphaned with a muted
+  // Hard cap — a dead/slow WT (non-QUIC origin, filterbox) must not
+  // starve the ws floor. A late-resolving probe is orphaned with a muted
   // config: dispose it or it sits as a zombie lane holding a seat.
   let capExpired = false;
-  const capped = (p: Promise<GameTransport | null>, ms: number, name: string): Promise<GameTransport | null> => {
-    const guarded = p.then(
-      (t): GameTransport | null => { if (capExpired) { t?.disconnect(); return null; } return t; },
-      (error: unknown): null => { logger.warn(`${name} probe threw`, { err: error instanceof Error ? error.message : String(error) }); return null; },
-    );
-    return Promise.race([guarded, new Promise<null>((res): void => { setTimeout((): void => res(null), ms); })]);
-  };
-  const [wt, rtc] = await Promise.all([
-    probeWt ? capped(tryWebTransport(wtC.config), 4000, 'wt') : null,
-    probeRtc ? capped(tryWebRTC(rtcC.config), 8000, 'rtc') : null,
-  ]);
+  const wt = probeWt
+    ? await Promise.race([
+        tryWebTransport(wtC.config).then(
+          (t): GameTransport | null => { if (capExpired) { t?.disconnect(); return null; } return t; },
+          (error: unknown): null => { logger.warn('wt probe threw', { err: error instanceof Error ? error.message : String(error) }); return null; },
+        ),
+        new Promise<null>((res): void => { setTimeout((): void => res(null), 4000); }),
+      ])
+    : null;
   capExpired = true;
   // Only an actual probe refreshes the miss window — a skipped probe must
   // not extend the cache or the tier never gets retried.
   if (probeWt && !wt) {missUntil.wt = Date.now() + MISS_CACHE_MS;}
-  if (probeRtc && !rtc) {missUntil.rtc = Date.now() + MISS_CACHE_MS;}
-  if (wt) { wtC.arm(); rtc?.disconnect(); logger.info('tier: WebTransport'); return wt; }
-  if (rtc) { rtcC.arm(); logger.info('tier: WebRTC'); return rtc; }
+  if (wt) { wtC.arm(); logger.info('tier: WebTransport'); return wt; }
   logger.info('tier: WebSocket');
   return new WebSocketConnection(config);
 }
