@@ -24,6 +24,13 @@ export class UdpLane {
   private tokenToPid = new Map<string, string>();
   private pidToToken = new Map<string, string>();
   private addrOf = new Map<string, { port: number; host: string }>();
+  /** pid → wall ms of the last inbound datagram — staleness decides
+   *  whether the down-lane is still real. */
+  private lastRx = new Map<string, number>();
+  /** Lane silence budget: no datagram in this window = the client-side
+   *  shim is dead or the NAT blackholed the path — starving their tick
+   *  stream on a corpse lane is the silent-failure mode. ~2 claim beats. */
+  private static readonly STALE_MS = 2500;
   /** pid -> inbound frame hook, set by GameServer once the lane exists. */
   onFrame?: (playerId: string, frame: Uint8Array) => void;
 
@@ -56,6 +63,14 @@ export class UdpLane {
     if (token !== undefined) { this.tokenToPid.delete(token); }
     this.pidToToken.delete(playerId);
     this.addrOf.delete(playerId);
+    this.lastRx.delete(playerId);
+  }
+
+  /** Bound AND alive — the send router consults this per frame: a stale
+   *  lane falls back to ws ticks and self-heals on the next datagram. */
+  live(playerId: string): boolean {
+    const at = this.lastRx.get(playerId);
+    return at !== undefined && Date.now() - at < UdpLane.STALE_MS;
   }
 
   bound(playerId: string): boolean { return this.addrOf.has(playerId); }
@@ -84,6 +99,7 @@ export class UdpLane {
       // windows are a hardening pass, not the spike.
       return;
     }
+    this.lastRx.set(pid, Date.now());
     const frame = buf.subarray(TOKEN_BYTES);
     wireRx(pid, frame.byteLength, BIN_KIND[frame[1]!]!);
     this.onFrame?.(pid, frame);

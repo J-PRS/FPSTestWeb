@@ -167,7 +167,9 @@ export class GameServer {
       port: lane.port,
     });
     ConnectionManager.udpSend = (playerId, data): boolean => {
-      if (!lane.bound(playerId)) {return false;}
+      // Stale lanes fall back to ws — a client whose inbound path died
+      // (shim crash, NAT blackhole) gets ticks back without a reconnect.
+      if (!lane.live(playerId)) {return false;}
       lane.sendTo(playerId, data);
       return true;
     };
