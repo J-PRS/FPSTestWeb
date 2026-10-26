@@ -75,7 +75,7 @@ footer{margin-top:18px;display:flex;justify-content:space-between;font:11px ui-m
 <div class="online">
   <div class="stat"><b><i id="nplay">–</i></b><span>players online</span></div>
   <div class="stat"><b><i id="nrooms">–</i></b><span>live rooms</span></div>
-  <div class="stat"><b><i id="nhum">–</i></b><span>humans</span></div>
+  <div class="stat"><b><i id="nhum">–</i></b><span>playing now</span></div>
 </div>
 <table><thead><tr>
   <th>server</th><th>mode</th><th class="th-map">map</th><th>players</th><th>score</th><th class="th-meta">info</th>
@@ -99,10 +99,11 @@ async function tick(){
    (await fetch(API+'/rooms',{cache:'no-store'})).json(),
    (await fetch(API+'/health',{cache:'no-store'})).json()]);
   document.getElementById('host').textContent=location.protocol.startsWith('http')?API.replace(/^https?:\/\//,''):'';
-  document.getElementById('nplay').textContent=h.players;
+  // ONLINE = seated humans (sockets) — h.players counts bots too.
+  // PLAYING = a position claim in the last 90s — a parked hidden-tab
+  // client keeps its seat but doesn't read as "someone online".
+  document.getElementById('nplay').textContent=rooms.reduce((a,r)=>a+(r.humans||0),0);
   document.getElementById('nrooms').textContent=rooms.length;
-  // active = a position claim in the last 90s — a parked hidden-tab
-  // client keeps its seat but doesn't count as "someone online".
   document.getElementById('nhum').textContent=rooms.reduce((a,r)=>a+(r.active??r.humans??0),0);
   const sorted=[...rooms].sort((a,b)=>((b.active??b.humans)-(a.active??a.humans))||(b.players-a.players));
   const html=sorted.length?sorted.map(r=>{
@@ -120,7 +121,7 @@ async function tick(){
     '<td><span class="mode'+(r.mode?'':' empty-mode')+'">'+esc(r.mode||'arena')+'</span></td>'+
     '<td class="map">'+esc(r.map||'—')+'</td>'+
     '<td class="occ'+(full?' full':'')+'">'+r.players+'/'+r.maxPlayers+
-      '<small>'+(r.active??r.humans)+'p'+(bots?'+'+bots+'b':'')+(r.spectators?' +'+r.spectators+'s':'')+'</small>'+
+      '<small>'+(r.active??r.humans)+(bots?' · '+bots+' bot'+(bots===1?'':'s'):'')+(r.spectators?' · '+r.spectators+' spec':'')+'</small>'+
       '<div class="cbar"><i style="width:'+pct+'%"></i></div></td>'+
     '<td class="score">'+score+'</td>'+
     '<td class="meta">'+info.join(' · ')+'</td></tr>';
