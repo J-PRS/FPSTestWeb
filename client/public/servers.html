@@ -52,9 +52,6 @@ td{padding:11px 10px;vertical-align:middle}
 .map{color:var(--dim);font-family:ui-monospace,monospace;font-size:12px}
 .occ{white-space:nowrap;font:600 14px ui-monospace,monospace;color:var(--bright)}
 .occ small{display:block;font-weight:400;font-size:10px;color:var(--dim);letter-spacing:.08em}
-.occ .cbar{width:64px;height:3px;background:#1c2836;border-radius:2px;margin-top:4px;overflow:hidden}
-.occ .cbar i{display:block;height:100%;background:var(--ok)}
-.occ.full .cbar i{background:var(--bad)}
 .occ.full{color:var(--bad)}
 .score{font-family:ui-monospace,monospace;font-size:12px;color:var(--txt);white-space:nowrap}
 .score em{font-style:normal;color:var(--gold)}
@@ -73,7 +70,7 @@ footer{margin-top:18px;display:flex;justify-content:space-between;font:11px ui-m
 <div class="wrap">
 <header><h1>SERVER <b>BROWSER</b></h1><span class="host" id="host">—</span></header>
 <div class="online">
-  <div class="stat"><b><i id="nplay">–</i></b><span>players online</span></div>
+  <div class="stat"><b><i id="nplay">–</i></b><span>online</span></div>
   <div class="stat"><b><i id="nrooms">–</i></b><span>live rooms</span></div>
   <div class="stat"><b><i id="nhum">–</i></b><span>playing</span></div>
 </div>
@@ -108,7 +105,6 @@ async function tick(){
   const sorted=[...rooms].sort((a,b)=>((b.active??b.humans)-(a.active??a.humans))||(b.players-a.players));
   const html=sorted.length?sorted.map(r=>{
    const full=r.players>=r.maxPlayers;
-   const pct=Math.min(100,Math.round(r.players/r.maxPlayers*100));
    const bots=r.players-r.humans;
    let score='';
    if(r.scores)score='α '+r.scores.alpha+' <em>·</em> β '+r.scores.bravo;
@@ -121,8 +117,7 @@ async function tick(){
     '<td><span class="mode'+(r.mode?'':' empty-mode')+'">'+esc(r.mode||'arena')+'</span></td>'+
     '<td class="map">'+esc(r.map||'—')+'</td>'+
     '<td class="occ'+(full?' full':'')+'">'+r.players+'/'+r.maxPlayers+
-      '<small>'+(r.active??r.humans)+(bots?' · '+bots+' bot'+(bots===1?'':'s'):'')+(r.spectators?' · '+r.spectators+' spec':'')+'</small>'+
-      '<div class="cbar"><i style="width:'+pct+'%"></i></div></td>'+
+      '<small>'+(r.active??r.humans)+(bots?' · '+bots+' bot'+(bots===1?'':'s'):'')+(r.spectators?' · '+r.spectators+' spec':'')+'</small></td>'+
     '<td class="score">'+score+'</td>'+
     '<td class="meta">'+info.join(' · ')+'</td></tr>';
   }).join(''):'<tr><td colspan="6" class="empty">no live rooms — the first join mints one</td></tr>';
