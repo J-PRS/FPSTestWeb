@@ -62,7 +62,9 @@ footer{margin-top:18px;display:flex;justify-content:space-between;font:11px ui-m
 #spin.on{animation:r .8s linear infinite}
 @keyframes r{to{transform:rotate(360deg)}}
 @media (max-width:560px){
-  .map,.meta,.th-map,.th-meta{display:none}
+  /* Phone: the map matters more than live scores for picking a room —
+     score + info drop, map stays. */
+  .score,.meta,.th-score,.th-meta{display:none}
   td{padding:9px 6px}
   h1{font-size:17px}
 }
@@ -75,7 +77,7 @@ footer{margin-top:18px;display:flex;justify-content:space-between;font:11px ui-m
   <div class="stat"><b><i id="nhum">–</i></b><span>playing</span></div>
 </div>
 <table><thead><tr>
-  <th>server</th><th>mode</th><th class="th-map">map</th><th>players</th><th>score</th><th class="th-meta">info</th>
+  <th>server</th><th>mode</th><th class="th-map">map</th><th>players</th><th class="th-score">score</th><th class="th-meta">info</th>
 </tr></thead><tbody id="rows">
 <tr><td colspan="6" class="empty">connecting…</td></tr>
 </tbody></table>
