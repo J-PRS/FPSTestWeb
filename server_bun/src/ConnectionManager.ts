@@ -2,7 +2,7 @@ import type { ServerWebSocket } from 'bun';
 import type { WebSocketData, ServerMessage } from './types.ts';
 import { logger } from './logger.ts';
 import { wallNow } from './wallClock.ts';
-import { wireTx, BIN_KIND } from './wireMeter.ts';
+import { wireTx, wireClose, BIN_KIND } from './wireMeter.ts';
 import { encodeBatch, encodeWireJson, tickFrameScratch, isEvScratch, type TickFrameScratch } from '../../shared/wire.ts';
 
 /** Tick frames are drop-safe (peers extrapolate), so a socket that can't
@@ -342,6 +342,7 @@ export class ConnectionManager {
       this.outbox.delete(playerId);
       this.frameArenas.delete(playerId);
       if (this.topic && typeof ws.unsubscribe === 'function') {ws.unsubscribe(this.topic);}
+      wireClose(playerId); // drop the /wire conn entry — ghosts otherwise list forever
       logger.info(`Connection unregistered`, { playerId, total: this.connections.size });
     }
   }

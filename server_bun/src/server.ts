@@ -315,6 +315,11 @@ console.log(`\x1b[32mWebSocket: ws://localhost:${CONFIG.port}/ws`);
 console.log(`Health:    http://localhost:${CONFIG.port}/health`);
 // oxlint-disable-next-line no-console
 console.log(`RTC relay: ws://localhost:${CONFIG.port}/rtc?room=CODE\x1b[0m`);
+// No admin token = ops surfaces (/metrics /wire /weaponstats /status)
+// are WIDE OPEN — fine for dev, dangerous if a real deploy forgot the
+// env. Scream at boot so a misconfig can't ship silently.
+// oxlint-disable-next-line no-console
+if (!CONFIG.adminToken) {console.log('\x1b[33mWARN: FPS_ADMIN_TOKEN unset — ops endpoints (/metrics /wire /status /weaponstats) are OPEN to anyone who can reach the port\x1b[0m');}
 
 // Fleet worker heartbeat — under fleet.ts this process is one of N
 // children; the matchmaker tracks room homes + per-worker ccu off these

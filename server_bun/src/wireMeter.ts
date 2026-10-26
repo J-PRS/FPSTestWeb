@@ -40,11 +40,17 @@ export function wireTx(pid: string, bytes: number, kind?: string): void {
   }
 }
 
-export function wireMeterSnapshot(): { at: number; uptimeS: number; total: ConnBytes; conns: Record<string, ConnBytes>; txByKind: Record<string, { b: number; f: number }>; rxByKind: Record<string, { b: number; f: number }> } {
+/** Seat closed — drop its cumulative entry so /wire lists live conns,
+ *  not every id that ever connected. Totals stay cumulative by design. */
+export function wireClose(pid: string): void { conns.delete(pid); }
+
+export function wireMeterSnapshot(nameOf?: (pid: string) => string | undefined): { at: number; uptimeS: number; total: ConnBytes; conns: Record<string, ConnBytes & { name?: string }>; txByKind: Record<string, { b: number; f: number }>; rxByKind: Record<string, { b: number; f: number }> } {
   return {
     at: Date.now(), uptimeS: Math.round((Date.now() - startedAt) / 1000),
     total,
-    conns: Object.fromEntries(conns),
+    conns: nameOf
+      ? Object.fromEntries([...conns].map(([pid, s]) => [pid, Object.assign({}, s, { name: nameOf(pid) })]))
+      : Object.fromEntries(conns),
     txByKind: Object.fromEntries(txByKind),
     rxByKind: Object.fromEntries(rxByKind),
   };

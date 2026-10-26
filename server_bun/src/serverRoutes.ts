@@ -7,6 +7,7 @@
  * server state.
  */
 import { parse as parseToml } from 'smol-toml';
+import { timingSafeEqual, createHash } from 'node:crypto';
 import { CONFIG } from './config.ts';
 import { windowAllow } from './windowLimit.ts';
 import type { GameServer } from './GameServer.ts';
@@ -42,11 +43,26 @@ const CORS_HEADERS: Record<string, string> = {
 // callers must send Authorization: Bearer; the query fallback stays for
 // loopback curl convenience only.
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+/** Effective client IP: behind the local reverse proxy (Caddy on the
+ *  same box) every peer is 127.0.0.1 — trust the LAST X-Forwarded-For
+ *  hop then (the proxy appends the real client IP; a client-supplied
+ *  XFF is followed by Caddy's append, so .pop() can't be spoofed into
+ *  loopback). Direct loopback hits keep `ip`. */
+function clientIp(req: Request | undefined, peerIp?: string): string | undefined {
+  const xff = peerIp && LOOPBACK.has(peerIp) ? req?.headers.get('x-forwarded-for') : undefined;
+  return xff ? xff.split(',').pop()!.trim() : peerIp;
+}
+// Constant-time compare — sha256 both sides first so a length mismatch
+// can't trip timingSafeEqual's equal-length requirement.
+function tokEq(given: string | null | undefined): boolean {
+  if (!given || !CONFIG.adminToken) {return false;}
+  return timingSafeEqual(createHash('sha256').update(given).digest(), createHash('sha256').update(CONFIG.adminToken).digest());
+}
 function opsAllowed(req: Request | undefined, url: URL, ip?: string): boolean {
   if (!CONFIG.adminToken) {return true;}
-  const bearer = req?.headers.get('authorization')?.replace(/^bearer\s+/i, '');
-  if (bearer === CONFIG.adminToken) {return true;}
-  return url.searchParams.get('key') === CONFIG.adminToken && ip !== undefined && LOOPBACK.has(ip);
+  const ipEff = clientIp(req, ip);
+  if (tokEq(req?.headers.get('authorization')?.replace(/^bearer\s+/i, ''))) {return true;}
+  return tokEq(url.searchParams.get('key')) && ipEff !== undefined && LOOPBACK.has(ipEff);
 }
 
 export function corsResponse(body: BodyInit | null, init?: ResponseInit): Response {
@@ -102,11 +118,14 @@ export function makeRoutes(ctx: HttpCtx): Record<string, (url: URL, req?: Reques
     '/metrics': (url, req): Response => opsAllowed(req, url, req && ctx.requestIP?.(req)?.address) ? json(ctx.gameServer.getMetrics()) : opsClosed(),
     // Cumulative wire bytes per connection + total — diff two reads for
     // a rate. Ops-gated like metrics.
-    '/wire': (url, req): Response => opsAllowed(req, url, req && ctx.requestIP?.(req)?.address) ? json(wireMeterSnapshot()) : opsClosed(),
+    '/wire': (url, req): Response => opsAllowed(req, url, req && ctx.requestIP?.(req)?.address) ? json(wireMeterSnapshot((pid) => ctx.gameServer.playerName(pid))) : opsClosed(),
     // Server-browser card — identity + occupancy for master lists / LAN.
     '/serverinfo': (): Response => json(ctx.gameServer.getServerInfo()),
-    // Lobby browse — live matches with occupancy.
-    '/rooms': (): Response => json(ctx.gameServer.listRooms()),
+    // Lobby browse — live matches with occupancy. The admin key adds
+    // the id→name roster (ops lookup "who's in there" — public callers
+    // get counts only; names are cosmetic, not secret, but listing them
+    // for anonymous internet traffic is a stalk-by-lobby surface).
+    '/rooms': (url, req): Response => json(ctx.gameServer.listRooms(opsAllowed(req, url, req && ctx.requestIP?.(req)?.address))),
     // Match history ring (also journaled to logs/matches.jsonl).
     '/matches': (): Response => json(ctx.gameServer.listMatches()),
     // Lifetime per-player aggregates off the match journal.

@@ -411,14 +411,28 @@ export class GameServer {
     logger.debug('Backpressure drain', { playerId: ws.data.playerId });
   }
 
-  /** Lobby listing — live matches a client can join by name. */
-  listRooms() {
+  /** Display name for a player id, scanning live rooms — ops paths only,
+   *  called per-conn on admin endpoints, not per-tick. */
+  playerName(id: string): string | undefined {
+    for (const room of this.rooms.values()) {
+      const p = room.players.getPlayer(id);
+      if (p) {return p.name;}
+    }
+    return undefined;
+  }
+
+  /** Lobby listing — live matches a client can join by name. `withNames`
+   *  (ops callers only) adds the per-player id→name roster. */
+  listRooms(withNames = false) {
     return [...this.rooms.values()].filter((r): boolean => !r.unlisted).map(r => ({
       name: r.name,
       mode: r.mode || undefined,
       map: this.maps.mapNameOf(r.name),
       players: r.playerCount(),
       humans: r.players.getHumanCount(),
+      names: withNames
+        ? [...r.players.getAllPlayers().values()].map(p => ({ id: p.id, name: p.name }))
+        : undefined,
       maxPlayers: CONFIG.maxPlayers,
       spectators: r.spectators.size > 0 ? r.spectators.size : undefined,
       // Live match state so the lobby row shows more than occupancy.

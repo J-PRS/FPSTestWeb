@@ -82,7 +82,10 @@ export class BotSheepMeter {
       }
       logger.info('Sheep meter maxed', { room: this.room.name, bot: id, whyPts });
     } else {
-      logger.warn('Sheep meter maxed', { room: this.room.name, bot: id, whyPts });
+      // info, not warn: a maxed meter is a brain-tuning datapoint (once
+      // per bot per 10min), and it was the ONLY warn on healthy servers —
+      // burying real ones under a bot-behavior meter.
+      logger.info('Sheep meter maxed', { room: this.room.name, bot: id, whyPts });
     }
   }
 
