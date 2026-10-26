@@ -37,6 +37,10 @@ export interface SweepHost {
   readonly wakeBallDistances: Map<Targetable, number>;
   readonly wakePlayerDistances: Map<string, number>;
   hitAt(x: number, y: number, z: number, t: number): void;
+  /** Earliest-contact arbitration: when terrain/structures already found a
+   *  contact at tMax, body hits later than it are unreachable — the shell
+   *  died before it got there (the "tunnel through the ball" bug). */
+  tMax?: number;
 }
 
 // Swept sphere terrain check: sample along path, then bisect to refine
@@ -169,6 +173,7 @@ export function sweepBall(p: SweepHost, ball: Targetable, pos?: THREE.Vector3): 
 
     // Direct hit - immediate
     if (d2 <= coreThresh * coreThresh) {
+      if (t > (p.tMax ?? 1)) {return false;}
       p.minHitDist = minDist;
       p.directHit = true;
       p.hitAt(sx, sy, sz, t);
@@ -182,6 +187,7 @@ export function sweepBall(p: SweepHost, ball: Targetable, pos?: THREE.Vector3): 
         p.wakeBallDistances.set(ball, d);
       } else if (d > prevMin && passedCenter) {
         // Only trigger wake hit if we've passed the center (distance increasing after minimum)
+        if (t > (p.tMax ?? 1)) {return false;}
         p.minHitDist = minDist;
         p.directHit = false;
         p.hitAt(sx, sy, sz, t);
@@ -254,6 +260,7 @@ export function sweepPlayer(p: SweepHost, playerPos: THREE.Vector3, playerId: st
     p.minHitDist = totalDist;
 
     if (totalDist <= directThresh) {
+      if (tClamped > (p.tMax ?? 1)) {return false;}
       p.directHit = true;
       p.hitAt(closestX, closestY, closestZ, tClamped);
       return true;
@@ -266,6 +273,7 @@ export function sweepPlayer(p: SweepHost, playerPos: THREE.Vector3, playerId: st
       p.wakePlayerDistances.set(playerId, totalDist);
       return false;
     } else if (totalDist > prevMin && passedCenter) {
+      if (tClamped > (p.tMax ?? 1)) {return false;}
       p.directHit = false;
       logger.debug(`Wake hit at dist ${totalDist.toFixed(2)}, threshold ${(capRadius + p.hitRadius).toFixed(2)}`);
       p.hitAt(closestX, closestY, closestZ, tClamped);

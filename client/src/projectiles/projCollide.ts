@@ -62,18 +62,17 @@ export class ProjCollide {
   // something and exploded (records hit target + accuracy data).
   checkCollisions(terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>, obstacles?: SweepObstacle[], playerClasses?: Map<string, string>, ballSweepPos?: Map<Targetable, THREE.Vector3>): boolean {
     const {h} = this;
+    // Earliest-contact arbitration: a 50ms cell covers meters of flight —
+    // the terrain sample can report a contact BEHIND a ball/player the
+    // shell hit earlier in the same step (the 'tunneled through the ball'
+    // complaint). Compute the terrain contact t, then let bodies win only
+    // when their contact is earlier (sweep tMax gate).
+    let terrHit = false;
     if (sweepTerrain(h, terrain)) {
-      // arming fuse (T2 mortar): bounces only apply BEFORE the shell is armed
-      if (h.canBounce && this.bounceOffTerrain(terrain)) {
-        return false; // bounced — still live, fuse keeps running
-      }
-      if (h.config.sticks) {
-        h.stickAt(h.hitPoint);
-        return true;
-      }
-      h.explode();
-      return true;
-    }
+      terrHit = true;
+      const len = h.pos.distanceTo(h.prevPos) || 1e-6;
+      h.tMax = Math.max(0, Math.min(1, h.hitPoint.distanceTo(h.prevPos) / len));
+    } else {h.tMax = 1;}
     // Map structures next — walls stop shells like terrain does; without
     // this a mortar splashes the generator room straight through the roof.
     const solids = h.solids();
@@ -82,7 +81,7 @@ export class ProjCollide {
       const sh = solids.length > 0 ? segSolidHit(h.prevPos, h.pos, solids, h.solidIdx() ?? undefined, h.shooterTeam ?? undefined) : null;
       const dh = dyn.length > 0 ? segSolidHit(h.prevPos, h.pos, dyn, undefined, h.shooterTeam ?? undefined) : null;
       const hit = dh && (!sh || dh.t < sh.t) ? dh : sh;
-      if (hit) {
+      if (hit && hit.t <= (h.tMax ?? 1)) {
         h.hitAt(hit.x, hit.y, hit.z, hit.t);
         if (h.config.sticks) {
           h.stickAt(h.hitPoint);
@@ -104,8 +103,20 @@ export class ProjCollide {
     // (GL excepted: bodiesLive=0 — it pops bodies while still bouncing
     // off dirt.) Bolts and shield domes still intercept: shooting it
     // down is counterplay, and a dome shouldn't let a dud inside.
-    if (!h.bodiesLive) {return this.checkObstacles(obstacles);}
-    return this.checkObstacles(obstacles) || this.checkBalls(balls, ballSweepPos) || this.checkPlayers(remotePlayers, playerClasses);
+    if (!h.bodiesLive) {return this.checkObstacles(obstacles) || (terrHit && this.applyTerrain(terrain));}
+    if (this.checkObstacles(obstacles) || this.checkBalls(balls, ballSweepPos) || this.checkPlayers(remotePlayers, playerClasses)) {return true;}
+    return terrHit && this.applyTerrain(terrain);
+  }
+
+  private applyTerrain(terrain: Terrain): boolean {
+    const {h} = this;
+    if (h.canBounce && this.bounceOffTerrain(terrain)) {return false;}
+    if (h.config.sticks) {
+      h.stickAt(h.hitPoint);
+      return true;
+    }
+    h.explode();
+    return true;
   }
 
   private checkObstacles(obstacles?: SweepObstacle[]): boolean {
