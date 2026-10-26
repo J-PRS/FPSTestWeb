@@ -1398,9 +1398,11 @@ this.sendDrops += 1;
   }
 
   /** Netcode-v2 tier our own connection negotiated — self row on the
-   *  scoreboard (remotes get theirs from gameState/playerJoined). */
-  getTransportTier(): TransportKind | 'p2p' | 'host' | undefined {
-    return this.ws?.tier;
+   *  scoreboard (remotes get theirs from gameState/playerJoined). A live
+   *  UDP volatile lane shows as '<tier>+udp' — the composite is the tier. */
+  getTransportTier(): TransportKind | 'p2p' | 'host' | string | undefined {
+    const t = this.ws?.tier;
+    return t !== undefined && this.udpLane.live ? `${t}+udp` : t;
   }
 
 }
