@@ -26,7 +26,13 @@ h1 b{color:var(--acc);font-weight:600}
 .stat b{display:block;font:600 24px/1.1 ui-monospace,monospace;color:var(--bright)}
 .stat b i{font-style:normal;color:var(--acc)}
 .stat span{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
-table{width:100%;border-collapse:collapse}
+table{width:100%;border-collapse:collapse;table-layout:fixed}
+/* Fixed columns keep score/clock text from reflowing the row every
+   refresh — a live score tick used to wobble every column. */
+th:nth-child(1){width:23%}th:nth-child(2){width:13%}th:nth-child(3){width:14%}
+th:nth-child(4){width:16%}th:nth-child(5){width:20%}th:nth-child(6){width:14%}
+tbody{min-height:64px}
+.rname,.mode,.map,.score,.meta{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 thead th{
   font:600 10px ui-monospace,monospace;letter-spacing:.18em;text-transform:uppercase;
   color:var(--dim);text-align:left;padding:6px 10px;border-bottom:1px solid var(--edge);
@@ -82,6 +88,10 @@ footer{margin-top:18px;display:flex;justify-content:space-between;font:11px ui-m
 const API='https://play.jprice.app';
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const mmss=ms=>{const s=Math.max(0,Math.round(ms/1000));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
+/* Last rendered room-table HTML — the 5s poll used to rewrite tbody
+   every tick, re-flowing the whole page even when nothing moved. Skip
+   the innerHTML write when the render is identical. */
+let lastRowsHtml='';
 async function tick(){
  const spin=document.getElementById('spin');spin.className='on';
  try{
@@ -95,7 +105,7 @@ async function tick(){
   // client keeps its seat but doesn't count as "someone online".
   document.getElementById('nhum').textContent=rooms.reduce((a,r)=>a+(r.active??r.humans??0),0);
   const sorted=[...rooms].sort((a,b)=>((b.active??b.humans)-(a.active??a.humans))||(b.players-a.players));
-  document.getElementById('rows').innerHTML=sorted.length?sorted.map(r=>{
+  const html=sorted.length?sorted.map(r=>{
    const full=r.players>=r.maxPlayers;
    const pct=Math.min(100,Math.round(r.players/r.maxPlayers*100));
    const bots=r.players-r.humans;
@@ -115,6 +125,7 @@ async function tick(){
     '<td class="score">'+score+'</td>'+
     '<td class="meta">'+info.join(' · ')+'</td></tr>';
   }).join(''):'<tr><td colspan="6" class="empty">no live rooms — the first join mints one</td></tr>';
+  if(html!==lastRowsHtml){document.getElementById('rows').innerHTML=html;lastRowsHtml=html;}
   document.getElementById('stamp').textContent='updated '+new Date().toLocaleTimeString();
   document.getElementById('ver').textContent='v'+(h.version||'?')+' · '+(h.build||'?')+' · '+(h.tickRate||'?')+'hz';
  }catch(e){
