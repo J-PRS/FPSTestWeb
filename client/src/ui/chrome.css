@@ -590,16 +590,23 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
    bottom fade is the only "keep scrolling" affordance. */
 .lb-maplist.lb-more { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent); }
 /* Room rows read as the servers.html column table: fav | SERVER | MODE |
-   MAP | PLAYERS | PING — grid so every column lines up across rows. */
+   MAP | PLAYERS | PING. Header + rows are separate grids, so every
+   non-flex column must be a fixed width or they size independently and
+   misalign (auto columns grow per-row). */
 .lb-room, .lb-head {
   display: grid; align-items: center;
-  grid-template-columns: 14px minmax(0,1fr) auto minmax(52px,auto) auto 52px;
-  gap: 10px;
+  grid-template-columns: 14px minmax(0,1fr) 52px 64px 150px 44px;
+  gap: 8px;
 }
 .lb-head {
   padding: 0 10px 4px;
   font-size: 0.52rem; font-weight: 700; letter-spacing: 0.16em;
   color: rgba(160,190,215,0.55);
+}
+.lb-head > span:last-child { text-align: right; }
+.lb-room > * { min-width: 0; }
+.lb-room .lb-name, .lb-room .lb-map {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .lb-room .meta { float: none; display: flex; gap: 10px; white-space: nowrap; }
 .lb-room .lb-map { color: rgba(160,190,215,0.7); font-size: 0.62rem;
