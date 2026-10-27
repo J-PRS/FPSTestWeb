@@ -25,12 +25,14 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-10-23_SERVER_HOTPATH_AUDIT.md` | **Server hot-path footgun audit** — projStep/link allocations, remaining dhypot3 swaps, per-tick grid rebuild, roster builders; ordered by payoff/risk |
 | `_docs/2026-10-23_DUEL_CAPACITY.md` | **1v1 capacity report** — measured: duel rooms cost 1.5× more per client than 32-seat rooms (175 vs 266 CCU/core); profile attribution, cost model, L1-L8 levers, industry patterns |
 | `_docs/2026-10-18_ADDING_MODES_AND_PICKUPS.md` | Blast surface for new modes/pickups |
+| `_docs/2026-10-26_TTS_DTS_REFERENCE.md` | **TTS/DTS reference** - cold-boot time-to-shoot and data-to-shoot profile, phase breakdown, prediction table, improvement levers |
 | `_docs/2026-10-18_CTF_BOT_BRAIN_PUG_AUDIT.md` | CTF bot brain vs PUG guide audit |
 | `_docs/2026-10-18_NETCODE_OVERHAUL.md` | Netcode overhaul (2026-10-18) |
 | `_docs/2026-10-21_NETCODE_GAP.md` | Netcode gap analysis vs production shooters |
 | `_docs/2026-10-26_TRANSPORT_TIERS.md` | **Transport ladder reference** — WS+WT; why RTC left the auto ladder, what still uses it (pinned/netbots, p2p hosting), Firefox caveat |
 | `_docs/2026-10-26_NATIVE_UDP_LANE.md` | **Native shell + raw-UDP lane** — Electrobun spike verified (ws→UDP relay), composite adopt-don't-race tier design, server UDP scope, prior art (NexQuake/Xepsa), LOC estimate |
 | `_docs/2026-10-26_NATIVE_SHELL_CAPABILITIES.md` | **Native shell capability inventory** — what the webview wrapper buys beyond fullscreen+UDP: exclusive/GPU control, disk replays, presence/deep-links, PTT, telemetry, attestation; trap cards flagged |
+| `_docs/2026-10-26_DESKTOP_ENGINE_STACK.md` | **Pure-desktop engine stack reference** — thin custom verdict: what already ports (MoveSim, shared sims, netcode, instancing), renderer picks (bgfx/wgpu/sokol), Jolt/Rapier physics floor, the "still reasonable" boundary that flips it to Unreal |
 | `_docs/2026-10-27_PER_FRAME_INPUT.md` | **Per-frame input streaming for anti-cheat** — bandwidth math (+90% volatile up, still trivial), real costs (server CPU ×7 on hot path, variable cadence), bounded AC value; verdict: journal-on-demand audit beats always-on |
 | `_docs/2026-10-25_PROJECTILE_PREDICTION_NETCODE.md` | Projectile prediction research + implementation — fake+real shell model, claim-carried spawn state (pos/dir/vel/fireAt), velocity-scaled reanchor blend, MaxPredictionPing gap |
 | `_docs/2026-10-22_GRIND_LEADERBOARD.md` | Grind leaderboard design |
