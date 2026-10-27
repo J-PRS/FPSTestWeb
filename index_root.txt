@@ -26,6 +26,8 @@ _netbots.bat
 _oxlint.bat
 _reference
 _rootcheck.bat
+_run_native.bat
+_run_native_live.bat
 _run_client.bat
 _run_client_noreload.bat
 _run_client_prod.bat
