@@ -6,7 +6,7 @@ import type { WebSocketData } from './types.ts';
 import { logger } from './logger.ts';
 import { isPerkId } from '../../shared/perks.ts';
 import type { SessionRegistry } from './sessionRegistry.ts';
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHmac, randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import { wallNow } from './wallClock.ts';
 import { simNow, simMs } from './simClock.ts';
 import { windowAllow } from './windowLimit.ts';
@@ -164,10 +164,15 @@ export class SessionManager {
     // reclaims land (the grace path is how live players ride through).
     if (this.d.draining) { ws.close(1013, 'Server draining'); return; }
 
+    // Soak/test fleets all live behind one IP — a join carrying the ops
+    // admin token is a load driver, not a stranger: skip the flood guard.
+    // Same secret + compare as the ops routes (serverRoutes.tokEq).
+    const trusted = typeof handshake.adminKey === 'string' && CONFIG.adminToken !== '' &&
+      timingSafeEqual(createHash('sha256').update(handshake.adminKey).digest(), createHash('sha256').update(CONFIG.adminToken).digest());
     // Join flood guard: joins bypass the per-player RateLimiter (they ARE
     // the registration), so throttle by source IP — 5 joins/min is generous
     // for humans, lethal for a spammer script.
-    if (!this.joinThrottleAllow(ws.remoteAddress)) {
+    if (!trusted && !this.joinThrottleAllow(ws.remoteAddress)) {
       logger.warn('Join flood rejected', { ip: ws.remoteAddress });
       ws.close(1013, 'Join rate limited');
       return;

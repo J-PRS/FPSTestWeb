@@ -18,6 +18,10 @@ const PER = arg('--bots', 24, Number);
 const SECONDS = arg('--seconds', 90, Number);
 const PACE = arg('--pace', 3400, Number); // ms between connects, global
 const ROOMBASE = arg('--roombase', 'stress', String);
+// Ops admin token — bypasses the 20/min/IP join flood guard on the
+// server (SessionManager). Lets a single-box fleet burst instead of
+// pacing. --pace still spreads handshakes; 5-50ms is plenty with it.
+const KEY = arg('--key', process.env.FPS_ADMIN_TOKEN ?? '', String);
 const TAG = Date.now().toString(36);
 const LINKS = [
   { pingMs: 40, jitterMs: 30, lossRate: 0 },
@@ -34,7 +38,7 @@ for (let r = 0; r < ROOMS; r++) {
     const lo = BOT_LOADOUTS[g % BOT_LOADOUTS.length]!;
     const li = LINKS[g % LINKS.length]!;
     const nc = new NetClient(URL_, `nb${TAG}_${r}_${i}`, new LatencyLink(li),
-      { transport: 'ws', room, mode: 'ctf', armorClass: botClassForLoadout(lo) });
+      { transport: 'ws', room, mode: 'ctf', armorClass: botClassForLoadout(lo), ...(KEY ? { adminKey: KEY } : {}) });
     bots.push({ nc, bot: new NetBot(nc, { loadout: lo }), room });
     g++;
   }

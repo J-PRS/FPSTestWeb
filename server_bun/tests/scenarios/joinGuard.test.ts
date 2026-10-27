@@ -58,6 +58,24 @@ describe('join guards', () => {
     expect(over.closed[0]?.reason).toBe('Join rate limited');
   });
 
+  it('a join carrying the admin token bypasses the throttle (soak fleets)', () => {
+    const orig = CONFIG.adminToken;
+    (CONFIG as unknown as { adminToken: string }).adminToken = 'ops-secret';
+    try {
+      const room = mkRoom({}, 'tdm');
+      const { mgr } = mkSessions(room);
+      for (let i = 0; i < 20; i++) {join(mgr, fakeWs(), `flood${i}`);} // burn the window
+      // Wrong/absent key still throttles; the real one walks through.
+      mgr.handle(fakeWs() as never, { type: 'join', playerId: 'bad', room: 't', adminKey: 'nope' });
+      const ok = fakeWs();
+      mgr.handle(ok as never, { type: 'join', playerId: 'soaker', room: 't', adminKey: 'ops-secret' });
+      expect(ok.closed).toHaveLength(0);
+      expect(room.players.getPlayer('soaker')).toBeDefined();
+    } finally {
+      (CONFIG as unknown as { adminToken: string }).adminToken = orig;
+    }
+  });
+
   it('exempts loopback from the throttle (dev fleets)', () => {
     const room = mkRoom({}, 'tdm');
     const { mgr } = mkSessions(room);

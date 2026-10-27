@@ -148,7 +148,7 @@ export class NetClient {
   closed = false;
   closeInfo = '';
 
-  constructor(private url: string, id: string, link?: LatencyLink, private joinOpts: { room?: string; mode?: string; transport?: 'ws' | 'rtc'; bots?: number; armorClass?: string; rtc?: { nd: NdModule; iceServers?: { hostname: string; port: number; relayer?: boolean }[] } } = {}) {
+  constructor(private url: string, id: string, link?: LatencyLink, private joinOpts: { room?: string; mode?: string; transport?: 'ws' | 'rtc'; bots?: number; armorClass?: string; adminKey?: string; rtc?: { nd: NdModule; iceServers?: { hostname: string; port: number; relayer?: boolean }[] } } = {}) {
     this.id = id;
     this.link = link ?? new LatencyLink({ pingMs: 0, jitterMs: 0, lossRate: 0 });
   }
@@ -172,7 +172,7 @@ export class NetClient {
         // Join retries until the first gameState lands — a swallowed or
         // throttled join would otherwise leave the bot a silent ghost,
         // the same failure a real client's retry button papers over.
-        const joinMsg = JSON.stringify({ type: 'join', playerId: this.id, transport, token: this.sessionToken, room: this.joinOpts.room, mode: this.joinOpts.mode, bots: this.joinOpts.bots, armorClass: this.joinOpts.armorClass });
+        const joinMsg = JSON.stringify({ type: 'join', playerId: this.id, transport, token: this.sessionToken, room: this.joinOpts.room, mode: this.joinOpts.mode, bots: this.joinOpts.bots, armorClass: this.joinOpts.armorClass, adminKey: this.joinOpts.adminKey });
         ws.send(joinMsg);
         let tries = 0;
         this.joinTimer = setInterval(() => {
