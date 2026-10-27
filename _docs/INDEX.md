@@ -42,6 +42,7 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-10-23_OFFLINE_DESKTOP_RENDERER.md` | **Desktop demo→MP4 renderer design** — headless-Chrome CLI tier (mostly built), ffmpeg-pipe upgrade, Electron tier; packaging plan + gotchas |
 | `_docs/2026-10-27_CLIP_TRUTH_VS_BEAUTY.md` | **Client vs server clip capture** — Cool Shots are prettier client-side but record player beliefs, not truth; CS:GO POV/GOTV split, OW killcam paradox, hybrid input+snapshot standard |
 | `_docs/2026-10-27_WAN_EDGE_FORENSICS.md` | **WAN edge forensics** — 3-gate firewall (NSG→firewalld→socket), the silent-WT-death bug (advertise-port vs client's 443-guard), bare-restart env drop, ISP arbitrary-UDP egress filtering + test matrix, remote netbot battery |
+| `_docs/2026-10-27_WAN_STRESS_240.md` | **WAN stress report** — 240 bots × 10 rooms on live OCI, join-pacing under the flood guard, measured CPU/RSS/NIC/socket shape, findings (join-burst > combat, HTTP keepalive lane doubles fds, ~2.4MB/conn) |
 | `_docs/2026-10-23_SKI_FLAT_OVERSPEED.md` | Ski flat-ground overspeed audit — measured per-class, uncapped accel + unscaled gate root cause, fix sketch |
 | `_docs/2026-10-23_LOCAL_SHELL_SPAWN.md` | Local projectile spawn epochs — rewind-mirror tried & reverted (ping-dependent spawn feel); server-claims-muzzle is the correct fix if trajDiv regresses |
 | `_docs/2026-10-23_REMOTE_THREE_TRUTHS.md` | Remote pos/ghost/wire-head trio — measured relationships, sim viewLagMs defect + p90 jitter estimator fixes; `_posdump.ts` probe |
