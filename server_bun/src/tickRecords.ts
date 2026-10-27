@@ -98,6 +98,13 @@ export class TickFanout {
    *  frame carried stays stale until it changes again or this forces a
    *  full record (15 ticks = 750ms worst-case drift on a torn link). */
   private static readonly FULL_RECORD_EVERY = 15;
+  /** First ticks of a joiner's intro window get every record every tick
+   *  — the decode baseline must punch through loss fast. The window's
+   *  tail keeps sending the full VARIANT but at normal tier cadence:
+   *  stacked intros in a join burst otherwise each pay full-cadence +
+   *  full-copies for a whole second (measured: join-phase CPU ~2.2x
+   *  settled, profload --settle 3). */
+  private static readonly INTRO_CADENCE_TICKS = 5;
 
   constructor(
     private readonly metrics: FanoutMetrics,
@@ -370,6 +377,9 @@ this.metrics.recordsIdleReaped += 1;
       // Intro recipients decode from zero — they get the per-socket FULL
       // copy of every record at full cadence for the window.
       const intro = room.introPlayers.has(recipientId);
+      // markIntro stamps at the seat's tickSeq — delta <= N covers the
+      // first N fanout ticks after the mark.
+      const introFull = intro && room.tickSeq - (room.introPlayers.get(recipientId) ?? -100) <= TickFanout.INTRO_CADENCE_TICKS;
       const others = this.scratchOthers;
       others.length = 0;
       for (const r of records) {
@@ -415,7 +425,7 @@ else if (dSq < 360_000) {tier = 3;} // 150m / 400m / 600m
         // force = hit/knockback window: real positions must reach every
         // observer at full rate while they extrapolate the knockback —
         // sparse never substitutes there (vel IS the payload).
-        if (intro || r.force || seq % tier === 0) {
+        if (introFull || r.force || seq % tier === 0) {
           // Far tier (>600m, 2.5Hz): pos+vitals only — the speck
           // dead-reckons its retained vel/rot and the staggered fulls
           // reseat it every ~750ms. ~40% off the dominant egress class.

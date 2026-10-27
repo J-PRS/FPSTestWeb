@@ -75,7 +75,7 @@ describe('scenario: interest tier hysteresis', () => {
     room.connections.broadcast = prevBroadcast;
   });
 
-  it('per-recipient intro: a fresh seat gets every-tick fulls while the room stays on deltas', () => {
+  it('per-recipient intro: a fresh seat gets every-tick fulls for the window head, then tiered cadence', () => {
     const room = mkRoom({ bots: 2 });
     const [a, b] = twoPlayers(room);
     seat(room, a.id);
@@ -115,15 +115,26 @@ describe('scenario: interest tier hysteresis', () => {
     };
 
     const players = room.players.getAllPlayers();
-    for (let i = 0; i < 16; i += 1) {
+    // Head of the window (INTRO_CADENCE_TICKS): every tick — the decode
+    // baseline must punch through loss fast.
+    for (let i = 0; i < 5; i += 1) {
       b.position.z = (i % 2) * 2; // keep B out of the suppression window
       room.tickSeq++;
       fanout.fanoutRecords(room, players, fanout.buildRecords(room, players, wallNow()));
     }
-    // Intro window is 20 ticks — the joiner sees the far target every tick
-    // (full cadence + full records) while the established client rides
-    // tier-8 (~2 of 16 ticks).
-    expect(cSaw).toBe(16);
+    expect(cSaw).toBe(5);
+    // Tail of the window: the joiner drops to the same tier-8 cadence
+    // as everyone else (~2 of 11 ticks) — a stacked join burst no
+    // longer pays full cadence for a whole second per seat.
+    const cTail0 = cSaw;
+    for (let i = 0; i < 11; i += 1) {
+      b.position.z = (i % 2) * 2;
+      room.tickSeq++;
+      fanout.fanoutRecords(room, players, fanout.buildRecords(room, players, wallNow()));
+    }
+    const cTail = cSaw - cTail0;
+    expect(cTail).toBeGreaterThanOrEqual(1); // still lands in-window fulls
+    expect(cTail).toBeLessThanOrEqual(4);
     expect(aSaw).toBeLessThanOrEqual(4);
 
     room.connections.broadcast = prevBroadcast;
