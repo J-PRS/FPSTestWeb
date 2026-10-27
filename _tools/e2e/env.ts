@@ -6,6 +6,8 @@
  */
 import { spawn, type Subprocess } from 'bun';
 import dgram from 'node:dgram';
+import net from 'node:net';
+import { execFileSync } from 'node:child_process';
 
 const REPO = new URL('../../', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 
@@ -53,9 +55,37 @@ function udpFree(port: number): Promise<boolean> {
   });
 }
 
+/** TCP half of the free-port probe — same ghost-listener class as UDP: an
+ *  orphaned vite/bun child outliving its killed wrapper would otherwise
+ *  pass waitHttp while our strictPort spawn dies, then survive down() (not
+ *  our child) and haunt every later stack on that port. */
+function tcpFree(port: number): Promise<boolean> {
+  return new Promise((res) => {
+    const s = net.createServer();
+    s.once('error', () => res(false));
+    s.listen(port, '127.0.0.1', () => s.close(() => res(true)));
+  });
+}
+
+/** Kill whatever LISTENs on `port` — catches the orphaned grandchildren
+ *  (npx shims spawn real vite/bun children; killing the shim leaves the
+ *  real process) that child-handle kill() always misses on Windows. */
+function killByPort(port: number): void {
+  try {
+    const out = execFileSync('netstat', ['-ano'], { encoding: 'utf8', timeout: 8000 });
+    for (const line of out.split(/\r?\n/)) {
+      if (!line.includes('LISTENING')) {continue;}
+      const m = line.match(/:(\d+)\s+\S+\s+LISTENING\s+(\d+)/);
+      if (m && Number(m[1]) === port && Number(m[2]) !== process.pid) {
+        try { process.kill(Number(m[2])); } catch { /* already gone */ }
+      }
+    }
+  } catch { /* netstat unavailable — child kill still ran */ }
+}
+
 async function spawnGameServer(procs: Subprocess[], from: number): Promise<number> {
   for (let port = from; port < from + 60; port++) {
-    if (!await udpFree(port)) continue;
+    if (!await udpFree(port) || !await tcpFree(port)) {continue;}
     // E2E_CPU_PROF=1 → bun CPU-profiles the game server and writes a
     // grep-friendly markdown report on exit (_tools/e2e/profout/).
     const prof = process.env.E2E_CPU_PROF ? ['--cpu-prof', '--cpu-prof-md', '--cpu-prof-dir', `${REPO}_tools/e2e/profout`] : [];
@@ -127,6 +157,11 @@ export async function upStack(opts: { clientPort?: number; serverPort?: number }
         p.kill();
       } catch { /* already dead */ }
     }
+    // Orphan sweep: children killed above only reap their handle — npx/cmd
+    // grandchildren holding the listener survive and impersonate the next
+    // stack's health check. Kill whatever owns our ports outright.
+    if (opts.clientPort === undefined) {killByPort(clientPort);}
+    if (opts.serverPort === undefined) {killByPort(serverPort);}
   };
 
   const serverPort = opts.serverPort ?? await spawnGameServer(procs, 8477);
@@ -134,6 +169,9 @@ export async function upStack(opts: { clientPort?: number; serverPort?: number }
   const clientPort = await (async () => {
     if (opts.clientPort) return opts.clientPort;
     for (let port = 5399; port < 5459; port++) {
+      // A ghost listener on this port would pass waitHttp while our
+      // strictPort spawn dies — skip busy ports outright.
+      if (!await tcpFree(port)) {continue;}
       // Windows: npx is a .cmd shim, uv_spawn needs the explicit filename.
       const p = spawn([process.platform === 'win32' ? 'npx.cmd' : 'npx', 'vite', '--port', String(port), '--strictPort'], {
         cwd: `${REPO}client`,
