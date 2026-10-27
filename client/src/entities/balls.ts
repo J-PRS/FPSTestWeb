@@ -7,7 +7,7 @@ import {type Terrain, getHeightfield} from '../world/terrain.js';
 import { makeSimBall, stepBall, applySimDamage, type StructureCollider, type SegmentKind } from '../../../shared/ballSim.js';
 import type { ColliderIndex } from '../../../shared/solidWorld.js';
 import { type Heightfield, hmFingerprint } from '../../../shared/heightfield.js';
-import { type NetBag, newNetBag, type NetStatics, type NetSeg, tickNet, isStaleSeg, applySeg } from './ballNet.js';
+import { type NetBag, newNetBag, type NetStatics, type NetSeg, tickNet, isStaleSeg, applySeg, netProf } from './ballNet.js';
 import { Logger } from '../core/Logger.js';
 import { RibbonTrail, DyingRibbons } from '../effects/RibbonTrail.js';
 import type { TrailDriver } from '../effects/vfxRuntime.js';
@@ -26,6 +26,7 @@ import { drawBallSpawn, drawVariant, spawnRand } from '../../../shared/spawnDice
 // burst spender. Off-path cost is one branch; the timed path is a separate
 // method so the normal hot path keeps zero timing overhead.
 const BALL_PROF = urlParams.has('ballprof');
+netProf.on = BALL_PROF;
 const ballProf = { calls: 0, net: 0, render: 0, rage: 0, shadow: 0, inst: 0, trails: 0, sim: 0, dress: 0, max: 0, maxAt: '' };
 
 const BALL_GRAVITY   = GRAVITY;
@@ -628,6 +629,8 @@ registerDiag('balls', () => ({
         rage: Number(ballProf.rage.toFixed(1)), shadow: Number(ballProf.shadow.toFixed(1)),
         inst: Number(ballProf.inst.toFixed(1)), trails: Number(ballProf.trails.toFixed(1)),
         sim: Number(ballProf.sim.toFixed(1)), dress: Number(ballProf.dress.toFixed(1)),
+        tickNet: { calls: netProf.calls, cells: netProf.cells, ms: Number(netProf.stepMs.toFixed(1)), max: Number(netProf.max.toFixed(1)), maxAt: netProf.maxAt },
+        applySeg: { n: netProf.applyN, ms: Number(netProf.applyMs.toFixed(1)) },
         max: Number(ballProf.max.toFixed(1)), maxAt: ballProf.maxAt,
       },
     } : {},

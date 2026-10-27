@@ -108,7 +108,13 @@ export interface NetStatics {
  *  the wire event confirms, it doesn't correct. host.pos renders the
  *  sub-cell remainder ballistically so flight stays smooth between the
  *  20Hz sim steps. */
+/** ?ballprof internals — balls.ts flips `on`; the 'balls' diag dumps it.
+ *  A 48ms tickNet with O(1) stepBall means GC/JIT vs real loop work —
+ *  cells/stepMs/maxAt split the two apart. */
+export const netProf = { on: false, calls: 0, cells: 0, stepMs: 0, applyN: 0, applyMs: 0, max: 0, maxAt: '' };
+
 export function tickNet(st: NetStatics, bag: NetBag, host: NetHost, dt: number): void {
+  const _t0 = netProf.on ? performance.now() : 0;
   const s = bag.sim!;
   bag.netAcc = Math.min(bag.netAcc + dt, 0.5);
   // Locked to the server's 50ms grid and gated on the stamped sim clock
@@ -215,6 +221,16 @@ export function tickNet(st: NetStatics, bag: NetBag, host: NetHost, dt: number):
   host.enrageTimer = s.enrageTimer;
   host.dampNextBounce = s.dampNextBounce;
   if (s.dead && !host.dead) {host.dead = true;}
+  if (netProf.on) {
+    const ms = performance.now() - _t0;
+    netProf.calls += 1;
+    netProf.cells += cellsStepped;
+    netProf.stepMs += ms;
+    if (ms > netProf.max) {
+      netProf.max = ms;
+      netProf.maxAt = `cells=${cellsStepped} acc=${bag.netAcc.toFixed(2)} gap=${Number.isFinite(simNow) ? (simNow - bag.simT).toFixed(2) : 'inf'} segs=${bag.segsSeen ?? 0}`;
+    }
+  }
 }
 
 /** Wire-ordering guard — anchors only move forward. The stamp is compared
@@ -271,6 +287,7 @@ function blendSegCorrection(host: NetHost, s: SimBall, seg: NetSeg): void {
  *  without this every bounce visibly rewinds the ball before re-flying.
  *  The >20m trail-cut already handles teleport discontinuities. */
 export function applySeg(st: NetStatics, bag: NetBag, host: NetHost, seg: NetSeg): void {
+  const _t0 = netProf.on ? performance.now() : 0;
   const s = bag.sim;
   if (!s) {return;}
   const {simT} = seg;
@@ -359,6 +376,7 @@ export function applySeg(st: NetStatics, bag: NetBag, host: NetHost, seg: NetSeg
   // measures the correction AGAIN as a gap and folds it into renderOffset
   // a second time (the 20-50m render-blend/follow-jump double-blend).
   bag.px = s.x; bag.py = s.y; bag.pz = s.z;
+  if (netProf.on) {netProf.applyN += 1; netProf.applyMs += performance.now() - _t0;}
 }
 
 /** Predicted position at sim-time `t`: clone the live replay sim and step
