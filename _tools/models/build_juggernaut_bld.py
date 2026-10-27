@@ -7,7 +7,7 @@
 #
 # Outputs: _tools/models/juggernaut_bld.blend  (source of truth)
 #          client/public/assets/models/class_juggernaut_bld.glb
-import bpy, math
+import bpy, math, subprocess
 from mathutils import Vector
 
 ROOT = 'C:/TEMP/_WEB/FPSWebTest'
@@ -160,6 +160,7 @@ slab('crest', [0, 0.06, 2.08], [0.05,0.06,0.04], 'head', ACCENT, 0.02)
 bpy.ops.wm.save_as_mainfile(filepath=OUT_BLEND)
 bpy.ops.export_scene.gltf(filepath=OUT_GLB, export_format='GLB',
                           export_animations=True, export_skins=True)
+subprocess.run('npx -y gltfpack -i "' + OUT_GLB + '" -o "' + OUT_GLB + '" -cc -kn', shell=True, check=True)
 print('bld ->', OUT_GLB, 'and', OUT_BLEND)
 
 # ---- turntable render for visual check (workbench, no lights needed) ----

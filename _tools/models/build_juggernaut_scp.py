@@ -7,7 +7,7 @@
 #
 # Outputs: _tools/models/juggernaut_scp.blend
 #          client/public/assets/models/class_juggernaut_scp.glb
-import bpy, math
+import bpy, math, subprocess
 from mathutils import Vector
 
 ROOT = 'C:/TEMP/_WEB/FPSWebTest'
@@ -152,6 +152,7 @@ for p in me.polygons: p.use_smooth = False
 bpy.ops.wm.save_as_mainfile(filepath=OUT_BLEND)
 bpy.ops.export_scene.gltf(filepath=OUT_GLB, export_format='GLB',
                           export_animations=True, export_skins=True)
+subprocess.run('npx -y gltfpack -i "' + OUT_GLB + '" -o "' + OUT_GLB + '" -cc -kn', shell=True, check=True)
 
 # turntable render
 scn = bpy.context.scene
