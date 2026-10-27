@@ -11,9 +11,12 @@ Status and index: `readme.md`. HTTPS: `dns-https.md`. WebTransport: `webtranspor
   Trade-off: a change is a copy and a restart. Type checking happens on the laptop
   (`tsc` and `bun test`), not on the box.
 - Measured idle RSS: about 43 MB.
-- Env file: `~/kribes/server.env`, mode 600. Keys present: `FPS_PORT`, `FPS_ADMIN_TOKEN`,
-  `FPS_PUBLIC_BETA`, `FPS_WT_CERT`, `FPS_WT_KEY`, `FPS_WT_ADVERTISE_PORT=443`.
-  Never print values.
+- Env file: `~/kribes/.env` is what `deploy_server.sh` sources (`set -a; . ~/kribes/.env`).
+  `~/kribes/server.env` is the older name kept around with the same keys — keep both
+  in sync when adding vars. Keys: `FPS_PORT`, `FPS_ADMIN_TOKEN`,
+  `FPS_PUBLIC_BETA`, `FPS_WT_CERT`, `FPS_WT_KEY`, `FPS_WT_ADVERTISE_PORT=443`,
+  `FPS_UDP_PORT=9898` (2026-10-27 — volatile datagram lane for the native shell;
+  NSG `anabatic-sl` carries the UDP 9898 ingress). Never print values.
 - Log: `~/kribes/server.log`.
 - Content gates: balls and creatures are OFF by default (PvP server). `FPS_ALLOW_BALLS=1` and
   `FPS_ALLOW_CREATURES=1` in `server.env` let clients request them again (for coop or offline-style play later).
@@ -92,3 +95,8 @@ restart between matches when possible.
 
 - 2026-10-24: server deployed on the A1 (Bun 1.4.4, v0.1.20). Fixed missing demo imports.
   Headhunt token changes and WT advertise port synced. `/ping` added.
+- 2026-10-27: build `7a91d370` deployed. UDP volatile lane live: `FPS_UDP_PORT=9898`
+  (both `.env` and `server.env`), NSG `anabatic-sl` gained UDP 9898 ingress, lane
+  verified — `gameState.udp` returns `{token, port}` on join. `deploy_server.sh`
+  env vars: `FPS_DEPLOY_HOST=opc@92.5.61.55`, `FPS_SSH_KEY` = key with owner-only ACL
+  (OpenSSH rejects group-readable keys).
