@@ -413,6 +413,38 @@ export class ServerBots {
     return legacyMoveInto(this, id, p, dest, dt);
   }
 
+  /** Metrics census: brains alive vs bodies parked — 'standing bots'
+   *  splits into "no brains minted" vs "brains emitting park/at-dest".
+   *  A parked bot is a live body moving <2m/s whose last think emitted
+   *  park or whose dest is already reached (<2m). */
+  parkedCount(): { brains: number; parked: number } {
+    let parked = 0;
+    for (const [id] of this.brains) {
+      const p = this.room.players.getPlayer(id);
+      if (!p || p.isDead) {continue;}
+      const out = this.lastOut.get(id);
+      const d = out?.dest ? Math.hypot(out.dest.x - p.position.x, out.dest.z - p.position.z) : 0;
+      const sp = Math.hypot(p.velocity.x, p.velocity.y, p.velocity.z);
+      if (sp < 2 && (out?.move?.park || d < 2)) {parked++;}
+    }
+    return { brains: this.brains.size, parked };
+  }
+
+  /** Per-parked-bot one-liners for /metrics — dest, goal, and the
+   *  brain's own stall surface in one string per id. */
+  parkedDebug(): { id: string; dest: string; goal: string; brain: string }[] {
+    const rows: { id: string; dest: string; goal: string; brain: string }[] = [];
+    for (const [id] of this.brains) {
+      const p = this.room.players.getPlayer(id);
+      if (!p || p.isDead) {continue;}
+      const sp = Math.hypot(p.velocity.x, p.velocity.y, p.velocity.z);
+      if (sp >= 2) {continue;}
+      const f = (v?: { x: number; y: number; z: number } | null): string => v ? `${v.x.toFixed(0)},${v.y.toFixed(0)},${v.z.toFixed(0)}` : '-';
+      rows.push({ id, dest: f(this.lastOut.get(id)?.dest), goal: f(this.brains.get(id)?.goalS.goal), brain: this.debugBrain(id) });
+    }
+    return rows;
+  }
+
   /** The meter the tick stream publishes — 0 for non-bots. */
   sheepOf(id: string): number {
     return this.sheep.of(id);

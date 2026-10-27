@@ -93,6 +93,8 @@ n += 1; fpsSum += s.fps; fpsMin = Math.min(fpsMin, s.fps);
         think: Number(r.bots.stageMs[2]!.toFixed(1)), fire: Number(r.bots.stageMs[3]!.toFixed(1)),
         drive: Number(r.bots.stageMs[4]!.toFixed(1)),
       } : undefined,
+      botIdle: r.bots?.parkedCount(),
+      botParked: r.bots?.parkedDebug(),
       pickups: r.pickups?.snapshot().length ?? 0,
       gracePending: r.sessions?.graceInRoom(r.name) ?? 0,
       ballSimNow: r.ballSim.simNow,
