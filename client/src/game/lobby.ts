@@ -413,13 +413,13 @@ export class Lobby {
     headhunt: 'HH', conquest: 'CONQ', infestation: 'INF', deathball: 'DB', rabbit: 'RBT', teamrabbit: 'TRBT',
   };
 
-  /** Occupancy cell — the servers.html read: (bots) humans/max. Match
+  /** Occupancy cell — the servers.html read: humans/max (bots). Match
    *  internals (score/target/clock) live in the room, not the browser. */
   private rowMeta(meta: HTMLElement, r: RoomRow): void {
     const mk = Lobby.metaSpan;
     const bots = r.players - (r.humans ?? r.players);
-    if (bots > 0) {meta.append(mk(`(${bots})`, 'lb-bots'));}
     meta.append(mk(`${r.humans ?? r.players}/${r.maxPlayers}`));
+    if (bots > 0) {meta.append(mk(`(${bots})`, 'lb-bots'));}
   }
 
   join(name: string, map?: string, bots?: number, mode?: string, unlisted?: boolean, noCreatures?: boolean, noBalls?: boolean): void {
