@@ -9,7 +9,10 @@ describe.skipIf(!process.env.FPS_SOAK)('netbot — real clients over real socket
     // jittered ws bot trading claims with an rtc bot is the real mix a
     // production room sees (browsers are ws-only today; LAN/P2P can still
     // land rtc). No nd → everyone ws, same as before.
-    await spawn(4, { pingMs: 20, jitterMs: 150, lossRate: 0 }, { transports: nd ? ['ws', 'rtc'] : undefined }); // heavy jitter: claims race spawns constantly
+    // rtc only on local runs — a remote box can't take it (Caddy doesn't
+    // proxy /rtcs and ICE needs host-reachable UDP anyway).
+    const mix = process.env.NETBOT_URL ? undefined : (nd ? ['ws', 'rtc'] : undefined);
+    await spawn(4, { pingMs: 20, jitterMs: 150, lossRate: 0 }, { transports: mix }); // heavy jitter: claims race spawns constantly
     const t = () => bots.map((b) => b.nc.tel);
     // Humanized bots close slower — wait on engagement, not a fixed
     // window, then drain the in-flight claims before asserting.

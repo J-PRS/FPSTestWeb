@@ -111,6 +111,7 @@ export function mkNetbots(): {
   env: () => ReturnType<typeof bootServer> | null;
 } {
   let env: ReturnType<typeof bootServer> | null = null;
+  const nonce = Math.floor(Math.random() * 1e4).toString(36);
   const bots: { nc: NetClient; bot: NetBot }[] = [];
 
   afterEach(() => {
@@ -132,7 +133,11 @@ export function mkNetbots(): {
       // squad-role weighting reads armorClass off roster entries.
       const lo = BOT_LOADOUTS[i % BOT_LOADOUTS.length]!;
       const li = Array.isArray(link) ? link[i % link.length]! : link;
-      const nc = new NetClient(url ?? env!.url, `nb_${i}`, new LatencyLink(li), { transport, rtc: nd ? { nd } : undefined, room: opts.room, mode: opts.mode, bots: opts.bots, armorClass: botClassForLoadout(lo) });
+      // Remote runs share one live server across runs — a parked seat from
+      // a previous test still claims `nb_0`, so nonce the ids per HARNESS
+      // (process.pid collides: every test file in a run shares it).
+      const id = url ? `nb_${nonce}_${i}` : `nb_${i}`;
+      const nc = new NetClient(url ?? env!.url, id, new LatencyLink(li), { transport, rtc: nd ? { nd } : undefined, room: opts.room, mode: opts.mode, bots: opts.bots, armorClass: botClassForLoadout(lo) });
       const bot = new NetBot(nc, { ...opts, loadout: lo });
       bots.push({ nc, bot });
       // Staggered connects — a burst of simultaneous socket opens made
