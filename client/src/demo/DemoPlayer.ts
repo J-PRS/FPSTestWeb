@@ -10,6 +10,9 @@ export interface InterpolatedRemote {
   velX: number; velY: number; velZ: number;
   yaw: number; pitch: number;
   flags: number;
+  // v8 meta — stepped (not lerped) like flags: hp/team/held jump, never blend.
+  team?: number; hp?: number; held?: number; sheep?: number;
+  cls?: number; status?: number; wid?: number;
 }
 
 export interface PlaybackState {
@@ -20,6 +23,8 @@ export interface PlaybackState {
   jetpackFlags: number;
   jetpackFuel: number;
   weaponType: number;
+  health: number;
+  armor: number;
 }
 
 export interface PlaybackCallbacks {
@@ -247,6 +252,8 @@ export class DemoPlayer {
         yaw: pb.lerpAngle(f0.yaw, f1.yaw, t),
         pitch: f0.pitch + (f1.pitch - f0.pitch) * t,
         flags: f0.flags,
+        team: f0.team, hp: f0.hp, held: f0.held, sheep: f0.sheep,
+        cls: f0.cls, status: f0.status, wid: f0.wid,
       });
     }
     return out;

@@ -93,13 +93,15 @@ function isRemoteActive(deps: RemotesDeps, playerId: string, players: Map<string
 // when cloaked — an enemy's HUD must give no trace (dust off an
 // invisible skier is a giveaway). A teammate's cloak is different: it
 // stays on screen wearing the ghost shimmer, so only enemies vanish.
-function applyStatusVisuals(deps: RemotesDeps, playerId: string, remotePlayer: RemotePlayer, status: number, theirTeam: string | undefined): boolean {
+// Standalone so demo playback drives the same lanes — the live caller
+// passes world/hud from RemotesDeps, playback from its own lifecycle.
+export function applyStatusVisuals(localTeam: string | undefined, hud: HUD, removeBar: ((id: string) => void) | null, playerId: string, remotePlayer: RemotePlayer, status: number, theirTeam: string | undefined): boolean {
   // Corpses hold no channels — the corpse window's row still streams the
   // pre-death bits until respawn clears them server-side, and a cloaked
   // corpse would render nothing at all.
   const s = remotePlayer.isDead ? 0 : status;
   const cloaked = Boolean(s & STATUS.CLOAK);
-  const friendly = cloaked && Boolean(theirTeam) && theirTeam === deps.world.localTeam;
+  const friendly = cloaked && Boolean(theirTeam) && theirTeam === localTeam;
   remotePlayer.setCloakHidden(cloaked && !friendly);
   remotePlayer.setCloakGhosted(cloaked && friendly);
   remotePlayer.setShielded(Boolean(s & STATUS.SHIELD));
@@ -111,8 +113,8 @@ function applyStatusVisuals(deps: RemotesDeps, playerId: string, remotePlayer: R
   // Fire-reveal: his own shot left the shimmer window open — the marker
   // and bar stay up like any visible enemy until ghostT closes it.
   if (remotePlayer.ghostT > 0) {return true;}
-  deps.lazyHud().removePlayerIndicator(playerId);
-  deps.lazyHealthBarSystem().removeBar(playerId);
+  hud.removePlayerIndicator(playerId);
+  removeBar?.(playerId);
   return false;
 }
 
@@ -189,13 +191,14 @@ function aswAccrue(id: string, dead: boolean, grounded: boolean, skiing: boolean
 
 
 // Friend-or-foe marker: teammates wear their team's color, enemies are
-// always red. Tint applies only when the wire team changes.
-function applyTeamTint(deps: RemotesDeps, lastTintOf: Map<string, string>,
+// always red. Tint applies only when the wire team changes. Exported for
+// the demo playback lane — same reason as applyStatusVisuals.
+export function applyTeamTint(localTeam: string | undefined, lastTintOf: Map<string, string>,
     playerId: string, remotePlayer: RemotePlayer, theirTeam: string | undefined): void {
   // Debug hitbox wireframe — friendly green, everyone else red. Runs every
   // tick (setHex is free) so teamless/FFA bodies read enemy-red, not the
   // constructor's default green.
-  const friendly = Boolean(theirTeam) && theirTeam === deps.world.localTeam;
+  const friendly = Boolean(theirTeam) && theirTeam === localTeam;
   remotePlayer.setColliderColor(friendly ? 0x00_FF_00 : ENEMY_RED);
   // Body marks — enemies carry the scarlet hull+rim (through-wall read);
   // allies get the quieter squad-green rim only. Bodies stay neutral.
@@ -203,7 +206,7 @@ function applyTeamTint(deps: RemotesDeps, lastTintOf: Map<string, string>,
   remotePlayer.model.setRim(friendly ? 0x44_CC_55 : 0xF0_4A_4A);
   if (!theirTeam || theirTeam === lastTintOf.get(playerId)) {return;}
   lastTintOf.set(playerId, theirTeam);
-  remotePlayer.setGizmoColor(theirTeam === deps.world.localTeam ? TEAM_COLORS[theirTeam] : ENEMY_RED);
+  remotePlayer.setGizmoColor(theirTeam === localTeam ? TEAM_COLORS[theirTeam as 'alpha' | 'bravo'] : ENEMY_RED);
 }
 
 
@@ -254,8 +257,8 @@ function tickRemotePlayer(deps: RemotesDeps, lastTintOf: Map<string, string>,
   // A decloak-revealed enemy (ghostT live from his own shot) reads like
   // any visible foe: HUD marker, team tint, ski dust — the cloak only
   // blanks him once the shimmer window closes.
-  if (!applyStatusVisuals(deps, playerId, remotePlayer, playerState.status ?? 0, playerState.team) && remotePlayer.ghostT <= 0) {return;}
-  applyTeamTint(deps, lastTintOf, playerId, remotePlayer, playerState.team);
+  if (!applyStatusVisuals(deps.world.localTeam, deps.lazyHud(), (id): void => { deps.lazyHealthBarSystem().removeBar(id); }, playerId, remotePlayer, playerState.status ?? 0, playerState.team) && remotePlayer.ghostT <= 0) {return;}
+  applyTeamTint(deps.world.localTeam, lastTintOf, playerId, remotePlayer, playerState.team);
   tickRemoteCosmetics(deps, playerId, remotePlayer, playerState);
 }
 
@@ -466,6 +469,10 @@ export function createRemotes(deps: RemotesDeps) {
     // would mix the real match into the replay scene.
     if (deps.world.playbackMode) {
       player.pendingTeleport = false; // don't queue a stale teleport for later
+      // Playback feeds flagMarkers/nodeMarkers from the demo stream —
+      // the projection ticks must still run or the HUD diamonds die.
+      tickFlagMarkers(deps, nm.getLocalPlayerId(), player.pos, deps.lazyHud(), deps.lazyCamera());
+      tickNodeMarkers(deps, deps.lazyHud(), deps.lazyCamera());
       return;
     }
     lastSentPos.x = player.pos.x;

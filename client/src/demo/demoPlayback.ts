@@ -156,6 +156,7 @@ export function getInterpolatedState(p: DemoPlayer): PlaybackState {
         velX: 0, velY: 0, velZ: 0,
         yaw: 0, pitch: 0,
         inputFlags: 0, jetpackFlags: 0, jetpackFuel: 0, weaponType: 0,
+        health: 0, armor: 0,
       };
     }
 
@@ -188,6 +189,8 @@ export function getInterpolatedState(p: DemoPlayer): PlaybackState {
       jetpackFuel: lerp(f0.jetpackFuel, f1.jetpackFuel, t),
       // Held weapon is discrete like the flags — snap at midpoint, not lerp.
       weaponType: t < 0.5 ? f0.weaponType : f1.weaponType,
+      health: lerp(f0.health ?? 0, f1.health ?? 0, t),
+      armor: lerp(f0.armor ?? 0, f1.armor ?? 0, t),
     };
   }
 

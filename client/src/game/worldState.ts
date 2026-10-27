@@ -53,6 +53,8 @@ export interface WorldState {
   respawnMs: number;
   /** CTF flag status per team — HUD chips (home/carried/dropped). */
   flagStates: { alpha?: 'home' | 'carried' | 'dropped'; bravo?: 'home' | 'carried' | 'dropped' };
+  /** Last applied map look spec — demo playback restores this on stop. */
+  lastAtmo?: { fog?: unknown; weather?: unknown; atmosphere?: unknown };
   /** Set by matchStart: the server's endCleanup resets flags to 'home',
    *  which broadcasts fake carried/dropped→home transitions on the next
    *  flagUpdate — flags.ts swallows announcements on that one update so

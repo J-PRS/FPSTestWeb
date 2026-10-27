@@ -9,6 +9,8 @@ export interface IPlayerDataProvider {
   // Held weapon, stamped into every frame so replays can rebuild the
   // viewmodel — demos stay loadable even if the weapon is deleted later.
   weaponType: number;
+  health: number;
+  armor: number;
 }
 
 export interface IInputProvider {

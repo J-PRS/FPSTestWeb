@@ -1093,6 +1093,8 @@ function makeDemoLifecycle(): ReturnType<typeof createDemoLifecycle> {
     lazyPlayer: (): Player => player,
     lazyDemoManager: (): DemoManager | null => demoManager,
     lazyViewModel: (): ViewModel => viewModel,
+    lazyNetworkManager: (): NetworkManager => networkManager,
+    lazyWeather: (): AmbientWeather => ambientWeather,
     damageNumberManager: (): DamageNumberManager => damageNumberManager,
     fragMessages: (): FragMessages => fragMessages,
     lazyHud: (): HUD => hud,

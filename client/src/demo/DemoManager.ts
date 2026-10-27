@@ -273,6 +273,12 @@ export class DemoManager implements demoIO.DemoIOHost {
     this.coolShotMgr.playById(id);
   }
 
+  /** Clip end is the export's stop signal — the armed recorder must
+   *  stop+download here or it rolls forever and nothing lands. */
+  finishExportIfArmed(): void {
+    if (this.pendingExportShotId && this.video.isRecording) {this.toggleVideoRecord();}
+  }
+
   /** Cool-shot context-menu "RENDER MP4": offline stepped render — scrubs
    *  the demo at fixed 1/60 steps and encodes authored-timestamp frames,
    *  so the mp4 is frame-perfect at any machine speed and usually done
@@ -591,6 +597,16 @@ export class DemoManager implements demoIO.DemoIOHost {
 
   recordFlagUpdate(team: string, state: string, position: Vec3, carrier: string | null): void {
     this.recorder.recordFlagUpdate(team, state, position, carrier);
+  }
+
+  /** Map look spec — captured when the map applies; serialized as the
+   *  SECTION_ATMO trailer so playback replays the recorded sky/haze. */
+  recordAtmo(atmo: { fog?: unknown; weather?: unknown; atmosphere?: unknown }): void {
+    this.recorder.atmo = atmo;
+  }
+
+  recordNodeUpdate(r: { id: number; pos: Vec3; owner: string; core: boolean; hp: number; buildBy: string | null; show: boolean; hot: boolean; gx: number; gz: number }): void {
+    this.recorder.recordNodeUpdate(r);
   }
 
   recordPickupSpawned(netId: number, kind: string, position: Vec3): void {

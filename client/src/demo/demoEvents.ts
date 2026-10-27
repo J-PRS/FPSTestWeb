@@ -1,4 +1,4 @@
-import {ProjectileEventType, TargetEventType, TARGETTYPE_CREATURE_BASE, TARGETTYPE_DEPLOY_BASE, TARGETTYPE_KILL, TARGETTYPE_FLAG, TARGETTYPE_PICKUP_BASE, demoSpeciesIndex, demoDeployKindIndex, demoPickupKindIndex, creatureDemoId, deployDemoId, flagDemoId, pickupDemoId, type ProjectileEvent, type TargetEvent} from './types.js';
+import {ProjectileEventType, TargetEventType, TARGETTYPE_CREATURE_BASE, TARGETTYPE_DEPLOY_BASE, TARGETTYPE_KILL, TARGETTYPE_FLAG, TARGETTYPE_PICKUP_BASE, TARGETTYPE_NODE, demoSpeciesIndex, demoDeployKindIndex, demoPickupKindIndex, creatureDemoId, deployDemoId, flagDemoId, pickupDemoId, nodeDemoId, type ProjectileEvent, type TargetEvent} from './types.js';
 import type { Vec3 } from './interfaces.js';
 import type { DemoRecorder } from './DemoRecorder.js';
 
@@ -299,8 +299,37 @@ export function recordKill(b: DemoRecorder, shooterId: string | null, targetId: 
     b.targetEvents.push(e);
   }
 
-const FLAG_TEAM_IDX: Record<string, number> = { alpha: 0, beta: 1 };
+const FLAG_TEAM_IDX: Record<string, number> = { alpha: 0, bravo: 1 };
 const FLAG_STATE_CODE: Record<string, number> = { home: 0, carried: 1, dropped: 2 };
+
+// Conquest node lane — targetType 240. peakPosX packs the marker state
+// verbatim (owner|core|show|hot|buildBy) so playback needs no topology
+// recompute; hp rides health, grid coords ride peakPosY/Z.
+const NODE_OWNER_CODE: Record<string, number> = { neutral: 0, alpha: 1, bravo: 2 };
+export function recordNodeUpdate(b: DemoRecorder, r: { id: number; pos: Vec3; owner: string; core: boolean; hp: number; buildBy: string | null; show: boolean; hot: boolean; gx: number; gz: number }): void {
+    if (!b.recording) {return;}
+    const meta = (NODE_OWNER_CODE[r.owner] ?? 0)
+      | (r.core ? 4 : 0) | (r.show ? 8 : 0) | (r.hot ? 16 : 0)
+      | ((NODE_OWNER_CODE[r.buildBy ?? 'neutral'] ?? 0) << 5);
+    // Dedupe: record only on marker-visible state change, >0.5m move, or
+    // a >25hp bucket boundary — under-fire cores don't stream 20Hz.
+    const sig = meta | (Math.round(r.hp / 25) << 8) | (Math.round(r.pos.x + r.pos.y + r.pos.z) << 20);
+    if (b.nodeLast.get(r.id) === sig) {return;}
+    if (!checkEventRate(b)) {return;}
+    const first = !b.nodeSeen.has(r.id);
+    if (first) {b.nodeSeen.add(r.id);}
+    b.nodeLast.set(r.id, sig);
+    const e = b.targetEventPool.pop() ?? ({} as TargetEvent);
+    e.eventType = first ? TargetEventType.Spawned : TargetEventType.StateChanged;
+    e.timestamp = b.elapsedTime;
+    e.posX = r.pos.x; e.posY = r.pos.y; e.posZ = r.pos.z;
+    e.velX = 0; e.velY = 0; e.velZ = 0;
+    e.targetId = nodeDemoId(r.id); e.targetType = TARGETTYPE_NODE;
+    e.health = r.hp;
+    e.hasPeakPosition = true;
+    e.peakPosX = meta; e.peakPosY = r.gx; e.peakPosZ = r.gz;
+    b.targetEvents.push(e);
+  }
 
 export function recordFlagUpdate(b: DemoRecorder, team: string, state: string, position: Vec3, carrier: string | null): void {
     if (!b.recording || !checkEventRate(b)) {return;}

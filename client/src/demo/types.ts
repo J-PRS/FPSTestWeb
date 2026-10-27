@@ -10,7 +10,7 @@ export const TARGETTYPE_KILL = 224;
 
 export const DEMO_MAGIC = 0x44; // 'D'
 
-export const DEMO_FORMAT_VERSION = 7;
+export const DEMO_FORMAT_VERSION = 8;
 
 
 
@@ -203,6 +203,15 @@ export const TARGETTYPE_FLAG = 225;
 
 export const TARGETTYPE_PICKUP_BASE = 226;
 
+// 240 conquest node — pos = node pos, health = hp, peakPosX packs
+// owner(0-2)|core|show|hot|buildBy(0-3)<<3, peakPosY/Z = gx/gz grid.
+export const TARGETTYPE_NODE = 240;
+
+export const NODE_DEMO_ID_BASE = 0xD0_00; // |nodeId — netId nibble space
+export function nodeDemoId(nodeId: number): number {
+  return NODE_DEMO_ID_BASE | (nodeId & 0xF_FF);
+}
+
 export const FLAG_DEMO_ID_BASE = 0xC0_00; // |teamIdx — one flag per team
 
 export const PICKUP_ID_FLAG = 0xE0_00;
@@ -284,6 +293,11 @@ export interface DemoFrame {
   // a stock model rather than refusing to load the clip.
 
   weaponType: number;       // uint8
+
+  // v8: HUD bars — health/armor so playback drives the readout instead
+  // of showing whatever the live body had when the clip started.
+  health: number;           // uint16
+  armor: number;            // uint16
 
 }
 
@@ -438,7 +452,24 @@ export interface RemoteFrame {
 
   flags: number;              // uint8 — RemoteFrameFlags
 
+  // v8 meta tail — everything the HUD indicator lane reads beyond
+  // motion. Absent on v≤7 files; playback falls back to name-only
+  // chevrons when undefined.
+  team?: number;              // uint8 — TEAM_CODE (0 none, 1 alpha, 2 bravo)
+  hp?: number;                // uint8 — health clamped 0-255
+  held?: number;              // uint8 — headhunt token count
+  sheep?: number;             // uint8 — bot sheep meter
+  cls?: number;               // uint8 — CLS_CODE (1 light, 2 medium, 3 heavy)
+  status?: number;            // uint8 — low STATUS_* bits
+  wid?: number;               // uint8 — held weaponType
+
 }
+
+// v8 remote-frame meta encodings — wire strings → u8 lanes.
+export const TEAM_CODE: Record<string, number> = { alpha: 1, bravo: 2 };
+export const TEAM_NAME = ['', 'alpha', 'bravo'];
+export const CLS_CODE: Record<string, number> = { light: 1, medium: 2, heavy: 3 };
+export const CLS_NAME = ['', 'light', 'medium', 'heavy'];
 
 
 
@@ -479,6 +510,9 @@ export interface DemoFile {
   remoteFrames: RemoteFrame[];     // empty on v1/v2 files
 
   heightmap?: DemoHeightmap;       // absent unless the recorder saw terrain
+  /** v8: map look spec ({fog, weather, atmosphere} as MapSnapshot fields)
+   *  — playback replays the recorded haze/sky instead of the live map's. */
+  atmo?: { fog?: unknown; weather?: unknown; atmosphere?: unknown };
   // v7 trailer: server-signed result receipt (SECTION_TOKEN) — the
   // leaderboard submission pairs demo+token in one file. Absent offline.
   matchToken?: ResultToken;
@@ -523,6 +557,8 @@ export function createFrame(frameNumber: number, timestamp: number): DemoFrame {
     yaw: 0, pitch: 0,
 
     inputFlags: 0, mouseDeltaX: 0, mouseDeltaY: 0,
+
+    health: 0, armor: 0,
 
     jetpackFlags: 0, jetpackFuel: 0, weaponType: 0,
 

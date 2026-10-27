@@ -54,6 +54,9 @@ export interface PlaybackWorld {
   playbackDeployableById: Map<number, PlaybackDeployable>;
   /** Flag + pickup proxies — keyed by their demo targetIds. */
   playbackFlags: Map<number, THREE.Group>;
+  /** Conquest node markers decoded from TARGETTYPE_NODE events —
+   *  demoLifecycle mirrors them into world.nodeMarkers for the HUD. */
+  playbackNodes: Map<number, { x: number; y: number; z: number; meta: number; gx: number; gz: number; hp: number }>;
   playbackPickups: Map<number, { mesh: THREE.Object3D; dispose(scene: THREE.Scene): void }>;
   /** Resolves a roster idx to the replayed remote player's rendered pos —
    *  wired by the playback lifecycle so a carried flag can ride its carrier. */

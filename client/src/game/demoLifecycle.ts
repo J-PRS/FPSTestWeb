@@ -1,6 +1,11 @@
 import { reconstructSeek, applyPlaybackEvents, releasePlaybackBeam, type PlaybackWorld } from '../demo/playbackReconstruction.js';
-import {type ProjectileEvent, type TargetEvent, RemoteFrameFlags, TARGETTYPE_CREATURE_BASE, demoSpeciesIndex, creatureDemoId, targetDemoId, ProjectileEventType} from '../demo/types.js';
+import {type ProjectileEvent, type TargetEvent, RemoteFrameFlags, TARGETTYPE_CREATURE_BASE, TARGETTYPE_KILL, demoSpeciesIndex, creatureDemoId, targetDemoId, ProjectileEventType, TEAM_NAME, CLS_NAME} from '../demo/types.js';
 import type { RemoteSample } from '../demo/DemoRecorder.js';
+import type { NetworkManager } from '../networking/NetworkManager.js';
+import { isBotId } from '../../../shared/botNames.js';
+import { applyStatusVisuals, applyTeamTint } from './remotes.js';
+import { FLAG_STAND_TOP } from '../structures/structures.js';
+import { applyMapFog, applyWeather, applyAtmosphere } from './net/mapAssets.js';
 import type { DemoManager } from '../demo/index.js';
 import type { Ball , Targetable } from '../entities/balls.js';
 import type { DamageNumberManager } from '../effects/damageNumbers.js';
@@ -11,6 +16,7 @@ import { noteLocalSnap } from './gameLoop.js';
 import type { Projectile } from '../projectiles/Projectile.js';
 import type { Terrain } from '../world/terrain.js';
 import type * as THREE from 'three';
+import { Vector3 as _V3 } from 'three';
 import { ChildLogger } from '../core/Logger.js';
 import type { WorldState } from './worldState.js';
 import { RemotePlayer } from '../entities/RemotePlayer.js';
@@ -47,6 +53,8 @@ export interface DemoLifecycleDeps {
   lazyPlayer: () => Player;
   lazyDemoManager: () => DemoManager | null;
   lazyViewModel: () => ViewModel | null;
+  lazyNetworkManager: () => NetworkManager;
+  lazyWeather?: () => { setWeather(w?: unknown): void };
   damageNumberManager: () => DamageNumberManager;
   fragMessages: () => FragMessages;
   lazyHud: () => HUD;
@@ -78,6 +86,10 @@ interface DemoLifecycleCtx extends DemoLifecycleDeps {
   playbackRemotes: Map<number, RemotePlayer>;
   frozenWarn: { n: number };
   seekReconstructing: { on: boolean };
+  /** flagMarkers/nodeMarkers entries playback minted — cleared with the
+   *  clip so live markers don't inherit replayed state. */
+  playbackFlagTeams: Set<string>;
+  playbackNodeIds: Set<number>;
   /** wid currently mirrored onto the viewmodel — -1 means "not applied yet". */
   playbackWid: number;
   /** Restores the live heightmap after a clip's embedded terrain was
@@ -146,15 +158,78 @@ d.frozenWarn.n += 1;
   }
   updatePlaybackCreatures(d.playbackWorld, dt);
   updatePlaybackFlags(d.playbackWorld);
+  // HUD flag diamonds — the proxy already re-pins to the carrier each
+  // frame, so pointing marker.wirePos at the proxy rides the carrier too.
+  for (const [id, proxy] of d.playbackWorld.playbackFlags) {
+    const team = (id & 0xF) === 1 ? 'bravo' : 'alpha';
+    let m = d.world.flagMarkers.get(team);
+    if (!m) {
+      m = { mesh: proxy, stand: proxy, home: proxy.position.clone(), homeKnown: false, carrier: null, wirePos: proxy.position.clone() };
+      d.world.flagMarkers.set(team, m);
+      d.playbackFlagTeams.add(team);
+    }
+    m.wirePos.copy(proxy.position);
+    if (proxy.userData.state === 0) {
+      m.home.copy(proxy.position); m.homeKnown = true;
+      m.wirePos.y += FLAG_STAND_TOP; // same home-lift the live feed applies
+    }
+    d.world.flagStates[team] = PB_FLAG_STATE[proxy.userData.state as number] ?? 'home';
+  }
+  // Conquest node pins — recorded marker state decoded verbatim; the
+  // nodeMarkers projection tick (kept alive in playback mode) pins it.
+  const NODE_OWNER = ['neutral', 'alpha', 'bravo'] as const;
+  for (const [id, n] of d.playbackWorld.playbackNodes) {
+    let m = d.world.nodeMarkers.get(id);
+    if (!m) {
+      m = { pos: new _V3(), owner: 'neutral', core: false, gx: 0, gz: 0, show: false, hot: false };
+      d.world.nodeMarkers.set(id, m);
+      d.playbackNodeIds.add(id);
+    }
+    m.pos.set(n.x, n.y, n.z);
+    m.owner = NODE_OWNER[n.meta & 3] ?? 'neutral';
+    m.core = Boolean(n.meta & 4); m.gx = n.gx; m.gz = n.gz;
+    m.show = Boolean(n.meta & 8); m.hot = Boolean(n.meta & 16);
+  }
+  // Nodes whose playback lane went quiet leave their pin behind — reap.
+  for (const id of d.playbackNodeIds) {
+    if (!d.playbackWorld.playbackNodes.has(id)) {
+      d.world.nodeMarkers.delete(id);
+      d.lazyHud().removePlayerIndicator(`node:${id}`);
+      d.playbackNodeIds.delete(id);
+    }
+  }
 }
 
+const PB_FLAG_STATE = ['home', 'carried', 'dropped'] as const;
+
 // Shared cleanup: dispose live + playback transient objects
+const _pbMark = { x: 0, y: 0, z: 0 };
+// Playback tint/weapon dedupe — per-clip memory like the live lastTintOf.
+const pbTintOf = new Map<string, string>();
+const pbWidOf = new Map<number, number>();
 function clearTransientObjects(d: DemoLifecycleCtx): void {
   for (const rp of d.playbackRemotes.values()) {rp.dispose();}
   // Loop audio outlives the replica — each 'pb:' voice must release its
   // remoteMoveAudio slot or a stopped replay drones on.
-  for (const idx of d.playbackRemotes.keys()) {sfxWorld.remoteMoveAudioGone(`pb:${idx}`);}
+  for (const idx of d.playbackRemotes.keys()) {
+    sfxWorld.remoteMoveAudioGone(`pb:${idx}`);
+    d.lazyHud().removePlayerIndicator(`pb:${idx}`);
+  }
   d.playbackRemotes.clear();
+  pbTintOf.clear(); pbWidOf.clear();
+  // Playback-owned flag markers — remove so live flags reclaim the lane.
+  for (const team of d.playbackFlagTeams) {
+    d.world.flagMarkers.delete(team as 'alpha' | 'bravo');
+    d.lazyHud().removePlayerIndicator(`flag:${team}`);
+    d.lazyHud().removePlayerIndicator(`stand:${team}`);
+  }
+  d.playbackFlagTeams.clear();
+  for (const id of d.playbackNodeIds) {
+    d.world.nodeMarkers.delete(id);
+    d.lazyHud().removePlayerIndicator(`node:${id}`);
+  }
+  d.playbackNodeIds.clear();
+  d.playbackWorld.playbackNodes.clear();
   for (const r of d.playbackProjectiles) {r.dispose();}
   d.playbackProjectiles.length = 0;
   d.playbackProjectileById.clear();
@@ -222,6 +297,18 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
       }
     }
     applyPlaybackEvents(d.playbackWorld, events);
+    // Kill feed — TARGETTYPE_KILL carries victim rosterIdx, shooter
+    // rosterIdx+1 in peakPosX, weapon in health. Teams aren't in the
+    // roster stream; leave them neutral rather than guessing.
+    for (const ev of events.targets) {
+      if (ev.targetType !== TARGETTYPE_KILL) {continue;}
+      const roster = demoManager.getRoster();
+      const localId = d.lazyNetworkManager().getLocalPlayerId();
+      const targetId = roster[ev.targetId] ?? `player${ev.targetId}`;
+      const shooterId = ev.peakPosX > 0 ? (roster[ev.peakPosX - 1] ?? 'environment') : 'environment';
+      d.lazyHud().feedKill(shooterId, targetId, shooterId === localId, targetId === localId,
+        { weapon: ev.health || undefined, sName: shooterId, tName: targetId });
+    }
   };
   demoManager.onPlaybackState = (state): void => {
     if (demoManager.isPlaying) {
@@ -231,6 +318,9 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
       player.vel.set(state.velX, state.velY, state.velZ);
       player.yaw = state.yaw;
       player.pitch = state.pitch;
+      // HUD bars replay the recorded body — v≤7 files carry 0s, so leave
+      // the live values alone rather than pinning them to zero.
+      if (state.health || state.armor) {player.health = state.health; player.armor = state.armor;}
       // Mirror the recorded held weapon onto the viewmodel — switchWeapon
       // takes the wire weaponType (the same ids frames carry), NOT a
       // loadout slot. Unknown ids (a weapon deleted since recording)
@@ -247,6 +337,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
   demoManager.onPlaybackEnd = (): void => {
     // No cleanup — objects stay visible as if user pressed pause.
     // Cleanup happens when user explicitly stops playback via ESC.
+    demoManager.finishExportIfArmed();
   };
 
   // User explicitly stops playback (ESC, UI stop button) — full cleanup
@@ -256,6 +347,14 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
     // inheriting whatever the previous clip left selected.
     d.playbackWid = -1;
     for (const rp of d.world.remotePlayers.values()) {rp.setStaleHidden(false);}
+    // Hand the live sky/haze back — the clip's atmo was a guest.
+    if (demoManager.player.demoData?.atmo) {
+      const ctx = { deps: d } as never;
+      const live = d.world.lastAtmo;
+      applyMapFog(ctx, live?.fog as never);
+      applyWeather(ctx, live?.weather as never);
+      applyAtmosphere(ctx, live?.atmosphere as never);
+    }
     clearTransientObjects(d);
     // Show overlay menu so user can replay or pick another clip
     if (document.pointerLockElement === d.rendererCanvas) {
@@ -279,6 +378,16 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
   demoManager.onPlaybackStart = (): void => {
     // The replay is its own world — the live wire must not fight it
     d.world.playbackMode = true;
+    // SECTION_ATMO: replay the recorded map look — without it a rimrock
+    // clip rendered on caldera's map inherits the wrong haze/sky. Restored
+    // to world.lastAtmo on stop.
+    const atmo = demoManager.player.demoData?.atmo;
+    if (atmo) {
+      const ctx = { deps: d } as never;
+      applyMapFog(ctx, atmo.fog as never);
+      applyWeather(ctx, atmo.weather as never);
+      applyAtmosphere(ctx, atmo.atmosphere as never);
+    }
     // v5 HMAP: the clip carries its terrain — use it when the live field
     // is absent or doesn't match the recorded action; the live map wins
     // when it checks out against the embedded fingerprint.
@@ -358,6 +467,33 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
       rp.tick(dt, d.lazyCamera().position);
       const dead = (s.flags & RemoteFrameFlags.Dead) !== 0;
       rp.setStaleHidden(dead);
+      // Overhead chevron — playback remotes bypass net/remotes.ts where
+      // the live HUD marker updates, so without this replayed bodies
+      // walk around unmarked. Same renderLift anchor as the live path.
+      const indId = `pb:${s.rosterIdx}`;
+      const hud = d.lazyHud();
+      const teamName = s.team ? TEAM_NAME[s.team] : undefined;
+      if (s.cls && rp.armorClass !== CLS_NAME[s.cls]) {rp.setClass(CLS_NAME[s.cls]);}
+      // Same cosmetic lanes the live tick drives: status auras/cloak,
+      // team tint, held-token crown, roster-declared weapon.
+      const visible = applyStatusVisuals(d.world.localTeam, hud, null, indId, rp, s.status ?? 0, teamName);
+      applyTeamTint(d.world.localTeam, pbTintOf, indId, rp, teamName);
+      rp.setHeld(s.held ?? 0);
+      if (s.wid !== undefined && s.wid !== pbWidOf.get(s.rosterIdx)) {
+        pbWidOf.set(s.rosterIdx, s.wid);
+        rp.model.setWeapon(s.wid);
+      }
+      if (dead || !visible) {hud.removePlayerIndicator(indId);}
+      else {
+        _pbMark.x = rp.position.x; _pbMark.y = rp.position.y + rp.renderLift; _pbMark.z = rp.position.z;
+        const rid = roster[s.rosterIdx] ?? indId;
+        hud.updatePlayerIndicator(indId, _pbMark, d.lazyCamera(), {
+          friendly: Boolean(teamName) && teamName === d.world.localTeam,
+          sheep: s.sheep, bot: isBotId(rid), cls: CLS_NAME[s.cls ?? 0] ?? rp.armorClass,
+          hp: s.hp || undefined, held: s.held || undefined,
+          name: rid,
+        });
+      }
       // Playback remotes bypass net/remotes.ts, which is where jet/ski
       // audio normally fires — replay the same positional loop decision.
       // No wireJet bit in the recording, so the powered-climb heuristic
@@ -372,6 +508,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
       if (!seen.has(idx)) {
         rp.setStaleHidden(true);
         sfxWorld.remoteMoveAudioGone(`pb:${idx}`);
+        d.lazyHud().removePlayerIndicator(`pb:${idx}`);
       }
     }
   };
@@ -388,6 +525,7 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
   const remoteSampleBuf: RemoteSample[] = [];
   demoManager.setRemoteSource((): RemoteSample[] => {
     const out = remoteSampleBuf;
+    const wire = d.lazyNetworkManager().getPlayers();
     let i = 0;
     for (const [id, rp] of d.world.remotePlayers) {
       let s = out[i];
@@ -400,7 +538,13 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
       s.velX = rp.vel.x; s.velY = rp.vel.y; s.velZ = rp.vel.z;
       s.yaw = rp.rotation.yaw; s.pitch = rp.rotation.pitch;
       s.dead = rp.isDead; s.ski = false;
-i += 1;
+      // Meta lives on the wire state, not the replica — same fields the
+      // live HUD indicator lane reads.
+      const w = wire.get(id);
+      s.team = w?.team; s.health = w?.health; s.held = w?.held;
+      s.sheep = w?.sheep; s.armorClass = w?.armorClass;
+      s.status = w?.status; s.weapon = w?.weapon;
+      i += 1;
     }
     out.length = i;
     return out;
@@ -466,6 +610,7 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
     playbackCreatureById,
     playbackDeployableById,
     playbackFlags,
+    playbackNodes: new Map(),
     playbackPickups,
     remotePosAt: (rosterIdx): THREE.Vector3 | null => playbackRemotesMap.get(rosterIdx)?.position ?? null,
     playbackProjectiles,
@@ -489,6 +634,8 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
     frozenWarn: { n: 0 },
     seekReconstructing: { on: false },
     playbackWid: -1,
+    playbackFlagTeams: new Set<string>(),
+    playbackNodeIds: new Set<number>(),
     playbackWorld,
     hmRestore: null,
   });

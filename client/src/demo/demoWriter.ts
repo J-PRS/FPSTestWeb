@@ -42,15 +42,20 @@ function writeString(view: DataView, pOffset: number, str: string): number {
   return offset;
 }
 
-// Frame size: 2 + 4 + 12 + 12 + 8 + 1 + 2 + 2 + 1 + 4 + 1 = 49 bytes
-export const FRAME_SIZE = 49;
+// Frame size: 2 + 4 + 12 + 12 + 8 + 1 + 2 + 2 + 1 + 4 + 1 + 4 = 53 bytes
+// (v8 appends u16 health + u16 armor). v4-7 read at 49, older at 48.
+export const FRAME_SIZE = 53;
+export const FRAME_SIZE_V7 = 49;
 // Projectile event size: 1 + 4 + 12 + 12 + 2 + 1 + 12 + 2 + 1 + 12 + 1 = 60
 // bytes (v6 appended targetType). v5 and older read at 59.
 export const PROJECTILE_EVENT_SIZE = 60;
 // Target event size: 1 + 4 + 12 + 12 + 2 + 1 + 4 + 1 + 12 = 49 bytes
 export const TARGET_EVENT_SIZE = 49;
-// Remote frame size: 4 + 2 + 12 + 12 + 4 + 4 + 1 = 39 bytes
-export const REMOTE_FRAME_SIZE = 39;
+// Remote frame size: 4 + 2 + 12 + 12 + 4 + 4 + 1 + 7 = 46 bytes
+// (v8 appends a 7-byte meta tail: team/hp/held/sheep/cls/status/wid).
+// v7 and older read at 39.
+export const REMOTE_FRAME_SIZE = 46;
+export const REMOTE_FRAME_SIZE_V7 = 39;
 
 // v5 trailer: tagged optional sections after remoteFrames — each is
 // u8 tag + u32 payloadLen + payload. Unknown tags are skipped by the
@@ -60,6 +65,9 @@ export const SECTION_TOKEN = 2;
 // Seek checkpoints: u32 count + f32 ascending timestamps. Versionless by
 // design — old readers skip the tag, old files just seek from 0.
 export const SECTION_SNAP = 3;
+// Map look spec — JSON {fog, weather, atmosphere} so a clip replays the
+// mission haze/sky it was recorded under (rimrock haze != caldera night).
+export const SECTION_ATMO = 4;
 
 function writeHmapSection(view: DataView, pOffset: number, hm: DemoFile['heightmap']): number {
   let offset = pOffset;
@@ -97,6 +105,8 @@ function writeFrames(view: DataView, pOffset: number, frames: DemoFile['frames']
     view.setUint8(((offset += 1) - 1), f.jetpackFlags);
     view.setFloat32(offset, f.jetpackFuel, true); offset += 4;
     view.setUint8(((offset += 1) - 1), f.weaponType);
+    view.setUint16(offset, f.health, true); offset += 2;
+    view.setUint16(offset, f.armor, true); offset += 2;
   }
   return offset;
 }
@@ -166,6 +176,14 @@ function writeRemoteFrames(view: DataView, pOffset: number, frames: DemoFile['re
     view.setFloat32(offset, f.yaw, true); offset += 4;
     view.setFloat32(offset, f.pitch, true); offset += 4;
     view.setUint8(((offset += 1) - 1), f.flags);
+    // v8 meta tail — 0 encodes "absent" so unset lanes stay free.
+    view.setUint8(((offset += 1) - 1), f.team ?? 0);
+    view.setUint8(((offset += 1) - 1), f.hp ?? 0);
+    view.setUint8(((offset += 1) - 1), f.held ?? 0);
+    view.setUint8(((offset += 1) - 1), f.sheep ?? 0);
+    view.setUint8(((offset += 1) - 1), f.cls ?? 0);
+    view.setUint8(((offset += 1) - 1), f.status ?? 0);
+    view.setUint8(((offset += 1) - 1), f.wid ?? 0);
   }
   return offset;
 }
@@ -193,7 +211,9 @@ export function serializeDemo(data: DemoFile): ArrayBuffer {
     const tokenSize = data.matchToken ? 1 + 4 + new TextEncoder().encode(JSON.stringify(data.matchToken)).length : 0;
     const snapCount = data.snapshots?.length ?? 0;
     const snapSize = snapCount > 0 ? 1 + 4 + 4 + snapCount * 4 : 0;
-    const trailerSize = 1 + hmapSize + tokenSize + snapSize;
+    const atmoBytes = data.atmo ? new TextEncoder().encode(JSON.stringify(data.atmo)) : null;
+    const atmoSize = atmoBytes ? 1 + 4 + atmoBytes.length : 0;
+    const trailerSize = 1 + hmapSize + tokenSize + snapSize + atmoSize;
     const totalSize = totalHeaderSize + framesSize + projEventsSize + targetEventsSize + rosterSize + remoteFramesSize + trailerSize;
 
     const buffer = new ArrayBuffer(totalSize);
@@ -250,8 +270,14 @@ export function serializeDemo(data: DemoFile): ArrayBuffer {
     // v5 trailer sections — u8 count, then tag+len+payload per section.
     const tokenBytes = data.matchToken ? new TextEncoder().encode(JSON.stringify(data.matchToken)) : null;
     const snaps = data.snapshots ?? [];
-    view.setUint8(((offset += 1) - 1), (data.heightmap ? 1 : 0) + (tokenBytes ? 1 : 0) + (snaps.length > 0 ? 1 : 0));
+    view.setUint8(((offset += 1) - 1), (data.heightmap ? 1 : 0) + (tokenBytes ? 1 : 0) + (snaps.length > 0 ? 1 : 0) + (atmoBytes ? 1 : 0));
     offset = writeHmapSection(view, offset, data.heightmap);
+    if (atmoBytes) {
+      view.setUint8(((offset += 1) - 1), SECTION_ATMO);
+      view.setUint32(offset, atmoBytes.length, true); offset += 4;
+      new Uint8Array(buffer, offset, atmoBytes.length).set(atmoBytes);
+      offset += atmoBytes.length;
+    }
     if (tokenBytes) {
       view.setUint8(((offset += 1) - 1), SECTION_TOKEN);
       view.setUint32(offset, tokenBytes.length, true); offset += 4;

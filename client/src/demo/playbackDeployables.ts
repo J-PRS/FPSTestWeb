@@ -53,9 +53,14 @@ export class PlaybackDeployable {
     scene.add(this.mesh);
   }
 
-  /** Hit events carry hp — 0 is the down state, >0 back up. */
-  setHp(hp: number): void {
+  hp = 100;
+  /** Hit events carry hp — 0 is the down state, >0 back up. The delta vs
+   *  the last seen hp IS the damage number (no separate field recorded). */
+  setHp(hp: number): number {
+    const delta = this.hp - hp;
+    this.hp = hp;
     this.mat.color.copy(this.baseColor).multiplyScalar(hp > 0 ? 1 : 0.25);
+    return delta;
   }
 
   dispose(scene: THREE.Scene): void {
@@ -111,7 +116,8 @@ export function applyPlaybackDeployableEvent(world: PlaybackWorld, ev: TargetEve
   if (!d || d.dead) {return;}
 
   if (ev.eventType === TargetEventType.Hit) {
-    d.setHp(ev.health);
+    const dmg = d.setHp(ev.health);
+    if (dmg > 0) {world.damageNumberManager.spawn(d.pos, dmg, '#ffffff', world.camera);}
     return;
   }
   if (ev.eventType === TargetEventType.Destroyed) {

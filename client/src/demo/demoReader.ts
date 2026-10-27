@@ -9,7 +9,7 @@ import {
   type DemoFile,type DemoRosterEntry,type DemoHeightmap} from './types.js';
 
 import type { ResultToken } from '../../../shared/resultToken.ts';
-import { crc32, FRAME_SIZE, PROJECTILE_EVENT_SIZE, TARGET_EVENT_SIZE, REMOTE_FRAME_SIZE, SECTION_HMAP, SECTION_TOKEN, SECTION_SNAP } from './demoWriter.js';
+import { crc32, FRAME_SIZE, FRAME_SIZE_V7, PROJECTILE_EVENT_SIZE, TARGET_EVENT_SIZE, REMOTE_FRAME_SIZE, REMOTE_FRAME_SIZE_V7, SECTION_HMAP, SECTION_TOKEN, SECTION_SNAP, SECTION_ATMO } from './demoWriter.js';
 
 
 // CRC32 lookup table
@@ -152,10 +152,10 @@ function readRecordCount(r: Reader, what: string, recordSize: number, max: numbe
   return count;
 }
 
-function readFrames(r: Reader, hasWeaponType: boolean): DemoFrame[] {
-  // v4 appended weaponType to the frame record; older files read at their
-  // own record size and default to no held weapon shown.
-  const recSize = hasWeaponType ? FRAME_SIZE : FRAME_SIZE - 1;
+function readFrames(r: Reader, version: number): DemoFrame[] {
+  // v4 appended weaponType; v8 appended health+armor. Older files read at
+  // their own record size.
+  const recSize = version >= 8 ? FRAME_SIZE : version >= 4 ? FRAME_SIZE_V7 : FRAME_SIZE_V7 - 1;
   const count = readRecordCount(r, 'frame', recSize, 720_000);
   const frames: DemoFrame[] = Array.from({ length: count });
   for (let i = 0; i < count; i += 1) {
@@ -170,7 +170,9 @@ function readFrames(r: Reader, hasWeaponType: boolean): DemoFrame[] {
       mouseDeltaY: r.i16(),
       jetpackFlags: r.u8(),
       jetpackFuel: r.f32(),
-      weaponType: hasWeaponType ? r.u8() : 0,
+      weaponType: version >= 4 ? r.u8() : 0,
+      health: version >= 8 ? r.u16() : 0,
+      armor: version >= 8 ? r.u16() : 0,
     };
   }
   return frames;
@@ -239,8 +241,9 @@ function readRoster(r: Reader): DemoRosterEntry[] {
   return roster;
 }
 
-function readRemoteFrames(r: Reader, rosterSize: number): RemoteFrame[] {
-  const count = readRecordCount(r, 'remote frame', REMOTE_FRAME_SIZE, 4_000_000);
+function readRemoteFrames(r: Reader, rosterSize: number, v8: boolean): RemoteFrame[] {
+  const size = v8 ? REMOTE_FRAME_SIZE : REMOTE_FRAME_SIZE_V7;
+  const count = readRecordCount(r, 'remote frame', size, 4_000_000);
   const frames: RemoteFrame[] = Array.from({ length: count });
   for (let i = 0; i < count; i += 1) {
     const timestamp = r.f32();
@@ -248,13 +251,18 @@ function readRemoteFrames(r: Reader, rosterSize: number): RemoteFrame[] {
     if (rosterIdx >= rosterSize) {
       throw new Error(`Remote frame ${i} references roster idx ${rosterIdx} (roster has ${rosterSize})`);
     }
-    frames[i] = {
+    const f: RemoteFrame = {
       timestamp, rosterIdx,
       posX: r.f32(), posY: r.f32(), posZ: r.f32(),
       velX: r.f32(), velY: r.f32(), velZ: r.f32(),
       yaw: r.f32(), pitch: r.f32(),
       flags: r.u8(),
     };
+    if (v8) {
+      f.team = r.u8(); f.hp = r.u8(); f.held = r.u8();
+      f.sheep = r.u8(); f.cls = r.u8(); f.status = r.u8(); f.wid = r.u8();
+    }
+    frames[i] = f;
   }
   return frames;
 }
@@ -276,17 +284,19 @@ function validateHeaderCounts(header: DemoFile['header'], frames: DemoFrame[], p
 
 // v5 trailer: tagged optional sections after remoteFrames. Unknown tags
 // are skipped so newer sections don't break older readers of this file.
-function readTrailerSections(r: Reader): { hmap?: DemoHeightmap; token?: ResultToken; snapshots?: number[] } {
+function readTrailerSections(r: Reader): { hmap?: DemoHeightmap; token?: ResultToken; snapshots?: number[]; atmo?: DemoFile['atmo'] } {
   if (r.remaining === 0) {return {};}
   const count = r.u8();
   let hmap: DemoHeightmap | undefined = undefined;
   let token: ResultToken | undefined = undefined;
   let snapshots: number[] | undefined = undefined;
+  let atmo: DemoFile['atmo'] | undefined = undefined;
   for (let i = 0; i < count; i += 1) {
     r.ensure(1 + 4, 'trailer section header');
     const tag = r.u8();
     const len = r.u32();
     if (tag === SECTION_TOKEN) {token = JSON.parse(new TextDecoder().decode(r.bytes(len))) as ResultToken; continue;}
+    if (tag === SECTION_ATMO) {atmo = JSON.parse(new TextDecoder().decode(r.bytes(len))) as DemoFile['atmo']; continue;}
     if (tag === SECTION_SNAP) {
       const before = r.remaining;
       r.ensure(4, 'snapshot count');
@@ -318,21 +328,22 @@ function readTrailerSections(r: Reader): { hmap?: DemoHeightmap; token?: ResultT
     if (consumed > len) {throw new Error('HMAP section overruns its length');}
     r.skip(len - consumed);
   }
-  return { hmap, token, snapshots };
+  return { hmap, token, snapshots, atmo };
 }
 
 export function deserializeDemo(buffer: ArrayBuffer): DemoFile {
 
     const r = new Reader(buffer);
     const header = readDemoHeader(r, buffer);
-    const frames = readFrames(r, header.formatVersion >= 4);
+    const frames = readFrames(r, header.formatVersion);
     const projectileEvents = readProjectileEvents(r, header.formatVersion >= 6);
     const targetEvents = readTargetEvents(r);
     const roster = header.formatVersion >= 3 ? readRoster(r) : [];
-    const remoteFrames = header.formatVersion >= 3 ? readRemoteFrames(r, roster.length) : [];
+    const remoteFrames = header.formatVersion >= 3 ? readRemoteFrames(r, roster.length, header.formatVersion >= 8) : [];
     const trailer = header.formatVersion >= 5 ? readTrailerSections(r) : {};
     validateHeaderCounts(header, frames, projectileEvents, targetEvents);
     return Object.assign({}, {header,frames,projectileEvents,targetEvents,roster,remoteFrames},
       (trailer.hmap ? { heightmap: trailer.hmap } : {}), (trailer.token ? { matchToken: trailer.token } : {}),
-      (trailer.snapshots && trailer.snapshots.length > 0 ? { snapshots: trailer.snapshots } : {}));
+      (trailer.snapshots && trailer.snapshots.length > 0 ? { snapshots: trailer.snapshots } : {}),
+      (trailer.atmo ? { atmo: trailer.atmo } : {}));
   }

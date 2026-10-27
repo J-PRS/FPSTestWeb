@@ -31,6 +31,7 @@ export interface NodeLayerDeps {
   lazyHud(): { logEvent(text: string, cls?: string): void; removePlayerIndicator(id: string): void };
   fragMessages: { show(text: string): void };
   lazyHealthBarSystem(): { showDamage(item: RepairTarget, ally: boolean): void };
+  lazyDemoManager?: () => { recordNodeUpdate(r: { id: number; pos: { x: number; y: number; z: number }; owner: string; core: boolean; hp: number; buildBy: string | null; show: boolean; hot: boolean; gx: number; gz: number }): void } | null;
 }
 
 const NEUTRAL_COLOR = 0x6A_70_78;
@@ -188,6 +189,9 @@ export function createNodeLayer(deps: NodeLayerDeps): { applyRows(nodes: NodeRow
       m.hot = enemy !== null && conquestActionable(rows, r, enemy, nDim);
       const canAct = me === 'alpha' || me === 'bravo' ? conquestActionable(rows, r, me, nDim) : false;
       m.show = r.core || m.hot || (canAct && r.owner !== me);
+      // Demo lane: the marker decision is already computed here — record
+      // it verbatim so playback pins the same diamonds without topology.
+      deps.lazyDemoManager?.()?.recordNodeUpdate({ id: r.id, pos: r.pos, owner: r.owner, core: r.core, hp: r.hp, buildBy: r.buildBy ?? null, show: m.show, hot: m.hot, gx: r.gx, gz: r.gz });
     }
     for (const [id] of marks) {
       if (!seen.has(id)) {marks.delete(id); deps.lazyHud().removePlayerIndicator(`node:${id}`);}

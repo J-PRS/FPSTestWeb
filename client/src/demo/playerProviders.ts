@@ -16,6 +16,8 @@ export function playerProviders(player: Player): { playerData: IPlayerDataProvid
       get yaw(): number { return player.yaw; },
       get pitch(): number { return player.pitch; },
       get weaponType() { return weaponDef(player.currentWeapon).weaponType; },
+      get health() { return Math.max(0, Math.round(player.health)); },
+      get armor() { return Math.max(0, Math.round(player.armor)); },
     },
     inputData: {
       get inputFlags(): number {

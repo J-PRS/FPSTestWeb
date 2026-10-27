@@ -8,7 +8,7 @@ import type { IPlayerDataProvider, IInputProvider } from '../demo/interfaces.js'
 
 const mkPlayer = (): IPlayerDataProvider => ({
   posX: 1, posY: 2, posZ: 3, velX: 4, velY: 5, velZ: 6,
-  yaw: 0.1, pitch: 0.2, weaponType: 7,
+  yaw: 0.1, pitch: 0.2, weaponType: 7, health: 100, armor: 0,
 });
 const mkInput = (): IInputProvider => ({
   inputFlags: 0, mouseDeltaX: 0, mouseDeltaY: 0, jetpackFlags: 0, jetpackFuel: 0,

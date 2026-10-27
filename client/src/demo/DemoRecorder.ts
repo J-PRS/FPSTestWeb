@@ -5,6 +5,7 @@ import { CircularBuffer } from './CircularBuffer.js';
 import {
   type DemoFrame, type ProjectileEvent, ProjectileEventType, type TargetEvent, type RemoteFrame, type DemoHeightmap,RemoteFrameFlags,
   createFrame,
+  TEAM_CODE, CLS_CODE,
   type DemoFile,type DemoRosterEntry} from './types.js';
 
 import type { IPlayerDataProvider, IInputProvider, Vec3 } from './interfaces.js';
@@ -74,6 +75,10 @@ export interface RemoteSample {
   velX: number; velY: number; velZ: number;
   yaw: number; pitch: number;
   dead: boolean; ski: boolean;
+  // v8 meta — optional so old sources (bot entries without wire state)
+  // still satisfy the shape; absent lanes encode 0.
+  team?: string; health?: number; held?: number; sheep?: number;
+  armorClass?: string; status?: number; weapon?: number;
 }
 
 export interface DemoContext {
@@ -121,6 +126,10 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   /** Server pickup netId -> targetType + rest pos — pickupGone carries
    *  no position, so spawn seeds the table. */
   pickupInfoByNetId = new Map<number, { tt: number; x: number; y: number; z: number }>();
+  /** Conquest node dedupe — last written sig per node id (see
+   *  ev.recordNodeUpdate) plus the Spawned-once set. */
+  nodeSeen = new Set<number>();
+  nodeLast = new Map<number, number>();
   /** Flag demo ids already Spawned this window — flags live forever, so
    *  the lane emits one Spawned then only StateChanged keyframes. */
   flagSeen = new Set<number>();
@@ -134,6 +143,9 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
    *  Lives outside remoteFrames so pooled/pruned frames don't alias it. */
   private lastRemoteByIdx = new Map<number, { posX: number; posY: number; posZ: number; velX: number; velY: number; velZ: number; yaw: number; pitch: number; flags: number }>();
   context: DemoContext = { room: '', mode: '', playerName: '' };
+  /** Map look spec — captured at map-apply time so the clip replays the
+   *  recorded haze/sky, not whatever map is live at playback. */
+  atmo?: { fog?: unknown; weather?: unknown; atmosphere?: unknown };
   /** Seek-checkpoint marks (elapsed seconds, ascending) — emitted every
    *  SEEK_SNAPSHOT_INTERVAL while recording; serialized as SECTION_SNAP. */
   snapshots: number[] = [];
@@ -283,6 +295,14 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
       f.velX = s.velX; f.velY = s.velY; f.velZ = s.velZ;
       f.yaw = s.yaw; f.pitch = s.pitch;
       f.flags = flags;
+      // v8 meta — encode wire strings to the u8 lanes; absent stays 0.
+      f.team = s.team ? (TEAM_CODE[s.team] ?? 0) : 0;
+      f.hp = Math.max(0, Math.min(255, Math.round(s.health ?? 0)));
+      f.held = Math.max(0, Math.min(255, s.held ?? 0));
+      f.sheep = Math.max(0, Math.min(255, s.sheep ?? 0));
+      f.cls = s.armorClass ? (CLS_CODE[s.armorClass] ?? 0) : 0;
+      f.status = (s.status ?? 0) & 0xFF;
+      f.wid = (s.weapon ?? 0) & 0xFF;
       this.remoteFrames.push(f);
     }
   }
@@ -321,7 +341,8 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
       last.inputFlags === i.inputFlags &&
       last.mouseDeltaX === i.mouseDeltaX && last.mouseDeltaY === i.mouseDeltaY &&
       last.jetpackFlags === i.jetpackFlags && last.jetpackFuel === i.jetpackFuel &&
-      last.weaponType === p.weaponType;
+      last.weaponType === p.weaponType &&
+      last.health === p.health && last.armor === p.armor;
   }
 
   private markWall(now: number): void {
@@ -376,6 +397,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     frame.jetpackFlags = i.jetpackFlags;
     frame.jetpackFuel = i.jetpackFuel;
     frame.weaponType = p.weaponType;
+    frame.health = p.health; frame.armor = p.armor;
 
     this.frameBuffer.add(frame);
     // Ring-write invariant: the frame we just stored must be the newest
@@ -490,6 +512,9 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   }
   recordFlagUpdate(team: string, state: string, position: Vec3, carrier: string | null): void {
     ev.recordFlagUpdate(this, team, state, position, carrier);
+  }
+  recordNodeUpdate(r: { id: number; pos: Vec3; owner: string; core: boolean; hp: number; buildBy: string | null; show: boolean; hot: boolean; gx: number; gz: number }): void {
+    ev.recordNodeUpdate(this, r);
   }
   recordPickupSpawned(netId: number, kind: string, position: Vec3): void {
     ev.recordPickupSpawned(this, netId, kind, position);

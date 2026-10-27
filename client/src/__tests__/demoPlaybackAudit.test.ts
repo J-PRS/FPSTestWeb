@@ -31,6 +31,7 @@ import type { WorldState } from '../game/worldState.js';
 import type { DamageNumberManager } from '../effects/damageNumbers.js';
 import type { FragMessages } from '../ui/FragMessages.js';
 import type { HUD } from '../ui/hud.js';
+import type { NetworkManager } from '../networking/NetworkManager.js';
 
 const mkFired = (targetId: number): ProjectileEvent => ({
   eventType: ProjectileEventType.Fired, timestamp: 0,
@@ -80,6 +81,7 @@ function makePlaybackRig(): {
   });
   const world = {
     debrisList: [] as never[], explosions: [] as never[], implosions: [] as never[],
+    flagMarkers: new Map(), flagStates: {},
   } as unknown as WorldState;
   // A stub manager carrying the real wireDemoHandlers graft — the kick
   // path only exists inside onPlaybackEvent, so tests drive events
@@ -99,6 +101,7 @@ function makePlaybackRig(): {
     lazyPlayer: (): Player => ({ pos: new THREE.Vector3(0, 0, 0) } as unknown as Player),
     lazyDemoManager: (): DemoManager => mgr,
     lazyViewModel: (): ViewModel => viewmodel as unknown as ViewModel,
+    lazyNetworkManager: (): NetworkManager => ({ getPlayers: (): Map<string, never> => new Map<string, never>() } as unknown as NetworkManager),
     damageNumberManager: (): DamageNumberManager => ({ spawn: noop } as unknown as DamageNumberManager),
     fragMessages: (): FragMessages => ({ showScore: noop } as unknown as FragMessages),
     lazyHud: (): HUD => ({ showHitMarker: noop } as unknown as HUD),

@@ -276,6 +276,8 @@ export function wireWorld(ctx: NetCtx): void {
     applyMapFog(ctx, map.fog);
     applyWeather(ctx, map.weather);
     applyAtmosphere(ctx, map.atmosphere);
+    deps.world.lastAtmo = { fog: map.fog, weather: map.weather, atmosphere: map.atmosphere };
+    ctx.deps.lazyDemoManager?.()?.recordAtmo(deps.world.lastAtmo);
     applyWater(ctx, map.water);
     applyKillZone(ctx, map.killY);
     applyInteriors(ctx, map.interiors)
@@ -394,6 +396,8 @@ function applyMapSnapshot(ctx: NetCtx, map?: MapSnapshot): void {
   applyMapFog(ctx, map?.fog);
   applyWeather(ctx, map?.weather);
   applyAtmosphere(ctx, map?.atmosphere);
+  deps.world.lastAtmo = { fog: map?.fog, weather: map?.weather, atmosphere: map?.atmosphere };
+  ctx.deps.lazyDemoManager?.()?.recordAtmo(deps.world.lastAtmo);
   applyWater(ctx, map?.water);
   applyKillZone(ctx, map?.killY);
   applyTerrain(ctx, map?.terrain ?? null, map?.terrainTex, map?.sky, map?.heightScale, map?.tileSize, map?.terrainPreset)
