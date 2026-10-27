@@ -51,7 +51,9 @@ export function renderLagBoundOf(
 ): number {
   const transit = transitOf?.(playerId) ?? 0;
   const jit = transitVarOf?.(playerId) ?? 0;
-  return Math.min(RENDER_LAG_MS + 2 * transit + 3 * jit, 800);
+  // Casual-floor: every player gets a fair hit-what-you-see window even on
+  // a perfect link — the exploit case is the ceiling, not the floor.
+  return Math.min(Math.max(RENDER_LAG_MS + 2 * transit + 3 * jit, 350), 800);
 }
 
 /** Per-victim render delay: the shooter's ghost lag for THIS target.

@@ -109,13 +109,12 @@ describe('renderLag bound', () => {
     clientStats: { renderLagMs, renderLag, at: Date.now() },
   }) as unknown as PlayerState;
 
-  it('clean link: a claimed 800ms gets bounded near the base delay', () => {
-    const bound = renderLagBoundOf(() => 10, () => 3, 'p1'); // ~235ms
-    expect(bound).toBeLessThan(260);
-    expect(bound).toBeGreaterThan(200);
-    // The exploit: claim 800 on a 10ms path — earns only the bound.
-    expect(renderLagOf(statsP(800), bound)).toBeLessThan(260);
-    expect(renderLagOfTarget(statsP(800, { t1: 800 }), 't1', bound)).toBeLessThan(260);
+  it('clean link: a claimed 800ms binds to the casual floor, not the claim', () => {
+    const bound = renderLagBoundOf(() => 10, () => 3, 'p1'); // floors at 350
+    expect(bound).toBe(350);
+    // The exploit: claim 800 on a 10ms path — earns the floor, not 800.
+    expect(renderLagOf(statsP(800), bound)).toBe(350);
+    expect(renderLagOfTarget(statsP(800, { t1: 800 }), 't1', bound)).toBe(350);
   });
 
   it('honest claims under the bound pass through', () => {
@@ -128,7 +127,7 @@ describe('renderLag bound', () => {
     // 400ms transit + 150ms jitter — a real bad-link client keeps the
     // full window.
     expect(renderLagBoundOf(() => 400, () => 150, 'p1')).toBe(800);
-    const bound = renderLagBoundOf(() => 300, () => 50, 'p1'); // 950→800? 200+600+150=950→800
+    const bound = renderLagBoundOf(() => 300, () => 50, 'p1'); // 200+600+150=950→800
     expect(bound).toBe(800);
   });
 
