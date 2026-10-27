@@ -92,7 +92,10 @@ export function upsampleGrid(src: Uint8Array, srcN: number, dstN: number): Uint8
 /** Greedy error-driven correction list — every fine-grid sample where
  *  the coarse reconstruction misses by > boundU8 steps, worst-first,
  *  capped. See _docs/2026-10-27_DEMO_HMAP_DELTA.md. */
-export function hmapCorrections(field: Heightfield, hm: DemoHeightmap, boundU8 = 3, cap = 6000): DemoHeightmap['corr'] {
+// Cap raised after the rimrock audit: rough maps select >6000 samples at
+// bound 3 (≈16% of the 192² lattice) — 12000 covers a third of the
+// lattice at ~60KB, still trivial next to the clip's frame data.
+export function hmapCorrections(field: Heightfield, hm: DemoHeightmap, boundU8 = 3, cap = 12000): DemoHeightmap['corr'] {
   const dst = HMAP_CORR_GRID;
   const up = upsampleGrid(hm.data, hm.gridN, dst);
   const gain = 125 * (hm.heightScale ?? 1);

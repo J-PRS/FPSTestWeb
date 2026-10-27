@@ -46,7 +46,7 @@ describe('HMAP corrections', (): void => {
     const errFixed = maxErr(field, fixed, hm.worldScale);
     expect(errFixed).toBeLessThan(errBare);
     // The spike texel is the worst-error sample — it must be selected.
-    expect(hm.corr!.idx.length).toBeLessThanOrEqual(6000);
+    expect(hm.corr!.idx.length).toBeLessThanOrEqual(12000);
   });
   it('upsampleGrid preserves the corners', (): void => {
     const src = new Uint8Array([0, 200, 50, 255]);
