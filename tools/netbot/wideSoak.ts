@@ -17,6 +17,7 @@ const ROOMS = arg('--rooms', 10, Number);
 const PER = arg('--bots', 24, Number);
 const SECONDS = arg('--seconds', 90, Number);
 const PACE = arg('--pace', 3400, Number); // ms between connects, global
+const ROOMBASE = arg('--roombase', 'stress', String);
 const TAG = Date.now().toString(36);
 const LINKS = [
   { pingMs: 40, jitterMs: 30, lossRate: 0 },
@@ -28,7 +29,7 @@ const LINKS = [
 const bots: { nc: NetClient; bot: NetBot; room: string }[] = [];
 let g = 0;
 for (let r = 0; r < ROOMS; r++) {
-  const room = `stress-${r + 1}`;
+  const room = `${ROOMBASE}-${r + 1}`;
   for (let i = 0; i < PER; i++) {
     const lo = BOT_LOADOUTS[g % BOT_LOADOUTS.length]!;
     const li = LINKS[g % LINKS.length]!;
