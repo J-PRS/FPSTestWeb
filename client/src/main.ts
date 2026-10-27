@@ -45,7 +45,6 @@ import { AmbientBirds } from './effects/birds.js';
 import { resolveServerEndpoints, fleetWorkerUrl, NAMED_SERVERS } from './networking/endpoints.js';
 import { NetworkManager } from './networking/NetworkManager.js';
 import { connectServer } from './networking/connectServer.js';
-
 import { CoolShotsPanel } from './ui/CoolShotsPanel.js';
 import { FragMessages } from './ui/FragMessages.js';
 import { HealthBarSystem } from './ui/HealthBarSystem.js';
@@ -861,6 +860,10 @@ async function init(): Promise<void> {
   // A persisted fps-mode=classic must not survive an explicit /s/ join.
   const classicBlocksWire = urlParams.mode === 'classic' && !urlParams.room && !urlParams.p2p;
   const earlyWire = Boolean(urlParams.room) && !urlParams.p2p && !classicBlocksWire;
+  // Cold QUIC first-dial costs ~2.5-3.2s and only a COMPLETED handshake
+  // unlocks resumption — a boot-time warm dial finishes after the real
+  // probe already started, so the cap raise (4.5s) is the actual fix.
+  // A racing warm dial was measured to just contend.
   if (onlineBoot && !classicBlocksWire && settings.get('fps-session-token')) {
     serverEndpoints
       .then((ep): Promise<boolean> => pingServer(ep.httpUrl))

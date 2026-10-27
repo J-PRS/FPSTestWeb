@@ -478,6 +478,7 @@ dropCensus.total += 1;
   };
 
   private handleGameState(data: Extract<ServerMessage, { type: 'gameState' }>): void {
+    performance.mark('load:gameStateArrived');
     // Protocol handshake: a stale bundle can't parse a new wire format —
     // force-reload once (cache-busted) instead of silently desyncing. The
     // sessionStorage counter caps it at 2 attempts so a genuinely newer

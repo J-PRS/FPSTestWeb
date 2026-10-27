@@ -337,6 +337,7 @@ export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: s
   terrainSwap = terrainSwap.then(async (): Promise<void> => {
 
     if (terrainActive === key || terrainWanted !== key) {return;}
+    performance.mark('load:terrainApplyStart');
 
     Ball.terrainSwapping = true;
 

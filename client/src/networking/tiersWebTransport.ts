@@ -281,8 +281,10 @@ export async function tryWebTransport(config: ConnectionConfig): Promise<GameTra
     // close is handled by WebTransportGameTransport's own subscription.
     wt.closed.catch((): void => { return; });
     try {
-      // The probe IS the session — don't handshake twice.
-      await Promise.race([wt.ready, new Promise((_, rej): NodeJS.Timeout => setTimeout(rej, 3000))]);
+      // The probe IS the session — don't handshake twice. Cap must cover a
+      // COLD first handshake (~2.5-3.2s measured: no resumption ticket +
+      // self-signed cert path); warm dials resume 0-RTT in ~200ms.
+      await Promise.race([wt.ready, new Promise((_, rej): NodeJS.Timeout => setTimeout(rej, 4500))]);
     } catch {
       // A losing probe otherwise leaks a pending session (Chrome caps at
       // 64 — reconnects exhausted it before the miss cache existed).
