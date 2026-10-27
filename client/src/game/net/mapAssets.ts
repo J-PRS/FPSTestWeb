@@ -457,7 +457,7 @@ export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: s
     } finally {
 
       Ball.terrainSwapping = false;
-
+      try { performance.mark('load:terrainSwapped'); } catch { /* ignore */ }
       firstTerrainGate.resolve();
 
     }

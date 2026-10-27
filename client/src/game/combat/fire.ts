@@ -77,6 +77,17 @@ export function histAt(hist: WorldState['localPosHistory'], backMs: number): Wor
 
 
 function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs, quiet = false): Projectile | undefined {
+  // One-shot TTS (time-to-shoot) marker - invisible, no debug overlays.
+  // Records the first fired shot's performance.now() (ms since navigation
+  // start) on dev hosts or when ?tts=1 is present. Production https builds
+  // without the param never record it.
+  const _w = window as any;
+  if (_w.__ttsShot === undefined
+      && (import.meta.env.DEV || window.location.protocol !== 'https:'
+          || new URLSearchParams(window.location.search).has('tts'))) {
+    _w.__ttsShot = performance.now();
+    try { performance.mark('tts:shot'); } catch { /* ignore */ }
+  }
   if (deps.inputTracking.isTabHidden()) {return undefined;}
   if (deps.lazyDemoManager()?.isPlaying) {return undefined;}
 

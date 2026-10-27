@@ -38,6 +38,7 @@ let sessionVeilLabelTimer: ReturnType<typeof setTimeout> | null = null;
 let sessionVeilDropCb: (() => void) | null = null;
 
 export function dropSessionVeil(): void {
+  try { performance.mark('load:veilDropped'); } catch { /* ignore */ }
   if (sessionVeilTimer) { clearTimeout(sessionVeilTimer); sessionVeilTimer = null; }
   if (sessionVeilLabelTimer) { clearTimeout(sessionVeilLabelTimer); sessionVeilLabelTimer = null; }
   sessionVeil?.remove();

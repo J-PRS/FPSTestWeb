@@ -71,6 +71,7 @@ export async function launchClient(clientUrl: string, opts: LaunchOpts = {}): Pr
     ...(headed || process.env.E2E_PROFILE ? { userDataDir: `${process.env.TEMP ?? 'C:/TEMP'}/e2e-chrome-profile` } : {}),
     // SwiftShader by default for determinism; E2E_GPU or headed uses real
     // hardware GL (SwiftShader raster costs skew every phase number).
+    dumpio: Boolean(process.env.E2E_DUMPIO),
     args: (process.env.E2E_GPU || headed)
       ? [
           `--use-angle=${process.env.E2E_ANGLE ?? 'default'}`,
@@ -105,6 +106,9 @@ export async function launchClient(clientUrl: string, opts: LaunchOpts = {}): Pr
           // Lifts the post-Spectre fuzzing on WebGL2 timer queries —
           // ?gpuperf pass profiling reads exact GPU ms, not ~1ms steps.
           '--enable-webgl-developer-extensions',
+          // E2E_JSFLAGS='--trace-gc --trace-gc-verbose' — V8 flags for
+          // hitch forensics (a 100ms call with O(1) math is GC or deopt).
+          ...(process.env.E2E_JSFLAGS ? [`--js-flags=${process.env.E2E_JSFLAGS}`, '--enable-logging=stderr'] : []),
         ]
       : [
           '--use-gl=angle', '--use-angle=swiftshader',
