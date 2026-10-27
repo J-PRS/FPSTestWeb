@@ -35,6 +35,7 @@ type Ev =
   | { kind: 'evs'; items: { j?: ServerMessage; b?: Uint8Array; at: number }[] }
   | { kind: 'rtt'; rtt: number }
   | { kind: 'resolve'; seq: number }
+  | { kind: 'ready' }
   | { kind: 'nlog'; level: NetLogLevel; name: string; msg: string; ctx?: unknown };
 
 /** Drop every queued tick frame but the newest — a stall backlog replays
@@ -86,6 +87,7 @@ export class WorkerTransport implements GameTransport {
   private coalesced = 0;
 
   constructor(private readonly config: ConnectionConfig) {
+    performance.mark('load:netWorkerCtor');
     this.worker = new Worker(new URL('./netWorker.ts', import.meta.url), { type: 'module' });
     this.worker.addEventListener('message', (e: MessageEvent<Ev>): void => this.enqueue(e.data));
     this.worker.addEventListener('error', (e): void => {
@@ -130,6 +132,9 @@ export class WorkerTransport implements GameTransport {
   }
 
   private enqueue(ev: Ev): void {
+    // Worker module-eval finished — splits boot cost from the dial in
+    // the TTS mark chain (ev goes straight through, never queued).
+    if (ev.kind === 'ready') { performance.mark('load:netWorkerReady'); return; }
     if (ev.kind === 'evs') {
       // Flatten the batch — each item runs the same stamp/push path as a
       // lone post; the queue then coalesces stale tick frames as usual.

@@ -1,4 +1,4 @@
-import {ProjectileEventType, TargetEventType, TARGETTYPE_CREATURE_BASE, TARGETTYPE_DEPLOY_BASE, TARGETTYPE_KILL, TARGETTYPE_FLAG, TARGETTYPE_PICKUP_BASE, TARGETTYPE_NODE, demoSpeciesIndex, demoDeployKindIndex, demoPickupKindIndex, creatureDemoId, deployDemoId, flagDemoId, pickupDemoId, nodeDemoId, type ProjectileEvent, type TargetEvent} from './types.js';
+import {ProjectileEventType, TargetEventType, TARGETTYPE_CREATURE_BASE, TARGETTYPE_DEPLOY_BASE, TARGETTYPE_KILL, TARGETTYPE_FLAG, TARGETTYPE_PICKUP_BASE, TARGETTYPE_NODE, TARGETTYPE_MATCH, MATCH_DEMO_ID, demoSpeciesIndex, demoDeployKindIndex, demoPickupKindIndex, creatureDemoId, deployDemoId, flagDemoId, pickupDemoId, nodeDemoId, type ProjectileEvent, type TargetEvent} from './types.js';
 import type { Vec3 } from './interfaces.js';
 import type { DemoRecorder } from './DemoRecorder.js';
 
@@ -306,6 +306,27 @@ const FLAG_STATE_CODE: Record<string, number> = { home: 0, carried: 1, dropped: 
 // verbatim (owner|core|show|hot|buildBy) so playback needs no topology
 // recompute; hp rides health, grid coords ride peakPosY/Z.
 const NODE_OWNER_CODE: Record<string, number> = { neutral: 0, alpha: 1, bravo: 2 };
+
+// Match meta lane — scoreboard + clock change edges (targetType 241).
+// Recorded only when alpha/bravo/remainingMs actually move — clock
+// updates are 1Hz-ish, bucketed to whole seconds so jitter doesn't spam.
+export function recordMatchMeta(b: DemoRecorder, alpha: number, bravo: number, remainingMs: number): void {
+    if (!b.recording) {return;}
+    const sig = alpha | (bravo << 8) | (Math.round(remainingMs / 1000) << 16);
+    if (b.matchSig === sig) {return;}
+    if (!checkEventRate(b)) {return;}
+    b.matchSig = sig;
+    const e = b.targetEventPool.pop() ?? ({} as TargetEvent);
+    e.eventType = TargetEventType.StateChanged;
+    e.timestamp = b.elapsedTime;
+    e.posX = 0; e.posY = 0; e.posZ = 0;
+    e.velX = 0; e.velY = 0; e.velZ = 0;
+    e.targetId = MATCH_DEMO_ID; e.targetType = TARGETTYPE_MATCH;
+    e.health = remainingMs;
+    e.hasPeakPosition = true;
+    e.peakPosX = alpha; e.peakPosY = bravo; e.peakPosZ = 0;
+    b.targetEvents.push(e);
+  }
 export function recordNodeUpdate(b: DemoRecorder, r: { id: number; pos: Vec3; owner: string; core: boolean; hp: number; buildBy: string | null; show: boolean; hot: boolean; gx: number; gz: number }): void {
     if (!b.recording) {return;}
     const meta = (NODE_OWNER_CODE[r.owner] ?? 0)

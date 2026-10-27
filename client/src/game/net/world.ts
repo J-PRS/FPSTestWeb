@@ -451,6 +451,10 @@ function applyMatchMeta(ctx: NetCtx, roomInfo: RoomInfo): void {
   if (scores) {deps.world.teamScores = scores;}
   if (matchEndsAt !== undefined) {deps.world.matchEndsAt = matchEndsAt;}
   if (ffaScores) {deps.world.ffaScores = new Map(Object.entries(ffaScores));}
+  if (scores || matchEndsAt !== undefined) {
+    const s = deps.world.teamScores;
+    deps.lazyDemoManager?.()?.recordMatchMeta(s?.alpha ?? 0, s?.bravo ?? 0, matchEndsAt === undefined ? 0 : matchEndsAt - Date.now());
+  }
 }
 
 

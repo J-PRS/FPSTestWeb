@@ -57,6 +57,10 @@ export interface PlaybackWorld {
   /** Conquest node markers decoded from TARGETTYPE_NODE events —
    *  demoLifecycle mirrors them into world.nodeMarkers for the HUD. */
   playbackNodes: Map<number, { x: number; y: number; z: number; meta: number; gx: number; gz: number; hp: number }>;
+  /** Match-meta events project onto world.teamScores/matchEndsAt —
+   *  the world state lives outside the playback world, so the lifecycle
+   *  supplies the sink. */
+  playbackMatchMeta?: (ev: { health: number; peakPosX: number; peakPosY: number; timestamp: number }) => void;
   playbackPickups: Map<number, { mesh: THREE.Object3D; dispose(scene: THREE.Scene): void }>;
   /** Resolves a roster idx to the replayed remote player's rendered pos —
    *  wired by the playback lifecycle so a carried flag can ride its carrier. */

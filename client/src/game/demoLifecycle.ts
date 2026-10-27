@@ -522,6 +522,12 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
   // Offline clip render advances playback projectiles/beams by step-dt,
   // not the wall dt the game loop hands updatePlaybackProjectiles.
   demoManager.onPlaybackTick = (dt: number): void => { updatePlaybackProjectiles(d, dt); };
+  d.playbackWorld.playbackMatchMeta = (ev): void => {
+    d.world.teamScores = { alpha: ev.peakPosX, bravo: ev.peakPosY };
+    // Deadline in wall-clock = remaining-ms minus demo time elapsed
+    // since the event — scrubbing backward re-arms honestly.
+    d.world.matchEndsAt = Date.now() + ev.health - ((demoManager.currentTime ?? ev.timestamp) - ev.timestamp) * 1000;
+  };
 
   // Recording source: every remote player the world knows about. Bot
   // entries ('bot:'-prefixed) ride along too — they're in the same map.

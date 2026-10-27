@@ -376,6 +376,7 @@ export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: s
 
         }
 
+        performance.mark('load:terrainBin');
         deps.lazyTerrain().reloadHeightmap();
 
         // Ball.field captured the previous heightfield OBJECT — hmData is
@@ -417,6 +418,7 @@ export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: s
       try {
 
         await applyTerrainTex(deps, httpUrl, texPath);
+        performance.mark('load:terrainTex');
 
       } catch (error) {
 
@@ -431,6 +433,7 @@ export async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: s
       // without one fall back to the procedural atmosphere.
 
       await applySky(deps, httpUrl, skyDir);
+      performance.mark('load:terrainSky');
 
 
 

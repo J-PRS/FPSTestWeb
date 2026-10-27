@@ -35,6 +35,7 @@ type Up =
   | { kind: 'evs'; items: { j?: ServerMessage; b?: Uint8Array; at: number }[] }
   | { kind: 'rtt'; rtt: number }
   | { kind: 'resolve'; seq: number }
+  | { kind: 'ready' }
   | { kind: 'nlog'; level: NetLogLevel; name: string; msg: string; ctx?: unknown };
 
 type Down =
@@ -241,4 +242,8 @@ w.addEventListener('message', (e: MessageEvent<Down>): void => {
 
 // DedicatedWorkerGlobalScope.onmessage assignment is the actual entry —
 // keep the export so bundlers treat this as a module.
+// Boot marker: posts after the whole module graph has eval'd — the main
+// thread marks 'load:netWorkerReady' off it to split worker-boot from
+// the transport dial in the connect chain.
+post({ kind: 'ready' });
 

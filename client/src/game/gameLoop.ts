@@ -879,7 +879,9 @@ function tickVeil(deps: GameLoopDeps, st: LoopState, rawElapsed: number, draw: (
   // here, under the veil, or the first live frame stalls on the GPU driver.
   if (st.veilFrames === 0) {
     pl.model?.setVisible(true);
+    performance.mark('load:veilCompileStart');
     deps.rendererSetup.renderer.compile(deps.sceneSetup.scene, deps.camera);
+    performance.mark('load:veilCompileDone');
     pl.model?.setVisible(false);
   }
   // Draw the REAL frame path — composer, viewmodel pass, post pipeline,
@@ -970,7 +972,7 @@ export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(
     if (Number.isFinite(time)) {lastTime = time;}
     // One-shot: iGPU/software renderer strings start mid-ladder instead
     // of grinding ~10s of <40fps per watchdog step to reach the floor.
-    if (!gpuSeeded) {gpuSeeded = true; seedGpuTier(deps, st);}
+    if (!gpuSeeded) {gpuSeeded = true; seedGpuTier(deps, st); performance.mark('load:loopFirst');}
     fpsWatchdog(deps, st, budget, perf, rawElapsed, time);
     // Veiled = waiting on gameState — don't sim or take input, but DO
     // render: shader/pipeline warmup needs real draws or it fires on
@@ -982,7 +984,9 @@ export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(
     if (isSessionVeiled()) {
       if (isSessionVeilReady() && !st.terrainCompiled) {
         st.terrainCompiled = true;
+        performance.mark('load:terrainWarmupStart');
         deps.rendererSetup.warmup();
+        performance.mark('load:terrainWarmupDone');
         renderFrame(0.016);
       }
       if (!st.veilLive) {
@@ -1173,7 +1177,9 @@ export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(
        // waits for late content, but every material already in the scene
        // would otherwise sync-compile inside its first draw - on refresh
        // that's the multi-second whole-browser ANGLE stall.
+       performance.mark('load:warmupStart');
        deps.rendererSetup.warmup();
+       performance.mark('load:warmupDone');
        requestAnimationFrame(loop);
      },
     /** Resolves once ~45 consecutive sub-26ms frames rendered (or 240

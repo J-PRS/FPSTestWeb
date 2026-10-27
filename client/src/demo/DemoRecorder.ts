@@ -130,6 +130,8 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
    *  ev.recordNodeUpdate) plus the Spawned-once set. */
   nodeSeen = new Set<number>();
   nodeLast = new Map<number, number>();
+  /** Match-meta dedupe — last written (alpha|bravo|remaining) sig. */
+  matchSig = -1;
   /** Flag demo ids already Spawned this window — flags live forever, so
    *  the lane emits one Spawned then only StateChanged keyframes. */
   flagSeen = new Set<number>();
@@ -516,6 +518,9 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   }
   recordNodeUpdate(r: { id: number; pos: Vec3; owner: string; core: boolean; hp: number; buildBy: string | null; show: boolean; hot: boolean; gx: number; gz: number }): void {
     ev.recordNodeUpdate(this, r);
+  }
+  recordMatchMeta(alpha: number, bravo: number, remainingMs: number): void {
+    ev.recordMatchMeta(this, alpha, bravo, remainingMs);
   }
   recordPickupSpawned(netId: number, kind: string, position: Vec3): void {
     ev.recordPickupSpawned(this, netId, kind, position);

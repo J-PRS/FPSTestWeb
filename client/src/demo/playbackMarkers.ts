@@ -14,7 +14,7 @@
 
 import * as THREE from 'three';
 
-import {type TargetEvent, TargetEventType, TARGETTYPE_KILL, TARGETTYPE_FLAG, TARGETTYPE_PICKUP_BASE, TARGETTYPE_NODE} from './types.js';
+import {type TargetEvent, TargetEventType, TARGETTYPE_KILL, TARGETTYPE_FLAG, TARGETTYPE_PICKUP_BASE, TARGETTYPE_NODE, TARGETTYPE_MATCH} from './types.js';
 
 import { Explosion } from '../effects/explosion.js';
 
@@ -201,6 +201,15 @@ export function applyPlaybackMarkerEvent(world: PlaybackWorld, ev: TargetEvent, 
   }
 
 
+
+  if (ev.targetType === TARGETTYPE_MATCH) {
+    // Scoreboard/clock — world.teamScores/matchEndsAt drive the same
+    // HUD lanes live wire updates do. Clock is remaining-ms at event
+    // time projected onto the playback clock, so seeking mid-clip stays
+    // honest rather than re-arming a wall-clock deadline.
+    if (world.playbackMatchMeta) {world.playbackMatchMeta(ev);}
+    return;
+  }
 
   if (ev.targetType === TARGETTYPE_NODE) {
     // Marker state arrives packed — decode straight into the mirror

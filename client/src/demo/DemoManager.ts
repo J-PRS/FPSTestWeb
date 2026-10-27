@@ -609,6 +609,10 @@ export class DemoManager implements demoIO.DemoIOHost {
     this.recorder.recordNodeUpdate(r);
   }
 
+  recordMatchMeta(alpha: number, bravo: number, remainingMs: number): void {
+    this.recorder.recordMatchMeta(alpha, bravo, remainingMs);
+  }
+
   recordPickupSpawned(netId: number, kind: string, position: Vec3): void {
     this.recorder.recordPickupSpawned(netId, kind, position);
   }

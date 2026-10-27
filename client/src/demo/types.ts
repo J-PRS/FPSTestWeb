@@ -207,6 +207,13 @@ export const TARGETTYPE_PICKUP_BASE = 226;
 // owner(0-2)|core|show|hot|buildBy(0-3)<<3, peakPosY/Z = gx/gz grid.
 export const TARGETTYPE_NODE = 240;
 
+// 241 match meta — health = ms remaining on the match clock at event
+// time, peakPosX = alpha score, peakPosY = bravo score. Recorded on
+// change only; scoreboard/timer HUD reads world.teamScores/matchEndsAt.
+export const TARGETTYPE_MATCH = 241;
+
+export const MATCH_DEMO_ID = 0xE8_00;
+
 export const NODE_DEMO_ID_BASE = 0xD0_00; // |nodeId — netId nibble space
 export function nodeDemoId(nodeId: number): number {
   return NODE_DEMO_ID_BASE | (nodeId & 0xF_FF);
