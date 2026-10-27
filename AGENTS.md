@@ -86,6 +86,38 @@ suite to it.
 Ports: game client (Vite) **:5400**, game server (Bun) **:8000**.
 `:5173` is a different project's dev server — not the game.
 
+Port map:
+- `:5400` canonical Vite dev (HMR ws shares it); `:5500` `vite preview`
+  (prod build).
+- `:8000` dev-watch's supervised `bun src/server.ts`; `:8001` = dev-watch's
+  own sidecar — `/state` seat handoff + `/restart` countdown the client
+  polls every 500ms (backs off after 8 refusals: spawned/prod servers have
+  no watcher). WebTransport = `port+1443` (so :8000→9443).
+- `upStack()` (e2e) spawns its own stack: game server probes **8477→8536**
+  (UDP+TCP must both be free — WT shares the number; its +1 gets the
+  /restart poll spam with nobody answering), vite probes **5399→5458**.
+  `:5399` is the scan floor, not a service anyone runs.
+
+Ghost-port rules (fixed 2026-10-27, `_tools/e2e/env.ts`): spawned stacks
+must `tcpFree`/`udpFree` a port before adopting it — a health check
+answers on ANY listener, so an orphaned grandchild (npx/cmd wrappers
+survive killed runners on Windows) passes it while your strictPort spawn
+dies. `down()` kills by port via netstat, not just child handles — that's
+what reaps the grandchildren. If :5399/:8477 "works but serves stale
+code," a ghost owns it: `node _tools/procs.mjs --kill`.
+
+## Deployment
+
+- The OCI VPS (`play.jprice.app`) is **game-server only** — Caddy proxies
+  API paths (`/ws`, `/health`, …) to :8000 and 404s everything else. The
+  static client bundle is NOT served from the box; `~/anabatic-client` is
+  legacy. Today's public client is the local `:5500` preview tunneled out.
+- Direction: client moves to an **unmetered CDN** (free-tier OCI egress
+  would be the bill; the box stays API/game traffic only). No CDN deploy
+  path is scripted yet — when building it, document it in `deployment/`.
+- UDP volatile lane: `FPS_UDP_PORT=9898` + NSG ingress — see
+  `deployment/server.md`.
+
 ## Layout
 
 - `shared/` — sims + protocol (deterministic). `server_bun/src/` — authority.
