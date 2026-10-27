@@ -18,7 +18,7 @@ function fakeWs() {
 }
 
 const gameStates = (ws: ReturnType<typeof fakeWs>) =>
-  ws.sent.filter((s): s is string => typeof s === 'string')
+  ws.sent.filter((s: unknown): s is string => typeof s === 'string')
     .map((s) => JSON.parse(s) as { type: string; room?: string })
     .filter((m: { type: string; room?: string }) => m.type === 'gameState');
 

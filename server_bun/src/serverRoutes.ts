@@ -428,5 +428,8 @@ export async function mapBinRoute(url: URL): Promise<Response> {
   else if (file.endsWith('.glb')) {ct = 'model/gltf-binary';}
   else if (file.match(/\.jpe?g$/)) {ct = 'image/jpeg';}
   else if (file.endsWith('.json')) {ct = 'application/json';}
-  return corsResponse(f, { headers: { 'Content-Type': ct } });
+  // Rejoins and room hops re-request the same terrain — a 1h cache turns
+  // those into local hits. Bounded, not immutable: map bins do get edited,
+  // and a stale heightfield is a real divergence, not a cosmetic miss.
+  return corsResponse(f, { headers: { 'Content-Type': ct, 'Cache-Control': 'public, max-age=3600' } });
 }
