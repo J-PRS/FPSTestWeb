@@ -6,12 +6,12 @@ function frames(gate: BootWarmup, count: number, seconds = 1 / 60): void {
 }
 
 describe('boot warmup', (): void => {
-  it('releases all early waiters only after consecutive stable frames', async (): Promise<void> => {
+  it('releases all early waiters once the stable window fills', async (): Promise<void> => {
     const gate = new BootWarmup();
     const resolved = vi.fn();
     const first = gate.whenStable().then(resolved);
     const second = gate.whenStable().then(resolved);
-    frames(gate, 44);
+    frames(gate, 29);
     await Promise.resolve();
     expect(gate.released).toBe(false);
     expect(resolved).not.toHaveBeenCalled();
@@ -21,9 +21,9 @@ describe('boot warmup', (): void => {
     expect(resolved).toHaveBeenCalledTimes(2);
   });
 
-  it('releases without waiters and serves late callers after a hitch', async (): Promise<void> => {
+  it('releases without waiters and serves late callers', async (): Promise<void> => {
     const gate = new BootWarmup();
-    frames(gate, 45);
+    frames(gate, 30);
     expect(gate.released).toBe(true);
     gate.tick(0.1);
     await gate.whenStable();
@@ -41,16 +41,14 @@ describe('boot warmup', (): void => {
     expect(gate.released).toBe(true);
   });
 
-  it.each([0.026, 0.1, 0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
-    'resets the stable streak on an invalid or slow frame (%s)',
-    (seconds): void => {
-      const gate = new BootWarmup();
-      frames(gate, 44);
-      gate.tick(seconds);
-      frames(gate, 44);
-      expect(gate.released).toBe(false);
-      gate.tick(1 / 60);
-      expect(gate.released).toBe(true);
-    },
-  );
+  it('tolerates occasional slow frames but requires a majority-stable window', (): void => {
+    const gate = new BootWarmup();
+    // Fill the window with mostly slow frames — should NOT release.
+    frames(gate, 20, 0.1);
+    frames(gate, 10, 1 / 60);
+    expect(gate.released).toBe(false);
+    // Now make the window majority-stable.
+    frames(gate, 20, 1 / 60);
+    expect(gate.released).toBe(true);
+  });
 });

@@ -108,11 +108,6 @@ for (let run = 0; run < RUNS; run += 1) {
   const runStart = Date.now();
   await page.goto(url, { waitUntil: 'domcontentloaded' });
 
-  page.on('console', (m: any) => {
-    const t = m.text();
-    if (t.includes('boot-hitch') || t.includes('boot-frame')) console.log(`[page ${m.type()}] ${t}`);
-  });
-
   let readyMs = -1;
   try {
     if (debugMode) {

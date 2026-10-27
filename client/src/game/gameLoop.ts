@@ -555,8 +555,8 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   // ammo/health/timer shouldn't flash over the frozen match. Transition-
   // gated so release can't stomp another owner's hide() (spectate/death).
   const held = bootHoldActive(f);
-  if (held && !st.hudHeld) { st.hudHeld = true; hud.hide(); setBootVeil(true); deps.rendererSetup.renderer.shadowMap.enabled = false; }
-  else if (!held && st.hudHeld) { st.hudHeld = false; hud.show(); setBootVeil(false); deps.rendererSetup.renderer.shadowMap.enabled = settings.get('fps-shadows'); }
+  if (held && !st.hudHeld) { st.hudHeld = true; hud.hide(); setBootVeil(true); deps.rendererSetup.renderer.shadowMap.enabled = false; deps.rendererSetup.setPostProcessingEnabled(false); }
+  else if (!held && st.hudHeld) { st.hudHeld = false; hud.show(); setBootVeil(false); deps.rendererSetup.renderer.shadowMap.enabled = settings.get('fps-shadows'); deps.rendererSetup.setPostProcessingEnabled(settings.get('fps-postpro')); }
 
   hud.update(dt, player, networkManager.getPing(), networkManager.getPacketLoss(), networkManager.getJitter());
   hud.setConnDown(networkManager.connectionDown(), networkManager.connectionDownReason());
@@ -979,11 +979,6 @@ export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(
     // Boot warmup counter runs even while veiled — the veil block counts
     // its own renders separately; here we meter real frames.
     st.bootWarmup.tick(rawElapsed);
-    if (rawElapsed >= 0.026) {
-      let _dbg = '';
-      try { _dbg = JSON.stringify(perf.snapshot()); } catch (e) { _dbg = 'ERR=' + String(e); }
-      console.warn(`[boot-frame] rawElapsed=${(rawElapsed*1000).toFixed(1)}ms ${_dbg}`);
-    }
     if (isSessionVeiled()) {
       if (isSessionVeilReady() && !st.terrainCompiled) {
         st.terrainCompiled = true;
@@ -1174,13 +1169,13 @@ export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(
 
   return {
     start(): void {
-      // Kick parallel compiles BEFORE frame 1: the tick-60 warmup gate
-      // waits for late content, but every material already in the scene
-      // would otherwise sync-compile inside its first draw — on refresh
-      // that's the multi-second whole-browser ANGLE stall.
-      deps.rendererSetup.warmup();
-      requestAnimationFrame(loop);
-    },
+       // Kick parallel compiles BEFORE frame 1: the tick-60 warmup gate
+       // waits for late content, but every material already in the scene
+       // would otherwise sync-compile inside its first draw - on refresh
+       // that's the multi-second whole-browser ANGLE stall.
+       deps.rendererSetup.warmup();
+       requestAnimationFrame(loop);
+     },
     /** Resolves once ~45 consecutive sub-26ms frames rendered (or 240
      *  frames pass on a weak box — never gates forever). Offline
      *  starts wait on this so the match doesn't spawn mid-compile-hitch. */

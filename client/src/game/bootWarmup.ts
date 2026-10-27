@@ -1,12 +1,13 @@
-const STABLE_FRAME_SECONDS = 0.026;
-const REQUIRED_STABLE_FRAMES = 15;
+const STABLE_FRAME_SECONDS = 0.035;
+const WINDOW_SIZE = 30;
+const REQUIRED_STABLE = 18; // 60% of the window
 // Wall-clock cap, NOT a frame count - a stalled frame (a 40s sync shader
 // compile lands in one rAF) stretches frame budgets arbitrarily, which is
 // how the veil could outlive the actual hitch.
 const MAX_WARMUP_SECONDS = 4;
 
 export class BootWarmup {
-  private stableFrames = 0;
+  private window: number[] = [];
   private elapsed = 0;
   private ready = false;
   private resolvers: (() => void)[] = [];
@@ -17,9 +18,12 @@ export class BootWarmup {
     if (this.ready) {return;}
     const dt = Number.isFinite(frameSeconds) && frameSeconds > 0 ? frameSeconds : 0;
     this.elapsed += dt;
-    this.stableFrames = dt > 0 && dt < STABLE_FRAME_SECONDS
-      ? this.stableFrames + 1 : 0;
-    if (this.stableFrames < REQUIRED_STABLE_FRAMES && this.elapsed < MAX_WARMUP_SECONDS) {return;}
+    const stable = dt > 0 && dt < STABLE_FRAME_SECONDS ? 1 : 0;
+    this.window.push(stable);
+    if (this.window.length > WINDOW_SIZE) {this.window.shift();}
+    const stableCount = this.window.reduce((a, b) => a + b, 0);
+    if (this.window.length < WINDOW_SIZE) {return;} // wait for full window
+    if (stableCount < REQUIRED_STABLE && this.elapsed < MAX_WARMUP_SECONDS) {return;}
     this.ready = true;
     const {resolvers} = this;
     this.resolvers = [];
