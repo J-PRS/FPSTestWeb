@@ -491,6 +491,11 @@ export interface DemoHeightmap {
 
   data: Uint8Array;           // gridN² u8 heights (stride-1 Heightfield)
 
+  /** Optional sparse corrections — worst-error samples on a finer grid,
+   *  preserving peaks/saddles the coarse bilinear grid flattens. See
+   *  _docs/2026-10-27_DEMO_HMAP_DELTA.md. */
+  corr?: { grid: number; idx: Uint32Array; delta: Int8Array };
+
 }
 
 
@@ -512,7 +517,7 @@ export interface DemoFile {
   heightmap?: DemoHeightmap;       // absent unless the recorder saw terrain
   /** v8: map look spec ({fog, weather, atmosphere} as MapSnapshot fields)
    *  — playback replays the recorded haze/sky instead of the live map's. */
-  atmo?: { fog?: unknown; weather?: unknown; atmosphere?: unknown };
+  atmo?: { fog?: unknown; weather?: unknown; atmosphere?: unknown; terrain?: unknown; terrainTex?: unknown; terrainPreset?: unknown; heightScale?: unknown; tileSize?: unknown; sky?: unknown };
   // v7 trailer: server-signed result receipt (SECTION_TOKEN) — the
   // leaderboard submission pairs demo+token in one file. Absent offline.
   matchToken?: ResultToken;

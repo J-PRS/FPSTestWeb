@@ -11,7 +11,7 @@ import {
 import type { IPlayerDataProvider, IInputProvider, Vec3 } from './interfaces.js';
 import * as ev from './demoEvents.js';
 import { buildDemoFile, extractClip } from './demoExtract.js';
-import { hmapDownsample } from './demoHmap.js';
+import { hmapDownsample, hmapCorrections } from './demoHmap.js';
 import type { Heightfield } from '../../../shared/heightfield.js';
 import type { ResultToken } from '../../../shared/resultToken.ts';
 
@@ -145,7 +145,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   context: DemoContext = { room: '', mode: '', playerName: '' };
   /** Map look spec — captured at map-apply time so the clip replays the
    *  recorded haze/sky, not whatever map is live at playback. */
-  atmo?: { fog?: unknown; weather?: unknown; atmosphere?: unknown };
+  atmo?: { fog?: unknown; weather?: unknown; atmosphere?: unknown; terrain?: unknown; terrainTex?: unknown; terrainPreset?: unknown; heightScale?: unknown; tileSize?: unknown; sky?: unknown };
   /** Seek-checkpoint marks (elapsed seconds, ascending) — emitted every
    *  SEEK_SNAPSHOT_INTERVAL while recording; serialized as SECTION_SNAP. */
   snapshots: number[] = [];
@@ -159,6 +159,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
    *  grid + a fingerprint of the full-res source for the match check. */
   setHeightmap(field: Heightfield | null): void {
     this.heightmap = field ? hmapDownsample(field) : null;
+    if (field && this.heightmap) {this.heightmap.corr = hmapCorrections(field, this.heightmap);}
   }
 
   recording = false;

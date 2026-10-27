@@ -66,6 +66,7 @@ class Reader {
   skip(n: number): void { this.ensure(n, `skip of ${n} bytes`); this.offset += n; }
 
   u8(): number { const v = this.view.getUint8(this.offset); this.offset += 1; return v; }
+  i8(): number { const v = this.view.getInt8(this.offset); this.offset += 1; return v; }
   u16(): number { const v = this.view.getUint16(this.offset, true); this.offset += 2; return v; }
   u32(): number { const v = this.view.getUint32(this.offset, true); this.offset += 4; return v; }
   i16(): number { const v = this.view.getInt16(this.offset, true); this.offset += 2; return v; }
@@ -323,7 +324,18 @@ function readTrailerSections(r: Reader): { hmap?: DemoHeightmap; token?: ResultT
     }
     const data = r.bytes(dataLen);
     hmap = { gridN, heightScale, worldScale, srcHash, data: data.slice() };
-    // Skip any padding a future writer adds inside the declared length.
+    // Corrections tail (v8+): finer-grid peak-preserving deltas — absent
+    // in older sections, which end right after the grid data.
+    const corrRemaining = len - (before - r.remaining);
+    if (corrRemaining >= 6) {
+      const corrGrid = r.u16();
+      const nCorr = r.u32();
+      if (nCorr * 5 + 6 > corrRemaining || nCorr > corrGrid * corrGrid) {throw new Error(`Invalid HMAP corrections: ${nCorr}`);}
+      const idx = new Uint32Array(nCorr);
+      const delta = new Int8Array(nCorr);
+      for (let k = 0; k < nCorr; k += 1) {idx[k] = r.u32(); delta[k] = r.i8();}
+      hmap.corr = { grid: corrGrid, idx, delta };
+    }
     const consumed = before - r.remaining;
     if (consumed > len) {throw new Error('HMAP section overruns its length');}
     r.skip(len - consumed);

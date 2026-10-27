@@ -55,9 +55,67 @@ export function hmapDownsample(field: Heightfield, gridN: number = HMAP_GRID): D
 }
 
 /** The embedded grid dressed as a Heightfield — playback feeds it
- *  straight into hmHeight()/FieldSurface like a normal map. */
+ *  straight into hmHeight()/FieldSurface like a normal map. With
+ *  corrections it decodes onto the finer correction grid instead:
+ *  peaks/saddles survive the bilinear upsample. */
 export function hmapToField(hm: DemoHeightmap): Heightfield {
-  return { size: hm.gridN, data: hm.data, stride: 1, heightScale: hm.heightScale, worldScale: hm.worldScale };
+  if (!hm.corr || hm.corr.idx.length === 0) {
+    return { size: hm.gridN, data: hm.data, stride: 1, heightScale: hm.heightScale, worldScale: hm.worldScale };
+  }
+  const data = upsampleGrid(hm.data, hm.gridN, hm.corr.grid);
+  for (let i = 0; i < hm.corr.idx.length; i += 1) {
+    const idx = hm.corr.idx[i]!;
+    data[idx] = Math.max(0, Math.min(255, data[idx]! + hm.corr.delta[i]!));
+  }
+  return { size: hm.corr.grid, data, stride: 1, heightScale: hm.heightScale, worldScale: hm.worldScale };
+}
+
+export const HMAP_CORR_GRID = 192; // decode lattice for corrections
+
+/** Bilinear upsample a u8 grid — the base the delta list edits. */
+export function upsampleGrid(src: Uint8Array, srcN: number, dstN: number): Uint8Array {
+  const out = new Uint8Array(dstN * dstN);
+  const scale = (srcN - 1) / (dstN - 1);
+  for (let z = 0; z < dstN; z += 1) {
+    for (let x = 0; x < dstN; x += 1) {
+      const fx = x * scale, fz = z * scale;
+      const x0 = Math.min(Math.floor(fx), srcN - 2), z0 = Math.min(Math.floor(fz), srcN - 2);
+      const tx = fx - x0, tz = fz - z0;
+      const a = src[z0 * srcN + x0]!, b = src[z0 * srcN + x0 + 1]!;
+      const c = src[(z0 + 1) * srcN + x0]!, d = src[(z0 + 1) * srcN + x0 + 1]!;
+      out[z * dstN + x] = Math.round((a * (1 - tx) + b * tx) * (1 - tz) + (c * (1 - tx) + d * tx) * tz);
+    }
+  }
+  return out;
+}
+
+/** Greedy error-driven correction list — every fine-grid sample where
+ *  the coarse reconstruction misses by > boundU8 steps, worst-first,
+ *  capped. See _docs/2026-10-27_DEMO_HMAP_DELTA.md. */
+export function hmapCorrections(field: Heightfield, hm: DemoHeightmap, boundU8 = 3, cap = 6000): DemoHeightmap['corr'] {
+  const dst = HMAP_CORR_GRID;
+  const up = upsampleGrid(hm.data, hm.gridN, dst);
+  const gain = 125 * (hm.heightScale ?? 1);
+  const ws = hm.worldScale;
+  const errs: { idx: number; delta: number }[] = [];
+  for (let z = 0; z < dst; z += 1) {
+    for (let x = 0; x < dst; x += 1) {
+      // Texel-center convention — hmHeight applies it, so decode-side
+      // samples land exactly where these were evaluated.
+      const trueH = hmHeight(field, ((x + 0.5) / dst) * ws, ((z + 0.5) / dst) * ws);
+      const q = Math.max(0, Math.min(255, Math.round((trueH / gain) * 255)));
+      const idx = z * dst + x;
+      const delta = q - up[idx]!;
+      if (Math.abs(delta) > boundU8) {errs.push({ idx, delta: Math.max(-127, Math.min(127, delta)) });}
+    }
+  }
+  if (errs.length === 0) {return undefined;}
+  errs.sort((a, b): number => Math.abs(b.delta) - Math.abs(a.delta));
+  const sel = errs.slice(0, cap);
+  const idx = new Uint32Array(sel.length);
+  const delta = new Int8Array(sel.length);
+  for (let i = 0; i < sel.length; i += 1) {idx[i] = sel[i]!.idx; delta[i] = sel[i]!.delta;}
+  return { grid: dst, idx, delta };
 }
 
 /** "Does this live field match the terrain the demo was recorded on?"

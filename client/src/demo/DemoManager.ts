@@ -601,7 +601,7 @@ export class DemoManager implements demoIO.DemoIOHost {
 
   /** Map look spec — captured when the map applies; serialized as the
    *  SECTION_ATMO trailer so playback replays the recorded sky/haze. */
-  recordAtmo(atmo: { fog?: unknown; weather?: unknown; atmosphere?: unknown }): void {
+  recordAtmo(atmo: { fog?: unknown; weather?: unknown; atmosphere?: unknown; terrain?: unknown; terrainTex?: unknown; terrainPreset?: unknown; heightScale?: unknown; tileSize?: unknown; sky?: unknown }): void {
     this.recorder.atmo = atmo;
   }
 

@@ -81,6 +81,14 @@ function writeHmapSection(view: DataView, pOffset: number, hm: DemoFile['heightm
   view.setUint32(offset, hm.srcHash, true); offset += 4;
   view.setUint32(offset, hm.data.length, true); offset += 4;
   for (const b of hm.data) {view.setUint8(((offset += 1) - 1), b);}
+  if (hm.corr && hm.corr.idx.length > 0) {
+    view.setUint16(offset, hm.corr.grid, true); offset += 2;
+    view.setUint32(offset, hm.corr.idx.length, true); offset += 4;
+    for (let i = 0; i < hm.corr.idx.length; i += 1) {
+      view.setUint32(offset, hm.corr.idx[i]!, true); offset += 4;
+      view.setInt8(((offset += 1) - 1), hm.corr.delta[i]!);
+    }
+  }
   view.setUint32(lenPos, offset - start, true);
   return offset;
 }
@@ -207,7 +215,8 @@ export function serializeDemo(data: DemoFile): ArrayBuffer {
     const rosterSize = 2 + rosterBytes.reduce((a, b): number => a + b, 0);
     const remoteFramesSize = 4 + data.remoteFrames.length * REMOTE_FRAME_SIZE;
     // v5 trailer: u8 section count + per-section tag/len/payload.
-    const hmapSize = data.heightmap ? 1 + 4 + 2 + 4 + 4 + 4 + 4 + data.heightmap.data.length : 0;
+    const corrN = data.heightmap?.corr?.idx.length ?? 0;
+    const hmapSize = data.heightmap ? 1 + 4 + 2 + 4 + 4 + 4 + 4 + data.heightmap.data.length + (corrN > 0 ? 2 + 4 + corrN * 5 : 0) : 0;
     const tokenSize = data.matchToken ? 1 + 4 + new TextEncoder().encode(JSON.stringify(data.matchToken)).length : 0;
     const snapCount = data.snapshots?.length ?? 0;
     const snapSize = snapCount > 0 ? 1 + 4 + 4 + snapCount * 4 : 0;

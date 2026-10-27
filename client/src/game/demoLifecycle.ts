@@ -5,7 +5,7 @@ import type { NetworkManager } from '../networking/NetworkManager.js';
 import { isBotId } from '../../../shared/botNames.js';
 import { applyStatusVisuals, applyTeamTint } from './remotes.js';
 import { FLAG_STAND_TOP } from '../structures/structures.js';
-import { applyMapFog, applyWeather, applyAtmosphere } from './net/mapAssets.js';
+import { applyMapFog, applyWeather, applyAtmosphere, applyTerrain } from './net/mapAssets.js';
 import type { DemoManager } from '../demo/index.js';
 import type { Ball , Targetable } from '../entities/balls.js';
 import type { DamageNumberManager } from '../effects/damageNumbers.js';
@@ -354,6 +354,9 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
       applyMapFog(ctx, live?.fog as never);
       applyWeather(ctx, live?.weather as never);
       applyAtmosphere(ctx, live?.atmosphere as never);
+      const a = live as Record<string, unknown> | undefined;
+      applyTerrain(ctx, (a?.terrain ?? null) as never, a?.terrainTex as never, a?.sky as never, a?.heightScale as never, a?.tileSize as never, a?.terrainPreset as never)
+        .catch((): void => undefined);
     }
     clearTransientObjects(d);
     // Show overlay menu so user can replay or pick another clip
@@ -387,6 +390,9 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
       applyMapFog(ctx, atmo.fog as never);
       applyWeather(ctx, atmo.weather as never);
       applyAtmosphere(ctx, atmo.atmosphere as never);
+      const a = atmo as Record<string, unknown>;
+      applyTerrain(ctx, (a.terrain ?? null) as never, a.terrainTex as never, a.sky as never, a.heightScale as never, a.tileSize as never, a.terrainPreset as never)
+        .catch((): void => undefined);
     }
     // v5 HMAP: the clip carries its terrain — use it when the live field
     // is absent or doesn't match the recorded action; the live map wins
