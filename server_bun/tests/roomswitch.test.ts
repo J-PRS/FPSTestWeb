@@ -18,7 +18,8 @@ function fakeWs() {
 }
 
 const gameStates = (ws: ReturnType<typeof fakeWs>) =>
-  ws.sent.map((s: string) => JSON.parse(s) as { type: string; room?: string })
+  ws.sent.filter((s): s is string => typeof s === 'string')
+    .map((s) => JSON.parse(s) as { type: string; room?: string })
     .filter((m: { type: string; room?: string }) => m.type === 'gameState');
 
 describe('switchRoom', () => {
@@ -30,8 +31,13 @@ describe('switchRoom', () => {
   afterEach(() => { cfg.allowBalls = prevGates.balls; cfg.allowCreatures = prevGates.creatures; gs.stop(); });
 
   // Join + hop both defer the seat on terrainReady (async map load) —
-  // assertions need the room's ready promise first.
+  // assertions need the room's ready promise first. The room itself is
+  // minted lazily by the deferred hop, so `rooms.get` can still miss when
+  // this runs — poll for its existence before awaiting readiness, or the
+  // settle check resolves against a room that was never created (the
+  // reclaim flake: disconnect raced the hop).
   const awaitSeat = async (rooms: Map<string, { terrainReady?: Promise<unknown> }>, name: string): Promise<void> => {
+    for (let i = 0; i < 200 && !rooms.has(name); i++) {await new Promise((r): NodeJS.Timeout => setTimeout(r, 10));}
     await rooms.get(name)?.terrainReady;
   };
 
@@ -137,6 +143,11 @@ describe('switchRoom', () => {
     const ws2 = fakeWs();
     gs.onMessage(ws2, JSON.stringify({ type: 'join', playerId: 'p1', token: tok }));
     expect(ws2.data.playerId).toBe('p1');
+    // The reclaim can take the different-room path (join carries no room →
+    // 'default' while the grace seat is in 'b'): the retired seat falls
+    // through to a normal join, which defers on terrainReady — under suite
+    // load the gameState lands after this line, so poll for it.
+    for (let i = 0; i < 200 && gameStates(ws2).length === 0; i++) {await new Promise((r): NodeJS.Timeout => setTimeout(r, 10));}
     expect(gameStates(ws2).length).toBeGreaterThan(0);
   });
 
