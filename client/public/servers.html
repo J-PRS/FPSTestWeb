@@ -103,7 +103,8 @@ async function tick(){
     '<td><span class="rname">'+esc(r.name)+'</span></td>'+
     '<td><span class="mode'+(r.mode?'':' empty-mode')+'">'+esc(modeShort(r.mode||'arena'))+'</span></td>'+
     '<td class="map">'+esc(r.map||'—')+'</td>'+
-    '<td class="occ'+(full?' full':'')+'">'+(bots?`<span class="bots">(${bots})</span> `:'')+r.humans+'/'+r.maxPlayers+
+    '<td class="occ'+(full?' full':'')+'">'+r.humans+'/'+r.maxPlayers+
+      (bots?` <span class="bots">(${bots})</span>`:'')+
       (r.spectators?`<small>${r.spectators} spec</small>`:'')+'</td></tr>';
   }).join(''):'<tr><td colspan="4" class="empty">no live rooms — the first join mints one</td></tr>';
   if(html!==lastRowsHtml){document.getElementById('rows').innerHTML=html;lastRowsHtml=html;}
