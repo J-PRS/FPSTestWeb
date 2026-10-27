@@ -857,8 +857,11 @@ async function init(): Promise<void> {
   // wireIn queues inbound until wireNetworkHandlers binds the deps
   // (markWireReady right after it returns). p2p/classic keep the late
   // connectServer path — they need machinery that isn't built yet.
-  const earlyWire = Boolean(urlParams.room) && !urlParams.p2p && urlParams.mode !== 'classic';
-  if (onlineBoot && urlParams.mode !== 'classic' && settings.get('fps-session-token')) {
+  // Classic is a solo ruleset — its connect veto only holds offline.
+  // A persisted fps-mode=classic must not survive an explicit /s/ join.
+  const classicBlocksWire = urlParams.mode === 'classic' && !urlParams.room && !urlParams.p2p;
+  const earlyWire = Boolean(urlParams.room) && !urlParams.p2p && !classicBlocksWire;
+  if (onlineBoot && !classicBlocksWire && settings.get('fps-session-token')) {
     serverEndpoints
       .then((ep): Promise<boolean> => pingServer(ep.httpUrl))
       .then((live): void => { if (live) {armSessionVeil('RECONNECTING', (): void => networkManager.sendReady()); profiler.markTime('veilProbed');} return; })
@@ -973,7 +976,7 @@ async function init(): Promise<void> {
   const mode = urlParams.mode ?? undefined;
   // ?mode=classic — the original solo ruleset: bouncy balls only, lost balls
   // teleport back instead of raging (enrage was layered on top later)
-  const classicMode = mode === 'classic';
+  const classicMode = mode === 'classic' && !urlParams.room && !urlParams.p2p;
   if (classicMode) {setBallEnrage(false);}
   // Bot roster waits on the first terrain decision — a room's map spec
   // arrives a few seconds after connect, and bots seeded on the boot
@@ -1218,7 +1221,7 @@ const paintStaleBadge = (): void => {
 if (import.meta.env.PROD && (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '[::1]')) {
   // Alt+R = rebuild + reload — the loop the preview badge makes visible.
   let rebuildDiv: HTMLDivElement | null = null;
-  addEventListener('keydown', (e): void => {
+  addEventListener('keydown', (e: KeyboardEvent): void => {
     if (!e.altKey || e.code !== 'KeyR' || e.repeat) {return;}
     e.preventDefault();
     if (!rebuildDiv) {
@@ -1234,19 +1237,31 @@ if (import.meta.env.PROD && (location.hostname === 'localhost' || location.hostn
       .catch((): void => { rebuildDiv!.textContent = 'rebuild endpoint missing'; });
   });
   let lastCount = 0;
-  setInterval((): void => {
+  const applyStale = (d: { count: number; files?: string[]; built?: number } | null): void => {
+    if (!d || d.count === lastCount) {return;}
+    noteStale(d.files, d.count - lastCount);
+    lastCount = d.count;
+    paintStaleBadge();
+  };
+  const poll = (): void => {
     fetch('/dev/stale')
       .then((r) => r.ok ? r.json() : null)
-      .then((d: { count: number; files?: string[]; built?: number } | null) => {
-        if (!d || d.count === lastCount) {return;}
-        noteStale(d.files, d.count - lastCount);
-        lastCount = d.count;
-        paintStaleBadge();
-      })
+      .then(applyStale)
       .catch((): void => { /* endpoint absent on real prod — stay silent */ });
-  }, 4000);
+  };
+  poll();
+  // Push when the preview exposes it (fs.watch → SSE); fall back to a
+  // poll if the endpoint isn't there (older preview / real prod).
+  const es = new EventSource('/dev/stale-events');
+  es.onmessage = (e): void => {
+    try { applyStale(JSON.parse(e.data)); } catch { /* malformed push */ }
+  };
+  es.onerror = (): void => {
+    es.close();
+    setInterval(poll, 4000);
+  };
 }
-const hot = import.meta.hot as { on(e: string, cb: (d: { count: number; files?: string[] }) => void): void } | undefined;
+const hot = import.meta.hot as unknown as { on(e: string, cb: (d: { count: number; files?: string[] }) => void): void } | undefined;
 if (hot) {
   hot.on('stale:changed', (d): void => {
     noteStale(d.files, d.count);
@@ -1275,11 +1290,12 @@ if (hot) {
       rbadge.textContent = left > 0 ? `⟳ server restart in ${(left / 1000).toFixed(1)}s` : '⟳ server restarting…';
     };
     setInterval(paint, 200);
-    const pollRestart = async (url: string): Promise<void> => {
+    const pollRestart = async (url: string): Promise<boolean> => {
       try {
         const r = await fetch(url, { cache: 'no-store' });
         restartAt = r.ok ? Number((await r.json() as { restartAt?: number }).restartAt ?? 0) : 0;
-      } catch { restartAt = 0; } // bare `bun src/server.ts` — no watcher to announce
+        return true;
+      } catch { restartAt = 0; return false; } // bare `bun src/server.ts` — no watcher to announce
     };
     const armRestartPoll = async (): Promise<void> => {
       const ep = await serverEndpoints;
@@ -1287,8 +1303,14 @@ if (hot) {
       if (u.protocol !== 'http:' || !u.port) {return;} // dev-watch only exists on the http dev server
       u.port = String(Number(u.port) + 1);
       const url = `${u.origin}/restart`;
-      await pollRestart(url).catch((): undefined => undefined);
-      setInterval((): void => { pollRestart(url).catch((): undefined => undefined); }, 500); // pending window is ~3s — coarse polling would miss it
+      let fails = 0;
+      // pending window is ~3s — coarse polling would miss it. Spawned test
+      // servers and prod have no dev-watch: refused forever, so a few straight
+      // failures stop the poll instead of spamming console for the session.
+      const t = setInterval(async (): Promise<void> => {
+        fails = (await pollRestart(url)) ? 0 : fails + 1;
+        if (fails >= 8) {clearInterval(t);}
+      }, 500);
     };
     armRestartPoll().catch((): undefined => undefined);
   }
