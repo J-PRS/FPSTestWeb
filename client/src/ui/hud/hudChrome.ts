@@ -113,6 +113,7 @@ export function updateDeathCountdown(h: HUD, respawnMs: number, held = false): v
  *  compositor and the node is dropped once transparent. */
 let bootVeil: HTMLDivElement | null = null;
 export function setBootVeil(on: boolean): void {
+    document.body.classList.toggle('boot-holding', on);
     if (on && !bootVeil) {
       bootVeil = document.createElement('div');
       bootVeil.id = 'boot-veil';

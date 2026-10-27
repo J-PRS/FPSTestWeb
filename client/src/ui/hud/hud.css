@@ -709,21 +709,19 @@ body:has(#hud.cm-open) #healthbar-container {
   text-shadow: 0 1px 4px #000; opacity: 0.9;
 }
 /* Boot veil — blurs the world through the offline FPS warmup, then
- * dissolves on release. backdrop-filter transitions on the compositor,
- * so the unblur stays smooth even while rAF is still hitching. */
+ * dissolves on release. The blur lives on #gl (the canvas) itself rather
+ * than a backdrop-filter overlay: backdrop-filter doesn't reliably sample
+ * a WebGL canvas, so the blur never reached the pixels. A CSS filter on
+ * the canvas composites on its own output. No dim wash — just a real blur. */
+#gl { transition: filter 0.45s ease-out; }
+body.boot-holding #gl { filter: blur(18px); }
 #boot-veil {
   position: fixed; inset: 0; pointer-events: none; z-index: 6;
-  backdrop-filter: blur(14px) brightness(0.8);
-  -webkit-backdrop-filter: blur(14px) brightness(0.8);
   opacity: 1;
-  transition: opacity 0.45s ease-out,
-              backdrop-filter 0.45s ease-out,
-              -webkit-backdrop-filter 0.45s ease-out;
+  transition: opacity 0.45s ease-out;
 }
 #boot-veil.releasing {
   opacity: 0;
-  backdrop-filter: blur(0px) brightness(1);
-  -webkit-backdrop-filter: blur(0px) brightness(1);
 }
 
 /* Underwater grade — camera below the sea level. The terrain shader owns

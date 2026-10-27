@@ -187,6 +187,9 @@ export interface LoopState {
    *  (interiors, rigs) land in the scene before compileAsync runs. */
   warmN: number;
   warmed: boolean;
+  /** Terrain materials compiled once after the real terrain lands (under
+   *  the veil) so stragglers don't hitch the live-under-veil frames. */
+  terrainCompiled?: boolean;
   /** Post-warmup recompile countdown — arms when the remote roster
    *  changes so late-loading rigs still get a parallel compile pass
    *  instead of hitching their first visible frame. */
@@ -552,8 +555,8 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   // ammo/health/timer shouldn't flash over the frozen match. Transition-
   // gated so release can't stomp another owner's hide() (spectate/death).
   const held = bootHoldActive(f);
-  if (held && !st.hudHeld) { st.hudHeld = true; hud.hide(); setBootVeil(true); }
-  else if (!held && st.hudHeld) { st.hudHeld = false; hud.show(); setBootVeil(false); }
+  if (held && !st.hudHeld) { st.hudHeld = true; hud.hide(); setBootVeil(true); deps.rendererSetup.renderer.shadowMap.enabled = false; }
+  else if (!held && st.hudHeld) { st.hudHeld = false; hud.show(); setBootVeil(false); deps.rendererSetup.renderer.shadowMap.enabled = settings.get('fps-shadows'); }
 
   hud.update(dt, player, networkManager.getPing(), networkManager.getPacketLoss(), networkManager.getJitter());
   hud.setConnDown(networkManager.connectionDown(), networkManager.connectionDownReason());
@@ -905,7 +908,7 @@ function tickVeil(deps: GameLoopDeps, st: LoopState, rawElapsed: number, draw: (
   // A seat that is still settling (gameState / reconcile writes after the
   // respawn) would otherwise lift the veil on the old spot and snap to the
   // real one — hold until the body has stopped moving for ~1s.
-  const placed = (isSessionSeated() && grounded && veilStillFrames >= 60) || st.veilFrames >= 600;
+  const placed = (isSessionSeated() && grounded && veilStillFrames >= 60 && !isTerrainSwapPending()) || st.veilFrames >= 600;
   // Ready to go live UNDER the veil — the caller runs the full loop from
   // here and only drops once REAL frames hold <26ms. Measuring stability
   // on veiled frames was the bug: a veiled frame skips the whole sim, so
@@ -976,7 +979,17 @@ export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(
     // Boot warmup counter runs even while veiled — the veil block counts
     // its own renders separately; here we meter real frames.
     st.bootWarmup.tick(rawElapsed);
+    if (rawElapsed >= 0.026) {
+      let _dbg = '';
+      try { _dbg = JSON.stringify(perf.snapshot()); } catch (e) { _dbg = 'ERR=' + String(e); }
+      console.warn(`[boot-frame] rawElapsed=${(rawElapsed*1000).toFixed(1)}ms ${_dbg}`);
+    }
     if (isSessionVeiled()) {
+      if (isSessionVeilReady() && !st.terrainCompiled) {
+        st.terrainCompiled = true;
+        deps.rendererSetup.warmup();
+        renderFrame(0.016);
+      }
       if (!st.veilLive) {
         st.veilLive = tickVeil(deps, st, rawElapsed, renderFrame);
         if (!st.veilLive) {return;}
@@ -1079,7 +1092,7 @@ export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(
     if (isSessionVeiled()) {
       st.veilLiveFrames += 1;
       if (rawElapsed < 0.026) {st.veilStable += 1;} else {st.veilStable = 0;}
-      if (st.veilStable >= 45 || st.veilLiveFrames >= 480) {
+      if (st.veilStable >= 15 || st.veilLiveFrames >= 480) {
         st.veilStable = 0; st.veilLiveFrames = 0; st.veilLive = false;
         dropSessionVeil();
         if (st.veilFroze) {deps.lazyPlayer().unfreezeInput(); st.veilFroze = false;}
