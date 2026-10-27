@@ -82,8 +82,11 @@ async function findServer() {
   // jpeg_pipe otherwise). ffmpeg is spawned lazily once we know.
   let ffmpeg = null;
   let encDone = null;
-  const startEncoder = (mode, cw, ch) => {
+  const startEncoder = (mode, cw, ch, wallclock = false) => {
     console.log(`frame path: ${mode} ${mode === 'raw' ? `(${cw}x${ch})` : ''}`);
+    // wallclock: stamp each piped frame at arrival time — screencast
+    // frames arrive at the capture rate, not a fake 1/FPS grid, so a
+    // slow capture no longer stretches/squeezes the timeline.
     ffmpeg = spawn('ffmpeg', mode === 'raw' ? [
       '-y',
       '-f', 'rawvideo',
@@ -99,8 +102,9 @@ async function findServer() {
     ] : [
       '-y',
       '-f', 'image2pipe',
-      '-framerate', String(FPS),
+      ...(wallclock ? ['-use_wallclock_as_timestamps', '1'] : ['-framerate', String(FPS)]),
       '-i', 'pipe:0',
+      ...(wallclock ? ['-vf', `fps=${FPS}`] : []),
       ...encArgs,
       '-pix_fmt', 'yuv420p',
       '-movflags', '+faststart',
@@ -118,7 +122,18 @@ async function findServer() {
       `--window-size=${W},${H + 80}`,
       '--mute-audio',
       '--no-sandbox',
-      ...(HEADLESS ? ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] : []),
+      // Fresh-profile Chrome stalls the FIRST page fetch ~30-45s on WPAD
+      // probes / variations seeding / first-run work — the same flags
+      // _tools/e2e/browser.ts carries for exactly this.
+      '--no-proxy-server',
+      '--disable-background-networking', '--disable-component-update',
+      '--no-first-run', '--no-default-browser-check',
+      '--disable-features=LocalNetworkAccessChecks,PrivateNetworkAccessSendHeaders,BlockInsecurePrivateNetworkRequests',
+      ...(HEADLESS
+        ? process.env.E2E_GPU
+          ? ['--use-angle=default'] // real GPU, headless-safe (locked PC OK)
+          : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader']
+        : []),
     ],
     defaultViewport: { width: W, height: H },
   });
@@ -143,7 +158,7 @@ async function findServer() {
     };
   });
 
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await page.waitForFunction('window.__demoManager && window.__demoManager.isRecording === true', { timeout: 60000 });
 
   // ---------- load the demo file through the real UI path ----------
@@ -152,8 +167,12 @@ async function findServer() {
   await page.waitForFunction('window.__demoManager.player.isLoaded === true', { timeout: 10000 });
 
   const duration = await page.evaluate(() => window.__demoManager.player.duration);
-  const totalFrames = Math.max(1, Math.round(duration * FPS));
-  console.log(`demo loaded: ${duration.toFixed(2)}s → ${totalFrames} frames`);
+  // --from/--to clip the rendered window (demo seconds) — democmp aligns
+  // this to the live video's capture window via recorder.elapsedTime.
+  const FROM = Math.max(0, Number(opt.from || 0));
+  const TO = Math.min(duration, opt.to ? Number(opt.to) : duration);
+  const totalFrames = Math.max(1, Math.round((TO - FROM) * FPS));
+  console.log(`demo loaded: ${duration.toFixed(2)}s → render [${FROM.toFixed(2)}, ${TO.toFixed(2)}] = ${totalFrames} frames`);
 
   // ---------- enter playback, hide ALL chrome ----------
   await page.evaluate((realtime) => {
@@ -235,7 +254,7 @@ async function findServer() {
     // clean 60fps file. Screencast needs headed Chrome or --headless=new.
     const cdp = await page.createCDPSession();
     mode = 'jpeg';
-    startEncoder('jpeg');
+    startEncoder('jpeg', 0, 0, true);
     let n = 0;
     await page.evaluate(() => {
       const dm = window.__demoManager;
@@ -259,7 +278,7 @@ async function findServer() {
   }
 
   for (let i = 0; i <= totalFrames; i++) {
-    const t = Math.min(duration, i / FPS);
+    const t = Math.min(TO, FROM + i / FPS);
     const buf = await frameAt(t);
     // backpressure: drain when stdin buffer fills
     if (!ffmpeg.stdin.write(buf)) await new Promise(r => ffmpeg.stdin.once('drain', r));
