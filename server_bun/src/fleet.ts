@@ -95,6 +95,9 @@ for (let i = 0; i < WORKERS; i += 1) {
 
 // ---- matchmaker ----------------------------------------------------------
 
+const FLEET_CAP = Number(process.env.FPS_FLEET_MAX_PLAYERS) || Infinity;
+const fleetSeats = (): number => [...dir.workers.values()].reduce((a, w) => a + (w.up ? w.ccu : 0), 0);
+
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const json = (data: unknown, init?: ResponseInit): Response =>
   corsResponse(JSON.stringify(data), Object.assign({}, init, {headers: JSON_HEADERS}));
@@ -136,6 +139,8 @@ Bun.serve({
         return corsResponse('Too many joins', { status: 429 });
       }
       dir.sweep(now);
+      // Each worker caps its own seats (FPS_GLOBAL_MAX_PLAYERS); only the sum needs this gate.
+      if (fleetSeats() >= FLEET_CAP) {return json({ error: 'fleet full' }, { status: 503 });}
       // Quick-join shape (the worker's /join answers this standalone):
       // pick the emptiest matching room fleet-wide, else mint a name.
       // humans=1 (the client's /quickjoin) flips the pick to the busiest

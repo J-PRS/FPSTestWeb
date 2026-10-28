@@ -11,7 +11,7 @@ describe.skipIf(!process.env.FPS_SOAK)('netbot — real clients over real socket
     // land rtc). No nd → everyone ws, same as before.
     // rtc only on local runs — a remote box can't take it (Caddy doesn't
     // proxy /rtcs and ICE needs host-reachable UDP anyway).
-    const mix = process.env.NETBOT_URL ? undefined : (nd ? ['ws', 'rtc'] : undefined);
+    const mix = process.env.NETBOT_URL ? undefined : (nd ? ['ws', 'rtc'] as ('ws' | 'rtc')[] : undefined);
     await spawn(4, { pingMs: 20, jitterMs: 150, lossRate: 0 }, { transports: mix }); // heavy jitter: claims race spawns constantly
     const t = () => bots.map((b) => b.nc.tel);
     // Humanized bots close slower — wait on engagement, not a fixed

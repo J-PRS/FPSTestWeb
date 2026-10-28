@@ -59,7 +59,7 @@ describe('stop tier', () => {
   let fakeNow = wallNow();
   const drain = (room: Room, fanout: TickFanout): void => {
     room.tickSeq += 1;
-    fakeNow += 50;
+    fakeNow = (fakeNow + 50) as typeof fakeNow;
     const players = room.players.getAllPlayers();
     fanout.fanoutRecords(room, players, fanout.buildRecords(room, players, fakeNow));
   };
