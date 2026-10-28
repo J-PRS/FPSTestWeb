@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { ChildLogger } from '../../core/Logger.js';
 import { tokenTier } from '../../../../shared/pickups.js';
+import { ndcToClient } from '../ndcScreen.js';
 
 const band = (x: number, invert: boolean): string => {
   if (x >= 60) {return invert ? '#ff6b6b' : '#7ddf7d';}
@@ -104,8 +105,10 @@ export class PlayerIndicators {
     const vector = _projected.copy(targetPos);
     vector.project(camera);
 
-    let x = (vector.x * 0.5 + 0.5) * window.innerWidth;
-    let y = (-(vector.y * 0.5) + 0.5) * window.innerHeight;
+    const scr = { x: 0, y: 0 };
+    ndcToClient(vector.x, vector.y, scr);
+    let {x} = scr;
+    let {y} = scr;
 
     if (behind) {
       x = window.innerWidth - x;

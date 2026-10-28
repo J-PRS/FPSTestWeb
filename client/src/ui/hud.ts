@@ -4,6 +4,7 @@ import { CommandMap, type SpawnPools } from './commandmap.js';
 import { createHudDom } from './hud/dom.js';
 import { tokenTier } from '../../../shared/pickups.js';
 import { PlayerIndicators } from './hud/indicators.js';
+import { ndcToClient } from './ndcScreen.js';
 import type { Targetable } from '../entities/balls.js';
 import type { Nugget } from '../entities/Nugget.js';
 import { Scoreboard, type SbRow } from './hud/scoreboard.js';
@@ -473,8 +474,10 @@ export class HUD {
       return;
     }
     el.classList.remove('hidden');
-    let x = (v.x * 0.5 + 0.5) * window.innerWidth;
-    let y = (-v.y * 0.5 + 0.5) * window.innerHeight;
+    const scr = { x: 0, y: 0 };
+    ndcToClient(v.x, v.y, scr);
+    let {x} = scr;
+    let {y} = scr;
     // Long lobs aim nearly overhead — the aim point leaves the frustum but
     // the reticle must survive, so off-screen positions clamp to the edge
     // pointing at the arc (same read as off-screen player indicators).

@@ -22,6 +22,9 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-10-16_TEAMSOAK_WARP.md` | Themed team matchups + warp collapse |
 | `_docs/2026-10-17_TERRAIN_COMPILE_STALL.md` | The 40s browser hang |
 | `_docs/2026-10-22_FRONTEND_AUDIT.md` | Vanilla DOM layer vs published best practice — near-optimal; residual gaps |
+| `_docs/2026-10-28_CLASS_ASSET_DUPLICATION.md` | Live class GLBs embed duplicate 32-clip sets (~722 KB redundant); shared-pack option and prerequisites |
+| `_docs/2026-10-28_LAG_COMP_WYSIWYG.md` | Lag-comp reference: industry practices, our rewind pipeline, ghostsoak numbers, remaining accuracy work |
+| `_docs/2026-10-28_NDC_PROJECTION.md` | Overscan-canvas NDC mapping — why head markers drifted, the ndcScreen contract, what to reuse |
 | `_docs/2026-10-23_SERVER_HOTPATH_AUDIT.md` | **Server hot-path footgun audit** — projStep/link allocations, remaining dhypot3 swaps, per-tick grid rebuild, roster builders; ordered by payoff/risk |
 | `_docs/2026-10-23_DUEL_CAPACITY.md` | **1v1 capacity report** — measured: duel rooms cost 1.5× more per client than 32-seat rooms (175 vs 266 CCU/core); profile attribution, cost model, L1-L8 levers, industry patterns |
 | `_docs/2026-10-28_SERVER_PERF_RESEARCH.md` | **Server perf research** — what's actually left after cpuprof attribution: GC-controller 16ms bug ≈ tickMsMax spikes (Bun upgrade lever), validated architecture, ranked remaining wins |

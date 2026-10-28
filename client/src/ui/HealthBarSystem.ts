@@ -5,6 +5,7 @@ import { CLASS_STATS } from '../../../shared/botClasses.js';
 import { REPAIR_ARMOR_MULT } from '../../../shared/weapons.js';
 
 import type { Ball, Targetable } from '../entities/balls.js';
+import { ndcToClient } from './ndcScreen.js';
 
 // Scratch vectors — update() iterates bars sequentially, safe to share
 const _cameraPos = new THREE.Vector3();
@@ -458,8 +459,10 @@ export class HealthBarSystem {
       return;
     }
 
-    const x = (projected.x * 0.5 + 0.5) * window.innerWidth;
-    const y = (-(projected.y * 0.5) + 0.5) * window.innerHeight;
+    const scr = { x: 0, y: 0 };
+    ndcToClient(projected.x, projected.y, scr);
+    const {x} = scr;
+    const {y} = scr;
 
     const onScreen = x >= 0 && x <= window.innerWidth && y >= 0 && y <= window.innerHeight;
     if (!onScreen) {
