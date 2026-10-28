@@ -53,11 +53,11 @@ export function emitSmoke(d: Debris, s: Shard, dt: number): void {
     if (s.vx * s.vx + s.vy * s.vy + s.vz * s.vz < 25) {return;} // <5m/s: wisps stop
     _trailPos.set(s.x, s.y, s.z);
     fxPuff(_trailPos, {
-      count: 1,
+      count: 2,
       velMin: [-0.3, 0.3, -0.3], velMax: [0.3, 1, 0.3],
       shed: [-s.vx * 0.1, -s.vy * 0.05, -s.vz * 0.1],
-      lifeMin: 0.4, lifeMax: 0.7,
-      sizeScale: Math.max(0.5, s.radius * 1.5),
+      lifeMin: 0.5, lifeMax: 0.9,
+      sizeScale: Math.max(0.6, s.radius * 2),
       colA: [0.16, 0.15, 0.14], colB: [0.3, 0.28, 0.26],
       gravity: false,
     });

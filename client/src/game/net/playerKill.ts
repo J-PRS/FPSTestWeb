@@ -31,9 +31,9 @@ const STREAK_NAMES: [number, string][] = [
 let lastFullGibAt = 0;
 const FULL_GIB_GAP_MS = 250;
 
-/** Victim fx: ragdoll with the blast's impulse, capsule-shard gibs in the
- *  team color, then hide the model and strip HUD markers. */
-function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlayer: RemotePlayer): void {
+/** Victim fx: ragdoll with the blast's impulse + a shard burst — unless a
+ *  power weapon connected point-blank, then the body full-gibs instead. */
+function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlayer: RemotePlayer, weapon?: number): void {
   const { deps, nm } = ctx;
   // Find matching explosion from this shooter
   let explosionPos: THREE.Vector3 | undefined = undefined;
@@ -92,6 +92,8 @@ function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlaye
     { impulseDir, inheritVel: remotePlayer.vel, parts, shardGeos: parts?.map((p) => p.geo), count: fullGib ? undefined : 6, smoke: fullGib },
   ));
 
+  // Full-gib for every kill for now — the model hides as its baked chunk
+  // geos fly; respawn()'s showRemote restores on the next life.
   remotePlayer.hide();
   deps.lazyHud().removePlayerIndicator(targetId);
   deps.lazyHealthBarSystem().removeBar(targetId);
@@ -174,7 +176,7 @@ export function onPlayerKill(ctx: NetCtx, shooterId: string, targetId: string, w
 
   const remotePlayer = deps.world.remotePlayers.get(targetId);
   if (remotePlayer) {
-    gibVictim(ctx, shooterId, targetId, remotePlayer);
+    gibVictim(ctx, shooterId, targetId, remotePlayer, weapon);
     logger.info(`Player ${targetId} killed by ${shooterId}`);
   }
 

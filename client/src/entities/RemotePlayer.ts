@@ -9,6 +9,7 @@ import { CLASS_MODEL_SCALE, classCapsule, classMass } from '../../../shared/botC
 import { RemoteInterp } from './remoteInterp.js';
 import { RemoteGizmo } from './remoteGizmo.js';
 import { resetCorpse, launchCorpse, stepCorpse, type CorpseState } from './remoteDeath.js';
+import { VerletRagdoll, GunDrop } from './verletRagdoll.js';
 import { WeaponType, WEAPON_FIRE_INTERVAL_S } from '../../../shared/weapons.js';
 import { RemoteAuras } from './remoteAuras.js';
 import { RemoteAnim } from './remoteAnim.js';
@@ -61,6 +62,8 @@ export class RemotePlayer {
   private isOnGround = true;
   terrain: Terrain | null = null; // public — anim drive ground-tests off it
   private corpse!: CorpseState; // ctor assigns — aliases live position/vel/rotation refs
+  private ragdoll: VerletRagdoll | null = null;
+  private gunDrop: GunDrop | null = null;
   serverVelocity: THREE.Vector3 = new THREE.Vector3(); // Velocity reported by server (public — interp family reads it)
   // Snapshot ingest, adaptive-delay interp, dead reckoning and the
   // predicted-knockback window — the whole netcode half lives in
@@ -263,7 +266,17 @@ export class RemotePlayer {
   // update() which only fires at ~20Hz with a fixed dt — and now extracted
   // to remoteDeath.ts.
   private tickDead(dt: number): void {
-    stepCorpse(this.corpse, dt, this.terrain);
+    this.gunDrop?.step(dt, this.terrain);
+    // Verlet path: the body stays visible and its skeleton flops under
+    // the point sim. Rigidbody tumble is the fallback for unmapped rigs.
+    if (this.ragdoll?.valid) {
+      if (this.ragdoll.still > 1.5) {this.ragdoll.startSink();} // settled → slide under
+      this.ragdoll.step(dt, this.terrain);
+      this.ragdoll.apply();
+      if (this.ragdoll.gone) {this._model.setVisible(false); this.ragdoll = null;} // only once submerged
+      return;
+    }
+    stepCorpse(this.corpse, dt, this.terrain, this.eyeOff);
 
     // Update model if loaded (position/rotation/scale/animation)
     if (this._loaded) {
@@ -455,6 +468,10 @@ export class RemotePlayer {
     setCloakGhost(this, false);
     resetCorpse(this.corpse);
     launchCorpse(this.corpse, explosionPos, explosionForce);
+    // Ragdoll disabled in-game for now — reads off; the gib burst carries
+    // the death. Code + gunlab preview stay for the revisit.
+    this.ragdoll = null;
+    this.gunDrop = null;
     // A standing-height blob under a crumpled corpse reads wrong — the
     // slot re-allocs on the next tickAlive after respawn.
     getShadows()?.free(this);
@@ -469,7 +486,7 @@ export class RemotePlayer {
     this.model.removeColliderGizmo();
   }
 
-  hide(): void { hideRemote(this); }
+  hide(): void { this.ragdoll = null; this.gunDrop?.restore(); this.gunDrop = null; hideRemote(this); }
   show(): void { showRemote(this); }
 
   /** Team tint on the name ring — Nugget Wars bots use it; server players
@@ -486,6 +503,8 @@ export class RemotePlayer {
 
   respawn(position: { x: number; y: number; z: number }): void {
     this._isDead = false;
+    this.ragdoll = null;
+    this.gunDrop?.restore(); this.gunDrop = null;
     resetCorpse(this.corpse);
     // Corpse shrink writes the MODEL's scale directly — reset it here or
     // a respawned player keeps the shrunken size forever (tickAlive never
@@ -534,6 +553,8 @@ export class RemotePlayer {
     WeaponType.Implodisc, WeaponType.Grenade, WeaponType.ClusterBomb,
     WeaponType.Javelin, WeaponType.ImpactGrenade, WeaponType.RemoteRailgun,
     WeaponType.ArmorGrenade, WeaponType.Concussion, WeaponType.EMP,
+    WeaponType.ProxyGrenade, WeaponType.SatchelCharge, WeaponType.BeltSticky,
+    WeaponType.HealGrenade, WeaponType.Hook, WeaponType.BeltDisc,
   ]);
 
   // Remote fired a weapon — kick the gun's procedural recoil

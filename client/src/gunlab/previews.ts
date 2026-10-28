@@ -30,6 +30,7 @@ import { mkFlagPlate } from '../game/flagRun.js';
 import { mkFlagMesh } from '../game/ctfFlags.js';
 import { TEAM_COLORS } from '../../../shared/teams.js';
 import { PlayerModel, type PlayerModelVariant } from '../entities/PlayerModel.js';
+import { VerletRagdoll, GunDrop, collectBones } from '../entities/verletRagdoll.js';
 import { PlayerDebris } from '../effects/debris.js';
 import { CLASS_BODY_MAT_REV, CLASS_BODY_VARIANT, type AnimationState } from '../entities/playerClips.js';
 import { CLASS_MODEL_SCALE, classCapsule, type ArmorClass } from '../../../shared/botClasses.js';
@@ -64,6 +65,7 @@ const LAB_SCENE = creatureLayer as unknown as THREE.Scene;
 const LAB_TERRAIN = {
   getHeight: (): number => 0,
   getHeightVisual: (): number => 0,
+  getRenderedHeight: (): number => 0,
   getNormal: (): THREE.Vector3 => new THREE.Vector3(0, 1, 0),
   // Swarm blob shadows + terrainBlend read the SAME uniform objects a
   // real Terrain exposes — a flat 1×1 zero field keeps the stub honest.
@@ -335,8 +337,15 @@ function mkLineup(entries: LineupEntry[], boundsX = 0, boundsW = 0, focusX = 0):
     // Gib preview — the real PlayerDebris pulverize (posed body parts +
     // impulse burst) then the body respawns ~1.6s later.
     const debris: { d: PlayerDebris; t: number; s: number }[] = [];
-    const flashes: { m: THREE.Mesh; l: THREE.PointLight; t: number; s: number }[] = [];
+    const flashes: { m: THREE.Mesh; l: THREE.PointLight; t: number; s: number; j?: boolean }[] = [];
+    // Flat marks + rings: dust dies fast, scorch outlives the chunks.
+    const decals: { m: THREE.Mesh; t: number; s: number; life: number; grow: number }[] = [];
     const downAt = new Map<PlayerModel, { t: number; s: number }>();
+    // Verlet ragdolls — body stays VISIBLE and flops; same respawn clock.
+    const ragdolls = new Map<PlayerModel, { r: VerletRagdoll; t: number; s: number }>();
+    const gunDrops: { g: GunDrop; s: number }[] = [];
+    // Deferred death beats — flash-first juicy gib staging.
+    const pending: { at: number; fn: () => void }[] = [];
     let elapsed = 0;
     // Last picked team tint/outline — reapplied per body as GLBs resolve
     // (setOutline's hull clone needs the skinned meshes loaded first).
@@ -460,13 +469,81 @@ function mkLineup(entries: LineupEntry[], boundsX = 0, boundsW = 0, focusX = 0):
           downAt.set(m, { t: elapsed, s: speed });
         }
       },
+      // Juicy gib — staged: flash WHILE the body is still up (~90ms of
+      // anticipation), then the model hides as wave 1 of its real chunks
+      // flies, wave 2 lands ~50ms later. The flash is the cover for the
+      // body→pieces swap; the stagger reads as tearing, not teleport.
+      gibJuicy: (speed = 1): void => {
+        for (const m of models) {
+          const w = (m as unknown as { model?: THREE.Group }).model
+            ?.getWorldPosition(new THREE.Vector3()) ?? new THREE.Vector3();
+          const c = LAB_SCENE.worldToLocal(w.clone());
+          const cx = c.x, cy = c.y + 1, cz = c.z;
+          // Strobing flash — the Nuclear Throne black/white flicker; a
+          // steady glow doesn't cover the swap half as hard.
+          const flash = new THREE.Mesh(
+            new THREE.IcosahedronGeometry(0.4, 1),
+            new THREE.MeshBasicMaterial({ color: 0xFF_CC_66, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+          flash.position.set(cx, cy, cz);
+          const light = new THREE.PointLight(0xFF_AA_44, 60, 12);
+          light.position.set(cx, cy + 0.5, cz);
+          LAB_SCENE.add(flash, light);
+          flashes.push({ m: flash, l: light, t: elapsed, s: speed, j: true });
+          // Anticipation = flash + strobes only; squash read as weird
+          // on a skinned body (the rig fights scale edits mid-anim).
+          // Dust ring — communicates the burst's direction; dies fast.
+          const ring = new THREE.Mesh(
+            new THREE.RingGeometry(0.3, 1, 24),
+            new THREE.MeshBasicMaterial({ color: 0xBB_AA_88, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false }));
+          ring.rotation.x = -Math.PI / 2; ring.position.set(cx, 0.06, cz);
+          LAB_SCENE.add(ring);
+          decals.push({ m: ring, t: elapsed, s: speed, life: 0.4, grow: 6 });
+          // Scorch mark — the kill earns a spot on the ground for ~5s.
+          const scorch = new THREE.Mesh(
+            new THREE.CircleGeometry(0.9, 20),
+            new THREE.MeshBasicMaterial({ color: 0x11_11_11, transparent: true, opacity: 0.55, depthWrite: false }));
+          scorch.rotation.x = -Math.PI / 2; scorch.position.set(cx, 0.04, cz);
+          LAB_SCENE.add(scorch);
+          decals.push({ m: scorch, t: elapsed, s: speed, life: 5, grow: 0.4 });
+          let parts: { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] | undefined;
+          try { parts = m.deathParts() ?? undefined; } catch { /* generic chunks */ }
+          if (parts) {for (const p of parts) {LAB_SCENE.worldToLocal(p.pos);}}
+          const half = parts ? Math.ceil(parts.length / 2) : 0;
+          const mkDebris = (chunk?: { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[], count?: number): void => {
+            debris.push({ d: new PlayerDebris(LAB_SCENE, LAB_TERRAIN,
+              { x: cx, y: cy, z: cz }, new THREE.Color(0x55_AA_FF),
+              { parts: chunk, count, power: 0.45, impulseDir: new THREE.Vector3(0, 1, -0.3).normalize().multiplyScalar(0.15) }), t: elapsed, s: speed });
+          };
+          downAt.set(m, { t: elapsed, s: speed }); // respawn clock rides along
+          pending.push({ at: elapsed + 0.09 / speed, fn: (): void => {
+            m.setVisible(false); mkDebris(parts?.slice(0, half));
+          } });
+          pending.push({ at: elapsed + 0.14 / speed, fn: (): void => {
+            mkDebris(parts?.slice(half), parts ? undefined : 8);
+          } });
+        }
+      },
+      // Verlet ragdoll — same sim RemotePlayer.playDeath drives. The body
+      // stays on screen and flops under the point constraints.
+      ragdoll: (speed = 1): void => {
+        for (const m of models) {
+          const inner = (m as unknown as { model?: THREE.Object3D }).model;
+          if (!inner) {continue;}
+          const r = new VerletRagdoll(collectBones(inner), new THREE.Vector3(0, 1.2, -1).multiplyScalar(speed));
+          if (!r.valid) {continue;}
+          ragdolls.set(m, { r, t: elapsed, s: speed });
+          // Same drop as playDeath — the held gun detaches and arcs free.
+          const gun = (m as unknown as { gunCtl?: { group?: THREE.Object3D } }).gunCtl?.group;
+          if (gun) {gunDrops.push({ g: new GunDrop(gun, LAB_SCENE, r ? new THREE.Vector3(0, 1.2, -1).multiplyScalar(speed) : new THREE.Vector3()), s: speed });}
+        }
+      },
     };
     // Wire toggle rides along: gunlab calls this on every ▧ wire flip so
     // the class hit capsules show exactly while the tri overlay does.
     proxy.userData.colliderWire = (on: boolean): void => {
       for (const m of models) {m.setColliderVisible(on, true);}
     };
-    proxy.userData.disposeCreature = (): void => { for (const d of debris) {d.d.dispose();} for (const f of flashes) {f.m.geometry.dispose(); (f.m.material as THREE.Material).dispose();} for (const m of models) {m.dispose();} previewLive.tick = null; };
+    proxy.userData.disposeCreature = (): void => { pending.length = 0; for (const d of debris) {d.d.dispose();} for (const f of flashes) {f.m.geometry.dispose(); (f.m.material as THREE.Material).dispose();} for (const d of decals) {d.m.geometry.dispose(); (d.m.material as THREE.Material).dispose();} for (const m of models) {m.dispose();} previewLive.tick = null; };
     previewLive.tick = (dt): void => {
       elapsed += dt;
       for (const m of models) {m.update(dt);}
@@ -484,9 +561,31 @@ function mkLineup(entries: LineupEntry[], boundsX = 0, boundsW = 0, focusX = 0):
           flashes.splice(i, 1);
         } else {
           f.m.scale.setScalar(1 + k * 5);
-          (f.m.material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - k);
+          const o = 0.9 * (1 - k);
+          // Juicy strobes alternate bright/dim — the flicker IS the effect.
+          (f.m.material as THREE.MeshBasicMaterial).opacity = f.j ? o * (Math.floor(k * 6) % 2 === 0 ? 1 : 0.15) : o;
           f.l.intensity = 60 * (1 - k);
         }
+      }
+      for (let i = decals.length - 1; i >= 0; i -= 1) {
+        const d = decals[i]!;
+        const k = (elapsed - d.t) / (d.life / d.s);
+        if (k >= 1) {
+          LAB_SCENE.remove(d.m);
+          d.m.geometry.dispose(); (d.m.material as THREE.Material).dispose();
+          decals.splice(i, 1);
+        } else {
+          d.m.scale.setScalar(1 + k * d.grow);
+          (d.m.material as THREE.MeshBasicMaterial).opacity = (d.life < 1 ? 0.7 : 0.55) * (1 - k);
+        }
+      }
+      for (let i = pending.length - 1; i >= 0; i -= 1) {
+        if (elapsed >= pending[i]!.at) {pending[i]!.fn(); pending.splice(i, 1);}
+      }
+      for (const g of gunDrops) {g.g.step(dt * g.s, LAB_TERRAIN);}
+      for (const [m, e] of ragdolls) {
+        e.r.step(dt * e.s, LAB_TERRAIN); e.r.apply(); // after m.update so our writes win
+        if (e.r.still > 0.5) {ragdolls.delete(m);} // settled — freeze on the final pose
       }
       for (const [m, d] of downAt) {
         if (elapsed - d.t > 1.6 / d.s) {m.setVisible(true); m.forceAnimationState('idle'); downAt.delete(m);}

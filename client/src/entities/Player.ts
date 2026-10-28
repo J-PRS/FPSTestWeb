@@ -374,6 +374,9 @@ export class Player {
    *  previous one (dir=-1). The ring includes the ghost slot — cycling
    *  off either end drops back to free-fly, where LMB is respawn again. */
   deadSpectateCycle(dir: 1 | -1 = 1): void {
+    // A press during the corpse→killer blend is dropped, not queued: the
+    // switch only becomes legal once the lerp settles on the killer.
+    if (this.killcamBlendActive()) {return;}
     this.spectateAnchor = undefined; // a press is a manual override — kill-cam releases
     const ts = this.spectateTargets?.() ?? [];
     const aliveIdx = ts.map((t, i): number => (t.alive ? i : -1)).filter((i): boolean => i >= 0);
@@ -383,6 +386,15 @@ export class Player {
     const next = posNext < 0 || posNext >= aliveIdx.length ? -1 : (aliveIdx[posNext] ?? -1);
     if (this.deadSpectateIdx < 0 && next >= 0) { this.orbit.yaw = this.yaw; this.orbit.pitch = 0.25; }
     this.deadSpectateIdx = next;
+  }
+  /** Kill-cam still in its dwell→glide leg — the anchor lerp hasn't
+   *  reached the killer yet. Matches the camera block's anchor test so a
+   *  press lands exactly when the track phase starts. */
+  private killcamBlendActive(): boolean {
+    const anchor = this.spectateAnchor;
+    return this.isDead && Boolean(anchor) && !anchor!.isDead
+      && performance.now() < this.spectateAnchorUntil
+      && performance.now() - this.spectateAnchorStart < Player.KILLCAM_HOLD_MS + Player.KILLCAM_BLEND_MS;
   }
   private wasMidHeld = false;
   /** Body-model barrel tip in world space — the beam/tracer anchor when
@@ -513,7 +525,7 @@ export class Player {
     }
     // L's armed orbit fires on the first dead frame — the claim round-
     // tripped, death owns the cam, now point it at a teammate.
-    if (this.spectateOnDeath && this.isDead) {
+    if (this.spectateOnDeath && this.isDead && !this.killcamBlendActive()) {
       this.spectateOnDeath = false;
       this.deadSpectateCycle();
     }
@@ -531,9 +543,8 @@ export class Player {
       // the ghost drifts until the player happens to re-press them.
       // Clearing on entry means the cam only moves on a fresh press.
       this.input.clearAll();
-      // Death hides the own body — the alive-path setVisible below never
-      // runs once dead, so a third-person corpse would freeze mid-pose.
-      // main spawns the gib burst on this edge.
+      // Full-gib on the death edge: the body hides as its baked chunk
+      // geos fly — main spawns the burst via onLocalDeath.
       if (this.isDead) { this.model?.setVisible(false); this.onLocalDeath?.(); }
     }
     this.wasObserving = observing;

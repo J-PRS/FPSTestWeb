@@ -104,9 +104,10 @@ export function hurtLocal(b: TeamBots, dmg: number, fromPos: THREE.Vector3, atta
   }
 
 export function botKilledF(b: TeamBots, killerId: string, bot: GameBot, weapon?: number, air?: number): void {
-    // Same shatter as wire remotes — the corpse pops into team-colored
-    // shards instead of just shrinking away.
+    // Full-gib for every kill for now — the model hides as its baked
+    // chunk geos fly; respawn restores on the next life.
     const t = bot.team;
+    bot.hide();
     // Past ~120m real body parts read as generic shards anyway — take
     // the instanced path (mesh-path gibs are ~20 materials + matrix
     // writes each, the pdebris spike under throttle).

@@ -812,7 +812,7 @@ const DIR_BTNS: [label: string, v: [number, number]][] = [
   ['L', [0, -1]], ['·', [0, 0]], ['R', [0, 1]],
   ['BL', [-0.7, -0.7]], ['B', [-1, 0]], ['BR', [-0.7, 0.7]],
 ];
-interface AnimHook { set: (s: AnimationState) => void; dir?: (f: number, s: number) => void; weapon?: (wt: number) => void; team?: (t: string) => void; mark?: (t: string) => void; side?: (t: string) => void; gib?: (speed?: number) => void; bind?: () => void }
+interface AnimHook { set: (s: AnimationState) => void; dir?: (f: number, s: number) => void; weapon?: (wt: number) => void; team?: (t: string) => void; mark?: (t: string) => void; side?: (t: string) => void; gib?: (speed?: number) => void; gibJuicy?: (speed?: number) => void; ragdoll?: (speed?: number) => void; bind?: () => void }
 let animSel: AnimationState | '' = '';
 let bindHeld = false;
 
@@ -929,6 +929,20 @@ function paintAnimRail(): void {
       b.addEventListener('click', (): void => hook.gib!(s));
       animRail.append(b);
     }
+  }
+  if (hook.gibJuicy) {
+    for (const [label, s] of [['pulv juicy', 1], ['pulv juicy 0.1x', 0.1]] as const) {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.addEventListener('click', (): void => hook.gibJuicy!(s));
+      animRail.append(b);
+    }
+  }
+  if (hook.ragdoll) {
+    const b = document.createElement('button');
+    b.textContent = 'ragdoll';
+    b.addEventListener('click', (): void => hook.ragdoll!());
+    animRail.append(b);
   }
   if (!hook.dir) {return;}
   const drow = document.createElement('div');

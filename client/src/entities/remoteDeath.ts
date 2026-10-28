@@ -65,8 +65,10 @@ export function launchCorpse(s: CorpseState, explosionPos?: THREE.Vector3, explo
 
 const SHRINK_DURATION = 0.5;
 
-/** Advance corpse physics one frame. Returns the current shrink scale. */
-export function stepCorpse(s: CorpseState, dt: number, terrain: Terrain | null): void {
+/** Advance corpse physics one frame. `eye` = the body's eye-above-feet —
+ *  position.y is eye-space, so the floor it rests on is ground + eye.
+ *  Returns the current shrink scale. */
+export function stepCorpse(s: CorpseState, dt: number, terrain: Terrain | null, eye = 0): void {
   s.velocity.y += GRAVITY * dt;
   s.position.addScaledVector(s.velocity, dt);
 
@@ -80,7 +82,7 @@ export function stepCorpse(s: CorpseState, dt: number, terrain: Terrain | null):
   // getRenderedHeight, not the field: the corpse is pure visual and must
   // rest on the drawn chord — the level-0 mesh bridges gullies ABOVE the
   // bilinear field, so field-clamped corpses sink under the surface.
-  const groundY = terrain ? terrain.getRenderedHeight(s.position.x, s.position.z) : 0;
+  const groundY = (terrain ? terrain.getRenderedHeight(s.position.x, s.position.z) : 0) + eye;
   if (Number.isFinite(groundY) && s.position.y < groundY) {
     s.position.y = groundY;
     s.velocity.y = -s.velocity.y * BOUNCE_Y;

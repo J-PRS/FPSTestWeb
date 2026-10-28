@@ -666,7 +666,7 @@ bn += 1;
     if (pool?.length) {
       const p = pool[Math.floor(simRand() * pool.length)]!;
       const jx = (simRand() - 0.5) * 8, jz = (simRand() - 0.5) * 8;
-      return new THREE.Vector3(p.x + jx, floorAt(p.x + jx, p.z + jz) + EYE, p.z + jz);
+      return new THREE.Vector3(p.x + jx, Math.max(p.y, floorAt(p.x + jx, p.z + jz) + EYE), p.z + jz);
     }
     const player = this.deps.lazyPlayer();
     const a = simRand() * Math.PI * 2;

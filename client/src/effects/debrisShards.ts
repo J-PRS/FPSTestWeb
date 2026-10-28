@@ -45,7 +45,7 @@ export type DebrisPart = NonNullable<DebrisOptions['parts']>[number];
 // Smoke cadence — slower than the sparkle trail: puffs live ~0.6s so
 // ~7Hz per shard still keeps a continuous wake. Lives here (leaf
 // module) because debris.ts and debrisStep.ts both need it.
-export const SMOKE_INTERVAL = 0.14;
+export const SMOKE_INTERVAL = 0.08;
 
 /** Primitive family index for the instanced path — same shapes as the
  *  random branch below, but as a bucket id so shards can share one
