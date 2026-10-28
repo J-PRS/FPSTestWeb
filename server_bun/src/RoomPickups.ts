@@ -6,7 +6,7 @@
  * the touch — no client claim involved; the old 'bank' claim message
  * was removed entirely since this path covers every legit bank.
  */
-import type { Vec3, ServerMessage } from './types.ts';
+import type { Vec3, ServerMessage, PlayerState } from './types.ts';
 import { WORLD_MODEL, spawnPayload, verbPayload, rosterRow } from '../../shared/worldModel.ts';
 import type { Room } from './Room.ts';
 import { logger } from './logger.ts';
@@ -137,6 +137,21 @@ export class RoomPickups {
       return;
     }
     const players = this.room.players.getAllPlayers(); // live map — re-iterated, no roster copy per tick
+    // Per-tick swept-segment table — each player's path + reach factor is
+    // pickup-independent; the inner loop was recomputing both once per
+    // (pickup × player) pair.
+    const segs: { pl: PlayerState; ax: number; ay: number; az: number; abx: number; aby: number; abz: number; len2: number; mx: number; my: number; mz: number; half: number; radMul: number }[] = [];
+    for (const pl of players.values()) {
+      if (pl.isDead) {continue;}
+      const a = this.prevPos.get(pl.id) ?? pl.position;
+      const b = pl.position;
+      const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z;
+      const half = Math.sqrt(abx * abx + aby * aby + abz * abz) / 2;
+      segs.push({ pl, ax: a.x, ay: a.y, az: a.z, abx, aby, abz,
+        len2: abx * abx + aby * aby + abz * abz,
+        mx: a.x + abx / 2, my: a.y + aby / 2, mz: a.z + abz / 2,
+        half, radMul: perkMods(pl.perk).pickupRadius });
+    }
     for (const p of this.pickups.values()) {
       // Headhunt tokens ARE the score — decaying them starves the win
       // condition. Loot (gems/powerups) keeps the 60s decay.
@@ -189,29 +204,30 @@ export class RoomPickups {
         continue;
       }
       if (p.armT > 0) { p.armT -= dt; continue; } // still flying — no grabs
-      for (const pl of players.values()) {
-        if (pl.isDead) {continue;}
+      for (const s of segs) {
+        const pl = s.pl;
         if (p.lockUntil && pl.team === p.lockTeam && simNow() / 1000 < p.lockUntil) {continue;}
         // Score pickups (gems/tags/tokens) only exist in team modes;
         // powerups are grab-able by anyone alive in any mode.
         if ((p.kind === 'gem' || p.kind === 'tag' || p.kind === 'token') && !pl.team) {continue;}
+        const reach = (p.kind === 'token' ? TOKEN_R : PICKUP_R) * s.radMul;
+        // Bounding-sphere skip: the grab disc can't touch a segment whose
+        // midpoint is past reach + half-seg + the ±6y gate's slack.
+        const mdx = s.mx - p.pos.x, mdy = s.my - p.pos.y, mdz = s.mz - p.pos.z;
+        const bound = reach + s.half + 6;
+        if (mdx * mdx + mdy * mdy + mdz * mdz > bound * bound) {continue;}
         // Swept grab: closest point on this tick's path segment — a
         // point check lets a full-speed ski skip the ring entirely.
-        const a = this.prevPos.get(pl.id) ?? pl.position;
-        const b = pl.position;
-        const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z;
-        const len2 = abx * abx + aby * aby + abz * abz;
         let t = 0;
-        if (len2 > 0) {
+        if (s.len2 > 0) {
           t = Math.min(1, Math.max(0,
-            ((p.pos.x - a.x) * abx + (p.pos.y - a.y) * aby + (p.pos.z - a.z) * abz) / len2));
+            ((p.pos.x - s.ax) * s.abx + (p.pos.y - s.ay) * s.aby + (p.pos.z - s.az) * s.abz) / s.len2));
         }
-        const cx = a.x + abx * t, cy = a.y + aby * t, cz = a.z + abz * t;
+        const cx = s.ax + s.abx * t, cy = s.ay + s.aby * t, cz = s.az + s.abz * t;
         // Planar grab — a jump shouldn't put a nugget out of reach,
         // but a jetpack flyover isn't a pickup.
         if (Math.abs(cy - p.pos.y) > 6) {continue;}
         const dx = cx - p.pos.x, dz = cz - p.pos.z;
-        const reach = (p.kind === 'token' ? TOKEN_R : PICKUP_R) * perkMods(pl.perk).pickupRadius;
         if (dx * dx + dz * dz > reach * reach) {continue;}
         this.remove(p.id, pl.id);
         weaponStats.recordPickup(this.room.mode, p.kind, 'banked');

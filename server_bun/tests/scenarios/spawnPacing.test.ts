@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { freeze, mkRoom, seat } from './harness.ts';
-import type { ServerMessage } from '../../shared/protocol.ts';
+import type { ServerMessage } from '../../../shared/protocol.ts';
 import { MessageHandler } from '../../src/MessageHandler.ts';
 import { TickFanout, type FanoutMetrics } from '../../src/tickRecords.ts';
 import { wallNow } from '../../src/wallClock.ts';
