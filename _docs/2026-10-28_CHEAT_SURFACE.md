@@ -74,6 +74,39 @@ easier still: a userscript hooking page JS is a cheat, not a binary patch.
    join is indistinguishable by design. Web attestation is weak; don't
    rely on it.
 
+## Field evidence — the Tribes precedent (community history check)
+
+The genre's own history says aim-math cheats are weak here by DESIGN:
+
+- **"Workable aimbots don't exist in Tribes"** — long-standing T2
+  community consensus. The mechanism: projectiles inherit player
+  momentum AND travel slow, so a lead solution needs the victim's live
+  velocity AND their future trajectory — a ski-turn invalidates both.
+  Shadowex3's formulation: "even on a stationary target you'd need the
+  player's exact speed and direction at all times — aimbots exist in
+  hitscan games; Tribes isn't one." Our own chain matches: splash
+  forgives humans and punishes bots equally.
+- **What actually hurt T2** — not aimbots: `hm2` (a hack menu — mostly
+  outcome/rate exploits, and community consensus was it got *less*
+  effective outside Ultra/Renegades), texture replacements, fog-free
+  patches, bright-skin mods, and QoL scripts (autopoints). The damage
+  classes were visibility and rate exploits — exactly the layer our
+  server already owns.
+- **T:A's real cheats were outcome hacks** — the reported aimbot was a
+  sniper (hitscan — the one class where aim math DOES work) bundled with
+  rate exploits (60/s melee swings, 950,000 kph knockback). Those are
+  clamp-verdict bugs on rates/effects — our `moveJudge`, `forceSend`
+  windows, and `claimsAccepted=false` gates cover the same classes.
+- **Community enforcement worked** — T2 comp used demo review +
+  anti-cheat mods because the game was small and community-run. Our
+  `dualcheck` demo oracle is the same mechanism automated.
+
+So the honest rank stays: the strongest structural anti-cheat is the
+*genre choice itself* — slow inheriting projectiles + splash + skiing
+movement make perfect aim low-value. The two real remaining cheat
+surfaces (un-marked intel, sub-tolerance movement) are the ones the
+server-side gates already own.
+
 ## The rule
 
 The defenses live server-side — authority over outcomes, plausibility
