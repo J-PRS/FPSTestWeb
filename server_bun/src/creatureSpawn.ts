@@ -34,13 +34,20 @@ export interface SpawnHost {
   snapTarget(c: SimBeing): void;
 }
 
-export function alivePlayers(h: SpawnHost): { id: string; pos: SimVec }[] {
-  const out: { id: string; pos: SimVec }[] = [];
+export function alivePlayers(h: SpawnHost, out: { id: string; pos: SimVec }[] = []): { id: string; pos: SimVec }[] {
+  // Caller-owned scratch (same rule as ballSpawn.alivePlayers) — reused
+  // per tick instead of churning a roster of {id,pos} objects.
+  let n = 0;
   for (const [id, p] of h.players.getAllPlayers()) {
     // Firing decloaks — a cloaked shooter is fodder for the reveal
     // window, same rule the ball sim and bot senses apply.
-    if (!p.isDead && (!(p.status & STATUS.CLOAK) || shootRevealed(p.lastFireSim, simNow()))) {out.push({ id, pos: p.position });}
+    if (!p.isDead && (!(p.status & STATUS.CLOAK) || shootRevealed(p.lastFireSim, simNow()))) {
+      const e = out[n] ?? (out[n] = { id: '', pos: { x: 0, y: 0, z: 0 } });
+      e.id = id; e.pos = p.position;
+      n += 1;
+    }
   }
+  out.length = n;
   if (h.extraTargets) {out.push(...h.extraTargets());}
   return out;
 }

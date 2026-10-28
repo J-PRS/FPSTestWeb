@@ -37,19 +37,31 @@ function join(gs: GameServer, ws: FakeWs, id: string, room: string) {
   send(gs, ws, { type: 'join', playerId: id, room, mode: 'nuggets', perk: 'pathfinder', armorClass: 'light' });
 }
 
+// Minted rooms defer seating on terrainReady — poll it out. A cold field
+// cache makes the first room's load outlive a bare microtask flush, so
+// setTimeout(0) alone races the first assertion.
+const settle = async (gs: GameServer, room: string, id: string) => {
+  const r = rooms(gs).get(room);
+  for (let i = 0; i < 200 && !(r?.players.getPlayer(id)); i++) {
+    await new Promise(res => setTimeout(res, 1));
+  }
+};
+
 const rooms = (gs: GameServer) => (gs as unknown as { rooms: Map<string, { players: { getPlayer(id: string): unknown } }> }).rooms;
 
 describe('scenario: room hop', () => {
-  it('moves the player — kit, team seat, and pending loadout ride along', () => {
+  it('moves the player — kit, team seat, and pending loadout ride along', async () => {
     const gs = mkServer();
     const ws = fakeWs();
     gs.onOpen(asWs(ws));
     join(gs, ws, 'p1', 'r1');
+    await settle(gs, 'r1', 'p1');
     const from = rooms(gs).get('r1')!;
     const p1 = from.players.getPlayer('p1') as { pendingPerk?: string; armorClass?: string };
     p1.pendingPerk = 'sentinel';
 
     send(gs, ws, { type: 'switchRoom', room: 'r2' });
+    await settle(gs, 'r2', 'p1');
 
     expect(from.players.getPlayer('p1')).toBeUndefined();
     const to = rooms(gs).get('r2')!;
@@ -60,27 +72,31 @@ describe('scenario: room hop', () => {
     expect(ws.sent.some(m => (m as { type?: string }).type === 'gameState')).toBe(true);
   });
 
-  it('denies a hop while dead — respawn delay is not skippable', () => {
+  it('denies a hop while dead — respawn delay is not skippable', async () => {
     const gs = mkServer();
     const ws = fakeWs();
     gs.onOpen(asWs(ws));
     join(gs, ws, 'p1', 'r1');
+    await settle(gs, 'r1', 'p1');
     const from = rooms(gs).get('r1')!;
     (from.players.getPlayer('p1') as { isDead: boolean }).isDead = true;
 
     send(gs, ws, { type: 'switchRoom', room: 'r2' });
+    await new Promise(r => setTimeout(r, 0)); // denied hop needs no re-seat — just the Respawning warn
     expect(from.players.getPlayer('p1')).toBeDefined();
     expect(ws.sent.some(m => (m as { text?: string }).text?.includes('Respawning'))).toBe(true);
   });
 
-  it('throttles hop spam — second switch inside the cooldown is ignored', () => {
+  it('throttles hop spam — second switch inside the cooldown is ignored', async () => {
     const gs = mkServer();
     const ws = fakeWs();
     gs.onOpen(asWs(ws));
     join(gs, ws, 'p1', 'r1');
+    await settle(gs, 'r1', 'p1');
 
     send(gs, ws, { type: 'switchRoom', room: 'r2' });
     send(gs, ws, { type: 'switchRoom', room: 'r3' }); // inside 1.5s cooldown
+    await settle(gs, 'r2', 'p1');
     expect(rooms(gs).get('r2')!.players.getPlayer('p1')).toBeDefined();
     expect(rooms(gs).get('r3')).toBeUndefined();
   });

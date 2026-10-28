@@ -696,21 +696,27 @@ sh.gapStreak += 1;
       // onGround lies at seed/resync (setState writes it true even for
       // a mid-air drop) — the gate measures rest against the real
       // ground under it, or a dropped body never starts falling.
-      const surf = sh.bot && this.botSurface ? this.botSurface : this.surface;
-      const groundY = Math.max(
-        surf ? surf.getHeight(s.pos.x, s.pos.z) : s.pos.y,
-        this.structureTop(s.pos.x, s.pos.z),
-      );
       // A sunk shadow is NOT resting — pos.y - groundY goes negative,
       // which passed the upper bound alone, so a bot seeded under
       // terrain (respawn anchor, stale resync) parked forever instead
       // of stepping back onto the floor. 2Hz unbury was the only
       // rescue — that was the ~1s sink-then-pop cycle, 514 rescues in
       // one 15-minute soak.
-      const resting = s.onGround && s.pos.y - groundY > -0.5 && s.pos.y - groundY < sh.sim.eyeHeight + 0.5
+      // Cheap gates first: the heightfield+structureTop probe is the
+      // expensive term — on a moving roster it ran per-shadow-per-tick
+      // only to be discarded (hmChord showed up in the cpuprofile).
+      const resting = s.onGround
         && Math.abs(s.vel.x) + Math.abs(s.vel.y) + Math.abs(s.vel.z) < 0.05
         && !inp.forward && !inp.right && !inp.jumpHeld && !inp.jumpPressed && !inp.skiHeld && !inp.jetHeld
         && (!edges || edges.every((e): boolean => !e.input.forward && !e.input.right && !e.input.jumpHeld && !e.input.jumpPressed && !e.input.skiHeld && !e.input.jetHeld))
+        && ((): boolean => {
+          const surf = sh.bot && this.botSurface ? this.botSurface : this.surface;
+          const groundY = Math.max(
+            surf ? surf.getHeight(s.pos.x, s.pos.z) : s.pos.y,
+            this.structureTop(s.pos.x, s.pos.z),
+          );
+          return s.pos.y - groundY > -0.5 && s.pos.y - groundY < sh.sim.eyeHeight + 0.5;
+        })()
         && (!bodiesNear || !bodiesNear(s.pos.x, s.pos.z).some((b): boolean => b.id !== pid && Math.abs(b.x - s.pos.x) < 2.5 && Math.abs(b.z - s.pos.z) < 2.5));
       if (!resting) {
         let landing = 0;

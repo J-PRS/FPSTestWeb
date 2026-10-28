@@ -199,6 +199,8 @@ export class BallSim {
    *  nature — hits don't tick-loop). */
   private pendingSegs: Uint8Array[] = [];
   private inStep = false;
+  /** Caller-owned alive-list scratch — read only inside step(). */
+  private aliveScratch: { id: string; pos: SimVec }[] = [];
 
   private segment(b: SimBall, kind: SegmentKind): void {
     this.resyncAcc.set(b.id, 0);
@@ -321,7 +323,7 @@ export class BallSim {
     this.tickAcc = Math.min(this.tickAcc, BallSim.TICK_CATCHUP_CAP);
     if (this.tickAcc < TICK_DT) {return;}
 
-    const alive = alivePlayers(this.players);
+    const alive = alivePlayers(this.players, this.aliveScratch);
     if (alive.length === 0) { this.tickAcc = 0; return; } // room empty — freeze the ecosystem
 
     // Population: base + per-player, spawn drip-fed one per tick fire

@@ -225,8 +225,10 @@ try {
 } finally {
   if (CPUPROF && !ATTACH) {
     try {
-      await fetch(`http://127.0.0.1:${PORT}/dev/shutdown`, { signal: AbortSignal.timeout(3000) });
-      await sleep(4000); // flush window
+      await fetch(`http://127.0.0.1:${PORT}/dev/shutdown?key=${KEY}`, { signal: AbortSignal.timeout(3000) });
+      // Wait for actual exit — the cpuprofile flushes on process end, and a
+      // fixed window raced killAll below (observed: boot-only profiles).
+      for (let i = 0; i < 75 && srv && srv.exitCode === null; i++) {await sleep(200);}
       const profs = readdirSync('server_bun').filter(f => f.endsWith('.cpuprofile')).sort();
       log(`profile: server_bun/${profs[profs.length - 1]}`);
     } catch { /* shutdown raced the kill below — non-fatal */ }

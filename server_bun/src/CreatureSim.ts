@@ -142,8 +142,11 @@ export class CreatureSim {
   }
 
   private alivePlayers(): { id: string; pos: SimVec }[] {
-    return alivePlayersOf(this);
+    return alivePlayersOf(this, this.aliveScratch);
   }
+
+  /** Caller-owned alive-list scratch — read only inside step(). */
+  private aliveScratch: { id: string; pos: SimVec }[] = [];
 
   private nearestPlayer(c: SimBeing, alive: { id: string; pos: SimVec }[]): { id: string; pos: SimVec } | null {
     return nearestPlayer(c, alive);

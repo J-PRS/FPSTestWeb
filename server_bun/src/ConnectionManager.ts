@@ -154,6 +154,28 @@ export class ConnectionManager {
    *  holds frames until the join burst clears, not just on first seat. */
   private tickDrained: Set<string> = new Set();
 
+  /** Inbound flood control (Bun 1.4 ws.pause): a tripped rate-limit
+   *  socket stops dispatching entirely — the kernel buffers its frames,
+   *  zero parse/validate cost for the window. resume() fires on the
+   *  live check only; a socket that died mid-pause is simply gone. */
+  private floodTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  floodPause(playerId: string, ms: number): void {
+    const ws = this.connections.get(playerId);
+    if (!ws) {return;}
+    // Bun ≥1.4 runtime API — the installed bun-types predates it, and
+    // adapters/test fakes may not carry it at all.
+    const sock = ws as unknown as { pause?: () => void; resume?: () => void };
+    const resume = sock.resume?.bind(sock);
+    if (!sock.pause || !resume) {return;}
+    sock.pause();
+    const prev = this.floodTimers.get(playerId);
+    if (prev) {clearTimeout(prev);}
+    this.floodTimers.set(playerId, setTimeout((): void => {
+      this.floodTimers.delete(playerId);
+      if (ws.readyState === 1) {resume();}
+    }, ms).unref());
+  }
+
   // Offset cursor (Socket.IO connection-state-recovery shape): every
   // reliable JSON frame carries a room-scoped `ev` seq, and the last N
   // frames sit in a journal. A reclaim presents the last seq it processed
@@ -351,6 +373,8 @@ export class ConnectionManager {
       this.heldPhase.delete(playerId);
       this.outbox.delete(playerId);
       this.frameArenas.delete(playerId);
+      const ft = this.floodTimers.get(playerId);
+      if (ft) {clearTimeout(ft); this.floodTimers.delete(playerId);}
       if (this.topic && typeof ws.unsubscribe === 'function') {ws.unsubscribe(this.topic);}
       wireClose(playerId); // drop the /wire conn entry — ghosts otherwise list forever
       ConnectionManager.onUnreg?.(playerId);

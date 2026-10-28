@@ -765,15 +765,26 @@ p.lastSeq += 1; // tick stream keys staleness off seq
    *  intents: fire recency arrives via noteFire from the claim path,
    *  and a live human always counts as having a destination (coverage
    *  stall applies — standing around is the thing being measured). */
+  /** Rotates which quarter of humans meters this tick — the sheep meter
+   *  is a slow windowed accumulator (rates all scale on s.dt), so 5Hz
+   *  per-human cadence + dt×4 is identical math at 1/4 the scan cost.
+   *  The humans×players foe scan was a named cpuprofile line. */
+  private meterPhase = 0;
+  private static readonly METER_DIV = 4;
+
   private meterHumans(dt: number): void {
     const now = simNow();
     const players = this.room.players.getAllPlayers();
+    this.meterPhase = (this.meterPhase + 1) % ServerBots.METER_DIV;
+    const phase = this.meterPhase, sdt = dt * ServerBots.METER_DIV;
+    let i = 0;
     for (const [id, p] of players) {
       if (p.isBot || p.isDead) {continue;}
       // A closed socket freezes the last position but the player is
       // gone — charging sheep to a corpse-of-a-session just spams
       // maxed warns through the grace window.
       if (wallNow() - p.lastSeen > 2000) {continue;} // lastSeen is wall domain
+      if ((i++ & (ServerBots.METER_DIV - 1)) !== phase) {continue;}
       const sh = this.room.moveSim.simState(id);
       const ground = Math.max(
         this.room.moveSim.structureTop(p.position.x, p.position.z),
@@ -785,7 +796,7 @@ p.lastSeq += 1; // tick stream keys staleness off seq
         airborne: sh ? !sh.onGround : Math.abs(p.velocity.y) > 2,
         hasDest: true,
         foe,
-        dt,
+        dt: sdt,
         height: Math.max(0, p.position.y - classCapsule(p.armorClass).eye - ground),
       }, now);
     }
@@ -797,12 +808,14 @@ p.lastSeq += 1; // tick stream keys staleness off seq
    *  it either), so facing gets the same cone gate. */
   private humanFoeNear(id: string, p: { position: Vec3; rotation: { yaw: number }; team?: string }, players: Map<string, { position: Vec3; team?: string; isDead?: boolean }>): boolean {
     const fx = Math.sin(p.rotation.yaw), fz = Math.cos(p.rotation.yaw);
+    // Squared-compare first — the hypot pair was the per-call cost on
+    // every out-of-range body in the cpuprofile (humans × players).
+    const br2 = BRAWL_RANGE * BRAWL_RANGE;
     for (const [qid, q] of players) {
       if (qid === id || q.isDead) {continue;}
       if (q.team && p.team && q.team === p.team) {continue;}
-      const dx = q.position.x - p.position.x, dz = q.position.z - p.position.z;
-      const d = Math.hypot(dx, q.position.y - p.position.y, dz);
-      if (d >= BRAWL_RANGE) {continue;}
+      const dx = q.position.x - p.position.x, dy = q.position.y - p.position.y, dz = q.position.z - p.position.z;
+      if (dx * dx + dy * dy + dz * dz >= br2) {continue;}
       const gd = Math.hypot(dx, dz) || 1;
       if ((dx * fx + dz * fz) / gd < FOE_CONE_MIN_DOT) {continue;}
       return true;

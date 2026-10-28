@@ -67,7 +67,13 @@ export class RoomSwitcher {
     from.messages.onPlayerDisconnected(playerId);
     this.host.removePlayerCompletely(from, playerId, 'roomSwitch');
 
-    this.seatOnReady(to, ws, playerId, prev?.perk ?? 'none', prev?.armorClass ?? 'medium', prev?.transport, prev?.name);
+    this.seatOnReady(to, ws, playerId, prev?.perk ?? 'none', prev?.armorClass ?? 'medium', prev?.transport, prev?.name,
+      // Banked respawn edits ride the hop — a hop is a seat transfer, not
+      // a respawn, so a queued class/perk swap must survive it or the
+      // client's declared next-life loadout silently vanishes. Applied
+      // INSIDE the deferred seat: a terrain-loading room has no player
+      // record until fire() runs, so patching it here dropped the kit.
+      prev ? { pendingClass: prev.pendingClass, pendingPerk: prev.pendingPerk } as const : undefined);
     // Same gate check the join path sends — a host hopping into a
     // pre-existing room with different sim toggles must hear it.
     const req = raw as { noBalls?: boolean; noCreatures?: boolean };
@@ -78,16 +84,6 @@ export class RoomSwitcher {
         to.noCreatures === wantNoCreatures ? '' : `critters ${to.noCreatures ? 'OFF' : 'ON'}`,
       ].filter(Boolean).join(', ');
       to.sendToPlayer(playerId, { type: 'serverWarn', text: `room '${to.name}' already existed — your settings overridden (${diffs})` });
-    }
-    // Banked respawn edits ride the hop too — a hop is a seat transfer,
-    // not a respawn, so a queued class/perk swap must survive it or the
-    // client's declared next-life loadout silently vanishes.
-    if (prev) {
-      const reseated = to.players.getPlayer(playerId);
-      if (reseated) {
-        reseated.pendingClass = prev.pendingClass;
-        reseated.pendingPerk = prev.pendingPerk;
-      }
     }
     logger.info('Player switched rooms', { playerId, from: from.name, to: to.name });
   }
@@ -129,12 +125,13 @@ export class RoomSwitcher {
 
   /** The join tail a room hop shares with SessionManager's accept path —
    *  token, roster entry, socket registration, handshake replay. */
-  private seatPlayer(room: Room, ws: ServerWebSocket<WebSocketData>, playerId: string, perk: string, armorClass: string, transport?: TransportKind, name?: string): void {
+  private seatPlayer(room: Room, ws: ServerWebSocket<WebSocketData>, playerId: string, perk: string, armorClass: string, transport?: TransportKind, name?: string, pending?: Pick<PlayerState, 'pendingClass' | 'pendingPerk'>): void {
     const sessionToken = this.host.sessions.tokenFor(playerId);
     room.sessionTokens.set(playerId, sessionToken);
     const joined = room.players.addPlayer(playerId, room.nextTeam(), perk, armorClass);
     joined.name = name;
     if (transport) {joined.transport = transport;}
+    if (pending) {joined.pendingClass = pending.pendingClass; joined.pendingPerk = pending.pendingPerk;}
     // Room hops don't stop the client's stream: reports emitted in the
     // OLD room keep arriving for ~1 RTT and would poison the fresh
     // anchor (first straggler seats lastPosCheckPos, the post-hop spawn
@@ -160,11 +157,11 @@ export class RoomSwitcher {
    *  (same gate as SessionManager's join deferral). Intent is set first:
    *  a second hop mid-wait, or a stale deferred join in another room,
    *  dies on the roomOf check instead of winning a registration race. */
-  private seatOnReady(room: Room, ws: ServerWebSocket<WebSocketData>, playerId: string, perk: string, armorClass: string, transport?: TransportKind, name?: string): void {
+  private seatOnReady(room: Room, ws: ServerWebSocket<WebSocketData>, playerId: string, perk: string, armorClass: string, transport?: TransportKind, name?: string, pending?: Pick<PlayerState, 'pendingClass' | 'pendingPerk'>): void {
     if (!this.host.registry.retarget(playerId, room.name)) {
       this.host.registry.begin(playerId, room.name);
     }
-    const fire = (): void => this.seatPlayer(room, ws, playerId, perk, armorClass, transport, name);
+    const fire = (): void => this.seatPlayer(room, ws, playerId, perk, armorClass, transport, name, pending);
     if (room.terrainReady) {
       void room.terrainReady.then((): void => {
         if (ws.readyState === 1 && this.host.registry.roomOf(playerId) === room.name) {fire();}

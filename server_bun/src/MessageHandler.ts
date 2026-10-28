@@ -132,6 +132,10 @@ export interface RoomInfo {
   /** tickNack gate — false while the client's join burst still holds
    *  its tick frames (seq gaps there are by design, not loss). */
   drainedForTicks?: (playerId: string) => boolean;
+  /** Flood-control breach → pause the socket's inbound dispatch for ms.
+   *  A tripped socket stops paying parse+validate per flooded frame;
+   *  Bun 1.4 ws.pause()/resume() closes the no-inbound-backpressure gap. */
+  floodPause?: (playerId: string, ms: number) => void;
   /** Deploy claim sink — Room.deployables.handleDeploy. The return is
    *  the claim verdict the claimant sees in its claimAck. */
   onDeploy?: (playerId: string, kind: string, pos: Vec3, vel?: Vec3) => ClaimVerdict;
@@ -710,6 +714,9 @@ export class MessageHandler {
       if (verdict === 'tripped') {
         logger.warn(`Flood control tripped`, { playerId, messageType: msg.type });
         this.sendToPlayer(playerId, { type: 'serverWarn', text: `flood control: ${msg.type} muted` });
+        // A tripping socket keeps paying full parse+validate per frame
+        // on drops — pause stops inbound dispatch entirely for a second.
+        this.roomInfo.floodPause?.(playerId, 1000);
       } else if (!lastWarn || now - lastWarn > this.RATE_WARN_COOLDOWN_MS) {
         this.rateLimitWarnings.set(warnKey, now);
         logger.warn(`Rate limit exceeded`, { playerId, messageType: msg.type });

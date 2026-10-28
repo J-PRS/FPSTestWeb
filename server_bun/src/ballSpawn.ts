@@ -26,13 +26,21 @@ export function rollVariant(mix: readonly number[] = DEFAULT_MIX, rng: () => num
   return 0;
 }
 
-export function alivePlayers(players: PlayerManager): { id: string; pos: SimVec }[] {
-  const out: { id: string; pos: SimVec }[] = [];
+export function alivePlayers(players: PlayerManager, out: { id: string; pos: SimVec }[] = []): { id: string; pos: SimVec }[] {
+  // `out` scratch is owned by the caller and read only inside the step —
+  // reusing it kills a full-roster object churn per sim tick (the
+  // {id,pos} allocs were the visible cost in the cpuprofile).
+  let n = 0;
   for (const [id, p] of players.getAllPlayers()) {
     // Firing decloaks: a shot stamps the reveal window, so a cloaked
     // player who just shot is fodder again like everyone else.
-    if (!p.isDead && (!(p.status & STATUS.CLOAK) || shootRevealed(p.lastFireSim, simNow()))) {out.push({ id, pos: p.position });}
+    if (!p.isDead && (!(p.status & STATUS.CLOAK) || shootRevealed(p.lastFireSim, simNow()))) {
+      const e = out[n] ?? (out[n] = { id: '', pos: { x: 0, y: 0, z: 0 } });
+      e.id = id; e.pos = p.position;
+      n += 1;
+    }
   }
+  out.length = n;
   return out;
 }
 

@@ -1034,6 +1034,7 @@ export class Room {
       },
       readySpawn: (pid): void => this.releaseReady(pid),
       admitQueue: (pid, ids): void => { this.admitPending.set(pid, ids); },
+      floodPause: (pid, ms): void => this.connections.floodPause(pid, ms),
       fireProjectile: (pid, wt, origin, dir, vel, shotId, lagS): string | null => this.projectiles.spawn(pid, wt, origin, dir, vel, shotId, lagS),
       beamSweep: (pid, muzzle, dir, range): BeamContact | null => this.beamSweep(pid, muzzle, dir, range),
       ballHit: (pid, id, dmg) => this.ballSim.handleHit(pid, id, dmg),
