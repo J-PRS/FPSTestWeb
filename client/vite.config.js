@@ -175,13 +175,40 @@ const stripOldAssets = {
   },
 };
 
+// Build-only prune: gunlab/previews still load these in dev from public/,
+// but live class selection is scout/brawler/brute, which need none of them.
+const LIVE_UNUSED = [
+  'models/class_light.glb', 'models/class_heavy.glb', 'models/class_cyber.glb', 'models/class_medium.glb',
+  'models/class_juggernaut.glb', 'models/class_juggernaut_bld.glb', 'models/class_juggernaut_og.glb',
+  'models/class_juggernaut_brick.glb', 'models/class_juggernaut_wedge.glb', 'models/class_juggernaut_kit.glb',
+  'models/class_juggernaut_scp.glb', 'models/class_juggernaut_shell.glb', 'models/class_light_plate.glb',
+  'models/class_light_brick.glb', 'models/class_light_shell.glb', 'models/class_light_scp.glb',
+  'models/class_dreadnought.glb', 'models/knight.glb', 'models/mannequin.glb', 'models/mannequin_opt.glb',
+  'models/mannequin_lod1.glb', 'models/mannequin2.glb', 'models/RobotExpressive.glb', 'models/robot-anims.glb', 'models/robot-anims2.glb',
+  'models/kevdev-anims.glb', 'anims/robot.glb', 'anims/cybersoldier.glb', 'anims/vexa.glb', 'anims/polyart.glb',
+  'anims/scifisoldier.glb', 'anims/knight.glb', 'anims/mannequin.glb',
+];
+const pruneLiveUnused = {
+  name: 'prune-live-unused',
+  apply: 'build',
+  closeBundle() {
+    const assets = fileURLToPath(new URL('dist/assets', import.meta.url));
+    for (const f of LIVE_UNUSED) {rmSync(join(assets, f), { force: true });}
+    for (const d of ['anims', 'models']) {
+      const p = join(assets, d);
+      if (existsSync(p) && readdirSync(p).length === 0) {rmSync(p, { recursive: true, force: true });}
+    }
+    rmSync(fileURLToPath(new URL('dist/gallery', import.meta.url)), { recursive: true, force: true });
+  },
+};
+
 export default defineConfig(({ mode }) => ({
   // `vite --mode noreload` (npm run dev:noreload): agentic edit batches were
   // nuking in-world state on every file save. HMR socket stays alive but the
   // stale-notify plugin SWALLOWS every update and instead pushes a custom
   // event — the client counts changed files in a corner badge.
   // Manual Ctrl+R when you want the new code.
-  plugins: [shotSaver, gunSheet, stripOldAssets, mapRelief, distSize, {
+  plugins: [shotSaver, gunSheet, stripOldAssets, pruneLiveUnused, mapRelief, distSize, {
     name: 'stale-probe',
     // vite preview: the built client can't hear a watcher, so serve
     // 'how stale is this bundle' — mtime scan: any source file newer

@@ -68,6 +68,10 @@ footer{margin-top:18px;display:flex;justify-content:space-between;font:11px ui-m
 </tr></thead><tbody id="rows">
 <tr><td colspan="4" class="empty">connecting…</td></tr>
 </tbody></table>
+<div id="online-players" style="margin-top:18px;display:none">
+  <div style="font:600 10px ui-monospace,monospace;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);margin-bottom:8px">online players</div>
+  <div id="player-list" style="font:13px ui-monospace,monospace;color:var(--bright);line-height:1.6">—</div>
+</div>
 <footer><span id="stamp">—</span><span id="ver">—</span></footer>
 </div>
 <script>
@@ -85,7 +89,7 @@ async function tick(){
   const[rooms,h]=await Promise.all([
    (await fetch(API+'/rooms',{cache:'no-store'})).json(),
    (await fetch(API+'/health',{cache:'no-store'})).json()]);
-  document.getElementById('host').textContent=location.protocol.startsWith('http')?API.replace(/^https?:\/\//,''):'';
+   document.getElementById('host').textContent='v'+(h.version||'?');
   // ONLINE = seated humans (sockets) — h.players counts bots too.
   // PLAYING = a position claim in the last 90s — a parked hidden-tab
   // client keeps its seat but doesn't read as "someone online".
@@ -108,8 +112,11 @@ async function tick(){
       (r.spectators?`<small>${r.spectators} spec</small>`:'')+'</td></tr>';
   }).join(''):'<tr><td colspan="4" class="empty">no live rooms — the first join mints one</td></tr>';
   if(html!==lastRowsHtml){document.getElementById('rows').innerHTML=html;lastRowsHtml=html;}
+  const seen=new Set();const humans=[];
+  for(const r of sorted){for(const n of (r.names||[])){if(!n||!n.id||String(n.id).startsWith('BOT-')){continue;}if(seen.has(n.id)){continue;}seen.add(n.id);humans.push(esc(n.name||n.id));}}
+  const box=document.getElementById('online-players');if(box){box.style.display=humans.length?'':'none';}const pl=document.getElementById('player-list');if(pl&&humans.length){pl.textContent=humans.join(', ');}
   document.getElementById('stamp').textContent='updated '+new Date().toLocaleTimeString();
-  document.getElementById('ver').textContent='v'+(h.version||'?')+' · '+(h.build||'?')+' · '+(h.tickRate||'?')+'hz';
+   document.getElementById('ver').textContent=(h.build||'?')+' · '+(h.tickRate||'?')+'hz';
  }catch(e){
   document.getElementById('rows').innerHTML='<tr><td colspan="4" class="empty">server unreachable</td></tr>';
  }finally{}

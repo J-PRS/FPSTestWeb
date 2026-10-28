@@ -8,6 +8,7 @@ import { RibbonTrail } from './RibbonTrail.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { registerDiag, markProbe } from '../core/fxDiag.js';
 import { acquireBatch, retireBatch, type BatchMap } from '../core/batchPool.js';
+import { settings } from '../core/settings.js';
 
 const MESH_GEO_CACHE = new Map<string, THREE.BufferGeometry>();
 // Projectile materials are never mutated after construction — share per color
@@ -333,6 +334,8 @@ function updateGlowMesh(
 ): void {
   const { age, hitRadius, fuseAge } = frame;
   glowMesh.position.copy(pos);
+  // WAKE toggle off: zero the instanced slot — scale is rewritten per frame anyway.
+  if (config.glowShape === 'wakeCone' && !settings.get('fps-wake')) {glowMesh.scale.setScalar(0); return;}
   // Glow scales with hitRadius (wake hitbox) so they always match
   const glowMultiplier = config.glowScale ?? 1;
   // Glow always ramps in at spawn even when the body opts out — a

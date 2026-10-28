@@ -229,14 +229,14 @@ frag.show(retMsg);
     if (f.home) {
       marker.home.set(f.home.x, f.home.y, f.home.z);
       marker.homeKnown = true;
-    } else if (f.state === 'home') {
+    } else if (!marker.homeKnown) {
+      // No wire home ever arrives (or it raced past) — plant the stand at
+      // the flag's reported spot so the socket reads instead of hiding.
       marker.home.set(f.pos.x, f.pos.y, f.pos.z);
       marker.homeKnown = true;
     }
-    if (marker.homeKnown) {
-      vis.stand.visible = true;
-      vis.stand.position.copy(marker.home);
-    }
+    vis.stand.visible = true;
+    vis.stand.position.copy(marker.home);
     marker.wirePos.set(f.pos.x, f.pos.y, f.pos.z);
     // The wire's home is ground level; the pole seats ON the platform
     // deck — tickFlagMarkers lerps to wirePos, so lift the target.

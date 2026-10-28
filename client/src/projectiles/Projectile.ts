@@ -26,6 +26,11 @@ import { ProjStuck } from './projStuck.js';
 const _rayDir = new THREE.Vector3();
 // Rope dart: shared geo/mat + scratch — one taut rod per live dart, so a
 // per-dart allocation would be churn for a 5-vert cylinder.
+// Visual only: once attached the rope may shorten but never stretch; a longer
+// span detaches the thrower end and reels it back toward the anchor.
+const ROPE_SNAP_REEL_SPEED = 180;
+const ROPE_REEL_ACCEL = 900;
+const ROPE_REEL_MIN_S = 0.12;
 const _ropeGeo = new THREE.CylinderGeometry(0.05, 0.05, 1, 5, 1, true);
 const _ropeMat = new THREE.MeshBasicMaterial({ color: 0x1A_14_0C });
 const _ropeV = new THREE.Vector3();
@@ -459,6 +464,9 @@ export class Projectile {
     if (this.config.gravity) {this.pos.y += 0.5 * GRAVITY * srvAge * srvAge;}
     this.prevPos.copy(this.pos);
     this.vel.copy(Projectile._reanchorV);
+    // Clock sync: the splice trusts the authority's spawn state verbatim —
+    // the age rides with it or the two timelines diverge ~transit every bind.
+    this.age = srvAge;
     this.computeRendered();
     this.renderOffset.add(Projectile._reanchorOld).sub(this.rendered);
     this.computeRendered();
@@ -688,8 +696,19 @@ export class Projectile {
   ropeTo: THREE.Vector3 | null = null;
   /** Remaining reel window — the rope stays drawn through the pull. */
   ropeT = 0;
+  /** Attached rope's shrink-only visual length (-1 = not yet measured). */
+  private ropeLen = -1;
+  /** Connect hold: the line stays attached to its anchor for the yank window. */
+  private ropeHold = false;
+  /** Finish reel: the free end walks from ropeFree back to the thrower. */
+  private ropeRecall = false;
+  private readonly ropeFree = new THREE.Vector3();
+  private readonly ropeFromPos = new THREE.Vector3();
+  private ropeMax = 0;
+  private ropeReelV = 0;
+  private ropeReelT = 0;
   /** True while the rope should draw: live flight OR inside the reel. */
-  get ropeActive(): boolean { return !this.exploded || this.ropeT > 0; }
+  get ropeActive(): boolean { return !this.exploded || this.ropeHold || this.ropeRecall; }
 
   /** Rope dart: caller passes the thrower's CURRENT chest pos each frame
    *  (local player for own darts, replica pos for remote throws). The
@@ -699,12 +718,34 @@ export class Projectile {
       this.ropeMesh = new THREE.Mesh(_ropeGeo, _ropeMat);
       this.scene.add(this.ropeMesh);
     }
-    _ropeV.subVectors(this.ropeTo ?? this.rendered, from);
+    this.ropeFromPos.copy(from);
+    let a: THREE.Vector3 = from;
+    let b: THREE.Vector3 = this.rendered;
+    if (this.ropeRecall) {
+      b = this.ropeFree;
+    } else if (this.ropeHold) {
+      a = this.ropeTo!;
+      b = from;
+      _ropeV.subVectors(from, a);
+      const len = _ropeV.length();
+      this.ropeMax = Math.max(this.ropeMax, len);
+      if (this.ropeLen < 0 || len <= this.ropeLen + 0.02) {this.ropeLen = len;}
+      else {
+        // Span would grow past the taut length: the line stops being attached
+        // and reels back from its outermost point, not from where it sits now.
+        this.ropeFree.copy(a).addScaledVector(_ropeV.divideScalar(len), this.ropeMax);
+        this.ropeReelV = 0; this.ropeReelT = 0;
+        this.ropeHold = false; this.ropeRecall = true;
+        a = from; b = this.ropeFree;
+      }
+    }
+    _ropeV.subVectors(b, a);
     const len = _ropeV.length();
     if (len < 0.01) { this.ropeMesh.visible = false; return; }
     this.ropeMesh.visible = true;
-    this.ropeMesh.position.copy(from).addScaledVector(_ropeV, 0.5);
-    this.ropeMesh.quaternion.setFromUnitVectors(_ropeUp, _ropeV.normalize());
+    _ropeV.divideScalar(len);
+    this.ropeMesh.position.copy(a).addScaledVector(_ropeV, len * 0.5);
+    this.ropeMesh.quaternion.setFromUnitVectors(_ropeUp, _ropeV);
     this.ropeMesh.scale.set(1, len, 1);
   }
 
@@ -715,24 +756,42 @@ export class Projectile {
    *  the shell alive through its reel window the same way. */
   private settled(): boolean {
     return this.exploded && this.trail.empty && this.ribbons.every((r): boolean => r.done)
-      && this.ropeT <= 0 && (!this.glue.embedded || this.projectileRemoved);
+      && !this.ropeHold && !this.ropeRecall && (!this.glue.embedded || this.projectileRemoved);
   }
 
   /** Reel window countdown — the rope outlives the dart by design. */
   private tickRope(dt: number): void {
-    if (this.ropeT <= 0) {return;}
-    this.ropeT -= dt;
-    if (this.ropeT <= 0) { this.ropeTo = null; this.hideRope(); }
+    if (this.ropeHold) {
+      this.ropeT -= dt;
+      if (this.ropeT <= 0) {this.startRecall();}
+    } else if (this.ropeRecall) {
+      _ropeV.subVectors(this.ropeFromPos, this.ropeFree);
+      const d = _ropeV.length();
+      this.ropeReelV = Math.min(ROPE_SNAP_REEL_SPEED, this.ropeReelV + ROPE_REEL_ACCEL * dt);
+      const step = this.ropeReelV * dt;
+      this.ropeReelT += dt;
+      if (d > step) {this.ropeFree.addScaledVector(_ropeV, step / d);}
+      else if (this.ropeReelT >= ROPE_REEL_MIN_S) {this.ropeRecall = false; this.ropeTo = null; this.hideRope();}
+      else {this.ropeFree.copy(this.ropeFromPos);}
+    }
+  }
+
+  private startRecall(): void {
+    this.ropeHold = false; this.ropeRecall = true; this.ropeReelV = 0; this.ropeReelT = 0;
+    this.ropeFree.copy(this.ropeTo ?? this.pos);
   }
 
   explode(): void {
     if (this.exploded) {return;}
     this.exploded = true;
-    // A real connect keeps the rope up through the reel — the moving end
-    // sliding along the line IS the pull animation. Whiffs snap dead.
-    if (this.config.hook && (this.hitPlayerId || this.hitPointValid)) {
+    // A connect holds the line on its anchor for the yank window, then every
+    // hook finishes the same way: the free end reels back to the thrower.
+    if (this.config.hook) {
+      const hit = this.hitPlayerId || this.hitPointValid;
       this.ropeTo = (this.hitPlayerId ? this.pos : this.hitPoint).clone();
-      this.ropeT = 0.55;
+      this.ropeLen = -1; this.ropeMax = 0;
+      if (hit) {this.ropeHold = true; this.ropeT = 0.55;}
+      else {this.startRecall();}
     } else {this.hideRope();}
     const hook = this.onExploded;
     this.onExploded = null;

@@ -24,13 +24,13 @@ export class LatencyLink {
 
   constructor(private opts: LatencyOpts, private rand: () => number = Math.random) {}
 
-  send(socket: { send(data: string): unknown; readyState: number }, data: string, steady = false): void {
+  send(socket: { send(data: string | Uint8Array): unknown; readyState: number }, data: string | Uint8Array, steady = false): void {
     if (this.rand() < this.opts.lossRate) { this.dropped++; return; }
     this.sent++;
     const delay = this.opts.pingMs / 2 + (steady ? 0 : this.rand() * this.opts.jitterMs);
-    if (delay <= 0) { if (socket.readyState === 1) socket.send(data); return; }
+    if (delay <= 0) { if (socket.readyState === 1) {socket.send(data);} return; }
     this.timers.push(setTimeout(() => {
-      if (socket.readyState === 1) socket.send(data);
+      if (socket.readyState === 1) {socket.send(data);}
     }, delay));
   }
 
@@ -39,7 +39,7 @@ export class LatencyLink {
 
   /** Deliver nothing else — pending sends are abandoned with the socket. */
   close(): void {
-    for (const t of this.timers) clearTimeout(t);
+    for (const t of this.timers) {clearTimeout(t);}
     this.timers = [];
   }
 }

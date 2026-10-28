@@ -246,6 +246,13 @@ export class NetClient {
     this.link.send(this.ws, JSON.stringify(msg), steady);
   }
 
+  /** Binary lane — same joined gate as send(); the movement/intent frames
+   *  a real client ships as wire binary instead of JSON text. */
+  sendBin(data: Uint8Array, steady = false): void {
+    if (!this.ws || !this.joined || this.pendingRoom) {return;}
+    this.link.send(this.ws, data, steady);
+  }
+
   close(): void {
     if (this.pingTimer) {clearInterval(this.pingTimer);}
     if (this.joinTimer) {clearInterval(this.joinTimer);}

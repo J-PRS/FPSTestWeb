@@ -282,7 +282,7 @@ body.menu-open #frag-msg { display: none !important; }
 #overlay .field-row select:focus { border-color: #3aa7ff; }
 #cool-shots-panel {
   position: absolute; top: 0; left: 0; bottom: 0;
-  width: 280px;
+  width: 400px;
   background: rgba(8,11,16,0.75);
   border-right: 1px solid rgba(255,255,255,0.07);
   padding: 24px 18px;
@@ -318,9 +318,8 @@ body.menu-open #frag-msg { display: none !important; }
 /* The play hub is a centered window now — it covers the same screen
    region as the loadout sheet, so the sheet steps aside while it's up. */
 body.lobby-open #loadout-bar { display: none; }
-/* Lobby open: mute the paused-menu chrome behind the hub — the ghosted
-   "CLICK TO RESUME" bleeding through read as a broken screen, not a menu. */
-body.lobby-open #overlay { background: rgba(4,7,12,0.72); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+/* Lobby open: hide the paused-menu centre so the ghosted "CLICK TO RESUME"
+   doesn't read as a broken screen. The ESC overlay's own veil stays as the only dim. */
 body.lobby-open #overlay-center { display: none; }
 #loadout-bar .lo-group { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
 #loadout-bar .lo-head {
@@ -428,7 +427,7 @@ body.lobby-open #overlay-center { display: none; }
 #cool-shots-top, #cool-shots-recent { display: flex; flex-direction: column; gap: 3px; }
 .cool-shot-item {
   display: flex; align-items: center; gap: 10px;
-  padding: 6px 10px;
+  padding: 4px 10px;
   background: rgba(255,255,255,0.04);
   border: 1px solid transparent;
   border-left: 2px solid rgba(255,255,255,0.1);

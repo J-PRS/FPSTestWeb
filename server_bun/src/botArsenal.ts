@@ -6,7 +6,7 @@
  */
 import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
-import { classCapsule } from '../../shared/botClasses.ts';
+import { classCapsule, classCanFire } from '../../shared/botClasses.ts';
 import { logger } from './logger.ts';
 import { WeaponType, getWeaponStats, WEAPON_FIRE_INTERVAL_S, BELT_THROW_COST } from '../../shared/weapons.ts';
 import { SELF_SPLASH_MAX,aoeDamageAt } from '../../shared/combat.ts';
@@ -607,8 +607,13 @@ s[kind] += 1; this.propels.set(id, s);
     // The wounded-explosive gate lives in shared pickBotWeaponSafe so
     // offline bots get the same self-preservation.
     if (!botId) {return pickBotWeapon(lo, distXZ, dist, skill, s?.courage);}
-    const hp = this.room.players.getAllPlayers().get(botId)?.health ?? 100;
-    return pickBotWeaponSafe(lo, distXZ, dist, hp, skill, s?.courage);
+    const body = this.room.players.getAllPlayers().get(botId);
+    const hp = body?.health ?? 100;
+    const picked = pickBotWeaponSafe(lo, distXZ, dist, hp, skill, s?.courage);
+    // Same class gate players get in CombatHandler — the loadout tables
+    // stay honest, but a pick is refused at fire time too, not assumed.
+    if (classCanFire(body?.armorClass, picked)) {return picked;}
+    return [lo.side, lo.near, lo.mid, lo.far].find((w): boolean => classCanFire(body?.armorClass, w)) ?? WeaponType.Disc;
   }
 
   /** Belt throw — a lobbed grenade at the hunt's last-seen spot. Same
@@ -637,7 +642,8 @@ s[kind] += 1; this.propels.set(id, s);
    *  lob closer than its own blast envelope — eating falloff IS the
    *  sabotage, humans disc a gen point-blank. */
   lobAt(p: BotBody, aim: Vec3, riskSelf = false): boolean {
-    const wt = this.loadouts.get(p.id)?.belt ?? WeaponType.Grenade;
+    const want = this.loadouts.get(p.id)?.belt ?? WeaponType.Grenade;
+    const wt = classCanFire(p.armorClass, want) ? want : WeaponType.Grenade;
     const stats = getWeaponStats(wt);
     if (!stats || stats.speed <= 0) {return false;}
     // The belt pool pays for every toss — a dry bot's lob intents quietly

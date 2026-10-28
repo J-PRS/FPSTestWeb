@@ -18,6 +18,7 @@ import type { WeaponType } from '../../shared/weaponTable.ts';
 import type { ClientMessage, Vec3 } from '../../shared/protocol.ts';
 import { assignRole, roleObjective, WIRE_ROLES, type BotRole, type FlagSituation } from '../../shared/flagGoals.ts';
 import type { NetClient, RemoteEntry } from './netClient.ts';
+import { encodePosition, encodeInputMove, encodePosClaim, WIRE_JUMP, WIRE_JETPACK } from '../../shared/wire.ts';
 
 const THINK_S = 0.3;
 const POS_HZ = 10;
@@ -329,8 +330,8 @@ export class NetBot {
         nc.self.vel = { x: 0, y: 0, z: 0 };
       }
     }
-    if (out.move?.jump) {nc.send({ type: 'jump', position: { ...nc.self.pos } });}
-    if (out.move?.jet) {nc.send({ type: 'jetpack', position: { ...nc.self.pos } });}
+    if (out.move?.jump) {nc.sendBin(encodePosClaim(WIRE_JUMP, nc.self.pos));}
+    if (out.move?.jet) {nc.sendBin(encodePosClaim(WIRE_JETPACK, nc.self.pos));}
 
     if (out.fire) { nc.tel.fireIntents++; this.fire(out.fire.targetId, out.fire.aim); }
   }
@@ -483,17 +484,16 @@ export class NetBot {
     }
     const yaw = sim ? sim.state.yaw : Math.atan2(nc.self.vel.x, nc.self.vel.z);
     this.inSeq++;
-    nc.send({
-      type: 'inputMove', seq: this.inSeq,
-      input: { forward: this.wantMove.forward, right: this.wantMove.right, jump: this.wantMove.jump ? 1 : 0, ski: 1, jet: this.jetting ? 1 : 0 },
-      rotation: { yaw, pitch: 0 },
-    }, true);
+    const move = { forward: this.wantMove.forward, right: this.wantMove.right, jump: this.wantMove.jump ? 1 : 0, ski: 1, jet: this.jetting ? 1 : 0 };
+    nc.sendBin(encodeInputMove(this.inSeq, move), true);
     // Movement stays ordered (steady) — jitter lives on the claim channel,
     // matching how the real client keeps movement seq-gated.
     // Real clients ride their ping in every position frame — omitting it
     // leaves the roster row ping-less, which the remote-liveness gate
     // reads as a dead socket: the render entity goes staleHidden and its
     // position freezes at spawn while the wire records keep flowing.
-    nc.send({ type: 'position', position: { ...nc.self.pos }, rotation: { yaw, pitch: 0 }, velocity: { ...nc.self.vel }, inputSeq: this.inSeq, ping: nc.pingMs }, true);
+    // Binary lanes (same frames the browser client sends) — ~4-5× less
+    // upload than the JSON senders, which is what capped WAN fleets.
+    nc.sendBin(encodePosition(nc.self.pos, { yaw, pitch: 0 }, nc.self.vel, this.inSeq, nc.pingMs, this.inSeq, move), true);
   }
 }

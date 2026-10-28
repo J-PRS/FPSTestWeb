@@ -714,7 +714,7 @@ body:has(#hud.cm-open) #healthbar-container {
  * a WebGL canvas, so the blur never reached the pixels. A CSS filter on
  * the canvas composites on its own output. No dim wash — just a real blur. */
 #gl { transition: filter 0.45s ease-out; }
-body.boot-holding #gl { filter: blur(18px); }
+html.boot-holding #gl { filter: blur(18px); }
 #boot-veil {
   position: fixed; inset: 0; pointer-events: none; z-index: 6;
   opacity: 1;

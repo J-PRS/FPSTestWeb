@@ -70,7 +70,7 @@ export class RtcGameSocket implements BotSocket {
     // Bun) never invokes a gather callback installed after a datachannel
     // exists — verified empirically, the callback simply never fires.
     const gathering = new Promise<void>((res) => {
-      pc.onGatheringStateChange((s) => { if (s === 'complete') res(); });
+      pc.onGatheringStateChange((s) => { if (s === 'complete') {res();} });
     });
     const game = pc.createDataChannel('game');
     const ctrl = pc.createDataChannel('ctrl');
@@ -91,7 +91,7 @@ export class RtcGameSocket implements BotSocket {
       signal.onmessage = (ev) => {
         try {
           const m = JSON.parse(String(ev.data));
-          if (m.type === 'answer') res({ sdp: m.sdp });
+          if (m.type === 'answer') {res({ sdp: m.sdp });}
         } catch { /* not ours */ }
       };
       signal.onerror = () => rej(new Error('rtc signal error'));
@@ -110,7 +110,7 @@ export class RtcGameSocket implements BotSocket {
       dc.onClosed(() => {
         // The server counts the seat live while EITHER lane is open — only
         // declare dead when both are gone.
-        if (!game.isOpen() && !ctrl.isOpen()) sock.onclose?.({ code: 1000, reason: 'rtc lanes closed' });
+        if (!game.isOpen() && !ctrl.isOpen()) {sock.onclose?.({ code: 1000, reason: 'rtc lanes closed' });}
       });
     };
     wire(game);
@@ -127,9 +127,9 @@ export class RtcGameSocket implements BotSocket {
 
   get readyState(): number { return this.game.isOpen() || this.ctrl.isOpen() ? 1 : 0; }
 
-  send(data: string): void {
+  send(data: string | Uint8Array): void {
     const dc = this.ctrl.isOpen() ? this.ctrl : this.game;
-    dc.sendMessage(data);
+    if (typeof data === 'string') {dc.sendMessage(data);} else {dc.sendMessageBinary(data);}
   }
 
   close(): void {

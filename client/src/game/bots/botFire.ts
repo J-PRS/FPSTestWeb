@@ -22,7 +22,7 @@ import { claimShot, tickBolts, disposeBolts } from './botBolts.js';
 import { poissonDisc } from '../../utils/poissonSpread.js';
 import type { RemotePlayer } from '../../entities/RemotePlayer.js';
 import type { Targetable } from '../../entities/balls.js';
-import type { ArmorClass } from '../../../../shared/botClasses.js';
+import { classCanFire, type ArmorClass } from '../../../../shared/botClasses.js';
 import { simRand } from '../../../../shared/simRand.js';
 
 const _shotDir = new THREE.Vector3();
@@ -92,9 +92,14 @@ export class BotFire {
     const lo = bot.loadout ?? BOT_LOADOUTS[0]!;
     const dx = aim.x - bot.position.x, dy = aim.y - bot.position.y, dz = aim.z - bot.position.z;
     const dist = Math.hypot(dx, dy, dz) || 1;
-    const wt = pickBotWeaponSafe(lo, Math.hypot(dx, dz), dist, bot.botHp,
+    const picked = pickBotWeaponSafe(lo, Math.hypot(dx, dz), dist, bot.botHp,
       bot.skill ? (t): number => aimSkillFor(bot.skill, t, 0) : undefined, bot.skill?.courage);
-    const melee = wt === WeaponType.Melee || dist <= MELEE_RANGE;
+    const melee = picked === WeaponType.Melee || dist <= MELEE_RANGE;
+    // Same class gate the server holds players to — a pick the body can't
+    // legally shoulder falls back to the first legal slot, never fires.
+    const wt = melee || classCanFire(bot.armorClass, picked) ? picked
+      : ([lo.side, lo.near, lo.mid, lo.far].find((w): boolean => classCanFire(bot.armorClass, w)) ?? -1);
+    if (!melee && wt < 0) {return;}
     if (!this.canFire(bot.playerId, melee ? WeaponType.Melee : (wt as WeaponType))) {return;}
     const cfg = melee ? undefined : getProjectileConfig(wt);
 
@@ -184,7 +189,8 @@ export class BotFire {
   /** Lob the belt weapon at an explicit point — ballistic arc solves
    *  θ from the target's range instead of a flat guess. */
   private lobAt(bot: GameBot, aim: { x: number; y: number; z: number }): void {
-    const wt = bot.loadout?.belt ?? WeaponType.Grenade;
+    const want = bot.loadout?.belt ?? WeaponType.Grenade;
+    const wt = classCanFire(bot.armorClass, want) ? want : WeaponType.Grenade;
     const stats = getWeaponStats(wt);
     const cfg = getProjectileConfig(wt);
     if (!stats || stats.speed <= 0 || !cfg) {return;}

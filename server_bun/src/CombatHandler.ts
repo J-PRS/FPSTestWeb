@@ -554,11 +554,12 @@ win.violations += 1;
       const ownerVel = msg.vel && finiteVec(msg.vel)
           && dhypot3(msg.vel.x - player.velocity.x, msg.vel.y - player.velocity.y, msg.vel.z - player.velocity.z) <= 20
         ? msg.vel : player.velocity;
-      // Back-date the shell's age by the measured uplink (same number
-      // that bound the origin) — the replica's clock already runs, so
-      // the authoritative shell ages in lockstep: fuses die at the same
-      // epoch instead of the wire 'gone' arriving seconds late.
-      const lagS = uplinkMs / 1000;
+      // Back-date the shell's age by the MEASURED uplink transit — the
+      // EMA fed by pongs + bounded claim samples, not this claim's stamp
+      // (a stale/forged fireAt only re-anchors the ORIGIN above; it may
+      // not buy seconds of shell age). Without a measurement the honest
+      // age is arrival-time — transitOf returns 0 in join grace.
+      const lagS = (this.deps.transitOf?.(playerId) ?? 0) / 1000;
       const id = fireProjectile(playerId, msg.weaponType!,
         { x: at.x, y: at.y, z: at.z },
         { x: dir!.x / l, y: dir!.y / l, z: dir!.z / l },

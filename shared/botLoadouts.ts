@@ -3,7 +3,8 @@ import { SELF_SPLASH_MAX } from './combat.ts';
 import type { PerkId } from './perks.ts';
 import { HEAVY_ONLY_WEAPONS, MEDIUM_ONLY_WEAPONS, LIGHT_ONLY_WEAPONS, classCanFire, type ArmorClass } from './botClasses.ts';
 
-const beltOut = (w: WeaponType, fb: WeaponType): WeaponType => w === WeaponType.HealBeam ? fb : w;
+const beltOut = (w: WeaponType, fb: WeaponType): WeaponType =>
+  w === WeaponType.HealBeam || w === WeaponType.Repair ? fb : w;
 
 
 /** A bot's kit — weapon picked by engagement range, perk set at spawn so
@@ -102,8 +103,13 @@ export const WILDCARD_SLOTS: Record<LoadoutSlot, WeaponType[]> = {
   // in the far band where only splash reach matters.
   mid: [WeaponType.Chaingun, WeaponType.Lightning, WeaponType.Disc, WeaponType.Cannon, WeaponType.GrenadeLauncher, WeaponType.Sprinkler, WeaponType.Sticky, WeaponType.PlasmaGun, WeaponType.Bombard, WeaponType.RocketLauncher],
   far: [WeaponType.BoltLauncher, WeaponType.Disc, WeaponType.Mortar, WeaponType.Railgun, WeaponType.MRVLauncher],
-  belt: [WeaponType.Grenade, WeaponType.RemoteRailgun, WeaponType.ImpactGrenade, WeaponType.ClusterBomb, WeaponType.Javelin, WeaponType.ArmorGrenade, WeaponType.Implodisc, WeaponType.MRVLauncher, WeaponType.Hook],
-  side: [WeaponType.Pistol, WeaponType.Revolver],
+  // Every player belt throw + every player sidearm — parity both ways:
+  // a wildcard bot can field anything a player can legally equip.
+  belt: [WeaponType.Grenade, WeaponType.RemoteRailgun, WeaponType.ImpactGrenade, WeaponType.ClusterBomb, WeaponType.Javelin, WeaponType.ArmorGrenade, WeaponType.Implodisc, WeaponType.MRVLauncher, WeaponType.Hook,
+    WeaponType.BeltDisc, WeaponType.BeltSticky, WeaponType.ProxyGrenade, WeaponType.SatchelCharge, WeaponType.Concussion, WeaponType.EMP, WeaponType.HealGrenade],
+  // Shocklance rides the speed-0 beam lane (fireSpeedless/botFire) — the
+  // same honest-ray path Lightning already takes, no projectile needed.
+  side: [WeaponType.Pistol, WeaponType.Revolver, WeaponType.Shotgun, WeaponType.Repair, WeaponType.Shocklance],
 };
 const WILDCARD_PERKS: PerkId[] = ['lifesteal', 'overcharge', 'armored', 'bombardier', 'featherjets'];
 
@@ -228,11 +234,11 @@ export function pickBotWeapon(lo: BotLoadout, distXZ: number, dist: number, skil
   let safeW = lo.mid;
   for (const slot of ['side', 'near', 'mid', 'far'] as const) {
     const w = lo[slot];
-    if (w !== WeaponType.HealBeam && getWeaponStats(w).aoeRadius <= 0) { safeW = w; break; }
+    if (w !== WeaponType.HealBeam && w !== WeaponType.Repair && getWeaponStats(w).aoeRadius <= 0) { safeW = w; break; }
   }
   for (const slot of ['side', 'near', 'mid', 'far'] as const) {
     const w = lo[slot];
-    if (w === WeaponType.HealBeam) {continue;} // healing is aimed at allies, not drawn for a fight
+    if (w === WeaponType.HealBeam || w === WeaponType.Repair) {continue;} // healing is aimed at allies/deployables, not drawn for a fight
     // Self-splash pricing: an enemy already inside this weapon's blast
     // means the shell costs the shooter too — the cautious draw the
     // sidearm, the bold keep the launcher (a mutual splash is still a
