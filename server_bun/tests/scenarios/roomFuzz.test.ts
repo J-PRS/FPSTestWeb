@@ -7,7 +7,8 @@
 // cross, and dispose draining.
 //
 // Invariants checked after every op:
-//   * rooms.size ≤ maxRooms — the cap is hard, recycling is bounded
+//   * join-driven rooms ≤ maxRooms — the cap is hard, recycling is bounded;
+//     boot-seeded standing lobbies sit outside it (roomFactory.roomFor)
 //   * a seated player lives in exactly one live room — never a
 //     recycled corpse, never two rooms
 //   * unlisted rooms are joinable by name but invisible to quickRoom
@@ -75,7 +76,8 @@ describe('room lifecycle conformance fuzz', () => {
       let uniqueN = 0;
 
       const checkAll = (opDesc: string): void => {
-        if (peek.rooms.size > 6) violations.push(`${ctx(0, opDesc)}: rooms.size=${peek.rooms.size} over cap`);
+        const joinRooms = [...peek.rooms.values()].filter((r) => !r.standing).length;
+        if (joinRooms > 6) {violations.push(`${ctx(0, opDesc)}: join rooms=${joinRooms} over cap`);}
 
         const seatedIn = new Map<string, string>();
         let totalPlayers = 0;
@@ -83,23 +85,23 @@ describe('room lifecycle conformance fuzz', () => {
           for (const [id, p] of room.players.getAllPlayers()) {
             // Server-side bots live in rosters with no socket — the
             // playerRoom index only ever tracks socket-seated players.
-            if ((p as { isBot?: boolean }).isBot) continue;
+            if ((p as { isBot?: boolean }).isBot) {continue;}
             totalPlayers++;
             const prev = seatedIn.get(id);
-            if (prev) violations.push(`${ctx(0, opDesc)}: ${id} seated in two rooms (${prev}, ${name})`);
-            else seatedIn.set(id, name);
-            if (!peek.roomOfPlayer(id)) violations.push(`${ctx(0, opDesc)}: ${id} in ${name} roster but playerRoom index lost it`);
+            if (prev) {violations.push(`${ctx(0, opDesc)}: ${id} seated in two rooms (${prev}, ${name})`);}
+            else {seatedIn.set(id, name);}
+            if (!peek.roomOfPlayer(id)) {violations.push(`${ctx(0, opDesc)}: ${id} in ${name} roster but playerRoom index lost it`);}
           }
         }
         for (const [id, room] of peek.playerRoom) {
-          if (!peek.rooms.has(room.name)) violations.push(`${ctx(0, opDesc)}: playerRoom[${id}] points at disposed room ${room.name}`);
-          else if (seatedIn.get(id) !== room.name) violations.push(`${ctx(0, opDesc)}: playerRoom[${id}]=${room.name} but roster says ${seatedIn.get(id) ?? 'gone'}`);
+          if (!peek.rooms.has(room.name)) {violations.push(`${ctx(0, opDesc)}: playerRoom[${id}] points at disposed room ${room.name}`);}
+          else if (seatedIn.get(id) !== room.name) {violations.push(`${ctx(0, opDesc)}: playerRoom[${id}]=${room.name} but roster says ${seatedIn.get(id) ?? 'gone'}`);}
         }
 
         // Visibility contract: quickRoom must never hand out an unlisted room.
         for (let i = 0; i < 3; i++) {
           const q = peek.factory.quickRoom(i === 0 ? 'ctf' : i === 1 ? 'dm' : '');
-          if (q && q.unlisted) violations.push(`${ctx(0, opDesc)}: quickRoom returned unlisted ${q.name}`);
+          if (q && q.unlisted) {violations.push(`${ctx(0, opDesc)}: quickRoom returned unlisted ${q.name}`);}
         }
       };
 
@@ -132,7 +134,7 @@ describe('room lifecycle conformance fuzz', () => {
           // If the join was refused (every room live), the id must not
           // have a seat.
           const room = peek.roomOfPlayer(id);
-          if (room && !peek.rooms.has(room.name)) violations.push(`${ctx(op, desc)}: seated in a room not in the directory`);
+          if (room && !peek.rooms.has(room.name)) {violations.push(`${ctx(op, desc)}: seated in a room not in the directory`);}
         } else if (r < 0.52) {
           // Room switch — to a pool name, a fresh name, or unlisted.
           const sock = sockets.get(id);
@@ -152,11 +154,11 @@ describe('room lifecycle conformance fuzz', () => {
           const name = pool[Math.floor(rng() * pool.length)]!;
           gs.onMessage(sock as never, JSON.stringify({ type: 'join', playerId: `spec_${seed}_${Math.floor(rng() * 3)}`, room: name, spectate: true }));
           desc = `spectate@${name}`;
-        } else if (r < 0.80) {
+        } else if (r < 0.8) {
           // Fault-streak seeding on a random room name — a recycled name
           // must remint clean (the roomCap pin, exercised under chaos).
           const names = [...peek.rooms.keys()];
-          if (names.length) {
+          if (names.length > 0) {
             const n = names[Math.floor(rng() * names.length)]!;
             peek.tickLoop.tickErrStreak.set(n, 4);
             peek.tickLoop.tickQuarantined.add(n);
@@ -169,7 +171,7 @@ describe('room lifecycle conformance fuzz', () => {
           desc = 'direct-mint';
         }
 
-        for (const [, room] of peek.rooms) room.drainCommands();
+        for (const [, room] of peek.rooms) {room.drainCommands();}
         checkAll(desc);
       }
 
@@ -177,9 +179,9 @@ describe('room lifecycle conformance fuzz', () => {
       // corpse, unlisted rooms never leaked into quick-join while live.
       for (const sock of sockets.values()) {
         const id = sock.data.playerId;
-        if (!id) continue;
+        if (!id) {continue;}
         const room = peek.roomOfPlayer(id);
-        if (room) peek.removePlayerCompletely(room, id, 'teardown');
+        if (room) {peek.removePlayerCompletely(room, id, 'teardown');}
       }
       for (const [name, room] of peek.rooms) {
         if (room.unlisted && peek.factory.quickRoom('') === room) {

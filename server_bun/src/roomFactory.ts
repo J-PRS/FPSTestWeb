@@ -134,7 +134,13 @@ export class RoomFactory {
       room = undefined;
     }
     if (!room) {
-      if (this.host.rooms.size >= CONFIG.maxRooms) {
+      // The cap bounds join-driven room growth only — operator-authored
+      // standing lobbies (duel-1, headhunt-1) are seeded at boot and can
+      // never be recycled, so counting them would fill a low cap with
+      // rooms that reject every user mint.
+      let joinRooms = 0;
+      for (const r of this.host.rooms.values()) {if (!r.standing) {joinRooms += 1;}}
+      if (joinRooms >= CONFIG.maxRooms) {
         for (const [n, r] of this.host.rooms) {
           if (r.standing) {continue;} // standing lobbies never recycle
           if (r.players.getHumanCount() > 0 || r.spectators.size > 0) {continue;}
@@ -144,7 +150,9 @@ export class RoomFactory {
           logger.warn('Room cap recycled idle room', { room: n });
           break;
         }
-        if (this.host.rooms.size >= CONFIG.maxRooms) {
+        joinRooms = 0;
+        for (const r of this.host.rooms.values()) {if (!r.standing) {joinRooms += 1;}}
+        if (joinRooms >= CONFIG.maxRooms) {
           logger.warn('Room mint rejected: all rooms live', { wanted: name });
           return null;
         }

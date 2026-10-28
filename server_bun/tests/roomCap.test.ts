@@ -39,14 +39,17 @@ describe('room cap', () => {
   it('minting past the cap recycles the eldest audience-less room', () => {
     ;(CONFIG as unknown as { maxRooms: number }).maxRooms = 3;
     const peek = mkServer();
+    // Boot-seeded standing lobbies share the rooms map but sit outside
+    // the join-driven cap — count only join-driven rooms.
+    const joinRooms = () => [...peek.rooms.values()].filter((r) => !r.standing).length;
     peek.factory.roomFor('a'); peek.factory.roomFor('b'); peek.factory.roomFor('c');
-    expect(peek.rooms.size).toBe(3);
+    expect(joinRooms()).toBe(3);
 
     const d = peek.factory.roomFor('d');
     expect(d).not.toBeNull();
     expect(peek.rooms.has('a')).toBe(false); // eldest empty room recycled
     expect(peek.rooms.has('d')).toBe(true);
-    expect(peek.rooms.size).toBe(3);
+    expect(joinRooms()).toBe(3);
   });
 
   it('a recycled room name remints fresh on the next join', () => {
