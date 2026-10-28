@@ -30,12 +30,16 @@ scp -i "$KEY" /tmp/kribes_sync.tgz /tmp/kribes_build.txt "$HOST:/tmp/"
 ssh -i "$KEY" "$HOST" "
   cd ~/$RDIR && tar -xzf /tmp/kribes_sync.tgz &&
   cp /tmp/kribes_build.txt server_bun/build.txt &&
-  pgrep -f '^[^ ]*bin/bun src/server.ts' | xargs -r kill; sleep 2;
-  cd ~/$RDIR/server_bun &&
-  set -a; [ -f ~/$RDIR/.env ] && . ~/$RDIR/.env; set +a;
-  nohup ~/$BUN src/server.ts > ~/$RDIR/server.log 2>&1 &
-  sleep 4;
-  pgrep -fa '^[^ ]*bin/bun src/server.ts' | head -2;
-  grep -ci 'failed to start' ~/$RDIR/server.log" </dev/null
+  if systemctl cat kribes-fleet >/dev/null 2>&1; then
+    sudo systemctl restart kribes-fleet; sleep 8; systemctl is-active kribes-fleet;
+  else
+    pgrep -f '^[^ ]*bin/bun src/server.ts' | xargs -r kill; sleep 2;
+    cd ~/$RDIR/server_bun &&
+    set -a; [ -f ~/$RDIR/.env ] && . ~/$RDIR/.env; set +a;
+    nohup ~/$BUN src/server.ts > ~/$RDIR/server.log 2>&1 &
+    sleep 4;
+    pgrep -fa '^[^ ]*bin/bun src/server.ts' | head -2;
+  fi;
+  grep -ci 'failed to start' ~/$RDIR/server.log || true" </dev/null
 echo "deploy: verifying..."
 curl -s --max-time 8 "https://${FPS_DEPLOY_URL:-play.jprice.app}/health"

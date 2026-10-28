@@ -202,7 +202,7 @@ Bun.serve({
         if (w.up) {workersUp++; players += w.ccu;}
       }
       let build: string | null = null;
-      try { build = (await Bun.file('server_bun/build.txt').text()).trim(); } catch { /* no stamp */ }
+      try { build = (await Bun.file(join(import.meta.dir, '..', 'build.txt')).text()).trim(); } catch { /* no stamp */ }
       return json({ status: workersUp > 0 ? 'running' : 'degraded', players, maxPlayers: WORKERS * CONFIG.maxPlayers, tickRate: 20, build, workers: workersUp, fleet: WORKERS });
     }
 
