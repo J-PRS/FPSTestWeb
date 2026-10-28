@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { mkGltfLoader } from '../gltfLoad';
+import { mkGltfLoader, loadGlbOrMain } from '../gltfLoad';
 import { WeaponType } from '../../../shared/weapons.js';
 import { urlParams } from '../core/params.js';
 import { bakeVertexAO, bakeWearOnly } from '../effects/vertexAO.js';
@@ -121,7 +121,7 @@ export class VmBaked {
     // wears the wrong unwrap, and a missing file shouldn't kill the swap.
     const ao = await this.probeTex(`/weapons/w${wt}_ao`);
     const [gltf, tex] = await Promise.all([
-      loader.loadAsync(`/weapons/w${wt}_baked.glb`),
+      loadGlbOrMain(loader, `/weapons/w${wt}_baked.glb`),
       ao ? texLoader.loadAsync(`${ao}?v=${Date.now()}`) : Promise.resolve(null),
     ]);
     if (tex) {

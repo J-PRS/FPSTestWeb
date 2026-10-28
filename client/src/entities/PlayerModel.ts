@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mkGltfLoader, loadGltfCached } from '../gltfLoad';
+import { mkGltfLoader, loadGltfCached, loadGlbOrMain } from '../gltfLoad';
 import { takeRig } from './rigPool.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -393,7 +393,7 @@ export class PlayerModel {
    *  geo list into the same buckets so the swap stays aligned. */
   private lodGeoBuckets: number[][] | null = null;
   private readonly lodCtl = new PlayerModelLod(this.skinnedMeshes,
-    () => mkGltfLoader().loadAsync(RIG_MANIFEST[this.variant].lodUrl!).then((g): THREE.BufferGeometry<THREE.NormalBufferAttributes, THREE.BufferGeometryEventMap>[] => {
+    () => loadGlbOrMain(mkGltfLoader(), RIG_MANIFEST[this.variant].lodUrl!).then((g): THREE.BufferGeometry<THREE.NormalBufferAttributes, THREE.BufferGeometryEventMap>[] => {
       const geos: THREE.BufferGeometry[] = [];
       g.scene.traverse((o): void => {
         if ((o as THREE.SkinnedMesh).isSkinnedMesh) {geos.push(smoothShade((o as THREE.SkinnedMesh).geometry));}

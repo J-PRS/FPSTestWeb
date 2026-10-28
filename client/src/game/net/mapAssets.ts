@@ -10,7 +10,7 @@
 
 import * as THREE from 'three';
 
-import { mkGltfLoader } from '../../gltfLoad';
+import { mkGltfLoader, loadGlbOrMain } from '../../gltfLoad';
 
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -1464,7 +1464,7 @@ async function fetchGlb(httpUrl: string, file: string): Promise<THREE.Group | nu
 
   if (!p) {
 
-    p = glbLoader.loadAsync(`${httpUrl}/maps/t2/dif/${name}`)
+    p = loadGlbOrMain(glbLoader, `${httpUrl}/maps/t2/dif/${name}`)
 
       .then((g): THREE.Group<THREE.Object3DEventMap> => g.scene)
 

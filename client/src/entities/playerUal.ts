@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mkGltfLoader } from '../gltfLoad.js';
+import { mkGltfLoader, loadGlbOrMain } from '../gltfLoad.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { ChildLogger } from '../core/Logger.js';
 import { UAL_BONE_MAP, UAL2_BONE_MAP, MANNEQUIN_UAL2_BONE_MAP, KEVDEV_BONE_MAP, MANNEQUIN_KEVDEV_BONE_MAP, VEXA_KEVDEV_BONE_MAP, CYBER_KEVDEV_BONE_MAP, CYBER_MANNEQUIN_BONE_MAP, POLYART_KEVDEV_BONE_MAP, POLYART_UAL2_BONE_MAP, RIG_MANIFEST, CLASS_BODY_SPEC, ONESHOT_CLIPS, normBone } from './playerClips.js';
@@ -122,7 +122,7 @@ function loadSources(env?: UalBakeEnv): Promise<UalSource[]> {
     for (const spec of SPECS) {
       const gltf = env?.loadGltf
         ? await env.loadGltf(spec.url)
-        : await mkGltfLoader().loadAsync(spec.url);
+        : await loadGlbOrMain(mkGltfLoader(), spec.url);
       const src = gltf.scene;
       src.updateMatrixWorld(true);
       // No meshes in the trimmed GLBs — the joints arrive as plain
@@ -448,7 +448,7 @@ const bakedFileByVariant = new Map<string, Promise<Map<string, THREE.AnimationCl
 export function loadBakedUALClips(variant: string): Promise<Map<string, THREE.AnimationClip> | null> {
   let p = bakedFileByVariant.get(variant);
   if (!p) {
-    p = mkGltfLoader().loadAsync(`/assets/anims/${variant}.glb`)
+    p = loadGlbOrMain(mkGltfLoader(), `/assets/anims/${variant}.glb`)
       .then((gltf): Map<string, THREE.AnimationClip> | null => {
         if (gltf.animations.length === 0) {return null;}
         const m = new Map(gltf.animations.map((c): [string, THREE.AnimationClip] => [c.name, c]));
