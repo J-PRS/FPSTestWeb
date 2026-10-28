@@ -107,6 +107,8 @@ console.log(`clock fit: ${lanes.length} lanes, ${points.length} windows, offset 
 // drift is a client-clock property so one consensus line serves all lanes.
 type Stat = { n: number; sum: number; max: number; over1: number; over5: number; ds: number[] };
 const stats = new Map<number, Stat>();
+const BYTIME = process.argv.includes('--bytime');
+const timeBins = new Map<number, { n: number; sum: number; max: number; over1: number }>();
 let overN = 0;
 for (const [idx, fs] of cliByIdx) {
   const sIdx = srvIdxByName.get(nameA(idx));
@@ -120,8 +122,21 @@ for (const [idx, fs] of cliByIdx) {
     st.n += 1; st.sum += d; st.max = Math.max(st.max, d); st.ds.push(d);
     if (d > 1) {st.over1 += 1; overN += 1;}
     if (d > 5) {st.over5 += 1;}
+    // --bytime: where does divergence LIVE — join-window or steady drift.
+    if (BYTIME) {
+      const b = Math.floor(f.timestamp / 5) * 5;
+      const e = timeBins.get(b) ?? { n: 0, sum: 0, max: 0, over1: 0 };
+      e.n += 1; e.sum += d; e.max = Math.max(e.max, d); if (d > 1) {e.over1 += 1;}
+      timeBins.set(b, e);
+    }
   }
   stats.set(idx, st);
+}
+if (BYTIME) {
+  console.log('\ntime   n    meanΔ   max   >1m');
+  for (const [b, e] of [...timeBins].sort((a, c) => a[0] - c[0])) {
+    console.log(`${String(b).padStart(4)}s ${String(e.n).padStart(5)} ${(e.sum / e.n).toFixed(2).padStart(7)} ${e.max.toFixed(1).padStart(6)} ${String(e.over1).padStart(5)}`);
+  }
 }
 console.log('\nseat              n      meanΔ   p95     max    >1m   >5m');
 for (const [idx, st] of [...stats].sort((a, b) => b[1].max - a[1].max)) {

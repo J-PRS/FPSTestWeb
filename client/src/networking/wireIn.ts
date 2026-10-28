@@ -691,9 +691,13 @@ dedupCensus.hitSeqDrops += 1;
     const now = Date.now();
     for (let i = this.pendingWidEvents.length - 1; i >= 0; i -= 1) {
       const p = this.pendingWidEvents[i]!;
-      if (now - p.at > 3000) {
+      // Mints ride the same reliable broadcast — an unminted-wid event
+      // resolves within a packet or two. 1500ms is far above the lane-
+      // reorder window and far BELOW the wireId reissue quiet window, so
+      // a stale frame can't resolve against a recycled id's new owner.
+      if (now - p.at > 1500) {
         this.pendingWidEvents.splice(i, 1);
-        logger.warn(`binary ${p.hit ? 'hit' : 'kill'} orphaned — wid never minted for ${JSON.stringify(p.hit ?? p.kill)}`);
+        logger.warn(`binary ${p.hit ? 'hit' : p.kill ? 'kill' : 'projSpawn'} orphaned — wid never minted for ${JSON.stringify(p.hit ?? p.kill ?? p.proj)}`);
         continue;
       }
       if (p.hit) {
