@@ -331,7 +331,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
 
     // Hold-out sidearm: fast flat slug, modest damage — the panic button
     // when the primary is dry or wrong for the range.
-    directDamage: 14,
+    directDamage: 8,
     aoeDamage: 0,
     aoeRadius: 0,
     knockbackForce: 4,
@@ -346,8 +346,8 @@ export const WEAPONS: Record<number, WeaponStats> = {
   },
   [WeaponType.Revolver]: {
 
-    // Hand cannon: three hits kill — slow cadence, heavy single slug.
-    directDamage: 34,
+    // Hand cannon: slow cadence, heavy single slug.
+    directDamage: 20,
     aoeDamage: 0,
     aoeRadius: 0,
     knockbackForce: 8,

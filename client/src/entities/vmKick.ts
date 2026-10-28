@@ -33,7 +33,7 @@ const RECOIL: Record<number, { recover: number; jitter: number; amp: number; bac
     [WeaponType.Lightning]:       { recover: 0.21, jitter: 0.05,  amp: 0.4,  back: 1 },  // per-tick hum
     [WeaponType.Cannon]:          { recover: 0.41, jitter: 0.02,  amp: 1.1,  back: 1 },  // heavy naval-gun thump
     [WeaponType.RocketLauncher]:  { recover: 2.8,  jitter: 0.02,  amp: 0.9,  back: 1.15 }, // tube launch — back-blast shove
-    [WeaponType.Pistol]:          { recover: 0.15, jitter: 0.01,  amp: 1.1,  back: 1 },  // snappy crack — quick settle
+    [WeaponType.Pistol]:          { recover: 0.27, jitter: 0.033, amp: 1.1,  back: 1 },  // ~65% of the revolver's kick — snap without the full throw
     [WeaponType.Revolver]:        { recover: 0.41, jitter: 0.05,  amp: 1.3,  back: 1 },  // hand-cannon bark
     [WeaponType.Sticky]:          { recover: 0.25, jitter: 0.02,  amp: 0.9,  back: 1 },  // thoomp — tube launch
     [WeaponType.Repair]:          { recover: 0.21, jitter: 0.05,  amp: 0.4,  back: 1 },  // per-tick hum

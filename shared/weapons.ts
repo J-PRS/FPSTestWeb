@@ -106,6 +106,14 @@ export const LANCE_CADENCE_S = 2;
 // deploy: the nuggets you pick up ARE the ordnance you carry.
 export const BELT_MAX = 5;        // spawn stock AND the pickup cap
 export const BELT_THROW_COST = 1; // per belt toss
+
+/** Power-class weapons: a kill on DIRECT contact bursts the body into
+ *  its chunk gibs. Splash from the same gun (and all bullet/hitscan
+ *  kills) stays the Verlet ragdoll. */
+export const GIB_WEAPONS = new Set<number>([
+  WeaponType.BoltLauncher, WeaponType.PlasmaCannon, WeaponType.RocketLauncher,
+  WeaponType.Mortar, WeaponType.Bombard, WeaponType.Cannon,
+  WeaponType.Sticky, WeaponType.GrenadeLauncher]);
 // Pack items (turret/mine/station/…) are priced per-kind in
 // shared/deployItems.ts (turret 2, mortar 3, …) — not a flat constant.
 // WeaponTypes that ONLY exist as belt throws — any spawn claim carrying
