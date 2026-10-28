@@ -101,7 +101,9 @@ for (let z = 0; z < N; z += 1) {
     // a ridged mountain belt — real grasslands are plains NEXT TO hill
     // country, not the same bumps louder. Escalade's "floor+peaks" shape
     // without pinning a level.
-    const mask = noise(u * 0.5 + 3.1, v * 0.5 + 7.4, 3, 7);
+    // 3 cells per tile (period 1) — a 0.5 scale would shift 1.5 cells per
+    // wrap and seam the clipmap.
+    const mask = noise(u + 3.1, v + 7.4, 3, 7);
     const belt = smoothstep01(mask, 0.35, 0.75);
     const plainH = f * 0.62;                       // rolling meadow, not flats
     const beltH = f * (1 - RIDGE) + r * (0.55 + RIDGE); // ridged ridge-country
