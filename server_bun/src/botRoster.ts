@@ -338,6 +338,10 @@ have += 1;
     if (!fill || now < this.maintainAt) {return;}
     this.maintainAt = now + 1000;
     const humans = this.room.playerCount() - this.brains.size;
+    // Empty rooms don't mint a roster — a 0-audience room would
+    // hibernate its fill anyway, and every minted bot eats a global-cap
+    // seat that a real joiner could take (stress fleets hit this).
+    if (humans === 0 && this.brains.size === 0) {return;}
     // The 16 clamp was a hidden ceiling: a map asking botFill=40 quietly
     // got 16. Specs are trusted up to a still-sane bound — a runaway fill
     // is a perf question for capSoak, not a silent override here.
