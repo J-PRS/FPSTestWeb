@@ -167,42 +167,7 @@ function handleWireHit(ctx: NetCtx, shooterId: string, targetId: string, damage:
     ? deps.lazyPlayer().pos
     : (deps.world.remotePlayers.get(targetId)?.pos ?? deps.lazyPlayer().pos);
   deps.lazyDemoManager?.()?.recordPlayerHit(shooterId === 'environment' ? null : shooterId, targetId, damage, hitPos);
-  if (targetId === nm().getLocalPlayerId()) {
-    const player = deps.lazyPlayer();
-    if (player.isDead) {
-      if (player.deadConfirmedByWire) {
-        // A confirmed hit on a corpse means the wire thinks we died later
-        // than the sim did — worth surfacing, it moves kill credit too.
-        logger.warn(`playerHit on dead local player: ${damage} from ${shooterId}`);
-      } else {
-        // Predicted death, never wire-confirmed — the server says we're
-        // alive and this hit IS the proof. Un-die to its health so the
-        // seat un-bricks instead of desyncing isDead until a kill lands.
-        logger.warn(`playerHit on predicted-dead local — reviving to server hp ${health} (was dead to ${shooterId})`);
-        player.isDead = false;
-        player.health = health;
-        deps.lazyHud().show();
-        deps.lazyHud().setDeathOverlay(false);
-      }
-    }
-    if (armor !== undefined && Number.isFinite(armor)) {player.armor = armor;}
-    // Shielded hits route to the energy tank (server kept health
-    // unchanged) — the soak reads as a cyan flash + hum, not a grunt.
-    if (player.isShielded) {
-      player.absorbShieldDamage(damage);
-      deps.lazyHud().showShieldDamage(deps.world.remotePlayers.get(shooterId)?.pos ?? null, damage);
-      sfx.shieldHit();
-      player.health = health;
-      logger.info(`Shield soaked ${damage} from ${shooterId} (health: ${health})`);
-      return;
-    }
-    player.health = health;
-    // Point the damage arc at the shooter's last known position
-    deps.lazyHud().showDamage(deps.world.remotePlayers.get(shooterId)?.pos ?? null, damage);
-    sfx.playerHurt();
-    logger.info(`Local player hit for ${damage} damage by ${shooterId} (health: ${health})`);
-    return;
-  }
+  if (targetId === nm().getLocalPlayerId()) {wireHitSelf(ctx, shooterId, damage, health, armor); return;}
 
   // Non-lethal hits don't trigger death animation
   logger.info(`Remote player ${targetId} hit for ${damage} damage by ${shooterId} (health: ${health})`);
@@ -218,6 +183,45 @@ function handleWireHit(ctx: NetCtx, shooterId: string, targetId: string, damage:
     deps.lazyHud().showHitMarker();
     sfx.hitMarker(false);
   }
+}
+
+/** playerHit on the LOCAL seat — corpse-revive, shield soak, hurt feedback. */
+function wireHitSelf(ctx: NetCtx, shooterId: string, damage: number, health: number, armor?: number): void {
+  const { deps } = ctx;
+  const {logger} = deps;
+  const player = deps.lazyPlayer();
+  if (player.isDead) {
+    if (player.deadConfirmedByWire) {
+      // A confirmed hit on a corpse means the wire thinks we died later
+      // than the sim did — worth surfacing, it moves kill credit too.
+      logger.warn(`playerHit on dead local player: ${damage} from ${shooterId}`);
+    } else {
+      // Predicted death, never wire-confirmed — the server says we're
+      // alive and this hit IS the proof. Un-die to its health so the
+      // seat un-bricks instead of desyncing isDead until a kill lands.
+      logger.warn(`playerHit on predicted-dead local — reviving to server hp ${health} (was dead to ${shooterId})`);
+      player.isDead = false;
+      player.health = health;
+      deps.lazyHud().show();
+      deps.lazyHud().setDeathOverlay(false);
+    }
+  }
+  if (armor !== undefined && Number.isFinite(armor)) {player.armor = armor;}
+  // Shielded hits route to the energy tank (server kept health
+  // unchanged) — the soak reads as a cyan flash + hum, not a grunt.
+  if (player.isShielded) {
+    player.absorbShieldDamage(damage);
+    deps.lazyHud().showShieldDamage(deps.world.remotePlayers.get(shooterId)?.pos ?? null, damage);
+    sfx.shieldHit();
+    player.health = health;
+    logger.info(`Shield soaked ${damage} from ${shooterId} (health: ${health})`);
+    return;
+  }
+  player.health = health;
+  // Point the damage arc at the shooter's last known position
+  deps.lazyHud().showDamage(deps.world.remotePlayers.get(shooterId)?.pos ?? null, damage);
+  sfx.playerHurt();
+  logger.info(`Local player hit for ${damage} damage by ${shooterId} (health: ${health})`);
 }
 
 /** Hit feedback, knockback, reconciliation, kills — the damage wire. */
