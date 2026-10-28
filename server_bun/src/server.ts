@@ -347,7 +347,7 @@ if (fleetReport) {
         port: CONFIG.port,
         ccu: rooms.reduce((n, r): number => n + r.playerCount() + r.spectators.size, 0),
         rooms: rooms.map((r): string => r.name),
-        list: gameServer.listRooms(),
+        list: gameServer.listRooms(true),
       }),
     }).catch((): void => { /* matchmaker restarting — the next beat retries */ });
   }, 2000);

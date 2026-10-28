@@ -202,7 +202,7 @@ export function adminRoute(ctx: HttpCtx, req: Request, url: URL): Response | Pro
   if (got !== want) {return corsResponse('unauthorized', { status: 401 });}
 
   if (url.pathname === '/admin/rooms' && req.method === 'GET') {
-    return json(ctx.gameServer.listRooms());
+    return json(ctx.gameServer.listRooms(true));
   }
   if (req.method !== 'POST') {return corsResponse('POST only', { status: 405 });}
 

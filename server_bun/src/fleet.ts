@@ -38,6 +38,7 @@ interface LobbyRow {
   players?: number;
   humans?: number;
   maxPlayers?: number;
+  names?: { id: string; name?: string }[];
 }
 
 // Lobby rows the last heartbeat carried per worker — the directory only
