@@ -181,7 +181,26 @@ Bun.serve({
       if (!w) {return json({ error: 'no workers up' }, { status: 503 });}
       const host = url.hostname;
       const s = clientSchemes(req);
+      // FPS_FLEET_PATH=1: workers sit behind an edge path route (/w0/ws →
+      // :8001) — the public host only exposes 443. Default keeps
+      // host:port for LAN/direct deployment.
+      if (process.env.FPS_FLEET_PATH) {
+        return json({ url: `${s.ws}://${host}/${w.id}/ws`, http: `${s.http}://${host}/${w.id}`, room, worker: w.id });
+      }
       return json({ url: `${s.ws}://${host}:${w.port}/ws`, http: `${s.http}://${host}:${w.port}`, room, worker: w.id });
+    }
+
+    // /health aggregates what a single server.ts would report — the deploy
+    // script and server browser expect this shape on the public port.
+    if (url.pathname === '/health' && req.method === 'GET') {
+      dir.sweep(now);
+      let players = 0, workersUp = 0;
+      for (const w of dir.workers.values()) {
+        if (w.up) {workersUp++; players += w.ccu;}
+      }
+      let build: string | null = null;
+      try { build = (await Bun.file('server_bun/build.txt').text()).trim(); } catch { /* no stamp */ }
+      return json({ status: workersUp > 0 ? 'running' : 'degraded', players, maxPlayers: WORKERS * CONFIG.maxPlayers, tickRate: 20, build, workers: workersUp, fleet: WORKERS });
     }
 
     if (url.pathname === '/rooms' && req.method === 'GET') {
