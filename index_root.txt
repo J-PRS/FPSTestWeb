@@ -29,6 +29,7 @@ __RUN.bat
 _clean_deploy.bat
 _docs
 _netbots.bat
+_oci_deploy.bat
 _oxlint.bat
 _reference
 _rootcheck.bat
