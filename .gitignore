@@ -131,6 +131,18 @@ _tools/*.blend
 _tools/*.patch
 _tools/*_out.txt
 _tools/_*.ts
+_tools/_*.txt
+_tools/_*.sh
+_tools/_*.ps1
+_tools/_*.json
+
+# Root strays — one-off scratch dumps, not source
+/$null
+/*.lock
+/e.*
+/build.txt
+/check_*.txt
+/client/_tools_lw.txt
 
 
 
