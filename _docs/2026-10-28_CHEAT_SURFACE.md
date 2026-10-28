@@ -107,6 +107,94 @@ movement make perfect aim low-value. The two real remaining cheat
 surfaces (un-marked intel, sub-tolerance movement) are the ones the
 server-side gates already own.
 
+## Web transparency — wider access surface, smaller payoff surface
+
+Counterpoint: our inspection surface is wider-open than any native game —
+protocol, sim, decoders, predicted-movement math all ship as inspectable
+JS; devtools IS the cheat IDE. A userscript + ws sniff is hours, not
+weeks. BUT cheat *value* is bounded independently of cheat *access*:
+
+- CS2's closed binary doesn't stop cheats (below) because the payoff is
+  huge: hitscan aim = the outcome.
+- Ours: perfect aim = parity (projectile + momentum + splash), outcomes =
+  server-owned, ESP = IFF-diminished. Trivially-easy write, low-value win.
+- Krunker is the real cautionary axis — web AND hitscan = worst
+  combination. We're web AND projectile — only one of those. Genre choice
+  does more work than a closed binary would.
+- Net effect: cheat *prevalence* may be higher (anyone can write one);
+  cheat *impact* stays bounded by authority + physics. ESP is the one
+  class where openness converts directly into advantage.
+
+## CS2 field data — "nigh-infinite budget" doesn't close the gap
+
+- STYKO's 30-match Premier experiment at 25k+ (Mar 2025): **26/30 had a
+  cheater**, 17 consecutive. Vince Hill: 20k+ "unbearable", 25k+ "out of
+  control."
+- CheckMATE '24 ranked Valve's AC below Valorant/Fortnite/R6/OW. Valve
+  refuses kernel-level AC (privacy + Linux/Steam Deck) — VACnet loses to
+  anything kernel-resident. A cheat dev claimed sub-tick floods detection
+  (16 sub-ticks/tick overwhelms the server-side sample).
+- FACEIT (kernel AC) reports ~0.4% cheat rate vs Premier's ~80%
+  community-measured — players migrated BECAUSE of this.
+- July 2026: rage-hack wave → VACnet update + ~8k ban wave; cheat dev
+  quoted "might be the end for ragehacking in Premier" — for now, and
+  only the blatant class.
+- Lesson: hitscan + reaction-time combat is the exact shape where aim IS
+  the outcome; no budget fixes the structural payoff asymmetry.
+
+## Behavioral ML — we have the data; the trap is the false-positive tail
+
+- **Data surface is rich**: every moveIntent/shotFired/moveClaim + the
+  demo oracle pairing "what the client saw" vs "what it did."
+- **FP asymmetry**: ban a legit = catastrophic; miss = status quo. Best
+  legit players are outliers in the same direction as cheaters — tails
+  overlap, always. Humanization adapts the moment a detector exists.
+- **The real discriminator is information leakage, not aim smoothness**:
+  a cheater reacts to enemies it shouldn't know (shoots the un-marked
+  flanker it read off the wire). Reaction-to-visibility correlation can't
+  be faked — they can't un-know what they saw. Second: lead-error vs
+  target-juking correlation — human lead error tracks target evasion; a
+  bot's stays flat.
+- **Pragmatic shape**: score-and-flag + demo review on flagged segments,
+  not auto-ban. Capture machinery already exists (dualcheck/demos/
+  journals); the scorer is feature work on data we have, days not months.
+
+## Shadow-pools — ban nobody, quarantine behavior
+
+- Titanfall "cheaters paradise"/GTA precedent: flagged players get
+  identical-looking lobbies populated by bots/other flagged players. The
+  win: no false-positive PR disaster — a flagged legit just has a weird
+  game, not a ban.
+- **Mechanics are already ours**: `/join?room=X` resolves server-side —
+  the room NAME the player clicked is cosmetic; the matchmaker can mint a
+  same-named shadow room on a flagged worker and land them there. Server
+  browser does NOT block this: friends clicking the same name land real,
+  flagged sessions land shadow — party-join with flagged accounts is
+  broken (arguably a feature). Tells: roster diff if they compare notes;
+  bots with human-ish names cover casual inspection.
+- **The real blocker is identity persistence**: joins are
+  anonymous-by-design — a flagged player rejoins clean. But that may be
+  FINE: shadow-pooling doesn't need permanent flags, it needs
+  re-detection within a session — a continuous re-sort, not a ban hammer.
+  They get A clean game, re-flag, land back in the pool.
+
+## Input biometrics — probabilistic re-admission signal
+
+- Real field, commercial products (BioCatch, BehavioSec); reCAPTCHA's
+  mouse analysis is the same idea. Two flavors: keystroke dynamics (weak
+  here — bursty FPS inputs, not text) and mouse/input dynamics (aim-flick
+  signature, ski-jump cadence, key-press micro-timing, weapon-switch
+  habits).
+- **Fits our data surface**: every input frame is already on the wire —
+  the journal/demo data IS the biometric surface. A "resembles flagged
+  session X" scorer is feature work on data we have.
+- **Limits**: it's a signal, not an ID — same person drifts, hardware
+  swaps shift it, two players collide. Cold-start asymmetry — a one-shot
+  cheater has no fingerprint to re-match.
+- **The honest role**: a shadow-pool re-admission gate — "this new
+  session's inputs match a flagged fingerprint closely enough to
+  re-route" — not a ban-grade identifier.
+
 ## The rule
 
 The defenses live server-side — authority over outcomes, plausibility
