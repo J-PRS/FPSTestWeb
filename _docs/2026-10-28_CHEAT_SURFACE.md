@@ -195,6 +195,29 @@ weeks. BUT cheat *value* is bounded independently of cheat *access*:
   session's inputs match a flagged fingerprint closely enough to
   re-route" — not a ban-grade identifier.
 
+## Community tools + the cheap fingerprint stack
+
+- **Vote-flag, not vote-kick**: anonymous joins make ejection cosmetic —
+  a kicked player rejoins clean. The useful version is votes feeding the
+  shadow-pool score: flag-weight over vote-count (one vote = noise;
+  repeated flags across sessions = signal), ideally corroborated by the
+  behavioral scorer so "is just good" doesn't outvote reality. CS's
+  failure mode (kick-the-good-player, cooldowns for kicking cheaters) is
+  the documented abuse to design against.
+- **Fingerprint = cheap signals only**: first-party localStorage device
+  token (server-minted at join — catches everyone who doesn't clear
+  storage), IP (`srv.requestIP` is already there), and client-reported
+  fields in the join frame (WebGL renderer string, UA, screen res — the
+  client knows them; no fingerprinting code, just report-what's-there).
+- **Skip**: canvas/audio-context fingerprinting (real code, easy to
+  noise-spoof), JA3/TLS (proxy-incompatible), accounts (kills the
+  no-auth join). The stack is a weighted "probably-same-operator" — all a
+  soft quarantine needs; a false positive costs a weird game, not a ban.
+- **Framing**: not proof-grade — a determined cheater cycles incognito +
+  VPN + spoofing and beats it. The job is raising rejoin cost from "F5"
+  to "clear everything + rotate VPN"; friction-grade is what a
+  shadow-pool needs to hold people.
+
 ## The rule
 
 The defenses live server-side — authority over outcomes, plausibility
