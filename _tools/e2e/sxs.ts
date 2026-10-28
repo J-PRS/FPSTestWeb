@@ -40,11 +40,27 @@ const replayMp4 = join(OUT, `${stem}-replay.mp4`);
 
 mkdirSync(OUT, { recursive: true });
 
-// Render the demo — authored-timestamp scrub, exact demo window.
-console.log(`render ${demo} → ${replayMp4}`);
+// Probe the live clip first — the replay renders at ITS size+fps so the
+// stack is a fair pixel-for-pixel compare, not an upscale.
+const probe = (f: string): { w: number; h: number; fps: number } => {
+  const j = JSON.parse(execFileSync(FFPROBE, [
+    '-v', 'error', '-select_streams', 'v:0',
+    '-show_entries', 'stream=width,height,r_frame_rate', '-of', 'json', f,
+  ]).toString());
+  const s = j.streams[0];
+  const [n, d] = s.r_frame_rate.split('/').map(Number);
+  return { w: s.width, h: s.height, fps: n / d };
+};
+const lp = liveMp4 ? probe(liveMp4) : null;
+const size = opts.size ?? (lp ? `${lp.w}x${lp.h}` : '1280x720');
+const fps = opts.fps ?? (lp ? Math.round(lp.fps) : 30);
+
+// Render the demo — authored-timestamp scrub, exact demo window, live
+// post chain on (--post) so the grade matches a real capture.
+console.log(`render ${demo} → ${replayMp4} @${size} ${fps}fps post`);
 const r = spawnSync('node', [
   `${REPO}_tools/demorender/render.js`, demo, replayMp4,
-  `--fps=${opts.fps ?? 30}`, `--size=${opts.size ?? '1280x720'}`, '--headless',
+  `--fps=${fps}`, `--size=${size}`, '--post',
 ], { stdio: 'inherit', env: { ...process.env, E2E_GPU: '1' } });
 if (r.status !== 0 || !existsSync(replayMp4)) {
   console.error('render failed');
@@ -56,19 +72,8 @@ if (!liveMp4) {
   process.exit(0);
 }
 
-// Stack live|replay — probe live fps so the sxs plays at true speed.
-const probe = (f: string): { w: number; h: number; fps: number } => {
-  const j = JSON.parse(execFileSync(FFPROBE, [
-    '-v', 'error', '-select_streams', 'v:0',
-    '-show_entries', 'stream=width,height,r_frame_rate', '-of', 'json', f,
-  ]).toString());
-  const s = j.streams[0];
-  const [n, d] = s.r_frame_rate.split('/').map(Number);
-  return { w: s.width, h: s.height, fps: n / d };
-};
-
-const lp = probe(liveMp4);
-const half = 960; // per-side width for the stack
+// Stack live|replay at half-width each.
+const half = 960;
 console.log(`stack ${liveMp4} + ${replayMp4} → ${outMp4} @${lp.fps}fps`);
 execFileSync(FFMPEG, [
   '-y', '-i', liveMp4, '-i', replayMp4,

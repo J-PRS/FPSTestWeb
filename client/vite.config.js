@@ -340,7 +340,8 @@ export default defineConfig(({ mode }) => ({
   server: {
     port: 5400,
     host: '0.0.0.0',
-    allowedHosts: ['.trycloudflare.com'],
+    // tailnet reach (phone/laptop testing over tailscale) + cloudflare tunnel
+    allowedHosts: ['.trycloudflare.com', '.tailaba354.ts.net'],
     cors: true,
     headers: {
       // Dev-only: opts the page into the JS Self-Profiling API
