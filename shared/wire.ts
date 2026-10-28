@@ -787,11 +787,14 @@ export const WIRE_PROJGONE = 0x0C;
  *  subframes. Cuts socket-write syscalls ~3-4× under combat. */
 export const WIRE_BATCH = 0x0D;
 
-export function encodeBatch(frames: Uint8Array[]): Uint8Array {
+export function encodeBatch(frames: Uint8Array[], into?: Uint8Array): Uint8Array {
   let n = 2;
   for (const f of frames) {n += 2 + f.length;}
-  const out = new Uint8Array(n);
-  const d = new DataView(out.buffer);
+  // `into` callers pass a send-consumed-synchronously scratch — the view
+  // is overwritten by the next batch, so it's only safe where the send
+  // copies at call time (uWS does).
+  const out = into && into.byteLength >= n ? into.subarray(0, n) : new Uint8Array(n);
+  const d = new DataView(out.buffer, out.byteOffset, out.byteLength);
   out[0] = MAGIC; out[1] = WIRE_BATCH;
   let o = 2;
   for (const f of frames) {d.setUint16(o, f.length, true); o += 2; out.set(f, o); o += f.length;}

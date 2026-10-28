@@ -28,6 +28,7 @@ const BOTS = Number.parseInt(arg('bots', '64'), 10);
 const ROOMS = arg('rooms', 'prof1,prof2').split(',');
 const SECS = Number.parseInt(arg('secs', '60'), 10);
 const SETTLE = Number.parseInt(arg('settle', '18'), 10);
+const JOINPAR = arg('join-parallel', '1'); // waves of N concurrent connects
 const CPUPROF = process.argv.includes('--cpuprof');
 const ATTACH = process.argv.includes('--attach');
 const KEEP = process.argv.includes('--keep');
@@ -195,7 +196,7 @@ try {
   // one proc, --rooms N --bots PER. Loopback is throttle-exempt, so pace 5ms.
   track(Bun.spawn(
     [BUN, '../tools/netbot/wideSoak.ts', '--rooms', String(ROOMS.length), '--bots', String(Math.ceil(BOTS / ROOMS.length)),
-      '--seconds', String(SETTLE + SECS + 30), '--pace', '5', '--url', `ws://localhost:${PORT}/ws`, '--roombase', ROOMS[0] ?? 'prof'],
+      '--seconds', String(SETTLE + SECS + 30), '--pace', '5', '--join-parallel', JOINPAR, '--url', `ws://localhost:${PORT}/ws`, '--roombase', ROOMS[0] ?? 'prof'],
     { cwd: 'server_bun', stdout: Bun.file(`_tools/devin_scratch/profload_rooms.log`), stderr: Bun.file(`_tools/devin_scratch/profload_rooms.log`), stdin: 'ignore' },
   ), 'netBot');
   log(`${BOTS} bots across ${ROOMS.length} rooms — settling ${SETTLE}s`);
@@ -219,6 +220,17 @@ try {
     dropped: bw?.tickFramesDroppedPerSec,
     held: bw?.tickFramesHeldPerSec,
     phaseMs: bw?.phaseMs,
+    worstTicks: (bw as { worstTicks?: unknown } | undefined)?.worstTicks,
+    // Per-thread CPU ms deltas (Linux /proc only) — splits the JS loop
+    // from native helper threads (GC/JIT/io) that cpuPct lumps together.
+    threadCpu: ((): unknown => {
+      const a = (m0 as { threadCpu?: { tid: number; comm: string; cpuMs: number }[] } | null)?.threadCpu;
+      const b = (m1 as { threadCpu?: { tid: number; comm: string; cpuMs: number }[] } | null)?.threadCpu;
+      if (!a || !b) {return undefined;}
+      const aMap = new Map(a.map((t): [number, typeof t] => [t.tid, t]));
+      return b.map((t): { comm: string; cpuMs: number } => ({ comm: t.comm, cpuMs: t.cpuMs - (aMap.get(t.tid)?.cpuMs ?? 0) }))
+        .filter((t): boolean => t.cpuMs > 10);
+    })(),
     perClientCorePct: players ? +(measured / players).toFixed(3) : null,
     ccuPerCore: players ? +(100 / (measured / players)).toFixed(0) : null,
   }, null, 1));

@@ -79,7 +79,13 @@ export class TickLoop {
   }
   /** Last completed 10s rollup — surfaced on /metrics, null until a
    *  window closes (needs a connected player to accumulate). */
-  private lastBw: { kbpsDownTotal: number; recordsPerSec: number; suppressedPerSec: number; tierSkippedPerSec: number; tickFramesDroppedPerSec: number; tickFramesHeldPerSec: number; tickErrors: number; phaseMs: Record<string, number>; tickMs?: { avg: number; max: number } } | null = null;
+  private lastBw: { kbpsDownTotal: number; recordsPerSec: number; suppressedPerSec: number; tierSkippedPerSec: number; tickFramesDroppedPerSec: number; tickFramesHeldPerSec: number; tickErrors: number; phaseMs: Record<string, number>; tickMs?: { avg: number; max: number }; worstTicks?: { ms: number; room: string; cmd: number; sims: number; auth: number; rec: number; fan: number; at: number }[] } | null = null;
+  /** Worst ticks this rollup window — a bare tickMsMax never says WHICH
+   *  phase held the spike, and "code vs GC/deschedule" is the whole
+   *  question: a 200ms tick whose spans sum to 2ms is a runtime pause,
+   *  a 200ms 'fan' span is ours. Per-tick stamps are ~6 wallNow calls —
+   *  cheap vs the mark() EMA's measured cost. */
+  private worstTicks: { ms: number; room: string; cmd: number; sims: number; auth: number; rec: number; fan: number; at: number }[] = [];
   bandwidthWindow() { return this.lastBw; }
   /** Rooms stopped for repeated tick failures — /metrics surfaces this
    *  so a dead room is visible on the status page, not just in logs. */
@@ -292,6 +298,7 @@ this.metrics.tickErrors += 1;
     room.connections.beginCollect();
     room.drainCommands();
     this.mark('cmd');
+    const tCmd = wallNow();
 
     // Server sims move first — bot/flag writes land in this tick's
     // records. They get MEASURED elapsed, not the nominal step: setInterval
@@ -307,6 +314,7 @@ this.metrics.tickErrors += 1;
     // projectiles are different fix paths).
     for (const sim of room.sims) { this.errPhase = `sim:${sim.name ?? '?'}`; sim.tick(dt); this.mark(this.errPhase); }
     this.mark('sims');
+    const tSims = wallNow();
 
     // Authority mode: the shadow sim's output is the broadcast truth.
     // Reports only fed it aim/liveness hints — what every other player
@@ -332,10 +340,12 @@ this.metrics.tickErrors += 1;
       }
     }
     this.mark('auth');
+    const tAuth = wallNow();
 
     this.errPhase = 'records';
     const records = this.fanout.buildRecords(room, players, now0);
     this.mark('records');
+    const tRec = wallNow();
 
 room.tickSeq += 1;
 this.metrics.ticks += 1;
@@ -353,7 +363,20 @@ this.metrics.ticks += 1;
     this.errPhase = '?';
     // Whole-tick wall cost — the execution-side complement of tickLag
     // (schedule-side). Rising avg = systemic load; spikes = GC/bursts.
-    const tickMs = wallNow() - tickT0;
+    const tEnd = wallNow();
+    const tickMs = tEnd - tickT0;
+    const w = this.worstTicks;
+    if (w.length < 8 || tickMs > w[w.length - 1]!.ms) {
+      w.push({ ms: Math.round(tickMs * 10) / 10, room: room.name,
+        cmd: Math.round((tCmd - tickT0) * 10) / 10,
+        sims: Math.round((tSims - tCmd) * 10) / 10,
+        auth: Math.round((tAuth - tSims) * 10) / 10,
+        rec: Math.round((tRec - tAuth) * 10) / 10,
+        fan: Math.round((tEnd - tRec) * 10) / 10,
+        at: room.tickSeq });
+      w.sort((a, b): number => b.ms - a.ms);
+      if (w.length > 8) {w.length = 8;}
+    }
     this.metrics.tickMsSum += tickMs;
     this.metrics.tickSamples += 1;
     if (tickMs > this.metrics.tickMsMax) {this.metrics.tickMsMax = tickMs;}
@@ -382,7 +405,9 @@ this.metrics.ticks += 1;
         tickErrors: m.tickErrors,
         phaseMs,
         tickMs: m.tickSamples ? { avg: Number((m.tickMsSum / m.tickSamples).toFixed(2)), max: Number(m.tickMsMax.toFixed(2)) } : undefined,
+        worstTicks: [...this.worstTicks],
       };
+      this.worstTicks = [];
       m.tickMsSum = 0; m.tickMsMax = 0; m.tickSamples = 0;
       logger.debug('Tick bandwidth', Object.assign({}, this.lastBw, {players: playerCount}));
       m.tickErrors = 0; m.recordsIdleReaped = m.tickErrors; m.recordsSuppressed = m.recordsIdleReaped; m.recordsBuilt = m.recordsSuppressed; m.ticks = m.recordsBuilt;

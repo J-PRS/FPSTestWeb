@@ -17,6 +17,10 @@ const ROOMS = arg('--rooms', 10, Number);
 const PER = arg('--bots', 24, Number);
 const SECONDS = arg('--seconds', 90, Number);
 const PACE = arg('--pace', 3400, Number); // ms between connects, global
+// --join-parallel N: connect N bots concurrently per wave (join-burst
+// test — the launch-day herd shape; default 1 keeps the WAN-polite
+// serial pace the flood guard expects).
+const JOIN_PAR = arg('--join-parallel', 1, Number);
 const ROOMBASE = arg('--roombase', 'stress', String);
 // Ops admin token — bypasses the 20/min/IP join flood guard on the
 // server (SessionManager). Lets a single-box fleet burst instead of
@@ -43,12 +47,12 @@ for (let r = 0; r < ROOMS; r++) {
     g++;
   }
 }
-console.log(`wide soak: ${bots.length} bots → ${ROOMS} rooms × ${PER}, pace ${PACE}ms → ~${Math.ceil(bots.length * PACE / 60000)}min join phase`);
+console.log(`wide soak: ${bots.length} bots → ${ROOMS} rooms × ${PER}, pace ${PACE}ms → ~${Math.ceil(bots.length * PACE / 60_000)}min join phase`);
 
 let joined = 0;
 const t0 = Date.now();
 const joinMs: number[] = [];
-for (const b of bots) {
+const joinOne = async (b: (typeof bots)[0]): Promise<void> => {
   const c0 = Date.now();
   try { await b.nc.connect(); joined++; }
   catch { /* socket error — count at the end */ }
@@ -56,7 +60,11 @@ for (const b of bots) {
   // pace gap mostly covers it, so poll briefly rather than serially wait.
   for (let i = 0; i < 50 && b.nc.tel.gameStates === 0; i++) {await new Promise((r) => setTimeout(r, 60));}
   if (b.nc.tel.gameStates > 0) {joinMs.push(Date.now() - c0);}
-  await new Promise((r) => setTimeout(r, PACE));
+};
+for (let w = 0; w < bots.length; w += JOIN_PAR) {
+  const wave = bots.slice(w, w + JOIN_PAR);
+  await Promise.all(wave.map(joinOne));
+  if (w + JOIN_PAR < bots.length) {await new Promise((r) => setTimeout(r, PACE));}
 }
 joinMs.sort((a, b) => a - b);
 const jq = (q: number): number => joinMs[Math.min(joinMs.length - 1, Math.floor(joinMs.length * q))]!;
@@ -72,7 +80,7 @@ await new Promise((r) => setTimeout(r, 400));
 
 const perRoom = new Map<string, { n: number; gs: number; ticks: number; shots: number; hits: number; kills: number; deaths: number; rejects: Map<string, number>; closed: number; corr: number }>();
 for (const s of snap) {
-  const t = s.t;
+  const {t} = s;
   const r = perRoom.get(s.room) ?? { n: 0, gs: 0, ticks: 0, shots: 0, hits: 0, kills: 0, deaths: 0, rejects: new Map(), closed: 0, corr: 0 };
   r.n++; r.gs += t.gameStates; r.ticks += t.ticks; r.shots += t.shots; r.hits += t.hitsDealt;
   r.kills += t.kills; r.deaths += t.deaths; r.corr += t.corrections;

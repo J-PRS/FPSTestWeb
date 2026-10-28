@@ -1,4 +1,5 @@
 import { monitorEventLoopDelay, type IntervalHistogram } from 'perf_hooks';
+import { readdirSync, readFileSync } from 'node:fs';
 import { CONFIG } from './config.js';
 import type { GameServer } from './GameServer.js';
 import { wallNow } from './wallClock.ts';
@@ -142,6 +143,32 @@ n += 1; fpsSum += s.fps; fpsMin = Math.min(fpsMin, s.fps);
         const m = process.memoryUsage();
         return { rssMb: Math.round(m.rss / 1_048_576), heapUsedMb: Math.round(m.heapUsed / 1_048_576), heapTotalMb: Math.round(m.heapTotal / 1_048_576) };
       })(),
+      // Per-thread CPU (Linux /proc, undefined elsewhere) — splits "JS
+      // loop busy" from "native helpers busy" (GC markers/JIT/io) which
+      // the cpuprofile can't see. Consumers diff successive scrapes.
+      threadCpu: threadCpu(),
     };
   }
+
+/** Linux procfs per-thread cumulative CPU ms (self/task entries' stat).
+ *  Returns undefined on platforms without procfs (Windows/macOS). */
+function threadCpu(): { tid: number; comm: string; cpuMs: number }[] | undefined {
+  try {
+    const dir = `/proc/self/task`;
+    const out: { tid: number; comm: string; cpuMs: number }[] = [];
+    for (const tid of readdirSync(dir)) {
+      try {
+        const stat = readFileSync(`${dir}/${tid}/stat`, 'utf8');
+        // comm is "(name)" possibly containing spaces — split after it.
+        const end = stat.lastIndexOf(')');
+        const comm = stat.slice(stat.indexOf('(') + 1, end);
+        const f = stat.slice(end + 2).split(' ');
+        // fields after comm: state(3) → utime is field 14 → index 11
+        const utime = Number(f[11] ?? 0), stime = Number(f[12] ?? 0);
+        out.push({ tid: Number(tid), comm, cpuMs: Math.round((utime + stime) * 10) }); // 100Hz jiffies
+      } catch { /* thread exited mid-read */ }
+    }
+    return out.sort((a, b): number => b.cpuMs - a.cpuMs).slice(0, 12);
+  } catch { return undefined; }
+}
 

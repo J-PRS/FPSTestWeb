@@ -109,6 +109,10 @@ export class ConnectionManager {
    *  metering at queue time, not at the merged send. */
   private collecting = false;
   private readonly outbox = new Map<string, Uint8Array[]>();
+  /** Batch-encode scratch — ws.send consumes the bytes synchronously, so
+   *  one growable buffer serves every conn's batch (per-conn arenas are
+   *  for frames that OUTLIVE their encode, the batch doesn't). */
+  private batchScratch = new Uint8Array(64 * 1024);
   /** Per-conn tick-frame arena — the outbox RETAINS the encoded view
    *  until flush, so every conn needs its own buffer: a shared arena
    *  aliases every queued frame to the last-encoded one (the fanout
@@ -136,17 +140,21 @@ export class ConnectionManager {
   flushOutboxes(): void {
     this.collecting = false;
     for (const [pid, q] of this.outbox) {
-      const ws = this.connections.get(pid);
-      if (ws && ws.readyState === 1 && this.drownCheck(pid, ws) === 'ok') {
-        const status = ws.send(q.length === 1 ? q[0]! : encodeBatch(q));
-        if (status === 0) {
-          this.reliableDropped += 1;
-          this.onReliableDropped?.(pid);
-          try { ws.close(1011, 'reliable drop'); } catch { /* already closing */ }
+      // Persistent queue — the array survives the flush (length reset),
+      // so a steady fleet allocates zero outbox objects per tick.
+      if (q.length > 0) {
+        const ws = this.connections.get(pid);
+        if (ws && ws.readyState === 1 && this.drownCheck(pid, ws) === 'ok') {
+          const status = ws.send(q.length === 1 ? q[0]! : encodeBatch(q, this.batchScratch));
+          if (status === 0) {
+            this.reliableDropped += 1;
+            this.onReliableDropped?.(pid);
+            try { ws.close(1011, 'reliable drop'); } catch { /* already closing */ }
+          }
         }
+        q.length = 0;
       }
     }
-    this.outbox.clear();
   }
 
   private connections: Map<string, ServerWebSocket<WebSocketData>> = new Map();
@@ -373,6 +381,8 @@ export class ConnectionManager {
       this.heldPhase.delete(playerId);
       this.outbox.delete(playerId);
       this.frameArenas.delete(playerId);
+      this.bufSampleAt.delete(playerId);
+      this.bufSampleVal.delete(playerId);
       const ft = this.floodTimers.get(playerId);
       if (ft) {clearTimeout(ft); this.floodTimers.delete(playerId);}
       if (this.topic && typeof ws.unsubscribe === 'function') {ws.unsubscribe(this.topic);}
@@ -413,7 +423,7 @@ export class ConnectionManager {
   sendBinaryToPlayer(playerId: string, data: Uint8Array): 'sent' | 'held' | 'backlogged' | 'sparse' | 'gone' {
     const ws = this.connections.get(playerId);
     if (!ws || ws.readyState !== 1) {return 'gone';}
-    const buffered = (ws as unknown as { getBufferedAmount?(): number }).getBufferedAmount?.() ?? 0;
+    const buffered = this.bufferedOf(playerId, ws);
     // UDP-bound session: volatile tick frames ride the datagram lane
     // outright — before the outbox/collect path so they never queue
     // behind the reliable batch.
@@ -465,6 +475,23 @@ export class ConnectionManager {
    *  a buffered sample — once per DROWN_SWEEP_MS per conn, not per frame
    *  (a native getBufferedAmount per broadcast×conn was a hot remnant). */
   private drownSweepAt = new Map<string, number>();
+  /** getBufferedAmount is a native call — sampling it per send frame was
+   *  a cpuprofile line at 1k conns. Cached while `collecting` (the batched
+   *  tick window, ≤50ms — the shed/held gates tolerate that staleness;
+   *  outside the window every read is fresh, per the intro-gate tests). */
+  private bufSampleAt = new Map<string, number>();
+  private bufSampleVal = new Map<string, number>();
+  private bufferedOf(pid: string, ws: ServerWebSocket<WebSocketData>): number {
+    if (!this.collecting) {
+      return (ws as unknown as { getBufferedAmount?(): number }).getBufferedAmount?.() ?? 0;
+    }
+    const now = wallNow();
+    if (now - (this.bufSampleAt.get(pid) ?? -1e12) < 50) {return this.bufSampleVal.get(pid) ?? 0;}
+    const v = (ws as unknown as { getBufferedAmount?(): number }).getBufferedAmount?.() ?? 0;
+    this.bufSampleAt.set(pid, now);
+    this.bufSampleVal.set(pid, v);
+    return v;
+  }
   /** Per-conn shed phase — counts backlogged ticks so every SHED_KEEPALIVE-th
    *  still rides through (sparse keepalive); reset on unregister. */
   private shedPhase = new Map<string, number>();
