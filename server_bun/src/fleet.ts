@@ -61,7 +61,7 @@ const children = new Map<string, Child>();
 const crashStreak = new Map<string, number>();
 
 function spawnWorker(id: string, port: number): void {
-  const proc = Bun.spawn(['bun', join('src', 'server.ts')], {
+  const proc = Bun.spawn([process.execPath, join('src', 'server.ts')], {
     cwd: join(import.meta.dir, '..'),
     env: Object.assign({}, process.env, {FPS_PORT: String(port),FPS_FLEET_REPORT: `http://127.0.0.1:${BASE}/fleet/report`}),
     stdout: 'inherit',
