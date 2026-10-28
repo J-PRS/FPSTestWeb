@@ -23,5 +23,5 @@
     "visible": 700.0
   },
   "weather": { "ash": 0.35 },
-  "_notes": "hills = rolling grassland field (terrainPreset 2), open dm, no structures. Cool grey-blue haze (green -> grey -> blue); the explicit weather block drops the default ember/ash trio (neutral drift only). 2026-10-28: bin was MISSING from the tree (map silently fell back to the default field) — rebaked with genhills: per-octave integer shears + per-axis cells kill the axis-aligned diamond lattice, widened plains/belts mask gives feature placement; profile now 29deg mean slope / 9% steep vs escalade's 33deg/26%."
+  "_notes": "hills = rolling grassland field (terrainPreset 2), open dm, no structures. Cool grey-blue haze (green -> grey -> blue); the explicit weather block drops the default ember/ash trio (neutral drift only). 2026-10-28: bin was MISSING from the tree (map silently fell back to the default field) — rebaked with genhills: per-octave integer shears + per-axis cells kill the axis-aligned diamond lattice; plains/belts are regional classes (smooth meadow vs ridged mountain wall) with octave amplitudes tilted to big features for long descents. terrainstats (hs 1.5): 21deg mean slope / 6% steep vs escalade's 33deg/26%."
 }

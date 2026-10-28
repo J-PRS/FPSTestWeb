@@ -39,6 +39,7 @@ function lattice(ix, iz, oct) {
   return s - Math.floor(s);
 }
 const fade = (t) => t * t * (3 - 2 * t);
+function smoothstep01(v, a, b) { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); }
 function noise(u, v, cells, oct) {
   const x = u * cells, z = v * cells;
   const x0 = ((Math.floor(x) % cells) + cells) % cells, z0 = ((Math.floor(z) % cells) + cells) % cells;
@@ -57,7 +58,11 @@ function noise(u, v, cells, oct) {
 // cell counts give drift-aligned anisotropy without breaking the wrap.
 const SHEAR = [[0, 0], [1, 0], [0, 2], [-2, 1], [3, -1]];
 const OCTX = [3, 7, 16, 37, 79], OCTZ = [5, 11, 23, 53, 89];
-const AMP = [1, 0.62, 0.38, 0.24, 0.13];
+// Amplitude tilts toward the big octaves: Tribes skiing wants long
+// unbroken descents and launchable lips — jagged fine detail is dead
+// speed. The belt path adds the ridged term for crests; the 79/89-cell
+// octaves stay tiny so they texture, not chatter, the runs.
+const AMP = [1, 0.62, 0.38, 0.20, 0.08];
 function octUV(u, v, i) {
   const [kx, kz] = SHEAR[i];
   return [((u + kx * v) % 1 + 1) % 1, ((v + kz * u) % 1 + 1) % 1];
@@ -91,13 +96,16 @@ for (let z = 0; z < N; z += 1) {
       wv = v + WARP * (noise(u + 8.3, v + 2.8, 4, 12) - 0.5) * 0.25;
     }
     const f = fbm(wu, wv), r = ridged(wu, wv);
-    let hh = f * (1 - RIDGE) + r * RIDGE;
-    // low-frequency feature mask: ridge belts vs open plains — the
-    // escalade-vs-hills diff is that real terrain concentrates energy
-    // unevenly; widen the modulation so plains genuinely calm and belts
-    // bump (still variance, just unevenly distributed).
+    // Regional terrain classes, not amplitude scaling: the mask picks
+    // between a smooth rolling plain (low fBm, damped high octaves) and
+    // a ridged mountain belt — real grasslands are plains NEXT TO hill
+    // country, not the same bumps louder. Escalade's "floor+peaks" shape
+    // without pinning a level.
     const mask = noise(u * 0.5 + 3.1, v * 0.5 + 7.4, 3, 7);
-    hh *= 0.40 + 1.05 * mask;
+    const belt = smoothstep01(mask, 0.35, 0.75);
+    const plainH = f * 0.62;                       // rolling meadow, not flats
+    const beltH = f * (1 - RIDGE) + r * (0.55 + RIDGE); // ridged ridge-country
+    let hh = plainH * (1 - belt) + beltH * belt * (1.6 - 0.3 * belt);
     // gentle sinusoidal tilt for asymmetry
     hh += 0.12 * (1 - Math.cos(2 * Math.PI * u)) * 0.5;
     h[z * N + x] = hh;
