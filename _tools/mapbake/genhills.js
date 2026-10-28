@@ -49,9 +49,35 @@ function noise(u, v, cells, oct) {
          lattice(x0, z1, oct) * (1 - fx) * fz +
          lattice(x1, z1, oct) * fx * fz;
 }
-const OCT = [4, 9, 20, 44], AMP = [1, 0.62, 0.38, 0.22];
-function fbm(u, v) { let h = 0; for (let i = 0; i < OCT.length; i += 1) { h += noise(u, v, OCT[i], i) * AMP[i]; } return h; }
-function ridged(u, v) { let h = 0, w = 1; for (let i = 0; i < OCT.length; i += 1) { const n = 1 - Math.abs(2 * noise(u, v, OCT[i], i + 31) - 1); h += n * n * w * AMP[i]; w *= 0.85; } return h; }
+// Per-octave integer shear + per-axis cell counts: un-skewed octaves stack
+// their lattices axis-aligned, so ridge directions align into a visible
+// diamond grid. SHEAR[i]=(kx,kz) shifts u by kx*v and v by kz*u — integer
+// shears keep the wrap periodic (u+kv at v=1 shifts by an integer), unlike
+// rotation or fractional stretch which seam the clipmap tile. Per-axis
+// cell counts give drift-aligned anisotropy without breaking the wrap.
+const SHEAR = [[0, 0], [1, 0], [0, 2], [-2, 1], [3, -1]];
+const OCTX = [3, 7, 16, 37, 79], OCTZ = [5, 11, 23, 53, 89];
+const AMP = [1, 0.62, 0.38, 0.24, 0.13];
+function octUV(u, v, i) {
+  const [kx, kz] = SHEAR[i];
+  return [((u + kx * v) % 1 + 1) % 1, ((v + kz * u) % 1 + 1) % 1];
+}
+function noiseAn(u, v, i, seed) {
+  const [pu, pv] = octUV(u, v, i);
+  // per-axis lattice: texels px=OCTX[i], pz=OCTZ[i] — still wraps at u=1
+  // because both counts are integers.
+  const cx = OCTX[i], cz = OCTZ[i];
+  const x = pu * cx, z = pv * cz;
+  const x0 = ((Math.floor(x) % cx) + cx) % cx, z0 = ((Math.floor(z) % cz) + cz) % cz;
+  const x1 = (x0 + 1) % cx, z1 = (z0 + 1) % cz;
+  const fx = fade(x - Math.floor(x)), fz = fade(z - Math.floor(z));
+  return lattice(x0, z0, seed) * (1 - fx) * (1 - fz) +
+         lattice(x1, z0, seed) * fx * (1 - fz) +
+         lattice(x0, z1, seed) * (1 - fx) * fz +
+         lattice(x1, z1, seed) * fx * fz;
+}
+function fbm(u, v) { let h = 0; for (let i = 0; i < OCTX.length; i += 1) { h += noiseAn(u, v, i, i) * AMP[i]; } return h; }
+function ridged(u, v) { let h = 0, w = 1; for (let i = 0; i < OCTX.length; i += 1) { const n = 1 - Math.abs(2 * noiseAn(u, v, i, i + 31) - 1); h += n * n * w * AMP[i]; w *= 0.85; } return h; }
 
 // --- base field ------------------------------------------------------------
 const h = new Float64Array(N * N);
@@ -66,9 +92,12 @@ for (let z = 0; z < N; z += 1) {
     }
     const f = fbm(wu, wv), r = ridged(wu, wv);
     let hh = f * (1 - RIDGE) + r * RIDGE;
-    // low-frequency feature mask: ridge belts vs open plains
+    // low-frequency feature mask: ridge belts vs open plains — the
+    // escalade-vs-hills diff is that real terrain concentrates energy
+    // unevenly; widen the modulation so plains genuinely calm and belts
+    // bump (still variance, just unevenly distributed).
     const mask = noise(u * 0.5 + 3.1, v * 0.5 + 7.4, 3, 7);
-    hh *= 0.65 + 0.7 * mask;
+    hh *= 0.40 + 1.05 * mask;
     // gentle sinusoidal tilt for asymmetry
     hh += 0.12 * (1 - Math.cos(2 * Math.PI * u)) * 0.5;
     h[z * N + x] = hh;
