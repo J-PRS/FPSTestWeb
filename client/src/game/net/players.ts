@@ -153,75 +153,80 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
 
 
 
+/** Wire playerHit → health/death feedback + the demo's damage edge. */
+function handleWireHit(ctx: NetCtx, shooterId: string, targetId: string, damage: number, health: number, armor?: number): void {
+  const { deps, nm } = ctx;
+  const {logger} = deps;
+  if (deps.world.playbackMode) {return;}
+  inv('wire-hit-finite', Number.isFinite(damage) && Number.isFinite(health), { damage, health, shooterId, targetId });
+  if (!Number.isFinite(damage) || !Number.isFinite(health)) {return;}
+  // Every credited hit lands in the demo — demodiff pairs it 1:1 with
+  // the server's own playerHit edge; a missing one is a dropped wire
+  // event (the "no missing damage" oracle).
+  const hitPos = targetId === nm().getLocalPlayerId()
+    ? deps.lazyPlayer().pos
+    : (deps.world.remotePlayers.get(targetId)?.pos ?? deps.lazyPlayer().pos);
+  deps.lazyDemoManager?.()?.recordPlayerHit(shooterId === 'environment' ? null : shooterId, targetId, damage, hitPos);
+  if (targetId === nm().getLocalPlayerId()) {
+    const player = deps.lazyPlayer();
+    if (player.isDead) {
+      if (player.deadConfirmedByWire) {
+        // A confirmed hit on a corpse means the wire thinks we died later
+        // than the sim did — worth surfacing, it moves kill credit too.
+        logger.warn(`playerHit on dead local player: ${damage} from ${shooterId}`);
+      } else {
+        // Predicted death, never wire-confirmed — the server says we're
+        // alive and this hit IS the proof. Un-die to its health so the
+        // seat un-bricks instead of desyncing isDead until a kill lands.
+        logger.warn(`playerHit on predicted-dead local — reviving to server hp ${health} (was dead to ${shooterId})`);
+        player.isDead = false;
+        player.health = health;
+        deps.lazyHud().show();
+        deps.lazyHud().setDeathOverlay(false);
+      }
+    }
+    if (armor !== undefined && Number.isFinite(armor)) {player.armor = armor;}
+    // Shielded hits route to the energy tank (server kept health
+    // unchanged) — the soak reads as a cyan flash + hum, not a grunt.
+    if (player.isShielded) {
+      player.absorbShieldDamage(damage);
+      deps.lazyHud().showShieldDamage(deps.world.remotePlayers.get(shooterId)?.pos ?? null, damage);
+      sfx.shieldHit();
+      player.health = health;
+      logger.info(`Shield soaked ${damage} from ${shooterId} (health: ${health})`);
+      return;
+    }
+    player.health = health;
+    // Point the damage arc at the shooter's last known position
+    deps.lazyHud().showDamage(deps.world.remotePlayers.get(shooterId)?.pos ?? null, damage);
+    sfx.playerHurt();
+    logger.info(`Local player hit for ${damage} damage by ${shooterId} (health: ${health})`);
+    return;
+  }
+
+  // Non-lethal hits don't trigger death animation
+  logger.info(`Remote player ${targetId} hit for ${damage} damage by ${shooterId} (health: ${health})`);
+  deps.lazyHealthBarSystem().spawn(targetId, damage, health, armor);
+  deps.world.remotePlayers.get(targetId)?.flinch();
+  // Server-confirmed hit on a remote: flash the marker even when client
+  // prediction didn't (e.g. lag-comp rewound the victim into the shot).
+  if (shooterId === nm().getLocalPlayerId()) {
+    // Authority-simmed shells never run the client's predict path, so
+    // the damage number has to live on the echo or it never appears.
+    const rp = deps.world.remotePlayers.get(targetId);
+    if (rp) {deps.lazyDamageNumbers().spawn(rp.pos, damage, '#ffe08a', deps.lazyCamera());}
+    deps.lazyHud().showHitMarker();
+    sfx.hitMarker(false);
+  }
+}
+
 /** Hit feedback, knockback, reconciliation, kills — the damage wire. */
 function wirePlayerCombat(ctx: NetCtx): void {
   const { deps, networkManager, nm } = ctx;
   const {logger} = deps;
 
-  networkManager.onPlayerHit = (shooterId: string, targetId: string, damage: number, health: number, armor?: number): void => {
-    if (deps.world.playbackMode) {return;}
-    inv('wire-hit-finite', Number.isFinite(damage) && Number.isFinite(health), { damage, health, shooterId, targetId });
-    if (!Number.isFinite(damage) || !Number.isFinite(health)) {return;}
-    // Every credited hit lands in the demo — demodiff pairs it 1:1 with
-    // the server's own playerHit edge; a missing one is a dropped wire
-    // event (the "no missing damage" oracle).
-    const hitPos = targetId === nm().getLocalPlayerId()
-      ? deps.lazyPlayer().pos
-      : (deps.world.remotePlayers.get(targetId)?.pos ?? deps.lazyPlayer().pos);
-    deps.lazyDemoManager?.()?.recordPlayerHit(shooterId === 'environment' ? null : shooterId, targetId, damage, hitPos);
-    // Check if local player was hit
-    if (targetId === nm().getLocalPlayerId()) {
-      const player = deps.lazyPlayer();
-      if (player.isDead) {
-        if (player.deadConfirmedByWire) {
-          // A confirmed hit on a corpse means the wire thinks we died later
-          // than the sim did — worth surfacing, it moves kill credit too.
-          logger.warn(`playerHit on dead local player: ${damage} from ${shooterId}`);
-        } else {
-          // Predicted death, never wire-confirmed — the server says we're
-          // alive and this hit IS the proof. Un-die to its health so the
-          // seat un-bricks instead of desyncing isDead until a kill lands.
-          logger.warn(`playerHit on predicted-dead local — reviving to server hp ${health} (was dead to ${shooterId})`);
-          player.isDead = false;
-          player.health = health;
-          deps.lazyHud().show();
-          deps.lazyHud().setDeathOverlay(false);
-        }
-      }
-      if (armor !== undefined && Number.isFinite(armor)) {player.armor = armor;}
-      // Shielded hits route to the energy tank (server kept health
-      // unchanged) — the soak reads as a cyan flash + hum, not a grunt.
-      if (player.isShielded) {
-        player.absorbShieldDamage(damage);
-        deps.lazyHud().showShieldDamage(deps.world.remotePlayers.get(shooterId)?.pos ?? null, damage);
-        sfx.shieldHit();
-        player.health = health;
-        logger.info(`Shield soaked ${damage} from ${shooterId} (health: ${health})`);
-        return;
-      }
-      player.health = health;
-      // Point the damage arc at the shooter's last known position
-      deps.lazyHud().showDamage(deps.world.remotePlayers.get(shooterId)?.pos ?? null, damage);
-      sfx.playerHurt();
-      logger.info(`Local player hit for ${damage} damage by ${shooterId} (health: ${health})`);
-      return;
-    }
-
-    // Non-lethal hits don't trigger death animation
-    logger.info(`Remote player ${targetId} hit for ${damage} damage by ${shooterId} (health: ${health})`);
-    deps.lazyHealthBarSystem().spawn(targetId, damage, health, armor);
-    deps.world.remotePlayers.get(targetId)?.flinch();
-    // Server-confirmed hit on a remote: flash the marker even when client
-    // prediction didn't (e.g. lag-comp rewound the victim into the shot).
-    if (shooterId === nm().getLocalPlayerId()) {
-      // Authority-simmed shells never run the client's predict path, so
-      // the damage number has to live on the echo or it never appears.
-      const rp = deps.world.remotePlayers.get(targetId);
-      if (rp) {deps.lazyDamageNumbers().spawn(rp.pos, damage, '#ffe08a', deps.lazyCamera());}
-      deps.lazyHud().showHitMarker();
-      sfx.hitMarker(false);
-    }
-  };
+  networkManager.onPlayerHit = (shooterId, targetId, damage, health, armor): void =>
+    handleWireHit(ctx, shooterId, targetId, damage, health, armor);
 
   // Rejected claim: a predicted self-blast that never happened server-side
   // leaves our health low until the next real event. Adopt the server's
