@@ -98,7 +98,8 @@ export class RoomStructures {
     // map file can't know the terrain, and a floating/buried compound is
     // worse than an advisory height. Spec objects are shared with the
     // wire echo, so the mutation reaches clients as the real position.
-    if (host.field) {seatKits(host.spec.structures, (x, z): number => hmHeight(host.field!, x, z));}
+    // Sky maps (killY) author decks in the air over a far-below plain — seating them would drop the deck into the kill zone.
+    if (host.field && host.spec.killY === undefined) {seatKits(host.spec.structures, (x, z): number => hmHeight(host.field!, x, z));}
     const list = this.eff();
     host.moveSim.attachStructures(list);
     host.projectiles?.attachStructures(list);

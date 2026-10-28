@@ -79,6 +79,7 @@ import { createWaveDirector } from './game/waveDirector.js';
 import { createDemoLifecycle } from './game/demoLifecycle.js';
 import { createEntities } from './game/entities.js';
 import { createGameLoop, noteLocalSnap } from './game/gameLoop.js';
+import { setBootVeil } from './ui/hud/hudChrome.js';
 import { PlayerSheep } from './game/playerSheep.js';
 import { wireNetworkHandlers } from './game/netHandlers.js';
 import { createRemotes } from './game/remotes.js';
@@ -612,7 +613,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
   // including seatKits, which the server normally runs before broadcast:
   // without it every piece stands at authored y and dirt pokes through
   // decks (bastion terrain varies ~15m under a genhouse footprint).
-  if (!classicMode && soloMode && soloSpec) {
+  if (!classicMode && soloMode && soloSpec && soloSpec.spec.killY === undefined) {
     seatKits(soloSpec.spec.structures, (x, z): number => terrain.getHeight(x, z));
   }
   if (!classicMode) {bootApplySavedMap(netCtx, soloMode ? (soloSpec?.map ?? null) : savedMap);}
@@ -674,7 +675,7 @@ async function connectPhase(netCtx: NetCtx, savedMap: MapSnapshot | null, classi
     const s = soloSpec.spec;
     const anchor = s.teamSpawns?.alpha?.[0] ?? s.spawns?.[0] ?? s.bases?.alpha;
     if (anchor) {
-      player.pos.set(anchor.x, terrain.getHeight(anchor.x, anchor.z) + 2, anchor.z);
+      player.pos.set(anchor.x, Math.max(anchor.y, terrain.getHeight(anchor.x, anchor.z) + 2), anchor.z);
       player.yaw = Math.atan2(-anchor.x, -anchor.z);
       noteLocalSnap();
       player.syncMovement();
@@ -970,7 +971,7 @@ async function init(): Promise<void> {
   if (!onlineBoot && soloSpec) {
     const a0 = soloSpec.spec.teamSpawns?.alpha?.[0] ?? soloSpec.spec.spawns?.[0] ?? soloSpec.spec.bases?.alpha;
     if (a0) {
-      player.pos.set(a0.x, terrain.getHeight(a0.x, a0.z) + 2, a0.z);
+      player.pos.set(a0.x, Math.max(a0.y, terrain.getHeight(a0.x, a0.z) + 2), a0.z);
       noteLocalSnap();
       player.syncMovement();
       player.markTeleport();
@@ -1106,7 +1107,8 @@ async function init(): Promise<void> {
   // Offline boots hold the player out of play during warmup — input
   // frozen from first frame until whenStable() releases him in
   // connectPhase (online paths gate on the session veil instead).
-  if (classicMode || (!urlParams.room && !urlParams.p2p)) {player.freezeInput();}
+  if (classicMode || (!urlParams.room && !urlParams.p2p)) {player.freezeInput(); setBootVeil(true);}
+  else {setBootVeil(false);}
   gameLoop.start();
   // Offline clip renderer drives real render passes off the rAF cadence.
   if (demoManager) {demoManager.renderNow = (dt: number): void => gameLoop.renderFrame(dt);}
@@ -1176,7 +1178,7 @@ function reviveLocal(): void {
   if (spot) {
     player.pos.set(spot.x + 3, terrain.getHeight(spot.x + 3, spot.z + 3) + 2, spot.z + 3);
   } else if (specAnchor) {
-    player.pos.set(specAnchor.x, terrain.getHeight(specAnchor.x, specAnchor.z) + 2, specAnchor.z);
+    player.pos.set(specAnchor.x, Math.max(specAnchor.y, terrain.getHeight(specAnchor.x, specAnchor.z) + 2), specAnchor.z);
   } else {
     const a = Math.random() * Math.PI * 2;
     player.pos.set(Math.cos(a) * 40, terrain.getHeight(Math.cos(a) * 40, Math.sin(a) * 40) + 2, Math.sin(a) * 40);
