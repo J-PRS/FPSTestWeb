@@ -20,6 +20,11 @@ cd client && npx -y oxlint src                   # lint
 bash _tools/check.sh --fastest                    # quick compile+lint probe (~30-60s); NOT the gate
 # rootcheck (utils/_rootcheck.mjs) now also runs inside check.sh and gates
 # on index_root.txt — a new/removed root entry fails until accepted or moved.
+# When a rootcheck fails, investigate the new entry FIRST: scratch/log/
+# accident files move to ZZZ_ROOT/, _scratch/, or logs/. index_root.txt
+# --update IS the right fix for genuinely new top-level things — but
+# scratch-patterned names (.log, stray .txt, shell-quoting accidents) are
+# refused even when indexed, so archiving beats indexing there.
 # Windows clean stack: .\devup.bat = reap stale dev procs (_tools/reap.mjs)
 # + free :5400/:8000 + launch both. run_all.bat = same without the reaper.
 node _tools/procs.mjs            # list every repo-rooted process (zombie check)

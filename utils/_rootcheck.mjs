@@ -19,8 +19,41 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const INDEX = join(ROOT, 'index_root.txt');
 const UPDATE = process.argv.includes('--update') || process.argv.includes('--accept');
+const FORCE = process.argv.includes('--force');
+
+// Entries that are almost certainly scratch/accidents, not real top-level
+// files. These fail the gate EVEN WHEN INDEXED — the index is for genuine
+// new top-level entries, not for silencing scratch. Real homes: ZZZ_ROOT
+// (archive), _scratch, logs/, or a subfolder. --force overrides --update only.
+const JUNK = [
+  /\.log$/i,                                   // stray logs → logs/
+  /\.txt$/i,                                   // stray dumps (allowlist below)
+  /[$'"()]/,                                   // shell-quoting accidents ($null, e.includes('lights'))
+  /^nul$/i,                                    // windows nul redirection artifact
+  /^[a-z]\./i,                                 // fragment files like e.targetType
+];
+const TXT_ALLOWLIST = new Set(['index_root.txt', 'changelog.txt']);
+const isJunk = (n) => JUNK.some((re) => re.test(n)) && !TXT_ALLOWLIST.has(n);
 
 const actual = readdirSync(ROOT).sort();
+const junkPresent = actual.filter(isJunk);
+if (junkPresent.length) {
+  console.log('\n[rootcheck] scratch-looking root entries — do NOT index these:');
+  for (const f of junkPresent) console.log(`    ! ${f}`);
+  console.log('Move them into ZZZ_ROOT/ (archive), _scratch/, logs/, or a proper subfolder.');
+  if (!FORCE) {process.exit(1);}
+  console.log('(--force: continuing anyway)');
+}
+
+if (UPDATE) {
+  if (junkPresent.length && !FORCE) {
+    // unreachable — junk exits above — but keep the guard explicit.
+    process.exit(1);
+  }
+  writeFileSync(INDEX, actual.join('\n') + '\n');
+  console.log(`[rootcheck] wrote ${actual.length} entries to index_root.txt`);
+  process.exit(0);
+}
 
 if (UPDATE) {
   writeFileSync(INDEX, actual.join('\n') + '\n');
