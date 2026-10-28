@@ -213,8 +213,12 @@ export class Terrain {
           : terrainFrag,
         lights: true, // binds sun shadow map/matrices — enables USE_SHADOWMAP
         // Outermost ring alpha-dissolves into the sky past ~80% of its
-        // extent (edgeHalf) — transparent so the world edge has no seam.
-        transparent: i === CLIPMAP_LEVELS.length - 1,
+        // extent (edgeHalf). ALL levels are transparent: `opaque` is a
+        // three program parameter, so mixing minted a SECOND ~83KB
+        // program (~1s serial compile inside the veil) for a one-level
+        // difference. alpha=1 fragments blend identically and
+        // depthWrite stays on — the cost is transparent-pass sorting.
+        transparent: true,
         // Overlap band (each level's border cell rides under its parent):
         // finer levels must win coincident depth or coarse rings paint
         // over the seam — graded offset per level, finest closest.
