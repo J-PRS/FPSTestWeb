@@ -17,9 +17,10 @@ describe('scenario: ffa kill feeds the dm scoreboard', () => {
       step(room, 1);
     }
     expect(target.isDead).toBe(true);
-    const fs = w.msgs.find((m) => m.type === 'ffaScore') as { scores?: Record<string, number> } | undefined;
+    const fs = w.msgs.find((m) => m.type === 'ffaScore') as { playerId?: string; score?: number } | undefined;
     expect(fs).toBeTruthy();
-    expect(fs!.scores![killer.id]).toBeGreaterThan(0);
+    expect(fs!.playerId).toBe(killer.id);
+    expect(fs!.score).toBeGreaterThan(0);
     expect(w.count('teamScore')).toBe(0);
   });
 });

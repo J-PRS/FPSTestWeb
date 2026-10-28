@@ -273,7 +273,10 @@ export class RoomScore {
     const spec = this.h.modeSpec!;
     const pts = (this.ffaScores.get(id) ?? 0) + n;
     this.ffaScores.set(id, pts);
-    this.h.broadcast({ type: 'ffaScore', scores: Object.fromEntries(this.ffaScores), winAt: spec.winAt });
+    // Delta row only — a full-board echo per kill is O(kills × players ×
+    // board size) JSON on the wire; clients merge (gameState still sends
+    // the whole board on join).
+    this.h.broadcast({ type: 'ffaScore', playerId: id, score: pts, winAt: spec.winAt });
     if (pts >= spec.winAt) {this.h.endMatch(id);}
   }
 
@@ -282,18 +285,19 @@ export class RoomScore {
   awardPersonal(id: string, n: number): void {
     const spec = this.h.modeSpec;
     if (!spec) {return;}
-    this.ffaScores.set(id, (this.ffaScores.get(id) ?? 0) + n);
-    this.h.broadcast({ type: 'ffaScore', scores: Object.fromEntries(this.ffaScores), winAt: spec.winAt });
+    const pts = (this.ffaScores.get(id) ?? 0) + n;
+    this.ffaScores.set(id, pts);
+    this.h.broadcast({ type: 'ffaScore', playerId: id, score: pts, winAt: spec.winAt });
   }
 
-  /** Player removal — drop their FFA row and re-echo the board if it
+  /** Player removal — drop their FFA row and re-echo the removal if it
    *  had one. */
   dropPlayer(playerId: string): void {
     this.dmgPool.delete(playerId); // unbanked chip dies with the seat
     this.heldEchoed.delete(playerId); // their tokens leave the live sum too
     this.syncHeld();
     if (this.ffaScores.delete(playerId)) {
-      this.h.broadcast({ type: 'ffaScore', scores: Object.fromEntries(this.ffaScores), winAt: this.h.modeSpec!.winAt });
+      this.h.broadcast({ type: 'ffaScore', playerId, rm: true, winAt: this.h.modeSpec!.winAt });
     }
   }
 }

@@ -143,7 +143,7 @@ export class NetworkManager {
   public lastHealthEventAt = 0;
   public onYourCharge: ((charge: number) => void) | null = null;
   public onPickupGone: ((id: number, by: string | null) => void) | null = null;
-  public onFfaScore: ((scores: Record<string, number>, winAt: number) => void) | null = null;
+  public onFfaScore: ((scores: Record<string, number> | undefined, winAt: number, deltaId?: string, deltaScore?: number, rm?: boolean) => void) | null = null;
   public onFfaMatchEnd: ((winner: string, scores: Record<string, number>) => void) | null = null;
   /** Admin hot-reload — structures/arena changed mid-match; rebuild them. */
   public onMapUpdate: ((map: { mapName?: string; silent?: boolean; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; killY?: number; terrain?: string; heightScale?: number; tileSize?: number; fog?: { color: [number, number, number]; distance?: number; visible?: number; horizon?: [number, number, number] }; water?: WaterSpec; spawns?: SpawnPoint[]; teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] }; terrainTex?: string; terrainPreset?: number; sky?: string; weather?: WeatherSpec; atmosphere?: AtmosphereSpec; interiors?: InteriorSpec[] }) => void) | null = null;
@@ -293,34 +293,6 @@ export class NetworkManager {
           url,
           resolveUrl,
           onConnect: (): void => {
-            // Join handshake — must precede the queued-message flush,
-            // which WebSocketConnection guarantees (onConnect first)
-            this.send({
-              type: 'join',
-              playerId: this.localPlayerId,
-              name: settings.get('fps-name').trim() || undefined,
-              token: this.sessionToken ?? undefined,
-              // Offset cursor — a reclaim carries the last reliable ev we
-              // saw so the server replays only the missed frames.
-              resumeSeq: this.sessionToken ? this.wireIn.evWatermark : undefined,
-              // We own a session veil — hold the body off-spawn until the
-              // veil-drop sends 'ready' (or the 8s force timer).
-              spawnHold: true,
-              room: urlParams.room ?? undefined,
-              // Creation hints: explicit ?mode wins, then the persisted
-              // join-spec — NOT fps-mode, which is the solo tab's pick
-              // and mustn't leak into room mints (lobby ANY bug).
-              mode: urlParams.get('mode') ?? readJoinSpec().mode,
-              map: urlParams.map ?? readJoinSpec().map,
-              bots: urlParams.bots ?? readJoinSpec().bots,
-              unlisted: urlParams.unlisted || undefined,
-              noCreatures: urlParams.noCreatures || undefined,
-              noBalls: urlParams.noBalls || undefined,
-              perk: this.joinPerk?.(),
-              armorClass: this.joinClass?.(),
-              skill: this.joinSkill?.(),
-              transport: this.ws?.tier,
-            });
             this.connected = true;
             this.connectedAtMs = Date.now();
             this.tierRewarded = false;
@@ -383,6 +355,37 @@ export class NetworkManager {
           onRtt: (rtt): void => this.telemetry.onPong(Date.now() - rtt, Date.now()),
         });
         this.ws.connect(url);
+        // The join posts NOW — it parks in the tier transport's pending
+        // queue and rides out AT connect instead of paying a starved
+        // main-thread 'up' hop (~1.5-2.5s while the GLB parse owns main).
+        // Ordering is preserved: join is the first frame queued, the
+        // pendingCmds flush lands behind it. 'transport' is stamped by the
+        // tier at flush — the probe hasn't picked a lane yet.
+        this.ws.send(JSON.stringify({
+          type: 'join',
+          playerId: this.localPlayerId,
+          name: settings.get('fps-name').trim() || undefined,
+          token: this.sessionToken ?? undefined,
+          // Offset cursor — a reclaim carries the last reliable ev we
+          // saw so the server replays only the missed frames.
+          resumeSeq: this.sessionToken ? this.wireIn.evWatermark : undefined,
+          // We own a session veil — hold the body off-spawn until the
+          // veil-drop sends 'ready' (or the 8s force timer).
+          spawnHold: true,
+          room: urlParams.room ?? undefined,
+          // Creation hints: explicit ?mode wins, then the persisted
+          // join-spec — NOT fps-mode, which is the solo tab's pick
+          // and mustn't leak into room mints (lobby ANY bug).
+          mode: urlParams.get('mode') ?? readJoinSpec().mode,
+          map: urlParams.map ?? readJoinSpec().map,
+          bots: urlParams.bots ?? readJoinSpec().bots,
+          unlisted: urlParams.unlisted || undefined,
+          noCreatures: urlParams.noCreatures || undefined,
+          noBalls: urlParams.noBalls || undefined,
+          perk: this.joinPerk?.(),
+          armorClass: this.joinClass?.(),
+          skill: this.joinSkill?.(),
+        }));
       } catch (error) {
         reject(error);
       }

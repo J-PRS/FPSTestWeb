@@ -28,7 +28,8 @@ describe('Room DM scoring', () => {
     expect(sent.some((m) => m.type === 'playerKill' && m.shooterId === 'shooter')).toBe(true);
     const fs = sent.filter((m) => m.type === 'ffaScore');
     expect(fs.length).toBe(1);
-    expect((fs[0] as { scores: Record<string, number> }).scores.shooter).toBe(MODES.dm.ptsPlayerKill);
+    expect((fs[0] as { playerId: string }).playerId).toBe('shooter');
+    expect((fs[0] as { score: number }).score).toBe(MODES.dm.ptsPlayerKill);
   });
 
   it('environment kills score nothing', () => {
@@ -65,7 +66,8 @@ describe('Room DM scoring', () => {
     room.ballSim.onKilled!('hunter', { x: 0, y: 0, z: 0 }, 0);
     const fs = sent.filter((m) => m.type === 'ffaScore');
     expect(fs.length).toBe(1);
-    expect((fs[0] as { scores: Record<string, number> }).scores.hunter).toBe(MODES.dm.ptsCreatureKill);
+    expect((fs[0] as { playerId: string }).playerId).toBe('hunter');
+    expect((fs[0] as { score: number }).score).toBe(MODES.dm.ptsCreatureKill);
     // Unknown/environment-ish killers score nothing
     sent.length = 0;
     room.ballSim.onKilled!('ghost', { x: 0, y: 0, z: 0 }, 0);

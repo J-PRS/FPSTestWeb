@@ -81,17 +81,27 @@ else if (scores.alpha > scores.bravo) {lead = 'alpha';}
       lastMilestone = milestone;
     }
   };
-  networkManager.onFfaScore = (scores, winAt): void => {
-    if (Object.values(scores).some((v): boolean => !Number.isFinite(v)) || !Number.isFinite(winAt)) {return;}
-    deps.world.ffaScores = new Map(Object.entries(scores));
+  networkManager.onFfaScore = (scores, winAt, deltaId, deltaScore, rm): void => {
+    let board = deps.world.ffaScores;
+    if (deltaId === undefined) {
+      if (!scores || Object.values(scores).some((v): boolean => !Number.isFinite(v))) {return;}
+      board = deps.world.ffaScores = new Map(Object.entries(scores));
+    } else {
+      // Steady-state delta — merge one row; the full-board replace below
+      // stays for legacy peers and the join snapshot.
+      if (rm) {board.delete(deltaId);}
+      else if (Number.isFinite(deltaScore)) {board.set(deltaId, deltaScore!);}
+      else {return;}
+    }
+    if (!Number.isFinite(winAt)) {return;}
     const me = nm().getLocalPlayerId();
-    const mine = scores[me] ?? 0;
-    let lead = 0; for (const v of Object.values(scores)) {if (v > lead) {lead = v;}}
+    const mine = board.get(me) ?? 0;
+    let lead = 0; for (const v of board.values()) {if (v > lead) {lead = v;}}
     // Only announce when the lead changes hands or YOU score — a per-kill
     // feed line for every bot frag would drown the chat. Team modes reuse
     // the same channel for the personal PTS column — silent there, the
     // win is the team bank, not a personal race to winAt.
-    if (MODES[deps.world.mode as ModeId]?.ffa && (scores[me] ?? 0) > 0) {
+    if (MODES[deps.world.mode as ModeId]?.ffa && mine > 0) {
       chat.add(null, `you: ${mine} pts (leader ${lead}/${winAt})`);
     }
   };
@@ -141,6 +151,10 @@ else if (scores.alpha > scores.bravo) {lead = 'alpha';}
     // new match's first lead line.
     lastLead = '';
     lastMilestone = -1;
+    // Server cleared its ffaScores in startNext — the delta path means no
+    // full-board echo arrives to wipe ours, so clear it here or last
+    // match's rows linger forever.
+    deps.world.ffaScores.clear();
     chat.add(null, `match start — ${mode || 'arena'}`);
     sfx.matchHorn('start');
   };

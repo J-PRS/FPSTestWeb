@@ -399,7 +399,10 @@ export type ServerMessage =
   // drop its stored session instead of rejoin-looping on a stale token.
   | { type: 'sessionRejected'; reason: string }
   | { type: 'teamScore'; scores: { alpha: number; bravo: number }; winAt: number }
-  | { type: 'ffaScore'; scores: Record<string, number>; winAt: number }
+  // scores = full-board echo (legacy/join path); playerId+score = single-row
+  // delta (the steady-state path — a full map per kill was the chatty-JSON
+  // egress the stress run surfaced). rm = drop that player's row.
+  | { type: 'ffaScore'; scores?: Record<string, number>; playerId?: string; score?: number; rm?: boolean; winAt: number }
   | { type: 'ffaMatchEnd'; winner: string; scores: Record<string, number> }
   | { type: 'matchEnd'; winner: TeamId | 'draw'; scores: { alpha: number; bravo: number } }
   | { type: 'matchStart'; mode: string; scores: { alpha: number; bravo: number } }
