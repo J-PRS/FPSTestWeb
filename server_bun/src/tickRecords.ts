@@ -67,6 +67,9 @@ export interface FanoutMetrics {
   recordsIdleReaped: number;
   recordsSent: number;
   recordsTierSkipped: number;
+  /** Stop-tier verdicts — far+static records replicated nothing (the
+   *  sparse cadence record carries no truth a 0-vel ghost lacks). */
+  recordsStopped: number;
   bytesSent: number;
   tickFramesDropped: number;
   /** Frames held at the intro gate (join burst still draining) — NOT
@@ -475,6 +478,18 @@ else if (dSq < 360_000) {tier = 3;} // 150m / 400m / 600m
         // observer at full rate while they extrapolate the knockback —
         // sparse never substitutes there (vel IS the payload).
         if (introFull || r.force || seq % tier === 0) {
+          // Stopped (far AND under ~12m/s): zero replication — the
+          // receiver dead-reckons a ~0-vel ghost either way, so every
+          // sparse record was paying wire cost for no new truth. The
+          // staggered FULLS keep flowing through r.force below, so the
+          // conn's decode basis still reseats every ~750ms — an un-stop
+          // needs nothing: the next masked delta decodes against a
+          // fresh basis. Nothing on the wire says a record stopped.
+          if (tier === 8 && !r.force && !intro && spd <= 12) {
+            this.metrics.recordsTierSkipped += 1;
+            this.metrics.recordsStopped += 1;
+            continue;
+          }
           // Far tier (>600m, 2.5Hz): pos+vitals only — the speck
           // dead-reckons its retained vel/rot and the staggered fulls
           // reseat it every ~750ms. ~40% off the dominant egress class.

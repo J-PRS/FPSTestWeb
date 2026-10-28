@@ -12,7 +12,7 @@ import type { Room } from '../../src/Room.ts';
 describe('spawn pacing', () => {
   const mkFanout = (): TickFanout => new TickFanout(
     { recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0,
-      recordsSent: 0, recordsTierSkipped: 0, bytesSent: 0,
+      recordsSent: 0, recordsTierSkipped: 0, recordsStopped: 0, bytesSent: 0,
       tickFramesDropped: 0, tickFramesHeld: 0 } as FanoutMetrics,
     (r, pid, reason) => r.removePlayerCompletely(pid, reason, () => {}));
 

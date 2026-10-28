@@ -240,10 +240,14 @@ wouldn't write again."
    Cheaper than the playersJoined-batch idea and targets the real burst
    cost: the joiner's receive buffer + instantiation cost. Our
    gameState ships the full roster in one shot.
-2. **Stop-vs-cull split** — our far tier keeps replicating sparsely;
-   a `Stopped` state (frozen object, retained, zero replication) for
-   far/static entities is a real egress lever we don't have. Their
-   group-vote rule for reclaiming is the right shape.
+2. ~~**Stop-vs-cull split**~~ — **shipped** (stopTier.test): far+static
+   (tier-8, spd≤12) replicates nothing on its sparse cadence — the
+   receiver's retained ~0-vel ghost is already truth. Staggered
+   heal-fulls keep flowing (r.force bypass) so the conn's decode basis
+   stays fresh; un-stop needs nothing. The "per-recipient basis"
+   concern turned out moot: the periodic-full bypass already keeps
+   every conn's basis within 750ms of wire-truth, so no conn is ever
+   >15 ticks behind.
 3. **Hold radius on reconcile** — only systems near a replay get
    corrected. Ours restores the local player; if we ever predict remote
    entities, this limits the blast radius.

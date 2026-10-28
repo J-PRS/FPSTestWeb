@@ -243,7 +243,7 @@ export function replica(room: Room): Replica {
   // sim so step() drives the production ordering (input → sim → fanout).
   const fanoutMetrics: FanoutMetrics = {
     recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0,
-    recordsSent: 0, recordsTierSkipped: 0, bytesSent: 0, tickFramesDropped: 0, tickFramesHeld: 0,
+    recordsSent: 0, recordsTierSkipped: 0, recordsStopped: 0, bytesSent: 0, tickFramesDropped: 0, tickFramesHeld: 0,
   };
   const fanout = new TickFanout(fanoutMetrics,
     (r, pid, reason) => r.removePlayerCompletely(pid, reason, () => {}));

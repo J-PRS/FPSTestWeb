@@ -18,7 +18,7 @@ describe('scenario: tick egress counts live recipients only', () => {
 
     const metrics: FanoutMetrics = {
       recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0,
-      recordsSent: 0, recordsTierSkipped: 0, bytesSent: 0, tickFramesDropped: 0, tickFramesHeld: 0,
+      recordsSent: 0, recordsTierSkipped: 0, recordsStopped: 0, bytesSent: 0, tickFramesDropped: 0, tickFramesHeld: 0,
     };
     const fanout = new TickFanout(metrics,
       (r, pid, reason) => r.removePlayerCompletely(pid, reason, () => {}));

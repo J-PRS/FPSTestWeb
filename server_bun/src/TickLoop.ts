@@ -47,7 +47,7 @@ export class TickLoop {
 
   // Tick-bandwidth metrics — aggregated per log window so we can see what
   // interest tiers + suppression are actually saving.
-  private metrics = { ticks: 0, recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0, recordsSent: 0, recordsTierSkipped: 0, bytesSent: 0, tickFramesDropped: 0, tickFramesHeld: 0, tickErrors: 0, windowStart: 0, tickMsSum: 0, tickMsMax: 0, tickSamples: 0 };
+  private metrics = { ticks: 0, recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0, recordsSent: 0, recordsTierSkipped: 0, recordsStopped: 0, bytesSent: 0, tickFramesDropped: 0, tickFramesHeld: 0, tickErrors: 0, windowStart: 0, tickMsSum: 0, tickMsMax: 0, tickSamples: 0 };
   /** Which phase threw when a room tick dies — the catch sites one level
    *  up can't see inside tickRoom otherwise. */
   private errPhase = '?';
