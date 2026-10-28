@@ -600,6 +600,15 @@ export class MessageHandler {
     if (pending.size > 0) {this.roomInfo.admitQueue?.(playerId, pending);}
     const playersData = roster.filter((p): boolean => !pending.has(p.id));
 
+    // Early map announce on the silent mapUpdate verb — the joiner's
+    // ~2.7s terrain fetch+apply waits on gameState otherwise; shipping
+    // the identical map payload one message earlier lets the client
+    // build the world while the roster snapshot + creature rosters
+    // serialize behind it. gameState still carries map (unchanged wire);
+    // applyTerrain is keyed — the second apply is a no-op.
+    const early = this.roomEcho();
+    if (early.map) {this.sendToPlayer(playerId, Object.assign({type: 'mapUpdate' as const, mapName: early.mapName, silent: true}, early.map));}
+
     this.sendGameState(playerId, playersData, {
       sessionToken,
       // wt clients only: advertise the reliable-binary lane (stream 2).
