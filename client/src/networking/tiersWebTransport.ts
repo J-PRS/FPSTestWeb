@@ -189,7 +189,16 @@ export class WebTransportGameTransport implements GameTransport {
   }
 
   send(data: string | Uint8Array): boolean {
-    if (!this.open) {return false;}
+    // The tier transport flushes its parked join via send() right after
+    // t.connect() — before wt.ready resolves. Returning false DROPS it:
+    // the server's first frame then becomes 'ready' → 'pre-join frame
+    // rejected' → session kills itself on every dial. Strings park in
+    // preOpen (joins/control must wait, not drop); binary stays volatile —
+    // superseding state, the join is never binary.
+    if (!this.open) {
+      if (typeof data === 'string' && this.preOpen.length < 100) {this.preOpen.push(data);}
+      return true;
+    }
     // Seq'd binary frames (position reports): prefer stream-2 when it's
     // up — reliable AND HoL-isolated from the JSON lane, and the
     // datagram lane measured ~33% loss on loopback (QUIC drops dgrams

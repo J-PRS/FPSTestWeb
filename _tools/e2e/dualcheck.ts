@@ -70,7 +70,7 @@ try {
       const r = spawnSync(BUN, [`${REPO}_tools/demodiff.ts`, CLI_DEMO, dump.file], { stdio: 'inherit', cwd: REPO });
       process.exit(r.status ?? 1);
     }
-    console.error(`demodump failed: ${JSON.stringify(dump)}`);
+    console.error(`demodump failed: ${JSON.stringify(dump)}\n--- server log ---\n${stack.serverLog().slice(-4000)}`);
   } catch (e) { console.error(`demodump threw: ${e}`); }
 }
 await stack.down();
