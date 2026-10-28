@@ -11,7 +11,7 @@ import type { PlayerState } from '../src/types.ts';
 // consumer rewinds the same window.
 const P = (x = 0, y = 0, z = 0) => ({ x, y, z });
 const fakePlayer = () => ({
-  position: P(), history: [] as { t: number; x: number; y: number; z: number }[],
+  position: P(), history: [] as { t: number; x: number; y: number; z: number; vx: number; vy: number; vz: number }[],
 }) as unknown as PlayerState;
 
 describe('pushRewindSample', () => {
@@ -19,7 +19,7 @@ describe('pushRewindSample', () => {
     const p = fakePlayer();
     p.position = P(1, 2, 3);
     pushRewindSample(p, wallMs(1000));
-    expect(p.history).toEqual([{ t: wallMs(1000), x: 1, y: 2, z: 3 }]);
+    expect(p.history).toEqual([{ t: wallMs(1000), x: 1, y: 2, z: 3, vx: 0, vy: 0, vz: 0 }]);
   });
 
   it('trims samples older than the rewind window', () => {
@@ -55,8 +55,8 @@ describe('rewindPos', () => {
     const p = fakePlayer();
     const now = Date.now();
     p.history = [
-      { t: wallMs(now - 200), x: 0, y: 0, z: 0 },
-      { t: wallMs(now - 100), x: 10, y: 0, z: 0 },
+      { t: wallMs(now - 200), x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 },
+      { t: wallMs(now - 100), x: 10, y: 0, z: 0, vx: 0, vy: 0, vz: 0 },
     ];
     p.position = P(20, 0, 0);
     const r = rewindPos(p, 150); // halfway between the two samples
@@ -66,7 +66,7 @@ describe('rewindPos', () => {
   it('clamps to buffer edges instead of extrapolating', () => {
     const p = fakePlayer();
     const now = Date.now();
-    p.history = [{ t: wallMs(now - 300), x: 7, y: 0, z: 0 }];
+    p.history = [{ t: wallMs(now - 300), x: 7, y: 0, z: 0, vx: 0, vy: 0, vz: 0 }];
     p.position = P(20, 0, 0);
     // Older than the oldest sample → the oldest sample, not a guess.
     expect(rewindPos(p, 500).x).toBe(7);

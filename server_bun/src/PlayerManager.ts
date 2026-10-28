@@ -475,7 +475,7 @@ target.deaths += 1;
     // Rewind buffer: corpse-side samples must not survive the respawn —
     // hit validation and muzzle checks would rewind to the death site.
     player.history.length = 0;
-    player.history.push({ t: wallNow(), x: spawn.x, y: spawn.y, z: spawn.z });
+    player.history.push({ t: wallNow(), x: spawn.x, y: spawn.y, z: spawn.z, vx: 0, vy: 0, vz: 0 });
     player.protectedUntil = simMs(simNow() + SPAWN_PROTECT_MS);
 
     return { position: Object.assign({}, player.position), rotation: Object.assign({}, player.rotation), armorClass: player.armorClass };

@@ -23,6 +23,13 @@ interface GhostRow {
   /** Speed of the wire record at sample time — divergence means more at
    *  60m/s than at 5m/s. */
   spd: number;
+  /** Interp phase flags at sample time — identifies WHICH mechanism let
+   *  rendered diverge from the ghost (DR free-run, converge steer,
+   *  extrapolation cap, or plain silence). */
+  sim: boolean; conv: boolean; cap: boolean;
+  /** Wall-ms since the last server update — separates "buffered interp"
+   *  (fresh) from "no wire truth arrived" (stale). */
+  silence: number;
 }
 const rows: GhostRow[] = [];
 let nextAt = 0;
@@ -42,13 +49,15 @@ export function sampleRemoteGhosts(remotes: Iterable<RemotePlayer>): void {
     rows.push({
       t: now, id: rp.playerId, rw, wg, rg,
       spd: Math.hypot(rp.vel.x, rp.vel.y, rp.vel.z),
+      sim: rp.isSimulating, conv: rp.interpConverging, cap: rp.interpAtCap,
+      silence: Date.now() - rp.lastUpdateTime,
     });
   }
   if (rows.length > MAX_ROWS) {rows.splice(0, rows.length - MAX_ROWS);}
 }
 
 function pct(vals: number[], f: number): number {
-  if (!vals.length) {return 0;}
+  if (vals.length === 0) {return 0;}
   const s = vals.slice().sort((a, b) => a - b);
   return Math.round(s[Math.min(s.length - 1, Math.floor(s.length * f))]! * 100) / 100;
 }
@@ -58,13 +67,13 @@ registerDiag('ghosts', () => {
   const wg = rows.map((r) => r.wg);
   const rg = rows.map((r) => r.rg);
   const worst = rows.slice().sort((a, b) => b.rg - a.rg).slice(0, 5)
-    .map((r) => `${r.id.slice(0, 12)} rg=${r.rg.toFixed(1)} rw=${r.rw.toFixed(1)} wg=${r.wg.toFixed(1)} @${Math.round(r.spd)}m/s`);
+    .map((r) => `${r.id.slice(0, 12)} rg=${r.rg.toFixed(1)} rw=${r.rw.toFixed(1)} wg=${r.wg.toFixed(1)} @${Math.round(r.spd)}m/s ${r.sim ? 'SIM' : ''}${r.conv ? 'CONV' : ''}${r.cap ? 'CAP' : ''} sil=${Math.round(r.silence)}ms`);
   return {
     ghosts: {
       n: rows.length,
-      rw: { p50: pct(rw, 0.5), p95: pct(rw, 0.95), max: rw.length ? Math.max(...rw).toFixed(1) : 0 },
-      wg: { p50: pct(wg, 0.5), p95: pct(wg, 0.95), max: wg.length ? Math.max(...wg).toFixed(1) : 0 },
-      rg: { p50: pct(rg, 0.5), p95: pct(rg, 0.95), max: rg.length ? Math.max(...rg).toFixed(1) : 0 },
+      rw: { p50: pct(rw, 0.5), p95: pct(rw, 0.95), max: rw.length > 0 ? Math.max(...rw).toFixed(1) : 0 },
+      wg: { p50: pct(wg, 0.5), p95: pct(wg, 0.95), max: wg.length > 0 ? Math.max(...wg).toFixed(1) : 0 },
+      rg: { p50: pct(rg, 0.5), p95: pct(rg, 0.95), max: rg.length > 0 ? Math.max(...rg).toFixed(1) : 0 },
       worst,
     },
   };

@@ -153,3 +153,34 @@ export function dhypot(...v: number[]): number {
 /** Fixed-arity — no args-array alloc; the ...v form is for cold callers. */
 export function dhypot2(x: number, z: number): number { return Math.sqrt(x * x + z * z); }
 export function dhypot3(x: number, y: number, z: number): number { return Math.sqrt(x * x + y * y + z * z); }
+
+/* ---- bounded Hermite position interp — lag-comp shared curve ------- */
+
+export interface HermiteSample { x: number; y: number; z: number; vx: number; vy: number; vz: number }
+
+/** Position at alpha `f` between s0 and s1, `spanSec` apart. Velocity-
+ *  aware Hermite so the interpolated point rides the same curve the
+ *  renderer drew; the overshoot guard rejects ballooning curves (turns
+ *  where endpoint tangents fight) and falls back to the linear chord.
+ *  Client render interp, client ghost query, and server rewind MUST all
+ *  use this — a divergent ghost curve rewinds hit validation onto a
+ *  path nobody saw. Pure +−×÷/sqrt — identical on both engines. */
+export function hermiteBounded(
+  s0: HermiteSample, s1: HermiteSample, f: number, spanSec: number,
+  out: { x: number; y: number; z: number },
+): void {
+  const lx = s0.x + (s1.x - s0.x) * f, ly = s0.y + (s1.y - s0.y) * f, lz = s0.z + (s1.z - s0.z) * f;
+  const f2 = f * f, f3 = f2 * f;
+  const h00 = 2 * f3 - 3 * f2 + 1, h10 = f3 - 2 * f2 + f;
+  const h01 = -2 * f3 + 3 * f2, h11 = f3 - f2;
+  const hx = h00 * s0.x + h10 * s0.vx * spanSec + h01 * s1.x + h11 * s1.vx * spanSec;
+  const hy = h00 * s0.y + h10 * s0.vy * spanSec + h01 * s1.y + h11 * s1.vy * spanSec;
+  const hz = h00 * s0.z + h10 * s0.vz * spanSec + h01 * s1.z + h11 * s1.vz * spanSec;
+  const ox = hx - lx, oy = hy - ly, oz = hz - lz;
+  const dist = Math.sqrt((s1.x - s0.x) ** 2 + (s1.y - s0.y) ** 2 + (s1.z - s0.z) ** 2);
+  if (ox * ox + oy * oy + oz * oz < (0.25 * dist + 0.35) * (0.25 * dist + 0.35)) {
+    out.x = hx; out.y = hy; out.z = hz;
+  } else {
+    out.x = lx; out.y = ly; out.z = lz;
+  }
+}

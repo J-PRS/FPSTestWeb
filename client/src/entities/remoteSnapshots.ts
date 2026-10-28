@@ -1,5 +1,6 @@
 import type * as THREE from 'three';
 import { lerpAngle, wrapAngleDelta } from '../../../shared/angles.ts';
+import { hermiteBounded } from '../../../shared/dmath.ts';
 import { inv } from '../../../shared/invariants.ts';
 
 function clampNum(v: number, lo: number, hi: number): number {
@@ -7,6 +8,9 @@ function clampNum(v: number, lo: number, hi: number): number {
 if (v > hi) {return hi;}
 return v;
 }
+
+// Scratch for hermiteBounded — keeps the per-frame sample zero-alloc.
+const _hermiteOut = { x: 0, y: 0, z: 0 };
 
 /**
  * SnapshotBuffer — the remote-player interpolation core.
@@ -367,33 +371,14 @@ export class SnapshotBuffer {
     const a = span > 0 ? (renderTime - s0.t) / span : 1;
 
     const spanSec = span / 1000;
-    const ddx = s1.x - s0.x, ddy = s1.y - s0.y, ddz = s1.z - s0.z;
-    const lx = s0.x + ddx * a, ly = s0.y + ddy * a, lz = s0.z + ddz * a;
-    let useHermite = false;
-    // 1s cap: tier-suppressed streams legitimately span ~500ms.
+    // 1s cap: tier-suppressed streams legitimately span ~500ms. The
+    // shared bounded Hermite (dmath) is the same curve the server's
+    // rewind uses — overshoot guard keeps curves bent, never ballooned.
     if (spanSec > 0 && spanSec < 1) {
-      const t2 = a * a, t3 = t2 * a;
-      const h00 = 2 * t3 - 3 * t2 + 1;
-      const h10 = t3 - 2 * t2 + a;
-      const h01 = -2 * t3 + 3 * t2;
-      const h11 = t3 - t2;
-      const hx = h00 * s0.x + h10 * s0.vx * spanSec + h01 * s1.x + h11 * s1.vx * spanSec;
-      const hy = h00 * s0.y + h10 * s0.vy * spanSec + h01 * s1.y + h11 * s1.vy * spanSec;
-      const hz = h00 * s0.z + h10 * s0.vz * spanSec + h01 * s1.z + h11 * s1.vz * spanSec;
-      const ox = hx - lx, oy = hy - ly, oz = hz - lz;
-      const dist = Math.hypot(ddx, ddy, ddz);
-      // Overshoot tolerance: a loose bound here lets the curve bulge far
-      // off-chord — the ghost then sprints along the bulge faster than
-      // the wire velocity (a 1.5m chord excursion at 30m/s reads as a
-      // visible surge, and feeds the converge-steer seam on segment
-      // boundaries). Keep it tight: curves may bend, never balloon.
-      if (ox * ox + oy * oy + oz * oz < (0.25 * dist + 0.35) * (0.25 * dist + 0.35)) {
-        outPos.set(hx, hy, hz);
-        useHermite = true;
-      }
-    }
-    if (!useHermite) {
-      outPos.set(lx, ly, lz);
+      hermiteBounded(s0, s1, a, spanSec, _hermiteOut);
+      outPos.set(_hermiteOut.x, _hermiteOut.y, _hermiteOut.z);
+    } else {
+      outPos.set(s0.x + (s1.x - s0.x) * a, s0.y + (s1.y - s0.y) * a, s0.z + (s1.z - s0.z) * a);
     }
     // Yaw: lerp along shortest arc
     outRot.yaw = lerpAngle(s0.yaw, s1.yaw, a);
@@ -431,11 +416,10 @@ export class SnapshotBuffer {
     const s0 = snaps[i]!;
     const s1 = snaps[i + 1]!;
     const a = s1.t > s0.t ? (t - s0.t) / (s1.t - s0.t) : 1;
-    outPos.set(
-      s0.x + (s1.x - s0.x) * a,
-      s0.y + (s1.y - s0.y) * a,
-      s0.z + (s1.z - s0.z) * a,
-    );
+    // Same bounded Hermite the server's rewindPos runs — the ghost the
+    // client projects IS the ghost the server validates.
+    hermiteBounded(s0, s1, a, (s1.t - s0.t) / 1000, _hermiteOut);
+    outPos.set(_hermiteOut.x, _hermiteOut.y, _hermiteOut.z);
     return true;
   }
 

@@ -78,18 +78,20 @@ export function renderLagOfTarget(
  *  {t,x,y,z} alloc was ~2.5K objects/s at a full room. Trims recycle
  *  into the pool; consumers read sample fields transiently, never
  *  retain the object past the call, so reuse can't leak stale reads. */
-const samplePool: { t: WallMs; x: number; y: number; z: number }[] = [];
+const samplePool: { t: WallMs; x: number; y: number; z: number; vx: number; vy: number; vz: number }[] = [];
 const SAMPLE_POOL_MAX = 8192;
 
 export function pushRewindSample(
-  p: { history: { t: WallMs; x: number; y: number; z: number }[]; position: { x: number; y: number; z: number } },
+  p: { history: { t: WallMs; x: number; y: number; z: number; vx: number; vy: number; vz: number }[]; position: { x: number; y: number; z: number }; velocity?: { x: number; y: number; z: number } },
   now: WallMs,
 ): void {
   // A non-finite position would rewind hit validation to a NaN ghost —
   // every check against this window whiffs. Skip the sample instead.
   if (!Number.isFinite(p.position.x + p.position.y + p.position.z)) {return;}
-  const s = samplePool.pop() ?? { t: 0 as WallMs, x: 0, y: 0, z: 0 };
+  const v = p.velocity ?? { x: 0, y: 0, z: 0 };
+  const s = samplePool.pop() ?? { t: 0 as WallMs, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
   s.t = now; s.x = p.position.x; s.y = p.position.y; s.z = p.position.z;
+  s.vx = v.x; s.vy = v.y; s.vz = v.z;
   p.history.push(s);
   // Trim stale head entries with one scan + one splice — the old
   // per-push shift() loop was O(n²) over ~60 entries × ~25Hz/player.

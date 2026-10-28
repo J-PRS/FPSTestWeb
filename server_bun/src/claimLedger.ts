@@ -1,5 +1,6 @@
 import type { Vec3, PlayerState } from './types.ts';
 import { wallNow } from './wallClock.ts';
+import { hermiteBounded } from '../../shared/dmath.ts';
 
 // Lag compensation: clamp self-reported ping to a sane rewind window —
 // unclamped, a forged 60s "ping" could rewind targets anywhere.
@@ -36,8 +37,13 @@ export function rewindPos(target: PlayerState, backMs: number): { x: number; y: 
   for (let i = h.length - 1; i > 0; i -= 1) {
     if (h[i - 1]!.t <= tAt) {
       const a = h[i - 1]!, b = h[i]!;
-      const f = (tAt - a.t) / Math.max(b.t - a.t, 1);
-      return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, z: a.z + (b.z - a.z) * f };
+      const spanMs = Math.max(b.t - a.t, 1);
+      // Hermite (shared/dmath) — the ghost rides the same curve the
+      // shooter's renderer drew; the linear chord was the rg tail on
+      // fast/curved movers.
+      const r = { x: 0, y: 0, z: 0 };
+      hermiteBounded(a, b, (tAt - a.t) / spanMs, spanMs / 1000, r);
+      return r;
     }
   }
   return last;

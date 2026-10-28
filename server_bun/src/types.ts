@@ -125,7 +125,7 @@ export interface PlayerState {
   // receive time. Hit validation rewinds the target to the shooter's view
   // (now - shooterPing) so a 100ms player shoots the ghost they saw, not
   // the live position. Capped ~400ms / appended in handlePosition.
-  history: { t: WallMs; x: number; y: number; z: number }[];
+  history: { t: WallMs; x: number; y: number; z: number; vx: number; vy: number; vz: number }[];
   // Tick-send override: while wallNow() < forceSendUntil, this player is
   // included in every tick regardless of movement/distance suppression.
   // Set on hit/knockback — the victim's real trajectory MUST flow during
