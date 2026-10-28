@@ -4,6 +4,7 @@ import { registerDiag } from '../core/fxDiag.js';
 import { terrainVert, terrainFrag } from './terrainShaders.js';
 import { urlParams } from '../core/params.js';
 import { TERRAIN_HEIGHT_SCALE, TERRAIN_WORLD_SCALE } from '../core/config.js';
+import { clipmapSurfaceHeight, type ClipmapSurfaceLevel } from './clipmapSurface.js';
 
 // Heightmap loading/sampling + the shared Heightfield live in heightmap.ts —
 // re-export so existing '../world/terrain.js' imports stay valid.
@@ -72,6 +73,29 @@ const CLIPMAP_LEVELS = [
   { spacing: 20, divisions: 80, innerHalfSize: 400 },
   { spacing: 40, divisions: 80, innerHalfSize: 800 },
 ];
+const REMOTE_PATCH_DIVS = 8;
+const REMOTE_PATCH_SIZE = 40;
+const REMOTE_PATCH_MAX = 64;
+
+const REMOTE_PATCH_VERT = /* glsl */`
+  varying vec3 vNormal;
+  varying vec3 vWorldPos;
+  varying vec3 vCameraPos;
+  #include <shadowmap_pars_vertex>
+  void main() {
+    vec4 worldPos = modelMatrix * vec4(position, 1.0);
+    vNormal = normalize(mat3(modelMatrix) * normal);
+    vWorldPos = worldPos.xyz;
+    vCameraPos = cameraPosition;
+    #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
+      for ( int i = 0; i < NUM_DIR_LIGHT_SHADOWS; i ++ ) {
+        vec4 shadowWorldPosition = worldPos + vec4(vNormal * directionalLightShadows[ i ].shadowNormalBias, 0.0);
+        vDirectionalShadowCoord[ i ] = directionalShadowMatrix[ i ] * shadowWorldPosition;
+      }
+    #endif
+    gl_Position = projectionMatrix * viewMatrix * worldPos;
+  }
+`;
 
 
 function createFlatGridGeometry(divisions: number, borderCells = 1): THREE.BufferGeometry {
@@ -114,6 +138,12 @@ export class Terrain {
   static dbg: Terrain | null = null;
   private scene: THREE.Scene;
   private levels: ClipmapLevel[] = [];
+  private surfaceLevels: ClipmapSurfaceLevel[] = [];
+  private remotePatches: { mesh: THREE.Mesh; lastX: number; lastZ: number; surfaceVersion: number }[] = [];
+  private remotePatchMaterial: THREE.ShaderMaterial | null = null;
+  private remoteDetailEnabled = false;
+  private remoteSurfaceVersion = 0;
+  private remotePatchStats = { active: 0, vertices: 0, cpuMs: 0, maxCpuMs: 0 };
   private heightTexture: THREE.DataTexture;
   /** Shared heightfield uniforms for anything else that needs to hug the
    *  terrain GPU-side (instanced blob shadows drape over slopes by
@@ -147,6 +177,7 @@ export class Terrain {
 
   constructor(scene: THREE.Scene, sunDir: THREE.Vector3) {
     this.scene = scene;
+    this.remoteDetailEnabled = urlParams.get('terrainRemoteDetail') === '1';
 
     const hm = getHeightmapData();
     if (!hm) {
@@ -269,9 +300,22 @@ export class Terrain {
         innerGridOrigin: new THREE.Vector2(0, 0),
       });
     }
+    this.surfaceLevels = this.levels.map((level, i): ClipmapSurfaceLevel => ({
+      originX: 0,
+      originZ: 0,
+      halfSize: level.halfSize,
+      levelScale: CLIPMAP_LEVELS[i]!.spacing * CLIPMAP_LEVELS[i]!.divisions,
+      spacing: level.spacing,
+      parentSpacing: this.levels[i + 1]?.spacing ?? 0,
+      parentOriginX: 0,
+      parentOriginZ: 0,
+    }));
 
     Terrain.dbg = this;
     registerDiag('terrainDiv', (): { terrainDiv: Record<string, unknown>; } => ({ terrainDiv: this.divergenceStats() }));
+    registerDiag('terrainRemoteDetail', (): { terrainRemoteDetail: Record<string, number> } => ({
+      terrainRemoteDetail: Object.assign({}, this.remotePatchStats, { drawCalls: this.remotePatchStats.active }),
+    }));
   }
 
   /** Re-aim the baked sun without a rebuild — per-map `atmosphere.timeOfDay`.
@@ -417,8 +461,12 @@ n += 1; sum += d; sumAbs += Math.abs(d);
       // rings are coarser than that) or verts swim through the heightmap
       const ox = Math.round(px / level.spacing) * level.spacing;
       const oz = Math.round(pz / level.spacing) * level.spacing;
+      if (ox !== level.gridOrigin.x || oz !== level.gridOrigin.y) {this.remoteSurfaceVersion += 1;}
       level.gridOrigin.set(ox, oz);
       level.material.uniforms.gridOrigin.value.set(ox, oz);
+      const surfaceLevel = this.surfaceLevels[i]!;
+      surfaceLevel.originX = ox;
+      surfaceLevel.originZ = oz;
 
       // Outer levels use the inner level's snapped origin for discard boundary
       if (i > 0) {
@@ -432,8 +480,10 @@ n += 1; sum += d; sumAbs += Math.abs(d);
       // parent level won't write until its own iteration.
       if (i + 1 < this.levels.length) {
         const ps = this.levels[i + 1]!.spacing;
-        level.material.uniforms.parentOrigin.value.set(
-          Math.round(px / ps) * ps, Math.round(pz / ps) * ps);
+        const parentX = Math.round(px / ps) * ps, parentZ = Math.round(pz / ps) * ps;
+        level.material.uniforms.parentOrigin.value.set(parentX, parentZ);
+        surfaceLevel.parentOriginX = parentX;
+        surfaceLevel.parentOriginZ = parentZ;
       }
     }
 
@@ -497,6 +547,114 @@ n += 1; sum += d; sumAbs += Math.abs(d);
     }
   }
 
+  /** Debug-only experiment: 40m L0 terrain patches around active remotes.
+   *  ?terrainRemoteDetail=1 enables it; production/default remains untouched. */
+  updateRemoteDetail(remotes: Iterable<{ position: { x: number; z: number }; isDead: boolean }>): void {
+    if (!this.remoteDetailEnabled) {return;}
+    const started = performance.now();
+    let active = 0;
+    for (const remote of remotes) {
+      if (remote.isDead) {continue;}
+      if (active >= REMOTE_PATCH_MAX) {break;}
+      const patch = this.ensureRemotePatch(active);
+      const x = Math.round(remote.position.x / 5) * 5;
+      const z = Math.round(remote.position.z / 5) * 5;
+      if (x !== patch.lastX || z !== patch.lastZ || patch.surfaceVersion !== this.remoteSurfaceVersion) {
+        this.updateRemotePatch(patch.mesh.geometry, x, z);
+        patch.mesh.position.set(x, 0, z);
+        patch.lastX = x;
+        patch.lastZ = z;
+        patch.surfaceVersion = this.remoteSurfaceVersion;
+      }
+      patch.mesh.visible = true;
+      active += 1;
+    }
+    for (let i = active; i < this.remotePatches.length; i += 1) {this.remotePatches[i]!.mesh.visible = false;}
+    const cpuMs = performance.now() - started;
+    this.remotePatchStats.active = active;
+    this.remotePatchStats.vertices = active * (REMOTE_PATCH_DIVS + 1) ** 2;
+    this.remotePatchStats.cpuMs = cpuMs;
+    this.remotePatchStats.maxCpuMs = Math.max(this.remotePatchStats.maxCpuMs, cpuMs);
+  }
+
+  remoteDetailStats(): Readonly<typeof this.remotePatchStats> { return this.remotePatchStats; }
+
+  setRemoteDetailEnabled(enabled: boolean): void {
+    this.remoteDetailEnabled = enabled;
+    if (!enabled) {
+      for (const patch of this.remotePatches) {patch.mesh.visible = false;}
+      this.remotePatchStats.active = 0;
+      this.remotePatchStats.vertices = 0;
+      this.remotePatchStats.cpuMs = 0;
+    }
+  }
+
+  private ensureRemotePatch(index: number): { mesh: THREE.Mesh; lastX: number; lastZ: number; surfaceVersion: number } {
+    const existing = this.remotePatches[index];
+    if (existing) {return existing;}
+    if (!this.remotePatchMaterial) {
+      const base = this.levels[0]!.material;
+      this.remotePatchMaterial = new THREE.ShaderMaterial({
+        vertexShader: REMOTE_PATCH_VERT,
+        fragmentShader: base.fragmentShader,
+        uniforms: base.uniforms,
+        defines: base.defines,
+        lights: true,
+        transparent: true,
+        depthWrite: true,
+        polygonOffset: true,
+        polygonOffsetFactor: -5,
+        polygonOffsetUnits: -5,
+      });
+    }
+    const divisions = REMOTE_PATCH_DIVS, n = divisions + 1;
+    const positions = new Float32Array(n * n * 3);
+    const indices = new Uint16Array(divisions * divisions * 6);
+    for (let iz = 0; iz <= divisions; iz += 1) {
+      for (let ix = 0; ix <= divisions; ix += 1) {
+        const v = (iz * n + ix) * 3;
+        positions[v] = (ix / divisions - 0.5) * REMOTE_PATCH_SIZE;
+        positions[v + 2] = (iz / divisions - 0.5) * REMOTE_PATCH_SIZE;
+        if (ix < divisions && iz < divisions) {
+          const i = iz * n + ix, t = (iz * divisions + ix) * 6;
+          indices[t] = i; indices[t + 1] = i + n; indices[t + 2] = i + 1;
+          indices[t + 3] = i + 1; indices[t + 4] = i + n; indices[t + 5] = i + n + 1;
+        }
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage));
+    geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+    const mesh = new THREE.Mesh(geometry, this.remotePatchMaterial);
+    mesh.receiveShadow = true;
+    mesh.frustumCulled = true;
+    mesh.renderOrder = 1;
+    this.scene.add(mesh);
+    const patch = { mesh, lastX: Number.NaN, lastZ: Number.NaN, surfaceVersion: -1 };
+    this.remotePatches.push(patch);
+    return patch;
+  }
+
+  private updateRemotePatch(geometry: THREE.BufferGeometry, cx: number, cz: number): void {
+    const pos = geometry.getAttribute('position') as THREE.BufferAttribute;
+    const n = REMOTE_PATCH_DIVS + 1;
+    for (let iz = 0; iz <= REMOTE_PATCH_DIVS; iz += 1) {
+      for (let ix = 0; ix <= REMOTE_PATCH_DIVS; ix += 1) {
+        const x = cx + (ix / REMOTE_PATCH_DIVS - 0.5) * REMOTE_PATCH_SIZE;
+        const z = cz + (iz / REMOTE_PATCH_DIVS - 0.5) * REMOTE_PATCH_SIZE;
+        const edge = Math.min(ix, iz, REMOTE_PATCH_DIVS - ix, REMOTE_PATCH_DIVS - iz);
+        const t = Math.min(1, edge / 2);
+        const blend = t * t * (3 - 2 * t);
+        const fine = this.getHeight(x, z);
+        const rendered = this.getRenderedHeight(x, z);
+        pos.setY(iz * n + ix, rendered + (fine - rendered) * blend);
+      }
+    }
+    pos.needsUpdate = true;
+    geometry.computeVertexNormals();
+    geometry.computeBoundingSphere();
+  }
+
   // Register a projected scorch decal. Returns a handle whose `intensity`
   // and `ember` the caller animates; pass it back to removeScorch when done.
   addScorch(x: number, z: number, r: number): { x: number; z: number; r: number; intensity: number; ember: number; } {
@@ -550,6 +708,13 @@ n += 1; sum += d; sumAbs += Math.abs(d);
   }
 
   dispose(): void {
+    for (const patch of this.remotePatches) {
+      this.scene.remove(patch.mesh);
+      patch.mesh.geometry.dispose();
+    }
+    this.remotePatches = [];
+    this.remotePatchMaterial?.dispose();
+    this.remotePatchMaterial = null;
     for (const level of this.levels) {
       this.scene.remove(level.mesh);
       level.material.dispose();
@@ -668,36 +833,11 @@ n += 1; sum += d; sumAbs += Math.abs(d);
     return sampleNormal(wx, wz);
   }
 
-  /** Height of the RENDERED surface chord at (wx,wz) — the clipmap's
-   *  flat triangles, not the smooth heightfield. A decal that conforms
-   *  to getHeight still gets occluded where the heightfield dips
-   *  mid-cell (a gully the mesh bridges over), so conforming decals
-   *  must also clear this chord. The chord is computed at the level
-   *  actually drawn there: clipmap rings coarsen with distance (5 →
-   *  40m cells), so a remote 300m out renders against a chord the
-   *  level-0 estimate sits meters below. The drawn level is the
-   *  finest whose snapped square contains the point — the same
-   *  coverage rule the shader's inner-hole discard uses. */
+  /** Exact CPU height of the rendered clipmap triangles, including
+   *  vertex morphing to the parent ring. Not authoritative gameplay
+   *  ground: this surface varies with the viewer's snapped ring origins. */
   getRenderedHeight(wx: number, wz: number): number {
-    let [{spacing}] = CLIPMAP_LEVELS;
-    for (const level of this.levels) {
-      if (Math.abs(wx - level.gridOrigin.x) < level.halfSize && Math.abs(wz - level.gridOrigin.y) < level.halfSize) {
-        ({spacing} = level);
-        break;
-      }
-    }
-    const s = spacing;
-    const x0 = Math.floor(wx / s) * s, z0 = Math.floor(wz / s) * s;
-    const h00 = this.getHeight(x0, z0), h10 = this.getHeight(x0 + s, z0);
-    const h01 = this.getHeight(x0, z0 + s), h11 = this.getHeight(x0 + s, z0 + s);
-    const tx = (wx - x0) / s, tz = (wz - z0) / s;
-    // The quad renders as two flat triangles split on the (x0+s,z0)↔
-    // (x0,z0+s) diagonal — a bilinear patch sags below that surface
-    // across the diagonal, so decals conforming to a bilinear estimate
-    // still get clipped there. Barycentric on the actual triangle.
-    return tx + tz <= 1
-      ? h00 + (h10 - h00) * tx + (h01 - h00) * tz
-      : h11 + (h10 - h11) * (1 - tz) + (h01 - h11) * (1 - tx);
+    return clipmapSurfaceHeight(this.surfaceLevels, wx, wz, this.getHeight);
   }
 }
 

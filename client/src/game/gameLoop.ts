@@ -418,6 +418,7 @@ bodyN += 1;
   if (!demoManager?.isPlaying) {
     deps.remotes().networkTick(dt);
   }
+  terrain.updateRemoteDetail(deps.world.remotePlayers.values());
   perf.mark('player');
 
   const demoPaused = tickDemo(deps, dt);
