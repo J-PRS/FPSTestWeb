@@ -61,7 +61,9 @@ export async function resolveServerEndpoints(): Promise<ServerEndpoints> {
   // host's own machine, so those paths ignore the saved host.
   const publicPool = /^\/(quickplay|quickjoin)\b/.test(window.location.pathname);
   let host = (urlParams.get('server')?.trim() || (publicPool ? '' : settings.get('fps-server').trim()));
-  let fleet = urlParams.has('fleet');
+  // A remote host is a fleet matchmaker unless it answers no /join, which
+  // falls back to the direct URL below — so default on, not behind ?fleet.
+  let fleet = urlParams.has('fleet') || host.length > 0;
   if (!host || urlParams.serverPath) {
     try {
       const cfg = await fetch('server.json', { cache: 'no-cache' }).then((r): Promise<{ server?: string; fleet?: boolean; servers?: Record<string, string> }> => r.json());
