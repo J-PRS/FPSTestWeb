@@ -191,8 +191,10 @@ export class PlayerModel {
       // hands each remote its own skeleton bound to shared geometry and
       // textures. A roomful of same-class bots used to pay a full GLB
       // decode + GPU upload apiece.
+      performance.mark('load:rigParseStart');
       loadGltfCached(loader, url).then(
         (gltf): void => {
+          performance.mark('load:rigParseDone');
           if (this._disposed) { resolve(); return; }
           // Worn-gunmetal rigs: matte recipe is cheap — flatten the
           // template's metalness synchronously so the clone inherits it.
@@ -212,13 +214,20 @@ export class PlayerModel {
               }
             });
             gunmetalBake.set(url, new Promise((res): void => {
-              setTimeout((): void => { bakeVertexAO(gltf.scene as THREE.Group, { grime: true, wearBoost: 0.5, edgeAngle: 28 }); res(); }, 0);
+              setTimeout((): void => {
+                performance.mark('load:aoBakeStart');
+                bakeVertexAO(gltf.scene as THREE.Group, { grime: true, wearBoost: 0.5, edgeAngle: 28 });
+                performance.mark('load:aoBakeDone');
+                res();
+              }, 0);
             }));
           }
           // Pool first — a warmed clone is free; a live SkeletonUtils.clone
           // on this frame was the w:player join spike.
           const scene = takeRig(this.variant, gltf.scene) ?? (SkeletonUtils.clone(gltf.scene) as THREE.Group);
+          performance.mark('load:rigCloneDone');
           this.onModelLoaded({ scene, animations: gltf.animations.map((c): THREE.AnimationClip => c.clone()) }, mann, knight);
+          performance.mark('load:modelSetupDone');
           resolve();
           if (gunmetal) {
             // Every instance waits on the shared per-URL bake — not just the
