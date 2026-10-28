@@ -60,6 +60,35 @@ describe('glbSer round trip', () => {
     expect(() => serializeGltf({ scene, animations })).toThrow('glbSer');
   });
 
+  test('non-standard materials and drawable/light nodes refuse (main path keeps them)', () => {
+    const { scene, animations } = mkScene();
+    const sm = scene.getObjectByName('body') as THREE.SkinnedMesh;
+    sm.material = new THREE.MeshBasicMaterial();
+    expect(() => serializeGltf({ scene, animations })).toThrow('glbSer');
+  });
+
+  test('interleaved attributes round-trip with stride + offset', () => {
+    const { scene, animations } = mkScene();
+    const sm = scene.getObjectByName('body') as THREE.SkinnedMesh;
+    // uv + interleave: 2 verts × [uv(2) + pad(1)] stride 3
+    const il = new THREE.InterleavedBuffer(new Float32Array([0.1, 0.2, 0, 0.9, 0.8, 0]), 3);
+    sm.geometry.setAttribute('uv', new THREE.InterleavedBufferAttribute(il, 2, 0));
+    const g = rebuildGltf(serializeGltf({ scene, animations }).data);
+    const sm2 = g.scene.getObjectByName('body') as THREE.SkinnedMesh;
+    const uv = sm2.geometry.getAttribute('uv') as THREE.InterleavedBufferAttribute;
+    expect((uv as unknown as { isInterleavedBufferAttribute: boolean }).isInterleavedBufferAttribute).toBe(true);
+    expect(uv.data.array[0]).toBeCloseTo(0.1);
+    expect(uv.data.array[4]).toBeCloseTo(0.8);
+  });
+
+  test('vertexColors flag + material fields survive', () => {
+    const { scene, animations } = mkScene();
+    const sm = scene.getObjectByName('body') as THREE.SkinnedMesh;
+    (sm.material as THREE.MeshStandardMaterial).vertexColors = true;
+    const g = rebuildGltf(serializeGltf({ scene, animations }).data);
+    expect(((g.scene.getObjectByName('body') as THREE.SkinnedMesh).material as THREE.MeshStandardMaterial).vertexColors).toBe(true);
+  });
+
   test('shared buffer dedupes (two attrs, one backing buffer)', () => {
     const { scene, animations } = mkScene();
     const sm = scene.getObjectByName('body') as THREE.SkinnedMesh;

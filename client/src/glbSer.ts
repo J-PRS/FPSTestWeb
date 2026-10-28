@@ -8,11 +8,11 @@ import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 type Buf = { b: number; off: number; len: number; ctor: string };
 type Attr = { name: string; buf: Buf; itemSize: number; norm: boolean; stride?: number; off?: number };
-type Tex = { bmp: ImageBitmap; flipY: boolean; ch: number; rep: [number, number]; off: [number, number]; rot: number };
+type Tex = { bmp: ImageBitmap; flipY: boolean; ch: number; rep: [number, number]; off: [number, number]; rot: number; cs: string };
 type Mat = {
   name: string; color: [number, number, number]; metal: number; rough: number;
   emis: [number, number, number]; emisInt: number; opac: number; transp: boolean;
-  side: number; alphaTest: number;
+  side: number; alphaTest: number; vcol: boolean; nrmScale: [number, number];
   map?: Tex; nrm?: Tex; rgh?: Tex; mtl?: Tex; ao?: Tex; emi?: Tex;
 };
 type Skin = { joints: number[]; inverses: ArrayBuffer; bind: ArrayBuffer };
@@ -22,9 +22,9 @@ type Track = { name: string; kind: string; times: Buf; values: Buf };
 type Clip = { name: string; duration: number; tracks: Track[] };
 type Ser = { nodes: Node[]; mats: Mat[]; clips: Clip[]; bufs: ArrayBuffer[] };
 
-type TypedArr = Float32Array | Float64Array | Int8Array | Uint8Array | Int16Array | Uint16Array | Int32Array | Uint32Array;
+type TypedArr = Float32Array | Float64Array | Int8Array | Uint8Array | Uint8ClampedArray | Int16Array | Uint16Array | Int32Array | Uint32Array;
 const CTOR: Record<string, new (b: ArrayBuffer, o: number, n: number) => TypedArr> = {
-  Float32Array, Int8Array, Uint8Array, Int16Array, Uint16Array, Int32Array, Uint32Array, Float64Array,
+  Float32Array, Int8Array, Uint8Array, Uint8ClampedArray, Int16Array, Uint16Array, Int32Array, Uint32Array, Float64Array,
 };
 
 /** Typed-array → transferable slot. Buffers are deduped (two attributes can
@@ -37,10 +37,17 @@ function serArr(ser: Ser, a: THREE.TypedArray): Buf {
 
 function serTex(t: THREE.Texture | null): Tex | undefined {
   if (!t || !(t.image instanceof ImageBitmap)) {return undefined;}
-  return { bmp: t.image, flipY: t.flipY, ch: t.channel, rep: [t.repeat.x, t.repeat.y], off: [t.offset.x, t.offset.y], rot: t.rotation };
+  return { bmp: t.image, flipY: t.flipY, ch: t.channel, rep: [t.repeat.x, t.repeat.y], off: [t.offset.x, t.offset.y], rot: t.rotation, cs: t.colorSpace };
 }
 
 function serMat(m: THREE.Material, ser: Ser): number {
+  // Rebuilding a Lambert/Physical/Basic as Standard changes the render —
+  // refuse and let the caller's own loader keep the exact material.
+  if (m.type !== 'MeshStandardMaterial') {
+    const e = new Error(`glbSer: material type ${m.type}`);
+    (e as { __ser?: boolean }).__ser = true;
+    throw e;
+  }
   const s = m as THREE.MeshStandardMaterial;
   const cur = ser.mats.length;
   ser.mats.push({
@@ -50,6 +57,8 @@ function serMat(m: THREE.Material, ser: Ser): number {
     emisInt: s.emissiveIntensity ?? 1,
     opac: s.opacity ?? 1, transp: s.transparent === true,
     side: s.side ?? 0, alphaTest: s.alphaTest ?? 0,
+    vcol: s.vertexColors === true,
+    nrmScale: s.normalScale ? [s.normalScale.x, s.normalScale.y] : [1, 1],
     map: serTex(s.map), nrm: serTex(s.normalMap), rgh: serTex(s.roughnessMap),
     mtl: serTex(s.metalnessMap), ao: serTex(s.aoMap), emi: serTex(s.emissiveMap),
   });
@@ -116,6 +125,12 @@ export function serializeGltf(gltf: { scene: THREE.Group; animations: THREE.Anim
     };
     const m = o as THREE.Mesh;
     if (m.isMesh) {
+      const other = o as unknown as { isPoints?: boolean; isLine?: boolean; isLight?: boolean; isCamera?: boolean };
+      if (other.isPoints || other.isLine || other.isLight || other.isCamera) {
+        const e = new Error('glbSer: drawable/light node');
+        (e as { __ser?: boolean }).__ser = true;
+        throw e;
+      }
       if (Object.keys(m.geometry.morphAttributes).length > 0) {
         const e = new Error('glbSer: morph attributes unsupported');
         (e as { __ser?: boolean }).__ser = true;
@@ -136,8 +151,13 @@ export function serializeGltf(gltf: { scene: THREE.Group; animations: THREE.Anim
     });
   }
   const transfers = [...ser.bufs];
+  const seenTex = new Set<ImageBitmap>();
   for (const m of ser.mats) {
-    for (const t of [m.map, m.nrm, m.rgh, m.mtl, m.ao, m.emi]) {if (t) {transfers.push(t.bmp);}}
+    for (const t of [m.map, m.nrm, m.rgh, m.mtl, m.ao, m.emi]) {
+      // One bitmap may back several slots — duplicate entries in the
+      // transfer list throw DataCloneError on postMessage.
+      if (t && !seenTex.has(t.bmp)) {seenTex.add(t.bmp); transfers.push(t.bmp);}
+    }
   }
   return { data: ser, transfers };
 }
@@ -152,7 +172,7 @@ function arr(ser: Ser, b: Buf): THREE.TypedArray {
 function tex(t: Tex | undefined): THREE.Texture | null {
   if (!t) {return null;}
   const x = new THREE.Texture(t.bmp);
-  x.flipY = t.flipY; x.channel = t.ch;
+  x.flipY = t.flipY; x.channel = t.ch; x.colorSpace = t.cs as THREE.TextureColorSpace;
   x.repeat.set(t.rep[0], t.rep[1]); x.offset.set(t.off[0], t.off[1]); x.rotation = t.rot;
   x.needsUpdate = true;
   return x;
@@ -168,32 +188,33 @@ export function rebuildGltf(ser: Ser): GLTF {
     s.metalness = m.metal; s.roughness = m.rough;
     s.emissive.setRGB(m.emis[0], m.emis[1], m.emis[2]); s.emissiveIntensity = m.emisInt;
     s.opacity = m.opac; s.transparent = m.transp; s.side = m.side; s.alphaTest = m.alphaTest;
+    s.vertexColors = m.vcol; s.normalScale.set(m.nrmScale[0], m.nrmScale[1]);
     s.map = tex(m.map); s.normalMap = tex(m.nrm); s.roughnessMap = tex(m.rgh);
     s.metalnessMap = tex(m.mtl); s.aoMap = tex(m.ao); s.emissiveMap = tex(m.emi);
     return s;
   });
-  const objs: THREE.Object3D[] = ser.nodes.map((n): THREE.Object3D => {
+  const objs: THREE.Object3D[] = ser.nodes.map((n, i): THREE.Object3D => {
     if (n.mesh) {
       const g = new THREE.BufferGeometry();
       for (const a of n.mesh.attrs) {
         const raw = arr(ser, a.buf);
-        if (a.stride !== undefined) {
+        if (a.stride === undefined) {
+          g.setAttribute(a.name, new THREE.BufferAttribute(raw, a.itemSize, a.norm));
+        } else {
           const il = new THREE.InterleavedBuffer(raw, a.stride);
           g.setAttribute(a.name, new THREE.InterleavedBufferAttribute(il, a.itemSize, a.off ?? 0, a.norm));
-        } else {
-          g.setAttribute(a.name, new THREE.BufferAttribute(raw, a.itemSize, a.norm));
         }
       }
       if (n.mesh.index) {g.setIndex(new THREE.BufferAttribute(arr(ser, n.mesh.index), 1));}
       if (n.mesh.groups) {for (const x of n.mesh.groups) {g.addGroup(x.start, x.count, x.materialIndex);}}
-      const mm = n.mesh.mats.map((i): THREE.Material => mats[i]!);
+      const mm = n.mesh.mats.map((mi): THREE.Material => mats[mi]!);
       // A single group → single material (GLTFLoader's own shape — an
       // array-of-one reads as undefined to `mesh.material as Material`).
       const mmOrOne = mm.length === 1 ? mm[0]! : mm;
       const m = n.mesh.skin ? new THREE.SkinnedMesh(g, mmOrOne) : new THREE.Mesh(g, mmOrOne);
-      m.castShadow = true;
       return m;
     }
+    if (i === 0) {return new THREE.Group();}
     return n.bone ? new THREE.Bone() : new THREE.Object3D();
   });
   ser.nodes.forEach((n, i): void => {
