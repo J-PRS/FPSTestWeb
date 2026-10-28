@@ -337,6 +337,7 @@ export class Lobby {
     // Diff, don't rebuild: append() moves an existing row, so walking the
     // sorted list both inserts new tiles and re-sorts without a repaint.
     const seen = new Set<string>();
+    this.rows.querySelector('.lb-empty')?.remove();
     if (!this.head) {
       this.head = document.createElement('div');
       this.head.className = 'lb-head';
@@ -359,6 +360,7 @@ export class Lobby {
     }
     if (rooms.length === 0) {
       const empty = document.createElement('div');
+      empty.className = 'lb-empty';
       empty.style.cssText = 'color:rgba(58,167,255,0.5);padding:6px 2px;';
       empty.textContent = '— no matches — host one from the HOST tab';
       this.rows.append(empty);

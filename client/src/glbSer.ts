@@ -80,7 +80,7 @@ function serMesh(ser: Ser, mesh: THREE.Mesh | THREE.SkinnedMesh, matIdx: Map<THR
       });
       continue;
     }
-    if (!a?.isBufferAttribute) {
+    if (!a || (a as { isBufferAttribute?: boolean }).isBufferAttribute !== true) {
       const e = new Error(`glbSer: unserializable attribute ${name}`);
       (e as { __ser?: boolean }).__ser = true;
       throw e;
@@ -98,7 +98,7 @@ function serMesh(ser: Ser, mesh: THREE.Mesh | THREE.SkinnedMesh, matIdx: Map<THR
   return {
     attrs: out,
     index: g.index ? serArr(ser, g.index.array as THREE.TypedArray) : undefined,
-    groups: g.groups.length > 0 ? g.groups.map((x): { start: number; count: number; materialIndex: number } => ({ start: x.start, count: x.count, materialIndex: x.materialIndex })) : undefined,
+    groups: g.groups.length > 0 ? g.groups.map((x): { start: number; count: number; materialIndex: number } => ({ start: x.start, count: x.count, materialIndex: x.materialIndex ?? 0 })) : undefined,
     mats,
     skin,
   };
@@ -150,7 +150,7 @@ export function serializeGltf(gltf: { scene: THREE.Group; animations: THREE.Anim
       })),
     });
   }
-  const transfers = [...ser.bufs];
+  const transfers: Transferable[] = [...ser.bufs];
   const seenTex = new Set<ImageBitmap>();
   for (const m of ser.mats) {
     for (const t of [m.map, m.nrm, m.rgh, m.mtl, m.ao, m.emi]) {
@@ -166,13 +166,13 @@ function arr(ser: Ser, b: Buf): THREE.TypedArray {
   const buf = ser.bufs[b.b];
   const Ctor = CTOR[b.ctor];
   if (!buf || !Ctor) {throw new Error(`glbSer: bad buffer ${b.b}/${b.ctor}`);}
-  return new Ctor(buf, b.off, Math.floor(b.len / Ctor.BYTES_PER_ELEMENT));
+  return new Ctor(buf, b.off, Math.floor(b.len / (Ctor as unknown as { BYTES_PER_ELEMENT: number }).BYTES_PER_ELEMENT));
 }
 
 function tex(t: Tex | undefined): THREE.Texture | null {
   if (!t) {return null;}
   const x = new THREE.Texture(t.bmp);
-  x.flipY = t.flipY; x.channel = t.ch; x.colorSpace = t.cs as THREE.TextureColorSpace;
+  x.flipY = t.flipY; x.channel = t.ch; x.colorSpace = t.cs as typeof x.colorSpace;
   x.repeat.set(t.rep[0], t.rep[1]); x.offset.set(t.off[0], t.off[1]); x.rotation = t.rot;
   x.needsUpdate = true;
   return x;
@@ -187,7 +187,7 @@ export function rebuildGltf(ser: Ser): GLTF {
     s.name = m.name; s.color.setRGB(m.color[0], m.color[1], m.color[2]);
     s.metalness = m.metal; s.roughness = m.rough;
     s.emissive.setRGB(m.emis[0], m.emis[1], m.emis[2]); s.emissiveIntensity = m.emisInt;
-    s.opacity = m.opac; s.transparent = m.transp; s.side = m.side; s.alphaTest = m.alphaTest;
+    s.opacity = m.opac; s.transparent = m.transp; s.side = m.side as THREE.Side; s.alphaTest = m.alphaTest;
     s.vertexColors = m.vcol; s.normalScale.set(m.nrmScale[0], m.nrmScale[1]);
     s.map = tex(m.map); s.normalMap = tex(m.nrm); s.roughnessMap = tex(m.rgh);
     s.metalnessMap = tex(m.mtl); s.aoMap = tex(m.ao); s.emissiveMap = tex(m.emi);
@@ -234,7 +234,7 @@ export function rebuildGltf(ser: Ser): GLTF {
     const boneInverses: THREE.Matrix4[] = [];
     const inv = new Float32Array(n.mesh.skin.inverses);
     for (let j = 0; j < bones.length; j += 1) {boneInverses.push(new THREE.Matrix4().fromArray(inv, j * 16));}
-    sm.bind(new THREE.Skeleton(bones, boneInverses), new THREE.Matrix4().fromArray(new Float32Array(n.mesh.skin)));
+    sm.bind(new THREE.Skeleton(bones, boneInverses), new THREE.Matrix4().fromArray(new Float32Array(n.mesh.skin.bind)));
   });
   const clips = ser.clips.map((c): THREE.AnimationClip => new THREE.AnimationClip(c.name, c.duration, c.tracks.map((t): THREE.KeyframeTrack => {
     const times = arr(ser, t.times), values = arr(ser, t.values);

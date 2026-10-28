@@ -21,7 +21,7 @@ vi.mock('../entities/PlayerModel.js', (): { PlayerModel: () => { load: () => Pro
     });
   },
 }));
-globalThis.fetch = (): Promise<Response> => new Promise<Response>((): void => { return; });
+globalThis.fetch = ((): Promise<Response> => new Promise<Response>((): void => { return; })) as unknown as typeof fetch;
 
 
 // Captures are stamped with whatever protocol the recorder saw —

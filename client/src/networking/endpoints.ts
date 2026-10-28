@@ -44,6 +44,10 @@ export async function fleetWorkerUrl(httpUrl: string): Promise<string | null> {
   return (await resolveFleet(httpUrl))?.wsUrl ?? null;
 }
 
+async function isUp(httpUrl: string): Promise<boolean> {
+  return fetch(`${httpUrl}/health`, { signal: AbortSignal.timeout(800) }).then((r): boolean => r.ok, (): boolean => false);
+}
+
 export async function resolveServerEndpoints(): Promise<ServerEndpoints> {
   const hn = window.location.hostname || 'localhost';
   // Served through the cloudflared preview tunnel: the API rides the same
@@ -64,6 +68,8 @@ export async function resolveServerEndpoints(): Promise<ServerEndpoints> {
   // A remote host is a fleet matchmaker unless it answers no /join, which
   // falls back to the direct URL below — so default on, not behind ?fleet.
   let fleet = urlParams.has('fleet') || host.length > 0;
+  // Localhost pages prefer the dev server when it answers; prod is the fallback.
+  if (!host && !urlParams.serverPath && (hn === 'localhost' || hn === '127.0.0.1') && await isUp(local.httpUrl)) {return local;}
   if (!host || urlParams.serverPath) {
     try {
       const cfg = await fetch('server.json', { cache: 'no-cache' }).then((r): Promise<{ server?: string; fleet?: boolean; servers?: Record<string, string> }> => r.json());

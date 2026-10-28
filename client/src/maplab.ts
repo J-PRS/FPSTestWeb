@@ -168,16 +168,16 @@ let lookYaw = 0;
 let lookPitch = -0.15;
 let jumpEdge = false;
 const held = new Set<string>();
-addEventListener('keydown', (e): void => {
+addEventListener('keydown', (e: KeyboardEvent): void => {
   if (e.code === 'Space') {e.preventDefault();}
   if (!e.repeat) {if (e.code === 'Space') {jumpEdge = true;}}
   if (player && e.code === 'Escape') {exitPlay(); return;}
   held.add(e.code);
 });
-addEventListener('keyup', (e): void => { held.delete(e.code); });
+addEventListener('keyup', (e: KeyboardEvent): void => { held.delete(e.code); });
 // Mouse look — pointer lock, same convention as the game (yaw gains going
 // right, pitch gains looking up; MoveSim forward = (sin yaw, ·, cos yaw)).
-addEventListener('mousemove', (e): void => {
+addEventListener('mousemove', (e: MouseEvent): void => {
   if (!player || document.pointerLockElement !== renderer.domElement) {return;}
   lookYaw -= e.movementX * 0.0025;
   lookPitch = Math.max(-1.5, Math.min(1.5, lookPitch - e.movementY * 0.0025));

@@ -1236,13 +1236,13 @@ const pollTimer = new URLSearchParams(window.location.search).has('bake')
 // OrbitControls on the canvas — these listeners only feed the sway. ---
 let dragging = false, lastX = 0, lastY = 0;
 let lookDX = 0, lookDY = 0;
-addEventListener('mousedown', (e): void => {
+addEventListener('mousedown', (e: MouseEvent): void => {
   if ((e.target as HTMLElement).tagName === 'BUTTON') {return;}
   lastX = e.clientX; lastY = e.clientY;
   dragging = true;
 });
 addEventListener('mouseup', (): void => { dragging = false; });
-addEventListener('keydown', (e): void => {
+addEventListener('keydown', (e: KeyboardEvent): void => {
   if (e.altKey && e.code === 'KeyQ') { e.preventDefault(); infoDump(false); return; }
   if (e.altKey && e.code === 'KeyW') { e.preventDefault(); infoDump(true); return; }
   if (e.code === 'ArrowDown' || e.code === 'ArrowUp') {
@@ -1267,7 +1267,7 @@ addEventListener('keydown', (e): void => {
   setInspect(!state.inspect);
   paintRail();
 });
-addEventListener('mousemove', (e): void => {
+addEventListener('mousemove', (e: MouseEvent): void => {
   lookDX = e.clientX - lastX; lookDY = e.clientY - lastY;
   lastX = e.clientX; lastY = e.clientY;
   if (state.inspect || !dragging) { lookDX = 0; lookDY = 0; }
@@ -1287,7 +1287,7 @@ pickDot.renderOrder = 999;
 scene.add(pickDot);
 let pickDotTimer: ReturnType<typeof setTimeout> | undefined = undefined;
 let downX = 0, downY = 0;
-addEventListener('mousedown', (e): void => { downX = e.clientX; downY = e.clientY; });
+addEventListener('mousedown', (e: MouseEvent): void => { downX = e.clientX; downY = e.clientY; });
 function pickPiece(cx: number, cy: number): void {
   const root: THREE.Object3D = state.inspect && inspectAnchor ? inspectAnchor : vm.group;
   pickNDC.set((cx / innerWidth) * 2 - 1, -(cy / innerHeight) * 2 + 1);
@@ -1344,7 +1344,7 @@ function pickPiece(cx: number, cy: number): void {
 }
 
 
-addEventListener('mouseup', (e): void => {
+addEventListener('mouseup', (e: MouseEvent): void => {
   if (Math.hypot(e.clientX - downX, e.clientY - downY) > 4) {return;}
   if ((e.target as HTMLElement).tagName === 'BUTTON') {return;}
   pickPiece(e.clientX, e.clientY);

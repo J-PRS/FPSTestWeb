@@ -12,7 +12,7 @@ vi.mock('../entities/PlayerModel.js', (): { PlayerModel: () => { load: () => Pro
     });
   },
 }));
-globalThis.fetch = (): Promise<Response> => new Promise<Response>((): void => { return; });
+globalThis.fetch = ((): Promise<Response> => new Promise<Response>((): void => { return; })) as unknown as typeof fetch;
 
 
 // Real dispose runs full aura/anim/model teardown — outside this invariant's

@@ -14,7 +14,7 @@ vi.mock('../entities/PlayerModel.js', (): { PlayerModel: () => { load: () => Pro
 }));
 // Lobby is constructed async inside wireNetworkHandlers off a fetch() —
 // keep it pending forever so it never builds DOM in tests.
-globalThis.fetch = (): Promise<Response> => new Promise<Response>((): void => { return; });
+globalThis.fetch = ((): Promise<Response> => new Promise<Response>((): void => { return; })) as unknown as typeof fetch;
 
 
 describe('netHarness — real wire messages through real handlers', (): void => {
