@@ -218,6 +218,46 @@ weeks. BUT cheat *value* is bounded independently of cheat *access*:
   to "clear everything + rotate VPN"; friction-grade is what a
   shadow-pool needs to hold people.
 
+## Vote-nerf — community punishment as spectacle
+
+Better than kick for our model: a `handicap`/`nerf` clamp on player
+state (health max, energy max, move-speed multiplier, damage scalar) at
+the spawn/damage funnel, wire-exposed so the HUD shows it. Session-
+scoped; rejoin drops it, the room re-votes. Punishment-as-spectacle is
+genre heritage (T2 Classic shipped admin `explode`/`boot-to-rear`/
+freeze). Ladder ideas: **1hp** (glass cannon), **no-jets** (juice gone,
+ski stays), **walk-only** (no ski — the real humiliation), **tickle**
+(damage ×0.1 — plays, can't hurt), **big-head** (giant hitbox). Doubles
+as a social feature, not just anti-cheat.
+
+### Why nerf > kick under democracy failure
+
+The community record (CS2 forums, TF2 MvM, PixelTail, Arma) is one-
+sided: lobbies punish *difference*, not cheating — kicked for topping
+the board, being a noob, being a furry, being outside a 3-stack
+premade. PixelTail removed vote-kick entirely; pros quit over false
+kicks. BUT casual-lobby vibes are also a real signal — the mob can't
+tell "disrupts by cheating" from "disrupts by being too good." Nerf is
+defensible as community expression precisely BECAUSE it's playful and
+reversible: nerfed-good-player is funny + self-correcting (they still
+out-ski), kicked-good-player is ragequit fuel.
+
+### Threshold design — the documented failure modes to beat
+
+- **2/3, not 50%+1** — TF2's exploit was a 3-stack = 50% of 6. A premade
+  can't solo-decide; a true disruptor still gets 2/3 easily.
+- **Enemy-team yeses carry it** — the cheater's team benefits from the
+  cheating and votes NO ("you'd vote YES if he wasn't on your group").
+  The victims are the jury: 2/3 of *enemy* votes + teammate votes
+  advisory-or-excluded; or dual-threshold 2/3 enemies AND >50% lobby.
+  Abstainers don't count against — only explicit casts.
+- **Participation floor** — 2/3 of an empty lobby is 2 people; require
+  ~5 yes votes absolute so small lobbies can't whisper-convict.
+- **The target abstains automatically** — you don't vote on your own
+  nerf.
+- **Reversibility carries the weight** — a false nerf is a funny story,
+  not a ban; the threshold doesn't have to be ban-grade.
+
 ## The rule
 
 The defenses live server-side — authority over outcomes, plausibility
