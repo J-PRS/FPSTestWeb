@@ -54,12 +54,16 @@ const t0 = Date.now();
 const joinMs: number[] = [];
 const joinOne = async (b: (typeof bots)[0]): Promise<void> => {
   const c0 = Date.now();
-  try { await b.nc.connect(); joined++; }
+  try { await b.nc.connect(); joined++; b.bot.start(); }
   catch { /* socket error — count at the end */ }
-  // Time-to-first-gameState is the user-facing "how fast am I in" — the
-  // pace gap mostly covers it, so poll briefly rather than serially wait.
-  for (let i = 0; i < 50 && b.nc.tel.gameStates === 0; i++) {await new Promise((r) => setTimeout(r, 60));}
-  if (b.nc.tel.gameStates > 0) {joinMs.push(Date.now() - c0);}
+  // Time-to-first-gameState is the user-facing "how fast am I in" — but
+  // waiting for it serializes the wave (a slow server turns every wave
+  // into join latency × bots/parallel). Detach the poll: the join phase
+  // runs at connect speed and we still keep the latency stat.
+  void (async (): Promise<void> => {
+    for (let i = 0; i < 50 && b.nc.tel.gameStates === 0; i++) {await new Promise((r) => setTimeout(r, 60));}
+    if (b.nc.tel.gameStates > 0) {joinMs.push(Date.now() - c0);}
+  })();
 };
 for (let w = 0; w < bots.length; w += JOIN_PAR) {
   const wave = bots.slice(w, w + JOIN_PAR);
@@ -69,7 +73,6 @@ for (let w = 0; w < bots.length; w += JOIN_PAR) {
 joinMs.sort((a, b) => a - b);
 const jq = (q: number): number => joinMs[Math.min(joinMs.length - 1, Math.floor(joinMs.length * q))]!;
 console.log(`join phase done: ${joined}/${bots.length} connected in ${((Date.now() - t0) / 1000).toFixed(0)}s — first-gameState p50=${jq(0.5)}ms p95=${jq(0.95)}ms max=${joinMs[joinMs.length - 1]}ms`);
-for (const b of bots) { b.bot.start(); }
 await new Promise((r) => setTimeout(r, SECONDS * 1000));
 
 // Snapshot BEFORE teardown — b.nc.close() is what sets nc.closed, so
