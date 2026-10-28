@@ -136,6 +136,7 @@ export class RoomFactory {
     if (!room) {
       if (this.host.rooms.size >= CONFIG.maxRooms) {
         for (const [n, r] of this.host.rooms) {
+          if (r.standing) {continue;} // standing lobbies never recycle
           if (r.players.getHumanCount() > 0 || r.spectators.size > 0) {continue;}
           r.dispose();
           this.host.rooms.delete(n);
