@@ -16,6 +16,9 @@ import type { DeployKind } from '../../../../shared/deployables.js';
 import type { TeamId } from '../../../../shared/teams.js';
 import { finiteVec } from '../../../../shared/wire.js';
 import { saveLastRoomMap } from './lastRoom.js';
+import { RIG_MANIFEST, CLASS_BODY_VARIANT } from '../../entities/playerClips.js';
+import type { PlayerModelVariant } from '../../entities/PlayerModel.js';
+import { mkGltfLoader, loadGltfCached } from '../../gltfLoad.js';
 import { dropVolatileWorldFx } from './resync.js';
 import { applyTerrain, applyInteriors, applyMapFog, applyWeather, applyAtmosphere, applyWater, applyKillZone, firstTerrain, type MapSnapshot } from './mapAssets.js';
 import type { PickupKind } from '../../../../shared/pickups.js';
@@ -325,6 +328,22 @@ export function wireWorld(ctx: NetCtx): void {
     }
     applyRoomInfo(ctx, players.length, roomInfo);
     if (localPlayerState) {restoreLocalPlayer(ctx, localPlayerState);}
+    // Warm every class-body rig parse — remote ctors fire on paced spawn
+    // admits, so the last variant's ~460ms worker parse otherwise starts
+    // ~5s into the veil (the 10s rig tail). The class set is closed
+    // (scout/brawler/brute + vexa fallback); warming all four in the
+    // worker costs nothing on main and the cache is per-URL session-wide.
+    {
+      const urls = new Set<string>();
+      for (const v of Object.values(CLASS_BODY_VARIANT)) {
+        const u = RIG_MANIFEST[v as PlayerModelVariant]?.url;
+        if (u) {urls.add(u);}
+      }
+      const def = RIG_MANIFEST['vexa' as PlayerModelVariant]?.url; // unknown-class fallback
+      if (def) {urls.add(def);}
+      const loader = mkGltfLoader();
+      for (const u of urls) {void loadGltfCached(loader, u).catch((): void => undefined);}
+    }
     // Real state landed — the loop drops the veil once frames stabilize
     // (warmup window; the 8s timer remains the connect-fail escape).
     // The seat sits on the ROOM's field, not the boot heightmap — until
