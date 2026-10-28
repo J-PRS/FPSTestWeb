@@ -12,7 +12,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Root cleanliness
-        run: node utils/_rootcheck.mjs
+        run: |
+          node utils/_rootcheck.mjs
+          node utils/_rootcheck.mjs --scope client
+          node utils/_rootcheck.mjs --scope server_bun
+          # shared/ is exempt — it's a flat sim library by design.
 
       - uses: oven-sh/setup-bun@v2
 

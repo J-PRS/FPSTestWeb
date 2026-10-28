@@ -1,23 +1,29 @@
 #!/usr/bin/env node
 /**
- * Root-clutter gate — part of `npm run check` in client/.
+ * Root-clutter gate — the repository and first-party project roots have
+ * committed entry manifests. Ignored build/local artifacts are excluded.
  *
- * The repo root's entry set is tracked in `index_root.txt` (committed).
- * This script compares the actual root against that manifest: any add or
- * remove fails the gate and asks whether it was intentional. Nothing is
- * ever deleted here — the answer is either "move it into a subfolder"
- * (do not delete) or "accept it" via --update + commit.
+ * Any unignored add/remove fails. Nothing is deleted; new intentional
+ * entries are accepted by updating the relevant manifest and committing it.
  *
- *   node utils/_rootcheck.mjs            # check (exit 1 on diff)
- *   node utils/_rootcheck.mjs --update    # rewrite index_root.txt from
- *                                        # the current root (then git add)
+ *   node utils/_rootcheck.mjs [--update]
+ *   node utils/_rootcheck.mjs --scope client|server_bun [--update]
  */
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const INDEX = join(ROOT, 'index_root.txt');
+const scopeAt = process.argv.indexOf('--scope');
+const scope = scopeAt < 0 ? '' : process.argv[scopeAt + 1];
+const scopes = new Set(['client', 'server_bun']);
+if (scopeAt >= 0 && !scopes.has(scope)) {
+  console.error('[rootcheck] --scope must be one of: client, server_bun');
+  process.exit(2);
+}
+const TARGET = scope ? join(ROOT, scope) : ROOT;
+const INDEX = join(TARGET, 'index_root.txt');
 const UPDATE = process.argv.includes('--update') || process.argv.includes('--accept');
 const FORCE = process.argv.includes('--force');
 
@@ -35,10 +41,25 @@ const JUNK = [
 const TXT_ALLOWLIST = new Set(['index_root.txt', 'changelog.txt']);
 const isJunk = (n) => JUNK.some((re) => re.test(n)) && !TXT_ALLOWLIST.has(n);
 
-const actual = readdirSync(ROOT).sort();
+const entries = readdirSync(TARGET).sort();
+// Ignore generated/local-only entries according to the repo's .gitignore.
+// This keeps node_modules/dist and local logs out of committed baselines,
+// while unignored untracked root entries still fail the gate.
+const ignoredResult = spawnSync('git', ['check-ignore', '--stdin', '-z'], {
+  cwd: ROOT,
+  input: entries.map((entry) => scope ? `${scope}/${entry}` : entry).join('\0') + '\0',
+  encoding: 'utf8',
+});
+if (ignoredResult.error) {
+  console.error(`[rootcheck] git check-ignore failed: ${ignoredResult.error.message}`);
+  process.exit(2);
+}
+const ignored = new Set(ignoredResult.stdout.split('\0').filter(Boolean)
+  .map((entry) => scope ? entry.slice(scope.length + 1) : entry));
+const actual = entries.filter((entry) => !ignored.has(entry));
 const junkPresent = actual.filter(isJunk);
 if (junkPresent.length) {
-  console.log('\n[rootcheck] scratch-looking root entries — do NOT index these:');
+  console.log(`\n[rootcheck] scratch-looking ${scope || 'repository'} root entries — do NOT index these:`);
   for (const f of junkPresent) console.log(`    ! ${f}`);
   console.log('Move them into ZZZ_ROOT/ (archive), _scratch/, logs/, or a proper subfolder.');
   if (!FORCE) {process.exit(1);}
@@ -51,13 +72,7 @@ if (UPDATE) {
     process.exit(1);
   }
   writeFileSync(INDEX, actual.join('\n') + '\n');
-  console.log(`[rootcheck] wrote ${actual.length} entries to index_root.txt`);
-  process.exit(0);
-}
-
-if (UPDATE) {
-  writeFileSync(INDEX, actual.join('\n') + '\n');
-  console.log(`[rootcheck] wrote ${actual.length} entries to index_root.txt`);
+  console.log(`[rootcheck] wrote ${actual.length} entries to ${scope ? `${scope}/` : ''}index_root.txt`);
   process.exit(0);
 }
 
@@ -68,7 +83,7 @@ try {
     .map((s) => s.trim())
     .filter((s) => s && !s.startsWith('#'));
 } catch {
-  console.log('[rootcheck] index_root.txt missing — run with --update to create it');
+  console.log(`[rootcheck] ${scope ? `${scope}/` : ''}index_root.txt missing — run with --scope ${scope || '<scope>'} --update`);
   process.exit(1);
 }
 
@@ -78,11 +93,11 @@ const added = actual.filter((n) => !declaredSet.has(n));
 const removed = declared.filter((n) => !actualSet.has(n));
 
 if (added.length === 0 && removed.length === 0) {
-  console.log(`[rootcheck] root matches index_root.txt (${actual.length} entries)`);
+  console.log(`[rootcheck] ${scope || 'repository'} root matches its index (${actual.length} entries)`);
   process.exit(0);
 }
 
-console.log('\n[rootcheck] root differs from index_root.txt:');
+console.log(`\n[rootcheck] ${scope || 'repository'} root differs from ${scope ? `${scope}/` : ''}index_root.txt:`);
 if (added.length) {
   console.log('  added (not in index_root.txt):');
   for (const f of added) console.log(`    + ${f}`);
@@ -91,6 +106,6 @@ if (removed.length) {
   console.log('  removed (in index_root.txt but not on disk):');
   for (const f of removed) console.log(`    - ${f}`);
 }
-console.log('\nIf intentional:  node utils/_rootcheck.mjs --update  then  git add index_root.txt');
+console.log(`\nIf intentional: node utils/_rootcheck.mjs${scope ? ` --scope ${scope}` : ''} --update, then git add ${scope ? `${scope}/` : ''}index_root.txt`);
 console.log('If not: move the entry into a subfolder (do not delete).\n');
 process.exit(1);

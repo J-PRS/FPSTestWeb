@@ -18,11 +18,11 @@ cd client && ./node_modules/.bin/tsc --noEmit    # client typecheck
 cd client && ./node_modules/.bin/vitest run      # client tests
 cd client && npx -y oxlint src                   # lint
 bash _tools/check.sh --fastest                    # quick compile+lint probe (~30-60s); NOT the gate
-# rootcheck (utils/_rootcheck.mjs) now also runs inside check.sh and gates
-# on index_root.txt — a new/removed root entry fails until accepted or moved.
+# rootcheck (utils/_rootcheck.mjs) runs inside check.sh and CI for the repo,
+# client/, server_bun/, and shared/ roots. Each has its own index_root.txt.
 # When a rootcheck fails, investigate the new entry FIRST: scratch/log/
-# accident files move to ZZZ_ROOT/, _scratch/, or logs/. index_root.txt
-# --update IS the right fix for genuinely new top-level things — but
+# accident files move to ZZZ_ROOT/, _scratch/, or logs/. The matching
+# index_root.txt --update IS the right fix for genuinely new top-level things — but
 # scratch-patterned names (.log, stray .txt, shell-quoting accidents) are
 # refused even when indexed, so archiving beats indexing there.
 # Windows clean stack: .\devup.bat = reap stale dev procs (_tools/reap.mjs)
