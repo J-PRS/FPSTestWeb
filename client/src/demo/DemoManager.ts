@@ -595,6 +595,10 @@ export class DemoManager implements demoIO.DemoIOHost {
     this.recorder.recordKill(shooterId, targetId, weapon, position);
   }
 
+  recordPlayerHit(shooterId: string | null, targetId: string, damage: number, position: Vec3): void {
+    this.recorder.recordPlayerHit(shooterId, targetId, damage, position);
+  }
+
   recordFlagUpdate(team: string, state: string, position: Vec3, carrier: string | null): void {
     this.recorder.recordFlagUpdate(team, state, position, carrier);
   }

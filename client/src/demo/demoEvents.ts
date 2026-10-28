@@ -283,6 +283,26 @@ export function recordDeployBoom(b: DemoRecorder, netId: number, position: Vec3)
     recordTargetDestroyed(b, deployDemoId(netId), position, info.tt);
   }
 
+/** PvP hit edge — same lane as recordKill (victim rosterIdx, shooter in
+ *  peakPosX+1) but eventType=Hit so demos carry EVERY damage instance the
+ *  server credited, not just fatal ones. demodiff pairs these 1:1 with the
+ *  server's own playerHit edges — a missing one is a dropped wire event. */
+export function recordPlayerHit(b: DemoRecorder, shooterId: string | null, targetId: string, damage: number, position: Vec3): void {
+    if (!b.recording || !checkEventRate(b)) {return;}
+    const e = b.targetEventPool.pop() ?? ({} as TargetEvent);
+    e.eventType = TargetEventType.Hit;
+    e.timestamp = b.elapsedTime;
+    e.posX = position.x; e.posY = position.y; e.posZ = position.z;
+    e.velX = 0; e.velY = 0; e.velZ = 0;
+    e.targetId = Math.max(0, rosterIdx(b, targetId));
+    e.targetType = TARGETTYPE_KILL;
+    e.health = damage;
+    e.hasPeakPosition = true;
+    e.peakPosX = rosterIdx(b, shooterId) + 1;
+    e.peakPosY = 0; e.peakPosZ = 0;
+    b.targetEvents.push(e);
+  }
+
 export function recordKill(b: DemoRecorder, shooterId: string | null, targetId: string, weapon: number, position: Vec3): void {
     if (!b.recording || !checkEventRate(b)) {return;}
     const e = b.targetEventPool.pop() ?? ({} as TargetEvent);

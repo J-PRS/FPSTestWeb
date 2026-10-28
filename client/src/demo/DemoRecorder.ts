@@ -513,6 +513,11 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   recordKill(shooterId: string | null, targetId: string, weapon: number, position: Vec3): void {
     ev.recordKill(this, shooterId, targetId, weapon, position);
   }
+  /** PvP hit edge — every credited damage instance, paired with the
+   *  server's own playerHit lane by demodiff. */
+  recordPlayerHit(shooterId: string | null, targetId: string, damage: number, position: Vec3): void {
+    ev.recordPlayerHit(this, shooterId, targetId, damage, position);
+  }
   recordFlagUpdate(team: string, state: string, position: Vec3, carrier: string | null): void {
     ev.recordFlagUpdate(this, team, state, position, carrier);
   }

@@ -15,7 +15,7 @@ if (process.env.E2E_GPU !== '1' && !process.env.CI) {
   console.warn('[E2E] Set E2E_GPU=1 for headless+GPU, or E2E_HEADED=1 for visible+GPU.\\n');
 }
 
-const SPECS = ['smoke.ts', 'duo.ts', 'duo_p2p.ts', 'lobby.ts', 'reconnect.ts', 'vgs.ts', 'overlap.ts', 'desyncsoak.ts', 'mapswitch.ts', 'weather.ts', 'perf.ts'];
+const SPECS = ['smoke.ts', 'duo.ts', 'duo_p2p.ts', 'lobby.ts', 'reconnect.ts', 'vgs.ts', 'overlap.ts', 'desyncsoak.ts', 'dualcheck.ts', 'mapswitch.ts', 'weather.ts', 'perf.ts'];
 const skip = new Set(process.argv.slice(2).flatMap((a, i, arr) => a === '--skip' ? [arr[i + 1]] : []));
 const here = new URL('.', import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1');
 

@@ -29,6 +29,7 @@ import {
 import { serializeDemo } from '../../client/src/demo/demoWriter.ts';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { WIRE_HIT, WIRE_KILL, decodeHit, decodeKill } from '../../shared/wire.ts';
 
 export class RoomDemo {
   /** Sim-seconds recorded — the clock the frames stamp. */
@@ -55,6 +56,10 @@ export class RoomDemo {
    *  namespaced demo id's spawn-lane type or a Destroyed lands on the
    *  default lane and orphans against its own Spawned. */
   private kindTypes = new Map<number, number>();
+  /** Same class for `pos`: the gone verbs carry no position on the wire,
+   *  so a Destroyed would stamp (0,0,0) — keep each id's spawn pos and
+   *  reuse it, matching what the client recorder resolves. */
+  private posById = new Map<number, { x: number; y: number; z: number }>();
 
   constructor(private room: Room) {
     for (const id of room.players.getAllPlayers().keys()) {this.seat(id);}
@@ -69,6 +74,66 @@ export class RoomDemo {
       try { this.onBroadcast(msg); } catch { /* recording must never break the wire */ }
       orig(msg, exclude);
     };
+    // Binary funnel too: playerHit/playerKill ride WIRE_HIT/WIRE_KILL
+    // subframes via broadcastBinaryReliable whenever wireIds resolve —
+    // the JSON broadcast is only the unminted-id fallback, so a tap on
+    // broadcast() alone misses nearly every damage edge in a real room.
+    const origBin = room.connections.broadcastBinaryReliable.bind(room.connections);
+    room.connections.broadcastBinaryReliable = (data, journaled, exclude): void => {
+      try { this.onBinaryBroadcast(data); } catch { /* same rule */ }
+      origBin(data, journaled, exclude);
+    };
+  }
+
+  /** wid → playerId — room.wireIds maps the other way; combat lanes are
+   *  small enough that a scan per decoded frame costs nothing. */
+  private pidOfWid(wid: number): string | undefined {
+    for (const [pid, w] of this.room.wireIds) {if (w === wid) {return pid;}}
+    return undefined;
+  }
+
+  private onBinaryBroadcast(data: Uint8Array): void {
+    if (data.length < 2 || data[0] !== 0x54) {return;} // wire MAGIC 'T'
+    if (data[1] === WIRE_HIT) {
+      const h = decodeHit(data);
+      if (!h) {return;}
+      const targetId = this.pidOfWid(h.targetWid);
+      const shooterId = h.shooterWid === 0 ? 'environment' : this.pidOfWid(h.shooterWid);
+      if (!targetId || !shooterId) {return;}
+      const victimIdx = this.seat(targetId);
+      const shooterIdx = this.seat(shooterId);
+      const s = this.room.moveSim.simState(targetId);
+      const pos = s?.pos ?? { x: 0, y: 0, z: 0 };
+      this.targetEvents.push({
+        eventType: TargetEventType.Hit, timestamp: this.now,
+        posX: pos.x, posY: pos.y, posZ: pos.z,
+        velX: 0, velY: 0, velZ: 0,
+        targetId: victimIdx, targetType: TARGETTYPE_KILL,
+        health: h.damage,
+        hasPeakPosition: true, peakPosX: shooterIdx + 1, peakPosY: 0, peakPosZ: 0,
+      });
+      return;
+    }
+    if (data[1] === WIRE_KILL) {
+      const k = decodeKill(data);
+      if (!k) {return;}
+      const targetId = this.pidOfWid(k.targetWid);
+      const shooterId = k.shooterWid === 0 ? 'environment' : this.pidOfWid(k.shooterWid);
+      if (!targetId || !shooterId) {return;}
+      const victimIdx = this.seat(targetId);
+      const shooterIdx = this.seat(shooterId);
+      const s = this.room.moveSim.simState(targetId);
+      const pos = s?.pos ?? { x: 0, y: 0, z: 0 };
+      this.targetEvents.push({
+        eventType: TargetEventType.Destroyed, timestamp: this.now,
+        posX: pos.x, posY: pos.y, posZ: pos.z,
+        velX: 0, velY: 0, velZ: 0,
+        targetId: victimIdx, targetType: TARGETTYPE_KILL,
+        health: k.weapon ?? 0,
+        hasPeakPosition: true, peakPosX: shooterIdx + 1, peakPosY: 0, peakPosZ: 0,
+      });
+      return;
+    }
   }
   private baselineDone = false;
   /** Baseline spawns — initial-pool deployables/pickups/crawlers live via
@@ -203,6 +268,23 @@ export class RoomDemo {
         });
         break;
       }
+      case 'playerHit': {
+        // Every credited damage instance — the demodiff pairing lane
+        // (KILL-type, Hit event, victim+shooter rosterIdx like playerKill).
+        const victimIdx = this.seat(m.targetId as string);
+        const shooterIdx = m.shooterId ? this.seat(m.shooterId as string) : -1;
+        const s = this.room.moveSim.simState(m.targetId as string);
+        const pos = s?.pos ?? { x: 0, y: 0, z: 0 };
+        this.targetEvents.push({
+          eventType: TargetEventType.Hit, timestamp: this.now,
+          posX: pos.x, posY: pos.y, posZ: pos.z,
+          velX: 0, velY: 0, velZ: 0,
+          targetId: victimIdx, targetType: TARGETTYPE_KILL,
+          health: (m.damage as number) ?? 0,
+          hasPeakPosition: true, peakPosX: shooterIdx + 1, peakPosY: 0, peakPosZ: 0,
+        });
+        break;
+      }
       case 'playerKill': {
         const victimIdx = this.seat(m.targetId as string);
         const shooterIdx = m.shooterId ? this.seat(m.shooterId as string) : -1;
@@ -271,8 +353,11 @@ export class RoomDemo {
         break;
       }
       case 'deploySpawn': case 'deployGone': {
-        const pos = v(m.pos);
-        const id = deployDemoId(m.id as number);
+        const id0 = m.id as number;
+        const pos = (msg.type === 'deploySpawn')
+          ? (this.posById.set(id0, v(m.pos)), v(m.pos))
+          : (this.posById.get(id0) ?? v(m.pos));
+        const id = deployDemoId(id0);
         const spawned = msg.type === 'deploySpawn';
         const type = spawned
           ? TARGETTYPE_DEPLOY_BASE + demoDeployKindIndex((m.kind as string) ?? 'turret')
@@ -288,8 +373,11 @@ export class RoomDemo {
         break;
       }
       case 'pickupSpawn': case 'pickupGone': {
-        const pos = v(m.pos);
-        const id = pickupDemoId(m.id as number);
+        const id0 = m.id as number;
+        const pos = (msg.type === 'pickupSpawn')
+          ? (this.posById.set(id0, v(m.pos)), v(m.pos))
+          : (this.posById.get(id0) ?? v(m.pos));
+        const id = pickupDemoId(id0);
         const spawned = msg.type === 'pickupSpawn';
         const type = spawned
           ? TARGETTYPE_PICKUP_BASE + demoPickupKindIndex((m.kind as string) ?? 'gem')

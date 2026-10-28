@@ -162,6 +162,13 @@ function wirePlayerCombat(ctx: NetCtx): void {
     if (deps.world.playbackMode) {return;}
     inv('wire-hit-finite', Number.isFinite(damage) && Number.isFinite(health), { damage, health, shooterId, targetId });
     if (!Number.isFinite(damage) || !Number.isFinite(health)) {return;}
+    // Every credited hit lands in the demo — demodiff pairs it 1:1 with
+    // the server's own playerHit edge; a missing one is a dropped wire
+    // event (the "no missing damage" oracle).
+    const hitPos = targetId === nm().getLocalPlayerId()
+      ? deps.lazyPlayer().pos
+      : (deps.world.remotePlayers.get(targetId)?.pos ?? deps.lazyPlayer().pos);
+    deps.lazyDemoManager?.()?.recordPlayerHit(shooterId === 'environment' ? null : shooterId, targetId, damage, hitPos);
     // Check if local player was hit
     if (targetId === nm().getLocalPlayerId()) {
       const player = deps.lazyPlayer();

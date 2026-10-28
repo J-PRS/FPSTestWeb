@@ -61,6 +61,13 @@ export class WireIn {
    *  session — the "half my damage instances don't work" desync. */
   private lastHitSeq = 0;
 
+  /** Binary hits/kills that arrived before their wireIds minted — a
+   *  journaled replay or a gameState race can deliver the damage edge
+   *  ahead of the roster delta, and a hit dropped here is a MISSING
+   *  DAMAGE INSTANCE. Park them until the next 'wireIds' mint resolves
+   *  the ids; orphans past the staleness window drop with a warn. */
+  private readonly pendingWidEvents: { at: number; hit?: { shooterWid: number; targetWid: number; damage: number; health: number; armor?: number; seq?: number; shotId?: string; gd?: number }; kill?: { shooterWid: number; targetWid: number; weapon?: number; streak?: number; air?: number; steal?: boolean }; proj?: ReturnType<typeof decodeProjSpawn> }[] = [];
+
   /** Ring of recent health-affecting events — read by the desync dump so a
    *  hash mismatch says WHICH event diverged, not just that one did. */
   private readonly recentHealthEvents: { type: string; t: number; detail: string }[] = [];
@@ -238,7 +245,7 @@ this.handlerThrows += 1;
       if (!h) {return;}
       const targetId = this.wireIds.get(h.targetWid);
       const shooterId = h.shooterWid === 0 ? 'environment' : this.wireIds.get(h.shooterWid);
-      if (!targetId || !shooterId) {return;} // ids not minted yet — same as a tick record for an unknown wid
+      if (!targetId || !shooterId) {this.pendingWidEvents.push({ at: Date.now(), hit: h }); this.drainPendingWidEvents(); return;}
       try { this.message({ type: 'playerHit', shooterId, targetId, damage: h.damage, health: h.health, armor: h.armor, seq: h.seq, shotId: h.shotId, gd: h.gd }); }
       catch (error) {this.handlerThrows += 1; logger.warn(`wire-hit subframe failed: ${error instanceof Error ? error.message : String(error)}`);}
       return;
@@ -279,6 +286,7 @@ this.handlerThrows += 1;
       const k = decodeKill(data);
       const targetId = k ? this.wireIds.get(k.targetWid) : undefined;
       const shooterId = k ? (k.shooterWid === 0 ? 'environment' : this.wireIds.get(k.shooterWid)) : undefined;
+      if (k && (!targetId || !shooterId)) {this.pendingWidEvents.push({ at: Date.now(), kill: k }); this.drainPendingWidEvents(); return;}
       if (k && targetId && shooterId) {
         try { this.message({ type: 'playerKill', shooterId, targetId, weapon: k.weapon, streak: k.streak, air: k.air, steal: k.steal }); }
         catch (error) {this.handlerThrows += 1; logger.warn(`wire-kill failed: ${error instanceof Error ? error.message : String(error)}`);}
@@ -289,6 +297,7 @@ this.handlerThrows += 1;
       if (data[1] === WIRE_PROJSPAWN) {
         const s = decodeProjSpawn(data);
         const ownerId = s ? this.wireIds.get(s.ownerWireId) : undefined;
+        if (s && !ownerId) {this.pendingWidEvents.push({ at: Date.now(), proj: s }); this.drainPendingWidEvents(); return;}
         if (s && ownerId) {
           try { this.h.onProjectileCreated?.(`sp-${s.projId}`, ownerId, s.position, s.velocity, s.weaponType, s.shotId, s.pellet, s.age || undefined, s.t); }
           catch (error) {this.handlerThrows += 1; logger.warn(`Handler threw for projSpawn: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);}
@@ -377,6 +386,7 @@ this.handlerThrows += 1;
         // departed owner's retained fields (see WireIdRoster.feed).
         this.tickPool.byId?.delete(id);
       }
+      this.drainPendingWidEvents();
     },
     teamUpdate: (data): void => { this.h.patchRemotePlayer(data.playerId, { team: data.team }); },
     playerHeld: (data): void => { this.h.patchRemotePlayer(data.playerId, { held: data.n }); this.h.onPlayerHeld?.(data.playerId, data.n); },
@@ -425,7 +435,7 @@ this.handlerThrows += 1;
     pickupSpawn: (data): void | undefined => this.h.onPickupSpawn?.(data.id, data.pos, data.kind, data.val, data.vel),
     pickupGone: (data): void | undefined => this.h.onPickupGone?.(data.id, data.by ?? null),
     teamScore: (data): void | undefined => this.h.onTeamScore?.(data.scores, data.winAt),
-    ffaScore: (data): void | undefined => this.h.onFfaScore?.(data.scores, data.winAt),
+    ffaScore: (data): void | undefined => this.h.onFfaScore?.(data.scores, data.winAt, data.playerId, data.score, data.rm),
     ffaMatchEnd: (data): void | undefined => this.h.onFfaMatchEnd?.(data.winner, data.scores),
     matchEnd: (data): void | undefined => this.h.onMatchEnd?.(data.winner, data.scores),
     matchStart: (data): void | undefined => this.h.onMatchStart?.(data.mode, data.scores),
@@ -523,10 +533,15 @@ dropCensus.total += 1;
     // entries for players who left during our disconnect, then add the
     // current set. v3 ids are per-room: the snapshot replaces, not merges.
     this.wireIds.clear();
+    // Same epoch rule for queued binary hits — their wids belong to the
+    // room that sent them; resolving against a new room's map would
+    // misattribute the damage.
+    this.pendingWidEvents.length = 0;
     // v4 masked deltas inherit per-wireId state — a new room epoch must
     // not let a reassigned id keep the old player's last-decoded fields.
     this.tickPool.byId?.clear();
     if (data.wireIds) {for (const [id, pid] of Object.entries(data.wireIds)) {this.wireIds.set(Number(id), pid);}}
+    this.drainPendingWidEvents();
     this.h.remoteReset(data.players);
     // Seat is (re)established — replay fire intents a dead lane may have
     // lost. Server dedupes by shotId, so a shot that DID land is a no-op.
@@ -665,6 +680,45 @@ dedupCensus.hitSeqDrops += 1;
     // not mint a stub corpse.
     this.h.patchRemotePlayer(data.targetId, { isDead: true, health: 0 });
     this.h.onPlayerKill?.(data.shooterId, data.targetId, data.weapon, data.air, data.steal);
+  }
+
+  /** Retry wid-unresolved binary hits/kills — resolves once the roster
+   *  learns the ids (wireIds delta, gameState seed) or drops with a warn
+   *  past the staleness window. A queued hit that replays carries its
+   *  original seq, so handlePlayerHit's dedup still applies. */
+  private drainPendingWidEvents(): void {
+    if (this.pendingWidEvents.length === 0) {return;}
+    const now = Date.now();
+    for (let i = this.pendingWidEvents.length - 1; i >= 0; i -= 1) {
+      const p = this.pendingWidEvents[i]!;
+      if (now - p.at > 3000) {
+        this.pendingWidEvents.splice(i, 1);
+        logger.warn(`binary ${p.hit ? 'hit' : 'kill'} orphaned — wid never minted for ${JSON.stringify(p.hit ?? p.kill)}`);
+        continue;
+      }
+      if (p.hit) {
+        const targetId = this.wireIds.get(p.hit.targetWid);
+        const shooterId = p.hit.shooterWid === 0 ? 'environment' : this.wireIds.get(p.hit.shooterWid);
+        if (!targetId || !shooterId) {continue;}
+        this.pendingWidEvents.splice(i, 1);
+        this.message({ type: 'playerHit', shooterId, targetId, damage: p.hit.damage, health: p.hit.health, armor: p.hit.armor, seq: p.hit.seq, shotId: p.hit.shotId, gd: p.hit.gd });
+        continue;
+      }
+      const k = p.kill;
+      if (k) {
+        const targetId = this.wireIds.get(k.targetWid);
+        const shooterId = k.shooterWid === 0 ? 'environment' : this.wireIds.get(k.shooterWid);
+        if (!targetId || !shooterId) {continue;}
+        this.pendingWidEvents.splice(i, 1);
+        this.message({ type: 'playerKill', shooterId, targetId, weapon: k.weapon, streak: k.streak, air: k.air, steal: k.steal });
+        continue;
+      }
+      const s = p.proj!;
+      const ownerId = this.wireIds.get(s.ownerWireId);
+      if (!ownerId) {continue;}
+      this.pendingWidEvents.splice(i, 1);
+      this.h.onProjectileCreated?.(`sp-${s.projId}`, ownerId, s.position, s.velocity, s.weaponType, s.shotId, s.pellet, s.age || undefined, s.t);
+    }
   }
 
   /** Routed through the NetworkManager seam so tests can wrap/count it. */
