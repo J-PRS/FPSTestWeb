@@ -7,6 +7,7 @@
 type Schema = {
   'fps-pixelated': number;   // pixel scale factor (1 = off)
   'fps-postpro': boolean;
+  'fps-wake': boolean;       // projectile wake-cone shell (disc/bolt proxy hitbox visual)
   'fps-bloom': boolean;
   'fps-invert-y': boolean;
   'fps-sens': number;
@@ -62,6 +63,7 @@ type Schema = {
 const DEFAULTS: Schema = {
   'fps-pixelated': 0,
   'fps-postpro': true,
+  'fps-wake': true,
   'fps-bloom': true,
   'fps-invert-y': false,
   'fps-sens': 0.8, // menu shows 8 → ~12.5cm/360 @800dpi — casual flick default; tuners drop it

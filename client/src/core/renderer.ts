@@ -48,7 +48,7 @@ export interface RendererSetup {
    *  hard-pixel modes, which need integer factors to keep the chunky
    *  grid regular. */
   setResScale: (scale: number) => void;
-  setPostProcessingEnabled: (enabled: boolean) => void;
+  setPostProcessingEnabled: (enabled: boolean, persist?: boolean) => void;
   resize: (width: number, height: number) => void;
 }
 
@@ -511,6 +511,14 @@ function wireToggleButtons(modes: RenderModes, onBm: () => void, onPp: () => voi
   postproToggleBtn.classList.toggle('on', modes.postproEnabled);
   bloomToggleBtn.addEventListener('click', onBm);
   postproToggleBtn.addEventListener('click', onPp);
+  // Wake-cone shells are cosmetic only — pure settings flip, read per frame.
+  const wakeToggleBtn = document.getElementById('wake-toggle')! as HTMLButtonElement;
+  wakeToggleBtn.classList.toggle('on', settings.get('fps-wake'));
+  wakeToggleBtn.addEventListener('click', (): void => {
+    const v = !settings.get('fps-wake');
+    settings.set('fps-wake', v);
+    wakeToggleBtn.classList.toggle('on', v);
+  });
   return { bloomToggleBtn, postproToggleBtn };
 }
 
@@ -765,13 +773,15 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     applyBufferSizes();
   }
 
-  function setPostProcessingEnabled(enabled: boolean): void {
+  // persist=false for staging holds (boot veil): the stored key is the
+  // user's pick — a temporary off must not overwrite it.
+  function setPostProcessingEnabled(enabled: boolean, persist = true): void {
     // Floyd mode has no composer — enabling post there drops floyd rather
     // than silently refusing (the toggle used to clamp back to OFF with
     // no feedback and read as dead). Other pixel modes share the chain.
     if (enabled && pmodeEff() === 3) {setPixel(pscale, 0, false);} // compat drop, not a user pick
     postproEnabled = enabled;
-    settings.set('fps-postpro', postproEnabled);
+    if (persist) {settings.set('fps-postpro', postproEnabled);}
     gradePass.enabled = postproEnabled;
     syncRenderToScreen();
     postproToggleBtn.classList.toggle('on', postproEnabled);

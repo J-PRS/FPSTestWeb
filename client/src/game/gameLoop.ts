@@ -52,7 +52,7 @@ import { createFrameBudget } from '../core/frameBudget.js';
 import { gpuBegin, gpuEnd, gpuMs } from '../core/gpuTimer.js';
 import { lastWeaponByPlayer } from './net/projectiles.js';
 import { parityMiss, kbEchoHorizon } from './parity.js';
-import { fpsWatchdog, resetAutoQuality, fxJobSample, fxJobStats, seedGpuTier } from './loopPerf.js';
+import { fpsWatchdog, resetAutoQuality, fxJobSample, fxJobStats, seedGpuTier, setShadows } from './loopPerf.js';
 import { createRenderScan } from './renderScan.js';
 import { settings } from '../core/settings.js';
 import { WeaponType } from '../../../shared/weapons.js';
@@ -555,8 +555,11 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   // ammo/health/timer shouldn't flash over the frozen match. Transition-
   // gated so release can't stomp another owner's hide() (spectate/death).
   const held = bootHoldActive(f);
-  if (held && !st.hudHeld) { st.hudHeld = true; hud.hide(); setBootVeil(true); deps.rendererSetup.renderer.shadowMap.enabled = false; deps.rendererSetup.setPostProcessingEnabled(false); }
-  else if (!held && st.hudHeld) { st.hudHeld = false; hud.show(); setBootVeil(false); deps.rendererSetup.renderer.shadowMap.enabled = settings.get('fps-shadows'); deps.rendererSetup.setPostProcessingEnabled(settings.get('fps-postpro')); }
+  // Route every shadowMap.enabled flip through setShadows — the raw
+  // toggle leaves shadow-compiled programs live, and the next render
+  // dies uploading shadowIntensity uniforms the lights state lacks.
+  if (held && !st.hudHeld) { st.hudHeld = true; hud.hide(); setBootVeil(true); setShadows(deps, false); if (isSessionVeiled()) {deps.rendererSetup.setPostProcessingEnabled(false, false);} }
+  else if (!held && st.hudHeld) { st.hudHeld = false; hud.show(); setBootVeil(false); setShadows(deps, settings.get('fps-shadows')); deps.rendererSetup.setPostProcessingEnabled(settings.get('fps-postpro'), false); }
 
   hud.update(dt, player, networkManager.getPing(), networkManager.getPacketLoss(), networkManager.getJitter());
   hud.setConnDown(networkManager.connectionDown(), networkManager.connectionDownReason());

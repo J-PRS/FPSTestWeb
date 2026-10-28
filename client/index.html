@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="/src/ui/chrome.css" />
   <link rel="stylesheet" href="/src/ui/hud/hud.css" />
   <link rel="stylesheet" href="/src/lab/lab.css" />
+  <script>if (!/[?&](room|p2p)=|^\/s\//.test(location.pathname + location.search)) document.documentElement.classList.add('boot-holding');</script>
 </head>
 <body>
   <div id="overlay">
@@ -65,6 +66,7 @@
         <div class="btn-pair">
           <button id="postpro-toggle" class="tog">POST-PROCESSING</button>
           <button id="bloom-toggle" class="tog">GLOW</button>
+          <button id="wake-toggle" class="tog">WAKE</button>
         </div>
         <div class="field-row">
           <span>ANTIALIAS</span>

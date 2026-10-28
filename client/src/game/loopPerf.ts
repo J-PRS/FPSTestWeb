@@ -216,7 +216,7 @@ function gpuLevelTarget(st: LoopState, dir: number, base: { p: number; m: number
   return next === st.gpuLevel ? null : { next, baselineLevel };
 }
 
-function setShadows(deps: GameLoopDeps, on: boolean): void {
+export function setShadows(deps: GameLoopDeps, on: boolean): void {
   const { rendererSetup, sceneSetup } = deps;
   rendererSetup.renderer.shadowMap.enabled = on;
   sceneSetup.sun.castShadow = on;
