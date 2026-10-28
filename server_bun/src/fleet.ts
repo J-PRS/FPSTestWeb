@@ -26,6 +26,18 @@ import { corsResponse } from './serverRoutes.ts';
 import { windowAllow } from './windowLimit.ts';
 import { logger } from './logger.ts';
 import { wallNow } from './wallClock.ts';
+import { readFileSync } from 'node:fs';
+
+// Manifest version — same source the workers read (server_bun/package.json).
+function readVersion(): string {
+  try {
+    const pkg = JSON.parse(readFileSync(join(import.meta.dir, '..', 'package.json'), 'utf8')) as { version?: string };
+    return pkg.version ?? '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
+const FLEET_VERSION = readVersion();
 
 const WORKERS = Math.max(1, Math.min(16, Number(process.env.FPS_FLEET_WORKERS) || cpus().length - 1 || 1));
 const BASE = CONFIG.port;
@@ -209,7 +221,7 @@ Bun.serve({
       }
       let build: string | null = null;
       try { build = (await Bun.file(join(import.meta.dir, '..', 'build.txt')).text()).trim(); } catch { /* no stamp */ }
-      return json({ status: workersUp > 0 ? 'running' : 'degraded', players, maxPlayers: WORKERS * CONFIG.maxPlayers, tickRate: 20, build, workers: workersUp, fleet: WORKERS });
+      return json({ status: workersUp > 0 ? 'running' : 'degraded', players, maxPlayers: WORKERS * CONFIG.maxPlayers, tickRate: 20, version: FLEET_VERSION, build, workers: workersUp, fleet: WORKERS });
     }
 
     if (url.pathname === '/rooms' && req.method === 'GET') {
