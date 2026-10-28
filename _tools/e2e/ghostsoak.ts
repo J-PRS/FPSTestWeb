@@ -19,15 +19,18 @@ const arg = (name: string, dflt: string): string =>
 const SECS = Number(arg('secs', '120'));
 const BOTS = arg('bots', '12');
 const MAP = arg('map', 'lagoon');
+const NET = arg('net', 'ws');
 
 const stack = await upStack();
-const client = await launchClient(stack.clientUrl(`&room=ghostsoak&map=${MAP}&bots=${BOTS}&mode=ctf&net=ws`));
+const client = await launchClient(stack.clientUrl(`&room=ghostsoak&map=${MAP}&bots=${BOTS}&mode=ctf&net=${NET}`));
 
 try {
   await client.waitFor(`t.networkManager && t.networkManager.isConnected()`, 60000);
   await client.waitFor(`t.world.remotePlayers.entities.size >= 1`, 30000);
   const remotes = await client.test<number>(`t.world.remotePlayers.entities.size`);
-  console.log(`room populated (${remotes} remotes) — soaking ${SECS}s wall`);
+  const tier = await client.test<string>(`t.networkManager.getTransportTier() ?? 'unknown'`);
+  console.log(`room populated (${remotes} remotes, ${tier}) — soaking ${SECS}s wall`);
+  if (NET === 'wt' && !tier.startsWith('wt')) {throw new Error(`WT requested but connected via ${tier}`);}
 
   await new Promise((r) => setTimeout(r, SECS * 1000));
 
