@@ -222,24 +222,35 @@ const pairLane = (cli: Ev[], srv: Ev[], label: string, gating: boolean): void =>
   // and always survives.
   const isHb = (k: string): boolean => k.endsWith(':0') || k.endsWith(':4');
   const idOf = (k: string): string => k.slice(0, k.lastIndexOf(':'));
-  const mkDedupe = (): ((k: string, aux: string) => boolean) => {
-    const lastEv = new Map<string, string>();
-    return (k: string, aux: string): boolean => {
-      const id = idOf(k), sig = `${k}|${aux}`;
-      if (isHb(k) && lastEv.get(id) === sig) {return true;}
-      lastEv.set(id, sig);
+  const mkDedupe = (): ((e: Ev) => boolean) => {
+    const lastEv = new Map<string, { sig: string; t: number }>();
+    return (e: Ev): boolean => {
+      const id = idOf(e.key), sig = `${e.key}|${e.aux}`;
+      const prev = lastEv.get(id);
+      // Heartbeats cluster within seconds; a repeat past the window is a
+      // NEW edge (rest-spot resync, respawn) both tapes must still carry —
+      // collapsing it drops the pairing's only representative.
+      if (isHb(e.key) && prev && prev.sig === sig && e.t - prev.t < 3) {return true;}
+      lastEv.set(id, { sig, t: e.t });
       return false;
     };
   };
   const dedupeCli = mkDedupe(), dedupeSrv = mkDedupe();
-  const cliDeduped = cli.filter((e): boolean => !dedupeCli(e.key, e.aux));
-  const srvDeduped = srv.filter((e): boolean => !dedupeSrv(e.key, e.aux));
+  // Cli dedupe compares in server-domain time — the raw client clock
+  // drifts vs sim, so its "3s" is a different real interval.
+  const cliDeduped = cli.filter((e): boolean => !dedupeCli({ ...e, t: e.t + offAt(e.t) }));
+  const srvDeduped = srv.filter((e): boolean => !dedupeSrv(e));
   for (const e of cliDeduped) {
     const t = e.t + offAt(e.t);
     const a = cliPool.get(e.key); if (a) {a.push({ ...e, t });} else {cliPool.set(e.key, [{ ...e, t }]);}
   }
   for (const a of cliPool.values()) {a.sort((p, q): number => p.t - q.t);}
   const cliStart = tMin + offAt(tMin);
+  // The tape's end is also a boundary: a server event past the last
+  // client-side timestamp can't have been recorded — the capture stopped
+  // before it arrived. Post-capture misses report but don't gate.
+  let cliEnd = tMax + offAt(tMax);
+  for (const e of cli) {cliEnd = Math.max(cliEnd, e.t + offAt(e.t));}
   // Join backpressure: durable events (hits, kills, spawns — ~3s journal)
   // re-sent at connect get stamped when the client DISPATCHES them, and
   // veil/boot starvation can queue that seconds late — timestamps in the
@@ -249,8 +260,11 @@ const pairLane = (cli: Ev[], srv: Ev[], label: string, gating: boolean): void =>
   // srvWin: events sent before the client's socket existed can't have
   // reached it (journal replay only rides RECLAIM, not first join), so
   // only a small pre-window margin applies — not the replay horizon.
+  // Upper bound rides +3 (the drift-pass tolerance) — a client event's
+  // fitted server time can land past tMax+off, and cutting its server
+  // twin out of the window reads a good pair as missed+fabricated.
   const srvWin = srvDeduped.filter((e): boolean =>
-    e.t >= cliStart - 1.5 && e.t <= tMax + offAt(tMax) + 1);
+    e.t >= cliStart - 1.5 && e.t <= tMax + offAt(tMax) + 3);
   // Two passes: strict EV_TOL first, then a drift pass — the piecewise
   // fit's residual error grows ~0.1s/s from its anchors, so mid-clip
   // copies can sit ~2s off their server truth and still be the same edge.
@@ -277,9 +291,22 @@ const pairLane = (cli: Ev[], srv: Ev[], label: string, gating: boolean): void =>
       }
     }
   }
+  if (process.env.DD_DEBUG) {
+    const k = process.env.DD_DEBUG;
+    console.log(`  dbg key=${k} cli=${JSON.stringify((cliPool.get(k) ?? []).map(e => +e.t.toFixed(2)))} srv=${JSON.stringify(srvWin.filter(e => e.key === k).map(e => +e.t.toFixed(2)))} cliStart=${cliStart.toFixed(2)}`);
+  }
   for (const s of srvWin) {
     evMissed += 1;
-    if (gating) {evMissedGated += 1;}
+    // Gated = provably deliverable AND a damage edge. Three bounds:
+    // (a) post-cliStart — the socket's registration instant is provably
+    //     inside [connect, first frame], so earlier misses are ambiguous;
+    // (b) inside cliEnd — a server event past the client's last stamped
+    //     edge landed after the capture stopped, it can't be a drop;
+    // (c) KILL-lane only — pickup/deploy resync edges carry their own
+    //     legitimate asymmetries (own-shot exclusion, rest-spot rebroadcast)
+    //     that are tape noise, while a dropped damage edge is the actual
+    //     thing this oracle exists to catch.
+    if (gating && s.t >= cliStart && s.t <= cliEnd + 1 && s.key.startsWith(`${TARGETTYPE_KILL}:`)) {evMissedGated += 1;}
     if (evMissed <= 15) {console.log(`  [missed] ${label} ${s.key} @${s.t.toFixed(1)}`);}
   }
   for (const [key, pool] of cliPool) {
