@@ -24,6 +24,7 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-10-22_FRONTEND_AUDIT.md` | Vanilla DOM layer vs published best practice — near-optimal; residual gaps |
 | `_docs/2026-10-23_SERVER_HOTPATH_AUDIT.md` | **Server hot-path footgun audit** — projStep/link allocations, remaining dhypot3 swaps, per-tick grid rebuild, roster builders; ordered by payoff/risk |
 | `_docs/2026-10-23_DUEL_CAPACITY.md` | **1v1 capacity report** — measured: duel rooms cost 1.5× more per client than 32-seat rooms (175 vs 266 CCU/core); profile attribution, cost model, L1-L8 levers, industry patterns |
+| `_docs/2026-10-28_SERVER_PERF_RESEARCH.md` | **Server perf research** — what's actually left after cpuprof attribution: GC-controller 16ms bug ≈ tickMsMax spikes (Bun upgrade lever), validated architecture, ranked remaining wins |
 | `_docs/2026-10-18_ADDING_MODES_AND_PICKUPS.md` | Blast surface for new modes/pickups |
 | `_docs/2026-10-26_TTS_DTS_REFERENCE.md` | **TTS/DTS reference** - cold-boot time-to-shoot and data-to-shoot profile, phase breakdown, prediction table, improvement levers |
 | `_docs/2026-10-18_CTF_BOT_BRAIN_PUG_AUDIT.md` | CTF bot brain vs PUG guide audit |
@@ -45,6 +46,7 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-10-27_WAN_STRESS_240.md` | **WAN stress report** — 240 bots × 10 rooms on live OCI, join-pacing under the flood guard, measured CPU/RSS/NIC/socket shape, findings (join-burst > combat, HTTP keepalive lane doubles fds, ~2.4MB/conn) |
 | `_docs/2026-10-27_NUCLEUS_NETCODE_REFERENCE.md` | **Nucleus (Fish-Net successor) feature-set reference** — full doc-tree dig: interest/Spawn-vs-Stop, spawn pacing, reconcile+replay, lag-comp view clamp, trust model, Pro/Free split; feature map vs ours + 6 ranked stealable ideas |
 | `_docs/2026-10-28_BOOT_WATERFALL.md` | **TTS decode via permanent mark chain** — GLB rigParse ~1.7s is the connect starver (not worker boot or compile), wt cold-dial 2.5-3.2s vs 3s cap bug fixed, bin-drain starvation model, lever ranking |
+| `_docs/2026-10-28_DEMO_VALIDATION.md` | **Demo validation oracle** — dual-capture demodiff end-to-end: binary-lane server recording, per-event hit/kill pairing, provable-delivery gating (cliStart/cliEnd/KILL-lane), the 6 real bugs it caught, run commands |
 | `_docs/2026-10-27_DEMO_HMAP_DELTA.md` | **Demo heightmap greedy-delta design** — coarse u8 grid + sparse worst-error correction list (Garland-Heckbert without the TIN); preserves peaks exactly, rides inside HMAP |
 | `_docs/2026-10-23_SKI_FLAT_OVERSPEED.md` | Ski flat-ground overspeed audit — measured per-class, uncapped accel + unscaled gate root cause, fix sketch |
 | `_docs/2026-10-23_LOCAL_SHELL_SPAWN.md` | Local projectile spawn epochs — rewind-mirror tried & reverted (ping-dependent spawn feel); server-claims-muzzle is the correct fix if trajDiv regresses |
