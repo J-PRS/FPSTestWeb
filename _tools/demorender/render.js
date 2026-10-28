@@ -158,7 +158,11 @@ async function findServer() {
     };
   });
 
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  // --post opts into the live post chain (postpro+bloom). Raw GL stays
+  // default: the composer's offscreen chain can black-frame headless
+  // (the bloom NaN smear), and readPixels can't see its output anyway.
+  const pageUrl = opt.post ? `${url}${url.includes('?') ? '&' : '?'}postpro=on&bloom=on` : url;
+  await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await page.waitForFunction('window.__demoManager && window.__demoManager.isRecording === true', { timeout: 60000 });
 
   // ---------- load the demo file through the real UI path ----------
