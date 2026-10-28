@@ -151,7 +151,13 @@ export class GameServer {
     // on its siblings in the claim directory (duplicate /rooms rows,
     // joiners split across invisible instances) — the matchmaker owns
     // room naming fleet-wide instead.
-    if (!process.env.FPS_FLEET_REPORT) {
+    // Standing lobbies: specs flagged standing:true get a permanent
+    // <name>-1 room. Single-worker deploys seed them at boot. In fleet
+    // mode only the primary worker (w0) seeds — every worker seeding
+    // 'duel-1' would shadow the same-named room on its siblings (duplicate
+    // /rooms rows, joiners split across invisible instances). The
+    // matchmaker routes joins to w0 for those rooms.
+    if (!process.env.FPS_FLEET_REPORT || process.env.FPS_WORKER_ID === 'w0') {
       for (const name of this.maps.standingRooms()) {this.factory.roomFor(name);}
     }
   }
