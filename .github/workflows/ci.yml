@@ -31,6 +31,14 @@ jobs:
           npx vitest run
           npx oxlint src
 
+      # Fails when the shipped build's files or sizes differ from the committed
+      # client/dist-manifest.json, so added/removed/resized output is a decision.
+      - name: Build output guard
+        working-directory: client
+        run: |
+          npm run build
+          node ../_tools/dist-manifest.mjs
+
       - name: Circular dependency ratchet
         run: node _tools/check-cycles.mjs
 

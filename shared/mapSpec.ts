@@ -9,7 +9,7 @@
  */
 
 import type { TeamId } from './teams.ts';
-import { KIT_HULLS } from './structKits.js';
+import { KIT_HULLS, type Vec3like } from './structKits.js';
 import type { BotSkillSpec,BotTier,BotSkillMix } from './botSkill.ts';
 import type { DeployKind } from './deployables.ts';
 
@@ -222,7 +222,7 @@ export interface StructureSpec {
   team?: TeamId;
 }
 
-export interface Vec3like { x: number; y: number; z: number }
+export type { Vec3like };
 
 /** Spawn anchor — a point, or a sphere volume when `r` > 0. */
 export interface SpawnPoint extends Vec3like {

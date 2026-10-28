@@ -4,7 +4,7 @@
 // the real builder. pos = box CENTER in piece-local space (origin at
 // ground). Keep in step with the builders — each piece's hull table is
 // the contract between its authored spec and its rendered mesh.
-import type { Vec3like } from './mapSpec.js';
+export interface Vec3like { x: number; y: number; z: number }
 import { dcos, dsin } from './dmath.ts';
 
 export interface KitHull {
