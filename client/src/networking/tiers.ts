@@ -409,7 +409,13 @@ this.attempts += 1;
       if (this.closed || gen !== this.gen) { t.disconnect(); return; }
       this.inner = t;
       t.connect(url);
-      for (const d of this.pending) {t.send(d);}
+      for (const d of this.pending) {
+        // The join queued before the probe picked a lane — it advertises
+        // 'transport' but couldn't know it; stamp the negotiated tier here.
+        t.send(typeof d === 'string' && d.startsWith('{"type":"join"')
+          ? ((): string => { try { const j = JSON.parse(d) as { transport?: string }; j.transport = t.tier; return JSON.stringify(j); } catch { return d; } })()
+          : d);
+      }
       this.pending.length = 0;
     return; }).catch((error): void => {
       if (gen !== this.gen) {return;}

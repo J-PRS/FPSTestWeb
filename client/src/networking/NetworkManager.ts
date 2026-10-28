@@ -361,31 +361,7 @@ export class NetworkManager {
         // Ordering is preserved: join is the first frame queued, the
         // pendingCmds flush lands behind it. 'transport' is stamped by the
         // tier at flush — the probe hasn't picked a lane yet.
-        this.ws.send(JSON.stringify({
-          type: 'join',
-          playerId: this.localPlayerId,
-          name: settings.get('fps-name').trim() || undefined,
-          token: this.sessionToken ?? undefined,
-          // Offset cursor — a reclaim carries the last reliable ev we
-          // saw so the server replays only the missed frames.
-          resumeSeq: this.sessionToken ? this.wireIn.evWatermark : undefined,
-          // We own a session veil — hold the body off-spawn until the
-          // veil-drop sends 'ready' (or the 8s force timer).
-          spawnHold: true,
-          room: urlParams.room ?? undefined,
-          // Creation hints: explicit ?mode wins, then the persisted
-          // join-spec — NOT fps-mode, which is the solo tab's pick
-          // and mustn't leak into room mints (lobby ANY bug).
-          mode: urlParams.get('mode') ?? readJoinSpec().mode,
-          map: urlParams.map ?? readJoinSpec().map,
-          bots: urlParams.bots ?? readJoinSpec().bots,
-          unlisted: urlParams.unlisted || undefined,
-          noCreatures: urlParams.noCreatures || undefined,
-          noBalls: urlParams.noBalls || undefined,
-          perk: this.joinPerk?.(),
-          armorClass: this.joinClass?.(),
-          skill: this.joinSkill?.(),
-        }));
+        this.ws.send(JSON.stringify(this.joinMsg()));
       } catch (error) {
         reject(error);
       }
@@ -565,6 +541,36 @@ export class NetworkManager {
   ]);
   private pendingCmds: ClientMessage[] = [];
   private static readonly MAX_PENDING_CMDS = 16;
+
+  /** The join handshake payload — everything but 'transport', which the
+   *  tier stamps at pending-flush once the probe picks a lane. */
+  private joinMsg(): ClientMessage {
+    return {
+      type: 'join',
+      playerId: this.localPlayerId,
+      name: settings.get('fps-name').trim() || undefined,
+      token: this.sessionToken ?? undefined,
+      // Offset cursor — a reclaim carries the last reliable ev we
+      // saw so the server replays only the missed frames.
+      resumeSeq: this.sessionToken ? this.wireIn.evWatermark : undefined,
+      // We own a session veil — hold the body off-spawn until the
+      // veil-drop sends 'ready' (or the 8s force timer).
+      spawnHold: true,
+      room: urlParams.room ?? undefined,
+      // Creation hints: explicit ?mode wins, then the persisted
+      // join-spec — NOT fps-mode, which is the solo tab's pick
+      // and mustn't leak into room mints (lobby ANY bug).
+      mode: urlParams.get('mode') ?? readJoinSpec().mode,
+      map: urlParams.map ?? readJoinSpec().map,
+      bots: urlParams.bots ?? readJoinSpec().bots,
+      unlisted: urlParams.unlisted || undefined,
+      noCreatures: urlParams.noCreatures || undefined,
+      noBalls: urlParams.noBalls || undefined,
+      perk: this.joinPerk?.(),
+      armorClass: this.joinClass?.(),
+      skill: this.joinSkill?.(),
+    };
+  }
 
   /** Outbound JSON event — typed against the shared protocol union. */
   private send(msg: ClientMessage): void {
