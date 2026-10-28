@@ -911,7 +911,22 @@ async function init(): Promise<void> {
   const soloPrimed = soloSpec?.map && (await serverEndpoints).httpUrl
     ? await bootPrimeTerrain((await serverEndpoints).httpUrl, soloSpec.map).catch((): boolean => false)
     : false;
-  if (!soloPrimed && (!bootSaved || !(await bootPrimeTerrain(bootSaved.httpUrl, bootSaved.map)))) {
+  // Fresh-join terrain prime: ?room=X learns its map from the public
+  // /rooms lobby list — the heightfield fetch then rides the dial
+  // instead of serializing inside the veil (the ~2.7s
+  // gameState→terrainSwapped gap). fieldLoaded marks it resident so
+  // applyTerrain skips the refetch. Only heights are primed — tex/sky/
+  // interiors still apply at gameState as before.
+  let roomPrimed = false;
+  if (!soloPrimed && !bootSaved && onlineBoot && urlParams.room) {
+    try {
+      const { httpUrl } = await serverEndpoints;
+      const rooms = await (await fetch(`${httpUrl}/rooms`)).json() as { name: string; map?: string }[];
+      const mine = rooms.find((r): boolean => r.name === urlParams.room);
+      roomPrimed = Boolean(mine?.map) && await bootPrimeTerrain(httpUrl, { terrain: `${mine!.map}.bin` });
+    } catch { roomPrimed = false; }
+  }
+  if (!soloPrimed && !roomPrimed && (!bootSaved || !(await bootPrimeTerrain(bootSaved.httpUrl, bootSaved.map)))) {
     await loadHeightfieldBin('/assets/heightmaps/heightmap.bin');
   }
   profiler.markTime('heightmapLoaded');
