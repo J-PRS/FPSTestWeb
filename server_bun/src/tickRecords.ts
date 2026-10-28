@@ -6,7 +6,7 @@
  * "what leaves the room this tick".
  */
 import type { Room } from './Room.ts';
-import { encodeTickPlayerV4, encodeTickFrame, WIRE_TICK_V4, tickEncodeScratch, v4Last, sparseV4Record, type TickEncodeScratch } from '../../shared/wire.ts';
+import { encodeTickPlayerV4, encodeTickFrame, WIRE_TICK_V4, tickEncodeScratch, v4Last, sparseV4Record, type TickEncodeScratch, type WireTickPlayer } from '../../shared/wire.ts';
 import { STATUS } from '../../shared/status.ts';
 import { lgChargeAt } from '../../shared/combat.ts';
 import { heldBuffRates, POWERUP } from '../../shared/pickups.ts';
@@ -15,6 +15,9 @@ import { logger } from './logger.ts';
 import type { PlayerState } from './types.ts';
 import { PlayerManager } from './PlayerManager.ts';
 import { healPerTick, recordSuppressed, type TickRecord } from './tickHelpers.ts';
+import { WORLD_MODEL, spawnPayload } from '../../shared/worldModel.ts';
+import type { ServerMessage } from '../../shared/protocol.ts';
+import { ConnectionManager } from './ConnectionManager.ts';
 import { CONFIG } from './config.ts';
 import { healPool } from './healPool.ts';
 import { inv } from '../../shared/invariants.ts';
@@ -92,6 +95,11 @@ export class TickFanout {
    *  receivers actually hold). forceFull makes every call fresh, so the
    *  basis contents don't matter — it's a parameter-shape dummy. */
   private readonly introLast = v4Last();
+  /** Scratch fields object for encodeTickPlayerV4 — read synchronously
+   *  inside the call and never retained, so one shared object replaces a
+   *  per-record-per-tick allocation (the last hot-loop garbage left). */
+  private readonly scratchFields: WireTickPlayer =
+    { playerId: '', position: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 }, velocity: { x: 0, y: 0, z: 0 }, health: 0, isDead: false, ping: undefined, ski: 0, jet: 0, status: 0, sheep: 0 };
 
   private static readonly IDLE_KICK_MS = CONFIG.idleKickMs; // silent >60s → remove
   /** v4 masks delta against last-encoded state — a masked field a lost
@@ -105,6 +113,9 @@ export class TickFanout {
    *  full-copies for a whole second (measured: join-phase CPU ~2.2x
    *  settled, profload --settle 3). */
   private static readonly INTRO_CADENCE_TICKS = 5;
+  /** Seats a joiner's world admits per fanout tick — 4/tick drains a
+   *  30-seat roster in ~350ms (the burst becomes a trickle). */
+  private static readonly ADMIT_PER_TICK = 4;
 
   constructor(
     private readonly metrics: FanoutMetrics,
@@ -200,7 +211,10 @@ this.metrics.recordsSuppressed += 1;
       }
       rec.playerId = playerId;
       rec.pos = p.position;
-      rec.spd = Math.hypot(p.velocity.x, p.velocity.y, p.velocity.z);
+      // spd only feeds the >12 m/s travel-budget gate — squared-compare
+      // skips the hypot on everyone parked (Math.hypot is ~10x sqrt).
+      const vsq = p.velocity.x * p.velocity.x + p.velocity.y * p.velocity.y + p.velocity.z * p.velocity.z;
+      rec.spd = vsq > 144 ? Math.sqrt(vsq) : 0;
       // The delta basis is per-wireId and shared across recipients, but
       // fanout skips records per-recipient by distance tier — a field the
       // far client never received stays stale in its decode pool FOREVER
@@ -232,22 +246,21 @@ this.metrics.recordsSuppressed += 1;
       // mint always fulls: a quiet-window-reissued wireId's `last`
       // could still hold the retired owner's basis, and a masked
       // record would hand receivers the departed owner's hp/flags.
-      const fields = {
-        playerId,
-        position: p.position,
-        rotation: p.rotation,
-        velocity: p.velocity,
-        health: p.health,
-        isDead: p.isDead,
-        // Only advertise a proven ping — stale heartbeats above would
-        // otherwise broadcast the default 0 for ghosts that never
-        // reported (renders them with a bogus "0ms" ping).
-        ping: p.ping > 0 ? p.ping : undefined,
-        ski: p.skiing,
-        jet: p.jetting,
-        status: snap.status,
-        sheep,
-      };
+      const fields = this.scratchFields;
+      fields.playerId = playerId;
+      fields.position = p.position;
+      fields.rotation = p.rotation;
+      fields.velocity = p.velocity;
+      fields.health = p.health;
+      fields.isDead = p.isDead;
+      // Only advertise a proven ping — stale heartbeats above would
+      // otherwise broadcast the default 0 for ghosts that never
+      // reported (renders them with a bogus "0ms" ping).
+      fields.ping = p.ping > 0 ? p.ping : undefined;
+      fields.ski = p.skiing;
+      fields.jet = p.jetting;
+      fields.status = snap.status;
+      fields.sheep = sheep;
       rec.data = encodeTickPlayerV4(wireId, fields, rec.enc, last, fullRecord);
       // Joiner side-channel: while any seat is in its intro window, a
       // second FULL copy rides rec.full — the fanout swaps it in only
@@ -355,6 +368,32 @@ this.metrics.recordsIdleReaped += 1;
     room.connections.sendToPlayer(playerId, { type: 'yourCharge', charge: p.chargeEchoed });
   }
 
+  /** Admit up to ADMIT_PER_TICK pending seats to one conn — the same
+   *  playerJoined payload a mid-match join broadcasts, sent direct. */
+  private drainAdmits(room: Room, recipientId: string, pending: Set<string>): void {
+    let n = TickFanout.ADMIT_PER_TICK;
+    const roster = room.players.getAllPlayers();
+    for (const pid of pending) {
+      const p = roster.get(pid);
+      pending.delete(pid);
+      if (!p) {continue;} // left mid-pacing — drop silently
+      room.connections.sendToPlayer(recipientId, spawnPayload(WORLD_MODEL.player!, p.id, 'playerId', {
+        name: p.name,
+        internalId: p.internalId,
+        position: p.position,
+        rotation: p.rotation,
+        team: p.team,
+        transport: ConnectionManager.udpLive?.(p.id) ? `${p.transport ?? 'ws'}+udp` : p.transport,
+        armorClass: p.armorClass,
+        weapon: p.weapon,
+        health: p.health,
+        isDead: p.isDead,
+      }) as ServerMessage);
+      if ((n -= 1) <= 0) {break;}
+    }
+    if (pending.size === 0) {room.admitPending.delete(recipientId);}
+  }
+
   /** Interest management: distance-tiered update rate per recipient.
    *  <150m (engagement range) every tick · <400m half rate · beyond 1/4.
    *  Hits/kills travel on reliable events, so stale far ghosts only lose
@@ -380,10 +419,18 @@ this.metrics.recordsIdleReaped += 1;
       // markIntro stamps at the seat's tickSeq — delta <= N covers the
       // first N fanout ticks after the mark.
       const introFull = intro && room.tickSeq - (room.introPlayers.get(recipientId) ?? -100) <= TickFanout.INTRO_CADENCE_TICKS;
+      // Spawn pacing: admit a few pending seats per tick — a paced admit
+      // rides an ordinary playerJoined on the wire; nothing says it waited.
+      const pending = room.admitPending.get(recipientId);
+      if (pending) {this.drainAdmits(room, recipientId, pending);}
       const others = this.scratchOthers;
       others.length = 0;
       for (const r of records) {
         if (r.playerId === recipientId) {continue;}
+        // Un-admitted seats don't exist for this conn yet — their records
+        // wait for the paced playerJoined (their hit/kill EDGES still ride
+        // the reliable broadcast; a damage event is never admission-gated).
+        if (pending?.has(r.playerId)) {continue;}
         const dx = r.pos.x - rx;
         const dy = r.pos.y - ry;
         const dz = r.pos.z - rz;
@@ -408,7 +455,9 @@ else if (dSq < 360_000) {tier = 3;} // 150m / 400m / 600m
           const bound = mem === 1 ? 22_500 : mem === 2 ? 160_000 : 360_000;
           if (dSq < bound * 1.15) {tier = mem;}
         }
-        tiers.set(r.playerId, tier);
+        // Map write only on change — an unconditional set was a churn
+        // write per recipient×record×tick in the cpuprofile hot loop.
+        if (mem !== tier) {tiers.set(r.playerId, tier);}
         // Travel-budget tier (ephemeral — sits AFTER hysteresis so a
         // slowed bot falls back to its distance tier immediately): no
         // remote may cover >5m between records. At ~50ms/tick that's

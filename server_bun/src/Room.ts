@@ -107,6 +107,12 @@ export class Room {
    *  prefers recycled ids over burning toward the 65536 wrap, where
    *  setUint16 would silently alias a live teammate's binding. */
   readonly wireIds = new Map<string, number>();
+  /** Spawn pacing: joiner playerId → seat ids still un-admitted to its
+   *  world. gameState ships only admitted seats; the fanout admits a few
+   *  per tick via direct playerJoined and gates their records meanwhile —
+   *  an unpaced world sends its biggest tick to the peer least able to
+   *  take it (the joiner mid-handshake). */
+  readonly admitPending = new Map<string, Set<string>>();
   /** wireId → wall-ms it was released at. */
   readonly wireIdRetired = new Map<number, number>();
   /** wireId → v4 delta-compare basis (last-ENCODED values). Keyed by
@@ -1027,6 +1033,7 @@ export class Room {
         this.introSeq = this.tickSeq;
       },
       readySpawn: (pid): void => this.releaseReady(pid),
+      admitQueue: (pid, ids): void => { this.admitPending.set(pid, ids); },
       fireProjectile: (pid, wt, origin, dir, vel, shotId, lagS): string | null => this.projectiles.spawn(pid, wt, origin, dir, vel, shotId, lagS),
       beamSweep: (pid, muzzle, dir, range): BeamContact | null => this.beamSweep(pid, muzzle, dir, range),
       ballHit: (pid, id, dmg) => this.ballSim.handleHit(pid, id, dmg),
@@ -1553,6 +1560,8 @@ excess -= 1;
       this.v4Last.delete(wid);
       this.connections.broadcast({ type: 'wireIds', add: {}, remove: [wid] });
     }
+    this.admitPending.delete(playerId);
+    for (const q of this.admitPending.values()) {q.delete(playerId);}
     this.lastSentPositions.delete(playerId);
     this.chatPace.delete(playerId);
     this.connections.broadcast(verbPayload(WORLD_MODEL.player!, 'gone', 'playerId', playerId, {}) as ServerMessage);

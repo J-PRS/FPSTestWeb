@@ -125,6 +125,10 @@ export interface RoomInfo {
   /** 'ready' sink — a held-off-spawn seat's client finished warming
    *  (session veil dropped); releases the body into the world. */
   readySpawn?: (playerId: string) => void;
+  /** Spawn pacing — seat ids the joiner's world hasn't admitted yet;
+   *  TickFanout admits them a few per tick and gates their records
+   *  meanwhile. Room.admitPending.set. */
+  admitQueue?: (playerId: string, ids: Set<string>) => void;
   /** tickNack gate — false while the client's join burst still holds
    *  its tick frames (seq gaps there are by design, not loss). */
   drainedForTicks?: (playerId: string) => boolean;
@@ -298,6 +302,9 @@ export class MessageHandler {
    *  server.ts sets it when FPS_UDP_PORT is live; absent = key omitted
    *  from gameState (JSON.stringify drops undefined fields). */
   static udpBind: ((playerId: string) => { token: string; port: number } | undefined) | undefined;
+
+  /** Seats a gameState ships inline; the rest pace in via the fanout. */
+  static readonly JOIN_INLINE_SEATS = 6;
 
   roomInfo: RoomInfo = { room: 'default', mode: '' };
 
@@ -576,7 +583,18 @@ export class MessageHandler {
 
     // Humans that never reported a position aren't in-world yet — listing
     // them spawns a frozen ghost mesh at the spawn default for the joiner.
-    const playersData = this.inWorldRoster().filter((p): boolean => p.id !== playerId);
+    const roster = this.inWorldRoster().filter((p): boolean => p.id !== playerId);
+    // Spawn pacing (Nucleus model): an unpaced world sends its biggest
+    // tick to the peer least able to take it. The nearest JOIN_INLINE_SEATS
+    // ride gameState; the rest admit a few per fanout tick via direct
+    // playerJoined, their records gated until the admit lands.
+    const mp = player.position;
+    const byDist = [...roster].sort((a, b): number =>
+      (a.position.x - mp.x) ** 2 + (a.position.z - mp.z) ** 2
+      - ((b.position.x - mp.x) ** 2 + (b.position.z - mp.z) ** 2));
+    const pending = new Set(byDist.slice(MessageHandler.JOIN_INLINE_SEATS).map((p): string => p.id));
+    if (pending.size > 0) {this.roomInfo.admitQueue?.(playerId, pending);}
+    const playersData = roster.filter((p): boolean => !pending.has(p.id));
 
     this.sendGameState(playerId, playersData, {
       sessionToken,
