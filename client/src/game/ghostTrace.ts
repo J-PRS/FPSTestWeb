@@ -20,6 +20,9 @@ const scratch = new THREE.Vector3();
 interface GhostRow {
   t: number; id: string;
   rw: number; wg: number; rg: number;
+  /** Vertical share of rg — a floorToGround lift is pure Y, path/steer
+   *  divergence is mostly XZ. Tells which post-sample correction owns it. */
+  rgY: number;
   /** Speed of the wire record at sample time — divergence means more at
    *  60m/s than at 5m/s. */
   spd: number;
@@ -47,7 +50,7 @@ export function sampleRemoteGhosts(remotes: Iterable<RemotePlayer>): void {
     const wg = Math.hypot(w.x - g.x, w.y - g.y, w.z - g.z);
     const rg = Math.hypot(r.x - g.x, r.y - g.y, r.z - g.z);
     rows.push({
-      t: now, id: rp.playerId, rw, wg, rg,
+      t: now, id: rp.playerId, rw, wg, rg, rgY: Math.abs(r.y - g.y),
       spd: Math.hypot(rp.vel.x, rp.vel.y, rp.vel.z),
       sim: rp.isSimulating, conv: rp.interpConverging, cap: rp.interpAtCap,
       silence: Date.now() - rp.lastUpdateTime,
@@ -67,7 +70,7 @@ registerDiag('ghosts', () => {
   const wg = rows.map((r) => r.wg);
   const rg = rows.map((r) => r.rg);
   const worst = rows.slice().sort((a, b) => b.rg - a.rg).slice(0, 5)
-    .map((r) => `${r.id.slice(0, 12)} rg=${r.rg.toFixed(1)} rw=${r.rw.toFixed(1)} wg=${r.wg.toFixed(1)} @${Math.round(r.spd)}m/s ${r.sim ? 'SIM' : ''}${r.conv ? 'CONV' : ''}${r.cap ? 'CAP' : ''} sil=${Math.round(r.silence)}ms`);
+    .map((r) => `${r.id.slice(0, 12)} rg=${r.rg.toFixed(1)} rgY=${r.rgY.toFixed(1)} rw=${r.rw.toFixed(1)} wg=${r.wg.toFixed(1)} @${Math.round(r.spd)}m/s ${r.sim ? 'SIM' : ''}${r.conv ? 'CONV' : ''}${r.cap ? 'CAP' : ''} sil=${Math.round(r.silence)}ms`);
   return {
     ghosts: {
       n: rows.length,

@@ -12,7 +12,7 @@ import * as THREE from 'three';
 
 import { Projectile } from '../../projectiles/Projectile.js';
 
-import { BOMBLET_CONFIG, computeAccuracy } from '../../projectiles/index.js';
+import { BOLT_CONFIG, BOMBLET_CONFIG, DISC_CONFIG, computeAccuracy } from '../../projectiles/index.js';
 
 import { Explosion } from '../../effects/explosion.js';
 
@@ -54,6 +54,7 @@ import type { Targetable } from '../../entities/balls.js';
 import { simRand } from '../../../../shared/simRand.js';
 
 const _splatPos = new THREE.Vector3();
+const _claimTarget = new THREE.Vector3();
 
 
 
@@ -307,7 +308,12 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
 
   if (mine && willClaim) {
 
-    const verdict = hitVerdict(c, p, p.pos, hitPos, p.hitAge, targetPlayer?.armorClass);
+    // The sweep that scored this hit ran on the ghost — the buffer pos at
+    // the shooter's view epoch, which is what the server rewinds to.
+    // Validating against the rendered `position` suppresses honest claims
+    // whenever the two diverge (converge/drift episodes, 6-14m observed).
+    const claimTarget = targetPlayer ? targetPlayer.ghostPosition(_claimTarget) : hitPos;
+    const verdict = hitVerdict(c, p, p.pos, claimTarget, p.hitAge, targetPlayer?.armorClass);
 
     if (!verdict.ok) {
 
@@ -793,7 +799,11 @@ export function spawnVisualOnly(c: CombatCtx, p: Projectile): void {
 
   }
 
-  deps.world.explosions.push(new Explosion(deps.lazyScene(), pos, p.directHit, p.age, deps.lazyTerrain(), p.explosionRadius / EXPLOSION_VFX_RADIUS, p.config.damageColor, p.config.vfx));
+  // Disc/bolt wake (proxy) hits get a toned-down compact pop; direct hits keep the full blast.
+  const wakeOnly = !p.directHit && Boolean(p.hitBall || p.hitPlayerId);
+  const toned = wakeOnly && (p.config === DISC_CONFIG || p.config === BOLT_CONFIG);
+  const sizeScale = p.explosionRadius / EXPLOSION_VFX_RADIUS * (toned ? 0.55 : 1);
+  deps.world.explosions.push(new Explosion(deps.lazyScene(), pos, p.directHit, p.age, deps.lazyTerrain(), sizeScale, p.config.damageColor, toned ? 'bolt' : p.config.vfx));
 
   sfx.explosionAt(pos, p.directHit);
 
@@ -907,8 +917,8 @@ export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
   // fires below — the server adjudicates the hit from real aim data.
   // Terrain hits are provably identical both sides — predict them fully.
   const ghostBodyPop = p.hitPlayerId !== null && p.hitPlayerId !== 'local' && (p.serverProjectileId !== null || p.shotId !== null);
-  if (!ghostBodyPop) {spawnImpactEffect(c, p);}
-  else {p.ghostBodyPop = true;} // flag it — the wire 'gone' owes us the real blast
+  if (ghostBodyPop) {p.ghostBodyPop = true;}
+  else {spawnImpactEffect(c, p);} // flag it — the wire 'gone' owes us the real blast
 
   recordProjectileHit(c, p);
 

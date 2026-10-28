@@ -50,6 +50,13 @@ rendered position (interpolated, smoothed, wall-clock) and the server's rewound 
   2.5, min 350ms max 1500ms) the remote free-runs the last estimated velocity; on resume
   it steers back (converge), never snaps. `viewLagMs` converts a behind-drift to time
   during sim episodes (there's no rewindable epoch — reports drift/speed instead).
+  `floorToGround` lifts the render to `max(field, L0 chord)+eye` **only when the
+  wire feet touch the sim field** (grounded/skiing/buried) — an airborne wire below a
+  chord bridge renders as-is. The floor uses `hmChord` (L0), NOT
+  `getRenderedHeight`: the drawn level coarsens with viewer distance (40m cells),
+  a surface the server can never reconstruct — lifting to it was the pure-Y rg tail.
+  A remote under a coarse distant triangle stays under it: invisible but consistent —
+  you can't aim at it and the server can't pay the hit either way.
 - `ghostTrace.ts` — **the WYSIWYG instrument.** Every 100ms samples rendered ↔ wire ↔
   ghost for each remote: `rw` (interp lag), `wg` (lag-comp projection), `rg` (what you
   see vs what the server judges — the hit-feel number). Percentiles + worst-5 via the
@@ -63,10 +70,14 @@ rendered position (interpolated, smoothed, wall-clock) and the server's rewound 
   1200ms history (`REWIND_MS`) at ~25Hz. `renderLagOfTarget` resolves the shooter's
   claimed per-target view lag; `renderLagBoundOf` caps the claim at
   `RENDER_LAG_MS(200) + 2×transit + 3×jitter`, floored 350, ceiling 800.
-- `claimLedger.ts` — `rewindPos(target, backMs)` interpolates history at `now − backMs`
-  using **cubic Hermite with velocity** (added 2026-10-28 — matches the client's curve
-  instead of the chord, same overshoot fallback). `clampPing` caps reported RTT at
-  400ms; `shooterTransitMs` prefers the measured one-way uplink over RTT/2.
+- `claimLedger.ts` — `rewindPos(target, backMs, field?)` interpolates history at
+  `now − backMs` using **cubic Hermite with velocity** (added 2026-10-28 — matches
+  the client's curve instead of the chord, same overshoot fallback). With `field`,
+  the rewound position additionally applies the same ground-contacted rendered floor
+  the client draws (`feet ≤ hmHeight+0.5 → y = max(y, max(hmHeight, hmChord)+eye)`):
+  humans ground on the plain field, so a gully-standing target renders above its wire
+  Y and an unfloored rewind whiffs shots aimed at the visible body. `clampPing` caps
+  reported RTT at 400ms; `shooterTransitMs` prefers the measured one-way uplink.
 - `projContact.ts` / `combatBlast.ts` / `beamSweep.ts` — `ghostBack`:
   `back = shooterTransit + renderLagOfTarget − targetTransit`. One-way hops only —
   the target's own downlink transit is subtracted because the rewind history rides its
@@ -99,12 +110,37 @@ stationary remote should agree exactly. That points at converge/seat-handoff edg
 (the same class as `seat without begin` errors), not physics. The 51m `ghosts.max`
 note was WebTransport — a wt-lane soak is the still-missing comparison.
 
+## The rendered-floor contract
+
+`floorToGround` exists because the drawn clipmap bridges gullies the smooth
+heightfield dips into — a grounded remote at raw wire Y renders *under* the visible
+floor. But it is a **client-only displacement**: any lift the server can't reproduce
+is a WYSIWYG hole (aim at the body, hit nothing). The contract:
+
+- Lift only to a surface the server also knows: `max(hmHeight, hmChord-L0)` — never
+  the viewer-dependent drawn clipmap level (`getRenderedHeight` is render-only).
+- Lift only when wire feet are at/below the sim field — ground-contacted bodies only.
+- The server rewinds through the same gate (`rewindPos` `field` param) so the
+  validated capsule sits where the render put it. Wired today at `projContact` and
+  `beamSweep`; `combatBlast`'s host lacks the field — splash edges can still disagree.
+- The sweep, the claim pre-flight, and the rewind must all evaluate the *same*
+  position (the ghost epoch). `handlePlayerHit` validated against the rendered
+  `position` while the sweep tested `ghostPosition` — a 6–14m episode gap suppressed
+  honest claims client-side before the server ever saw them (fixed 2026-10-28).
+- `ghostTrace` rows now carry `rgY` — a pure-Y rg is the floor class; XZ is
+  path/steer churn. First discriminator when a new outlier appears.
+
 ## What was improved 2026-10-28
 
 - **Velocity-aware rewind** — `rewindPos` lerps with Hermite over velocity-carrying
   samples, matching the client's render curve. Server history used to plain-lerp on
   the chord while the client curved; during turns the ghost sat meters off the render.
   ~20 lines in `rewind.ts`/`claimLedger.ts`, sample shape + test fixtures updated.
+- **Rendered-floor gate + mirrored rewind** — `floorToGround` gated on ground
+  contact (killed the airborne-lift rg class — every worst row was pure Y); server
+  `rewindPos` mirrors the same floor so grounded gully targets validate where drawn.
+- **Claim pre-flight vs ghost** — `impact.ts` validates the claim against
+  `ghostPosition()` (the epoch the sweep hit), not the rendered blend.
 
 ## What could still improve, ordered by accuracy gain
 
@@ -112,9 +148,9 @@ note was WebTransport — a wt-lane soak is the still-missing comparison.
    clientStats — stale by up to a few seconds between reports. Sending the target's
    viewLag *inside the shot/intent* makes "what you literally saw" exact per claim.
    The claim is still bounded by `renderLagBoundOf` either way.
-2. **Kill the stationary-drift episodes.** `rg>2m @ <5m/s` is a bug class (converge
-   holdover, seat handoff, `teleported` buffer-clear racing a re-seat). Reproduce in a
-   controlled soak, trace which phase leaves rendered stale. Not a rewind-math fix.
+2. ~~**Kill the stationary-drift episodes.**~~ Resolved 2026-10-28: phase-tagged
+   ghostsoak showed no SIM/CONV/CAP flags and `rg ≈ rgY` — the outliers were the
+   unconditional `floorToGround` lift, not converge/seat handoff. Gated + mirrored.
 3. **`targetTransit` symmetry assumption.** `ghostBack` subtracts the target's
    downlink transit measured on its uplink — asymmetric routing lands ±half the
    jitter. Minor; fixing needs per-direction SRTT, hard to get.

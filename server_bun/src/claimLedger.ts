@@ -1,6 +1,8 @@
 import type { Vec3, PlayerState } from './types.ts';
 import { wallNow } from './wallClock.ts';
 import { hermiteBounded } from '../../shared/dmath.ts';
+import { hmHeight, hmChord, type Heightfield } from '../../shared/heightfield.ts';
+import { classCapsule } from '../../shared/botClasses.ts';
 
 // Lag compensation: clamp self-reported ping to a sane rewind window —
 // unclamped, a forged 60s "ping" could rewind targets anywhere.
@@ -25,28 +27,50 @@ export function shooterTransitMs(transitOf: ((playerId: string) => number) | und
 }
 
 // Interpolated position at (now - backMs) from the player's rewind buffer.
-export function rewindPos(target: PlayerState, backMs: number): { x: number; y: number; z: number } {
+// `field` opts into the rendered-floor mirror: the client lifts a
+// ground-contacted remote to the drawn clipmap chord (humans ground on
+// the plain field, so a gully body renders above its wire Y). Validating
+// at raw wire then whiffs shots aimed at the visible body — every rg
+// outlier in the ghost soak was pure Y. Same gate as the client: feet
+// at/below the sim field only — airborne wire stays put.
+export function rewindPos(target: PlayerState, backMs: number, field?: Heightfield | null): { x: number; y: number; z: number } {
   const h = target.history;
+  let tp: { x: number; y: number; z: number };
   // NaN backMs: every t-comparison below is false — the walk returns a
   // garbage sample instead of the present. Present is the safe answer.
-  if (h.length === 0 || !Number.isFinite(backMs)) {return target.position;}
-  const tAt = wallNow() - backMs;
-  if (tAt <= h[0]!.t) {return h[0]!;}
-  const last = h[h.length - 1]!;
-  if (tAt >= last.t) {return target.position;}
-  for (let i = h.length - 1; i > 0; i -= 1) {
-    if (h[i - 1]!.t <= tAt) {
-      const a = h[i - 1]!, b = h[i]!;
-      const spanMs = Math.max(b.t - a.t, 1);
-      // Hermite (shared/dmath) — the ghost rides the same curve the
-      // shooter's renderer drew; the linear chord was the rg tail on
-      // fast/curved movers.
-      const r = { x: 0, y: 0, z: 0 };
-      hermiteBounded(a, b, (tAt - a.t) / spanMs, spanMs / 1000, r);
-      return r;
+  if (h.length === 0 || !Number.isFinite(backMs)) {tp = target.position;}
+  else {
+    const tAt = wallNow() - backMs;
+    if (tAt <= h[0]!.t) {tp = h[0]!;}
+    else {
+      const last = h[h.length - 1]!;
+      if (tAt >= last.t) {tp = target.position;}
+      else {
+        tp = last;
+        for (let i = h.length - 1; i > 0; i -= 1) {
+          if (h[i - 1]!.t <= tAt) {
+            const a = h[i - 1]!, b = h[i]!;
+            const spanMs = Math.max(b.t - a.t, 1);
+            // Hermite (shared/dmath) — the ghost rides the same curve the
+            // shooter's renderer drew; the linear chord was the rg tail on
+            // fast/curved movers.
+            const r = { x: 0, y: 0, z: 0 };
+            hermiteBounded(a, b, (tAt - a.t) / spanMs, spanMs / 1000, r);
+            tp = r;
+            break;
+          }
+        }
+      }
     }
   }
-  return last;
+  if (field) {
+    const {eye} = classCapsule(target.armorClass);
+    if (tp.y - eye <= hmHeight(field, tp.x, tp.z) + 0.5) {
+      const floor = Math.max(hmHeight(field, tp.x, tp.z), hmChord(field, tp.x, tp.z)) + eye;
+      if (tp.y < floor) {return { x: tp.x, y: floor, z: tp.z };}
+    }
+  }
+  return tp;
 }
 
 function dist3(a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }): number {

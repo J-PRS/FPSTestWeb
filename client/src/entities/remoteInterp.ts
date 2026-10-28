@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { GRAVITY } from '../core/config.js';
 import { MOVEMENT_CONFIG } from '../../../shared/movement.js';
 import { classCapsule, classMass } from '../../../shared/botClasses.js';
+import { hmChord } from '../../../shared/heightfield.js';
+import { getHeightfield } from '../world/heightmap.js';
 import type { Terrain } from '../world/terrain.js';
 import { ChildLogger } from '../core/Logger.js';
 import { SnapshotBuffer } from './remoteSnapshots.js';
@@ -590,19 +592,33 @@ export class RemoteInterp {
    *  next frame and the body lives in perpetual micro-steer churn
    *  (visible wobble, never settled). ~1.4s ceiling keeps a lost replica
    *  honest — bigger failures take the >40m snap path. */
-  /** Drawn ground height at (x,z): the rendered clipmap chord can sit
-   *  above the smooth collider field in gullies, so visible burial keys
-   *  off the max of both — every render path floors the same way. */
+  /** Ground height the AUTHORITY agrees on: max of the smooth field and
+   *  the L0 clipmap chord — the same surface the server's hmChord sim and
+   *  rewindPos mirror use. NOT getRenderedHeight: that follows the drawn
+   *  clipmap level, which coarsens with viewer distance (up to 40m cells)
+   *  — a floor the server can never reconstruct, so a remote lifted to it
+   *  drew ~5m above the validated capsule (the pure-Y rg tail). A remote
+   *  under a distant coarse triangle stays put: invisible but consistent —
+   *  you can't aim at it and the server can't pay the hit either way. */
   private groundY(x: number, z: number): number {
     const t = this.h.terrain!;
-    return Math.max(t.getHeight(x, z), t.getRenderedHeight(x, z));
+    const hf = getHeightfield();
+    return hf ? Math.max(t.getHeight(x, z), hmChord(hf, x, z)) : t.getHeight(x, z);
   }
 
   /** Clamp the rendered position's eye above the drawn surface — a body
    *  under it reads as buried even when the wire sits legitimately below
-   *  the smooth field. Visual only; no velocity side-effects. */
+   *  the smooth field. Ground-contacted wire only: feet at/below the sim
+   *  field = standing, skiing or buried — the chord bridge must raise
+   *  the render. An AIRBORNE wire below the chord (diving under a gully
+   *  the coarse clipmap bridges) is honestly placed: lifting it pinned
+   *  the body ~5m above the capsule the server validates — every rg
+   *  outlier in the ghost soak was pure Y from this. */
   private floorToGround(p: THREE.Vector3): void {
     if (!this.h.terrain) {return;}
+    const w = this.lastServerPosition;
+    const feet = (w.lengthSq() > 0 ? w.y : p.y) - classCapsule(this.h.armorClass).eye;
+    if (feet > this.h.terrain.getHeight(p.x, p.z) + 0.5) {return;}
     const floor = this.groundY(p.x, p.z) + classCapsule(this.h.armorClass).eye;
     if (p.y < floor) {p.y = floor;}
   }
