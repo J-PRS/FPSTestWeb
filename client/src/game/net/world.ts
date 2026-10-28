@@ -24,7 +24,7 @@ import { applyTerrain, applyInteriors, applyMapFog, applyWeather, applyAtmospher
 import type { PickupKind } from '../../../../shared/pickups.js';
 // Boot/terrain machinery lives in mapAssets.js — re-exported so main.ts
 // and lastRoom.ts keep a single import site.
-export { firstTerrain, probeBootMap, bootPrimeTerrain } from './mapAssets.js';
+export { firstTerrain, probeBootMap, bootPrimeTerrain, bootPrimedPreset } from './mapAssets.js';
 export type { MapSnapshot } from './mapAssets.js';
 
 // Session veil — an F5 boot with a stored session token waits on the

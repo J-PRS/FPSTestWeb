@@ -1778,7 +1778,16 @@ export async function bootPrimeTerrain(httpUrl: string, map: MapSnapshot): Promi
 
   fieldLoaded = `${map.terrain}@${map.heightScale ?? 1}`;
 
+  primedPreset = map.terrainPreset ?? null;
+
   return true;
 
 }
+
+/** The primed map's palette id — main seeds it onto the fresh Terrain
+ *  BEFORE the tick-60 warmup compile so the boot program IS the map's
+ *  preset and gameState's setPreset recompile never happens (the ~1s
+ *  serial stall inside the veil). */
+let primedPreset: number | null = null;
+export function bootPrimedPreset(): number | null {return primedPreset;}
 

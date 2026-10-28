@@ -66,7 +66,7 @@ import type { GameBot } from './game/bots/botBrain.js';
 import { SoloConquest } from './game/soloConquest.js';
 import { HM_WORLD_SCALE } from '../../shared/heightfield.js';
 import { MODES , type ModeId, TEAM_COLORS } from '../../shared/teams.js';
-import { firstTerrain, probeBootMap, bootPrimeTerrain, bootApplySavedMap, armSessionVeil, type MapSnapshot } from './game/net/world.js';
+import { firstTerrain, probeBootMap, bootPrimeTerrain, bootPrimedPreset, bootApplySavedMap, armSessionVeil, type MapSnapshot } from './game/net/world.js';
 import { resolveMapSpec, parseMapSpecJson, type MapSpec } from '../../shared/mapSpec.js';
 import { seatKits } from '../../shared/structKits.js';
 import { structureColliders } from '../../shared/ballCollide.js';
@@ -923,7 +923,17 @@ async function init(): Promise<void> {
       const { httpUrl } = await serverEndpoints;
       const rooms = await (await fetch(`${httpUrl}/rooms`)).json() as { name: string; map?: string }[];
       const mine = rooms.find((r): boolean => r.name === urlParams.room);
-      roomPrimed = Boolean(mine?.map) && await bootPrimeTerrain(httpUrl, { terrain: `${mine!.map}.bin` });
+      // Spec JSON first: the resolved spec carries terrainPreset +
+      // heightScale so the primed field is exactly right AND the boot
+      // program compiles the real palette (bootPrimedPreset seeds
+      // setPreset before the tick-60 warmup). Bin-only fallback keeps
+      // the old behavior when the spec route misses.
+      if (mine?.map) {
+        const hit = await loadSoloSpec(mine.map);
+        roomPrimed = hit
+          ? await bootPrimeTerrain(httpUrl, hit.map)
+          : await bootPrimeTerrain(httpUrl, { terrain: `${mine.map}.bin` });
+      }
     } catch { roomPrimed = false; }
   }
   if (!soloPrimed && !roomPrimed && (!bootSaved || !(await bootPrimeTerrain(bootSaved.httpUrl, bootSaved.map)))) {
@@ -935,6 +945,11 @@ async function init(): Promise<void> {
   // A primed field (solo ?map= / saved-room probe) already carries its
   // gain in hmScale — the fresh Terrain built its uniforms at 1x.
   applyHeightfieldScale(terrain);
+  // Seed the primed map's palette BEFORE the tick-60 warmup compile —
+  // the boot program then IS the map's preset, so applyTerrain's
+  // setPreset never recompiles (~1s serial stall inside the veil).
+  const primedP = bootPrimedPreset();
+  if (primedP !== null) {terrain.setPreset(primedP);}
   profiler.markTime('terrainCreated');
 
   // Instanced enemy rendering — one draw call per species-part. Species
