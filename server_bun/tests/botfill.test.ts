@@ -27,20 +27,26 @@ describe('botFill', () => {
     expect(resolveMapSpec({}).terrain).toBeUndefined();
   });
 
-  test('room tops up to the floor', () => {
+  test('room tops up to the floor — only once a human seats it', () => {
     const room = new Room('bf', null, '', resolveMapSpec({ botFill: 5 }));
+    // Empty rooms don't mint (fill:97c5db5b) — an empty lobby must not
+    // read as "5 humans online" in the roster.
     forceMaintain(room);
-    expect(room.bots.count).toBe(5);
+    expect(room.bots.count).toBe(0);
+    room.players.addPlayer('human1');
+    forceMaintain(room);
+    expect(room.bots.count).toBe(4);
     expect(room.playerCount()).toBe(5);
   });
 
   test('a human arrival retires a bot', () => {
     const room = new Room('bf2', null, '', resolveMapSpec({ botFill: 4 }));
-    forceMaintain(room);
-    expect(room.bots.count).toBe(4);
     room.players.addPlayer('human1');
     forceMaintain(room);
     expect(room.bots.count).toBe(3);
+    room.players.addPlayer('human2');
+    forceMaintain(room);
+    expect(room.bots.count).toBe(2);
     expect(room.playerCount()).toBe(4);
   });
 

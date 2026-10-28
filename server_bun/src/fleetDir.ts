@@ -75,9 +75,16 @@ export class FleetDirectory {
       }
     }
     let best: FleetWorker | null = null;
+    let bestScore = Infinity;
     for (const w of this.workers.values()) {
       if (!w.up) {continue;}
-      if (best === null || w.ccu < best.ccu) {best = w;}
+      // Pending claims weigh like seats: on a ccu tie, consecutive
+      // room mints still spread instead of piling onto the first-up
+      // worker (a claimed room pre-beats is the join that lands next).
+      let pend = 0;
+      for (const c of this.claims.values()) {if (c.workerId === w.id) {pend += 1;}}
+      const score = w.ccu + pend;
+      if (score < bestScore) {best = w; bestScore = score;}
     }
     if (best && room) {this.claims.set(room, { workerId: best.id, at: now });}
     return best;

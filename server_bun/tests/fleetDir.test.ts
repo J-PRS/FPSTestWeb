@@ -46,6 +46,16 @@ describe('fleet directory', () => {
     expect(w?.id).toBe('w0');
   });
 
+  it('pending claims weigh like seats — mints spread on a ccu tie', () => {
+    const d = mkDir();
+    d.beat('w0', [], 0, wallMs(1_000));
+    d.beat('w1', [], 0, wallMs(1_000));
+    // Without claim-weighting both mints land on w0 — every fresh room
+    // piles onto the first-up worker until its ccu grows.
+    expect(d.resolve('alpha', wallMs(1_100))?.id).toBe('w0');
+    expect(d.resolve('bravo', wallMs(1_200))?.id).toBe('w1');
+  });
+
   it('resolve with no room picks the least-CCU live worker', () => {
     const d = mkDir(3);
     d.beat('w0', [], 40, wallMs(1_000));

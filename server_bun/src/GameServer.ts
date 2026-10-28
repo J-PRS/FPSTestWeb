@@ -146,8 +146,14 @@ export class GameServer {
     // Standing lobbies: specs flagged standing:true get a permanent
     // <name>-1 room now — hibernating empty (near-zero cost), always
     // joinable and always listed in /rooms (a 1v1 duel-1 with nobody in
-    // it is still an open table, not a dead room).
-    for (const name of this.maps.standingRooms()) {this.factory.roomFor(name);}
+    // it is still an open table, not a dead room). Fleet workers skip
+    // this: every worker seeding 'duel-1' shadows the same-named room
+    // on its siblings in the claim directory (duplicate /rooms rows,
+    // joiners split across invisible instances) — the matchmaker owns
+    // room naming fleet-wide instead.
+    if (!process.env.FPS_FLEET_REPORT) {
+      for (const name of this.maps.standingRooms()) {this.factory.roomFor(name);}
+    }
   }
 
   /** Native-shell volatile lane — one datagram socket, sessions bind by
