@@ -140,8 +140,9 @@ function dropBalls(): void {
   }
   ballMesh.count = balls.length;
   ballMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  Object.assign(ballPeaks, { mean: 0, med: 0, p10: 0, p90: 0, max: 0, horiz: 0, abs: 0, vert: 0, vertAbs: 0 });
 }
-function clearBalls(): void { balls = []; ballMesh.count = 0; }
+function clearBalls(): void { balls = []; ballMesh.count = 0; ballHud.textContent = 'balls: 0'; }
 function tickBalls(dt: number): void {
   for (let i = 0; i < balls.length; i += 1) {
     const sim = balls[i]!;
@@ -332,6 +333,11 @@ function paintHeightmap(): void {
 }
 
 const statusEl = document.querySelector<HTMLDivElement>('#status')!;
+const ballHud = document.createElement('div');
+ballHud.style.cssText = 'position:fixed;right:8px;top:120px;color:#cde;font:11px monospace;text-align:right;z-index:10;text-shadow:0 1px 2px #000;pointer-events:none;white-space:pre;max-width:260px;';
+document.body.append(ballHud);
+const ballPeaks = { mean: 0, med: 0, p10: 0, p90: 0, max: 0, horiz: 0, abs: 0, vert: 0, vertAbs: 0 };
+let ballHudT = 0;
 // Ski-ball aggregate — mean/p90 speed + the fast share, reported in the
 // status once the probe has run ~4s. The only metric that captures route
 // connectivity (dead-end bowls trap balls even at good slope).
@@ -347,6 +353,43 @@ function skiScore(dt: number): void {
   skiLine = `ski μ${mean.toFixed(0)} p90 ${p90.toFixed(0)} · ${(fast * 100).toFixed(0)}% fast`;
   skiT = 3.5; // update ~2×/s after warm-up
 }
+function updateBallHud(): void {
+  if (balls.length === 0) { ballHud.textContent = 'balls: 0'; return; }
+  const speeds = balls.map((b) => Math.hypot(b.state.vel.x, b.state.vel.y, b.state.vel.z));
+  const horiz = balls.map((b) => Math.hypot(b.state.vel.x, b.state.vel.z));
+  const vert = balls.map((b) => b.state.vel.y);
+  const vertAbs = balls.map((b) => Math.abs(b.state.vel.y));
+  const absSpeeds = balls.map((b) => Math.abs(b.state.vel.x) + Math.abs(b.state.vel.y) + Math.abs(b.state.vel.z));
+  speeds.sort((a, b) => a - b);
+  const n = speeds.length;
+  const mean = speeds.reduce((a, b) => a + b, 0) / n;
+  const med = speeds[Math.floor(n * 0.5)]!;
+  const p10 = speeds[Math.floor(n * 0.1)]!;
+  const p90 = speeds[Math.floor(n * 0.9)]!;
+  const max = speeds[n - 1]!;
+  const horizMean = horiz.reduce((a, b) => a + b, 0) / n;
+  const absMean = absSpeeds.reduce((a, b) => a + b, 0) / n;
+  const vertMean = vert.reduce((a, b) => a + b, 0) / n;
+  const vertAbsMean = vertAbs.reduce((a, b) => a + b, 0) / n;
+  ballPeaks.mean = Math.max(ballPeaks.mean, mean);
+  ballPeaks.med = Math.max(ballPeaks.med, med);
+  ballPeaks.p10 = Math.max(ballPeaks.p10, p10);
+  ballPeaks.p90 = Math.max(ballPeaks.p90, p90);
+  ballPeaks.max = Math.max(ballPeaks.max, max);
+  ballPeaks.horiz = Math.max(ballPeaks.horiz, horizMean);
+  ballPeaks.abs = Math.max(ballPeaks.abs, absMean);
+  ballPeaks.vert = Math.max(ballPeaks.vert, Math.abs(vertMean));
+  ballPeaks.vertAbs = Math.max(ballPeaks.vertAbs, vertAbsMean);
+  ballHud.textContent =
+    `balls ${  n 
+    }\nV mean ${  mean.toFixed(0)  } (peak ${  ballPeaks.mean.toFixed(0)  })` +
+    `\nmed ${  med.toFixed(0)  }  p10 ${  p10.toFixed(0)  }  p90 ${  p90.toFixed(0) 
+    }\ntop ${  max.toFixed(0)  } (peak ${  ballPeaks.max.toFixed(0)  })` +
+    `\n|V|sum ${  absMean.toFixed(0)  } (peak ${  ballPeaks.abs.toFixed(0)  })` +
+    `\nVxy mean ${  horizMean.toFixed(0)  } (peak ${  ballPeaks.horiz.toFixed(0)  })` +
+    `\nVy mean ${  vertMean.toFixed(0)  }  |Vy| mean ${  vertAbsMean.toFixed(0)}`;
+}
+
 function paintStats(genMs: number): void {
   // Field stats in world units — the signature terrainstats.js measures
   // on shipped maps: relief + sd + mean slope + steep share, tagged with
@@ -772,7 +815,7 @@ renderer.setAnimationLoop((): void => {
   fpsFrames += 1; fpsT += dt;
   if (fpsT >= 0.5) { fpsEl.textContent = `${Math.round(fpsFrames / fpsT)} fps`; fpsFrames = 0; fpsT = 0; }
   if (player) {tickPlay(dt);} else {orbit.update();}
-  if (balls.length > 0) {tickBalls(dt); skiScore(dt);}
+  if (balls.length > 0) {tickBalls(dt); skiScore(dt); ballHudT += dt; if (ballHudT >= 0.25) { ballHudT = 0; updateBallHud(); } }
   renderer.render(scene, camera);
 });
 (window as any).__maplab = { state, refresh, field: () => field };
