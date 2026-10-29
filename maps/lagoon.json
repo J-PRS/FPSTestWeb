@@ -136,12 +136,7 @@
       0.86
     ],
     "distance": 150,
-    "visible": 1050,
-    "horizon": [
-      0.8,
-      0.89,
-      0.93
-    ]
+    "visible": 1050
   },
   "atmosphere": {
     "timeOfDay": 0.42,

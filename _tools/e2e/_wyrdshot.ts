@@ -1,30 +1,23 @@
-// wyrd look check: ground-level, high vantage, and top-down shots.
-// Uses pos.set + markTeleport (mapshot.ts pattern) so the jumps stick.
+// Screenshot wyrd's arcane preset in maplab (real map bin + spec preset).
+//   bun _tools/e2e/_wyrdshot.ts <out.png>
 import { upStack } from './env.ts';
 import { launchClient, closeClient } from './browser.ts';
 
+const out = process.argv[2] ?? '_wyrd_arcane.png';
 const stack = await upStack();
+const client = await launchClient(`http://localhost:${stack.clientPort}/maplab.html`);
 try {
-  const c = await launchClient(stack.clientUrl('&room=wyrdshot&map=wyrd&bots=0&mode=dm&net=ws'),
-    { preload: "localStorage.setItem('fps-autoq','false')" });
-  await c.waitFor('window.__test && window.__test.networkManager && window.__test.networkManager.isConnected()', 90000);
-  await new Promise(r => setTimeout(r, 12000));
-  await c.page.screenshot({ path: '_tools/e2e/shots/wyrd_ground.png' });
-  const tp = (x: number, z: number, up: number, yaw: number, pitch: number) =>
-    `(() => { const p = window.__test.player;
-      const h = window.__test.terrain?.heightAt ? window.__test.terrain.heightAt(${x}, ${z}) : 60;
-      p.pos.set(${x}, h + ${up}, ${z}); p.vel.set(0,0,0);
-      p.yaw = ${yaw}; p.pitch = ${pitch};
-      p.syncMovement && p.syncMovement(); p.markTeleport && p.markTeleport(); })()`;
-  // High vantage over map centre, looking down ~55° — flats + slopes +
-  // horizon, the view that judges the meadow hue regions.
-  await c.page.evaluate(tp(0, 0, 130, 0.6, -0.95));
-  await new Promise(r => setTimeout(r, 2000));
-  await c.page.screenshot({ path: '_tools/e2e/shots/wyrd_high.png' });
-  // Near top-down for the palette patchwork.
-  await c.page.evaluate(tp(0, 0, 300, 0.0, -1.45));
+  await client.page.waitForFunction('window.__maplab !== undefined', { timeout: 30000 });
+  await client.page.evaluate(() => {
+    const lab = (window as unknown as { __maplab: { state: Record<string, unknown>; refresh(): void } }).__maplab;
+    lab.state.map = 'wyrd';
+    lab.refresh();
+  });
+  // loadMap is async — poll until the map paint lands.
+  await client.page.waitForFunction(
+    `(() => { const l = window.__maplab; return l && l.loaded === 'wyrd'; })()`,
+    { timeout: 20000 }).catch(() => {});
   await new Promise(r => setTimeout(r, 1500));
-  await c.page.screenshot({ path: '_tools/e2e/shots/wyrd_top.png' });
-  console.log('shots saved');
-  await closeClient(c);
-} finally { await stack.down(); }
+  await client.page.screenshot({ path: out });
+  console.log(JSON.stringify({ shot: out }));
+} finally { await closeClient(client); await stack.down(); }

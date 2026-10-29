@@ -25,7 +25,9 @@ try {
       o.traverse((m) => { if (m.isMesh && m.material?.onBeforeCompile) { ms.push('patched'); } });
       kit = { piece: 'found', patchedMats: ms.length };
     });
-    return { programs: all, ssFbmPrograms: hits, kit }; })()`);
+    return { programs: all, ssFbmPrograms: hits, kit,
+      env: Boolean(window.__test.scene.environment),
+      envIntensity: window.__test.scene.environmentIntensity }; })()`);
   console.log('programs:', JSON.stringify(prog));
   // Close on the katastand (-500,60 scale2): stand 8m south of it.
   const h = await c.page.evaluate(`window.__test.terrain.getHeight(-500, 72)`);

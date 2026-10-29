@@ -1,0 +1,41 @@
+{
+  "name": "Rift",
+  "mode": "ctf",
+  "bots": 8,
+  "botFill": 12,
+  "bases": {
+    "alpha": { "x": -320, "y": 0, "z": 0 },
+    "bravo": { "x": 320, "y": 0, "z": 0 }
+  },
+  "teamSpawns": {
+    "alpha": [
+      { "x": -320, "y": 0, "z": -30, "r": 50 },
+      { "x": -340, "y": 0, "z": 40, "r": 50 }
+    ],
+    "bravo": [
+      { "x": 320, "y": 0, "z": -30, "r": 50 },
+      { "x": 340, "y": 0, "z": 40, "r": 50 }
+    ]
+  },
+  "spawns": [
+    { "x": -320, "y": 0, "z": 0, "r": 40 },
+    { "x": 320, "y": 0, "z": 0, "r": 40 },
+    { "x": 0, "y": 0, "z": -200 },
+    { "x": 0, "y": 0, "z": 200 },
+    { "x": -160, "y": 0, "z": 160 },
+    { "x": 160, "y": 0, "z": -160 }
+  ],
+  "structures": [],
+  "terrain": "rift.bin",
+  "heightScale": 2.5,
+  "tileSize": 2048,
+  "terrainPreset": 5,
+  "fog": {
+    "color": [0.60, 0.50, 0.38],
+    "distance": 150.0,
+    "visible": 600.0
+  },
+  "atmosphere": { "rayleigh": 1.0, "mie": 2.0, "sunIntensity": 0.8, "starIntensity": 0.3 },
+  "weather": { "dust": 0.6 },
+  "_notes": "Rift = extreme verticality canyon (terrainPreset 5 badlands). Two base ridges separated by a deep central chasm with a central mesa (island). Sim-sculpted: genmap (deep bowl + plateaus + central mesa) -> simrock (6 rocks + mass-wasting) -> simwater (flow erosion) -> simsand (scree) -> simcellular (weathering). heightScale 2.5 = 312m relief. Dense dusty fog. No structures yet."
+}

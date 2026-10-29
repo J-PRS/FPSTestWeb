@@ -1,0 +1,41 @@
+{
+  "name": "Crossing",
+  "mode": "ctf",
+  "bots": 8,
+  "botFill": 12,
+  "bases": {
+    "alpha": { "x": -260, "y": 0, "z": 0 },
+    "bravo": { "x": 260, "y": 0, "z": 0 }
+  },
+  "teamSpawns": {
+    "alpha": [
+      { "x": -260, "y": 0, "z": -30, "r": 50 },
+      { "x": -280, "y": 0, "z": 40, "r": 50 }
+    ],
+    "bravo": [
+      { "x": 260, "y": 0, "z": -30, "r": 50 },
+      { "x": 280, "y": 0, "z": 40, "r": 50 }
+    ]
+  },
+  "spawns": [
+    { "x": -260, "y": 0, "z": 0, "r": 40 },
+    { "x": 260, "y": 0, "z": 0, "r": 40 },
+    { "x": 0, "y": 0, "z": -200 },
+    { "x": 0, "y": 0, "z": 200 },
+    { "x": -130, "y": 0, "z": 130 },
+    { "x": 130, "y": 0, "z": -130 }
+  ],
+  "structures": [],
+  "terrain": "crossing.bin",
+  "heightScale": 1.9,
+  "tileSize": 2048,
+  "terrainPreset": 2,
+  "fog": {
+    "color": [0.70, 0.70, 0.70],
+    "distance": 200.0,
+    "visible": 420.0
+  },
+  "atmosphere": { "rayleigh": 1.0, "mie": 1.4, "sunIntensity": 0.9 },
+  "weather": { "dust": 0.4 },
+  "_notes": "Crossing = DC-style chasm (terrainPreset 2 grassland). Two base plateaus separated by a deep chasm, smooth long ski runs, densest fog. Terrain sim-sculpted: genmap (bowl+plateaus) -> simrock (8 rocks + mass-wasting) -> simwater (flow erosion) -> simsand (granular flow). heightScale 1.9 = 244m relief like DC. No bridge yet (structures TBD)."
+}

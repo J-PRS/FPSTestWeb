@@ -1,0 +1,107 @@
+{
+  "name": "Glacier",
+  "mode": "ctf",
+  "bots": 8,
+  "botFill": 12,
+  "bases": {
+    "alpha": {
+      "x": -260,
+      "y": 0,
+      "z": 0
+    },
+    "bravo": {
+      "x": 260,
+      "y": 0,
+      "z": 0
+    }
+  },
+  "teamSpawns": {
+    "alpha": [
+      {
+        "x": -260,
+        "y": 0,
+        "z": -30,
+        "r": 50
+      },
+      {
+        "x": -280,
+        "y": 0,
+        "z": 40,
+        "r": 50
+      }
+    ],
+    "bravo": [
+      {
+        "x": 260,
+        "y": 0,
+        "z": -30,
+        "r": 50
+      },
+      {
+        "x": 280,
+        "y": 0,
+        "z": 40,
+        "r": 50
+      }
+    ]
+  },
+  "spawns": [
+    {
+      "x": -260,
+      "y": 0,
+      "z": 0,
+      "r": 40
+    },
+    {
+      "x": 260,
+      "y": 0,
+      "z": 0,
+      "r": 40
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": -200
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": 200
+    },
+    {
+      "x": -130,
+      "y": 0,
+      "z": 130
+    },
+    {
+      "x": 130,
+      "y": 0,
+      "z": -130
+    }
+  ],
+  "structures": [],
+  "terrain": "glacier.bin",
+  "heightScale": 1.5,
+  "tileSize": 2048,
+  "terrainPreset": 3,
+  "sky": "glacier",
+  "fog": {
+    "color": [
+      0.6,
+      0.68,
+      0.78
+    ],
+    "distance": 200,
+    "visible": 900
+  },
+  "atmosphere": {
+    "rayleigh": 0.7,
+    "mie": 1.2,
+    "starIntensity": 0.6,
+    "sunIntensity": 0.75
+  },
+  "weather": {
+    "snow": 0.7
+  },
+  "_notes": "Glacier = alpine ice field (terrainPreset 3 snow/ice/rock). Bases on plateaus, deep central cirque, sim-sculpted: genmap (ridged alpine) -> simrock (6 rocks + mass-wasting) -> simwater (glacial channels) -> simsand (scree) -> simcellular (weathering). heightScale 1.5 = 187m relief. Custom skybox (maps/glacier/) + snow weather + cold blue-grey fog. No structures yet."
+}

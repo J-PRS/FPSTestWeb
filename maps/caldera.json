@@ -4,38 +4,111 @@
   "bots": 8,
   "botFill": 12,
   "bases": {
-    "alpha": { "x": -330, "y": 0, "z": 0 },
-    "bravo": { "x": 330, "y": 0, "z": 0 }
+    "alpha": {
+      "x": -330,
+      "y": 0,
+      "z": 0
+    },
+    "bravo": {
+      "x": 330,
+      "y": 0,
+      "z": 0
+    }
   },
   "teamSpawns": {
     "alpha": [
-      { "x": -330, "y": 0, "z": -30, "r": 40 },
-      { "x": -360, "y": 0, "z": 35, "r": 40 }
+      {
+        "x": -330,
+        "y": 0,
+        "z": -30,
+        "r": 40
+      },
+      {
+        "x": -360,
+        "y": 0,
+        "z": 35,
+        "r": 40
+      }
     ],
     "bravo": [
-      { "x": 330, "y": 0, "z": -30, "r": 40 },
-      { "x": 360, "y": 0, "z": 35, "r": 40 }
+      {
+        "x": 330,
+        "y": 0,
+        "z": -30,
+        "r": 40
+      },
+      {
+        "x": 360,
+        "y": 0,
+        "z": 35,
+        "r": 40
+      }
     ]
   },
   "spawns": [
-    { "x": -330, "y": 0, "z": 0, "r": 38 },
-    { "x": 330, "y": 0, "z": 0, "r": 38 },
-    { "x": -170, "y": 0, "z": -220, "r": 36 },
-    { "x": 170, "y": 0, "z": 220, "r": 36 },
-    { "x": 0, "y": 0, "z": 0 }
+    {
+      "x": -330,
+      "y": 0,
+      "z": 0,
+      "r": 38
+    },
+    {
+      "x": 330,
+      "y": 0,
+      "z": 0,
+      "r": 38
+    },
+    {
+      "x": -170,
+      "y": 0,
+      "z": -220,
+      "r": 36
+    },
+    {
+      "x": 170,
+      "y": 0,
+      "z": 220,
+      "r": 36
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": 0
+    }
   ],
-  "arena": { "x": 0, "z": 0, "radius": 700 },
+  "arena": {
+    "x": 0,
+    "z": 0,
+    "radius": 700
+  },
   "structures": [],
   "terrain": "caldera.bin",
   "heightScale": 1.6,
   "terrainPreset": 4,
   "fog": {
-    "color": [0.28, 0.19, 0.16],
-    "distance": 100.0,
-    "visible": 680.0,
-    "horizon": [0.62, 0.33, 0.14]
+    "color": [
+      0.28,
+      0.19,
+      0.16
+    ],
+    "distance": 100,
+    "visible": 680
   },
-  "atmosphere": { "timeOfDay": 0.70, "sunAzimuth": 55, "rayleigh": 1.4, "mie": 5.0, "turbidity": 1.4, "mieDirectionalG": 0.5, "rayleighDirectional": 0.4, "sunIntensity": 0.85, "starIntensity": 0.0 },
-  "weather": { "embers": 1.6, "ash": 1.3, "dust": 0.3 },
+  "atmosphere": {
+    "timeOfDay": 0.7,
+    "sunAzimuth": 55,
+    "rayleigh": 1.4,
+    "mie": 5,
+    "turbidity": 1.4,
+    "mieDirectionalG": 0.5,
+    "rayleighDirectional": 0.4,
+    "sunIntensity": 0.85,
+    "starIntensity": 0
+  },
+  "weather": {
+    "embers": 1.6,
+    "ash": 1.3,
+    "dust": 0.3
+  },
   "_notes": "Caldera = ash-dusk volcanic basin (terrainPreset 4): ringed crater with a central cinder cone and a breached wall (+Z), long skiable rim runs down into a molten basin, ctf, embers+ash"
 }
