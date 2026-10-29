@@ -489,32 +489,37 @@ export const terrainFrag = /* glsl */`
     if (useAlbedo) {
       vec3 col = texture2D(albedoMap, fract(vWorldPos.xz / hmWorldScaleFrag)).rgb;
       if (useMats) {
-        vec2 hmUV = fract(vWorldPos.xz / hmWorldScaleFrag);
-        // Detail repeats 4× per alpha cell (~1.5m on t2 maps): at the full
-        // 5.86m cell each tile's luminance variance lands as giant dark
-        // blobs; at grain scale it reads as close-range texture.
-        vec2 au = fract(vWorldPos.xz / (tileMeters * 0.25)) * vec2(0.25, 0.5);
-        vec4 wA = texture2D(matAlphaA, hmUV);
-        vec4 wB = texture2D(matAlphaB, hmUV);
-        vec3 det =
-          texture2D(matTiles, au + vec2(0.00, 0.0)).rgb * wA.r +
-          texture2D(matTiles, au + vec2(0.25, 0.0)).rgb * wA.g +
-          texture2D(matTiles, au + vec2(0.50, 0.0)).rgb * wA.b +
-          texture2D(matTiles, au + vec2(0.75, 0.0)).rgb * wA.a +
-          texture2D(matTiles, au + vec2(0.00, 0.5)).rgb * wB.r +
-          texture2D(matTiles, au + vec2(0.25, 0.5)).rgb * wB.g +
-          texture2D(matTiles, au + vec2(0.50, 0.5)).rgb * wB.b +
-          texture2D(matTiles, au + vec2(0.75, 0.5)).rgb * wB.a;
-        float wsum = wA.r + wA.g + wA.b + wA.a + wB.r + wB.g + wB.b + wB.a;
-        // Luminance modulation, not color replacement: the tile's own
-        // weighted mean divides its luminance so the blend adds grain
-        // around neutral — the baked albedo keeps its color. Replacing
-        // outright painted every material region in flat tile color.
-        float tmean = tileMeans[0] * wA.r + tileMeans[1] * wA.g + tileMeans[2] * wA.b + tileMeans[3] * wA.a
-                    + tileMeans[4] * wB.r + tileMeans[5] * wB.g + tileMeans[6] * wB.b + tileMeans[7] * wB.a;
-        float dl = dot(det, vec3(0.299, 0.587, 0.114)) / max(tmean, 1e-3);
+        // detFade gates the whole 10-sample block — past the fade the mix
+        // multiplies by 1.0 anyway, so distant pixels skip ~10 fetches
+        // (uniform-coherent branch: the fade varies smoothly, not per-texel).
         float detFade = 1.0 - smoothstep(140.0, 380.0, length(vWorldPos - vCameraPos));
-        col *= mix(1.0, dl, detFade * clamp(wsum, 0.0, 1.0));
+        if (detFade > 0.001) {
+          vec2 hmUV = fract(vWorldPos.xz / hmWorldScaleFrag);
+          // Detail repeats 4× per alpha cell (~1.5m on t2 maps): at the full
+          // 5.86m cell each tile's luminance variance lands as giant dark
+          // blobs; at grain scale it reads as close-range texture.
+          vec2 au = fract(vWorldPos.xz / (tileMeters * 0.25)) * vec2(0.25, 0.5);
+          vec4 wA = texture2D(matAlphaA, hmUV);
+          vec4 wB = texture2D(matAlphaB, hmUV);
+          vec3 det =
+            texture2D(matTiles, au + vec2(0.00, 0.0)).rgb * wA.r +
+            texture2D(matTiles, au + vec2(0.25, 0.0)).rgb * wA.g +
+            texture2D(matTiles, au + vec2(0.50, 0.0)).rgb * wA.b +
+            texture2D(matTiles, au + vec2(0.75, 0.0)).rgb * wA.a +
+            texture2D(matTiles, au + vec2(0.00, 0.5)).rgb * wB.r +
+            texture2D(matTiles, au + vec2(0.25, 0.5)).rgb * wB.g +
+            texture2D(matTiles, au + vec2(0.50, 0.5)).rgb * wB.b +
+            texture2D(matTiles, au + vec2(0.75, 0.5)).rgb * wB.a;
+          float wsum = wA.r + wA.g + wA.b + wA.a + wB.r + wB.g + wB.b + wB.a;
+          // Luminance modulation, not color replacement: the tile's own
+          // weighted mean divides its luminance so the blend adds grain
+          // around neutral — the baked albedo keeps its color. Replacing
+          // outright painted every material region in flat tile color.
+          float tmean = tileMeans[0] * wA.r + tileMeans[1] * wA.g + tileMeans[2] * wA.b + tileMeans[3] * wA.a
+                      + tileMeans[4] * wB.r + tileMeans[5] * wB.g + tileMeans[6] * wB.b + tileMeans[7] * wB.a;
+          float dl = dot(det, vec3(0.299, 0.587, 0.114)) / max(tmean, 1e-3);
+          col *= mix(1.0, dl, detFade * clamp(wsum, 0.0, 1.0));
+        }
       }
       float detail = noise(uvFin) * 0.5 + noise(uvMed) * 0.5;
       col *= 0.82 + 0.36 * detail;
