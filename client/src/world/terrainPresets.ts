@@ -346,6 +346,84 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       return;
     }
 
+    // --- crag preset: storm-swept granite arena. Dark slate walls,
+    // pale wind-scoured scree on the tops, olive moss in the flat
+    // hollows, crevice lines on steep faces — cooler and greyer than
+    // the canyon strata, the "jagged rock field" skin (Vortex/Ridges).
+    // NOTE: preset 7 had no branch — vortex+ridges rendered undefined
+    // fragments (fell inside the >=3<=9 gate past every elif). ---
+#elif TERRAIN_PRESET == 7
+    {
+      vec2 q = vec2(fbm(uv), fbm(uv + vec2(5.2, 1.3)));
+      vec2 r = vec2(fbm(uv + 2.0 * q + vec2(1.7, 9.2)), fbm(uv + 2.0 * q + vec2(8.3, 2.8)));
+      float macro  = fbm(uv + 0.8 * q);
+      float medium = fbm(uvMed + vec2(3.1, 7.4) + 0.35 * q);
+      float detFade = 1.0 - smoothstep(350.0, 900.0, length(vWorldPos - vCameraPos));
+      float micro = 0.0, triRock = 0.0, triDetail = 0.0, grain = 0.0, triGrain = 0.0;
+      if (detFade > 0.0) {
+        micro = noise(uvFin + q * 2.0) * 0.5 + noise(uvFin * 2.8 + r * 3.5 + 1.7) * 0.5;
+        triRock = triplanarNoise(vWorldPos, 0.22);
+        triDetail = triplanarNoise(vWorldPos, 0.85);
+      }
+      if (grainFade > 0.0) {
+        grain = detailFbm(vWorldPos.xz + (q - 0.5) * 6.0, camDist, 2.0);
+        triGrain = triplanarNoise(vWorldPos, 3.4);
+      }
+      float cell = worley(uvMed * 1.4 + r * 0.6);
+      float ridged = 1.0 - abs(2.0 * fbm(uvMed * 1.9 + r) - 1.0); ridged *= ridged;
+      float patchMask = smoothstep(0.25, 0.75, fbm(vWorldPos.xz * 0.006));
+      float detail = (macro*0.40 + medium*0.30 + micro*0.15 + triDetail*0.10) * (0.5 + 0.9 * patchMask);
+
+      vec3 cSlateD = vec3(0.19, 0.20, 0.24);   // shadowed wall
+      vec3 cSlateW = vec3(0.34, 0.33, 0.32);   // lit wall, slight warm
+      vec3 cScree  = vec3(0.58, 0.55, 0.46);   // pale scoured tops
+      vec3 cMossD  = vec3(0.14, 0.21, 0.09);   // sheltered hollow moss
+      vec3 cMossT  = vec3(0.38, 0.42, 0.22);
+      vec3 cTalus  = vec3(0.46, 0.42, 0.35);   // wall-toe scree fans
+
+      float warpedH = height + (macro - 0.5) * 0.10 + (medium - 0.5) * 0.05;
+      float flat2   = 1.0 - smoothstep(0.28, 0.55, slope);
+      float onTop   = smoothstep(0.52, 0.74, warpedH);
+      float onFloor = 1.0 - smoothstep(0.16, 0.38, warpedH);
+
+      vec3 rock = mix(cSlateD, cSlateW, cell * 0.6 + triRock * 0.4);
+      // Crevice lines: worley-edge darkening on the steeper faces.
+      float crack = smoothstep(0.78, 0.92, abs(sin(medium * 9.0 + macro * 5.0)));
+      rock *= 1.0 - crack * 0.22;
+      vec3 moss = mix(cMossD, cMossT, smoothstep(0.25, 0.75, medium));
+      vec3 scree = mix(cTalus, cScree, smoothstep(0.3, 0.8, ridged));
+
+      vec3 col = rock;
+      col = mix(col, scree, flat2 * onTop);
+      col = mix(col, moss, flat2 * onFloor * smoothstep(0.3, 0.7, patchMask));
+      // Talus aprons where a wall's toe meets gentler ground.
+      col = mix(col, cTalus, flat2 * (1.0 - onTop) * (1.0 - onFloor) * 0.5);
+      col *= mix(1.06, 0.82, smoothstep(0.0, 0.5, slope));
+      col *= 0.90 + 0.20 * detail;
+      col *= 1.0 + (grain - 0.5) * 0.45 * grainFade + (triGrain - 0.5) * 0.2 * grainFade;
+      col *= 1.0 - scorchMask(vWorldPos.xz);
+      { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
+      float diff = max(dot(vNormal, sunDir), 0.0);
+      float shadow = diff * diff;
+      float rim = pow(1.0 - max(dot(vNormal, vec3(0,1,0)), 0.0), 2.5) * 0.15;
+      vec3 lit = ambientColor + sunColor * shadow * shadowMask + vec3(rim);
+      col *= lit;
+      col += scorchEmberGlow(vWorldPos.xz);
+      col += fieldGlow(vWorldPos);
+      vec3 fogDelta = vWorldPos - vCameraPos;
+      float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
+      float fogFactor = terrainFogFactor(fogDist);
+      float edgeA = 1.0 - smoothstep(edgeHalf * 0.55, edgeHalf * 0.96, fogDist) * step(0.5, edgeHalf);
+      float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, fogDist) * smoothstep(0.3, 0.8, height);
+      float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
+      fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
+      col = mix(col, fogColor, fogFactor);
+      gl_FragColor = vec4(bloomGuard(ungradeColor(col)), edgeA);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+      return;
+    }
+
     // --- canyon preset: stratified mesas. SLOPE is the rock gate, HEIGHT
     // picks flat-top grass vs floor sand: green table tops, bare rock
     // walls, sand in the basins — the strata read is topographic, not
