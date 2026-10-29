@@ -7,7 +7,7 @@
 // varyings, derived `height`/`slope`, uv sets, noise helpers, `shadowMask`.
 // Every branch returns.
 export const TERRAIN_PRESET_GLSL = /* glsl */`
-#elif TERRAIN_PRESET >= 3 && TERRAIN_PRESET <= 8
+#elif TERRAIN_PRESET >= 3 && TERRAIN_PRESET <= 9
     // Close-range surface detail. The mesh LOD is 5m and the palette features
     // run 7-31m, so without a sub-metre DETAIL LAYER the ground reads as giant
     // patches and the player feels like an ant. detailFbm() (see the shader
@@ -418,6 +418,111 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       col *= lit;
       col += scorchEmberGlow(vWorldPos.xz);
       col += fieldGlow(vWorldPos);
+      vec3 fogDelta = vWorldPos - vCameraPos;
+      float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
+      float fogFactor = terrainFogFactor(fogDist);
+      float edgeA = 1.0 - smoothstep(edgeHalf * 0.55, edgeHalf * 0.96, fogDist) * step(0.5, edgeHalf);
+      float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, fogDist) * smoothstep(0.3, 0.8, height);
+      float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
+      fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
+      col = mix(col, fogColor, fogFactor);
+      gl_FragColor = vec4(bloomGuard(ungradeColor(col)), edgeA);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+      return;
+    }
+
+    // --- arcane preset: Elysium meadow — indigo/violet fae-grass, blue
+    // meadow regions, pockets of ordinary green in the hollows, lilac
+    // stone, and ley veins that emit their own light (Wyrd). ---
+#elif TERRAIN_PRESET == 9
+    {
+      float detFade = 1.0 - smoothstep(350.0, 900.0, camDist);
+      vec2 q = vec2(fbm(uv), fbm(uv + vec2(5.2, 1.3)));
+      vec2 r = vec2(fbm(uv + 2.0 * q + vec2(1.7, 9.2)), fbm(uv + 2.0 * q + vec2(8.3, 2.8)));
+      float region = fbm(uv * 0.22 + 1.1 * r);
+      float macro  = fbm(uv + 0.8 * q);
+      float medium = fbm(uvMed + vec2(3.1, 7.4) + 0.35 * q);
+      float micro = 0.0, triDetail = 0.0, grain = 0.0, triGrain = 0.0;
+      if (detFade > 0.0) {
+        micro = noise(uvFin + q * 2.0) * 0.5 + noise(uvFin * 2.8 + r * 3.5 + 1.7) * 0.5;
+        triDetail = triplanarNoise(vWorldPos, 0.85);
+      }
+      if (grainFade > 0.0) {
+        grain = detailFbm(vWorldPos.xz + (q - 0.5) * 6.0, camDist, 2.0);
+        triGrain = triplanarNoise(vWorldPos, 3.4);
+      }
+      float ridged = 1.0 - abs(2.0 * fbm(uvMed * 1.9 + r) - 1.0); ridged *= ridged;
+      float detail = macro * 0.45 + medium * 0.35 + micro * 0.10 + triDetail * 0.10;
+
+      vec3 cFaeDeep = vec3(0.20, 0.16, 0.44);   // indigo roots
+      vec3 cFaeTip  = vec3(0.52, 0.42, 0.80);   // violet canopy
+      vec3 cTeal    = vec3(0.10, 0.52, 0.56);   // teal meadow regions
+      vec3 cGold    = vec3(0.72, 0.55, 0.15);   // amber fae-fields
+      vec3 cGoldTip = vec3(0.95, 0.78, 0.30);
+      vec3 cGreen   = vec3(0.24, 0.42, 0.10);   // ordinary grass pockets
+      vec3 cGreenTip= vec3(0.50, 0.60, 0.20);
+      vec3 cStoneA  = vec3(0.52, 0.50, 0.66);   // lilac stone
+      vec3 cCliff   = vec3(0.18, 0.16, 0.26);
+
+      vec3 grass = mix(cFaeDeep, cFaeTip, smoothstep(0.25, 0.75, medium));
+      float clumpId = hash(floor(uvMed * 1.4 + r * 0.6));
+      // Hue regions: teal meadows and amber fields break the violet —
+      // a single-hue map reads monochromatic no matter the value range.
+      grass = mix(grass, cTeal, smoothstep(0.42, 0.62, region));
+      float amberMask = smoothstep(0.56, 0.72, fbm(uv * 0.30 + r * 0.8 + 5.1));
+      grass = mix(grass, mix(cGold, cGoldTip, smoothstep(0.25, 0.75, medium)), amberMask * 0.85);
+      grass = mix(grass, grass.bgr, clumpId * 0.12); // per-clump hue drift
+
+      // Pockets of mundane green field in the low, flat hollows —
+      // Elysium's last patch of the mortal world.
+      float greenMask = smoothstep(0.50, 0.66, fbm(uv * 0.9 + q * 0.5 + 2.7))
+                      * (1.0 - smoothstep(0.18, 0.40, height));
+      grass = mix(grass, mix(cGreen, cGreenTip, smoothstep(0.25, 0.75, medium)), greenMask);
+
+      vec3 col = grass;
+      col = mix(col, cStoneA * (0.85 + 0.3 * triDetail), smoothstep(0.55, 0.78, height) * (0.4 + 0.6 * ridged));
+      float slopeBlend = smoothstep(0.20, 0.48, slope);
+      // Rock faces carry their own value range — wyrd is ~27% steep, so a
+      // dark slopeCol turns half the map into a featureless night wall.
+      vec3 rockFace = mix(cFaeDeep * 0.9, cStoneA * (0.75 + 0.5 * triDetail), 0.35 + 0.5 * ridged);
+      vec3 slopeCol = mix(rockFace, cCliff, smoothstep(0.34, 0.70, slope));
+      col = mix(col, slopeCol, slopeBlend);
+      col *= mix(1.18, 0.72, smoothstep(0.0, 0.45, slope));
+      col *= mix(vec3(0.86, 0.94, 1.10), vec3(1.08, 0.90, 1.04), smoothstep(0.30, 0.70, fbm(uv * 0.045)));
+      col *= 0.85 + 0.30 * detail;
+      col *= 1.0 + ((grain - 0.5) * 0.50 + (triGrain - 0.5) * 0.30) * grainFade;
+      col *= 1.0 - scorchMask(vWorldPos.xz);
+      { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
+      float diff = max(dot(vNormal, sunDir), 0.0);
+      float shadow = diff * diff;
+      float rim = pow(1.0 - max(dot(vNormal, vec3(0,1,0)), 0.0), 2.5) * 0.15;
+      vec3 lit = ambientColor + sunColor * shadow * shadowMask + vec3(rim);
+      col *= lit;
+      // Bioluminescent meadow: the ground glows in its OWN albedo hues —
+      // teal regions teal, amber fields amber, violet stays violet. A
+      // flat additive lamp can't do this; it just greys the wash.
+      col += grass * (0.30 + 0.20 * medium) * (1.0 - slopeBlend * 0.5);
+      // Faint cool ambient lift so shadowed faces never go black.
+      col += vec3(0.020, 0.018, 0.045) * (0.6 + 0.4 * medium);
+
+      // Ley veins: thin ridged-noise seams that EMIT — added after the
+      // lighting term so they read at dusk. Violet cores, cyan edges.
+      // The second gate breaks the network into reaches — unbroken
+      // continent-wide ribbons read as neon rivers, not veins.
+      float ley = 1.0 - abs(2.0 * fbm(uvMed * 0.9 + q * 0.6 + 4.1) - 1.0);
+      // Fade past mid distance — the full web at altitude reads as busy
+      // marble veining, not glowing seams.
+      ley = smoothstep(0.965, 0.997, ley) * (1.0 - slopeBlend * 0.6)
+          * smoothstep(0.40, 0.68, fbm(uvMed * 0.5 + 1.3))
+          * (1.0 - smoothstep(200.0, 600.0, camDist) * 0.6);
+      col += ley * mix(vec3(0.45, 0.20, 0.95), vec3(0.20, 0.65, 1.0), smoothstep(0.35, 0.65, macro)) * 0.65;
+      // Spore motes: sparse pale specks on open meadow, close range only.
+      float mote = noise(uvFin * 3.8 + q * 4.0) * noise(uvFin * 7.2 + r * 2.5 + 3.1);
+      col += vec3(0.55, 0.75, 0.95) * smoothstep(0.78, 0.92, mote) * (1.0 - slopeBlend) * detFade * 0.35;
+      col += scorchEmberGlow(vWorldPos.xz);
+      col += fieldGlow(vWorldPos);
+      col = seaTint(col, vWorldPos.y, vWorldPos.xz);
       vec3 fogDelta = vWorldPos - vCameraPos;
       float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
       float fogFactor = terrainFogFactor(fogDist);

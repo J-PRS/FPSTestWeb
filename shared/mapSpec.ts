@@ -677,7 +677,7 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     tileSize: parseTileSize((src as { tileSize?: unknown }).tileSize),
     fog: parseFog((src as { fog?: unknown }).fog),
     terrainTex: parsePathField((src as { terrainTex?: unknown }).terrainTex, /\.(?:png|jpe?g|webp)$/, 2, 'terrainTex'),
-    terrainPreset: clampInt((src as { terrainPreset?: unknown }).terrainPreset, 0, 8, 0, 'terrainPreset') || undefined,
+    terrainPreset: clampInt((src as { terrainPreset?: unknown }).terrainPreset, 0, 9, 0, 'terrainPreset') || undefined,
     sky: parsePathField((src as { sky?: unknown }).sky, /[\w-]{1,64}$/, 2, 'sky'),
     weather: parseWeather((src as { weather?: unknown }).weather),
     water: parseWater((src as { water?: unknown }).water),
