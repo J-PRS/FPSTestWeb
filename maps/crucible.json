@@ -1,0 +1,126 @@
+{
+  "name": "Crucible",
+  "mode": "ctf",
+  "bots": 8,
+  "botFill": 12,
+  "bases": {
+    "alpha": {
+      "x": -300,
+      "y": 0,
+      "z": 0
+    },
+    "bravo": {
+      "x": 300,
+      "y": 0,
+      "z": 0
+    }
+  },
+  "teamSpawns": {
+    "alpha": [
+      {
+        "x": -315,
+        "y": 0,
+        "z": -30,
+        "r": 25
+      },
+      {
+        "x": -315,
+        "y": 0,
+        "z": 30,
+        "r": 25
+      }
+    ],
+    "bravo": [
+      {
+        "x": 315,
+        "y": 0,
+        "z": -30,
+        "r": 25
+      },
+      {
+        "x": 315,
+        "y": 0,
+        "z": 30,
+        "r": 25
+      }
+    ]
+  },
+  "spawns": [
+    {
+      "x": 0,
+      "y": 0,
+      "z": 300,
+      "r": 25
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": -300,
+      "r": 25
+    },
+    {
+      "x": -212,
+      "y": 0,
+      "z": 212,
+      "r": 25
+    },
+    {
+      "x": 212,
+      "y": 0,
+      "z": 212,
+      "r": 25
+    },
+    {
+      "x": -212,
+      "y": 0,
+      "z": -212,
+      "r": 25
+    },
+    {
+      "x": 212,
+      "y": 0,
+      "z": -212,
+      "r": 25
+    }
+  ],
+  "arena": {
+    "x": 0,
+    "z": 0,
+    "radius": 680
+  },
+  "structures": [],
+  "terrain": "crucible.bin",
+  "heightScale": 1.0,
+  "terrainPreset": 4,
+  "fog": {
+    "color": [
+      0.55,
+      0.42,
+      0.34
+    ],
+    "distance": 220,
+    "visible": 1100,
+    "horizon": [
+      0.66,
+      0.5,
+      0.4
+    ]
+  },
+  "atmosphere": {
+    "timeOfDay": 0.68,
+    "sunAzimuth": 55,
+    "rayleigh": 1.4,
+    "mie": 4.0,
+    "turbidity": 1.4,
+    "mieDirectionalG": 0.5,
+    "rayleighDirectional": 0.4,
+    "sunIntensity": 0.95,
+    "starIntensity": 0.0
+  },
+  "weather": {
+    "embers": 0.7,
+    "ash": 0.8,
+    "dust": 0.3
+  },
+  "_notes": "Crucible = giant volcanic crater CTF (terrainPreset 4). Dangerous-Crossing layout: base pads on opposite rim crests (+-300,0), the bowl is the transit. Bowl floor carries relief — polar-space ejecta ridges, secondary craters, crag field, vent plug — so the inside is cover, not a flat pit. Field authored with _tools/mapbake/gencrucible.js (engine-world frame, dry — no water)."
+}
