@@ -106,6 +106,39 @@ describe('weapon registry', (): void => {
       expect(c.rayBurst === undefined || w.rayRange === c.rayBurst.range, 'rayRange matches burst').toBe(true);
     }
   });
+
+  // The hardcoded-wid failure mode: an append to SLOT_DEFS shifted the
+  // indices a static table pointed at — menu "Blaster" would have
+  // equipped HealBeam. These pins fail if any SIDEARM entry's wid
+  // drifts off its weaponType or a new sidearm def goes unregistered.
+  const SIDEARM_BY_WT = new Map<number, string>([
+    [WeaponType.Pistol, 'pistol'], [WeaponType.Revolver, 'revolver'],
+    [WeaponType.Shotgun, 'shotgun'], [WeaponType.Repair, 'repair'],
+    [WeaponType.Shocklance, 'lance'], [WeaponType.Blaster, 'blaster'],
+  ]);
+  it('SIDEARM wids resolve to the right weaponType (no stale indices)', (): void => {
+    const entries = Object.entries(PlayerLoadout.SIDEARM) as [string, { wid: number; label: string }][];
+    for (const [id, s] of entries) {
+      const def = weaponDef(s.wid);
+      expect(SIDEARM_BY_WT.get(def.weaponType), `sidearm '${id}' wid ${s.wid} → ${def.config.name}`).toBe(id);
+      expect(def.sidearm, `def for '${id}' isn't flagged sidearm`).toBe(true);
+    }
+  });
+
+  it('every sidearm-flagged def has a SIDEARM entry (and vice versa)', (): void => {
+    const tableWts = new Set((Object.entries(PlayerLoadout.SIDEARM) as [string, { wid: number }][])
+      .map(([, s]): number => weaponDef(s.wid).weaponType));
+    for (const def of SLOT_DEFS.filter((d): boolean => d.sidearm === true)) {
+      expect(tableWts.has(def.weaponType), `${def.config.name} flagged sidearm but has no SIDEARM entry`).toBe(true);
+    }
+    expect(tableWts.size).toBe(SLOT_DEFS.filter((d): boolean => d.sidearm === true).length);
+  });
+
+  it('sidearm marker on the stats row agrees with the def flag', (): void => {
+    for (const def of SLOT_DEFS) {
+      expect(def.sidearm === true, `${def.config.name}: def.sidearm vs row marker`).toBe(getWeaponStats(def.weaponType).sidearm === true);
+    }
+  });
 });
 
 // Remote railgun: the mid-flight hitscan discharge is the only client-side
