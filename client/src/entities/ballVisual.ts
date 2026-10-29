@@ -30,7 +30,11 @@ export function writeBallInstance(b: Ball): void {
     b._rpos.copy(b.pos).add(b.renderOffset);
     const u = 1 - b.spawnPopT / SPAWN_POP_S - 1; // t-1 for the back-out ease
     const pop = b.spawnPopT <= 0 ? 1 : 1 + 2.70158 * u * u * u + 1.70158 * u * u;
-    _m.compose(b._rpos, _q.identity(), _s.setScalar(Math.max(0.05, b.scale * pop)));
+    const s = Math.max(0.05, b.scale * pop);
+    // Hull first — part 1 rides the same transform at outline scale.
+    _m.compose(b._rpos, _q.identity(), _s.setScalar(s * 1.07));
+    swarm.setMatrix(1, b.swarmSlot, _m);
+    _m.compose(b._rpos, _q.identity(), _s.setScalar(s));
     swarm.setMatrix(0, b.swarmSlot, _m);
     if (b.flashTimer > 0) {
       swarm.setColor(0, b.swarmSlot, 4, 4, 4);

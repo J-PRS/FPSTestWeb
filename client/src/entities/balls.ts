@@ -47,13 +47,42 @@ function ballMat(): THREE.MeshToonMaterial {
   if (!_ballMat) {
     const ramp = new THREE.DataTexture(new Uint8Array([100, 190, 255]), 3, 1, THREE.RedFormat);
     ramp.needsUpdate = true;
-    _ballMat = new THREE.MeshToonMaterial({ color: 0xFF_FF_FF, gradientMap: ramp });
+    const mat = new THREE.MeshToonMaterial({ color: 0xFF_FF_FF, gradientMap: ramp });
+    // Matching-color spec glint: Blinn against the key light, tinted by
+    // vColor (= instanceColor = ball hue + glow). Emissive-side add so it
+    // ignores the toon banding — a hard cartoon spec dot.
+    mat.onBeforeCompile = (s): void => {
+      s.fragmentShader = s.fragmentShader.replace(
+        '#include <lights_fragment_end>',
+        `#include <lights_fragment_end>
+        #if NUM_DIR_LIGHTS > 0
+        {
+          vec3 h = normalize( directionalLights[ 0 ].direction + normalize( vViewPosition ) );
+          totalEmissiveRadiance += vColor * directionalLights[ 0 ].color
+            * pow( max( dot( normal, h ), 0.0 ), 48.0 ) * 0.7;
+        }
+        #endif`,
+      );
+    };
+    _ballMat = mat;
   }
   return _ballMat;
 }
 
+// Inverted hull: same sphere pushed to ~107% drawn back-side white — the
+// classic cel outline. Second swarm part, matrix written in
+// writeBallInstance; two parts still stays under the gib-burst floor.
+let _outlineMat: THREE.MeshBasicMaterial | null = null;
+function outlineMat(): THREE.MeshBasicMaterial {
+  if (!_outlineMat) {_outlineMat = new THREE.MeshBasicMaterial({ color: 0xFF_FF_FF, side: THREE.BackSide });}
+  return _outlineMat;
+}
+
 export function ballParts(): SwarmPart[] {
-  return [{ geometry: ballGeo(), material: ballMat(), castShadow: true }];
+  return [
+    { geometry: ballGeo(), material: ballMat(), castShadow: true },
+    { geometry: ballGeo(), material: outlineMat() },
+  ];
 }
 
 const BALL_COLORS = [
