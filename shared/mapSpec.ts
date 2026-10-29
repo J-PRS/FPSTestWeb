@@ -65,6 +65,10 @@ export interface WaterSpec {
   color?: [number, number, number];
   /** Deep-water tint [r,g,b] — where the floor is far below. */
   deep?: [number, number, number];
+  /** false = decorative water — the surface renders and terrain tints,
+   *  but neither sim applies drag/buoy/swim (wading stays full-speed).
+   *  Absent = real water. */
+  swim?: boolean;
 }
 
 export interface MapSpec {
@@ -528,7 +532,8 @@ function parseWater(raw: unknown): MapSpec['water'] {
     Array.isArray(v) && v.length >= 3 &&
     v.slice(0, 3).every((c): boolean => typeof c === 'number' && Number.isFinite(c))
       ? [clamp01(v[0]), clamp01(v[1]), clamp01(v[2])] : undefined;
-  return { level: Math.max(-500, Math.min(2000, w.level)), color: vec3(w.color), deep: vec3(w.deep) };
+  return { level: Math.max(-500, Math.min(2000, w.level)), color: vec3(w.color), deep: vec3(w.deep),
+    swim: (w as { swim?: unknown }).swim === false ? false : undefined };
 }
 
 /** Weather intensities — known kinds only, clamped 0..2. An empty result

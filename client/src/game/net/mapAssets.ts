@@ -18,8 +18,6 @@ import type { SpawnPoint, StructureSpec, InteriorSpec, WeatherSpec, AtmosphereSp
 
 import { Ball } from '../../entities/balls.js';
 
-import { urlParams } from '../../core/params.js';
-
 import type { NetCtx } from './ctx.js';
 
 import { loadHeightfieldBin, setHeightScale, setWorldScale } from '../../world/heightmap.js';
@@ -98,7 +96,9 @@ export function applyWeather(ctx: NetCtx, weather?: WeatherSpec): void {
  *  local prediction so the client floats exactly like the server shadow.
  *  Absent = dry map, plane removed. */
 export function applyWater(ctx: NetCtx, water?: WaterSpec): void {
-  ctx.deps.lazyPlayer().movement.setWaterLevel(water?.level);
+  // swim:false = decorative sea — surface + terrain tint still apply, but
+  // the prediction sim gets no waterLevel so wading runs full speed.
+  ctx.deps.lazyPlayer().movement.setWaterLevel(water?.swim === false ? undefined : water?.level);
   applyWaterSurface(ctx.deps.lazyScene(), water);
   ctx.deps.lazyTerrain().setWaterLevel(water?.level, water?.color);
 }
@@ -206,11 +206,9 @@ async function applyTerrainTex(deps: NetCtx['deps'], httpUrl: string, texPath: s
 
   try {
 
-    const mats = urlParams.has('mats')
-
-      ? await loadMats(`${httpUrl}/maps/${texPath.slice(0, texPath.lastIndexOf('/'))}`)
-
-      : null;
+    // Auto-detect the splat set beside the albedo — maps without mats.json
+    // 404 once and keep the plain bake; no opt-in flag needed.
+    const mats = await loadMats(`${httpUrl}/maps/${texPath.slice(0, texPath.lastIndexOf('/'))}`);
 
     if (mats) {terrain.setMaterialBlend(mats.tiles, mats.alphaA, mats.alphaB, mats.tileMeters, mats.means);}
 

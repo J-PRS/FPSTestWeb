@@ -527,7 +527,7 @@ export class Room {
       if (kb > (this.health.get('bufMax') ?? 0)) {this.health.set('bufMax', kb);}
     };
     this.moveSim.attachStructures(this.structs.eff());
-    this.moveSim.setWaterLevel(this.spec.water?.level);
+    this.moveSim.setWaterLevel(this.spec.water?.swim === false ? undefined : this.spec.water?.level);
     this.moveSim.setKillY(this.spec.killY);
     // Shield soak burns the same tank the jet model owns — without this
     // a shielded player under fire runs the sim tank ahead of the real one.

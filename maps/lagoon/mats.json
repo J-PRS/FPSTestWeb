@@ -1,0 +1,12 @@
+{
+  "grid": 256,
+  "count": 4,
+  "tiles": [
+    "tile_seabed.png",
+    "tile_sand.png",
+    "tile_grass.png",
+    "tile_rock.png"
+  ],
+  "alphas": "alphas.bin",
+  "tileMeters": 5.859375
+}

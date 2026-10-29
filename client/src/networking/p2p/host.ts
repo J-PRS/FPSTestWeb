@@ -177,7 +177,7 @@ export class P2PHost {
     // host's collider set — without it a guest who slides off a wall
     // reports a position the shadow can't reproduce (phantom resyncs).
     this.moveShadows.attachStructures(map.structures);
-    this.moveShadows.setWaterLevel(map.water?.level);
+    this.moveShadows.setWaterLevel(map.water?.swim === false ? undefined : map.water?.level);
   }
 
   constructor() {
