@@ -44,6 +44,7 @@ export enum WeaponType {
   Shocklance = 38,       // melee-key pull-out zap: one-shot hitscan bolt, lance reach. No backstab/energy economy yet.
   EMP = 39,              // belt throw: EMP grenade — fuse bomb, 0 damage, drains all jet energy + strips shield in blast radius. Timer detonation (not proxy/hit) to avoid being OP.
   BeltDisc = 40,        // belt throw: the plain push belt disc — Implodisc carries the pull identity
+  Blaster = 41,         // T1 energy sidearm — jet energy is the magazine (energyCost per shot)
 }
 
 export interface WeaponStats {
@@ -151,6 +152,10 @@ export interface WeaponStats {
    *  VICTIM toward the shooter, anything else yanks the OWNER toward the
    *  contact. knockbackForce is the impulse magnitude; aoe fields inert. */
   hook?: boolean;
+  /** Jet energy per trigger pull (T1 blaster): the server gates + drains
+   *  the moveSim tank on the fire intent; the client predicts the same
+   *  check so a dry tank can't draw a ghost bolt. */
+  energyCost?: number;
 }
 
 /** Catch radius for the belt-sticky combo — shared so the server and

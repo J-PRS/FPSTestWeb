@@ -31,13 +31,14 @@ import { BOMBARD_CONFIG } from './projectiles/bombardConfig.js';
 import { RKT_CONFIG } from './projectiles/rocketLauncherConfig.js';
 import { PISTOL_CONFIG } from './projectiles/pistolConfig.js';
 import { REVOLVER_CONFIG } from './projectiles/revolverConfig.js';
+import { BLASTER_CONFIG } from './projectiles/blasterConfig.js';
 import { STICKY_CONFIG } from './projectiles/stickyConfig.js';
 import { MRV_CONFIG } from './projectiles/mrvConfig.js';
 import { REPAIR_CONFIG } from './projectiles/repairConfig.js';
 import {
   BOLT_FIRE_RATE, DISC_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE,
   PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE,
-  PISTOL_RATE, REVOLVER_RATE, STICKY_RATE, PLASMAGUN_RATE, BOMBARD_RATE,
+  PISTOL_RATE, REVOLVER_RATE, BLASTER_RATE, STICKY_RATE, PLASMAGUN_RATE, BOMBARD_RATE,
   SPRINKLER_RATE, SPRINKLER_SPREAD, REPAIR_RATE, MRV_RATE,
   FLAK_SHARDS, FLAK_SPREAD, SG_PELLETS, SG_SPREAD,
 } from './core/config.js';
@@ -110,6 +111,10 @@ export const SLOT_DEFS: readonly WeaponDef[] = [
   // Shocklance — the hold-out power lance: 18m zap on a 2s refire
   // (LANCE_CADENCE_S — the same number the server's lance gate reads).
   def(WeaponType.Shocklance, LANCE_CADENCE_S, SHOCKLANCE_CONFIG, 0.4, { sidearm: true }),
+  // Blaster — T1 energy sidearm: 35 per bolt, but every pull bills the
+  // jet tank (energyCost in the shared row — jets and the sidearm argue
+  // over the same pool). Keep LAST: wid 23.
+  def(WeaponType.Blaster, BLASTER_RATE, BLASTER_CONFIG, 0.9, { sidearm: true }),
 ];
 
 /** wid of the shocklance def — the 'lance' sidearm pick binds this. */

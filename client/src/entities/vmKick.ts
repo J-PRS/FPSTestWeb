@@ -36,6 +36,7 @@ const RECOIL: Record<number, { recover: number; jitter: number; amp: number; bac
     [WeaponType.Pistol]:          { recover: 0.27, jitter: 0.033, amp: 1.1,  back: 1 },  // ~65% of the revolver's kick — snap without the full throw
     [WeaponType.Revolver]:        { recover: 0.41, jitter: 0.05,  amp: 1.3,  back: 1 },  // hand-cannon bark
     [WeaponType.Sticky]:          { recover: 0.25, jitter: 0.02,  amp: 0.9,  back: 1 },  // thoomp — tube launch
+    [WeaponType.Blaster]:         { recover: 0.28, jitter: 0.025, amp: 0.9,  back: 1 },  // energy snap — between pistol and revolver
     [WeaponType.Repair]:          { recover: 0.21, jitter: 0.05,  amp: 0.4,  back: 1 },  // per-tick hum
     [WeaponType.MRVLauncher]:     { recover: 1.5,  jitter: 0.03,  amp: 0.8,  back: 1.35 }, // drum-fed cannon — pull-back
     [WeaponType.Bombard]:         { recover: 0.9,  jitter: 0.02,  amp: 1.35, back: 1.2 },  // siege gun — biggest muzzle rise in the roster
@@ -64,6 +65,7 @@ const FLASH: Record<number, { color: number; scale: number; life: number; light:
     [WeaponType.Pistol]:          { color: 0xFF_E0_A0, scale: 0.35, life: 0.4, light: 1 },
     [WeaponType.Revolver]:        { color: 0xFF_B0_60, scale: 1.1,  life: 0.8, light: 1 },
     [WeaponType.Sticky]:          { color: 0xFF_66_DD, scale: 0.8,  life: 0.7, light: 1 },  // magenta spit
+    [WeaponType.Blaster]:         { color: 0x7D_FF_9E, scale: 0.5,  life: 0.5, light: 1 },  // green cell discharge
     [WeaponType.Repair]:          { color: 0x7D_FF_B8, scale: 0.4,  life: 0.4, light: 1 },  // green weld spark
     [WeaponType.MRVLauncher]:     { color: 0xFF_77_44, scale: 1.4,  life: 1.4, light: 1 },
     [WeaponType.Bombard]:         { color: 0xFF_88_33, scale: 2.4,  life: 1.9, light: 2 }, // a powder fireball that fills the bell

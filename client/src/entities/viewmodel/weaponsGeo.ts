@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { WeaponType } from '../../../../shared/weapons.js';
 import { getMuzzleFlashTexture } from '../../effects/glowTexture.js';
 import { mkPlasmaCannon, mkPlasmaGun, mkSprinkler, mkRailgun, mkLightningGun, mkShocklance } from './weaponsGeoEnergy.js';
-import { mkPistol, mkRevolver, mkRepair } from './weaponsGeoSidearm.js';
+import { mkPistol, mkRevolver, mkRepair, mkBlaster } from './weaponsGeoSidearm.js';
 import { mkBolt, mkDisc, mkChaingun, mkMortar, mkGrenadeLauncher, mkSticky, mkFlak, mkShotgun, mkCannon, mkRpg, mkMrv, mkBombard } from './weaponsGeoBallistic.js';
 import { darkMat } from './weaponKit.js';
 
@@ -38,6 +38,7 @@ export const MODEL_BUILDERS: [number, () => THREE.Group][] = [
   [WeaponType.MRVLauncher, mkMrv],
   [WeaponType.Bombard, mkBombard],
   [WeaponType.Shocklance, mkShocklance],
+  [WeaponType.Blaster, mkBlaster],
 ];
 
 export function buildWeaponMeshes(parent: THREE.Group, muzzleZ: Record<number, number>): WeaponMeshes {

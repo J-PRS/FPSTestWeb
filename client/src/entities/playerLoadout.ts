@@ -31,7 +31,7 @@ export interface LoadoutHost {
   loadout: number[];
   weaponIndex: number;
   beltItem: BeltItem;
-  sidearm: 'pistol' | 'revolver' | 'shotgun' | 'repair' | 'lance';
+  sidearm: 'pistol' | 'revolver' | 'shotgun' | 'repair' | 'lance' | 'blaster';
   packItem: DeployKind;
   skill: SkillId;
   fireTimer: number;
@@ -85,7 +85,7 @@ export class PlayerLoadout {
   // wid is slot-space (SLOT_DEFS index): pistol 12, revolver 13, shotgun 9,
   // repair 17, lance 20. (sticky launcher sits at wid 14 — primary, not a
   // hold-out; bombard 19.)
-  static readonly SIDEARM_WIDS = { pistol: 12, revolver: 13, shotgun: 9, repair: 17, lance: LANCE_WID } as const;
+  static readonly SIDEARM_WIDS = { pistol: 12, revolver: 13, shotgun: 9, repair: 17, lance: LANCE_WID, blaster: 23 } as const;
 
   // Hold-out secondaries: while the bind is held the weapon swaps in and
   // auto-fires at its own cadence; release snaps back to the loadout slot.
@@ -292,7 +292,7 @@ export class PlayerLoadout {
     settings.set('fps-belt', item);
     this.saveGear();
   }
-  setSidearm(s: 'pistol' | 'revolver' | 'shotgun' | 'repair' | 'lance'): void {
+  setSidearm(s: 'pistol' | 'revolver' | 'shotgun' | 'repair' | 'lance' | 'blaster'): void {
     this.h.sidearm = s;
     settings.set('fps-sidearm', s);
     this.saveGear();

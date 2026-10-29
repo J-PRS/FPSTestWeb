@@ -360,6 +360,26 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitGrow: 0.1,
     maxLifetime: 0.5,
   },
+  [WeaponType.Blaster]: {
+
+    // T1 blaster — jet-energy sidearm: 10 energy per pull, 35 flat on
+    // contact. Heavier than the pistol slug per hit, but the magazine IS
+    // the jet tank — spamming it costs the climb out of trouble.
+    directDamage: 35,
+    aoeDamage: 0,
+    aoeRadius: 0,
+    knockbackForce: 6,
+    forceMode: 'push',
+    speed: 180,
+    gravity: false,
+    bodyRadius: 0.18,
+    hitMin: 0,
+    hitMax: 0.5,
+    hitGrow: 0.1,
+    maxLifetime: 0.8, // ~145m reach — the bolt fades before range drop matters
+    energyCost: 10,
+    fireInterval: 0.3,
+  },
   [WeaponType.Sticky]: {
     // Sticky launcher (T2): glue bomb — sticks where it lands, pops on a
     // 3s fuse. The CHAIN is the weapon: a detonation cooks every other

@@ -280,6 +280,16 @@ i += 1;
 // reaches here — combat.ts routes it to the lightning module, which owns
 // its own tick/raycast loop.
 function fireWeapon(deps: CombatDeps, def: WeaponDef, e: FireArgs): void {
+  // Energy-paid weapons (Blaster): the jet tank IS the magazine — gate
+  // and drain locally so a dry tank can't draw a ghost bolt; the server
+  // runs the same check on the intent (CombatHandler) and owns the tank.
+  const stats = getWeaponStats(def.config.weaponType);
+  const energyCost = stats.energyCost ?? 0;
+  if (energyCost > 0) {
+    const pl = deps.lazyPlayer();
+    if (pl.energy < energyCost) {return;}
+    pl.energy = Math.max(0, pl.energy - energyCost);
+  }
   deps.lazyViewModel()?.kick(def.kick);
   if (def.pellets) { spawnFan(deps, def.config, e, def.pellets.count, def.pellets.spread); return; }
   if (def.spread) {

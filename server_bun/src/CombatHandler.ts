@@ -543,6 +543,14 @@ win.violations += 1;
         if (player.beltCharges < cost) { this.hb('drop.beltDry'); this.reject(playerId, 'Shot', 'belt charges dry', undefined, msg.weaponType, msg.shotId); return; }
         player.beltCharges -= cost;
       }
+      // Energy-paid weapons (Blaster): the jet tank IS the magazine —
+      // same ammo-check shape as belt charges, verdict back so the
+      // shooter's predicted bolt doesn't ghost.
+      const energyCost = msg.weaponType !== undefined ? (getWeaponStats(msg.weaponType).energyCost ?? 0) : 0;
+      if (energyCost > 0) {
+        if ((this.deps.energyOf?.(playerId) ?? 0) < energyCost) { this.hb('drop.tankDry'); this.reject(playerId, 'Shot', 'energy dry', undefined, msg.weaponType, msg.shotId); return; }
+        this.deps.drainEnergy?.(playerId, energyCost);
+      }
       player.protectedUntil = simMs(0); // firing breaks your own spawn shield
       const l = dhypot3(dir!.x, dir!.y, dir!.z) || 1;
       // Velocity inherit: the predicted shell draws playerVel*0.5 — using

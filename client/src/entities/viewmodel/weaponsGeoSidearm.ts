@@ -282,3 +282,38 @@ rep.add(repGuard);
 rep.visible = false;
 return rep;
 }
+
+// Blaster — the T1 energy sidearm. Not a firearm: no barrel, no bore.
+// A compact charged cell — chunky emitter housing over a pistol frame,
+// green glow at the muzzle face where the bolt forms.
+export function mkBlaster(): THREE.Group {
+const bl = new THREE.Group();
+const glow = new THREE.MeshBasicMaterial({ color: 0x7D_FF_9E });
+// Emitter housing — a squat block where the bolt condenses.
+const housing = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.06, 0.18), bodyMat);
+housing.position.set(0, 0.05, -0.06);
+bl.add(housing);
+// Emitter face — the glowing muzzle pad, wider than the housing.
+const face = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.012), glow);
+face.position.set(0, 0.05, -0.156);
+bl.add(face);
+// Collar around the emitter face — frame for the glow pad.
+const collar = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.075, 0.02), darkMat);
+collar.position.set(0, 0.05, -0.145);
+bl.add(collar);
+// Frame + grip — compact autopistol rake.
+const frame = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.05, 0.2), darkMat);
+frame.position.set(0, 0, -0.02);
+bl.add(frame);
+const grip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.11, 0.06),
+  new THREE.MeshLambertMaterial({ color: 0x33_36_2F, emissive: 0x0B_0C_0A }));
+grip.position.set(0, -0.06, 0.05);
+grip.rotation.x = 0.28;
+bl.add(grip);
+// Cell window — a green sliver in the frame so the energy cell reads.
+const cell = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.018, 0.07), glow);
+cell.position.set(0, 0.005, -0.02);
+bl.add(cell);
+bl.visible = false;
+return bl;
+}

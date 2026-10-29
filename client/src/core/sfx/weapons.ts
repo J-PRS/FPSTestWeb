@@ -129,6 +129,14 @@ const SHOT_LAYERS: Partial<Record<number, [name: string, gain: number, rate?: nu
     ['punch', 0.55, 0.9, 1800, 0.1],
     ['hg_clang', 0.3, 1.5, undefined, 0.18],
   ],
+  // Blaster: charged-cell discharge — an energy snap, not a powder
+  // crack. Bright hiss over a soft thud so the bolt reads as condensed
+  // energy, not a bullet.
+  [WeaponType.Blaster]: [
+    ['shot_energy', 0.9, 1.1, undefined, 0.1],
+    ['hg_tick', 0.4, 1.6, 2600, 0.06],
+    ['thud_big', 0.35, 0.8, 700, 0.06],
+  ],
   // Sticky launcher: pneumatic THOOMP — a pressurized tube cough, not a
   // powder crack. Soft lowpassed thud body + punch transient + a short
   // air hiss tail as the charge vents. Wet, not explosive.

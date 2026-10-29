@@ -1,0 +1,56 @@
+import * as THREE from 'three';
+
+import { WEAPONS } from '../../../shared/weapons.js';
+
+import type { ProjectileConfig } from './types.js';
+
+// T1 blaster — a fat green energy bolt with a glow shell. Slower than
+// the pistol slug and far more visible: the magazine is your jet tank,
+// so the bolt reads as a charged shot, not a tracer.
+export const BLASTER_CONFIG: ProjectileConfig = {
+  name: 'blaster',
+  displayName: 'Blaster',
+  weaponType: 41,
+  speed: WEAPONS[41].speed,
+  gravity: WEAPONS[41].gravity,
+  explosionRadius: 0,
+  force: 0,
+  forceMode: 'push',
+  bodyRadius: WEAPONS[41].bodyRadius,
+  hitMin: WEAPONS[41].hitMin,
+  hitMax: WEAPONS[41].hitMax,
+  hitGrow: WEAPONS[41].hitGrow,
+  maxLifetime: WEAPONS[41].maxLifetime,
+  forceMultiplier: 0,
+  aoeDamage: 0,
+  aoeRadius: 0,
+  damageColor: '#7dff9e',
+  trailColors: [new THREE.Color(0.5, 1, 0.65), new THREE.Color(0.25, 0.9, 0.4)],
+  trailParticlesPerUnit: 0.5,
+  trailLifeMin: 0.1,
+  trailLifeMax: 0.25,
+  trailSpread: 0.03,
+  trailForwardSpread: 0.02,
+  trailParticleGravity: 0,
+  trailOpacity: 0.8,
+  trailBaseSize: 0.05,
+  trailSizeRange: 0.04,
+  trailScaleMin: 0.4,
+  trailScaleMax: 1.2,
+  trailRampIn: 0.03,
+  meshColor: 0x7D_FF_9E,
+  meshType: 'rocket',
+  glowShell: true,
+  glowColor: 0x44_EE_77,
+  glowOpacity: 0.7,
+  glowScale: 1.6,
+  terrainOffset: 0.06,
+  needsServerTracking: true,
+  noExplosion: true,
+  trailMeshType: 'sphere',
+  ribbonTrail: true,
+  ribbonLanes: 1,
+  ribbonWidth: 0.22,
+  ribbonLife: 0.12,
+  ribbonColor: 0x44_EE_77,
+};

@@ -76,6 +76,7 @@ export class ViewModel {
     [WeaponType.Pistol]: -0.17,   // stubby barrel face
     [WeaponType.Revolver]: -0.27, // long barrel + underlug tip
     [WeaponType.Repair]: -0.2,   // emitter stud on the reflector dish
+    [WeaponType.Blaster]: -0.17, // emitter face — same stubby read as the pistol
     [WeaponType.MRVLauncher]: -0.56, // group-space: scaled bore face (-0.445 model) ×1.25
     [WeaponType.Bombard]: -0.42, // short barrel — the bell ends ~-0.37 model-space ×1.15
   };

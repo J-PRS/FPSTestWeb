@@ -134,6 +134,7 @@ export function weaponAxis(w: number): AimAxis | null {
     case WeaponType.RemoteRailgun:
     case WeaponType.Pistol:
     case WeaponType.Revolver:
+    case WeaponType.Blaster:
     case WeaponType.Javelin: {
       return 'snap';
     }
