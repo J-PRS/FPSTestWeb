@@ -157,6 +157,7 @@ export const KIT_HULLS: Record<string, KitHull[]> = {
   pillar:  [box(0, 5.3, 0, 3, 10.6, 3)],
   obelisk: [box(0, 7.1, 0, 3.36, 14.2, 3.36)],
   shard:   [box(1, 4.6, 0, 4.08, 9.2, 4.08)], // w=3.4 × 1.2 visual pad
+  boulder: [box(0, 1, 0, 3.6, 2, 3.6)],
   // mkArch feet are leaning slabs (w=2.6, h=7.4), not end posts.
   arch:    [box(-4.5, 3.7, 0, 2.6, 7.4, 2.6), box(4.5, 3.7, 0, 2.6, 7.4, 2.6),
             box(0, 7.85, 0, 11.6, 1.1, 1.4)],

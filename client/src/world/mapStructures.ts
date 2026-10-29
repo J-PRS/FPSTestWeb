@@ -7,6 +7,7 @@ import {
   mkBastion, mkBaseTower, mkWallRun, mkWallGate, mkGenDome, mkLandingPad,
   mkCommsMast, mkKataStand, mkBunker, mkFlagTower, mkPillar, mkObelisk,
   mkArch, mkShard, mkGatehouse, mkGenHouse, mkArenaPanel, mkArenaPier,
+  mkBoulder,
 } from '../structures/structures.js';
 import { ramp, hullMat, trimMat, deckMat, darkMat } from '../structures/structKit.js';
 import { applyTerrainBlend } from '../structures/terrainBlend.js';
@@ -40,6 +41,7 @@ export const KIT_BUILDERS: Record<string, (glow: number) => THREE.Group> = {
   obelisk:   (g): THREE.Group<THREE.Object3DEventMap> => mkObelisk(2.4, 12, g),
   arch:      (): THREE.Group<THREE.Object3DEventMap> => mkArch(),
   shard:     (): THREE.Group<THREE.Object3DEventMap> => mkShard(),
+  boulder:   (): THREE.Group<THREE.Object3DEventMap> => mkBoulder(4, 1),
   gatehouse: (g): THREE.Group<THREE.Object3DEventMap> => mkGatehouse(g),
   ramp:      (): THREE.Group<THREE.Object3DEventMap> => ramp(5, 12, 2.5),
 };
@@ -219,10 +221,10 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
   built.matrixAutoUpdate = false;
   built.matrixWorldAutoUpdate = false;
   const mats = {
-    neutral: applyStructSurface(new THREE.MeshLambertMaterial({ color: TINTS.neutral }), { panel: 2.4, mottle: 0.10, grime: 0.30 }),
-    alpha: applyStructSurface(new THREE.MeshLambertMaterial({ color: TINTS.alpha }), { panel: 2.4, mottle: 0.10, grime: 0.30 }),
-    bravo: applyStructSurface(new THREE.MeshLambertMaterial({ color: TINTS.bravo }), { panel: 2.4, mottle: 0.10, grime: 0.30 }),
-    root: applyStructSurface(new THREE.MeshLambertMaterial({ color: TINTS.root }), { panel: 0, mottle: 0.16, grime: 0.40 }),
+    neutral: applyStructSurface(new THREE.MeshLambertMaterial({ color: TINTS.neutral }), { panel: 2.4, mottle: 0.1, grime: 0.3 }),
+    alpha: applyStructSurface(new THREE.MeshLambertMaterial({ color: TINTS.alpha }), { panel: 2.4, mottle: 0.1, grime: 0.3 }),
+    bravo: applyStructSurface(new THREE.MeshLambertMaterial({ color: TINTS.bravo }), { panel: 2.4, mottle: 0.1, grime: 0.3 }),
+    root: applyStructSurface(new THREE.MeshLambertMaterial({ color: TINTS.root }), { panel: 0, mottle: 0.16, grime: 0.4 }),
   };
   if (terrain) {for (const m of Object.values(mats)) {applyTerrainBlend(m, terrain.heightU);}}
   const unit = new THREE.BoxGeometry(1, 1, 1);

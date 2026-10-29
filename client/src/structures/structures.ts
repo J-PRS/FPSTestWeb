@@ -2,6 +2,7 @@
 // Each builder returns a Group whose origin sits at ground level.
 
 import * as THREE from 'three';
+import { bakeVertexAO } from '../effects/vertexAO.js';
 import {
   skirt, windowBand, capPlate, towerShaft, trimMat, deckMat, darkMat,
   topDown, pad, dome, mast, hullMat, glowStrip, endPost, compound,
@@ -713,4 +714,33 @@ export function mkBastion(teamGlow = 0x59_F2_FF): THREE.Group {
     [endPost(5, 4.5), -20, -21.75],
     [endPost(5, 4.5),  20, -21.75],
   ]);
+}
+
+
+/** Boulder — a displaced icosahedron with baked vertex AO/grunge/wear.
+ *  Origin at ground level; scale param sets approximate diameter. */
+export function mkBoulder(size = 4, seed = 1): THREE.Group {
+  const g = new THREE.Group();
+  const geo = new THREE.IcosahedronGeometry(size * 0.5, 4);
+  const pos = geo.getAttribute('position') as THREE.BufferAttribute;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    const n = (Math.sin(v.x * 1.7 + seed) + Math.sin(v.y * 2.1 + seed * 1.3) + Math.sin(v.z * 1.9 + seed * 0.7)) / 3;
+    const disp = 1 + n * 0.25;
+    v.multiplyScalar(disp);
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  geo.computeVertexNormals();
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x6A_60_58, roughness: 0.92, metalness: 0.05,
+    vertexColors: true,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  g.add(mesh);
+  try { bakeVertexAO(g, { grime: true, wearBoost: 0.8 }); } catch { /* bake optional */ }
+  g.userData.hulls = [{ pos: { x: 0, y: size * 0.25, z: 0 }, size: { x: size * 0.9, y: size * 0.5, z: size * 0.9 } }];
+  return g;
 }
