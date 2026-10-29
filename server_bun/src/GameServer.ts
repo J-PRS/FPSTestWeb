@@ -69,6 +69,9 @@ export class GameServer {
     // Which netcode-v2 tier clients actually land on — the cost/perf mix
     // this deployment is paying for.
     tierWs: 0, tierWt: 0, tierRtc: 0, tierOther: 0,
+    // Join-phase rollup — wait = upgrade→handshake dispatch (inbound
+    // queue/loop starvation), work = seat+worldstate serialize+send.
+    joinWaitMsSum: 0, joinWaitMsMax: 0, joinWorkMsSum: 0, joinWorkMsMax: 0, joinN: 0,
     tickLagMsMax: 0, tickLagMsSum: 0, tickLagSamples: 0,
     lastTickAt: 0, ticksDropped: 0,
   };

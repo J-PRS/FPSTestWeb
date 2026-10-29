@@ -520,6 +520,12 @@ export class Room {
     // forced close so it shows in room health, not just the close log.
     this.connections.onDrowned = (): void => this.healthBump('drownedSock', 1);
     this.connections.onReliableDropped = (): void => this.healthBump('reliableDrop', 1);
+    // Register→intro-gate-open — join-burst drain latency under load.
+    this.connections.onIntroDrained = (_pid, ms): void => {
+      this.healthBump('introDrainMsSum', ms);
+      this.healthBump('introDrainN', 1);
+      if (ms > (this.health.get('introDrainMax') ?? 0)) {this.health.set('introDrainMax', ms);}
+    };
     // Send-queue depth gauge (KB, worst sample this window) — the drown
     // cap only tells us the socket died; this shows it drowning first.
     this.connections.onBuffered = (_pid, bytes): void => {

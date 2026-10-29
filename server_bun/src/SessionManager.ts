@@ -27,7 +27,8 @@ export interface SessionDeps {
   /** Drain-deploys: armed via /admin/drain — new joins refused (reclaims
    *  still land, they're the grace path), process exits on empty. */
   draining?: boolean;
-  ops: { joins: number; tierWs: number; tierWt: number; tierRtc: number; tierOther: number };
+  ops: { joins: number; tierWs: number; tierWt: number; tierRtc: number; tierOther: number;
+    joinWaitMsSum: number; joinWaitMsMax: number; joinWorkMsSum: number; joinWorkMsMax: number; joinN: number };
   /** Session lifecycle state machine — owns who each playerId is; sockets
    *  carry the seat generation it stamps so stale callbacks die by gen. */
   registry: SessionRegistry;
@@ -109,6 +110,12 @@ export class SessionManager {
       ws.close(1008, 'Expected join handshake');
       return;
     }
+    // Join-phase mark: upgrade→dispatch wait — the inbound-queue and
+    // loop-starvation component of first-gameState latency.
+    const waitMs = wallNow() - ws.data.connectedAt;
+    this.d.ops.joinWaitMsSum += waitMs;
+    if (waitMs > this.d.ops.joinWaitMsMax) {this.d.ops.joinWaitMsMax = waitMs;}
+
     const playerIdResult = validatePlayerId(handshake.playerId);
     if (!playerIdResult.success) {
       logger.warn('Invalid playerId rejected', { error: playerIdResult.error });
@@ -471,7 +478,12 @@ this.d.ops.joins += 1;
     this.d.playerRoom.set(playerId, room);
     room.connections.register(playerId, ws);
     room.markIntro(playerId); // per-joiner full window — see Room.introPlayers
+    const workT0 = wallNow();
     room.messages.handleHandshake(playerId, sessionToken);
+    const workMs = wallNow() - workT0;
+    this.d.ops.joinWorkMsSum += workMs;
+    if (workMs > this.d.ops.joinWorkMsMax) {this.d.ops.joinWorkMsMax = workMs;}
+    this.d.ops.joinN += 1;
     // Opt-in spawn hold: veil-equipped clients declare spawnHold and
     // their body stays out of the world until 'ready' — a body that
     // exists before the player can see is a free frag. The hand goes

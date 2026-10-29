@@ -162,6 +162,13 @@ export class ConnectionManager {
     }
   }
 
+  /** Register→intro-gate-open span — how long the join burst takes to
+   *  drain under load (the "playable" point, not just first gameState). */
+  private introAt = new Map<string, number>();
+  /** Fires once per seat when the intro gate opens; room folds it into
+   *  health counters. */
+  onIntroDrained?: (playerId: string, ms: number) => void;
+
   private connections: Map<string, ServerWebSocket<WebSocketData>> = new Map();
   /** Pids whose post-join outbox has drained once — the tick intro gate
    *  holds frames until the join burst clears, not just on first seat. */
@@ -366,6 +373,7 @@ export class ConnectionManager {
 
   register(playerId: string, ws: ServerWebSocket<WebSocketData>): void {
     this.connections.set(playerId, ws);
+    this.introAt.set(playerId, wallNow());
     this.tickDrained.delete(playerId); // joins re-arm the intro hold
     this.heldPhase.delete(playerId);   // ...and its grace count
     if (this.topic && ConnectionManager.publishFn && typeof ws.subscribe === 'function') {
@@ -379,6 +387,7 @@ export class ConnectionManager {
     const ws = this.connections.get(playerId);
     if (ws) {
       this.connections.delete(playerId);
+      this.introAt.delete(playerId);
       this.tickDrained.delete(playerId);
       this.pubbed.delete(playerId);
       this.drownSweepAt.delete(playerId);
@@ -446,6 +455,8 @@ export class ConnectionManager {
       }
       this.heldPhase.delete(playerId);
       this.tickDrained.add(playerId); // first clean sample — gate opens
+      const introT0 = this.introAt.get(playerId);
+      if (introT0 !== undefined) {this.introAt.delete(playerId); this.onIntroDrained?.(playerId, wallNow() - introT0);}
     }
     if (buffered > MAX_TICK_BACKLOG) {return this.sparseOrShed(playerId, ws, data);}
     wireTx(playerId, data.byteLength, BIN_KIND[data[1]!]!);

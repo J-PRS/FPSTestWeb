@@ -119,6 +119,15 @@ n += 1; fpsSum += s.fps; fpsMin = Math.min(fpsMin, s.fps);
       quarantined: g.tickLoop.quarantinedRooms(),
       rooms,
       joins: o.joins,
+      // Join-phase rollup — wait = upgrade→handshake (inbound starvation),
+      // work = seat+worldstate emit. introDrain lives per-room in health.
+      joinMs: {
+        n: o.joinN,
+        waitAvg: o.joinN ? Number((o.joinWaitMsSum / o.joinN).toFixed(1)) : 0,
+        waitMax: o.joinWaitMsMax,
+        workAvg: o.joinN ? Number((o.joinWorkMsSum / o.joinN).toFixed(1)) : 0,
+        workMax: o.joinWorkMsMax,
+      },
       leaves: o.leaves,
       msgsIn: o.msgsIn,
       msgsRejected: o.msgsRejected,
