@@ -283,24 +283,32 @@ rep.visible = false;
 return rep;
 }
 
-// Blaster — the T1 energy sidearm. Not a firearm: no barrel, no bore.
-// A compact charged cell — chunky emitter housing over a pistol frame,
-// green glow at the muzzle face where the bolt forms.
+// Blaster — the T1 energy sidearm. Not a firearm: an octagonal emitter
+// housing where the bolt condenses, over a pistol frame — reads as a
+// charged cell, not a barrel gun.
 export function mkBlaster(): THREE.Group {
 const bl = new THREE.Group();
 const glow = new THREE.MeshBasicMaterial({ color: 0x7D_FF_9E });
-// Emitter housing — a squat block where the bolt condenses.
-const housing = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.06, 0.18), bodyMat);
+// Emitter housing — octagonal barrel, faceted like the repair tool's
+// housings so it reads machined, not boxy.
+const housing = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.042, 0.2, 8), bodyMat);
+housing.rotation.x = Math.PI / 2;
 housing.position.set(0, 0.05, -0.06);
 bl.add(housing);
-// Emitter face — the glowing muzzle pad, wider than the housing.
-const face = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.012), glow);
-face.position.set(0, 0.05, -0.156);
-bl.add(face);
-// Collar around the emitter face — frame for the glow pad.
-const collar = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.075, 0.02), darkMat);
-collar.position.set(0, 0.05, -0.145);
+// Collar — the wider octagonal ring framing the emitter face.
+const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.046, 0.046, 0.025, 8), darkMat);
+collar.rotation.x = Math.PI / 2;
+collar.position.set(0, 0.05, -0.155);
 bl.add(collar);
+// Emitter face — glowing pad where the bolt forms; small stud out front.
+const face = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.038, 0.012, 8), glow);
+face.rotation.x = Math.PI / 2;
+face.position.set(0, 0.05, -0.168);
+bl.add(face);
+const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.02, 8), glow);
+tip.rotation.x = Math.PI / 2;
+tip.position.set(0, 0.05, -0.18);
+bl.add(tip);
 // Frame + grip — compact autopistol rake.
 const frame = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.05, 0.2), darkMat);
 frame.position.set(0, 0, -0.02);

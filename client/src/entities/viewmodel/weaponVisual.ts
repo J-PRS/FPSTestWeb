@@ -35,7 +35,7 @@ export const WEAPON_VISUAL: Record<number, WeaponVisual> = {
   [WeaponType.Pistol]:          { muzzleZ: -0.17, recoil: { recover: 0.27, jitter: 0.033, amp: 1.1,  back: 1 },  flash: { color: 0xFF_E0_A0, scale: 0.35, life: 0.4, light: 1 } },
   [WeaponType.Revolver]:        { muzzleZ: -0.27, recoil: { recover: 0.41, jitter: 0.05,  amp: 1.3,  back: 1 },  flash: { color: 0xFF_B0_60, scale: 1.1, life: 0.8, light: 1 } },
   [WeaponType.Sticky]:          { muzzleZ: -0.4,  recoil: { recover: 0.25, jitter: 0.02,  amp: 0.9,  back: 1 },  flash: { color: 0xFF_66_DD, scale: 0.8, life: 0.7, light: 1 } },
-  [WeaponType.Blaster]:         { muzzleZ: -0.17, recoil: { recover: 0.28, jitter: 0.025, amp: 0.9,  back: 1 },  flash: { color: 0x7D_FF_9E, scale: 0.5, life: 0.5, light: 1 } },
+  [WeaponType.Blaster]:         { muzzleZ: -0.2,  recoil: { recover: 0.28, jitter: 0.025, amp: 0.9,  back: 1 },  flash: { color: 0x7D_FF_9E, scale: 0.5, life: 0.5, light: 1 } },
   [WeaponType.Repair]:          { muzzleZ: -0.2,  recoil: { recover: 0.21, jitter: 0.05,  amp: 0.4,  back: 1 },  flash: { color: 0x7D_FF_B8, scale: 0.4, life: 0.4, light: 1 } },
   [WeaponType.HealBeam]:        { recoil: { recover: 0.21, jitter: 0.05,  amp: 0.4,  back: 1 }, flash: { color: 0x8F_D8_FF, scale: 0.4, life: 0.4, light: 1 } },
   [WeaponType.MRVLauncher]:     { muzzleZ: -0.56, recoil: { recover: 1.5,  jitter: 0.03,  amp: 0.8,  back: 1.35 }, flash: { color: 0xFF_77_44, scale: 1.4, life: 1.4, light: 1 } },
