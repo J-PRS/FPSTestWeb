@@ -35,8 +35,9 @@ const WATER = Number(opt.water ?? 2);       // sea level in world meters (very l
 // Layout: a main mass + a smaller off-centre mass — the two-part silhouette
 // reads as a natural island group, not a radial dome.
 const MASSES = [
-  { x: -60, z: -20, r: 540, peak: 118 },
-  { x: 280, z: 170, r: 330, peak: 58 },
+  { x: -60, z: -20, r: 640, peak: 118 },
+  { x: 280, z: 170, r: 420, peak: 58 },
+  { x: -120, z: 330, r: 300, peak: 44 },
 ];
 const RIDGE = 1.6;      // ridged spine weight
 
