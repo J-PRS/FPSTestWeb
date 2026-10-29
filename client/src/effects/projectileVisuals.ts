@@ -13,7 +13,7 @@ import { settings } from '../core/settings.js';
 const MESH_GEO_CACHE = new Map<string, THREE.BufferGeometry>();
 // Projectile materials are never mutated after construction — share per color
 // so rapid fire doesn't create/dispose a material every shot
-const BODY_MAT_CACHE = new Map<number, THREE.MeshBasicMaterial>();
+const BODY_MAT_CACHE = new Map<number, THREE.Material>();
 const GLOW_MAT_CACHE = new Map<string, THREE.MeshBasicMaterial>();
 const GLOW_GEO = new THREE.SphereGeometry(1, 12, 12);
 // Vapor-cone silhouette: unit cone TRAILING the shell — apex rooted at
@@ -69,11 +69,21 @@ function getConeAlphaTex(): THREE.Texture {
   return t;
 }
 
-function getBodyMat(color: number): THREE.MeshBasicMaterial {
-  let m = BODY_MAT_CACHE.get(color);
+function getBodyMat(color: number, lit = false): THREE.Material {
+  const key = lit ? -color - 1 : color; // lit entries share the cache map
+  let m = BODY_MAT_CACHE.get(key);
   if (!m) {
-    m = new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(EMIT_GAIN) });
-    BODY_MAT_CACHE.set(color, m);
+    m = lit
+      // Iron shells: a lit body + faint specular sheen — the sphere reads
+      // as metal under the sun, not a flat dark disc. Mild emissive keeps
+      // the silhouette alive in shadow.
+      ? new THREE.MeshPhongMaterial({
+          color: new THREE.Color(color).multiplyScalar(1.3),
+          specular: 0x44_44_44, shininess: 24,
+          emissive: new THREE.Color(color).multiplyScalar(0.25),
+        }) as THREE.Material
+      : new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(EMIT_GAIN) });
+    BODY_MAT_CACHE.set(key, m);
   }
   return m;
 }
@@ -245,7 +255,7 @@ export function buildProjectileMeshes(
   scene: THREE.Scene, config: ProjectileConfig, pos: THREE.Vector3,
 ): ProjectileMeshes {
   const geo = getMeshGeo(config.meshType, config.bodyRadius);
-  const mat = getBodyMat(config.meshColor); // shared — never mutated
+  const mat = getBodyMat(config.meshColor, config.litMesh === true); // shared — never mutated
   const mesh = new THREE.Mesh(geo, mat); // state only — rendered via the instanced pool
   mesh.position.copy(pos);
   // Spawn at the ramp-in start scale — prevents a one-frame full-size

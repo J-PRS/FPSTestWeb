@@ -150,7 +150,7 @@ export class Implosion {
         posAttr.setUsage(THREE.DynamicDrawUsage);
         geo.setAttribute('position', posAttr);
         const mat = new THREE.LineBasicMaterial({
-          transparent: true, blending: THREE.AdditiveBlending,
+          transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
         });
         const line = new THREE.Line(geo, mat);
         line.layers.enable(BLOOM_LAYER);

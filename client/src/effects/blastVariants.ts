@@ -105,6 +105,15 @@ export class BlastVariants {
       this.h.spawnGroundRing(pos, mult * 0.7, terrain);
       return true;
     }
+    if (vfx === 'shellburst') {
+      // Black-powder shell burst (cannon/gonne/basilisk): potassium-
+      // sulfide WHITE smoke is the signature — a dirty flash, a fat
+      // lingering smoke cloud, and dark iron chips. No hot dome, no
+      // energy read: a period gun, not a sci-fi blast.
+      this.shellburst(pos, mult, terrain);
+      this.h.spawnGroundRing(pos, mult * 0.7, terrain);
+      return true;
+    }
     if (vfx === 'flak') {
       // Air-burst shell — it detonates mid-flight, so the read is a
       // spherical bloom of hot fragments, not a ground-rooted fireball.
@@ -267,6 +276,107 @@ export class BlastVariants {
       r1: 0.9, g1: 0.95, b1: 1, r2: 0.3, g2: 0.4, b2: 0.6, kind: 'glow', stagger: 0.09,
       planar: true,
     });
+  }
+
+  /** Shellburst — a black-powder detonation: weak dirty flash (black
+   *  powder flares poorly vs HE), then the SIGNATURE white-gray smoke
+   *  cloud that hangs and drifts, with hot chips riding out through it.
+   *  Smoke is the mass of the read — everything else is a garnish. */
+  private shellburst(pos: THREE.Vector3, mult: number, terrain?: Terrain): void {
+    blastBurst(pos, { // dirty flash — hot, fat, gone in a blink (the oomph)
+      count: 1, spdMin: 0, spdMax: 0, vy: 0,
+      lifeMin: 0.11, lifeMax: 0.11,
+      sizeMin: 5.5 * mult, sizeMax: 5.5 * mult,
+      gravity: 0,
+      c1: [1, 0.8, 0.45], c2: [0.7, 0.35, 0.12],
+      opacity: 1,
+    }, true);
+    // AOE spark ring — embers born ON the damage envelope's surface
+    // (radius = mult × EXPLOSION_VFX_RADIUS / AOE_VFX_SCALE, i.e. the
+    // true aoeRadius) flying outward: the blast's real reach drawn as a
+    // shell of fire. Reads identical from every angle. A dusty shock
+    // dome sweeps the same edge — instant telegraph + traveling wave.
+    const aoeR = mult * 7.5;
+    // Ground-vs-air edge telegraph: a blast within ~35% of its radius of
+    // the dirt drapes the embers on a terrain-hugging circle (the AOE
+    // edge you actually dodge), an airburst keeps the full shell. Same
+    // getHeight() sampler TerrainRing uses per-vertex — ~40 one-shot
+    // reads at spawn, nothing per-frame.
+    const groundY = terrain ? terrain.getHeight(pos.x, pos.z) : -Infinity;
+    const h = pos.y - groundY;
+    const grounded = h < aoeR * 0.35;
+    // Sphere∩ground radius: √(R²−h²) — the true intersection circle.
+    // (h≤0 → full R, the sphere's equator is underground at the hit point.)
+    const edgeR = grounded ? Math.sqrt(Math.max(0, aoeR * aoeR - Math.min(h, 0) ** 2)) : aoeR;
+    const ringN = Math.floor(40 * mult);
+    for (let i = 0; i < ringN; i += 1) {
+      const ang = Math.random() * Math.PI * 2;
+      let nx = Math.cos(ang), ny: number, nz = Math.sin(ang);
+      if (grounded) {ny = 0;} // flat circle — terrain drape below
+      else {ny = Math.random() * 2 - 1; const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;}
+      const spark = this.h.sparks.alloc(pos);
+      spark.r = 1; spark.g = 0.75; spark.b = 0.35;
+      spark.o = 0.85;                        // bright — this IS the edge telegraph now
+      spark.vel.set(nx * 5, grounded ? 1.5 : ny * 5, nz * 5); // slow drift — the shell holds its edge
+      spark.grav = grounded ? 0.1 : 0.15;    // ground ring barely sinks — full gravity pushes it under slopes
+      spark.life = 0.6 + Math.random() * 0.4; // linger ~0.6-1.0s
+      if (grounded) {
+        const wx = pos.x + nx * edgeR, wz = pos.z + nz * edgeR;
+        // Offset along the terrain NORMAL, not +y: on a 30° slope a
+        // vertical lift only gives cos(θ) of clearance — the ring reads
+        // buried on hillsides. 4 finite-difference height reads per
+        // spark, all at spawn — cheap.
+        const t = terrain!, e = 0.5;
+        const hx = t.getHeight(wx + e, wz) - t.getHeight(wx - e, wz);
+        const hz = t.getHeight(wx, wz + e) - t.getHeight(wx, wz - e);
+        // n = (-∂h/∂x, 1, -∂h/∂z) normalized — the cheap up normal.
+        const nl = Math.hypot(hx, 1, hz);
+        const lift = 0.5;
+        spark.pos.set(wx - (hx / nl) * lift, t.getHeight(wx, wz) + (1 / nl) * lift, wz - (hz / nl) * lift);
+      } else {
+        spark.pos.set(pos.x + nx * aoeR, pos.y + ny * aoeR, pos.z + nz * aoeR);
+      }
+    }
+    this.h.spawnBurst(pos, { // white smoke heart — the potassium sulfide signature (cut back count; smoke is the LONG tail, not the burst)
+      count: 12, countMult: mult,
+      elvBase: 0.4, elvSpan: Math.PI,
+      spdMin: 1.5, spdMax: 7, spdBoost: 1, vy: 3,   // slower than the shock — smoke must not outpace the wavefront
+      lifeMin: 1.2, lifeVar: 1, lifeBoost: 1,     // powder smoke lingers for seconds
+      sizeMin: 0.5, sizeVar: 0.8, sizeBoost: 1,
+      gravity: -2,
+      r1: 0.88, g1: 0.86, b1: 0.82, r2: 0.45, g2: 0.44, b2: 0.42,
+      kind: 'smoke', stagger: 0.08, spin: 1,
+    });
+    this.h.spawnBurst(pos, { // charcoal core smoke — darker breath inside the white
+      count: 6, countMult: mult,
+      elvBase: 0.3, elvSpan: Math.PI,
+      spdMin: 3, spdMax: 9, spdBoost: 1, vy: 3,
+      lifeMin: 0.4, lifeVar: 0.4, lifeBoost: 1,
+      sizeMin: 0.35, sizeVar: 0.5, sizeBoost: 1,
+      gravity: -3,
+      r1: 0.32, g1: 0.3, b1: 0.28, r2: 0.15, g2: 0.14, b2: 0.13,
+      kind: 'smoke', stagger: 0.07, spin: 1.4,
+    });
+    this.h.spawnBurst(pos, { // incandescent chips — the shell wall coming off hot (kept INSIDE the blast envelope — chips that fly past the AOE lie about the reach)
+      count: 26, countMult: mult,
+      elvBase: 0.5, elvSpan: Math.PI,
+      spdMin: 18, spdMax: 40, spdBoost: 1, vy: 0,
+      lifeMin: 0.2, lifeVar: 0.35, lifeBoost: 1,
+      sizeMin: 0.06, sizeVar: 0.11, sizeBoost: 1,
+      gravity: -30,
+      r1: 1, g1: 0.65, g1Var: 0.2, b1: 0.25, r2: 0.6, g2: 0.2, b2: 0.05, kind: 'glow', stagger: 0.03,
+    });
+    // Iron sparks — sparse: the casing is iron, not magnesium
+    for (let i = 0; i < Math.floor(6 * mult); i += 1) {
+      const ang = Math.random() * Math.PI * 2;
+      const elv = (Math.random() - 0.3) * Math.PI;
+      const spd = 15 + Math.random() * 22;
+      const spark = this.h.sparks.alloc(pos);
+      spark.r = 1; spark.g = 0.75; spark.b = 0.4;
+      spark.o = 0.55;
+      spark.vel.set(spd * Math.cos(elv) * Math.sin(ang), spd * Math.sin(elv) + 6, spd * Math.cos(elv) * Math.cos(ang));
+      spark.life = 0.3 + Math.random() * 0.2;
+    }
   }
 
   /** Flak air-burst — a spherical bloom of incandescent shell fragments:

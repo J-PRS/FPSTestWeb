@@ -117,6 +117,26 @@ const SHOT_LAYERS: Partial<Record<number, [name: string, gain: number, rate?: nu
     ['punch', 0.5, 0.7, 1200, 0.2],
     ['hg_clang', 0.4, 0.6, undefined, 0.4, 0.08],
   ],
+  // Gonne: the light frame's arc gun — same naval boom as the cannon
+  // but a quarter-octave UP and tighter: a smaller gun throwing the same
+  // ball, so the crack is crisper and the ring tail shorter.
+  [WeaponType.Gonne]: [
+    ['shot_cannon', 1, 0.38, 320, 0.45],
+    ['thud_big', 0.85, 0.4, 300, 0.35],
+    ['explosion_small', 0.3, 0.6, 1400, 0.25, 0.08],
+    ['punch', 0.4, 0.9, 1200, 0.1],
+    ['hg_clang', 0.3, 0.9, undefined, 0.18],
+  ],
+  // Basilisk: the heavy frame's arc gun — cannon boom a half-octave
+  // down like the bombard's throat, but crisper mid crack to keep it
+  // distinct: same ball, bigger gun, deeper report.
+  [WeaponType.Basilisk]: [
+    ['shot_cannon', 1, 0.28, 290, 0.55],
+    ['thud_big', 0.95, 0.5, 340, 0.4],
+    ['explosion_small', 0.35, 0.5, 1400, 0.3, 0.1],
+    ['punch', 0.45, 0.75, 1200, 0.16],
+    ['hg_clang', 0.35, 0.55, undefined, 0.32],
+  ],
   // Sidearms: pistol = short snappy crack + hammer tick; revolver = deeper
   // bark with a metallic ring — the two need to be distinguishable blind.
   [WeaponType.Pistol]: [

@@ -215,7 +215,7 @@ else if (l.kind === 'solid') {sMul = 2;}
     this.allocShock(pos, this.hasTint ? this.tint : 0xFF_CC_66, 0.45, 6.5 * mult, 0.5);
   }
 
-  allocShock(pos: THREE.Vector3, color: number | THREE.Color, life: number, maxRadius: number, opacity: number): void {
+  allocShock(pos: THREE.Vector3, color: number | THREE.Color, life: number, maxRadius: number, opacity: number, instant = false): void {
     let sw = shockPool.pop();
     if (sw) {
       sw.mesh.geometry = GEO_SHOCK;
@@ -239,7 +239,11 @@ else if (l.kind === 'solid') {sMul = 2;}
     // old full radius renders as a screen-swallowing sphere for one
     // frame before update() re-seats it. Reset at alloc.
     sw.mesh.scale.setScalar(0);
-    sw.life = life; sw.elapsed = 0; sw.maxRadius = maxRadius; sw.dead = false;
+    sw.life = life;
+    // instant: seed elapsed past the growth phase — the dome spawns at full
+    // radius (instant AOE telegraph) and its whole life is the fade-out.
+    sw.elapsed = instant ? life * 0.6 : 0;
+    sw.maxRadius = maxRadius; sw.dead = false;
     this.shockwaves.push(sw);
   }
 
@@ -297,7 +301,11 @@ else if (l.kind === 'solid') {sMul = 2;}
     let alive = 0;
     for (const sw of this.shockwaves) {
       if (sw.dead) {continue;}
-      sw.elapsed += dt;
+      // Cap per-frame aging at 50ms: a spawn that lands on a hitch frame
+      // (GC pause, tab-switch, queue drain) would otherwise age the dome
+      // birth→death in ONE update — scale 0 straight to removed, the
+      // "dome vanishes in a frame" glitch. Normal 60fps is unaffected.
+      sw.elapsed += Math.min(dt, 0.05);
       if (sw.elapsed >= sw.life) {
         this.scene.remove(sw.mesh);
         sw.dead = true;
@@ -306,7 +314,13 @@ else if (l.kind === 'solid') {sMul = 2;}
       }
 alive += 1;
       const t = sw.elapsed / sw.life;
-      sw.mesh.scale.setScalar(sw.maxRadius * t / 0.3); // Scale from initial 0.3 radius
+      // r ∝ t^0.4 — measured point-blast growth law (Trilithon): violent
+      // off the mark, decelerating tail. Radius lands at ~60% of life and
+      // HELD there — a dome that hits max size the instant it fades pops
+      // out like a glitch; the last 40% is a linger-and-dissolve.
+      const grow = Math.min(t / 0.6, 1);
+      const ease = grow ** 0.4;
+      sw.mesh.scale.setScalar(sw.maxRadius * ease / 0.3); // Scale from initial 0.3 radius
       sw.mat.opacity = (1 - t) * 0.8;
     }
     return alive;

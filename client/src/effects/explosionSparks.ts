@@ -27,6 +27,9 @@ export interface Spark {
   // Base color + opacity — the shared vertex-color attribute fades by
   // writing color*(1-t)*o each frame (additive blending: black = gone).
   r: number; g: number; b: number; o: number;
+  /** Gravity multiplier — default 1 (full -40 drop). Edge telegraph
+   *  embers want to HANG on the blast shell, not rain off it. */
+  grav?: number;
   slice: number; // float offset into the shared position/color arrays
 }
 
@@ -52,6 +55,7 @@ class SparkBatch {
     this.geo.setAttribute('color', this.colAttr);
     this.mesh = new THREE.LineSegments(this.geo, new THREE.LineBasicMaterial({
       vertexColors: true, transparent: true, blending: THREE.AdditiveBlending,
+      depthWrite: false, // additive VFX must not punch depth holes for later transparents
       // Dead slices are black verts collapsed at the origin — without
       // fog:false the fog mix repaints them as a fog-colored speck.
       fog: false,
@@ -184,7 +188,7 @@ export class ExplosionSparks {
 alive += 1;
 
       // Apply gravity
-      spark.vel.y -= 40 * dt;
+      spark.vel.y -= 40 * (spark.grav ?? 1) * dt;
 
       // Update position
       spark.pos.addScaledVector(spark.vel, dt);
