@@ -659,6 +659,17 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
 
   const blastPos = p.hitPointValid ? p.hitPoint : p.pos;
 
+  // burstShards: shell bursts spherically ON TOP of the dome the blast
+  // presenter draws — the ball's mass visibly goes somewhere. Spherical
+  // (no impulseDir/inheritVel): reads the same from any hit angle.
+  if (p.config.burstShards) {
+    deps.world.debrisList.push(new BallDebris(
+      deps.lazyScene(), deps.lazyTerrain(), blastPos,
+      _crumbCol.setHex(p.config.meshColor), p.config.bodyRadius,
+      { bodyRadius: p.config.bodyRadius, kind: 'rock' },
+    ));
+  }
+
   const airtime = p.hitAge > 0 ? p.hitAge : p.age;
 
   const claimable = !(p.config.sticks && p.fuseAge() < 0)
@@ -804,6 +815,18 @@ export function spawnVisualOnly(c: CombatCtx, p: Projectile): void {
   const toned = wakeOnly && (p.config === DISC_CONFIG || p.config === BOLT_CONFIG);
   const sizeScale = p.explosionRadius / EXPLOSION_VFX_RADIUS * (toned ? 0.55 : 1);
   deps.world.explosions.push(new Explosion(deps.lazyScene(), pos, p.directHit, p.age, deps.lazyTerrain(), sizeScale, p.config.damageColor, toned ? 'bolt' : p.config.vfx));
+
+  // burstShards: the ball comes APART in the blast — a spherical shard
+  // burst on top of the dome so the shell's mass visibly goes somewhere.
+  // No impulseDir/inheritVel: the detonation owns the spray, not the
+  // flight line — a side-on hit reads the same as a nose-on one.
+  if (p.config.burstShards) {
+    deps.world.debrisList.push(new BallDebris(
+      deps.lazyScene(), deps.lazyTerrain(), pos,
+      _crumbCol.setHex(p.config.meshColor), p.config.bodyRadius,
+      { bodyRadius: p.config.bodyRadius, kind: 'rock' },
+    ));
+  }
 
   sfx.explosionAt(pos, p.directHit);
 

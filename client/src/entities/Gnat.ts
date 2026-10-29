@@ -44,7 +44,7 @@ export function gnatParts(): SwarmPart[] {
     color: 0xFF_FF_FF, flatShading: true,
   });}
   if (!_wingMat) {_wingMat = new THREE.MeshLambertMaterial({
-    color: 0x9A_8A_6A, transparent: true, opacity: 0.5, side: THREE.DoubleSide,
+    color: 0x9A_8A_6A, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false,
   });}
   return [
     { geometry: bodyGeo(), material: _bodyMat },

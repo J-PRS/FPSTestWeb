@@ -124,6 +124,38 @@ function label(text: string): HTMLDivElement {
 
  *  single source of truth (?p2p=/?lobby). */
 
+/** Persist a select pick to settings, and restore the saved pick once
+ *  options actually exist — refreshMaps refills async, so restore rides
+ *  childList. Only fills an unpicked ('') select: a fresh user pick wins
+ *  over the remembered one. */
+type StrKey = 'fps-lb-tab' | 'fps-host-mode' | 'fps-host-map' | 'fps-host-name'
+  | 'fps-mode' | 'fps-solo-map' | 'fps-p2p-code';
+type NumKey = 'fps-host-bots' | 'fps-solo-bots' | 'fps-p2p-pub';
+function keepSelect(sel: HTMLSelectElement, key: StrKey): void {
+  sel.addEventListener('change', (): void => settings.set(key, sel.value));
+  const restore = (): void => {
+    const v = settings.get(key);
+    if (v === '' || sel.value !== '') {return;}
+    if ([...sel.options].some((o): boolean => o.value === v)) {
+      sel.value = v;
+      sel.dispatchEvent(new Event('change')); // refilters dependent lists
+    }
+  };
+  new MutationObserver(restore).observe(sel, { childList: true });
+  restore();
+}
+
+function keepNumber(el: HTMLInputElement, key: NumKey): void {
+  const saved = settings.get(key);
+  if (saved >= 0) {el.value = String(saved);}
+  el.addEventListener('change', (): void => settings.set(key, el.value === '' ? -1 : Number(el.value) || 0));
+}
+
+function keepText(el: HTMLInputElement, key: StrKey): void {
+  el.value = settings.get(key);
+  el.addEventListener('change', (): void => settings.set(key, el.value.trim()));
+}
+
 function p2pGo(p2p: string, lobby: number): void {
 
   settings.set('fps-p2p', p2p);
@@ -150,7 +182,7 @@ function buildP2PButtons(p2pIn: HTMLInputElement): HTMLDivElement {
 
   // code is the only way in.
 
-  let pub = false;
+  let pub = settings.get('fps-p2p-pub') === 1;
 
   // .tog styling is scoped to #overlay .btn-row — the wrapper is required
 
@@ -176,9 +208,13 @@ function buildP2PButtons(p2pIn: HTMLInputElement): HTMLDivElement {
 
   pubBtn.title = 'listed publicly — quick-joinable';
 
+  pubBtn.classList.toggle('on', pub);
+
   pubBtn.addEventListener('click', (): void => {
 
     pub = !pub;
+
+    settings.set('fps-p2p-pub', pub ? 1 : 0);
 
     pubBtn.classList.toggle('on', pub);
 
@@ -566,6 +602,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     const tabBtns: HTMLButtonElement[] = [];
 
     const showTab = (name: string): void => {
+      settings.set('fps-lb-tab', name);
 
       for (const [n, el] of tabs) {el.style.display = n === name ? 'block' : 'none';}
 
@@ -635,6 +672,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     nameInput.style.cssText = 'flex:1;min-width:0;';
 
+    keepText(nameInput, 'fps-host-name');
     nameInput.addEventListener('keydown', (e): void => {
 
       e.stopPropagation();
@@ -657,6 +695,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     modeSelect.style.display = 'none';
 
+    keepSelect(modeSelect, 'fps-host-mode');
     modeSelect.addEventListener('change', (): void => h.fillMapSelect());
 
     modeRow.append(modeSelect);
@@ -774,6 +813,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     gateToggles(famRow);
 
     const { select: mapSelect, thumb: mapThumb, live: mapLive } = mapPicker(h);
+    keepSelect(mapSelect, 'fps-host-map');
 
     // Hidden store — the scrollable list beside the preview is the UI.
 
@@ -793,6 +833,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     botsInput.style.cssText = 'width:110px;text-align:right;';
 
+    keepNumber(botsInput, 'fps-host-bots');
     botsInput.addEventListener('keydown', (e): void => e.stopPropagation());
 
     botsRow.append(botsInput);
@@ -971,6 +1012,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     p2pIn.addEventListener('keydown', (e): void => e.stopPropagation());
 
+    keepText(p2pIn, 'fps-p2p-code');
     p2pRow.append(p2pIn);
 
     const p2pBtns = buildP2PButtons(p2pIn);
@@ -1075,6 +1117,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     soloModeSel.style.display = 'none';
 
+    keepSelect(soloModeSel, 'fps-mode');
     soloModeRow.append(soloModeSel);
 
     // Solo modes ride a second row — bot-mode picks stay a team-mode ramp.
@@ -1085,6 +1128,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     gateToggles(soloFamRow);
 
     const { select: soloMapSel, thumb: soloThumb, live: soloLive } = mapPicker(h);
+    keepSelect(soloMapSel, 'fps-solo-map');
 
     // Hidden store — the scrollable list beside the preview is the UI.
 
@@ -1104,6 +1148,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     soloBotsIn.style.cssText = 'width:110px;text-align:right;';
 
+    keepNumber(soloBotsIn, 'fps-solo-bots');
     soloBotsIn.addEventListener('keydown', (e): void => e.stopPropagation());
 
     soloBotsRow.append(soloBotsIn);
@@ -1148,7 +1193,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     panel.append(tabBar, joinPage, tabs.get('HOST')!, tabs.get('OFFLINE')!, tabs.get('P2P')!);
 
-    showTab('JOIN');
+    showTab(tabs.has(settings.get('fps-lb-tab')) ? settings.get('fps-lb-tab') : 'JOIN');
 
     (document.getElementById('overlay') ?? document.body).append(panel);
 

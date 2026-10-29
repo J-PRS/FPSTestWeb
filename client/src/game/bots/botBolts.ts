@@ -6,7 +6,7 @@ import { WeaponType } from '../../../../shared/weapons.js';
 
 type BoltHost = BotFire;
 const _shotMuzzle = new THREE.Vector3();
-const BOLT_MAT = new THREE.LineBasicMaterial({ color: 0xFF_E0_8A, transparent: true, opacity: 0.9 });
+const BOLT_MAT = new THREE.LineBasicMaterial({ color: 0xFF_E0_8A, transparent: true, opacity: 0.9, depthWrite: false });
 
 function spawnBolt(b: BoltHost, from: THREE.Vector3, to: THREE.Vector3): void {
     let line = b.boltPool.pop();

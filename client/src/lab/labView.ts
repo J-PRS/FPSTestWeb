@@ -241,6 +241,8 @@ export function wireLabButton(): void {
     window.open('gunlab.html', '_blank'));
   mapBtn?.addEventListener('click', (): Window | null =>
     window.open('maplab.html', '_blank'));
+  (document.querySelector('#gunstats-open') as HTMLElement | null)
+    ?.addEventListener('click', (): Window | null => window.open('gunstats.html', '_blank'));
   if (!btn) {return;}
   window.__labDump = (): [string, [string, string][]] | undefined => (lab?.open ? lab.dumpRows() : undefined);
   btn.addEventListener('click', (): void => {

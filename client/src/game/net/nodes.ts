@@ -114,7 +114,7 @@ export function createNodeLayer(deps: NodeLayerDeps): { applyRows(nodes: NodeRow
   // (≤40 edges), so link colors always match live ownership.
   const links = new THREE.LineSegments(
     new THREE.BufferGeometry(),
-    new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.45 }),
+    new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.45, depthWrite: false }),
   );
   links.frustumCulled = false;
   let linksAdded = false;

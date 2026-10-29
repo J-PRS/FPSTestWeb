@@ -14,7 +14,7 @@ const _zero = new THREE.Vector3(0, 0, 0);
 const _m = new THREE.Matrix4();
 const _p = new THREE.Vector3();
 const _c = new THREE.Color();
-const _ringMat = new THREE.MeshBasicMaterial({ color: 0xFF_FF_FF, side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
+const _ringMat = new THREE.MeshBasicMaterial({ color: 0xFF_FF_FF, side: THREE.DoubleSide, transparent: true, opacity: 0.7, depthWrite: false });
 
 interface GizmoPool {
   mesh: THREE.InstancedMesh;

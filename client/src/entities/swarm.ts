@@ -300,7 +300,9 @@ export class InstancedBlobShadows {
     this.mesh.matrixWorldAutoUpdate = false;
     this.mesh.count = 0;
     this.mesh.frustumCulled = false;
-    this.mesh.renderOrder = 999;
+    // Ground decal tier — after terrain (-2), z-sorted with the VFX so a
+    // blast in front glows over the blob instead of the blob dimming it.
+    this.mesh.renderOrder = 0;
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     scene.add(this.mesh);
     markProbe(this.mesh, { kind: 'blobShadows', swarm: this });

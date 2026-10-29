@@ -57,6 +57,13 @@ type Schema = {
   'fps-solo': number;         // 1 = player chose a solo session (lobby stays shut on boot)
   'fps-solo-map': string;     // SOLO tab's map pick ('' = default field)
   'fps-solo-bots': number;    // SOLO tab's bot count (-1 = map default)
+  'fps-lb-tab': string;       // lobby's last-open tab (JOIN|HOST|OFFLINE|P2P)
+  'fps-host-mode': string;    // HOST tab's ruleset pick ('' = ANY)
+  'fps-host-map': string;     // HOST tab's map pick
+  'fps-host-bots': number;    // HOST tab's bot count (-1 = map default)
+  'fps-host-name': string;    // HOST tab's room-name field
+  'fps-p2p-code': string;     // P2P tab's code field
+  'fps-p2p-pub': number;      // P2P host listed publicly on the relay
   'fps-join-spec': string;    // JSON {map?,bots?,mode?} — creation hints for the next room join
 };
 
@@ -114,6 +121,13 @@ const DEFAULTS: Schema = {
   'fps-solo': 0,
   'fps-solo-map': '',
   'fps-solo-bots': -1,
+  'fps-lb-tab': '',
+  'fps-host-mode': '',
+  'fps-host-map': '',
+  'fps-host-bots': -1,
+  'fps-host-name': '',
+  'fps-p2p-code': '',
+  'fps-p2p-pub': 0,
   'fps-join-spec': '{}',
 };
 

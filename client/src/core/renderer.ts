@@ -222,8 +222,12 @@ function applyPixelSize(renderer: THREE.WebGLRenderer,
   if (pscale === 1 || (pmode !== 0 && pmode !== 3)) {return false;}
   const { w, h } = overscanSize();
   renderer.setPixelRatio(1);
-  renderer.setSize(Math.floor(w / pscale),
-    Math.floor(h / pscale), false);
+  // pscale<1 supersampling can overrun MAX_TEXTURE_SIZE the same way the
+  // pixelRatio path can — floor the scale so the buffer always fits.
+  const maxTex = renderer.capabilities.maxTextureSize;
+  const scale = Math.max(pscale, w / maxTex, h / maxTex);
+  renderer.setSize(Math.floor(w / scale),
+    Math.floor(h / scale), false);
   renderer.domElement.style.imageRendering = pscale < 1 ? 'auto' : 'pixelated';
   renderer.domElement.style.width = `${w}px`;
   renderer.domElement.style.height = `${h}px`;
@@ -461,7 +465,11 @@ function makeUpdateRendererSize(renderer: THREE.WebGLRenderer,
     // Canvas stays full-res — in smooth mode only the composer buffers
     // drop to 1/PIXEL_SCALE and the upscale pass reconstructs to screen.
     const { w, h } = overscanSize();
-    renderer.setPixelRatio(pixelRatio());
+    // Clamp pixel ratio so the drawing buffer fits the GPU: portrait
+    // phones hit 16:9-overscan × dpr buffers past MAX_TEXTURE_SIZE and
+    // present black. (composer buffers ride the same pixelRatio.)
+    const maxTex = renderer.capabilities.maxTextureSize;
+    renderer.setPixelRatio(Math.min(pixelRatio(), maxTex / w, maxTex / h));
     renderer.setSize(w, h);
     // Fractional degrade upscales a sub-res buffer through the same CSS
     // filter path — SHARP keeps deep rungs readable, SMOOTH hides mild ones.

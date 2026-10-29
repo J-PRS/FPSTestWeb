@@ -62,6 +62,7 @@ export class HudStats {
   private static readonly WEAPON_SHORT = [
     'BLT', 'DSG', 'CG', 'MTR', 'GL', 'FLK', 'PLM', 'RAIL', 'LG', 'SG', 'CAN', 'RKT',
     'PST', 'REV', 'STK', 'PLG', 'SPR', 'RPR', 'MRV', 'BMB',
+    'LAN', 'BLA', 'HLB', 'GON', 'BSK',
   ];
 
   constructor(private h: StatsHost) {}

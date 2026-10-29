@@ -73,7 +73,7 @@ export const SPRINKLER_RATE = 0.11; // ~9/s stream — saturation over precision
 export const SPRINKLER_SPREAD = 0.05; // per-shot cone jitter (dir-offset units, flak-scale)
 export const RAILGUN_RATE = 1.5; // Quake railgun cadence
 export const SHOTGUN_RATE = 0.7; // pump cadence — punchy per shot, not spam
-export const CANNON_RATE = 0.7; // must match WEAPON_FIRE_INTERVAL_S[Cannon] — server cadence law
+export const CANNON_RATE = 1.1; // must match WEAPON_FIRE_INTERVAL_S[Cannon] — server cadence law
 export const BOMBARD_RATE = 1.6; // siege slug — one 160dmg ball per pull, deliberate cadence
 export const RKT_RATE = 2.5; // RPG cadence — slower than mortar, one missile IS the event
 // Hold-out sidearms (G/T/B) — pulled while the key is held, holstered on release

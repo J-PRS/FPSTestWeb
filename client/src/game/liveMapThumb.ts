@@ -26,6 +26,7 @@ const LAB_VERT = /* glsl */`
 interface Spec {
   terrain?: string;
   heightScale?: number;
+  tileSize?: number;
   terrainPreset?: number;
   terrainTex?: string;
   fog?: { color?: [number, number, number] };
@@ -39,6 +40,8 @@ interface Rig {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
+  ortho: THREE.OrthographicCamera;
+  mesh: THREE.Mesh;
   sky: AtmosphericSky;
   mat: THREE.ShaderMaterial;
   geo: THREE.PlaneGeometry;
@@ -86,26 +89,34 @@ function buildRig(canvas: HTMLCanvasElement): Rig {
       litKnee: { value: 0.85 }, litKeep: { value: 0.2 }, colCap: { value: 0.99 },
     }),
   });
-  scene.add(new THREE.Mesh(geo, mat));
-  return { renderer, scene, camera, sky, mat, geo, texLoader: new THREE.TextureLoader() };
+  const mesh = new THREE.Mesh(geo, mat);
+  scene.add(mesh);
+  // Top-down ortho for the textured HEIGHTMAP tile — up=(0,0,-1) orients
+  // +z down-screen so rows match the hillshade layout.
+  const ortho = new THREE.OrthographicCamera();
+  ortho.up.set(0, 0, -1);
+  return { renderer, scene, camera, ortho, mesh, sky, mat, geo, texLoader: new THREE.TextureLoader() };
 }
 
 async function loadSpec(name: string): Promise<{ spec: Spec; field: Heightfield } | null> {
   const spec = await (await fetch(`/maps/${name}.json`, { cache: 'no-cache' })).json() as Spec;
   const buf = new Uint8Array(await (await fetch(`/maps/${spec.terrain ?? `${name}.bin`}`, { cache: 'no-cache' })).arrayBuffer());
-  return { spec, field: hmParseBin(buf, spec.heightScale ?? 1) };
+  return { spec, field: hmParseBin(buf, spec.heightScale ?? 1, spec.tileSize) };
 }
 
-function displace(geo: THREE.PlaneGeometry, field: Heightfield): void {
+function displace(geo: THREE.PlaneGeometry, field: Heightfield, span: number): void {
   const pos = geo.getAttribute('position') as THREE.BufferAttribute;
+  const k = span / WS; // geometry spans WS; sample at world coords
   for (let i = 0; i < pos.count; i += 1) {
-    pos.setY(i, hmHeight(field, pos.getX(i), pos.getZ(i)));
+    pos.setY(i, hmHeight(field, pos.getX(i) * k, pos.getZ(i) * k));
   }
   pos.needsUpdate = true;
   geo.computeVertexNormals();
 }
 
-function applySpec(r: Rig, spec: Spec, hs: number): void {
+function applySpec(r: Rig, spec: Spec, hs: number, tile: number): void {
+  r.mesh.scale.set(tile / WS, 1, tile / WS);
+  r.mat.uniforms.hmWorldScaleFrag.value = tile;
   r.mat.defines.TERRAIN_PRESET = spec.terrainPreset ?? 1;
   r.mat.uniforms.hscale.value = HM_HEIGHT_SCALE * hs;
   r.mat.uniforms.sunDir.value = r.sky.getSunDirection();
@@ -147,6 +158,36 @@ function vantage(spec: Spec): Vantage {
   return { vx: aimX + (mx / d) * back, vz: aimZ + (mz / d) * back, aimX, aimZ, lift };
 }
 
+/** Exact-look heightmap: one ortho render through the same terrain
+ *  shader (palette/preset/albedo/sun all live), blitted to the 2D
+ *  canvas. Fog is lifted for the shot — at 3km top-down everything
+ *  would be a haze card. */
+function renderTopo(r: Rig, field: Heightfield, tile: number, hmEl: HTMLCanvasElement): void {
+  const u = r.mat.uniforms;
+  const fs = u.fogStart.value as number, fe = u.fogEnd.value as number;
+  u.fogStart.value = 1e7; u.fogEnd.value = 1e7;
+  const skyMesh = r.scene.getObjectByName('__sky');
+  if (skyMesh) { skyMesh.visible = false; }
+  // Fit the ortho to the mesh's real XZ extent — tile and mesh span can
+  // disagree (scale applied to the whole plane), and any slack shows as
+  // a fog-colored sky frame.
+  const half = (r.geo.boundingBox?.max.x ?? WS / 2) * r.mesh.scale.x;
+  const o = r.ortho;
+  o.left = -half; o.right = half; o.top = half; o.bottom = -half;
+  o.near = 1; o.far = 9000;
+  o.position.set(0, 4000, 0);
+  o.lookAt(0, 0, 0);
+  o.updateProjectionMatrix();
+  r.renderer.setSize(field.size, field.size, false);
+  r.renderer.render(r.scene, o);
+  hmEl.width = field.size; hmEl.height = field.size;
+  const src = r.renderer.domElement;
+  hmEl.getContext('2d')!.drawImage(src, 0, 0, src.width, src.height, 0, 0, field.size, field.size);
+  if (skyMesh) { skyMesh.visible = true; }
+  u.fogStart.value = fs; u.fogEnd.value = fe;
+  r.renderer.setSize(480, 360, false); // restore the VIEW viewport
+}
+
 export interface LiveMapThumb {
   el: HTMLDivElement;
   show(name: string): void;
@@ -180,9 +221,14 @@ export function liveMapThumb(): LiveMapThumb {
     hmBtn.classList.toggle('active', mode === 'hm');
   };
   viewBtn.addEventListener('click', (): void => { mode = 'view'; applyMode(); });
-  hmBtn.addEventListener('click', (): void => { mode = 'hm'; applyMode(); });
+  hmBtn.addEventListener('click', (): void => {
+    mode = 'hm';
+    applyMode();
+    if (last) { renderTopo(last.r, last.field, last.tile, hmEl); }
+  });
   applyMode();
   let rig: Rig | null = null;
+  let last: { r: Rig; field: Heightfield; tile: number } | null = null;
   let gen = 0;
 
   const show = async (name: string): Promise<void> => {
@@ -203,15 +249,18 @@ export function liveMapThumb(): LiveMapThumb {
       el.style.display = 'block';
       if (!rig) { rig = buildRig(glEl); }
       const r = rig;
-      displace(r.geo, field);
-      applySpec(r, spec, hs);
+      const tile = spec.tileSize ?? WS;
+      displace(r.geo, field, tile);
+      applySpec(r, spec, hs, tile);
       await applyAlbedo(r, spec);
       if (stale()) { return; }
+      last = { r, field, tile };
       const v = vantage(spec);
       r.camera.position.set(v.vx, hmHeight(field, v.vx, v.vz) + v.lift, v.vz);
       r.camera.lookAt(v.aimX, hmHeight(field, v.aimX, v.aimZ), v.aimZ);
       el.style.display = 'block';
       r.renderer.render(r.scene, r.camera);
+      if (mode === 'hm') { renderTopo(r, field, tile, hmEl); }
     } catch {
       if (!stale()) { el.style.display = 'none'; }
     }

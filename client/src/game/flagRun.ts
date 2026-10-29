@@ -245,7 +245,7 @@ export class FlagRunBridge {
     this.tasPts = simPts;
     const line = new THREE.Line(
       new THREE.BufferGeometry().setFromPoints(this.tasPts),
-      new THREE.LineBasicMaterial({ color: 0xFF_D8_4D, transparent: true, opacity: 0.7 }));
+      new THREE.LineBasicMaterial({ color: 0xFF_D8_4D, transparent: true, opacity: 0.7, depthWrite: false }));
     this.tasMat = new THREE.MeshBasicMaterial({ color: 0xFF_40_60 });
     const dot = new THREE.Mesh(new THREE.SphereGeometry(1.6, 10, 8), this.tasMat);
     // Carried-flag prop — the leg is a grab→cap flight, so the marker
@@ -264,6 +264,9 @@ export class FlagRunBridge {
     this.tasSpeedCtx = cv.getContext('2d')!;
     this.tasSpeedTex = new THREE.CanvasTexture(cv);
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.tasSpeedTex, depthTest: false }));
+    // depthTest off = never-occluded readout; renderOrder must live in the
+    // overlay tier too or a nearer transparent VFX blends over it.
+    sp.renderOrder = 950;
     sp.scale.set(14, 3.9, 1);
     sp.position.set(0, 4.4, 0);
     dot.add(sp);

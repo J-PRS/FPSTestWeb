@@ -188,8 +188,8 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
 
 
 
-// Locked gear stays listed but grays out against the tier in effect —
-// knowing a mortar exists matters even when you can't shoulder it.
+// Only equippable weapons list — the class gate hides other tiers'
+// ordnance outright; grayed-out dead options were pure noise.
 function weaponOptsFor(cls: ArmorClass): DropOpt[] {
   return SLOT_DEFS
     .map((def, wid): { v: string; label: string; sidearm: boolean; disabled: boolean; } => {
@@ -201,16 +201,10 @@ function weaponOptsFor(cls: ArmorClass): DropOpt[] {
         disabled: Player.lockedForClass(cls, wid),
       };
     })
-    .filter((o): boolean => !o.sidearm)
+    .filter((o): boolean => !o.sidearm && !o.disabled)
     // SLOT_DEFS order is wire identity (wid = index) — the MENU sorts by
-    // name instead; v stays the wid so picks never reshuffle. Order by
-    // pickability: universal, then this class's tagged ordnance, then
-    // the locked tiers — everything you CAN shoulder reads as one block.
-    .toSorted((a, b) => {
-      const rank = (o: { disabled: boolean; label: string }): number =>
-        o.disabled ? 2 : o.label.startsWith('[') ? 1 : 0;
-      return rank(a) - rank(b) || a.label.localeCompare(b.label);
-    });
+    // name instead; v stays the wid so picks never reshuffle.
+    .toSorted((a, b): number => a.label.localeCompare(b.label));
 }
 
 
@@ -339,12 +333,12 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void; clo
     const opts = weaponOptsFor(player.armorClass);
     ui.slotDrops.forEach((d, i): void => { d.setOptions?.(opts); d.setValue(String(player.menuKit[i])); });
     markSlotUse(player, ui.slotDrops);
-    ui.beltDrop?.setValue(player.beltItem);
-    ui.skillDrop?.setValue(player.skill);
-    ui.perkDrop?.setValue(player.perk);
+    ui.beltDrop?.setValue(player.menuGear.beltItem);
+    ui.skillDrop?.setValue(player.menuGear.skill);
+    ui.perkDrop?.setValue(player.menuGear.perk);
     ui.classDrop?.setValue(player.armorClass);
-    ui.sidearmDrop?.setValue(player.sidearm);
-    ui.packDrop?.setValue(player.packItem);
+    ui.sidearmDrop?.setValue(player.menuGear.sidearm);
+    ui.packDrop?.setValue(player.menuGear.packItem);
     if (ui.beltLabel) {ui.beltLabel.textContent = `BELT (${codeLabel(codeFor('belt'))})`;}
     if (ui.skillLabel) {ui.skillLabel.textContent = `SKILL (${codeLabel(codeFor('skill'))})`;}
     if (ui.sidearmLabel) {ui.sidearmLabel.textContent = `SIDEARM (${codeLabel(codeFor('sidearm'))})`;}

@@ -368,7 +368,7 @@ export interface ShellOpts {
   hitTest?: (from: { x: number; y: number; z: number }, pos: { x: number; y: number; z: number }) => boolean;
   /** Explosion style override; defaults to the config's own blast look. */
   blastScale?: number; tint?: number | string;
-  vfx?: 'splash' | 'punch' | 'energy' | 'kinetic' | 'concussion' | 'arc' | 'bolt' | 'flak';
+  vfx?: 'splash' | 'punch' | 'energy' | 'kinetic' | 'concussion' | 'arc' | 'bolt' | 'flak' | 'shellburst';
   onDone?: (impact: { x: number; y: number; z: number } | null, directHit: boolean) => void;
 }
 

@@ -46,11 +46,11 @@ export interface LoadoutHost {
 export class PlayerLoadout {
   /** Tier-restricted ordnance — the heavy's exclusive arsenal, same as
    *  TA where lights can't shoulder a mortar. Indexed SLOT_DEFS ids. */
-  static readonly HEAVY_ONLY: readonly number[] = [3, 6, 11, 18, 19]; // Mortar, PlasmaCannon, RocketLauncher, MRVLauncher, Bombard
+  static readonly HEAVY_ONLY: readonly number[] = [3, 6, 11, 18, 19, 24]; // Mortar, PlasmaCannon, RocketLauncher, MRVLauncher, Bombard, Basilisk
   /** Medium-only guns — lights trade them for speed, heavies for ordnance. */
   static readonly MEDIUM_ONLY: readonly number[] = [5, 10, 15]; // Flak, Cannon, PlasmaGun
   /** Light-frame precision gear — heavier chassis can't shoulder them. */
-  static readonly LIGHT_ONLY: readonly number[] = [7, 8]; // Railgun, Lightning
+  static readonly LIGHT_ONLY: readonly number[] = [7, 8, 23]; // Railgun, Lightning, Gonne
   static readonly LOADOUT_SLOTS = 4;
   /** Per-class kit memory — the four weapon slots are remembered per
    *  tier, so heavy's ordnance rig survives a stint on light. */
@@ -63,25 +63,52 @@ export class PlayerLoadout {
     light: 'fps-gear-light', medium: 'fps-gear-medium', heavy: 'fps-gear-heavy',
   } as const;
 
+  /** The gear half of a kit — banked in pendingGear while a class swap
+   *  is pending, live fields otherwise. Same picked-vs-applied split as
+   *  the weapon kit: the belt/sidearm/pack/perk/skill you're BUILDING for
+   *  the tier must not leak into the life you're still living. */
+  private gearPick(): { beltItem: BeltItem; sidearm: SidearmId; packItem: DeployKind; perk: PerkId; skill: SkillId } {
+    return this.pendingGear ?? this.h;
+  }
+
+  /** The picks the menu displays/edits — pending while a swap is banked. */
+  menuGear(): { beltItem: BeltItem; sidearm: SidearmId; packItem: DeployKind; perk: PerkId; skill: SkillId } {
+    return this.gearPick();
+  }
+
+  /** Banked gear — non-null while armorClass ≠ appliedClass. Installed by
+   *  applyPendingClass alongside the weapon kit. */
+  pendingGear: { beltItem: BeltItem; sidearm: SidearmId; packItem: DeployKind; perk: PerkId; skill: SkillId } | null = null;
+
   private gearBundle(): string {
-    const {h} = this;
-    return [h.beltItem, h.sidearm, h.packItem, h.perk, h.skill].join(',');
+    const g = this.gearPick();
+    return [g.beltItem, g.sidearm, g.packItem, g.perk, g.skill].join(',');
   }
 
   private saveGear(): void {
     settings.set(PlayerLoadout.GEAR_KEY[this.h.armorClass], this.gearBundle());
   }
 
-  private restoreGear(c: ArmorClass): void {
+  private parseGear(c: ArmorClass): { beltItem: BeltItem; sidearm: SidearmId; packItem: DeployKind; perk: PerkId; skill: SkillId } {
     const saved = settings.get(PlayerLoadout.GEAR_KEY[c]);
-    if (!saved) {return;}
-    // Written by saveGear from the same setters — always legal ids.
-    const [belt, side, pack, perk, skill] = saved.split(',');
-    if (belt) {this.h.beltItem = belt as LoadoutHost['beltItem'];}
-    if (side) {this.h.sidearm = side as LoadoutHost['sidearm'];}
-    if (pack) {this.h.packItem = pack as LoadoutHost['packItem'];}
-    if (perk) {this.h.perk = perk as LoadoutHost['perk'];}
-    if (skill) {this.h.skill = skill as LoadoutHost['skill'];}
+    const [belt, side, pack, perk, skill] = (saved || ',,,,').split(',');
+    const {h} = this;
+    return {
+      beltItem: (belt || h.beltItem) as BeltItem,
+      sidearm: (side || h.sidearm) as SidearmId,
+      packItem: (pack || h.packItem) as DeployKind,
+      perk: (perk || h.perk) as PerkId,
+      skill: (skill || h.skill) as SkillId,
+    };
+  }
+
+  private restoreGear(c: ArmorClass): void {
+    const g = this.parseGear(c);
+    this.h.beltItem = g.beltItem;
+    this.h.sidearm = g.sidearm;
+    this.h.packItem = g.packItem;
+    this.h.perk = g.perk;
+    this.h.skill = g.skill;
   }
   // wid derives from SLOT_DEFS by weaponType — hardcoded indices went
   // stale the moment HealBeam appended after Blaster (blaster was
@@ -130,8 +157,9 @@ export class PlayerLoadout {
   }
 
   setPerk(p: PerkId): void {
-    this.h.perk = p;
-    settings.set('fps-perk', p);
+    const g = this.gearPick();
+    g.perk = p;
+    if (!this.pendingGear) {settings.set('fps-perk', p);}
     this.saveGear();
   }
 
@@ -150,9 +178,12 @@ export class PlayerLoadout {
       this.saveGear();
       if (c === this.h.appliedClass) {
         this.pendingLoadout = null; // back to the tier you're wearing — live edits again
+        this.pendingGear = null;
       } else {
         const saved = settings.get(PlayerLoadout.CLASS_KEY[c]);
-        this.restoreGear(c);
+        // Gear banks with the kit — restore into pendingGear, not the
+        // live fields (a mid-life perk/pack swap is a free buff).
+        this.pendingGear = this.parseGear(c);
         // First visit to a tier carries the current kit as a starting
         // point — unshoulderLocked scrubs the illegal picks at respawn.
         this.pendingLoadout = saved ? PlayerLoadout.parseLoadout(saved) : [...this.h.loadout];
@@ -173,6 +204,22 @@ export class PlayerLoadout {
       this.h.loadout = this.pendingLoadout;
       this.pendingLoadout = null;
       settings.set('fps-loadout', this.h.loadout.join(','));
+    }
+    // Gear banks with the kit — belt/sidearm/pack/perk/skill install on
+    // the same life boundary. fps-* mirrors track the LIVE picks.
+    if (this.pendingGear) {
+      const g = this.pendingGear;
+      this.pendingGear = null;
+      this.h.beltItem = g.beltItem;
+      this.h.sidearm = g.sidearm;
+      this.h.packItem = g.packItem;
+      this.h.perk = g.perk;
+      this.h.skill = g.skill;
+      settings.set('fps-belt', g.beltItem);
+      settings.set('fps-sidearm', g.sidearm);
+      settings.set('fps-pack', g.packItem);
+      settings.set('fps-perk', g.perk);
+      settings.set('fps-skill', g.skill);
     }
     if (this.h.appliedClass === c) {return;}
     this.h.appliedClass = c;
@@ -299,18 +346,23 @@ export class PlayerLoadout {
   }
 
   setBeltItem(item: BeltItem): void {
-    this.h.beltItem = item;
-    settings.set('fps-belt', item);
+    this.gearPick().beltItem = item;
+    if (!this.pendingGear) {settings.set('fps-belt', item);}
     this.saveGear();
   }
   setSidearm(s: SidearmId): void {
-    this.h.sidearm = s;
-    settings.set('fps-sidearm', s);
+    this.gearPick().sidearm = s;
+    if (!this.pendingGear) {settings.set('fps-sidearm', s);}
     this.saveGear();
   }
   setPackItem(p: DeployKind): void {
-    this.h.packItem = p;
-    settings.set('fps-pack', p);
+    this.gearPick().packItem = p;
+    if (!this.pendingGear) {settings.set('fps-pack', p);}
+    this.saveGear();
+  }
+  setSkill(s: SkillId): void {
+    this.gearPick().skill = s;
+    if (!this.pendingGear) {settings.set('fps-skill', s);}
     this.saveGear();
   }
 
