@@ -13,12 +13,24 @@ import {
 } from '../entities/viewmodel/weaponKit';
 
 // — palette — concrete gunmetal + dark trim + one glow line per structure —
-export const hullMat  = new THREE.MeshStandardMaterial({ color: 0x8A_8F_96, roughness: 0.75, metalness: 0.35 });
-export const trimMat  = new THREE.MeshStandardMaterial({ color: 0x3A_3D_44, roughness: 0.6,  metalness: 0.6  });
-export const deckMat  = new THREE.MeshStandardMaterial({ color: 0x6D_70_78, roughness: 0.85, metalness: 0.25 });
+// applyStructSurface layers procedural detail on top (mottle/seams/grime/
+// dust); terrainBlend still chains on at buildStructures for the foot tint.
+import { applyStructSurface } from './structSurface';
+
+export const hullMat  = applyStructSurface(
+  new THREE.MeshStandardMaterial({ color: 0x8A_8F_96, roughness: 0.75, metalness: 0.35 }),
+  { panel: 3.2, mottle: 0.11, grime: 0.45, dust: 0.4 });
+export const trimMat  = applyStructSurface(
+  new THREE.MeshStandardMaterial({ color: 0x3A_3D_44, roughness: 0.6,  metalness: 0.6  }),
+  { panel: 0,   mottle: 0.08, grime: 0.25, dust: 0.3 });
+export const deckMat  = applyStructSurface(
+  new THREE.MeshStandardMaterial({ color: 0x6D_70_78, roughness: 0.85, metalness: 0.25 }),
+  { panel: 2.2, mottle: 0.13, grime: 0.30, dust: 0.5 });
 export const glowCyan = new THREE.MeshBasicMaterial({ color: 0x59_F2_FF });
 export const glowAmber = new THREE.MeshBasicMaterial({ color: 0xFF_B0_40 });
-export const darkMat  = new THREE.MeshStandardMaterial({ color: 0x14_15_18, roughness: 0.9,  metalness: 0.2  });
+export const darkMat  = applyStructSurface(
+  new THREE.MeshStandardMaterial({ color: 0x14_15_18, roughness: 0.9,  metalness: 0.2  }),
+  { panel: 0,   mottle: 0.05, grime: 0.15, dust: 0.2 });
 
 /** Add mesh w/ shadows on — every kit piece goes through this. */
 

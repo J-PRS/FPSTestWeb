@@ -10,6 +10,7 @@ import {
 } from '../structures/structures.js';
 import { ramp, hullMat, trimMat, deckMat, darkMat } from '../structures/structKit.js';
 import { applyTerrainBlend } from '../structures/terrainBlend.js';
+import { applyStructSurface } from '../structures/structSurface.js';
 import type { Terrain } from './terrain.js';
 import { KIT_HULLS } from '../../../shared/structKits.js';
 import { urlParams } from '../core/params.js';
@@ -218,10 +219,10 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
   built.matrixAutoUpdate = false;
   built.matrixWorldAutoUpdate = false;
   const mats = {
-    neutral: new THREE.MeshLambertMaterial({ color: TINTS.neutral }),
-    alpha: new THREE.MeshLambertMaterial({ color: TINTS.alpha }),
-    bravo: new THREE.MeshLambertMaterial({ color: TINTS.bravo }),
-    root: new THREE.MeshLambertMaterial({ color: TINTS.root }),
+    neutral: applyStructSurface(new THREE.MeshLambertMaterial({ color: TINTS.neutral }), { panel: 2.4, mottle: 0.10, grime: 0.30 }),
+    alpha: applyStructSurface(new THREE.MeshLambertMaterial({ color: TINTS.alpha }), { panel: 2.4, mottle: 0.10, grime: 0.30 }),
+    bravo: applyStructSurface(new THREE.MeshLambertMaterial({ color: TINTS.bravo }), { panel: 2.4, mottle: 0.10, grime: 0.30 }),
+    root: applyStructSurface(new THREE.MeshLambertMaterial({ color: TINTS.root }), { panel: 0, mottle: 0.16, grime: 0.40 }),
   };
   if (terrain) {for (const m of Object.values(mats)) {applyTerrainBlend(m, terrain.heightU);}}
   const unit = new THREE.BoxGeometry(1, 1, 1);
