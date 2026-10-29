@@ -1,0 +1,29 @@
+{
+  "name": "Terraced",
+  "mode": "dm",
+  "bots": 10,
+  "botFill": 12,
+  "spawns": [
+    { "x": -110, "y": 0, "z": 0, "r": 34 },
+    { "x": 110, "y": 0, "z": 0, "r": 34 },
+    { "x": 0, "y": 0, "z": -110, "r": 34 },
+    { "x": 0, "y": 0, "z": 110, "r": 34 },
+    { "x": -78, "y": 0, "z": -78, "r": 34 },
+    { "x": 78, "y": 0, "z": -78, "r": 34 },
+    { "x": -78, "y": 0, "z": 78, "r": 34 },
+    { "x": 78, "y": 0, "z": 78, "r": 34 }
+  ],
+  "structures": [],
+  "terrain": "terraced.bin",
+  "tileSize": 750,
+  "heightScale": 2,
+  "terrainPreset": 5,
+  "fog": {
+    "color": [0.78, 0.66, 0.50],
+    "distance": 170.0,
+    "visible": 850.0
+  },
+  "atmosphere": { "rayleigh": 1.0, "mie": 2.0, "sunIntensity": 1.05 },
+  "weather": { "dust": 0.9 },
+  "_notes": "Terraced = jittered bench steps (terrainPreset 5 badlands strata reads as ledges), dm"
+}
