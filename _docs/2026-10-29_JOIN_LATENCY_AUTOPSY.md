@@ -73,20 +73,30 @@ sub-second while aggregate egress has headroom (~5MB/s used, NIC is
 Gbps). What the herd does prove: admission is healthy at ~600/worker on
 4 OCPUs, and the seat work itself will never be the limit.
 
-## Actionable residue
+## Close attribution — RESOLVED (832f8906 + 73b4ce6c live)
 
-1. **Close attribution incomplete:** the ~460-seat mid-run drop was not
-   definitively attributed — candidates: drown clock (bufMax peaked
-   ~1MB, no drownedSock in the post window), 15s joinTimeout on stalled
-   pre-seat sockets, or client-side 1006 closes. A close-reason counter
-   in `onClose` would settle it next herd.
+Second herd (~400/worker, `_qh0/1/2.log`, `_closecodes.ts`):
+~250-267 × **close code 1005** per worker — deaths with *no close
+frame*, i.e. TCP-level kill. Zero `1011` drowns, `closesUnseated` 0,
+drains ~38ms, ELD ~50ms. Bot-side: `closed=19-27/34` concentrated in
+the earliest-joined rooms — a point-in-time mass kill; post-event
+joins survived. Same rooms show hundreds of `fire rate flood` rejects
+(the post-stall queued-input burst). **The ~460-seat drop was a
+transient outage on the client-side WAN path** — every herd socket
+shares one laptop link, so a stall kills them all at once and backs up
+every outbox server-side. The server never blinked (work ~0.4ms).
+Local-path flakiness was observed directly throughout the run (fetch
+timeouts, crashed fleet launches).
 2. **Herd methodology:** single-link fleets cannot measure per-user join
-   latency past ~300 seats/worker — split-source (two client sites) or
-   direct worker-path runs are required for that question.
+   latency past ~300 seats/worker, and cannot measure server resilience
+   to WAN death — a local stall mass-kills ~40% of sockets identically
+   (1005). Split-source (two client sites) or per-bot link shaping is
+   required for both questions.
 3. **Fleet cap enforcement** is matchmaker-only; direct `/wN/ws` joins
    bypass `FPS_FLEET_MAX_PLAYERS`. Per-worker `globalMaxPlayers` is the
    only backstop.
-4. `maxPlayers: 96` in `/health` is still wrong vs actual seat limits.
+4. `maxPlayers` fixed 73b4ce6c: worker reports `globalMaxPlayers`,
+   fleet reports the enforced `FPS_FLEET_MAX_PLAYERS` (1000 live).
 5. `joinTimeoutMs` (15s) is the correct bound — it is also what capped
    seating at ~595/600 during the storm; do not raise it, it caught the
    spiral.
