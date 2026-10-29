@@ -5,6 +5,7 @@ import { SKILL_ORDER, Player, type SkillId, BELT_ITEMS, type BeltItem } from '..
 import { PERKS, PERK_ORDER, type PerkId } from '../../../shared/perks.js';
 import type { ArmorClass } from '../../../shared/botClasses.js';
 import { SLOT_DEFS } from '../weapons.js';
+import { PlayerLoadout, type SidearmId } from '../entities/playerLoadout.js';
 import { codeFor, codeLabel } from '../core/keybinds.js';
 import { PACK_KINDS, type DeployKind } from '../../../shared/deployables.js';
 import { DEPLOY_ITEMS } from '../../../shared/deployItems.js';
@@ -138,13 +139,10 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   const sidearm = mkCellDom(kitRowA);
   ui.sidearmLabel = sidearm.cap;
   ui.sidearmDrop = mkDrop(
-    [{ v: 'pistol', label: 'Pistol' },
-     { v: 'revolver', label: 'Revolver' },
-     { v: 'shotgun', label: 'Shotgun' },
-     { v: 'repair', label: 'Repair Tool' },
-     { v: 'lance', label: 'Lance' },
-     { v: 'blaster', label: 'Blaster' }],
-    (v): void => deps.lazyPlayer().setSidearm(v as 'pistol' | 'revolver' | 'shotgun' | 'repair' | 'lance' | 'blaster'),
+    // The SIDEARM table owns id→wid+label — the menu derives, so a new
+    // sidearm is one table entry, not a menu edit.
+    Object.entries(PlayerLoadout.SIDEARM).map(([v, s]): { v: string; label: string } => ({ v, label: s.label })),
+    (v): void => deps.lazyPlayer().setSidearm(v as SidearmId),
   );
   sidearm.cell.append(ui.sidearmDrop.el);
 

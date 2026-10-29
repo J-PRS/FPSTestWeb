@@ -21,7 +21,7 @@ import { PlayerModel, type PlayerModelVariant } from './PlayerModel.js';
 import { CLASS_BODY_MAT_REV, CLASS_BODY_VARIANT } from './playerClips.js';
 import * as imp from './playerImpulse.js';
 import { PlayerEmit } from './playerEmit.js';
-import { PlayerLoadout } from './playerLoadout.js';
+import { PlayerLoadout, type SidearmId } from './playerLoadout.js';
 import { PACK_KINDS, type DeployKind } from '../../../shared/deployables.js';
 import { BELT_MAX } from '../../../shared/weapons.js';
 import { heldBuffRates, POWERUP } from '../../../shared/pickups.js';
@@ -276,10 +276,10 @@ export class Player {
   static readonly LIGHT_ONLY = PlayerLoadout.LIGHT_ONLY;
   static readonly lockedForClass = PlayerLoadout.lockedForClass;
   static readonly LOADOUT_SLOTS = PlayerLoadout.LOADOUT_SLOTS;
-  static readonly SIDEARM_WIDS = PlayerLoadout.SIDEARM_WIDS;
-  sidearm: 'pistol' | 'revolver' | 'shotgun' | 'repair' | 'lance' | 'blaster' =
-    (settings.get('fps-sidearm') as 'pistol' | 'revolver' | 'shotgun' | 'repair' | 'lance' | 'blaster') in Player.SIDEARM_WIDS
-      ? settings.get('fps-sidearm') as 'pistol' | 'revolver' | 'shotgun' | 'repair' | 'lance' | 'blaster' : 'pistol';
+  static readonly SIDEARM = PlayerLoadout.SIDEARM;
+  sidearm: SidearmId =
+    (settings.get('fps-sidearm') as SidearmId) in Player.SIDEARM
+      ? settings.get('fps-sidearm') as SidearmId : 'pistol';
   // Pack: one deployable on the deploy key — ESC menu picks.
   packItem: DeployKind =
     (PACK_KINDS as readonly string[]).includes(settings.get('fps-pack'))
@@ -296,7 +296,7 @@ export class Player {
    *  is pending, the live kit otherwise. Never use for fire logic. */
   get menuKit(): readonly number[] { return this.armory.menuKit(); }
   setBeltItem(item: BeltItem): void { this.armory.setBeltItem(item); }
-  setSidearm(s: 'pistol' | 'revolver' | 'shotgun' | 'repair' | 'lance' | 'blaster'): void { this.armory.setSidearm(s); }
+  setSidearm(s: SidearmId): void { this.armory.setSidearm(s); }
   setPackItem(p: DeployKind): void { this.armory.setPackItem(p); }
   get sidearmWid(): number { return this.armory.sidearmWid; }
   // wid → WeaponType lives on the def: weaponDef(wid).weaponType.

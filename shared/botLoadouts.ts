@@ -1,4 +1,4 @@
-import { WeaponType, getWeaponStats } from './weapons.ts';
+import { WeaponType, getWeaponStats, SIDEARM_WEAPONS } from './weapons.ts';
 import { SELF_SPLASH_MAX } from './combat.ts';
 import type { PerkId } from './perks.ts';
 import { HEAVY_ONLY_WEAPONS, MEDIUM_ONLY_WEAPONS, LIGHT_ONLY_WEAPONS, classCanFire, type ArmorClass } from './botClasses.ts';
@@ -109,7 +109,7 @@ export const WILDCARD_SLOTS: Record<LoadoutSlot, WeaponType[]> = {
     WeaponType.BeltDisc, WeaponType.BeltSticky, WeaponType.ProxyGrenade, WeaponType.SatchelCharge, WeaponType.Concussion, WeaponType.EMP, WeaponType.HealGrenade],
   // Shocklance rides the speed-0 beam lane (fireSpeedless/botFire) — the
   // same honest-ray path Lightning already takes, no projectile needed.
-  side: [WeaponType.Pistol, WeaponType.Revolver, WeaponType.Shotgun, WeaponType.Repair, WeaponType.Shocklance, WeaponType.Blaster],
+  side: [...SIDEARM_WEAPONS],
 };
 const WILDCARD_PERKS: PerkId[] = ['lifesteal', 'overcharge', 'armored', 'bombardier', 'featherjets'];
 

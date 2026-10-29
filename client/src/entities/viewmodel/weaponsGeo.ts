@@ -39,9 +39,12 @@ export const MODEL_BUILDERS: [number, () => THREE.Group][] = [
   [WeaponType.Bombard, mkBombard],
   [WeaponType.Shocklance, mkShocklance],
   [WeaponType.Blaster, mkBlaster],
+  // Heal beam wears the repair tool's chassis — same hand-held welder
+  // frame, the cyan bolt IS the distinction.
+  [WeaponType.HealBeam, mkRepair],
 ];
 
-export function buildWeaponMeshes(parent: THREE.Group, muzzleZ: Record<number, number>): WeaponMeshes {
+export function buildWeaponMeshes(parent: THREE.Group, muzzleZ: (wt: number) => number): WeaponMeshes {
   const weapons = new Map<number, THREE.Group>();
   const muzzleNodes = new Map<number, THREE.Object3D>();
   // Chaingun needs its barrels group back; Implodisc reuses the Disc group —
@@ -55,7 +58,7 @@ export function buildWeaponMeshes(parent: THREE.Group, muzzleZ: Record<number, n
     const mz = new THREE.Object3D();
     // muzzleZ is GROUP-space (the flash parks on it raw) — divide out the
     // model scale so the node lands on the same group-space z.
-    mz.position.z = (muzzleZ[wt] ?? -0.35) / g.scale.z;
+    mz.position.z = muzzleZ(wt) / g.scale.z;
     // Chaingun fires from the TOP barrel — the cluster indexes a barrel
     // to TDC each shot, so the flash rides the top of the cluster.
     if (wt === WeaponType.Chaingun) {mz.position.y = 0.088;}
@@ -64,7 +67,7 @@ export function buildWeaponMeshes(parent: THREE.Group, muzzleZ: Record<number, n
   }
   weapons.set(WeaponType.Implodisc, weapons.get(WeaponType.Disc)!);
   const pullMz = new THREE.Object3D();
-  pullMz.position.z = muzzleZ[WeaponType.Implodisc] ?? -0.35;
+  pullMz.position.z = muzzleZ(WeaponType.Implodisc);
   weapons.get(WeaponType.Disc)!.add(pullMz);
   muzzleNodes.set(WeaponType.Implodisc, pullMz);
   return { weapons, muzzleNodes, chainBarrels: chain.barrels };

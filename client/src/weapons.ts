@@ -11,7 +11,7 @@
 // To add a weapon: shared/weapons.ts stats + ProjectileConfig + geo/sfx
 // entries, then ONE def here. Nothing else aligns positionally.
 
-import { WeaponType, LANCE_CADENCE_S } from '../../shared/weapons.js';
+import { WeaponType, LANCE_CADENCE_S, getWeaponStats } from '../../shared/weapons.js';
 import type { ProjectileConfig } from './projectiles/types.js';
 import { BOLT_CONFIG } from './projectiles/boltConfig.js';
 import { DISC_CONFIG } from './projectiles/discConfig.js';
@@ -35,6 +35,7 @@ import { BLASTER_CONFIG } from './projectiles/blasterConfig.js';
 import { STICKY_CONFIG } from './projectiles/stickyConfig.js';
 import { MRV_CONFIG } from './projectiles/mrvConfig.js';
 import { REPAIR_CONFIG } from './projectiles/repairConfig.js';
+import { HEALBEAM_CONFIG } from './projectiles/healbeamConfig.js';
 import {
   BOLT_FIRE_RATE, DISC_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE,
   PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE,
@@ -69,18 +70,24 @@ export interface WeaponDef {
   readonly sidearm?: boolean;
 }
 
-function def(weaponType: WeaponType, rate: number, config: ProjectileConfig,
+function def(weaponType: WeaponType, rate: number | undefined, config: ProjectileConfig,
              kick: number, opts: { auto?: boolean; pellets?: { count: number; spread: number }; spread?: number; sidearm?: boolean } = {}): WeaponDef {
   let kind: WeaponDef['kind'] = 'projectile';
   if (opts.pellets) {kind = 'fan';}
-  else if (weaponType === WeaponType.Lightning || weaponType === WeaponType.Repair || weaponType === WeaponType.Shocklance) {kind = 'beam';}
+  else if (weaponType === WeaponType.Lightning || weaponType === WeaponType.Repair || weaponType === WeaponType.Shocklance || weaponType === WeaponType.HealBeam) {kind = 'beam';}
+  const stats = getWeaponStats(weaponType);
   return {
-    weaponType, rate, config, kick,
+    weaponType,
+    // The shared row's fireInterval IS the law — it's the same number the
+    // server's cadence gate reads. The positional arg remains for legacy
+    // rows that predate the field (they have no row entry to read).
+    rate: stats.fireInterval ?? rate ?? 0.5,
+    config, kick,
     kind,
     auto: opts.auto ?? false,
     pellets: opts.pellets,
     spread: opts.spread,
-    sidearm: opts.sidearm,
+    sidearm: opts.sidearm ?? (stats.sidearm === true || undefined),
   };
 }
 
@@ -113,8 +120,12 @@ export const SLOT_DEFS: readonly WeaponDef[] = [
   def(WeaponType.Shocklance, LANCE_CADENCE_S, SHOCKLANCE_CONFIG, 0.4, { sidearm: true }),
   // Blaster — T1 energy sidearm: 35 per bolt, but every pull bills the
   // jet tank (energyCost in the shared row — jets and the sidearm argue
-  // over the same pool). Keep LAST: wid 23.
+  // over the same pool). wid 23 is hardcoded in SIDEARM_WIDS — don't
+  // insert before this.
   def(WeaponType.Blaster, BLASTER_RATE, BLASTER_CONFIG, 0.9, { sidearm: true }),
+  // Heal beam — the medic's pocket beam: primary-slot support gun,
+  // HP on teammates, jet energy as ammo (server resolves the intent).
+  def(WeaponType.HealBeam, 0.1, HEALBEAM_CONFIG, 0, { auto: true }),
 ];
 
 /** wid of the shocklance def — the 'lance' sidearm pick binds this. */

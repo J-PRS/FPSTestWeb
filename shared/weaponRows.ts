@@ -260,6 +260,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMin: 0,
     hitMax: 0,
     hitGrow: 0,
+    sidearm: true,
   },
   [WeaponType.Shotgun]: {
     burst: 10, // one pull registers all pellets at once
@@ -280,6 +281,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMax: 0.4,
     hitGrow: 0.1,
     maxLifetime: 0.4,
+    sidearm: true,
   },
   [WeaponType.Cannon]: {
 
@@ -343,6 +345,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMax: 0.5,
     hitGrow: 0.1,
     maxLifetime: 0.6,
+    sidearm: true,
   },
   [WeaponType.Revolver]: {
 
@@ -359,6 +362,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMax: 0.5,
     hitGrow: 0.1,
     maxLifetime: 0.5,
+    sidearm: true,
   },
   [WeaponType.Blaster]: {
 
@@ -379,6 +383,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 0.8, // ~145m reach — the bolt fades before range drop matters
     energyCost: 10,
     fireInterval: 0.3,
+    sidearm: true,
   },
   [WeaponType.Sticky]: {
     // Sticky launcher (T2): glue bomb — sticks where it lands, pops on a
@@ -583,6 +588,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMin: 0,
     hitMax: 0,
     hitGrow: 0,
+    sidearm: true,
   },
   [WeaponType.ArmorGrenade]: {
     // Support ordnance: the blast is deliberately mid — the payoff is the

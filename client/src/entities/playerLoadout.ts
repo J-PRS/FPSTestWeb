@@ -31,7 +31,7 @@ export interface LoadoutHost {
   loadout: number[];
   weaponIndex: number;
   beltItem: BeltItem;
-  sidearm: 'pistol' | 'revolver' | 'shotgun' | 'repair' | 'lance' | 'blaster';
+  sidearm: SidearmId;
   packItem: DeployKind;
   skill: SkillId;
   fireTimer: number;
@@ -83,9 +83,19 @@ export class PlayerLoadout {
     if (skill) {this.h.skill = skill as LoadoutHost['skill'];}
   }
   // wid is slot-space (SLOT_DEFS index): pistol 12, revolver 13, shotgun 9,
-  // repair 17, lance 20. (sticky launcher sits at wid 14 — primary, not a
-  // hold-out; bombard 19.)
-  static readonly SIDEARM_WIDS = { pistol: 12, revolver: 13, shotgun: 9, repair: 17, lance: LANCE_WID, blaster: 23 } as const;
+  // repair 17, lance 22, blaster 23. (sticky launcher sits at wid 14 —
+  // primary, not a hold-out; bombard 19.)
+  static readonly SIDEARM = {
+    pistol:   { wid: 12, label: 'Pistol' },
+    revolver: { wid: 13, label: 'Revolver' },
+    shotgun:  { wid: 9,  label: 'Shotgun' },
+    repair:   { wid: 17, label: 'Repair Tool' },
+    lance:    { wid: LANCE_WID, label: 'Lance' },
+    blaster:  { wid: 23, label: 'Blaster' },
+  } as const;
+  /** wid lookup per id — kept as SIDEARM_WIDS for existing callers. */
+  static readonly SIDEARM_WIDS = Object.fromEntries(
+    Object.entries(PlayerLoadout.SIDEARM).map(([k, v]): [string, number] => [k, v.wid])) as Record<SidearmId, number>;
 
   // Hold-out secondaries: while the bind is held the weapon swaps in and
   // auto-fires at its own cadence; release snaps back to the loadout slot.
@@ -292,7 +302,7 @@ export class PlayerLoadout {
     settings.set('fps-belt', item);
     this.saveGear();
   }
-  setSidearm(s: 'pistol' | 'revolver' | 'shotgun' | 'repair' | 'lance' | 'blaster'): void {
+  setSidearm(s: SidearmId): void {
     this.h.sidearm = s;
     settings.set('fps-sidearm', s);
     this.saveGear();
@@ -303,7 +313,7 @@ export class PlayerLoadout {
     this.saveGear();
   }
 
-  get sidearmWid(): number { return (PlayerLoadout.SIDEARM_WIDS as Record<string, number>)[this.h.sidearm]!; }
+  get sidearmWid(): number { return (PlayerLoadout.SIDEARM as Record<string, { wid: number }>)[this.h.sidearm]!.wid; }
   get currentWid(): number { return this.h.loadout[this.h.weaponIndex]; }
 
   /** Hold-out key down — swap the sidearm in and arm its draw timer. */
@@ -341,3 +351,4 @@ export class PlayerLoadout {
     }
   }
 }
+export type SidearmId = keyof typeof PlayerLoadout.SIDEARM;  

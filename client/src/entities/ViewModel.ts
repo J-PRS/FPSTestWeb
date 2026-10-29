@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { WeaponType } from '../../../shared/weapons.js';
 import { buildWeaponMeshes, buildHandAndFlash } from './viewmodel/weaponsGeo.js';
+import { muzzleZFor } from './viewmodel/weaponVisual.js';
 import * as vm from './vmGhost.js';
 import { kickF } from './vmKick.js';
 import { VmEnvelopes } from './vmEnvelopes.js';
@@ -61,25 +62,8 @@ export class ViewModel {
   // Empty node parked at each weapon's muzzle — world position IS the
   // attachment point for beam VFX, so the bolt tracks sway/kick exactly.
   private muzzleNodes = new Map<number, THREE.Object3D>();
-  // Muzzle Z per weapon (model space) so the flash sits AT the bore,
-  // not at a fixed offset that floats ahead of stubby barrels.
-  private static readonly MUZZLE_Z: Record<number, number> = {
-    [WeaponType.BoltLauncher]: -0.36, // flush bore face, just past the end plate [WeaponType.Disc]: -0.36, [WeaponType.Implodisc]: -0.36, // just past the face plate
-    [WeaponType.Chaingun]: -0.8, // just past the cluster + clamp, incl. the group's +0.15 pullback [WeaponType.Mortar]: -0.28, [WeaponType.GrenadeLauncher]: -0.42,
-    [WeaponType.Flak]: -0.28, [WeaponType.PlasmaCannon]: -0.35, [WeaponType.PlasmaGun]: -0.38, // group ×1.4 — collar tip moved to ≈-0.39 [WeaponType.Sprinkler]: -0.30,
-    [WeaponType.Railgun]: -0.64, // clear of the prong cluster — at -0.57 the hex tips frame-swallow the flash
-    [WeaponType.Shotgun]: -0.41, [WeaponType.Cannon]: -0.53,
-    [WeaponType.RocketLauncher]: -0.44, // just past the warhead tip
-    [WeaponType.Lightning]: -0.42, // emitter ball at the prong tips
-    [WeaponType.Shocklance]: -0.56, // blade tip — just clear of the point
-    [WeaponType.Sticky]: -0.4,
-    [WeaponType.Pistol]: -0.17,   // stubby barrel face
-    [WeaponType.Revolver]: -0.27, // long barrel + underlug tip
-    [WeaponType.Repair]: -0.2,   // emitter stud on the reflector dish
-    [WeaponType.Blaster]: -0.17, // emitter face — same stubby read as the pistol
-    [WeaponType.MRVLauncher]: -0.56, // group-space: scaled bore face (-0.445 model) ×1.25
-    [WeaponType.Bombard]: -0.42, // short barrel — the bell ends ~-0.37 model-space ×1.15
-  };
+  // Muzzle Z per weapon (model space) — lives in weaponVisual.ts so the
+  // flash sits AT the bore; read through muzzleZFor()/muzzleZ().
   chainBarrels: THREE.Group | null = null; // public — VmBaked reseats the bake's pivot
   // Bore axis in the SPIN NODE's local space — procedural barrels run
   // along -Z, but an adopted bake node carries Blender's export axes, so
@@ -122,7 +106,7 @@ export class ViewModel {
     this.vmCam = camera;
     this.group = new THREE.Group();
 
-    const built = buildWeaponMeshes(this.group, ViewModel.MUZZLE_Z);
+    const built = buildWeaponMeshes(this.group, muzzleZFor);
     this.weapons = built.weapons;
     this.muzzleNodes = built.muzzleNodes;
     this.chainBarrels = built.chainBarrels;
@@ -315,7 +299,7 @@ export class ViewModel {
    *  (vmEnvelopes.ts); the public triggers stay as delegates. */
   private env = new VmEnvelopes(this);
   private baked = new VmBaked(this);
-  muzzleZ(wt: number): number { return ViewModel.MUZZLE_Z[wt] ?? -0.35; }
+  muzzleZ(wt: number): number { return muzzleZFor(wt); }
 
   /** Re-park a weapon's muzzle node on a model feature (e.g. the LG's
    *  emitter ball) so every consumer of the node — beam anchor, flash —

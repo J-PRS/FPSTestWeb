@@ -141,6 +141,15 @@ export function beltThrowCost(weaponType: number): number {
   return BELT_THROW_COSTS.get(weaponType) ?? BELT_THROW_COST;
 }
 
+/** Hold-out sidearms — derived from the stats row's `sidearm` marker,
+ *  same pattern as BELT_THROW_WEAPONS: one flag on the row replaces the
+ *  menu list, the bot pool, and the def's sidearm opt. */
+export const SIDEARM_WEAPONS = new Set<number>(
+  Object.entries(WEAPONS).filter(([, w]): boolean => w.sidearm === true).map(([wt]): number => Number(wt)));
+export function isSidearm(weaponType: number | undefined): boolean {
+  return weaponType !== undefined && SIDEARM_WEAPONS.has(weaponType);
+}
+
 /** Biggest legal single damage claim vs a creature: table max
  *  (direct+splash) with perk headroom. creatureHit/crawlerHit claims
  *  carry no weapon ref, so this is the widest honest ceiling — anything

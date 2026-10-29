@@ -156,6 +156,10 @@ export interface WeaponStats {
    *  the moveSim tank on the fire intent; the client predicts the same
    *  check so a dry tank can't draw a ghost bolt. */
   energyCost?: number;
+  /** Sidearm (hold-out pull weapon): auto-derives the sidearm pool —
+   *  same marker pattern as beltThrow, so a new sidearm registers here
+   *  once instead of in a menu, a union type, and two tables. */
+  sidearm?: boolean;
 }
 
 /** Catch radius for the belt-sticky combo — shared so the server and
