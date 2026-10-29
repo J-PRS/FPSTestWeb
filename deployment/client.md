@@ -55,6 +55,28 @@ makes that reachable. See `webtransport.md`.
 - Shared links: send `/pub/<room>` or `/?server=https://play.jprice.app`. Do not send
   `localhost` links, because they point at the recipient's own machine.
 
+## Static hosting (Cloudflare Pages)
+
+The game page lives on **https://jetpack-fps.pages.dev** — `dist/` deployed to the
+`jetpack-fps` Pages project (account `2e14e1304c4503b43cdc3d38ad68f03f`). The OCI
+box stays API/game traffic only; Pages is the unmetered CDN for the bundle.
+
+```bash
+cd client && npm run build
+npx wrangler pages deploy dist --project-name jetpack-fps --branch main --commit-dirty=true
+```
+
+- `--branch main` is required — the project's production branch is `main`; an
+  unbranched upload lands as a `*.pages.dev` preview alias only.
+- `public/_redirects` (`/* /index.html 200`) keeps client routes working:
+  `/quickjoin`, `/pub/<room>`, `/s/<room>` all serve the app.
+- `server.json` in `public/` points the deploy at `https://play.jprice.app`; any
+  remote host (any source) resolves through `/join` first since `eefbb9a4` + the
+  server.json/named-path follow-up.
+
+Verified 2026-10-29: headless Chrome loaded the Pages URL, seated into w1's
+headhunt-1 as `player_bzy1hov3q` in under 5s.
+
 ## History
 
 - 2026-10-24: default moved from the direct IP (`ws://92.5.61.55:8000`) to `https://play.jprice.app`.

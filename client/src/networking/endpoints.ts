@@ -79,6 +79,11 @@ export async function resolveServerEndpoints(): Promise<ServerEndpoints> {
     } catch { /* no server.json — stay local */ }
   }
   if (urlParams.serverPath) {host = NAMED_SERVERS[urlParams.serverPath] ?? '';}
+  // Any non-empty host from any source (?server, saved, server.json,
+  // named path) is remote-of-some-sort — resolve it through the fleet
+  // matchmaker first; resolveFleet's failure falls back to the direct
+  // URL below, so non-fleet boxes are unaffected.
+  if (host.length > 0) {fleet = true;}
   if (!host) {return (fleet ? await resolveFleet(local.httpUrl) : null) ?? local;}
 
   // Explicit ws(s) URL wins outright — devs targeting a plain-ws box on a
