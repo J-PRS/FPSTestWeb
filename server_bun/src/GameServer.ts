@@ -72,6 +72,10 @@ export class GameServer {
     // Join-phase rollup — wait = upgrade→handshake dispatch (inbound
     // queue/loop starvation), work = seat+worldstate serialize+send.
     joinWaitMsSum: 0, joinWaitMsMax: 0, joinWorkMsSum: 0, joinWorkMsMax: 0, joinN: 0,
+    // Close attribution — ws code histogram + seats that died before
+    // seating. The herd's mass-drop mechanism was never provable without
+    // this (drown vs join-timeout vs client 1006 all look identical).
+    closeCodes: new Map<number, number>(), closesUnseated: 0,
     tickLagMsMax: 0, tickLagMsSum: 0, tickLagSamples: 0,
     lastTickAt: 0, ticksDropped: 0,
   };
@@ -467,7 +471,8 @@ export class GameServer {
 
   private reconnectGraceMs = CONFIG.reconnectGraceMs; // Grace period for F5 reconnect
 
-  onClose(ws: ServerWebSocket<WebSocketData>): void {
+  onClose(ws: ServerWebSocket<WebSocketData>, code?: number, reason?: string): void {
+    if (code !== undefined) {this.ops.closeCodes.set(code, (this.ops.closeCodes.get(code) ?? 0) + 1);}
     const {playerId} = ws.data;
     if (!playerId) {return;}
     // Throttle entries keyed by playerId must die with the socket —
@@ -479,6 +484,7 @@ export class GameServer {
     if (!room) {
       // Closed mid-handshake (connecting, never seated) — no room entry
       // exists to tear down, but the session record must not leak.
+      this.ops.closesUnseated += 1;
       this.registry.terminate(playerId, 'closed before seat');
       return;
     }

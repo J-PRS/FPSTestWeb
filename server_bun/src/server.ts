@@ -168,10 +168,10 @@ const serve = (): ReturnType<typeof Bun.serve<WebSocketData>> => Bun.serve<WebSo
       gameServer.onMessage(ws, message as string | ArrayBuffer);
     },
 
-    close(ws): void {
+    close(ws, code, reason): void {
       if (ws.data.rtc) { rtcRelay.onClose(ws); return; }
       if (ws.data.rtcs) { rtcServer.onClose(ws); return; }
-      gameServer.onClose(ws);
+      gameServer.onClose(ws, code, reason);
     },
 
     drain(ws): void {

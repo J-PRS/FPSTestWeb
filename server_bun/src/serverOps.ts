@@ -129,6 +129,11 @@ n += 1; fpsSum += s.fps; fpsMin = Math.min(fpsMin, s.fps);
         workMax: o.joinWorkMsMax,
       },
       leaves: o.leaves,
+      // Close attribution — ws close-code histogram + pre-seat deaths;
+      // settles whether a mass drop was drown(1011), timeout(1000), or
+      // client-side (1006) without log spelunking.
+      closeCodes: Object.fromEntries(o.closeCodes),
+      closesUnseated: o.closesUnseated,
       msgsIn: o.msgsIn,
       msgsRejected: o.msgsRejected,
       // Session lifecycle rollup — live census + per-edge totals +

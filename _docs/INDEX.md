@@ -29,6 +29,7 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-10-23_DUEL_CAPACITY.md` | **1v1 capacity report** — measured: duel rooms cost 1.5× more per client than 32-seat rooms (175 vs 266 CCU/core); profile attribution, cost model, L1-L8 levers, industry patterns |
 | `_docs/2026-10-28_SERVER_PERF_RESEARCH.md` | **Server perf research** — what's actually left after cpuprof attribution: GC-controller 16ms bug ≈ tickMsMax spikes (Bun upgrade lever), validated architecture, ranked remaining wins |
 | `_docs/2026-10-18_ADDING_MODES_AND_PICKUPS.md` | Blast surface for new modes/pickups |
+|| `_docs/2026-10-29_JOIN_LATENCY_AUTOPSY.md` | **Join latency autopsy** — /metrics.joinMs phases + introDrain prove the herd's multi-second first-gameState tail is WAN delivery, not compute (work ~0.4ms, ELD healthy while drain hit 245s); herd single-link artifact boundary documented |
 | `_docs/2026-10-26_TTS_DTS_REFERENCE.md` | **TTS/DTS reference** - cold-boot time-to-shoot and data-to-shoot profile, phase breakdown, prediction table, improvement levers |
 | `_docs/2026-10-18_CTF_BOT_BRAIN_PUG_AUDIT.md` | CTF bot brain vs PUG guide audit |
 | `_docs/2026-10-18_NETCODE_OVERHAUL.md` | Netcode overhaul (2026-10-18) |
