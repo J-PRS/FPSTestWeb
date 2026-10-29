@@ -108,6 +108,11 @@ export class ConnectionManager {
    *  (~4B/subframe) aren't metered; per-frame kind detail is kept by
    *  metering at queue time, not at the merged send. */
   private collecting = false;
+  /** Armed by the first tick — volatile cues arriving between flushes
+   *  queue into the NEXT flush's batch instead of a send each (the
+   *  cpuprofile's top line was per-event ws.send fanout). Non-ticking
+   *  harnesses never arm it and keep the immediate path. */
+  private ticksRunning = false;
   private readonly outbox = new Map<string, Uint8Array[]>();
   /** Batch-encode scratch — ws.send consumes the bytes synchronously, so
    *  one growable buffer serves every conn's batch (per-conn arenas are
@@ -125,7 +130,7 @@ export class ConnectionManager {
     if (!a) {a = tickFrameScratch(); this.frameArenas.set(pid, a);}
     return a;
   }
-  beginCollect(): void { this.collecting = true; }
+  beginCollect(): void { this.collecting = true; this.ticksRunning = true; }
   private push(pid: string, frame: Uint8Array): void {
     // evScratch views are only valid until the ring wraps (128 encodes)
     // — a queued frame would otherwise flush as a DIFFERENT event
@@ -396,7 +401,7 @@ export class ConnectionManager {
     // Journal BEFORE delivery — a frame aimed at a dead/grace socket is
     // exactly what reclaim replay must find later.
     const f = this.frame(msg, playerId);
-    if (this.collecting) {
+    if (this.collecting || (this.ticksRunning && VOLATILE_TYPES.has((msg as { type: string }).type))) {
       this.push(playerId, encodeWireJson(f.data));
       wireTx(playerId, f.data.length, f.kind);
       return;
@@ -509,7 +514,7 @@ export class ConnectionManager {
   broadcastBinaryReliable(data: Uint8Array, journaled: boolean | 'volatile' = false, exclude?: string): void {
     const kind = BIN_KIND[data[1]!]!;
     if (journaled) {this.journalBinary(data, undefined, exclude, journaled === 'volatile');} // combat events replay on reclaim — 'volatile' carries the same 3s staleness window the JSON version had
-    if (this.collecting) {
+    if (this.collecting || (this.ticksRunning && journaled === 'volatile')) {
       // Ring views get one shared copy for the whole broadcast — push()
       // would otherwise slice the same bytes once per recipient.
       const owned = isEvScratch(data) ? data.slice() : data;
@@ -541,14 +546,14 @@ export class ConnectionManager {
    *  `only` so a reclaim replays it to the victim alone. */
   sendBinToPlayerReliable(playerId: string, data: Uint8Array, journaled: boolean | 'volatile' = false): void {
     if (journaled) {this.journalBinary(data, playerId, undefined, journaled === 'volatile');}
-    if (this.collecting) {this.push(playerId, data); wireTx(playerId, data.byteLength, BIN_KIND[data[1]!]!); return;}
+    if (this.collecting || (this.ticksRunning && journaled === 'volatile')) {this.push(playerId, data); wireTx(playerId, data.byteLength, BIN_KIND[data[1]!]!); return;}
     const ws = this.connections.get(playerId);
     if (ws && ws.readyState === 1 && this.drownCheck(playerId, ws) === 'ok') {this.sendReliable(playerId, ws, data, BIN_KIND[data[1]!]!);}
   }
 
   broadcast(msg: ServerMessage, excludePlayerId?: string): void {
     const f = this.frame(msg, undefined, excludePlayerId);
-    if (this.collecting) {
+    if (this.collecting || (this.ticksRunning && VOLATILE_TYPES.has((msg as { type: string }).type))) {
       const bin = encodeWireJson(f.data);
       for (const pid of this.connections.keys()) {
         if (pid === excludePlayerId) {continue;}

@@ -137,10 +137,17 @@ export class RoomPickups {
       return;
     }
     const players = this.room.players.getAllPlayers(); // live map — re-iterated, no roster copy per tick
+    // 10Hz grab pass: prevPos snapshots only on grab ticks, so the swept
+    // segment still covers the full elapsed window — the skipped tick
+    // costs ≤50ms on the pickup edge, not a missed grab. Halves the
+    // pickups×players pair cost (a cpuprofile line under nugget load).
+    const grabNow = (this.room.tickSeq & 1) === 0;
     // Per-tick swept-segment table — each player's path + reach factor is
     // pickup-independent; the inner loop was recomputing both once per
     // (pickup × player) pair.
     const segs: { pl: PlayerState; ax: number; ay: number; az: number; abx: number; aby: number; abz: number; len2: number; mx: number; my: number; mz: number; half: number; radMul: number }[] = [];
+    const grabNowS = grabNow ? simNow() / 1000 : 0;
+    if (grabNow) {
     for (const pl of players.values()) {
       if (pl.isDead) {continue;}
       const a = this.prevPos.get(pl.id) ?? pl.position;
@@ -151,6 +158,7 @@ export class RoomPickups {
         len2: abx * abx + aby * aby + abz * abz,
         mx: a.x + abx / 2, my: a.y + aby / 2, mz: a.z + abz / 2,
         half, radMul: perkMods(pl.perk).pickupRadius });
+    }
     }
     for (const p of this.pickups.values()) {
       // Headhunt tokens ARE the score — decaying them starves the win
@@ -204,9 +212,10 @@ export class RoomPickups {
         continue;
       }
       if (p.armT > 0) { p.armT -= dt; continue; } // still flying — no grabs
+      if (!grabNow) {continue;}
       for (const s of segs) {
         const pl = s.pl;
-        if (p.lockUntil && pl.team === p.lockTeam && simNow() / 1000 < p.lockUntil) {continue;}
+        if (p.lockUntil && pl.team === p.lockTeam && grabNowS < p.lockUntil) {continue;}
         // Score pickups (gems/tags/tokens) only exist in team modes;
         // powerups are grab-able by anyone alive in any mode.
         if ((p.kind === 'gem' || p.kind === 'tag' || p.kind === 'token') && !pl.team) {continue;}
@@ -240,10 +249,11 @@ export class RoomPickups {
         break;
       }
     }
-    // Snapshot AFTER the touch pass — next tick's segment starts where
-    // this one ended (same ordering RoomFlags uses for its sweep).
+    // Snapshot AFTER the touch pass — next grab tick's segment starts
+    // where this one ended (same ordering RoomFlags uses for its sweep).
     // Reuse the stored Vec3 (it must be a snapshot, not an alias — the
     // live position mutates next tick): field writes kill N allocs/tick.
+    if (!grabNow) {return;}
     for (const pl of players.values()) {
       const prev = this.prevPos.get(pl.id);
       if (prev) { prev.x = pl.position.x; prev.y = pl.position.y; prev.z = pl.position.z; }
