@@ -904,7 +904,7 @@ ${TERRAIN_PRESET_GLSL}
     col += scorchEmberGlow(vWorldPos.xz);
     col += fieldGlow(vWorldPos);
     // Same dampened-downward-distance fog as the desert branch — see above
-    col = seaTint(col, vWorldPos.y);
+    col = seaTint(col, vWorldPos.y, vWorldPos.xz);
     vec3 fogDelta = vWorldPos - vCameraPos;
     float dist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
     float fogFactor = terrainFogFactor(dist);

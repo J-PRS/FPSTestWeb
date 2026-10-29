@@ -48,9 +48,9 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       // Snow lives HIGH in value (never a flat mid-grey) so the map survives a
       // grayscale pass; the blue shadow side is the temperature pair. Rock only
       // shows where the slope is too steep to hold snow, or the peak is above it.
-      vec3 cSnowNew  = vec3(0.88, 0.92, 0.98);
-      vec3 cSnowOld  = vec3(0.72, 0.79, 0.90);
-      vec3 cIceBlue  = vec3(0.50, 0.64, 0.80);
+      vec3 cSnowNew  = vec3(0.72, 0.78, 0.86);
+      vec3 cSnowOld  = vec3(0.58, 0.66, 0.78);
+      vec3 cIceBlue  = vec3(0.40, 0.52, 0.68);
       vec3 cRockCold = vec3(0.27, 0.29, 0.36);
       vec3 cRockWarm = vec3(0.37, 0.33, 0.28);
 
@@ -63,9 +63,9 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       col = mix(col, mix(rock, cIceBlue, 0.4), smoothstep(0.26, 0.5, slope));
       col *= 1.0 - smoothstep(0.10, 0.45, slope) * (1.0 - smoothstep(0.25, 0.75, drainage)) * 0.20;
       col *= mix(1.06, 0.80, smoothstep(0.0, 0.45, slope));
-      col *= 0.90 + 0.20 * detail;
+      col *= 0.82 + 0.16 * detail;
       col *= 1.0 + (grain - 0.5) * 0.6 * grainFade + (triGrain - 0.5) * 0.25 * grainFade;
-      col += sparkle * detFade * snowMask * vec3(0.05, 0.06, 0.08);
+      col += sparkle * detFade * snowMask * vec3(0.03, 0.04, 0.06);
       col *= 1.0 - scorchMask(vWorldPos.xz);
       { float splM; vec3 splC = splatStain(vWorldPos.xz, splM); col = mix(col, splC, splM); }
       float diff = max(dot(vNormal, sunDir), 0.0);
@@ -543,19 +543,20 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       vec3 cStoneA  = vec3(0.52, 0.50, 0.66);   // lilac stone
       vec3 cCliff   = vec3(0.18, 0.16, 0.26);
 
+      // Landform-driven zones — every hue answers "what is this ground",
+      // not "what does the noise say": valleys pool teal wyrm-moss,
+      // mid slopes carry the violet canopy, high flats go amber, and
+      // stone only claims the steep. fbm wobbles boundaries so nothing
+      // reads as a contour ring; noise picks WITHIN a zone, never the zone.
+      float valley  = (1.0 - smoothstep(0.10, 0.32, height)) * (1.0 - smoothstep(0.08, 0.30, slope));
+      float midslope= smoothstep(0.12, 0.38, height) * (1.0 - smoothstep(0.42, 0.72, height));
+      float upland  = smoothstep(0.52, 0.74, height) * (1.0 - smoothstep(0.10, 0.32, slope));
+      float ridge   = smoothstep(0.30, 0.55, slope) + smoothstep(0.62, 0.85, height) * smoothstep(0.25, 0.5, slope);
       vec3 grass = mix(cFaeDeep, cFaeTip, smoothstep(0.25, 0.75, medium));
-      float clumpId = hash(floor(uvMed * 1.4 + r * 0.6));
-      // Hue regions: teal meadows and amber fields break the violet —
-      // a single-hue map reads monochromatic no matter the value range.
-      grass = mix(grass, cTeal, smoothstep(0.42, 0.62, region));
-      float amberMask = smoothstep(0.56, 0.72, fbm(uv * 0.30 + r * 0.8 + 5.1));
-      grass = mix(grass, mix(cGold, cGoldTip, smoothstep(0.25, 0.75, medium)), amberMask * 0.85);
-      grass = mix(grass, grass.bgr, clumpId * 0.12); // per-clump hue drift
-
-      // Pockets of mundane green field in the low, flat hollows —
-      // Elysium's last patch of the mortal world.
-      float greenMask = smoothstep(0.50, 0.66, fbm(uv * 0.9 + q * 0.5 + 2.7))
-                      * (1.0 - smoothstep(0.18, 0.40, height));
+      grass = mix(grass, cTeal * (0.7 + 0.6 * medium), smoothstep(0.35, 0.75, valley));
+      grass = mix(grass, mix(cGold, cGoldTip, smoothstep(0.25, 0.75, medium)), smoothstep(0.45, 0.8, upland) * 0.9);
+      // mundane green pockets only where the canopy is thin
+      float greenMask = smoothstep(0.55, 0.7, fbm(uv * 0.9 + q * 0.5 + 2.7)) * midslope * 0.5;
       grass = mix(grass, mix(cGreen, cGreenTip, smoothstep(0.25, 0.75, medium)), greenMask);
 
       vec3 col = grass;
@@ -577,27 +578,28 @@ export const TERRAIN_PRESET_GLSL = /* glsl */`
       float rim = pow(1.0 - max(dot(vNormal, vec3(0,1,0)), 0.0), 2.5) * 0.15;
       vec3 lit = ambientColor + sunColor * shadow * shadowMask + vec3(rim);
       col *= lit;
-      // Bioluminescent meadow: the ground glows in its OWN albedo hues —
-      // teal regions teal, amber fields amber, violet stays violet. A
-      // flat additive lamp can't do this; it just greys the wash.
-      col += grass * (0.30 + 0.20 * medium) * (1.0 - slopeBlend * 0.5);
+      // Bioluminescence lives in the LANDFORM, not a wash: valley floors
+      // smoulder in their own hue, ridge spines barely shimmer. Flat
+      // additive glow everywhere just greys the palette.
+      col += grass * (0.34 + 0.22 * medium) * valley;
+      col += grass * 0.10 * midslope;
       // Faint cool ambient lift so shadowed faces never go black.
       col += vec3(0.020, 0.018, 0.045) * (0.6 + 0.4 * medium);
 
-      // Ley veins: thin ridged-noise seams that EMIT — added after the
-      // lighting term so they read at dusk. Violet cores, cyan edges.
-      // The second gate breaks the network into reaches — unbroken
-      // continent-wide ribbons read as neon rivers, not veins.
-      float ley = 1.0 - abs(2.0 * fbm(uvMed * 0.9 + q * 0.6 + 4.1) - 1.0);
-      // Fade past mid distance — the full web at altitude reads as busy
-      // marble veining, not glowing seams.
-      ley = smoothstep(0.965, 0.997, ley) * (1.0 - slopeBlend * 0.6)
+      // Ley veins EMIT along terrain fault lines — ridged noise seams
+      // gated to ridge spines and valley seams, where a magical vein
+      // would actually outcrop. Violet cores on ridges, cyan in valleys.
+      float leyBase = 1.0 - abs(2.0 * fbm(uvMed * 0.9 + q * 0.6 + 4.1) - 1.0);
+      float leyRidge = smoothstep(0.45, 0.75, ridge) ;
+      float leyValley = smoothstep(0.45, 0.75, valley) * (1.0 - slopeBlend);
+      float ley = smoothstep(0.96, 0.995, leyBase)
+          * max(leyRidge, leyValley)
           * smoothstep(0.40, 0.68, fbm(uvMed * 0.5 + 1.3))
           * (1.0 - smoothstep(200.0, 600.0, camDist) * 0.6);
-      col += ley * mix(vec3(0.45, 0.20, 0.95), vec3(0.20, 0.65, 1.0), smoothstep(0.35, 0.65, macro)) * 0.65;
-      // Spore motes: sparse pale specks on open meadow, close range only.
+      col += ley * mix(vec3(0.45, 0.20, 0.95), vec3(0.20, 0.65, 1.0), leyValley) * 0.7;
+      // Spore motes drift off the glowing valleys — source matches cause.
       float mote = noise(uvFin * 3.8 + q * 4.0) * noise(uvFin * 7.2 + r * 2.5 + 3.1);
-      col += vec3(0.55, 0.75, 0.95) * smoothstep(0.78, 0.92, mote) * (1.0 - slopeBlend) * detFade * 0.35;
+      col += vec3(0.55, 0.75, 0.95) * smoothstep(0.78, 0.92, mote) * valley * detFade * 0.45;
       col += scorchEmberGlow(vWorldPos.xz);
       col += fieldGlow(vWorldPos);
       col = seaTint(col, vWorldPos.y, vWorldPos.xz);
