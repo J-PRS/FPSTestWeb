@@ -1,5 +1,6 @@
 import { settings } from '../core/settings.js';
-import { SLOT_COUNT, weaponDef, LANCE_WID } from '../weapons.js';
+import { SLOT_COUNT, weaponDef, widOf, LANCE_WID } from '../weapons.js';
+import { WeaponType } from '../../../shared/weapons.js';
 import { SIDEARM_DRAW_TIME } from './ViewModel.js';
 import type { MovementController } from './movement.js';
 import type { PlayerInput } from './player/input.js';
@@ -82,16 +83,16 @@ export class PlayerLoadout {
     if (perk) {this.h.perk = perk as LoadoutHost['perk'];}
     if (skill) {this.h.skill = skill as LoadoutHost['skill'];}
   }
-  // wid is slot-space (SLOT_DEFS index): pistol 12, revolver 13, shotgun 9,
-  // repair 17, lance 22, blaster 23. (sticky launcher sits at wid 14 —
-  // primary, not a hold-out; bombard 19.)
+  // wid derives from SLOT_DEFS by weaponType — hardcoded indices went
+  // stale the moment HealBeam appended after Blaster (blaster was
+  // wrongly 23 → equipped the heal beam; it's 21).
   static readonly SIDEARM = {
-    pistol:   { wid: 12, label: 'Pistol' },
-    revolver: { wid: 13, label: 'Revolver' },
-    shotgun:  { wid: 9,  label: 'Shotgun' },
-    repair:   { wid: 17, label: 'Repair Tool' },
-    lance:    { wid: LANCE_WID, label: 'Lance' },
-    blaster:  { wid: 23, label: 'Blaster' },
+    pistol:   { wid: widOf(WeaponType.Pistol),      label: 'Pistol' },
+    revolver: { wid: widOf(WeaponType.Revolver),    label: 'Revolver' },
+    shotgun:  { wid: widOf(WeaponType.Shotgun),     label: 'Shotgun' },
+    repair:   { wid: widOf(WeaponType.Repair),      label: 'Repair Tool' },
+    lance:    { wid: LANCE_WID,                     label: 'Lance' },
+    blaster:  { wid: widOf(WeaponType.Blaster),     label: 'Blaster' },
   } as const;
   /** wid lookup per id — kept as SIDEARM_WIDS for existing callers. */
   static readonly SIDEARM_WIDS = Object.fromEntries(

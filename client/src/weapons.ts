@@ -138,3 +138,10 @@ export const SLOT_COUNT = SLOT_DEFS.length;
 export function weaponDef(wid: number): WeaponDef {
   return SLOT_DEFS[wid] ?? SLOT_DEFS[0];
 }
+
+/** wid for a weaponType — the sidearm table and any "which slot is X"
+ *  lookup derives here instead of hardcoding indices that go stale the
+ *  next append. -1 if the type has no slot def. */
+export function widOf(weaponType: WeaponType): number {
+  return SLOT_DEFS.findIndex((d): boolean => d.weaponType === weaponType);
+}
