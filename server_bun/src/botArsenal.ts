@@ -8,7 +8,7 @@ import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
 import { classCapsule, classCanFire } from '../../shared/botClasses.ts';
 import { logger } from './logger.ts';
-import { WeaponType, getWeaponStats, WEAPON_FIRE_INTERVAL_S, BELT_THROW_COST } from '../../shared/weapons.ts';
+import { WeaponType, getWeaponStats, WEAPON_FIRE_INTERVAL_S, BELT_THROW_COST, payShotCost } from '../../shared/weapons.ts';
 import { SELF_SPLASH_MAX,aoeDamageAt } from '../../shared/combat.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { GRAVITY, type MoveState } from '../../shared/movement.ts';
@@ -285,11 +285,11 @@ s[kind] += 1; this.propels.set(id, s);
       const cdist = Math.hypot(cdx, cdy, cdz) || 1;
       const lo0 = this.loadouts.get(p.id) ?? BOT_LOADOUTS[0]!;
       const wt0 = this.pickWeapon(lo0, Math.hypot(cdx, cdz), cdist, p.id);
-      const ec0 = getWeaponStats(wt0)?.energyCost ?? 0;
-      if (ec0 > 0 && (this.room.moveSim.energyOf(p.id) ?? 0) < ec0) {return;}
+      if (!payShotCost(wt0, p.id,
+        (id): number | null => this.room.moveSim.energyOf(id),
+        (id, n): void => { this.room.moveSim.drainEnergy?.(id, n); })) {return;}
       if (tr.track === undefined) {this.markTrack(tr, wt0, aim);}
       if (!this.rateOk(p.id, wt0)) {return;}
-      if (ec0 > 0) {this.room.moveSim.drainEnergy?.(p.id, ec0);}
       weaponStats.recordShot(this.room.mode, `w${wt0}`, cdist);
       if (wt0 === WeaponType.Melee) {
         const stats = getWeaponStats(WeaponType.Melee);
@@ -350,13 +350,13 @@ s[kind] += 1; this.propels.set(id, s);
       aim.x = muzzle.x + qx / sf; aim.y = muzzle.y + qy / sf; aim.z = muzzle.z + qz / sf;
       fuseSolved = true;
     }
-    // Energy-paid weapons (Blaster): bots drain their own moveSim tank —
-    // same magazine, same dry check; a broke bot keeps the bolt holstered.
-    const ec = getWeaponStats(wt)?.energyCost ?? 0;
-    if (ec > 0 && (this.room.moveSim.energyOf(p.id) ?? 0) < ec) {return;}
+    // Energy-paid weapons (Blaster): bots drain their own moveSim tank
+    // through the shared payShotCost gate — same magazine, same bill.
+    if (!payShotCost(wt, p.id,
+      (id): number | null => this.room.moveSim.energyOf(id),
+      (id, n): void => { this.room.moveSim.drainEnergy?.(id, n); })) {return;}
     if (tr.track === undefined) {this.markTrack(tr, wt, aim);}
     if (!this.rateOk(p.id, wt)) {return;}
-    if (ec > 0) {this.room.moveSim.drainEnergy?.(p.id, ec);}
     weaponStats.recordShot(this.room.mode, `w${wt}`, dist);
     if (wt === WeaponType.Melee) {
       // The punch IS the player's swing — combat funnels it identically,

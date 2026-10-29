@@ -23,7 +23,7 @@ import {
 import { ScorchDecal } from '../../effects/scorch.js';
 import { fxPuff } from '../../effects/vfx.js';
 import { swingArcView } from '../../effects/swingTrails.js';
-import { getWeaponStats, WeaponType, beltThrowCost, serverSimmed } from '../../../../shared/weapons.js';
+import { getWeaponStats, WeaponType, beltThrowCost, serverSimmed, payShotCost } from '../../../../shared/weapons.js';
 import type { CombatDeps, FireArgs } from '../combat.js';
 import type { WorldState } from '../worldState.js';
 import type { BlastArgs } from '../blastForce.js';
@@ -280,16 +280,11 @@ i += 1;
 // reaches here — combat.ts routes it to the lightning module, which owns
 // its own tick/raycast loop.
 function fireWeapon(deps: CombatDeps, def: WeaponDef, e: FireArgs): void {
-  // Energy-paid weapons (Blaster): the jet tank IS the magazine — gate
-  // and drain locally so a dry tank can't draw a ghost bolt; the server
-  // runs the same check on the intent (CombatHandler) and owns the tank.
-  const stats = getWeaponStats(def.config.weaponType);
-  const energyCost = stats.energyCost ?? 0;
-  if (energyCost > 0) {
-    const pl = deps.lazyPlayer();
-    if (pl.energy < energyCost) {return;}
-    pl.energy = Math.max(0, pl.energy - energyCost);
-  }
+  // Energy-paid weapons (Blaster): the jet tank IS the magazine — the
+  // shared payShotCost gate keeps client prediction, server intent and
+  // bot fire on one formula; a dry tank can't draw a ghost bolt.
+  if (!payShotCost(def.config.weaponType, '', (): number => deps.lazyPlayer().energy,
+    (_id, n): void => { const pl = deps.lazyPlayer(); pl.energy = Math.max(0, pl.energy - n); })) {return;}
   deps.lazyViewModel()?.kick(def.kick);
   if (def.pellets) { spawnFan(deps, def.config, e, def.pellets.count, def.pellets.spread); return; }
   if (def.spread) {

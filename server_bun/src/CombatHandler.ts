@@ -4,7 +4,7 @@ import { POWERUP } from '../../shared/pickups.ts';
 
 import { logger } from './logger.ts';
 import { classCanFire } from '../../shared/botClasses.ts';
-import { serverSimmed, BELT_THROW_WEAPONS, beltThrowCost, WeaponType, getWeaponStats, REPAIR_RANGE, WEAPON_FIRE_INTERVAL_S, LANCE_RANGE, LANCE_CADENCE_S, HEALBEAM_RANGE, HEALBEAM_PER_TICK, HEALBEAM_ENERGY, HEALBEAM_MIN_TICK_S } from '../../shared/weapons.ts';
+import { serverSimmed, BELT_THROW_WEAPONS, beltThrowCost, WeaponType, getWeaponStats, REPAIR_RANGE, WEAPON_FIRE_INTERVAL_S, LANCE_RANGE, LANCE_CADENCE_S, HEALBEAM_RANGE, HEALBEAM_PER_TICK, HEALBEAM_ENERGY, HEALBEAM_MIN_TICK_S, payShotCost } from '../../shared/weapons.ts';
 import { finiteVec, encodeShotEv } from '../../shared/wire.ts';
 import { dhypot3 } from '../../shared/dmath.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
@@ -579,12 +579,13 @@ win.violations += 1;
         player.beltCharges -= cost;
       }
       // Energy-paid weapons (Blaster): the jet tank IS the magazine —
-      // same ammo-check shape as belt charges, verdict back so the
-      // shooter's predicted bolt doesn't ghost.
-      const energyCost = msg.weaponType === undefined ? 0 : (getWeaponStats(msg.weaponType).energyCost ?? 0);
-      if (energyCost > 0) {
-        if ((this.deps.energyOf?.(playerId) ?? 0) < energyCost) { this.hb('drop.tankDry'); this.reject(playerId, 'Shot', 'energy dry', undefined, msg.weaponType, msg.shotId); return; }
-        this.deps.drainEnergy?.(playerId, energyCost);
+      // one shared cost formula (payShotCost) so bots, clients and the
+      // server never disagree on the bill. Verdict back so the shooter's
+      // predicted bolt doesn't ghost.
+      if (!payShotCost(msg.weaponType, playerId,
+        (id): number | null => this.deps.energyOf?.(id) ?? 0,
+        (id, n): void => this.deps.drainEnergy?.(id, n))) {
+        this.hb('drop.tankDry'); this.reject(playerId, 'Shot', 'energy dry', undefined, msg.weaponType, msg.shotId); return;
       }
       player.protectedUntil = simMs(0); // firing breaks your own spawn shield
       const l = dhypot3(dir!.x, dir!.y, dir!.z) || 1;

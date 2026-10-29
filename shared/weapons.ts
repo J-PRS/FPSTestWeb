@@ -150,6 +150,26 @@ export function isSidearm(weaponType: number | undefined): boolean {
   return weaponType !== undefined && SIDEARM_WEAPONS.has(weaponType);
 }
 
+/** Ammo economy for non-belt shots (energyCost today — the pattern any
+ *  future tank-paid weapon rides). ONE formula for all three gates:
+ *  server intent (CombatHandler), bot fire (botArsenal), client
+ *  prediction (fire.ts) — they passed different tank accessors but must
+ *  never disagree on the bill or the dry check.
+ *  Returns true and debits when the tank covers the cost; zero-cost
+ *  weapons always pass. */
+export function payShotCost(
+  weaponType: number | undefined,
+  id: string,
+  energyOf: (playerId: string) => number | null,
+  drainEnergy: (playerId: string, amount: number) => void,
+): boolean {
+  const cost = weaponType !== undefined ? (WEAPONS[weaponType]?.energyCost ?? 0) : 0;
+  if (cost <= 0) {return true;}
+  if ((energyOf(id) ?? 0) < cost) {return false;}
+  drainEnergy(id, cost);
+  return true;
+}
+
 /** Biggest legal single damage claim vs a creature: table max
  *  (direct+splash) with perk headroom. creatureHit/crawlerHit claims
  *  carry no weapon ref, so this is the widest honest ceiling — anything
