@@ -3,14 +3,14 @@
   "bots": 10,
   "botFill": 12,
   "spawns": [
-    { "x": 230, "y": 0, "z": -310 },
-    { "x": 350, "y": 0, "z": -330 },
-    { "x": 50, "y": 0, "z": -350 },
-    { "x": 90, "y": 0, "z": -230 },
-    { "x": 350, "y": 0, "z": -110 },
-    { "x": -250, "y": 0, "z": 110 },
-    { "x": -70, "y": 0, "z": 110 },
-    { "x": -350, "y": 0, "z": 270 }
+    { "x": 74, "y": 0, "z": 31, "r": 34 },
+    { "x": 31, "y": 0, "z": 74, "r": 34 },
+    { "x": -31, "y": 0, "z": 74, "r": 34 },
+    { "x": -74, "y": 0, "z": 31, "r": 34 },
+    { "x": -74, "y": 0, "z": -31, "r": 34 },
+    { "x": -31, "y": 0, "z": -74, "r": 34 },
+    { "x": 31, "y": 0, "z": -74, "r": 34 },
+    { "x": 74, "y": 0, "z": -31, "r": 34 }
   ],
   "structures": [],
   "terrain": "wyrd.bin",
@@ -31,5 +31,5 @@
     "mieDirectionalG": 0.55
   },
   "weather": { "embers": 0.6 },
-  "_notes": "wyrd = arcane elysian meadow. Preset 9 (arcane): indigo/violet fae-grass, blue meadow regions, pockets of ordinary green in the hollows, lilac stone, emissive ley veins. Dusk-violet sky + fog seal the look. Terrain: genhills --seed=11; ~27% steep — cliff-heavy, ski tuning open."
+  "_notes": "wyrd = arcane elysian meadow. Preset 9 (arcane): indigo/violet fae-grass, teal + amber regions, green hollows, lilac stone, emissive ley veins. Spawns: rimrock-style 8 spheres on an R=80 ring (r=34) — engine-sampled flattest ring (mean pad spread 24m vs rimrock's own 25m); tight ring = chaos-mode action. Terrain: genhills --seed=11; ~27% steep — ski tuning open."
 }
