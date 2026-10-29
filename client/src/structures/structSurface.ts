@@ -7,9 +7,9 @@
 //
 // Modular by construction: applyStructSurface(material, recipe) is
 // idempotent and chains — it calls the previous onBeforeCompile first
-// and re-emits `#include <color_fragment>` so terrainBlend's
-// normal_fragment_begin patch composes unchanged. Weapons and glow
-// meshes never touch this — it only binds the materials you pass it.
+// and re-emits `#include <normal_fragment_begin>` so terrainBlend's
+// patch (same marker) composes unchanged. Weapons and glow meshes
+// never touch this — it only binds the materials you pass it.
 
 import * as THREE from 'three';
 
@@ -60,9 +60,11 @@ export function applyStructSurface<T extends THREE.Material>(m: T, r: SurfaceRec
   const grime = r.grime ?? 0.35;
   const dust = r.dust ?? 0.4;
 
-  // roughnessFactor only exists on physical materials — Lambert spec mats
-  // must skip it or the program won't compile (the 'program not valid'
-  // spam on bastion's spec boxes).
+  // Inject at normal_fragment_begin — roughnessFactor doesn't exist until
+  // roughnessmap_fragment (which runs AFTER color_fragment), and Lambert
+  // never declares it at all (gate). color_fragment was the wrong site:
+  // every patched standard material compiled an undeclared-identifier
+  // variant — the 'program not valid' burst at boot.
   const isStd = m instanceof THREE.MeshStandardMaterial;
 
   const BODY = /* glsl */ `
@@ -107,9 +109,9 @@ export function applyStructSurface<T extends THREE.Material>(m: T, r: SurfaceRec
       .replace('#include <fog_vertex>', `#include <fog_vertex>\n${VERT}`);
     shader.fragmentShader = shader.fragmentShader
       .replace('void main() {', `${HEAD}\nvoid main() {`)
-      // Re-emit the include inside the body so later patches (the
-      // terrain-blend chain targets normal_fragment_begin) compose.
-      .replace('#include <color_fragment>', `#include <color_fragment>\n${BODY}`);
+      // Re-emit the include inside the body so later patches (terrainBlend
+      // targets the same marker) compose — both bodies run in order.
+      .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>\n${BODY}`);
   };
   m.needsUpdate = true;
   return m;
