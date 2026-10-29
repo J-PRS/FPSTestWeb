@@ -19,6 +19,7 @@ import { createBlastForce } from './blastForce.js';
 import { createLightning } from './combat/lightning.js';
 import { createShocklance } from './combat/shocklance.js';
 import { createRepair } from './combat/repair.js';
+import { createHealBeam } from './combat/healbeam.js';
 import { hitTargetLocal, onTargetDestroyed } from './combat/impact.js';
 import { processProjectileExplosion, slam, updateProjectiles } from './combat/projectiles.js';
 import { WeaponType } from '../../../shared/weapons.js';
@@ -155,12 +156,16 @@ export function createCombat(deps: CombatDeps) {
   // Shares the LG's beam machinery, tinted weld-green.
   const rep = createRepair(deps);
 
+  // Heal beam — the medic's pocket beam (combat/healbeam.ts). Same
+  // honest ray as the LG, clinical cyan; heals the teammate it pins.
+  const hb = createHealBeam(deps);
+
   const c: CombatCtx = {
     deps,
     applyExplosionForce,
     predictLocalShove,
     applyForceToPrey,
-    lg: { tickBeam: (dt: number): void => { lg.tickBeam(dt); rep.tickBeam(dt); lance.tickBeam(dt); } },
+    lg: { tickBeam: (dt: number): void => { lg.tickBeam(dt); rep.tickBeam(dt); lance.tickBeam(dt); hb.tickBeam(dt); } },
     // Chaingun ramp state: targetId → last hit time + chain count.
     chainRamp: new Map(),
   };
@@ -186,6 +191,7 @@ export function createCombat(deps: CombatDeps) {
       if (def.kind === 'beam') {
         if (def.weaponType === WeaponType.Repair) {rep.repair(e);}
         else if (def.weaponType === WeaponType.Shocklance) {lance.lance(e);}
+        else if (def.weaponType === WeaponType.HealBeam) {hb.heal(e);}
         else {lightning(e);}
       }
       else {fire.fireWeapon(def, e);}
@@ -195,7 +201,7 @@ export function createCombat(deps: CombatDeps) {
     onLightning: lightning,
     slam: (pos: THREE.Vector3, impactSpeed: number): void => slam(c, pos, impactSpeed),
     updateProjectiles: (dt: number): void => updateProjectiles(c, dt),
-    updateBeamVisual: (): void => { updateBeamVisual(); rep.updateBeamVisual(); },
+    updateBeamVisual: (): void => { updateBeamVisual(); rep.updateBeamVisual(); hb.updateBeamVisual(); },
     hitTargetLocal: (t: Targetable, dmg: number, attackerId?: string): boolean => hitTargetLocal(c, t, dmg, attackerId),
   };
 }

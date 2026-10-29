@@ -4,7 +4,7 @@ import { POWERUP } from '../../shared/pickups.ts';
 
 import { logger } from './logger.ts';
 import { classCanFire } from '../../shared/botClasses.ts';
-import { serverSimmed, BELT_THROW_WEAPONS, beltThrowCost, WeaponType, getWeaponStats, REPAIR_RANGE, WEAPON_FIRE_INTERVAL_S, LANCE_RANGE, LANCE_CADENCE_S } from '../../shared/weapons.ts';
+import { serverSimmed, BELT_THROW_WEAPONS, beltThrowCost, WeaponType, getWeaponStats, REPAIR_RANGE, WEAPON_FIRE_INTERVAL_S, LANCE_RANGE, LANCE_CADENCE_S, HEALBEAM_RANGE, HEALBEAM_PER_TICK, HEALBEAM_ENERGY, HEALBEAM_MIN_TICK_S } from '../../shared/weapons.ts';
 import { finiteVec, encodeShotEv } from '../../shared/wire.ts';
 import { dhypot3 } from '../../shared/dmath.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
@@ -18,6 +18,7 @@ import { AoeClaims } from './combatAoe.ts';
 import type { RoomEventSink } from './roomEvents.ts';
 import { HitLedger } from './hitLedger.ts';
 import { handleEnvironmentDamage, handleHeal } from './envClaims.ts';
+import { healPool } from './healPool.ts';
 import { crawlerAttack, botAttack } from './serverAttacks.ts';
 import { simNow , simMs} from './simClock.ts';
 import type { InfluenceMap } from './influenceMap.ts';
@@ -163,7 +164,7 @@ export class CombatHandler {
   /** Weapons whose shotFired resolves in the beam branches — never
    *  reach the projectile spawn gate (they'd double-count the window
    *  and only spawn-refuse anyway). */
-  private static readonly BEAM_INTENT_WEAPONS = new Set<number>([WeaponType.Lightning, WeaponType.Shocklance, WeaponType.Repair]);
+  private static readonly BEAM_INTENT_WEAPONS = new Set<number>([WeaponType.Lightning, WeaponType.Shocklance, WeaponType.Repair, WeaponType.HealBeam]);
   /** Post-reclaim intent replays: shotId → wall time the pull spawned.
    *  A resend inside the window is a no-op (the first verdict already
    *  flew); outside it the intent is simply new. */
@@ -490,6 +491,40 @@ w.n += 1;
         { x: dir.x / l, y: dir.y / l, z: dir.z / l }, REPAIR_RANGE);
       if (id !== null) {this.deps.repair?.(playerId, id);}
     }
+    // Beam intent (HealBeam): same tick-is-intent shape, but the honest
+    // ray's first contact must be a TEAMMATE — anything earlier (enemy,
+    // creature, wall) shadows the patient and the tick pays nothing.
+    // The ammo is the shooter's own jet tank: pocket-healing a push
+    // costs the medic their climb out. healTicks paces per shooter|
+    // patient pair — the same rate law the repair beam enforces.
+    if (msg.weaponType === WeaponType.HealBeam && dir && this.deps.beamSweep) {
+      const recent = (this.beamFireTimes.get(playerId) ?? []).filter((t): boolean => now - t < 1000);
+      if (recent.length >= 30) { this.hb('drop.beamFlood'); return; }
+      recent.push(now);
+      this.beamFireTimes.set(playerId, recent);
+      const mpos = this.claimOrigin(player, this.uplinkMsOf(msg), msg.pos);
+      const l = dhypot3(dir.x, dir.y, dir.z) || 1;
+      const c = this.deps.beamSweep(playerId,
+        { x: mpos.x, y: mpos.y, z: mpos.z },
+        { x: dir.x / l, y: dir.y / l, z: dir.z / l }, HEALBEAM_RANGE);
+      if (c?.playerId && this.friendly(playerId, c.playerId)) {
+        const key = `${playerId}|${c.playerId}`;
+        if (now - (this.healTicks.get(key) ?? -1) < HEALBEAM_MIN_TICK_S * 1000) { this.hb('drop.healPace'); }
+        else {
+          this.healTicks.set(key, now);
+          if ((this.deps.energyOf?.(playerId) ?? 0) < HEALBEAM_ENERGY) { this.hb('drop.tankDry'); }
+          else {
+            this.deps.drainEnergy?.(playerId, HEALBEAM_ENERGY);
+            const target = this.playerManager.getPlayer(c.playerId);
+            if (target && !target.isDead) {
+              healPool(target, HEALBEAM_PER_TICK);
+              target.forceSendUntil = wallMs(wallNow() + FORCE_SEND_MS);
+              this.hb('heal.beam');
+            }
+          }
+        }
+      }
+    }
     if (fireProjectile) {
       // Intents spawn real sims + broadcasts, so they need a real flood
       // gate — the fastest legit simmed weapon is ~13/s; 20/s is spam.
@@ -546,7 +581,7 @@ win.violations += 1;
       // Energy-paid weapons (Blaster): the jet tank IS the magazine —
       // same ammo-check shape as belt charges, verdict back so the
       // shooter's predicted bolt doesn't ghost.
-      const energyCost = msg.weaponType !== undefined ? (getWeaponStats(msg.weaponType).energyCost ?? 0) : 0;
+      const energyCost = msg.weaponType === undefined ? 0 : (getWeaponStats(msg.weaponType).energyCost ?? 0);
       if (energyCost > 0) {
         if ((this.deps.energyOf?.(playerId) ?? 0) < energyCost) { this.hb('drop.tankDry'); this.reject(playerId, 'Shot', 'energy dry', undefined, msg.weaponType, msg.shotId); return; }
         this.deps.drainEnergy?.(playerId, energyCost);

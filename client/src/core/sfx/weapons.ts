@@ -296,4 +296,11 @@ const SYNTH_SHOTS: Record<number, (g: GainNode) => void> = {
   // Hook synth fallback — air-whoosh + a brighter zip tail (the line
   // running out), light body under it.
   [WeaponType.Hook]:      (g): void => { noise(0.16, 0.4, g, 'bandpass', 1400, 4200, 1.8); osc('sine', 200, 90, 0.1, 0.25, g); },
+  // Heal beam tick — soft clinical chirp on a sine carrier; 10/s ticks
+  // must never read as a machine gun, so the shot is a faint wisp.
+  [WeaponType.HealBeam]:  (g): void => {
+    const j = 1 + (Math.random() - 0.5) * 0.25;
+    osc('sine', 1600 * j, 2200 * j, 0.05, 0.09, g);
+    noise(0.04, 0.12, g, 'bandpass', 3200, 2400, 1.4);
+  },
 };
