@@ -34,7 +34,10 @@ export interface ProjectileConfig {
   trailScaleMax: number;
   trailRampIn: number;
   meshColor: number;
-  meshType: string; // 'rocket', 'disc' — Projectile class dispatches on this
+  meshType: string;
+  /** Lit body material (Phong + specular) instead of the flat unlit
+   *  default — iron shells need shading to read as balls, not discs. */
+  litMesh?: boolean; // 'rocket', 'disc' — Projectile class dispatches on this
   glowShell: boolean;
   glowColor: number;
   glowOpacity: number;
@@ -61,6 +64,10 @@ export interface ProjectileConfig {
    *  crumble. The blast still runs the standard splash sphere; this only
    *  swaps the dome presentation for debris. */
   crumbles?: boolean;
+  /** Ball shells that still detonate (cannon/gonne/basilisk): burst the
+   *  shell into BallDebris shards ALONGSIDE the normal blast dome — the
+   *  dome sells the charge, the shards sell the ball coming apart. */
+  burstShards?: boolean;
   ribbonTrail?: boolean; // flat ribbon trail strip (single mesh, cheap) in addition to particles — ON by default; set false to opt out
   ribbonLanes?: number; // 1 = single strip; 3 = main band + 2 offset core lanes (default)
   ribbonWidth?: number;
@@ -75,6 +82,8 @@ export interface ProjectileConfig {
   bounceRestitution?: number; // velocity kept along the terrain normal per bounce
   bounceFriction?: number; // tangential velocity kept per bounce
   maxBounces?: number; // die on the Nth terrain hit (flak shards); undefined = bounce until fuse
+  firstBounceVelScale?: number; // |v| *= this on the FIRST terrain bounce only (shared WeaponStats.firstBounceVelScale)
+  lodgeBounce?: number; // first terrain contact lodges the shell in place, pops this many seconds later (shared WeaponStats.lodgeBounce)
   fuseAfterBounce?: number; // first terrain bounce clamps the fuse to now+this many seconds (shared WeaponStats.fuseAfterBounce)
   armTime?: number; // T2 mortar arming delay: contacts before this age BOUNCE, after it they detonate
   bodyArmTime?: number; // bodies pop on contact at/after this age (defaults to armTime); 0 = GL: pops bodies at any age while still bouncing off dirt
@@ -111,7 +120,7 @@ export interface ProjectileConfig {
    *  smoke + dirt debris (mortar/cannon/warhead); 'arc' = electric pop
    *  (lightning); 'splash' = droplets + mist (sprinkler hose);
    *  'punch' = melee puff. Unset = the shared powder recipe. */
-  vfx?: 'splash' | 'punch' | 'energy' | 'kinetic' | 'concussion' | 'arc' | 'bolt' | 'flak';
+  vfx?: 'splash' | 'punch' | 'energy' | 'kinetic' | 'concussion' | 'arc' | 'bolt' | 'flak' | 'shellburst';
   /** Terrain/structure hits: the shell stays planted at the contact point
    *  for N seconds, then shrinks away — a javelin quivering in the dirt.
    *  Combat resolution is unchanged (impact still reports immediately). */

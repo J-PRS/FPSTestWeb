@@ -23,7 +23,8 @@ export const CANNON_CONFIG: ProjectileConfig = {
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: WEAPONS[14].aoeDamage,
   aoeRadius: WEAPONS[14].aoeRadius,
-  vfx: 'concussion',
+  vfx: 'shellburst', // black-powder blast: dirty flash + white smoke + iron chips
+  burstShards: true, // the iron ball visibly bursts in the blast — dome + shards, not just a dome
   damageColor: '#ffbb66',
   // No trail — the joke IS the giant ball. A smoke streak behind a
   // beach-ball-sized cannonball just clutters the read. (ribbonTrail
@@ -44,6 +45,7 @@ export const CANNON_CONFIG: ProjectileConfig = {
   trailRampIn: 0,
   meshColor: 0x23_25_2B, // dark iron cannonball
   meshType: 'ball',
+  litMesh: true, // iron ball needs real shading — flat unlit read as a dark disc
   glowShell: false, // iron, not energy — the ember trail carries the read
   glowColor: 0x00_00_00, // unused — glowShell is off
   glowOpacity: 0,
@@ -57,5 +59,8 @@ export const CANNON_CONFIG: ProjectileConfig = {
   bounceSfx: 'hg_clang', // iron ball thunk on every skip
   bounceRestitution: WEAPONS[14].bounceRestitution,
   bounceFriction: WEAPONS[14].bounceFriction,
+  firstBounceVelScale: WEAPONS[14].firstBounceVelScale,
   fuseAfterBounce: WEAPONS[14].fuseAfterBounce,
+  lodgeBounce: WEAPONS[14].lodgeBounce,
+  maxBounces: WEAPONS[14].maxBounces,
 };

@@ -68,12 +68,14 @@ export class PlayerVisuals {
     });
     this.shadowBlob = new THREE.Mesh(shadowGeo, shadowMat);
     this.shadowBlob.rotation.x = -Math.PI / 2; // Lay flat on ground
-    this.shadowBlob.renderOrder = 999; // Render after terrain
+    // Ground decal — only needs to land after terrain (-2); at 999 it
+    // painted dark over explosion glow and damage numbers.
+    this.shadowBlob.renderOrder = 0;
     scene.add(this.shadowBlob);
 
     // Feet marker — soft glowing ring flat on the terrain (reads nicer than a wireframe sphere)
     const gizmoGeo = new THREE.RingGeometry(0.28, 0.36, 32);
-    const gizmoMat = new THREE.MeshBasicMaterial({ color: 0x66_FF_CC, transparent: true, opacity: 0.55, side: THREE.DoubleSide });
+    const gizmoMat = new THREE.MeshBasicMaterial({ color: 0x66_FF_CC, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false });
     this.groundGizmo = new THREE.Mesh(gizmoGeo, gizmoMat);
     this.groundGizmo.rotation.x = -Math.PI / 2;
     this.groundGizmo.renderOrder = 999;

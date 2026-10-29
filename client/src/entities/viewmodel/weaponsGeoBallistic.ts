@@ -728,6 +728,86 @@ bb.visible = false;
 return bb;
 }
 
+// Weapon 42 — Gonne: the light frame's arc gun. The silhouette is a
+// wrought-iron handgonne (medieval hand-cannon ref): a SHORT slim tube
+// ringed by shrunk-on hoops — reads "forged", not "cast" — with a
+// hint of muzzle lip and a small cascabel knob. Compact, not a bore.
+export function mkGonne(): THREE.Group {
+const cv = new THREE.Group();
+let cz = 0;
+const cvSeg = (r1: number, r2: number, len: number, mat: THREE.Material): void => {
+  cv.add(mkTube(r1, r2, len, cz - len / 2, mat));
+  cz -= len;
+};
+const cvHoop = (r: number): void => {
+  cvSeg(r, r + 0.005, 0.01, darkMat);
+  cvSeg(r + 0.005, r, 0.01, darkMat);
+};
+cvSeg(0.098, 0.1, 0.03, bodyMat);    // breech cap
+cvSeg(0.1, 0.094, 0.1, bodyMat);     // chamber stretch — the tube IS the gun
+cvHoop(0.098);
+cvSeg(0.094, 0.09, 0.1, bodyMat);    // taper 1
+cvHoop(0.093);
+cvSeg(0.09, 0.084, 0.09, bodyMat);   // chase — slimmest stretch
+cvHoop(0.087);
+cvSeg(0.084, 0.092, 0.03, bodyMat);  // muzzle flare — a hint of lip, not a bell
+cvHoop(0.095);                        // muzzle ring
+// cz ends ≈ -0.37 — hand-cannon proportions, not a flagpole.
+// Small cascabel — same knob trick as the cannon, undersized to match
+// the slimmer breech.
+const cvNeck = mkTube(0.04, 0.028, 0.03, 0.015, bodyMat);
+cv.add(cvNeck);
+const cvBall = new THREE.Mesh(new THREE.SphereGeometry(0.042, 10, 8), bodyMat);
+cvBall.position.set(0, 0, 0.04);
+cv.add(cvBall);
+// ~20% bigger overall — a handgonne reads as a small CANNON on the
+// shoulder, not a fat pistol.
+cv.scale.setScalar(1.2);
+cv.visible = false;
+return cv;
+}
+
+// Weapon 43 — Basilisk: the heavy frame's arc gun. The silhouette is a
+// cast BRONZE giant (the real basilisks were 50-pdr monsters, cast in
+// bronze not iron — so it's brass, not the bombard's dark iron): FAT
+// long barrel, fewer THICK reinforcing bands instead of the gonne's
+// many slim hoops, deep bell mouth, heavy cascabel ball. The material
+// is half the identity: warm cast metal vs every other gun's cold iron.
+export function mkBasilisk(): THREE.Group {
+const bk = new THREE.Group();
+let cz = 0;
+const bkSeg = (r1: number, r2: number, len: number, mat: THREE.Material): void => {
+  bk.add(mkTube(r1, r2, len, cz - len / 2, mat));
+  cz -= len;
+};
+// Thick cast band — wider and taller than the cannon's crown hoops:
+// bronze guns wore their strength visibly.
+const bkBand = (r: number): void => {
+  bkSeg(r, r + 0.014, 0.014, darkMat);
+  bkSeg(r + 0.014, r + 0.014, 0.02, darkMat);
+  bkSeg(r + 0.014, r, 0.014, darkMat);
+};
+bkSeg(0.165, 0.17, 0.04, brassMat);   // breech cap — already wider than the whole gonne
+bkSeg(0.17, 0.16, 0.1, brassMat);     // chamber — the powder room
+bkBand(0.167);
+bkSeg(0.16, 0.15, 0.1, brassMat);     // first reinforce
+bkBand(0.157);
+bkSeg(0.15, 0.14, 0.1, brassMat);     // second reinforce
+bkBand(0.147);
+bkSeg(0.14, 0.13, 0.09, brassMat);    // chase — still fatter than the cannon's breech
+bkSeg(0.13, 0.17, 0.04, brassMat);    // bell mouth — the bronze flare
+bkBand(0.173);                        // muzzle astragal — the widest band on the gun
+// cz ends ≈ -0.51 — fat and compact, not a flagpole.
+// Heavy cascabel — a ball nearly the breech's width, counterweight mass.
+const bkNeck = mkTube(0.065, 0.045, 0.04, 0.02, brassMat);
+bk.add(bkNeck);
+const bkBall = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), brassMat);
+bkBall.position.set(0, 0, 0.055);
+bk.add(bkBall);
+bk.visible = false;
+return bk;
+}
+
 // Weapon 11 — rocket launcher: classic RPG profile. Long launch tube,
 // flared muzzle bell, conical warhead tip protruding past the tube
 // (loaded look = the RPG read), stubby exhaust cone at the rear.

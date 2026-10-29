@@ -40,6 +40,8 @@ export const WEAPON_VISUAL: Record<number, WeaponVisual> = {
   [WeaponType.HealBeam]:        { recoil: { recover: 0.21, jitter: 0.05,  amp: 0.4,  back: 1 }, flash: { color: 0x8F_D8_FF, scale: 0.4, life: 0.4, light: 1 } },
   [WeaponType.MRVLauncher]:     { muzzleZ: -0.56, recoil: { recover: 1.5,  jitter: 0.03,  amp: 0.8,  back: 1.35 }, flash: { color: 0xFF_77_44, scale: 1.4, life: 1.4, light: 1 } },
   [WeaponType.Bombard]:         { muzzleZ: -0.42, recoil: { recover: 0.9,  jitter: 0.02,  amp: 1.35, back: 1.2 }, flash: { color: 0xFF_88_33, scale: 2.4, life: 1.9, light: 2 } },
+  [WeaponType.Gonne]:        { muzzleZ: -0.44, recoil: { recover: 0.41, jitter: 0.02,  amp: 1,  back: 1 },  flash: { color: 0xFF_A5_50, scale: 1.7, life: 1.6, light: 1.6 } },
+  [WeaponType.Basilisk]:        { muzzleZ: -0.53, recoil: { recover: 0.6,  jitter: 0.03,  amp: 1.3,  back: 1.15 }, flash: { color: 0xFF_90_3A, scale: 2.2, life: 1.8, light: 1.9 } },
   [WeaponType.Shocklance]:      { muzzleZ: -0.56 },
 };
 

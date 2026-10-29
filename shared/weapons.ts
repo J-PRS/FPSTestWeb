@@ -112,7 +112,7 @@ export const BELT_THROW_COST = 1; // per belt toss
  *  kills) stays the Verlet ragdoll. */
 export const GIB_WEAPONS = new Set<number>([
   WeaponType.BoltLauncher, WeaponType.PlasmaCannon, WeaponType.RocketLauncher,
-  WeaponType.Mortar, WeaponType.Bombard, WeaponType.Cannon,
+  WeaponType.Mortar, WeaponType.Bombard, WeaponType.Cannon, WeaponType.Gonne, WeaponType.Basilisk,
   WeaponType.Sticky, WeaponType.GrenadeLauncher]);
 // Pack items (turret/mine/station/…) are priced per-kind in
 // shared/deployItems.ts (turret 2, mortar 3, …) — not a flat constant.
@@ -163,7 +163,7 @@ export function payShotCost(
   energyOf: (playerId: string) => number | null,
   drainEnergy: (playerId: string, amount: number) => void,
 ): boolean {
-  const cost = weaponType !== undefined ? (WEAPONS[weaponType]?.energyCost ?? 0) : 0;
+  const cost = weaponType === undefined ? 0 : (WEAPONS[weaponType]?.energyCost ?? 0);
   if (cost <= 0) {return true;}
   if ((energyOf(id) ?? 0) < cost) {return false;}
   drainEnergy(id, cost);
@@ -205,11 +205,13 @@ export const WEAPON_FIRE_INTERVAL_S: Partial<Record<WeaponType, number>> = {
   [WeaponType.Railgun]: 1.5,
   [WeaponType.Lightning]: 0.05,
   [WeaponType.Shotgun]: 0.7,
-  [WeaponType.Cannon]: 0.7,
+  [WeaponType.Cannon]: 1.1,
+  [WeaponType.Gonne]: 1, // lightest gun, fastest refire of the arc family
+  [WeaponType.Basilisk]: 1.2, // heaviest bore, slowest refire
   [WeaponType.RocketLauncher]: 2.5, // A/B'd 2.0: more volume but same kills — dodge-window is the constraint, not cadence
   [WeaponType.Pistol]: 0.22,
   [WeaponType.Revolver]: 0.6,
-  [WeaponType.Sticky]: 0.8,
+  [WeaponType.Sticky]: 0.6,
   [WeaponType.PlasmaGun]: 0.1,
   [WeaponType.Sprinkler]: 0.1,
   [WeaponType.HealBeam]: 0.1, // heal ticks like the repair beam — cadence IS the heal rate

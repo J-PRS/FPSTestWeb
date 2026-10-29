@@ -150,8 +150,16 @@ export class ProjCollide {
   // detonation instead of letting the shell sink or jitter in place.
   bounceOffTerrain(terrain: Terrain): boolean {
     const {h} = this;
-    if (h.config.maxBounces !== undefined && (h.bouncesTaken += 1) > h.config.maxBounces) {
+    h.bouncesTaken += 1;
+    if (h.config.maxBounces !== undefined && h.bouncesTaken > h.config.maxBounces) {
       return false; // out of bounces — treat as impact
+    }
+    // Lodge: first dirt contact plants the shell (stuck path) — only the
+    // clamped fuse ends it. Mirrors the server's lodgeBounce attach.
+    if (h.config.lodgeBounce !== undefined && h.bouncesTaken === 1) {
+      h.stickAt(h.hitPoint);
+      h.clampFuse(h.config.lodgeBounce);
+      return true;
     }
     const e = 0.5;
     // Sample the normal at the SEGMENT-END pos (where the server's
@@ -176,6 +184,9 @@ export class ProjCollide {
     if (vn >= -2) {
       if (h.armed) {return false;}
       h.vel.addScaledVector(_tNormal, -vn);
+      if (h.config.firstBounceVelScale !== undefined && h.bouncesTaken === 1) {
+        h.vel.multiplyScalar(h.config.firstBounceVelScale);
+      }
       h.pos.y = terrain.getHeight(h.pos.x, h.pos.z) + depenetrate;
       h.prevPos.copy(h.pos);
       if (h.config.bounceSfx) {sfx.at(h.pos, h.config.bounceSfx, 0.5, 1.4, h.vel);}
@@ -183,6 +194,9 @@ export class ProjCollide {
       return true;
     }
     h.vel.addScaledVector(_tNormal, -(1 + (h.config.bounceRestitution ?? 0.5)) * vn);
+    if (h.config.firstBounceVelScale !== undefined && h.bouncesTaken === 1) {
+      h.vel.multiplyScalar(h.config.firstBounceVelScale);
+    }
     const fr = h.config.bounceFriction ?? 0.7;
     h.vel.x *= fr;
     h.vel.z *= fr;

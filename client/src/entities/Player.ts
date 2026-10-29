@@ -122,8 +122,8 @@ export class Player {
   resetLifeState(): void {
     this.isDead = false;
     this.deadConfirmedByWire = false;
-    this.applyPendingPerk(); // banked perk lands first — maxHealth reads it
-    this.applyPendingClass(); // banked tier swap lands on the new life
+    this.applyPendingClass(); // banked tier+gear install first — it writes perk
+    this.applyPendingPerk(); // then the banked perk lands — maxHealth reads it
     this.health = this.maxHealth;
     this._prevHealth = this.health;
     this._regenBaseT = 0;
@@ -192,9 +192,10 @@ export class Player {
   }
 
   setSkill(s: SkillId): void {
-    this.skill = s;
-    this.skills.reset();
-    settings.set('fps-skill', s);
+    // Banked class swap: the pick lands in the armory's pendingGear — the
+    // live skill (and its in-flight state) stays untouched until respawn.
+    this.armory.setSkill(s);
+    if (!this.armory.pendingGear) {this.skills.reset();}
   }
 
   // Power punch (E): CoD-style lunge toward the crosshair, hit itself is
@@ -295,6 +296,8 @@ export class Player {
   /** The kit the menu edits — the banked respawn kit while a class swap
    *  is pending, the live kit otherwise. Never use for fire logic. */
   get menuKit(): readonly number[] { return this.armory.menuKit(); }
+  /** Gear picks the menu shows/edits — pendingGear while a swap is banked. */
+  get menuGear(): { beltItem: BeltItem; sidearm: SidearmId; packItem: DeployKind; perk: PerkId; skill: SkillId } { return this.armory.menuGear(); }
   setBeltItem(item: BeltItem): void { this.armory.setBeltItem(item); }
   setSidearm(s: SidearmId): void { this.armory.setSidearm(s); }
   setPackItem(p: DeployKind): void { this.armory.setPackItem(p); }

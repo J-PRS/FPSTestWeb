@@ -9,7 +9,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
   [WeaponType.BoltLauncher]: {
     directDamage: 50,
     aoeDamage: 15,
-    aoeRadius: 8, // ~1.3× the VFX dome — damage reaches the ring's edge
+    aoeRadius: 5, // tighter pop — the bolt's splash is graze, not zoning
     knockbackForce: 28,
     forceMode: 'push',
     speed: 120,
@@ -47,6 +47,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMin: 0,
     hitMax: 0.25, // belt rule: the throw is a physical shell, not a wake — the pull AOE is the payoff after contact
     hitGrow: 2,
+    maxLifetime: 12, // same sail time as the launcher's disc
     beltThrow: true,
   },
   [WeaponType.BeltDisc]: {
@@ -62,6 +63,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMin: 0,
     hitMax: 0.25,
     hitGrow: 2,
+    maxLifetime: 12,
     beltThrow: true,
   },
   [WeaponType.Grenade]: {
@@ -110,7 +112,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     aoeScales: [0.833, 0.667, 0.333],
     knockbackForce: 45,
     forceMode: 'push',
-    speed: 60,
+    speed: 80, // T:A Fusion Mortar / T2 Classic (~76) territory — at GRAVITY -28 the lob needs it
     gravity: true,
     bodyRadius: 0.3,
     hitMin: 0,
@@ -126,7 +128,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
   [WeaponType.GrenadeLauncher]: {
     directDamage: 50,
     aoeDamage: 20,
-    aoeRadius: 13,
+    aoeRadius: 12,
     knockbackForce: 35,
     forceMode: 'push',
     speed: 60,
@@ -288,9 +290,9 @@ export const WEAPONS: Record<number, WeaponStats> = {
     // Serious Sam cannonball: a big iron sphere that SKIPS off terrain
     // (client bounce config) and detonates on target contact or fuse.
     // The GL's rowdier bigger brother — trades shell count for presence.
-    directDamage: 70,
+    directDamage: 65,
     aoeDamage: 25,
-    aoeRadius: 10,
+    aoeRadius: 7, // mid of the arc family: gonne 6 < cannon 7 < basilisk 8
     knockbackForce: 40,
     forceMode: 'push',
     speed: 80,    // faster than GL's 55 — it skips far between bounces
@@ -303,7 +305,61 @@ export const WEAPONS: Record<number, WeaponStats> = {
     terrainBounce: true,
     bounceRestitution: 1, // perfectly elastic — loses nothing off dirt
     bounceFriction: 1, // tangential kept in full: zero friction
-    fuseAfterBounce: 0.5, // first skip starts a 0.5s cook-off — the ball detonates where it lands, not 6s later
+    firstBounceVelScale: 0.5, // the first skip SLAMS — half the speed dies on landing #1; later skips stay elastic
+    fuseAfterBounce: 0.25, // first skip starts a 0.25s cook-off — the ball detonates where it lands, not 6s later
+    // Bounce/lodge SHELVED for now — maxBounces 0 detonates on first
+    // dirt contact. The skip fields (and lodgeBounce support) stay so
+    // either behavior can be re-tried by removing this line.
+    maxBounces: 0,
+  },
+  [WeaponType.Gonne]: {
+    // The light frame's member of the 80 m/s gravity-arc family — same
+    // shell economics as the cannon (a flavored reskin, not a new
+    // weapon): same damage, same splash, same cadence, same arc. The
+    // difference is the gun: a stubby wrought-iron handgonne instead of a
+    // naval bore.
+    directDamage: 60, // lightest ball, lightest payload: gonne 60 < cannon 65 < basilisk 70
+    aoeDamage: 25,
+    aoeRadius: 6, // smallest burst of the family — the handgonne's little charge
+    knockbackForce: 40,
+    forceMode: 'push',
+    speed: 80,
+    gravity: true,
+    bodyRadius: 0.53, // ~2/3 the cannonball — the handgonne's smaller ball, honest hitbox and mesh both
+    hitMin: 0,
+    hitMax: 2,
+    hitGrow: 1.5,
+    maxLifetime: 6,
+    terrainBounce: true,
+    bounceRestitution: 1,
+    bounceFriction: 1,
+    firstBounceVelScale: 0.5,
+    fuseAfterBounce: 0.25,
+    maxBounces: 0, // bounce/lodge shelved — contact pop for now, same as the cannon
+  },
+  [WeaponType.Basilisk]: {
+    // The heavy frame's member of the 80 m/s gravity-arc family — same
+    // shell economics as the cannon/gonne (a flavored reskin, not a
+    // new weapon). The huge-bore bronze gun is cosmetic; the Bombard
+    // remains the heavy's UNIQUE weapon (140 direct, no AoE, crumbles).
+    directDamage: 70, // biggest bore, biggest payload: gonne 60 < cannon 65 < basilisk 70
+    aoeDamage: 25,
+    aoeRadius: 8, // biggest burst of the family — the heavy bore gets the biggest pop
+    knockbackForce: 40,
+    forceMode: 'push',
+    speed: 80,
+    gravity: true,
+    bodyRadius: 0.8,
+    hitMin: 0,
+    hitMax: 2,
+    hitGrow: 1.5,
+    maxLifetime: 6,
+    terrainBounce: true,
+    bounceRestitution: 1,
+    bounceFriction: 1,
+    firstBounceVelScale: 0.5,
+    fuseAfterBounce: 0.25,
+    maxBounces: 0, // bounce/lodge shelved — contact pop for now, same as the cannon
   },
   [WeaponType.RocketLauncher]: {
     // RPG-style missile: flat trajectory, slower than the Bolt Launcher
@@ -366,10 +422,10 @@ export const WEAPONS: Record<number, WeaponStats> = {
   },
   [WeaponType.Blaster]: {
 
-    // T1 blaster — jet-energy sidearm: 10 energy per pull, 35 flat on
+    // T1 blaster — jet-energy sidearm: 10 energy per pull, 30 flat on
     // contact. Heavier than the pistol slug per hit, but the magazine IS
     // the jet tank — spamming it costs the climb out of trouble.
-    directDamage: 35,
+    directDamage: 30,
     aoeDamage: 0,
     aoeRadius: 0,
     knockbackForce: 6,
@@ -388,8 +444,8 @@ export const WEAPONS: Record<number, WeaponStats> = {
   [WeaponType.Sticky]: {
     // Sticky launcher (T2): glue bomb — sticks where it lands, pops on a
     // 3s fuse. The CHAIN is the weapon: a detonation cooks every other
-    // live sticky in its radius, and at 0.8s cadence a player can stack 3
-    // before the first fuse pops — so a cluster is one triple-strength
+    // live sticky in its radius, and at 0.6s cadence a player can stack 5
+    // before the first fuse pops — so a cluster is one big overlapping
     // overlapping blast, not three weak pops.
     directDamage: 80,
     aoeDamage: 35,
@@ -688,7 +744,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     aoeRadius: 8,
     knockbackForce: 15, // the pop is delivery — the rain does the shoving
     forceMode: 'push',
-    speed: 60,          // mortar muzzle — same lob line, different payload
+    speed: 80,          // mortar muzzle — same lob line, different payload
     gravity: true,
     bodyRadius: 0.3,
     hitMin: 0,
@@ -779,10 +835,10 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hook: true,
   },
   [WeaponType.EMP]: {
-    // EMP grenade: belt throw fuse bomb — 0 damage, drains all jet energy
-    // and strips shield for targets in the blast radius. Timer detonation
-    // (not proxy/hit) to avoid being OP. Terrain bounces like a frag.
-    directDamage: 0,
+    // EMP grenade: belt throw fuse bomb — nominal 10 tag on contact, drains
+    // all jet energy and strips shield for targets in the blast radius.
+    // Timer detonation (not proxy/hit) to avoid being OP.
+    directDamage: 10,
     aoeDamage: 0,
     aoeRadius: 12,
     knockbackForce: 0,

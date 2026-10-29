@@ -28,9 +28,7 @@ const _rayDir = new THREE.Vector3();
 // per-dart allocation would be churn for a 5-vert cylinder.
 // Visual only: once attached the rope may shorten but never stretch; a longer
 // span detaches the thrower end and reels it back toward the anchor.
-const ROPE_SNAP_REEL_SPEED = 180;
-const ROPE_REEL_ACCEL = 900;
-const ROPE_REEL_MIN_S = 0.12;
+const ROPE_REEL_S = 0.2;
 const _ropeGeo = new THREE.CylinderGeometry(0.05, 0.05, 1, 5, 1, true);
 const _ropeMat = new THREE.MeshBasicMaterial({ color: 0x1A_14_0C });
 const _ropeV = new THREE.Vector3();
@@ -703,9 +701,9 @@ export class Projectile {
   /** Finish reel: the free end walks from ropeFree back to the thrower. */
   private ropeRecall = false;
   private readonly ropeFree = new THREE.Vector3();
+  private readonly ropeReelFrom = new THREE.Vector3();
   private readonly ropeFromPos = new THREE.Vector3();
   private ropeMax = 0;
-  private ropeReelV = 0;
   private ropeReelT = 0;
   /** True while the rope should draw: live flight OR inside the reel. */
   get ropeActive(): boolean { return !this.exploded || this.ropeHold || this.ropeRecall; }
@@ -731,11 +729,10 @@ export class Projectile {
       this.ropeMax = Math.max(this.ropeMax, len);
       if (this.ropeLen < 0 || len <= this.ropeLen + 0.02) {this.ropeLen = len;}
       else {
-        // Span would grow past the taut length: the line stops being attached
-        // and reels back from its outermost point, not from where it sits now.
-        this.ropeFree.copy(a).addScaledVector(_ropeV.divideScalar(len), this.ropeMax);
-        this.ropeReelV = 0; this.ropeReelT = 0;
-        this.ropeHold = false; this.ropeRecall = true;
+        // Span grew past the taut length (the reeled body overshot the
+        // anchor): the line lets go and reels back from the anchor —
+        // extending the free end to ropeMax here whipped the tip outward.
+        this.startRecall();
         a = from; b = this.ropeFree;
       }
     }
@@ -765,20 +762,20 @@ export class Projectile {
       this.ropeT -= dt;
       if (this.ropeT <= 0) {this.startRecall();}
     } else if (this.ropeRecall) {
-      _ropeV.subVectors(this.ropeFromPos, this.ropeFree);
-      const d = _ropeV.length();
-      this.ropeReelV = Math.min(ROPE_SNAP_REEL_SPEED, this.ropeReelV + ROPE_REEL_ACCEL * dt);
-      const step = this.ropeReelV * dt;
+      // Constant-time reel: the free end lerps anchor→thrower over
+      // ROPE_REEL_S regardless of span — a 400m miss retracts as fast
+      // as a 20m one, so the line never lingers behind a moving thrower.
       this.ropeReelT += dt;
-      if (d > step) {this.ropeFree.addScaledVector(_ropeV, step / d);}
-      else if (this.ropeReelT >= ROPE_REEL_MIN_S) {this.ropeRecall = false; this.ropeTo = null; this.hideRope();}
-      else {this.ropeFree.copy(this.ropeFromPos);}
+      const k = Math.min(1, this.ropeReelT / ROPE_REEL_S);
+      this.ropeFree.lerpVectors(this.ropeReelFrom, this.ropeFromPos, k);
+      if (k >= 1) {this.ropeRecall = false; this.ropeTo = null; this.hideRope();}
     }
   }
 
   private startRecall(): void {
-    this.ropeHold = false; this.ropeRecall = true; this.ropeReelV = 0; this.ropeReelT = 0;
-    this.ropeFree.copy(this.ropeTo ?? this.pos);
+    this.ropeHold = false; this.ropeRecall = true; this.ropeReelT = 0;
+    this.ropeReelFrom.copy(this.ropeTo ?? this.pos);
+    this.ropeFree.copy(this.ropeReelFrom);
   }
 
   explode(): void {

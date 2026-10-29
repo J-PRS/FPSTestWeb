@@ -99,6 +99,45 @@ describe('weapon registry', (): void => {
     expect(BOMBARD_CONFIG.bodyRadius).toBe(w.bodyRadius);
   });
 
+  it('gonne is light-only and stat-identical to the cannon (family reskin)', (): void => {
+    const c = WEAPONS[WeaponType.Gonne];
+    const k = WEAPONS[WeaponType.Cannon];
+    expect(c).toBeDefined();
+    // The family contract: same arc, same splash — only the gun differs.
+    for (const f of ['aoeDamage', 'knockbackForce', 'speed', 'gravity'] as const) {
+      expect(c[f], `gonne ${f} drifts from cannon`).toBe(k[f]);
+    }
+    // The honest deviations: smaller ball (mesh AND hitbox from bodyRadius),
+    // a smaller blast, and the lightest payload — the ladders are
+    // aoe gonne 6 < cannon 7 < basilisk 8, dmg 60 < 65 < 70.
+    expect(c.bodyRadius).toBeCloseTo(k.bodyRadius * 2 / 3, 2);
+    expect(c.aoeRadius).toBe(6);
+    expect(c.directDamage).toBe(60);
+    expect(k.directDamage).toBe(65);
+    expect(serverSimmed(WeaponType.Gonne)).toBe(true);
+    const wid = SLOT_DEFS.findIndex((d): boolean => d.weaponType === WeaponType.Gonne);
+    expect(wid).toBeGreaterThanOrEqual(0);
+    expect(PlayerLoadout.LIGHT_ONLY).toContain(wid);
+  });
+
+  it('basilisk is heavy-only and stat-identical to the cannon (family reskin)', (): void => {
+    const b = WEAPONS[WeaponType.Basilisk];
+    const k = WEAPONS[WeaponType.Cannon];
+    expect(b).toBeDefined();
+    for (const f of ['aoeDamage', 'knockbackForce', 'speed', 'gravity', 'bodyRadius'] as const) {
+      expect(b[f], `basilisk ${f} drifts from cannon`).toBe(k[f]);
+    }
+    // The deviations: biggest bore gets biggest payload and burst
+    // (aoe gonne 6 < cannon 7 < basilisk 8, dmg 60 < 65 < 70).
+    expect(b.aoeRadius).toBe(8);
+    expect(b.directDamage).toBe(70);
+    expect(serverSimmed(WeaponType.Basilisk)).toBe(true);
+    expect(HEAVY_ONLY_WEAPONS.has(WeaponType.Basilisk)).toBe(true);
+    const wid = SLOT_DEFS.findIndex((d): boolean => d.weaponType === WeaponType.Basilisk);
+    expect(wid).toBeGreaterThanOrEqual(0);
+    expect(PlayerLoadout.HEAVY_ONLY).toContain(wid);
+  });
+
   it('every ray-burst weapon declares delay+range in shared stats', (): void => {
     for (const c of WEAPON_CONFIGS) {
       const w = getWeaponStats(c.weaponType);

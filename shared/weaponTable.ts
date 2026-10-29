@@ -45,6 +45,8 @@ export enum WeaponType {
   EMP = 39,              // belt throw: EMP grenade — fuse bomb, 0 damage, drains all jet energy + strips shield in blast radius. Timer detonation (not proxy/hit) to avoid being OP.
   BeltDisc = 40,        // belt throw: the plain push belt disc — Implodisc carries the pull identity
   Blaster = 41,         // T1 energy sidearm — jet energy is the magazine (energyCost per shot)
+  Gonne = 42,        // light-frame cannon: the same 80 m/s arc shell in a handgonne — the gravity-arc primary family member for lights
+  Basilisk = 43,        // heavy-frame cannon: the same 80 m/s arc shell in a huge-bore long gun — the gravity-arc primary family member for heavies
 }
 
 export interface WeaponStats {
@@ -126,6 +128,8 @@ export interface WeaponStats {
   bounceRestitution?: number; // normal velocity kept per bounce
   bounceFriction?: number;    // tangential velocity kept per bounce
   maxBounces?: number;        // die on the Nth terrain hit (flak shards); unset = bounce until fuse
+  firstBounceVelScale?: number; // |v| *= this on the FIRST terrain bounce only (cannonball's dead first skip)
+  lodgeBounce?: number; // first terrain contact LODGES the shell in place (stuck path) and pops it this many seconds later — overrides the bounce arc
   /** Streamlining fields — optional metadata that auto-generates derived sets:
    *  - beltThrow: true → auto-added to BELT_THROW_WEAPONS
    *  - fireInterval: number → auto-populated in WEAPON_FIRE_INTERVAL_S

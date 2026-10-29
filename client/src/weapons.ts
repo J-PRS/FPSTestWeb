@@ -28,6 +28,8 @@ import { SHOCKLANCE_CONFIG } from './projectiles/shocklanceConfig.js';
 import { SHOTGUN_CONFIG } from './projectiles/shotgunConfig.js';
 import { CANNON_CONFIG } from './projectiles/cannonConfig.js';
 import { BOMBARD_CONFIG } from './projectiles/bombardConfig.js';
+import { GONNE_CONFIG } from './projectiles/gonneConfig.js';
+import { BASILISK_CONFIG } from './projectiles/basiliskConfig.js';
 import { RKT_CONFIG } from './projectiles/rocketLauncherConfig.js';
 import { PISTOL_CONFIG } from './projectiles/pistolConfig.js';
 import { REVOLVER_CONFIG } from './projectiles/revolverConfig.js';
@@ -126,6 +128,12 @@ export const SLOT_DEFS: readonly WeaponDef[] = [
   // Heal beam — the medic's pocket beam: primary-slot support gun,
   // HP on teammates, jet energy as ammo (server resolves the intent).
   def(WeaponType.HealBeam, 0.1, HEALBEAM_CONFIG, 0, { auto: true }),
+  // Gonne — the light frame's 80 m/s arc primary: cannon stats in a
+  // stubby handgonne. Appended last; never reorder shipped entries.
+  def(WeaponType.Gonne, CANNON_RATE, GONNE_CONFIG, 1.2),
+  // Basilisk — the heavy frame's 80 m/s arc primary: same family, big
+  // bronze bore. Appended last; never reorder shipped entries.
+  def(WeaponType.Basilisk, CANNON_RATE, BASILISK_CONFIG, 1.4),
 ];
 
 /** wid of the shocklance def — the 'lance' sidearm pick binds this. */
