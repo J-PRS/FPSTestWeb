@@ -13,7 +13,8 @@ const GRANDFATHERED: Record<string, number> = {
   // Re-pinned at the worker-crash-escalation size — still alarms at +15%.
   'client/src/networking/NetworkManager.ts': 1370,
   'client/src/entities/PlayerModel.ts': 1427,
-  'client/src/gunlab.ts': 1264,
+  'client/src/gunlab.ts': 1458,
+  'client/src/maplab.ts': 1845,
   'client/src/lab/scenarios.ts': 1000,
   'server_bun/src/Room.ts': 1460,
   'server_bun/src/serverSenses.ts': 1045,

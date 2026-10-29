@@ -47,12 +47,12 @@ describe('resolveMapSpec — clamps and defaults', () => {
     expect(resolveMapSpec({ modes: ['ctf', 42, 'dm'] }).modes).toEqual(['ctf', 'dm']);
   });
 
-  it('terrainPreset accepts the extended palette ids (0..8)', () => {
-    for (const p of [1, 2, 3, 4, 5, 6, 7, 8]) {
+  it('terrainPreset accepts the extended palette ids (0..9)', () => {
+    for (const p of [1, 2, 3, 4, 5, 6, 7, 8, 9]) {
       expect(resolveMapSpec({ terrainPreset: p }).terrainPreset).toBe(p);
     }
     expect(resolveMapSpec({ terrainPreset: 0 }).terrainPreset).toBeUndefined(); // 0 = default
-    expect(resolveMapSpec({ terrainPreset: 9 }).terrainPreset).toBe(8);
+    expect(resolveMapSpec({ terrainPreset: 10 }).terrainPreset).toBe(9);
   });
 
   it('weather keeps known kinds, clamps intensity, drops the rest', () => {

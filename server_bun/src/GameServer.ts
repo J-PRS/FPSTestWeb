@@ -471,7 +471,7 @@ export class GameServer {
 
   private reconnectGraceMs = CONFIG.reconnectGraceMs; // Grace period for F5 reconnect
 
-  onClose(ws: ServerWebSocket<WebSocketData>, code?: number, reason?: string): void {
+  onClose(ws: ServerWebSocket<WebSocketData>, code?: number, _reason?: string): void {
     if (code !== undefined) {this.ops.closeCodes.set(code, (this.ops.closeCodes.get(code) ?? 0) + 1);}
     const {playerId} = ws.data;
     if (!playerId) {return;}

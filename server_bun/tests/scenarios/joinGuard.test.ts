@@ -30,7 +30,7 @@ function mkSessions(room: ReturnType<typeof mkRoom>) {
       quickRoom: () => room,
       roomOfPlayer: (id) => room.players.getPlayer(id) ? room : undefined,
       totalPlayers: () => playerRoom.size,
-      ops: { joins: 0, tierWs: 0, tierWt: 0, tierRtc: 0, tierOther: 0 },
+      ops: { joins: 0, tierWs: 0, tierWt: 0, tierRtc: 0, tierOther: 0, joinWaitMsSum: 0, joinWaitMsMax: 0, joinWorkMsSum: 0, joinWorkMsMax: 0, joinN: 0 },
       registry: reg,
       departSpectator: () => false,
       removePlayerCompletely: () => undefined,

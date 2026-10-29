@@ -77,6 +77,7 @@ function makePlaybackRig(): {
   initSwarms(scene, flatTerrain, {
     ball: { capacity: 512, parts: (): { geometry: THREE.SphereGeometry; material: THREE.MeshBasicMaterial; }[] => [
       { geometry: new THREE.SphereGeometry(1, 4, 3), material: new THREE.MeshBasicMaterial() },
+      { geometry: new THREE.SphereGeometry(1.07, 4, 3), material: new THREE.MeshBasicMaterial() },
     ] },
   });
   const world = {

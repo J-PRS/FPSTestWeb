@@ -25,7 +25,7 @@ function mkSessions(room: ReturnType<typeof mkRoom>, deps: Record<string, unknow
   const rooms = new Map([[room.name, room]]);
   const playerRoom = new Map<string, typeof room>();
   const specRooms = new Map<string, typeof room>();
-  const ops = { joins: 0, tierWs: 0, tierWt: 0, tierRtc: 0, tierOther: 0 };
+  const ops = { joins: 0, tierWs: 0, tierWt: 0, tierRtc: 0, tierOther: 0, joinWaitMsSum: 0, joinWaitMsMax: 0, joinWorkMsSum: 0, joinWorkMsMax: 0, joinN: 0 };
   const registry = new SessionRegistry();
   room.sessions = registry; // grace reads (empty check, tick skip) resolve here
   return {
