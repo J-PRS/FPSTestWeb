@@ -179,8 +179,11 @@ export class SessionManager {
     // Join flood guard: joins bypass the per-player RateLimiter (they ARE
     // the registration), so throttle by source IP — 5 joins/min is generous
     // for humans, lethal for a spammer script.
-    if (!trusted && !this.joinThrottleAllow(ws.remoteAddress)) {
-      logger.warn('Join flood rejected', { ip: ws.remoteAddress });
+    // clientIp carries the XFF hop behind the local proxy — without it
+    // every proxied join reads loopback and the flood guard never fires.
+    const joinIp = ws.data.clientIp ?? ws.remoteAddress;
+    if (!trusted && !this.joinThrottleAllow(joinIp)) {
+      logger.warn('Join flood rejected', { ip: joinIp });
       ws.close(1013, 'Join rate limited');
       return;
     }

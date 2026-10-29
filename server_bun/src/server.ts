@@ -32,7 +32,14 @@ if (udpPort > 0) {
   gameServer.attachUdpLane(lane);
 }
 
-function wsUpgrade(srv: { upgrade(req: Request, opts: { data: WebSocketData }): boolean }, req: Request, data: WebSocketData): Response | undefined {
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+function wsUpgrade(srv: { upgrade(req: Request, opts: { data: WebSocketData }): boolean; requestIP?(req: Request): { address?: string } | null }, req: Request, data: WebSocketData): Response | undefined {
+  // Proxied peers all read 127.0.0.1 — the join throttle and flood logs
+  // would key every client onto the proxy. Trust the LAST XFF hop only
+  // when the peer actually is loopback; a direct socket can spoof XFF.
+  const peer = srv.requestIP?.(req)?.address;
+  const xff = peer && LOOPBACK.has(peer) ? req.headers.get('x-forwarded-for') : null;
+  data.clientIp = (xff ? xff.split(',').pop()!.trim() : undefined) ?? peer;
   if (srv.upgrade(req, { data })) {return undefined;}
   return new Response('Upgrade failed', { status: 400 });
 }

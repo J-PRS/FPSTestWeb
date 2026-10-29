@@ -221,7 +221,7 @@ Bun.serve({
       }
       let build: string | null = null;
       try { build = (await Bun.file(join(import.meta.dir, '..', 'build.txt')).text()).trim(); } catch { /* no stamp */ }
-      return json({ status: workersUp > 0 ? 'running' : 'degraded', players, maxPlayers: WORKERS * CONFIG.maxPlayers, tickRate: 20, version: FLEET_VERSION, build, workers: workersUp, fleet: WORKERS });
+      return json({ status: workersUp > 0 ? 'running' : 'degraded', players, maxPlayers: Number.isFinite(FLEET_CAP) ? FLEET_CAP : WORKERS * CONFIG.globalMaxPlayers, tickRate: 20, version: FLEET_VERSION, build, workers: workersUp, fleet: WORKERS });
     }
 
     if (url.pathname === '/rooms' && req.method === 'GET') {

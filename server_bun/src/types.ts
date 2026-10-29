@@ -36,6 +36,10 @@ export interface WebSocketData {
   /** Text frames seen before the join handshake completes — unseated
    *  sockets get a hard frame/size budget (pre-join CPU flood). */
   preJoin?: number;
+  /** Effective client IP — behind the local reverse proxy every peer is
+   *  127.0.0.1, so upgrade stamps the last X-Forwarded-For hop (the same
+   *  rule serverRoutes uses for ops auth: XFF only when peer is loopback). */
+  clientIp?: string;
 }
 
 export interface PlayerState {
