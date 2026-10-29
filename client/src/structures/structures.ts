@@ -721,7 +721,7 @@ export function mkBastion(teamGlow = 0x59_F2_FF): THREE.Group {
  *  Origin at ground level; scale param sets approximate diameter. */
 export function mkBoulder(size = 4, seed = 1): THREE.Group {
   const g = new THREE.Group();
-  const geo = new THREE.IcosahedronGeometry(size * 0.5, 4);
+  const geo = new THREE.IcosahedronGeometry(size * 0.5, 5);
   const pos = geo.getAttribute('position') as THREE.BufferAttribute;
   const v = new THREE.Vector3();
   for (let i = 0; i < pos.count; i++) {
@@ -737,6 +737,9 @@ export function mkBoulder(size = 4, seed = 1): THREE.Group {
     vertexColors: true,
   });
   const mesh = new THREE.Mesh(geo, mat);
+  // Elongate some boulders so they read as tumbled slabs, not spheres.
+  const elong = 1 + (Math.sin(seed * 3.7) * 0.5 + 0.5) * 0.9;
+  mesh.scale.set(1, 0.85 + (Math.cos(seed * 2.1) * 0.5 + 0.5) * 0.3, elong);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   g.add(mesh);
