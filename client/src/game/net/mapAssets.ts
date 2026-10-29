@@ -26,6 +26,7 @@ import { TERRAIN_HEIGHT_SCALE, TERRAIN_WORLD_SCALE, FOG_COLOR, FOG_START, FOG_EN
 
 import { setFogBase, setFogHorizon } from '../../world/directionalFog.js';
 import { applyWaterSurface } from '../../world/waterSurface.js';
+import { bakeSkyEnv } from '../../world/skyEnv.js';
 
 import { resolveServerEndpoints } from '../../networking/endpoints.js';
 
@@ -127,6 +128,8 @@ export function applyAtmosphere(ctx: NetCtx, atmosphere?: AtmosphereSpec): void 
   // sun (timeOfDay) has to re-aim it here or shading disagrees with the dome.
   try {ctx.deps.lazyTerrain().setSunDirection(sky.getSunDirection());}
   catch { /* terrain not resident yet — it inherits the boot sun */ }
+  // Re-bake image-based lighting — the env mirrors this map's sky now.
+  bakeSkyEnv(ctx.deps.lazyScene(), JSON.stringify(atmosphere ?? 'boot'));
 }
 
 /** Fetch the room's heightfield and swap the live terrain over to it.
