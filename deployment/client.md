@@ -57,9 +57,11 @@ makes that reachable. See `webtransport.md`.
 
 ## Static hosting (Cloudflare Pages)
 
-The game page lives on **https://jetpack-fps.pages.dev** — `dist/` deployed to the
-`jetpack-fps` Pages project (account `2e14e1304c4503b43cdc3d38ad68f03f`). The OCI
-box stays API/game traffic only; Pages is the unmetered CDN for the bundle.
+`dist/` can be served from Cloudflare Pages (`wrangler pages deploy` below) — the
+OCI box stays API/game traffic only and a CDN is the unmetered path for the
+bundle. **No public deploy is currently live** — the `jetpack-fps` Pages project
+was created and then deleted at the owner's request (2026-10-29); recreate it
+with an approved name before deploying.
 
 ```bash
 cd client && npm run build
@@ -74,8 +76,8 @@ npx wrangler pages deploy dist --project-name jetpack-fps --branch main --commit
   remote host (any source) resolves through `/join` first since `eefbb9a4` + the
   server.json/named-path follow-up.
 
-Verified 2026-10-29: headless Chrome loaded the Pages URL, seated into w1's
-headhunt-1 as `player_bzy1hov3q` in under 5s.
+Verified 2026-10-29 while the deploy was up: headless Chrome loaded the Pages
+URL and seated into w1's headhunt-1 as `player_bzy1hov3q` in under 5s.
 
 ## History
 
