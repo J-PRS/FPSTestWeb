@@ -1,0 +1,10 @@
+import { launchClient, closeClient } from './browser.js';
+const c = await launchClient('http://localhost:5400/maplab.html');
+await c.page.waitForFunction('!!document.querySelector("canvas")', { timeout: 30000 }).catch(() => null);
+await c.page.evaluate('localStorage.setItem("maplab", JSON.stringify({preset:9, map:""}))');
+await c.page.reload();
+await c.page.waitForFunction('!!document.querySelector("canvas")', { timeout: 30000 }).catch(() => null);
+await new Promise(r => setTimeout(r, 9000));
+await c.page.screenshot({ path: '_tools/e2e/shots/arcane.png' });
+console.log('shot saved');
+await closeClient(c);

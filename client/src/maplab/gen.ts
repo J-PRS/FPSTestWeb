@@ -133,7 +133,7 @@ export function synthField(p: GenParams): Float32Array {
         wv = v + p.warp * ((1 - p.curl) * offZ * 0.25 + p.curl * (cz / cl) * 0.18);
       }
       let hh = p.ridge > 0 ? fbmAt(wu, wv) * (1 - p.ridge) + ridgedAt(wu, wv) * p.ridge : fbmAt(wu, wv);
-      if (p.tilt !== 0) { hh += p.tilt * (1 - Math.cos(2 * Math.PI * (p.tiltAxis === 'z' ? v : u))) * 0.5; }
+      if (p.tilt !== 0) { hh += p.tilt * ((p.tiltAxis === 'z' ? v : u) - 0.5); }
       const wx = (u - 0.5) * WORLD + fwarp(u, v, 1) * 45;
       const wz = (v - 0.5) * WORLD + fwarp(u + 5, v + 3, 1) * 45;
       const tdist = (fx: number, fz: number): number =>
@@ -221,9 +221,11 @@ export function erode(h: Float32Array, N: number, p: GenParams): void {
 // rough proxy for where a capper's lines converge.
 
 /** Priority-flood depression fill (Barnes): raise closed basins to their
- *  lowest outlet so every cell drains to the tile edge. Returns a filled
- *  copy — the caller keeps eroding the real field, flood is only for
- *  routing. */
+ *  lowest outlet so every cell drains to the field's lowest point. The
+ *  field is toroidal — seeding the tile border as ocean made every
+ *  channel terminate at a fake edge wall, which read as seams. Returns
+ *  a filled copy — the caller keeps eroding the real field, flood is
+ *  only for routing. */
 function priorityFlood(h: Float32Array, N: number): Float32Array {
   const f = h.slice();
   const done = new Uint8Array(N * N);
@@ -250,18 +252,17 @@ function priorityFlood(h: Float32Array, N: number): Float32Array {
     }
     return top;
   };
-  for (let x = 0; x < N; x += 1) { // tile boundary is the ocean
-    for (const i of [x, (N - 1) * N + x, x * N, x * N + N - 1]) {
-      if (!done[i]) { done[i] = 1; push(f[i]! * 1e7 + i); }
-    }
-  }
+  // On a torus the only true outlet is the global minimum — the lowest
+  // cell is the ocean every basin eventually spills toward.
+  let lo = 0;
+  for (let i = 1; i < N * N; i += 1) { if (f[i]! < f[lo]!) { lo = i; } }
+  done[lo] = 1; push(f[lo]! * 1e7 + lo);
   while (heap.length > 0) {
     const top = pop();
     const i = Math.round(top % 1e7), ih = f[i]!;
     const x = i % N, z = (i / N) | 0;
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
-      const nx = x + dx, nz = z + dz;
-      if (nx < 0 || nx >= N || nz < 0 || nz >= N) { continue; }
+      const nx = ((x + dx) % N + N) % N, nz = ((z + dz) % N + N) % N;
       const ni = nz * N + nx;
       if (done[ni]) { continue; }
       done[ni] = 1;
@@ -286,9 +287,7 @@ export function drainage(h: Float32Array, N: number): Drainage {
       const i = z * N + x;
       let worst = 0, wn = -1;
       for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
-        const nx = x + dx, nz = z + dz;
-        if (nx < 0 || nx >= N || nz < 0 || nz >= N) { continue; }
-        const ni = nz * N + nx;
+        const ni = (((z + dz) % N + N) % N) * N + (((x + dx) % N + N) % N);
         const d = (f[i]! - f[ni]!) / Math.hypot(dx, dz);
         if (d > worst) { worst = d; wn = ni; }
       }
@@ -314,7 +313,10 @@ export function streamPower(h: Float32Array, N: number, p: GenParams): void {
     for (let i = 0; i < N * N; i += 1) {
       const r = rec[i];
       if (r < 0) { continue; }
-      const dx = (i % N) - (r % N), dz = ((i / N) | 0) - ((r / N) | 0);
+      // Toroidal step — a receiver across the seam is one cell away, not N.
+      let dx = (i % N) - (r % N), dz = ((i / N) | 0) - ((r / N) | 0);
+      if (dx > N / 2) { dx -= N; } else if (dx < -N / 2) { dx += N; }
+      if (dz > N / 2) { dz -= N; } else if (dz < -N / 2) { dz += N; }
       const dist = Math.hypot(dx, dz);
       const slope = (src[i]! - src[r]!) / dist;
       const cut = p.stream * Math.sqrt(acc[i]!) * Math.max(0, slope) * 0.02;
@@ -394,6 +396,365 @@ export function glacierPass(h: Float32Array, N: number, p: GenParams): void {
   }
 }
 
+/** Playa/lakebed flats — wherever the local relief inside a ~radius
+ *  window is shallower than maxFill, pull every cell toward the
+ *  neighborhood's lowest point. Shallow bowls level to their floor;
+ *  the flats inherit the basin's real shape, not a pad disc. (The
+ *  earlier flood-fill version only touched *closed* basins — carved
+ *  terrain drains out, so it barely did anything.) Separable box
+ *  min/max keeps it O(N²) instead of O(N²·r²). */
+export function playaPass(h: Float32Array, N: number, maxFill = 0.04, radius = 10): void {
+  const tmn = new Float32Array(N * N), tmx = new Float32Array(N * N);
+  const mn = new Float32Array(N * N), mx = new Float32Array(N * N);
+  const R = Math.round(radius);
+  for (let z = 0; z < N; z += 1) { // horizontal pass
+    for (let x = 0; x < N; x += 1) {
+      let lo = Infinity, hi = -Infinity;
+      for (let d = -R; d <= R; d += 1) {
+        const v = h[z * N + (((x + d) % N + N) % N)]!;
+        if (v < lo) { lo = v; } if (v > hi) { hi = v; }
+      }
+      tmn[z * N + x] = lo; tmx[z * N + x] = hi;
+    }
+  }
+  for (let z = 0; z < N; z += 1) { // vertical pass
+    for (let x = 0; x < N; x += 1) {
+      let lo = Infinity, hi = -Infinity;
+      for (let d = -R; d <= R; d += 1) {
+        const i = (((z + d) % N + N) % N) * N + x;
+        if (tmn[i]! < lo) { lo = tmn[i]!; } if (tmx[i]! > hi) { hi = tmx[i]!; }
+      }
+      mn[z * N + x] = lo; mx[z * N + x] = hi;
+    }
+  }
+  for (let i = 0; i < N * N; i += 1) {
+    const rel = mx[i]! - mn[i]!;
+    if (rel >= maxFill) { continue; }
+    const w = 1 - rel / maxFill;
+    const s = w * w * (3 - 2 * w);
+    h[i] = h[i]! + (mn[i]! - h[i]!) * s;
+  }
+}
+
+/** Aeolian drift — sand creeps downwind off windward faces and piles
+ *  on the lee side. rate = per-cell transport when downwind is lower,
+ *  creep = constant flat-ground saltation. Cheap longitudinal-dune
+ *  read; repeat clicks elongate the ridges along `dir`. */
+export function dunesPass(h: Float32Array, N: number, iters = 30, dir = 0.8, rate = 0.04, creep = 0.0012): void {
+  const dx = Math.round(Math.cos(dir)), dz = Math.round(Math.sin(dir));
+  for (let it = 0; it < iters; it += 1) {
+    const src = h.slice();
+    for (let z = 0; z < N; z += 1) {
+      for (let x = 0; x < N; x += 1) {
+        const i = z * N + x;
+        const j = (((z + dz) % N + N) % N) * N + (((x + dx) % N + N) % N);
+        const move = (src[i]! - src[j]!) * rate + creep;
+        if (move <= 0) { continue; }
+        h[i] = Math.max(0, h[i]! - move); h[j] = Math.min(1, h[j]! + move);
+      }
+    }
+  }
+}
+
+/** Terrace — quantize heights into steps with a noise jitter on the
+ *  risers so the benches don't read machined. Farmland/badlands look. */
+export function terracePass(h: Float32Array, N: number, steps = 9, jitter = 0.4, seed = 7): void {
+  const step = 1 / steps;
+  for (let z = 0; z < N; z += 1) {
+    for (let x = 0; x < N; x += 1) {
+      const i = z * N + x;
+      const u = x / N, v = z / N;
+      const j = (noise(u * 6, v * 6, 8, 3, seed) - 0.5) * step * jitter;
+      const t = Math.round(h[i]! / step) * step + j;
+      h[i] = h[i]! + (t - h[i]!) * 0.85;
+    }
+  }
+}
+
+/** Cliff carving — accentuate cells already steeper than threshold:
+ *  high side lifts, low side drops. Benches and escarpments without
+ *  touching flat ground. */
+export function cliffPass(h: Float32Array, N: number, thresh = 0.02, k = 0.5): void {
+  const src = h.slice();
+  for (let z = 0; z < N; z += 1) {
+    for (let x = 0; x < N; x += 1) {
+      const i = z * N + x;
+      const avg = (src[z * N + ((x - 1 + N) % N)]! + src[z * N + ((x + 1) % N)]!
+        + src[((z - 1 + N) % N) * N + x]! + src[((z + 1) % N) * N + x]!) * 0.25;
+      const d = src[i]! - avg;
+      if (Math.abs(d) > thresh) { h[i] = src[i]! + d * k; }
+    }
+  }
+}
+
+/** Alluvial fans — cells steeper than thresh shed a share of their drop
+ *  onto the downhill neighbor. Sediment collects at slope breaks =
+ *  fans at valley mouths. */
+export function fanPass(h: Float32Array, N: number, thresh = 0.012, rate = 0.35): void {
+  const src = h.slice();
+  for (let z = 0; z < N; z += 1) {
+    for (let x = 0; x < N; x += 1) {
+      const i = z * N + x;
+      let wn = -1, worst = 0;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        const ni = (((z + dz) % N + N) % N) * N + (((x + dx) % N + N) % N);
+        const d = src[i]! - src[ni]!;
+        if (d > worst) { worst = d; wn = ni; }
+      }
+      if (worst > thresh) { h[wn] = h[wn]! + (worst - thresh) * rate; }
+    }
+  }
+}
+
+/** Flood — clamp everything below `level` to it: instant flat seabed
+ *  and a coherent coastline. */
+export function floodPass(h: Float32Array, N: number, level = 0.28): void {
+  for (let i = 0; i < N * N; i += 1) { if (h[i]! < level) { h[i] = level; } }
+}
+
+/** Karst dissolve — seeded sinkholes: smooth wells with no raised rim
+ *  (dolines, not craters). */
+export function sinkPass(h: Float32Array, N: number, sinks = 8, radius = 24, depth = 0.12, seed = 11): void {
+  const rand = mulberry(seed * 747_796_405);
+  const texel = WORLD / N;
+  for (let i = 0; i < sinks; i += 1) {
+    const cx = Math.floor(rand() * N), cz = Math.floor(rand() * N);
+    const r = radius * (0.5 + rand()), d = depth * (0.6 + rand() * 0.8);
+    const rCells = Math.max(2, Math.round(r / texel));
+    for (let dz = -rCells; dz <= rCells; dz += 1) {
+      for (let dx = -rCells; dx <= rCells; dx += 1) {
+        const dd = Math.hypot(dx, dz) * texel;
+        if (dd > r) { continue; }
+        const t = Math.min(1, Math.max(0, 1 - dd / r));
+        const idx = (((cz + dz) % N + N) % N) * N + (((cx + dx) % N + N) % N);
+        h[idx] = Math.max(0, h[idx]! - d * t * t * (3 - 2 * t));
+      }
+    }
+  }
+}
+
+/** Ridge sharpen — unsharp mask on local maxima only. Brings back the
+ *  crests that creep/erosion rounds off. */
+export function sharpenPass(h: Float32Array, N: number, k = 0.45): void {
+  const src = h.slice();
+  for (let z = 0; z < N; z += 1) {
+    for (let x = 0; x < N; x += 1) {
+      const i = z * N + x;
+      const avg = (src[z * N + ((x - 1 + N) % N)]! + src[z * N + ((x + 1) % N)]!
+        + src[((z - 1 + N) % N) * N + x]! + src[((z + 1) % N) * N + x]!) * 0.25;
+      const d = src[i]! - avg;
+      if (d > 0) { h[i] = src[i]! + d * k; }
+    }
+  }
+}
+
+/** Fold — parallel bent ridges along an axis. A triangle wave gives
+ *  sharp fold crests with linear limbs (folded strata), wiggled so the
+ *  ridge lines wander like real orogeny instead of straight comb teeth. */
+export function foldPass(h: Float32Array, N: number, amp = 0.12, folds = 4, dir = 0.5, seed = 13): void {
+  const cx = Math.cos(dir), sz = Math.sin(dir);
+  for (let z = 0; z < N; z += 1) {
+    for (let x = 0; x < N; x += 1) {
+      const u = x / N, v = z / N;
+      const wig = (noise(u, v, 3, 5, seed) - 0.5) * 0.6;
+      const tr = (u * cx + v * sz) * folds + wig;
+      const t = tr - Math.floor(tr); // proper wrap — JS % keeps the sign
+      const tri = 1 - Math.abs(t * 2 - 1); // triangle crest
+      h[z * N + x] = h[z * N + x]! + amp * tri;
+    }
+  }
+}
+
+/** Plates — jittered voronoi regions, each with its own flat elevation
+ *  offset. Flat inside each plate, a step fault at boundaries. */
+export function platesPass(h: Float32Array, N: number, cells = 26, amp = 0.14, seed = 19): void {
+  const rand = mulberry(seed * 7919);
+  const px: number[] = [], pz: number[] = [], off: number[] = [];
+  // Fully random centers — grid-jittered seeds made every plate a
+  // square-ish block with borders hugging the grid lines (the quilt look).
+  for (let p = 0; p < cells; p += 1) {
+    px.push(rand()); pz.push(rand());
+    off.push((rand() * 2 - 1) * amp);
+  }
+  for (let z = 0; z < N; z += 1) {
+    for (let x = 0; x < N; x += 1) {
+      const u = x / N, v = z / N;
+      let d1 = Infinity, d2 = Infinity, near = 0;
+      for (let p = 0; p < px.length; p += 1) {
+        // Toroidal distance — plate offsets must agree across the wrap
+        // seam or the field stops tiling.
+        const du = Math.min(Math.abs(u - px[p]!), 1 - Math.abs(u - px[p]!));
+        const dv = Math.min(Math.abs(v - pz[p]!), 1 - Math.abs(v - pz[p]!));
+        const dd = Math.hypot(du, dv);
+        if (dd < d1) { d2 = d1; d1 = dd; near = p; } else if (dd < d2) { d2 = dd; }
+      }
+      // Full offset inside the plate, tapering across the boundary band.
+      const w = Math.min(1, Math.max(0, (d2 - d1) / 0.06));
+      h[z * N + x] = h[z * N + x]! + off[near]! * w;
+    }
+  }
+}
+
+/** Canyon — a wandering deep channel carved along a noise-steered walk.
+ *  Direction persists with noise wobble, so it meanders like a river
+ *  canyon rather than a straight slot. */
+export function canyonPass(h: Float32Array, N: number, depth = 0.22, width = 8, seed = 23): void {
+  const rand = mulberry(seed * 747_796_405);
+  const texel = WORLD / N;
+  let x = rand() * N, z = rand() * N, a = rand() * Math.PI * 2;
+  const rCells = Math.max(2, Math.round(width / texel));
+  for (let s = 0; s < N * 1.6; s += 1) {
+    a += (noise(x / N, z / N, 3, 5, seed) - 0.5) * 0.9;
+    x += Math.cos(a); z += Math.sin(a);
+    const cx = Math.round(((x % N) + N) % N), cz = Math.round(((z % N) + N) % N);
+    for (let dz = -rCells; dz <= rCells; dz += 1) {
+      for (let dx = -rCells; dx <= rCells; dx += 1) {
+        const dd = Math.hypot(dx, dz);
+        if (dd > rCells) { continue; }
+        const t = 1 - dd / rCells;
+        const idx = (((cz + dz) % N + N) % N) * N + (((cx + dx) % N + N) % N);
+        h[idx] = Math.max(0, h[idx]! - depth * t * t * (3 - 2 * t) * 0.12);
+      }
+    }
+  }
+}
+
+/** Snowpack — deposit on high, low-slope cells: ridges pick up cornices,
+ *  steep faces stay bare. */
+export function snowPass(h: Float32Array, N: number, line = 0.55, amt = 0.05): void {
+  const src = h.slice();
+  for (let z = 0; z < N; z += 1) {
+    for (let x = 0; x < N; x += 1) {
+      const i = z * N + x;
+      const avg = (src[z * N + ((x - 1 + N) % N)]! + src[z * N + ((x + 1) % N)]!
+        + src[((z - 1 + N) % N) * N + x]! + src[((z + 1) % N) * N + x]!) * 0.25;
+      const slope = Math.abs(src[i]! - avg);
+      const hi = Math.min(1, Math.max(0, (src[i]! - line) / 0.15));
+      const flat = 1 - Math.min(1, slope / 0.03);
+      h[i] = Math.min(1, src[i]! + amt * hi * flat);
+    }
+  }
+}
+
+/** Lake — fill genuinely closed basins (priority-flood pits) to their
+ *  spill level. Playa's complement: real water bodies, not flats. */
+export function lakePass(h: Float32Array, N: number, minFill = 0.006): void {
+  const f = priorityFlood(h, N);
+  for (let i = 0; i < N * N; i += 1) {
+    const fill = f[i]! - h[i]!;
+    if (fill > minFill) { h[i] = f[i]!; }
+  }
+}
+
+/** Slump — collapse steep cells toward their neighborhood mean. Hillside
+ *  lobes instead of sharp cliffs; flat ground untouched. */
+export function slumpPass(h: Float32Array, N: number, thresh = 0.03, k = 0.5): void {
+  const src = h.slice();
+  for (let z = 0; z < N; z += 1) {
+    for (let x = 0; x < N; x += 1) {
+      const i = z * N + x;
+      const avg = (src[z * N + ((x - 1 + N) % N)]! + src[z * N + ((x + 1) % N)]!
+        + src[((z - 1 + N) % N) * N + x]! + src[((z + 1) % N) * N + x]!) * 0.25;
+      const d = avg - src[i]!;
+      if (Math.abs(d) > thresh) { h[i] = src[i]! + d * k; }
+    }
+  }
+}
+
+/** Rugged — amplify existing mid-frequency detail both ways: bumps get
+ *  bumpier, dips get dipper, landform silhouette preserved. */
+export function ruggedPass(h: Float32Array, N: number, k = 0.9, R = 3): void {
+  const src = h.slice();
+  for (let z = 0; z < N; z += 1) {
+    for (let x = 0; x < N; x += 1) {
+      let sum = 0, cnt = 0;
+      for (const [dx, dz] of [[-R, 0], [R, 0], [0, -R], [0, R], [-R, -R], [R, R], [-R, R], [R, -R]]) {
+        sum += src[(((z + dz) % N + N) % N) * N + (((x + dx) % N + N) % N)]!; cnt += 1;
+      }
+      const i = z * N + x;
+      h[i] = src[i]! + (src[i]! - sum / cnt) * k;
+    }
+  }
+}
+
+/** Canyonize — sigmoid contrast around the median: lows drop, highs
+ *  lift, flats split. s scales how hard the tails compress. */
+export function contrastPass(h: Float32Array, N: number, s = 4): void {
+  for (let i = 0; i < N * N; i += 1) {
+    h[i] = 0.5 + 0.5 * Math.tanh((h[i]! - 0.5) * s);
+  }
+}
+
+/** Stretch — renormalize the field to fill 0..1. Verbs compress the
+ *  range over time; this restores the full u8 export span. */
+export function stretchPass(h: Float32Array, N: number): void {
+  let mn = Infinity, mx = -Infinity;
+  for (const v of h) { if (v < mn) { mn = v; } if (v > mx) { mx = v; } }
+  const inv = 1 / Math.max(1e-6, mx - mn);
+  for (let i = 0; i < N * N; i += 1) { h[i] = (h[i]! - mn) * inv; }
+}
+
+/** Breach — Flow Restructure-lite: every closed basin gets ONE outlet.
+ *  priorityFlood marks the pits; each connected basin's lowest rim
+ *  cell is cut to just below its spill level, then a short channel is
+ *  carved downhill so the breach reads as a canyon gap, not a notch. */
+export function breachPass(h: Float32Array, N: number, minFill = 0.01, margin = 0.008): void {
+  const f = priorityFlood(h, N);
+  const pit = new Uint8Array(N * N);
+  for (let i = 0; i < N * N; i += 1) { if (f[i]! - h[i]! > minFill) { pit[i] = 1; } }
+  const comp = new Int32Array(N * N).fill(-1);
+  let nComp = 0;
+  // Label pit components (4-conn, non-toroidal — edge basins still label fine).
+  for (let s = 0; s < N * N; s += 1) {
+    if (!pit[s] || comp[s] >= 0) { continue; }
+    const stack = [s]; comp[s] = nComp;
+    while (stack.length > 0) {
+      const i = stack.pop()!;
+      const x = i % N, z = (i / N) | 0;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const ni = (((z + dz) % N + N) % N) * N + (((x + dx) % N + N) % N);
+        if (pit[ni] && comp[ni] < 0) { comp[ni] = nComp; stack.push(ni); }
+      }
+    }
+    nComp += 1;
+  }
+  // Lowest rim cell per basin + the spill level it dams.
+  const rim = new Int32Array(nComp).fill(-1);
+  const rimH = new Float64Array(nComp).fill(Infinity);
+  const spill = new Float64Array(nComp);
+  for (let i = 0; i < N * N; i += 1) {
+    const c = comp[i];
+    if (c < 0) { continue; }
+    spill[c] = f[i]!;
+    const x = i % N, z = (i / N) | 0;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+      const ni = (((z + dz) % N + N) % N) * N + (((x + dx) % N + N) % N);
+      if (comp[ni] !== c && h[ni]! < rimH[c]!) { rimH[c] = h[ni]!; rim[c] = ni; }
+    }
+  }
+  for (let c = 0; c < nComp; c += 1) {
+    const r = rim[c];
+    if (r < 0) { continue; }
+    h[r] = Math.min(h[r]!, spill[c]! - margin); // cut the saddle
+    // Carve a short downhill channel outward from the breach — each
+    // step dips just below the previous cell so water actually flows out.
+    let x = r % N, z = (r / N) | 0;
+    let prevH = h[r]!;
+    for (let s = 0; s < Math.round(N / 6); s += 1) {
+      let bn = -1, best = 0;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        const ni = (((z + dz) % N + N) % N) * N + (((x + dx) % N + N) % N);
+        const d = h[z * N + x]! - h[ni]!;
+        if (d > best) { best = d; bn = ni; }
+      }
+      if (bn < 0) { break; }
+      h[bn] = Math.min(h[bn]!, prevH - margin);
+      prevH = h[bn]!;
+      x = bn % N; z = (bn / N) | 0;
+    }
+  }
+}
+
 /** Diffusion creep — a laplacian softening pass. The gentle sibling of
  *  talus (which only slides the steep cells): rounds ridge crests and
  *  kills the noise carpet without removing relief. */
@@ -433,6 +794,75 @@ export function flatsPass(h: Float32Array, N: number, p: GenParams): void {
         const w = t * t * (3 - 2 * t);
         const idx = z * N + x;
         h[idx] = h[idx]! * (1 - w) + target * w;
+      }
+    }
+  }
+}
+
+/** Rockfall verb — port of _tools/mapbake/simrock.js: a seeded rock drops,
+ *  walks steepest descent until the slope is under repose, then carves a
+ *  warped crater (smoothstep well + debris rim). Depths in 0..1 field. */
+export function rockPass(h: Float32Array, N: number, o: { rocks?: number; radius?: number; depth?: number; rim?: number; warp?: number; seed?: number }): void {
+  const rand = mulberry((o.seed ?? 7) * 747_796_405);
+  const texel = WORLD / N;
+  const rocks = o.rocks ?? 3, baseR = o.radius ?? 36;
+  const depth = o.depth ?? 0.18, rimRaise = o.rim ?? 0.08, warp = o.warp ?? 0.3;
+  const tanRepose = Math.tan(33 * Math.PI / 180);
+  const H = (x: number, z: number): number =>
+    h[(((z % N) + N) % N) * N + (((x % N) + N) % N)]!;
+  const settle = (x0: number, z0: number): { x: number; z: number } => {
+    let x = x0, z = z0;
+    for (let s = 0; s < 60; s += 1) {
+      let bestSlope = 0, bx = 0, bz = 0;
+      for (let dz = -1; dz <= 1; dz += 1) {
+        for (let dx = -1; dx <= 1; dx += 1) {
+          if (!dx && !dz) {continue;}
+          const sl = (H(x, z) - H(x + dx, z + dz)) / (Math.hypot(dx, dz) * texel);
+          if (sl > bestSlope) { bestSlope = sl; bx = dx; bz = dz; }
+        }
+      }
+      if (bestSlope <= tanRepose) {break;}
+      x += bx; z += bz;
+    }
+    return { x: ((x % N) + N) % N, z: ((z % N) + N) % N };
+  };
+  for (let i = 0; i < rocks; i += 1) {
+    const rx = Math.floor(rand() * N), rz = Math.floor(rand() * N);
+    const r = baseR * (0.6 + rand() * 0.8);
+    const d = depth * (0.7 + rand() * 0.6), rm = rimRaise * (0.7 + rand() * 0.6);
+    const c = settle(rx, rz);
+    // Real impacts aren't circular: an oblique footprint (rotated
+    // ellipse), a lobate rim that breaches on some arcs, and a rough
+    // floor — a clean analytic bowl reads as machined, not struck.
+    const rot = rand() * Math.PI * 2, cr = Math.cos(rot), sr = Math.sin(rot);
+    const aspect = 0.62 + rand() * 0.7;                 // <1 = oblique hit
+    const lobeSeed = rand() * 100;
+    const breach = rand() * Math.PI * 2;                // rim gap direction
+    const rCells = Math.max(3, Math.round((r * 1.8) / texel));
+    const sigma = r * 0.3;
+    for (let dz = -rCells; dz <= rCells; dz += 1) {
+      for (let dx = -rCells; dx <= rCells; dx += 1) {
+        const ex = dx * cr - dz * sr, ez = (dx * sr + dz * cr) / aspect;
+        const dd = Math.hypot(ex, ez) * texel;
+        if (dd > r * 1.8) {continue;}
+        const u = (c.x + dx) / N, v = (c.z + dz) / N;
+        const ang = Math.atan2(ez, ex);
+        // Lobate rim: radius wobbles by angle, and a breach sector lets
+        // material spill through instead of closing the ring.
+        const lobe = noise(ang * 0.7 + lobeSeed, lobeSeed, 4, 3, o.seed ?? 7);
+        const wrapAng = ((ang - breach + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+        const breachT = Math.exp(-(wrapAng * wrapAng) / 0.28); // 1 in the breach arc, ~0 elsewhere
+        const rimWarp = 1 + warp * (noise(u + 1.7, v + 9.2, 3, 7, o.seed ?? 7) - 0.5) * 2
+          + (lobe - 0.5) * 0.55;
+        const rW = r * rimWarp;
+        const wellT = Math.min(1, Math.max(0, 1 - dd / rW));
+        const well = d * wellT * wellT * (3 - 2 * wellT);
+        // Rough floor — the crater isn't polished; rubble and slumps stay.
+        const rough = (noise(u * 4 + lobeSeed, v * 4, 6, 5, o.seed ?? 7) - 0.5) * d * 0.55 * wellT;
+        const ringT = Math.min(1, Math.max(0, 1 - Math.abs(dd - rW) / (sigma * (0.7 + lobe))));
+        const ring = rm * ringT * ringT * (3 - 2 * ringT) * (1 - breachT * 0.85);
+        const idx = (((c.z + dz) % N + N) % N) * N + (((c.x + dx) % N) + N) % N;
+        h[idx] = Math.max(0, Math.min(1, h[idx]! - well + rough + ring));
       }
     }
   }

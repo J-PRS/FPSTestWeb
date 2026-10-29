@@ -8,12 +8,12 @@ import { hmParseBin, hmHeight, hmNormal, hmSurface, HM_HEIGHT_SCALE } from '../.
 import { MoveSim } from '../../shared/movement.js';
 import { terrainFrag } from './world/terrainShaders.js';
 import { hillshadeImage } from './world/hillshade.js';
-import { synthField, erode, talusPass, streamPower, drainage, faultPass, glacierPass, smoothPass, flatsPass, DEFAULTS, type GenParams, type Drainage } from './maplab/gen.js';
+import { synthField, erode, talusPass, streamPower, drainage, faultPass, glacierPass, smoothPass, flatsPass, rockPass, playaPass, dunesPass, terracePass, cliffPass, fanPass, floodPass, sinkPass, sharpenPass, foldPass, platesPass, canyonPass, snowPass, lakePass, slumpPass, ruggedPass, contrastPass, stretchPass, breachPass, DEFAULTS, type GenParams, type Drainage } from './maplab/gen.js';
 
 // Player-facing lab: served on prod too — no isDevHost gate on the entry.
 
-const state: GenParams & { heightScale: number; preset: number; showRaw: boolean; wire: boolean; slopeOverlay: boolean; flowOverlay: boolean; dropHeight: number; map: string } =
-  Object.assign({}, DEFAULTS, { heightScale: 1, preset: 1, showRaw: false, wire: false, slopeOverlay: true, flowOverlay: true, dropHeight: 0, map: '' });
+const state: GenParams & { heightScale: number; preset: number; showRaw: boolean; wire: boolean; slopeOverlay: boolean; flowOverlay: boolean; dropHeight: number; ballTerm: number; map: string; verbs: string[] } =
+  Object.assign({}, DEFAULTS, { heightScale: 1, preset: 1, showRaw: false, wire: false, slopeOverlay: true, flowOverlay: true, dropHeight: 0, ballTerm: 100, map: '', verbs: [] });
 try { Object.assign(state, JSON.parse(localStorage.getItem('maplab') ?? '{}')); } catch { /* fresh */ }
 const save = (): void => { localStorage.setItem('maplab', JSON.stringify(state)); };
 
@@ -136,13 +136,25 @@ function dropBalls(): void {
     });
     sim.setInput({ skiHeld: true });
     sim.eyeHeight = 0.4; sim.bodyRadius = 0.4;
+    sim.terminalVelocity = state.ballTerm;
     balls.push(sim);
+    ballStart.push({ x, z });
+    ballPath.push([x, z]);
+    ballPeak.push(0);
   }
   ballMesh.count = balls.length;
   ballMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   Object.assign(ballPeaks, { mean: 0, med: 0, p10: 0, p90: 0, max: 0, horiz: 0, abs: 0, vert: 0, vertAbs: 0 });
 }
-function clearBalls(): void { balls = []; ballMesh.count = 0; ballHud.textContent = 'balls: 0'; }
+const ballDist: number[] = []; // per-ball horizontal distance covered (m)
+const ballPeak: number[] = []; // per-ball top speed
+const ballStart: { x: number; z: number }[] = [];
+const ballPath: number[][] = [];   // flat [x,z,x,z...] trail for the minimap
+function clearBalls(): void {
+  balls = []; ballDist.length = 0; ballPeak.length = 0;
+  ballStart.length = 0; ballPath.length = 0;
+  ballMesh.count = 0; ballHud.textContent = 'balls: 0';
+}
 function tickBalls(dt: number): void {
   for (let i = 0; i < balls.length; i += 1) {
     const sim = balls[i]!;
@@ -151,6 +163,13 @@ function tickBalls(dt: number): void {
     _pos.set(s.pos.x, s.pos.y - 0.4 + BEAM_H / 2, s.pos.z); // beam root at feet
     _m4.compose(_pos, _q.identity(), _scl);
     ballMesh.setMatrixAt(i, _m4);
+    ballDist[i] = (ballDist[i] ?? 0) + Math.hypot(s.vel.x, s.vel.z) * dt;
+    ballPeak[i] = Math.max(ballPeak[i] ?? 0, Math.hypot(s.vel.x, s.vel.z));
+    const path = ballPath[i]!;
+    const pl = path.length;
+    if (Math.hypot(s.pos.x - path[pl - 2]!, s.pos.z - path[pl - 1]!) > 5 && pl < 800) {
+      path.push(s.pos.x, s.pos.z);
+    }
     const v = Math.hypot(s.vel.x, s.vel.y, s.vel.z);
     // cold→hot hue ramp: 0 m/s = deep blue, 60+ = red. Pick the HSL in
     // sRGB so the swatch reads as authored (working space is linear).
@@ -233,6 +252,48 @@ let activeHeightScale = 1;
 // when a synth slider pokes it while an existing map is on screen.
 let loadedMap = '';
 
+// --- verbs: one-shot ops that replay cumulatively on every refresh ---
+// The bake-chain sims (simrock/simwater/simsand) as buttons — the log
+// persists in state, so sliders keep working and verbs layer on top.
+// Each verb's seed derives from its log position, so replay is exact.
+const VERBS: Record<string, (h: Float32Array, N: number, i: number) => void> = {
+  rock:    (h, N, i) => rockPass(h, N, { rocks: 12, radius: 36, depth: 0.18, seed: state.seed * 31 + i }),
+  scree:   (h, N) => talusPass(h, N, { ...state, talus: 6, talusAngle: 0.008 }),
+  streams: (h, N) => streamPower(h, N, { ...state, stream: 1.8, streamIters: 5 }),
+  erode:   (h, N) => erode(h, N, { ...state, droplets: Math.max(state.droplets, 200), erodeRate: Math.max(state.erodeRate, 0.5), capacity: Math.max(state.capacity, 6) }),
+  smooth:  (h, N) => smoothPass(h, N, 4),
+  glacier: (h, N) => glacierPass(h, N, { ...state, glacier: 0.5 }),
+  playa:   (h, N) => playaPass(h, N),
+  dunes:   (h, N) => dunesPass(h, N),
+  terrace: (h, N) => terracePass(h, N),
+  meteor:  (h, N, i) => { // big impacts first so small ones pit their floors
+    rockPass(h, N, { rocks: 2, radius: 60, depth: 0.2, seed: state.seed * 31 + i });
+    rockPass(h, N, { rocks: 14, radius: 16, depth: 0.1, seed: state.seed * 37 + i + 1 });
+  },
+  cliff:   (h, N) => cliffPass(h, N),
+  fan:     (h, N) => fanPass(h, N),
+  flood:   (h, N) => floodPass(h, N),
+  sink:    (h, N) => sinkPass(h, N),
+  sharpen: (h, N) => sharpenPass(h, N),
+  fold:    (h, N) => foldPass(h, N),
+  plates:  (h, N) => platesPass(h, N),
+  canyon:  (h, N) => canyonPass(h, N),
+  snow:    (h, N) => snowPass(h, N),
+  lake:    (h, N) => lakePass(h, N),
+  slump:   (h, N) => slumpPass(h, N),
+  rugged:  (h, N) => ruggedPass(h, N),
+  uplift:  (h, N) => { for (let i = 0; i < N * N; i += 1) { h[i] = h[i]! ** 0.7; } },
+  contrast:(h, N) => contrastPass(h, N),
+  stretch: (h, N) => stretchPass(h, N),
+  breach:  (h, N) => breachPass(h, N),
+};
+function applyVerbs(h: Float32Array, N: number): void {
+  state.verbs.forEach((op, i) => { VERBS[op]?.(h, N, i); });
+}
+function addVerb(op: string): void {
+  state.verbs.push(op); save(); schedule();
+}
+
 function refresh(): void {
   // An existing map is a fixed .bin, not a synth — fetch + paint it.
   if (state.map) {
@@ -251,6 +312,7 @@ function refresh(): void {
     if (state.talus > 0) { talusPass(h, state.size, state); }
   }
   flatsPass(h, state.size, state);          // base pads level last — not erosion
+  applyVerbs(h, state.size);                // one-shot ops replayed on top
   // Flow map for the overlay — computed on the DISPLAYED field so the
   // channels you see are the ones the surface actually drains.
   drain = state.flowOverlay ? drainage(h, state.size) : null;
@@ -280,6 +342,15 @@ async function loadMap(name: string): Promise<void> {
     const file = spec.terrain ?? `${name}.bin`;
     const buf = new Uint8Array(await (await fetch(`/maps/${file}`, { cache: 'no-cache' })).arrayBuffer());
     if (state.map !== name) { return; }
+    // Verbs apply to loaded maps too — decode → mutate → re-encode so
+    // hmParseBin sees the edited field (the shipped .bin stays untouched).
+    if (state.verbs.length > 0) {
+      const N = new DataView(buf.buffer, buf.byteOffset).getUint32(0, true);
+      const h = new Float32Array(N * N);
+      for (let i = 0; i < N * N; i += 1) { h[i] = buf[8 + i]! / 255; }
+      applyVerbs(h, N);
+      for (let i = 0; i < N * N; i += 1) { buf[8 + i] = Math.round(Math.min(1, Math.max(0, h[i]!)) * 255); }
+    }
     drain = null; // flow overlay is a synth product — an existing map has none
     activeHeightScale = spec.heightScale ?? 1;
     field = hmParseBin(buf, activeHeightScale);
@@ -334,7 +405,7 @@ function paintHeightmap(): void {
 
 const statusEl = document.querySelector<HTMLDivElement>('#status')!;
 const ballHud = document.createElement('div');
-ballHud.style.cssText = 'position:fixed;right:8px;top:120px;color:#cde;font:11px monospace;text-align:right;z-index:10;text-shadow:0 1px 2px #000;pointer-events:none;white-space:pre;max-width:260px;';
+ballHud.style.cssText = 'position:fixed;right:258px;top:120px;color:#cde;font:11px monospace;text-align:right;z-index:10;text-shadow:0 1px 2px #000;pointer-events:none;white-space:pre;max-width:260px;';
 document.body.append(ballHud);
 const ballPeaks = { mean: 0, med: 0, p10: 0, p90: 0, max: 0, horiz: 0, abs: 0, vert: 0, vertAbs: 0 };
 let ballHudT = 0;
@@ -380,6 +451,16 @@ function updateBallHud(): void {
   ballPeaks.abs = Math.max(ballPeaks.abs, absMean);
   ballPeaks.vert = Math.max(ballPeaks.vert, Math.abs(vertMean));
   ballPeaks.vertAbs = Math.max(ballPeaks.vertAbs, vertAbsMean);
+  const stall = horiz.filter((v) => v < 3).length / n;
+  let dispMean = 0;
+  for (let i = 0; i < n; i += 1) {
+    dispMean += Math.hypot(balls[i]!.state.pos.x - ballStart[i]!.x, balls[i]!.state.pos.z - ballStart[i]!.z);
+  }
+  dispMean /= n;
+  const distMean = ballDist.reduce((a, b) => a + b, 0) / Math.max(1, ballDist.length);
+  const tort = distMean / Math.max(1, dispMean); // 1 = straight routes; high = circling bowls
+  const peaks = ballPeak.slice(0, n).sort((a, b) => a - b);
+  drawBallTrails();
   ballHud.textContent =
     `balls ${  n 
     }\nV mean ${  mean.toFixed(0)  } (peak ${  ballPeaks.mean.toFixed(0)  })` +
@@ -387,7 +468,30 @@ function updateBallHud(): void {
     }\ntop ${  max.toFixed(0)  } (peak ${  ballPeaks.max.toFixed(0)  })` +
     `\n|V|sum ${  absMean.toFixed(0)  } (peak ${  ballPeaks.abs.toFixed(0)  })` +
     `\nVxy mean ${  horizMean.toFixed(0)  } (peak ${  ballPeaks.horiz.toFixed(0)  })` +
-    `\nVy mean ${  vertMean.toFixed(0)  }  |Vy| mean ${  vertAbsMean.toFixed(0)}`;
+    `\nVy mean ${  vertMean.toFixed(0)  }  |Vy| mean ${  vertAbsMean.toFixed(0)}` +
+    `\nXZ dist mean ${  (ballDist.reduce((a, b) => a + b, 0) / Math.max(1, ballDist.length)).toFixed(0)  }  max ${  Math.max(0, ...ballDist).toFixed(0)}` +
+    `\ndisp mean ${  dispMean.toFixed(0)  }  tort ${  tort.toFixed(2)  }  stall ${  (stall * 100).toFixed(0)  }%` +
+    `\npeakV p50 ${  peaks[Math.floor(n * 0.5)]!.toFixed(0)  }  p90 ${  peaks[Math.floor(n * 0.9)]!.toFixed(0)  }`;
+}
+
+// Ball trails over the minimap — the ski-line test made visible: live
+// routes show as long strokes, dead-end bowls as tight scribbles.
+function drawBallTrails(): void {
+  const ws = field.worldScale ?? WS;
+  const s = hmcv.width / ws;
+  hmctx.save();
+  hmctx.lineWidth = 1;
+  hmctx.strokeStyle = 'rgba(255,120,40,0.55)';
+  for (const path of ballPath) {
+    if (path.length < 4) { continue; }
+    hmctx.beginPath();
+    hmctx.moveTo((path[0]! * s + hmcv.width / 2), (path[1]! * s + hmcv.height / 2));
+    for (let i = 2; i < path.length; i += 2) {
+      hmctx.lineTo(path[i]! * s + hmcv.width / 2, path[i + 1]! * s + hmcv.height / 2);
+    }
+    hmctx.stroke();
+  }
+  hmctx.restore();
 }
 
 function paintStats(genMs: number): void {
@@ -427,6 +531,27 @@ ${
 
 // --- rail UI ---
 const rail = document.querySelector<HTMLDivElement>('#rail')!;
+// Right rail — actions (view/export) + the verb rack; params stay left.
+const rail2 = document.querySelector<HTMLDivElement>('#rail2')!;
+
+// Hover tooltip — one shared div, delegated; any element with data-tip
+// gets the blurb at its right edge (the rail clips ::after tooltips).
+const tipEl = document.querySelector<HTMLDivElement>('#tip')!;
+document.addEventListener('mouseover', (e): void => {
+  const t = (e.target as HTMLElement).closest?.('[data-tip]') as HTMLElement | null;
+  if (!t) { tipEl.style.opacity = '0'; return; }
+  tipEl.textContent = t.dataset.tip!;
+  const r = t.getBoundingClientRect();
+  tipEl.style.top = `${r.top}px`;
+  // Right-rail items tip leftward — right+8 would overflow the edge.
+  tipEl.style.left = t.closest('#rail2')
+    ? `${r.left - tipEl.offsetWidth - 8}px`
+    : `${r.right + 8}px`;
+  tipEl.style.opacity = '1';
+});
+document.addEventListener('mouseout', (e): void => {
+  if ((e.target as HTMLElement).closest?.('[data-tip]')) { tipEl.style.opacity = '0'; }
+});
 type SliderDef = [key: keyof GenParams | 'heightScale', label: string, min: number, max: number, step: number, group?: string];
 const SLIDERS: SliderDef[] = [
   ['size', 'grid size', 65, 513, 64],
@@ -440,7 +565,7 @@ const SLIDERS: SliderDef[] = [
   ['smoothIters', 'creep', 0, 40, 2],
   ['fault', 'fault', -0.4, 0.4, 0.02, 'shape'],
   ['faultAngle', 'fault angle', 0, 180, 5],
-  ['tilt', 'tilt', 0, 1, 0.05],
+  ['tilt', 'tilt', -1, 1, 0.05],
   ['bowlR', 'bowl r', 0, 600, 10],
   ['bowlDepth', 'bowl depth', 0, 1, 0.05],
   ['plateauR', 'mesa r', 0, 600, 10],
@@ -461,7 +586,7 @@ const SLIDERS: SliderDef[] = [
   ['talus', 'talus iters', 0, 60, 2],
   ['talusAngle', 'talus angle', 0.005, 0.1, 0.005],
   ['vscale', 'u8 gain', 0.2, 1, 0.05, 'output'],
-  ['heightScale', 'heightScale', 0.5, 3, 0.1],
+  ['heightScale', 'heightScale', 0.5, 12, 0.1],
 ];
 
 let regenT: ReturnType<typeof setTimeout> | undefined;
@@ -475,6 +600,11 @@ function schedule(): void {
 // repaints once it lands. Falls back to custom-only if the server is down.
 let mapNames: string[] = [];
 let mapT2: boolean[] = [];
+// Picker filter — 'custom' = shipped [C] maps, 'tribes' = T1/T2 ports.
+let mapFilter: 'all' | 'custom' | 'tribes' = 'all';
+const visMaps = (): { name: string; isT2: boolean }[] =>
+  mapNames.map((n, i): { name: string; isT2: boolean } => ({ name: n, isT2: mapT2[i]! }))
+    .filter((m): boolean => mapFilter === 'all' || (mapFilter === 'tribes') === m.isT2);
 async function loadMapList(): Promise<void> {
   try {
     const rows = await (await fetch('/maps', { cache: 'no-cache' })).json() as { name: string; hidden?: boolean; t2?: boolean; t1?: boolean }[];
@@ -499,9 +629,9 @@ function terrainSelect(): HTMLSelectElement {
   custom.value = ''; custom.textContent = state.map ? 'custom (synth)' : 'custom (synth) ▸';
   if (!state.map) {custom.selected = true;}
   sel.append(custom);
-  for (const name of mapNames) {
+  for (const { name, isT2 } of visMaps()) {
     const o = document.createElement('option');
-    o.value = name; const isT2 = mapT2[mapNames.indexOf(name)] === true; o.textContent = (isT2 ? '[T2] ' : '[C] ') + name;
+    o.value = name; o.textContent = (isT2 ? '[T2] ' : '[C] ') + name;
     if (state.map === name) {o.selected = true;}
     sel.append(o);
   }
@@ -526,6 +656,20 @@ function playButton(): HTMLButtonElement {
 
 // Noise archetype select — fBm / billow / swiss / jordan per-octave
 // shaping (gen.ts `shape`). Same row pattern as the tilt-axis select.
+/** ◀/▶ cyclic option steppers — lets dropdowns be browsed like sliders
+ *  without opening the native picker. */
+function stepBtn(sel: HTMLSelectElement, dir: number): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.className = 'step';
+  b.textContent = dir < 0 ? '\u25C0' : '\u25B6';
+  b.addEventListener('click', (): void => {
+    const n = sel.options.length;
+    sel.selectedIndex = (((sel.selectedIndex + dir) % n) + n) % n;
+    sel.dispatchEvent(new Event('change'));
+  });
+  return b;
+}
+
 function noiseRow(): HTMLDivElement {
   const row = document.createElement('div');
   row.className = 'row';
@@ -537,21 +681,31 @@ function noiseRow(): HTMLDivElement {
     sel.append(o);
   }
   sel.addEventListener('change', (): void => { state.noiseType = Number(sel.value); save(); schedule(); });
-  row.append(lab, sel);
+  row.append(lab, stepBtn(sel, -1), sel, stepBtn(sel, 1));
   return row;
 }
 
 function stepMap(dir: number): void {
-  if (mapNames.length === 0) {return;}
-  const idx = mapNames.indexOf(state.map);
-  let nextIdx: number;
-  if (idx === -1) { nextIdx = dir > 0 ? 0 : mapNames.length - 1; }
-  else { nextIdx = (idx + dir + mapNames.length) % mapNames.length; }
-  state.map = mapNames[nextIdx]!; save(); refresh(); paintRail();
+  const vis = visMaps();
+  if (vis.length === 0) {return;}
+  const idx = vis.findIndex((m): boolean => m.name === state.map);
+  const next = idx === -1
+    ? (dir > 0 ? vis[0] : vis[vis.length - 1])
+    : vis[(idx + dir + vis.length) % vis.length];
+  state.map = next!.name; save(); refresh(); paintRail();
 }
 
 function paintRail(): void {
   rail.innerHTML = '';
+  rail2.innerHTML = '';
+  const filt = document.createElement('div'); filt.className = 'btnrow';
+  for (const [f, label] of [['all', 'All'], ['custom', 'Custom'], ['tribes', 'Tribes']] as const) {
+    const b = document.createElement('button'); b.textContent = label;
+    if (mapFilter === f) {b.classList.add('active');}
+    b.addEventListener('click', (): void => { mapFilter = f; paintRail(); });
+    filt.append(b);
+  }
+  rail.append(filt);
   const nav = document.createElement('div'); nav.className = 'terrnav';
   const prev = document.createElement('button'); prev.textContent = '\u25C0';
   prev.addEventListener('click', (): void => { stepMap(-1); });
@@ -594,6 +748,7 @@ function paintRail(): void {
   // Probe-only control (not a GenParams key) — must NOT call schedule(),
   // so it lives here instead of SLIDERS. Re-drops live balls on release.
   rail.append(dropHeightRow());
+  rail.append(ballTermRow());
   rail.append(dbgStageRow());
   // lit-knee tuning — live uniforms, no regen. See terrainShaders desert block.
   for (const [key, min, max] of [['litKnee', 0.5, 1], ['litKeep', 0, 0.6], ['colCap', 0.9, 1]] as const) {
@@ -602,7 +757,7 @@ function paintRail(): void {
 
   const btns = document.createElement('div');
   btns.className = 'group'; btns.textContent = 'view + export';
-  rail.append(btns);
+  rail2.append(btns);
   const row1 = document.createElement('div'); row1.className = 'btnrow';
   const mk = (label: string, fn: () => void, active = false): HTMLButtonElement => {
     const b = document.createElement('button');
@@ -626,11 +781,26 @@ function paintRail(): void {
       state.flowOverlay = !state.flowOverlay; save(); paintRail(); refresh();
     }, state.flowOverlay),
   );
-  rail.append(row1);
+  rail2.append(row1);
   const row2 = document.createElement('div'); row2.className = 'btnrow';
   row2.append(
     mk('🎲 seed', (): void => {
       state.seed = Math.floor(Math.random() * 9999); save(); paintRail(); refresh();
+    }),
+    mk('🎲 params', (): void => {
+      // Every knob re-rolled within its own slider range (grid size + seed
+      // excluded — size is a heavy regen, seed has its own dice).
+      for (const [key, , min, max, step] of SLIDERS) {
+        if (key === 'size' || key === 'seed') {continue;}
+        (state as unknown as Record<string, unknown>)[key] = min + Math.round((Math.random() * (max - min)) / step) * step;
+      }
+      state.preset = Math.floor(Math.random() * 10); // PRESETS 0–9
+      mat.defines.TERRAIN_PRESET = state.preset;
+      mat.needsUpdate = true;
+      state.noiseType = Math.floor(Math.random() * 4); // fBm/billow/swiss/jordan
+      state.tiltAxis = Math.random() < 0.5 ? 'x' : 'z';
+      state.map = '';
+      save(); paintRail(); refresh();
     }),
     mk('⬇ .bin', (): void => {
       const blob = new Blob([bakedBytes.slice().buffer as ArrayBuffer], { type: 'application/octet-stream' });
@@ -658,11 +828,82 @@ function paintRail(): void {
       else { dropBalls(); this.classList.add('active'); }
     }),
   );
-  rail.append(row2);
+  rail2.append(row2);
+  // Verbs — one-shot sims applied cumulatively; the log replays on every
+  // refresh, on synth fields AND loaded maps (the shipped .bin is safe —
+  // the mutation only lives in the preview buffer).
+  const verbGrp = document.createElement('div'); verbGrp.className = 'group';
+  verbGrp.textContent = `verbs${state.verbs.length > 0 ? ` (${state.verbs.join(', ')})` : ''}`;
+  rail2.append(verbGrp);
+  const VERB_TIPS: Record<string, string> = {
+    rock: '12 seeded impact craters — oblique lobate rims, rough floors',
+    scree: 'talus slide ×12 — debris creeps to repose under cliffs',
+    streams: 'stream-power ×2 — carve coherent river valleys on the drainage net',
+    erode: '50k droplet hydraulic erosion — gullies and sediment fans',
+    smooth: 'diffusion ×4 — softens ridges, kills the noise carpet',
+    glacier: 'polish U-troughs along the high-flow drainage spine',
+    playa: 'fill shallow basins to spill level — flat lakebeds where water ponds',
+    dunes: 'aeolian drift — sand creeps downwind, ridges pile on the lee',
+    terrace: 'quantize heights into jittered steps — farmland/badlands benches',
+    meteor: '16 seeded impacts, big ones first — ancient pitted surface',
+    cliff: 'steepen what is already steep — carved escarpments, flats untouched',
+    fan: 'alluvial fans — sediment cones at slope breaks / valley mouths',
+    flood: 'clamp everything below water level — flat seabed + coastline',
+    sink: 'karst dissolve — seeded rimless sinkholes',
+    sharpen: 'unsharp mask on crests — restores eroded ridgelines',
+    fold: 'parallel bent ridges along an axis — folded strata',
+    plates: 'voronoi plates with per-plate offsets — tectonic steps',
+    canyon: 'noise-steered wandering channel — meandering river canyon',
+    snow: 'deposit on high + gentle — cornices on ridges, bare cliffs',
+    lake: 'fill closed basins to spill — real lakes, playa complement',
+    slump: 'collapse steep cells — hillside lobes, flats untouched',
+    rugged: 'amplify mid-frequency bumps — rocky texture, same shape',
+    uplift: 'gamma-raise the field — mids and highs get taller',
+    contrast: 'sigmoid around the median — canyonize: lows drop, highs lift',
+    stretch: 'renormalize to full 0–1 — restores export range after verbs',
+    breach: 'cut one outlet channel per closed basin — flow restructure',
+    undo: 'pop the last verb off the replay log',
+    clear: 'empty the verb log — back to the raw pipeline',
+  };
+  const verbBtn = (op: string): HTMLButtonElement => {
+    const b = mk(`+${op}`, () => { addVerb(op); paintRail(); });
+    b.dataset.tip = VERB_TIPS[op]!;
+    return b;
+  };
+  const row3 = document.createElement('div'); row3.className = 'btnrow';
+  for (const op of ['rock', 'meteor', 'sink', 'terrace']) { row3.append(verbBtn(op)); }
+  rail2.append(row3);
+  const row4 = document.createElement('div'); row4.className = 'btnrow';
+  for (const op of ['streams', 'erode', 'glacier', 'scree']) { row4.append(verbBtn(op)); }
+  rail2.append(row4);
+  const row4b = document.createElement('div'); row4b.className = 'btnrow';
+  for (const op of ['dunes', 'fan', 'cliff', 'sharpen']) { row4b.append(verbBtn(op)); }
+  rail2.append(row4b);
+  const row4c = document.createElement('div'); row4c.className = 'btnrow';
+  for (const op of ['playa', 'flood', 'smooth']) { row4c.append(verbBtn(op)); }
+  rail2.append(row4c);
+  const row4d = document.createElement('div'); row4d.className = 'btnrow';
+  for (const op of ['fold', 'plates', 'uplift', 'rugged']) { row4d.append(verbBtn(op)); }
+  rail2.append(row4d);
+  const row4e = document.createElement('div'); row4e.className = 'btnrow';
+  for (const op of ['canyon', 'snow', 'lake', 'slump']) { row4e.append(verbBtn(op)); }
+  rail2.append(row4e);
+  const row4f = document.createElement('div'); row4f.className = 'btnrow';
+  for (const op of ['contrast', 'stretch', 'breach']) { row4f.append(verbBtn(op)); }
+  rail2.append(row4f);
+  const row5 = document.createElement('div'); row5.className = 'btnrow';
+  for (const op of ['undo', 'clear']) {
+    const b = mk(op, op === 'undo'
+      ? () => { state.verbs.pop(); save(); schedule(); paintRail(); }
+      : () => { state.verbs.length = 0; save(); schedule(); paintRail(); });
+    b.dataset.tip = VERB_TIPS[op]!;
+    row5.append(b);
+  }
+  rail2.append(row5);
   const note = document.createElement('div');
   note.style.cssText = 'opacity:.45;margin-top:8px;line-height:1.5';
   note.textContent = 'droplets>0 erodes live · A/B flips raw↔eroded · .bin = maps/<name>.bin format · same lattice as genmap.js';
-  rail.append(note);
+  rail2.append(note);
 }
 
 // Spawn-height slider for the ski-ball probe. Deliberately outside
@@ -680,6 +921,26 @@ function dropHeightRow(): HTMLDivElement {
     state.dropHeight = Number(inp.value); val.textContent = String(state.dropHeight); save();
   });
   inp.addEventListener('change', (): void => { if (balls.length > 0) {dropBalls();} });
+  row.append(lab, inp, val);
+  return row;
+}
+
+// Ball terminal velocity — live-applies to falling balls, no re-drop.
+// 0 disables the airborne fall clamp (free-fall accelerates forever).
+function ballTermRow(): HTMLDivElement {
+  const row = document.createElement('div');
+  row.className = 'row';
+  const lab = document.createElement('label'); lab.textContent = 'ball term V';
+  const inp = document.createElement('input');
+  inp.type = 'range'; inp.min = '0'; inp.max = '200'; inp.step = '5';
+  inp.value = String(state.ballTerm);
+  const val = document.createElement('span'); val.textContent = state.ballTerm === 0 ? 'off' : String(state.ballTerm);
+  inp.addEventListener('input', (): void => {
+    state.ballTerm = Number(inp.value);
+    val.textContent = state.ballTerm === 0 ? 'off' : String(state.ballTerm);
+    for (const sim of balls) { sim.terminalVelocity = state.ballTerm; }
+    save();
+  });
   row.append(lab, inp, val);
   return row;
 }
@@ -710,7 +971,7 @@ function presetRow(): HTMLDivElement {
   row.className = 'row';
   const lab = document.createElement('label'); lab.textContent = 'terrain';
   const sel = document.createElement('select');
-  const PRESETS: [number, string][] = [[0, 'mixed'], [1, 'desert'], [2, 'grassland'], [3, 'snow'], [4, 'volcanic'], [5, 'badlands'], [6, 'coast'], [7, 'desert sun']];
+  const PRESETS: [number, string][] = [[0, 'mixed'], [1, 'desert'], [2, 'grassland'], [3, 'snow'], [4, 'volcanic'], [5, 'badlands'], [6, 'coast'], [7, 'crag'], [8, 'canyon'], [9, 'arcane']];
   for (const [v, label] of PRESETS) {
     const o = document.createElement('option'); o.value = String(v); o.textContent = label;
     if (state.preset === v) {o.selected = true;}
@@ -722,7 +983,7 @@ function presetRow(): HTMLDivElement {
     mat.needsUpdate = true; // preset is a compile-time define — recompiles once
     save();
   });
-  row.append(lab, sel);
+  row.append(lab, stepBtn(sel, -1), sel, stepBtn(sel, 1));
   return row;
 }
 
@@ -755,7 +1016,7 @@ function styleRow(): HTMLDivElement {
     Object.assign(state, b);
     save(); refresh(); paintRail();
   });
-  row.append(lab, sel);
+  row.append(lab, stepBtn(sel, -1), sel, stepBtn(sel, 1));
   return row;
 }
 
@@ -770,7 +1031,7 @@ function tiltRow(): HTMLDivElement {
     sel.append(o);
   }
   sel.addEventListener('change', (): void => { state.tiltAxis = sel.value as 'x' | 'z'; save(); schedule(); });
-  row.append(lab, sel);
+  row.append(lab, stepBtn(sel, -1), sel, stepBtn(sel, 1));
   return row;
 }
 
