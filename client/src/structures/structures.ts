@@ -721,7 +721,7 @@ export function mkBastion(teamGlow = 0x59_F2_FF): THREE.Group {
  *  Origin at ground level; scale param sets approximate diameter. */
 export function mkBoulder(size = 4, seed = 1): THREE.Group {
   const g = new THREE.Group();
-  const geo = new THREE.IcosahedronGeometry(size * 0.5, 5);
+  const geo = new THREE.IcosahedronGeometry(size * 0.5, 4);
   const pos = geo.getAttribute('position') as THREE.BufferAttribute;
   const v = new THREE.Vector3();
   for (let i = 0; i < pos.count; i++) {
