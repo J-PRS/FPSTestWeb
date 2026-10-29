@@ -568,6 +568,7 @@ hurtCount += 1;
       const score = missing + (carrying ? 40 : 0) - d;
       if (!best || score > best.score) {best = { id: aid, a, score };}
     }
+    this.room.healthBump(`healscan.${best ? 'patient' : 'none'}`);
     if (best && hasBeam && (this.healBeamT.get(id) ?? 0) <= now) {
       this.healBeamT.set(id, now + 110); // ~0.1s tick — matches WEAPON_FIRE_INTERVAL_S[HealBeam]
       this.room.messages.botAttack(id, best.id, WeaponType.HealBeam);

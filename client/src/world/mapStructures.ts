@@ -272,7 +272,7 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terra
     // the frame keeps the portal's extent readable from any approach.
     const edges = new THREE.LineSegments(
       new THREE.EdgesGeometry(pane.geometry),
-      new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.85 }),
+      new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.85, depthWrite: false }),
     );
     pane.add(edges);
     pane.updateMatrixWorld(true);

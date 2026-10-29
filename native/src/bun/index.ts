@@ -13,7 +13,10 @@ import { BrowserWindow } from "electrobun/main";
 // CLIENT_URL at https://play.jprice.app/?server=wss%3A%2F%2Fplay.jprice.app%2Fws
 const CLIENT_URL = process.env.CLIENT_URL
   ?? "http://localhost:5400/?server=ws%3A%2F%2Flocalhost%3A8000%2Fws";
-const RELAY_PORT = 8787;
+// Another loopback app can squat the default (mailsync took 8787 once) —
+// scan a small range; the client probes the same list. No free port =
+// no UDP lane, the window still opens on plain ws.
+const RELAY_BASE = Number(process.env.UDP_RELAY_PORT ?? 8787);
 // Where datagrams go — the server UDP lane (FPS_UDP_PORT on the box).
 // Local dev: 127.0.0.1:9898. Live: UDP_TARGET_HOST=92.5.61.55.
 const TARGET_HOST = process.env.UDP_TARGET_HOST ?? "127.0.0.1";
@@ -31,28 +34,39 @@ const udp = await Bun.udpSocket({
 });
 let ws: { send(d: string | ArrayBuffer | Uint8Array): void } | null = null;
 
-Bun.serve({
-  port: RELAY_PORT,
-  fetch(req, server) {
-    if (server.upgrade(req)) { return; }
-    return new Response("udp relay — ws://127.0.0.1:8787/udp");
-  },
-  websocket: {
-    open(conn) {
-      ws = conn;
-      console.log("relay client attached");
-    },
-    message(_conn, data) {
-      // Page datagram -> server UDP socket.
-      udp.send(data as Uint8Array, TARGET_PORT, TARGET_HOST);
-    },
-    close() {
-      ws = null;
-      console.log("relay client detached");
-    },
-  },
-});
-console.log(`udp relay: ws://127.0.0.1:${RELAY_PORT} -> ${TARGET_HOST}:${TARGET_PORT}`);
+let relayPort = RELAY_BASE;
+let listening = false;
+for (let p = RELAY_BASE; p <= RELAY_BASE + 4; p += 1) {
+  try {
+    Bun.serve({
+      port: p,
+      fetch(req, server) {
+        if (server.upgrade(req)) { return; }
+        return new Response(`udp relay — ws://127.0.0.1:${p}/udp`);
+      },
+      websocket: {
+        open(conn) {
+          ws = conn;
+          console.log("relay client attached");
+        },
+        message(_conn, data) {
+          // Page datagram -> server UDP socket.
+          udp.send(data as Uint8Array, TARGET_PORT, TARGET_HOST);
+        },
+        close() {
+          ws = null;
+          console.log("relay client detached");
+        },
+      },
+    });
+    relayPort = p;
+    listening = true;
+    break;
+  } catch (error) {
+    if ((error as { code?: string }).code !== 'EADDRINUSE') {throw error;}
+  }
+}
+console.log(`udp relay: ws://127.0.0.1:${relayPort} -> ${TARGET_HOST}:${TARGET_PORT}${listening ? '' : ' (all ports busy — UDP lane off)'}`);
 
 const mainWindow = new BrowserWindow({
   title: "Kribes",

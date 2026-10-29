@@ -277,8 +277,13 @@ export class RoomFactory {
     // a named mode still wins outright.
     const specMode = mode || 'headhunt';
     const base = specMode || mintMap || 'arena';
-    let n = 1;
-    while (this.host.rooms.has(`${base}-${n}`)) {n += 1;}
+    // Room names list fleet-wide but mint worker-local — stride the
+    // counter per worker so each names its own (-1/-4/-7 on w0,
+    // -2/-5/-8 on w1…) and the aggregated /rooms can't collide.
+    const wIdx = Number(process.env.FPS_WORKER_ID?.replace(/^w/, '') ?? 0) || 0;
+    const wCnt = Math.max(1, Number(process.env.FPS_WORKERS ?? 1) || 1);
+    let n = wIdx + 1;
+    while (this.host.rooms.has(`${base}-${n}`)) {n += wCnt;}
     return this.roomFor(`${base}-${n}`, specMode, mintMap, bots, false, noCreatures, noBalls);
   }
 }

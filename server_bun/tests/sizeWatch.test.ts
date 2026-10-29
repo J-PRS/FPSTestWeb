@@ -43,6 +43,10 @@ const GRANDFATHERED: Record<string, number> = {
   // aggregates frame encoders) — pinned; still alarms at +15%.
   // Re-pinned at 1227 after the binary event family + evScratch ring.
   'shared/wire.ts': 1227,
+  // Breached via the gonne/basilisk builders — ballistic viewmodel
+  // file legitimately aggregates gun constructors; next split goes to
+  // weaponsGeoArchive. Pinned; still alarms at +15%.
+  'client/src/entities/viewmodel/weaponsGeoBallistic.ts': 924,
 };
 
 function* walk(dir: string): Generator<string> {

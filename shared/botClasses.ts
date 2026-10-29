@@ -22,7 +22,7 @@ export interface ClassStats {
  *  PlasmaCannon, RocketLauncher, MRVLauncher, Bombard). Enforced
  *  server-side in CombatHandler; the loadout menu filter is a
  *  convenience, not a boundary. */
-export const HEAVY_ONLY_WEAPONS: ReadonlySet<number> = new Set([4, 7, 15, 28, 35]);
+export const HEAVY_ONLY_WEAPONS: ReadonlySet<number> = new Set([4, 7, 15, 28, 35, 43]);
 
 /** Medium-only guns (Flak, Cannon, PlasmaGun) — the mid-tier punch. An
  *  EXACT-class lock like the light tier: heavies trade it away for
@@ -32,7 +32,7 @@ export const MEDIUM_ONLY_WEAPONS: ReadonlySet<number> = new Set([6, 14, 23]);
 /** Light-only finesse weapons (Railgun, Lightning) — precision gear for
  *  the frame that paid HP for twitch; heavies get ordnance instead.
  *  Unlike the other tiers this is an EXACT-class lock, not a floor. */
-export const LIGHT_ONLY_WEAPONS: ReadonlySet<number> = new Set([9, 12]);
+export const LIGHT_ONLY_WEAPONS: ReadonlySet<number> = new Set([9, 12, 42]);
 
 const TIER_RANK: Record<ArmorClass, number> = { light: 0, medium: 1, heavy: 2 };
 

@@ -76,7 +76,7 @@ const crashStreak = new Map<string, number>();
 function spawnWorker(id: string, port: number): void {
   const proc = Bun.spawn([process.execPath, join('src', 'server.ts')], {
     cwd: join(import.meta.dir, '..'),
-    env: Object.assign({}, process.env, {FPS_PORT: String(port), FPS_WORKER_ID: id, FPS_FLEET_REPORT: `http://127.0.0.1:${BASE}/fleet/report`,
+    env: Object.assign({}, process.env, {FPS_PORT: String(port), FPS_WORKER_ID: id, FPS_FLEET_REPORT: `http://127.0.0.1:${BASE}/fleet/report`, FPS_WORKERS: String(WORKERS),
       // One UDP lane can't be shared by N workers on one box — each gets
       // its own port (9898→w0, 9899→w1, …) or the lane stays off.
       ...(process.env.FPS_UDP_PORT ? {FPS_UDP_PORT: String(Number(process.env.FPS_UDP_PORT) + (port - BASE - 1))} : {})}),

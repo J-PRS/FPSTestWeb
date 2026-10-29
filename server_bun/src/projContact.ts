@@ -125,7 +125,19 @@ export function stepContact(r: ContactHost, proj: LiveProj, stats: ReturnType<ty
           if (stats.maxBounces !== undefined && proj.bounces > stats.maxBounces) {
             r.detonate(proj, hit); return true;
           }
+          // Lodge: first dirt contact plants the shell via the glue-bomb
+          // stuck path — only the clamped fuse ends it now.
+          if (stats.lodgeBounce !== undefined && proj.bounces === 1) {
+            r.attach(proj, hit);
+            proj.ttl = Math.min(proj.ttl, p.age + stats.lodgeBounce);
+            return true;
+          }
           bounceOffField(p, r.field, stats.bodyRadius, stats.bounceRestitution, stats.bounceFriction);
+          if (stats.firstBounceVelScale !== undefined && proj.bounces === 1) {
+            p.vel.x *= stats.firstBounceVelScale;
+            p.vel.y *= stats.firstBounceVelScale;
+            p.vel.z *= stats.firstBounceVelScale;
+          }
           // Dirt contact starts a short cook-off when the weapon says so —
           // min-clamp keeps the first bounce's deadline on later skips.
           if (stats.fuseAfterBounce !== undefined) {proj.ttl = Math.min(proj.ttl, p.age + stats.fuseAfterBounce);}

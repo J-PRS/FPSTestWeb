@@ -1,6 +1,8 @@
 {
 	"extends": "./.hutch/devkit/tsconfig.json",
 	"compilerOptions": {
+		// devkit base still uses baseUrl — silence the TS7 deprecation nag
+		"ignoreDeprecations": "6.0",
 		"lib": ["ESNext", "DOM"],
 		"target": "ESNext",
 		"module": "ESNext",

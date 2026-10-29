@@ -284,6 +284,12 @@ export class Terrain {
       this.wireMeshes.push(wire);
       mesh.receiveShadow = true;
       mesh.frustumCulled = false; // world-space extent is set via uniforms, not mesh transform
+      // Terrain sits in the transparent pass (one shared program — only
+      // the edge ring needs alpha) but its fragments are alpha≈1, so any
+      // VFX drawn earlier gets OVERPAINTED where they overlap. Draw
+      // before every VFX object instead — depthWrite is on, so
+      // depth-tested VFX still occlude behind ridges correctly.
+      mesh.renderOrder = -2;
       // Clipmap levels never move — geometry does the panning in-shader.
       mesh.matrixAutoUpdate = false;
       mesh.matrixWorldAutoUpdate = false;
@@ -629,7 +635,10 @@ n += 1; sum += d; sumAbs += Math.abs(d);
     const mesh = new THREE.Mesh(geometry, this.remotePatchMaterial);
     mesh.receiveShadow = true;
     mesh.frustumCulled = true;
-    mesh.renderOrder = 1;
+    // After the clipmap levels (-2) it overlays, before VFX (0+) — same
+    // overpaint rule as the clipmaps: a transparent terrain drawn after
+    // a glow paints it out instead of being occluded by depth.
+    mesh.renderOrder = -1;
     this.scene.add(mesh);
     const patch = { mesh, lastX: Number.NaN, lastZ: Number.NaN, surfaceVersion: -1 };
     this.remotePatches.push(patch);

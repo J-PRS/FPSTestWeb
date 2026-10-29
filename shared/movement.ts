@@ -247,6 +247,8 @@ export class MoveSim {
   /** Contact half-width — set per armor class like mass/eyeHeight; a
    *  narrow class is harder to block, same as its hit capsule. */
   bodyRadius: number = MOVEMENT_CONFIG.playerRadius;
+  /** Airborne downward speed cap (m/s); <=0 disables the clamp entirely. */
+  terminalVelocity: number = MOVEMENT_CONFIG.terminalVelocity;
   /** Sea-surface height in world meters — the map's water.level. Undefined
    *  on a dry map, where water physics is exactly zero. Every host that
    *  runs a sim (server shadow, client prediction, bots, judge probe)
@@ -541,7 +543,7 @@ export class MoveSim {
     // tangential speed through the contact, so clamping vel.y while
     // grounded silently capped downhill speed at terminal/sin(slope).
     s.vel.y += GRAVITY * dt;
-    if (!s.onGround && s.vel.y < -MOVEMENT_CONFIG.terminalVelocity) {s.vel.y = -MOVEMENT_CONFIG.terminalVelocity;}
+    if (!s.onGround && this.terminalVelocity > 0 && s.vel.y < -this.terminalVelocity) {s.vel.y = -this.terminalVelocity;}
     // Gameplay water: below the surface the body is buoyant. Depth is how
     // far the FEET sit under; submersion (0..1) scales every force. Drag
     // runs on all three axes so a fast entry bleeds off, buoyancy cancels

@@ -31,6 +31,9 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-10-18_ADDING_MODES_AND_PICKUPS.md` | Blast surface for new modes/pickups |
 || `_docs/2026-10-29_JOIN_LATENCY_AUTOPSY.md` | **Join latency autopsy** — /metrics.joinMs phases + introDrain prove the herd's multi-second first-gameState tail is WAN delivery, not compute (work ~0.4ms, ELD healthy while drain hit 245s); herd single-link artifact boundary documented |
 | `_docs/2026-10-29_WEAPON_ARCHITECTURE.md` | **Weapon system state** — layer map (wire law → derived sets → authority → prediction → presentation), both ammo economies, the hardcoded-wid bug the audit caught, ranked remaining seams, add-a-weapon checklist |
+| `_docs/2026-10-29_EXPLOSION_VFX_BIBLE.md` | **Blast VFX reference** — variant architecture, per-weapon recipes, AOE-accuracy rules, layer-timing beats, shellburst (black-powder) recipe, tuning knobs, sources |
+| `_docs/2026-10-29_RENDER_ORDER.md` | **Render-order reference** — three.js opaque/transparent pass mechanics, the tier table (-100 sky → 9999 debug), the depthWrite/depthTest rules, terrain's transparent-pseudo-opaque special case, sim-vs-render gap trap |
+| `_docs/2026-10-29_PHONE_PROFILING.md` | **Real-device phone profiling** — adb reverse + CDP attach pipeline, profiler/debug scripts, every setup gotcha (intent-URL escapes, 9222 clash, rAF death on nav, screen-off suspension), and the canvas-oversize black-screen bug it found |
 | `_docs/2026-10-26_TTS_DTS_REFERENCE.md` | **TTS/DTS reference** - cold-boot time-to-shoot and data-to-shoot profile, phase breakdown, prediction table, improvement levers |
 | `_docs/2026-10-18_CTF_BOT_BRAIN_PUG_AUDIT.md` | CTF bot brain vs PUG guide audit |
 | `_docs/2026-10-18_NETCODE_OVERHAUL.md` | Netcode overhaul (2026-10-18) |
