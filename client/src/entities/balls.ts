@@ -39,10 +39,16 @@ function ballGeo(): THREE.IcosahedronGeometry {
   if (!_ballGeo) {_ballGeo = new THREE.IcosahedronGeometry(BALL_BASE_RADIUS, 0);}
   return _ballGeo;
 }
-let _ballMat: THREE.MeshLambertMaterial | null = null;
-function ballMat(): THREE.MeshLambertMaterial {
-  // White diffuse — instanceColor carries hue + emissive-style glow
-  if (!_ballMat) {_ballMat = new THREE.MeshLambertMaterial({ color: 0xFF_FF_FF });}
+let _ballMat: THREE.MeshToonMaterial | null = null;
+function ballMat(): THREE.MeshToonMaterial {
+  // White diffuse — instanceColor carries hue + emissive-style glow.
+  // Toon + 3-step ramp: shade floor ~0.4 so lit faces pop against
+  // shadowed ones (Lambert's smooth falloff read as flat at range).
+  if (!_ballMat) {
+    const ramp = new THREE.DataTexture(new Uint8Array([100, 190, 255]), 3, 1, THREE.RedFormat);
+    ramp.needsUpdate = true;
+    _ballMat = new THREE.MeshToonMaterial({ color: 0xFF_FF_FF, gradientMap: ramp });
+  }
   return _ballMat;
 }
 
