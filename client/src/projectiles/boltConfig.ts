@@ -14,7 +14,7 @@ export const BOLT_CONFIG: ProjectileConfig = {
   speed: WEAPONS[0].speed,
   gravity: WEAPONS[0].gravity,
   explosionRadius: WEAPONS[0].aoeRadius * AOE_VFX_SCALE,
-  force: WEAPONS[0].knockbackForce, // shared table — must match server AOE impulse
+  force: WEAPONS[0].knockbackForce, // shared table - must match server AOE impulse
   forceMode: 'push',
   bodyRadius: WEAPONS[0].bodyRadius,
   hitMin: WEAPONS[0].hitMin,
@@ -48,7 +48,7 @@ export const BOLT_CONFIG: ProjectileConfig = {
   meshType: 'rocket',
   glowShell: true,
   glowColor: 0xFF_44_00,
-  // Vapor-cone collar like the disc — the collar radius IS the wake
+  // Vapor-cone collar like the disc - the collar radius IS the wake
   // hitbox (coupled in projectileVisuals); glowScale only sizes the
   // skirt's trailing length. Opacity runs hotter than the old sphere:
   // the filament map eats most of the additive fill.
@@ -63,8 +63,30 @@ export const BOLT_CONFIG: ProjectileConfig = {
   ribbonTrail: true,
   ribbonWidth: 0.55,
   ribbonLife: 0.3,
-  // Emitter ramp-in — streak spawns at 10% width+life, full over 0.1s,
+  // Emitter ramp-in - streak spawns at 10% width+life, full over 0.1s,
   // so a fresh shot isn't a fat ribbon in the face at the muzzle.
   ribbonRampIn: 0.2,
   ribbonColor: 0xFF_77_33,
 };
+
+/** Bolt-family factory - re-derives every stat field from the shared row
+ *  for `weaponType`, keeps the bolt visual recipe, then applies `over`.
+ *  The bolt recipe is a family, not a per-gun copy. */
+export function mkBoltLike(weaponType: number, over: Partial<ProjectileConfig>): ProjectileConfig {
+  const w = WEAPONS[weaponType];
+  return Object.assign({}, BOLT_CONFIG, {
+    weaponType,
+    speed: w.speed,
+    gravity: w.gravity,
+    explosionRadius: w.aoeRadius * AOE_VFX_SCALE,
+    force: w.knockbackForce,
+    bodyRadius: w.bodyRadius,
+    hitMin: w.hitMin,
+    hitMax: w.hitMax,
+    hitGrow: w.hitGrow,
+    maxLifetime: w.maxLifetime,
+    aoeDamage: w.aoeDamage,
+    aoeRadius: w.aoeRadius,
+    terrainOffset: w.hitMin,
+  }, over);
+}
