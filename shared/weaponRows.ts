@@ -7,6 +7,7 @@ import { WeaponType, type WeaponStats } from './weaponTable.ts';
  *  the visual edge (covers the shock ring), and the two can never drift. */
 export const WEAPONS: Record<number, WeaponStats> = {
   [WeaponType.BoltLauncher]: {
+    fireInterval: 1,
     gib: true, airtimeScale: true, aoeBonus: true,
     directDamage: 50,
     aoeDamage: 15,
@@ -22,6 +23,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 12, // ~1.4km - effectively "flies until it lands"; the fuse only exists so a bugged remote replica can't streak forever
   },
   [WeaponType.Disc]: {
+    fireInterval: 1,
     airtimeScale: true, aoeBonus: true,
     directDamage: 50,
     aoeDamage: 15,
@@ -37,6 +39,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 12, // ~960m - long prayers stay live; fuse only bounds desynced replicas
   },
   [WeaponType.Implodisc]: {
+    fireInterval: 1,
     airtimeScale: true,
     // Belt disc (C): the implosion - pulls targets toward the blast.
     directDamage: 50,
@@ -54,6 +57,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     beltThrow: true,
   },
   [WeaponType.BeltDisc]: {
+    fireInterval: 1,
     airtimeScale: true,
     // Belt disc: the plain push variant - same flight/damage, knocks back.
     directDamage: 50,
@@ -71,6 +75,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     beltThrow: true,
   },
   [WeaponType.Grenade]: {
+    fireInterval: 1,
     directDamage: 50,
     aoeDamage: 20,
     aoeRadius: 13,
@@ -92,6 +97,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     bounceFriction: 0.75,
   },
   [WeaponType.Chaingun]: {
+    fireInterval: 0.09,
     directDamage: 8, // ~89 dps at 11/s - below plasma (125) but hitscan-easy; 13 slugs to kill a player
 
     aoeDamage: 0,
@@ -107,6 +113,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 1.5, // ~375m of reach - every other fast slug carries a fuse; without one remote replicas streak to the 10s backstop
   },
   [WeaponType.Mortar]: {
+    fireInterval: 2,
     gib: true, tier: 'heavy',
     directDamage: 120,
 
@@ -131,6 +138,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     bounceFriction: 0.7,
   },
   [WeaponType.GrenadeLauncher]: {
+    fireInterval: 0.5,
     gib: true,
     directDamage: 50,
     aoeDamage: 20,
@@ -152,6 +160,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     bounceFriction: 0.7,     // = client GL_BOUNCE_FRICTION
   },
   [WeaponType.Flak]: {
+    fireInterval: 1.2,
     tier: 'medium',
     directDamage: 9,
     burst: 9, // one pull registers all shards at once // per shard - 9 shards ≈ 81 max
@@ -174,6 +183,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxBounces: 3,          // shards die on the Nth terrain hit
   },
   [WeaponType.PlasmaCannon]: {
+    fireInterval: 0.28,
     gib: true, tier: 'heavy',
     directDamage: 45,
 
@@ -190,6 +200,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 5, // ~450m flat - same fuse class as Disc; remote replicas otherwise streak forever
   },
   [WeaponType.PlasmaGun]: {
+    fireInterval: 0.1,
     tier: 'medium',
 
     // Quake 2/3 plasma: rapid volley of fat bolts - chain-like cadence
@@ -209,6 +220,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 1.5, // ~240m of reach
   },
   [WeaponType.Railgun]: {
+    fireInterval: 1.5,
     tier: 'light',
     // Quake railgun: 60dmg slug at 450 m/s ≈ hitscan past ~200m - a
     // three-shot on mediums, not two (was dominant at range: 7/12 FFA
@@ -227,6 +239,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 1.2, // ~540m of reach
   },
   [WeaponType.Melee]: {
+    fireInterval: 0.5,
     // Power punch: instant cone in front of the player. Ballistic fields inert;
     // aoeDamage/aoeRadius are the authoritative reach the server validates.
     directDamage: 0,
@@ -242,6 +255,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitGrow: 0,
   },
   [WeaponType.Lightning]: {
+    fireInterval: 0.05,
     tier: 'light',
     // Hitscan beam - not a projectile; ballistic fields inert. Tick damage is
     // directDamage (~89 dps vs enemies - halved: 8dmg ticks were sawing
@@ -276,6 +290,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     sidearm: true,
   },
   [WeaponType.Shotgun]: {
+    fireInterval: 0.7,
     burst: 10, // one pull registers all pellets at once
     pelletSpread: 0.065,
     // Pump pellets: 10 × 7dmg ≈ 70 point-blank - a tighter cone than
@@ -297,6 +312,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     sidearm: true,
   },
   [WeaponType.Cannon]: {
+    fireInterval: 1.1,
     gib: true, tier: 'medium',
 
     // Serious Sam cannonball: a big iron sphere that SKIPS off terrain
@@ -325,6 +341,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxBounces: 0,
   },
   [WeaponType.Gonne]: {
+    fireInterval: 1,
     gib: true, tier: 'light',
     // The light frame's member of the 80 m/s gravity-arc family - same
     // shell economics as the cannon (a flavored reskin, not a new
@@ -351,6 +368,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxBounces: 0, // bounce/lodge shelved - contact pop for now, same as the cannon
   },
   [WeaponType.Basilisk]: {
+    fireInterval: 1.2,
     gib: true, tier: 'heavy',
     // The heavy frame's member of the 80 m/s gravity-arc family - same
     // shell economics as the cannon/gonne (a flavored reskin, not a
@@ -376,6 +394,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxBounces: 0, // bounce/lodge shelved - contact pop for now, same as the cannon
   },
   [WeaponType.MissileLauncher]: {
+    fireInterval: 2.5,
     gib: true, tier: 'heavy',
     // RPG-style missile: flat trajectory, slower than the Bolt Launcher
     // but not free to dodge (65 m/s - the 48 shell was readable-in-flight
@@ -401,6 +420,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 6, // ~290m of flat reach
   },
   [WeaponType.RocketLauncher]: {
+    fireInterval: 1,
     gib: true, airtimeScale: true, aoeBonus: true,
     // The universal rocket: Bolt Launcher stats minus the arc - flat
     // 120 m/s bolt anyone can carry (every class, no tier lock).
@@ -418,6 +438,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 12,
   },
   [WeaponType.Pistol]: {
+    fireInterval: 0.22,
 
     // Hold-out sidearm: fast flat slug, modest damage - the panic button
     // when the primary is dry or wrong for the range.
@@ -436,6 +457,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     sidearm: true,
   },
   [WeaponType.Revolver]: {
+    fireInterval: 0.6,
 
     // Hand cannon: slow cadence, heavy single slug.
     directDamage: 20,
@@ -474,6 +496,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     sidearm: true,
   },
   [WeaponType.Sticky]: {
+    fireInterval: 0.6,
     gib: true,
     // Sticky launcher (T2): glue bomb - sticks where it lands, pops on a
     // 3s fuse. The CHAIN is the weapon: a detonation cooks every other
@@ -495,6 +518,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     stick: true,
   },
   [WeaponType.BeltSticky]: {
+    fireInterval: 1,
     // Belt twin of the glue bomb - same payload, hand-thrown lob. The
     // slow arc is the COMBO enabler: it hangs long enough for your own
     // shell to catch up and swallow it (stats.rides). Own weaponType so
@@ -516,6 +540,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     rides: true,
   },
   [WeaponType.ClusterBomb]: {
+    fireInterval: 1,
     // Belt cluster: a fuse bomb whose pop is only the carrier - the real
     // damage is the bomblet scatter it releases (each claims with
     // ClusterBomblet stats, so the parent's radius stays honest).
@@ -549,6 +574,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 1.1,
   },
   [WeaponType.Javelin]: {
+    fireInterval: 1,
     airtimeScale: true,
     // Thrown dart: near-flat long throw, heavy single-target pierce.
     // No splash - the skill shot IS the reward.
@@ -566,6 +592,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 12, // ~1.4km - spear prayers stay live; fuse only bounds desynced replicas
   },
   [WeaponType.ImpactGrenade]: {
+    fireInterval: 1,
     // Contact-fused blast nade: flies flat and far, pops on ANY touch,
     // medium-high damage in a tight envelope - a real kill tool whose
     // shove is the bonus, not the payload (the CONC carries the strip).
@@ -583,6 +610,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 4, // contact usually pops it first
   },
   [WeaponType.Concussion]: {
+    fireInterval: 1,
     // T2 concussion grenade: the blast is a STRIP, not a kill - small
     // sting inside a wide envelope, a heavy shove, the flag pops loose,
     // and the victim's jet tank takes a bite (CONC_JET_DRAIN). Pure fuse
@@ -607,6 +635,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     fireInterval: 1,
   },
   [WeaponType.RemoteRailgun]: {
+    fireInterval: 1,
     // Belt capacitor slug: 0.4s of readable lob, then a railgun-class beam
     // down its velocity line and a pop at whatever the beam touches. The
     // slug itself can also contact-pop before discharge like an impact nade.
@@ -629,6 +658,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     rayRange: 160,
   },
   [WeaponType.Sprinkler]: {
+    fireInterval: 0.1,
 
     // Sprinkler: plasma-gun cadence (~10/s ≈ 140dps on paper) but every bolt
     // arcs under world gravity inside a slight cone - mid-range area
@@ -681,6 +711,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     sidearm: true,
   },
   [WeaponType.ArmorGrenade]: {
+    fireInterval: 1,
     // Support ordnance: the blast is deliberately mid - the payoff is the
     // plating it sprays onto EVERYTHING it catches (players via the armor
     // pool, creatures as overcap health). Arming the enemy is the cost of
@@ -699,6 +730,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 2,
   },
   [WeaponType.HealBeam]: {
+    fireInterval: 0.1,
     // Hitscan heal - the payload is HP on a friend, not damage. directDamage
     // stays 0 so a claim routed through the damage path lands nothing;
     // the heal itself is server-derived (HEALBEAM_* in weapons.ts).
@@ -715,6 +747,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitGrow: 0,
   },
   [WeaponType.HealGrenade]: {
+    fireInterval: 1,
     // Heal burst: tight radius, the sting vs enemies is the tax on a
     // misthrow - allies get the strong heal, foes get a shove + graze.
     directDamage: 0,
@@ -731,6 +764,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 2,
   },
   [WeaponType.ProxyGrenade]: {
+    fireInterval: 1,
     // Proximity-fused zone pop: a 1s fuse whose trigger bubble inflates
     // 0→4m over its whole life - the closer it is to popping, the wider
     // the net. Toss it into a fight and it cooks off the moment anyone
@@ -749,6 +783,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 1,
   },
   [WeaponType.SatchelCharge]: {
+    fireInterval: 1.9,
     // Satchel charge: hand-planted bomb, not a grenade. Near-zero throw
     // speed means you have to BE there - brush past a generator or an
     // enemy's back, slap it on, and it glues in place for a slow 4s fuse.
@@ -768,6 +803,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     stick: true,   // hand-planted: rests where it lands until the fuse
   },
   [WeaponType.MRVLauncher]: {
+    fireInterval: 2.4,
     tier: 'heavy',
 
     // Mortar's counterpart: a bouncing carrier shell that AIRBURSTS at
@@ -812,6 +848,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 10,    // safety TTL only - contact pops them; an air fuse wastes the rain
   },
   [WeaponType.Bombard]: {
+    fireInterval: 1.6,
     gib: true, tier: 'heavy',
     // The cannon's bigger, meaner brother: an even fatter iron ball that
     // NEVER detonates - it shatters into shards on contact (terrain,
@@ -849,6 +886,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxBounces: 0,
   },
   [WeaponType.Hook]: {
+    fireInterval: 1,
     // Rope dart: contact is never a blast - hitting a body reels the
     // victim toward the shooter, hitting anything else reels the shooter
     // toward the anchor (the movement tool). No damage, no splash: the
@@ -871,6 +909,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hook: true,
   },
   [WeaponType.EMP]: {
+    fireInterval: 1,
     // EMP grenade: belt throw fuse bomb - nominal 10 tag on contact, drains
     // all jet energy and strips shield for targets in the blast radius.
     // Timer detonation (not proxy/hit) to avoid being OP.

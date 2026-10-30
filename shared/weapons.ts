@@ -192,40 +192,10 @@ for (const [wt, w] of Object.entries(WEAPONS)) {
   if (w.fireInterval !== undefined) { _autoFireIntervals[Number(wt)] = w.fireInterval; }
 }
 export const WEAPON_FIRE_INTERVAL_S: Partial<Record<WeaponType, number>> = {
-  [WeaponType.BoltLauncher]: 1,
-  [WeaponType.RocketLauncher]: 1, // bolt-equivalent: same 1s cadence
-  [WeaponType.Disc]: 1,
-  [WeaponType.Chaingun]: 0.09,
-  [WeaponType.Mortar]: 2,
-  [WeaponType.GrenadeLauncher]: 0.5,
-  [WeaponType.Flak]: 1.2,
-  [WeaponType.PlasmaCannon]: 0.28,
-  [WeaponType.Railgun]: 1.5,
-  [WeaponType.Lightning]: 0.05,
-  [WeaponType.Shotgun]: 0.7,
-  [WeaponType.Cannon]: 1.1,
-  [WeaponType.Gonne]: 1, // lightest gun, fastest refire of the arc family
-  [WeaponType.Basilisk]: 1.2, // heaviest bore, slowest refire
-  [WeaponType.MissileLauncher]: 2.5, // A/B'd 2.0: more volume but same kills — dodge-window is the constraint, not cadence
-  [WeaponType.Pistol]: 0.22,
-  [WeaponType.Revolver]: 0.6,
-  [WeaponType.Sticky]: 0.6,
-  [WeaponType.PlasmaGun]: 0.1,
-  [WeaponType.Sprinkler]: 0.1,
-  [WeaponType.HealBeam]: 0.1, // heal ticks like the repair beam — cadence IS the heal rate
-  [WeaponType.Melee]: 0.5,
-  [WeaponType.Shocklance]: LANCE_CADENCE_S, // one zap per pull-out cycle — the cycle IS the cadence
-  [WeaponType.MRVLauncher]: 2.4, // slower than the mortar — one trigger = a whole volley
-  [WeaponType.Bombard]: 1.6, // slower than the cannon — 160dmg can't ride a 0.55s cadence
-  // Belt throws: THROW_TOTAL (0.7 release + 0.3 raise) gates the human
-  // toss — 1.0s mirrors it so a bot that somehow draws a belt weapon in a
-  // combat slot obeys the same ceremony instead of defaulting to 0.1s.
-  [WeaponType.Grenade]: 1, [WeaponType.Implodisc]: 1, [WeaponType.ClusterBomb]: 1,
-  [WeaponType.Javelin]: 1, [WeaponType.ImpactGrenade]: 1, [WeaponType.RemoteRailgun]: 1,
-  [WeaponType.ArmorGrenade]: 1, [WeaponType.HealGrenade]: 1, [WeaponType.ProxyGrenade]: 1,
-  [WeaponType.Concussion]: 1, [WeaponType.BeltSticky]: 1, [WeaponType.Hook]: 1, [WeaponType.BeltDisc]: 1,
-  [WeaponType.SatchelCharge]: 1.9, // deliberate two-beat plant (BELT_THROW_TIME.satchel)
-  [WeaponType.EMP]: 1, // belt throw: EMP grenade — 2s fuse, timer detonation
+  // Cadence lives on the rows: `fireInterval` per WEAPONS entry scans in
+  // here (belt throws carry 1.0 - the THROW_TOTAL ceremony mirror so a
+  // bot in a combat slot can't out-ceremony a human toss).
+  [WeaponType.Shocklance]: LANCE_CADENCE_S, // one zap per pull-out cycle - the cycle IS the cadence
   ..._autoFireIntervals,
 };
 
