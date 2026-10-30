@@ -25,6 +25,11 @@ export interface WorldState {
   /** Remote players - lifecycle (spawn/stale/prune) lives in RemoteSet;
    *  hooks are wired by createRemotes once the deps exist. */
   remotePlayers: RemoteSet<RemotePlayer, RemotePlayerState>;
+  /** Demo playback mirrors — replayed actors as roster-keyed maps so HUD
+   *  systems (health bars) read them through the same shape the wire feeds.
+   *  Replayed actors are first-class, not a side lane. */
+  playbackPlayers: Map<string, { position: { x: number; y: number; z: number }; isDead: boolean; health?: number; armor?: number; team?: string }>;
+  playbackRemotePlayers: Map<string, RemotePlayer>;
   killCounts: Map<string, number>;
   deathCounts: Map<string, number>;
   /** Kills since last local death - drives the SPREE/RAMPAGE subtitle.
@@ -124,6 +129,8 @@ export function createWorldState(): WorldState {
     // Stub hooks - real ones need scene/terrain/nm which don't exist at
     // world-creation time; createRemotes replaces them before first use.
     remotePlayers: new RemoteSet<RemotePlayer, RemotePlayerState>({ create: (): undefined => undefined, isLive: (): true => true }),
+    playbackPlayers: new Map(),
+    playbackRemotePlayers: new Map(),
     killCounts: new Map(),
     deathCounts: new Map(),
     killStreak: 0,

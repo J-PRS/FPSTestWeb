@@ -643,7 +643,10 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   st.lastYaw = player.yaw;
   st.lastPitch = player.pitch;
   perf.mark('viewmodel');
-  deps.lazyHealthBarSystem().update(dt, networkManager.getPlayers(), deps.world.remotePlayers, entities.balls, deps.world.localTeam);
+  deps.lazyHealthBarSystem().update(dt,
+    demoManager?.isPlaying ? deps.world.playbackPlayers : networkManager.getPlayers(),
+    demoManager?.isPlaying ? deps.world.playbackRemotePlayers : deps.world.remotePlayers,
+    entities.balls, deps.world.localTeam);
   perf.mark('healthbars');
 
   // Peripheral speed lines along the true velocity vector; demo-suppressed.
