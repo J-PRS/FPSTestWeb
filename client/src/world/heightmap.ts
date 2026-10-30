@@ -139,6 +139,7 @@ export async function loadHeightfieldBin(url: string): Promise<void> {
   hmData = rgba;
   hmSize = w;
   buildMaxGrid();
+  rebuildVisual(); // lips reapply on the new field — sources persist across swaps
   invalidateField();
 }
 
@@ -206,9 +207,76 @@ export function sampleHeightVisual(wx: number, wz: number): number {
 }
 
 /** Raw RGBA pixels for the GPU displacement texture — Terrain uploads this
- *  verbatim; null until the field arrives via injectHeightmapBytes. */
+ *  verbatim; null until the field arrives via injectHeightmapBytes. When
+ *  structure sediment lips are set, this returns the BUMPED visual copy —
+ *  the sim still reads raw hmData everywhere else (the lip is cosmetic:
+ *  a couple of meters under a structure's own footprint, below anything
+ *  gameplay would sample honestly). */
 export function getHeightmapData(): { data: Uint8ClampedArray; size: number } | null {
-  return hmData ? { data: hmData, size: hmSize } : null;
+  const d = hmVisual ?? hmData;
+  return d ? { data: d, size: hmSize } : null;
+}
+
+// --- visual-only sediment lips -------------------------------------------
+// Structure bases mound the DRAWN field — organic accumulation around the
+// footprint edge so hulls sit IN the ground instead of on it. Bumps merge
+// per source ('structs', 'interiors') so each replacer clears its own set
+// on map swap; reloadHeightmap re-uploads the texture afterwards.
+export interface TerrainBump { x: number; z: number; r: number; h: number }
+let hmVisual: Uint8ClampedArray | null = null;
+const bumpSources = new Map<string, TerrainBump[]>();
+
+export function setTerrainBumps(source: string, list: TerrainBump[] | null): void {
+  if (list?.length) {bumpSources.set(source, list);}
+  else {bumpSources.delete(source);}
+  rebuildVisual();
+}
+
+/** Wipe every bump source — full teardown (tests, demo-inject swaps whose
+ *  placement set never re-fires). Structure lists re-push their own lips
+ *  on the next apply path; this is the escape hatch when they won't. */
+export function clearTerrainBumps(): void {
+  bumpSources.clear();
+  hmVisual = null;
+}
+
+function rebuildVisual(): void {
+  if (!hmData || !hmSize || bumpSources.size === 0) {hmVisual = null; return;}
+  const v = new Uint8ClampedArray(hmData);
+  const metersToByte = TERRAIN_HEIGHTMAP_DIVISOR / (HSCALE * hmScale);
+  let idx = 0;
+  for (const list of bumpSources.values()) {
+    for (const b of list) {
+      const seed = idx++ * 2.17;
+      const gx = (((b.x / hmWorldScale) % 1 + 1) % 1) * hmSize;
+      const gz = (((b.z / hmWorldScale) % 1 + 1) % 1) * hmSize;
+      const gr = (b.r / hmWorldScale) * hmSize;
+      const reach = Math.ceil(gr * 2.1);
+      for (let dz = -reach; dz <= reach; dz += 1) {
+        for (let dx = -reach; dx <= reach; dx += 1) {
+          const d = Math.hypot(dx, dz);
+          // Angular wobble — the ring radius breathes by direction so the
+          // lip reads wind-drifted, not a stamped circle.
+          const ang = Math.atan2(dz, dx);
+          const tw = d / (gr * (1 + 0.2 * Math.sin(3 * ang + seed) + 0.1 * Math.sin(7 * ang + seed * 1.7)));
+          // Apron profile: flat under the footprint (<0.35r), peak ~0.9r,
+          // fade to zero at 2r — soil piled at the wall, not under it.
+          let amp = 0;
+          if (tw > 0.35 && tw <= 0.9) { const t = (tw - 0.35) / 0.55; amp = t * t * (3 - 2 * t); }
+          else if (tw > 0.9 && tw < 2) { const t = 1 - (tw - 0.9) / 1.1; amp = t * t * (3 - 2 * t); }
+          else {continue;}
+          const lift = amp * b.h * metersToByte;
+          if (lift < 1) {continue;}
+          const x = ((Math.round(gx + dx) % hmSize) + hmSize) % hmSize;
+          const z = ((Math.round(gz + dz) % hmSize) + hmSize) % hmSize;
+          const p = (z * hmSize + x) * 4;
+          const nv = Math.min(255, v[p]! + lift);
+          v[p] = v[p + 1] = v[p + 2] = nv;
+        }
+      }
+    }
+  }
+  hmVisual = v;
 }
 
 /** The heightmap in the shared format — server-owned creatures (ballSim)
@@ -240,6 +308,7 @@ export function snapshotHeightmap(): HeightmapSnapshot {
 export function restoreHeightmap(snap: HeightmapSnapshot): void {
   hmData = snap.data; hmSize = snap.size; hmScale = snap.scale; hmWorldScale = snap.worldScale;
   buildMaxGrid();
+  rebuildVisual();
   _hvc.clear();
   invalidateField();
 }
@@ -262,6 +331,7 @@ export function injectHeightmapBytes(
   }
   hmData = rgba; hmSize = size; hmScale = heightScale; hmWorldScale = worldScale;
   buildMaxGrid();
+  rebuildVisual();
   _hvc.clear();
   invalidateField();
   return (): void => restoreHeightmap(prev);

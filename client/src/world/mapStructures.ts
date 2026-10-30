@@ -12,6 +12,7 @@ import {
 import { ramp, hullMat, trimMat, deckMat, darkMat } from '../structures/structKit.js';
 import { applyTerrainBlend } from '../structures/terrainBlend.js';
 import { applyStructSurface } from '../structures/structSurface.js';
+import { setTerrainBumps, type TerrainBump } from './heightmap.js';
 import type { Terrain } from './terrain.js';
 import { KIT_HULLS } from '../../../shared/structKits.js';
 import { urlParams } from '../core/params.js';
@@ -184,7 +185,26 @@ function buildColliderGizmos(list: StructureSpec[], scene: THREE.Scene): void {
 
 
 
-export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terrain?: Pick<Terrain, 'heightU'>): void {
+/** Sediment-lip radius per structure kind — the apron mound heightmap.ts
+ *  draws around the footprint. 'shield' skipped: a pane is a wall, not a
+ *  mass that collects soil. 'kit' pieces get a fixed modest lip (their
+ *  real hulls are KIT_HULLS, not `size`). */
+export function structureBumps(list: StructureSpec[]): TerrainBump[] {
+  const out: TerrainBump[] = [];
+  for (const s of list) {
+    if (s.kind === 'shield' || s.kind === 'hull') {continue;} // hull = invisible T2 collision — the interior mesh owns the lip
+    let r: number;
+    if (s.kind === 'kit') { r = 9 * (s.scale ?? 1); }
+    else { r = Math.max(s.size.x, s.size.z) * 0.5; }
+    r = Math.min(30, Math.max(4, r));
+    out.push({ x: s.pos.x, z: s.pos.z, r, h: Math.min(3, r * 0.16) });
+  }
+  return out;
+}
+
+export function buildStructures(list: StructureSpec[], scene: THREE.Scene, terrain?: Pick<Terrain, 'heightU' | 'reloadHeightmap'>): void {
+  setTerrainBumps('structs', structureBumps(list));
+  terrain?.reloadHeightmap();
   // Sand-creep seam blend — patch the shared kit palette (idempotent)
   // and this build's spec-box mats so every wall/kit foot fades into
   // the heightfield instead of hard-intersecting it.

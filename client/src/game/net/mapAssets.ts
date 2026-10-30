@@ -20,7 +20,7 @@ import { Ball } from '../../entities/balls.js';
 
 import type { NetCtx } from './ctx.js';
 
-import { loadHeightfieldBin, setHeightScale, setWorldScale } from '../../world/heightmap.js';
+import { loadHeightfieldBin, setHeightScale, setWorldScale, setTerrainBumps, type TerrainBump } from '../../world/heightmap.js';
 
 import { TERRAIN_HEIGHT_SCALE, TERRAIN_WORLD_SCALE, FOG_COLOR, FOG_START, FOG_END } from '../../core/config.js';
 
@@ -1495,6 +1495,26 @@ async function fetchGlb(httpUrl: string, file: string): Promise<THREE.Group | nu
 
  *  these are static hulls, no skeletons. */
 
+/** Sediment-lip radius per dif class — footprint estimate for the
+ *  accumulation apron heightmap draws at each base. Bridges skipped:
+ *  a lip under midspan reads as a berm, not sediment. Scaled by
+ *  spec.scale.x so blown-up variants pile proportionally more. */
+function interiorBumps(list: InteriorSpec[]): TerrainBump[] {
+  const R: [RegExp, number][] = [
+    [/vpad|plat|base/i, 28], [/bunk/i, 24], [/towr/i, 15],
+    [/rock/i, 12], [/spir|misc|tbunker/i, 11], [/gate|powerpit/i, 20],
+    [/wall/i, 16], [/tbower|tri_tower/i, 14],
+  ];
+  const out: TerrainBump[] = [];
+  for (const s of list) {
+    if (/brdg|bridge/i.test(s.file)) {continue;}
+    const cls = R.find(([re]): boolean => re.test(s.file));
+    const r = (cls?.[1] ?? 15) * (s.scale?.x ?? 1);
+    out.push({ x: s.pos.x, z: s.pos.z, r, h: Math.min(3.2, r * 0.13) });
+  }
+  return out;
+}
+
 export async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefined): Promise<void> {
 
 interiorsEpoch += 1;
@@ -1514,6 +1534,9 @@ interiorsEpoch += 1;
     interiorGeos = [];
 
   }
+
+  setTerrainBumps('interiors', list?.length ? interiorBumps(list) : null);
+  deps.lazyTerrain().reloadHeightmap();
 
   if (!list?.length) {return;}
 
