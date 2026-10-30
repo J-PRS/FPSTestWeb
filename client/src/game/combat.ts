@@ -200,7 +200,7 @@ export function createCombat(deps: CombatDeps) {
     onMelee: fire.onMelee,
     onLightning: lightning,
     slam: (pos: THREE.Vector3, impactSpeed: number): void => slam(c, pos, impactSpeed),
-    updateProjectiles: (dt: number): void => updateProjectiles(c, dt),
+    updateProjectiles: (dt: number, rawDt?: number): void => updateProjectiles(c, dt, rawDt),
     updateBeamVisual: (): void => { updateBeamVisual(); rep.updateBeamVisual(); hb.updateBeamVisual(); },
     hitTargetLocal: (t: Targetable, dmg: number, attackerId?: string): boolean => hitTargetLocal(c, t, dmg, attackerId),
   };

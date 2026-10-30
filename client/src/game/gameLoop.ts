@@ -299,14 +299,14 @@ const _contactBodies: BodyCapsule[] = [];
 
 /** Stage 1 — world sim: player, terrain, entities, wave director,
  *  projectiles. Returns demoPaused for the later stages. */
-interface TickFrame { dt: number; player: Player; networkManager: NetworkManager; demoManager: DemoManager | null; bootReleased: boolean }
+interface TickFrame { dt: number; rawDt: number; player: Player; networkManager: NetworkManager; demoManager: DemoManager | null; bootReleased: boolean }
 const fmtBps = (b: number): string => {
   if (b >= 1_048_576) {return `${(b / 1_048_576).toFixed(1)}MB/s`;}
   if (b >= 1024) {return `${(b / 1024).toFixed(1)}KB/s`;}
   return `${Math.round(b)}B/s`;
 };
 
-function tickEntities(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, dt: number, demoPlaying: boolean, bootReleased: boolean): void {
+function tickEntities(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, dt: number, demoPlaying: boolean, bootReleased: boolean, rawDt = dt): void {
   const {entities} = deps;
   entities.updateBalls(dt);
   perf.mark('balls');
@@ -330,7 +330,7 @@ function tickEntities(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>
   // on the wire and this field stays unset.
   deps.world.soloConquest?.tick(dt);
   perf.mark('bots');
-  if (!demoPlaying) {deps.combat()?.updateProjectiles(dt);}
+  if (!demoPlaying) {deps.combat()?.updateProjectiles(dt, rawDt);}
   // Offline clip render steps this with demo-dt per output frame —
   // a wall-dt tick here would make shells fly at render speed.
   if (!deps.lazyDemoManager()?.offlineRender) {deps.demoLifecycle().updatePlaybackProjectiles(dt);}
@@ -437,7 +437,7 @@ bodyN += 1;
   if (demoPaused) {return true;}
 
   if (bootHoldActive(f)) {return false;}
-  tickEntities(deps, perf, dt, demoManager?.isPlaying ?? false, bootReleased);
+  tickEntities(deps, perf, dt, demoManager?.isPlaying ?? false, bootReleased, f.rawDt);
   return false;
 }
 
@@ -1033,7 +1033,7 @@ export function createGameLoop(deps: GameLoopDeps): { start(): void; whenStable(
     const networkManager = deps.lazyNetworkManager();
     const demoManager = deps.lazyDemoManager();
 
-    const frame: TickFrame = { dt, player, networkManager, demoManager, bootReleased: st.bootWarmup.released };
+    const frame: TickFrame = { dt, rawDt: Number.isFinite(rawElapsed) ? Math.min(Math.max(rawElapsed, 0), 2) : dt, player, networkManager, demoManager, bootReleased: st.bootWarmup.released };
     // Late-bound once: the ops uplink reads the perf EMA (JS frame cost +
     // real present rate) but perf doesn't exist until the loop starts.
     if (!networkManager.statsSource) {

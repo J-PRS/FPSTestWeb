@@ -267,7 +267,7 @@ function catchRiders(list: Projectile[]): void {
 
 
 
-export function updateProjectiles(c: CombatCtx, dt: number): void {
+export function updateProjectiles(c: CombatCtx, dt: number, rawDt = dt): void {
   const {deps} = c;
   c.lg.tickBeam(dt); // beam fades ~80ms after the last tick
   pruneShots(c);
@@ -329,7 +329,13 @@ export function updateProjectiles(c: CombatCtx, dt: number): void {
   RibbonTrail.sweepStale();
   for (let i = deps.world.projectiles.length - 1; i >= 0; i -= 1) {
     const p = deps.world.projectiles[i];
-    p.update(dt, deps.lazyTerrain(), deps.targets, remotePlayerPositions, obstacles, remotePlayerClasses);
+    // Shells clock WALL time — the server shell doesn't slow down for
+    // our frame jank, so both replicas and own predicted shells take
+    // the unclamped elapsed and catch up through the cell grid instead
+    // of starving ~95% of a loafed frame (the traj-epoch / dmg-echo
+    // starvation class). The local BODY stays on the clamped dt — only
+    // shells mirror a server-side clock.
+    p.update(rawDt, deps.lazyTerrain(), deps.targets, remotePlayerPositions, obstacles, remotePlayerClasses);
 
     if (p.config.hook) {tickHookRope(deps, p, remotePlayerPositions);}
 

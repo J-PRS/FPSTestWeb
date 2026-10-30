@@ -427,7 +427,10 @@ export class Projectile {
     // different phase than the authority's tick, which was the remote
     // half of the trajDiv tail (self:0 outliers).
     if (this.isRemote) {
-      this.cellAcc = Math.min(this.cellAcc + dt, 0.6);
+      // Catch-up ceiling: replicas get WALL dt (the server shell doesn't
+      // starve when our frames loaf) — cap at 2s so a single jank frame
+      // fully closes the gap instead of dripping it over seconds.
+      this.cellAcc = Math.min(this.cellAcc + dt, 2);
       while (this.cellAcc >= 0.05) {
         this.cellAcc -= 0.05;
         if (this.stepFrame(0.05, terrain, undefined, remotePlayers, obstacles, playerClasses)) {return;}
@@ -441,7 +444,9 @@ export class Projectile {
     // bounce/contacts resolved at a different phase point than the tick
     // grid the authority sweeps. The sub-cell remainder renders
     // ballistically (the ballNet rem pattern) so motion stays smooth.
-    this.cellAcc = Math.min(this.cellAcc + dt, 0.6);
+    // Wall-dt feed: the server shell doesn't starve under our jank —
+    // catch up through the grid (cap 2s covers a full loafed frame).
+    this.cellAcc = Math.min(this.cellAcc + dt, 2);
     while (this.cellAcc >= 0.05) {
       this.cellAcc -= 0.05;
       if (this.stepFrame(0.05, terrain, balls, remotePlayers, obstacles, playerClasses)) {return;}

@@ -153,7 +153,7 @@ export function wireProjectiles(ctx: NetCtx): void {
   // Bind a server id echo to the local shell that spawned it — the spawn
   // claim's shotId nonce comes back verbatim, so the link is exact (no
   // FIFO, no position inference, immune to rejected/dropped claims).
-  const linkOwnProjectile = (projectileId: string, shotId: string | undefined, pellet: number | undefined, position?: { x: number; y: number; z: number }, velocity?: { x: number; y: number; z: number }, srvAge?: number): void => {
+  const linkOwnProjectile = (projectileId: string, shotId: string | undefined, pellet: number | undefined, position?: { x: number; y: number; z: number }, velocity?: { x: number; y: number; z: number }, srvAge?: number, srvT?: number): void => {
     const registry = deps.world.projectileRegistry;
     let localProjectile;
     if (shotId) {
@@ -182,9 +182,16 @@ export function wireProjectiles(ctx: NetCtx): void {
     if (position && velocity
         && Number.isFinite(position.x + position.y + position.z + velocity.x + velocity.y + velocity.z)) {
       // Exact server age on the echo beats the ping estimate — the wire
-      // now carries it; fall back to the transit estimate on old peers.
+      // now carries it; + (serverNow − srvT) measures the echo's own
+      // queue delay so a stalled create can't reset the clock backward
+      // (the traj-epoch starvation class). Fall back to the transit
+      // estimate on old peers.
+      const serverNow = nm().serverNowMs?.();
+      const exactAge = srvAge !== undefined && srvT !== undefined && serverNow !== undefined
+        ? srvAge + Math.max(0, (serverNow - srvT) / 1000)
+        : srvAge;
       localProjectile.reanchorTo(position, velocity,
-        srvAge ?? Math.max(0, localProjectile.age - (nm().serverPingMs ?? nm().getPing()) / 2000));
+        exactAge ?? Math.max(0, localProjectile.age - (nm().serverPingMs ?? nm().getPing()) / 2000));
     }
     // Burst pellet binding is one-shot — the slot frees once linked.
     if (localProjectile.fanSlot) {
@@ -198,7 +205,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     noteWeapon(ownerId, weaponType);
     // For own projectiles: link the server id to the local shell by nonce.
     if (ownerId === nm().getLocalPlayerId()) {
-      linkOwnProjectile(projectileId, shotId, pellet, position, velocity, srvAge);
+      linkOwnProjectile(projectileId, shotId, pellet, position, velocity, srvAge, srvT);
       return;
     }
 

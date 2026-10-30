@@ -188,7 +188,11 @@ export function sweepDamageEchoes(now: number, stallMs = 0): void {
     // stallMs = inbound silence — a starved wire delays every verdict;
     // expiring mid-stall counts a delayed hit as a ghost.
     const ttlMs = e.wt === undefined ? 0 : (WEAPONS[e.wt]?.maxLifetime ?? 0) * 1000;
-    const deadline = e.t + 900 + Math.min(ttlMs, 4100) + stallMs;
+    // A shotId-bound verdict can't predate its shell's fate — a planted
+    // shell's destroy lands at TTL, not at the painted blast (the
+    // srvAt:none + fate-late pairing class). Same horizon the kb stamps
+    // use: full shell life, 9s cap.
+    const deadline = e.t + 900 + Math.min(ttlMs, 9000) + stallMs;
     if (now > deadline) {
       // Bodyless + carrier-spawned weapons (MRVBomblet, melee, beams)
       // have no shotId-bound shell fate — the client intent is never
