@@ -9,7 +9,7 @@ import { CLASS_MODEL_SCALE, classCapsule, classMass } from '../../../shared/botC
 import { RemoteInterp } from './remoteInterp.js';
 import { RemoteGizmo } from './remoteGizmo.js';
 import { resetCorpse, launchCorpse, stepCorpse, type CorpseState } from './remoteDeath.js';
-import { VerletRagdoll, GunDrop } from './verletRagdoll.js';
+import type { VerletRagdoll, GunDrop } from './verletRagdoll.js';
 import { WeaponType, WEAPON_FIRE_INTERVAL_S } from '../../../shared/weapons.js';
 import { RemoteAuras } from './remoteAuras.js';
 import { RemoteAnim } from './remoteAnim.js';
@@ -89,8 +89,13 @@ export class RemotePlayer {
    *  snapshot buffer sampled at the last drawn frame's server epoch —
    *  literally where the shooter saw them. Envelope math (blast/shock
    *  beams, shell sweeps) must read this — rendered pos ghosts hits on
-   *  fast movers, wire pos leads them. */
-  ghostPosition(out: THREE.Vector3): THREE.Vector3 {
+   *  fast movers, wire pos leads them.
+   *  The server's rewind is shooterTransit+lag−targetTransit, NOT the
+   *  pure view epoch — a victim on a fatter pipe gets judged
+   *  (victimPing−shooterPing)/2 ms LATER than the paint shows. Pass the
+   *  shooter's transit so the sampled ghost lands on the adjudicated
+   *  body, not the rendered one. */
+  ghostPosition(out: THREE.Vector3, shooterTransitMs = 0): THREE.Vector3 {
     if (this.lastUpdateTime <= 0) {return out.copy(this.position);}
     // The shooter's view epoch IS a server-time in the snapshot buffer —
     // sample the real history (turns, landings, bounces) instead of
@@ -98,7 +103,7 @@ export class RemotePlayer {
     // Dead reckoning owns the body — the drawn position IS the view, and
     // the buffer's frozen epoch would sample a pre-sim ghost instead.
     if (this.interp.simulating) {return out.copy(this.position);}
-    const epoch = this.interp.viewEpochT;
+    const epoch = this.interp.viewEpochT + this.interp.wirePingMs / 2 - shooterTransitMs;
     if (Number.isFinite(epoch) && this.interp.sampleGhostAt(epoch, out)) {return out;}
     // No rendered frame yet (pre-buffer boot) — project the wire record.
     const age = Math.min((Date.now() - this.lastUpdateTime) / 1000, 1);
@@ -109,6 +114,9 @@ export class RemotePlayer {
   get interpAtCap(): boolean { return this.interp.atCap; }
   get interpSimVel(): THREE.Vector3 { return this.interp.simVelocity; }
   get interpConverging(): boolean { return this.interp.converging; }
+  /** The remote's own wire ping — server rewind depth needs the
+   *  victim's transit, not just the shooter's view epoch. */
+  get wirePingMs(): number { return this.interp.wirePingMs; }
   /** Local authority (GameBot): position is written directly each frame,
    *  so the snapshot interp / dead-reckoning path would fight it — tick
    *  short-circuits to model+gizmo upkeep only. */

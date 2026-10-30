@@ -133,6 +133,10 @@ export class RemoteInterp {
   /** Server-time epoch of the last drawn frame — the shooter's literal
    *  view instant the lag-comp ghost samples at. */
   get viewEpochT(): number { return this.net.viewEpochT; }
+  /** The remote's own wire ping — the server rewinds victims
+   *  targetTransit-shallower than the shooter's view epoch, so sweep
+   *  ghosts need this to land on the adjudicated body. */
+  get wirePingMs(): number { return this.ping; }
   /** Buffered truth at a server-time epoch — history, not projection. */
   sampleGhostAt(t: number, out: THREE.Vector3): boolean { return this.net.sampleAt(t, out); }
   /** Buffer starved → extrapolation cap hit: each underrun is a visible

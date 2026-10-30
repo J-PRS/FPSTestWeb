@@ -18,6 +18,7 @@ export const _lgHit = new THREE.Vector3();
 export const _lgBend = new THREE.Vector3(); // terrain-bounce corner, when bounced
 const _lgD2 = new THREE.Vector3(); // bounce-pick scratch
 const _lgGhost = new THREE.Vector3(); // ghost-epoch victim position
+let _lgTransit = 0; // shooter transit — refreshed per trace call
 const _lgP = new THREE.Vector3();   // terrain march point
 const _lgTo = new THREE.Vector3();
 const _lgTo2 = new THREE.Vector3(); // chain-pick scratch
@@ -57,7 +58,7 @@ function tracePlayerHit(deps: CombatDeps, hitT: number, traceT: { t: number }, o
     // server validates) at the GHOST epoch — the server judges the victim
     // ~0.7·renderDelay behind live; the rendered body is ~150ms stale
     // (pins on the stale visual read as hits the authority never saw).
-    const entry = rayCapsuleEntry(rp.ghostPosition?.(_lgGhost) ?? rp.position, traceT.t, rp.armorClass, o, d);
+    const entry = rayCapsuleEntry(rp.ghostPosition?.(_lgGhost, _lgTransit) ?? rp.position, traceT.t, rp.armorClass, o, d);
     if (entry !== null) { traceT.t = entry; hitId = pid; }
   }
   return hitId;
@@ -99,6 +100,9 @@ export function lgTrace(deps: CombatDeps, cam: THREE.Camera, traceT: { t: number
 } {
   _lgO.copy(cam.position);
   cam.getWorldDirection(_lgD);
+  // Server rewind = view + (victimPing−myPing)/2 — ghost sweeps judge
+  // the victim at the adjudicated epoch, not the rendered one.
+  _lgTransit = (deps.lazyNetworkManager?.()?.serverPingMs ?? deps.lazyNetworkManager?.()?.getPing?.() ?? 0) / 2;
 
   // Terrain: march the ray in 1.5m steps until it goes under the heightmap,
   // then bisect the last step — the coarse march alone can leave the tip
@@ -177,7 +181,7 @@ function bounceLeg(deps: CombatDeps): {
     // eye height; measure to the capsule midpoint so a contact at the
     // feet still catches a standing enemy.
     const cap = classCapsule(rp.armorClass);
-    const gp = rp.ghostPosition?.(_lgGhost) ?? rp.position;
+    const gp = rp.ghostPosition?.(_lgGhost, _lgTransit) ?? rp.position;
     _lgD2.set(gp.x, gp.y - cap.eye + cap.height * 0.5, gp.z);
     const d2 = _lgBend.distanceToSquared(_lgD2) - cap.radius * cap.radius;
     if (d2 < bestD2) { bestD2 = d2; bTarget = null; bPlayer = pid; _lgTo.copy(_lgD2); }

@@ -139,6 +139,42 @@ try {
     return true;
   })()`);
   const tier = await c.test<string>(`t.networkManager.transportTier ?? t.networkManager.ws?.tier`);
+  // WT_FIRE=1: the soak client fights — real-input fire loop aimed at
+  // live remotes, cycling weapon classes. Without this the local
+  // prediction→claim→echo path (trajDiv-self, damage echoes, self-shove)
+  // stays unmeasured: an AFK client only audits remote replicas.
+  if (process.env.WT_FIRE) {
+    await c.test(`(() => {
+      window.__fire = setInterval(async () => {
+        const t = window.__test; const p = t.player;
+        if (!p || p.isDead) {return;}
+        let best = null, bd = 1e9;
+        for (const [id, rp] of (t.world?.remotePlayers ?? [])) {
+          const d = p.pos.distanceTo(rp.position);
+          if (d < bd) {bd = d; best = rp.position;}
+        }
+        if (!best || bd < 8 || bd > 220) {return;}
+        const { weaponDef } = await import('/src/weapons.ts');
+        const wids = [1, 1, 2, 6, 3]; // disc-heavy + chaingun/plasma/mortar
+        const wid = wids[Math.floor(Math.random() * wids.length)];
+        const def = weaponDef(wid);
+        // The server enforces per-weapon cadence — onWeaponFire skips the
+        // input cooldown, so the harness must pace itself or every reject
+        // is self-inflicted noise.
+        const now = performance.now();
+        window.__lastFire = window.__lastFire ?? {};
+        if (now - (window.__lastFire[wid] ?? -1e9) < def.rate * 1100) {return;}
+        window.__lastFire[wid] = now;
+        const origin = p.pos.clone().add(new p.pos.constructor(0, 1.4, 0));
+        const dir = best.clone().sub(origin);
+        dir.y += bd * 0.04; // loft for the arc weapons
+        dir.normalize();
+        p.onWeaponFire(def, { origin, dir, playerVel: p.vel.clone() });
+      }, 400);
+      return true;
+    })()`);
+    console.log('WT_FIRE armed — client firing at remotes');
+  }
   console.log(`connected tier=${tier} — soaking ${SECS}s`);
   if (tier !== 'wt') {console.log('WARN: not on wt — check server WT bind log');}
   for (let t = 0; t < SECS; t += 5) {
@@ -171,6 +207,7 @@ try {
 } finally {
   const jerk = await c.test<Record<string, { d: number[]; pops: number }>>(`(() => {
     const j = window.__jerk; if (j?.timer) {clearInterval(j.timer);}
+    if (window.__fire) {clearInterval(window.__fire);}
     const out = {};
     for (const [id, s] of (j?.steps ?? [])) {
       const sorted = [...s.d].sort((a, b) => a - b);
@@ -212,7 +249,10 @@ try {
   console.log('--- console (session lines) ---');
   for (const l of consoleLines.slice(-40)) console.log(l);
   console.log('--- server tail ---');
-  console.log(stack.serverLog().split('\n').slice(-15).join('\n'));
+  const slog = stack.serverLog();
+  console.log(slog.split('\n').slice(-15).join('\n'));
+  const { writeFileSync } = await import('node:fs');
+  writeFileSync('wtsoak_server.log', slog);
   await closeClient(c);
   stack.down();
 }

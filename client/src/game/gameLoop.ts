@@ -369,6 +369,9 @@ bodyN += 1;
   // misreported its rejection age (up to ~20s) when it finally landed.
   const kbStamps = deps.world.selfBlastStamps;
   if (kbStamps.length > 0) {
+    // Death voids pending stamps — the respawn teleports the body, so any
+    // verdict arriving now was judged at the corpse's ghost, not ours.
+    if (deps.lazyPlayer().isDead) {kbStamps.length = 0;}
     const now = performance.now();
     // Starvation-tolerant: an inbound silence delays every echo — a stamp
     // younger than horizon+silence can't have been refused yet (the same
@@ -381,10 +384,14 @@ bodyN += 1;
         // Self-authored stamps are confirmation-free by design (server
         // skips the self-shove echo for humans) — silent expiry.
         if (!s.self) {
+          // Refused verdict — reverse the predicted impulse so a phantom
+          // shove stops displacing the body into the next blast's eval.
+          if (s.iv) {const v = deps.lazyPlayer().vel; if (v) {v.x -= s.iv.x; v.y -= s.iv.y; v.z -= s.iv.z;}}
           const wa = s.wireAt;
           const kind = s.pid && !wa ? 'kb-pop-div' : 'kb-echo';
           parityMiss(kind, Object.assign({ x: Math.round(s.x), y: Math.round(s.y), z: Math.round(s.z), by: s.by, f: s.f, ageMs: Math.round(now - s.t) },
             s.pop ? { pop: s.pop } : {},
+            s.m === undefined ? {} : { m: s.m },
             s.wt === undefined ? {} : { wt: s.wt },
             wa ? { wa: `${wa.x.toFixed(0)},${wa.y.toFixed(0)},${wa.z.toFixed(0)}`, offM: Number(Math.hypot(s.x - wa.x, s.y - wa.y, s.z - wa.z).toFixed(1)) } : {}));
         }

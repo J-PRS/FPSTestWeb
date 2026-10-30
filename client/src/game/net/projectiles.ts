@@ -239,8 +239,12 @@ export function wireProjectiles(ctx: NetCtx): void {
       // Fallback = our own one-way uplink (ping/2), not the old
       // 0.35·rtt estimate that sat between the epochs of nothing.
       const rp = deps.world.remotePlayers.get(ownerId);
-      const backMs = rp && rp.viewLagMs > 0 ? rp.viewLagMs
-        : (nm().serverPingMs ?? nm().getPing() ?? 0) / 2;
+      // Full rewind = shooterTransit + shooterViewLag − myTransit: the
+      // shooter's viewLag alone is (shooterPing−myPing)/2 shallow — a
+      // fat-pipe shooter's server body-sweeps me ~90ms deeper.
+      const myPing = nm().serverPingMs ?? nm().getPing() ?? 0;
+      const backMs = rp && rp.viewLagMs > 0 ? rp.viewLagMs + (rp.wirePingMs - myPing) / 2
+        : myPing / 2;
       const m = histAt(deps.world.localPosHistory, backMs);
       if (!m) {return pl.pos;}
       _sweepGhost.set(m.x, m.y, m.z);

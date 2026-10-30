@@ -313,7 +313,10 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
     // the shooter's view epoch, which is what the server rewinds to.
     // Validating against the rendered `position` suppresses honest claims
     // whenever the two diverge (converge/drift episodes, 6-14m observed).
-    const claimTarget = targetPlayer ? targetPlayer.ghostPosition(_claimTarget) : hitPos;
+    // The server's rewind is (victimPing−myPing)/2 shallower than the
+    // view ghost — validate at the adjudicated epoch, not the painted one.
+    const myTransit = (deps.lazyNetworkManager?.()?.serverPingMs ?? deps.lazyNetworkManager?.()?.getPing?.() ?? 0) / 2;
+    const claimTarget = targetPlayer ? targetPlayer.ghostPosition(_claimTarget, myTransit) : hitPos;
     const verdict = hitVerdict(c, p, p.pos, claimTarget, p.hitAge, targetPlayer?.armorClass);
 
     if (!verdict.ok) {

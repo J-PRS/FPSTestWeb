@@ -279,12 +279,13 @@ export class BlastRunner {
     return rewindPos(target, Math.max(0, back));
   }
 
-  /** Why a human target was refused — the client-side predicted-shove
-   *  stamp (kb-echo) names an echo that never arrives, but not WHICH
-   *  gate killed it. Logging the gate + the server-side numbers next to
-   *  the client's stamp is how the divergence actually gets attributed. */
+  /** Why a refused envelope verdict happened — the client-side stamps
+   *  (kb-echo / dmg-echo) name an echo that never arrives, but not
+   *  WHICH gate killed it. Logs when the blast could ever be audited:
+   *  a human victim (kb-echo) or a human SHOOTER (dmg-echo — the victim
+   *  is usually a bot, which is why victim-gating missed them). */
   private refuse(gate: string, ctx: BlastCtx, targetId: string, dist: number, isBot?: boolean, tpos?: Vec3, live?: Vec3): void {
-    if (isBot) {return;} // the sweep refuses bots constantly — humans are the parity-miss population
+    if (isBot && ctx.bot) {return;} // bot-on-bot sweep noise — the parity-miss population is human-involved
     logger.warn('aoe-refuse', { gate, victim: targetId, shooter: ctx.shooterId, dist: Number(dist.toFixed(1)), radius: ctx.radius, wt: ctx.weapon, at: [ctx.pos.x, ctx.pos.y, ctx.pos.z].map((v): number => Math.round(v)),
       ...(tpos && live ? { ghost: [Math.round(tpos.x), Math.round(tpos.y), Math.round(tpos.z)], live: [Math.round(live.x), Math.round(live.y), Math.round(live.z)],
         gM: Number(Math.hypot(tpos.x - live.x, tpos.y - live.y, tpos.z - live.z).toFixed(1)) } : {}) });

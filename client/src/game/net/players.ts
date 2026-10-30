@@ -251,10 +251,15 @@ function wireKnockback(ctx: NetCtx, position: { x: number; y: number; z: number 
       // predictions audit an echo that should have existed.
       if (!stamps[i]!.self) {
         const s = stamps[i]!;
+        // Refused verdict — undo the predicted impulse: the drift already
+        // integrated can't un-run, but reverting vel stops the phantom
+        // shove from compounding into the next envelope eval.
+        if (s.iv) {const v = deps.lazyPlayer().vel; if (v) {v.x -= s.iv.x; v.y -= s.iv.y; v.z -= s.iv.z;}}
         const wa = s.wireAt;
         const kind = s.pid && !wa ? 'kb-pop-div' : 'kb-echo';
         parityMiss(kind, Object.assign({ x: Math.round(s.x), y: Math.round(s.y), z: Math.round(s.z), by: s.by, f: s.f, ageMs: Math.round(now - s.t) },
           s.pop ? { pop: s.pop } : {},
+          s.m === undefined ? {} : { m: s.m },
           s.wt === undefined ? {} : { wt: s.wt },
           wa ? { wa: `${wa.x.toFixed(0)},${wa.y.toFixed(0)},${wa.z.toFixed(0)}`, offM: Number(Math.hypot(s.x - wa.x, s.y - wa.y, s.z - wa.z).toFixed(1)) } : {}));
       }

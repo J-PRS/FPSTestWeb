@@ -276,6 +276,11 @@ export function updateProjectiles(c: CombatCtx, dt: number): void {
   remotePlayerPositions.clear();
   const remotePlayerClasses = _remotePlayerClasses;
   remotePlayerClasses.clear();
+  // Server rewind = shooterTransit + lag − targetTransit: sweep ghosts
+  // must sit (victimPing−myPing)/2 off the view epoch or fast victims
+  // get painted where the authority never judged them.
+  const nmPing = deps.lazyNetworkManager?.()?.serverPingMs ?? deps.lazyNetworkManager?.()?.getPing?.() ?? 0;
+  const myTransitMs = nmPing / 2;
   let maxRenderDelayMs = 0;
   deps.world.remotePlayers.forEach((rp, playerId): void => {
     if (rp.isDead) {return;}
@@ -285,7 +290,7 @@ export function updateProjectiles(c: CombatCtx, dt: number): void {
     // sails past the real body = dmg-echo's offM class). Project wire
     // pos forward by wire age — the same epoch the authority sees.
     remotePlayerPositions.set(playerId,
-      rp.ghostPosition?.(_projVecs.get(playerId) ?? _projVecs.set(playerId, new THREE.Vector3()).get(playerId)!) ?? rp.position);
+      rp.ghostPosition?.(_projVecs.get(playerId) ?? _projVecs.set(playerId, new THREE.Vector3()).get(playerId)!, myTransitMs) ?? rp.position);
     if (rp.armorClass) {remotePlayerClasses.set(playerId, rp.armorClass);}
     if (rp.renderDelayMs > maxRenderDelayMs) {maxRenderDelayMs = rp.renderDelayMs;}
   });
