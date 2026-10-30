@@ -62,18 +62,19 @@ describe('scenario: flag stand snapping', () => {
 });
 
 describe('scenario: auto flag placement (no authored bases)', () => {
-  it('ctf on a spawn-only spec seats flags on the diagonal pair, 300m apart', () => {
+  it('ctf on a spawn-only spec seats flags on the diagonal pair, 500m apart', () => {
     const room = mkRoom({
       mode: 'ctf',
       spawns: [{ x: -110, y: 0, z: 0 }, { x: 110, y: 0, z: 0 }, { x: 0, y: 0, z: 40 }],
     }, 'ctf');
     const a = room.flags!.flags.get('alpha')!;
     const b = room.flags!.flags.get('bravo')!;
-    // Flat terrain: hilltops can't rise, so the diagonal seeds stand —
-    // anchor centroid (0, 13.3) ±150·(√.5,√.5) → (-106,-92.7)+(106,119.4).
-    expect(a.home.x).toBeCloseTo(-106.07, 0);
-    expect(b.home.x).toBeCloseTo(106.07, 0);
-    expect(Math.hypot(a.home.x - b.home.x, a.home.z - b.home.z)).toBeCloseTo(300, 0);
+    // Flat terrain: hilltops can't rise, so the diagonal seeds stand.
+    // Anchor centroid (0, 13.3) ±150·(√.5,√.5) would cap in seconds -
+    // the MIN_STAND_SEP guard pushes the same axis out to ±250.
+    expect(a.home.x).toBeCloseTo(-176.78, 0);
+    expect(b.home.x).toBeCloseTo(176.78, 0);
+    expect(Math.hypot(a.home.x - b.home.x, a.home.z - b.home.z)).toBeCloseTo(500, 0);
   });
 
   it('auto-derived stands mint team spawn rings when the spec ships none', () => {
