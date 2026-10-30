@@ -94,7 +94,7 @@ export class HitLedger {
     const tp = c.playerManager.getPlayer(targetId)?.position;
     const gap = sp && tp ? Math.hypot(tp.x - sp.x, tp.z - sp.z) : impactDist;
     const killVictim = killed ? c.playerManager.getPlayer(targetId) : undefined;
-    weaponStats.record(modeTag, src, damage, killed, shooterId.startsWith('BOT-'), gap, impact.shotId, killed ? `${targetId}|${killVictim?.deaths ?? 0}` : undefined);
+    weaponStats.record(modeTag, src, damage, killed, shooterId.startsWith('BOT-'), gap, impact.shotId, killed ? `${targetId}|${killVictim?.deaths ?? 0}` : undefined, targetId);
     const duelKey = `${shooterId}|${targetId}`;
     if (!killed) {
       this.duelStart.set(duelKey, this.duelStart.get(duelKey) ?? simNow());

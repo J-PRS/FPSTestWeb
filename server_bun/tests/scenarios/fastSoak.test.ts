@@ -1062,14 +1062,15 @@ describe.skipIf(!process.env.FPS_SOAK)('scenario: warp soak throughput', () => {
       });
     console.log('');
     if (wtable.length > 0) {
-      console.log('  — K kills · hits/shots fired · acc% hit rate · K/tr-s kills per trigger-second · K/s kills per shot · shots-by-range aim-distance bands (m) —');
-    console.log('  weapon            K  hits  shots   acc%   dmg  K/tr-s  K/s   shots-by-range');
+      console.log('  — K kills · hits/victims credited (raw = applications) · acc% shots landing ≥1 hit · hit/sh hits per shot · K/tr-s kills per trigger-second · K/s kills per shot · shots-by-range aim-distance bands (m) —');
+    console.log('  weapon            K  hits   raw  shots   acc%  hit/sh   dmg  K/tr-s  K/s   shots-by-range');
       for (const { name, r, trigKps, duelKps } of wtable) {
-        const acc = r.shots > 0 ? ((r.hits / r.shots) * 100).toFixed(0) : '-';
+        const acc = r.shots > 0 ? ((r.conn / r.shots) * 100).toFixed(0) : '-';
+        const hps = r.shots > 0 ? (r.hits / r.shots).toFixed(2) : '-';
         const rng = r.dist && Object.keys(r.dist).length > 0
           ? Object.entries(r.dist).sort((a, b) => b[1] - a[1]).map(([b, n]) => `${b}:${n}`).join(' ')
           : '';
-        console.log(`  ${name.padEnd(14)} ${String(r.kills).padStart(3)} ${String(r.hits).padStart(5)} ${String(r.shots).padStart(6)} ${acc.padStart(5)} ${String(Math.round(r.damage)).padStart(5)} ${trigKps.padStart(7)} ${duelKps.padStart(6)}   ${rng}`);
+        console.log(`  ${name.padEnd(14)} ${String(r.kills).padStart(3)} ${String(r.hits).padStart(5)} ${String(r.hitsRaw ?? r.hits).padStart(5)} ${String(r.shots).padStart(6)} ${acc.padStart(5)} ${hps.padStart(6)} ${String(Math.round(r.damage)).padStart(5)} ${trigKps.padStart(7)} ${duelKps.padStart(6)}   ${rng}`);
       }
     } else {console.log('  weapon       no credited kills');}
     console.log('');

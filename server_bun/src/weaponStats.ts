@@ -32,6 +32,10 @@ async function statsFile(): Promise<{ dir: string; file: string } | null> {
 
 export interface WeaponRow {
   hits: number;
+  /** Raw application count BEFORE victim-dedup — a shell crediting the
+   *  same body direct+splash counts twice here. hits is deduped per
+   *  (shotId|victim); hitsRaw is the forensic trail when they diverge. */
+  hitsRaw: number;
   damage: number;
   kills: number;
   /** Trigger pulls — shots×firePeriod = trigger-uptime seconds, the
@@ -128,15 +132,23 @@ export class WeaponStats {
     // Source keys are 'w<client-claimed weaponType>' — arbitrary numbers
     // mint arbitrary keys, so overflow folds into a shared 'other' row.
     const key = source in m || Object.keys(m).length < WeaponStats.MAX_SOURCES ? source : 'other';
-    return (m[key] ??= { hits: 0, damage: 0, kills: 0, shots: 0, conn: 0, botDamage: 0, botKills: 0, dist: {} });
+    return (m[key] ??= { hits: 0, hitsRaw: 0, damage: 0, kills: 0, shots: 0, conn: 0, botDamage: 0, botKills: 0, dist: {} });
   }
 
   /** Feed one credited hit. `source` is `w<weaponType>` or a label for
    *  non-weapon damage ('Turret hit', 'Mine hit', 'environment'). */
-  record(mode: string, source: string, damage: number, killed: boolean, botShooter: boolean, dist?: number, shotId?: string, killKey?: string): void {
+  record(mode: string, source: string, damage: number, killed: boolean, botShooter: boolean, dist?: number, shotId?: string, killKey?: string, victimId?: string): void {
     if (damage <= 0 || !this.modeOk(mode)) {return;}
     const r = this.row(mode, source);
-r.hits += 1;
+r.hitsRaw += 1;
+    // hits = victims credited, not applications: a shell that body-hits
+    // AND splashes the same body still deals full damage (line below
+    // accumulates both) but only counts as one victim-touch.
+    const vk = shotId !== undefined && victimId !== undefined ? `${mode}|${source}|h|${shotId}|${victimId}` : undefined;
+    if (vk === undefined || !this.seen.has(vk)) {
+      if (vk !== undefined) {this.seen.add(vk);}
+      r.hits += 1;
+    }
     if (shotId === undefined) {
       r.conn += 1; // no pull identity — per-hit IS per-pull for this path
     } else {
