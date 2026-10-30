@@ -94,7 +94,11 @@ function cheapSkinnedBounds(sm: THREE.SkinnedMesh): void {
   if (!g.boundingSphere) {g.computeBoundingSphere();}
   if (!sm.boundingSphere) {sm.boundingSphere = new THREE.Sphere();}
   sm.boundingSphere.copy(g.boundingSphere!);
-  sm.boundingSphere.radius += 0.6;
+  // Bind-pose bounds under-cover animation: a run/jet swing carries
+  // verts ~1.5-2m past the load pose — the old +0.6 pad frustum-culled
+  // remotes the moment they animated. +2.5 keeps culling honest and the
+  // mesh visible in every pose.
+  sm.boundingSphere.radius += 2.5;
 }
 
 export type { AnimationState } from './playerClips.js';
