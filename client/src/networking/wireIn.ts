@@ -22,7 +22,7 @@ import { WeaponType } from '../../../shared/weapons.js';
 import { WORLD_MODEL, verbForType, checkPacket, rowPatch } from '../../../shared/worldModel.js';
 import type { RemotePlayerState,NetworkManager } from './NetworkManager.js';
 import { claim as netProbeClaim } from '../debug/netProbe.js';
-import { parityProbes,hasPendingEcho } from '../game/parity.js';
+import { parityProbes, hasPendingEcho, noteVictimDeath, noteVictimRespawn } from '../game/parity.js';
 import { recWireIn, recHit } from '../core/telemetry.js';
 
 import { rejectCensus, dedupCensus, dropCensus } from './claimLedger.js';
@@ -642,7 +642,7 @@ dropCensus.total += 1;
     // first — a 'predicted:false' row names the reverse class (server
     // damage the client never predicted).
     const wasPredicted = hasPendingEcho(data.targetId);
-    if (data.shooterId === this.h.getLocalPlayerId()) {this.h.confirmClaimHit(data.targetId);}
+    if (data.shooterId === this.h.getLocalPlayerId()) {this.h.confirmClaimHit(data.targetId, data.shotId);}
     if (data.seq !== undefined) {
       if (data.seq <= this.lastHitSeq) {
 dedupCensus.hitSeqDrops += 1;
@@ -666,6 +666,7 @@ dedupCensus.hitSeqDrops += 1;
     } else {
       this.h.patchRemotePlayer(data.targetId, { isDead: false });
     }
+    noteVictimRespawn(data.targetId);
     this.h.onPlayerHit?.(data.shooterId, data.targetId, data.damage, data.health, data.armor);
   }
 
@@ -673,12 +674,15 @@ dedupCensus.hitSeqDrops += 1;
     // A kill IS the confirm — the fatal blow arrives as playerKill, not
     // playerHit, so the pending ledger would warn phantom otherwise.
     const killWasPredicted = hasPendingEcho(data.targetId);
+    // playerKill carries no shotId — the victim-only fallback consume
+    // handles it; shot-aware consume rides the playerHit path.
     if (data.shooterId === this.h.getLocalPlayerId()) {this.h.confirmClaimHit(data.targetId);}
     recHit(data.shooterId, data.targetId, -1, killWasPredicted);
     // Update REMOTE player state (local player death handled by callback).
     // Same phantom-row guard as hits — a kill for a departed target must
     // not mint a stub corpse.
     this.h.patchRemotePlayer(data.targetId, { isDead: true, health: 0 });
+    noteVictimDeath(data.targetId);
     this.h.onPlayerKill?.(data.shooterId, data.targetId, data.weapon, data.air, data.steal);
   }
 

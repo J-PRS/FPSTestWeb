@@ -91,8 +91,12 @@ export function expectDamageEcho(victim: string, dmg: number, wt?: number, shotI
   }
 }
 
-export function confirmDamageEcho(victim: string): void {
-  const i = dmgEchoes.findIndex((e): boolean => e.victim === victim);
+export function confirmDamageEcho(victim: string, shotId?: string | null): void {
+  // Shot-aware consume: multiple pending echoes on one victim (fan
+  // bursts, fast re-shots) must not let a stray confirm eat the wrong
+  // stamp — prefer the shotId match, fall back to victim-only.
+  let i = shotId ? dmgEchoes.findIndex((e): boolean => e.victim === victim && (e.shotId ?? null) === shotId) : -1;
+  if (i === -1) {i = dmgEchoes.findIndex((e): boolean => e.victim === victim);}
   if (i !== -1) {parityProbes.echoesConfirmed += 1; dmgEchoes.splice(i, 1);}
 }
 
@@ -106,11 +110,22 @@ export function hasPendingEcho(victim: string): boolean {
 // not a truly dead intent.
 const expiredShots = new Map<string, number>();
 
+// Wire death times per victim — the server skips dead targets in the
+// AOE sweep entirely (no refuse, no hit): a painted contact on a corpse
+// can never confirm, so dying-around-the-stamp voids the verdict rather
+// than proving a miss.
+const victimDiedAt = new Map<string, number>();
+export function noteVictimDeath(victim: string): void {
+  victimDiedAt.set(victim, performance.now());
+  if (victimDiedAt.size > 64) {const now = performance.now(); for (const [k, t] of victimDiedAt) {if (now - t > 60_000) {victimDiedAt.delete(k);}}}
+}
+export function noteVictimRespawn(victim: string): void { victimDiedAt.delete(victim); }
+
 // Soak-visible counters — the pilot harness reads these to tell
 // "intent never ran" from "destroy never arrived" without a packet dump.
 export const parityProbes: {
   fatesSeen: number; echoesStamped: number; echoesConfirmed: number;
-  destroysSeen: number; deadOnArrival: number; trajUnbound?: number; trajBounced?: number; msgSeen: Record<string, number>;
+  destroysSeen: number; deadOnArrival: number; trajUnbound?: number; trajBounced?: number; echoesVoided?: number; msgSeen: Record<string, number>;
 } = { fatesSeen: 0, echoesStamped: 0, echoesConfirmed: 0, destroysSeen: 0, deadOnArrival: 0, msgSeen: {} };
 
 // My shells' replica-vs-fate distances — offM as a population, not just
@@ -200,6 +215,15 @@ export function sweepDamageEchoes(now: number, stallMs = 0): void {
       // intent from "no fate contract exists". Skip those: noise was
       // drowning the real verdicts (wt:29 srvAt:none in every soak).
       if (e.wt !== undefined && !serverSimmed(e.wt)) {dmgEchoes.splice(i, 1); continue;}
+      // Victim died inside the stamp→verdict window — the server skips
+      // dead targets before any refuse/confirm path can run, so this
+      // echo can never prove a miss: unjudgeable, not a complaint.
+      const died = victimDiedAt.get(e.victim);
+      if (died !== undefined && died >= e.t - 500) {
+        parityProbes.echoesVoided = (parityProbes.echoesVoided ?? 0) + 1;
+        dmgEchoes.splice(i, 1);
+        continue;
+      }
       const fate = e.shotId ? shellFates.get(e.shotId) : undefined;
       const detail: Record<string, unknown> = Object.assign({}, {victim: e.victim,dmg: e.dmg}, (e.wt === undefined ? {} : { wt: e.wt }), { shot: e.shotId ?? '?' });
       if (e.at) {detail.at = `${e.at.x.toFixed(0)},${e.at.y.toFixed(0)},${e.at.z.toFixed(0)}`;}

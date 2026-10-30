@@ -841,7 +841,7 @@ this.sendDrops += 1;
 
   confirmClaimHit(targetId: string, shotId?: string): void {
     this.ledger.confirmHit(targetId, shotId);
-    confirmDamageEcho(targetId);
+    confirmDamageEcho(targetId, shotId);
   }
 
   ackClaim(msg: Parameters<ClaimLedger['ack']>[0]): void {
