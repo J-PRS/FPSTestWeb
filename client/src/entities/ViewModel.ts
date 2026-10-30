@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { WeaponType } from '../../../shared/weapons.js';
+import { WeaponType, vmTypeOf } from '../../../shared/weapons.js';
 import { buildWeaponMeshes, buildHandAndFlash } from './viewmodel/weaponsGeo.js';
 import { muzzleZFor } from './viewmodel/weaponVisual.js';
 import * as vm from './vmGhost.js';
@@ -213,7 +213,7 @@ export class ViewModel {
       if (!this.discAmmo) {this.discAmmo = this.weapons.get(WeaponType.Disc)?.getObjectByName('discAmmo') ?? null;}
       if (this.discAmmo) { this.discAmmo.visible = false; this.discT = 0; }
     }
-    if (this.activeWeapon === WeaponType.BoltLauncher) {
+    if (vmTypeOf(this.activeWeapon) === WeaponType.BoltLauncher) {
       // Crossbow fake: the chambered bolt is the projectile — gone the
       // instant the shot breaks; the drum indexes one station and the
       // next bolt feeds up into the channel during the refire gap.

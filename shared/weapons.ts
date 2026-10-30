@@ -28,6 +28,16 @@ export const MELEE_CREATURE_DAMAGE = 60;
  *  and the server re-derives the bonus from this table, never trusting a
  *  radius over the wire. */
 export const DIRECT_HIT_AOE_BONUS = 1.5;
+/** Presentation aliases — `sfxKey`/`vmKey` markers on the stat row let a
+ *  weapon inherit another type's sound/viewmodel family. Every sfx/geo/
+ *  visual lookup resolves through these instead of carrying a copied row. */
+export function sfxTypeOf(weaponType: number): number {
+  return WEAPONS[weaponType]?.sfxKey ?? weaponType;
+}
+export function vmTypeOf(weaponType: number): number {
+  return WEAPONS[weaponType]?.vmKey ?? weaponType;
+}
+
 export function directHitAoeBonus(weaponType: number): number {
   return WEAPONS[weaponType]?.aoeBonus === true ? DIRECT_HIT_AOE_BONUS : 1;
 }

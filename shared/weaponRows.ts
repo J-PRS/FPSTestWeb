@@ -422,6 +422,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
   [WeaponType.RocketLauncher]: {
     fireInterval: 1,
     gib: true, airtimeScale: true, aoeBonus: true,
+    sfxKey: WeaponType.BoltLauncher, vmKey: WeaponType.BoltLauncher,
     // The universal rocket: Bolt Launcher stats minus the arc - flat
     // 120 m/s bolt anyone can carry (every class, no tier lock).
     directDamage: 50,
@@ -610,7 +611,6 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 4, // contact usually pops it first
   },
   [WeaponType.Concussion]: {
-    fireInterval: 1,
     // T2 concussion grenade: the blast is a STRIP, not a kill - small
     // sting inside a wide envelope, a heavy shove, the flag pops loose,
     // and the victim's jet tank takes a bite (CONC_JET_DRAIN). Pure fuse
@@ -909,7 +909,6 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hook: true,
   },
   [WeaponType.EMP]: {
-    fireInterval: 1,
     // EMP grenade: belt throw fuse bomb - nominal 10 tag on contact, drains
     // all jet energy and strips shield for targets in the blast radius.
     // Timer detonation (not proxy/hit) to avoid being OP.

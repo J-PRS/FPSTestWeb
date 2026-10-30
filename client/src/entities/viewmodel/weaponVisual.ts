@@ -1,4 +1,4 @@
-import { WeaponType } from '../../../../shared/weapons.js';
+import { WeaponType, vmTypeOf } from '../../../../shared/weapons.js';
 
 // Per-weapon PRESENTATION table — one entry per weapon replaces the three
 // parallel tables that used to live in ViewModel (MUZZLE_Z), vmKick
@@ -31,7 +31,7 @@ export const WEAPON_VISUAL: Record<number, WeaponVisual> = {
   [WeaponType.Lightning]:       { muzzleZ: -0.42, recoil: { recover: 0.21, jitter: 0.05,  amp: 0.4,  back: 1 },  flash: { color: 0x8F_DC_FF, scale: 0.4, life: 0.4, light: 1 } },
   [WeaponType.Shotgun]:         { muzzleZ: -0.41 },
   [WeaponType.Cannon]:          { muzzleZ: -0.53, recoil: { recover: 0.41, jitter: 0.02,  amp: 1.1,  back: 1 },  flash: { color: 0xFF_99_44, scale: 2,  life: 1.8, light: 1.8 } },
-  [WeaponType.RocketLauncher]:  { muzzleZ: -0.44, recoil: { recover: 2.8,  jitter: 0.02,  amp: 0.9,  back: 1.15 }, flash: { color: 0xFF_88_44, scale: 1.8, life: 1.6, light: 1 } },
+  [WeaponType.MissileLauncher]:  { muzzleZ: -0.44, recoil: { recover: 2.8,  jitter: 0.02,  amp: 0.9,  back: 1.15 }, flash: { color: 0xFF_88_44, scale: 1.8, life: 1.6, light: 1 } },
   [WeaponType.Pistol]:          { muzzleZ: -0.17, recoil: { recover: 0.27, jitter: 0.033, amp: 1.1,  back: 1 },  flash: { color: 0xFF_E0_A0, scale: 0.35, life: 0.4, light: 1 } },
   [WeaponType.Revolver]:        { muzzleZ: -0.27, recoil: { recover: 0.41, jitter: 0.05,  amp: 1.3,  back: 1 },  flash: { color: 0xFF_B0_60, scale: 1.1, life: 0.8, light: 1 } },
   [WeaponType.Sticky]:          { muzzleZ: -0.4,  recoil: { recover: 0.25, jitter: 0.02,  amp: 0.9,  back: 1 },  flash: { color: 0xFF_66_DD, scale: 0.8, life: 0.7, light: 1 } },
@@ -48,11 +48,11 @@ export const WEAPON_VISUAL: Record<number, WeaponVisual> = {
 /** Missing-field fallbacks — bolt launcher defaults, the same fallbacks
  *  the old RECOIL/FLASH tables used for unlisted weapons. */
 export function recoilFor(wt: number): { recover: number; jitter: number; amp: number; back: number } {
-  return WEAPON_VISUAL[wt]?.recoil ?? BOLT_RECOIL;
+  return WEAPON_VISUAL[vmTypeOf(wt)]?.recoil ?? BOLT_RECOIL;
 }
 export function flashFor(wt: number): { color: number; scale: number; life: number; light: number } {
-  return WEAPON_VISUAL[wt]?.flash ?? BOLT_FLASH;
+  return WEAPON_VISUAL[vmTypeOf(wt)]?.flash ?? BOLT_FLASH;
 }
 export function muzzleZFor(wt: number): number {
-  return WEAPON_VISUAL[wt]?.muzzleZ ?? -0.35;
+  return WEAPON_VISUAL[vmTypeOf(wt)]?.muzzleZ ?? -0.35;
 }

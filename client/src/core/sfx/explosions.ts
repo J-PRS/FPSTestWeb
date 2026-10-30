@@ -2,7 +2,7 @@ import type * as THREE from 'three';
 
 import { audio } from '../audio.js';
 
-import { WeaponType } from '../../../../shared/weapons.js';
+import { WeaponType, sfxTypeOf } from '../../../../shared/weapons.js';
 
 import { ctx, play, osc, sample, layer, noise } from './util.js';
 
@@ -87,7 +87,7 @@ const BOOM_SAMPLES: Partial<Record<number, [string, number, number?, number?, nu
 
   // Warhead pop: the biggest layered boom — full blast + deep tail
 
-  [WeaponType.RocketLauncher]: [['explosion1', 1, 0.8], ['explosion2', 0.7, 0.6], ['thud_big', 0.8, 0.65, 400]],
+  [WeaponType.MissileLauncher]: [['explosion1', 1, 0.8], ['explosion2', 0.7, 0.6], ['thud_big', 0.8, 0.65, 400]],
 
   // MRV airburst pop — the carrier's delivery bang: mid-size blast +
 
@@ -125,7 +125,7 @@ const BOOM_SAMPLES: Partial<Record<number, [string, number, number?, number?, nu
 
  *  (~6/s); positional so a beam on a distant target reads quieter. */function explosionSample(g: GainNode, big: boolean, weaponType?: number): boolean {
 
-  const w = weaponType === undefined ? undefined : BOOM_SAMPLES[weaponType];
+  const w = weaponType === undefined ? undefined : BOOM_SAMPLES[sfxTypeOf(weaponType)];
 
   if (w && layer(g, w)) {return true;}
 

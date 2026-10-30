@@ -30,7 +30,7 @@ export const MODEL_BUILDERS: [number, () => THREE.Group][] = [
   [WeaponType.Lightning, mkLightningGun],
   [WeaponType.Shotgun, mkShotgun],
   [WeaponType.Cannon, mkCannon],
-  [WeaponType.RocketLauncher, mkRpg],
+  [WeaponType.MissileLauncher, mkRpg],
   [WeaponType.Pistol, mkPistol],
   [WeaponType.Revolver, mkRevolver],
   [WeaponType.Sticky, mkSticky],
@@ -68,6 +68,7 @@ export function buildWeaponMeshes(parent: THREE.Group, muzzleZ: (wt: number) => 
     muzzleNodes.set(wt, mz);
   }
   weapons.set(WeaponType.Implodisc, weapons.get(WeaponType.Disc)!);
+  weapons.set(WeaponType.RocketLauncher, weapons.get(WeaponType.BoltLauncher)!);
   const pullMz = new THREE.Object3D();
   pullMz.position.z = muzzleZ(WeaponType.Implodisc);
   weapons.get(WeaponType.Disc)!.add(pullMz);

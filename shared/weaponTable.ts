@@ -147,6 +147,11 @@ export interface WeaponStats {
   gib?: boolean;
   airtimeScale?: boolean;
   aoeBonus?: boolean;
+  /** Presentation family: this weapon inherits another type's sfx tables
+   *  (sfxKey) / viewmodel geometry+recoil (vmKey) - an alias to the type
+   *  id, never a copied row in the presentation maps. */
+  sfxKey?: WeaponType;
+  vmKey?: WeaponType;
   /** First terrain bounce clamps the remaining fuse to this many seconds
    *  - a skip becomes a short cook-off instead of free ricochet time. */
   fuseAfterBounce?: number;
