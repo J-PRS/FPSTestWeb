@@ -52,7 +52,9 @@ const CONFIG_BY_TYPE = new Map<number, ProjectileConfig>(WEAPON_CONFIGS.map((c):
 
 function def(weaponType: WeaponType, rate: number | undefined,
              kick: number, opts: { auto?: boolean; pellets?: { count: number; spread: number }; spread?: number; sidearm?: boolean } = {}): WeaponDef {
-  const config = CONFIG_BY_TYPE.get(weaponType)!;
+  // Registry miss falls back to the bolt config rather than taking down
+  //  firing - same rule weaponDef() applies to a corrupt wid.
+  const config = CONFIG_BY_TYPE.get(weaponType) ?? CONFIG_BY_TYPE.get(WeaponType.BoltLauncher)!;
   let kind: WeaponDef['kind'] = 'projectile';
   if (opts.pellets) {kind = 'fan';}
   else if (weaponType === WeaponType.Lightning || weaponType === WeaponType.Repair || weaponType === WeaponType.Shocklance || weaponType === WeaponType.HealBeam) {kind = 'beam';}
