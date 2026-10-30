@@ -227,12 +227,12 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     // and the real ghost epoch - that gap IS the measured kb-echo miss
     // (offM:0 - same blast center, wrong victim point). Fall back to the
     // transit estimate when the shooter isn't a tracked remote.
-    // Server rewind = shooterTransit + shooterViewLag − myTransit: the
+    // Server rewind = shooterTransit + shooterViewLag − myTransit - the
     // shooter's viewLag alone undershoots the ghost by (shooterPing −
     // myPing)/2 - a fat-pipe shooter's server judges me ~90ms deeper
     // than their rendered epoch, the f:30 pop:wire refuse class.
     const shooterRp = shooterId ? deps.world.remotePlayers.get(shooterId) : undefined;
-    const shooterLagMs = (shooterRp?.viewLagMs ?? 0) + ((shooterRp?.wirePingMs ?? 0) - nmPing) / 2;
+    const shooterLagMs = shooterRp?.rewindLocalMs(nmPing) ?? 0;
     const lagSec = Math.min(0.35, Math.max(0, shooterLagMs > 0 ? shooterLagMs / 1000 : nmPing / 2000 + 0.075));
     const evalPos = lagSec > 0 && player.vel ? (_rewound ??= player.pos.clone()).copy(player.pos).addScaledVector(player.vel, -lagSec) : player.pos;
     const dpx = evalPos.distanceTo(pos);

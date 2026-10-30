@@ -117,6 +117,15 @@ export class RemotePlayer {
   /** The remote's own wire ping - server rewind depth needs the
    *  victim's transit, not just the shooter's view epoch. */
   get wirePingMs(): number { return this.interp.wirePingMs; }
+  /** Ms to rewind the LOCAL body when the server judges me on this
+   *  remote's behalf: shooterTransit + shooterViewLag - victimTransit.
+   *  viewLagMs alone is (shooterPing - myPing)/2 shallow - a fat-pipe
+   *  shooter's server body-sweeps me ~90ms deeper than their rendered
+   *  epoch of me. Single owner of the formula - every prior kb-echo
+   *  miss class was a caller that skipped the transit term. */
+  rewindLocalMs(myPingMs: number): number {
+    return this.viewLagMs + (this.wirePingMs - myPingMs) / 2;
+  }
   /** Local authority (GameBot): position is written directly each frame,
    *  so the snapshot interp / dead-reckoning path would fight it - tick
    *  short-circuits to model+gizmo upkeep only. */

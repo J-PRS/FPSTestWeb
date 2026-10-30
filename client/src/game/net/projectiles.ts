@@ -250,7 +250,7 @@ export function wireProjectiles(ctx: NetCtx): void {
       // shooter's viewLag alone is (shooterPing−myPing)/2 shallow - a
       // fat-pipe shooter's server body-sweeps me ~90ms deeper.
       const myPing = nm().serverPingMs ?? nm().getPing() ?? 0;
-      const backMs = rp && rp.viewLagMs > 0 ? rp.viewLagMs + (rp.wirePingMs - myPing) / 2
+      const backMs = rp && rp.viewLagMs > 0 ? rp.rewindLocalMs(myPing)
         : myPing / 2;
       const m = histAt(deps.world.localPosHistory, backMs);
       if (!m) {return pl.pos;}
