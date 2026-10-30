@@ -50,7 +50,6 @@ import { FragMessages } from './ui/FragMessages.js';
 import { HealthBarSystem } from './ui/HealthBarSystem.js';
 import { HUD } from './ui/hud.js';
 import { wireOverlayInput } from './ui/overlayInput.js';
-import { wireOnboarding } from './ui/onboarding.js';
 import { initLogPanel } from './ui/logPanel.js';
 import { installOverlapAudit, reportHudOverlap } from './ui/overlapAudit.js';
 
@@ -1354,9 +1353,6 @@ if (hot) {
 }
 
 // Auto-start: init immediately, overlay stays hidden until ESC is pressed
-// The clip feed is phone-first — the desktop-required gate must not
-// block it (playback needs no keyboard/mouse).
-if (!feedMode.on) {wireOnboarding();}
 init().then(async (): Promise<void> => {
   gameStarted = true;
 
