@@ -8,7 +8,7 @@ import { hmParseBin, hmHeight, hmNormal, hmSurface, HM_HEIGHT_SCALE } from '../.
 import { MoveSim } from '../../shared/movement.js';
 import { terrainFrag } from './world/terrainShaders.js';
 import { hillshadeImage } from './world/hillshade.js';
-import { synthField, erode, talusPass, streamPower, drainage, faultPass, glacierPass, smoothPass, flatsPass, rockPass, playaPass, dunesPass, terracePass, cliffPass, fanPass, floodPass, sinkPass, sharpenPass, foldPass, platesPass, canyonPass, snowPass, lakePass, slumpPass, ruggedPass, contrastPass, stretchPass, breachPass, DEFAULTS, type GenParams, type Drainage } from './maplab/gen.js';
+import { synthField, erode, talusPass, streamPower, drainage, faultPass, glacierPass, smoothPass, flatsPass, rockPass, playaPass, dunesPass, terracePass, cliffPass, fanPass, floodPass, sinkPass, sharpenPass, foldPass, platesPass, canyonPass, snowPass, lakePass, slumpPass, ruggedPass, contrastPass, stretchPass, breachPass, scramblePass, DEFAULTS, type GenParams, type Drainage } from './maplab/gen.js';
 
 // Player-facing lab: served on prod too — no isDevHost gate on the entry.
 
@@ -286,6 +286,7 @@ const VERBS: Record<string, (h: Float32Array, N: number, i: number) => void> = {
   contrast:(h, N) => contrastPass(h, N),
   stretch: (h, N) => stretchPass(h, N),
   breach:  (h, N) => breachPass(h, N),
+  scramble:(h, N, i) => scramblePass(h, N, 12, state.seed * 53 + i),
 };
 function applyVerbs(h: Float32Array, N: number): void {
   state.verbs.forEach((op, i) => { VERBS[op]?.(h, N, i); });
@@ -862,6 +863,7 @@ function paintRail(): void {
     contrast: 'sigmoid around the median — canyonize: lows drop, highs lift',
     stretch: 'renormalize to full 0–1 — restores export range after verbs',
     breach: 'cut one outlet channel per closed basin — flow restructure',
+    scramble: 'phase-scramble the spectrum — same vitals, shuffled identity (A/B: toggle in verb log)',
     undo: 'pop the last verb off the replay log',
     clear: 'empty the verb log — back to the raw pipeline',
   };
@@ -889,7 +891,7 @@ function paintRail(): void {
   for (const op of ['canyon', 'snow', 'lake', 'slump']) { row4e.append(verbBtn(op)); }
   rail2.append(row4e);
   const row4f = document.createElement('div'); row4f.className = 'btnrow';
-  for (const op of ['contrast', 'stretch', 'breach']) { row4f.append(verbBtn(op)); }
+  for (const op of ['contrast', 'stretch', 'breach', 'scramble']) { row4f.append(verbBtn(op)); }
   rail2.append(row4f);
   const row5 = document.createElement('div'); row5.className = 'btnrow';
   for (const op of ['undo', 'clear']) {

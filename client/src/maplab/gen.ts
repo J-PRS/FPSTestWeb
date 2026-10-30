@@ -868,6 +868,82 @@ export function rockPass(h: Float32Array, N: number, o: { rocks?: number; radius
   }
 }
 
+/** Spectral phase scramble — the "nobody can claim the source" verb.
+ *  FFT the field, keep every amplitude (relief, slope distribution and
+ *  feature-size energy ARE the amplitude spectrum), randomize phases
+ *  above `keep` cycles/tile. Squinted, the map reads the same kind of
+ *  terrain — same vitals — but the geometry's fingerprint shuffles.
+ *  Fields are tile-periodic, so the FFT needs no window. */
+export function scramblePass(h: Float32Array, N: number, keep = 6, seed = 7): void {
+  const M = N - (N & 1); // even working size — 512 on the stock 513 grid
+  const re = new Float64Array(M * M);
+  const im = new Float64Array(M * M);
+  for (let z = 0; z < M; z += 1) {
+    for (let x = 0; x < M; x += 1) { re[z * M + x] = h[z * N + x]!; }
+  }
+  const fftLine = (off: number, stride: number, inv: boolean): void => {
+    for (let i = 0, j = 0; i < M; i += 1) {
+      if (j > i) {
+        const a = off + i * stride, b = off + j * stride;
+        const tr = re[a]!; re[a] = re[b]!; re[b] = tr;
+        const ti = im[a]!; im[a] = im[b]!; im[b] = ti;
+      }
+      for (let m = M >> 1; (j ^= m) < m; m >>= 1) { /* bit-reverse walk */ }
+    }
+    for (let len = 2; len <= M; len <<= 1) {
+      const ang = (inv ? 2 : -2) * Math.PI / len;
+      const wr = Math.cos(ang), wi = Math.sin(ang);
+      for (let i = 0; i < M; i += len) {
+        let cwr = 1, cwi = 0;
+        for (let k = 0; k < len / 2; k += 1) {
+          const iu = off + (i + k) * stride, iv = off + (i + k + len / 2) * stride;
+          const tr = re[iv]! * cwr - im[iv]! * cwi, ti = re[iv]! * cwi + im[iv]! * cwr;
+          re[iv] = re[iu]! - tr; im[iv] = im[iu]! - ti;
+          re[iu] = re[iu]! + tr; im[iu] = im[iu]! + ti;
+          const t = cwr * wr - cwi * wi; cwi = cwr * wi + cwi * wr; cwr = t;
+        }
+      }
+    }
+  };
+  for (let z = 0; z < M; z += 1) { fftLine(z * M, 1, false); }
+  for (let x = 0; x < M; x += 1) { fftLine(x, M, false); }
+
+  const rand = mulberry(seed * 9_814_223);
+  const idx = (u: number, v: number): number => ((v + M) % M) * M + ((u + M) % M);
+  for (let v = 0; v < M; v += 1) {
+    for (let u = 0; u < M; u += 1) {
+      const i1 = idx(u, v), i2 = idx(-u, -v);
+      if (i1 > i2) {continue;}                    // each conjugate pair once
+      if (i1 === i2) {continue;}                  // self-paired must stay real
+      const su = u > M / 2 ? u - M : u, sv = v > M / 2 ? v - M : v;
+      if (Math.hypot(su, sv) < keep) {continue;}  // macro layout survives
+      const mag = Math.hypot(re[i1]!, im[i1]!);
+      const ph = rand() * Math.PI * 2;
+      re[i1] = mag * Math.cos(ph); im[i1] = mag * Math.sin(ph);
+      re[i2] = re[i1]!; im[i2] = -im[i1]!;
+    }
+  }
+
+  for (let z = 0; z < M; z += 1) { fftLine(z * M, 1, true); }
+  for (let x = 0; x < M; x += 1) { fftLine(x, M, true); }
+  const inv = 1 / (M * M);
+  let mn = Infinity, mx = -Infinity;
+  for (let i = 0; i < M * M; i += 1) {
+    const v = re[i]! * inv;
+    if (v < mn) {mn = v;}
+    if (v > mx) {mx = v;}
+  }
+  const span = mx - mn || 1;
+  for (let z = 0; z < M; z += 1) {
+    for (let x = 0; x < M; x += 1) { h[z * N + x] = (re[z * M + x]! * inv - mn) / span; }
+  }
+  // Restore the periodic seam on odd N — wrap row/col mirrors index 0.
+  if (N !== M) {
+    for (let x = 0; x < N; x += 1) { h[(N - 1) * N + x] = h[x]!; }
+    for (let z = 0; z < N; z += 1) { h[z * N + (N - 1)] = h[z * N]!; }
+  }
+}
+
 /** Full pipeline → the .bin byte layout (u32 w,h + u8 field).
  *  Order: fault displaces the geometry → smooth creeps → stream-power
  *  carves the macro drainage network → droplets gully → glacier polishes
