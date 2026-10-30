@@ -34,6 +34,7 @@ The project produces a lot of documentation. This file is the map.
 | `_docs/2026-10-29_EXPLOSION_VFX_BIBLE.md` | **Blast VFX reference** — variant architecture, per-weapon recipes, AOE-accuracy rules, layer-timing beats, shellburst (black-powder) recipe, tuning knobs, sources |
 | `_docs/2026-10-29_RENDER_ORDER.md` | **Render-order reference** — three.js opaque/transparent pass mechanics, the tier table (-100 sky → 9999 debug), the depthWrite/depthTest rules, terrain's transparent-pseudo-opaque special case, sim-vs-render gap trap |
 | `_docs/2026-10-29_PHONE_PROFILING.md` | **Real-device phone profiling** — adb reverse + CDP attach pipeline, profiler/debug scripts, every setup gotcha (intent-URL escapes, 9222 clash, rAF death on nav, screen-off suspension), and the canvas-oversize black-screen bug it found |
+| `_docs/2026-10-29_MOBILE_PERF_BUDGET.md` | **Mobile perf budget** — K70 measured (~16fps, 502 calls, 429k tris) vs published targets (Arm/PlayCanvas/DevForge): 3–5× over on draw calls, ~1.5× on tris; ranked next steps |
 | `_docs/2026-10-26_TTS_DTS_REFERENCE.md` | **TTS/DTS reference** - cold-boot time-to-shoot and data-to-shoot profile, phase breakdown, prediction table, improvement levers |
 | `_docs/2026-10-18_CTF_BOT_BRAIN_PUG_AUDIT.md` | CTF bot brain vs PUG guide audit |
 | `_docs/2026-10-18_NETCODE_OVERHAUL.md` | Netcode overhaul (2026-10-18) |

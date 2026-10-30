@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- maximum-scale + user-scalable=no: any element wider than the device
+       (the overscan canvas is, briefly, before html overflow clips it) would
+       otherwise trigger Chrome's auto zoom-out → runaway oversize loop. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Three.js FPS — Tribes/Quake Style</title>
   <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
   <link rel="icon" type="image/png" href="/assets/icons/icon_star.png" sizes="512x512" />

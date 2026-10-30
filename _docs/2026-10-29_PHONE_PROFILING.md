@@ -130,8 +130,12 @@ is even feasible on Adreno.
 
 ## Still open
 
-- Re-run `_phoneprof.ts 120` post-clamp: honest fps + p95 + 15s trace
-  with hot functions.
+- Post-clamp numbers: **~16 fps, ~502 calls, ~429k tris, 3.6 MP buffer**
+  (pre-spawn sample). Verdict vs budgets →
+  `_docs/2026-10-29_MOBILE_PERF_BUDGET.md`. Draw calls are the bottleneck.
+- `connectOverCDP` browser attach hangs on wedged worker/empty-URL targets
+  (agent-browser#87) — `_phoneprof.ts` now uses raw page-target CDP.
+  `_phonedbg*.ts` still use playwright and will hit the same hang.
 - `?res=` and `pscale`/`autoq` interaction on mobile — autoq may
   already rescale; verify.
 - UDP lanes (`ws://127.0.0.1:8787-8791/udp`) are NOT adb-reversed — the

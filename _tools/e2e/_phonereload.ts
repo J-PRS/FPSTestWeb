@@ -9,6 +9,9 @@ if (!p) { console.log('no page'); process.exit(1); }
 await p.reload();
 console.log('reloading — waiting for the match…');
 await p.waitForFunction('window.__test && window.__test.playerId', undefined, { timeout: 120000 });
+// Reveal the HUD — pointerlockchange can't fire on touch, so the menu
+// overlay never dismisses itself.
+await p.evaluate(`(() => { const o = document.getElementById('overlay'); if (o) { o.style.display = 'none'; } document.body.classList.remove('menu-open'); })()`);
 await new Promise(r => setTimeout(r, 12000)); // a few seconds of real gameplay
 const s = await p.evaluate(`(async () => {
   const w = window; const cv = document.getElementById('gl');

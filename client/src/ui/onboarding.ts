@@ -4,6 +4,8 @@
  * underneath.
  */
 
+const SKIP_KEY = 'fps-nomobile';
+
 const card = (title: string, body: string, btnText: string | null): HTMLDivElement => {
   const el = document.createElement('div');
   el.style.cssText =
@@ -26,7 +28,12 @@ const card = (title: string, body: string, btnText: string | null): HTMLDivEleme
     b.style.cssText =
       'margin-top:18px;padding:8px 26px;font:inherit;letter-spacing:0.14em;cursor:pointer;' +
       'color:#eaf4ff;background:rgba(58,167,255,0.16);border:1px solid rgba(58,167,255,0.5);border-radius:4px;';
-    b.addEventListener('click', (): void => el.remove());
+    b.addEventListener('click', (): void => {
+      // Persist the bypass — a phone tester shouldn't re-dismiss every
+      // reload. Clear via devtools localStorage or a desktop boot.
+      try { localStorage.setItem(SKIP_KEY, '1'); } catch { /* private mode */ }
+      el.remove();
+    });
     box.append(b);
   }
   el.append(box);
@@ -37,13 +44,17 @@ export function wireOnboarding(): void {
   // Coarse pointer with no fine fallback = phone/tablet. The game needs
   // a keyboard+mouse; a broken render is a worse first impression than
   // an honest gate. Checked live so a hybrid laptop with a mouse passes.
+  // ?nomobile=1 skips it entirely — real-device profiling needs to see
+  // the game render on a phone, gate or no gate.
   const touchOnly = window.matchMedia('(pointer: coarse)').matches
     && !window.matchMedia('(pointer: fine)').matches;
-  if (touchOnly) {
+  const skipped = new URLSearchParams(location.search).has('nomobile')
+    || localStorage.getItem(SKIP_KEY) === '1';
+  if (touchOnly && !skipped) {
     document.body.append(card(
       'DESKTOP REQUIRED',
       'This game needs a keyboard and mouse.\n\nCome back on a laptop or desktop —\nphone/tablet controls are not supported yet.',
-      null,
+      'VIEW ANYWAY',
     ));
   }
 }

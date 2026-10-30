@@ -21,6 +21,11 @@
 ::-webkit-scrollbar-thumb:hover { background: rgba(140,170,195,0.55); }
 ::-webkit-scrollbar-corner { background: transparent; }
 body { background: #000; overflow: hidden; font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; }
+/* html must clip too: abs-positioned canvases hang off the root, and a
+   widened canvas pushed documentElement.scrollWidth past the device
+   viewport — mobile Chrome then auto-zooms out to fit, which grows
+   innerWidth, which grows the canvas: runaway 4× oversizing. */
+html { overflow: hidden; }
 canvas { display: block; }
 #overlay {
   position: absolute; inset: 0;
