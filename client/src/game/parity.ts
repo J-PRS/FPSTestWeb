@@ -155,6 +155,27 @@ export function noteShellFate(shotId: string, at: { x: number; y: number; z: num
   }
 }
 
+/** pid → the wire's detonation point — set on every projectileDestroyed
+ *  carrying a position; read by remote-blast shove prediction so a
+ *  self-popped replica (destroy already landed) evaluates the envelope
+ *  at the server's true center, not its painted contact. */
+export const projWireAt = new Map<string, { at: { x: number; y: number; z: number }; t: number }>();
+
+/** Deadline for a kb-echo stamp. A pid-bound stamp's verdict can't
+ *  exist before the server shell's fate lands — a replica that popped
+ *  early on its painted contact otherwise expires before the wire
+ *  destroy (and the knockback echo riding behind it) ever arrives,
+ *  which turns a late-but-legit echo into a raw double-shove + a false
+ *  kb-echo miss. No pid = no fate contract — the plain horizon. */
+
+export function kbStampDeadline(s: { t: number; pid?: string; wt?: number; wireT?: number }, horizon: number): number {
+  if (s.wireT) {return s.wireT + horizon;} // echo rides ~one transit behind the destroy
+  // Server shell may outlive the replica's early self-pop by its whole
+  // fuse — the verdict only exists once the wire destroy lands.
+  if (s.pid) {return s.t + horizon + Math.min((s.wt === undefined ? 0 : (WEAPONS[s.wt]?.maxLifetime ?? 0) * 1000), 4000) + 2500;}
+  return s.t + horizon;
+}
+
 export function sweepDamageEchoes(now: number, stallMs = 0): void {
   for (let i = dmgEchoes.length - 1; i >= 0; i -= 1) {
     const e = dmgEchoes[i]!;

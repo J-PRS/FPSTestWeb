@@ -13,7 +13,7 @@ import { PlayerLoadout } from '../../entities/playerLoadout.js';
 import { onPlayerKill } from './playerKill.js';
 import { noteLocalSnap } from '../gameLoop.js';
 import { initNetProbe, bindStats, attachScene, corr as probeCorr, corrGhost } from '../../debug/netProbe.js';
-import { parityMiss, kbEchoHorizon } from '../parity.js';
+import { parityMiss, kbEchoHorizon, kbStampDeadline } from '../parity.js';
 import { recCorrection } from '../../core/telemetry.js';
 import { lastWeaponByPlayer } from './projectiles.js';
 import { markLocalSeated, isSessionVeiled } from './world.js';
@@ -245,12 +245,16 @@ function wireKnockback(ctx: NetCtx, position: { x: number; y: number; z: number 
   // raw apply (double-shove) AND logs a false kb-echo.
   const kbHorizon = kbEchoHorizon(networkManager.serverPingMs ?? networkManager.getPing(), networkManager.msSinceLiveRx());
   for (let i = stamps.length - 1; i >= 0; i -= 1) {
-    if (now - stamps[i]!.t > kbHorizon) {
+    if (now > kbStampDeadline(stamps[i]!, kbHorizon)) {
       // Self-authored stamps are confirmation-free (the server skips
       // its self-shove for humans) — silent expiry; only remote-blast
       // predictions audit an echo that should have existed.
       if (!stamps[i]!.self) {
-        parityMiss('kb-echo', { x: Math.round(stamps[i]!.x), y: Math.round(stamps[i]!.y), z: Math.round(stamps[i]!.z), by: stamps[i]!.by, f: stamps[i]!.f, ageMs: Math.round(now - stamps[i]!.t) });
+        const s = stamps[i]!;
+        const wa = s.wireAt;
+        const kind = s.pid && !wa ? 'kb-pop-div' : 'kb-echo';
+        parityMiss(kind, Object.assign({ x: Math.round(s.x), y: Math.round(s.y), z: Math.round(s.z), by: s.by, f: s.f, ageMs: Math.round(now - s.t) },
+          wa ? { wa: `${wa.x.toFixed(0)},${wa.y.toFixed(0)},${wa.z.toFixed(0)}`, offM: Number(Math.hypot(s.x - wa.x, s.y - wa.y, s.z - wa.z).toFixed(1)) } : {}));
       }
       stamps.splice(i, 1);
     }
@@ -271,7 +275,7 @@ function wireKnockback(ctx: NetCtx, position: { x: number; y: number; z: number 
   const cands: number[] = [];
   for (let k = 0; k < stamps.length; k += 1) {
     const s = stamps[k]!;
-    if (now - s.t < kbHorizon && Math.hypot(s.x - position.x, s.y - position.y, s.z - position.z) < 18) {cands.push(k);}
+    if (now <= kbStampDeadline(s, kbHorizon) && Math.hypot(s.x - position.x, s.y - position.y, s.z - position.z) < 18) {cands.push(k);}
   }
   let i = cands.length === 0 ? -1
     : cands.reduce((a, b): number => Math.abs((stamps[a]!.f ?? force) - force) <= Math.abs((stamps[b]!.f ?? force) - force) ? a : b);
@@ -281,7 +285,7 @@ function wireKnockback(ctx: NetCtx, position: { x: number; y: number; z: number 
   // here is the physical double-shove + a false kb-echo expiry; with
   // 2+ pending the attribution genuinely can't be called, so hold.
   if (i === -1) {
-    const pending = stamps.filter((s): boolean => now - s.t < kbHorizon);
+    const pending = stamps.filter((s): boolean => now <= kbStampDeadline(s, kbHorizon));
     if (pending.length === 1) {i = stamps.indexOf(pending[0]!);}
   }
   if (i !== -1) {

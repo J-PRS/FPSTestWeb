@@ -85,7 +85,7 @@ export interface WorldState {
   /** Fired after a terrain swap completes — local bots re-seat onto the
    *  new heightmap instead of standing at the old field's altitude. */
   onTerrainApplied?: (file: string | null) => void;
-  selfBlastStamps: { x: number; y: number; z: number; t: number; by?: string; self?: boolean; f?: number }[];
+  selfBlastStamps: { x: number; y: number; z: number; t: number; by?: string; self?: boolean; f?: number; pid?: string; wt?: number; wireAt?: { x: number; y: number; z: number }; wireT?: number }[];
   /** Local pos/vel ring (~3s @60Hz) sampled by remotes.networkTick —
    *  the server's spawn rewind reads its shadow at 0.7·transit, so a
    *  predicted shell that mirrors the same history epoch flies the

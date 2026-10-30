@@ -279,6 +279,17 @@ export class BlastRunner {
     return rewindPos(target, Math.max(0, back));
   }
 
+  /** Why a human target was refused — the client-side predicted-shove
+   *  stamp (kb-echo) names an echo that never arrives, but not WHICH
+   *  gate killed it. Logging the gate + the server-side numbers next to
+   *  the client's stamp is how the divergence actually gets attributed. */
+  private refuse(gate: string, ctx: BlastCtx, targetId: string, dist: number, isBot?: boolean, tpos?: Vec3, live?: Vec3): void {
+    if (isBot) {return;} // the sweep refuses bots constantly — humans are the parity-miss population
+    logger.warn('aoe-refuse', { gate, victim: targetId, shooter: ctx.shooterId, dist: Number(dist.toFixed(1)), radius: ctx.radius, wt: ctx.weapon, at: [ctx.pos.x, ctx.pos.y, ctx.pos.z].map((v): number => Math.round(v)),
+      ...(tpos && live ? { ghost: [Math.round(tpos.x), Math.round(tpos.y), Math.round(tpos.z)], live: [Math.round(live.x), Math.round(live.y), Math.round(live.z)],
+        gM: Number(Math.hypot(tpos.x - live.x, tpos.y - live.y, tpos.z - live.z).toFixed(1)) } : {}) });
+  }
+
   /** One target inside (or outside) a blast envelope: lag-comp position,
    *  wall occlusion, scaled damage, knockback impulse, friendly gate. */
   splashOne(ctx: BlastCtx, targetId: string, target: PlayerState, shoveOnly = false, directDmg?: number, impulseOnly = false): void {
@@ -296,18 +307,27 @@ export class BlastRunner {
     const dist = (tdx * tdx + tdy * tdy + tdz * tdz) ** 0.5;
     // T1 impulse reaches to surface distance = radius (~minbox past the
     // center rim) — the early cut has to use the same envelope.
-    if (!Number.isFinite(dist) || dist - t1Minbox(target.armorClass) > ctx.radius) {return;}
+    if (!Number.isFinite(dist) || dist - t1Minbox(target.armorClass) > ctx.radius) {
+      this.refuse('env', ctx, targetId, dist, target.isBot, tpos, target.position);
+      return;
+    }
 
     // Wall occlusion — a blast outside a structure doesn't splash
     // targets inside it (and vice versa). Blasts can legitimately
     // sit INSIDE geometry (shell popped at the face), so a contact
     // at t≈0 is stepped past rather than counted.
-    if (this.h.solids.length > 0 && this.blastBlocked(ctx.pos, tpos)) {return;}
+    if (this.h.solids.length > 0 && this.blastBlocked(ctx.pos, tpos)) {
+      this.refuse('wall', ctx, targetId, dist, target.isBot, tpos, target.position);
+      return;
+    }
 
     // Dome occlusion — the shell that popped AT the field edge splashes
     // into it anyway without this: a dome is a blast wall, not just a
     // projectile wall. Victims inside an enemy dome take nothing.
-    if (this.h.deps.shieldBlocked?.(ctx.pos, tpos, ctx.shooterId)) {return;}
+    if (this.h.deps.shieldBlocked?.(ctx.pos, tpos, ctx.shooterId)) {
+      this.refuse('dome', ctx, targetId, dist, target.isBot, tpos, target.position);
+      return;
+    }
 
     // Ghost-forensics: the gap between the rewind ghost this hit was
     // credited on and the victim's live wire truth — a large delta is
@@ -355,6 +375,8 @@ export class BlastRunner {
     // (the kb-echo warn).
     if ((!shoveOnly || target.isBot) && !protectedTarget) {
       this.shove(targetId, target, { x: tdx, y: tdy, z: tdz }, impulseMag, { pos: ctx.pos, pull: ctx.pull });
+    } else if (protectedTarget && !target.isBot) {
+      this.refuse('shield', ctx, targetId, dist, target.isBot, tpos, target.position);
     }
     if (damage <= 0) {return;}
     if (shoveOnly && ctx.weapon === WeaponType.Melee) {return;}

@@ -12,7 +12,7 @@ import { blastOccluded } from '../../../shared/solidWorld.js';
 import type { CombatDeps } from './combat.js';
 import type { Targetable } from '../entities/balls.js';
 import * as sfx from '../core/sfx.js';
-import { parityMiss, parityStamp, expectDamageEcho, kbEchoHorizon } from './parity.js';
+import { parityMiss, parityStamp, expectDamageEcho, kbEchoHorizon, kbStampDeadline } from './parity.js';
 import { ballGhostPos } from '../projectiles/sweep.js';
 import { targetDemoId } from '../demo/types.js';
 
@@ -195,7 +195,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
    *  (applyExplosionForce) and remote-blast replicas (impact.ts). Returns
    *  true when the player sat inside the envelope — whether this call
    *  applied the impulse or a raced wire echo already spent it. */
-  function predictLocalShove(pos: THREE.Vector3, radius: number, force: number, forceMode: 'push' | 'pull', shooterId?: string): boolean {
+  function predictLocalShove(pos: THREE.Vector3, radius: number, force: number, forceMode: 'push' | 'pull', shooterId?: string, pid?: string, wt?: number): boolean {
     const player = deps.lazyPlayer();
     // Ledger the blast itself, not just the shove: when the wire
     // knockback arrives, net/players.ts can tell 'the blast rendered but
@@ -210,7 +210,15 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     // datagram ping; +75ms covers the input-processing interval + tick
     // quantization the shadow sits behind even at LAN ping.
     const nmPing = deps.lazyNetworkManager?.()?.serverPingMs ?? deps.lazyNetworkManager?.()?.getPing?.() ?? 0;
-    const lagSec = Math.min(0.35, Math.max(0, nmPing / 2000 + 0.075));
+    // The server's rewind depth isn't a fixed transit — splashOne judges
+    // the victim at shooterTransit + the shooter's render lag − victim
+    // uplink, i.e. roughly the shooter's viewLagMs of me. A skier at
+    // 40m/s sits ~4m differently between the shallow fixed 75ms rewind
+    // and the real ghost epoch — that gap IS the measured kb-echo miss
+    // (offM:0 — same blast center, wrong victim point). Fall back to the
+    // transit estimate when the shooter isn't a tracked remote.
+    const shooterLagMs = shooterId ? (deps.world.remotePlayers.get(shooterId)?.viewLagMs ?? 0) : 0;
+    const lagSec = Math.min(0.35, Math.max(0, shooterLagMs > 0 ? shooterLagMs / 1000 : nmPing / 2000 + 0.075));
     const evalPos = lagSec > 0 && player.vel ? (_rewound ??= player.pos.clone()).copy(player.pos).addScaledVector(player.vel, -lagSec) : player.pos;
     const dpx = evalPos.distanceTo(pos);
     // Knockback reach = damage reach: the blast ends at aoeRadius, same
@@ -278,15 +286,24 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     // 'remote' can never be confirmed, so treat it self/silent or the
     // expiry reports a phantom kb-echo.
     const echoless = shooterId === undefined || shooterId === 'local' || !(kbNm?.isConnected?.() ?? false);
-    stamps.push({ x: pos.x, y: pos.y, z: pos.z, t: now, by: shooterId, self: echoless, f: Math.round(impulse * 10) / 10 });
+    stamps.push({ x: pos.x, y: pos.y, z: pos.z, t: now, by: shooterId, self: echoless, f: Math.round(impulse * 10) / 10, pid, wt });
     parityStamp('kb-echo');
     // Settle older stamps: a predicted self-shove the server never echoed
     // back (~700ms past the consume window) was rejected server-side —
     // loud parity miss, not a silent expiry.
     for (let i = stamps.length - 1; i >= 0; i -= 1) {
-      if (now - stamps[i]!.t > horizon) {
+      if (now > kbStampDeadline(stamps[i]!, horizon)) {
         if (!stamps[i]!.self) {
-          parityMiss('kb-echo', { x: Math.round(stamps[i]!.x), y: Math.round(stamps[i]!.y), z: Math.round(stamps[i]!.z), by: stamps[i]!.by, f: stamps[i]!.f, ageMs: Math.round(now - stamps[i]!.t) });
+          const s = stamps[i]!;
+          // wireAt known → the server's blast point is the verdict's
+          // center — an unechoed stamp there is a real adjudication miss.
+          // pid without wireAt → the replica popped where the server
+          // shell never detonated (painted traj/body divergence) — the
+          // echo can't exist, that's replica lifecycle, not a refusal.
+          const wa = s.wireAt;
+          const kind = s.pid && !wa ? 'kb-pop-div' : 'kb-echo';
+          parityMiss(kind, Object.assign({ x: Math.round(s.x), y: Math.round(s.y), z: Math.round(s.z), by: s.by, f: s.f, ageMs: Math.round(now - s.t) },
+            wa ? { wa: `${wa.x.toFixed(0)},${wa.y.toFixed(0)},${wa.z.toFixed(0)}`, offM: Number(Math.hypot(s.x - wa.x, s.y - wa.y, s.z - wa.z).toFixed(1)) } : {}));
         }
         stamps.splice(i, 1);
       }

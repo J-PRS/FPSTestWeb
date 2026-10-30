@@ -34,7 +34,7 @@ import { EXPLOSION_VFX_RADIUS, CHAINGUN_RATE, SPLAT_MAX } from '../../core/confi
 
 import { WeaponType, directHitAoeBonus, scaledDirectDamage, getWeaponStats, serverSimmed } from '../../../../shared/weapons.js';
 
-import { expectDamageEcho } from '../parity.js';
+import { expectDamageEcho, projWireAt } from '../parity.js';
 
 import { validateAoeClaim, validateHitClaim, type TrackedProjectile, type HitClaimVerdict } from '../../../../shared/combat.js';
 
@@ -55,6 +55,7 @@ import { simRand } from '../../../../shared/simRand.js';
 
 const _splatPos = new THREE.Vector3();
 const _claimTarget = new THREE.Vector3();
+let _kbWirePos: THREE.Vector3 | undefined;
 
 
 
@@ -906,13 +907,19 @@ export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
 
     if (!p.config.noExplosion && p.config.aoeRadius > 0) {
 
-      const blastPos = p.hitPointValid ? p.hitPoint : p.pos;
+      // The wire's detonation point beats the painted contact when the
+      // destroy already landed — a self-popped replica drifts meters off
+      // the server's true blast, and the stamp/echo center has to live
+      // where the authority judged it or the shove registers against a
+      // phantom center (the kb-echo miss class).
+      const wireAt = p.serverProjectileId ? projWireAt.get(p.serverProjectileId)?.at : undefined;
+      const blastPos = wireAt ? (_kbWirePos ??= new THREE.Vector3()).set(wireAt.x, wireAt.y, wireAt.z) : (p.hitPointValid ? p.hitPoint : p.pos);
 
       const bloom = p.directHit ? directHitAoeBonus(p.config.weaponType) : 1;
 
       // Remote hook whiffs yank nobody — the generic pull is for real
       // blasts; the rope's reel only exists on a wire grapple.
-      if (!p.config.hook) {c.predictLocalShove(blastPos, p.config.aoeRadius * bloom, p.force, p.forceMode, p.shooterId ?? undefined);}
+      if (!p.config.hook) {c.predictLocalShove(blastPos, p.config.aoeRadius * bloom, p.force, p.forceMode, p.shooterId ?? undefined, p.serverProjectileId ?? undefined, p.config.weaponType);}
 
       // Replayed prey sims (balls/nuggets) get the same predicted shove --
 

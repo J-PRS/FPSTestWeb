@@ -10,7 +10,7 @@ import { GRAVITY } from '../../../../shared/movement.js';
 import { Explosion } from '../../effects/explosion.js';
 import { swingSwipe } from '../../effects/swingTrails.js';
 import { MELEE_RANGE, EXPLOSION_VFX_RADIUS, LG_RANGE, LG_BOUNCE_RANGE } from '../../core/config.js';
-import { noteShellFate, noteTrajDiv, parityProbes, parityMiss } from '../parity.js';
+import { noteShellFate, noteTrajDiv, parityProbes, parityMiss, projWireAt } from '../parity.js';
 import { histAt } from '../combat/fire.js';
 import type { NetCtx } from './ctx.js';
 const snapToContact = (p: Projectile, at?: { x: number; y: number; z: number }): number => {
@@ -352,6 +352,20 @@ export function wireProjectiles(ctx: NetCtx): void {
     // Kill remote projectile (explode so trail particles fade out naturally).
     // Delete the map entry now — the visual fade lives on world.projectiles,
     // not this map; keeping dead entries leaks one record per shot ever fired.
+    // Attach the wire detonation to any self-shove stamp this replica
+    // painted — a self-popped replica is already off the map, so this
+    // can't live inside the `remoteProjectile` check below. Stamps that
+    // miss are exactly the self-pops (wire-snap users got the point).
+    if (position) {
+      projWireAt.set(projectileId, { at: position, t: performance.now() });
+      for (const k of projWireAt.keys()) {if (performance.now() - projWireAt.get(k)!.t > 15_000) {projWireAt.delete(k);}}
+      for (const s of deps.world.selfBlastStamps) {
+        // Re-center the stamp on the wire point — the echo arrives at
+        // the server's detonation, so a painted-center stamp misses a
+        // legitimate echo (double-shove + false kb-echo).
+        if (s.pid === projectileId) {s.wireAt = position; s.wireT = performance.now(); s.x = position.x; s.y = position.y; s.z = position.z;}
+      }
+    }
     const remoteProjectile = remoteProjectiles.get(projectileId);
     if (remoteProjectile) {
       snapToContact(remoteProjectile, position);

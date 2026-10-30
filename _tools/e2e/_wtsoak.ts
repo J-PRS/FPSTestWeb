@@ -207,6 +207,8 @@ try {
     const rejects = [...t.rejects.entries()].map(([r, n]) => `${r}:${n}`).join(' ') || 'none';
     console.log(`${nc.id}: shots=${t.shots} dealt=${t.hitsDealt} k/d=${t.kills}/${t.deaths} rejects=[${rejects}] corr=${t.corrections} dedup=${t.dedupDrops} rtt=${nc.pingMs}ms${nc.closed ? ` CLOSED[${nc.closeInfo}]` : ''}`);
   }
+  const diag = await c.test<Record<string, unknown>>(`window.__trailDump?.() ?? {}`).catch(() => null);
+  if (diag) {console.log('--- parity census ---'); for (const [k, v] of Object.entries(diag)) {console.log(`  ${k}: ${JSON.stringify(v).slice(0, 500)}`);}}
   console.log('--- console (session lines) ---');
   for (const l of consoleLines.slice(-40)) console.log(l);
   console.log('--- server tail ---');

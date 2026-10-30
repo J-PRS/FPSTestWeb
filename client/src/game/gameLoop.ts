@@ -51,7 +51,7 @@ import { createPerfHud } from '../core/perfHud.js';
 import { createFrameBudget } from '../core/frameBudget.js';
 import { gpuBegin, gpuEnd, gpuMs } from '../core/gpuTimer.js';
 import { lastWeaponByPlayer } from './net/projectiles.js';
-import { parityMiss, kbEchoHorizon } from './parity.js';
+import { parityMiss, kbEchoHorizon, kbStampDeadline } from './parity.js';
 import { fpsWatchdog, resetAutoQuality, fxJobSample, fxJobStats, seedGpuTier, setShadows } from './loopPerf.js';
 import { createRenderScan } from './renderScan.js';
 import { settings } from '../core/settings.js';
@@ -377,11 +377,14 @@ bodyN += 1;
     const kbHorizon = kbEchoHorizon(kbnm.serverPingMs ?? kbnm.getPing(), kbnm.msSinceLiveRx());
     for (let i = kbStamps.length - 1; i >= 0; i -= 1) {
       const s = kbStamps[i]!;
-      if (now - s.t > kbHorizon) {
+      if (now > kbStampDeadline(s, kbHorizon)) {
         // Self-authored stamps are confirmation-free by design (server
         // skips the self-shove echo for humans) — silent expiry.
         if (!s.self) {
-          parityMiss('kb-echo', { x: Math.round(s.x), y: Math.round(s.y), z: Math.round(s.z), by: s.by, f: s.f, ageMs: Math.round(now - s.t) });
+          const wa = s.wireAt;
+          const kind = s.pid && !wa ? 'kb-pop-div' : 'kb-echo';
+          parityMiss(kind, Object.assign({ x: Math.round(s.x), y: Math.round(s.y), z: Math.round(s.z), by: s.by, f: s.f, ageMs: Math.round(now - s.t) },
+            wa ? { wa: `${wa.x.toFixed(0)},${wa.y.toFixed(0)},${wa.z.toFixed(0)}`, offM: Number(Math.hypot(s.x - wa.x, s.y - wa.y, s.z - wa.z).toFixed(1)) } : {}));
         }
         kbStamps.splice(i, 1);
       }
