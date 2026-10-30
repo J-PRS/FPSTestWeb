@@ -100,6 +100,10 @@ export class Projectile {
   /** Body-hit blast deferred — local contact suppressed the fake blast;
    *  the wire 'gone' handler paints the authority's real one instead. */
   ghostBodyPop = false;
+  /** Which replica pop path ended the shell — carried onto the self-shove
+   *  stamp so a kb-pop-div row names the divergence class (painted
+   *  contact where the server shell flew on). */
+  popClass?: string;
   hitBolt: SweepObstacle | null = null; // mid-air interception — combat turns this into a cookoff blast
   age = 0;
   spawnedThisFrame = true; // skip first update so projectile renders at spawn pos before moving
@@ -395,6 +399,7 @@ export class Projectile {
         this.host = null;
         this.pos.copy(h.hitPointValid ? h.hitPoint : h.pos);
         this.prevPos.copy(this.pos);
+        this.popClass = 'host-pop';
         this.explode();
         return;
       }
@@ -491,6 +496,7 @@ export class Projectile {
     // 90km below the world at 2300m/s. Any reasonable shot is long dead
     // by 10s (a 250m/s chaingun slug covers ~2.5km).
     if (this.age >= ABSOLUTE_TTL_S) {
+      this.popClass = 'ttl';
       this.explode();
       return true;
     }
@@ -519,6 +525,7 @@ export class Projectile {
     const ttl = this.fuseTtl();
     const fa = this.fuseAge();
     if (ttl && ((fa >= 0 && fa >= ttl) || (fa < 0 && this.age >= ttl * 3))) {
+      this.popClass = 'fuse';
       this.explode();
       return true;
     }
@@ -781,6 +788,9 @@ export class Projectile {
   explode(): void {
     if (this.exploded) {return;}
     this.exploded = true;
+    // Remote replicas name their pop path for the kb-pop-div census —
+    // untagged explode sites collapse to 'other' so the count is honest.
+    if (this.isRemote && !this.popClass) {this.popClass = 'other';}
     // A connect holds the line on its anchor for the yank window, then every
     // hook finishes the same way: the free end reels back to the thrower.
     if (this.config.hook) {

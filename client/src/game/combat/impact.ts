@@ -919,7 +919,7 @@ export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
 
       // Remote hook whiffs yank nobody — the generic pull is for real
       // blasts; the rope's reel only exists on a wire grapple.
-      if (!p.config.hook) {c.predictLocalShove(blastPos, p.config.aoeRadius * bloom, p.force, p.forceMode, p.shooterId ?? undefined, p.serverProjectileId ?? undefined, p.config.weaponType);}
+      if (!p.config.hook) {c.predictLocalShove(blastPos, p.config.aoeRadius * bloom, p.force, p.forceMode, p.shooterId ?? undefined, { pid: p.serverProjectileId ?? undefined, wt: p.config.weaponType, pop: p.popClass });}
 
       // Replayed prey sims (balls/nuggets) get the same predicted shove --
 

@@ -171,8 +171,9 @@ export const projWireAt = new Map<string, { at: { x: number; y: number; z: numbe
 export function kbStampDeadline(s: { t: number; pid?: string; wt?: number; wireT?: number }, horizon: number): number {
   if (s.wireT) {return s.wireT + horizon;} // echo rides ~one transit behind the destroy
   // Server shell may outlive the replica's early self-pop by its whole
-  // fuse — the verdict only exists once the wire destroy lands.
-  if (s.pid) {return s.t + horizon + Math.min((s.wt === undefined ? 0 : (WEAPONS[s.wt]?.maxLifetime ?? 0) * 1000), 4000) + 2500;}
+  // life — a fly-until-contact disc's fate only lands at ABSOLUTE_TTL,
+  // so cap at maxLifetime+transit rather than a fixed window.
+  if (s.pid) {return s.t + horizon + Math.min((s.wt === undefined ? 2000 : (WEAPONS[s.wt]?.maxLifetime ?? 2) * 1000), 9000) + 1500;}
   return s.t + horizon;
 }
 

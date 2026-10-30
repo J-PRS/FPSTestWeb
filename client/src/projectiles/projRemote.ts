@@ -17,10 +17,12 @@ export function tickRemote(h: Projectile, terrain: Terrain, remotePlayers?: Map<
     // so update() pops the slug at contact, not at the range cap.
     if (h.rayFired) {sweepTerrain(h, terrain);}
     if (h.canBounce && sweepTerrain(h, terrain) && !h.collide.bounceOffTerrain(terrain)) {
+      h.popClass = 'bounce';
       h.explode(); // bounce budget/graze exhausted — die like a local shard
       return true;
     }
     if (!h.canBounce && h.config.armTime !== undefined && sweepTerrain(h, terrain)) {
+      h.popClass = 'armed';
       h.explode(); // armed mortar shell touching terrain on a remote client
       return true;
     }
@@ -31,6 +33,7 @@ export function tickRemote(h: Projectile, terrain: Terrain, remotePlayers?: Map<
     // ABSOLUTE_TTL_S pops it.
     if (!h.canBounce && !h.config.sticks && h.config.armTime === undefined
         && h.config.embeds === undefined && sweepTerrain(h, terrain)) {
+      h.popClass = 'terrain';
       h.explode();
       return true;
     }
@@ -38,6 +41,7 @@ export function tickRemote(h: Projectile, terrain: Terrain, remotePlayers?: Map<
     // Embed-capable shells (javelin) die on contact everywhere — the server
     // never sends a destroy for a dirt hit, so the replica must sense it.
     if (h.config.embeds !== undefined && sweepTerrain(h, terrain)) {
+      h.popClass = 'embed';
       h.explode();
       return true;
     }
@@ -48,6 +52,7 @@ export function tickRemote(h: Projectile, terrain: Terrain, remotePlayers?: Map<
     if (h.bodiesLive && !h.config.passThroughTargets && !h.config.sticks) {
       const lp = h.sweepLocal?.();
       if (lp && h.shooterId !== 'local' && sweepPlayer(h, lp, 'local', h.localClass?.())) {
+        h.popClass = 'body-local';
         h.explode();
         return true;
       }
@@ -55,6 +60,7 @@ export function tickRemote(h: Projectile, terrain: Terrain, remotePlayers?: Map<
         for (const [playerId, playerPos] of remotePlayers) {
           if (playerId === h.shooterId) {continue;}
           if (sweepPlayer(h, playerPos, playerId, playerClasses?.get(playerId))) {
+            h.popClass = 'body-remote';
             h.explode();
             return true;
           }

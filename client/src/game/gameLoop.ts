@@ -384,6 +384,8 @@ bodyN += 1;
           const wa = s.wireAt;
           const kind = s.pid && !wa ? 'kb-pop-div' : 'kb-echo';
           parityMiss(kind, Object.assign({ x: Math.round(s.x), y: Math.round(s.y), z: Math.round(s.z), by: s.by, f: s.f, ageMs: Math.round(now - s.t) },
+            s.pop ? { pop: s.pop } : {},
+            s.wt === undefined ? {} : { wt: s.wt },
             wa ? { wa: `${wa.x.toFixed(0)},${wa.y.toFixed(0)},${wa.z.toFixed(0)}`, offM: Number(Math.hypot(s.x - wa.x, s.y - wa.y, s.z - wa.z).toFixed(1)) } : {}));
         }
         kbStamps.splice(i, 1);

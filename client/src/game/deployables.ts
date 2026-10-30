@@ -162,7 +162,7 @@ type Foe = { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean; playerId?: 
 export interface DeployDeps extends GameContext {
   scene: THREE.Scene;    // scene exists before deployables is constructed
   targets: Targetable[]; // shared creature surface
-  lazyCombat: () => { hitTargetLocal(t: Targetable, dmg: number, attackerId?: string): boolean; predictLocalShove?(pos: THREE.Vector3, radius: number, force: number, mode: 'push' | 'pull', shooterId?: string): boolean; applyForceToPrey?(pos: THREE.Vector3, radius: number, force: number, mode: 'push' | 'pull'): void } | undefined;
+  lazyCombat: () => { hitTargetLocal(t: Targetable, dmg: number, attackerId?: string): boolean; predictLocalShove?(pos: THREE.Vector3, radius: number, force: number, mode: 'push' | 'pull', shooterId?: string, meta?: { pid?: string; wt?: number; pop?: string }): boolean; applyForceToPrey?(pos: THREE.Vector3, radius: number, force: number, mode: 'push' | 'pull'): void } | undefined;
   /** Enemy bots the turret may legally shoot (deployer's team excluded). */
   enemyBots?: () => { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[];
   /** Damage funnel for bot hits — same authority as a player's bolts. */

@@ -33,6 +33,7 @@ export interface StuckHost {
   glowMesh: THREE.Mesh | null;
   updateMesh(): void;
   explode(): void;
+  popClass?: string;
   fuseTtl(): number | undefined;
   /** Seconds since arming (-1 while unarmed — sticks arm on contact). */
   fuseAge(): number;
@@ -99,7 +100,7 @@ export class ProjStuck {
       }
     }
     if (!h.stuck) {return false;} // dropped — fall through into physics with zero velocity
-    if (h.fuseTtl() && h.fuseAge() >= h.fuseTtl()!) {h.explode();}
+    if (h.fuseTtl() && h.fuseAge() >= h.fuseTtl()!) {h.popClass = 'stuck-fuse'; h.explode();}
     else {h.updateMesh();}
     return true;
   }

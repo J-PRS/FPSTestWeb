@@ -369,6 +369,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     const remoteProjectile = remoteProjectiles.get(projectileId);
     if (remoteProjectile) {
       snapToContact(remoteProjectile, position);
+      remoteProjectile.popClass = 'wire'; // the authority's detonation, not a painted contact
       remoteProjectile.explode(); // onExploded records + unmaps
       // Body-hit replica suppressed its predicted blast (ghostBodyPop) —
       // the wire owns the real detonation, so paint it at the stamped

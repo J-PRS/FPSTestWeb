@@ -65,7 +65,7 @@ export interface EntitiesDeps extends GameContext {
 
   /** Deployables: combat resolves after entities is built — lazy getter. */
 
-  lazyCombat?: () => { hitTargetLocal(t: Targetable, dmg: number, attackerId?: string): boolean; predictLocalShove?(pos: THREE.Vector3, radius: number, force: number, mode: 'push' | 'pull', shooterId?: string): boolean } | undefined;
+  lazyCombat?: () => { hitTargetLocal(t: Targetable, dmg: number, attackerId?: string): boolean; predictLocalShove?(pos: THREE.Vector3, radius: number, force: number, mode: 'push' | 'pull', shooterId?: string, meta?: { pid?: string; wt?: number; pop?: string }): boolean } | undefined;
 
   /** Enemy bots deployable turrets may shoot (deployer's team excluded). */
 
