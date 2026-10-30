@@ -187,7 +187,26 @@ export class FlagPlacer {
     return this.seatAuto(this.pcaAxisSeats());
   }
 
+  /** Auto-derived stands must sit at least this far apart — under it a
+   *  cap is a 2-second sprint and the match is broken (rimrock's ~140m
+   *  auto pair capped at 2.1s). */
+  private static readonly MIN_STAND_SEP = 500;
+
   private seatAuto(raw: { alpha: Vec3like; bravo: Vec3like }): { alpha: Vec3; bravo: Vec3 } {
+    const dx = raw.bravo.x - raw.alpha.x, dz = raw.bravo.z - raw.alpha.z;
+    const d = Math.hypot(dx, dz);
+    if (d < FlagPlacer.MIN_STAND_SEP) {
+      // Push the pair apart along its own segment until the run is a
+      // real flag run — hilltop/PCA fallbacks pick seats by terrain
+      // shape, not by separation, so the guard lives at the choke point.
+      const cx = (raw.alpha.x + raw.bravo.x) / 2, cz = (raw.alpha.z + raw.bravo.z) / 2;
+      const ux = d > 1e-3 ? dx / d : 1, uz = d > 1e-3 ? dz / d : 0;
+      const half = FlagPlacer.MIN_STAND_SEP / 2;
+      raw = {
+        alpha: { x: cx - ux * half, y: 0, z: cz - uz * half },
+        bravo: { x: cx + ux * half, y: 0, z: cz + uz * half },
+      };
+    }
     const snapped = this.snapFlagBases(raw);
     this.syncAutoSpawns?.(this.autoSpawnRings(snapped));
     return snapped;
