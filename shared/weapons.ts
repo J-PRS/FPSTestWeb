@@ -29,9 +29,7 @@ export const MELEE_CREATURE_DAMAGE = 60;
  *  radius over the wire. */
 export const DIRECT_HIT_AOE_BONUS = 1.5;
 export function directHitAoeBonus(weaponType: number): number {
-  return (weaponType === WeaponType.BoltLauncher || weaponType === WeaponType.Disc)
-    ? DIRECT_HIT_AOE_BONUS
-    : 1;
+  return WEAPONS[weaponType]?.aoeBonus === true ? DIRECT_HIT_AOE_BONUS : 1;
 }
 
 /** Skillshot ramp: the flagship launchers (and their belt cousins)
@@ -42,7 +40,7 @@ export function directHitAoeBonus(weaponType: number): number {
  *  same formula on both ends can't drift. */
 export const AIRTIME_DMG_CAP = 4;
 const AIRTIME_SCALED = new Set<number>([
-  WeaponType.BoltLauncher, WeaponType.Disc, WeaponType.Implodisc, WeaponType.BeltDisc, WeaponType.Javelin,
+  ...Object.entries(WEAPONS).filter(([, w]) => w.airtimeScale === true).map(([wt]) => Number(wt)),
 ]);
 export function scaledDirectDamage(weaponType: number, airtime?: number): number {
   const w = WEAPONS[weaponType];
@@ -111,9 +109,8 @@ export const BELT_THROW_COST = 1; // per belt toss
  *  its chunk gibs. Splash from the same gun (and all bullet/hitscan
  *  kills) stays the Verlet ragdoll. */
 export const GIB_WEAPONS = new Set<number>([
-  WeaponType.BoltLauncher, WeaponType.PlasmaCannon, WeaponType.RocketLauncher,
-  WeaponType.Mortar, WeaponType.Bombard, WeaponType.Cannon, WeaponType.Gonne, WeaponType.Basilisk,
-  WeaponType.Sticky, WeaponType.GrenadeLauncher]);
+  ...Object.entries(WEAPONS).filter(([, w]) => w.gib === true).map(([wt]) => Number(wt)),
+]);
 // Pack items (turret/mine/station/…) are priced per-kind in
 // shared/deployItems.ts (turret 2, mortar 3, …) — not a flat constant.
 // WeaponTypes that ONLY exist as belt throws — any spawn claim carrying
@@ -196,6 +193,7 @@ for (const [wt, w] of Object.entries(WEAPONS)) {
 }
 export const WEAPON_FIRE_INTERVAL_S: Partial<Record<WeaponType, number>> = {
   [WeaponType.BoltLauncher]: 1,
+  [WeaponType.RocketLauncher]: 1, // bolt-equivalent: same 1s cadence
   [WeaponType.Disc]: 1,
   [WeaponType.Chaingun]: 0.09,
   [WeaponType.Mortar]: 2,
@@ -208,7 +206,7 @@ export const WEAPON_FIRE_INTERVAL_S: Partial<Record<WeaponType, number>> = {
   [WeaponType.Cannon]: 1.1,
   [WeaponType.Gonne]: 1, // lightest gun, fastest refire of the arc family
   [WeaponType.Basilisk]: 1.2, // heaviest bore, slowest refire
-  [WeaponType.RocketLauncher]: 2.5, // A/B'd 2.0: more volume but same kills — dodge-window is the constraint, not cadence
+  [WeaponType.MissileLauncher]: 2.5, // A/B'd 2.0: more volume but same kills — dodge-window is the constraint, not cadence
   [WeaponType.Pistol]: 0.22,
   [WeaponType.Revolver]: 0.6,
   [WeaponType.Sticky]: 0.6,

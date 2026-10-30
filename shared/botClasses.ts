@@ -4,6 +4,8 @@
  *  the anchor that tanks the stand. Mass is now real too: jet thrust and
  *  blast impulses divide by it, so the mech anchor that shrugs off
  *  shoves also burns more sky per drop of fuel. */
+import { WEAPONS } from './weaponRows.js';
+
 export type ArmorClass = 'light' | 'medium' | 'heavy';
 
 export interface ClassStats {
@@ -18,21 +20,22 @@ export interface ClassStats {
   radius: number;
 }
 
-/** Tier-locked ordnance — WeaponType ids only heavies may fire (Mortar,
- *  PlasmaCannon, RocketLauncher, MRVLauncher, Bombard). Enforced
- *  server-side in CombatHandler; the loadout menu filter is a
- *  convenience, not a boundary. */
-export const HEAVY_ONLY_WEAPONS: ReadonlySet<number> = new Set([4, 7, 15, 28, 35, 43]);
+/** Tier-locked ordnance — derived from `tier` markers on the stat rows
+ *  (weaponRows.ts); a new weapon declares its class in the row, never
+ *  here. Enforced server-side in CombatHandler; the loadout menu filter
+ *  is a convenience, not a boundary. */
+const tierOf = (t: 'light' | 'medium' | 'heavy'): Set<number> =>
+  new Set(Object.entries(WEAPONS).filter(([, w]) => w.tier === t).map(([wt]) => Number(wt)));
+export const HEAVY_ONLY_WEAPONS: ReadonlySet<number> = tierOf('heavy');
 
-/** Medium-only guns (Flak, Cannon, PlasmaGun) — the mid-tier punch. An
- *  EXACT-class lock like the light tier: heavies trade it away for
- *  ordnance access. */
-export const MEDIUM_ONLY_WEAPONS: ReadonlySet<number> = new Set([6, 14, 23]);
+/** Medium-only guns — the mid-tier punch. An EXACT-class lock like the
+ *  light tier: heavies trade it away for ordnance access. */
+export const MEDIUM_ONLY_WEAPONS: ReadonlySet<number> = tierOf('medium');
 
-/** Light-only finesse weapons (Railgun, Lightning) — precision gear for
- *  the frame that paid HP for twitch; heavies get ordnance instead.
- *  Unlike the other tiers this is an EXACT-class lock, not a floor. */
-export const LIGHT_ONLY_WEAPONS: ReadonlySet<number> = new Set([9, 12, 42]);
+/** Light-only finesse weapons — precision gear for the frame that paid
+ *  HP for twitch; heavies get ordnance instead. Exact-class like
+ *  medium, NOT a floor (heavy is the only floor tier). */
+export const LIGHT_ONLY_WEAPONS: ReadonlySet<number> = tierOf('light');
 
 const TIER_RANK: Record<ArmorClass, number> = { light: 0, medium: 1, heavy: 2 };
 

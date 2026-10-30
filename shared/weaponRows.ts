@@ -7,6 +7,7 @@ import { WeaponType, type WeaponStats } from './weaponTable.ts';
  *  the visual edge (covers the shock ring), and the two can never drift. */
 export const WEAPONS: Record<number, WeaponStats> = {
   [WeaponType.BoltLauncher]: {
+    gib: true, airtimeScale: true, aoeBonus: true,
     directDamage: 50,
     aoeDamage: 15,
     aoeRadius: 5, // tighter pop - the bolt's splash is graze, not zoning
@@ -21,6 +22,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 12, // ~1.4km - effectively "flies until it lands"; the fuse only exists so a bugged remote replica can't streak forever
   },
   [WeaponType.Disc]: {
+    airtimeScale: true, aoeBonus: true,
     directDamage: 50,
     aoeDamage: 15,
     aoeRadius: 10,
@@ -35,6 +37,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 12, // ~960m - long prayers stay live; fuse only bounds desynced replicas
   },
   [WeaponType.Implodisc]: {
+    airtimeScale: true,
     // Belt disc (C): the implosion - pulls targets toward the blast.
     directDamage: 50,
     aoeDamage: 15,
@@ -51,6 +54,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     beltThrow: true,
   },
   [WeaponType.BeltDisc]: {
+    airtimeScale: true,
     // Belt disc: the plain push variant - same flight/damage, knocks back.
     directDamage: 50,
     aoeDamage: 15,
@@ -103,6 +107,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 1.5, // ~375m of reach - every other fast slug carries a fuse; without one remote replicas streak to the 10s backstop
   },
   [WeaponType.Mortar]: {
+    gib: true, tier: 'heavy',
     directDamage: 120,
 
     aoeDamage: 80,
@@ -126,6 +131,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     bounceFriction: 0.7,
   },
   [WeaponType.GrenadeLauncher]: {
+    gib: true,
     directDamage: 50,
     aoeDamage: 20,
     aoeRadius: 12,
@@ -146,6 +152,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     bounceFriction: 0.7,     // = client GL_BOUNCE_FRICTION
   },
   [WeaponType.Flak]: {
+    tier: 'medium',
     directDamage: 9,
     burst: 9, // one pull registers all shards at once // per shard - 9 shards ≈ 81 max
     pelletSpread: 0.1,
@@ -167,6 +174,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxBounces: 3,          // shards die on the Nth terrain hit
   },
   [WeaponType.PlasmaCannon]: {
+    gib: true, tier: 'heavy',
     directDamage: 45,
 
     aoeDamage: 25,
@@ -182,6 +190,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 5, // ~450m flat - same fuse class as Disc; remote replicas otherwise streak forever
   },
   [WeaponType.PlasmaGun]: {
+    tier: 'medium',
 
     // Quake 2/3 plasma: rapid volley of fat bolts - chain-like cadence
     // (10/s, ~140dps) but a visible projectile you can dodge, so it
@@ -200,6 +209,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 1.5, // ~240m of reach
   },
   [WeaponType.Railgun]: {
+    tier: 'light',
     // Quake railgun: 60dmg slug at 450 m/s ≈ hitscan past ~200m - a
     // three-shot on mediums, not two (was dominant at range: 7/12 FFA
     // wins). Small AOE so near-misses still pop.
@@ -232,6 +242,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitGrow: 0,
   },
   [WeaponType.Lightning]: {
+    tier: 'light',
     // Hitscan beam - not a projectile; ballistic fields inert. Tick damage is
     // directDamage (~89 dps vs enemies - halved: 8dmg ticks were sawing
     // through targets in a blink); aoeDamage/aoeRadius validate the
@@ -286,6 +297,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     sidearm: true,
   },
   [WeaponType.Cannon]: {
+    gib: true, tier: 'medium',
 
     // Serious Sam cannonball: a big iron sphere that SKIPS off terrain
     // (client bounce config) and detonates on target contact or fuse.
@@ -313,6 +325,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxBounces: 0,
   },
   [WeaponType.Gonne]: {
+    gib: true, tier: 'light',
     // The light frame's member of the 80 m/s gravity-arc family - same
     // shell economics as the cannon (a flavored reskin, not a new
     // weapon): same damage, same splash, same cadence, same arc. The
@@ -338,6 +351,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxBounces: 0, // bounce/lodge shelved - contact pop for now, same as the cannon
   },
   [WeaponType.Basilisk]: {
+    gib: true, tier: 'heavy',
     // The heavy frame's member of the 80 m/s gravity-arc family - same
     // shell economics as the cannon/gonne (a flavored reskin, not a
     // new weapon). The huge-bore bronze gun is cosmetic; the Bombard
@@ -361,7 +375,8 @@ export const WEAPONS: Record<number, WeaponStats> = {
     fuseAfterBounce: 0.25,
     maxBounces: 0, // bounce/lodge shelved - contact pop for now, same as the cannon
   },
-  [WeaponType.RocketLauncher]: {
+  [WeaponType.MissileLauncher]: {
+    gib: true, tier: 'heavy',
     // RPG-style missile: flat trajectory, slower than the Bolt Launcher
     // but not free to dodge (65 m/s - the 48 shell was readable-in-flight
     // to the point of never connecting at range) in exchange for the
@@ -384,6 +399,23 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMax: 0.5, // area-denial tier: 0.5m wake cap - the 14m splash is the reach, not the proxy
     hitGrow: 0.4,
     maxLifetime: 6, // ~290m of flat reach
+  },
+  [WeaponType.RocketLauncher]: {
+    gib: true, airtimeScale: true, aoeBonus: true,
+    // The universal rocket: Bolt Launcher stats minus the arc - flat
+    // 120 m/s bolt anyone can carry (every class, no tier lock).
+    directDamage: 50,
+    aoeDamage: 15,
+    aoeRadius: 8,
+    knockbackForce: 28,
+    forceMode: 'push',
+    speed: 120,
+    gravity: false,
+    bodyRadius: 0.18,
+    hitMin: 0,
+    hitMax: 8,
+    hitGrow: 2,
+    maxLifetime: 12,
   },
   [WeaponType.Pistol]: {
 
@@ -442,6 +474,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     sidearm: true,
   },
   [WeaponType.Sticky]: {
+    gib: true,
     // Sticky launcher (T2): glue bomb - sticks where it lands, pops on a
     // 3s fuse. The CHAIN is the weapon: a detonation cooks every other
     // live sticky in its radius, and at 0.6s cadence a player can stack 5
@@ -516,6 +549,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 1.1,
   },
   [WeaponType.Javelin]: {
+    airtimeScale: true,
     // Thrown dart: near-flat long throw, heavy single-target pierce.
     // No splash - the skill shot IS the reward.
     directDamage: 60,
@@ -734,6 +768,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     stick: true,   // hand-planted: rests where it lands until the fuse
   },
   [WeaponType.MRVLauncher]: {
+    tier: 'heavy',
 
     // Mortar's counterpart: a bouncing carrier shell that AIRBURSTS at
     // ~1s into bomblets - one volley in one direction (MRV, not MIRV:
@@ -777,6 +812,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 10,    // safety TTL only - contact pops them; an air fuse wastes the rain
   },
   [WeaponType.Bombard]: {
+    gib: true, tier: 'heavy',
     // The cannon's bigger, meaner brother: an even fatter iron ball that
     // NEVER detonates - it shatters into shards on contact (terrain,
     // walls, shields, bodies; no arm window). The crumble carries a small
