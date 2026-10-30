@@ -263,4 +263,49 @@ describe('predictLocalShove — remote-blast knockback dedup', (): void => {
     expect(r.stamps).toHaveLength(0);
     expect(w.recentKb).toHaveLength(1); // a different blast's echo — keep it
   });
+
+  it('a refused verdict reverses the recorded impulse off the body', (): void => {
+    const r = mkRig();
+    // The reversal writes player.vel directly — give the stub a real
+    // vector and a knockback that moves it, so iv records a true delta.
+    const vel = new THREE.Vector3();
+    (r.player as { vel?: THREE.Vector3 }).vel = vel;
+    (r.player as { appliedClass?: string }).appliedClass = 'scout';
+    const appliedF: number[] = [];
+    (r.player as { applyKnockback?: unknown }).applyKnockback =
+      (pos: THREE.Vector3, f: number): void => {
+        appliedF.push(f);
+        vel.addScaledVector(new THREE.Vector3().subVectors(r.player.pos, pos).normalize(), f);
+      };
+    // Connected authority + a REMOTE shooter → the stamp audits (self=false).
+    (r.net as { isConnected?: () => boolean }).isConnected = (): boolean => true;
+    (r.net as { serverPingMs?: number }).serverPingMs = 40;
+    (r.net as { msSinceLiveRx?: () => number }).msSinceLiveRx = (): number => 0;
+
+    r.player.pos.set(1, 0, 0); // off-center so the push dir is nonzero
+    r.blast.predictLocalShove(new THREE.Vector3(0, 0, 0), 10, 30, 'push', 'enemy-1');
+    expect(r.stamps).toHaveLength(1);
+    const afterFirst = vel.x;
+    expect(afterFirst).toBeGreaterThan(0); // pushed +x off the blast
+
+    // No echo lands → the stamp's deadline passes; the NEXT shove's settle
+    // sweep is what expires it. A distant second blast applies + reverses.
+    r.stamps[0]!.t -= 20_000;
+    r.player.pos.set(50.5, 0, 0);
+    r.blast.predictLocalShove(new THREE.Vector3(50, 0, 0), 10, 30, 'push', 'enemy-1');
+    // vel now carries only the second blast's impulse: the first was
+    // undone, not left poisoning the body.
+    expect(appliedF).toHaveLength(2);
+    expect(vel.x).toBeCloseTo(appliedF[1]!, 5);
+    expect(r.stamps).toHaveLength(1); // only the second stamp remains
+  });
+
+  it('a dead body never predicts a shove', (): void => {
+    const r = mkRig();
+    r.player.isDead = true;
+    const applied = r.blast.predictLocalShove(new THREE.Vector3(0, 0, 0), 10, 30, 'push', 'enemy-1');
+    expect(applied).toBe(false);
+    expect(r.player.knock).not.toHaveBeenCalled();
+    expect(r.stamps).toHaveLength(0);
+  });
 });
