@@ -21,7 +21,7 @@ describe('terrain sediment lips', (): void => {
 
   it('bumps raise the visual field near the ring, not the sim field', (): void => {
     injectHeightmapBytes(flat, N, 1, 1500);
-    // World (0,0) maps to texel 0 — the wrap corner. r=30m on a 1500m tile
+    // World (0,0) maps to texel 0 - the wrap corner. r=30m on a 1500m tile
     // ≈ 1.3 texels: the ring peak lands within ~3 texels of the origin.
     setTerrainBumps('t', [{ x: 0, z: 0, r: 60, h: 6 }]);
     const visual = getHeightmapData()!;

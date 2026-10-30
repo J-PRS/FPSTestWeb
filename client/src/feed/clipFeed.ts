@@ -442,13 +442,25 @@ clipGen += 1;
   await dm.fetchCoolShotsFromServer();
   // Copy before shuffling - getCoolShots returns the manager's live
   // array and the panel's best-first order must survive feed playback.
-  entries = [...dm.getCoolShots()];
+  // Dev-time window: prefer clips from the last 24h — stale demos from
+  // older builds break playback. Under 20 fresh ones, fall back to the
+  // 20 most recent overall so the feed isn't empty.
+  const all = [...dm.getCoolShots()].sort((a, b): number => b.timestamp - a.timestamp);
+  const cutoff = Date.now() - 86_400_000;
+  const fresh = all.filter((e): boolean => e.timestamp > cutoff);
+  entries = fresh.length >= 20 ? fresh : all.slice(0, 20);
   // Shuffle the queue - the index is lifetime-sorted, which makes every
-  // feed session replay the same top-N run. One pass, one shuffle.
-  for (let i = entries.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [entries[i], entries[j]] = [entries[j]!, entries[i]!];
-  }
+  // feed session replay the same top-N run. Fresh clips shuffle among
+  // themselves and come FIRST; stale fallback padding trails behind.
+  const cutoffIdx = fresh.length >= 20 ? 20 : fresh.length;
+  const shuffle = (a: CoolShotEntry[], lo: number, hi: number): void => {
+    for (let i = hi - 1; i > lo; i -= 1) {
+      const j = lo + Math.floor(Math.random() * (i - lo + 1));
+      [a[i], a[j]] = [a[j]!, a[i]!];
+    }
+  };
+  shuffle(entries, 0, cutoffIdx);
+  shuffle(entries, cutoffIdx, entries.length);
   logger.info(`Clip feed: ${entries.length} clip(s)`);
   if (feedMode.startAt) {
     const at = entries.findIndex((e): boolean => e.filename === feedMode.startAt || e.id === feedMode.startAt);
